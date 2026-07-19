@@ -1,9 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { taskStatesApi, taskKeys, useCan, ApiError } from "@mediaos/web-core";
-import { Badge, Button, Dialog, Input } from "@mediaos/ui";
-import type { ProjectStateDto, ProjectStateGroupDto } from "@mediaos/contracts";
+import { Badge, Button, Dialog, Input, Skeleton } from "@mediaos/ui";
+import {
+  projectStateGroupSchema,
+  type ProjectStateDto,
+  type ProjectStateGroupDto,
+  type UpdateProjectStateRequest,
+} from "@mediaos/contracts";
 import { PROJECT_STATE_PAIRS } from "./constants";
 
 /**
@@ -13,14 +18,8 @@ import { PROJECT_STATE_PAIRS } from "./constants";
  * sống ⇒ server 400 — hiển thị lỗi, không xoá mù.
  */
 
-const STATE_GROUP_OPTIONS: ProjectStateGroupDto[] = [
-  "backlog",
-  "unstarted",
-  "started",
-  "review",
-  "completed",
-  "cancelled",
-];
+// Derive từ schema contracts — thêm nhóm thứ 7 sau này không trôi (finding LIGHT gate, DRY).
+const STATE_GROUP_OPTIONS: readonly ProjectStateGroupDto[] = projectStateGroupSchema.options;
 
 function errorKey(err: unknown): string {
   if (err instanceof ApiError) {
@@ -53,13 +52,18 @@ function StateRow({
     void queryClient.invalidateQueries({ queryKey: taskKeys.kanban(state.projectId) });
   };
 
+  // Chỉ gửi field DIRTY (PATCH partial — finding LIGHT gate: gửi đủ bộ sẽ last-write-wins đè
+  // rename của người khác đang mở dialog song song một cách câm lặng).
+  const parsedSort = Number.parseInt(sortOrder, 10);
+  const sortValid = Number.isInteger(parsedSort) && parsedSort >= 0;
+  const dirtyPatch: UpdateProjectStateRequest = {};
+  if (name.trim() !== state.name) dirtyPatch.name = name.trim();
+  if (color !== state.color) dirtyPatch.color = color;
+  if (sortValid && parsedSort !== state.sortOrder) dirtyPatch.sortOrder = parsedSort;
+  const hasDirty = Object.keys(dirtyPatch).length > 0;
+
   const updateMutation = useMutation({
-    mutationFn: () =>
-      taskStatesApi.updateState(state.id, {
-        name: name.trim(),
-        color,
-        sortOrder: Number.parseInt(sortOrder, 10) || 0,
-      }),
+    mutationFn: () => taskStatesApi.updateState(state.id, dirtyPatch),
     onSuccess: () => {
       onError(null);
       invalidate();
@@ -107,7 +111,7 @@ function StateRow({
         <Button
           size="sm"
           variant="outline"
-          disabled={updateMutation.isPending || name.trim().length === 0}
+          disabled={updateMutation.isPending || name.trim().length === 0 || !sortValid || !hasDirty}
           onClick={() => updateMutation.mutate()}
         >
           {t("tasks.kanban.manage.save")}
@@ -154,7 +158,20 @@ export function TaskStateColumnsDialog({
   const [newName, setNewName] = useState("");
   const [newGroup, setNewGroup] = useState<ProjectStateGroupDto>("started");
 
-  const { data: states } = useQuery({
+  // Mở lại dialog = phiên mới: xoá lỗi cũ + draft tên cột (finding LIGHT gate — state sống ở
+  // wrapper luôn-mounted nên không tự reset).
+  useEffect(() => {
+    if (open) {
+      setErrorMsgKey(null);
+      setNewName("");
+    }
+  }, [open]);
+
+  const {
+    data: states,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: taskKeys.states(projectId),
     queryFn: () => taskStatesApi.listStates(projectId),
     enabled: open,
@@ -181,16 +198,26 @@ export function TaskStateColumnsDialog({
           </p>
         )}
         <div className="space-y-2">
-          {(states ?? []).map((s) => (
-            <StateRow
-              key={s.id}
-              state={s}
-              canUpdate={canUpdate}
-              canDelete={canDelete}
-              onError={setErrorMsgKey}
-            />
-          ))}
-          {(states ?? []).length === 0 && (
+          {isLoading && <Skeleton className="h-24 w-full" />}
+          {isError && (
+            <p role="alert" className="text-sm text-destructive">
+              {t("tasks.kanban.error.title")}
+            </p>
+          )}
+          {!isLoading &&
+            !isError &&
+            (states ?? []).map((s) => (
+              <StateRow
+                // key kèm updatedAt: server đổi (người khác sửa song song) ⇒ row REMOUNT, draft
+                // resync theo dữ liệu mới (finding LIGHT gate — chống draft cũ đè rename).
+                key={`${s.id}-${s.updatedAt}`}
+                state={s}
+                canUpdate={canUpdate}
+                canDelete={canDelete}
+                onError={setErrorMsgKey}
+              />
+            ))}
+          {!isLoading && !isError && (states ?? []).length === 0 && (
             <p className="text-sm text-muted-foreground">{t("tasks.kanban.manage.empty")}</p>
           )}
         </div>
