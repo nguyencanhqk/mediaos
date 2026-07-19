@@ -561,6 +561,8 @@ TASK.TASK.ASSIGN
 | Company    | Tất cả task/dự án trong công ty               |
 | System     | Tất cả task/dự án toàn hệ thống               |
 
+> **Lưu ý hiện thực (D-22 · [DECISIONS-04](<../DECISIONS/DECISIONS-04_Task_Per_Project_Role.md>) D-23):** hàng `Project` ở bảng trên KHÔNG phải một bậc trong enum `data_scope` của permission engine (engine giữ 5 bậc `Own/Team/Department/Company/System` — DB-02 §4.7). Phạm-vi-dự-án được hiện thực bằng **membership service-layer**: nhánh OR theo `project_members` trong predicate đọc, và tầng kiểm tra `project_role` theo ma trận D-24 cho ghi/collab/governance. Vai trò trong dự án chỉ có hiệu lực khi tầm với của actor KHÔNG đến từ org-scope (`Company/System` bypass — §18.6.8).
+
 Ví dụ:
 
 ```text
@@ -596,7 +598,7 @@ Super Admin có TASK.TASK.VIEW với scope System.
 | Xem báo cáo dự án        | Có          | Có nếu được cấp      | Có nếu được cấp      | Có theo scope           | Có với dự án phụ trách | Không mặc định                |
 | Xuất task                | Có          | Có nếu được cấp      | Có nếu được cấp      | Có nếu được cấp         | Có nếu được cấp        | Không mặc định                |
 
-> **Hai hàng cột pipeline ghi theo seed THẬT đang chạy, không theo suy đoán.** Quyền quản trị cột (`TASK.PROJECT_STATE.CREATE/UPDATE/DELETE`) hiện chỉ cấp cho **Super Admin · Admin công ty · Project Manager**; quyền xem (`VIEW`) cấp thêm cho **Employee**. **Manager và HR hiện KHÔNG có quyền nào trên cột** — kể cả xem. Và **không tồn tại kiểm tra "owner dự án"** ở các route quản trị cột (gate thuần theo cặp quyền). Nếu muốn Manager có quyền quản trị cột, hoặc muốn thêm ràng buộc owner, đó là **quyết định mới** cần vào sổ quyết định + migration riêng — KHÔNG được sửa lén qua bảng này, vì bảng này là nguồn mà migration seed mirror theo.
+> **Hai hàng cột pipeline ghi theo seed THẬT đang chạy, không theo suy đoán.** Quyền quản trị cột (`TASK.PROJECT_STATE.CREATE/UPDATE/DELETE`) hiện chỉ cấp cho **Super Admin · Admin công ty · Project Manager**; quyền xem (`VIEW`) cấp thêm cho **Employee**. **Manager và HR hiện KHÔNG có quyền nào trên cột** — kể cả xem. **CẬP NHẬT 19/07/2026 ([DECISIONS-04](<../DECISIONS/DECISIONS-04_Task_Per_Project_Role.md>) D-28):** route quản trị cột NAY CÓ tầng vai-trò-dự-án — actor có cặp quyền ở scope < Company phải là member **Owner/Manager** của đúng dự án chứa cột; scope Company/System bypass. Với seed hiện tại (mọi grant `project_state` đều Company) tầng này là defense-in-depth, chưa gate user thật. Muốn đổi grant cho Manager/HR vẫn là **quyết định mới** cần vào sổ + migration riêng — KHÔNG sửa lén qua bảng này, vì bảng này là nguồn mà migration seed mirror theo.
 
 ---
 
@@ -1418,17 +1420,21 @@ Cho phép phân quyền nội bộ trong từng dự án.
 
 #### Vai trò dự án
 
-| Vai trò | Quyền gợi ý                   |
-| ------- | ----------------------------- |
-| Owner   | Toàn quyền trong dự án        |
-| Manager | Quản lý task và thành viên    |
-| Member  | Xem dự án, nhận/cập nhật task |
-| Viewer  | Chỉ xem dự án/task            |
+> **Ma trận role×action chuẩn (nguồn duy nhất) = [DECISIONS-04](<../DECISIONS/DECISIONS-04_Task_Per_Project_Role.md>) D-24** — bảng dưới là tóm tắt; xung đột thì D-24 thắng. Dòng Manager sửa 19/07/2026 theo D-26: quản lý thành viên là **Owner-only** (khớp §9 + API-06 §6.3; bản cũ ghi "và thành viên" là mâu thuẫn đã reconcile).
+
+| Vai trò | Quyền (tóm tắt theo D-24)                                           |
+| ------- | ------------------------------------------------------------------- |
+| Owner   | Toàn quyền trong dự án (gồm thành viên · đổi chủ · close/archive/delete) |
+| Manager | Quản lý TASK trong dự án (tạo/sửa/giao/cột pipeline/sửa thông tin dự án) — KHÔNG quản thành viên |
+| Member  | Xem dự án; nhận/cập nhật task được giao; comment/checklist/file      |
+| Viewer  | Chỉ xem dự án/task (kể cả comment/checklist/file — chỉ đọc); được watch |
 
 #### Quy tắc
 
 * Project role không thay thế permission hệ thống.
 * User cần có quyền hệ thống cơ bản và role dự án phù hợp.
+* Role chỉ có hiệu lực khi tầm với KHÔNG đến từ org-scope (Company/System bypass — §18.6.8).
+* `project_role` NULL (member legacy) = Member cho đọc/collab, không hơn (D-24).
 * Owner không được tự hạ quyền nếu là owner duy nhất.
 * Thay đổi role dự án phải ghi log.
 
@@ -2226,8 +2232,8 @@ progress_percentage = 0
 4. Mỗi API phải khai báo permission.
 5. Mỗi màn hình phải khai báo permission.
 6. Data scope phải áp dụng khi query danh sách.
-7. Project role chỉ có hiệu lực trong phạm vi project.
-8. Permission hệ thống vẫn là lớp kiểm soát cao nhất.
+7. Project role chỉ có hiệu lực trong phạm vi project — ma trận role×action chuẩn: [DECISIONS-04](<../DECISIONS/DECISIONS-04_Task_Per_Project_Role.md>) D-24; governance dự án neo theo member role Owner (D-25), không theo một cá nhân `owner_employee_id`.
+8. Permission hệ thống vẫn là lớp kiểm soát cao nhất (scope Company/System bypass tầng role dự án).
 
 ---
 
@@ -2447,11 +2453,11 @@ Module TASK được xem là hoàn thành MVP khi:
 
 Trước khi chốt bản final, cần xác nhận:
 
-1. MVP có cho Employee tự tạo task cá nhân không?
+1. ~~MVP có cho Employee tự tạo task cá nhân không?~~ **ĐÃ CHỐT 19/07/2026 — [DECISIONS-04](<../DECISIONS/DECISIONS-04_Task_Per_Project_Role.md>) D-27: CÓ** — employee có `create:task@Own` tạo task cá nhân self-assigned; cổng cấu hình tắt task cá nhân (`TASK-ERR-TASK-PERSONAL-DISABLED`) DEFER — MVP chưa có setting nên mặc định cho phép.
 2. Mỗi task chỉ có một assignee chính hay cho nhiều assignee?
 3. Assignee có được tự chuyển task sang Done không, hay phải qua In Review?
 4. Có bắt buộc checklist hoàn thành trước khi Done không?
-5. Có cho tạo task ngoài project không?
+5. ~~Có cho tạo task ngoài project không?~~ **ĐÃ CHỐT 19/07/2026 — D-27: CÓ** — task không thuộc dự án (task cá nhân) hợp lệ; task thuộc dự án thì người tạo scope<Company phải là member Owner/Manager của dự án đó (DECISIONS-04 D-24/D-27).
 6. Project visibility cần các mức nào: Private/Internal/Public?
 7. Có cần tự sinh mã project/task không?
 8. Có cần import task từ Excel không?
