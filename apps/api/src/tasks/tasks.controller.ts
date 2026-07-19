@@ -24,6 +24,7 @@ import { TaskActionsService } from "./task-actions.service";
 import { TaskCommentsService } from "./task-comments.service";
 import { TaskChecklistsService } from "./task-checklists.service";
 import { TaskActivityFeedService } from "./task-activity-feed.service";
+import { TaskWatchersService } from "./task-watchers.service";
 import {
   AddWatcherDto,
   AssignTaskDto,
@@ -71,6 +72,8 @@ export class TasksController {
     private readonly taskComments: TaskCommentsService,
     private readonly taskChecklists: TaskChecklistsService,
     private readonly taskActivityFeed: TaskActivityFeedService,
+    // S5-TASK-DETAIL-1 (GAP 4) — GET watchers tách service riêng (task-actions chạm trần 800 dòng).
+    private readonly taskWatchers: TaskWatchersService,
   ) {}
 
   /**
@@ -423,7 +426,7 @@ export class TasksController {
   @UseGuards(PermissionGuard)
   @RequirePermission("watch", "task")
   listWatchers(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
-    return this.taskActions.listWatchers(req.user, taskId);
+    return this.taskWatchers.listWatchers(req.user, taskId);
   }
 
   /** POST /tasks/:taskId/watchers — tự theo dõi (self-only MVP). Gate watch:task. */

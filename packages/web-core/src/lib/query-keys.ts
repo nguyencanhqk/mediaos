@@ -425,6 +425,10 @@ export const taskKeys = {
   checklists: (taskId: string) => [...rootKeys.tasks, "checklists", taskId] as const,
   activity: (taskId: string, params?: Record<string, unknown>) =>
     [...rootKeys.tasks, "activity", taskId, params] as const,
+  // S5-TASK-DETAIL-1 — PREFIX 3-phần tử (bỏ slot params) cho invalidation: khớp MỌI trang phân trang
+  // của activity(taskId, params) — activity() với params=undefined KHÔNG partial-match được key có
+  // params cụ thể (mirror taskProjectListPrefix ở dưới).
+  activityOf: (taskId: string) => [...rootKeys.tasks, "activity", taskId] as const,
   // S4-FE-TASK-4 — APPEND: file đính kèm công việc (TaskFilePanel, GET /tasks/:taskId/files).
   files: (taskId: string) => [...rootKeys.tasks, "files", taskId] as const,
   // S5-TASK-DETAIL-1 — APPEND: danh sách người theo dõi (TaskAssignControl, GET /tasks/:taskId/watchers).

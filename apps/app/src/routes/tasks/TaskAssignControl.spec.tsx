@@ -106,7 +106,10 @@ describe("TaskAssignControl — watchers (S5-TASK-DETAIL-1 GAP 4)", () => {
     });
     renderWithQuery(<TaskAssignControl task={TASK} />);
 
+    // Chờ list settle: nút Theo dõi disable trong lúc watchersQuery.isFetching (chống double-click).
+    await screen.findByText("Đồng Nghiệp");
     const btn = await screen.findByRole("button", { name: /^theo dõi$/i });
+    await waitFor(() => expect(btn).toBeEnabled());
     fireEvent.click(btn);
     await waitFor(() => expect(taskCoreApi.addWatcher).toHaveBeenCalledWith("task-001"));
   });

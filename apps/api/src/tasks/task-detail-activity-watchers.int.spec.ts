@@ -208,6 +208,8 @@ describe.skipIf(!runDb)(
       uOutsider = await seedUser(direct, A.companyId, `outsider@${A.slug}.test`, hash);
       uAudit = await seedUser(direct, A.companyId, `audit@${A.slug}.test`, hash);
       uAuditNoRead = await seedUser(direct, A.companyId, `auditnoread@${A.slug}.test`, hash);
+      // V11 — 0 grant: rào biên guard (bù cho dòng deny-matrix đã gỡ khỏi task-qa1-permission-matrix).
+      await seedUser(direct, A.companyId, `nogrants@${A.slug}.test`, hash);
 
       // Tên để assert enrich (users.full_name — nguồn tên qua employee_profiles.user_id).
       await direct.query(`UPDATE users SET full_name = 'Ngô Assignee' WHERE id = $1`, [uAssignee]);
@@ -348,6 +350,12 @@ describe.skipIf(!runDb)(
       const token = await login(A.slug, `auditnoread@${A.slug}.test`);
       const res = await get(token, `/tasks/${T1}/activity`);
       expect(res.status).toBe(403);
+    });
+
+    it("V11 — user 0 grant (không read:task, không pair audit) → 403 THUẦN từ PermissionGuard", async () => {
+      const token = await login(A.slug, `nogrants@${A.slug}.test`);
+      expect((await get(token, `/tasks/${T1}/activity`)).status).toBe(403);
+      expect((await get(token, `/tasks/${T1}/watchers`)).status).toBe(403);
     });
 
     it("V8 — cross-tenant taskId B → 404 (không lộ tồn tại)", async () => {

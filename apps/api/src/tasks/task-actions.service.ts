@@ -18,7 +18,6 @@ import type {
   TaskCoreResponseDto,
   TaskCoreStatusDto,
   TaskCorePriorityDto,
-  TaskWatcherResponseDto,
 } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
@@ -409,35 +408,7 @@ export class TaskActionsService {
   }
 
   // ══════════════════════ WATCHERS (self-only) ══════════════════════
-
-  /**
-   * S5-TASK-DETAIL-1 (GAP 4) — GET /tasks/:id/watchers: danh sách người theo dõi Active/Muted.
-   * Gate watch:task (backlog done_when) + loadWatchable mode 'read' (mirror add/remove — task ngoài
-   * scope → 404 nhất quán). Read-only, KHÔNG activity/audit.
-   */
-  async listWatchers(user: RequestUser, taskId: string): Promise<TaskWatcherResponseDto[]> {
-    const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "watch", "task");
-    return this.db.withTenant(user.companyId, async (tx) => {
-      await this.loadWatchable(tx, user, taskId, scope);
-      const rows = await this.repo.listActiveWatchersTx(tx, user.companyId, taskId);
-      return rows.map((r) => {
-        const createdAt = this.toIso(r.createdAt);
-        if (createdAt === null) {
-          throw new InternalServerErrorException("Watcher thiếu created_at bắt buộc.");
-        }
-        return {
-          id: r.id,
-          taskId: r.taskId,
-          employeeId: r.employeeId,
-          employeeName: r.employeeName,
-          userId: r.userId,
-          watcherType: r.watcherType,
-          status: r.status,
-          createdAt,
-        };
-      });
-    });
-  }
+  // GET list (S5-TASK-DETAIL-1 GAP 4) TÁCH sang TaskWatchersService — file này chạm trần 800 dòng.
 
   async addWatcher(user: RequestUser, taskId: string): Promise<TaskActionResponseDto> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "watch", "task");

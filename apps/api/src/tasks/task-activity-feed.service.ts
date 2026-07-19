@@ -120,10 +120,15 @@ export class TaskActivityFeedService {
     return rows.map((r) => this.toDto(r, names));
   }
 
+  // Chỉ nhận UUID hợp lệ: log rác/cũ mang assigneeEmployeeId='' hoặc không-phải-uuid mà lọt vào
+  // IN-list sẽ làm Postgres ném "invalid input syntax for type uuid" ⇒ 500 CẢ trang activity.
+  private static readonly UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   private readAssigneeId(values: unknown): string | null {
     if (values === null || typeof values !== "object" || Array.isArray(values)) return null;
     const id = (values as Record<string, unknown>).assigneeEmployeeId;
-    return typeof id === "string" ? id : null;
+    return typeof id === "string" && TaskActivityFeedService.UUID_RE.test(id) ? id : null;
   }
 
   /** Immutable: trả object MỚI; giá trị ĐÃ LƯU (vd assigneeName tương lai ghi sẵn) không bị ghi đè. */

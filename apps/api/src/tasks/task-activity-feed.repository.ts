@@ -83,6 +83,7 @@ export class TaskActivityFeedRepository {
            or exists (
              select 1 from task_watchers w
              join employee_profiles ew on ew.id = w.employee_id
+                                      and ew.company_id = t.company_id
               where w.task_id = t.id and w.company_id = t.company_id
                 and w.status in ('Active','Muted') and w.deleted_at is null
                 and ew.user_id = ${userId} and ew.deleted_at is null

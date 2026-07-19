@@ -586,9 +586,9 @@ export default {
       changeButton: "Đổi người phụ trách",
       saving: "Đang lưu…",
       employeeReadHint: "Bạn không có quyền xem danh sách nhân viên để chọn.",
-      watching: "Đang theo dõi",
       watchButton: "Theo dõi",
-      // S5-TASK-DETAIL-1 (GAP 4) — list người theo dõi + bỏ theo dõi (self-only).
+      // S5-TASK-DETAIL-1 (GAP 4) — list người theo dõi + bỏ theo dõi (self-only); key `watching`
+      // (nút 1-trạng-thái cũ) đã GỠ — UI chuyển sang 2 nút Theo dõi/Bỏ theo dõi.
       unwatchButton: "Bỏ theo dõi",
       watchersTitle: "Người theo dõi ({{count}})",
       watchersEmpty: "Chưa có ai theo dõi công việc này.",

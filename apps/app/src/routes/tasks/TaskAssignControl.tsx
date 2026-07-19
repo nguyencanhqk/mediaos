@@ -54,8 +54,6 @@ export function TaskAssignControl({ task }: { task: TaskCoreResponseDto }) {
   const queryClient = useQueryClient();
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(task.mainAssigneeEmployeeId ?? "");
-  // Bắc cầu giữa add thành công ↔ watchers refetch — nguồn sự thật là danh sách server (myWatcher).
-  const [optimisticWatching, setOptimisticWatching] = useState(false);
 
   const { data: employeesPage } = useQuery({
     queryKey: hrKeys.employees.list({ pageSize: 100, status: "active" }),
@@ -82,11 +80,18 @@ export function TaskAssignControl({ task }: { task: TaskCoreResponseDto }) {
     staleTime: 30_000,
   });
   const watchers = watchersQuery.data ?? [];
+  // Trạng thái "đang theo dõi" derive THUẦN từ list server — không flag local song song (flag từng
+  // gây kẹt nút khi add thành công mà list không chứa self). Khoảng trống add→refetch chỉ là 1 chớp
+  // isFetching (nút disable), và bấm lặp cũng vô hại: add trùng → 409 (đối xử như thành công) → refetch.
   const myWatcher = myUserId ? watchers.find((w) => w.userId === myUserId) : undefined;
-  const isWatching = myWatcher !== undefined || optimisticWatching;
+  const isWatching = myWatcher !== undefined;
 
-  const invalidateWatchers = () =>
+  // Watch/unwatch GHI activity log server-side (TASK_WATCHER_ADDED/REMOVED) ⇒ invalidate CẢ timeline
+  // cùng trang (taskKeys.activityOf — prefix mọi trang phân trang), không chỉ danh sách watcher.
+  const invalidateWatchers = () => {
     void queryClient.invalidateQueries({ queryKey: taskKeys.watchers(task.id) });
+    void queryClient.invalidateQueries({ queryKey: taskKeys.activityOf(task.id) });
+  };
 
   const watchMutation = useTaskActionMutation<void>({
     taskId: task.id,
@@ -96,22 +101,15 @@ export function TaskAssignControl({ task }: { task: TaskCoreResponseDto }) {
 
   const unwatchMutation = useMutation({
     mutationFn: (watcherId: string) => taskCoreApi.removeWatcher(task.id, watcherId),
-    onSuccess: () => setOptimisticWatching(false),
     onSettled: invalidateWatchers,
   });
 
   const handleWatch = () => {
     watchMutation.mutate(undefined, {
-      onSuccess: () => {
-        setOptimisticWatching(true);
-        invalidateWatchers();
-      },
+      onSuccess: invalidateWatchers,
       onError: (err) => {
-        // 409 = đã theo dõi trước đó (idempotent theo UX — hiển thị như đã theo dõi, KHÔNG coi là lỗi).
-        if (err instanceof ApiError && err.status === 409) {
-          setOptimisticWatching(true);
-          invalidateWatchers();
-        }
+        // 409 = đã theo dõi trước đó (idempotent theo UX — refetch để list phản ánh, KHÔNG coi là lỗi).
+        if (err instanceof ApiError && err.status === 409) invalidateWatchers();
       },
     });
   };
@@ -176,7 +174,7 @@ export function TaskAssignControl({ task }: { task: TaskCoreResponseDto }) {
               type="button"
               size="sm"
               variant="outline"
-              disabled={unwatchMutation.isPending || (!myWatcher && optimisticWatching)}
+              disabled={unwatchMutation.isPending || watchersQuery.isFetching}
               onClick={handleUnwatch}
             >
               {t("tasks.assign.unwatchButton")}
@@ -186,7 +184,7 @@ export function TaskAssignControl({ task }: { task: TaskCoreResponseDto }) {
               type="button"
               size="sm"
               variant="outline"
-              disabled={watchMutation.isPending}
+              disabled={watchMutation.isPending || watchersQuery.isFetching}
               onClick={handleWatch}
             >
               {t("tasks.assign.watchButton")}
@@ -217,7 +215,7 @@ export function TaskAssignControl({ task }: { task: TaskCoreResponseDto }) {
                 {watchers.map((w) => (
                   <li key={w.id} className="text-sm text-foreground">
                     {w.employeeName ?? "—"}
-                    {myUserId !== undefined && w.userId === myUserId && (
+                    {w.id === myWatcher?.id && (
                       <span className="text-xs text-muted-foreground">
                         {" "}
                         {t("tasks.assign.watcherSelfSuffix")}

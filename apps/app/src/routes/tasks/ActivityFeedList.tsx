@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { formatDateTime } from "@mediaos/web-core";
 import { Button } from "@mediaos/ui";
 import type { TaskActivityLogResponseDto } from "@mediaos/contracts";
 import { ACTIVITY_ACTION_LABEL_KEYS } from "./activity-labels";
@@ -46,8 +47,9 @@ export function ActivityFeedList({
     if (change.kind === "status") return t(`tasks.status.${value}`, { defaultValue: value });
     if (change.kind === "priority") return t(`tasks.priority.${value}`, { defaultValue: value });
     if (change.kind === "dueAt") {
+      // formatDateTime (web-core) pin Asia/Ho_Chi_Minh — không trôi theo múi giờ trình duyệt.
       const d = new Date(value);
-      return Number.isNaN(d.getTime()) ? value : d.toLocaleString("vi-VN");
+      return Number.isNaN(d.getTime()) ? value : formatDateTime(value);
     }
     return value; // state/assignee: tên đã lưu/enrich từ server
   };
