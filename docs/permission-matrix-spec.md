@@ -123,7 +123,7 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 
 Thêm cột **PM** (Project Manager — vai trò cấp-dự-án) và scope **Project**.
 
-**Mã quyền (nhóm):** `TASK.PROJECT.{VIEW,CREATE,UPDATE,DELETE,CLOSE,ARCHIVE,MANAGE_MEMBER,VIEW_REPORT} · TASK.TASK.{VIEW,CREATE,UPDATE,DELETE,ASSIGN,UPDATE_STATUS,UPDATE_PRIORITY,UPDATE_DEADLINE,COMMENT,FILE_UPLOAD,FILE_DELETE,WATCH,VIEW_KANBAN,EXPORT} · TASK.AUDIT_LOG.VIEW`
+**Mã quyền (nhóm):** `TASK.PROJECT.{VIEW,CREATE,UPDATE,DELETE,CLOSE,ARCHIVE,MANAGE_MEMBER,VIEW_REPORT} · TASK.TASK.{VIEW,CREATE,UPDATE,DELETE,ASSIGN,UPDATE_STATUS,UPDATE_STATE,UPDATE_PRIORITY,UPDATE_DEADLINE,COMMENT,FILE_UPLOAD,FILE_DELETE,WATCH,VIEW_KANBAN,EXPORT} · `TASK.PROJECT_STATE.{VIEW,CREATE,UPDATE,DELETE}` · `TASK.AUDIT_LOG.VIEW`
 
 | Chức năng | SA | ADM | HR | MGR | PM | EMP |
 |---|---|---|---|---|---|---|
@@ -134,9 +134,16 @@ Thêm cột **PM** (Project Manager — vai trò cấp-dự-án) và scope **Pro
 | Xem / Tạo task | Có | Cấp | Cấp | Team/Project | Project | Task liên quan / Cấp |
 | Giao task | Có | Cấp | Cấp | Team/Project | Project | — |
 | Cập nhật trạng thái task | Có | Cấp | Cấp | Scope | Project | Nếu là assignee |
+| Đổi cột pipeline task (kéo thả Kanban) | Có | Cấp | Cấp | Scope | Project | Own (task của mình) |
+| Xem cột pipeline của dự án | Có | Có | — | — | Có | Có |
+| Quản lý cột pipeline (thêm/sửa/xoá) | Có | Có | — | **—** | Có | — |
 | Bình luận / Upload file task | Có | Nếu xem được task | Nếu xem được task | Nếu xem được task | Nếu xem được task | Nếu xem được task |
 | Xóa task | Có | Cấp | — | Creator/owner | Owner | — |
 | Xem báo cáo dự án · Xuất task | Có | Cấp | Cấp | Scope | Dự án phụ trách | — |
+
+> **`TASK.TASK.UPDATE_STATE`** (bổ sung 18/07/2026 — [DECISIONS-03](<DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-16/D-17): quyền đổi **cột pipeline** (`tasks.state_id` → `project_states`), TÁCH khỏi `TASK.TASK.UPDATE_STATUS` (đổi `task_status`). Ma trận scope theo 4 role chuẩn **mirror đúng `UPDATE_STATUS`**: `employee = Own` · `manager = Team` · `hr = Company` · `company-admin = Company`.
+>
+> Kéo thẻ sang cột **khác `state_group`** kéo theo đổi trạng thái ⇒ đòi **cả hai** quyền, và phần đổi trạng thái chạy ở **phạm vi của chính `UPDATE_STATUS`**, không mượn phạm vi của `UPDATE_STATE`. Kéo sang cột **cùng nhóm** chỉ đòi `UPDATE_STATE`.
 
 ---
 
@@ -158,6 +165,8 @@ DASH chỉ hiển thị/deep-link; **module nguồn ép data scope thật**. Quy
 | Widget tổng user/nhân viên · module · log hệ thống · tài khoản mới | Có | Có | — | — | — |
 | Widget tiến độ dự án | Có | Cấp | Liên quan | Scope | Nếu là member |
 | Cấu hình widget theo role | Có | Cấp | — | — | — |
+
+> **Hai hàng cột pipeline ghi theo seed THẬT (mig 0420), không theo suy đoán.** Quản trị cột chỉ cấp cho SA · ADM · PM; quyền xem cấp thêm cho EMP. **MGR và HR hiện không có quyền nào trên cột, kể cả xem.** Không tồn tại kiểm tra "owner dự án" ở các route quản trị cột. Đổi bất kỳ ô nào ở hai hàng này = quyết định mới, phải qua sổ quyết định + migration riêng.
 
 ---
 

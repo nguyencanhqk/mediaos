@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-19 01:24Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-19 03:06Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -38,7 +38,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `docs/s5-task-subtask-model` · **file đang đổi (dirty)**: 1
+- **branch**: `docs/s5-task-pipeline-adr` · **file đang đổi (dirty)**: 7
 - **migration head**: idx 178 — `0498_s5_notifix2_task_code_seqgen` (179 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -47,7 +47,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
-| `7984777b` | 2026-07-19 | docs(task): việc con = subtask THẬT (parent_task_id) — tách WO riêng + chèn bộ lọc board vào đợt A |
+| `30a9db1f` | 2026-07-19 | docs(task): việc con = subtask THẬT + chèn bộ lọc board vào đợt A (owner chỉ ra) (#233) |
 | `731072e6` | 2026-07-18 | docs(task): kế hoạch đợt A pipeline + seed 4 WO redesign TASK (benchmark MISA AMIS) (#232) |
 | `a6a900cd` | 2026-07-18 | fix(task,att): task HR từ đơn điều chỉnh công mang task_code THẬT + counter Inactive → 409 (S5-TASK-HRCODE-1) (#231) |
 | `f00167db` | 2026-07-18 | fix(hr): /hr/audit-logs luôn "Không thể tải lịch sử" (schema client lệch hình dạng response) (#230) |
