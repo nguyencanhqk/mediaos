@@ -457,7 +457,7 @@ export class TaskActionsService {
   async removeWatcher(user: RequestUser, taskId: string, watcherId: string): Promise<void> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "watch", "task");
     await this.db.withTenant(user.companyId, async (tx) => {
-      await this.loadWatchable(tx, user, taskId, scope);
+      const raw = await this.loadWatchable(tx, user, taskId, scope);
       const actorEmp = await this.coreRepo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
       const w = await this.repo.findWatcherByIdTx(tx, user.companyId, taskId, watcherId);
       if (!w || w.deletedAt !== null) throw new NotFoundException(ERR.NOT_FOUND);
@@ -470,6 +470,9 @@ export class TaskActionsService {
         targetType: "Watcher",
         targetId: watcherId,
         taskId,
+        // S5-TASK-WORKSPACE-1: projectId PHẢI đi kèm (mirror TASK_WATCHER_ADDED) — feed dự án
+        // TASK-API-601 lọc theo project_id, thiếu là sự kiện biến mất khỏi tab Hoạt động.
+        projectId: raw.projectId,
         actorUserId: user.id,
         actorEmployeeId: actorEmp?.id ?? null,
         message: "Bỏ theo dõi công việc",

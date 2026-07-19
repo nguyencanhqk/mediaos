@@ -7,6 +7,8 @@ import { ProtectedShell } from "@/layouts/protected/ProtectedShell";
 import { ProtectedRoute } from "@/layouts/protected/ProtectedRoute";
 import { HomePortalLayout } from "@/layouts/home/HomePortalLayout";
 import { ModuleWorkspaceLayout } from "@/layouts/workspace/ModuleWorkspaceLayout";
+// S5-TASK-WORKSPACE-1 — parser ?tab= của workspace dự án (file thuần TS, không component).
+import { parseWorkspaceTab, type ProjectWorkspaceTab } from "@/routes/tasks/workspace-constants";
 
 // ---------------------------------------------------------------------------
 // Auth guard — `beforeLoad` CHỈ làm REDIRECT_LOGIN khi CHƯA có phiên (redirect SSO).
@@ -1397,11 +1399,19 @@ const tasksProjectsRoute = makeModuleRoute(
 );
 
 // Project detail — no sidebar entry; path param resolved via useParams (mirror hrEmployeeDetailRoute).
+// S5-TASK-WORKSPACE-1: vỏ workspace tab hoá — `?tab=` validate bằng CHÍNH parser của workspace
+// (parseWorkspaceTab, single source apps/app/src/routes/tasks/workspace-constants.ts — file thuần TS,
+// import tĩnh không kéo component vào bundle router). Giá trị rác bị strip (overview mặc định),
+// không 400/crash; đổi tab do page tự history.push (mirror pattern đợt B ProjectListPage).
 const tasksProjectDetailMeta = getMeta("task.projects.detail");
 const tasksProjectDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/tasks/projects/$projectId",
   beforeLoad: authGuard,
+  validateSearch: (search: Record<string, unknown>): { tab?: ProjectWorkspaceTab } => {
+    const tab = parseWorkspaceTab(search.tab);
+    return tab === "overview" ? {} : { tab };
+  },
   component: () => {
     const { projectId } = tasksProjectDetailRoute.useParams();
     const navigate = useNavigate();

@@ -19,6 +19,8 @@ import { RequirePermission } from "../permission/require-permission.decorator";
 import { ProjectsService } from "./projects.service";
 // S4-TASK-BE-4 (additive) — Kanban board (GET /projects/:id/kanban, TASK-API-212).
 import { TaskKanbanService } from "./task-kanban.service";
+// S5-TASK-WORKSPACE-1 (additive) — feed hoạt động dự án (GET /projects/:id/activity, TASK-API-601).
+import { TaskActivityFeedService } from "./task-activity-feed.service";
 import {
   AddMemberDto,
   CloseTaskProjectDto,
@@ -27,6 +29,7 @@ import {
   UpdateMemberRoleDto,
   UpdateTaskProjectDto,
 } from "./projects.dto";
+import { ListTaskActivityQueryDto } from "./tasks.dto";
 
 interface AuthenticatedRequest extends Request {
   user: { id: string; companyId: string };
@@ -52,6 +55,8 @@ export class ProjectsController {
     private readonly projects: ProjectsService,
     // S4-TASK-BE-4 — Kanban board.
     private readonly kanban: TaskKanbanService,
+    // S5-TASK-WORKSPACE-1 — feed hoạt động dự án.
+    private readonly activityFeed: TaskActivityFeedService,
   ) {}
 
   /** GET /projects — danh sách (read:project). Data-scope: employee @Own · manager @Team · hr/admin @Company. */
@@ -181,5 +186,23 @@ export class ProjectsController {
   @RequirePermission("view-report", "project", { isSensitive: true })
   getReport(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
     return this.projects.getReport(req.user, id);
+  }
+
+  /**
+   * GET /projects/:id/activity (S5-TASK-WORKSPACE-1, SPEC-06 §16.3 · TASK-API-601) — lịch sử hoạt động
+   * DỰ ÁN (task_activity_logs lọc project_id: gộp sự kiện project-level + task con). Gate
+   * `view:task-audit-log` (sensitive=true, seed 0485 CHỈ hr/company-admin @Company — employee/manager
+   * 403 đúng thiết kế, mirror TASK-API-602). Path suffix `/activity` theo route anh em ĐÃ ship
+   * GET /tasks/:taskId/activity (sổ mã ghi `/activity-logs` — drift path tiền tồn, dọn 1 lần riêng).
+   */
+  @Get(":id/activity")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("view", "task-audit-log", { isSensitive: true })
+  listActivity(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Query() query: ListTaskActivityQueryDto,
+  ) {
+    return this.activityFeed.listByProject(req.user, id, query);
   }
 }

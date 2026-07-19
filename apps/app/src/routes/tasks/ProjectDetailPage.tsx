@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "@tanstack/react-router";
+import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, RefreshCw, Pencil, Lock, Trash2, BarChart3 } from "lucide-react";
+import { ArrowLeft, RefreshCw, Pencil, Lock, Trash2 } from "lucide-react";
 import {
   taskProjectApi,
   taskKeys,
@@ -12,28 +12,49 @@ import {
   PermissionGate,
   ApiError,
 } from "@mediaos/web-core";
-import { PageHeader, EmptyState, Button, Card, Badge, Dialog } from "@mediaos/ui";
+import { PageHeader, EmptyState, Button, Card, Badge, Dialog, Input, Select } from "@mediaos/ui";
 import type { TaskProjectResponseDto } from "@mediaos/contracts";
-import { TASK_ENGINE_PAIRS } from "./constants";
+import {
+  TASK_CORE_ENGINE_PAIRS,
+  TASK_CORE_PRIORITY_OPTIONS,
+  TASK_CORE_STATUS_OPTIONS,
+  TASK_ENGINE_PAIRS,
+} from "./constants";
 import { PROJECT_REPORT_PAIR } from "./task-file-constants";
 import { ProjectFormDrawer } from "./ProjectFormDrawer";
 import { ProjectMemberTable } from "./ProjectMemberTable";
 import { TaskKanbanPage } from "./TaskKanbanPage";
+import { ProjectTaskListTab } from "./ProjectTaskListTab";
+import { ProjectActivityTimeline } from "./ProjectActivityTimeline";
+import { ProjectReportContent } from "./ProjectReportPage";
 import { ProjectProgressCard } from "./ProjectProgressCard";
 import { ProjectProgressWidget } from "@/components/dashboard/ProjectProgressWidget";
+import {
+  DEFAULT_WORKSPACE_FILTERS,
+  parseWorkspaceTab,
+  PROJECT_WORKSPACE_TABS,
+  WORKSPACE_TASK_SORTS,
+  type ProjectWorkspaceTab,
+  type WorkspaceTaskFilters,
+} from "./workspace-constants";
 
 /**
- * ProjectDetailPage — S4-FE-TASK-1 (SPEC-06 §13.3, TASK-SCREEN-003). Deep link /tasks/projects/:projectId.
+ * ProjectDetailPage — VỎ WORKSPACE dự án (S5-TASK-WORKSPACE-1 đợt D1, SPEC-06 §13.3 TASK-SCREEN-003;
+ * gốc S4-FE-TASK-1). Deep link /tasks/projects/:projectId?tab=board|list|report|activity|members.
  *
- * Tab "Kanban" (S4-FE-TASK-3, SPEC-06 §13.8) mount `<TaskKanbanPage>` — route MỚI KHÔNG thêm vào router.tsx
- * (ngoài paths cho phép của lane); thay vào đó tái dùng route đã có `/tasks/projects/:projectId` qua state
- * tab nội bộ (mirror tab "members" đã có từ S4-FE-TASK-1). Overview tab hiển thị field THẬT từ
- * TaskProjectResponseDto; khối "Tiến độ" (S4-FE-DASH-2) nhúng `<ProjectProgressWidget projectId>` — tổng
- * hợp task theo dự án qua GET /dashboard/widgets/project-progress (S4-DASH-BE-2, KHÔNG raw-query TASK).
+ * Tab bar: Tổng quan · Bảng · Danh sách · Báo cáo · Hoạt động · Thành viên — tab phản ánh vào URL
+ * (?tab=, history.PUSH ⇒ back/forward đi qua các tab). Tab Báo cáo/Hoạt động ẨN khi thiếu cặp
+ * SENSITIVE tương ứng (view-report:project / view:task-audit-log, useCanExact — UI-02 §5.3);
+ * deep-link thẳng vào tab bị ẩn → component tab TỰ gate (EmptyState forbidden, không fetch).
+ * Tab Gantt·Lịch·Tài liệu·Biểu mẫu thuộc đợt D2-D5 — KHÔNG render giả.
  *
- * `<ProjectProgressCard projectId>` (S4-FE-TASK-4, SPEC-06 §16.1) — báo cáo NHẠY CẢM riêng
- * (view-report:project, GET /projects/:id/report, S4-TASK-BE-5): countsByStatus + overdueCount +
- * assigneeWorkload (KHÁC widget ở trên — chỉ manager/hr/admin thấy, useCanExact fail-closed).
+ * Toolbar (tìm·lọc·sắp xếp) + rail avatar (multi-select người thực hiện + "Chưa giao") dùng CHUNG
+ * giữa tab Bảng và Danh sách: state sống Ở ĐÂY (vỏ luôn mounted khi đổi tab) — đổi tab giữ nguyên
+ * filter. Hai tab lọc client-side qua CÙNG helper `workspace-constants` (parity theo cấu trúc).
+ *
+ * Overview tab hiển thị field THẬT từ TaskProjectResponseDto; khối "Tiến độ" (S4-FE-DASH-2) nhúng
+ * `<ProjectProgressWidget projectId>`; `<ProjectProgressCard>` (S4-FE-TASK-4) — báo cáo NHẠY CẢM
+ * useCanExact fail-closed.
  */
 function ProjectStatusBadge({ status }: { status: string | null }) {
   const { t } = useTranslation("tasks");
@@ -201,6 +222,98 @@ function OverviewTab({ project }: { project: TaskProjectResponseDto }) {
   );
 }
 
+/** Toolbar lọc chung tab Bảng·Danh sách (tìm · trạng thái · ưu tiên · quá hạn · sắp xếp · đặt lại). */
+function WorkspaceToolbar({
+  filters,
+  onChange,
+}: {
+  filters: WorkspaceTaskFilters;
+  onChange: (next: WorkspaceTaskFilters) => void;
+}) {
+  const { t } = useTranslation("tasks");
+  const patch = (part: Partial<WorkspaceTaskFilters>) => onChange({ ...filters, ...part });
+  const isDirty =
+    filters.q !== "" ||
+    filters.status !== "" ||
+    filters.priority !== "" ||
+    filters.overdueOnly ||
+    filters.sort !== "default";
+
+  return (
+    <div className="flex flex-wrap items-center gap-3" data-testid="workspace-toolbar">
+      <Input
+        type="search"
+        value={filters.q}
+        onChange={(e) => patch({ q: e.target.value })}
+        placeholder={t("workspace.toolbar.searchPlaceholder")}
+        aria-label={t("workspace.toolbar.searchPlaceholder")}
+        className="w-56"
+        data-testid="workspace-search"
+      />
+      <Select
+        value={filters.status}
+        onChange={(e) => patch({ status: e.target.value as WorkspaceTaskFilters["status"] })}
+        aria-label={t("tasks.list.filters.status")}
+        className="w-40"
+        data-testid="workspace-filter-status"
+      >
+        <option value="">{t("tasks.list.allStatuses")}</option>
+        {TASK_CORE_STATUS_OPTIONS.map((s) => (
+          <option key={s} value={s}>
+            {t(`tasks.status.${s}`)}
+          </option>
+        ))}
+      </Select>
+      <Select
+        value={filters.priority}
+        onChange={(e) => patch({ priority: e.target.value as WorkspaceTaskFilters["priority"] })}
+        aria-label={t("tasks.list.filters.priority")}
+        className="w-36"
+        data-testid="workspace-filter-priority"
+      >
+        <option value="">{t("tasks.list.allPriorities")}</option>
+        {TASK_CORE_PRIORITY_OPTIONS.map((p) => (
+          <option key={p} value={p}>
+            {t(`tasks.priority.${p}`)}
+          </option>
+        ))}
+      </Select>
+      <label className="flex items-center gap-2 text-sm text-foreground">
+        <input
+          type="checkbox"
+          checked={filters.overdueOnly}
+          onChange={(e) => patch({ overdueOnly: e.target.checked })}
+          data-testid="workspace-filter-overdue"
+        />
+        {t("tasks.list.filters.overdue")}
+      </label>
+      <Select
+        value={filters.sort}
+        onChange={(e) => patch({ sort: e.target.value as WorkspaceTaskFilters["sort"] })}
+        aria-label={t("workspace.toolbar.sortLabel")}
+        className="w-44"
+        data-testid="workspace-sort"
+      >
+        {WORKSPACE_TASK_SORTS.map((sort) => (
+          <option key={sort} value={sort}>
+            {t(`workspace.toolbar.sort.${sort}`)}
+          </option>
+        ))}
+      </Select>
+      {isDirty && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onChange(DEFAULT_WORKSPACE_FILTERS)}
+          data-testid="workspace-filters-reset"
+        >
+          {t("workspace.toolbar.reset")}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export function ProjectDetailPage({
   projectId,
   onBack,
@@ -209,15 +322,43 @@ export function ProjectDetailPage({
   onBack: () => void;
 }) {
   const { t } = useTranslation("tasks");
-  const navigate = useNavigate();
   const canView = useCan(
     TASK_ENGINE_PAIRS.READ_PROJECT.action,
     TASK_ENGINE_PAIRS.READ_PROJECT.resourceType,
   );
-  // Báo cáo tiến độ (TASK-SCREEN-011) NHẠY CẢM — gate EXACT view-report:project (fail-closed, mirror
-  // ProjectProgressCard). Thiếu quyền → KHÔNG hiện nút "Xem báo cáo".
+  // 2 tab NHẠY CẢM gate EXACT (fail-closed): Báo cáo (view-report:project — TASK-SCREEN-011) và
+  // Hoạt động (view:task-audit-log — TASK-SCREEN-012). Thiếu quyền → ẨN tab (UI-02 §5.3).
   const canViewReport = useCanExact(PROJECT_REPORT_PAIR.action, PROJECT_REPORT_PAIR.resourceType);
-  const [tab, setTab] = useState<"overview" | "members" | "kanban">("overview");
+  const canViewActivity = useCanExact(
+    TASK_CORE_ENGINE_PAIRS.VIEW_ACTIVITY_LOG.action,
+    TASK_CORE_ENGINE_PAIRS.VIEW_ACTIVITY_LOG.resourceType,
+  );
+
+  // Tab là URL-driven (?tab=) — deep-link/share được; history.PUSH nên back/forward đi qua tab
+  // (done_when #1). Đọc qua useRouterState (route đã có validateSearch — router.tsx) mirror pattern
+  // đợt B ProjectListPage; giá trị rác → "overview".
+  const router = useRouter();
+  const locationSearch = useRouterState({ select: (s) => s.location.search });
+  const tab = parseWorkspaceTab((locationSearch as Record<string, unknown> | undefined)?.tab);
+  // validateSearch của route (router.tsx) là NGUỒN DUY NHẤT về shape search (chỉ giữ `tab`) —
+  // không copy param khác vào URL ở đây (sẽ bị validateSearch strip ngay lượt sau, dead code).
+  const setTab = (next: ProjectWorkspaceTab) => {
+    if (next === tab) return;
+    router.history.push(`/tasks/projects/${projectId}${next === "overview" ? "" : `?tab=${next}`}`);
+  };
+
+  // Bộ lọc toolbar + rail avatar sống Ở VỎ — đổi tab Bảng↔Danh sách giữ nguyên (done_when #2/#3).
+  const [filters, setFilters] = useState<WorkspaceTaskFilters>(DEFAULT_WORKSPACE_FILTERS);
+  const [assigneeSelection, setAssigneeSelection] = useState<ReadonlySet<string>>(new Set());
+  const toggleAssignee = (value: string) =>
+    setAssigneeSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  const clearAssignees = () => setAssigneeSelection(new Set());
+
   const [editOpen, setEditOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -289,21 +430,6 @@ export function ProjectDetailPage({
         description={project.code ?? undefined}
         actions={
           <div className="flex items-center gap-2">
-            {canViewReport && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  void navigate({
-                    to: "/tasks/projects/$projectId/report" as "/",
-                    params: { projectId: project.id } as never,
-                  })
-                }
-              >
-                <BarChart3 className="mr-2 h-4 w-4" />
-                {t("projects.detail.actions.viewReport")}
-              </Button>
-            )}
             <PermissionGate
               action={TASK_ENGINE_PAIRS.UPDATE_PROJECT.action}
               resourceType={TASK_ENGINE_PAIRS.UPDATE_PROJECT.resourceType}
@@ -337,12 +463,16 @@ export function ProjectDetailPage({
         }
       />
 
-      <div className="flex gap-2 border-b border-border">
-        {(["overview", "members", "kanban"] as const).map((key) => (
+      <div className="flex gap-2 overflow-x-auto border-b border-border">
+        {PROJECT_WORKSPACE_TABS.filter((key) =>
+          key === "report" ? canViewReport : key === "activity" ? canViewActivity : true,
+        ).map((key) => (
           <button
             key={key}
             type="button"
-            className={`border-b-2 px-3 py-2 text-sm font-medium ${
+            aria-current={tab === key ? "page" : undefined}
+            data-testid={`workspace-tab-${key}`}
+            className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium ${
               tab === key
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -354,12 +484,34 @@ export function ProjectDetailPage({
         ))}
       </div>
 
+      {(tab === "board" || tab === "list") && (
+        <WorkspaceToolbar filters={filters} onChange={setFilters} />
+      )}
+
       {tab === "overview" ? (
         <OverviewTab project={project} />
-      ) : tab === "members" ? (
-        <ProjectMemberTable projectId={project.id} />
+      ) : tab === "board" ? (
+        <TaskKanbanPage
+          projectId={project.id}
+          filters={filters}
+          assigneeSelection={assigneeSelection}
+          onToggleAssignee={toggleAssignee}
+          onClearAssignees={clearAssignees}
+        />
+      ) : tab === "list" ? (
+        <ProjectTaskListTab
+          projectId={project.id}
+          filters={filters}
+          assigneeSelection={assigneeSelection}
+          onToggleAssignee={toggleAssignee}
+          onClearAssignees={clearAssignees}
+        />
+      ) : tab === "report" ? (
+        <ProjectReportContent projectId={project.id} />
+      ) : tab === "activity" ? (
+        <ProjectActivityTimeline projectId={project.id} />
       ) : (
-        <TaskKanbanPage projectId={project.id} />
+        <ProjectMemberTable projectId={project.id} />
       )}
 
       {editOpen && (

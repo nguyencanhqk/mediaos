@@ -414,6 +414,10 @@ export const taskKeys = {
     // S4-FE-TASK-4 — APPEND: báo cáo tổng hợp dự án (ProjectProgressCard, GET /projects/:id/report,
     // view-report:project SENSITIVE) — tách khỏi detail (khác endpoint/gate/shape).
     report: (id: string) => [...rootKeys.tasks, "projects", "report", id] as const,
+    // S5-TASK-WORKSPACE-1 — APPEND: feed hoạt động dự án (tab "Hoạt động", GET /projects/:id/activity,
+    // TASK-API-601, view:task-audit-log SENSITIVE) — param'd theo limit/offset (tải thêm).
+    activity: (id: string, params?: Record<string, unknown>) =>
+      [...rootKeys.tasks, "projects", "activity", id, params] as const,
   },
   comments: (taskId: string) => [...rootKeys.tasks, "comments", taskId] as const,
   // S4-FE-TASK-3 — Kanban board (theo project) · checklist · activity feed (S4-TASK-BE-4).
