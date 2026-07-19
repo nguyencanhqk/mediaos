@@ -5,11 +5,12 @@ import { taskStatesApi, taskKeys, useCan, ApiError } from "@mediaos/web-core";
 import { Badge, Button, Dialog, Input, Skeleton } from "@mediaos/ui";
 import {
   projectStateGroupSchema,
+  type ProjectRoleDto,
   type ProjectStateDto,
   type ProjectStateGroupDto,
   type UpdateProjectStateRequest,
 } from "@mediaos/contracts";
-import { PROJECT_STATE_PAIRS } from "./constants";
+import { isProjectManagerOrOwner, PROJECT_STATE_PAIRS } from "./constants";
 
 /**
  * S5-TASK-PIPELINE-1 (lane fe) — quản lý CỘT pipeline của dự án (SPEC-06 §6.8, DECISIONS-03: kỷ luật
@@ -133,27 +134,28 @@ function StateRow({
 
 export function TaskStateColumnsDialog({
   projectId,
+  myProjectRole = null,
   open,
   onClose,
 }: {
   projectId: string;
+  /** Vai trò của CHÍNH actor trong dự án — S5-TASK-PROJROLE-1, D-24 (Owner/Manager quản cột). */
+  myProjectRole?: ProjectRoleDto | null;
   open: boolean;
   onClose: () => void;
 }) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
-  const canCreate = useCan(
-    PROJECT_STATE_PAIRS.CREATE.action,
-    PROJECT_STATE_PAIRS.CREATE.resourceType,
-  );
-  const canUpdate = useCan(
-    PROJECT_STATE_PAIRS.UPDATE.action,
-    PROJECT_STATE_PAIRS.UPDATE.resourceType,
-  );
-  const canDelete = useCan(
-    PROJECT_STATE_PAIRS.DELETE.action,
-    PROJECT_STATE_PAIRS.DELETE.resourceType,
-  );
+  const roleAllows = isProjectManagerOrOwner(myProjectRole);
+  const canCreate =
+    useCan(PROJECT_STATE_PAIRS.CREATE.action, PROJECT_STATE_PAIRS.CREATE.resourceType) ||
+    roleAllows;
+  const canUpdate =
+    useCan(PROJECT_STATE_PAIRS.UPDATE.action, PROJECT_STATE_PAIRS.UPDATE.resourceType) ||
+    roleAllows;
+  const canDelete =
+    useCan(PROJECT_STATE_PAIRS.DELETE.action, PROJECT_STATE_PAIRS.DELETE.resourceType) ||
+    roleAllows;
   const [errorMsgKey, setErrorMsgKey] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newGroup, setNewGroup] = useState<ProjectStateGroupDto>("started");

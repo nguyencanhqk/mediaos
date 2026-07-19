@@ -35,6 +35,7 @@ import {
 } from "./task-core.repository";
 import { TaskActivityService } from "./task-activity.service";
 import { TaskActionsService } from "./task-actions.service";
+import { ProjectAccessService } from "./project-access.service";
 import { coalesceTaskStatus, type TaskCoreStatus } from "./task-fsm";
 import { STATE_GROUP_TO_STATUS, type ProjectStateGroup } from "./task-state-sync";
 
@@ -70,6 +71,11 @@ const ERR = {
   // S5-TASK-PIPELINE-1 (API-06 §15.2/§26.2#12-13) — đường ghi state_id.
   STATE_NOT_FOUND: "TASK-ERR-STATE-NOT-FOUND: không tìm thấy cột.",
   STATE_INVALID: "TASK-ERR-STATE-INVALID: cột không thuộc dự án của công việc.",
+  // S5-TASK-PROJROLE-1 (D-27 create-scope)
+  CREATE_ASSIGNEE_REQUIRED:
+    "TASK-ERR-FORBIDDEN: tạo công việc ngoài dự án ở phạm vi này phải chỉ định người thực hiện trong phạm vi của bạn.",
+  ASSIGNEE_NOT_MEMBER:
+    "TASK-ERR-ASSIGNEE-INVALID: người thực hiện không phải thành viên đang hoạt động của dự án.",
 } as const;
 
 /**
@@ -99,6 +105,8 @@ export class TaskCoreService {
     // resolveStrongestScope KHÔNG-NÉM cho pair update-status: chỉ 403 khi auto-map THẬT SỰ đổi status
     // (plan 4b — kéo cùng nhóm không đòi update-status); null = thiếu pair, quyết trong tx (race-safe).
     private readonly permission: PermissionService,
+    // S5-TASK-PROJROLE-1 (D-23/D-24) — tầng đọc project_role + DRY assertInScopeForWrite (mode 'write').
+    private readonly projectAccess: ProjectAccessService,
   ) {}
 
   // ── Reads ────────────────────────────────────────────────────────────────────
@@ -178,8 +186,34 @@ export class TaskCoreService {
       if (dto.projectId) await this.assertProjectUsable(tx, user.companyId, dto.projectId);
       if (dto.departmentId) await this.assertDepartment(tx, user.companyId, dto.departmentId);
 
+      // S5-TASK-PROJROLE-1 — CREATE-SCOPE (D-27, điều kiện un-defer create:task ghi ở
+      // task-permissions.const.ts:80-83 'grant CÙNG release với enforcement'):
+      //   scope Own/Team + KHÔNG projectId ⇒ task cá nhân/đội — assignee BẮT BUỘC và phải thoả
+      //     org-scope (resolveAssignee bên dưới: Own = chính mình, Team = trong team; 403 out-of-scope).
+      //     Thiếu assignee ⇒ 403 (task vô chủ không nằm trong phạm vi nhìn thấy của chính người tạo —
+      //     buildReadScopeExists không có nhánh creator).
+      //   scope Own/Team + projectId ⇒ actor PHẢI là Active member Owner/Manager của dự án (D-24 hàng
+      //     'Tạo task trong dự án'); assignee (nếu có) PHẢI là Active member CÙNG dự án (400) — thay
+      //     cho org-scope check (Manager dự án giao việc cho member ngoài team mình là ca dùng CHÍNH).
+      //   scope Company/System ⇒ hành vi cũ nguyên vẹn (kể cả warning-only assignee ngoài dự án).
+      const isOrgWide = createScope === "Company" || createScope === "System";
+      if (!isOrgWide && !dto.projectId && !dto.assigneeEmployeeId) {
+        throw new ForbiddenException(ERR.CREATE_ASSIGNEE_REQUIRED);
+      }
+      if (!isOrgWide && dto.projectId) {
+        await this.projectAccess.assertProjectRoleTx(
+          tx,
+          user,
+          dto.projectId,
+          actorEmp?.id ?? null,
+          ["Owner", "Manager"],
+        );
+      }
+
       const assignee = dto.assigneeEmployeeId
-        ? await this.resolveAssignee(tx, user, createScope, dto.assigneeEmployeeId)
+        ? !isOrgWide && dto.projectId
+          ? await this.resolveAssigneeForProject(tx, user, dto.assigneeEmployeeId, dto.projectId)
+          : await this.resolveAssignee(tx, user, createScope, dto.assigneeEmployeeId)
         : null;
 
       // S5-TASK-PIPELINE-1 — cột + status khởi tạo (plan 1/3c, API-06 §26.2#15):
@@ -557,25 +591,18 @@ export class TaskCoreService {
     return this.repo.buildReadScopeExists(user.companyId, scopeCond, actorEmp?.id ?? null, user.id);
   }
 
-  /** WRITE scope: scope < Company ⇒ task phải nằm trong phạm vi (assignee-scope OR membership) ⇒ else 404. */
+  /**
+   * WRITE scope (mode 'write' — D-24): scope < Company ⇒ task phải nằm trong phạm vi ghi
+   * (assignee-scope OR membership Owner/Manager) ⇒ else 404. DRY về ProjectAccessService (trước đây
+   * bản trùng lặp thứ hai nằm ở TaskActionsService — plan lane be-core (4)).
+   */
   private async assertInScopeForWrite(
     tx: TenantTx,
     user: RequestUser,
     id: string,
     scope: DataScope,
   ): Promise<void> {
-    if (scope === "Company" || scope === "System") return;
-    const ctx = await this.dataScope.resolveContext(user.id, user.companyId);
-    const scopeCond = this.dataScope.buildEmployeeScopeCondition(scope, ctx);
-    const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
-    const scopeExists = this.repo.buildReadScopeExists(
-      user.companyId,
-      scopeCond,
-      actorEmp?.id ?? null,
-      user.id,
-    );
-    const scoped = await this.repo.findScopedByIdTx(tx, user.companyId, id, scopeExists);
-    if (!scoped) throw new NotFoundException(ERR.NOT_FOUND);
+    await this.projectAccess.assertTaskInScopeTx(tx, user, id, scope, "write");
   }
 
   /** Project tồn tại cùng tenant + KHÔNG kết thúc (đóng/huỷ/lưu trữ) — mirror createHubTask guard. */
@@ -617,6 +644,32 @@ export class TaskCoreService {
     if (emp.status !== "active") throw new BadRequestException(ERR.ASSIGNEE_NOT_ACTIVE);
     if (!emp.userId) throw new BadRequestException(ERR.ASSIGNEE_NO_ACCOUNT);
     await this.assertAssigneeInScope(user, scope, emp);
+    return { employeeId: emp.id, userId: emp.userId };
+  }
+
+  /**
+   * S5-TASK-PROJROLE-1 (D-27) — assignee cho đường tạo-trong-dự-án ở scope<Company: base validations
+   * (tồn tại/active/có account) + PHẢI là Active member CÙNG dự án (400 — thay cho org-scope check;
+   * Manager dự án giao việc cho member ngoài team mình là ca dùng chính của quyền per-project).
+   */
+  private async resolveAssigneeForProject(
+    tx: TenantTx,
+    user: RequestUser,
+    employeeId: string,
+    projectId: string,
+  ): Promise<{ employeeId: string; userId: string }> {
+    const emp = await this.repo.findEmployeeForScopeTx(tx, user.companyId, employeeId);
+    if (!emp || emp.deletedAt !== null) throw new BadRequestException(ERR.ASSIGNEE_NOT_FOUND);
+    if (emp.status !== "active") throw new BadRequestException(ERR.ASSIGNEE_NOT_ACTIVE);
+    if (!emp.userId) throw new BadRequestException(ERR.ASSIGNEE_NO_ACCOUNT);
+    const membership = await this.projectAccess.getMembershipTx(
+      tx,
+      user.companyId,
+      projectId,
+      emp.id,
+      emp.userId,
+    );
+    if (!membership) throw new BadRequestException(ERR.ASSIGNEE_NOT_MEMBER);
     return { employeeId: emp.id, userId: emp.userId };
   }
 

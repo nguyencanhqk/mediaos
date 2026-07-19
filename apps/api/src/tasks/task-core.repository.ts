@@ -182,15 +182,26 @@ const TASK_CORE_JOINS = sql`
   left join project_states ps    on ps.id = tk.state_id and ps.company_id = tk.company_id
                                 and ps.project_id = tk.project_id and ps.deleted_at is null`;
 
+/**
+ * S5-TASK-PROJROLE-1 (DECISIONS-04 D-24) — mode của predicate scope, thread PER-OPERATION từ caller:
+ *   'read'   — mọi Active member (list/detail/board/xem comment-checklist-file/watch);
+ *   'collab' — viết comment · tick/sửa checklist · upload/xoá file: role ≥ Member (chặn Viewer);
+ *   'write'  — sửa/move/assign/priority/deadline/delete task NGƯỜI KHÁC: Owner/Manager.
+ * Nhánh assignee KHÔNG cap ở mọi mode. Helper dùng chung cho cả đọc lẫn ghi PHẢI nhận mode từ caller,
+ * KHÔNG gán cứng (BLOCKING #1 + residual của plan-reviewer — docs/plans/S5-TASK-PROJROLE-1.md §Sửa sai).
+ */
+export type TaskScopeMode = "read" | "collab" | "write";
+
 @Injectable()
 export class TaskCoreRepository {
   // ── Data-scope EXISTS (filter AT THE DB, defense-in-depth trên RLS) ──────────────
 
   /**
-   * Predicate scope ĐỌC cho Own/Team/Department: task giữ khi (A) main_assignee_employee_id trỏ 1
+   * Predicate scope cho Own/Team/Department: task giữ khi (A) main_assignee_employee_id trỏ 1
    * employee_profiles thoả `scopeCond` (DataScopeService.buildEmployeeScopeCondition — predicate over
-   * employee_profiles) HOẶC (B) actor là ACTIVE member của project chứa task (membership OR-scope,
-   * done_when #2). Correlate `tk` (outer alias). Company/System KHÔNG gọi (service bỏ qua ⇒ thấy toàn tenant).
+   * employee_profiles) HOẶC (B) actor là ACTIVE member của project chứa task (membership OR-scope) với
+   * project_role đủ bậc theo `mode` (D-24 — xem TaskScopeMode). Correlate `tk` (outer alias).
+   * Company/System KHÔNG gọi (service bỏ qua ⇒ thấy toàn tenant).
    *
    * Idiom đã chứng minh (ProjectsRepository.buildScopeExists): subquery FROM `employee_profiles` KHÔNG alias
    * ⇒ scopeCond render `"employee_profiles"."…"` bind đúng phạm vi con; `${companyId}` = bind-param.
@@ -200,6 +211,7 @@ export class TaskCoreRepository {
     scopeCond: SQL,
     actorEmployeeId: string | null,
     actorUserId: string,
+    mode: TaskScopeMode = "read",
   ): SQL {
     const assigneeExists = sql`exists (
       select 1 from employee_profiles
@@ -211,13 +223,25 @@ export class TaskCoreRepository {
     const memberPredicate = actorEmployeeId
       ? sql`(pm.employee_id = ${actorEmployeeId} or pm.user_id = ${actorUserId})`
       : sql`pm.user_id = ${actorUserId}`;
+    // S5-TASK-PROJROLE-1 (D-24): nhánh membership bị CAP theo project_role tuỳ mode — nhánh assignee
+    // KHÔNG cap ở mọi mode (task giao cho chính mình = đường Own truyền thống). NULL = Member (member
+    // legacy user_id-only trước 0478) ⇒ được read/collab, KHÔNG write-rộng.
+    //   read   — mọi Active member (giữ nguyên hành vi cũ);
+    //   collab — viết comment/tick checklist/upload file: role ≥ Member (chặn Viewer);
+    //   write  — sửa/move/assign/priority/deadline/delete task người khác: Owner/Manager.
+    const roleCond =
+      mode === "write"
+        ? sql` and pm.project_role in ('Owner','Manager')`
+        : mode === "collab"
+          ? sql` and (pm.project_role in ('Owner','Manager','Member') or pm.project_role is null)`
+          : sql``;
     const projectMemberExists = sql`exists (
       select 1 from project_members pm
        where pm.company_id = ${companyId}
          and pm.project_id = tk.project_id
          and pm.member_status = 'Active'
          and pm.deleted_at is null
-         and ${memberPredicate}
+         and ${memberPredicate}${roleCond}
     )`;
 
     return sql`(${assigneeExists} or ${projectMemberExists})`;
@@ -328,7 +352,14 @@ export class TaskCoreRepository {
     companyId: string,
     projectId: string,
   ): Promise<
-    { id: string; name: string; color: string; stateGroup: string; isDefault: boolean; sortOrder: number }[]
+    {
+      id: string;
+      name: string;
+      color: string;
+      stateGroup: string;
+      isDefault: boolean;
+      sortOrder: number;
+    }[]
   > {
     const res = await tx.execute(sql`
       select id, name, color, state_group as "stateGroup", is_default as "isDefault",

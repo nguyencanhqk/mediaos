@@ -12,13 +12,14 @@ import {
 } from "@mediaos/web-core";
 import { Card, Button, EmptyState, Avatar, Badge, cn } from "@mediaos/ui";
 import type {
+  ProjectRoleDto,
   TaskCoreStatusDto,
   TaskKanbanBoardDto,
   TaskKanbanCardDto,
   TaskKanbanStateColumnDto,
   TaskKanbanStatusColumnDto,
 } from "@mediaos/contracts";
-import { PROJECT_STATE_PAIRS, TASK_CORE_ENGINE_PAIRS } from "./constants";
+import { isProjectManagerOrOwner, PROJECT_STATE_PAIRS, TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { TaskStatusBadge, TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
 import { TaskStateColumnsDialog } from "./TaskStateColumnsDialog";
 import { AssigneeRail } from "./AssigneeRail";
@@ -291,12 +292,15 @@ function StateKanbanColumn({
 
 export function TaskKanbanPage({
   projectId,
+  myProjectRole = null,
   filters = DEFAULT_WORKSPACE_FILTERS,
   assigneeSelection = EMPTY_SELECTION,
   onToggleAssignee,
   onClearAssignees,
 }: {
   projectId: string;
+  /** Vai trò của CHÍNH actor trong dự án (server tính) — S5-TASK-PROJROLE-1, D-24 quản cột pipeline. */
+  myProjectRole?: ProjectRoleDto | null;
   /** Bộ lọc toolbar chung của workspace (mặc định: không lọc — mount độc lập vẫn chạy). */
   filters?: WorkspaceTaskFilters;
   /** Rail avatar multi-select; không truyền onToggleAssignee → ẨN rail (không có chỗ ghi state). */
@@ -334,7 +338,10 @@ export function TaskKanbanPage({
     PROJECT_STATE_PAIRS.DELETE.action,
     PROJECT_STATE_PAIRS.DELETE.resourceType,
   );
-  const canManageColumns = canCreateState || canUpdateState || canDeleteState;
+  // D-24: Owner/Manager của dự án quản được cột pipeline dù pair *:project_state chưa cấp (dormant
+  // seed hiện tại — DECISIONS-04 D-28); BE là người quyết cuối, đây CHỈ ẩn/hiện nút.
+  const canManageColumns =
+    canCreateState || canUpdateState || canDeleteState || isProjectManagerOrOwner(myProjectRole);
   const [manageOpen, setManageOpen] = useState(false);
   const [dragErrorKey, setDragErrorKey] = useState<string | null>(null);
   const queryKey = taskKeys.kanban(projectId);
@@ -618,6 +625,7 @@ export function TaskKanbanPage({
       {canManageColumns && (
         <TaskStateColumnsDialog
           projectId={projectId}
+          myProjectRole={myProjectRole}
           open={manageOpen}
           onClose={() => setManageOpen(false)}
         />

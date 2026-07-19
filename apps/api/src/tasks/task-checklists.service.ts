@@ -11,7 +11,11 @@ import type {
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { DataScopeService } from "../permission/data-scope.service";
-import { TaskCoreRepository, type TaskCoreRow } from "./task-core.repository";
+import {
+  TaskCoreRepository,
+  type TaskCoreRow,
+  type TaskScopeMode,
+} from "./task-core.repository";
 import {
   TaskChecklistsRepository,
   type TaskChecklistItemRow,
@@ -57,7 +61,7 @@ export class TaskChecklistsService {
   async list(user: RequestUser, taskId: string): Promise<TaskChecklistResponseDto[]> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "read", "task");
     return this.db.withTenant(user.companyId, async (tx) => {
-      await this.assertTaskInScope(tx, user, taskId, scope);
+      await this.assertTaskInScope(tx, user, taskId, scope, "read");
       const checklists = await this.repo.listChecklistsTx(tx, user.companyId, taskId);
       const out: TaskChecklistResponseDto[] = [];
       for (const cl of checklists) {
@@ -75,7 +79,7 @@ export class TaskChecklistsService {
   ): Promise<TaskChecklistResponseDto> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "update", "task");
     return this.db.withTenant(user.companyId, async (tx) => {
-      const task = await this.assertTaskInScope(tx, user, taskId, scope);
+      const task = await this.assertTaskInScope(tx, user, taskId, scope, "collab");
       const orderIndex = await this.repo.nextChecklistOrderIndexTx(tx, user.companyId, taskId);
       const created = await this.repo.insertChecklistTx(tx, user.companyId, {
         taskId,
@@ -129,7 +133,7 @@ export class TaskChecklistsService {
   ): Promise<TaskChecklistResponseDto> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "update", "task");
     return this.db.withTenant(user.companyId, async (tx) => {
-      const task = await this.assertTaskInScope(tx, user, taskId, scope);
+      const task = await this.assertTaskInScope(tx, user, taskId, scope, "collab");
       const existing = await this.repo.findChecklistTx(tx, user.companyId, taskId, checklistId);
       if (!existing || existing.deletedAt !== null)
         throw new NotFoundException(ERR.CHECKLIST_NOT_FOUND);
@@ -169,7 +173,7 @@ export class TaskChecklistsService {
   async remove(user: RequestUser, taskId: string, checklistId: string): Promise<void> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "update", "task");
     await this.db.withTenant(user.companyId, async (tx) => {
-      const task = await this.assertTaskInScope(tx, user, taskId, scope);
+      const task = await this.assertTaskInScope(tx, user, taskId, scope, "collab");
       const existing = await this.repo.findChecklistTx(tx, user.companyId, taskId, checklistId);
       if (!existing || existing.deletedAt !== null)
         throw new NotFoundException(ERR.CHECKLIST_NOT_FOUND);
@@ -213,7 +217,7 @@ export class TaskChecklistsService {
   ): Promise<TaskChecklistItemResponseDto> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "update", "task");
     return this.db.withTenant(user.companyId, async (tx) => {
-      const task = await this.assertTaskInScope(tx, user, taskId, scope);
+      const task = await this.assertTaskInScope(tx, user, taskId, scope, "collab");
       const checklist = await this.repo.findChecklistTx(tx, user.companyId, taskId, checklistId);
       if (!checklist || checklist.deletedAt !== null) {
         throw new NotFoundException(ERR.CHECKLIST_NOT_FOUND);
@@ -264,7 +268,7 @@ export class TaskChecklistsService {
   ): Promise<TaskChecklistItemResponseDto> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "update", "task");
     return this.db.withTenant(user.companyId, async (tx) => {
-      const task = await this.assertTaskInScope(tx, user, taskId, scope);
+      const task = await this.assertTaskInScope(tx, user, taskId, scope, "collab");
       const checklist = await this.repo.findChecklistTx(tx, user.companyId, taskId, checklistId);
       if (!checklist || checklist.deletedAt !== null) {
         throw new NotFoundException(ERR.CHECKLIST_NOT_FOUND);
@@ -315,7 +319,7 @@ export class TaskChecklistsService {
   ): Promise<void> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "update", "task");
     await this.db.withTenant(user.companyId, async (tx) => {
-      const task = await this.assertTaskInScope(tx, user, taskId, scope);
+      const task = await this.assertTaskInScope(tx, user, taskId, scope, "collab");
       const checklist = await this.repo.findChecklistTx(tx, user.companyId, taskId, checklistId);
       if (!checklist || checklist.deletedAt !== null) {
         throw new NotFoundException(ERR.CHECKLIST_NOT_FOUND);
@@ -348,11 +352,17 @@ export class TaskChecklistsService {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
+  /**
+   * S5-TASK-PROJROLE-1 (BLOCKING #1 plan-reviewer): helper dùng chung cho CẢ list (đọc) LẪN mutate
+   * (checklist/item CUD + tick) ⇒ mode thread từ caller — list → 'read' (Viewer đọc được checklist),
+   * mutate → 'collab' (D-24: tick/sửa checklist đòi role ≥ Member; Viewer bị chặn 404).
+   */
   private async assertTaskInScope(
     tx: TenantTx,
     user: RequestUser,
     taskId: string,
     scope: DataScope,
+    mode: TaskScopeMode,
   ): Promise<TaskCoreRow> {
     let scopeExists;
     if (scope !== "Company" && scope !== "System") {
@@ -364,6 +374,7 @@ export class TaskChecklistsService {
         scopeCond,
         actorEmp?.id ?? null,
         user.id,
+        mode,
       );
     }
     const row = await this.coreRepo.findScopedByIdTx(tx, user.companyId, taskId, scopeExists);

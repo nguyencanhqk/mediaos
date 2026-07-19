@@ -9,7 +9,6 @@ import {
   taskProjectInvalidation,
   useCan,
   useCanExact,
-  PermissionGate,
   ApiError,
 } from "@mediaos/web-core";
 import { PageHeader, EmptyState, Button, Card, Badge, Dialog, Input, Select } from "@mediaos/ui";
@@ -19,10 +18,13 @@ import {
   TASK_CORE_PRIORITY_OPTIONS,
   TASK_CORE_STATUS_OPTIONS,
   TASK_ENGINE_PAIRS,
+  isProjectManagerOrOwner,
+  isProjectOwner,
 } from "./constants";
 import { PROJECT_REPORT_PAIR } from "./task-file-constants";
 import { ProjectFormDrawer } from "./ProjectFormDrawer";
 import { ProjectMemberTable } from "./ProjectMemberTable";
+import { ProjectRoleLegend } from "./ProjectRoleLegend";
 import { TaskKanbanPage } from "./TaskKanbanPage";
 import { ProjectTaskListTab } from "./ProjectTaskListTab";
 import { ProjectActivityTimeline } from "./ProjectActivityTimeline";
@@ -333,6 +335,21 @@ export function ProjectDetailPage({
     TASK_CORE_ENGINE_PAIRS.VIEW_ACTIVITY_LOG.action,
     TASK_CORE_ENGINE_PAIRS.VIEW_ACTIVITY_LOG.resourceType,
   );
+  // S5-TASK-PROJROLE-1 (đợt C, D-24) — affordance Sửa/Đóng/Xóa dự án: pair hệ thống HOẶC vai trò
+  // per-project đủ bậc (server `assertGovern`/tầng role service-layer là người quyết cuối, ở đây
+  // CHỈ ẩn/hiện). Gọi ĐỦ 3 hook vô điều kiện trước khi OR với myProjectRole (rules-of-hooks).
+  const canUpdatePair = useCan(
+    TASK_ENGINE_PAIRS.UPDATE_PROJECT.action,
+    TASK_ENGINE_PAIRS.UPDATE_PROJECT.resourceType,
+  );
+  const canClosePair = useCan(
+    TASK_ENGINE_PAIRS.CLOSE_PROJECT.action,
+    TASK_ENGINE_PAIRS.CLOSE_PROJECT.resourceType,
+  );
+  const canDeletePair = useCan(
+    TASK_ENGINE_PAIRS.DELETE_PROJECT.action,
+    TASK_ENGINE_PAIRS.DELETE_PROJECT.resourceType,
+  );
 
   // Tab là URL-driven (?tab=) — deep-link/share được; history.PUSH nên back/forward đi qua tab
   // (done_when #1). Đọc qua useRouterState (route đã có validateSearch — router.tsx) mirror pattern
@@ -417,6 +434,10 @@ export function ProjectDetailPage({
   if (!data) return null;
   const project = data;
   const canCloseAction = project.status !== "Completed" && project.status !== "Cancelled";
+  // D-24: Sửa = Owner/Manager; Đóng/Xóa = Owner-only (govern) — myProjectRole chỉ NỚI hiện, BE quyết cuối.
+  const showEdit = canUpdatePair || isProjectManagerOrOwner(project.myProjectRole);
+  const showClose = canClosePair || isProjectOwner(project.myProjectRole);
+  const showDelete = canDeletePair || isProjectOwner(project.myProjectRole);
 
   return (
     <div className="space-y-6 p-6">
@@ -430,35 +451,24 @@ export function ProjectDetailPage({
         description={project.code ?? undefined}
         actions={
           <div className="flex items-center gap-2">
-            <PermissionGate
-              action={TASK_ENGINE_PAIRS.UPDATE_PROJECT.action}
-              resourceType={TASK_ENGINE_PAIRS.UPDATE_PROJECT.resourceType}
-            >
+            {showEdit && (
               <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
                 <Pencil className="mr-2 h-4 w-4" />
                 {t("projects.detail.actions.edit")}
               </Button>
-            </PermissionGate>
-            {canCloseAction && (
-              <PermissionGate
-                action={TASK_ENGINE_PAIRS.CLOSE_PROJECT.action}
-                resourceType={TASK_ENGINE_PAIRS.CLOSE_PROJECT.resourceType}
-              >
-                <Button variant="outline" size="sm" onClick={() => setCloseOpen(true)}>
-                  <Lock className="mr-2 h-4 w-4" />
-                  {t("projects.detail.actions.close")}
-                </Button>
-              </PermissionGate>
             )}
-            <PermissionGate
-              action={TASK_ENGINE_PAIRS.DELETE_PROJECT.action}
-              resourceType={TASK_ENGINE_PAIRS.DELETE_PROJECT.resourceType}
-            >
+            {canCloseAction && showClose && (
+              <Button variant="outline" size="sm" onClick={() => setCloseOpen(true)}>
+                <Lock className="mr-2 h-4 w-4" />
+                {t("projects.detail.actions.close")}
+              </Button>
+            )}
+            {showDelete && (
               <Button variant="outline" size="sm" onClick={() => setDeleteOpen(true)}>
                 <Trash2 className="mr-2 h-4 w-4 text-destructive" />
                 {t("projects.detail.actions.delete")}
               </Button>
-            </PermissionGate>
+            )}
           </div>
         }
       />
@@ -493,6 +503,7 @@ export function ProjectDetailPage({
       ) : tab === "board" ? (
         <TaskKanbanPage
           projectId={project.id}
+          myProjectRole={project.myProjectRole}
           filters={filters}
           assigneeSelection={assigneeSelection}
           onToggleAssignee={toggleAssignee}
@@ -511,7 +522,12 @@ export function ProjectDetailPage({
       ) : tab === "activity" ? (
         <ProjectActivityTimeline projectId={project.id} />
       ) : (
-        <ProjectMemberTable projectId={project.id} />
+        // tab "members" (S5-TASK-PROJROLE-1 đợt C) — HIỆN cho mọi người xem được dự án; control ghi
+        // gate trong ProjectMemberTable qua myProjectRole. Chú giải D-24 kèm theo, KHÔNG logic quyền.
+        <div className="space-y-4">
+          <ProjectMemberTable projectId={project.id} myProjectRole={project.myProjectRole} />
+          <ProjectRoleLegend />
+        </div>
       )}
 
       {editOpen && (

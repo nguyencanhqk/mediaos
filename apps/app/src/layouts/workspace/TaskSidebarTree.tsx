@@ -8,6 +8,7 @@ import {
   Check,
   ChevronRight,
   FolderKanban,
+  KeyRound,
   MoreHorizontal,
   Plus,
   RefreshCw,
@@ -23,7 +24,7 @@ import {
 } from "@mediaos/web-core";
 import { cn, Popover, Skeleton } from "@mediaos/ui";
 import { TASK_PROJECT_PAGE_LIMIT_MAX, type TaskProjectListItemDto } from "@mediaos/contracts";
-import { TASK_ENGINE_PAIRS } from "@/routes/tasks/constants";
+import { isProjectOwner, TASK_ENGINE_PAIRS } from "@/routes/tasks/constants";
 import { ProjectFormDrawer } from "@/routes/tasks/ProjectFormDrawer";
 import { useLocalPref } from "@/hooks/use-local-pref";
 import { isPathActive } from "./ModuleSidebar";
@@ -47,6 +48,9 @@ import { usePersistedSet } from "./use-persisted-set";
  * - Số lượng: limit = TASK_PROJECT_PAGE_LIMIT_MAX (trần server, import từ contracts — không chép
  *   số); chạm trần thì hiện dòng báo cắt, không cắt im lặng. staleTime 5' cả 2 query — dữ liệu đổi
  *   qua mutation đã có taskProjectInvalidation, không cần refetch-on-focus dồn dập.
+ * - S5-TASK-PROJROLE-1 (đợt C): node DỰ ÁN cũng có menu ⋯ — ĐÚNG 1 mục "Cài đặt quyền" (deep-link
+ *   `?tab=members`), HIỆN khi manage-member:project HOẶC `myProjectRole==='Owner'` (list DTO); thiếu
+ *   cả hai ⇒ ẨN mục + ẩn luôn nút ⋯ (`ProjectMenu` trả `null`, không lộ menu rỗng — UI-02 §5.3).
  */
 
 const COLLAPSED_KEY = "mediaos.sidebar.taskTree.collapsed";
@@ -185,28 +189,86 @@ function DeptMenu({
   );
 }
 
+/**
+ * S5-TASK-PROJROLE-1 (đợt C) — menu ⋯ node DỰ ÁN, ĐÚNG 1 mục "Cài đặt quyền" → điều hướng
+ * `?tab=members` (tab Thành viên vỏ workspace). HIỆN khi có manage-member:project (pair hệ thống)
+ * HOẶC `myProjectRole==='Owner'` (list DTO server trả — BE quyết cuối, đây chỉ ẩn/hiện). Thiếu cả
+ * hai ⇒ ẨN MỤC + ẨN LUÔN NÚT ⋯ (UI-02 §5.3 — không lộ menu rỗng).
+ */
+function ProjectMenu({ project }: { project: TaskProjectListItemDto }) {
+  const { t } = useTranslation("tasks");
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const canManageMembersPair = useCan(
+    TASK_ENGINE_PAIRS.MANAGE_MEMBER_PROJECT.action,
+    TASK_ENGINE_PAIRS.MANAGE_MEMBER_PROJECT.resourceType,
+  );
+  const showSettings = canManageMembersPair || isProjectOwner(project.myProjectRole);
+  if (!showSettings) return null;
+
+  const goSettings = () => {
+    setOpen(false);
+    router.history.push(`/tasks/projects/${project.id}?tab=members`);
+  };
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      align="end"
+      className="min-w-[13rem] p-1.5"
+      trigger={
+        <button
+          type="button"
+          aria-label={t("sidebarTree.projectMenuLabel", { name: project.name })}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className={cn(
+            "rounded p-1 text-muted-foreground/60 hover:bg-accent hover:text-foreground",
+            "opacity-60 lg:opacity-0 lg:focus-visible:opacity-100 lg:group-hover/project:opacity-100",
+            open && "opacity-100 lg:opacity-100",
+          )}
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+      }
+    >
+      <div role="menu" className="space-y-0.5">
+        <button type="button" role="menuitem" onClick={goSettings} className={MENU_ITEM_CLASS}>
+          <KeyRound className="h-4 w-4" />
+          {t("sidebarTree.projectMenu.permissionSettings")}
+        </button>
+      </div>
+    </Popover>
+  );
+}
+
 function ProjectLeaf({ project, pathname }: { project: TaskProjectListItemDto; pathname: string }) {
   const isActive = isPathActive(pathname, `/tasks/projects/${project.id}`);
   return (
-    <Link
-      to="/tasks/projects/$projectId"
-      params={{ projectId: project.id }}
-      aria-current={isActive ? "page" : undefined}
-      title={project.name}
-      className={cn(
-        "flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors",
-        "text-muted-foreground hover:bg-accent hover:text-foreground",
-        isActive && "bg-brand-muted font-medium text-brand",
-      )}
-    >
-      <span
+    <div className="group/project flex items-center gap-0.5 pr-1">
+      <Link
+        to="/tasks/projects/$projectId"
+        params={{ projectId: project.id }}
+        aria-current={isActive ? "page" : undefined}
+        title={project.name}
         className={cn(
-          "h-1.5 w-1.5 shrink-0 rounded-full",
-          isActive ? "bg-brand" : "bg-muted-foreground/50",
+          "flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors",
+          "text-muted-foreground hover:bg-accent hover:text-foreground",
+          isActive && "bg-brand-muted font-medium text-brand",
         )}
-      />
-      <span className="truncate">{project.name}</span>
-    </Link>
+      >
+        <span
+          className={cn(
+            "h-1.5 w-1.5 shrink-0 rounded-full",
+            isActive ? "bg-brand" : "bg-muted-foreground/50",
+          )}
+        />
+        <span className="truncate">{project.name}</span>
+      </Link>
+      <ProjectMenu project={project} />
+    </div>
   );
 }
 

@@ -75,6 +75,7 @@ const MOCK_ITEMS: TaskProjectListItemDto[] = [
     startDate: "2026-01-01",
     endDate: "2026-06-30",
     memberCount: 3,
+    myProjectRole: null,
     createdBy: "u1",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",

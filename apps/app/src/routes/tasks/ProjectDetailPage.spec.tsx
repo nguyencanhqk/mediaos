@@ -106,6 +106,7 @@ const MOCK_PROJECT: TaskProjectResponseDto = {
   startDate: "2026-01-01",
   endDate: "2026-06-30",
   memberCount: 3,
+  myProjectRole: null,
   createdBy: "u1",
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
@@ -183,6 +184,46 @@ describe("ProjectDetailPage", () => {
     expect(screen.getByText(/xóa dự án/i)).toBeInTheDocument();
   });
 
+  // ── S5-TASK-PROJROLE-1 (đợt C, D-24 affordance) — myProjectRole nới hiện dù thiếu pair ──────
+  it("Manager (myProjectRole) thấy 'Sửa dự án' nhưng KHÔNG thấy 'Đóng'/'Xóa' (govern Owner-only)", async () => {
+    setCapabilities({ "read:project": true });
+    vi.mocked(taskProjectApi.getProject).mockResolvedValue({
+      ...MOCK_PROJECT,
+      myProjectRole: "Manager",
+    });
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(screen.getByText(/sửa dự án/i)).toBeInTheDocument();
+    expect(screen.queryByText(/đóng dự án/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/xóa dự án/i)).not.toBeInTheDocument();
+  });
+
+  it("Owner (myProjectRole) thấy đủ Sửa/Đóng/Xóa dù thiếu mọi pair hệ thống", async () => {
+    setCapabilities({ "read:project": true });
+    vi.mocked(taskProjectApi.getProject).mockResolvedValue({
+      ...MOCK_PROJECT,
+      myProjectRole: "Owner",
+    });
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(screen.getByText(/sửa dự án/i)).toBeInTheDocument();
+    expect(screen.getByText(/đóng dự án/i)).toBeInTheDocument();
+    expect(screen.getByText(/xóa dự án/i)).toBeInTheDocument();
+  });
+
+  it("Member (myProjectRole) KHÔNG thấy Sửa/Đóng/Xóa khi thiếu pair hệ thống", async () => {
+    setCapabilities({ "read:project": true });
+    vi.mocked(taskProjectApi.getProject).mockResolvedValue({
+      ...MOCK_PROJECT,
+      myProjectRole: "Member",
+    });
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(screen.queryByText(/sửa dự án/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/đóng dự án/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/xóa dự án/i)).not.toBeInTheDocument();
+  });
+
   // ── S5-TASK-WORKSPACE-1: tab bar + gating ─────────────────────────────────
   describe("workspace tab bar", () => {
     it("ẨN tab Báo cáo/Hoạt động khi thiếu cặp EXACT (kể cả wildcard *:*)", async () => {
@@ -254,12 +295,14 @@ describe("ProjectDetailPage", () => {
       expect(screen.queryByTestId("workspace-toolbar")).not.toBeInTheDocument();
     });
 
-    it("deep-link ?tab=members tải danh sách thành viên", async () => {
+    it("deep-link ?tab=members tải danh sách thành viên + hiện chú giải vai trò D-24", async () => {
       setCapabilities({ "read:project": true });
       vi.mocked(taskProjectApi.getProject).mockResolvedValue(MOCK_PROJECT);
       searchRef.current = { tab: "members" };
       renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
       await waitFor(() => expect(taskProjectApi.listMembers).toHaveBeenCalledWith("proj-001"));
+      expect(screen.getByText("Vai trò trong dự án")).toBeInTheDocument();
+      expect(screen.getByText(/quản lý thành viên/i)).toBeInTheDocument();
     });
 
     it("deep-link ?tab=report KHÔNG có quyền → forbidden của content, KHÔNG fetch report", async () => {

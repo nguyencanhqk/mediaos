@@ -800,8 +800,9 @@ WHERE deleted_at IS NULL;
 4. Nếu member đang có task active trong project, khi remove phải cảnh báo.
 5. Member bị removed không còn thấy project private.
 6. Thay đổi project role phải ghi activity log.
-7. Project role không thay thế permission hệ thống.
+7. Project role không thay thế permission hệ thống — ma trận role×action chuẩn: [DECISIONS-04](<../DECISIONS/DECISIONS-04_Task_Per_Project_Role.md>) D-24.
 8. Nếu employee rời công ty, service nên cảnh báo các project còn member active.
+9. **Quan hệ `projects.owner_employee_id` ↔ member role `Owner` (D-25, 19/07/2026):** `owner_employee_id` là "chủ nhiệm chính" (hiển thị/notification), KHÔNG còn là cổng governance — cổng neo theo Active member `project_role='Owner'` (nhiều Owner hợp lệ). Đổi `ownerEmployeeId` phải upsert người mới thành Active Owner-member trong cùng transaction. Dữ liệu trước đợt C được backfill ở migration `0501` (INSERT/nâng role; employee không có account thì skip + notice). `project_role` NULL (hàng legacy `user_id`-only) = Member cho đọc/collab.
 
 ---
 

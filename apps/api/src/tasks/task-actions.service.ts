@@ -31,6 +31,7 @@ import {
 } from "./task-core.repository";
 import { TaskActionsRepository, type ActionTaskRaw } from "./task-actions.repository";
 import { TaskActivityService } from "./task-activity.service";
+import { ProjectAccessService } from "./project-access.service";
 import { coalesceTaskStatus, deriveStatusTimestamps, evaluateTransition } from "./task-fsm";
 import { isStateInGroupForStatus, pickTargetState } from "./task-state-sync";
 
@@ -83,6 +84,8 @@ export class TaskActionsService {
     private readonly audit: AuditService,
     private readonly activity: TaskActivityService,
     private readonly outbox: OutboxService,
+    // S5-TASK-PROJROLE-1 (D-24) — DRY task-scope assert, mode thread per-operation (write/read).
+    private readonly projectAccess: ProjectAccessService,
   ) {}
 
   // ══════════════════════ ASSIGN ══════════════════════
@@ -510,11 +513,16 @@ export class TaskActionsService {
         ),
       );
     }
-    await this.assertInScopeForWrite(tx, user, taskId, scope);
+    // Mode 'write' (D-24): mutate qua membership đòi Owner/Manager; nhánh assignee không cap.
+    await this.projectAccess.assertTaskInScopeTx(tx, user, taskId, scope, "write");
     return raw;
   }
 
-  /** Watch: load (404) → workflow ALLOW (watch không mutate vòng đời) → data-scope (404). KHÔNG guard Cancelled. */
+  /**
+   * Watch: load (404) → workflow ALLOW (watch không mutate vòng đời) → data-scope (404). KHÔNG guard
+   * Cancelled. Mode 'read' — watch là READ-AFFORDANCE (D-24: mọi role kể cả Viewer được theo dõi);
+   * gán 'write' ở đây là Viewer/Member mất watch (BLOCKING residual vòng 2 của plan-reviewer).
+   */
   private async loadWatchable(
     tx: TenantTx,
     user: RequestUser,
@@ -523,7 +531,7 @@ export class TaskActionsService {
   ): Promise<ActionTaskRaw> {
     const raw = await this.repo.findActionRawTx(tx, user.companyId, taskId);
     if (!raw) throw new NotFoundException(ERR.NOT_FOUND);
-    await this.assertInScopeForWrite(tx, user, taskId, scope);
+    await this.projectAccess.assertTaskInScopeTx(tx, user, taskId, scope, "read");
     return raw;
   }
 
@@ -540,26 +548,8 @@ export class TaskActionsService {
     return raw;
   }
 
-  /** scope < Company ⇒ task phải nằm trong phạm vi ghi (assignee-scope OR membership) ⇒ else 404. */
-  private async assertInScopeForWrite(
-    tx: TenantTx,
-    user: RequestUser,
-    id: string,
-    scope: DataScope,
-  ): Promise<void> {
-    if (scope === "Company" || scope === "System") return;
-    const ctx = await this.dataScope.resolveContext(user.id, user.companyId);
-    const scopeCond = this.dataScope.buildEmployeeScopeCondition(scope, ctx);
-    const actorEmp = await this.coreRepo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
-    const scopeExists = this.coreRepo.buildReadScopeExists(
-      user.companyId,
-      scopeCond,
-      actorEmp?.id ?? null,
-      user.id,
-    );
-    const scoped = await this.coreRepo.findScopedByIdTx(tx, user.companyId, id, scopeExists);
-    if (!scoped) throw new NotFoundException(ERR.NOT_FOUND);
-  }
+  // assertInScopeForWrite cũ (bản trùng lặp thứ 2) đã DRY về ProjectAccessService.assertTaskInScopeTx
+  // (S5-TASK-PROJROLE-1 lane be-core (4)) — loadMutable truyền mode 'write', loadWatchable 'read'.
 
   private async resolveAssignee(
     tx: TenantTx,

@@ -89,6 +89,13 @@ function makeService(opts: { sequence?: ReturnType<typeof makeSequence> } = {}) 
   // createTask chỉ gọi findDefaultStateTx khi có projectId; mock trả undefined = project 0 state).
   const taskActions = { isChecklistGateEnabled: vi.fn().mockResolvedValue(false) };
   const permission = { resolveStrongestScope: vi.fn().mockResolvedValue("Company") };
+  // S5-TASK-PROJROLE-1 — dependency mới (tầng project_role). Test này chạy scope Company ⇒ create-scope
+  // bypass, KHÔNG gọi membership; mock trả null cho an toàn.
+  const projectAccess = {
+    getMembershipTx: vi.fn().mockResolvedValue(null),
+    assertProjectRoleTx: vi.fn().mockResolvedValue({ role: "Owner", memberId: "m" }),
+    assertTaskInScopeTx: vi.fn().mockResolvedValue(undefined),
+  };
   const svc = new TaskCoreService(
     db as never,
     repo as never,
@@ -99,6 +106,7 @@ function makeService(opts: { sequence?: ReturnType<typeof makeSequence> } = {}) 
     sequence as never,
     taskActions as never,
     permission as never,
+    projectAccess as never,
   );
   return { svc, repo, db, sequence };
 }

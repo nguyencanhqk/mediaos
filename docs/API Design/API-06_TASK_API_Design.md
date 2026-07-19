@@ -263,12 +263,14 @@ permission + data_scope + project membership + task relation + business validati
 
 Project role không thay thế RBAC hệ thống. Backend phải kiểm tra RBAC trước, sau đó kiểm tra project role nếu task thuộc project.
 
-| Project role | Ý nghĩa | Quyền nghiệp vụ gợi ý trong project |
+> **Hiện thực từ 19/07/2026 ([DECISIONS-04](<../DECISIONS/DECISIONS-04_Task_Per_Project_Role.md>)):** ma trận role×action **chuẩn = D-24** (bảng dưới mirror — xung đột thì D-24 thắng). Tầng role áp khi tầm với của actor KHÔNG đến từ org-scope (data_scope của cặp quyền < `Company`); `Company/System` bypass. Nhánh assignee (task giao cho chính mình) không bị cap. `project_role` NULL (member legacy) = `Member` cho đọc/collab. Governance (member/close/archive/delete/đổi-chủ) neo theo **member role `Owner`** — không còn so 1 cá nhân `owner_employee_id` (D-25). DTO project detail + list trả thêm **`myProjectRole`** (`Owner|Manager|Member|Viewer|null`) — role của chính actor, server tính; FE chỉ dùng để ẩn/hiện, server quyết cuối.
+
+| Project role | Ý nghĩa | Quyền trong project (theo D-24) |
 | --- | --- | --- |
-| `Owner` | Chủ dự án | Quản lý project, member, task, report, close/archive nếu có permission hệ thống |
-| `Manager` | Quản lý dự án | Tạo/giao/cập nhật task trong project nếu có permission hệ thống |
-| `Member` | Thành viên | Xem project, xử lý task được giao, comment |
-| `Viewer` | Chỉ xem | Xem project/task theo scope, không cập nhật |
+| `Owner` | Chủ dự án | Toàn quyền: task · cột pipeline · thông tin dự án · thành viên · đổi chủ · close/archive/delete (vẫn cần permission hệ thống lớp 1) |
+| `Manager` | Quản lý dự án | Tạo/giao/cập nhật/move task người khác · quản cột pipeline · sửa thông tin dự án — KHÔNG quản thành viên (D-26) |
+| `Member` | Thành viên | Xem project; xử lý task được giao; comment/tick checklist/upload file |
+| `Viewer` | Chỉ xem | Xem project/task/comment/checklist/file — không ghi gì; được watch |
 
 ---
 

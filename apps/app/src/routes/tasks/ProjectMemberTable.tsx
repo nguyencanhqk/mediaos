@@ -13,18 +13,21 @@ import {
   hrApi,
   hrKeys,
   useCan,
-  PermissionGate,
 } from "@mediaos/web-core";
 import { Button, DataTable, EmptyState, Dialog, Select, Badge } from "@mediaos/ui";
 import type { MemberResponseDto, ProjectRoleDto } from "@mediaos/contracts";
-import { TASK_ENGINE_PAIRS } from "./constants";
+import { TASK_ENGINE_PAIRS, isProjectOwner } from "./constants";
 
 /**
  * ProjectMemberTable — quản lý thành viên dự án (S4-FE-TASK-1, SPEC-06 §13.4, TASK-SCREEN-004).
  *
  * Cổng ghi (thêm/đổi vai trò/xóa) = TASK.PROJECT.MANAGE_MEMBER (manage-member:project, sensitive —
- * owner-check ở server khi scope < Company). Đọc dùng CHUNG data-scope với project detail (server 404
- * nếu ngoài scope — component KHÔNG tự gate đọc, cha (ProjectDetailPage) đã đảm bảo project load được).
+ * owner-check ở server khi scope < Company) **HOẶC** `myProjectRole === 'Owner'` (S5-TASK-PROJROLE-1
+ * đợt C, DECISIONS-04 D-24 — Owner luôn quản được thành viên CỦA CHÍNH dự án mình dù pair hệ thống
+ * chỉ cấp scope hẹp hơn; BE `assertGovern` là người quyết cuối, đây CHỈ là ẩn/hiện). `myProjectRole`
+ * là prop tuỳ chọn do trang cha (ProjectDetailPage) truyền xuống từ project detail đã tải — component
+ * KHÔNG tự fetch lại. Đọc dùng CHUNG data-scope với project detail (server 404 nếu ngoài scope —
+ * component KHÔNG tự gate đọc, cha đã đảm bảo project load được).
  */
 const ROLE_OPTIONS: readonly ProjectRoleDto[] = ["Owner", "Manager", "Member", "Viewer"];
 
@@ -253,12 +256,21 @@ function RemoveMemberDialog({
 }
 
 // ── Main table ──────────────────────────────────────────────────────────────
-export function ProjectMemberTable({ projectId }: { projectId: string }) {
+export function ProjectMemberTable({
+  projectId,
+  myProjectRole = null,
+}: {
+  projectId: string;
+  /** Vai trò của CHÍNH actor trong dự án (server tính — TaskProjectResponseDto.myProjectRole). */
+  myProjectRole?: ProjectRoleDto | null;
+}) {
   const { t } = useTranslation("tasks");
-  const canManage = useCan(
+  const canManagePair = useCan(
     TASK_ENGINE_PAIRS.MANAGE_MEMBER_PROJECT.action,
     TASK_ENGINE_PAIRS.MANAGE_MEMBER_PROJECT.resourceType,
   );
+  // D-24: Owner của CHÍNH dự án luôn quản được thành viên dù pair hệ thống chỉ cấp scope hẹp hơn.
+  const canManage = canManagePair || isProjectOwner(myProjectRole);
   const [addOpen, setAddOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<MemberResponseDto | null>(null);
 
@@ -347,15 +359,12 @@ export function ProjectMemberTable({ projectId }: { projectId: string }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-base font-semibold text-foreground">{t("projects.members.title")}</h3>
-        <PermissionGate
-          action={TASK_ENGINE_PAIRS.MANAGE_MEMBER_PROJECT.action}
-          resourceType={TASK_ENGINE_PAIRS.MANAGE_MEMBER_PROJECT.resourceType}
-        >
+        {canManage && (
           <Button size="sm" onClick={() => setAddOpen(true)}>
             <UserPlus className="mr-2 h-4 w-4" />
             {t("projects.members.addButton")}
           </Button>
-        </PermissionGate>
+        )}
       </div>
 
       <DataTable

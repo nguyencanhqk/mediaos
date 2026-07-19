@@ -247,7 +247,10 @@ describe.skipIf(!hasLaneDb)(
         resource: "task",
         label: "POST /tasks",
         success: [201],
-        call: (t) => authPost(t, `/tasks`).send({ title: "qa-create" }),
+        // S5-TASK-PROJROLE-1 (D-27 create-scope): scope<Company không projectId ⇒ assignee BẮT BUỘC
+        // + trong scope. empEmp = chính employee (Own ✓) đồng thời report của manager (Team ✓);
+        // hr/ca @Company không bị ảnh hưởng. Payload trần {title} nay 403 cho emp/mgr — CHỦ ĐÍCH.
+        call: (t) => authPost(t, `/tasks`).send({ title: "qa-create", assigneeEmployeeId: empEmp }),
       },
       {
         action: "update",
@@ -504,12 +507,35 @@ describe.skipIf(!hasLaneDb)(
       });
     });
 
-    describe("data-scope membership Project mở scope", () => {
-      it("employee là project_member Active → task NGOÀI Own trong project đó ⇒ read 200 · change-status 200", async () => {
+    describe("data-scope membership Project mở scope (S5-TASK-PROJROLE-1 D-24: cap theo project_role)", () => {
+      it("member thường (role NULL=Member) → task NGOÀI Own trong project: read 200 NHƯNG change-status 404 (write cap Owner/Manager — ĐỔI HÀNH VI chủ đích đợt C)", async () => {
         const proj = await seedProject(A.companyId, "P-member");
         await seedProjectMember(A.companyId, proj, userIdByRole.employee, empEmp);
         const task = await mkTask({
           mainAssigneeEmployeeId: outEmp, // ngoài Own theo assignee
+          assigneeUserId: outUser,
+          projectId: proj,
+        });
+        expect((await authGet(tok.employee, `/tasks/${task}`)).status).toBe(200);
+        expect(
+          (
+            await authPost(tok.employee, `/tasks/${task}/change-status`).send({
+              status: "In Progress",
+            })
+          ).status,
+        ).toBe(404);
+      });
+
+      it("member role Manager → task NGOÀI Own trong project: read 200 VÀ change-status 200 (membership 'write' mở đúng cho Owner/Manager)", async () => {
+        const proj = await seedProject(A.companyId, "P-member-mgr");
+        await seedProjectMember(A.companyId, proj, userIdByRole.employee, empEmp);
+        await direct.query(
+          `UPDATE project_members SET project_role='Manager'
+            WHERE company_id=$1 AND project_id=$2 AND employee_id=$3 AND deleted_at IS NULL`,
+          [A.companyId, proj, empEmp],
+        );
+        const task = await mkTask({
+          mainAssigneeEmployeeId: outEmp,
           assigneeUserId: outUser,
           projectId: proj,
         });

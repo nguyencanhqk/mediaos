@@ -43,8 +43,19 @@ describe.skipIf(!hasDb)("PM-1 ProjectStatesService (RLS app role)", () => {
     const db = new DatabaseService();
     const repo = new TasksRepository(db);
     const audit = new AuditService();
-    states = new ProjectStatesService(db, repo, audit);
-    tasks = new TasksService(db, repo, audit);
+    // S5-TASK-PROJROLE-1 (D-28): spec này test CRUD cột (không test tầng quyền) ⇒ stub scope Company
+    // (bypass tầng role — giữ hành vi cũ của spec). Deny-path role-layer có int-spec HTTP riêng
+    // (task-project-role.int-spec.ts) chạy đường thật qua PermissionGuard.
+    const permStub = { resolveStrongestScope: async () => "Company" as const };
+    const accessStub = { assertProjectRoleTx: async () => ({ role: "Owner", memberId: "" }) };
+    states = new ProjectStatesService(db, repo, audit, permStub as never, accessStub as never);
+    tasks = new TasksService(
+      db,
+      repo,
+      audit,
+    { resolveAndAssert: async () => "Company" } as never,
+    { assertTaskInScopeTx: async () => undefined } as never,
+    );
   });
 
   afterAll(async () => {
@@ -75,7 +86,9 @@ describe.skipIf(!hasDb)("PM-1 ProjectStatesService (RLS app role)", () => {
   });
 
   it("SEC-1: list states project tenant khác → NotFound", async () => {
-    await expect(states.listStates(A.companyId, projectB)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(states.listStates(A.companyId, projectB)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
   it("≤1 default/project: set default mới bỏ cờ state default cũ trong cùng project", async () => {
@@ -124,9 +137,9 @@ describe.skipIf(!hasDb)("PM-1 ProjectStatesService (RLS app role)", () => {
       [B.companyId, projectB],
     );
     const idB = sB.rows[0].id as string;
-    await expect(
-      states.updateState(user(), idB, { name: "hack" }),
-    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(states.updateState(user(), idB, { name: "hack" })).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
     await expect(states.deleteState(user(), idB)).rejects.toBeInstanceOf(NotFoundException);
   });
 });

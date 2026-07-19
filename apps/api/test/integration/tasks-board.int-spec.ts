@@ -98,7 +98,13 @@ describe.skipIf(!hasDb)("G9-3 task board — listBoard", () => {
     });
 
     const db = new DatabaseService();
-    tasks = new TasksService(db, new TasksRepository(db), new AuditService());
+    tasks = new TasksService(
+      db,
+      new TasksRepository(db),
+      new AuditService(),
+    { resolveAndAssert: async () => "Company" } as never,
+    { assertTaskInScopeTx: async () => undefined } as never,
+    );
   });
 
   afterAll(async () => {

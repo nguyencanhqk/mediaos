@@ -1,7 +1,7 @@
 /**
- * S4-TASK-SEED-1 → S5-TASK-PIPELINE-1 — Catalog 24 cặp permission TASK canonical (DB-06 §12.1:
- * 23 cặp seed 0485 + update-state:task seed 0499) + ma trận grant per-(role, pair) 71 hàng
- * (67 ở 0485 + 4 ở 0499; +5 hàng hoãn — SPEC-06 §9, truy nguyên docs/plans/S4-TASK-SEED-1.md §3).
+ * S4-TASK-SEED-1 → S5-TASK-PIPELINE-1 → S5-TASK-PROJROLE-1 — Catalog 24 cặp permission TASK canonical
+ * (DB-06 §12.1: 23 cặp seed 0485 + update-state:task seed 0499) + ma trận grant per-(role, pair) 75 hàng
+ * (67 ở 0485 + 4 ở 0499 + 4 un-defer ở 0501; +1 hàng còn hoãn — truy nguyên plans/S4-TASK-SEED-1 §3 + S5-TASK-PROJROLE-1).
  *
  * Nguồn cho task-permissions-seed.int.spec.ts (đối chiếu DB thật sau mig 0485+0499) — mirror
  * attendance-permissions.const (mig 0454). OWNER CHỐT 2026-07-09: 23 mã gốc, KHÔNG cặp
@@ -96,8 +96,10 @@ export const TASK_GRANT_MATRIX: readonly TaskMatrixRow[] = [
   // task — read/comment giữ cho emp/mgr (đã disclose plan §7: read = tiền lệ đã-chấp-nhận,
   // comment = mirror RECON-1); create/update/delete HOÃN cho emp/mgr (TASK_DEFERRED_GRANTS).
   { action: "read", resource: "task", emp: "Own", mgr: "Team", hr: "Company", ca: "Company" },
-  { action: "create", resource: "task", hr: "Company", ca: "Company" },
-  { action: "update", resource: "task", hr: "Company", ca: "Company" },
+  // S5-TASK-PROJROLE-1 / 0501 (D-27): UN-DEFER emp@Own + mgr@Team — điều kiện 'grant CÙNG release
+  // với enforcement scope+membership' ĐÃ thoả (create-scope + role-cap mode 'write' cùng PR).
+  { action: "create", resource: "task", emp: "Own", mgr: "Team", hr: "Company", ca: "Company" },
+  { action: "update", resource: "task", emp: "Own", mgr: "Team", hr: "Company", ca: "Company" },
   {
     action: "update-status",
     resource: "task",
@@ -144,22 +146,21 @@ export const TASK_GRANT_MATRIX: readonly TaskMatrixRow[] = [
 ] as const;
 
 /**
- * 5 grant HOÃN — S4-TASK-BE-2 grant trong migration CÙNG release với enforcement
- * scope+membership trên task CRUD (lật cả assert DENY tương ứng trong
- * task-permissions-seed.int.spec.ts, mirror khuôn RECON-2 lật task-recon-grants).
- * Lý do từng hàng: docs/plans/S4-TASK-SEED-1.md §7 (route sống pair-only:
- * POST /tasks · PATCH /tasks/:id{,/status,/labels/*} · DELETE /tasks/:id + DELETE attachment).
+ * Grant CÒN HOÃN sau 0501 (S5-TASK-PROJROLE-1 / DECISIONS-04 D-27.2): create/update:task emp+mgr ĐÃ
+ * un-defer ở 0501 (enforcement create-scope + role-cap membership 'write' land CÙNG PR — điều kiện
+ * gốc của S4-TASK-SEED-1 §7 đã thoả). delete:task mgr@Team GIỮ HOÃN: SPEC-06 §9 đòi "nếu là
+ * creator/owner" = relation-check theo creator chưa thiết kế — mở lại bằng WO riêng thiết kế
+ * relation-check + migration grant + lật assert DENY tương ứng trong task-permissions-seed.int.spec.
  */
 export const TASK_DEFERRED_GRANTS: readonly TaskMatrixRow[] = [
-  { action: "create", resource: "task", emp: "Own", mgr: "Team" },
-  { action: "update", resource: "task", emp: "Own", mgr: "Team" },
   { action: "delete", resource: "task", mgr: "Team" },
 ] as const;
 
-/** Số grant kỳ vọng per role TRÊN TẬP 24 cặp canonical SAU 0499 (verify exact — chống over-grant). */
+/** Số grant kỳ vọng per role TRÊN TẬP 24 cặp canonical SAU 0501 (verify exact — chống over-grant).
+ * 0499: emp 8 · mgr 20. 0501 un-defer create/update:task ⇒ emp +2 = 10 · mgr +2 = 22 (hr/ca không đổi). */
 export const TASK_EXPECTED_GRANT_COUNTS = {
-  employee: 8,
-  manager: 20,
+  employee: 10,
+  manager: 22,
   hr: 19,
   "company-admin": 24,
 } as const;

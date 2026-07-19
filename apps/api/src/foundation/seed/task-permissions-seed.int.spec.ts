@@ -15,7 +15,7 @@
  *       (chứng minh re-scope DELETE+INSERT: DB thật đang @Company);
  *   (C) DENY holes theo CẶP CỤ THỂ (done_when #5 — không chỉ đếm scope-class) + 5 grant HOÃN
  *       (TASK_DEFERRED_GRANTS — BE-2 lật khi enforce scope) + đếm EXACT trên tập 24 cặp canonical
- *       per role (8/20/19/24 sau 0499, miễn nhiễm legacy submit/manage/comment:comment);
+ *       per role (10/22/19/24 sau 0501, miễn nhiễm legacy submit/manage/comment:comment);
  *   (D) idempotent: chạy lại TOÀN BỘ SQL 0485 lần 2 → snapshot không đổi; ON CONFLICT wrong-scope
  *       không drift bộ-ba;
  *   (E) catalog legacy không nhân đôi/không bị đụng (submit:task…, delete-project:project giữ nguyên).
@@ -78,12 +78,10 @@ const DENY_PAIRS: ReadonlyArray<{ role: string; action: string; resource: string
   { role: "hr", action: "delete", resource: "task" },
   // manager — không audit-log
   { role: "manager", action: "view", resource: "task-audit-log" },
-  // ── 5 grant HOÃN (plan §7 — route sống pair-only, chưa có scope/owner-check): PHẢI vắng sau
-  //    0485; S4-TASK-BE-2 grant cùng release enforcement rồi LẬT các assert này (khuôn RECON-2).
-  { role: "employee", action: "create", resource: "task" },
-  { role: "employee", action: "update", resource: "task" },
-  { role: "manager", action: "create", resource: "task" },
-  { role: "manager", action: "update", resource: "task" },
+  // ── Grant HOÃN còn lại sau 0501 (S5-TASK-PROJROLE-1 / D-27.2): create/update:task emp+mgr ĐÃ
+  //    LẬT (un-defer 0501, enforcement create-scope + role-cap cùng PR — khuôn RECON-2); ALLOW mới
+  //    được assert tự động qua TASK_GRANT_MATRIX ở mục B. delete:task mgr GIỮ HOÃN (relation-check
+  //    creator/owner chưa thiết kế — SPEC-06 §9).
   { role: "manager", action: "delete", resource: "task" },
 ];
 
@@ -225,6 +223,12 @@ describe.skipIf(!runIsolatedDb)(
         for (const stmt of sql.split("--> statement-breakpoint")) {
           const trimmed = stmt.trim();
           if (trimmed.length === 0) continue;
+          // S5-TASK-PROJROLE-1: khối verify NỘI TẠI của 0485 pin đếm-grant THEO THỜI ĐIỂM 0485
+          // (employee=7/23 cặp) — đúng tại vị trí của nó trong chain, SAI khi re-run sau 0501
+          // (un-defer create/update:task ⇒ employee=9/23). Bỏ qua khối verify era-bound khi re-run;
+          // bằng chứng idempotence của test này là SNAPSHOT before/after bên dưới (mạnh hơn đếm),
+          // còn đếm-đúng-thời-điểm-hiện-tại đã có mục C (TASK_EXPECTED_GRANT_COUNTS sau 0501).
+          if (trimmed.includes("[0485] verify")) continue;
           await direct.query(trimmed);
         }
         const after = await snapshot();

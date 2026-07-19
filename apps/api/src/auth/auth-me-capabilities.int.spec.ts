@@ -844,22 +844,21 @@ describe.skipIf(!runDb)(
       }
     });
 
-    it("TASKCAP-P3 — manager → CÓ 20 cặp @Team (grant-bound, gồm update-state 0499); VẮNG delete:task (HOÃN BE-2) + view:task-audit-log", async () => {
+    it("TASKCAP-P3 — manager → CÓ 22 cặp @Team (gồm create/update:task un-defer 0501); VẮNG delete:task (HOÃN D-27.2) + view:task-audit-log", async () => {
       const caps = await meCapabilities(app, managerToken);
       const granted = taskKeysFor("mgr");
-      expect(granted.length).toBe(20);
+      // S5-TASK-PROJROLE-1/0501: un-defer create/update:task ⇒ 20 → 22 (ma trận const là nguồn).
+      expect(granted.length).toBe(22);
       for (const key of granted) {
         expect(caps[key], `manager thiếu cặp đã grant ${key}`).toBe(true);
       }
-      expect("delete:task" in caps, "delete:task manager HOÃN sang BE-2 — không được lộ").toBe(
+      expect("delete:task" in caps, "delete:task manager HOÃN (D-27.2) — không được lộ").toBe(
         false,
       );
       expect("view:task-audit-log" in caps, "manager không có audit-log").toBe(false);
-      expect("create:task" in caps, "create:task manager HOÃN sang BE-2").toBe(false);
-      expect("update:task" in caps, "update:task manager HOÃN sang BE-2").toBe(false);
     });
 
-    it("TASKCAP-N1 — employee → KHÔNG cặp sensitive nào; KHÔNG create:project; KHÔNG create/update:task (HOÃN); CÓ 8 cặp Own", async () => {
+    it("TASKCAP-N1 — employee → KHÔNG cặp sensitive nào; KHÔNG create:project; CÓ 10 cặp Own (gồm create/update:task un-defer 0501)", async () => {
       const caps = await meCapabilities(app, employeeToken);
       for (const key of TASK_SENSITIVE_KEYS) {
         expect(key in caps, `employee KHÔNG được lộ cặp sensitive ${key}`).toBe(false);
@@ -868,10 +867,8 @@ describe.skipIf(!runDb)(
         false,
       );
       expect("update:project" in caps).toBe(false);
-      expect("create:task" in caps, "create:task employee HOÃN sang BE-2").toBe(false);
-      expect("update:task" in caps, "update:task employee HOÃN sang BE-2").toBe(false);
       const granted = taskKeysFor("emp");
-      expect(granted.length).toBe(8); // 7 + update-state:task@Own (0499)
+      expect(granted.length).toBe(10); // 8 (0499) + create/update:task un-defer (0501)
       for (const key of granted) {
         expect(caps[key], `employee thiếu cặp non-sensitive đã grant ${key}`).toBe(true);
       }

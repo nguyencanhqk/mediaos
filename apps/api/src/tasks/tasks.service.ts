@@ -15,7 +15,9 @@ import {
 } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
+import { DataScopeService } from "../permission/data-scope.service";
 import { TasksRepository, type ListTasksFilter, type Pagination } from "./tasks.repository";
+import { ProjectAccessService } from "./project-access.service";
 
 interface RequestUser {
   id: string;
@@ -58,6 +60,12 @@ export class TasksService {
     private readonly db: DatabaseService,
     private readonly repo: TasksRepository,
     private readonly audit: AuditService,
+    // S5-TASK-PROJROLE-1 (D-24) — sau 0501 un-defer update:task cho emp@Own/mgr@Team, 3 route legacy
+    // gate update:task (PATCH /:id/status khai tử · POST|DELETE /:id/labels/:labelId) PHẢI áp data-scope
+    // + role-cap 'write' như đường TaskCore, nếu không Viewer/non-member ghi được task toàn tenant
+    // (finding HIGH security-reviewer — chính cửa sổ grant-trước-enforcement plan cảnh báo).
+    private readonly dataScope: DataScopeService,
+    private readonly projectAccess: ProjectAccessService,
   ) {}
 
   // ─── Reads ───────────────────────────────────────────────────────────────────
@@ -269,6 +277,7 @@ export class TasksService {
       );
     }
     const nextStatus: OfficeTaskStatusDto = parsedStatus.data;
+    const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "update", "task");
 
     return this.db.withTenant(user.companyId, async (tx) => {
       const [task] = await this.repo.findRawByIdTx(tx, user.companyId, taskId);
@@ -279,6 +288,9 @@ export class TasksService {
           "Task thuộc workflow — đổi trạng thái qua workflow (submit/duyệt/trả về), không sửa tay.",
         );
       }
+      // D-24 role-cap: scope<Company ⇒ task phải trong phạm vi ghi (assignee OR membership Owner/Manager)
+      // ⇒ else 404. Đóng lỗ escalation Own→Company của route khai tử sau khi 0501 mở update:task@Own.
+      await this.projectAccess.assertTaskInScopeTx(tx, user, taskId, scope, "write");
 
       const [updated] = await this.repo.updateStatus(user.companyId, taskId, nextStatus, tx);
       if (!updated) throw new NotFoundException(`Task not found: ${taskId}`);
@@ -363,6 +375,7 @@ export class TasksService {
    * gán lại nhãn đã có → no-op (unique). Audit objectType 'task' action 'TaskLabelAdded'.
    */
   async addLabelToTask(user: RequestUser, taskId: string, labelId: string) {
+    const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "update", "task");
     await this.db.withTenant(user.companyId, async (tx) => {
       const [task] = await this.repo.findRawByIdTx(tx, user.companyId, taskId);
       if (!task) throw new NotFoundException(`Task not found: ${taskId}`);
@@ -370,6 +383,8 @@ export class TasksService {
       if (task.workflowStepId !== null || WORKFLOW_TASK_TYPES.has(task.taskType)) {
         throw new BadRequestException("Task thuộc workflow — không gắn nhãn tay.");
       }
+      // D-24 role-cap 'write' — mirror updateStatus (route gate update:task, sau 0501 với tới emp/mgr).
+      await this.projectAccess.assertTaskInScopeTx(tx, user, taskId, scope, "write");
       const [label] = await this.repo.findLabelByIdTx(tx, user.companyId, labelId);
       if (!label) throw new NotFoundException(`Label not found: ${labelId}`);
       // Nhãn theo project → task phải cùng project với nhãn (chặn gắn nhãn project khác).
@@ -393,12 +408,15 @@ export class TasksService {
 
   /** Gỡ nhãn khỏi work item (hard-delete link M:N). Audit objectType 'task' action 'TaskLabelRemoved'. */
   async removeLabelFromTask(user: RequestUser, taskId: string, labelId: string) {
+    const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "update", "task");
     await this.db.withTenant(user.companyId, async (tx) => {
       const [task] = await this.repo.findRawByIdTx(tx, user.companyId, taskId);
       if (!task) throw new NotFoundException(`Task not found: ${taskId}`);
       if (task.workflowStepId !== null || WORKFLOW_TASK_TYPES.has(task.taskType)) {
         throw new BadRequestException("Task thuộc workflow — không gỡ nhãn tay.");
       }
+      // D-24 role-cap 'write' — mirror updateStatus/addLabel (route gate update:task).
+      await this.projectAccess.assertTaskInScopeTx(tx, user, taskId, scope, "write");
 
       const [removed] = await this.repo.removeTaskLabelTx(user.companyId, taskId, labelId, tx);
       if (!removed) throw new NotFoundException("Nhãn chưa được gán cho công việc này.");

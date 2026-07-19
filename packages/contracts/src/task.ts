@@ -463,6 +463,12 @@ export const taskProjectResponseSchema = z.object({
   startDate: z.string().nullable(),
   endDate: z.string().nullable(),
   memberCount: z.number().int().nonnegative(),
+  // S5-TASK-PROJROLE-1 (đợt C — DECISIONS-04 D-24/D-25): role của CHÍNH actor trong dự án, server tính
+  // từ project_members Active bằng correlated scalar-subquery role-MẠNH-NHẤT (Owner>Manager>Member>Viewer;
+  // actor có thể khớp cả hàng legacy user_id-only lẫn hàng employee_id — KHÔNG join nhân bản row).
+  // null = không phải member (hoặc Removed/Inactive). FE CHỈ dùng ẩn/hiện (menu ⋯ "Cài đặt quyền",
+  // control member) — BE là người quyết cuối qua tầng role service-layer.
+  myProjectRole: projectRoleSchema.nullable(),
   createdBy: z.string().uuid().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
