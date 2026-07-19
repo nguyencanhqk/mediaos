@@ -1,3 +1,5 @@
+import type { ProjectRoleDto } from "@mediaos/contracts";
+
 /**
  * Hằng quyền module TASK (Project) — S4-FE-TASK-1.
  * Cấu trúc: TASK.RESOURCE.ACTION (SPEC-06 §8 + CLAUDE.md §5 quy ước mã) — dùng với
@@ -47,6 +49,21 @@ export const PROJECT_STATE_PAIRS = {
   UPDATE: { action: "update", resourceType: "project_state" },
   DELETE: { action: "delete", resourceType: "project_state" },
 } as const;
+
+/**
+ * S5-TASK-PROJROLE-1 (đợt C, DECISIONS-04 D-24 affordance) — helper THUẦN suy ẨN/HIỆN control theo
+ * `myProjectRole` (server trả trong TaskProjectResponseDto/TaskProjectListItemDto). CHỈ dùng để
+ * ẨN/HIỆN ở client — BE (ProjectAccessService/assertGovern) là người quyết cuối; nới quyền ở đây
+ * KHÔNG mở khoá gì thật, chỉ tránh hiện nút bấm-rồi-403. KHÔNG suy diễn ngoài bảng D-24.
+ */
+export function isProjectOwner(role: ProjectRoleDto | null | undefined): boolean {
+  return role === "Owner";
+}
+
+/** D-24: Owner/Manager sửa thông tin dự án · quản lý cột pipeline · sửa/tạo task người khác. */
+export function isProjectManagerOrOwner(role: ProjectRoleDto | null | undefined): boolean {
+  return role === "Owner" || role === "Manager";
+}
 
 export const TASK_CORE_STATUS_OPTIONS = [
   "Todo",

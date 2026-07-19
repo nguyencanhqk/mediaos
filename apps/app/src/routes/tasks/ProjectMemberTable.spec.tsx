@@ -104,4 +104,30 @@ describe("ProjectMemberTable", () => {
     renderWithQuery(<ProjectMemberTable projectId="proj-001" />);
     await waitFor(() => expect(screen.getByText(/không thể tải thành viên/i)).toBeInTheDocument());
   });
+
+  // ── S5-TASK-PROJROLE-1 (đợt C, D-24) — canManage = pair OR myProjectRole==='Owner' ───────────
+  it("shows 'Thêm thành viên' + remove action when myProjectRole='Owner' dù thiếu manage-member:project", async () => {
+    setCapabilities({ "read:project": true });
+    vi.mocked(taskProjectApi.listMembers).mockResolvedValue(MOCK_MEMBERS);
+    renderWithQuery(<ProjectMemberTable projectId="proj-001" myProjectRole="Owner" />);
+    await waitFor(() => expect(screen.getByText("Nguyễn Văn A")).toBeInTheDocument());
+    expect(screen.getByText(/thêm thành viên/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/xóa khỏi dự án/i)).toBeInTheDocument();
+  });
+
+  it("hides 'Thêm thành viên' khi myProjectRole='Member' và thiếu manage-member:project", async () => {
+    setCapabilities({ "read:project": true });
+    vi.mocked(taskProjectApi.listMembers).mockResolvedValue(MOCK_MEMBERS);
+    renderWithQuery(<ProjectMemberTable projectId="proj-001" myProjectRole="Member" />);
+    await waitFor(() => expect(screen.getByText("Nguyễn Văn A")).toBeInTheDocument());
+    expect(screen.queryByText(/thêm thành viên/i)).not.toBeInTheDocument();
+  });
+
+  it("hides 'Thêm thành viên' khi myProjectRole='Viewer' và thiếu manage-member:project", async () => {
+    setCapabilities({ "read:project": true });
+    vi.mocked(taskProjectApi.listMembers).mockResolvedValue(MOCK_MEMBERS);
+    renderWithQuery(<ProjectMemberTable projectId="proj-001" myProjectRole="Viewer" />);
+    await waitFor(() => expect(screen.getByText("Nguyễn Văn A")).toBeInTheDocument());
+    expect(screen.queryByText(/thêm thành viên/i)).not.toBeInTheDocument();
+  });
 });

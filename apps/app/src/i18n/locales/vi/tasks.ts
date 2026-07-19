@@ -22,6 +22,11 @@ export default {
       newest: "Mới nhất trước",
       nameAsc: "Tên A→Z",
     },
+    // S5-TASK-PROJROLE-1 (đợt C) — menu ⋯ NODE DỰ ÁN (KHÁC menu phòng ban ở trên): đúng 1 mục.
+    projectMenuLabel: "Thao tác dự án {{name}}",
+    projectMenu: {
+      permissionSettings: "Cài đặt quyền",
+    },
   },
   projects: {
     list: {
@@ -234,6 +239,35 @@ export default {
         cancel: "Hủy",
       },
       removeAction: "Xóa khỏi dự án",
+      // S5-TASK-PROJROLE-1 (đợt C, DECISIONS-04 D-24) — khối chú giải TĨNH tab "Thành viên", mô tả
+      // 4 vai trò. Chỉ text mô tả — KHÔNG logic quyền client (ProjectRoleLegend.tsx).
+      roleLegend: {
+        title: "Vai trò trong dự án",
+        description: "Mô tả quyền hạn của từng vai trò trong phạm vi dự án này.",
+        columns: {
+          action: "Hành động",
+          viewer: "Viewer",
+          member: "Member",
+          manager: "Manager",
+          owner: "Owner",
+        },
+        rows: {
+          view: "Xem dự án · công việc · bảng · thành viên · bình luận · tệp · checklist",
+          watch: "Theo dõi (tự watch)",
+          collab: "Viết bình luận · tick checklist · tải tệp công việc",
+          editOwnTask: "Sửa công việc được giao cho mình",
+          editOthersTask: "Sửa · di chuyển · giao · đổi ưu tiên/deadline công việc người khác",
+          createTask: "Tạo công việc trong dự án",
+          manageColumns: "Quản lý cột quy trình (pipeline)",
+          editProject: "Sửa thông tin dự án",
+          governance: "Quản lý thành viên · đổi chủ · đóng/lưu trữ/xóa dự án",
+        },
+        mark: {
+          yes: "Có",
+          no: "Không",
+          assignee: "Nếu được giao",
+        },
+      },
     },
     status: {
       Planning: "Đang lên kế hoạch",

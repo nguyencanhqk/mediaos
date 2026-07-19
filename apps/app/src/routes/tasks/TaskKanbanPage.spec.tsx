@@ -516,5 +516,23 @@ describe("TaskKanbanPage", () => {
         expect(screen.getAllByTestId("kanban-manage-columns").length).toBeGreaterThan(0),
       );
     });
+
+    // ── S5-TASK-PROJROLE-1 (đợt C, D-24) — myProjectRole Owner/Manager nới hiện nút "Quản lý cột"
+    // dù thiếu mọi pair *:project_state (grant hiện đều @Company — DORMANT, D-28) ─────────────────
+    it("nút Quản lý cột HIỆN khi myProjectRole='Manager' dù thiếu pair *:project_state", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_STATE_BOARD);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" myProjectRole="Manager" />);
+      await waitFor(() => expect(screen.getByText("Ý Tưởng")).toBeInTheDocument());
+      expect(screen.getByTestId("kanban-manage-columns")).toBeInTheDocument();
+    });
+
+    it("nút Quản lý cột ẨN khi myProjectRole='Member' và thiếu pair *:project_state", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_STATE_BOARD);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" myProjectRole="Member" />);
+      await waitFor(() => expect(screen.getByText("Ý Tưởng")).toBeInTheDocument());
+      expect(screen.queryByTestId("kanban-manage-columns")).not.toBeInTheDocument();
+    });
   });
 });

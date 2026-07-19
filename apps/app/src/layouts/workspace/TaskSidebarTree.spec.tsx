@@ -108,6 +108,7 @@ function project(
   name: string,
   departmentId: string | null,
   createdAt: string,
+  myProjectRole: TaskProjectListItemDto["myProjectRole"] = null,
 ): TaskProjectListItemDto {
   return {
     id,
@@ -123,6 +124,7 @@ function project(
     startDate: null,
     endDate: null,
     memberCount: 0,
+    myProjectRole,
     createdBy: null,
     createdAt,
     updatedAt: createdAt,
@@ -245,6 +247,50 @@ describe("TaskSidebarTree", () => {
     fireEvent.click(screen.getByRole("button", { name: "sidebarTree.menuLabel:Phòng B" }));
     fireEvent.click(screen.getByRole("menuitem", { name: /sidebarTree\.menu\.report/ }));
     expect(historyPushMock).toHaveBeenCalledWith("/tasks/projects?departmentId=d-b");
+  });
+
+  // ── S5-TASK-PROJROLE-1 (đợt C) — menu ⋯ node DỰ ÁN: "Cài đặt quyền" (HIỆN khi manage-member:project
+  // HOẶC myProjectRole==='Owner'; ẨN cả nút ⋯ nếu thiếu cả hai — UI-02 §5.3) ─────────────────────
+  it("menu ⋯ node dự án ẨN khi thiếu manage-member:project và myProjectRole không phải Owner", async () => {
+    renderTree();
+    await screen.findByText("Dự án A");
+    expect(
+      screen.queryByRole("button", { name: "sidebarTree.projectMenuLabel:Dự án A" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("menu ⋯ node dự án HIỆN khi có manage-member:project → 'Cài đặt quyền' điều hướng ?tab=members", async () => {
+    allowedPairs.current = new Set(["read:project", "manage-member:project"]);
+    renderTree();
+    await screen.findByText("Dự án A");
+    fireEvent.click(screen.getByRole("button", { name: "sidebarTree.projectMenuLabel:Dự án A" }));
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: /sidebarTree\.projectMenu\.permissionSettings/ }),
+    );
+    expect(historyPushMock).toHaveBeenCalledWith("/tasks/projects/p-a?tab=members");
+  });
+
+  it("menu ⋯ node dự án HIỆN khi myProjectRole==='Owner' dù thiếu manage-member:project", async () => {
+    listProjectsMock.mockResolvedValue([
+      project("p-a", "Dự án A", "d-a", "2026-07-01T00:00:00.000Z", "Owner"),
+    ]);
+    renderTree();
+    await screen.findByText("Dự án A");
+    fireEvent.click(screen.getByRole("button", { name: "sidebarTree.projectMenuLabel:Dự án A" }));
+    expect(
+      screen.getByRole("menuitem", { name: /sidebarTree\.projectMenu\.permissionSettings/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("menu ⋯ node dự án ẨN khi myProjectRole='Manager' (không phải Owner) và thiếu pair", async () => {
+    listProjectsMock.mockResolvedValue([
+      project("p-a", "Dự án A", "d-a", "2026-07-01T00:00:00.000Z", "Manager"),
+    ]);
+    renderTree();
+    await screen.findByText("Dự án A");
+    expect(
+      screen.queryByRole("button", { name: "sidebarTree.projectMenuLabel:Dự án A" }),
+    ).not.toBeInTheDocument();
   });
 
   it("không có read:project → không render gì, không gọi API", () => {
