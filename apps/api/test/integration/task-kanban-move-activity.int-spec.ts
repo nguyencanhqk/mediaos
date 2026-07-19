@@ -103,18 +103,41 @@ describe.skipIf(!hasLaneDb)(
       mainAssigneeEmployeeId?: string | null;
       projectId?: string | null;
       creatorUserId?: string | null;
+      stateId?: string | null;
+      parentTaskId?: string | null;
+      title?: string;
     }): Promise<string> {
       const r = await direct.query(
-        `INSERT INTO tasks (company_id, task_type, title, task_status, main_assignee_employee_id, project_id, creator_user_id)
-       VALUES ($1,'office',$2,$3,$4,$5,$6) RETURNING id`,
+        `INSERT INTO tasks (company_id, task_type, title, task_status, main_assignee_employee_id, project_id, creator_user_id, state_id, parent_task_id)
+       VALUES ($1,'office',$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
         [
           opts.companyId ?? A.companyId,
-          "T",
+          opts.title ?? "T",
           opts.taskStatus ?? "Todo",
           opts.mainAssigneeEmployeeId ?? null,
           opts.projectId ?? null,
           opts.creatorUserId ?? adminUser,
+          opts.stateId ?? null,
+          opts.parentTaskId ?? null,
         ],
+      );
+      return r.rows[0].id as string;
+    }
+
+    // S5-TASK-PIPELINE-1 (lane be-read) — cột pipeline cho board state-mode.
+    async function seedState(
+      companyId: string,
+      pId: string,
+      name: string,
+      group: string,
+      sortOrder: number,
+      isDefault = false,
+      color = "#64748b",
+    ): Promise<string> {
+      const r = await direct.query(
+        `INSERT INTO project_states (company_id, project_id, name, state_group, is_default, sort_order, color)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+        [companyId, pId, name, group, isDefault, sortOrder, color],
       );
       return r.rows[0].id as string;
     }
@@ -538,6 +561,148 @@ describe.skipIf(!hasLaneDb)(
     it("activity cross-tenant taskId → 404", async () => {
       const bTask = await mkTask({ companyId: B.companyId, creatorUserId: bAdmin });
       expect((await authGet(tok.admin, `/tasks/${bTask}/activity`)).status).toBe(404);
+    });
+
+    // ── 4. S5-TASK-PIPELINE-1 (lane be-read) — board state-mode theo cột pipeline ──
+
+    describe("board columnMode:'state' (project có pipeline)", () => {
+      type StateCol = {
+        columnMode: "state";
+        stateId: string;
+        name: string;
+        color: string;
+        stateGroup: string;
+        sortOrder: number;
+        taskCount: number;
+        tasks: Array<{ id: string; status: string | null; stateId?: string | null }>;
+      };
+
+      it("REGRESSION QUAN TRỌNG NHẤT: thẻ nằm ĐÚNG cột theo state_id (KHÔNG dồn 1 cột); NULL → cột is_default; cột theo sortOrder; taskCount đúng", async () => {
+        const p = await seedProject(A.companyId, "P-board-state");
+        const cBacklog = await seedState(A.companyId, p, "Backlog", "backlog", 0);
+        const cTodo = await seedState(A.companyId, p, "Cần làm", "unstarted", 1, true);
+        const cDoing = await seedState(A.companyId, p, "Đang làm", "started", 2, false, "#3b82f6");
+        const cDone = await seedState(A.companyId, p, "Hoàn thành", "completed", 3);
+
+        const t1 = await mkTask({ projectId: p, taskStatus: "Todo", stateId: cTodo });
+        const t2 = await mkTask({ projectId: p, taskStatus: "In Progress", stateId: cDoing });
+        const t3 = await mkTask({ projectId: p, taskStatus: "Done", stateId: cDone });
+        const tNull = await mkTask({ projectId: p, taskStatus: "Todo", stateId: null }); // legacy chưa map
+
+        const res = await authGet(tok.admin, `/projects/${p}/kanban`);
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        const cols = res.body.data.columns as StateCol[];
+        expect(cols.every((c) => c.columnMode === "state")).toBe(true);
+        expect(cols.map((c) => c.stateId)).toEqual([cBacklog, cTodo, cDoing, cDone]); // sortOrder
+        expect(cols[2].name).toBe("Đang làm");
+        expect(cols[2].color).toBe("#3b82f6");
+        expect(cols[2].stateGroup).toBe("started");
+
+        const byState = new Map(cols.map((c) => [c.stateId, c]));
+        expect(byState.get(cDoing)?.tasks.map((tk) => tk.id)).toEqual([t2]);
+        expect(byState.get(cDone)?.tasks.map((tk) => tk.id)).toEqual([t3]);
+        // NULL state_id KHÔNG biến mất — rơi vào cột is_default (Cần làm) cùng t1.
+        const defTasks = byState.get(cTodo)?.tasks.map((tk) => tk.id) ?? [];
+        expect(defTasks).toContain(t1);
+        expect(defTasks).toContain(tNull);
+        expect(byState.get(cTodo)?.taskCount).toBe(2);
+        expect(byState.get(cBacklog)?.taskCount).toBe(0);
+      });
+
+      it("LỌC CON: task có parent_task_id KHÔNG lên board, taskCount không tính con (bộ lọc sẵn cho S5-TASK-SUBTASK-1)", async () => {
+        const p = await seedProject(A.companyId, "P-board-child");
+        const cOnly = await seedState(A.companyId, p, "Cần làm", "unstarted", 1, true);
+        const parent = await mkTask({ projectId: p, taskStatus: "Todo", stateId: cOnly });
+        const child = await mkTask({
+          projectId: p,
+          taskStatus: "Todo",
+          stateId: cOnly,
+          parentTaskId: parent,
+          title: "việc con",
+        });
+
+        const res = await authGet(tok.admin, `/projects/${p}/kanban`);
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        const cols = res.body.data.columns as StateCol[];
+        const ids = cols.flatMap((c) => c.tasks.map((tk) => tk.id));
+        expect(ids).toContain(parent);
+        expect(ids, "task con PHẢI ẩn khỏi board (owner chốt 18/07)").not.toContain(child);
+        expect(cols[0].taskCount).toBe(1);
+      });
+
+      it("dự án chỉ còn ĐÚNG 1 cột: board render bình thường, không crash, không mất thẻ", async () => {
+        const p = await seedProject(A.companyId, "P-board-one");
+        const cOne = await seedState(A.companyId, p, "Duy nhất", "started", 0, true);
+        const t = await mkTask({ projectId: p, taskStatus: "In Progress", stateId: cOne });
+
+        const res = await authGet(tok.admin, `/projects/${p}/kanban`);
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        const cols = res.body.data.columns as StateCol[];
+        expect(cols.length).toBe(1);
+        expect(cols[0].tasks.map((tk) => tk.id)).toEqual([t]);
+      });
+
+      it("card trên board state-mode mang stateId/stateName/stateGroup (mapper LEFT JOIN project_states)", async () => {
+        const p = await seedProject(A.companyId, "P-board-cardfields");
+        const c = await seedState(A.companyId, p, "Quay", "started", 1, true, "#111111");
+        const t = await mkTask({ projectId: p, taskStatus: "In Progress", stateId: c });
+
+        const res = await authGet(tok.admin, `/projects/${p}/kanban`);
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        const card = (res.body.data.columns as StateCol[])[0].tasks.find((tk) => tk.id === t) as
+          | { stateId?: string | null; stateName?: string | null; stateGroup?: string | null }
+          | undefined;
+        expect(card?.stateId).toBe(c);
+        expect(card?.stateName).toBe("Quay");
+        expect(card?.stateGroup).toBe("started");
+      });
+
+      it("KHÔNG cột is_default ⇒ thẻ state NULL rơi vào CỘT ĐẦU (bậc cuối D-20); list /tasks VẪN trả task con (parentOnly chỉ ở board)", async () => {
+        const p = await seedProject(A.companyId, "P-board-nodefault");
+        const cFirst = await seedState(A.companyId, p, "Đầu", "started", 0); // KHÔNG is_default
+        await seedState(A.companyId, p, "Sau", "completed", 1);
+        const tNull = await mkTask({ projectId: p, taskStatus: "In Progress", stateId: null });
+        const child = await mkTask({
+          projectId: p,
+          taskStatus: "Todo",
+          stateId: cFirst,
+          parentTaskId: tNull,
+          title: "con-trong-list",
+        });
+
+        const res = await authGet(tok.admin, `/projects/${p}/kanban`);
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        const cols = res.body.data.columns as StateCol[];
+        expect(cols[0].tasks.map((tk) => tk.id)).toContain(tNull); // cột đầu, không default
+
+        // Bộ lọc con CHỈ ở board: GET /tasks (list) vẫn thấy con — subtask tương lai không mất khỏi
+        // list. Fixture admin của spec này không có read:task ⇒ dựng reader ad-hoc.
+        const readerEmail = `listreader@${A.slug}.test`;
+        const reader = await seedUser(direct, A.companyId, readerEmail, pwHash);
+        await seedEmp(A.companyId, reader, null, null);
+        await grant(A.companyId, reader, [["read", "task", "Company"]]);
+        const readerTok = await login(A.slug, readerEmail);
+        const list = await authGet(readerTok, `/tasks?projectId=${p}`);
+        expect(list.status, JSON.stringify(list.body)).toBe(200);
+        const listIds = (list.body.data as Array<{ id: string }>).map((tk) => tk.id);
+        expect(listIds).toContain(child);
+      });
+
+      it("dự án 0 state GIỮ columnMode:'status' 5 cột FSM (fallback y hệt hành vi cũ)", async () => {
+        const p = await seedProject(A.companyId, "P-board-nostates");
+        await mkTask({ projectId: p, taskStatus: "In Progress" });
+        const res = await authGet(tok.admin, `/projects/${p}/kanban`);
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        const cols = res.body.data.columns as Array<{ columnMode: string; status?: string }>;
+        expect(cols.every((c) => c.columnMode === "status")).toBe(true);
+        expect(cols.map((c) => c.status)).toEqual([
+          "Todo",
+          "In Progress",
+          "In Review",
+          "Done",
+          "Cancelled",
+        ]);
+      });
     });
   },
 );

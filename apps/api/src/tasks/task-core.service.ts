@@ -714,6 +714,11 @@ export class TaskCoreService {
       createdBy: row.createdBy,
       createdAt,
       updatedAt,
+      // S5-TASK-PIPELINE-1 (lane be-read) — cột pipeline resolved từ TASK_CORE_SELECT.
+      stateId: row.stateId ?? null,
+      stateName: row.stateName ?? null,
+      stateColor: row.stateColor ?? null,
+      stateGroup: (row.stateGroup as TaskCoreResponseDto["stateGroup"]) ?? null,
     };
   }
 
