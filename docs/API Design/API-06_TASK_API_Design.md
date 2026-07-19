@@ -42,7 +42,7 @@ Module TASK cung cấp API cho các nghiệp vụ:
 7. Quản lý assignee chính, watcher/follower và người tạo task.
 8. Cập nhật trạng thái, độ ưu tiên và deadline task.
 9. Hiển thị danh sách task, việc của tôi, task quá hạn, task sắp đến hạn.
-10. Hiển thị Kanban board theo trạng thái task.
+10. Hiển thị Kanban board theo **cột pipeline tuỳ biến của dự án** (`project_states`), có nhánh dự phòng theo trạng thái task khi dự án chưa cấu hình cột.
 11. Bình luận trong task và mention người dùng.
 12. Quản lý checklist/checklist item trong task.
 13. Upload, xem, tải và xóa file đính kèm project/task.
@@ -91,7 +91,7 @@ API-06 tuân thủ các quyết định đã chốt trong bộ tài liệu dự 
 | My Task API | Việc của tôi, task được giao, task tôi tạo, task tôi theo dõi |
 | Assignment API | Giao task, đổi assignee, thêm/xóa watcher |
 | Task Status API | Cập nhật trạng thái task, đổi priority, đổi deadline |
-| Kanban API | Lấy board theo project/status và kéo thả đổi trạng thái |
+| Kanban API | Lấy board theo cột pipeline của dự án (dự phòng theo status) và kéo thả đổi cột |
 | Task Comment API | Tạo, sửa, xóa comment, mention người dùng |
 | Task Checklist API | Tạo checklist, tạo item, cập nhật item, đánh dấu hoàn thành |
 | Task File API | Upload, danh sách, tải, xóa file task |
@@ -291,7 +291,8 @@ Project role không thay thế RBAC hệ thống. Backend phải kiểm tra RBAC
 | `TASK.TASK.UPDATE` | Cập nhật task |
 | `TASK.TASK.DELETE` | Xóa mềm task |
 | `TASK.TASK.ASSIGN` | Giao task hoặc đổi assignee |
-| `TASK.TASK.UPDATE_STATUS` | Cập nhật trạng thái task |
+| `TASK.TASK.UPDATE_STATUS` | Cập nhật trạng thái task (`task_status`) |
+| `TASK.TASK.UPDATE_STATE` | Đổi cột pipeline của task (`state_id`) — kéo thả Kanban |
 | `TASK.TASK.UPDATE_PRIORITY` | Cập nhật độ ưu tiên |
 | `TASK.TASK.UPDATE_DEADLINE` | Cập nhật deadline |
 | `TASK.TASK.COMMENT` | Bình luận trong task |
@@ -623,6 +624,7 @@ title
 | Method | Endpoint | Mục đích | Permission |
 | --- | --- | --- | --- |
 | GET | `/api/v1/tasks/projects/{project_id}/kanban` | Lấy Kanban board | `TASK.TASK.VIEW_KANBAN` |
+| POST | `/api/v1/tasks/{task_id}/move-state` | Kéo thả đổi cột pipeline (**TASK-API-213**) | `TASK.TASK.UPDATE_STATE` (+ `TASK.TASK.UPDATE_STATUS` khi đổi nhóm) |
 | POST | `/api/v1/tasks/{task_id}/comments` | Tạo comment | `TASK.TASK.COMMENT` |
 | PATCH | `/api/v1/tasks/{task_id}/comments/{comment_id}` | Sửa comment | `TASK.TASK.COMMENT` |
 | DELETE | `/api/v1/tasks/{task_id}/comments/{comment_id}` | Xóa comment | `TASK.TASK.COMMENT` |
@@ -630,6 +632,8 @@ title
 | POST | `/api/v1/tasks/{task_id}/checklists` | Tạo checklist | `TASK.TASK.UPDATE` |
 | POST | `/api/v1/tasks/{task_id}/files` | Upload file task | `TASK.TASK.FILE_UPLOAD` |
 | GET | `/api/v1/tasks/{task_id}/activity-logs` | Xem activity task | `TASK.AUDIT_LOG.VIEW` hoặc `TASK.TASK.VIEW` |
+
+> **Về mã `TASK-API-213`.** Cấp ngày 18/07/2026 cho route đổi cột (chi tiết §15.2), theo **sổ mã SPEC-06 §16.3** — nguồn chuẩn theo CLAUDE.md §1. Bối cảnh: SPEC-06 §16.3 và `IMPLEMENTATION-07` là **hai sổ mã đã lệch nhau từ trước đợt này** cho cả route cũ (SPEC: kanban = `212`; IMPLEMENTATION-07: kanban = `241`, kéo thả = `242`). Chọn dải `21x` của SPEC. `IMPLEMENTATION-07` **đã được đồng bộ** về `213`. Việc hợp nhất hoàn toàn hai sổ mã là một lần dọn riêng — đừng "sửa lại" thành `243` khi thấy IMPL-07 dùng dải `24x`.
 
 ---
 
@@ -1549,22 +1553,28 @@ Idempotency-Key: <uuid>
 1. Trạng thái mới phải hợp lệ.
 2. Backend kiểm tra workflow chuyển trạng thái:
 
-```text
-Todo        -> In Progress | Cancelled
-In Progress -> In Review | Done | Cancelled
-In Review   -> In Progress | Done | Cancelled
-Done        -> In Progress (reopen, chỉ khi policy cho phép)
-Cancelled   -> (terminal; không reopen)
-```
+> **Bảng chuyển trạng thái ĐÃ NỚI 18/07/2026** — nguồn duy nhất là **SPEC-06 §6.10.1** (xem [DECISIONS-03](<../DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-18). Bảng cũ ở đây (cấm nhảy cấp, `Done`/`Cancelled` là ngõ cụt) **không còn hiệu lực** và đã được gỡ để không có hai nguồn mâu thuẫn.
 
-Bảng transition chuẩn theo SPEC-06; API-06 conform.
+Tóm tắt luật hiện hành: bốn trạng thái hoạt động (`Todo` · `In Progress` · `In Review` · `Done`) đi được tới nhau và tới `Cancelled`; `Cancelled → {Todo, In Progress}` để khôi phục. Chi tiết đầy đủ ở SPEC-06 §6.10.1 — **đừng chép lại bảng vào đây**, một bản sao là một nguồn mâu thuẫn tương lai.
 
 1. Nếu chuyển sang `Done` và company setting yêu cầu checklist hoàn thành, tất cả checklist item bắt buộc phải done.
 2. Nếu task thuộc project Archived/Cancelled, không cho đổi trạng thái.
 3. Assignee có thể đổi trạng thái task của mình nếu có quyền và scope.
 
-**Activity log**  
-`TASK_STATUS_CHANGED`
+**Tác dụng phụ: đồng bộ ngược sang cột pipeline (D-21, từ 18/07/2026)**
+
+Sau khi đổi trạng thái thành công, endpoint này **cũng chuyển `state_id`** sang cột thuộc nhóm tương ứng, **trong cùng giao dịch**:
+
+1. Tra nhóm đích theo **bảng ánh xạ ngược** ở DECISIONS-03 D-20 (`Todo → unstarted` · `In Progress → started` · `In Review → review` · `Done → completed` · `Cancelled → cancelled`).
+2. **KHÔNG chuyển nếu thẻ đã ở cột đúng nhóm.** Đây là bất biến bảo đảm dừng, không phải tinh chỉnh giao diện — bỏ đi sẽ âm thầm hoàn tác thao tác kéo của người dùng (kéo vào *Hậu Kỳ*, thẻ nhảy về *Quay*).
+3. Cần chuyển thì chọn cột trong nhóm theo bậc thang D-20: `is_default` → `sort_order` nhỏ nhất, tie-break `ORDER BY sort_order, created_at, id`.
+4. Đọc `state_id` để so nhóm phải là đọc **sau khi ghi**, cùng giao dịch — đọc bản chụp lấy trước lúc ghi sẽ khiến guard thấy cột cũ và dời thẻ thêm một lần.
+
+Lý do có tác dụng phụ này: sau khi board chuyển sang hiển thị theo cột, thao tác đổi trạng thái ngoài board mà không dời cột sẽ khiến thẻ đứng nguyên chỗ cũ trên board — người dùng thấy như lỗi.
+
+**Activity log**
+
+`TASK_STATUS_CHANGED`, cộng `TASK_STATE_CHANGED` khi tác dụng phụ trên có dời cột.
 
 **Notification event**
 
@@ -1681,9 +1691,16 @@ Bảng transition chuẩn theo SPEC-06; API-06 conform.
 
 1. User phải xem được project.
 2. Board chỉ trả task trong project đó.
-3. Nếu user không có `TASK.TASK.UPDATE_STATUS`, frontend chỉ cho xem, không cho kéo thả.
+3. Board **chỉ trả task cha** (`parent_task_id IS NULL`); công việc con xem trong task cha.
+4. Nếu user không có `TASK.TASK.UPDATE_STATE`, frontend chỉ cho xem, không cho kéo thả.
+5. **Cột lấy từ `project_states`** của project (sắp theo `sort_order`), KHÔNG phải 5 trạng thái cố định — xem SPEC-06 §6.8, [DECISIONS-03](<../DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-16. Response mang thêm `column_mode`:
+   - `column_mode = "state"` — cột là pipeline; mỗi cột có `state_id`, `name`, `color`, `state_group`, `sort_order`.
+   - `column_mode = "status"` — project chưa cấu hình cột nào ⇒ trả 5 cột trạng thái như thiết kế cũ (tương thích ngược).
+6. Task có `state_id` NULL rơi vào cột mặc định của project — **không** biến mất khỏi board.
 
-**Response 200**
+**Response 200 — `column_mode = "state"` (đường chính)**
+
+Cột lấy từ `project_states` của dự án. Mỗi phần tử `columns` mang `state_id`, `name`, `color`, `state_group`, `sort_order`. Ví dụ dưới là một dự án sản xuất video tự cấu hình pipeline riêng:
 
 ```json
 {
@@ -1694,28 +1711,41 @@ Bảng transition chuẩn theo SPEC-06; API-06 conform.
       "project_id": "...",
       "name": "EMS MVP"
     },
+    "column_mode": "state",
     "columns": [
       {
-        "status": "Todo",
-        "title": "Cần làm",
-        "total": 8,
+        "state_id": "3f1c…",
+        "name": "Ý Tưởng",
+        "color": "#94a3b8",
+        "state_group": "backlog",
+        "sort_order": 0,
+        "total": 6,
         "tasks": []
       },
       {
-        "status": "In Progress",
-        "title": "Đang làm",
+        "state_id": "8a24…",
+        "name": "Hậu Kỳ",
+        "color": "#3b82f6",
+        "state_group": "started",
+        "sort_order": 1,
         "total": 12,
         "tasks": []
       },
       {
-        "status": "In Review",
-        "title": "Chờ kiểm tra",
+        "state_id": "c07b…",
+        "name": "Duyệt Video",
+        "color": "#f59e0b",
+        "state_group": "review",
+        "sort_order": 2,
         "total": 4,
         "tasks": []
       },
       {
-        "status": "Done",
-        "title": "Hoàn thành",
+        "state_id": "d5e9…",
+        "name": "Hoàn thành",
+        "color": "#22c55e",
+        "state_group": "completed",
+        "sort_order": 3,
         "total": 8,
         "tasks": []
       }
@@ -1732,17 +1762,96 @@ Bảng transition chuẩn theo SPEC-06; API-06 conform.
 }
 ```
 
+**Response 200 — `column_mode = "status"` (nhánh dự phòng)**
+
+Dự án **chưa cấu hình cột nào** ⇒ board trả về các cột trạng thái như thiết kế cũ. Phần tử `columns` ở chế độ này mang `status`/`title`, **không** có `state_id`/`state_group`/`sort_order`:
+
+```json
+{
+  "success": true,
+  "message": "Lấy Kanban board thành công",
+  "data": {
+    "project": {
+      "project_id": "...",
+      "name": "Dự án chưa cấu hình cột"
+    },
+    "column_mode": "status",
+    "columns": [
+      { "status": "Todo",        "title": "Cần làm",       "total": 8,  "tasks": [] },
+      { "status": "In Progress", "title": "Đang làm",      "total": 12, "tasks": [] },
+      { "status": "In Review",   "title": "Chờ kiểm tra",  "total": 4,  "tasks": [] },
+      { "status": "Done",        "title": "Hoàn thành",    "total": 8,  "tasks": [] },
+      { "status": "Cancelled",   "title": "Đã huỷ",        "total": 1,  "tasks": [] }
+    ],
+    "permissions": {
+      "can_drag_drop": true,
+      "can_create_task": true
+    }
+  },
+  "meta": {
+    "request_id": "req_20260620_000401",
+    "timestamp": "2026-06-20T10:00:00+07:00"
+  }
+}
+```
+
+> **Hai chế độ loại trừ nhau — client phải rẽ nhánh theo `column_mode`, không đoán theo sự có mặt của trường.** Ở chế độ `status`, kéo thả **không** dùng `move-state` (không có `state_id` để gửi); frontend chỉ hiển thị, hoặc gọi `change-status` như trước.
+
 ---
 
-### 15.2 POST `/api/v1/tasks/{task_id}/change-status` dùng cho kéo thả
+### 15.2 POST `/api/v1/tasks/{task_id}/move-state` - Kéo thả đổi cột
 
-Kanban drag/drop không có endpoint riêng trong MVP. Frontend gọi lại endpoint đổi trạng thái task.
+> Thay thế cách cũ (gọi lại `change-status`) từ 18/07/2026 — cột nay là pipeline, không phải trạng thái. Xem [DECISIONS-03](<../DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-16/D-17.
 
-Quy tắc:
+**Mã API**  
+`TASK-API-213`
 
-1. Kéo thả từ cột này sang cột khác gọi `POST /api/v1/tasks/{task_id}/change-status`.
-2. Backend kiểm tra workflow hợp lệ.
-3. Nếu frontend có thứ tự task trong cột, phase sau có thể bổ sung `order_index` và endpoint reorder.
+**Required permission**
+
+| Tình huống | Quyền cần |
+| --- | --- |
+| Kéo sang cột **cùng nhóm** (`state_group` không đổi) | `TASK.TASK.UPDATE_STATE` |
+| Kéo sang cột **khác nhóm** (kéo theo đổi trạng thái) | `TASK.TASK.UPDATE_STATE` **và** `TASK.TASK.UPDATE_STATUS` |
+
+**Request body**
+
+```json
+{ "state_id": "uuid-cot-dich" }
+```
+
+**Business validation**
+
+1. Cột đích phải thuộc **đúng project của task** và cùng công ty. Cột không tồn tại (hoặc đã xoá mềm) ⇒ **404 `TASK-ERR-STATE-NOT-FOUND`**. Cột có tồn tại nhưng thuộc dự án khác ⇒ **400 `TASK-ERR-STATE-INVALID`**. Cả hai trường hợp **không ghi gì**.
+2. Task do workflow điều khiển **không** kéo thả được ⇒ 400.
+3. Task ngoài phạm vi dữ liệu của người thao tác ⇒ 404 (không tiết lộ sự tồn tại).
+4. Đổi cột và (nếu có) đổi trạng thái nằm trong **cùng một giao dịch**: máy trạng thái từ chối ⇒ cột **không** đổi.
+5. Thiếu `TASK.TASK.UPDATE_STATUS` khi thao tác làm đổi trạng thái ⇒ **403 và cột không đổi** — không được đổi cột rồi mới báo lỗi.
+6. Phạm vi dữ liệu của quyền đổi trạng thái được kiểm **theo chính quyền đó**, không mượn phạm vi của quyền đổi cột.
+
+**Auto-map nhóm → trạng thái**
+
+| `state_group` cột đích | `task_status` sau khi kéo |
+| --- | --- |
+| `backlog`, `unstarted` | `Todo` |
+| `started` | `In Progress` |
+| `review` | `In Review` |
+| `completed` | `Done` |
+| `cancelled` | `Cancelled` |
+
+Trạng thái đích trùng trạng thái hiện tại ⇒ không đổi, không ghi nhật ký trạng thái, không phát thông báo.
+
+> **Cross-tenant.** Cột thuộc công ty khác **không nhìn thấy được** do cô lập ở tầng cơ sở dữ liệu, nên trả **404 `TASK-ERR-STATE-NOT-FOUND`** giống hệt cột không tồn tại — không được để lộ sự tồn tại của dữ liệu công ty khác qua chênh lệch mã lỗi.
+>
+> **Sáu nhóm** (`backlog · unstarted · started · review · completed · cancelled`) — nhóm `review` bổ sung 18/07/2026 để cột duyệt của quy trình sản xuất (ví dụ *Duyệt Video*) quy về `In Review` thay vì bị gộp vào `In Progress`. Ánh xạ toàn phần: mọi nhóm đều có đúng một trạng thái đích.
+
+**Ghi nhật ký**
+
+Một thao tác kéo ghi **một** bản ghi đổi cột, cộng **một** bản ghi đổi trạng thái nếu có auto-map. Bản ghi đổi cột lưu cả `state_id` **và tên cột tại thời điểm đó** — cột đổi tên về sau không được làm sai lịch sử.
+
+**Ghi chú**
+
+1. `POST /api/v1/tasks/{task_id}/change-status` **ĐỔI HÀNH VI từ 18/07/2026** — nay đồng bộ ngược sang `state_id`. Xem §14.2 và [DECISIONS-03](<../DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-21.
+2. Nếu frontend cần thứ tự task trong cột, phase sau bổ sung `order_index` và endpoint reorder.
 
 ---
 
@@ -2454,9 +2563,11 @@ Quy tắc:
 | 400 | `TASK-ERR-ASSIGNEE-INVALID` | Assignee không hợp lệ |
 | 400 | `TASK-ERR-PROJECT-MEMBER-INVALID` | Member dự án không hợp lệ |
 | 400 | `TASK-ERR-TASK-PERSONAL-DISABLED` | Company không cho phép task cá nhân |
+| 400 | `TASK-ERR-STATE-INVALID` | Cột đích không thuộc dự án của task |
 | 403 | `TASK-ERR-FORBIDDEN` | Không có quyền TASK hoặc ngoài scope |
 | 404 | `TASK-ERR-PROJECT-NOT-FOUND` | Không tìm thấy project hoặc không có quyền xem |
 | 404 | `TASK-ERR-TASK-NOT-FOUND` | Không tìm thấy task hoặc không có quyền xem |
+| 404 | `TASK-ERR-STATE-NOT-FOUND` | Không tìm thấy cột pipeline (không tồn tại, đã xoá mềm, hoặc thuộc công ty khác) |
 | 404 | `TASK-ERR-COMMENT-NOT-FOUND` | Không tìm thấy comment |
 | 409 | `TASK-ERR-DUPLICATE-MEMBER` | Member đã tồn tại |
 | 409 | `TASK-ERR-DUPLICATE-WATCHER` | Watcher đã tồn tại |
@@ -2496,6 +2607,10 @@ Quy tắc:
 9. Không chuyển Done nếu checklist bắt buộc chưa hoàn thành.
 10. Không cập nhật task thuộc project Archived/Cancelled nếu setting không cho phép.
 11. Khi giao task, nếu assignee đang nghỉ phép/deadline trùng lịch nghỉ, backend trả warning hoặc chặn theo setting.
+12. `state_id` phải trỏ cột **thuộc đúng dự án của task**: cột không tìm thấy ⇒ 404 `TASK-ERR-STATE-NOT-FOUND`; cột của dự án khác ⇒ 400 `TASK-ERR-STATE-INVALID`.
+13. Task **không thuộc dự án** (`project_id` NULL) thì `state_id` phải NULL.
+14. Đổi `state_id` sang cột **khác `state_group`** phải kéo theo cập nhật `task_status` theo ánh xạ (§15.2) **trong cùng một giao dịch** — hai cột không được lệch nhau.
+15. Quy tắc 12–14 áp cho **mọi** đường ghi `state_id` (`POST /tasks`, `PATCH /tasks/{task_id}`, `POST /tasks/{task_id}/move-state`), không riêng route kéo thả. Đường **tạo** phải suy `task_status` khởi tạo từ nhóm của cột được chỉ định thay vì mặc định `Todo`.
 
 ### 26.3 Comment
 
@@ -2601,11 +2716,14 @@ task_watchers(company_id, employee_id, task_id)
 
 ### 28.2 Query Kanban
 
-Nên lấy task theo project và group ở backend:
+Nên lấy task theo project và group ở backend. Board nhóm theo **cột pipeline** (`state_id`), không theo `status`:
 
 ```text
-tasks(company_id, project_id, status, priority, due_at)
+tasks(company_id, state_id) WHERE deleted_at IS NULL     -- đường chính (column_mode = "state")
+tasks(company_id, project_id, status, priority, due_at)  -- nhánh dự phòng (column_mode = "status")
 ```
+
+Truy vấn board còn phải lọc `parent_task_id IS NULL` (board chỉ hiện task cha) và `LEFT JOIN project_states` để task có `state_id` NULL không biến mất — chúng được xếp vào cột mặc định của dự án.
 
 Với project nhiều task, cần giới hạn số task mỗi cột hoặc lazy load theo cột.
 

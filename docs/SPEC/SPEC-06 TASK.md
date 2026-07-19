@@ -363,15 +363,42 @@ Watcher nhận thông báo khi:
 
 ### 6.8 Kanban Board
 
-`Kanban Board` là giao diện hiển thị task theo cột trạng thái.
+> **Đổi ngữ nghĩa 18/07/2026 — xem [DECISIONS-03](<../DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-16/D-17.** Trước đây cột = trạng thái task. Nay cột = **pipeline tuỳ biến theo dự án**.
 
-Ví dụ cột:
+`Kanban Board` là giao diện hiển thị task theo **cột pipeline của dự án** (`project_states`) — mỗi dự án tự định nghĩa quy trình riêng, không dùng chung 5 trạng thái cố định.
+
+Ví dụ cột của một dự án sản xuất video:
 
 ```text
-Todo → In Progress → In Review → Done
+Ý Tưởng–kịch bản → Thiết Kế → Quay → Hậu Kỳ → Thumbnail → Duyệt Video → SEO
 ```
 
-Người dùng có thể kéo thả task giữa các cột nếu có quyền cập nhật trạng thái.
+Mỗi cột thuộc một **nhóm** (`state_group`): `backlog · unstarted · started · review · completed · cancelled`. Nhóm là lớp nối giúp cột tuỳ biến vẫn quy được về trạng thái chuẩn, nhờ đó báo cáo tổng hợp và so sánh giữa các dự án vẫn hoạt động.
+
+**Quan hệ cột ↔ trạng thái.** Task mang **đồng thời** hai chiều thông tin:
+
+| | Ý nghĩa | Dùng cho |
+| --- | --- | --- |
+| `state_id` (cột) | Task đang ở chặng nào trong quy trình của dự án | Hiển thị board, điều phối công việc |
+| `task_status` | Trạng thái chuẩn của hệ thống | Phê duyệt, báo cáo, cảnh báo quá hạn |
+
+Kéo thẻ sang cột khác sẽ **tự động cập nhật `task_status`** theo nhóm của cột đích:
+
+| Nhóm cột đích | `task_status` |
+| --- | --- |
+| `backlog`, `unstarted` | `Todo` |
+| `started` | `In Progress` |
+| `review` | `In Review` |
+| `completed` | `Done` |
+| `cancelled` | `Cancelled` |
+
+Nhóm `review` được **thêm 18/07/2026** để cột duyệt (ví dụ *Duyệt Video*) sinh ra được trạng thái `In Review` — nếu không, báo cáo "chờ kiểm tra" sẽ luôn bằng 0 vì không thao tác board nào tạo ra trạng thái đó. Kéo giữa hai cột **cùng nhóm** không đổi trạng thái. Việc cập nhật đi qua đúng máy trạng thái nên vẫn ghi nhật ký và phát thông báo như thao tác đổi trạng thái thông thường.
+
+**Quyền.** Kéo thẻ cần quyền đổi cột (`TASK.TASK.UPDATE_STATE`). Nếu thao tác đó làm đổi cả trạng thái thì cần **thêm** quyền đổi trạng thái (`TASK.TASK.UPDATE_STATUS`) — thiếu quyền thì cả thao tác bị từ chối, cột không đổi.
+
+**Dự án chưa có cột nào** hiển thị theo 5 trạng thái cố định như trước — không vỡ. Đây là **lưới phòng vệ**, không phải tình huống vận hành thường gặp: sau khi migration seed cột cho mọi dự án đang trống và luồng tạo dự án seed sẵn 6 cột, nhánh này gần như không với tới được. Đừng viết kiểm thử coi nó là đường chính.
+
+Board **chỉ hiển thị công việc cha**; công việc con nằm bên trong task cha (mô hình công việc con chốt riêng — xem kế hoạch `S5-TASK-SUBTASK-1`).
 
 ---
 
@@ -407,6 +434,26 @@ Lưu ý:
 
 * `Overdue` có thể là trạng thái tính toán, không nhất thiết là trạng thái lưu trực tiếp.
 * Nếu `due_at < current_date` và status chưa phải Done/Cancelled, task được xem là quá hạn.
+
+#### 6.10.1 Bảng chuyển trạng thái
+
+> **Nới 18/07/2026 — xem [DECISIONS-03](<../DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-18.** Trước đây cấm nhảy cấp và cấm mở lại (`Done` là ngõ cụt). Lý do nới: trên board pipeline, kéo thẻ vượt cấp là thao tác hằng ngày, và trong sản xuất thì **trả về sửa** là việc bình thường.
+
+| Từ \ Đến | Todo | In Progress | In Review | Done | Cancelled |
+| --- | :---: | :---: | :---: | :---: | :---: |
+| **Todo** | — | ✅ | ✅ | ✅ | ✅ |
+| **In Progress** | ✅ | — | ✅ | ✅ | ✅ |
+| **In Review** | ✅ | ✅ | — | ✅ | ✅ |
+| **Done** | ✅ | ✅ | ✅ | — | ✅ |
+| **Cancelled** | ✅ | ✅ | ❌ | ❌ | — |
+
+* Rời `Done` ⇒ xoá `completed_at` và `completed_by`. Rời `Cancelled` ⇒ xoá `cancelled_at`. Giữ lại mốc cũ sẽ làm sai chỉ số thời gian hoàn thành.
+* Chuyển tới cùng trạng thái đang có = không làm gì (không ghi nhật ký, không phát thông báo).
+* **Task đã huỷ vẫn bị khoá ở các thao tác khác**: giao việc, đổi ưu tiên, đổi hạn đều bị từ chối. Chỉ riêng đường đổi trạng thái được mở để khôi phục.
+* **Task do workflow điều khiển giữ nguyên luật cũ** — board pipeline không áp cho nhóm này.
+* Sau khi nới, lỗi `TASK-ERR-WORKFLOW-INVALID` gần như chỉ còn xảy ra với task đang `Cancelled` chuyển tới đích không được phép.
+
+**Kỷ luật quy trình chuyển chỗ, không mất đi.** Trước đây hệ thống ép thứ tự bằng bảng chuyển trạng thái; nay thứ tự nằm ở **thứ tự cột pipeline** do người quản lý dự án cấu hình — và người dùng nhìn thấy được nó, thay vì nó ẩn trong mã. Nếu về sau cần ép duyệt cứng cho một loại việc, làm bằng **khoá cột theo quyền**, không quay lại siết bảng chuyển trạng thái.
 
 ---
 
@@ -486,6 +533,11 @@ TASK.TASK.ASSIGN
 | TASK.TASK.DELETE           | Xóa mềm task                       |
 | TASK.TASK.ASSIGN           | Giao task hoặc đổi assignee        |
 | TASK.TASK.UPDATE_STATUS    | Cập nhật trạng thái task           |
+| TASK.TASK.UPDATE_STATE     | Đổi cột pipeline của task (kéo thả board) — thêm 18/07/2026, [DECISIONS-03](<../DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-16 |
+| TASK.PROJECT_STATE.VIEW    | Xem danh sách cột pipeline của dự án |
+| TASK.PROJECT_STATE.CREATE  | Thêm cột pipeline |
+| TASK.PROJECT_STATE.UPDATE  | Sửa cột pipeline (tên, màu, nhóm, thứ tự) |
+| TASK.PROJECT_STATE.DELETE  | Xoá mềm cột pipeline |
 | TASK.TASK.UPDATE_PRIORITY  | Cập nhật độ ưu tiên                |
 | TASK.TASK.UPDATE_DEADLINE  | Cập nhật deadline                  |
 | TASK.TASK.COMMENT          | Bình luận trong task               |
@@ -535,11 +587,16 @@ Super Admin có TASK.TASK.VIEW với scope System.
 | Giao task                | Có          | Có nếu được cấp      | Có nếu được cấp      | Có trong team/project   | Có trong project       | Không mặc định                |
 | Cập nhật task            | Có          | Có nếu được cấp      | Có nếu được cấp      | Có theo scope           | Có theo project        | Có giới hạn với task của mình |
 | Cập nhật trạng thái task | Có          | Có nếu được cấp      | Có nếu được cấp      | Có theo scope           | Có theo project        | Có nếu là assignee            |
+| Đổi cột pipeline task    | Có          | Có (Company)         | Có (Company)         | Có (Team)               | Có theo project        | Có (Own — task của mình)      |
+| Xem cột pipeline         | Có          | Có                   | Không mặc định       | Không mặc định          | Có                     | Có                            |
+| Quản lý cột pipeline     | Có          | Có                   | Không mặc định       | **Không mặc định**      | Có                     | Không                         |
 | Bình luận task           | Có          | Có nếu xem được task | Có nếu xem được task | Có nếu xem được task    | Có nếu xem được task   | Có nếu xem được task          |
 | Upload file task         | Có          | Có nếu được cấp      | Có nếu được cấp      | Có nếu xem được task    | Có nếu xem được task   | Có nếu được cấp               |
 | Xóa task                 | Có          | Có nếu được cấp      | Không mặc định       | Có nếu là creator/owner | Có nếu là owner        | Không mặc định                |
 | Xem báo cáo dự án        | Có          | Có nếu được cấp      | Có nếu được cấp      | Có theo scope           | Có với dự án phụ trách | Không mặc định                |
 | Xuất task                | Có          | Có nếu được cấp      | Có nếu được cấp      | Có nếu được cấp         | Có nếu được cấp        | Không mặc định                |
+
+> **Hai hàng cột pipeline ghi theo seed THẬT đang chạy, không theo suy đoán.** Quyền quản trị cột (`TASK.PROJECT_STATE.CREATE/UPDATE/DELETE`) hiện chỉ cấp cho **Super Admin · Admin công ty · Project Manager**; quyền xem (`VIEW`) cấp thêm cho **Employee**. **Manager và HR hiện KHÔNG có quyền nào trên cột** — kể cả xem. Và **không tồn tại kiểm tra "owner dự án"** ở các route quản trị cột (gate thuần theo cặp quyền). Nếu muốn Manager có quyền quản trị cột, hoặc muốn thêm ràng buộc owner, đó là **quyết định mới** cần vào sổ quyết định + migration riêng — KHÔNG được sửa lén qua bảng này, vì bảng này là nguồn mà migration seed mirror theo.
 
 ---
 
@@ -559,7 +616,7 @@ Super Admin có TASK.TASK.VIEW với scope System.
 | TASK-FUNC-010 | Cập nhật thông tin task           | Sửa tiêu đề, mô tả, deadline, priority |
 | TASK-FUNC-011 | Cập nhật trạng thái task          | Todo, In Progress, In Review, Done     |
 | TASK-FUNC-012 | Xem việc của tôi                  | Danh sách task liên quan user hiện tại |
-| TASK-FUNC-013 | Kanban board                      | Xem và kéo thả task theo trạng thái    |
+| TASK-FUNC-013 | Kanban board                      | Xem và kéo thả task theo cột pipeline của dự án    |
 | TASK-FUNC-014 | Bình luận task                    | Trao đổi trong task                    |
 | TASK-FUNC-015 | Đính kèm file                     | Upload/xem/xóa file task               |
 | TASK-FUNC-016 | Checklist                         | Thêm checklist nhỏ trong task          |
@@ -674,12 +731,15 @@ Employee đăng nhập
 ```text
 Người dùng mở dự án
 → Chọn tab Kanban
-→ Hệ thống lấy task trong dự án theo quyền
-→ Hiển thị task theo cột trạng thái
+→ Hệ thống lấy task CHA trong dự án theo quyền
+→ Hiển thị task theo cột pipeline của dự án (project_states)
 → Người dùng kéo task sang cột khác
-→ Hệ thống kiểm tra quyền cập nhật trạng thái
-→ Hệ thống cập nhật trạng thái task
-→ Ghi activity log
+→ Hệ thống kiểm tra quyền ĐỔI CỘT
+→ Nếu cột đích khác nhóm: kiểm tra thêm quyền ĐỔI TRẠNG THÁI
+     ├─ thiếu quyền → từ chối TOÀN BỘ, cột không đổi
+     └─ đủ quyền   → đổi cột + đổi trạng thái trong CÙNG giao dịch
+→ Nếu cột đích cùng nhóm: chỉ đổi cột
+→ Ghi activity log (1 bản ghi đổi cột + 1 bản ghi đổi trạng thái nếu có)
 ```
 
 ---
@@ -828,7 +888,7 @@ Hiển thị toàn bộ thông tin dự án, task, thành viên và tiến độ
 | ---------- | --------------------------------- |
 | Tổng quan  | Thông tin dự án, tiến độ, số task |
 | Task       | Danh sách task thuộc dự án        |
-| Kanban     | Board task theo trạng thái        |
+| Kanban     | Board task theo cột pipeline        |
 | Thành viên | Danh sách thành viên dự án        |
 | File       | Tài liệu dự án nếu có             |
 | Báo cáo    | Thống kê tiến độ                  |
@@ -1006,17 +1066,32 @@ Hiển thị chi tiết task và cho phép người có quyền thao tác.
 
 #### Mục đích
 
-Hiển thị task theo cột trạng thái để dễ theo dõi tiến độ.
+Hiển thị task theo **cột pipeline của dự án** để dễ theo dõi tiến độ (xem §6.8 — đổi ngữ nghĩa 18/07/2026, [DECISIONS-03](<../DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-16).
 
-#### Cột mặc định
+#### Cột
 
-| Cột        | Trạng thái  |
-| ---------- | ----------- |
-| Cần làm    | Todo        |
-| Đang làm   | In Progress |
-| Chờ review | In Review   |
-| Hoàn thành | Done        |
-| Đã hủy     | Cancelled   |
+Cột lấy từ `project_states` của dự án, sắp theo thứ tự người quản trị cấu hình. Mỗi cột có **tên, màu, nhóm** (`state_group`) do người dùng đặt.
+
+Cột mặc định khi tạo dự án mới:
+
+| Cột        | Nhóm      |
+| ---------- | --------- |
+| Backlog    | backlog   |
+| Cần làm    | unstarted |
+| Đang làm   | started   |
+| Chờ duyệt  | review    |
+| Hoàn thành | completed |
+| Đã huỷ     | cancelled |
+
+Bộ mặc định gồm **6 cột**, phủ đủ 6 nhóm. Cột *Chờ duyệt* được thêm cùng nhóm `review` (18/07/2026): thiếu nó thì dự án dùng bộ mặc định vẫn không sinh ra được trạng thái `In Review` từ board, tức mục đích của việc thêm nhóm `review` không đạt.
+
+Dự án tự đổi tên / thêm / bớt / sắp xếp lại cột theo quy trình riêng — ví dụ dự án sản xuất video: *Ý Tưởng–kịch bản · Thiết Kế · Quay · Hậu Kỳ · Thumbnail · Duyệt Video · SEO*.
+
+**Dự án chưa cấu hình cột nào** hiển thị theo 5 trạng thái cố định như thiết kế cũ.
+
+#### Phạm vi hiển thị
+
+Board **chỉ hiện công việc cha**. Công việc con xem trong task cha.
 
 #### Card task hiển thị
 
@@ -1037,17 +1112,23 @@ Hiển thị task theo cột trạng thái để dễ theo dõi tiến độ.
 
 #### Quy tắc kéo thả
 
-* Chỉ người có quyền cập nhật trạng thái mới kéo thả được.
+> Cập nhật 18/07/2026 — kéo thả nay đổi **cột pipeline**, không phải trạng thái. Xem §6.8 và [DECISIONS-03](<../DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-16/D-17.
+
+* Chỉ người có quyền **đổi cột** (`TASK.TASK.UPDATE_STATE`) mới kéo thả được.
+* Nếu cột đích **khác nhóm** với cột hiện tại, thao tác kéo theo cập nhật trạng thái ⇒ cần **thêm** quyền `TASK.TASK.UPDATE_STATUS`. Thiếu quyền thứ hai thì **từ chối toàn bộ thao tác, cột không đổi** — không được đổi cột rồi mới báo lỗi.
+* Kéo giữa hai cột **cùng nhóm** không đổi trạng thái, chỉ cần quyền đổi cột.
+* Cột đích phải thuộc **đúng dự án** của task.
 * Nếu task bị khóa hoặc dự án đã đóng, không kéo thả được.
-* Nếu workflow không cho chuyển trạng thái trực tiếp, hệ thống chặn.
-* Sau khi kéo thả thành công, ghi activity log.
+* Task do workflow điều khiển **không** kéo thả được trên board pipeline.
+* Nếu checklist bắt buộc chưa xong, kéo sang cột nhóm `completed` bị chặn (kiểm theo trạng thái đích).
+* Sau khi kéo thả thành công, ghi activity log: **một** bản ghi đổi cột, cộng **một** bản ghi đổi trạng thái nếu có auto-map. Bản ghi lưu cả **tên cột tại thời điểm đó**.
 
 #### Lọc theo người phụ trách (client-side)
 
 * Board có dải chip lọc theo assignee, gồm: chip **"Tất cả"** (bỏ lọc, mặc định) + 1 chip/người phụ trách + chip **"Chưa giao"** (task có `main_assignee_employee_id = null`).
 * Danh sách người phụ trách trong dải chip **suy ra từ chính tập task đang hiển thị trên board** (duyệt qua toàn bộ cột) — **không** gọi thêm API danh sách thành viên/nhân sự nào khác; chip "Chưa giao" chỉ xuất hiện nếu board có ít nhất 1 task chưa gán.
 * Lọc chạy **hoàn toàn phía client** trong từng cột (không gọi lại API, không đổi query lên server) — chọn 1 assignee (hoặc "Chưa giao") thì mỗi cột chỉ hiển thị các card khớp điều kiện đó; số đếm ở header cột vẫn phản ánh tổng số task gốc của cột (không đổi theo bộ lọc).
-* Bộ lọc **kết hợp được** với kéo-thả hiện có: kéo thả vẫn hoạt động bình thường trên tập card đang lọc, không ảnh hưởng tới quyền (`TASK.TASK.UPDATE_STATUS`) hay dữ liệu gốc của board.
+* Bộ lọc **kết hợp được** với kéo-thả hiện có: kéo thả vẫn hoạt động bình thường trên tập card đang lọc, không ảnh hưởng tới quyền (`TASK.TASK.UPDATE_STATE` — quyền đổi **cột**) hay dữ liệu gốc của board.
 * Lọc theo assignee **không** thay đổi quyền xem/kéo thả và **không** phát sinh lời gọi API mới — chỉ là view-state cục bộ trên dữ liệu Kanban đã tải.
 
 ---
@@ -1465,7 +1546,11 @@ Cho phép cập nhật trạng thái task theo workflow.
 
 #### Bảng chuyển trạng thái chuẩn (state machine)
 
-Đây là bảng transition chuẩn (nguồn gốc) cho toàn hệ thống; BACKEND-08 và API-06 phải conform theo bảng này.
+> ⚠️ **BẢNG CHUẨN ĐÃ CHUYỂN VỀ §6.10.1 (18/07/2026).** Từ đợt nới FSM theo [DECISIONS-03](<../DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-18, **§6.10.1 là nguồn duy nhất** cho bảng chuyển trạng thái; BACKEND-08 và API-06 conform theo §6.10.1.
+>
+> Bảng dưới đây là **bản LỊCH SỬ** (trước 18/07/2026), giữ lại để tra cứu vì sao dữ liệu cũ có hình dạng như hiện tại. **KHÔNG dùng để hiện thực hoá.** Mã nguồn nào còn trích dẫn "§14.11 là bảng chuẩn" phải được sửa trích dẫn sang §6.10.1.
+
+**[LỊCH SỬ — không còn hiệu lực]**
 
 | Từ trạng thái | Sang trạng thái hợp lệ |
 | ------------- | ---------------------- |
@@ -1488,10 +1573,12 @@ Cancelled   → (terminal)
 * Assignee có thể chuyển Todo → In Progress.
 * Assignee có thể chuyển In Progress → In Review hoặc Done tùy cấu hình.
 * Manager/Project Manager có thể chuyển In Review → Done.
-* `Cancelled` là trạng thái cuối, không cho reopen về Todo.
-* Task Done có thể không cho sửa nếu project đã đóng; chỉ reopen về In Progress nếu policy cho phép.
-* Nếu checklist bắt buộc hoàn thành trước Done, hệ thống chặn Done khi còn checklist chưa xong.
-* Mọi thay đổi trạng thái phải ghi log.
+* ~~`Cancelled` là trạng thái cuối, không cho reopen về Todo.~~ → **Không còn hiệu lực.** §6.10.1 cho `Cancelled → {Todo, In Progress}` để khôi phục.
+* ~~Task Done chỉ reopen về In Progress nếu policy cho phép.~~ → **Không còn hiệu lực.** §6.10.1 cho `Done` đi tới mọi trạng thái hoạt động.
+* Task Done có thể không cho sửa nếu project đã đóng (điều kiện project, **vẫn hiệu lực**).
+* Nếu checklist bắt buộc hoàn thành trước Done, hệ thống chặn Done khi còn checklist chưa xong (**vẫn hiệu lực** — kiểm theo trạng thái ĐÍCH, không theo đường đi, nên kéo vượt cấp sang cột nhóm `completed` vẫn bị chặn nếu còn checklist bắt buộc).
+* Mọi thay đổi trạng thái phải ghi log (**vẫn hiệu lực**).
+* Task đã huỷ vẫn bị khoá ở các thao tác **khác** đổi trạng thái: giao việc, đổi ưu tiên, đổi hạn (**vẫn hiệu lực** — xem §6.10.1).
 
 #### Trường hợp lỗi
 
@@ -1538,15 +1625,18 @@ Cho phép người dùng xem các task liên quan đến mình.
 
 #### Mục tiêu
 
-Hiển thị task theo trạng thái dạng board.
+Hiển thị task theo **cột pipeline của dự án** dạng board (xem §6.8).
 
 #### Quy tắc
 
 * Người có quyền view kanban mới truy cập được.
-* Người không có quyền update status chỉ xem, không kéo thả.
-* Kéo thả task phải gọi API cập nhật trạng thái.
-* Backend kiểm tra workflow hợp lệ.
-* Mọi thao tác kéo thả thành công ghi activity log.
+* Người không có quyền đổi cột chỉ xem, không kéo thả.
+* Kéo thả task gọi API **đổi cột**; nếu cột đích khác nhóm với cột hiện tại thì API đó **đồng thời** cập nhật trạng thái theo ánh xạ nhóm (§6.8).
+* **Quyền hai tầng:** đổi cột cần `TASK.TASK.UPDATE_STATE`. Nếu thao tác làm đổi cả trạng thái thì cần **thêm** `TASK.TASK.UPDATE_STATUS`. Thiếu quyền thứ hai ⇒ từ chối **toàn bộ** thao tác, cột **không** đổi (không được đổi cột rồi mới báo lỗi).
+* Cột đích phải thuộc **đúng dự án** của task; cột của dự án khác hoặc công ty khác đều bị từ chối.
+* Backend kiểm tra workflow hợp lệ — task do workflow điều khiển **không** kéo thả được trên board pipeline.
+* Đổi cột và đổi trạng thái nằm trong **cùng một giao dịch**: máy trạng thái từ chối thì cột cũng không đổi (không để cột và trạng thái lệch nhau).
+* Mọi thao tác kéo thả thành công ghi nhật ký hoạt động: **một** bản ghi đổi cột, cộng **một** bản ghi đổi trạng thái nếu có auto-map. Nhật ký lưu cả **tên cột** tại thời điểm đó, để lịch sử không sai khi cột bị đổi tên về sau.
 
 ---
 
@@ -1979,6 +2069,13 @@ progress_percentage = 0
 | TASK-API-210 | GET    | /api/v1/tasks/my                       | Việc của tôi        | TASK.TASK.VIEW          |
 | TASK-API-211 | GET    | /api/v1/tasks/overdue                  | Task quá hạn        | TASK.TASK.VIEW          |
 | TASK-API-212 | GET    | /api/v1/projects/{id}/kanban           | Kanban board        | TASK.TASK.VIEW_KANBAN   |
+| TASK-API-213 | POST   | /api/v1/tasks/{id}/move-state          | Kéo thả đổi cột pipeline | TASK.TASK.UPDATE_STATE (+ UPDATE_STATUS khi đổi nhóm) |
+| TASK-API-214 | GET    | /api/v1/projects/{id}/states           | Danh sách cột pipeline | TASK.PROJECT_STATE.VIEW |
+| TASK-API-215 | POST   | /api/v1/projects/{id}/states           | Thêm cột pipeline   | TASK.PROJECT_STATE.CREATE |
+| TASK-API-216 | PATCH  | /api/v1/states/{state_id}              | Sửa cột pipeline    | TASK.PROJECT_STATE.UPDATE |
+| TASK-API-217 | DELETE | /api/v1/states/{state_id}              | Xoá mềm cột pipeline | TASK.PROJECT_STATE.DELETE |
+
+> **Lệch sổ mã có sẵn (không do đợt này gây ra).** `IMPLEMENTATION-07` (kế hoạch thi công Sprint 4) đánh số nhóm Kanban ở block `24x` (`241` = kanban board, `242` = kéo thả) trong khi §16.3 dùng block `21x` cho cùng các route đó. **Bảng §16.3 này là chuẩn** (CLAUDE.md §1: spec thắng). Việc hợp nhất hai sổ mã là một lần dọn riêng.
 
 ---
 
@@ -2089,7 +2186,7 @@ progress_percentage = 0
 4. Assignee phải là employee hợp lệ.
 5. Task không được giao cho employee Resigned/Terminated.
 6. Deadline không được nhỏ hơn start_date.
-7. Task Done phải lưu completed_at.
+7. Task Done phải lưu completed_at; ngược lại task RỜI Done phải xoá completed_at + completed_by (xem §6.10.1).
 8. Task Cancelled không tính vào tiến độ hoàn thành.
 9. Task quá hạn được tính khi due_at đã qua và task chưa Done/Cancelled.
 10. Xóa task là soft delete.
@@ -2270,8 +2367,8 @@ Module TASK được xem là hoàn thành MVP khi:
 12. Người không liên quan không xem được task private.
 13. Cập nhật trạng thái task đúng workflow.
 14. Task quá hạn được xác định đúng.
-15. Kanban board hiển thị task theo trạng thái.
-16. Kéo thả Kanban cập nhật trạng thái nếu có quyền.
+15. Kanban board hiển thị task theo **cột pipeline của dự án**; dự án chưa cấu hình cột thì hiển thị theo 5 trạng thái cố định.
+16. Kéo thả Kanban đổi cột nếu có quyền đổi cột; nếu cột đích khác nhóm thì **đồng thời** cập nhật trạng thái (cần thêm quyền đổi trạng thái, thiếu thì từ chối cả thao tác).
 17. Comment trong task hoạt động đúng.
 18. File task upload/xóa theo quyền.
 19. Checklist hoạt động đúng.
@@ -2312,8 +2409,16 @@ Module TASK được xem là hoàn thành MVP khi:
 | TASK-TC-022  | Upload file sai định dạng           | Bị chặn                          |
 | TASK-TC-023  | Xóa file không có quyền             | Bị chặn                          |
 | TASK-TC-024  | Task quá hạn                        | Hiển thị trong danh sách quá hạn |
-| TASK-TC-025  | Kanban kéo task sang Done           | Cập nhật trạng thái              |
-| TASK-TC-026  | User không có quyền kéo Kanban      | Không cho kéo                    |
+| TASK-TC-025  | Kanban kéo task sang cột nhóm completed | Đổi cột + trạng thái thành Done, xoá mốc quá hạn |
+| TASK-TC-026  | User không có quyền đổi cột         | Không cho kéo                    |
+| TASK-TC-026a | Kéo giữa 2 cột CÙNG nhóm            | Đổi cột, KHÔNG đổi trạng thái, không phát thông báo |
+| TASK-TC-026b | Có quyền đổi cột, THIẾU quyền đổi trạng thái, kéo sang cột khác nhóm | Từ chối toàn bộ, cột KHÔNG đổi |
+| TASK-TC-026c | Kéo thẻ RA KHỎI cột nhóm completed  | Trạng thái rời Done, xoá completed_at + completed_by |
+| TASK-TC-026d | Kéo thẻ ra khỏi cột nhóm cancelled  | Khôi phục, xoá cancelled_at |
+| TASK-TC-026e | Cột đích thuộc dự án khác           | Từ chối, không ghi gì |
+| TASK-TC-026f | Kéo thẻ vào cột nhóm `review`       | Trạng thái thành In Review (báo cáo chờ duyệt đếm được) |
+| TASK-TC-026g | Đổi trạng thái ở màn chi tiết       | Thẻ TỰ chuyển sang cột thuộc nhóm tương ứng trên board |
+| TASK-TC-026h | Đổi trạng thái khi thẻ ĐÃ ở cột đúng nhóm | Thẻ GIỮ NGUYÊN cột (không bị giật về cột mặc định) |
 | TASK-TC-027  | Đóng project còn task chưa xong     | Cảnh báo                         |
 | TASK-TC-028  | Xóa mềm task                        | Task không hiển thị mặc định     |
 | TASK-TC-029  | Xem báo cáo dự án                   | Hiển thị số liệu đúng            |
@@ -2328,7 +2433,7 @@ Module TASK được xem là hoàn thành MVP khi:
 | Phân quyền task phức tạp        | Vừa có role hệ thống, vừa có role dự án | MVP dùng permission + project role đơn giản      |
 | User thấy task không nên thấy   | Sai data scope hoặc project visibility  | Test kỹ scope Own/Team/Project/Company           |
 | Task bị giao cho người đã nghỉ  | HR status không kiểm tra                | Luôn kiểm tra employment_status trước khi assign |
-| Kanban cập nhật sai workflow    | Kéo thả tự do                           | Backend kiểm tra workflow                        |
+| Cột và trạng thái lệch nhau     | Đổi cột không kéo theo trạng thái       | Auto-map theo nhóm cột, đổi cột + đổi trạng thái trong CÙNG giao dịch |
 | Project đóng khi task chưa xong | Dữ liệu tiến độ sai                     | Cảnh báo hoặc chặn theo cấu hình                 |
 | Comment/file lộ dữ liệu         | URL file public hoặc task private       | Kiểm tra quyền khi tải file                      |
 | Quá nhiều notification          | Gây nhiễu cho user                      | Cho cấu hình loại notification sau MVP           |

@@ -470,7 +470,8 @@ src/modules/task
 | TASK-API-232 | `POST /api/v1/tasks/{id}/priority` | Đổi priority | P1 |
 | TASK-API-233 | `POST /api/v1/tasks/{id}/deadline` | Đổi deadline | P1 |
 | TASK-API-241 | `GET /api/v1/projects/{id}/kanban` | Kanban board | P1 |
-| TASK-API-242 | `POST /api/v1/tasks/{id}/move` | Kéo thả Kanban | P1 |
+| TASK-API-242 | `POST /api/v1/tasks/{id}/move` | Kéo thả Kanban (đổi TRẠNG THÁI — cách cũ, giữ cho đổi trạng thái trực tiếp) | P1 |
+| TASK-API-213 | `POST /api/v1/tasks/{id}/move-state` | Kéo thả Kanban đổi CỘT pipeline (thay 242 ở board — [DECISIONS-03](<../DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-16) | P1 |
 | TASK-API-251 | `GET /api/v1/tasks/{id}/comments` | List comment | P1 |
 | TASK-API-252 | `POST /api/v1/tasks/{id}/comments` | Tạo comment/mention | P1 |
 | TASK-API-253 | `PATCH /api/v1/tasks/{id}/comments/{comment_id}` | Sửa comment | P2 |

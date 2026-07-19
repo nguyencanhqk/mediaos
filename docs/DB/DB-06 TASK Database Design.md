@@ -139,6 +139,7 @@ DB-06 không tạo lại các bảng sau, nhưng phụ thuộc trực tiếp và
 | Nhóm | Giai đoạn | Ghi chú thiết kế |
 | --- | --- | --- |
 | Sprint/Scrum | Phase sau | Thêm `sprints`, `sprint_tasks`, backlog, story point |
+| ~~Cột board tuỳ biến~~ | **Đã có** (18/07/2026) | `project_states` + `tasks.state_id` — xem §4.9b. Không còn là "phase sau" |
 | Gantt chart | Phase sau | Thêm dependency, baseline, milestone |
 | Time tracking | Phase sau | Thêm `task_time_logs`, liên kết ATT nếu cần |
 | Task dependency | Phase sau | Thêm `task_dependencies` |
@@ -292,6 +293,43 @@ Lý do:
 3. Query overdue có thể tối ưu bằng index `due_at` + `status`.
 4. Dashboard và Notification có thể tính riêng hoặc cache summary.
 
+### 4.9b Cột board là `project_states`, tách khỏi `tasks.task_status`
+
+> Bổ sung 18/07/2026 — [DECISIONS-03](<../DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-16/D-17/D-20. Bảng `project_states` và cột `tasks.state_id` **đã tồn tại** trong cơ sở dữ liệu (đến từ nền tảng quản lý dự án dựng trước DB-06) nhưng chưa từng được mô tả trong tài liệu này. Mục này lấp khoảng trống đó.
+
+**Hai chiều thông tin trên một task.** Task mang đồng thời:
+
+| Cột | Ý nghĩa | Ai dùng |
+| --- | --- | --- |
+| `state_id` → `project_states.id` | Task đang ở **chặng nào trong quy trình của dự án** | Board, điều phối công việc |
+| `task_status` | **Trạng thái chuẩn** của hệ thống (`Todo · In Progress · In Review · Done · Cancelled`) | Phê duyệt, báo cáo, cảnh báo quá hạn, dashboard |
+
+Mỗi dự án tự định nghĩa tập cột riêng, nên `state_id` **không so sánh được giữa các dự án**. Lớp nối là `project_states.state_group` — quy cột tuỳ biến về nhóm chuẩn để báo cáo tổng hợp vẫn hoạt động.
+
+**Sáu nhóm chuẩn và ánh xạ sang `task_status`** (owner chốt 18/07/2026 — bổ sung nhóm `review` để cột duyệt của quy trình sản xuất quy được về `In Review` thay vì bị gộp vào `started`):
+
+| `state_group` | Ý nghĩa | `task_status` tương ứng |
+| --- | --- | --- |
+| `backlog` | Việc đã ghi nhận, chưa đưa vào hàng đợi | `Todo` |
+| `unstarted` | Đã đưa vào hàng đợi, chưa bắt đầu | `Todo` |
+| `started` | Đang thực hiện | `In Progress` |
+| `review` | Đang chờ duyệt/kiểm tra | `In Review` |
+| `completed` | Đã hoàn thành | `Done` |
+| `cancelled` | Đã huỷ | `Cancelled` |
+
+Ánh xạ là **toàn phần và một chiều** (`state_group` → `task_status`): mọi nhóm đều có đúng một trạng thái đích, nên không có cột nào rơi vào trạng thái không xác định. Chiều ngược lại **không đơn trị** (`Todo` ứng với hai nhóm) nên migration đồng bộ ngược phải chọn nhóm tường minh, xem bảng ánh xạ ngược ở DECISIONS-03 D-20.
+
+**Ràng buộc bắt buộc:**
+
+1. `state_id` phải trỏ tới state **thuộc đúng `project_id` của task** và cùng `company_id`. Kiểm ở tầng ứng dụng trước khi ghi (khoá ngoại không đủ vì không ràng buộc được cặp project).
+2. Task **không thuộc dự án** (`project_id` NULL — ví dụ task duyệt đơn HR) thì `state_id` phải NULL.
+3. Đổi `state_id` sang cột **khác nhóm** phải kéo theo cập nhật `task_status` theo ánh xạ nhóm, **trong cùng một giao dịch**. Không được để hai cột lệch nhau.
+4. `state_id` NULL trên task thuộc dự án là hợp lệ (dữ liệu cũ) — board xếp vào cột mặc định, **không** ẩn task đi.
+
+**Cảnh báo lịch sử dữ liệu.** Lần backfill đầu tiên map `state_id` từ cột `status` **cũ** (chạy trước khi `task_status` ra đời), nên dữ liệu hiện tại **lệch pha** với `task_status` mà board đọc, và task tạo sau đó có `state_id` NULL. Cần một migration đồng bộ lại trước khi chuyển board sang nhóm theo `state_id` — nếu không, phần lớn task sẽ dồn về một cột. Chi tiết quy tắc đồng bộ: DECISIONS-03 D-20.
+
+---
+
 ### 4.10 Activity log là ledger nghiệp vụ của TASK
 
 `task_activity_logs` lưu mọi thay đổi quan trọng trong project/task.
@@ -319,8 +357,29 @@ Các hành động cần ghi log:
 19. TASK_CHECKLIST_CREATED.
 20. TASK_CHECKLIST_ITEM_DONE.
 21. TASK_DELETED.
+22. TASK_STATE_CHANGED — đổi **cột pipeline** (`state_id`), tách khỏi TASK_STATUS_CHANGED.
 
 Activity log phục vụ UI lịch sử hoạt động. `audit_logs` cấp hệ thống vẫn dùng cho thao tác nhạy cảm hoặc quản trị.
+
+**Cặp `(action, target_type)` chốt cho bản ghi đổi cột — KHÔNG cần migration.** Bản ghi đổi cột dùng:
+
+```text
+action      = 'TASK_STATE_CHANGED'
+target_type = 'Task'
+target_id   = tasks.id
+```
+
+Lý do không cần `ALTER`: ràng buộc `chk_task_activity_target_type` **chỉ** kiểm cột `target_type`, và `'Task'` **đã** nằm trong danh sách cho phép. Cột `action` **không có ràng buộc CHECK nào** — nó là văn bản tự do ở tầng DB, tập giá trị hợp lệ chỉ được ép ở tầng ứng dụng (kiểu union TypeScript). Vì vậy thêm một action mới **không** đụng DDL.
+
+> Chỉ khi nào chọn một `target_type` **mới** (ví dụ `'State'` thay vì `'Task'`) thì mới phải `ALTER` ràng buộc `chk_task_activity_target_type`, và phải làm theo kiểu **UNION** — thêm giá trị vào danh sách hiện có, tuyệt đối không viết lại danh sách (CLAUDE.md §9, hot-file). Thiết kế này **chọn `'Task'`** chính là để tránh việc đó.
+
+**Nội dung `old_values`/`new_values` bắt buộc.** Bản ghi đổi cột phải lưu **cả `state_id` và tên cột tại thời điểm đó**:
+
+```json
+{ "state_id": "…", "state_name": "Hậu Kỳ", "state_group": "started" }
+```
+
+Cột đổi tên được qua API nên nếu chỉ lưu `state_id`, lịch sử cũ sẽ render sai tên về sau. Bảng `task_activity_logs` **đã đủ trường** cho việc này (`actor_user_id` · `actor_employee_id` · `created_at` · `old_values`/`new_values` JSONB) — không cần thêm cột.
 
 ### 4.11 File dùng `files` / `file_links`, bảng domain là tùy chọn
 
@@ -454,11 +513,16 @@ users
 projects
   1 --- n project_members
   1 --- n project_files
+  1 --- n project_states                     cột pipeline riêng của từng dự án
   1 --- n tasks
   1 --- n task_activity_logs
 
+project_states
+  1 --- n tasks                              qua tasks.state_id (ON DELETE SET NULL)
+
 tasks
   n --- 0..1 projects
+  n --- 0..1 project_states                  qua state_id; NULL nếu task không thuộc dự án
   n --- 0..1 tasks                           qua parent_task_id
   1 --- n task_assignees
   1 --- n task_watchers
@@ -490,6 +554,8 @@ files
 | `projects.id` -> `project_members.project_id` | 1-n | Thành viên dự án |
 | `employees.id` -> `project_members.employee_id` | 1-n | Employee tham gia nhiều project |
 | `projects.id` -> `tasks.project_id` | 1-n | Project có nhiều task |
+| `projects.id` -> `project_states.project_id` | 1-n | Mỗi dự án có tập cột pipeline riêng |
+| `project_states.id` -> `tasks.state_id` | 1-n | Task đang ở cột nào; `ON DELETE SET NULL` |
 | `tasks.id` -> `tasks.parent_task_id` | 1-n self-reference | Task cha/sub-task nếu bật |
 | `employees.id` -> `tasks.main_assignee_employee_id` | 1-n | Assignee chính snapshot/query nhanh |
 | `tasks.id` -> `task_assignees.task_id` | 1-n | Task có nhiều assignee theo thiết kế mở rộng |
@@ -508,6 +574,7 @@ files
 ```mermaid
 erDiagram
     COMPANIES ||--o{ PROJECTS : owns
+    COMPANIES ||--o{ PROJECT_STATES : owns
     COMPANIES ||--o{ TASKS : owns
 
     EMPLOYEES ||--o{ PROJECTS : owns
@@ -517,8 +584,11 @@ erDiagram
 
     PROJECTS ||--o{ PROJECT_MEMBERS : has
     PROJECTS ||--o{ PROJECT_FILES : has
+    PROJECTS ||--o{ PROJECT_STATES : defines
     PROJECTS ||--o{ TASKS : contains
     PROJECTS ||--o{ TASK_ACTIVITY_LOGS : logs
+
+    PROJECT_STATES ||--o{ TASKS : groups
 
     TASKS ||--o{ TASK_ASSIGNEES : has
     TASKS ||--o{ TASK_WATCHERS : has
@@ -544,6 +614,7 @@ erDiagram
 | 2 | `project_members` | Có | Thành viên và role trong project |
 | 3 | `project_files` | Nên có | File/tài liệu project |
 | 4 | `tasks` | Có | Công việc |
+| 4b | `project_states` | Có | Cột pipeline tuỳ biến theo dự án (cột board) |
 | 5 | `task_assignees` | Có | Người phụ trách task |
 | 6 | `task_watchers` | Có | Người theo dõi task |
 | 7 | `task_comments` | Có | Comment trong task |
@@ -554,6 +625,8 @@ erDiagram
 | 12 | `task_activity_logs` | Có | Lịch sử hoạt động task/project |
 | 13 | `task_tags` | Phase sau | Danh mục tag |
 | 14 | `task_tag_links` | Phase sau | Gắn tag vào task |
+
+> **Về số thứ tự `4b`:** `project_states` được bổ sung vào tài liệu ngày 18/07/2026 (bảng đã tồn tại trong cơ sở dữ liệu từ trước nhưng chưa được mô tả — xem §4.9b). Dùng hậu tố `b` thay vì đánh số lại 5→14 vì các số hiệu §7.x hiện đang được tài liệu khác trích dẫn (ví dụ `SPEC-DRIFT-MATRIX` trỏ tới §7.5 `task_assignees`); đánh số lại sẽ làm sai mọi tham chiếu đó. Cùng lý do, thiết kế chi tiết nằm ở **§7.4b**, ngay sau §7.4 `tasks`.
 
 ---
 
@@ -803,6 +876,7 @@ Lưu thông tin chính của công việc/task.
 | `company_id` | UUID | Có | FK `companies.id` |
 | `project_id` | UUID | Không | FK `projects.id`; NULL nếu task cá nhân được phép |
 | `parent_task_id` | UUID | Không | FK `tasks.id`, sub-task nếu dùng |
+| `state_id` | UUID | Không | FK `project_states.id` `ON DELETE SET NULL` — **cột pipeline** task đang đứng. NULL nếu task không thuộc dự án, hoặc dữ liệu cũ chưa đồng bộ. Xem §4.9b + §7.4b |
 | `task_code` | VARCHAR(100) | Có | Mã task, unique theo company |
 | `title` | VARCHAR(255) | Có | Tiêu đề task |
 | `description` | TEXT | Không | Mô tả |
@@ -889,6 +963,11 @@ WHERE deleted_at IS NULL AND status NOT IN ('Done', 'Cancelled') AND due_at IS N
 CREATE INDEX idx_tasks_search_title
 ON tasks USING gin (to_tsvector('simple', coalesce(task_code, '') || ' ' || coalesce(title, '') || ' ' || coalesce(description, '')))
 WHERE deleted_at IS NULL;
+
+-- Kanban nhóm theo CỘT PIPELINE (§4.9b). Index này là index THẬT đang tồn tại trong cơ sở dữ liệu.
+CREATE INDEX tasks_company_state_active_idx
+ON tasks (company_id, state_id)
+WHERE deleted_at IS NULL;
 ```
 
 #### Quy tắc nghiệp vụ
@@ -908,6 +987,109 @@ WHERE deleted_at IS NULL;
 13. Xóa task là soft delete.
 14. Mọi thay đổi quan trọng phải ghi `task_activity_logs`.
 15. Nếu checklist bắt buộc hoàn thành trước Done, service phải kiểm tra `task_checklist_items` trước khi update status.
+
+---
+
+### 7.4b Bảng `project_states`
+
+> Bổ sung 18/07/2026 — [DECISIONS-03](<../DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-16. Bảng **đã tồn tại** trong cơ sở dữ liệu (đến từ nền tảng quản lý dự án dựng trước tài liệu này); mục này mô tả đúng cấu trúc đang chạy, không phải đề xuất mới. Ngữ nghĩa và quan hệ với `tasks.task_status`: §4.9b.
+
+#### Mục đích
+
+Định nghĩa **tập cột pipeline riêng của từng dự án** — chính là các cột hiển thị trên Kanban board. Mỗi dự án tự đặt tên, màu, thứ tự cột theo quy trình của mình (ví dụ *Ý Tưởng → Thiết Kế → Quay → Hậu Kỳ → Duyệt Video → SEO*). Cột **không phải** trạng thái công việc; `state_group` là lớp nối để quy cột tuỳ biến về nhóm chuẩn cho báo cáo tổng hợp.
+
+#### Cấu trúc cột
+
+| Cột | Kiểu | Bắt buộc | Mặc định | Ghi chú |
+| --- | --- | --- | --- | --- |
+| `id` | UUID | Có | `gen_random_uuid()` | PK |
+| `company_id` | UUID | Có | `NULLIF(current_setting('app.current_company_id', true), '')::uuid` | FK `companies.id` `ON DELETE CASCADE`. Mặc định lấy từ GUC phiên nên đường ghi qua `withTenant` **không cần truyền tay** |
+| `project_id` | UUID | Có | — | FK `projects.id` `ON DELETE CASCADE`. Cột luôn thuộc đúng một dự án |
+| `name` | TEXT | Có | — | Tên cột hiển thị trên board. Đổi tên được qua API |
+| `state_group` | TEXT | Có | — | Nhóm chuẩn. Ràng buộc CHECK — xem dưới |
+| `color` | TEXT | Có | `'#64748b'` | Mã màu hiển thị |
+| `is_default` | BOOLEAN | Có | `false` | Cột mặc định của dự án. **KHÔNG unique ở tầng DB** — xem quy tắc 4 |
+| `sort_order` | INT | Có | `0` | Thứ tự cột trái→phải. **Không unique**, trùng giá trị là hợp lệ |
+| `deleted_at` | TIMESTAMPTZ | Không | NULL | Soft delete — **đường xoá duy nhất** |
+| `created_at` | TIMESTAMPTZ | Có | `now()` | |
+| `updated_at` | TIMESTAMPTZ | Có | `now()` | |
+
+Bảng **không có** `created_by`/`updated_by`/`deleted_by`. Ai thao tác cột được truy vết qua `task_activity_logs`, không qua chính bảng này.
+
+#### Constraint/index đề xuất
+
+```sql
+-- CHECK nhóm chuẩn — 6 nhóm (bổ sung 'review' ngày 18/07/2026).
+-- Phiên bản đang chạy trong CSDL còn 5 nhóm (thiếu 'review') ⇒ CẦN MIGRATION đổi CHECK.
+ALTER TABLE project_states
+ADD CONSTRAINT project_states_group_check
+CHECK (state_group IN ('backlog', 'unstarted', 'started', 'review', 'completed', 'cancelled'));
+
+CREATE INDEX project_states_company_id_idx
+ON project_states (company_id);
+
+CREATE INDEX project_states_company_project_idx
+ON project_states (company_id, project_id);
+
+-- Tên cột không trùng trong cùng dự án, CHỈ tính cột còn sống.
+-- Soft-delete rồi tạo lại cùng tên là hợp lệ.
+CREATE UNIQUE INDEX project_states_project_name_active_uq
+ON project_states (company_id, project_id, name)
+WHERE deleted_at IS NULL;
+
+-- Cô lập tenant ép ở tầng DB (BẤT BIẾN #1).
+ALTER TABLE project_states ENABLE ROW LEVEL SECURITY;
+ALTER TABLE project_states FORCE  ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON project_states
+  USING      (company_id = NULLIF(current_setting('app.current_company_id', true), '')::uuid)
+  WITH CHECK (company_id = NULLIF(current_setting('app.current_company_id', true), '')::uuid);
+
+-- KHÔNG có DELETE cho app role ⇒ hard-delete bất khả thi kể cả khi code viết sai (BẤT BIẾN #2).
+GRANT SELECT, INSERT, UPDATE ON project_states TO mediaos_app;
+GRANT SELECT                 ON project_states TO mediaos_worker;
+```
+
+> **Đặt tên ràng buộc.** CHECK tên là `project_states_group_check` (**không** phải `chk_project_states_group` như quy ước đặt tên ở các bảng §7.x khác của tài liệu này). Đây là tên **thật** đang tồn tại trong CSDL — migration đổi CHECK phải `DROP CONSTRAINT project_states_group_check` theo đúng tên này.
+
+#### Quy tắc nghiệp vụ
+
+1. **Xoá cột là soft delete, không có ngoại lệ.** App role chỉ được cấp `SELECT, INSERT, UPDATE` — **không có `DELETE`**. Nghĩa là bất biến #2 được ép ở tầng đặc quyền cơ sở dữ liệu, không dựa vào kỷ luật lập trình: một câu `DELETE FROM project_states` do code viết sai sẽ bị từ chối ngay ở PostgreSQL. Đường xoá hợp lệ duy nhất là `UPDATE ... SET deleted_at = now()`.
+2. **`state_group` phải thuộc 6 nhóm chuẩn** (`backlog · unstarted · started · review · completed · cancelled`). Ràng buộc ép ở DB, không chỉ ở DTO.
+3. **Tên cột duy nhất theo dự án, chỉ trong tập còn sống.** Chỉ mục một phần `WHERE deleted_at IS NULL` cho phép soft-delete cột *Quay* rồi tạo lại cột *Quay* mới. Hệ quả cần lưu ý khi viết migration đổi tên hàng loạt: **đổi tên có thể va chỉ mục** nếu dự án đã có sẵn cột trùng tên đích, nên phải xử lý xung đột tường minh chứ không `UPDATE` mù.
+4. **`is_default` KHÔNG unique ở tầng DB.** Không có chỉ mục một phần nào ép "mỗi dự án đúng một cột mặc định" — về mặt cơ sở dữ liệu, một dự án có thể có 0 hoặc nhiều cột `is_default = true`. Ràng buộc "đúng một" **chỉ được ép ở tầng ứng dụng**. Vì vậy mọi đường đọc phải phòng thủ: chọn cột mặc định theo bậc thang **`is_default` → `sort_order` nhỏ nhất → `created_at` → `id`** để kết quả xác định ngay cả khi dữ liệu có nhiều `is_default` hoặc `sort_order` trùng nhau.
+5. **`sort_order` không duy nhất và mặc định `0`.** Nhiều cột cùng `sort_order = 0` là trạng thái bình thường (đường tạo không bắt buộc truyền). Mọi truy vấn sắp xếp cột phải có tie-break xác định: `ORDER BY sort_order, created_at, id`.
+6. **Cột thuộc đúng dự án của task.** Khoá ngoại `tasks.state_id → project_states.id` **không** ràng buộc được cặp `project_id`; ứng dụng phải kiểm `state.project_id = task.project_id` (và cùng `company_id`) trước khi ghi.
+7. **Xoá dự án kéo theo xoá cột** (`ON DELETE CASCADE` trên `project_id`) — đây là hard-delete duy nhất chạm bảng, và nó do PostgreSQL thực hiện khi dòng `projects` bị xoá cứng, không phải đường ghi của ứng dụng.
+8. **Xoá cột khi còn task sống phải bị chặn ở tầng ứng dụng.** Lưu ý cạm bẫy: đếm task tham chiếu thường chỉ đếm `deleted_at IS NULL`, nên task **đã soft-delete** vẫn giữ `state_id` trỏ tới cột vừa bị soft-delete — tham chiếu mồ côi hợp lệ về mặt dữ liệu, phải chấp nhận khi khôi phục task.
+9. **Dự án còn đúng một cột** là trạng thái hợp lệ; board hiển thị một cột và không kéo thả đi đâu được.
+
+#### Bộ cột mặc định
+
+Dự án mới được seed **6 cột** dưới đây trong cùng transaction tạo dự án (rollback ⇒ không còn cột mồ côi). Tên hiển thị dùng **tiếng Việt** (owner chốt 18/07/2026):
+
+| `name` | `state_group` | `color` | `is_default` | `sort_order` |
+| --- | --- | --- | --- | --- |
+| Backlog | `backlog` | `#94a3b8` | `false` | 0 |
+| Cần làm | `unstarted` | `#64748b` | **`true`** | 1 |
+| Đang làm | `started` | `#3b82f6` | `false` | 2 |
+| Chờ duyệt | `review` | `#f59e0b` | `false` | 3 |
+| Hoàn thành | `completed` | `#22c55e` | `false` | 4 |
+| Đã huỷ | `cancelled` | `#ef4444` | `false` | 5 |
+
+**Chèn cột *Chờ duyệt* phải dồn lại `sort_order`.** Bộ cũ dùng `sort_order` 0..4 (Backlog0 · Todo1 · In Progress2 · Done3 · Cancelled4). Chèn *Chờ duyệt* ở vị trí 3 sẽ **đụng** Done(3), và theo tie-break `sort_order, created_at, id` thì Done có `created_at` sớm hơn ⇒ cột duyệt hiển thị **SAU** *Hoàn thành*. Migration phải UPDATE dồn lại tường minh: review=3, completed=4, cancelled=5 — không chỉ INSERT.
+
+**Dữ liệu cũ phải được đổi tên.** Lần backfill đầu tiên seed bộ cột này bằng **tên tiếng Anh** (`Backlog` · `Todo` · `In Progress` · `Done` · `Cancelled`) cho mọi dự án đang có. Cần migration đổi tên `Todo → Cần làm` · `In Progress → Đang làm` · `Done → Hoàn thành` · `Cancelled → Đã huỷ` (riêng `Backlog` giữ nguyên). Ràng buộc khi viết migration đó:
+
+1. Chỉ đổi tên cột **còn sống** và **đúng cặp (tên cũ, `state_group`)** — người dùng có thể đã tự đổi tên cột, không được đổi mù theo tên.
+2. Phải xử lý va chỉ mục `project_states_project_name_active_uq`: nếu dự án đã có sẵn cột tên *Cần làm*, bỏ qua dòng đó thay vì để migration đổ.
+3. **Không** đụng `state_group`, `is_default`, `sort_order`, `id` — đổi tên là thao tác thuần hiển thị; `tasks.state_id` không được ảnh hưởng.
+
+> **Bộ mặc định gồm 6 cột, phủ đủ 6 nhóm.** Cột *Chờ duyệt* (nhóm `review`) nằm trong bộ mặc định — nếu không, dự án dùng bộ mặc định sẽ không sinh được trạng thái `In Review` từ board và việc thêm nhóm `review` mất tác dụng thực tế.
+>
+> Hệ quả cho migration đồng bộ: dự án **đã có sẵn** bộ 5 cột cũ (seed lần đầu) **không tự nhiên có** cột *Chờ duyệt*. Migration phải **thêm cột này cho các dự án đó** trước khi map, nếu không task đang `In Review` sẽ rơi vào *Đang làm* theo bậc thang fallback — đúng luật nhưng mất thông tin "đang chờ duyệt".
+>
+> **Cột `Backlog` sẽ luôn rỗng** sau khi đồng bộ: `task_status` không có giá trị nào ánh xạ về nhóm `backlog`. Cần nêu trong ghi chú phát hành để người dùng không tưởng board hỏng.
 
 ---
 
@@ -1563,6 +1745,7 @@ TASK_DELETED
 TASK_ASSIGNED
 TASK_ASSIGNEE_CHANGED
 TASK_STATUS_CHANGED
+TASK_STATE_CHANGED
 TASK_PRIORITY_CHANGED
 TASK_DUE_DATE_CHANGED
 TASK_WATCHER_ADDED
@@ -1582,6 +1765,10 @@ TASK_CHECKLIST_ITEM_DONE
 TASK_CHECKLIST_ITEM_REOPENED
 TASK_CHECKLIST_ITEM_DELETED
 ```
+
+> **`TASK_STATE_CHANGED`** (bổ sung 18/07/2026) ghi việc **đổi cột pipeline**, tách khỏi `TASK_STATUS_CHANGED` (đổi trạng thái). Cặp chốt: `action = 'TASK_STATE_CHANGED'`, `target_type = 'Task'`. **Không cần migration** — `chk_task_activity_target_type` chỉ ràng buộc `target_type` (và `'Task'` đã hợp lệ), còn cột `action` không có CHECK nào. Chi tiết + trường hợp phải `ALTER`: §4.10.
+>
+> Một thao tác kéo thẻ ghi **một** `TASK_STATE_CHANGED`, cộng **một** `TASK_STATUS_CHANGED` nếu cột đích khác `state_group` (auto-map). Kéo trong cùng nhóm chỉ ghi một dòng.
 
 ---
 
@@ -1668,14 +1855,20 @@ idx_tasks_overdue_candidate
 Query:
 
 ```text
-company_id + project_id + status + sort_order
+company_id + project_id + state_id + sort_order
 ```
 
 Index chính:
 
 ```sql
-idx_tasks_project_status_sort
+tasks_company_state_active_idx
 ```
+
+> **Đổi 18/07/2026** ([DECISIONS-03](<../DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-16). Board nay nhóm task theo **`state_id`** (cột pipeline), **không** theo `status` như thiết kế ban đầu. Index thật đang phục vụ đường đọc này là `tasks_company_state_active_idx (company_id, state_id) WHERE deleted_at IS NULL`.
+>
+> `idx_tasks_project_status_sort` **vẫn giữ** — nó phục vụ nhánh dự phòng khi dự án chưa cấu hình cột nào (board rơi về 5 cột trạng thái), cùng các truy vấn danh sách/báo cáo lọc theo `status`.
+>
+> Truy vấn board còn phải lọc **`parent_task_id IS NULL`** (board chỉ hiện task cha; công việc con xem trong task cha).
 
 ### 9.6 Activity log
 
@@ -1916,25 +2109,30 @@ ORDER BY t.due_at ASC;
 
 ### 11.3 Query Kanban theo project
 
+Board nhóm theo **cột pipeline** (`state_id`), không theo `status` — xem §9.5. `LEFT JOIN` để task có `state_id` NULL **không biến mất** khỏi board (tầng ứng dụng xếp chúng vào cột mặc định của dự án).
+
 ```sql
-SELECT t.*
+SELECT t.*, ps.id AS state_id, ps.name AS state_name,
+       ps.color AS state_color, ps.state_group, ps.sort_order AS state_sort_order
 FROM tasks t
+LEFT JOIN project_states ps
+       ON ps.id = t.state_id
+      AND ps.company_id = t.company_id
+      AND ps.deleted_at IS NULL
 WHERE t.company_id = :company_id
   AND t.project_id = :project_id
+  AND t.parent_task_id IS NULL          -- board chỉ hiện task cha
   AND t.deleted_at IS NULL
 ORDER BY
-  CASE t.status
-    WHEN 'Todo' THEN 1
-    WHEN 'In Progress' THEN 2
-    WHEN 'In Review' THEN 3
-    WHEN 'Done' THEN 4
-    WHEN 'Cancelled' THEN 5
-    ELSE 99
-  END,
+  ps.sort_order ASC NULLS LAST,         -- thứ tự cột trái→phải
+  ps.created_at ASC NULLS LAST,         -- tie-break: sort_order KHÔNG duy nhất (§7.4b quy tắc 5)
+  ps.id ASC NULLS LAST,
   t.sort_order ASC NULLS LAST,
   t.due_at ASC NULLS LAST,
   t.created_at DESC;
 ```
+
+> **Nhánh dự phòng.** Dự án chưa cấu hình cột nào ⇒ board rơi về 5 cột trạng thái, dùng đúng truy vấn `ORDER BY CASE t.status ...` của thiết kế ban đầu và index `idx_tasks_project_status_sort`.
 
 ### 11.4 Query report tiến độ project
 
@@ -1986,6 +2184,7 @@ TASK.TASK.UPDATE
 TASK.TASK.DELETE
 TASK.TASK.ASSIGN
 TASK.TASK.UPDATE_STATUS
+TASK.TASK.UPDATE_STATE
 TASK.TASK.UPDATE_PRIORITY
 TASK.TASK.UPDATE_DEADLINE
 TASK.TASK.COMMENT
@@ -1997,6 +2196,8 @@ TASK.TASK.EXPORT
 TASK.AUDIT_LOG.VIEW
 ```
 
+> **`TASK.TASK.UPDATE_STATE`** (bổ sung 18/07/2026 — [DECISIONS-03](<../DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-16/D-17): quyền đổi **cột pipeline** (`tasks.state_id`), tách khỏi `TASK.TASK.UPDATE_STATUS` (đổi `task_status`). Cần quyền riêng vì hai việc có ngữ nghĩa khác nhau: đổi cột là điều phối quy trình, đổi trạng thái là dữ liệu vào báo cáo và cảnh báo quá hạn.
+
 ### 12.2 Data scope seed đề xuất theo role
 
 | Role | Permission nhóm TASK | Scope đề xuất |
@@ -2004,9 +2205,29 @@ TASK.AUDIT_LOG.VIEW
 | Super Admin | Tất cả TASK.* | System |
 | Admin công ty | Theo phân quyền cấu hình | Company |
 | HR | View/Create/Update task nghiệp vụ HR nếu được cấp | Company hoặc Department |
-| Manager | Project/Task view/create/assign/update status | Team hoặc Project |
+| Manager | Project/Task view/create/assign/update status/update state | Team hoặc Project |
 | Project Manager | View/update/manage member trong project phụ trách | Project |
-| Employee | View own task, update status task được giao, comment nếu xem được | Own |
+| Employee | View own task, update status/state task được giao, comment nếu xem được | Own |
+
+#### Ma trận scope chốt cho `TASK.TASK.UPDATE_STATE`
+
+Bảng trên là gợi ý theo vai trò nghiệp vụ. Với **4 role chuẩn đang được seed trong hệ thống**, cặp quyền đổi cột lấy **đúng** ma trận của `TASK.TASK.UPDATE_STATUS` — đây là nguồn mà migration seed phải sao lại từng dòng:
+
+| Role chuẩn | `TASK.TASK.UPDATE_STATE` | `TASK.TASK.UPDATE_STATUS` (đối chiếu) |
+| --- | --- | --- |
+| `employee` | **Own** | Own |
+| `manager` | **Team** | Team |
+| `hr` | **Company** | Company |
+| `company-admin` | **Company** | Company |
+
+**Vì sao phải mirror chính xác.** Kéo thẻ sang cột khác `state_group` tự động đổi `task_status`. Nếu hai cặp quyền lệch scope, một người có `UPDATE_STATE` rộng hơn `UPDATE_STATUS` sẽ chạm tới việc đổi trạng thái ở phạm vi rộng hơn quyền thật (scope confusion). Đặc tả thực thi để chống việc đó:
+
+1. Đổi cột luôn xin `UPDATE_STATE`, kiểm phạm vi theo **chính** quyền đó.
+2. **Chỉ khi** auto-map thực sự phải đổi trạng thái mới xin thêm `UPDATE_STATUS`, và phần đổi trạng thái chạy ở phạm vi của **`UPDATE_STATUS`** — tuyệt đối không mượn phạm vi của `UPDATE_STATE`.
+3. Kéo giữa hai cột **cùng nhóm** không đổi trạng thái ⇒ **không** đòi `UPDATE_STATUS`.
+4. Thiếu `UPDATE_STATUS` khi thao tác làm đổi trạng thái ⇒ từ chối **và cột không đổi** (cùng một giao dịch), không được đổi cột rồi mới báo lỗi.
+
+**Seed phải cấp theo từng cặp `(role, quyền)` tường minh** — không dùng `INSERT ... SELECT` cấp hàng loạt theo `role_id`, vì kiểu cấp đó sẽ gán sai scope cho các role không nằm trong ma trận trên.
 
 ### 12.3 Kiểm tra quyền khi xem task
 
@@ -2189,6 +2410,7 @@ TASK.TASK.UPDATE scope Company
 TASK.TASK.DELETE scope Company
 TASK.TASK.ASSIGN scope Company
 TASK.TASK.UPDATE_STATUS scope Company
+TASK.TASK.UPDATE_STATE scope Company
 TASK.TASK.UPDATE_PRIORITY scope Company
 TASK.TASK.UPDATE_DEADLINE scope Company
 TASK.TASK.COMMENT scope Company
@@ -2213,6 +2435,7 @@ TASK.TASK.CREATE scope Team/Project
 TASK.TASK.UPDATE scope Team/Project
 TASK.TASK.ASSIGN scope Team/Project
 TASK.TASK.UPDATE_STATUS scope Team/Project
+TASK.TASK.UPDATE_STATE scope Team/Project
 TASK.TASK.UPDATE_PRIORITY scope Team/Project
 TASK.TASK.UPDATE_DEADLINE scope Team/Project
 TASK.TASK.COMMENT scope Team/Project
@@ -2234,6 +2457,7 @@ TASK.TASK.CREATE scope Project
 TASK.TASK.UPDATE scope Project
 TASK.TASK.ASSIGN scope Project
 TASK.TASK.UPDATE_STATUS scope Project
+TASK.TASK.UPDATE_STATE scope Project
 TASK.TASK.COMMENT scope Project
 TASK.TASK.FILE_UPLOAD scope Project
 TASK.TASK.WATCH scope Project
@@ -2249,11 +2473,14 @@ TASK.TASK.VIEW scope Own/Project
 TASK.TASK.CREATE scope Own nếu công ty cho phép task cá nhân
 TASK.TASK.UPDATE scope Own giới hạn field
 TASK.TASK.UPDATE_STATUS scope Own
+TASK.TASK.UPDATE_STATE scope Own
 TASK.TASK.COMMENT scope Own/Project
 TASK.TASK.FILE_UPLOAD scope Own/Project nếu cấu hình cho phép
 TASK.TASK.WATCH scope Own/Project
 TASK.TASK.VIEW_KANBAN scope Project nếu là member
 ```
+
+> **Đối chiếu 4 role chuẩn.** Danh sách §18.3 mô tả vai trò nghiệp vụ; ma trận **chốt** để seed `TASK.TASK.UPDATE_STATE` theo 4 role đang tồn tại (`employee = Own` · `manager = Team` · `hr = Company` · `company-admin = Company`) nằm ở **§12.2**. Khi hai nơi có vẻ lệch, §12.2 là bản dùng để viết migration.
 
 ---
 
