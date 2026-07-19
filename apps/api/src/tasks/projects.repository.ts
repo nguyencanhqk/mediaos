@@ -4,6 +4,7 @@ import { alias } from "drizzle-orm/pg-core";
 import type { TenantTx } from "../db/db.service";
 import { employeeProfiles } from "../db/schema/employees";
 import { projectMembers, projects, type Project, type ProjectMember } from "../db/schema/media";
+import { projectStates } from "../db/schema/workflow";
 import { orgUnits } from "../db/schema/org";
 import { users } from "../db/schema/users";
 
@@ -557,6 +558,40 @@ export class ProjectsRepository {
       )
       .limit(1);
     return row !== undefined;
+  }
+
+  /**
+   * S5-TASK-PIPELINE-1 (lane be-seed) — bộ 6 cột pipeline mặc định cho DỰ ÁN MỚI, khớp NGUYÊN VĂN
+   * DB-06 §7.4 (tên tiếng Việt, owner chốt 18/07/2026; phủ đủ 6 nhóm — thiếu 'Chờ duyệt' thì board
+   * không sinh được In Review). Chạy TRONG CÙNG tx tạo project (rollback ⇒ 0 state mồ côi).
+   * KHÔNG dùng cho project đã tồn tại (0500 lo dữ liệu tồn kho).
+   */
+  async seedDefaultStatesTx(tx: TenantTx, companyId: string, projectId: string): Promise<void> {
+    const DEFAULT_STATES = [
+      { name: "Backlog", stateGroup: "backlog", color: "#94a3b8", isDefault: false, sortOrder: 0 },
+      { name: "Cần làm", stateGroup: "unstarted", color: "#64748b", isDefault: true, sortOrder: 1 },
+      { name: "Đang làm", stateGroup: "started", color: "#3b82f6", isDefault: false, sortOrder: 2 },
+      { name: "Chờ duyệt", stateGroup: "review", color: "#f59e0b", isDefault: false, sortOrder: 3 },
+      {
+        name: "Hoàn thành",
+        stateGroup: "completed",
+        color: "#22c55e",
+        isDefault: false,
+        sortOrder: 4,
+      },
+      { name: "Đã huỷ", stateGroup: "cancelled", color: "#ef4444", isDefault: false, sortOrder: 5 },
+    ] as const;
+    await tx.insert(projectStates).values(
+      DEFAULT_STATES.map((s) => ({
+        companyId,
+        projectId,
+        name: s.name,
+        stateGroup: s.stateGroup,
+        color: s.color,
+        isDefault: s.isDefault,
+        sortOrder: s.sortOrder,
+      })),
+    );
   }
 
   async insertMemberTx(
