@@ -180,6 +180,8 @@ export class TasksController {
    * @deprecated S4-TASK-BE-3: ghi cột LEGACY `status` lowercase (not_started/in_progress/completed) — KHÁC
    * cột `task_status` TitleCase của FSM mới (POST /tasks/:id/change-status). GIỮ song song (board legacy G9-3
    * đọc `status`); hợp nhất ở WO dọn sau. KHÔNG dùng cho luồng task core mới.
+   * KHAI TỬ (DECISIONS-03 D-21.4, expand-contract đợt 1/2 — S5-TASK-PIPELINE-1): đợt này đánh dấu
+   * ngừng dùng + FE chuyển route mới; đợt sau mới gỡ. KHÔNG nối thêm caller.
    */
   @Patch(":taskId/status")
   @UseGuards(PermissionGuard)
@@ -349,6 +351,10 @@ export class TasksController {
    * KHÔNG activity/outbox trùng — 1 lời gọi = 1 lần ghi). Gate update-status:task (mirror change-status
    * — kéo task sang cột mà không có quyền đổi trạng thái ⇒ 403, SPEC-06 §14.13 "Người không có quyền
    * update status chỉ xem, không kéo thả").
+   * @deprecated KHAI TỬ (DECISIONS-03 D-21.4, expand-contract đợt 1/2 — S5-TASK-PIPELINE-1): board mới
+   * kéo thả theo CỘT PIPELINE qua POST /tasks/:id/move-state (gate update-state:task, lane be-write) —
+   * route /move này gate CHỈ update-status nên là CỬA VÒNG QUA cổng update-state chừng nào còn sống.
+   * Đợt này đánh dấu ngừng dùng + FE chuyển route mới; đợt sau mới gỡ. KHÔNG nối thêm caller.
    */
   @Post(":taskId/move")
   @HttpCode(200)
