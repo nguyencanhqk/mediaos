@@ -126,7 +126,10 @@ export type ReportResponseDto = z.infer<typeof reportResponseSchema>;
 
 export const mvStatsQuerySchema = z.object({
   /** Filter by month, format YYYY-MM. */
-  month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+  month: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .optional(),
   channelId: z.string().uuid().optional(),
   projectId: z.string().uuid().optional(),
   departmentId: z.string().uuid().optional(),
@@ -134,6 +137,9 @@ export const mvStatsQuerySchema = z.object({
 export type MvStatsQueryDto = z.infer<typeof mvStatsQuerySchema>;
 
 export const taskStatusStatSchema = z.object({
+  // D-30 (S5-DASH-TASKSTATUS-FIX-1, mig 0502): giá trị = trạng thái CANONICAL TitleCase
+  // (Todo/In Progress/In Review/Done/Cancelled; legacy lạ giữ raw). Giữ z.string() (không enum) —
+  // fail-visible theo thiết kế. LƯU Ý: outputStatSchema.status bên dưới VẪN lowercase legacy (MV parked).
   status: z.string(),
   taskCount: z.number().int().nonnegative(),
 });

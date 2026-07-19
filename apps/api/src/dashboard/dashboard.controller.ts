@@ -1,4 +1,14 @@
-import { Body, Controller, Get, HttpCode, Post, Query, Req, UseGuards, UsePipes } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+  UsePipes,
+} from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
 import { PermissionGuard } from "../permission/guards/permission.guard";
@@ -91,14 +101,13 @@ export class DashboardController {
    * GET /dashboard/mv-stats — MV-backed task-status + output breakdown with optional filters.
    * filter: month (YYYY-MM), channelId, projectId, departmentId.
    * SECURITY: MV does not honor RLS — service always adds WHERE company_id = companyId.
+   * D-30 (mig 0502): taskStatus[].status = trạng thái CANONICAL TitleCase (Todo/In Progress/In Review/
+   * Done/Cancelled) — KHÔNG còn lowercase legacy; output[].status vẫn legacy (MV parked — xem service).
    */
   @Get("mv-stats")
   @UseGuards(PermissionGuard)
   @RequirePermission("read", "dashboard")
-  async getMvStats(
-    @Req() req: AuthenticatedRequest,
-    @Query() query: MvStatsQueryDto,
-  ) {
+  async getMvStats(@Req() req: AuthenticatedRequest, @Query() query: MvStatsQueryDto) {
     const { companyId } = req.user;
     const filter = mvStatsQuerySchema.parse(query);
     const [taskStatus, output] = await Promise.all([
