@@ -4,6 +4,7 @@ import { render, screen, within, waitFor, fireEvent } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, taskCollabApi, ApiError } from "@mediaos/web-core";
 import { TaskKanbanPage } from "./TaskKanbanPage";
+import { DEFAULT_WORKSPACE_FILTERS, type WorkspaceTaskFilters } from "./workspace-constants";
 import type { TaskKanbanBoardDto, TaskKanbanCardDto } from "@mediaos/contracts";
 
 // ---------------------------------------------------------------------------
@@ -125,6 +126,34 @@ function setCapabilities(caps: Record<string, boolean>) {
 
 function clearCapabilities() {
   useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
+}
+
+/**
+ * S5-TASK-WORKSPACE-1 — rail avatar multi-select + toolbar filter giờ là PROPS từ vỏ workspace;
+ * harness giữ selection state như ProjectDetailPage thật (toggle Set + clear).
+ */
+function KanbanHarness({
+  filters = DEFAULT_WORKSPACE_FILTERS,
+}: {
+  filters?: WorkspaceTaskFilters;
+}) {
+  const [selection, setSelection] = React.useState<ReadonlySet<string>>(new Set());
+  const toggle = (value: string) =>
+    setSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  return (
+    <TaskKanbanPage
+      projectId="proj-001"
+      filters={filters}
+      assigneeSelection={selection}
+      onToggleAssignee={toggle}
+      onClearAssignees={() => setSelection(new Set())}
+    />
+  );
 }
 
 function makeDataTransfer(taskId: string) {
@@ -267,22 +296,22 @@ describe("TaskKanbanPage", () => {
     });
   });
 
-  // ── S5-FE-TASK-5: lọc theo assignee/"Chưa giao" ──────────────────────────────
-  describe("assignee filter rail", () => {
-    it("filters cards by selected assignee and by unassigned, resettable via 'Tất cả'", async () => {
+  // ── S5-TASK-WORKSPACE-1: rail avatar multi-select + toolbar filter (props từ vỏ) ──
+  describe("assignee rail (multi-select) + workspace filters", () => {
+    it("bật/tắt NHIỀU người + 'Chưa giao' cùng lúc, reset qua nút 'Tất cả'", async () => {
       setCapabilities({ "view-kanban:task": true });
       vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
-      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      renderWithQuery(<KanbanHarness />);
       await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
 
       const todoColumn = screen.getByTestId("kanban-column-Todo");
-      // Mặc định ("Tất cả") — cả 3 task trong cột Todo đều hiển thị.
+      // Mặc định (selection rỗng) — cả 3 task trong cột Todo đều hiển thị.
       expect(within(todoColumn).getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument();
       expect(within(todoColumn).getByText("Soạn thảo hợp đồng")).toBeInTheDocument();
       expect(within(todoColumn).getByText("Việc chưa có người nhận")).toBeInTheDocument();
 
-      // Lọc theo emp-002 (Trần Thị B) — chỉ còn task-002 trong cột.
-      fireEvent.click(screen.getByTestId("kanban-filter-assignee-emp-002"));
+      // Bật emp-002 — chỉ còn task-002.
+      fireEvent.click(screen.getByTestId("assignee-rail-item-emp-002"));
       await waitFor(() =>
         expect(
           within(screen.getByTestId("kanban-column-Todo")).queryByText("Chuẩn bị báo cáo tuần"),
@@ -292,19 +321,30 @@ describe("TaskKanbanPage", () => {
         within(screen.getByTestId("kanban-column-Todo")).getByText("Soạn thảo hợp đồng"),
       ).toBeInTheDocument();
 
-      // Lọc "Chưa giao" — chỉ còn task-003.
-      fireEvent.click(screen.getByTestId("kanban-filter-unassigned"));
+      // Bật THÊM "Chưa giao" (multi-select) — task-002 VÀ task-003 cùng hiển thị.
+      fireEvent.click(screen.getByTestId("assignee-rail-unassigned"));
       await waitFor(() =>
         expect(
           within(screen.getByTestId("kanban-column-Todo")).getByText("Việc chưa có người nhận"),
         ).toBeInTheDocument(),
       );
       expect(
-        within(screen.getByTestId("kanban-column-Todo")).queryByText("Soạn thảo hợp đồng"),
+        within(screen.getByTestId("kanban-column-Todo")).getByText("Soạn thảo hợp đồng"),
+      ).toBeInTheDocument();
+      expect(
+        within(screen.getByTestId("kanban-column-Todo")).queryByText("Chuẩn bị báo cáo tuần"),
       ).not.toBeInTheDocument();
 
+      // Tắt lại emp-002 (toggle) — chỉ còn "Chưa giao".
+      fireEvent.click(screen.getByTestId("assignee-rail-item-emp-002"));
+      await waitFor(() =>
+        expect(
+          within(screen.getByTestId("kanban-column-Todo")).queryByText("Soạn thảo hợp đồng"),
+        ).not.toBeInTheDocument(),
+      );
+
       // "Tất cả" — reset về đầy đủ.
-      fireEvent.click(screen.getByTestId("kanban-filter-all"));
+      fireEvent.click(screen.getByTestId("assignee-rail-all"));
       await waitFor(() =>
         expect(
           within(screen.getByTestId("kanban-column-Todo")).getByText("Chuẩn bị báo cáo tuần"),
@@ -312,23 +352,67 @@ describe("TaskKanbanPage", () => {
       );
     });
 
+    it("rail đếm đúng theo người (trước lọc assignee) — không triệt tiêu khi bật 1 người", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
+      renderWithQuery(<KanbanHarness />);
+      await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+
+      // emp-001 = task-001 (Todo) + task-004 (Done) = 2; emp-002 = 1; Chưa giao = 1.
+      expect(screen.getByTestId("assignee-rail-count-emp-001")).toHaveTextContent("2");
+      expect(screen.getByTestId("assignee-rail-count-emp-002")).toHaveTextContent("1");
+      expect(screen.getByTestId("assignee-rail-count-unassigned")).toHaveTextContent("1");
+
+      // Bật emp-002 — số đếm của emp-001 KHÔNG đổi (summary tính trước lọc assignee).
+      fireEvent.click(screen.getByTestId("assignee-rail-item-emp-002"));
+      await waitFor(() =>
+        expect(
+          within(screen.getByTestId("kanban-column-Todo")).queryByText("Chuẩn bị báo cáo tuần"),
+        ).not.toBeInTheDocument(),
+      );
+      expect(screen.getByTestId("assignee-rail-count-emp-001")).toHaveTextContent("2");
+    });
+
     it("keeps column header count at the original total when a filter is applied (SPEC-06 §13.8)", async () => {
       setCapabilities({ "view-kanban:task": true });
       vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
-      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      renderWithQuery(<KanbanHarness />);
       await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
 
       // Cột Todo có 3 task gốc.
       expect(screen.getByTestId("kanban-column-count-Todo")).toHaveTextContent("3");
 
       // Lọc theo emp-002 (chỉ 1 task khớp) — số đếm header VẪN là 3 (tổng gốc, không đổi theo bộ lọc).
-      fireEvent.click(screen.getByTestId("kanban-filter-assignee-emp-002"));
+      fireEvent.click(screen.getByTestId("assignee-rail-item-emp-002"));
       await waitFor(() =>
         expect(
           within(screen.getByTestId("kanban-column-Todo")).queryByText("Chuẩn bị báo cáo tuần"),
         ).not.toBeInTheDocument(),
       );
       expect(screen.getByTestId("kanban-column-count-Todo")).toHaveTextContent("3");
+    });
+
+    it("áp filters toolbar từ props (q tìm không dấu) — card ngoài bộ lọc ẩn, rail đếm theo tập đã lọc", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
+      renderWithQuery(<KanbanHarness filters={{ ...DEFAULT_WORKSPACE_FILTERS, q: "hop dong" }} />);
+      await waitFor(() => expect(screen.getByText("Soạn thảo hợp đồng")).toBeInTheDocument());
+
+      const todoColumn = screen.getByTestId("kanban-column-Todo");
+      expect(within(todoColumn).queryByText("Chuẩn bị báo cáo tuần")).not.toBeInTheDocument();
+      expect(within(todoColumn).queryByText("Việc chưa có người nhận")).not.toBeInTheDocument();
+      // Rail chỉ còn emp-002 (1 task khớp q); emp-001 không có task khớp → không hiện trên rail.
+      expect(screen.getByTestId("assignee-rail-count-emp-002")).toHaveTextContent("1");
+      expect(screen.queryByTestId("assignee-rail-item-emp-001")).not.toBeInTheDocument();
+      // Ẩn rail khi mount ĐỘC LẬP (không có onToggleAssignee) đã phủ ở test forbidden/allow cũ.
+    });
+
+    it("KHÔNG render rail khi mount độc lập không truyền onToggleAssignee", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+      expect(screen.queryByTestId("assignee-rail")).not.toBeInTheDocument();
     });
   });
 
@@ -406,7 +490,9 @@ describe("TaskKanbanPage", () => {
       });
       expect(vi.mocked(taskCollabApi.moveTask)).not.toHaveBeenCalled();
 
-      rejectMove(new ApiError({ status: 403, code: "FORBIDDEN", message: "missing update-status" }));
+      rejectMove(
+        new ApiError({ status: 403, code: "FORBIDDEN", message: "missing update-status" }),
+      );
 
       // Rollback: thẻ về cột cũ + alert lỗi.
       await waitFor(() =>

@@ -227,11 +227,15 @@ export class TaskFileService {
   ): Promise<void> {
     await this.db.withTenant(user.companyId, async (tx: TenantTx) => {
       const actorEmp = await this.coreRepo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
+      // S5-TASK-WORKSPACE-1: projectId PHẢI đi kèm (mirror TASK_WATCHER_*) — feed dự án TASK-API-601
+      // lọc theo project_id; thiếu là sự kiện file biến mất khỏi tab Hoạt động của workspace.
+      const raw = await this.coreRepo.findRawByIdTx(tx, user.companyId, taskId);
       await this.activity.record(tx, {
         action,
         targetType: "File",
         targetId: fileId,
         taskId,
+        projectId: raw?.projectId ?? null,
         actorUserId: user.id,
         actorEmployeeId: actorEmp?.id ?? null,
         message,

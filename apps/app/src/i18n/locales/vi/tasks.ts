@@ -62,10 +62,15 @@ export default {
     },
     detail: {
       backToList: "Quay lại danh sách",
+      // S5-TASK-WORKSPACE-1 — tab bar vỏ workspace (SPEC-06 §13.3): kanban đổi nhãn thành "Bảng",
+      // thêm Danh sách · Báo cáo · Hoạt động. Gantt/Lịch/Tài liệu/Biểu mẫu thuộc đợt D2-D5.
       tabs: {
         overview: "Tổng quan",
+        board: "Bảng",
+        list: "Danh sách",
+        report: "Báo cáo",
+        activity: "Hoạt động",
         members: "Thành viên",
-        kanban: "Kanban",
       },
       fields: {
         code: "Mã dự án",
@@ -80,11 +85,11 @@ export default {
         createdAt: "Ngày tạo",
         closedAt: "Ngày đóng",
       },
+      // S5-TASK-WORKSPACE-1: bỏ key viewReport — nút header thay bằng tab "Báo cáo".
       actions: {
         edit: "Sửa dự án",
         close: "Đóng dự án",
         delete: "Xóa dự án",
-        viewReport: "Xem báo cáo",
       },
       closeDialog: {
         title: "Đóng dự án",
@@ -407,16 +412,27 @@ export default {
           loadFailed: "Không thể tải lịch sử hoạt động. Vui lòng thử lại.",
         },
         actions: {
+          // S5-TASK-WORKSPACE-1 — nhóm project-level (feed dự án TASK-API-601, activity-labels.ts).
+          projectCreated: "đã tạo dự án",
+          projectUpdated: "đã cập nhật dự án",
+          projectClosed: "đã đóng dự án",
+          projectDeleted: "đã xóa dự án",
+          memberAdded: "đã thêm thành viên",
+          memberRoleChanged: "đã đổi vai trò thành viên",
+          memberRemoved: "đã gỡ thành viên",
           taskCreated: "đã tạo công việc",
           taskUpdated: "đã cập nhật công việc",
           taskDeleted: "đã xóa công việc",
           taskAssigned: "đã giao việc",
           taskAssigneeChanged: "đã đổi người phụ trách",
           taskStatusChanged: "đã đổi trạng thái",
+          taskStateChanged: "đã chuyển cột công việc",
           taskPriorityChanged: "đã đổi độ ưu tiên",
           taskDueDateChanged: "đã đổi deadline",
           taskWatcherAdded: "đã theo dõi công việc",
           taskWatcherRemoved: "đã bỏ theo dõi công việc",
+          taskFileUploaded: "đã đính kèm tệp",
+          taskFileDeleted: "đã gỡ tệp đính kèm",
           commentCreated: "đã bình luận",
           commentUpdated: "đã sửa bình luận",
           commentDeleted: "đã xóa bình luận",
@@ -634,10 +650,51 @@ export default {
         attachments: "{{count}} tệp đính kèm",
         checklist: "{{done}}/{{total}} hạng mục checklist hoàn thành",
       },
-      filters: {
-        label: "Lọc theo người phụ trách:",
-        all: "Tất cả",
-        unassigned: "Chưa giao",
+      // S5-TASK-WORKSPACE-1: nhóm filters.* cũ (rail đơn-chọn) đã gỡ — rail mới dùng workspace.rail.*.
+    },
+  },
+  // S5-TASK-WORKSPACE-1 (đợt D1) — vỏ workspace dự án: toolbar lọc chung Bảng·Danh sách, rail avatar
+  // multi-select, tab Hoạt động cấp dự án (TASK-API-601). Xuất khẩu ĐỂ LẠI đợt sau (cần cặp quyền
+  // export:task + ghi activity log server-side theo SPEC-06 §14.19).
+  workspace: {
+    toolbar: {
+      searchPlaceholder: "Tìm công việc theo tiêu đề…",
+      sortLabel: "Sắp xếp",
+      sort: {
+        default: "Thứ tự mặc định",
+        dueAsc: "Deadline gần nhất",
+        dueDesc: "Deadline xa nhất",
+        priorityDesc: "Ưu tiên cao trước",
+        titleAsc: "Tiêu đề A→Z",
+        createdDesc: "Mới tạo trước",
+      },
+      reset: "Đặt lại bộ lọc",
+      columns: "Hiển thị",
+      columnsTitle: "Cột hiển thị",
+    },
+    rail: {
+      label: "Lọc theo người thực hiện",
+      all: "Tất cả mọi người",
+      assigneeTitle: "{{name}} — {{count}} công việc",
+      unassignedTitle: "Chưa giao — {{count}} công việc",
+    },
+    list: {
+      empty: {
+        title: "Không có công việc nào khớp bộ lọc",
+        description: "Thử đổi từ khóa hoặc đặt lại bộ lọc để xem toàn bộ công việc của dự án.",
+      },
+      truncated:
+        "Đang hiển thị {{count}} công việc đầu của dự án — dùng bộ lọc để thu hẹp kết quả.",
+    },
+    activity: {
+      title: "Lịch sử hoạt động của dự án",
+      empty: "Dự án chưa có hoạt động nào.",
+      errors: {
+        loadFailed: "Không thể tải lịch sử hoạt động. Vui lòng thử lại.",
+      },
+      forbidden: {
+        title: "Không có quyền xem lịch sử hoạt động",
+        description: "Bạn cần quyền xem nhật ký công việc để mở tab này.",
       },
     },
   },

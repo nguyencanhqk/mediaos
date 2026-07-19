@@ -7061,7 +7061,7 @@ export const backlog = [
   {
     id: "S5-TASK-WORKSPACE-1",
     module: "TASK",
-    layer: "FE",
+    layer: "FE+BE",
     title:
       "Đợt D1 — Vỏ workspace dự án: tab bar (Bảng·Danh sách·Báo cáo·Hoạt động) + toolbar (tìm·lọc·sắp xếp·tuỳ chỉnh hiển thị·xuất khẩu) + rail avatar lọc theo người thực hiện",
     zone: "yellow",
@@ -7071,6 +7071,7 @@ export const backlog = [
       "apps/app/src/router.tsx",
       "packages/web-core/src/lib/**",
       "apps/app/src/i18n/**",
+      "apps/api/src/tasks/**",
     ],
     skills: ["code-review"],
     depends_on: ["S5-TASK-PIPELINE-1"],
@@ -7079,6 +7080,8 @@ export const backlog = [
       "TÁI DÙNG (đã có, chỉ gom lại): TaskKanbanPage (tab Bảng) · TaskListPage (Danh sách) · ProjectReportPage đã ship PR #226 (Báo cáo) · TaskActivityTimeline (Hoạt động, hiện ở cấp task → mở rộng cấp dự án)",
       "Kanban hiện KHÔNG có route riêng — là tab state trong ProjectDetailPage (comment ProjectDetailPage.tsx:28-30 ghi rõ lane trước không sở hữu router.tsx). WO này sở hữu router.tsx nên gom được",
       "Tab Gantt·Lịch·Tài liệu·Biểu mẫu KHÔNG thuộc đợt này (D2-D5, mỗi cái một model/migration mới) — nếu render tab thì phải nói rõ chưa có, KHÔNG vẽ giả",
+      "GHI NHẬN khi ship (2026-07-19): tab Hoạt động cần BE mới — TASK-API-601 (GET /projects/:id/activity) ĐÃ có trong sổ mã SPEC-06 §16.3 nhưng chưa build ⇒ WO này build luôn (repo/service/controller mirror TASK-API-602, cùng gate view:task-audit-log, int-spec lane DB). Paths mở rộng thêm apps/api/src/tasks/**",
+      "HOÃN 'xuất khẩu' trong toolbar: chưa có cặp quyền export:task + SPEC-06 §14.19 đòi ghi activity log khi export ⇒ CSV client-side sẽ lách log. Cần WO riêng (BE export + seed pair) nếu owner muốn",
     ],
     done_when: [
       "Tab bar trong dự án: Bảng·Danh sách·Báo cáo·Hoạt động — deep-link được (URL phản ánh tab), back/forward đúng",
@@ -7174,11 +7177,7 @@ export const backlog = [
       "Dashboard đếm SAI cột trạng thái: mv_dashboard_task_status GROUP BY `status` legacy mà task core không bao giờ ghi ⇒ mọi task văn phòng hiện là 'not_started' vĩnh viễn",
     zone: "red",
     status: "todo",
-    paths: [
-      "apps/api/migrations/**",
-      "apps/api/src/dashboard/**",
-      "apps/api/test/integration/**",
-    ],
+    paths: ["apps/api/migrations/**", "apps/api/src/dashboard/**", "apps/api/test/integration/**"],
     skills: ["code-review"],
     depends_on: [],
     src: [

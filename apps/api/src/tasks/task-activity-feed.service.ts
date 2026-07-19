@@ -14,6 +14,8 @@ interface RequestUser {
 
 const ERR = {
   TASK_NOT_FOUND: "TASK-ERR-TASK-NOT-FOUND: không tìm thấy công việc.",
+  // Symbolic mirror projects.service/task-kanban.service (SPEC-06 map TASK-ERR-008 → *-PROJECT-NOT-FOUND).
+  PROJECT_NOT_FOUND: "TASK-ERR-PROJECT-NOT-FOUND: không tìm thấy dự án.",
 } as const;
 
 const DEFAULT_LIMIT = 50;
@@ -44,6 +46,29 @@ export class TaskActivityFeedService {
       const exists = await this.repo.taskExistsTx(tx, user.companyId, taskId);
       if (!exists) throw new NotFoundException(ERR.TASK_NOT_FOUND);
       const rows = await this.repo.listByTaskTx(tx, user.companyId, taskId, { limit, offset });
+      return rows.map((r) => this.toDto(r));
+    });
+  }
+
+  /**
+   * S5-TASK-WORKSPACE-1 — feed theo DỰ ÁN (TASK-API-601, tab "Hoạt động" của workspace dự án). Cùng
+   * gate `view:task-audit-log` + cùng lý do KHÔNG lọc data-scope như list() (grant chỉ @Company).
+   * Project soft-delete vẫn đọc được (ledger durability — projectExistsTx không lọc deleted_at).
+   */
+  async listByProject(
+    user: RequestUser,
+    projectId: string,
+    query: ListTaskActivityQueryRequest,
+  ): Promise<TaskActivityLogResponseDto[]> {
+    const limit = this.clampLimit(query.limit);
+    const offset = query.offset && query.offset > 0 ? query.offset : 0;
+    return this.db.withTenant(user.companyId, async (tx) => {
+      const exists = await this.repo.projectExistsTx(tx, user.companyId, projectId);
+      if (!exists) throw new NotFoundException(ERR.PROJECT_NOT_FOUND);
+      const rows = await this.repo.listByProjectTx(tx, user.companyId, projectId, {
+        limit,
+        offset,
+      });
       return rows.map((r) => this.toDto(r));
     });
   }

@@ -1,7 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { taskActivityLogs } from "../db/schema/task-activity";
+import { projects } from "../db/schema/media";
 import { tasks } from "../db/schema/workflow";
 import { users } from "../db/schema/users";
 
@@ -10,6 +11,10 @@ import { users } from "../db/schema/users";
  * Bảng NÀY ĐÃ typed trong Drizzle schema (`db/schema/task-activity.ts`, ghi bởi TaskActivityService ở mọi
  * S4-TASK-BE-*) ⇒ dùng query builder bình thường (KHÔNG cần raw sql như comments/checklists — 2 bảng đó
  * chưa typed). Append-only (BẤT BIẾN #2) — repo này CHỈ SELECT, KHÔNG UPDATE/DELETE (khớp GRANT mig 0478).
+ *
+ * S5-TASK-WORKSPACE-1 (đợt D1, additive) — thêm chiều đọc theo DỰ ÁN (TASK-API-601): cùng bảng, lọc
+ * `project_id` thay vì `task_id` — feed dự án gộp CẢ sự kiện cấp project (task_id NULL) lẫn task con.
+ * Projection + join + order dùng CHUNG `listRowsTx` — 2 chiều đọc chỉ khác đúng vế where.
  */
 
 export interface TaskActivityLogRow {
@@ -42,10 +47,40 @@ export class TaskActivityFeedRepository {
     return rows.length > 0;
   }
 
+  /** Mirror taskExistsTx cho dự án — cùng lý do ledger durability: KHÔNG lọc deleted_at. */
+  async projectExistsTx(tx: TenantTx, companyId: string, projectId: string): Promise<boolean> {
+    const rows = await tx
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.companyId, companyId), eq(projects.id, projectId)))
+      .limit(1);
+    return rows.length > 0;
+  }
+
   async listByTaskTx(
     tx: TenantTx,
     companyId: string,
     taskId: string,
+    page: { limit: number; offset: number },
+  ): Promise<TaskActivityLogRow[]> {
+    return this.listRowsTx(tx, companyId, eq(taskActivityLogs.taskId, taskId), page);
+  }
+
+  /** S5-TASK-WORKSPACE-1 — feed theo dự án (TASK-API-601): shape/order y hệt, chỉ khác vế where. */
+  async listByProjectTx(
+    tx: TenantTx,
+    companyId: string,
+    projectId: string,
+    page: { limit: number; offset: number },
+  ): Promise<TaskActivityLogRow[]> {
+    return this.listRowsTx(tx, companyId, eq(taskActivityLogs.projectId, projectId), page);
+  }
+
+  /** Projection + join actor + order desc dùng chung cho cả 2 chiều đọc (1 nguồn shape duy nhất). */
+  private async listRowsTx(
+    tx: TenantTx,
+    companyId: string,
+    scopeCondition: SQL,
     page: { limit: number; offset: number },
   ): Promise<TaskActivityLogRow[]> {
     const rows = await tx
@@ -65,7 +100,7 @@ export class TaskActivityFeedRepository {
       })
       .from(taskActivityLogs)
       .leftJoin(users, eq(users.id, taskActivityLogs.actorUserId))
-      .where(and(eq(taskActivityLogs.companyId, companyId), eq(taskActivityLogs.taskId, taskId)))
+      .where(and(eq(taskActivityLogs.companyId, companyId), scopeCondition))
       .orderBy(desc(taskActivityLogs.createdAt))
       .limit(page.limit)
       .offset(page.offset);

@@ -177,4 +177,15 @@ export const taskCollabApi = {
       `/tasks/${taskId}/activity${buildQueryString(query ?? {})}`,
       z.array(taskActivityLogResponseSchema),
     ),
+
+  /** S5-TASK-WORKSPACE-1 — GET /projects/:id/activity (TASK-API-601): feed DỰ ÁN (project-level +
+   * task con), cùng gate/DTO với listActivity. Tab "Hoạt động" workspace dự án. */
+  listProjectActivity: (
+    projectId: string,
+    query?: Partial<ListTaskActivityQueryRequest>,
+  ): Promise<TaskActivityLogResponseDto[]> =>
+    apiFetch(
+      `/projects/${projectId}/activity${buildQueryString(query ?? {})}`,
+      z.array(taskActivityLogResponseSchema),
+    ),
 };

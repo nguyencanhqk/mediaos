@@ -21,6 +21,16 @@ import type {
 import { PROJECT_STATE_PAIRS, TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { TaskStatusBadge, TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
 import { TaskStateColumnsDialog } from "./TaskStateColumnsDialog";
+import { AssigneeRail } from "./AssigneeRail";
+import {
+  buildAssigneeSummary,
+  DEFAULT_WORKSPACE_FILTERS,
+  matchesAssigneeSelection,
+  matchesWorkspaceFilters,
+  pinSelectedInSummary,
+  sortWorkspaceTasks,
+  type WorkspaceTaskFilters,
+} from "./workspace-constants";
 
 /**
  * TaskKanbanPage — board task theo cột trạng thái, kéo-thả đổi status (S4-FE-TASK-3, SPEC-06 §13.8/§14.13,
@@ -34,12 +44,16 @@ import { TaskStateColumnsDialog } from "./TaskStateColumnsDialog";
  * S5-FE-TASK-5 — card giàu tín hiệu (benchmark UX TASK, xem memory task-ux-reference-benchmark): badge
  * comment/attachment/checklist (S5-TASK-BE-6 đã bổ sung counts vào `taskKanbanCardSchema`, field optional
  * NHƯNG server luôn điền số thật — chỉ render khi count > 0), avatar-initials thay text cho assignee, style
- * muted + gạch tiêu đề cho card Done/Cancelled. Lọc theo assignee/"Chưa giao" suy TỪ tập task của board hiện
- * có (KHÔNG gọi API member mới) — lọc client-side trong từng cột.
+ * muted + gạch tiêu đề cho card Done/Cancelled.
+ *
+ * S5-TASK-WORKSPACE-1 (đợt D1): bộ lọc chuyển lên VỎ workspace (ProjectDetailPage) — nhận qua props
+ * `filters` (toolbar chung với tab Danh sách) + `assigneeSelection` (rail avatar multi-select, thay
+ * rail đơn-chọn cũ). Lọc/sắp vẫn CLIENT-SIDE trong từng cột qua helper workspace-constants (cùng
+ * predicate với tab Danh sách ⇒ parity theo cấu trúc). Header cột giữ SỐ GỐC (SPEC-06 §13.8 — không
+ * đổi theo bộ lọc); rail đếm theo tập đã lọc toolbar (TRƯỚC lọc assignee).
  */
 const COMPLETED_STATUSES = new Set<TaskCoreStatusDto>(["Done", "Cancelled"]);
-/** Sentinel lọc "Chưa giao" — KHÔNG phải id thật (mainAssigneeEmployeeId là UUID nên không đụng độ). */
-const UNASSIGNED_FILTER_VALUE = "__unassigned__";
+const EMPTY_SELECTION: ReadonlySet<string> = new Set();
 
 function moveErrorKey(err: unknown): string {
   if (err instanceof ApiError) {
@@ -275,105 +289,21 @@ function StateKanbanColumn({
   );
 }
 
-interface AssigneeOption {
-  id: string;
-  name: string | null;
-}
-
-/** Suy dải assignee lọc TỪ tập task hiện có của board — KHÔNG gọi API member mới. */
-function useBoardAssigneeOptions(board: TaskKanbanBoardDto | undefined) {
-  return useMemo(() => {
-    const map = new Map<string, string | null>();
-    let hasUnassigned = false;
-    for (const col of board?.columns ?? []) {
-      for (const task of col.tasks) {
-        if (task.mainAssigneeEmployeeId) {
-          if (!map.has(task.mainAssigneeEmployeeId)) {
-            map.set(task.mainAssigneeEmployeeId, task.assigneeName);
-          }
-        } else {
-          hasUnassigned = true;
-        }
-      }
-    }
-    const employees: AssigneeOption[] = Array.from(map.entries()).map(([id, name]) => ({
-      id,
-      name,
-    }));
-    return { employees, hasUnassigned };
-  }, [board]);
-}
-
-function AssigneeFilterRail({
-  employees,
-  hasUnassigned,
-  selected,
-  onSelect,
+export function TaskKanbanPage({
+  projectId,
+  filters = DEFAULT_WORKSPACE_FILTERS,
+  assigneeSelection = EMPTY_SELECTION,
+  onToggleAssignee,
+  onClearAssignees,
 }: {
-  employees: AssigneeOption[];
-  hasUnassigned: boolean;
-  selected: string | null;
-  onSelect: (value: string | null) => void;
+  projectId: string;
+  /** Bộ lọc toolbar chung của workspace (mặc định: không lọc — mount độc lập vẫn chạy). */
+  filters?: WorkspaceTaskFilters;
+  /** Rail avatar multi-select; không truyền onToggleAssignee → ẨN rail (không có chỗ ghi state). */
+  assigneeSelection?: ReadonlySet<string>;
+  onToggleAssignee?: (value: string) => void;
+  onClearAssignees?: () => void;
 }) {
-  const { t } = useTranslation("tasks");
-  if (employees.length === 0 && !hasUnassigned) return null;
-
-  const chipClass = (active: boolean) =>
-    cn(
-      "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
-      active
-        ? "border-brand bg-brand-muted text-brand"
-        : "border-border text-muted-foreground hover:bg-muted",
-    );
-
-  return (
-    <div
-      className="flex flex-wrap items-center gap-1.5"
-      role="group"
-      aria-label={t("tasks.kanban.filters.label")}
-    >
-      <span className="text-xs font-medium text-muted-foreground">
-        {t("tasks.kanban.filters.label")}
-      </span>
-      <button
-        type="button"
-        onClick={() => onSelect(null)}
-        aria-pressed={selected === null}
-        data-testid="kanban-filter-all"
-        className={chipClass(selected === null)}
-      >
-        {t("tasks.kanban.filters.all")}
-      </button>
-      {employees.map((emp) => (
-        <button
-          key={emp.id}
-          type="button"
-          onClick={() => onSelect(emp.id)}
-          aria-pressed={selected === emp.id}
-          data-testid={`kanban-filter-assignee-${emp.id}`}
-          title={emp.name ?? undefined}
-          className={chipClass(selected === emp.id)}
-        >
-          <Avatar size="sm" name={emp.name} className="h-5 w-5 text-[10px]" />
-          <span className="max-w-[8rem] truncate">{emp.name ?? t("tasks.kanban.unassigned")}</span>
-        </button>
-      ))}
-      {hasUnassigned && (
-        <button
-          type="button"
-          onClick={() => onSelect(UNASSIGNED_FILTER_VALUE)}
-          aria-pressed={selected === UNASSIGNED_FILTER_VALUE}
-          data-testid="kanban-filter-unassigned"
-          className={chipClass(selected === UNASSIGNED_FILTER_VALUE)}
-        >
-          {t("tasks.kanban.filters.unassigned")}
-        </button>
-      )}
-    </div>
-  );
-}
-
-export function TaskKanbanPage({ projectId }: { projectId: string }) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
   const canView = useCan(
@@ -407,7 +337,6 @@ export function TaskKanbanPage({ projectId }: { projectId: string }) {
   const canManageColumns = canCreateState || canUpdateState || canDeleteState;
   const [manageOpen, setManageOpen] = useState(false);
   const [dragErrorKey, setDragErrorKey] = useState<string | null>(null);
-  const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);
   const queryKey = taskKeys.kanban(projectId);
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -417,7 +346,36 @@ export function TaskKanbanPage({ projectId }: { projectId: string }) {
     staleTime: 15_000,
   });
 
-  const { employees: assigneeOptions, hasUnassigned } = useBoardAssigneeOptions(data);
+  // Rail đếm theo tập ĐÃ lọc toolbar nhưng TRƯỚC lọc assignee (bật 1 người không triệt tiêu số
+  // người khác); pinSelectedInSummary GHIM người đang chọn (count 0) để luôn còn nút gỡ.
+  const railSummary = useMemo(() => {
+    const allTasks = (data?.columns ?? []).flatMap((col) => col.tasks);
+    return pinSelectedInSummary(
+      buildAssigneeSummary(allTasks.filter((task) => matchesWorkspaceFilters(task, filters))),
+      assigneeSelection,
+      allTasks,
+    );
+  }, [data, filters, assigneeSelection]);
+
+  // Lọc + sắp per-column MEMO theo [data, filters, selection] — re-render vì kéo-thả lỗi/dialog
+  // không lọc lại 500 card (mirror kỷ luật useMemo của ProjectTaskListTab). Key = stateId/status.
+  const visibleTasksByColumn = useMemo(() => {
+    const map = new Map<string, TaskKanbanCardDto[]>();
+    for (const col of data?.columns ?? []) {
+      map.set(
+        col.columnMode === "state" ? col.stateId : col.status,
+        sortWorkspaceTasks(
+          col.tasks.filter(
+            (task) =>
+              matchesWorkspaceFilters(task, filters) &&
+              matchesAssigneeSelection(task, assigneeSelection),
+          ),
+          filters.sort,
+        ),
+      );
+    }
+    return map;
+  }, [data, filters, assigneeSelection]);
 
   const moveMutation = useMutation({
     mutationFn: ({ taskId, status }: { taskId: string; status: TaskCoreStatusDto }) =>
@@ -592,13 +550,9 @@ export function TaskKanbanPage({ projectId }: { projectId: string }) {
     );
   }
 
-  const matchesAssigneeFilter = (task: TaskKanbanCardDto): boolean => {
-    if (assigneeFilter === null) return true;
-    if (assigneeFilter === UNASSIGNED_FILTER_VALUE) return task.mainAssigneeEmployeeId === null;
-    return task.mainAssigneeEmployeeId === assigneeFilter;
-  };
-
   const canDragBoard = isStateMode ? canDragState : canDrag;
+  const showRail = onToggleAssignee !== undefined;
+  const noopClear = () => {};
 
   return (
     <div className="space-y-3">
@@ -620,43 +574,47 @@ export function TaskKanbanPage({ projectId }: { projectId: string }) {
           </Button>
         )}
       </div>
-      <AssigneeFilterRail
-        employees={assigneeOptions}
-        hasUnassigned={hasUnassigned}
-        selected={assigneeFilter}
-        onSelect={setAssigneeFilter}
-      />
       {dragErrorKey && (
         <p role="alert" className="text-sm text-destructive">
           {t(dragErrorKey)}
         </p>
       )}
-      <Card className="overflow-x-auto p-3">
-        <div className="flex gap-3">
-          {isStateMode
-            ? stateColumns.map((col) => (
-                <StateKanbanColumn
-                  key={col.stateId}
-                  column={col}
-                  tasks={col.tasks.filter(matchesAssigneeFilter)}
-                  canDrag={canDragState}
-                  onDragStartTask={onDragStartTask}
-                  onDrop={onDropState}
-                />
-              ))
-            : statusColumns.map((col) => (
-                <KanbanColumn
-                  key={col.status}
-                  status={col.status}
-                  tasks={col.tasks.filter(matchesAssigneeFilter)}
-                  totalCount={col.tasks.length}
-                  canDrag={canDrag}
-                  onDragStartTask={onDragStartTask}
-                  onDrop={onDrop}
-                />
-              ))}
-        </div>
-      </Card>
+      <div className="flex items-start gap-3">
+        <Card className="min-w-0 flex-1 overflow-x-auto p-3">
+          <div className="flex gap-3">
+            {isStateMode
+              ? stateColumns.map((col) => (
+                  <StateKanbanColumn
+                    key={col.stateId}
+                    column={col}
+                    tasks={visibleTasksByColumn.get(col.stateId) ?? []}
+                    canDrag={canDragState}
+                    onDragStartTask={onDragStartTask}
+                    onDrop={onDropState}
+                  />
+                ))
+              : statusColumns.map((col) => (
+                  <KanbanColumn
+                    key={col.status}
+                    status={col.status}
+                    tasks={visibleTasksByColumn.get(col.status) ?? []}
+                    totalCount={col.tasks.length}
+                    canDrag={canDrag}
+                    onDragStartTask={onDragStartTask}
+                    onDrop={onDrop}
+                  />
+                ))}
+          </div>
+        </Card>
+        {showRail && (
+          <AssigneeRail
+            summary={railSummary}
+            selection={assigneeSelection}
+            onToggle={onToggleAssignee}
+            onClear={onClearAssignees ?? noopClear}
+          />
+        )}
+      </div>
       {canManageColumns && (
         <TaskStateColumnsDialog
           projectId={projectId}
