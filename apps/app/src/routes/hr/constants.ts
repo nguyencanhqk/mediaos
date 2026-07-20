@@ -70,6 +70,9 @@ export const HR_ENGINE_PAIRS = {
   UPDATE_EMPLOYEE: { action: "update", resourceType: "employee" },
   DELETE_EMPLOYEE: { action: "delete", resourceType: "employee" },
   READ_DEPARTMENT: { action: "read", resourceType: "department" },
+  // Đặt/đổi trưởng đơn vị trên sơ đồ tổ chức (PATCH /hr/departments/:id) — cùng cặp seed
+  // update:department mà màn quản lý phòng ban dùng.
+  UPDATE_DEPARTMENT: { action: "update", resourceType: "department" },
   READ_POSITION: { action: "read", resourceType: "position" },
   // job-level / contract-type lookups are gated by manage:master-data on the BE (hr-read.controller).
   MANAGE_MASTER_DATA: { action: "manage", resourceType: "master-data" },

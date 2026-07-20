@@ -17,8 +17,12 @@ import tasksVi from "./locales/vi/tasks";
 import dashboardVi from "./locales/vi/dashboard";
 // S5-ME-FE-1 — MeOverviewPage (namespace mới "me", ME-SCREEN-001).
 import meVi from "./locales/vi/me";
+// EmployeeMultiPickerDialog (components/) — khóa chung deep-merge THÊM vào namespace "common"
+// đã có sẵn ở @mediaos/web-core (KHÔNG ghi đè khóa cũ).
+import employeePickerVi from "./locales/vi/employee-picker";
 
 registerI18nResources("vi", {
+  common: employeePickerVi,
   hr: hrVi,
   system: systemVi,
   leave: leaveVi,
