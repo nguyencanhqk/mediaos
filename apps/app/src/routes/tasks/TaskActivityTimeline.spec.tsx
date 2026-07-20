@@ -99,6 +99,27 @@ describe("TaskActivityTimeline", () => {
     expect(screen.getByText("Duyệt Video")).toBeInTheDocument();
   });
 
+  // S5-TASK-SUBTASK-1 (D-36) — gán cha ghi TASK_UPDATED kèm oldValues.parentTaskId; server tự viết
+  // `message` mô tả sự kiện ⇒ label fallback "đã cập nhật công việc" KHÔNG hiện (message ưu tiên hơn);
+  // dòng cũ→mới hiện nhãn cố định "Việc con" (KHÔNG raw UUID) vì BE không enrich tên cha.
+  it("renders the parent-change message + old→new 'Việc con' line (D-36 không biến mất câm)", async () => {
+    vi.mocked(taskCollabApi.listActivity).mockResolvedValue([
+      {
+        ...MOCK_LOG,
+        id: "log-003",
+        action: "TASK_UPDATED",
+        oldValues: { parentTaskId: null, stateId: "s1" },
+        newValues: { parentTaskId: "parent-1", stateId: null },
+        message: "Chuyển thành việc con",
+      },
+    ]);
+    renderWithQuery(<TaskActivityTimeline taskId="task-001" />);
+
+    await waitFor(() => expect(screen.getByText("Chuyển thành việc con")).toBeInTheDocument());
+    expect(screen.queryByText(/đã cập nhật công việc/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Việc con")).toBeInTheDocument();
+  });
+
   // ── DENY-PATH: server 403 (không liên quan + không pair audit) → ẨN HẲN ─────
   it("renders nothing when the server responds 403", async () => {
     vi.mocked(taskCollabApi.listActivity).mockRejectedValue(

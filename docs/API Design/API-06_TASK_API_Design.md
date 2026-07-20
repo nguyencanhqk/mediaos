@@ -609,6 +609,8 @@ title
 | GET | `/api/v1/tasks/{task_id}` | Chi tiết task | `TASK.TASK.VIEW` |
 | PATCH | `/api/v1/tasks/{task_id}` | Cập nhật task | `TASK.TASK.UPDATE` |
 | DELETE | `/api/v1/tasks/{task_id}` | Xóa mềm task | `TASK.TASK.DELETE` |
+| GET | `/api/v1/tasks/{task_id}/subtasks` | Danh sách công việc con (**TASK-API-701**) | `TASK.TASK.VIEW` |
+| PATCH | `/api/v1/tasks/{task_id}/subtasks/reorder` | Đổi thứ tự công việc con (**TASK-API-702**) | `TASK.TASK.UPDATE` |
 
 ### 10.4 Task action endpoints
 
@@ -1276,6 +1278,8 @@ Idempotency-Key: <uuid>
 | Field | Rule |
 | --- | --- |
 | `project_id` | UUID, nullable nếu company cho phép task cá nhân |
+| `parent_task_id` | UUID, nullable. Có giá trị ⇒ task được tạo là **công việc con**: cha phải tồn tại, cùng company, chưa xoá và **là task gốc** (`parent_task_id IS NULL`). `project_id` của con **suy ra từ cha** — gửi kèm mà lệch ⇒ 400 `TASK-ERR-SUBTASK-INVALID`. Xem [DECISIONS-05](<../DECISIONS/DECISIONS-05_Task_Subtask_And_Leaf_Counting.md>) D-31/D-33 |
+| `state_id` | **Không được gửi** khi có `parent_task_id` — việc con luôn `state_id = NULL` (D-36); gửi kèm ⇒ 400 |
 | `title` | Bắt buộc, 1-255 ký tự |
 | `description` | Không bắt buộc |
 | `priority` | Low/Medium/High/Urgent |
@@ -1326,6 +1330,7 @@ Idempotency-Key: <uuid>
     "title": "Thiết kế API module TASK",
     "status": "Todo",
     "priority": "High",
+    "parent_task_id": null,
     "main_assignee": {},
     "created_at": "2026-06-20T10:00:00+07:00",
     "warnings": [
@@ -1398,7 +1403,10 @@ GET /api/v1/tasks/my-tasks?status=Todo&priority=High&is_overdue=false&sort=due_a
     "task_id": "...",
     "task_code": "TASK-0001",
     "project": {},
+    "parent_task_id": null,
     "parent_task": null,
+    "subtask_total": 5,
+    "subtask_done": 2,
     "title": "Thiết kế API module TASK",
     "description": "Viết tài liệu API-06",
     "status": "In Progress",
@@ -1429,6 +1437,10 @@ GET /api/v1/tasks/my-tasks?status=Todo&priority=High&is_overdue=false&sort=due_a
 
 ---
 
+> **`subtask_total` / `subtask_done` (D-34).** Mẫu số **không tính công việc con đã huỷ** (`Cancelled`) và con đã xoá mềm. Task không có công việc con ⇒ `subtask_total = 0`, frontend không hiển thị chỉ số. Hai field này độc lập hoàn toàn với `checklist_summary` — xem [DECISIONS-05](<../DECISIONS/DECISIONS-05_Task_Subtask_And_Leaf_Counting.md>) D-31/D-32.
+
+---
+
 ### 13.5 PATCH `/api/v1/tasks/{task_id}` - Cập nhật thông tin task
 
 **Required permission**  
@@ -1454,6 +1466,11 @@ GET /api/v1/tasks/my-tasks?status=Todo&priority=High&is_overdue=false&sort=due_a
 3. Nếu đổi `due_at`, kiểm tra trùng lịch nghỉ của assignee và `project.end_date` để cảnh báo.
 4. Nếu đổi priority, có thể yêu cầu permission `TASK.TASK.UPDATE_PRIORITY` tùy cấu hình.
 5. Nếu đổi deadline, có thể yêu cầu permission `TASK.TASK.UPDATE_DEADLINE` tùy cấu hình.
+6. **`parent_task_id`** (gán/gỡ công việc cha — [DECISIONS-05](<../DECISIONS/DECISIONS-05_Task_Subtask_And_Leaf_Counting.md>) D-33): bỏ trống = không đổi, `null` = gỡ khỏi cha. Backend kiểm **sau khi đã khoá hàng, trong cùng giao dịch**: cha tồn tại + cùng company + chưa xoá (404 `TASK-ERR-TASK-NOT-FOUND`); cha phải là task gốc (400); task đang **có công việc con** không được trở thành con (400); con phải **cùng dự án** với cha (400). Cần quyền ghi trên **cả cha cũ lẫn cha mới**.
+7. **Gán cha ⇒ `state_id` bị xoá về NULL** cùng lượt (D-36 — việc con không lên board); **gỡ cha ⇒ `state_id` VẪN NULL**, task trở thành gốc *không cột*, người dùng tự kéo vào cột sau. Backend **không** tự đoán cột mặc định.
+8. **`project_id` của một cây là bất biến (D-36a):** task đang có công việc con **không đổi được `project_id`** (400 — gỡ việc con ra trước); task **đang là việc con** không đổi được `project_id` riêng (400 — dự án do cha quyết).
+9. **`state_id` của việc con:** mọi đường ghi `state_id` (route này và `POST /move-state`) **từ chối 400 `TASK-ERR-STATE-INVALID`** khi task có `parent_task_id`. Chốt nằm ở phương thức dùng chung, không ở từng route.
+10. Lịch sử của lần đổi cha ghi `TASK_UPDATED` mang **cả `parent_task_id` và `state_id` ở giá trị cũ→mới** — thẻ rời board là thay đổi người dùng nhìn thấy, không được biến mất câm.
 
 **Activity log**
 
@@ -1473,15 +1490,111 @@ GET /api/v1/tasks/my-tasks?status=Todo&priority=High&is_overdue=false&sort=due_a
 **Business validation**
 
 1. Không xóa cứng task.
-2. Nếu task có sub-task active, backend chặn hoặc xóa mềm cascade theo cấu hình.
-3. Nếu task đã Done, chỉ Owner/Manager/Admin có quyền phù hợp được xóa nếu policy cho phép.
-4. Ghi `deleted_at`, `deleted_by`.
+2. **Task có công việc con ⇒ XÓA LAN XUỐNG CON, TẤT-CẢ-HOẶC-KHÔNG** ([DECISIONS-05](<../DECISIONS/DECISIONS-05_Task_Subtask_And_Leaf_Counting.md>) **D-38** — quy tắc dứt khoát, **không** còn "theo cấu hình"):
+   1. Khóa hàng cha `FOR UPDATE` rồi nạp **toàn bộ công việc con chưa xoá**, **kể cả con `Cancelled`** (bỏ sót là để lại con mồ côi).
+   2. Kiểm quyền **GHI** trên **từng** con. Có **≥1 con nằm ngoài phạm vi ghi** ⇒ **403 `TASK-ERR-FORBIDDEN`**, payload `{ "blocked_count": n, "blocked": [{ "id", "task_code", "title" }] }`, và **KHÔNG xóa bản ghi nào** (kể cả cha).
+   3. Con workflow-driven (không nên tồn tại — fail-closed) ⇒ **400**, không xóa gì.
+   4. Qua hết ⇒ soft-delete **con TRƯỚC rồi tới cha**, trong **CÙNG một giao dịch**.
+   - Danh sách `blocked[]` liệt kê được đầy đủ vì quyền **ĐỌC** thừa hưởng từ cha (D-39). Hai phép kiểm này **khác nhau và không được lẫn**: chặn theo quyền GHI, liệt kê theo quyền ĐỌC.
+3. **Hủy (`Cancelled`) cha KHÔNG hủy con** (D-41) — quy tắc 2 chỉ áp cho XÓA.
+4. Nếu task đã Done, chỉ Owner/Manager/Admin có quyền phù hợp được xóa nếu policy cho phép.
+5. Ghi `deleted_at`, `deleted_by`.
 
 **Activity log**  
-`TASK_DELETED`
+`TASK_DELETED` — ghi **một dòng cho mỗi** bản ghi bị xóa (cha và từng công việc con), kèm audit log tương ứng (append-only).
 
 **Notification event**  
 `TASK_DELETED` nếu cấu hình bật.
+
+---
+
+### 13.7 GET `/api/v1/tasks/{task_id}/subtasks` - Danh sách công việc con
+
+**Mã API**  
+`TASK-API-701`
+
+**Required permission**  
+`TASK.TASK.VIEW`
+
+**Data scope**  
+Kiểm **trên công việc CHA** (`{task_id}`). Danh sách con **KHÔNG lọc thêm theo scope của từng con** — [DECISIONS-05](<../DECISIONS/DECISIONS-05_Task_Subtask_And_Leaf_Counting.md>) **D-39**: đọc được cha ⇒ đọc được toàn bộ con. Nếu lọc từng con thì `subtask_done/subtask_total` sẽ không khớp danh sách người dùng nhìn thấy ("2/5" nhưng chỉ liệt kê 3 dòng) và % mất nghĩa.
+
+**Business validation**
+
+1. Task `{task_id}` phải thuộc company hiện tại và chưa xóa mềm — không thì **404 `TASK-ERR-TASK-NOT-FOUND`** (không rò rỉ sự tồn tại của task công ty khác).
+2. Task không có công việc con ⇒ trả **mảng rỗng**, KHÔNG phải 404.
+3. Chỉ trả con **chưa xóa mềm**; con `Cancelled` **vẫn trả** (người dùng cần thấy việc đã hủy trong phân rã).
+4. Sắp xếp: `sort_order` **NULLS LAST**, rồi `created_at`.
+
+**Response 200 — MẢNG TRẦN (không có phong bì `data`/`meta`)**
+
+```json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440021",
+    "task_code": "TASK-0042",
+    "title": "Viết request/response cho API-06",
+    "task_status": "Done",
+    "assignee_name": "Nguyễn Văn A",
+    "due_at": "2026-07-22T18:00:00+07:00",
+    "is_overdue": false,
+    "sort_order": 0
+  }
+]
+```
+
+> **Trạng thái 20/07/2026 — ĐÃ ĐÓNG:** hình dạng dưới đây là **quyết định D-39 (phương án i, DTO hẹp)** và code đã khớp: `listSubtasks`/`reorderSubtasks` trả `subtaskListItemSchema`, **không** phải `taskCoreResponseSchema`. Lệch phát hiện lúc viết tài liệu (code ban đầu trả DTO đầy đủ) đã được đóng bằng cách **thu hẹp code theo ADR**, không phải nới tài liệu theo code — bỏ `description` (tới 20000 ký tự), `projectName`, `creatorName`, `reporterName`, `departmentId` khỏi đường thừa-hưởng-quyền-đọc. Trường `canOpen` là bổ sung của cùng lần đóng đó (xem D-39).
+>
+> **DTO HẸP có chủ đích (D-39).** Route này **không** trả DTO task đầy đủ: `description` (tới 20 000 ký tự), `project_name`, `creator_name`, `reporter_name`, `department_id` **không** nằm trong payload — panel công việc con không cần, và quyền đọc ở đây là **thừa hưởng** nên tập field lộ ra phải giữ ở mức tối thiểu. Đây là mảng trần giống `GET /tasks/{task_id}/watchers`; client **không** được khai schema `{data, meta}` cho nó.
+>
+> **Thừa hưởng dừng ở đúng route này.** `GET /tasks/{child_id}` vẫn kiểm scope trên **chính con** ⇒ có con hiện trong danh sách mà mở riêng sẽ **404**, sửa/xóa sẽ **403**. Frontend phải render các con ngoài tầm với ở dạng **chỉ đọc, không liên kết, không nút thao tác**.
+
+---
+
+### 13.8 PATCH `/api/v1/tasks/{task_id}/subtasks/reorder` - Đổi thứ tự công việc con
+
+**Mã API**  
+`TASK-API-702`
+
+**Required permission**  
+`TASK.TASK.UPDATE` — kiểm phạm vi **GHI trên công việc CHA** (đổi thứ tự là sửa cấu trúc của cha, không phải sửa từng con).
+
+**Request body**
+
+```json
+{
+  "subtask_ids": [
+    "550e8400-e29b-41d4-a716-446655440022",
+    "550e8400-e29b-41d4-a716-446655440021"
+  ]
+}
+```
+
+**Validation**
+
+| Field | Rule |
+| --- | --- |
+| `subtask_ids` | Mảng UUID, 1-200 phần tử, không trùng |
+
+**Business validation**
+
+1. Task `{task_id}` thuộc company hiện tại, chưa xóa — không thì **404**.
+2. Khóa hàng cha `FOR UPDATE` trước khi đọc tập con (D-33 — cùng luật khóa với xóa lan).
+3. `subtask_ids` phải **KHỚP CHÍNH XÁC** tập công việc con chưa xóa của cha: thiếu id, thừa id, id lạ, id thuộc cha khác hoặc company khác ⇒ **400** và **không hàng nào đổi `sort_order`**.
+4. Ghi `sort_order = vị trí trong mảng` bằng **một** câu `UPDATE`; câu đó phải **tự mang** `company_id` + `parent_task_id` + `deleted_at IS NULL` trong `WHERE` (defense-in-depth trên RLS, không chỉ dựa vào bước 3).
+5. Cập nhật `updated_at` / `updated_by`.
+
+**Audit log / Activity log**
+
+**KHÔNG ghi activity log, KHÔNG ghi audit log.** Đổi thứ tự là thay đổi **trình bày**, không phải sự kiện vòng đời của công việc — ghi nhật ký cho nó chỉ làm nhiễu dòng thời gian mà người dùng đang dùng để lần lại thay đổi nghiệp vụ. Ghi rõ ở đây để lần review sau không coi là thiếu sót.
+
+**Notification event**
+
+Không phát sự kiện.
+
+**Response 200**
+
+Trả danh sách con sau khi sắp xếp, cùng hình dạng **mảng trần** với `TASK-API-701`.
 
 ---
 
@@ -1693,7 +1806,7 @@ Lý do có tác dụng phụ này: sau khi board chuyển sang hiển thị theo
 
 1. User phải xem được project.
 2. Board chỉ trả task trong project đó.
-3. Board **chỉ trả task cha** (`parent_task_id IS NULL`); công việc con xem trong task cha.
+3. Board **chỉ trả task cha** (`parent_task_id IS NULL`); công việc con xem trong task cha — [DECISIONS-05](<../DECISIONS/DECISIONS-05_Task_Subtask_And_Leaf_Counting.md>) **D-36**. Việc con còn bị ép `state_id = NULL` **và giữ NULL sau mọi lần đổi trạng thái**, nên không có đường nào đưa nó lên board. Thẻ cha mang thêm `subtask_total` / `subtask_done` (D-34). Lọc board theo người phụ trách giữ thẻ cha khi người đó là assignee của cha **hoặc** của một việc con chưa hủy (**D-40**).
 4. Nếu user không có `TASK.TASK.UPDATE_STATE`, frontend chỉ cho xem, không cho kéo thả.
 5. **Cột lấy từ `project_states`** của project (sắp theo `sort_order`), KHÔNG phải 5 trạng thái cố định — xem SPEC-06 §6.8, [DECISIONS-03](<../DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-16. Response mang thêm `column_mode`:
    - `column_mode = "state"` — cột là pipeline; mỗi cột có `state_id`, `name`, `color`, `state_group`, `sort_order`.
@@ -2565,7 +2678,8 @@ Quy tắc:
 | 400 | `TASK-ERR-ASSIGNEE-INVALID` | Assignee không hợp lệ |
 | 400 | `TASK-ERR-PROJECT-MEMBER-INVALID` | Member dự án không hợp lệ |
 | 400 | `TASK-ERR-TASK-PERSONAL-DISABLED` | Company không cho phép task cá nhân |
-| 400 | `TASK-ERR-STATE-INVALID` | Cột đích không thuộc dự án của task |
+| 400 | `TASK-ERR-STATE-INVALID` | Cột đích không thuộc dự án của task, **hoặc** task là công việc con (việc con không có cột — D-36) |
+| 400 | `TASK-ERR-SUBTASK-INVALID` | Vi phạm bất biến cây công việc con: cha đã là con (quá 1 cấp) · task đang có con không thể thành con · con khác dự án với cha · đổi dự án của cây (D-33/D-36/D-36a). Ánh xạ SPEC-06: `TASK-ERR-044` / `045` / `046` |
 | 403 | `TASK-ERR-FORBIDDEN` | Không có quyền TASK hoặc ngoài scope |
 | 404 | `TASK-ERR-PROJECT-NOT-FOUND` | Không tìm thấy project hoặc không có quyền xem |
 | 404 | `TASK-ERR-TASK-NOT-FOUND` | Không tìm thấy task hoặc không có quyền xem |
@@ -2613,6 +2727,11 @@ Quy tắc:
 13. Task **không thuộc dự án** (`project_id` NULL) thì `state_id` phải NULL.
 14. Đổi `state_id` sang cột **khác `state_group`** phải kéo theo cập nhật `task_status` theo ánh xạ (§15.2) **trong cùng một giao dịch** — hai cột không được lệch nhau.
 15. Quy tắc 12–14 áp cho **mọi** đường ghi `state_id` (`POST /tasks`, `PATCH /tasks/{task_id}`, `POST /tasks/{task_id}/move-state`), không riêng route kéo thả. Đường **tạo** phải suy `task_status` khởi tạo từ nhóm của cột được chỉ định thay vì mặc định `Todo`.
+16. **Cây công việc con đúng 1 cấp** ([DECISIONS-05](<../DECISIONS/DECISIONS-05_Task_Subtask_And_Leaf_Counting.md>) D-33): cha phải là task gốc; task đang có con không được thành con; không tự làm cha chính mình. Bốn phép kiểm chạy **sau khi đã khóa hàng**, trong cùng giao dịch — kiểm-rồi-ghi không khóa **không** serialize dưới `READ COMMITTED` và tạo được chu trình A↔B.
+17. **Việc con luôn cùng dự án với cha** (D-36) và **`project_id` của một cây là bất biến** (D-36a): task có con không đổi được `project_id`; task là con không đổi được `project_id` riêng.
+18. **Việc con luôn `state_id = NULL`** (D-36). Chốt đặt ở **phương thức dùng chung** của các đường ghi `state_id`, không rải ở từng route — nếu không, đánh dấu một việc con "Done" sẽ ghi lại `state_id` và đẩy nó lên board.
+19. **Xóa cha kéo theo xóa con, tất-cả-hoặc-không** (D-38, §13.6); **hủy cha KHÔNG hủy con** (D-41).
+20. **Con số ≠ danh sách** (D-34/D-37): dashboard và báo cáo dự án đếm theo **task lá**; các màn danh sách việc phải xử lý ("Việc của tôi", "Việc quá hạn", tổng hợp cá nhân) hiện **cả cha lẫn con**. Hai bên **cố ý** khác nhau — giao diện phải có ghi chú giải thích.
 
 ### 26.3 Comment
 
@@ -2725,7 +2844,9 @@ tasks(company_id, state_id) WHERE deleted_at IS NULL     -- đường chính (co
 tasks(company_id, project_id, status, priority, due_at)  -- nhánh dự phòng (column_mode = "status")
 ```
 
-Truy vấn board còn phải lọc `parent_task_id IS NULL` (board chỉ hiện task cha) và `LEFT JOIN project_states` để task có `state_id` NULL không biến mất — chúng được xếp vào cột mặc định của dự án.
+Truy vấn board còn phải lọc `parent_task_id IS NULL` (board chỉ hiện task cha — [DECISIONS-05](<../DECISIONS/DECISIONS-05_Task_Subtask_And_Leaf_Counting.md>) **D-36**) và `LEFT JOIN project_states` để task có `state_id` NULL không biến mất — chúng được xếp vào cột mặc định của dự án.
+
+Tiến độ việc con của các thẻ lấy bằng **một** truy vấn gộp cho toàn bộ `parent_task_id = ANY(...)` của trang board, **không** query từng thẻ (N+1). Vị từ đếm và index phục vụ nó: DB-06 §4.16 + `tasks_parent_active_idx`.
 
 Với project nhiều task, cần giới hạn số task mỗi cột hoặc lazy load theo cột.
 

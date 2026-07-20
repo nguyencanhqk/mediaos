@@ -189,6 +189,23 @@ export class ProjectsService {
     });
   }
 
+  /**
+   * S5-TASK-SUBTASK-1 (DECISIONS-05 D-35) — byStatus theo ĐẾM LÁ cho widget dashboard `project-progress`.
+   *
+   * ⚠️ KHÔNG có gate/scope Ở ĐÂY — CHỦ Ý, và là điều kiện sử dụng: caller PHẢI authorize project TRƯỚC.
+   * Đường duy nhất gọi hàm này là DashboardWidgetHandlersService.fetchProjectProgress, và nó đã chạy
+   * `gateProjectProgress` → `getProject` (resolveAndAssert read:project + scope 404) ở bước gate.
+   * Bỏ bước đó là mở IDOR (bài học reused-method-must-be-actor-scoped).
+   * ⚠️ KHÔNG gọi `getReport` thay cho hàm này: report nằm sau cặp view-report:project SENSITIVE với
+   * data-scope RIÊNG (xem resolveReportScopeExists) và trả kèm assigneeWorkload có PII. Chia sẻ VỊ TỪ
+   * đếm-lá, KHÔNG chia sẻ method.
+   */
+  async countsByStatusLeaf(companyId: string, projectId: string): Promise<Record<string, number>> {
+    return this.db.withTenant(companyId, (tx) =>
+      this.repo.countsByStatusLeafTx(tx, companyId, projectId),
+    );
+  }
+
   // ── Create (creator = owner khi actor có employee mapping active) ───────────────
 
   async createProject(
@@ -755,7 +772,8 @@ export class ProjectsService {
         "Owner",
         user.id,
       );
-      if (!updated) throw new InternalServerErrorException("Không nâng được vai trò chủ dự án mới.");
+      if (!updated)
+        throw new InternalServerErrorException("Không nâng được vai trò chủ dự án mới.");
       await this.activity.record(tx, {
         action: "MEMBER_ROLE_CHANGED",
         targetType: "Member",

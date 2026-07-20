@@ -30,6 +30,10 @@ const PAGE_SIZE = 20;
  *
  * Gate `read:task` (TASK.TASK.VIEW) — mirror TaskListPage; cột "Dự án" ẩn mặc định (thừa trong
  * workspace 1 dự án), bật lại được qua menu "Hiển thị" (tuỳ chỉnh hiển thị — benchmark MISA).
+ *
+ * S5-TASK-SUBTASK-1 (D-36) — `parentOnly:true` chỉ lấy task GỐC, parity Bảng↔Danh sách (board đã lọc
+ * `parent_task_id IS NULL` từ đợt A). Việc con quản lý riêng qua TaskSubtaskPanel ở màn chi tiết cha,
+ * KHÔNG lẫn vào bảng danh sách này (D-37: danh sách ≠ con số, nhưng tab workspace này đi theo board).
  */
 export function ProjectTaskListTab({
   projectId,
@@ -52,7 +56,14 @@ export function ProjectTaskListTab({
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [hiddenColumns, setHiddenColumns] = useState<ReadonlySet<string>>(new Set(["projectName"]));
 
-  const queryParams = { projectId, limit: TASK_CORE_PAGE_LIMIT_MAX, offset: 0 };
+  // S5-TASK-SUBTASK-1 (D-36) — parentOnly:true để chỉ hiện task GỐC, parity Bảng↔Danh sách (board đã
+  // lọc parent_task_id IS NULL sẵn từ đợt A). Việc con quản lý qua TaskSubtaskPanel ở màn chi tiết cha.
+  const queryParams = {
+    projectId,
+    limit: TASK_CORE_PAGE_LIMIT_MAX,
+    offset: 0,
+    parentOnly: true,
+  };
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: taskKeys.list(queryParams),
     queryFn: () => taskCoreApi.listTasks(queryParams),

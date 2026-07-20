@@ -156,6 +156,11 @@ export default {
           notDone: "Chưa hoàn thành",
           overdue: "Quá hạn",
         },
+        // S5-TASK-SUBTASK-1 (D-34/D-37/D-40) — ghi chú BẮT BUỘC: con số ở đây đếm theo LÁ (công việc
+        // có việc con thì đếm việc con, không đếm việc cha) nên có thể khác danh sách "Việc của tôi"/
+        // "Việc quá hạn"; người chỉ ôm việc cha (mọi con giao người khác) có thể hiện 0 việc đang làm.
+        leafCountingNote:
+          "Công việc có việc con được tính theo việc con (không tính việc cha) — số ở đây có thể khác danh sách công việc, và người chỉ phụ trách việc cha có thể hiện 0 việc đang làm trong biểu đồ tải bên dưới.",
         forbidden: {
           title: "Không có quyền truy cập",
           description: "Bạn không có quyền xem báo cáo tiến độ của dự án này.",
@@ -440,10 +445,61 @@ export default {
           generic: "Đã xảy ra lỗi. Vui lòng thử lại.",
         },
       },
+      // S5-TASK-SUBTASK-1 (DECISIONS-05 D-31) — việc con 1 cấp (TaskSubtaskPanel), đứng TRÊN checklist
+      // (phân rã công việc, khác hạng mục checklist trong đầu MỘT người).
+      subtasks: {
+        title: "Việc con",
+        addButton: "Thêm việc con",
+        empty: "Chưa có việc con nào.",
+        progress: "{{done}}/{{total}} việc con hoàn thành ({{pct}}%)",
+        belongsToParent: "Đây là việc con — thuộc công việc cha:",
+        viewParentAction: "Xem công việc cha",
+        unassigned: "Chưa giao",
+        // D-39 — con actor không có phạm vi ĐỌC riêng (chỉ thấy qua thừa hưởng từ cha): ẩn link/nút.
+        outOfScopeHint: "Bạn không có quyền xem chi tiết việc con này.",
+        moveUp: "Đưa lên trên",
+        moveDown: "Đưa xuống dưới",
+        editAction: "Sửa nhanh việc con",
+        deleteAction: "Xóa việc con",
+        fields: {
+          title: "Tiêu đề",
+          assignee: "Người thực hiện",
+          dueAt: "Hạn hoàn thành",
+        },
+        addDialog: {
+          title: "Thêm việc con",
+          confirm: "Thêm",
+          cancel: "Hủy",
+          saving: "Đang lưu…",
+        },
+        editDialog: {
+          title: "Sửa việc con",
+          confirm: "Lưu",
+          cancel: "Hủy",
+          saving: "Đang lưu…",
+        },
+        deleteDialog: {
+          title: "Xóa việc con",
+          description: 'Việc con "{{title}}" sẽ bị xóa mềm. Bạn có chắc chắn?',
+          confirm: "Xác nhận xóa",
+          cancel: "Hủy",
+        },
+        errors: {
+          loadFailed: "Không thể tải danh sách việc con. Vui lòng thử lại.",
+          validation: "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.",
+          forbidden: "Bạn không có quyền thực hiện thao tác này.",
+          notFound: "Không tìm thấy việc con hoặc công việc.",
+          server: "Lỗi hệ thống. Vui lòng thử lại sau.",
+          generic: "Đã xảy ra lỗi. Vui lòng thử lại.",
+        },
+      },
       activity: {
         title: "Lịch sử hoạt động",
         empty: "Chưa có hoạt động nào.",
         systemActor: "Hệ thống",
+        // S5-TASK-SUBTASK-1 (D-36) — nhãn dòng cũ→mới khi TASK_UPDATED đổi cha (activity-change.ts kind
+        // "parentLink"); BE không enrich tên cha (chỉ ghi UUID) nên hiển thị nhãn cố định, KHÔNG raw id.
+        parentLabel: "Việc con",
         errors: {
           loadFailed: "Không thể tải lịch sử hoạt động. Vui lòng thử lại.",
         },
@@ -691,6 +747,8 @@ export default {
         comments: "{{count}} bình luận",
         attachments: "{{count}} tệp đính kèm",
         checklist: "{{done}}/{{total}} hạng mục checklist hoàn thành",
+        // S5-TASK-SUBTASK-1 — badge tiến độ việc con (D-34, mẫu số COUNTABLE_CHILD loại Cancelled).
+        subtasks: "{{done}}/{{total}} việc con hoàn thành ({{pct}}%)",
       },
       // S5-TASK-WORKSPACE-1: nhóm filters.* cũ (rail đơn-chọn) đã gỡ — rail mới dùng workspace.rail.*.
     },

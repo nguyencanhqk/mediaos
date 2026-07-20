@@ -109,9 +109,15 @@ export class TaskActionsRepository {
     tx: TenantTx,
     companyId: string,
     taskId: string,
-  ): Promise<{ stateId: string | null; stateGroup: string | null } | undefined> {
+  ): Promise<
+    { stateId: string | null; stateGroup: string | null; parentTaskId: string | null } | undefined
+  > {
     const res = await tx.execute(sql`
-      select t.state_id as "stateId", ps.state_group as "stateGroup"
+      select t.state_id as "stateId", ps.state_group as "stateGroup",
+             -- S5-TASK-SUBTASK-1 (D-36): việc con KHÔNG có cột ⇒ syncStateWithStatusTx phải dừng TRƯỚC
+             -- khi auto-map. Thêm CÙNG LƯỢT với findRawByIdTx — thiếu một trong hai thì chốt tương ứng
+             -- im lặng không chạy.
+             t.parent_task_id as "parentTaskId"
         from tasks t
         left join project_states ps
           on ps.id = t.state_id and ps.company_id = t.company_id
@@ -119,7 +125,13 @@ export class TaskActionsRepository {
        where t.id = ${taskId} and t.company_id = ${companyId} and t.deleted_at is null
        limit 1
     `);
-    return (res.rows as unknown as { stateId: string | null; stateGroup: string | null }[])[0];
+    return (
+      res.rows as unknown as {
+        stateId: string | null;
+        stateGroup: string | null;
+        parentTaskId: string | null;
+      }[]
+    )[0];
   }
 
   /** Cột pipeline active của project, sort XÁC ĐỊNH cho bậc thang D-20 (sort_order trùng 0 là thường). */

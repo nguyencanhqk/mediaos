@@ -314,7 +314,12 @@ erDiagram
 
 ### tasks 🗑️
 
-`id` PK · company_id · project_id FK→projects(nullable) · `task_code` · title · description · creator_user_id · reporter_employee_id · `main_assignee_employee_id` FK→employees · `parent_task_id` 🔑 FK→tasks · priority(Low/Medium/High/Urgent) · status(Todo/In Progress/In Review/Done/Cancelled) · due_date · start_date · completed_at · + audit. *(Overdue = dẫn xuất từ due_date, KHÔNG lưu cứng.)*
+`id` PK · company_id · project_id FK→projects(nullable) · `task_code` · title · description · creator_user_id · reporter_employee_id · `main_assignee_employee_id` FK→employees · `parent_task_id` 🔑 FK→tasks · `sort_order` · priority(Low/Medium/High/Urgent) · status(Todo/In Progress/In Review/Done/Cancelled) · due_date · start_date · completed_at · + audit. *(Overdue = dẫn xuất từ due_date, KHÔNG lưu cứng.)*
+
+> **Cây việc con (S5-TASK-SUBTASK-1, mig 0503 — DECISIONS-05):** `parent_task_id` nay là đường sống (subtask THẬT, sâu ĐÚNG 1 cấp), `sort_order` dùng cho thứ tự việc con.
+> - `tasks_id_company_uq UNIQUE (id, company_id)` + `tasks_parent_same_company_fk FOREIGN KEY (parent_task_id, company_id) → (id, company_id) ON DELETE SET NULL (parent_task_id)` — **backstop tenant ở tầng DB**: RI-check của Postgres BỎ QUA RLS nên FK thường không chặn được cha cross-tenant. **Danh sách cột trong `SET NULL` là bắt buộc** (thiếu nó Postgres null hoá cả `company_id`, vốn NOT NULL ⇒ hard-delete nổ).
+> - `tasks_parent_active_idx (company_id, parent_task_id) WHERE deleted_at IS NULL AND parent_task_id IS NOT NULL` — phục vụ vị từ "lá" và aggregate tiến độ.
+> - `mv_dashboard_task_status` từ 0503 **đếm LÁ**: bỏ qua task còn việc con chưa huỷ (task có con thì chỉ đếm con). Định nghĩa chuẩn của ACTIVE_CHILD vs COUNTABLE_CHILD: DB-06 §4.16.
 
 | Bảng | Mô tả | Cột chính |
 | --- | --- | --- |

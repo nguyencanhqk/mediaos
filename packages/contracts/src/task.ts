@@ -590,6 +590,11 @@ export const listTaskCoreQuerySchema = z.object({
   dueFrom: z.string().datetime({ offset: true }).optional(),
   dueTo: z.string().datetime({ offset: true }).optional(),
   overdue: taskCoreOptionalBooleanParam(),
+  // S5-TASK-SUBTASK-1 (D-36) — chỉ lấy task GỐC (parent_task_id IS NULL). Mặc định FALSE ⇒ hành vi cũ
+  // nguyên vẹn (GET /tasks toàn cục + "Việc của tôi" + "Việc quá hạn" vẫn hiện cả con — D-37 "danh
+  // sách ≠ con số"). Tab Bảng/Danh sách của vỏ workspace dự án bật cờ này để giữ parity.
+  // Dùng CHUNG helper với `overdue`: boolean query param PHẢI idempotent (pipe nestjs-zod chạy 2 LẦN).
+  parentOnly: taskCoreOptionalBooleanParam(),
   limit: z.coerce.number().int().min(1).max(TASK_CORE_PAGE_LIMIT_MAX).optional(),
   offset: z.coerce.number().int().min(0).optional(),
 });
@@ -616,6 +621,12 @@ export const createTaskCoreSchema = z
      * hardcode 'Todo' khi có stateId — chống desync-lúc-sinh, plan 3c). Bỏ trống = is_default.
      */
     stateId: z.string().uuid().optional(),
+    /**
+     * S5-TASK-SUBTASK-1 (DECISIONS-05 D-31) — tạo VIỆC CON. Server ép: cây ĐÚNG 1 CẤP (cha phải là
+     * gốc), con cùng project với cha (projectId suy TỪ CHA — gửi kèm mà lệch ⇒ 400), state_id NULL
+     * (D-36: con ẩn khỏi board nên cột không mang nghĩa ⇒ gửi kèm stateId ⇒ 400).
+     */
+    parentTaskId: z.string().uuid().nullable().optional(),
   })
   .strict()
   .refine((v) => !v.startAt || !v.dueAt || v.dueAt >= v.startAt, {
@@ -645,6 +656,13 @@ export const updateTaskCoreSchema = z
      * KHÔNG nullable: spec không có thao tác "gỡ thẻ khỏi board".
      */
     stateId: z.string().uuid(),
+    /**
+     * S5-TASK-SUBTASK-1 (DECISIONS-05 D-31/D-33) — gán/gỡ cha sau khi tạo. `null` = gỡ khỏi cha (task
+     * thành GỐC KHÔNG CỘT — không tự đoán cột mặc định, người dùng kéo vào cột sau bằng move-state).
+     * Server ép trong CÙNG tx SAU khi khoá hàng (D-33): cha ≠ chính nó · cha tồn tại cùng company ·
+     * cha là GỐC (chặn tầng 3) · task CHƯA có con active (task đang làm cha không được thành con).
+     */
+    parentTaskId: z.string().uuid().nullable(),
   })
   .partial()
   .strict()
@@ -699,8 +717,55 @@ export const taskCoreResponseSchema = z.object({
   stateName: z.string().nullable().optional(),
   stateColor: z.string().nullable().optional(),
   stateGroup: projectStateGroupSchema.nullable().optional(),
+  // ── S5-TASK-SUBTASK-1 (DECISIONS-05) — cây việc con. `.optional()` additive, KHÔNG `.default()`
+  // (giữ Input=Output cho apiFetch<T> + deploy lệch pha FE/BE không gãy — cùng khuôn reporterName).
+  // parentTaskId NULL = task GỐC. subtaskTotal/subtaskDone theo COUNTABLE_CHILD (D-32): mẫu số LOẠI
+  // con Cancelled (việc đã huỷ không còn là việc), tử số = con 'Done'. Task 0 con ⇒ total 0 ⇒ FE
+  // KHÔNG hiện % (D-34: một nguồn duy nhất, KHÔNG fallback sang checklist — xem D-35).
+  parentTaskId: z.string().uuid().nullable().optional(),
+  subtaskTotal: z.number().int().nullable().optional(),
+  subtaskDone: z.number().int().nullable().optional(),
 });
 export type TaskCoreResponseDto = z.infer<typeof taskCoreResponseSchema>;
+
+/**
+ * GET /api/v1/tasks/:taskId/subtasks (TASK-API-701) — DTO HẸP, KHÔNG phải taskCoreResponseSchema.
+ *
+ * DECISIONS-05 D-39: quyền ĐỌC thừa hưởng từ cha (đọc được cha ⇒ thấy đủ con, kể cả con giao người
+ * khác) — cần thiết để `subtaskDone/subtaskTotal` khớp danh sách hiển thị, nếu không % mất nghĩa.
+ * ĐỔI LẠI, tập field phải HẸP NHẤT có thể: panel việc con không cần `description` (tới 20000 ký tự),
+ * `projectName`, `creatorName`, `reporterName`, `departmentId` — trả chúng qua đường thừa-hưởng là mở
+ * rộng phơi lộ mà không đổi lấy chức năng nào.
+ *
+ * `canOpen`: con có nằm trong phạm vi ĐỌC riêng của actor không (ghi KHÔNG thừa hưởng — D-39). FE dùng
+ * để render con ngoài tầm với ở dạng read-only, KHÔNG link (bấm vào `GET /tasks/:childId` sẽ 404) và
+ * KHÔNG nút sửa/xoá (sẽ 403). Server tính bằng 2 truy vấn tập hợp, KHÔNG phải N+1.
+ */
+export const subtaskListItemSchema = z.object({
+  id: z.string().uuid(),
+  taskCode: z.string().nullable(),
+  title: z.string(),
+  status: taskCoreStatusSchema.nullable(),
+  priority: taskCorePrioritySchema.nullable(),
+  mainAssigneeEmployeeId: z.string().uuid().nullable(),
+  assigneeName: z.string().nullable(),
+  dueAt: z.string().datetime().nullable(),
+  isOverdue: z.boolean(),
+  sortOrder: z.number().int().nullable(),
+  canOpen: z.boolean(),
+});
+export type SubtaskListItemDto = z.infer<typeof subtaskListItemSchema>;
+
+/**
+ * PATCH /api/v1/tasks/:taskId/subtasks/reorder (TASK-API-702, update:task trên CHA).
+ * `subtaskIds` phải KHỚP CHÍNH XÁC tập con active của cha (thiếu/thừa/lạ ⇒ 400) — chống ghi sort_order
+ * cho task của cha khác hoặc company khác. Thứ tự trong mảng = sort_order. KHÔNG ghi activity/audit
+ * (thay đổi trình bày, không phải vòng đời — DECISIONS-05).
+ */
+export const reorderSubtasksSchema = z
+  .object({ subtaskIds: z.array(z.string().uuid()).min(1).max(200) })
+  .strict();
+export type ReorderSubtasksRequest = z.infer<typeof reorderSubtasksSchema>;
 
 /** GET /api/v1/tasks/my (TASK-API-210) — mỗi dòng kèm `source` (assigned|created|watched). */
 export const myTaskItemSchema = taskCoreResponseSchema.extend({

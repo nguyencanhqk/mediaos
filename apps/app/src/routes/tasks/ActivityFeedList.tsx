@@ -51,6 +51,10 @@ export function ActivityFeedList({
       const d = new Date(value);
       return Number.isNaN(d.getTime()) ? value : formatDateTime(value);
     }
+    // S5-TASK-SUBTASK-1 — `value` ở đây là parentTaskId THÔ (UUID, BE không enrich tên cha). Không
+    // hiển thị raw id: value non-null CHỈ mang nghĩa "có cha" ⇒ dịch thành nhãn cố định (null vế kia
+    // đã render "—" ở trên = "độc lập").
+    if (change.kind === "parentLink") return t("tasks.detail.activity.parentLabel");
     return value; // state/assignee: tên đã lưu/enrich từ server
   };
 

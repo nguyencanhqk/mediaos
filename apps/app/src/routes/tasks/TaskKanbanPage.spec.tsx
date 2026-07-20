@@ -110,6 +110,33 @@ const MOCK_BOARD: TaskKanbanBoardDto = {
   ],
 };
 
+// S5-TASK-SUBTASK-1 — board ISOLATED riêng cho test badge subtask (KHÔNG đụng MOCK_BOARD dùng chung
+// bởi nhiều test đếm cột/rail ở trên — thêm task vào đó sẽ làm lệch số đếm của các test khác).
+const TASK_WITH_SUBTASKS: TaskKanbanCardDto = {
+  ...BASE_TASK,
+  id: "task-101",
+  title: "Việc có việc con",
+  subtaskTotal: 4,
+  subtaskDone: 1,
+};
+
+const TASK_ZERO_SIGNALS: TaskKanbanCardDto = {
+  ...BASE_TASK,
+  id: "task-102",
+  title: "Việc không tín hiệu nào",
+};
+
+const MOCK_BOARD_WITH_SUBTASKS: TaskKanbanBoardDto = {
+  projectId: "proj-001",
+  columns: [
+    { columnMode: "status", status: "Todo", tasks: [TASK_WITH_SUBTASKS, TASK_ZERO_SIGNALS] },
+    { columnMode: "status", status: "In Progress", tasks: [] },
+    { columnMode: "status", status: "In Review", tasks: [] },
+    { columnMode: "status", status: "Done", tasks: [] },
+    { columnMode: "status", status: "Cancelled", tasks: [] },
+  ],
+};
+
 function setCapabilities(caps: Record<string, boolean>) {
   useAuthStore.setState({
     isAuthenticated: true,
@@ -268,6 +295,23 @@ describe("TaskKanbanPage", () => {
         within(zeroCard).queryByTestId("kanban-card-badge-attachments"),
       ).not.toBeInTheDocument();
       expect(within(zeroCard).queryByTestId("kanban-card-badge-checklist")).not.toBeInTheDocument();
+    });
+
+    // S5-TASK-SUBTASK-1 — badge tiến độ việc con (D-34); early-return CŨ (chỉ xét 3 count) ẨN OAN
+    // badge subtask của thẻ 0 comment/file/checklist — plan fe mục 3 bắt buộc pin ca này.
+    it("renders the subtask badge even when comment/attachment/checklist are all 0 (early-return fix)", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD_WITH_SUBTASKS);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      await waitFor(() => expect(screen.getByText("Việc có việc con")).toBeInTheDocument());
+
+      const card = screen.getByTestId("kanban-card-task-101");
+      expect(within(card).getByTestId("kanban-card-badge-subtasks")).toHaveTextContent("1/4");
+
+      // Thẻ 0 CẢ BỐN count (kể cả subtask) — vẫn không render badge nào.
+      const zeroCard = screen.getByTestId("kanban-card-task-102");
+      expect(within(zeroCard).queryByTestId("kanban-card-badge-subtasks")).not.toBeInTheDocument();
+      expect(within(zeroCard).queryByTestId("kanban-card-badge-comments")).not.toBeInTheDocument();
     });
 
     it("shows avatar initials for assignee instead of raw name text", async () => {

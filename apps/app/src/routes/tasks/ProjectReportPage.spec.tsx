@@ -95,6 +95,19 @@ describe("ProjectReportPage", () => {
     expect(screen.getByText(/5 việc đang làm/i)).toBeInTheDocument();
   });
 
+  // S5-TASK-SUBTASK-1 (D-34/D-37/D-40) — ghi chú BẮT BUỘC: đếm-lá có thể khác danh sách + người chỉ
+  // ôm việc cha có thể hiện 0 trong biểu đồ tải.
+  it("renders the leaf-counting note (D-34) below the KPI tiles", async () => {
+    setCapabilities({ "view-report:project": true, "read:project": true });
+    vi.mocked(taskProjectApi.getReport).mockResolvedValue(REPORT);
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("project-report-leaf-counting-note")).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/được tính theo việc con/i)).toBeInTheDocument();
+  });
+
   it("shows empty state when the project has no tasks", async () => {
     setCapabilities({ "view-report:project": true });
     vi.mocked(taskProjectApi.getReport).mockResolvedValue(EMPTY_REPORT);

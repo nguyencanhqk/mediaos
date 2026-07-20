@@ -14,7 +14,7 @@ import type { TaskActivityLogResponseDto } from "@mediaos/contracts";
  * dueAt format ngày, state/assignee là text trần) — helper này THUẦN trích xuất, không dịch.
  */
 export interface ActivityChange {
-  kind: "status" | "state" | "assignee" | "priority" | "dueAt";
+  kind: "status" | "state" | "assignee" | "priority" | "dueAt" | "parentLink";
   oldValue: string | null;
   newValue: string | null;
 }
@@ -80,6 +80,21 @@ function extractByAction(
         oldValue: readString(oldV, "dueAt"),
         newValue: readString(newV, "dueAt"),
       };
+    // S5-TASK-SUBTASK-1 (D-36 "thẻ rời board không được biến mất câm") — TASK_UPDATED dùng CHUNG cho
+    // MỌI sửa field; chỉ dựng dòng cũ→mới khi log này LÀ sự kiện đổi cha. be-core CHỈ ghi `oldValues`
+    // cho nhánh này (task-core.service.ts ~652-657) nên kiểm SỰ CÓ MẶT của khoá `parentTaskId`, không
+    // chỉ action code — sửa field thường (title/description/...) KHÔNG có oldValues ⇒ vẫn null, không
+    // bịa dòng "— → —". `parentTaskId` chỉ là UUID (BE không enrich tên cha) nên KHÔNG hiển thị raw id
+    // — value non-null ở đây chỉ mang nghĩa "có cha" (formatChangeValue dịch thành nhãn cố định).
+    case "TASK_UPDATED":
+      if (oldV && "parentTaskId" in oldV) {
+        return {
+          kind: "parentLink",
+          oldValue: readString(oldV, "parentTaskId"),
+          newValue: readString(newV, "parentTaskId"),
+        };
+      }
+      return null;
     default:
       return null;
   }

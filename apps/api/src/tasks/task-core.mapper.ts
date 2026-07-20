@@ -61,6 +61,10 @@ export function toTaskCoreDto(row: TaskCoreRow): TaskCoreResponseDto {
     stateName: row.stateName ?? null,
     stateColor: row.stateColor ?? null,
     stateGroup: (row.stateGroup as ProjectStateGroupDto | null | undefined) ?? null,
+    // S5-TASK-SUBTASK-1 (D-31) — NULL = task GỐC. subtaskTotal/Done KHÔNG điền ở đây: chúng là
+    // aggregate, chỉ có ở đường board (toTaskKanbanCardDto) và getTask — mapper base không tự đoán 0
+    // vì "0 việc con" và "chưa tính" là hai chuyện khác nhau trước mắt FE.
+    parentTaskId: row.parentTaskId ?? null,
   };
 }
 
@@ -70,6 +74,10 @@ export interface TaskKanbanCardCounts {
   attachmentCount: number;
   checklistDone: number;
   checklistTotal: number;
+  // S5-TASK-SUBTASK-1 (D-34) — tiến độ thẻ cha. `subtaskTotal` LOẠI con Cancelled (COUNTABLE_CHILD,
+  // D-32). total = 0 ⇒ FE KHÔNG hiện % (task không có việc con thì không có tiến độ để nói).
+  subtaskDone: number;
+  subtaskTotal: number;
 }
 
 /**

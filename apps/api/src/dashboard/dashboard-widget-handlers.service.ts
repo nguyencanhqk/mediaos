@@ -401,18 +401,22 @@ export class DashboardWidgetHandlersService {
         message: "project-progress bắt buộc project_id",
       });
     }
-    const rows = await this.tasks.listByProject(ctx.user.companyId, projectId, { limit: 200 });
-    // BUG1 fix: TaskCoreService (S4-TASK-BE-*, luồng work-item/Kanban hiện đại) CHỈ ghi task_status
-    // (TitleCase) — KHÔNG BAO GIỜ đụng `status` legacy (lowercase, giữ DEFAULT 'not_started' vĩnh viễn cho
-    // task tạo qua luồng hiện đại). byStatus/done PHẢI đọc task_status HIỆN ĐẠI, không phải status legacy.
-    const byStatus: Record<string, number> = {};
-    let done = 0;
-    for (const r of rows) {
-      const s = r.taskStatus ?? "Unknown";
-      byStatus[s] = (byStatus[s] ?? 0) + 1;
-      if (r.taskStatus === "Done") done += 1;
-    }
-    const total = rows.length;
+    // ── S5-TASK-SUBTASK-1 (DECISIONS-05 D-35) — MỘT CÔNG THỨC, MỘT CON SỐ ─────────────────────────
+    // TRƯỚC: đếm trong bộ nhớ từ listByProject(limit 200) — không lọc parent VÀ âm thầm cắt ở 200 hàng.
+    // Sau khi MV dashboard chuyển sang ĐẾM LÁ (mig 0503), cùng MỘT màn dashboard sẽ hiện hai con số
+    // khác nhau cho cùng dự án (widget task-status đếm lá vs project-progress đếm thô) — tệ hơn hẳn
+    // "dashboard ≠ danh sách" mà owner đã chấp nhận. Nay dùng CHUNG vị từ lá với báo cáo dự án; đồng
+    // thời bỏ luôn cái cắt-200 (dự án >200 task trước đây báo % sai).
+    // ⚠️ Gọi METHOD HẸP countsByStatusLeafTx, KHÔNG gọi aggregateReportTx: cái sau nằm sau gate
+    // view-report:project SENSITIVE và kèm PII assigneeWorkload — xem docblock của method đó.
+    // ⚠️ Authorize project đã chạy ở gateProjectProgress (:386) — method hẹp KHÔNG tự scope theo actor.
+    const byStatus = await this.projects.countsByStatusLeaf(ctx.user.companyId, projectId);
+    // ⚠️ HÌNH DẠNG ĐỔI CÓ CHỦ ĐÍCH so với bản cũ: MẤT key "Unknown" (task_status NULL nay coalesce về
+    // 'Todo' — cùng quy ước với báo cáo dự án) và THÊM các key giá trị 0 (luôn đủ 5 trạng thái chuẩn).
+    // `total` vì thế phải TỰ DẪN XUẤT từ tổng các key LÁ, KHÔNG còn là rows.length; "Empty" nay nghĩa là
+    // "0 công việc LÁ" chứ không phải "0 công việc".
+    const done = byStatus.Done ?? 0;
+    const total = Object.values(byStatus).reduce((sum, n) => sum + n, 0);
     const percent = total > 0 ? Math.round((done / total) * 100) : 0;
     return {
       status: total === 0 ? "Empty" : "Active",

@@ -43,6 +43,7 @@ import {
   UpdateTaskChecklistDto,
   UpdateTaskChecklistItemDto,
   UpdateTaskCommentDto,
+  ReorderSubtasksDto,
   UpdateTaskCoreDto,
   UpdateTaskStatusDto,
 } from "./tasks.dto";
@@ -166,6 +167,37 @@ export class TasksController {
   @RequirePermission("read", "task")
   getTask(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
     return this.taskCore.getTask(req.user, taskId);
+  }
+
+  /**
+   * GET /tasks/:taskId/subtasks — danh sách VIỆC CON của một việc cha (TASK-API-701,
+   * S5-TASK-SUBTASK-1 · DECISIONS-05 D-39). Gate read:task; phạm vi kiểm trên CHA, con thừa hưởng
+   * quyền ĐỌC (không lọc thêm — nếu lọc thì subtaskDone/Total lệch danh sách hiển thị, % mất nghĩa).
+   * Trả MẢNG TRẦN (khớp GET /tasks/:id/watchers) — client KHÔNG được khai schema {data,meta}.
+   * Task không có con ⇒ mảng rỗng (KHÔNG 404).
+   */
+  @Get(":taskId/subtasks")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("read", "task")
+  listSubtasks(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
+    return this.taskCore.listSubtasks(req.user, taskId);
+  }
+
+  /**
+   * PATCH /tasks/:taskId/subtasks/reorder — đổi thứ tự việc con (TASK-API-702). Gate update:task +
+   * phạm vi GHI trên CHA. Tập id gửi lên phải KHỚP CHÍNH XÁC tập việc con hiện có (thiếu/thừa/lạ ⇒
+   * 400) — chống ghi sort_order cho việc con của cha khác hoặc company khác.
+   * KHÔNG ghi activity/audit: đổi thứ tự là thay đổi TRÌNH BÀY, không phải vòng đời công việc.
+   */
+  @Patch(":taskId/subtasks/reorder")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "task")
+  reorderSubtasks(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Body() dto: ReorderSubtasksDto,
+  ) {
+    return this.taskCore.reorderSubtasks(req.user, taskId, dto.subtaskIds);
   }
 
   /**

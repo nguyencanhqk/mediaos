@@ -43,6 +43,8 @@ describe("task-core.mapper — toTaskKanbanCardDto (SPEC-06 §13.8, S5-TASK-BE-6
       attachmentCount: 1,
       checklistDone: 1,
       checklistTotal: 3,
+      subtaskDone: 0,
+      subtaskTotal: 0,
     });
 
     expect(card).toMatchObject(base);
@@ -58,6 +60,8 @@ describe("task-core.mapper — toTaskKanbanCardDto (SPEC-06 §13.8, S5-TASK-BE-6
       attachmentCount: 0,
       checklistDone: 0,
       checklistTotal: 0,
+      subtaskDone: 0,
+      subtaskTotal: 0,
     });
 
     expect(card.commentCount).toBe(0);
@@ -72,7 +76,45 @@ describe("task-core.mapper — toTaskKanbanCardDto (SPEC-06 §13.8, S5-TASK-BE-6
       attachmentCount: 0,
       checklistDone: 2,
       checklistTotal: 2,
+      subtaskDone: 0,
+      subtaskTotal: 0,
     });
     expect(card.checklistDone).toBeLessThanOrEqual(card.checklistTotal ?? 0);
+  });
+
+  // ── S5-TASK-SUBTASK-1 (DECISIONS-05 D-34/D-35) ────────────────────────────────────────────────
+  it("tiến độ việc con là badge ĐỘC LẬP với checklist — hai khái niệm khác nhau, KHÔNG gộp (D-35)", () => {
+    const card = toTaskKanbanCardDto(baseRow, {
+      commentCount: 0,
+      attachmentCount: 0,
+      checklistDone: 3,
+      checklistTotal: 4,
+      subtaskDone: 1,
+      subtaskTotal: 2,
+    });
+    expect(card.checklistDone).toBe(3);
+    expect(card.checklistTotal).toBe(4);
+    expect(card.subtaskDone).toBe(1);
+    expect(card.subtaskTotal).toBe(2);
+  });
+
+  it("task KHÔNG có việc con ⇒ subtaskTotal = 0 (FE dùng làm cờ 'không hiện %' — D-34)", () => {
+    const card = toTaskKanbanCardDto(baseRow, {
+      commentCount: 0,
+      attachmentCount: 0,
+      checklistDone: 0,
+      checklistTotal: 0,
+      subtaskDone: 0,
+      subtaskTotal: 0,
+    });
+    expect(card.subtaskTotal).toBe(0);
+  });
+
+  it("parentTaskId map ra DTO: NULL = task gốc (D-31)", () => {
+    expect(toTaskCoreDto(baseRow).parentTaskId).toBeNull();
+    expect(
+      toTaskCoreDto({ ...baseRow, parentTaskId: "11111111-1111-4111-8111-111111111111" })
+        .parentTaskId,
+    ).toBe("11111111-1111-4111-8111-111111111111");
   });
 });

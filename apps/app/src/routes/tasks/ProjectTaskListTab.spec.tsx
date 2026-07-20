@@ -138,6 +138,7 @@ describe("ProjectTaskListTab", () => {
       projectId: "proj-001",
       limit: 200,
       offset: 0,
+      parentOnly: true,
     });
     // Cột "Dự án" ẩn mặc định (workspace 1 dự án) — không render tên dự án.
     expect(screen.queryByText("Dự án A")).not.toBeInTheDocument();

@@ -183,6 +183,7 @@ Tài liệu này chốt các quyết định làm thay đổi ngữ nghĩa đã 
   1. Tập giá trị `taskStatus[].status` của `GET /dashboard/mv-stats` đổi lowercase→TitleCase. Contract `taskStatusStatSchema.status = z.string()` không vỡ; **0 consumer FE** (chỉ web-core client chưa ai gọi) — đổi bây giờ là rẻ nhất.
   2. `mv_dashboard_output` (sản lượng theo channel — media-era, PARKED de-media-fy) **GIỮ NGUYÊN** đếm theo `status` legacy: cùng lớp sai nhưng 0 consumer + thuộc phạm vi WO dọn de-media-fy, không sửa ở đây (tránh scope creep vào bảng park).
   3. Đếm-lá cho subtask (owner chốt 18/07) KHÔNG thuộc WO này — S5-TASK-SUBTASK-1 sẽ thêm điều kiện lá lên ĐÚNG công thức canonical này (lý do WO này phải đi TRƯỚC).
+     - **Cập nhật 20/07/2026 — đã áp:** [DECISIONS-05](<DECISIONS-05_Task_Subtask_And_Leaf_Counting.md>) D-34 + migration `0503` thêm vị từ lá (`COUNTABLE_CHILD`, D-32) lên ĐÚNG công thức canonical này; công thức D-30 giữ NGUYÊN VĂN, chỉ thêm điều kiện lá.
 - **Rollback:** migration DROP+CREATE lại định nghĩa 0102 (MV là dữ liệu dẫn xuất — không mất dữ liệu gốc).
 - **Người quyết định / Trạng thái:** Đề xuất bởi phiên S5-DASH-TASKSTATUS-FIX-1 — **owner chốt khi merge PR (vùng đỏ, người chốt)**.
 
