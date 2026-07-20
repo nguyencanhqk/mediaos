@@ -343,5 +343,11 @@ export const AUDIT_OBJECT_TYPES = [
   // 0491/0474/0468/0464/0456/0446/0440), append-only #2 nguyên vẹn; INSERT audit KHÔNG vỡ
   // audit_logs_object_type_chk trên Postgres thật.
   "employee_import",
+  // S5-GOAL-DB-1 (mig 0506): GOAL create/update/delete/checkin/finalize/reopen ghi audit object_type='goal'
+  // audit-in-tx app-tenant (GOAL-BE). before/after = snapshot mục tiêu (name/level/period/progress/status) —
+  // KHÔNG salary/PII/secret vào before/after (BẤT BIẾN #3 — masker che nếu lọt). 0506 UNION ADD-only vào CHECK
+  // (clone 0474 DO-block, dạng '{...}' ANY), append-only #2 nguyên vẹn; INSERT audit KHÔNG vỡ
+  // audit_logs_object_type_chk trên Postgres thật.
+  "goal",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

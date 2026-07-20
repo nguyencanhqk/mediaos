@@ -1289,6 +1289,34 @@
       "when": 1717587305000,
       "tag": "0503_s5_subtask1_leaf_counting",
       "breakpoints": true
+    },
+    {
+      "idx": 184,
+      "version": "7",
+      "when": 1717587306000,
+      "tag": "0504_s5_goaldb1_goal_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 185,
+      "version": "7",
+      "when": 1717587307000,
+      "tag": "0505_s5_goaldb1_tasks_goal_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 186,
+      "version": "7",
+      "when": 1717587308000,
+      "tag": "0506_s5_goaldb1_seed_module_perms_counter_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 187,
+      "version": "7",
+      "when": 1717587309000,
+      "tag": "0507_s5_goaldb1_noti_catalog_goal",
+      "breakpoints": true
     }
   ]
 }

@@ -2791,4 +2791,58 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+
+  // ── S5-GOAL-DB-1 (mig 0504) goals + goal_updates — cây mục tiêu + sổ check-in (DB-11 §6.1/§6.2) ──
+  // company_id NOT NULL + RLS+FORCE literal-GUC → PHẢI ở harness (rls-guards "không bảng company_id thiếu
+  // case"). KHÔNG skipNoContext (mọi hàng tenant-scoped). goals: soft-delete (app SELECT/INSERT/UPDATE).
+  // goal_updates: APPEND-ONLY (app SELECT,INSERT — mutate-deny kiểm ở goal-db-seed.int-spec; seedRow dùng
+  // direct/superuser nên chèn OK). Seed goal EMPLOYEE-level (owner=employee) — chỉ FK employee_profiles +
+  // users; cleanup qua companies/users CASCADE (goals.employee_id/owner_employee_id + goal_updates.* CASCADE).
+  {
+    name: "goals",
+    table: "goals",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `goal-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const empId = emp.rows[0].id as string;
+      const r = await direct.query(
+        `INSERT INTO goals
+           (company_id, goal_code, name, level, employee_id, owner_employee_id,
+            period_type, period_start, period_end)
+         VALUES ($1, $2, 'rls-goal', 'employee', $3, $3, 'quarter', '2026-01-01', '2026-03-31')
+         RETURNING id`,
+        [t.companyId, `GOAL-${randomUUID().slice(0, 8)}`, empId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "goal_updates",
+    table: "goal_updates",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `gupd-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const empId = emp.rows[0].id as string;
+      const goal = await direct.query(
+        `INSERT INTO goals
+           (company_id, goal_code, name, level, employee_id, owner_employee_id,
+            period_type, period_start, period_end)
+         VALUES ($1, $2, 'rls-goal-upd', 'employee', $3, $3, 'quarter', '2026-01-01', '2026-03-31')
+         RETURNING id`,
+        [t.companyId, `GOAL-${randomUUID().slice(0, 8)}`, empId],
+      );
+      const r = await direct.query(
+        `INSERT INTO goal_updates (company_id, goal_id, update_type, actor_user_id, note)
+         VALUES ($1, $2, 'checkin', $3, 'rls-checkin') RETURNING id`,
+        [t.companyId, goal.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 ];
