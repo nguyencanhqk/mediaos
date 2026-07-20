@@ -75,9 +75,16 @@ nút trong `TaskFilePanel` · thẻ board render bìa · int-spec deny-path.
 
 ### 2.1 Repository (`apps/api/src/tasks/task-file.repository.ts`)
 
-Thêm 2 method (giữ khuôn hiện có: nhận `tx` + `companyId`, AND `company_id` tường minh dù đã có RLS):
+Thêm **3** method (giữ khuôn hiện có: nhận `tx` + `companyId`, AND `company_id` tường minh dù đã có RLS).
+⚠️ rev2 ghi "2 method" nhưng §2.2 bước 3 cần thêm một cái nữa cho vị từ độc quyền — khai luôn ở đây kẻo
+lúc code lại đi query ad-hoc trong service:
 
 ```text
+countOtherLiveLinksTx(tx, companyId, taskId, fileId): Promise<number>
+  đếm link SỐNG của fileId ở BẤT KỲ entity nào KHÁC (task này). >0 ⇒ 409 ở setCover.
+  ⚠️ phải KHỚP LOGIC với vị từ NOT EXISTS ở §3.1 — lệch nhau thì setCover cho qua mà
+     đường đọc lại trả null (bìa "đặt được nhưng không hiện").
+
 findPrimaryLinkTx(tx, companyId, taskId): Promise<{ linkId, fileId } | undefined>
   SELECT ... FROM file_links
   WHERE company_id, module_code='TASK', entity_type='task', entity_id=taskId,
@@ -394,13 +401,13 @@ Sao khuôn `apps/api/test/integration/task-files-access.int-spec.ts`: gate
 | 1 | đặt bìa bằng file **không thuộc task** | 404 |
 | 2 | file **cross-tenant** | 404 (RLS 0-row, không lộ tồn tại) |
 | 3 | task **ngoài data_scope** | 404 (không 403-sau-200) |
-| 4 | file **không phải ảnh** (application/pdf) | 400/415 |
+| 4 | file **không phải ảnh** (application/pdf) | **415** (§7.2 đã chốt — KHÔNG phải 400) |
 | 5 | file `scanStatus='Infected'` | 409 |
 | 6 | file `uploadStatus!=='Uploaded'` | 409 |
 | 7 | **thiếu `file-upload:task`** | 403 |
 | 8 | đặt bìa mới khi đã có bìa cũ | 200, đúng **1** row `is_primary` |
 | 9 | đặt lại chính bìa hiện tại | 200 idempotent, vẫn 1 row |
-| 10 | gỡ bìa khi **không có** bìa | 204 idempotent (không 404) |
+| 10 | gỡ bìa khi **không có** bìa | 204 idempotent (không 404) — ⚠️ cần `@HttpCode(204)` tường minh, Nest mặc định DELETE trả 200 |
 | 11 | soft-delete tệp đang là bìa → đọc task | `coverUrl: null`, **không 500** |
 | 12 | `coverUrl` có mặt trên cả 6 đường đọc §3.4 (kể cả `move-state`) | 🔧 assert URL **đã ký** (có tham số chữ ký), KHÔNG chỉ `typeof === "string"` |
 | 13 | DTO **không bao giờ** chứa `storage_path`/fileId thô | assert vắng mặt |
@@ -408,7 +415,12 @@ Sao khuôn `apps/api/test/integration/task-files-access.int-spec.ts`: gate
 | 🔧 15 | file link vào **2 task** | không ký ở **cả hai** |
 | 🔧 16 | `findVerifiedTaskCoversTx` với `taskIds` của **tenant khác** | 0 dòng (RLS) — rev1 chỉ phủ cross-tenant ở đường GHI |
 | 🔧 17 | soft-delete tệp-đang-là-bìa → **đặt bìa mới** | 200 + đúng **1** primary (không 23505 từ primary mồ côi) |
-| 🔧 18 | hai lời gọi `setCover` **đồng thời** | một 200 một 409 — không 2 primary, **không 500** |
+| 🔧 18 | hai lời gọi `setCover` **đồng thời** | ⚠️ **không** lời gọi nào 500 · `COUNT(is_primary)=1` · ≥1 lời gọi 200. **409 là kết cục CHẤP NHẬN ĐƯỢC, KHÔNG bắt buộc** |
+
+⚠️ **Ca 18 — cẩn thận assertion tự mâu thuẫn với advisory lock.** rev2 ghi "một 200 một 409"; SAI về logic:
+nếu lock chạy **đúng**, T2 chờ xong sẽ đọc primary MỚI qua `FOR UPDATE` → hạ → nâng ⇒ **cả hai đều 200**.
+Assert cứng "phải có một 409" sẽ **RED khi code ĐÚNG**, và cám dỗ người code đi nới lock cho hết đỏ —
+tức là tự tay gỡ chính bản vá đồng thời. Assert bất biến (đúng 1 primary, không 500), không assert cơ chế.
 
 🔧 **Bẫy dựng fixture ca 5:** `FileService.link` **từ chối** file `Infected` (`files.service.ts:568`) ⇒ không
 link thẳng được. Phải link khi `Clean` rồi flip `scan_status` qua `directPool`. Ca 6 thì ổn — `link` không
@@ -471,6 +483,27 @@ invalidate đủ 3 khoá.
    do WO này**. Verify trên lane DB riêng (`LANE_DB=mediaos_cover1`).
 7. **Stacked PR** — nhánh này cắt từ `feat/s5-task-ux-batch` (chưa merge). Sau khi PR đó squash-merge,
    PR này thành CONFLICTING; phải rebase lên master. (memory `squash-merge-breaks-stacked-prs`)
+
+---
+
+## 8b. Cảnh báo mang theo lúc code (plan-review vòng 3 — PASS kèm các mục này)
+
+1. **Vị từ "bìa hợp lệ" sẽ tồn tại ở HAI nơi** — `foundation/files/file.repository.ts` (đường ký) và
+   `tasks/task-file.repository.ts` (`isCover`). Lệch nhau ⇒ panel nói "đang là bìa" mà board trống.
+   Tách thành một hằng/builder dùng chung, hoặc tối thiểu docblock trỏ chéo hai chiều.
+   (Cùng lớp với `countOtherLiveLinksTx` ↔ `NOT EXISTS` ở §2.1.)
+2. **Câu hỏi mở §3.1 đã có câu trả lời — đừng để lơ lửng qua FULL gate.**
+   `task-file.resolver.ts:42` đăng ký `entityTypes = [TASK_ENTITY]`, và toàn bộ `apps/api/src/tasks/**`
+   chỉ dùng `TASK_ENTITY` ⇒ **không có luồng nào tạo `module='TASK'` + `entity_type='project'`** ⇒ không có
+   false-negative. Xác nhận lại bằng 1 query trên lane DB rồi ghi kết luận vào plan.
+3. **`audit.record` cần nhiều field hơn snippet §2.2** — `actorUserId`, `moduleCode`, `entityType`,
+   `entityId`, `resultStatus`, `dataScope`. Khuôn: `files.service.ts:591-604`. tsc bắt, nhưng copy đúng
+   khuôn từ đầu cho nhanh.
+4. **`classid` của advisory lock phải là hằng số ĐẶT TÊN RÕ trong `common/`**, không nhét magic number tại
+   chỗ — không gian khoá advisory là toàn cục, module sau sẽ va.
+5. **Sửa `src[]` của WO phải sửa TRỌN 3 câu sai, không chỉ câu đầu:** (a) `linkType='Cover'` ở mục phương
+   án, (b) `linkType='Cover'` trong mô tả `findVerifiedTaskCoversTx`, (c) `scan≠Infected` ở **cả** mục đọc
+   **lẫn** mục "tính chất an toàn". Bỏ sót một câu là để lại chính cái tiền đề sai cho phiên sau.
 
 ---
 
