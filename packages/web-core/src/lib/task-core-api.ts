@@ -4,10 +4,12 @@ import {
   myTaskItemSchema,
   taskActionResponseSchema,
   taskWatcherResponseSchema,
+  subtaskListItemSchema,
   type TaskCoreResponseDto,
   type MyTaskItemDto,
   type TaskActionResponseDto,
   type TaskWatcherResponseDto,
+  type SubtaskListItemDto,
   type ListTaskCoreQueryRequest,
   type CreateTaskCoreRequest,
   type UpdateTaskCoreRequest,
@@ -15,6 +17,7 @@ import {
   type ChangeTaskStatusRequest,
   type ChangeTaskPriorityRequest,
   type ChangeTaskDeadlineRequest,
+  type ReorderSubtasksRequest,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -42,6 +45,12 @@ import { buildQueryString } from "./api-params";
  * đổi sang TaskCommentsService (content/mentionEmployeeIds, S4-TASK-BE-4) nên schema `commentSchema` cũ
  * (`body`, không mention) FAIL Zod validate ở response thật. Dùng `taskCollabApi.listComments/addComment/
  * updateComment/deleteComment` (task-collab-api.ts) — cùng URL, đúng schema mới.
+ *
+ * Việc con (S5-TASK-SUBTASK-1, DECISIONS-05): `listSubtasks`/`reorderSubtasks` nối TASK-API-701/702.
+ * `listSubtasks` trả MẢNG TRẦN theo `subtaskListItemSchema` (DTO HẸP D-39 — KHÔNG phải
+ * taskCoreResponseSchema, KHÔNG khai envelope {data,meta} — bẫy apifetch-drops-pagination-bare-array).
+ * Tạo/sửa/xoá 1 việc con dùng LẠI createTask/updateTask/deleteTask ở trên (KHÔNG endpoint riêng) —
+ * tạo con truyền `parentTaskId`, KHÔNG gửi kèm `projectId`/`stateId` (BE suy từ cha, gửi lệch → 400).
  */
 export const taskCoreApi = {
   /** GET /tasks — danh sách task theo data-scope thật (read:task). Filter status/priority/assignee/project/
@@ -113,4 +122,19 @@ export const taskCoreApi = {
   /** DELETE /tasks/:id/watchers/:watcherId — bỏ theo dõi self-only (watch:task, 204; của người khác → 404). */
   removeWatcher: (id: string, watcherId: string): Promise<void> =>
     apiFetch(`/tasks/${id}/watchers/${watcherId}`, z.void(), { method: "DELETE" }),
+
+  /** GET /tasks/:taskId/subtasks (TASK-API-701, read:task, scope trên CHA — D-39 đọc thừa hưởng).
+   * Task không có con ⇒ mảng rỗng (KHÔNG 404). */
+  listSubtasks: (taskId: string): Promise<SubtaskListItemDto[]> =>
+    apiFetch(`/tasks/${taskId}/subtasks`, z.array(subtaskListItemSchema)),
+
+  /** PATCH /tasks/:taskId/subtasks/reorder (TASK-API-702, update:task + scope GHI trên CHA). Tập
+   * `subtaskIds` phải KHỚP CHÍNH XÁC tập con hiện có (thiếu/thừa/lạ → 400). Trả MẢNG TRẦN đã sắp lại
+   * (server-side, cùng schema với listSubtasks) — KHÔNG ghi activity/audit (thay đổi trình bày, không
+   * phải vòng đời — DECISIONS-05). */
+  reorderSubtasks: (taskId: string, body: ReorderSubtasksRequest): Promise<SubtaskListItemDto[]> =>
+    apiFetch(`/tasks/${taskId}/subtasks/reorder`, z.array(subtaskListItemSchema), {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
 };

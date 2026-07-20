@@ -704,7 +704,7 @@ export class TaskCoreRepository {
     if (unique.length === 0) return [];
     const res = await tx.execute(sql`
       select id from tasks
-       where company_id = ${companyId} and id = any(${unique}::uuid[])
+       where company_id = ${companyId} and id = any(${sql.param(unique)}::uuid[])
        order by id
          for update
     `);
@@ -771,7 +771,7 @@ export class TaskCoreRepository {
              count(*)::int                                     as "total"
         from tasks
        where company_id = ${companyId}
-         and parent_task_id = any(${parentIds}::uuid[])
+         and parent_task_id = any(${sql.param(parentIds)}::uuid[])
          and deleted_at is null
          and task_status is distinct from 'Cancelled'
        group by parent_task_id

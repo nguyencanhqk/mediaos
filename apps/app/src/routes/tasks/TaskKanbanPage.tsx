@@ -1,7 +1,7 @@
 import { useMemo, useState, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageSquare, Paperclip, ListChecks, Settings2 } from "lucide-react";
+import { MessageSquare, Paperclip, ListChecks, ListTree, Settings2 } from "lucide-react";
 import {
   taskCollabApi,
   taskKeys,
@@ -52,6 +52,11 @@ import {
  * rail đơn-chọn cũ). Lọc/sắp vẫn CLIENT-SIDE trong từng cột qua helper workspace-constants (cùng
  * predicate với tab Danh sách ⇒ parity theo cấu trúc). Header cột giữ SỐ GỐC (SPEC-06 §13.8 — không
  * đổi theo bộ lọc); rail đếm theo tập đã lọc toolbar (TRƯỚC lọc assignee).
+ *
+ * S5-TASK-SUBTASK-1 — badge THỨ 4 `subtaskDone/subtaskTotal` (D-34, mẫu số COUNTABLE_CHILD loại
+ * Cancelled), chỉ render khi `subtaskTotal > 0`. Field kế thừa từ `taskCoreResponseSchema` qua
+ * `.extend()` (contracts task-collab.ts) — KHÔNG cần đổi schema Kanban riêng. Badge RIÊNG với checklist
+ * (hai khái niệm khác nhau — D-31) — KHÔNG đụng badge checklist.
  */
 const COMPLETED_STATUSES = new Set<TaskCoreStatusDto>(["Done", "Cancelled"]);
 const EMPTY_SELECTION: ReadonlySet<string> = new Set();
@@ -75,8 +80,15 @@ function KanbanCardBadges({ task }: { task: TaskKanbanCardDto }) {
   const attachmentCount = task.attachmentCount ?? 0;
   const checklistTotal = task.checklistTotal ?? 0;
   const checklistDone = task.checklistDone ?? 0;
+  // S5-TASK-SUBTASK-1 — badge tiến độ việc con (D-34, mẫu số COUNTABLE_CHILD loại Cancelled). Badge
+  // RIÊNG với checklist (D-31/D-35 "hai khái niệm khác nhau" — KHÔNG gộp, KHÔNG thay).
+  const subtaskTotal = task.subtaskTotal ?? 0;
+  const subtaskDone = task.subtaskDone ?? 0;
 
-  if (commentCount <= 0 && attachmentCount <= 0 && checklistTotal <= 0) return null;
+  // ⚠️ Early-return PHẢI xét đủ 4 count — thẻ có subtask mà 0 comment/file/checklist từng KHÔNG
+  // render badge nào nếu chỉ xét 3 count cũ (bẫy đã ghi trong plan fe mục 3).
+  if (commentCount <= 0 && attachmentCount <= 0 && checklistTotal <= 0 && subtaskTotal <= 0)
+    return null;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
@@ -111,6 +123,20 @@ function KanbanCardBadges({ task }: { task: TaskKanbanCardDto }) {
         >
           <ListChecks className="h-3 w-3" aria-hidden="true" />
           {checklistDone}/{checklistTotal}
+        </Badge>
+      )}
+      {subtaskTotal > 0 && (
+        <Badge
+          variant="muted"
+          title={t("tasks.kanban.badges.subtasks", {
+            done: subtaskDone,
+            total: subtaskTotal,
+            pct: Math.round((subtaskDone / subtaskTotal) * 100),
+          })}
+          data-testid="kanban-card-badge-subtasks"
+        >
+          <ListTree className="h-3 w-3" aria-hidden="true" />
+          {subtaskDone}/{subtaskTotal}
         </Badge>
       )}
     </div>

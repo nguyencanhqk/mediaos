@@ -21,6 +21,12 @@ import { PROJECT_REPORT_PAIR } from "./task-file-constants";
  *
  * S5-TASK-WORKSPACE-1: phần thân tách thành `ProjectReportContent` — tab "Báo cáo" của workspace dự án
  * mount TRỰC TIẾP content (không back/header); route trang này GIỮ NGUYÊN cho bookmark/deep-link cũ.
+ *
+ * S5-TASK-SUBTASK-1 (D-34/D-37/D-40) — con số ở đây đếm theo LÁ (server, `projects.repository.ts`
+ * `countsByStatus`/`overdueCount`/`assigneeWorkload` dùng vị từ `isLeaf`), KHÁC danh sách "Việc của
+ * tôi"/"Việc quá hạn" (tính CẢ cha lẫn con) — ghi chú BẮT BUỘC hiển thị dưới KPI để người dùng không
+ * hiểu nhầm là bug khi số ở đây ≠ số ở danh sách, và người chỉ ôm task cha có thể hiện 0 trong
+ * `assigneeWorkload` (D-34 hệ quả #3).
  */
 const STATUS_ORDER: Array<keyof ProjectReportCountsByStatusDto> = [
   "Todo",
@@ -113,6 +119,13 @@ export function ProjectReportContent({ projectId }: { projectId: string }) {
           value={report.overdueCount}
         />
       </div>
+
+      {/* S5-TASK-SUBTASK-1 (D-34/D-37/D-40) — ghi chú BẮT BUỘC: con số ở đây đếm theo LÁ (task có
+          việc con thì đếm việc con, không đếm việc cha) — khác quy tắc "danh sách việc phải làm"
+          (Việc của tôi/Việc quá hạn tính CẢ cha lẫn con). Không phải bug — đây là hệ quả đã ADR hoá. */}
+      <p className="text-xs text-muted-foreground" data-testid="project-report-leaf-counting-note">
+        {t("projects.report.page.leafCountingNote")}
+      </p>
 
       {/* Breakdown theo 5 status (gồm Cancelled) */}
       <Card className="space-y-3 p-4">

@@ -86,6 +86,40 @@ describe("extractActivityChange", () => {
     expect(extractActivityChange({ ...BASE, action: "TASK_CREATED" })).toBeNull();
   });
 
+  // S5-TASK-SUBTASK-1 (D-36 "thẻ rời board không được biến mất câm") — TASK_UPDATED dùng CHUNG cho
+  // MỌI sửa field; chỉ dựng dòng cũ→mới khi oldValues mang khoá parentTaskId (be-core CHỈ ghi khi
+  // parentChanged).
+  it("TASK_UPDATED + oldValues.parentTaskId hiện diện (gán cha) → kind parentLink", () => {
+    const c = extractActivityChange({
+      ...BASE,
+      action: "TASK_UPDATED",
+      oldValues: { parentTaskId: null, stateId: "s1" },
+      newValues: { title: "x", parentTaskId: "p-1", stateId: null },
+    });
+    expect(c).toEqual({ kind: "parentLink", oldValue: null, newValue: "p-1" });
+  });
+
+  it("TASK_UPDATED + gỡ cha (parentTaskId cũ khác null, mới null) → kind parentLink", () => {
+    const c = extractActivityChange({
+      ...BASE,
+      action: "TASK_UPDATED",
+      oldValues: { parentTaskId: "p-1", stateId: null },
+      newValues: { title: "x", parentTaskId: null, stateId: null },
+    });
+    expect(c).toEqual({ kind: "parentLink", oldValue: "p-1", newValue: null });
+  });
+
+  it("TASK_UPDATED sửa field thường (KHÔNG có oldValues) → null (không bịa dòng cũ→mới)", () => {
+    expect(
+      extractActivityChange({
+        ...BASE,
+        action: "TASK_UPDATED",
+        oldValues: null,
+        newValues: { title: "Tiêu đề mới" },
+      }),
+    ).toBeNull();
+  });
+
   it("old/new đều null hoặc không phải object → null (không vỡ UI với dữ liệu lạ)", () => {
     expect(extractActivityChange(BASE)).toBeNull();
     expect(extractActivityChange({ ...BASE, oldValues: "junk", newValues: 42 })).toBeNull();

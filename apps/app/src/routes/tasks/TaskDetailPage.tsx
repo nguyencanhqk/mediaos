@@ -12,6 +12,7 @@ import { TaskAssignControl } from "./TaskAssignControl";
 import { TaskFormDrawer } from "./TaskFormDrawer";
 import { DeleteTaskDialog } from "./DeleteTaskDialog";
 import { TaskCommentThread } from "./TaskCommentThread";
+import { TaskSubtaskPanel } from "./TaskSubtaskPanel";
 import { TaskChecklistPanel } from "./TaskChecklistPanel";
 import { TaskActivityTimeline } from "./TaskActivityTimeline";
 import { TaskFilePanel } from "./TaskFilePanel";
@@ -19,14 +20,19 @@ import { TaskFilePanel } from "./TaskFilePanel";
 /**
  * TaskDetailPage — S4-FE-TASK-2/3 (SPEC-06 §13.7, TASK-SCREEN-007). Deep link /tasks/:taskId.
  *
- * Thành phần: tiêu đề/trạng thái/priority/assignee/reporter/project/deadline/mô tả + Checklist +
- * Bình luận (mention) + Lịch sử hoạt động + Tệp đính kèm (S4-FE-TASK-3/4, TaskChecklistPanel/
- * TaskCommentThread/TaskActivityTimeline/TaskFilePanel — mỗi khối tự gate quyền finer bên trong).
+ * Thành phần: tiêu đề/trạng thái/priority/assignee/reporter/project/deadline/mô tả + Việc con +
+ * Checklist + Bình luận (mention) + Lịch sử hoạt động + Tệp đính kèm (S4-FE-TASK-3/4, TaskSubtaskPanel/
+ * TaskChecklistPanel/TaskCommentThread/TaskActivityTimeline/TaskFilePanel — mỗi khối tự gate quyền
+ * finer bên trong).
  *
  * Nút cập nhật trạng thái/priority/deadline = TaskStatusSelect; đổi assignee/theo dõi = TaskAssignControl
  * (cả 2 tự gate finer bên trong qua useCan). Edit/Delete gate ở page này (update:task/delete:task).
  *
  * TaskFilePanel (S4-FE-TASK-4) — tệp đính kèm, nối canonical /tasks/:taskId/files (S4-TASK-BE-5, PR #184).
+ *
+ * TaskSubtaskPanel (S5-TASK-SUBTASK-1, DECISIONS-05) — việc con 1 cấp, đứng NGAY TRƯỚC checklist (phân
+ * rã công việc đứng trên hạng mục checklist trong đầu MỘT người). Tự gate 3 pair khác nhau bên trong
+ * (create/update/delete:task theo ĐÚNG action, không phải 1 gate chung).
  */
 function OverviewCard({ task }: { task: TaskCoreResponseDto }) {
   const { t } = useTranslation("tasks");
@@ -179,6 +185,8 @@ export function TaskDetailPage({ taskId, onBack }: { taskId: string; onBack: () 
       </Card>
 
       <OverviewCard task={task} />
+
+      <TaskSubtaskPanel taskId={task.id} />
 
       <TaskChecklistPanel taskId={task.id} />
 

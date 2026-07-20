@@ -94,7 +94,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
       // caller KHÔNG được nhét secret/internal-id vào message của lỗi 4xx.
       const message =
         status >= HttpStatus.INTERNAL_SERVER_ERROR ? "Lỗi hệ thống" : exception.message;
-      return { status, code, message, type: exception.name, details: null };
+      // `details` OPT-IN, KHÔNG mặc định: chỉ đi ra client khi caller đặt TƯỜNG MINH `details` trong
+      // payload VÀ lỗi là 4xx. Trước đây hard-code null ⇒ mọi payload cấu trúc bị nuốt câm (phát hiện
+      // khi int-spec của S5-TASK-SUBTASK-1 assert `blocked[]` của 403 xoá-lan không bao giờ tới nơi).
+      // RÀNG BUỘC CHO CALLER (giống ràng buộc đã ghi cho `code`/`message` ở trên): chỉ đặt vào `details`
+      // dữ liệu mà actor ĐÃ có quyền đọc — filter KHÔNG lọc quyền hộ. 5xx thì bỏ qua hoàn toàn để
+      // không rò nội tại; payload không khai `details` thì giữ nguyên hành vi cũ (null).
+      const payloadDetails =
+        status < HttpStatus.INTERNAL_SERVER_ERROR &&
+        typeof payload === "object" &&
+        payload !== null &&
+        "details" in payload
+          ? ((payload as { details: unknown }).details as ErrorDetail[] | null)
+          : null;
+      return { status, code, message, type: exception.name, details: payloadDetails };
     }
 
     // 3) Lỗi không xác định → 500 generic (không lộ chi tiết).

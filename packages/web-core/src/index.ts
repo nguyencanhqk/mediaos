@@ -100,6 +100,8 @@ export {
   taskCollabInvalidation,
   // S4-FE-TASK-4: Task file (upload/delete) mutation → files list invalidation.
   taskFileInvalidation,
+  // S5-TASK-SUBTASK-1: Subtask mutation → subtasks/detail/kanban invalidation (TaskSubtaskPanel).
+  taskSubtaskInvalidation,
   // S5-ME-FE-1/FE-3 — Personal Hub (ME-SCREEN-001/009-014) query key factory.
   meKeys,
   // S5-ME-FE-3 — Notification preferences (ME-SCREEN-013) query key factory.

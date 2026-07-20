@@ -890,10 +890,19 @@ export class TaskCoreService {
       if (blocked.length > 0) {
         // D-39: đọc thừa hưởng từ cha ⇒ actor xoá-được-cha đã đọc được mọi con, nên liệt kê id/tiêu đề
         // ở đây KHÔNG rò thêm gì. KHÔNG xoá hàng nào — tất-cả-hoặc-không.
+        // `details` là khe DUY NHẤT đi ra client cho HttpException (all-exceptions.filter — opt-in);
+        // key phẳng cạnh `message` bị nuốt câm. `blocked` chỉ gồm con actor ĐỌC được (D-39 cho phép
+        // liệt kê vì đọc thừa hưởng từ cha) — filter KHÔNG lọc quyền hộ, caller tự chịu.
         throw new ForbiddenException({
-          message: ERR.SUBTASK_DELETE_FORBIDDEN,
-          blockedCount: blocked.length,
-          blocked,
+          // `code` là HẰNG SỐ phía server (ràng buộc của all-exceptions.filter — KHÔNG nội suy dữ liệu
+          // request). Đặt tường minh để client phân nhánh được ca này thay vì phải parse message.
+          code: "TASK-ERR-047",
+          message: `${ERR.SUBTASK_DELETE_FORBIDDEN} (${blocked.length} việc con bị chặn)`,
+          details: blocked.map((b) => ({
+            field: "subtask",
+            message: `${b.taskCode ?? b.id} — ${b.title}`,
+            rule: "SUBTASK_DELETE_FORBIDDEN",
+          })),
         });
       }
 
@@ -1201,6 +1210,12 @@ export class TaskCoreService {
       stateName: row.stateName ?? null,
       stateColor: row.stateColor ?? null,
       stateGroup: (row.stateGroup as TaskCoreResponseDto["stateGroup"]) ?? null,
+      // S5-TASK-SUBTASK-1 (D-31) — NULL = task GỐC. FE dùng field này để quyết định hiện panel việc
+      // con (chỉ ở task gốc) hay dòng "Thuộc công việc cha".
+      // ⚠️ CÓ HAI BẢN MAPPER: `task-core.mapper.ts:toTaskCoreDto` (đường board/kanban) và bản private
+      // này (đường list/detail/create/update/move-state). Thêm field vào MỘT bản là field im lặng
+      // không tới FE ở nửa số đường — đúng cái đã xảy ra và bị int-spec bắt. Sửa một bản PHẢI sửa bản kia.
+      parentTaskId: row.parentTaskId ?? null,
     };
   }
 

@@ -19,6 +19,7 @@ import {
   notificationKeys,
   notificationPreferenceKeys,
   taskKeys,
+  taskSubtaskInvalidation,
 } from "./query-keys";
 
 describe("foundationKeys", () => {
@@ -226,6 +227,28 @@ describe("taskKeys", () => {
   it("detail(id) chứa id", () => {
     const key = taskKeys.detail("task-abc");
     expect(key).toContain("task-abc");
+  });
+
+  // S5-TASK-SUBTASK-1 — subtasks(taskId) namespace riêng, KHÁC checklists(taskId) dù cùng taskId.
+  it("subtasks(taskId) chứa 'tasks'/'subtasks'/id, khác checklists(taskId)", () => {
+    const key = taskKeys.subtasks("task-abc");
+    expect(key).toEqual(["tasks", "subtasks", "task-abc"]);
+    expect(key).not.toEqual(taskKeys.checklists("task-abc"));
+  });
+});
+
+describe("taskSubtaskInvalidation", () => {
+  it("afterMutate chạm ĐỦ BA: subtasks(parentId) · prefix detail(parentId) · kanban(projectId)", () => {
+    const keys = taskSubtaskInvalidation.afterMutate("parent-1", "proj-1");
+    expect(keys).toContainEqual(taskKeys.subtasks("parent-1"));
+    expect(keys).toContainEqual(taskKeys.detail("parent-1"));
+    expect(keys).toContainEqual(taskKeys.kanban("proj-1"));
+  });
+
+  it("projectId null (task cá nhân ngoài dự án) ⇒ KHÔNG thêm khoá kanban", () => {
+    const keys = taskSubtaskInvalidation.afterMutate("parent-1", null);
+    expect(keys).toContainEqual(taskKeys.subtasks("parent-1"));
+    expect(keys.some((k) => k[1] === "kanban")).toBe(false);
   });
 });
 

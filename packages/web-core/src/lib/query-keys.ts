@@ -435,6 +435,9 @@ export const taskKeys = {
   watchers: (taskId: string) => [...rootKeys.tasks, "watchers", taskId] as const,
   // S5-TASK-PIPELINE-1 (lane fe) — APPEND: cột pipeline theo dự án (TaskStateColumnsDialog).
   states: (projectId: string) => [...rootKeys.tasks, "states", projectId] as const,
+  // S5-TASK-SUBTASK-1 — APPEND: danh sách việc con của MỘT việc cha (TaskSubtaskPanel,
+  // GET /tasks/:taskId/subtasks, TASK-API-701).
+  subtasks: (taskId: string) => [...rootKeys.tasks, "subtasks", taskId] as const,
 };
 
 // S4-FE-TASK-1 — invalidation cho mutation Project (create/update/close/delete + member add/update-role/
@@ -476,6 +479,20 @@ export const taskCollabInvalidation = {
 // S4-FE-TASK-4 — invalidation cho file đính kèm công việc (upload/xóa TaskFilePanel).
 export const taskFileInvalidation = {
   files: (taskId: string) => [taskKeys.files(taskId)] as const,
+};
+
+// S5-TASK-SUBTASK-1 — invalidation cho mutate việc con (thêm/sửa/xoá/đổi thứ tự, TaskSubtaskPanel).
+// Chạm ĐỦ BA (plan done_when): danh sách con của CHA · chi tiết CHA (subtaskTotal/subtaskDone đổi,
+// mirror taskCollabInvalidation.kanban dùng lại taskCoreInvalidation.detail để list/my cũng refresh)
+// · board Kanban của dự án (badge tiến độ trên thẻ đổi ngay — thiếu vế này thẻ board đứng số cũ).
+// `projectId` nullable (task cá nhân ngoài dự án) ⇒ chỉ thêm khoá kanban khi có.
+export const taskSubtaskInvalidation = {
+  afterMutate: (parentId: string, projectId: string | null) =>
+    [
+      taskKeys.subtasks(parentId),
+      ...taskCoreInvalidation.detail(parentId),
+      ...(projectId ? [taskKeys.kanban(projectId)] : []),
+    ] as const,
 };
 
 // ── Notification keys ─────────────────────────────────────────────────────────
