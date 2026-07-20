@@ -8,7 +8,7 @@
  * `drainOutboxUntilSettled` (BẮT BUỘC — an toàn dưới cross-suite claim, xem helpers/outbox-drain).
  *
  * Phủ (docs/plans/S5-NOTI-FIX-1.md §7):
- *   (a) SAU migrate: 0 template GLOBAL còn `target_url_template IS NULL` + tổng đúng 39 + sample-map khớp §4.
+ *   (a) SAU migrate: 0 template GLOBAL còn `target_url_template IS NULL` + tổng đúng 41 (39 + 2 GOAL của 0507) + sample-map khớp §4.
  *   (b) render deep-link THẬT (P0) qua bridge:
  *        TASK_ASSIGNED / TASK_COMMENT_CREATED → `/tasks/{taskId}` (payload commonPayload/commentPayload có taskId).
  *        LEAVE_REQUEST_APPROVED / LEAVE_REQUEST_REJECTED → `/leave/me/requests/{requestId}` (payload có requestId).
@@ -138,8 +138,8 @@ describe.skipIf(!hasLaneDb)(
       await app?.close();
     });
 
-    // ── (a) Invariant: 0/39 template global còn NULL sau migrate 0497 ────────────────────────────────
-    it("(a) 0 template GLOBAL còn target_url_template NULL + tổng đúng 39 (QA2-CRIT-001 fixed)", async () => {
+    // ── (a) Invariant: 0/41 template global còn NULL sau migrate 0497 (+2 GOAL từ 0507, có target_url) ──
+    it("(a) 0 template GLOBAL còn target_url_template NULL + tổng đúng 41 (QA2-CRIT-001 fixed)", async () => {
       const stats = await direct.query(
         `SELECT count(*)::int AS total,
               count(*) FILTER (WHERE target_url_template IS NULL)::int AS nulls
@@ -150,7 +150,9 @@ describe.skipIf(!hasLaneDb)(
         stats.rows[0].nulls,
         "QA2-CRIT-001: KHÔNG template global nào được phép còn target_url NULL",
       ).toBe(0);
-      expect(stats.rows[0].total, "0481 (36) + 0490 (3) = 39 template global").toBe(39);
+      expect(stats.rows[0].total, "0481 (36) + 0490 (3) + 0507 (2 GOAL) = 41 template global").toBe(
+        41,
+      );
     });
 
     it("(a) sample-map target_url_template khớp bảng §4 (placeholder + tĩnh)", async () => {

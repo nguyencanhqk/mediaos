@@ -466,22 +466,32 @@ describe.skipIf(!runIsolatedDb)(
       });
 
       it("counter 'goal' cho MỌI company có-lúc-migrate (prefix GOAL-, pad 4, Never, Company)", async () => {
-        // Loại A/B (test tạo SAU migrate — company mới nhận counter ở company-creation-time, không phải migration).
-        // Verify (c) trong 0506 đã ép per-company coverage TẠI migrate-time; test khẳng định shape + coverage
-        // cho mọi company có TRƯỚC test (đúng ý plan "MỌI company" ở thời điểm seed).
-        const r = await direct.query<{ n: number }>(
-          `SELECT COUNT(*)::int AS n
+        // SUITE-ROBUST (fix false-red CI run 29760165733): CI chạy MỌI int-spec trên MỘT DB — spec khác
+        // tạo company SAU migrate (chưa có counter goal cho tới khi provisioning-flow bổ sung) ⇒ KHÔNG được
+        // quét "mọi company hiện có". Trên DB SẠCH (lane/CI) lúc migrate 0 company ⇒ 0 counter là ĐÚNG,
+        // không được đòi total>=1. Neo thời-điểm-migrate = created_at của hàng modules GOAL (INSERT cùng
+        // migration 0506): hàng này TỒN TẠI = bằng chứng 0506 đã chạy (chống vacuous); company nào
+        // created_at <= mốc đó BẮT BUỘC có counter đúng shape. A/B + company của spec khác đều sinh sau mốc.
+        const anchor = await direct.query<{ t0: string }>(
+          `SELECT created_at AS t0 FROM modules WHERE module_code='GOAL' AND deleted_at IS NULL`,
+        );
+        expect(anchor.rows.length, "modules GOAL không tồn tại ⇒ 0506 chưa chạy").toBe(1);
+        const r = await direct.query<{ missing: number }>(
+          `SELECT COUNT(*)::int AS missing
              FROM companies c
-            WHERE c.id <> ALL($1::uuid[])
+            WHERE c.created_at <= $1::timestamptz
               AND NOT EXISTS (
                 SELECT 1 FROM sequence_counters sc
                  WHERE sc.company_id = c.id AND sc.sequence_key='goal'
                    AND sc.scope_type='Company' AND sc.prefix='GOAL-'
                    AND sc.padding_length=4 AND sc.reset_policy='Never' AND sc.deleted_at IS NULL
               )`,
-          [[A.companyId, B.companyId]],
+          [anchor.rows[0].t0],
         );
-        expect(r.rows[0].n, "company thiếu counter goal ⇒ nextCode goal đầu tiên sẽ 404").toBe(0);
+        expect(
+          r.rows[0].missing,
+          "company có-lúc-migrate thiếu counter goal ⇒ nextCode goal đầu tiên sẽ 404",
+        ).toBe(0);
       });
 
       it("audit_logs CHECK object_type ⊇ 'goal'", async () => {
