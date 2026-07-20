@@ -24,7 +24,7 @@ import { useTaskActionMutation } from "./use-task-action-mutation";
 const DETAIL_WITH_SUBTASKS = {
   id: "task-1",
   projectId: "proj-1",
-  taskStatus: "InProgress",
+  status: "In Progress",
   subtaskTotal: 5,
   subtaskDone: 2,
 } as unknown as TaskCoreResponseDto;
@@ -34,7 +34,7 @@ const ACTION_RESPONSE = {
   task: {
     id: "task-1",
     projectId: "proj-1",
-    taskStatus: "Done",
+    status: "Done",
   } as unknown as TaskCoreResponseDto,
   warnings: [],
 } as unknown as TaskActionResponseDto;
@@ -55,7 +55,7 @@ function setup(response: TaskActionResponseDto = ACTION_RESPONSE) {
       useTaskActionMutation<{ status: string }>({
         taskId: "task-1",
         mutationFn: () => Promise.resolve(response),
-        toPatch: (vars) => ({ taskStatus: vars.status }) as Partial<TaskCoreResponseDto>,
+        toPatch: (vars) => ({ status: vars.status }) as Partial<TaskCoreResponseDto>,
       }),
     { wrapper },
   );
@@ -72,7 +72,7 @@ describe("useTaskActionMutation — cache chi tiết sau action mutate", () => {
 
     const cached = client.getQueryData<TaskCoreResponseDto>(taskKeys.detail("task-1"));
     // Field server TRẢ thì server thắng…
-    expect(cached?.taskStatus).toBe("Done");
+    expect(cached?.status).toBe("Done");
     // …field server KHÔNG trả thì giữ nguyên, KHÔNG bị xoá.
     expect(cached?.subtaskTotal).toBe(5);
     expect(cached?.subtaskDone).toBe(2);
@@ -83,7 +83,7 @@ describe("useTaskActionMutation — cache chi tiết sau action mutate", () => {
       task: {
         id: "task-1",
         projectId: "proj-1",
-        taskStatus: "Done",
+        status: "Done",
         mainAssigneeEmployeeId: null,
       } as unknown as TaskCoreResponseDto,
       warnings: [],
@@ -120,7 +120,7 @@ describe("useTaskActionMutation — cache chi tiết sau action mutate", () => {
 
   it("task KHÔNG thuộc dự án nào ⇒ không gọi invalidate kanban với id rỗng", async () => {
     const { result, invalidateSpy } = setup({
-      task: { id: "task-1", projectId: null, taskStatus: "Done" } as unknown as TaskCoreResponseDto,
+      task: { id: "task-1", projectId: null, status: "Done" } as unknown as TaskCoreResponseDto,
       warnings: [],
     } as unknown as TaskActionResponseDto);
 
