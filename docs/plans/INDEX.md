@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**241 WO** · có micro-plan: **109/241** · ⬜ 17 chờ · 🔵 0 đang làm · ✅ 224 xong · 🔴 0 chặn
+**247 WO** · có micro-plan: **111/247** · ⬜ 15 chờ · 🔵 1 đang làm · ✅ 231 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -225,7 +225,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `S5-DEVOPS-1` | 🟡 | ✅ xong | [📄](S5-DEVOPS-1.md) | — | Staging/UAT readiness: env + deploy pipeline + migration/seed chạy từ  |
 | `S5-QA-E2E-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S4-QA-2 | Integration freeze + system smoke P0 + cross-module E2E: login→Home Po |
-| `S5-BE-CONTRACT-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S4-QA-2 | API contract & OpenAPI/Swagger chuẩn hoá theo module + FE integration  |
+| `S5-BE-CONTRACT-1` | 🟡 | 🔵 đang làm | — *(chưa)* | ✅S4-QA-2 | API contract & OpenAPI/Swagger chuẩn hoá theo module + FE integration  |
 | `S5-SEC-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S4-QA-2 | Permission & data-scope hardening + field-level/export permission + se |
 | `S5-QA-REG-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S4-QA-2 | QA regression suite MVP (test-case matrix theo module × role) + UI sta |
 | `S5-QA-DASHNOTI-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S4-QA-2 ✅S4-INT-2 | Dashboard & Notification hardening: widget degraded/cache đúng, unread |
@@ -262,9 +262,15 @@
 | `S5-TASK-NAV-TREE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-TASK-PIPELINE-1 | Đợt B — Sidebar cây phòng ban: dự án lồng dưới phòng ban + menu ⋯ mỗi  |
 | `S5-TASK-WORKSPACE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-TASK-PIPELINE-1 | Đợt D1 — Vỏ workspace dự án: tab bar (Bảng·Danh sách·Báo cáo·Hoạt động |
 | `S5-TASK-DETAIL-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-TASK-PIPELINE-1 | Màn chi tiết task — vá 4 gap TRONG SPEC chưa làm: timeline hiện dữ liệ |
-| `S5-TASK-SUBTASK-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S5-TASK-PIPELINE-1 | Công việc con = subtask THẬT (parent_task_id): CRUD + người thực hiện/ |
+| `S5-TASK-SUBTASK-1` | 🔴 | ✅ xong | [📄](S5-TASK-SUBTASK-1.md) | ✅S5-TASK-PIPELINE-1 | Công việc con = subtask THẬT (parent_task_id): CRUD + người thực hiện/ |
 | `S5-DASH-TASKSTATUS-FIX-1` | 🔴 | ✅ xong | [📄](S5-DASH-TASKSTATUS-FIX-1.md) | — | Dashboard đếm SAI cột trạng thái: mv_dashboard_task_status GROUP BY `s |
 | `S5-TASK-PROJROLE-1` | 🔴 | ✅ xong | [📄](S5-TASK-PROJROLE-1.md) | ✅S5-TASK-PIPELINE-1 | Đợt C — Quyền per-project THẬT: projectRole (Owner/Manager/Member/View |
+| `S5-TASK-BOARD-UX-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-TASK-PIPELINE-1 ✅S5-TASK-DETAIL-1 | Board: bấm thẻ mở chi tiết trong panel TRƯỢT PHẢI (?task=, giữ ngữ cản |
+| `S5-TASK-INLINE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-TASK-BOARD-UX-1 | Màn chi tiết task: bố cục lại (dự án + trạng thái + ưu tiên lên dải đầ |
+| `S5-TASK-AVATAR-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-ME-BE-5 | Avatar người phụ trách trong TASK (Nhóm C của hệ avatar): nối 3 mắt xí |
+| `S5-TASK-CARDSUB-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S5-TASK-SUBTASK-1 | Thẻ board: nút trỏ xuống bung danh sách việc con ngay trên thẻ (tải lư |
+| `S5-TASK-MOVEPROJ-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-TASK-INLINE-1 | VÁ BUG state_id mồ côi khi đổi dự án + đường đổi dự án ĐÚNG MỘT chỗ (h |
+| `S5-TASK-COVER-1` | 🔴 | ✅ xong | [📄](S5-TASK-COVER-1.md) | ✅S5-TASK-AVATAR-1 | Ảnh bìa cho công việc — chọn từ TỆP ĐÃ ĐÍNH KÈM (file_links Attachment |
 
 ## Sprint 6
 

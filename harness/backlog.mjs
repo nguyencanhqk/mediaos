@@ -7433,4 +7433,280 @@ export const backlog = [
       "FULL gate (security-reviewer + silent-failure-hunter) + typecheck/lint/build xanh",
     ],
   },
+
+  // ════════════════════ SPRINT 5 — GOAL · Mục tiêu phòng ban/dự án/nhân viên (SPEC-10) ════════════════════
+  // SPEC-10 GOAL + DB-11 (seed 2026-07-20, owner chốt 4 quyết định: cây thuần KHÔNG tách KR · module GOAL riêng
+  // menu + quyền GOAL.* · KHÔNG luồng duyệt MVP (điểm kiểm soát = CHỐT KỲ finalize) · phân rã CHỈ template, KHÔNG AI).
+  // Cây: department → project|employee → tasks (tasks.goal_id). 4 progress_mode ĐỘC QUYỀN manual|project|tasks|children
+  // (SPEC-10 §13 — công thức + null-vs-0% + recompute sync-in-tx + job đối soát đêm). goal_updates = ledger append-only
+  // (bất biến #2). Chốt kỳ đóng băng số liệu → đầu vào đánh giá PERF/KPI Phase 2 (kpi_results tham chiếu goal_id).
+  // Head migration lúc seed: idx 183 / 0503 ⇒ GOAL bắt đầu 0504+ (kiểm _journal.json THẬT trước khi đánh số).
+  // Thứ tự: DOC-1 ‖ DB-1 → BE-1 → BE-2 → FE-1 → FE-2 → (đợt D) DB-2 → TPL-1 → (đợt E) DASH-1.
+  {
+    id: "S5-GOAL-DOC-1",
+    module: "GOAL",
+    layer: "DOC",
+    title:
+      "Docs sync SPEC-10 GOAL: SPEC-01/PRD-00/DB-01·09·10 ghi nhận GOAL + API-12 GOAL stub + permission-matrix 8 cặp + nav header 9 SPEC cũ + ghi chú DB-06 (tasks.goal_id, task_templates kích hoạt)",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "docs/SPEC/**",
+      "docs/PRD/**",
+      "docs/DB/**",
+      "docs/API Design/**",
+      "docs/permission-matrix-spec.md",
+      "docs/README.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "SPEC-10 §23 (danh sách tác động đầy đủ)",
+      "SPEC-09 S5-ME-DOC-1 (mẫu docs-sync wave trước)",
+    ],
+    done_when: [
+      "SPEC-01 thêm GOAL vào danh sách module + sơ đồ phụ thuộc; header nav SPEC-01..09 thêm link SPEC-10; PRD-00 thêm Mục tiêu vào MVP bổ sung",
+      "DB-01 ghi nhóm bảng GOAL + ERD cấp cao; DB-09 index GOAL; DB-10 seed module GOAL — CHỈ docs, code thuộc S5-GOAL-DB-1",
+      "Tạo API-12_GOAL_API_Design.md stub theo SPEC-10 §15 (GOAL-API-001..013, envelope API-01)",
+      "permission-matrix-spec: 8 cặp GOAL (SPEC-10 §11) + scope đề xuất theo 4 role canonical; DB-06 §3.3/§7.4 ghi chú trỏ DB-11 (KHÔNG nhân bản); flip SPEC-10 Draft→Approved khi owner duyệt PR",
+    ],
+  },
+  {
+    id: "S5-GOAL-DB-1",
+    module: "GOAL",
+    layer: "DB",
+    title:
+      "Schema + migration goals + goal_updates (append-only) + tasks.goal_id + RLS FORCE + seed module GOAL + 7 cặp permission per-pair scope (0504–0506 dự kiến)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "apps/api/src/foundation/seed/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S5-GOAL-DB-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S5-GOAL-DB-1.md",
+    src: [
+      "DB-11 §6.1–6.2/§6.5/§9 (cột/CHECK/index/GRANT + kế hoạch 0504–0506)",
+      "SPEC-10 §11 (7 cặp quyền wave lõi — pair manage/task-template thuộc S5-GOAL-DB-2) + §12 (CHECK phản chiếu GOAL-ERR-001/002/003/011/012)",
+      "apps/api/migrations/meta/_journal.json (head lúc seed: idx 183 / 0503 — kiểm lại THẬT trước khi đánh số)",
+      "memory s2-13-permission-matrix-per-pair-scope + canonical-seed-pin-regression (is_sensitive finalize chốt với owner)",
+      "mẫu: 0479 (RLS literal-GUC) · 0435 (seed modules) · 0466/0476 (grant per-pair + verify fail-LOUD)",
+    ],
+    done_when: [
+      "Bảng goals đủ cột DB-11 §6.1 (level 4 giá trị + CHECK level↔neo + period + measure + mode + progress cache + weight + finalized_at/by + soft delete) + unique goal_code/company + 6 index; goal_updates §6.2 KHÔNG updated/deleted_at, GRANT app = SELECT,INSERT (KHÔNG UPDATE/DELETE), worker SELECT — bất biến #2",
+      "BẤT BIẾN #1: ENABLE + FORCE RLS + policy tenant_isolation literal-GUC cả 2 bảng TRƯỚC mọi INSERT; đăng ký rls-registry; drizzle schema goals.ts/goal-updates.ts additive, schema/index.ts append khối WO; ALTER tasks ADD goal_id (FK đơn cột ON DELETE SET NULL) + index partial (company_id, goal_id)",
+      "Seed module GOAL (mirror 0435, ON CONFLICT DO NOTHING) + 7 cặp: (access|view|create|update|delete|checkin|finalize, goal) — scope per-(permission,role) theo SPEC-10 §11 (nhân viên view=department create/update/delete/checkin=own finalize=KHÔNG; trưởng đơn vị=department; BOD/Admin=all), per-pair DELETE-wrong-scope + INSERT ON CONFLICT + verify fail-LOUD; is_sensitive chốt owner (finalize cân nhắc true — nhớ pin auth-seed-canonical-roles)",
+      "Int-spec RED-trước lane DB cô lập (goals-seed + rls-registry): cross-tenant deny goals/goal_updates · app role UPDATE/DELETE goal_updates bị từ chối ở tầng GRANT · CHECK level↔neo bắn 23514 đúng ca · seed-assert (module GOAL + 7 pair + grant per-role); migration-smoke clean 0000→head xanh; FULL gate database-reviewer + security-reviewer + rls-tenant-isolation-tester + silent-failure-hunter PASS",
+    ],
+  },
+  {
+    id: "S5-GOAL-BE-1",
+    module: "GOAL",
+    layer: "BE",
+    title:
+      "BE GoalsModule: CRUD 3 cấp + cây theo kỳ + data-scope service-layer (own/department/all) + validate level↔neo↔parent + goal_code qua sequence_counters",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/goals/**",
+      "apps/api/src/app.module.ts",
+      "packages/contracts/src/goal.ts",
+      "packages/contracts/src/index.ts",
+      "apps/api/test/integration/**",
+      "docs/plans/S5-GOAL-BE-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-GOAL-DB-1"],
+    plan: "docs/plans/S5-GOAL-BE-1.md",
+    src: [
+      "SPEC-10 §10 (FUNC-001/002) + §12 (GOAL-ERR-001..004/007/010/011/015) + §15 (GOAL-API-001..006/013)",
+      "DB-11 §6.1/§8 (index theo use case)",
+      "memory task-per-project-role-decisions04 (goal cấp project: quyền ghi qua ProjectAccessService) + reused-method-must-be-actor-scoped (buildReadScopeExists)",
+      "SPEC-09 §14.4 (/me/goals resolve từ token — KHÔNG nhận employee_id từ client)",
+    ],
+    done_when: [
+      "GOAL-API-001..006 + 013 chạy: CRUD soft-delete + GET /goals/tree (≤3 tầng kèm progress từng nút) + GET /me/goals own-scope resolve token; goal_code sinh qua sequence_counters; mọi query withTenant + company_id",
+      "Data-scope ép Ở SERVICE (buildReadScopeExists pattern): own = owner/employee chính mình · department = phòng của actor · all; goal cấp project: ghi thêm điều kiện qua ProjectAccessService (Owner/Manager project được tạo/sửa goal dự án kể cả khác phòng); level='company' chặn GOAL-ERR-004",
+      "Validate đủ GOAL-ERR-001 (level↔neo, phản chiếu CHECK thành 422 có mã) · 002 (parent cùng company + đúng chiều cấp + chống cycle) · 003 · 007 (xóa còn con active) · 010 (employee Active, owner=employee) · 011 · 015; DTO nestjs-zod từ packages/contracts (goalCoreResponseSchema, KHÔNG io.emit/route trả row thô)",
+      "Int-spec RED-trước (apps/api/test/integration/, LANE_DB): deny-path nhân viên sửa/xóa goal người khác 403 · xem goal phòng khác 403 · cross-tenant 404 · /me/goals bơm employeeId lạ vẫn về own · parent sai chiều/cycle 422 · tạo level company 422; FULL gate (permission-domain) PASS",
+    ],
+  },
+  {
+    id: "S5-GOAL-BE-2",
+    module: "GOAL",
+    layer: "BE",
+    title:
+      "BE progress engine 4 mode + rollup bubble + job đối soát đêm + check-in/finalize/reopen (ledger goal_updates) + link/unlink task↔goal + NOTI goal.assigned/goal.finalized qua bridge INT-1",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/goals/**",
+      "apps/api/src/tasks/**",
+      "apps/api/src/notifications/**",
+      "apps/api/src/events/**",
+      "packages/contracts/src/goal.ts",
+      "apps/api/test/integration/**",
+      "docs/plans/S5-GOAL-BE-2.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-GOAL-BE-1"],
+    plan: "docs/plans/S5-GOAL-BE-2.md",
+    src: [
+      "SPEC-10 §13 TOÀN BỘ (công thức 4 mode · null-vs-0% · recompute sync-in-tx + bubble ≤3 tầng + finalized bỏ qua · đối soát đêm) + §12 (GOAL-ERR-005/006/008/012/013/014) + §17 (2 event)",
+      "SPEC-10 §15 GOAL-API-007..010; DB-11 §6.2 (goal_updates) + §6.5 (điểm ghi tasks.goal_id)",
+      "memory noti-outbox-bridge-generic (khai event-type + recipient trên bridge INT-1, KHÔNG dựng bridge mới) + wo-plans-built-on-code-comments (grep writer THẬT của task status trước khi móc recompute)",
+      "DECISIONS-05 (đếm-lá là của projects.progress_percent — GOAL mode tasks đếm CHÍNH task được gắn, KHÔNG kéo cây con — GOAL-DEC-006)",
+    ],
+    done_when: [
+      "4 mode đúng công thức §13.1 + progress NULL khi chưa đo được (KHÔNG 0%); recompute sync cùng tx tại MỌI writer thật của task-status/gắn-tháo/Cancelled + project progress + check-in, bubble lên cha mode=children, goal finalized bỏ qua; job BullMQ đối soát đêm idempotent, lệch >0.01 log warn",
+      "Check-in (GOAL-API-007/008) ghi goal_updates type=checkin (old/new value + confidence + note) — INSERT-only; finalize/reopen (API-009) quyền ('finalize','goal') + ghi ledger type finalize/reopen + audit_logs; sau finalize MỌI đường ghi (update/checkin/link/decompose/recompute) trả GOAL-ERR-005",
+      "Link/unlink task↔goal (API-010, bulk) validate GOAL-ERR-008: goal employee → assignee phải là employee đó (CHẶN) · goal project → task thuộc project (CHẶN) · goal department → cảnh báo mềm; audit_logs cho link/unlink/finalize/reopen (object_types CHECK mở rộng kiểu UNION — hot-file append)",
+      "goal.assigned + goal.finalized enqueue outbox TRONG tx qua OutboxNotificationBridge (eventCode verbatim, dedupe + delivery log, cùng company, payload KHÔNG số liệu nhạy cảm); int-spec RED-trước: ma trận mode×(chuyển trạng thái·Cancelled·đổi mode GOAL-ERR-013) · freeze sau finalize · app-role không UPDATE/DELETE được goal_updates · link sai neo bị chặn · notification đúng recipient + idempotent · cross-tenant; FULL gate PASS",
+    ],
+  },
+  {
+    id: "S5-GOAL-FE-1",
+    module: "GOAL",
+    layer: "FE",
+    title:
+      "FE trang Mục tiêu: menu sidebar riêng + danh sách/cây theo kỳ·phòng ban + form tạo/sửa (chọn cấp → đúng field neo, chọn mode đo) + màn chi tiết 4 tab — PermissionGate GOAL.*, i18n vi",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/goals/**",
+      "apps/app/src/router.tsx",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/**",
+      "packages/ui/src/**",
+      "docs/plans/S5-GOAL-FE-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-GOAL-BE-1"],
+    src: [
+      "SPEC-10 §9 (GOAL-SCREEN-001/002/003) + §14 (trạng thái UI bắt buộc: loading/error/empty/CHƯA-ĐO-hiển-thị-—/đã-chốt-badge-khóa/PermissionGate)",
+      "GOAL-DEC-002 (menu Mục tiêu riêng, KHÔNG chôn trong khu Task)",
+      "memory apifetch-drops-pagination-bare-array (schema {data,meta} qua apiFetch) + fe-theme-light-dark-system",
+    ],
+    done_when: [
+      "Menu 'Mục tiêu' sau gate ('access','goal'); GOAL-SCREEN-001 cây/danh sách filter kỳ·cấp·phòng ban·trạng thái·owner + progress bar từng nút (NULL → '—' + cảnh báo 'chưa gắn việc', KHÔNG 0%)",
+      "GOAL-SCREEN-003: chọn level → hiện đúng field neo (phòng/dự án/nhân viên — picker nhân viên DÙNG CHUNG EmployeePicker từ #251); chọn progress_mode có mô tả từng mode; validate RHF+Zod khớp GOAL-ERR-001/003/011/015",
+      "GOAL-SCREEN-002 chi tiết 4 tab (Tổng quan · Công việc gắn · Mục tiêu con · Lịch sử check-in — 2 tab sau được stub chờ FE-2 nếu API chưa đủ); goal đã chốt: badge khóa + disable MỌI nút ghi; mutation nào cũng invalidate query list+tree+detail",
+      "Không hard-code permission (PermissionGate/useCan); i18n namespace goals đủ vi; loading/error/empty đủ 3 trạng thái; unit test component chính; LIGHT gate (typescript-reviewer + react-reviewer + quality-gate) xanh",
+    ],
+  },
+  {
+    id: "S5-GOAL-FE-2",
+    module: "GOAL",
+    layer: "FE",
+    title:
+      "FE vòng đo: check-in modal + lịch sử + nút chốt kỳ/mở lại + gắn goal từ panel task + tab Công việc trong goal (bulk link) + khối 'Mục tiêu của tôi' trong /me",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/goals/**",
+      "apps/app/src/routes/tasks/**",
+      "apps/app/src/routes/me/**",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/**",
+      "docs/plans/S5-GOAL-FE-2.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-GOAL-BE-2", "S5-GOAL-FE-1"],
+    src: [
+      "SPEC-10 §9 (GOAL-SCREEN-005) + §13.2 (null-vs-0%) + §15 (API-007..010/013)",
+      "Panel chi tiết task hiện hành (TaskDetailContent/Drawer — field Mục tiêu đặt cạnh khối dự án/nhãn vừa làm #250/#251)",
+      "S5-ME wave (khối /me — nếu ME FE chưa ship thì khối 'Mục tiêu của tôi' đứng chờ route /me, KHÔNG chặn phần còn lại)",
+    ],
+    done_when: [
+      "Check-in modal (currentValue/progress + confidence + note) chỉ hiện đúng scope; lịch sử check-in phân trang; nút Chốt kỳ/Mở lại sau gate ('finalize','goal') + confirm dialog nêu hệ quả đóng băng",
+      "Panel task: field 'Mục tiêu' (picker goal Active hợp lệ theo neo — validate lỗi GOAL-ERR-008 hiển thị rõ); tab Công việc trong goal: bulk gắn/tháo + trạng thái từng task; task đổi trạng thái → % goal cập nhật không F5 (invalidate đúng key, đồng bộ panel↔board như pattern #250)",
+      "Khối 'Mục tiêu của tôi' (own, GOAL-API-013) + check-in nhanh; toàn bộ nút ghi disable khi goal chốt kỳ; LIGHT gate xanh + unit test",
+    ],
+  },
+  {
+    id: "S5-GOAL-DB-2",
+    module: "GOAL",
+    layer: "DB",
+    title:
+      "Đợt D — Schema + migration task_templates + task_template_items + RLS FORCE + seed cặp ('manage','task-template') (0507 dự kiến, kiểm head thật)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "apps/api/src/foundation/seed/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S5-GOAL-DB-2.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-GOAL-DB-1"],
+    src: [
+      "DB-11 §6.3/§6.4/§9 (bước 0507)",
+      "SPEC-10 §11 (('manage','task-template') — trưởng đơn vị department, BOD/Admin all, nhân viên KHÔNG)",
+    ],
+    done_when: [
+      "2 bảng theo DB-11 §6.3/6.4 (unique tên template/company · index items theo template+sort_order · soft delete) + ENABLE/FORCE RLS literal-GUC TRƯỚC INSERT + rls-registry + drizzle additive",
+      "Seed pair ('manage','task-template') per-pair scope + verify fail-LOUD; int-spec RED-trước: cross-tenant deny + seed-assert; migration-smoke clean; FULL gate DB PASS",
+    ],
+  },
+  {
+    id: "S5-GOAL-TPL-1",
+    module: "GOAL",
+    layer: "FULL",
+    title:
+      "Đợt D — Phân rã mục tiêu từ template: CRUD template (BE+FE, GOAL-SCREEN-006) + wizard preview sửa/xóa/thêm/gán người/cột board + POST /goals/:id/decompose tạo bulk task 1 transaction",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/goals/**",
+      "apps/api/src/tasks/**",
+      "packages/contracts/src/goal.ts",
+      "apps/app/src/routes/goals/**",
+      "apps/app/src/i18n/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S5-GOAL-TPL-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-GOAL-DB-2", "S5-GOAL-FE-2"],
+    src: [
+      "SPEC-10 §10 (FUNC-007/008) + §12 (GOAL-ERR-009: chặn khi Cancelled/đã chốt/template rỗng/quá 50) + §15 (API-011/012) + GOAL-DEC-004 (KHÔNG AI)",
+      "DB-11 §6.4 (checklist JSONB → task_checklists khi áp)",
+    ],
+    done_when: [
+      "CRUD template + items (quyền manage, phân trang, soft delete); wizard: chọn template → preview items (sửa/xóa/thêm/assignee/cột board/due) → áp dụng",
+      "POST /goals/:id/decompose: tạo bulk task TRONG 1 transaction (fail giữa chừng rollback HẾT), mỗi task mang goal_id + activity log 'tạo từ phân rã mục tiêu X' + checklist map sang task_checklists; giới hạn 50 (GOAL-ERR-009); quyền tạo task đi qua đúng gate TASK hiện hành (KHÔNG bypass)",
+      "Int-spec: transactional-rollback + goal chốt/Cancelled bị chặn + template company khác deny + >50 chặn; LIGHT gate + typecheck/lint xanh",
+    ],
+  },
+  {
+    id: "S5-GOAL-DASH-1",
+    module: "GOAL",
+    layer: "FULL",
+    title:
+      "Đợt E — Widget dashboard 'Mục tiêu kỳ này' (progress theo phòng ban, đọc cache) + hàng mục tiêu trong trang phòng ban",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/dashboard/**",
+      "apps/api/src/goals/**",
+      "apps/app/src/routes/dashboard/**",
+      "apps/app/src/routes/hr/**",
+      "apps/app/src/i18n/**",
+      "docs/plans/S5-GOAL-DASH-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-GOAL-BE-2", "S5-GOAL-FE-1"],
+    src: [
+      "SPEC-10 §7 (DASH đọc cache, KHÔNG copy dữ liệu gốc — cùng nguyên tắc DB-06 §4.15)",
+      "SPEC-07 DASH (khung widget + dashboard_widget_cache)",
+    ],
+    done_when: [
+      "Widget tổng hợp % goal theo phòng ban kỳ hiện tại (respect data-scope người xem — nhân viên chỉ thấy phòng mình) + drill-down về trang Mục tiêu; trang phòng ban (HR) thêm khối mục tiêu phòng",
+      "Số widget khớp GET /goals/tree (không lệch công thức §13); loading/error/empty; LIGHT gate xanh",
+    ],
+  },
 ];
