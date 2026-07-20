@@ -16,8 +16,6 @@ import type {
   TaskActionResponseDto,
   TaskActionWarning,
   TaskCoreResponseDto,
-  TaskCoreStatusDto,
-  TaskCorePriorityDto,
 } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
@@ -34,6 +32,7 @@ import { TaskActivityService } from "./task-activity.service";
 import { ProjectAccessService } from "./project-access.service";
 import { coalesceTaskStatus, deriveStatusTimestamps, evaluateTransition } from "./task-fsm";
 import { isStateInGroupForStatus, pickTargetState } from "./task-state-sync";
+import { toTaskCoreDto } from "./task-core.mapper";
 
 interface RequestUser {
   id: string;
@@ -741,41 +740,17 @@ export class TaskActionsService {
   private toBool(v: boolean | string): boolean {
     return v === true || v === "true" || v === "t";
   }
+  /**
+   * S5-TASK-SUBTASK-1 — DELEGATE về mapper DÙNG CHUNG, KHÔNG copy bảng field nữa.
+   *
+   * Trước đây có BA bản dựng TaskCoreResponseDto: `task-core.mapper.ts:toTaskCoreDto` (board),
+   * `TaskCoreService.toDto` (list/detail/create/update) và bản này (assign/change-status/priority/
+   * deadline/watch). Thêm một field vào một bản = field im lặng KHÔNG tới FE ở phần ba số đường.
+   * Đã bị đúng lỗi đó HAI LẦN trong WO này (`parentTaskId` thiếu ở bản service, rồi thiếu ở bản này —
+   * biểu hiện: đổi trạng thái một việc con làm panel lật sang chế độ "task gốc" vì `parentTaskId`
+   * biến thành undefined trong cache chi tiết). Hợp nhất là cách duy nhất đóng hẳn lớp lỗi này.
+   */
   private toDto(row: TaskCoreRow): TaskCoreResponseDto {
-    const createdAt = this.toIso(row.createdAt);
-    const updatedAt = this.toIso(row.updatedAt);
-    if (createdAt === null || updatedAt === null) {
-      throw new InternalServerErrorException("Task thiếu timestamp bắt buộc.");
-    }
-    return {
-      id: row.id,
-      companyId: row.companyId,
-      title: row.title,
-      description: row.description,
-      taskType: row.taskType,
-      status: (row.taskStatus as TaskCoreStatusDto | null) ?? null,
-      priority: (row.taskPriority as TaskCorePriorityDto | null) ?? null,
-      projectId: row.projectId,
-      projectName: row.projectName,
-      mainAssigneeEmployeeId: row.mainAssigneeEmployeeId,
-      assigneeName: row.assigneeName,
-      creatorUserId: row.creatorUserId,
-      creatorName: row.creatorName,
-      reporterEmployeeId: row.reporterEmployeeId,
-      reporterName: row.reporterName ?? null,
-      departmentId: row.departmentId,
-      dueAt: this.toIso(row.dueAt),
-      startAt: this.toIso(row.startAt),
-      completedAt: this.toIso(row.completedAt),
-      isOverdue: this.toBool(row.isOverdue),
-      createdBy: row.createdBy,
-      createdAt,
-      updatedAt,
-      // S5-TASK-PIPELINE-1 (lane be-read) — mirror TaskCoreService.toDto (copy có kiểm soát, W4).
-      stateId: row.stateId ?? null,
-      stateName: row.stateName ?? null,
-      stateColor: row.stateColor ?? null,
-      stateGroup: (row.stateGroup as TaskCoreResponseDto["stateGroup"]) ?? null,
-    };
+    return toTaskCoreDto(row);
   }
 }

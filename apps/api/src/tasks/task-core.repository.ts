@@ -744,8 +744,8 @@ export class TaskCoreRepository {
   /** Có ACTIVE_CHILD nào không (D-32) — luật (d) của D-33 và luật D-36a. */
   async hasActiveChildrenTx(tx: TenantTx, companyId: string, taskId: string): Promise<boolean> {
     const res = await tx.execute(sql`
-      select 1 from tasks
-       where company_id = ${companyId} and parent_task_id = ${taskId} and deleted_at is null
+      select 1 from tasks tk
+       where tk.company_id = ${companyId} and tk.id = ${taskId} and ${activeChildExists("tk")}
        limit 1
     `);
     return res.rows.length > 0;
@@ -832,7 +832,6 @@ export class TaskCoreRepository {
     companyId: string,
     parentId: string,
     orderedIds: string[],
-    actorUserId: string,
   ): Promise<number> {
     if (orderedIds.length === 0) return 0;
     const values = sql.join(
@@ -841,7 +840,12 @@ export class TaskCoreRepository {
     );
     const res = await tx.execute(sql`
       update tasks t
-         set sort_order = v.ord, updated_at = now(), updated_by = ${actorUserId}
+         -- ⚠️ CHỈ ghi sort_order — KHÔNG đụng updated_at/updated_by.
+         -- Quyền của reorder chỉ kiểm trên CHA (D-33), nên câu này chạm cả việc con NGOÀI phạm vi ghi
+         -- của actor. Ghi updated_by lên những hàng đó là viết đè quyền-tác-giả cuối cùng của một bản
+         -- ghi mà actor không được sửa — hỏng tính toàn vẹn dấu vết, lại KHÔNG có activity/audit đi kèm
+         -- (reorder cố ý không ghi nhật ký). Đổi thứ tự là TRÌNH BÀY: chỉ cột trình bày được đổi.
+         set sort_order = v.ord
         from (values ${values}) as v(id, ord)
        where t.id = v.id
          and t.company_id     = ${companyId}

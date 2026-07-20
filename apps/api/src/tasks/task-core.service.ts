@@ -13,11 +13,9 @@ import type {
   ListTaskCoreQueryRequest,
   MoveTaskStateRequest,
   MyTaskItemDto,
-  TaskCorePriorityDto,
   SubtaskListItemDto,
   TaskCoreResponseDto,
   TaskCoreSourceDto,
-  TaskCoreStatusDto,
   UpdateTaskCoreRequest,
 } from "@mediaos/contracts";
 import { TASK_CORE_PAGE_LIMIT_MAX } from "@mediaos/contracts";
@@ -40,6 +38,7 @@ import { TaskActionsService } from "./task-actions.service";
 import { ProjectAccessService } from "./project-access.service";
 import { coalesceTaskStatus, type TaskCoreStatus } from "./task-fsm";
 import { STATE_GROUP_TO_STATUS, type ProjectStateGroup } from "./task-state-sync";
+import { toTaskCoreDto } from "./task-core.mapper";
 
 interface RequestUser {
   id: string;
@@ -95,6 +94,10 @@ const ERR = {
     "TASK-ERR-046: không thể đổi dự án của một việc con — dự án do việc cha quyết định.",
   SUBTASK_REORDER_MISMATCH:
     "TASK-ERR-046: danh sách sắp xếp phải khớp đúng tập việc con hiện có của công việc này.",
+  // 409 — ĐUA, không phải thiếu quyền. Tách mã riêng vì dùng lại thông điệp 047 (quyền) sẽ nói SAI
+  // nguyên nhân cho người dùng và cho cả người điều tra sau này.
+  SUBTASK_TREE_CONCURRENT:
+    "TASK-ERR-048: cây công việc vừa bị thay đổi bởi thao tác khác — hãy tải lại và thử lại.",
 } as const;
 
 /**
@@ -251,17 +254,11 @@ export class TaskCoreService {
         throw new BadRequestException(ERR.SUBTASK_REORDER_MISMATCH);
       }
 
-      const written = await this.repo.setSubtaskOrderTx(
-        tx,
-        user.companyId,
-        parentId,
-        subtaskIds,
-        user.id,
-      );
+      const written = await this.repo.setSubtaskOrderTx(tx, user.companyId, parentId, subtaskIds);
       // ASSERT SỐ HÀNG: câu UPDATE tự mang company_id + parent_task_id + deleted_at trong WHERE
       // (defense-in-depth trên RLS). Lệch kỳ vọng ⇒ rollback, KHÔNG im lặng ghi thiếu.
       if (written !== subtaskIds.length) {
-        throw new ConflictException(ERR.SUBTASK_REORDER_MISMATCH);
+        throw new ConflictException(ERR.SUBTASK_TREE_CONCURRENT);
       }
 
       const rows = await this.repo.listTx(
@@ -339,8 +336,19 @@ export class TaskCoreService {
       //   (iii) assertProjectRoleTx bị skip ⇒ scope<Company không bị kiểm Owner/Manager;
       //   (iv) assignee đi nhánh org-scope thay vì scope-dự-án ⇒ vỡ ca dùng CHÍNH của D-27
       //        (Manager dự án giao việc cho member ngoài team mình).
+      const isOrgWideCreate = createScope === "Company" || createScope === "System";
       let parentProjectId: string | null = null;
       if (dto.parentTaskId) {
+        // ⚠️ AUTHORIZE CHA TRƯỚC MỌI KIỂM CẤU TRÚC — nếu không, chuỗi lỗi phía dưới thành ORACLE DÒ
+        // TRẠNG THÁI: cùng một UUID đoán được, actor chỉ có create:task@Own phân biệt được
+        // 404(không tồn tại/khác tenant) · 400-044(tồn tại VÀ là việc con) · 400-046(tồn tại, gốc,
+        // khác dự án) · 400 PROJECT_CLOSED(dự án đã đóng) · 403(không phải Owner/Manager) — tức đọc
+        // được nhiều bit về task/dự án NGOÀI phạm vi dữ liệu của mình. `assertInScopeForWrite` gộp
+        // "không tồn tại" và "ngoài phạm vi" vào CÙNG một 404 (đúng quy ước 404-trước-403 của D-29).
+        // Company/System bỏ qua (họ vốn thấy toàn tenant nên không có gì để rò).
+        if (!isOrgWideCreate) {
+          await this.assertInScopeForWrite(tx, user, dto.parentTaskId, createScope);
+        }
         // Khoá cha + kiểm bất biến cây TRƯỚC mọi ghi (D-33). taskId = null: task chưa tồn tại nên luật
         // (d) không áp; oldParent = null.
         ({ effectiveProjectId: parentProjectId } = await this.assertParentAssignable(
@@ -384,11 +392,8 @@ export class TaskCoreService {
           ["Owner", "Manager"],
         );
       }
-      // D-38/D-39 (ghi KHÔNG thừa hưởng, nhưng TẠO CON là sửa cấu trúc việc CHA): scope<Company ⇒ actor
-      // phải GHI được cha. Không có điều kiện này thì ai đọc được cha cũng nhét được việc con vào đó.
-      if (!isOrgWide && dto.parentTaskId) {
-        await this.assertInScopeForWrite(tx, user, dto.parentTaskId, createScope);
-      }
+      // (Quyền GHI trên CHA đã được kiểm Ở TRÊN, trước mọi kiểm cấu trúc — xem ghi chú oracle ở đó.
+      // KHÔNG chuyển xuống đây lại: thứ tự chính là nội dung của chốt này.)
 
       const assignee = dto.assigneeEmployeeId
         ? !isOrgWide && effectiveProjectId
@@ -621,7 +626,17 @@ export class TaskCoreService {
         if (dto.parentTaskId) {
           // Writer HẸP: vị từ `parent_task_id is not null` của nó khiến không thể chạm task gốc.
           // KHÔNG dùng setTaskStateTx (ràng buộc R9: chỉ applyStateChangeTx được gọi writer đó).
-          await this.repo.clearTaskStateForSubtaskTx(tx, user.companyId, id, user.id);
+          // ⚠️ PHẢI ASSERT KẾT QUẢ: writer trả undefined khi ghi 0 hàng (gọi nhầm trên task gốc, hoặc
+          // ai đó đảo thứ tự hai lời gọi này). Nuốt nó ⇒ dòng activity bên dưới vẫn khai
+          // `stateId: null` trong khi DB còn state_id ⇒ nhật ký nói thẻ đã rời board mà thẻ vẫn nằm
+          // trên board, và KHÔNG ai được báo. Hôm nay thứ tự đang đúng; assert là thứ giữ nó đúng.
+          const cleared = await this.repo.clearTaskStateForSubtaskTx(
+            tx,
+            user.companyId,
+            id,
+            user.id,
+          );
+          if (!cleared) throw new NotFoundException(ERR.NOT_FOUND);
         }
       }
 
@@ -855,17 +870,26 @@ export class TaskCoreService {
       // Khoá theo luật D-33: đọc con TRƯỚC (không khoá) → khoá {cha} ∪ con theo id tăng dần → ĐỌC LẠI.
       // Khoá CHA là thứ chặn PHANTOM (con chèn thêm sau lúc SELECT) — FOR UPDATE chỉ trên tập con thì
       // không chặn được, vì hàng chưa tồn tại lúc khoá. Mọi writer thêm con đều phải khoá cha trước.
+      // ⚠️ KHOÁ CẢ CHA CỦA CHÍNH NÓ (raw.parentTaskId) khi task đang xoá LÀ một việc con.
+      // Bảng khoá của D-33 ban đầu ghi "delete CON : {T}" — SAI, và nó làm nhánh 409 bên dưới THỰC SỰ
+      // với tới được: `DELETE /tasks/P` đọc con (chưa khoá) → `DELETE /tasks/C1` chỉ khoá {C1} và
+      // commit → `DELETE /tasks/P` khoá xong đọc lại thấy thiếu C1 ⇒ 409 mang thông điệp QUYỀN cho một
+      // ca đua thuần tuý. Khoá thêm cha đóng đúng khe đó, và khôi phục tính "không-với-tới-được" mà
+      // ADR tuyên bố cho nhánh 409.
       const firstPass = await this.repo.listActiveChildrenTx(tx, user.companyId, id);
       await this.repo.lockTasksForTreeWriteTx(tx, user.companyId, [
         id,
+        ...(raw.parentTaskId ? [raw.parentTaskId] : []),
         ...firstPass.map((c) => c.id),
       ]);
       const children = await this.repo.listActiveChildrenTx(tx, user.companyId, id);
       if (children.length !== firstPass.length) {
-        // Defensive, UNREACHABLE khi luật khoá D-33 còn nguyên: giữ khoá cha ⇒ tập con đóng băng, nên
-        // lần đọc thứ hai không thể lệch. KHÔNG xoá như dead code — nếu nhánh này bắn thật thì đó là
-        // tín hiệu có writer thêm con mà KHÔNG khoá cha (luật khoá đã bị phá ở đâu đó).
-        throw new ConflictException(ERR.SUBTASK_DELETE_FORBIDDEN);
+        // Defensive. Sau khi khoá gồm cả cha-của-chính-nó, MỌI writer đổi tập con đều phải khoá hàng
+        // này trước ⇒ tập con đóng băng ⇒ nhánh này không với tới được. KHÔNG xoá như dead code: nếu
+        // nó bắn thật thì đó là tín hiệu có writer mới KHÔNG theo luật khoá D-33.
+        // Dùng mã RIÊNG, KHÔNG dùng lại thông điệp quyền: đây là ĐUA, không phải thiếu quyền — nói sai
+        // nguyên nhân còn tệ hơn không nói.
+        throw new ConflictException(ERR.SUBTASK_TREE_CONCURRENT);
       }
 
       // Con workflow-driven không nên tồn tại (HR task không bao giờ set parent) — fail-closed.
@@ -1173,50 +1197,14 @@ export class TaskCoreService {
     return v === true || v === "true" || v === "t";
   }
 
+  /**
+   * S5-TASK-SUBTASK-1 — DELEGATE về mapper DÙNG CHUNG (`task-core.mapper.ts`), KHÔNG giữ bảng field
+   * copy nữa. Trước đây có BA bản dựng TaskCoreResponseDto (mapper board · bản này · TaskActionsService)
+   * ⇒ thêm field vào một bản là field im lặng không tới FE ở phần ba số đường. Đúng lỗi đó đã xảy ra
+   * HAI LẦN với `parentTaskId` trong chính WO này. Hợp nhất là cách duy nhất đóng hẳn lớp lỗi.
+   */
   private toDto(row: TaskCoreRow): TaskCoreResponseDto {
-    const createdAt = this.toIso(row.createdAt);
-    const updatedAt = this.toIso(row.updatedAt);
-    if (createdAt === null || updatedAt === null) {
-      throw new InternalServerErrorException(
-        "Task thiếu timestamp bắt buộc (createdAt/updatedAt).",
-      );
-    }
-    return {
-      id: row.id,
-      companyId: row.companyId,
-      title: row.title,
-      description: row.description,
-      taskType: row.taskType,
-      status: (row.taskStatus as TaskCoreStatusDto | null) ?? null,
-      priority: (row.taskPriority as TaskCorePriorityDto | null) ?? null,
-      projectId: row.projectId,
-      projectName: row.projectName,
-      mainAssigneeEmployeeId: row.mainAssigneeEmployeeId,
-      assigneeName: row.assigneeName,
-      creatorUserId: row.creatorUserId,
-      creatorName: row.creatorName,
-      reporterEmployeeId: row.reporterEmployeeId,
-      reporterName: row.reporterName ?? null,
-      departmentId: row.departmentId,
-      dueAt: this.toIso(row.dueAt),
-      startAt: this.toIso(row.startAt),
-      completedAt: this.toIso(row.completedAt),
-      isOverdue: this.toBool(row.isOverdue),
-      createdBy: row.createdBy,
-      createdAt,
-      updatedAt,
-      // S5-TASK-PIPELINE-1 (lane be-read) — cột pipeline resolved từ TASK_CORE_SELECT.
-      stateId: row.stateId ?? null,
-      stateName: row.stateName ?? null,
-      stateColor: row.stateColor ?? null,
-      stateGroup: (row.stateGroup as TaskCoreResponseDto["stateGroup"]) ?? null,
-      // S5-TASK-SUBTASK-1 (D-31) — NULL = task GỐC. FE dùng field này để quyết định hiện panel việc
-      // con (chỉ ở task gốc) hay dòng "Thuộc công việc cha".
-      // ⚠️ CÓ HAI BẢN MAPPER: `task-core.mapper.ts:toTaskCoreDto` (đường board/kanban) và bản private
-      // này (đường list/detail/create/update/move-state). Thêm field vào MỘT bản là field im lặng
-      // không tới FE ở nửa số đường — đúng cái đã xảy ra và bị int-spec bắt. Sửa một bản PHẢI sửa bản kia.
-      parentTaskId: row.parentTaskId ?? null,
-    };
+    return toTaskCoreDto(row);
   }
 
   private toMyDto(row: MyTaskRow): MyTaskItemDto {

@@ -43,18 +43,32 @@
 ALTER TABLE tasks ADD CONSTRAINT tasks_id_company_uq UNIQUE (id, company_id);
 --> statement-breakpoint
 
+-- ⚠️ `ON DELETE SET NULL (parent_task_id)` — DANH SÁCH CỘT LÀ BẮT BUỘC, KHÔNG được bỏ.
+-- `ON DELETE SET NULL` trần set NULL cho MỌI cột tham chiếu, tức cả `company_id`:
+--   UPDATE ONLY tasks SET parent_task_id = NULL, company_id = NULL WHERE ...
+-- mà `tasks.company_id` là NOT NULL (0008) ⇒ hard-DELETE một task cha sẽ NỔ
+-- "null value in column company_id violates not-null constraint".
+-- Hôm nay lỗi đó BỊ CHE bởi FK cũ (0478) chạy trước và set parent_task_id = NULL, làm WHERE của
+-- trigger mới khớp 0 hàng — nhưng thứ tự nổ trigger RI là sort CHUỖI tên `RI_ConstraintTrigger_a_<oid>`,
+-- nên chỉ cần OID vượt mốc luỹ thừa 10 là thứ tự đảo và hard-delete vỡ. Không được dựa vào đó.
+-- Hard-delete CÓ thật trên đường test: apps/api/test/helpers/seed.ts teardown dùng DELETE.
 ALTER TABLE tasks ADD CONSTRAINT tasks_parent_same_company_fk
   FOREIGN KEY (parent_task_id, company_id)
   REFERENCES tasks (id, company_id)
-  ON DELETE SET NULL;
+  ON DELETE SET NULL (parent_task_id);
 --> statement-breakpoint
 
 -- Index phục vụ vị từ lá + aggregate tiến độ (countSubtaskProgressByParentIdsTx dùng `= ANY`).
 -- Postgres KHÔNG tự index FK ⇒ thiếu index này là seq-scan theo parent_task_id.
 -- (Build MV toàn bảng nhiều khả năng vẫn chọn hash anti-join — lợi ích thật nằm ở truy vấn per-project.)
+-- PARTIAL trên `parent_task_id IS NOT NULL` — KHÔNG chỉ `deleted_at IS NULL`. Vế trong của anti-join
+-- lá chỉ quan tâm các hàng CÓ cha; thiếu vị từ này, index cond rút về `company_id = ...` và mỗi lần
+-- đánh giá phải đi hết task còn sống CỦA CẢ TENANT — chi phí theo quy mô TENANT chứ không theo dự án
+-- (đo trên 40k hàng tenant / 400 hàng dự án: 769 buffer · 1.31ms → 4 buffer · 0.21ms).
+-- Planner vẫn suy ra được `IS NOT NULL` từ điều kiện bằng nên `= ANY` và EXISTS tương quan vẫn dùng index.
 CREATE INDEX IF NOT EXISTS tasks_parent_active_idx
   ON tasks (company_id, parent_task_id)
-  WHERE deleted_at IS NULL;
+  WHERE deleted_at IS NULL AND parent_task_id IS NOT NULL;
 --> statement-breakpoint
 
 DROP MATERIALIZED VIEW IF EXISTS mv_dashboard_task_status;
