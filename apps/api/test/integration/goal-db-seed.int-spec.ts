@@ -273,7 +273,7 @@ describe.skipIf(!runIsolatedDb)(
               [B.companyId, `GOAL-forge-${randomUUID().slice(0, 8)}`, empB],
             ),
           ),
-        ).rejects.toThrow(/row-level security|violates/i);
+        ).rejects.toThrow(/row-level security/i);
       });
 
       it("app ngoài ngữ cảnh tenant → 0 goal", async () => {
