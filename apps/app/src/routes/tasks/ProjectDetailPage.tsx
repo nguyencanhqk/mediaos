@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, RefreshCw, Pencil, Lock, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Lock, Pencil, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import {
   taskProjectApi,
   taskKeys,
@@ -14,6 +14,7 @@ import {
 import { PageHeader, EmptyState, Button, Card, Badge, Dialog, Input, Select } from "@mediaos/ui";
 import type { TaskProjectResponseDto } from "@mediaos/contracts";
 import {
+  PROJECT_STATE_PAIRS,
   TASK_CORE_ENGINE_PAIRS,
   TASK_CORE_PRIORITY_OPTIONS,
   TASK_CORE_STATUS_OPTIONS,
@@ -26,6 +27,7 @@ import { ProjectFormDrawer } from "./ProjectFormDrawer";
 import { ProjectMemberTable } from "./ProjectMemberTable";
 import { ProjectRoleLegend } from "./ProjectRoleLegend";
 import { TaskKanbanPage } from "./TaskKanbanPage";
+import { TaskStateColumnsDialog } from "./TaskStateColumnsDialog";
 import { TaskDetailDrawer } from "./TaskDetailDrawer";
 import { ProjectTaskListTab } from "./ProjectTaskListTab";
 import { ProjectActivityTimeline } from "./ProjectActivityTimeline";
@@ -35,21 +37,23 @@ import { ProjectProgressWidget } from "@/components/dashboard/ProjectProgressWid
 import {
   DEFAULT_WORKSPACE_FILTERS,
   parseWorkspaceTab,
-  PROJECT_WORKSPACE_TABS,
   WORKSPACE_TASK_SORTS,
   type ProjectWorkspaceTab,
   type WorkspaceTaskFilters,
 } from "./workspace-constants";
+import { useWorkspaceTabOrder } from "./use-workspace-tab-order";
 
 /**
  * ProjectDetailPage — VỎ WORKSPACE dự án (S5-TASK-WORKSPACE-1 đợt D1, SPEC-06 §13.3 TASK-SCREEN-003;
  * gốc S4-FE-TASK-1). Deep link /tasks/projects/:projectId?tab=board|list|report|activity|members.
  *
- * Tab bar: Tổng quan · Bảng · Danh sách · Báo cáo · Hoạt động · Thành viên — tab phản ánh vào URL
- * (?tab=, history.PUSH ⇒ back/forward đi qua các tab). Tab Báo cáo/Hoạt động ẨN khi thiếu cặp
- * SENSITIVE tương ứng (view-report:project / view:task-audit-log, useCanExact — UI-02 §5.3);
+ * Tab bar: Tổng quan · Bảng · Danh sách · Báo cáo · Hoạt động · Thành viên · Cài đặt — tab phản ánh
+ * vào URL (?tab=, history.PUSH ⇒ back/forward đi qua các tab). Tab Báo cáo/Hoạt động ẨN khi thiếu
+ * cặp SENSITIVE tương ứng (view-report:project / view:task-audit-log, useCanExact — UI-02 §5.3);
  * deep-link thẳng vào tab bị ẩn → component tab TỰ gate (EmptyState forbidden, không fetch).
- * Tab Gantt·Lịch·Tài liệu·Biểu mẫu thuộc đợt D2-D5 — KHÔNG render giả.
+ * Tab Cài đặt gom Sửa/Đóng/Xóa dự án (trước ở header) + Quản lý cột pipeline — chỉ hiện khi đủ
+ * quyền (pair hệ thống HOẶC myProjectRole đủ bậc, D-24). Tab Gantt·Lịch·Tài liệu·Biểu mẫu thuộc
+ * đợt D2-D5 — KHÔNG render giả.
  *
  * Toolbar (tìm·lọc·sắp xếp) + rail avatar (multi-select người thực hiện + "Chưa giao") dùng CHUNG
  * giữa tab Bảng và Danh sách: state sống Ở ĐÂY (vỏ luôn mounted khi đổi tab) — đổi tab giữ nguyên
@@ -225,6 +229,209 @@ function OverviewTab({ project }: { project: TaskProjectResponseDto }) {
   );
 }
 
+/**
+ * Tab "Cài đặt" — gom hành động quản trị dự án về MỘT chỗ (trước đây: 3 nút Sửa/Đóng/Xóa nằm ở
+ * header + Quản lý cột nằm trên board). 3 khối: Thông tin chung (mở ProjectFormDrawer) · Cột quy
+ * trình (mở TaskStateColumnsDialog) · Vùng nguy hiểm (Đóng/Xóa). Mỗi khối tự ẩn theo quyền —
+ * affordance CHỈ ẩn/hiện, server (assertGovern/permission engine) vẫn là người quyết cuối (D-24).
+ */
+function ProjectSettingsTab({
+  project,
+  showEdit,
+  showClose,
+  showDelete,
+  canManageColumns,
+  tabOrder,
+  isTabOrderCustomized,
+  onMoveTab,
+  onResetTabOrder,
+  onEdit,
+  onCloseProject,
+  onDeleteProject,
+  onManageColumns,
+}: {
+  project: TaskProjectResponseDto;
+  showEdit: boolean;
+  showClose: boolean;
+  showDelete: boolean;
+  canManageColumns: boolean;
+  /** Thứ tự tab (tuỳ chọn hiển thị cá nhân, localStorage — useWorkspaceTabOrder). */
+  tabOrder: ProjectWorkspaceTab[];
+  isTabOrderCustomized: boolean;
+  onMoveTab: (tab: ProjectWorkspaceTab, dir: -1 | 1) => void;
+  onResetTabOrder: () => void;
+  onEdit: () => void;
+  onCloseProject: () => void;
+  onDeleteProject: () => void;
+  onManageColumns: () => void;
+}) {
+  const { t } = useTranslation("tasks");
+  const generalRows: Array<[string, ReactNode]> = [
+    [t("projects.form.fields.name"), project.name],
+    [t("projects.detail.fields.code"), project.code ?? "—"],
+    [t("projects.detail.fields.owner"), project.ownerName ?? "—"],
+    [t("projects.detail.fields.department"), project.departmentName ?? "—"],
+    [
+      t("projects.detail.fields.priority"),
+      project.priority ? t(`projects.priority.${project.priority}`) : "—",
+    ],
+    [t("projects.detail.fields.startDate"), project.startDate ?? "—"],
+    [t("projects.detail.fields.endDate"), project.endDate ?? "—"],
+  ];
+
+  return (
+    <div className="max-w-3xl space-y-4" data-testid="project-settings-tab">
+      <Card className="space-y-4 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold text-foreground">
+              {t("projects.detail.settings.general.title")}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {t("projects.detail.settings.general.description")}
+            </p>
+          </div>
+          {showEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onEdit}
+              data-testid="settings-edit-project"
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              {t("projects.detail.actions.edit")}
+            </Button>
+          )}
+        </div>
+        <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+          {generalRows.map(([label, value]) => (
+            <div key={String(label)} className="flex items-baseline justify-between gap-3">
+              <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+              <dd className="text-right text-sm text-foreground">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </Card>
+
+      {canManageColumns && (
+        <Card className="flex flex-wrap items-start justify-between gap-3 p-4">
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold text-foreground">
+              {t("projects.detail.settings.pipeline.title")}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {t("projects.detail.settings.pipeline.description")}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onManageColumns}
+            data-testid="settings-manage-columns"
+          >
+            <Settings2 className="mr-2 h-4 w-4" aria-hidden="true" />
+            {t("tasks.kanban.manage.button")}
+          </Button>
+        </Card>
+      )}
+
+      <Card className="space-y-3 p-4" data-testid="settings-tab-order">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold text-foreground">
+              {t("projects.detail.settings.tabOrder.title")}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {t("projects.detail.settings.tabOrder.description")}
+            </p>
+          </div>
+          {isTabOrderCustomized && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onResetTabOrder}
+              data-testid="settings-tab-order-reset"
+            >
+              {t("projects.detail.settings.tabOrder.reset")}
+            </Button>
+          )}
+        </div>
+        <ul className="divide-y divide-border rounded-md border border-border">
+          {tabOrder.map((key, index) => (
+            <li key={key} className="flex items-center justify-between gap-3 px-3 py-1.5">
+              <span className="text-sm text-foreground">{t(`projects.detail.tabs.${key}`)}</span>
+              <span className="flex items-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 px-0"
+                  disabled={index === 0}
+                  onClick={() => onMoveTab(key, -1)}
+                  aria-label={t("projects.detail.settings.tabOrder.moveUp")}
+                  data-testid={`tab-move-up-${key}`}
+                >
+                  <ChevronUp className="h-4 w-4" aria-hidden="true" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 px-0"
+                  disabled={index === tabOrder.length - 1}
+                  onClick={() => onMoveTab(key, 1)}
+                  aria-label={t("projects.detail.settings.tabOrder.moveDown")}
+                  data-testid={`tab-move-down-${key}`}
+                >
+                  <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      {(showClose || showDelete) && (
+        <Card className="space-y-3 border-destructive/40 p-4">
+          <h3 className="text-sm font-semibold text-destructive">
+            {t("projects.detail.settings.danger.title")}
+          </h3>
+          {showClose && (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                {t("projects.detail.settings.danger.closeDescription")}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onCloseProject}
+                data-testid="settings-close-project"
+              >
+                <Lock className="mr-2 h-4 w-4" />
+                {t("projects.detail.actions.close")}
+              </Button>
+            </div>
+          )}
+          {showDelete && (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                {t("projects.detail.settings.danger.deleteDescription")}
+              </p>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={onDeleteProject}
+                data-testid="settings-delete-project"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {t("projects.detail.actions.delete")}
+              </Button>
+            </div>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}
+
 /** Toolbar lọc chung tab Bảng·Danh sách (tìm · trạng thái · ưu tiên · quá hạn · sắp xếp · đặt lại). */
 function WorkspaceToolbar({
   filters,
@@ -351,6 +558,20 @@ export function ProjectDetailPage({
     TASK_ENGINE_PAIRS.DELETE_PROJECT.action,
     TASK_ENGINE_PAIRS.DELETE_PROJECT.resourceType,
   );
+  // Tab "Cài đặt" — khối Quản lý cột pipeline (mirror TaskKanbanPage): gọi ĐỦ 3 hook vô điều kiện
+  // rồi mới OR với myProjectRole (rules-of-hooks).
+  const canCreateState = useCan(
+    PROJECT_STATE_PAIRS.CREATE.action,
+    PROJECT_STATE_PAIRS.CREATE.resourceType,
+  );
+  const canUpdateState = useCan(
+    PROJECT_STATE_PAIRS.UPDATE.action,
+    PROJECT_STATE_PAIRS.UPDATE.resourceType,
+  );
+  const canDeleteState = useCan(
+    PROJECT_STATE_PAIRS.DELETE.action,
+    PROJECT_STATE_PAIRS.DELETE.resourceType,
+  );
 
   // Tab là URL-driven (?tab=) — deep-link/share được; history.PUSH nên back/forward đi qua tab
   // (done_when #1). Đọc qua useRouterState (route đã có validateSearch — router.tsx) mirror pattern
@@ -385,6 +606,9 @@ export function ProjectDetailPage({
   const openTask = (taskId: string) => router.history.push(buildUrl(tab, taskId));
   const closeTask = () => router.history.replace(buildUrl(tab, null));
 
+  // Thứ tự tab — tuỳ chọn hiển thị cá nhân (localStorage), chỉnh trong thẻ "Thứ tự tab" của Cài đặt.
+  const { tabOrder, isCustomized, moveTab, resetTabOrder } = useWorkspaceTabOrder();
+
   // Bộ lọc toolbar + rail avatar sống Ở VỎ — đổi tab Bảng↔Danh sách giữ nguyên (done_when #2/#3).
   const [filters, setFilters] = useState<WorkspaceTaskFilters>(DEFAULT_WORKSPACE_FILTERS);
   const [assigneeSelection, setAssigneeSelection] = useState<ReadonlySet<string>>(new Set());
@@ -400,6 +624,7 @@ export function ProjectDetailPage({
   const [editOpen, setEditOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: taskKeys.projects.detail(projectId),
@@ -459,60 +684,50 @@ export function ProjectDetailPage({
   const showEdit = canUpdatePair || isProjectManagerOrOwner(project.myProjectRole);
   const showClose = canClosePair || isProjectOwner(project.myProjectRole);
   const showDelete = canDeletePair || isProjectOwner(project.myProjectRole);
+  // D-24/D-28: Owner/Manager quản được cột pipeline dù pair *:project_state chưa cấp (dormant seed).
+  const canManageColumns =
+    canCreateState ||
+    canUpdateState ||
+    canDeleteState ||
+    isProjectManagerOrOwner(project.myProjectRole);
+  // Tab "Cài đặt" chỉ hiện khi có ÍT NHẤT một việc làm được trong đó; deep-link ?tab=settings khi
+  // không đủ quyền → EmptyState forbidden (mirror pattern report/activity).
+  const showSettings = showEdit || showClose || showDelete || canManageColumns;
 
   return (
     <div className="space-y-6 p-6">
-      <Button variant="ghost" size="sm" className="w-fit" onClick={onBack}>
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        {t("projects.detail.backToList")}
-      </Button>
-
-      <PageHeader
-        title={project.name}
-        description={project.code ?? undefined}
-        actions={
-          <div className="flex items-center gap-2">
-            {showEdit && (
-              <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-                <Pencil className="mr-2 h-4 w-4" />
-                {t("projects.detail.actions.edit")}
-              </Button>
-            )}
-            {canCloseAction && showClose && (
-              <Button variant="outline" size="sm" onClick={() => setCloseOpen(true)}>
-                <Lock className="mr-2 h-4 w-4" />
-                {t("projects.detail.actions.close")}
-              </Button>
-            )}
-            {showDelete && (
-              <Button variant="outline" size="sm" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="mr-2 h-4 w-4 text-destructive" />
-                {t("projects.detail.actions.delete")}
-              </Button>
-            )}
-          </div>
-        }
-      />
+      {/* Nút "Quay lại danh sách" đã BỎ (sidebar/breadcrumb đảm nhận điều hướng); onBack chỉ còn
+          dùng sau khi XÓA dự án — trang chi tiết không còn tồn tại để đứng lại. */}
+      {/* 3 nút Sửa/Đóng/Xóa dự án đã CHUYỂN vào tab Cài đặt — header chỉ còn tiêu đề. */}
+      <PageHeader title={project.name} description={project.code ?? undefined} />
 
       <div className="flex gap-2 overflow-x-auto border-b border-border">
-        {PROJECT_WORKSPACE_TABS.filter((key) =>
-          key === "report" ? canViewReport : key === "activity" ? canViewActivity : true,
-        ).map((key) => (
-          <button
-            key={key}
-            type="button"
-            aria-current={tab === key ? "page" : undefined}
-            data-testid={`workspace-tab-${key}`}
-            className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium ${
-              tab === key
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setTab(key)}
-          >
-            {t(`projects.detail.tabs.${key}`)}
-          </button>
-        ))}
+        {tabOrder
+          .filter((key) =>
+            key === "report"
+              ? canViewReport
+              : key === "activity"
+                ? canViewActivity
+                : key === "settings"
+                  ? showSettings
+                  : true,
+          )
+          .map((key) => (
+            <button
+              key={key}
+              type="button"
+              aria-current={tab === key ? "page" : undefined}
+              data-testid={`workspace-tab-${key}`}
+              className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium ${
+                tab === key
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setTab(key)}
+            >
+              {t(`projects.detail.tabs.${key}`)}
+            </button>
+          ))}
       </div>
 
       {(tab === "board" || tab === "list") && (
@@ -524,7 +739,6 @@ export function ProjectDetailPage({
       ) : tab === "board" ? (
         <TaskKanbanPage
           projectId={project.id}
-          myProjectRole={project.myProjectRole}
           filters={filters}
           assigneeSelection={assigneeSelection}
           onToggleAssignee={toggleAssignee}
@@ -543,13 +757,35 @@ export function ProjectDetailPage({
         <ProjectReportContent projectId={project.id} />
       ) : tab === "activity" ? (
         <ProjectActivityTimeline projectId={project.id} />
-      ) : (
+      ) : tab === "members" ? (
         // tab "members" (S5-TASK-PROJROLE-1 đợt C) — HIỆN cho mọi người xem được dự án; control ghi
         // gate trong ProjectMemberTable qua myProjectRole. Chú giải D-24 kèm theo, KHÔNG logic quyền.
         <div className="space-y-4">
           <ProjectMemberTable projectId={project.id} myProjectRole={project.myProjectRole} />
           <ProjectRoleLegend />
         </div>
+      ) : !showSettings ? (
+        // Deep-link ?tab=settings khi tab bị ẨN → gate tại chỗ, không lộ control (mirror report).
+        <EmptyState
+          title={t("projects.detail.settings.forbidden.title")}
+          description={t("projects.detail.settings.forbidden.description")}
+        />
+      ) : (
+        <ProjectSettingsTab
+          project={project}
+          showEdit={showEdit}
+          showClose={canCloseAction && showClose}
+          showDelete={showDelete}
+          canManageColumns={canManageColumns}
+          tabOrder={tabOrder}
+          isTabOrderCustomized={isCustomized}
+          onMoveTab={moveTab}
+          onResetTabOrder={resetTabOrder}
+          onEdit={() => setEditOpen(true)}
+          onCloseProject={() => setCloseOpen(true)}
+          onDeleteProject={() => setDeleteOpen(true)}
+          onManageColumns={() => setColumnsOpen(true)}
+        />
       )}
 
       {editOpen && (
@@ -561,6 +797,14 @@ export function ProjectDetailPage({
         />
       )}
       {closeOpen && <CloseProjectDialog project={project} onClose={() => setCloseOpen(false)} />}
+      {columnsOpen && canManageColumns && (
+        <TaskStateColumnsDialog
+          projectId={project.id}
+          myProjectRole={project.myProjectRole}
+          open
+          onClose={() => setColumnsOpen(false)}
+        />
+      )}
       {/* S5-TASK-BOARD-UX-1 — panel chi tiết mở từ board. Đặt ở VỎ workspace (không trong
           TaskKanbanPage) để tab Danh sách sau này dùng lại được cùng một `?task=`. */}
       <TaskDetailDrawer taskId={openTaskId} onClose={closeTask} />

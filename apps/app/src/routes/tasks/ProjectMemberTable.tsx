@@ -1,21 +1,12 @@
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { UserPlus, Trash2, RefreshCw } from "lucide-react";
-import {
-  taskProjectApi,
-  taskKeys,
-  taskProjectInvalidation,
-  hrApi,
-  hrKeys,
-  useCan,
-} from "@mediaos/web-core";
-import { Button, DataTable, EmptyState, Dialog, Select, Badge } from "@mediaos/ui";
+import { taskProjectApi, taskKeys, taskProjectInvalidation, useCan } from "@mediaos/web-core";
+import { Badge, Button, DataTable, Dialog, EmptyState, Select } from "@mediaos/ui";
 import type { MemberResponseDto, ProjectRoleDto } from "@mediaos/contracts";
+import { EmployeeMultiPickerDialog } from "../../components/EmployeeMultiPickerDialog";
 import { TASK_ENGINE_PAIRS, isProjectOwner } from "./constants";
 
 /**
@@ -89,13 +80,9 @@ function RoleCell({
   );
 }
 
-// ── Add member dialog ─────────────────────────────────────────────────────────
-const addMemberSchema = z.object({
-  employeeId: z.string().min(1, "Cần chọn nhân viên"),
-  projectRole: z.enum(["Owner", "Manager", "Member", "Viewer"]),
-});
-type AddMemberFormValues = z.infer<typeof addMemberSchema>;
-
+// ── Add member dialog — wrapper mỏng của EmployeeMultiPickerDialog (components/): bảng chọn
+// NHIỀU nhân viên benchmark Base/AMIS. Phần riêng của dự án: slot chọn Vai trò + addMember
+// từng người + invalidate members. ─────────────────────────────────────────────────────────
 function AddMemberDialog({
   projectId,
   existingEmployeeIds,
@@ -107,94 +94,46 @@ function AddMemberDialog({
 }) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
-  const { data: employeesPage } = useQuery({
-    queryKey: hrKeys.employees.list({ pageSize: 100, status: "active" }),
-    queryFn: () => hrApi.listEmployees({ pageSize: 100, status: "active" }),
-    staleTime: 60_000,
-  });
-  const candidates = (employeesPage?.items ?? []).filter(
-    (e) => !existingEmployeeIds.includes(e.id),
+  const [role, setRole] = useState<ProjectRoleDto>("Member");
+
+  const existingSet = useMemo(
+    () => new Set(existingEmployeeIds.filter((id): id is string => id !== null)),
+    [existingEmployeeIds],
   );
 
-  const form = useForm<AddMemberFormValues>({
-    resolver: zodResolver(addMemberSchema),
-    defaultValues: { employeeId: "", projectRole: "Member" },
-  });
-
-  const mutation = useMutation({
-    mutationFn: (values: AddMemberFormValues) => taskProjectApi.addMember(projectId, values),
-    onSuccess: async () => {
-      await Promise.all(
-        taskProjectInvalidation
-          .members(projectId)
-          .map((queryKey) => queryClient.invalidateQueries({ queryKey })),
-      );
-      onClose();
-    },
-  });
-
-  const busy = mutation.isPending;
-  const noop = () => {};
-
   return (
-    <Dialog
-      open
-      onClose={busy ? noop : onClose}
+    <EmployeeMultiPickerDialog
       title={t("projects.members.addDialog.title")}
-      footer={
-        <>
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-            {t("projects.members.addDialog.cancel")}
-          </Button>
-          <Button type="submit" form="add-member-form" disabled={busy}>
-            {t("projects.members.addDialog.confirm")}
-          </Button>
-        </>
-      }
-    >
-      {mutation.isError && (
-        <p role="alert" className="text-sm text-destructive">
-          {t("projects.members.error.description")}
-        </p>
-      )}
-      <form
-        id="add-member-form"
-        noValidate
-        className="space-y-4"
-        onSubmit={form.handleSubmit((values) => mutation.mutate(values))}
-      >
-        <div className="space-y-1.5">
-          <label htmlFor="member-employee" className="text-sm font-medium text-foreground">
-            {t("projects.members.addDialog.employeeLabel")}
-          </label>
-          <Select id="member-employee" {...form.register("employeeId")}>
-            <option value="">{t("projects.members.addDialog.employeePlaceholder")}</option>
-            {candidates.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.fullName}
-              </option>
-            ))}
-          </Select>
-          {form.formState.errors.employeeId && (
-            <p role="alert" className="text-sm text-destructive">
-              {form.formState.errors.employeeId.message}
-            </p>
-          )}
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="member-role" className="text-sm font-medium text-foreground">
-            {t("projects.members.addDialog.roleLabel")}
-          </label>
-          <Select id="member-role" {...form.register("projectRole")}>
+      isRowDisabled={(e) => existingSet.has(e.id)}
+      disabledBadge={t("projects.members.addDialog.alreadyMember")}
+      headerExtra={
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          {t("projects.members.addDialog.roleLabel")}
+          <Select
+            value={role}
+            onChange={(e) => setRole(e.target.value as ProjectRoleDto)}
+            className="h-9 w-32"
+            data-testid="member-picker-role"
+          >
             {ROLE_OPTIONS.map((r) => (
               <option key={r} value={r}>
                 {t(`projects.members.role.${r}`)}
               </option>
             ))}
           </Select>
-        </div>
-      </form>
-    </Dialog>
+        </label>
+      }
+      onAddOne={(e) => taskProjectApi.addMember(projectId, { employeeId: e.id, projectRole: role })}
+      onBatchSettled={() =>
+        Promise.all(
+          taskProjectInvalidation
+            .members(projectId)
+            .map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+        )
+      }
+      onClose={onClose}
+      testIdPrefix="member-picker"
+    />
   );
 }
 

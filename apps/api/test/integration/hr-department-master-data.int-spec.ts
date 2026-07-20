@@ -345,4 +345,127 @@ describe.skipIf(!hasLaneDb)("S2-HR-BE-3 HR department + master-data on real Post
       ).rejects.toThrow(/parent department does not exist/i);
     });
   });
+
+  // ── (e) managerEmployeeId = EMPLOYEE id (DB-03 §15 rule 5) — resolve user liên kết + deny-path ────
+  // DTO mang employee id đúng spec; service validate "employee active cùng company" TRONG withTenant tx
+  // (RLS lọc — employee tenant khác = 0 row) rồi resolve user_id liên kết ghi vào org_units.head_user_id
+  // (cột legacy FK users). null = GỠ trưởng phòng.
+  describe("(e) trưởng phòng managerEmployeeId → head_user_id (resolve + deny-path)", () => {
+    let empLinkedA: string; // employee A có user liên kết (active)
+    let empLinkedAUserId: string;
+    let empUnlinkedA: string; // employee A KHÔNG user liên kết
+    let empInactiveA: string; // employee A inactive (có user)
+    let empLinkedB: string; // employee tenant B (có user) — cross-tenant deny
+    let deptId: string;
+
+    beforeAll(async () => {
+      empLinkedAUserId = await seedUser(direct, A.companyId, `mgr-${A.slug}@x.test`);
+      empLinkedA = (
+        await direct.query(
+          `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+          [A.companyId, empLinkedAUserId],
+        )
+      ).rows[0].id as string;
+
+      empUnlinkedA = (
+        await direct.query(
+          `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, NULL) RETURNING id`,
+          [A.companyId],
+        )
+      ).rows[0].id as string;
+
+      const inactiveUser = await seedUser(direct, A.companyId, `mgr-ina-${A.slug}@x.test`);
+      empInactiveA = (
+        await direct.query(
+          `INSERT INTO employee_profiles (company_id, user_id, status)
+           VALUES ($1, $2, 'inactive') RETURNING id`,
+          [A.companyId, inactiveUser],
+        )
+      ).rows[0].id as string;
+
+      const userB = await seedUser(direct, B.companyId, `mgr-${B.slug}@x.test`);
+      empLinkedB = (
+        await direct.query(
+          `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+          [B.companyId, userB],
+        )
+      ).rows[0].id as string;
+
+      const dept = await deptService.createDepartment(A.companyId, hrUserA, {
+        name: `Head Dept ${sfx}`,
+        code: `HD-${sfx}`,
+      });
+      deptId = dept.id;
+    });
+
+    it("set trưởng phòng bằng EMPLOYEE id ⇒ head_user_id = user LIÊN KẾT (không phải employee id)", async () => {
+      await deptService.updateDepartment(A.companyId, hrUserA, deptId, {
+        managerEmployeeId: empLinkedA,
+      });
+      const row = await direct.query(`SELECT head_user_id FROM org_units WHERE id = $1`, [deptId]);
+      expect(row.rows[0].head_user_id).toBe(empLinkedAUserId);
+    });
+
+    it("employee của TENANT KHÁC ⇒ BadRequest (RLS 0 row — KHÔNG rò tồn tại, KHÔNG ghi)", async () => {
+      await expect(
+        deptService.updateDepartment(A.companyId, hrUserA, deptId, {
+          managerEmployeeId: empLinkedB,
+        }),
+      ).rejects.toThrow(/manager employee does not exist/i);
+      const row = await direct.query(`SELECT head_user_id FROM org_units WHERE id = $1`, [deptId]);
+      expect(row.rows[0].head_user_id).toBe(empLinkedAUserId); // giữ nguyên head cũ
+    });
+
+    it("employee INACTIVE ⇒ BadRequest (DB-03: phải là employee active)", async () => {
+      await expect(
+        deptService.updateDepartment(A.companyId, hrUserA, deptId, {
+          managerEmployeeId: empInactiveA,
+        }),
+      ).rejects.toThrow(/must be active/i);
+    });
+
+    it("employee CHƯA liên kết tài khoản ⇒ BadRequest (cột lưu là head_user_id FK users)", async () => {
+      await expect(
+        deptService.updateDepartment(A.companyId, hrUserA, deptId, {
+          managerEmployeeId: empUnlinkedA,
+        }),
+      ).rejects.toThrow(/no linked user account/i);
+    });
+
+    it("managerEmployeeId: null ⇒ GỠ trưởng phòng (head_user_id NULL); undefined ⇒ giữ nguyên", async () => {
+      // undefined (không gửi field) — head giữ nguyên
+      await deptService.updateDepartment(A.companyId, hrUserA, deptId, {
+        name: `Head Dept R ${sfx}`,
+      });
+      let row = await direct.query(`SELECT head_user_id FROM org_units WHERE id = $1`, [deptId]);
+      expect(row.rows[0].head_user_id).toBe(empLinkedAUserId);
+
+      // null — gỡ
+      await deptService.updateDepartment(A.companyId, hrUserA, deptId, {
+        managerEmployeeId: null,
+      });
+      row = await direct.query(`SELECT head_user_id FROM org_units WHERE id = $1`, [deptId]);
+      expect(row.rows[0].head_user_id).toBeNull();
+    });
+
+    it("CREATE department kèm managerEmployeeId ⇒ resolve ngay khi tạo; employee tenant khác ⇒ chặn", async () => {
+      const created = await deptService.createDepartment(A.companyId, hrUserA, {
+        name: `Head Dept C ${sfx}`,
+        code: `HDC-${sfx}`,
+        managerEmployeeId: empLinkedA,
+      });
+      const row = await direct.query(`SELECT head_user_id FROM org_units WHERE id = $1`, [
+        created.id,
+      ]);
+      expect(row.rows[0].head_user_id).toBe(empLinkedAUserId);
+
+      await expect(
+        deptService.createDepartment(A.companyId, hrUserA, {
+          name: `Head Dept X ${sfx}`,
+          code: `HDX-${sfx}`,
+          managerEmployeeId: empLinkedB,
+        }),
+      ).rejects.toThrow(/manager employee does not exist/i);
+    });
+  });
 });

@@ -143,6 +143,8 @@ export { taskCoreApi } from "./lib/task-core-api";
 export { taskCollabApi } from "./lib/task-collab-api";
 // S5-TASK-PIPELINE-1 (lane fe) — client cột pipeline theo dự án.
 export { taskStatesApi } from "./lib/task-states-api";
+// Gắn thẻ (labels PM-1) — client nhãn màu theo dự án + gắn/gỡ nhãn cho task.
+export { taskLabelsApi } from "./lib/task-labels-api";
 // S4-FE-TASK-4 — Task File (list/upload 4-pha có tiến độ/xóa mềm/tải), nối canonical /tasks/:id/files
 // (S4-TASK-BE-5, PR #184).
 export { taskFileApi, type UploadTaskFileOptions } from "./lib/task-file-api";

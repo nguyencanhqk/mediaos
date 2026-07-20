@@ -11,7 +11,7 @@
  * Cấu trúc PHẢI là <li><div box/><ul>…children…</ul></li> để CSS connector khớp.
  */
 import { useTranslation } from "react-i18next";
-import { ArrowRightLeft, UserCog, UserPlus } from "lucide-react";
+import { ArrowRightLeft, Crown, UserCog, UserPlus } from "lucide-react";
 import type { OrgTreeNode } from "@mediaos/web-core";
 import { Avatar, Badge } from "@mediaos/ui";
 import type { UnitMember } from "./members-by-unit";
@@ -36,6 +36,8 @@ interface OrgChartNodeProps {
   membersByUnit?: Map<string, UnitMember[]>;
   /** Callback hành động sửa nhân sự — chỉ có khi actor có quyền update:employee. */
   edit?: PersonEditHandlers;
+  /** Đặt/đổi/gỡ TRƯỞNG ĐƠN VỊ — chỉ có khi actor có quyền update:department (gate ở page). */
+  onSetHead?: (dept: { id: string; name: string; headUserName: string | null }) => void;
 }
 
 /** Cụm 2 nút nhỏ (đổi quản lý / chuyển phòng) cho 1 người. */
@@ -67,7 +69,7 @@ function PersonActions({ target, edit }: { target: UnitMember; edit: PersonEditH
   );
 }
 
-export function OrgChartNode({ node, membersByUnit, edit }: OrgChartNodeProps) {
+export function OrgChartNode({ node, membersByUnit, edit, onSetHead }: OrgChartNodeProps) {
   const { t } = useTranslation("hr");
   const hasChildren = node.children.length > 0;
   const statusVariant = ORG_UNIT_STATUS_VARIANT[node.status] ?? "muted";
@@ -108,8 +110,38 @@ export function OrgChartNode({ node, membersByUnit, edit }: OrgChartNodeProps) {
               </div>
               <div className="text-[11px] text-muted-foreground">{t("orgChart.headLabel")}</div>
             </div>
-            {edit && headMember && <PersonActions target={headMember} edit={edit} />}
+            <div className="ml-auto flex shrink-0 items-center gap-0.5">
+              {onSetHead && (
+                <button
+                  type="button"
+                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  title={t("orgChart.actions.changeHead")}
+                  aria-label={t("orgChart.actions.changeHead")}
+                  onClick={() =>
+                    onSetHead({
+                      id: node.id,
+                      name: node.name,
+                      headUserName: node.headUserName ?? null,
+                    })
+                  }
+                >
+                  <Crown className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {edit && headMember && <PersonActions target={headMember} edit={edit} />}
+            </div>
           </div>
+        )}
+
+        {onSetHead && !node.headUserName && (
+          <button
+            type="button"
+            onClick={() => onSetHead({ id: node.id, name: node.name, headUserName: null })}
+            className="mt-1 flex items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-1.5 text-xs font-medium text-muted-foreground hover:border-brand/60 hover:text-foreground"
+          >
+            <Crown className="h-3.5 w-3.5" />
+            {t("orgChart.actions.setHead")}
+          </button>
         )}
 
         {members.length > 0 && (
@@ -153,7 +185,13 @@ export function OrgChartNode({ node, membersByUnit, edit }: OrgChartNodeProps) {
       {hasChildren && (
         <ul role="group">
           {node.children.map((child) => (
-            <OrgChartNode key={child.id} node={child} membersByUnit={membersByUnit} edit={edit} />
+            <OrgChartNode
+              key={child.id}
+              node={child}
+              membersByUnit={membersByUnit}
+              edit={edit}
+              onSetHead={onSetHead}
+            />
           ))}
         </ul>
       )}

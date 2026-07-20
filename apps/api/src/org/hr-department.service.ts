@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import type { CreateDepartmentRequest, UpdateDepartmentRequest } from "@mediaos/contracts";
-import { DatabaseService } from "../db/db.service";
+import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { isUniqueViolation } from "../common/db-error";
 import { HrDepartmentRepository } from "./hr-department.repository";
@@ -26,6 +26,31 @@ export class HrDepartmentService {
 
   listDepartments(companyId: string, status?: string) {
     return this.repo.listDepartments(companyId, status);
+  }
+
+  /**
+   * managerEmployeeId (DTO) = EMPLOYEE id trưởng phòng theo spec (DB-03 §15 rule 5: "employee active
+   * cùng company"); cột lưu hiện thực hoá là org_units.head_user_id (FK users — legacy, xem
+   * erd-current Phụ lục A) nên phải resolve user liên kết. Chạy TRONG withTenant tx (RLS lọc —
+   * employee tenant khác = 0 row → 400, KHÔNG rò tồn tại).
+   */
+  private async resolveManagerUserId(
+    companyId: string,
+    managerEmployeeId: string,
+    tx: TenantTx,
+  ): Promise<string> {
+    const rows = await this.repo.findManagerCandidate(companyId, managerEmployeeId, tx);
+    const employee = rows[0];
+    if (!employee) {
+      throw new BadRequestException("Manager employee does not exist in this company");
+    }
+    if (employee.status !== "active") {
+      throw new BadRequestException("Manager employee must be active");
+    }
+    if (!employee.userId) {
+      throw new BadRequestException("Manager employee has no linked user account");
+    }
+    return employee.userId;
   }
 
   async getDepartment(companyId: string, id: string) {
@@ -49,13 +74,18 @@ export class HrDepartmentService {
           }
         }
 
+        // Trưởng phòng: DTO mang EMPLOYEE id (đúng spec) → resolve user liên kết trong CÙNG tx.
+        const headUserId = dto.managerEmployeeId
+          ? await this.resolveManagerUserId(companyId, dto.managerEmployeeId, tx)
+          : null;
+
         const rows = await this.repo.createDepartment(
           companyId,
           {
             name: dto.name,
             code: dto.code ?? null,
             parentId: dto.parentId ?? null,
-            headUserId: dto.managerEmployeeId ?? null,
+            headUserId,
             description: dto.description ?? null,
             status: dto.status ?? "active",
           },
@@ -69,7 +99,13 @@ export class HrDepartmentService {
           objectType: "org_unit",
           objectId: created.id,
           actorUserId,
-          after: { name: dto.name, code: dto.code, parentId: dto.parentId },
+          after: {
+            name: dto.name,
+            code: dto.code,
+            parentId: dto.parentId,
+            managerEmployeeId: dto.managerEmployeeId,
+            headUserId,
+          },
         });
 
         return created;
@@ -112,6 +148,12 @@ export class HrDepartmentService {
 
     try {
       return await this.db.withTenant(companyId, async (tx) => {
+        // undefined = không đổi trưởng phòng · null = GỠ · uuid = EMPLOYEE id → resolve user liên kết.
+        const headUserId =
+          dto.managerEmployeeId == null
+            ? dto.managerEmployeeId
+            : await this.resolveManagerUserId(companyId, dto.managerEmployeeId, tx);
+
         const rows = await this.repo.updateDepartment(
           companyId,
           id,
@@ -119,7 +161,7 @@ export class HrDepartmentService {
             name: dto.name,
             code: dto.code,
             parentId: dto.parentId,
-            headUserId: dto.managerEmployeeId,
+            headUserId,
             description: dto.description,
             status: dto.status,
           },
@@ -138,8 +180,16 @@ export class HrDepartmentService {
             code: before[0].code,
             parentId: before[0].parentId,
             status: before[0].status,
+            headUserId: before[0].headUserId,
           },
-          after: { name: dto.name, code: dto.code, parentId: dto.parentId, status: dto.status },
+          after: {
+            name: dto.name,
+            code: dto.code,
+            parentId: dto.parentId,
+            status: dto.status,
+            managerEmployeeId: dto.managerEmployeeId,
+            headUserId,
+          },
         });
 
         return updated;

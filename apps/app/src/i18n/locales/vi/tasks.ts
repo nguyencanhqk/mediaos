@@ -66,7 +66,6 @@ export default {
       loadMore: "Tải thêm",
     },
     detail: {
-      backToList: "Quay lại danh sách",
       // S5-TASK-WORKSPACE-1 — tab bar vỏ workspace (SPEC-06 §13.3): kanban đổi nhãn thành "Bảng",
       // thêm Danh sách · Báo cáo · Hoạt động. Gantt/Lịch/Tài liệu/Biểu mẫu thuộc đợt D2-D5.
       tabs: {
@@ -76,6 +75,7 @@ export default {
         report: "Báo cáo",
         activity: "Hoạt động",
         members: "Thành viên",
+        settings: "Cài đặt",
       },
       fields: {
         code: "Mã dự án",
@@ -120,6 +120,35 @@ export default {
       error: {
         title: "Không thể tải dự án",
         description: "Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.",
+      },
+      // Tab "Cài đặt" — gom hành động quản trị dự án (trước đây nằm rải ở header + board toolbar).
+      settings: {
+        forbidden: {
+          title: "Không có quyền truy cập",
+          description: "Bạn không có quyền cài đặt dự án này.",
+        },
+        general: {
+          title: "Thông tin chung",
+          description: "Tên, mã, mô tả, Owner, phòng ban, độ ưu tiên và thời gian của dự án.",
+        },
+        pipeline: {
+          title: "Cột quy trình (pipeline)",
+          description: "Thêm, đổi tên, đổi màu, sắp xếp hoặc xoá các cột trên bảng công việc.",
+        },
+        tabOrder: {
+          title: "Thứ tự tab",
+          description:
+            "Sắp xếp thứ tự các tab của trang dự án theo ý bạn (lưu trên trình duyệt này, áp dụng cho mọi dự án).",
+          moveUp: "Chuyển tab lên",
+          moveDown: "Chuyển tab xuống",
+          reset: "Khôi phục mặc định",
+        },
+        danger: {
+          title: "Vùng nguy hiểm",
+          closeDescription:
+            "Đóng dự án — chuyển sang trạng thái Completed, các thao tác trên công việc sẽ dừng lại.",
+          deleteDescription: "Xóa dự án — dự án bị xóa mềm và biến mất khỏi danh sách.",
+        },
       },
       // S4-FE-TASK-4 — ProjectProgressCard (SPEC-06 §16.1, GET /projects/:id/report, view-report:project
       // SENSITIVE). KHÁC ProjectProgressWidget (S4-FE-DASH-2) — thêm overdueCount + workload theo người
@@ -229,13 +258,12 @@ export default {
         title: "Không thể tải thành viên",
         description: "Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.",
       },
+      // Bảng chọn NHIỀU nhân viên (benchmark Base/AMIS) — khóa CHUNG của picker nằm ở
+      // common.employeePicker (locales/vi/employee-picker.ts); đây chỉ còn phần riêng của dự án.
       addDialog: {
         title: "Thêm thành viên",
-        employeeLabel: "Nhân viên",
-        employeePlaceholder: "— Chọn nhân viên —",
         roleLabel: "Vai trò",
-        confirm: "Thêm",
-        cancel: "Hủy",
+        alreadyMember: "Đã tham gia",
       },
       removeDialog: {
         title: "Xóa thành viên",
@@ -513,6 +541,7 @@ export default {
         editAction: "Sửa nhanh việc con",
         // S5-TASK-INLINE-1 — sửa người thực hiện + hạn NGAY trên dòng việc con.
         inline: {
+          statusAction: "Đổi trạng thái việc con",
           assigneeAction: "Đổi người thực hiện (hiện tại: {{name}})",
           assigneeTitle: "Chọn người thực hiện",
           searchPlaceholder: "Tìm thành viên…",
@@ -734,8 +763,40 @@ export default {
         generic: "Đã xảy ra lỗi. Vui lòng thử lại.",
       },
     },
+    // Gắn thẻ (labels) — UX kiểu Base: nhãn màu tự do, gắn nhiều thẻ một công việc.
+    labels: {
+      strip: {
+        addButton: "Gắn thẻ",
+      },
+      dialog: {
+        title: "Gắn thẻ",
+        searchPlaceholder: "Tìm thẻ…",
+        addLink: "Thêm thẻ",
+        namePlaceholder: "Nhập tên thẻ",
+        colorLabel: "Màu thẻ",
+        createConfirm: "Xong",
+        saveAction: "Lưu",
+        cancelAction: "Hủy",
+        editAction: "Sửa thẻ {{name}}",
+        deleteAction: "Xoá thẻ {{name}}",
+        deleteConfirm: "Xoá?",
+        close: "Đóng",
+        empty: "Dự án chưa có thẻ nào — bấm “Thêm thẻ” để tạo thẻ đầu tiên.",
+        noMatch: "Không tìm thấy thẻ phù hợp.",
+        readHint: "Bạn không có quyền xem danh sách thẻ của dự án.",
+        attachHint: "Bạn không có quyền gắn/gỡ thẻ cho công việc này.",
+        errors: {
+          duplicate: "Tên thẻ đã tồn tại trong dự án.",
+          forbidden: "Bạn không có quyền thực hiện thao tác này.",
+          validation: "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.",
+          generic: "Đã xảy ra lỗi. Vui lòng thử lại.",
+        },
+      },
+    },
     statusSelect: {
       statusLabel: "Trạng thái",
+      // Cột pipeline của dự án (TaskStateField) — chỉ hiện với dự án có bảng pipeline.
+      stateLabel: "Cột quy trình",
       priorityLabel: "Ưu tiên",
       deadlineLabel: "Deadline",
       errors: {
@@ -814,7 +875,8 @@ export default {
         name: "Tên cột",
         namePlaceholder: "Tên cột mới…",
         color: "Màu cột",
-        sortOrder: "Thứ tự",
+        moveUp: "Chuyển cột lên",
+        moveDown: "Chuyển cột xuống",
         group: "Nhóm trạng thái",
         default: "Mặc định",
         add: "Thêm cột",

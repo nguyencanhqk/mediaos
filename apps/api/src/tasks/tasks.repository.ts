@@ -717,24 +717,33 @@ export class TasksRepository {
    * row.taskId để caller gom theo task. KHÔNG xoá link khi nhãn soft-deleted → lọc deleted_at IS NULL.
    */
   listLabelsForTaskIds(companyId: string, taskIds: string[]) {
-    if (taskIds.length === 0) return Promise.resolve([] as never[]);
+    if (taskIds.length === 0) return Promise.resolve([]);
     return this.db.withTenant(companyId, (tx) =>
-      tx
-        .select({
-          taskId: taskLabels.taskId,
-          id: labels.id,
-          companyId: labels.companyId,
-          projectId: labels.projectId,
-          name: labels.name,
-          color: labels.color,
-          createdBy: labels.createdBy,
-          createdAt: labels.createdAt,
-        })
-        .from(taskLabels)
-        .innerJoin(labels, and(eq(taskLabels.labelId, labels.id), isNull(labels.deletedAt)))
-        .where(and(eq(taskLabels.companyId, companyId), inArray(taskLabels.taskId, taskIds)))
-        .orderBy(asc(labels.name)),
+      this.listLabelsForTaskIdsTx(tx, companyId, taskIds),
     );
+  }
+
+  /**
+   * Biến thể nhận `tx` cho caller ĐANG Ở TRONG withTenant (getTask/kanban) — mở withTenant lồng nhau
+   * sẽ treo trên PgBouncer transaction-mode (bẫy đã ghi ở task-kanban.service).
+   */
+  listLabelsForTaskIdsTx(tx: TenantTx, companyId: string, taskIds: string[]) {
+    if (taskIds.length === 0) return Promise.resolve([]);
+    return tx
+      .select({
+        taskId: taskLabels.taskId,
+        id: labels.id,
+        companyId: labels.companyId,
+        projectId: labels.projectId,
+        name: labels.name,
+        color: labels.color,
+        createdBy: labels.createdBy,
+        createdAt: labels.createdAt,
+      })
+      .from(taskLabels)
+      .innerJoin(labels, and(eq(taskLabels.labelId, labels.id), isNull(labels.deletedAt)))
+      .where(and(eq(taskLabels.companyId, companyId), inArray(taskLabels.taskId, taskIds)))
+      .orderBy(asc(labels.name));
   }
 
   /** True nếu task ĐÃ gán nhãn này (idempotent add). */

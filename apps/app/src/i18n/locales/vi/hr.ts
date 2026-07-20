@@ -427,6 +427,8 @@ export default {
       assignManager: "Đổi quản lý trực tiếp",
       moveDept: "Chuyển phòng ban",
       addToDept: "Thêm người vào phòng",
+      setHead: "Đặt trưởng đơn vị",
+      changeHead: "Đổi trưởng đơn vị",
     },
     // S5-HR-ORGCHART-FE-3 — khu nhân viên chưa thuộc phòng ban nào.
     unassigned: {
@@ -440,12 +442,15 @@ export default {
       save: "Lưu",
       saving: "Đang lưu…",
       genericError: "Không thể lưu. Vui lòng thử lại.",
-      // Thêm người có sẵn vào phòng
-      addToDeptDesc: "Chọn một nhân viên (kể cả người chưa có phòng ban) để thêm vào {{dept}}.",
-      employeeLabel: "Nhân viên",
-      pickEmployee: "Vui lòng chọn một nhân viên.",
-      unassignedTag: "Chưa phân phòng",
-      noCandidates: "Không còn nhân viên nào để thêm vào phòng này.",
+      // Thêm người có sẵn vào phòng — picker chọn nhiều (EmployeeMultiPickerDialog; khóa chung
+      // của bảng chọn nằm ở common.employeePicker).
+      addToDeptDesc: "Chọn nhân viên (kể cả người chưa có phòng ban) để thêm vào {{dept}}.",
+      alreadyInDept: "Đã ở phòng này",
+      // Đặt/đổi/gỡ trưởng đơn vị (chọn-một; cần tài khoản liên kết vì head_user_id trỏ users).
+      setHeadDesc: "Chọn một nhân viên làm trưởng {{dept}}.",
+      noLinkedAccount: "Chưa có tài khoản",
+      removeHead: "Gỡ trưởng đơn vị ({{name}})",
+      removeHeadError: "Không gỡ được trưởng đơn vị. Vui lòng thử lại.",
       // Thêm phòng ban
       addDepartmentDesc: "Tạo phòng ban mới trong cơ cấu tổ chức.",
       deptName: "Tên phòng ban",

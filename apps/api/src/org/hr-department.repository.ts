@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, isNull, inArray } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
-import { orgUnits } from "../db/schema";
+import { employeeProfiles, orgUnits } from "../db/schema";
 
 /**
  * S2-HR-BE-3 — HR department repository.
@@ -59,6 +59,34 @@ export class HrDepartmentRepository {
           .from(orgUnits)
           .where(
             and(eq(orgUnits.companyId, companyId), eq(orgUnits.id, id), isNull(orgUnits.deletedAt)),
+          )
+          .limit(1),
+      tx,
+    );
+  }
+
+  /**
+   * Ứng viên trưởng phòng — đọc employee trong CÙNG company (RLS + company_id, BẤT BIẾN #1) để
+   * service validate active + resolve user liên kết (DB-03: manager_employee_id phải là employee
+   * active cùng company; cột lưu hiện là org_units.head_user_id FK users nên cần user_id).
+   */
+  findManagerCandidate(companyId: string, employeeId: string, tx?: TenantTx) {
+    return this.run(
+      companyId,
+      (t) =>
+        t
+          .select({
+            id: employeeProfiles.id,
+            userId: employeeProfiles.userId,
+            status: employeeProfiles.status,
+          })
+          .from(employeeProfiles)
+          .where(
+            and(
+              eq(employeeProfiles.companyId, companyId),
+              eq(employeeProfiles.id, employeeId),
+              isNull(employeeProfiles.deletedAt),
+            ),
           )
           .limit(1),
       tx,

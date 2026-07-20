@@ -30,6 +30,7 @@ import { DepartmentCreateDialog } from "./DepartmentCreateDialog";
 import { EmployeeAssignManagerDialog } from "./EmployeeAssignManagerDialog";
 import { EmployeeMoveDeptDialog } from "./EmployeeMoveDeptDialog";
 import { EmployeeAddToDeptDialog } from "./EmployeeAddToDeptDialog";
+import { DeptHeadPickerDialog } from "./DeptHeadPickerDialog";
 import "./org-chart.css";
 
 type PersonDialog = { kind: "manager" | "dept"; target: UnitMember } | null;
@@ -54,10 +55,21 @@ export function OrgChartPage() {
     HR_ENGINE_PAIRS.UPDATE_EMPLOYEE.action,
     HR_ENGINE_PAIRS.UPDATE_EMPLOYEE.resourceType,
   );
+  // Đặt/đổi trưởng đơn vị = mutation PHÒNG BAN (PATCH /hr/departments/:id) → gate update:department,
+  // KHÔNG dùng chung cổng update:employee của các hành động nhân sự.
+  const canUpdateDept = useCan(
+    HR_ENGINE_PAIRS.UPDATE_DEPARTMENT.action,
+    HR_ENGINE_PAIRS.UPDATE_DEPARTMENT.resourceType,
+  );
 
   const [createDeptOpen, setCreateDeptOpen] = useState(false);
   const [personDialog, setPersonDialog] = useState<PersonDialog>(null);
   const [addToDept, setAddToDept] = useState<{ id: string; name: string } | null>(null);
+  const [headDept, setHeadDept] = useState<{
+    id: string;
+    name: string;
+    headUserName: string | null;
+  } | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery<OrgTreeNode[]>({
     queryKey: hrKeys.orgChart.tree(),
@@ -104,6 +116,8 @@ export function OrgChartPage() {
     void queryClient.invalidateQueries({ queryKey: hrKeys.orgChart.tree() });
     void queryClient.invalidateQueries({ queryKey: orgChartEmployeesQueryKey });
     void queryClient.invalidateQueries({ queryKey: hrKeys.employees.all });
+    // Đặt/đổi trưởng đơn vị ghi vào org_units.head_user_id → list/detail phòng ban cũng đổi.
+    void queryClient.invalidateQueries({ queryKey: hrKeys.departments.all });
   }
 
   // ── Forbidden ──────────────────────────────────────────────────────────────
@@ -190,6 +204,7 @@ export function OrgChartPage() {
                   node={node}
                   membersByUnit={membersByUnit}
                   edit={editHandlers}
+                  onSetHead={canUpdateDept ? setHeadDept : undefined}
                 />
               ))}
             </ul>
@@ -251,14 +266,19 @@ export function OrgChartPage() {
       {addToDept && (
         <EmployeeAddToDeptDialog
           key={addToDept.id}
-          open
           dept={addToDept}
-          employees={allEmployees}
           onClose={() => setAddToDept(null)}
-          onSaved={() => {
-            invalidateOrgData();
-            setAddToDept(null);
-          }}
+          onSaved={invalidateOrgData}
+        />
+      )}
+
+      {headDept && (
+        <DeptHeadPickerDialog
+          key={headDept.id}
+          dept={headDept}
+          currentHeadName={headDept.headUserName}
+          onClose={() => setHeadDept(null)}
+          onSaved={invalidateOrgData}
         />
       )}
 

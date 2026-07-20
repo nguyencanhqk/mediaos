@@ -81,6 +81,18 @@ export const labelSchema = z.object({
 });
 export type LabelDto = z.infer<typeof labelSchema>;
 
+/**
+ * Chip nhãn HẸP đính trên DTO đọc task (detail + thẻ kanban) — UX "Gắn thẻ" kiểu Base. CHỈ 3 field
+ * cần vẽ chip (mirror độ hẹp SubtaskListItemDto): companyId/createdBy/createdAt là metadata quản trị,
+ * trả qua đường đọc task là phơi lộ thừa. Nguồn đầy đủ vẫn là `labelSchema` (GET /projects/:id/labels).
+ */
+export const taskLabelChipSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  color: z.string(),
+});
+export type TaskLabelChipDto = z.infer<typeof taskLabelChipSchema>;
+
 // ─── Task ─────────────────────────────────────────────────────────────────────
 // taskType uses the canonical 8-type `taskTypeSchema` defined above (G9-1 unified hub).
 // (A stale 5-type duplicate from merge 599609e was removed here — it shadowed the canonical
@@ -743,6 +755,10 @@ export const taskCoreResponseSchema = z.object({
   parentTaskId: z.string().uuid().nullable().optional(),
   subtaskTotal: z.number().int().nullable().optional(),
   subtaskDone: z.number().int().nullable().optional(),
+  // ── Gắn thẻ (labels PM-1, UX kiểu Base) — nhãn màu tự do gắn N-N vào task. `.optional()` additive
+  // (KHÔNG `.default([])` — giữ Input=Output cho apiFetch<T>, cùng bẫy suy luận đã ghi ở stateId).
+  // Server điền ở getTask + kanban board; endpoint chưa điền ⇒ FE coi như không có thẻ, không gãy.
+  labels: z.array(taskLabelChipSchema).optional(),
 });
 export type TaskCoreResponseDto = z.infer<typeof taskCoreResponseSchema>;
 

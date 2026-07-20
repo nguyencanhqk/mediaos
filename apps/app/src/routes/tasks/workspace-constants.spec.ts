@@ -7,6 +7,8 @@ import {
   normalizeSearchText,
   parseWorkspaceTab,
   pinSelectedInSummary,
+  PROJECT_WORKSPACE_TABS,
+  sanitizeWorkspaceTabOrder,
   sortWorkspaceTasks,
   UNASSIGNED_FILTER_VALUE,
   type WorkspaceTaskFilters,
@@ -49,6 +51,31 @@ describe("parseWorkspaceTab", () => {
     expect(parseWorkspaceTab("kanban")).toBe("overview");
     expect(parseWorkspaceTab(123)).toBe("overview");
     expect(parseWorkspaceTab(["board"])).toBe("overview");
+  });
+});
+
+describe("sanitizeWorkspaceTabOrder", () => {
+  it("giữ thứ tự đã lưu khi hợp lệ đầy đủ", () => {
+    const reversed = [...PROJECT_WORKSPACE_TABS].reverse();
+    expect(sanitizeWorkspaceTabOrder(reversed)).toEqual(reversed);
+  });
+
+  it("bỏ rác + trùng lặp, nối tab thiếu vào cuối theo mặc định", () => {
+    expect(sanitizeWorkspaceTabOrder(["board", "kanban", "board", 42, "settings"])).toEqual([
+      "board",
+      "settings",
+      "overview",
+      "list",
+      "report",
+      "activity",
+      "members",
+    ]);
+  });
+
+  it("không phải mảng (storage hỏng/null) → thứ tự mặc định", () => {
+    expect(sanitizeWorkspaceTabOrder(null)).toEqual([...PROJECT_WORKSPACE_TABS]);
+    expect(sanitizeWorkspaceTabOrder("board")).toEqual([...PROJECT_WORKSPACE_TABS]);
+    expect(sanitizeWorkspaceTabOrder({})).toEqual([...PROJECT_WORKSPACE_TABS]);
   });
 });
 

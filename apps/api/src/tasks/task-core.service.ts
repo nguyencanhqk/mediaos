@@ -43,6 +43,7 @@ import {
   toAvatarSubjects,
   avatarForRow,
   signedUrlsForRow,
+  toLabelChipsByTask,
   type TaskCoreSignedUrls,
 } from "./task-core.mapper";
 import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
@@ -190,7 +191,10 @@ export class TaskCoreService {
       // D-34 — tiến độ việc con trên màn chi tiết. CÙNG aggregate với board (không viết truy vấn thứ
       // hai ⇒ không có cơ hội hai công thức trôi khỏi nhau).
       const progress = await this.repo.countSubtaskProgressByParentIdsTx(tx, user.companyId, [id]);
-      return { row, progress: progress.get(id) };
+      // Gắn thẻ — nhãn của task cho màn chi tiết (biến thể Tx: đang Ở TRONG withTenant, mở lồng sẽ
+      // treo trên PgBouncer). AWAIT TUẦN TỰ sau progress (cùng tx — không Promise.all, bẫy đã ghi).
+      const labelRows = await this.tasksRepo.listLabelsForTaskIdsTx(tx, user.companyId, [id]);
+      return { row, progress: progress.get(id), labelRows };
     });
     if (!result) throw new NotFoundException(ERR.NOT_FOUND);
     const { avatars, covers } = await this.resolveSignedUrls(user.companyId, [result.row]);
@@ -198,6 +202,7 @@ export class TaskCoreService {
       ...this.toDto(result.row, signedUrlsForRow(result.row, avatars, covers)),
       subtaskTotal: result.progress?.total ?? 0,
       subtaskDone: result.progress?.done ?? 0,
+      labels: toLabelChipsByTask(result.labelRows).get(id) ?? [],
     };
   }
 

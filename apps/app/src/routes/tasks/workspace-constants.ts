@@ -16,6 +16,8 @@ import type {
  */
 
 // ─── Tab (URL ?tab=) — thứ tự = thứ tự render tab bar ─────────────────────────
+// Tab "settings" (S5) — gom Sửa/Đóng/Xóa dự án + Quản lý cột pipeline về một chỗ; chỉ hiện cho
+// người đủ quyền (pair hệ thống hoặc myProjectRole đủ bậc — ProjectDetailPage quyết).
 export const PROJECT_WORKSPACE_TABS = [
   "overview",
   "board",
@@ -23,6 +25,7 @@ export const PROJECT_WORKSPACE_TABS = [
   "report",
   "activity",
   "members",
+  "settings",
 ] as const;
 export type ProjectWorkspaceTab = (typeof PROJECT_WORKSPACE_TABS)[number];
 
@@ -31,6 +34,22 @@ export function parseWorkspaceTab(raw: unknown): ProjectWorkspaceTab {
   return typeof raw === "string" && (PROJECT_WORKSPACE_TABS as readonly string[]).includes(raw)
     ? (raw as ProjectWorkspaceTab)
     : "overview";
+}
+
+/**
+ * Làm sạch thứ tự tab người dùng lưu (localStorage — useWorkspaceTabOrder): giữ giá trị hợp lệ
+ * theo đúng thứ tự đã lưu, bỏ rác/trùng, và NỐI các tab còn thiếu vào cuối theo thứ tự mặc định —
+ * nhờ vậy code thêm tab mới sau này không làm thứ tự đã lưu "nuốt" mất tab.
+ */
+export function sanitizeWorkspaceTabOrder(raw: unknown): ProjectWorkspaceTab[] {
+  const valid = Array.isArray(raw)
+    ? raw.filter((t): t is ProjectWorkspaceTab =>
+        (PROJECT_WORKSPACE_TABS as readonly string[]).includes(t as string),
+      )
+    : [];
+  const unique = Array.from(new Set(valid));
+  const missing = PROJECT_WORKSPACE_TABS.filter((t) => !unique.includes(t));
+  return [...unique, ...missing];
 }
 
 // ─── Bộ lọc toolbar dùng chung (tìm · lọc · sắp xếp) ──────────────────────────

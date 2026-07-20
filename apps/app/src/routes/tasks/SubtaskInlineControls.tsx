@@ -11,8 +11,15 @@ import {
   ApiError,
 } from "@mediaos/web-core";
 import { Avatar, Popover, Input, cn } from "@mediaos/ui";
-import type { SubtaskListItemDto } from "@mediaos/contracts";
-import { localDatetimeToIso, isoToLocalDatetime } from "./constants";
+import type { SubtaskListItemDto, TaskCoreStatusDto } from "@mediaos/contracts";
+import {
+  localDatetimeToIso,
+  isoToLocalDatetime,
+  TASK_CORE_ENGINE_PAIRS,
+  TASK_CORE_STATUS_OPTIONS,
+} from "./constants";
+import { TaskStatusBadge } from "./TaskStatusBadge";
+import { BadgeSelect } from "./TaskInlineFields";
 
 /**
  * SubtaskInlineControls — sửa NGƯỜI THỰC HIỆN và HẠN của từng việc con NGAY TRÊN DÒNG
@@ -56,6 +63,60 @@ function useSubtaskFieldMutation(
         void queryClient.invalidateQueries({ queryKey: key });
     },
   });
+}
+
+// ── Trạng thái: bấm thẻ → chọn (đường change-status — ĐÚNG cửa màn chi tiết dùng) ────────────────
+/**
+ * Đổi trạng thái việc con NGAY TRÊN DÒNG — trước đây badge trạng thái là chữ chết, muốn đổi phải mở
+ * hẳn việc con ra. Đi route `POST /tasks/:id/change-status` (gate update-status:task) như
+ * TaskStatusField của màn chi tiết — KHÔNG đi PATCH (update:task) để không lặng lẽ nới/thắt quyền.
+ * `canEdit` = item.canOpen (D-39: GHI không thừa hưởng) — con ngoài phạm vi chỉ xem badge tĩnh.
+ */
+export function SubtaskStatusControl({
+  item,
+  parentTaskId,
+  projectId,
+  canEdit,
+}: {
+  item: SubtaskListItemDto;
+  parentTaskId: string;
+  projectId: string | null;
+  canEdit: boolean;
+}) {
+  const { t } = useTranslation("tasks");
+  const queryClient = useQueryClient();
+  const canStatus = useCan(
+    TASK_CORE_ENGINE_PAIRS.UPDATE_STATUS.action,
+    TASK_CORE_ENGINE_PAIRS.UPDATE_STATUS.resourceType,
+  );
+  const mutation = useMutation({
+    mutationFn: (status: TaskCoreStatusDto) => taskCoreApi.changeStatus(item.id, { status }),
+    onSettled: () => {
+      for (const key of taskSubtaskInvalidation.afterMutate(parentTaskId, projectId))
+        void queryClient.invalidateQueries({ queryKey: key });
+    },
+  });
+
+  if (!canEdit || !canStatus) return <TaskStatusBadge status={item.status} />;
+
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <BadgeSelect
+        id={`subtask-status-select-${item.id}`}
+        ariaLabel={t("tasks.detail.subtasks.inline.statusAction")}
+        value={item.status}
+        options={TASK_CORE_STATUS_OPTIONS}
+        disabled={mutation.isPending}
+        onSelect={(status) => mutation.mutate(status)}
+        renderBadge={(s) => <TaskStatusBadge status={s} />}
+      />
+      {mutation.isError && (
+        <p role="alert" className="text-xs text-destructive">
+          {t(inlineErrorTitle(mutation.error, "tasks.detail.subtasks.errors.saveFailed"))}
+        </p>
+      )}
+    </div>
+  );
 }
 
 // ── Người thực hiện: bấm avatar → chọn ───────────────────────────────────────
