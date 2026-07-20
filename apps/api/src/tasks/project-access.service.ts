@@ -137,7 +137,27 @@ export class ProjectAccessService {
     scope: DataScope,
     mode: TaskScopeMode,
   ): Promise<void> {
-    if (scope === "Company" || scope === "System") return;
+    const ok = await this.checkTaskInScopeTx(tx, user, taskId, scope, mode);
+    if (!ok) throw new NotFoundException(ERR.TASK_NOT_FOUND);
+  }
+
+  /**
+   * S5-TASK-SUBTASK-1 (DECISIONS-05 D-38) — bản KHÔNG NÉM của assertTaskInScopeTx.
+   *
+   * Xoá lan cần duyệt HẾT việc con rồi mới quyết (tất-cả-hoặc-không), nên không dùng được bản ném 404.
+   * ⚠️ MỘT NGUỒN LOGIC: `assertTaskInScopeTx` = hàm này + throw. KHÔNG copy thân hàm sang chỗ khác —
+   * hai bản sao là chỗ hai đường quyền trôi khỏi nhau.
+   * ⚠️ `mode` PHẢI đúng vế: quyết định CHẶN xoá dùng 'write'; nếu ai đó truyền 'read' cho vế chặn thì
+   * danh sách bị chặn sẽ luôn rỗng (hỏng CÂM) hoặc con đọc-được-nhưng-không-ghi-được bị xoá oan.
+   */
+  async checkTaskInScopeTx(
+    tx: TenantTx,
+    user: RequestUser,
+    taskId: string,
+    scope: DataScope,
+    mode: TaskScopeMode,
+  ): Promise<boolean> {
+    if (scope === "Company" || scope === "System") return true;
     const ctx = await this.dataScope.resolveContext(user.id, user.companyId);
     const scopeCond = this.dataScope.buildEmployeeScopeCondition(scope, ctx);
     const actorEmp = await this.coreRepo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
@@ -149,7 +169,7 @@ export class ProjectAccessService {
       mode,
     );
     const scoped = await this.coreRepo.findScopedByIdTx(tx, user.companyId, taskId, scopeExists);
-    if (!scoped) throw new NotFoundException(ERR.TASK_NOT_FOUND);
+    return scoped !== undefined;
   }
 
   /** NULL→Member (D-24); giá trị ngoài enum (không thể xảy ra nhờ CHECK) fail về Viewer cho an toàn. */

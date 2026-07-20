@@ -88,18 +88,37 @@ export class TaskKanbanService {
       // S5-TASK-BE-6 (SPEC-06 §13.8) — 3 aggregate GROUP-BY, KHÔNG per-card query (chống N+1). Chạy CÙNG tx
       // (withTenant) nên vẫn qua RLS+FORCE của tenant hiện tại.
       const taskIds = rows.map((row) => row.id);
-      const [commentCounts, attachmentCounts, checklistProgress] = await Promise.all([
-        this.commentsRepo.countByTaskIdsTx(tx, user.companyId, taskIds),
-        this.filesRepo.countByTaskIdsTx(tx, user.companyId, taskIds),
-        this.checklistsRepo.countProgressByTaskIdsTx(tx, user.companyId, taskIds),
-      ]);
+      // S5-TASK-SUBTASK-1 — 4 aggregate GROUP-BY, AWAIT TUẦN TỰ (KHÔNG Promise.all).
+      // ⚠️ Trước đây khối này dùng Promise.all trên CÙNG MỘT tx. node-postgres KHÔNG chạy được truy vấn
+      // song song trên một tx connection — chúng serialize dù có Promise.all (và pattern đó vỡ ở pg@9;
+      // xem workflow.service.ts:478-480 "Sequential awaits, NOT Promise.all"). Nghĩa là Promise.all ở
+      // đây KHÔNG mang lại song song thật, chỉ mang lại rủi ro ⇒ đổi tuần tự khi thêm cái thứ tư.
+      // Yêu cầu "KHÔNG N+1" nói về SỐ CÂU (1 aggregate cho N thẻ), không phải về tính song song.
+      const commentCounts = await this.commentsRepo.countByTaskIdsTx(tx, user.companyId, taskIds);
+      const attachmentCounts = await this.filesRepo.countByTaskIdsTx(tx, user.companyId, taskIds);
+      const checklistProgress = await this.checklistsRepo.countProgressByTaskIdsTx(
+        tx,
+        user.companyId,
+        taskIds,
+      );
+      // D-34 — tiến độ = tỉ lệ việc con hoàn thành. Board đã parentOnly ⇒ taskIds chính là id các thẻ CHA.
+      const subtaskProgress = await this.repo.countSubtaskProgressByParentIdsTx(
+        tx,
+        user.companyId,
+        taskIds,
+      );
       const toCard = (row: (typeof rows)[number]) => {
         const progress = checklistProgress.get(row.id);
+        const subtasks = subtaskProgress.get(row.id);
         return toTaskKanbanCardDto(row, {
           commentCount: commentCounts.get(row.id) ?? 0,
           attachmentCount: attachmentCounts.get(row.id) ?? 0,
           checklistDone: progress?.done ?? 0,
           checklistTotal: progress?.total ?? 0,
+          // D-35 — checklist GIỮ badge riêng, KHÔNG gộp, KHÔNG thay bằng subtask: checklist là hạng mục
+          // con trong đầu MỘT người, subtask là việc có chủ + hạn riêng. Hai khái niệm khác nhau.
+          subtaskDone: subtasks?.done ?? 0,
+          subtaskTotal: subtasks?.total ?? 0,
         });
       };
 

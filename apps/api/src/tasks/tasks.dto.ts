@@ -24,6 +24,7 @@ import {
   updateTaskChecklistItemSchema,
   updateTaskChecklistSchema,
   updateTaskCommentSchema,
+  reorderSubtasksSchema,
   updateTaskCoreSchema,
   updateTaskFieldsSchema,
   updateTaskStatusSchema,
@@ -86,6 +87,9 @@ export class CreateTaskCoreDto extends createZodDto(createTaskCoreSchema) {}
 
 /** PATCH /tasks/:id — cập nhật field task core (update:task, partial ≥1 field, KHÔNG đổi status). */
 export class UpdateTaskCoreDto extends createZodDto(updateTaskCoreSchema) {}
+
+/** PATCH /tasks/:id/subtasks/reorder — đổi thứ tự việc con (TASK-API-702, update:task trên CHA). */
+export class ReorderSubtasksDto extends createZodDto(reorderSubtasksSchema) {}
 
 // ─── S4-TASK-BE-3 — Task actions crown-FSM (assign/change-status/priority/deadline/watch) ─────────
 

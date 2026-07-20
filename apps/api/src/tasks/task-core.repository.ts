@@ -30,6 +30,12 @@ export interface TaskCoreListFilter {
    * truy vấn đã qua review. CHỈ truy vấn board bật; list/my giữ nguyên.
    */
   parentOnly?: boolean;
+  /**
+   * S5-TASK-SUBTASK-1 (TASK-API-701) — CHỈ việc con của đúng một cha. Loại trừ nhau với `parentOnly`
+   * (một bên đòi parent IS NULL, bên kia đòi parent = $id). Khi set, kết quả sắp theo
+   * `sort_order NULLS LAST, created_at` thay vì `created_at desc` mặc định của list.
+   */
+  parentId?: string;
   limit: number;
   offset: number;
 }
@@ -73,6 +79,10 @@ export interface TaskCoreRow {
   stateName?: string | null;
   stateColor?: string | null;
   stateGroup?: string | null;
+  // S5-TASK-SUBTASK-1 (D-31): cây việc con. Optional additive (mirror taskCode/stateId) để KHÔNG phá
+  // literal TaskCoreRow trong unit spec hiện có. NULL = task GỐC.
+  parentTaskId?: string | null;
+  sortOrder?: number | null;
 }
 
 export interface MyTaskRow extends TaskCoreRow {
@@ -91,6 +101,9 @@ export interface TaskRawRow {
   // hoặc trỏ project khác — dữ liệu hỏng, coi như chưa có cột, mirror findStateSyncRowTx).
   stateId: string | null;
   stateName: string | null;
+  // S5-TASK-SUBTASK-1 (D-36) — NULL = task GỐC. Nguồn cho chốt "việc con không có cột" ở
+  // applyStateChangeTx (phủ CẢ move-state LẪN PATCH {stateId}) và cho luật D-36a của updateTask.
+  parentTaskId: string | null;
 }
 
 /** Cột pipeline đích cho đường ghi state_id (move-state / PATCH / POST — plan 3b/3c). */
@@ -131,6 +144,9 @@ export interface TaskCoreInsertValues {
   // tường minh ⇒ status suy từ nhóm, chống desync-lúc-sinh 3c; không ⇒ is_default + 'Todo').
   stateId: string | null;
   taskStatus: string;
+  // S5-TASK-SUBTASK-1 (D-31) — NULL = task gốc. Bất biến cây đã được TaskCoreService kiểm+khoá TRƯỚC
+  // khi tới đây (assertParentAssignable); repository chỉ ghi.
+  parentTaskId: string | null;
 }
 
 export interface TaskCorePatchValues {
@@ -173,6 +189,8 @@ const TASK_CORE_SELECT = sql`
   tk.created_at                AS "createdAt",
   tk.updated_at                AS "updatedAt",
   tk.state_id                  AS "stateId",
+  tk.parent_task_id            AS "parentTaskId",
+  tk.sort_order                AS "sortOrder",
   ps.name                      AS "stateName",
   ps.color                     AS "stateColor",
   ps.state_group               AS "stateGroup"`;
@@ -197,6 +215,46 @@ const TASK_CORE_JOINS = sql`
  * KHÔNG gán cứng (BLOCKING #1 + residual của plan-reviewer — docs/plans/S5-TASK-PROJROLE-1.md §Sửa sai).
  */
 export type TaskScopeMode = "read" | "collab" | "write";
+
+/**
+ * S5-TASK-SUBTASK-1 (DECISIONS-05 D-32) — HAI vị từ "con", KHÁC NHAU CÓ CHỦ ĐÍCH. Đây là nguồn nhầm lẫn
+ * số 1 của cây việc con; mọi nơi dùng PHẢI gọi đúng hàm và giữ comment trỏ D-32. ĐỪNG "hợp nhất cho gọn".
+ *
+ *   activeChildExists    (CẤU TRÚC) — con còn sống, MỌI trạng thái KỂ CẢ Cancelled.
+ *     Dùng cho: xoá lan (D-38) · luật độ sâu (d) của D-33 · câu hỏi "task này có phải là cha không".
+ *     Nếu dùng COUNTABLE ở đây: con Cancelled thành MỒ CÔI khi xoá cha, và cây lên được 3 tầng.
+ *
+ *   countableChildExists (ĐẾM)     — con còn sống VÀ task_status <> 'Cancelled'.
+ *     Dùng cho: định nghĩa "lá" (D-34) · mẫu số tiến độ · rail avatar (D-40).
+ *     Nếu dùng ACTIVE ở đây: một task cha đang Todo & QUÁ HẠN mà có ĐÚNG 1 con đã Cancelled sẽ rớt khỏi
+ *     countsByStatus/overdueCount/assigneeWorkload ⇒ dự án hiện "0 việc phải làm, 0 quá hạn" trong khi
+ *     cha vẫn sống và trễ hạn. Việc đã huỷ KHÔNG được che khuất việc còn sống.
+ *
+ * Nhận `alias` vì 3 câu của ProjectsRepository dùng alias khác nhau — một hằng SQL cứng sẽ không tái dùng
+ * được và implementer sẽ copy 3 bản (3 đường trôi). company_id nằm TRONG subquery: BẤT BIẾN #1,
+ * defense-in-depth trên RLS.
+ *
+ * ⚠️ NEO CHÉO: vị từ lá còn tồn tại một bản SQL viết tay trong migration
+ * `0503_s5_subtask1_leaf_counting.sql` (định nghĩa mv_dashboard_task_status). KHÔNG có ràng buộc cơ học
+ * nào giữ hai bản khớp nhau — sửa một bên PHẢI sửa bên kia; int-spec "ba nguồn số khớp nhau" là lưới an toàn.
+ */
+export const activeChildExists = (alias: string): SQL => sql`exists (
+  select 1 from tasks c
+   where c.parent_task_id = ${sql.raw(alias)}.id
+     and c.company_id     = ${sql.raw(alias)}.company_id
+     and c.deleted_at is null
+)`;
+
+export const countableChildExists = (alias: string): SQL => sql`exists (
+  select 1 from tasks c
+   where c.parent_task_id = ${sql.raw(alias)}.id
+     and c.company_id     = ${sql.raw(alias)}.company_id
+     and c.deleted_at is null
+     and c.task_status is distinct from 'Cancelled'
+)`;
+
+/** "Lá" của D-34: task không có COUNTABLE_CHILD. Task không con ⇒ chính nó là lá. */
+export const isLeaf = (alias: string): SQL => sql`not ${countableChildExists(alias)}`;
 
 @Injectable()
 export class TaskCoreRepository {
@@ -265,7 +323,22 @@ export class TaskCoreRepository {
     if (filter.status) conds.push(sql`tk.task_status = ${filter.status}`);
     if (filter.priority) conds.push(sql`tk.task_priority = ${filter.priority}`);
     if (filter.assigneeEmployeeId) {
-      conds.push(sql`tk.main_assignee_employee_id = ${filter.assigneeEmployeeId}`);
+      // S5-TASK-SUBTASK-1 (DECISIONS-05 D-40) — RAIL AVATAR CÓ TÍNH CON: trên BOARD (parentOnly), lọc
+      // theo người X giữ thẻ CHA khi assignee của chính cha là X HOẶC có COUNTABLE_CHILD giao X. Board
+      // vẫn chỉ hiện cha (D-36) — con KHÔNG thành thẻ riêng. Ngoài board (list/my) giữ NGUYÊN hành vi cũ:
+      // ở đó con là dòng riêng nên nới cha sẽ nhân đôi việc trước mắt người dùng.
+      conds.push(
+        filter.parentOnly
+          ? sql`(tk.main_assignee_employee_id = ${filter.assigneeEmployeeId} or exists (
+                   select 1 from tasks c
+                    where c.parent_task_id = tk.id
+                      and c.company_id     = tk.company_id
+                      and c.deleted_at is null
+                      and c.task_status is distinct from 'Cancelled'
+                      and c.main_assignee_employee_id = ${filter.assigneeEmployeeId}
+                 ))`
+          : sql`tk.main_assignee_employee_id = ${filter.assigneeEmployeeId}`,
+      );
     }
     if (filter.projectId) conds.push(sql`tk.project_id = ${filter.projectId}`);
     if (filter.dueFrom) conds.push(sql`tk.due_at >= ${filter.dueFrom}`);
@@ -276,14 +349,20 @@ export class TaskCoreRepository {
       );
     }
     if (filter.parentOnly) conds.push(sql`tk.parent_task_id is null`);
+    if (filter.parentId) conds.push(sql`tk.parent_task_id = ${filter.parentId}`);
     if (scopeExists) conds.push(scopeExists);
 
     const where = sql.join(conds, sql` and `);
+    // Danh sách việc con có thứ tự NGƯỜI DÙNG sắp (TASK-API-702) ⇒ sort_order trước, NULLS LAST để con
+    // chưa từng reorder rơi xuống cuối theo created_at. Mọi truy vấn khác giữ nguyên created_at desc.
+    const orderBy = filter.parentId
+      ? sql`tk.sort_order asc nulls last, tk.created_at asc`
+      : sql`tk.created_at desc`;
     const res = await tx.execute(sql`
       select ${TASK_CORE_SELECT}
       ${TASK_CORE_JOINS}
       where ${where}
-      order by tk.created_at desc
+      order by ${orderBy}
       limit ${filter.limit} offset ${filter.offset}
     `);
     return res.rows as unknown as TaskCoreRow[];
@@ -320,7 +399,12 @@ export class TaskCoreRepository {
     const res = await tx.execute(sql`
       select t.id, t.task_type as "taskType", t.workflow_step_id as "workflowStepId",
              t.project_id as "projectId", t.main_assignee_employee_id as "mainAssigneeEmployeeId",
-             t.task_status as "taskStatus", t.state_id as "stateId", ps.name as "stateName"
+             t.task_status as "taskStatus", t.state_id as "stateId", ps.name as "stateName",
+             -- S5-TASK-SUBTASK-1 (D-36): mọi chốt "không ghi state_id lên việc con" đọc từ ĐÂY. Thêm ở
+             -- projection dùng chung để applyStateChangeTx (move-state + PATCH stateId) có sẵn thông tin
+             -- cây mà KHÔNG phải truy vấn thêm. Đi CÙNG LƯỢT với findStateSyncRowTx — thiếu một trong hai
+             -- thì chốt tương ứng im lặng không chạy.
+             t.parent_task_id as "parentTaskId"
         from tasks t
         left join project_states ps
           on ps.id = t.state_id and ps.company_id = t.company_id
@@ -533,12 +617,12 @@ export class TaskCoreRepository {
         company_id, task_type, title, description, task_status, task_priority,
         project_id, department_id, main_assignee_employee_id, assignee_user_id,
         creator_user_id, reporter_employee_id, due_at, start_at, created_by, updated_by, task_code,
-        state_id
+        state_id, parent_task_id
       ) values (
         ${companyId}, 'office', ${v.title}, ${v.description}, ${v.taskStatus}, ${v.taskPriority},
         ${v.projectId}, ${v.departmentId}, ${v.mainAssigneeEmployeeId}, ${v.assigneeUserId},
         ${v.creatorUserId}, ${v.reporterEmployeeId}, ${v.dueAt}, ${v.startAt}, ${v.createdBy}, ${v.createdBy}, ${v.taskCode},
-        ${v.stateId}
+        ${v.stateId}, ${v.parentTaskId}
       )
       returning id
     `);
@@ -594,5 +678,177 @@ export class TaskCoreRepository {
        returning id
     `);
     return (res.rows as unknown as { id: string }[])[0];
+  }
+
+  // ══ S5-TASK-SUBTASK-1 (DECISIONS-05) — cây việc con ═══════════════════════════════
+
+  /**
+   * D-33 — KHOÁ HÀNG, MỘT LUẬT CHO MỌI ĐƯỜNG GHI ĐỔI CẤU TRÚC CÂY.
+   *
+   * Khoá TOÀN BỘ tập hàng thao tác sẽ chạm, bằng ĐÚNG MỘT câu, `ORDER BY id` (thứ tự khoá TOÀN CỤC).
+   * Tập theo từng đường: create `{P}` · update parentTaskId `{oldP, T, newP}` · delete cha
+   * `{P} ∪ children` · delete con `{T}` · reorder `{P} ∪ children` · update projectId của task-có-con `{T}`.
+   *
+   * ⚠️ VÌ SAO KHÔNG TÁCH THÀNH NHIỀU LỆNH KHOÁ LẺ: node `LockRows` nằm TRÊN `Sort` nên MỘT câu bảo đảm
+   * hàng được khoá đúng thứ tự đã sắp; tách ra là mất bảo đảm đó ⇒ deadlock quay lại.
+   * ⚠️ VÌ SAO id-TĂNG-DẦN TOÀN CỤC chứ không phải "cha trước": "cha trước" gây ABBA với
+   * `PATCH A{parent:B}` ‖ `PATCH B{parent:A}`; trộn "cha trước" (delete) với "id tăng dần" (update)
+   * cũng ABBA. Một luật cho mọi đường mới thoát.
+   * ⚠️ KHÔNG JOIN trong câu khoá (idiom repo — attendance-adjustment.repository.ts:105-108: joined
+   * FOR UPDATE khoá lây employee/user rows).
+   *
+   * Caller PHẢI ĐỌC LẠI dữ liệu sau khi hàm này trả về — giá trị đọc trước khi khoá là bản chụp cũ.
+   */
+  async lockTasksForTreeWriteTx(tx: TenantTx, companyId: string, ids: string[]): Promise<string[]> {
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) return [];
+    const res = await tx.execute(sql`
+      select id from tasks
+       where company_id = ${companyId} and id = any(${unique}::uuid[])
+       order by id
+         for update
+    `);
+    return (res.rows as unknown as { id: string }[]).map((r) => r.id);
+  }
+
+  /** ACTIVE_CHILD (D-32 — CẤU TRÚC, kể cả Cancelled): dùng cho xoá lan, luật độ sâu, reorder. */
+  async listActiveChildrenTx(
+    tx: TenantTx,
+    companyId: string,
+    parentId: string,
+  ): Promise<
+    {
+      id: string;
+      taskCode: string | null;
+      title: string;
+      taskType: string;
+      workflowStepId: string | null;
+    }[]
+  > {
+    const res = await tx.execute(sql`
+      select id, task_code as "taskCode", title, task_type as "taskType",
+             workflow_step_id as "workflowStepId"
+        from tasks
+       where company_id = ${companyId} and parent_task_id = ${parentId} and deleted_at is null
+       order by id
+    `);
+    return res.rows as unknown as {
+      id: string;
+      taskCode: string | null;
+      title: string;
+      taskType: string;
+      workflowStepId: string | null;
+    }[];
+  }
+
+  /** Có ACTIVE_CHILD nào không (D-32) — luật (d) của D-33 và luật D-36a. */
+  async hasActiveChildrenTx(tx: TenantTx, companyId: string, taskId: string): Promise<boolean> {
+    const res = await tx.execute(sql`
+      select 1 from tasks
+       where company_id = ${companyId} and parent_task_id = ${taskId} and deleted_at is null
+       limit 1
+    `);
+    return res.rows.length > 0;
+  }
+
+  /**
+   * D-34 — tiến độ thẻ cha, MỘT truy vấn cho N thẻ (KHÔNG N+1; khuôn mẫu
+   * task-checklists.repository.countProgressByTaskIdsTx).
+   * Mẫu số = COUNTABLE_CHILD (LOẠI Cancelled — việc đã huỷ không còn là việc); tử số = con 'Done'.
+   * Lưu ý cặp đôi với D-33: con Cancelled VẪN giữ cha ngoài tập lá ở MV/báo cáo — hai vị từ khác nhau
+   * có chủ đích, xem docblock activeChildExists/countableChildExists ở đầu file.
+   */
+  async countSubtaskProgressByParentIdsTx(
+    tx: TenantTx,
+    companyId: string,
+    parentIds: string[],
+  ): Promise<Map<string, { done: number; total: number }>> {
+    const out = new Map<string, { done: number; total: number }>();
+    if (parentIds.length === 0) return out;
+    const res = await tx.execute(sql`
+      select parent_task_id as "parentId",
+             count(*) filter (where task_status = 'Done')::int as "done",
+             count(*)::int                                     as "total"
+        from tasks
+       where company_id = ${companyId}
+         and parent_task_id = any(${parentIds}::uuid[])
+         and deleted_at is null
+         and task_status is distinct from 'Cancelled'
+       group by parent_task_id
+    `);
+    for (const r of res.rows as unknown as { parentId: string; done: number; total: number }[]) {
+      out.set(r.parentId, { done: Number(r.done), total: Number(r.total) });
+    }
+    return out;
+  }
+
+  /**
+   * D-36 — writer HẸP xoá cột của việc con. KHÔNG phải state-change nghiệp vụ mà là hệ quả cơ học của
+   * "việc con ẩn khỏi board". Tách riêng vì: `TaskCorePatchValues` KHÔNG có `stateId` (mở ra là tạo
+   * đường ghi state THỨ HAI) và `setTaskStateTx` mang ràng buộc R9 "CHỈ gọi từ applyStateChangeTx".
+   * Vị từ `parent_task_id is not null` khiến writer này KHÔNG THỂ chạm task gốc, kể cả khi gọi nhầm.
+   */
+  async clearTaskStateForSubtaskTx(
+    tx: TenantTx,
+    companyId: string,
+    taskId: string,
+    actorUserId: string,
+  ): Promise<{ id: string } | undefined> {
+    const res = await tx.execute(sql`
+      update tasks
+         set state_id = null, updated_at = now(), updated_by = ${actorUserId}
+       where id = ${taskId} and company_id = ${companyId} and deleted_at is null
+         and parent_task_id is not null
+       returning id
+    `);
+    return (res.rows as unknown as { id: string }[])[0];
+  }
+
+  /** Gán/gỡ cha. Writer DUY NHẤT của parent_task_id — gate + bất biến cây nằm ở TaskCoreService. */
+  async setParentTaskTx(
+    tx: TenantTx,
+    companyId: string,
+    taskId: string,
+    parentTaskId: string | null,
+    actorUserId: string,
+  ): Promise<{ id: string } | undefined> {
+    const res = await tx.execute(sql`
+      update tasks
+         set parent_task_id = ${parentTaskId}, updated_at = now(), updated_by = ${actorUserId}
+       where id = ${taskId} and company_id = ${companyId} and deleted_at is null
+       returning id
+    `);
+    return (res.rows as unknown as { id: string }[])[0];
+  }
+
+  /**
+   * TASK-API-702 — ghi sort_order bằng MỘT câu (không loop N lệnh). Caller đã validate tập id khớp
+   * chính xác tập ACTIVE_CHILD của cha, NHƯNG câu này VẪN tự mang company_id + parent_task_id +
+   * deleted_at trong WHERE: defense-in-depth trên RLS, không chỉ dựa vào kiểm tra ở tầng trên.
+   * Trả số hàng đã ghi để caller ASSERT khớp kỳ vọng (lệch ⇒ rollback, không im lặng ghi thiếu).
+   */
+  async setSubtaskOrderTx(
+    tx: TenantTx,
+    companyId: string,
+    parentId: string,
+    orderedIds: string[],
+    actorUserId: string,
+  ): Promise<number> {
+    if (orderedIds.length === 0) return 0;
+    const values = sql.join(
+      orderedIds.map((id, i) => sql`(${id}::uuid, ${i}::int)`),
+      sql`, `,
+    );
+    const res = await tx.execute(sql`
+      update tasks t
+         set sort_order = v.ord, updated_at = now(), updated_by = ${actorUserId}
+        from (values ${values}) as v(id, ord)
+       where t.id = v.id
+         and t.company_id     = ${companyId}
+         and t.parent_task_id = ${parentId}
+         and t.deleted_at is null
+       returning t.id
+    `);
+    return res.rows.length;
   }
 }

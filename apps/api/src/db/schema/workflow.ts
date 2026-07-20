@@ -425,6 +425,16 @@ export const tasks = pgTable(
     // (hr-tasks.service, drizzle insert) GHI type-safe qua .values({ taskCode }) — S5-TASK-HRCODE-1.
     // uq_tasks_company_task_code_active (0478) chặn trùng còn-sống. KHÔNG migration mới (cột đã tồn tại).
     taskCode: text("task_code"),
+    // S5-TASK-SUBTASK-1 (DECISIONS-05 D-31) — cây việc con 1 CẤP. Cột + CHECK (parent_task_id <> id) đã
+    // tồn tại từ mig 0478; WO này chỉ TYPED cho drizzle (KHÔNG migration cột). NULL = task GỐC.
+    // ⚠️ Đường CRUD chính đi raw SQL ở task-core.repository (docblock đầu file đó) — typed ở đây phục vụ
+    // đường HR-task + an toàn kiểu. Bất biến cây (1 cấp · cùng project · khoá hàng) ép ở SERVICE, không
+    // ở drizzle: xem DECISIONS-05 D-33/D-36/D-36a và task-core.service.assertParentAssignable.
+    parentTaskId: uuid("parent_task_id").references((): AnyPgColumn => tasks.id, {
+      onDelete: "set null",
+    }),
+    // Thứ tự việc con trong một cha (TASK-API-702). Cột có từ 0478, WO này là nơi ĐẦU TIÊN dùng.
+    sortOrder: integer("sort_order"),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

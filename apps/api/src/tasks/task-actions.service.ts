@@ -676,6 +676,11 @@ export class TaskActionsService {
     if (!projectId) return;
     const current = await this.repo.findStateSyncRowTx(tx, user.companyId, taskId);
     if (!current) return; // task biến mất giữa tx (không thể sau updateStatusTx thành công) — fail-safe
+    // S5-TASK-SUBTASK-1 (DECISIONS-05 D-36) — VIỆC CON KHÔNG CÓ CỘT, và đây là đường DỄ TRƯỢT NHẤT:
+    // guard `!projectId` ở trên KHÔNG che được việc con, vì con BẮT BUỘC cùng project với cha ⇒ luôn có
+    // projectId. Thiếu dòng này thì đánh dấu một việc con là "Done" — luồng cốt lõi của tiến độ thẻ cha —
+    // sẽ auto-map state_id cho con và ĐẨY CON LÊN BOARD. Test chỉ kiểm state_id lúc TẠO sẽ xanh giả.
+    if (current.parentTaskId !== null) return;
     if (isStateInGroupForStatus(current.stateGroup, toStatus)) return;
     const states = await this.repo.listActiveStatesOrderedTx(tx, user.companyId, projectId);
     const target = pickTargetState(states, toStatus);

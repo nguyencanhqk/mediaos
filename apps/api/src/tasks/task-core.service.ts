@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
@@ -76,6 +77,23 @@ const ERR = {
     "TASK-ERR-FORBIDDEN: tạo công việc ngoài dự án ở phạm vi này phải chỉ định người thực hiện trong phạm vi của bạn.",
   ASSIGNEE_NOT_MEMBER:
     "TASK-ERR-ASSIGNEE-INVALID: người thực hiện không phải thành viên đang hoạt động của dự án.",
+  // ── S5-TASK-SUBTASK-1 (DECISIONS-05 D-33/D-36/D-36a/D-38) — cây việc con. Dải 043-047 (042 là mã cao
+  // nhất trước WO này). Ràng buộc cây ép Ở ĐÂY, không chỉ ở FE.
+  SUBTASK_PARENT_NOT_FOUND: "TASK-ERR-043: không tìm thấy công việc cha.",
+  SUBTASK_DEPTH_EXCEEDED:
+    "TASK-ERR-044: công việc con chỉ được 1 cấp — không thể tạo việc con bên trong một việc con.",
+  SUBTASK_HAS_CHILDREN:
+    "TASK-ERR-045: công việc này đang có việc con nên không thể trở thành việc con của công việc khác.",
+  SUBTASK_PROJECT_MISMATCH:
+    "TASK-ERR-046: việc con phải cùng dự án với việc cha — dự án của việc con do việc cha quyết định.",
+  SUBTASK_DELETE_FORBIDDEN:
+    "TASK-ERR-047: có việc con nằm ngoài phạm vi xoá của bạn — không xoá việc nào cả.",
+  SUBTASK_PARENT_PROJECT_LOCKED:
+    "TASK-ERR-046: công việc đang có việc con — hãy gỡ việc con ra trước khi chuyển dự án.",
+  SUBTASK_CHILD_PROJECT_LOCKED:
+    "TASK-ERR-046: không thể đổi dự án của một việc con — dự án do việc cha quyết định.",
+  SUBTASK_REORDER_MISMATCH:
+    "TASK-ERR-046: danh sách sắp xếp phải khớp đúng tập việc con hiện có của công việc này.",
 } as const;
 
 /**
@@ -130,6 +148,10 @@ export class TaskCoreService {
           dueFrom: query.dueFrom,
           dueTo: query.dueTo,
           overdue: query.overdue,
+          // S5-TASK-SUBTASK-1 (D-36) — opt-in, mặc định FALSE ⇒ hành vi cũ nguyên vẹn. Tab Bảng/Danh
+          // sách của vỏ workspace dự án bật để giữ parity; list toàn cục + /my + quá hạn KHÔNG bật
+          // (D-37 "danh sách ≠ con số").
+          parentOnly: query.parentOnly,
           limit,
           offset,
         },
@@ -140,12 +162,110 @@ export class TaskCoreService {
   }
 
   async getTask(user: RequestUser, id: string): Promise<TaskCoreResponseDto> {
-    const row = await this.db.withTenant(user.companyId, async (tx) => {
+    const result = await this.db.withTenant(user.companyId, async (tx) => {
       const scopeExists = await this.resolveReadScopeExists(tx, user);
-      return this.repo.findScopedByIdTx(tx, user.companyId, id, scopeExists);
+      const row = await this.repo.findScopedByIdTx(tx, user.companyId, id, scopeExists);
+      if (!row) return undefined;
+      // D-34 — tiến độ việc con trên màn chi tiết. CÙNG aggregate với board (không viết truy vấn thứ
+      // hai ⇒ không có cơ hội hai công thức trôi khỏi nhau).
+      const progress = await this.repo.countSubtaskProgressByParentIdsTx(tx, user.companyId, [id]);
+      return { row, progress: progress.get(id) };
     });
-    if (!row) throw new NotFoundException(ERR.NOT_FOUND);
-    return this.toDto(row);
+    if (!result) throw new NotFoundException(ERR.NOT_FOUND);
+    return {
+      ...this.toDto(result.row),
+      subtaskTotal: result.progress?.total ?? 0,
+      subtaskDone: result.progress?.done ?? 0,
+    };
+  }
+
+  /**
+   * TASK-API-701 — GET /tasks/:taskId/subtasks. Trả MẢNG TRẦN (khớp GET /tasks/:id/watchers).
+   *
+   * D-39 — PHẠM VI ĐỌC THỪA HƯỞNG: scope kiểm trên CHA; con KHÔNG lọc thêm. Có chủ đích, không phải
+   * bỏ sót: nếu lọc read-scope từng con thì `subtaskDone/subtaskTotal` sẽ không khớp danh sách người
+   * dùng nhìn thấy ("2/5" nhưng chỉ liệt kê 3 dòng) ⇒ % mất nghĩa và trông như bug. Người chịu trách
+   * nhiệm việc cha đương nhiên phải thấy phân rã của nó.
+   * ⚠️ Đối xứng: quyền GHI KHÔNG thừa hưởng — sửa/xoá/đổi trạng thái một con riêng lẻ vẫn kiểm trên
+   * chính con đó, và `GET /tasks/:childId` cũng vậy (FE phải render con ngoài tầm với dạng read-only).
+   */
+  async listSubtasks(user: RequestUser, parentId: string): Promise<TaskCoreResponseDto[]> {
+    const rows = await this.db.withTenant(user.companyId, async (tx) => {
+      const scopeExists = await this.resolveReadScopeExists(tx, user);
+      const parent = await this.repo.findScopedByIdTx(tx, user.companyId, parentId, scopeExists);
+      if (!parent) throw new NotFoundException(ERR.NOT_FOUND);
+      return this.repo.listTx(
+        tx,
+        user.companyId,
+        { parentId, limit: TASK_CORE_PAGE_LIMIT_MAX, offset: 0 },
+        undefined,
+      );
+    });
+    return rows.map((r) => this.toDto(r));
+  }
+
+  /**
+   * TASK-API-702 — PATCH /tasks/:taskId/subtasks/reorder. Gate update:task + phạm vi ghi trên CHA
+   * (đổi thứ tự việc con là sửa cấu trúc trình bày của cha). KHÔNG ghi activity/audit: đây là thay đổi
+   * TRÌNH BÀY, không phải vòng đời (ghi rõ trong API-06) — nhật ký task sẽ ngập rác nếu ghi.
+   */
+  async reorderSubtasks(
+    user: RequestUser,
+    parentId: string,
+    subtaskIds: string[],
+  ): Promise<TaskCoreResponseDto[]> {
+    const updateScope = await this.dataScope.resolveAndAssert(
+      user.id,
+      user.companyId,
+      "update",
+      "task",
+    );
+    return this.db.withTenant(user.companyId, async (tx) => {
+      const parent = await this.repo.findRawByIdTx(tx, user.companyId, parentId);
+      if (!parent) throw new NotFoundException(ERR.NOT_FOUND);
+      await this.assertInScopeForWrite(tx, user, parentId, updateScope);
+
+      // Luật khoá D-33: {cha} ∪ con, id tăng dần, một câu.
+      const firstPass = await this.repo.listActiveChildrenTx(tx, user.companyId, parentId);
+      await this.repo.lockTasksForTreeWriteTx(tx, user.companyId, [
+        parentId,
+        ...firstPass.map((c) => c.id),
+      ]);
+      const children = await this.repo.listActiveChildrenTx(tx, user.companyId, parentId);
+
+      // Tập gửi lên phải KHỚP CHÍNH XÁC tập con hiện có: thiếu ⇒ con sót lại sort_order cũ (thứ tự
+      // nhập nhằng); thừa/lạ ⇒ ghi sort_order cho task của cha khác hoặc company khác.
+      const actual = new Set(children.map((c) => c.id));
+      const given = new Set(subtaskIds);
+      if (
+        given.size !== subtaskIds.length ||
+        given.size !== actual.size ||
+        [...given].some((cid) => !actual.has(cid))
+      ) {
+        throw new BadRequestException(ERR.SUBTASK_REORDER_MISMATCH);
+      }
+
+      const written = await this.repo.setSubtaskOrderTx(
+        tx,
+        user.companyId,
+        parentId,
+        subtaskIds,
+        user.id,
+      );
+      // ASSERT SỐ HÀNG: câu UPDATE tự mang company_id + parent_task_id + deleted_at trong WHERE
+      // (defense-in-depth trên RLS). Lệch kỳ vọng ⇒ rollback, KHÔNG im lặng ghi thiếu.
+      if (written !== subtaskIds.length) {
+        throw new ConflictException(ERR.SUBTASK_REORDER_MISMATCH);
+      }
+
+      const rows = await this.repo.listTx(
+        tx,
+        user.companyId,
+        { parentId, limit: TASK_CORE_PAGE_LIMIT_MAX, offset: 0 },
+        undefined,
+      );
+      return rows.map((r) => this.toDto(r));
+    });
   }
 
   async getMyTasks(user: RequestUser): Promise<MyTaskItemDto[]> {
@@ -173,6 +293,9 @@ export class TaskCoreService {
     if (dto.stateId !== undefined) {
       await this.dataScope.resolveAndAssert(user.id, user.companyId, "update-state", "task");
       if (!dto.projectId) throw new BadRequestException(ERR.STATE_INVALID);
+      // S5-TASK-SUBTASK-1 (D-36) — việc con ẩn khỏi board nên KHÔNG có cột. Từ chối tường minh thay vì
+      // nuốt im lặng: client gửi stateId cho việc con là hiểu sai mô hình, phải biết ngay.
+      if (dto.parentTaskId) throw new BadRequestException(ERR.STATE_INVALID);
     }
     // S5-NOTI-FIX-2 / S5-TASK-HRCODE-1: cấp task_code Ở TX RIÊNG TRƯỚC business tx (mirror
     // allocateEmployeeCode) — counter FOR UPDATE serialize (0 dup) rồi COMMIT ngay, KHÔNG giữ lock suốt tx
@@ -183,7 +306,34 @@ export class TaskCoreService {
     return this.db.withTenant(user.companyId, async (tx) => {
       const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
 
-      if (dto.projectId) await this.assertProjectUsable(tx, user.companyId, dto.projectId);
+      // ── S5-TASK-SUBTASK-1 (DECISIONS-05 D-31/D-36) — TẠO VIỆC CON ──────────────────────────────
+      // ⚠️ `effectiveProjectId` PHẢI thay `dto.projectId` ở MỌI cửa bên dưới. Việc con thường chỉ gửi
+      // parentTaskId (dự án suy từ cha); nếu các cửa vẫn key theo `dto.projectId` thì lọt 4 lỗ:
+      //   (i) assertProjectUsable bị skip ⇒ TẠO ĐƯỢC việc con trong dự án ĐÃ ĐÓNG (bypass PROJECT_CLOSED);
+      //   (ii) nhánh CREATE_ASSIGNEE_REQUIRED bắn 403 oan cho việc con không có người thực hiện;
+      //   (iii) assertProjectRoleTx bị skip ⇒ scope<Company không bị kiểm Owner/Manager;
+      //   (iv) assignee đi nhánh org-scope thay vì scope-dự-án ⇒ vỡ ca dùng CHÍNH của D-27
+      //        (Manager dự án giao việc cho member ngoài team mình).
+      let parentProjectId: string | null = null;
+      if (dto.parentTaskId) {
+        // Khoá cha + kiểm bất biến cây TRƯỚC mọi ghi (D-33). taskId = null: task chưa tồn tại nên luật
+        // (d) không áp; oldParent = null.
+        ({ effectiveProjectId: parentProjectId } = await this.assertParentAssignable(
+          tx,
+          user.companyId,
+          null,
+          dto.parentTaskId,
+          null,
+        ));
+        // Dự án của con do CHA quyết. Gửi kèm projectId mà lệch ⇒ 400 (KHÔNG âm thầm ghi đè).
+        if (dto.projectId && dto.projectId !== parentProjectId) {
+          throw new BadRequestException(ERR.SUBTASK_PROJECT_MISMATCH);
+        }
+      }
+      const effectiveProjectId = dto.parentTaskId ? parentProjectId : (dto.projectId ?? null);
+
+      if (effectiveProjectId)
+        await this.assertProjectUsable(tx, user.companyId, effectiveProjectId);
       if (dto.departmentId) await this.assertDepartment(tx, user.companyId, dto.departmentId);
 
       // S5-TASK-PROJROLE-1 — CREATE-SCOPE (D-27, điều kiện un-defer create:task ghi ở
@@ -197,22 +347,32 @@ export class TaskCoreService {
       //     cho org-scope check (Manager dự án giao việc cho member ngoài team mình là ca dùng CHÍNH).
       //   scope Company/System ⇒ hành vi cũ nguyên vẹn (kể cả warning-only assignee ngoài dự án).
       const isOrgWide = createScope === "Company" || createScope === "System";
-      if (!isOrgWide && !dto.projectId && !dto.assigneeEmployeeId) {
+      if (!isOrgWide && !effectiveProjectId && !dto.assigneeEmployeeId) {
         throw new ForbiddenException(ERR.CREATE_ASSIGNEE_REQUIRED);
       }
-      if (!isOrgWide && dto.projectId) {
+      if (!isOrgWide && effectiveProjectId) {
         await this.projectAccess.assertProjectRoleTx(
           tx,
           user,
-          dto.projectId,
+          effectiveProjectId,
           actorEmp?.id ?? null,
           ["Owner", "Manager"],
         );
       }
+      // D-38/D-39 (ghi KHÔNG thừa hưởng, nhưng TẠO CON là sửa cấu trúc việc CHA): scope<Company ⇒ actor
+      // phải GHI được cha. Không có điều kiện này thì ai đọc được cha cũng nhét được việc con vào đó.
+      if (!isOrgWide && dto.parentTaskId) {
+        await this.assertInScopeForWrite(tx, user, dto.parentTaskId, createScope);
+      }
 
       const assignee = dto.assigneeEmployeeId
-        ? !isOrgWide && dto.projectId
-          ? await this.resolveAssigneeForProject(tx, user, dto.assigneeEmployeeId, dto.projectId)
+        ? !isOrgWide && effectiveProjectId
+          ? await this.resolveAssigneeForProject(
+              tx,
+              user,
+              dto.assigneeEmployeeId,
+              effectiveProjectId,
+            )
           : await this.resolveAssignee(tx, user, createScope, dto.assigneeEmployeeId)
         : null;
 
@@ -222,24 +382,36 @@ export class TaskCoreService {
       //   từ nhóm cột đó (hardening F4 gate: is_default/state_group mutable qua PATCH /states/:id —
       //   default thường là unstarted ⇒ 'Todo' như acceptance, nhưng nếu admin flip default sang cột
       //   nhóm khác thì status theo cột, KHÔNG sinh thẻ desync-lúc-sinh).
+      // S5-TASK-SUBTASK-1 (D-36) — VIỆC CON BỎ QUA TOÀN BỘ nhánh cột: state_id NULL và status khởi tạo
+      // 'Todo' (không suy từ cột vì con không có cột). Nhánh is_default bên dưới cũng phải bị bỏ qua —
+      // nếu không, con sẽ được gán cột mặc định của dự án và hiện lên board ngay lúc tạo.
       let stateId: string | null = null;
       let initialStatus: TaskCoreStatus = "Todo";
-      if (dto.stateId !== undefined && dto.projectId) {
-        const state = await this.repo.findStateForWriteTx(tx, user.companyId, dto.stateId);
-        if (!state) throw new NotFoundException(ERR.STATE_NOT_FOUND);
-        if (state.projectId !== dto.projectId) throw new BadRequestException(ERR.STATE_INVALID);
-        stateId = state.id;
-        initialStatus = this.statusForGroup(state.stateGroup);
-      } else if (dto.projectId) {
-        const fallback = await this.repo.findDefaultStateTx(tx, user.companyId, dto.projectId);
-        stateId = fallback?.id ?? null; // project 0 state ⇒ NULL (hợp lệ)
-        if (fallback) initialStatus = this.statusForGroup(fallback.stateGroup);
+      if (!dto.parentTaskId) {
+        if (dto.stateId !== undefined && effectiveProjectId) {
+          const state = await this.repo.findStateForWriteTx(tx, user.companyId, dto.stateId);
+          if (!state) throw new NotFoundException(ERR.STATE_NOT_FOUND);
+          if (state.projectId !== effectiveProjectId) {
+            throw new BadRequestException(ERR.STATE_INVALID);
+          }
+          stateId = state.id;
+          initialStatus = this.statusForGroup(state.stateGroup);
+        } else if (effectiveProjectId) {
+          const fallback = await this.repo.findDefaultStateTx(
+            tx,
+            user.companyId,
+            effectiveProjectId,
+          );
+          stateId = fallback?.id ?? null; // project 0 state ⇒ NULL (hợp lệ)
+          if (fallback) initialStatus = this.statusForGroup(fallback.stateGroup);
+        }
       }
 
       const created = await this.repo.insertTaskCoreTx(tx, user.companyId, {
         title: dto.title,
         description: dto.description ?? null,
-        projectId: dto.projectId ?? null,
+        projectId: effectiveProjectId,
+        parentTaskId: dto.parentTaskId ?? null,
         departmentId: dto.departmentId ?? null,
         mainAssigneeEmployeeId: assignee?.employeeId ?? null,
         assigneeUserId: assignee?.userId ?? null,
@@ -259,7 +431,7 @@ export class TaskCoreService {
         targetType: "Task",
         targetId: created.id,
         taskId: created.id,
-        projectId: dto.projectId ?? null,
+        projectId: effectiveProjectId,
         actorUserId: user.id,
         actorEmployeeId: actorEmp?.id ?? null,
         newValues: {
@@ -267,7 +439,8 @@ export class TaskCoreService {
           status: initialStatus,
           stateId,
           assigneeEmployeeId: assignee?.employeeId ?? null,
-          projectId: dto.projectId ?? null,
+          projectId: effectiveProjectId,
+          parentTaskId: dto.parentTaskId ?? null,
         },
         message: `Tạo công việc ${dto.title}`,
       });
@@ -281,7 +454,8 @@ export class TaskCoreService {
           status: initialStatus,
           stateId,
           assigneeEmployeeId: assignee?.employeeId ?? null,
-          projectId: dto.projectId ?? null,
+          projectId: effectiveProjectId,
+          parentTaskId: dto.parentTaskId ?? null,
         },
       });
 
@@ -314,6 +488,52 @@ export class TaskCoreService {
       }
       // DATA-SCOPE WRITE: scope < Company ⇒ task phải nằm trong phạm vi update của actor (fail-closed).
       await this.assertInScopeForWrite(tx, user, id, updateScope);
+
+      // ── S5-TASK-SUBTASK-1 (DECISIONS-05 D-36a) — DỰ ÁN CỦA CÂY LÀ BẤT BIẾN ────────────────────────
+      // `PATCH {projectId}` phá được D-36 mà KHÔNG cần đồng thời: chuyển cha sang dự án X thì con ở lại
+      // dự án cũ. Vì báo cáo lọc theo project_id còn quan hệ cha-con thì KHÔNG, cha sẽ "không phải lá"
+      // ở X (vẫn còn COUNTABLE_CHILD) mà cũng không xuất hiện ở dự án cũ ⇒ CHA SỐNG, CÓ THỂ QUÁ HẠN,
+      // TÀNG HÌNH Ở CẢ HAI DỰ ÁN — đúng lỗi "việc sống bị che" mà D-32 đã lập luận để tránh.
+      // Chốt YAGNI (không cascade): chặn cả hai chiều, người dùng gỡ cây ra trước rồi mới chuyển dự án.
+      if (dto.projectId !== undefined && dto.projectId !== raw.projectId) {
+        if (raw.parentTaskId !== null) {
+          throw new BadRequestException(ERR.SUBTASK_CHILD_PROJECT_LOCKED);
+        }
+        // Khoá T trước khi hỏi "có con không" — chặn create-child chạy chen vào giữa kiểm và ghi
+        // (create khoá {P} = {T} nên hai bên serialize trên cùng một hàng).
+        await this.repo.lockTasksForTreeWriteTx(tx, user.companyId, [id]);
+        if (await this.repo.hasActiveChildrenTx(tx, user.companyId, id)) {
+          throw new BadRequestException(ERR.SUBTASK_PARENT_PROJECT_LOCKED);
+        }
+      }
+
+      // ── Gán/gỡ cha (D-33) ────────────────────────────────────────────────────────────────────────
+      // Chạy TRƯỚC patch để 400 xảy ra trước mọi ghi. Gỡ cha (null) ⇒ task thành GỐC KHÔNG CỘT: KHÔNG
+      // tự đoán cột mặc định (auto-map là cửa desync D-20/D-21) — người dùng kéo vào cột bằng move-state.
+      let parentChanged = false;
+      if (dto.parentTaskId !== undefined && dto.parentTaskId !== raw.parentTaskId) {
+        if (dto.parentTaskId !== null) {
+          await this.assertParentAssignable(
+            tx,
+            user.companyId,
+            id,
+            dto.parentTaskId,
+            raw.parentTaskId,
+          );
+          // Ghi cấu trúc việc của CẢ hai cha ⇒ đòi quyền ghi trên cả hai (scope<Company).
+          await this.assertInScopeForWrite(tx, user, dto.parentTaskId, updateScope);
+        } else {
+          await this.repo.lockTasksForTreeWriteTx(
+            tx,
+            user.companyId,
+            [id, raw.parentTaskId].filter((v): v is string => v !== null),
+          );
+        }
+        if (raw.parentTaskId) {
+          await this.assertInScopeForWrite(tx, user, raw.parentTaskId, updateScope);
+        }
+        parentChanged = true;
+      }
 
       if (dto.projectId) await this.assertProjectUsable(tx, user.companyId, dto.projectId);
       if (dto.departmentId) await this.assertDepartment(tx, user.companyId, dto.departmentId);
@@ -350,6 +570,24 @@ export class TaskCoreService {
         if (!updated) throw new NotFoundException(ERR.NOT_FOUND);
       }
 
+      // S5-TASK-SUBTASK-1 — ghi cấu trúc cây SAU patch (writer riêng, KHÔNG mở TaskCorePatchValues cho
+      // parent_task_id/state_id). Gán cha ⇒ xoá cột CÙNG LƯỢT (D-36): thẻ rời board ngay.
+      if (parentChanged) {
+        const moved = await this.repo.setParentTaskTx(
+          tx,
+          user.companyId,
+          id,
+          dto.parentTaskId ?? null,
+          user.id,
+        );
+        if (!moved) throw new NotFoundException(ERR.NOT_FOUND);
+        if (dto.parentTaskId) {
+          // Writer HẸP: vị từ `parent_task_id is not null` của nó khiến không thể chạm task gốc.
+          // KHÔNG dùng setTaskStateTx (ràng buộc R9: chỉ applyStateChangeTx được gọi writer đó).
+          await this.repo.clearTaskStateForSubtaskTx(tx, user.companyId, id, user.id);
+        }
+      }
+
       // 3b — đổi cột qua PATCH đi CÙNG method dùng chung với move-state (gate update-state đã resolve
       // pre-tx ở prepareStateWrite). Chạy SAU patch để dùng projectId hiệu lực (PATCH có thể đổi project).
       if (dto.stateId !== undefined && stateCtx) {
@@ -373,15 +611,30 @@ export class TaskCoreService {
           projectId: raw.projectId,
           actorUserId: user.id,
           actorEmployeeId: actorEmp?.id ?? null,
-          newValues: auditedChanges,
-          message: "Cập nhật công việc",
+          // S5-TASK-SUBTASK-1 — CHỐNG "THẺ BIẾN MẤT CÂM": gán cha làm thẻ rời board, đó là thay đổi
+          // người dùng NHÌN THẤY nên phải có dòng lịch sử. Ghi oldValues CHỈ cho parentTaskId/stateId
+          // (không đổi hình dạng bản ghi cho mọi field — spec timeline #245 đang pin `newValues`);
+          // TaskActivityTimeline dựng dòng cũ→mới từ cặp này.
+          ...(parentChanged
+            ? {
+                oldValues: { parentTaskId: raw.parentTaskId, stateId: raw.stateId },
+                message: dto.parentTaskId
+                  ? "Chuyển thành việc con"
+                  : "Tách khỏi việc cha thành việc độc lập",
+              }
+            : { message: "Cập nhật công việc" }),
+          newValues: parentChanged
+            ? { ...auditedChanges, parentTaskId: dto.parentTaskId ?? null, stateId: null }
+            : auditedChanges,
         });
         await this.audit.record(tx, {
           action: "TaskUpdated",
           objectType: "task",
           objectId: id,
           actorUserId: user.id,
-          before: { changed: Object.keys(auditedChanges) },
+          before: parentChanged
+            ? { changed: Object.keys(auditedChanges), parentTaskId: raw.parentTaskId }
+            : { changed: Object.keys(auditedChanges) },
           after: auditedChanges,
         });
       }
@@ -469,6 +722,11 @@ export class TaskCoreService {
     ctx: { scopeState: DataScope; scopeStatus: DataScope | null; checklistGateEnabled: boolean },
   ): Promise<void> {
     if (!projectId) throw new BadRequestException(ERR.STATE_INVALID);
+    // S5-TASK-SUBTASK-1 (DECISIONS-05 D-36) — VIỆC CON KHÔNG CÓ CỘT. Chốt đặt ở METHOD DÙNG CHUNG nên
+    // phủ CẢ HAI route ghi state_id: POST /tasks/:id/move-state (TASK-API-213) VÀ PATCH /tasks/:id
+    // {stateId}. Guard `!projectId` ngay trên KHÔNG che được việc con (con luôn có project của cha).
+    // ⚠️ Đừng vá ở route — vá một route thì route kia vẫn mở, và int-spec được thiết kế để đỏ đúng ca đó.
+    if (raw.parentTaskId !== null) throw new BadRequestException(ERR.STATE_INVALID);
     // BOUND DATA-SCOPE của pair update-state Ở CHÍNH method dùng chung (finding HIGH security-reviewer):
     // đặt ở caller thì đường PATCH bound nhầm theo scope update:task ⇒ actor update:task@Company +
     // update-state@Own đổi được cột task NGOÀI phạm vi qua PATCH (API-06 §15.2#6 — "phạm vi kiểm theo
@@ -556,10 +814,82 @@ export class TaskCoreService {
       }
       await this.assertInScopeForWrite(tx, user, id, deleteScope);
 
+      // ── S5-TASK-SUBTASK-1 (DECISIONS-05 D-38) — XOÁ LAN, TẤT-CẢ-HOẶC-KHÔNG ───────────────────────
+      // Khoá theo luật D-33: đọc con TRƯỚC (không khoá) → khoá {cha} ∪ con theo id tăng dần → ĐỌC LẠI.
+      // Khoá CHA là thứ chặn PHANTOM (con chèn thêm sau lúc SELECT) — FOR UPDATE chỉ trên tập con thì
+      // không chặn được, vì hàng chưa tồn tại lúc khoá. Mọi writer thêm con đều phải khoá cha trước.
+      const firstPass = await this.repo.listActiveChildrenTx(tx, user.companyId, id);
+      await this.repo.lockTasksForTreeWriteTx(tx, user.companyId, [
+        id,
+        ...firstPass.map((c) => c.id),
+      ]);
+      const children = await this.repo.listActiveChildrenTx(tx, user.companyId, id);
+      if (children.length !== firstPass.length) {
+        // Defensive, UNREACHABLE khi luật khoá D-33 còn nguyên: giữ khoá cha ⇒ tập con đóng băng, nên
+        // lần đọc thứ hai không thể lệch. KHÔNG xoá như dead code — nếu nhánh này bắn thật thì đó là
+        // tín hiệu có writer thêm con mà KHÔNG khoá cha (luật khoá đã bị phá ở đâu đó).
+        throw new ConflictException(ERR.SUBTASK_DELETE_FORBIDDEN);
+      }
+
+      // Con workflow-driven không nên tồn tại (HR task không bao giờ set parent) — fail-closed.
+      if (children.some((c) => c.workflowStepId !== null || WORKFLOW_TASK_TYPES.has(c.taskType))) {
+        throw new BadRequestException(ERR.WORKFLOW_LOCKED);
+      }
+
+      // Kiểm quyền GHI TỪNG CON trước khi xoá BẤT CỨ GÌ. Vị từ KHÔNG NÉM (checkTaskInScopeTx) vì phải
+      // duyệt hết rồi mới quyết. ⚠️ mode 'write' — dùng nhầm 'read' thì con đọc-được-nhưng-không-ghi-được
+      // sẽ bị xoá oan, và danh sách chặn thành rỗng (hỏng CÂM).
+      const blocked: { id: string; taskCode: string | null; title: string }[] = [];
+      for (const child of children) {
+        const canWrite = await this.projectAccess.checkTaskInScopeTx(
+          tx,
+          user,
+          child.id,
+          deleteScope,
+          "write",
+        );
+        if (!canWrite) blocked.push({ id: child.id, taskCode: child.taskCode, title: child.title });
+      }
+      if (blocked.length > 0) {
+        // D-39: đọc thừa hưởng từ cha ⇒ actor xoá-được-cha đã đọc được mọi con, nên liệt kê id/tiêu đề
+        // ở đây KHÔNG rò thêm gì. KHÔNG xoá hàng nào — tất-cả-hoặc-không.
+        throw new ForbiddenException({
+          message: ERR.SUBTASK_DELETE_FORBIDDEN,
+          blockedCount: blocked.length,
+          blocked,
+        });
+      }
+
+      const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
+
+      // Con TRƯỚC, cha SAU — cùng 1 tx, soft-delete (BẤT BIẾN #2). Mỗi con có activity + audit riêng:
+      // xoá 5 việc mà chỉ 1 dòng nhật ký là mất dấu vết của 4 việc.
+      for (const child of children) {
+        const childDeleted = await this.repo.softDeleteTx(tx, user.companyId, child.id, user.id);
+        if (!childDeleted) throw new NotFoundException(ERR.NOT_FOUND);
+        await this.activity.record(tx, {
+          action: "TASK_DELETED",
+          targetType: "Task",
+          targetId: child.id,
+          taskId: child.id,
+          projectId: raw.projectId,
+          actorUserId: user.id,
+          actorEmployeeId: actorEmp?.id ?? null,
+          oldValues: { parentTaskId: id },
+          message: "Xoá việc con theo việc cha",
+        });
+        await this.audit.record(tx, {
+          action: "TaskDeleted",
+          objectType: "task",
+          objectId: child.id,
+          actorUserId: user.id,
+          before: { parentTaskId: id, cascadedFromParent: true },
+        });
+      }
+
       const deleted = await this.repo.softDeleteTx(tx, user.companyId, id, user.id);
       if (!deleted) throw new NotFoundException(ERR.NOT_FOUND);
 
-      const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
       await this.activity.record(tx, {
         action: "TASK_DELETED",
         targetType: "Task",
@@ -568,13 +898,15 @@ export class TaskCoreService {
         projectId: raw.projectId,
         actorUserId: user.id,
         actorEmployeeId: actorEmp?.id ?? null,
-        message: "Xoá công việc",
+        message:
+          children.length > 0 ? `Xoá công việc kèm ${children.length} việc con` : "Xoá công việc",
       });
       await this.audit.record(tx, {
         action: "TaskDeleted",
         objectType: "task",
         objectId: id,
         actorUserId: user.id,
+        before: children.length > 0 ? { cascadedChildren: children.map((c) => c.id) } : undefined,
       });
     });
   }
@@ -603,6 +935,62 @@ export class TaskCoreService {
     scope: DataScope,
   ): Promise<void> {
     await this.projectAccess.assertTaskInScopeTx(tx, user, id, scope, "write");
+  }
+
+  /**
+   * S5-TASK-SUBTASK-1 (DECISIONS-05 D-33) — BẤT BIẾN CÂY, một nơi duy nhất. Gọi từ CẢ createTask LẪN
+   * updateTask; cấm nhân bản logic này ra chỗ khác.
+   *
+   * KHOÁ TRƯỚC, ĐỌC LẠI, RỒI MỚI KIỂM — khoá là MỘT PHẦN của bất biến, không phải tối ưu. Dưới READ
+   * COMMITTED, 4 luật kiểm-rồi-ghi KHÔNG serialize: `PATCH A{parent:B}` ‖ `PATCH B{parent:A}` đều thấy
+   * đối phương là gốc và chưa có con ⇒ commit cả hai ⇒ CHU TRÌNH A↔B. Tương tự tạo con dưới P ‖ gán
+   * P.parent = Q ⇒ 3 tầng.
+   *
+   * Tập khoá = {T, P cũ, P mới} theo id tăng dần (luật khoá TOÀN CỤC của D-33 — xem
+   * lockTasksForTreeWriteTx). Bỏ oldP khỏi tập là lỗ thật: `DELETE oldP` ‖ `PATCH T{parent:newP}` sẽ
+   * xoá lan mất T dù T đã chuyển sang cha khác.
+   *
+   * 4 luật (a)(b)(c)(d) + cùng project (D-36). (c)+(d) cộng lại loại trừ MỌI chu trình mà không cần
+   * duyệt cây — BẤT BIẾN ĐÔI, bỏ một trong hai là mở lại chu trình; đừng gỡ (d) vì "trông thừa".
+   *
+   * @returns projectId HIỆU LỰC của con (lấy TỪ CHA — D-36), hoặc undefined khi gỡ cha (parentId null).
+   */
+  private async assertParentAssignable(
+    tx: TenantTx,
+    companyId: string,
+    taskId: string | null,
+    parentId: string,
+    oldParentId: string | null,
+  ): Promise<{ effectiveProjectId: string | null }> {
+    // (a) — DB có CHECK (parent_task_id <> id) từ 0478, nhưng kiểm ở đây để trả 400 sạch thay vì 23514 raw.
+    if (taskId !== null && parentId === taskId) {
+      throw new BadRequestException(ERR.SUBTASK_DEPTH_EXCEEDED);
+    }
+
+    const lockIds = [taskId, parentId, oldParentId].filter((v): v is string => v !== null);
+    await this.repo.lockTasksForTreeWriteTx(tx, companyId, lockIds);
+
+    // ĐỌC LẠI SAU KHOÁ — giá trị đọc trước khi khoá là bản chụp cũ (F2/TOCTOU).
+    const parent = await this.repo.findRawByIdTx(tx, companyId, parentId);
+    // (b) — cross-tenant/soft-deleted ⇒ 404, KHÔNG lộ tồn tại.
+    if (!parent) throw new NotFoundException(ERR.SUBTASK_PARENT_NOT_FOUND);
+    // (c) — cha phải là GỐC: chặn tầng 3.
+    if (parent.parentTaskId !== null) throw new BadRequestException(ERR.SUBTASK_DEPTH_EXCEEDED);
+
+    if (taskId !== null) {
+      // (d) — task đang LÀ cha thì không được thành con. ACTIVE_CHILD (D-32: kể cả con Cancelled — nếu
+      // dùng COUNTABLE ở đây thì task có con Cancelled vẫn chui xuống làm con ⇒ cây 3 tầng).
+      if (await this.repo.hasActiveChildrenTx(tx, companyId, taskId)) {
+        throw new BadRequestException(ERR.SUBTASK_HAS_CHILDREN);
+      }
+      const self = await this.repo.findRawByIdTx(tx, companyId, taskId);
+      if (!self) throw new NotFoundException(ERR.NOT_FOUND);
+      // D-36 — cùng project với cha. So sánh SAU khoá; cả hai NULL cũng hợp lệ.
+      if (self.projectId !== parent.projectId) {
+        throw new BadRequestException(ERR.SUBTASK_PROJECT_MISMATCH);
+      }
+    }
+    return { effectiveProjectId: parent.projectId };
   }
 
   /** Project tồn tại cùng tenant + KHÔNG kết thúc (đóng/huỷ/lưu trữ) — mirror createHubTask guard. */
