@@ -514,6 +514,24 @@ export class TaskCoreService {
       // DATA-SCOPE WRITE: scope < Company ⇒ task phải nằm trong phạm vi update của actor (fail-closed).
       await this.assertInScopeForWrite(tx, user, id, updateScope);
 
+      // ── S5-TASK-SUBTASK-1 (DECISIONS-05 D-33) — KHOÁ MỘT LẦN, TOÀN BỘ TẬP HÀNG SẼ CHẠM ──────────
+      // ⚠️ PHẢI là MỘT lời gọi khoá cho cả request, TRƯỚC mọi kiểm cấu trúc. Khoá làm hai lần (một cho
+      // nhánh projectId, một cho nhánh parentTaskId) mở lại ABBA: request này giữ {T} rồi xin {oldP,newP},
+      // trong khi request kia đã giữ P (id nhỏ hơn) và đang xin T. Superset tính trước ⇒ mọi tx khoá
+      // theo cùng thứ tự id toàn cục. Lời gọi khoá LỒNG BÊN TRONG assertParentAssignable sau đó chỉ là
+      // re-lock tập con của thứ đã giữ ⇒ không acquire lock mới, không sinh thứ tự mới.
+      const treeLockIds = [
+        id,
+        raw.parentTaskId,
+        dto.parentTaskId !== undefined ? dto.parentTaskId : null,
+      ].filter((v): v is string => v !== null);
+      const touchesTree =
+        (dto.parentTaskId !== undefined && dto.parentTaskId !== raw.parentTaskId) ||
+        (dto.projectId !== undefined && dto.projectId !== raw.projectId);
+      if (touchesTree) {
+        await this.repo.lockTasksForTreeWriteTx(tx, user.companyId, treeLockIds);
+      }
+
       // ── S5-TASK-SUBTASK-1 (DECISIONS-05 D-36a) — DỰ ÁN CỦA CÂY LÀ BẤT BIẾN ────────────────────────
       // `PATCH {projectId}` phá được D-36 mà KHÔNG cần đồng thời: chuyển cha sang dự án X thì con ở lại
       // dự án cũ. Vì báo cáo lọc theo project_id còn quan hệ cha-con thì KHÔNG, cha sẽ "không phải lá"
@@ -524,9 +542,8 @@ export class TaskCoreService {
         if (raw.parentTaskId !== null) {
           throw new BadRequestException(ERR.SUBTASK_CHILD_PROJECT_LOCKED);
         }
-        // Khoá T trước khi hỏi "có con không" — chặn create-child chạy chen vào giữa kiểm và ghi
+        // T đã nằm trong khoá superset ở trên ⇒ create-child không chen được vào giữa kiểm và ghi
         // (create khoá {P} = {T} nên hai bên serialize trên cùng một hàng).
-        await this.repo.lockTasksForTreeWriteTx(tx, user.companyId, [id]);
         if (await this.repo.hasActiveChildrenTx(tx, user.companyId, id)) {
           throw new BadRequestException(ERR.SUBTASK_PARENT_PROJECT_LOCKED);
         }
@@ -547,13 +564,8 @@ export class TaskCoreService {
           );
           // Ghi cấu trúc việc của CẢ hai cha ⇒ đòi quyền ghi trên cả hai (scope<Company).
           await this.assertInScopeForWrite(tx, user, dto.parentTaskId, updateScope);
-        } else {
-          await this.repo.lockTasksForTreeWriteTx(
-            tx,
-            user.companyId,
-            [id, raw.parentTaskId].filter((v): v is string => v !== null),
-          );
         }
+        // Gỡ cha: khoá đã lấy ở superset trên, không cần lời gọi thứ hai.
         if (raw.parentTaskId) {
           await this.assertInScopeForWrite(tx, user, raw.parentTaskId, updateScope);
         }
@@ -992,6 +1004,9 @@ export class TaskCoreService {
       throw new BadRequestException(ERR.SUBTASK_DEPTH_EXCEEDED);
     }
 
+    // Khoá tập {T, P, oldP} theo id tăng dần. Khi gọi từ `updateTask`, caller ĐÃ giữ superset này ⇒
+    // đây là re-lock (không acquire lock mới, không sinh thứ tự khoá mới). Khi gọi từ `createTask`,
+    // đây là lời gọi khoá DUY NHẤT của request. Cả hai đường đều thoả "một luật, id tăng dần".
     const lockIds = [taskId, parentId, oldParentId].filter((v): v is string => v !== null);
     await this.repo.lockTasksForTreeWriteTx(tx, companyId, lockIds);
 
