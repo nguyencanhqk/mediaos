@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-20 15:11Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-20 15:32Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -25,7 +25,7 @@
 - 🔴 `S5-LEAVE-DEADCODE-1` Dọn khối LeaveService chết (createRequest/approveRequest/rejectRequest/cancelRequest + CreateLeaveRequestDto/createLeaveRequestSchema) — di sản G11 còn sót sau rebuild SPEC-05 Sprint 3, không route HTTP nào tới được
 - 🔴 `S5-SEQ-HARDEN-1` Gia cố cấp mã tuần tự: SAVEPOINT cho recovery 23505 (ensure-on-miss race hiện trả 500 do 25P02), allocate sau authz tầng-service (chống đốt counter), phân biệt constraint khi map unique-violation
 - 🟢 `S5-GOAL-DOC-1` Docs sync SPEC-10 GOAL: SPEC-01/PRD-00/DB-01·09·10 ghi nhận GOAL + API-12 GOAL stub + permission-matrix 8 cặp + nav header 9 SPEC cũ + ghi chú DB-06 (tasks.goal_id, task_templates kích hoạt)
-- 🔴 `S5-GOAL-DB-1` Schema + migration goals + goal_updates (append-only) + tasks.goal_id + RLS FORCE + seed module GOAL + 7 cặp permission per-pair scope (0504–0506 dự kiến)
+- 🔴 `S5-GOAL-DB-1` Schema + migration goals + goal_updates (append-only) + tasks.goal_id + RLS FORCE + seed module GOAL + 7 cặp permission + counter goal_code + UNION-ADD 'goal' audit CHECK + NOTI catalog 2 event GOAL (0504–0507 dự kiến)
 
 **CHỜ (kẹt phụ thuộc):**
 - `S5-UAT-1` UAT prep + run (script theo role · test data · sign-off) + release readiness checklist + known issues/release notes nội bộ — gate vào Sprint 6 ⏳ cần: S5-QA-E2E-1, S5-QA-REG-1, S5-SEC-1
@@ -37,10 +37,10 @@
 - `S6-REL-1` Release Candidate build + release notes + Go-live runbook + deployment/rollback rehearsal + monitoring/alerting/support readiness (WS7/WS8/WS9) — crown release ⏳ cần: S6-QA-FINAL-1, S6-SEC-1, S6-PERF-DB-1
 - `S6-GOLIVE-1` Final Sign-off · Go/No-go · Go-live execution · Handoff (admin/user/support guide · known issues · post-go-live backlog) — WS10 ⏳ cần: S6-REL-1
 - `S5-GOAL-BE-1` BE GoalsModule: CRUD 3 cấp + cây theo kỳ + data-scope service-layer (own/department/all) + validate level↔neo↔parent + goal_code qua sequence_counters ⏳ cần: S5-GOAL-DB-1
-- `S5-GOAL-BE-2` BE progress engine 4 mode + rollup bubble + job đối soát đêm + check-in/finalize/reopen (ledger goal_updates) + link/unlink task↔goal + NOTI goal.assigned/goal.finalized qua bridge INT-1 ⏳ cần: S5-GOAL-BE-1
+- `S5-GOAL-BE-2` BE progress engine 4 mode + rollup bubble + job đối soát đêm (system-jobs) + check-in/finalize/reopen (ledger goal_updates) + link/unlink task↔goal + NOTI GOAL_ASSIGNED/GOAL_FINALIZED qua bridge đã ship ⏳ cần: S5-GOAL-BE-1
 - `S5-GOAL-FE-1` FE trang Mục tiêu: menu sidebar riêng + danh sách/cây theo kỳ·phòng ban + form tạo/sửa (chọn cấp → đúng field neo, chọn mode đo) + màn chi tiết 4 tab — PermissionGate GOAL.*, i18n vi ⏳ cần: S5-GOAL-BE-1
 - `S5-GOAL-FE-2` FE vòng đo: check-in modal + lịch sử + nút chốt kỳ/mở lại + gắn goal từ panel task + tab Công việc trong goal (bulk link) + khối 'Mục tiêu của tôi' trong /me ⏳ cần: S5-GOAL-BE-2, S5-GOAL-FE-1
-- `S5-GOAL-DB-2` Đợt D — Schema + migration task_templates + task_template_items + RLS FORCE + seed cặp ('manage','task-template') (0507 dự kiến, kiểm head thật) ⏳ cần: S5-GOAL-DB-1
+- `S5-GOAL-DB-2` Đợt D — Schema + migration task_templates + task_template_items + RLS FORCE + seed cặp ('manage','task-template') + UNION-ADD 'task_template' audit CHECK (0508 dự kiến, kiểm head thật) ⏳ cần: S5-GOAL-DB-1
 - `S5-GOAL-TPL-1` Đợt D — Phân rã mục tiêu từ template: CRUD template (BE+FE, GOAL-SCREEN-006) + wizard preview sửa/xóa/thêm/gán người/cột board + POST /goals/:id/decompose tạo bulk task 1 transaction ⏳ cần: S5-GOAL-DB-2, S5-GOAL-FE-2
 - `S5-GOAL-DASH-1` Đợt E — Widget dashboard 'Mục tiêu kỳ này' (progress theo phòng ban, đọc cache) + hàng mục tiêu trong trang phòng ban ⏳ cần: S5-GOAL-BE-2, S5-GOAL-FE-1
 
@@ -48,7 +48,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 11
+- **branch**: `master` · **file đang đổi (dirty)**: 8
 - **migration head**: idx 183 — `0503_s5_subtask1_leaf_counting` (184 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -57,6 +57,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `41b5c314` | 2026-07-20 | docs(goal): seed SPEC-10 GOAL + DB-11 + wave S5-GOAL (9 WO) — mục tiêu phòng ban/dự án/nhân viên |
 | `dc0cce8a` | 2026-07-20 | feat(task+hr): gắn thẻ + UX board/chi tiết + picker nhân viên dùng chung (thêm người vào phòng · trưởng đơn vị) (#251) |
 | `57423fcd` | 2026-07-20 | fix(task): trạng thái/ưu tiên dạng thẻ + gọn cột hành động tệp + đồng bộ panel chi tiết → board không cần F5 (#250) |
 | `e7b27277` | 2026-07-20 | chore(harness): S5-TASK-COVER-1 → done (#249 merged) + bàn giao phiên 2026-07-20 (6 WO / 2 PR) |
@@ -68,7 +69,6 @@
 | `6489162a` | 2026-07-19 | feat(task): màn chi tiết task — timeline cũ→mới + gate lịch sử người-liên-quan (D-29) + người giao việc + GET watchers [S5-TASK-DETAIL-1] (#245) |
 | `e37aa255` | 2026-07-19 | chore(task): S5-TASK-PROJROLE-1 → done (đợt C merged #244) |
 | `debcf5d9` | 2026-07-19 | feat(task): đợt C — quyền per-project THẬT (projectRole nguồn quyền, governance Owner-member, un-defer create/update:task) [S5-TASK-PROJROLE-1] (#244) |
-| `1cd45662` | 2026-07-19 | feat(task): vỏ workspace dự án — tab bar ?tab= (Bảng·Danh sách·Báo cáo·Hoạt động) + toolbar lọc chung + rail avatar multi-select + TASK-API-601 — đợt D1 (S5-TASK-WORKSPACE-1) (#243) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

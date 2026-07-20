@@ -7476,7 +7476,7 @@ export const backlog = [
     module: "GOAL",
     layer: "DB",
     title:
-      "Schema + migration goals + goal_updates (append-only) + tasks.goal_id + RLS FORCE + seed module GOAL + 7 cặp permission per-pair scope (0504–0506 dự kiến)",
+      "Schema + migration goals + goal_updates (append-only) + tasks.goal_id + RLS FORCE + seed module GOAL + 7 cặp permission + counter goal_code + UNION-ADD 'goal' audit CHECK + NOTI catalog 2 event GOAL (0504–0507 dự kiến)",
     zone: "red",
     status: "todo",
     paths: [
@@ -7490,17 +7490,19 @@ export const backlog = [
     depends_on: [],
     plan: "docs/plans/S5-GOAL-DB-1.md",
     src: [
-      "DB-11 §6.1–6.2/§6.5/§9 (cột/CHECK/index/GRANT + kế hoạch 0504–0506)",
-      "SPEC-10 §11 (7 cặp quyền wave lõi — pair manage/task-template thuộc S5-GOAL-DB-2) + §12 (CHECK phản chiếu GOAL-ERR-001/002/003/011/012)",
+      "DB-11 §6.1–6.2/§6.5/§9 (cột/CHECK/index/GRANT + kế hoạch 0504–0507 SAU review 2026-07-20)",
+      "SPEC-10 §11 (7 cặp quyền wave lõi — pair manage/task-template thuộc S5-GOAL-DB-2) + §12 (CHECK phản chiếu GOAL-ERR-001/002/003/011/012) + §17 (2 event + bẫy fail-loud boot)",
       "apps/api/migrations/meta/_journal.json (head lúc seed: idx 183 / 0503 — kiểm lại THẬT trước khi đánh số)",
-      "memory s2-13-permission-matrix-per-pair-scope + canonical-seed-pin-regression (is_sensitive finalize chốt với owner)",
-      "mẫu: 0479 (RLS literal-GUC) · 0435 (seed modules) · 0466/0476 (grant per-pair + verify fail-LOUD)",
+      "VỊ TRÍ BẢNG THẬT (tên file di sản): tasks ở apps/api/src/db/schema/workflow.ts · projects ở media.ts (cột progressPercent trong đó là CỘT CHẾT không writer — GOAL không bao giờ đọc)",
+      "memory s2-13-permission-matrix-per-pair-scope + canonical-seed-pin-regression (is_sensitive finalize chốt với owner TRONG plan, không để mở)",
+      "mẫu: 0479 (RLS literal-GUC) · 0435 (seed modules) · 0466/0476 (grant per-pair + verify fail-LOUD) · 0498 (seed sequence_counters task_code — bug QA2-CRIT-002 lặp nếu quên) · 0474 (UNION-ADD audit object_type) · 0481/0490 (seed notification_events + template)",
     ],
     done_when: [
       "Bảng goals đủ cột DB-11 §6.1 (level 4 giá trị + CHECK level↔neo + period + measure + mode + progress cache + weight + finalized_at/by + soft delete) + unique goal_code/company + 6 index; goal_updates §6.2 KHÔNG updated/deleted_at, GRANT app = SELECT,INSERT (KHÔNG UPDATE/DELETE), worker SELECT — bất biến #2",
       "BẤT BIẾN #1: ENABLE + FORCE RLS + policy tenant_isolation literal-GUC cả 2 bảng TRƯỚC mọi INSERT; đăng ký rls-registry; drizzle schema goals.ts/goal-updates.ts additive, schema/index.ts append khối WO; ALTER tasks ADD goal_id (FK đơn cột ON DELETE SET NULL) + index partial (company_id, goal_id)",
-      "Seed module GOAL (mirror 0435, ON CONFLICT DO NOTHING) + 7 cặp: (access|view|create|update|delete|checkin|finalize, goal) — scope per-(permission,role) theo SPEC-10 §11 (nhân viên view=department create/update/delete/checkin=own finalize=KHÔNG; trưởng đơn vị=department; BOD/Admin=all), per-pair DELETE-wrong-scope + INSERT ON CONFLICT + verify fail-LOUD; is_sensitive chốt owner (finalize cân nhắc true — nhớ pin auth-seed-canonical-roles)",
-      "Int-spec RED-trước lane DB cô lập (goals-seed + rls-registry): cross-tenant deny goals/goal_updates · app role UPDATE/DELETE goal_updates bị từ chối ở tầng GRANT · CHECK level↔neo bắn 23514 đúng ca · seed-assert (module GOAL + 7 pair + grant per-role); migration-smoke clean 0000→head xanh; FULL gate database-reviewer + security-reviewer + rls-tenant-isolation-tester + silent-failure-hunter PASS",
+      "Seed module GOAL (mirror 0435, ON CONFLICT DO NOTHING) + 7 cặp: (access|view|create|update|delete|checkin|finalize, goal) — scope per-(permission,role) theo SPEC-10 §11 (nhân viên view=department create/update/delete/checkin=own finalize=KHÔNG; trưởng đơn vị=department; BOD/Admin=all), per-pair DELETE-wrong-scope + INSERT ON CONFLICT + verify fail-LOUD; is_sensitive chốt owner TRONG plan (không để mở — nếu finalize=true thì cập nhật allowlist sensitive FE + pin auth-seed-canonical-roles trong CÙNG WO)",
+      "3 SEED ĐI KÈM BẮT BUỘC (review 2026-07-20 — thiếu cái nào là 500/boot-fail ở BE): (a) sequence_counters 'goal' MỌI company (mirror 0498: scope Company, prefix+pad, reset Never, ON CONFLICT DO NOTHING + verify fail-loud — thiếu = SequenceNotFoundError ngay goal đầu tiên); (b) UNION-ADD 'goal' vào CHECK audit_logs.object_type (DO-block idempotent mẫu 0474 — thiếu = audit INSERT 23514); (c) NOTI catalog GOAL_ASSIGNED + GOAL_FINALIZED (const notification-event-catalog.const.ts isEnabled=true + migration seed notification_events + template mirror 0481/0490 — thiếu = bridge registerSource FAIL-LOUD TẠI BOOT khi BE-2 đăng ký registrar)",
+      "Int-spec RED-trước lane DB cô lập (goals-seed + rls-registry): cross-tenant deny goals/goal_updates · app role UPDATE/DELETE goal_updates bị từ chối ở tầng GRANT · CHECK level↔neo bắn 23514 đúng ca (kể cả neo THỪA: level=project mà set department_id) · seed-assert (module GOAL + 7 pair + grant per-role + counter goal mọi company + 2 event code catalog + CHECK audit chứa 'goal'); migration-smoke clean 0000→head xanh; FULL gate database-reviewer + security-reviewer + rls-tenant-isolation-tester + silent-failure-hunter PASS",
     ],
   },
   {
@@ -7529,7 +7531,7 @@ export const backlog = [
       "SPEC-09 §14.4 (/me/goals resolve từ token — KHÔNG nhận employee_id từ client)",
     ],
     done_when: [
-      "GOAL-API-001..006 + 013 chạy: CRUD soft-delete + GET /goals/tree (≤3 tầng kèm progress từng nút) + GET /me/goals own-scope resolve token; goal_code sinh qua sequence_counters; mọi query withTenant + company_id",
+      "GOAL-API-001..006 + 013 chạy: CRUD soft-delete + GET /goals/tree (≤3 tầng kèm progress từng nút) + GET /me/goals own-scope resolve token; goal_code sinh qua sequence_counters (counter ĐÃ seed ở DB-1 — SequenceService fail-loud nếu thiếu, đừng tự chế fallback); mọi query withTenant + company_id",
       "Data-scope ép Ở SERVICE (buildReadScopeExists pattern): own = owner/employee chính mình · department = phòng của actor · all; goal cấp project: ghi thêm điều kiện qua ProjectAccessService (Owner/Manager project được tạo/sửa goal dự án kể cả khác phòng); level='company' chặn GOAL-ERR-004",
       "Validate đủ GOAL-ERR-001 (level↔neo, phản chiếu CHECK thành 422 có mã) · 002 (parent cùng company + đúng chiều cấp + chống cycle) · 003 · 007 (xóa còn con active) · 010 (employee Active, owner=employee) · 011 · 015; DTO nestjs-zod từ packages/contracts (goalCoreResponseSchema, KHÔNG io.emit/route trả row thô)",
       "Int-spec RED-trước (apps/api/test/integration/, LANE_DB): deny-path nhân viên sửa/xóa goal người khác 403 · xem goal phòng khác 403 · cross-tenant 404 · /me/goals bơm employeeId lạ vẫn về own · parent sai chiều/cycle 422 · tạo level company 422; FULL gate (permission-domain) PASS",
@@ -7540,7 +7542,7 @@ export const backlog = [
     module: "GOAL",
     layer: "BE",
     title:
-      "BE progress engine 4 mode + rollup bubble + job đối soát đêm + check-in/finalize/reopen (ledger goal_updates) + link/unlink task↔goal + NOTI goal.assigned/goal.finalized qua bridge INT-1",
+      "BE progress engine 4 mode + rollup bubble + job đối soát đêm (system-jobs) + check-in/finalize/reopen (ledger goal_updates) + link/unlink task↔goal + NOTI GOAL_ASSIGNED/GOAL_FINALIZED qua bridge đã ship",
     zone: "red",
     status: "todo",
     paths: [
@@ -7548,7 +7550,9 @@ export const backlog = [
       "apps/api/src/tasks/**",
       "apps/api/src/notifications/**",
       "apps/api/src/events/**",
+      "apps/api/src/scheduler/**",
       "packages/contracts/src/goal.ts",
+      "packages/contracts/src/task.ts",
       "apps/api/test/integration/**",
       "docs/plans/S5-GOAL-BE-2.md",
     ],
@@ -7558,14 +7562,16 @@ export const backlog = [
     src: [
       "SPEC-10 §13 TOÀN BỘ (công thức 4 mode · null-vs-0% · recompute sync-in-tx + bubble ≤3 tầng + finalized bỏ qua · đối soát đêm) + §12 (GOAL-ERR-005/006/008/012/013/014) + §17 (2 event)",
       "SPEC-10 §15 GOAL-API-007..010; DB-11 §6.2 (goal_updates) + §6.5 (điểm ghi tasks.goal_id)",
-      "memory noti-outbox-bridge-generic (khai event-type + recipient trên bridge INT-1, KHÔNG dựng bridge mới) + wo-plans-built-on-code-comments (grep writer THẬT của task status trước khi móc recompute)",
-      "DECISIONS-05 (đếm-lá là của projects.progress_percent — GOAL mode tasks đếm CHÍNH task được gắn, KHÔNG kéo cây con — GOAL-DEC-006)",
+      "memory noti-outbox-bridge-generic — bridge lõi ĐÃ SHIP (outbox-notification-bridge.service.ts + 4 registrar att/auth-hr/hr-pcr/leave; KHÔNG chờ S4-INT-1, KHÔNG dựng bridge mới); registerSource FAIL-LOUD TẠI BOOT nếu eventCode chưa seed catalog ⇒ registrar GOAL chỉ thêm SAU khi DB-1 seed 0507",
+      "wo-plans-built-on-code-comments (grep writer THẬT của task status trước khi móc recompute)",
+      "MODE PROJECT (review 2026-07-20): reuse ProjectsService.countsByStatusLeaf (projects.service.ts:203, DECISIONS-05 D-35, cùng nguồn số widget project-progress) — cột projects.progress_percent là CỘT CHẾT không writer, CẤM đọc; mode tasks đếm CHÍNH task được gắn, KHÔNG kéo cây con (GOAL-DEC-006)",
+      "Job đêm: @SystemJobHandler + DiscoveryService (mẫu retention-cleanup.job-handler.ts; scheduler.module.ts import tường minh module chứa handler — xác minh gom được GoalsModule, cần thì thêm import + seed system_jobs)",
     ],
     done_when: [
-      "4 mode đúng công thức §13.1 + progress NULL khi chưa đo được (KHÔNG 0%); recompute sync cùng tx tại MỌI writer thật của task-status/gắn-tháo/Cancelled + project progress + check-in, bubble lên cha mode=children, goal finalized bỏ qua; job BullMQ đối soát đêm idempotent, lệch >0.01 log warn",
+      "4 mode đúng công thức §13.1 + progress NULL khi chưa đo được (KHÔNG 0%); recompute sync cùng tx tại MỌI writer thật của task-status/gắn-tháo/Cancelled — cả mode tasks LẪN mode project (đếm-lá reuse countsByStatusLeaf, KHÔNG đọc cột progress_percent chết) — + check-in, bubble lên cha mode=children, goal finalized bỏ qua; job đối soát đêm qua system-jobs handler idempotent, lệch >0.01 log warn",
       "Check-in (GOAL-API-007/008) ghi goal_updates type=checkin (old/new value + confidence + note) — INSERT-only; finalize/reopen (API-009) quyền ('finalize','goal') + ghi ledger type finalize/reopen + audit_logs; sau finalize MỌI đường ghi (update/checkin/link/decompose/recompute) trả GOAL-ERR-005",
-      "Link/unlink task↔goal (API-010, bulk) validate GOAL-ERR-008: goal employee → assignee phải là employee đó (CHẶN) · goal project → task thuộc project (CHẶN) · goal department → cảnh báo mềm; audit_logs cho link/unlink/finalize/reopen (object_types CHECK mở rộng kiểu UNION — hot-file append)",
-      "goal.assigned + goal.finalized enqueue outbox TRONG tx qua OutboxNotificationBridge (eventCode verbatim, dedupe + delivery log, cùng company, payload KHÔNG số liệu nhạy cảm); int-spec RED-trước: ma trận mode×(chuyển trạng thái·Cancelled·đổi mode GOAL-ERR-013) · freeze sau finalize · app-role không UPDATE/DELETE được goal_updates · link sai neo bị chặn · notification đúng recipient + idempotent · cross-tenant; FULL gate PASS",
+      "Link/unlink task↔goal (API-010, bulk) validate GOAL-ERR-008: goal employee → assignee phải là employee đó (CHẶN) · goal project → task thuộc project (CHẶN) · goal department → cảnh báo mềm; audit_logs cho link/unlink/finalize/reopen (CHECK 'goal' ĐÃ mở ở DB-1/0506 — không tự thêm migration ở lane này); task response bổ sung goalId (+ tên goal) ADDITIVE qua MAPPER HỢP NHẤT duy nhất (bài học 3-mapper PR #247) + packages/contracts/src/task.ts additive",
+      "GOAL_ASSIGNED + GOAL_FINALIZED enqueue outbox TRONG tx qua OutboxNotificationBridge (eventCode verbatim khớp catalog ĐÃ seed ở DB-1/0507 — bridge fail-loud tại boot nếu lệch; dedupe + delivery log, cùng company, payload KHÔNG số liệu nhạy cảm); int-spec RED-trước: ma trận mode×(chuyển trạng thái·Cancelled·đổi mode GOAL-ERR-013) · freeze sau finalize · app-role không UPDATE/DELETE được goal_updates · link sai neo bị chặn · notification đúng recipient + idempotent · cross-tenant; FULL gate PASS",
     ],
   },
   {
@@ -7632,7 +7638,7 @@ export const backlog = [
     module: "GOAL",
     layer: "DB",
     title:
-      "Đợt D — Schema + migration task_templates + task_template_items + RLS FORCE + seed cặp ('manage','task-template') (0507 dự kiến, kiểm head thật)",
+      "Đợt D — Schema + migration task_templates + task_template_items + RLS FORCE + seed cặp ('manage','task-template') + UNION-ADD 'task_template' audit CHECK (0508 dự kiến, kiểm head thật)",
     zone: "red",
     status: "todo",
     paths: [
@@ -7645,12 +7651,12 @@ export const backlog = [
     skills: ["code-review"],
     depends_on: ["S5-GOAL-DB-1"],
     src: [
-      "DB-11 §6.3/§6.4/§9 (bước 0507)",
+      "DB-11 §6.3/§6.4/§9 (bước 0508)",
       "SPEC-10 §11 (('manage','task-template') — trưởng đơn vị department, BOD/Admin all, nhân viên KHÔNG)",
     ],
     done_when: [
       "2 bảng theo DB-11 §6.3/6.4 (unique tên template/company · index items theo template+sort_order · soft delete) + ENABLE/FORCE RLS literal-GUC TRƯỚC INSERT + rls-registry + drizzle additive",
-      "Seed pair ('manage','task-template') per-pair scope + verify fail-LOUD; int-spec RED-trước: cross-tenant deny + seed-assert; migration-smoke clean; FULL gate DB PASS",
+      "Seed pair ('manage','task-template') per-pair scope + verify fail-LOUD + UNION-ADD 'task_template' vào CHECK audit_logs.object_type (mẫu 0474); int-spec RED-trước: cross-tenant deny + seed-assert (pair + CHECK audit); migration-smoke clean; FULL gate DB PASS",
     ],
   },
   {

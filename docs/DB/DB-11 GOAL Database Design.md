@@ -113,8 +113,8 @@ CHECK (level IN ('company','department','project','employee'));
 ALTER TABLE goals ADD CONSTRAINT chk_goals_level_anchor CHECK (
   (level = 'company'    AND department_id IS NULL     AND project_id IS NULL     AND employee_id IS NULL) OR
   (level = 'department' AND department_id IS NOT NULL AND project_id IS NULL     AND employee_id IS NULL) OR
-  (level = 'project'    AND project_id IS NOT NULL    AND employee_id IS NULL) OR
-  (level = 'employee'   AND employee_id IS NOT NULL)
+  (level = 'project'    AND project_id IS NOT NULL    AND department_id IS NULL AND employee_id IS NULL) OR
+  (level = 'employee'   AND employee_id IS NOT NULL   AND department_id IS NULL AND project_id IS NULL)
 );
 
 ALTER TABLE goals ADD CONSTRAINT chk_goals_period      CHECK (period_end >= period_start);
@@ -235,10 +235,11 @@ Quy tắc gắn (GOAL-ERR-008) ép ở service, không ép FK chéo ở DB (goal
 
 | Bước | Nội dung | Ràng buộc thứ tự |
 | --- | --- | --- |
-| 0504 | Tạo `goals` + `goal_updates` + **ENABLE/FORCE RLS + policy literal-GUC cả 2 bảng** + GRANT (goal_updates: SELECT,INSERT only) + index | RLS TRƯỚC mọi INSERT (bất biến #1); đăng ký rls-registry |
-| 0505 | ALTER `tasks` ADD `goal_id` + FK + index partial | sau 0504 |
-| 0506 | Seed module `GOAL` vào `modules` (mirror 0435, ON CONFLICT DO NOTHING) + 8 cặp permission (SPEC-10 §11) + grant per-pair data_scope cho 4 role canonical (per-(permission,role) DELETE-wrong-scope + INSERT ON CONFLICT, verify fail-LOUD mirror 0466/0476) | `is_sensitive` chốt với owner tại WO; nhớ pin canonical-seed |
-| 0507 (đợt D) | Tạo `task_templates` + `task_template_items` + RLS + seed pair `('manage','task-template')` | tách khỏi wave lõi — chỉ chạy khi làm phân rã |
+| 0504 | Tạo `goals` + `goal_updates` + **ENABLE/FORCE RLS + policy literal-GUC cả 2 bảng** + GRANT (goal_updates: SELECT,INSERT only — KHÔNG UPDATE/DELETE) + index | RLS TRƯỚC mọi INSERT (bất biến #1); đăng ký rls-registry |
+| 0505 | ALTER `tasks` ADD `goal_id` + FK đơn cột + index partial — bảng `tasks` thật nằm ở `schema/workflow.ts` (tên file di sản), `projects` ở `schema/media.ts` | sau 0504 |
+| 0506 | Seed module `GOAL` vào `modules` (mirror 0435, ON CONFLICT DO NOTHING) + **7 cặp** permission wave lõi (SPEC-10 §11, TRỪ manage/task-template → 0508) + grant per-pair data_scope 4 role canonical (DELETE-wrong-scope + INSERT ON CONFLICT, verify fail-LOUD mirror 0466/0476) + **UNION-ADD `'goal'` vào CHECK `audit_logs.object_type`** (DO-block idempotent mẫu 0474) + **seed `sequence_counters` 'goal' cho MỌI company** (mirror 0498: scope Company, prefix + padding, reset Never, ON CONFLICT DO NOTHING + verify fail-loud — thiếu là `SequenceNotFoundError` ngay goal đầu tiên, đúng bug QA2-CRIT-002 của task_code) | `is_sensitive` (nhất là finalize) chốt với owner TRONG plan WO — flip sau seed đụng pin canonical-seed |
+| 0507 | **Seed NOTI catalog GOAL**: thêm `GOAL_ASSIGNED` + `GOAL_FINALIZED` vào `notification-event-catalog.const.ts` (isEnabled=true) + migration seed `notification_events` + template render (mirror 0481/0490; payload chỉ goal name + link) | PHẢI xong TRƯỚC khi BE-2 đăng ký registrar — bridge `registerSource()` **fail-loud NGAY LÚC BOOT** nếu eventCode chưa có trong catalog |
+| 0508 (đợt D) | Tạo `task_templates` + `task_template_items` + RLS + seed pair `('manage','task-template')` + UNION-ADD `'task_template'` vào audit CHECK | tách khỏi wave lõi — chỉ chạy khi làm phân rã |
 
 Số migration là **dự kiến** — nối tiếp head THẬT tại thời điểm chạy WO (kiểm `_journal.json` trước, tránh trùng số với lane khác — bẫy `wo-paths-drive-gate-and-scheduler`).
 
