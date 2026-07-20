@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type {
   ProjectStateGroupDto,
   TaskKanbanBoardDto,
@@ -135,10 +135,19 @@ export class TaskKanbanService {
       // Seed 0485 hiện cấp cả hai cặp cùng scope cho cả 4 role ⇒ chưa khai thác được ở cấu hình xuất
       // xưởng, nhưng đó là may mắn cấu hình, không phải bảo đảm. Fail-closed: không có grant
       // `read:task` ⇒ KHÔNG ký bìa nào (thẻ vẫn hiện, chỉ không có ảnh).
-      const canReadTask = await this.dataScope
-        .resolveAndAssert(user.id, user.companyId, "read", "task")
-        .then(() => true)
-        .catch(() => false);
+      //
+      // ⚠️ CHỈ nuốt đúng `ForbiddenException` (= "không có grant", `DataScopeService.resolveAndAssert`
+      // ném đúng loại này khi scope null). Bắt trần `.catch(() => false)` sẽ nuốt CẢ lỗi hạ tầng của
+      // permission engine (mất kết nối DB, lỗi lập trình) và biến nó thành "board im lặng không có
+      // bìa nào" — không exception, không log, không ai biết. Đúng lớp lỗi mà chính WO này đi vá ở
+      // chỗ khác; không được tự tạo lại nó ở đây.
+      let canReadTask = true;
+      try {
+        await this.dataScope.resolveAndAssert(user.id, user.companyId, "read", "task");
+      } catch (err) {
+        if (!(err instanceof ForbiddenException)) throw err;
+        canReadTask = false;
+      }
       const covers = canReadTask
         ? await this.covers.resolveTaskCovers(user.companyId, taskIds, tx)
         : new Map<string, string>();
