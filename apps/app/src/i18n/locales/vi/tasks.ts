@@ -368,8 +368,59 @@ export default {
         description: "Bạn chưa có công việc nào trong mục này.",
       },
     },
+    // S5-TASK-MOVEPROJ-1 — đổi dự án của công việc (bắt buộc chọn cột đích để state_id không mồ côi).
+    moveProject: {
+      openAction: "Đổi dự án",
+      title: "Đổi dự án của công việc",
+      description: "Chọn dự án mới và cột sẽ đặt công việc vào trên bảng của dự án đó.",
+      projectLabel: "Dự án",
+      pickProject: "— Chọn dự án —",
+      columnLabel: "Cột trên bảng",
+      pickColumn: "— Chọn cột —",
+      noColumns:
+        "Dự án này chưa có cột pipeline nên chưa nhận công việc được. Hãy thêm cột cho dự án đó trước, rồi quay lại đổi.",
+      columnsError: "Không tải được danh sách cột. Thử lại trước khi đổi dự án.",
+      columnRequiredHint: "Phải chọn cột đích, nếu không thẻ sẽ nằm sai cột trên bảng mới.",
+      lockedChild:
+        "Đây là việc con — việc con luôn thuộc dự án của công việc cha, không đổi riêng được.",
+      lockedParent:
+        "Công việc này đang có việc con. Cả cây phải cùng một dự án — gỡ hoặc xóa việc con trước khi đổi.",
+      confirm: "Chuyển dự án",
+      cancel: "Hủy",
+      saving: "Đang chuyển…",
+      errors: {
+        badRequest: "Không chuyển được — kiểm tra cột đích, hoặc công việc đang có việc con.",
+        forbidden: "Bạn không có quyền chuyển công việc sang dự án khác.",
+        notFound: "Không tìm thấy công việc hoặc dự án đích.",
+        server: "Lỗi hệ thống. Vui lòng thử lại sau.",
+        generic: "Không chuyển được dự án. Vui lòng thử lại.",
+      },
+    },
+    // S5-TASK-LAYOUT-1 — bộ chọn người dùng chung (ô người phụ trách + dòng việc con).
+    picker: {
+      title: "Chọn người",
+      change: "Đổi người (hiện tại: {{name}})",
+      searchPlaceholder: "Tìm thành viên…",
+      clear: "— Bỏ chọn người —",
+      noMatch: "Không tìm thấy ai phù hợp.",
+    },
     detail: {
       backToList: "Quay lại danh sách",
+      // S5-TASK-LAYOUT-1 — gom 5 khối rời thành 2 nhóm tab cho đỡ phải cuộn.
+      tabs: {
+        subtasks: "Việc con",
+        checklist: "Checklist",
+        comments: "Bình luận",
+        files: "Tệp đính kèm",
+        activity: "Hoạt động",
+      },
+      // S5-TASK-LAYOUT-1 — mô tả sửa tại chỗ (thay cho form Sửa).
+      descriptionEmpty: "—",
+      descriptionPlaceholder: "Nhập mô tả…",
+      // S5-TASK-BOARD-UX-1 — tiêu đề tạm của panel trượt phải trong lúc chờ tải task.
+      drawer: {
+        loading: "Đang tải công việc…",
+      },
       fields: {
         project: "Dự án",
         assignee: "Người phụ trách",
@@ -460,6 +511,15 @@ export default {
         moveUp: "Đưa lên trên",
         moveDown: "Đưa xuống dưới",
         editAction: "Sửa nhanh việc con",
+        // S5-TASK-INLINE-1 — sửa người thực hiện + hạn NGAY trên dòng việc con.
+        inline: {
+          assigneeAction: "Đổi người thực hiện (hiện tại: {{name}})",
+          assigneeTitle: "Chọn người thực hiện",
+          searchPlaceholder: "Tìm thành viên…",
+          clearAssignee: "— Bỏ người thực hiện —",
+          noMatch: "Không tìm thấy ai phù hợp.",
+          dueAction: "Đổi hạn hoàn thành",
+        },
         deleteAction: "Xóa việc con",
         fields: {
           title: "Tiêu đề",
@@ -486,6 +546,8 @@ export default {
         },
         errors: {
           loadFailed: "Không thể tải danh sách việc con. Vui lòng thử lại.",
+          // S5-TASK-INLINE-1 — lỗi khi sửa nhanh trên dòng (không mở hộp thoại nên báo tại chỗ).
+          saveFailed: "Không lưu được thay đổi. Vui lòng thử lại.",
           validation: "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.",
           forbidden: "Bạn không có quyền thực hiện thao tác này.",
           notFound: "Không tìm thấy việc con hoặc công việc.",
@@ -538,6 +600,9 @@ export default {
         },
       },
       actions: {
+        more: "Thao tác khác",
+        // Form đầy đủ giờ CHỈ còn cho các trường không có ô sửa tại chỗ (phòng ban, ngày bắt đầu).
+        editMore: "Sửa thông tin khác",
         edit: "Sửa công việc",
         delete: "Xóa công việc",
       },
@@ -623,6 +688,11 @@ export default {
       placeholders: {
         none: "— Không chọn —",
       },
+      // S5-TASK-MOVEPROJ-1 — form Sửa không đổi dự án (còn phải chọn cột đích) → chỉ đường.
+      hints: {
+        moveProject:
+          'Đổi dự án bằng nút "Đổi dự án" ở đầu màn chi tiết (cần chọn cột trên bảng mới).',
+      },
       errors: {
         titleRequired: "Tiêu đề là bắt buộc",
         dueBeforeStart: "Deadline không được sớm hơn thời điểm bắt đầu",
@@ -692,6 +762,25 @@ export default {
       columnEmpty: "Không có công việc.",
       readOnlyHint: "Bạn chỉ có thể xem — không có quyền kéo-thả đổi trạng thái.",
       unassigned: "Chưa giao",
+      // S5-TASK-BOARD-UX-1 — bấm thẻ mở panel chi tiết bên phải (nhãn cho trình đọc màn hình).
+      openDetail: "Mở chi tiết công việc: {{title}}",
+      // S5-TASK-CARDSUB-1 — nút trỏ xuống bung danh sách việc con ngay trên thẻ.
+      subtaskList: {
+        toggle: "Xem {{done}}/{{total}} việc con",
+        empty: "Chưa có việc con.",
+        loadFailed: "Không tải được việc con.",
+      },
+      // S5-TASK-BOARD-UX-1 — tạo nhanh đáy cột pipeline: gõ tiêu đề, Enter là tạo thẳng vào cột.
+      quickCreate: {
+        button: "Thêm công việc",
+        placeholder: "Nhập tên công việc…",
+        hint: "Enter để tạo · Esc để đóng",
+        errors: {
+          forbidden: "Bạn không có quyền tạo công việc ở cột này.",
+          badRequest: "Không tạo được — kiểm tra lại tên công việc hoặc cột.",
+          generic: "Không tạo được công việc. Vui lòng thử lại.",
+        },
+      },
       forbidden: {
         title: "Không có quyền truy cập",
         description: "Bạn không có quyền xem Kanban board.",

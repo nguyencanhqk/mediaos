@@ -110,6 +110,8 @@ export function matchesAssigneeSelection(
 export interface AssigneeRailOption {
   id: string;
   name: string | null;
+  // S5-TASK-AVATAR-1 — URL ảnh đã ký (server trả kèm mỗi task). null ⇒ rail vẽ chữ cái đầu.
+  avatarUrl: string | null;
   count: number;
 }
 
@@ -124,9 +126,11 @@ export interface AssigneeRailSummary {
  * rồi tên asc cho rail ổn định.
  */
 export function buildAssigneeSummary(
-  tasks: ReadonlyArray<Pick<TaskCoreResponseDto, "mainAssigneeEmployeeId" | "assigneeName">>,
+  tasks: ReadonlyArray<
+    Pick<TaskCoreResponseDto, "mainAssigneeEmployeeId" | "assigneeName" | "assigneeAvatarUrl">
+  >,
 ): AssigneeRailSummary {
-  const byId = new Map<string, { name: string | null; count: number }>();
+  const byId = new Map<string, { name: string | null; avatarUrl: string | null; count: number }>();
   let unassignedCount = 0;
   for (const task of tasks) {
     if (task.mainAssigneeEmployeeId === null) {
@@ -137,14 +141,19 @@ export function buildAssigneeSummary(
     if (existing) {
       byId.set(task.mainAssigneeEmployeeId, {
         name: existing.name ?? task.assigneeName,
+        avatarUrl: existing.avatarUrl ?? task.assigneeAvatarUrl ?? null,
         count: existing.count + 1,
       });
     } else {
-      byId.set(task.mainAssigneeEmployeeId, { name: task.assigneeName, count: 1 });
+      byId.set(task.mainAssigneeEmployeeId, {
+        name: task.assigneeName,
+        avatarUrl: task.assigneeAvatarUrl ?? null,
+        count: 1,
+      });
     }
   }
   const assignees = Array.from(byId.entries())
-    .map(([id, v]) => ({ id, name: v.name, count: v.count }))
+    .map(([id, v]) => ({ id, name: v.name, avatarUrl: v.avatarUrl, count: v.count }))
     .sort((a, b) => b.count - a.count || (a.name ?? "").localeCompare(b.name ?? "", "vi"));
   return { assignees, unassignedCount };
 }
@@ -157,7 +166,9 @@ export function buildAssigneeSummary(
 export function pinSelectedInSummary(
   summary: AssigneeRailSummary,
   selection: ReadonlySet<string>,
-  allTasks: ReadonlyArray<Pick<TaskCoreResponseDto, "mainAssigneeEmployeeId" | "assigneeName">>,
+  allTasks: ReadonlyArray<
+    Pick<TaskCoreResponseDto, "mainAssigneeEmployeeId" | "assigneeName" | "assigneeAvatarUrl">
+  >,
 ): AssigneeRailSummary {
   if (selection.size === 0) return summary;
   const present = new Set(summary.assignees.map((a) => a.id));
@@ -165,16 +176,24 @@ export function pinSelectedInSummary(
     (id) => id !== UNASSIGNED_FILTER_VALUE && !present.has(id),
   );
   if (missing.length === 0) return summary;
-  const nameById = new Map<string, string | null>();
+  const infoById = new Map<string, { name: string | null; avatarUrl: string | null }>();
   for (const task of allTasks) {
-    if (task.mainAssigneeEmployeeId && !nameById.has(task.mainAssigneeEmployeeId)) {
-      nameById.set(task.mainAssigneeEmployeeId, task.assigneeName);
+    if (task.mainAssigneeEmployeeId && !infoById.has(task.mainAssigneeEmployeeId)) {
+      infoById.set(task.mainAssigneeEmployeeId, {
+        name: task.assigneeName,
+        avatarUrl: task.assigneeAvatarUrl ?? null,
+      });
     }
   }
   return {
     assignees: [
       ...summary.assignees,
-      ...missing.map((id) => ({ id, name: nameById.get(id) ?? null, count: 0 })),
+      ...missing.map((id) => ({
+        id,
+        name: infoById.get(id)?.name ?? null,
+        avatarUrl: infoById.get(id)?.avatarUrl ?? null,
+        count: 0,
+      })),
     ],
     unassignedCount: summary.unassignedCount,
   };

@@ -141,13 +141,26 @@ describe("TaskDetailPage", () => {
   });
 
   // ── ALLOW-PATH: edit/delete visible with permission ───────────────────────
-  it("shows edit/delete actions with update/delete:task", async () => {
+  // S5-TASK-LAYOUT-1 — hai hành động này KHÔNG còn là nút ở đầu màn: mọi trường hay dùng đã sửa
+  // được tại chỗ, nên chúng lui vào menu ⋯ (mirror MISA) để đầu màn chỉ còn thông tin.
+  it("ẩn Sửa/Xóa sau menu ⋯, mở ra mới thấy (có update/delete:task)", async () => {
     setCapabilities({ "read:task": true, "update:task": true, "delete:task": true });
     vi.mocked(taskCoreApi.getTask).mockResolvedValue(MOCK_TASK);
     renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
-    expect(screen.getByText(/sửa công việc/i)).toBeInTheDocument();
-    expect(screen.getByText(/xóa công việc/i)).toBeInTheDocument();
+
+    expect(screen.queryByTestId("task-action-edit")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("task-actions-menu"));
+    expect(screen.getByTestId("task-action-edit")).toBeInTheDocument();
+    expect(screen.getByTestId("task-action-delete")).toBeInTheDocument();
+  });
+
+  it("thiếu cả update lẫn delete ⇒ KHÔNG render menu ⋯", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getTask).mockResolvedValue(MOCK_TASK);
+    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+    expect(screen.queryByTestId("task-actions-menu")).not.toBeInTheDocument();
   });
 
   // ── NOT FOUND (404) ────────────────────────────────────────────────────────

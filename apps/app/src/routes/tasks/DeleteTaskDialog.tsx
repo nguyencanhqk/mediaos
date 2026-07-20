@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { taskCoreApi, taskCoreInvalidation } from "@mediaos/web-core";
+import { taskCoreApi, taskCoreInvalidation, taskKeys } from "@mediaos/web-core";
 import { Dialog, Button } from "@mediaos/ui";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
 
@@ -23,9 +23,16 @@ export function DeleteTaskDialog({
   const mutation = useMutation({
     mutationFn: () => taskCoreApi.deleteTask(task.id),
     onSuccess: async () => {
-      await Promise.all(
-        taskCoreInvalidation.list().map((queryKey) => queryClient.invalidateQueries({ queryKey })),
-      );
+      // `taskKeys.kanban` KHÔNG nằm dưới prefix `tasks/list` ⇒ list() KHÔNG chạm board. Thiếu vế này:
+      // xoá task từ panel trượt trên board ⇒ panel đóng nhưng THẺ ĐÃ XOÁ VẪN NẰM trên board, kéo-thả
+      // nó là 404. Cũng invalidate báo cáo dự án (số liệu đếm task đổi) — mirror taskSubtaskInvalidation.
+      const keys = [
+        ...taskCoreInvalidation.list(),
+        ...(task.projectId
+          ? [taskKeys.kanban(task.projectId), taskKeys.projects.report(task.projectId)]
+          : []),
+      ];
+      await Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
       onDeleted?.();
       onClose();
     },

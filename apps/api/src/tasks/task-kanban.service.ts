@@ -9,11 +9,12 @@ import { DatabaseService } from "../db/db.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { TaskCoreRepository } from "./task-core.repository";
 import { TasksRepository } from "./tasks.repository";
-import { toTaskKanbanCardDto } from "./task-core.mapper";
+import { toTaskKanbanCardDto, toAvatarSubjects, avatarForRow } from "./task-core.mapper";
 import { TASK_CORE_STATUSES } from "./task-fsm";
 import { TaskCommentsRepository } from "./task-comments.repository";
 import { TaskChecklistsRepository } from "./task-checklists.repository";
 import { TaskFileRepository } from "./task-file.repository";
+import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
 
 interface RequestUser {
   id: string;
@@ -48,6 +49,9 @@ export class TaskKanbanService {
     private readonly commentsRepo: TaskCommentsRepository,
     private readonly checklistsRepo: TaskChecklistsRepository,
     private readonly filesRepo: TaskFileRepository,
+    // S5-TASK-AVATAR-1 (Nhóm C) — ký URL avatar người phụ trách cho thẻ board. CÙNG service mà
+    // HR list/org-chart dùng ⇒ cùng luật self-defending (chỉ ký cặp employeeId↔fileId đã xác minh).
+    private readonly avatars: AvatarPresignService,
   ) {}
 
   async getBoard(user: RequestUser, projectId: string): Promise<TaskKanbanBoardDto> {
@@ -107,19 +111,33 @@ export class TaskKanbanService {
         user.companyId,
         taskIds,
       );
+      // S5-TASK-AVATAR-1 (Nhóm C) — ký URL avatar người phụ trách, THEO LÔ và khử trùng người: một
+      // người phụ trách 20 thẻ chỉ tốn MỘT hàng cần ký, không phải 20. Truyền `tx` để tái dùng đúng
+      // kết nối đang mở (mở withTenant lồng nhau sẽ treo trên PgBouncer transaction-mode).
+      // Fail-soft sẵn trong service: ký lỗi ⇒ không vào map ⇒ null ⇒ FE vẽ chữ cái đầu, KHÔNG 500 board.
+      const avatars = await this.avatars.resolveEmployeeAvatars(
+        user.companyId,
+        toAvatarSubjects(rows),
+        tx,
+      );
+
       const toCard = (row: (typeof rows)[number]) => {
         const progress = checklistProgress.get(row.id);
         const subtasks = subtaskProgress.get(row.id);
-        return toTaskKanbanCardDto(row, {
-          commentCount: commentCounts.get(row.id) ?? 0,
-          attachmentCount: attachmentCounts.get(row.id) ?? 0,
-          checklistDone: progress?.done ?? 0,
-          checklistTotal: progress?.total ?? 0,
-          // D-35 — checklist GIỮ badge riêng, KHÔNG gộp, KHÔNG thay bằng subtask: checklist là hạng mục
-          // con trong đầu MỘT người, subtask là việc có chủ + hạn riêng. Hai khái niệm khác nhau.
-          subtaskDone: subtasks?.done ?? 0,
-          subtaskTotal: subtasks?.total ?? 0,
-        });
+        return toTaskKanbanCardDto(
+          row,
+          {
+            commentCount: commentCounts.get(row.id) ?? 0,
+            attachmentCount: attachmentCounts.get(row.id) ?? 0,
+            checklistDone: progress?.done ?? 0,
+            checklistTotal: progress?.total ?? 0,
+            // D-35 — checklist GIỮ badge riêng, KHÔNG gộp, KHÔNG thay bằng subtask: checklist là hạng mục
+            // con trong đầu MỘT người, subtask là việc có chủ + hạn riêng. Hai khái niệm khác nhau.
+            subtaskDone: subtasks?.done ?? 0,
+            subtaskTotal: subtasks?.total ?? 0,
+          },
+          avatarForRow(row, avatars),
+        );
       };
 
       if (states.length > 0) {

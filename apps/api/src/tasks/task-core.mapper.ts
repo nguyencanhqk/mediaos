@@ -15,6 +15,37 @@ import type { TaskCoreRow } from "./task-core.repository";
  * KHÔNG type-parse (drizzle không biết OID) ⇒ timestamptz về string, boolean về 't'/'f'|'true'/'false'.
  */
 
+/**
+ * S5-TASK-AVATAR-1 — gom "chủ hàng avatar" từ một trang task để resolve THEO LÔ.
+ *
+ * Bỏ task chưa giao (không có employeeId thì không có avatar để tra) và khử trùng lặp theo employee:
+ * một người phụ trách 20 thẻ trên board vẫn chỉ là MỘT hàng cần ký, không phải 20.
+ *
+ * ⚠️ Kết quả PHẢI truyền cho `AvatarPresignService.resolveEmployeeAvatars`, và lời gọi đó phải nằm
+ * NGOÀI transaction đọc chính (service đó tự mở `withTenant` — nested-tx trên PgBouncer sẽ treo).
+ */
+export function toAvatarSubjects(
+  rows: readonly TaskCoreRow[],
+): Array<{ employeeId: string; avatarUrl: string | null }> {
+  const byEmployee = new Map<string, string | null>();
+  for (const row of rows) {
+    const employeeId = row.mainAssigneeEmployeeId;
+    if (!employeeId) continue;
+    if (!byEmployee.has(employeeId)) byEmployee.set(employeeId, row.assigneeAvatarRaw ?? null);
+  }
+  return [...byEmployee].map(([employeeId, avatarUrl]) => ({ employeeId, avatarUrl }));
+}
+
+/** Tra URL đã ký cho MỘT hàng — task chưa giao ⇒ null (fail-soft về chữ cái đầu). */
+export function avatarForRow(
+  row: TaskCoreRow,
+  resolved: ReadonlyMap<string, string>,
+): string | null {
+  const employeeId = row.mainAssigneeEmployeeId;
+  if (!employeeId) return null;
+  return resolved.get(employeeId) ?? null;
+}
+
 function toIso(v: string | Date | null): string | null {
   if (v == null) return null;
   return v instanceof Date ? v.toISOString() : new Date(v).toISOString();
@@ -24,7 +55,20 @@ function toBool(v: boolean | string): boolean {
   return v === true || v === "true" || v === "t";
 }
 
-export function toTaskCoreDto(row: TaskCoreRow): TaskCoreResponseDto {
+/**
+ * S5-TASK-AVATAR-1 (Nhóm C) — `assigneeAvatarUrl` nhận URL ĐÃ KÝ, truyền vào từ caller.
+ *
+ * Vì sao là THAM SỐ chứ không đọc `row.assigneeAvatarRaw`: giá trị trong cột là fileId thô của một
+ * cột ĐA-NGƯỜI-GHI; chỉ `AvatarPresignService` mới biết cặp (employeeId, fileId) có hợp lệ không.
+ * Mapper đọc thẳng cột = ký mù = IDOR đọc file nội-tenant.
+ *
+ * Bỏ trống ⇒ `null` ⇒ FE vẽ chữ cái đầu. Mặc định an toàn CÓ CHỦ ĐÍCH: đường nào quên nối resolver
+ * thì mất ảnh, KHÔNG BAO GIỜ lộ fileId.
+ */
+export function toTaskCoreDto(
+  row: TaskCoreRow,
+  assigneeAvatarUrl?: string | null,
+): TaskCoreResponseDto {
   const createdAt = toIso(row.createdAt);
   const updatedAt = toIso(row.updatedAt);
   if (createdAt === null || updatedAt === null) {
@@ -42,6 +86,7 @@ export function toTaskCoreDto(row: TaskCoreRow): TaskCoreResponseDto {
     projectName: row.projectName,
     mainAssigneeEmployeeId: row.mainAssigneeEmployeeId,
     assigneeName: row.assigneeName,
+    assigneeAvatarUrl: assigneeAvatarUrl ?? null,
     creatorUserId: row.creatorUserId,
     creatorName: row.creatorName,
     reporterEmployeeId: row.reporterEmployeeId,
@@ -87,6 +132,7 @@ export interface TaskKanbanCardCounts {
 export function toTaskKanbanCardDto(
   row: TaskCoreRow,
   counts: TaskKanbanCardCounts,
+  assigneeAvatarUrl?: string | null,
 ): TaskKanbanCardDto {
-  return { ...toTaskCoreDto(row), ...counts };
+  return { ...toTaskCoreDto(row, assigneeAvatarUrl), ...counts };
 }

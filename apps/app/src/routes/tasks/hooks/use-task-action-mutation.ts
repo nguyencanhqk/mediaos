@@ -44,13 +44,32 @@ export function useTaskActionMutation<TVariables>({
       }
     },
     onSuccess: (result) => {
-      queryClient.setQueryData(queryKey, result.task);
+      // HỢP NHẤT, KHÔNG ghi đè. `respond()` (task-actions.service.ts) trả về `toTaskCoreDto(row)` — DTO
+      // này KHÔNG mang `subtaskTotal`/`subtaskDone` (hai field đó chỉ `getTask` gắn thêm, và chúng
+      // `.optional()` trong contract nên tsc KHÔNG bắt được). Ghi đè thẳng `result.task` là XOÁ chúng
+      // khỏi cache chi tiết, mà `onSettled` lại không invalidate `detail` ⇒ không có refetch sửa lại,
+      // `setQueryData` còn làm cache "tươi" thêm staleTime nữa. Hệ quả THẬT sau MỘT lần đổi ưu tiên:
+      //   · TaskSubtaskPanel mất thanh tiến độ dù danh sách việc con vẫn đó;
+      //   · TaskMoveProjectDialog đọc `subtaskTotal ?? 0` → 0 → mở khoá nút "Đổi dự án" cho task CÓ
+      //     việc con ⇒ bấm là ăn 400 SUBTASK_PARENT_PROJECT_LOCKED, đúng thứ D-36a hứa chặn sớm.
+      // Spread giữ nguyên ngữ nghĩa "server là nguồn sự thật": field nào server TRẢ (kể cả null tường
+      // minh) vẫn thắng; chỉ field server KHÔNG trả mới giữ lại từ cache.
+      queryClient.setQueryData<TaskCoreResponseDto>(queryKey, (prev) =>
+        prev ? { ...prev, ...result.task } : result.task,
+      );
     },
-    onSettled: () => {
+    onSettled: (data, _err, _vars, context) => {
       for (const key of taskCoreInvalidation.list())
         void queryClient.invalidateQueries({ queryKey: key });
       for (const key of taskCoreInvalidation.my())
         void queryClient.invalidateQueries({ queryKey: key });
+      // `taskKeys.kanban` KHÔNG nằm dưới prefix `tasks/list` ⇒ list() ở trên KHÔNG chạm tới board.
+      // Thiếu vế này: mở panel trượt TỪ board → đổi trạng thái → đóng panel, thẻ vẫn nằm cột cũ với
+      // badge cũ tới 15s (staleTime, refetchOnWindowFocus tắt). Trước S5-TASK-BOARD-UX-1 lỗi bị che
+      // vì chi tiết là TRANG riêng; panel-đè-board làm nó lộ ra ngay sau lưng người dùng.
+      // projectId không đổi qua action mutate ⇒ lấy từ response, fallback snapshot khi lỗi/rollback.
+      const projectId = data?.task.projectId ?? context?.previous?.projectId ?? null;
+      if (projectId) void queryClient.invalidateQueries({ queryKey: taskKeys.kanban(projectId) });
     },
   });
 }

@@ -578,5 +578,71 @@ describe("TaskKanbanPage", () => {
       await waitFor(() => expect(screen.getByText("Ý Tưởng")).toBeInTheDocument());
       expect(screen.queryByTestId("kanban-manage-columns")).not.toBeInTheDocument();
     });
+
+    // ── S5-TASK-BOARD-UX-1 — tạo nhanh đáy cột (hành vi chi tiết ở KanbanQuickCreate.spec) ────────
+    it("cột pipeline có nút tạo nhanh khi đủ quyền create + update-state", async () => {
+      setCapabilities({
+        "view-kanban:task": true,
+        "create:task": true,
+        "update-state:task": true,
+      });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_STATE_BOARD);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      await waitFor(() => expect(screen.getByText("Ý Tưởng")).toBeInTheDocument());
+      // Mỗi cột có nút RIÊNG mang stateId của chính nó — tạo đúng cột người dùng bấm.
+      expect(screen.getByTestId("kanban-quick-create-open-st-1")).toBeInTheDocument();
+      expect(screen.getByTestId("kanban-quick-create-open-st-2")).toBeInTheDocument();
+    });
+
+    it("cột chế độ STATUS cũ KHÔNG có tạo nhanh — server từ chối stateId ở chế độ đó, task sẽ rơi sai cột", async () => {
+      setCapabilities({
+        "view-kanban:task": true,
+        "create:task": true,
+        "update-state:task": true,
+      });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      await waitFor(() => expect(screen.getByTestId("kanban-column-Todo")).toBeInTheDocument());
+      expect(screen.queryByText(/thêm công việc/i)).not.toBeInTheDocument();
+    });
+  });
+
+  // ── S5-TASK-BOARD-UX-1 — bấm thẻ mở panel chi tiết ────────────────────────────
+  describe("mở chi tiết từ thẻ", () => {
+    it("bấm thẻ gọi onOpenTask với ĐÚNG id của thẻ", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
+      const onOpenTask = vi.fn();
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" onOpenTask={onOpenTask} />);
+      await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+
+      fireEvent.click(screen.getByTestId("kanban-card-task-001"));
+      expect(onOpenTask).toHaveBeenCalledWith("task-001");
+    });
+
+    it("mở được bằng bàn phím (Enter) — thẻ là div nên phải tự nối phím", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
+      const onOpenTask = vi.fn();
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" onOpenTask={onOpenTask} />);
+      await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+
+      const card = screen.getByTestId("kanban-card-task-001");
+      expect(card).toHaveAttribute("role", "button");
+      expect(card).toHaveAttribute("tabindex", "0");
+      fireEvent.keyDown(card, { key: "Enter" });
+      expect(onOpenTask).toHaveBeenCalledWith("task-001");
+    });
+
+    it("KHÔNG truyền onOpenTask ⇒ thẻ không phải nút, không bẫy focus bàn phím", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+
+      const card = screen.getByTestId("kanban-card-task-001");
+      expect(card).not.toHaveAttribute("role", "button");
+      expect(card).not.toHaveAttribute("tabindex");
+    });
   });
 });

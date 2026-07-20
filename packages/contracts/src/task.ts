@@ -693,6 +693,12 @@ export const taskCoreResponseSchema = z.object({
   projectName: z.string().nullable(),
   mainAssigneeEmployeeId: z.string().uuid().nullable(),
   assigneeName: z.string().nullable(),
+  // S5-TASK-AVATAR-1 (Nhóm C) — URL ẢNH đại diện người phụ trách, ĐÃ KÝ sẵn TTL-ngắn bởi server
+  // (AvatarPresignService, cùng đường HR list/org-chart dùng). KHÔNG BAO GIỜ là fileId thô: cột
+  // `employee_profiles.avatar_url` là đa-người-ghi nên chỉ giá trị đã xác minh cặp (employeeId,fileId)
+  // mới được ký; không xác minh được ⇒ null ⇒ FE vẽ chữ cái đầu (fail-soft, không vỡ trang).
+  // `.optional()` additive: FE và API deploy lệch pha vẫn parse được.
+  assigneeAvatarUrl: z.string().nullable().optional(),
   creatorUserId: z.string().uuid().nullable(),
   creatorName: z.string().nullable(),
   reporterEmployeeId: z.string().uuid().nullable(),
@@ -749,6 +755,8 @@ export const subtaskListItemSchema = z.object({
   priority: taskCorePrioritySchema.nullable(),
   mainAssigneeEmployeeId: z.string().uuid().nullable(),
   assigneeName: z.string().nullable(),
+  // S5-TASK-AVATAR-1 — xem ghi chú ở taskCoreResponseSchema.assigneeAvatarUrl (cùng luật ký + fail-soft).
+  assigneeAvatarUrl: z.string().nullable().optional(),
   dueAt: z.string().datetime().nullable(),
   isOverdue: z.boolean(),
   sortOrder: z.number().int().nullable(),

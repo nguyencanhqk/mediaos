@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { taskCollabApi, taskKeys, ApiError } from "@mediaos/web-core";
-import { Card } from "@mediaos/ui";
+// Card không còn dùng trực tiếp — vỏ do PanelBody quyết (embedded hay không).
 import { ActivityFeedList } from "./ActivityFeedList";
+import { PanelBody } from "./PanelBody";
 
 const PAGE_SIZE = 20;
 
@@ -21,7 +22,14 @@ const PAGE_SIZE = 20;
  * dùng chung với ProjectActivityTimeline (feed dự án TASK-API-601 — GIỮ gate sensitive, xem D-29);
  * bảng nhãn action ở `activity-labels.ts`. Key i18n GIỮ NGUYÊN.
  */
-export function TaskActivityTimeline({ taskId }: { taskId: string }) {
+export function TaskActivityTimeline({
+  taskId,
+  embedded = false,
+}: {
+  taskId: string;
+  /** Trong tab ⇒ bỏ vỏ Card + tiêu đề (nhãn tab đã nói). Xem PanelBody. */
+  embedded?: boolean;
+}) {
   const { t } = useTranslation("tasks");
   const [page, setPage] = useState(1);
   const queryParams = { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE };
@@ -39,10 +47,12 @@ export function TaskActivityTimeline({ taskId }: { taskId: string }) {
   if (isError && error instanceof ApiError && error.status === 403) return null;
 
   return (
-    <Card className="space-y-3 p-4">
-      <h3 className="text-sm font-semibold text-muted-foreground">
-        {t("tasks.detail.activity.title")}
-      </h3>
+    <PanelBody embedded={embedded}>
+      {!embedded && (
+        <h3 className="text-sm font-semibold text-muted-foreground">
+          {t("tasks.detail.activity.title")}
+        </h3>
+      )}
       <ActivityFeedList
         items={data ?? []}
         isLoading={isLoading}
@@ -54,6 +64,6 @@ export function TaskActivityTimeline({ taskId }: { taskId: string }) {
         errorText={t("tasks.detail.activity.errors.loadFailed")}
         emptyText={t("tasks.detail.activity.empty")}
       />
-    </Card>
+    </PanelBody>
   );
 }

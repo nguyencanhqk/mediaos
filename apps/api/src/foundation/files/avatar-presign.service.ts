@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { DatabaseService } from "../../db/db.service";
+import { DatabaseService, type TenantTx } from "../../db/db.service";
 import { STORAGE_ADAPTER, type StorageAdapter } from "../../storage/storage-adapter.port";
 import { FileRepository } from "./file.repository";
 
@@ -54,6 +54,15 @@ export class AvatarPresignService {
   async resolveEmployeeAvatars(
     companyId: string,
     subjects: AvatarSubject[],
+    /**
+     * S5-TASK-AVATAR-1 — tx CỦA CALLER, dùng khi lời gọi nằm SẴN trong một transaction đọc.
+     *
+     * Không có tham số này thì caller trong tx buộc phải tách đôi luồng (đọc trong tx → ký ngoài tx),
+     * vì mở `withTenant` lồng nhau sẽ treo trên PgBouncer transaction-mode. Truyền tx vào là tái dùng
+     * đúng kết nối đang mở — vẫn cùng tenant, vẫn qua RLS+FORCE. Phần ký là HMAC cục bộ (không I/O
+     * mạng) nên không giữ tx lâu.
+     */
+    callerTx?: TenantTx,
   ): Promise<Map<string, string>> {
     const out = new Map<string, string>();
     // employeeId → fileId ứng viên (chỉ giữ bản ghi UUID; http đã passthrough thẳng vào `out`).
@@ -72,9 +81,12 @@ export class AvatarPresignService {
     }
     if (fileIds.length === 0) return out;
 
-    const verified = await this.db.withTenant(companyId, (tx) =>
-      this.fileRepo.findVerifiedAvatarsTx(companyId, [...new Set(fileIds)], tx),
-    );
+    const uniqueFileIds = [...new Set(fileIds)];
+    const verified = callerTx
+      ? await this.fileRepo.findVerifiedAvatarsTx(companyId, uniqueFileIds, callerTx)
+      : await this.db.withTenant(companyId, (tx) =>
+          this.fileRepo.findVerifiedAvatarsTx(companyId, uniqueFileIds, tx),
+        );
     // Khớp ĐÚNG cặp (employeeId, fileId) — link.entity_id PHẢI là chính employee đó (chống đầu độc chéo).
     const storagePathByPair = new Map<string, string>();
     for (const v of verified) storagePathByPair.set(`${v.employeeId}:${v.fileId}`, v.storagePath);

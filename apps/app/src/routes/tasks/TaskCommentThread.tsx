@@ -12,9 +12,10 @@ import {
   useCan,
   ApiError,
 } from "@mediaos/web-core";
-import { Card, Button, Badge, Popover, Dialog } from "@mediaos/ui";
+import { Button, Badge, Popover, Dialog } from "@mediaos/ui";
 import type { TaskCommentResponseDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
+import { PanelBody } from "./PanelBody";
 
 /**
  * TaskCommentThread — bình luận + mention autocomplete (S4-FE-TASK-3, SPEC-06 §13.7/§14.14,
@@ -375,7 +376,14 @@ function CommentRow({
   );
 }
 
-export function TaskCommentThread({ taskId }: { taskId: string }) {
+export function TaskCommentThread({
+  taskId,
+  embedded = false,
+}: {
+  taskId: string;
+  /** Trong tab ⇒ bỏ vỏ Card + tiêu đề (nhãn tab đã nói). Xem PanelBody. */
+  embedded?: boolean;
+}) {
   const { t } = useTranslation("tasks");
   const myUserId = useAuthStore((s) => s.user?.id);
   const canComment = useCan(
@@ -413,10 +421,12 @@ export function TaskCommentThread({ taskId }: { taskId: string }) {
   );
 
   return (
-    <Card className="space-y-3 p-4">
-      <h3 className="text-sm font-semibold text-muted-foreground">
-        {t("tasks.detail.comments.title")}
-      </h3>
+    <PanelBody embedded={embedded}>
+      {!embedded && (
+        <h3 className="text-sm font-semibold text-muted-foreground">
+          {t("tasks.detail.comments.title")}
+        </h3>
+      )}
 
       {isLoading ? (
         <div className="h-16 animate-pulse rounded bg-muted" />
@@ -474,6 +484,6 @@ export function TaskCommentThread({ taskId }: { taskId: string }) {
           }
         />
       )}
-    </Card>
+    </PanelBody>
   );
 }

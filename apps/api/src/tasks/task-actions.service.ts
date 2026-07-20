@@ -32,7 +32,8 @@ import { TaskActivityService } from "./task-activity.service";
 import { ProjectAccessService } from "./project-access.service";
 import { coalesceTaskStatus, deriveStatusTimestamps, evaluateTransition } from "./task-fsm";
 import { isStateInGroupForStatus, pickTargetState } from "./task-state-sync";
-import { toTaskCoreDto } from "./task-core.mapper";
+import { toTaskCoreDto, toAvatarSubjects, avatarForRow } from "./task-core.mapper";
+import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
 
 interface RequestUser {
   id: string;
@@ -85,6 +86,8 @@ export class TaskActionsService {
     private readonly outbox: OutboxService,
     // S5-TASK-PROJROLE-1 (D-24) — DRY task-scope assert, mode thread per-operation (write/read).
     private readonly projectAccess: ProjectAccessService,
+    // S5-TASK-AVATAR-1 (Nhóm C) — ký avatar cho response của 4 route action (xem ghi chú ở `respond`).
+    private readonly avatars: AvatarPresignService,
   ) {}
 
   // ══════════════════════ ASSIGN ══════════════════════
@@ -717,7 +720,16 @@ export class TaskActionsService {
   ): Promise<TaskActionResponseDto> {
     const row = await this.coreRepo.findScopedByIdTx(tx, companyId, taskId);
     if (!row) throw new InternalServerErrorException("Không tải lại được công việc vừa ghi.");
-    return { task: this.toDto(row), warnings };
+    // S5-TASK-AVATAR-1 — PHẢI ký ở đây. FE (useTaskActionMutation.onSuccess) GHI ĐÈ TOÀN BỘ cache
+    // chi tiết bằng `result.task`; trả avatar null là mỗi lần đổi trạng thái/ưu tiên/hạn/người phụ
+    // trách sẽ xoá ảnh vừa hiện, tới lần refetch sau mới về — đúng lớp lỗi "field im lặng không tới
+    // FE ở một phần ba số đường" mà docblock toDto bên dưới đã bị hai lần.
+    const avatars = await this.avatars.resolveEmployeeAvatars(
+      companyId,
+      toAvatarSubjects([row]),
+      tx,
+    );
+    return { task: this.toDto(row, avatarForRow(row, avatars)), warnings };
   }
 
   private isUniqueViolation(err: unknown): boolean {
@@ -750,7 +762,7 @@ export class TaskActionsService {
    * biểu hiện: đổi trạng thái một việc con làm panel lật sang chế độ "task gốc" vì `parentTaskId`
    * biến thành undefined trong cache chi tiết). Hợp nhất là cách duy nhất đóng hẳn lớp lỗi này.
    */
-  private toDto(row: TaskCoreRow): TaskCoreResponseDto {
-    return toTaskCoreDto(row);
+  private toDto(row: TaskCoreRow, assigneeAvatarUrl?: string | null): TaskCoreResponseDto {
+    return toTaskCoreDto(row, assigneeAvatarUrl);
   }
 }

@@ -56,6 +56,12 @@ export interface TaskCoreRow {
   projectName: string | null;
   mainAssigneeEmployeeId: string | null;
   assigneeName: string | null;
+  // S5-TASK-AVATAR-1 — giá trị THÔ của `employee_profiles.avatar_url`: fileId (UUID) cho ảnh
+  // self-service, hoặc URL http legacy do admin đặt. Tên có hậu tố `Raw` CỐ Ý: cột này là
+  // ĐA-NGƯỜI-GHI (profile-change-request ghi verbatim) nên KHÔNG được đưa thẳng vào DTO — phải qua
+  // `AvatarPresignService.resolveEmployeeAvatars` để xác minh cặp (employeeId, fileId) rồi mới ký.
+  // Đặt tên trùng `assigneeAvatarUrl` sẽ mời gọi đúng cái lỗi đó. Optional additive (mirror taskCode).
+  assigneeAvatarRaw?: string | null;
   creatorUserId: string | null;
   creatorName: string | null;
   reporterEmployeeId: string | null;
@@ -175,6 +181,7 @@ const TASK_CORE_SELECT = sql`
   pr.name                      AS "projectName",
   tk.main_assignee_employee_id AS "mainAssigneeEmployeeId",
   au.full_name                 AS "assigneeName",
+  ae.avatar_url                AS "assigneeAvatarRaw",
   tk.creator_user_id           AS "creatorUserId",
   cu.full_name                 AS "creatorName",
   tk.reporter_employee_id      AS "reporterEmployeeId",

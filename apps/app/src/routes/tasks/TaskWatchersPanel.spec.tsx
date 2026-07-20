@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, taskCoreApi } from "@mediaos/web-core";
-import { TaskAssignControl } from "./TaskAssignControl";
+import { TaskWatchersPanel } from "./TaskWatchersPanel";
 import type { TaskCoreResponseDto, TaskWatcherResponseDto } from "@mediaos/contracts";
 
 // ---------------------------------------------------------------------------
@@ -69,7 +69,7 @@ function setCapabilities(caps: Record<string, boolean>) {
   });
 }
 
-describe("TaskAssignControl — watchers (S5-TASK-DETAIL-1 GAP 4)", () => {
+describe("TaskWatchersPanel — người theo dõi (S5-TASK-DETAIL-1 GAP 4)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -77,7 +77,7 @@ describe("TaskAssignControl — watchers (S5-TASK-DETAIL-1 GAP 4)", () => {
   it("renders the watcher list (names) and marks the current user", async () => {
     setCapabilities({ "watch:task": true });
     vi.mocked(taskCoreApi.listWatchers).mockResolvedValue([MY_WATCHER, OTHER_WATCHER]);
-    renderWithQuery(<TaskAssignControl task={TASK} />);
+    renderWithQuery(<TaskWatchersPanel task={TASK} />);
 
     await waitFor(() => expect(screen.getByText("Đồng Nghiệp")).toBeInTheDocument());
     expect(screen.getByText(/người theo dõi \(2\)/i)).toBeInTheDocument();
@@ -88,7 +88,7 @@ describe("TaskAssignControl — watchers (S5-TASK-DETAIL-1 GAP 4)", () => {
     setCapabilities({ "watch:task": true });
     vi.mocked(taskCoreApi.listWatchers).mockResolvedValue([MY_WATCHER]);
     vi.mocked(taskCoreApi.removeWatcher).mockResolvedValue(undefined);
-    renderWithQuery(<TaskAssignControl task={TASK} />);
+    renderWithQuery(<TaskWatchersPanel task={TASK} />);
 
     const btn = await screen.findByRole("button", { name: /bỏ theo dõi/i });
     fireEvent.click(btn);
@@ -104,7 +104,7 @@ describe("TaskAssignControl — watchers (S5-TASK-DETAIL-1 GAP 4)", () => {
       task: TASK,
       warnings: [],
     });
-    renderWithQuery(<TaskAssignControl task={TASK} />);
+    renderWithQuery(<TaskWatchersPanel task={TASK} />);
 
     // Chờ list settle: nút Theo dõi disable trong lúc watchersQuery.isFetching (chống double-click).
     await screen.findByText("Đồng Nghiệp");
@@ -116,7 +116,7 @@ describe("TaskAssignControl — watchers (S5-TASK-DETAIL-1 GAP 4)", () => {
 
   it("hides the watcher section and never fetches without watch:task", () => {
     setCapabilities({});
-    renderWithQuery(<TaskAssignControl task={TASK} />);
+    renderWithQuery(<TaskWatchersPanel task={TASK} />);
     expect(screen.queryByText(/người theo dõi/i)).not.toBeInTheDocument();
     expect(taskCoreApi.listWatchers).not.toHaveBeenCalled();
   });

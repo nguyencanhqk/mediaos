@@ -78,7 +78,7 @@ export function AssigneeRail({
             data-testid={`assignee-rail-item-${assignee.id}`}
             className={itemClass(active)}
           >
-            <Avatar size="sm" name={assignee.name} />
+            <Avatar size="sm" name={assignee.name} src={assignee.avatarUrl} />
             <CountBadge count={assignee.count} testId={`assignee-rail-count-${assignee.id}`} />
           </button>
         );

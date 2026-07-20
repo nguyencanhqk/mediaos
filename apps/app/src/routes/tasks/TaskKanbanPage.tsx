@@ -1,4 +1,4 @@
-import { useMemo, useState, type DragEvent } from "react";
+import { useMemo, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare, Paperclip, ListChecks, ListTree, Settings2 } from "lucide-react";
@@ -22,6 +22,8 @@ import type {
 import { isProjectManagerOrOwner, PROJECT_STATE_PAIRS, TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { TaskStatusBadge, TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
 import { TaskStateColumnsDialog } from "./TaskStateColumnsDialog";
+import { KanbanQuickCreate } from "./KanbanQuickCreate";
+import { KanbanCardSubtasks } from "./KanbanCardSubtasks";
 import { AssigneeRail } from "./AssigneeRail";
 import {
   buildAssigneeSummary,
@@ -125,6 +127,8 @@ function KanbanCardBadges({ task }: { task: TaskKanbanCardDto }) {
           {checklistDone}/{checklistTotal}
         </Badge>
       )}
+      {/* S5-TASK-CARDSUB-1 — badge việc con chuyển thành NÚT BUNG (KanbanCardSubtasks) ở dưới; ở đây
+          chỉ còn biểu tượng để giữ hàng badge đồng nhất, số liệu nằm trên nút. */}
       {subtaskTotal > 0 && (
         <Badge
           variant="muted"
@@ -147,25 +151,52 @@ function KanbanCard({
   task,
   draggable,
   onDragStart,
+  onOpen,
+  subtasksExpanded,
+  onToggleSubtasks,
   showStatus = false,
 }: {
   task: TaskKanbanCardDto;
   draggable: boolean;
   onDragStart: (e: DragEvent<HTMLDivElement>) => void;
+  /** S5-TASK-BOARD-UX-1 — bấm thẻ mở panel chi tiết. Không truyền ⇒ thẻ KHÔNG bấm được (giữ hành vi cũ). */
+  onOpen?: () => void;
+  /** S5-TASK-CARDSUB-1 — trạng thái bung việc con do BOARD giữ (theo taskId), không phải từng thẻ:
+   *  kéo-thả làm thẻ remount sang cột khác, state cục bộ sẽ bị reset về thu. */
+  subtasksExpanded: boolean;
+  onToggleSubtasks: () => void;
   /** Board state-mode: hiện badge task_status trên thẻ — người dùng THẤY auto-map nhóm→status đã chạy. */
   showStatus?: boolean;
 }) {
   const { t } = useTranslation("tasks");
   const isCompleted = task.status != null && COMPLETED_STATUSES.has(task.status);
 
+  // S5-TASK-BOARD-UX-1 — thẻ vừa KÉO-THẢ vừa BẤM-MỞ. Kéo không được kích hoạt onClick: trình duyệt
+  // chỉ bắn click khi con trỏ không di chuyển đáng kể, nên dragstart→drop KHÔNG sinh click. Bàn phím
+  // đi qua onKeyDown (Enter/Space) vì div không phải nút thật.
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!onOpen) return;
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    onOpen();
+  };
+
   return (
     <div
       draggable={draggable}
       onDragStart={onDragStart}
+      onClick={onOpen}
+      onKeyDown={onKeyDown}
+      role={onOpen ? "button" : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      aria-label={onOpen ? t("tasks.kanban.openDetail", { title: task.title }) : undefined}
       data-testid={`kanban-card-${task.id}`}
       className={cn(
         "space-y-1.5 rounded-md border border-border bg-card p-2.5 text-sm shadow-sm",
         draggable && "cursor-grab active:cursor-grabbing",
+        onOpen &&
+          "hover:border-primary/50 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        !draggable && onOpen && "cursor-pointer",
         isCompleted && "border-border/60 bg-muted/40",
       )}
     >
@@ -181,6 +212,8 @@ function KanbanCard({
         <Avatar
           size="sm"
           name={task.assigneeName}
+          // S5-TASK-AVATAR-1 — URL đã ký từ server; null ⇒ Avatar tự lùi về chữ cái đầu.
+          src={task.assigneeAvatarUrl}
           title={task.assigneeName ?? t("tasks.kanban.unassigned")}
         />
         <div className="flex items-center gap-1.5">
@@ -195,6 +228,14 @@ function KanbanCard({
         <TaskOverdueBadge isOverdue={task.isOverdue} />
       </div>
       <KanbanCardBadges task={task} />
+      {/* S5-TASK-CARDSUB-1 — bung danh sách việc con ngay trên thẻ (tải lười, chỉ khi bấm). */}
+      <KanbanCardSubtasks
+        taskId={task.id}
+        done={task.subtaskDone ?? 0}
+        total={task.subtaskTotal ?? 0}
+        expanded={subtasksExpanded}
+        onToggle={onToggleSubtasks}
+      />
     </div>
   );
 }
@@ -206,6 +247,9 @@ function KanbanColumn({
   canDrag,
   onDragStartTask,
   onDrop,
+  onOpenTask,
+  expandedSubtasks,
+  onToggleSubtasks,
 }: {
   status: TaskCoreStatusDto;
   tasks: TaskKanbanCardDto[];
@@ -214,6 +258,9 @@ function KanbanColumn({
   canDrag: boolean;
   onDragStartTask: (taskId: string) => (e: DragEvent<HTMLDivElement>) => void;
   onDrop: (status: TaskCoreStatusDto) => (e: DragEvent<HTMLDivElement>) => void;
+  onOpenTask?: (taskId: string) => void;
+  expandedSubtasks: ReadonlySet<string>;
+  onToggleSubtasks: (taskId: string) => void;
 }) {
   const { t } = useTranslation("tasks");
   return (
@@ -247,6 +294,9 @@ function KanbanColumn({
               task={task}
               draggable={canDrag}
               onDragStart={onDragStartTask(task.id)}
+              onOpen={onOpenTask ? () => onOpenTask(task.id) : undefined}
+              subtasksExpanded={expandedSubtasks.has(task.id)}
+              onToggleSubtasks={() => onToggleSubtasks(task.id)}
             />
           ))
         )}
@@ -264,14 +314,23 @@ function StateKanbanColumn({
   column,
   tasks,
   canDrag,
+  projectId,
   onDragStartTask,
   onDrop,
+  onOpenTask,
+  expandedSubtasks,
+  onToggleSubtasks,
 }: {
   column: TaskKanbanStateColumnDto;
   tasks: TaskKanbanCardDto[];
   canDrag: boolean;
+  /** S5-TASK-BOARD-UX-1 — cần cho tạo nhanh: createTask({ projectId, stateId }). */
+  projectId: string;
   onDragStartTask: (taskId: string) => (e: DragEvent<HTMLDivElement>) => void;
   onDrop: (stateId: string) => (e: DragEvent<HTMLDivElement>) => void;
+  onOpenTask?: (taskId: string) => void;
+  expandedSubtasks: ReadonlySet<string>;
+  onToggleSubtasks: (taskId: string) => void;
 }) {
   const { t } = useTranslation("tasks");
   return (
@@ -307,11 +366,16 @@ function StateKanbanColumn({
               task={task}
               draggable={canDrag}
               onDragStart={onDragStartTask(task.id)}
+              onOpen={onOpenTask ? () => onOpenTask(task.id) : undefined}
+              subtasksExpanded={expandedSubtasks.has(task.id)}
+              onToggleSubtasks={() => onToggleSubtasks(task.id)}
               showStatus
             />
           ))
         )}
       </div>
+      {/* Tạo nhanh nằm NGOÀI vùng cuộn của cột → luôn thấy nút dù cột dài (mirror MISA). */}
+      <KanbanQuickCreate projectId={projectId} stateId={column.stateId} />
     </div>
   );
 }
@@ -323,6 +387,7 @@ export function TaskKanbanPage({
   assigneeSelection = EMPTY_SELECTION,
   onToggleAssignee,
   onClearAssignees,
+  onOpenTask,
 }: {
   projectId: string;
   /** Vai trò của CHÍNH actor trong dự án (server tính) — S5-TASK-PROJROLE-1, D-24 quản cột pipeline. */
@@ -333,6 +398,11 @@ export function TaskKanbanPage({
   assigneeSelection?: ReadonlySet<string>;
   onToggleAssignee?: (value: string) => void;
   onClearAssignees?: () => void;
+  /**
+   * S5-TASK-BOARD-UX-1 — bấm thẻ mở chi tiết. Vỏ workspace truyền vào (nó quản `?task=` trên URL);
+   * không truyền ⇒ thẻ không bấm được, board vẫn chạy như cũ.
+   */
+  onOpenTask?: (taskId: string) => void;
 }) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
@@ -369,6 +439,16 @@ export function TaskKanbanPage({
   const canManageColumns =
     canCreateState || canUpdateState || canDeleteState || isProjectManagerOrOwner(myProjectRole);
   const [manageOpen, setManageOpen] = useState(false);
+  // S5-TASK-CARDSUB-1 — thẻ nào đang bung việc con. Giữ Ở BOARD (không trong từng thẻ) vì kéo-thả
+  // làm thẻ remount sang cột khác; state cục bộ sẽ tự thu lại giữa chừng thao tác.
+  const [expandedSubtasks, setExpandedSubtasks] = useState<ReadonlySet<string>>(new Set());
+  const toggleSubtasks = (taskId: string) =>
+    setExpandedSubtasks((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
   const [dragErrorKey, setDragErrorKey] = useState<string | null>(null);
   const queryKey = taskKeys.kanban(projectId);
 
@@ -622,8 +702,12 @@ export function TaskKanbanPage({
                     column={col}
                     tasks={visibleTasksByColumn.get(col.stateId) ?? []}
                     canDrag={canDragState}
+                    projectId={projectId}
                     onDragStartTask={onDragStartTask}
                     onDrop={onDropState}
+                    onOpenTask={onOpenTask}
+                    expandedSubtasks={expandedSubtasks}
+                    onToggleSubtasks={toggleSubtasks}
                   />
                 ))
               : statusColumns.map((col) => (
@@ -635,6 +719,9 @@ export function TaskKanbanPage({
                     canDrag={canDrag}
                     onDragStartTask={onDragStartTask}
                     onDrop={onDrop}
+                    onOpenTask={onOpenTask}
+                    expandedSubtasks={expandedSubtasks}
+                    onToggleSubtasks={toggleSubtasks}
                   />
                 ))}
           </div>

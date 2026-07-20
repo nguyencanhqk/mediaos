@@ -1408,9 +1408,19 @@ const tasksProjectDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/tasks/projects/$projectId",
   beforeLoad: authGuard,
-  validateSearch: (search: Record<string, unknown>): { tab?: ProjectWorkspaceTab } => {
+  // S5-TASK-BOARD-UX-1 — thêm `?task=<id>`: mở panel chi tiết ĐÈ LÊN workspace (không rời trang).
+  // Giữ nguyên chuỗi, KHÔNG validate uuid ở đây: id rác chỉ làm panel hiện "không tìm thấy" (server
+  // là người quyết), còn chặn ở router sẽ nuốt mất param và người dùng thấy panel im lặng không mở.
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { tab?: ProjectWorkspaceTab; task?: string } => {
     const tab = parseWorkspaceTab(search.tab);
-    return tab === "overview" ? {} : { tab };
+    const task =
+      typeof search.task === "string" && search.task.length > 0 ? search.task : undefined;
+    return {
+      ...(tab === "overview" ? {} : { tab }),
+      ...(task ? { task } : {}),
+    };
   },
   component: () => {
     const { projectId } = tasksProjectDetailRoute.useParams();

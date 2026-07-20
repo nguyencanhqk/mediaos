@@ -9,9 +9,10 @@ import {
   useCan,
   ApiError,
 } from "@mediaos/web-core";
-import { Card, Button, Checkbox, Input, Badge, Dialog } from "@mediaos/ui";
+import { Button, Checkbox, Input, Badge, Dialog } from "@mediaos/ui";
 import type { TaskChecklistResponseDto, TaskChecklistItemResponseDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
+import { PanelBody } from "./PanelBody";
 
 /**
  * TaskChecklistPanel — nhóm checklist + item tick được (S4-FE-TASK-3, SPEC-06 §13.7/§14.16,
@@ -328,7 +329,14 @@ function DeleteChecklistConfirm({
   );
 }
 
-export function TaskChecklistPanel({ taskId }: { taskId: string }) {
+export function TaskChecklistPanel({
+  taskId,
+  embedded = false,
+}: {
+  taskId: string;
+  /** Trong tab ⇒ bỏ vỏ Card + tiêu đề (nhãn tab đã nói). Xem PanelBody. */
+  embedded?: boolean;
+}) {
   const { t } = useTranslation("tasks");
   const canUpdate = useCan(
     TASK_CORE_ENGINE_PAIRS.UPDATE.action,
@@ -358,11 +366,15 @@ export function TaskChecklistPanel({ taskId }: { taskId: string }) {
   const showOverallProgress = (checklists?.length ?? 0) > 1 && totalItems > 0;
 
   return (
-    <Card className="space-y-3 p-4">
+    <PanelBody embedded={embedded}>
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-muted-foreground">
-          {t("tasks.detail.checklist.title")}
-        </h3>
+        {embedded ? (
+          <span />
+        ) : (
+          <h3 className="text-sm font-semibold text-muted-foreground">
+            {t("tasks.detail.checklist.title")}
+          </h3>
+        )}
         {canUpdate && (
           <Button type="button" size="sm" variant="outline" onClick={() => setCreateOpen(true)}>
             <Plus className="mr-1 h-4 w-4" />
@@ -408,6 +420,6 @@ export function TaskChecklistPanel({ taskId }: { taskId: string }) {
           onClose={() => setDeleteTarget(null)}
         />
       )}
-    </Card>
+    </PanelBody>
   );
 }
