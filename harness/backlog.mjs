@@ -7534,7 +7534,7 @@ export const backlog = [
       "GOAL-API-001..006 + 013 chạy: CRUD soft-delete + GET /goals/tree (≤3 tầng kèm progress từng nút) + GET /me/goals own-scope resolve token; goal_code sinh qua sequence_counters (counter ĐÃ seed ở DB-1 — SequenceService fail-loud nếu thiếu, đừng tự chế fallback); mọi query withTenant + company_id",
       "Data-scope ép Ở SERVICE (buildReadScopeExists pattern): own = owner/employee chính mình · department = phòng của actor · all; goal cấp project: ghi thêm điều kiện qua ProjectAccessService (Owner/Manager project được tạo/sửa goal dự án kể cả khác phòng); level='company' chặn GOAL-ERR-004",
       "Validate đủ GOAL-ERR-001 (level↔neo, phản chiếu CHECK thành 422 có mã) · 002 (parent cùng company + đúng chiều cấp + chống cycle) · 003 · 007 (xóa còn con active) · 010 (employee Active, owner=employee) · 011 · 015; DTO nestjs-zod từ packages/contracts (goalCoreResponseSchema, KHÔNG io.emit/route trả row thô)",
-      "Int-spec RED-trước (apps/api/test/integration/, LANE_DB): deny-path nhân viên sửa/xóa goal người khác 403 · xem goal phòng khác 403 · cross-tenant 404 · /me/goals bơm employeeId lạ vẫn về own · parent sai chiều/cycle 422 · tạo level company 422; FULL gate (permission-domain) PASS",
+      "Int-spec RED-trước (apps/api/test/integration/, LANE_DB): deny-path nhân viên sửa/xóa goal người khác 403 · xem goal phòng khác 403 · cross-tenant 404 · /me/goals bơm employeeId lạ vẫn về own · parent sai chiều/cycle 422 · tạo level company 422 · CROSS-TENANT-REF: parent_goal_id/neo trỏ id company khác phải 404 (finding MEDIUM gate DB-1: FK đơn cột KHÔNG ép cùng-tenant — service phải resolve mọi id tham chiếu DƯỚI tenant scope trước khi ghi); FULL gate (permission-domain) PASS",
     ],
   },
   {
@@ -7570,7 +7570,7 @@ export const backlog = [
     done_when: [
       "4 mode đúng công thức §13.1 + progress NULL khi chưa đo được (KHÔNG 0%); recompute sync cùng tx tại MỌI writer thật của task-status/gắn-tháo/Cancelled — cả mode tasks LẪN mode project (đếm-lá reuse countsByStatusLeaf, KHÔNG đọc cột progress_percent chết) — + check-in, bubble lên cha mode=children, goal finalized bỏ qua; job đối soát đêm qua system-jobs handler idempotent, lệch >0.01 log warn",
       "Check-in (GOAL-API-007/008) ghi goal_updates type=checkin (old/new value + confidence + note) — INSERT-only; finalize/reopen (API-009) quyền ('finalize','goal') + ghi ledger type finalize/reopen + audit_logs; sau finalize MỌI đường ghi (update/checkin/link/decompose/recompute) trả GOAL-ERR-005",
-      "Link/unlink task↔goal (API-010, bulk) validate GOAL-ERR-008: goal employee → assignee phải là employee đó (CHẶN) · goal project → task thuộc project (CHẶN) · goal department → cảnh báo mềm; audit_logs cho link/unlink/finalize/reopen (CHECK 'goal' ĐÃ mở ở DB-1/0506 — không tự thêm migration ở lane này); task response bổ sung goalId (+ tên goal) ADDITIVE qua MAPPER HỢP NHẤT duy nhất (bài học 3-mapper PR #247) + packages/contracts/src/task.ts additive",
+      "Link/unlink task↔goal (API-010, bulk) validate GOAL-ERR-008: goal employee → assignee phải là employee đó (CHẶN) · goal project → task thuộc project (CHẶN) · goal department → cảnh báo mềm · task_id/goal_id đều resolve DƯỚI tenant scope trước khi ghi (finding MEDIUM gate DB-1 — FK đơn cột không ép cùng-tenant) + check-in/goal_updates cùng ràng buộc; audit_logs cho link/unlink/finalize/reopen (CHECK 'goal' ĐÃ mở ở DB-1/0506 — không tự thêm migration ở lane này); task response bổ sung goalId (+ tên goal) ADDITIVE qua MAPPER HỢP NHẤT duy nhất (bài học 3-mapper PR #247) + packages/contracts/src/task.ts additive",
       "GOAL_ASSIGNED + GOAL_FINALIZED enqueue outbox TRONG tx qua OutboxNotificationBridge (eventCode verbatim khớp catalog ĐÃ seed ở DB-1/0507 — bridge fail-loud tại boot nếu lệch; dedupe + delivery log, cùng company, payload KHÔNG số liệu nhạy cảm); int-spec RED-trước: ma trận mode×(chuyển trạng thái·Cancelled·đổi mode GOAL-ERR-013) · freeze sau finalize · app-role không UPDATE/DELETE được goal_updates · link sai neo bị chặn · notification đúng recipient + idempotent · cross-tenant; FULL gate PASS",
     ],
   },
@@ -7686,6 +7686,31 @@ export const backlog = [
       "CRUD template + items (quyền manage, phân trang, soft delete); wizard: chọn template → preview items (sửa/xóa/thêm/assignee/cột board/due) → áp dụng",
       "POST /goals/:id/decompose: tạo bulk task TRONG 1 transaction (fail giữa chừng rollback HẾT), mỗi task mang goal_id + activity log 'tạo từ phân rã mục tiêu X' + checklist map sang task_checklists; giới hạn 50 (GOAL-ERR-009); quyền tạo task đi qua đúng gate TASK hiện hành (KHÔNG bypass)",
       "Int-spec: transactional-rollback + goal chốt/Cancelled bị chặn + template company khác deny + >50 chặn; LIGHT gate + typecheck/lint xanh",
+    ],
+  },
+  {
+    id: "S5-FND-REVOKE-1",
+    module: "FOUNDATION",
+    layer: "DB",
+    title:
+      "Nợ di sản G-era (finding MEDIUM gate S5-GOAL-DB-1): REVOKE DELETE org_units + projects khỏi app role — chặn cửa cascade-xoá goals/goal_updates vòng qua soft-delete (expand-contract 2 release nếu còn caller)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S5-FND-REVOKE-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-GOAL-DB-1"],
+    src: [
+      "Gate S5-GOAL-DB-1 (database-reviewer 2026-07-20): goals.department_id/project_id ON DELETE CASCADE là bắt buộc-về-CHECK, nhưng app role còn GRANT DELETE org_units (0006:36) + projects (0007:61) từ G-era — raw DELETE lỗi sẽ cascade-xoá goal + ledger không audit; services hiện chỉ soft-delete (grep .delete(orgUnits)/.delete(projects) = 0)",
+      "memory migration-expand-contract-required (revoke grant mà live code còn enforce = cửa sổ lỗi — grep caller THẬT trước, tách 2 release nếu cần)",
+    ],
+    done_when: [
+      "Grep TOÀN BỘ caller thật (kể cả raw sql) xác nhận 0 đường DELETE org_units/projects từ app role; migration REVOKE DELETE 2 bảng khỏi app role + verify fail-loud information_schema",
+      "Int-spec: app role DELETE org_units/projects → 42501; suite HR/TASK hiện có vẫn xanh (LANE_DB); FULL gate DB PASS",
     ],
   },
   {

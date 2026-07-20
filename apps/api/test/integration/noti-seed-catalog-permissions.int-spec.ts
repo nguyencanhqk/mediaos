@@ -86,9 +86,9 @@ describe.skipIf(!runIsolatedDb)(
 
     // ── A. Catalog event GLOBAL == registry (thiếu ĐỎ · thừa ĐỎ) ────────────────────
     describe("A. notification_events GLOBAL khớp registry (UNION SPEC-08 §15 + DB-07 §14.1)", () => {
-      it("pin: registry có đúng 53 mã (39 enabled + 14 disabled) — sau mig 0490 (S4-NOTI-SEED-2)", () => {
-        expect(NOTI_EVENT_COUNT).toBe(53);
-        expect(NOTI_ENABLED_EVENT_COUNT).toBe(39);
+      it("pin: registry có đúng 55 mã (41 enabled + 14 disabled) — sau mig 0507 (S5-GOAL-DB-1)", () => {
+        expect(NOTI_EVENT_COUNT).toBe(55);
+        expect(NOTI_ENABLED_EVENT_COUNT).toBe(41);
       });
 
       it("tập event_code (company_id IS NULL) == registry — KHÔNG mã lạ, KHÔNG thiếu", async () => {
@@ -187,7 +187,7 @@ describe.skipIf(!runIsolatedDb)(
         ).toEqual([]);
       });
 
-      it("tổng template GLOBAL IN_APP/vi-VN Active == số event enabled (39 sau 0490)", async () => {
+      it("tổng template GLOBAL IN_APP/vi-VN Active == số event enabled (41 sau 0507)", async () => {
         const res = await direct.query<{ n: number }>(
           `SELECT COUNT(*)::int AS n
              FROM notification_templates

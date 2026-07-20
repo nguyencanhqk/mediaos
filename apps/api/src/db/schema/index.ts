@@ -100,3 +100,7 @@ export * from "./task-activity";
 // module ME (tầng User). company_id NOT NULL, RLS+FORCE literal-GUC (mẫu 0479), app GRANT SELECT,INSERT,UPDATE
 // (upsert-config — KHÔNG DELETE, KHÔNG soft-delete). UNIQUE(company_id,user_id). Cross-user IDOR ép ở ME-BE.
 export * from "./user-preferences";
+// S5-GOAL-DB-1 (DB-11 §6.1/§6.2 / SPEC-10, mig 0504): goals (cây mục tiêu 3 cấp — company_id NOT NULL, RLS+FORCE
+// literal-GUC, app SELECT,INSERT,UPDATE — soft-delete, KHÔNG DELETE) + goal_updates (sổ check-in APPEND-ONLY —
+// app SELECT,INSERT, KHÔNG UPDATE/DELETE, KHÔNG deleted_at). tasks.goal_id (mig 0505) ADD-only ở ./workflow.
+export * from "./goals";

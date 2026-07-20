@@ -13,10 +13,19 @@
  *   event_code VERBATIM: TASK_MENTIONED + TASK_COMMENT_CREATED (KHÔNG TASK_COMMENT_MENTIONED).
  */
 
-/** module_code hợp lệ (CHECK chk_notification_events_module_code — 0479). */
-export type NotiModuleCode = "AUTH" | "HR" | "ATT" | "LEAVE" | "TASK" | "DASH" | "NOTI" | "SYSTEM";
+/** module_code hợp lệ (CHECK chk_notification_events_module_code — 0479 + 'GOAL' 0507). */
+export type NotiModuleCode =
+  | "AUTH"
+  | "HR"
+  | "ATT"
+  | "LEAVE"
+  | "TASK"
+  | "DASH"
+  | "NOTI"
+  | "SYSTEM"
+  | "GOAL";
 
-/** notification_type hợp lệ (CHECK chk_notification_events_type — 0479). */
+/** notification_type hợp lệ (CHECK chk_notification_events_type — 0479 + 'Goal' 0507). */
 export type NotiType =
   | "System"
   | "Account"
@@ -28,7 +37,8 @@ export type NotiType =
   | "Approval"
   | "Reminder"
   | "Warning"
-  | "Error";
+  | "Error"
+  | "Goal";
 
 /** default_priority hợp lệ (CHECK chk_notification_events_priority — 0479). */
 export type NotiPriority = "Low" | "Normal" | "High" | "Urgent" | "Critical";
@@ -53,11 +63,12 @@ export interface NotiEventCatalogEntry {
 }
 
 /**
- * UNION danh mục event (53 mã). ĐỒNG BỘ 1-1 với migration 0481 bước (1) ∪ 0490 (S4-NOTI-SEED-2).
- * Thứ tự nhóm theo module để dễ đối chiếu; test so SÁNH THEO TẬP (set), không theo thứ tự.
+ * UNION danh mục event (55 mã). ĐỒNG BỘ 1-1 với migration 0481 bước (1) ∪ 0490 (S4-NOTI-SEED-2) ∪ 0507
+ * (S5-GOAL-DB-1: GOAL_ASSIGNED + GOAL_FINALIZED). Thứ tự nhóm theo module để dễ đối chiếu; test so SÁNH
+ * THEO TẬP (set), không theo thứ tự.
  */
 export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
-  // ===== MVP set (DB-07 §14.1) ∪ TASK BE-3 canonical (0490) — isEnabled = true (39 mã) =====
+  // ===== MVP set (DB-07 §14.1) ∪ TASK BE-3 canonical (0490) ∪ GOAL (0507) — isEnabled = true (41 mã) =====
   { module: "AUTH", eventCode: "AUTH_USER_CREATED", type: "Account", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "AUTH", eventCode: "AUTH_USER_LOCKED", type: "Account", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "AUTH", eventCode: "AUTH_PASSWORD_RESET_REQUESTED", type: "Account", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
@@ -98,6 +109,9 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
   { module: "TASK", eventCode: "TASK_DUE_DATE_CHANGED", type: "Task", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "SYSTEM", eventCode: "SYSTEM_CONFIG_WARNING", type: "Warning", priority: "High", isEnabled: true, isSystemEvent: true }, // prettier-ignore
   { module: "SYSTEM", eventCode: "SYSTEM_ERROR_DETECTED", type: "Error", priority: "Critical", isEnabled: true, isSystemEvent: true }, // prettier-ignore
+  // S5-GOAL-DB-1 (mig 0507) — 2 mã GOAL (SPEC-10 §18): giao mục tiêu + chốt kỳ. payload chỉ goal name/mã + link.
+  { module: "GOAL", eventCode: "GOAL_ASSIGNED", type: "Goal", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "GOAL", eventCode: "GOAL_FINALIZED", type: "Goal", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   // ===== Phần dư SPEC-08 §15 (ngoài MVP) — isEnabled = false, GIỮ trong catalog (14 mã) =====
   { module: "AUTH", eventCode: "AUTH_PASSWORD_CHANGED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
   { module: "AUTH", eventCode: "AUTH_USER_UNLOCKED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
@@ -117,14 +131,14 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
 ] as const;
 
 /** Tổng số event UNION (pin để test bắt thiếu/thừa mã). */
-export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 53
+export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 55
 
 /** Danh mục event ENABLED (MVP set DB-07 §14.1) — mỗi mã PHẢI có đúng 1 template IN_APP/vi-VN. */
 export const NOTI_ENABLED_EVENTS: readonly NotiEventCatalogEntry[] = NOTI_EVENT_CATALOG.filter(
   (e) => e.isEnabled,
 );
 
-export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 39
+export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 41
 
 /** template_code chuẩn hoá (mirror 0481 bước (2)): `<EVENT_CODE>__IN_APP__vi-VN`. */
 export const NOTI_TEMPLATE_CHANNEL = "IN_APP" as const;

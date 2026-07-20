@@ -14,6 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
+import { goals } from "./goals";
 import { users } from "./users";
 import { contentItems, projects } from "./media";
 
@@ -435,6 +436,9 @@ export const tasks = pgTable(
     }),
     // Thứ tự việc con trong một cha (TASK-API-702). Cột có từ 0478, WO này là nơi ĐẦU TIÊN dùng.
     sortOrder: integer("sort_order"),
+    // S5-GOAL-DB-1 (mig 0505) — liên kết đo tiến độ mode 'tasks' (GOAL-DEC-006). FK ĐƠN CỘT → goals(id) ON
+    // DELETE SET NULL (xoá cứng goal ⇒ task rớt liên kết, company_id KHÔNG đổi). NULL = task không gắn goal.
+    goalId: uuid("goal_id").references(() => goals.id, { onDelete: "set null" }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -483,6 +487,10 @@ export const tasks = pgTable(
     index("tasks_project_sequence_idx")
       .on(t.companyId, t.projectId, t.sequence)
       .where(sql`deleted_at IS NULL AND project_id IS NOT NULL`),
+    // S5-GOAL-DB-1 (mig 0505) — đo goal mode 'tasks': đếm task Done gắn goal_id (DB-11 §8).
+    index("idx_tasks_company_goal")
+      .on(t.companyId, t.goalId)
+      .where(sql`goal_id IS NOT NULL AND deleted_at IS NULL`),
   ],
 );
 
