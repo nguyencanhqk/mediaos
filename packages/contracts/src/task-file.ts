@@ -49,5 +49,17 @@ export const taskFileDtoSchema = z.object({
   uploadedAt: z.string().datetime(),
   /** file_links.purpose — nhãn phân loại tài liệu (nullable/absent nếu không đặt lúc link). */
   category: z.string().nullable().optional(),
+  /**
+   * S5-TASK-COVER-1 — tệp này ĐANG là ảnh bìa của task.
+   *
+   * KHÔNG suy được từ `coverUrl` của task: `coverUrl` là URL ĐÃ KÝ, không đối chiếu ngược về `fileId`.
+   * Server tính field này theo ĐÚNG bộ điều kiện của đường ký ảnh bìa (is_primary + ảnh + Uploaded +
+   * scan sạch + độc quyền), KHÔNG phải `is_primary` thô — nếu chỉ đọc cờ thô thì panel sẽ hiện "đang
+   * là ảnh bìa" trong khi board không hiện gì cả.
+   *
+   * `.optional()` + `.default(false)` để khớp `coverUrl` (cũng optional): FE mới gặp API cũ vẫn parse
+   * được thay vì ném ZodError lúc chạy.
+   */
+  isCover: z.boolean().optional().default(false),
 });
 export type TaskFileDto = z.infer<typeof taskFileDtoSchema>;

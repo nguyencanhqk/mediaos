@@ -91,6 +91,40 @@ export class TaskFilesController {
     return this.svc.link(req.user, taskId, dto.fileId, dto.category);
   }
 
+  // ── S5-TASK-COVER-1: ảnh bìa ────────────────────────────────────────────────────────────────
+  //
+  // ⚠️ THỨ TỰ KHAI BÁO Ở ĐÂY LÀ MỘT RÀNG BUỘC, KHÔNG PHẢI SỞ THÍCH.
+  // Nest khớp route theo THỨ TỰ KHAI BÁO. `@Delete("cover")` PHẢI đứng TRƯỚC `@Delete(":fileId")`
+  // bên dưới — nếu không, `DELETE .../files/cover` sẽ rơi vào `remove()` với `fileId = "cover"`,
+  // đi tiếp tới `loadLinkedFileOr404("cover")` và chết ở tầng uuid, cho ra lỗi trông như "chưa
+  // implement" thay vì "route bị che". Có int-spec khoá riêng tính chất này.
+  //
+  // Cũng vì controller prefix là `tasks/:taskId/files` nên đường dẫn là `/files/cover`, KHÔNG phải
+  // `/tasks/:taskId/cover` như Work Order mô tả — mọi route ở đây bắt buộc mang tiền tố `/files`.
+
+  /** POST /tasks/:taskId/files/:fileId/cover — đặt tệp ĐÃ đính kèm làm ảnh bìa. Gate file-upload:task. */
+  @Post(":fileId/cover")
+  @RequirePermission("file-upload", "task")
+  setCover(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Param("fileId") fileId: string,
+  ) {
+    return this.svc.setCover(req.user, taskId, fileId);
+  }
+
+  /**
+   * DELETE /tasks/:taskId/files/cover — gỡ ảnh bìa (idempotent). Gate file-upload:task — CÙNG cặp với
+   * đặt bìa, KHÔNG phải `file-delete:task`: thao tác này không xoá tệp nào, chỉ tắt một cờ hiển thị.
+   * Bắt nó đòi quyền xoá tệp sẽ nghiêm hơn mức cần và lệch với đường đặt bìa.
+   */
+  @Delete("cover")
+  @HttpCode(204)
+  @RequirePermission("file-upload", "task")
+  clearCover(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
+    return this.svc.clearCover(req.user, taskId);
+  }
+
   /** DELETE /tasks/:taskId/files/:fileId — soft-delete an attachment. Gate file-delete:task. */
   @Delete(":fileId")
   @HttpCode(204)
