@@ -1,6 +1,9 @@
 # S5-TASK-COVER-1 — Ảnh bìa công việc (chọn từ tệp đã đính kèm)
 
-> **rev2** — bake 7 điểm BLOCKING của `plan-reviewer` (vòng 1 verdict BLOCK). Chỗ đổi đánh dấu 🔧.
+> **rev3** — bake 7 điểm BLOCKING vòng 2 (đánh dấu 🔺). rev2 đã bake 7 điểm vòng 1 (đánh dấu 🔧).
+> Vòng 2 bắt được 2 **mâu thuẫn nội bộ** của rev2: bake bản vá vào một mục nhưng để nguyên văn bản
+> cũ mâu thuẫn ở mục khác (§8 bẫy 5, §6 bước 2) — implementer đọc mục kia sẽ làm ngược lại bản vá.
+> Bài học: sửa plan phải grep lại TOÀN file theo từ khoá vừa đổi, không chỉ sửa tại chỗ.
 > Vùng: 🔴 red (chạm file-link + presign = kiểm soát truy cập tệp) → FULL gate.
 > Base: nhánh `feat/s5-task-ux-batch` (COVER-1 `depends_on` S5-TASK-AVATAR-1 — code avatar CHƯA lên master; PR #248).
 
@@ -105,15 +108,28 @@ setCover(user, taskId, fileId): Promise<TaskFileDto>
        - !DOWNLOADABLE_SCAN.has(row.scanStatus)  → 409  🔧 ngưỡng CHẶT ở đường GHI (§7.3)
        - 🔧 file còn link SỐNG ở entity KHÁC     → 409  (§3.1 vị từ độc quyền)
   4. TRONG MỘT withTenant tx duy nhất:
-       🔧 pg_advisory_xact_lock(hashtextextended(taskId))   -- khoá cả khi CHƯA có primary
-          (FOR UPDATE không khoá được "hàng chưa tồn tại")
+       🔺 pg_advisory_xact_lock(<classid hằng số module TASK>, hashtext(${taskId}::text))
+          · rev2 viết `hashtextextended(taskId)` → SAI ARITY: hàm đó là (text, bigint) 2 tham số,
+            và taskId là uuid nên phải ép ::text ⇒ 42883, setCover 500 **100% số lần**.
+          · dạng 2 tham số (classid, objid) tránh va chạm không gian khoá TOÀN CỤC — repo đã dùng
+            `pg_advisory_xact_lock(hashtext('ensure_default_company'))` ở mig 0473.
+          · **xact** chứ không session-level: bắt buộc trên PgBouncer transaction-mode.
+          · cần khoá vì FOR UPDATE không khoá được "hàng CHƯA tồn tại" (task chưa có bìa).
        cũ = findPrimaryLinkTx(tx, companyId, taskId)        -- FOR UPDATE
        nếu cũ?.linkId === row.linkId → no-op, trả luôn (idempotent, tránh UPDATE thừa)
        nếu cũ → setPrimaryTx(tx, ..., cũ.linkId, false)
        setPrimaryTx(tx, ..., row.linkId, true)
+       🔺 audit.record(tx, { action:'FileLinkPrimaryChanged', objectType:'file_link',
+                             objectId: linkId, before:{isPrimary}, after:{isPrimary} })
+          TRONG CÙNG tx — xem ghi chú audit bên dưới.
   5. recordActivity(TASK_COVER_SET, targetType 'File', targetId fileId)
-  6. trả toDto(row)
-  🔧 BẮT 23505 → 409, KHÔNG BAO GIỜ để thành 500 (khuôn `isUniqueViolation`, task-actions.service.ts:735)
+  6. 🔺 reload row SAU khi lật cờ rồi mới toDto — row ở bước 2 load TRƯỚC update nên
+       response 200 sẽ mang `isCover:false`, sai ngay tại chính lời gọi vừa đặt bìa.
+  🔺 BẮT 23505 **VÀ 40P01 (deadlock) VÀ 40001** → 409, KHÔNG BAO GIỜ để thành 500.
+     Advisory lock chỉ tuần-tự-hoá các `setCover` với nhau; `POST /foundation/.../links` (isPrimary=true)
+     và `unlink` KHÔNG lấy khoá đó nên vẫn chạm unique index / khoá hàng theo thứ tự ngược.
+     Helper `isUniqueViolation` nằm ở **`apps/api/src/common/db-error.ts`** (rev2 trỏ nhầm
+     `task-actions.service.ts:735`) — chỉ import, không cần thêm vào `paths`.
 
 clearCover(user, taskId): Promise<void>
   1. assertScope(user, taskId, ACTION_UPLOAD)
@@ -129,12 +145,30 @@ vi phạm unique index ⇒ 23505.
 đồng thời: cả hai đọc cùng primary cũ P → T1 hạ P + nâng F1 + commit → T2 (đã chờ khoá) hạ P + nâng F2 →
 đụng unique → 23505. Vì vậy mới cần advisory lock ở bước 4 **và** bắt 23505 → 409.
 
+🔺 **BẮT BUỘC có dòng `audit_logs`.** Mọi writer khác của `file_links` đều ghi audit:
+`FileService.link` → `audit.record(objectType:'file_link', 'FileLinked')` (`files.service.ts:591`),
+`unlink` → `'FileUnlinked'` (`:666`), cả hai kèm `file_access_logs`. `setCover`/`clearCover` mutate chính
+bảng đó; chỉ ghi `task_activity_logs` là để lại **một đường ghi vô hình trong trail audit của `file_links`**
+— FULL gate sẽ bắt, và DoD CLAUDE.md §8 đòi "audit log nếu hành động quan trọng".
+**Không cần migration:** `action` là text tự do; `object_type` CHECK đã có `'file_link'` (mig
+`0440_file1_audit_object_type.sql:25` — `v_new := ARRAY['file', 'file_link']`) ⇒ giữ nguyên lời hứa §9.
+
 ### 2.3 Controller (`apps/api/src/tasks/task-files.controller.ts`)
 
-```
+🔺 **`DELETE /tasks/:taskId/cover` KHÔNG khai được** — `TaskFilesController` là
+`@Controller("tasks/:taskId/files")` (`task-files.controller.ts:39`), mọi route trong đó bắt buộc mang
+tiền tố `/files`. Đường dẫn đổi thành `/files/cover`:
+
+```text
 POST   /tasks/:taskId/files/:fileId/cover   @RequirePermission('file-upload', 'task')
-DELETE /tasks/:taskId/cover                  @RequirePermission('file-upload', 'task')
+DELETE /tasks/:taskId/files/cover           @RequirePermission('file-upload', 'task')
 ```
+
+🔺 **BẪY CHE ROUTE — `@Delete("cover")` PHẢI khai TRƯỚC `@Delete(":fileId")`.**
+`@Delete(":fileId")` đã tồn tại ở `:95` và Nest khớp **theo thứ tự khai báo**: khai sau thì `"cover"` bị
+bắt làm `fileId` → `loadLinkedFileOr404("cover")` → uuid không hợp lệ → 500/404 sai chỗ, và test dễ đọc
+nhầm là "chưa implement". Thêm 1 ca test khẳng định `DELETE .../files/cover` **không** rơi vào `remove()`.
+🔺 Sửa luôn chuỗi route trong `done_when[]` của WO (đang ghi `DELETE /tasks/:taskId/cover`).
 
 **Chọn `file-upload:task`, KHÔNG phải `update:task`** — lý do (mời plan-reviewer phản biện, §7):
 cặp `file-upload` đang gate chính việc đính kèm/gỡ tệp của task, chạy mode `'collab'` trong
@@ -162,9 +196,17 @@ WHERE file_links.company_id = $companyId
   AND file_links.entity_id  = ANY($taskIds)     -- ⚠️ sql.param, xem §8 bẫy 3
   AND files.company_id = $companyId AND files.deleted_at IS NULL
   AND files.upload_status = 'Uploaded'
-  AND files.scan_status <> 'Infected'
+  AND files.scan_status IN ('Clean','NotRequired')   -- 🔺 xem ghi chú ngưỡng scan bên dưới
   AND files.mime_type LIKE 'image/%'
 ```
+
+🔺 **Ngưỡng scan ở đường ĐỌC phải là `Clean|NotRequired`, KHÔNG phải `<> 'Infected'`** (đảo ngược §7.3 rev2).
+`TaskFileService.getDownloadUrl` (`task-file.service.ts:100`) trả **409** khi `scanStatus ∉ DOWNLOADABLE_SCAN`,
+docblock ghi rõ "defense against serving unscanned content". Nếu đường bìa ký cả `Pending`/`Failed` thì nó
+thành **đường vòng qua chính chốt đó**: cùng một file, tải qua task thì 409, mà hiện làm ảnh bìa full-res
+cho mọi người đọc board. Chốt ở đường GHI (§2.2) không cứu được — §0-3 đã chứng minh `is_primary` đặt được
+qua `POST /foundation/files/:id/links` (`files.service.ts:568` chỉ chặn `Infected`).
+Nguyên tắc: **biên an toàn không được lỏng hơn đường tải mà nó thay thế.**
 
 `taskIds` rỗng → trả `[]` ngay (mirror avatar).
 
@@ -197,6 +239,19 @@ AND NOT EXISTS (
 Kiểm tương đương ở `setCover` (→ 409 "tệp đang gắn ở nơi khác, không dùng làm bìa được") để người dùng
 biết ngay, **nhưng ràng buộc ở đường ĐỌC mới là chốt** — self-defending, đúng học thuyết §0-3: link có
 thể được thêm SAU khi đặt bìa, qua đường foundation, không đi qua `setCover`.
+(Lệch TOCTOU giữa kiểm ở `setCover` và kiểm ở đường đọc là **chấp nhận được có chủ đích** — đường đọc tái
+kiểm mỗi lần. Ghi ra đây để FULL gate không mở lại như một lỗ.)
+
+🔺 **TUYỆT ĐỐI KHÔNG thêm `fl2.company_id = $companyId` vào `NOT EXISTS`.** Nhà này có phản xạ "AND
+company_id tường minh dù đã có RLS" (ghi trong mọi docblock repo) — nhưng ở một `NOT EXISTS`, mỗi điều kiện
+thêm vào `fl2` làm **ẩn bớt** link nhìn thấy được ⇒ **fail-OPEN**, đúng ngược hướng phản xạ. Chỉ dựa RLS.
+
+🔺 **Xác minh trước khi code:** có luồng nào tạo link `module_code='TASK'` với `entity_type='project'` không?
+Nếu có, file vừa đính kèm task vừa đính kèm dự án sẽ im lặng thành `coverUrl: null`. Nghiêng về giữ
+fail-closed + 409 ở `setCover` để người dùng biết, nhưng phải quyết tường minh.
+(Đã xác minh KHÔNG có false-negative với link phụ **cùng task**: mệnh đề `NOT (module='TASK' AND
+entity_type='task' AND entity_id = <task này>)` cho qua mọi `link_type` khác trên chính task đó, và
+`uq_file_links_entity_file_active` đã cấm 2 link active trùng `(entity, file, link_type)`.)
 
 ### 3.2 Ký URL
 
@@ -280,10 +335,23 @@ tsc bắt hết ⇒ rủi ro là sai ước lượng công, không phải lỗi 
 🔧 **`TaskFileDto` phải mang `isCover: boolean`** — nếu không, yêu cầu "tệp đang là bìa → nút Gỡ + nhãn"
 là **bất khả thi**: `coverUrl` là URL ĐÃ KÝ, không đối chiếu được với `fileId` của dòng trong bảng, và
 `TaskFileRow`/`toDto` (`task-file.repository.ts:25-47`, `task-file.service.ts:251`) không mang `isPrimary`.
-Việc cần làm: select `fileLinks.isPrimary` vào `FILE_COLUMNS` + `TaskFileRow`, map ở `toDto`, thêm
-`isCover` vào `taskFileDto` (`packages/contracts/src/task-file.ts`).
-⚠️ `isCover` phải suy theo **CÙNG bộ lọc hợp lệ** như đường đọc §3.1 (kể cả vị từ độc quyền), **không phải
-`is_primary` thô** — nếu không panel sẽ nói "đang là bìa" trong khi board không hiện gì.
+Việc cần làm: thêm `isCover` vào `taskFileDto` (`packages/contracts/src/task-file.ts`) + map ở `toDto`.
+
+🔺 **`isCover` là BIỂU THỨC TRONG `SELECT`, KHÔNG phải điều kiện trong `WHERE`.** rev2 viết "suy theo cùng
+bộ lọc hợp lệ như đường đọc" — mơ hồ chết người: implementer thêm mime/upload/scan/độc-quyền vào `WHERE`
+của `listLinkedFilesByTaskTx` là **mọi tệp không-ảnh biến mất khỏi danh sách đính kèm**. Viết đúng:
+
+```text
+FILE_COLUMNS.isCover = fileLinks.isPrimary AND <vị-từ-bìa-hợp-lệ §3.1>   -- trong SELECT
+WHERE  … giữ NGUYÊN như hiện tại …                                       -- không đụng
+```
+
+Vẫn phải kèm vị từ hợp lệ (không phải `is_primary` thô), nếu không panel nói "đang là bìa" trong khi board
+không hiện gì.
+
+🔺 **Khai `z.boolean().optional()` hoặc `.default(false)`, KHÔNG phải `boolean` bắt buộc** — `coverUrl` cố ý
+`.optional()` cho lệch pha deploy, để `isCover` bắt buộc là bất nhất: FE mới + API cũ ⇒ **ZodError runtime**
+(đúng lớp lỗi memory `apifetch-drops-pagination-bare-array`).
 
 - Mỗi tệp **là ảnh** (`mimeType.startsWith('image/')`) + `uploadStatus==='Uploaded'` + `scanStatus∈{Clean,NotRequired}`
   → nút **"Đặt làm ảnh bìa"**; `isCover` → **"Gỡ ảnh bìa"** + nhãn đánh dấu.
@@ -354,7 +422,9 @@ invalidate đủ 3 khoá.
 ## 6. Thứ tự thực hiện
 
 1. Contracts `coverUrl` + đổi `toTaskCoreDto` sang object-param (sửa 2 call-site avatar) → typecheck.
-2. `presign-utils.ts` + `CoverPresignService` + `findVerifiedTaskCoversTx`.
+2. `CoverPresignService` (độc lập) + `findVerifiedTaskCoversTx`.
+   🔺 **KHÔNG tạo `presign-utils.ts`** — rev2 để sót dòng này dù §3.2 đã quyết bỏ helper dùng chung
+   (không trộn code AVATAR-1 chưa merge vào diff FULL gate của COVER-1).
 3. Nối 6 đường đọc §3.4.
 4. Repo `findPrimaryLinkTx`/`setPrimaryTx` + service `setCover`/`clearCover` + controller.
 5. int-spec RED trước (deny-path 1-7) → GREEN.
@@ -373,8 +443,10 @@ invalidate đủ 3 khoá.
 2. **Mã lỗi mime = 415** + `FOUNDATION_FILE_ERROR_CODES.MIME` (nhất quán `me-avatar.service.ts`).
    🔧 ⇒ **phải sửa `done_when` của WO trong backlog** (đang ghi 400) — đừng để mâu thuẫn nằm trong tiêu
    chí nghiệm thu.
-3. **Ngưỡng scan:** `DOWNLOADABLE_SCAN` (`Clean|NotRequired`) ở đường **GHI**, `<> 'Infected'` ở đường
-   **ĐỌC** — reviewer TÁN THÀNH.
+3. **Ngưỡng scan: `DOWNLOADABLE_SCAN` (`Clean|NotRequired`) ở CẢ HAI đường (GHI và ĐỌC).**
+   🔺 Vòng 1 tán thành `<> 'Infected'` ở đường đọc; **vòng 2 đảo lại** với căn cứ mạnh hơn: đường đọc là
+   biên an toàn thay thế đường tải, mà đường tải đòi `Clean|NotRequired` (`task-file.service.ts:100`) —
+   biên an toàn lỏng hơn thứ nó thay thế là một đường vòng. Xem phân tích ở §3.1.
 4. **Bỏ owner-check: TÁN THÀNH, NHƯNG chỉ khi kèm vị từ độc quyền** (§3.1). Bỏ trần trụi như rev1 là
    **không chấp nhận được** — xem phân tích leo thang ở §3.1.
 
@@ -389,7 +461,11 @@ invalidate đủ 3 khoá.
 3. **Bind mảng drizzle** — `${taskIds}` thô trong `sql` sinh record ⇒ 500 runtime; typecheck + unit mock đều mù.
    Dùng `inArray()` hoặc `sql.param()`. (memory `drizzle-array-bind-sql-param`)
 4. **`taskKeys.kanban` không dưới prefix `tasks/list`** — phải invalidate tường minh (§4.1).
-5. **Spec phải colocate trong `src/**`** — `test/**` không chạy trong `pnpm test` = xanh giả.
+5. 🔺 **`*.int-spec.ts` PHẢI ở `apps/api/test/**` — KHÔNG colocate `src/**`.**
+   (rev1/rev2 mục này ghi ngược lại và đó chính là điểm bị BLOCK ở vòng 1 — xem §5.)
+   `vitest.config.ts:47` include 3 glob: `src/**/*.spec.ts` (unit, colocate) ·
+   `test/**/*.e2e-spec.ts` · `test/**/*.int-spec.ts`. Chỉ **unit** spec mới colocate.
+   File `*.int-spec.ts` đặt trong `src/` không khớp glob nào ⇒ chạy 0 ca, gate vẫn PASS.
 6. **Đỏ có sẵn trên master:** `test/foundation/foundation-audit.e2e-spec.ts` fail khi chạy trên DB chung
    `mediaos` (audit rows tích luỹ ⇒ count 2≠1). Đã xác minh đỏ y hệt trên master `6abcf067` — **không phải
    do WO này**. Verify trên lane DB riêng (`LANE_DB=mediaos_cover1`).
@@ -400,11 +476,13 @@ invalidate đủ 3 khoá.
 
 ## 9. Definition of Done
 
-- [ ] `POST /tasks/:taskId/files/:fileId/cover` + `DELETE /tasks/:taskId/cover`; chỉ nhận file đã đính kèm task đó + là ảnh + Uploaded + scan sạch
+- [ ] `POST /tasks/:taskId/files/:fileId/cover` + 🔺 `DELETE /tasks/:taskId/files/cover` (khai TRƯỚC `@Delete(":fileId")`); chỉ nhận file đã đính kèm task đó + là ảnh + Uploaded + `Clean|NotRequired`
 - [ ] Đặt bìa mới thay bìa cũ trong **1 tx** — không vi phạm unique, không cửa sổ 2 bìa / 0 bìa
 - [ ] `coverUrl` trả trên **cả 6 đường đọc** §3.4 — URL đã ký, **không bao giờ** fileId thô; không bìa ⇒ `null`
 - [ ] FE: nút Đặt/Gỡ bìa trong `TaskFilePanel` (chỉ trên tệp ảnh, ẩn khi thiếu quyền); thẻ board render bìa
-- [ ] int-spec deny-path 13 ca §5 xanh trên lane DB riêng
+- [ ] 🔺 int-spec deny-path **18 ca** §5 (rev2 ghi 13 — lệch sau khi thêm ca 14-18) xanh trên lane DB riêng, file ở `apps/api/test/integration/`
+- [ ] 🔺 Có dòng `audit_logs` (`object_type='file_link'`) cho mỗi lần đổi/gỡ bìa — trail của `file_links` không có đường ghi vô hình
+- [ ] 🔺 Không đường nào trả 500: bắt `23505` + `40P01` + `40001` → 409
 - [ ] Không migration, không đổi enum contracts (kiểm bằng `git diff --stat` — 0 file trong `apps/api/migrations/`)
 - [ ] FULL gate PASS + typecheck/lint/build xanh
 - [ ] 🔧 Ảnh bìa là tệp **CHỈ** thuộc task đó — file link ở entity khác KHÔNG BAO GIỜ được ký (ca 14/15)
