@@ -4,6 +4,18 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
+## Phiên 2026-07-20 (session dc2add15) — S5-TASK-SUBTASK-1 🔴 PR #247 MỞ, chờ CI + owner chốt
+
+> **CHỜ OWNER 2 quyết định sản phẩm (OWNER-CONFIRM trong ADR + mô tả PR):** D-31 đóng SPEC-06 §24 Q#14 (CÓ subtask, checklist giữ song song) · D-40 rail avatar CÓ tính việc con (đổi hành vi board). Lệnh merge khi owner duyệt: `gh pr merge 247 --squash --admin`. **Deploy: CÓ mig 0503 ⇒ dev-online cần `m dev-online-db`.**
+
+- **Ship (PR #247, nhánh `feat/s5-task-subtask-1`, 9 commit):** việc con THẬT qua `parent_task_id` (cột có sẵn 0478 ⇒ KHÔNG migration cột) — cây ĐÚNG 1 cấp + **khoá hàng MỘT LẦN** (`SELECT … ORDER BY id FOR UPDATE` trên TOÀN BỘ tập hàng chạm, id tăng dần, mọi đường ghi) · ẩn khỏi board & `state_id` NULL chốt ở **CẢ BA** writer · xoá lan tất-cả-hoặc-không (D-38) · **đếm-lá** (D-34) áp 3 nơi CÙNG release (MV mig 0503 · báo cáo dự án · widget project-progress) · TASK-API-701/702 · FE panel + badge + ghi chú quy tắc đếm. ADR **DECISIONS-05** (D-31…D-41 + D-36a).
+- **Plan qua 3 vòng plan-reviewer đối kháng: 9 → 3 → 2 → PASS.** Mọi claim tự xác minh lại trên code thật trước khi vá. Vòng nào cũng tìm ra lỗi CÙNG MỘT HỌ ⇒ bài học ghi ở đầu ADR: **bất biến phải kèm DANH SÁCH WRITER, chốt ở method dùng chung, không rải ở route**.
+- **Int-spec bắt lỗi CRITICAL mà typecheck + 255 unit test đều mù:** bind mảng SQL sai (`${arr}` sinh record thay vì mảng) ⇒ **500 hàng loạt** trên `DELETE /tasks/:id`, `GET /tasks/:id`, kanban mọi dự án — tức phá tính năng ĐÃ SHIP. Xem memory `drizzle-array-bind-sql-param`.
+- **Lỗ trong bằng chứng của chính mình:** đã báo "255/255 xanh" khi MỚI chạy `src/**` mà CHƯA chạy `test/integration/**` — nơi chứa deny-path/IDOR/board thật. Memory `src-green-is-not-integration-green`.
+- **FULL gate 3 reviewer đều BLOCK → vá 8 finding:** oracle dò trạng thái ở `createTask` (kiểm cấu trúc trước kiểm quyền ⇒ đoán UUID đọc được nhiều bit ngoài phạm vi) · **mapper THỨ BA** (`TaskActionsService.toDto`) ⇒ đã HỢP NHẤT cả ba · FK `ON DELETE SET NULL` thiếu danh sách cột ⇒ null hoá cả `company_id` (NOT NULL), hiện bị che bởi thứ tự trigger RI phụ thuộc OID · 409 "unreachable" thật ra với tới được + trả thông điệp QUYỀN cho ca ĐUA (tách `TASK-ERR-048`) · reorder ghi `updated_by` lên con ngoài phạm vi · filter toàn cục ép kiểu `details` mù · index lá thành partial (769→4 buffer).
+- **Verify:** API **6398/6398** tuần tự (`LANE_DB=mediaos_check`) · int-spec việc con + kanban regression 46/46 · app 1265 · web-core 587 · lint/typecheck xanh.
+- **Friction:** (1) `check.sh --lane-db` ĐỎ **2 lần liên tiếp** vì crash worker vitest `ERR_IPC_CHANNEL_CLOSED` — **0 ca test đỏ** trong log, suite chết giữa chừng; phải chạy tuần tự mới có số xác định (memory `vitest-worker-crash-chunked-runs` áp nguyên văn, nhưng nay xảy ra ở CẢ api LẪN app). (2) `git push` SSH fail "Could not read from remote" trong khi `ssh -T git@github.com` OK ⇒ retry với `GIT_SSH_COMMAND="ssh -o BatchMode=yes"` là qua; `gh auth status` báo token keyring hỏng nhưng `gh pr create` vẫn chạy. (3) Lệnh `git commit -m` với nội dung chứa `$1`/`(` bị shell nuốt — dùng `-F -` + heredoc trích dẫn đơn.
+
 ## Phiên 2026-07-20 (session b83a39b8 tiếp) — S5-DASH-TASKSTATUS-FIX-1 🔴 SHIPPED (#246 MERGED → master `880c7642`)
 
 > Owner ra lệnh "merge luôn 246" → squash --admin (= chốt D-30). Nhánh dọn sạch, ledger done. **Deploy còn chờ: dev-online cần `m dev-online-db` (CÓ migration 0502) — owner tự chạy.** Các mục dưới viết lúc PR còn mở.
