@@ -486,12 +486,16 @@ export const taskFileInvalidation = {
 // mirror taskCollabInvalidation.kanban dùng lại taskCoreInvalidation.detail để list/my cũng refresh)
 // · board Kanban của dự án (badge tiến độ trên thẻ đổi ngay — thiếu vế này thẻ board đứng số cũ).
 // `projectId` nullable (task cá nhân ngoài dự án) ⇒ chỉ thêm khoá kanban khi có.
+// · BÁO CÁO dự án: thêm/xoá/đổi-cha một việc con làm CHA rời (hoặc quay lại) tập LÁ ⇒ countsByStatus /
+//   overdueCount / assigneeWorkload đều đổi (D-34). Thiếu vế này thì với staleTime 30s +
+//   refetchOnWindowFocus:false, chuyển sang tab "Báo cáo" ngay sau thao tác sẽ thấy số TRƯỚC-khi-đổi —
+//   sai mà nhìn vẫn hợp lý, đúng loại lỗi WO này sinh ra để tránh.
 export const taskSubtaskInvalidation = {
   afterMutate: (parentId: string, projectId: string | null) =>
     [
       taskKeys.subtasks(parentId),
       ...taskCoreInvalidation.detail(parentId),
-      ...(projectId ? [taskKeys.kanban(projectId)] : []),
+      ...(projectId ? [taskKeys.kanban(projectId), taskKeys.projects.report(projectId)] : []),
     ] as const,
 };
 
