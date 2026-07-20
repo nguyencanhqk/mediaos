@@ -699,6 +699,18 @@ export const taskCoreResponseSchema = z.object({
   // mới được ký; không xác minh được ⇒ null ⇒ FE vẽ chữ cái đầu (fail-soft, không vỡ trang).
   // `.optional()` additive: FE và API deploy lệch pha vẫn parse được.
   assigneeAvatarUrl: z.string().nullable().optional(),
+  // S5-TASK-COVER-1 — URL ẢNH BÌA của công việc, ĐÃ KÝ sẵn TTL-ngắn bởi server (CoverPresignService).
+  // Ảnh bìa = tệp đính kèm của CHÍNH task này được đánh dấu `file_links.is_primary` (KHÔNG có
+  // link_type 'Cover' — giá trị đó không nằm trong CHECK chk_file_links_link_type).
+  //
+  // KHÔNG BAO GIỜ là fileId thô. `is_primary` là cột ĐA-NGƯỜI-GHI (POST /foundation/files/:id/links
+  // nhận isPrimary verbatim) nên đường ĐỌC tự phòng vệ đầy đủ, không tin cờ này một mình: chỉ ký khi
+  // tệp là ảnh + Uploaded + scan Clean|NotRequired + **CHỈ thuộc riêng task này** (vị từ độc quyền —
+  // tệp còn link sống ở entity khác sẽ KHÔNG được ký, vì đường tải thật đi qua
+  // FilePolicy.decideForLinkedFile = AND khắt-khe-nhất trên MỌI link).
+  // Không xác minh được / ký lỗi ⇒ null ⇒ thẻ không có bìa (fail-soft, KHÔNG vỡ board).
+  // `.optional()` additive: FE và API deploy lệch pha vẫn parse được.
+  coverUrl: z.string().nullable().optional(),
   creatorUserId: z.string().uuid().nullable(),
   creatorName: z.string().nullable(),
   reporterEmployeeId: z.string().uuid().nullable(),

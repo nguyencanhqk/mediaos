@@ -109,6 +109,10 @@ function makeService(opts: { sequence?: ReturnType<typeof makeSequence> } = {}) 
     projectAccess as never,
     // S5-TASK-AVATAR-1 — resolver avatar (map rỗng = không ai có ảnh ⇒ DTO trả null, đúng fail-soft).
     { resolveEmployeeAvatars: vi.fn().mockResolvedValue(new Map()) } as never,
+    // S5-TASK-COVER-1 — resolver ảnh bìa (map rỗng = task chưa có bìa ⇒ coverUrl null, fail-soft).
+    // ⚠️ Dependency mới PHẢI thêm ở CUỐI danh sách này: service được dựng theo VỊ TRÍ nên chèn vào
+    // giữa sẽ lệch mọi tham số phía sau, mà tsc chỉ báo "thiếu 1 tham số" — không chỉ ra chỗ lệch.
+    { resolveTaskCovers: vi.fn().mockResolvedValue(new Map()) } as never,
   );
   return { svc, repo, db, sequence };
 }

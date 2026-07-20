@@ -9,12 +9,13 @@ import { DatabaseService } from "../db/db.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { TaskCoreRepository } from "./task-core.repository";
 import { TasksRepository } from "./tasks.repository";
-import { toTaskKanbanCardDto, toAvatarSubjects, avatarForRow } from "./task-core.mapper";
+import { toTaskKanbanCardDto, toAvatarSubjects, signedUrlsForRow } from "./task-core.mapper";
 import { TASK_CORE_STATUSES } from "./task-fsm";
 import { TaskCommentsRepository } from "./task-comments.repository";
 import { TaskChecklistsRepository } from "./task-checklists.repository";
 import { TaskFileRepository } from "./task-file.repository";
 import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
+import { CoverPresignService } from "../foundation/files/cover-presign.service";
 
 interface RequestUser {
   id: string;
@@ -52,6 +53,8 @@ export class TaskKanbanService {
     // S5-TASK-AVATAR-1 (Nhóm C) — ký URL avatar người phụ trách cho thẻ board. CÙNG service mà
     // HR list/org-chart dùng ⇒ cùng luật self-defending (chỉ ký cặp employeeId↔fileId đã xác minh).
     private readonly avatars: AvatarPresignService,
+    // S5-TASK-COVER-1 — ký ảnh bìa cho thẻ board. Đặt CUỐI (spec dựng theo VỊ TRÍ).
+    private readonly covers: CoverPresignService,
   ) {}
 
   async getBoard(user: RequestUser, projectId: string): Promise<TaskKanbanBoardDto> {
@@ -120,6 +123,10 @@ export class TaskKanbanService {
         toAvatarSubjects(rows),
         tx,
       );
+      // S5-TASK-COVER-1 — ảnh bìa THEO LÔ cho cả board, cùng `tx`. TUẦN TỰ sau avatar chứ KHÔNG
+      // Promise.all: hai truy vấn trên CÙNG một kết nối transaction sẽ hỏng ngẫu nhiên dưới tải.
+      // Fail-soft như avatar: ký lỗi ⇒ không vào map ⇒ thẻ không bìa, KHÔNG 500 board.
+      const covers = await this.covers.resolveTaskCovers(user.companyId, taskIds, tx);
 
       const toCard = (row: (typeof rows)[number]) => {
         const progress = checklistProgress.get(row.id);
@@ -136,7 +143,7 @@ export class TaskKanbanService {
             subtaskDone: subtasks?.done ?? 0,
             subtaskTotal: subtasks?.total ?? 0,
           },
-          avatarForRow(row, avatars),
+          signedUrlsForRow(row, avatars, covers),
         );
       };
 
