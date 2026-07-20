@@ -729,6 +729,34 @@ export const taskCoreResponseSchema = z.object({
 export type TaskCoreResponseDto = z.infer<typeof taskCoreResponseSchema>;
 
 /**
+ * GET /api/v1/tasks/:taskId/subtasks (TASK-API-701) — DTO HẸP, KHÔNG phải taskCoreResponseSchema.
+ *
+ * DECISIONS-05 D-39: quyền ĐỌC thừa hưởng từ cha (đọc được cha ⇒ thấy đủ con, kể cả con giao người
+ * khác) — cần thiết để `subtaskDone/subtaskTotal` khớp danh sách hiển thị, nếu không % mất nghĩa.
+ * ĐỔI LẠI, tập field phải HẸP NHẤT có thể: panel việc con không cần `description` (tới 20000 ký tự),
+ * `projectName`, `creatorName`, `reporterName`, `departmentId` — trả chúng qua đường thừa-hưởng là mở
+ * rộng phơi lộ mà không đổi lấy chức năng nào.
+ *
+ * `canOpen`: con có nằm trong phạm vi ĐỌC riêng của actor không (ghi KHÔNG thừa hưởng — D-39). FE dùng
+ * để render con ngoài tầm với ở dạng read-only, KHÔNG link (bấm vào `GET /tasks/:childId` sẽ 404) và
+ * KHÔNG nút sửa/xoá (sẽ 403). Server tính bằng 2 truy vấn tập hợp, KHÔNG phải N+1.
+ */
+export const subtaskListItemSchema = z.object({
+  id: z.string().uuid(),
+  taskCode: z.string().nullable(),
+  title: z.string(),
+  status: taskCoreStatusSchema.nullable(),
+  priority: taskCorePrioritySchema.nullable(),
+  mainAssigneeEmployeeId: z.string().uuid().nullable(),
+  assigneeName: z.string().nullable(),
+  dueAt: z.string().datetime().nullable(),
+  isOverdue: z.boolean(),
+  sortOrder: z.number().int().nullable(),
+  canOpen: z.boolean(),
+});
+export type SubtaskListItemDto = z.infer<typeof subtaskListItemSchema>;
+
+/**
  * PATCH /api/v1/tasks/:taskId/subtasks/reorder (TASK-API-702, update:task trên CHA).
  * `subtaskIds` phải KHỚP CHÍNH XÁC tập con active của cha (thiếu/thừa/lạ ⇒ 400) — chống ghi sort_order
  * cho task của cha khác hoặc company khác. Thứ tự trong mảng = sort_order. KHÔNG ghi activity/audit

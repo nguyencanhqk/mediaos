@@ -7,6 +7,9 @@ import { projectMembers, projects, type Project, type ProjectMember } from "../d
 import { projectStates } from "../db/schema/workflow";
 import { orgUnits } from "../db/schema/org";
 import { users } from "../db/schema/users";
+// S5-TASK-SUBTASK-1 (D-34) — vị từ "lá" dùng CHUNG với task-core.repository và migration 0503.
+// Một nguồn cho cả báo cáo dự án lẫn widget dashboard; xem docblock ở nơi khai báo.
+import { isLeaf } from "./task-core.repository";
 
 /**
  * S4-TASK-BE-1 — persistence Project + project_members (DB-06 §7.1/§7.2, cột TitleCase MỚI mig 0478).
@@ -801,13 +804,21 @@ export class ProjectsRepository {
     projectId: string,
     workloadLimit: number,
   ): Promise<ProjectReportAggregate> {
+    // ── S5-TASK-SUBTASK-1 (DECISIONS-05 D-34) — ĐẾM LÁ ────────────────────────────────────────────
+    // "Lá" = task KHÔNG có COUNTABLE_CHILD (task không con ⇒ chính nó là lá). Task có việc con thì chỉ
+    // đếm con, không đếm cả cha lẫn con.
+    // ⚠️ Alias CHUẨN HOÁ về `tk` cho CẢ BA câu bên dưới để dùng CHUNG một hàm `isLeaf('tk')` — trước đây
+    // hai câu đầu dùng `from tasks` không alias. Ba bản copy vị từ là ba đường trôi.
+    // ⚠️ Vị từ này còn một bản SQL viết tay trong migration 0503 (mv_dashboard_task_status). Sửa một bên
+    // PHẢI sửa bên kia; int-spec "ba nguồn số khớp nhau" là lưới an toàn về hành vi.
     const countsRes = await tx.execute(sql`
-      select coalesce(task_status, 'Todo') as status, count(*)::int as n
-        from tasks
-       where company_id = ${companyId}
-         and project_id = ${projectId}
-         and deleted_at is null
-       group by coalesce(task_status, 'Todo')
+      select coalesce(tk.task_status, 'Todo') as status, count(*)::int as n
+        from tasks tk
+       where tk.company_id = ${companyId}
+         and tk.project_id = ${projectId}
+         and tk.deleted_at is null
+         and ${isLeaf("tk")}
+       group by coalesce(tk.task_status, 'Todo')
     `);
     const countsByStatus: Record<string, number> = {};
     for (const s of TASK_REPORT_STATUSES) countsByStatus[s] = 0;
@@ -817,13 +828,14 @@ export class ProjectsRepository {
 
     const overdueRes = await tx.execute(sql`
       select count(*)::int as n
-        from tasks
-       where company_id = ${companyId}
-         and project_id = ${projectId}
-         and deleted_at is null
-         and due_at is not null
-         and due_at < now()
-         and (task_status is null or task_status not in ('Done','Cancelled'))
+        from tasks tk
+       where tk.company_id = ${companyId}
+         and tk.project_id = ${projectId}
+         and tk.deleted_at is null
+         and tk.due_at is not null
+         and tk.due_at < now()
+         and (tk.task_status is null or tk.task_status not in ('Done','Cancelled'))
+         and ${isLeaf("tk")}
     `);
     const overdueCount = Number((overdueRes.rows as unknown as { n: number }[])[0]?.n ?? 0);
 
@@ -839,6 +851,9 @@ export class ProjectsRepository {
          and tk.deleted_at is null
          and tk.main_assignee_employee_id is not null
          and (tk.task_status is null or tk.task_status not in ('Done','Cancelled'))
+         -- D-34: đếm lá. HỆ QUẢ ĐÃ CHẤP NHẬN: người CHỈ ôm task cha (mọi việc con giao người khác) sẽ
+         -- hiện activeCount = 0 trên biểu đồ tải — đúng theo đếm-lá nhưng phản trực giác ⇒ UI có ghi chú.
+         and ${isLeaf("tk")}
        group by tk.main_assignee_employee_id, u.full_name
        order by count(*) desc, tk.main_assignee_employee_id asc
        limit ${workloadLimit}
@@ -850,5 +865,45 @@ export class ProjectsRepository {
     }));
 
     return { countsByStatus, overdueCount, assigneeWorkload };
+  }
+
+  /**
+   * S5-TASK-SUBTASK-1 (DECISIONS-05 D-35) — byStatus theo ĐẾM LÁ cho widget dashboard `project-progress`.
+   *
+   * ⚠️ VÌ SAO LÀ METHOD RIÊNG chứ không tái dùng `aggregateReportTx`: hai bên nằm sau HAI GATE QUYỀN
+   * KHÁC NHAU. Widget PROJECT_PROGRESS gate ('read','project') NON-sensitive
+   * (dashboard-widget-catalog.const.ts); route GET /projects/:id/report gate ('view-report','project')
+   * isSensitive:true, và `resolveReportScopeExists` ghi tường minh "dùng SCOPE của view-report:project —
+   * KHÔNG mượn read:project". Gọi thẳng aggregateReportTx từ widget sẽ đưa số liệu nằm sau cặp SENSITIVE
+   * ra cho người chỉ có read:project ⇒ gate đó thành trang trí. Thêm nữa aggregateReportTx còn tính
+   * assigneeWorkload kèm employeeName (PII) mà widget không cần — fetch rồi vứt, cách một lần refactor
+   * là thành rò thật.
+   * ⇒ CHIA SẺ VỊ TỪ (`isLeaf`), KHÔNG CHIA SẺ METHOD. Muốn widget = báo cáo thật thì phải NÂNG GATE
+   * widget lên view-report:project — quyết định sản phẩm, cần owner duyệt, không sửa ngầm ở đây.
+   *
+   * ⚠️ KHÔNG tự scope theo actor — CHỈ gọi SAU khi đã authorize project (bài học
+   * reused-method-must-be-actor-scoped). Với đường widget, `ProjectsService.getProject` là thứ DUY NHẤT
+   * giữ scope; bỏ bước đó là mở IDOR.
+   */
+  async countsByStatusLeafTx(
+    tx: TenantTx,
+    companyId: string,
+    projectId: string,
+  ): Promise<Record<string, number>> {
+    const res = await tx.execute(sql`
+      select coalesce(tk.task_status, 'Todo') as status, count(*)::int as n
+        from tasks tk
+       where tk.company_id = ${companyId}
+         and tk.project_id = ${projectId}
+         and tk.deleted_at is null
+         and ${isLeaf("tk")}
+       group by coalesce(tk.task_status, 'Todo')
+    `);
+    const out: Record<string, number> = {};
+    for (const s of TASK_REPORT_STATUSES) out[s] = 0;
+    for (const r of res.rows as unknown as { status: string; n: number }[]) {
+      if (r.status in out) out[r.status] = Number(r.n);
+    }
+    return out;
   }
 }

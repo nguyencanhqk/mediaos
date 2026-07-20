@@ -14,6 +14,7 @@ import type {
   MoveTaskStateRequest,
   MyTaskItemDto,
   TaskCorePriorityDto,
+  SubtaskListItemDto,
   TaskCoreResponseDto,
   TaskCoreSourceDto,
   TaskCoreStatusDto,
@@ -189,19 +190,24 @@ export class TaskCoreService {
    * ⚠️ Đối xứng: quyền GHI KHÔNG thừa hưởng — sửa/xoá/đổi trạng thái một con riêng lẻ vẫn kiểm trên
    * chính con đó, và `GET /tasks/:childId` cũng vậy (FE phải render con ngoài tầm với dạng read-only).
    */
-  async listSubtasks(user: RequestUser, parentId: string): Promise<TaskCoreResponseDto[]> {
-    const rows = await this.db.withTenant(user.companyId, async (tx) => {
+  async listSubtasks(user: RequestUser, parentId: string): Promise<SubtaskListItemDto[]> {
+    return this.db.withTenant(user.companyId, async (tx) => {
       const scopeExists = await this.resolveReadScopeExists(tx, user);
       const parent = await this.repo.findScopedByIdTx(tx, user.companyId, parentId, scopeExists);
       if (!parent) throw new NotFoundException(ERR.NOT_FOUND);
-      return this.repo.listTx(
-        tx,
-        user.companyId,
-        { parentId, limit: TASK_CORE_PAGE_LIMIT_MAX, offset: 0 },
-        undefined,
-      );
+
+      const filter = { parentId, limit: TASK_CORE_PAGE_LIMIT_MAX, offset: 0 };
+      // 1) TOÀN BỘ con (thừa hưởng quyền đọc của cha — D-39).
+      const all = await this.repo.listTx(tx, user.companyId, filter, undefined);
+      // 2) Con nằm trong phạm vi đọc RIÊNG của actor ⇒ suy ra `canOpen`. Hai truy vấn TẬP HỢP, KHÔNG
+      //    N+1 (một check/con sẽ là N truy vấn cho một panel).
+      const openable = scopeExists
+        ? new Set(
+            (await this.repo.listTx(tx, user.companyId, filter, scopeExists)).map((r) => r.id),
+          )
+        : null; // Company/System ⇒ mở được tất cả
+      return all.map((r) => this.toSubtaskItem(r, openable === null || openable.has(r.id)));
     });
-    return rows.map((r) => this.toDto(r));
   }
 
   /**
@@ -213,7 +219,7 @@ export class TaskCoreService {
     user: RequestUser,
     parentId: string,
     subtaskIds: string[],
-  ): Promise<TaskCoreResponseDto[]> {
+  ): Promise<SubtaskListItemDto[]> {
     const updateScope = await this.dataScope.resolveAndAssert(
       user.id,
       user.companyId,
@@ -264,8 +270,27 @@ export class TaskCoreService {
         { parentId, limit: TASK_CORE_PAGE_LIMIT_MAX, offset: 0 },
         undefined,
       );
-      return rows.map((r) => this.toDto(r));
+      // Ghi được cha ⇒ mở được mọi con trong ngữ cảnh này (actor vừa qua assertInScopeForWrite trên cha).
+      return rows.map((r) => this.toSubtaskItem(r, true));
     });
+  }
+
+  /** DTO HẸP cho panel việc con (D-39) — xem docblock subtaskListItemSchema về lý do không trả DTO đầy đủ. */
+  private toSubtaskItem(row: TaskCoreRow, canOpen: boolean): SubtaskListItemDto {
+    const base = this.toDto(row);
+    return {
+      id: base.id,
+      taskCode: row.taskCode ?? null,
+      title: base.title,
+      status: base.status,
+      priority: base.priority,
+      mainAssigneeEmployeeId: base.mainAssigneeEmployeeId,
+      assigneeName: base.assigneeName,
+      dueAt: base.dueAt,
+      isOverdue: base.isOverdue,
+      sortOrder: row.sortOrder ?? null,
+      canOpen,
+    };
   }
 
   async getMyTasks(user: RequestUser): Promise<MyTaskItemDto[]> {

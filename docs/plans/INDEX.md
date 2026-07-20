@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**240 WO** · có micro-plan: **107/240** · ⬜ 22 chờ · 🔵 0 đang làm · ✅ 218 xong · 🔴 0 chặn
+**241 WO** · có micro-plan: **109/241** · ⬜ 17 chờ · 🔵 0 đang làm · ✅ 224 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -258,12 +258,13 @@
 | `S5-TASK-HRCODE-1` | 🔴 | ✅ xong | [📄](S5-TASK-HRCODE-1.md) | ✅S5-NOTI-FIX-2 | Cấp task_code cho task HR (createApprovalTaskTx ← leave/attendance-adj |
 | `S5-LEAVE-DEADCODE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S5-TASK-HRCODE-1 | Dọn khối LeaveService chết (createRequest/approveRequest/rejectRequest |
 | `S5-SEQ-HARDEN-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S5-TASK-HRCODE-1 | Gia cố cấp mã tuần tự: SAVEPOINT cho recovery 23505 (ensure-on-miss ra |
-| `S5-TASK-PIPELINE-1` | 🔴 | ⬜ chờ | [📄](S5-TASK-PIPELINE-1.md) | ✅S5-TASK-HRCODE-1 | Đợt A — Kanban cột pipeline tuỳ biến theo dự án (project_states) thay  |
-| `S5-TASK-NAV-TREE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S5-TASK-PIPELINE-1 | Đợt B — Sidebar cây phòng ban: dự án lồng dưới phòng ban + menu ⋯ mỗi  |
-| `S5-TASK-WORKSPACE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S5-TASK-PIPELINE-1 | Đợt D1 — Vỏ workspace dự án: tab bar (Bảng·Danh sách·Báo cáo·Hoạt động |
-| `S5-TASK-DETAIL-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S5-TASK-PIPELINE-1 | Màn chi tiết task — vá 4 gap TRONG SPEC chưa làm: timeline hiện dữ liệ |
-| `S5-TASK-SUBTASK-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S5-TASK-PIPELINE-1 | Công việc con = subtask THẬT (parent_task_id): CRUD + người thực hiện/ |
-| `S5-DASH-TASKSTATUS-FIX-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Dashboard đếm SAI cột trạng thái: mv_dashboard_task_status GROUP BY `s |
+| `S5-TASK-PIPELINE-1` | 🔴 | ✅ xong | [📄](S5-TASK-PIPELINE-1.md) | ✅S5-TASK-HRCODE-1 | Đợt A — Kanban cột pipeline tuỳ biến theo dự án (project_states) thay  |
+| `S5-TASK-NAV-TREE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-TASK-PIPELINE-1 | Đợt B — Sidebar cây phòng ban: dự án lồng dưới phòng ban + menu ⋯ mỗi  |
+| `S5-TASK-WORKSPACE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-TASK-PIPELINE-1 | Đợt D1 — Vỏ workspace dự án: tab bar (Bảng·Danh sách·Báo cáo·Hoạt động |
+| `S5-TASK-DETAIL-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-TASK-PIPELINE-1 | Màn chi tiết task — vá 4 gap TRONG SPEC chưa làm: timeline hiện dữ liệ |
+| `S5-TASK-SUBTASK-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S5-TASK-PIPELINE-1 | Công việc con = subtask THẬT (parent_task_id): CRUD + người thực hiện/ |
+| `S5-DASH-TASKSTATUS-FIX-1` | 🔴 | ✅ xong | [📄](S5-DASH-TASKSTATUS-FIX-1.md) | — | Dashboard đếm SAI cột trạng thái: mv_dashboard_task_status GROUP BY `s |
+| `S5-TASK-PROJROLE-1` | 🔴 | ✅ xong | [📄](S5-TASK-PROJROLE-1.md) | ✅S5-TASK-PIPELINE-1 | Đợt C — Quyền per-project THẬT: projectRole (Owner/Manager/Member/View |
 
 ## Sprint 6
 

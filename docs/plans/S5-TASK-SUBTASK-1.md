@@ -176,6 +176,8 @@ lanes:
         (tái dùng `STATE_INVALID`). `raw: TaskRawRow` đã là tham số sẵn ⇒ chỉ cần thêm `parentTaskId` vào
         `findRawByIdTx` (task-core.repository.ts:315-332), CÙNG LƯỢT với việc thêm `parentTaskId` vào
         `findStateSyncRowTx`. Một chốt phủ cả hai route.
+        Tab "Danh sách" của vỏ workspace dự án CŨNG chỉ hiện cha (parity Bảng↔Danh sách là thuộc tính đã
+        ship ở đợt D1 — hai tab lọc qua cùng helper).
 
       • D-36a DỰ ÁN CỦA CÂY LÀ BẤT BIẾN, VÀ `PATCH {projectId}` LÀ WRITER PHÁ ĐƯỢC NÓ MÀ KHÔNG CẦN ĐỒNG THỜI.
         `updateTask` hiện gán tự do: task-core.service.ts:324 `if (dto.projectId !== undefined)
@@ -193,8 +195,9 @@ lanes:
         "gỡ việc con ra trước khi chuyển dự án"; (ii) T có `parent_task_id IS NOT NULL` ⇒ **cấm đổi
         projectId riêng, 400** (dự án của con do cha quyết). Không chọn cascade projectId xuống con vì nó
         kéo theo cả `state_id` của cha lẫn con và mở thêm một tập khoá nữa cho ít giá trị thật.
-        Tab "Danh sách" của vỏ workspace dự án CŨNG chỉ hiện cha (parity Bảng↔Danh sách là thuộc tính đã
-        ship ở đợt D1 — hai tab lọc qua cùng helper).
+        TẬP KHOÁ: đã chọn 400 (không cascade) nên `{T}` là ĐỦ — giữ khoá T chặn được mọi create-child đồng
+        thời (create khoá `{P}` = `{T}`). Dòng `{T} ∪ children` ở bảng D-33 là khoá THỪA (vẫn đúng thứ tự
+        id toàn cục, không deadlock) — implementer được phép rút gọn về `{T}`.
 
       • D-37 DANH SÁCH ≠ CON SỐ: "Việc của tôi" và "Việc quá hạn" hiện CẢ cha lẫn con (owner chốt (c):
         việc quá hạn CÓ tính con) vì đó là danh sách việc phải xử lý; còn CON SỐ trên dashboard/báo cáo
