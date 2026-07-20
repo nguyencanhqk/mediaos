@@ -65,7 +65,11 @@ export function OrgChartPage() {
   const [createDeptOpen, setCreateDeptOpen] = useState(false);
   const [personDialog, setPersonDialog] = useState<PersonDialog>(null);
   const [addToDept, setAddToDept] = useState<{ id: string; name: string } | null>(null);
-  const [headDept, setHeadDept] = useState<{ id: string; name: string } | null>(null);
+  const [headDept, setHeadDept] = useState<{
+    id: string;
+    name: string;
+    headUserName: string | null;
+  } | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery<OrgTreeNode[]>({
     queryKey: hrKeys.orgChart.tree(),
@@ -272,6 +276,7 @@ export function OrgChartPage() {
         <DeptHeadPickerDialog
           key={headDept.id}
           dept={headDept}
+          currentHeadName={headDept.headUserName}
           onClose={() => setHeadDept(null)}
           onSaved={invalidateOrgData}
         />

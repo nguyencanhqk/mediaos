@@ -36,8 +36,8 @@ interface OrgChartNodeProps {
   membersByUnit?: Map<string, UnitMember[]>;
   /** Callback hành động sửa nhân sự — chỉ có khi actor có quyền update:employee. */
   edit?: PersonEditHandlers;
-  /** Đặt/đổi TRƯỞNG ĐƠN VỊ — chỉ có khi actor có quyền update:department (gate ở page). */
-  onSetHead?: (dept: { id: string; name: string }) => void;
+  /** Đặt/đổi/gỡ TRƯỞNG ĐƠN VỊ — chỉ có khi actor có quyền update:department (gate ở page). */
+  onSetHead?: (dept: { id: string; name: string; headUserName: string | null }) => void;
 }
 
 /** Cụm 2 nút nhỏ (đổi quản lý / chuyển phòng) cho 1 người. */
@@ -117,7 +117,13 @@ export function OrgChartNode({ node, membersByUnit, edit, onSetHead }: OrgChartN
                   className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                   title={t("orgChart.actions.changeHead")}
                   aria-label={t("orgChart.actions.changeHead")}
-                  onClick={() => onSetHead({ id: node.id, name: node.name })}
+                  onClick={() =>
+                    onSetHead({
+                      id: node.id,
+                      name: node.name,
+                      headUserName: node.headUserName ?? null,
+                    })
+                  }
                 >
                   <Crown className="h-3.5 w-3.5" />
                 </button>
@@ -130,7 +136,7 @@ export function OrgChartNode({ node, membersByUnit, edit, onSetHead }: OrgChartN
         {onSetHead && !node.headUserName && (
           <button
             type="button"
-            onClick={() => onSetHead({ id: node.id, name: node.name })}
+            onClick={() => onSetHead({ id: node.id, name: node.name, headUserName: null })}
             className="mt-1 flex items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-1.5 text-xs font-medium text-muted-foreground hover:border-brand/60 hover:text-foreground"
           >
             <Crown className="h-3.5 w-3.5" />

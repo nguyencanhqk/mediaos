@@ -43,6 +43,8 @@ interface EmployeeMultiPickerDialogProps {
   onClose: () => void;
   /** "single" = chọn đúng MỘT người (chọn người khác thì THAY người cũ, ẩn chọn-cả-trang). */
   selectionMode?: "multi" | "single";
+  /** Slot TRÁI của footer, cạnh bộ đếm (vd: nút "Gỡ trưởng đơn vị"). */
+  footerExtra?: ReactNode;
   /** Đè nhãn nút xác nhận (mặc định "Thêm"/"Thêm (n)") — vd "Lưu" cho ngữ cảnh đặt trưởng đơn vị. */
   confirmLabel?: string;
   testIdPrefix?: string;
@@ -58,6 +60,7 @@ export function EmployeeMultiPickerDialog({
   onBatchSettled,
   onClose,
   selectionMode = "multi",
+  footerExtra,
   confirmLabel,
   testIdPrefix = "employee-picker",
 }: EmployeeMultiPickerDialogProps) {
@@ -157,11 +160,14 @@ export function EmployeeMultiPickerDialog({
       className="max-w-3xl"
       footer={
         <>
-          <span
-            className="mr-auto self-center text-sm text-muted-foreground"
-            data-testid={`${testIdPrefix}-selected-count`}
-          >
-            {t("employeePicker.selectedCount", { count: selected.size })}
+          <span className="mr-auto flex items-center gap-3">
+            <span
+              className="self-center text-sm text-muted-foreground"
+              data-testid={`${testIdPrefix}-selected-count`}
+            >
+              {t("employeePicker.selectedCount", { count: selected.size })}
+            </span>
+            {footerExtra}
           </span>
           <Button variant="outline" onClick={onClose} disabled={busy}>
             {t("employeePicker.cancel")}

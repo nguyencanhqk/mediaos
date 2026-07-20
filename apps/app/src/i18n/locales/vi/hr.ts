@@ -446,9 +446,11 @@ export default {
       // của bảng chọn nằm ở common.employeePicker).
       addToDeptDesc: "Chọn nhân viên (kể cả người chưa có phòng ban) để thêm vào {{dept}}.",
       alreadyInDept: "Đã ở phòng này",
-      // Đặt/đổi trưởng đơn vị (chọn-một; cần tài khoản liên kết vì head_user_id trỏ users).
+      // Đặt/đổi/gỡ trưởng đơn vị (chọn-một; cần tài khoản liên kết vì head_user_id trỏ users).
       setHeadDesc: "Chọn một nhân viên làm trưởng {{dept}}.",
       noLinkedAccount: "Chưa có tài khoản",
+      removeHead: "Gỡ trưởng đơn vị ({{name}})",
+      removeHeadError: "Không gỡ được trưởng đơn vị. Vui lòng thử lại.",
       // Thêm phòng ban
       addDepartmentDesc: "Tạo phòng ban mới trong cơ cấu tổ chức.",
       deptName: "Tên phòng ban",

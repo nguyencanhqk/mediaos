@@ -66,8 +66,19 @@ const PICKER_EMPLOYEES = {
   meta: { page: 1, pageSize: 10, total: 3, totalPages: 1, hasNext: false, hasPrev: false },
 } as never;
 
-async function openDialog(onClose = vi.fn(), onSaved = vi.fn()) {
-  renderWithQuery(<DeptHeadPickerDialog dept={DEPT} onClose={onClose} onSaved={onSaved} />);
+async function openDialog(
+  onClose = vi.fn(),
+  onSaved = vi.fn(),
+  currentHeadName: string | null = null,
+) {
+  renderWithQuery(
+    <DeptHeadPickerDialog
+      dept={DEPT}
+      currentHeadName={currentHeadName}
+      onClose={onClose}
+      onSaved={onSaved}
+    />,
+  );
   await waitFor(() =>
     expect(screen.getByTestId("dept-head-picker-row-emp-002")).toBeInTheDocument(),
   );
@@ -99,12 +110,30 @@ describe("DeptHeadPickerDialog", () => {
 
     fireEvent.click(screen.getByTestId("dept-head-picker-confirm"));
     await waitFor(() => expect(hrMasterDataApi.updateDepartment).toHaveBeenCalledTimes(1));
-    // Giá trị gửi đi là USER ID liên kết (BE ghi vào org_units.head_user_id FK users), không phải employee id.
+    // Gửi EMPLOYEE id đúng spec (DB-03) — BE tự resolve user liên kết ghi head_user_id.
     expect(hrMasterDataApi.updateDepartment).toHaveBeenCalledWith("dept-001", {
-      managerEmployeeId: "user-003",
+      managerEmployeeId: "emp-003",
     });
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(onSaved).toHaveBeenCalled();
+  });
+
+  it("nút GỠ chỉ hiện khi phòng ĐANG có trưởng; bấm ⇒ PATCH managerEmployeeId=null + đóng", async () => {
+    vi.mocked(hrMasterDataApi.updateDepartment).mockResolvedValue({} as never);
+    const { onClose, onSaved } = await openDialog(vi.fn(), vi.fn(), "Nguyễn Văn A");
+
+    fireEvent.click(screen.getByTestId("dept-head-picker-remove"));
+    await waitFor(() => expect(hrMasterDataApi.updateDepartment).toHaveBeenCalledTimes(1));
+    expect(hrMasterDataApi.updateDepartment).toHaveBeenCalledWith("dept-001", {
+      managerEmployeeId: null,
+    });
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(onSaved).toHaveBeenCalled();
+  });
+
+  it("phòng CHƯA có trưởng ⇒ không có nút gỡ", async () => {
+    await openDialog();
+    expect(screen.queryByTestId("dept-head-picker-remove")).not.toBeInTheDocument();
   });
 
   it("lưu lỗi → báo lỗi + giữ selection, KHÔNG đóng dialog", async () => {

@@ -74,6 +74,11 @@ export const createDepartmentSchema = z.object({
   name: z.string().min(1).max(200),
   code: z.string().min(1).max(50).optional(),
   parentId: z.string().uuid().nullable().optional(),
+  /**
+   * Trưởng phòng = EMPLOYEE id (DB-03 §15: FK employees, "employee active cùng company").
+   * BE validate rồi resolve user liên kết để ghi vào cột legacy org_units.head_user_id (FK users) —
+   * employee chưa liên kết tài khoản → 400 (ràng buộc hiện thực hoá, xem erd-current Phụ lục A).
+   */
   managerEmployeeId: z.string().uuid().nullable().optional(),
   description: z.string().optional(),
   status: departmentStatusEnum.optional().default("active"),
@@ -85,6 +90,7 @@ export const updateDepartmentSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   code: z.string().min(1).max(50).nullable().optional(),
   parentId: z.string().uuid().nullable().optional(),
+  /** Trưởng phòng = EMPLOYEE id (xem createDepartmentSchema); null = GỠ trưởng phòng. */
   managerEmployeeId: z.string().uuid().nullable().optional(),
   description: z.string().nullable().optional(),
   status: departmentStatusEnum.optional(),
