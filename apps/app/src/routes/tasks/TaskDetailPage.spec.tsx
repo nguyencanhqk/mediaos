@@ -196,12 +196,14 @@ describe("TaskDetailPage", () => {
     renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
 
-    const statusSelect = screen.getByLabelText(/^trạng thái$/i) as HTMLSelectElement;
-    expect(statusSelect.value).toBe("Todo");
+    // Vá UI 2026-07-20: control trạng thái là THẺ badge + popover (không còn <select>).
+    const statusTrigger = screen.getByTestId("task-status-select");
+    expect(statusTrigger).toHaveTextContent("Cần làm");
 
-    fireEvent.change(statusSelect, { target: { value: "In Progress" } });
+    fireEvent.click(statusTrigger);
+    fireEvent.click(screen.getByRole("option", { name: /đang làm/i }));
     // Optimistic: giá trị đổi NGAY trong cache/UI, KHÔNG đợi API trả về.
-    await waitFor(() => expect(statusSelect.value).toBe("In Progress"));
+    await waitFor(() => expect(statusTrigger).toHaveTextContent("Đang làm"));
 
     // API lỗi (409 FSM sai bảng) → rollback về giá trị trước đó + hiển thị thông báo lỗi.
     rejectChangeStatus(
@@ -211,7 +213,7 @@ describe("TaskDetailPage", () => {
         message: "invalid transition",
       }),
     );
-    await waitFor(() => expect(statusSelect.value).toBe("Todo"));
+    await waitFor(() => expect(statusTrigger).toHaveTextContent("Cần làm"));
     expect(screen.getByRole("alert")).toBeInTheDocument();
   });
 });

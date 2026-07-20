@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Check, ChevronDown } from "lucide-react";
 import { taskCoreApi, taskCoreInvalidation, useCan, ApiError } from "@mediaos/web-core";
-import { Select, Input } from "@mediaos/ui";
+import { Input, Popover, cn } from "@mediaos/ui";
 import type {
   TaskCoreResponseDto,
   TaskCoreStatusDto,
@@ -76,14 +77,86 @@ function Field({
   );
 }
 
-// ── Trạng thái ───────────────────────────────────────────────────────────────
-export function TaskStatusField({
-  task,
-  compact = false,
+// ── Chọn-theo-thẻ (badge) cho trạng thái/ưu tiên ─────────────────────────────
+/**
+ * Vá UI 2026-07-20 (owner): trạng thái/ưu tiên hiển thị DẠNG THẺ MÀU thay vì <select> trần —
+ * cùng mặt chữ với badge trên board/danh sách (TaskStatusBadge/TaskPriorityBadge) nên nhìn phát
+ * biết ngay "việc đang ở đâu". Có quyền ⇒ thẻ bấm được, mở popover chọn (vẫn LƯU NGAY khi chọn);
+ * thiếu quyền ⇒ ai gọi component này tự render badge tĩnh — ranh giới quyền không đổi.
+ */
+function BadgeSelect<T extends string>({
+  id,
+  ariaLabel,
+  value,
+  options,
+  disabled,
+  onSelect,
+  renderBadge,
 }: {
-  task: TaskCoreResponseDto;
-  compact?: boolean;
+  id: string;
+  ariaLabel: string;
+  value: T | null;
+  options: readonly T[];
+  disabled: boolean;
+  onSelect: (next: T) => void;
+  renderBadge: (v: T | null) => React.ReactNode;
 }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      align="start"
+      className="min-w-[10rem] p-1"
+      trigger={
+        <button
+          type="button"
+          id={id}
+          aria-label={ariaLabel}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          disabled={disabled}
+          onClick={() => setOpen((v) => !v)}
+          data-testid={id}
+          className="flex items-center gap-1 rounded-full transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {renderBadge(value)}
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+        </button>
+      }
+    >
+      <ul role="listbox" aria-label={ariaLabel} className="space-y-0.5">
+        {options.map((opt) => (
+          <li key={opt}>
+            <button
+              type="button"
+              role="option"
+              aria-selected={opt === value}
+              className={cn(
+                "flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left hover:bg-muted",
+                opt === value && "bg-muted",
+              )}
+              onClick={() => {
+                setOpen(false);
+                // Chọn lại đúng giá trị đang giữ = no-op, không bắn request thừa.
+                if (opt !== value) onSelect(opt);
+              }}
+            >
+              {renderBadge(opt)}
+              {opt === value && (
+                <Check className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              )}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Popover>
+  );
+}
+
+// ── Trạng thái ───────────────────────────────────────────────────────────────
+export function TaskStatusField({ task }: { task: TaskCoreResponseDto }) {
   const { t } = useTranslation("tasks");
   const canStatus = useCan(
     TASK_CORE_ENGINE_PAIRS.UPDATE_STATUS.action,
@@ -96,35 +169,21 @@ export function TaskStatusField({
   });
 
   const control = canStatus ? (
-    <Select
+    <BadgeSelect
       id="task-status-select"
-      aria-label={t("tasks.statusSelect.statusLabel")}
-      value={task.status ?? ""}
+      ariaLabel={t("tasks.statusSelect.statusLabel")}
+      value={task.status ?? null}
+      options={TASK_CORE_STATUS_OPTIONS}
       disabled={mutation.isPending}
-      className={compact ? "h-8 w-auto min-w-36 py-1 text-xs" : undefined}
-      onChange={(e) => mutation.mutate(e.target.value as TaskCoreStatusDto)}
-    >
-      {TASK_CORE_STATUS_OPTIONS.map((s) => (
-        <option key={s} value={s}>
-          {t(`tasks.status.${s}`)}
-        </option>
-      ))}
-    </Select>
+      onSelect={(status) => mutation.mutate(status)}
+      renderBadge={(s) => <TaskStatusBadge status={s} />}
+    />
   ) : (
     <div>
       <TaskStatusBadge status={task.status} />
     </div>
   );
 
-  // compact = dải đầu (đã có ngữ cảnh xung quanh) ⇒ bỏ nhãn, chỉ giữ aria-label cho trình đọc màn hình.
-  if (compact) {
-    return (
-      <div className="space-y-1">
-        {control}
-        {mutation.isError && <FieldError error={mutation.error} />}
-      </div>
-    );
-  }
   return (
     <Field label={t("tasks.statusSelect.statusLabel")} htmlFor="task-status-select">
       {control}
@@ -134,13 +193,7 @@ export function TaskStatusField({
 }
 
 // ── Ưu tiên ──────────────────────────────────────────────────────────────────
-export function TaskPriorityField({
-  task,
-  compact = false,
-}: {
-  task: TaskCoreResponseDto;
-  compact?: boolean;
-}) {
+export function TaskPriorityField({ task }: { task: TaskCoreResponseDto }) {
   const { t } = useTranslation("tasks");
   const canPriority = useCan(
     TASK_CORE_ENGINE_PAIRS.UPDATE_PRIORITY.action,
@@ -153,34 +206,21 @@ export function TaskPriorityField({
   });
 
   const control = canPriority ? (
-    <Select
+    <BadgeSelect
       id="task-priority-select"
-      aria-label={t("tasks.statusSelect.priorityLabel")}
-      value={task.priority ?? ""}
+      ariaLabel={t("tasks.statusSelect.priorityLabel")}
+      value={task.priority ?? null}
+      options={TASK_CORE_PRIORITY_OPTIONS}
       disabled={mutation.isPending}
-      className={compact ? "h-8 w-auto min-w-32 py-1 text-xs" : undefined}
-      onChange={(e) => mutation.mutate(e.target.value as TaskCorePriorityDto)}
-    >
-      {TASK_CORE_PRIORITY_OPTIONS.map((p) => (
-        <option key={p} value={p}>
-          {t(`tasks.priority.${p}`)}
-        </option>
-      ))}
-    </Select>
+      onSelect={(priority) => mutation.mutate(priority)}
+      renderBadge={(p) => <TaskPriorityBadge priority={p} />}
+    />
   ) : (
     <div>
       <TaskPriorityBadge priority={task.priority} />
     </div>
   );
 
-  if (compact) {
-    return (
-      <div className="space-y-1">
-        {control}
-        {mutation.isError && <FieldError error={mutation.error} />}
-      </div>
-    );
-  }
   return (
     <Field label={t("tasks.statusSelect.priorityLabel")} htmlFor="task-priority-select">
       {control}

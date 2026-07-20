@@ -81,33 +81,48 @@ describe("TaskInlineFields", () => {
   });
 
   // ── Trạng thái ─────────────────────────────────────────────────────────────
+  // Vá UI 2026-07-20: control đổi từ <select> trần sang THẺ badge + popover chọn — tương tác mới là
+  // bấm thẻ rồi bấm option; ràng buộc cũ giữ nguyên (lưu ngay khi chọn, thiếu quyền = chỉ-đọc).
   describe("TaskStatusField", () => {
-    it("đổi là LƯU NGAY, không cần nút", async () => {
+    it("bấm thẻ → chọn option là LƯU NGAY, không cần nút", async () => {
       setCapabilities({ "update-status:task": true });
       vi.mocked(taskCoreApi.changeStatus).mockResolvedValue({ id: "task-001" } as never);
       renderWithQuery(<TaskStatusField task={TASK} />);
 
-      fireEvent.change(screen.getByLabelText(/trạng thái/i), { target: { value: "Done" } });
+      fireEvent.click(screen.getByTestId("task-status-select"));
+      fireEvent.click(screen.getByRole("option", { name: /hoàn thành/i }));
       await waitFor(() =>
         expect(taskCoreApi.changeStatus).toHaveBeenCalledWith("task-001", { status: "Done" }),
       );
     });
 
+    it("chọn LẠI đúng trạng thái đang giữ ⇒ không gọi API", async () => {
+      setCapabilities({ "update-status:task": true });
+      renderWithQuery(<TaskStatusField task={TASK} />);
+
+      fireEvent.click(screen.getByTestId("task-status-select"));
+      fireEvent.click(screen.getByRole("option", { name: /cần làm/i }));
+      expect(taskCoreApi.changeStatus).not.toHaveBeenCalled();
+    });
+
     it("thiếu update-status:task ⇒ chỉ-đọc, KHÔNG render control", () => {
       setCapabilities({});
       renderWithQuery(<TaskStatusField task={TASK} />);
-      expect(screen.queryByLabelText(/trạng thái/i)).not.toBeInTheDocument();
+      expect(screen.queryByTestId("task-status-select")).not.toBeInTheDocument();
+      // Vẫn thấy giá trị ở dạng badge tĩnh.
+      expect(screen.getByText("Cần làm")).toBeInTheDocument();
     });
   });
 
   // ── Ưu tiên ────────────────────────────────────────────────────────────────
   describe("TaskPriorityField", () => {
-    it("đổi là lưu ngay", async () => {
+    it("bấm thẻ → chọn option là lưu ngay", async () => {
       setCapabilities({ "update-priority:task": true });
       vi.mocked(taskCoreApi.changePriority).mockResolvedValue({ id: "task-001" } as never);
       renderWithQuery(<TaskPriorityField task={TASK} />);
 
-      fireEvent.change(screen.getByLabelText(/ưu tiên/i), { target: { value: "High" } });
+      fireEvent.click(screen.getByTestId("task-priority-select"));
+      fireEvent.click(screen.getByRole("option", { name: /cao/i }));
       await waitFor(() =>
         expect(taskCoreApi.changePriority).toHaveBeenCalledWith("task-001", { priority: "High" }),
       );
@@ -116,7 +131,8 @@ describe("TaskInlineFields", () => {
     it("thiếu update-priority:task ⇒ chỉ-đọc", () => {
       setCapabilities({});
       renderWithQuery(<TaskPriorityField task={TASK} />);
-      expect(screen.queryByLabelText(/ưu tiên/i)).not.toBeInTheDocument();
+      expect(screen.queryByTestId("task-priority-select")).not.toBeInTheDocument();
+      expect(screen.getByText("Trung bình")).toBeInTheDocument();
     });
   });
 

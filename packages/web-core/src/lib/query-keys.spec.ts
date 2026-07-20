@@ -245,10 +245,14 @@ describe("taskSubtaskInvalidation", () => {
     expect(keys).toContainEqual(taskKeys.kanban("proj-1"));
   });
 
-  it("projectId null (task cá nhân ngoài dự án) ⇒ KHÔNG thêm khoá kanban", () => {
+  it("projectId null (task cá nhân ngoài dự án) ⇒ KHÔNG thêm khoá kanban ĐÍCH DANH", () => {
     const keys = taskSubtaskInvalidation.afterMutate("parent-1", null);
     expect(keys).toContainEqual(taskKeys.subtasks("parent-1"));
-    expect(keys.some((k) => k[1] === "kanban")).toBe(false);
+    // Vá 2026-07-20: detail() giờ kèm PREFIX ['tasks','kanban'] (sửa trong panel chi tiết phải
+    // sang board không cần F5) nên prefix ấy CÓ MẶT cả ở đây — vô hại với task cá nhân (board nào
+    // active thì refetch, không có thì thôi). Điều vẫn bị cấm: khoá kanban ĐÍCH DANH id rỗng/null.
+    expect(keys).not.toContainEqual(taskKeys.kanban(""));
+    expect(keys.some((k) => k[1] === "kanban" && k.length > 2)).toBe(false);
   });
 });
 
