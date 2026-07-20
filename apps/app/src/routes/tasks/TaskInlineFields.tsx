@@ -1,8 +1,16 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown } from "lucide-react";
-import { taskCoreApi, taskCoreInvalidation, useCan, ApiError } from "@mediaos/web-core";
+import {
+  taskCoreApi,
+  taskCollabApi,
+  taskStatesApi,
+  taskKeys,
+  taskCoreInvalidation,
+  useCan,
+  ApiError,
+} from "@mediaos/web-core";
 import { Input, Popover, cn } from "@mediaos/ui";
 import type {
   TaskCoreResponseDto,
@@ -84,7 +92,7 @@ function Field({
  * biết ngay "việc đang ở đâu". Có quyền ⇒ thẻ bấm được, mở popover chọn (vẫn LƯU NGAY khi chọn);
  * thiếu quyền ⇒ ai gọi component này tự render badge tĩnh — ranh giới quyền không đổi.
  */
-function BadgeSelect<T extends string>({
+export function BadgeSelect<T extends string>({
   id,
   ariaLabel,
   value,
@@ -186,6 +194,90 @@ export function TaskStatusField({ task }: { task: TaskCoreResponseDto }) {
 
   return (
     <Field label={t("tasks.statusSelect.statusLabel")} htmlFor="task-status-select">
+      {control}
+      {mutation.isError && <FieldError error={mutation.error} />}
+    </Field>
+  );
+}
+
+// ── Cột pipeline (trạng thái tuỳ biến của dự án) ─────────────────────────────
+/** Màu chấm khi cột hiện tại không còn trong danh sách (vd vừa bị xoá) — trung tính, không vẽ bậy. */
+const STATE_CHIP_FALLBACK_COLOR = "#94a3b8";
+
+/**
+ * Chọn CỘT pipeline cho task ngay trong màn chi tiết — trước đây đổi cột CHỈ làm được bằng kéo-thả
+ * trên board. Chỉ hiện khi task thuộc dự án CÓ pipeline (listStates khác rỗng); dự án status-mode
+ * giữ nguyên bố cục cũ (ô tự ẩn). Gate update-state:task (CÙNG cửa kéo-thả board — TASK-API-213);
+ * đổi NHÓM cột server đòi thêm update-status và tự auto-map trong cùng tx — bị từ chối thì hiện lỗi,
+ * cột không đổi.
+ */
+export function TaskStateField({ task }: { task: TaskCoreResponseDto }) {
+  const { t } = useTranslation("tasks");
+  const queryClient = useQueryClient();
+  const canMoveState = useCan(
+    TASK_CORE_ENGINE_PAIRS.UPDATE_STATE.action,
+    TASK_CORE_ENGINE_PAIRS.UPDATE_STATE.resourceType,
+  );
+  const projectId = task.projectId ?? null;
+  const statesQuery = useQuery({
+    queryKey: taskKeys.states(projectId ?? ""),
+    queryFn: () => taskStatesApi.listStates(projectId ?? ""),
+    enabled: projectId !== null,
+    staleTime: 60_000,
+  });
+  const states = statesQuery.data ?? [];
+
+  const mutation = useMutation({
+    mutationFn: (stateId: string) => taskCollabApi.moveTaskState(task.id, { stateId }),
+    // Server trả TASK ĐẦY ĐỦ sau move (status đã auto-map) — HỢP NHẤT vào cache chi tiết, KHÔNG
+    // ghi đè (giữ subtaskTotal/subtaskDone chỉ getTask gắn — bẫy đã ghi ở use-task-action-mutation).
+    onSuccess: (updated) => {
+      queryClient.setQueryData<TaskCoreResponseDto>(taskKeys.detail(task.id), (prev) =>
+        prev ? { ...prev, ...updated } : updated,
+      );
+    },
+    onSettled: () => {
+      for (const key of taskCoreInvalidation.list())
+        void queryClient.invalidateQueries({ queryKey: key });
+      for (const key of taskCoreInvalidation.my())
+        void queryClient.invalidateQueries({ queryKey: key });
+      if (projectId) void queryClient.invalidateQueries({ queryKey: taskKeys.kanban(projectId) });
+    },
+  });
+
+  // Task ngoài dự án / dự án không có pipeline → không có cột để chọn.
+  if (projectId === null || states.length === 0) return null;
+
+  const chip = (stateId: string | null) => {
+    const state = states.find((s) => s.id === stateId);
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground">
+        <span
+          aria-hidden="true"
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: state?.color ?? task.stateColor ?? STATE_CHIP_FALLBACK_COLOR }}
+        />
+        {state?.name ?? task.stateName ?? "—"}
+      </span>
+    );
+  };
+
+  const control = canMoveState ? (
+    <BadgeSelect
+      id="task-state-select"
+      ariaLabel={t("tasks.statusSelect.stateLabel")}
+      value={task.stateId ?? null}
+      options={states.map((s) => s.id)}
+      disabled={mutation.isPending}
+      onSelect={(stateId) => mutation.mutate(stateId)}
+      renderBadge={chip}
+    />
+  ) : (
+    <div>{chip(task.stateId ?? null)}</div>
+  );
+
+  return (
+    <Field label={t("tasks.statusSelect.stateLabel")} htmlFor="task-state-select">
       {control}
       {mutation.isError && <FieldError error={mutation.error} />}
     </Field>

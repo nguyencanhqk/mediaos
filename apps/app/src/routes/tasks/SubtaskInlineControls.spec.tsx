@@ -4,7 +4,11 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, taskCoreApi, hrApi } from "@mediaos/web-core";
 import type { SubtaskListItemDto } from "@mediaos/contracts";
-import { SubtaskAssigneeControl, SubtaskDueControl } from "./SubtaskInlineControls";
+import {
+  SubtaskAssigneeControl,
+  SubtaskDueControl,
+  SubtaskStatusControl,
+} from "./SubtaskInlineControls";
 
 /**
  * S5-TASK-INLINE-1 — sửa người thực hiện + hạn NGAY trên dòng việc con.
@@ -20,6 +24,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     taskCoreApi: {
       updateTask: vi.fn(),
       assign: vi.fn(),
+      // SubtaskStatusControl — đổi trạng thái đi route change-status (không PATCH).
+      changeStatus: vi.fn(),
     },
     hrApi: {
       listEmployees: vi.fn().mockResolvedValue({
@@ -68,6 +74,41 @@ const ITEM = {
 } as unknown as SubtaskListItemDto;
 
 const PROPS = { item: ITEM, parentTaskId: "task-parent", projectId: "proj-001", canEdit: true };
+
+describe("SubtaskStatusControl", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
+  });
+
+  it("bấm thẻ → chọn trạng thái đổi qua ĐÚNG cửa change-status (không PATCH)", async () => {
+    setCapabilities({ "update-status:task": true });
+    vi.mocked(taskCoreApi.changeStatus).mockResolvedValue({ task: { id: "sub-001" } } as never);
+    renderWithQuery(<SubtaskStatusControl {...PROPS} />);
+
+    fireEvent.click(screen.getByTestId("subtask-status-select-sub-001"));
+    fireEvent.click(screen.getByRole("option", { name: /hoàn thành/i }));
+
+    await waitFor(() =>
+      expect(taskCoreApi.changeStatus).toHaveBeenCalledWith("sub-001", { status: "Done" }),
+    );
+    expect(taskCoreApi.updateTask).not.toHaveBeenCalled();
+  });
+
+  it("thiếu update-status:task ⇒ badge tĩnh, KHÔNG render control", () => {
+    setCapabilities({});
+    renderWithQuery(<SubtaskStatusControl {...PROPS} />);
+    expect(screen.queryByTestId("subtask-status-select-sub-001")).not.toBeInTheDocument();
+    expect(screen.getByText("Cần làm")).toBeInTheDocument();
+  });
+
+  it("canEdit=false (item.canOpen=false — D-39 ghi không thừa hưởng) ⇒ badge tĩnh dù ĐỦ pair", () => {
+    setCapabilities({ "update-status:task": true });
+    renderWithQuery(<SubtaskStatusControl {...PROPS} canEdit={false} />);
+    expect(screen.queryByTestId("subtask-status-select-sub-001")).not.toBeInTheDocument();
+    expect(screen.getByText("Cần làm")).toBeInTheDocument();
+  });
+});
 
 describe("SubtaskAssigneeControl", () => {
   beforeEach(() => {

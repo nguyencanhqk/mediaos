@@ -14,9 +14,13 @@ import { Button } from "@mediaos/ui";
 import type { SubtaskListItemDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { PanelBody } from "./PanelBody";
-import { TaskStatusBadge, TaskOverdueBadge } from "./TaskStatusBadge";
+import { TaskOverdueBadge } from "./TaskStatusBadge";
 import { AddSubtaskDialog, EditSubtaskDialog, DeleteSubtaskConfirm } from "./TaskSubtaskDialogs";
-import { SubtaskAssigneeControl, SubtaskDueControl } from "./SubtaskInlineControls";
+import {
+  SubtaskAssigneeControl,
+  SubtaskDueControl,
+  SubtaskStatusControl,
+} from "./SubtaskInlineControls";
 
 /**
  * TaskSubtaskPanel — việc con (subtask) 1 cấp (S5-TASK-SUBTASK-1, DECISIONS-05 D-31, TASK-API-701/702).
@@ -161,7 +165,14 @@ function SubtaskRow({
         </div>
       </div>
 
-      <TaskStatusBadge status={item.status} />
+      {/* Đổi trạng thái NGAY trên dòng (SubtaskStatusControl tự gate update-status:task;
+          canEdit = canOpen — D-39 ghi không thừa hưởng). */}
+      <SubtaskStatusControl
+        item={item}
+        parentTaskId={parentTaskId}
+        projectId={projectId}
+        canEdit={item.canOpen}
+      />
 
       {item.canOpen && canEdit && (
         <Button

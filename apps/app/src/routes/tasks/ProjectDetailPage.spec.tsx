@@ -141,6 +141,8 @@ describe("ProjectDetailPage", () => {
   beforeEach(() => {
     clearCapabilities();
     searchRef.current = {};
+    // Thứ tự tab (useWorkspaceTabOrder) lưu localStorage — dọn để test không rò nhau.
+    window.localStorage.clear();
     vi.clearAllMocks();
   });
 
@@ -162,19 +164,21 @@ describe("ProjectDetailPage", () => {
     expect(screen.getByText("Nguyễn Văn A")).toBeInTheDocument();
   });
 
-  // ── DENY-PATH: edit/close/delete hidden without matching permission ──────
-  it("hides edit/close/delete actions without update/close/delete:project", async () => {
+  // ── Tab Cài đặt — Sửa/Đóng/Xóa dự án + Quản lý cột đã CHUYỂN từ header vào đây ──────────────
+  // DENY-PATH: thiếu mọi pair + không có vai trò dự án → tab Cài đặt ẨN, không nút nào lộ ra.
+  it("ẨN tab Cài đặt (không lộ Sửa/Đóng/Xóa) khi thiếu update/close/delete:project", async () => {
     setCapabilities({ "read:project": true });
     vi.mocked(taskProjectApi.getProject).mockResolvedValue(MOCK_PROJECT);
     renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(screen.queryByTestId("workspace-tab-settings")).not.toBeInTheDocument();
     expect(screen.queryByText(/sửa dự án/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/đóng dự án/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/xóa dự án/i)).not.toBeInTheDocument();
   });
 
-  // ── ALLOW-PATH: edit/close/delete visible with permission ────────────────
-  it("shows edit/close/delete actions with update/close/delete:project", async () => {
+  // ── ALLOW-PATH: đủ pair → tab Cài đặt hiện đủ Sửa/Đóng/Xóa ───────────────
+  it("tab Cài đặt hiện đủ Sửa/Đóng/Xóa khi có update/close/delete:project", async () => {
     setCapabilities({
       "read:project": true,
       "update:project": true,
@@ -182,41 +186,92 @@ describe("ProjectDetailPage", () => {
       "delete:project": true,
     });
     vi.mocked(taskProjectApi.getProject).mockResolvedValue(MOCK_PROJECT);
+    searchRef.current = { tab: "settings" };
     renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
-    expect(screen.getByText(/sửa dự án/i)).toBeInTheDocument();
-    expect(screen.getByText(/đóng dự án/i)).toBeInTheDocument();
-    expect(screen.getByText(/xóa dự án/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("project-settings-tab")).toBeInTheDocument());
+    expect(screen.getByTestId("workspace-tab-settings")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-edit-project")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-close-project")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-delete-project")).toBeInTheDocument();
+    // Không có pair *:project_state + không có vai trò dự án → khối Quản lý cột ẨN.
+    expect(screen.queryByTestId("settings-manage-columns")).not.toBeInTheDocument();
   });
 
   // ── S5-TASK-PROJROLE-1 (đợt C, D-24 affordance) — myProjectRole nới hiện dù thiếu pair ──────
-  it("Manager (myProjectRole) thấy 'Sửa dự án' nhưng KHÔNG thấy 'Đóng'/'Xóa' (govern Owner-only)", async () => {
+  it("Manager (myProjectRole) thấy 'Sửa dự án' + 'Quản lý cột' nhưng KHÔNG thấy 'Đóng'/'Xóa' (govern Owner-only)", async () => {
     setCapabilities({ "read:project": true });
     vi.mocked(taskProjectApi.getProject).mockResolvedValue({
       ...MOCK_PROJECT,
       myProjectRole: "Manager",
     });
+    searchRef.current = { tab: "settings" };
     renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
-    expect(screen.getByText(/sửa dự án/i)).toBeInTheDocument();
-    expect(screen.queryByText(/đóng dự án/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/xóa dự án/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("project-settings-tab")).toBeInTheDocument());
+    expect(screen.getByTestId("settings-edit-project")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-manage-columns")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-close-project")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("settings-delete-project")).not.toBeInTheDocument();
   });
 
-  it("Owner (myProjectRole) thấy đủ Sửa/Đóng/Xóa dù thiếu mọi pair hệ thống", async () => {
+  it("Owner (myProjectRole) thấy đủ Sửa/Đóng/Xóa + Quản lý cột dù thiếu mọi pair hệ thống", async () => {
     setCapabilities({ "read:project": true });
     vi.mocked(taskProjectApi.getProject).mockResolvedValue({
       ...MOCK_PROJECT,
       myProjectRole: "Owner",
     });
+    searchRef.current = { tab: "settings" };
     renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
-    expect(screen.getByText(/sửa dự án/i)).toBeInTheDocument();
-    expect(screen.getByText(/đóng dự án/i)).toBeInTheDocument();
-    expect(screen.getByText(/xóa dự án/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("project-settings-tab")).toBeInTheDocument());
+    expect(screen.getByTestId("settings-edit-project")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-close-project")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-delete-project")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-manage-columns")).toBeInTheDocument();
   });
 
-  it("Member (myProjectRole) KHÔNG thấy Sửa/Đóng/Xóa khi thiếu pair hệ thống", async () => {
+  // ── Thẻ "Thứ tự tab" — tuỳ chọn hiển thị cá nhân, lưu localStorage (use-workspace-tab-order) ──
+  it("sắp thứ tự tab trong Cài đặt → tab bar đổi theo + lưu localStorage; khôi phục về mặc định", async () => {
+    setCapabilities({ "read:project": true });
+    vi.mocked(taskProjectApi.getProject).mockResolvedValue({
+      ...MOCK_PROJECT,
+      myProjectRole: "Owner",
+    });
+    searchRef.current = { tab: "settings" };
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("settings-tab-order")).toBeInTheDocument());
+
+    const tabBarOrder = () =>
+      Array.from(document.querySelectorAll('[data-testid^="workspace-tab-"]')).map((el) =>
+        el.getAttribute("data-testid"),
+      );
+    expect(tabBarOrder()[0]).toBe("workspace-tab-overview");
+
+    // "Tổng quan" xuống 1 bậc → "Bảng" lên đầu tab bar; thứ tự mới ghi vào localStorage.
+    fireEvent.click(screen.getByTestId("tab-move-down-overview"));
+    expect(tabBarOrder()[0]).toBe("workspace-tab-board");
+    expect(
+      JSON.parse(window.localStorage.getItem("mediaos.tasks.workspaceTabOrder") ?? "[]")[0],
+    ).toBe("board");
+
+    // Khôi phục mặc định → về thứ tự gốc + xoá storage.
+    fireEvent.click(screen.getByTestId("settings-tab-order-reset"));
+    expect(tabBarOrder()[0]).toBe("workspace-tab-overview");
+    expect(window.localStorage.getItem("mediaos.tasks.workspaceTabOrder")).toBeNull();
+  });
+
+  it("thứ tự tab đã lưu được áp lại khi mở trang (đọc từ localStorage)", async () => {
+    window.localStorage.setItem(
+      "mediaos.tasks.workspaceTabOrder",
+      JSON.stringify(["members", "overview", "board", "list", "report", "activity", "settings"]),
+    );
+    setCapabilities({ "read:project": true });
+    vi.mocked(taskProjectApi.getProject).mockResolvedValue(MOCK_PROJECT);
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    const first = document.querySelector('[data-testid^="workspace-tab-"]');
+    expect(first?.getAttribute("data-testid")).toBe("workspace-tab-members");
+  });
+
+  it("Member (myProjectRole) KHÔNG thấy tab Cài đặt khi thiếu pair hệ thống", async () => {
     setCapabilities({ "read:project": true });
     vi.mocked(taskProjectApi.getProject).mockResolvedValue({
       ...MOCK_PROJECT,
@@ -224,6 +279,7 @@ describe("ProjectDetailPage", () => {
     });
     renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(screen.queryByTestId("workspace-tab-settings")).not.toBeInTheDocument();
     expect(screen.queryByText(/sửa dự án/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/đóng dự án/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/xóa dự án/i)).not.toBeInTheDocument();
@@ -243,6 +299,8 @@ describe("ProjectDetailPage", () => {
       expect(screen.getByTestId("workspace-tab-members")).toBeInTheDocument();
       expect(screen.queryByTestId("workspace-tab-report")).not.toBeInTheDocument();
       expect(screen.queryByTestId("workspace-tab-activity")).not.toBeInTheDocument();
+      // Tab Cài đặt gate bằng useCan (KHÔNG exact) → wildcard *:* mở được (mirror nút cũ ở header).
+      expect(screen.getByTestId("workspace-tab-settings")).toBeInTheDocument();
     });
 
     it("hiện tab Báo cáo/Hoạt động khi có đúng cặp sensitive", async () => {
@@ -375,6 +433,17 @@ describe("ProjectDetailPage", () => {
         screen.getByText(/không có quyền xem báo cáo tiến độ của dự án này/i),
       ).toBeInTheDocument();
       expect(taskProjectApi.getReport).not.toHaveBeenCalled();
+    });
+
+    it("deep-link ?tab=settings KHÔNG đủ quyền → forbidden tại chỗ, không lộ control", async () => {
+      setCapabilities({ "read:project": true });
+      vi.mocked(taskProjectApi.getProject).mockResolvedValue(MOCK_PROJECT);
+      searchRef.current = { tab: "settings" };
+      renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+      await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+      expect(screen.getByText(/không có quyền cài đặt dự án này/i)).toBeInTheDocument();
+      expect(screen.queryByTestId("project-settings-tab")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("settings-edit-project")).not.toBeInTheDocument();
     });
 
     it("deep-link ?tab=activity với quyền → tải feed dự án", async () => {

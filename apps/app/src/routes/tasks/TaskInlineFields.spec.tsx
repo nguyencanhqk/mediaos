@@ -2,9 +2,10 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore, taskCoreApi, hrApi } from "@mediaos/web-core";
+import { useAuthStore, taskCoreApi, taskCollabApi, taskStatesApi, hrApi } from "@mediaos/web-core";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import {
+  TaskStateField,
   TaskStatusField,
   TaskPriorityField,
   TaskDeadlineField,
@@ -30,6 +31,13 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       changePriority: vi.fn(),
       changeDeadline: vi.fn(),
       updateTask: vi.fn(),
+    },
+    // TaskStateField — cột pipeline: list cột + move-state (TASK-API-213).
+    taskCollabApi: {
+      moveTaskState: vi.fn(),
+    },
+    taskStatesApi: {
+      listStates: vi.fn(),
     },
     hrApi: {
       listEmployees: vi.fn().mockResolvedValue({
@@ -74,10 +82,60 @@ const TASK = {
   assigneeName: "Nguyễn Văn A",
 } as unknown as TaskCoreResponseDto;
 
+const STATE_TASK = {
+  ...TASK,
+  projectId: "proj-001",
+  stateId: "st-1",
+  stateName: "Ý Tưởng",
+  stateColor: "#3b82f6",
+} as unknown as TaskCoreResponseDto;
+
+const MOCK_STATES = [
+  { id: "st-1", name: "Ý Tưởng", color: "#3b82f6", sortOrder: 1 },
+  { id: "st-2", name: "Đang Làm", color: "#f59e0b", sortOrder: 2 },
+] as never;
+
 describe("TaskInlineFields", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
+  });
+
+  // ── Cột pipeline ───────────────────────────────────────────────────────────
+  describe("TaskStateField", () => {
+    it("dự án có pipeline: bấm thẻ → chọn cột gọi move-state (cùng cửa kéo-thả board)", async () => {
+      setCapabilities({ "update-state:task": true });
+      vi.mocked(taskStatesApi.listStates).mockResolvedValue(MOCK_STATES);
+      vi.mocked(taskCollabApi.moveTaskState).mockResolvedValue({ id: "task-001" } as never);
+      renderWithQuery(<TaskStateField task={STATE_TASK} />);
+
+      await waitFor(() => expect(screen.getByTestId("task-state-select")).toBeInTheDocument());
+      fireEvent.click(screen.getByTestId("task-state-select"));
+      fireEvent.click(screen.getByRole("option", { name: /đang làm/i }));
+
+      await waitFor(() =>
+        expect(taskCollabApi.moveTaskState).toHaveBeenCalledWith("task-001", { stateId: "st-2" }),
+      );
+    });
+
+    it("thiếu update-state:task ⇒ chip tĩnh, KHÔNG render control", async () => {
+      setCapabilities({});
+      vi.mocked(taskStatesApi.listStates).mockResolvedValue(MOCK_STATES);
+      renderWithQuery(<TaskStateField task={STATE_TASK} />);
+
+      await waitFor(() => expect(screen.getByText("Ý Tưởng")).toBeInTheDocument());
+      expect(screen.queryByTestId("task-state-select")).not.toBeInTheDocument();
+    });
+
+    it("dự án KHÔNG có pipeline (0 cột) ⇒ ẩn hẳn ô, không vẽ control rỗng", async () => {
+      setCapabilities({ "update-state:task": true });
+      vi.mocked(taskStatesApi.listStates).mockResolvedValue([] as never);
+      renderWithQuery(<TaskStateField task={STATE_TASK} />);
+
+      await waitFor(() => expect(taskStatesApi.listStates).toHaveBeenCalledWith("proj-001"));
+      expect(screen.queryByText("Cột quy trình")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("task-state-select")).not.toBeInTheDocument();
+    });
   });
 
   // ── Trạng thái ─────────────────────────────────────────────────────────────

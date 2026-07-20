@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { taskStatesApi, taskKeys, useCan, ApiError } from "@mediaos/web-core";
 import { Badge, Button, Dialog, Input, Skeleton } from "@mediaos/ui";
@@ -14,9 +15,12 @@ import { isProjectManagerOrOwner, PROJECT_STATE_PAIRS } from "./constants";
 
 /**
  * S5-TASK-PIPELINE-1 (lane fe) — quản lý CỘT pipeline của dự án (SPEC-06 §6.8, DECISIONS-03: kỷ luật
- * quy trình nằm ở THỨ TỰ CỘT + quyền cấu hình cột). Thêm/đổi tên/màu/thứ tự — mỗi thao tác gate đúng
+ * quy trình nằm ở THỨ TỰ CỘT + quyền cấu hình cột). Thêm/đổi tên/màu — mỗi thao tác gate đúng
  * pair create/update/delete:project_state qua useCan (server vẫn là người quyết). Xoá cột còn task
  * sống ⇒ server 400 — hiển thị lỗi, không xoá mù.
+ *
+ * Thứ tự cột sắp bằng nút LÊN/XUỐNG per-row (thay ô nhập số cũ): mỗi lần bấm đánh lại số 1..n theo
+ * vị trí mới rồi PATCH những cột có sortOrder đổi. Mở từ tab Cài đặt của dự án (ProjectSettingsTab).
  */
 
 // Derive từ schema contracts — thêm nhóm thứ 7 sau này không trôi (finding LIGHT gate, DRY).
@@ -35,18 +39,26 @@ function StateRow({
   state,
   canUpdate,
   canDelete,
+  canMoveUp,
+  canMoveDown,
+  reordering,
+  onMove,
   onError,
 }: {
   state: ProjectStateDto;
   canUpdate: boolean;
   canDelete: boolean;
+  /** Sắp thứ tự bằng nút lên/xuống — dialog (biết hàng xóm) quyết, row chỉ phát tín hiệu. */
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  reordering: boolean;
+  onMove: (dir: -1 | 1) => void;
   onError: (key: string | null) => void;
 }) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
   const [name, setName] = useState(state.name);
   const [color, setColor] = useState(state.color);
-  const [sortOrder, setSortOrder] = useState(String(state.sortOrder));
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: taskKeys.states(state.projectId) });
@@ -55,12 +67,9 @@ function StateRow({
 
   // Chỉ gửi field DIRTY (PATCH partial — finding LIGHT gate: gửi đủ bộ sẽ last-write-wins đè
   // rename của người khác đang mở dialog song song một cách câm lặng).
-  const parsedSort = Number.parseInt(sortOrder, 10);
-  const sortValid = Number.isInteger(parsedSort) && parsedSort >= 0;
   const dirtyPatch: UpdateProjectStateRequest = {};
   if (name.trim() !== state.name) dirtyPatch.name = name.trim();
   if (color !== state.color) dirtyPatch.color = color;
-  if (sortValid && parsedSort !== state.sortOrder) dirtyPatch.sortOrder = parsedSort;
   const hasDirty = Object.keys(dirtyPatch).length > 0;
 
   const updateMutation = useMutation({
@@ -83,6 +92,32 @@ function StateRow({
 
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid={`state-manage-row-${state.id}`}>
+      {canUpdate && (
+        <div className="flex shrink-0 items-center">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 w-7 px-0"
+            disabled={!canMoveUp || reordering}
+            onClick={() => onMove(-1)}
+            aria-label={t("tasks.kanban.manage.moveUp")}
+            data-testid={`state-move-up-${state.id}`}
+          >
+            <ChevronUp className="h-4 w-4" aria-hidden="true" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 w-7 px-0"
+            disabled={!canMoveDown || reordering}
+            onClick={() => onMove(1)}
+            aria-label={t("tasks.kanban.manage.moveDown")}
+            data-testid={`state-move-down-${state.id}`}
+          >
+            <ChevronDown className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </div>
+      )}
       <input
         type="color"
         value={color}
@@ -98,21 +133,13 @@ function StateRow({
         aria-label={t("tasks.kanban.manage.name")}
         className="h-8 w-40"
       />
-      <Input
-        type="number"
-        value={sortOrder}
-        onChange={(e) => setSortOrder(e.target.value)}
-        disabled={!canUpdate}
-        aria-label={t("tasks.kanban.manage.sortOrder")}
-        className="h-8 w-16"
-      />
       <Badge variant="muted">{t(`tasks.kanban.manage.groups.${state.stateGroup}`)}</Badge>
       {state.isDefault && <Badge variant="muted">{t("tasks.kanban.manage.default")}</Badge>}
       {canUpdate && (
         <Button
           size="sm"
           variant="outline"
-          disabled={updateMutation.isPending || name.trim().length === 0 || !sortValid || !hasDirty}
+          disabled={updateMutation.isPending || name.trim().length === 0 || !hasDirty}
           onClick={() => updateMutation.mutate()}
         >
           {t("tasks.kanban.manage.save")}
@@ -191,6 +218,42 @@ export function TaskStateColumnsDialog({
     onError: (err) => setErrorMsgKey(errorKey(err)),
   });
 
+  // Hiển thị THEO sortOrder (tie-break tên) — cùng thứ tự board vẽ cột; là nền cho nút lên/xuống.
+  const sortedStates = useMemo(
+    () =>
+      [...(states ?? [])].sort(
+        (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "vi"),
+      ),
+    [states],
+  );
+
+  // Sắp thứ tự bằng nút lên/xuống: đánh lại số 1..n theo vị trí MỚI rồi PATCH những cột có
+  // sortOrder đổi (bình thường 2 cột; lần đầu có thể nhiều hơn nếu dữ liệu cũ trùng/thủng số —
+  // tự lành). Lỗi giữa chừng ⇒ một phần PATCH có thể đã ăn: refetch từ server thay vì tin cache.
+  const reorderMutation = useMutation({
+    mutationFn: (patches: Array<{ id: string; sortOrder: number }>) =>
+      Promise.all(patches.map((p) => taskStatesApi.updateState(p.id, { sortOrder: p.sortOrder }))),
+    onSuccess: () => setErrorMsgKey(null),
+    onError: (err) => setErrorMsgKey(errorKey(err)),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: taskKeys.states(projectId) });
+      void queryClient.invalidateQueries({ queryKey: taskKeys.kanban(projectId) });
+    },
+  });
+
+  const moveState = (index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= sortedStates.length || reorderMutation.isPending) return;
+    const next = [...sortedStates];
+    const [moved] = next.splice(index, 1);
+    next.splice(target, 0, moved);
+    const patches = next
+      .map((s, i) => ({ id: s.id, from: s.sortOrder, sortOrder: i + 1 }))
+      .filter((p) => p.from !== p.sortOrder)
+      .map(({ id, sortOrder }) => ({ id, sortOrder }));
+    if (patches.length > 0) reorderMutation.mutate(patches);
+  };
+
   return (
     <Dialog open={open} onClose={onClose} title={t("tasks.kanban.manage.title")}>
       <div className="space-y-3">
@@ -208,7 +271,7 @@ export function TaskStateColumnsDialog({
           )}
           {!isLoading &&
             !isError &&
-            (states ?? []).map((s) => (
+            sortedStates.map((s, index) => (
               <StateRow
                 // key kèm updatedAt: server đổi (người khác sửa song song) ⇒ row REMOUNT, draft
                 // resync theo dữ liệu mới (finding LIGHT gate — chống draft cũ đè rename).
@@ -216,10 +279,14 @@ export function TaskStateColumnsDialog({
                 state={s}
                 canUpdate={canUpdate}
                 canDelete={canDelete}
+                canMoveUp={index > 0}
+                canMoveDown={index < sortedStates.length - 1}
+                reordering={reorderMutation.isPending}
+                onMove={(dir) => moveState(index, dir)}
                 onError={setErrorMsgKey}
               />
             ))}
-          {!isLoading && !isError && (states ?? []).length === 0 && (
+          {!isLoading && !isError && sortedStates.length === 0 && (
             <p className="text-sm text-muted-foreground">{t("tasks.kanban.manage.empty")}</p>
           )}
         </div>
