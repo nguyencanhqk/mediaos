@@ -7478,7 +7478,7 @@ export const backlog = [
     title:
       "Schema + migration goals + goal_updates (append-only) + tasks.goal_id + RLS FORCE + seed module GOAL + 7 cặp permission + counter goal_code + UNION-ADD 'goal' audit CHECK + NOTI catalog 2 event GOAL (0504–0507 dự kiến)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
