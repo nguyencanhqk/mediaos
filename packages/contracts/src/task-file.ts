@@ -57,9 +57,11 @@ export const taskFileDtoSchema = z.object({
    * scan sạch + độc quyền), KHÔNG phải `is_primary` thô — nếu chỉ đọc cờ thô thì panel sẽ hiện "đang
    * là ảnh bìa" trong khi board không hiện gì cả.
    *
-   * `.optional()` + `.default(false)` để khớp `coverUrl` (cũng optional): FE mới gặp API cũ vẫn parse
-   * được thay vì ném ZodError lúc chạy.
+   * `.optional()` (KHÔNG `.default(false)`) để khớp `coverUrl` và `category` cùng schema: FE mới gặp
+   * API cũ vẫn parse được thay vì ném ZodError lúc chạy. Tránh `.default()` vì nó làm kiểu INPUT và
+   * OUTPUT của Zod lệch nhau (`boolean | undefined` vs `boolean`), kéo theo lỗi gán ở tầng api-client.
+   * Consumer đọc bằng `?? false`.
    */
-  isCover: z.boolean().optional().default(false),
+  isCover: z.boolean().optional(),
 });
 export type TaskFileDto = z.infer<typeof taskFileDtoSchema>;

@@ -160,6 +160,26 @@ export const taskFileApi = {
     apiFetch(`/tasks/${taskId}/files/${fileId}`, z.void(), { method: "DELETE" }),
 
   /**
+   * POST /tasks/:taskId/files/:fileId/cover — đặt tệp ĐÃ đính kèm làm ảnh bìa. Permission file-upload:task.
+   *
+   * Server chỉ nhận tệp đã là đính kèm SỐNG của chính task đó + là ảnh + Uploaded + scan sạch + KHÔNG
+   * gắn ở nơi nào khác. Lỗi thường gặp mà FE nên phân biệt: 415 (không phải ảnh) · 409 (chưa upload
+   * xong / chưa quét sạch / đang gắn ở entity khác) · 404 (tệp không thuộc task).
+   */
+  setTaskCover: (taskId: string, fileId: string): Promise<TaskFileDto> =>
+    apiFetch(`/tasks/${taskId}/files/${fileId}/cover`, taskFileDtoSchema, { method: "POST" }),
+
+  /**
+   * DELETE /tasks/:taskId/files/cover — gỡ ảnh bìa (204, idempotent). Permission file-upload:task
+   * (CÙNG cặp với đặt bìa — thao tác này không xoá tệp nào).
+   *
+   * Đường dẫn là `/files/cover`, KHÔNG phải `/tasks/:taskId/cover`: controller prefix là
+   * `tasks/:taskId/files` nên mọi route đều mang tiền tố đó.
+   */
+  clearTaskCover: (taskId: string): Promise<void> =>
+    apiFetch(`/tasks/${taskId}/files/cover`, z.void(), { method: "DELETE" }),
+
+  /**
    * Tải file nhị phân — GET /tasks/:taskId/files/:fileId/download (302 redirect, permission read:task).
    * apiFetchBlob theo redirect + trả { blob, filename } (filename suy từ Content-Disposition nếu storage
    * backend gửi kèm — caller fallback về TaskFileDto.originalName khi vắng).

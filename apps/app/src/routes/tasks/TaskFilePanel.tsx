@@ -98,6 +98,66 @@ function DownloadTaskFileButton({ taskId, file }: { taskId: string; file: TaskFi
 // ---------------------------------------------------------------------------
 // Delete confirm dialog
 // ---------------------------------------------------------------------------
+/**
+ * S5-TASK-COVER-1 — nút "Đặt làm ảnh bìa" / "Gỡ ảnh bìa".
+ *
+ * CHỈ hiện trên tệp server sẽ CHẤP NHẬN làm bìa (ảnh + Uploaded + scan sạch). Hiện nút trên tệp không
+ * đủ điều kiện rồi để người dùng bấm và ăn 415/409 là biến một quy tắc thành một lỗi bất ngờ.
+ *
+ * `isCover` do SERVER tính theo đúng bộ điều kiện của đường ký ảnh bìa (kể cả vị từ độc quyền), KHÔNG
+ * phải cờ `is_primary` thô — nên nút "Gỡ" chỉ hiện khi board THẬT SỰ đang hiển thị bìa đó.
+ */
+function CoverToggleButton({
+  taskId,
+  projectId,
+  file,
+}: {
+  taskId: string;
+  projectId: string | null;
+  file: TaskFileDto;
+}) {
+  const { t } = useTranslation("tasks");
+  const queryClient = useQueryClient();
+  const isCover = file.isCover ?? false;
+
+  const eligible =
+    file.mimeType.startsWith("image/") &&
+    file.uploadStatus === "Uploaded" &&
+    (file.scanStatus === "Clean" || file.scanStatus === "NotRequired");
+
+  const mutation = useMutation({
+    // Chuẩn hoá về void: hai nhánh trả kiểu khác nhau (clear → void, set → TaskFileDto) nên union sẽ
+    // không khớp MutationFunction. Không dùng giá trị trả về — nguồn sự thật là refetch sau invalidate.
+    mutationFn: async (): Promise<void> => {
+      if (isCover) await taskFileApi.clearTaskCover(taskId);
+      else await taskFileApi.setTaskCover(taskId, file.fileId);
+    },
+    onSuccess: async () => {
+      await Promise.all(
+        taskFileInvalidation
+          .cover(taskId, projectId)
+          .map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      );
+    },
+  });
+
+  // Tệp không đủ điều kiện VÀ cũng không phải bìa hiện tại ⇒ không có thao tác nào để chào mời.
+  if (!eligible && !isCover) return null;
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={() => mutation.mutate()}
+      disabled={mutation.isPending}
+      data-testid={`task-cover-toggle-${file.fileId}`}
+    >
+      {isCover ? t("tasks.detail.files.cover.clear") : t("tasks.detail.files.cover.set")}
+    </Button>
+  );
+}
+
+// ---------------------------------------------------------------------------
 function DeleteTaskFileDialog({
   taskId,
   file,
@@ -246,9 +306,15 @@ export interface TaskFilePanelProps {
   taskId: string;
   /** Trong tab ⇒ bỏ vỏ Card + tiêu đề (nhãn tab đã nói). Xem PanelBody. */
   embedded?: boolean;
+  /**
+   * S5-TASK-COVER-1 — dự án chứa task, để đặt/gỡ bìa còn invalidate được BOARD. `taskKeys.kanban`
+   * KHÔNG nằm dưới prefix `tasks/list` nên không có id này thì thẻ trên board giữ ảnh cũ tới hết
+   * staleTime. Nullable: task cá nhân ngoài dự án không có board nào để làm mới.
+   */
+  projectId?: string | null;
 }
 
-export function TaskFilePanel({ taskId, embedded = false }: TaskFilePanelProps) {
+export function TaskFilePanel({ taskId, embedded = false, projectId = null }: TaskFilePanelProps) {
   const { t } = useTranslation("tasks");
   const canView = useCan(
     TASK_FILE_ENGINE_PAIRS.READ.action,
@@ -332,6 +398,14 @@ export function TaskFilePanel({ taskId, embedded = false }: TaskFilePanelProps) 
       cell: ({ row }) => (
         <div className="flex flex-wrap items-center gap-1">
           <DownloadTaskFileButton taskId={taskId} file={row.original} />
+          {/* Gate = cặp UPLOAD (file-upload:task) — mirror server. Thiếu quyền ⇒ KHÔNG render nút
+              (PermissionGate), không phải nút disabled: UI-02 §5.3. */}
+          <PermissionGate
+            action={TASK_FILE_ENGINE_PAIRS.UPLOAD.action}
+            resourceType={TASK_FILE_ENGINE_PAIRS.UPLOAD.resourceType}
+          >
+            <CoverToggleButton taskId={taskId} projectId={projectId} file={row.original} />
+          </PermissionGate>
           <PermissionGate
             action={TASK_FILE_ENGINE_PAIRS.DELETE.action}
             resourceType={TASK_FILE_ENGINE_PAIRS.DELETE.resourceType}

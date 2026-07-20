@@ -200,6 +200,22 @@ function KanbanCard({
         isCompleted && "border-border/60 bg-muted/40",
       )}
     >
+      {/* S5-TASK-COVER-1 — ảnh bìa. `coverUrl` là URL ĐÃ KÝ TTL-ngắn từ server (không bao giờ là
+          fileId thô). Không có bìa ⇒ KHÔNG chừa chỗ trống, thẻ giữ nguyên dáng cũ.
+          `onError` ẩn hẳn ảnh: URL đã ký có thể hết hạn khi board mở lâu — thà mất bìa còn hơn để
+          một ô ảnh vỡ nằm trên thẻ. `loading="lazy"` vì board có thể hàng chục thẻ. */}
+      {task.coverUrl && (
+        <img
+          src={task.coverUrl}
+          alt=""
+          loading="lazy"
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+          }}
+          data-testid={`kanban-card-cover-${task.id}`}
+          className="mb-1.5 h-24 w-full rounded object-cover"
+        />
+      )}
       <p
         className={cn(
           "font-medium text-foreground",
