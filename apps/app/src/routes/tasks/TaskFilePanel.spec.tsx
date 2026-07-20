@@ -23,6 +23,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       uploadTaskFile: vi.fn(),
       deleteTaskFile: vi.fn(),
       downloadTaskFile: vi.fn(),
+      setTaskCover: vi.fn(),
+      clearTaskCover: vi.fn(),
     },
   };
 });
@@ -54,6 +56,27 @@ const FILE_A: TaskFileDto = {
   uploadedAt: "2026-07-01T00:00:00.000Z",
   category: "Spec",
 };
+
+/** Ảnh HỢP LỆ để làm bìa (image + Uploaded + Clean) — chưa phải bìa. */
+const IMG: TaskFileDto = {
+  linkId: "link-2",
+  fileId: "file-2",
+  originalName: "cover.png",
+  mimeType: "image/png",
+  sizeBytes: 1024,
+  scanStatus: "Clean",
+  uploadStatus: "Uploaded",
+  uploadedAt: "2026-07-02T00:00:00.000Z",
+  category: null,
+};
+
+const FULL_CAPS = {
+  "read:task": true,
+  "file-upload:task": true,
+  "file-delete:task": true,
+};
+
+const coverBtn = (fileId: string) => screen.queryByTestId(`task-cover-toggle-${fileId}`);
 
 describe("TaskFilePanel (gate = read/file-upload/file-delete:task)", () => {
   beforeEach(() => {
@@ -168,4 +191,83 @@ describe("TaskFilePanel (gate = read/file-upload/file-delete:task)", () => {
     );
     await waitFor(() => expect(mockTriggerDownload).toHaveBeenCalledWith(blob, "spec.pdf"));
   });
+});
+
+/**
+ * S5-TASK-COVER-1 — ảnh bìa chọn từ tệp ĐÃ đính kèm.
+ *
+ * Trọng tâm là hai thứ dễ hỏng âm thầm:
+ *   1. Nút chỉ được hiện trên tệp server sẽ CHẤP NHẬN (ảnh + Uploaded + scan sạch) — hiện trên tệp
+ *      không đủ điều kiện là biến một quy tắc thành lỗi bất ngờ (415/409) lúc bấm.
+ *   2. Đặt/gỡ bìa phải invalidate CẢ BOARD: `taskKeys.kanban` KHÔNG nằm dưới prefix `tasks/list` nên
+ *      thiếu vế này thì làm xong quay ra board vẫn thấy thẻ trắng — "đã làm mà không thấy gì".
+ */
+describe("TaskFilePanel — ảnh bìa (S5-TASK-COVER-1)", () => {
+  beforeEach(() => {
+    useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
+    vi.clearAllMocks();
+  });
+
+  it("KHÔNG hiện nút bìa trên tệp không phải ảnh", async () => {
+    setCaps(FULL_CAPS);
+    vi.mocked(taskFileApi.getTaskFiles).mockResolvedValue([FILE_A]);
+    renderWithQuery(<TaskFilePanel taskId="task-1" projectId="proj-1" />);
+    await screen.findByText("spec.pdf");
+    expect(coverBtn(FILE_A.fileId)).toBeNull();
+  });
+
+  it("KHÔNG hiện nút bìa trên ảnh chưa quét sạch (scan Pending)", async () => {
+    setCaps(FULL_CAPS);
+    vi.mocked(taskFileApi.getTaskFiles).mockResolvedValue([{ ...IMG, scanStatus: "Pending" }]);
+    renderWithQuery(<TaskFilePanel taskId="task-1" projectId="proj-1" />);
+    await screen.findByText("cover.png");
+    expect(coverBtn(IMG.fileId)).toBeNull();
+  });
+
+  it("thiếu file-upload:task ⇒ ẨN nút (không phải nút disabled)", async () => {
+    setCaps({ "read:task": true, "file-delete:task": true });
+    vi.mocked(taskFileApi.getTaskFiles).mockResolvedValue([IMG]);
+    renderWithQuery(<TaskFilePanel taskId="task-1" projectId="proj-1" />);
+    await screen.findByText("cover.png");
+    expect(coverBtn(IMG.fileId)).toBeNull();
+  });
+
+  it("ảnh hợp lệ ⇒ hiện 'Đặt làm ảnh bìa', bấm gọi setTaskCover", async () => {
+    setCaps(FULL_CAPS);
+    vi.mocked(taskFileApi.getTaskFiles).mockResolvedValue([IMG]);
+    vi.mocked(taskFileApi.setTaskCover).mockResolvedValue(IMG);
+    renderWithQuery(<TaskFilePanel taskId="task-1" projectId="proj-1" />);
+
+    const btn = await screen.findByTestId(`task-cover-toggle-${IMG.fileId}`);
+    expect(btn).toHaveTextContent(/đặt làm ảnh bìa/i);
+    fireEvent.click(btn);
+
+    await waitFor(() =>
+      expect(taskFileApi.setTaskCover).toHaveBeenCalledWith("task-1", IMG.fileId),
+    );
+    expect(taskFileApi.clearTaskCover).not.toHaveBeenCalled();
+  });
+
+  it("tệp ĐANG là bìa ⇒ nút đổi thành 'Gỡ ảnh bìa' và gọi clearTaskCover", async () => {
+    setCaps(FULL_CAPS);
+    vi.mocked(taskFileApi.getTaskFiles).mockResolvedValue([{ ...IMG, isCover: true }]);
+    vi.mocked(taskFileApi.clearTaskCover).mockResolvedValue(undefined);
+    renderWithQuery(<TaskFilePanel taskId="task-1" projectId="proj-1" />);
+
+    const btn = await screen.findByTestId(`task-cover-toggle-${IMG.fileId}`);
+    expect(btn).toHaveTextContent(/gỡ ảnh bìa/i);
+    fireEvent.click(btn);
+
+    await waitFor(() => expect(taskFileApi.clearTaskCover).toHaveBeenCalledWith("task-1"));
+    expect(taskFileApi.setTaskCover).not.toHaveBeenCalled();
+  });
+
+  // GHI CHÚ: KHÔNG test "tệp không đủ điều kiện NHƯNG đang là bìa". Server tính `isCover` bằng
+  // FILE_COLUMNS.isCover — biểu thức đó ĐÃ chứa sẵn vế đủ-điều-kiện, nên API không bao giờ phát ra
+  // isCover:true kèm scanStatus:'Pending'. Fixture như vậy là một trạng thái server không tạo được,
+  // và test dựng nó chỉ khoá một nhánh code không tới được — xanh mà không chứng minh gì.
+  // Trạng thái KẸT thật là chiều ngược lại (is_primary còn true nhưng tệp mất điều kiện, ví dụ scan
+  // lật sang Infected sau đó): isCover→false ⇒ nút ẩn ⇒ không có lối gỡ cờ trên UI. Không nguy hiểm
+  // (đường đọc fail-closed nên board không hiện gì) và `findPrimaryLinkTx` cố ý KHÔNG lọc điều kiện
+  // nên setCover/clearCover vẫn hạ được cờ — ghi nhận làm follow-up, chưa vá đợt này.
 });

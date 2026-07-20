@@ -660,6 +660,10 @@ export default {
           title: "Không có quyền truy cập",
           description: "Bạn không có quyền xem tệp đính kèm của công việc này.",
         },
+        cover: {
+          set: "Đặt làm ảnh bìa",
+          clear: "Gỡ ảnh bìa",
+        },
         delete: {
           button: "Xóa",
           title: "Xóa tệp đính kèm",

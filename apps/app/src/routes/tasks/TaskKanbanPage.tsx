@@ -200,6 +200,30 @@ function KanbanCard({
         isCompleted && "border-border/60 bg-muted/40",
       )}
     >
+      {/* S5-TASK-COVER-1 — ảnh bìa. `coverUrl` là URL ĐÃ KÝ TTL-ngắn từ server (không bao giờ là
+          fileId thô). Không có bìa ⇒ KHÔNG chừa chỗ trống, thẻ giữ nguyên dáng cũ.
+          `onError` ẩn hẳn ảnh: URL đã ký có thể hết hạn khi board mở lâu — thà mất bìa còn hơn để
+          một ô ảnh vỡ nằm trên thẻ. `loading="lazy"` vì board có thể hàng chục thẻ. */}
+      {task.coverUrl && (
+        <img
+          // ⚠️ `key` PHẢI là coverUrl, KHÔNG được bỏ. Thẻ có key={task.id} nên React TÁI DÙNG chính
+          // phần tử <img> này qua mọi lần refetch và chỉ đổi `src`. `onError` bên dưới đặt style
+          // display:none TRỰC TIẾP lên DOM — React không biết gì về nó nên KHÔNG BAO GIỜ dọn.
+          // Hệ quả nếu thiếu key: để board mở quá TTL của URL đã ký ⇒ ảnh 403 ⇒ ẩn hết; sau đó dù
+          // đặt bìa mới hay chỉ kéo-thả (moveState trả coverUrl mới), URL hợp lệ về tới nơi mà thẻ
+          // VẪN trắng — chỉ rời route mới khỏi. Người dùng thấy "bấm mà không có gì xảy ra".
+          // Đổi key ⇒ phần tử MỚI ⇒ không mang theo style cũ.
+          key={task.coverUrl}
+          src={task.coverUrl}
+          alt=""
+          loading="lazy"
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+          }}
+          data-testid={`kanban-card-cover-${task.id}`}
+          className="mb-1.5 h-24 w-full rounded object-cover"
+        />
+      )}
       <p
         className={cn(
           "font-medium text-foreground",

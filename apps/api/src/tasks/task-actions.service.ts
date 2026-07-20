@@ -32,8 +32,14 @@ import { TaskActivityService } from "./task-activity.service";
 import { ProjectAccessService } from "./project-access.service";
 import { coalesceTaskStatus, deriveStatusTimestamps, evaluateTransition } from "./task-fsm";
 import { isStateInGroupForStatus, pickTargetState } from "./task-state-sync";
-import { toTaskCoreDto, toAvatarSubjects, avatarForRow } from "./task-core.mapper";
+import {
+  toTaskCoreDto,
+  toAvatarSubjects,
+  avatarForRow,
+  type TaskCoreSignedUrls,
+} from "./task-core.mapper";
 import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
+import { CoverPresignService } from "../foundation/files/cover-presign.service";
 
 interface RequestUser {
   id: string;
@@ -88,6 +94,8 @@ export class TaskActionsService {
     private readonly projectAccess: ProjectAccessService,
     // S5-TASK-AVATAR-1 (Nhóm C) — ký avatar cho response của 4 route action (xem ghi chú ở `respond`).
     private readonly avatars: AvatarPresignService,
+    // S5-TASK-COVER-1 — ký ảnh bìa cho response 4 route action. Đặt CUỐI (spec dựng theo VỊ TRÍ).
+    private readonly covers: CoverPresignService,
   ) {}
 
   // ══════════════════════ ASSIGN ══════════════════════
@@ -724,12 +732,21 @@ export class TaskActionsService {
     // chi tiết bằng `result.task`; trả avatar null là mỗi lần đổi trạng thái/ưu tiên/hạn/người phụ
     // trách sẽ xoá ảnh vừa hiện, tới lần refetch sau mới về — đúng lớp lỗi "field im lặng không tới
     // FE ở một phần ba số đường" mà docblock toDto bên dưới đã bị hai lần.
+    // S5-TASK-COVER-1 — ảnh bìa đi CÙNG đường và cùng lý do. TUẦN TỰ, không Promise.all: hai lời gọi
+    // dùng CHUNG `tx` (một kết nối pg không chạy song song hai truy vấn).
     const avatars = await this.avatars.resolveEmployeeAvatars(
       companyId,
       toAvatarSubjects([row]),
       tx,
     );
-    return { task: this.toDto(row, avatarForRow(row, avatars)), warnings };
+    const covers = await this.covers.resolveTaskCovers(companyId, [row.id], tx);
+    return {
+      task: this.toDto(row, {
+        assigneeAvatarUrl: avatarForRow(row, avatars),
+        coverUrl: covers.get(row.id) ?? null,
+      }),
+      warnings,
+    };
   }
 
   private isUniqueViolation(err: unknown): boolean {
@@ -762,7 +779,7 @@ export class TaskActionsService {
    * biểu hiện: đổi trạng thái một việc con làm panel lật sang chế độ "task gốc" vì `parentTaskId`
    * biến thành undefined trong cache chi tiết). Hợp nhất là cách duy nhất đóng hẳn lớp lỗi này.
    */
-  private toDto(row: TaskCoreRow, assigneeAvatarUrl?: string | null): TaskCoreResponseDto {
-    return toTaskCoreDto(row, assigneeAvatarUrl);
+  private toDto(row: TaskCoreRow, urls?: TaskCoreSignedUrls): TaskCoreResponseDto {
+    return toTaskCoreDto(row, urls);
   }
 }

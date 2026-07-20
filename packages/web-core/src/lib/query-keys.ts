@@ -479,6 +479,21 @@ export const taskCollabInvalidation = {
 // S4-FE-TASK-4 — invalidation cho file đính kèm công việc (upload/xóa TaskFilePanel).
 export const taskFileInvalidation = {
   files: (taskId: string) => [taskKeys.files(taskId)] as const,
+  /**
+   * S5-TASK-COVER-1 — đổi/gỡ ảnh bìa chạm BA nơi, không chỉ danh sách tệp:
+   *  · files  — cờ `isCover` của từng dòng trong panel Tệp;
+   *  · detail — `coverUrl` trong DTO task (panel/trang chi tiết);
+   *  · kanban — THẺ trên board mới là chỗ ảnh bìa hiện ra. `taskKeys.kanban` KHÔNG nằm dưới prefix
+   *    `tasks/list` nên `taskCoreInvalidation.detail` KHÔNG chạm tới nó; thiếu vế này thì đặt bìa
+   *    xong quay ra board vẫn thấy thẻ trắng tới hết staleTime — đúng lỗi "đã làm mà không thấy gì".
+   * `projectId` nullable (task ngoài dự án) ⇒ chỉ thêm khoá kanban khi có.
+   */
+  cover: (taskId: string, projectId: string | null) =>
+    [
+      taskKeys.files(taskId),
+      ...taskCoreInvalidation.detail(taskId),
+      ...(projectId ? [taskKeys.kanban(projectId)] : []),
+    ] as const,
 };
 
 // S5-TASK-SUBTASK-1 — invalidation cho mutate việc con (thêm/sửa/xoá/đổi thứ tự, TaskSubtaskPanel).

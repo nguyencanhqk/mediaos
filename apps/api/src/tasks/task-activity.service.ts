@@ -52,7 +52,11 @@ export type TaskActivityAction =
   // S4-TASK-BE-5 (additive) — task file link/unlink (SPEC-06, target_type 'File'). action là free-text
   // (KHÔNG migration — CHECK chk_task_activity_target_type 0478 ĐÃ cho 'File'; chỉ mở union TS).
   | "TASK_FILE_UPLOADED"
-  | "TASK_FILE_DELETED";
+  | "TASK_FILE_DELETED"
+  // S5-TASK-COVER-1 — đặt/gỡ ảnh bìa (target_type "File"; cột `action` KHÔNG có CHECK ở DB nên
+  // thêm giá trị mới KHÔNG cần migration — chỉ `target_type` bị CHECK ràng buộc).
+  | "TASK_COVER_SET"
+  | "TASK_COVER_CLEARED";
 
 /**
  * target_type — tập con của CHECK chk_task_activity_target_type (0478:217-219). S4-TASK-BE-2 (additive):

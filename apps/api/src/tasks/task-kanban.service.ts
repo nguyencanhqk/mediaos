@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type {
   ProjectStateGroupDto,
   TaskKanbanBoardDto,
@@ -9,12 +9,13 @@ import { DatabaseService } from "../db/db.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { TaskCoreRepository } from "./task-core.repository";
 import { TasksRepository } from "./tasks.repository";
-import { toTaskKanbanCardDto, toAvatarSubjects, avatarForRow } from "./task-core.mapper";
+import { toTaskKanbanCardDto, toAvatarSubjects, signedUrlsForRow } from "./task-core.mapper";
 import { TASK_CORE_STATUSES } from "./task-fsm";
 import { TaskCommentsRepository } from "./task-comments.repository";
 import { TaskChecklistsRepository } from "./task-checklists.repository";
 import { TaskFileRepository } from "./task-file.repository";
 import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
+import { CoverPresignService } from "../foundation/files/cover-presign.service";
 
 interface RequestUser {
   id: string;
@@ -52,6 +53,8 @@ export class TaskKanbanService {
     // S5-TASK-AVATAR-1 (Nhóm C) — ký URL avatar người phụ trách cho thẻ board. CÙNG service mà
     // HR list/org-chart dùng ⇒ cùng luật self-defending (chỉ ký cặp employeeId↔fileId đã xác minh).
     private readonly avatars: AvatarPresignService,
+    // S5-TASK-COVER-1 — ký ảnh bìa cho thẻ board. Đặt CUỐI (spec dựng theo VỊ TRÍ).
+    private readonly covers: CoverPresignService,
   ) {}
 
   async getBoard(user: RequestUser, projectId: string): Promise<TaskKanbanBoardDto> {
@@ -120,6 +123,34 @@ export class TaskKanbanService {
         toAvatarSubjects(rows),
         tx,
       );
+      // S5-TASK-COVER-1 — ảnh bìa THEO LÔ cho cả board, cùng `tx`. TUẦN TỰ sau avatar chứ KHÔNG
+      // Promise.all: hai truy vấn trên CÙNG một kết nối transaction sẽ hỏng ngẫu nhiên dưới tải.
+      // Fail-soft như avatar: ký lỗi ⇒ không vào map ⇒ thẻ không bìa, KHÔNG 500 board.
+      //
+      // ⚠️ GATE RIÊNG CHO BÌA — KHÔNG dùng lại `scope` của board. Board gate bằng cặp
+      // `view-kanban:task` (projects.controller), còn đường TẢI tệp gate bằng cặp `read:task`
+      // (TaskFileService.getDownloadUrl + TaskFileResolver). `data_scope` là PER-(permission, role)
+      // nên hai cặp có thể có scope KHÁC nhau: cấu hình `view-kanban@Company` + `read@Own` sẽ khiến
+      // board ký ảnh GỐC full-res của attachment cho người KHÔNG tải được chính tệp đó.
+      // Seed 0485 hiện cấp cả hai cặp cùng scope cho cả 4 role ⇒ chưa khai thác được ở cấu hình xuất
+      // xưởng, nhưng đó là may mắn cấu hình, không phải bảo đảm. Fail-closed: không có grant
+      // `read:task` ⇒ KHÔNG ký bìa nào (thẻ vẫn hiện, chỉ không có ảnh).
+      //
+      // ⚠️ CHỈ nuốt đúng `ForbiddenException` (= "không có grant", `DataScopeService.resolveAndAssert`
+      // ném đúng loại này khi scope null). Bắt trần `.catch(() => false)` sẽ nuốt CẢ lỗi hạ tầng của
+      // permission engine (mất kết nối DB, lỗi lập trình) và biến nó thành "board im lặng không có
+      // bìa nào" — không exception, không log, không ai biết. Đúng lớp lỗi mà chính WO này đi vá ở
+      // chỗ khác; không được tự tạo lại nó ở đây.
+      let canReadTask = true;
+      try {
+        await this.dataScope.resolveAndAssert(user.id, user.companyId, "read", "task");
+      } catch (err) {
+        if (!(err instanceof ForbiddenException)) throw err;
+        canReadTask = false;
+      }
+      const covers = canReadTask
+        ? await this.covers.resolveTaskCovers(user.companyId, taskIds, tx)
+        : new Map<string, string>();
 
       const toCard = (row: (typeof rows)[number]) => {
         const progress = checklistProgress.get(row.id);
@@ -136,7 +167,7 @@ export class TaskKanbanService {
             subtaskDone: subtasks?.done ?? 0,
             subtaskTotal: subtasks?.total ?? 0,
           },
-          avatarForRow(row, avatars),
+          signedUrlsForRow(row, avatars, covers),
         );
       };
 

@@ -15,6 +15,7 @@ import { FilesController } from "./files.controller";
 import { FileService } from "./files.service";
 // S5-ME-BE-5 (additive): ký URL avatar directory-class (HR read/org-chart hiển thị ảnh nhân viên).
 import { AvatarPresignService } from "./avatar-presign.service";
+import { CoverPresignService } from "./cover-presign.service";
 import { TempFileCleanupJobHandler } from "./temp-file-cleanup.job-handler";
 import { TempFileCleanupRepository } from "./temp-file-cleanup.repository";
 
@@ -54,6 +55,7 @@ import { TempFileCleanupRepository } from "./temp-file-cleanup.repository";
     TempFileCleanupJobHandler,
     // S5-ME-BE-5 (additive): ký URL avatar directory-class (dùng FileRepository + STORAGE_ADAPTER sẵn có).
     AvatarPresignService,
+    CoverPresignService,
     {
       provide: FilePolicyService,
       useFactory: (permission: PermissionService): FilePolicyService =>
@@ -72,6 +74,7 @@ import { TempFileCleanupRepository } from "./temp-file-cleanup.repository";
     TempFileCleanupJobHandler,
     // S5-ME-BE-5 (additive): HR read/org-chart inject để resolve avatar fileId→URL directory-class.
     AvatarPresignService,
+    CoverPresignService,
     // S5-HR-AVATAR-1 (additive): HrEmployeeAvatarService ghi file_access_logs khi TỰ quản lý link (bypass
     // FileService.link/unlink own-scope) — cần inject trực tiếp (mirror why FileRepository/FileLinkRepository
     // are already exported for the same reason).

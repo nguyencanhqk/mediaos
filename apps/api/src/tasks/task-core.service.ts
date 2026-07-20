@@ -38,8 +38,15 @@ import { TaskActionsService } from "./task-actions.service";
 import { ProjectAccessService } from "./project-access.service";
 import { coalesceTaskStatus, type TaskCoreStatus } from "./task-fsm";
 import { STATE_GROUP_TO_STATUS, type ProjectStateGroup } from "./task-state-sync";
-import { toTaskCoreDto, toAvatarSubjects, avatarForRow } from "./task-core.mapper";
+import {
+  toTaskCoreDto,
+  toAvatarSubjects,
+  avatarForRow,
+  signedUrlsForRow,
+  type TaskCoreSignedUrls,
+} from "./task-core.mapper";
 import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
+import { CoverPresignService } from "../foundation/files/cover-presign.service";
 
 interface RequestUser {
   id: string;
@@ -134,6 +141,10 @@ export class TaskCoreService {
     // Đặt CUỐI có chủ đích: vài unit spec dựng service bằng `new TaskCoreService(...)` theo VỊ TRÍ,
     // chèn vào giữa sẽ lệch toàn bộ dependency phía sau mà typecheck chỉ kêu "thiếu 1 tham số".
     private readonly avatars: AvatarPresignService,
+    // S5-TASK-COVER-1 — ký ảnh bìa cho list/detail/my-tasks/board. Đặt CUỐI cùng lý do như `avatars`:
+    // vài unit spec dựng service bằng `new TaskCoreService(...)` theo VỊ TRÍ, chèn vào giữa sẽ lệch
+    // toàn bộ dependency phía sau mà typecheck chỉ kêu "thiếu 1 tham số".
+    private readonly covers: CoverPresignService,
   ) {}
 
   // ── Reads ────────────────────────────────────────────────────────────────────
@@ -167,8 +178,8 @@ export class TaskCoreService {
         scopeExists,
       );
     });
-    const avatars = await this.resolveAvatars(user.companyId, rows);
-    return rows.map((r) => this.toDto(r, avatarForRow(r, avatars)));
+    const { avatars, covers } = await this.resolveSignedUrls(user.companyId, rows);
+    return rows.map((r) => this.toDto(r, signedUrlsForRow(r, avatars, covers)));
   }
 
   async getTask(user: RequestUser, id: string): Promise<TaskCoreResponseDto> {
@@ -182,9 +193,9 @@ export class TaskCoreService {
       return { row, progress: progress.get(id) };
     });
     if (!result) throw new NotFoundException(ERR.NOT_FOUND);
-    const avatars = await this.resolveAvatars(user.companyId, [result.row]);
+    const { avatars, covers } = await this.resolveSignedUrls(user.companyId, [result.row]);
     return {
-      ...this.toDto(result.row, avatarForRow(result.row, avatars)),
+      ...this.toDto(result.row, signedUrlsForRow(result.row, avatars, covers)),
       subtaskTotal: result.progress?.total ?? 0,
       subtaskDone: result.progress?.done ?? 0,
     };
@@ -290,7 +301,10 @@ export class TaskCoreService {
     canOpen: boolean,
     assigneeAvatarUrl?: string | null,
   ): SubtaskListItemDto {
-    const base = this.toDto(row, assigneeAvatarUrl);
+    // CHỦ ĐÍCH chỉ nhận avatar: `subtaskListItemSchema` KHÔNG khai `coverUrl` (panel việc con là danh
+    // sách DÒNG, không có chỗ hiện ảnh bìa). Giữ tham số dạng string thay vì object để call-site không
+    // vô tình bơm cover vào một DTO không mang nó.
+    const base = this.toDto(row, { assigneeAvatarUrl });
     return {
       id: base.id,
       taskCode: row.taskCode ?? null,
@@ -314,8 +328,8 @@ export class TaskCoreService {
       const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
       return this.repo.findMyTasksTx(tx, user.companyId, user.id, actorEmp?.id ?? null);
     });
-    const avatars = await this.resolveAvatars(user.companyId, rows);
-    return rows.map((r) => this.toMyDto(r, avatarForRow(r, avatars)));
+    const { avatars, covers } = await this.resolveSignedUrls(user.companyId, rows);
+    return rows.map((r) => this.toMyDto(r, signedUrlsForRow(r, avatars, covers)));
   }
 
   // ── Create ─────────────────────────────────────────────────────────────────────
@@ -1201,8 +1215,8 @@ export class TaskCoreService {
     if (!row) throw new InternalServerErrorException("Không tải lại được công việc vừa ghi.");
     // Ký avatar ngay ở đường GHI: FE ghi đè cache chi tiết bằng response này (useTaskActionMutation
     // /TaskFormDrawer), nên trả null ở đây là ảnh vừa hiện xong đã biến mất tới lần refetch sau.
-    const avatars = await this.resolveAvatars(companyId, [row], tx);
-    return this.toDto(row, avatarForRow(row, avatars));
+    const { avatars, covers } = await this.resolveSignedUrls(companyId, [row], tx);
+    return this.toDto(row, signedUrlsForRow(row, avatars, covers));
   }
 
   // ── Projection (raw tx.execute trả string cho timestamptz/boolean → normalize ISO/boolean) ─────
@@ -1224,13 +1238,13 @@ export class TaskCoreService {
    * ⇒ thêm field vào một bản là field im lặng không tới FE ở phần ba số đường. Đúng lỗi đó đã xảy ra
    * HAI LẦN với `parentTaskId` trong chính WO này. Hợp nhất là cách duy nhất đóng hẳn lớp lỗi.
    */
-  private toDto(row: TaskCoreRow, assigneeAvatarUrl?: string | null): TaskCoreResponseDto {
-    return toTaskCoreDto(row, assigneeAvatarUrl);
+  private toDto(row: TaskCoreRow, urls?: TaskCoreSignedUrls): TaskCoreResponseDto {
+    return toTaskCoreDto(row, urls);
   }
 
-  private toMyDto(row: MyTaskRow, assigneeAvatarUrl?: string | null): MyTaskItemDto {
+  private toMyDto(row: MyTaskRow, urls?: TaskCoreSignedUrls): MyTaskItemDto {
     return {
-      ...this.toDto(row, assigneeAvatarUrl),
+      ...this.toDto(row, urls),
       source: row.source as TaskCoreSourceDto,
     };
   }
@@ -1241,6 +1255,28 @@ export class TaskCoreService {
    * `tx` truyền vào khi lời gọi nằm SẴN trong transaction đọc (tái dùng kết nối, tránh nested-tx trên
    * PgBouncer); bỏ trống khi map ở NGOÀI tx (service tự mở withTenant riêng — đúng thiết kế gốc).
    */
+  /**
+   * S5-TASK-COVER-1 — gom CẢ HAI nguồn URL đã ký cho một trang hàng.
+   *
+   * ⚠️ CHẠY TUẦN TỰ, KHÔNG `Promise.all`. Khi `tx` được truyền vào, cả hai lời gọi dùng CHUNG một
+   * kết nối transaction; một `pg` client KHÔNG chạy song song hai truy vấn trên cùng kết nối. Bọc
+   * `Promise.all` sẽ hỏng ngẫu nhiên dưới tải — đúng loại lỗi không tái hiện được trên máy dev.
+   * Phần đắt là ký HMAC cục bộ (không I/O mạng) nên tuần tự không phải nút cổ chai.
+   */
+  private async resolveSignedUrls(
+    companyId: string,
+    rows: readonly TaskCoreRow[],
+    tx?: TenantTx,
+  ): Promise<{ avatars: Map<string, string>; covers: Map<string, string> }> {
+    const avatars = await this.resolveAvatars(companyId, rows, tx);
+    const covers = await this.covers.resolveTaskCovers(
+      companyId,
+      rows.map((r) => r.id),
+      tx,
+    );
+    return { avatars, covers };
+  }
+
   private resolveAvatars(
     companyId: string,
     rows: readonly TaskCoreRow[],

@@ -365,7 +365,7 @@ export function TaskDetailContent({
             <TaskCommentThread taskId={task.id} embedded />
           </TabsContent>
           <TabsContent value="files" className="p-4">
-            <TaskFilePanel taskId={task.id} embedded />
+            <TaskFilePanel taskId={task.id} projectId={task.projectId} embedded />
           </TabsContent>
           <TabsContent value="activity" className="p-4">
             <TaskActivityTimeline taskId={task.id} embedded />

@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, inArray, isNull, like, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, like, ne, not, notExists, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import type { TenantTx } from "../../db/db.service";
 import { fileLinks, files, type FileRecord, type NewFileRecord } from "../../db/schema/files";
 
@@ -17,6 +18,25 @@ const AVATAR_LINK_TYPE = "Avatar";
 export interface VerifiedAvatarMeta {
   /** employee_profiles.id (= file_links.entity_id) mà file này là avatar HỢP LỆ của. */
   employeeId: string;
+  fileId: string;
+  storagePath: string;
+}
+
+/**
+ * S5-TASK-COVER-1 — taxonomy ảnh bìa công việc. KHÔNG có `link_type = 'Cover'`: giá trị đó KHÔNG nằm
+ * trong CHECK `chk_file_links_link_type` (mig 0433:159 — chỉ Avatar/Attachment/Contract/Proof/Document/
+ * Import/Export/Other). Ảnh bìa = chính dòng Attachment của task được bật `is_primary`; unique index
+ * `uq_file_links_primary_per_entity_type` (0433:174) đã ép đúng MỘT bìa cho mỗi (task, link_type).
+ * Hardcode literal Ở ĐÂY vì foundation/files KHÔNG phụ thuộc module `tasks` (chiều phụ thuộc: tasks → foundation).
+ */
+const COVER_LINK_MODULE = "TASK";
+const COVER_LINK_ENTITY = "task";
+const COVER_LINK_TYPE = "Attachment";
+
+/** 1 ảnh bìa ĐÃ XÁC MINH — chỉ field cần để ký (KHÔNG vào DTO, KHÔNG bao giờ lộ storagePath ra ngoài). */
+export interface VerifiedCoverMeta {
+  /** tasks.id (= file_links.entity_id) mà file này là ảnh bìa HỢP LỆ của. */
+  taskId: string;
   fileId: string;
   storagePath: string;
 }
@@ -92,6 +112,83 @@ export class FileRepository {
           ne(files.scanStatus, "Infected"),
           like(files.mimeType, "image/%"),
           eq(files.ownerUserId, fileLinks.createdBy),
+        ),
+      );
+  }
+
+  /**
+   * S5-TASK-COVER-1 — batch tra ẢNH BÌA ĐÃ XÁC MINH theo `taskIds` (cho CoverPresignService ký).
+   *
+   * SELF-DEFENDING — KHÔNG tin `file_links.is_primary` một mình. Cột đó ĐA-NGƯỜI-GHI: `POST
+   * /foundation/files/:id/links` (`files.controller.ts`) nhận `isPrimary` **verbatim** từ body và
+   * `FileService.link` chỉ kiểm tenant + `scan_status !== 'Infected'` — KHÔNG kiểm mime, KHÔNG kiểm
+   * upload_status. Nên mọi ràng buộc an toàn phải nằm Ở ĐÂY, đường ĐỌC, chứ không ở đường ghi.
+   *
+   * ⚠️ VỊ TỪ ĐỘC QUYỀN (`NOT EXISTS` bên dưới) là chốt CHỐNG LEO THANG ĐỌC, không phải tối ưu:
+   * đường tải file thật đi qua `FilePolicy.decideForLinkedFile` = **AND khắt-khe-nhất trên MỌI link
+   * sống của file**. Một file link CẢ vào HR/Employee CẢ vào task (ảnh chụp hợp đồng/CCCD dạng
+   * image/jpeg) hôm nay **403 khi tải** vì HR resolver deny. Không có vị từ này, chính file đó sẽ
+   * được ký và render làm ảnh bìa cho MỌI người đọc board. Có nó, tập "ai nhận được coverUrl" TRÙNG
+   * KHÍT tập "ai tải được file đó qua task".
+   *
+   * ⚠️ TUYỆT ĐỐI KHÔNG thêm `fl2.company_id = $companyId` vào `NOT EXISTS`. Nhà này có phản xạ "AND
+   * company_id tường minh dù đã có RLS" (đúng ở mệnh đề thường), nhưng trong một `NOT EXISTS` mỗi điều
+   * kiện thêm vào `fl2` làm ẨN BỚT link nhìn thấy được ⇒ **fail-OPEN** — ngược hẳn ý định. RLS đã lo
+   * phần tenant.
+   *
+   * Ngưỡng scan `Clean|NotRequired` (KHÔNG phải `<> 'Infected'`): khớp `DOWNLOADABLE_SCAN` của
+   * `TaskFileService.getDownloadUrl`. Biên an toàn không được lỏng hơn đường tải mà nó thay thế.
+   *
+   * Trả kèm `taskId` (= link.entity_id) để caller khớp ĐÚNG (task, file). ids rỗng → [].
+   */
+  async findVerifiedTaskCoversTx(
+    companyId: string,
+    taskIds: string[],
+    tx: TenantTx,
+  ): Promise<VerifiedCoverMeta[]> {
+    if (taskIds.length === 0) return [];
+    const otherLink = alias(fileLinks, "fl2");
+    return tx
+      .select({
+        taskId: fileLinks.entityId,
+        fileId: files.id,
+        storagePath: files.storagePath,
+      })
+      .from(fileLinks)
+      .innerJoin(files, eq(files.id, fileLinks.fileId))
+      .where(
+        and(
+          eq(fileLinks.companyId, companyId),
+          eq(fileLinks.moduleCode, COVER_LINK_MODULE),
+          eq(fileLinks.entityType, COVER_LINK_ENTITY),
+          eq(fileLinks.linkType, COVER_LINK_TYPE),
+          eq(fileLinks.isPrimary, true),
+          isNull(fileLinks.deletedAt),
+          inArray(fileLinks.entityId, taskIds),
+          eq(files.companyId, companyId),
+          isNull(files.deletedAt),
+          eq(files.uploadStatus, "Uploaded"),
+          inArray(files.scanStatus, ["Clean", "NotRequired"]),
+          like(files.mimeType, "image/%"),
+          // Vị từ độc quyền — xem docblock. KHÔNG thêm điều kiện nào khác vào `otherLink`.
+          notExists(
+            tx
+              .select({ one: sql`1` })
+              .from(otherLink)
+              .where(
+                and(
+                  eq(otherLink.fileId, files.id),
+                  isNull(otherLink.deletedAt),
+                  not(
+                    and(
+                      eq(otherLink.moduleCode, COVER_LINK_MODULE),
+                      eq(otherLink.entityType, COVER_LINK_ENTITY),
+                      eq(otherLink.entityId, fileLinks.entityId),
+                    )!,
+                  ),
+                ),
+              ),
+          ),
         ),
       );
   }
