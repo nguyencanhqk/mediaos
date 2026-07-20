@@ -435,6 +435,8 @@ export const taskKeys = {
   watchers: (taskId: string) => [...rootKeys.tasks, "watchers", taskId] as const,
   // S5-TASK-PIPELINE-1 (lane fe) — APPEND: cột pipeline theo dự án (TaskStateColumnsDialog).
   states: (projectId: string) => [...rootKeys.tasks, "states", projectId] as const,
+  // Gắn thẻ — APPEND: danh sách nhãn theo dự án (TaskLabelPickerDialog, GET /projects/:id/labels).
+  labels: (projectId: string) => [...rootKeys.tasks, "labels", projectId] as const,
   // S5-TASK-SUBTASK-1 — APPEND: danh sách việc con của MỘT việc cha (TaskSubtaskPanel,
   // GET /tasks/:taskId/subtasks, TASK-API-701).
   subtasks: (taskId: string) => [...rootKeys.tasks, "subtasks", taskId] as const,

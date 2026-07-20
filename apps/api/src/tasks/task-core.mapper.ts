@@ -5,6 +5,7 @@ import type {
   TaskCoreResponseDto,
   TaskCoreStatusDto,
   TaskKanbanCardDto,
+  TaskLabelChipDto,
 } from "@mediaos/contracts";
 import type { TaskCoreRow } from "./task-core.repository";
 
@@ -170,4 +171,21 @@ export function toTaskKanbanCardDto(
   urls?: TaskCoreSignedUrls,
 ): TaskKanbanCardDto {
   return { ...toTaskCoreDto(row, urls), ...counts };
+}
+
+/**
+ * Gắn thẻ (labels) — gom hàng `listLabelsForTaskIdsTx` (mỗi hàng = 1 link task↔nhãn) thành
+ * Map taskId → chip HẸP {id, name, color} để đính vào DTO đọc (detail + kanban). Helper DÙNG CHUNG
+ * giữa 2 đường đọc — tự gom tay mỗi nơi là 2 cơ hội lệch shape chip.
+ */
+export function toLabelChipsByTask(
+  rows: ReadonlyArray<{ taskId: string; id: string; name: string; color: string }>,
+): Map<string, TaskLabelChipDto[]> {
+  const byTask = new Map<string, TaskLabelChipDto[]>();
+  for (const row of rows) {
+    const list = byTask.get(row.taskId) ?? [];
+    list.push({ id: row.id, name: row.name, color: row.color });
+    byTask.set(row.taskId, list);
+  }
+  return byTask;
 }

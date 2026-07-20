@@ -1,7 +1,7 @@
 import { useMemo, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageSquare, Paperclip, ListChecks, ListTree, Settings2 } from "lucide-react";
+import { MessageSquare, Paperclip, ListChecks, ListTree } from "lucide-react";
 import {
   taskCollabApi,
   taskKeys,
@@ -12,18 +12,17 @@ import {
 } from "@mediaos/web-core";
 import { Card, Button, EmptyState, Avatar, Badge, cn } from "@mediaos/ui";
 import type {
-  ProjectRoleDto,
   TaskCoreStatusDto,
   TaskKanbanBoardDto,
   TaskKanbanCardDto,
   TaskKanbanStateColumnDto,
   TaskKanbanStatusColumnDto,
 } from "@mediaos/contracts";
-import { isProjectManagerOrOwner, PROJECT_STATE_PAIRS, TASK_CORE_ENGINE_PAIRS } from "./constants";
+import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { TaskStatusBadge, TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
-import { TaskStateColumnsDialog } from "./TaskStateColumnsDialog";
 import { KanbanQuickCreate } from "./KanbanQuickCreate";
 import { KanbanCardSubtasks } from "./KanbanCardSubtasks";
+import { TaskLabelChip } from "./TaskLabelPicker";
 import { AssigneeRail } from "./AssigneeRail";
 import {
   buildAssigneeSummary,
@@ -232,6 +231,14 @@ function KanbanCard({
       >
         {task.title}
       </p>
+      {/* Gắn thẻ — chip nhãn màu trên thẻ board (server đính labels[] trong board read, không N+1). */}
+      {(task.labels?.length ?? 0) > 0 && (
+        <div className="flex flex-wrap gap-1" data-testid={`kanban-card-labels-${task.id}`}>
+          {(task.labels ?? []).map((label) => (
+            <TaskLabelChip key={label.id} label={label} />
+          ))}
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2">
         <Avatar
           size="sm"
@@ -380,6 +387,8 @@ function StateKanbanColumn({
           {column.taskCount}
         </span>
       </div>
+      {/* Tạo nhanh ĐẦU cột, ngoài vùng cuộn → luôn thấy nút + việc mới nhập xong hiện ngay cạnh nút. */}
+      <KanbanQuickCreate projectId={projectId} stateId={column.stateId} />
       <div className="flex min-h-24 max-h-[calc(100dvh-21rem)] flex-1 flex-col gap-2 overflow-y-auto overscroll-contain">
         {tasks.length === 0 ? (
           <p className="px-1 text-xs text-muted-foreground">{t("tasks.kanban.columnEmpty")}</p>
@@ -398,15 +407,12 @@ function StateKanbanColumn({
           ))
         )}
       </div>
-      {/* Tạo nhanh nằm NGOÀI vùng cuộn của cột → luôn thấy nút dù cột dài (mirror MISA). */}
-      <KanbanQuickCreate projectId={projectId} stateId={column.stateId} />
     </div>
   );
 }
 
 export function TaskKanbanPage({
   projectId,
-  myProjectRole = null,
   filters = DEFAULT_WORKSPACE_FILTERS,
   assigneeSelection = EMPTY_SELECTION,
   onToggleAssignee,
@@ -414,8 +420,6 @@ export function TaskKanbanPage({
   onOpenTask,
 }: {
   projectId: string;
-  /** Vai trò của CHÍNH actor trong dự án (server tính) — S5-TASK-PROJROLE-1, D-24 quản cột pipeline. */
-  myProjectRole?: ProjectRoleDto | null;
   /** Bộ lọc toolbar chung của workspace (mặc định: không lọc — mount độc lập vẫn chạy). */
   filters?: WorkspaceTaskFilters;
   /** Rail avatar multi-select; không truyền onToggleAssignee → ẨN rail (không có chỗ ghi state). */
@@ -444,25 +448,6 @@ export function TaskKanbanPage({
     TASK_CORE_ENGINE_PAIRS.UPDATE_STATE.action,
     TASK_CORE_ENGINE_PAIRS.UPDATE_STATE.resourceType,
   );
-  // Gọi ĐỦ 3 hook vô điều kiện rồi mới OR (|| short-circuit trong biểu thức hook = đổi thứ tự hook
-  // giữa các render — vi phạm rules-of-hooks).
-  const canCreateState = useCan(
-    PROJECT_STATE_PAIRS.CREATE.action,
-    PROJECT_STATE_PAIRS.CREATE.resourceType,
-  );
-  const canUpdateState = useCan(
-    PROJECT_STATE_PAIRS.UPDATE.action,
-    PROJECT_STATE_PAIRS.UPDATE.resourceType,
-  );
-  const canDeleteState = useCan(
-    PROJECT_STATE_PAIRS.DELETE.action,
-    PROJECT_STATE_PAIRS.DELETE.resourceType,
-  );
-  // D-24: Owner/Manager của dự án quản được cột pipeline dù pair *:project_state chưa cấp (dormant
-  // seed hiện tại — DECISIONS-04 D-28); BE là người quyết cuối, đây CHỈ ẩn/hiện nút.
-  const canManageColumns =
-    canCreateState || canUpdateState || canDeleteState || isProjectManagerOrOwner(myProjectRole);
-  const [manageOpen, setManageOpen] = useState(false);
   // S5-TASK-CARDSUB-1 — thẻ nào đang bung việc con. Giữ Ở BOARD (không trong từng thẻ) vì kéo-thả
   // làm thẻ remount sang cột khác; state cục bộ sẽ tự thu lại giữa chừng thao tác.
   const [expandedSubtasks, setExpandedSubtasks] = useState<ReadonlySet<string>>(new Set());
@@ -693,24 +678,10 @@ export function TaskKanbanPage({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {!canDragBoard ? (
-          <p className="text-xs text-muted-foreground">{t("tasks.kanban.readOnlyHint")}</p>
-        ) : (
-          <span />
-        )}
-        {canManageColumns && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setManageOpen(true)}
-            data-testid="kanban-manage-columns"
-          >
-            <Settings2 className="h-3.5 w-3.5" aria-hidden="true" />
-            {t("tasks.kanban.manage.button")}
-          </Button>
-        )}
-      </div>
+      {/* Nút "Quản lý cột" đã CHUYỂN vào tab Cài đặt của dự án (ProjectSettingsTab). */}
+      {!canDragBoard && (
+        <p className="text-xs text-muted-foreground">{t("tasks.kanban.readOnlyHint")}</p>
+      )}
       {dragErrorKey && (
         <p role="alert" className="text-sm text-destructive">
           {t(dragErrorKey)}
@@ -759,14 +730,6 @@ export function TaskKanbanPage({
           />
         )}
       </div>
-      {canManageColumns && (
-        <TaskStateColumnsDialog
-          projectId={projectId}
-          myProjectRole={myProjectRole}
-          open={manageOpen}
-          onClose={() => setManageOpen(false)}
-        />
-      )}
     </div>
   );
 }

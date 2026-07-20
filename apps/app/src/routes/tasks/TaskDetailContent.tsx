@@ -18,6 +18,7 @@ import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { TaskOverdueBadge } from "./TaskStatusBadge";
 import {
+  TaskStateField,
   TaskStatusField,
   TaskPriorityField,
   TaskDeadlineField,
@@ -26,6 +27,7 @@ import {
   TaskDescriptionField,
 } from "./TaskInlineFields";
 import { TaskWatchersPanel } from "./TaskWatchersPanel";
+import { TaskLabelStrip } from "./TaskLabelPicker";
 import { TaskMoveProjectDialog } from "./TaskMoveProjectDialog";
 import { TaskFormDrawer } from "./TaskFormDrawer";
 import { DeleteTaskDialog } from "./DeleteTaskDialog";
@@ -115,12 +117,16 @@ function TaskHeaderStrip({ task }: { task: TaskCoreResponseDto }) {
         )}
       </div>
 
-      {/* Dòng 2 — trạng thái + mức độ quan trọng */}
+      {/* Dòng 2 — cột pipeline (nếu dự án có) + trạng thái + mức độ quan trọng */}
       <div className="flex flex-wrap items-end gap-3">
+        <TaskStateField task={task} />
         <TaskStatusField task={task} />
         <TaskPriorityField task={task} />
         <TaskOverdueBadge isOverdue={task.isOverdue} />
       </div>
+
+      {/* Dòng 3 — gắn thẻ (nhãn màu tự do, UX kiểu Base). Không thẻ + không quyền ⇒ strip tự ẩn. */}
+      <TaskLabelStrip task={task} />
 
       {moveOpen && <TaskMoveProjectDialog task={task} onClose={() => setMoveOpen(false)} />}
     </div>
