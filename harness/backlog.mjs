@@ -7136,7 +7136,7 @@ export const backlog = [
     title:
       "Công việc con = subtask THẬT (parent_task_id): CRUD + người thực hiện/hạn riêng + ẩn khỏi board + tiến độ thẻ cha = tỉ lệ con hoàn thành",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/tasks/**",
       "apps/api/src/db/schema/workflow.ts",

@@ -4,9 +4,9 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
-## Phiên 2026-07-20 (session dc2add15) — S5-TASK-SUBTASK-1 🔴 PR #247 MỞ, chờ CI + owner chốt
+## Phiên 2026-07-20 (session dc2add15) — S5-TASK-SUBTASK-1 🔴 SHIPPED (#247 MERGED → master `1cf12a45`)
 
-> **CHỜ OWNER 2 quyết định sản phẩm (OWNER-CONFIRM trong ADR + mô tả PR):** D-31 đóng SPEC-06 §24 Q#14 (CÓ subtask, checklist giữ song song) · D-40 rail avatar CÓ tính việc con (đổi hành vi board). Lệnh merge khi owner duyệt: `gh pr merge 247 --squash --admin`. **Deploy: CÓ mig 0503 ⇒ dev-online cần `m dev-online-db`.**
+> Owner chốt trong phiên ("ok chốt") = duyệt **D-31** (đóng SPEC-06 §24 Q#14: CÓ subtask, checklist giữ song song) + **D-40** (rail avatar CÓ tính việc con) và uỷ quyền merge → squash --admin. Nhánh local/remote đã dọn, backlog `done`, ledger `finished`. **DEPLOY CÒN CHỜ: dev-online cần `m dev-online-db` (CÓ mig 0503) — owner tự chạy.** Các mục dưới viết lúc PR còn mở, vẫn đúng nội dung.
 
 - **Ship (PR #247, nhánh `feat/s5-task-subtask-1`, 9 commit):** việc con THẬT qua `parent_task_id` (cột có sẵn 0478 ⇒ KHÔNG migration cột) — cây ĐÚNG 1 cấp + **khoá hàng MỘT LẦN** (`SELECT … ORDER BY id FOR UPDATE` trên TOÀN BỘ tập hàng chạm, id tăng dần, mọi đường ghi) · ẩn khỏi board & `state_id` NULL chốt ở **CẢ BA** writer · xoá lan tất-cả-hoặc-không (D-38) · **đếm-lá** (D-34) áp 3 nơi CÙNG release (MV mig 0503 · báo cáo dự án · widget project-progress) · TASK-API-701/702 · FE panel + badge + ghi chú quy tắc đếm. ADR **DECISIONS-05** (D-31…D-41 + D-36a).
 - **Plan qua 3 vòng plan-reviewer đối kháng: 9 → 3 → 2 → PASS.** Mọi claim tự xác minh lại trên code thật trước khi vá. Vòng nào cũng tìm ra lỗi CÙNG MỘT HỌ ⇒ bài học ghi ở đầu ADR: **bất biến phải kèm DANH SÁCH WRITER, chốt ở method dùng chung, không rải ở route**.
