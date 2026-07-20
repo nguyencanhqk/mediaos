@@ -246,15 +246,12 @@ trong đó `$2` = **TOÀN BỘ tập hàng mà thao tác sẽ chạm**; **đọc
 - **Lý do:** việc con là **phần cấu trúc của cha**, không phải đối tượng độc lập. Nếu lọc read-scope từng con thì `subtaskDone/subtaskTotal` (D-34) sẽ **không khớp** danh sách người dùng nhìn thấy (*"2/5" nhưng chỉ liệt kê 3 dòng*) — % mất nghĩa và **trông như bug**.
 - **PHẠM VI LỘ RA — chốt DTO HẸP (phương án (i)).** Route `GET /tasks/:taskId/subtasks` trả **DTO hẹp riêng**, đúng tập field cần cho panel:
 
-  `id` · `taskCode` · `title` · `taskStatus` · `assigneeName` · `dueAt` · `isOverdue` · `sortOrder`
+  `id` · `taskCode` · `title` · `status` · `priority` · `mainAssigneeEmployeeId` · `assigneeName` · `dueAt` · `isOverdue` · `sortOrder` · `canOpen`
+
+  Schema: `subtaskListItemSchema` (`packages/contracts/src/task.ts`). `canOpen` = con có nằm trong phạm vi đọc **riêng** của actor không — server tính bằng **2 truy vấn tập hợp** (toàn bộ con, và con qua `scopeExists`), KHÔNG phải N+1. FE dùng nó để render con ngoài tầm với dạng read-only (xem gạch đầu dòng "THỪA HƯỞNG DỪNG Ở ĐÚNG ROUTE NÀY" bên dưới).
 
   **Vì sao không trả `taskCoreResponseSchema`:** DTO đầy đủ còn mang `description` (tới 20 000 ký tự), `projectName`, `creatorName`, `reporterName`, `departmentId` — panel **không cần**, mà thừa hưởng đọc lại làm tập lộ ra rộng hơn mức cần thiết. **Không được để câu mô tả trong tài liệu hẹp hơn cái route thật sự trả** — nếu implementer chọn trả DTO đầy đủ thì phải quay lại sửa dòng này trước, không im lặng.
-  > **⚠️ LỆCH GIỮA ADR VÀ CODE ĐANG CÓ — PHẢI ĐÓNG TRƯỚC KHI MERGE.** Tại thời điểm viết ADR (20/07/2026), lane `subtask-be-core` đã hiện thực `TaskCoreService.listSubtasks` trả **`TaskCoreResponseDto[]` (DTO ĐẦY ĐỦ)** — tức phương án **(ii)**, không phải (i). Lane `subtask-contracts` cũng **chưa khai** schema hẹp (chỉ có `reorderSubtasksSchema`). Hai đường đóng, **chọn một, không để lệch**:
-  >
-  > 1. **Theo ADR (khuyến nghị):** thêm schema mảng-trần hẹp cho TASK-API-701 vào `packages/contracts`, sửa `listSubtasks` map sang DTO hẹp.
-  > 2. **Đổi ADR sang (ii):** owner chấp nhận trả DTO đầy đủ ⇒ **phải sửa lại mục này** và liệt kê **nguyên tập field** thật sự trả ra (gồm `description` tới 20 000 ký tự, `projectName`, `creatorName`, `reporterName`, `departmentId`), đồng thời sửa API-06 §13.7.
-  >
-  > **Không được để tài liệu mô tả hẹp hơn cái route thật sự trả** — đó là cách một quyết định về phạm vi lộ dữ liệu chết âm thầm.
+  > **✅ ĐÃ ĐÓNG (20/07/2026).** Lệch được phát hiện đúng lúc viết ADR: lane `subtask-be-core` ban đầu trả `TaskCoreResponseDto[]` (phương án ii) trong khi ADR chốt (i). Đóng bằng cách **thu hẹp CODE theo ADR**, không nới ADR theo code — thêm `subtaskListItemSchema` vào `packages/contracts` và map `listSubtasks`/`reorderSubtasks` sang DTO hẹp. Ghi lại ở đây vì đây chính là loại lệch mà một quyết định về **phạm vi lộ dữ liệu** hay chết âm thầm: tài liệu nói hẹp, route trả rộng, không ai đối chiếu.
 - **Chấp nhận lộ ở mức đó** vì người chịu trách nhiệm việc cha đương nhiên phải thấy phân rã của nó.
 - **THỪA HƯỞNG DỪNG Ở ĐÚNG ROUTE NÀY:** `GET /tasks/:childId` vẫn kiểm scope trên **chính con** ⇒ có con hiện trong panel mà bấm vào là **404**, nút sửa/xoá sẽ **403**. **Chốt hành vi FE:** con ngoài tầm với render **READ-ONLY, KHÔNG link, KHÔNG nút** — đừng mời gọi hành vi sẽ lỗi.
 - **Đối xứng — quyền GHI KHÔNG thừa hưởng:** sửa / đổi trạng thái / xoá riêng một con vẫn kiểm quyền trên **CHÍNH con đó** (least-privilege). **Chỉ ĐỌC là thừa hưởng.** Đổi trạng thái một con đi đường `POST /tasks/:id/status` sẵn có.

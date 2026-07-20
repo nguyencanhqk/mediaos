@@ -1543,7 +1543,7 @@ Kiểm **trên công việc CHA** (`{task_id}`). Danh sách con **KHÔNG lọc t
 ]
 ```
 
-> **⚠️ Trạng thái 20/07/2026:** hình dạng dưới đây là **quyết định D-39 (phương án i)**; code `listSubtasks` đang hiện thực **trả DTO task đầy đủ** (phương án ii). Lệch này phải đóng trước khi merge — xem callout trong DECISIONS-05 D-39. Nếu owner chốt giữ DTO đầy đủ thì **sửa mục này trước**, không để tài liệu hẹp hơn payload thật.
+> **Trạng thái 20/07/2026 — ĐÃ ĐÓNG:** hình dạng dưới đây là **quyết định D-39 (phương án i, DTO hẹp)** và code đã khớp: `listSubtasks`/`reorderSubtasks` trả `subtaskListItemSchema`, **không** phải `taskCoreResponseSchema`. Lệch phát hiện lúc viết tài liệu (code ban đầu trả DTO đầy đủ) đã được đóng bằng cách **thu hẹp code theo ADR**, không phải nới tài liệu theo code — bỏ `description` (tới 20000 ký tự), `projectName`, `creatorName`, `reporterName`, `departmentId` khỏi đường thừa-hưởng-quyền-đọc. Trường `canOpen` là bổ sung của cùng lần đóng đó (xem D-39).
 >
 > **DTO HẸP có chủ đích (D-39).** Route này **không** trả DTO task đầy đủ: `description` (tới 20 000 ký tự), `project_name`, `creator_name`, `reporter_name`, `department_id` **không** nằm trong payload — panel công việc con không cần, và quyền đọc ở đây là **thừa hưởng** nên tập field lộ ra phải giữ ở mức tối thiểu. Đây là mảng trần giống `GET /tasks/{task_id}/watchers`; client **không** được khai schema `{data, meta}` cho nó.
 >
