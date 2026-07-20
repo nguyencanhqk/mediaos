@@ -69,7 +69,11 @@ export function TaskMoveProjectDialog({
   const projects = projectsPage ?? [];
 
   // Cột của dự án ĐANG CHỌN (không phải dự án hiện tại của task) — đổi dự án là đổi luôn danh sách cột.
-  const { data: states, isLoading: statesLoading } = useQuery({
+  const {
+    data: states,
+    isLoading: statesLoading,
+    isError: statesError,
+  } = useQuery({
     queryKey: taskKeys.states(projectId),
     queryFn: () => taskStatesApi.listStates(projectId),
     enabled: !treeLocked && projectId !== "",
@@ -79,11 +83,11 @@ export function TaskMoveProjectDialog({
   const projectChanged = projectId !== (task.projectId ?? "");
 
   const mutation = useMutation({
-    mutationFn: () =>
-      taskCoreApi.updateTask(task.id, {
-        projectId: projectId || null,
-        ...(stateId ? { stateId } : {}),
-      }),
+    // projectId + stateId đi CÙNG một PATCH, cả hai LUÔN có giá trị — `canSubmit` bên dưới là thứ bảo
+    // đảm điều đó. KHÔNG gửi có điều kiện (`...(stateId ? {stateId} : {})`): server chỉ gọi
+    // applyStateChangeTx khi `dto.stateId !== undefined` (task-core.service.ts:663), nên PATCH thiếu
+    // stateId ⇒ đổi project_id mà GIỮ NGUYÊN state_id trỏ cột dự án CŨ = đúng bug WO này đi vá.
+    mutationFn: () => taskCoreApi.updateTask(task.id, { projectId, stateId }),
     onSuccess: async () => {
       // Chạm CẢ HAI board: dự án cũ mất thẻ, dự án mới có thêm thẻ.
       const keys = [
@@ -96,11 +100,19 @@ export function TaskMoveProjectDialog({
     },
   });
 
-  // Chọn dự án MỚI thì BẮT BUỘC chọn cột — đó chính là thứ chống state_id mồ côi. Dự án đích không
-  // có cột pipeline nào (board chế độ status cũ) thì không có gì để chọn, cho phép đi tiếp.
-  const needsColumn = projectChanged && projectId !== "" && columns.length > 0;
+  // ĐỔI DỰ ÁN LUÔN PHẢI KÈM CỘT ĐÍCH — không có ngoại lệ nào "cho đi tiếp". Contract KHÔNG cho gửi
+  // `stateId: null` (updateTaskCoreSchema.stateId = z.string().uuid(), không nullable) và server
+  // KHÔNG BAO GIỜ tự xoá state_id khi project đổi ⇒ mọi đường submit thiếu stateId đều để lại
+  // state_id trỏ cột dự án CŨ. Ba cửa từng lọt, nay đóng cả ba:
+  //   (a) chọn "Không thuộc dự án" — ĐÃ GỠ khỏi danh sách (xem <Select> bên dưới): không diễn đạt
+  //       được bằng contract hiện tại nên không được phép bấm ra dữ liệu hỏng;
+  //   (b) dự án đích 0 cột pipeline — chặn kèm giải thích, KHÔNG cho đi tiếp;
+  //   (c) đua tải cột / API cột lỗi — `states ?? []` cho columns rỗng trông y hệt "dự án không có
+  //       cột", nên phải đòi tải xong VÀ không lỗi trước khi cho bấm.
+  const columnsReady = projectId !== "" && !statesLoading && !statesError && columns.length > 0;
   const canSubmit =
-    !treeLocked && projectChanged && !mutation.isPending && (!needsColumn || stateId !== "");
+    !treeLocked && projectChanged && !mutation.isPending && columnsReady && stateId !== "";
+  const needsColumn = columnsReady && projectChanged;
 
   return (
     <Dialog
@@ -147,7 +159,13 @@ export function TaskMoveProjectDialog({
                 setStateId("");
               }}
             >
-              <option value="">{t("tasks.moveProject.noProject")}</option>
+              {/* CỐ Ý KHÔNG có option "Không thuộc dự án": gỡ task khỏi dự án đòi xoá luôn state_id,
+                  mà contract không cho gửi `stateId: null` và server không tự dọn ⇒ chọn được nó là
+                  đẻ ra task project_id=NULL còn state_id trỏ cột dự án cũ. Cần thao tác này thì phải
+                  mở đường ở BE trước (WO riêng, vùng đỏ) — xem docblock canSubmit. */}
+              {task.projectId === null && (
+                <option value="">{t("tasks.moveProject.pickProject")}</option>
+              )}
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -166,8 +184,13 @@ export function TaskMoveProjectDialog({
               </label>
               {statesLoading ? (
                 <div className="h-10 animate-pulse rounded bg-muted" />
+              ) : statesError ? (
+                // Tách BẠCH khỏi "dự án không có cột": cả hai đều cho `columns` rỗng nên nếu gộp
+                // chung một thông báo, lỗi mạng sẽ đội lốt "dự án này chưa có cột" — người dùng đi
+                // tạo cột cho một dự án vốn đã có đủ cột.
+                <p className="text-xs text-destructive">{t("tasks.moveProject.columnsError")}</p>
               ) : columns.length === 0 ? (
-                <p className="text-xs text-muted-foreground">{t("tasks.moveProject.noColumns")}</p>
+                <p className="text-xs text-destructive">{t("tasks.moveProject.noColumns")}</p>
               ) : (
                 <Select
                   id="move-project-state"

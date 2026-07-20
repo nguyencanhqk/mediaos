@@ -374,12 +374,15 @@ export default {
       title: "Đổi dự án của công việc",
       description: "Chọn dự án mới và cột sẽ đặt công việc vào trên bảng của dự án đó.",
       projectLabel: "Dự án",
-      noProject: "— Không thuộc dự án nào —",
+      pickProject: "— Chọn dự án —",
       columnLabel: "Cột trên bảng",
       pickColumn: "— Chọn cột —",
-      noColumns: "Dự án này chưa có cột pipeline — công việc sẽ vào cột mặc định.",
+      noColumns:
+        "Dự án này chưa có cột pipeline nên chưa nhận công việc được. Hãy thêm cột cho dự án đó trước, rồi quay lại đổi.",
+      columnsError: "Không tải được danh sách cột. Thử lại trước khi đổi dự án.",
       columnRequiredHint: "Phải chọn cột đích, nếu không thẻ sẽ nằm sai cột trên bảng mới.",
-      lockedChild: "Đây là việc con — việc con luôn thuộc dự án của công việc cha, không đổi riêng được.",
+      lockedChild:
+        "Đây là việc con — việc con luôn thuộc dự án của công việc cha, không đổi riêng được.",
       lockedParent:
         "Công việc này đang có việc con. Cả cây phải cùng một dự án — gỡ hoặc xóa việc con trước khi đổi.",
       confirm: "Chuyển dự án",
@@ -687,7 +690,8 @@ export default {
       },
       // S5-TASK-MOVEPROJ-1 — form Sửa không đổi dự án (còn phải chọn cột đích) → chỉ đường.
       hints: {
-        moveProject: 'Đổi dự án bằng nút "Đổi dự án" ở đầu màn chi tiết (cần chọn cột trên bảng mới).',
+        moveProject:
+          'Đổi dự án bằng nút "Đổi dự án" ở đầu màn chi tiết (cần chọn cột trên bảng mới).',
       },
       errors: {
         titleRequired: "Tiêu đề là bắt buộc",
