@@ -7402,7 +7402,7 @@ export const backlog = [
     title:
       "Ảnh bìa cho công việc — chọn từ TỆP ĐÃ ĐÍNH KÈM (file_links Attachment + is_primary), hiện trên thẻ board + màn chi tiết",
     zone: "red",
-    status: "in_progress",
+    status: "done",
     paths: [
       "apps/api/src/tasks/**",
       "apps/api/src/foundation/files/**",
