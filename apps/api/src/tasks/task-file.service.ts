@@ -22,6 +22,7 @@ import {
   type TaskFileRow,
 } from "./task-file.repository";
 import { AuditService } from "../events/audit.service";
+import { pgErrorCode, PG_UNIQUE_VIOLATION } from "../common/db-error";
 import { TaskActivityService } from "./task-activity.service";
 
 interface RequestUser {
@@ -50,6 +51,32 @@ const TASK_COVER_SHARED_CODE = "TASK-ERR-COVER-SHARED";
  * rõ, thay vì nhét `hashtext('chuỗi nào đó')` tại chỗ và để module sau va phải.
  */
 const ADVISORY_CLASS_TASK_COVER = 0x5401;
+
+/**
+ * Mã lỗi Postgres phải quy về 409, KHÔNG BAO GIỜ để rơi ra thành 500.
+ *
+ * Advisory lock ở `setCover` CHỈ tuần-tự-hoá setCover-với-setCover. Các writer KHÁC của
+ * `file_links.is_primary` — `POST /foundation/files/:id/links` với isPrimary=true, và `unlink` —
+ * KHÔNG lấy khoá đó, nên vẫn có thể đụng `uq_file_links_primary_per_entity_type` (23505) hoặc khoá
+ * hàng theo thứ tự ngược (40P01 deadlock / 40001 serialization). Cả ba đều là "va chạm đồng thời,
+ * thử lại đi" — đúng ngữ nghĩa 409, không phải lỗi máy chủ.
+ */
+const PG_DEADLOCK = "40P01";
+const PG_SERIALIZATION_FAILURE = "40001";
+const CONFLICT_PG_CODES = new Set([PG_UNIQUE_VIOLATION, PG_DEADLOCK, PG_SERIALIZATION_FAILURE]);
+const TASK_COVER_CONFLICT_CODE = "TASK-ERR-COVER-CONFLICT";
+
+/** Quy va-chạm-đồng-thời của Postgres về 409; mọi lỗi khác PHẢI propagate (không nuốt). */
+function rethrowAsConflict(err: unknown): never {
+  const code = pgErrorCode(err);
+  if (code && CONFLICT_PG_CODES.has(code)) {
+    throw new ConflictException({
+      code: TASK_COVER_CONFLICT_CODE,
+      message: `${TASK_COVER_CONFLICT_CODE}: ảnh bìa vừa bị người khác đổi cùng lúc, thử lại.`,
+    });
+  }
+  throw err;
+}
 
 /**
  * scan_status values that MAY be downloaded. STRICTER than FileService's own state-guard (which only blocks
@@ -222,36 +249,59 @@ export class TaskFileService {
       });
     }
 
-    await this.db.withTenant(user.companyId, async (tx) => {
-      // Kiểm ĐỘC QUYỀN trong tx: tệp còn link sống ở entity khác ⇒ không dùng làm bìa được. Đường ĐỌC
-      // cũng ép lại vị từ này (đó mới là chốt); ở đây chỉ để người dùng biết NGAY thay vì đặt xong rồi
-      // ngồi nhìn thẻ không hiện gì. Lệch TOCTOU giữa hai chỗ là chấp nhận được — đọc tái kiểm mỗi lần.
-      const otherLinks = await this.repo.countOtherLiveLinksTx(tx, taskId, fileId);
-      if (otherLinks > 0) {
-        throw new ConflictException({
-          code: TASK_COVER_SHARED_CODE,
-          message: `${TASK_COVER_SHARED_CODE}: tệp đang được gắn ở nơi khác nên không dùng làm ảnh bìa được.`,
-        });
-      }
+    let changed = false;
+    try {
+      changed = await this.db.withTenant(user.companyId, async (tx) => {
+        // Kiểm ĐỘC QUYỀN trong tx: tệp còn link sống ở entity khác ⇒ không dùng làm bìa được. Đường ĐỌC
+        // cũng ép lại vị từ này (đó mới là chốt); ở đây chỉ để người dùng biết NGAY thay vì đặt xong rồi
+        // ngồi nhìn thẻ không hiện gì. Lệch TOCTOU giữa hai chỗ chấp nhận được — đọc tái kiểm mỗi lần.
+        const otherLinks = await this.repo.countOtherLiveLinksTx(tx, taskId, fileId);
+        if (otherLinks > 0) {
+          throw new ConflictException({
+            code: TASK_COVER_SHARED_CODE,
+            message: `${TASK_COVER_SHARED_CODE}: tệp đang được gắn ở nơi khác nên không dùng làm ảnh bìa được.`,
+          });
+        }
 
-      // Khoá theo TASK. `FOR UPDATE` trong findPrimaryLinkTx không đủ một mình: task CHƯA có bìa thì
-      // không có hàng nào để khoá, hai người cùng đặt bìa đầu tiên sẽ cùng đi tới INSERT-cờ ⇒ 23505.
-      // xact-level (không phải session) là bắt buộc trên PgBouncer transaction-mode.
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(${ADVISORY_CLASS_TASK_COVER}, hashtext(${taskId}::text))`,
+        // Khoá theo TASK. `FOR UPDATE` trong findPrimaryLinkTx không đủ một mình: task CHƯA có bìa thì
+        // không có hàng nào để khoá, hai người cùng đặt bìa đầu tiên sẽ cùng đi tới nâng cờ ⇒ 23505.
+        // xact-level (không phải session) là bắt buộc trên PgBouncer transaction-mode.
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(${ADVISORY_CLASS_TASK_COVER}, hashtext(${taskId}::text))`,
+        );
+
+        const current = await this.repo.findPrimaryLinkTx(tx, user.companyId, taskId);
+        if (current?.linkId === row.linkId) return false; // đã là bìa ⇒ no-op idempotent
+
+        // Hạ bìa cũ TRƯỚC khi nâng bìa mới, trong CÙNG tx: unique index không bao giờ thấy 2 primary.
+        if (current) {
+          await this.repo.setPrimaryTx(tx, user.companyId, current.linkId, false);
+          // Audit CHO CẢ link bị HẠ. Bỏ vế này là để lại đúng thứ docblock recordCoverAudit nói nó tồn
+          // tại để chặn: một mutation is_primary true→false trên file_links không ai truy được.
+          await this.recordCoverAudit(tx, user, current.linkId, current.fileId, taskId, false);
+        }
+        await this.repo.setPrimaryTx(tx, user.companyId, row.linkId, true);
+
+        await this.recordCoverAudit(tx, user, row.linkId, fileId, taskId, true);
+        return true;
+      });
+    } catch (err) {
+      // ConflictException của vế ĐỘC QUYỀN ở trên đi thẳng qua đây (không phải lỗi pg) —
+      // rethrowAsConflict chỉ đổi mã cho va chạm đồng thời, còn lại propagate nguyên vẹn.
+      rethrowAsConflict(err);
+    }
+
+    // Chỉ ghi activity khi CÓ ĐỔI THẬT (đặt lại chính bìa hiện tại là no-op). `task_activity_logs`
+    // append-only ⇒ ghi lúc no-op làm phình bảng + nhiễu feed bằng sự kiện không có thay đổi nào.
+    if (changed) {
+      await this.recordActivity(
+        user,
+        taskId,
+        fileId,
+        "TASK_COVER_SET",
+        "Đặt ảnh bìa cho công việc",
       );
-
-      const current = await this.repo.findPrimaryLinkTx(tx, user.companyId, taskId);
-      if (current?.linkId === row.linkId) return; // đã là bìa ⇒ no-op idempotent
-
-      // Hạ bìa cũ TRƯỚC khi nâng bìa mới, trong CÙNG tx: unique index không bao giờ thấy 2 primary.
-      if (current) await this.repo.setPrimaryTx(tx, user.companyId, current.linkId, false);
-      await this.repo.setPrimaryTx(tx, user.companyId, row.linkId, true);
-
-      await this.recordCoverAudit(tx, user, row.linkId, fileId, taskId, true);
-    });
-
-    await this.recordActivity(user, taskId, fileId, "TASK_COVER_SET", "Đặt ảnh bìa cho công việc");
+    }
 
     // Reload SAU khi lật cờ — row ở trên load TRƯỚC update nên sẽ mang isCover=false, sai ngay tại
     // chính lời gọi vừa đặt bìa.
@@ -262,22 +312,33 @@ export class TaskFileService {
   /** Gỡ ảnh bìa. Idempotent: task chưa có bìa ⇒ no-op, KHÔNG 404 (gỡ thứ không có là thành công). */
   async clearCover(user: RequestUser, taskId: string): Promise<void> {
     await this.assertScope(user, taskId, ACTION_UPLOAD);
-    await this.db.withTenant(user.companyId, async (tx) => {
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(${ADVISORY_CLASS_TASK_COVER}, hashtext(${taskId}::text))`,
+    let changed = false;
+    try {
+      changed = await this.db.withTenant(user.companyId, async (tx) => {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(${ADVISORY_CLASS_TASK_COVER}, hashtext(${taskId}::text))`,
+        );
+        const current = await this.repo.findPrimaryLinkTx(tx, user.companyId, taskId);
+        if (!current) return false;
+        await this.repo.setPrimaryTx(tx, user.companyId, current.linkId, false);
+        await this.recordCoverAudit(tx, user, current.linkId, current.fileId, taskId, false);
+        return true;
+      });
+    } catch (err) {
+      rethrowAsConflict(err);
+    }
+    // Chỉ ghi activity khi CÓ ĐỔI THẬT. `task_activity_logs` là append-only: ghi cả lúc no-op
+    // (gỡ bìa của task vốn không có bìa) làm phình bảng và nhiễu feed hoạt động bằng sự kiện không
+    // tương ứng thay đổi nào.
+    if (changed) {
+      await this.recordActivity(
+        user,
+        taskId,
+        undefined,
+        "TASK_COVER_CLEARED",
+        "Gỡ ảnh bìa công việc",
       );
-      const current = await this.repo.findPrimaryLinkTx(tx, user.companyId, taskId);
-      if (!current) return;
-      await this.repo.setPrimaryTx(tx, user.companyId, current.linkId, false);
-      await this.recordCoverAudit(tx, user, current.linkId, current.fileId, taskId, false);
-    });
-    await this.recordActivity(
-      user,
-      taskId,
-      undefined,
-      "TASK_COVER_CLEARED",
-      "Gỡ ảnh bìa công việc",
-    );
+    }
   }
 
   /**
@@ -378,11 +439,7 @@ export class TaskFileService {
     user: RequestUser,
     taskId: string,
     fileId: string | undefined,
-    action:
-      | "TASK_FILE_UPLOADED"
-      | "TASK_FILE_DELETED"
-      | "TASK_COVER_SET"
-      | "TASK_COVER_CLEARED",
+    action: "TASK_FILE_UPLOADED" | "TASK_FILE_DELETED" | "TASK_COVER_SET" | "TASK_COVER_CLEARED",
     message: string,
   ): Promise<void> {
     await this.db.withTenant(user.companyId, async (tx: TenantTx) => {

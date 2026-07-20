@@ -77,6 +77,9 @@ const FULL: Pair[] = [
   ["read", "task"],
   ["file-upload", "task"],
   ["file-delete", "task"],
+  // `view-kanban` là cặp RIÊNG với `read` — board gate bằng nó, đường tải tệp gate bằng `read`.
+  // Chính sự tách đôi này là lý do getBoard phải resolve riêng `read:task` trước khi ký ảnh bìa.
+  ["view-kanban", "task"],
 ];
 const READ_ONLY: Pair[] = [["read", "task"]];
 const SENSITIVE = new Set(["delete", "export", "view", "view-report"]);
@@ -94,6 +97,28 @@ async function grant(
     await seedRolePermission(direct, roleId, permId, "ALLOW", scope);
   }
   await seedUserRole(direct, userId, roleId, companyId);
+}
+
+async function seedProject(direct: Pool, companyId: string): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO projects (company_id, name, status, project_status)
+     VALUES ($1,'cover-proj','active','Active') RETURNING id`,
+    [companyId],
+  );
+  return r.rows[0].id as string;
+}
+
+async function seedTaskInProject(
+  direct: Pool,
+  companyId: string,
+  projectId: string,
+): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO tasks (company_id, project_id, task_type, title, task_status)
+     VALUES ($1,$2,'office','cover-board-task','Todo') RETURNING id`,
+    [companyId, projectId],
+  );
+  return r.rows[0].id as string;
 }
 
 async function seedTask(direct: Pool, companyId: string): Promise<string> {
@@ -221,6 +246,8 @@ describe.skipIf(!hasLaneDb)(
     let orphanFile = ""; // link is_primary=true nhưng files đã soft-delete (primary MỒ CÔI)
     let otherTaskFile = ""; // link taskA2 — dùng qua /tasks/{taskA}/... → 404 (cross-task)
     let bFile = ""; // tenant B → 404
+  let boardProject = ""; // dự án cho ca board
+  let boardTask = ""; // task trong dự án đó, có bìa
 
     beforeAll(async () => {
       const hash = await hashedPw();
@@ -269,7 +296,13 @@ describe.skipIf(!hasLaneDb)(
       otherTaskFile = await seedFile(direct, A.companyId, hrUserId);
       await linkToTask(direct, A.companyId, otherTaskFile, taskA2, hrUserId);
 
-      taskB = await seedTask(direct, B.companyId);
+      boardProject = await seedProject(direct, A.companyId);
+    boardTask = await seedTaskInProject(direct, A.companyId, boardProject);
+    const boardImg = await seedFile(direct, A.companyId, hrUserId);
+    const boardLink = await linkToTask(direct, A.companyId, boardImg, boardTask, hrUserId);
+    await direct.query(`UPDATE file_links SET is_primary = true WHERE id = $1`, [boardLink]);
+
+    taskB = await seedTask(direct, B.companyId);
       const bUser = await seedUser(direct, B.companyId, `bhr@${B.slug}.test`, hash);
       bFile = await seedFile(direct, B.companyId, bUser);
       await linkToTask(direct, B.companyId, bFile, taskB, bUser);
@@ -460,7 +493,50 @@ describe.skipIf(!hasLaneDb)(
       expect(res.status, JSON.stringify(res.body)).toBe(204);
     });
 
-    it("task chưa có bìa ⇒ coverUrl null (fail-soft, không 500)", async () => {
+    // ── coverUrl phải tới FE trên MỌI đường đọc, không chỉ GET /tasks/:id ─────────────────────────
+
+  it("coverUrl có mặt trên đường DANH SÁCH (GET /tasks), không chỉ chi tiết", async () => {
+    // Đường đọc là chỗ field "im lặng không tới FE" hay xảy ra nhất — docblock trong code ghi lỗi này
+    // đã xảy ra 2 lần với parentTaskId và 1 lần với assigneeAvatarUrl. Ghim thêm một đường nữa.
+    const token = await login(nest, A.slug, hrEmail);
+    const res = await api(nest).get(`/tasks?projectId=${boardProject}`).set(bearer(token));
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const item = (res.body.data as Array<{ id: string; coverUrl: string | null }>).find(
+      (t) => t.id === boardTask,
+    );
+    expect(item?.coverUrl).toBeTruthy();
+  });
+
+  it("coverUrl có mặt trên BOARD kanban — đường có gate quyền RIÊNG (view-kanban vs read)", async () => {
+    // Board gate bằng cặp `view-kanban:task` còn đường TẢI tệp gate bằng `read:task`. data_scope là
+    // PER-(permission, role) nên hai cặp có thể lệch scope ⇒ getBoard phải resolve RIÊNG `read:task`
+    // trước khi ký bìa. Ca này khoá nhánh THUẬN (có cả hai grant ⇒ có bìa).
+    const token = await login(nest, A.slug, hrEmail);
+    const res = await api(nest).get(`/projects/${boardProject}/kanban`).set(bearer(token));
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const cards = JSON.stringify(res.body);
+    expect(cards).toContain(boardTask);
+    const found = /"coverUrl":"[^"]+"/.test(cards);
+    expect(found, "board phải trả coverUrl đã ký cho thẻ có bìa").toBe(true);
+  });
+
+  it("thiếu grant read:task ⇒ BOARD không ký bìa nào (fail-closed), thẻ vẫn hiện", async () => {
+    // Nhánh NGHỊCH của ca trên: người chỉ có view-kanban (không read:task) vẫn xem được board nhưng
+    // KHÔNG được nhận URL ảnh gốc full-res của attachment — đó là nội dung họ không tải được.
+    const hash = await hashedPw();
+    const email = `kanbanonly@${A.slug}.test`;
+    const uid = await seedUser(direct, A.companyId, email, hash);
+    await grant(direct, A.companyId, uid, [["view-kanban", "task"]], "Company");
+
+    const token = await login(nest, A.slug, email);
+    const res = await api(nest).get(`/projects/${boardProject}/kanban`).set(bearer(token));
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const body = JSON.stringify(res.body);
+    expect(body).toContain(boardTask); // thẻ vẫn hiện
+    expect(/"coverUrl":"[^"]+"/.test(body), "KHÔNG được ký bìa khi thiếu read:task").toBe(false);
+  });
+
+  it("task chưa có bìa ⇒ coverUrl null (fail-soft, không 500)", async () => {
       const token = await login(nest, A.slug, hrEmail);
       const fresh = await seedTask(direct, A.companyId);
       expect(await coverUrlOf(nest, token, fresh)).toBeNull();

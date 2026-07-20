@@ -206,6 +206,14 @@ function KanbanCard({
           một ô ảnh vỡ nằm trên thẻ. `loading="lazy"` vì board có thể hàng chục thẻ. */}
       {task.coverUrl && (
         <img
+          // ⚠️ `key` PHẢI là coverUrl, KHÔNG được bỏ. Thẻ có key={task.id} nên React TÁI DÙNG chính
+          // phần tử <img> này qua mọi lần refetch và chỉ đổi `src`. `onError` bên dưới đặt style
+          // display:none TRỰC TIẾP lên DOM — React không biết gì về nó nên KHÔNG BAO GIỜ dọn.
+          // Hệ quả nếu thiếu key: để board mở quá TTL của URL đã ký ⇒ ảnh 403 ⇒ ẩn hết; sau đó dù
+          // đặt bìa mới hay chỉ kéo-thả (moveState trả coverUrl mới), URL hợp lệ về tới nơi mà thẻ
+          // VẪN trắng — chỉ rời route mới khỏi. Người dùng thấy "bấm mà không có gì xảy ra".
+          // Đổi key ⇒ phần tử MỚI ⇒ không mang theo style cũ.
+          key={task.coverUrl}
           src={task.coverUrl}
           alt=""
           loading="lazy"

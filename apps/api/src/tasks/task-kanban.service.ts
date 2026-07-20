@@ -126,7 +126,22 @@ export class TaskKanbanService {
       // S5-TASK-COVER-1 — ảnh bìa THEO LÔ cho cả board, cùng `tx`. TUẦN TỰ sau avatar chứ KHÔNG
       // Promise.all: hai truy vấn trên CÙNG một kết nối transaction sẽ hỏng ngẫu nhiên dưới tải.
       // Fail-soft như avatar: ký lỗi ⇒ không vào map ⇒ thẻ không bìa, KHÔNG 500 board.
-      const covers = await this.covers.resolveTaskCovers(user.companyId, taskIds, tx);
+      //
+      // ⚠️ GATE RIÊNG CHO BÌA — KHÔNG dùng lại `scope` của board. Board gate bằng cặp
+      // `view-kanban:task` (projects.controller), còn đường TẢI tệp gate bằng cặp `read:task`
+      // (TaskFileService.getDownloadUrl + TaskFileResolver). `data_scope` là PER-(permission, role)
+      // nên hai cặp có thể có scope KHÁC nhau: cấu hình `view-kanban@Company` + `read@Own` sẽ khiến
+      // board ký ảnh GỐC full-res của attachment cho người KHÔNG tải được chính tệp đó.
+      // Seed 0485 hiện cấp cả hai cặp cùng scope cho cả 4 role ⇒ chưa khai thác được ở cấu hình xuất
+      // xưởng, nhưng đó là may mắn cấu hình, không phải bảo đảm. Fail-closed: không có grant
+      // `read:task` ⇒ KHÔNG ký bìa nào (thẻ vẫn hiện, chỉ không có ảnh).
+      const canReadTask = await this.dataScope
+        .resolveAndAssert(user.id, user.companyId, "read", "task")
+        .then(() => true)
+        .catch(() => false);
+      const covers = canReadTask
+        ? await this.covers.resolveTaskCovers(user.companyId, taskIds, tx)
+        : new Map<string, string>();
 
       const toCard = (row: (typeof rows)[number]) => {
         const progress = checklistProgress.get(row.id);

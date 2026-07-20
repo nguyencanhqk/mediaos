@@ -160,10 +160,13 @@ function CoverToggleButton({
 // ---------------------------------------------------------------------------
 function DeleteTaskFileDialog({
   taskId,
+  projectId,
   file,
   onClose,
 }: {
   taskId: string;
+  /** S5-TASK-COVER-1 — cần để invalidate board khi tệp bị xoá đang là ảnh bìa. */
+  projectId: string | null;
   file: TaskFileDto;
   onClose: () => void;
 }) {
@@ -174,9 +177,14 @@ function DeleteTaskFileDialog({
   const mutation = useMutation({
     mutationFn: () => taskFileApi.deleteTaskFile(taskId, file.fileId),
     onSuccess: async () => {
+      // S5-TASK-COVER-1 — dùng bộ khoá `cover` (files + detail + kanban), KHÔNG chỉ `files`.
+      // Server xử lý đúng: soft-delete `files` làm findVerifiedTaskCoversTx thôi trả tệp đó. Nhưng FE
+      // không hỏi lại thì cache board/chi tiết vẫn giữ `coverUrl` CŨ — và URL đã ký ấy VẪN TẢI ĐƯỢC
+      // (soft-delete chỉ ở DB, object trên storage còn nguyên) ⇒ xoá tệp xong quay ra board vẫn thấy
+      // đúng tấm ảnh vừa xoá làm bìa. Trước WO này `files(taskId)` là đủ; chính WO này tạo ra ràng buộc.
       await Promise.all(
         taskFileInvalidation
-          .files(taskId)
+          .cover(taskId, projectId)
           .map((queryKey) => queryClient.invalidateQueries({ queryKey })),
       );
       onClose();
@@ -461,6 +469,7 @@ export function TaskFilePanel({ taskId, embedded = false, projectId = null }: Ta
       {deleteTarget && canDelete && (
         <DeleteTaskFileDialog
           taskId={taskId}
+          projectId={projectId}
           file={deleteTarget}
           onClose={() => setDeleteTarget(null)}
         />

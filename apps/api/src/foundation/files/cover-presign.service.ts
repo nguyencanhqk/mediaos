@@ -12,10 +12,18 @@ import { FileRepository } from "./file.repository";
  *     (`POST /foundation/files/:id/links` nhận `isPrimary` verbatim, chỉ chặn `Infected`). Ai đó bật cờ
  *     vòng qua `TaskFileService.setCover` thì đường đọc vẫn phải từ chối. Xem docblock repo về vị từ
  *     ĐỘC QUYỀN — nó là chốt chống leo thang đọc, không phải tối ưu.
- *   - **KHÔNG qua FilePolicy.** Cùng lý do đã dùng cho avatar directory-class: ai đọc được task (đã qua
- *     `read:task` + data_scope ở caller) thì thấy bìa. An toàn được bảo đảm bằng vị từ độc quyền: tệp
- *     còn link sống ở entity KHÁC sẽ không bao giờ được ký, nên tập "ai nhận coverUrl" trùng khít tập
- *     "ai tải được tệp đó qua chính task này".
+ *   - **KHÔNG qua FilePolicy** — nhưng điều đó đặt một NGHĨA VỤ LÊN CALLER, không phải một bảo đảm sẵn.
+ *     Service này KHÔNG nhận actor: nó ký cho mọi `taskId` được đưa vào. Vị từ độc quyền chỉ bảo đảm
+ *     tệp được ký CHỈ thuộc đúng task đó — nó KHÔNG kiểm người gọi có quyền đọc task ấy không.
+ *
+ *     ⚠️ Phát biểu đúng là: "ai nhận được coverUrl" ⊆ "ai tải được tệp đó qua task",
+ *     **VỚI ĐIỀU KIỆN caller đã gate bằng cặp `read:task` + data_scope của chính cặp đó.**
+ *     (Bản đầu docblock này viết "trùng khít" vô điều kiện — SAI, và security-review bắt được.)
+ *
+ *     Vì sao điều kiện đó không tự động đúng: `data_scope` là PER-(permission, role). Đường TẢI tệp
+ *     gate bằng `read:task`, nhưng board gate bằng `view-kanban:task` — hai cặp khác nhau có thể có
+ *     scope khác nhau. `TaskKanbanService.getBoard` vì vậy phải resolve RIÊNG `read:task` trước khi
+ *     gọi vào đây (xem chú thích tại đó). Caller mới nào cũng phải làm đúng như vậy.
  *   - **KHÔNG ghi `file_access_logs` / KHÔNG bump download_count** — mirror avatar: đây là ảnh trang
  *     trí render hàng loạt trên board, ghi log mỗi thẻ sẽ làm nhiễu số liệu tải thật.
  *   - **FAIL-SOFT:** storage lỗi → bỏ qua (không vào map) ⇒ `coverUrl: null` ⇒ thẻ không có bìa,

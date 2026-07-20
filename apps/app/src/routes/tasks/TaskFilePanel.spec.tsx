@@ -262,13 +262,12 @@ describe("TaskFilePanel — ảnh bìa (S5-TASK-COVER-1)", () => {
     expect(taskFileApi.setTaskCover).not.toHaveBeenCalled();
   });
 
-  it("tệp KHÔNG đủ điều kiện nhưng ĐANG là bìa ⇒ vẫn cho GỠ (không kẹt bìa không gỡ được)", async () => {
-    setCaps(FULL_CAPS);
-    vi.mocked(taskFileApi.getTaskFiles).mockResolvedValue([
-      { ...IMG, scanStatus: "Pending", isCover: true },
-    ]);
-    renderWithQuery(<TaskFilePanel taskId="task-1" projectId="proj-1" />);
-    const btn = await screen.findByTestId(`task-cover-toggle-${IMG.fileId}`);
-    expect(btn).toHaveTextContent(/gỡ ảnh bìa/i);
-  });
+  // GHI CHÚ: KHÔNG test "tệp không đủ điều kiện NHƯNG đang là bìa". Server tính `isCover` bằng
+  // FILE_COLUMNS.isCover — biểu thức đó ĐÃ chứa sẵn vế đủ-điều-kiện, nên API không bao giờ phát ra
+  // isCover:true kèm scanStatus:'Pending'. Fixture như vậy là một trạng thái server không tạo được,
+  // và test dựng nó chỉ khoá một nhánh code không tới được — xanh mà không chứng minh gì.
+  // Trạng thái KẸT thật là chiều ngược lại (is_primary còn true nhưng tệp mất điều kiện, ví dụ scan
+  // lật sang Infected sau đó): isCover→false ⇒ nút ẩn ⇒ không có lối gỡ cờ trên UI. Không nguy hiểm
+  // (đường đọc fail-closed nên board không hiện gì) và `findPrimaryLinkTx` cố ý KHÔNG lọc điều kiện
+  // nên setCover/clearCover vẫn hạ được cờ — ghi nhận làm follow-up, chưa vá đợt này.
 });
