@@ -15,6 +15,8 @@ export * from "./components/ui/button";
 export * from "./components/ui/input";
 export * from "./components/ui/select";
 export * from "./components/ui/dialog";
+// S5-TASK-BOARD-UX-1 — panel trượt phải (chi tiết mở từ board, giữ ngữ cảnh nền)
+export * from "./components/ui/sheet";
 export * from "./components/ui/skeleton";
 export * from "./components/ui/empty-state";
 export * from "./components/ui/data-table";

@@ -13,9 +13,12 @@ import type { TaskProjectResponseDto } from "@mediaos/contracts";
 // S5-TASK-WORKSPACE-1 — tab là URL-driven (?tab=) qua useRouterState + router.history.push; test
 // không dựng RouterProvider nên mock cả hai (mirror ProjectListPage.spec đợt B). searchRef mutable
 // để test deep-link từng tab.
-const { searchRef, historyPushMock } = vi.hoisted(() => ({
+// S5-TASK-BOARD-UX-1 — thêm historyReplaceMock: ĐÓNG panel chi tiết dùng replace (không push) để
+// Back sau khi đóng không mở lại panel — muốn khẳng định được điều đó thì phải bắt được lời gọi.
+const { searchRef, historyPushMock, historyReplaceMock } = vi.hoisted(() => ({
   searchRef: { current: {} as Record<string, unknown> },
   historyPushMock: vi.fn(),
+  historyReplaceMock: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
@@ -23,7 +26,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   return {
     ...actual,
     useNavigate: () => vi.fn(),
-    useRouter: () => ({ history: { push: historyPushMock, replace: vi.fn() } }),
+    useRouter: () => ({ history: { push: historyPushMock, replace: historyReplaceMock } }),
     useRouterState: ({
       select,
     }: {
@@ -60,6 +63,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     // Tab "Danh sách" (ProjectTaskListTab) — 1 query lớn theo projectId.
     taskCoreApi: {
       listTasks: vi.fn().mockResolvedValue([]),
+      // S5-TASK-BOARD-UX-1 — panel chi tiết (?task=) đọc task qua getTask.
+      getTask: vi.fn(),
     },
     hrApi: {
       listDepartments: vi.fn().mockResolvedValue([]),
@@ -285,6 +290,61 @@ describe("ProjectDetailPage", () => {
       await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
       expect(screen.getByTestId("workspace-toolbar")).toBeInTheDocument();
       await waitFor(() => expect(screen.getByText(/chưa có công việc nào/i)).toBeInTheDocument());
+    });
+
+    // ── S5-TASK-BOARD-UX-1 — panel chi tiết mở ĐÈ board qua `?task=` ────────────────────────────
+    it("KHÔNG có ?task= ⇒ panel chi tiết đóng", async () => {
+      setCapabilities({ "read:project": true, "view-kanban:task": true, "read:task": true });
+      vi.mocked(taskProjectApi.getProject).mockResolvedValue(MOCK_PROJECT);
+      searchRef.current = { tab: "board" };
+      renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+      await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+      expect(screen.queryByTestId("task-detail-drawer")).not.toBeInTheDocument();
+    });
+
+    it("deep-link ?tab=board&task=<id> mở thẳng panel chi tiết — copy link ra đúng task", async () => {
+      setCapabilities({ "read:project": true, "view-kanban:task": true, "read:task": true });
+      vi.mocked(taskProjectApi.getProject).mockResolvedValue(MOCK_PROJECT);
+      vi.mocked(taskCoreApi.getTask).mockResolvedValue({
+        id: "task-042",
+        title: "Dựng trang Tuyển dụng",
+      } as never);
+      searchRef.current = { tab: "board", task: "task-042" };
+      renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+
+      await waitFor(() => expect(screen.getByTestId("task-detail-drawer")).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText("Dựng trang Tuyển dụng")).toBeInTheDocument());
+    });
+
+    it("đóng panel dùng history.REPLACE (không push) — Back sau khi đóng không mở lại panel", async () => {
+      setCapabilities({ "read:project": true, "view-kanban:task": true, "read:task": true });
+      vi.mocked(taskProjectApi.getProject).mockResolvedValue(MOCK_PROJECT);
+      vi.mocked(taskCoreApi.getTask).mockResolvedValue({
+        id: "task-042",
+        title: "Dựng trang Tuyển dụng",
+      } as never);
+      searchRef.current = { tab: "board", task: "task-042" };
+      renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+      await waitFor(() => expect(screen.getByTestId("task-detail-drawer")).toBeInTheDocument());
+
+      fireEvent.click(screen.getByTestId("sheet-close"));
+      expect(historyReplaceMock).toHaveBeenCalledWith("/tasks/projects/proj-001?tab=board");
+      expect(historyPushMock).not.toHaveBeenCalled();
+    });
+
+    it("đổi tab BỎ ?task= — panel không treo lại ở tab khác", async () => {
+      setCapabilities({ "read:project": true, "view-kanban:task": true, "read:task": true });
+      vi.mocked(taskProjectApi.getProject).mockResolvedValue(MOCK_PROJECT);
+      vi.mocked(taskCoreApi.getTask).mockResolvedValue({
+        id: "task-042",
+        title: "Dựng trang Tuyển dụng",
+      } as never);
+      searchRef.current = { tab: "board", task: "task-042" };
+      renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+      await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+
+      fireEvent.click(screen.getByTestId("workspace-tab-list"));
+      expect(historyPushMock).toHaveBeenCalledWith("/tasks/projects/proj-001?tab=list");
     });
 
     it("tab overview (mặc định) KHÔNG render toolbar lọc", async () => {

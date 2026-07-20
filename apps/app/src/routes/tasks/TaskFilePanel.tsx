@@ -26,8 +26,9 @@ import {
   mapApiErrorToUi,
   formatDate,
 } from "@mediaos/web-core";
-import { Badge, Button, Card, DataTable, Dialog, EmptyState, Input } from "@mediaos/ui";
+import { Badge, Button, DataTable, Dialog, EmptyState, Input } from "@mediaos/ui";
 import { TASK_FILE_ENGINE_PAIRS } from "./task-file-constants";
+import { PanelBody } from "./PanelBody";
 import { triggerBlobDownload } from "./download-blob";
 
 /** 1024-based byte formatter — mirror EmployeeFilesTab.tsx (không export dùng chung, tránh coupling). */
@@ -243,9 +244,11 @@ function UploadTaskFileControl({ taskId }: { taskId: string }) {
 // ---------------------------------------------------------------------------
 export interface TaskFilePanelProps {
   taskId: string;
+  /** Trong tab ⇒ bỏ vỏ Card + tiêu đề (nhãn tab đã nói). Xem PanelBody. */
+  embedded?: boolean;
 }
 
-export function TaskFilePanel({ taskId }: TaskFilePanelProps) {
+export function TaskFilePanel({ taskId, embedded = false }: TaskFilePanelProps) {
   const { t } = useTranslation("tasks");
   const canView = useCan(
     TASK_FILE_ENGINE_PAIRS.READ.action,
@@ -271,15 +274,17 @@ export function TaskFilePanel({ taskId }: TaskFilePanelProps) {
   // ── Forbidden ──────────────────────────────────────────────────────────────
   if (!canView) {
     return (
-      <Card className="space-y-3 p-4">
-        <h3 className="text-sm font-semibold text-muted-foreground">
-          {t("tasks.detail.files.title")}
-        </h3>
+      <PanelBody embedded={embedded}>
+        {!embedded && (
+          <h3 className="text-sm font-semibold text-muted-foreground">
+            {t("tasks.detail.files.title")}
+          </h3>
+        )}
         <EmptyState
           title={t("tasks.detail.files.forbidden.title")}
           description={t("tasks.detail.files.forbidden.description")}
         />
-      </Card>
+      </PanelBody>
     );
   }
 
@@ -347,10 +352,12 @@ export function TaskFilePanel({ taskId }: TaskFilePanelProps) {
   ];
 
   return (
-    <Card className="space-y-3 p-4">
-      <h3 className="text-sm font-semibold text-muted-foreground">
-        {t("tasks.detail.files.title")}
-      </h3>
+    <PanelBody embedded={embedded}>
+      {!embedded && (
+        <h3 className="text-sm font-semibold text-muted-foreground">
+          {t("tasks.detail.files.title")}
+        </h3>
+      )}
 
       {canUpload && <UploadTaskFileControl taskId={taskId} />}
 
@@ -384,6 +391,6 @@ export function TaskFilePanel({ taskId }: TaskFilePanelProps) {
           onClose={() => setDeleteTarget(null)}
         />
       )}
-    </Card>
+    </PanelBody>
   );
 }

@@ -38,7 +38,8 @@ import { TaskActionsService } from "./task-actions.service";
 import { ProjectAccessService } from "./project-access.service";
 import { coalesceTaskStatus, type TaskCoreStatus } from "./task-fsm";
 import { STATE_GROUP_TO_STATUS, type ProjectStateGroup } from "./task-state-sync";
-import { toTaskCoreDto } from "./task-core.mapper";
+import { toTaskCoreDto, toAvatarSubjects, avatarForRow } from "./task-core.mapper";
+import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
 
 interface RequestUser {
   id: string;
@@ -129,6 +130,10 @@ export class TaskCoreService {
     private readonly permission: PermissionService,
     // S5-TASK-PROJROLE-1 (D-23/D-24) — tầng đọc project_role + DRY assertInScopeForWrite (mode 'write').
     private readonly projectAccess: ProjectAccessService,
+    // S5-TASK-AVATAR-1 (Nhóm C) — ký avatar người phụ trách cho list/detail/việc con/my-tasks.
+    // Đặt CUỐI có chủ đích: vài unit spec dựng service bằng `new TaskCoreService(...)` theo VỊ TRÍ,
+    // chèn vào giữa sẽ lệch toàn bộ dependency phía sau mà typecheck chỉ kêu "thiếu 1 tham số".
+    private readonly avatars: AvatarPresignService,
   ) {}
 
   // ── Reads ────────────────────────────────────────────────────────────────────
@@ -162,7 +167,8 @@ export class TaskCoreService {
         scopeExists,
       );
     });
-    return rows.map((r) => this.toDto(r));
+    const avatars = await this.resolveAvatars(user.companyId, rows);
+    return rows.map((r) => this.toDto(r, avatarForRow(r, avatars)));
   }
 
   async getTask(user: RequestUser, id: string): Promise<TaskCoreResponseDto> {
@@ -176,8 +182,9 @@ export class TaskCoreService {
       return { row, progress: progress.get(id) };
     });
     if (!result) throw new NotFoundException(ERR.NOT_FOUND);
+    const avatars = await this.resolveAvatars(user.companyId, [result.row]);
     return {
-      ...this.toDto(result.row),
+      ...this.toDto(result.row, avatarForRow(result.row, avatars)),
       subtaskTotal: result.progress?.total ?? 0,
       subtaskDone: result.progress?.done ?? 0,
     };
@@ -209,7 +216,11 @@ export class TaskCoreService {
             (await this.repo.listTx(tx, user.companyId, filter, scopeExists)).map((r) => r.id),
           )
         : null; // Company/System ⇒ mở được tất cả
-      return all.map((r) => this.toSubtaskItem(r, openable === null || openable.has(r.id)));
+      // Map TRONG tx ⇒ truyền tx vào (tránh nested-tx trên PgBouncer).
+      const avatars = await this.resolveAvatars(user.companyId, all, tx);
+      return all.map((r) =>
+        this.toSubtaskItem(r, openable === null || openable.has(r.id), avatarForRow(r, avatars)),
+      );
     });
   }
 
@@ -268,13 +279,18 @@ export class TaskCoreService {
         undefined,
       );
       // Ghi được cha ⇒ mở được mọi con trong ngữ cảnh này (actor vừa qua assertInScopeForWrite trên cha).
-      return rows.map((r) => this.toSubtaskItem(r, true));
+      const avatars = await this.resolveAvatars(user.companyId, rows, tx);
+      return rows.map((r) => this.toSubtaskItem(r, true, avatarForRow(r, avatars)));
     });
   }
 
   /** DTO HẸP cho panel việc con (D-39) — xem docblock subtaskListItemSchema về lý do không trả DTO đầy đủ. */
-  private toSubtaskItem(row: TaskCoreRow, canOpen: boolean): SubtaskListItemDto {
-    const base = this.toDto(row);
+  private toSubtaskItem(
+    row: TaskCoreRow,
+    canOpen: boolean,
+    assigneeAvatarUrl?: string | null,
+  ): SubtaskListItemDto {
+    const base = this.toDto(row, assigneeAvatarUrl);
     return {
       id: base.id,
       taskCode: row.taskCode ?? null,
@@ -283,6 +299,7 @@ export class TaskCoreService {
       priority: base.priority,
       mainAssigneeEmployeeId: base.mainAssigneeEmployeeId,
       assigneeName: base.assigneeName,
+      assigneeAvatarUrl: base.assigneeAvatarUrl ?? null,
       dueAt: base.dueAt,
       isOverdue: base.isOverdue,
       sortOrder: row.sortOrder ?? null,
@@ -297,7 +314,8 @@ export class TaskCoreService {
       const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
       return this.repo.findMyTasksTx(tx, user.companyId, user.id, actorEmp?.id ?? null);
     });
-    return rows.map((r) => this.toMyDto(r));
+    const avatars = await this.resolveAvatars(user.companyId, rows);
+    return rows.map((r) => this.toMyDto(r, avatarForRow(r, avatars)));
   }
 
   // ── Create ─────────────────────────────────────────────────────────────────────
@@ -1181,7 +1199,10 @@ export class TaskCoreService {
   private async reload(tx: TenantTx, companyId: string, id: string): Promise<TaskCoreResponseDto> {
     const row = await this.repo.findScopedByIdTx(tx, companyId, id);
     if (!row) throw new InternalServerErrorException("Không tải lại được công việc vừa ghi.");
-    return this.toDto(row);
+    // Ký avatar ngay ở đường GHI: FE ghi đè cache chi tiết bằng response này (useTaskActionMutation
+    // /TaskFormDrawer), nên trả null ở đây là ảnh vừa hiện xong đã biến mất tới lần refetch sau.
+    const avatars = await this.resolveAvatars(companyId, [row], tx);
+    return this.toDto(row, avatarForRow(row, avatars));
   }
 
   // ── Projection (raw tx.execute trả string cho timestamptz/boolean → normalize ISO/boolean) ─────
@@ -1203,11 +1224,28 @@ export class TaskCoreService {
    * ⇒ thêm field vào một bản là field im lặng không tới FE ở phần ba số đường. Đúng lỗi đó đã xảy ra
    * HAI LẦN với `parentTaskId` trong chính WO này. Hợp nhất là cách duy nhất đóng hẳn lớp lỗi.
    */
-  private toDto(row: TaskCoreRow): TaskCoreResponseDto {
-    return toTaskCoreDto(row);
+  private toDto(row: TaskCoreRow, assigneeAvatarUrl?: string | null): TaskCoreResponseDto {
+    return toTaskCoreDto(row, assigneeAvatarUrl);
   }
 
-  private toMyDto(row: MyTaskRow): MyTaskItemDto {
-    return { ...this.toDto(row), source: row.source as TaskCoreSourceDto };
+  private toMyDto(row: MyTaskRow, assigneeAvatarUrl?: string | null): MyTaskItemDto {
+    return {
+      ...this.toDto(row, assigneeAvatarUrl),
+      source: row.source as TaskCoreSourceDto,
+    };
+  }
+
+  /**
+   * S5-TASK-AVATAR-1 (Nhóm C) — ký avatar người phụ trách cho một trang hàng.
+   *
+   * `tx` truyền vào khi lời gọi nằm SẴN trong transaction đọc (tái dùng kết nối, tránh nested-tx trên
+   * PgBouncer); bỏ trống khi map ở NGOÀI tx (service tự mở withTenant riêng — đúng thiết kế gốc).
+   */
+  private resolveAvatars(
+    companyId: string,
+    rows: readonly TaskCoreRow[],
+    tx?: TenantTx,
+  ): Promise<Map<string, string>> {
+    return this.avatars.resolveEmployeeAvatars(companyId, toAvatarSubjects(rows), tx);
   }
 }

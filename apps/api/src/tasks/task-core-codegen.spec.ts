@@ -107,6 +107,8 @@ function makeService(opts: { sequence?: ReturnType<typeof makeSequence> } = {}) 
     taskActions as never,
     permission as never,
     projectAccess as never,
+    // S5-TASK-AVATAR-1 — resolver avatar (map rỗng = không ai có ảnh ⇒ DTO trả null, đúng fail-soft).
+    { resolveEmployeeAvatars: vi.fn().mockResolvedValue(new Map()) } as never,
   );
   return { svc, repo, db, sequence };
 }

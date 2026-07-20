@@ -103,11 +103,16 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
       return taskCoreApi.createTask(taskFormToCreatePayload(values));
     },
     onSuccess: async (result) => {
-      await Promise.all(
-        (isEdit && task ? taskCoreInvalidation.detail(task.id) : taskCoreInvalidation.list()).map(
-          (queryKey) => queryClient.invalidateQueries({ queryKey }),
-        ),
-      );
+      // S5-TASK-BOARD-UX-1 — board Kanban KHÔNG nằm dưới prefix `tasks/list`, nên chỉ invalidate
+      // list/detail thì thẻ mới (hoặc tiêu đề vừa sửa) không lên board cho tới khi hết staleTime 15s
+      // (refetchOnWindowFocus đang tắt) — người dùng đọc là "tạo xong mà board trống". Thêm khoá
+      // kanban + report của ĐÚNG dự án, mirror taskSubtaskInvalidation.afterMutate.
+      const projectId = result.projectId ?? task?.projectId ?? null;
+      const keys = [
+        ...(isEdit && task ? taskCoreInvalidation.detail(task.id) : taskCoreInvalidation.list()),
+        ...(projectId ? [taskKeys.kanban(projectId), taskKeys.projects.report(projectId)] : []),
+      ];
+      await Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
       onSuccess(result);
     },
   });
@@ -176,14 +181,30 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
           <label htmlFor="task-project" className="text-sm font-medium text-foreground">
             {t("tasks.form.fields.project")}
           </label>
-          <Select id="task-project" {...register("projectId")}>
-            <option value="">{t("tasks.form.placeholders.none")}</option>
-            {(projects ?? []).map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </Select>
+          {/*
+           * S5-TASK-MOVEPROJ-1 — chọn dự án CHỈ khi TẠO. Ở chế độ SỬA hiện chữ chỉ-đọc: đổi dự án
+           * còn phải chọn CỘT đích của dự án mới (nếu không `state_id` mồ côi — xem docblock
+           * taskFormToUpdatePayload), nên nó đi đường riêng `TaskMoveProjectDialog`. Không dùng
+           * `disabled` trên ô đã register: react-hook-form có thể trả `undefined` ⇒ payload gửi
+           * `projectId: null` ⇒ GỠ task khỏi dự án — hỏng nặng hơn thứ đang vá.
+           */}
+          {isEdit ? (
+            <>
+              <p className="text-sm text-foreground">
+                {task?.projectName ?? t("tasks.form.placeholders.none")}
+              </p>
+              <p className="text-xs text-muted-foreground">{t("tasks.form.hints.moveProject")}</p>
+            </>
+          ) : (
+            <Select id="task-project" {...register("projectId")}>
+              <option value="">{t("tasks.form.placeholders.none")}</option>
+              {(projects ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+          )}
         </div>
 
         <div className="space-y-1.5">

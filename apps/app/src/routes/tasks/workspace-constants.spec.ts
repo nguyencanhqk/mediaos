@@ -27,6 +27,8 @@ function makeTask(overrides: Partial<FilterableTask> = {}): FilterableTask {
     isOverdue: false,
     mainAssigneeEmployeeId: null,
     assigneeName: null,
+    // S5-TASK-AVATAR-1 — rail giờ mang thêm URL ảnh đã ký; mặc định null = chữ cái đầu.
+    assigneeAvatarUrl: null,
     ...overrides,
   };
 }
@@ -100,8 +102,8 @@ describe("buildAssigneeSummary", () => {
     ]);
     expect(summary.unassignedCount).toBe(2);
     expect(summary.assignees).toEqual([
-      { id: "emp-1", name: "An", count: 2 },
-      { id: "emp-2", name: "Bình", count: 1 },
+      { id: "emp-1", name: "An", avatarUrl: null, count: 2 },
+      { id: "emp-2", name: "Bình", avatarUrl: null, count: 1 },
     ]);
   });
 });
@@ -116,8 +118,8 @@ describe("pinSelectedInSummary", () => {
     const summary = buildAssigneeSummary([all[0]]);
     const pinned = pinSelectedInSummary(summary, new Set(["emp-2"]), all);
     expect(pinned.assignees).toEqual([
-      { id: "emp-1", name: "An", count: 1 },
-      { id: "emp-2", name: "Bình", count: 0 },
+      { id: "emp-1", name: "An", avatarUrl: null, count: 1 },
+      { id: "emp-2", name: "Bình", avatarUrl: null, count: 0 },
     ]);
   });
 

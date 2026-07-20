@@ -10,11 +10,13 @@ import {
   useCan,
   useCanExact,
 } from "@mediaos/web-core";
-import { Card, Button } from "@mediaos/ui";
+import { Button } from "@mediaos/ui";
 import type { SubtaskListItemDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
+import { PanelBody } from "./PanelBody";
 import { TaskStatusBadge, TaskOverdueBadge } from "./TaskStatusBadge";
 import { AddSubtaskDialog, EditSubtaskDialog, DeleteSubtaskConfirm } from "./TaskSubtaskDialogs";
+import { SubtaskAssigneeControl, SubtaskDueControl } from "./SubtaskInlineControls";
 
 /**
  * TaskSubtaskPanel — việc con (subtask) 1 cấp (S5-TASK-SUBTASK-1, DECISIONS-05 D-31, TASK-API-701/702).
@@ -62,6 +64,8 @@ function SubtaskRow({
   item,
   index,
   total,
+  parentTaskId,
+  projectId,
   canEdit,
   canDelete,
   canReorder,
@@ -74,6 +78,9 @@ function SubtaskRow({
   item: SubtaskListItemDto;
   index: number;
   total: number;
+  /** Cha + dự án — cần cho invalidation sau khi sửa nhanh trên dòng. */
+  parentTaskId: string;
+  projectId: string | null;
   canEdit: boolean;
   canDelete: boolean;
   canReorder: boolean;
@@ -132,8 +139,24 @@ function SubtaskRow({
           </p>
         )}
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span>{item.assigneeName ?? t("tasks.detail.subtasks.unassigned")}</span>
-          <span>{item.dueAt ? new Date(item.dueAt).toLocaleDateString("vi-VN") : "—"}</span>
+          {/* S5-TASK-INLINE-1 — người thực hiện + hạn sửa NGAY trên dòng (bấm avatar / bấm ngày).
+              `canOpen=false` (con ngoài phạm vi đọc riêng của actor, D-39) ⇒ chỉ-đọc: GHI không
+              thừa hưởng, bấm sửa sẽ 403. */}
+          <SubtaskAssigneeControl
+            item={item}
+            parentTaskId={parentTaskId}
+            projectId={projectId}
+            canEdit={item.canOpen && canEdit}
+          />
+          <span className="truncate">
+            {item.assigneeName ?? t("tasks.detail.subtasks.unassigned")}
+          </span>
+          <SubtaskDueControl
+            item={item}
+            parentTaskId={parentTaskId}
+            projectId={projectId}
+            canEdit={item.canOpen && canEdit}
+          />
           <TaskOverdueBadge isOverdue={item.isOverdue} />
         </div>
       </div>
@@ -166,7 +189,14 @@ function SubtaskRow({
   );
 }
 
-export function TaskSubtaskPanel({ taskId }: { taskId: string }) {
+export function TaskSubtaskPanel({
+  taskId,
+  embedded = false,
+}: {
+  taskId: string;
+  /** Trong tab ⇒ bỏ vỏ Card + tiêu đề (nhãn tab đã nói). Xem PanelBody. */
+  embedded?: boolean;
+}) {
   const { t } = useTranslation("tasks");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -247,7 +277,7 @@ export function TaskSubtaskPanel({ taskId }: { taskId: string }) {
   // ── Đang xem MỘT VIỆC CON: đừng mời gọi hành vi BE sẽ 400 (D-33) — thay bằng dòng link cha ──
   if (taskQuery.data && parentTaskId !== null) {
     return (
-      <Card className="p-4" data-testid="subtask-parent-link">
+      <PanelBody embedded={embedded} className="p-4" data-testid="subtask-parent-link">
         <p className="text-sm text-muted-foreground">
           {t("tasks.detail.subtasks.belongsToParent")}{" "}
           <button
@@ -260,26 +290,26 @@ export function TaskSubtaskPanel({ taskId }: { taskId: string }) {
             {t("tasks.detail.subtasks.viewParentAction")}
           </button>
         </p>
-      </Card>
+      </PanelBody>
     );
   }
 
   if (taskQuery.isLoading) {
     return (
-      <Card className="p-4">
+      <PanelBody embedded={embedded} className="p-4">
         <div className="h-16 animate-pulse rounded bg-muted" />
-      </Card>
+      </PanelBody>
     );
   }
 
   if (taskQuery.isError) {
     return (
-      <Card className="space-y-2 p-4">
+      <PanelBody embedded={embedded} className="space-y-2 p-4">
         <p className="text-sm text-destructive">{t("tasks.detail.subtasks.errors.loadFailed")}</p>
         <Button variant="outline" size="sm" onClick={() => void taskQuery.refetch()}>
           {t("actions.retry", { ns: "common" })}
         </Button>
-      </Card>
+      </PanelBody>
     );
   }
 
@@ -293,11 +323,15 @@ export function TaskSubtaskPanel({ taskId }: { taskId: string }) {
   const reorderBusy = subtasksQuery.isFetching || reorderMutation.isPending;
 
   return (
-    <Card className="space-y-3 p-4">
+    <PanelBody embedded={embedded}>
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-muted-foreground">
-          {t("tasks.detail.subtasks.title")}
-        </h3>
+        {embedded ? (
+          <span />
+        ) : (
+          <h3 className="text-sm font-semibold text-muted-foreground">
+            {t("tasks.detail.subtasks.title")}
+          </h3>
+        )}
         {canCreate && (
           <Button type="button" size="sm" variant="outline" onClick={() => setAddOpen(true)}>
             <Plus className="mr-1 h-4 w-4" />
@@ -325,6 +359,8 @@ export function TaskSubtaskPanel({ taskId }: { taskId: string }) {
               item={item}
               index={index}
               total={items.length}
+              parentTaskId={taskId}
+              projectId={projectId}
               canEdit={canUpdate}
               canDelete={canDelete}
               canReorder={canUpdate}
@@ -363,6 +399,6 @@ export function TaskSubtaskPanel({ taskId }: { taskId: string }) {
           onClose={() => setDeleteTarget(null)}
         />
       )}
-    </Card>
+    </PanelBody>
   );
 }
