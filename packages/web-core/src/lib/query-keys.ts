@@ -457,10 +457,21 @@ export const taskProjectInvalidation = {
 // params) — mirror taskProjectListPrefix, khớp MỌI biến thể filter/offset.
 const taskListPrefix = [...taskKeys.all, "list"] as const;
 
+// Vá 2026-07-20 (owner báo "sửa trong panel chi tiết phải F5 board mới thấy"): `taskKeys.kanban`
+// KHÔNG nằm dưới prefix `tasks/list` nên các helper dưới đây trước giờ KHÔNG chạm board — sửa
+// tiêu đề/mô tả, bình luận, checklist, upload tệp xong thẻ trên board vẫn đứng dữ liệu cũ tới hết
+// staleTime (refetchOnWindowFocus tắt ⇒ thực tế là tới khi F5). Dùng PREFIX (bỏ slot projectId) thay
+// vì bắt mọi call-site phải biết projectId: panel con (comment/checklist) không giữ projectId, và
+// tối đa chỉ 1-2 board nằm trong cache — invalidate prefix chỉ refetch board đang mở (active).
+const taskKanbanPrefix = [...taskKeys.all, "kanban"] as const;
+
 export const taskCoreInvalidation = {
   list: () => [taskListPrefix] as const,
   my: () => [taskKeys.my()] as const,
-  detail: (id: string) => [taskListPrefix, taskKeys.my(), taskKeys.detail(id)] as const,
+  // detail() kèm kanban-prefix: mọi mutate đi qua đây (PATCH tiêu đề/mô tả, form Sửa, watchers…)
+  // đều có thể đổi dữ liệu thẻ trên board (title là mặt chữ to nhất của thẻ).
+  detail: (id: string) =>
+    [taskListPrefix, taskKeys.my(), taskKeys.detail(id), taskKanbanPrefix] as const,
 };
 
 // S4-FE-TASK-3 — invalidation cho collab (comment CRUD/checklist CRUD/Kanban move). `taskActivityPrefix`
@@ -468,8 +479,10 @@ export const taskCoreInvalidation = {
 const taskActivityPrefix = [...taskKeys.all, "activity"] as const;
 
 export const taskCollabInvalidation = {
-  comments: (taskId: string) => [taskKeys.comments(taskId)] as const,
-  checklists: (taskId: string) => [taskKeys.checklists(taskId)] as const,
+  // Kèm kanban-prefix: badge đếm bình luận/checklist nằm NGAY trên thẻ board (KanbanCardBadges) —
+  // thiếu vế này thì thêm bình luận/tick checklist xong quay ra board vẫn thấy số cũ.
+  comments: (taskId: string) => [taskKeys.comments(taskId), taskKanbanPrefix] as const,
+  checklists: (taskId: string) => [taskKeys.checklists(taskId), taskKanbanPrefix] as const,
   // Move (Kanban drag/drop) đổi CẢ board + task detail/list (status field dùng chung).
   kanban: (projectId: string, taskId: string) =>
     [taskKeys.kanban(projectId), ...taskCoreInvalidation.detail(taskId)] as const,
@@ -478,7 +491,8 @@ export const taskCollabInvalidation = {
 
 // S4-FE-TASK-4 — invalidation cho file đính kèm công việc (upload/xóa TaskFilePanel).
 export const taskFileInvalidation = {
-  files: (taskId: string) => [taskKeys.files(taskId)] as const,
+  // Kèm kanban-prefix: badge 📎 đếm tệp nằm trên thẻ board — upload xong badge phải nhảy số ngay.
+  files: (taskId: string) => [taskKeys.files(taskId), taskKanbanPrefix] as const,
   /**
    * S5-TASK-COVER-1 — đổi/gỡ ảnh bìa chạm BA nơi, không chỉ danh sách tệp:
    *  · files  — cờ `isCover` của từng dòng trong panel Tệp;

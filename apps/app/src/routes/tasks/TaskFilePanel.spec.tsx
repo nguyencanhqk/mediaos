@@ -239,7 +239,8 @@ describe("TaskFilePanel — ảnh bìa (S5-TASK-COVER-1)", () => {
     renderWithQuery(<TaskFilePanel taskId="task-1" projectId="proj-1" />);
 
     const btn = await screen.findByTestId(`task-cover-toggle-${IMG.fileId}`);
-    expect(btn).toHaveTextContent(/đặt làm ảnh bìa/i);
+    // Nút icon (vá UI 2026-07-20) — nhãn nằm ở aria-label/title, không còn text trong nút.
+    expect(btn.getAttribute("aria-label")).toMatch(/đặt làm ảnh bìa/i);
     fireEvent.click(btn);
 
     await waitFor(() =>
@@ -255,7 +256,7 @@ describe("TaskFilePanel — ảnh bìa (S5-TASK-COVER-1)", () => {
     renderWithQuery(<TaskFilePanel taskId="task-1" projectId="proj-1" />);
 
     const btn = await screen.findByTestId(`task-cover-toggle-${IMG.fileId}`);
-    expect(btn).toHaveTextContent(/gỡ ảnh bìa/i);
+    expect(btn.getAttribute("aria-label")).toMatch(/gỡ ảnh bìa/i);
     fireEvent.click(btn);
 
     await waitFor(() => expect(taskFileApi.clearTaskCover).toHaveBeenCalledWith("task-1"));

@@ -15,7 +15,7 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Download, Loader2, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Download, ImageOff, ImagePlus, Loader2, RefreshCw, Trash2, Upload } from "lucide-react";
 import type { TaskFileDto } from "@mediaos/contracts";
 import {
   taskFileApi,
@@ -59,6 +59,8 @@ function scanStatusVariant(
 
 // ---------------------------------------------------------------------------
 // Download button — taskFileApi.downloadTaskFile (blob qua redirect 302) rồi trigger tải nội bộ.
+// Vá UI 2026-07-20: cột hành động chuyển hết sang NÚT ICON (tooltip qua title) — 3 nút chữ xếp dọc
+// làm cột "Hành động" tràn khỏi mép panel, phải kéo ngang mới thấy nút Xóa (owner gửi ảnh).
 // ---------------------------------------------------------------------------
 function DownloadTaskFileButton({ taskId, file }: { taskId: string; file: TaskFileDto }) {
   const { t } = useTranslation("tasks");
@@ -70,28 +72,32 @@ function DownloadTaskFileButton({ taskId, file }: { taskId: string; file: TaskFi
     },
   });
 
+  const label = mutation.isPending
+    ? t("tasks.detail.files.downloading")
+    : t("tasks.detail.files.download");
+
   return (
-    <div className="flex flex-col items-start gap-1">
+    <>
       <Button
         variant="ghost"
         size="sm"
         onClick={() => mutation.mutate()}
         disabled={mutation.isPending}
-        aria-label={t("tasks.detail.files.download")}
+        aria-label={label}
+        title={label}
       >
         {mutation.isPending ? (
-          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden />
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
         ) : (
-          <Download className="mr-1 h-3.5 w-3.5" aria-hidden />
+          <Download className="h-4 w-4" aria-hidden />
         )}
-        {mutation.isPending
-          ? t("tasks.detail.files.downloading")
-          : t("tasks.detail.files.download")}
       </Button>
       {mutation.isError && (
-        <span className="text-xs text-destructive">{mapApiErrorToUi(mutation.error).message}</span>
+        <span role="alert" className="text-xs text-destructive">
+          {mapApiErrorToUi(mutation.error).message}
+        </span>
       )}
-    </div>
+    </>
   );
 }
 
@@ -144,15 +150,23 @@ function CoverToggleButton({
   // Tệp không đủ điều kiện VÀ cũng không phải bìa hiện tại ⇒ không có thao tác nào để chào mời.
   if (!eligible && !isCover) return null;
 
+  const label = isCover ? t("tasks.detail.files.cover.clear") : t("tasks.detail.files.cover.set");
+
   return (
     <Button
       variant="ghost"
       size="sm"
       onClick={() => mutation.mutate()}
       disabled={mutation.isPending}
+      aria-label={label}
+      title={label}
       data-testid={`task-cover-toggle-${file.fileId}`}
     >
-      {isCover ? t("tasks.detail.files.cover.clear") : t("tasks.detail.files.cover.set")}
+      {isCover ? (
+        <ImageOff className="h-4 w-4" aria-hidden />
+      ) : (
+        <ImagePlus className="h-4 w-4" aria-hidden />
+      )}
     </Button>
   );
 }
@@ -366,8 +380,15 @@ export function TaskFilePanel({ taskId, embedded = false, projectId = null }: Ta
     {
       accessorKey: "originalName",
       header: t("tasks.detail.files.columns.name"),
+      // Tên file (nhất là tên tự sinh dạng uuid.png) từng bẻ dòng chiếm bề ngang, đẩy cột hành động
+      // ra khỏi mép panel — cắt ngắn + tooltip tên đầy đủ.
       cell: ({ row }) => (
-        <span className="text-sm font-medium text-foreground">{row.original.originalName}</span>
+        <span
+          className="block max-w-[13rem] truncate text-sm font-medium text-foreground"
+          title={row.original.originalName}
+        >
+          {row.original.originalName}
+        </span>
       ),
     },
     {
@@ -403,8 +424,9 @@ export function TaskFilePanel({ taskId, embedded = false, projectId = null }: Ta
     {
       id: "actions",
       header: t("tasks.detail.files.columns.actions"),
+      // Nút icon một hàng KHÔNG bẻ dòng — 3 nút chữ cũ tràn khỏi mép panel (vá UI 2026-07-20).
       cell: ({ row }) => (
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <DownloadTaskFileButton taskId={taskId} file={row.original} />
           {/* Gate = cặp UPLOAD (file-upload:task) — mirror server. Thiếu quyền ⇒ KHÔNG render nút
               (PermissionGate), không phải nút disabled: UI-02 §5.3. */}
@@ -423,9 +445,9 @@ export function TaskFilePanel({ taskId, embedded = false, projectId = null }: Ta
               size="sm"
               onClick={() => setDeleteTarget(row.original)}
               aria-label={t("tasks.detail.files.delete.button")}
+              title={t("tasks.detail.files.delete.button")}
             >
-              <Trash2 className="mr-1 h-3.5 w-3.5 text-destructive" />
-              {t("tasks.detail.files.delete.button")}
+              <Trash2 className="h-4 w-4 text-destructive" />
             </Button>
           </PermissionGate>
         </div>
