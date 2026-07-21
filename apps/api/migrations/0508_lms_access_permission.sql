@@ -62,6 +62,12 @@ BEGIN
   SELECT count(*) INTO v_n FROM permissions WHERE action = 'access' AND resource_type = 'lms';
   IF v_n <> 1 THEN RAISE EXCEPTION '[0508] verify: pair access:lms phải =1, thấy %', v_n; END IF;
 
+  -- Defense-in-depth (mẫu 0495): access:lms PHẢI is_sensitive=false để lọt getCapabilities (nav gate).
+  -- Nếu pair có sẵn từ trước với is_sensitive=true, ON CONFLICT DO NOTHING sẽ giữ nguyên → chặn ở đây.
+  SELECT count(*) INTO v_n
+    FROM permissions WHERE action = 'access' AND resource_type = 'lms' AND is_sensitive = false;
+  IF v_n <> 1 THEN RAISE EXCEPTION '[0508] verify: access:lms phải is_sensitive=false (nav gate)'; END IF;
+
   SELECT count(*) INTO v_n
     FROM role_permissions rp
     JOIN permissions p ON p.id = rp.permission_id
