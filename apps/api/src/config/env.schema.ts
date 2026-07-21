@@ -202,6 +202,13 @@ export const envSchema = z
     // claude-sonnet-4-6 = lựa chọn rẻ/nhanh hơn. Giá trị ngoài enum bị reject ở boundary (fail-fast cấu hình).
     AI_MODEL: z.enum(["claude-opus-4-8", "claude-sonnet-4-6"]).default("claude-opus-4-8"),
 
+    // ── Tích hợp LMS (fmc-app) — cầu SSO Giai đoạn A ─────────────────────────────────────────────────
+    // Shared secret HMAC với LMS (MEDIAOS_SSO_SECRET phía LMS). OPTIONAL để API boot khi chưa cấu hình —
+    // endpoint sso-link fail-fast 503 khi dùng (mirror ANTHROPIC_API_KEY). BẤT BIẾN #3: không hardcode/log.
+    LMS_SSO_SECRET: z.string().min(32).optional(),
+    // Gốc public của LMS (vd https://lms.example.com) — đích redirect SSO.
+    LMS_BASE_URL: z.string().url().optional(),
+
     // ⚠️ ALLOW_SUPERUSER_ROTATION (KHÔNG validate qua zod — CỐ Ý): SecretRotationService đọc THẲNG
     // `process.env.ALLOW_SUPERUSER_ROTATION === 'true'` để fail-closed tuyệt đối (mọi giá trị ≠ 'true', kể cả
     // unset → CHẶN rotation bằng role BYPASS RLS). Không dùng z.coerce.boolean() vì nó coi 'false' → true (bẫy).

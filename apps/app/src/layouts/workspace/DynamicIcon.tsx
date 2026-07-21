@@ -49,6 +49,7 @@ import {
   Building2,
   SlidersHorizontal,
   File,
+  GraduationCap,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@mediaos/ui";
@@ -101,6 +102,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "building-2": Building2,
   "sliders-horizontal": SlidersHorizontal,
   file: File,
+  // Tích hợp LMS Giai đoạn A — mục "Đào tạo".
+  "graduation-cap": GraduationCap,
 };
 
 interface DynamicIconProps {
