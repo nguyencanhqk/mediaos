@@ -30,7 +30,9 @@ export type ModuleCode =
   | "ROOM"
   | "CHAT"
   | "SOCIAL"
-  | "AI";
+  | "AI"
+  // Tích hợp LMS (fmc-app) — cổng SSO sang hệ Đào tạo ngoài, KHÔNG phải module nội bộ MediaOS.
+  | "LMS";
 
 // ---------------------------------------------------------------------------
 // Data scope (FRONTEND-03 §9.2–§9.3)
@@ -627,6 +629,24 @@ export const APP_REGISTRY: readonly AppRegistryItem[] = [
     requiredAnyPermissions: SYSTEM_APP_PERMISSIONS,
     status: "active",
     order: 70,
+  },
+  // Tích hợp LMS Giai đoạn A — card "Đào tạo (LMS)" mở /lms (fetch sso-link → chuyển sang LMS ngoài).
+  // Quyền "mở LMS" THUỘC hệ phân quyền MediaOS: gate cặp engine LITERAL `access:lms` (KHÔNG qua
+  // PERMISSION_CODE_TO_PAIR — tránh pair-drift, giống access:me). Seed 0508 cấp cho 4 role canonical;
+  // admin thu hồi per-role. Card + endpoint SSO cùng gate 1 cặp. Không phải module nội bộ → không sidebar.
+  {
+    appKey: "lms",
+    moduleCode: "LMS",
+    nameKey: "app.lms",
+    descKey: "appDesc.lms",
+    icon: "graduation-cap",
+    rootPath: "/lms",
+    defaultRoute: "/lms",
+    category: "collaboration",
+    aliases: ["dao tao", "lms", "hoc tap", "khoa hoc", "training", "e-learning"],
+    requiredAnyPermissions: ["access:lms"],
+    status: "active",
+    order: 80,
   },
 ] as const;
 

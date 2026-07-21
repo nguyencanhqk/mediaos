@@ -1,6 +1,9 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # apps/lms = LMS nhập tại chỗ, workspace RIÊNG (Next.js+SQLite, pnpm-lock riêng) — loại khỏi
+  # workspace MediaOS để root install/turbo KHÔNG đụng tới (tránh xung đột deps + build).
+  - "!apps/lms"
 
 # Pin React TYPES về một phiên bản toàn monorepo — chặn @types/react dedupe skew
 # (ReactNode/ReactPortal mismatch 19.0.14 vs 19.2.16). Khớp peerDeps packages/{ui,web-core}.

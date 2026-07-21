@@ -965,6 +965,8 @@ export const ME_SIDEBAR: readonly SidebarItemMeta[] = [
     requiredAnyPermissions: ["access:me"],
   },
   // Tích hợp LMS Giai đoạn A: mở LMS qua cầu SSO (/lms fetch sso-link rồi chuyển trang).
+  // Gate access:lms (KHÔNG access:me) — nhất quán với card Trang chủ + endpoint BE: ai bị thu quyền
+  // KHÔNG thấy link này. (mig 0508 cấp mặc định cho 4 role canonical.)
   {
     sidebarKey: "me.lms",
     moduleCode: "ME",
@@ -973,7 +975,7 @@ export const ME_SIDEBAR: readonly SidebarItemMeta[] = [
     icon: "graduation-cap",
     group: "Đào tạo",
     order: 60,
-    requiredAnyPermissions: ["access:me"],
+    requiredAnyPermissions: ["access:lms"],
   },
 ];
 
