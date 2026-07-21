@@ -1317,6 +1317,13 @@
       "when": 1717587309000,
       "tag": "0507_s5_goaldb1_noti_catalog_goal",
       "breakpoints": true
+    },
+    {
+      "idx": 188,
+      "version": "7",
+      "when": 1717587310000,
+      "tag": "0508_lms_access_permission",
+      "breakpoints": true
     }
   ]
 }

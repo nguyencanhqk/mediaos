@@ -2,6 +2,11 @@
 node_modules/
 .pnpm-store/
 
+# apps/lms — LMS (fmc-app) nhập tại chỗ, chạy độc lập bằng stack riêng (Next.js+SQLite).
+# KHÔNG commit vào repo MediaOS (PUBLIC): chứa data/app.db (PII + password hash) + .env secret.
+# Version hoá riêng nếu cần (repo private tách biệt).
+/apps/lms/
+
 # harness — artefact runtime (ledger có timestamp + báo cáo tự sinh), KHÔNG commit
 harness/activity.jsonl
 harness/report.md
