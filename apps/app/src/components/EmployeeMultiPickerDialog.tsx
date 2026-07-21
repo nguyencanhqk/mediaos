@@ -28,8 +28,13 @@ interface EmployeeMultiPickerDialogProps {
   description?: string;
   /** Hàng bị KHÓA (đã tham gia / đã ở phòng…) — hiện mờ + badge, không chọn lại được. */
   isRowDisabled: (employee: HrEmployeeListItem) => boolean;
-  /** Nhãn badge cạnh tên của hàng bị khóa (vd: "Đã tham gia"). */
-  disabledBadge: string;
+  /** Nhãn badge cạnh tên của hàng bị khóa (vd: "Đã tham gia") — string chung hoặc theo từng hàng. */
+  disabledBadge: string | ((employee: HrEmployeeListItem) => string);
+  /**
+   * Multi-mode: hàng khóa có hiện dấu tích không (mặc định true = "đã ở trong"). Truyền khi hàng
+   * khóa vì lý do KHÁC đã-tham-gia (vd chưa liên kết tài khoản) — hàng đó không được tích.
+   */
+  disabledRowChecked?: (employee: HrEmployeeListItem) => boolean;
   /** Slot bên phải hàng lọc (vd: chọn Vai trò dự án). */
   headerExtra?: ReactNode;
   /**
@@ -55,6 +60,7 @@ export function EmployeeMultiPickerDialog({
   description,
   isRowDisabled,
   disabledBadge,
+  disabledRowChecked,
   headerExtra,
   onAddOne,
   onBatchSettled,
@@ -261,6 +267,7 @@ export function EmployeeMultiPickerDialog({
                 items.map((e) => {
                   const disabled = isRowDisabled(e);
                   const checked = selected.has(e.id);
+                  const disabledChecked = disabled && (disabledRowChecked?.(e) ?? true);
                   return (
                     <tr
                       key={e.id}
@@ -277,9 +284,10 @@ export function EmployeeMultiPickerDialog({
                       <td className="px-3 py-2" onClick={(ev) => ev.stopPropagation()}>
                         <input
                           type={single ? "radio" : "checkbox"}
-                          // Multi: hàng khóa = "đã ở trong" → hiện dấu tích. Single: hàng khóa
-                          // (vd chưa có tài khoản) KHÔNG phải lựa chọn hiện tại → không tích.
-                          checked={single ? checked : disabled || checked}
+                          // Multi: hàng khóa mặc định = "đã ở trong" → hiện dấu tích (caller đè
+                          // qua disabledRowChecked). Single: hàng khóa KHÔNG phải lựa chọn hiện
+                          // tại → không tích.
+                          checked={single ? checked : disabled ? disabledChecked : checked}
                           disabled={disabled || busy}
                           onChange={() => toggleOne(e)}
                           aria-label={e.fullName ?? e.employeeCode ?? e.id}
@@ -289,7 +297,13 @@ export function EmployeeMultiPickerDialog({
                         <span className="flex items-center gap-2">
                           <Avatar name={e.fullName} src={e.avatarUrl} size="sm" />
                           <span className="font-medium text-foreground">{e.fullName ?? "—"}</span>
-                          {disabled && <Badge variant="muted">{disabledBadge}</Badge>}
+                          {disabled && (
+                            <Badge variant="muted">
+                              {typeof disabledBadge === "function"
+                                ? disabledBadge(e)
+                                : disabledBadge}
+                            </Badge>
+                          )}
                         </span>
                       </td>
                       <td className="px-3 py-2">{e.positionName ?? "—"}</td>

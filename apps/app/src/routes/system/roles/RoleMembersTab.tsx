@@ -6,6 +6,10 @@
  * isSensitive — audit + SoD ở server, KHÔNG mở mutation surface mới). Nút mutation bọc
  * PermissionGate assign-role:user; server vẫn là cổng cuối (403 từng dòng khi bị chặn, vd tự gán).
  *
+ * "Thêm người": EmployeeMultiPickerDialog dùng chung (benchmark Base/AMIS — search server + lọc
+ * phòng ban + phân trang + multi-select như Task/HR). Chỉ gán được nhân viên ĐÃ link tài khoản;
+ * hàng đã giữ vai trò / chưa có tài khoản bị khóa với badge riêng.
+ *
  * "Thêm theo phòng ban": org tree → GET /hr/employees?orgUnitId → chỉ gán nhân viên ĐÃ link tài
  * khoản (userId ≠ null) và CHƯA là member; gọi TUẦN TỰ từng người, báo kết quả từng dòng.
  */
@@ -24,7 +28,8 @@ import {
   PermissionGate,
   type OrgTreeNode,
 } from "@mediaos/web-core";
-import { Badge, Button, Card, CardContent, Dialog, EmptyState, Input } from "@mediaos/ui";
+import { Badge, Button, Card, CardContent, Dialog, EmptyState } from "@mediaos/ui";
+import { EmployeeMultiPickerDialog } from "../../../components/EmployeeMultiPickerDialog";
 import { SYSTEM_ENGINE_PAIRS } from "../constants";
 
 type TF = ReturnType<typeof useTranslation<"system">>["t"];
@@ -221,13 +226,14 @@ export function RoleMembersTab({ roleId }: RoleMembersTabProps) {
         )}
       </Dialog>
 
-      <AddPersonDialog
-        open={addPersonOpen}
-        onClose={() => setAddPersonOpen(false)}
-        roleId={roleId}
-        memberIds={memberIds}
-        onDone={() => void invalidateMembers()}
-      />
+      {addPersonOpen && (
+        <AddPersonDialog
+          onClose={() => setAddPersonOpen(false)}
+          roleId={roleId}
+          memberIds={memberIds}
+          onDone={() => void invalidateMembers()}
+        />
+      )}
       <AddOrgUnitDialog
         open={addOrgOpen}
         onClose={() => setAddOrgOpen(false)}
@@ -299,7 +305,9 @@ function BatchResultList({ results }: { results: BatchResult[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Dialog "Thêm người" — search /auth/users, multi-select, loại user đã là member.
+// Dialog "Thêm người" — wrapper mỏng của EmployeeMultiPickerDialog (components/), cùng bảng chọn
+// với Task/HR. Phần riêng của vai trò: chỉ gán được nhân viên ĐÃ link tài khoản (userId ≠ null);
+// hàng đã giữ vai trò hoặc chưa có tài khoản bị khóa với badge phân biệt.
 // ---------------------------------------------------------------------------
 interface AddDialogProps {
   open: boolean;
@@ -309,93 +317,29 @@ interface AddDialogProps {
   onDone: () => void;
 }
 
-function AddPersonDialog({ open, onClose, roleId, memberIds, onDone }: AddDialogProps) {
+function AddPersonDialog({ onClose, roleId, memberIds, onDone }: Omit<AddDialogProps, "open">) {
   const { t } = useTranslation("system");
-  const { t: tc } = useTranslation("common");
-  const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const batch = useAssignBatch(roleId, t, onDone);
-
-  const usersQuery = useQuery({
-    queryKey: ["auth", "roles", roleId, "member-picker", search],
-    queryFn: () => authUsersApi.listUsers(search.trim() ? { q: search.trim() } : {}),
-    enabled: open,
-    staleTime: 10_000,
-  });
-  const candidates = (usersQuery.data?.users ?? []).filter((u) => !memberIds.has(u.id));
-
-  const toggle = (id: string) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  const close = () => {
-    setSelected(new Set());
-    setSearch("");
-    batch.reset();
-    onClose();
-  };
 
   return (
-    <Dialog
-      open={open}
-      onClose={close}
+    <EmployeeMultiPickerDialog
       title={t("roleMembers.addPerson.title")}
       description={t("roleMembers.addPerson.description")}
-      footer={
-        <>
-          <Button variant="outline" size="sm" onClick={close}>
-            {tc("actions.cancel")}
-          </Button>
-          <Button
-            size="sm"
-            disabled={selected.size === 0 || batch.running}
-            onClick={() =>
-              void batch.run(
-                candidates
-                  .filter((u) => selected.has(u.id))
-                  .map((u) => ({ userId: u.id, label: u.email })),
-              )
-            }
-          >
-            {batch.running
-              ? t("roleMembers.batch.running")
-              : t("roleMembers.addPerson.submit", { count: selected.size })}
-          </Button>
-        </>
+      isRowDisabled={(e) => e.userId === null || memberIds.has(e.userId)}
+      disabledBadge={(e) =>
+        e.userId === null
+          ? t("roleMembers.addPerson.noAccount")
+          : t("roleMembers.addPerson.alreadyMember")
       }
-    >
-      <Input
-        placeholder={t("roleMembers.addPerson.searchPlaceholder")}
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-      {usersQuery.isLoading ? (
-        <div className="h-24 animate-pulse rounded-md bg-muted" />
-      ) : candidates.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t("roleMembers.addPerson.empty")}</p>
-      ) : (
-        <ul className="max-h-56 space-y-1 overflow-y-auto">
-          {candidates.map((u) => (
-            <li key={u.id}>
-              <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
-                <input type="checkbox" checked={selected.has(u.id)} onChange={() => toggle(u.id)} />
-                <span className="min-w-0">
-                  <span className="block truncate font-medium text-foreground">
-                    {u.fullName ?? u.email}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">{u.email}</span>
-                </span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      )}
-      <BatchResultList results={batch.results} />
-    </Dialog>
+      disabledRowChecked={(e) => e.userId !== null && memberIds.has(e.userId)}
+      onAddOne={(e) => {
+        // Hàng chưa link tài khoản đã bị khóa chọn — guard giữ type an toàn.
+        if (e.userId === null) return Promise.reject(new Error("employee-not-linked"));
+        return authUsersApi.assignRole(e.userId, { roleId });
+      }}
+      onBatchSettled={onDone}
+      onClose={onClose}
+      testIdPrefix="role-member-picker"
+    />
   );
 }
 

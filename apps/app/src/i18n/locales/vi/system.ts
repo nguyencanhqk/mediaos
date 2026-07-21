@@ -384,10 +384,9 @@ export default {
     addPerson: {
       title: "Thêm người vào vai trò",
       description:
-        "Tìm và chọn tài khoản để gán vai trò này. Tài khoản đã là thành viên không hiển thị.",
-      searchPlaceholder: "Tìm theo email hoặc tên...",
-      empty: "Không có tài khoản phù hợp (hoặc tất cả đã là thành viên).",
-      submit: "Gán {{count}} tài khoản",
+        "Tìm và chọn nhân viên để gán vai trò này. Người đã giữ vai trò hoặc chưa liên kết tài khoản sẽ bị khóa chọn.",
+      alreadyMember: "Đã giữ vai trò",
+      noAccount: "Chưa có tài khoản",
     },
     addOrgUnit: {
       title: "Thêm cả phòng ban vào vai trò",

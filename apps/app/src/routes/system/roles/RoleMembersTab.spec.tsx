@@ -5,12 +5,14 @@
  * KHÔNG kế thừa wildcard qua PermissionGate exact-pair? — PermissionGate dùng useCan; cờ sensitive
  * chỉ xuất hiện khi allowlist phơi đúng grant thật nên wildcard '*:*' KHÔNG tự mở nút).
  * States: forbidden · members list · empty · remove flow gọi đúng revokeRole(userId, roleId).
+ * "Thêm người" = EmployeeMultiPickerDialog (GET /hr/employees): hàng đã giữ vai trò / chưa link
+ * tài khoản bị khóa; chọn nhiều → assignRole(userId, {roleId}) TỪNG người.
  */
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore, roleAdminApi, authUsersApi } from "@mediaos/web-core";
+import { useAuthStore, roleAdminApi, authUsersApi, hrApi } from "@mediaos/web-core";
 import { RoleMembersTab } from "./RoleMembersTab";
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
@@ -23,9 +25,13 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     },
     authUsersApi: {
       ...actual.authUsersApi,
-      listUsers: vi.fn(),
       assignRole: vi.fn(),
       revokeRole: vi.fn(),
+    },
+    hrApi: {
+      ...actual.hrApi,
+      listEmployees: vi.fn().mockResolvedValue({ items: [], meta: {} }),
+      listDepartments: vi.fn().mockResolvedValue([]),
     },
   };
 });
@@ -94,6 +100,81 @@ describe("RoleMembersTab", () => {
     setCaps({ "view:user": true });
     renderWithQuery(<RoleMembersTab roleId="role-1" />);
     expect(await screen.findByText("Chưa có thành viên")).toBeInTheDocument();
+  });
+
+  // ── Picker "Thêm người" (EmployeeMultiPickerDialog) ────────────────────────
+  const PICKER_EMPLOYEES = {
+    items: [
+      {
+        id: "emp-1",
+        userId: "u-100", // đã là member (MEMBERS) → khóa + badge "Đã giữ vai trò"
+        fullName: "Bùi Mỹ Linh",
+        email: "linh.bui@demo.local",
+        positionName: "Nhân viên đăng tải",
+        orgUnitName: "Nội dung",
+        avatarUrl: null,
+        employeeCode: "EMP0001",
+      },
+      {
+        id: "emp-2",
+        userId: "u-200", // chọn được
+        fullName: "Trần Thị B",
+        email: "b@demo.local",
+        positionName: "Designer",
+        orgUnitName: "Nội dung",
+        avatarUrl: null,
+        employeeCode: "EMP0002",
+      },
+      {
+        id: "emp-3",
+        userId: null, // chưa link tài khoản → khóa + badge "Chưa có tài khoản"
+        fullName: "Lê Văn C",
+        email: "c@demo.local",
+        positionName: "QA",
+        orgUnitName: "Kỹ thuật",
+        avatarUrl: null,
+        employeeCode: "EMP0003",
+      },
+    ],
+    meta: { page: 1, pageSize: 10, total: 3, totalPages: 1, hasNext: false, hasPrev: false },
+  };
+
+  it("Thêm người → picker: hàng đã giữ vai trò / chưa có tài khoản bị khóa với badge riêng", async () => {
+    setCaps({ "view:user": true, "assign-role:user": true });
+    vi.mocked(hrApi.listEmployees).mockResolvedValue(PICKER_EMPLOYEES as never);
+    renderWithQuery(<RoleMembersTab roleId="role-1" />);
+    fireEvent.click(await screen.findByText("Thêm người"));
+    await waitFor(() =>
+      expect(screen.getByTestId("role-member-picker-row-emp-2")).toBeInTheDocument(),
+    );
+
+    expect(screen.getByLabelText("Bùi Mỹ Linh")).toBeDisabled();
+    expect(screen.getByText("Đã giữ vai trò")).toBeInTheDocument();
+    expect(screen.getByLabelText("Lê Văn C")).toBeDisabled();
+    // Hàng chưa link tài khoản KHÔNG hiện dấu tích (khác hàng "đã ở trong").
+    expect(screen.getByLabelText("Lê Văn C")).not.toBeChecked();
+    expect(screen.getByText("Chưa có tài khoản")).toBeInTheDocument();
+  });
+
+  it("Thêm người → chọn nhân viên → assignRole gọi với userId (không phải employeeId)", async () => {
+    setCaps({ "view:user": true, "assign-role:user": true });
+    vi.mocked(hrApi.listEmployees).mockResolvedValue(PICKER_EMPLOYEES as never);
+    vi.mocked(authUsersApi.assignRole).mockResolvedValue({} as never);
+    renderWithQuery(<RoleMembersTab roleId="role-1" />);
+    fireEvent.click(await screen.findByText("Thêm người"));
+    await waitFor(() =>
+      expect(screen.getByTestId("role-member-picker-row-emp-2")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByTestId("role-member-picker-row-emp-2"));
+    fireEvent.click(screen.getByTestId("role-member-picker-confirm"));
+    await waitFor(() => {
+      expect(authUsersApi.assignRole).toHaveBeenCalledWith("u-200", { roleId: "role-1" });
+    });
+    // Thành công hết → dialog tự đóng.
+    await waitFor(() =>
+      expect(screen.queryByTestId("role-member-picker-confirm")).not.toBeInTheDocument(),
+    );
   });
 
   it("Gỡ → confirm dialog → xác nhận gọi revokeRole(userId, roleId) + refetch", async () => {
