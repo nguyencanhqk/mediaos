@@ -7960,4 +7960,115 @@ export const backlog = [
       "i18n namespace vi đủ; unit test component chính; LIGHT gate (typescript + react + quality-gate) xanh",
     ],
   },
+
+  // ── S5-BRAND — Cài đặt thương hiệu công ty (logo + favicon) — seed 2026-07-21 ──
+  // Quyết định seed-time: logo = fileId lưu vào cột companies.logo_url SẴN CÓ (docs/DB DB-08
+  // thiết kế gốc logo_file_id trên companies); favicon = company_settings key
+  // branding.favicon_file_id qua SettingService (upsert sẵn) ⇒ KHÔNG migration, KHÔNG quyền mới
+  // (tái dùng view/update:foundation-company). Bảng tenant_branding (mig 0300, di sản AC-4
+  // ngoài docs/DB) KHÔNG nối lại. Branding pre-auth (trang login + favicon trước đăng nhập,
+  // cần endpoint public) = đợt sau, NGOÀI phạm vi wave này.
+  {
+    id: "S5-BRAND-BE-1",
+    module: "SYSTEM",
+    layer: "BE",
+    title:
+      "BE Thương hiệu công ty: wrapper presign logo + favicon trên FileService (pattern ME avatar) — /foundation/company/branding, logo→companies.logo_url (fileId), favicon→company_settings key, KHÔNG migration, KHÔNG quyền mới",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/company/**",
+      "apps/api/src/foundation/settings/**",
+      "apps/api/test/integration/**",
+      "packages/contracts/src/**",
+      "docs/plans/S5-BRAND-BE-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S5-BRAND-BE-1.md",
+    src: [
+      "apps/api/src/me/me-avatar.controller.ts + me-avatar.service.ts (pattern wrapper presign 4 pha trên FileService: upload-url→confirm→set→get, guard IDOR/MIME/state — TÁI DÙNG cách làm, KHÔNG đụng file ME)",
+      "apps/api/src/foundation/company/company.service.ts (EDITABLE_KEYS có logoUrl L20; audit COMPANY_UPDATED in-tx L97)",
+      "apps/api/src/foundation/settings/setting.service.ts:198 updateCompanySetting (đường upsert L288) + setting-defaults.ts (khai default key nếu service ép catalog)",
+      "packages/contracts/src/files.ts (uploadFileInputSchema L76 · linkFileInputSchema L97 — entityType chuỗi tự do ⇒ dùng company-branding)",
+      "docs/DB/DB-08 §companies (logo_file_id FK files — thiết kế gốc; cột code hiện là logo_url text ⇒ chứa fileId, KHÔNG migration)",
+      "memory: avatar-own-scope-presign-wrapper + read-path-gate-pair-must-match-download-pair",
+    ],
+    done_when: [
+      "Endpoint dưới /api/v1/foundation/company/branding: GET (gate view:foundation-company) trả {logo, favicon} mỗi mục {fileId, downloadUrl, expiresAt}|null — presign fail-soft (file hỏng/mất → null, KHÔNG 500); POST :kind/upload-url · POST :kind/confirm · PUT :kind {fileId} · DELETE :kind (gate update:foundation-company); kind ∈ logo|favicon, DTO mới trong packages/contracts",
+      "Lưu trữ: logo = fileId UUID ghi companies.logo_url (tương thích ngược: giá trị cũ dạng http(s) URL → GET trả như external URL, không presign); favicon = company_settings key branding.favicon_file_id qua SettingService (KHÔNG migration, KHÔNG bảng tenant_branding); mọi ghi qua withTenant + audit COMPANY_UPDATED ghi rõ field đổi",
+      "Guard như ME avatar: MIME whitelist (logo: image/png·jpeg·webp·svg+xml; favicon: thêm image/x-icon·image/vnd.microsoft.icon) + giới hạn size (logo ≤2MB, favicon ≤512KB — hằng số, không magic number); visibility Private; phải confirm trước khi set; IDOR: fileId công ty khác / file người khác upload chưa confirm → từ chối; link entityType=company-branding entityId=companyId, thay link cũ khi đổi (không rò file treo)",
+      "Rà 2 surface đọc/ghi logo_url hiện có: companyViewSchema (foundation) + companySettingsSchema (settings) — nới validate logoUrl (bỏ .url() cứng) hoặc map fileId→presigned khi trả, đảm bảo console /settings/company KHÔNG vỡ Zod khi logo_url chứa fileId (bẫy apiFetch ZodError runtime)",
+      "Int-spec RED-trước (gate hasDb && LANE_DB): thiếu update:foundation-company → 403 · cross-tenant fileId → reject · MIME sai → 400 · GET fail-soft khi presign lỗi; unit spec service; security-reviewer soi diff wrapper (bọc FileService bypass cặp foundation-file — giống ME) + quality-gate PASS",
+    ],
+  },
+  {
+    id: "S5-BRAND-FE-1",
+    module: "SYSTEM",
+    layer: "FE",
+    title:
+      "FE khối 'Thương hiệu' trong /system/company: upload/preview/gỡ logo + favicon qua wrapper BE-1 (pattern AvatarUploadCard 4 pha), gate update:foundation-company + dọn ô URL thô ở console",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/system/foundation/**",
+      "apps/console/src/routes/settings/**",
+      "apps/console/src/lib/**",
+      "packages/web-core/src/**",
+      "apps/app/src/i18n/**",
+      "docs/plans/S5-BRAND-FE-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-BRAND-BE-1"],
+    plan: "docs/plans/S5-BRAND-FE-1.md",
+    src: [
+      "apps/app/src/routes/me/use-me-avatar.ts (client validate MIME/size L16-27) + components/AvatarUploadCard.tsx (mẫu upload 4 pha + useCan)",
+      "packages/web-core/src/lib/me-api.ts:36 putBytesToStorage (PUT thẳng storage, credentials omit, Content-Type khớp) + :154 uploadAvatar (chuỗi 4 pha)",
+      "apps/app/src/routes/system/foundation/constants.ts (SYSTEM-SCREEN-COMPANY /system/company · FOUNDATION_ENGINE_PAIRS L13-14)",
+      "apps/console/src/routes/settings/company.tsx:377-386 (ô logoUrl URL thô + TODO G5-FIX — GỠ trong WO này)",
+      "memory: web-core-stale-dist-white-page (REBUILD dist sau đổi web-core src)",
+    ],
+    done_when: [
+      "Khối 'Thương hiệu' trong trang Hồ sơ công ty /system/company (apps/app): hiển thị logo + favicon hiện tại (preview từ downloadUrl, placeholder khi null); nút tải lên/thay/gỡ CHỈ hiện khi useCan update:foundation-company (KHÔNG hard-code role); client validate MIME/size trước khi xin upload-url; toast lỗi tiếng Việt, không nuốt lỗi",
+      "web-core: api-client branding (getBranding · uploadLogo · uploadFavicon · removeKind) tái dùng putBytesToStorage; REBUILD web-core dist",
+      "Console /settings/company: GỠ ô nhập logoUrl URL thô (TODO G5-FIX) — thay bằng khối Thương hiệu tương tự hoặc chỉ-đọc trỏ hướng dẫn sang /system/company; KHÔNG để 2 đường ghi lệch nhau",
+      "Loading/error/empty đủ; FE spec component chính (mock api); check.sh xanh; LIGHT gate react-reviewer + typescript-reviewer + quality-gate",
+    ],
+  },
+  {
+    id: "S5-BRAND-FE-2",
+    module: "SYSTEM",
+    layer: "FE",
+    title:
+      "FE áp thương hiệu ra vỏ app: GlobalTopbar hiện logo công ty (fallback wordmark) + hook useFavicon set favicon động sau đăng nhập + sửa favicon tĩnh vỡ /vite.svg ở cả 3 app",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/app/src/layouts/**",
+      "apps/app/index.html",
+      "apps/app/public/**",
+      "apps/console/index.html",
+      "apps/console/public/**",
+      "apps/console/src/lib/**",
+      "apps/auth/index.html",
+      "apps/auth/public/**",
+      "packages/web-core/src/**",
+      "docs/plans/S5-BRAND-FE-2.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-BRAND-BE-1"],
+    plan: "docs/plans/S5-BRAND-FE-2.md",
+    src: [
+      "apps/app/src/layouts/topbar/GlobalTopbar.tsx:109-111 (wordmark FUNTIME MEDIA hard-code — điểm gắn logo)",
+      "apps/{app,console,auth}/index.html:5 (favicon trỏ /vite.svg KHÔNG tồn tại — public/ cả 3 app đều thiếu file, favicon đang vỡ)",
+      "apps/console/src/lib/brand.ts:25 (markSrc /brand/logo-mark.png dangling — public/brand/ không có file)",
+      "memory: fe-theme-light-dark-system (chrome navy hằng số #187 — logo phải nhìn được trên nền navy)",
+    ],
+    done_when: [
+      "GlobalTopbar (apps/app): branding.logo có → hiện ảnh (giới hạn chiều cao topbar, không giật layout); null/lỗi/chưa tải xong → fallback wordmark FUNTIME MEDIA như hiện tại (fail-soft, KHÔNG block render, KHÔNG spinner ở topbar)",
+      "Hook useFavicon (web-core): sau đăng nhập đọc branding.favicon → set <link rel=icon> động (áp ở apps/app + apps/console); server không có favicon → giữ tĩnh; chấp nhận presigned URL hết hạn chỉ ảnh hưởng lần refetch sau (ghi chú trong plan); REBUILD web-core dist",
+      "Sửa favicon tĩnh vỡ: thêm file favicon mặc định thật vào public/ của app·console·auth + index.html trỏ đúng file; console brand.ts: gỡ markSrc dangling hoặc thêm file thật vào public/brand/",
+      "Trang login apps/auth GIỮ brand tĩnh (branding pre-auth cần endpoint public — đợt sau, NGOÀI phạm vi); check.sh xanh; LIGHT gate react-reviewer + quality-gate",
+    ],
+  },
 ];
