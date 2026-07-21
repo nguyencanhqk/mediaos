@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-20 17:15Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-21 04:58Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -26,8 +26,10 @@
 - 🔴 `S5-SEQ-HARDEN-1` Gia cố cấp mã tuần tự: SAVEPOINT cho recovery 23505 (ensure-on-miss race hiện trả 500 do 25P02), allocate sau authz tầng-service (chống đốt counter), phân biệt constraint khi map unique-violation
 - 🟢 `S5-GOAL-DOC-1` Docs sync SPEC-10 GOAL: SPEC-01/PRD-00/DB-01·09·10 ghi nhận GOAL + API-12 GOAL stub + permission-matrix 8 cặp + nav header 9 SPEC cũ + ghi chú DB-06 (tasks.goal_id, task_templates kích hoạt)
 - 🔴 `S5-GOAL-BE-1` BE GoalsModule: CRUD 3 cấp + cây theo kỳ + data-scope service-layer (own/department/all) + validate level↔neo↔parent + goal_code qua sequence_counters
-- 🔴 `S5-GOAL-DB-2` Đợt D — Schema + migration task_templates + task_template_items + RLS FORCE + seed cặp ('manage','task-template') + UNION-ADD 'task_template' audit CHECK (0508 dự kiến, kiểm head thật)
+- 🔴 `S5-GOAL-DB-2` Đợt D — Schema + migration task_templates + task_template_items + RLS FORCE + seed cặp ('manage','task-template') + UNION-ADD 'task_template' audit CHECK (số cũ 0508 ĐÃ BỊ CHIẾM bởi lms_access; 0509 dự kiến cho S5-LMS-DB-1 — kiểm _journal lấy số kế lúc chạy, DO-block cộng dồn KHÔNG rewrite CHECK từ snapshot cũ)
 - 🔴 `S5-FND-REVOKE-1` Nợ di sản G-era (finding MEDIUM gate S5-GOAL-DB-1): REVOKE DELETE org_units + projects khỏi app role — chặn cửa cascade-xoá goals/goal_updates vòng qua soft-delete (expand-contract 2 release nếu còn caller)
+- 🔴 `S5-LMS-DB-1` Mig 0509 (kiểm _journal trước khi đánh số): UNION-ADD audit object_type 'lms_sso' + 'lms_sync' vào CHECK audit_logs + cập nhật AUDIT_OBJECT_TYPES union TS cùng commit
+- 🟡 `S5-LMS-APP-1` LOCAL apps/lms — chuẩn hoá UI: '/' hết landing (có phiên → /course, chưa → /login), /course = giao diện chính (SSO next + sau-login đều về /course), /dashboard relabel 'Khoá học của tôi', sidebar sắp lại (Course đầu, ẨN khu HR placeholder employee/salary/benefits/uniform/assets), admin giữ nguyên theo permission
 
 **CHỜ (kẹt phụ thuộc):**
 - `S5-UAT-1` UAT prep + run (script theo role · test data · sign-off) + release readiness checklist + known issues/release notes nội bộ — gate vào Sprint 6 ⏳ cần: S5-QA-E2E-1, S5-QA-REG-1, S5-SEC-1
@@ -43,13 +45,19 @@
 - `S5-GOAL-FE-2` FE vòng đo: check-in modal + lịch sử + nút chốt kỳ/mở lại + gắn goal từ panel task + tab Công việc trong goal (bulk link) + khối 'Mục tiêu của tôi' trong /me ⏳ cần: S5-GOAL-BE-2, S5-GOAL-FE-1
 - `S5-GOAL-TPL-1` Đợt D — Phân rã mục tiêu từ template: CRUD template (BE+FE, GOAL-SCREEN-006) + wizard preview sửa/xóa/thêm/gán người/cột board + POST /goals/:id/decompose tạo bulk task 1 transaction ⏳ cần: S5-GOAL-DB-2, S5-GOAL-FE-2
 - `S5-GOAL-DASH-1` Đợt E — Widget dashboard 'Mục tiêu kỳ này' (progress theo phòng ban, đọc cache) + hàng mục tiêu trong trang phòng ban ⏳ cần: S5-GOAL-BE-2, S5-GOAL-FE-1
+- `S5-LMS-BE-1` Auto-sync tài khoản MediaOS→LMS: outbox event RIÊNG hr.employee_status_changed dùng CHUNG cho cả HrWriteService.changeStatus LẪN đường admin khoá/mở user (CẤM re-emit auth.user_locked — đã có consumer notification + sẽ lan auto-lock tạm thời sang LMS) + LmsUserSyncBridge (EventBus, KHÔNG qua OutboxNotificationBridge) + job đối soát @SystemJobHandler LMS_USER_SYNC + env LMS_SYNC_TOKEN + audit 'lms_sync' ⏳ cần: S5-LMS-DB-1
+- `S5-LMS-BE-2` Trả nợ audit #253: ghi audit_logs objectType 'lms_sso' action sso_link_minted tại GET /integrations/lms/sso-link (objectId=jti, KHÔNG log token/secret) ⏳ cần: S5-LMS-DB-1
+- `S5-LMS-APP-2` LOCAL apps/lms — SSO-only: cờ env SSO_ONLY=true → đóng register/forgot/reset/resend-otp (route redirect + API 403), /login chỉ còn nút 'Đăng nhập qua MediaOS' ({MEDIAOS_APP_URL}/lms), break-glass ADMIN_EMAILS vẫn login mật khẩu; audit consume SSO → admin_audit_log. LÀM CUỐI WAVE ⏳ cần: S5-LMS-BE-1, S5-LMS-APP-3
+- `S5-LMS-APP-3` LOCAL apps/lms — API export tiến độ: GET /api/mediaos/progress?email= Bearer MEDIAOS_SYNC_TOKEN (tái dùng bearerMatches sync-users) → enrollment + % hoàn thành/course + learning time + điểm quiz/exam; cap kích thước + không lộ dữ liệu user khác ⏳ cần: S5-LMS-APP-1
+- `S5-LMS-BE-3` Proxy tiến độ đào tạo vào MediaOS: GET /me/training (email resolve TỪ TOKEN — không nhận param, mirror SPEC-09 §14.4) gọi LMS /api/mediaos/progress, cache ngắn ~60s, gate access:lms, contracts Zod ⏳ cần: S5-LMS-APP-3
+- `S5-LMS-FE-1` FE /me: card 'Đào tạo' trong MeOverviewPage (fail-soft như 5 section hiện có) + trang /me/training (danh sách khoá + % + thời lượng + nút 'Mở LMS' → /lms) + sidebar entry, gate access:lms, i18n vi ⏳ cần: S5-LMS-BE-3
 
 **Đã xong (v2):** `S0-GOV-1`, `S0-CI-1`, `S0-CI-2`, `S0-ENV-1`, `S0-FND-DB-1`, `S0-FND-SEED-1`, `S0-AUTH-DB-1`, `S0-API-CORE-1`, `S0-FE-CORE-1`, `S0-FE-API-1`, `S0-QA-1`, `S1-FND-AUDIT-1`, `S1-FND-SETTING-1`, `S1-FND-FILE-1`, `S1-FND-SEQ-1`, `S1-FND-MODULE-1`, `S1-FND-WIRE-1`, `S1-FE-LAYOUT-1`, `S1-FE-REGISTRY-1`, `S1-FE-QUERY-WIRE-1`, `S1-QA-FND-1`, `S1-QA-DEBT-1`, `S1-INT-MOUNT-1`, `S2-AUTH-DB-1`, `S2-AUTH-DB-2`, `S2-AUTH-SEED-1`, `S2-AUTH-BE-1`, `S2-AUTH-BE-2`, `S2-AUTH-BE-3`, `S2-AUTH-BE-4`, `S2-AUTH-BE-5`, `S2-HR-DB-1`, `S2-HR-SEED-1`, `S2-HR-BE-1`, `S2-HR-BE-2`, `S2-HR-BE-3`, `S2-HR-BE-4`, `S2-FE-AUTH-1`, `S2-FE-HR-1`, `S2-FE-HR-2`, `S2-FE-HR-3`, `S2-INT-1`, `S2-INT-2`, `S2-QA-1`, `S2-QA-2`, `S2-QA-DEBT-1`, `S2-AUTH-HARDEN-1`, `S2-HR-MASK-1`, `S2-HR-EMP-LEGACY-LOCK-1`, `S2-AUTH-BRAND-1`, `S2-FE-AUTH-2`, `S2-FE-AUTH-3`, `S2-AUTH-BE-6`, `S2-FE-AUTH-4`, `S2-AUTH-BE-7`, `S2-FE-AUTH-5`, `S2-FE-FND-1`, `S2-FE-FND-2`, `S2-FND-BE-1`, `S2-FE-FND-3`, `S2-FE-FND-4`, `S2-FND-BE-2`, `S2-FE-FND-5`, `S2-FND-BE-3`, `S2-FE-FND-6`, `S2-FE-HR-4`, `S2-FE-HR-5`, `S2-FE-HR-6`, `S2-HR-BE-6`, `S2-FE-HR-7`, `S2-HR-BE-7`, `S2-FE-HR-8`, `S3-ATT-DB-1`, `S3-LEAVE-DB-1`, `S3-FND-SEEDRUN-1`, `S3-ATT-SEED-1`, `S3-LEAVE-SEED-1`, `S3-ATT-BE-1`, `S3-ATT-BE-2`, `S3-ATT-BE-3`, `S3-LEAVE-BE-1`, `S3-LEAVE-BE-2`, `S3-LEAVE-BE-3`, `S3-LEAVE-BE-4`, `S3-INT-1`, `S3-FE-REGISTRY-1`, `S3-FE-ATT-1`, `S3-FE-ATT-2`, `S3-FE-LEAVE-1`, `S3-FE-LEAVE-2`, `S3-QA-1`, `S3-QA-2`, `S3-ATT-BE-4`, `S3-ATT-BE-5`, `S3-ATT-BE-6`, `S3-FE-ATT-3`, `S3-FE-ATT-4`, `S3-FE-ATT-5`, `S3-FE-ATT-6`, `S3-LEAVE-BE-5`, `S3-LEAVE-BE-6`, `S3-FE-LEAVE-3`, `S3-FE-LEAVE-4`, `S3-FE-LEAVE-5`, `S3-FE-LEAVE-6`, `S2-AUTH-BE-8`, `S2-AUTH-BE-9`, `S2-AUTH-BE-10`, `S2-AUTH-CAP-1`, `S2-AUTH-DB-4`, `S2-AUTH-BE-11`, `S2-AUTH-BE-12`, `S2-FE-ACCT-SEC-1`, `S2-FE-SYS-SEC-1`, `S2-AUTH-DB-3`, `S2-FE-AUTH-6`, `S2-AUTH-DOC-1`, `S2-FND-BE-4`, `S2-FND-BE-5`, `S2-FND-BE-6`, `S2-FND-DB-1`, `S2-FND-SEED-2`, `S2-FND-SEED-3`, `S2-FND-SEED-4`, `S3-LEAVE-SEED-2`, `S2-FND-BE-8`, `S2-FND-JOBS-1`, `S2-FND-FILE-2`, `S2-FE-FND-7`, `S2-FND-DB-2`, `S2-FND-CONTRACT-1`, `S2-FND-DOC-1`, `S2-AUTH-ROLEMEM-1`, `S2-AUTH-PERMUX-1`, `S2-AUTH-USEROPS-1`, `S4-TASK-DB-1`, `S4-TASK-RECON-1`, `S4-TASK-RECON-2`, `S4-TASK-SEED-1`, `S4-TASK-BE-1`, `S4-TASK-BE-2`, `S4-TASK-BE-3`, `S4-TASK-BE-4`, `S4-NOTI-DB-1`, `S4-NOTI-SEED-1`, `S4-NOTI-SEED-2`, `S4-NOTI-BE-1`, `S4-NOTI-BE-2`, `S4-NOTI-BE-3`, `S4-NOTI-BE-4`, `S4-DASH-DB-1`, `S4-DASH-SEED-1`, `S4-DASH-CATALOG-2`, `S4-DASH-BE-1`, `S4-DASH-SEED-2`, `S4-DASH-BE-2`, `S4-INT-1`, `S4-INT-2`, `S4-FE-REGISTRY-1`, `S4-FE-TASK-1`, `S4-FE-TASK-CLEANUP-1`, `S4-FE-TASK-2`, `S4-FE-TASK-3`, `S4-FE-NOTI-1`, `S4-FE-NOTI-CLEANUP-1`, `S4-FE-DASH-1`, `S4-FE-DASH-2`, `S4-QA-1`, `S4-QA-2`, `S5-DEVOPS-1`, `S3-FE-LEAVE-7`, `S2-HR-EMPFILE-1`, `S2-FE-HR-9`, `S2-FND-SYSSET-1`, `S2-FE-FND-8`, `S4-TASK-BE-5`, `S4-FE-TASK-4`, `S4-DASH-BE-3`, `S4-FE-DASH-3`, `S3-ATT-EXPORT-1`, `HR-PROFILE-UI-1`, `HR-PROFILE-UI-2`, `HR-PERF-1`, `HR-IDENTITY-READ-1`, `S4-FE-NOTI-2`, `S4-FE-NOTI-3`, `S4-NOTI-BE-5`, `S4-FE-NOTI-4`, `S4-QA-TASK-1`, `S4-QA-NOTI-1`, `S5-QA-GATE-LANEDB-1`, `S5-FND-JOBS-OBS-1`, `S4-INT-3`, `S4-INT-4`, `S4-INT-5`, `S5-ME-DOC-1`, `S5-ME-DB-1`, `S5-ME-BE-1`, `S5-ME-BE-2`, `S5-ME-BE-3`, `S5-ME-FE-1`, `S5-ME-FE-2`, `S5-ME-FE-3`, `S5-ME-QA-1`, `S5-HR-LINKUI-1`, `S5-HR-IMPORT-BE-1`, `S5-HR-IMPORT-FE-1`, `S5-HR-ORGCHART-BE-1`, `S5-HR-ORGCHART-FE-1`, `S5-HR-WORKINFO-1`, `S5-FE-TASK-NAV-1`, `S5-TASK-BE-6`, `S5-FE-TASK-5`, `S5-FE-TASK-6`, `S5-LEAVE-HOLIDAYS-MOVE-1`, `S5-NOTI-FIX-1`, `S5-NOTI-FIX-2`, `S5-TASK-HRCODE-1`, `S5-TASK-PIPELINE-1`, `S5-TASK-NAV-TREE-1`, `S5-TASK-WORKSPACE-1`, `S5-TASK-DETAIL-1`, `S5-TASK-SUBTASK-1`, `S5-DASH-TASKSTATUS-FIX-1`, `S5-TASK-PROJROLE-1`, `S5-TASK-BOARD-UX-1`, `S5-TASK-INLINE-1`, `S5-TASK-AVATAR-1`, `S5-TASK-CARDSUB-1`, `S5-TASK-MOVEPROJ-1`, `S5-TASK-COVER-1`, `S5-GOAL-DB-1`
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 6
-- **migration head**: idx 187 — `0507_s5_goaldb1_noti_catalog_goal` (188 migration)
+- **branch**: `master` · **file đang đổi (dirty)**: 9
+- **migration head**: idx 188 — `0508_lms_access_permission` (189 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
 
@@ -57,6 +65,9 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `bd981f8c` | 2026-07-21 | feat(lms): phân quyền access:lms thuộc app chính (gate card + endpoint + seed 4 vai trò) (#254) |
+| `bc09ffb7` | 2026-07-21 | feat(integration): cầu SSO MediaOS→LMS Giai đoạn A — sso-link HMAC 60s + sidebar Đào tạo + script sync tài khoản (#253) |
+| `2c8be7b3` | 2026-07-21 | chore(harness): S5-GOAL-DB-1 → done (#252 merged, master 0cbc5e79) |
 | `0cbc5e79` | 2026-07-21 | feat(goal): DB core module Mục tiêu — goals + goal_updates + tasks.goal_id + seed quyền/counter/catalog [S5-GOAL-DB-1] (#252) |
 | `f841eb8d` | 2026-07-20 | docs(goal): vá kế hoạch S5-GOAL theo review đối kháng (plan-reviewer BLOCK → PASS-with-fixes) |
 | `41b5c314` | 2026-07-20 | docs(goal): seed SPEC-10 GOAL + DB-11 + wave S5-GOAL (9 WO) — mục tiêu phòng ban/dự án/nhân viên |
@@ -66,9 +77,6 @@
 | `239d7b69` | 2026-07-20 | feat(task): ảnh bìa công việc — chọn từ tệp đã đính kèm (is_primary), hiện trên board + chi tiết [S5-TASK-COVER-1] (#249) |
 | `6d9b245f` | 2026-07-20 | feat(task): 5 WO UX board/chi tiết task (panel trượt · tạo nhanh cột · sửa-tại-chỗ · avatar · việc con trên thẻ · vá đổi-dự-án) + vá 4 HIGH gate (#248) |
 | `6abcf067` | 2026-07-20 | chore(task): S5-TASK-SUBTASK-1 → done (#247 merged, owner chốt D-31 + D-40) |
-| `1cf12a45` | 2026-07-20 | feat(task): việc con (subtask) THẬT qua parent_task_id + đếm-lá báo cáo/dashboard (D-31..D-41, mig 0503) [S5-TASK-SUBTASK-1] (#247) |
-| `880c7642` | 2026-07-20 | fix(dash): MV dashboard đếm task theo trạng thái CANONICAL — hết 'not_started' vĩnh viễn (D-30, mig 0502) [S5-DASH-TASKSTATUS-FIX-1] (#246) |
-| `6489162a` | 2026-07-19 | feat(task): màn chi tiết task — timeline cũ→mới + gate lịch sử người-liên-quan (D-29) + người giao việc + GET watchers [S5-TASK-DETAIL-1] (#245) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

@@ -7638,7 +7638,7 @@ export const backlog = [
     module: "GOAL",
     layer: "DB",
     title:
-      "Đợt D — Schema + migration task_templates + task_template_items + RLS FORCE + seed cặp ('manage','task-template') + UNION-ADD 'task_template' audit CHECK (0508 dự kiến, kiểm head thật)",
+      "Đợt D — Schema + migration task_templates + task_template_items + RLS FORCE + seed cặp ('manage','task-template') + UNION-ADD 'task_template' audit CHECK (số cũ 0508 ĐÃ BỊ CHIẾM bởi lms_access; 0509 dự kiến cho S5-LMS-DB-1 — kiểm _journal lấy số kế lúc chạy, DO-block cộng dồn KHÔNG rewrite CHECK từ snapshot cũ)",
     zone: "red",
     status: "todo",
     paths: [
@@ -7738,6 +7738,226 @@ export const backlog = [
     done_when: [
       "Widget tổng hợp % goal theo phòng ban kỳ hiện tại (respect data-scope người xem — nhân viên chỉ thấy phòng mình) + drill-down về trang Mục tiêu; trang phòng ban (HR) thêm khối mục tiêu phòng",
       "Số widget khớp GET /goals/tree (không lệch công thức §13); loading/error/empty; LIGHT gate xanh",
+    ],
+  },
+
+  // ════════════════════ WAVE S5-LMS — Tích hợp LMS Giai đoạn B (seed 2026-07-21) ════════════════════
+  // Kế hoạch Ô: docs/plans/S5-LMS-WAVE.md (2 track: PR = apps/api·apps/app·packages | LOCAL = apps/lms
+  // NGOÀI git — main worktree, TUẦN TỰ, backup app.db trước deploy, ship = NSSM restart MediaOS-LMS).
+  // Giai đoạn A đã live: SSO #253 + access:lms #254 (mig 0508). APP-2 (SSO-only) làm CUỐI wave.
+  {
+    id: "S5-LMS-DB-1",
+    module: "LMS",
+    layer: "DB",
+    title:
+      "Mig 0509 (kiểm _journal trước khi đánh số): UNION-ADD audit object_type 'lms_sso' + 'lms_sync' vào CHECK audit_logs + cập nhật AUDIT_OBJECT_TYPES union TS cùng commit",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S5-LMS-DB-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S5-LMS-DB-1.md",
+    src: [
+      "docs/plans/S5-LMS-WAVE.md §4 B03",
+      "mẫu UNION-ADD idempotent: migrations/0491_s4_dashbe3_config_update_grant_audit_type.sql:46-97 (+ 0474/0506)",
+      "quy tắc sync CHECK↔union TS cùng commit: apps/api/src/db/schema/audit.ts (AUDIT_OBJECT_TYPES)",
+      "VA SỐ (plan-review W1): S5-GOAL-DB-2 (todo) cũng UNION-ADD vào CHECK audit + đụng migrations/** — WO nào chạy sau PHẢI re-check _journal lấy số kế; DO-block cộng dồn từ def THẬT trong pg_constraint, KHÔNG rewrite từ snapshot",
+    ],
+    done_when: [
+      "Migration DO-block idempotent thêm 'lms_sso'+'lms_sync' vào audit_logs_object_type_chk (chạy 2 lần không lỗi); AUDIT_OBJECT_TYPES thêm 2 giá trị CÙNG commit",
+      "Int-spec seed-assert (LANE_DB): CHECK chứa 2 giá trị mới + INSERT audit objectType lms_sso/lms_sync thành công + objectType lạ vẫn 23514; migration-smoke 0000→head xanh; FULL gate DB PASS",
+    ],
+  },
+  {
+    id: "S5-LMS-BE-1",
+    module: "LMS",
+    layer: "BE",
+    title:
+      "Auto-sync tài khoản MediaOS→LMS: outbox event RIÊNG hr.employee_status_changed dùng CHUNG cho cả HrWriteService.changeStatus LẪN đường admin khoá/mở user (CẤM re-emit auth.user_locked — đã có consumer notification + sẽ lan auto-lock tạm thời sang LMS) + LmsUserSyncBridge (EventBus, KHÔNG qua OutboxNotificationBridge) + job đối soát @SystemJobHandler LMS_USER_SYNC + env LMS_SYNC_TOKEN + audit 'lms_sync'",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/integrations/lms/**",
+      "apps/api/src/employees/**",
+      "apps/api/src/users/**",
+      "apps/api/src/events/**",
+      "apps/api/src/scheduler/**",
+      "apps/api/src/config/env.schema.ts",
+      "apps/api/sync-lms-users.mjs",
+      "apps/api/test/integration/**",
+      ".env.example",
+      "docs/plans/S5-LMS-BE-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-LMS-DB-1"],
+    plan: "docs/plans/S5-LMS-BE-1.md",
+    src: [
+      "docs/plans/S5-LMS-WAVE.md §4 B01/B02 + §7 (fail-soft: LMS chết KHÔNG được chặn tx khoá nhân viên)",
+      "điểm nối: apps/api/src/employees/hr-write.service.ts:433-481 (changeStatus — OutboxService ĐÃ inject; row=employee_profiles KHÔNG có email → resolve qua users theo userId, row.userId==null thì BỎ QUA event; active tính như script: user.status='active' AND ep.status='active', KHÔNG chỉ từ dto.lockUser) + users/auth-users.service.ts:274-333 (lockUser/unlockUser — CHƯA inject OutboxService, thêm additive được vì EventsModule @Global, enqueue trong tx withTenant sẵn có)",
+      "plan-review 2026-07-21 finding #1: auth.user_locked hiện CHỈ phát từ auto-lock sai-mật-khẩu (auth.service.ts:1618) và ĐÃ có consumer AuthHrNotiBridgeRegistrar gửi thông báo cho user — re-emit từ đường admin = đổi hành vi crown-auth + auto-lock tạm thời lan sang khoá LMS. Event LMS-sync phải TÁCH HẲN pipeline notification",
+      "mẫu job: apps/api/src/notifications/task-reminder.job-handler.ts + scheduler.module.ts:24-37 (import module chứa handler); mẫu consumer EventBus: events/event-bus.ts + dashboard-cache-invalidation.registrar.ts; outbox-worker.ts:130-170 (retry ×5 → dead-letter): consumer PHẢI throw khi LMS lỗi tạm để được retry — CẤM catch rỗng rồi markProcessed",
+      "script gốc (query + payload chuẩn): apps/api/sync-lms-users.mjs — giữ làm fallback, đọc thêm tên LMS_SYNC_TOKEN; nhánh TẠO tài khoản LMS cần name (sync-users/route.ts:88 ensureUserForSso(email, name)) → tạo-mới là việc của job đối soát (mang name), event chỉ khoá/mở tài khoản ĐÃ tồn tại — hoặc thêm name vào payload",
+      "memory: wo-paths-drive-gate-and-scheduler + reviewers-pass-real-bugs (prove RED trước)",
+    ],
+    done_when: [
+      "changeStatus sang resigned/terminated (+ admin khoá/mở user) → enqueue event RIÊNG hr.employee_status_changed CÙNG tx, payload whitelist {email, name?, active} (KHÔNG kéo row nhân sự, KHÔNG đụng auth.user_locked); userId null → bỏ qua sạch; consumer gọi POST {LMS_BASE_URL}/api/admin/sync-users Bearer LMS_SYNC_TOKEN, idempotent, fail-soft ĐÚNG NGHĨA: tx HR commit độc lập, consumer THROW khi LMS 500/timeout để outbox-worker retry (không nuốt lỗi), dead-letter có alert",
+      "Job LMS_USER_SYNC (system-jobs, per-tenant) full-reconcile đúng query script cũ (mang name — đường TẠO tài khoản mới); ghi audit lms_sync summary (đếm, KHÔNG dump email list); env LMS_SYNC_TOKEN vào env.schema (min 32, optional — thiếu → bridge+job tắt, warn 1 lần, KHÔNG chặn boot)",
+      "Int-spec RED-trước (LANE_DB): khoá nhân viên → outbox có event đúng payload · admin khoá user → event (và KHÔNG có notification AUTH_USER_LOCKED phát sinh mới) · auto-lock sai-mật-khẩu KHÔNG sinh event LMS · consumer đẩy đúng body · LMS mock 500 → tx HR vẫn commit + event retry · thiếu env → skip sạch; FULL gate (security + silent-failure-hunter) PASS",
+    ],
+  },
+  {
+    id: "S5-LMS-BE-2",
+    module: "LMS",
+    layer: "BE",
+    title:
+      "Trả nợ audit #253: ghi audit_logs objectType 'lms_sso' action sso_link_minted tại GET /integrations/lms/sso-link (objectId=jti, KHÔNG log token/secret)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/integrations/lms/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S5-LMS-BE-2.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-LMS-DB-1"],
+    plan: "docs/plans/S5-LMS-BE-2.md",
+    src: [
+      "docs/plans/S5-LMS-WAVE.md §4 B03; nợ MEDIUM security review PR #253",
+      "plan-review 2026-07-21 W5 — KHÔNG phải one-liner: lms-sso.service.ts:18-44 hiện thuần/đồng bộ KHÔNG DB; phải inject DatabaseService+AuditService (wiring module), chuyển async, controller truyền req.user đầy đủ (companyId+id) thay vì chỉ email; giữ 503-thiếu-env; chính sách khi audit-write FAIL chốt trong micro-plan (khuyến nghị fail-closed: không phát token chưa audit được)",
+    ],
+    done_when: [
+      "Mỗi lần mint thành công → 1 row audit_logs objectType=lms_sso, objectId=jti, actor=user (companyId từ token), KHÔNG chứa token/chữ ký/secret trong before/after; mint fail (503 thiếu env) không ghi; audit-write fail xử lý theo chính sách đã chốt trong plan (mặc định fail-closed)",
+      "Int-spec: mint → audit row đúng shape + không rò token + audit-fail path đúng chính sách; FULL gate PASS",
+    ],
+  },
+  {
+    id: "S5-LMS-APP-1",
+    module: "LMS",
+    layer: "INT",
+    title:
+      "LOCAL apps/lms — chuẩn hoá UI: '/' hết landing (có phiên → /course, chưa → /login), /course = giao diện chính (SSO next + sau-login đều về /course), /dashboard relabel 'Khoá học của tôi', sidebar sắp lại (Course đầu, ẨN khu HR placeholder employee/salary/benefits/uniform/assets), admin giữ nguyên theo permission",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/lms/**", "docs/plans/S5-LMS-APP-1.md"],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S5-LMS-APP-1.md",
+    src: [
+      "docs/plans/S5-LMS-WAVE.md §3 (kỷ luật track LOCAL — main worktree, tuần tự, backup app.db, NSSM restart) + §4 B05",
+      "vị trí: apps/lms/app/(public)/page.tsx (landing) · app/(app)/course|dashboard · components/sidebar/app-sidebar.tsx · app/api/auth/sso/route.ts (default next) · authz phân tán từng page (middleware.ts KHÔNG chặn — giữ pattern getSessionFromCookies)",
+    ],
+    done_when: [
+      "train.funtimemediacorp.com mở ra: chưa phiên → /login, có phiên → /course; SSO từ MediaOS đáp xuống /course; sidebar không còn khu HR placeholder; /dashboard vẫn truy cập được dưới nhãn mới",
+      "typecheck + build apps/lms xanh; smoke sau NSSM restart: /login 200 · SSO end-to-end từ MediaOS OK · user thường không mất chức năng học (course list/learn/quiz đi được); review typescript-reviewer local PASS",
+    ],
+  },
+  {
+    id: "S5-LMS-APP-2",
+    module: "LMS",
+    layer: "INT",
+    title:
+      "LOCAL apps/lms — SSO-only: cờ env SSO_ONLY=true → đóng register/forgot/reset/resend-otp (route redirect + API 403), /login chỉ còn nút 'Đăng nhập qua MediaOS' ({MEDIAOS_APP_URL}/lms), break-glass ADMIN_EMAILS vẫn login mật khẩu; audit consume SSO → admin_audit_log. LÀM CUỐI WAVE",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/lms/**", "docs/plans/S5-LMS-APP-2.md"],
+    skills: ["code-review"],
+    depends_on: ["S5-LMS-BE-1", "S5-LMS-APP-3"],
+    plan: "docs/plans/S5-LMS-APP-2.md",
+    src: [
+      "docs/plans/S5-LMS-WAVE.md §4 B04 + §6 (tiền đề OWNER BẮT BUỘC: Pages đã deploy bản #254 · sync khoá 11 người nghỉ đã chạy · ADMIN_EMAILS đã set tới admin THẬT + test đăng nhập break-glass PROD TRƯỚC khi flip cờ · SSO_ONLY+MEDIAOS_APP_URL vào .env.production CHỈ khi bật) + §7 (rủi ro tự khoá cửa)",
+      "vị trí: apps/lms/app/(auth)/** · app/api/auth/{sign-up,sign-in,forgot-password,reset-password,resend-otp}/route.ts · lib/platform/env.ts (thêm cờ) · lib/platform/auth/permissions.ts:32-38 (isEnvOwnerEmail trả false khi ADMIN_EMAILS rỗng → guard bắt buộc) · lib/platform/auth/sso.ts (điểm ghi consume)",
+      "plan-review 2026-07-21 Q2: verify route consume /api/auth/sso có gọi JIT ensureUserForSso (sso.ts:112) TRƯỚC khi bật cờ — nếu không, nhân viên MỚI chưa từng vào LMS sẽ bị khoá ngoài dưới SSO_ONLY",
+      "depends APP-3 chỉ để SERIAL HOÁ track LOCAL (chung apps/lms, main worktree — plan-review W2), không phải phụ thuộc logic",
+    ],
+    done_when: [
+      "GUARD cấu hình: SSO_ONLY=true && ADMIN_EMAILS rỗng → từ chối bật (fail-loud lúc boot/đọc env), CHẶN kịch bản tự-khoá-cửa; SSO_ONLY=true: register/forgot/reset UI+API đóng (403/redirect) · login mật khẩu bị chặn cho user thường · break-glass ADMIN_EMAILS login được (test THẬT trên PROD trước khi flip) · SSO_ONLY unset/false = hành vi cũ nguyên vẹn",
+      "Xác minh JIT: user MediaOS hợp lệ CHƯA có tài khoản LMS vẫn vào được qua SSO dưới SSO_ONLY (route consume gọi ensureUserForSso — nếu thiếu thì bổ sung trong WO này)",
+      "Consume SSO (thành công + thất bại sai-chữ-ký/replay) ghi admin_audit_log không chứa token; smoke PROD sau bật cờ: nhân viên vào LMS qua nút MediaOS OK, /register 403; review security-reviewer + silent-failure-hunter local PASS",
+    ],
+  },
+  {
+    id: "S5-LMS-APP-3",
+    module: "LMS",
+    layer: "INT",
+    title:
+      "LOCAL apps/lms — API export tiến độ: GET /api/mediaos/progress?email= Bearer MEDIAOS_SYNC_TOKEN (tái dùng bearerMatches sync-users) → enrollment + % hoàn thành/course + learning time + điểm quiz/exam; cap kích thước + không lộ dữ liệu user khác",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/lms/**", "docs/plans/S5-LMS-APP-3.md"],
+    skills: ["code-review"],
+    depends_on: ["S5-LMS-APP-1"],
+    plan: "docs/plans/S5-LMS-APP-3.md",
+    src: [
+      "docs/plans/S5-LMS-WAVE.md §4 B06",
+      "SQL % tiến độ sẵn: apps/lms/app/(app)/dashboard/page.tsx:28-53 + app/(app)/layout.tsx:33-53; điểm thi: quiz_attempts/exam_attempts (lib/platform/db/schema.ts:246 + migrations/exam.ts:107); mẫu auth server-to-server: app/api/admin/sync-users/route.ts:25 (bearerMatches, timingSafeEqual, thiếu env → 503)",
+      "plan-review 2026-07-21 W4 — blast-radius: MEDIAOS_SYNC_TOKEN là token quyền-cao (khoá/mở/tạo tài khoản); micro-plan CHỐT: dùng chung (đơn giản) vs token đọc riêng — tối thiểu PHẢI có rate-limit per-IP cho endpoint này (mở internet qua tunnel); 404-theo-email là oracle enumeration nhưng chấp nhận được sau token gate",
+      "depends APP-1 chỉ để SERIAL HOÁ track LOCAL (chung apps/lms, main worktree — plan-review W2), không phải phụ thuộc logic",
+    ],
+    done_when: [
+      "Endpoint trả JSON versioned cho 1 email: courses[{slug,title,percent,completed,total,learningTimeSec,lastActivityAt}] + exams tóm tắt; email không tồn tại → 404 sạch; sai/thiếu Bearer → 401/503; KHÔNG có chế độ dump-toàn-bộ không phân trang; có rate-limit per-IP",
+      "Test tay + script curl 4 ca (đúng token · sai token · email lạ · vượt rate-limit); typecheck/build xanh; review security-reviewer local PASS (endpoint mới mở ra internet qua tunnel — soi kỹ auth + enumeration + quyết định token trong plan)",
+    ],
+  },
+  {
+    id: "S5-LMS-BE-3",
+    module: "LMS",
+    layer: "BE",
+    title:
+      "Proxy tiến độ đào tạo vào MediaOS: GET /me/training (email resolve TỪ TOKEN — không nhận param, mirror SPEC-09 §14.4) gọi LMS /api/mediaos/progress, cache ngắn ~60s, gate access:lms, contracts Zod",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/integrations/lms/**",
+      "apps/api/src/me/**",
+      "packages/contracts/src/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S5-LMS-BE-3.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-LMS-APP-3"],
+    plan: "docs/plans/S5-LMS-BE-3.md",
+    src: [
+      "docs/plans/S5-LMS-WAVE.md §4 B06 (KHÔNG lưu DB — proxy + cache; token LMS_SYNC_TOKEN từ env.schema đã thêm ở BE-1)",
+      "mẫu 503-thiếu-env + gate: apps/api/src/integrations/lms/lms-sso.controller.ts (@RequirePermission access,lms)",
+      "memory: reused-method-must-be-actor-scoped (own-scope resolve từ token) + apifetch-drops-pagination-bare-array (schema contracts khớp shape thật)",
+    ],
+    done_when: [
+      "GET /me/training trả DTO qua packages/contracts (KHÔNG trả raw JSON LMS); email lấy từ JWT — bơm query/body employee/email lạ KHÔNG đổi kết quả; thiếu env → 503; LMS chết/timeout → 502 sạch có mã lỗi, không treo request (timeout client-side)",
+      "Int-spec RED-trước: user không quyền access:lms → 403 · own-scope không vượt được · LMS mock down → 502; FULL gate PASS",
+    ],
+  },
+  {
+    id: "S5-LMS-FE-1",
+    module: "LMS",
+    layer: "FE",
+    title:
+      "FE /me: card 'Đào tạo' trong MeOverviewPage (fail-soft như 5 section hiện có) + trang /me/training (danh sách khoá + % + thời lượng + nút 'Mở LMS' → /lms) + sidebar entry, gate access:lms, i18n vi",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/me/**",
+      "apps/app/src/routes/lms/**",
+      "apps/app/src/layouts/workspace/sidebar-registry.ts",
+      "apps/app/src/router.tsx",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/**",
+      "docs/plans/S5-LMS-FE-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-LMS-BE-3"],
+    plan: "docs/plans/S5-LMS-FE-1.md",
+    src: [
+      "docs/plans/S5-LMS-WAVE.md §4 B06; mẫu: apps/app/src/routes/me/MeOverviewPage.tsx:72-124 (grid MeSectionCard fail-soft) + sidebar-registry.ts:970-979 (entry me.lms group Đào tạo, gate access:lms)",
+      "memory: fe-theme-light-dark-system + apifetch-drops-pagination-bare-array",
+    ],
+    done_when: [
+      "Card Đào tạo trong /me (số khoá đang học + % gần nhất, fail-soft khi 403/502 — KHÔNG kéo sập overview) + trang /me/training loading/error/empty đủ 3 trạng thái; user không quyền access:lms không thấy card/menu (PermissionGate/useCan, KHÔNG hard-code role)",
+      "i18n namespace vi đủ; unit test component chính; LIGHT gate (typescript + react + quality-gate) xanh",
     ],
   },
 ];
