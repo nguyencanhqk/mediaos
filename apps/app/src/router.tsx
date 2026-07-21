@@ -170,7 +170,6 @@ import {
 import {
   PCR_ME_PATH,
   PCR_LIST_PATH,
-  PCR_ME_ROUTE_META,
   PCR_LIST_ROUTE_META,
   PCR_DETAIL_ROUTE_META,
 } from "@/routes/hr/profile-change-requests/constants";
@@ -653,11 +652,18 @@ const hrEmployeeCodeConfigRoute = createRoute({
 
 // Profile change request workflow (S2-FE-HR-4) — RouteMeta CỤC BỘ (literal engine pair, KHÔNG đụng
 // ROUTE_REGISTRY của web-core — cùng kỹ thuật system.login-logs/system.files).
+// 2026-07-21 — màn "Yêu cầu sửa hồ sơ" GỠ khỏi phần HR: /hr/me/change-request (PCR_ME_PATH) giờ là
+// REDIRECT thuần sang /me/profile/change-requests (màn ME thay thế sau S5-ME-FE-2) để bookmark/
+// deep-link cũ không gãy — mirror systemPublicHolidaysRedirectRoute.
 const hrMeChangeRequestRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: PCR_ME_PATH,
-  beforeLoad: authGuard,
-  component: () => buildModuleRouteContent(PCR_ME_ROUTE_META, "HR", <MyChangeRequestPage />),
+  beforeLoad: () => {
+    authGuard();
+    // href (không phải to:) — route ME tạo qua makeModuleRoute bị widen path nên không có trong
+    // union literal của `to`.
+    throw redirect({ href: "/me/profile/change-requests", replace: true });
+  },
 });
 const hrProfileChangeRequestsRoute = createRoute({
   getParentRoute: () => rootRoute,
