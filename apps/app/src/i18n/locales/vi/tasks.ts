@@ -448,6 +448,7 @@ export default {
       // S5-TASK-BOARD-UX-1 — tiêu đề tạm của panel trượt phải trong lúc chờ tải task.
       drawer: {
         loading: "Đang tải công việc…",
+        openFull: "Mở toàn trang",
       },
       fields: {
         project: "Dự án",

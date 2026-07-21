@@ -24,6 +24,8 @@ vi.mock("./TaskDetailContent", () => ({
   TaskDetailContent: ({ taskId, variant }: { taskId: string; variant?: string }) => (
     <div data-testid="task-detail-content" data-task-id={taskId} data-variant={variant} />
   ),
+  // Cụm menu ⋯ + dialog Sửa/Xoá — drawer đặt lên header Sheet; nội dung test ở TaskDetailPage.spec.
+  TaskDetailActions: () => <div data-testid="task-detail-actions" />,
 }));
 
 function makeQueryClient() {
@@ -87,6 +89,34 @@ describe("TaskDetailDrawer", () => {
 
     await waitFor(() => expect(screen.getByText("Dựng trang Tuyển dụng")).toBeInTheDocument());
     expect(screen.getByText("Website Công ty phiên bản 2.0")).toBeInTheDocument();
+  });
+
+  it("menu hành động nằm ở HEADER panel (cùng hàng nút đóng) sau khi task tải xong", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getTask).mockResolvedValue(TASK as never);
+    renderWithQuery(<TaskDetailDrawer taskId="task-001" onClose={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByTestId("task-detail-actions")).toBeInTheDocument());
+    // Cùng cụm shrink-0 chứa nút đóng ⇒ cùng hàng header, không rớt xuống thân.
+    const actions = screen.getByTestId("task-detail-actions");
+    const close = screen.getByTestId("sheet-close");
+    expect(actions.parentElement).toBe(close.parentElement);
+  });
+
+  it("có onOpenFull ⇒ hiện nút mở toàn trang, bấm gọi onOpenFull; không truyền ⇒ ẩn", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getTask).mockResolvedValue(TASK as never);
+    const onOpenFull = vi.fn();
+    const { unmount } = renderWithQuery(
+      <TaskDetailDrawer taskId="task-001" onClose={vi.fn()} onOpenFull={onOpenFull} />,
+    );
+
+    fireEvent.click(screen.getByTestId("task-drawer-open-full"));
+    expect(onOpenFull).toHaveBeenCalledTimes(1);
+    unmount();
+
+    renderWithQuery(<TaskDetailDrawer taskId="task-001" onClose={vi.fn()} />);
+    expect(screen.queryByTestId("task-drawer-open-full")).not.toBeInTheDocument();
   });
 
   it("nút đóng gọi onClose", async () => {
