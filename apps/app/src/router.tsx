@@ -552,6 +552,10 @@ const SeedsPage = React.lazy(() =>
 const AccountSessionsPage = React.lazy(() =>
   import("@/routes/account/AccountSessionsPage").then((m) => ({ default: m.AccountSessionsPage })),
 );
+// Tích hợp LMS Giai đoạn A — /lms trung chuyển SSO.
+const LmsRedirectPage = React.lazy(() =>
+  import("@/routes/lms/LmsRedirectPage").then((m) => ({ default: m.LmsRedirectPage })),
+);
 // Account self-service — S2-FE-AUTH-6: /account/setup-2fa (ép enroll, AUTH-003) + /account/profile (đọc).
 const TwoFactorSetupPage = React.lazy(() =>
   import("@/routes/account/TwoFactorSetupPage").then((m) => ({ default: m.TwoFactorSetupPage })),
@@ -1898,6 +1902,15 @@ const accountSessionsRoute = createRoute({
   component: () => buildShellRouteContent(<AccountSessionsPage />),
 });
 
+// Tích hợp LMS Giai đoạn A — /lms: authenticated-only (không permission pair — mọi nhân viên
+// đều sang được LMS; token SSO chỉ phát cho chính email của user, mirror accountSessionsRoute).
+const lmsRedirectRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/lms",
+  beforeLoad: authGuard,
+  component: () => buildShellRouteContent(<LmsRedirectPage />),
+});
+
 // S2-FE-AUTH-6 — /account/setup-2fa. Ép enroll khi `mustSetupTwoFactor` (AUTH-003); ProtectedShell TỰ
 // điều hướng tới đây, route content chỉ cần authGuard (không permission pair — self-service, giống
 // accountSessionsRoute/accountChangePasswordRoute).
@@ -2230,6 +2243,7 @@ const routeTree = rootRoute.addChildren([
   systemSequencesRoute,
   systemSeedsRoute,
   accountSessionsRoute,
+  lmsRedirectRoute,
   accountSetupTwoFactorRoute,
   accountProfileRoute,
   systemAuditLogsRoute,

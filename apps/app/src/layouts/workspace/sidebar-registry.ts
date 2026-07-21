@@ -964,6 +964,17 @@ export const ME_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 50,
     requiredAnyPermissions: ["access:me"],
   },
+  // Tích hợp LMS Giai đoạn A: mở LMS qua cầu SSO (/lms fetch sso-link rồi chuyển trang).
+  {
+    sidebarKey: "me.lms",
+    moduleCode: "ME",
+    label: "Đào tạo (LMS)",
+    path: "/lms",
+    icon: "graduation-cap",
+    group: "Đào tạo",
+    order: 60,
+    requiredAnyPermissions: ["access:me"],
+  },
 ];
 
 // ---------------------------------------------------------------------------
