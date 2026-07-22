@@ -312,3 +312,14 @@ export {
   formatNumber,
   formatCurrency,
 } from "./i18n/format";
+
+// S5-BRAND-FE-1 — thương hiệu công ty (logo + favicon) + helper upload storage dùng chung.
+export {
+  brandingApi,
+  brandingAcceptAttr,
+  validateBrandingFile,
+  BRANDING_ACCEPTED_MIME,
+  BRANDING_MAX_BYTES,
+  type BrandingValidationError,
+} from "./lib/branding-api";
+export { putBytesToStorage, DEFAULT_UPLOAD_MIME } from "./lib/storage-upload";

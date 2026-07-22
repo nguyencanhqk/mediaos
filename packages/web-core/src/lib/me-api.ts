@@ -23,33 +23,11 @@ import {
   confirmUploadResponseSchema,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
+import { DEFAULT_UPLOAD_MIME, putBytesToStorage } from "./storage-upload";
 import { buildQueryString } from "./api-params";
 
-const DEFAULT_UPLOAD_MIME = "application/octet-stream";
-
-/**
- * S5-ME-FE-4 — PUT bytes trực tiếp lên presigned URL của storage (S3/MinIO), KHÔNG qua apiFetch (đích là
- * storage, KHÔNG phải API của ta — không gắn Bearer/cookie). Content-Type PHẢI khớp `declaredMimeType` đã
- * khai báo lúc upload-url (server ký PutObject kèm ContentType — lệch ⇒ 403 SignatureDoesNotMatch). Lỗi
- * mạng/HTTP → ném ngay (KHÔNG nuốt — silent-failure; caller dừng flow, KHÔNG confirm/set file rỗng).
- */
-async function putBytesToStorage(url: string, file: File, contentType: string): Promise<void> {
-  let res: Response;
-  try {
-    // credentials:'omit' TƯỜNG MINH — KHÔNG gửi cookie/Bearer tới host storage (đích là S3/MinIO, không phải
-    // API của ta). Default 'same-origin' đã chặn cross-origin, 'omit' làm bất biến này đúng kể cả nếu tương lai
-    // storage được proxy same-origin.
-    res = await fetch(url, {
-      method: "PUT",
-      headers: { "Content-Type": contentType },
-      body: file,
-      credentials: "omit",
-    });
-  } catch {
-    throw new Error("Tải ảnh lên storage thất bại do lỗi mạng.");
-  }
-  if (!res.ok) throw new Error(`Tải ảnh lên storage thất bại (HTTP ${res.status}).`);
-}
+// S5-BRAND-FE-1: putBytesToStorage + DEFAULT_UPLOAD_MIME chuyển sang storage-upload.ts (dùng chung với
+// branding-api). Hành vi GIỮ NGUYÊN — cùng Content-Type khớp presign + credentials:'omit' + ném-không-nuốt.
 
 /**
  * Query GET /me/security/activity — CHỈ phân trang + khoảng thời gian (whitelist tường minh). CỐ Ý
