@@ -56,6 +56,10 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 
 > **CHỐT canonical (S2-FND-BE-5):** *audit-log viewer* = cặp engine **`view:audit-log`** (mig 0340, `is_sensitive=true`, grant `company-admin`) — đây là cổng DUY NHẤT của `GET /foundation/audit-logs`. Cặp `view:foundation-audit-log`/`export:foundation-audit-log` (mig 0435, non-sensitive) **DEPRECATE cho app-surface**: KHÔNG route nào enforce, seed row GIỮ (append-only). `MODULE_APP_METADATA.AUTH` dùng `view:audit-log` (không `view:foundation-audit-log`).
 >
+> **CHỐT `GET /foundation/company/branding` = Authenticated (S5-BRAND-FE-2):** đường ĐỌC thương hiệu công ty (logo + favicon) chỉ cần JWT hợp lệ, **KHÔNG** cặp quyền. Lý do: `view:foundation-company` DB thật chỉ cấp `company-admin`, gate bằng nó ⇒ logo trên vỏ app + favicon động chết với mọi nhân viên còn lại. Logo/favicon là tài sản thương hiệu công khai trong tenant. Cô lập tenant do `CompanyGuard` + `withTenant` ép; `CompanyBrandingFileResolver.canRead` kiểm `entityId === companyId`; `resolveAsset` chỉ ký file CÓ link branding sống (chống đầu độc con trỏ `companies.logo_url`).
+>
+> **Mọi đường GHI branding VẪN gate `update:foundation-company`** (`upload-url` · `confirm` · `PUT :kind` · `DELETE :kind`), thêm owner-check file ở `canLinkFile`/`canDeleteFile`. ⚠️ Hệ quả đã ghi nhận: role nào được cấp `download:foundation-file` sẽ **kéo theo** quyền đọc file branding (hôm nay chỉ SA + company-admin giữ cặp đó) — pin bằng int-spec `company-branding-deny.int-spec.ts`.
+
 > **CHỐT `GET /foundation/settings/public` = Authenticated** (chỉ cần JWT hợp lệ, KHÔNG cần `view:foundation-setting`); server vẫn lọc `is_public && !is_sensitive` + mask secret. `resolve`/`PATCH company-settings` VẪN gate `view`/`update:foundation-setting`. *(Pin API-09 chuẩn hoá surface → S2-FND-DOC-1.)*
 
 ---
