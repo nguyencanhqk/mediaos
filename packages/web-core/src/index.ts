@@ -246,6 +246,8 @@ export { PermissionGate } from "./components/permission-gate";
 
 // CS-9 idle auto-logout (client UX layer; backstop = short access-token TTL + server refresh enforce)
 export { useIdleLogout, type UseIdleLogoutOptions } from "./hooks/use-idle-logout";
+// S5-BRAND-FE-2 — favicon động theo thương hiệu công ty (DOM-only, app tự truyền URL vào).
+export { useFavicon } from "./hooks/use-favicon";
 
 // Nav types + helper (NAV_ITEMS cụ thể do mỗi app tự khai)
 export {

@@ -7,7 +7,6 @@ import { FileRepository } from "../files/file.repository";
 import {
   BRANDING_MODULE_CODE,
   BRANDING_UPDATE_PAIR,
-  BRANDING_VIEW_PAIR,
   brandingEntityTypes,
 } from "./branding.constants";
 
@@ -73,16 +72,22 @@ export class CompanyBrandingFileResolver implements FileOwnerPermissionResolver 
     return this.canWrite(input, { requireFileOwnership: true });
   }
 
-  /** READ ⇐ view:foundation-company + entityId phải LÀ chính công ty của caller. */
-  private async canRead(input: FilePermissionInput): Promise<boolean> {
-    if (input.entityId !== input.companyId) return false;
-    const decision = await this.permission.can({
-      userId: input.userId,
-      companyId: input.companyId,
-      action: BRANDING_VIEW_PAIR.action,
-      resourceType: BRANDING_VIEW_PAIR.resourceType,
-    });
-    return decision.allow;
+  /**
+   * READ = MỌI thành viên của CHÍNH tenant đó (chỉ tenant-check, KHÔNG đòi cặp quyền).
+   *
+   * VÌ SAO KHÔNG gate `view:foundation-company` (S5-BRAND-FE-2, owner chốt): cặp đó DB thật chỉ cấp cho
+   * company-admin ⇒ nếu gate ở đây thì presign deny cho mọi nhân viên khác, và logo trên vỏ app + favicon
+   * động chỉ chạy đúng với ~1 người/công ty (tính năng nhìn như xong nhưng không phải).
+   *
+   * An toàn: logo/favicon LÀ tài sản thương hiệu công khai theo bản chất — nhân viên nào cũng nhìn thấy
+   * chúng trên topbar/tab. Đây KHÔNG phải nới quyền cho file bất kỳ: `entityId === companyId` ép đúng công
+   * ty của caller, và `CompanyBrandingService.resolveAsset` chỉ ký file CÓ link branding SỐNG (self-defending
+   * #5) ⇒ con trỏ bị đầu độc trỏ sang tài liệu nội bộ vẫn KHÔNG bao giờ tới được đây.
+   *
+   * GHI: mọi đường GHI (link/unlink/delete) VẪN gate `update:foundation-company` — xem canWrite.
+   */
+  private canRead(input: FilePermissionInput): Promise<boolean> {
+    return Promise.resolve(input.entityId === input.companyId);
   }
 
   /** WRITE ⇐ update:foundation-company (+ tuỳ chọn: file do chính caller upload). Fail-closed mọi nhánh. */

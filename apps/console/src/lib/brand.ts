@@ -21,8 +21,14 @@ export const BRAND = {
   mark: "FMC",
   /** (Tùy chọn) URL ảnh logo đầy đủ trong public/. Trống = dùng SVG dựng sẵn. */
   logoSrc: "",
-  /** URL ảnh icon-mark gốc (quả cầu 4 màu) trong public/. Trống = dùng SVG dựng sẵn. */
-  markSrc: "/brand/logo-mark.png",
+  /**
+   * URL ảnh icon-mark gốc trong public/. Trống = dùng SVG dựng sẵn (brand-mark.tsx).
+   *
+   * S5-BRAND-FE-2: ĐẶT LẠI VỀ RỖNG. Giá trị cũ "/brand/logo-mark.png" trỏ file KHÔNG TỒN TẠI
+   * (public/brand/ chưa từng có) ⇒ BrandMark render <img> gãy (icon ảnh vỡ) thay vì SVG dựng sẵn.
+   * Muốn dùng ảnh thật: đặt file vào public/brand/ RỒI mới điền lại đường dẫn này.
+   */
+  markSrc: "",
 } as const;
 
 export type Brand = typeof BRAND;

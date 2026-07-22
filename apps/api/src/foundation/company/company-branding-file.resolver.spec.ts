@@ -56,27 +56,21 @@ describe("CompanyBrandingFileResolver — đăng ký đúng cặp dispatch", () 
   });
 });
 
-describe("CompanyBrandingFileResolver — READ ⇐ view:foundation-company", () => {
-  it.each([
-    ["canViewFile" as const],
-    ["canDownloadFile" as const],
-  ])("%s dùng ĐÚNG cặp view:foundation-company", async (method) => {
-    const { resolver, can } = makeResolver();
-    await expect(resolver[method](input())).resolves.toBe(true);
-    expect(can).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "view", resourceType: "foundation-company" }),
-    );
-  });
+describe("CompanyBrandingFileResolver — READ = tenant-check (mọi thành viên công ty)", () => {
+  it.each([["canViewFile" as const], ["canDownloadFile" as const]])(
+    "%s cho phép user KHÔNG có cặp quyền nào (logo/favicon là tài sản thương hiệu công khai)",
+    async (method) => {
+      const { resolver, can } = makeResolver({ allow: false });
+      await expect(resolver[method](input())).resolves.toBe(true);
+      // KHÔNG hỏi PermissionService: gate view:foundation-company chỉ company-admin có ⇒ gate ở đây
+      // sẽ làm logo vỏ app + favicon động chết với mọi nhân viên khác (S5-BRAND-FE-2).
+      expect(can).not.toHaveBeenCalled();
+    },
+  );
 
-  it("thiếu quyền view → false (fail-closed)", async () => {
-    const { resolver } = makeResolver({ allow: false });
-    await expect(resolver.canDownloadFile(input())).resolves.toBe(false);
-  });
-
-  it("entityId KHÁC companyId → false, KHÔNG hỏi quyền (không cho mượn kênh branding)", async () => {
-    const { resolver, can } = makeResolver();
+  it("entityId KHÁC companyId → false (không cho mượn kênh branding trỏ entity khác)", async () => {
+    const { resolver } = makeResolver();
     await expect(resolver.canDownloadFile(input({ entityId: "entity-lạ" }))).resolves.toBe(false);
-    expect(can).not.toHaveBeenCalled();
   });
 });
 

@@ -23,7 +23,7 @@ import {
 } from "@mediaos/contracts";
 import { PermissionGuard } from "../../permission/guards/permission.guard";
 import { RequirePermission } from "../../permission/require-permission.decorator";
-import { BRANDING_UPDATE_PAIR, BRANDING_VIEW_PAIR } from "./branding.constants";
+import { BRANDING_UPDATE_PAIR } from "./branding.constants";
 import { CompanyBrandingService } from "./company-branding.service";
 
 class BrandingUploadUrlDto extends createZodDto(brandingUploadUrlInputSchema) {}
@@ -36,32 +36,42 @@ interface AuthenticatedRequest extends Request {
 /**
  * S5-BRAND-BE-1 — HTTP surface thương hiệu công ty (logo + favicon).
  *
- *  GET    /foundation/company/branding                (view:foundation-company)
+ *  GET    /foundation/company/branding                   (ĐÃ ĐĂNG NHẬP — không cặp quyền, xem ghi chú dưới)
  *  POST   /foundation/company/branding/:kind/upload-url  (update:foundation-company)
  *  POST   /foundation/company/branding/:kind/confirm     (update:foundation-company)
  *  PUT    /foundation/company/branding/:kind             (update:foundation-company)
  *  DELETE /foundation/company/branding/:kind             (update:foundation-company)
  *
- * TÁI DÙNG cặp `view/update:foundation-company` (mig 0435) — WO này KHÔNG seed quyền mới.
- * `PermissionGuard` opt-in ở class (KHÔNG global) — fail-closed, mirror CompanyController.
+ * TÁI DÙNG cặp `update:foundation-company` (mig 0435) — WO này KHÔNG seed quyền mới.
+ * `PermissionGuard` opt-in THEO ROUTE (KHÔNG cấp class, KHÔNG global): guard fail-closed 403 khi route
+ * thiếu @RequirePermission, nên route đọc authenticated-only PHẢI nằm ngoài guard (mẫu SettingsController).
  *
  * `:kind` validate bằng `brandingKindSchema` NGAY trong controller: `ZodValidationPipe` của nestjs-zod chỉ
  * áp cho @Body (DTO), KHÔNG cho @Param ⇒ kind lạ sẽ lọt xuống service và index `BRANDING_RULES[kind]` ra
  * undefined (500). Parse tường minh ⇒ 400 sạch.
  */
 @Controller("foundation/company/branding")
-@UseGuards(PermissionGuard)
 @UsePipes(ZodValidationPipe)
 export class CompanyBrandingController {
   constructor(private readonly branding: CompanyBrandingService) {}
 
+  /**
+   * Authenticated-only: KHÔNG @UseGuards(PermissionGuard), KHÔNG @RequirePermission (mẫu
+   * `SettingsController.getPublic`). Chuỗi guard GLOBAL (JwtAuthGuard → CompanyGuard) vẫn chạy ⇒ có
+   * `req.user.companyId`, và service đọc qua withTenant ⇒ cô lập tenant giữ nguyên (BẤT BIẾN #1).
+   *
+   * VÌ SAO KHÔNG gate `view:foundation-company` (S5-BRAND-FE-2, owner chốt): DB thật chỉ cấp cặp đó cho
+   * company-admin. Gate ở đây ⇒ logo trên vỏ app + favicon động chỉ chạy cho ~1 người/công ty, mọi nhân
+   * viên khác nhận 403 → tính năng nhìn như xong nhưng không phải. Logo/favicon là tài sản thương hiệu
+   * công khai theo bản chất (ai cũng thấy trên topbar/tab). Đường GHI bên dưới VẪN gate đầy đủ.
+   */
   @Get()
-  @RequirePermission(BRANDING_VIEW_PAIR.action, BRANDING_VIEW_PAIR.resourceType)
   getBranding(@Req() req: AuthenticatedRequest) {
     return this.branding.getBranding(req.user);
   }
 
   @Post(":kind/upload-url")
+  @UseGuards(PermissionGuard)
   @RequirePermission(BRANDING_UPDATE_PAIR.action, BRANDING_UPDATE_PAIR.resourceType)
   createUploadUrl(
     @Req() req: AuthenticatedRequest,
@@ -72,6 +82,7 @@ export class CompanyBrandingController {
   }
 
   @Post(":kind/confirm")
+  @UseGuards(PermissionGuard)
   @HttpCode(200)
   @RequirePermission(BRANDING_UPDATE_PAIR.action, BRANDING_UPDATE_PAIR.resourceType)
   confirmUpload(
@@ -83,6 +94,7 @@ export class CompanyBrandingController {
   }
 
   @Put(":kind")
+  @UseGuards(PermissionGuard)
   @RequirePermission(BRANDING_UPDATE_PAIR.action, BRANDING_UPDATE_PAIR.resourceType)
   setAsset(
     @Req() req: AuthenticatedRequest,
@@ -93,6 +105,7 @@ export class CompanyBrandingController {
   }
 
   @Delete(":kind")
+  @UseGuards(PermissionGuard)
   @HttpCode(204)
   @RequirePermission(BRANDING_UPDATE_PAIR.action, BRANDING_UPDATE_PAIR.resourceType)
   async removeAsset(@Req() req: AuthenticatedRequest, @Param("kind") kind: string): Promise<void> {

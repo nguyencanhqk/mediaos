@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEvent } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { BrandingKind } from "@mediaos/contracts";
 import {
   brandingApi,
@@ -8,6 +8,7 @@ import {
   validateBrandingFile,
   type BrandingValidationError,
 } from "@mediaos/web-core";
+import { useBrandingQuery } from "@/hooks/use-branding";
 import { FOUNDATION_ENGINE_PAIRS } from "./constants";
 
 /**
@@ -26,13 +27,9 @@ export function useCompanyBranding() {
     FOUNDATION_ENGINE_PAIRS.UPDATE_COMPANY.resourceType,
   );
 
-  const query = useQuery({
-    queryKey: foundationKeys.company.branding(),
-    queryFn: () => brandingApi.getBranding(),
-    // `url` khi source==='file' là presigned TTL ngắn (mặc định 300s). staleTime 60s << TTL ⇒ query stale
-    // và refetch URL tươi trước khi hết hạn. Hạ TTL server xuống dưới ~60s thì phải chỉnh con số này.
-    staleTime: 60_000,
-  });
+  // Dùng CHUNG query của vỏ app (useBrandingQuery) — cùng queryKey ⇒ đặt logo ở đây thì topbar/favicon
+  // tự cập nhật qua invalidate bên dưới, KHÔNG cần F5 và không sinh request thứ hai.
+  const query = useBrandingQuery();
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: foundationKeys.company.branding() });

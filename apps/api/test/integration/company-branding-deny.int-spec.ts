@@ -2,7 +2,9 @@
  * S5-BRAND-BE-1 — deny-path CROWN cho /api/v1/foundation/company/branding (logo + favicon).
  *
  * CHỨNG MINH (fail-closed, không rò):
- *   G  GET    /branding            → gate view:foundation-company: 0-grant → 403 (KHÔNG 200 rỗng).
+ *   G  GET    /branding            → AUTHENTICATED-ONLY (S5-BRAND-FE-2): 0-grant → 200; không token → 401.
+ *                                    (Trước là gate view:foundation-company — đổi vì cặp đó chỉ company-admin
+ *                                    có ⇒ logo vỏ app + favicon động sẽ chết với mọi nhân viên khác.)
  *   U  POST   /:kind/upload-url    → gate update:foundation-company: chỉ-view → 403 (least-privilege:
  *                                    xem ≠ sửa); MIME ngoài whitelist → 415; size vượt trần → 413.
  *   C  POST   /:kind/confirm       → IDOR: fileId của CÔNG TY KHÁC → 404 (RLS chặn, KHÔNG rò tồn tại);
@@ -201,9 +203,19 @@ describe.skipIf(!hasLaneDb)("S5-BRAND-BE-1 branding deny-path (logo · favicon)"
 
   // ── G — READ gate ───────────────────────────────────────────────────────────
 
-  it("GET /branding — 0 grant → 403 fail-closed (KHÔNG 200 rỗng)", async () => {
+  // S5-BRAND-FE-2 (owner chốt) — GET ĐỔI TỪ gated SANG authenticated-only. Lý do: `view:foundation-company`
+  // DB thật chỉ cấp company-admin ⇒ gate ở đây làm logo trên vỏ app + favicon động chỉ chạy cho ~1
+  // người/công ty. Logo/favicon là tài sản thương hiệu công khai. MỌI đường GHI VẪN gate (test bên dưới).
+  it("GET /branding — user 0 grant VẪN đọc được (authenticated-only, không cặp quyền)", async () => {
     const res = await api(nest).get("/foundation/company/branding").set(bearer(tokenNoRole));
-    expectForbidden(res, "GET branding no-role");
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data).toHaveProperty("logo");
+    expect(res.body.data).toHaveProperty("favicon");
+  });
+
+  it("GET /branding — KHÔNG token → 401 (vẫn phải đăng nhập)", async () => {
+    const res = await api(nest).get("/foundation/company/branding");
+    expect(res.status).toBe(401);
   });
 
   it("GET /branding — có view:foundation-company → 200 {logo:null, favicon:null} khi chưa đặt", async () => {
@@ -340,7 +352,7 @@ describe.skipIf(!hasLaneDb)("S5-BRAND-BE-1 branding deny-path (logo · favicon)"
     expect(row.rows[0].logo_url).toBe(fileId);
   });
 
-  it("user CHỈ có view:foundation-company cũng đọc được logo đã đặt (resolver cấp theo cặp view)", async () => {
+  it("user 0 grant cũng đọc được logo đã đặt (resolver READ = tenant-check, cho toàn công ty)", async () => {
     const fileId = await insertFile(direct, A.companyId, adminUserId);
     await api(nest)
       .put("/foundation/company/branding/logo")
@@ -348,7 +360,7 @@ describe.skipIf(!hasLaneDb)("S5-BRAND-BE-1 branding deny-path (logo · favicon)"
       .send({ fileId })
       .expect(200);
 
-    const get = await api(nest).get("/foundation/company/branding").set(bearer(tokenViewOnly));
+    const get = await api(nest).get("/foundation/company/branding").set(bearer(tokenNoRole));
     expect(get.status).toBe(200);
     expect(get.body.data.logo).toMatchObject({ source: "file", fileId });
   });

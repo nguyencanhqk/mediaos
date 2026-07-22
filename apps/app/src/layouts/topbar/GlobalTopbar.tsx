@@ -20,6 +20,7 @@ import { cn, ThemeToggle } from "@mediaos/ui";
 import { useLayoutStore } from "@/stores/layout.store";
 import { useCurrentRouteMeta } from "@/hooks/use-current-route-meta";
 import { AvatarMenu } from "./AvatarMenu";
+import { BrandLogo } from "./BrandLogo";
 import { DirtyFormConfirmDialog } from "../shared/DirtyFormConfirmDialog";
 import { DynamicIcon } from "../workspace/DynamicIcon";
 import { NotificationBadge } from "@/components/notifications/NotificationBadge";
@@ -106,9 +107,7 @@ export function GlobalTopbar() {
           className="flex items-center gap-2 rounded-lg px-2 py-1 text-chrome-foreground transition-colors hover:bg-white/10"
           aria-label="Về trang chủ"
         >
-          <span className="brand-gradient-text font-display text-base font-bold">
-            FUNTIME MEDIA
-          </span>
+          <BrandLogo />
         </Link>
 
         {/* Divider */}

@@ -11,6 +11,7 @@
  * KHÔNG phải bằng chứng enforcement; đừng coi green ở đây là "2FA đã được ép".
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, cleanup } from "@testing-library/react";
 import { useAuthStore } from "@mediaos/web-core";
 import { ProtectedShell } from "./ProtectedShell";
@@ -42,10 +43,15 @@ function setUser(mustSetupTwoFactor: boolean) {
 
 function renderShell(pathname: string) {
   pathnameRef.current = pathname;
+  // S5-BRAND-FE-2: shell nay dùng useBrandingQuery (favicon động) ⇒ cần QueryClientProvider.
+  // retry:false + client MỚI mỗi lần render để test không dính cache/lỗi mạng chéo nhau.
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <ProtectedShell>
-      <div data-testid="protected-content" />
-    </ProtectedShell>,
+    <QueryClientProvider client={client}>
+      <ProtectedShell>
+        <div data-testid="protected-content" />
+      </ProtectedShell>
+    </QueryClientProvider>,
   );
 }
 
