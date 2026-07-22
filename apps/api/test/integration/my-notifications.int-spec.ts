@@ -10,7 +10,8 @@
  *   - cross-tenant: userA1 đọc notification của company B → 404 (RLS + own-scope filter).
  *   - list mặc định loại Hidden/Archived/Deleted; unread-count đúng SAU mark-read/mark-all-read; mark-read
  *     idempotent; DELETE soft (deleted_at set, KHÔNG hard-delete) → biến mất khỏi list mặc định.
- *   - unread-count query hit đúng partial index `idx_notifications_unread` (EXPLAIN, không scan bảng).
+ *   - partial index `idx_notifications_unread` tồn tại đúng định nghĩa (pg_indexes) + unread-count query
+ *     index-servable (EXPLAIN với enable_seqscan=off KHÔNG rơi về Seq Scan) = "không scan bảng".
  *
  * Gate hasDb && LANE_DB (memory integration-test-lane-db-gate): .env trỏ DATABASE_URL vào DB dev chung
  * (hasDb=true) → CHỈ chạy trên DB cô lập lane, nếu không sẽ đỏ-giả/xanh-giả.
@@ -379,13 +380,30 @@ describe.skipIf(!hasLaneDb)(
 
     // ── unread-count query hit đúng partial index (WO done_when: "không scan bảng") ────────────────────
 
-    it("unread-count query TƯƠNG THÍCH idx_notifications_unread (partial index) — planner CÓ THỂ chọn", async () => {
-      // Bảng test chỉ ~6 hàng — planner LUÔN chọn Seq Scan (đúng, rẻ hơn) bất kể index tồn tại, nên so
-      // "Seq Scan vs Index Scan" trên cardinality nhỏ là bài test SAI (phụ thuộc thống kê, không phải đúng-
-      // sai cấu trúc). Thay vào đó: `SET LOCAL enable_seqscan=off` trong 1 transaction (rollback ngay sau,
-      // KHÔNG rò setting sang connection khác trong pool) để BUỘC planner dùng index nếu WHERE khớp — chứng
-      // minh query TƯƠNG THÍCH `idx_notifications_unread` (company_id, recipient_user_id) WHERE status=
-      // 'Unread' (mig 0479/0481), đúng ý "unread dùng partial index, không scan bảng" ở quy mô thật.
+    // ⚠️ KHÔNG assert planner chọn ĐÍCH DANH `idx_notifications_unread`. Bảng notifications có 8 index
+    // mà (company_id, recipient_user_id) là tiền tố khớp; ở cardinality test (~6 hàng) chi phí chênh
+    // nhau ~5% ⇒ index nào thắng là XỔ SỐ theo thống kê/phiên bản PG. Bài test cũ vì thế xanh ở local
+    // nhưng ĐỎ trên CI (PR #255: planner chọn plan cost 7.72 thay vì 8.15) dù schema HOÀN TOÀN đúng.
+    // Tách thành 2 khẳng định TẤT ĐỊNH, mỗi cái canh đúng một thứ:
+    //   (1) index CÒN SỐNG & đúng định nghĩa — đọc thẳng pg_indexes, không qua planner;
+    //   (2) query index-servable — không rơi về Seq Scan ở quy mô thật.
+    // Cần CẢ HAI: kiểm chứng bằng cách DROP index rồi chạy lại — (2) vẫn xanh vì index anh em phục vụ
+    // thay, chỉ (1) bắt được. Ngược lại (2) bắt được trường hợp WHERE đổi làm mất khả năng dùng index.
+    it("partial index idx_notifications_unread TỒN TẠI đúng định nghĩa (cột + predicate)", async () => {
+      const res = await direct.query<{ indexdef: string }>(
+        `SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND indexname = $1`,
+        ["idx_notifications_unread"],
+      );
+      expect(res.rows).toHaveLength(1);
+      const def = res.rows[0].indexdef;
+      expect(def).toMatch(/\(company_id, recipient_user_id\)/); // đúng cột + đúng thứ tự
+      expect(def).toMatch(/WHERE \(\(status\)::text = 'Unread'::text\)/); // đúng predicate partial
+    });
+
+    it("unread-count query INDEX-SERVABLE — không rơi về Seq Scan khi có index dùng được", async () => {
+      // enable_seqscan=off chỉ PHẠT seq scan (cost ~1e10) chứ không cấm: plan vẫn ra Seq Scan nghĩa là
+      // KHÔNG index nào phục vụ được WHERE này ⇒ ở quy mô thật sẽ scan bảng. SET LOCAL + ROLLBACK để
+      // KHÔNG rò setting sang connection khác trong pool.
       const text = await withClient(direct, async (client) => {
         await client.query("BEGIN");
         await client.query("SET LOCAL enable_seqscan = off");
@@ -397,7 +415,8 @@ describe.skipIf(!hasLaneDb)(
         await client.query("ROLLBACK");
         return plan.rows.map((r) => r["QUERY PLAN"] as string).join("\n");
       });
-      expect(text).toMatch(/idx_notifications_unread/);
+      expect(text).toMatch(/Index (Only )?Scan/);
+      expect(text).not.toMatch(/Seq Scan/);
     });
 
     it("noPerm không tạo được rác trong DB qua route bị 403 (notifA1Unread2High vẫn Read, không đổi state)", async () => {
