@@ -95,7 +95,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456+0457+0459+0460+0461+0462+0463+0464+0468+0474+0491+0496). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456+0457+0459+0460+0461+0462+0463+0464+0468+0474+0491+0496+0506+0509). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -349,5 +349,13 @@ export const AUDIT_OBJECT_TYPES = [
   // (clone 0474 DO-block, dạng '{...}' ANY), append-only #2 nguyên vẹn; INSERT audit KHÔNG vỡ
   // audit_logs_object_type_chk trên Postgres thật.
   "goal",
+  // S5-LMS-DB-1 (mig 0509): tích hợp LMS Giai đoạn B — 'lms_sso' cho mint link SSO (BE-2:
+  // LmsSsoService, action sso_link_minted, objectId = jti UUID) và 'lms_sync' cho đồng bộ tài khoản
+  // MediaOS→LMS (BE-1: LmsUserSyncBridge + job LMS_USER_SYNC, ghi 1 dòng summary). before/after CHỈ
+  // metadata (jti / số lượng đồng bộ) — TUYỆT ĐỐI KHÔNG token SSO, chữ ký HMAC, LMS_SYNC_TOKEN hay
+  // danh sách email vào before/after (BẤT BIẾN #3). 0509 UNION ADD-only vào CHECK, fail-closed khi
+  // parse hỏng + verify NO-LOSS sau swap (clone 0506 DO-block, có gia cố); append-only #2 nguyên vẹn.
+  "lms_sso",
+  "lms_sync",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
