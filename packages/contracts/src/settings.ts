@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { brandingLogoRefSchema } from "./foundation/branding";
 
 const workingDaysJsonSchema = z.object({
   days: z.array(z.number().int().min(0).max(6)),
@@ -15,9 +16,9 @@ export const companySettingsSchema = z.object({
   name: z.string().min(1),
   slug: z.string().min(1),
   status: z.string(),
-  // S5-BRAND-BE-1: BỎ `.url()` ở ĐƯỜNG ĐỌC. logo_url chứa fileId (UUID) khi đặt qua branding endpoint ⇒
+  // S5-BRAND-BE-1: ĐƯỜNG ĐỌC khoan dung. logo_url chứa fileId (UUID) khi đặt qua branding endpoint ⇒
   // `.url()` biến HTTP 200 thành ZodError runtime trong apiFetch (console /settings/company trắng trang).
-  logoUrl: z.string().nullable().optional(),
+  logoUrl: z.string().max(2048).nullable().optional(),
   timezone: z.string().min(1),
   currency: z.enum(["VND", "USD"]),
   language: z.enum(["vi", "en"]),
@@ -59,8 +60,8 @@ const isoDateSchema = z
 
 export const updateCompanySettingsSchema = z.object({
   // Thiết lập chung (G5-1, giữ nguyên)
-  // S5-BRAND-BE-1: BỎ `.url()` — xem companySettingsSchema.logoUrl (round-trip GET→PUT không được gãy).
-  logoUrl: z.string().nullable().optional(),
+  // S5-BRAND-BE-1: ĐƯỜNG GHI — allowlist scheme (fileId UUID | http(s)), chặn javascript:/data:.
+  logoUrl: brandingLogoRefSchema.nullable().optional(),
   timezone: z.string().min(1).optional(),
   currency: z.enum(["VND", "USD"]).optional(),
   language: z.enum(["vi", "en"]).optional(),

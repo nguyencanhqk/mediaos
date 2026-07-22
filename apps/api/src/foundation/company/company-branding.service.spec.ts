@@ -70,7 +70,8 @@ function makeService(over: Partial<Deps> = {}): { svc: CompanyBrandingService; d
     })),
     link: vi.fn(),
     unlink: vi.fn(),
-    listActiveByEntityTx: vi.fn(async () => []),
+    // Mặc định: đã có link branding SỐNG trỏ FILE_ID (đường đọc self-defending verify link trước khi ký).
+    listActiveByEntityTx: vi.fn(async () => [{ id: "link-1", fileId: FILE_ID, linkType: "Other" }]),
     resolveSetting: vi.fn(async () => ({
       key: FAVICON_SETTING_KEY,
       value: undefined,
@@ -78,7 +79,7 @@ function makeService(over: Partial<Deps> = {}): { svc: CompanyBrandingService; d
       found: false,
     })),
     updateCompanySetting: vi.fn(),
-    getCurrent: vi.fn(async () => ({ id: COMPANY_ID, logoUrl: null })),
+    getCurrent: vi.fn(async () => ({ id: COMPANY_ID, logoUrl: null, status: "active" })),
     updateCompany: vi.fn(),
     ...over,
   };
@@ -146,7 +147,7 @@ describe("CompanyBrandingService — createUploadUrl (chặn TRƯỚC register)"
     expect(deps.upload).not.toHaveBeenCalled();
   });
 
-  it("favicon nhận .ico nhưng logo thì KHÔNG (whitelist theo kind, không dùng chung)", async () => {
+  it("favicon KHÔNG nhận .ico — chốt nợ migration (allowlist system_settings chưa có ico)", async () => {
     const { svc, deps } = makeService();
     await expect(
       svc.createUploadUrl(ACTOR, "favicon", {
@@ -154,8 +155,21 @@ describe("CompanyBrandingService — createUploadUrl (chặn TRƯỚC register)"
         declaredMimeType: "image/x-icon",
         sizeBytes: 2048,
       }),
-    ).resolves.toMatchObject({ fileId: FILE_ID });
+    ).rejects.toBeInstanceOf(UnsupportedMediaTypeException);
+    expect(deps.upload).not.toHaveBeenCalled();
+    // Whitelist branding phải khớp ĐÚNG hàng system_settings thật, không hứa suông rồi 415 ở runtime.
+    expect(BRANDING_RULES.favicon.allowedMimeTypes).not.toContain("image/x-icon");
+  });
 
+  it("favicon nhận png; logo KHÔNG nhận .ico (whitelist theo kind, không dùng chung)", async () => {
+    const { svc, deps } = makeService();
+    await expect(
+      svc.createUploadUrl(ACTOR, "favicon", {
+        originalName: "fav.png",
+        declaredMimeType: "image/png",
+        sizeBytes: 2048,
+      }),
+    ).resolves.toMatchObject({ fileId: FILE_ID });
     await expect(
       svc.createUploadUrl(ACTOR, "logo", {
         originalName: "logo.ico",
@@ -244,13 +258,21 @@ describe("CompanyBrandingService — setAsset ghi qua service có audit sẵn", 
 
   it("replace: gỡ link CŨ trước khi tạo link mới (không để file treo)", async () => {
     const order: string[] = [];
+    // Stateful: lượt ĐẦU (unlinkStale) thấy link CŨ; sau khi link mới tạo, lượt sau (verify đường đọc)
+    // thấy link MỚI trỏ FILE_ID. Phản ánh đúng vòng đời thật thay vì trả cứng một danh sách.
+    let linked = false;
     const { svc } = makeService({
-      listActiveByEntityTx: vi.fn(async () => [{ id: "link-cũ", linkType: "Other" }]),
+      listActiveByEntityTx: vi.fn(async () =>
+        linked
+          ? [{ id: "link-mới", fileId: FILE_ID, linkType: "Other" }]
+          : [{ id: "link-cũ", fileId: "file-cũ", linkType: "Other" }],
+      ),
       unlink: vi.fn(async () => {
         order.push("unlink");
       }),
       link: vi.fn(async () => {
         order.push("link");
+        linked = true;
       }),
     });
     await svc.setAsset(ACTOR, "logo", FILE_ID);
@@ -285,7 +307,7 @@ describe("CompanyBrandingService — getBranding FAIL-SOFT", () => {
 
   it("logo là fileId UUID → ký presigned, source='file'", async () => {
     const { svc, deps } = makeService({
-      getCurrent: vi.fn(async () => ({ id: COMPANY_ID, logoUrl: FILE_ID })),
+      getCurrent: vi.fn(async () => ({ id: COMPANY_ID, logoUrl: FILE_ID, status: "active" })),
     });
     const out = await svc.getBranding(ACTOR);
     expect(out.logo).toEqual({
@@ -299,7 +321,7 @@ describe("CompanyBrandingService — getBranding FAIL-SOFT", () => {
 
   it("logo là URL cũ nhập tay → source='external', KHÔNG gọi presign (tương thích ngược)", async () => {
     const { svc, deps } = makeService({
-      getCurrent: vi.fn(async () => ({ id: COMPANY_ID, logoUrl: "https://cdn.cũ/logo.png" })),
+      getCurrent: vi.fn(async () => ({ id: COMPANY_ID, logoUrl: "https://cdn.cũ/logo.png", status: "active" })),
     });
     const out = await svc.getBranding(ACTOR);
     expect(out.logo).toEqual({
@@ -317,7 +339,7 @@ describe("CompanyBrandingService — getBranding FAIL-SOFT", () => {
     ["Conflict (Infected/not-downloadable)", new ConflictException("hỏng")],
   ])("presign ném %s → null, KHÔNG 500 (read tải-trang không vỡ)", async (_label, err) => {
     const { svc } = makeService({
-      getCurrent: vi.fn(async () => ({ id: COMPANY_ID, logoUrl: FILE_ID })),
+      getCurrent: vi.fn(async () => ({ id: COMPANY_ID, logoUrl: FILE_ID, status: "active" })),
       getDownloadUrl: vi.fn(async () => {
         throw err;
       }),
@@ -328,7 +350,7 @@ describe("CompanyBrandingService — getBranding FAIL-SOFT", () => {
 
   it("lỗi hạ tầng KHÁC (storage chưa cấu hình) PROPAGATE — không nuốt (silent-failure)", async () => {
     const { svc } = makeService({
-      getCurrent: vi.fn(async () => ({ id: COMPANY_ID, logoUrl: FILE_ID })),
+      getCurrent: vi.fn(async () => ({ id: COMPANY_ID, logoUrl: FILE_ID, status: "active" })),
       getDownloadUrl: vi.fn(async () => {
         throw new InternalServerErrorException("storage down");
       }),

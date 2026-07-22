@@ -48,11 +48,6 @@ export const SETTING_DEFAULTS: Readonly<Record<string, SettingDefault>> = Object
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "text/csv",
       "text/plain",
-      // S5-BRAND-BE-1 (append): favicon .ico. Hai MIME vì trình duyệt/OS gửi cả hai tên cho cùng định dạng.
-      // CỐ Ý KHÔNG thêm image/svg+xml — SVG nhúng được <script> ⇒ stored-XSS khi phục vụ lại từ origin
-      // của mình; cho phép SVG đòi sanitize server-side (ngoài phạm vi S5-BRAND-BE-1).
-      "image/x-icon",
-      "image/vnd.microsoft.icon",
     ],
     valueType: "Array",
     category: "File",

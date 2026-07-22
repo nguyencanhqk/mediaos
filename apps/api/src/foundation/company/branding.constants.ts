@@ -58,11 +58,29 @@ export const BRANDING_RULES: Readonly<Record<BrandingKind, BrandingKindRule>> = 
     entityType: "company-logo",
   },
   favicon: {
-    allowedMimeTypes: ["image/png", "image/webp", "image/x-icon", "image/vnd.microsoft.icon"],
+    // KHÔNG có image/x-icon (.ico) — xem ghi chú dưới. png/webp phủ đủ favicon trên mọi trình duyệt hiện đại.
+    allowedMimeTypes: ["image/png", "image/webp"],
     maxBytes: 512 * KB,
     entityType: "company-favicon",
   },
 });
+
+/**
+ * NỢ GHI NHẬN (security-review #2) — favicon `.ico` CHƯA hỗ trợ được, và KHÔNG thể vá bằng
+ * `setting-defaults.ts`: `SettingService.resolveMany` chạy precedence company > system > **default**, mà
+ * `file.allowed_mime_types` CÓ hàng Active trong `system_settings` (seed mig 0435, mig 0470 assert giữ)
+ * ⇒ tầng `default` KHÔNG BAO GIỜ được đọc. Thêm MIME vào defaults là code CHẾT trên mọi DB đã migrate
+ * (đã verify trên DB thật: hàng system chỉ có png/jpeg/webp/pdf/docx/xlsx/csv/txt).
+ *
+ * Muốn bật `.ico` phải có MIGRATION union-add 2 MIME vào hàng `system_settings` (jsonb array, idempotent,
+ * KHÔNG rewrite từ snapshot cũ) + thêm map `ico` vào MIME_TO_EXTENSIONS. WO này chốt KHÔNG migration nên
+ * để lại cho WO sau; whitelist ở trên khớp ĐÚNG thực tế thay vì hứa suông rồi 415 ở runtime.
+ */
+
+/** Mọi entityType branding — dùng cho đăng ký resolver (khớp NGUYÊN VĂN entityType ở BRANDING_RULES). */
+export function brandingEntityTypes(): readonly string[] {
+  return Object.values(BRANDING_RULES).map((r) => r.entityType);
+}
 
 /** True nếu `value` trông như UUID v4-ish ⇒ diễn giải là fileId; ngược lại là URL ngoài (dữ liệu cũ). */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

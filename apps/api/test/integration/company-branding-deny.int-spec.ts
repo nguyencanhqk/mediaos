@@ -18,7 +18,10 @@
  * .env trỏ DB dev chung (hasDb=true) ⇒ CHỈ chạy trên DB cô lập lane; thiếu LANE_DB ⇒ SKIP (không xanh-giả).
  *   bash scripts/lane-db-setup.sh brand → export LANE_DB=mediaos_brand → npx vitest run <spec>
  *
- * KHÔNG cần MinIO: mọi ca ở đây dừng TRƯỚC bước ký URL (deny) hoặc đi nhánh fail-soft (presign lỗi → null).
+ * CẦN MinIO (docker compose): các ca HAPPY-PATH (H) ký URL thật. Bản ĐẦU của spec này cố ý "không cần
+ * MinIO — mọi ca dừng trước bước ký URL", và chính vì thế nó XANH GIẢ trong khi tính năng chết hoàn toàn
+ * (thiếu FileOwnerPermissionResolver ⇒ files.link 403 + GET luôn null). Bài học `reviewers-pass-real-bugs`:
+ * deny-path một mình KHÔNG chứng minh được cổng phân quyền hoạt động — phải có ít nhất một đường đi trọn vẹn.
  */
 
 import "reflect-metadata";
@@ -308,6 +311,103 @@ describe.skipIf(!hasLaneDb)("S5-BRAND-BE-1 branding deny-path (logo · favicon)"
       .set(bearer(tokenAdmin))
       .send({ fileId: anyFileId });
     expect(res.status, JSON.stringify(res.body)).toBe(400);
+  });
+
+  // ── H — HAPPY-PATH (security-review BLOCK #1) ───────────────────────────────
+  //
+  // Đây là test DUY NHẤT bắt được lỗi thiếu FileOwnerPermissionResolver: bản đầu chỉ có deny-path nên
+  // mọi ca dừng TRƯỚC bước link/ký URL ⇒ xanh giả trong khi tính năng chết hoàn toàn. Role ở đây CHỈ có
+  // view/update:foundation-company (KHÔNG có bất kỳ quyền *:foundation-file nào) — đúng mô hình quyền WO
+  // tuyên bố. Nếu resolver không đăng ký: `files.link` 403 (fail-closed deny-no-resolver) ⇒ test ĐỎ.
+
+  it("PUT /logo rồi GET → 200 source='file' với role CHỈ có view+update:foundation-company", async () => {
+    const fileId = await insertFile(direct, A.companyId, adminUserId);
+
+    const put = await api(nest)
+      .put("/foundation/company/branding/logo")
+      .set(bearer(tokenAdmin))
+      .send({ fileId });
+    expect(put.status, `PUT logo: ${JSON.stringify(put.body)}`).toBe(200);
+    expect(put.body.data).toMatchObject({ source: "file", fileId });
+
+    const get = await api(nest).get("/foundation/company/branding").set(bearer(tokenAdmin));
+    expect(get.status).toBe(200);
+    expect(get.body.data.logo).toMatchObject({ source: "file", fileId });
+    expect(typeof get.body.data.logo.url).toBe("string");
+
+    // con trỏ ĐÃ ghi vào companies.logo_url (không phải chỉ có link)
+    const row = await direct.query("SELECT logo_url FROM companies WHERE id = $1", [A.companyId]);
+    expect(row.rows[0].logo_url).toBe(fileId);
+  });
+
+  it("user CHỈ có view:foundation-company cũng đọc được logo đã đặt (resolver cấp theo cặp view)", async () => {
+    const fileId = await insertFile(direct, A.companyId, adminUserId);
+    await api(nest)
+      .put("/foundation/company/branding/logo")
+      .set(bearer(tokenAdmin))
+      .send({ fileId })
+      .expect(200);
+
+    const get = await api(nest).get("/foundation/company/branding").set(bearer(tokenViewOnly));
+    expect(get.status).toBe(200);
+    expect(get.body.data.logo).toMatchObject({ source: "file", fileId });
+  });
+
+  it("DELETE /logo sau khi đặt → 204, GET trả logo:null, con trỏ được xoá", async () => {
+    const fileId = await insertFile(direct, A.companyId, adminUserId);
+    await api(nest)
+      .put("/foundation/company/branding/logo")
+      .set(bearer(tokenAdmin))
+      .send({ fileId })
+      .expect(200);
+
+    await api(nest).delete("/foundation/company/branding/logo").set(bearer(tokenAdmin)).expect(204);
+
+    const get = await api(nest).get("/foundation/company/branding").set(bearer(tokenAdmin));
+    expect(get.body.data.logo).toBeNull();
+    const row = await direct.query("SELECT logo_url FROM companies WHERE id = $1", [A.companyId]);
+    expect(row.rows[0].logo_url).toBeNull();
+  });
+
+  // ── I — con trỏ bị ĐẦU ĐỘC (security-review #5) ─────────────────────────────
+
+  it("logo_url bị trỏ tay sang file KHÔNG có link branding → GET trả null (không ký, không rò)", async () => {
+    // Mô phỏng đầu độc: file nhạy cảm trong tenant (vd bản scan), KHÔNG hề đi qua PUT /branding.
+    const secretFileId = await insertFile(direct, A.companyId, otherUserId);
+    await direct.query("UPDATE companies SET logo_url = $1 WHERE id = $2", [
+      secretFileId,
+      A.companyId,
+    ]);
+
+    const get = await api(nest).get("/foundation/company/branding").set(bearer(tokenViewOnly));
+    expect(get.status).toBe(200);
+    expect(get.body.data.logo, "file không có link branding sống KHÔNG được ký").toBeNull();
+  });
+
+  // ── J — công ty suspended KHÔNG được chạm file_links (security-review #3) ────
+
+  it("công ty suspended → PUT 403 và KHÔNG tạo/gỡ link nào", async () => {
+    const fileId = await insertFile(direct, A.companyId, adminUserId);
+    const before = await direct.query(
+      "SELECT count(*)::int AS n FROM file_links WHERE company_id = $1",
+      [A.companyId],
+    );
+    await direct.query("UPDATE companies SET status = 'suspended' WHERE id = $1", [A.companyId]);
+    try {
+      const res = await api(nest)
+        .put("/foundation/company/branding/logo")
+        .set(bearer(tokenAdmin))
+        .send({ fileId });
+      expect(res.status, JSON.stringify(res.body)).toBe(403);
+
+      const after = await direct.query(
+        "SELECT count(*)::int AS n FROM file_links WHERE company_id = $1",
+        [A.companyId],
+      );
+      expect(after.rows[0].n, "suspended KHÔNG được ghi nửa vời").toBe(before.rows[0].n);
+    } finally {
+      await direct.query("UPDATE companies SET status = 'active' WHERE id = $1", [A.companyId]);
+    }
   });
 
   // ── F — fail-soft đường đọc ─────────────────────────────────────────────────

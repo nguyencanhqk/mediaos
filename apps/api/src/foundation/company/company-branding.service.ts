@@ -28,6 +28,8 @@ import {
   FAVICON_SETTING_KEY,
   looksLikeFileId,
 } from "./branding.constants";
+import { assertCompanyActive } from "./company-status";
+import type { CompanyView } from "./company.dto";
 import { CompanyService } from "./company.service";
 
 interface Actor {
@@ -73,14 +75,13 @@ export class CompanyBrandingService {
    * KHÔNG 500 (đây là read tải-trang — vỡ nó là vỡ cả vỏ app). Lỗi hạ tầng KHÁC vẫn propagate.
    */
   async getBranding(actor: Actor): Promise<CompanyBranding> {
-    const [logoRef, faviconRef] = await Promise.all([
-      this.readLogoRef(actor),
-      this.readFaviconFileId(actor),
-    ]);
+    const view = await this.readCompanyView(actor);
+    if (!view) return { logo: null, favicon: null };
 
+    const faviconRef = await this.readFaviconFileId(actor);
     const [logo, favicon] = await Promise.all([
-      this.resolveAsset(actor, logoRef, "logo"),
-      this.resolveAsset(actor, faviconRef, "favicon"),
+      this.resolveAsset(actor, view.id, view.logoUrl, "logo"),
+      this.resolveAsset(actor, view.id, faviconRef, "favicon"),
     ]);
     return { logo, favicon };
   }
@@ -137,7 +138,7 @@ export class CompanyBrandingService {
     const requestUser = { id: actor.id, companyId: actor.companyId };
     await this.loadOwnedFileOrThrow(actor, fileId, { requireUploaded: true, kind });
 
-    const companyId = await this.resolveCompanyIdOrThrow(actor);
+    const companyId = await this.resolveActiveCompanyIdOrThrow(actor);
     await this.unlinkStale(requestUser, companyId, kind);
 
     await this.files.link(requestUser, {
@@ -152,7 +153,7 @@ export class CompanyBrandingService {
 
     await this.persistRef(actor, kind, fileId);
 
-    const asset = await this.resolveAsset(actor, fileId, kind);
+    const asset = await this.resolveAsset(actor, companyId, fileId, kind);
     // setAsset vừa link + confirm-state xong ⇒ presign PHẢI ra được. null ở đây = lỗi hạ tầng thật
     // (storage down), KHÔNG phải "chưa đặt" ⇒ 409 tường minh thay vì trả null gây hiểu nhầm đã lưu hụt.
     if (!asset) {
@@ -167,7 +168,7 @@ export class CompanyBrandingService {
   /** DELETE /:kind — gỡ link + xoá con trỏ. Idempotent (chưa đặt → no-op, vẫn 204). */
   async removeAsset(actor: Actor, kind: BrandingKind): Promise<void> {
     const requestUser = { id: actor.id, companyId: actor.companyId };
-    const companyId = await this.resolveCompanyIdOrThrow(actor);
+    const companyId = await this.resolveActiveCompanyIdOrThrow(actor);
     await this.unlinkStale(requestUser, companyId, kind);
     await this.persistRef(actor, kind, null);
   }
@@ -229,19 +230,25 @@ export class CompanyBrandingService {
     this.assertMimeAllowed(opts.kind, file.mimeType);
   }
 
-  /** companies.id của tenant hiện tại (entityId của file_links). Không có company → 404 sạch. */
-  private async resolveCompanyIdOrThrow(actor: Actor): Promise<string> {
+  /**
+   * companies.id cho MUTATION + chốt trạng thái công ty NGAY ĐẦU (security-review #3).
+   *
+   * `assertCompanyActive` vốn chỉ nằm TRONG `CompanyService.updateCompany` — tức tận bước `persistRef`,
+   * SAU khi đã unlink + link + ghi audit FileLinked/FileUnlinked. Công ty `suspended` khi đó vẫn đổi được
+   * `file_links` rồi mới 403 ⇒ ghi nửa vời. Ép ở ĐẦU mutation để suspended KHÔNG chạm gì cả.
+   */
+  private async resolveActiveCompanyIdOrThrow(actor: Actor): Promise<string> {
     const view = await this.company.getCurrent(actor);
+    assertCompanyActive(view.status);
     return view.id;
   }
 
-  /** Con trỏ logo hiện tại = `companies.logo_url` (fileId UUID HOẶC URL cũ). */
-  private async readLogoRef(actor: Actor): Promise<string | null> {
+  /** Hồ sơ company cho đường ĐỌC (id + logoUrl). Company mất → null (fail-soft, không vỡ trang). */
+  private async readCompanyView(actor: Actor): Promise<CompanyView | null> {
     try {
-      const view = await this.company.getCurrent(actor);
-      return view.logoUrl;
+      return await this.company.getCurrent(actor);
     } catch (err) {
-      if (err instanceof NotFoundException) return null; // fail-soft: company mất ⇒ không có branding
+      if (err instanceof NotFoundException) return null;
       throw err;
     }
   }
@@ -260,6 +267,7 @@ export class CompanyBrandingService {
    */
   private async resolveAsset(
     actor: Actor,
+    companyId: string,
     ref: string | null,
     kind: BrandingKind,
   ): Promise<BrandingAsset | null> {
@@ -267,6 +275,19 @@ export class CompanyBrandingService {
     if (!looksLikeFileId(ref)) {
       return { source: "external", fileId: null, url: ref, expiresAt: null };
     }
+
+    // SELF-DEFENDING (security-review #5, mẫu AvatarPresignService/findVerifiedAvatarsTx): KHÔNG tin
+    // `companies.logo_url` verbatim. Cột đó ĐA-NGƯỜI-GHI (PATCH /foundation/company · PATCH
+    // /settings/company · platform update) nên có thể bị trỏ sang file BẤT KỲ trong tenant (bản scan
+    // CCCD/hợp đồng). Chỉ ký khi fileId THẬT SỰ có link branding SỐNG đúng (module, entityType, công ty).
+    // Không khớp ⇒ null (như chưa đặt) — KHÔNG ký, KHÔNG chạm file_access_logs.
+    if (!(await this.hasLiveBrandingLink(actor, companyId, kind, ref))) {
+      this.logger.warn(
+        `getBranding: ${kind} trỏ file ${ref} KHÔNG có link branding sống → null (con trỏ bị đầu độc hoặc link đã gỡ?).`,
+      );
+      return null;
+    }
+
     try {
       const { url, expiresAt } = await this.files.getDownloadUrl(
         { id: actor.id, companyId: actor.companyId },
@@ -291,21 +312,37 @@ export class CompanyBrandingService {
     }
   }
 
-  /** Gỡ (soft-delete) mọi link branding của `kind` — replace semantics, không để file treo. */
-  private async unlinkStale(
-    requestUser: { id: string; companyId: string },
+  /** True nếu `fileId` có link branding SỐNG đúng (FOUNDATION, entityType của kind, entityId=companyId). */
+  private async hasLiveBrandingLink(
+    actor: Actor,
     companyId: string,
     kind: BrandingKind,
-  ): Promise<void> {
-    const links = await this.db.withTenant(requestUser.companyId, (tx) =>
+    fileId: string,
+  ): Promise<boolean> {
+    const links = await this.listBrandingLinks(actor.companyId, companyId, kind);
+    return links.some((l) => l.fileId === fileId);
+  }
+
+  /** Link branding SỐNG của (kind, công ty). Dùng chung cho verify đường đọc + replace đường ghi. */
+  private listBrandingLinks(tenantId: string, companyId: string, kind: BrandingKind) {
+    return this.db.withTenant(tenantId, (tx) =>
       this.linkRepo.listActiveByEntityTx(
-        requestUser.companyId,
+        tenantId,
         BRANDING_MODULE_CODE,
         BRANDING_RULES[kind].entityType,
         companyId,
         tx,
       ),
     );
+  }
+
+  /** Gỡ (soft-delete) mọi link branding của `kind` — replace semantics, không để file treo. */
+  private async unlinkStale(
+    requestUser: { id: string; companyId: string },
+    companyId: string,
+    kind: BrandingKind,
+  ): Promise<void> {
+    const links = await this.listBrandingLinks(requestUser.companyId, companyId, kind);
     for (const link of links) {
       await this.files.unlink(requestUser, link.id);
     }

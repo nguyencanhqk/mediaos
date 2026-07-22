@@ -16,6 +16,28 @@ import { z } from "zod";
  * BẤT BIẾN #3: KHÔNG lộ storage_path/bucket/checksum — chỉ fileId + URL ephemeral (mirror files.ts).
  */
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Validator dùng chung cho MỌI ĐƯỜNG GHI chạm `companies.logo_url` (patchCompany · companySettings ·
+ * platform updateCompany). Chấp nhận ĐÚNG 2 dạng: fileId UUID (đặt qua branding endpoint) hoặc URL
+ * http(s) (giá trị nhập tay cũ). Trần 2048 = giới hạn thực dụng cho cột `text`.
+ *
+ * VÌ SAO KHÔNG dùng `z.string().url()` (security-review #4): zod v3 `.url()` dựng `new URL()` nên
+ * **CHO QUA** `javascript:alert(1)` và `data:text/html,<script>…` — đã chạy thật để xác nhận. Nó tạo cảm
+ * giác an toàn giả trong khi FE sắp render giá trị này vào `<img src>` / `<link rel=icon href>`
+ * (S5-BRAND-FE-1/FE-2). Allowlist scheme tường minh mới là hàng rào thật.
+ *
+ * ĐƯỜNG ĐỌC vẫn khoan dung (`z.string()` trần) — dữ liệu lịch sử bẩn phải hiển thị được, không được
+ * biến thành ZodError runtime ở FE. Chặt ở ghi, khoan dung ở đọc.
+ */
+export const brandingLogoRefSchema = z
+  .string()
+  .max(2048)
+  .refine((v) => UUID_RE.test(v) || /^https?:\/\//i.test(v), {
+    message: "logoUrl phải là fileId (UUID) hoặc URL http(s) — không nhận scheme khác.",
+  });
+
 /** Loại tài sản thương hiệu. Dùng làm path-param `:kind` (logo|favicon). */
 export const brandingKindSchema = z.enum(["logo", "favicon"]);
 export type BrandingKind = z.infer<typeof brandingKindSchema>;
