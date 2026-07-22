@@ -142,8 +142,10 @@ describe.skipIf(!hasLaneDb)("S5-BRAND-BE-1 branding deny-path (logo · favicon)"
   let B: SeededTenant;
   const companyIds: string[] = [];
 
-  const email = { noRole: "", viewOnly: "", admin: "", other: "", tenantB: "" };
+  const email = { noRole: "", viewOnly: "", admin: "", other: "", tenantB: "", fileOnly: "" };
   let tokenNoRole = "";
+  let tokenTenantB = "";
+  let tokenFileOnly = "";
   let tokenViewOnly = "";
   let tokenAdmin = "";
   let adminUserId = "";
@@ -165,7 +167,14 @@ describe.skipIf(!hasLaneDb)("S5-BRAND-BE-1 branding deny-path (logo · favicon)"
     await grant(direct, roleAdmin, "view", "foundation-company");
     await grant(direct, roleAdmin, "update", "foundation-company");
 
+    // Role CHỈ có *:foundation-file, 0 grant foundation-company — dùng để ĐO phạm vi thực sự nới ra
+    // sau khi resolver READ bỏ cặp quyền (security-review vòng 2, MEDIUM).
+    const roleFileOnly = await seedRole(direct, A.companyId, "brand-file-only");
+    await grant(direct, roleFileOnly, "view", "foundation-file");
+    await grant(direct, roleFileOnly, "download", "foundation-file");
+
     email.noRole = `norole@${A.slug}.test`;
+    email.fileOnly = `fileonly@${A.slug}.test`;
     email.viewOnly = `viewonly@${A.slug}.test`;
     email.admin = `admin@${A.slug}.test`;
     email.other = `other@${A.slug}.test`;
@@ -175,12 +184,14 @@ describe.skipIf(!hasLaneDb)("S5-BRAND-BE-1 branding deny-path (logo · favicon)"
     const uViewOnly = await seedUser(direct, A.companyId, email.viewOnly, hash);
     const uAdmin = await seedUser(direct, A.companyId, email.admin, hash);
     const uOther = await seedUser(direct, A.companyId, email.other, hash);
+    const uFileOnly = await seedUser(direct, A.companyId, email.fileOnly, hash);
     const uTenantB = await seedUser(direct, B.companyId, email.tenantB, hash);
     adminUserId = uAdmin;
     otherUserId = uOther;
     tenantBUserId = uTenantB;
 
     await seedUserRole(direct, uViewOnly, roleViewOnly, A.companyId);
+    await seedUserRole(direct, uFileOnly, roleFileOnly, A.companyId);
     await seedUserRole(direct, uAdmin, roleAdmin, A.companyId);
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -190,6 +201,8 @@ describe.skipIf(!hasLaneDb)("S5-BRAND-BE-1 branding deny-path (logo · favicon)"
     await nest.init();
 
     tokenNoRole = await login(nest, A.slug, email.noRole);
+    tokenTenantB = await login(nest, B.slug, email.tenantB);
+    tokenFileOnly = await login(nest, A.slug, email.fileOnly);
     tokenViewOnly = await login(nest, A.slug, email.viewOnly);
     tokenAdmin = await login(nest, A.slug, email.admin);
   });
@@ -209,8 +222,9 @@ describe.skipIf(!hasLaneDb)("S5-BRAND-BE-1 branding deny-path (logo · favicon)"
   it("GET /branding — user 0 grant VẪN đọc được (authenticated-only, không cặp quyền)", async () => {
     const res = await api(nest).get("/foundation/company/branding").set(bearer(tokenNoRole));
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(res.body.data).toHaveProperty("logo");
-    expect(res.body.data).toHaveProperty("favicon");
+    // Assert GIÁ TRỊ, không chỉ toHaveProperty: `toHaveProperty("logo")` xanh cả khi logo=null nên
+    // không phân biệt được "đọc được" với "bị chặn rồi fail-soft" (security-review vòng 2).
+    expect(res.body.data).toEqual({ logo: null, favicon: null });
   });
 
   it("GET /branding — KHÔNG token → 401 (vẫn phải đăng nhập)", async () => {
@@ -218,10 +232,14 @@ describe.skipIf(!hasLaneDb)("S5-BRAND-BE-1 branding deny-path (logo · favicon)"
     expect(res.status).toBe(401);
   });
 
-  it("GET /branding — có view:foundation-company → 200 {logo:null, favicon:null} khi chưa đặt", async () => {
-    const res = await api(nest).get("/foundation/company/branding").set(bearer(tokenViewOnly));
-    expect(res.status).toBe(200);
-    expect(res.body.data).toEqual({ logo: null, favicon: null });
+  // GIỮ ca này nhưng ĐỔI Ý NGHĨA: sau khi GET thành authenticated-only, `tokenViewOnly` và `tokenNoRole`
+  // đi CÙNG một đường ⇒ nó không còn chứng minh gì về cổng quyền. Giá trị còn lại: chốt rằng có thêm
+  // cặp view cũng KHÔNG làm đổi kết quả (không có nhánh đặc biệt nào cho company-admin).
+  it("GET /branding — có view:foundation-company cho kết quả GIỐNG HỆT user 0-grant", async () => {
+    const withView = await api(nest).get("/foundation/company/branding").set(bearer(tokenViewOnly));
+    const without = await api(nest).get("/foundation/company/branding").set(bearer(tokenNoRole));
+    expect(withView.status).toBe(200);
+    expect(withView.body.data).toEqual(without.body.data);
   });
 
   // ── U — WRITE gate (least-privilege) ────────────────────────────────────────
@@ -379,6 +397,98 @@ describe.skipIf(!hasLaneDb)("S5-BRAND-BE-1 branding deny-path (logo · favicon)"
     expect(get.body.data.logo).toBeNull();
     const row = await direct.query("SELECT logo_url FROM companies WHERE id = $1", [A.companyId]);
     expect(row.rows[0].logo_url).toBeNull();
+  });
+
+  // ── K — CROSS-TENANT trên mô hình quyền MỚI (security-review vòng 2, HIGH) ──
+  //
+  // Sau khi resolver READ bỏ cặp quyền, TOÀN BỘ ranh giới tenant của đường đọc nằm trên đúng một biểu
+  // thức `input.entityId === input.companyId`. Trước đó spec này seed tenant B nhưng CHƯA BAO GIỜ login
+  // bằng nó ⇒ không ca nào chứng minh wiring cấp `companyId` từ JWT. Hồi quy sẽ lọt mà 22/22 vẫn xanh.
+
+  it("tenant B KHÔNG thấy logo của tenant A (ranh giới tenant của đường đọc mới)", async () => {
+    const fileId = await insertFile(direct, A.companyId, adminUserId);
+    await api(nest)
+      .put("/foundation/company/branding/logo")
+      .set(bearer(tokenAdmin))
+      .send({ fileId })
+      .expect(200);
+
+    const res = await api(nest).get("/foundation/company/branding").set(bearer(tokenTenantB));
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.logo, "logo tenant A KHÔNG được lộ sang tenant B").toBeNull();
+  });
+
+  it("tenant B KHÔNG presign được fileId branding của tenant A qua /files/:id/download-url", async () => {
+    const fileId = await insertFile(direct, A.companyId, adminUserId);
+    await api(nest)
+      .put("/foundation/company/branding/logo")
+      .set(bearer(tokenAdmin))
+      .send({ fileId })
+      .expect(200);
+
+    const res = await api(nest)
+      .get(`/foundation/files/${fileId}/download-url`)
+      .set(bearer(tokenTenantB));
+    expect([403, 404], `cross-tenant phải bị chặn, nhận ${res.status}`).toContain(res.status);
+  });
+
+  // ── L — ĐO phạm vi nới thực tế (security-review vòng 2, MEDIUM) ─────────────
+
+  it("ĐO phạm vi nới: role chỉ có *:foundation-file giờ ĐỌC ĐƯỢC file branding (trước cần foundation-company)", async () => {
+    // GHI NHẬN CÓ CHỦ ĐÍCH, không phải mong muốn. Trước khi resolver READ bỏ cặp quyền, role này bị
+    // deny-resolver ở file branding; giờ `canRead` chỉ kiểm tenant nên nó đi qua. Hôm nay blast radius
+    // = 0 vì DB thật chỉ SA + company-admin giữ `download:foundation-file`. Test này PIN điều đó lại:
+    // nếu ai đó cấp cặp file cho role rộng hơn, họ sẽ thấy ca này và biết nó KÉO THEO quyền đọc branding.
+    const fileId = await insertFile(direct, A.companyId, adminUserId);
+    await api(nest)
+      .put("/foundation/company/branding/logo")
+      .set(bearer(tokenAdmin))
+      .send({ fileId })
+      .expect(200);
+
+    const res = await api(nest)
+      .get(`/foundation/files/${fileId}/download-url`)
+      .set(bearer(tokenFileOnly));
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+  });
+
+  it("nới ở trên KHÔNG mở rộng sang tenant khác (cùng role, file branding của tenant B)", async () => {
+    // Chốt rằng phạm vi nới bị chặn bởi ranh giới tenant, không phải chỉ bởi cặp quyền.
+    const foreignFileId = await insertFile(direct, B.companyId, tenantBUserId);
+    const res = await api(nest)
+      .get(`/foundation/files/${foreignFileId}/download-url`)
+      .set(bearer(tokenFileOnly));
+    expect([403, 404], `cross-tenant phải bị chặn, nhận ${res.status}`).toContain(res.status);
+  });
+
+  it("file vừa có link branding VỪA có link module khác → 403 (chốt AND trên mọi link sống)", async () => {
+    const fileId = await insertFile(direct, A.companyId, adminUserId);
+    await api(nest)
+      .put("/foundation/company/branding/logo")
+      .set(bearer(tokenAdmin))
+      .send({ fileId })
+      .expect(200);
+
+    // Gắn THÊM 1 link HR/contract cho cùng file. FilePolicy AND verdict trên MỌI link sống ⇒ resolver HR
+    // deny sẽ THẮNG resolver branding allow. Nếu ai đó đổi AND thành OR, ca này đỏ.
+    await direct.query(
+      `INSERT INTO file_links (company_id, file_id, module_code, entity_type, entity_id, link_type,
+         access_scope, is_primary, created_by)
+       VALUES ($1,$2,'HR','contract',$3,'Contract','Company',false,$4)`,
+      [A.companyId, fileId, A.companyId, adminUserId],
+    );
+
+    const res = await api(nest)
+      .get(`/foundation/files/${fileId}/download-url`)
+      .set(bearer(tokenFileOnly));
+    expect(res.status, `AND-across-links phải deny, nhận ${res.status}`).toBe(403);
+
+    // Và GET /branding degrade fail-soft về null (KHÔNG 500, KHÔNG rò).
+    const branding = await api(nest)
+      .get("/foundation/company/branding")
+      .set(bearer(tokenNoRole));
+    expect(branding.status).toBe(200);
+    expect(branding.body.data.logo).toBeNull();
   });
 
   // ── I — con trỏ bị ĐẦU ĐỘC (security-review #5) ─────────────────────────────

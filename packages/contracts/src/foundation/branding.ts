@@ -59,7 +59,11 @@ export const brandingAssetSchema = z.object({
 export type BrandingAsset = z.infer<typeof brandingAssetSchema>;
 
 /**
- * Response `GET /api/v1/foundation/company/branding` (gate view:foundation-company).
+ * Response `GET /api/v1/foundation/company/branding`.
+
+ * GATE: CHỈ cần ĐÃ ĐĂNG NHẬP — KHÔNG có cặp quyền (S5-BRAND-FE-2). `view:foundation-company` chỉ
+ * company-admin có, nên gate bằng nó sẽ làm logo vỏ app + favicon động chết với mọi nhân viên khác.
+ * Cô lập tenant do CompanyGuard + withTenant ép. Mọi đường GHI vẫn gate `update:foundation-company`.
  * Mỗi mục `null` = chưa đặt HOẶC không hiển-thị-được (FAIL-SOFT: file bị gỡ/Infected/presign lỗi → null,
  * KHÔNG 500 — read tải-trang không được vỡ, mirror GET /me/avatar SPEC-09 §12.2).
  */

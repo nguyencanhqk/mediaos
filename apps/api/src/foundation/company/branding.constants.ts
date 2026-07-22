@@ -9,7 +9,14 @@ import type { BrandingKind } from "@mediaos/contracts";
  * Cặp quyền TÁI DÙNG của foundation-company (seed mig 0435, grant company-admin qua resource_type LIKE
  * 'foundation-%') — WO này KHÔNG thêm quyền mới. READ = view, mọi MUTATION = update.
  */
-export const BRANDING_VIEW_PAIR = { action: "view", resourceType: "foundation-company" } as const;
+/**
+ * CỐ Ý KHÔNG CÒN cặp `view:foundation-company` ở đây (security-review vòng 2, LOW — dead code).
+ *
+ * Đường ĐỌC branding là authenticated-only: `CompanyBrandingController.getBranding` không gate, và
+ * `CompanyBrandingFileResolver.canRead` chỉ kiểm `entityId === companyId`. Giữ lại hằng `BRANDING_VIEW_PAIR`
+ * mà 0 consumer là mời người sau nối nhầm nó vào đường đọc, làm tính năng chết với mọi nhân viên
+ * không phải company-admin. Cần cặp view cho việc khác thì khai tại chỗ dùng.
+ */
 export const BRANDING_UPDATE_PAIR = {
   action: "update",
   resourceType: "foundation-company",
