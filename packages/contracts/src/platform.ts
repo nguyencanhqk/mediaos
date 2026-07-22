@@ -52,7 +52,8 @@ export const updateCompanySchema = z
     timezone: z.string().min(1).max(64).optional(),
     currency: z.enum(["VND", "USD"]).optional(),
     language: z.enum(["vi", "en"]).optional(),
-    logoUrl: z.string().url().max(2048).nullable().optional(),
+    // S5-BRAND-BE-1: BỎ `.url()` — cùng cột `companies.logo_url` với branding endpoint (chứa fileId UUID).
+    logoUrl: z.string().max(2048).nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "Cần ít nhất 1 trường để cập nhật" });
 export type UpdateCompanyRequest = z.infer<typeof updateCompanySchema>;

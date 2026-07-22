@@ -24,6 +24,9 @@ export const MIME_TO_EXTENSIONS: Readonly<Record<string, readonly string[]>> = O
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ["xlsx"],
   "text/csv": ["csv"],
   "text/plain": ["txt"],
+  // S5-BRAND-BE-1 (append): favicon .ico — hai MIME cho cùng định dạng (x-icon = de-facto, vnd.microsoft = IANA).
+  "image/x-icon": ["ico"],
+  "image/vnd.microsoft.icon": ["ico"],
 });
 
 /**

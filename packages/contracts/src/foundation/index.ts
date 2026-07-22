@@ -22,3 +22,5 @@ export * from "./sequences";
 export * from "./seeds";
 // S5-FND-JOBS-OBS-1 — System Jobs observability DTO (READ-ONLY, WHITELIST, KHÔNG metadata). Append-only.
 export * from "./system-jobs";
+// S5-BRAND-BE-1 — thương hiệu công ty (logo + favicon) qua wrapper presign trên FileService. Append-only.
+export * from "./branding";

@@ -1,23 +1,16 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-21 09:51Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-22 01:41Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-### 🟡 S5-BE-CONTRACT-1 — API contract & OpenAPI/Swagger chuẩn hoá theo module + FE integration hardening (401/403/422/500 mapping, request-id, idempotency, query invalidation sau mutation) — WS-D
-- **zone**: yellow · **skills**: code-review
-- **sửa ở đâu (paths)**: `apps/api/src/**`, `packages/contracts/src/**`, `packages/web-core/src/lib/**`, `apps/app/src/**`
-- **phụ thuộc**: S4-QA-2✓
-- **done_when (đích hội tụ)**:
-  - [ ] OpenAPI/Swagger đủ endpoint AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH/Foundation (request/response/error/auth/permission note) — đối chiếu Swagger đã dựng ở debt-wave2, hoàn thiện phần thiếu (KHÔNG dựng trùng)
-  - [ ] FE api-client chuẩn hoá error mapping 401/403/422/500 + request-id + idempotency key; query invalidation bắt buộc sau mutation IMPLEMENTATION-08 §13.3
-  - [ ] Contract Zod (packages/contracts) khớp API thật; envelope API-01 đồng nhất
-  - [ ] check.sh xanh; LIGHT gate
+_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🟡 `S5-QA-E2E-1` Integration freeze + system smoke P0 + cross-module E2E: login→Home Portal→module workspace→check-in→nghỉ phép→task→notification→dashboard (WS-B/C)
+- 🟡 `S5-BE-CONTRACT-1` API contract & OpenAPI/Swagger chuẩn hoá theo module + FE integration hardening (401/403/422/500 mapping, request-id, idempotency, query invalidation sau mutation) — WS-D
 - 🔴 `S5-SEC-1` Permission & data-scope hardening + field-level/export permission + security testing (IDOR, file access, sensitive fields, rate-limit auth) — WS-E, crown
 - 🟡 `S5-QA-REG-1` QA regression suite MVP (test-case matrix theo module × role) + UI state hardening + responsive/accessibility smoke — WS-F
 - 🟡 `S5-QA-DASHNOTI-1` Dashboard & Notification hardening: widget degraded/cache đúng, unread count chính xác, deep link an toàn, invalidation theo event — WS-G
@@ -59,7 +52,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 18
+- **branch**: `master` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 188 — `0508_lms_access_permission` (189 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -68,6 +61,8 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `54f5028b` | 2026-07-22 | feat: task detail UX + role-member picker dùng chung + PROD tooling (#255) |
+| `49ff063c` | 2026-07-21 | docs(brand): seed wave S5-BRAND — cài đặt thương hiệu logo + favicon (3 WO: wrapper presign trên FileService + FE /system/company + áp vỏ app, không migration/quyền mới) |
 | `0cdd68e0` | 2026-07-21 | docs(lms): seed wave S5-LMS Giai đoạn B — 8 WO (auto-sync + SSO-only + audit + tiến độ về /me + chuẩn hoá UI LMS) |
 | `bd981f8c` | 2026-07-21 | feat(lms): phân quyền access:lms thuộc app chính (gate card + endpoint + seed 4 vai trò) (#254) |
 | `bc09ffb7` | 2026-07-21 | feat(integration): cầu SSO MediaOS→LMS Giai đoạn A — sso-link HMAC 60s + sidebar Đào tạo + script sync tài khoản (#253) |
@@ -78,8 +73,6 @@
 | `dc0cce8a` | 2026-07-20 | feat(task+hr): gắn thẻ + UX board/chi tiết + picker nhân viên dùng chung (thêm người vào phòng · trưởng đơn vị) (#251) |
 | `57423fcd` | 2026-07-20 | fix(task): trạng thái/ưu tiên dạng thẻ + gọn cột hành động tệp + đồng bộ panel chi tiết → board không cần F5 (#250) |
 | `e7b27277` | 2026-07-20 | chore(harness): S5-TASK-COVER-1 → done (#249 merged) + bàn giao phiên 2026-07-20 (6 WO / 2 PR) |
-| `239d7b69` | 2026-07-20 | feat(task): ảnh bìa công việc — chọn từ tệp đã đính kèm (is_primary), hiện trên board + chi tiết [S5-TASK-COVER-1] (#249) |
-| `6d9b245f` | 2026-07-20 | feat(task): 5 WO UX board/chi tiết task (panel trượt · tạo nhanh cột · sửa-tại-chỗ · avatar · việc con trên thẻ · vá đổi-dự-án) + vá 4 HIGH gate (#248) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

@@ -61,7 +61,10 @@ export const patchCompanySchema = z
   .object({
     name: z.string().min(1).max(255),
     shortName: z.string().max(255).nullable(),
-    logoUrl: z.string().url().max(2048).nullable(),
+    // S5-BRAND-BE-1: BỎ `.url()`. `companies.logo_url` giờ chứa fileId (UUID) khi logo đặt qua
+    // /foundation/company/branding, hoặc http(s) URL với dữ liệu cũ. Ép .url() ⇒ round-trip
+    // GET→PATCH của FE gãy 400 sau khi đổi logo. Đường ghi ĐÚNG cho logo là branding endpoint.
+    logoUrl: z.string().max(2048).nullable(),
     timezone: z.string().min(1).max(64),
     currency: companyCurrencyEnum,
     language: companyLanguageEnum,

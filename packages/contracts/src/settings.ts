@@ -15,7 +15,9 @@ export const companySettingsSchema = z.object({
   name: z.string().min(1),
   slug: z.string().min(1),
   status: z.string(),
-  logoUrl: z.string().url().nullable().optional(),
+  // S5-BRAND-BE-1: BỎ `.url()` ở ĐƯỜNG ĐỌC. logo_url chứa fileId (UUID) khi đặt qua branding endpoint ⇒
+  // `.url()` biến HTTP 200 thành ZodError runtime trong apiFetch (console /settings/company trắng trang).
+  logoUrl: z.string().nullable().optional(),
   timezone: z.string().min(1),
   currency: z.enum(["VND", "USD"]),
   language: z.enum(["vi", "en"]),
@@ -57,7 +59,8 @@ const isoDateSchema = z
 
 export const updateCompanySettingsSchema = z.object({
   // Thiết lập chung (G5-1, giữ nguyên)
-  logoUrl: z.string().url().nullable().optional(),
+  // S5-BRAND-BE-1: BỎ `.url()` — xem companySettingsSchema.logoUrl (round-trip GET→PUT không được gãy).
+  logoUrl: z.string().nullable().optional(),
   timezone: z.string().min(1).optional(),
   currency: z.enum(["VND", "USD"]).optional(),
   language: z.enum(["vi", "en"]).optional(),
