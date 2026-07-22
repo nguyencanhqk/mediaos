@@ -27,6 +27,9 @@ $FeApps = @(
   [pscustomobject]@{ Name = "console"; Port = 5278; Dir = "apps\console" }
 )
 $DefaultDomain = "funtimemediacorp.com"
+$ProdApiService = "MediaOS-API"   # Windows service API PROD (NSSM — 04-build-install-service.ps1)
+$ProdLmsService = "MediaOS-LMS"   # Windows service LMS PROD (apps\lms = fmc-app, node server.mjs)
+$LmsPort = 3400                   # LMS PROD — tunnel train.<domain> → localhost:3400
 
 # ── Log helpers ─────────────────────────────────────────────────────────────
 function Write-Step([string]$m) { Write-Host "`n=== $m ===" -ForegroundColor Cyan }
@@ -333,6 +336,155 @@ function Invoke-DeploySeed {
   if ($LASTEXITCODE -ne 0) { throw "seed-admin thất bại — kiểm tra ADMIN_* trong .env." }
 }
 
+# ── PROD ops (re-build · cập nhật · restart các app ĐÃ deploy online) ──────────────────
+# FE PROD = Cloudflare Pages (06-deploy-pages.ps1 tự bake VITE_* — KHÔNG đụng root .env).
+# API PROD = service NSSM "MediaOS-API" chạy node apps\api\dist\main.js (cwd=repo root, đọc root .env).
+# LMS PROD = service NSSM "MediaOS-LMS" chạy node server.mjs (cwd=apps\lms, PORT=3400, tunnel train.*).
+#            apps\lms là workspace RIÊNG (fmc-app, Next.js+SQLite) — ngoài turbo/pnpm-workspace MediaOS.
+
+function Test-IsAdmin {
+  $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+  return (New-Object Security.Principal.WindowsPrincipal($id)).IsInRole(
+    [Security.Principal.WindowsBuiltinRole]::Administrator)
+}
+
+# Mở cửa sổ PowerShell Administrator (UAC) chạy lại 'mediaos.ps1 <lệnh>' — dùng khi bước cần admin
+# (restart/cài service) mà phiên hiện tại không có quyền. Cửa sổ giữ mở để đọc kết quả.
+function Invoke-Elevated([string]$cmdLine) {
+  $ps1 = Join-Path $Root "mediaos.ps1"
+  # Prompt ASCII (không dấu) — codepage cửa sổ mới có thể chưa là UTF-8.
+  $inner = "& '$ps1' $cmdLine; Write-Host ''; Read-Host 'Xong - Enter de dong cua so'"
+  Start-Process powershell -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$inner`""
+}
+
+$ApiHealthHint = "xem logs\api.err.log (thường: .env sai / DB thiếu migration / KEK thiếu)."
+$LmsHealthHint = "xem log service MediaOS-LMS (apps\lms — Next.js server.mjs, PORT=3400)."
+
+function Wait-HttpOk([string]$url, [string]$label, [string]$hint) {
+  Write-Host "  chờ $label trả HTTP OK ($url, tối đa 60s) ..." -ForegroundColor DarkGray
+  for ($i = 0; $i -lt 20; $i++) {
+    Start-Sleep -Seconds 3
+    try {
+      $r = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 4
+      Write-Ok ("$label OK (HTTP " + $r.StatusCode + ")")
+      return $true
+    } catch { }
+  }
+  Write-Err "$label chưa phản hồi sau 60s — $hint"
+  return $false
+}
+
+# Restart 1 service PROD + chờ health. Chỉ gọi khi ĐÃ có quyền Administrator.
+function Restart-OneProdService([string]$svcName, [string]$healthUrl, [string]$label, [string]$hint) {
+  $svc = Get-Service $svcName -ErrorAction SilentlyContinue
+  if (-not $svc) { Write-Err "Chưa có service $svcName trên máy này — cài service trước rồi mới restart được."; return }
+  Restart-Service -Name $svcName -Force
+  Write-Ok "Đã restart $svcName"
+  $null = Wait-HttpOk $healthUrl $label $hint
+}
+
+# Khởi động lại service PROD (KHÔNG rebuild):  m prod-restart [api|lms]  — bỏ trống = CẢ HAI.
+# Cần Administrator — chưa có thì tự mở cửa sổ UAC chạy lại đúng lệnh.
+function Invoke-ProdRestart([string[]]$rArgs) {
+  $target = "all"
+  if ($rArgs.Count -gt 0 -and $rArgs[0]) { $target = $rArgs[0].ToLower() }
+  if (@("all", "api", "lms") -notcontains $target) {
+    Write-Warn "Cách dùng:  m prod-restart [api|lms]   (bỏ trống = cả hai)"
+    return
+  }
+  Write-Step "PROD — restart service ($target)"
+  if (-not (Test-IsAdmin)) {
+    Write-Warn "Cần Administrator để restart service — mở cửa sổ elevated (UAC)..."
+    Invoke-Elevated "prod-restart $target"
+    return
+  }
+  if (@("all", "api") -contains $target) {
+    Restart-OneProdService $ProdApiService "http://localhost:$ApiPort/api/v1/health" "API PROD" $ApiHealthHint
+  }
+  if (@("all", "lms") -contains $target) {
+    Restart-OneProdService $ProdLmsService "http://localhost:$LmsPort" "LMS PROD" $LmsHealthHint
+  }
+}
+
+# PROD UPDATE — re-build + cập nhật + khởi động lại các app đã deploy online:
+#   m prod-update              → FE (Pages) + API + LMS
+#   m prod-update fe|api|lms   → chỉ 1 phần    ('be' = API + LMS — bước elevated dùng nội bộ)
+# API: build ĐÚNG cặp filter của 04-build-install-service.ps1 (contracts + api) rồi restart service —
+# nhanh hơn 'm deploy-api' (không gỡ/cài lại service). Đổi cấu hình service/node path → vẫn 'm deploy-api'.
+# LMS: apps\lms là workspace RIÊNG (fmc-app) → build tại chỗ ('pnpm build' = next build) rồi restart
+# service. Deps LMS đổi thì tự chạy 'pnpm install' trong apps\lms trước.
+function Invoke-ProdUpdate([string[]]$updArgs) {
+  $target = "all"
+  if ($updArgs.Count -gt 0 -and $updArgs[0]) { $target = $updArgs[0].ToLower() }
+  if (@("all", "fe", "api", "lms", "be") -notcontains $target) {
+    Write-Warn "Cách dùng:  m prod-update [fe|api|lms]   (bỏ trống = FE + API + LMS)"
+    return
+  }
+  Write-Step "PROD UPDATE ($target) -> $DefaultDomain"
+  if (@("all", "fe") -contains $target) { Invoke-DeployFe @() }
+  if ($target -eq "fe") { return }
+  $doApi = @("all", "be", "api") -contains $target
+  $doLms = @("all", "be", "lms") -contains $target
+
+  if (-not (Test-IsAdmin)) {
+    $next = "be"
+    if (-not $doLms) { $next = "api" }
+    if (-not $doApi) { $next = "lms" }
+    Write-Warn "Bước restart service cần Administrator — mở cửa sổ elevated (UAC) chạy tiếp ($next)..."
+    Invoke-Elevated "prod-update $next"
+    return
+  }
+
+  if ($doApi) {
+    # Landmine prod-dist-shared: dev-online watch ghi đè cùng apps/api/dist → dừng nó trước khi build.
+    if (Test-Port 3200) {
+      Write-Warn "dev-online API (:3200) đang chạy — dist API DÙNG CHUNG với PROD."
+      Write-Warn "Nên 'm dev-online-stop' trước, kẻo watch ghi đè dist vừa build cho PROD."
+    }
+    Write-Host "  build contracts + api (dist mà service PROD sẽ chạy) ..." -ForegroundColor DarkGray
+    Exec { pnpm --filter "@mediaos/contracts" build } "build contracts"
+    Exec { pnpm --filter "@mediaos/api" build } "build api"
+    Restart-OneProdService $ProdApiService "http://localhost:$ApiPort/api/v1/health" "API PROD" $ApiHealthHint
+  }
+  if ($doLms) {
+    Write-Host "  build LMS (apps\lms — next build, workspace riêng ngoài turbo) ..." -ForegroundColor DarkGray
+    Push-Location (Join-Path $Root "apps\lms")
+    try { Exec { pnpm build } "build lms (next build)" } finally { Pop-Location }
+    Restart-OneProdService $ProdLmsService "http://localhost:$LmsPort" "LMS PROD" $LmsHealthHint
+  }
+}
+
+function Invoke-ProdStatus {
+  Write-Step "PROD — trạng thái ($DefaultDomain)"
+  foreach ($name in @($ProdApiService, $ProdLmsService, "cloudflared")) {
+    $svc = Get-Service $name -ErrorAction SilentlyContinue
+    if (-not $svc) { Write-Warn ("service {0,-12}: chưa cài" -f $name) }
+    elseif ($svc.Status -eq "Running") { Write-Ok ("service {0,-12}: Running" -f $name) }
+    else { Write-Err ("service {0,-12}: {1}" -f $name, $svc.Status) }
+  }
+  Write-Host ""
+  if (Test-Port $ApiPort) { Write-Ok "cổng :$ApiPort (API PROD) đang mở" } else { Write-Err "cổng :$ApiPort (API PROD) đóng" }
+  if (Test-Port $LmsPort) { Write-Ok "cổng :$LmsPort (LMS PROD) đang mở" } else { Write-Err "cổng :$LmsPort (LMS PROD) đóng" }
+  if (Test-Port 3200)     { Write-Warn "cổng :3200 (dev-online API) CŨNG đang chạy — nhớ landmine dist dùng chung" }
+  Write-Host ""
+  try {
+    $r = Invoke-WebRequest -Uri "http://localhost:$ApiPort/api/v1/health" -UseBasicParsing -TimeoutSec 4
+    Write-Ok ("health API local  http://localhost:$ApiPort/api/v1/health (HTTP " + $r.StatusCode + ")")
+  } catch { Write-Err "health API local KHÔNG phản hồi — service dừng hoặc API lỗi (logs\api.err.log)" }
+  try {
+    $r = Invoke-WebRequest -Uri "https://api.$DefaultDomain/api/v1/health" -UseBasicParsing -TimeoutSec 8
+    Write-Ok ("health API online https://api.$DefaultDomain/api/v1/health (HTTP " + $r.StatusCode + ")")
+  } catch { Write-Err "health API online KHÔNG phản hồi — kiểm tra service cloudflared / DNS" }
+  try {
+    $r = Invoke-WebRequest -Uri "http://localhost:$LmsPort" -UseBasicParsing -TimeoutSec 4
+    Write-Ok ("health LMS local  http://localhost:$LmsPort (HTTP " + $r.StatusCode + ")")
+  } catch { Write-Err "health LMS local KHÔNG phản hồi — service MediaOS-LMS dừng hoặc lỗi" }
+  try {
+    $r = Invoke-WebRequest -Uri "https://train.$DefaultDomain" -UseBasicParsing -TimeoutSec 8
+    Write-Ok ("health LMS online https://train.$DefaultDomain (HTTP " + $r.StatusCode + ")")
+  } catch { Write-Err "health LMS online KHÔNG phản hồi — kiểm tra cloudflared / DNS" }
+}
+
 # ── DEV-ONLINE (lộ dev stack ra cian-dev.* qua cloudflared, song song prod) ──────────────
 # Nạp .env.dev (base) rồi .env.dev-online (override) vào session → cửa sổ con kế thừa.
 function Import-DevOnlineEnv {
@@ -611,6 +763,11 @@ function Show-Help {
   Write-Host "    deploy-seed         seed admin/công ty cho prod (đọc ADMIN_* từ .env)"
   Write-Host "    prod-env            khôi phục .env.prod -> .env (KHÔNG chạy browser local)"
   Write-Host ""
+  Write-Host "  PROD ĐANG CHẠY (re-build · cập nhật · restart app đã deploy online)" -ForegroundColor Yellow
+  Write-Host "    prod-update [fe|api|lms]  re-build + deploy FE Pages + rebuild API/LMS + restart service (UAC khi cần)"
+  Write-Host "    prod-restart [api|lms]    chỉ khởi động lại service PROD, KHÔNG rebuild (bỏ trống = cả hai)"
+  Write-Host "    prod-status               service (API·LMS·cloudflared) · cổng · health local + online"
+  Write-Host ""
   Write-Host "  DEV-ONLINE (lộ dev ra cian-dev.*.funtimemediacorp.com, song song prod)" -ForegroundColor Yellow
   Write-Host "    dev-online          chạy/restart dev stack lộ ra cian-dev.* (tự dừng cũ + rebuild shared)"
   Write-Host "    dev-online-fast     như dev-online nhưng API + 3 SPA đều chạy BẢN BUILD (nhanh/ổn định qua tunnel, không watch/HMR)"
@@ -663,12 +820,20 @@ function Show-Menu {
     Write-Host "  [15] Dev-online: ingress tunnel          (1 lần, Administrator)"
     Write-Host "  [18] Dev-online: xem log tiến trình ẩn   (dev\logs\)"
     Write-Host ""
+    Write-Host "  --- PROD ($DefaultDomain — Pages + API :3100 + LMS train. :3400 + tunnel) ---" -ForegroundColor DarkCyan
+    Write-Host "  [21] PROD UPDATE tất cả    re-build + deploy Pages + rebuild API/LMS + restart service"
+    Write-Host "  [22] PROD update chỉ FE    (build + deploy 3 SPA lên Cloudflare Pages)"
+    Write-Host "  [23] PROD update chỉ API   (rebuild dist + restart service — UAC nếu cần)"
+    Write-Host "  [26] PROD update chỉ LMS   (next build apps\lms + restart service — UAC nếu cần)"
+    Write-Host "  [24] PROD restart API+LMS  (chỉ khởi động lại service, KHÔNG rebuild)"
+    Write-Host "  [25] PROD status           (service · cổng · health local/online)"
+    Write-Host ""
     Write-Host "  --- DASHBOARD tiến độ (chạy ẩn, cổng 5180) ---" -ForegroundColor DarkCyan
     Write-Host "  [16] Bật DASHBOARD (ẩn)    http://localhost:5180"
     Write-Host "  [17] Tắt DASHBOARD"
     Write-Host "   [0] Thoát"
     Write-Host ""
-    $choice = Read-Host "Chọn (0-20)"
+    $choice = Read-Host "Chọn (0-26)"
     switch ($choice) {
       "1"  { Invoke-Dev }
       "2"  { Invoke-Up }
@@ -690,6 +855,12 @@ function Show-Menu {
       "17" { Invoke-DashboardStop }
       "19" { Invoke-Migrate }
       "20" { Invoke-DevOnlineMigrate }
+      "21" { Invoke-ProdUpdate @() }
+      "22" { Invoke-ProdUpdate @("fe") }
+      "23" { Invoke-ProdUpdate @("api") }
+      "26" { Invoke-ProdUpdate @("lms") }
+      "24" { Invoke-ProdRestart @() }
+      "25" { Invoke-ProdStatus }
       "0"  { return }
       default { }
     }
@@ -727,6 +898,9 @@ switch ($Command.ToLower()) {
   "deploy-api" { Invoke-DeployApi }
   "deploy-env" { Invoke-DeployEnv $Rest }
   "deploy-seed" { Invoke-DeploySeed }
+  "prod-update"  { Invoke-ProdUpdate $Rest }
+  "prod-restart" { Invoke-ProdRestart $Rest }
+  "prod-status"  { Invoke-ProdStatus }
   "dev-online"        { Invoke-DevOnline }
   "dev-online-fast"   { Invoke-DevOnlineFast }
   "dev-online-stop"   { Invoke-DevOnlineStop }

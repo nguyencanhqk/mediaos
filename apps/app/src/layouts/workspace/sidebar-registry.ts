@@ -31,9 +31,7 @@ import {
   FOUNDATION_PATH,
 } from "@/routes/system/foundation/constants";
 import {
-  PCR_CREATE_PERMISSION,
   PCR_APPROVE_PERMISSION,
-  PCR_ME_PATH,
   PCR_LIST_PATH,
 } from "@/routes/hr/profile-change-requests/constants";
 
@@ -82,18 +80,10 @@ export const HR_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 30,
     requiredAnyPermissions: ["HR.EMPLOYEE.VIEW"],
   },
-  // S2-FE-HR-4 — cặp seed THẬT mig 0444 (create/approve:profile-change-request) — literal, KHÔNG
-  // qua PERMISSION_CODE_TO_PAIR (tránh drift, cùng kỹ thuật system.login-logs/system.files).
-  {
-    sidebarKey: "hr.me-change-request",
-    moduleCode: "HR",
-    label: "Yêu cầu sửa hồ sơ",
-    path: PCR_ME_PATH,
-    icon: "file-edit",
-    group: "operation",
-    order: 40,
-    requiredAnyPermissions: [PCR_CREATE_PERMISSION],
-  },
+  // "Yêu cầu sửa hồ sơ" (/hr/me/change-request) GỠ khỏi sidebar HR 2026-07-21 — trùng với ME
+  // "Yêu cầu cập nhật hồ sơ" (/me/profile/change-requests, sidebarKey me.profile.change-requests)
+  // sau S5-ME-FE-2. Route cũ trong router.tsx giờ REDIRECT sang đường dẫn ME để bookmark không gãy.
+  // Màn HR duyệt (hr.profile-change-requests bên dưới) GIỮ NGUYÊN.
   // S2-FE-HR-6 — Sơ đồ tổ chức. Gate = read:department (cặp seed thật, CÙNG cặp "phòng ban" HR).
   {
     sidebarKey: "hr.org-chart",

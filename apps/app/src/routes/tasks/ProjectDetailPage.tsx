@@ -807,7 +807,15 @@ export function ProjectDetailPage({
       )}
       {/* S5-TASK-BOARD-UX-1 — panel chi tiết mở từ board. Đặt ở VỎ workspace (không trong
           TaskKanbanPage) để tab Danh sách sau này dùng lại được cùng một `?task=`. */}
-      <TaskDetailDrawer taskId={openTaskId} onClose={closeTask} />
+      <TaskDetailDrawer
+        taskId={openTaskId}
+        onClose={closeTask}
+        // Mở toàn trang = PUSH sang /tasks/:taskId — Back quay về board với panel còn mở (?task= giữ
+        // nguyên trong entry trước).
+        onOpenFull={() => {
+          if (openTaskId) router.history.push(`/tasks/${openTaskId}`);
+        }}
+      />
       {deleteOpen && (
         <DeleteProjectDialog
           project={project}

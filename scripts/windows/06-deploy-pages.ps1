@@ -22,6 +22,15 @@ Assert-Command npx  "Node đi kèm npx (00-prereqs.ps1)"
 $api  = "https://api.$Domain/api/v1"
 $auth = "https://auth.$Domain"
 
+# Env var User-scope chỉ vào process MỞ SAU khi set — terminal/VS Code mở trước đó không thấy.
+# Fallback: process thiếu thì đọc thẳng từ User scope, khỏi phải mở terminal mới.
+foreach ($n in "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID") {
+  if (-not (Get-Item "Env:$n" -ErrorAction SilentlyContinue)) {
+    $v = [Environment]::GetEnvironmentVariable($n, "User")
+    if ($v) { Set-Item "Env:$n" $v }
+  }
+}
+
 if (-not $env:CLOUDFLARE_API_TOKEN -or -not $env:CLOUDFLARE_ACCOUNT_ID) {
   Write-Warn "Thiếu CLOUDFLARE_API_TOKEN/ACCOUNT_ID → wrangler login (tương tác)."
   npx wrangler@3 login

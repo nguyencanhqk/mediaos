@@ -14,23 +14,13 @@ import { type RouteMeta } from "@mediaos/web-core";
 export const PCR_CREATE_PERMISSION = "create:profile-change-request";
 export const PCR_APPROVE_PERMISSION = "approve:profile-change-request";
 
+// 2026-07-21 — /hr/me/change-request GỠ khỏi phần HR (màn + menu): giờ chỉ còn là REDIRECT trong
+// router.tsx sang /me/profile/change-requests (ME, S5-ME-FE-2). PCR_ME_ROUTE_META đã xoá theo.
 export const PCR_ME_PATH = "/hr/me/change-request";
 export const PCR_LIST_PATH = "/hr/profile-change-requests";
 export function pcrDetailPath(id: string): string {
   return `/hr/profile-change-requests/${id}`;
 }
-
-export const PCR_ME_ROUTE_META: RouteMeta = {
-  routeKey: "hr.me-change-request",
-  path: PCR_ME_PATH,
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "HR",
-  screenCode: "HR-SCREEN-016",
-  titleKey: "routeTitle.hrMeChangeRequest",
-  requiredAnyPermissions: [PCR_CREATE_PERMISSION],
-  showInSidebar: true,
-  order: 23,
-};
 
 export const PCR_LIST_ROUTE_META: RouteMeta = {
   routeKey: "hr.profile-change-requests",

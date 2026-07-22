@@ -220,7 +220,7 @@ function KanbanCard({
             e.currentTarget.style.display = "none";
           }}
           data-testid={`kanban-card-cover-${task.id}`}
-          className="mb-1.5 h-24 w-full rounded object-cover"
+          className="mb-1.5 aspect-video w-full rounded object-cover"
         />
       )}
       <p

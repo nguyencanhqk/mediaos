@@ -237,6 +237,54 @@ function InfoGrid({ task }: { task: TaskCoreResponseDto }) {
   );
 }
 
+/**
+ * TaskDetailActions — cụm hành động hiếm dùng (menu ⋯ + hộp thoại Sửa/Xoá) tách riêng để hai lối
+ * vào đặt ở hai chỗ khác nhau: trang riêng đặt cạnh tiêu đề trong thân; panel trượt đặt lên HEADER
+ * của Sheet, cùng hàng với nút đóng — trước đây menu nằm trong thân drawer nên rớt xuống DƯỚI nút X,
+ * lệch hàng (owner phàn nàn 2026-07-20).
+ */
+export function TaskDetailActions({
+  task,
+  onDeleted,
+}: {
+  task: TaskCoreResponseDto;
+  /** Gọi sau khi xoá thành công — trang thì quay lại danh sách, drawer thì đóng panel. */
+  onDeleted: () => void;
+}) {
+  const canUpdate = useCan(
+    TASK_CORE_ENGINE_PAIRS.UPDATE.action,
+    TASK_CORE_ENGINE_PAIRS.UPDATE.resourceType,
+  );
+  const canDelete = useCanExact(
+    TASK_CORE_ENGINE_PAIRS.DELETE.action,
+    TASK_CORE_ENGINE_PAIRS.DELETE.resourceType,
+  );
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  return (
+    <>
+      <TaskOverflowMenu
+        canUpdate={canUpdate}
+        canDelete={canDelete}
+        onEdit={() => setEditOpen(true)}
+        onDelete={() => setDeleteOpen(true)}
+      />
+      {editOpen && (
+        <TaskFormDrawer
+          mode="edit"
+          task={task}
+          onClose={() => setEditOpen(false)}
+          onSuccess={() => setEditOpen(false)}
+        />
+      )}
+      {deleteOpen && (
+        <DeleteTaskDialog task={task} onClose={() => setDeleteOpen(false)} onDeleted={onDeleted} />
+      )}
+    </>
+  );
+}
+
 export function TaskDetailContent({
   taskId,
   onDeleted,
@@ -252,16 +300,6 @@ export function TaskDetailContent({
     TASK_CORE_ENGINE_PAIRS.READ.action,
     TASK_CORE_ENGINE_PAIRS.READ.resourceType,
   );
-  const canUpdate = useCan(
-    TASK_CORE_ENGINE_PAIRS.UPDATE.action,
-    TASK_CORE_ENGINE_PAIRS.UPDATE.resourceType,
-  );
-  const canDelete = useCanExact(
-    TASK_CORE_ENGINE_PAIRS.DELETE.action,
-    TASK_CORE_ENGINE_PAIRS.DELETE.resourceType,
-  );
-  const [editOpen, setEditOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
   // Tab mặc định của mỗi nhóm; state ở đây (không trong panel con) để đổi tab không mất dữ liệu đã tải.
   const [breakdownTab, setBreakdownTab] = useState("subtasks");
   const [collabTab, setCollabTab] = useState("comments");
@@ -317,16 +355,14 @@ export function TaskDetailContent({
 
   return (
     <div className="space-y-4">
-      {/* Hàng tiêu đề + menu ⋯. Trong drawer, Sheet đã hiện tiêu đề ở header nên chỉ còn menu. */}
-      <div className="flex items-start justify-between gap-2">
-        {isDrawer ? <span /> : <TaskTitleField task={task} />}
-        <TaskOverflowMenu
-          canUpdate={canUpdate}
-          canDelete={canDelete}
-          onEdit={() => setEditOpen(true)}
-          onDelete={() => setDeleteOpen(true)}
-        />
-      </div>
+      {/* Hàng tiêu đề + menu ⋯ — CHỈ ở trang riêng. Trong drawer, Sheet đã hiện tiêu đề ở header
+          và TaskDetailDrawer tự đặt TaskDetailActions lên header đó (cùng hàng nút đóng). */}
+      {!isDrawer && (
+        <div className="flex items-start justify-between gap-2">
+          <TaskTitleField task={task} />
+          <TaskDetailActions task={task} onDeleted={onDeleted} />
+        </div>
+      )}
 
       <TaskHeaderStrip task={task} />
 
@@ -378,18 +414,6 @@ export function TaskDetailContent({
           </TabsContent>
         </Tabs>
       </Card>
-
-      {editOpen && (
-        <TaskFormDrawer
-          mode="edit"
-          task={task}
-          onClose={() => setEditOpen(false)}
-          onSuccess={() => setEditOpen(false)}
-        />
-      )}
-      {deleteOpen && (
-        <DeleteTaskDialog task={task} onClose={() => setDeleteOpen(false)} onDeleted={onDeleted} />
-      )}
     </div>
   );
 }
