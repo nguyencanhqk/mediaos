@@ -593,6 +593,8 @@ export const foundationKeys = {
   company: {
     all: [...rootKeys.foundation, "company"] as const,
     current: () => [...rootKeys.foundation, "company", "current"] as const,
+    // S5-BRAND-FE-1 — logo + favicon (GET /foundation/company/branding).
+    branding: () => [...rootKeys.foundation, "company", "branding"] as const,
   },
   settings: {
     all: [...rootKeys.foundation, "settings"] as const,

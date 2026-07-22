@@ -27,6 +27,7 @@ import { PageHeader, EmptyState, Button, Input, Card, CardContent } from "@media
 import { useDirtyFormGuard } from "@/hooks/use-dirty-form-guard";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FOUNDATION_ENGINE_PAIRS } from "./constants";
+import { BrandingSection } from "./BrandingSection";
 
 type TF = ReturnType<typeof useTranslation<"system">>["t"];
 
@@ -355,6 +356,10 @@ export function CompanyProfilePage() {
           </div>
         </form>
       )}
+
+      {/* S5-BRAND-FE-1 — khối Thương hiệu (logo + favicon). Độc lập với form hồ sơ: có đường ghi RIÊNG
+          (/foundation/company/branding) nên KHÔNG nằm trong dirty-form guard của form trên. */}
+      <BrandingSection />
 
       <ConfirmDialog
         open={confirmOpen}

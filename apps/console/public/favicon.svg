@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Funtime Media">
+  <!--
+    S5-BRAND-FE-2 — favicon MẶC ĐỊNH (tĩnh) dùng chung cho apps/app · console · auth.
+    Thay cho /vite.svg vốn KHÔNG TỒN TẠI (cả 3 app đều thiếu file ⇒ favicon vỡ 404).
+
+    Mô-típ: "thanh tín hiệu on-air" — dải phổ thương hiệu (teal→đỏ) của Funtime, cùng dải với
+    .brand-gradient-* (index.css) và BRAND_SPECTRUM (apps/console/src/lib/brand.ts). Dạng bar
+    đọc được ở 16px, không phụ thuộc chữ (chữ "F" ở 16px thành vệt mờ).
+
+    Nền navy hằng số #0F172A = màu chrome (memory fe-theme-light-dark-system) ⇒ nhìn rõ trên
+    tab sáng LẪN tối, không cần 2 biến thể theme.
+  -->
+  <rect width="64" height="64" rx="14" fill="#0F172A" />
+  <g>
+    <rect x="12" y="30" width="6" height="22" rx="3" fill="#16A085" />
+    <rect x="21" y="22" width="6" height="30" rx="3" fill="#1FA9E0" />
+    <rect x="30" y="12" width="6" height="40" rx="3" fill="#36A94E" />
+    <rect x="39" y="20" width="6" height="32" rx="3" fill="#F5B50C" />
+    <rect x="48" y="28" width="6" height="24" rx="3" fill="#E8482E" />
+  </g>
+</svg>

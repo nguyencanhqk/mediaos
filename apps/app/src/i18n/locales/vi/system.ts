@@ -688,6 +688,32 @@ export default {
     },
   },
 
+  // S5-BRAND-FE-1 — khối "Thương hiệu" trong /system/company (logo + favicon).
+  branding: {
+    title: "Thương hiệu",
+    description: "Logo và favicon hiển thị trên toàn hệ thống.",
+    loading: "Đang tải thương hiệu…",
+    retry: "Thử lại",
+    empty: "Chưa đặt.",
+    upload: "Tải lên",
+    change: "Đổi ảnh",
+    remove: "Gỡ",
+    uploading: "Đang tải lên…",
+    previewAlt: "Xem trước {{kind}}",
+    kind: {
+      logo: "Logo",
+      favicon: "Favicon",
+    },
+    hint: {
+      logo: "PNG, JPEG hoặc WebP. Tối đa 2MB. Nên dùng ảnh nền trong suốt.",
+      favicon: "PNG hoặc WebP vuông. Tối đa 512KB. Nên dùng ảnh 64×64 trở lên.",
+    },
+    error: {
+      type: "Định dạng không hỗ trợ. {{kinds}} chỉ nhận PNG, JPEG hoặc WebP.",
+      size: "Tệp quá lớn so với giới hạn của {{kinds}}.",
+    },
+  },
+
   company: {
     title: "Hồ sơ công ty",
     description: "Thông tin định danh, pháp lý và liên hệ của công ty",

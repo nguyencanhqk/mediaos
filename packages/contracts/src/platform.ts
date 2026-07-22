@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { brandingLogoRefSchema } from "./foundation/branding";
 
 /**
  * G16-3 SaaS prep — PLATFORM tier DTOs (workspace/company management above company-admin).
@@ -52,7 +53,8 @@ export const updateCompanySchema = z
     timezone: z.string().min(1).max(64).optional(),
     currency: z.enum(["VND", "USD"]).optional(),
     language: z.enum(["vi", "en"]).optional(),
-    logoUrl: z.string().url().max(2048).nullable().optional(),
+    // S5-BRAND-BE-1: cùng cột `companies.logo_url` — allowlist scheme (fileId UUID | http(s)).
+    logoUrl: brandingLogoRefSchema.nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "Cần ít nhất 1 trường để cập nhật" });
 export type UpdateCompanyRequest = z.infer<typeof updateCompanySchema>;

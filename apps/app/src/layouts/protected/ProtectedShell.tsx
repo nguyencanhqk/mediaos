@@ -19,11 +19,12 @@ import { useEffect } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Skeleton } from "@mediaos/ui";
 import { ShieldX } from "lucide-react";
-import { useAuthStore, getAuthRedirectUrl } from "@mediaos/web-core";
+import { useAuthStore, getAuthRedirectUrl, useFavicon } from "@mediaos/web-core";
 import { GlobalTopbar } from "../topbar/GlobalTopbar";
 import { AppSwitcher } from "../home/AppSwitcher";
 import { useLayoutStore } from "@/stores/layout.store";
 import { useCurrentRouteMeta } from "@/hooks/use-current-route-meta";
+import { useBrandingQuery } from "@/hooks/use-branding";
 import { ACCOUNT_SETUP_2FA_PATH, SETUP_2FA_PATHS } from "@/routes/account/constants";
 
 // ---------------------------------------------------------------------------
@@ -80,6 +81,10 @@ export function ProtectedShell({ children }: ProtectedShellProps) {
   const resetTransient = useLayoutStore((s) => s.resetTransientLayoutState);
   const routeMeta = useCurrentRouteMeta();
   const navigate = useNavigate();
+
+  // S5-BRAND-FE-2 — favicon động theo thương hiệu công ty. Đặt ở shell (không ở từng trang) để mọi route
+  // đã đăng nhập đều áp. Fail-soft: chưa đặt/lỗi → giữ favicon tĩnh /favicon.svg (useFavicon tự khôi phục).
+  useFavicon(useBrandingQuery().data?.favicon?.url ?? null);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   // Reset transient layout state on route change

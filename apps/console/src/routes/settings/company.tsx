@@ -141,7 +141,7 @@ export function CompanySettingsForm({
   const { t } = useTranslation("settings");
 
   // Thiết lập chung
-  const [logoUrl, setLogoUrl] = useState(initial.logoUrl ?? "");
+  const [logoUrl] = useState(initial.logoUrl ?? ""); // chỉ-đọc (S5-BRAND-FE-1)
   const [timezone, setTimezone] = useState(initial.timezone);
   const [currency, setCurrency] = useState<CompanySettingsDto["currency"]>(initial.currency);
   const [language, setLanguage] = useState<CompanySettingsDto["language"]>(initial.language);
@@ -177,7 +177,8 @@ export function CompanySettingsForm({
   const handleSubmit = () => {
     const payload: Record<string, unknown> = {
       // Thiết lập chung
-      logoUrl: logoUrl.trim() ? logoUrl.trim() : null,
+      // S5-BRAND-FE-1: KHÔNG gửi logoUrl — màn này không còn sửa logo. Gửi lại giá trị cũ trong state
+      // sẽ GHI ĐÈ fileId do /system/company vừa đặt (lost-update giữa 2 tab).
       timezone: timezone.trim(),
       currency,
       language,
@@ -376,15 +377,16 @@ export function CompanySettingsForm({
       {/* ── Tab: Thiết lập chung ────────────────────────────────────────────── */}
       {activeTab === "general" && (
         <div className="space-y-5 rounded-xl border border-border p-6">
-          <label className="block space-y-1.5">
+          {/* S5-BRAND-FE-1 — GỠ ô nhập logoUrl URL thô (TODO G5-FIX đã đóng). Logo giờ upload qua
+              presign ở /system/company (khối "Thương hiệu"). CỐ Ý chỉ-đọc: hai đường ghi cùng cột
+              `companies.logo_url` mà một đường nhận URL tự do sẽ làm lệch trạng thái (fileId vs URL)
+              và bỏ qua guard MIME/size/owner của branding endpoint. */}
+          <div className="block space-y-1.5">
             <span className="text-sm font-medium">{t("company.logoUrlLabel")}</span>
-            <Input
-              value={logoUrl}
-              onChange={(e) => setLogoUrl(e.target.value)}
-              placeholder="https://… (link logo)"
-            />
-            {/* TODO(G5-FIX): thay bằng presigned upload R2/MinIO khi BE có endpoint; tạm dùng URL. */}
-          </label>
+            <p className="text-sm text-muted-foreground">
+              {logoUrl ? t("company.logoManagedSet") : t("company.logoManagedEmpty")}
+            </p>
+          </div>
 
           <label className="block space-y-1.5">
             <span className="text-sm font-medium">{t("company.timezoneLabel")}</span>

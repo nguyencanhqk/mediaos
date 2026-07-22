@@ -37,7 +37,7 @@ function makeSettings(overrides: Partial<CompanySettingsDto> = {}): CompanySetti
 }
 
 describe("CompanySettingsForm — Thiết lập chung tab: submit", () => {
-  it("submits the full payload (timezone, currency, language, logo, working days, payroll)", () => {
+  it("submits the full payload (timezone, currency, language, working days, payroll)", () => {
     const onSubmit = vi.fn();
     render(
       <CompanySettingsForm
@@ -55,10 +55,12 @@ describe("CompanySettingsForm — Thiết lập chung tab: submit", () => {
       timezone: "Asia/Ho_Chi_Minh",
       currency: "VND",
       language: "vi",
-      logoUrl: "https://cdn.example.com/logo.png",
       workingDaysJson: { days: [1, 2, 3, 4, 5] },
       payrollConfigJson: { cutoffDay: 25, payDay: 5 },
     });
+    // S5-BRAND-FE-1: logo KHÔNG còn thuộc màn này (đường ghi riêng qua /system/company → branding).
+    // Gửi lại giá trị cũ trong state sẽ GHI ĐÈ fileId vừa đặt ở tab kia (lost-update).
+    expect(payload).not.toHaveProperty("logoUrl");
   });
 
   it("includes a newly toggled working day in the payload", () => {
@@ -111,17 +113,15 @@ describe("CompanySettingsForm — reflects fresh server data on remount", () => 
 });
 
 describe("CompanySettingsForm — Zod validation blocks bad input (Thiết lập chung)", () => {
-  it("does NOT submit and shows an error when the logo URL is invalid", () => {
+  it("KHÔNG còn ô nhập logo URL thô — chỉ hiện hướng dẫn (S5-BRAND-FE-1)", () => {
     const onSubmit = vi.fn();
     render(
       <CompanySettingsForm initial={makeSettings()} activeTab="general" onSubmit={onSubmit} />,
     );
 
-    fireEvent.change(screen.getByLabelText(/Logo/), { target: { value: "not-a-url" } });
-    fireEvent.click(screen.getByRole("button", { name: /Lưu/ }));
-
-    expect(onSubmit).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert")).toBeInTheDocument();
+    // Ô nhập cũ (TODO G5-FIX) đã gỡ: không còn input nào nhãn "Logo" để gõ URL tuỳ ý.
+    expect(screen.queryByLabelText(/Logo/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Thương hiệu/)).toBeInTheDocument();
   });
 
   it("does NOT submit when the payroll cutoff day is out of range", () => {
