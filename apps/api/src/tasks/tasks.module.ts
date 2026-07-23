@@ -106,7 +106,10 @@ import { ProjectAccessService } from "./project-access.service";
   // S4-DASH-BE-2 (additive): + TaskCoreService (MY_TASKS/TASK_ALERTS) + ProjectsService (PROJECT_PROGRESS
   // authorize getProject TRƯỚC listByProject — GAP vòng reconcile: plan cũ chỉ ghi TaskCoreService). DASH
   // inject qua DI — KHÔNG re-provide instance thứ 2, KHÔNG method mới. Chỉ thêm vào exports[].
-  exports: [TasksService, TaskCoreService, ProjectsService],
+  // S5-GOAL-BE-1 (additive): + ProjectAccessService — GoalsModule cần lớp đọc project_role DUY NHẤT
+  // (D-23/D-24) để cho Owner/Manager dự án ghi goal cấp dự án kể cả khác phòng ban (SPEC-10 §11).
+  // CHỈ mở visibility qua DI — KHÔNG re-provide instance thứ 2, KHÔNG method mới.
+  exports: [TasksService, TaskCoreService, ProjectsService, ProjectAccessService],
 })
 export class TasksModule implements OnModuleInit {
   /**
