@@ -33,7 +33,7 @@ IMPLEMENTATION-10 tập trung vào 5 mục tiêu chính:
 4. Lập kế hoạch chuẩn bị tài liệu, thiết kế, triển khai và kiểm thử cho Phase 2.
 5. Tạo cơ chế quản lý backlog liên tục để tránh mở rộng phạm vi không kiểm soát.
 
-Tài liệu này không thay thế SPEC/API/DB/UI chi tiết cho module Phase 2. Sau khi tài liệu này được chốt, các tài liệu chi tiết như `SPEC-09 PAYROLL`, `SPEC-10 RECRUIT`, `DB Phase 2`, `API Phase 2`, `UI Phase 2`, `BACKEND Phase 2`, `FRONTEND Phase 2` và `QA Phase 2` sẽ được triển khai riêng.
+Tài liệu này không thay thế SPEC/API/DB/UI chi tiết cho module Phase 2. Sau khi tài liệu này được chốt, các tài liệu chi tiết như `SPEC-11 PAYROLL`, `SPEC-12 RECRUIT`, `DB Phase 2`, `API Phase 2`, `UI Phase 2`, `BACKEND Phase 2`, `FRONTEND Phase 2` và `QA Phase 2` sẽ được triển khai riêng.
 
 ---
 
@@ -676,33 +676,37 @@ RECRUIT là module quản lý tuyển dụng từ job opening đến candidate p
 
 Trước khi code Phase 2, cần triển khai bộ tài liệu sau:
 
+> **Đánh số = SỐ CÒN TRỐNG tại 23/07/2026, không phải số cố định.** Bộ tài liệu MVP đã lớn thêm sau khi IMPLEMENTATION-10 được viết: **SPEC-09 = ME**, **SPEC-10 = GOAL**, **DB-11 = GOAL**, **API-10 = Permission Matrix**, **API-11 = ME**, **API-12 = GOAL**. Số Phase 2 dưới đây đã dời tương ứng (SPEC-11/12 · DB-12→16 · API-13→15) để không đè lên tài liệu đang sống; SPEC-11…SPEC-18 là dải SPEC-01 §7.2 cấp cho 8 module Phase 2–5 nên spec tích hợp Phase 2 lấy **SPEC-19**. UI-11→14 · QA-11→13 · BACKEND-15→17 · FRONTEND-15/16 · DEVOPS-13 vẫn còn trống, giữ nguyên.
+>
+> **Trước khi tạo file thật: kiểm lại số trống theo `docs/README.md` §2–§8** — mỗi module MVP bổ sung (ME, GOAL, …) đẩy dải Phase 2 xuống tiếp.
+
 ### 13.1 Product/SPEC
 
 | Tài liệu | Mục tiêu | Priority |
 | --- | --- | --- |
 | PRD-01 Phase 2 Product Requirements | Chốt mục tiêu Phase 2 | P0 |
-| SPEC-09 PAYROLL | Đặc tả nghiệp vụ tiền lương | P0 |
-| SPEC-10 RECRUIT | Đặc tả nghiệp vụ tuyển dụng | P0 |
-| SPEC-11 Phase 2 Cross-module Integration | Tích hợp HR/ATT/LEAVE/AUTH/DASH/NOTI | P1 |
+| SPEC-11 PAYROLL | Đặc tả nghiệp vụ tiền lương | P0 |
+| SPEC-12 RECRUIT | Đặc tả nghiệp vụ tuyển dụng | P0 |
+| SPEC-19 Phase 2 Cross-module Integration | Tích hợp HR/ATT/LEAVE/AUTH/DASH/NOTI | P1 |
 
 ### 13.2 Database
 
 | Tài liệu | Mục tiêu | Priority |
 | --- | --- | --- |
-| DB-11 Phase 2 Database Overview | Tổng quan database Phase 2 | P0 |
-| DB-12 PAYROLL Database Design | Bảng payroll, payslip, salary components | P0 |
-| DB-13 RECRUIT Database Design | Bảng job, candidate, pipeline, interview | P0 |
-| DB-14 Phase 2 Index & Performance | Index/query cho payroll/recruit | P1 |
-| DB-15 Phase 2 Migration & Seed | Migration/seed role/permission/module | P0 |
+| DB-12 Phase 2 Database Overview | Tổng quan database Phase 2 | P0 |
+| DB-13 PAYROLL Database Design | Bảng payroll, payslip, salary components | P0 |
+| DB-14 RECRUIT Database Design | Bảng job, candidate, pipeline, interview | P0 |
+| DB-15 Phase 2 Index & Performance | Index/query cho payroll/recruit | P1 |
+| DB-16 Phase 2 Migration & Seed | Migration/seed role/permission/module | P0 |
 
 ### 13.3 API
 
 | Tài liệu | Mục tiêu | Priority |
 | --- | --- | --- |
 | API-09 FOUNDATION/API bổ sung | Module registry, settings, file, audit nếu chưa có | P0 |
-| API-10 PAYROLL API Design | API payroll period, run, payslip, export | P0 |
-| API-11 RECRUIT API Design | API job, candidate, pipeline, interview, hire | P0 |
-| API-12 Phase 2 Internal Contracts | Contract HR/ATT/LEAVE -> PAYROLL, RECRUIT -> HR | P1 |
+| API-13 PAYROLL API Design | API payroll period, run, payslip, export | P0 |
+| API-14 RECRUIT API Design | API job, candidate, pipeline, interview, hire | P0 |
+| API-15 Phase 2 Internal Contracts | Contract HR/ATT/LEAVE -> PAYROLL, RECRUIT -> HR | P1 |
 
 ### 13.4 UI/UX
 
@@ -818,8 +822,8 @@ Một item được xem là hoàn tất khi:
 ### 18.1 Product Gate
 
 - [ ] PRD-01 Phase 2 được duyệt.
-- [ ] SPEC-09 PAYROLL được duyệt.
-- [ ] SPEC-10 RECRUIT được duyệt.
+- [ ] SPEC-11 PAYROLL được duyệt.
+- [ ] SPEC-12 RECRUIT được duyệt.
 - [ ] Scope Phase 2 có danh sách in/out rõ ràng.
 - [ ] Backlog P0/P1 có acceptance criteria.
 
@@ -1036,8 +1040,8 @@ Sau tài liệu này, các deliverables cần có:
 | Post-MVP backlog board | Product Owner | Trước Phase 2 discovery |
 | Bug/tech debt shortlist | QA Lead + Tech Lead | Trước Phase 2 discovery |
 | PRD-01 Phase 2 | Product Owner | Sprint 0 |
-| SPEC-09 PAYROLL | Product Owner/BA | Sprint 0 |
-| SPEC-10 RECRUIT | Product Owner/BA | Sprint 0 |
+| SPEC-11 PAYROLL | Product Owner/BA | Sprint 0 |
+| SPEC-12 RECRUIT | Product Owner/BA | Sprint 0 |
 | DB/API/UI design Phase 2 | Tech/Design Leads | Sprint 0-1 |
 | QA Phase 2 strategy | QA Lead | Sprint 0-1 |
 | DevOps Phase 2 release plan | DevOps Lead | Sprint 1 |
@@ -1078,11 +1082,11 @@ Bước tiếp theo khuyến nghị:
 
 ```text
 PRD-01: Phase 2 Product Requirements
-SPEC-09: PAYROLL
-SPEC-10: RECRUIT
-DB-11: Phase 2 Database Overview
-API-10: PAYROLL API Design
-API-11: RECRUIT API Design
+SPEC-11: PAYROLL
+SPEC-12: RECRUIT
+DB-12: Phase 2 Database Overview
+API-13: PAYROLL API Design
+API-14: RECRUIT API Design
 UI-11: Payroll UI Design
 UI-12: Recruitment UI Design
 QA-11: Phase 2 Test Strategy

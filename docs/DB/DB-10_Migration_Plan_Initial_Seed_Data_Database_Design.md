@@ -614,8 +614,11 @@ Secret phải lấy từ environment variable hoặc secret manager.
 | DASH | Dashboard | Experience | false | true | true | 60 |
 | NOTI | Thông báo hệ thống | Experience | false | true | true | 70 |
 | ME | Trung tâm cá nhân (MVP bổ sung) | Experience | false | true | true | 80 |
+| GOAL | Mục tiêu (MVP bổ sung) | Collaboration | false | true | true | 90 |
 
 > **ME (SPEC-09):** module MVP bổ sung, không tạo dữ liệu nghiệp vụ mới — đọc-lại AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH ở scope Own + bảng `user_preferences` (DB-08 §8.16). Seed module idempotent theo business key `module_code` (§5.5): `INSERT ... ON CONFLICT (module_code) DO NOTHING`.
+>
+> **GOAL (SPEC-10 · DB-11):** module MVP bổ sung, sở hữu riêng `goals`/`goal_updates`/`task_templates`/`task_template_items`; liên kết `tasks.goal_id`. Seed module + 7 cặp permission wave lõi (SPEC-10 §11, trừ `('manage','task-template')` seed riêng ở migration **đợt D — 0510+**, KHÔNG phải 0508: số đó đã bị wave LMS chiếm, luôn đọc `_journal.json` thật lúc chạy) + `sequence_counters` cho `goal_code` mỗi company + UNION-ADD `'goal'` vào CHECK `audit_logs.object_type` — chi tiết kế hoạch migration: DB-11 §9. Đã chạy thật: `0504`–`0507` (S5-GOAL-DB-1, PR #252). Seed module idempotent `ON CONFLICT (module_code) DO NOTHING` (§5.5); grant per-pair data_scope theo pattern DELETE-wrong-scope + INSERT ON CONFLICT (mirror 0466/0476).
 
 ### 10.2 Module phase sau inactive
 

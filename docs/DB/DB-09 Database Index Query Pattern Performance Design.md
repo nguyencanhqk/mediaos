@@ -732,6 +732,21 @@ ON user_preferences (company_id, user_id);
 
 > Bảng không có `deleted_at` (upsert 1 row/user) nên **không cần partial soft-delete index**. Cô lập tenant ép ở RLS + FORCE (DB-08 §8.16, bất biến #1). Nếu phase sau thêm soft-delete, đổi UNIQUE sang partial `WHERE deleted_at IS NULL` theo §6.3.
 
+### 8.14 GOAL (`goals`, `goal_updates`)
+
+> Chi tiết đầy đủ + DDL: [DB-11 GOAL Database Design §8](<DB-11 GOAL Database Design.md>). Tóm tắt use case → index:
+
+| Use case | Index dùng |
+| --- | --- |
+| Trang Mục tiêu theo kỳ + phòng | `idx_goals_company_level_period` + `idx_goals_company_department` |
+| Cây con của 1 goal | `idx_goals_company_parent` |
+| Mục tiêu của tôi (`/me/goals`) | `idx_goals_company_employee` |
+| Tab Mục tiêu trong project | `idx_goals_company_project` |
+| Đếm task Done của goal (mode `tasks`) | `idx_tasks_company_goal` (partial trên `tasks.goal_id`) |
+| Lịch sử check-in (`goal_updates`) | `idx_goal_updates_goal` |
+
+> Cô lập tenant ép ở RLS + FORCE (DB-11 §4, bất biến #1); mọi index trên đều dẫn đầu bằng `company_id`.
+
 ---
 
 ## 9. Index cho AUTH / DB-02

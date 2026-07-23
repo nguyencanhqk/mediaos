@@ -206,6 +206,30 @@ Grant scope `Own` cho **cả 4 role canonical** (employee/manager/hr/company-adm
 
 ---
 
+## 9b. GOAL — Mục tiêu (SPEC-10)
+
+GOAL đứng riêng (GOAL-DEC-002), 8 cặp quyền per-(action, resource) theo SPEC-10 §11. Data scope đề xuất theo 4 role canonical — **chốt cùng migration seed** (S5-GOAL-DB-1, KHÔNG để mở sau — flip sau đụng pin canonical-seed):
+
+| Cặp quyền (SPEC-10 §11) | Ý nghĩa | Nhân viên | Trưởng đơn vị | BOD/Admin |
+| --- | --- | --- | --- | --- |
+| `('access','goal')` | Cổng nav menu Mục tiêu | có | có | có |
+| `('view','goal')` | Xem mục tiêu | **department** (goal phòng + goal cá nhân mình + goal dự án mình là member) | department | all |
+| `('create','goal')` | Tạo mục tiêu | **own** (chỉ cấp employee của chính mình) | department (cả 3 cấp trong phòng) | all |
+| `('update','goal')` | Sửa mục tiêu | own | department | all |
+| `('delete','goal')` | Xóa mềm | own | department | all |
+| `('checkin','goal')` | Check-in tiến độ | own | department | all |
+| `('finalize','goal')` | Chốt kỳ + mở lại | không | department | all |
+| `('manage','task-template')` | Danh mục template phân rã | không | department | all |
+
+Ghi chú:
+
+- Goal **cấp dự án**: quyền ghi ngoài data_scope trên còn đi qua **vai trò dự án** (ProjectAccessService — DECISIONS-04): Owner/Manager của project được tạo/sửa goal dự án đó kể cả khác phòng ban.
+- `is_sensitive` đề xuất `false` cho cả 8 cặp; `('finalize','goal')` là quyết định phải chốt tường minh trong plan WO backend đầu tiên của GOAL — nếu đổi thành `true` sau seed, phải cập nhật đồng thời allowlist sensitive FE + pin `auth-seed-canonical-roles` trong CÙNG WO (bẫy `canonical-seed-pin-regression`).
+- RLS+FORCE cô lập **tenant** trên `goals`/`goal_updates`/`task_templates`/`task_template_items`; data scope (own/department/all) ép ở **service layer** GOAL-BE qua `buildReadScopeExists` pattern (không phải RLS).
+- Chi tiết mã lỗi/quy tắc: [SPEC-10 GOAL §11–12](<spec/SPEC-10 GOAL.md>); schema: [DB-11](<DB/DB-11 GOAL Database Design.md>).
+
+---
+
 ## 10. Nguyên tắc dữ liệu nhạy cảm (SPEC-01 §11.3)
 
 Dữ liệu nhạy cảm: lương · tài khoản ngân hàng · CCCD/CMND · hợp đồng · hồ sơ nhân sự · dữ liệu kỷ luật/nghỉ việc · chấm công chi tiết · log hệ thống.

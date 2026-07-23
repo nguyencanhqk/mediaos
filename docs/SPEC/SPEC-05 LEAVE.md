@@ -1,7 +1,7 @@
 # SPEC-05: NGHỈ PHÉP
 
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
-> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · **SPEC-05 LEAVE** · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>)
+> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · **SPEC-05 LEAVE** · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>)
 >
 > **Liên quan:** [Thiết kế DB: DB-05 LEAVE](<../DB/DB-05 LEAVE Database Design.md>) · [Sản phẩm: PRD-00 §9.4](<../PRD/PRD-00 Enterprise Management System .md>) · [Thiết kế API: API-05 LEAVE](<../API Design/API-05_LEAVE_API_Design.md>) · [Chỉ mục tài liệu](<../README.md>)
 
