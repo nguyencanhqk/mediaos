@@ -1,7 +1,7 @@
 # SPEC-06: CÔNG VIỆC & DỰ ÁN
 
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
-> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · **SPEC-06 TASK** · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>)
+> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · **SPEC-06 TASK** · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>)
 >
 > **Liên quan:** [Thiết kế DB: DB-06 TASK](<../DB/DB-06 TASK Database Design.md>) · [Sản phẩm: PRD-00 §9.5](<../PRD/PRD-00 Enterprise Management System .md>) · [Thiết kế API: API-06 TASK](<../API Design/API-06_TASK_API_Design.md>) · [Chỉ mục tài liệu](<../README.md>)
 
@@ -146,6 +146,18 @@ Module NOTI dùng để gửi thông báo khi:
 * Task được đánh dấu hoàn thành.
 * Project bị đóng hoặc hủy.
 
+### 3.8 Liên kết với [SPEC-10](<SPEC-10 GOAL.md>): GOAL
+
+Module GOAL (Mục tiêu — MVP bổ sung) **neo lên dữ liệu TASK, không sở hữu**:
+
+* `tasks.goal_id` (nullable, thêm bởi S5-GOAL-DB-1): 1 task gắn tối đa 1 mục tiêu. TASK vẫn là chủ sở hữu bảng `tasks`; GOAL chỉ đọc để đo tiến độ.
+* Mục tiêu **cấp dự án** neo vào `projects.id`; quyền ghi mục tiêu dự án đi qua vai trò dự án (Owner/Manager — DECISIONS-04), không chỉ data_scope phòng ban.
+* Mục tiêu đo theo mode `tasks`/`project` tính tiến độ từ trạng thái task/dự án; đổi trạng thái task → recompute mục tiêu liên quan trong **cùng transaction** (SPEC-10 §13.3).
+* Gắn/tháo task vào mục tiêu validate theo neo (SPEC-10 GOAL-ERR-008); mục tiêu **đã chốt kỳ** đóng băng cả đường gắn/tháo (GOAL-ERR-005).
+* Danh mục `task_templates` (phân rã mục tiêu thành task) do GOAL sở hữu — xem §5.2.
+
+> Chi tiết nghiệp vụ mục tiêu: [SPEC-10 GOAL](<SPEC-10 GOAL.md>); schema: [DB-11](<../DB/DB-11 GOAL Database Design.md>). KHÔNG nhân bản rule GOAL vào SPEC-06.
+
 ---
 
 ## 4. Mục tiêu module
@@ -220,7 +232,8 @@ Module TASK cần đảm bảo:
 | Time tracking theo task                  | Phase sau |
 | Ước lượng effort/story point             | Phase sau |
 | Quản lý phụ thuộc giữa các task          | Phase sau |
-| Template dự án/task                      | Phase sau |
+| Template phân rã mục tiêu (`task_templates`) | **Đã kích hoạt bởi [SPEC-10 GOAL](<SPEC-10 GOAL.md>)** — không còn "phase sau"; nghiệp vụ ở SPEC-10 §10, schema ở [DB-11](<../DB/DB-11 GOAL Database Design.md>) §6.3–6.4, KHÔNG nhân bản ở đây |
+| Template dự án (`project_templates`)     | Phase sau — chưa có kế hoạch, khác `task_templates` của GOAL |
 | Tự động hóa workflow                     | Phase sau |
 | Approval workflow cho task quan trọng    | Phase sau |
 | Tích hợp calendar                        | Phase sau |

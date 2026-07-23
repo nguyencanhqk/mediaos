@@ -3,7 +3,7 @@
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
 > [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · **SPEC-10 GOAL**
 >
-> **Liên quan:** [Chỉ mục tài liệu](<../README.md>) · [DB-11 GOAL Database Design](<../DB/DB-11 GOAL Database Design.md>) · [Ma trận phân quyền](<../permission-matrix-spec.md>)
+> **Liên quan:** [Chỉ mục tài liệu](<../README.md>) · [DB-11 GOAL Database Design](<../DB/DB-11 GOAL Database Design.md>) · [Thiết kế API: API-12 GOAL](<../API Design/API-12_GOAL_API_Design.md>) · [Ma trận phân quyền §9b](<../permission-matrix-spec.md>) · [TASK nền: SPEC-06 §3.8](<SPEC-06 TASK.md>)
 
 ---
 
@@ -18,10 +18,10 @@
 | Module phụ thuộc trực tiếp | AUTH (RBAC), HR (departments/employees), TASK (projects/tasks) |
 | Module liên quan           | NOTI, DASH, ME, FOUNDATION; PERF/KPI (Phase 2 — tương lai) |
 | Phiên bản                  | v1.0                                                      |
-| Trạng thái                 | Draft (chờ owner duyệt PR S5-GOAL-DOC-1 → Approved)       |
+| Trạng thái                 | **Approved** (owner duyệt PR S5-GOAL-DOC-1, 23/07/2026)    |
 | Giai đoạn                  | MVP Version 1.0 - bổ sung (sau SPEC-09 ME)                |
 | Ngày tạo                   | 20/07/2026                                                |
-| Ngày cập nhật              | 20/07/2026                                                |
+| Ngày cập nhật              | 23/07/2026                                                |
 
 ---
 
@@ -422,10 +422,10 @@ Check-in reminder định kỳ: phase sau (§5.2).
 
 ## 24. Definition of Done cho SPEC-10
 
-- [ ] Owner duyệt PR docs → flip Trạng thái Draft → Approved
-- [ ] DB-11 + API-12 + permission-matrix đồng bộ, không mâu thuẫn SPEC-10
-- [ ] Wave S5-GOAL trong `harness/backlog.mjs` trace về đúng mã GOAL-FUNC/API/ERR của spec này
-- [ ] Mọi WO code của wave lấy SPEC-10 + DB-11 làm nguồn sự thật; lệch → sửa code, không sửa ngầm spec
+- [x] Owner duyệt PR docs → flip Trạng thái Draft → Approved (S5-GOAL-DOC-1, 23/07/2026)
+- [x] DB-11 + API-12 + permission-matrix đồng bộ, không mâu thuẫn SPEC-10
+- [x] Wave S5-GOAL trong `harness/backlog.mjs` trace về đúng mã GOAL-FUNC/API/ERR của spec này (9 WO)
+- [ ] Mọi WO code của wave lấy SPEC-10 + DB-11 làm nguồn sự thật; lệch → sửa code, không sửa ngầm spec _(kiểm tra liên tục theo từng WO — đối chiếu endpoint đã ship: API-12 §5.2)_
 
 ---
 

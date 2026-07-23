@@ -1,6 +1,8 @@
 # DB-11: GOAL DATABASE DESIGN — MỤC TIÊU
 
-> **Nguồn nghiệp vụ:** [SPEC-10 GOAL](<../SPEC/SPEC-10 GOAL.md>) · Quy ước chung: [DB-01](<DB-01 DATABASE DESIGN TỔNG QUAN.md>) · TASK nền: [DB-06](<DB-06 TASK Database Design.md>)
+> **Nguồn nghiệp vụ:** [SPEC-10 GOAL](<../SPEC/SPEC-10 GOAL.md>) · Quy ước chung: [DB-01](<DB-01 DATABASE DESIGN TỔNG QUAN.md>) §3.1/§7.9/§19b · TASK nền: [DB-06](<DB-06 TASK Database Design.md>) §3.3/§7.4
+>
+> **Liên quan:** [API-12 GOAL API Design](<../API Design/API-12_GOAL_API_Design.md>) · [DB-09 §8.14 index](<DB-09 Database Index Query Pattern Performance Design.md>) · [DB-10 seed GOAL](<DB-10_Migration_Plan_Initial_Seed_Data_Database_Design.md>) · [Ma trận phân quyền §9b](<../permission-matrix-spec.md>) · [Chỉ mục tài liệu](<../README.md>)
 
 ---
 
@@ -11,9 +13,10 @@
 | Mã tài liệu | DB-11 |
 | Tên tài liệu | GOAL Database Design — Mục tiêu phòng ban · dự án · nhân viên |
 | Module | GOAL (SPEC-10) |
-| Phiên bản | v1.0 — Draft (duyệt cùng PR SPEC-10) |
-| Ngày tạo / cập nhật | 20/07/2026 |
+| Phiên bản | v1.0 — **Approved** (duyệt cùng SPEC-10 tại PR S5-GOAL-DOC-1, 23/07/2026) |
+| Ngày tạo / cập nhật | 20/07/2026 / 23/07/2026 |
 | Head migration lúc viết | idx 183 / `0503_s5_subtask1_leaf_counting` ⇒ migration GOAL bắt đầu **0504+** |
+| Đã chạy thật (23/07/2026) | `0504`–`0507` (S5-GOAL-DB-1, PR #252). Head hiện tại idx 189 / `0509` — đợt D (`task_templates`) lấy **0510+**, xem §9 |
 
 ---
 
@@ -239,7 +242,7 @@ Quy tắc gắn (GOAL-ERR-008) ép ở service, không ép FK chéo ở DB (goal
 | 0505 | ALTER `tasks` ADD `goal_id` + FK đơn cột + index partial — bảng `tasks` thật nằm ở `schema/workflow.ts` (tên file di sản), `projects` ở `schema/media.ts` | sau 0504 |
 | 0506 | Seed module `GOAL` vào `modules` (mirror 0435, ON CONFLICT DO NOTHING) + **7 cặp** permission wave lõi (SPEC-10 §11, TRỪ manage/task-template → 0508) + grant per-pair data_scope 4 role canonical (DELETE-wrong-scope + INSERT ON CONFLICT, verify fail-LOUD mirror 0466/0476) + **UNION-ADD `'goal'` vào CHECK `audit_logs.object_type`** (DO-block idempotent mẫu 0474) + **seed `sequence_counters` 'goal' cho MỌI company** (mirror 0498: scope Company, prefix + padding, reset Never, ON CONFLICT DO NOTHING + verify fail-loud — thiếu là `SequenceNotFoundError` ngay goal đầu tiên, đúng bug QA2-CRIT-002 của task_code) | `is_sensitive` (nhất là finalize) chốt với owner TRONG plan WO — flip sau seed đụng pin canonical-seed |
 | 0507 | **Seed NOTI catalog GOAL**: thêm `GOAL_ASSIGNED` + `GOAL_FINALIZED` vào `notification-event-catalog.const.ts` (isEnabled=true) + migration seed `notification_events` + template render (mirror 0481/0490; payload chỉ goal name + link) | PHẢI xong TRƯỚC khi BE-2 đăng ký registrar — bridge `registerSource()` **fail-loud NGAY LÚC BOOT** nếu eventCode chưa có trong catalog |
-| 0508 (đợt D) | Tạo `task_templates` + `task_template_items` + RLS + seed pair `('manage','task-template')` + UNION-ADD `'task_template'` vào audit CHECK | tách khỏi wave lõi — chỉ chạy khi làm phân rã |
+| **0510+** (đợt D) | Tạo `task_templates` + `task_template_items` + RLS + seed pair `('manage','task-template')` + UNION-ADD `'task_template'` vào audit CHECK | tách khỏi wave lõi — chỉ chạy khi làm phân rã. ⚠️ **Số 0508 dự kiến ban đầu ĐÃ BỊ CHIẾM** (`0508_lms_access_permission`, `0509_s5_lmsdb1_audit_lms_object_types` — wave LMS chen vào sau 20/07). Head tại 23/07/2026 = idx 189 / `0509` ⇒ đợt D lấy **0510+**; luôn đọc `migrations/meta/_journal.json` THẬT lúc chạy, đừng tin số ghi sẵn ở đây |
 
 Số migration là **dự kiến** — nối tiếp head THẬT tại thời điểm chạy WO (kiểm `_journal.json` trước, tránh trùng số với lane khác — bẫy `wo-paths-drive-gate-and-scheduler`).
 

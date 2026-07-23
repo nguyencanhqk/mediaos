@@ -143,7 +143,8 @@ DB-06 không tạo lại các bảng sau, nhưng phụ thuộc trực tiếp và
 | Gantt chart | Phase sau | Thêm dependency, baseline, milestone |
 | Time tracking | Phase sau | Thêm `task_time_logs`, liên kết ATT nếu cần |
 | Task dependency | Phase sau | Thêm `task_dependencies` |
-| Template | Phase sau | Thêm `project_templates`, `task_templates` |
+| Template phân rã mục tiêu (`task_templates`) | **Đã kích hoạt bởi SPEC-10 GOAL** (S5-GOAL-DB-1) | Không còn "phase sau" — schema đầy đủ ở [DB-11 GOAL Database Design §6.3–6.4](<DB-11 GOAL Database Design.md>), không nhân bản ở đây |
+| `project_templates` (khác `task_templates`) | Phase sau | Chưa có kế hoạch — không liên quan GOAL |
 | Automation workflow | Phase sau | Thêm rule engine hoặc workflow tables |
 | Approval task quan trọng | Phase sau | Thêm `task_approval_requests`, `task_approval_steps` |
 | Calendar integration | Phase sau | Thêm external calendar sync metadata |
@@ -926,6 +927,7 @@ Lưu thông tin chính của công việc/task.
 | `project_id` | UUID | Không | FK `projects.id`; NULL nếu task cá nhân được phép |
 | `parent_task_id` | UUID | Không | **Công việc cha** — FK **composite** `(parent_task_id, company_id) → tasks(id, company_id)`. Đường dữ liệu SỐNG từ 20/07/2026: cây đúng **1 cấp**, con **cùng `project_id`** với cha, con luôn `state_id = NULL`. Xem §4.16 + [DECISIONS-05](<../DECISIONS/DECISIONS-05_Task_Subtask_And_Leaf_Counting.md>) |
 | `state_id` | UUID | Không | FK `project_states.id` `ON DELETE SET NULL` — **cột pipeline** task đang đứng. NULL nếu task không thuộc dự án, hoặc dữ liệu cũ chưa đồng bộ. Xem §4.9b + §7.4b |
+| `goal_id` | UUID | Không | **Thêm bởi SPEC-10 GOAL** (migration 0505, S5-GOAL-DB-1) — FK `goals.id`, n-1 (1 task ↔ 1 goal), index partial. Không nhân bản chi tiết ở đây — nguồn chuẩn: [DB-11 GOAL Database Design §6.5](<DB-11 GOAL Database Design.md>) |
 | `task_code` | VARCHAR(100) | Có | Mã task, unique theo company |
 | `title` | VARCHAR(255) | Có | Tiêu đề task |
 | `description` | TEXT | Không | Mô tả |
