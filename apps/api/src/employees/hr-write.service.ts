@@ -18,6 +18,7 @@ import type {
 import { HR_EMPLOYEE_PII_WRITE_FIELDS } from "@mediaos/contracts";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
+import { LmsSyncProducer } from "../integrations/lms/lms-sync-producer.service";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { PasswordService } from "../auth/password.service";
 import { DataScopeService } from "../permission/data-scope.service";
@@ -102,6 +103,9 @@ export class HrWriteService {
     // S4-INT-5 (STORY-098) — transactional outbox for the activation/welcome producer.
     // From the @Global EventsModule (same source as AuditService) → no employees.module.ts import change.
     private readonly outbox: OutboxService,
+    // S5-LMS-BE-1 — auto-sync tài khoản MediaOS→LMS. Enqueue outbox (cùng tx) khi đổi status của employee
+    // có linked user. ZERO HTTP (fail-soft cấu trúc); company-gated bên trong producer. LmsSyncModule imported.
+    private readonly lmsSync: LmsSyncProducer,
   ) {}
 
   /**
@@ -476,6 +480,9 @@ export class HrWriteService {
         before: { status: oldStatus },
         after: { status: newStatus },
       });
+      // S5-LMS-BE-1: enqueue LMS auto-sync CÙNG tx SAU mutation (đọc state post-change). Employee có linked
+      // user (row.userId) → producer resolve {email,active} + enqueue; userId null / ngoài LMS-company → no-op.
+      await this.lmsSync.enqueueSync(tx, user.companyId, row.userId);
       return { id, status: newStatus };
     });
   }

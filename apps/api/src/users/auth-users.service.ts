@@ -25,6 +25,7 @@ import { AuthService } from "../auth/auth.service";
 import { PasswordService } from "../auth/password.service";
 import { SecurityEventWriter } from "../auth/security-event-writer.service";
 import { PermissionService } from "../permission/permission.service";
+import { LmsSyncProducer } from "../integrations/lms/lms-sync-producer.service";
 import { AuthUsersRepository, authUserSnapshot } from "./auth-users.repository";
 
 /** Actor = admin đang thao tác (id/companyId từ JWT — KHÔNG nhận từ body — BẤT BIẾN #1). */
@@ -111,6 +112,10 @@ export class AuthUsersService {
     // LUÔN inject (provider đã đăng ký) ⇒ production luôn emit; chỉ vắng khi unit-spec dựng service bằng
     // tay (mock `tx` không có `.insert`) → guard bỏ qua để KHÔNG vỡ test — KHÔNG phải nuốt lỗi.
     private readonly securityEvents?: SecurityEventWriter,
+    // S5-LMS-BE-1: auto-sync tài khoản→LMS khi admin khoá/mở user. Optional theo convention securityEvents
+    // (Nest LUÔN inject — LmsSyncProducer export từ LmsSyncModule, UsersModule import; chỉ vắng khi unit-spec
+    // dựng tay). ZERO HTTP trong tx (fail-soft cấu trúc); company-gated bên trong producer.
+    private readonly lmsSync?: LmsSyncProducer,
   ) {}
 
   /**
@@ -297,6 +302,10 @@ export class AuthUsersService {
         actorUserId: actor.id,
         payload: { reason: reason ?? null },
       });
+      // S5-LMS-BE-1: enqueue LMS auto-sync CÙNG tx (SAU setLockTx ⇒ active=false). eventType RIÊNG
+      // hr.employee_status_changed — KHÔNG re-emit auth.user_locked (né consumer notification). User không
+      // hồ sơ nhân viên / ngoài LMS-company → producer no-op sạch.
+      await this.lmsSync?.enqueueSync(tx, actor.companyId, id);
       return toDto(updated);
     });
   }
@@ -328,6 +337,9 @@ export class AuthUsersService {
         userId: id,
         actorUserId: actor.id,
       });
+      // S5-LMS-BE-1: enqueue LMS auto-sync CÙNG tx (SAU setUnlockTx ⇒ active theo ep.status). Mở khoá user
+      // → LMS mở lại NẾU nhân viên vẫn active. Ngoài LMS-company / không hồ sơ → no-op.
+      await this.lmsSync?.enqueueSync(tx, actor.companyId, id);
       return toDto(updated);
     });
   }

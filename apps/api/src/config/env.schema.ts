@@ -208,6 +208,14 @@ export const envSchema = z
     LMS_SSO_SECRET: z.string().min(32).optional(),
     // Gốc public của LMS (vd https://lms.example.com) — đích redirect SSO.
     LMS_BASE_URL: z.string().url().optional(),
+    // ── S5-LMS-BE-1: auto-sync tài khoản MediaOS→LMS (Giai đoạn B) ──
+    // Bearer token server-to-server tới LMS POST /api/admin/sync-users (= MEDIAOS_SYNC_TOKEN phía LMS).
+    // OPTIONAL: thiếu → bridge/job auto-sync TẮT (warn 1 lần, KHÔNG chặn boot; mirror posture SSO). BẤT BIẾN #3.
+    LMS_SYNC_TOKEN: z.string().min(32).optional(),
+    // COMPANY GATE: id công ty DUY NHẤT được sync sang LMS (LMS là hệ 1-công-ty = funtime; endpoint LMS
+    // khoá thuần theo email, KHÔNG company-scope). Thiếu → auto-sync TẮT (fail-closed isolation). Producer/
+    // bridge/job CHỈ sync khi companyId === LMS_COMPANY_ID ⇒ tenant khác KHÔNG rò email sang LMS (BẤT BIẾN #1).
+    LMS_COMPANY_ID: z.string().uuid().optional(),
 
     // ⚠️ ALLOW_SUPERUSER_ROTATION (KHÔNG validate qua zod — CỐ Ý): SecretRotationService đọc THẲNG
     // `process.env.ALLOW_SUPERUSER_ROTATION === 'true'` để fail-closed tuyệt đối (mọi giá trị ≠ 'true', kể cả

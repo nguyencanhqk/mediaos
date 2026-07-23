@@ -32,10 +32,12 @@ async function main() {
   const flags = parseArgs(process.argv);
   const DIRECT_URL = process.env.SEED_DIRECT_URL;
   const LMS_BASE_URL = process.env.LMS_BASE_URL?.replace(/\/+$/, "");
-  const SYNC_TOKEN = process.env.MEDIAOS_SYNC_TOKEN;
+  // S5-LMS-BE-1: đọc cả 2 tên (tương thích ngược). LMS_SYNC_TOKEN là tên chuẩn phía MediaOS-API (env.schema);
+  // MEDIAOS_SYNC_TOKEN là tên cũ script tay dùng = giá trị token phía LMS. Cùng một secret.
+  const SYNC_TOKEN = process.env.LMS_SYNC_TOKEN ?? process.env.MEDIAOS_SYNC_TOKEN;
   if (!DIRECT_URL) throw new Error("Thiếu env SEED_DIRECT_URL");
   if (!flags.dryRun && (!LMS_BASE_URL || !SYNC_TOKEN))
-    throw new Error("Thiếu env LMS_BASE_URL / MEDIAOS_SYNC_TOKEN (hoặc dùng --dry-run)");
+    throw new Error("Thiếu env LMS_BASE_URL / LMS_SYNC_TOKEN (hoặc dùng --dry-run)");
 
   const c = new pg.Client({ connectionString: DIRECT_URL });
   await c.connect();

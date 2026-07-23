@@ -124,6 +124,7 @@ function makeService(opts: { repo?: ReturnType<typeof makeRepo>; sequence?: unkn
     dataScope as never,
     permissions as never,
     outbox as never,
+    { enqueueSync: vi.fn().mockResolvedValue(undefined) } as never,
   );
   return { svc, repo, db, audit, sequence, dataScope, permissions, outbox };
 }
@@ -412,6 +413,7 @@ describe("HrWriteService.createEmployee", () => {
       dataScope as never,
       permissions as never,
       outbox as never,
+      { enqueueSync: vi.fn().mockResolvedValue(undefined) } as never,
     );
     await expect(svc.createEmployee(actorA, { userId: OTHER_USER } as never)).rejects.toThrow(
       ForbiddenException,
