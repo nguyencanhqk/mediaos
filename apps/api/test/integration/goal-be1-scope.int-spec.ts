@@ -522,6 +522,26 @@ describe.skipIf(!hasLaneDb)(
         expect(res.status, JSON.stringify(res.body)).toBe(200);
       });
 
+      /**
+       * MEDIUM-4 (gate vòng 2): vế owner chỉ được dùng khi neo giữ NGUYÊN Y HỆT. Nếu so ở mức "phòng
+       * suy ra" thì hai DỰ ÁN KHÁC NHAU trong CÙNG phòng cho ra cùng giá trị ⇒ người phụ trách chuyển
+       * được mục tiêu sang dự án mình không có vai trò (bẩn rollup mode 'project' của BE-2).
+       */
+      it("KHÔNG được đổi neo sang DỰ ÁN KHÁC cùng phòng bằng quyền owner ⇒ 403", async () => {
+        const res = await authPatch(tMgr, `/goals/${gMktOwnedByMgr}`).send({
+          level: "project",
+          departmentId: null,
+          projectId: projectMkt,
+        });
+        expect(res.status, JSON.stringify(res.body)).toBe(403);
+        const row = await direct.query(
+          "SELECT level, department_id, project_id FROM goals WHERE id = $1",
+          [gMktOwnedByMgr],
+        );
+        expect(row.rows[0].level).toBe("department");
+        expect(row.rows[0].project_id).toBeNull();
+      });
+
       it("nhưng KHÔNG được dùng quyền owner để DI DỜI neo sang phòng thứ ba ⇒ 403", async () => {
         const res = await authPatch(tMgr, `/goals/${gMktOwnedByMgr}`).send({
           departmentId: ouRnd,

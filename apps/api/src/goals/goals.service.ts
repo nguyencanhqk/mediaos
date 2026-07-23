@@ -252,7 +252,9 @@ export class GoalsService {
         actorEmployeeId: actor.actorEmployeeId,
       });
       await this.assertWriteAllowed(tx, user, actor, resolved, {
-        anchorDepartmentId: currentAnchorDepartmentId,
+        departmentId: current.departmentId,
+        projectId: current.projectId,
+        employeeId: current.employeeId,
       });
       if (resolved.values.parentGoalId !== current.parentGoalId) {
         await this.assertParentVisible(tx, user, resolved.values.parentGoalId);
@@ -435,19 +437,28 @@ export class GoalsService {
    * trưởng đơn vị chỉ cần bỏ trống `ownerEmployeeId` là tạo được mục tiêu neo vào PHÒNG/DỰ ÁN BẤT KỲ
    * (create:goal@Department ≈ @Company) rồi giữ nguyên quyền sửa/xoá vì vẫn là owner.
    * ⇒ CREATE: chỉ chấp nhận neo trong phòng actor (`allowOwnerFallback = false`).
-   * ⇒ UPDATE: chấp nhận vế owner CHỈ KHI neo KHÔNG ĐỔI (`currentAnchorDepartmentId`) — giữ được quyền
-   *   sửa mục tiêu mình ĐƯỢC GIAO ở phòng khác, nhưng cấm dùng quyền owner để DI DỜI sang phòng thứ ba.
+   * ⇒ UPDATE: chấp nhận vế owner CHỈ KHI **bộ ba neo giữ NGUYÊN Y HỆT** — giữ được quyền sửa TẠI CHỖ
+   *   mục tiêu mình ĐƯỢC GIAO ở phòng khác, nhưng cấm mọi kiểu DI DỜI.
+   *
+   * ⚠️ So `department_id/project_id/employee_id` (ĐỊNH DANH neo), KHÔNG so `anchorDepartmentId`
+   * (finding MEDIUM-4, gate vòng 2): `anchorDepartmentId` là giá trị SUY RA (dự án → phòng dự án),
+   * nên hai dự án khác nhau CÙNG một phòng cho ra cùng giá trị ⇒ người phụ trách chuyển được mục tiêu
+   * sang dự án mình không có vai trò, miễn cùng phòng. Không vượt biên phòng nhưng làm bẩn rollup
+   * `progress_mode='project'` ở S5-GOAL-BE-2. Đừng "tối giản" lại thành so phòng.
    */
   private async assertWriteAllowed(
     tx: TenantTx,
     user: RequestUser,
     actor: GoalActorScope,
     resolved: ResolvedGoalWrite,
-    current?: { anchorDepartmentId: string | null },
+    current?: { departmentId: string | null; projectId: string | null; employeeId: string | null },
   ): Promise<void> {
     if (actor.scope === "Company" || actor.scope === "System") return;
     const anchorUnchanged =
-      current !== undefined && current.anchorDepartmentId === resolved.anchorDepartmentId;
+      current !== undefined &&
+      current.departmentId === resolved.values.departmentId &&
+      current.projectId === resolved.values.projectId &&
+      current.employeeId === resolved.values.employeeId;
     await this.assertWriteTarget(
       tx,
       user,

@@ -6,8 +6,8 @@
 > **S5-GOAL-DB-1** (migration 0504–0507). WO này **KHÔNG tạo file DB mới**.
 
 Trạng thái: **ĐÃ HIỆN THỰC + ĐÃ QUA FULL GATE (vòng 2)** (lane `s5goalbe1`, worktree
-`../mediaos-s5goalbe1`) — 68 int-spec xanh trên DB cô lập `mediaos_s5goalbe1`; toàn bộ suite api xanh
-(219 unit-file/3395 test + 179 int-file/3213 test). Chi tiết gate + bản vá: **mục 8**.
+`../mediaos-s5goalbe1`) — 69 int-spec xanh trên DB cô lập `mediaos_s5goalbe1`; toàn bộ suite api xanh
+(219 unit-file/3395 test + 179 int-file/3214 test). Chi tiết gate + bản vá: **mục 8**.
 
 ---
 
@@ -36,7 +36,7 @@ rollup + job đối soát, link/unlink task↔goal, 2 event NOTI. WO này **khô
 - `apps/api/src/goals/`: `goals.module.ts` · `goals.controller.ts` · `me-goals.controller.ts` ·
   `goals.service.ts` · `goals-validation.service.ts` · `goals.repository.ts` · `goals.mapper.ts` ·
   `goals.dto.ts` · `goals.errors.ts`.
-- `apps/api/test/integration/goal-be1-scope.int-spec.ts` (44 test) ·
+- `apps/api/test/integration/goal-be1-scope.int-spec.ts` (45 test) ·
   `goal-be1-validate.int-spec.ts` (24 test).
 
 **Sửa (append-only, hot-file)**
@@ -64,8 +64,9 @@ chủ thể (goal cá nhân) trong scope · `department_id ∈ phòng actor` · 
 
 Luật GHI khi scope < Company: `Own` ⇒ CHỈ goal cấp employee của chính actor · `Department` ⇒ neo nằm
 trong phòng actor **HOẶC** actor là người phụ trách — vế thứ hai chỉ dùng được khi `allowOwnerFallback`
-bật (D7): TẮT ở CREATE, bật ở update/delete trên bản ghi đã lưu, và ở UPDATE thì chỉ bật khi **neo
-không đổi** (được sửa mục tiêu mình được giao ở phòng khác, KHÔNG được di dời nó sang phòng thứ ba).
+bật (D7): TẮT ở CREATE, bật ở update/delete trên bản ghi đã lưu, và ở UPDATE thì chỉ bật khi **bộ ba
+neo (`department_id`/`project_id`/`employee_id`) giữ NGUYÊN Y HỆT** — được sửa TẠI CHỖ mục tiêu mình
+được giao ở phòng khác, nhưng cấm mọi kiểu di dời (kể cả sang dự án khác **cùng phòng** — MEDIUM-4).
 
 **Gắn cha** = liên kết dữ liệu ⇒ `parent_goal_id` phải nằm trong phạm vi **('view','goal')** của actor
 (không phải phạm vi ghi): nhân viên treo mục tiêu cá nhân dưới mục tiêu PHÒNG MÌNH được, treo sang
@@ -104,9 +105,9 @@ export LANE_DB=mediaos_s5goalbe1
 pnpm --filter @mediaos/contracts build            # dual ESM/CJS (chống stale-dist false-red)
 pnpm --filter @mediaos/api typecheck              # sạch
 pnpm --filter @mediaos/api lint                   # 0 error (43 warning tiền tồn ở file khác)
-npx vitest run test/integration/goal-be1-*.int-spec.ts   # 68 passed (54 + 14 ca gate vòng 2)
+npx vitest run test/integration/goal-be1-*.int-spec.ts   # 69 passed (54 + 15 ca gate vòng 2)
 npx vitest run src                                # 219 file / 3395 test passed
-npx vitest run test/integration                   # 179 file / 3213 test passed (1 skip tiền tồn)
+npx vitest run test/integration                   # 179 file / 3214 test passed (1 skip tiền tồn)
 ```
 
 RED trước GREEN (bằng chứng): chạy 2 int-spec khi CHƯA có module ⇒ 18/19 fail với
@@ -151,6 +152,21 @@ Chạy trên commit `183e9fa7`: `security-reviewer` (domain permission) **BLOCK*
 | LOW-2 (rls)      | `goals`/`goal_updates` chưa có policy `*_all_tenant_read` cho `mediaos_readonly` (bảng `tasks`/`projects` có).                                                                                                                                                                                                                                                                                                                       | **KHÔNG SỬA** — mặc định là DENY (an toàn), chỉ là khoảng trống tính năng cho surface operator; thuộc DB, không thuộc WO này.                                                                                                                                                                       |
 | LOW-3 (sec)      | File probe untracked còn sót trong worktree.                                                                                                                                                                                                                                                                                                                                                                                         | **ĐÃ DỌN** — cả hai reviewer tự xoá; `git status` sạch trước khi commit.                                                                                                                                                                                                                            |
 | LOW-4 (sec)      | `mapper` fallback câm (`weight ?? 1`, `createdAt ?? 1970`) trên cột `NOT NULL`.                                                                                                                                                                                                                                                                                                                                                      | **KHÔNG SỬA** — nhánh chết (DB đã NOT NULL); ghi nhận để BE-2 đừng nhân bản mẫu này.                                                                                                                                                                                                                |
+
+### Gate vòng 2 (`183e9fa7..58424ade`) — **PASS**
+
+Reviewer chạy lại đúng probe cũ trên commit đã vá: **P1/P2 = 403** (vòng 1 là 201/201), 3 ca control vẫn
+201/201/200 ⇒ HIGH-1 chết mà không vá quá tay. Thử thêm 4 đường vòng (di dời nhiều bước · mượn cửa
+`ProjectAccessService` bằng cách đổi `level` sang `project` · scope `Own`) — đều 403. Ba mục "chủ ý không
+sửa" ở trên được **rút/chấp nhận** sau khi reviewer tự kiểm tiền lệ trong code (`hr-write.service.ts`,
+`task-core.repository.ts`), không phải tin lời khai.
+
+Một finding MỚI, đã vá luôn trong PR này:
+
+| #            | Finding                                                                                                                                                                                                                                                                                                                                                                    | Xử lý                                                                                                                                                                                            |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **MEDIUM-4** | `anchorUnchanged` so ở mức **phòng SUY RA** (`anchorDepartmentId`) chứ không phải **định danh neo** ⇒ hai dự án khác nhau CÙNG một phòng cho cùng giá trị: người phụ trách chuyển được mục tiêu sang dự án mình KHÔNG có vai trò, miễn cùng phòng (repro: PATCH `projectId` → 200). Không vượt biên phòng/tenant, nhưng làm bẩn rollup `progress_mode='project'` của BE-2. | **ĐÃ VÁ** — so bộ ba `department_id`/`project_id`/`employee_id` của bản ghi hiện tại; vế owner giờ đúng nghĩa "sửa TẠI CHỖ, cấm mọi kiểu di dời". +1 int-spec khoá đúng ca đổi-dự-án-cùng-phòng. |
+| LOW-5        | Docblock hứa "neo không đổi" trong khi code chỉ ép "phòng không đổi".                                                                                                                                                                                                                                                                                                      | **ĐÃ VÁ** cùng MEDIUM-4 — code và comment giờ nói cùng một điều (bài học `wo-plans-built-on-code-comments`).                                                                                     |
 
 **Bằng chứng RED cho HIGH-1** = probe của gate chạy trên chính commit `183e9fa7` (201/200/204 nơi phải
 403). 4 ca deny mới ở `S2b` phủ đúng các vector đó và XANH sau vá; 4 ca control chứng minh luồng hợp lệ
