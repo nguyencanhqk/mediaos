@@ -7910,12 +7910,16 @@ export const backlog = [
     title:
       "Proxy tiến độ đào tạo vào MediaOS: GET /me/training (email resolve TỪ TOKEN — không nhận param, mirror SPEC-09 §14.4) gọi LMS /api/mediaos/progress, cache ngắn ~60s, gate access:lms, contracts Zod",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/integrations/lms/**",
       "apps/api/src/me/**",
       "packages/contracts/src/**",
       "apps/api/test/integration/**",
+      // Mở rộng (2026-07-23, lúc thi công): biến env MỚI phía MediaOS `LMS_PROGRESS_TOKEN` (token ĐỌC
+      // riêng = MEDIAOS_PROGRESS_TOKEN phía LMS) BẮT BUỘC phải khai ở boundary env + doc mẫu.
+      "apps/api/src/config/env.schema.ts",
+      ".env.example",
       "docs/plans/S5-LMS-BE-3.md",
     ],
     skills: ["code-review"],

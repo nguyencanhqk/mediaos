@@ -40,6 +40,19 @@ export const ME_ERROR_CODES = {
    * hoặc bỏ field KHÔNG bị chặn — chỉ giá trị override THẬT mới cần policy.
    */
   TIMEZONE_OVERRIDE_DENIED: "ME-ERR-TIMEZONE-OVERRIDE-DENIED",
+  /**
+   * S5-LMS-BE-3 — 503: tích hợp LMS CHƯA cấu hình phía MediaOS (thiếu `LMS_BASE_URL`/`LMS_PROGRESS_TOKEN`)
+   * hoặc company hiện tại KHÔNG thuộc phạm vi LMS (`LMS_COMPANY_ID` khai và lệch — fail-closed isolation).
+   * Là trạng thái CẤU HÌNH, không phải lỗi hạ tầng ⇒ FE ẩn/disable card Đào tạo, KHÔNG hiện "lỗi hệ thống".
+   */
+  TRAINING_LMS_DISABLED: "ME-ERR-TRAINING-LMS-DISABLED",
+  /** S5-LMS-BE-3 — 502: LMS không phản hồi được (timeout client-side / lỗi mạng / HTTP lỗi). Có thể thử lại. */
+  TRAINING_LMS_UNAVAILABLE: "ME-ERR-TRAINING-LMS-UNAVAILABLE",
+  /**
+   * S5-LMS-BE-3 — 502: LMS trả 2xx nhưng payload KHÔNG khớp hợp đồng v1 (`meTrainingProgressSchema`) —
+   * ví dụ LMS bump `version` hoặc đổi shape. Fail-safe: KHÔNG forward object lệch ra client.
+   */
+  TRAINING_CONTRACT_MISMATCH: "ME-ERR-TRAINING-CONTRACT-MISMATCH",
 } as const;
 
 export type MeErrorCode = (typeof ME_ERROR_CODES)[keyof typeof ME_ERROR_CODES];

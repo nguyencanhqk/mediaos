@@ -212,6 +212,12 @@ export const envSchema = z
     // Bearer token server-to-server tới LMS POST /api/admin/sync-users (= MEDIAOS_SYNC_TOKEN phía LMS).
     // OPTIONAL: thiếu → bridge/job auto-sync TẮT (warn 1 lần, KHÔNG chặn boot; mirror posture SSO). BẤT BIẾN #3.
     LMS_SYNC_TOKEN: z.string().min(32).optional(),
+    // ── S5-LMS-BE-3: đọc tiến độ học MediaOS←LMS (GET /me/training) ──
+    // Bearer token CHỈ-ĐỌC tới LMS GET /api/mediaos/progress (= MEDIAOS_PROGRESS_TOKEN phía LMS, xem
+    // docs/plans/S5-LMS-APP-3.md §7.1). TÁCH BIỆT khỏi LMS_SYNC_TOKEN (quyền GHI: tạo/khoá tài khoản LMS) —
+    // security review APP-3 HIGH-2: đường ĐỌC mở ra internet KHÔNG được mang quyền GHI, KHÔNG fallback.
+    // OPTIONAL: thiếu → /me/training trả 503 (tắt mềm, không chặn boot). BẤT BIẾN #3: không hardcode/log.
+    LMS_PROGRESS_TOKEN: z.string().min(32).optional(),
     // COMPANY GATE: id công ty DUY NHẤT được sync sang LMS (LMS là hệ 1-công-ty = funtime; endpoint LMS
     // khoá thuần theo email, KHÔNG company-scope). Thiếu → auto-sync TẮT (fail-closed isolation). Producer/
     // bridge/job CHỈ sync khi companyId === LMS_COMPANY_ID ⇒ tenant khác KHÔNG rò email sang LMS (BẤT BIẾN #1).

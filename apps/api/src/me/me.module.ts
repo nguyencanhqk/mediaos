@@ -28,6 +28,11 @@ import { MeAvatarFileResolver } from "./me-avatar-file.resolver";
 import { MeSecurityActivityController } from "./me-security-activity.controller";
 import { MeSecurityActivityService } from "./me-security-activity.service";
 import { MeSecurityActivityRepository } from "./me-security-activity.repository";
+// S5-LMS-BE-3 (additive): GET /me/training — proxy tiến độ học (LmsProgressClient từ IntegrationsLmsModule).
+// KHÔNG re-provide client (dùng đúng singleton của module nguồn); KHÔNG chạm DB (proxy thuần, không migration).
+import { IntegrationsLmsModule } from "../integrations/lms/lms.module";
+import { MeTrainingController } from "./me-training.controller";
+import { MeTrainingService } from "./me-training.service";
 
 /**
  * S5-ME-BE-1 — MeModule (Personal Hub, SPEC-09 / API-11). Lớp TỔNG HỢP đọc-own: KHÔNG sở hữu dữ liệu nguồn.
@@ -60,12 +65,14 @@ import { MeSecurityActivityRepository } from "./me-security-activity.repository"
     TasksModule,
     NotificationsModule,
     FilesModule,
+    IntegrationsLmsModule,
   ],
   controllers: [
     MeController,
     MePreferencesController,
     MeAvatarController,
     MeSecurityActivityController,
+    MeTrainingController,
   ],
   providers: [
     MeRepository,
@@ -78,6 +85,7 @@ import { MeSecurityActivityRepository } from "./me-security-activity.repository"
     MeAvatarFileResolver,
     MeSecurityActivityRepository,
     MeSecurityActivityService,
+    MeTrainingService,
   ],
 })
 export class MeModule implements OnModuleInit {
