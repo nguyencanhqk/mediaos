@@ -18,6 +18,13 @@ export const GOAL_ERR = {
   /** GOAL-ERR-004 — cấp company bị chặn ở MVP (schema đã chừa, bật ở phase sau). */
   LEVEL_COMPANY:
     "GOAL-ERR-004: mục tiêu cấp công ty chưa mở ở phiên bản này — chọn cấp phòng ban/dự án/nhân viên.",
+  /**
+   * GOAL-ERR-005 — goal đã chốt kỳ (`finalized_at`) thì ĐÓNG BĂNG: cấm sửa/xoá (SPEC-10 §12 + §15
+   * GOAL-API-004 "chặn khi finalized"). BE-1 chưa có writer cho `finalized_at` (chốt/reopen thuộc
+   * S5-GOAL-BE-2) nhưng route PATCH/DELETE đã LIVE ⇒ chặn NGAY, không để guard rơi giữa 2 WO.
+   */
+  FINALIZED:
+    "GOAL-ERR-005: mục tiêu đã chốt kỳ — mở lại (reopen) trước khi sửa hoặc xoá (cần quyền chốt kỳ).",
   /** GOAL-ERR-007 — xoá goal còn goal con. */
   HAS_CHILDREN:
     "GOAL-ERR-007: mục tiêu còn mục tiêu con — xoá hoặc di dời mục tiêu con trước (không xoá lan).",
@@ -39,6 +46,9 @@ export const GOAL_ERR = {
   FORBIDDEN: "GOAL-ERR-FORBIDDEN: mục tiêu này nằm ngoài phạm vi dữ liệu của bạn.",
   FORBIDDEN_CREATE:
     "GOAL-ERR-FORBIDDEN: bạn không được tạo/sửa mục tiêu ở phạm vi này (phòng ban/dự án/nhân viên khác).",
+  /** Cây vượt trần một lần dựng — TRẢ LỖI thay vì cắt câm (cây thiếu trông y hệt cây đủ). */
+  TREE_TOO_LARGE: (cap: number) =>
+    `GOAL-ERR-TREE-TOO-LARGE: cây mục tiêu vượt ${cap} nút trong một lần dựng — lọc hẹp lại (departmentId hoặc kỳ) rồi thử lại.`,
   /** Gắn cha là hành vi LIÊN KẾT dữ liệu — chỉ được gắn vào mục tiêu mà actor NHÌN THẤY. */
   FORBIDDEN_PARENT:
     "GOAL-ERR-FORBIDDEN: mục tiêu cha nằm ngoài phạm vi dữ liệu của bạn — không gắn được.",

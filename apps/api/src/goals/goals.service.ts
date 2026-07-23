@@ -118,11 +118,16 @@ export class GoalsService {
           status: query.status,
           periodFrom: query.periodFrom,
           periodTo: query.periodTo,
-          limit: TREE_NODE_CAP,
+          // Lấy DƯ 1 nút để PHÁT HIỆN tràn: cắt câm ở đúng trần sẽ biến nút mất-cha thành nút GỐC
+          // (goals.mapper) ⇒ người dùng thấy một cây hợp lệ nhưng SAI CẤU TRÚC mà không có cách nào biết.
+          limit: TREE_NODE_CAP + 1,
           offset: 0,
         },
         actor.readScopeExists,
       );
+      if (rows.length > TREE_NODE_CAP) {
+        throw new UnprocessableEntityException(GOAL_ERR.TREE_TOO_LARGE(TREE_NODE_CAP));
+      }
       return buildGoalTree(rows);
     });
   }
@@ -237,14 +242,18 @@ export class GoalsService {
       const actor = await this.resolveActorScope(tx, user, "update");
       const current = await this.repo.findByIdTx(tx, user.companyId, id);
       if (!current) throw new NotFoundException(GOAL_ERR.NOT_FOUND);
-      await this.assertWriteAllowedOnExisting(tx, user, actor, current);
+      const currentAnchorDepartmentId = await this.anchorDepartmentOf(tx, user.companyId, current);
+      await this.assertWriteAllowedOnExisting(tx, user, actor, current, currentAnchorDepartmentId);
+      this.assertNotFinalized(current);
 
       const desired = this.desiredFromUpdate(current, dto);
       const resolved = await this.validator.resolve(tx, user.companyId, desired, {
         goalId: id,
         actorEmployeeId: actor.actorEmployeeId,
       });
-      await this.assertWriteAllowed(tx, user, actor, resolved);
+      await this.assertWriteAllowed(tx, user, actor, resolved, {
+        anchorDepartmentId: currentAnchorDepartmentId,
+      });
       if (resolved.values.parentGoalId !== current.parentGoalId) {
         await this.assertParentVisible(tx, user, resolved.values.parentGoalId);
       }
@@ -290,7 +299,9 @@ export class GoalsService {
       const actor = await this.resolveActorScope(tx, user, "delete");
       const current = await this.repo.findByIdTx(tx, user.companyId, id);
       if (!current) throw new NotFoundException(GOAL_ERR.NOT_FOUND);
-      await this.assertWriteAllowedOnExisting(tx, user, actor, current);
+      const anchorDepartmentId = await this.anchorDepartmentOf(tx, user.companyId, current);
+      await this.assertWriteAllowedOnExisting(tx, user, actor, current, anchorDepartmentId);
+      this.assertNotFinalized(current);
 
       const children = await this.repo.countNonDeletedChildrenTx(tx, user.companyId, id);
       if (children > 0) throw new UnprocessableEntityException(GOAL_ERR.HAS_CHILDREN);
@@ -387,39 +398,69 @@ export class GoalsService {
     if (!visible) throw new ForbiddenException(GOAL_ERR.FORBIDDEN_PARENT);
   }
 
-  /** Phạm vi GHI trên bản ghi ĐANG CÓ (update/delete) — anchor resolve từ chính hàng đó. */
+  /**
+   * Phạm vi GHI trên bản ghi ĐANG CÓ (update/delete) — anchor resolve từ chính hàng đó.
+   * Ở đường này `ownerEmployeeId` là dữ liệu ĐÃ LƯU (người khác gán cho actor), KHÔNG do actor tự khai
+   * trong request ⇒ cho phép vế "người phụ trách" (xem `assertWriteTarget`).
+   */
   private async assertWriteAllowedOnExisting(
     tx: TenantTx,
     user: RequestUser,
     actor: GoalActorScope,
     goal: Goal,
+    anchorDepartmentId: string | null,
   ): Promise<void> {
     if (actor.scope === "Company" || actor.scope === "System") return;
-    const anchorDepartmentId = await this.anchorDepartmentOf(tx, user.companyId, goal);
-    await this.assertWriteTarget(tx, user, actor, {
-      level: goal.level,
-      projectId: goal.projectId,
-      employeeId: goal.employeeId,
-      ownerEmployeeId: goal.ownerEmployeeId,
-      anchorDepartmentId,
-    });
+    await this.assertWriteTarget(
+      tx,
+      user,
+      actor,
+      {
+        level: goal.level,
+        projectId: goal.projectId,
+        employeeId: goal.employeeId,
+        ownerEmployeeId: goal.ownerEmployeeId,
+        anchorDepartmentId,
+      },
+      true,
+    );
   }
 
-  /** Phạm vi GHI trên trạng thái ĐÍCH (create/update sau merge). */
+  /**
+   * Phạm vi GHI trên trạng thái ĐÍCH (create/update sau merge).
+   *
+   * 🔒 LEO QUYỀN ĐÃ CHẶN (finding HIGH-1, FULL gate 2026-07-23 — có repro 201 nơi phải 403):
+   * `ownerEmployeeId` ở đường này do CLIENT khai, và khi vắng thì validator suy về CHÍNH ACTOR
+   * (`GoalsValidationService.resolveOwner`). Nếu chấp nhận vế "actor là người phụ trách" ở đây thì mọi
+   * trưởng đơn vị chỉ cần bỏ trống `ownerEmployeeId` là tạo được mục tiêu neo vào PHÒNG/DỰ ÁN BẤT KỲ
+   * (create:goal@Department ≈ @Company) rồi giữ nguyên quyền sửa/xoá vì vẫn là owner.
+   * ⇒ CREATE: chỉ chấp nhận neo trong phòng actor (`allowOwnerFallback = false`).
+   * ⇒ UPDATE: chấp nhận vế owner CHỈ KHI neo KHÔNG ĐỔI (`currentAnchorDepartmentId`) — giữ được quyền
+   *   sửa mục tiêu mình ĐƯỢC GIAO ở phòng khác, nhưng cấm dùng quyền owner để DI DỜI sang phòng thứ ba.
+   */
   private async assertWriteAllowed(
     tx: TenantTx,
     user: RequestUser,
     actor: GoalActorScope,
     resolved: ResolvedGoalWrite,
+    current?: { anchorDepartmentId: string | null },
   ): Promise<void> {
     if (actor.scope === "Company" || actor.scope === "System") return;
-    await this.assertWriteTarget(tx, user, actor, {
-      level: resolved.values.level,
-      projectId: resolved.values.projectId,
-      employeeId: resolved.values.employeeId,
-      ownerEmployeeId: resolved.values.ownerEmployeeId,
-      anchorDepartmentId: resolved.anchorDepartmentId,
-    });
+    const anchorUnchanged =
+      current !== undefined && current.anchorDepartmentId === resolved.anchorDepartmentId;
+    await this.assertWriteTarget(
+      tx,
+      user,
+      actor,
+      {
+        level: resolved.values.level,
+        projectId: resolved.values.projectId,
+        employeeId: resolved.values.employeeId,
+        ownerEmployeeId: resolved.values.ownerEmployeeId,
+        anchorDepartmentId: resolved.anchorDepartmentId,
+      },
+      anchorUnchanged,
+    );
   }
 
   /**
@@ -430,8 +471,13 @@ export class GoalsService {
    *      trong phòng"); đừng đổi thành throw sớm.
    *   2. Own        — CHỈ mục tiêu cá nhân của chính actor (nhân viên không tạo mục tiêu phòng/dự án).
    *   3. Department — neo nằm trong phòng actor (phòng mình ∪ phòng mình phụ trách) HOẶC actor là người
-   *                  phụ trách chính mục tiêu đó.
+   *                  phụ trách chính mục tiêu đó **và `allowOwnerFallback`**.
    * Không khớp ⇒ 403 (bản ghi vẫn tồn tại với actor — GOAL minh bạch in-tenant).
+   *
+   * `allowOwnerFallback` = "được phép dùng vế NGƯỜI PHỤ TRÁCH". Bật cho trạng thái ĐÃ LƯU (update/delete
+   * trên hàng hiện có, hoặc update không di dời neo); TẮT cho trạng thái ĐÍCH của CREATE — nơi
+   * `ownerEmployeeId` do client khai/suy về chính actor nên vế owner TỰ THOẢ (chi tiết ở
+   * `assertWriteAllowed`). Đừng gộp lại thành một luật "cho gọn".
    */
   private async assertWriteTarget(
     tx: TenantTx,
@@ -444,6 +490,7 @@ export class GoalsService {
       ownerEmployeeId: string;
       anchorDepartmentId: string | null;
     },
+    allowOwnerFallback: boolean,
   ): Promise<void> {
     if (target.level === "project" && target.projectId) {
       const membership = await this.projectAccess.getMembershipTx(
@@ -470,9 +517,21 @@ export class GoalsService {
       target.anchorDepartmentId !== null &&
       actor.deptOrgUnitIds.includes(target.anchorDepartmentId);
     const isOwner =
-      actor.actorEmployeeId !== null && target.ownerEmployeeId === actor.actorEmployeeId;
+      allowOwnerFallback &&
+      actor.actorEmployeeId !== null &&
+      target.ownerEmployeeId === actor.actorEmployeeId;
     if (inDepartment || isOwner) return;
     throw new ForbiddenException(GOAL_ERR.FORBIDDEN_CREATE);
+  }
+
+  /**
+   * GOAL-ERR-005 — goal đã chốt kỳ thì ĐÓNG BĂNG (SPEC-10 §12 · §15 GOAL-API-004).
+   * BE-1 chưa có writer cho `finalized_at` (chốt/reopen = S5-GOAL-BE-2) nên nhánh này CHƯA kích hoạt
+   * được qua API — nhưng route PATCH/DELETE đã LIVE, để trống là guard rơi giữa 2 WO: ngày BE-2 bật
+   * chốt kỳ thì hai đường ghi này vẫn sửa/xoá được số ĐÃ CHỐT. Giữ nguyên, đừng dọn vì "chưa dùng".
+   */
+  private assertNotFinalized(goal: Goal): void {
+    if (goal.finalizedAt) throw new UnprocessableEntityException(GOAL_ERR.FINALIZED);
   }
 
   /** Phòng ban SUY RA của một goal đã lưu (dự án → phòng dự án · nhân viên → phòng nhân viên). */

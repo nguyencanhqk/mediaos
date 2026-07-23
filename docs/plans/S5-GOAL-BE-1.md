@@ -5,8 +5,9 @@
 > Bảng `goals`/`goal_updates`, seed permission + counter `goal` + audit CHECK `'goal'` ĐÃ có từ
 > **S5-GOAL-DB-1** (migration 0504–0507). WO này **KHÔNG tạo file DB mới**.
 
-Trạng thái: **ĐÃ HIỆN THỰC** (lane `s5goalbe1`, worktree `../mediaos-s5goalbe1`) — 54 int-spec xanh trên
-DB cô lập `mediaos_s5goalbe1`; toàn bộ suite api xanh (219 unit-file/3395 test + 179 int-file/3196 test).
+Trạng thái: **ĐÃ HIỆN THỰC + ĐÃ QUA FULL GATE (vòng 2)** (lane `s5goalbe1`, worktree
+`../mediaos-s5goalbe1`) — 68 int-spec xanh trên DB cô lập `mediaos_s5goalbe1`; toàn bộ suite api xanh
+(219 unit-file/3395 test + 179 int-file/3213 test). Chi tiết gate + bản vá: **mục 8**.
 
 ---
 
@@ -62,7 +63,9 @@ Vị từ ĐỌC (`buildReadScopeExists`, scope < Company) = OR của 4 nhánh: 
 chủ thể (goal cá nhân) trong scope · `department_id ∈ phòng actor` · actor là member Active của dự án.
 
 Luật GHI khi scope < Company: `Own` ⇒ CHỈ goal cấp employee của chính actor · `Department` ⇒ neo nằm
-trong phòng actor HOẶC actor là người phụ trách.
+trong phòng actor **HOẶC** actor là người phụ trách — vế thứ hai chỉ dùng được khi `allowOwnerFallback`
+bật (D7): TẮT ở CREATE, bật ở update/delete trên bản ghi đã lưu, và ở UPDATE thì chỉ bật khi **neo
+không đổi** (được sửa mục tiêu mình được giao ở phòng khác, KHÔNG được di dời nó sang phòng thứ ba).
 
 **Gắn cha** = liên kết dữ liệu ⇒ `parent_goal_id` phải nằm trong phạm vi **('view','goal')** của actor
 (không phải phạm vi ghi): nhân viên treo mục tiêu cá nhân dưới mục tiêu PHÒNG MÌNH được, treo sang
@@ -78,6 +81,7 @@ phòng khác ⇒ 403.
 | D4  | `goal_code` cấp **trước** tx nghiệp vụ, **KHÔNG ensure-on-miss**                                                 | chỉ thị WO: counter đã seed 0506 cho MỌI company ⇒ thiếu là lỗi seed thật, phải nổ (khác pattern task_code). Validate lỗi ⇒ "đốt" 1 số (gap OK, cùng khuôn task_code) |
 | D5  | PATCH **merge rồi re-validate toàn bộ** (không patch từng field)                                                 | chống "đổi 1 cột làm vỡ bất biến mà CHECK Postgres vẫn cho qua" (vd đổi `level` giữ neo cũ ⇒ 422 GOAL-ERR-001)                                                        |
 | D6  | `deptOrgUnitIds` chỉ có giá trị khi scope = `Department`                                                         | scope `Own`/`Team` mà mang theo phòng ⇒ đọc/ghi được MỌI mục tiêu cấp phòng của phòng mình = nới quyền câm (đã dựng test regression, ĐÃ CHỨNG MINH ĐỎ trước khi vá)   |
+| D7  | Vế "actor là người phụ trách" của luật GHI phải qua cờ `allowOwnerFallback` (TẮT khi CREATE)                     | `ownerEmployeeId` do client khai, vắng thì suy về CHÍNH actor ⇒ để nguyên là vế owner TỰ THOẢ, biến `create:goal@Department` thành `@Company` (finding HIGH-1, mục 8) |
 
 ## 5. Bẫy đã xử lý
 
@@ -100,14 +104,18 @@ export LANE_DB=mediaos_s5goalbe1
 pnpm --filter @mediaos/contracts build            # dual ESM/CJS (chống stale-dist false-red)
 pnpm --filter @mediaos/api typecheck              # sạch
 pnpm --filter @mediaos/api lint                   # 0 error (43 warning tiền tồn ở file khác)
-npx vitest run test/integration/goal-be1-*.int-spec.ts   # 54 passed
+npx vitest run test/integration/goal-be1-*.int-spec.ts   # 68 passed (54 + 14 ca gate vòng 2)
 npx vitest run src                                # 219 file / 3395 test passed
-npx vitest run test/integration                   # 179 file / 3196 test passed (1 skip tiền tồn)
+npx vitest run test/integration                   # 179 file / 3213 test passed (1 skip tiền tồn)
 ```
 
 RED trước GREEN (bằng chứng): chạy 2 int-spec khi CHƯA có module ⇒ 18/19 fail với
 `Cannot POST /goals` (route chưa tồn tại). Riêng regression D6: revert đúng 4 dòng ⇒ test
 "view@Own KHÔNG thấy mục tiêu cấp phòng" ĐỎ, khôi phục ⇒ xanh.
+
+> ⚠️ Bẫy hạ tầng: `vitest run src` chạy song song có thể chết giữa chừng với
+> `ERR_IPC_CHANNEL_CLOSED` (crash worker, KHÔNG phải test đỏ). Chạy lại với `--no-file-parallelism`
+> mới ra kết luận thật.
 
 ## 7. Còn nợ / bàn giao
 
@@ -124,3 +132,29 @@ RED trước GREEN (bằng chứng): chạy 2 int-spec khi CHƯA có module ⇒ 
   lúc provisioning (KHÔNG vá bằng ensure-on-miss trong GoalsService).
 - **API-12 (GOAL API Design)**: cập nhật request/response thật của 7 endpoint theo file này — thuộc
   S5-GOAL-DOC-1.
+
+## 8. FULL gate (2026-07-23) — findings và cách xử lý
+
+Chạy trên commit `183e9fa7`: `security-reviewer` (domain permission) **BLOCK** +
+`rls-tenant-isolation-tester` **PASS** (0 CRITICAL/HIGH). Cả hai tự dựng probe chạy đường THẬT rồi xoá.
+
+| #                | Finding                                                                                                                                                                                                                                                                                                                                                                                                                              | Xử lý                                                                                                                                                                                                                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **HIGH-1**       | **Leo quyền GHI chéo phòng**: `ownerEmployeeId` vắng ⇒ validator suy về chính actor ⇒ vế `isOwner` TỰ THOẢ ở đường CREATE. Probe (role `manager`, grant `create/update/delete × goal @Department`): tạo goal cấp phòng cho PHÒNG KHÁC **201**, goal cấp dự án của dự án phòng khác **201**, rồi PATCH **200** / DELETE **204** — đều phải là 403. Grant thật trong DB xác nhận role canonical dính lỗ, không phải role bịa của test. | **ĐÃ VÁ** — thêm cờ `allowOwnerFallback` (D7): CREATE tắt · update/delete trên hàng đã lưu bật · UPDATE chỉ bật khi **neo không đổi** (cấm dùng quyền owner để di dời goal sang phòng thứ ba). `goals.service.ts`                                                                                   |
+| **HIGH-2**       | Deny-path thiếu đúng vector bị thủng: nhóm S2 chỉ phủ **UPDATE** goal phòng khác (owner là NGƯỜI KHÁC nên vô tình né lỗ), không có ca **CREATE** cross-department/cross-project.                                                                                                                                                                                                                                                     | **ĐÃ VÁ** — thêm nhóm `S2b` (8 ca): 4 deny (tạo goal phòng khác · dự án phòng khác · NV phòng khác · khai owner=mình vẫn 403) + 4 control chống vá quá tay (tạo cho phòng mình · goal cá nhân · sửa goal được giao ở phòng khác · nhưng cấm di dời).                                                |
+| MEDIUM-1 (sec)   | `GET /goals/tree` cắt câm ở 500 nút; nút mất-cha bị dựng thành nút GỐC ⇒ cây thiếu trông y hệt cây đủ.                                                                                                                                                                                                                                                                                                                               | **ĐÃ VÁ** — lấy `CAP + 1` để phát hiện tràn, trả **422 `GOAL-ERR-TREE-TOO-LARGE`** kèm hướng dẫn lọc hẹp.                                                                                                                                                                                           |
+| MEDIUM-2 (sec)   | GOAL-ERR-005 (đóng băng sau chốt kỳ) chưa ép ở PATCH/DELETE — route đã LIVE, guard rơi giữa BE-1 và BE-2.                                                                                                                                                                                                                                                                                                                            | **ĐÃ VÁ** — `assertNotFinalized` ở cả hai đường ghi + 2 int-spec (`S2c`). BE-2 chỉ việc dùng lại.                                                                                                                                                                                                   |
+| MEDIUM-1/2 (rls) | Lưới test cross-tenant thiếu 5 vector: PATCH `department_id`/`project_id`/`employee_id`/`owner_employee_id` và POST `owner_employee_id` ĐƠN LẺ (ca cũ gửi kèm `employeeId` nên nổ ở nhánh resolve TRƯỚC, nhánh owner chưa từng được kiểm thật).                                                                                                                                                                                      | **ĐÃ VÁ** — thêm 3 ca vào `S3` + 1 ca hậu kiểm bằng SQL "0 hàng của A trỏ sang thực thể của B".                                                                                                                                                                                                     |
+| MEDIUM-3 (sec)   | `nextCode` chạy trước kiểm phạm vi ⇒ request bị 403 vẫn "đốt" một số `goal_code`.                                                                                                                                                                                                                                                                                                                                                    | **KHÔNG SỬA (chủ ý)** — đây đúng khuôn nhà (`hr-write.service.ts` cũng `nextCode` trước `withTenant`); đưa xuống trong tx sẽ **xin connection lồng trong tx đang mở** (rủi ro cạn pool qua PgBouncer) để đổi lấy thứ không phải lỗ hổng: hệ quả chỉ là gap mã + counter phình. D4 đã chấp nhận gap. |
+| LOW-1 (sec)      | Nhánh `project_members` của `buildReadScopeExists` áp cho mọi scope, kể cả `Own` ⇒ member Viewer của dự án phòng khác đọc được goal dự án đó.                                                                                                                                                                                                                                                                                        | **KHÔNG SỬA** — đúng mẫu TASK đang chạy (`task-core.repository.ts`, DECISIONS-04 D-23/D-24); không role canonical nào có `view:goal @Own`. Siết một mình GOAL sẽ lệch chuẩn hai module. Nếu owner muốn siết ⇒ WO riêng sửa CẢ HAI.                                                                  |
+| LOW-2 (sec)      | Breadcrumb cha + `childCount` không lọc theo phạm vi đọc.                                                                                                                                                                                                                                                                                                                                                                            | **KHÔNG SỬA** — đúng quy ước "minh bạch in-tenant" của D1; docblock `assertParentVisible` đã ghi rõ để không bị siết nhầm.                                                                                                                                                                          |
+| LOW-2 (rls)      | `goals`/`goal_updates` chưa có policy `*_all_tenant_read` cho `mediaos_readonly` (bảng `tasks`/`projects` có).                                                                                                                                                                                                                                                                                                                       | **KHÔNG SỬA** — mặc định là DENY (an toàn), chỉ là khoảng trống tính năng cho surface operator; thuộc DB, không thuộc WO này.                                                                                                                                                                       |
+| LOW-3 (sec)      | File probe untracked còn sót trong worktree.                                                                                                                                                                                                                                                                                                                                                                                         | **ĐÃ DỌN** — cả hai reviewer tự xoá; `git status` sạch trước khi commit.                                                                                                                                                                                                                            |
+| LOW-4 (sec)      | `mapper` fallback câm (`weight ?? 1`, `createdAt ?? 1970`) trên cột `NOT NULL`.                                                                                                                                                                                                                                                                                                                                                      | **KHÔNG SỬA** — nhánh chết (DB đã NOT NULL); ghi nhận để BE-2 đừng nhân bản mẫu này.                                                                                                                                                                                                                |
+
+**Bằng chứng RED cho HIGH-1** = probe của gate chạy trên chính commit `183e9fa7` (201/200/204 nơi phải
+403). 4 ca deny mới ở `S2b` phủ đúng các vector đó và XANH sau vá; 4 ca control chứng minh luồng hợp lệ
+không bị vá quá tay. `rls-tenant-isolation-tester` đã đo tận DB: `goals`/`goal_updates` đều
+`RLS + FORCE`, app role không bypass, và **FK đơn cột thật sự KHÔNG ép cùng-tenant** (INSERT goal của A
+neo vào employee của B thành công ở tầng DB) ⇒ lớp resolve dưới `company_id` ở service là hàng phòng thủ
+DUY NHẤT — mọi WO GOAL sau phải đi qua đúng lớp đó.

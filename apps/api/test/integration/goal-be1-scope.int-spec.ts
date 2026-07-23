@@ -58,6 +58,7 @@ describe.skipIf(!hasLaneDb)(
     // org units
     let ouSales = "";
     let ouMkt = "";
+    let ouRnd = ""; // phòng THỨ BA — không phải phòng mgr, cũng không phải phòng của goal được giao
     // users
     let caUser = "";
     let mgrUser = "";
@@ -83,8 +84,11 @@ describe.skipIf(!hasLaneDb)(
     let tStrict = "";
     // fixtures A
     let projectSales = "";
+    let projectMkt = ""; // dự án của phòng KHÁC — mgr KHÔNG phải thành viên
     let gDeptSales = "";
     let gDeptMkt = "";
+    let gMktOwnedByMgr = ""; // goal phòng Marketing nhưng mgr ĐƯỢC GIAO phụ trách
+    let gFinalized = ""; // goal đã chốt kỳ (finalized_at) — GOAL-ERR-005
     let gEmp2 = "";
     let gEmp1 = "";
     // fixtures B (tenant khác)
@@ -242,6 +246,7 @@ describe.skipIf(!hasLaneDb)(
 
       ouSales = await seedOrgUnit(A.companyId, "Kinh doanh");
       ouMkt = await seedOrgUnit(A.companyId, "Marketing");
+      ouRnd = await seedOrgUnit(A.companyId, "Nghiên cứu");
 
       const mk = (name: string) => seedUser(direct, A.companyId, `${name}@${A.slug}.test`, hash);
       caUser = await mk("ca");
@@ -291,6 +296,14 @@ describe.skipIf(!hasLaneDb)(
         [A.companyId, projectSales, outUser, outEmp, memUser, memEmp],
       );
 
+      // Dự án của phòng Marketing — mgr (trưởng phòng Kinh doanh) KHÔNG có vai trò dự án nào ở đây.
+      const prMkt = await direct.query(
+        `INSERT INTO projects (company_id, name, status, department_id, owner_employee_id)
+       VALUES ($1,'Dự án Marketing','active',$2,$3) RETURNING id`,
+        [A.companyId, ouMkt, outEmp],
+      );
+      projectMkt = prMkt.rows[0].id as string;
+
       gDeptSales = await seedGoal(A.companyId, {
         code: "SEED-0001",
         name: "Mục tiêu phòng Kinh doanh",
@@ -319,6 +332,27 @@ describe.skipIf(!hasLaneDb)(
         employeeId: e1Emp,
         ownerEmployeeId: e1Emp,
       });
+
+      // Mgr ĐƯỢC GIAO phụ trách một mục tiêu của phòng KHÁC (kịch bản hợp lệ: giám đốc giao chéo phòng).
+      gMktOwnedByMgr = await seedGoal(A.companyId, {
+        code: "SEED-0005",
+        name: "Mục tiêu phòng Marketing (mgr phụ trách)",
+        level: "department",
+        departmentId: ouMkt,
+        ownerEmployeeId: mgrEmp,
+      });
+      // Goal ĐÃ CHỐT KỲ — BE-1 không có writer cho finalized_at nên set thẳng bằng direct pool.
+      gFinalized = await seedGoal(A.companyId, {
+        code: "SEED-0006",
+        name: "Mục tiêu đã chốt kỳ",
+        level: "department",
+        departmentId: ouSales,
+        ownerEmployeeId: mgrEmp,
+      });
+      await direct.query("UPDATE goals SET finalized_at = now(), finalized_by = $2 WHERE id = $1", [
+        gFinalized,
+        mgrUser,
+      ]);
 
       // Tenant B
       const bUser = await seedUser(direct, B.companyId, `admin@${B.slug}.test`, hash);
@@ -402,6 +436,119 @@ describe.skipIf(!hasLaneDb)(
         const res = await authPatch(tMgr, `/goals/${gDeptMkt}`).send({ name: "sửa bậy" });
         expect(res.status, JSON.stringify(res.body)).toBe(403);
       });
+
+      it("Trưởng phòng Kinh doanh XOÁ mục tiêu phòng Marketing ⇒ 403 (hàng còn nguyên)", async () => {
+        const res = await authDelete(tMgr, `/goals/${gDeptMkt}`);
+        expect(res.status, JSON.stringify(res.body)).toBe(403);
+        const row = await direct.query("SELECT deleted_at FROM goals WHERE id = $1", [gDeptMkt]);
+        expect(row.rows[0].deleted_at).toBeNull();
+      });
+    });
+
+    /**
+     * S2b. LEO QUYỀN GHI CHÉO PHÒNG qua "người phụ trách mặc định" — finding HIGH-1 của FULL gate
+     * (2026-07-23). `ownerEmployeeId` vắng ⇒ validator suy về CHÍNH ACTOR, nên vế "actor là người phụ
+     * trách" TỰ THOẢ trên đường CREATE: trước khi vá, 4 ca đầu trả 201/200/204 thay vì 403 —
+     * create:goal@Department ≈ @Company. Nhóm S2 cũ chỉ phủ UPDATE (owner là NGƯỜI KHÁC nên vô tình
+     * né đúng lỗ này) ⇒ giữ nguyên nhóm này khi refactor luật ghi.
+     */
+    describe("S2b. deny-path GHI chéo phòng (leo quyền qua owner mặc định)", () => {
+      it("Mgr TẠO mục tiêu cấp phòng cho phòng KHÁC ⇒ 403", async () => {
+        const res = await authPost(tMgr, "/goals").send({
+          name: "Mục tiêu cắm sang phòng Marketing",
+          level: "department",
+          departmentId: ouMkt,
+          ...PERIOD,
+        });
+        expect(res.status, JSON.stringify(res.body)).toBe(403);
+      });
+
+      it("Mgr TẠO mục tiêu cấp dự án cho dự án phòng KHÁC (không có vai trò dự án) ⇒ 403", async () => {
+        const res = await authPost(tMgr, "/goals").send({
+          name: "Mục tiêu cắm vào dự án Marketing",
+          level: "project",
+          projectId: projectMkt,
+          ...PERIOD,
+        });
+        expect(res.status, JSON.stringify(res.body)).toBe(403);
+      });
+
+      it("Mgr TẠO mục tiêu cho nhân viên phòng KHÁC ⇒ 403", async () => {
+        const res = await authPost(tMgr, "/goals").send({
+          name: "Mục tiêu áp cho NV phòng Marketing",
+          level: "employee",
+          employeeId: outEmp,
+          ...PERIOD,
+        });
+        expect(res.status, JSON.stringify(res.body)).toBe(403);
+      });
+
+      it("Mgr KHÔNG mượn được quyền owner để tạo: khai ownerEmployeeId = chính mình vẫn 403", async () => {
+        const res = await authPost(tMgr, "/goals").send({
+          name: "Mục tiêu phòng khác nhưng tôi phụ trách",
+          level: "department",
+          departmentId: ouMkt,
+          ownerEmployeeId: mgrEmp,
+          ...PERIOD,
+        });
+        expect(res.status, JSON.stringify(res.body)).toBe(403);
+      });
+
+      // ── control: chống vá quá tay (luồng hợp lệ PHẢI còn sống) ──────────────────
+      it("control — Mgr tạo mục tiêu cho phòng MÌNH ⇒ 201", async () => {
+        const res = await authPost(tMgr, "/goals").send({
+          name: "Mục tiêu phòng Kinh doanh (mgr tạo)",
+          level: "department",
+          departmentId: ouSales,
+          ...PERIOD,
+        });
+        expect(res.status, JSON.stringify(res.body)).toBe(201);
+      });
+
+      it("control — Mgr tạo mục tiêu CÁ NHÂN của chính mình ⇒ 201", async () => {
+        const res = await authPost(tMgr, "/goals").send({
+          name: "Mục tiêu cá nhân của mgr",
+          level: "employee",
+          employeeId: mgrEmp,
+          ...PERIOD,
+        });
+        expect(res.status, JSON.stringify(res.body)).toBe(201);
+      });
+
+      it("control — Mgr SỬA được mục tiêu phòng khác mà mình ĐƯỢC GIAO phụ trách ⇒ 200", async () => {
+        const res = await authPatch(tMgr, `/goals/${gMktOwnedByMgr}`).send({
+          name: "Mục tiêu phòng Marketing (mgr sửa)",
+        });
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+      });
+
+      it("nhưng KHÔNG được dùng quyền owner để DI DỜI neo sang phòng thứ ba ⇒ 403", async () => {
+        const res = await authPatch(tMgr, `/goals/${gMktOwnedByMgr}`).send({
+          departmentId: ouRnd,
+        });
+        expect(res.status, JSON.stringify(res.body)).toBe(403);
+        const row = await direct.query("SELECT department_id FROM goals WHERE id = $1", [
+          gMktOwnedByMgr,
+        ]);
+        expect(row.rows[0].department_id).toBe(ouMkt);
+      });
+    });
+
+    // ── S2c. GOAL-ERR-005 — goal đã chốt kỳ thì đóng băng (SPEC-10 §12/§15) ────────
+    describe("S2c. goal đã chốt kỳ ⇒ cấm sửa/xoá", () => {
+      it("PATCH goal đã chốt ⇒ 422 GOAL-ERR-005", async () => {
+        const res = await authPatch(tCa, `/goals/${gFinalized}`).send({ name: "sửa sau chốt" });
+        expect(res.status, JSON.stringify(res.body)).toBe(422);
+        expect(JSON.stringify(res.body)).toContain("GOAL-ERR-005");
+      });
+
+      it("DELETE goal đã chốt ⇒ 422 GOAL-ERR-005 (hàng còn nguyên)", async () => {
+        const res = await authDelete(tCa, `/goals/${gFinalized}`);
+        expect(res.status, JSON.stringify(res.body)).toBe(422);
+        expect(JSON.stringify(res.body)).toContain("GOAL-ERR-005");
+        const row = await direct.query("SELECT deleted_at FROM goals WHERE id = $1", [gFinalized]);
+        expect(row.rows[0].deleted_at).toBeNull();
+      });
     });
 
     // ── S3. Cross-tenant ⇒ 404 (kể cả scope Company) ───────────────────────────────
@@ -454,6 +601,51 @@ describe.skipIf(!hasLaneDb)(
       it("PATCH goal nội bộ trỏ parent sang công ty khác ⇒ 404", async () => {
         const res = await authPatch(tCa, `/goals/${gEmp1}`).send({ parentGoalId: gB });
         expect(res.status, JSON.stringify(res.body)).toBe(404);
+      });
+
+      /**
+       * Đường PATCH của TỪNG neo — trước đây chỉ phủ `parentGoalId`. FK đơn cột KHÔNG ép cùng-tenant
+       * (đo ở tầng DB: `INSERT goals(employee_id = <emp công ty B>)` THÀNH CÔNG với role app) ⇒ lớp
+       * resolve dưới company_id ở service là hàng phòng thủ DUY NHẤT. Mỗi neo phải có ca riêng, kẻo
+       * gỡ nhầm một nhánh resolve mà suite vẫn xanh.
+       */
+      it("PATCH đổi department_id / project_id / employee_id sang công ty khác ⇒ 404", async () => {
+        const r1 = await authPatch(tCa, `/goals/${gDeptSales}`).send({ departmentId: bOrgUnit });
+        expect(r1.status, JSON.stringify(r1.body)).toBe(404);
+        const r2 = await authPatch(tCa, `/goals/${gDeptSales}`).send({
+          level: "project",
+          departmentId: null,
+          projectId: bProject,
+        });
+        expect(r2.status, JSON.stringify(r2.body)).toBe(404);
+        const r3 = await authPatch(tCa, `/goals/${gEmp1}`).send({ employeeId: bEmp });
+        expect(r3.status, JSON.stringify(r3.body)).toBe(404);
+      });
+
+      it("owner_employee_id của công ty khác ⇒ 404 (POST và PATCH, ĐƠN LẺ)", async () => {
+        // ĐƠN LẺ = không kèm employeeId chéo tenant, để 404 chắc chắn đến từ nhánh resolve OWNER
+        // (ca cũ gửi cả hai ⇒ nổ ở resolveEmployee trước, nhánh owner không được kiểm thật).
+        const post = await authPost(tCa, "/goals").send({
+          name: "owner chéo tenant",
+          level: "department",
+          departmentId: ouSales,
+          ownerEmployeeId: bEmp,
+          ...PERIOD,
+        });
+        expect(post.status, JSON.stringify(post.body)).toBe(404);
+        const patch = await authPatch(tCa, `/goals/${gDeptSales}`).send({ ownerEmployeeId: bEmp });
+        expect(patch.status, JSON.stringify(patch.body)).toBe(404);
+      });
+
+      it("KHÔNG hàng nào của A trỏ sang thực thể của B sau loạt thử trên", async () => {
+        const r = await direct.query(
+          `SELECT count(*)::int AS n FROM goals g
+             WHERE g.company_id = $1
+               AND (g.department_id = $2 OR g.project_id = $3
+                    OR g.employee_id = $4 OR g.owner_employee_id = $4 OR g.parent_goal_id = $5)`,
+          [A.companyId, bOrgUnit, bProject, bEmp, gB],
+        );
+        expect(r.rows[0].n).toBe(0);
       });
     });
 
