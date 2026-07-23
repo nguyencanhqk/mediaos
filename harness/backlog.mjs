@@ -7925,6 +7925,7 @@ export const backlog = [
       "docs/plans/S5-LMS-WAVE.md §4 B06 (KHÔNG lưu DB — proxy + cache; token LMS_SYNC_TOKEN từ env.schema đã thêm ở BE-1)",
       "mẫu 503-thiếu-env + gate: apps/api/src/integrations/lms/lms-sso.controller.ts (@RequirePermission access,lms)",
       "memory: reused-method-must-be-actor-scoped (own-scope resolve từ token) + apifetch-drops-pagination-bare-array (schema contracts khớp shape thật)",
+      "security-review S5-LMS-APP-3 (2026-07-23) M3 — BẮT BUỘC: LMS trả tiến độ của BẤT KỲ email nào cho ai giữ token ⇒ toàn bộ kiểm soát 'đúng người' nằm ở MediaOS. Email PHẢI resolve từ session/JWT phía server, CẤM nhận email/employeeId từ query·body·header (nếu không = IDOR). Bearer dùng MEDIAOS_PROGRESS_TOKEN (token ĐỌC riêng của LMS), KHÔNG phải LMS_SYNC_TOKEN; endpoint LMS 503 nếu owner chưa đặt biến đó",
     ],
     done_when: [
       "GET /me/training trả DTO qua packages/contracts (KHÔNG trả raw JSON LMS); email lấy từ JWT — bơm query/body employee/email lạ KHÔNG đổi kết quả; thiếu env → 503; LMS chết/timeout → 502 sạch có mã lỗi, không treo request (timeout client-side)",
