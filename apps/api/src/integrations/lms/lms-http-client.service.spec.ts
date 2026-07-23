@@ -198,8 +198,35 @@ describe("LmsHttpClient", () => {
       expect((await new LmsHttpClient().syncUsers(usersOf(1))).unknown).toBe(true);
     });
 
+    it("content-type KHÔNG phải JSON (proxy trả HTML) → unknown:true, KHÔNG đọc body", async () => {
+      const res = new Response("<html>maintenance</html>", {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      });
+      const json = vi.spyOn(res, "json");
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(res);
+
+      expect((await new LmsHttpClient().syncUsers(usersOf(1))).unknown).toBe(true);
+      expect(json).not.toHaveBeenCalled();
+    });
+
+    it("content-length vượt ngưỡng → unknown:true, KHÔNG đọc body", async () => {
+      const res = new Response("{}", {
+        status: 200,
+        headers: { "content-type": "application/json", "content-length": String(64 * 1024 + 1) },
+      });
+      const json = vi.spyOn(res, "json");
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(res);
+
+      expect((await new LmsHttpClient().syncUsers(usersOf(1))).unknown).toBe(true);
+      expect(json).not.toHaveBeenCalled();
+    });
+
     it("6) res.json() reject (AbortError) → unknown:true, KHÔNG throw (2xx không bị hạ cấp)", async () => {
-      const res = new Response(null, { status: 200 });
+      const res = new Response(null, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
       vi.spyOn(res, "json").mockRejectedValue(
         Object.assign(new Error("The operation was aborted"), { name: "AbortError" }),
       );
@@ -213,8 +240,12 @@ describe("LmsHttpClient", () => {
       const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
       const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
       // V8 nhét tiền tố body vào message của SyntaxError → nếu log err.message là RÒ.
+      // content-type JSON hợp lệ nhưng body hỏng ⇒ đi ĐÚNG vào nhánh JSON.parse (không bị chặn sớm).
       vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response('{"leak":"nhanvien@funtime.vn"', { status: 200 }),
+        new Response('{"leak":"nhanvien@funtime.vn"', {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
       );
 
       await new LmsHttpClient().syncUsers(usersOf(1));

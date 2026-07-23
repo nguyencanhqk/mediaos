@@ -41,6 +41,8 @@ const SUMMARY_COUNTERS = [
 ] as const;
 
 const REQUEST_TIMEOUT_MS = 10_000;
+/** Summary là ~6 số ⇒ vài trăm byte. Ngưỡng rộng rãi, chỉ để chặn body bất thường. */
+const MAX_SUMMARY_BODY_BYTES = 64 * 1024;
 
 function zeroSummary(unknown = false): LmsSyncSummary {
   return {
@@ -109,6 +111,21 @@ export class LmsHttpClient {
       // KHÔNG đọc/log response body (có thể vọng lại email). Chỉ status. Ném để được retry.
       this.logger.warn(`LMS sync trả HTTP ${res.status}`);
       throw new Error(`LMS sync HTTP ${res.status}`);
+    }
+
+    // Đọc body là NĂNG LỰC MỚI của WO này (trước đây không bao giờ đọc) ⇒ chặn 2 ca rẻ tiền trước khi
+    // parse: sai content-type (proxy trả HTML) và body khổng lồ (áp lực bộ nhớ tiến trình API).
+    // Residual đã biết: chunked KHÔNG có content-length thì ngưỡng này không áp được — chấp nhận vì LMS
+    // là service của chính ta trên localhost, và mọi ca lọt lưới vẫn kết thúc ở `unknown` (fail-safe).
+    const contentType = res.headers.get("content-type") ?? "";
+    const declaredBytes = Number(res.headers.get("content-length"));
+    if (!contentType.includes("application/json")) {
+      this.logger.warn("LMS sync: response không phải JSON — coi như unknown");
+      return zeroSummary(true);
+    }
+    if (Number.isFinite(declaredBytes) && declaredBytes > MAX_SUMMARY_BODY_BYTES) {
+      this.logger.warn("LMS sync: response vượt ngưỡng kích thước — coi như unknown");
+      return zeroSummary(true);
     }
 
     // try RIÊNG cho body-read, TÁCH khỏi try bọc fetch: `AbortSignal.timeout` ở trên vẫn còn hiệu lực

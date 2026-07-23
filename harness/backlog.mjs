@@ -8000,6 +8000,7 @@ export const backlog = [
       "Unit RED-trước: summary toàn existing/skipped/alreadyDisabled → audit.record KHÔNG được gọi (test chính) · created/reactivated/deactivated>0 → có audit · lô hỗn hợp (lô ok có thay đổi + lô throw) → audit Failure KHÔNG nuốt thay đổi · body null/shape lạ/counter sai kiểu → unknown:true KHÔNG throw · !res.ok vẫn throw và KHÔNG đọc body · N nhịp liên tiếp cùng trạng thái bất thường → ĐÚNG 1 audit",
       "int-spec PHẢI reset audit_logs trong beforeEach qua direct pool (không thì I13 đỏ vì I9 đã ghi trước — app role KHÔNG có DELETE, BẤT BIẾN #2); nghiệm thu bằng `bash harness/check.sh --lane-db`, KHÔNG phải `pnpm test`",
       "Nghiệm thu tay LMS CHỈ dùng email tổng hợp @funtime.invalid + backup app.db trước, dọn account rác sau — CẤM chạy thử trên tài khoản nhân viên thật (nhánh active:false xoá session + xáo mật khẩu)",
+      "THỨ TỰ DEPLOY BẮT BUỘC: LMS (§3C) TRƯỚC, MediaOS (PR) SAU — cả 2 reviewer độc lập chỉ ra: MediaOS-trước thì LMS cũ vẫn tăng deactivated mỗi nhịp ⇒ changed>0 mỗi 60s ⇒ bom 526k dòng/năm quay lại y nguyên",
       "FULL gate (security + database + silent-failure + santa-method) PASS; verify PROD: đếm audit lms_sync đứng yên qua ≥3 nhịp job trong khi system_job_runs vẫn tăng",
     ],
   },

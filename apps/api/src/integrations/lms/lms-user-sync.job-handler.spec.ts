@@ -27,7 +27,9 @@ function makeDeps(rows: unknown[]) {
       from: () => ({ innerJoin: () => ({ where: () => Promise.resolve(rows) }) }),
     }),
   };
-  const db = { withTenant: vi.fn((_c: string, fn: (tx: unknown) => Promise<unknown>) => fn(fakeTx)) };
+  const db = {
+    withTenant: vi.fn((_c: string, fn: (tx: unknown) => Promise<unknown>) => fn(fakeTx)),
+  };
   const audit = { record: vi.fn().mockResolvedValue(undefined) };
   const http = {
     isEnabled: vi.fn().mockReturnValue(true),
@@ -42,7 +44,11 @@ function makeHandler(deps: ReturnType<typeof makeDeps>) {
 }
 
 function rowsOf(n: number) {
-  return Array.from({ length: n }, (_, i) => ({ email: `u${i}@x.co`, name: `U${i}`, active: true }));
+  return Array.from({ length: n }, (_, i) => ({
+    email: `u${i}@x.co`,
+    name: `U${i}`,
+    active: true,
+  }));
 }
 
 describe("LmsUserSyncJobHandler", () => {
@@ -107,6 +113,8 @@ describe("LmsUserSyncJobHandler", () => {
       deactivated: 1,
       unknown: false,
       auditPhase: "changed",
+      recovered: false,
+      carriedOver: false,
     });
     expect(JSON.stringify(entry)).not.toContain("a@x.co");
   });
@@ -260,6 +268,99 @@ describe("LmsUserSyncJobHandler", () => {
     await handler.run({ companyId: LMS_CO });
 
     expect(deps.audit.record).toHaveBeenCalledTimes(2);
+  });
+
+  // ── silent-failure-hunter F1 (HIGH): pha `changed` KHÔNG tự retry được như pha `abnormal` ──
+  // Thay đổi là sự kiện NHẤT THỜI + LMS idempotent ⇒ nhịp sau created/deactivated đã thành
+  // existing/alreadyDisabled ⇒ changed=0 ⇒ không nhịp nào tái tạo dòng audit đã mất.
+  it("20d) audit.record ném ở nhịp CÓ THAY ĐỔI → nhịp sau (LMS đã idempotent) VẪN ghi bù, không mất dấu vết", async () => {
+    const deps = makeDeps(rowsOf(1));
+    deps.http.syncUsers.mockResolvedValueOnce(summary({ deactivated: 1 }));
+    deps.audit.record.mockRejectedValueOnce(new Error("audit write failed"));
+    const handler = makeHandler(deps);
+
+    await expect(handler.run({ companyId: LMS_CO })).rejects.toThrow(/audit write failed/);
+
+    // Nhịp sau: LMS báo "vốn đã khoá" ⇒ changed của CHÍNH nhịp này = 0.
+    deps.http.syncUsers.mockResolvedValue(summary({ alreadyDisabled: 1 }));
+    await handler.run({ companyId: LMS_CO });
+
+    expect(deps.audit.record).toHaveBeenCalledTimes(2);
+    expect(deps.audit.record.mock.calls[1][1].metadata).toMatchObject({
+      deactivated: 1,
+      auditPhase: "changed",
+      carriedOver: true,
+    });
+  });
+
+  it("20e) ghi bù XONG thì xoá nợ — nhịp thứ ba không ghi lại lần nữa", async () => {
+    const deps = makeDeps(rowsOf(1));
+    deps.http.syncUsers.mockResolvedValueOnce(summary({ created: 1 }));
+    deps.audit.record.mockRejectedValueOnce(new Error("audit write failed"));
+    const handler = makeHandler(deps);
+
+    await expect(handler.run({ companyId: LMS_CO })).rejects.toThrow();
+    deps.http.syncUsers.mockResolvedValue(summary({ existing: 1 }));
+    await handler.run({ companyId: LMS_CO }); // ghi bù
+    await handler.run({ companyId: LMS_CO }); // KHÔNG được ghi nữa
+
+    expect(deps.audit.record).toHaveBeenCalledTimes(2);
+  });
+
+  it("F3) sự cố CHỈ-unknown (failed=0) → resultStatus 'Error', KHÔNG phải 'Success'", async () => {
+    const deps = makeDeps(rowsOf(1));
+    deps.http.syncUsers.mockResolvedValue(summary({ unknown: true }));
+    await makeHandler(deps).run({ companyId: LMS_CO });
+
+    // Nếu để "Success", mọi alert lọc theo cột trạng thái sẽ MÙ với nhóm sự cố này.
+    expect(deps.audit.record.mock.calls[0][1].resultStatus).toBe("Error");
+  });
+
+  it("F5) hồi phục TRÙNG nhịp có thay đổi → nhãn 'changed' nhưng metadata.recovered = true (đóng ngoặc sự cố)", async () => {
+    const deps = makeDeps(rowsOf(1));
+    const handler = makeHandler(deps);
+
+    deps.http.syncUsers.mockRejectedValue(new Error("LMS sync HTTP 503"));
+    await handler.run({ companyId: LMS_CO }); // abnormal
+    deps.http.syncUsers.mockResolvedValue(summary({ created: 1 }));
+    await handler.run({ companyId: LMS_CO }); // hồi phục + có thay đổi
+
+    const entry = deps.audit.record.mock.calls[1][1];
+    expect(entry.metadata).toMatchObject({ auditPhase: "changed", recovered: true });
+    // Và sự cố đã ĐÓNG thật: nhịp sạch tiếp theo không sinh dòng 'recovered' thừa.
+    deps.http.syncUsers.mockResolvedValue(summary({ existing: 1 }));
+    await handler.run({ companyId: LMS_CO });
+    expect(deps.audit.record).toHaveBeenCalledTimes(2);
+  });
+
+  it("F7) WARN unknown log LẠI ở sự cố THỨ HAI (warn 1 lần mỗi SỰ CỐ, không phải mỗi process)", async () => {
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    const deps = makeDeps(rowsOf(1));
+    const handler = makeHandler(deps);
+    const countUnknownWarns = () =>
+      warn.mock.calls.filter((c) => String(c[0]).includes("unknown")).length;
+
+    deps.http.syncUsers.mockResolvedValue(summary({ unknown: true }));
+    await handler.run({ companyId: LMS_CO });
+    expect(countUnknownWarns()).toBe(1);
+
+    deps.http.syncUsers.mockResolvedValue(summary({ existing: 1 })); // hồi phục
+    await handler.run({ companyId: LMS_CO });
+
+    deps.http.syncUsers.mockResolvedValue(summary({ unknown: true })); // sự cố MỚI
+    await handler.run({ companyId: LMS_CO });
+    expect(countUnknownWarns()).toBe(2);
+  });
+
+  it("F9) summary thiếu counter (object rỗng) → unknown, KHÔNG để NaN nuốt im lặng", async () => {
+    const deps = makeDeps(rowsOf(1));
+    deps.http.syncUsers.mockResolvedValue({ unknown: false } as never);
+    await makeHandler(deps).run({ companyId: LMS_CO });
+
+    expect(deps.audit.record).toHaveBeenCalledTimes(1);
+    const entry = deps.audit.record.mock.calls[0][1];
+    expect(entry.metadata).toMatchObject({ unknown: true, created: 0 });
+    expect(JSON.stringify(entry.metadata)).not.toContain("null"); // NaN → null trong jsonb
   });
 
   it("21) 5 nhịp liên tiếp failed → ĐÚNG 1 audit", async () => {
