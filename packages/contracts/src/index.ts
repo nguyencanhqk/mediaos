@@ -162,3 +162,6 @@ export * from "./dashboard-config";
 // SPEC-09 §13) + MeIdentity/MeOverview/*Summary + ME_ERROR_CODES (ME-ERR-DATA-INCONSISTENT §12.4).
 // TÊN export riêng (me*/Me*/ME_ERROR_CODES) KHÔNG trùng barrel hiện có → không vỡ.
 export * from "./me";
+// S5-GOAL-BE-1 (additive): GOAL contracts — enum DB-11 §7 + create/update/list/tree/me query +
+// goalCoreResponse/goalDetail/goalTreeNode (đệ quy). Tên export riêng (goal*/Goal*/GOAL_*) không đụng barrel.
+export * from "./goal";

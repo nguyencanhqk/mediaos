@@ -29,6 +29,8 @@ import { SchedulerModule } from "./scheduler/scheduler.module";
 import { RecycleBinModule } from "./recycle-bin/recycle-bin.module";
 import { MeModule } from "./me/me.module";
 import { IntegrationsLmsModule } from "./integrations/lms/lms.module";
+// S5-GOAL-BE-1 (additive): GoalsModule — cây mục tiêu 3 cấp + /me/goals (SPEC-10 / DB-11).
+import { GoalsModule } from "./goals/goals.module";
 import { JwtAuthGuard } from "./permission/guards/jwt-auth.guard";
 import { CompanyGuard } from "./permission/guards/company.guard";
 import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
@@ -81,6 +83,9 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     MeModule,
     // Giai đoạn A tích hợp LMS (fmc-app): cầu SSO — phát token HMAC 60s cho chính user đang đăng nhập.
     IntegrationsLmsModule,
+    // S5-GOAL-BE-1 (additive): module GOAL (SPEC-10) — CRUD cây mục tiêu 3 cấp + GET /goals/tree +
+    // GET /me/goals own-scope. Tái dùng ProjectAccessService của TasksModule cho goal cấp dự án.
+    GoalsModule,
   ],
   providers: [
     // Global guard pipeline (THỨ TỰ QUAN TRỌNG):
