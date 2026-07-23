@@ -531,6 +531,13 @@ export class TaskCoreService {
         },
       });
 
+      // S5-GOAL-BE-2 (SPEC-10 §13.3) — VIỆC MỚI LÀM ĐỔI MẪU SỐ của mục tiêu mode='project' trong dự án
+      // đó (đếm-lá D-35: thêm việc con còn làm CHA rớt khỏi tập lá). Không móc ở đây thì tiến độ mục
+      // tiêu đứng yên cho tới lần đổi trạng thái đầu tiên hoặc tới lượt job đêm — sai trong nhiều giờ
+      // mà nhìn vẫn "hợp lý". Task mới KHÔNG thể mang sẵn `goal_id` (DTO không có field đó) nên chỉ
+      // cần nhánh 'project'.
+      await this.goalProgress.recomputeProjectGoalsTx(tx, user.companyId, effectiveProjectId);
+
       return this.reload(tx, user.companyId, created.id);
     });
   }

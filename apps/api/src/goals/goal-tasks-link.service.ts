@@ -1,12 +1,15 @@
 import { Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import type {
+  DataScope,
   GoalTaskLinkResultDto,
   LinkGoalTasksRequest,
   TaskCoreResponseDto,
 } from "@mediaos/contracts";
+import type { SQL } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { DataScopeService } from "../permission/data-scope.service";
+import { ProjectAccessService } from "../tasks/project-access.service";
 import { GoalProgressEngineService } from "../tasks/goal-progress-engine.service";
 import { TaskCoreRepository } from "../tasks/task-core.repository";
 import { toTaskCoreDto } from "../tasks/task-core.mapper";
@@ -50,6 +53,7 @@ export class GoalTasksLinkService {
     private readonly audit: AuditService,
     private readonly dataScope: DataScopeService,
     private readonly taskCore: TaskCoreRepository,
+    private readonly projectAccess: ProjectAccessService,
   ) {}
 
   /**
@@ -73,7 +77,7 @@ export class GoalTasksLinkService {
         "read",
         "task",
       );
-      let scopeExists;
+      let scopeExists: SQL | undefined;
       if (taskScope !== "Company" && taskScope !== "System") {
         const ctx = await this.dataScope.resolveContext(user.id, user.companyId);
         const actorEmp = await this.taskCore.findActiveEmployeeByUserTx(
@@ -108,6 +112,7 @@ export class GoalTasksLinkService {
     const taskIds = [...new Set(dto.taskIds)];
     return this.db.withTenant(user.companyId, async (tx) => {
       const goal = await this.loadWritableGoalTx(tx, user, goalId);
+      const taskScope = await this.resolveTaskWriteScope(user);
 
       const warnings: GoalTaskLinkResultDto["warnings"] = [];
       const previousGoalIds = new Set<string>();
@@ -118,6 +123,7 @@ export class GoalTasksLinkService {
       for (const taskId of taskIds) {
         const task = await this.repo.resolveTaskRefTx(tx, user.companyId, taskId);
         if (!task) throw new NotFoundException(GOAL_ERR.REF_NOT_FOUND("công việc"));
+        await this.assertTaskWritableTx(tx, user, taskId, taskScope);
         this.assertLinkAllowed(goal, task, warnings);
 
         if (task.goalId === goalId) {
@@ -160,8 +166,10 @@ export class GoalTasksLinkService {
   ): Promise<GoalTaskLinkResultDto> {
     return this.db.withTenant(user.companyId, async (tx) => {
       await this.loadWritableGoalTx(tx, user, goalId);
+      const taskScope = await this.resolveTaskWriteScope(user);
       const task = await this.repo.resolveTaskRefTx(tx, user.companyId, taskId);
       if (!task) throw new NotFoundException(GOAL_ERR.REF_NOT_FOUND("công việc"));
+      await this.assertTaskWritableTx(tx, user, taskId, taskScope);
 
       const cleared = await this.repo.clearTaskGoalTx(tx, user.companyId, taskId, goalId, user.id);
       if (!cleared)
@@ -181,6 +189,32 @@ export class GoalTasksLinkService {
   }
 
   // ── Nội bộ ───────────────────────────────────────────────────────────────────
+
+  /**
+   * 🔒 CỔNG THỨ HAI — PHÍA TASK (finding gate S5-GOAL-BE-2, tự soi).
+   *
+   * Gắn/tháo GHI THẲNG cột `tasks.goal_id` ⇒ đây là một phép GHI LÊN TASK, không chỉ lên mục tiêu.
+   * Nếu chỉ gate `('update','goal')` thì một trưởng đơn vị có `update:goal @Department` gắn được
+   * **BẤT KỲ** công việc nào trong tenant vào mục tiêu CẤP PHÒNG của mình (vế `department` của
+   * GOAL-ERR-008 chỉ cảnh báo mềm, không chặn) — tức là sửa hàng `tasks` của phòng khác, và làm thẻ
+   * việc của người ta hiện tên mục tiêu của mình. Vì vậy phải qua ĐÚNG cặp `('update','task')` + vị từ
+   * scope mode `'write'` của TASK, dùng LẠI `ProjectAccessService` (một nguồn logic — KHÔNG copy thân hàm).
+   *
+   * ⚠️ Ngoài phạm vi ⇒ **404** (quy ước fail-closed của TASK), KHÁC quy ước 403-minh-bạch-in-tenant của
+   * GOAL. Hai module hai quy ước — đây là ranh giới, đừng "thống nhất cho gọn".
+   */
+  private resolveTaskWriteScope(user: RequestUser): Promise<DataScope> {
+    return this.dataScope.resolveAndAssert(user.id, user.companyId, "update", "task");
+  }
+
+  private assertTaskWritableTx(
+    tx: TenantTx,
+    user: RequestUser,
+    taskId: string,
+    taskScope: DataScope,
+  ): Promise<void> {
+    return this.projectAccess.assertTaskInScopeTx(tx, user, taskId, taskScope, "write");
+  }
 
   /** GOAL-ERR-008 — CHẶN cho employee/project, CẢNH BÁO MỀM cho department (SPEC-10 §12). */
   private assertLinkAllowed(

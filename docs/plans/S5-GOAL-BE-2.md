@@ -6,9 +6,10 @@
 > Nền: **S5-GOAL-DB-1** (migration 0504–0507) + **S5-GOAL-BE-1** (PR #263 — CRUD/cây/scope).
 > WO này **KHÔNG tạo migration** (band 0510+ đã có WO khác giữ chỗ) — chỉ code.
 
-Trạng thái: **ĐÃ HIỆN THỰC + XANH** (lane `s5goalbe2`, worktree `../mediaos-s5goalbe2`, DB cô lập
-`mediaos_s5goalbe2`). 33 int-spec BE-2 mới + 17 unit-spec engine; 69 int-spec BE-1 giữ nguyên XANH;
-toàn bộ suite `apps/api` xanh (220 unit-file/3412 test · 183 int-file/3247 test).
+Trạng thái: **ĐÃ HIỆN THỰC + ĐÃ QUA FULL GATE (tự soi, 3 finding đã vá)** (lane `s5goalbe2`, worktree
+`../mediaos-s5goalbe2`, DB cô lập `mediaos_s5goalbe2`). 35 int-spec BE-2 mới + 17 unit-spec engine;
+69 int-spec BE-1 giữ nguyên XANH; toàn bộ suite `apps/api` xanh (220 unit-file/3412 test ·
+181 int-file/3248 test). Findings + bằng chứng: **mục 8**.
 
 ---
 
@@ -75,6 +76,7 @@ KHÔNG đụng: `apps/api/migrations/**`, `src/db/schema/**`, seed permission, a
 | `TaskCoreService.updateTask`                      | đổi `projectId` ⇒ recompute goal mode='project' của dự án **CŨ + MỚI**; + goal của task     |
 | `TaskCoreService.deleteTask`                      | recompute goal của **từng con** vừa xoá lan + goal của cha + goal mode='project'             |
 | `GoalsService.createGoal/updateGoal/deleteGoal`   | recompute chính nó **+ `recomputeParentTx`** (xem bẫy B1)                                    |
+| `TaskCoreService.createTask`                      | `recomputeProjectGoalsTx(effectiveProjectId)` — việc MỚI đổi MẪU SỐ mode='project' (F2)       |
 | `GoalCheckinService.checkIn/finalize/reopen`      | recompute trước khi ghi sổ (finalize: recompute lần cuối TRƯỚC khi đóng băng)                |
 | `GoalTasksLinkService.linkTasks/unlinkTask`       | recompute goal MỚI + goal CŨ của từng task + goal mode='project' của dự án liên quan         |
 
@@ -141,3 +143,51 @@ Bằng chứng RED trước GREEN: (a) B1 ở trên — test đỏ với số sa
 - **API-12 (GOAL API Design)**: bổ sung request/response thật của 6 endpoint mới — thuộc S5-GOAL-DOC-1.
 - **Giới hạn đã biết**: `GET /goals/:id/tasks` cắt ở 200 việc/lần (chưa phân trang); bulk link tối đa
   `GOAL_LINK_TASKS_MAX = 100` id/lần.
+
+## 8. FULL gate (2026-07-24) — tự soi, 3 finding đã vá
+
+Sub-agent reviewer KHÔNG khả dụng trong phiên này (tool `Task` bị tắt) ⇒ gate chạy **thủ công theo đúng
+checklist FULL** (permission/RLS · append-only · silent-failure · cross-tenant), có **probe chạy đường
+THẬT** và **bằng chứng RED trước GREEN** cho từng finding. Ai review lại nên bắt đầu từ 3 mục dưới.
+
+| #               | Finding                                                                                                                                                                                                                                                                                                                                                                        | Xử lý                                                                                                                                                                                                                                                                       |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **F1 (HIGH)**   | **Gắn task chỉ gate phía GOAL, không gate phía TASK.** Gắn/tháo GHI THẲNG `tasks.goal_id` ⇒ là phép ghi lên TASK. Vế `department` của GOAL-ERR-008 chỉ cảnh báo mềm nên trưởng phòng B có `update:goal @Department` gắn được **việc riêng của phòng A**. **Repro thật đã chạy**: `201 {linked:1}` + cột `goal_id` của phòng A bị ghi, kèm đúng dòng "cảnh báo mềm". | **ĐÃ VÁ** — cổng thứ hai: cặp `('update','task')` + `ProjectAccessService.assertTaskInScopeTx(mode 'write')` cho TỪNG task ở cả `linkTasks` lẫn `unlinkTask` ⇒ **404**. +1 int-spec `C1b` **đã chứng minh ĐỎ** trước khi vá (201) và XANH sau vá. |
+| **F2 (MEDIUM)** | **Tạo việc mới KHÔNG tính lại mục tiêu `mode='project'`.** Thêm việc đổi MẪU SỐ đếm-lá (thêm việc con còn làm CHA rớt khỏi tập lá) nhưng `createTask` không có hook ⇒ tiến độ đứng yên tới lần đổi trạng thái đầu tiên hoặc tới job đêm — sai nhiều giờ mà nhìn vẫn "hợp lý".                                                                              | **ĐÃ VÁ** — hook `recomputeProjectGoalsTx` cuối `createTask`. +1 int-spec: dự án trống ⇒ NULL → tạo việc ⇒ 0 → Done ⇒ 100 → tạo việc thứ hai ⇒ 50, **không đụng trạng thái việc nào**.                                                                    |
+| **F3 (MEDIUM)** | **Int-spec làm bẩn catalog quyền TOÀN CỤC.** `seedPermissionCatalog` là UPSERT `DO UPDATE SET is_sensitive`; spec mới truyền `false` cho `('delete','task')` — cặp **SENSITIVE** theo 0485 ⇒ pin `S4-TASK-SEED-1` ĐỎ ở **file khác** (đã quan sát thật, tự khỏi tuỳ thứ tự chạy). Đúng bẫy `canonical-seed-pin-regression`.                                       | **ĐÃ VÁ** — spec truyền `is_sensitive` ĐÚNG canonical + comment cảnh báo tại chỗ; khôi phục hàng catalog trong lane DB. Chạy lại `tasks.permissions.spec.ts` (112 test) SAU spec GOAL ⇒ XANH.                                                          |
+
+### Đã kiểm TẬN DB (lane `mediaos_s5goalbe2` — `pg_class` / `pg_policies` / `information_schema`)
+
+- `goals` + `goal_updates`: `relrowsecurity = true` **và** `relforcerowsecurity = true`, policy
+  `tenant_isolation` (cmd ALL) — RLS+FORCE nguyên vẹn, WO này không đụng.
+- **Append-only ép ở tầng GRANT**: `goal_updates` → `mediaos_app` chỉ có `INSERT` + `SELECT` (KHÔNG
+  `UPDATE`/`DELETE`), `mediaos_worker` chỉ `SELECT`. Int-spec `C2` mở kết nối bằng **đúng app role**
+  (`DATABASE_URL`, không phải superuser) và nhận `permission denied` cho cả UPDATE lẫn DELETE.
+- **Không hard-delete**: `goals` → `mediaos_app` có INSERT/SELECT/UPDATE, **không có DELETE**.
+- `audit_logs.object_type` CHECK đã chứa `'goal'` (0506) — WO này chỉ dùng, KHÔNG sửa CHECK.
+- Index phục vụ truy vấn mới: `idx_tasks_company_goal (company_id, goal_id) WHERE goal_id IS NOT NULL
+  AND deleted_at IS NULL` (mode='tasks') · `idx_goals_company_parent` (rollup children) ·
+  `idx_goals_company_project` (mode='project') · `idx_goal_updates_goal` (sổ). Job đêm quét theo kỳ chỉ
+  dùng được một phần `idx_goals_company_level_period` — chấp nhận cho job nền.
+
+### Đã kiểm bằng đọc code / grep toàn cục
+
+- **Engine không lộ ra HTTP**: mọi call-site của `recompute*Tx` / `reconcileCompanyTx` nằm trong writer
+  đã tự authorize (`GoalsService`, `GoalCheckinService`, `GoalTasksLinkService`,
+  `TaskActionsService.changeStatusTx`, `TaskCoreService.create/update/deleteTask`) hoặc job nền.
+  **KHÔNG controller nào** gọi engine (bài học `reused-method-must-be-actor-scoped`).
+- **Mọi cửa đổi `task_status` đều được phủ**: `updateStatusTx` chỉ có MỘT caller là `changeStatusTx`;
+  `moveState` và `PATCH {stateId}` đều hội tụ về đó ⇒ một hook phủ cả ba cửa.
+- **Không vá triệu chứng**: 0 `@ts-ignore`, 0 `eslint-disable`, 0 catch rỗng trong diff. Hai chỗ `?? 0`
+  là kết quả `COUNT` (0 hàng thật sự là 0), và `computeRatioProgress` biến `total = 0` thành **null**.
+
+### Rủi ro CÒN LẠI (chấp nhận có ý thức — ghi ra để không ai "phát hiện lại")
+
+- **Đua ghi cache**: hai check-in / đổi-trạng-thái đồng thời trên cùng mục tiêu có thể ghi đè
+  `progress_percent` của nhau (không `SELECT … FOR UPDATE`). Hệ quả tối đa là cache lệch TẠM THỜI; sổ
+  `goal_updates` vẫn đủ cả hai dòng và job đối soát đêm sửa lại. Khoá hàng goal ở mọi writer task sẽ
+  biến mỗi lần tick việc thành điểm tranh khoá toàn phòng — đắt hơn nhiều thứ nó mua.
+- **`GET /goals/:id/tasks` chưa phân trang** (trần 200) — đủ cho quy mô SPEC-10 §19; nâng khi dữ liệu
+  thật chạm trần.
+- **Sub-agent gate chưa chạy**: nếu phiên sau có `security-reviewer`/`database-reviewer`, chạy lại trên
+  commit này và đối chiếu với 3 finding trên (đừng tin PASS trắng — bài học `reviewers-pass-real-bugs`).

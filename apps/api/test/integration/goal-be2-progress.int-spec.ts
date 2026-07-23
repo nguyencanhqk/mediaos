@@ -61,6 +61,8 @@ describe.skipIf(!hasLaneDb)("S5-GOAL-BE-2 progress engine (DB cô lập, đườ
   let adminEmp = "";
   let staffEmp = "";
   let projectId = "";
+  /** Dự án RIÊNG, chưa có việc nào — dùng cho ca "tạo việc làm đổi mẫu số". */
+  let projectFresh = "";
   let token = "";
 
   const auth = (m: "get" | "post" | "patch" | "delete", u: string) =>
@@ -151,7 +153,12 @@ describe.skipIf(!hasLaneDb)("S5-GOAL-BE-2 progress engine (DB cô lập, đườ
       ["update-status", "task"],
       ["delete", "task"],
     ] as const) {
-      const permId = await seedPermissionCatalog(direct, action, resource, false);
+      // ⚠️ `seedPermissionCatalog` GHI ĐÈ `is_sensitive` của catalog TOÀN CỤC (UPSERT DO UPDATE). Truyền
+      // `false` cho một cặp canonical đang là `true` sẽ làm ĐỎ pin `S4-TASK-SEED-1` ở spec KHÁC, và lỗi
+      // hiện ra ở nơi không liên quan (bài học canonical-seed-pin-regression). `('delete','task')` là
+      // cặp SENSITIVE theo migration 0485 — phải giữ nguyên `true`.
+      const isSensitive = action === "delete" && resource === "task";
+      const permId = await seedPermissionCatalog(direct, action, resource, isSensitive);
       await seedRolePermission(direct, roleId, permId, "ALLOW", "Company");
     }
     await seedUserRole(direct, adminUser, roleId, A.companyId);
@@ -162,6 +169,12 @@ describe.skipIf(!hasLaneDb)("S5-GOAL-BE-2 progress engine (DB cô lập, đườ
       [A.companyId, "active", ou, adminEmp],
     );
     projectId = pr.rows[0].id as string;
+    const prFresh = await direct.query(
+      `INSERT INTO projects (company_id, name, status, department_id, owner_employee_id)
+       VALUES ($1,'Dự án trống','active',$2,$3) RETURNING id`,
+      [A.companyId, ou, adminEmp],
+    );
+    projectFresh = prFresh.rows[0].id as string;
 
     const login = await request(app.getHttpServer())
       .post("/auth/login")
@@ -315,6 +328,26 @@ describe.skipIf(!hasLaneDb)("S5-GOAL-BE-2 progress engine (DB cô lập, đườ
       expect(total).toBeGreaterThan(0);
       expect(viaGoal).toBe(Math.round((done / total) * 10000) / 100);
       expect(b).toBeTruthy();
+    });
+
+    it("TẠO việc mới trong dự án ⇒ mẫu số đổi NGAY (không chờ đổi trạng thái/không chờ job đêm)", async () => {
+      const g = await createGoal({
+        name: "Mẫu số theo việc mới",
+        level: "project",
+        projectId: projectFresh,
+        status: "Active",
+        progressMode: "project",
+      });
+      expect(await progressOf(g)).toBeNull(); // dự án chưa có việc ⇒ CHƯA ĐO
+
+      const t1 = await createTask({ title: "Việc mới 1", projectId: projectFresh });
+      expect(await progressOf(g)).toBe(0); // 0/1 — đã đo được NGAY sau khi tạo việc
+      await setStatus(t1, "Done");
+      expect(await progressOf(g)).toBe(100);
+
+      // Thêm việc thứ hai ⇒ mẫu số thành 2 NGAY, không cần đụng trạng thái việc nào.
+      await createTask({ title: "Việc mới 2", projectId: projectFresh });
+      expect(await progressOf(g)).toBe(50);
     });
 
     it("CẤM đọc cột chết `projects.progress_percent`: đặt cột đó = 99 KHÔNG ảnh hưởng số của mục tiêu", async () => {
