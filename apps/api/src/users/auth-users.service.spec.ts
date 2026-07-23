@@ -58,12 +58,15 @@ describe("AuthUsersService", () => {
   let auth: { revokeAllForUserTx: ReturnType<typeof vi.fn> };
   // S2-AUTH-BE-8/12: SecurityEventWriter.record — timeline dual-write (TOTP_RESET).
   let securityEvents: { record: ReturnType<typeof vi.fn> };
+  // S5-LMS-BE-1: LmsSyncProducer.enqueueSync — wire-in assertion cho lock/unlock.
+  let lmsSync: { enqueueSync: ReturnType<typeof vi.fn> };
   let service: AuthUsersService;
   const TX = Symbol("tx");
 
   beforeEach(() => {
     audit = { record: vi.fn(async () => undefined) };
     securityEvents = { record: vi.fn(async () => undefined) };
+    lmsSync = { enqueueSync: vi.fn(async () => undefined) };
     db = {
       withTenant: vi.fn(async (_companyId: string, fn: (tx: unknown) => Promise<unknown>) =>
         fn(TX),
@@ -97,6 +100,7 @@ describe("AuthUsersService", () => {
       permissions as never,
       auth as never,
       securityEvents as never,
+      lmsSync as never,
     );
   });
 
@@ -170,6 +174,8 @@ describe("AuthUsersService", () => {
       TX,
       expect.objectContaining({ action: "user.locked", objectType: "user", actorUserId: ACTOR.id }),
     );
+    // S5-LMS-BE-1 wire-in: enqueue LMS auto-sync CÙNG tx, đúng tenant (actor) + target userId.
+    expect(lmsSync.enqueueSync).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID);
   });
 
   // S2-AUTH-BE-9: lock = thu hồi MỌI phiên (refresh_tokens + user_sessions) TRONG cùng tx qua
@@ -225,6 +231,8 @@ describe("AuthUsersService", () => {
       TX,
       expect.objectContaining({ action: "user.unlocked", objectType: "user" }),
     );
+    // S5-LMS-BE-1 wire-in: enqueue LMS auto-sync CÙNG tx (mở khoá → LMS mở lại nếu NV còn active).
+    expect(lmsSync.enqueueSync).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID);
     // NO-RESTORE: unlock KHÔNG re-issue/khôi phục phiên — chỉ đổi status. User phải đăng nhập lại.
     expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
   });

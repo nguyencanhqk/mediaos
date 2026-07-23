@@ -114,6 +114,8 @@ function makeService(opts: { repo?: ReturnType<typeof makeRepo>; sequence?: unkn
   const permissions = { can: vi.fn().mockResolvedValue({ allow: true, reason: "allow" }) };
   // S4-INT-5 (STORY-098) — outbox producer for the activation/welcome event.
   const outbox = { enqueue: vi.fn().mockResolvedValue("evt-id") };
+  // S5-LMS-BE-1 — LMS auto-sync producer (wire-in assertion: changeStatus phải gọi enqueueSync).
+  const lmsSync = { enqueueSync: vi.fn().mockResolvedValue(undefined) };
   const svc = new HrWriteService(
     repo as never,
     db as never,
@@ -124,8 +126,9 @@ function makeService(opts: { repo?: ReturnType<typeof makeRepo>; sequence?: unkn
     dataScope as never,
     permissions as never,
     outbox as never,
+    lmsSync as never,
   );
-  return { svc, repo, db, audit, sequence, dataScope, permissions, outbox };
+  return { svc, repo, db, audit, sequence, dataScope, permissions, outbox, lmsSync };
 }
 
 function assertNoSensitiveAuditKeys(audit: { record: ReturnType<typeof vi.fn> }) {
@@ -178,7 +181,7 @@ describe("HrWriteService.changeStatus — FSM", () => {
   });
 
   it("valid active→resigned: writes one history row + audit; lockUser locks the account", async () => {
-    const { svc, repo, audit } = makeService();
+    const { svc, repo, audit, lmsSync } = makeService();
     const res = await svc.changeStatus(actorA, EMP_ID, {
       newStatus: "resigned",
       reason: "left",
@@ -196,6 +199,8 @@ describe("HrWriteService.changeStatus — FSM", () => {
       FAKE_TX,
       expect.objectContaining({ action: "change-status", objectType: "employee" }),
     );
+    // S5-LMS-BE-1 wire-in: enqueue LMS auto-sync trong CÙNG tx, đúng tenant + userId của employee.
+    expect(lmsSync.enqueueSync).toHaveBeenCalledWith(FAKE_TX, COMPANY_A, OTHER_USER);
     assertNoSensitiveAuditKeys(audit);
   });
 
@@ -412,6 +417,7 @@ describe("HrWriteService.createEmployee", () => {
       dataScope as never,
       permissions as never,
       outbox as never,
+      { enqueueSync: vi.fn().mockResolvedValue(undefined) } as never,
     );
     await expect(svc.createEmployee(actorA, { userId: OTHER_USER } as never)).rejects.toThrow(
       ForbiddenException,

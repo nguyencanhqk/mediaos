@@ -4,6 +4,7 @@ import { DatabaseModule } from "../db/db.module";
 import { PermissionModule } from "../permission/permission.module";
 import { AuthModule } from "../auth/auth.module";
 import { SecurityEventWriter } from "../auth/security-event-writer.service";
+import { LmsSyncModule } from "../integrations/lms/lms-sync.module";
 import { AdminUsersController } from "./admin-users.controller";
 import { AdminUsersRepository } from "./admin-users.repository";
 import { AdminUsersService } from "./admin-users.service";
@@ -25,7 +26,7 @@ import { UsersService } from "./users.service";
  *    AuthModule (đã forwardRef). AuthUsersService dual-write USER_LOCKED/USER_UNLOCKED qua writer này.
  */
 @Module({
-  imports: [DatabaseModule, PermissionModule, forwardRef(() => AuthModule)],
+  imports: [DatabaseModule, PermissionModule, forwardRef(() => AuthModule), LmsSyncModule],
   controllers: [UsersController, AdminUsersController, AuthUsersController],
   providers: [
     UsersService,
