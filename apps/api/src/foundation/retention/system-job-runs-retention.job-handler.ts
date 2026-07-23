@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { sql } from "drizzle-orm";
 import { type Database, workerDb } from "../../db/index";
 import { assertWorkerRoleSafe } from "../../db/worker-role";
@@ -83,8 +83,13 @@ export class SystemJobRunsRetentionJobHandler implements JobHandler {
   private readonly logger = new Logger(SystemJobRunsRetentionJobHandler.name);
   private roleChecked = false;
 
-  // `null` = KHÔNG có db (fail-closed tường minh, dùng int-spec); vắng/undefined → default module workerDb.
-  constructor(private readonly dbw: Database | null = workerDb ?? null) {}
+  // `@Optional()` BẮT BUỘC: đây là plain class provider (để DiscoveryService gom qua @SystemJobHandler
+  // metadata), nhưng tham số `Database` KHÔNG phải Nest provider (module-level workerDb). Không có @Optional
+  // thì Nest ném "can't resolve dependencies" ⇒ AppModule KHÔNG bootstrap (mọi int-spec dựng app đỏ). Với
+  // @Optional, Nest truyền `undefined` khi không resolve được ⇒ default JS `workerDb ?? null` áp dụng (prod
+  // lấy workerDb thật; int-spec truyền db tường minh qua `new`). Mirror WorkerSchedulerService @Optional.
+  // `null` = KHÔNG có db (fail-closed tường minh, dùng int-spec).
+  constructor(@Optional() private readonly dbw: Database | null = workerDb ?? null) {}
 
   /** workerDb tồn tại + role an toàn TRƯỚC mọi chạm DB. Fail-closed (throw) nếu thiếu db. */
   private async ensureWorkerSafe(): Promise<Database> {
@@ -117,7 +122,10 @@ export class SystemJobRunsRetentionJobHandler implements JobHandler {
     if (dryRun) {
       const eligible = await this.purgeBatch(dbw, companyId, true);
       const globalRowsKept = await this.countGlobalRows(dbw);
-      this.logger.debug(
+      // Kill-switch OFF là trạng-thái-vận-hành đáng chú ý (ai đó tắt chủ đích) ⇒ log INFO để xác nhận
+      // "phanh đã ăn". Ở delete-mode bình thường KHÔNG log INFO ⇒ vắng dòng này = phanh KHÔNG ăn (tín hiệu
+      // cho operator lỡ gõ sai giá trị OFF). (silent-failure-hunter Hunt 4.)
+      this.logger.log(
         `SYSTEM_JOB_RUNS_RETENTION tenant=${companyId} DRY-RUN (kill-switch OFF) eligible=${eligible} globalRowsKept=${globalRowsKept}`,
       );
       return {
@@ -139,6 +147,19 @@ export class SystemJobRunsRetentionJobHandler implements JobHandler {
     }
     // capHit = thoát vì chạm trần lô VỚI lô cuối ĐẦY (còn row chưa dọn — bắt lại nhịp sau).
     const capHit = lastN === PURGE_BATCH_SIZE && batches === MAX_BATCHES_PER_RUN;
+
+    // Silent-0 self-check (silent-failure-hunter Hunt 1): deleted=0 có thể là "cạn THẬT" HOẶC "câm" (owner
+    // function mất BYPASSRLS ⇒ DELETE bị FORCE-RLS lọc 0 row KHÔNG lỗi ⇒ retention xanh mà không dọn gì —
+    // đúng loại phình vô hình WO này sinh ra để chặn). Nếu eligible>0 mà deleted=0 = CHỮ KÝ silent-0 ⇒ warn.
+    // Chỉ tốn 1 count trên nhịp no-op (deleted=0).
+    if (deleted === 0) {
+      const eligible = await this.purgeBatch(dbw, companyId, true);
+      if (eligible > 0) {
+        this.logger.warn(
+          `SYSTEM_JOB_RUNS_RETENTION tenant=${companyId}: deleted=0 nhưng eligible=${eligible} — nghi function bị RLS lọc 0-row CÂM (owner mất BYPASSRLS?); retention có thể KHÔNG chạy.`,
+        );
+      }
+    }
 
     const globalRowsKept = await this.countGlobalRows(dbw);
     if (globalRowsKept > GLOBAL_ROWS_WARN) {
@@ -170,7 +191,7 @@ export class SystemJobRunsRetentionJobHandler implements JobHandler {
       SELECT purge_system_job_runs(${id}::uuid, ${defaultDays}, ${lmsDays}, ${batchSize}, ${dry}) AS n
     `);
     const row = res.rows[0] as { n: number | string } | undefined;
-    return typeof row?.n === "number" ? row.n : Number(row?.n ?? 0);
+    return toFiniteCount(row?.n);
   }
 
   /**
@@ -182,6 +203,16 @@ export class SystemJobRunsRetentionJobHandler implements JobHandler {
       SELECT count(*)::int AS n FROM system_job_runs WHERE company_id IS NULL
     `);
     const row = res.rows[0] as { n: number | string } | undefined;
-    return typeof row?.n === "number" ? row.n : Number(row?.n ?? 0);
+    return toFiniteCount(row?.n);
   }
+}
+
+/**
+ * Ép giá trị đếm/xoá về số HỮU HẠN ≥0. `RETURNS integer`/`count(*)::int` → node-postgres cho number, nhưng
+ * coalesce phòng thủ NaN/undefined (silent-failure-hunter Hunt 3): NaN sẽ làm `lastN < BATCH` = false ⇒ loop
+ * chạy tới cap + metadata `deleted=NaN`. Trả 0 khi không hữu hạn.
+ */
+function toFiniteCount(raw: unknown): number {
+  const n = typeof raw === "number" ? raw : Number(raw ?? 0);
+  return Number.isFinite(n) ? n : 0;
 }

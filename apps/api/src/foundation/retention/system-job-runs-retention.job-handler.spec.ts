@@ -156,12 +156,39 @@ describe("SystemJobRunsRetentionJobHandler.run", () => {
 
   it("globalRowsKept > ngưỡng → logger.warn (không xoá row global)", async () => {
     const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
-    const { db } = fakeDbw({ purge: [0], global: 2000 });
+    // purge trả 3 (>0) ⇒ KHÔNG kích silent-0 check; chỉ còn warn do global vượt ngưỡng.
+    const { db } = fakeDbw({ purge: [3], global: 2000 });
     const handler = new SystemJobRunsRetentionJobHandler(db);
 
     const res = await handler.run({ companyId: "co-1" });
 
-    expect(res.metadata).toMatchObject({ deleted: 0, globalRowsKept: 2000 });
+    expect(res.metadata).toMatchObject({ deleted: 3, globalRowsKept: 2000 });
     expect(warn).toHaveBeenCalled();
+  });
+
+  it("silent-0 self-check: xoá thật deleted=0 nhưng eligible>0 → logger.warn (nghi RLS lọc câm)", async () => {
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    // purge real → 0 (câm/cạn); silent-0 dry-check → 7 (eligible>0) ⇒ warn; global → 0 (không warn global).
+    const { db, execute } = fakeDbw({ purge: [0, 7], global: 0 });
+    const handler = new SystemJobRunsRetentionJobHandler(db);
+
+    const res = await handler.run({ companyId: "co-1" });
+
+    expect(res.metadata).toMatchObject({ deleted: 0, dryRun: false, batches: 1 });
+    expect(warn).toHaveBeenCalled();
+    // role(1) + purge-real(1) + silent-0 dry(1) + global-count(1) = 4.
+    expect(execute).toHaveBeenCalledTimes(4);
+  });
+
+  it("silent-0 self-check KHÔNG kích khi cạn thật (deleted=0, eligible=0)", async () => {
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    // purge real → 0; silent-0 dry-check → 0 (eligible=0 ⇒ cạn thật, KHÔNG warn); global → 0.
+    const { db } = fakeDbw({ purge: [0, 0], global: 0 });
+    const handler = new SystemJobRunsRetentionJobHandler(db);
+
+    const res = await handler.run({ companyId: "co-1" });
+
+    expect(res.metadata).toMatchObject({ deleted: 0, globalRowsKept: 0 });
+    expect(warn).not.toHaveBeenCalled();
   });
 });

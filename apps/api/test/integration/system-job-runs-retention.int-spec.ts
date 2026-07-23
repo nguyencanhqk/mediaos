@@ -165,10 +165,17 @@ describe.skipIf(!runDb)(
       expect((res.metadata as { globalRowsKept: number }).globalRowsKept).toBeGreaterThanOrEqual(1);
     });
 
-    it("cô lập chéo tenant: purge(A) KHÔNG đụng row Success cũ của tenant B", async () => {
+    it("cô lập chéo tenant: purge(A) XOÁ row cũ của A NHƯNG KHÔNG đụng row Success cũ của tenant B", async () => {
       const a = await newTenant("sysclean-a");
       const b = await newTenant("sysclean-b");
       const code = `SYSCLEAN_TEST_XT_${randomUUID().slice(0, 8)}`;
+      // Cùng test chứng minh CẢ HAI nửa: xoá đúng cái phải xoá (A) + KHÔNG đụng cái không được đụng (B).
+      const aOld = await seedRun(direct, {
+        companyId: a.companyId,
+        jobCode: code,
+        status: "Success",
+        daysAgo: 730,
+      });
       const bOld = await seedRun(direct, {
         companyId: b.companyId,
         jobCode: code,
@@ -178,6 +185,7 @@ describe.skipIf(!runDb)(
 
       await handler.run({ companyId: a.companyId });
 
+      expect(await exists(direct, aOld)).toBe(false); // row A cũ → XOÁ
       expect(await exists(direct, bOld)).toBe(true); // row B còn nguyên (DELETE pin company_id = A)
     });
 
