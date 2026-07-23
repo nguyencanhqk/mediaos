@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**247 WO** · có micro-plan: **111/247** · ⬜ 15 chờ · 🔵 1 đang làm · ✅ 231 xong · 🔴 0 chặn
+**270 WO** · có micro-plan: **122/270** · ⬜ 22 chờ · 🔵 3 đang làm · ✅ 245 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -225,7 +225,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `S5-DEVOPS-1` | 🟡 | ✅ xong | [📄](S5-DEVOPS-1.md) | — | Staging/UAT readiness: env + deploy pipeline + migration/seed chạy từ  |
 | `S5-QA-E2E-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S4-QA-2 | Integration freeze + system smoke P0 + cross-module E2E: login→Home Po |
-| `S5-BE-CONTRACT-1` | 🟡 | 🔵 đang làm | — *(chưa)* | ✅S4-QA-2 | API contract & OpenAPI/Swagger chuẩn hoá theo module + FE integration  |
+| `S5-BE-CONTRACT-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S4-QA-2 | API contract & OpenAPI/Swagger chuẩn hoá theo module + FE integration  |
 | `S5-SEC-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S4-QA-2 | Permission & data-scope hardening + field-level/export permission + se |
 | `S5-QA-REG-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S4-QA-2 | QA regression suite MVP (test-case matrix theo module × role) + UI sta |
 | `S5-QA-DASHNOTI-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S4-QA-2 ✅S4-INT-2 | Dashboard & Notification hardening: widget degraded/cache đúng, unread |
@@ -271,6 +271,29 @@
 | `S5-TASK-CARDSUB-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S5-TASK-SUBTASK-1 | Thẻ board: nút trỏ xuống bung danh sách việc con ngay trên thẻ (tải lư |
 | `S5-TASK-MOVEPROJ-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-TASK-INLINE-1 | VÁ BUG state_id mồ côi khi đổi dự án + đường đổi dự án ĐÚNG MỘT chỗ (h |
 | `S5-TASK-COVER-1` | 🔴 | ✅ xong | [📄](S5-TASK-COVER-1.md) | ✅S5-TASK-AVATAR-1 | Ảnh bìa cho công việc — chọn từ TỆP ĐÃ ĐÍNH KÈM (file_links Attachment |
+| `S5-GOAL-DOC-1` | 🟢 | ✅ xong | — *(chưa)* | — | Docs sync SPEC-10 GOAL: SPEC-01/PRD-00/DB-01·09·10 ghi nhận GOAL + API |
+| `S5-GOAL-DB-1` | 🔴 | ✅ xong | [📄](S5-GOAL-DB-1.md) | — | Schema + migration goals + goal_updates (append-only) + tasks.goal_id  |
+| `S5-GOAL-BE-1` | 🔴 | ✅ xong | [📄](S5-GOAL-BE-1.md) | ✅S5-GOAL-DB-1 | BE GoalsModule: CRUD 3 cấp + cây theo kỳ + data-scope service-layer (o |
+| `S5-GOAL-BE-2` | 🔴 | ✅ xong | [📄](S5-GOAL-BE-2.md) | ✅S5-GOAL-BE-1 | BE progress engine 4 mode + rollup bubble + job đối soát đêm (system-j |
+| `S5-GOAL-FE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S5-GOAL-BE-1 | FE trang Mục tiêu: menu sidebar riêng + danh sách/cây theo kỳ·phòng ba |
+| `S5-GOAL-FE-2` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S5-GOAL-BE-2 ⏳S5-GOAL-FE-1 | FE vòng đo: check-in modal + lịch sử + nút chốt kỳ/mở lại + gắn goal t |
+| `S5-GOAL-DB-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S5-GOAL-DB-1 | Đợt D — Schema + migration task_templates + task_template_items + RLS  |
+| `S5-GOAL-TPL-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S5-GOAL-DB-2 ⏳S5-GOAL-FE-2 | Đợt D — Phân rã mục tiêu từ template: CRUD template (BE+FE, GOAL-SCREE |
+| `S5-FND-REVOKE-1` | 🔴 | 🔵 đang làm | — *(chưa)* | ✅S5-GOAL-DB-1 | Nợ di sản G-era (finding MEDIUM gate S5-GOAL-DB-1): REVOKE DELETE org_ |
+| `S5-GOAL-DASH-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S5-GOAL-BE-2 ⏳S5-GOAL-FE-1 | Đợt E — Widget dashboard 'Mục tiêu kỳ này' (progress theo phòng ban, đ |
+| `S5-LMS-DB-1` | 🔴 | ✅ xong | [📄](S5-LMS-DB-1.md) | — | Mig 0509 (kiểm _journal trước khi đánh số): UNION-ADD audit object_typ |
+| `S5-LMS-BE-1` | 🔴 | ✅ xong | [📄](S5-LMS-BE-1.md) | ✅S5-LMS-DB-1 | Auto-sync tài khoản MediaOS→LMS: outbox event RIÊNG hr.employee_status |
+| `S5-LMS-BE-2` | 🔴 | ✅ xong | [📄](S5-LMS-BE-2.md) | ✅S5-LMS-DB-1 | Trả nợ audit #253: ghi audit_logs objectType 'lms_sso' action sso_link |
+| `S5-LMS-APP-1` | 🟡 | ✅ xong | [📄](S5-LMS-APP-1.md) | — | LOCAL apps/lms — chuẩn hoá UI: '/' hết landing (có phiên → /course, ch |
+| `S5-LMS-APP-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S5-LMS-BE-1 ✅S5-LMS-APP-3 | LOCAL apps/lms — SSO-only: cờ env SSO_ONLY=true → đóng register/forgot |
+| `S5-LMS-APP-3` | 🔴 | ✅ xong | [📄](S5-LMS-APP-3.md) | ✅S5-LMS-APP-1 | LOCAL apps/lms — API export tiến độ: GET /api/mediaos/progress?email=  |
+| `S5-LMS-BE-3` | 🔴 | ✅ xong | [📄](S5-LMS-BE-3.md) | ✅S5-LMS-APP-3 | Proxy tiến độ đào tạo vào MediaOS: GET /me/training (email resolve TỪ  |
+| `S5-LMS-FE-1` | 🟡 | 🔵 đang làm | [📄](S5-LMS-FE-1.md) | ✅S5-LMS-BE-3 | FE /me: card 'Đào tạo' trong MeOverviewPage (fail-soft như 5 section h |
+| `S5-LMS-BE-4` | 🔴 | ✅ xong | [📄](S5-LMS-BE-4.md) | ✅S5-LMS-BE-1 | Job đối soát LMS chỉ ghi audit khi CÓ THAY ĐỔI THẬT: LmsHttpClient.syn |
+| `S5-SYS-CLEAN-1` | 🔴 | 🔵 đang làm | — *(chưa)* | ✅S5-LMS-BE-4 | Retention cho system_job_runs (47.126 dòng/18 MB, tăng mỗi nhịp schedu |
+| `S5-BRAND-BE-1` | 🟡 | ✅ xong | — *(chưa)* | — | BE Thương hiệu công ty: wrapper presign logo + favicon trên FileServic |
+| `S5-BRAND-FE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-BRAND-BE-1 | FE khối 'Thương hiệu' trong /system/company: upload/preview/gỡ logo +  |
+| `S5-BRAND-FE-2` | 🟢 | ✅ xong | — *(chưa)* | ✅S5-BRAND-BE-1 | FE áp thương hiệu ra vỏ app: GlobalTopbar hiện logo công ty (fallback  |
 
 ## Sprint 6
 

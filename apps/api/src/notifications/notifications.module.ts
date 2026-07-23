@@ -43,6 +43,10 @@ import { TaskReminderJobHandler } from "./task-reminder.job-handler";
 import { OutboxNotificationBridge } from "./outbox-notification-bridge.service";
 import { TaskAudienceReader } from "./task-audience.reader";
 import { TaskNotiBridgeRegistrar } from "./task-noti-bridge.registrar";
+// S5-GOAL-BE-2 (additive) — 2 mapping GOAL → NOTI (SPEC-10 §17) trên CÙNG bridge đã ship. Reader raw-SQL
+// đọc thẳng goals/employee_profiles/org_units — KHÔNG import GoalsModule (acyclic, mirror TASK).
+import { GoalAudienceReader } from "./goal-audience.reader";
+import { GoalNotiBridgeRegistrar } from "./goal-noti-bridge.registrar";
 // S4-INT-5 (additive): AUTH/HR → NOTI producer wiring. TÁI DÙNG OutboxNotificationBridge (INT-1) — đăng ký 3
 // mapping (auth.user_created/password_reset_requested/user_locked) qua registrar OnModuleInit. KHÔNG import
 // AuthModule/EmployeesModule (acyclic — consumer đọc payload, producer enqueue outbox ở service tương ứng).
@@ -100,6 +104,9 @@ import { HrPcrNotiBridgeRegistrar } from "./hr-pcr-noti-bridge.registrar";
     OutboxNotificationBridge,
     TaskAudienceReader,
     TaskNotiBridgeRegistrar,
+    // S5-GOAL-BE-2 (additive) — GOAL_ASSIGNED / GOAL_FINALIZED (catalog + template seed 0507).
+    GoalAudienceReader,
+    GoalNotiBridgeRegistrar,
     // S4-INT-5 (additive): registrar OnModuleInit đăng ký 3 consumer AUTH lên EventBus (@Global EventsModule)
     // tại boot, tái dùng OutboxNotificationBridge — KHÔNG bridge/consumer mới.
     AuthHrNotiBridgeRegistrar,

@@ -366,6 +366,37 @@ describe("RetentionService", () => {
       },
     );
 
+    // S5-FND-REVOKE-1 — cascade-guard: org_units/projects KHÔNG append-only (soft-delete) NHƯNG hard-delete
+    // qua retention sẽ CASCADE xóa cứng goals + ledger goal_updates (mig 0504) ⇒ phải nằm trong PROTECTED_TABLES
+    // (LỚP APP khớp DB REVOKE mig 0510). Regression pin: retention no-op thay vì ném 42501 uncaught.
+    const CASCADE_GUARD_TABLES = ["org_units", "projects"];
+    it.each(CASCADE_GUARD_TABLES)(
+      "CASCADE-GUARD: entity='%s' trong tập bảo vệ (set-membership) — chống cascade goals/goal_updates",
+      (entityType) => {
+        expect(RetentionService.isProtectedTable(entityType)).toBe(true);
+      },
+    );
+
+    it.each(CASCADE_GUARD_TABLES)(
+      "CASCADE-GUARD: entity='%s' + isEnabled=true + action=Delete + !dryRun ⇒ deletedRecords=0 + KHÔNG phát lệnh DELETE",
+      async (entityType) => {
+        harness = makeTx({
+          policy: makePolicy({ entityType, isEnabled: true, cleanupAction: "Delete" }),
+          eligibleCount: 7,
+        });
+        const { db } = makeDb(harness);
+        const svc = new RetentionService(db);
+
+        const res = await svc.runCleanup(COMPANY, POLICY_ID, { dryRun: false });
+
+        expect(res.deletedRecords).toBe(0);
+        expect(res.skippedDisabled).toBe(false); // enabled — bị chặn bởi PROTECTED_TABLES, KHÔNG bởi disabled
+        // Chỉ 1 execute (COUNT); KHÔNG có execute thứ hai (DELETE) ⇒ retention KHÔNG phát DELETE FROM org_units/projects
+        // (nếu phát → app role đụng REVOKE mig 0510 ⇒ 42501 uncaught ⇒ hỏng cả lượt cleanup tenant).
+        expect(harness.calls.execute).toBe(1);
+      },
+    );
+
     it("unprotected + enabled + Delete + !dryRun ⇒ ĐI đường DELETE (execute lần 2) — chốt độ nhạy của test PROTECTED", async () => {
       harness = makeTx({
         policy: makePolicy({ entityType: "tasks", isEnabled: true, cleanupAction: "Delete" }),

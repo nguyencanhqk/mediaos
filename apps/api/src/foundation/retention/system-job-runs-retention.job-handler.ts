@@ -17,7 +17,7 @@ import {
  * chạy qua app-withTenant; `system_job_runs` là INFRA, cần ngưỡng-CÓ-ĐIỀU-KIỆN + xoá qua đường có DELETE).
  *
  * Cơ chế XOÁ (docs/plans/S5-SYS-CLEAN-1.md §3): gọi FUNCTION `purge_system_job_runs` (SECURITY DEFINER,
- * mig 0510) qua `workerDb` (role mediaos_worker, có EXECUTE — KHÔNG có DELETE bảng). Sàn ngày ép Ở SQL
+ * mig 0511) qua `workerDb` (role mediaos_worker, có EXECUTE — KHÔNG có DELETE bảng). Sàn ngày ép Ở SQL
  * (LMS ≥90 / khác ≥7) + allowlist status (chỉ Success/Skipped) + predicate `company_id = $1` ⇒ Failed/
  * Partial/Running + row global (NULL) GIỮ VĨNH VIỄN by-construction.
  *
@@ -34,9 +34,9 @@ import {
 /** jobCode DUY NHẤT toàn hệ — khoá `system_job_locks` + `system_job_runs.job_code`. */
 export const SYSTEM_JOB_RUNS_RETENTION_JOB_CODE = "SYSTEM_JOB_RUNS_RETENTION";
 
-/** Ngưỡng ngày cho job_code khác (owner chốt 30). SÀN CỨNG ≥7 ép Ở function 0510 (không tin caller). */
+/** Ngưỡng ngày cho job_code khác (owner chốt 30). SÀN CỨNG ≥7 ép Ở function 0511 (không tin caller). */
 export const DEFAULT_RETENTION_DAYS = 30;
-/** Ngưỡng ngày cho LMS_USER_SYNC (hợp đồng BE-4 §3D). SÀN CỨNG ≥90 ép Ở function 0510. */
+/** Ngưỡng ngày cho LMS_USER_SYNC (hợp đồng BE-4 §3D). SÀN CỨNG ≥90 ép Ở function 0511. */
 export const LMS_RETENTION_DAYS = 90;
 /** Trần row xoá 1 lô (chống lock lớn). Khớp guard TRẦN 100000 ở function. */
 export const PURGE_BATCH_SIZE = 5000;

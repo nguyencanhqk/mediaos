@@ -1,13 +1,6 @@
-import {
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-  UnprocessableEntityException,
-} from "@nestjs/common";
-import type { SQL } from "drizzle-orm";
+import { Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import type {
   CreateGoalRequest,
-  DataScope,
   GoalCoreResponseDto,
   GoalDetailResponseDto,
   GoalTreeNodeDto,
@@ -19,33 +12,24 @@ import type {
 import { GOAL_PAGE_LIMIT_MAX } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
-import { DataScopeService, type ScopeContext } from "../permission/data-scope.service";
+import { OutboxService } from "../events/outbox.service";
 import { SequenceService } from "../foundation/sequences/sequence.service";
-import { ProjectAccessService } from "../tasks/project-access.service";
+import { GoalProgressEngineService } from "../tasks/goal-progress-engine.service";
 import type { Goal } from "../db/schema/goals";
 import { GOAL_ERR } from "./goals.errors";
+import {
+  GoalAccessService,
+  type GoalActorScope,
+  type GoalRequestUser as RequestUser,
+} from "./goal-access.service";
 import { buildGoalTree, toGoalCoreDto } from "./goals.mapper";
+import { goalAssignedPayload } from "./goal-noti.payload";
 import { GoalsRepository, type GoalListFilter, type GoalPatchValues } from "./goals.repository";
 import {
   GoalsValidationService,
   type GoalDesiredState,
   type ResolvedGoalWrite,
 } from "./goals-validation.service";
-
-interface RequestUser {
-  id: string;
-  companyId: string;
-}
-
-/** Ngữ cảnh phạm vi của actor, resolve MỘT LẦN mỗi request rồi dùng cho cả đọc lẫn ghi. */
-interface GoalActorScope {
-  scope: DataScope;
-  ctx: ScopeContext;
-  deptOrgUnitIds: string[];
-  actorEmployeeId: string | null;
-  /** undefined = Company/System (thấy toàn tenant, KHÔNG áp predicate). */
-  readScopeExists?: SQL;
-}
 
 const DEFAULT_LIST_LIMIT = 50;
 /** Trần số nút một lần dựng cây (cây 1 phòng/1 kỳ ~200 nút — SPEC-10 §19). */
@@ -59,8 +43,9 @@ const GOAL_CODE_SEQUENCE_KEY = "goal";
  * BẤT BIẾN #1: mọi truy vấn đi qua `db.withTenant(companyId)` (RLS+FORCE) + repo AND `company_id`.
  * BẤT BIẾN #2: xoá MỀM (`deleted_at`); audit ghi TRONG CÙNG tx nghiệp vụ (rollback ⇒ mất cả hai).
  *
- * PHÂN TẦNG QUYỀN (2 lớp — mirror TASK đợt C nhưng MÃ LỖI KHÁC):
- *   lớp 1 = cặp (action,'goal') + data_scope (PermissionGuard ở controller + resolveAndAssert ở đây);
+ * PHÂN TẦNG QUYỀN (2 lớp — mirror TASK đợt C nhưng MÃ LỖI KHÁC) nằm TRỌN ở `GoalAccessService`
+ * (S5-GOAL-BE-2 tách ra để 3 đường ghi mới — check-in/finalize/link — dùng CHUNG một bản luật):
+ *   lớp 1 = cặp (action,'goal') + data_scope (PermissionGuard ở controller + resolveAndAssert);
  *   lớp 2 = vai trò DỰ ÁN (ProjectAccessService) cho goal cấp dự án — Owner/Manager ghi được kể cả
  *           khác phòng ban (SPEC-10 §11 ghi chú).
  *
@@ -75,16 +60,17 @@ export class GoalsService {
     private readonly repo: GoalsRepository,
     private readonly validator: GoalsValidationService,
     private readonly audit: AuditService,
-    private readonly dataScope: DataScopeService,
     private readonly sequence: SequenceService,
-    private readonly projectAccess: ProjectAccessService,
+    private readonly access: GoalAccessService,
+    private readonly engine: GoalProgressEngineService,
+    private readonly outbox: OutboxService,
   ) {}
 
   // ── Reads ────────────────────────────────────────────────────────────────────
 
   async listGoals(user: RequestUser, query: ListGoalsQueryRequest): Promise<GoalCoreResponseDto[]> {
     return this.db.withTenant(user.companyId, async (tx) => {
-      const actor = await this.resolveActorScope(tx, user, "view");
+      const actor = await this.access.resolveActorScope(tx, user, "view");
       const rows = await this.repo.listTx(
         tx,
         user.companyId,
@@ -109,7 +95,7 @@ export class GoalsService {
   /** GOAL-API-006 — cây theo kỳ/phòng, dựng in-memory từ danh sách phẳng đã lọc scope. */
   async getTree(user: RequestUser, query: GoalTreeQueryRequest): Promise<GoalTreeNodeDto[]> {
     return this.db.withTenant(user.companyId, async (tx) => {
-      const actor = await this.resolveActorScope(tx, user, "view");
+      const actor = await this.access.resolveActorScope(tx, user, "view");
       const rows = await this.repo.listTx(
         tx,
         user.companyId,
@@ -135,8 +121,8 @@ export class GoalsService {
   /** GOAL-API-003 — chi tiết + breadcrumb cha + đếm con. 404 chéo tenant · 403 ngoài phạm vi. */
   async getGoal(user: RequestUser, id: string): Promise<GoalDetailResponseDto> {
     return this.db.withTenant(user.companyId, async (tx) => {
-      const actor = await this.resolveActorScope(tx, user, "view");
-      const goal = await this.loadReadableGoalTx(tx, user, id, actor);
+      const actor = await this.access.resolveActorScope(tx, user, "view");
+      const goal = await this.access.loadReadableGoalTx(tx, user, id, actor);
       const parent = goal.parentGoalId
         ? await this.repo.findGoalRefTx(tx, user.companyId, goal.parentGoalId)
         : undefined;
@@ -191,13 +177,13 @@ export class GoalsService {
       sequenceKey: GOAL_CODE_SEQUENCE_KEY,
     });
     return this.db.withTenant(user.companyId, async (tx) => {
-      const actor = await this.resolveActorScope(tx, user, "create");
+      const actor = await this.access.resolveActorScope(tx, user, "create");
       const desired = this.desiredFromCreate(dto);
       const resolved = await this.validator.resolve(tx, user.companyId, desired, {
         actorEmployeeId: actor.actorEmployeeId,
       });
       await this.assertWriteAllowed(tx, user, actor, resolved);
-      await this.assertParentVisible(tx, user, resolved.values.parentGoalId);
+      await this.access.assertParentVisible(tx, user, resolved.values.parentGoalId);
 
       const v = resolved.values;
       const row = await this.repo.insertTx(tx, user.companyId, {
@@ -228,7 +214,15 @@ export class GoalsService {
         actorUserId: user.id,
         after: this.auditSnapshot(row),
       });
-      return toGoalCoreDto(row);
+      // SPEC-10 §17 GOAL_ASSIGNED — CHỈ khi giao cho NGƯỜI KHÁC. Tự đặt mục tiêu cho mình thì im lặng.
+      await this.enqueueGoalAssignedIfNeeded(tx, user, actor, row, null);
+      // Mục tiêu mới đã có thể đo được ngay (mode 'project'/'children' có sẵn nguồn số) ⇒ recompute
+      // để `progress_percent` không đứng NULL cho tới lần đổi task đầu tiên. Rồi tính lại CHA: một con
+      // mới xuất hiện làm đổi mẫu số rollup của cha dù tiến độ con chưa đo được.
+      await this.engine.recomputeGoalTx(tx, user.companyId, row.id);
+      await this.engine.recomputeParentTx(tx, user.companyId, row.parentGoalId);
+      const measured = await this.repo.findByIdTx(tx, user.companyId, row.id);
+      return toGoalCoreDto(measured ?? row);
     });
   }
 
@@ -239,12 +233,22 @@ export class GoalsService {
     dto: UpdateGoalRequest,
   ): Promise<GoalCoreResponseDto> {
     return this.db.withTenant(user.companyId, async (tx) => {
-      const actor = await this.resolveActorScope(tx, user, "update");
+      const actor = await this.access.resolveActorScope(tx, user, "update");
       const current = await this.repo.findByIdTx(tx, user.companyId, id);
       if (!current) throw new NotFoundException(GOAL_ERR.NOT_FOUND);
-      const currentAnchorDepartmentId = await this.anchorDepartmentOf(tx, user.companyId, current);
-      await this.assertWriteAllowedOnExisting(tx, user, actor, current, currentAnchorDepartmentId);
-      this.assertNotFinalized(current);
+      const currentAnchorDepartmentId = await this.access.anchorDepartmentOf(
+        tx,
+        user.companyId,
+        current,
+      );
+      await this.access.assertWriteAllowedOnExisting(
+        tx,
+        user,
+        actor,
+        current,
+        currentAnchorDepartmentId,
+      );
+      this.access.assertNotFinalized(current);
 
       const desired = this.desiredFromUpdate(current, dto);
       const resolved = await this.validator.resolve(tx, user.companyId, desired, {
@@ -257,7 +261,7 @@ export class GoalsService {
         employeeId: current.employeeId,
       });
       if (resolved.values.parentGoalId !== current.parentGoalId) {
-        await this.assertParentVisible(tx, user, resolved.values.parentGoalId);
+        await this.access.assertParentVisible(tx, user, resolved.values.parentGoalId);
       }
 
       const v = resolved.values;
@@ -291,19 +295,34 @@ export class GoalsService {
         before: this.auditSnapshot(current),
         after: this.auditSnapshot(updated),
       });
-      return toGoalCoreDto(updated);
+      await this.enqueueGoalAssignedIfNeeded(tx, user, actor, updated, current);
+
+      // GOAL-ERR-013 — đổi cách đo (hoặc đổi neo/measure/target) ⇒ số cũ KHÔNG còn nghĩa: recompute
+      // NGAY trong cùng tx. Gọi vô điều kiện (engine tự no-op khi không có gì đổi) thay vì chỉ khi
+      // `progressMode` đổi: đổi `project_id` của goal mode='project' hay `target_value` của mode
+      // 'manual' cũng làm cache sai y hệt mà không đụng tới cột progress_mode.
+      await this.engine.recomputeGoalTx(tx, user.companyId, id);
+      // ⚠️ CHA PHẢI ĐƯỢC TÍNH LẠI RIÊNG (bug thật, int-spec P4 bắt được): huỷ/đổi trọng số/di dời một
+      // mục tiêu con KHÔNG làm tiến độ CỦA CHÍNH NÓ đổi ⇒ `recomputeGoalTx` không bubble, và cha giữ
+      // số cũ. Tính CẢ cha CŨ lẫn cha MỚI khi mục tiêu vừa đổi nhánh.
+      await this.engine.recomputeParentTx(tx, user.companyId, current.parentGoalId);
+      if (updated.parentGoalId !== current.parentGoalId) {
+        await this.engine.recomputeParentTx(tx, user.companyId, updated.parentGoalId);
+      }
+      const measured = await this.repo.findByIdTx(tx, user.companyId, id);
+      return toGoalCoreDto(measured ?? updated);
     });
   }
 
   /** GOAL-API-005 — xoá MỀM; còn goal con chưa xoá ⇒ 422 GOAL-ERR-007 (KHÔNG xoá lan). */
   async deleteGoal(user: RequestUser, id: string): Promise<void> {
     await this.db.withTenant(user.companyId, async (tx) => {
-      const actor = await this.resolveActorScope(tx, user, "delete");
+      const actor = await this.access.resolveActorScope(tx, user, "delete");
       const current = await this.repo.findByIdTx(tx, user.companyId, id);
       if (!current) throw new NotFoundException(GOAL_ERR.NOT_FOUND);
-      const anchorDepartmentId = await this.anchorDepartmentOf(tx, user.companyId, current);
-      await this.assertWriteAllowedOnExisting(tx, user, actor, current, anchorDepartmentId);
-      this.assertNotFinalized(current);
+      const anchorDepartmentId = await this.access.anchorDepartmentOf(tx, user.companyId, current);
+      await this.access.assertWriteAllowedOnExisting(tx, user, actor, current, anchorDepartmentId);
+      this.access.assertNotFinalized(current);
 
       const children = await this.repo.countNonDeletedChildrenTx(tx, user.companyId, id);
       if (children > 0) throw new UnprocessableEntityException(GOAL_ERR.HAS_CHILDREN);
@@ -317,134 +336,47 @@ export class GoalsService {
         actorUserId: user.id,
         before: this.auditSnapshot(current),
       });
+      // Con biến mất khỏi rollup của cha (SPEC-10 §13.1 mode='children' chỉ đếm con `deleted_at IS NULL`).
+      await this.engine.recomputeParentTx(tx, user.companyId, current.parentGoalId);
     });
   }
 
-  // ── Scope helpers ────────────────────────────────────────────────────────────
+  // ── Thông báo (SPEC-10 §17) ──────────────────────────────────────────────────
 
   /**
-   * Gate cặp (action,'goal') + dựng ngữ cảnh phạm vi. `resolveAndAssert` ném 403 khi actor KHÔNG có
-   * grant — trùng lớp PermissionGuard ở controller (defense-in-depth, không thừa: service còn được
-   * gọi từ job/bridge trong tương lai).
+   * GOAL_ASSIGNED — "được giao mục tiêu mới". Điều kiện phát (SPEC-10 §17): goal **cấp employee** và
+   * `owner_employee_id` ≠ nhân viên của actor. Tự đặt mục tiêu cho chính mình ⇒ IM LẶNG (không ai muốn
+   * nhận thông báo về việc mình vừa làm).
+   *
+   * Ở đường UPDATE chỉ phát khi người phụ trách THỰC SỰ ĐỔI (`before.ownerEmployeeId !== after`) —
+   * nếu không, mỗi lần sửa tiêu đề lại bắn một thông báo "được giao mục tiêu mới" cho cùng một người.
+   *
+   * Enqueue TRONG tx nghiệp vụ (outbox) ⇒ rollback thì thông báo cũng biến mất. Recipient KHÔNG resolve
+   * ở đây: `GoalNotiBridgeRegistrar` đọc audience HIỆN TẠI lúc consumer chạy (mirror TASK).
    */
-  private async resolveActorScope(
-    tx: TenantTx,
-    user: RequestUser,
-    action: string,
-  ): Promise<GoalActorScope> {
-    const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, action, "goal");
-    const ctx = await this.dataScope.resolveContext(user.id, user.companyId);
-    const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
-    // Bậc phòng ban CHỈ có nghĩa với scope 'Department' (phòng mình ∪ phòng mình phụ trách — mirror
-    // DataScopeService.departmentOrgUnitIds). Với Own/Team phải để RỖNG: nếu không, người scope Own
-    // sẽ đọc/ghi được MỌI mục tiêu cấp phòng của phòng mình = nới quyền câm.
-    const deptOrgUnitIds =
-      scope === "Department"
-        ? [...new Set([...(ctx.orgUnitId ? [ctx.orgUnitId] : []), ...(ctx.headedOrgUnitIds ?? [])])]
-        : [];
-    const base: GoalActorScope = {
-      scope,
-      ctx,
-      deptOrgUnitIds,
-      actorEmployeeId: actorEmp?.id ?? null,
-    };
-    if (scope === "Company" || scope === "System") return base;
-    return {
-      ...base,
-      readScopeExists: this.repo.buildReadScopeExists(
-        user.companyId,
-        this.dataScope.buildEmployeeScopeCondition(scope, ctx),
-        deptOrgUnitIds,
-        base.actorEmployeeId,
-        user.id,
-      ),
-    };
-  }
-
-  /** 404 khi không thuộc tenant · 403 khi thuộc tenant nhưng ngoài phạm vi ĐỌC (§20.2). */
-  private async loadReadableGoalTx(
-    tx: TenantTx,
-    user: RequestUser,
-    id: string,
-    actor: GoalActorScope,
-  ): Promise<Goal> {
-    const goal = await this.repo.findByIdTx(tx, user.companyId, id);
-    if (!goal) throw new NotFoundException(GOAL_ERR.NOT_FOUND);
-    if (!actor.readScopeExists) return goal;
-    const inScope = await this.repo.isInReadScopeTx(tx, user.companyId, id, actor.readScopeExists);
-    if (!inScope) throw new ForbiddenException(GOAL_ERR.FORBIDDEN);
-    return goal;
-  }
-
-  /**
-   * GẮN CHA = liên kết dữ liệu giữa hai nhánh cây ⇒ chỉ được gắn vào mục tiêu actor NHÌN THẤY
-   * (phạm vi của cặp ('view','goal'), KHÔNG phải phạm vi ghi). Vì sao dùng view chứ không dùng write:
-   * nhân viên @Own hợp lệ khi treo mục tiêu cá nhân dưới mục tiêu PHÒNG MÌNH (thấy được), nhưng KHÔNG
-   * được treo sang phòng khác — treo được sang phòng khác là đẩy dữ liệu của mình vào cây người ta.
-   * Cha ngoài tenant đã bị chặn từ validator (404) trước khi tới đây.
-   */
-  private async assertParentVisible(
-    tx: TenantTx,
-    user: RequestUser,
-    parentGoalId: string | null,
-  ): Promise<void> {
-    if (!parentGoalId) return;
-    const viewActor = await this.resolveActorScope(tx, user, "view");
-    if (!viewActor.readScopeExists) return;
-    const visible = await this.repo.isInReadScopeTx(
-      tx,
-      user.companyId,
-      parentGoalId,
-      viewActor.readScopeExists,
-    );
-    if (!visible) throw new ForbiddenException(GOAL_ERR.FORBIDDEN_PARENT);
-  }
-
-  /**
-   * Phạm vi GHI trên bản ghi ĐANG CÓ (update/delete) — anchor resolve từ chính hàng đó.
-   * Ở đường này `ownerEmployeeId` là dữ liệu ĐÃ LƯU (người khác gán cho actor), KHÔNG do actor tự khai
-   * trong request ⇒ cho phép vế "người phụ trách" (xem `assertWriteTarget`).
-   */
-  private async assertWriteAllowedOnExisting(
+  private async enqueueGoalAssignedIfNeeded(
     tx: TenantTx,
     user: RequestUser,
     actor: GoalActorScope,
     goal: Goal,
-    anchorDepartmentId: string | null,
+    before: Goal | null,
   ): Promise<void> {
-    if (actor.scope === "Company" || actor.scope === "System") return;
-    await this.assertWriteTarget(
-      tx,
-      user,
-      actor,
-      {
-        level: goal.level,
-        projectId: goal.projectId,
-        employeeId: goal.employeeId,
-        ownerEmployeeId: goal.ownerEmployeeId,
-        anchorDepartmentId,
-      },
-      true,
-    );
+    if (goal.level !== "employee") return;
+    if (actor.actorEmployeeId !== null && goal.ownerEmployeeId === actor.actorEmployeeId) return;
+    if (before !== null && before.ownerEmployeeId === goal.ownerEmployeeId) return;
+    const assignerName = await this.repo.findUserDisplayNameTx(tx, user.companyId, user.id);
+    await this.outbox.enqueue(tx, {
+      eventType: "goal.assigned",
+      payload: goalAssignedPayload(goal, assignerName ?? "Hệ thống"),
+    });
   }
 
+  // ── Scope helpers (uỷ quyền TOÀN BỘ cho GoalAccessService — S5-GOAL-BE-2) ────
+
   /**
-   * Phạm vi GHI trên trạng thái ĐÍCH (create/update sau merge).
-   *
-   * 🔒 LEO QUYỀN ĐÃ CHẶN (finding HIGH-1, FULL gate 2026-07-23 — có repro 201 nơi phải 403):
-   * `ownerEmployeeId` ở đường này do CLIENT khai, và khi vắng thì validator suy về CHÍNH ACTOR
-   * (`GoalsValidationService.resolveOwner`). Nếu chấp nhận vế "actor là người phụ trách" ở đây thì mọi
-   * trưởng đơn vị chỉ cần bỏ trống `ownerEmployeeId` là tạo được mục tiêu neo vào PHÒNG/DỰ ÁN BẤT KỲ
-   * (create:goal@Department ≈ @Company) rồi giữ nguyên quyền sửa/xoá vì vẫn là owner.
-   * ⇒ CREATE: chỉ chấp nhận neo trong phòng actor (`allowOwnerFallback = false`).
-   * ⇒ UPDATE: chấp nhận vế owner CHỈ KHI **bộ ba neo giữ NGUYÊN Y HỆT** — giữ được quyền sửa TẠI CHỖ
-   *   mục tiêu mình ĐƯỢC GIAO ở phòng khác, nhưng cấm mọi kiểu DI DỜI.
-   *
-   * ⚠️ So `department_id/project_id/employee_id` (ĐỊNH DANH neo), KHÔNG so `anchorDepartmentId`
-   * (finding MEDIUM-4, gate vòng 2): `anchorDepartmentId` là giá trị SUY RA (dự án → phòng dự án),
-   * nên hai dự án khác nhau CÙNG một phòng cho ra cùng giá trị ⇒ người phụ trách chuyển được mục tiêu
-   * sang dự án mình không có vai trò, miễn cùng phòng. Không vượt biên phòng nhưng làm bẩn rollup
-   * `progress_mode='project'` ở S5-GOAL-BE-2. Đừng "tối giản" lại thành so phòng.
+   * Cầu nối HẸP giữa `ResolvedGoalWrite` (đầu ra của validator) và `GoalAccessService.assertWriteAllowed`
+   * (nhận trạng thái ĐÍCH thuần dữ liệu). Giữ ở đây vì chỉ create/update mới có khái niệm "trạng thái đích";
+   * 3 writer mới của BE-2 thao tác trên hàng ĐÃ LƯU nên gọi thẳng `assertCanWriteExistingGoal`.
    */
   private async assertWriteAllowed(
     tx: TenantTx,
@@ -453,13 +385,7 @@ export class GoalsService {
     resolved: ResolvedGoalWrite,
     current?: { departmentId: string | null; projectId: string | null; employeeId: string | null },
   ): Promise<void> {
-    if (actor.scope === "Company" || actor.scope === "System") return;
-    const anchorUnchanged =
-      current !== undefined &&
-      current.departmentId === resolved.values.departmentId &&
-      current.projectId === resolved.values.projectId &&
-      current.employeeId === resolved.values.employeeId;
-    await this.assertWriteTarget(
+    await this.access.assertWriteAllowed(
       tx,
       user,
       actor,
@@ -470,97 +396,13 @@ export class GoalsService {
         ownerEmployeeId: resolved.values.ownerEmployeeId,
         anchorDepartmentId: resolved.anchorDepartmentId,
       },
-      anchorUnchanged,
+      current,
+      {
+        departmentId: resolved.values.departmentId,
+        projectId: resolved.values.projectId,
+        employeeId: resolved.values.employeeId,
+      },
     );
-  }
-
-  /**
-   * Luật ghi khi scope < Company (theo THỨ TỰ):
-   *   1. cấp DỰ ÁN  — Owner/Manager Active của đúng dự án ⇒ CHO, kể cả khác phòng ban (SPEC-10 §11
-   *      ghi chú: vai trò dự án cắt ngang phòng ban). KHÔNG phải member đủ vai ⇒ RƠI XUỐNG luật scope
-   *      bên dưới (trưởng đơn vị vẫn quản mục tiêu dự án THUỘC PHÒNG MÌNH — "department = cả 3 cấp
-   *      trong phòng"); đừng đổi thành throw sớm.
-   *   2. Own        — CHỈ mục tiêu cá nhân của chính actor (nhân viên không tạo mục tiêu phòng/dự án).
-   *   3. Department — neo nằm trong phòng actor (phòng mình ∪ phòng mình phụ trách) HOẶC actor là người
-   *                  phụ trách chính mục tiêu đó **và `allowOwnerFallback`**.
-   * Không khớp ⇒ 403 (bản ghi vẫn tồn tại với actor — GOAL minh bạch in-tenant).
-   *
-   * `allowOwnerFallback` = "được phép dùng vế NGƯỜI PHỤ TRÁCH". Bật cho trạng thái ĐÃ LƯU (update/delete
-   * trên hàng hiện có, hoặc update không di dời neo); TẮT cho trạng thái ĐÍCH của CREATE — nơi
-   * `ownerEmployeeId` do client khai/suy về chính actor nên vế owner TỰ THOẢ (chi tiết ở
-   * `assertWriteAllowed`). Đừng gộp lại thành một luật "cho gọn".
-   */
-  private async assertWriteTarget(
-    tx: TenantTx,
-    user: RequestUser,
-    actor: GoalActorScope,
-    target: {
-      level: string;
-      projectId: string | null;
-      employeeId: string | null;
-      ownerEmployeeId: string;
-      anchorDepartmentId: string | null;
-    },
-    allowOwnerFallback: boolean,
-  ): Promise<void> {
-    if (target.level === "project" && target.projectId) {
-      const membership = await this.projectAccess.getMembershipTx(
-        tx,
-        user.companyId,
-        target.projectId,
-        actor.actorEmployeeId,
-        user.id,
-      );
-      if (membership && (membership.role === "Owner" || membership.role === "Manager")) return;
-    }
-
-    if (actor.scope === "Own") {
-      const isOwnEmployeeGoal =
-        target.level === "employee" &&
-        actor.actorEmployeeId !== null &&
-        target.employeeId === actor.actorEmployeeId &&
-        target.ownerEmployeeId === actor.actorEmployeeId;
-      if (isOwnEmployeeGoal) return;
-      throw new ForbiddenException(GOAL_ERR.FORBIDDEN_CREATE);
-    }
-
-    const inDepartment =
-      target.anchorDepartmentId !== null &&
-      actor.deptOrgUnitIds.includes(target.anchorDepartmentId);
-    const isOwner =
-      allowOwnerFallback &&
-      actor.actorEmployeeId !== null &&
-      target.ownerEmployeeId === actor.actorEmployeeId;
-    if (inDepartment || isOwner) return;
-    throw new ForbiddenException(GOAL_ERR.FORBIDDEN_CREATE);
-  }
-
-  /**
-   * GOAL-ERR-005 — goal đã chốt kỳ thì ĐÓNG BĂNG (SPEC-10 §12 · §15 GOAL-API-004).
-   * BE-1 chưa có writer cho `finalized_at` (chốt/reopen = S5-GOAL-BE-2) nên nhánh này CHƯA kích hoạt
-   * được qua API — nhưng route PATCH/DELETE đã LIVE, để trống là guard rơi giữa 2 WO: ngày BE-2 bật
-   * chốt kỳ thì hai đường ghi này vẫn sửa/xoá được số ĐÃ CHỐT. Giữ nguyên, đừng dọn vì "chưa dùng".
-   */
-  private assertNotFinalized(goal: Goal): void {
-    if (goal.finalizedAt) throw new UnprocessableEntityException(GOAL_ERR.FINALIZED);
-  }
-
-  /** Phòng ban SUY RA của một goal đã lưu (dự án → phòng dự án · nhân viên → phòng nhân viên). */
-  private async anchorDepartmentOf(
-    tx: TenantTx,
-    companyId: string,
-    goal: Goal,
-  ): Promise<string | null> {
-    if (goal.departmentId) return goal.departmentId;
-    if (goal.projectId) {
-      const project = await this.repo.resolveProjectTx(tx, companyId, goal.projectId);
-      return project?.departmentId ?? null;
-    }
-    if (goal.employeeId) {
-      const employee = await this.repo.resolveEmployeeTx(tx, companyId, goal.employeeId);
-      return employee?.orgUnitId ?? null;
-    }
-    return null;
   }
 
   // ── Chuẩn hoá payload → trạng thái mong muốn ─────────────────────────────────

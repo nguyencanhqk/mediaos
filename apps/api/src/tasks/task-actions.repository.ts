@@ -39,6 +39,10 @@ export interface ActionTaskRaw {
   title: string;
   startAt: string | Date | null;
   dueAt: string | Date | null;
+  // S5-GOAL-BE-2 (additive) — mục tiêu đang gắn (cột `tasks.goal_id`, mig 0505). Đổi trạng thái task là
+  // một trong các sự kiện PHẢI tính lại tiến độ mục tiêu (SPEC-10 §13.3); thiếu cột này ở projection thì
+  // hook recompute không biết phải tính goal nào và im lặng bỏ qua.
+  goalId: string | null;
 }
 
 @Injectable()
@@ -54,7 +58,8 @@ export class TaskActionsRepository {
              project_id as "projectId", main_assignee_employee_id as "mainAssigneeEmployeeId",
              assignee_user_id as "assigneeUserId", creator_user_id as "creatorUserId",
              task_status as "taskStatus", task_priority as "taskPriority", task_code as "taskCode",
-             title, start_at as "startAt", due_at as "dueAt"
+             title, start_at as "startAt", due_at as "dueAt",
+             goal_id as "goalId"
         from tasks
        where id = ${id} and company_id = ${companyId} and deleted_at is null
        limit 1

@@ -759,6 +759,12 @@ export const taskCoreResponseSchema = z.object({
   // (KHÔNG `.default([])` — giữ Input=Output cho apiFetch<T>, cùng bẫy suy luận đã ghi ở stateId).
   // Server điền ở getTask + kanban board; endpoint chưa điền ⇒ FE coi như không có thẻ, không gãy.
   labels: z.array(taskLabelChipSchema).optional(),
+  // ── S5-GOAL-BE-2 (SPEC-10 §7 · GOAL-API-010) — mục tiêu đang gắn của công việc. `.optional()`
+  // additive (KHÔNG `.default()` — giữ Input=Output cho apiFetch<T>, cùng khuôn stateId/parentTaskId):
+  // FE và API deploy lệch pha vẫn parse được. NULL = chưa gắn mục tiêu nào.
+  goalId: z.string().uuid().nullable().optional(),
+  goalCode: z.string().nullable().optional(),
+  goalName: z.string().nullable().optional(),
 });
 export type TaskCoreResponseDto = z.infer<typeof taskCoreResponseSchema>;
 

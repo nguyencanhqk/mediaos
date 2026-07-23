@@ -113,6 +113,13 @@ function makeService(opts: { sequence?: ReturnType<typeof makeSequence> } = {}) 
     // ⚠️ Dependency mới PHẢI thêm ở CUỐI danh sách này: service được dựng theo VỊ TRÍ nên chèn vào
     // giữa sẽ lệch mọi tham số phía sau, mà tsc chỉ báo "thiếu 1 tham số" — không chỉ ra chỗ lệch.
     { resolveTaskCovers: vi.fn().mockResolvedValue(new Map()) } as never,
+    // S5-GOAL-BE-2 — engine đo tiến độ mục tiêu. createTask KHÔNG gọi engine (task mới chưa gắn mục
+    // tiêu nào và chưa đổi trạng thái); mock để dựng service, khẳng định "không gọi" ở int-spec.
+    {
+      recomputeGoalTx: vi.fn().mockResolvedValue(undefined),
+      recomputeProjectGoalsTx: vi.fn().mockResolvedValue(undefined),
+      recomputeForTaskTx: vi.fn().mockResolvedValue(undefined),
+    } as never,
   );
   return { svc, repo, db, sequence };
 }

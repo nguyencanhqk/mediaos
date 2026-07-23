@@ -46,7 +46,7 @@ DELETE + BYPASSRLS *chỉ trong thân function*). `REVOKE ALL FROM PUBLIC` + `GR
   row `company_id IS NULL` (global) KHÔNG BAO GIỜ khớp ⇒ **GIỮ VĨNH VIỄN** tự động (không cần nhánh riêng).
   Đây chính là lý do chọn tenant-scoped predicate thay vì quét global (owner decision #3).
 
-### 3.1 Function (migration 0510)
+### 3.1 Function (migration 0511)
 
 ```sql
 CREATE FUNCTION purge_system_job_runs(               -- CREATE (KHÔNG "OR REPLACE") — bám 0310, fail nếu đã tồn tại
@@ -121,7 +121,7 @@ GRANT EXECUTE ON FUNCTION purge_system_job_runs(uuid,integer,integer,integer,boo
   sống ⇒ owner có bypass; đã verify `pg_roles`: `mediaos` rolbypassrls=true). Nếu owner KHÔNG bypass thì DELETE
   bị RLS lọc về **0 row IM LẶNG** (không lỗi) ⇒ **int-spec case default-30d (seed 40d → PHẢI xoá) là bằng
   chứng RED-first** rằng function thật sự xoá được (câm = đỏ).
-- **Migration band**: 0510, journal idx 190, when 1717587312000 (nối tiếp head 0509 idx 189). Schema drizzle
+- **Migration band**: 0511, journal idx 191, when 1717587313000 (nối tiếp head 0510 fndrevoke idx 190; renumber 0510→0511 do S5-FND-REVOKE-1 chiếm 0510 trên master). Schema drizzle
   `system-jobs.ts` KHÔNG đổi (function/RLS không biểu diễn được bằng drizzle — parity thủ công, giống 0475).
 
 ## 4. Handler `SystemJobRunsRetentionJobHandler` (app-layer)
@@ -230,7 +230,7 @@ OFF_VALUES = { 'false','0','off','no','disabled' }   // case-insensitive, trim
 - [ ] LMS_USER_SYNC <90d giữ (mốc 50d) / >90d xoá; non-LMS mốc 30d — sàn ép Ở SQL primitive (`GREATEST`) +
       pin đối số handler (unit) + hành vi thật (int-spec).
 - [ ] Row `company_id IS NULL` GIỮ (predicate tenant-scoped) + metadata `globalRowsKept` + test.
-- [ ] Migration 0510 tạo function SECURITY DEFINER + REVOKE PUBLIC + GRANT EXECUTE worker; **KHÔNG** cấp
+- [ ] Migration 0511 tạo function SECURITY DEFINER + REVOKE PUBLIC + GRANT EXECUTE worker; **KHÔNG** cấp
       DELETE bảng cho role nào (app/worker table_grants bất biến); EXECUTE chỉ worker (không app/PUBLIC).
 - [ ] `SYSTEM_JOB_RUNS_RETENTION_ENABLED` khai `.env.example`; comment ở `system-jobs-schema.int-spec.ts`
       ghi rõ "DELETE-capability nay tồn tại QUA SECURITY DEFINER có kiểm soát" (tên assert cũ không còn nghĩa đen).
@@ -247,7 +247,7 @@ OFF_VALUES = { 'false','0','off','no','disabled' }   // case-insensitive, trim
   `REVOKE PUBLIC` + guard tham số + allowlist status. Mirror 0310.
 - **Xoá quá tay phá bằng chứng BE-4** → sàn LMS 90d + Failed/Partial giữ vĩnh viễn (append-mostly bảo toàn).
 - **Migration số trùng** → khai `apps/api/migrations/**` trong paths (memory `wo-paths-drive-gate-and-scheduler`);
-  head 0509 → 0510.
+  head 0510 → 0511 (0510 do fndrevoke chiếm).
 - **Handler dùng workerDb (pattern mới cho @SystemJobHandler)** → mirror JobRunLogger/JobLockService
   (assertWorkerRoleSafe + fail-closed); reviewer soi diff.
 - **NGOÀI phạm vi** (ghi rõ): giảm `SYSTEM_JOBS_POLL_MS` (đòn 0-code owner tự chỉnh .env.prod); lịch riêng

@@ -13,7 +13,7 @@ import { cleanupTenants, seedCompany, type SeededTenant } from "../helpers/seed"
  *
  * Kiểm chứng trên Postgres THẬT (LANE_DB) — chạy END-TO-END qua `handler.run()` với `workerDb` = role
  * mediaos_worker (NOBYPASSRLS): worker chỉ có EXECUTE trên FUNCTION purge_system_job_runs (SECURITY DEFINER,
- * mig 0510), KHÔNG có DELETE bảng ⇒ đây là ĐÚNG đường prod. Unit spec (fake dbw) không chứng minh được
+ * mig 0511), KHÔNG có DELETE bảng ⇒ đây là ĐÚNG đường prod. Unit spec (fake dbw) không chứng minh được
  * predicate SQL nào; mọi bằng chứng an toàn (giữ Failed/Partial/Running, sàn LMS ≥90d, giữ row global,
  * cô lập chéo tenant, EXECUTE chỉ worker) nằm Ở ĐÂY.
  *

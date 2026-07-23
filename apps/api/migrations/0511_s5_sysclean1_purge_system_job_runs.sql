@@ -1,4 +1,4 @@
--- Migration 0510: S5-SYS-CLEAN-1 (🔴 RED, zone=red, crown — primitive XOÁ + FUNCTION grant) —
+-- Migration 0511: S5-SYS-CLEAN-1 (🔴 RED, zone=red, crown — primitive XOÁ + FUNCTION grant) —
 -- Retention CÓ NGƯỠNG cho system_job_runs.
 --
 -- Gate: FULL (security-reviewer [SECURITY DEFINER cross-tenant primitive + REVOKE PUBLIC + grant] +
@@ -23,8 +23,8 @@
 --      row global (company_id IS NULL) không bao giờ khớp.
 --   #3 KHÔNG secret. Function chỉ nhận uuid + int + boolean; không đọc/ghi PII.
 --
--- BAND 0510 (lane sysclean). Journal: idx 190, when 1717587312000 (> head 0509 idx 189 / 1717587311000).
---   Nối tiếp ĐƠN ĐIỆU. KHÔNG db:generate — FUNCTION/SECURITY DEFINER không biểu diễn được bằng drizzle
+-- BAND 0511 (lane sysclean). Journal: idx 191, when 1717587313000 (> head 0510 fndrevoke idx 190 /
+--   1717587312000). Nối tiếp ĐƠN ĐIỆU. KHÔNG db:generate — FUNCTION/SECURITY DEFINER không biểu diễn bằng drizzle
 --   (parity thủ công, giống RLS/policy ở 0475). Drizzle schema system-jobs.ts KHÔNG đổi.
 -- ════════════════════════════════════════════════════════════════════════════════════════════════
 

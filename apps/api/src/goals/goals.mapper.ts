@@ -1,5 +1,7 @@
 import type {
   GoalCoreResponseDto,
+  GoalUpdateResponseDto,
+  GoalUpdateTypeDto,
   GoalLevelDto,
   GoalMeasureTypeDto,
   GoalPeriodTypeDto,
@@ -7,7 +9,7 @@ import type {
   GoalStatusDto,
   GoalTreeNodeDto,
 } from "@mediaos/contracts";
-import type { Goal } from "../db/schema/goals";
+import type { Goal, GoalUpdate } from "../db/schema/goals";
 
 /**
  * S5-GOAL-BE-1 — projection row Drizzle → DTO contracts. CẤM controller/service trả row thô.
@@ -54,6 +56,27 @@ export function toGoalCoreDto(row: Goal): GoalCoreResponseDto {
     finalizedAt: toIso(row.finalizedAt),
     createdAt: toIso(row.createdAt) ?? new Date(0).toISOString(),
     updatedAt: toIso(row.updatedAt) ?? new Date(0).toISOString(),
+  };
+}
+
+/**
+ * S5-GOAL-BE-2 — một dòng sổ `goal_updates` → DTO. Cột `numeric` về CHUỖI ⇒ ép số ở đây (một chỗ).
+ * `null` giữ NULL: "check-in không đổi số" và "check-in về 0" là hai chuyện khác nhau, y hệt luật
+ * "chưa đo ≠ 0%" của `progress_percent` (SPEC-10 §13.2).
+ */
+export function toGoalUpdateDto(row: GoalUpdate): GoalUpdateResponseDto {
+  return {
+    id: row.id,
+    goalId: row.goalId,
+    updateType: row.updateType as GoalUpdateTypeDto,
+    actorUserId: row.actorUserId,
+    oldCurrentValue: toNumber(row.oldCurrentValue),
+    newCurrentValue: toNumber(row.newCurrentValue),
+    oldProgressPercent: toNumber(row.oldProgressPercent),
+    newProgressPercent: toNumber(row.newProgressPercent),
+    confidence: row.confidence === null ? null : Number(row.confidence),
+    note: row.note,
+    createdAt: toIso(row.createdAt) ?? new Date(0).toISOString(),
   };
 }
 

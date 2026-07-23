@@ -28,6 +28,8 @@ import {
   type TaskCoreRow,
 } from "./task-core.repository";
 import { TaskActionsRepository, type ActionTaskRaw } from "./task-actions.repository";
+// S5-GOAL-BE-2 (additive) — vòng đo mục tiêu: recompute CÙNG TX khi task đổi trạng thái (SPEC-10 §13.3).
+import { GoalProgressEngineService } from "./goal-progress-engine.service";
 import { TaskActivityService } from "./task-activity.service";
 import { ProjectAccessService } from "./project-access.service";
 import { coalesceTaskStatus, deriveStatusTimestamps, evaluateTransition } from "./task-fsm";
@@ -90,6 +92,7 @@ export class TaskActionsService {
     private readonly audit: AuditService,
     private readonly activity: TaskActivityService,
     private readonly outbox: OutboxService,
+    private readonly goalProgress: GoalProgressEngineService,
     // S5-TASK-PROJROLE-1 (D-24) — DRY task-scope assert, mode thread per-operation (write/read).
     private readonly projectAccess: ProjectAccessService,
     // S5-TASK-AVATAR-1 (Nhóm C) — ký avatar cho response của 4 route action (xem ghi chú ở `respond`).
@@ -282,6 +285,13 @@ export class TaskActionsService {
         creatorUserId: raw.creatorUserId,
       },
     });
+
+    // S5-GOAL-BE-2 (SPEC-10 §13.3) — đổi trạng thái task (gồm cả vào/ra 'Cancelled') là sự kiện đo:
+    // tính lại goal ĐANG GẮN (mode='tasks') VÀ mọi goal mode='project' của dự án chứa task, CÙNG TX.
+    // Đặt SAU khi mọi thao tác ghi/khoá của FSM đã thành công — engine chỉ ĐỌC tasks rồi ghi cột cache
+    // của `goals`, không đụng hàng task nào nên không chen vào thứ tự khoá D-19/D-21/D-33.
+    // Goal đã chốt kỳ được engine tự bỏ qua (§13.4) — KHÔNG chặn việc đổi trạng thái task.
+    await this.goalProgress.recomputeForTaskTx(tx, user.companyId, raw.goalId, raw.projectId);
 
     return this.respond(tx, user.companyId, taskId, []);
   }
