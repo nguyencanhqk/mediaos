@@ -45,6 +45,10 @@ import { TaskFileService } from "./task-file.service";
 import { TaskFileRepository } from "./task-file.repository";
 import { TaskFileResolver } from "./task-file.resolver";
 import { ProjectAccessService } from "./project-access.service";
+// S5-GOAL-BE-2 (additive) — engine đo tiến độ mục tiêu (SPEC-10 §13). Đặt trong TasksModule vì nguồn số
+// là `tasks`/`projects`; GoalsModule đã import TasksModule (1 chiều) nên đặt bên goals/ sẽ tạo cycle.
+import { GoalProgressEngineService } from "./goal-progress-engine.service";
+import { GoalProgressEngineRepository } from "./goal-progress-engine.repository";
 
 @Module({
   imports: [
@@ -102,6 +106,10 @@ import { ProjectAccessService } from "./project-access.service";
     // S5-TASK-PROJROLE-1 (đợt C, DECISIONS-04) — tầng đọc project_role duy nhất (D-23/D-24) +
     // DRY assertTaskInScopeTx (mode read/collab/write thread per-operation).
     ProjectAccessService,
+    // S5-GOAL-BE-2 (additive) — engine tiến độ mục tiêu (4 mode + rollup). KHÔNG có controller: engine
+    // chỉ được gọi nội bộ từ writer đã tự authorize (xem docblock service).
+    GoalProgressEngineService,
+    GoalProgressEngineRepository,
   ],
   // S4-DASH-BE-2 (additive): + TaskCoreService (MY_TASKS/TASK_ALERTS) + ProjectsService (PROJECT_PROGRESS
   // authorize getProject TRƯỚC listByProject — GAP vòng reconcile: plan cũ chỉ ghi TaskCoreService). DASH
@@ -109,7 +117,17 @@ import { ProjectAccessService } from "./project-access.service";
   // S5-GOAL-BE-1 (additive): + ProjectAccessService — GoalsModule cần lớp đọc project_role DUY NHẤT
   // (D-23/D-24) để cho Owner/Manager dự án ghi goal cấp dự án kể cả khác phòng ban (SPEC-10 §11).
   // CHỈ mở visibility qua DI — KHÔNG re-provide instance thứ 2, KHÔNG method mới.
-  exports: [TasksService, TaskCoreService, ProjectsService, ProjectAccessService],
+  // S5-GOAL-BE-2 (additive): + GoalProgressEngineService (GoalsModule gọi khi check-in/finalize/link) +
+  // TaskCoreRepository (GoalTasksLinkService dùng LẠI projection + mapper task hợp nhất cho
+  // GET /goals/:id/tasks — KHÔNG dựng bản sao thứ hai, bài học 3-mapper PR #247).
+  exports: [
+    TasksService,
+    TaskCoreService,
+    ProjectsService,
+    ProjectAccessService,
+    GoalProgressEngineService,
+    TaskCoreRepository,
+  ],
 })
 export class TasksModule implements OnModuleInit {
   /**

@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, inArray, isNull, lte, gte, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, gte, sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { goals, type Goal } from "../db/schema/goals";
 
@@ -98,6 +98,22 @@ export interface EmployeeRefRow {
 export interface ProjectRefRow {
   id: string;
   departmentId: string | null;
+}
+
+/**
+ * S5-GOAL-BE-2 — hàng `tasks` tối thiểu cho gắn/tháo task↔goal (GOAL-API-010). `projectDepartmentId`
+ * là phòng của DỰ ÁN chứa task: goal cấp phòng coi task "liên quan phòng" khi task neo thẳng phòng đó
+ * HOẶC thuộc dự án của phòng đó (GOAL-ERR-008 vế cảnh báo mềm).
+ */
+export interface TaskRefRow {
+  id: string;
+  goalId: string | null;
+  projectId: string | null;
+  departmentId: string | null;
+  taskCode: string | null;
+  title: string;
+  mainAssigneeEmployeeId: string | null;
+  projectDepartmentId: string | null;
 }
 
 @Injectable()
@@ -366,6 +382,140 @@ export class GoalsRepository {
       .where(and(eq(goals.id, id), eq(goals.companyId, companyId), isNull(goals.deletedAt)))
       .returning();
     return row;
+  }
+
+  // ── S5-GOAL-BE-2 (additive) — writer HẸP cho vòng đo: check-in · chốt kỳ · gắn/tháo task ─────
+
+  /**
+   * Ghi `current_value` (đầu vào check-in thủ công). KHÔNG ghi `progress_percent` ở đây — tiến độ là
+   * giá trị DẪN XUẤT, chỉ `GoalProgressEngineService` được ghi (một writer duy nhất cho cột cache,
+   * nếu không thì mode='tasks' bị check-in ghi đè và job đối soát đêm sẽ "sửa" ngược lại mỗi đêm).
+   */
+  async setCurrentValueTx(
+    tx: TenantTx,
+    companyId: string,
+    id: string,
+    currentValue: string | null,
+    actorUserId: string,
+  ): Promise<Goal | undefined> {
+    const [row] = await tx
+      .update(goals)
+      .set({ currentValue, updatedAt: new Date(), updatedBy: actorUserId })
+      .where(and(eq(goals.id, id), eq(goals.companyId, companyId), isNull(goals.deletedAt)))
+      .returning();
+    return row;
+  }
+
+  /**
+   * Chốt kỳ / mở lại (GOAL-API-009). `finalizedAt=null` = reopen. Vị từ `finalized_at is null` /
+   * `is not null` tương ứng là KHOÁ CHỐNG ĐUA: hai request finalize song song thì request thứ hai ghi
+   * 0 hàng ⇒ caller thấy `undefined` và trả 422, thay vì ghi đè `finalized_by` của người chốt trước.
+   */
+  async setFinalizedTx(
+    tx: TenantTx,
+    companyId: string,
+    id: string,
+    finalize: boolean,
+    actorUserId: string,
+  ): Promise<Goal | undefined> {
+    const [row] = await tx
+      .update(goals)
+      .set({
+        finalizedAt: finalize ? new Date() : null,
+        finalizedBy: finalize ? actorUserId : null,
+        updatedAt: new Date(),
+        updatedBy: actorUserId,
+      })
+      .where(
+        and(
+          eq(goals.id, id),
+          eq(goals.companyId, companyId),
+          isNull(goals.deletedAt),
+          finalize ? isNull(goals.finalizedAt) : isNotNull(goals.finalizedAt),
+        ),
+      )
+      .returning();
+    return row;
+  }
+
+  /** Tên hiển thị của một user trong tenant (người giao mục tiêu — placeholder {assigner_name}). */
+  async findUserDisplayNameTx(
+    tx: TenantTx,
+    companyId: string,
+    userId: string,
+  ): Promise<string | null> {
+    const res = await tx.execute(sql`
+      select full_name as "fullName" from users
+       where id = ${userId} and company_id = ${companyId} and deleted_at is null
+       limit 1
+    `);
+    const row = (res.rows as unknown as { fullName: string | null }[])[0];
+    return row?.fullName ?? null;
+  }
+
+  /**
+   * Hàng task tối thiểu để validate GOAL-ERR-008 + tenant-check. RAW SQL vì các cột 0478
+   * (`task_status`/`main_assignee_employee_id`/`department_id`) và cột 0505 (`goal_id`) CHƯA typed
+   * trong Drizzle schema `tasks` (mirror TaskCoreRepository/TaskActionsRepository).
+   *
+   * ⚠️ `company_id` BIND TƯỜNG MINH: FK `tasks.goal_id → goals.id` là FK ĐƠN CỘT, KHÔNG ép cùng-tenant
+   * (finding MEDIUM gate S5-GOAL-DB-1) ⇒ lớp resolve dưới company này là hàng phòng thủ DUY NHẤT chống
+   * gắn task của công ty khác vào mục tiêu của mình. undefined ⇒ caller trả 404.
+   */
+  async resolveTaskRefTx(
+    tx: TenantTx,
+    companyId: string,
+    taskId: string,
+  ): Promise<TaskRefRow | undefined> {
+    const res = await tx.execute(sql`
+      select tk.id, tk.goal_id as "goalId", tk.project_id as "projectId",
+             tk.department_id as "departmentId", tk.task_code as "taskCode", tk.title,
+             tk.main_assignee_employee_id as "mainAssigneeEmployeeId",
+             pr.department_id as "projectDepartmentId"
+        from tasks tk
+        left join projects pr on pr.id = tk.project_id and pr.company_id = tk.company_id
+       where tk.id = ${taskId} and tk.company_id = ${companyId} and tk.deleted_at is null
+       limit 1
+    `);
+    return (res.rows as unknown as TaskRefRow[])[0];
+  }
+
+  /** Gắn task vào goal (GOAL sở hữu nghiệp vụ; cột nằm trên `tasks` — DB-11 §6.5). Trả {id} hoặc undefined. */
+  async setTaskGoalTx(
+    tx: TenantTx,
+    companyId: string,
+    taskId: string,
+    goalId: string | null,
+    actorUserId: string,
+  ): Promise<{ id: string } | undefined> {
+    const res = await tx.execute(sql`
+      update tasks
+         set goal_id = ${goalId}, updated_at = now(), updated_by = ${actorUserId}
+       where id = ${taskId} and company_id = ${companyId} and deleted_at is null
+       returning id
+    `);
+    return (res.rows as unknown as { id: string }[])[0];
+  }
+
+  /**
+   * Tháo task khỏi ĐÚNG goal đang xem (vị từ `goal_id = ${goalId}` — KHÔNG tháo mù theo taskId): tháo
+   * một task đang gắn mục tiêu KHÁC là sửa dữ liệu của cây khác qua endpoint của cây này.
+   */
+  async clearTaskGoalTx(
+    tx: TenantTx,
+    companyId: string,
+    taskId: string,
+    goalId: string,
+    actorUserId: string,
+  ): Promise<{ id: string } | undefined> {
+    const res = await tx.execute(sql`
+      update tasks
+         set goal_id = null, updated_at = now(), updated_by = ${actorUserId}
+       where id = ${taskId} and company_id = ${companyId} and goal_id = ${goalId}
+         and deleted_at is null
+       returning id
+    `);
+    return (res.rows as unknown as { id: string }[])[0];
   }
 
   /** BẤT BIẾN #2 — xoá MỀM. Không bao giờ gọi tx.delete(goals). */

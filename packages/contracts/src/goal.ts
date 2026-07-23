@@ -173,3 +173,86 @@ export const meGoalsQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).optional(),
 });
 export type MeGoalsQueryRequest = z.infer<typeof meGoalsQuerySchema>;
+
+// ══ S5-GOAL-BE-2 — vòng đo: check-in · sổ cập nhật · chốt kỳ · gắn/tháo task ══════════════════════
+
+/** Loại bản ghi trong sổ `goal_updates` (DB-11 §6.2). Recompute tự động KHÔNG ghi sổ — tránh phình. */
+export const goalUpdateTypeSchema = z.enum(["checkin", "finalize", "reopen"]);
+export type GoalUpdateTypeDto = z.infer<typeof goalUpdateTypeSchema>;
+
+/**
+ * POST /goals/:id/check-in (GOAL-API-007, cặp `('checkin','goal')`).
+ *
+ * `currentValue` và `progressPercent` là HAI CÁCH GỌI CÙNG MỘT CHỖ (cột `current_value`) tuỳ
+ * `measure_type` của mục tiêu — `percent` thì con số CHÍNH LÀ phần trăm, `number` thì là giá trị thực
+ * đo được, `boolean` thì 0/khác-0. Gửi cả hai ⇒ 422 ở service (mã GOAL-ERR-006): đoán hộ người dùng
+ * xem họ muốn cái nào là cách chắc chắn ghi sai một nửa số lần.
+ *
+ * Cả hai đều OPTIONAL: check-in "chỉ ghi cảm nhận + ghi chú" (confidence/note) là hợp lệ và KHÔNG đổi
+ * số — với mục tiêu đo bằng task/dự án/mục tiêu con thì đó là hình thức check-in DUY NHẤT có nghĩa.
+ */
+export const checkinGoalSchema = z.object({
+  currentValue: z.number().finite().nullish(),
+  progressPercent: z.number().finite().nullish(),
+  /** Cảm nhận khả năng đạt 0–100 (DB CHECK cùng khoảng). */
+  confidence: z.number().int().min(0).max(100).nullish(),
+  note: z.string().trim().max(2000).nullish(),
+});
+export type CheckinGoalRequest = z.infer<typeof checkinGoalSchema>;
+
+/** POST /goals/:id/finalize · /reopen (GOAL-API-009, cặp `('finalize','goal')`) — ghi chú tuỳ chọn. */
+export const finalizeGoalSchema = z.object({
+  note: z.string().trim().max(2000).nullish(),
+});
+export type FinalizeGoalRequest = z.infer<typeof finalizeGoalSchema>;
+
+/** Một dòng sổ `goal_updates` (GOAL-API-008). Ledger append-only ⇒ KHÔNG có updatedAt/deletedAt. */
+export const goalUpdateResponseSchema = z.object({
+  id: z.string().uuid(),
+  goalId: z.string().uuid(),
+  updateType: goalUpdateTypeSchema,
+  actorUserId: z.string().uuid(),
+  oldCurrentValue: z.number().nullable(),
+  newCurrentValue: z.number().nullable(),
+  oldProgressPercent: z.number().nullable(),
+  newProgressPercent: z.number().nullable(),
+  confidence: z.number().int().nullable(),
+  note: z.string().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type GoalUpdateResponseDto = z.infer<typeof goalUpdateResponseSchema>;
+
+/** GET /goals/:id/updates — `z.coerce` để idempotent khi ZodValidationPipe chạy 2 LẦN. */
+export const listGoalUpdatesQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(GOAL_PAGE_LIMIT_MAX).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+export type ListGoalUpdatesQueryRequest = z.infer<typeof listGoalUpdatesQuerySchema>;
+
+/** Trần số task gắn trong MỘT lần gọi (chống payload khổng lồ khoá hàng loạt trong 1 tx). */
+export const GOAL_LINK_TASKS_MAX = 100;
+
+/** POST /goals/:id/tasks (GOAL-API-010, bulk) — gắn task vào mục tiêu. */
+export const linkGoalTasksSchema = z.object({
+  taskIds: z.array(z.string().uuid()).min(1).max(GOAL_LINK_TASKS_MAX),
+});
+export type LinkGoalTasksRequest = z.infer<typeof linkGoalTasksSchema>;
+
+/**
+ * Kết quả gắn/tháo. `warnings` = CẢNH BÁO MỀM của GOAL-ERR-008 vế mục tiêu cấp phòng (task không liên
+ * quan phòng vẫn được gắn — SPEC-10 §12 nói rõ "không chặn"); vế `employee`/`project` thì CHẶN bằng 422
+ * nên không bao giờ xuất hiện ở đây.
+ */
+export const goalTaskLinkResultSchema = z.object({
+  goalId: z.string().uuid(),
+  linked: z.number().int().nonnegative(),
+  alreadyLinked: z.number().int().nonnegative(),
+  warnings: z.array(
+    z.object({
+      taskId: z.string().uuid(),
+      taskCode: z.string().nullable(),
+      message: z.string(),
+    }),
+  ),
+});
+export type GoalTaskLinkResultDto = z.infer<typeof goalTaskLinkResultSchema>;

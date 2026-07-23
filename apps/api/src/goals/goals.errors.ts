@@ -25,6 +25,19 @@ export const GOAL_ERR = {
    */
   FINALIZED:
     "GOAL-ERR-005: mục tiêu đã chốt kỳ — mở lại (reopen) trước khi sửa hoặc xoá (cần quyền chốt kỳ).",
+  /** GOAL-ERR-005 — reopen một mục tiêu CHƯA chốt kỳ (không có gì để mở lại). */
+  NOT_FINALIZED: "GOAL-ERR-005: mục tiêu chưa chốt kỳ — không có gì để mở lại.",
+  /** GOAL-ERR-006 — check-in chỉ hợp lệ khi status Active (Draft chưa chạy · Completed/Cancelled đã đóng). */
+  CHECKIN_STATUS: (status: string) =>
+    `GOAL-ERR-006: chỉ check-in được mục tiêu đang chạy (Active) — mục tiêu này đang ở trạng thái ${status}.`,
+  /** GOAL-ERR-006 — gửi CẢ `currentValue` lẫn `progressPercent`: không đoán hộ người dùng muốn cái nào. */
+  CHECKIN_AMBIGUOUS:
+    "GOAL-ERR-006: chỉ gửi MỘT trong hai giá trị check-in (currentValue hoặc progressPercent).",
+  /** GOAL-ERR-008 — gắn task sai neo (vế CHẶN: mục tiêu cấp nhân viên/dự án). */
+  LINK_ANCHOR: (detail: string) => `GOAL-ERR-008: không gắn được công việc vào mục tiêu — ${detail}`,
+  /** GOAL-ERR-014 — finalize chỉ hợp lệ khi status Active hoặc Completed. */
+  FINALIZE_STATUS: (status: string) =>
+    `GOAL-ERR-014: chỉ chốt kỳ được mục tiêu Active hoặc Completed — mục tiêu này đang ở trạng thái ${status}.`,
   /** GOAL-ERR-007 — xoá goal còn goal con. */
   HAS_CHILDREN:
     "GOAL-ERR-007: mục tiêu còn mục tiêu con — xoá hoặc di dời mục tiêu con trước (không xoá lan).",

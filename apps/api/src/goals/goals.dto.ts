@@ -1,6 +1,10 @@
 import { createZodDto } from "nestjs-zod";
 import {
+  checkinGoalSchema,
   createGoalSchema,
+  finalizeGoalSchema,
+  linkGoalTasksSchema,
+  listGoalUpdatesQuerySchema,
   goalTreeQuerySchema,
   listGoalsQuerySchema,
   meGoalsQuerySchema,
@@ -29,3 +33,17 @@ export class GoalTreeQueryDto extends createZodDto(goalTreeQuerySchema) {}
  * (SPEC-09 §14.4). Dùng chung `ListGoalsQueryDto` ở đây là mở lại đúng cửa IDOR vừa đóng.
  */
 export class MeGoalsQueryDto extends createZodDto(meGoalsQuerySchema) {}
+
+// ── S5-GOAL-BE-2 — vòng đo (GOAL-API-007..010) ──────────────────────────────────
+
+/** POST /goals/:id/check-in (checkin:goal). */
+export class CheckinGoalDto extends createZodDto(checkinGoalSchema) {}
+
+/** POST /goals/:id/finalize · /reopen (finalize:goal) — body chỉ có ghi chú tuỳ chọn. */
+export class FinalizeGoalDto extends createZodDto(finalizeGoalSchema) {}
+
+/** GET /goals/:id/updates (view:goal) — `z.coerce` ⇒ idempotent khi pipe chạy 2 lần. */
+export class ListGoalUpdatesQueryDto extends createZodDto(listGoalUpdatesQuerySchema) {}
+
+/** POST /goals/:id/tasks (update:goal) — gắn bulk (trần GOAL_LINK_TASKS_MAX). */
+export class LinkGoalTasksDto extends createZodDto(linkGoalTasksSchema) {}

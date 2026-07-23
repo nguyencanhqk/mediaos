@@ -36,6 +36,12 @@ export interface TaskCoreListFilter {
    * `sort_order NULLS LAST, created_at` thay vì `created_at desc` mặc định của list.
    */
   parentId?: string;
+  /**
+   * S5-GOAL-BE-2 (GOAL-API-010) — CHỈ task đang gắn đúng một mục tiêu. Dùng cho `GET /goals/:id/tasks`;
+   * caller vẫn PHẢI truyền `scopeExists` của cặp ('read','task') như mọi đường đọc khác — bộ lọc này
+   * KHÔNG phải lớp quyền.
+   */
+  goalId?: string;
   limit: number;
   offset: number;
 }
@@ -89,6 +95,11 @@ export interface TaskCoreRow {
   // literal TaskCoreRow trong unit spec hiện có. NULL = task GỐC.
   parentTaskId?: string | null;
   sortOrder?: number | null;
+  // S5-GOAL-BE-2 (D-…/SPEC-10 §7) — mục tiêu đang gắn. Optional additive (mirror taskCode/stateId) để
+  // KHÔNG phá literal TaskCoreRow trong unit spec hiện có. NULL = task chưa gắn mục tiêu nào.
+  goalId?: string | null;
+  goalCode?: string | null;
+  goalName?: string | null;
 }
 
 export interface MyTaskRow extends TaskCoreRow {
@@ -110,6 +121,9 @@ export interface TaskRawRow {
   // S5-TASK-SUBTASK-1 (D-36) — NULL = task GỐC. Nguồn cho chốt "việc con không có cột" ở
   // applyStateChangeTx (phủ CẢ move-state LẪN PATCH {stateId}) và cho luật D-36a của updateTask.
   parentTaskId: string | null;
+  // S5-GOAL-BE-2 (additive) — mục tiêu đang gắn (`tasks.goal_id`, mig 0505). Cần ở đường sửa/xoá task để
+  // tính lại tiến độ mục tiêu CÙNG TX (SPEC-10 §13.3).
+  goalId: string | null;
 }
 
 /** Cột pipeline đích cho đường ghi state_id (move-state / PATCH / POST — plan 3b/3c). */
@@ -200,8 +214,15 @@ const TASK_CORE_SELECT = sql`
   tk.sort_order                AS "sortOrder",
   ps.name                      AS "stateName",
   ps.color                     AS "stateColor",
-  ps.state_group               AS "stateGroup"`;
+  ps.state_group               AS "stateGroup",
+  tk.goal_id                   AS "goalId",
+  gl.goal_code                 AS "goalCode",
+  gl.name                      AS "goalName"`;
 
+// S5-GOAL-BE-2 (additive) — JOIN `goals gl` lấy tên/mã mục tiêu đang gắn. Ràng `company_id` TƯỜNG MINH
+// trong mệnh đề ON: FK `tasks.goal_id → goals.id` là FK ĐƠN CỘT, KHÔNG ép cùng-tenant (finding gate
+// S5-GOAL-DB-1 đã chứng minh tận DB) ⇒ thiếu vế này thì một hàng lệch tenant sẽ hiện TÊN MỤC TIÊU CỦA
+// CÔNG TY KHÁC trên thẻ việc.
 const TASK_CORE_JOINS = sql`
   from tasks tk
   left join projects pr          on pr.id = tk.project_id
@@ -211,7 +232,9 @@ const TASK_CORE_JOINS = sql`
   left join employee_profiles rep on rep.id = tk.reporter_employee_id
   left join users ru             on ru.id = rep.user_id
   left join project_states ps    on ps.id = tk.state_id and ps.company_id = tk.company_id
-                                and ps.project_id = tk.project_id and ps.deleted_at is null`;
+                                and ps.project_id = tk.project_id and ps.deleted_at is null
+  left join goals gl             on gl.id = tk.goal_id and gl.company_id = tk.company_id
+                                and gl.deleted_at is null`;
 
 /**
  * S5-TASK-PROJROLE-1 (DECISIONS-04 D-24) — mode của predicate scope, thread PER-OPERATION từ caller:
@@ -357,6 +380,7 @@ export class TaskCoreRepository {
     }
     if (filter.parentOnly) conds.push(sql`tk.parent_task_id is null`);
     if (filter.parentId) conds.push(sql`tk.parent_task_id = ${filter.parentId}`);
+    if (filter.goalId) conds.push(sql`tk.goal_id = ${filter.goalId}`);
     if (scopeExists) conds.push(scopeExists);
 
     const where = sql.join(conds, sql` and `);
@@ -411,7 +435,8 @@ export class TaskCoreRepository {
              -- projection dùng chung để applyStateChangeTx (move-state + PATCH stateId) có sẵn thông tin
              -- cây mà KHÔNG phải truy vấn thêm. Đi CÙNG LƯỢT với findStateSyncRowTx — thiếu một trong hai
              -- thì chốt tương ứng im lặng không chạy.
-             t.parent_task_id as "parentTaskId"
+             t.parent_task_id as "parentTaskId",
+             t.goal_id as "goalId"
         from tasks t
         left join project_states ps
           on ps.id = t.state_id and ps.company_id = t.company_id
@@ -730,11 +755,13 @@ export class TaskCoreRepository {
       title: string;
       taskType: string;
       workflowStepId: string | null;
+      // S5-GOAL-BE-2 (additive) — xoá lan con ⇒ tiến độ mục tiêu của TỪNG con phải được tính lại.
+      goalId: string | null;
     }[]
   > {
     const res = await tx.execute(sql`
       select id, task_code as "taskCode", title, task_type as "taskType",
-             workflow_step_id as "workflowStepId"
+             workflow_step_id as "workflowStepId", goal_id as "goalId"
         from tasks
        where company_id = ${companyId} and parent_task_id = ${parentId} and deleted_at is null
        order by id
@@ -745,6 +772,7 @@ export class TaskCoreRepository {
       title: string;
       taskType: string;
       workflowStepId: string | null;
+      goalId: string | null;
     }[];
   }
 

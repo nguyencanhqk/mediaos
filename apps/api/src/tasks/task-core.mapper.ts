@@ -146,6 +146,12 @@ export function toTaskCoreDto(row: TaskCoreRow, urls?: TaskCoreSignedUrls): Task
     // aggregate, chỉ có ở đường board (toTaskKanbanCardDto) và getTask — mapper base không tự đoán 0
     // vì "0 việc con" và "chưa tính" là hai chuyện khác nhau trước mắt FE.
     parentTaskId: row.parentTaskId ?? null,
+    // S5-GOAL-BE-2 — mục tiêu đang gắn. MAPPER HỢP NHẤT DUY NHẤT (bài học 3-mapper PR #247): mọi đường
+    // đọc task (list/detail/kanban/my-tasks/việc-của-mục-tiêu) đi qua đây, KHÔNG có bản sao thứ hai.
+    // Đường đọc chưa join `goals` ⇒ null tường minh (không bịa), giống khuôn reporterName/stateId.
+    goalId: row.goalId ?? null,
+    goalCode: row.goalCode ?? null,
+    goalName: row.goalName ?? null,
   };
 }
 
