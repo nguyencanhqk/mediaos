@@ -7960,6 +7960,89 @@ export const backlog = [
       "i18n namespace vi đủ; unit test component chính; LIGHT gate (typescript + react + quality-gate) xanh",
     ],
   },
+  // ── Phát sinh khi verify PROD sau restart API 2026-07-23 (BE-1 đã live) ──
+  // Job LMS_USER_SYNC ghi 1 dòng audit_logs MỖI 60s kể cả khi không có gì đổi (đo thật: 47 dòng/47
+  // phút ⇒ ~526k dòng/năm) trong khi audit_logs APPEND-ONLY (BẤT BIẾN #2) nên KHÔNG dọn được.
+  // Gốc: `if (total > 0)` — total = số user công ty (luôn 45), KHÔNG phải số thay đổi; comment ghi
+  // "chỉ khi có việc thật" ⇒ ý định lệch code. Owner chốt phương án (2) 2026-07-23.
+  {
+    id: "S5-LMS-BE-4",
+    module: "LMS",
+    layer: "BE",
+    title:
+      "Job đối soát LMS chỉ ghi audit khi CÓ THAY ĐỔI THẬT: LmsHttpClient.syncUsers trả summary (whitelist 6 counter gồm alreadyDisabled, kiểu number|boolean, chỉ đọc body ở success path) + job cộng dồn theo lô; audit MỖI LẦN khi changed>0, còn failed>0/unknown audit theo CHUYỂN TRẠNG THÁI + trần ≤1 dòng/giờ/company (fail-safe CÓ TRẦN)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/integrations/lms/**",
+      "apps/api/test/integration/**",
+      "apps/lms/**",
+      "docs/plans/S5-LMS-BE-4.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-LMS-BE-1"],
+    plan: "docs/plans/S5-LMS-BE-4.md",
+    src: [
+      "docs/plans/S5-LMS-BE-4.md (đo trên PROD 2026-07-23 07:01 UTC: 47 run/47 phút, audit lms_sync 47 dòng; audit_logs toàn bảng mới 5080 dòng ⇒ ~4 ngày là rác vượt audit thật)",
+      "gốc rễ: apps/api/src/integrations/lms/lms-user-sync.job-handler.ts:89 `if (total > 0)`",
+      "BẮT BUỘC ĐỤNG LMS (sửa vòng 3 — src[] cũ ghi 'KHÔNG cần đụng LMS', MÂU THUẪN với plan §3C): route.ts:61-109 ĐÃ trả {ok,summary} nên phần ĐỌC không cần đụng, NHƯNG nhánh deactivated (route.ts:91-103) không idempotent = bom hẹn giờ ⇒ PHẢI vá + thêm counter alreadyDisabled. Bỏ §3C = WO vô nghĩa ngay lần nghỉ việc đầu của người CÓ account LMS",
+      "BẤT BIẾN #3: error path (!res.ok) GIỮ NGUYÊN không đọc body (spec lms-http-client.service.spec.ts:51 pin 'secret-echo' không được lọt ra); chỉ đọc body ở success path + whitelist số",
+      "tương thích ngược: bridge.ts:55 await rồi bỏ giá trị; job-handler.spec.ts:16 mock trả undefined → coi là unknown → VẪN audit (test cũ dòng 57 xanh có chủ ý)",
+      "plan-review 2026-07-23 BLOCKING #1 — BOM HẸN GIỜ: route.ts:91-103 tăng `deactivated` KHÔNG kiểm `existing.disabled_at` ⇒ ngay khi 1 người CÓ account LMS nghỉ việc thì changed>0 VĨNH VIỄN mỗi nhịp = WO mất hết tác dụng, kèm scryptSync chặn event-loop Next mỗi phút. Đo PROD 23/7: 45 gửi (34 active/11 nghỉ), LMS 36 user 0 disabled, 11 người nghỉ KHÔNG có account ⇒ rơi vào `skipped`, changed=0 ⇒ HÔM NAY phương án đúng, nhưng PHẢI vá LMS mới bền",
+      "plan-review BLOCKING #3: message của `res.json()` lỗi CHỨA tiền tố body (V8) → catch chỉ log CHUỖI CỐ ĐỊNH, cấm err.message (đường rò: job-handler.ts:81-84 → job-runner → system_job_runs.error_message; scrubber không che email)",
+      "plan-review BLOCKING #4: AbortSignal.timeout còn hiệu lực khi đọc body ⇒ try RIÊNG cho body-read, 2xx KHÔNG BAO GIỜ hạ cấp thành Failure",
+      "plan-review BLOCKING #6: nghiệm thu phải `bash harness/check.sh --lane-db` — int-spec lms-user-sync.int-spec.ts:33 gate hasDb && LANE_DB nên assert audits.length===1 bị SKIP (memory ci-skips-most-integration-specs)",
+      "ĐÒN BẨY 0-DÒNG-CODE: SYSTEM_JOBS_POLL_MS có sẵn — đặt 900000 vào .env.prod (PROD:3100; dev-online:3200 KHÔNG cần) giảm 15× cả audit lẫn system_job_runs NGAY, độc lập PR này. BẪY (sửa vòng 3 — src[] cũ ghi 'clamp [1s,1h]' là SAI): worker-scheduler.config.ts:34-38 KHÔNG clamp mà rơi im lặng về DEFAULT 60s khi ngoài biên ⇒ gõ thừa 1 số 0 = tưởng 15ph nhưng vẫn 60s; PHẢI verify bằng log boot worker-scheduler.service.ts:82-84, không tin giá trị đã gõ",
+      "NGOÀI phạm vi: lịch riêng per-job cho scheduler + dọn system_job_runs (47.126 dòng/18 MB — WO dọn PHẢI giữ ≥90 ngày cho LMS_USER_SYNC + giữ vĩnh viễn row Failed/Partial, vì WO này viện dẫn bảng đó làm bằng chứng thay thế; bảng KHÔNG nằm trong PROTECTED_TABLES retention.service.ts:43-73)",
+    ],
+    done_when: [
+      "Job chạy khi KHÔNG có thay đổi → system_job_runs +1 nhưng audit_logs +0; changed>0 → audit mỗi lần; failed>0/unknown → audit theo chuyển-trạng-thái + trần ≤1 dòng/giờ/company (KHÔNG audit mỗi nhịp) + 1 dòng auditPhase:'recovered' khi hết lỗi; metadata CHỈ ĐẾM + cờ {total,ok,fail,created,reactivated,deactivated,unknown,auditPhase}, KHÔNG email, KHÔNG chuỗi ngoài",
+      "Unit RED-trước: summary toàn existing/skipped/alreadyDisabled → audit.record KHÔNG được gọi (test chính) · created/reactivated/deactivated>0 → có audit · lô hỗn hợp (lô ok có thay đổi + lô throw) → audit Failure KHÔNG nuốt thay đổi · body null/shape lạ/counter sai kiểu → unknown:true KHÔNG throw · !res.ok vẫn throw và KHÔNG đọc body · N nhịp liên tiếp cùng trạng thái bất thường → ĐÚNG 1 audit",
+      "int-spec PHẢI reset audit_logs trong beforeEach qua direct pool (không thì I13 đỏ vì I9 đã ghi trước — app role KHÔNG có DELETE, BẤT BIẾN #2); nghiệm thu bằng `bash harness/check.sh --lane-db`, KHÔNG phải `pnpm test`",
+      "Nghiệm thu tay LMS CHỈ dùng email tổng hợp @funtime.invalid + backup app.db trước, dọn account rác sau — CẤM chạy thử trên tài khoản nhân viên thật (nhánh active:false xoá session + xáo mật khẩu)",
+      "THỨ TỰ DEPLOY BẮT BUỘC: LMS (§3C) TRƯỚC, MediaOS (PR) SAU — cả 2 reviewer độc lập chỉ ra: MediaOS-trước thì LMS cũ vẫn tăng deactivated mỗi nhịp ⇒ changed>0 mỗi 60s ⇒ bom 526k dòng/năm quay lại y nguyên",
+      "FULL gate (security + database + silent-failure + santa-method) PASS; verify PROD: đếm audit lms_sync đứng yên qua ≥3 nhịp job trong khi system_job_runs vẫn tăng",
+    ],
+  },
+  // ── Seed 2026-07-23 từ plan-review S5-LMS-BE-4 vòng 3 (câu hỏi mở: ràng buộc §3D đang MỒ CÔI) ──
+  // BE-4 hạ số dòng audit_logs và viện dẫn system_job_runs làm "bằng chứng job đã chạy" thay thế.
+  // Nếu WO dọn tương lai xoá sạch bảng đó thì lập luận của BE-4 mất chỗ dựa ⇒ ràng buộc lưu-giữ phải
+  // sống trong MỘT WO CÓ CHỦ, không phải trong src[] của WO khác.
+  {
+    id: "S5-SYS-CLEAN-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Retention cho system_job_runs (47.126 dòng/18 MB, tăng mỗi nhịp scheduler): thêm vào RetentionCleanupJob với NGƯỠNG CÓ ĐIỀU KIỆN — giữ ≥90 ngày cho LMS_USER_SYNC, giữ VĨNH VIỄN mọi row Failed/Partial",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/**",
+      "apps/api/src/scheduler/**",
+      // migrations BẮT BUỘC khai (plan-review S5-LMS-BE-4 vòng 4 BLOCKING #5): mig 0475:99-102 cho thấy
+      // KHÔNG role nào có DELETE trên system_job_runs ⇒ retention tự động chắc chắn cần migration cấp
+      // quyền. Khai thiếu = bẫy memory wo-paths-drive-gate-and-scheduler (lọt LIGHT gate + trùng số mig).
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S5-SYS-CLEAN-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-LMS-BE-4"],
+    plan: "docs/plans/S5-SYS-CLEAN-1.md",
+    src: [
+      "RÀNG BUỘC KẾ THỪA từ S5-LMS-BE-4 §3D (lý do WO này tồn tại): BE-4 giảm audit_logs xuống 'chỉ khi có thay đổi' và chỉ định system_job_runs là nơi đọc 'job có chạy không' ⇒ xoá bảng này quá tay = phá bằng chứng của BE-4",
+      "system_job_runs KHÔNG nằm trong PROTECTED_TABLES (retention.service.ts:43-73) ⇒ hiện KHÔNG có gì chặn một WO dọn thô xoá sạch",
+      "app role chỉ SELECT trên bảng này (migrations/0475:99-102) ⇒ job dọn phải chạy bằng đường có quyền DELETE — kiểm kỹ, ĐỪNG cấp thêm grant cho app role",
+      "bối cảnh: đã purge tay 2026-07-22 (memory pgdata-bloat-lane-dbs-and-job-log); đây là bản tự động hoá CÓ NGƯỠNG thay cho purge tay",
+    ],
+    done_when: [
+      "Row Failed/Partial KHÔNG BAO GIỜ bị xoá (test RED-trước: seed row Failed 2 năm tuổi → chạy retention → row còn nguyên)",
+      "Row Success của LMS_USER_SYNC < 90 ngày KHÔNG bị xoá; > 90 ngày mới xoá",
+      "Xử lý TƯỜNG MINH row company_id IS NULL (job cấp system — retention policy là per-tenant nên ca này KHÔNG tự rơi vào đâu cả): chốt giữ hay xoá, có test",
+      "FULL gate PASS (chạm retention + bảng append-only-ish); không cấp thêm grant DELETE cho app role",
+    ],
+  },
 
   // ── S5-BRAND — Cài đặt thương hiệu công ty (logo + favicon) — seed 2026-07-21 ──
   // Quyết định seed-time: logo = fileId lưu vào cột companies.logo_url SẴN CÓ (docs/DB DB-08

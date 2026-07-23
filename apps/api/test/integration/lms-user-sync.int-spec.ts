@@ -26,7 +26,10 @@ import { AuditService } from "../../src/events/audit.service";
 import { OutboxService } from "../../src/events/outbox.service";
 import { LmsSyncProducer } from "../../src/integrations/lms/lms-sync-producer.service";
 import { LmsUserSyncJobHandler } from "../../src/integrations/lms/lms-user-sync.job-handler";
-import type { LmsSyncUser } from "../../src/integrations/lms/lms-http-client.service";
+import type {
+  LmsSyncSummary,
+  LmsSyncUser,
+} from "../../src/integrations/lms/lms-http-client.service";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
 
@@ -88,6 +91,14 @@ describe.skipIf(!runIsolatedDb)("S5-LMS-BE-1 · auto-sync MediaOS→LMS (DB cô 
     await direct.query(`DELETE FROM outbox_events WHERE company_id = ANY($1::uuid[])`, [
       [A.companyId, B.companyId],
     ]);
+    // S5-LMS-BE-4: slate audit sạch. BẮT BUỘC — không có dòng này thì I13 ("0 dòng audit") ĐỎ vì I9 đã
+    // ghi 1 dòng trước đó (vitest chạy `it` theo thứ tự khai báo), và cách sửa dễ dãi (đo delta / hạ
+    // toBeGreaterThan) sẽ xoá đúng thứ WO này tồn tại để chứng minh.
+    // Dọn qua `direct` (superuser BYPASSRLS) — app role KHÔNG có DELETE trên audit_logs (BẤT BIẾN #2),
+    // đúng mẫu `cleanupTenants` ở test/helpers/seed.ts.
+    await direct.query(`DELETE FROM audit_logs WHERE company_id = ANY($1::uuid[])`, [
+      [A.companyId, B.companyId],
+    ]);
   });
   afterEach(() => {
     process.env.LMS_COMPANY_ID = savedEnv.co;
@@ -98,8 +109,20 @@ describe.skipIf(!runIsolatedDb)("S5-LMS-BE-1 · auto-sync MediaOS→LMS (DB cô 
   const makeProducer = () => new LmsSyncProducer(new OutboxService());
   const makeJob = (http: {
     isEnabled: () => boolean;
-    syncUsers: (u: LmsSyncUser[]) => Promise<void>;
+    syncUsers: (u: LmsSyncUser[]) => Promise<LmsSyncSummary | undefined>;
   }) => new LmsUserSyncJobHandler(db, new AuditService(), http as never);
+
+  /** Summary đủ 6 counter + cờ (S5-LMS-BE-4). `http as never` khiến TS KHÔNG bắt được shape thiếu. */
+  const summary = (partial: Partial<LmsSyncSummary> = {}): LmsSyncSummary => ({
+    created: 0,
+    existing: 0,
+    reactivated: 0,
+    deactivated: 0,
+    skipped: 0,
+    alreadyDisabled: 0,
+    unknown: false,
+    ...partial,
+  });
 
   async function outboxEvents(companyId: string): Promise<{ payload: Record<string, unknown> }[]> {
     const r = await direct.query(
@@ -169,7 +192,9 @@ describe.skipIf(!runIsolatedDb)("S5-LMS-BE-1 · auto-sync MediaOS→LMS (DB cô 
   }
 
   it("I9: job reconcile — POST mang name, audit lms_sync actorType Job ĐẾM (không email list)", async () => {
-    const syncUsers = vi.fn().mockResolvedValue(undefined);
+    // Mock PHẢI mang thay đổi thật (created:1). Với mock cũ `undefined` → unknown:true → vẫn audit,
+    // test xanh VÌ FAIL-SAFE chứ không còn chứng minh "job reconcile ghi audit" (S5-LMS-BE-4).
+    const syncUsers = vi.fn().mockResolvedValue(summary({ created: 1 }));
     const res = await makeJob({ isEnabled: () => true, syncUsers }).run({ companyId: A.companyId });
 
     expect(res.total).toBe(1); // chỉ userA1 có hồ sơ (userA2 không hồ sơ → ngoài phạm vi)
@@ -179,8 +204,43 @@ describe.skipIf(!runIsolatedDb)("S5-LMS-BE-1 · auto-sync MediaOS→LMS (DB cô 
     const audits = await auditSummaries(A.companyId);
     expect(audits.length).toBe(1);
     expect(audits[0].actor_type).toBe("Job");
-    expect(audits[0].metadata).toMatchObject({ total: 1, ok: 1, fail: 0 });
+    expect(audits[0].metadata).toMatchObject({ total: 1, ok: 1, fail: 0, created: 1 });
     expect(JSON.stringify(audits[0].metadata)).not.toContain("a1@lms.test"); // ĐẾM, không email
+  });
+
+  // ══ S5-LMS-BE-4 — audit CHỈ khi có thay đổi thật (Postgres THẬT, không mock DB) ══
+
+  it("I13: summary toàn existing/skipped/alreadyDisabled → audit_logs lms_sync = 0 DÒNG", async () => {
+    // Assert QUAN TRỌNG NHẤT của cả WO: đây là thứ chứng minh 526k dòng rác/năm đã bị chặn.
+    const syncUsers = vi.fn().mockResolvedValue(summary({ existing: 1 }));
+    const res = await makeJob({ isEnabled: () => true, syncUsers }).run({ companyId: A.companyId });
+
+    expect(res).toMatchObject({ total: 1, success: 1, failed: 0 });
+    expect((await auditSummaries(A.companyId)).length).toBe(0);
+  });
+
+  it("I14: created:1 → ĐÚNG 1 dòng + metadata.created=1, và JobRunResult mang created (nguồn system_job_runs)", async () => {
+    const syncUsers = vi.fn().mockResolvedValue(summary({ created: 1 }));
+    const res = await makeJob({ isEnabled: () => true, syncUsers }).run({ companyId: A.companyId });
+
+    const audits = await auditSummaries(A.companyId);
+    expect(audits.length).toBe(1);
+    expect(audits[0].metadata).toMatchObject({ created: 1, auditPhase: "changed" });
+    // Pin luận điểm §3D: bằng chứng thay thế chảy xuống system_job_runs qua JobRunResult.metadata
+    // (job-runner.ts ghi mọi nhịp). Không assert chỗ này thì §3D không được test nào chống lưng.
+    expect(res.metadata).toMatchObject({ created: 1, unknown: false });
+  });
+
+  it("I15: 2 nhịp liên tiếp cùng trạng thái bất thường → ĐÚNG 1 dòng audit (trần fail-safe)", async () => {
+    const syncUsers = vi.fn().mockRejectedValue(new Error("LMS sync HTTP 503"));
+    const job = makeJob({ isEnabled: () => true, syncUsers });
+
+    await job.run({ companyId: A.companyId });
+    await job.run({ companyId: A.companyId });
+
+    const audits = await auditSummaries(A.companyId);
+    expect(audits.length).toBe(1);
+    expect(audits[0].metadata).toMatchObject({ fail: 1, auditPhase: "abnormal" });
   });
 
   it("I10-job: ISOLATION — job cho company B → total:0, KHÔNG POST, KHÔNG audit", async () => {
