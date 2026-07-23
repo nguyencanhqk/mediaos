@@ -20,7 +20,9 @@ export class LmsSsoController {
 
   @Get("sso-link")
   @RequirePermission("access", "lms", { isSensitive: false })
-  getSsoLink(@Req() req: AuthRequest): { url: string } {
-    return this.ssoService.buildSsoUrl(req.user.email);
+  async getSsoLink(@Req() req: AuthRequest): Promise<{ url: string }> {
+    // mintSsoLink = đường DUY NHẤT có audit (FAIL-CLOSED): token chỉ trả khi audit đã commit. Truyền
+    // req.user đầy đủ (id + companyId cho actor/tenant của audit, email cho payload token) — S5-LMS-BE-2.
+    return this.ssoService.mintSsoLink(req.user);
   }
 }
