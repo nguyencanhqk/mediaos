@@ -1324,6 +1324,13 @@
       "when": 1717587310000,
       "tag": "0508_lms_access_permission",
       "breakpoints": true
+    },
+    {
+      "idx": 189,
+      "version": "7",
+      "when": 1717587311000,
+      "tag": "0509_s5_lmsdb1_audit_lms_object_types",
+      "breakpoints": true
     }
   ]
 }
