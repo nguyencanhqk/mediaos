@@ -36,7 +36,7 @@ rollup + job đối soát, link/unlink task↔goal, 2 event NOTI. WO này **khô
 - `apps/api/src/goals/`: `goals.module.ts` · `goals.controller.ts` · `me-goals.controller.ts` ·
   `goals.service.ts` · `goals-validation.service.ts` · `goals.repository.ts` · `goals.mapper.ts` ·
   `goals.dto.ts` · `goals.errors.ts`.
-- `apps/api/test/integration/goal-be1-scope.int-spec.ts` (30 test) ·
+- `apps/api/test/integration/goal-be1-scope.int-spec.ts` (44 test) ·
   `goal-be1-validate.int-spec.ts` (24 test).
 
 **Sửa (append-only, hot-file)**
