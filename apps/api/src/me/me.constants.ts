@@ -119,6 +119,38 @@ export const ME_SECTION_SOURCES: readonly MeSectionSource[] = [
   },
 ] as const;
 
+// ─── S5-LMS-BE-3 — GET /me/training (proxy tiến độ đào tạo từ LMS) ───────────────────────────────
+//
+// Cặp quyền tuple engine `access:lms` — khớp NGUYÊN VĂN mig 0508 (is_sensitive=false, 4 role canonical @ Own).
+// TÁI DÙNG cặp của LmsSsoController: "được mở LMS" và "được xem tiến độ học của chính mình" là CÙNG một
+// quyền nghiệp vụ ⇒ KHÔNG seed permission mới (admin thu hồi 1 chỗ là tắt cả hai — §13).
+
+export const ME_TRAINING_ACCESS_PAIR = {
+  action: "access",
+  resourceType: "lms",
+  isSensitive: false,
+} as const;
+
+/**
+ * Mã lỗi tiến độ đào tạo — NGUỒN SỰ THẬT DUY NHẤT = packages/contracts (mirror ME_UNLINKED_EMPLOYEE_CODE).
+ * 503 disabled (cấu hình) · 502 unavailable (LMS chết/timeout) · 502 contract-mismatch (payload lệch v1).
+ */
+export const ME_TRAINING_LMS_DISABLED_CODE = ME_ERROR_CODES.TRAINING_LMS_DISABLED;
+export const ME_TRAINING_LMS_UNAVAILABLE_CODE = ME_ERROR_CODES.TRAINING_LMS_UNAVAILABLE;
+export const ME_TRAINING_CONTRACT_MISMATCH_CODE = ME_ERROR_CODES.TRAINING_CONTRACT_MISMATCH;
+
+/** TTL cache tiến độ (giây). Đủ ngắn để dữ liệu không cũ, đủ dài để không đụng trần 120 req/phút/IP của LMS. */
+export const ME_TRAINING_CACHE_TTL_SEC = 60;
+
+/**
+ * Cache key tiến độ đào tạo — BẮT BUỘC gồm CẢ companyId VÀ userId (BẤT BIẾN #1): khoá theo email/IP/phiên
+ * sẽ cho 2 actor đọc trúng entry của nhau. KHÔNG bao giờ đưa email vào key (email là PII, key nằm trong
+ * Valkey dùng chung + hiện trong log lỗi của ValkeyService).
+ */
+export function meTrainingCacheKey(companyId: string, userId: string): string {
+  return `me:training:${companyId}:${userId}`;
+}
+
 /** Setting key bật/tắt module (mirror module-catalog.service settingKey). */
 export function moduleEnabledKey(moduleCode: string): string {
   return `module.${moduleCode}.enabled`;

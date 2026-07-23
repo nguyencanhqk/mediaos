@@ -165,3 +165,7 @@ export * from "./me";
 // S5-GOAL-BE-1 (additive): GOAL contracts — enum DB-11 §7 + create/update/list/tree/me query +
 // goalCoreResponse/goalDetail/goalTreeNode (đệ quy). Tên export riêng (goal*/Goal*/GOAL_*) không đụng barrel.
 export * from "./goal";
+// S5-LMS-BE-3 (additive): DTO tiến độ đào tạo (GET /me/training) — pin version 1 của hợp đồng LMS
+// (docs/plans/S5-LMS-APP-3.md §5) + envelope ok|no_account. Tên export riêng (meTraining*/MeTraining*/
+// ME_TRAINING_*) KHÔNG trùng barrel hiện có.
+export * from "./me-training";
