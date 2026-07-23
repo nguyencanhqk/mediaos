@@ -36,6 +36,8 @@ import {
 import { TaskActivityService } from "./task-activity.service";
 import { TaskActionsService } from "./task-actions.service";
 import { ProjectAccessService } from "./project-access.service";
+// S5-GOAL-BE-2 (additive) — recompute tiến độ mục tiêu CÙNG TX khi task đổi dự án / bị xoá mềm.
+import { GoalProgressEngineService } from "./goal-progress-engine.service";
 import { coalesceTaskStatus, type TaskCoreStatus } from "./task-fsm";
 import { STATE_GROUP_TO_STATUS, type ProjectStateGroup } from "./task-state-sync";
 import {
@@ -146,6 +148,9 @@ export class TaskCoreService {
     // vài unit spec dựng service bằng `new TaskCoreService(...)` theo VỊ TRÍ, chèn vào giữa sẽ lệch
     // toàn bộ dependency phía sau mà typecheck chỉ kêu "thiếu 1 tham số".
     private readonly covers: CoverPresignService,
+    // S5-GOAL-BE-2 — engine đo tiến độ mục tiêu (SPEC-10 §13.3). Đặt CUỐI cùng lý do như `avatars`/
+    // `covers`: unit spec dựng service theo VỊ TRÍ tham số, chèn vào giữa sẽ lệch toàn bộ phía sau.
+    private readonly goalProgress: GoalProgressEngineService,
   ) {}
 
   // ── Reads ────────────────────────────────────────────────────────────────────
@@ -526,6 +531,13 @@ export class TaskCoreService {
         },
       });
 
+      // S5-GOAL-BE-2 (SPEC-10 §13.3) — VIỆC MỚI LÀM ĐỔI MẪU SỐ của mục tiêu mode='project' trong dự án
+      // đó (đếm-lá D-35: thêm việc con còn làm CHA rớt khỏi tập lá). Không móc ở đây thì tiến độ mục
+      // tiêu đứng yên cho tới lần đổi trạng thái đầu tiên hoặc tới lượt job đêm — sai trong nhiều giờ
+      // mà nhìn vẫn "hợp lý". Task mới KHÔNG thể mang sẵn `goal_id` (DTO không có field đó) nên chỉ
+      // cần nhánh 'project'.
+      await this.goalProgress.recomputeProjectGoalsTx(tx, user.companyId, effectiveProjectId);
+
       return this.reload(tx, user.companyId, created.id);
     });
   }
@@ -727,6 +739,17 @@ export class TaskCoreService {
           after: auditedChanges,
         });
       }
+
+      // S5-GOAL-BE-2 (SPEC-10 §13.3) — ĐỔI DỰ ÁN của task ⇒ mẫu số của goal mode='project' đổi ở CẢ HAI
+      // đầu: dự án CŨ mất một việc, dự án MỚI nhận thêm. Tính lại cả hai, CÙNG TX.
+      // Liên kết `goal_id` được GIỮ NGUYÊN khi đổi dự án (§13.3 chốt: giữ liên kết + cảnh báo trên UI,
+      // nối luồng PR #248) — nhưng goal mode='tasks' đang gắn vẫn phải tính lại vì tập task không đổi
+      // mà trạng thái thì có thể vừa đổi ở cùng request.
+      if (dto.projectId !== undefined && dto.projectId !== raw.projectId) {
+        await this.goalProgress.recomputeProjectGoalsTx(tx, user.companyId, raw.projectId);
+        await this.goalProgress.recomputeProjectGoalsTx(tx, user.companyId, dto.projectId ?? null);
+      }
+      if (raw.goalId) await this.goalProgress.recomputeGoalTx(tx, user.companyId, raw.goalId);
 
       return this.reload(tx, user.companyId, id);
     });
@@ -1015,6 +1038,15 @@ export class TaskCoreService {
         actorUserId: user.id,
         before: children.length > 0 ? { cascadedChildren: children.map((c) => c.id) } : undefined,
       });
+
+      // S5-GOAL-BE-2 (SPEC-10 §13.3) — xoá mềm task = task rời khỏi tập đo. Tính lại mục tiêu của
+      // TỪNG hàng vừa xoá (con có thể gắn mục tiêu KHÁC cha) + mục tiêu mode='project' của dự án.
+      // Chạy SAU khi toàn bộ soft-delete đã ghi: engine đếm bằng `deleted_at is null` nên gọi sớm
+      // sẽ đếm nhầm chính những hàng sắp biến mất.
+      for (const child of children) {
+        if (child.goalId) await this.goalProgress.recomputeGoalTx(tx, user.companyId, child.goalId);
+      }
+      await this.goalProgress.recomputeForTaskTx(tx, user.companyId, raw.goalId, raw.projectId);
     });
   }
 
