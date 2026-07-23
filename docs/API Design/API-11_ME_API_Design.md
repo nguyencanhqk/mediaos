@@ -19,7 +19,7 @@
 | Tên sản phẩm | Enterprise Management System |
 | Module | ME - Trung tâm cá nhân, cài đặt tài khoản, self-service |
 | Phiên bản | v0.1 |
-| Trạng thái | **Stub / Draft** (chờ owner duyệt PR S5-ME-DOC-1 → Approved cùng SPEC-09 §1) |
+| Trạng thái | **Stub — Approved** (owner duyệt 23/07/2026, cùng SPEC-09 §1). Khung endpoint đã chốt; DTO chi tiết bổ sung ở WO backend ME |
 | Giai đoạn | MVP Version 1.0 - bổ sung |
 | Tài liệu nguồn | SPEC-09 ME, API-01 Tổng quan, DB-08/09/10, permission-matrix-spec |
 | Ngày tạo | 13/07/2026 |
@@ -249,7 +249,7 @@ Mutation quan trọng của ME (revoke session/others, upload avatar) **nên** n
 | DTO request/response chi tiết từng endpoint | ⏳ WO backend ME (`S5-ME-BE-*`) |
 | Danh mục mã lỗi `ME-ERR-XXX` đầy đủ | ⏳ WO backend ME |
 | OpenAPI/Swagger cho nhóm ME | ⏳ WO backend/devops ME |
-| Flip Trạng thái Stub/Draft → Approved | ⏳ khi owner duyệt PR S5-ME-DOC-1 (đồng bộ SPEC-09 §1 + ME-DEC) |
+| Flip Trạng thái Stub/Draft → Approved | ✅ owner duyệt 23/07/2026 (đồng bộ SPEC-09 §1 + §21 ME-DEC) |
 
 ---
 

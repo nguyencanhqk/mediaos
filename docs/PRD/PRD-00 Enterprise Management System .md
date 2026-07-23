@@ -250,8 +250,11 @@ Bổ sung sau khi chốt 7 module lõi, cùng giai đoạn MVP Version 1.0:
 | Mã module | Tên module                            | Vai trò trong MVP                                      |
 | --------- | ------------------------------------- | ----------------------------------------------------- |
 | ME        | Trung tâm cá nhân & Cài đặt tài khoản | Personal Hub / Employee Self-service: tổng hợp dữ liệu Own của user hiện tại (AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH), self-service hồ sơ, tài khoản, bảo mật và cài đặt cá nhân |
+| GOAL      | Mục tiêu (Phòng ban · Dự án · Nhân viên) | Đặt và theo dõi mục tiêu theo kỳ (quý/năm) ở 3 cấp — phòng ban → dự án → nhân viên; liên kết xuống task để đo tiến độ khách quan, chốt kỳ làm nền cho đánh giá hiệu quả (PERF/KPI Phase 2) |
 
 ME là lớp trải nghiệm tổng hợp, **không sở hữu dữ liệu nghiệp vụ gốc** — mọi thao tác thay đổi vẫn gọi module sở hữu và tuân thủ quy trình phê duyệt. Chi tiết tại SPEC-09.
+
+GOAL **không sở hữu** dữ liệu công việc/nhân sự — task vẫn thuộc TASK, nhân sự vẫn thuộc HR; GOAL chỉ sở hữu cây mục tiêu + sổ check-in + con số tiến độ đã chốt. Chi tiết tại SPEC-10.
 
 ### 8.2 Module chưa thuộc MVP
 

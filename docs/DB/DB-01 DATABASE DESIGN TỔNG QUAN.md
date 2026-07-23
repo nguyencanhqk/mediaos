@@ -69,6 +69,7 @@ Database MVP cần hỗ trợ các module sau:
 | DASH   | Dashboard              | Widget, cấu hình widget, dữ liệu tổng hợp                   |
 | NOTI   | Thông báo hệ thống     | Notification, event, template, delivery log                 |
 | ME     | Trung tâm cá nhân (MVP bổ sung) | Không tạo dữ liệu mới; đọc-lại AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH ở scope Own + `user_preferences` (SPEC-09) |
+| GOAL   | Mục tiêu (MVP bổ sung) | Cây mục tiêu phòng ban/dự án/nhân viên + sổ check-in; liên kết `tasks.goal_id` (SPEC-10, DB-11) |
 
 ## 3.2 Module chưa thuộc MVP nhưng cần chừa khả năng mở rộng
 
@@ -549,6 +550,19 @@ notification_event_code
 | dashboard_widgets        | Danh mục widget                        |
 | dashboard_widget_configs | Cấu hình widget theo company/role/user |
 | dashboard_widget_cache   | Cache dữ liệu widget nếu cần           |
+
+---
+
+## 7.9 Nhóm GOAL
+
+> Chi tiết đầy đủ: [DB-11 GOAL Database Design](<DB-11 GOAL Database Design.md>).
+
+| Bảng                | Mô tả                                                                 |
+| ------------------- | ---------------------------------------------------------------------- |
+| goals               | Cây mục tiêu 1 bảng (department/project/employee/company-dự trữ), tự tham chiếu `parent_goal_id` |
+| goal_updates        | Sổ check-in/finalize/reopen theo goal — append-only                    |
+| task_templates      | Danh mục mẫu phân rã mục tiêu thành task                                |
+| task_template_items | Các dòng công việc trong 1 template                                     |
 
 ---
 
@@ -1734,6 +1748,24 @@ erDiagram
     DASHBOARD_WIDGETS ||--o{ DASHBOARD_WIDGET_CACHE : cached_by
     ROLES ||--o{ DASHBOARD_WIDGET_CONFIGS : role_config
     USERS ||--o{ DASHBOARD_WIDGET_CONFIGS : user_config
+```
+
+---
+
+## 19b. ERD cấp cao - GOAL
+
+> Chi tiết đầy đủ: [DB-11 GOAL Database Design](<DB-11 GOAL Database Design.md>).
+
+```mermaid
+erDiagram
+    DEPARTMENTS ||--o{ GOALS : department_goal
+    PROJECTS ||--o{ GOALS : project_goal
+    EMPLOYEES ||--o{ GOALS : employee_goal
+    GOALS ||--o{ GOALS : parent_of
+    GOALS ||--o{ GOAL_UPDATES : has
+    GOALS ||--o{ TASKS : linked_via_goal_id
+
+    TASK_TEMPLATES ||--o{ TASK_TEMPLATE_ITEMS : contains
 ```
 
 ---

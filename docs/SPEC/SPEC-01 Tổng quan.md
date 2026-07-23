@@ -1,7 +1,7 @@
 # SPEC-01: TỔNG QUAN HỆ THỐNG QUẢN LÝ DOANH NGHIỆP
 
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
-> **SPEC-01 Tổng quan** · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>)
+> **SPEC-01 Tổng quan** · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>)
 >
 > **Liên quan:** [Thiết kế DB: DB-01 Tổng quan](<../DB/DB-01 DATABASE DESIGN TỔNG QUAN.md>) · [Sản phẩm: PRD-00](<../PRD/PRD-00 Enterprise Management System .md>) · [Thiết kế API: API-01 Tổng quan](<../API Design/API-01 TỔNG QUAN.md>) · [Chỉ mục tài liệu](<../README.md>)
 
@@ -149,8 +149,11 @@ Phiên bản MVP v1.0 tập trung vào các module lõi sau:
 | Mã module | Tên module                            | Tài liệu liên kết | Trạng thái      |
 | --------- | ------------------------------------- | ----------------- | --------------- |
 | ME        | Trung tâm cá nhân & Cài đặt tài khoản | SPEC-09           | MVP bổ sung     |
+| GOAL      | Mục tiêu (Phòng ban · Dự án · Nhân viên) | SPEC-10         | MVP bổ sung     |
 
 > **ME** là lớp trải nghiệm self-service (Personal Hub / Employee Self-service) tổng hợp dữ liệu Own của user hiện tại từ AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH. ME không sở hữu dữ liệu nghiệp vụ gốc; chi tiết tại SPEC-09.
+>
+> **GOAL** đặt và theo dõi mục tiêu theo kỳ ở 3 cấp (phòng ban → dự án → nhân viên), liên kết xuống `tasks.goal_id` để đo tiến độ; phụ thuộc trực tiếp AUTH (RBAC), HR (department/employee), TASK (project/task). Không sở hữu dữ liệu task/nhân sự. Chi tiết tại SPEC-10. **Đánh số:** GOAL giữ mã **SPEC-10**; PAYROLL và toàn bộ spec Phase 2–5 dời xuống 1 bậc (SPEC-11…SPEC-18) — owner chốt tại PR S5-GOAL-DOC-1, xem ghi chú §7.2.
 
 ### 7.2 Module chưa thuộc MVP
 
@@ -158,17 +161,17 @@ Các module sau chưa triển khai chi tiết trong MVP v1.0, nhưng hệ thốn
 
 | Mã module | Tên module             | Tài liệu liên kết | Giai đoạn |
 | --------- | ---------------------- | ----------------- | --------- |
-| PAYROLL   | Tiền lương             | SPEC-10           | Phase 2   |
-| RECRUIT   | Tuyển dụng             | SPEC-11           | Phase 2   |
-| ASSET     | Quản lý tài sản        | SPEC-12           | Phase 3   |
-| ROOM      | Quản lý phòng họp      | SPEC-13           | Phase 3   |
-| CHAT      | Chat nội bộ            | SPEC-14           | Phase 4   |
-| SOCIAL    | Mạng xã hội nội bộ     | SPEC-15           | Phase 4   |
-| MOBILE    | Mobile app             | SPEC-16           | Phase 5   |
-| AI        | AI & tích hợp nâng cao | SPEC-17           | Phase 5   |
+| PAYROLL   | Tiền lương             | SPEC-11           | Phase 2   |
+| RECRUIT   | Tuyển dụng             | SPEC-12           | Phase 2   |
+| ASSET     | Quản lý tài sản        | SPEC-13           | Phase 3   |
+| ROOM      | Quản lý phòng họp      | SPEC-14           | Phase 3   |
+| CHAT      | Chat nội bộ            | SPEC-15           | Phase 4   |
+| SOCIAL    | Mạng xã hội nội bộ     | SPEC-16           | Phase 4   |
+| MOBILE    | Mobile app             | SPEC-17           | Phase 5   |
+| AI        | AI & tích hợp nâng cao | SPEC-18           | Phase 5   |
 
-> **Reconcile đánh số (13/07/2026):** SPEC-09 nay dành cho module **ME** (MVP bổ sung, khớp file `SPEC-09 ME.md` và `docs/README.md`).
-> Toàn bộ spec Phase 2–5 được dời +1: PAYROLL nhận SPEC-10, RECRUIT SPEC-11, ASSET SPEC-12, ROOM SPEC-13, CHAT SPEC-14, SOCIAL SPEC-15, MOBILE SPEC-16, AI SPEC-17. Quyết định này chờ owner chốt tại PR trước khi coi là chính thức.
+> **Reconcile đánh số (13/07/2026, owner chốt lần 2 tại PR S5-GOAL-DOC-1 — 23/07/2026):** SPEC-09 dành cho module **ME**, **SPEC-10 dành cho module GOAL** (khớp file `SPEC-09 ME.md`, `SPEC-10 GOAL.md` và `docs/README.md` §2).
+> Toàn bộ spec Phase 2–5 dời **+2** so với đánh số gốc: PAYROLL nhận SPEC-11, RECRUIT SPEC-12, ASSET SPEC-13, ROOM SPEC-14, CHAT SPEC-15, SOCIAL SPEC-16, MOBILE SPEC-17, AI SPEC-18. **Không còn số nào trùng** — quy tắc từ đây: mỗi module MVP bổ sung nhận số kế tiếp và đẩy toàn bộ Phase 2–5 xuống 1 bậc.
 
 ---
 
@@ -187,14 +190,15 @@ Bộ tài liệu spec của dự án sẽ được tổ chức như sau:
 | SPEC-07     | Dashboard                         | Spec module |
 | SPEC-08     | Thông báo hệ thống                | Spec module |
 | SPEC-09     | Trung tâm cá nhân & Cài đặt (ME)  | Spec module |
-| SPEC-10     | Tiền lương                        | Spec module |
-| SPEC-11     | Tuyển dụng                        | Spec module |
-| SPEC-12     | Quản lý tài sản                   | Spec module |
-| SPEC-13     | Quản lý phòng họp                 | Spec module |
-| SPEC-14     | Chat nội bộ                       | Spec module |
-| SPEC-15     | Mạng xã hội nội bộ                | Spec module |
-| SPEC-16     | Mobile app                        | Spec module |
-| SPEC-17     | AI & tích hợp nâng cao            | Spec module |
+| SPEC-10     | Mục tiêu (GOAL)                   | Spec module |
+| SPEC-11     | Tiền lương                        | Spec module |
+| SPEC-12     | Tuyển dụng                        | Spec module |
+| SPEC-13     | Quản lý tài sản                   | Spec module |
+| SPEC-14     | Quản lý phòng họp                 | Spec module |
+| SPEC-15     | Chat nội bộ                       | Spec module |
+| SPEC-16     | Mạng xã hội nội bộ                | Spec module |
+| SPEC-17     | Mobile app                        | Spec module |
+| SPEC-18     | AI & tích hợp nâng cao            | Spec module |
 
 ---
 
@@ -796,7 +800,7 @@ Module liên quan:
 
 ### 12.8 PAYROLL — Tiền lương
 
-Tài liệu chi tiết: SPEC-10
+Tài liệu chi tiết: SPEC-11
 
 Giai đoạn: Phase 2
 
@@ -827,7 +831,7 @@ Module liên quan:
 
 ### 12.9 RECRUIT — Tuyển dụng
 
-Tài liệu chi tiết: SPEC-11
+Tài liệu chi tiết: SPEC-12
 
 Giai đoạn: Phase 2
 
@@ -855,7 +859,7 @@ Module liên quan:
 
 ### 12.10 ASSET — Quản lý tài sản
 
-Tài liệu chi tiết: SPEC-12
+Tài liệu chi tiết: SPEC-13
 
 Giai đoạn: Phase 3
 
@@ -885,7 +889,7 @@ Module liên quan:
 
 ### 12.11 ROOM — Quản lý phòng họp
 
-Tài liệu chi tiết: SPEC-13
+Tài liệu chi tiết: SPEC-14
 
 Giai đoạn: Phase 3
 
@@ -913,7 +917,7 @@ Module liên quan:
 
 ### 12.12 CHAT — Chat nội bộ
 
-Tài liệu chi tiết: SPEC-14
+Tài liệu chi tiết: SPEC-15
 
 Giai đoạn: Phase 4
 
@@ -943,7 +947,7 @@ Module liên quan:
 
 ### 12.13 SOCIAL — Mạng xã hội nội bộ
 
-Tài liệu chi tiết: SPEC-15
+Tài liệu chi tiết: SPEC-16
 
 Giai đoạn: Phase 4
 
@@ -1976,8 +1980,15 @@ Chức năng chính:
 | NOTI         | ME               | ME đọc-lại thông báo & tùy chọn nhận thông báo của tôi (Own) |
 | DASH         | ME               | ME tái dùng một số widget cá nhân, không biến ME thành dashboard thứ hai (Own) |
 | FOUNDATION   | ME               | ME dùng file/avatar, personal preference, audit, company policy (Own) |
+| AUTH         | GOAL             | GOAL phụ thuộc AUTH — RBAC/permission per-pair, data scope own/department/all |
+| HR           | GOAL             | GOAL neo mục tiêu vào department/employee, đọc quan hệ quản lý phòng ban |
+| TASK         | GOAL             | GOAL neo mục tiêu vào project, liên kết `tasks.goal_id` để đo tiến độ mode `tasks`/`project` |
+| GOAL         | NOTI             | Chốt kỳ/giao mục tiêu tạo thông báo (`GOAL_ASSIGNED`, `GOAL_FINALIZED`) |
+| GOAL         | ME               | `/me/goals` đọc-lại mục tiêu cấp nhân viên của tôi (Own) |
 
 > **ME** phụ thuộc trực tiếp **AUTH** và **HR**; đọc-lại (read-only, scope **Own**) từ **ATT/LEAVE/TASK/NOTI/DASH/FOUNDATION**. ME không sở hữu dữ liệu nghiệp vụ gốc — mọi mutation gọi service của module sở hữu. Chi tiết tại SPEC-09.
+>
+> **GOAL** phụ thuộc trực tiếp **AUTH** (RBAC), **HR** (department/employee), **TASK** (project/task); phát thông báo qua **NOTI**; được **ME** đọc-lại ở `/me/goals` (Own). GOAL không sở hữu dữ liệu task/nhân sự/dự án — chỉ sở hữu cây mục tiêu + sổ check-in + template phân rã. Chi tiết tại SPEC-10.
 
 ---
 

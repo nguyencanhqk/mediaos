@@ -1,7 +1,7 @@
 # SPEC-09: ME - TRUNG TÂM CÁ NHÂN & CÀI ĐẶT TÀI KHOẢN
 
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
-> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · **SPEC-09 ME**
+> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · **SPEC-09 ME** · [SPEC-10 GOAL](<SPEC-10 GOAL.md>)
 >
 > **Liên quan:** [Chỉ mục tài liệu](<../README.md>) · [Ma trận phân quyền](<../permission-matrix-spec.md>)
 
@@ -18,7 +18,7 @@
 | Module phụ thuộc trực tiếp | AUTH, HR                                          |
 | Module liên quan           | ATT, LEAVE, TASK, NOTI, DASH, FOUNDATION          |
 | Phiên bản                  | v1.0                                              |
-| Trạng thái                 | Draft (chờ owner duyệt PR S5-ME-DOC-1 → Approved) |
+| Trạng thái                 | **Approved** (owner duyệt 23/07/2026 — nội dung chốt tại S5-ME-DOC-1 PR #195) |
 | Giai đoạn                  | MVP Version 1.0 - bổ sung                         |
 | Người viết                 |                                                   |
 | Người duyệt                |                                                   |
@@ -976,7 +976,7 @@ Không ghi vào audit log:
 
 ## 21. Quyết định nghiệp vụ đã chốt
 
-> **Ngày chốt: 13/07/2026 (S5-ME-DOC-1).** Toàn bộ ME-DEC-001..010 lấy theo cột **Đề xuất** làm **quyết định chính thức** (decision-of-record). Dấu Approved cuối cùng đóng khi owner duyệt PR (đồng bộ với §1 Trạng thái).
+> **Ngày chốt: 13/07/2026 (S5-ME-DOC-1).** Toàn bộ ME-DEC-001..010 lấy theo cột **Đề xuất** làm **quyết định chính thức** (decision-of-record). **Dấu Approved đã đóng ngày 23/07/2026** (owner duyệt, đồng bộ §1 Trạng thái + API-11 §1).
 
 | Mã | Câu hỏi | Quyết định chốt (13/07/2026) |
 | --- | --- | --- |
