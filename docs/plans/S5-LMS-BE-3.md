@@ -102,3 +102,19 @@ fail-closed isolation của auto-sync (BẤT BIẾN #1). Chưa khai ⇒ giữ po
   nếu sau này thấy 502 hàng loạt lúc Valkey outage thì đó là dấu hiệu cần bổ sung.
 - Eviction cache là TTL thuần, không invalidate theo sự kiện ⇒ tiến độ trễ tối đa 60s (chấp nhận, đúng WO).
 - FE (S5-LMS-FE-1) phải xử lý 3 trạng thái: `ok` · `no_account` · lỗi 502/503 (card fail-soft).
+
+## 8. Vá sau review (2026-07-24) — 404 phải là JSON mới được coi là `no_account`
+
+Finding MEDIUM của `security-reviewer` (silent-failure): nhánh `if (res.status === 404) return {found:false}`
+chạy **trước** khi kiểm `content-type`. Vấn đề không phải lý thuyết — nó **chắc chắn xảy ra ở lần deploy đầu**:
+route LMS `/api/mediaos/progress` cố ý CHƯA build/restart (APP-3 §9.3), nên Next.js trả **404 HTML**. Hậu quả
+nếu không vá: **toàn bộ** nhân viên thấy "chưa có tài khoản đào tạo" **vĩnh viễn**, không log, không metric —
+hỏng cấu hình đội lốt trạng thái nghiệp vụ hợp lệ (cùng họ với `LMS_BASE_URL` gõ sai, tunnel/proxy chen giữa).
+
+Bản vá (`lms-progress-client.service.ts`): tách helper `isJson(res)` dùng chung; 404 **có** `content-type:
+application/json` → `{found:false}` như hợp đồng APP-3 §4.6; 404 **không** JSON → log chuỗi cố định (không PII)
+rồi ném ⇒ service map **502** `ME-ERR-TRAINING-LMS-UNAVAILABLE`, người vận hành thấy ngay.
+
+2 test mới trong `lms-progress-client.service.spec.ts` đã **chứng minh RED trước**: revert riêng file service
+về bản commit `650c2338` ⇒ đúng 2 test đó FAIL (14 pass), khôi phục bản vá ⇒ 16/16 pass. Đừng nới test này
+thành "404 nào cũng `no_account`" — nó là hàng rào, không phải chi tiết cài đặt.

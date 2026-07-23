@@ -4,7 +4,8 @@ import "reflect-metadata";
  * (`GET /api/mediaos/progress?email=`). Khoá hành vi phòng thủ:
  *   - thiếu env (LMS_BASE_URL / LMS_PROGRESS_TOKEN) → isEnabled()=false; gọi khi tắt → THROW (không im lặng);
  *   - timeout/network → THROW (không treo request — AbortSignal.timeout);
- *   - HTTP 404 → { found:false } (LMS: email CHƯA TỪNG có tài khoản — KHÔNG phải lỗi);
+ *   - HTTP 404 **JSON** → { found:false } (LMS: email CHƯA TỪNG có tài khoản — KHÔNG phải lỗi);
+ *   - HTTP 404 KHÔNG-JSON → THROW (404 HTML = route chưa deploy/sai base URL, KHÔNG phải câu trả lời nghiệp vụ);
  *   - HTTP non-2xx khác → THROW, KHÔNG đọc/log body;
  *   - content-type không phải JSON hoặc content-length vượt trần → THROW TRƯỚC khi parse;
  *   - MỌI nhánh lỗi: KHÔNG log token, KHÔNG log email, KHÔNG log body (BẤT BIẾN #3).
@@ -112,11 +113,29 @@ describe("LmsProgressClient", () => {
       });
     });
 
-    it("404 → { found:false } (chưa từng có tài khoản LMS — KHÔNG throw)", async () => {
+    it("404 JSON → { found:false } (chưa từng có tài khoản LMS — KHÔNG throw)", async () => {
       const res = jsonResponse({ message: "Not found" }, { status: 404 });
       fetchMock.mockResolvedValue(res);
       await expect(new LmsProgressClient().fetchProgress(EMAIL)).resolves.toEqual({ found: false });
       expect(res.json as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+    });
+
+    // Hàng rào chống "hỏng cấu hình đội lốt dữ liệu hợp lệ": route chưa deploy / LMS_BASE_URL sai đều ra
+    // 404 HTML của Next.js. Nếu nuốt thành found:false thì MỌI nhân viên thấy "chưa có tài khoản đào tạo"
+    // vĩnh viễn mà không ai biết. Đừng nới test này thành "404 nào cũng no_account".
+    it("404 KHÔNG phải JSON (route chưa deploy / sai base URL) → THROW, KHÔNG nuốt thành no_account", async () => {
+      const res = jsonResponse("<!DOCTYPE html>", { status: 404, contentType: "text/html" });
+      fetchMock.mockResolvedValue(res);
+      await expect(new LmsProgressClient().fetchProgress(EMAIL)).rejects.toThrow();
+      expect(res.json as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+      expect(loggedText()).not.toContain(EMAIL);
+      expect(loggedText()).not.toContain(TOKEN);
+    });
+
+    it("404 không có content-type → THROW (fail-loud, không đoán mò)", async () => {
+      const res = jsonResponse(null, { status: 404, contentType: "" });
+      fetchMock.mockResolvedValue(res);
+      await expect(new LmsProgressClient().fetchProgress(EMAIL)).rejects.toThrow();
     });
   });
 

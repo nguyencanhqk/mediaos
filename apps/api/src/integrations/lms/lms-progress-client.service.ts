@@ -63,9 +63,21 @@ export class LmsProgressClient {
       throw new Error("LMS progress network error");
     }
 
-    // 404 = "chưa từng có tài khoản LMS" (hợp đồng APP-3 §4.6) — KHÔNG đọc body, KHÔNG log (tránh biến
-    // log thành oracle liệt kê email nào có/không có tài khoản học).
-    if (res.status === 404) return { found: false };
+    // 404 CỦA HỢP ĐỒNG (APP-3 §4.6: JSON `{message:'Not found'}`) = "chưa từng có tài khoản LMS" — KHÔNG
+    // đọc body, KHÔNG log (tránh biến log thành oracle liệt kê email nào có tài khoản học).
+    //
+    // NHƯNG 404 KHÔNG-JSON = HỎNG CẤU HÌNH, không phải trạng thái nghiệp vụ: `LMS_BASE_URL` sai, route
+    // `/api/mediaos/progress` chưa deploy (APP-3 §9.3 cố ý chưa build), hoặc proxy/tunnel chen giữa — cả ba
+    // đều trả 404 **HTML** của Next.js. Nuốt nó thành `found:false` sẽ báo "chưa có tài khoản đào tạo" cho
+    // TOÀN BỘ nhân viên, vĩnh viễn, không log/metric ⇒ hỏng hạ tầng đội lốt dữ liệu hợp lệ (finding MEDIUM
+    // security-review 2026-07-23). Fail-loud: ném → service map 502, người vận hành thấy ngay.
+    if (res.status === 404) {
+      if (isJson(res)) return { found: false };
+      this.logger.warn(
+        "LMS progress: 404 không phải JSON (sai LMS_BASE_URL hoặc route chưa deploy?)",
+      );
+      throw new Error("LMS progress 404 invalid content-type");
+    }
 
     if (!res.ok) {
       // KHÔNG đọc/log body (có thể vọng lại email). Chỉ status.
@@ -76,8 +88,7 @@ export class LmsProgressClient {
     // Chặn 2 ca rẻ tiền TRƯỚC khi parse: sai content-type (proxy/tunnel trả HTML) và body khổng lồ (áp lực
     // bộ nhớ tiến trình API). Residual đã biết: response chunked không có content-length thì ngưỡng không
     // áp được — chấp nhận (LMS là service của chính ta), Zod ở service vẫn là hàng rào cuối.
-    const contentType = res.headers.get("content-type") ?? "";
-    if (!contentType.includes("application/json")) {
+    if (!isJson(res)) {
       this.logger.warn("LMS progress: response không phải JSON");
       throw new Error("LMS progress invalid content-type");
     }
@@ -95,6 +106,14 @@ export class LmsProgressClient {
       throw new Error("LMS progress invalid JSON");
     }
   }
+}
+
+/**
+ * Response có đúng là JSON không. Dùng CHUNG cho nhánh 404-hợp-đồng và nhánh 2xx: chỉ khi LMS **thật sự**
+ * trả JSON thì 404 mới được hiểu là câu trả lời nghiệp vụ "chưa có tài khoản".
+ */
+function isJson(res: Response): boolean {
+  return (res.headers.get("content-type") ?? "").includes("application/json");
 }
 
 /** Tên lỗi (TimeoutError/AbortError/TypeError…) — an toàn để log, KHÔNG kèm message/URL/PII. */
