@@ -22,6 +22,7 @@ import {
 } from "./components/MeSectionContents";
 import { MeActionNeededCard, MePendingApprovalCard } from "./components/MeActionBlocks";
 import { MeQuickActions } from "./components/MeQuickActions";
+import { MeTrainingCard } from "./components/MeTrainingCard";
 import { ME_ACCESS_PAIR } from "./constants";
 
 function MeOverviewSkeleton() {
@@ -122,6 +123,10 @@ function MeOverviewPageInner() {
         >
           {(d) => <HrSectionContent data={d} />}
         </MeSectionCard>
+
+        {/* S5-LMS-FE-1 — card Đào tạo: query RIÊNG (GET /me/training), TỰ ẩn khi thiếu access:lms +
+            fail-soft độc lập (502/no_account KHÔNG kéo sập overview). Đặt cuối lưới (ô thứ 6). */}
+        <MeTrainingCard />
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

@@ -954,6 +954,18 @@ export const ME_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 50,
     requiredAnyPermissions: ["access:me"],
   },
+  // S5-LMS-FE-1 — Tiến độ đào tạo (LMS chảy ngược) TRONG MediaOS: /me/training (GET /me/training proxy).
+  // Cùng gate access:lms + group "Đào tạo"; đứng TRƯỚC mục "Đào tạo (LMS)" (mở LMS ngoài) — order 59.
+  {
+    sidebarKey: "me.training",
+    moduleCode: "ME",
+    label: "Tiến độ đào tạo",
+    path: "/me/training",
+    icon: "graduation-cap",
+    group: "Đào tạo",
+    order: 59,
+    requiredAnyPermissions: ["access:lms"],
+  },
   // Tích hợp LMS Giai đoạn A: mở LMS qua cầu SSO (/lms fetch sso-link rồi chuyển trang).
   // Gate access:lms (KHÔNG access:me) — nhất quán với card Trang chủ + endpoint BE: ai bị thu quyền
   // KHÔNG thấy link này. (mig 0508 cấp mặc định cho 4 role canonical.)

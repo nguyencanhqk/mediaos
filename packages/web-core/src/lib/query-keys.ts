@@ -762,6 +762,9 @@ export const meKeys = {
   leaveSummary: () => [...rootKeys.me, "leave-summary"] as const,
   taskSummary: () => [...rootKeys.me, "task-summary"] as const,
   notificationSummary: () => [...rootKeys.me, "notification-summary"] as const,
+  // S5-LMS-FE-1 — Tiến độ đào tạo (GET /me/training, LMS proxy). Query RIÊNG khỏi overview() (khác
+  // endpoint/envelope + gate access:lms) — 1 nguồn lỗi KHÔNG kéo sập cache overview (fail-soft §18.2).
+  training: () => [...rootKeys.me, "training"] as const,
   // S5-ME-FE-3 — Preferences (GET/PATCH /me/preferences, ME-SCREEN-014 Appearance).
   preferences: () => [...rootKeys.me, "preferences"] as const,
   // S5-ME-FE-4 — Avatar own-scope (GET /me/avatar, ephemeral downloadUrl). Invalidate sau upload/remove.
