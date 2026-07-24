@@ -23,6 +23,8 @@ import {
   EMPTY_DEPARTMENT_FORM,
   type DepartmentFormValues,
 } from "./department-form";
+// S5-GOAL-DASH-1 (additive): khối "Mục tiêu kỳ này" mỗi dòng phòng ban.
+import { DepartmentGoalCell } from "./DepartmentGoalCell";
 
 // Cặp engine SEED THẬT (hr-department.controller): read/create/update/delete:department.
 const DEPARTMENT_PERMISSIONS = {
@@ -77,6 +79,13 @@ function useColumns(): ColumnDef<HrDepartment>[] {
       accessorKey: "status",
       header: t("masterData.common.columns.status"),
       cell: ({ row }) => <MasterDataStatusBadge status={row.original.status} />,
+    },
+    // S5-GOAL-DASH-1 (APPEND) — khối "Mục tiêu kỳ này" (SPEC-10 §7). id KHÔNG phải accessorKey thật
+    // của HrDepartment (chỉ cell render) ⇒ dùng `id` cột riêng, tránh đụng sort/filter mặc định.
+    {
+      id: "currentGoal",
+      header: t("departments.goals.column"),
+      cell: ({ row }) => <DepartmentGoalCell departmentId={row.original.id} />,
     },
   ];
 }

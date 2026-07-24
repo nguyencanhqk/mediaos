@@ -15,6 +15,8 @@ import { NOTI_ENGINE_PAIRS } from "@/routes/notifications/constants";
 import { ATT_ENGINE_PAIRS } from "@/routes/attendance/constants";
 import { LEAVE_ENGINE_PAIRS } from "@/routes/leave/constants";
 import { HR_ENGINE_PAIRS } from "@/routes/hr/constants";
+// S5-GOAL-DASH-1 (additive): cặp gate GOAL_PROGRESS — tái dùng GOAL_ENGINE_PAIRS.VIEW đã có (DRY).
+import { GOAL_ENGINE_PAIRS } from "@/routes/goals/constants";
 
 export const DASH_WIDGET_CODE = {
   MY_TASKS: "MY_TASKS",
@@ -25,6 +27,8 @@ export const DASH_WIDGET_CODE = {
   PENDING_LEAVE: "PENDING_LEAVE",
   PROJECT_PROGRESS: "PROJECT_PROGRESS",
   HR_OVERVIEW: "HR_OVERVIEW",
+  // S5-GOAL-DASH-1 (APPEND) — widget "Mục tiêu kỳ này" (SPEC-10 §7/§13, mig 0525).
+  GOAL_PROGRESS: "GOAL_PROGRESS",
 } as const;
 
 export type DashWidgetCode = (typeof DASH_WIDGET_CODE)[keyof typeof DASH_WIDGET_CODE];
@@ -42,6 +46,8 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<
   PENDING_LEAVE: LEAVE_ENGINE_PAIRS.VIEW_REQUEST,
   PROJECT_PROGRESS: TASK_ENGINE_PAIRS.READ_PROJECT,
   HR_OVERVIEW: HR_ENGINE_PAIRS.READ_EMPLOYEE,
+  // S5-GOAL-DASH-1 (APPEND) — MIRROR đúng BE DASH_WIDGET_GATE_PAIR.GOAL_PROGRESS (view:goal).
+  GOAL_PROGRESS: GOAL_ENGINE_PAIRS.VIEW,
 };
 
 /**

@@ -71,6 +71,12 @@ export default {
     empty: { title: "Chưa có nhân sự" },
     headcountUnit: "nhân sự",
   },
+  // ── S5-GOAL-DASH-1 — widget "Mục tiêu kỳ này" (SPEC-10 §7/§13) ─────────────────
+  goalProgress: {
+    title: "Mục tiêu kỳ này",
+    empty: { title: "Chưa có mục tiêu phòng ban kỳ này" },
+    average: "Trung bình {{percent}}%",
+  },
   typeSwitcher: {
     label: "Chuyển đổi loại bảng điều khiển",
   },

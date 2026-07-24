@@ -261,7 +261,7 @@ describe.skipIf(!hasLaneDb)("S4-DASH-BE-1 Dashboard resolver + widget registry (
   });
 
   // ── M3 manager-only ───────────────────────────────────────────────────────────────────────────────
-  it("M3 manager: /hr·/admin → 403; /manager → 200 {PENDING_LEAVE,TASK_ALERTS,LEAVE_CALENDAR,ATTENDANCE_ALERTS,NOTIFICATIONS} (KHÔNG MY_TASKS)", async () => {
+  it("M3 manager: /hr·/admin → 403; /manager → 200 {PENDING_LEAVE,TASK_ALERTS,LEAVE_CALENDAR,ATTENDANCE_ALERTS,GOAL_PROGRESS,NOTIFICATIONS} (KHÔNG MY_TASKS)", async () => {
     const h = bearer(await login(nest, A.slug, email.mgr));
     expect((await api(nest).get("/dashboard/hr").set(h)).status).toBe(403);
     expect((await api(nest).get("/dashboard/admin").set(h)).status).toBe(403);
@@ -269,11 +269,13 @@ describe.skipIf(!hasLaneDb)("S4-DASH-BE-1 Dashboard resolver + widget registry (
     expect(res.status).toBe(200);
     const codes = widgetCodes(res.body);
     // S4-DASH-CATALOG-2: Manager default config nay + LEAVE_CALENDAR@40 (view-team:leave-calendar) +
-    // ATTENDANCE_ALERTS@50 (view-team:attendance) — manager CÓ cả hai. ATTENDANCE_ALERTS@50 & NOTIFICATIONS@50
+    // ATTENDANCE_ALERTS@50 (view-team:attendance) — manager CÓ cả hai. S5-GOAL-DASH-1: + GOAL_PROGRESS@60
+    // (view:goal@Department — manager canonical đã grant ở mig 0506). ATTENDANCE_ALERTS@50 & NOTIFICATIONS@50
     // TIE sort_order ⇒ so khớp TẬP (tránh phụ thuộc thứ tự tie); 3 widget đầu (10/30/40) vẫn xác định.
     expect([...codes].sort()).toEqual(
       [
         "ATTENDANCE_ALERTS",
+        "GOAL_PROGRESS",
         "LEAVE_CALENDAR",
         "NOTIFICATIONS",
         "PENDING_LEAVE",

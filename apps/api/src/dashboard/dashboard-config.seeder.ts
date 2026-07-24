@@ -28,7 +28,10 @@ import { DASH_DEFAULT_CONFIG } from "./dashboard-widget-catalog.const";
 @Injectable()
 export class DashboardConfigSeeder implements ModuleMasterDataSeeder {
   readonly seedKey = "dash.default-configs";
-  readonly seedVersion = "v1";
+  // S5-GOAL-DASH-1: bump v1→v2 để force re-seed công ty ĐÃ TỒN TẠI với entry GOAL_PROGRESS mới thêm vào
+  // DASH_DEFAULT_CONFIG (startBatch idempotent theo (companyId,seedKey,seedVersion) — version mới ⇒ batch
+  // mới; entry CŨ vẫn no-op qua WHERE NOT EXISTS, entry MỚI mới insert — an toàn, KHÔNG re-seed sai).
+  readonly seedVersion = "v2";
 
   async seed(ctx: MasterDataSeedContext): Promise<void> {
     for (const entry of DASH_DEFAULT_CONFIG) {

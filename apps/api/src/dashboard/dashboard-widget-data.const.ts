@@ -27,6 +27,8 @@ export const DASH_WIDGET_TTL_SECONDS: Readonly<Record<DashModuleCode, number>> =
   AUTH: 60,
   DASH: 60,
   SYSTEM: 60,
+  // S5-GOAL-DASH-1: goal check-in không đổi liên tục — 300s (5m), giữa TASK(60s) và HR(900s).
+  GOAL: 300,
 } as const;
 
 /**

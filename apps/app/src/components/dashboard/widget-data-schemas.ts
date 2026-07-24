@@ -130,3 +130,24 @@ export const hrOverviewWidgetDataSchema = z.object({
   byOrgUnit: z.record(z.string(), z.number().int().nonnegative()),
 });
 export type HrOverviewWidgetData = z.infer<typeof hrOverviewWidgetDataSchema>;
+
+// ── S5-GOAL-DASH-1 — GOAL_PROGRESS (fetchGoalProgress — dashboard-widget-handlers.service.ts) ─────
+// `progressPercent` NULL = "chưa đo" (KHÁC 0% — SPEC-10 §13.2), giữ nguyên nullable, KHÔNG `?? 0`.
+export const dashWidgetGoalProgressItemSchema = z.object({
+  departmentId: z.string().nullable(),
+  departmentName: z.string().nullable(),
+  goalId: z.string(),
+  goalName: z.string(),
+  progressPercent: z.number().nullable(),
+  status: z.string(),
+});
+export type DashWidgetGoalProgressItem = z.infer<typeof dashWidgetGoalProgressItemSchema>;
+
+export const goalProgressWidgetDataSchema = z.object({
+  items: z.array(dashWidgetGoalProgressItemSchema),
+  summary: z.object({
+    totalDepartments: z.number().int().nonnegative(),
+    avgProgressPercent: z.number().nullable(),
+  }),
+});
+export type GoalProgressWidgetData = z.infer<typeof goalProgressWidgetDataSchema>;

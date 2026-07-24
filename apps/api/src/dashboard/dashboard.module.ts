@@ -30,6 +30,10 @@ import { EmployeesModule } from "../employees/employees.module";
 import { ModuleCatalogModule } from "../foundation/module-catalog/module-catalog.module";
 import { UsersModule } from "../users/users.module";
 import { AuditModule } from "../foundation/audit/audit.module";
+// S5-GOAL-DASH-1 (additive): module nguồn cho GOAL_PROGRESS — GoalsModule (GoalsService.getTree, MỘT công
+// thức MỘT con số với /goals/tree) · OrgModule (HrDepartmentService.listDepartments — tên phòng hiển thị).
+import { GoalsModule } from "../goals/goals.module";
+import { OrgModule } from "../org/org.module";
 import { DashboardWidgetDataController } from "./dashboard-widget-data.controller";
 import { DashboardWidgetDataService } from "./dashboard-widget-data.service";
 import { DashboardWidgetHandlersService } from "./dashboard-widget-handlers.service";
@@ -67,6 +71,9 @@ import { DashboardCacheInvalidationRegistrar } from "./dashboard-cache-invalidat
     ModuleCatalogModule,
     UsersModule,
     AuditModule,
+    // S5-GOAL-DASH-1 (additive): + 2 module nguồn cho GOAL_PROGRESS.
+    GoalsModule,
+    OrgModule,
   ],
   controllers: [
     DashboardController,

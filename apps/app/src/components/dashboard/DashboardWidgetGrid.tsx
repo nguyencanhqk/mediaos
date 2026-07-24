@@ -17,6 +17,9 @@ import { NotificationsWidget } from "./NotificationsWidget";
 import { AttendanceTodayWidget } from "./AttendanceTodayWidget";
 import { PendingLeaveWidget } from "./PendingLeaveWidget";
 import { HrOverviewWidget } from "./HrOverviewWidget";
+// S5-GOAL-DASH-1 (additive): GOAL_PROGRESS KHÔNG cần tham số ngoài dashboardType ⇒ mount qua Grid bình
+// thường (khác PROJECT_PROGRESS — xem doc-block WIDGET_COMPONENTS bên dưới).
+import { GoalProgressWidget } from "./GoalProgressWidget";
 import { DASH_WIDGET_CODE } from "@/routes/dashboard/constants";
 
 interface DashboardWidgetProps {
@@ -39,6 +42,7 @@ const WIDGET_COMPONENTS: Readonly<Record<string, ComponentType<DashboardWidgetPr
   [DASH_WIDGET_CODE.ATTENDANCE_TODAY]: AttendanceTodayWidget,
   [DASH_WIDGET_CODE.PENDING_LEAVE]: PendingLeaveWidget,
   [DASH_WIDGET_CODE.HR_OVERVIEW]: HrOverviewWidget,
+  [DASH_WIDGET_CODE.GOAL_PROGRESS]: GoalProgressWidget,
 };
 
 interface DashboardWidgetGridProps {
