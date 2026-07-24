@@ -31,6 +31,10 @@ overrides:
   "fast-uri@>=3.0.0 <=3.1.3": "^3.1.4"
   "js-yaml@>=4.0.0 <4.3.0": "^4.3.0"
   "shell-quote@<=1.8.4": "^1.8.5"
+  # 2026-07-25 — vá advisory HIGH postcss (GHSA source-map path traversal, <8.5.18). Transitive dev-dep
+  # qua vitest coverage (apps/api>@vitest/coverage-v8>vitest>…>postcss), KHÔNG vào runtime bundle. Range-
+  # scoped để chỉ nâng dải lỗ hổng, không đụng postcss khác. Cổng CI = `pnpm audit --audit-level high`.
+  "postcss@<8.5.18": "^8.5.18"
 
 # Cho phép chạy postinstall của các gói cần binary native (pnpm 10+ chặn mặc định).
 allowBuilds:
