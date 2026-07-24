@@ -41,6 +41,9 @@ import {
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const PASSWORD = "Passw0rd!sec1g1";
+// Tiêu đề task DUY NHẤT: dùng làm sentinel "không nhúng" — deep-link chỉ là CON TRỎ (target_url), notification
+// KHÔNG được nhúng field record nguồn ⇒ chuỗi này TUYỆT ĐỐI không xuất hiện trong bất kỳ payload notification.
+const TASK_TITLE = "sec1g1-task-title-MUST-NOT-embed-in-notification";
 
 type Pair = readonly [action: string, resourceType: string, sensitive: boolean];
 const READ_NOTIFICATION: Pair = ["read", "notification", false];
@@ -91,6 +94,13 @@ describe.skipIf(!hasLaneDb)(
       for (const s of SECRET_PII_SUBSTRINGS) expect(raw, `leak "${s}"`).not.toContain(s);
     }
 
+    /** Deep-link là CON TRỎ, KHÔNG nhúng record nguồn: tiêu đề task DUY NHẤT không được lọt vào notification. */
+    function assertNoTaskEmbed(body: unknown): void {
+      expect(JSON.stringify(body), "notification KHÔNG được nhúng field task nguồn").not.toContain(
+        TASK_TITLE,
+      );
+    }
+
     async function login(slug: string, email: string): Promise<string> {
       const res = await http()
         .post("/auth/login")
@@ -115,11 +125,16 @@ describe.skipIf(!hasLaneDb)(
     }
 
     beforeAll(async () => {
-      // Belt (defense-in-depth): TỪ CHỐI chạy nếu DB resolve ra PROD `mediaos` dù .env ghim nó.
+      // Belt (defense-in-depth): TỪ CHỐI chạy nếu DB resolve ra `mediaos` DÙNG CHUNG trên MÁY DEV (là PROD
+      // trên host này — memory pgdata-bloat: 122 company test từng lọt PROD). CHỈ khi KHÔNG ở CI: trong CI
+      // (.github/workflows/api.yml) `mediaos` là DB container EPHEMERAL + step "Test" cố ý set LANE_DB=mediaos
+      // (line ~198) để BẬT gate — DB đó throwaway, migrate 0000→head, ZERO secret prod. GitHub Actions luôn
+      // set CI=true ⇒ bỏ qua guard ở CI, chỉ chặn nhầm-PROD ở local dev.
       const dbName = directUrl ? new URL(directUrl).pathname.replace(/^\//, "") : "";
-      if (dbName === "mediaos") {
+      if (!process.env.CI && dbName === "mediaos") {
         throw new Error(
-          `refuse-PROD: integration test trỏ DB 'mediaos' (PROD). Set LANE_DB=mediaos_sec1 + DATABASE_*.`,
+          `refuse-shared-mediaos(local): int-test trỏ DB 'mediaos' dùng chung (PROD trên host dev). ` +
+            `Set LANE_DB=mediaos_sec1 + DATABASE_* trỏ DB cô lập. (CI dùng mediaos ephemeral thì set CI=1.)`,
         );
       }
 
@@ -146,9 +161,9 @@ describe.skipIf(!hasLaneDb)(
       taskId = (
         await direct.query(
           `INSERT INTO tasks (company_id, task_type, title, status, origin, revision_round)
-           VALUES ($1, 'meeting_action', 'sec1g1 deep-link target', 'not_started', 'initial', 0)
+           VALUES ($1, 'meeting_action', $2, 'not_started', 'initial', 0)
            RETURNING id`,
-          [A.companyId],
+          [A.companyId, TASK_TITLE],
         )
       ).rows[0].id as string;
 
@@ -196,6 +211,7 @@ describe.skipIf(!hasLaneDb)(
         expect(res.body.data.notification_id).toBe(notificationId);
         expect(res.body.data.target.target_url).toBe(`/tasks/${taskId}`);
         assertNoSecrets(res.body);
+        assertNoTaskEmbed(res.body); // deep-link là con trỏ, KHÔNG nhúng tiêu đề task nguồn
       });
     });
 
@@ -224,6 +240,7 @@ describe.skipIf(!hasLaneDb)(
         // Deep-link vẫn còn (con trỏ) nhưng KHÔNG nhúng dữ liệu task nhạy cảm; body benign như seed.
         expect(res.body.data.target.target_url).toBe(`/tasks/${taskId}`);
         assertNoSecrets(res.body);
+        assertNoTaskEmbed(res.body); // mất quyền task cũng KHÔNG làm lộ field task qua notification
       });
     });
   },
