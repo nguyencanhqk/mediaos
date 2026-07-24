@@ -50,6 +50,7 @@ import {
   SlidersHorizontal,
   File,
   GraduationCap,
+  Target,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@mediaos/ui";
@@ -104,6 +105,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   file: File,
   // Tích hợp LMS Giai đoạn A — mục "Đào tạo".
   "graduation-cap": GraduationCap,
+  // S5-GOAL-FE-1 — module Mục tiêu (sidebar goal.list + APP_REGISTRY 'goals'); tránh fallback Circle.
+  target: Target,
 };
 
 interface DynamicIconProps {
