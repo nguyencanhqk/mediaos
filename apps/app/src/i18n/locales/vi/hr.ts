@@ -4,6 +4,13 @@
  */
 export default {
   pageTitle: "Nhân sự",
+  // ── S5-GOAL-DASH-1 (APPEND) — khối "Mục tiêu kỳ này" trong trang phòng ban (DepartmentsPage) ──────
+  departments: {
+    goals: {
+      column: "Mục tiêu kỳ này",
+      empty: "Chưa có mục tiêu",
+    },
+  },
   employees: {
     title: "Danh sách nhân viên",
     description: "Quản lý hồ sơ nhân viên trong công ty",

@@ -19,6 +19,11 @@ import { LeaveReadService } from "../leave/leave-read.service";
 import { LeaveCalendarService } from "../leave/leave-calendar.service";
 import { ContractService } from "../employees/contract.service";
 import { addDaysToLocalDate, localDateOf } from "../common/tz.util";
+// S5-GOAL-DASH-1 (additive): nguồn cho GOAL_PROGRESS — TÁI DÙNG GoalsService.getTree (MỘT công thức, MỘT
+// con số với GET /goals/tree — SPEC-10 §13, RÀNG BUỘC Work Order) + HrDepartmentService.listDepartments
+// (chỉ để map departmentId→tên hiển thị, KHÔNG raw-query bảng khác).
+import { GoalsService } from "../goals/goals.service";
+import { HrDepartmentService } from "../org/hr-department.service";
 import {
   gatePairFor,
   ttlSecondsFor,
@@ -90,6 +95,9 @@ export class DashboardWidgetHandlersService {
     private readonly leaveRead: LeaveReadService,
     private readonly leaveCalendar: LeaveCalendarService,
     private readonly contracts: ContractService,
+    // S5-GOAL-DASH-1 (additive): nguồn GOAL_PROGRESS (đã export ở module nguồn).
+    private readonly goals: GoalsService,
+    private readonly hrDepartments: HrDepartmentService,
   ) {
     this.buildRegistry();
   }
@@ -215,6 +223,15 @@ export class DashboardWidgetHandlersService {
     add("attendance-alerts", "ATTENDANCE_ALERTS", {
       gateAndResolve: async (ctx) => this.gateSelf(ctx, "ATTENDANCE_ALERTS"),
       fetch: (ctx) => this.fetchAttendanceAlerts(ctx),
+    });
+
+    // ─── S5-GOAL-DASH-1 (APPEND) — GOAL_PROGRESS ("Mục tiêu kỳ này") ────────────────────────────────
+    // Nội dung VIÊN THEO ACTOR (GoalsService.getTree tự áp GoalAccessService scope: nhân viên chỉ thấy
+    // phòng mình, trưởng đơn vị/HR/Admin thấy rộng hơn) ⇒ cache PER-USER (gateSelf/ownIdentity), KHÔNG
+    // company-shared — tránh rò chéo actor-scope (bẫy "reused read-service must be actor-scoped").
+    add("goal-progress", "GOAL_PROGRESS", {
+      gateAndResolve: async (ctx) => this.gateSelf(ctx, "GOAL_PROGRESS"),
+      fetch: (ctx) => this.fetchGoalProgress(ctx),
     });
   }
 
@@ -683,6 +700,52 @@ export class DashboardWidgetHandlersService {
       status: alerts.length === 0 ? "Empty" : "Active",
       data: { items, summary: { total: alerts.length } },
       emptyState: alerts.length === 0 ? { message: "Không có bất thường chấm công hôm nay" } : null,
+    };
+  }
+
+  // ── GOAL_PROGRESS (GoalsService.getTree — MỘT công thức, MỘT con số với GET /goals/tree §13) ──────
+
+  /**
+   * "Kỳ này" = kỳ ĐANG active hôm nay theo TZ công ty: `period_end >= today AND period_start <= today`
+   * (goalTreeQuerySchema periodFrom/periodTo giao nhau — reuse ĐÚNG semantics của GoalsRepository.listTx,
+   * KHÔNG tự định nghĩa "kỳ hiện tại" theo cách khác).
+   */
+  private async fetchGoalProgress(ctx: WidgetHandlerContext): Promise<WidgetFetchResult> {
+    const tz = await this.resolveCompanyTz(ctx.user.companyId);
+    const today = localDateOf(new Date(), tz);
+    const tree = await this.goals.getTree(ctx.user, { periodFrom: today, periodTo: today });
+    // Goal cấp `department` KHÔNG CÓ cha (MVP chặn level='company' — GOAL-ERR-004) ⇒ luôn là NÚT GỐC của
+    // rừng cây trả về; lọc theo level (KHÔNG chỉ theo "là gốc") để không lẫn goal project/employee mồ côi
+    // (cha ngoài phạm vi kỳ/scope) bị buildGoalTree đôn lên gốc.
+    const deptNodes = tree.filter((n) => n.level === "department");
+    if (deptNodes.length === 0) {
+      return {
+        status: "Empty",
+        data: { items: [], summary: { totalDepartments: 0, avgProgressPercent: null } },
+        emptyState: { message: "Chưa có mục tiêu phòng ban kỳ này" },
+      };
+    }
+    const departments = await this.hrDepartments.listDepartments(ctx.user.companyId);
+    const nameById = new Map(departments.map((d) => [d.id, d.name]));
+    const items = deptNodes.map((n) => ({
+      departmentId: n.departmentId,
+      departmentName: n.departmentId ? (nameById.get(n.departmentId) ?? null) : null,
+      goalId: n.id,
+      goalName: n.name,
+      progressPercent: n.progressPercent,
+      status: n.status,
+    }));
+    const measured = items.filter(
+      (i): i is typeof i & { progressPercent: number } => i.progressPercent !== null,
+    );
+    const avgProgressPercent =
+      measured.length > 0
+        ? Math.round(measured.reduce((sum, i) => sum + i.progressPercent, 0) / measured.length)
+        : null;
+    return {
+      status: "Active",
+      data: { items, summary: { totalDepartments: items.length, avgProgressPercent } },
+      emptyState: null,
     };
   }
 

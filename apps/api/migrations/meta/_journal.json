@@ -1345,6 +1345,13 @@
       "when": 1717587313000,
       "tag": "0511_s5_sysclean1_purge_system_job_runs",
       "breakpoints": true
+    },
+    {
+      "idx": 192,
+      "version": "7",
+      "when": 1717587314000,
+      "tag": "0525_s5_goaldash1_widget_goal_progress",
+      "breakpoints": true
     }
   ]
 }

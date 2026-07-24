@@ -13,8 +13,17 @@
  *  - mô hình gate widget       → docs/permission-matrix-spec.md §7 (dòng 144)
  */
 
-/** Union khớp CHECK chk_dashboard_widgets_module_code (mig 0482:71-72). */
-export type DashModuleCode = "AUTH" | "HR" | "ATT" | "LEAVE" | "TASK" | "DASH" | "NOTI" | "SYSTEM";
+/** Union khớp CHECK chk_dashboard_widgets_module_code (mig 0482:71-72; APPEND 'GOAL' ở mig 0525). */
+export type DashModuleCode =
+  | "AUTH"
+  | "HR"
+  | "ATT"
+  | "LEAVE"
+  | "TASK"
+  | "DASH"
+  | "NOTI"
+  | "SYSTEM"
+  | "GOAL";
 /** Union khớp CHECK chk_dashboard_widgets_widget_type (mig 0482:73-74). */
 export type DashWidgetType = "Summary" | "List" | "Chart" | "Calendar" | "Action" | "Alert";
 /** Union khớp CHECK chk_dashboard_widgets_default_data_scope (mig 0482:75-76). */
@@ -218,6 +227,17 @@ export const DASH_WIDGET_CATALOG: readonly DashWidgetEntry[] = [
     dataSourceKey: "attendance-alerts",
     componentKey: "AttendanceAlertsWidget",
   },
+  // ─── S5-GOAL-DASH-1 (APPEND-only) — widget "Mục tiêu kỳ này" (SPEC-10 §7/§13, mig 0525) ─────────
+  {
+    widgetCode: "GOAL_PROGRESS",
+    moduleCode: "GOAL",
+    name: "Mục tiêu kỳ này",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_GOAL_PROGRESS",
+    defaultDataScope: "Department",
+    widgetType: "Chart",
+    dataSourceKey: "goal-progress",
+    componentKey: "GoalProgressWidget",
+  },
 ] as const;
 
 export const DASH_WIDGET_COUNT = DASH_WIDGET_CATALOG.length;
@@ -269,6 +289,11 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<Record<string, EnginePair>> = {
   // ('view-team','attendance') — 0454:36 SENSITIVE. listTeamRecords tự resolveAndAssert(view-team,isSensitive);
   // handler gate lại cho nhất quán.
   ATTENDANCE_ALERTS: { action: "view-team", resourceType: "attendance" },
+  // ─── S5-GOAL-DASH-1 (APPEND) — cặp gate GOAL_PROGRESS ─────────────────────────────────────────────
+  // ('view','goal') — mig 0506 (S5-GOAL-DB-1), is_sensitive=false, grant đủ 4 role canonical (employee@
+  // department · manager@department · hr/company-admin@company). getTree tự resolveAndAssert('view','goal')
+  // + áp actor scope (GoalAccessService) ⇒ handler gate LẠI cho nhất quán (mirror pattern PENDING_LEAVE).
+  GOAL_PROGRESS: { action: "view", resourceType: "goal" },
 } as const;
 
 export interface DashPermissionPair extends EnginePair {
@@ -434,6 +459,12 @@ export const DASH_DEFAULT_CONFIG: readonly DashDefaultConfigEntry[] = [
   { dashboardType: "Admin", widgetCode: "EMPLOYEE_SUMMARY", sortOrder: 20 },
   { dashboardType: "Admin", widgetCode: "MODULE_STATUS", sortOrder: 30 },
   { dashboardType: "Admin", widgetCode: "SYSTEM_LOGS", sortOrder: 50 },
+  // ─── S5-GOAL-DASH-1 (APPEND) — GOAL_PROGRESS mặc định ở Manager/HR/Admin (widget "theo phòng ban",
+  // Employee KHÔNG có default vì GoalAccessService tự co scope Own→chỉ thấy dept mình khi có; đủ quyền
+  // view:goal vẫn có thể mở qua trang Mục tiêu, KHÔNG cần widget mặc định trên dashboard cá nhân).
+  { dashboardType: "Manager", widgetCode: "GOAL_PROGRESS", sortOrder: 60 },
+  { dashboardType: "HR", widgetCode: "GOAL_PROGRESS", sortOrder: 60 },
+  { dashboardType: "Admin", widgetCode: "GOAL_PROGRESS", sortOrder: 60 },
 ] as const;
 
 // ─── S4-DASH-BE-1 (APPEND-only) — resolver route → cặp engine ────────────────────────────────────────
