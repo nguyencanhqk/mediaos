@@ -109,10 +109,30 @@ Route avatar khớp MediaOS `AvatarMenu.tsx:21-25`: `/me` · `/me/account` · `/
 | `components/sidebar/app-switcher.tsx` | viết lại thành launcher MediaOS; nhận `mediaosAppUrl`; bỏ khu "Gần đây" + `useRecentApps` + localStorage; tile `href===null` bị lọc (fail-soft) |
 | `components/sidebar/site-header.tsx` | logo → `{base}/home` (`<a>`) khi có base, else `<Link href="/course">`; truyền `mediaosAppUrl` xuống `AppSwitcher` + `NavUser` |
 | `components/sidebar/nav-user.tsx` | **gỡ trọn** dialog đổi avatar + đổi mật khẩu nội bộ (state/handler/JSX/import ~250 dòng); menu mới: Cá nhân `/me` · Tài khoản `/me/account` · Đổi MK `/me/security/password` (external, ẩn khi base rỗng) + Ngôn ngữ (giữ) + Đăng xuất (local) |
-| `components/sidebar/app-sidebar.tsx` | thêm nhóm "Trao đổi" → mục Trò chuyện (`/chat`) ở khu không-admin |
+| `components/sidebar/app-sidebar.tsx` | thêm nhóm "Trao đổi" → mục Trò chuyện (`/chat`); **vá regression** (dưới) |
 | `app/(app)/layout.tsx` | đọc `env.MEDIAOS_APP_URL` → truyền `mediaosAppUrl` xuống `SiteHeader` |
 
 **Kiểm chứng:** `npx tsc --noEmit` **0 lỗi** · `npx eslint` 7 file **sạch**.
+
+### 8.1 Vá regression — nhóm "Hệ thống" mồ côi (owner phát hiện ngay trong phiên)
+
+Bản đầu của UI-4 bỏ tile "Hệ thống" khỏi App Switcher (giờ tile đó trỏ MediaOS `/system`), NHƯNG sidebar
+LMS vẫn giữ cơ chế cũ **tách 2 khu** (`isAdminApp ? adminNav : learningNav`) — chuyển giữa hai khu vốn
+DỰA vào App Switcher. Hệ quả: `/admin` LMS (Cài đặt · Người dùng · **Vai trò = phân quyền** · RAG) **mất
+lối vào**, chỉ gõ URL trực tiếp mới tới.
+
+Sửa: bỏ hẳn `isAdminApp` + cơ chế tách khu; sidebar hiện **mọi nhóm theo quyền cùng lúc** như
+`ModuleSidebar` của MediaOS:
+
+| Nhóm | Mục | Điều kiện |
+| --- | --- | --- |
+| Đào tạo | Học tập · Khóa học của tôi · Thi cử · (Bảng xếp hạng) | luôn |
+| Quản lý | Quản lý học liệu · Thiết lập (cài đặt khóa học) | `canManageContent`/`SiteConfig` |
+| Trao đổi | Trò chuyện | luôn |
+| **Hệ thống** | **Cài đặt** (`/admin`) · Người dùng · **Vai trò** · RAG | `isAdmin`/`canManageUsers`/`canManageRoles`/`MANAGE_RAG` |
+
+Đây mới đúng yêu cầu gốc "chuyển **hệ thống** về sidebar". Nhãn `/admin` đổi "Chung" → "Cài đặt" cho khớp
+tiêu đề trang.
 
 **Phạm vi giữ nguyên có chủ đích:** trang `(public)` (`Navbar.tsx`) vẫn dùng `AppSwitcher`/`NavUser`
 **không** truyền `mediaosAppUrl` ⇒ ở landing (thường trước đăng nhập) switcher chỉ hiện Đào tạo, avatar
