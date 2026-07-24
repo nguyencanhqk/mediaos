@@ -384,4 +384,39 @@ describe("goalKeys / goalInvalidation (S5-GOAL-FE-2 append)", () => {
     expect(keys.filter((k) => JSON.stringify(k) === detailKey)).toHaveLength(1);
     expect(keys.map((k) => JSON.stringify(k))).not.toContain(JSON.stringify(goalKeys.detail("")));
   });
+
+  // ── Vá gate LIGHT: khối /me đọc endpoint own-scope RIÊNG (me/goals) nên KHÔNG nằm dưới prefix
+  // `goals/*`. Mọi helper ghi-mục-tiêu thiếu vế này ⇒ ghi xong % trên card /me đứng yên, số cũ nhìn
+  // vẫn hợp lý (staleTime 60s + refetchOnWindowFocus tắt) nên người dùng không có cách nào biết.
+  const ME_GOALS_PREFIX = JSON.stringify(["me", "goals"]);
+
+  it("checkin/finalize/linkTasks đều phủ prefix me/goals — card 'Mục tiêu của tôi' không đọng số cũ", () => {
+    for (const keys of [
+      goalInvalidation.checkin("g-1"),
+      goalInvalidation.finalize("g-1"),
+      goalInvalidation.linkTasks({ goalIds: ["g-1"], taskId: "t-1" }),
+    ]) {
+      expect(keys.map((k) => JSON.stringify(k))).toContain(ME_GOALS_PREFIX);
+    }
+  });
+
+  it("me/goals prefix là PREFIX THẬT của meKeys.goals(params) — khớp mọi biến thể filter", () => {
+    const paged = meKeys.goals({ status: "Active", limit: 20 });
+    expect(JSON.stringify(paged.slice(0, 2))).toBe(ME_GOALS_PREFIX);
+  });
+
+  it("taskProgress(goalId) phủ detail + linked-tasks + list + tree + me/goals (task đổi trạng thái)", () => {
+    const keys = goalInvalidation.taskProgress("g-1").map((k) => JSON.stringify(k));
+    expect(keys).toContain(JSON.stringify(goalKeys.detail("g-1")));
+    expect(keys).toContain(JSON.stringify(goalKeys.linkedTasks("g-1")));
+    expect(keys).toContain(JSON.stringify(["goals", "list"]));
+    expect(keys).toContain(JSON.stringify(["goals", "tree"]));
+    expect(keys).toContain(ME_GOALS_PREFIX);
+  });
+
+  it("taskProgress KHÔNG kèm key phía task — call-site đã tự invalidate, tránh invalidate kép", () => {
+    const keys = goalInvalidation.taskProgress("g-1").map((k) => JSON.stringify(k));
+    expect(keys).not.toContain(JSON.stringify(taskKeys.detail("t-1")));
+    expect(keys.some((k) => k.includes("kanban"))).toBe(false);
+  });
 });

@@ -805,6 +805,14 @@ export const goalKeys = {
 const goalListPrefix = [...rootKeys.goals, "list"] as const;
 const goalTreePrefix = [...rootKeys.goals, "tree"] as const;
 
+// PREFIX 3-phần tử (bỏ slot params) của `meKeys.goals(params)`. Khối "Mục tiêu của tôi" ở /me đọc
+// endpoint own-scope RIÊNG (`me/goals`) nên KHÔNG nằm dưới prefix `goals/*` — mọi helper bên dưới
+// phải kèm vế này, nếu không: check-in nhanh ngay TRÊN card /me ghi thành công mà % trên chính card
+// đó đứng yên (card không remount khi dialog đóng, staleTime 60s + refetchOnWindowFocus tắt ⇒ số cũ
+// nhìn vẫn hợp lý, không có lỗi nào để người dùng biết). Cùng loại bẫy "hai đường đọc một dữ liệu"
+// như taskKeys.kanban vs tasks/list ở trên.
+const meGoalsPrefix = [...rootKeys.me, "goals"] as const;
+
 // Mọi mutation goal (create/update/delete) làm mới danh sách PHẲNG + cây (progress nút cha có thể đổi
 // theo rollup) + chi tiết đúng goal khi biết id. Nguồn sự thật DUY NHẤT — page không rải string tay.
 export const goalInvalidation = {
@@ -818,10 +826,43 @@ export const goalInvalidation = {
    * `goal_updates` ⇒ ngoài detail/list/tree còn phải làm mới CẢ sổ check-in (mọi trang, qua prefix).
    */
   checkin: (id: string) =>
-    [goalListPrefix, goalTreePrefix, goalKeys.detail(id), goalKeys.updatesOf(id)] as const,
+    [
+      goalListPrefix,
+      goalTreePrefix,
+      goalKeys.detail(id),
+      goalKeys.updatesOf(id),
+      meGoalsPrefix,
+    ] as const,
   /** Chốt kỳ/mở lại (GOAL-API-009): cũng ghi sổ + đổi `finalizedAt` ⇒ CÙNG tập với check-in. */
   finalize: (id: string) =>
-    [goalListPrefix, goalTreePrefix, goalKeys.detail(id), goalKeys.updatesOf(id)] as const,
+    [
+      goalListPrefix,
+      goalTreePrefix,
+      goalKeys.detail(id),
+      goalKeys.updatesOf(id),
+      meGoalsPrefix,
+    ] as const,
+
+  /**
+   * Task GẮN mục tiêu đổi trạng thái (SPEC-10 §13, progress_mode='tasks') — server tính lại
+   * `progress_percent` của mục tiêu neo NGAY khi task sang Done/rời Done, nên FE phải làm mới goal
+   * dù người dùng đang đứng ở màn TASK.
+   *
+   * Thiếu vế này thì kéo thẻ sang Done rồi mở Mục tiêu (detail/list/cây) hoặc /me vẫn thấy % TRƯỚC
+   * khi đổi — số SAI mà nhìn vẫn hợp lý, không có thông báo lỗi nào để người dùng nghi ngờ. Đây là
+   * đúng lớp bẫy PR #250 ("sửa trong panel phải F5 board mới thấy"), lần này ngược chiều TASK→GOAL.
+   *
+   * KHÔNG kèm key phía task: call-site (use-task-action-mutation / board move) đã tự invalidate
+   * `taskCoreInvalidation` + `taskKeys.kanban` cho luồng của nó — nhét thêm ở đây là invalidate kép.
+   */
+  taskProgress: (goalId: string) =>
+    [
+      goalListPrefix,
+      goalTreePrefix,
+      goalKeys.detail(goalId),
+      goalKeys.linkedTasks(goalId),
+      meGoalsPrefix,
+    ] as const,
 
   /**
    * Gắn/tháo việc ↔ mục tiêu (GOAL-API-010) — HAI CHIỀU, HAI PHÍA.
@@ -843,6 +884,8 @@ export const goalInvalidation = {
       goalListPrefix,
       goalTreePrefix,
       ...uniqueGoalIds.flatMap((goalId) => [goalKeys.detail(goalId), goalKeys.linkedTasks(goalId)]),
+      // Gắn/tháo việc đổi % của mục tiêu ⇒ khối "Mục tiêu của tôi" ở /me cũng lệch (xem meGoalsPrefix).
+      meGoalsPrefix,
       ...(input.taskId ? taskCoreInvalidation.detail(input.taskId) : []),
       ...(input.projectId ? [taskKeys.kanban(input.projectId)] : []),
     ];

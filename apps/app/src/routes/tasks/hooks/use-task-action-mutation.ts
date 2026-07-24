@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { taskKeys, taskCoreInvalidation } from "@mediaos/web-core";
+import { taskKeys, taskCoreInvalidation, goalInvalidation } from "@mediaos/web-core";
 import type { TaskCoreResponseDto, TaskActionResponseDto } from "@mediaos/contracts";
 
 /**
@@ -70,6 +70,17 @@ export function useTaskActionMutation<TVariables>({
       // projectId không đổi qua action mutate ⇒ lấy từ response, fallback snapshot khi lỗi/rollback.
       const projectId = data?.task.projectId ?? context?.previous?.projectId ?? null;
       if (projectId) void queryClient.invalidateQueries({ queryKey: taskKeys.kanban(projectId) });
+
+      // S5-GOAL-FE-2 — task GẮN mục tiêu đổi trạng thái ⇒ server tính lại % của mục tiêu neo
+      // (SPEC-10 §13, progress_mode='tasks'). Không có vế này thì đổi trạng thái xong mở màn Mục
+      // tiêu / /me vẫn thấy % CŨ tới hết staleTime (refetchOnWindowFocus tắt ⇒ thực tế tới khi F5),
+      // mà số cũ trông vẫn hợp lý nên người dùng không có cách nào biết là sai.
+      // Lấy goalId từ response trước (nguồn sự thật — action có thể ĐỔI goal), fallback snapshot khi
+      // lỗi/rollback để mục tiêu cũ vẫn được làm mới.
+      const goalId = data?.task.goalId ?? context?.previous?.goalId ?? null;
+      if (goalId)
+        for (const key of goalInvalidation.taskProgress(goalId))
+          void queryClient.invalidateQueries({ queryKey: key });
     },
   });
 }

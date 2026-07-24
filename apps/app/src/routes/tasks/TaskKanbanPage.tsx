@@ -7,6 +7,7 @@ import {
   taskKeys,
   taskCollabInvalidation,
   taskCoreInvalidation,
+  goalInvalidation,
   useCan,
   ApiError,
 } from "@mediaos/web-core";
@@ -505,6 +506,9 @@ export function TaskKanbanPage({
     onMutate: async ({ taskId, status }) => {
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<TaskKanbanBoardDto>(queryKey);
+      // S5-GOAL-FE-2 — nhặt mục tiêu neo của thẻ NGAY tại đây: onSettled chỉ có `variables.taskId`,
+      // mà lúc đó cache board đã bị optimistic/refetch đè nên không còn tra ngược được goalId.
+      let movedGoalId: string | null = null;
       if (previous) {
         let moved: TaskKanbanCardDto | undefined;
         const withoutMoved = previous.columns.map((col) => {
@@ -512,6 +516,7 @@ export function TaskKanbanPage({
           if (found) moved = found;
           return { ...col, tasks: col.tasks.filter((tk) => tk.id !== taskId) };
         });
+        movedGoalId = moved?.goalId ?? null;
         if (moved) {
           const patched = { ...moved, status };
           // Narrow theo columnMode (union S5-TASK-PIPELINE-1) — optimistic chỉ áp cột status;
@@ -528,19 +533,23 @@ export function TaskKanbanPage({
         }
       }
       setDragErrorKey(null);
-      return { previous };
+      return { previous, movedGoalId };
     },
     onError: (err, _vars, context) => {
       if (context?.previous) queryClient.setQueryData(queryKey, context.previous);
       setDragErrorKey(moveErrorKey(err));
     },
-    onSettled: (_data, _error, variables) => {
+    onSettled: (_data, _error, variables, context) => {
       for (const key of taskCollabInvalidation.kanban(projectId, variables.taskId))
         void queryClient.invalidateQueries({ queryKey: key });
       for (const key of taskCoreInvalidation.list())
         void queryClient.invalidateQueries({ queryKey: key });
       for (const key of taskCoreInvalidation.my())
         void queryClient.invalidateQueries({ queryKey: key });
+      // S5-GOAL-FE-2 — kéo thẻ sang Done/rời Done đổi % mục tiêu neo (SPEC-10 §13, mode 'tasks').
+      if (context?.movedGoalId)
+        for (const key of goalInvalidation.taskProgress(context.movedGoalId))
+          void queryClient.invalidateQueries({ queryKey: key });
     },
   });
 
@@ -551,6 +560,11 @@ export function TaskKanbanPage({
     onMutate: async ({ taskId, stateId }) => {
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<TaskKanbanBoardDto>(queryKey);
+      // S5-GOAL-FE-2 — xem chú thích ở moveMutation. Kéo cột pipeline KHÔNG phải lúc nào cũng vô can
+      // với mục tiêu: `applyStateChangeTx` (task-core.service.ts) có AUTO-MAP — cột đích khác nhóm
+      // với status hiện tại thì nó gọi luôn `changeStatusTx`, tức status ĐỔI THẬT ⇒ % mục tiêu
+      // (progress_mode='tasks') đổi theo. Bỏ qua vế này vì tưởng "state tách khỏi status" là sai.
+      let movedGoalId: string | null = null;
       if (previous) {
         let moved: TaskKanbanCardDto | undefined;
         const withoutMoved = previous.columns.map((col) => {
@@ -562,6 +576,7 @@ export function TaskKanbanPage({
             ? { ...col, tasks: nextTasks, taskCount: Math.max(0, col.taskCount - 1) }
             : { ...col, tasks: nextTasks };
         });
+        movedGoalId = moved?.goalId ?? null;
         if (moved) {
           const patched = { ...moved, stateId };
           const nextColumns = withoutMoved.map((col) =>
@@ -576,19 +591,22 @@ export function TaskKanbanPage({
         }
       }
       setDragErrorKey(null);
-      return { previous };
+      return { previous, movedGoalId };
     },
     onError: (err, _vars, context) => {
       if (context?.previous) queryClient.setQueryData(queryKey, context.previous);
       setDragErrorKey(moveErrorKey(err));
     },
-    onSettled: (_data, _error, variables) => {
+    onSettled: (_data, _error, variables, context) => {
       for (const key of taskCollabInvalidation.kanban(projectId, variables.taskId))
         void queryClient.invalidateQueries({ queryKey: key });
       for (const key of taskCoreInvalidation.list())
         void queryClient.invalidateQueries({ queryKey: key });
       for (const key of taskCoreInvalidation.my())
         void queryClient.invalidateQueries({ queryKey: key });
+      if (context?.movedGoalId)
+        for (const key of goalInvalidation.taskProgress(context.movedGoalId))
+          void queryClient.invalidateQueries({ queryKey: key });
     },
   });
 
