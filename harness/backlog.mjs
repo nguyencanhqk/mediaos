@@ -8175,6 +8175,36 @@ export const backlog = [
       "npx tsc --noEmit 0 lỗi + eslint sạch; build + restart 3400; verify BUILD_ID mới + CSS/HTML live",
     ],
   },
+  // ── Seed 2026-07-25 (owner): mở LMS từ MediaOS đừng qua trang trung chuyển /lms ────────────────
+  {
+    id: "S5-LMS-OPEN-DIRECT-1",
+    module: "LMS",
+    layer: "FE",
+    title:
+      "MediaOS apps/app — mở LMS 'vào thẳng': tile Đào tạo (App Switcher) + nút 'Mở LMS' (/me/training) lấy token SSO NGAY rồi assign sang LMS, KHÔNG điều hướng tới trang trung chuyển /lms; lỗi → fallback /lms (LmsRedirectPage giữ nguyên làm trang báo lỗi + thử lại)",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/lms/**",
+      "apps/app/src/layouts/home/AppSwitcher.tsx",
+      "apps/app/src/routes/me/MeTrainingPage.tsx",
+      "apps/app/src/routes/me/MeTrainingPage.spec.tsx",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "TRƯỚC: cả tile Đào tạo (AppSwitcher.tsx:178 navigate defaultRoute=/lms) lẫn nút Mở LMS (MeTrainingPage) đều điều hướng client tới route /lms = LmsRedirectPage — trang này mount, hiện 'Đang chuyển…', rồi mới fetch /integrations/lms/sso-link + assign. Owner muốn bỏ MÀN trung gian",
+      "GIỮ cầu SSO (bắt buộc): token 60s vẫn phải lấy, nếu không vào LMS chưa có phiên → SSO-only đá /login. Chỉ bỏ TRANG, không bỏ CẦU. Helper apps/app/src/routes/lms/open-lms.ts: openLms(onFallback) = apiFetch sso-link → window.location.assign; catch → onFallback()",
+      "special-case theo app.appKey==='lms' trong AppSwitcher.doNavigate (SAU dirty-form guard, không phá app khác); MeTrainingPage nút onClick → openLms(() => navigate /lms)",
+      "LmsRedirectPage + route /lms GIỮ NGUYÊN làm đường lỗi (fallback tự thử lại). Spec MeTrainingPage cập nhật: nút gọi openLms, fallback truyền vào điều hướng /lms",
+      "deploy KHÁC track LMS: đây là apps/app (MediaOS) — PR + CI + Cloudflare Pages, KHÔNG phải m prod-update lms",
+    ],
+    done_when: [
+      "Bấm Đào tạo (App Switcher) hoặc Mở LMS (/me/training) → vào thẳng LMS, KHÔNG thấy màn 'Đang chuyển…' của /lms ở happy path",
+      "Lỗi lấy token (mạng/503/thiếu quyền) → rơi về /lms hiện thông báo + nút thử lại (không kẹt im lặng)",
+      "typecheck + eslint + test apps/app xanh (MeTrainingPage.spec cập nhật)",
+    ],
+  },
   {
     id: "S5-LMS-NOTI-1",
     module: "NOTI",

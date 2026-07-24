@@ -27,6 +27,7 @@ import { Skeleton, cn } from "@mediaos/ui";
 import { useLayoutStore } from "@/stores/layout.store";
 import { AppCard } from "./AppCard";
 import { DirtyFormConfirmDialog } from "../shared/DirtyFormConfirmDialog";
+import { openLms } from "@/routes/lms/open-lms";
 
 function buildSession(): SessionContext {
   const state = useAuthStore.getState();
@@ -175,6 +176,12 @@ export function AppSwitcher() {
 
   const doNavigate = (app: AppRegistryItem) => {
     closeAppSwitcher();
+    // "Đào tạo" (LMS) là app CROSS-DOMAIN: vào thẳng qua token SSO thay vì điều hướng tới trang trung
+    // chuyển /lms. Lỗi → rơi về /lms (LmsRedirectPage tự thử lại). Owner 2026-07-25.
+    if (app.appKey === "lms") {
+      void openLms(() => void navigate({ to: app.defaultRoute as "/" }));
+      return;
+    }
     void navigate({ to: app.defaultRoute as "/" });
   };
 

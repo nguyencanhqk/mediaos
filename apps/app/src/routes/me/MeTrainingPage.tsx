@@ -44,6 +44,7 @@ import {
   PageHeader,
 } from "@mediaos/ui";
 import { LMS_ACCESS_PAIR, ME_LMS_OPEN_PATH } from "./constants";
+import { openLms } from "../lms/open-lms";
 import { clampPercent, learningTimeParts } from "./components/training-format";
 import { TrainingProgressBar } from "./components/TrainingProgressBar";
 
@@ -105,8 +106,9 @@ function MeTrainingPageInner() {
     staleTime: 60_000,
   });
 
+  // Vào thẳng LMS qua token SSO (không qua trang trung chuyển /lms); lỗi → rơi về /lms. Owner 2026-07-25.
   const openLmsButton = (
-    <Button size="sm" onClick={() => void navigate({ to: ME_LMS_OPEN_PATH })}>
+    <Button size="sm" onClick={() => void openLms(() => void navigate({ to: ME_LMS_OPEN_PATH }))}>
       <ExternalLink className="mr-2 h-4 w-4" />
       {t("trainingPage.openLms")}
     </Button>
