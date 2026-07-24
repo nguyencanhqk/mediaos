@@ -22,6 +22,8 @@ export const rootKeys = {
   foundation: ["foundation"] as const,
   // S5-ME-FE-1 — Personal Hub (SPEC-09).
   me: ["me"] as const,
+  // S5-GOAL-FE-1 — Mục tiêu (SPEC-10). Module RIÊNG (GOAL-DEC-002).
+  goals: ["goals"] as const,
 } as const;
 
 // ── Auth keys ─────────────────────────────────────────────────────────────────
@@ -770,6 +772,35 @@ export const meKeys = {
   // query (page/per_page/from_date/to_date) — plain, JSON-serialisable; key khác nhau theo trang/filter.
   securityActivity: (params?: Record<string, unknown>) =>
     [...rootKeys.me, "security-activity", params] as const,
+};
+
+// ── GOAL keys (S5-GOAL-FE-1) — Mục tiêu, SPEC-10 ───────────────────────────────
+//
+// Convention [root, resource, variant, ...params] như leaveKeys (KHÔNG copy khối lặp
+// hrContractsInvalidation/remoteWorkRequestInvalidation — chúng nhồi nhầm block, đã biết). list/tree
+// param'd theo filter; detail/linkedTasks/updates theo id. company_id KHÔNG vào key (server-scoped).
+
+export const goalKeys = {
+  all: rootKeys.goals,
+  list: (params?: Record<string, unknown>) => [...rootKeys.goals, "list", params] as const,
+  tree: (params?: Record<string, unknown>) => [...rootKeys.goals, "tree", params] as const,
+  detail: (id: string) => [...rootKeys.goals, "detail", id] as const,
+  linkedTasks: (id: string) => [...rootKeys.goals, "linked-tasks", id] as const,
+  updates: (id: string, params?: Record<string, unknown>) =>
+    [...rootKeys.goals, "updates", id, params] as const,
+};
+
+// PREFIX 3-phần tử (bỏ slot params) → khớp MỌI biến thể filter (TanStack match theo prefix; key có
+// object params cụ thể KHÔNG khớp filter khác — mirror taskProjectListPrefix/notificationListPrefix).
+const goalListPrefix = [...rootKeys.goals, "list"] as const;
+const goalTreePrefix = [...rootKeys.goals, "tree"] as const;
+
+// Mọi mutation goal (create/update/delete) làm mới danh sách PHẲNG + cây (progress nút cha có thể đổi
+// theo rollup) + chi tiết đúng goal khi biết id. Nguồn sự thật DUY NHẤT — page không rải string tay.
+export const goalInvalidation = {
+  create: () => [goalListPrefix, goalTreePrefix] as const,
+  update: (id: string) => [goalListPrefix, goalTreePrefix, goalKeys.detail(id)] as const,
+  remove: (id: string) => [goalListPrefix, goalTreePrefix, goalKeys.detail(id)] as const,
 };
 
 // S5-ME-FE-3 — Notification preferences (GET/PUT /notifications/preferences, ME-SCREEN-013). Namespace

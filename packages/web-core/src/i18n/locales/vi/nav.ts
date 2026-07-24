@@ -11,6 +11,8 @@ export default {
     system: "Hệ thống",
     // S5-ME-FE-1 — Personal Hub (SPEC-09).
     me: "Cá nhân",
+    // S5-GOAL-FE-1 — Mục tiêu (SPEC-10, module riêng).
+    goals: "Mục tiêu",
     // Tích hợp LMS Giai đoạn A — cổng SSO sang hệ Đào tạo.
     lms: "Đào tạo",
   },
@@ -24,6 +26,7 @@ export default {
     notifications: "Danh sách thông báo, trạng thái đọc và cấu hình thông báo.",
     system: "Người dùng, vai trò, quyền, cấu hình, audit log và module catalog.",
     me: "Hồ sơ, tài khoản, bảo mật, công việc và cài đặt của riêng bạn.",
+    goals: "Mục tiêu phòng ban, dự án và nhân viên theo kỳ — cây, tiến độ và chốt kỳ.",
     lms: "Khóa học, bài kiểm tra và lộ trình đào tạo (mở hệ LMS).",
   },
   // Route titles
@@ -75,6 +78,11 @@ export default {
     leavePublicHolidays: "Ngày nghỉ lễ",
     tasks: "Công việc",
     taskMyTasks: "Việc của tôi",
+    // S5-GOAL-FE-1 — Mục tiêu (GOAL-SCREEN-001/002/003).
+    goals: "Mục tiêu",
+    goalNew: "Tạo mục tiêu",
+    goalDetail: "Chi tiết mục tiêu",
+    goalEdit: "Sửa mục tiêu",
     notifications: "Thông báo",
     system: "Hệ thống",
     systemUsers: "Người dùng",

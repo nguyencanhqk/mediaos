@@ -106,6 +106,9 @@ export {
   meKeys,
   // S5-ME-FE-3 — Notification preferences (ME-SCREEN-013) query key factory.
   notificationPreferenceKeys,
+  // S5-GOAL-FE-1 — Mục tiêu (SPEC-10) query key factory + mutation → list/tree/detail invalidation.
+  goalKeys,
+  goalInvalidation,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -184,6 +187,8 @@ export {
 // S2-FE-HR-5 (lane HR5-WC): HR master-data CRUD spine (departments/positions/job-levels/contract-types).
 export { hrMasterDataApi, type HrDepartment } from "./lib/hr-master-data-api";
 export { leaveApi } from "./lib/leave-api";
+// S5-GOAL-FE-1 — GOAL API client (Mục tiêu, SPEC-10 GOAL-API-001..010, GoalsController).
+export { goalApi } from "./lib/goal-api";
 export { attendanceApi } from "./lib/attendance-api";
 // S2-FE-HR-7: employee contracts (hợp đồng lao động) CRUD client.
 export { contractsApi } from "./lib/contracts-api";

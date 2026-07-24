@@ -24,6 +24,8 @@ export type ModuleCode =
   | "NOTI"
   // S5-ME-FE-1 — Personal Hub / self-service (SPEC-09, mig 0495 seed module ME).
   | "ME"
+  // S5-GOAL-FE-1 — Mục tiêu (SPEC-10, GOAL-DEC-002 module RIÊNG, mig 0506 seed module GOAL active).
+  | "GOAL"
   | "PAYROLL"
   | "RECRUIT"
   | "ASSET"
@@ -614,6 +616,25 @@ export const APP_REGISTRY: readonly AppRegistryItem[] = [
     status: "active",
     order: 65,
   },
+  // S5-GOAL-FE-1 — card "Mục tiêu" (GOAL-DEC-002: module RIÊNG, KHÔNG chôn trong Task). Gate cặp engine
+  // LITERAL `access:goal` (KHÔNG qua PERMISSION_CODE_TO_PAIR — tránh drift, giống access:me/access:lms;
+  // seed mig 0506 cấp 4 role canonical, non-sensitive ⇒ có trong /auth/me capabilities). Module GOAL
+  // active mặc định (mig 0506 group Collaboration) ⇒ landing /goals KHÔNG 404 (mirror ME).
+  {
+    appKey: "goals",
+    moduleCode: "GOAL",
+    nameKey: "app.goals",
+    descKey: "appDesc.goals",
+    icon: "target",
+    rootPath: "/goals",
+    defaultRoute: "/goals",
+    category: "collaboration",
+    aliases: ["muc tieu", "goal", "kpi", "objective", "okr"],
+    requiredAnyPermissions: ["access:goal"],
+    status: "active",
+    // order phải tăng dần THEO VỊ TRÍ trong mảng (registry.spec "thứ tự order tăng dần") — đặt sau me(65).
+    order: 66,
+  },
   {
     appKey: "system",
     moduleCode: "FOUNDATION",
@@ -1189,6 +1210,24 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["view:notification-delivery-log"],
     showInSidebar: true,
     order: 63,
+  },
+
+  // GOAL — Mục tiêu (SPEC-10 §9 GOAL-SCREEN-001, GOAL-DEC-002 module RIÊNG). Gate route module-entry =
+  // cặp engine THỰC `access:goal` (mig 0506, non-sensitive, grant Own cho 4 role canonical) — literal
+  // pair (KHÔNG qua PERMISSION_CODE_TO_PAIR, cùng kỹ thuật me.overview/att.shifts, tránh drift). Trang
+  // list gọi GET /goals (view:goal) — mọi role có access CŨNG có view (§11) nên KHÔNG lệch thực tế.
+  // Route new/detail/edit dùng RouteMeta CỤC BỘ trong router.tsx (mẫu HR employees) — chỉ list ở đây.
+  {
+    routeKey: "goal.list",
+    path: "/goals",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "GOAL",
+    screenCode: "GOAL-SCREEN-001",
+    titleKey: "routeTitle.goals",
+    requiredAnyPermissions: ["access:goal"],
+    showInSidebar: true,
+    // Giữ tăng dần theo vị trí (sau noti.delivery-logs=63, trước me.overview=65).
+    order: 64,
   },
 
   // ME — Personal Hub (SPEC-09 §8.2/§9 ME-SCREEN-001). Gate = cặp engine THỰC trực tiếp `access:me`

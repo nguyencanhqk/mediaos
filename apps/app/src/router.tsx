@@ -1683,6 +1683,107 @@ const meSecurityTwoFactorRoute = makeModuleRoute(
   TwoFactorSetupPage,
 );
 
+// GOAL — Mục tiêu (S5-GOAL-FE-1, SPEC-10 GOAL-SCREEN-001/002/003). Module RIÊNG (GOAL-DEC-002). List
+// qua makeModuleRoute (ROUTE_REGISTRY "goal.list", gate access:goal). new/detail/edit dùng RouteMeta CỤC
+// BỘ (mẫu HR employees) — route truyền onSuccess/onEdit/onBack, page tự gate finer (create/update/delete)
+// + server enforce. Static "/goals/new" xếp hạng TRÊN "/goals/$goalId" (mirror hrEmployeeCreateRoute).
+const GoalListPage = React.lazy(() =>
+  import("@/routes/goals/GoalListPage").then((m) => ({ default: m.GoalListPage })),
+);
+const GoalFormPage = React.lazy(() =>
+  import("@/routes/goals/GoalFormPage").then((m) => ({ default: m.GoalFormPage })),
+);
+const GoalDetailPage = React.lazy(() =>
+  import("@/routes/goals/GoalDetailPage").then((m) => ({ default: m.GoalDetailPage })),
+);
+
+const goalsListRoute = makeModuleRoute("/goals", "goal.list", "GOAL", GoalListPage);
+
+const goalNewMeta: RouteMeta = {
+  routeKey: "goal.new",
+  path: "/goals/new",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "GOAL",
+  screenCode: "GOAL-SCREEN-003",
+  titleKey: "routeTitle.goalNew",
+  requiredAnyPermissions: ["access:goal"],
+  showInSidebar: false,
+  order: 55.1,
+};
+const goalNewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/goals/new",
+  beforeLoad: authGuard,
+  component: () => {
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      goalNewMeta,
+      "GOAL",
+      <GoalFormPage
+        onSuccess={(id) => void navigate({ to: "/goals/$goalId", params: { goalId: id } })}
+        onCancel={() => void navigate({ to: "/goals" as "/" })}
+      />,
+    );
+  },
+});
+
+const goalDetailMeta: RouteMeta = {
+  routeKey: "goal.detail",
+  path: "/goals/$goalId",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "GOAL",
+  screenCode: "GOAL-SCREEN-002",
+  titleKey: "routeTitle.goalDetail",
+  requiredAnyPermissions: ["access:goal"],
+  showInSidebar: false,
+  order: 55.2,
+};
+const goalDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/goals/$goalId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { goalId } = goalDetailRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      goalDetailMeta,
+      "GOAL",
+      <GoalDetailPage
+        goalId={goalId}
+        onEdit={(id) => void navigate({ to: "/goals/$goalId/edit", params: { goalId: id } })}
+        onBack={() => void navigate({ to: "/goals" as "/" })}
+      />,
+    );
+  },
+});
+
+const goalEditMeta: RouteMeta = {
+  routeKey: "goal.edit",
+  path: "/goals/$goalId/edit",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "GOAL",
+  screenCode: "GOAL-SCREEN-003",
+  titleKey: "routeTitle.goalEdit",
+  requiredAnyPermissions: ["access:goal"],
+  showInSidebar: false,
+  order: 55.3,
+};
+const goalEditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/goals/$goalId/edit",
+  beforeLoad: authGuard,
+  component: () => {
+    const { goalId } = goalEditRoute.useParams();
+    const navigate = useNavigate();
+    const toDetail = () => void navigate({ to: "/goals/$goalId", params: { goalId } });
+    return buildModuleRouteContent(
+      goalEditMeta,
+      "GOAL",
+      <GoalFormPage goalId={goalId} onSuccess={toDetail} onCancel={toDetail} />,
+    );
+  },
+});
+
 // System / Foundation — /system landing THAY ModulePlaceholder = System Overview (S2-FE-FND-1).
 const systemRoute = makeModuleRoute("/system", "system.overview", "FOUNDATION", SystemOverviewPage);
 
@@ -2226,6 +2327,10 @@ const routeTree = rootRoute.addChildren([
   meSecuritySessionsRoute,
   meSecurityActivityRoute,
   meSecurityTwoFactorRoute,
+  goalsListRoute,
+  goalNewRoute,
+  goalDetailRoute,
+  goalEditRoute,
   systemRoute,
   systemCompanyRoute,
   systemCompanySettingsRoute,

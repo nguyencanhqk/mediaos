@@ -17,6 +17,8 @@ import tasksVi from "./locales/vi/tasks";
 import dashboardVi from "./locales/vi/dashboard";
 // S5-ME-FE-1 — MeOverviewPage (namespace mới "me", ME-SCREEN-001).
 import meVi from "./locales/vi/me";
+// S5-GOAL-FE-1 — GOAL-SCREEN-001/002/003 (namespace mới "goals", SPEC-10).
+import goalsVi from "./locales/vi/goals";
 // EmployeeMultiPickerDialog (components/) — khóa chung deep-merge THÊM vào namespace "common"
 // đã có sẵn ở @mediaos/web-core (KHÔNG ghi đè khóa cũ).
 import employeePickerVi from "./locales/vi/employee-picker";
@@ -32,6 +34,7 @@ registerI18nResources("vi", {
   tasks: tasksVi,
   dashboard: dashboardVi,
   me: meVi,
+  goals: goalsVi,
   // S4-FE-NOTI-2 — ĐÈ THÊM 1 khoá routeTitle.notiEvents vào bundle "nav" đã nhúng sẵn ở @mediaos/web-core
   // (deep-merge, KHÔNG đụng khoá cũ) — route noti.events (ROUTE_REGISTRY) cần titleKey này.
   // S4-FE-NOTI-4 — THÊM notiTemplates (route noti.templates, MỚI) + notificationDeliveryLogs (route
