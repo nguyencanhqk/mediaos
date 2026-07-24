@@ -599,6 +599,13 @@ export const listTaskCoreQuerySchema = z.object({
   priority: taskCorePrioritySchema.optional(),
   assigneeEmployeeId: z.string().uuid().optional(),
   projectId: z.string().uuid().optional(),
+  // S5-TASK-DEPTFILTER-1 — neo theo phòng ban (mục tiêu cấp `department`/`company` không có projectId
+  // để lọc). AND thêm `tk.department_id = $x` TRONG phạm vi đọc — KHÔNG thay data-scope: người xem
+  // vẫn chỉ thấy task mình có quyền, filter chỉ THU HẸP thêm (mirror projectId/assigneeEmployeeId).
+  departmentId: z.string().uuid().optional(),
+  // S5-TASK-DEPTFILTER-1 — tìm theo tiêu đề (ILIKE '%…%'). `search` là quy ước của task-module
+  // (khớp listTaskProjectsQuerySchema/notification-admin). Cũng chỉ thu hẹp trong scope.
+  search: z.string().trim().min(1).max(200).optional(),
   dueFrom: z.string().datetime({ offset: true }).optional(),
   dueTo: z.string().datetime({ offset: true }).optional(),
   overdue: taskCoreOptionalBooleanParam(),

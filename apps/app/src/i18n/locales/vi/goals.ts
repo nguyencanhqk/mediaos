@@ -297,11 +297,12 @@ export default {
   taskPicker: {
     title: "Gắn công việc vào mục tiêu",
     description: "Chọn các công việc thuộc phạm vi của mục tiêu để tính tiến độ.",
-    projectLabel: "Dự án",
-    pickProject: "Chọn dự án",
-    // Giới hạn API THẬT: GET /tasks không có filter tìm-kiếm/phòng ban ⇒ cấp phòng phải chọn dự án trước.
-    pickProjectFirst: "Chọn một dự án để xem danh sách công việc.",
-    projectsError: "Không tải được danh sách dự án.",
+    // S5-TASK-DEPTFILTER-1 — cấp phòng neo thẳng theo departmentId (không còn phải chọn dự án); ô tìm
+    // theo tiêu đề để lọc thêm. Cấp công ty không có neo tự nhiên ⇒ bắt buộc nhập từ khoá mới liệt kê.
+    searchLabel: "Tìm công việc",
+    searchPlaceholder: "Nhập tiêu đề công việc…",
+    enterSearchTerm: "Nhập từ khoá để tìm công việc.",
+    noAnchor: "Không xác định được phạm vi công việc cho mục tiêu này.",
     tasksError: "Không tải được danh sách công việc.",
     empty: "Không còn công việc nào để gắn.",
     selectedCount: "Đã chọn {{count}} công việc",

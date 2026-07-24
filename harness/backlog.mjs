@@ -6720,6 +6720,36 @@ export const backlog = [
     ],
   },
   {
+    id: "S5-TASK-DEPTFILTER-1",
+    module: "TASK",
+    layer: "FULL",
+    title:
+      "GET /tasks bổ sung filter departmentId + search (trả nợ #272): gỡ ràng buộc picker gắn việc cấp phòng phải chọn dự án trước",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/tasks/**",
+      "apps/api/test/integration/**",
+      "packages/contracts/src/**",
+      "packages/web-core/src/**",
+      "apps/app/src/routes/goals/**",
+      "apps/app/src/i18n/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-GOAL-FE-2"],
+    src: [
+      "PR #272 needs-follow-up: listTaskCoreQuerySchema chỉ có projectId/assigneeEmployeeId ⇒ mục tiêu cấp department không có đường liệt kê việc trừ khi chọn dự án trước (GoalTaskPickerDialog.tsx L27-33)",
+      "apps/api/src/tasks/task-core.repository.ts (listTx buildScopeExists — filter chỉ THU HẸP trong scope, không phải lớp quyền)",
+      "ProjectsRepository.listTx (mẫu search ILIKE + departmentId đã có)",
+    ],
+    done_when: [
+      "listTaskCoreQuerySchema thêm departmentId + search (ADDITIVE, optional); contracts dual-build",
+      "listTx AND thêm tk.department_id + tk.title ILIKE, LUÔN dưới scopeExists — deny-path test: emp @Own lọc departmentId/search KHÔNG lộ task ngoài scope (RED trước GREEN)",
+      "GoalTaskPickerDialog: cấp department neo thẳng departmentId + ô tìm; cấp company chỉ query khi có từ khoá; gỡ bước chọn dự án bắt buộc",
+      "check.sh xanh; LIGHT gate; int-spec gate hasDb && LANE_DB",
+    ],
+  },
+  {
     id: "S5-FE-TASK-5",
     module: "TASK",
     layer: "FE",

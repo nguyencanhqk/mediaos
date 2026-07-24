@@ -20,6 +20,14 @@ export interface TaskCoreListFilter {
   priority?: string;
   assigneeEmployeeId?: string;
   projectId?: string;
+  /**
+   * S5-TASK-DEPTFILTER-1 — lọc theo phòng ban của task (tk.department_id). CHỈ THU HẸP trong phạm vi
+   * đọc: caller vẫn PHẢI truyền `scopeExists` của cặp ('read','task') như mọi đường list khác — filter
+   * này KHÔNG phải lớp quyền (mirror `projectId`/`goalId`).
+   */
+  departmentId?: string;
+  /** S5-TASK-DEPTFILTER-1 — tìm theo tiêu đề (ILIKE '%…%'), cũng chỉ thu hẹp trong scope. */
+  search?: string;
   dueFrom?: string;
   dueTo?: string;
   overdue?: boolean;
@@ -371,6 +379,14 @@ export class TaskCoreRepository {
       );
     }
     if (filter.projectId) conds.push(sql`tk.project_id = ${filter.projectId}`);
+    // S5-TASK-DEPTFILTER-1 — AND thêm neo phòng ban + tìm tiêu đề. Cả hai chỉ THU HẸP: nằm cạnh
+    // các filter khác và luôn được `scopeExists` (nếu có) bao ở dưới ⇒ không mở rộng phạm vi đọc.
+    if (filter.departmentId) conds.push(sql`tk.department_id = ${filter.departmentId}`);
+    if (filter.search) {
+      // Mirror ProjectsRepository/EmployeesRepository: ILIKE '%term%', bind-param (không nối chuỗi SQL).
+      const term = `%${filter.search}%`;
+      conds.push(sql`tk.title ilike ${term}`);
+    }
     if (filter.dueFrom) conds.push(sql`tk.due_at >= ${filter.dueFrom}`);
     if (filter.dueTo) conds.push(sql`tk.due_at <= ${filter.dueTo}`);
     if (filter.overdue === true) {

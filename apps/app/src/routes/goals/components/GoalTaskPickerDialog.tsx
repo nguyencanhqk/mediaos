@@ -1,36 +1,32 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ApiError,
-  goalApi,
-  goalInvalidation,
-  taskCoreApi,
-  taskKeys,
-  taskProjectApi,
-} from "@mediaos/web-core";
+import { ApiError, goalApi, goalInvalidation, taskCoreApi, taskKeys } from "@mediaos/web-core";
 import type {
   GoalCoreResponseDto,
   GoalTaskLinkResultDto,
+  ListTaskCoreQueryRequest,
   TaskCoreResponseDto,
 } from "@mediaos/contracts";
-import { Button, Checkbox, Dialog, Select } from "@mediaos/ui";
+import { Button, Checkbox, Dialog, Input } from "@mediaos/ui";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { TaskStatusBadge } from "@/routes/tasks/TaskStatusBadge";
 
 /** Trần số việc liệt kê để chọn — cùng cỡ với các picker khác, tránh kéo cả bảng task về client. */
 const CANDIDATE_TASK_LIMIT = 100;
-const PROJECT_LIMIT = 100;
 
 /**
  * S5-GOAL-FE-2 — chọn việc để gắn BULK vào mục tiêu (GOAL-API-010).
  *
- * NGUỒN ỨNG VIÊN THEO NEO — và GIỚI HẠN API THẬT phải nói thẳng ra:
- *   · mục tiêu cấp `project`  → `GET /tasks?projectId=…` (đúng neo, một phát ăn ngay);
- *   · mục tiêu cấp `employee` → `GET /tasks?assigneeEmployeeId=…`;
- *   · mục tiêu cấp `department` → KHÔNG có đường nào: `listTaskCoreQuerySchema` chỉ có
- *     `projectId`/`assigneeEmployeeId`, KHÔNG có `departmentId` lẫn tìm-kiếm theo tiêu đề. Nên ở cấp
- *     này người dùng BẮT BUỘC chọn một dự án trước rồi mới thấy danh sách việc. Đây là giới hạn của
- *     API hiện có, KHÔNG phải chỗ để lane FE tự chế endpoint mới.
+ * NGUỒN ỨNG VIÊN THEO NEO (S5-TASK-DEPTFILTER-1 đã gỡ nợ #272 — `GET /tasks` nay có `departmentId` +
+ * `search`, nên cấp phòng KHÔNG còn phải chọn dự án trước):
+ *   · mục tiêu cấp `project`    → `GET /tasks?projectId=…`;
+ *   · mục tiêu cấp `employee`   → `GET /tasks?assigneeEmployeeId=…`;
+ *   · mục tiêu cấp `department` → `GET /tasks?departmentId=…` (neo thẳng theo phòng, + ô tìm để lọc);
+ *   · mục tiêu cấp `company`    → KHÔNG có neo tự nhiên ⇒ CHỈ tìm theo từ khoá (không nhập gì thì
+ *     KHÔNG query — `GET /tasks` trần trả việc TOÀN công ty trong phạm vi đọc, không liên quan mục tiêu).
+ *
+ * Filter chỉ THU HẸP trong phạm vi đọc của người xem (BE vẫn áp data-scope read:task) — không phải lớp quyền.
  *
  * 200 KÈM `warnings[]` KHÔNG PHẢI LỖI: với mục tiêu cấp phòng, task không liên quan phòng VẪN ĐƯỢC
  * GẮN (SPEC-10 §12 ghi rõ "không chặn") và server chỉ trả cảnh báo mềm. Coi warnings là lỗi ⇒ hiện đỏ
@@ -47,35 +43,42 @@ export function GoalTaskPickerDialog({
   const { t } = useTranslation("goals");
   const queryClient = useQueryClient();
 
-  const isDepartmentLevel = goal.level === "department" || goal.level === "company";
-  const [projectId, setProjectId] = useState(isDepartmentLevel ? "" : (goal.projectId ?? ""));
+  const [searchInput, setSearchInput] = useState("");
+  const search = useDebouncedValue(searchInput.trim(), 300);
   const [selected, setSelected] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<GoalTaskLinkResultDto["warnings"]>([]);
 
-  // Bộ lọc gửi lên server — CHỈ field mà API thật có. Không có filter nào hợp lệ ⇒ KHÔNG gọi
-  // (enabled=false): `GET /tasks` trần sẽ trả việc TOÀN công ty trong phạm vi đọc, không liên quan neo.
-  const taskFilter = useMemo(() => {
+  // Neo TỰ NHIÊN theo cấp mục tiêu. null = không suy được neo (cấp công ty, hoặc dữ liệu neo khuyết)
+  // ⇒ phải dựa vào ô tìm. `search` cho phép LỌC THÊM trong neo (đặc biệt cấp phòng nhiều việc).
+  const anchorFilter = useMemo((): Partial<ListTaskCoreQueryRequest> | null => {
     if (goal.level === "employee" && goal.employeeId) {
-      return { assigneeEmployeeId: goal.employeeId, limit: CANDIDATE_TASK_LIMIT };
+      return { assigneeEmployeeId: goal.employeeId };
     }
-    const effectiveProjectId = isDepartmentLevel ? projectId : (goal.projectId ?? "");
-    if (effectiveProjectId) return { projectId: effectiveProjectId, limit: CANDIDATE_TASK_LIMIT };
+    if (goal.level === "project" && goal.projectId) {
+      return { projectId: goal.projectId };
+    }
+    if (goal.level === "department" && goal.departmentId) {
+      return { departmentId: goal.departmentId };
+    }
     return null;
-  }, [goal.level, goal.employeeId, goal.projectId, isDepartmentLevel, projectId]);
+  }, [goal.level, goal.employeeId, goal.projectId, goal.departmentId]);
 
-  // Không suy được neo nào (mục tiêu cấp phòng/công ty, hoặc dữ liệu neo khuyết) ⇒ phải chọn dự án
-  // trước. `GET /tasks` trần sẽ trả việc TOÀN công ty trong phạm vi đọc — không liên quan mục tiêu.
-  const needsProjectPick = taskFilter === null;
+  // Ô tìm hiện cho cấp có thể quét rộng (phòng ban / công ty). Cấp employee/project neo đã đủ hẹp.
+  const showSearch = goal.level === "department" || goal.level === "company";
 
-  const projectsQuery = useQuery({
-    queryKey: taskKeys.projects.list({ limit: PROJECT_LIMIT }),
-    queryFn: () => taskProjectApi.listProjects({ limit: PROJECT_LIMIT }),
-    enabled: needsProjectPick,
-    staleTime: 60_000,
-  });
+  // Bộ lọc gửi lên server. Có neo ⇒ query ngay (search chỉ thu hẹp thêm). Không neo (cấp công ty) ⇒
+  // CHỈ query khi có từ khoá — tránh trả việc toàn công ty không liên quan mục tiêu.
+  const taskFilter = useMemo((): Partial<ListTaskCoreQueryRequest> | null => {
+    const base: Partial<ListTaskCoreQueryRequest> = { limit: CANDIDATE_TASK_LIMIT };
+    if (anchorFilter) return { ...base, ...anchorFilter, ...(search ? { search } : {}) };
+    if (search) return { ...base, search };
+    return null;
+  }, [anchorFilter, search]);
+
+  const needsSearchTerm = anchorFilter === null && !search;
 
   const tasksQuery = useQuery({
-    queryKey: taskKeys.list(taskFilter ?? { goalPicker: "idle" }),
+    queryKey: taskKeys.list(taskFilter ?? {}),
     queryFn: () => taskCoreApi.listTasks(taskFilter ?? {}),
     enabled: taskFilter !== null,
     staleTime: 30_000,
@@ -157,40 +160,33 @@ export function GoalTaskPickerDialog({
       }
     >
       <div className="space-y-4">
-        {(isDepartmentLevel || needsProjectPick) && (
+        {showSearch && (
           <div className="space-y-1.5">
             <label
-              htmlFor="goal-task-picker-project"
+              htmlFor="goal-task-picker-search"
               className="text-xs font-medium text-muted-foreground"
             >
-              {t("taskPicker.projectLabel")}
+              {t("taskPicker.searchLabel")}
             </label>
-            <Select
-              id="goal-task-picker-project"
-              data-testid="goal-task-picker-project"
-              value={projectId}
+            <Input
+              id="goal-task-picker-search"
+              data-testid="goal-task-picker-search"
+              type="search"
+              value={searchInput}
               onChange={(e) => {
-                setProjectId(e.target.value);
+                setSearchInput(e.target.value);
                 setSelected([]);
               }}
-            >
-              <option value="">{t("taskPicker.pickProject")}</option>
-              {(projectsQuery.data ?? []).map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </Select>
-            {projectsQuery.isError && (
-              <p className="text-xs text-destructive">{t("taskPicker.projectsError")}</p>
-            )}
+              placeholder={t("taskPicker.searchPlaceholder")}
+              aria-label={t("taskPicker.searchLabel")}
+            />
           </div>
         )}
 
         <div className="max-h-72 space-y-1 overflow-y-auto">
           {taskFilter === null ? (
             <p className="py-4 text-center text-sm text-muted-foreground">
-              {t("taskPicker.pickProjectFirst")}
+              {needsSearchTerm ? t("taskPicker.enterSearchTerm") : t("taskPicker.noAnchor")}
             </p>
           ) : tasksQuery.isLoading ? (
             <div className="h-24 animate-pulse rounded bg-muted" />
