@@ -15,6 +15,12 @@ import {
   type ListGoalsQueryRequest,
   type GoalTreeQueryRequest,
   type ListGoalUpdatesQueryRequest,
+  // S5-GOAL-FE-2 (APPEND) — vòng đo: check-in · chốt kỳ/mở lại · gắn-tháo task (GOAL-API-007..010).
+  type CheckinGoalRequest,
+  type FinalizeGoalRequest,
+  type LinkGoalTasksRequest,
+  goalTaskLinkResultSchema,
+  type GoalTaskLinkResultDto,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -76,4 +82,53 @@ export const goalApi = {
       `/goals/${id}/updates${buildQueryString(query ?? {})}`,
       z.array(goalUpdateResponseSchema),
     ),
+
+  // ── S5-GOAL-FE-2 (APPEND) — vòng đo (GOAL-API-007/009/010) ────────────────────────────────────
+  // Cặp quyền do SERVER ép, client chỉ ẩn/disable trước cho đỡ bấm-rồi-403:
+  //   check-in → ('checkin','goal') · chốt kỳ/mở lại → ('finalize','goal') · gắn/tháo → ('update','goal')
+  //   + ('update','task') (cổng thứ hai ở goal-tasks-link.service.ts).
+
+  /**
+   * POST /goals/:id/check-in — ghi một dòng sổ `goal_updates` (append-only).
+   *
+   * `currentValue` và `progressPercent` là HAI CÁCH GỌI CÙNG MỘT CHỖ tuỳ `measure_type`; gửi CẢ HAI ⇒
+   * 422 GOAL-ERR-006. Bỏ trống cả hai (chỉ confidence/note) là HỢP LỆ — với mục tiêu đo bằng
+   * task/dự án/mục tiêu con thì đó là hình thức check-in duy nhất có nghĩa. Trả về goal ĐÃ recompute.
+   */
+  checkIn: (id: string, body: CheckinGoalRequest): Promise<GoalCoreResponseDto> =>
+    apiFetch(`/goals/${id}/check-in`, goalCoreResponseSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** POST /goals/:id/finalize — chốt kỳ: đóng băng số liệu, khoá mọi đường ghi (GOAL-ERR-005). */
+  finalize: (id: string, body: FinalizeGoalRequest = {}): Promise<GoalCoreResponseDto> =>
+    apiFetch(`/goals/${id}/finalize`, goalCoreResponseSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** POST /goals/:id/reopen — mở lại kỳ đã chốt. CÙNG cặp quyền `('finalize','goal')` với chốt kỳ. */
+  reopen: (id: string, body: FinalizeGoalRequest = {}): Promise<GoalCoreResponseDto> =>
+    apiFetch(`/goals/${id}/reopen`, goalCoreResponseSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * POST /goals/:id/tasks — gắn BULK việc vào mục tiêu (tối đa GOAL_LINK_TASKS_MAX).
+   *
+   * Task đang gắn mục tiêu KHÁC sẽ được server CHUYỂN sang mục tiêu này (previousGoalIds) và recompute
+   * CẢ HAI mục tiêu ⇒ call-site PHẢI invalidate cả goal cũ (goalInvalidation.linkTasks).
+   * `warnings[]` = cảnh báo MỀM (mục tiêu cấp phòng, SPEC-10 §12) — 200 kèm warnings KHÔNG phải lỗi.
+   */
+  linkTasks: (id: string, body: LinkGoalTasksRequest): Promise<GoalTaskLinkResultDto> =>
+    apiFetch(`/goals/${id}/tasks`, goalTaskLinkResultSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** DELETE /goals/:id/tasks/:taskId — tháo việc khỏi mục tiêu. Không gắn đúng mục tiêu này ⇒ 404. */
+  unlinkTask: (id: string, taskId: string): Promise<GoalTaskLinkResultDto> =>
+    apiFetch(`/goals/${id}/tasks/${taskId}`, goalTaskLinkResultSchema, { method: "DELETE" }),
 };

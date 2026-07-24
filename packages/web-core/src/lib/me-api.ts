@@ -23,6 +23,10 @@ import {
   confirmUploadResponseSchema,
   meTrainingResponseSchema,
   type MeTrainingResponse,
+  // S5-GOAL-FE-2 (APPEND) — "Mục tiêu của tôi" (GOAL-API-013).
+  goalCoreResponseSchema,
+  type GoalCoreResponseDto,
+  type MeGoalsQueryRequest,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { DEFAULT_UPLOAD_MIME, putBytesToStorage } from "./storage-upload";
@@ -85,6 +89,18 @@ export const meApi = {
    */
   getTraining: (): Promise<MeTrainingResponse> =>
     apiFetch("/me/training", meTrainingResponseSchema),
+
+  /**
+   * GET /me/goals — mục tiêu của CHÍNH user (GOAL-API-013, SPEC-10 §9 GOAL-SCREEN-005): mục tiêu mình
+   * phụ trách HOẶC mục tiêu cá nhân của mình. Gate BE `view:goal`.
+   *
+   * Query CỐ Ý KHÔNG có `employeeId` (`meGoalsQuerySchema` — chủ thể resolve 100% từ token, chống IDOR
+   * §14.4). MẢNG TRẦN `GoalCoreResponseDto[]` (KHÔNG `{data,meta}`) — mirror mọi endpoint đọc của GOAL;
+   * schema truyền vào là `z.array(...)`, KHÔNG envelope phân trang (memory
+   * apifetch-drops-pagination-bare-array). `progressPercent` NULL = "chưa đo" (§13.2) — GIỮ NULL.
+   */
+  getGoals: (query?: Partial<MeGoalsQueryRequest>): Promise<GoalCoreResponseDto[]> =>
+    apiFetch(`/me/goals${buildQueryString(query ?? {})}`, z.array(goalCoreResponseSchema)),
 
   /** GET /me/preferences — snapshot preference hiện tại (own, mọi field nullable = kế thừa default). */
   getPreferences: (): Promise<MePreferences> => apiFetch("/me/preferences", mePreferencesSchema),

@@ -23,6 +23,7 @@ import {
 import { MeActionNeededCard, MePendingApprovalCard } from "./components/MeActionBlocks";
 import { MeQuickActions } from "./components/MeQuickActions";
 import { MeTrainingCard } from "./components/MeTrainingCard";
+import { MeGoalsCard } from "./components/MeGoalsCard";
 import { ME_ACCESS_PAIR } from "./constants";
 
 function MeOverviewSkeleton() {
@@ -127,6 +128,10 @@ function MeOverviewPageInner() {
         {/* S5-LMS-FE-1 — card Đào tạo: query RIÊNG (GET /me/training), TỰ ẩn khi thiếu access:lms +
             fail-soft độc lập (502/no_account KHÔNG kéo sập overview). Đặt cuối lưới (ô thứ 6). */}
         <MeTrainingCard />
+
+        {/* S5-GOAL-FE-2 — card Mục tiêu của tôi: query RIÊNG (GET /me/goals), TỰ ẩn khi thiếu
+            access:goal + fail-soft độc lập (lỗi KHÔNG kéo sập overview). Ô thứ 7 của lưới. */}
+        <MeGoalsCard />
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

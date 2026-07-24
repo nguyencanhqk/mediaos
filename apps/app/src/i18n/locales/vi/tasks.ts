@@ -462,6 +462,15 @@ export default {
         startAt: "Bắt đầu",
         completedAt: "Hoàn thành lúc",
         description: "Mô tả",
+        // S5-GOAL-FE-2 (APPEND) — ô "Mục tiêu" (GOAL-API-010).
+        goal: "Mục tiêu",
+      },
+      // S5-GOAL-FE-2 (APPEND) — chỉ chrome của ô Mục tiêu ở màn TASK. Nhãn trạng thái/cấp mục tiêu
+      // KHÔNG nhân bản ở đây — dùng t(key, { ns: 'goals' }) để một nguồn duy nhất.
+      goal: {
+        none: "— Không gắn mục tiêu —",
+        loadError: "Không tải được danh sách mục tiêu.",
+        error: "Không gắn được công việc vào mục tiêu.",
       },
       quickActions: {
         title: "Thao tác nhanh",
