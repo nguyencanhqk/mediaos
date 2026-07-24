@@ -2,7 +2,7 @@
 /**
  * MeTrainingPage tests (S5-LMS-FE-1, route /me/training). Phủ: gate access:lms (thiếu → forbidden, KHÔNG
  * gọi API) · loading skeleton · lỗi transport/502 + thử lại · empty (no_account) · ok (danh sách khoá +
- * tổng hợp + nút "Mở LMS" → /lms + banner tài khoản khoá). Page CHỈ đọc meApi.getTraining (1 nguồn).
+ * tổng hợp + nút "Mở LMS" gọi openLms + banner tài khoản khoá). Page CHỈ đọc meApi.getTraining (1 nguồn).
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
@@ -15,6 +15,11 @@ import { MeTrainingPage } from "./MeTrainingPage";
 
 const mockNavigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mockNavigate }));
+
+// Nút "Mở LMS" nay gọi openLms (lấy token SSO rồi vào thẳng, lỗi → fallback /lms) thay vì điều hướng
+// thẳng tới /lms — S5 (owner 2026-07-25). Mock để test dừng ở "nút gọi openLms".
+const mockOpenLms = vi.fn();
+vi.mock("../lms/open-lms", () => ({ openLms: (fn: () => void) => mockOpenLms(fn) }));
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
@@ -141,7 +146,7 @@ describe("MeTrainingPage — data states (có access:lms)", () => {
     await waitFor(() => expect(screen.getByText(/chưa có dữ liệu đào tạo/i)).toBeInTheDocument());
   });
 
-  it("ok → render danh sách khoá + tổng hợp + nút 'Mở LMS' điều hướng /lms", async () => {
+  it("ok → render danh sách khoá + tổng hợp + nút 'Mở LMS' gọi openLms (vào thẳng)", async () => {
     mockGetTraining.mockResolvedValue(okResponse());
     renderPage();
     await waitFor(() => expect(screen.getByText("An toàn lao động")).toBeInTheDocument());
@@ -151,6 +156,10 @@ describe("MeTrainingPage — data states (có access:lms)", () => {
 
     const openBtn = screen.getByRole("button", { name: /mở lms/i });
     fireEvent.click(openBtn);
+    // Vào thẳng qua openLms; fallback truyền vào phải điều hướng /lms khi lỗi.
+    expect(mockOpenLms).toHaveBeenCalledTimes(1);
+    const fallback = mockOpenLms.mock.calls[0][0] as () => void;
+    fallback();
     expect(mockNavigate).toHaveBeenCalledWith({ to: "/lms" });
     expect(mockGetTraining).toHaveBeenCalledTimes(1);
   });
