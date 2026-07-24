@@ -7711,6 +7711,7 @@ export const backlog = [
     src: [
       "SPEC-10 §10 (FUNC-007/008) + §12 (GOAL-ERR-009: chặn khi Cancelled/đã chốt/template rỗng/quá 50) + §15 (API-011/012) + GOAL-DEC-004 (KHÔNG AI)",
       "DB-11 §6.4 (checklist JSONB → task_checklists khi áp)",
+      "Carry-forward gate S5-GOAL-DB-2 (security-reviewer + rls-tenant-isolation-tester 2026-07-24): FK đơn cột task_templates.department_id→org_units + task_template_items.template_id KHÔNG ép cùng-tenant ở DB (RLS che chéo-tenant nhưng cho set id lạ nếu biết UUID). Service TPL-1 PHẢI validate department_id + template_id thuộc company hiện tại khi ghi (mẫu reused-method-must-be-actor-scoped)",
     ],
     done_when: [
       "CRUD template + items (quyền manage, phân trang, soft delete); wizard: chọn template → preview items (sửa/xóa/thêm/assignee/cột board/due) → áp dụng",

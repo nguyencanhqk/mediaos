@@ -1352,6 +1352,27 @@
       "when": 1717587314000,
       "tag": "0525_s5_goaldash1_widget_goal_progress",
       "breakpoints": true
+    },
+    {
+      "idx": 193,
+      "version": "7",
+      "when": 1717587315000,
+      "tag": "0526_s5_goaldb2_task_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 194,
+      "version": "7",
+      "when": 1717587316000,
+      "tag": "0527_s5_goaldb2_seed_task_template_perm",
+      "breakpoints": true
+    },
+    {
+      "idx": 195,
+      "version": "7",
+      "when": 1717587317000,
+      "tag": "0528_s5_goaldb2_audit_task_template",
+      "breakpoints": true
     }
   ]
 }

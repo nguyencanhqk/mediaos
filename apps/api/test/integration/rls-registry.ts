@@ -2845,4 +2845,35 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+
+  // ── S5-GOAL-DB-2 (mig 0526) task_templates + task_template_items — đợt D template phân rã (DB-11 §6.3/§6.4) ──
+  // company_id NOT NULL + RLS+FORCE literal-GUC → PHẢI ở harness (rls-guards "không bảng company_id thiếu
+  // case"). KHÔNG skipNoContext (mọi hàng tenant-scoped). Cả 2 soft-delete (app SELECT/INSERT/UPDATE).
+  {
+    name: "task_templates",
+    table: "task_templates",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO task_templates (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-tpl-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "task_template_items",
+    table: "task_template_items",
+    seedRow: async (direct, t) => {
+      const tpl = await direct.query(
+        `INSERT INTO task_templates (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-tpl-it-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO task_template_items (company_id, template_id, title, sort_order)
+         VALUES ($1, $2, 'rls-item', 0) RETURNING id`,
+        [t.companyId, tpl.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 ];
