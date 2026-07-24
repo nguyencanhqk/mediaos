@@ -169,6 +169,29 @@ cũng cao đúng `100dvh − header`), không tràn. Còn lại cần mắt ngư
 `manage-exam/[id]/grading/[userId]/page.tsx:57` dùng `min-h-screen` — trong inset đã trừ header nên có
 thể dư ~3.5rem chiều cao (thanh cuộn thừa), sửa thành `min-h-full` nếu smoke thấy rõ.
 
-**CHƯA làm — chờ owner chốt:** `next build` + restart. Lý do: build ghi thẳng `.next` mà NSSM
-`MediaOS-LMS` đang phục vụ (không dựng được bản chạy thử song song). Khi chốt:
-`backup data/app.db` → `m prod-update lms` → smoke §5 tại `localhost:3400` (không phải domain).
+---
+
+## 7. Deploy PROD (2026-07-25, 00:09-00:13)
+
+| Bước | Kết quả |
+| --- | --- |
+| Backup DB | `c:\tmp\app.db{,-wal,-shm}.bak-S5-LMS-UI-3-20260725-000921` (55.2 MB + 4.07 MB + 32 KB — copy cả `-wal`/`-shm` vì SQLite ở chế độ WAL) |
+| `pnpm build` | thành công, `BUILD_ID` `yVo87q3j2TaX9T3uXgf2A` → **`oyyNGlwCGJ3VsLuqh8I3h`** |
+| Restart | **`Restart-Service` từ tool THẤT BẠI** — "Cannot open MediaOS-LMS service" (thiếu quyền admin, tool không mở được UAC). Owner chạy tay ⇒ PID 2736 → **40324**, start 00:12:49 |
+
+**Bài học lặp lại:** giữa lúc build xong và lúc restart, `.next` đã là bản mới còn tiến trình vẫn giữ
+bản cũ — cửa sổ lệch manifest. Lần sau: xin owner chạy `m prod-update lms` (script tự elevate, build và
+restart liền mạch) thay vì build từ tool rồi mới đi xin restart.
+
+**Bằng chứng đã live (không chỉ "đã restart"):**
+
+- CSS bundle `.next/static/css/15e720c562aa7eb8.css` có `.top-(--sidebar-top){top:var(--sidebar-top)}`
+  và `height:calc(100svh - var(--sidebar-top))` ⇒ utility của WO này đã được Tailwind sinh thật;
+  `bg-brand-muted` cũng có ⇒ bản vá avatar của `S5-LMS-UI-2` cùng lên chuyến này.
+- HTML `/login` tham chiếu **`oyyNGlwCGJ3VsLuqh8I3h`** ⇒ tiến trình đang phục vụ đúng bản mới.
+- Probe: `/login` 200 (render nút "Đăng nhập qua MediaOS" — SSO-only đang bật) · `/course` 307 ·
+  `/dashboard` 307 · `/exam` 200 nhưng thân trang chỉ chứa redirect `/login`, không rò dữ liệu.
+
+**CÒN LẠI:** smoke bằng mắt với phiên thật (§5) — phiên này không có tài khoản đăng nhập nên chỉ kiểm
+được tới tầng HTTP/CSS. Nếu thấy vỡ, rollback **không có git** (`apps/lms` gitignore, không phải repo
+riêng): hoàn nguyên theo bảng §6 rồi build + restart lại.
