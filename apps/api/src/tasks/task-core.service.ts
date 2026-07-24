@@ -171,6 +171,9 @@ export class TaskCoreService {
           priority: query.priority,
           assigneeEmployeeId: query.assigneeEmployeeId,
           projectId: query.projectId,
+          // S5-TASK-DEPTFILTER-1 — neo phòng ban + tìm tiêu đề (thu hẹp trong scope, KHÔNG thay quyền).
+          departmentId: query.departmentId,
+          search: query.search,
           dueFrom: query.dueFrom,
           dueTo: query.dueTo,
           overdue: query.overdue,

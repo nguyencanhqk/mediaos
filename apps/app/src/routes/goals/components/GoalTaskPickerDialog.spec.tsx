@@ -1,9 +1,9 @@
 /**
- * S5-GOAL-FE-2 — GoalTaskPickerDialog (gắn BULK việc vào mục tiêu, GOAL-API-010).
+ * S5-GOAL-FE-2 + S5-TASK-DEPTFILTER-1 — GoalTaskPickerDialog (gắn BULK việc vào mục tiêu, GOAL-API-010).
  *
- * GIỚI HẠN API THẬT: `GET /tasks` (listTaskCoreQuerySchema) KHÔNG có filter tìm-kiếm lẫn departmentId —
- * chỉ có projectId/assigneeEmployeeId. Vì vậy mục tiêu cấp PHÒNG BAN buộc phải chọn dự án trước rồi
- * mới liệt kê việc (KHÔNG tự chế endpoint mới ở lane FE).
+ * `GET /tasks` (listTaskCoreQuerySchema) nay CÓ `departmentId` + `search` (gỡ nợ #272). Vì vậy:
+ *   · cấp phòng ban → neo THẲNG theo departmentId, KHÔNG còn phải chọn dự án trước;
+ *   · cấp công ty  → không có neo tự nhiên ⇒ chỉ query khi có từ khoá tìm kiếm.
  *
  * warnings[] (department soft-mismatch, SPEC-10 §12) là CẢNH BÁO MỀM — server ĐÃ gắn xong; hiển thị
  * như cảnh báo, TUYỆT ĐỐI không coi là lỗi/rollback.
@@ -22,16 +22,14 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     useCan: () => true,
     goalApi: { ...actual.goalApi, linkTasks: vi.fn() },
     taskCoreApi: { ...actual.taskCoreApi, listTasks: vi.fn() },
-    taskProjectApi: { ...actual.taskProjectApi, listProjects: vi.fn() },
   };
 });
 
-import { goalApi, taskCoreApi, taskProjectApi } from "@mediaos/web-core";
+import { goalApi, taskCoreApi } from "@mediaos/web-core";
 import { GoalTaskPickerDialog } from "./GoalTaskPickerDialog";
 
 const mockLinkTasks = goalApi.linkTasks as ReturnType<typeof vi.fn>;
 const mockListTasks = taskCoreApi.listTasks as ReturnType<typeof vi.fn>;
-const mockListProjects = taskProjectApi.listProjects as ReturnType<typeof vi.fn>;
 
 function makeGoal(over: Partial<GoalCoreResponseDto> = {}): GoalCoreResponseDto {
   return {
@@ -97,38 +95,64 @@ function renderDialog(goal: GoalCoreResponseDto, onClose = vi.fn()) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockListTasks.mockResolvedValue([]);
-  mockListProjects.mockResolvedValue([{ id: "p-1", name: "Dự án A" }]);
   mockLinkTasks.mockResolvedValue({ goalId: "g-1", linked: 1, alreadyLinked: 0, warnings: [] });
 });
 
 describe("GoalTaskPickerDialog — nguồn ứng viên theo neo", () => {
-  it("cấp phòng ban: CHƯA tải việc cho tới khi chọn dự án (GET /tasks không có filter phòng ban)", async () => {
+  it("cấp phòng ban: gọi listTasks NGAY với departmentId (KHÔNG cần chọn dự án — nợ #272 đã gỡ)", async () => {
     renderDialog(makeGoal({ level: "department", departmentId: "dept-1" }));
-    await waitFor(() => expect(mockListProjects).toHaveBeenCalled());
-    expect(mockListTasks).not.toHaveBeenCalled();
-
-    fireEvent.change(await screen.findByTestId("goal-task-picker-project"), {
-      target: { value: "p-1" },
-    });
     await waitFor(() =>
-      expect(mockListTasks).toHaveBeenCalledWith(expect.objectContaining({ projectId: "p-1" })),
+      expect(mockListTasks).toHaveBeenCalledWith(
+        expect.objectContaining({ departmentId: "dept-1" }),
+      ),
+    );
+    // KHÔNG được gửi projectId khi neo là phòng ban.
+    expect(mockListTasks).not.toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: expect.anything() }),
     );
   });
 
-  it("cấp dự án: gọi listTasks NGAY với projectId của mục tiêu", async () => {
+  it("cấp phòng ban: gõ ô tìm → thêm search vào query (thu hẹp trong phòng, giữ departmentId)", async () => {
+    renderDialog(makeGoal({ level: "department", departmentId: "dept-1" }));
+    fireEvent.change(await screen.findByTestId("goal-task-picker-search"), {
+      target: { value: "migration" },
+    });
+    await waitFor(() =>
+      expect(mockListTasks).toHaveBeenCalledWith(
+        expect.objectContaining({ departmentId: "dept-1", search: "migration" }),
+      ),
+    );
+  });
+
+  it("cấp công ty: CHƯA query khi chưa nhập từ khoá; nhập rồi mới gọi listTasks với search", async () => {
+    renderDialog(makeGoal({ level: "company", departmentId: null }));
+    expect(await screen.findByText("Nhập từ khoá để tìm công việc.")).toBeInTheDocument();
+    expect(mockListTasks).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByTestId("goal-task-picker-search"), {
+      target: { value: "kế hoạch" },
+    });
+    await waitFor(() =>
+      expect(mockListTasks).toHaveBeenCalledWith(expect.objectContaining({ search: "kế hoạch" })),
+    );
+  });
+
+  it("cấp dự án: gọi listTasks NGAY với projectId; KHÔNG hiện ô tìm", async () => {
     renderDialog(makeGoal({ level: "project", projectId: "p-9", departmentId: null }));
     await waitFor(() =>
       expect(mockListTasks).toHaveBeenCalledWith(expect.objectContaining({ projectId: "p-9" })),
     );
+    expect(screen.queryByTestId("goal-task-picker-search")).not.toBeInTheDocument();
   });
 
-  it("cấp nhân viên: gọi listTasks với assigneeEmployeeId của mục tiêu", async () => {
+  it("cấp nhân viên: gọi listTasks với assigneeEmployeeId; KHÔNG hiện ô tìm", async () => {
     renderDialog(makeGoal({ level: "employee", employeeId: "emp-7", departmentId: null }));
     await waitFor(() =>
       expect(mockListTasks).toHaveBeenCalledWith(
         expect.objectContaining({ assigneeEmployeeId: "emp-7" }),
       ),
     );
+    expect(screen.queryByTestId("goal-task-picker-search")).not.toBeInTheDocument();
   });
 });
 
@@ -166,11 +190,8 @@ describe("GoalTaskPickerDialog — warnings mềm KHÁC lỗi", () => {
         { taskId: "t-1", taskCode: "TASK-t-1", message: "Việc không thuộc phòng ban mục tiêu." },
       ],
     });
+    // Cấp phòng ban: danh sách hiện NGAY theo departmentId (không còn bước chọn dự án).
     renderDialog(makeGoal({ level: "department", departmentId: "dept-1" }));
-    const projectSelect = await screen.findByTestId("goal-task-picker-project");
-    // Option chỉ có SAU khi listProjects trả — đổi value trước đó thì <select> giữ nguyên "".
-    await waitFor(() => expect(projectSelect).toHaveTextContent("Dự án A"));
-    fireEvent.change(projectSelect, { target: { value: "p-1" } });
     fireEvent.click(await screen.findByTestId("goal-task-pick-t-1"));
     fireEvent.click(screen.getByTestId("goal-task-picker-submit"));
     await waitFor(() =>

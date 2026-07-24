@@ -54,7 +54,7 @@ import { buildQueryString } from "./api-params";
  */
 export const taskCoreApi = {
   /** GET /tasks — danh sách task theo data-scope thật (read:task). Filter status/priority/assignee/project/
-   * due-range/overdue + pagination. */
+   * departmentId/search/due-range/overdue + pagination (filter chỉ THU HẸP trong scope, không mở quyền). */
   listTasks: (query?: Partial<ListTaskCoreQueryRequest>): Promise<TaskCoreResponseDto[]> =>
     apiFetch(`/tasks${buildQueryString(query ?? {})}`, z.array(taskCoreResponseSchema)),
 
