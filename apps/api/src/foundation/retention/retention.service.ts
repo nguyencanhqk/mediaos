@@ -33,12 +33,14 @@ export class RetentionService {
   private readonly logger = new Logger(RetentionService.name);
 
   /**
-   * Bảng append-only / ledger / snapshot — runCleanup TUYỆT ĐỐI KHÔNG được xóa (BẤT BIẾN #2, CLAUDE §2).
-   * Kể cả policy is_enabled=true + cleanup_action=Delete + dryRun=false ⇒ vẫn no-op (deletedRecords=0).
+   * Bảng runCleanup TUYỆT ĐỐI KHÔNG được xóa (BẤT BIẾN #2, CLAUDE §2). Kể cả policy is_enabled=true +
+   * cleanup_action=Delete + dryRun=false ⇒ vẫn no-op (deletedRecords=0). Hai nhóm:
+   *  (a) append-only / ledger / snapshot: audit/log/ledger/snapshot mà app role KHÔNG có UPDATE/DELETE ở DB.
+   *  (b) cascade-guard (S5-FND-REVOKE-1): org_units/projects — soft-delete NHƯNG hard-delete sẽ cascade xóa
+   *      cứng goals + ledger goal_updates (mig 0504), nên retention cũng KHÔNG được xóa.
    *
-   * Nguồn tập append-only (CLAUDE §2 + erd-current §9 / Phụ lục A): audit/log/ledger/snapshot mà app role
-   * KHÔNG có quyền UPDATE/DELETE ở DB (REVOKE ở migration). PROTECTED_TABLES là LỚP APP phòng-thủ-thứ-hai
-   * (defense-in-depth) TRÊN REVOKE-ở-DB: chặn ngay trước khi phát lệnh, không dựa vào DB ném lỗi.
+   * PROTECTED_TABLES là LỚP APP phòng-thủ-thứ-hai (defense-in-depth) TRÊN REVOKE-ở-DB (migration): chặn
+   * ngay trước khi phát lệnh, không dựa vào DB ném lỗi (42501 uncaught sẽ làm hỏng cả lượt cleanup tenant).
    */
   private static readonly PROTECTED_TABLES = new Set([
     // Audit trail (CLAUDE §2 core append-only).
@@ -70,6 +72,13 @@ export class RetentionService {
     // Seed provenance (FOUNDATION — append-only batch/item).
     "seed_batches",
     "seed_items",
+    // Cascade-guard (S5-FND-REVOKE-1 — KHÔNG append-only; 2 bảng này soft-delete). Lý do bảo vệ KHÁC tập
+    // trên: org_units/projects có FK ON DELETE CASCADE từ goals (department_id/project_id, mig 0504) →
+    // goal_updates (ledger append-only). Hard-delete qua retention ⇒ cascade xóa CỨNG goals + ledger =
+    // vi phạm BẤT BIẾN #2. Đây là LỚP APP khớp với DB REVOKE (mig 0510 REVOKE DELETE khỏi mediaos_app):
+    // retention no-op (deletedRecords=0) TRƯỚC khi phát lệnh ⇒ tránh 42501 uncaught làm hỏng cả lượt cleanup.
+    "org_units",
+    "projects",
   ]);
 
   /**
@@ -420,10 +429,10 @@ export class RetentionService {
 
       const eligibleCount = await this._countEligible(tx, companyId, policy.entityType, cutoffTime);
 
-      // BẤT BIẾN #2: bảng append-only KHÔNG bao giờ được xóa.
+      // BẤT BIẾN #2: bảng được bảo vệ (append-only/ledger HOẶC cascade-guard org_units/projects) KHÔNG bao giờ được xóa.
       if (RetentionService.PROTECTED_TABLES.has(policy.entityType)) {
         this.logger.warn(
-          `runCleanup: policy=${policyId} entity=${policy.entityType} là append-only — bỏ qua (BẤT BIẾN #2)`,
+          `runCleanup: policy=${policyId} entity=${policy.entityType} là bảng được bảo vệ — bỏ qua (BẤT BIẾN #2)`,
         );
         return {
           policyId,
