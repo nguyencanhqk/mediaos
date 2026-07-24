@@ -50,3 +50,6 @@ docs/prompts/
 
 # MCP local config — chứa đường dẫn binary tuyệt đối theo máy, KHÔNG portable, KHÔNG commit (repo public)
 .mcp.json
+
+# Runtime service logs (NSSM/PROD) — không bao giờ commit (từng chứa token)
+logs/

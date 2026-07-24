@@ -8040,6 +8040,66 @@ export const backlog = [
       "FULL gate (security + database + silent-failure + santa-method) PASS; verify PROD: đếm audit lms_sync đứng yên qua ≥3 nhịp job trong khi system_job_runs vẫn tăng",
     ],
   },
+  // ── Seed 2026-07-24 (owner chốt mức "theme + đồng bộ component lõi") ────────────────────────────
+  // S5-LMS-APP-1 mới chuẩn hoá ĐIỀU HƯỚNG (/ redirect · /course chính · ẩn employee/* · app-switcher);
+  // phần NHÌN vẫn là design system riêng (primary #BADDAD xanh lá pastel, sidebar/header màu khác hẳn
+  // chrome navy MediaOS) ⇒ nhân viên nhảy MediaOS→LMS thấy như hai sản phẩm khác nhau. Hai WO dưới đây
+  // đóng khoảng cách đó. Cả hai đều là track LOCAL (apps/lms nằm TRỌN trong .gitignore dòng 8) ⇒ chỉ
+  // docs/plans commit được, ship = next build + NSSM restart MediaOS-LMS (3400), TUẦN TỰ, không PR.
+  {
+    id: "S5-LMS-UI-1",
+    module: "LMS",
+    layer: "FE",
+    title:
+      "LOCAL apps/lms — đồng bộ TOKEN màu với MediaOS: port giá trị :root/.dark của packages/ui theme.css sang apps/lms/app/globals.css (giữ nguyên cơ chế @custom-variant dark + @theme inline của LMS), chrome (sidebar + site-header) về navy hằng số ở CẢ hai chế độ",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/lms/**", "docs/plans/S5-LMS-UI-1.md"],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S5-LMS-UI-1.md",
+    src: [
+      "nguồn token: packages/ui/src/styles/theme.css (276 dòng — NGUỒN DUY NHẤT cho app/console/auth; nguyên tắc 'chrome GIỮ NAVY ở cả hai chế độ', primary #1fa9e0 giống hệt light+dark)",
+      "đích: apps/lms/app/globals.css (337 dòng) — :root dòng 8 · .dark dòng 58 · @theme inline dòng 106 · @custom-variant dark dòng 6",
+      "THUẬN LỢI: hai bên CÙNG shadcn + Tailwind v4 nên TRÙNG tên biến (--background/--card/--primary/--sidebar-*/--radius) ⇒ việc cần làm là thay GIÁ TRỊ (LMS đang oklch + primary hard-code #BADDAD), KHÔNG đổi cơ chế, KHÔNG đổi tên class",
+      "KHÔNG import được @mediaos/ui: apps/lms có pnpm-workspace.yaml + pnpm-lock.yaml RIÊNG (Next.js 15.5.9 độc lập, ngoài turbo repo MediaOS) ⇒ đồng bộ bằng PORT giá trị + ghi chú nguồn ở đầu file, không bằng dependency",
+      "theme toggle LMS = next-themes (components/ui/theme-provider.tsx) đổi class `dark` trên <html> — CÙNG cơ chế MediaOS ⇒ giữ nguyên, KHÔNG ép chung storage key (khác subdomain train.* nên localStorage vốn không chia sẻ)",
+      "memory: fe-theme-light-dark-system (theme.css là nguồn token duy nhất; chrome navy là hằng số thương hiệu #187)",
+      "kỷ luật track LOCAL: docs/plans/S5-LMS-WAVE.md §3",
+    ],
+    done_when: [
+      "globals.css không còn giá trị token cũ (#BADDAD, sidebar-accent hồng/xanh lơ); light + dark khớp bảng màu MediaOS; header/sidebar navy ở CẢ hai chế độ",
+      "Smoke sau build+restart 3400 với phiên thật, ở CẢ light và dark: /login · /course · /course/{slug}/learn · /dashboard · /exam · /manage-courses · /admin — không màn nào chữ chìm vào nền, không nút mất viền",
+      "Tương phản text/nền đạt AA trên các cặp token đổi giá trị (foreground/background · muted-foreground/muted · primary-foreground/primary)",
+      "typecheck + build apps/lms xanh; review typescript-reviewer local PASS; KHÔNG đụng logic/route/API — diff chỉ nằm ở CSS + lớp trình bày",
+    ],
+  },
+  {
+    id: "S5-LMS-UI-2",
+    module: "LMS",
+    layer: "FE",
+    title:
+      "LOCAL apps/lms — đồng bộ COMPONENT LÕI với MediaOS: button/badge/card/table/input/select/dialog dùng đúng biến thể + radius + focus-ring + token trạng thái (success/warning/danger) của packages/ui; khung sidebar + site-header khớp workspace shell của apps/app",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/lms/**", "docs/plans/S5-LMS-UI-2.md"],
+    skills: ["code-review"],
+    depends_on: ["S5-LMS-UI-1"],
+    plan: "docs/plans/S5-LMS-UI-2.md",
+    src: [
+      "đối chiếu: apps/lms/components/ui/** (35 primitive shadcn riêng) ↔ packages/ui/src/components/** — so từng biến thể, KHÔNG chép file (khác runtime Next vs Vite)",
+      "khung: apps/lms/components/sidebar/{app-sidebar,site-header,app-switcher}.tsx ↔ apps/app/src/layouts/workspace/**",
+      "depends UI-1 vì token phải chốt trước; đồng thời SERIAL HOÁ track LOCAL (chung apps/lms, main worktree — kỷ luật S5-LMS-WAVE.md §3)",
+      "trạng thái badge/chip trong LMS (đã duyệt/chờ duyệt/đạt/trượt) phải dùng --success/--warning/--danger + -muted của theme thay vì màu Tailwind rời",
+      "PHẠM VI ĐÓNG: chỉ lớp trình bày. CẤM đổi cấu trúc màn hình, luồng học/thi, quyền, hay API — đó là việc của WO khác",
+    ],
+    done_when: [
+      "Nút/thẻ/bảng/form ở LMS và MediaOS đặt cạnh nhau đọc ra CÙNG một hệ (bo góc, độ dày viền, focus ring, cỡ chữ, mật độ hàng bảng)",
+      "Không còn màu Tailwind rời (bg-green-500/text-red-600…) ở component trạng thái — thay bằng token",
+      "Smoke light+dark trên đúng bộ màn hình như UI-1 + màn có bảng/dialog nặng (/manage-courses tab learners, chấm bài /manage-exam/{id}/grading); không vỡ layout mobile",
+      "typecheck + build apps/lms xanh; review typescript-reviewer + react-reviewer local PASS; backup data/app.db trước khi restart NSSM 3400",
+    ],
+  },
   // ── Seed 2026-07-23 từ plan-review S5-LMS-BE-4 vòng 3 (câu hỏi mở: ràng buộc §3D đang MỒ CÔI) ──
   // BE-4 hạ số dòng audit_logs và viện dẫn system_job_runs làm "bằng chứng job đã chạy" thay thế.
   // Nếu WO dọn tương lai xoá sạch bảng đó thì lập luận của BE-4 mất chỗ dựa ⇒ ràng buộc lưu-giữ phải
@@ -8077,6 +8137,40 @@ export const backlog = [
       "Row Success của LMS_USER_SYNC < 90 ngày KHÔNG bị xoá; > 90 ngày mới xoá",
       "Xử lý TƯỜNG MINH row company_id IS NULL (job cấp system — retention policy là per-tenant nên ca này KHÔNG tự rơi vào đâu cả): chốt giữ hay xoá, có test",
       "FULL gate PASS (chạm retention + bảng append-only-ish); không cấp thêm grant DELETE cho app role",
+    ],
+  },
+  // ── Seed 2026-07-24 từ sự cố PROD THẬT (không phải giả định) ────────────────────────────────────
+  // Triệu chứng: job SYSTEM_JOB_RUNS_RETENTION Failed MỖI NHỊP suốt 2026-07-24, logs/api.err.log phình
+  // 149 MB. Gốc: dist BE đã deploy nhưng migration 0511 (tạo purge_system_job_runs) CHƯA áp lên DB PROD
+  // (pg_proc=0). Đo lúc phát hiện: 190/196 migration đã áp — TỒN ĐỌNG 6 (0510·0511·0525·0526·0527·0528).
+  // Nguyên nhân hệ thống: mediaos.ps1 Invoke-ProdUpdate (dòng 438-448) = build contracts → build api →
+  // Restart-OneProdService. KHÔNG có bước migrate ⇒ mọi lần deploy BE đều có thể để schema tụt lại sau
+  // code, và lỗi chỉ lộ ra ở runtime, ở một job chạy nền, dưới dạng log rác.
+  {
+    id: "S5-DEVOPS-DEPLOYMIG-1",
+    module: "DEVOPS",
+    layer: "OPS",
+    title:
+      "m prod-update: chèn bước MIGRATE trước RESTART (fail-closed — migrate đỏ thì KHÔNG restart, thoát khác 0) + m prod-status báo số migration tồn đọng (file journal ↔ drizzle.__drizzle_migrations)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["mediaos.ps1", "scripts/windows/**", "docs/plans/S5-DEVOPS-DEPLOYMIG-1.md"],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S5-DEVOPS-DEPLOYMIG-1.md",
+    src: [
+      "chỗ sửa: mediaos.ps1 Invoke-ProdUpdate dòng 438-448 (nhánh $doApi) — chèn migrate GIỮA 'build api' và Restart-OneProdService; Invoke-ProdStatus dòng 457+ thêm dòng đếm tồn đọng",
+      "BẪY ĐÃ ĐO 2026-07-24: `pnpm db:migrate` chạy qua `pnpm --filter` có cwd = apps/api nên KHÔNG đọc .env ở gốc repo ⇒ chết với 'DATABASE_DIRECT_URL is required'. Script PHẢI nạp .env gốc (đã có helper Import-DotEnv, xem Invoke-DeploySeed dòng 333) rồi truyền DATABASE_DIRECT_URL tường minh",
+      "thứ tự đúng theo memory migration-expand-contract-required: migration EXPAND (thêm bảng/cột/hàm) chạy TRƯỚC restart là an toàn; migration CONTRACT (REVOKE/DROP) chỉ an toàn khi dist đang chạy đã hết dùng — WO này KHÔNG tự động hoá phần contract, chỉ cảnh báo khi phát hiện REVOKE/DROP trong lô tồn đọng",
+      "đếm tồn đọng: apps/api/migrations/meta/_journal.json (entries) ↔ select count(*) from drizzle.__drizzle_migrations — drizzle áp ĐƠN ĐIỆU theo thứ tự nên chênh lệch = số chờ áp",
+      "cùng họ với landmine đã ghi: prod-restart-does-not-rebuild-dist (restart KHÔNG build) — WO này thêm vế thứ hai: build KHÔNG migrate",
+    ],
+    done_when: [
+      "`m prod-update api` (và `all`) chạy migrate TRƯỚC khi restart; migrate lỗi → in lỗi + KHÔNG restart + exit code khác 0 (fail-closed, có test tay bằng cách tạm đổi DATABASE_DIRECT_URL sai)",
+      "Migrate đọc được .env gốc repo dù chạy qua pnpm --filter (không tái diễn lỗi 'DATABASE_DIRECT_URL is required')",
+      "`m prod-status` in số migration tồn đọng; = 0 thì báo xanh, > 0 thì báo vàng kèm tên migration đầu tiên chưa áp",
+      "Lô tồn đọng có chứa REVOKE/DROP → in cảnh báo yêu cầu người xác nhận (không tự chạy im lặng)",
+      "Chạy thử trên dev-online (:3200 / mediaos_dev) trước, KHÔNG thử nghiệm trực tiếp trên PROD",
     ],
   },
 
