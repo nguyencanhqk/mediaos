@@ -775,6 +775,9 @@ export const meKeys = {
   // query (page/per_page/from_date/to_date) — plain, JSON-serialisable; key khác nhau theo trang/filter.
   securityActivity: (params?: Record<string, unknown>) =>
     [...rootKeys.me, "security-activity", params] as const,
+  // S5-GOAL-FE-2 — "Mục tiêu của tôi" (GET /me/goals, GOAL-API-013). Query RIÊNG khỏi overview() và
+  // KHÁC goalKeys.list(): endpoint own-scope khác, gate khác, không nhận employeeId (chống IDOR).
+  goals: (params?: Record<string, unknown>) => [...rootKeys.me, "goals", params] as const,
 };
 
 // ── GOAL keys (S5-GOAL-FE-1) — Mục tiêu, SPEC-10 ───────────────────────────────
@@ -791,6 +794,10 @@ export const goalKeys = {
   linkedTasks: (id: string) => [...rootKeys.goals, "linked-tasks", id] as const,
   updates: (id: string, params?: Record<string, unknown>) =>
     [...rootKeys.goals, "updates", id, params] as const,
+  // S5-GOAL-FE-2 — PREFIX 4-phần tử (bỏ slot params) của updates(id, params): sổ check-in phân trang
+  // theo limit/offset nên key mang params CỤ THỂ — invalidate updates(id) (params=undefined) KHÔNG
+  // khớp trang khác (mirror taskKeys.activityOf). Dùng cái này khi cần làm mới MỌI trang của sổ.
+  updatesOf: (id: string) => [...rootKeys.goals, "updates", id] as const,
 };
 
 // PREFIX 3-phần tử (bỏ slot params) → khớp MỌI biến thể filter (TanStack match theo prefix; key có
@@ -798,12 +805,91 @@ export const goalKeys = {
 const goalListPrefix = [...rootKeys.goals, "list"] as const;
 const goalTreePrefix = [...rootKeys.goals, "tree"] as const;
 
+// PREFIX 3-phần tử (bỏ slot params) của `meKeys.goals(params)`. Khối "Mục tiêu của tôi" ở /me đọc
+// endpoint own-scope RIÊNG (`me/goals`) nên KHÔNG nằm dưới prefix `goals/*` — mọi helper bên dưới
+// phải kèm vế này, nếu không: check-in nhanh ngay TRÊN card /me ghi thành công mà % trên chính card
+// đó đứng yên (card không remount khi dialog đóng, staleTime 60s + refetchOnWindowFocus tắt ⇒ số cũ
+// nhìn vẫn hợp lý, không có lỗi nào để người dùng biết). Cùng loại bẫy "hai đường đọc một dữ liệu"
+// như taskKeys.kanban vs tasks/list ở trên.
+const meGoalsPrefix = [...rootKeys.me, "goals"] as const;
+
 // Mọi mutation goal (create/update/delete) làm mới danh sách PHẲNG + cây (progress nút cha có thể đổi
 // theo rollup) + chi tiết đúng goal khi biết id. Nguồn sự thật DUY NHẤT — page không rải string tay.
 export const goalInvalidation = {
   create: () => [goalListPrefix, goalTreePrefix] as const,
   update: (id: string) => [goalListPrefix, goalTreePrefix, goalKeys.detail(id)] as const,
   remove: (id: string) => [goalListPrefix, goalTreePrefix, goalKeys.detail(id)] as const,
+
+  // ── S5-GOAL-FE-2 (APPEND) — vòng đo ────────────────────────────────────────────────────────────
+  /**
+   * Check-in (GOAL-API-007): đổi `current_value`/`progress_percent` + GHI THÊM một dòng sổ
+   * `goal_updates` ⇒ ngoài detail/list/tree còn phải làm mới CẢ sổ check-in (mọi trang, qua prefix).
+   */
+  checkin: (id: string) =>
+    [
+      goalListPrefix,
+      goalTreePrefix,
+      goalKeys.detail(id),
+      goalKeys.updatesOf(id),
+      meGoalsPrefix,
+    ] as const,
+  /** Chốt kỳ/mở lại (GOAL-API-009): cũng ghi sổ + đổi `finalizedAt` ⇒ CÙNG tập với check-in. */
+  finalize: (id: string) =>
+    [
+      goalListPrefix,
+      goalTreePrefix,
+      goalKeys.detail(id),
+      goalKeys.updatesOf(id),
+      meGoalsPrefix,
+    ] as const,
+
+  /**
+   * Task GẮN mục tiêu đổi trạng thái (SPEC-10 §13, progress_mode='tasks') — server tính lại
+   * `progress_percent` của mục tiêu neo NGAY khi task sang Done/rời Done, nên FE phải làm mới goal
+   * dù người dùng đang đứng ở màn TASK.
+   *
+   * Thiếu vế này thì kéo thẻ sang Done rồi mở Mục tiêu (detail/list/cây) hoặc /me vẫn thấy % TRƯỚC
+   * khi đổi — số SAI mà nhìn vẫn hợp lý, không có thông báo lỗi nào để người dùng nghi ngờ. Đây là
+   * đúng lớp bẫy PR #250 ("sửa trong panel phải F5 board mới thấy"), lần này ngược chiều TASK→GOAL.
+   *
+   * KHÔNG kèm key phía task: call-site (use-task-action-mutation / board move) đã tự invalidate
+   * `taskCoreInvalidation` + `taskKeys.kanban` cho luồng của nó — nhét thêm ở đây là invalidate kép.
+   */
+  taskProgress: (goalId: string) =>
+    [
+      goalListPrefix,
+      goalTreePrefix,
+      goalKeys.detail(goalId),
+      goalKeys.linkedTasks(goalId),
+      meGoalsPrefix,
+    ] as const,
+
+  /**
+   * Gắn/tháo việc ↔ mục tiêu (GOAL-API-010) — HAI CHIỀU, HAI PHÍA.
+   *
+   * Server chuyển task sang mục tiêu mới rồi recompute % của CẢ mục tiêu mới LẪN mục tiêu cũ
+   * (`previousGoalIds`). Thiếu vế "mục tiêu cũ" ⇒ % sai đọng lại trên card/chi tiết mà người khác đang
+   * mở, không F5 thì không lộ (bài học PR #250, nhân đôi). Phía TASK cũng đổi (`goalId`/`goalName` hiện
+   * trên panel chi tiết và thẻ board) nên kèm luôn `taskCoreInvalidation.detail` + board đúng dự án.
+   *
+   * `goalIds` nhận cả null/undefined (task trước đó chưa gắn mục tiêu nào) — tự lọc + khử trùng lặp.
+   */
+  linkTasks: (input: {
+    goalIds: ReadonlyArray<string | null | undefined>;
+    taskId?: string | null;
+    projectId?: string | null;
+  }): ReadonlyArray<readonly unknown[]> => {
+    const uniqueGoalIds = [...new Set(input.goalIds.filter((id): id is string => Boolean(id)))];
+    return [
+      goalListPrefix,
+      goalTreePrefix,
+      ...uniqueGoalIds.flatMap((goalId) => [goalKeys.detail(goalId), goalKeys.linkedTasks(goalId)]),
+      // Gắn/tháo việc đổi % của mục tiêu ⇒ khối "Mục tiêu của tôi" ở /me cũng lệch (xem meGoalsPrefix).
+      meGoalsPrefix,
+      ...(input.taskId ? taskCoreInvalidation.detail(input.taskId) : []),
+      ...(input.projectId ? [taskKeys.kanban(input.projectId)] : []),
+    ];
+  },
 };
 
 // S5-ME-FE-3 — Notification preferences (GET/PUT /notifications/preferences, ME-SCREEN-013). Namespace

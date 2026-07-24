@@ -26,6 +26,7 @@ import {
   TaskTitleField,
   TaskDescriptionField,
 } from "./TaskInlineFields";
+import { TaskGoalField } from "./TaskGoalField";
 import { TaskWatchersPanel } from "./TaskWatchersPanel";
 import { TaskLabelStrip } from "./TaskLabelPicker";
 import { TaskMoveProjectDialog } from "./TaskMoveProjectDialog";
@@ -221,6 +222,11 @@ function InfoGrid({ task }: { task: TaskCoreResponseDto }) {
       <div className="grid gap-4 sm:grid-cols-2">
         <TaskAssigneeField task={task} />
         <TaskDeadlineField task={task} />
+      </div>
+      {/* S5-GOAL-FE-2 — "Mục tiêu" (GOAL-API-010): TaskGoalField TỰ gate two-gate (update:goal +
+          update:task) và tự về chế độ chỉ-đọc khi thiếu — mount vô điều kiện ở đây. */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <TaskGoalField task={task} />
       </div>
       <div className="grid gap-4 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* S5-TASK-DETAIL-1 (GAP 3) — đủ 3 vai; người phụ trách ở trên nên đây còn 2. */}

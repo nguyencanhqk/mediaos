@@ -38,3 +38,27 @@ export const GOAL_STATUS_OPTIONS = ["Draft", "Active", "Completed", "Cancelled"]
 export const GOAL_PERIOD_TYPE_OPTIONS = ["quarter", "year", "custom"] as const;
 
 export const GOAL_MEASURE_TYPE_OPTIONS = ["percent", "number", "boolean"] as const;
+
+// ─── S5-GOAL-FE-2 (APPEND) — vòng đo ──────────────────────────────────────────────────────────────
+
+/** Khoảng `confidence` của check-in — PIN theo `checkinGoalSchema` + DB CHECK (DB-11 §6.2). */
+export const CHECKIN_CONFIDENCE_MIN = 0;
+export const CHECKIN_CONFIDENCE_MAX = 100;
+
+/** Trần % tiến độ nhập tay (measureType='percent'). */
+export const PROGRESS_PERCENT_MAX = 100;
+
+/** Số dòng mỗi trang của sổ check-in (GET /goals/:id/updates). Server KHÔNG trả `total` ⇒ pager
+ * prev/next thuần: còn đủ `limit` dòng thì CÓ THỂ còn trang sau. */
+export const GOAL_UPDATES_PAGE_SIZE = 20;
+
+/** Số mục tiêu hiển thị trong card "Mục tiêu của tôi" ở Tổng quan ME (xem đủ ở /goals). */
+export const ME_GOALS_PREVIEW_LIMIT = 3;
+
+/**
+ * Cặp quyền TASK mà FE cần cho đường gắn/tháo việc ↔ mục tiêu. CỔNG THỨ HAI (ngoài `update:goal`) do
+ * `goal-tasks-link.service.ts` ép — gắn task vào mục tiêu là GHI vào hàng `tasks`, nên phải có phạm vi
+ * ghi của cặp `('update','task')`. Dựng thiếu cổng này ⇒ hiện nút rồi ăn 403 (hoặc tệ hơn: tưởng
+ * mình sửa được task ngoài phạm vi qua đường vòng mục tiêu).
+ */
+export const TASK_UPDATE_PAIR_FOR_GOAL_LINK = { action: "update", resourceType: "task" } as const;

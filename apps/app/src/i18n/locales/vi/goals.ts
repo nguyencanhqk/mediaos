@@ -234,4 +234,100 @@ export default {
       error: "Không tải được lịch sử check-in.",
     },
   },
+
+  // ─── S5-GOAL-FE-2 (APPEND) — vòng đo: check-in · chốt kỳ/mở lại · gắn-tháo việc ────────────────
+  // KHỐI THÊM MỚI, KHÔNG sửa khóa cũ ở trên (file HOT — lane khác cũng đang thêm khóa).
+  checkinDialog: {
+    title: "Check-in tiến độ",
+    description: "Ghi nhận số liệu mới, mức tự tin và ghi chú cho kỳ đang chạy.",
+    fields: {
+      progressPercent: "Tiến độ (%)",
+      currentValue: "Giá trị hiện tại",
+      achieved: "Đã đạt mục tiêu",
+      confidence: "Mức tự tin (%)",
+      note: "Ghi chú",
+    },
+    hints: {
+      target: "Mục tiêu: {{target}}",
+      noTarget: "Chưa đặt giá trị mục tiêu.",
+      // Mode đo tự động: số do hệ thống tính, người dùng chỉ ghi cảm nhận + ghi chú.
+      autoMeasured:
+        "Tiến độ mục tiêu này do hệ thống tính tự động — check-in chỉ ghi mức tự tin và ghi chú.",
+      valueOptional: "Bỏ trống nếu chỉ muốn ghi mức tự tin / ghi chú.",
+    },
+    placeholders: {
+      note: "Điều gì đang cản trở hoặc hỗ trợ mục tiêu này?",
+    },
+    submit: "Ghi nhận check-in",
+    submitting: "Đang ghi nhận…",
+    errors: {
+      generic: "Không ghi nhận được check-in. Vui lòng thử lại.",
+      confidenceRange: "Mức tự tin phải nằm trong khoảng 0–100.",
+      progressRange: "Tiến độ phải nằm trong khoảng 0–100.",
+      valueInvalid: "Giá trị nhập không hợp lệ.",
+    },
+    locked: {
+      finalized: "Mục tiêu đã chốt kỳ — cần mở lại trước khi check-in.",
+      notActive: "Chỉ mục tiêu đang chạy mới check-in được.",
+    },
+  },
+
+  finalizeDialog: {
+    title: "Chốt kỳ mục tiêu",
+    description:
+      "Chốt kỳ sẽ ĐÓNG BĂNG số liệu hiện tại: tiến độ ngừng tính lại, mọi thao tác ghi (sửa, check-in, gắn/tháo việc) bị khóa cho tới khi mở lại.",
+    noteLabel: "Ghi chú chốt kỳ",
+    notePlaceholder: "Tóm tắt kết quả kỳ này (không bắt buộc)",
+    submit: "Chốt kỳ",
+    submitting: "Đang chốt kỳ…",
+    error: "Không chốt kỳ được mục tiêu.",
+  },
+
+  reopenDialog: {
+    title: "Mở lại mục tiêu",
+    description:
+      "Mở lại sẽ bỏ đóng băng: tiến độ tính lại theo dữ liệu thực tế và các thao tác ghi được mở khóa. Hành động này được ghi vào sổ lịch sử.",
+    noteLabel: "Lý do mở lại",
+    notePlaceholder: "Vì sao cần mở lại kỳ này? (không bắt buộc)",
+    submit: "Mở lại",
+    submitting: "Đang mở lại…",
+    error: "Không mở lại được mục tiêu.",
+  },
+
+  taskPicker: {
+    title: "Gắn công việc vào mục tiêu",
+    description: "Chọn các công việc thuộc phạm vi của mục tiêu để tính tiến độ.",
+    projectLabel: "Dự án",
+    pickProject: "Chọn dự án",
+    // Giới hạn API THẬT: GET /tasks không có filter tìm-kiếm/phòng ban ⇒ cấp phòng phải chọn dự án trước.
+    pickProjectFirst: "Chọn một dự án để xem danh sách công việc.",
+    projectsError: "Không tải được danh sách dự án.",
+    tasksError: "Không tải được danh sách công việc.",
+    empty: "Không còn công việc nào để gắn.",
+    selectedCount: "Đã chọn {{count}} công việc",
+    submit: "Gắn công việc",
+    submitting: "Đang gắn…",
+    error: "Không gắn được công việc vào mục tiêu.",
+    warningsTitle: "Đã gắn xong, nhưng có cảnh báo:",
+    close: "Đóng",
+  },
+
+  linkedTasksActions: {
+    add: "Gắn thêm việc",
+    unlink: "Tháo",
+    unlinkError: "Không tháo được công việc khỏi mục tiêu.",
+    lockedFinalized: "Mục tiêu đã chốt kỳ — không sửa được danh sách công việc.",
+  },
+
+  checkinActions: {
+    open: "Check-in",
+    finalize: "Chốt kỳ",
+    reopen: "Mở lại",
+  },
+
+  pagination: {
+    prev: "Trước",
+    next: "Sau",
+    page: "Trang {{page}}",
+  },
 } as const;

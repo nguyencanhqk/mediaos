@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Pencil, Target, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Lock, Pencil, Target, Trash2, Unlock } from "lucide-react";
 import {
   ApiError,
   goalApi,
@@ -13,13 +13,8 @@ import {
   PermissionGate,
   useCan,
 } from "@mediaos/web-core";
-import type {
-  GoalDetailResponseDto,
-  GoalUpdateResponseDto,
-  TaskCoreResponseDto,
-} from "@mediaos/contracts";
+import type { GoalDetailResponseDto } from "@mediaos/contracts";
 import {
-  Badge,
   Button,
   Card,
   CardContent,
@@ -30,11 +25,15 @@ import {
   TabsList,
   TabsTrigger,
 } from "@mediaos/ui";
-import { TaskStatusBadge } from "@/routes/tasks/TaskStatusBadge";
 import { GOAL_ENGINE_PAIRS } from "./constants";
-import { formatDateOnly, formatPeriod, formatProgress } from "./goal-format";
+import { formatPeriod } from "./goal-format";
 import { GoalFinalizedBadge, GoalLevelBadge, GoalStatusBadge } from "./components/GoalBadges";
 import { GoalProgressBar } from "./components/GoalProgressBar";
+import { GoalCheckinDialog } from "./components/GoalCheckinDialog";
+import { GoalFinalizeDialog } from "./components/GoalFinalizeDialog";
+import { GoalCheckinsTab } from "./components/GoalCheckinsTab";
+import { GoalLinkedTasksTab } from "./components/GoalLinkedTasksTab";
+import { SimpleTable, TabError, TabSkeleton } from "./components/GoalTabPrimitives";
 
 interface GoalDetailPageProps {
   goalId: string;
@@ -45,10 +44,16 @@ interface GoalDetailPageProps {
 type DetailTab = "overview" | "linked" | "children" | "checkins";
 
 /**
- * GOAL-SCREEN-002 (S5-GOAL-FE-1) — chi tiết mục tiêu, 4 tab: Tổng quan · Công việc gắn · Mục tiêu con ·
- * Lịch sử check-in. Các tab con/lịch sử là READ-ONLY ở FE-1 (API đủ: GET /goals/:id/updates + list
- * theo parentGoalId); check-in/chốt kỳ/gắn task là FE-2. Goal đã chốt kỳ → badge khóa + disable MỌI
- * nút ghi (Sửa/Xóa). Xóa → invalidate list + tree + detail (goalInvalidation) → về danh sách.
+ * GOAL-SCREEN-002/005 (S5-GOAL-FE-1 + FE-2) — chi tiết mục tiêu, 4 tab: Tổng quan · Công việc gắn ·
+ * Mục tiêu con · Lịch sử check-in.
+ *
+ * FE-2 mở VÒNG ĐO ngay trên màn này: Check-in (`('checkin','goal')`) và Chốt kỳ/Mở lại
+ * (`('finalize','goal')` — MỘT cặp cho CẢ HAI chiều, migration 0506 không seed cặp `reopen` riêng).
+ * Hai cặp ĐỘC LẬP nhau: mất `checkin` không kéo theo mất `finalize` và ngược lại.
+ *
+ * Goal đã chốt kỳ → badge khóa + disable MỌI nút ghi (Sửa/Xóa/Check-in/gắn-tháo việc, GOAL-ERR-005);
+ * riêng nút finalize đổi nhãn thành "Mở lại" (đường duy nhất thoát trạng thái đóng băng).
+ * Xóa → invalidate list + tree + detail (goalInvalidation) → về danh sách.
  */
 export function GoalDetailPage({ goalId, onEdit, onBack }: GoalDetailPageProps) {
   const { t } = useTranslation("goals");
@@ -57,6 +62,8 @@ export function GoalDetailPage({ goalId, onEdit, onBack }: GoalDetailPageProps) 
   const [tab, setTab] = useState<DetailTab>("overview");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [checkinOpen, setCheckinOpen] = useState(false);
+  const [finalizeOpen, setFinalizeOpen] = useState(false);
 
   const canDelete = useCan(GOAL_ENGINE_PAIRS.DELETE.action, GOAL_ENGINE_PAIRS.DELETE.resourceType);
 
@@ -122,7 +129,38 @@ export function GoalDetailPage({ goalId, onEdit, onBack }: GoalDetailPageProps) 
           </div>
           <p className="text-sm text-muted-foreground">{goal.goalCode}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Check-in: cặp RIÊNG ('checkin','goal'). Khoá ở client khi đã chốt kỳ (GOAL-ERR-005) hoặc
+              status ≠ Active (GOAL-ERR-006) — để người dùng bấm rồi ăn 422 là UI nói dối. */}
+          <PermissionGate
+            action={GOAL_ENGINE_PAIRS.CHECKIN.action}
+            resourceType={GOAL_ENGINE_PAIRS.CHECKIN.resourceType}
+          >
+            <Button
+              size="sm"
+              data-testid="goal-checkin-open"
+              disabled={finalized || goal.status !== "Active"}
+              onClick={() => setCheckinOpen(true)}
+            >
+              <CheckCircle2 className="mr-2 h-4 w-4" />
+              {t("checkinActions.open")}
+            </Button>
+          </PermissionGate>
+          {/* Chốt kỳ ↔ Mở lại: CÙNG cặp ('finalize','goal'), chỉ đổi nhãn/hành vi theo finalizedAt. */}
+          <PermissionGate
+            action={GOAL_ENGINE_PAIRS.FINALIZE.action}
+            resourceType={GOAL_ENGINE_PAIRS.FINALIZE.resourceType}
+          >
+            <Button
+              size="sm"
+              variant="outline"
+              data-testid="goal-finalize-open"
+              onClick={() => setFinalizeOpen(true)}
+            >
+              {finalized ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
+              {finalized ? t("checkinActions.reopen") : t("checkinActions.finalize")}
+            </Button>
+          </PermissionGate>
           <PermissionGate
             action={GOAL_ENGINE_PAIRS.UPDATE.action}
             resourceType={GOAL_ENGINE_PAIRS.UPDATE.resourceType}
@@ -169,7 +207,7 @@ export function GoalDetailPage({ goalId, onEdit, onBack }: GoalDetailPageProps) 
           <OverviewTab goal={goal} />
         </TabsContent>
         <TabsContent value="linked">
-          <LinkedTasksTab goalId={goalId} active={tab === "linked"} />
+          <GoalLinkedTasksTab goal={goal} active={tab === "linked"} />
         </TabsContent>
         <TabsContent value="children">
           <ChildrenTab
@@ -179,9 +217,18 @@ export function GoalDetailPage({ goalId, onEdit, onBack }: GoalDetailPageProps) 
           />
         </TabsContent>
         <TabsContent value="checkins">
-          <CheckinsTab goalId={goalId} active={tab === "checkins"} />
+          <GoalCheckinsTab goalId={goalId} active={tab === "checkins"} />
         </TabsContent>
       </Tabs>
+
+      {checkinOpen && <GoalCheckinDialog goal={goal} onClose={() => setCheckinOpen(false)} />}
+      {finalizeOpen && (
+        <GoalFinalizeDialog
+          goal={goal}
+          mode={finalized ? "reopen" : "finalize"}
+          onClose={() => setFinalizeOpen(false)}
+        />
+      )}
 
       <Dialog
         open={confirmDelete}
@@ -296,54 +343,6 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-// ── Tab: Công việc gắn (read-only, GET /goals/:id/tasks) ────────────────────────
-function LinkedTasksTab({ goalId, active }: { goalId: string; active: boolean }) {
-  const { t } = useTranslation("goals");
-  const query = useQuery({
-    queryKey: goalKeys.linkedTasks(goalId),
-    queryFn: () => goalApi.listLinkedTasks(goalId),
-    enabled: active,
-    staleTime: 30_000,
-  });
-  if (query.isLoading) return <TabSkeleton />;
-  if (query.isError) return <TabError message={t("detail.linkedTasks.error")} />;
-  const tasks = query.data ?? [];
-  if (tasks.length === 0) {
-    return (
-      <EmptyState
-        title={t("detail.linkedTasks.empty.title")}
-        description={t("detail.linkedTasks.empty.description")}
-      />
-    );
-  }
-  return (
-    <SimpleTable
-      head={[
-        t("detail.linkedTasks.columns.title"),
-        t("detail.linkedTasks.columns.status"),
-        t("detail.linkedTasks.columns.assignee"),
-        t("detail.linkedTasks.columns.project"),
-        t("detail.linkedTasks.columns.due"),
-      ]}
-    >
-      {tasks.map((task: TaskCoreResponseDto) => (
-        <tr key={task.id} className="border-t border-border">
-          <td className="px-3 py-2 text-sm text-foreground">{task.title}</td>
-          {/* TaskStatusBadge (dùng chung tasks/) — nhãn ĐÃ i18n theo enum, KHÔNG in enum thô. */}
-          <td className="px-3 py-2">
-            <TaskStatusBadge status={task.status} />
-          </td>
-          <td className="px-3 py-2 text-sm text-muted-foreground">{task.assigneeName ?? "—"}</td>
-          <td className="px-3 py-2 text-sm text-muted-foreground">{task.projectName ?? "—"}</td>
-          <td className="whitespace-nowrap px-3 py-2 text-sm text-muted-foreground">
-            {formatDateOnly(task.dueAt ? task.dueAt.slice(0, 10) : null)}
-          </td>
-        </tr>
-      ))}
-    </SimpleTable>
-  );
-}
-
 // ── Tab: Mục tiêu con (list theo parentGoalId) ──────────────────────────────────
 function ChildrenTab({
   goalId,
@@ -400,95 +399,5 @@ function ChildrenTab({
         </tr>
       ))}
     </SimpleTable>
-  );
-}
-
-// ── Tab: Lịch sử check-in (ledger, GET /goals/:id/updates) ──────────────────────
-function CheckinsTab({ goalId, active }: { goalId: string; active: boolean }) {
-  const { t } = useTranslation("goals");
-  const query = useQuery({
-    queryKey: goalKeys.updates(goalId),
-    queryFn: () => goalApi.listUpdates(goalId, { limit: 100 }),
-    enabled: active,
-    staleTime: 30_000,
-  });
-  if (query.isLoading) return <TabSkeleton />;
-  if (query.isError) return <TabError message={t("detail.checkins.error")} />;
-  const updates = query.data ?? [];
-  if (updates.length === 0) {
-    return (
-      <EmptyState
-        title={t("detail.checkins.empty.title")}
-        description={t("detail.checkins.empty.description")}
-      />
-    );
-  }
-  return (
-    <SimpleTable
-      head={[
-        t("detail.checkins.columns.type"),
-        t("detail.checkins.columns.progress"),
-        t("detail.checkins.columns.confidence"),
-        t("detail.checkins.columns.note"),
-        t("detail.checkins.columns.at"),
-      ]}
-    >
-      {updates.map((u: GoalUpdateResponseDto) => (
-        <tr key={u.id} className="border-t border-border align-top">
-          <td className="px-3 py-2">
-            <Badge variant={u.updateType === "reopen" ? "warning" : "muted"}>
-              {t(`detail.checkins.type.${u.updateType}`)}
-            </Badge>
-          </td>
-          <td className="px-3 py-2 text-sm tabular-nums">
-            {formatProgress(u.oldProgressPercent)} → {formatProgress(u.newProgressPercent)}
-          </td>
-          <td className="px-3 py-2 text-sm text-muted-foreground">
-            {u.confidence === null ? "—" : `${u.confidence}%`}
-          </td>
-          <td className="px-3 py-2 text-sm text-foreground">{u.note ?? "—"}</td>
-          <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
-            {new Date(u.createdAt).toLocaleString("vi-VN")}
-          </td>
-        </tr>
-      ))}
-    </SimpleTable>
-  );
-}
-
-// ── Bảng đơn giản dùng chung cho các tab read-only ──────────────────────────────
-function SimpleTable({ head, children }: { head: string[]; children: React.ReactNode }) {
-  return (
-    <div className="overflow-x-auto rounded-lg border border-border">
-      <table className="w-full">
-        <thead className="bg-muted/50">
-          <tr>
-            {head.map((h) => (
-              <th key={h} className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>{children}</tbody>
-      </table>
-    </div>
-  );
-}
-
-function TabSkeleton() {
-  return (
-    <div className="space-y-2 py-3">
-      <div className="h-9 w-full animate-pulse rounded bg-muted" />
-      <div className="h-9 w-11/12 animate-pulse rounded bg-muted" />
-    </div>
-  );
-}
-
-function TabError({ message }: { message: string }) {
-  return (
-    <p className="py-6 text-center text-sm text-destructive" role="alert">
-      {message}
-    </p>
   );
 }

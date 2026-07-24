@@ -229,6 +229,19 @@ export default {
       description: "Hệ thống Đào tạo (LMS) tạm thời không phản hồi. Vui lòng thử lại.",
     },
   },
+  // ─── S5-GOAL-FE-2 (APPEND) — card "Mục tiêu của tôi" (GET /me/goals, GOAL-API-013) ────────────────
+  // Query RIÊNG khỏi overview (gate access:goal, fail-soft độc lập). Nhãn cấp/trạng thái mục tiêu KHÔNG
+  // nhân bản ở đây — dùng namespace 'goals'.
+  goals: {
+    title: "Mục tiêu của tôi",
+    empty: "Bạn chưa có mục tiêu nào đang chạy.",
+    checkin: "Check-in",
+    viewAll: "Xem tất cả",
+    error: {
+      title: "Không tải được mục tiêu của bạn",
+      description: "Đã có lỗi khi tải mục tiêu. Vui lòng thử lại.",
+    },
+  },
   trainingPage: {
     title: "Tiến độ đào tạo",
     description: "Khoá học, thời lượng và kết quả của bạn trên hệ thống Đào tạo (LMS).",

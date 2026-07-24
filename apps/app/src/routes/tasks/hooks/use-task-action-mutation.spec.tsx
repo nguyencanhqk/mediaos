@@ -2,7 +2,7 @@ import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { taskKeys, taskCoreInvalidation } from "@mediaos/web-core";
+import { taskKeys, taskCoreInvalidation, goalKeys, goalInvalidation } from "@mediaos/web-core";
 import type { TaskActionResponseDto, TaskCoreResponseDto } from "@mediaos/contracts";
 import { useTaskActionMutation } from "./use-task-action-mutation";
 
@@ -129,5 +129,73 @@ describe("useTaskActionMutation — cache chi tiết sau action mutate", () => {
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey));
     expect(invalidatedKeys).not.toContain(JSON.stringify(taskKeys.kanban("")));
+  });
+
+  // ── S5-GOAL-FE-2 — chiều TASK→GOAL. Lỗi cùng họ với hai ca trên: không exception, không đỏ test,
+  // chỉ là % mục tiêu SAI mà nhìn vẫn hợp lý. Server tính lại progress của mục tiêu neo ngay khi
+  // task sang Done (SPEC-10 §13, progress_mode='tasks'), FE không invalidate ⇒ mở màn Mục tiêu
+  // hoặc /me vẫn thấy số trước khi đổi cho tới khi F5.
+  describe("đồng bộ % mục tiêu khi task gắn mục tiêu đổi trạng thái", () => {
+    const WITH_GOAL = {
+      task: {
+        id: "task-1",
+        projectId: "proj-1",
+        status: "Done",
+        goalId: "goal-9",
+      } as unknown as TaskCoreResponseDto,
+      warnings: [],
+    } as unknown as TaskActionResponseDto;
+
+    it("task CÓ goalId ⇒ invalidate detail + linked-tasks + list/tree + me/goals của mục tiêu", async () => {
+      const { result, invalidateSpy } = setup(WITH_GOAL);
+
+      result.current.mutate({ status: "Done" });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      const invalidatedKeys = invalidateSpy.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey));
+      for (const key of goalInvalidation.taskProgress("goal-9")) {
+        expect(invalidatedKeys).toContain(JSON.stringify(key));
+      }
+    });
+
+    it("task KHÔNG gắn mục tiêu ⇒ KHÔNG đụng cache goal (không invalidate thừa)", async () => {
+      const { result, invalidateSpy } = setup();
+
+      result.current.mutate({ status: "Done" });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      const invalidatedKeys = invalidateSpy.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey));
+      expect(invalidatedKeys.some((k) => k?.includes("goals"))).toBe(false);
+      expect(invalidatedKeys).not.toContain(JSON.stringify(goalKeys.detail("")));
+    });
+
+    it("mutate LỖI ⇒ vẫn làm mới mục tiêu CŨ từ snapshot (rollback không được để % lệch)", async () => {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      });
+      client.setQueryData(taskKeys.detail("task-1"), {
+        ...DETAIL_WITH_SUBTASKS,
+        goalId: "goal-cu",
+      });
+      const invalidateSpy = vi.spyOn(client, "invalidateQueries");
+      const wrapper = ({ children }: { children: React.ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+      const { result } = renderHook(
+        () =>
+          useTaskActionMutation<{ status: string }>({
+            taskId: "task-1",
+            mutationFn: () => Promise.reject(new Error("boom")),
+            toPatch: (vars) => ({ status: vars.status }) as Partial<TaskCoreResponseDto>,
+          }),
+        { wrapper },
+      );
+
+      result.current.mutate({ status: "Done" });
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      const invalidatedKeys = invalidateSpy.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey));
+      expect(invalidatedKeys).toContain(JSON.stringify(goalKeys.detail("goal-cu")));
+    });
   });
 });

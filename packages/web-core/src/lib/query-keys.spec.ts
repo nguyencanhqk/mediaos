@@ -20,6 +20,8 @@ import {
   notificationPreferenceKeys,
   taskKeys,
   taskSubtaskInvalidation,
+  goalKeys,
+  goalInvalidation,
 } from "./query-keys";
 
 describe("foundationKeys", () => {
@@ -328,5 +330,93 @@ describe("notificationPreferenceKeys", () => {
     expect(list.slice(0, notificationPreferenceKeys.all.length)).toEqual([
       ...notificationPreferenceKeys.all,
     ]);
+  });
+});
+
+// ── S5-GOAL-FE-2 (APPEND) — vòng đo: check-in / chốt kỳ / gắn-tháo task ────────────────────────────
+describe("goalKeys / goalInvalidation (S5-GOAL-FE-2 append)", () => {
+  it("meKeys.goals(params) nằm dưới root 'me' + khác nhau theo params", () => {
+    const key = meKeys.goals({ status: "Active" });
+    expect(key[0]).toBe("me");
+    expect(key).toContain("goals");
+    expect(meKeys.goals({ status: "Active" })).toEqual(meKeys.goals({ status: "Active" }));
+    expect(meKeys.goals({ status: "Active" })).not.toEqual(meKeys.goals({ status: "Draft" }));
+    // KHÔNG đụng goalKeys.list — /me/goals là endpoint own-scope KHÁC (GOAL-API-013).
+    expect(meKeys.goals()).not.toEqual(goalKeys.list());
+  });
+
+  it("goalKeys.updatesOf(id) là PREFIX của updates(id, params) — khớp mọi trang phân trang", () => {
+    const prefix = goalKeys.updatesOf("g-1");
+    const paged = goalKeys.updates("g-1", { limit: 20, offset: 20 });
+    expect(paged.slice(0, prefix.length)).toEqual([...prefix]);
+  });
+
+  it("checkin(id) làm mới detail + SỔ check-in (prefix) + list + tree", () => {
+    const keys = goalInvalidation.checkin("g-1").map((k) => JSON.stringify(k));
+    expect(keys).toContain(JSON.stringify(goalKeys.detail("g-1")));
+    expect(keys).toContain(JSON.stringify(goalKeys.updatesOf("g-1")));
+    expect(keys).toContain(JSON.stringify(["goals", "list"]));
+    expect(keys).toContain(JSON.stringify(["goals", "tree"]));
+  });
+
+  it("finalize(id) = cùng tập với checkin(id) (chốt kỳ/mở lại cũng ghi sổ + đổi finalizedAt)", () => {
+    expect(goalInvalidation.finalize("g-1")).toEqual(goalInvalidation.checkin("g-1"));
+  });
+
+  it("linkTasks phủ CẢ goal mới lẫn goal CŨ (detail + linked-tasks 2 chiều) + task detail + kanban", () => {
+    const keys = goalInvalidation
+      .linkTasks({ goalIds: ["g-new", "g-old"], taskId: "t-1", projectId: "p-1" })
+      .map((k) => JSON.stringify(k));
+    for (const goalId of ["g-new", "g-old"]) {
+      expect(keys).toContain(JSON.stringify(goalKeys.detail(goalId)));
+      expect(keys).toContain(JSON.stringify(goalKeys.linkedTasks(goalId)));
+    }
+    expect(keys).toContain(JSON.stringify(taskKeys.detail("t-1")));
+    expect(keys).toContain(JSON.stringify(taskKeys.kanban("p-1")));
+    // Đổi tập việc của mục tiêu ⇒ % đổi ⇒ danh sách/cây mục tiêu phải làm mới.
+    expect(keys).toContain(JSON.stringify(["goals", "list"]));
+    expect(keys).toContain(JSON.stringify(["goals", "tree"]));
+  });
+
+  it("linkTasks bỏ qua goalId null/undefined + KHÔNG lặp key khi goal mới trùng goal cũ", () => {
+    const keys = goalInvalidation.linkTasks({ goalIds: ["g-1", null, undefined, "g-1"] });
+    const detailKey = JSON.stringify(goalKeys.detail("g-1"));
+    expect(keys.filter((k) => JSON.stringify(k) === detailKey)).toHaveLength(1);
+    expect(keys.map((k) => JSON.stringify(k))).not.toContain(JSON.stringify(goalKeys.detail("")));
+  });
+
+  // ── Vá gate LIGHT: khối /me đọc endpoint own-scope RIÊNG (me/goals) nên KHÔNG nằm dưới prefix
+  // `goals/*`. Mọi helper ghi-mục-tiêu thiếu vế này ⇒ ghi xong % trên card /me đứng yên, số cũ nhìn
+  // vẫn hợp lý (staleTime 60s + refetchOnWindowFocus tắt) nên người dùng không có cách nào biết.
+  const ME_GOALS_PREFIX = JSON.stringify(["me", "goals"]);
+
+  it("checkin/finalize/linkTasks đều phủ prefix me/goals — card 'Mục tiêu của tôi' không đọng số cũ", () => {
+    for (const keys of [
+      goalInvalidation.checkin("g-1"),
+      goalInvalidation.finalize("g-1"),
+      goalInvalidation.linkTasks({ goalIds: ["g-1"], taskId: "t-1" }),
+    ]) {
+      expect(keys.map((k) => JSON.stringify(k))).toContain(ME_GOALS_PREFIX);
+    }
+  });
+
+  it("me/goals prefix là PREFIX THẬT của meKeys.goals(params) — khớp mọi biến thể filter", () => {
+    const paged = meKeys.goals({ status: "Active", limit: 20 });
+    expect(JSON.stringify(paged.slice(0, 2))).toBe(ME_GOALS_PREFIX);
+  });
+
+  it("taskProgress(goalId) phủ detail + linked-tasks + list + tree + me/goals (task đổi trạng thái)", () => {
+    const keys = goalInvalidation.taskProgress("g-1").map((k) => JSON.stringify(k));
+    expect(keys).toContain(JSON.stringify(goalKeys.detail("g-1")));
+    expect(keys).toContain(JSON.stringify(goalKeys.linkedTasks("g-1")));
+    expect(keys).toContain(JSON.stringify(["goals", "list"]));
+    expect(keys).toContain(JSON.stringify(["goals", "tree"]));
+    expect(keys).toContain(ME_GOALS_PREFIX);
+  });
+
+  it("taskProgress KHÔNG kèm key phía task — call-site đã tự invalidate, tránh invalidate kép", () => {
+    const keys = goalInvalidation.taskProgress("g-1").map((k) => JSON.stringify(k));
+    expect(keys).not.toContain(JSON.stringify(taskKeys.detail("t-1")));
+    expect(keys.some((k) => k.includes("kanban"))).toBe(false);
   });
 });
