@@ -8084,10 +8084,13 @@ export const backlog = [
     status: "todo",
     paths: ["apps/lms/**", "docs/plans/S5-LMS-UI-2.md"],
     skills: ["code-review"],
-    depends_on: ["S5-LMS-UI-1"],
+    depends_on: ["S5-LMS-UI-1", "S5-FND-UI-GEN-1"],
     plan: "docs/plans/S5-LMS-UI-2.md",
     src: [
-      "đối chiếu: apps/lms/components/ui/** (35 primitive shadcn riêng) ↔ packages/ui/src/components/** — so từng biến thể, KHÔNG chép file (khác runtime Next vs Vite)",
+      "ĐÍNH CHÍNH 2026-07-24 (khảo sát mở màn): tiêu đề WO này seed với giả định 'LMS lệch chuẩn, kéo LMS về packages/ui'. Đo thực tế thì NGƯỢC: packages/ui ở thế hệ shadcn CŨ HƠN. Làm đúng chữ = hạ cấp LMS + gãy 189 call-site. Owner chốt nâng nguồn ⇒ thêm depends_on S5-FND-UI-GEN-1; UI-2 chỉ chạy SAU khi nguồn đã nâng, và khi đó phần lớn primitive LMS đã tự khớp",
+      "PHẦN CÒN LẠI THẬT SỰ của UI-2 sau khi nguồn nâng xong: (1) badge trạng thái — LMS chỉ có default/secondary/destructive/outline, THIẾU success/warning/brand mà packages/ui đã có ⇒ thêm rồi thay màu Tailwind rời; (2) radius + chiều cao control theo giá trị S5-FND-UI-GEN-1 chốt; (3) table LMS (shadcn thô h-10 px-2) về ngôn ngữ data-table MediaOS (bọc card, px-4 py-3.5, header uppercase tracking); (4) khung sidebar + site-header khớp workspace shell apps/app",
+      "màu Tailwind rời CÒN LẠI sau S5-LMS-UI-1 (UI-1 đã dọn hết BẢNG MÀU CŨ #BADDAD/#367588/#BBD8EA/#a8d0a8 ở 11 file): app-tile.tsx bảng màu 9 app · nav-user.tsx bg-gray-500 + thang độ mạnh mật khẩu · AdminNotificationBell bg-rose-500 · my-learning-menu chip emerald",
+      "đối chiếu: apps/lms/components/ui/** (36 primitive shadcn riêng) ↔ packages/ui/src/components/** — so từng biến thể, KHÔNG chép file (khác runtime Next vs Vite)",
       "khung: apps/lms/components/sidebar/{app-sidebar,site-header,app-switcher}.tsx ↔ apps/app/src/layouts/workspace/**",
       "depends UI-1 vì token phải chốt trước; đồng thời SERIAL HOÁ track LOCAL (chung apps/lms, main worktree — kỷ luật S5-LMS-WAVE.md §3)",
       "trạng thái badge/chip trong LMS (đã duyệt/chờ duyệt/đạt/trượt) phải dùng --success/--warning/--danger + -muted của theme thay vì màu Tailwind rời",
@@ -8132,6 +8135,41 @@ export const backlog = [
       "packages/ui và apps/lms/app/globals.css khớp giá trị từng token (diff bằng tay hoặc script so hai file)",
       "Smoke light+dark: apps/app (nút xoá, chip trạng thái, link brand) + console + auth + LMS — không chỗ nào đổi màu trông thấy rõ so với trước (đây là vá tương phản, KHÔNG phải đổi bảng màu)",
       "typecheck + build 3 app MediaOS + apps/lms xanh",
+    ],
+  },
+  // ── Seed 2026-07-24 từ khảo sát mở màn S5-LMS-UI-2 (owner chốt "sửa nguồn, không sửa ngọn") ──
+  // UI-2 seed với giả định "LMS lệch chuẩn, kéo LMS về packages/ui". Đo thực tế thì NGƯỢC LẠI:
+  // packages/ui đang ở thế hệ shadcn CŨ HƠN apps/lms. Làm đúng chữ UI-2 = hạ cấp LMS và gãy 189
+  // call-site LMS (size sm 78 · icon 47 · icon-sm 38 · lg 21 · variant secondary 3 — packages/ui
+  // không có cái nào). Owner chốt nâng nguồn lên. WO này làm việc đó; UI-2 xếp sau nó.
+  {
+    id: "S5-FND-UI-GEN-1",
+    module: "FOUNDATION",
+    layer: "FE",
+    title:
+      "packages/ui — nâng primitive lên thế hệ shadcn mới (button/badge/input/select/card/table): thêm biến thể + cỡ icon, đổi ngôn ngữ focus-ring sang border-ring + ring/50 + ring-3px, data-slot/aria-invalid; GIỮ NGUYÊN các API riêng của MediaOS",
+    zone: "yellow",
+    status: "todo",
+    paths: ["packages/ui/**", "docs/plans/S5-FND-UI-GEN-1.md"],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S5-FND-UI-GEN-1.md",
+    src: [
+      "ĐỐI CHIẾU ĐÃ ĐO (2026-07-24): button packages/ui 4 biến thể + 3 cỡ + focus-visible:ring-2 ↔ LMS 6 biến thể (+secondary,+link) + 6 cỡ (+icon,+icon-sm,+icon-lg) + focus-visible:border-ring ring-ring/50 ring-[3px] + data-slot + aria-invalid. input/select: h-10 + ring-2 ↔ h-9 + ring-3px. table: packages/ui bọc card px-4 py-3.5 header uppercase ↔ LMS shadcn thô h-10 px-2",
+      "DIỆN TÍCH NỔ: 1501 call-site trên apps/app + console + auth — Button 714 · Input 268 · Select 125 · Badge 120 · Card 118 · Dialog 87 · DataTable 69. Đây là lý do zone yellow chứ không green",
+      "LƯỚI AN TOÀN CÓ SẴN: packages/ui đang có 15 test file / 74 test XANH (`cd packages/ui && npx vitest run`). Chạy TRƯỚC khi sửa để có mốc, và sau mỗi primitive — đỏ là dừng, không sửa test cho vừa code",
+      "CẤM ĐÁNH MẤT (không phải shadcn gốc, là bổ sung riêng của MediaOS): badge có brand/success/warning/danger/muted (đang dùng: warning 12 · success 4 · brand 2) — port stock shadcn đè lên là mất sạch; Dialog KHÔNG phải Radix thô mà là wrapper `DialogProps {title, description}` với 87 call-site; DataTable cũng là wrapper riêng 69 call-site",
+      "QUYẾT ĐỊNH CÒN MỞ — chiều cao control: thế hệ mới dùng h-9, packages/ui đang h-10. ĐỀ XUẤT giữ h-10 và chỉ lấy API + focus-ring của thế hệ mới, vì đổi mật độ control là thay đổi THẤY ĐƯỢC trên 3 app đang chạy production, rủi ro không tương xứng với mục tiêu. Nếu owner chọn h-9 thì phải smoke lại toàn bộ màn dày form (HR hồ sơ, chấm công, duyệt nghỉ phép)",
+      "radius: packages/ui 0.625rem ↔ LMS 0.5rem. Sau WO này chốt MỘT giá trị (đề xuất giữ 0.625rem của MediaOS làm chuẩn thương hiệu) rồi để S5-LMS-UI-2 port sang LMS",
+      "token trạng thái success/warning/danger/info đã có sẵn ở theme.css và VỪA được port sang LMS ở S5-LMS-UI-1 (commit 70574398) — dùng luôn, không tự chế màu mới",
+      "thứ tự: WO này TRƯỚC S5-LMS-UI-2 (UI-2 đã depends_on). Không chạy song song vì UI-2 phải đối chiếu với packages/ui ở trạng thái đã nâng",
+    ],
+    done_when: [
+      "74 test packages/ui vẫn XANH (không sửa test cho vừa code); thêm test cho biến thể/cỡ mới",
+      "Badge còn đủ brand/success/warning/danger/muted; Dialog giữ nguyên API {title, description}; DataTable giữ nguyên API — 3 thứ này verify bằng cách typecheck 3 app KHÔNG có lỗi mới",
+      "typecheck + build apps/app + console + auth xanh; đếm lỗi TS trước/sau bằng nhau",
+      "Smoke light+dark 3 app: nút (mọi biến thể/cỡ), form (focus ring mới), bảng, dialog, badge trạng thái — không màn nào vỡ layout hay mất viền",
+      "Chốt tường minh trong plan: chiều cao control (h-9 hay h-10) và radius (0.5 hay 0.625rem), kèm lý do — đây là đầu vào bắt buộc của S5-LMS-UI-2",
     ],
   },
   // ── Seed 2026-07-23 từ plan-review S5-LMS-BE-4 vòng 3 (câu hỏi mở: ràng buộc §3D đang MỒ CÔI) ──
