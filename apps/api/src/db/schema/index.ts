@@ -104,3 +104,8 @@ export * from "./user-preferences";
 // literal-GUC, app SELECT,INSERT,UPDATE — soft-delete, KHÔNG DELETE) + goal_updates (sổ check-in APPEND-ONLY —
 // app SELECT,INSERT, KHÔNG UPDATE/DELETE, KHÔNG deleted_at). tasks.goal_id (mig 0505) ADD-only ở ./workflow.
 export * from "./goals";
+// S5-GOAL-DB-2 (DB-11 §6.3/§6.4 / SPEC-10 đợt D, mig 0526): task_templates + task_template_items — header
+// template phân rã mục tiêu → task + task mẫu (company_id NOT NULL, RLS+FORCE literal-GUC, soft-delete, app
+// SELECT,INSERT,UPDATE — KHÔNG DELETE, worker SELECT). Quyền ('manage','task-template') seed 0527; audit
+// object_type 'task_template' UNION-ADD 0528.
+export * from "./task-templates";

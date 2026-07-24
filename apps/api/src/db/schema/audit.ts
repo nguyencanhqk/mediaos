@@ -357,5 +357,10 @@ export const AUDIT_OBJECT_TYPES = [
   // parse hỏng + verify NO-LOSS sau swap (clone 0506 DO-block, có gia cố); append-only #2 nguyên vẹn.
   "lms_sso",
   "lms_sync",
+  // S5-GOAL-DB-2 (mig 0528): đợt D — GOAL-BE ghi audit object_type='task_template' khi tạo/sửa/xoá template
+  // phân rã (TPL-1). before/after = snapshot template (name/items count) — KHÔNG secret/PII (BẤT BIẾN #3).
+  // 0528 UNION ADD-only vào CHECK, NEO 2 TẦNG vào `object_type = ANY(…)` (vá lỗ tầng-1 của 0509 khi clone —
+  // memory audit-check-union-parse-anchor-trap), fail-closed + NO-LOSS/NO-GAIN; append-only #2 nguyên vẹn.
+  "task_template",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
