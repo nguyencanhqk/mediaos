@@ -260,6 +260,11 @@ describe.skipIf(!runDb)("S2-FND-JOBS-1 system_job_runs/locks — RLS + grant + s
       expect(cols.rows).toHaveLength(0);
     });
 
+    // LƯU Ý (S5-SYS-CLEAN-1): "KHÔNG DELETE role nào" ở đây = KHÔNG có DELETE trên BẢNG cho role runtime.
+    // Từ mig 0511, XOÁ có kiểm soát tồn tại QUA FUNCTION `purge_system_job_runs` (SECURITY DEFINER, EXECUTE
+    // chỉ mediaos_worker) — retention CÓ NGƯỠNG. Function grant KHÔNG xuất hiện trong role_table_grants nên
+    // assert dưới vẫn đúng; đừng hiểu tên test là "không thể xoá row nào". (EXECUTE-only-worker verify ở
+    // system-job-runs-retention.int-spec.ts.)
     it("grant system_job_runs: app = SELECT-only; worker = SELECT/INSERT/UPDATE; KHÔNG DELETE role nào", async () => {
       const g = await direct.query(
         `SELECT grantee, privilege_type FROM information_schema.role_table_grants
