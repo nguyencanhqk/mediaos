@@ -8100,6 +8100,40 @@ export const backlog = [
       "typecheck + build apps/lms xanh; review typescript-reviewer + react-reviewer local PASS; backup data/app.db trước khi restart NSSM 3400",
     ],
   },
+  // ── Seed 2026-07-24 từ phần đo tương phản của S5-LMS-UI-1 ────────────────────────────────────
+  // UI-1 port token sang LMS rồi đo AA 32 cặp: 29 đạt, 4 trượt SÁT ngưỡng. Cả 4 KHÔNG do UI-1 gây ra
+  // — chúng kế thừa nguyên giá trị từ packages/ui/src/styles/theme.css, tức lỗi nằm ở NGUỒN và đang
+  // hiện diện trên apps/app · console · auth từ trước. UI-1 cố ý KHÔNG sửa lệch khỏi nguồn (sửa riêng
+  // ở LMS là tạo drift đúng thứ mà cả wave đang đi xoá). Vá tại nguồn rồi port lại = WO này.
+  {
+    id: "S5-FND-THEME-AA-1",
+    module: "FOUNDATION",
+    layer: "FE",
+    title:
+      "packages/ui theme.css — kéo 4 cặp token trượt AA ở chế độ LIGHT lên ≥4.5 (--brand · --info · --danger · --destructive), rồi port giá trị mới sang apps/lms/app/globals.css để hai bên không lệch",
+    zone: "green",
+    status: "todo",
+    paths: ["packages/ui/src/styles/theme.css", "apps/lms/**", "docs/plans/S5-FND-THEME-AA-1.md"],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S5-FND-THEME-AA-1.md",
+    src: [
+      "SỐ ĐO THẬT (WCAG 2.1, đo trong S5-LMS-UI-1): brand#0879b2/background#f3f6fb = 4.42 · brand/brand-muted#ddeffa = 4.06 · info#0879b2/info-muted#ddeffa = 4.06 · danger#d92d20/danger-muted#fdeceb = 4.23 · destructive#d92d20/background = 4.46 — tất cả < 4.5",
+      "GIÁ TRỊ ĐỀ XUẤT (đã tính + verify đạt AA trên MỌI nền dùng chung): --brand và --info light #0879b2 -> #0771a6 (4.94 / 4.54) · --danger và --destructive light #d92d20 -> #d12b1f (4.51 / 4.76). Cách tìm: nhân RGB theo hệ số nên GIỮ NGUYÊN sắc, chỉ tối đi một nấc — mắt thường gần như không phân biệt",
+      "PHẢI đổi --destructive CÙNG --danger: hai token đang trùng giá trị, đổi một cái là chúng tách đôi (nút xoá một màu, chip cảnh báo một màu khác). Đổi destructive thì kiểm lại destructive-foreground(#ffffff)/destructive — tối đi thì cặp này TĂNG tương phản (5.15), an toàn",
+      "chế độ DARK đã đạt hết (thấp nhất 5.90) — KHÔNG đụng khối .dark",
+      "phạm vi nổ RỘNG HƠN LMS: theme.css là nguồn token của apps/app + console + auth ⇒ smoke phải phủ cả 3 app MediaOS, không chỉ LMS. Đây là lý do tách WO riêng thay vì nhét vào S5-LMS-UI-2",
+      "port sang LMS: apps/lms/app/globals.css khối :root (KHÔNG import được @mediaos/ui — workspace riêng, xem docs/plans/S5-LMS-UI-1.md §2). Sau khi sửa phải build + restart NSSM 3400 như UI-1",
+      "công cụ: script đo tương phản đã dùng ở UI-1 — viết lại được trong ~40 dòng Node (sRGB relative luminance), nên kèm vào repo dạng scripts/ để lần sau không phải làm tay",
+    ],
+    done_when: [
+      "Không cặp token nào ở CẢ light lẫn dark còn < 4.5 (text thường) — chạy script đo, in bảng kết quả vào plan",
+      "--danger và --destructive vẫn TRÙNG giá trị sau khi sửa; --brand và --info vẫn trùng nhau ở light",
+      "packages/ui và apps/lms/app/globals.css khớp giá trị từng token (diff bằng tay hoặc script so hai file)",
+      "Smoke light+dark: apps/app (nút xoá, chip trạng thái, link brand) + console + auth + LMS — không chỗ nào đổi màu trông thấy rõ so với trước (đây là vá tương phản, KHÔNG phải đổi bảng màu)",
+      "typecheck + build 3 app MediaOS + apps/lms xanh",
+    ],
+  },
   // ── Seed 2026-07-23 từ plan-review S5-LMS-BE-4 vòng 3 (câu hỏi mở: ràng buộc §3D đang MỒ CÔI) ──
   // BE-4 hạ số dòng audit_logs và viện dẫn system_job_runs làm "bằng chứng job đã chạy" thay thế.
   // Nếu WO dọn tương lai xoá sạch bảng đó thì lập luận của BE-4 mất chỗ dựa ⇒ ràng buộc lưu-giữ phải
