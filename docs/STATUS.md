@@ -1,22 +1,15 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-24 05:06Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-24 05:07Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-### 🟡 S5-BE-CONTRACT-1 — API contract & OpenAPI/Swagger chuẩn hoá theo module + FE integration hardening (401/403/422/500 mapping, request-id, idempotency, query invalidation sau mutation) — WS-D
-- **zone**: yellow · **skills**: code-review
-- **sửa ở đâu (paths)**: `apps/api/src/**`, `packages/contracts/src/**`, `packages/web-core/src/lib/**`, `apps/app/src/**`
-- **phụ thuộc**: S4-QA-2✓
-- **done_when (đích hội tụ)**:
-  - [ ] OpenAPI/Swagger đủ endpoint AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH/Foundation (request/response/error/auth/permission note) — đối chiếu Swagger đã dựng ở debt-wave2, hoàn thiện phần thiếu (KHÔNG dựng trùng)
-  - [ ] FE api-client chuẩn hoá error mapping 401/403/422/500 + request-id + idempotency key; query invalidation bắt buộc sau mutation IMPLEMENTATION-08 §13.3
-  - [ ] Contract Zod (packages/contracts) khớp API thật; envelope API-01 đồng nhất
-  - [ ] check.sh xanh; LIGHT gate
+_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
+- 🟡 `S5-BE-CONTRACT-1` API contract & OpenAPI/Swagger chuẩn hoá theo module + FE integration hardening (401/403/422/500 mapping, request-id, idempotency, query invalidation sau mutation) — WS-D
 - 🔴 `S5-SEC-1` Permission & data-scope hardening + field-level/export permission + security testing (IDOR, file access, sensitive fields, rate-limit auth) — WS-E, crown
 - 🟡 `S5-QA-REG-1` QA regression suite MVP (test-case matrix theo module × role) + UI state hardening + responsive/accessibility smoke — WS-F
 - 🟡 `S5-QA-DASHNOTI-1` Dashboard & Notification hardening: widget degraded/cache đúng, unread count chính xác, deep link an toàn, invalidation theo event — WS-G
@@ -50,6 +43,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `3b3e12ea` | 2026-07-24 | chore(harness): regen STATUS sau khi merge S5-TASK-DEPTFILTER-1 (#275) |
 | `8276a7d3` | 2026-07-24 | feat(task): GET /tasks them filter departmentId + search — go no #272 (S5-TASK-DEPTFILTER-1) (#275) |
 | `d1968c21` | 2026-07-24 | chore(harness): regen STATUS sau khi merge S5-GOAL-DASH-1 (#273) + S5-QA-E2E-1 (#274) + S5-GOAL-FE-2 (#272) |
 | `6f856489` | 2026-07-24 | feat(goal): FE vòng đo mục tiêu — check-in/chốt kỳ + gắn việc + 'Mục tiêu của tôi' (S5-GOAL-FE-2) (#272) |
@@ -61,7 +55,6 @@
 | `3f69628e` | 2026-07-24 | feat(goal): FE trang Mục tiêu — list/cây + form tạo/sửa + chi tiết 4 tab (S5-GOAL-FE-1) (#271) |
 | `a5b6206e` | 2026-07-24 | chore(harness): regen STATUS sau khi S5-FND-REVOKE-1 merge (#268) |
 | `fb966cba` | 2026-07-24 | feat(foundation): REVOKE DELETE org_units+projects khoi mediaos_app (S5-FND-REVOKE-1) (#268) |
-| `b2e532bc` | 2026-07-24 | chore(harness): regen STATUS + INDEX sau khi S5-GOAL-BE-2 merge (#267) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
