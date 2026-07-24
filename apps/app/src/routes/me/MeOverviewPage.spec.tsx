@@ -27,6 +27,9 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       getAvatar: vi.fn(() => Promise.resolve(null)),
       uploadAvatar: vi.fn(),
       removeAvatar: vi.fn(),
+      // S5-LMS-FE-1 — MeTrainingCard (mount trong overview) đọc GET /me/training; card TỰ ẩn khi thiếu
+      // access:lms nên các test access:me KHÔNG gọi hàm này — stub để queryFn không undefined (im warning).
+      getTraining: vi.fn(() => Promise.resolve({ status: "no_account", progress: null })),
     },
   };
 });

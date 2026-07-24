@@ -1399,6 +1399,20 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 78,
   },
+  // S5-LMS-FE-1 — Tiến độ đào tạo (LMS) chảy ngược về /me. Gate = cặp engine LITERAL `access:lms` (KHÁC
+  // các route ME khác dùng access:me): quyền "mở/xem LMS" độc lập — ai bị thu access:lms KHÔNG thấy route
+  // này (mirror sidebar me.lms + endpoint BE GET /me/training). KHÔNG có mã ME-SCREEN riêng: SPEC-09 §9
+  // không liệt kê màn training (nguồn dữ liệu là LMS ngoài) — giữ screenCode trống thay vì bịa mã mới.
+  {
+    routeKey: "me.training",
+    path: "/me/training",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    titleKey: "routeTitle.meTraining",
+    requiredAnyPermissions: ["access:lms"],
+    showInSidebar: true,
+    order: 79,
+  },
   // Bật 2FA trong ME workspace — TÁI DÙNG TwoFactorSetupPage (ACCOUNT-SCREEN-SETUP-2FA), cùng kỹ thuật
   // 5 màn re-mount của S5-ME-FE-2. KHÔNG có mã ME-SCREEN riêng: SPEC-09 §9 không liệt kê màn 2FA (nguồn
   // là AUTH), nên giữ screenCode gốc của AUTH thay vì bịa mã ME mới.

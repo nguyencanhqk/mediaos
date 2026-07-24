@@ -21,6 +21,8 @@ import {
   meCurrentAvatarSchema,
   type MeCurrentAvatar,
   confirmUploadResponseSchema,
+  meTrainingResponseSchema,
+  type MeTrainingResponse,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { DEFAULT_UPLOAD_MIME, putBytesToStorage } from "./storage-upload";
@@ -69,6 +71,20 @@ export const meApi = {
   /** GET /me/notification-summary — đếm thông báo chưa đọc (own), section-envelope riêng. ME-SCREEN-012. */
   getNotificationSummary: (): Promise<MeNotificationSection> =>
     apiFetch("/me/notification-summary", meNotificationSectionSchema),
+
+  /**
+   * GET /me/training — tiến độ đào tạo (LMS) của CHÍNH user (S5-LMS-BE-3). Email resolve 100% từ token
+   * (KHÔNG nhận param — chống IDOR, SPEC-09 §14.4). Gate BE `access:lms`. Envelope RIÊNG
+   * `{status:'ok'|'no_account', progress}` — KHÁC section-envelope `{status,data}` của overview:
+   *  - `no_account`: LMS trả 404 = email chưa từng có tài khoản học → fail-soft empty (KHÔNG lỗi hạ tầng).
+   *  - Parse fail (LMS bump contract v2 / shape lệch) ⇒ BE trả 502; LMS chết/timeout ⇒ 502 sạch có mã lỗi.
+   *
+   * Response là OBJECT `{status,progress}` (KHÔNG phải `{data,meta}` envelope) — apiFetch giữ nguyên
+   * object, parse qua meTrainingResponseSchema; KHÔNG có field `data` để unwrap (memory:
+   * apifetch-drops-pagination-bare-array — chỉ mảng/envelope phân trang mới bị unwrap).
+   */
+  getTraining: (): Promise<MeTrainingResponse> =>
+    apiFetch("/me/training", meTrainingResponseSchema),
 
   /** GET /me/preferences — snapshot preference hiện tại (own, mọi field nullable = kế thừa default). */
   getPreferences: (): Promise<MePreferences> => apiFetch("/me/preferences", mePreferencesSchema),

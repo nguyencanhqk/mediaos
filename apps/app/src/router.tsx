@@ -1672,6 +1672,14 @@ const meSecurityActivityRoute = makeModuleRoute(
   MeSecurityActivityPage,
 );
 
+// S5-LMS-FE-1 — /me/training (Tiến độ đào tạo LMS). Gate route-level = `access:lms` (ROUTE_REGISTRY
+// me.training, KHÔNG access:me): đọc GET /me/training (proxy LMS đã mask ở BE-3); page tự gate lại bằng
+// useCan (mirror meAttendanceRoute). Nút "Mở LMS" deep-link /lms (lmsRedirectRoute) tự phát token SSO.
+const MeTrainingPage = React.lazy(() =>
+  import("@/routes/me/MeTrainingPage").then((m) => ({ default: m.MeTrainingPage })),
+);
+const meTrainingRoute = makeModuleRoute("/me/training", "me.training", "ME", MeTrainingPage);
+
 // Bật 2FA trong ME workspace — TÁI DÙNG CÙNG hằng lazy TwoFactorSetupPage với accountSetupTwoFactorRoute
 // (KHÔNG import lại), mirror cách 5 màn account/hr được re-mount ở S5-ME-FE-2. Route SHELL cũ
 // /account/setup-2fa GIỮ NGUYÊN vì nó là đích của guard ép enroll AUTH-003; ProtectedShell nay chấp
@@ -2326,6 +2334,7 @@ const routeTree = rootRoute.addChildren([
   meSecurityPasswordRoute,
   meSecuritySessionsRoute,
   meSecurityActivityRoute,
+  meTrainingRoute,
   meSecurityTwoFactorRoute,
   goalsListRoute,
   goalNewRoute,

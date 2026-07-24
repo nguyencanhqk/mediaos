@@ -123,6 +123,8 @@ export default {
     meSecurityPassword: "Đổi mật khẩu",
     meSecuritySessions: "Phiên đăng nhập",
     meSecurityActivity: "Hoạt động bảo mật",
+    // S5-LMS-FE-1 — /me/training (tiến độ đào tạo LMS chảy ngược, gate access:lms).
+    meTraining: "Tiến độ đào tạo",
     // Bật 2FA mount trong ME workspace (reuse TwoFactorSetupPage) — route SHELL /account/setup-2fa giữ nguyên.
     meSecurityTwoFactor: "Xác thực 2 lớp",
     forbidden: "Không có quyền truy cập",

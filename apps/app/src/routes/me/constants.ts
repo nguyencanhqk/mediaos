@@ -10,6 +10,16 @@
  */
 export const ME_ACCESS_PAIR = { action: "access", resourceType: "me" } as const;
 
+/**
+ * S5-LMS-FE-1 — cặp quyền "mở/xem Đào tạo (LMS)". Gate LITERAL `access:lms` (mirror BE GET /me/training +
+ * sidebar `me.lms`/ROUTE_REGISTRY `me.training`) — ĐỘC LẬP với `access:me`: người có access:me nhưng bị thu
+ * access:lms KHÔNG thấy card training lẫn trang /me/training (done_when). Dùng trong useCan()/PermissionGate.
+ */
+export const LMS_ACCESS_PAIR = { action: "access", resourceType: "lms" } as const;
+
+/** Đích "Mở LMS" — trang trung chuyển SSO /lms (LmsRedirectPage). Route đích TỰ gate lại, ME KHÔNG bypass. */
+export const ME_LMS_OPEN_PATH = "/lms" as const;
+
 export const ME_QUICK_ACTION_PATHS = {
   // S5-ME-FE-2 — trỏ vào route ME workspace (/me/profile · /me/security/password) nay đã build (TÁI DÙNG
   // MyProfilePage/ChangePasswordPage); route cũ /hr/me và /account/change-password GIỮ hoạt động song song

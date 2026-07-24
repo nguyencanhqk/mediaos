@@ -212,6 +212,70 @@ export default {
       description: "Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.",
     },
   },
+  // ─── S5-LMS-FE-1 — Tiến độ đào tạo (LMS) chảy ngược về /me (GET /me/training, S5-LMS-BE-3) ──────────
+  // Card trong Tổng quan (fail-soft, query RIÊNG khỏi overview) + trang /me/training. Gate access:lms.
+  // Envelope BE: {status:'ok'|'no_account', progress}. no_account = fail-soft empty (KHÔNG lỗi).
+  training: {
+    title: "Đào tạo",
+    // Card overview
+    courseCount: "{{count}} khoá học",
+    completedCount: "{{count}} đã hoàn thành",
+    inProgressCount: "{{count}} đang học",
+    recent: "Gần đây: {{title}}",
+    empty: "Bạn chưa có tài khoản học.",
+    viewDetail: "Xem chi tiết",
+    error: {
+      title: "Không tải được tiến độ đào tạo",
+      description: "Hệ thống Đào tạo (LMS) tạm thời không phản hồi. Vui lòng thử lại.",
+    },
+  },
+  trainingPage: {
+    title: "Tiến độ đào tạo",
+    description: "Khoá học, thời lượng và kết quả của bạn trên hệ thống Đào tạo (LMS).",
+    openLms: "Mở LMS",
+    accountLocked: "Tài khoản học của bạn đang bị khoá — dữ liệu bên dưới là bản ghi gần nhất.",
+    coursesTruncated: "Danh sách đã rút gọn — mở LMS để xem đầy đủ.",
+    error: {
+      title: "Không tải được tiến độ đào tạo",
+      description: "Hệ thống Đào tạo (LMS) tạm thời không phản hồi. Vui lòng thử lại.",
+    },
+    empty: {
+      title: "Chưa có dữ liệu đào tạo",
+      description: "Bạn chưa có tài khoản học hoặc chưa tham gia khoá nào.",
+    },
+    summary: {
+      courses: "Khoá học",
+      completed: "Đã hoàn thành",
+      learningTime: "Thời lượng học",
+      lastActivity: "Hoạt động gần nhất",
+    },
+    exams: {
+      title: "Bài thi",
+      submitted: "{{count}} lượt nộp",
+      passed: "{{count}} đạt",
+      failed: "{{count}} chưa đạt",
+      pending: "{{count}} chờ chấm",
+      bestScore: "Điểm cao nhất: {{score}}/10",
+    },
+    quizzes: {
+      title: "Quiz",
+      submitted: "{{count}} lượt nộp",
+      average: "Trung bình: {{percent}}%",
+    },
+    columns: {
+      course: "Khoá học",
+      progress: "Tiến độ",
+      time: "Thời lượng",
+      lastActivity: "Gần nhất",
+    },
+    progressLabel: "{{completed}}/{{total}} bài",
+    time: {
+      hoursMinutes: "{{hours}} giờ {{minutes}} phút",
+      minutes: "{{minutes}} phút",
+      none: "—",
+    },
+    neverActive: "Chưa hoạt động",
+  },
   // ─── S5-ME-FE-4 — Ảnh đại diện own-scope (S5-ME-BE-4): GET/upload/remove /me/avatar ──────────────
   avatar: {
     title: "Ảnh đại diện",
