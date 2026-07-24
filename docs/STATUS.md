@@ -1,10 +1,18 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-24 17:15Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-24 17:42Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🟢 S5-LMS-UI-4 — LOCAL apps/lms — hòa chrome vào MediaOS: App Switcher thành launcher toàn hệ (10 app khớp APP_REGISTRY, 9 app nhảy cross-origin {MEDIAOS_APP_URL}/{path} cùng tab, Đào tạo nội bộ /course, bỏ recent), logo → {MEDIAOS_APP_URL}/home, menu avatar Cá nhân/Tài khoản/Đổi MK → MediaOS (/me·/me/account·/me/security/password) + gỡ dialog nội bộ, chuyển Trò chuyện + Hệ thống khỏi switcher xuống sidebar
+- **zone**: green · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/lms/**`, `docs/plans/S5-LMS-UI-4.md`
+- **phụ thuộc**: S5-LMS-UI-3✓
+- **done_when (đích hội tụ)**:
+  - [ ] App Switcher LMS hiện đủ 10 app giống ảnh MediaOS; bấm 9 app → funtimemediacorp.com/{path} cùng tab; Đào tạo → /course
+  - [ ] Logo → funtimemediacorp.com/home; menu avatar Cá nhân/Tài khoản/Đổi MK → MediaOS, Đăng xuất → đăng xuất LMS
+  - [ ] Trò chuyện là mục sidebar; Hệ thống (admin LMS) vẫn ở nhóm Quản trị; MEDIAOS_APP_URL rỗng → fail-soft không vỡ
+  - [ ] npx tsc --noEmit 0 lỗi + eslint sạch; build + restart 3400; verify BUILD_ID mới + CSS/HTML live
 
 ## Hàng đợi
 
@@ -36,7 +44,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 1
+- **branch**: `master` · **file đang đổi (dirty)**: 2
 - **migration head**: idx 195 — `0528_s5_goaldb2_audit_task_template` (196 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -45,6 +53,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `4d7ef176` | 2026-07-25 | docs(lms): kết quả deploy S5-LMS-UI-3 — khung shell LMS đã lên PROD |
 | `e2356fce` | 2026-07-25 | chore(harness): seed S5-LMS-UI-3 + S5-LMS-NOTI-1/2, regen STATUS |
 | `1bc40e4b` | 2026-07-25 | docs(lms): plan hồi cố S5-LMS-UI-2 (đóng WO) + micro-plan S5-LMS-UI-3 |
 | `674cc0d7` | 2026-07-24 | docs(lms): plan + kết quả S5-LMS-APP-2 — LMS SSO-only đã bật PROD |
@@ -56,7 +65,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `47f9eb4f` | 2026-07-24 | chore(harness): regen STATUS sau khi merge S5-GOAL-DB-2 (#276) |
 | `d4ebe9f4` | 2026-07-24 | feat(goal): đợt D template phân rã — task_templates + task_template_items + RLS FORCE + quyền manage:task-template + audit task_template (S5-GOAL-DB-2) (#276) |
 | `b9bcbccb` | 2026-07-24 | chore(harness): regen STATUS — go start-on-touch gia S5-BE-CONTRACT-1 (chua tung khoi dong) |
-| `3b3e12ea` | 2026-07-24 | chore(harness): regen STATUS sau khi merge S5-TASK-DEPTFILTER-1 (#275) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

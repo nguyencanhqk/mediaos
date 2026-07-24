@@ -8140,6 +8140,41 @@ export const backlog = [
       "Smoke light+dark sau deploy: /course · /course/{slug}/learn · /dashboard · /exam · /manage-courses (+tab learners) · /manage-exam/{id}/grading · /admin · /chat — không trang nào vỡ cuộn hay chồng chiều cao",
     ],
   },
+  // ── Seed 2026-07-25 từ nhận xét owner (kèm 2 ảnh MediaOS): sau khi UI-3 port khung, LMS vẫn là ──
+  // HỆ ĐÓNG — App Switcher chỉ 3 app nội bộ, logo về /course, menu avatar là dialog LMS. Owner muốn
+  // LMS hòa vào chrome MediaOS: switcher = launcher toàn hệ (nhảy cross-origin), logo → /home MediaOS,
+  // avatar → /me MediaOS. Chốt qua AskUserQuestion: cùng tab · không gate ở LMS · chat tạm về sidebar
+  // (dài hạn = module CHAT nội bộ MediaOS SPEC-15) · avatar trỏ MediaOS.
+  {
+    id: "S5-LMS-UI-4",
+    module: "LMS",
+    layer: "FE",
+    title:
+      "LOCAL apps/lms — hòa chrome vào MediaOS: App Switcher thành launcher toàn hệ (10 app khớp APP_REGISTRY, 9 app nhảy cross-origin {MEDIAOS_APP_URL}/{path} cùng tab, Đào tạo nội bộ /course, bỏ recent), logo → {MEDIAOS_APP_URL}/home, menu avatar Cá nhân/Tài khoản/Đổi MK → MediaOS (/me·/me/account·/me/security/password) + gỡ dialog nội bộ, chuyển Trò chuyện + Hệ thống khỏi switcher xuống sidebar",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/lms/**", "docs/plans/S5-LMS-UI-4.md"],
+    skills: ["code-review"],
+    depends_on: ["S5-LMS-UI-3"],
+    plan: "docs/plans/S5-LMS-UI-4.md",
+    src: [
+      "OWNER CHỐT (AskUserQuestion 2026-07-25): App Switcher nhảy sang MediaOS CÙNG TAB, không gate quyền ở LMS (MediaOS tự chặn khi tới); menu avatar trỏ MediaOS; Chat tạm về sidebar, dài hạn = module CHAT nội bộ SPEC-15 (ngoài WO này)",
+      "RÀNG BUỘC: 9 app MediaOS chỉ tồn tại ở funtimemediacorp.com ⇒ tile phải là <a href> cross-origin (KHÔNG next/link). Chỉ Đào tạo (appKey lms) nội bộ /course. Nguồn URL = env.MEDIAOS_APP_URL (lib/platform/env.ts, SERVER-ONLY, đã set .env.production=https://funtimemediacorp.com) ⇒ đọc ở layout.tsx server rồi TRUYỀN PROPS xuống SiteHeader→AppSwitcher/NavUser, KHÔNG thêm NEXT_PUBLIC_*",
+      "FAIL-SOFT khi MEDIAOS_APP_URL rỗng (local dev): switcher chỉ hiện Đào tạo, logo về /course, avatar ẩn 3 mục MediaOS giữ Đăng xuất — app không vỡ",
+      "danh sách 10 app khớp APP_REGISTRY packages/web-core/src/lib/registry.ts:506 (order 10..): dashboard/hr/attendance/leave/tasks/notifications/me/goals/system + lms. Route avatar khớp AvatarMenu.tsx:21-25 (/me · /me/account · /me/security/password)",
+      "nav-user.tsx (~490 dòng): GỠ TRỌN cụm dialog đổi avatar + đổi mật khẩu nội bộ (state+handler+JSX+import icon) trong 1 nhịp để không rơi unused → eslint đỏ; giữ Ngôn ngữ (LMS-specific hữu ích) + Đăng xuất local (useSignout)",
+      "app-tile.tsx: AppTile thêm cờ external → render <a href> thay <Link>. Giữ findMatchingApp cho 'tên app hiện tại' ở site-header (không đụng)",
+      "/chat vẫn ẩn sidebar (chat full-screen) — mục sidebar là LỐI VÀO, trong chat vẫn full-screen, ra bằng switcher/logo (chủ đích)",
+      "danh sách app MediaOS trong LMS là BẢN SAO có chủ đích (2 workspace tách rời, không import @mediaos/ui) — ghi nguồn ở đầu mediaos-apps.tsx để đồng bộ tay khi MediaOS đổi rootPath",
+      "kỷ luật track LOCAL như UI-3: không PR, ship = m prod-update lms + backup data/app.db; verify localhost:3400",
+    ],
+    done_when: [
+      "App Switcher LMS hiện đủ 10 app giống ảnh MediaOS; bấm 9 app → funtimemediacorp.com/{path} cùng tab; Đào tạo → /course",
+      "Logo → funtimemediacorp.com/home; menu avatar Cá nhân/Tài khoản/Đổi MK → MediaOS, Đăng xuất → đăng xuất LMS",
+      "Trò chuyện là mục sidebar; Hệ thống (admin LMS) vẫn ở nhóm Quản trị; MEDIAOS_APP_URL rỗng → fail-soft không vỡ",
+      "npx tsc --noEmit 0 lỗi + eslint sạch; build + restart 3400; verify BUILD_ID mới + CSS/HTML live",
+    ],
+  },
   {
     id: "S5-LMS-NOTI-1",
     module: "NOTI",
