@@ -139,8 +139,21 @@ tiêu đề trang.
 menu chỉ Ngôn ngữ + Đăng xuất. Chấp nhận fail-soft; nếu owner muốn landing cũng hòa MediaOS thì mở rộng
 truyền URL cho Navbar (WO nhỏ riêng).
 
-**CHƯA làm:** `next build` + restart — giao owner chạy `m prod-update lms` (build **và** restart liền
-mạch, tránh cửa sổ lệch manifest như UI-3 §7).
+### 8.2 Deploy PROD (2026-07-25, 01:23)
+
+Owner chạy `m prod-update lms` (build **và** restart liền mạch — không lặp cửa sổ lệch manifest của UI-3).
+
+| Kiểm chứng live | Kết quả |
+| --- | --- |
+| `BUILD_ID` | `oyyNGlwCGJ3VsLuqh8I3h` (UI-3) → **`37wP51BX8Kq1E5hJ20VuT`** |
+| Service | PID 40324 → **36532**, restart 01:23:56 |
+| HTML `/login` | tham chiếu BUILD_ID mới ✓ |
+| CSS bundle | có `bg-blue-50` · `bg-indigo-50` · `bg-violet-50` · `bg-amber-50` = tile Dashboard/Nhân sự/Cá nhân/Mục tiêu ⇒ `mediaos-apps.tsx` đã compile ✓ |
+| Probe | `/login` 200 · `/course` 307 · `/dashboard` 307 · `/admin` 200 ✓ |
+
+**CÒN LẠI:** smoke bằng mắt với phiên **admin** thật — nhóm "Hệ thống" hiện trong sidebar, bấm **Vai trò**
+mở được trang phân quyền; App Switcher nhảy sang `funtimemediacorp.com/{app}`; logo → `/home`; avatar →
+MediaOS.
 
 ---
 
