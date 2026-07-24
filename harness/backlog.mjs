@@ -7611,7 +7611,7 @@ export const backlog = [
     title:
       "FE vòng đo: check-in modal + lịch sử + nút chốt kỳ/mở lại + gắn goal từ panel task + tab Công việc trong goal (bulk link) + khối 'Mục tiêu của tôi' trong /me",
     zone: "yellow",
-    status: "done",
+    status: "todo",
     paths: [
       "apps/app/src/routes/goals/**",
       "apps/app/src/routes/tasks/**",
