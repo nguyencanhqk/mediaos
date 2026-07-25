@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { randomBytes } from "crypto";
@@ -22,7 +23,7 @@ import { SecurityPolicyService } from "../security-policy/security-policy.servic
 // S2-INT-1: same pure snapshot helper the HR write core uses — guarantees the user.created audit
 // never carries password_hash/normalized_email (BẤT BIẾN #3). Pure function → no DI/module cycle.
 import { authUserSnapshot } from "../users/auth-users.repository";
-import { EmployeesRepository } from "./employees.repository";
+import { EMPLOYEE_LIST_MAX_ROWS, EmployeesRepository } from "./employees.repository";
 import { isUniqueViolation } from "../common/db-error";
 
 const GENERATED_PASSWORD_BYTES = 18;
@@ -45,6 +46,8 @@ type RequestUser = { id: string; companyId: string };
 
 @Injectable()
 export class EmployeesService {
+  private readonly logger = new Logger(EmployeesService.name);
+
   constructor(
     private readonly repo: EmployeesRepository,
     private readonly db: DatabaseService,
@@ -96,6 +99,13 @@ export class EmployeesService {
     // (object_permissions), so each row is decided/masked individually — no all-or-nothing shortcut.
     return this.db.withTenant(user.companyId, async (tx) => {
       const rows = await this.repo.listEmployeesTx(tx, user.companyId, filters, scopeCond);
+      // S5-PERF-1: the repo bounds the scan at EMPLOYEE_LIST_MAX_ROWS. Hitting the cap means the
+      // result is truncated → surface it (never silent) so ops know real pagination is now needed.
+      if (rows.length === EMPLOYEE_LIST_MAX_ROWS) {
+        this.logger.warn(
+          `employee list hit safety cap (${EMPLOYEE_LIST_MAX_ROWS}) for company=${user.companyId} — result truncated; add real pagination`,
+        );
+      }
       // Sequential (not Promise.all): audit INSERTs share the tx connection and must not interleave.
       const reveals: boolean[] = [];
       for (const row of rows) {

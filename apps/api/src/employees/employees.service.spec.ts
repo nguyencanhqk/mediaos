@@ -15,9 +15,11 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { EmployeesService } from "./employees.service";
+import { EMPLOYEE_LIST_MAX_ROWS } from "./employees.repository";
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -365,6 +367,36 @@ describe("EmployeesService — F1 salary mask + audit", () => {
       const res = await svc.listEmployees(actor, {});
       expect(res.map((r) => r.baseSalary)).toEqual([5000, 5000]);
       expect(audit.record).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // S5-PERF-1: the flat list carries no page/pageSize; the repo bounds the scan at a safety cap.
+  // Reaching it truncates the result, so the service must SURFACE it (never a silent truncation).
+  describe("listEmployees — safety cap (S5-PERF-1)", () => {
+    it("warns (non-silent) when the result hits EMPLOYEE_LIST_MAX_ROWS", async () => {
+      const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+      const capped = Array.from({ length: EMPLOYEE_LIST_MAX_ROWS }, (_, i) =>
+        makeRow({ id: `emp-${i}` }),
+      );
+      const repo = makeRepo({ listEmployeesTx: vi.fn().mockResolvedValue(capped) });
+      const { svc } = makeService({ perms: { "view-salary": DENY() }, repo });
+
+      const res = await svc.listEmployees(actor, {});
+
+      expect(res).toHaveLength(EMPLOYEE_LIST_MAX_ROWS);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("safety cap"));
+      warn.mockRestore();
+    });
+
+    it("stays silent when the result is under the cap", async () => {
+      const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+      const repo = makeRepo({ listEmployeesTx: vi.fn().mockResolvedValue([makeRow()]) });
+      const { svc } = makeService({ perms: { "view-salary": DENY() }, repo });
+
+      await svc.listEmployees(actor, {});
+
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
     });
   });
 
