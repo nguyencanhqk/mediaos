@@ -40,12 +40,15 @@
   --accent: #e9eef7;
   --accent-foreground: #101b30;
 
-  /* Brand cho text/link — tối hơn primary để đạt tương phản trên nền sáng */
-  --brand: #0879b2;
+  /* Brand cho text/link — tối hơn primary để đạt tương phản trên nền sáng.
+     #0879b2 → #0771a6 ở S5-FND-THEME-AA-1: bản cũ trượt AA trên nền trang (4.42)
+     và trên chip brand-muted (4.06). Tối đi một nấc, GIỮ NGUYÊN sắc. */
+  --brand: #0771a6;
   --brand-foreground: #ffffff;
   --brand-muted: #ddeffa;
 
-  --destructive: #d92d20;
+  /* PHẢI trùng --danger (xem khối trạng thái) — cùng một đỏ cho cảnh báo và hành động xoá */
+  --destructive: #d12b1f;
   --destructive-foreground: #ffffff;
 
   --border: #dbe3ef;
@@ -57,17 +60,17 @@
   --success-muted: #e0f5ea;
   --warning: #955d00;
   --warning-muted: #fcf0d8;
-  --danger: #d92d20;
+  --danger: #d12b1f; /* = --destructive (bất biến giá trị) */
   --danger-muted: #fdeceb;
-  --info: #0879b2;
+  --info: #0771a6; /* = --brand ở light (bất biến giá trị) */
   --info-muted: #ddeffa;
 
   /* Chrome (topbar) — hằng số navy ở CẢ HAI chế độ */
   --chrome: #0f1a2e;
   --chrome-foreground: #e6ecf5;
 
-  /* Lưới texture .control-room-bg */
-  --grid-line: rgba(8, 121, 178, 0.06);
+  /* Lưới texture .control-room-bg — dẫn xuất từ --brand, theo nó khi brand đổi */
+  --grid-line: rgba(7, 113, 166, 0.06);
 }
 
 /* ---- DARK — phòng tối (giữ phổ Control Room hiện hành, tinh chỉnh nhẹ) ---- */
@@ -92,7 +95,11 @@
   --accent-foreground: #e6ecf5;
 
   --brand: #1fa9e0;
-  --brand-foreground: #ffffff;
+  /* Mực navy chứ KHÔNG trắng: dark --brand = #1fa9e0 = --primary, mà trắng trên keycap
+     xanh sáng chỉ 2.69 (dưới cả ngưỡng 3.0 cho đồ hoạ giao diện — WCAG 1.4.11).
+     Dùng đúng giá trị --primary-foreground vốn đã chọn cho chính màu này → 7.01.
+     S5-FND-THEME-AA-1: cặp này bị bản đo 32-cặp của S5-LMS-UI-1 bỏ sót. */
+  --brand-foreground: #06121f;
   --brand-muted: #16273c;
 
   --destructive: #f87171;
