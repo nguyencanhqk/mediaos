@@ -23,7 +23,7 @@ import { OutboxService } from "../events/outbox.service";
 import { PermissionService } from "../permission/permission.service";
 import { DataScopeService, type ScopeContext } from "../permission/data-scope.service";
 import { HrTasksService } from "../tasks/hr-tasks.service";
-import { isUniqueViolation } from "../common/db-error";
+import { isUniqueViolation, pgErrorField } from "../common/db-error";
 import { monthOfDate } from "../common/tz.util";
 import { ATT_RESOURCES } from "./attendance-permissions.const";
 import { AttendanceRepository } from "./attendance.repository";
@@ -54,6 +54,13 @@ import { toAdjustmentDetailDto, toAdjustmentListItem } from "./attendance-adjust
 
 const ADJUSTMENT = ATT_RESOURCES.ADJUSTMENT;
 const ATTENDANCE = ATT_RESOURCES.ATTENDANCE;
+
+/**
+ * Partial-unique index "1 đơn pending / (company, employee, work_date, request_type)" — migration 0458
+ * (uq_att_adj_pending_employee_date_type). CHỈ 23505 của constraint NÀY mới là "trùng đơn chờ duyệt";
+ * 23505 constraint khác (vd task_code) KHÔNG được map thành thông báo trùng-đơn (xem mapConflict).
+ */
+const PENDING_ADJUSTMENT_UNIQUE_CONSTRAINT = "uq_att_adj_pending_employee_date_type";
 
 interface Actor {
   id: string;
@@ -119,23 +126,39 @@ export class AttendanceAdjustmentService {
   // ─── Create (create-own:adjustment; create-thay gated by wider-than-Own scope) ─────
 
   async createRequest(actor: Actor, dto: CreateAdjustmentRequest) {
-    // S5-TASK-HRCODE-1: cấp task_code Ở TX RIÊNG TRƯỚC business tx (mirror TaskCoreService.createTask) —
-    // counter FOR UPDATE serialize (0 dup) rồi COMMIT ngay, KHÔNG giữ lock counter suốt tx đơn dài.
-    // Rollback business tx / validate fail ⇒ mã bị "đốt" (gap OK — counter cần DUY NHẤT, không liên tục).
-    // allocateTaskCodeBeforeTx map Inactive→409 (TASK-ERR-CODE-COUNTER-INACTIVE) fail-loud TRƯỚC khi mở tx
-    // ⇒ KHÔNG tạo task task_code=NULL câm, KHÔNG 500 raw. Ném ngoài chuỗi .catch(mapConflict) nên
-    // HttpException giữ nguyên 4xx.
-    // Nằm NGOÀI .catch(mapConflict) bên dưới ⇒ tự log để lỗi non-HttpException (SequenceNotFound sau retry,
-    // lỗi pg) không mất ngữ cảnh companyId/op và rơi thẳng ra AllExceptionsFilter thành 500 trần.
+    // S5-SEQ-HARDEN-1 (security-reviewer MEDIUM-1): authz tầng-service + kỳ-mở PHẢI qua TRƯỚC khi cấp
+    // task_code. Nếu cấp mã trước authz thì mỗi lần thử-thất-bại (403 ngoài scope / 409 kỳ đã khoá) vẫn
+    // "đốt" 1 giá trị counter (counter inflation — DoS-lite bởi actor đã đăng nhập). Mirror
+    // task-core.service (assert quyền RỒI mới allocate).
+    //
+    // Phase 1 — resolve target + kiểm kỳ mở ở tx ĐỌC riêng: 403/404/409 ở đây ⇒ KHÔNG cấp mã.
+    const target = await this.db
+      .withTenant(actor.companyId, async (tx) => {
+        const resolved = await this.resolveCreateTarget(actor, dto, tx);
+        await this.assertPeriodOpenForDate(actor.companyId, dto.workDate, tx);
+        return resolved;
+      })
+      .catch((err: unknown) =>
+        this.mapError(err, "createRequest.authz", { companyId: actor.companyId }),
+      );
+
+    // Phase 2 — cấp task_code Ở TX RIÊNG (mirror TaskCoreService.createTask): counter FOR UPDATE serialize
+    // (0 dup) rồi COMMIT ngay, KHÔNG giữ lock suốt business tx dài. allocateTaskCodeBeforeTx map Inactive→409
+    // (TASK-ERR-CODE-COUNTER-INACTIVE) fail-loud ⇒ KHÔNG tạo task task_code=NULL câm, KHÔNG 500 raw. mapError
+    // giữ HttpException 4xx nguyên vẹn + log lỗi non-HttpException (SequenceNotFound sau retry, lỗi pg) kèm
+    // ngữ cảnh companyId/op thay vì rơi thẳng thành 500 trần.
     let taskCode: string;
     try {
       taskCode = await this.hrTasks.allocateTaskCodeBeforeTx(actor.companyId);
     } catch (err: unknown) {
       throw this.mapError(err, "createRequest.allocateTaskCode", { companyId: actor.companyId });
     }
+
+    // Phase 3 — business tx. Re-assert kỳ mở TRONG tx (authoritative, chống race period-lock giữa Phase 1
+    // và đây). Chỉ đốt mã nếu kỳ khoá đúng khe hở Phase1→Phase3 hoặc trùng đơn pending (23505) — cực hiếm,
+    // gap OK (counter cần DUY NHẤT, không cần liên tục).
     return this.db
       .withTenant(actor.companyId, async (tx) => {
-        const target = await this.resolveCreateTarget(actor, dto, tx);
         await this.assertPeriodOpenForDate(actor.companyId, dto.workDate, tx);
         const task = await this.hrTasks.createApprovalTaskTx(tx, actor.companyId, {
           title: `Duyệt điều chỉnh công ${dto.workDate}`,
@@ -799,7 +822,14 @@ export class AttendanceAdjustmentService {
   }
 
   private mapConflict(err: unknown, op: string, actor: Actor, workDate: string): never {
-    if (isUniqueViolation(err)) {
+    // S5-SEQ-HARDEN-1 (security-reviewer LOW): CHỈ map 23505 của ĐÚNG constraint "1 đơn pending / nhân viên /
+    // ngày / loại" (0458) thành thông báo trùng-đơn. Task HR nay ghi task_code non-null ⇒ vi phạm
+    // uq_tasks_company_task_code_active (0478) cũng là 23505; map mù sẽ báo SAI "đã có đơn chờ duyệt" cho một
+    // sự cố cấp-mã. Constraint khác ⇒ rơi xuống mapError (log GỐC + 500 fail-loud, KHÔNG che nguyên nhân).
+    if (
+      isUniqueViolation(err) &&
+      pgErrorField(err, "constraint") === PENDING_ADJUSTMENT_UNIQUE_CONSTRAINT
+    ) {
       throw new ConflictException(`Đã có đơn điều chỉnh đang chờ duyệt cho ngày ${workDate}`);
     }
     return this.mapError(err, op, { companyId: actor.companyId });

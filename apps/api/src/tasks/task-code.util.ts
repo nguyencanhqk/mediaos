@@ -74,10 +74,16 @@ async function ensureTaskCounter(
 
 /**
  * Cấp mã task kế tiếp (tx RIÊNG, FOR UPDATE 0-dup) với ensure-on-miss retry-once + map Inactive→4xx.
+ *
+ * S5-SEQ-HARDEN-1 (security-reviewer LOW): tên mang hậu tố `OutsideTx` để RÀNG BUỘC "gọi NGOÀI tx của caller"
+ * hiện diện ở call-site (KHÔNG chỉ trong comment). `sequence.nextCode` + ensure-on-miss tự mở `withTenant`
+ * RIÊNG (connection thứ 2) — gọi bên trong 1 withTenant đang mở sẽ giữ 2 connection/counter-lock suốt tx dài
+ * (nguy cơ cạn pool/deadlock dưới tải). Caller PHẢI cấp mã TRƯỚC rồi truyền kết quả vào business tx.
+ *
  * @throws ConflictException (TASK-ERR-CODE-COUNTER-INACTIVE) khi counter 'task' Inactive.
  * @throws SequenceNotFoundError khi retry sau ensure VẪN không thấy counter (fail-loud — KHÔNG loop).
  */
-export async function allocateTaskCode(
+export async function allocateTaskCodeOutsideTx(
   db: DatabaseService,
   sequence: SequenceService,
   companyId: string,

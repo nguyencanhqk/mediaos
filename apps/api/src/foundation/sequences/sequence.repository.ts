@@ -82,6 +82,13 @@ export class SequenceRepository {
    *
    * RACE (2 request đầu cùng miss counter, ví dụ 2 employee đầu tiên tạo song song): INSERT thứ 2 nhận
    * unique_violation (23505) — bắt lỗi, SELECT lại (không throw, không 500) — thấy row của request thắng.
+   *
+   * S5-SEQ-HARDEN-1 (FULL gate S5-TASK-HRCODE-1: security-reviewer MEDIUM-4 + silent-failure F5): INSERT
+   * PHẢI nằm trong SAVEPOINT (nested `tx.transaction`). VÌ SAO: khi INSERT nổ 23505, Postgres ABORT toàn
+   * bộ transaction cha ⇒ mọi lệnh sau (kể cả re-SELECT recovery) ném 25P02 "current transaction is aborted"
+   * — recovery graceful KHÔNG chạy được, request race ĐỎ 500. Bọc SAVEPOINT: 23505 chỉ ROLLBACK TO SAVEPOINT
+   * (nhánh nested), tx CHA vẫn SỐNG ⇒ re-SELECT chạy bình thường, thấy row của request thắng. Cùng idiom
+   * notification-event.repository.upsertCompanyOverride.
    */
   async ensureCounterTx(
     companyId: string,
@@ -93,31 +100,35 @@ export class SequenceRepository {
     if (existing) return existing;
 
     try {
-      const [row] = await tx
-        .insert(sequenceCounters)
-        .values({
-          companyId,
-          moduleCode: defaults.moduleCode,
-          sequenceKey: key.sequenceKey,
-          scopeType: key.scopeType ?? "Company",
-          scopeReferenceId: key.scopeReferenceId ?? null,
-          prefix: defaults.prefix ?? null,
-          suffix: defaults.suffix ?? null,
-          // paddingLength mặc định 0 khi KHÔNG truyền — CHỦ Ý (formatter): 0 = KHÔNG pad ⇒ 'EMP1' sai định
-          // dạng thay vì 'EMP0001'. Caller PHẢI truyền đúng paddingLength (đọc từ config thật — CẤM hard-code).
-          currentValue: BigInt(defaults.startValue ?? 0),
-          incrementBy: defaults.incrementBy ?? 1,
-          paddingLength: defaults.paddingLength ?? 0,
-          resetPolicy: defaults.resetPolicy ?? "Never",
-          formatPattern: defaults.datePattern ?? null,
-          status: defaults.status ?? "Active",
-          createdBy: defaults.actorUserId ?? null,
-        })
-        .returning();
-      if (!row) throw new Error("ensureCounterTx: INSERT trả về 0 row (không rõ nguyên nhân)");
-      return row;
+      // SAVEPOINT quanh INSERT: 23505 (race) rollback tới đây, KHÔNG poison tx cha (chống 25P02).
+      return await tx.transaction(async (sp) => {
+        const [row] = await sp
+          .insert(sequenceCounters)
+          .values({
+            companyId,
+            moduleCode: defaults.moduleCode,
+            sequenceKey: key.sequenceKey,
+            scopeType: key.scopeType ?? "Company",
+            scopeReferenceId: key.scopeReferenceId ?? null,
+            prefix: defaults.prefix ?? null,
+            suffix: defaults.suffix ?? null,
+            // paddingLength mặc định 0 khi KHÔNG truyền — CHỦ Ý (formatter): 0 = KHÔNG pad ⇒ 'EMP1' sai định
+            // dạng thay vì 'EMP0001'. Caller PHẢI truyền đúng paddingLength (đọc từ config thật — CẤM hard-code).
+            currentValue: BigInt(defaults.startValue ?? 0),
+            incrementBy: defaults.incrementBy ?? 1,
+            paddingLength: defaults.paddingLength ?? 0,
+            resetPolicy: defaults.resetPolicy ?? "Never",
+            formatPattern: defaults.datePattern ?? null,
+            status: defaults.status ?? "Active",
+            createdBy: defaults.actorUserId ?? null,
+          })
+          .returning();
+        if (!row) throw new Error("ensureCounterTx: INSERT trả về 0 row (không rõ nguyên nhân)");
+        return row;
+      });
     } catch (err) {
       if (!isUniqueViolation(err)) throw err;
+      // 23505 đã rollback tới SAVEPOINT ⇒ tx cha còn sống, re-SELECT chạy được (KHÔNG 25P02).
       const raced = await this.findCounterTx(companyId, key, tx);
       if (raced) return raced;
       // Vẫn không thấy sau unique_violation — lỗi thật (khác race dự kiến), ném nguyên err gốc.
