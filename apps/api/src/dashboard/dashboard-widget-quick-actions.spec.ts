@@ -137,6 +137,41 @@ describe("DASH_WIDGET_QUICK_ACTIONS registry (§8.4/§20)", () => {
       }
     }
   });
+
+  // S5-QA-DASHNOTI-1 (§16.2 "quick-action về module gốc"): GHIM đích deep-link + module gốc TỪNG action.
+  // Sai literal 1 route (vd '/task/new' vs '/tasks/new', hay OPEN_* trỏ nhầm module) LỌT mọi assert cũ (chỉ
+  // kiểm shape/gate) — bảng dưới bắt đúng-đích. Bao trọn 9 action của 7 widget in-sprint.
+  it("mỗi action deep-link ĐÚNG đích (target_url/api_endpoint) + target_module đúng module gốc", () => {
+    const EXPECTED: Record<string, { module: string; url: string | null; api: string | null }> = {
+      CHECK_IN: { module: "ATT", url: null, api: "/api/v1/attendance/check-in" },
+      CHECK_OUT: { module: "ATT", url: null, api: "/api/v1/attendance/check-out" },
+      CREATE_TASK: { module: "TASK", url: "/tasks/new", api: null },
+      OPEN_MY_TASKS: { module: "TASK", url: "/tasks/my", api: null },
+      OPEN_TASK_ALERTS: { module: "TASK", url: "/tasks?filter=due-soon", api: null },
+      OPEN_NOTIFICATIONS: { module: "NOTI", url: "/notifications", api: null },
+      OPEN_PENDING_LEAVE_APPROVAL: {
+        module: "LEAVE",
+        url: "/leave/approvals?status=Pending",
+        api: null,
+      },
+      OPEN_PROJECT: { module: "TASK", url: "/projects", api: null },
+      OPEN_HR_DIRECTORY: { module: "HR", url: "/hr/employees", api: null },
+    };
+
+    const seen = new Set<string>();
+    for (const defs of Object.values(DASH_WIDGET_QUICK_ACTIONS)) {
+      for (const d of defs) {
+        const exp = EXPECTED[d.actionCode];
+        expect(exp, `action ${d.actionCode} chưa khai trong bảng đích kỳ vọng`).toBeTruthy();
+        expect(d.targetModule).toBe(exp.module);
+        expect(d.targetUrl).toBe(exp.url);
+        expect(d.apiEndpoint).toBe(exp.api);
+        seen.add(d.actionCode);
+      }
+    }
+    // Không thừa/thiếu action so với bảng kỳ vọng (thêm/bớt action phải cập nhật bảng này có chủ đích).
+    expect([...seen].sort()).toEqual(Object.keys(EXPECTED).sort());
+  });
 });
 
 describe("buildQuickAction (pure)", () => {

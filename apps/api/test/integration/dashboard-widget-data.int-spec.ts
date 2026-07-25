@@ -307,6 +307,37 @@ describe.skipIf(!hasLaneDb)("S4-DASH-BE-2 Widget DATA + cache + degraded (HTTP)"
     );
   });
 
+  // ── D5b (S5-QA-DASHNOTI-1): TTL hết hạn TỰ NHIÊN — nhánh shouldServe `expiresAt<=now` (KHÔNG refresh) ──
+  // D5 chỉ phủ nhánh min-interval (refresh=true + lùi generated_at). Nhánh TTL tự hết hạn (không có
+  // refresh) — semantics chính của cache TTL §16.2 — trước đây KHÔNG test. Phủ qua HTTP + DB thật.
+  it("D5b cache TTL: expires_at<=now (KHÔNG refresh) ⇒ hit=false regen (last_updated_at MỚI)", async () => {
+    const h = bearer(await login(nest, A.slug, email.emp));
+    // Warm rồi GET lại ⇒ hit=true (đang phục vụ cache tươi, chưa hết hạn).
+    await api(nest).get("/dashboard/widgets/my-tasks").set(h);
+    const warm = await api(nest).get("/dashboard/widgets/my-tasks").set(h);
+    expect(warm.body.data.cache.hit).toBe(true);
+    const l0 = warm.body.data.last_updated_at as string;
+
+    // Ép TTL hết hạn: đẩy CẢ generated_at + expires_at về quá khứ (giữ expires_at > generated_at cho
+    // CHECK chk_dashboard_widget_cache_time; nhánh no-refresh của shouldServe chỉ xét expiresAt<=now nên
+    // generated_at lùi không ảnh hưởng). KHÔNG refresh.
+    const upd = await direct.query(
+      `UPDATE dashboard_widget_cache
+       SET generated_at = now() - interval '2 hours', expires_at = now() - interval '1 hour'
+       WHERE company_id=$1 AND cache_key LIKE $2 AND deleted_at IS NULL`,
+      [A.companyId, `%:MY_TASKS:u:${ids.emp}%`],
+    );
+    expect(upd.rowCount ?? 0).toBeGreaterThanOrEqual(1);
+
+    // GET KHÔNG refresh ⇒ shouldServe thấy expiresAt<=now ⇒ regen (hit=false, mốc thời gian mới).
+    const regen = await api(nest).get("/dashboard/widgets/my-tasks").set(h);
+    expect(regen.status).toBe(200);
+    expect(regen.body.data.cache.hit).toBe(false);
+    expect(new Date(regen.body.data.last_updated_at).getTime()).toBeGreaterThan(
+      new Date(l0).getTime(),
+    );
+  });
+
   // ── D6 cache-key per-user (A≠B) + append-only grant (app KHÔNG DELETE) ──────────────────────────────
   it("D6 cache-key kèm userId (per-user) — 2 user khác nhau ⇒ cache_key KHÁC", async () => {
     // emp (A) đã ghi cache ở D5. bEmp (B) gọi cùng slug ⇒ row riêng, cache_key khác.
