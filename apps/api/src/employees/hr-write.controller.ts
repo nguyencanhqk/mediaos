@@ -24,6 +24,7 @@ import {
   type UpdateHrEmployeeRequest,
 } from "@mediaos/contracts";
 import { PermissionGuard } from "../permission/guards/permission.guard";
+import { Idempotent } from "../common/idempotency/idempotency.decorator";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import { HrWriteService } from "./hr-write.service";
 
@@ -44,6 +45,7 @@ export class HrWriteController {
   constructor(private readonly hr: HrWriteService) {}
 
   @Post("employees")
+  @Idempotent() // S5-BE-CONTRACT-1: chống tạo trùng hồ sơ nhân sự khi retry (IMPL-08 §13.2).
   @RequirePermission("create", "employee")
   createEmployee(
     @Req() req: AuthenticatedRequest,

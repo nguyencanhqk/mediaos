@@ -196,20 +196,26 @@ describe("mutation invalidation matrix", () => {
 
   // S3-FE-LEAVE-2: approver KHÔNG giữ balance key của requester → BỎ balances.all khỏi approve/reject.
   // Chỉ invalidate list (mọi biến thể param'd qua prefix) + chi tiết đúng đơn vừa duyệt/từ chối.
-  it("leave approve → list prefix + detail(id), KHÔNG balances.all", () => {
+  // S5-BE-CONTRACT-1 (§13.3): THÊM lịch nghỉ (approve) + widget dashboard của chính người duyệt.
+  // Bất biến "KHÔNG đụng balances của người GỬI đơn" GIỮ NGUYÊN — đó mới là điểm mấu chốt của test này;
+  // độ dài được cập nhật CÓ Ý THỨC theo hợp đồng mới (xem query-invalidation-contract.spec.ts).
+  it("leave approve → list prefix + detail(id) + lịch + dashboard, KHÔNG balances.all", () => {
     const keys = leaveInvalidation.approve("lr1");
     expect(keys).toContainEqual(["leave", "requests", "list"]);
     expect(keys).toContainEqual(["leave", "requests", "detail", "lr1"]);
+    expect(keys).toContainEqual(["leave", "calendar"]);
+    expect(keys).toContainEqual(["dashboard", "widgets"]);
     expect(keys).not.toContainEqual(["leave", "balances"]);
-    expect(keys).toHaveLength(2);
+    expect(keys).toHaveLength(4);
   });
 
-  it("leave reject → list prefix + detail(id), KHÔNG balances.all", () => {
+  it("leave reject → list prefix + detail(id) + dashboard, KHÔNG balances.all", () => {
     const keys = leaveInvalidation.reject("lr2");
     expect(keys).toContainEqual(["leave", "requests", "list"]);
     expect(keys).toContainEqual(["leave", "requests", "detail", "lr2"]);
+    expect(keys).toContainEqual(["dashboard", "widgets"]);
     expect(keys).not.toContainEqual(["leave", "balances"]);
-    expect(keys).toHaveLength(2);
+    expect(keys).toHaveLength(3);
   });
 });
 

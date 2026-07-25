@@ -470,8 +470,9 @@ const taskListPrefix = [...taskKeys.all, "list"] as const;
 const taskKanbanPrefix = [...taskKeys.all, "kanban"] as const;
 
 export const taskCoreInvalidation = {
-  list: () => [taskListPrefix] as const,
-  my: () => [taskKeys.my()] as const,
+  // §13.3 "Create/update task": danh sách + widget dashboard (việc của tôi / quá hạn) của chính actor.
+  list: () => [taskListPrefix, dashboardKeys.widgets.all] as const,
+  my: () => [taskKeys.my(), dashboardKeys.widgets.all] as const,
   // detail() kèm kanban-prefix: mọi mutate đi qua đây (PATCH tiêu đề/mô tả, form Sửa, watchers…)
   // đều có thể đổi dữ liệu thẻ trên board (title là mặt chữ to nhất của thẻ).
   detail: (id: string) =>
@@ -658,21 +659,44 @@ export const foundationKeys = {
 const attendanceMyRecordsPrefix = [...rootKeys.attendance, "my", "records"] as const;
 const leaveRequestsListPrefix = [...rootKeys.leave, "requests", "list"] as const;
 
+/**
+ * S5-BE-CONTRACT-1 (IMPLEMENTATION-08 §13.3) — widget dashboard đọc DỮ LIỆU DẪN XUẤT từ các module
+ * nghiệp vụ (chấm công hôm nay, đơn chờ duyệt, việc tới hạn…). Mutation ở module gốc vì thế làm CŨ
+ * widget của CHÍNH người vừa thao tác, mà không helper module nào làm mới hộ ⇒ người dùng quay về
+ * dashboard vẫn thấy số cũ cho tới lần refetch kế.
+ *
+ * Dùng PREFIX `widgets.all` (không liệt kê từng `widgetCode`): danh mục widget do server quyết định
+ * theo vai trò, client KHÔNG được đoán widget nào phụ thuộc mutation nào — đoán thiếu là bug âm thầm.
+ * Chi phí giới hạn: TanStack chỉ refetch query ĐANG hoạt động (widget đang hiển thị), phần còn lại chỉ
+ * bị đánh dấu stale.
+ *
+ * CHỈ áp cho cache của CHÍNH actor: không thể (và không nên) làm mới cache của người khác — vd người
+ * duyệt đơn KHÔNG giữ số dư phép của người gửi.
+ */
+const dashboardWidgetsPrefix = dashboardKeys.widgets.all;
+
 export const attendanceInvalidation = {
-  checkIn: () => [attendanceKeys.myToday(), attendanceMyRecordsPrefix] as const,
-  checkOut: () => [attendanceKeys.myToday(), attendanceMyRecordsPrefix] as const,
+  checkIn: () =>
+    [attendanceKeys.myToday(), attendanceMyRecordsPrefix, dashboardWidgetsPrefix] as const,
+  checkOut: () =>
+    [attendanceKeys.myToday(), attendanceMyRecordsPrefix, dashboardWidgetsPrefix] as const,
   // S3-FE-ATT-3 — create làm mới CẢ prefix "adjustments" (mọi biến thể scope/param: my/team/company).
   // approve/adjust-direct còn ÁP DỤNG vào attendance_records → làm mới thêm prefix "records" (list +
   // detail đúng bản ghi khi biết recordId) để bảng công không hiển thị giá trị cũ trước điều chỉnh.
-  createAdjustment: () => [attendanceKeys.adjustments.all] as const,
+  createAdjustment: () => [attendanceKeys.adjustments.all, dashboardWidgetsPrefix] as const,
   approveAdjustment: (id: string) =>
     [
       attendanceKeys.adjustments.all,
       attendanceKeys.adjustments.detail(id),
       attendanceKeys.records.all,
+      dashboardWidgetsPrefix,
     ] as const,
   rejectAdjustment: (id: string) =>
-    [attendanceKeys.adjustments.all, attendanceKeys.adjustments.detail(id)] as const,
+    [
+      attendanceKeys.adjustments.all,
+      attendanceKeys.adjustments.detail(id),
+      dashboardWidgetsPrefix,
+    ] as const,
   adjustDirect: (recordId: string) =>
     [
       attendanceKeys.adjustments.all,
@@ -722,9 +746,32 @@ export const hrInvalidation = {
 // param'd qua list-prefix) + chi tiết đúng đơn vừa duyệt/từ chối.
 export const leaveInvalidation = {
   approve: (requestId: string) =>
-    [leaveRequestsListPrefix, leaveKeys.requests.detail(requestId)] as const,
+    [
+      leaveRequestsListPrefix,
+      leaveKeys.requests.detail(requestId),
+      // §13.3: duyệt xong, lịch nghỉ (ngày đã duyệt hiện lên) + widget "chờ duyệt" của CHÍNH người
+      // duyệt đều đổi. Số dư phép thuộc người GỬI đơn → vẫn KHÔNG đụng (xem ghi chú ở trên).
+      leaveKeys.calendar.all,
+      dashboardWidgetsPrefix,
+    ] as const,
   reject: (requestId: string) =>
-    [leaveRequestsListPrefix, leaveKeys.requests.detail(requestId)] as const,
+    [
+      leaveRequestsListPrefix,
+      leaveKeys.requests.detail(requestId),
+      dashboardWidgetsPrefix,
+    ] as const,
+  /**
+   * §13.3 "Create leave request": đơn của tôi + số dư (giữ chỗ pending) + lịch nghỉ + widget dashboard
+   * của chính người gửi. Trước đây form tự gọi invalidate rời rạc (my + balances + detail) và BỎ SÓT
+   * lịch + dashboard — gom về helper để mọi call-site dùng chung một định nghĩa.
+   */
+  createRequest: () =>
+    [
+      leaveKeys.requests.my(),
+      leaveKeys.balances.my(),
+      leaveKeys.calendar.all,
+      dashboardWidgetsPrefix,
+    ] as const,
   // S3-FE-LEAVE-5 — admin CRUD (LEAVE-SCREEN-010/011/012/013). types/policies làm mới đúng list-prefix
   // của mặt admin; adjustBalance làm mới CẢ danh sách số dư (tổng đổi) LẪN ledger giao dịch của đúng
   // balance vừa điều chỉnh (KHÔNG mutate total_days ngoài ledger — bất biến #2).

@@ -39,6 +39,7 @@ import {
   type HrImportResult,
 } from "@mediaos/contracts";
 import { apiFetch, apiFetchBlob, apiFetchMultipart, type ApiBlobResult } from "./api-client";
+import { idempotencyKeyFor } from "./api-idempotency";
 import { buildQueryString } from "./api-params";
 
 // S5-HR-LINKUI-1 — response POST/DELETE /hr/employees/:id/link-user (HrWriteService.linkUser/
@@ -124,10 +125,13 @@ export const hrApi = {
    * Body validate `createHrEmployeeSchema` ở caller; server gate `create:employee` (403 trước handler).
    */
   createEmployee: (body: CreateHrEmployeeRequest): Promise<CreateHrEmployeeResponse> =>
-    apiFetch("/hr/employees", createHrEmployeeResponseSchema, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
+    apiFetch(
+      "/hr/employees",
+      createHrEmployeeResponseSchema,
+      { method: "POST", body: JSON.stringify(body) },
+      // S5-BE-CONTRACT-1: BE thực thi Idempotency-Key (@Idempotent) — chống tạo trùng hồ sơ nhân sự.
+      { idempotencyKey: idempotencyKeyFor("employee_create", body) },
+    ),
 
   /**
    * PATCH /hr/employees/:id — cập nhật trường cấu trúc (KHÔNG status / link-user).

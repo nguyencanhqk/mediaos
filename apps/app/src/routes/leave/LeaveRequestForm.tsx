@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Info, AlertTriangle } from "lucide-react";
 import type { LeaveCalculateResponse, LeaveTypeView } from "@mediaos/contracts";
-import { leaveApi, leaveKeys, ApiError } from "@mediaos/web-core";
+import { leaveApi, leaveKeys, leaveInvalidation, ApiError } from "@mediaos/web-core";
 import { Button, Card, CardContent, Input, Select } from "@mediaos/ui";
 import { useDirtyFormGuard } from "@/hooks/use-dirty-form-guard";
 import {
@@ -242,8 +242,11 @@ export function LeaveRequestForm({
             toCreateDraftBody(values) as Parameters<typeof leaveApi.createDraft>[0],
           ),
     onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: leaveKeys.requests.my() });
-      void queryClient.invalidateQueries({ queryKey: leaveKeys.balances.my() });
+      // S5-BE-CONTRACT-1 (§13.3): dùng helper chung thay vì liệt kê tay — trước đây thiếu lịch nghỉ +
+      // widget dashboard nên tạo đơn xong quay ra hai màn đó vẫn thấy dữ liệu cũ.
+      for (const queryKey of leaveInvalidation.createRequest()) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
       if (isEdit && requestId) {
         void queryClient.invalidateQueries({ queryKey: leaveKeys.requests.detail(requestId) });
       }

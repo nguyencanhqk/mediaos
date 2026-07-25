@@ -44,6 +44,7 @@ import {
   type AdjustLeaveBalanceRequest,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
+import { idempotencyKeyFor } from "./api-idempotency";
 import { buildQueryString } from "./api-params";
 
 /**
@@ -99,10 +100,13 @@ export const leaveApi = {
    * Permission: create:leave.
    */
   createDraft: (body: CreateLeaveRequestDraft): Promise<LeaveRequestDetailView> =>
-    apiFetch("/leave/requests", leaveRequestDetailViewSchema, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
+    apiFetch(
+      "/leave/requests",
+      leaveRequestDetailViewSchema,
+      { method: "POST", body: JSON.stringify(body) },
+      // S5-BE-CONTRACT-1: BE thực thi Idempotency-Key (@Idempotent) — retry mạng KHÔNG tạo 2 đơn nghỉ.
+      { idempotencyKey: idempotencyKeyFor("leave_request_create", body) },
+    ),
 
   /**
    * PATCH /leave/requests/:id — sửa đơn nháp (chỉ khi status='Draft').
@@ -168,20 +172,24 @@ export const leaveApi = {
    * Permission: approve:leave. Actor/companyId server-authoritative (client note bị Zod strip khác).
    */
   approveRequest: (id: string, note?: string): Promise<LeaveRequestDetailView> =>
-    apiFetch(`/leave/requests/${id}/approve`, leaveRequestDetailViewSchema, {
-      method: "POST",
-      body: JSON.stringify({ note }),
-    }),
+    apiFetch(
+      `/leave/requests/${id}/approve`,
+      leaveRequestDetailViewSchema,
+      { method: "POST", body: JSON.stringify({ note }) },
+      { idempotencyKey: idempotencyKeyFor("leave_request_approve", { id, note }) },
+    ),
 
   /**
    * POST /leave/requests/:id/reject — từ chối đơn Pending → Rejected. reason BẮT BUỘC (min1,max2000).
    * Permission: reject:leave (SENSITIVE). Validate lý do rỗng là việc form + Zod contract phía page.
    */
   rejectRequest: (id: string, reason: string): Promise<LeaveRequestDetailView> =>
-    apiFetch(`/leave/requests/${id}/reject`, leaveRequestDetailViewSchema, {
-      method: "POST",
-      body: JSON.stringify({ reason }),
-    }),
+    apiFetch(
+      `/leave/requests/${id}/reject`,
+      leaveRequestDetailViewSchema,
+      { method: "POST", body: JSON.stringify({ reason }) },
+      { idempotencyKey: idempotencyKeyFor("leave_request_reject", { id, reason }) },
+    ),
 
   // ── Lịch nghỉ (S3-FE-LEAVE-4) ─────────────────────────────────────────────
   // Cổng SERVER 2 tầng (xem apps/api/src/leave/leave.controller.ts listCalendar):
