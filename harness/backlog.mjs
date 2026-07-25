@@ -5163,8 +5163,14 @@ export const backlog = [
     title:
       "QA regression suite MVP (test-case matrix theo module × role) + UI state hardening + responsive/accessibility smoke — WS-F",
     zone: "yellow",
-    status: "todo",
-    paths: ["apps/api/test/**", "apps/app/src/**", "docs/QA/**", "docs/plans/S5-QA-REG-1.md"],
+    status: "in_progress",
+    paths: [
+      "apps/api/test/**",
+      "apps/app/src/**",
+      "packages/ui/src/**",
+      "docs/QA/**",
+      "docs/plans/S5-QA-REG-1.md",
+    ],
     skills: ["code-review"],
     depends_on: ["S4-QA-2"],
     src: ["IMP02-STORY-106/107", "IMPLEMENTATION-08 §15", "SPEC-01..08 (test case)"],
