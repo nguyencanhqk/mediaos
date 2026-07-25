@@ -10,6 +10,16 @@ import {
   type User,
 } from "../db/schema";
 
+/**
+ * S5-PERF-1: hard safety ceiling on the flat employee-list scan. The legacy list carries no
+ * page/pageSize (bare-array contract the FE consumes), so without a bound a pathological company
+ * would (a) heap-scan every profile and (b) drive one sequential per-row salary-audit INSERT in
+ * EmployeesService.listEmployees — N round-trips. This cap bounds both. Set far above any realistic
+ * single-company MVP headcount so it never truncates real data; when it IS hit the service logs a
+ * warning (§17.3 observability) — the cap is a rail against runaway scans, never a silent truncation.
+ */
+export const EMPLOYEE_LIST_MAX_ROWS = 2000;
+
 /** Columns returned by the flat list projection. */
 const LIST_COLUMNS = {
   id: employeeProfiles.id,
@@ -150,7 +160,8 @@ export class EmployeesRepository {
       .leftJoin(orgUnits, eq(employeeProfiles.orgUnitId, orgUnits.id))
       .leftJoin(positions, eq(employeeProfiles.positionId, positions.id))
       .where(and(...(conditions as [(typeof conditions)[0], ...typeof conditions])))
-      .orderBy(users.fullName);
+      .orderBy(users.fullName)
+      .limit(EMPLOYEE_LIST_MAX_ROWS);
   }
 
   // ── Detail (tx core — read inside the caller's tenant tx for atomic audit) ─────

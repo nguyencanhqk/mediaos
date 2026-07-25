@@ -5212,7 +5212,7 @@ export const backlog = [
     title:
       "Performance/reliability smoke + observability baseline: SLA danh sách nhân viên·bảng công·task·notification·dashboard + logging/monitoring/alerting — WS-H",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/**", "scripts/**", ".github/workflows/**", "docs/DEVOPS/**"],
     skills: ["code-review"],
     depends_on: ["S4-QA-2"],
