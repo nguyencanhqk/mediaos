@@ -24,7 +24,7 @@ import { AuditService } from "../events/audit.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { PermissionService } from "../permission/permission.service";
 import { SequenceService } from "../foundation/sequences/sequence.service";
-import { allocateTaskCode } from "./task-code.util";
+import { allocateTaskCodeOutsideTx } from "./task-code.util";
 import { TasksRepository } from "./tasks.repository";
 import {
   TaskCoreRepository,
@@ -369,7 +369,7 @@ export class TaskCoreService {
     // insert dài. Rollback business tx ⇒ mã bị "đốt" (gap OK). Ném TRƯỚC insert nếu không cấp được ⇒ KHÔNG
     // tạo task task_code=NULL câm. Delegate tiện ích DÙNG CHUNG (task-code.util) — CÙNG logic + 1 điểm map
     // lỗi Inactive→409 với HR task (leave/attendance-adjustment). POST /tasks nay trả 409 (không 500 raw).
-    const taskCode = await allocateTaskCode(this.db, this.sequence, user.companyId);
+    const taskCode = await allocateTaskCodeOutsideTx(this.db, this.sequence, user.companyId);
     return this.db.withTenant(user.companyId, async (tx) => {
       const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
 

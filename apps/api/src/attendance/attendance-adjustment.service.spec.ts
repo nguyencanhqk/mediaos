@@ -10,7 +10,12 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  ForbiddenException,
+  InternalServerErrorException,
+  NotFoundException,
+} from "@nestjs/common";
 import { AttendanceAdjustmentService } from "./attendance-adjustment.service";
 
 const COMPANY = "cccccccc-cccc-cccc-cccc-cccccccccccc";
@@ -137,6 +142,16 @@ describe("AttendanceAdjustmentService — create deny-paths", () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
+  // S5-SEQ-HARDEN-1 (security-reviewer MEDIUM-1): authz chạy Ở PHASE 1 TRƯỚC khi cấp task_code ⇒ 403 KHÔNG
+  // gọi allocate (không đốt counter). Bằng chứng DB-layer ở attendance-adjustment-allocate-guard.int-spec.
+  it("403 (create-thay ngoài scope) KHÔNG cấp mã — allocateTaskCodeBeforeTx không được gọi", async () => {
+    const { service, hrTasks } = build({ strongestScope: "Own" });
+    await expect(
+      service.createRequest(actor, { ...CREATE_DTO, targetEmployeeId: OTHER_EMP }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(hrTasks.allocateTaskCodeBeforeTx).not.toHaveBeenCalled();
+  });
+
   it("blocks create-thay when the target is out of the create scope → 403", async () => {
     const { service } = build({
       strongestScope: "Team",
@@ -147,18 +162,42 @@ describe("AttendanceAdjustmentService — create deny-paths", () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it("blocks create for a locked period → 409", async () => {
-    const { service } = build({
+  it("blocks create for a locked period → 409 (Phase 1) và KHÔNG cấp mã", async () => {
+    const { service, hrTasks } = build({
       attendanceRepo: { isPeriodLockedTx: vi.fn().mockResolvedValue(true) },
+    });
+    await expect(service.createRequest(actor, CREATE_DTO)).rejects.toThrow(ConflictException);
+    // S5-SEQ-HARDEN-1: kỳ khoá phát hiện ở Phase 1 TRƯỚC allocate ⇒ không đốt counter.
+    expect(hrTasks.allocateTaskCodeBeforeTx).not.toHaveBeenCalled();
+  });
+
+  it("maps a unique-pending violation (đúng constraint) to 409", async () => {
+    const { service } = build({
+      repo: {
+        insertRequestTx: vi.fn().mockRejectedValue({
+          code: "23505",
+          constraint: "uq_att_adj_pending_employee_date_type",
+        }),
+      },
     });
     await expect(service.createRequest(actor, CREATE_DTO)).rejects.toThrow(ConflictException);
   });
 
-  it("maps a unique-pending violation to 409", async () => {
+  // S5-SEQ-HARDEN-1 (security-reviewer LOW): 23505 của constraint KHÁC (vd task_code non-null của task HR)
+  // KHÔNG được map thành "đã có đơn chờ duyệt" — phải rơi xuống mapError (500 fail-loud, log gốc), không
+  // che sai nguyên nhân.
+  it("KHÔNG map 23505 của constraint KHÁC (task_code) thành 409 trùng-đơn — fall-through 500", async () => {
     const { service } = build({
-      repo: { insertRequestTx: vi.fn().mockRejectedValue({ code: "23505" }) },
+      repo: {
+        insertRequestTx: vi.fn().mockRejectedValue({
+          code: "23505",
+          constraint: "uq_tasks_company_task_code_active",
+        }),
+      },
     });
-    await expect(service.createRequest(actor, CREATE_DTO)).rejects.toThrow(ConflictException);
+    await expect(service.createRequest(actor, CREATE_DTO)).rejects.toThrow(
+      InternalServerErrorException,
+    );
   });
 });
 
@@ -167,16 +206,20 @@ describe("AttendanceAdjustmentService — create deny-paths", () => {
  * cut-over 0498), và mã phải cấp Ở TX RIÊNG TRƯỚC tx đơn để không giữ lock counter suốt tx dài.
  */
 describe("AttendanceAdjustmentService — task_code cho task HR", () => {
-  it("cấp mã ở tx RIÊNG TRƯỚC tx đơn rồi ghi vào task HR", async () => {
-    const { service, hrTasks, db } = build();
+  it("Phase 1 authz+kỳ chạy TRƯỚC cấp mã; cấp mã TRƯỚC business write; ghi task_code vào task HR", async () => {
+    const { service, hrTasks, attendanceRepo } = build();
     await service.createRequest(actor, CREATE_DTO);
 
     // Mã cấp cho đúng company (mirror TaskCoreService.createTask).
     expect(hrTasks.allocateTaskCodeBeforeTx).toHaveBeenCalledWith(COMPANY);
-    // Invocation-order: allocate PHẢI chạy TRƯỚC khi mở db.withTenant — counter FOR UPDATE commit ngay,
-    // KHÔNG bị giữ suốt tx đơn dài (tránh nghẽn khi nhiều người gửi đơn cùng lúc).
+    // S5-SEQ-HARDEN-1 (Fix #2): kiểm kỳ (Phase 1) chạy TRƯỚC allocate ⇒ 403/409 KHÔNG đốt counter.
+    expect(attendanceRepo.isPeriodLockedTx.mock.invocationCallOrder[0]).toBeLessThan(
+      hrTasks.allocateTaskCodeBeforeTx.mock.invocationCallOrder[0],
+    );
+    // allocate (tx RIÊNG) chạy TRƯỚC business write (createApprovalTaskTx) — counter FOR UPDATE commit ngay,
+    // KHÔNG giữ lock suốt business tx dài (tránh nghẽn khi nhiều người gửi đơn cùng lúc).
     expect(hrTasks.allocateTaskCodeBeforeTx.mock.invocationCallOrder[0]).toBeLessThan(
-      db.withTenant.mock.invocationCallOrder[0],
+      hrTasks.createApprovalTaskTx.mock.invocationCallOrder[0],
     );
     // Mã thật ghi xuống row tasks ⇒ comment/mention render mã THẬT thay '{task_code}'.
     expect(hrTasks.createApprovalTaskTx).toHaveBeenCalledWith(
@@ -186,16 +229,16 @@ describe("AttendanceAdjustmentService — task_code cho task HR", () => {
     );
   });
 
-  it("để lỗi counter Inactive nổi lên NGUYÊN VẸN 4xx, không nuốt thành 500 và không mở tx đơn", async () => {
-    const { service, hrTasks, db, repo } = build();
+  it("để lỗi counter Inactive nổi lên NGUYÊN VẸN 4xx, không nuốt thành 500 và KHÔNG ghi đơn dở dang", async () => {
+    const { service, hrTasks, repo } = build();
     // Util map SequenceInactiveError → 409 TASK-ERR-CODE-COUNTER-INACTIVE (fail-loud, 1 điểm map chung).
     hrTasks.allocateTaskCodeBeforeTx.mockRejectedValue(
       new ConflictException("TASK-ERR-CODE-COUNTER-INACTIVE"),
     );
 
     await expect(service.createRequest(actor, CREATE_DTO)).rejects.toThrow(ConflictException);
-    // Ném TRƯỚC tx ⇒ không mở transaction, không tạo task task_code=NULL câm, không ghi đơn dở dang.
-    expect(db.withTenant).not.toHaveBeenCalled();
+    // Allocate (Phase 2) hỏng TRƯỚC business tx (Phase 3) ⇒ KHÔNG tạo task task_code=NULL câm, KHÔNG ghi
+    // đơn dở dang. (Phase 1 authz là tx đọc chỉ để gate — không ghi gì.)
     expect(hrTasks.createApprovalTaskTx).not.toHaveBeenCalled();
     expect(repo.insertRequestTx).not.toHaveBeenCalled();
   });

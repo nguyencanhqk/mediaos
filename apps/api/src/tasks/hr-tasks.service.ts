@@ -3,7 +3,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { tasks } from "../db/schema";
 import { SequenceService } from "../foundation/sequences/sequence.service";
-import { allocateTaskCode } from "./task-code.util";
+import { allocateTaskCodeOutsideTx } from "./task-code.util";
 
 /**
  * Cầu nối Task Hub cho đơn HR (BẤT BIẾN Task Hub hợp nhất — CLAUDE.md G11 §1.3):
@@ -45,7 +45,7 @@ export class HrTasksService {
         "TASK-ERR-CODE-SEQ-UNWIRED: SequenceService chưa được cấp cho HrTasksService — module chứa provider phải import SequenceModule.",
       );
     }
-    return allocateTaskCode(this.db, this.sequence, companyId);
+    return allocateTaskCodeOutsideTx(this.db, this.sequence, companyId);
   }
 
   /**

@@ -212,6 +212,20 @@ jobs:
           test/integration/auth-seed-canonical-roles.int-spec.ts
           test/integration/super-admin-bootstrap.int-spec.ts
 
+      # ── S5-SEQ-HARDEN-1 / silent-failure F7 — canary tường minh cho hr-task-code + sequence-race ──────
+      # Step "Test" phía trên đã bao trùm 2 file này (LANE_DB đã bật). Giữ step RIÊNG có TÊN trong danh sách
+      # PR: nếu ai lỡ gỡ LANE_DB khỏi step "Test", cả suite deny-path quay về SKIP IM LẶNG — hr-task-code
+      # (task HR cấp task_code THẬT qua HTTP) + sequence-race (ensure-on-miss đồng thời KHÔNG 500/25P02) là 2
+      # spec dễ "xanh-giả" nhất khi bị skip. Step này vẫn đỏ + chỉ đúng nguyên nhân khi đó. `exec vitest run`
+      # (KHÔNG `test -- <file>`) để 2 path là positional filter THẬT (xem note SEED-1 phía trên).
+      - name: Integration (SEQ-HARDEN canary — hr-task-code + sequence-race)
+        env:
+          LANE_DB: mediaos
+        run: >-
+          pnpm --filter @mediaos/api exec vitest run
+          test/integration/hr-task-code.int-spec.ts
+          test/integration/sequence-ensure-race.int-spec.ts
+
       # DEFER → S0-CI-2: secret-scan (gitleaks) + dependency-scan (pnpm audit) — ĐÃ hiện thực ở security.yml
       # (WO S0-CI-2); KHÔNG bỏ qua silently (DEVOPS-02 §9.2/§11/§17.2). Đặt ở workflow riêng để tránh trùng lặp.
 
