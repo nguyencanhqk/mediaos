@@ -31,6 +31,7 @@ import { MeModule } from "./me/me.module";
 import { IntegrationsLmsModule } from "./integrations/lms/lms.module";
 // S5-GOAL-BE-1 (additive): GoalsModule — cây mục tiêu 3 cấp + /me/goals (SPEC-10 / DB-11).
 import { GoalsModule } from "./goals/goals.module";
+import { IdempotencyModule } from "./common/idempotency/idempotency.module";
 import { JwtAuthGuard } from "./permission/guards/jwt-auth.guard";
 import { CompanyGuard } from "./permission/guards/company.guard";
 import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
@@ -86,6 +87,9 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     // S5-GOAL-BE-1 (additive): module GOAL (SPEC-10) — CRUD cây mục tiêu 3 cấp + GET /goals/tree +
     // GET /me/goals own-scope. Tái dùng ProjectAccessService của TasksModule cho goal cấp dự án.
     GoalsModule,
+    // S5-BE-CONTRACT-1 (additive): thực thi `Idempotency-Key` cho mutation gắn @Idempotent()
+    // (IMPLEMENTATION-08 §13.2). Module LÁ, tự cung cấp ValkeyService → không tạo vòng phụ thuộc.
+    IdempotencyModule,
   ],
   providers: [
     // Global guard pipeline (THỨ TỰ QUAN TRỌNG):

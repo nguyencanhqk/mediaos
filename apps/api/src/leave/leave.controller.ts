@@ -14,6 +14,7 @@ import {
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
 import { PermissionGuard } from "../permission/guards/permission.guard";
+import { Idempotent } from "../common/idempotency/idempotency.decorator";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import {
   LEAVE_PERMISSIONS,
@@ -247,7 +248,9 @@ export class LeaveController {
 
   // S3-LEAVE-BE-2 REPOINT: create now produces a Draft via LeaveRequestService (FSM Draft→Pending→Cancelled).
   // submitNow=true in the body runs the submit path in the same tx. create:leave (Own) gate.
+  // S5-BE-CONTRACT-1: @Idempotent — retry mạng/bấm-đúp KHÔNG được tạo 2 đơn nghỉ (IMPL-08 §13.2).
   @Post("requests")
+  @Idempotent()
   @RequirePermission(CREATE_LEAVE.action, CREATE_LEAVE.resourceType, {
     isSensitive: CREATE_LEAVE.sensitive,
   })
@@ -299,6 +302,7 @@ export class LeaveController {
   // LeaveApprovalService (ngoài scope → 403, cross-tenant → 404, self → 422 LEAVE-ERR-APPROVER-INVALID).
   @Post("requests/:id/approve")
   @HttpCode(200)
+  @Idempotent()
   @RequirePermission(APPROVE_LEAVE.action, APPROVE_LEAVE.resourceType, {
     isSensitive: APPROVE_LEAVE.sensitive,
   })
@@ -315,6 +319,7 @@ export class LeaveController {
   // NO attendance record, NO sync event.
   @Post("requests/:id/reject")
   @HttpCode(200)
+  @Idempotent()
   @RequirePermission(REJECT_LEAVE.action, REJECT_LEAVE.resourceType, {
     isSensitive: REJECT_LEAVE.sensitive,
   })

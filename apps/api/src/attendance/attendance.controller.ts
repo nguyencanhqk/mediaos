@@ -15,6 +15,7 @@ import {
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request, Response } from "express";
 import { PermissionGuard } from "../permission/guards/permission.guard";
+import { Idempotent } from "../common/idempotency/idempotency.decorator";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import {
   ATT_PERMISSIONS,
@@ -87,13 +88,16 @@ export class AttendanceController {
     return this.attendance.getToday(req.user);
   }
 
+  // S5-BE-CONTRACT-1: @Idempotent — bấm-đúp/retry mạng KHÔNG được tạo 2 lần chấm công (IMPL-08 §13.2).
   @Post("check-in")
+  @Idempotent()
   @RequirePermission(CHECK_IN.action, CHECK_IN.resourceType, { isSensitive: CHECK_IN.sensitive })
   checkIn(@Req() req: AuthenticatedRequest, @Body() dto: CheckInDto) {
     return this.attendance.checkIn(req.user, dto);
   }
 
   @Post("check-out")
+  @Idempotent()
   @RequirePermission(CHECK_OUT.action, CHECK_OUT.resourceType, {
     isSensitive: CHECK_OUT.sensitive,
   })

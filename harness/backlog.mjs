@@ -5114,7 +5114,7 @@ export const backlog = [
     title:
       "API contract & OpenAPI/Swagger chuẩn hoá theo module + FE integration hardening (401/403/422/500 mapping, request-id, idempotency, query invalidation sau mutation) — WS-D",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/**",
       "packages/contracts/src/**",

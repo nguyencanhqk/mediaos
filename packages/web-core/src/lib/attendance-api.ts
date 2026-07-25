@@ -56,6 +56,7 @@ import {
   type AttendanceExportQuery,
 } from "@mediaos/contracts";
 import { apiFetch, apiFetchBlob, type ApiBlobResult } from "./api-client";
+import { idempotencyKeyFor } from "./api-idempotency";
 import { buildQueryString } from "./api-params";
 
 /**
@@ -88,20 +89,28 @@ export const attendanceApi = {
    * Permission: check-in:attendance.
    */
   checkIn: (body: CheckInRequest): Promise<AttendanceRecordV2Dto> =>
-    apiFetch("/attendance/check-in", attendanceRecordV2Schema, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
+    apiFetch(
+      "/attendance/check-in",
+      attendanceRecordV2Schema,
+      { method: "POST", body: JSON.stringify(body) },
+      // S5-BE-CONTRACT-1: BE thực thi Idempotency-Key (@Idempotent). Khoá suy từ payload nên GỬI LẠI
+      // CÙNG payload (retry của TanStack Query, replay sau refresh-401) chỉ tạo MỘT bản ghi.
+      // LƯU Ý: `clientTime` đổi theo từng lần BẤM ⇒ hai lần bấm khác nhau là hai khoá khác nhau; chống
+      // bấm-đúp ở đây vẫn dựa vào rule nghiệp vụ server (đã check-in → 409) + nút disabled khi đang gửi.
+      { idempotencyKey: idempotencyKeyFor("attendance_check_in", body) },
+    ),
 
   /**
    * POST /attendance/check-out — chấm ra.
    * Permission: check-out:attendance.
    */
   checkOut: (body: CheckOutRequest): Promise<AttendanceRecordV2Dto> =>
-    apiFetch("/attendance/check-out", attendanceRecordV2Schema, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
+    apiFetch(
+      "/attendance/check-out",
+      attendanceRecordV2Schema,
+      { method: "POST", body: JSON.stringify(body) },
+      { idempotencyKey: idempotencyKeyFor("attendance_check_out", body) },
+    ),
 
   // ── Bảng công (scoped: Own / Team / Company) ───────────────────────────────
 

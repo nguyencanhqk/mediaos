@@ -20,6 +20,7 @@ import {
   type ReorderSubtasksRequest,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
+import { idempotencyKeyFor } from "./api-idempotency";
 import { buildQueryString } from "./api-params";
 
 /**
@@ -67,7 +68,13 @@ export const taskCoreApi = {
 
   /** POST /tasks — tạo task core (create:task). title bắt buộc, project optional (task cá nhân MVP). */
   createTask: (body: CreateTaskCoreRequest): Promise<TaskCoreResponseDto> =>
-    apiFetch(`/tasks`, taskCoreResponseSchema, { method: "POST", body: JSON.stringify(body) }),
+    apiFetch(
+      `/tasks`,
+      taskCoreResponseSchema,
+      { method: "POST", body: JSON.stringify(body) },
+      // S5-BE-CONTRACT-1: BE thực thi Idempotency-Key (@Idempotent) — chống tạo trùng task khi retry.
+      { idempotencyKey: idempotencyKeyFor("task_create", body) },
+    ),
 
   /** PATCH /tasks/:id — cập nhật field task core (update:task). KHÔNG đổi status (action riêng). */
   updateTask: (id: string, body: UpdateTaskCoreRequest): Promise<TaskCoreResponseDto> =>

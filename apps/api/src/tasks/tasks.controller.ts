@@ -15,6 +15,7 @@ import {
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
 import { PermissionGuard } from "../permission/guards/permission.guard";
+import { Idempotent } from "../common/idempotency/idempotency.decorator";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import { TasksService } from "./tasks.service";
 import { TaskCoreService } from "./task-core.service";
@@ -205,6 +206,7 @@ export class TasksController {
    * MVP). Gate create:task (emp/mgr HOÃN ở TASK_DEFERRED_GRANTS 0485 ⇒ chỉ hr/company-admin @Company gọi được).
    */
   @Post()
+  @Idempotent() // S5-BE-CONTRACT-1: chống tạo trùng task khi retry/bấm-đúp (IMPL-08 §13.2).
   @UseGuards(PermissionGuard)
   @RequirePermission("create", "task")
   createTask(@Req() req: AuthenticatedRequest, @Body() dto: CreateTaskCoreDto) {

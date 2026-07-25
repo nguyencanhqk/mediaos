@@ -172,6 +172,29 @@ Controller/Route + DTO + Decorator metadata
 
 Nếu dự án chọn spec-first, vẫn phải có CI test đảm bảo backend implementation đáp ứng đúng OpenAPI.
 
+> **Trạng thái thực thi (S5-BE-CONTRACT-1, đo 2026-07-25) — 441 operation / 340 path.**
+>
+> Dự án đi hướng **code-first**: document sinh từ metadata controller/DTO rồi được làm giàu bằng chính
+> metadata guard (`apps/api/src/config/openapi-enrich.ts`), nên không có bản spec tách rời để trôi.
+>
+> | Hạng mục | Trước WO | Sau WO |
+> | --- | ---: | ---: |
+> | Operation có `security` (nói rõ cần auth hay không) | 0 | 441 |
+> | Operation có mô tả (quyền · xác thực · idempotency) | 0 | 441 |
+> | Operation có phản hồi lỗi tài liệu hoá (401/403/400/404/409/500) | 0 | 441 |
+> | Operation có chú thích quyền máy-đọc (`x-required-permission`) | 0 | 387 |
+> | Đường dẫn khớp server thật (`/api/v1/...`) | ❌ artifact thiếu prefix | ✅ |
+>
+> **Contract test** (thay cho "CI test" nói ở trên): `apps/api/test/foundation/openapi-contract.e2e-spec.ts`
+> chạy trong suite mặc định (không cần Postgres) và ĐỎ khi: có operation thiếu `security`/mô tả/500, route
+> cần quyền mà thiếu 403, tag rơi vào nhóm chưa phân loại, đường dẫn thiếu global prefix, hoặc một mutation
+> trong danh sách §13.2 mất `@Idempotent()`.
+>
+> **CHƯA làm (nợ có ghi):** hình dạng `data` của từng response chưa tài liệu hoá — hiện chỉ tài liệu hoá
+> ENVELOPE bao quanh (`ApiSuccessEnvelope`). Muốn có body chi tiết phải gắn `@ApiOkResponse({ type })` cho
+> từng endpoint (441 chỗ) — khối lượng của một WO riêng. Nguồn sự thật hình dạng `data` cho client TypeScript
+> vẫn là `packages/contracts` (Zod).
+
 ### 7.2 Contract không chỉ là URL
 
 Mỗi endpoint phải có đủ:
@@ -339,6 +362,20 @@ MVP có thể chọn `bearerAuth` là scheme chính. Nếu triển khai HttpOnly
 4. Endpoint file dùng chung ở FOUNDATION dùng tag `Foundation - Files`.
 5. Endpoint internal phải có tag bắt đầu bằng `Internal -`.
 
+> **Reconcile thực thi (S5-BE-CONTRACT-1) — tag được SINH TỰ ĐỘNG, không gắn tay:**
+> `apps/api/src/config/openapi-modules.ts` suy tag `<tiền tố> - <vùng nghiệp vụ>` từ hai nguồn ổn định:
+> tiền tố lấy theo **segment đầu của route path** (bảng §9.1 ở trên, khai trong `API_MODULE_TAGS`), vùng
+> nghiệp vụ lấy từ **tên class controller** (bỏ hậu tố `Controller`, tách camelCase). Ví dụ:
+> `AttendanceAdjustmentController` dưới `/attendance/**` → `Attendance - Attendance Adjustment`.
+>
+> Lý do KHÔNG gắn `@ApiTags` tay lên 78 controller: bảng ánh xạ tay chắc chắn trôi khỏi code, và WO này
+> tồn tại chính vì tài liệu đã trôi. Kết quả đo được 2026-07-25: **441 operation / 77 tag**, 0 operation
+> rơi vào nhóm chưa phân loại (e2e `openapi-contract.e2e-spec.ts` FAIL nếu có).
+>
+> **Thêm module mới ⇒ BẮT BUỘC khai segment trong `API_MODULE_TAGS`**, nếu không e2e sẽ đỏ. Registry hiện
+> có thêm 4 nhóm chưa nằm ở bảng §9.1 (doc có trước khi các module này ship): `Me` (SPEC-09), `Goal`
+> (SPEC-10), `Approval` (hộp duyệt đa cấp dùng chung), `Workflow` (di sản hướng media, ĐÃ PARK).
+
 ---
 
 ## 10. OperationId convention
@@ -398,6 +435,28 @@ OpenAPI chuẩn không có field riêng cho permission/data scope. Backend dùng
 | `x-internal` | boolean | Có | Có phải internal API không |
 | `x-sensitive-fields` | string[] | Tùy chọn | Field nhạy cảm có thể được trả về |
 | `x-source-doc` | string | Nên có | API-xx hoặc BACKEND-xx liên quan |
+
+> **Reconcile thực thi (S5-BE-CONTRACT-1) — extension nào ĐÃ tự sinh, extension nào CỐ Ý bỏ trống:**
+>
+> `apps/api/src/config/openapi-enrich.ts` suy extension từ CHÍNH metadata mà guard đọc lúc chạy
+> (`@Public`, `@RequirePermission`, `@Idempotent`) ⇒ tài liệu không thể lệch với hành vi thực thi.
+>
+> | Extension | Trạng thái | Ghi chú |
+> | --- | --- | --- |
+> | `x-module` | ✅ tự sinh | Suy từ segment path qua `API_MODULE_TAGS`. |
+> | `x-auth-required` | ✅ tự sinh | `!@Public` (JwtAuthGuard là guard TOÀN CỤC ⇒ mặc định là `true`). |
+> | `x-required-permission` | ✅ tự sinh | **Định dạng `action:resourceType`** — xem ghi chú bên dưới. |
+> | `x-idempotency-required` | ✅ tự sinh | Chỉ phát khi `true` (route có `@Idempotent()`). |
+> | `x-internal` | ✅ tự sinh | `x-module === "INTERNAL"`. |
+> | `x-permission-sensitive` / `x-reauth-required` | ✅ tự sinh (mở rộng) | Từ cờ `isSensitive`/`requiresReauth` của `@RequirePermission`. |
+> | `x-data-scope` | ⛔ CỐ Ý bỏ trống | Scope là **per-(permission, role)** trong bảng `role_permissions` (§13 permission matrix), KHÔNG suy được từ metadata route. Sinh bừa một giá trị scope vào tài liệu NGUY HIỂM hơn là không có. |
+> | `x-audit-log`, `x-notification-events`, `x-rate-limit`, `x-sensitive-fields`, `x-feature-code`, `x-source-doc` | ⛔ chưa làm | Nằm ở tầng service, cần khai tay per-endpoint — để lại cho WO sau. |
+>
+> **Định dạng `x-required-permission` LỆCH có chủ ý với ví dụ §11.2:** ví dụ ghi dạng chấm
+> `ATT.ATTENDANCE.CHECK_IN`, nhưng chuỗi đó **không tồn tại trong seed**. Thứ `PermissionGuard` thực sự so
+> khớp là **cặp engine `(action, resourceType)`**, nên tài liệu phát đúng cặp đó (`check-in:attendance`).
+> Sinh dạng chấm sẽ mời người đọc so khớp một chuỗi không có thật — đúng lớp lỗi perm-pair drift đã gặp ở
+> S1-FND-MODULE. Khi cần dạng hiển thị theo SPEC-01 §9, map ở tầng trình bày, KHÔNG đổi nguồn.
 
 ### 11.2 Ví dụ operation có extension
 
@@ -679,6 +738,33 @@ Quy tắc:
 | `X-Client-Type` | Nên có | `web`, `mobile`, `system` |
 | `X-Client-Version` | Nên có | Version frontend/mobile |
 | `Idempotency-Key` | Có với mutation quan trọng | Chống submit trùng |
+
+> **Reconcile thực thi (S5-BE-CONTRACT-1) — `Idempotency-Key` nay được server THỰC THI:**
+>
+> Trước WO này header chỉ tồn tại ở client (`packages/web-core` gắn khi caller truyền `opts.idempotencyKey`),
+> **không endpoint nào đọc nó và không caller nào truyền** ⇒ idempotency chỉ có trên giấy.
+>
+> Nay: `@Idempotent()` (`apps/api/src/common/idempotency/`) + `IdempotencyInterceptor` toàn cục. Ngữ nghĩa
+> theo API-01 §21.3 — khoá scope `company_id + user_id + method + path + key` (băm sha256), cùng khoá +
+> cùng vân tay body → **phát lại nguyên trạng** kèm `Idempotency-Replayed: true`; đang chạy →
+> `409 REQUEST-ERR-IDEMPOTENCY-IN-PROGRESS`; cùng khoá + body khác → `409 REQUEST-ERR-IDEMPOTENCY-KEY-REUSED`;
+> handler ném lỗi → **nhả khoá** (lỗi KHÔNG được cache).
+>
+> **Áp dụng cho 8 mutation của IMPLEMENTATION-08 §13.2**: check-in, check-out, tạo đơn nghỉ, duyệt/từ chối
+> đơn nghỉ, tạo task, tạo nhân viên (cả `/employees` lẫn `/hr/employees`). Danh sách rộng hơn ở API-01
+> §21.1 (login/refresh/submit leave/giao task/upload/export) **chưa làm** — WO sau.
+>
+> **Hai điểm LỆCH có chủ ý so với API-01 §21:**
+>
+> 1. **TTL 15 phút** (không phải "ví dụ 24 giờ"). Client suy khoá từ **nội dung payload**
+>    (`idempotencyKeyFor`, `packages/web-core/src/lib/api-idempotency.ts`) để lần thử lại có cùng khoá; hệ quả
+>    là hai thao tác **payload giống hệt nhau** trong cửa sổ TTL sẽ bị coi là một. Cửa sổ ngắn giữ đúng mục
+>    tiêu (chống retry/bấm-đúp) mà giới hạn khả năng nuốt nhầm một thao tác lặp lại HỢP LỆ.
+> 2. **Không bắt buộc**: route có `@Idempotent()` nhưng client không gửi header vẫn chạy bình thường
+>    (back-compat). Không ép 400 để khỏi phá client cũ.
+>
+> **Lưu ý vận hành:** kho trạng thái là Valkey khi có `VALKEY_URL`, ngược lại fallback bộ nhớ tiến trình
+> (single-instance). Chạy nhiều instance mà KHÔNG có Valkey ⇒ chống trùng không phủ chéo-instance.
 
 ### 14.2 Response header chung
 

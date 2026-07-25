@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "../app.module";
+import { loadEnv } from "../config/env.schema";
 import { buildOpenApiDocument } from "../config/swagger";
 
 /**
@@ -23,6 +24,12 @@ async function main(): Promise<void> {
   const logger = new Logger("gen-openapi");
   const app = await NestFactory.create(AppModule, { logger: false });
   try {
+    // S5-BE-CONTRACT-1: PHẢI setGlobalPrefix TRƯỚC buildOpenApiDocument — `createDocument` áp prefix của
+    // app (ignoreGlobalPrefix mặc định false). Thiếu dòng này, artifact ghi `/auth/login` trong khi
+    // server (main.ts có setGlobalPrefix) phục vụ `/api/v1/auth/login` ⇒ artifact LỆCH document thật,
+    // đúng thứ mà ghi chú đầu file cam kết là KHỚP. Cùng nguồn env với main.ts, KHÔNG hard-code.
+    const env = loadEnv();
+    app.setGlobalPrefix(`${env.API_PREFIX}/${env.API_VERSION}`);
     const document = buildOpenApiDocument(app);
     const outPath = resolve(process.cwd(), "openapi.json");
     writeFileSync(outPath, JSON.stringify(document, null, 2), "utf8");

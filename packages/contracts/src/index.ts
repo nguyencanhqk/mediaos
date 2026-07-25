@@ -169,3 +169,6 @@ export * from "./goal";
 // (docs/plans/S5-LMS-APP-3.md §5) + envelope ok|no_account. Tên export riêng (meTraining*/MeTraining*/
 // ME_TRAINING_*) KHÔNG trùng barrel hiện có.
 export * from "./me-training";
+// S5-BE-CONTRACT-1 (additive): hằng số idempotency dùng chung api ↔ web (tên header + mã lỗi).
+// Tên export riêng (IDEMPOTENCY_*) KHÔNG trùng barrel hiện có.
+export * from "./idempotency";

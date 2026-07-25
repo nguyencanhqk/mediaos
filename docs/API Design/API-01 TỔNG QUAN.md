@@ -1211,6 +1211,21 @@ company_id + user_id + method + path + idempotency_key
 4. Idempotency key có TTL, ví dụ 24 giờ.
 5. Với action cần transaction, idempotency record phải được tạo trong transaction hoặc có lock phù hợp.
 
+> **Trạng thái thực thi (S5-BE-CONTRACT-1, 2026-07-25):** quy tắc 1–3 ĐÃ thực thi đúng như trên
+> (`@Idempotent()` + `IdempotencyInterceptor`, khoá scope `company_id + user_id + method + path + key`).
+> Chi tiết triển khai + hai điểm lệch có chủ ý (TTL 15 phút thay vì 24 giờ; header KHÔNG bắt buộc để giữ
+> back-compat) ghi ở **BACKEND-12 §14.1**.
+>
+> Phạm vi hiện tại = 8 mutation của IMPLEMENTATION-08 §13.2 (check-in/out · tạo đơn nghỉ · duyệt/từ chối
+> đơn nghỉ · tạo task · tạo nhân viên). Các mục còn lại của §21.1 (login, refresh, gửi/duyệt điều chỉnh
+> công, submit đơn nghỉ, giao task, upload, export) **chưa áp** — nợ có ghi, WO sau.
+>
+> Quy tắc 5 (idempotency record trong cùng transaction) **chưa áp**: kho trạng thái hiện nằm ngoài DB
+> (Valkey, fallback bộ nhớ) nên không tham gia transaction nghiệp vụ. Hệ quả: nếu tiến trình chết SAU khi
+> commit nghiệp vụ nhưng TRƯỚC khi ghi cache, lần thử lại sẽ chạy thật lần nữa — rule nghiệp vụ của từng
+> endpoint (vd "đã check-in" → 409) vẫn là chốt chặn cuối. Muốn bảo đảm tuyệt đối phải chuyển kho sang
+> bảng DB ghi trong cùng transaction (WO sau).
+
 ---
 
 ### 21.4 Response khi request trùng
