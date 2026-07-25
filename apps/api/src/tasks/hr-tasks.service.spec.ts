@@ -80,15 +80,8 @@ describe("HrTasksService.createApprovalTaskTx — GHI task_code (S5-TASK-HRCODE-
     expect(written.taskType).toBe("hr");
   });
 
-  it("KHÔNG truyền taskCode ⇒ ghi null (backward-compat cho caller chưa cut-over)", async () => {
-    const { svc } = makeService();
-    const { tx, values } = makeInsertTx();
-
-    await svc.createApprovalTaskTx(tx, COMPANY, { title: "X", assigneeUserId: null });
-
-    const written = values.mock.calls[0][0] as { taskCode?: string | null };
-    expect(written.taskCode ?? null).toBeNull();
-  });
+  // S5-LEAVE-DEADCODE-1: `taskCode` nay BẮT BUỘC (string) — gọi thiếu là LỖI BUILD (TypeScript), không còn
+  // nhánh runtime "ghi null". Case backward-compat cũ đã bỏ. Caller sống duy nhất (attendance) luôn truyền mã.
 });
 
 describe("HrTasksService.allocateTaskCodeBeforeTx — cấp mã tx RIÊNG (S5-TASK-HRCODE-1)", () => {

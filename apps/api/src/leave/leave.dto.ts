@@ -5,7 +5,6 @@ import {
   cancelLeaveRequestSchema,
   createLeavePolicySchema,
   createLeaveRequestDraftSchema,
-  createLeaveRequestSchema,
   createLeaveTypeAdminSchema,
   createLeaveTypeSchema,
   leaveBalanceAdminListQuerySchema,
@@ -30,7 +29,8 @@ import {
 export class CreateLeaveTypeDto extends createZodDto(createLeaveTypeSchema) {}
 export class UpdateLeaveTypeDto extends createZodDto(updateLeaveTypeSchema) {}
 export class UpsertLeaveBalanceDto extends createZodDto(upsertLeaveBalanceSchema) {}
-export class CreateLeaveRequestDto extends createZodDto(createLeaveRequestSchema) {}
+// S5-LEAVE-DEADCODE-1: CreateLeaveRequestDto (createLeaveRequestSchema) đã xoá — DTO của route legacy
+// LeaveService.createRequest (code chết); route sống dùng CreateLeaveRequestDraftDto/SubmitLeaveRequestDto.
 export class LeaveListQueryDto extends createZodDto(leaveListQuerySchema) {}
 // S3-LEAVE-BE-5: scope=own|team|company + [from,to] (replaces the old unscoped month-only query).
 export class LeaveCalendarQueryDto extends createZodDto(leaveCalendarQuerySchema) {}
