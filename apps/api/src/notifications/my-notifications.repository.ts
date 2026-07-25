@@ -139,9 +139,16 @@ export class MyNotificationsRepository {
   }
 
   /**
-   * NOTI-API-003 unread-count — WHERE khớp NGUYÊN VĂN `idx_notifications_unread` (company_id,
-   * recipient_user_id) WHERE status='Unread' (mig 0479/0481): dùng literal `status='Unread'` (KHÔNG
-   * EFFECTIVE_STATUS/COALESCE) để hit partial index, không scan bảng (WO done_when).
+   * NOTI-API-003 unread-count — dùng literal `status='Unread'` (KHÔNG EFFECTIVE_STATUS/COALESCE) để hit
+   * partial index `idx_notifications_unread` (company_id, recipient_user_id) WHERE status='Unread' (mig
+   * 0479/0481), không scan bảng.
+   *
+   * S5-QA-DASHNOTI-1 (§16.3 "deleted/hidden ẩn đúng"): + `deleted_at IS NULL` để count KHỚP list
+   * (listWhere/ownScope đều lọc deleted_at IS NULL). Trước đây count KHÔNG lọc deleted_at, ĐÚNG chỉ NHỜ bất
+   * biến đường-ghi "softDelete luôn set status='Deleted'" (không phải ràng buộc DB) — 1 hàng bất thường
+   * status='Unread' + deleted_at set (admin/backfill tương lai) sẽ lọt vào badge nhưng ẩn khỏi list ⇒ lệch.
+   * Điều kiện result-identical với data hiện có (status='Deleted' ⇒ đã bị lọc bởi status='Unread'); vẫn
+   * index-servable (idx_notifications_unread phục vụ status='Unread', recheck deleted_at trên heap).
    */
   async unreadStatsTx(
     tx: TenantTx,
@@ -160,6 +167,7 @@ export class MyNotificationsRepository {
           eq(notifications.companyId, companyId),
           eq(notifications.recipientUserId, userId),
           eq(notifications.status, "Unread"),
+          isNull(notifications.deletedAt),
         ),
       );
     return {
@@ -220,7 +228,11 @@ export class MyNotificationsRepository {
     return row;
   }
 
-  /** NOTI-API-103 — bulk UPDATE 1 câu (KHÔNG loop từng dòng), chỉ đụng status='Unread' hiện có. */
+  /**
+   * NOTI-API-103 — bulk UPDATE 1 câu (KHÔNG loop từng dòng), chỉ đụng status='Unread' hiện có.
+   * S5-QA-DASHNOTI-1: + `deleted_at IS NULL` (như unreadStatsTx) — KHÔNG mark-read 1 hàng đã soft-delete
+   * (giữ count/mark-all khớp list; phòng hàng bất thường status='Unread' + deleted_at set).
+   */
   async markAllReadTx(
     tx: TenantTx,
     companyId: string,
@@ -231,6 +243,7 @@ export class MyNotificationsRepository {
       eq(notifications.companyId, companyId),
       eq(notifications.recipientUserId, userId),
       eq(notifications.status, "Unread"),
+      isNull(notifications.deletedAt),
     ];
     if (filter.sourceModule) conds.push(eq(notifications.moduleCode, filter.sourceModule));
     if (filter.notificationType)

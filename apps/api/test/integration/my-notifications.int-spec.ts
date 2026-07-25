@@ -378,6 +378,36 @@ describe.skipIf(!hasLaneDb)(
       expect(ids).not.toContain(notifA1Read);
     });
 
+    // ── S5-QA-DASHNOTI-1 (§16.3): unread-count PHẢI khớp list — hàng status='Unread' + deleted_at set ẩn cả 2 ──
+    // Hàng bất thường mà đường-ghi hiện tại KHÔNG tạo (softDelete luôn set status='Deleted'); mô phỏng path
+    // admin/backfill tương lai phá bất biến. TRƯỚC fix (count chỉ lọc status='Unread'): badge đếm nó nhưng
+    // list ẩn nó ⇒ "badge đếm hàng list giấu". SAU fix (+ deleted_at IS NULL): count = list.
+    it("regression: status='Unread' NHƯNG deleted_at set ⇒ KHÔNG vào unread-count NÊN khớp list (badge không lệch)", async () => {
+      const h = bearer(await login(nest, A.slug, a1Email));
+      const before = (await api(nest).get("/notifications/unread-count").set(h)).body.data
+        .unread_count as number;
+
+      const ghostId = await seedNotification(direct, A.companyId, userA1, {
+        status: "Unread",
+        title: "ghost-unread-but-deleted",
+      });
+      await direct.query("UPDATE notifications SET deleted_at = now() WHERE id = $1", [ghostId]);
+
+      // unread-count KHÔNG tăng — hàng đã soft-delete bị loại (dù status còn 'Unread').
+      const countRes = await api(nest).get("/notifications/unread-count").set(h);
+      expect(countRes.body.data.unread_count).toBe(before);
+
+      // list cũng loại nó ⇒ count KHỚP list (bất biến "deleted/hidden ẩn đúng").
+      const listRes = await api(nest).get("/notifications").set(h);
+      const listIds = (listRes.body.data as Array<{ notification_id: string }>).map(
+        (n) => n.notification_id,
+      );
+      expect(listIds).not.toContain(ghostId);
+
+      // dọn để KHÔNG ảnh hưởng test sau (index/EXPLAIN dùng cùng userA1).
+      await direct.query("DELETE FROM notifications WHERE id = $1", [ghostId]);
+    });
+
     // ── unread-count query hit đúng partial index (WO done_when: "không scan bảng") ────────────────────
 
     // ⚠️ KHÔNG assert planner chọn ĐÍCH DANH `idx_notifications_unread`. Bảng notifications có 8 index
