@@ -141,4 +141,15 @@ describe("DataTable — sắp xếp server (manual-mode)", () => {
     render(<DataTable columns={groupedColumns} data={groupedData} />);
     expect(screen.queryByTestId("sort-name")).not.toBeInTheDocument();
   });
+
+  // S5-QA-REG-1 §15.4 (responsive/a11y smoke) — "Tablet: filter wrap, horizontal table scroll".
+  // DataTable là bảng DÙNG CHUNG cho mọi list P0 (HR/TASK/ATT/…) — proxy TĨNH (class Tailwind) vì
+  // jsdom không đánh giá được layout/viewport thật; xác minh cuộn ngang thật trên tablet/mobile là
+  // thủ công (ghi ở QA sign-off), KHÔNG tự động hoá được ở đây.
+  it("bọc <table> trong container overflow-x-auto (responsive proxy — cuộn ngang khi bảng rộng hơn viewport)", () => {
+    const { container } = render(<DataTable columns={columns} data={data} />);
+    const scrollWrapper = container.querySelector(".overflow-x-auto");
+    expect(scrollWrapper).toBeInTheDocument();
+    expect(scrollWrapper?.querySelector("table")).toBeInTheDocument();
+  });
 });
