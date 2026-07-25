@@ -8398,7 +8398,10 @@ export const backlog = [
       "m prod-update: chèn bước MIGRATE trước RESTART (fail-closed — migrate đỏ thì KHÔNG restart, thoát khác 0) + m prod-status báo số migration tồn đọng (file journal ↔ drizzle.__drizzle_migrations)",
     zone: "yellow",
     status: "todo",
-    paths: ["mediaos.ps1", "scripts/windows/**", "docs/plans/S5-DEVOPS-DEPLOYMIG-1.md"],
+    // m.cmd thêm lúc triển khai: wrapper `m` CHẾT ở console codepage 65001 vì 2 dòng REM tiếng Việt
+    // (cmd.exe parse sai DÒNG KẾ TIẾP → "'ediaos.ps1.' is not recognized") ⇒ chính 2 lệnh trong done_when
+    // không gọi được bằng `m`. Vá về ASCII, đúng luật memory powershell-utf8-bom-required (.cmd = ASCII).
+    paths: ["mediaos.ps1", "m.cmd", "scripts/windows/**", "docs/plans/S5-DEVOPS-DEPLOYMIG-1.md"],
     skills: ["code-review"],
     depends_on: [],
     plan: "docs/plans/S5-DEVOPS-DEPLOYMIG-1.md",
@@ -8407,6 +8410,7 @@ export const backlog = [
       "BẪY ĐÃ ĐO 2026-07-24: `pnpm db:migrate` chạy qua `pnpm --filter` có cwd = apps/api nên KHÔNG đọc .env ở gốc repo ⇒ chết với 'DATABASE_DIRECT_URL is required'. Script PHẢI nạp .env gốc (đã có helper Import-DotEnv, xem Invoke-DeploySeed dòng 333) rồi truyền DATABASE_DIRECT_URL tường minh",
       "thứ tự đúng theo memory migration-expand-contract-required: migration EXPAND (thêm bảng/cột/hàm) chạy TRƯỚC restart là an toàn; migration CONTRACT (REVOKE/DROP) chỉ an toàn khi dist đang chạy đã hết dùng — WO này KHÔNG tự động hoá phần contract, chỉ cảnh báo khi phát hiện REVOKE/DROP trong lô tồn đọng",
       "đếm tồn đọng: apps/api/migrations/meta/_journal.json (entries) ↔ select count(*) from drizzle.__drizzle_migrations — drizzle áp ĐƠN ĐIỆU theo thứ tự nên chênh lệch = số chờ áp",
+      "ĐÍNH CHÍNH lúc triển khai (đọc drizzle-orm@0.45.2 pg-core/dialect.cjs migrate()): drizzle lấy row created_at LỚN NHẤT rồi áp mọi migration có `when` > giá trị đó ⇒ tồn đọng phải tính theo TIMESTAMP, không phải hiệu số row. Hiệu số row giữ lại làm PHÉP CHÉO phát hiện lệch gốc (DB từng migrate ở nhánh khác) — báo qua trường `skew`",
       "cùng họ với landmine đã ghi: prod-restart-does-not-rebuild-dist (restart KHÔNG build) — WO này thêm vế thứ hai: build KHÔNG migrate",
     ],
     done_when: [

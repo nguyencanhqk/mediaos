@@ -164,21 +164,55 @@ function Invoke-Clean {
 }
 
 # ── Lệnh: DB ────────────────────────────────────────────────────────────────
-# Đọc DB đích từ .env đang active, CHE mật khẩu. `pnpm db:migrate` im lặng đi theo .env hiện tại —
-# .env bị hoán đổi giữa prod/dev-online nên rất dễ migrate nhầm DB mà không hay.
-function Get-MigrateTarget {
+# Che mật khẩu trong connection string trước khi in ra console/log.
+function Get-MaskedUrl([string]$url) {
+  if (-not $url) { return "(trong)" }
+  return ($url -replace '://([^:/@]+):[^@]*@', '://$1:***@')
+}
+
+# S5-DEVOPS-DEPLOYMIG-1 — nạp .env GỐC repo vào session TRƯỚC khi gọi `pnpm db:migrate`.
+# VÌ SAO BẮT BUỘC: apps/api/src/db/migrate.ts CHỈ đọc process.env — nó import `loadEnv` từ config/env.schema,
+# KHÔNG import config/load-env (file DUY NHẤT nạp .env vào process.env; chỉ main.ts + gen-openapi.ts dùng).
+# Thêm nữa `pnpm db:migrate` = `pnpm --filter @mediaos/api db:migrate` nên cwd = apps/api, càng không thấy
+# .env gốc ⇒ chết "DATABASE_DIRECT_URL is required" (đo thật 2026-07-24). Import-DotEnv GHI ĐÈ biến sẵn có
+# ⇒ đồng thời dọn env dev-online còn sót trong session (không migrate nhầm mediaos_dev).
+function Import-MigrateEnv {
   $envPath = Join-Path $Root ".env"
-  if (-not (Test-Path $envPath)) { return "(KHÔNG có .env — chạy 'm prod-env' hoặc copy .env.example)" }
-  $line = Select-String -Path $envPath -Pattern '^\s*DATABASE_DIRECT_URL\s*=' | Select-Object -First 1
-  if (-not $line) { return "(.env THIẾU DATABASE_DIRECT_URL)" }
-  $url = ($line.Line -split '=', 2)[1].Trim().Trim('"').Trim("'")
-  return ($url -replace '://([^:]+):[^@]+@', '://$1:***@')
+  if (-not (Test-Path $envPath)) {
+    Write-Err "Khong co .env o goc repo -> khong biet migrate vao DB nao ('m prod-env' hoac copy .env.example)."
+    return $false
+  }
+  Import-DotEnv $envPath
+  if (-not $env:DATABASE_DIRECT_URL) {
+    Write-Err ".env goc THIEU DATABASE_DIRECT_URL -> khong migrate duoc."
+    return $false
+  }
+  return $true
+}
+
+# Đo tồn đọng migration (journal repo <-> drizzle.__drizzle_migrations). CHỈ ĐỌC — script chạy đúng 1 SELECT.
+# Trả object trạng thái, hoặc $null khi KHÔNG đo được (người gọi PHẢI fail-closed: "không biết" ≠ "không tồn đọng").
+# Cần Import-MigrateEnv chạy trước (script đọc DATABASE_DIRECT_URL từ env kế thừa).
+function Get-MigrationStatus {
+  $statusScript = Join-Path $Root "scripts\windows\migration-status.mjs"
+  if (-not (Test-Path $statusScript)) { Write-Err "Khong thay scripts\windows\migration-status.mjs"; return $null }
+  $out = $null
+  try { $out = & node $statusScript --json }
+  catch { Write-Err ("khong chay duoc node migration-status: " + $_.Exception.Message); return $null }
+  $raw = ($out | Out-String).Trim()
+  if (-not $raw) { Write-Err "migration-status khong tra ve gi (node loi?)"; return $null }
+  $status = $null
+  try { $status = $raw | ConvertFrom-Json }
+  catch { Write-Err ("migration-status tra ve JSON hong: " + $raw); return $null }
+  if (-not $status.ok) { Write-Err ("khong do duoc migration: " + $status.error); return $null }
+  return $status
 }
 
 function Invoke-Migrate {
   Write-Step "Migrate DB"
   Write-Host ("  .env dang dung : " + (Get-ActiveEnv))
-  Write-Host ("  DB dich        : " + (Get-MigrateTarget))
+  if (-not (Import-MigrateEnv)) { exit 1 }
+  Write-Host ("  DB dich        : " + (Get-MaskedUrl $env:DATABASE_DIRECT_URL))
   Exec { pnpm db:migrate } "pnpm db:migrate"
   Write-Ok "Migrate xong"
 }
@@ -406,6 +440,92 @@ function Invoke-ProdRestart([string[]]$rArgs) {
   }
 }
 
+# In danh sách có TRẦN, và NÓI RÕ đã cắt bao nhiêu (deploy bình thường chỉ tồn đọng vài migration; DB
+# rỗng/lệch gốc thì cả trăm — cắt im lặng sẽ khiến người đọc tưởng đã thấy hết).
+$ListCap = 15
+function Write-ListCapped($items, [scriptblock]$fmt) {
+  $i = 0
+  foreach ($item in $items) {
+    if ($i -ge $ListCap) {
+      Write-Host ("      ... va {0} dong nua (xem het: node scripts\windows\migration-status.mjs)" -f ($items.Count - $ListCap)) -ForegroundColor DarkGray
+      break
+    }
+    Write-Host (& $fmt $item) -ForegroundColor Yellow
+    $i++
+  }
+}
+
+# S5-DEVOPS-DEPLOYMIG-1 — bước MIGRATE của prod-update, đặt GIỮA "build api" và restart service.
+# VÌ SAO CÓ: trước đây prod-update = build + restart, KHÔNG migrate ⇒ dist mới chạy trên schema cũ và lỗi
+# chỉ lộ ra ở runtime, trong job nền, dưới dạng log rác (sự cố PROD 2026-07-24: thiếu mig 0511 ⇒
+# SYSTEM_JOB_RUNS_RETENTION Failed mỗi nhịp, api.err.log phình 149 MB, 190/196 migration đã áp).
+#
+# FAIL-CLOSED: trả $false ở MỌI ngã không chắc chắn (thiếu .env · không đo được · DB lỗi · người huỷ ·
+# migrate exit≠0 · migrate xong mà VẪN còn tồn đọng) ⇒ người gọi KHÔNG restart. Trạng thái xấu nhất KHÔNG
+# phải "service cũ chạy tiếp" mà là "dist mới chạy trên schema cũ".
+#
+# Xuất ra CONSOLE của cửa sổ elevated (UAC) → dùng ASCII không dấu, khớp ghi chú ở Invoke-Elevated.
+function Invoke-ProdMigrateStep {
+  Write-Host "  migrate DB TRUOC khi restart (fail-closed) ..." -ForegroundColor DarkGray
+  if (-not (Import-MigrateEnv)) { return $false }
+  Write-Host ("    DB dich : " + (Get-MaskedUrl $env:DATABASE_DIRECT_URL))
+  $st = Get-MigrationStatus
+  if (-not $st) { return $false }
+  if ($st.skew) { Write-Warn ("LECH journal/DB: " + $st.skew) }
+
+  if ($st.pendingCount -eq 0) {
+    Write-Ok ("schema da o head ({0}/{1}) - bo qua migrate" -f $st.appliedCount, $st.journalCount)
+    return $true
+  }
+
+  Write-Warn ("TON DONG {0} migration - se ap TRUOC khi restart:" -f $st.pendingCount)
+  Write-ListCapped $st.pendingTags { param($tag) "      - $tag" }
+
+  # Expand-contract (memory migration-expand-contract-required): EXPAND (thêm bảng/cột/hàm) áp trước restart
+  # là an toàn; CONTRACT (REVOKE/DROP) chỉ an toàn khi dist ĐANG CHẠY đã hết dùng đối tượng bị gỡ — máy
+  # KHÔNG biết điều đó ⇒ hỏi người, không tự quyết.
+  if ($st.contractCount -gt 0) {
+    Write-Warn ("Lo nay co {0} cau lenh CONTRACT (REVOKE/DROP):" -f $st.contractCount)
+    Write-ListCapped $st.contract { param($c) "      {0}:{1} [{2}] {3}" -f $c.tag, $c.line, $c.kind, $c.snippet }
+    Write-Warn "CONTRACT chi an toan khi dist DANG CHAY da het dung doi tuong bi go (expand-contract)."
+    if ($env:MEDIAOS_MIGRATE_YES -eq "1") {
+      Write-Warn "MEDIAOS_MIGRATE_YES=1 -> tu xac nhan, khong hoi."
+    } else {
+      # Read-Host NÉM khi host không tương tác (chạy từ script/CI) — bắt lấy để fail-closed KÈM cách đi tiếp,
+      # thay vì để exception thô nổi lên với thông báo khó hiểu.
+      $ans = $null
+      try { $ans = Read-Host 'Go "MIGRATE" de xac nhan ap ca lo (rong = huy, KHONG restart)' }
+      catch {
+        Write-Err "Khong hoi duoc (host khong tuong tac) -> KHONG migrate, KHONG restart."
+        Write-Err "Chay lai trong cua so PowerShell tuong tac, hoac dat MEDIAOS_MIGRATE_YES=1 neu da duyet lo nay."
+        return $false
+      }
+      if ($ans -ne "MIGRATE") { Write-Err "Da huy theo yeu cau -> KHONG migrate, KHONG restart."; return $false }
+    }
+  }
+  if ($st.routineCount -gt 0) {
+    Write-Host ("    ({0} cau DROP ... IF EXISTS kieu dung-lai - khong hoi)" -f $st.routineCount) -ForegroundColor DarkGray
+  }
+
+  # Out-Host: stdout của native command là OUTPUT STREAM của hàm — không chặn thì giá trị trả về thành
+  # mảng [log..., $false] và `-not` trên mảng KHÁC RỖNG = $false ⇒ fail-OPEN (vẫn restart dù migrate đỏ).
+  pnpm db:migrate | Out-Host
+  if ($LASTEXITCODE -ne 0) {
+    Write-Err ("pnpm db:migrate THAT BAI (exit {0}) - KHONG restart service." -f $LASTEXITCODE)
+    return $false
+  }
+
+  # Đo LẠI: exit 0 chưa chứng minh schema ở head (drizzle bỏ qua IM LẶNG khi journal/DB lệch gốc).
+  $after = Get-MigrationStatus
+  if (-not $after) { Write-Err "migrate xong nhung KHONG do lai duoc trang thai - KHONG restart."; return $false }
+  if ($after.pendingCount -ne 0) {
+    Write-Err ("migrate xong ma VAN con {0} ton dong (dau tien: {1}) - KHONG restart." -f $after.pendingCount, $after.firstPendingTag)
+    return $false
+  }
+  Write-Ok ("migrate xong: {0}/{1} da ap - schema o head ({2})" -f $after.appliedCount, $after.journalCount, $after.headTag)
+  return $true
+}
+
 # PROD UPDATE — re-build + cập nhật + khởi động lại các app đã deploy online:
 #   m prod-update              → FE (Pages) + API + LMS
 #   m prod-update fe|api|lms   → chỉ 1 phần    ('be' = API + LMS — bước elevated dùng nội bộ)
@@ -444,6 +564,15 @@ function Invoke-ProdUpdate([string[]]$updArgs) {
     Write-Host "  build contracts + api (dist mà service PROD sẽ chạy) ..." -ForegroundColor DarkGray
     Exec { pnpm --filter "@mediaos/contracts" build } "build contracts"
     Exec { pnpm --filter "@mediaos/api" build } "build api"
+    # S5-DEVOPS-DEPLOYMIG-1 — MIGRATE giữa build và restart. Build TRƯỚC migrate: build đỏ thì chưa hề
+    # đụng DB. Migrate TRƯỚC restart: dist mới luôn gặp schema >= cái nó cần.
+    # So sánh `-ne $true` (không phải `-not`): mảng lọt vào cũng rơi về nhánh DỪNG (fail-closed).
+    $migrateOk = Invoke-ProdMigrateStep
+    if ($migrateOk -ne $true) {
+      Write-Err "FAIL-CLOSED: schema chua o head -> KHONG restart API PROD (dist moi + schema cu = loi runtime o job nen)."
+      Write-Err "Sua xong chay lai 'm prod-update api'. Xem trang thai: 'm prod-status'. Chi migrate: 'm migrate'."
+      exit 1
+    }
     Restart-OneProdService $ProdApiService "http://localhost:$ApiPort/api/v1/health" "API PROD" $ApiHealthHint
   }
   if ($doLms) {
@@ -452,6 +581,28 @@ function Invoke-ProdUpdate([string[]]$updArgs) {
     try { Exec { pnpm build } "build lms (next build)" } finally { Pop-Location }
     Restart-OneProdService $ProdLmsService "http://localhost:$LmsPort" "LMS PROD" $LmsHealthHint
   }
+}
+
+# Khối "migration" của `m prod-status` — CHỈ ĐỌC và KHÔNG BAO GIỜ throw (đây là lệnh xem trạng thái:
+# đo được thì báo, không đo được thì nói rõ, chứ không làm hỏng phần còn lại của báo cáo).
+# Trả lời đúng câu hỏi đã ngã ngựa 2026-07-24: "dist đang chạy có đang ngồi trên schema cũ không?"
+function Show-MigrationStatus {
+  Write-Host "  Migration (journal repo <-> drizzle.__drizzle_migrations):" -ForegroundColor DarkGray
+  if (-not (Import-MigrateEnv)) { return }
+  Write-Host ("    DB dich : " + (Get-MaskedUrl $env:DATABASE_DIRECT_URL))
+  $st = Get-MigrationStatus
+  if (-not $st) { return }
+  if ($st.skew) { Write-Warn ("LECH journal/DB: " + $st.skew) }
+  if ($st.pendingCount -eq 0) {
+    Write-Ok ("migration {0}/{1} da ap - schema o head ({2})" -f $st.appliedCount, $st.journalCount, $st.headTag)
+    return
+  }
+  Write-Warn ("migration {0}/{1} da ap - TON DONG {2}, dau tien chua ap: {3}" -f `
+    $st.appliedCount, $st.journalCount, $st.pendingCount, $st.firstPendingTag)
+  if ($st.contractCount -gt 0) {
+    Write-Warn ("lo ton dong co {0} cau lenh CONTRACT (REVOKE/DROP) - se hoi xac nhan khi ap" -f $st.contractCount)
+  }
+  Write-Host "    Ap bang:  m prod-update api   (migrate xong moi restart)" -ForegroundColor DarkGray
 }
 
 function Invoke-ProdStatus {
@@ -466,6 +617,8 @@ function Invoke-ProdStatus {
   if (Test-Port $ApiPort) { Write-Ok "cổng :$ApiPort (API PROD) đang mở" } else { Write-Err "cổng :$ApiPort (API PROD) đóng" }
   if (Test-Port $LmsPort) { Write-Ok "cổng :$LmsPort (LMS PROD) đang mở" } else { Write-Err "cổng :$LmsPort (LMS PROD) đóng" }
   if (Test-Port 3200)     { Write-Warn "cổng :3200 (dev-online API) CŨNG đang chạy — nhớ landmine dist dùng chung" }
+  Write-Host ""
+  Show-MigrationStatus
   Write-Host ""
   try {
     $r = Invoke-WebRequest -Uri "http://localhost:$ApiPort/api/v1/health" -UseBasicParsing -TimeoutSec 4
@@ -765,8 +918,10 @@ function Show-Help {
   Write-Host ""
   Write-Host "  PROD ĐANG CHẠY (re-build · cập nhật · restart app đã deploy online)" -ForegroundColor Yellow
   Write-Host "    prod-update [fe|api|lms]  re-build + deploy FE Pages + rebuild API/LMS + restart service (UAC khi cần)"
-  Write-Host "    prod-restart [api|lms]    chỉ khởi động lại service PROD, KHÔNG rebuild (bỏ trống = cả hai)"
-  Write-Host "    prod-status               service (API·LMS·cloudflared) · cổng · health local + online"
+  Write-Host "                              API: build -> MIGRATE -> restart. Migrate đỏ/huỷ = KHÔNG restart, exit 1."
+  Write-Host "                              Lô tồn đọng có REVOKE/DROP thì HỎI xác nhận (bỏ qua: MEDIAOS_MIGRATE_YES=1)."
+  Write-Host "    prod-restart [api|lms]    chỉ khởi động lại service PROD, KHÔNG rebuild, KHÔNG migrate (bỏ trống = cả hai)"
+  Write-Host "    prod-status               service (API·LMS·cloudflared) · cổng · migration tồn đọng · health local + online"
   Write-Host ""
   Write-Host "  DEV-ONLINE (lộ dev ra cian-dev.*.funtimemediacorp.com, song song prod)" -ForegroundColor Yellow
   Write-Host "    dev-online          chạy/restart dev stack lộ ra cian-dev.* (tự dừng cũ + rebuild shared)"
