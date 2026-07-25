@@ -4,9 +4,7 @@ import { DatabaseModule } from "../db/db.module";
 import { AuditRepository } from "../foundation/audit/audit.repository";
 import { HolidaysModule } from "../foundation/holidays/holidays.module";
 import { SeedModule } from "../foundation/seed/seed.module";
-import { SequenceModule } from "../foundation/sequences/sequence.module";
 import { PermissionModule } from "../permission/permission.module";
-import { HrTasksService } from "../tasks/hr-tasks.service";
 import { LeaveController } from "./leave.controller";
 import { LeaveAdminRepository } from "./leave-admin.repository";
 import { LeaveAdminService } from "./leave-admin.service";
@@ -35,8 +33,11 @@ import { LeaveService } from "./leave.service";
 
 /**
  * G11-2 — Leave. AuditService/OutboxService come from the @Global EventsModule; PermissionModule
- * exports PermissionService + the guard stack. HrTasksService (Task Hub bridge) is provided locally —
- * it is stateless and shared with AttendanceModule, avoiding a cross-edit of the shared TasksModule.
+ * exports PermissionService + the guard stack.
+ *
+ * S5-LEAVE-DEADCODE-1: HrTasksService (Task Hub bridge) + SequenceModule ĐÃ GỠ khỏi module — chúng chỉ
+ * phục vụ khối LeaveService.createRequest/approve/reject/cancel (code chết đã xoá). Đường sống của LEAVE
+ * (LeaveRequestService/LeaveApprovalService/LeaveRevokeService) KHÔNG dùng Task Hub.
  *
  * S3-LEAVE-SEED-1 (additive): import SeedModule (exports MasterDataSeederRegistry) → LeaveSeedRegistrar
  * (OnModuleInit) registers LeaveMasterDataSeeder so the runtime per-company runner seeds 4 default leave
@@ -48,19 +49,10 @@ import { LeaveService } from "./leave.service";
   // exclusion in calculate preview. + LeaveReadService/LeaveReadRepository (read/preview surface).
   // S3-INT-1: + AttendanceModule (exports AttendanceLeaveSyncService — no cycle: AttendanceModule loads
   // BEFORE LeaveModule in app.module.ts and never imports LeaveModule).
-  // S5-TASK-HRCODE-1 (additive, DI-hygiene): + SequenceModule. LeaveModule provide HrTasksService cục bộ,
-  // mà HrTasksService inject SequenceService. Import ở đây cho phép BỎ @Optional() trên HrTasksService ⇒
-  // thiếu wiring lại FAIL-FAST LÚC BOOT thay vì 500 ở request đầu tiên. LƯU Ý: LEAVE hiện KHÔNG dùng
-  // task_code (khối LeaveService.createRequest/approve/reject/cancel là code chết — WO S5-LEAVE-DEADCODE-1);
-  // import này chỉ để DI resolve được. Khi WO đó gỡ HrTasksService khỏi providers, gỡ luôn SequenceModule.
-  imports: [
-    DatabaseModule,
-    PermissionModule,
-    SeedModule,
-    HolidaysModule,
-    AttendanceModule,
-    SequenceModule,
-  ],
+  // S5-LEAVE-DEADCODE-1: gỡ SequenceModule — nó chỉ được thêm (S5-TASK-HRCODE-1) để HrTasksService resolve
+  // SequenceService. HrTasksService đã gỡ khỏi providers cùng khối LeaveService.createRequest/approve/reject/
+  // cancel (code chết); LEAVE không còn cấp task_code nên không cần SequenceModule.
+  imports: [DatabaseModule, PermissionModule, SeedModule, HolidaysModule, AttendanceModule],
   controllers: [LeaveController, LeaveReportController, LeaveAuditController],
   providers: [
     LeaveService,
@@ -85,7 +77,6 @@ import { LeaveService } from "./leave.service";
     // S3-INT-1 (additive) — CANCEL(Approved)/REVOKE (ATT-revert + balance refund, idempotent). Reuses
     // LeaveRepository/LeaveRequestRepository/LeaveApprovalRepository (already provided above).
     LeaveRevokeService,
-    HrTasksService,
     LeaveMasterDataSeeder,
     LeaveSeedRegistrar,
     // S3-LEAVE-BE-6 (additive): LeaveReportService injects DataScopeService (PermissionModule) +

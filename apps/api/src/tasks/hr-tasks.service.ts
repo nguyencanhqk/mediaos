@@ -18,10 +18,10 @@ import { allocateTaskCode } from "./task-code.util";
  * (KHÔNG giữ lock counter suốt tx dài) rồi truyền `taskCode` vào `createApprovalTaskTx` để GHI vào row.
  *
  * DI — SequenceService là BẮT BUỘC (KHÔNG `@Optional()`): mọi module provide HrTasksService PHẢI
- * `imports: [SequenceModule]`. Hiện có đúng 2: AttendanceModule (dùng thật — cấp task_code cho đơn điều
- * chỉnh công) và LeaveModule (chỉ để DI resolve; LEAVE không dùng task_code — khối gọi service này là code
- * chết, xem WO S5-LEAVE-DEADCODE-1). Bắt buộc thay vì Optional để thiếu wiring FAIL-FAST LÚC BOOT, thay vì
- * boot xanh rồi 500 ở request đầu tiên — module thứ 3 quên import sẽ lộ ngay khi khởi động.
+ * `imports: [SequenceModule]`. Sau S5-LEAVE-DEADCODE-1 chỉ còn ĐÚNG 1: AttendanceModule (dùng thật — cấp
+ * task_code cho đơn điều chỉnh công). LeaveModule đã GỠ provider này cùng khối LeaveService code chết. Bắt
+ * buộc thay vì Optional để thiếu wiring FAIL-FAST LÚC BOOT, thay vì boot xanh rồi 500 ở request đầu tiên —
+ * module mới quên import sẽ lộ ngay khi khởi động.
  * Guard runtime trong `allocateTaskCodeBeforeTx` GIỮ làm defense-in-depth (bắt trường hợp khởi tạo tay/test
  * truyền thiếu) — ném TASK-ERR-CODE-SEQ-UNWIRED, tuyệt đối KHÔNG cấp mã câm/silent-null.
  * DatabaseService = @Global (luôn có).
@@ -50,8 +50,12 @@ export class HrTasksService {
 
   /**
    * Tạo task duyệt đơn HR. assigneeUserId = người duyệt (quản lý trực tiếp), null = hàng chờ HR.
-   * `taskCode` (tuỳ chọn) = mã đã cấp qua allocateTaskCodeBeforeTx — GHI vào cột tasks.task_code để
-   * comment/mention render mã THẬT (không '{task_code}' câm). Chưa truyền ⇒ null (backward-compat).
+   * `taskCode` = mã đã cấp qua allocateTaskCodeBeforeTx — GHI vào cột tasks.task_code để comment/mention
+   * render mã THẬT (không '{task_code}' câm).
+   *
+   * S5-LEAVE-DEADCODE-1: `taskCode` nay BẮT BUỘC (string, KHÔNG optional). Sau khi khối LeaveService code
+   * chết bị xoá, caller sống DUY NHẤT (AttendanceAdjustmentService) luôn cấp mã trước tx — biến "quên truyền"
+   * thành LỖI BUILD (TypeScript) thay vì task_code=NULL câm lúc runtime (defense-in-depth cho renderer).
    */
   async createApprovalTaskTx(
     tx: TenantTx,
@@ -60,7 +64,7 @@ export class HrTasksService {
       title: string;
       assigneeUserId: string | null;
       dueDate?: Date | null;
-      taskCode?: string | null;
+      taskCode: string;
     },
   ): Promise<{ id: string }> {
     const [row] = await tx
@@ -73,7 +77,7 @@ export class HrTasksService {
         status: "not_started",
         origin: "initial",
         dueDate: data.dueDate ?? null,
-        taskCode: data.taskCode ?? null,
+        taskCode: data.taskCode,
       })
       .returning({ id: tasks.id });
     if (!row) throw new InternalServerErrorException("Failed to create HR approval task");

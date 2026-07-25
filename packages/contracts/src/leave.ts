@@ -116,18 +116,10 @@ export const leaveRequestSchema = z.object({
 });
 export type LeaveRequestDto = z.infer<typeof leaveRequestSchema>;
 
-export const createLeaveRequestSchema = z
-  .object({
-    leaveTypeId: z.string().uuid(),
-    startDate: z.string().date(),
-    endDate: z.string().date(),
-    reason: z.string().max(1000).optional(),
-  })
-  .refine((v) => v.startDate <= v.endDate, { message: "Ngày bắt đầu phải trước ngày kết thúc" })
-  .refine((v) => v.startDate.slice(0, 4) === v.endDate.slice(0, 4), {
-    message: "Đơn nghỉ không được vắt qua 2 năm (tách thành 2 đơn)",
-  });
-export type CreateLeaveRequest = z.infer<typeof createLeaveRequestSchema>;
+// S5-LEAVE-DEADCODE-1: createLeaveRequestSchema + CreateLeaveRequest (legacy G11) ĐÃ XOÁ — chỉ phục vụ
+// LeaveService.createRequest (code chết, không route HTTP nào tới) + CreateLeaveRequestDto (0 consumer).
+// Route SỐNG tạo đơn nghỉ dùng createLeaveRequestDraftSchema + submitLeaveRequestSchema (self-service
+// workflow bên dưới §S3-LEAVE-BE-2).
 
 export const leaveListQuerySchema = z.object({
   status: hrRequestStatusSchema.optional(),
@@ -336,9 +328,9 @@ export type LeaveCalculateResponse = z.infer<typeof leaveCalculateResponseSchema
 
 // ─── S3-LEAVE-BE-2: request workflow (draft / submit / cancel) ───────────────────
 //
-// ADDITIVE — KHÔNG sửa createLeaveRequestSchema legacy ở trên (route legacy đang dùng). Các schema dưới đây
-// phục vụ self-service workflow: tạo nháp → gửi duyệt → huỷ. Body server-authoritative: employee_id/user_id/
-// company_id/status/total_* client gửi đều BỊ Zod strip (object mặc định strip key lạ) — resolve actor ở server.
+// Đây là đường SỐNG tạo/gửi/huỷ đơn nghỉ (self-service): tạo nháp → gửi duyệt → huỷ. Body server-authoritative:
+// employee_id/user_id/company_id/status/total_* client gửi đều BỊ Zod strip (object mặc định strip key lạ) —
+// resolve actor ở server. (Schema legacy createLeaveRequestSchema đã xoá — S5-LEAVE-DEADCODE-1.)
 
 /**
  * Trường ngày/loại nghỉ DÙNG CHUNG cho create-draft + update-draft. Tách ra để gắn refine 1 lần (DRY),
