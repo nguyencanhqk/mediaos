@@ -165,11 +165,18 @@ function idempotencyHeaderParameter(): ParameterObject {
   } as ParameterObject;
 }
 
-/** Phản hồi 409 riêng của cơ chế idempotency (mã lỗi máy-đọc để client xử lý đúng nhánh). */
+/**
+ * Phản hồi 409 cho route idempotency. Nêu CẢ hai nguồn 409 để client không code thiếu nhánh: cơ chế
+ * idempotency (2 mã dưới đây) VÀ rule nghiệp vụ của chính endpoint (vd "đã check-in") — mã lỗi của rule
+ * nghiệp vụ thuộc module, tra ở `docs/spec/`. Nói mỗi idempotency sẽ khiến người đọc tưởng 409 luôn là
+ * lỗi trùng khoá.
+ */
 const IDEMPOTENCY_CONFLICT_DESCRIPTION =
-  `Xung đột idempotency — \`error.code\` là \`${IDEMPOTENCY_ERROR_CODES.IN_PROGRESS}\` ` +
+  `Xung đột. Do cơ chế idempotency: \`error.code\` = \`${IDEMPOTENCY_ERROR_CODES.IN_PROGRESS}\` ` +
   "(request trước cùng khoá đang chạy → CHỜ rồi thử lại, KHÔNG đổi khoá) hoặc " +
-  `\`${IDEMPOTENCY_ERROR_CODES.KEY_REUSED}\` (khoá đã dùng cho nội dung khác → sinh khoá mới).`;
+  `\`${IDEMPOTENCY_ERROR_CODES.KEY_REUSED}\` (khoá đã dùng cho nội dung khác → sinh khoá mới). ` +
+  "Endpoint CÒN có thể trả 409 theo rule nghiệp vụ riêng (vd trạng thái đã bị người khác xử lý) với mã " +
+  "lỗi của module — xem `docs/spec/`.";
 
 /**
  * Ghép `description` mới vào description sẵn có (nếu controller đã tự khai `@ApiOperation`).
