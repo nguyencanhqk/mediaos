@@ -61,14 +61,17 @@ Infra docker: postgres :5432 · pgbouncer :6432 · valkey :6379 · minio :9000/9
 
 | Việc | Lệnh | Menu |
 |------|------|------|
-| **Update tất cả: FE + API + LMS** (re-build → deploy Pages → rebuild API/LMS → restart service) | `m prod-update` | `[21]` |
+| **Update tất cả: FE + API + LMS** (re-build → deploy Pages → rebuild API/LMS → **migrate** → restart service) | `m prod-update` | `[21]` |
 | Update chỉ FE (3 SPA lên Pages) | `m prod-update fe` | `[22]` |
-| Update chỉ API (rebuild dist + restart service `MediaOS-API`) | `m prod-update api` | `[23]` |
+| Update chỉ API (rebuild dist → **migrate** → restart service `MediaOS-API`) | `m prod-update api` | `[23]` |
 | Update chỉ LMS (next build `apps/lms` + restart service `MediaOS-LMS`) | `m prod-update lms` | `[26]` |
-| Chỉ restart service, KHÔNG rebuild (bỏ trống = API + LMS) | `m prod-restart [api\|lms]` | `[24]` |
-| Trạng thái PROD (service · cổng · health local/online) | `m prod-status` | `[25]` |
+| Chỉ restart service, KHÔNG rebuild, KHÔNG migrate (bỏ trống = API + LMS) | `m prod-restart [api\|lms]` | `[24]` |
+| Trạng thái PROD (service · cổng · **migration tồn đọng** · health local/online) | `m prod-status` | `[25]` |
 
 - Bước đụng service (restart) cần Administrator — thiếu quyền thì lệnh **tự mở cửa sổ UAC** chạy tiếp phần backend; phần FE (Pages) không cần admin.
+- 🔒 **Migrate chạy TRƯỚC restart và fail-closed** (S5-DEVOPS-DEPLOYMIG-1). Migrate đỏ · bạn huỷ · không đo được trạng thái · migrate xong mà vẫn còn tồn đọng ⇒ **KHÔNG restart**, thoát code 1, service giữ nguyên bản đang chạy. Lý do: trạng thái xấu nhất không phải "bản cũ chạy tiếp" mà là **"dist mới chạy trên schema cũ"** — đúng sự cố 2026-07-24 (thiếu migration 0511 ⇒ job nền Failed mỗi nhịp, `api.err.log` phình 149 MB). Hệ quả: migrate đỏ ở nhánh API chặn luôn nhánh LMS trong cùng lần chạy — cần riêng thì `m prod-update lms`.
+- Lô tồn đọng có **`REVOKE`/`DROP`** (contract) ⇒ lệnh **dừng lại hỏi**, gõ `MIGRATE` để xác nhận. Máy không biết dist đang chạy còn dùng đối tượng sắp bị gỡ hay không, nên không tự quyết. Chạy không tương tác thì đặt `MEDIAOS_MIGRATE_YES=1` (vẫn in cảnh báo). `DROP … IF EXISTS` kiểu dựng-lại chỉ được in ra, không hỏi.
+- Xem trước còn nợ bao nhiêu migration mà **không** đụng gì: `m prod-status` — hoặc chi tiết từng câu: `node scripts/windows/migration-status.mjs` (chỉ chạy 1 SELECT).
 - `prod-update` nhẹ hơn `m deploy-api` (không gỡ/cài lại service NSSM). Đổi cấu hình service/node path → vẫn dùng `m deploy-api`.
 - ⚠️ `apps/api/dist` DÙNG CHUNG với dev-online — đang chạy `m dev-online` (watch) thì `m dev-online-stop` trước khi update PROD (lệnh có cảnh báo khi thấy cổng :3200 mở).
 - **LMS** = `apps/lms` (fmc-app, Next.js + SQLite) — workspace RIÊNG ngoài turbo/pnpm-workspace, chạy service NSSM `MediaOS-LMS` cổng :3400, online tại `https://train.funtimemediacorp.com`. Deps LMS đổi thì tự `pnpm install` trong `apps/lms` trước khi `m prod-update lms`.

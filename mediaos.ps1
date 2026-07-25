@@ -976,12 +976,13 @@ function Show-Menu {
     Write-Host "  [18] Dev-online: xem log tiến trình ẩn   (dev\logs\)"
     Write-Host ""
     Write-Host "  --- PROD ($DefaultDomain — Pages + API :3100 + LMS train. :3400 + tunnel) ---" -ForegroundColor DarkCyan
-    Write-Host "  [21] PROD UPDATE tất cả    re-build + deploy Pages + rebuild API/LMS + restart service"
+    Write-Host "  [21] PROD UPDATE tất cả    re-build + deploy Pages + rebuild API/LMS + MIGRATE + restart"
     Write-Host "  [22] PROD update chỉ FE    (build + deploy 3 SPA lên Cloudflare Pages)"
-    Write-Host "  [23] PROD update chỉ API   (rebuild dist + restart service — UAC nếu cần)"
+    Write-Host "  [23] PROD update chỉ API   (rebuild dist -> MIGRATE -> restart service — UAC nếu cần)" -ForegroundColor Green
+    Write-Host "       ^ migrate đỏ/huỷ = KHÔNG restart (fail-closed); lô có REVOKE/DROP thì HỎI xác nhận"
     Write-Host "  [26] PROD update chỉ LMS   (next build apps\lms + restart service — UAC nếu cần)"
-    Write-Host "  [24] PROD restart API+LMS  (chỉ khởi động lại service, KHÔNG rebuild)"
-    Write-Host "  [25] PROD status           (service · cổng · health local/online)"
+    Write-Host "  [24] PROD restart API+LMS  (chỉ khởi động lại service, KHÔNG rebuild, KHÔNG migrate)"
+    Write-Host "  [25] PROD status           (service · cổng · MIGRATION tồn đọng · health local/online)"
     Write-Host ""
     Write-Host "  --- DASHBOARD tiến độ (chạy ẩn, cổng 5180) ---" -ForegroundColor DarkCyan
     Write-Host "  [16] Bật DASHBOARD (ẩn)    http://localhost:5180"
