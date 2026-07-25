@@ -180,5 +180,30 @@ describe.skipIf(!runDb)(
       expect(res.status, JSON.stringify(res.body)).toBe(409);
       expect(await taskCounterValue(C.companyId)).toBe(before); // KHÔNG tăng
     });
+
+    // S5-SEQ-HARDEN-1 (Fix #3, chốt gợi ý FULL-gate): trùng đơn Pending THẬT (23505 của
+    // uq_att_adj_pending_employee_date_type qua driver pg) vẫn map ĐÚNG 409 "đã có đơn chờ duyệt" — xác nhận
+    // pg error mang field `constraint` mà pgErrorField đọc được (không chỉ mock unit). Khoá disambiguation
+    // trước thay đổi driver/wrapper tương lai.
+    it("trùng đơn Pending (constraint pending-dup THẬT) → 409 'đã có đơn chờ duyệt'", async () => {
+      const first = await authPost(empToken, "/attendance/adjustment-requests", {
+        workDate: "2027-11-03",
+        requestType: "UPDATE_CHECK_IN",
+        reason: "Đơn Pending đầu tiên",
+        requestedCheckInAt: "2027-11-03T02:00:00Z",
+      });
+      expect(first.status, JSON.stringify(first.body)).toBe(201);
+
+      // Đơn thứ 2 CÙNG (employee, workDate, requestType) khi đơn đầu còn Pending ⇒ vi phạm
+      // uq_att_adj_pending_employee_date_type ⇒ 409 "đã có đơn chờ duyệt cho ngày ...".
+      const second = await authPost(empToken, "/attendance/adjustment-requests", {
+        workDate: "2027-11-03",
+        requestType: "UPDATE_CHECK_IN",
+        reason: "Đơn Pending trùng",
+        requestedCheckInAt: "2027-11-03T03:00:00Z",
+      });
+      expect(second.status, JSON.stringify(second.body)).toBe(409);
+      expect(JSON.stringify(second.body)).toMatch(/đã có đơn điều chỉnh đang chờ duyệt/i);
+    });
   },
 );
