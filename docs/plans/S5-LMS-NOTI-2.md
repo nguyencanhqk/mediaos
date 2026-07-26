@@ -94,7 +94,103 @@ Không đổi hợp đồng summary (`LmsSyncSummary` giữ nguyên phân hoạc
 
 ---
 
-## 4. Kiểm chứng
+## 4. Runbook deploy (PROD) — soạn 2026-07-26
+
+Số liệu ĐO trên máy PROD, không phải phỏng đoán:
+
+| Thứ | Giá trị |
+| --- | --- |
+| API PROD | service `MediaOS-API` · port **3100** · prefix `/api/v1` (`API_PREFIX`/`API_VERSION` trong `.env`) |
+| LMS PROD | service `MediaOS-LMS` · port **3400** · env `apps/lms/.env.production` (KHÔNG có `.env`) |
+| Env MediaOS | service đọc `.env` ở gốc repo (`ENV_FILE_PATHS`); `.env.prod` là bản PROD mà `m prod-env` chép đè lên `.env` ⇒ **ghi CẢ HAI** |
+| Đã có sẵn | `LMS_COMPANY_ID`, `LMS_BASE_URL`, `LMS_SSO_SECRET`, `LMS_SYNC_TOKEN`, `LMS_PROGRESS_TOKEN` — chỉ THIẾU `LMS_NOTI_TOKEN` |
+| URL LMS gọi vào | `http://localhost:3100/api/v1` (cùng máy — không vòng qua tunnel) |
+
+**Thứ tự BẮT BUỘC: API trước, LMS sau.** API mang migration 0529 (catalog `LMS_*`) và chính cái route.
+Nếu LMS lên trước, mọi lần đẩy chỉ nhận 404 rồi log lỗi — không hỏng gì, nhưng vô ích.
+Chiều ngược lại thì an toàn: API mới gửi thêm `mediaosUserId` cho LMS **cũ**, Zod của LMS strip key lạ.
+
+### Bước 0 — sinh token dùng chung (chạy 1 lần, lấy 1 giá trị dùng cho CẢ hai file)
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+```
+
+### Bước 1 — MediaOS: thêm `LMS_NOTI_TOKEN` vào **cả** `.env.prod` và `.env`
+
+```powershell
+$tok = "<dán giá trị bước 0>"
+Add-Content -Path ".env.prod" -Value "LMS_NOTI_TOKEN=$tok" -Encoding utf8
+Add-Content -Path ".env"      -Value "LMS_NOTI_TOKEN=$tok" -Encoding utf8
+```
+
+### Bước 2 — LMS: thêm 2 biến vào `apps/lms/.env.production`
+
+```powershell
+Add-Content -Path "apps\lms\.env.production" -Value "MEDIAOS_NOTI_TOKEN=$tok" -Encoding utf8
+Add-Content -Path "apps\lms\.env.production" -Value "MEDIAOS_API_URL=http://localhost:3100/api/v1" -Encoding utf8
+```
+
+> `MEDIAOS_API_URL` **khác** `MEDIAOS_APP_URL` (cái kia là URL trình duyệt của SPA). Sai chỗ này thì
+> `fetch` trả 404 và mọi thông báo im lặng biến mất.
+
+### Bước 3 — sao lưu SQLite của LMS TRƯỚC khi restart (schema sẽ thêm cột lúc khởi động)
+
+```powershell
+cd apps\lms; pnpm backup:db; cd ..\..
+```
+
+### Bước 4 — deploy API (build → **migrate 0529** → restart)
+
+```powershell
+m prod-update api
+```
+
+### Bước 5 — deploy LMS (next build → restart; `initSchema` tự thêm cột `mediaos_user_id`)
+
+```powershell
+m prod-update lms
+```
+
+### Bước 6 — kiểm chứng trước khi smoke
+
+```powershell
+# 6a. Catalog đã có 4 mã LMS (phải trả về 4 dòng)
+docker exec mediaos-postgres psql -U mediaos -d mediaos -c "SELECT event_code, notification_type, dedupe_strategy FROM notification_events WHERE module_code='LMS' ORDER BY 1;"
+
+# 6b. CHECK bảng notifications đã nới (phải thấy cả GOAL lẫn LMS)
+docker exec mediaos-postgres psql -U mediaos -d mediaos -c "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='chk_notifications_module_code';"
+
+# 6c. Route sống + fail-closed: KHÔNG token phải là 403
+curl.exe -s -o NUL -w "%{http_code}`n" -X POST http://localhost:3100/api/v1/internal/v1/notifications/lms-events
+
+# 6d. Token ĐÚNG + eventCode ngoài allowlist → 403 NOTI-ERR-EVENT-NOT-ALLOWED.
+#     Đây là phép thử xác thực AN TOÀN: chứng minh token chạy mà KHÔNG tạo thông báo nào.
+curl.exe -s -X POST http://localhost:3100/api/v1/internal/v1/notifications/lms-events -H "Authorization: Bearer $tok" -H "content-type: application/json" -d "{\"eventCode\":\"TASK_ASSIGNED\",\"sourceModule\":\"LMS\",\"dedupeKey\":\"probe\",\"recipient\":{\"mode\":\"UserIds\",\"userIds\":[]}}"
+
+# 6e. Sau ~2 phút (job đối soát chạy mỗi 60s): id đã backfill sang LMS chưa?
+cd apps\lms; node -e "const db=require('better-sqlite3')('data/app.db');console.log(db.prepare('SELECT count(*) AS total, count(mediaos_user_id) AS mapped FROM users').get())"; cd ..\..
+```
+
+`mapped` phải > 0 và tiến dần tới số nhân viên có hồ sơ. **Nếu `mapped = 0` thì đừng smoke** — chưa có
+id thì `pushToMediaos` bỏ qua sạch (có log `chưa có mediaos_user_id`), và bạn sẽ tưởng kênh hỏng.
+
+### Bước 7 — smoke thật
+
+1. Duyệt 1 ghi danh trong LMS → nhân viên đó thấy thông báo trong MediaOS, bấm vào ra `/me/training`.
+2. Bấm duyệt lại / gọi lại → **không** sinh thông báo thứ hai (dedupeKey).
+3. Chấm 1 bài tự luận → thông báo "Bài thi đã có kết quả".
+4. Chuông LMS **không** còn sinh mục "enrollment approved" mới (mục cũ vẫn hiện — đúng ý đồ).
+
+### Rollback (không cần deploy lại)
+
+Xoá/để trống `LMS_NOTI_TOKEN` trong `.env` rồi `m prod-restart api` ⇒ guard trả 403, kênh tắt sạch,
+LMS chỉ log lỗi và **không** ảnh hưởng luồng duyệt/chấm. Migration 0529 là ADD-only, KHÔNG cần lùi
+(lùi sẽ tái tạo lại đúng lỗi GOAL ở §0.1 của plan NOTI-1).
+
+---
+
+## 5. Kiểm chứng
 
 1. `npx tsc --noEmit` + `eslint` xanh ở apps/lms; `pnpm typecheck`/`lint`/`test` xanh ở monorepo.
 2. Smoke thật sau deploy: duyệt 1 ghi danh ⇒ nhân viên thấy thông báo trong MediaOS, bấm vào ra `/me/training`;
