@@ -54,7 +54,7 @@ Ký từng module sau khi chạy đủ scenario tương ứng ở `S5-UAT-1-UAT-
 | --- | --- | --- | --- |
 | **D3** (KI-012) | Widget `hr-overview` gate bằng **quyền widget**, không theo data-scope ⇒ HR được cấp scope Department vẫn thấy **con số** headcount toàn công ty | Lộ **tổng hợp** headcount xuyên phòng ban. **Không** lộ PII cá nhân; deep-link chi tiết vẫn bị module nguồn ép scope | ☐ Chấp nhận cho MVP ☐ Yêu cầu sửa trước release |
 | **D1** (KI-013) | `refresh` và `resetPassword` không throttle | Mitigation: refresh có reuse-detection + `FOR UPDATE`; reset token entropy cao, lưu hash, dùng-một-lần, hết hạn ngắn | ☐ Giữ nguyên ☐ Mở WO thêm throttle |
-| Scope | 4 nhánh ngoài 7 module MVP gốc đã ship ở Sprint 5 (ME · GOAL · LMS · BRAND) | Phải đóng băng chính thức ở `S6-GOV-1`, nếu không sẽ trôi tiếp sang Sprint 6 | ☐ Chấp nhận đưa vào phạm vi MVP ☐ Tách khỏi MVP |
+| ~~Scope~~ | ~~4 nhánh ngoài 7 module MVP gốc đã ship ở Sprint 5 (ME · GOAL · LMS · BRAND)~~ | — | ✅ **ĐÃ CHỐT 2026-07-26** (`S6-GOV-1`): **ME** vào gate ở mức **P1**; **GOAL · LMS · BRAND** trong release nhưng mức **P2**, không chặn RC. Xem `RELEASE-05` §2 |
 
 ---
 
@@ -92,7 +92,7 @@ Ký từng module sau khi chạy đủ scenario tương ứng ở `S5-UAT-1-UAT-
 | ~~C1~~ | ~~Áp migration `0529` cho `mediaos_dev` + `mediaos`~~ | — | ✅ **xong 2026-07-26** | — |
 | ~~C2~~ | ~~Đóng UAT-BLOCK-001/002 (hồ sơ NV + số dư phép)~~ | — | ✅ **xong 2026-07-26** | — |
 | C3 | Chạy UAT Cycle 1 đủ P0 + ghi biên bản | Owner + business user | tuần 1 Sprint 6 | sign-off |
-| C4 | Ký D3 + D1 + quyết định scope 4 nhánh mở rộng | Owner | tuần 1 Sprint 6 | đóng sổ MVP |
+| C4 | Ký D3 + D1 (~~+ quyết định scope 4 nhánh mở rộng — ✅ **xong 2026-07-26**, `RELEASE-05` §2~~) | Owner | tuần 1 Sprint 6 | đóng sổ MVP |
 | C5 | Diễn tập khôi phục backup + lưu biên bản | Owner/DevOps | trước RC | go-live |
 | C6 | Sửa/gỡ khoá job `Dependency scan` | Owner/DevOps | trước RC | CI xanh |
 | C7 | Cấp thư mục build riêng cho PROD (gỡ landmine `dist` dùng chung) | Owner/DevOps | trước go-live | go-live |
@@ -137,7 +137,7 @@ Quyết định cuối: ☐ Go ☐ **Conditional Go** ☐ No-Go
 | --- | --- | --- |
 | **IMP09-IN-003** | UAT scenario đã chuẩn bị ở Sprint 5 | `S5-UAT-1-UAT-KIT.md` §5 — 84 scenario / 4 vai, mỗi bước trỏ route thật |
 | **IMP09-IN-004** | Known issue đang mở đã được phân loại | `RELEASE-02` — 20 mục, có mức/loại/workaround/chủ |
-| IMP09-IN-001 | Scope MVP đã chốt | ⚠️ **một phần** — 4 nhánh mở rộng cần `S6-GOV-1` đóng băng (§3) |
+| IMP09-IN-001 | Scope MVP đã chốt | ✅ **đóng 2026-07-26** — `RELEASE-05` §2 (freeze 3 tầng T1/T2/T3) |
 | IMP09-IN-002 | Flow P0/P1 đã xác định | `S5-UAT-1-UAT-KIT.md` §2 + §5 |
 | IMP09-IN-006 | Staging hoạt động ổn định | ⚠️ DB + dữ liệu đã sẵn (C1/C2 xong); còn bật stack :3200 |
 
