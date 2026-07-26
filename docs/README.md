@@ -164,6 +164,19 @@ Mọi tài liệu đều liên kết chéo với nhau: mỗi file có breadcrumb
 
 > QA-01 đặt chiến lược & exit criteria xuyên suốt; QA-02 → 07 là các lớp kiểm thử (theo module · E2E · API/contract · permission/data-scope · security · performance); QA-08 → 10 chốt quy trình bug/regression, UAT và sẵn sàng phát hành. Bộ QA bổ sung góc nhìn kiểm thử cho [FRONTEND-14](<FRONTEND/FRONTEND-14_QA_Performance_Release_Readiness.md>) và [BACKEND-13](<BACKEND/BACKEND-13_Backend_Testing_Security_Performance.md>) / [BACKEND-14](<BACKEND/BACKEND-14_Backend_Release_Readiness.md>).
 
+**Bằng chứng chạy thật** (không phải khung tài liệu) nằm ở [`QA/evidence/`](<QA/evidence/>) — mỗi file gắn với 1 Work Order và cite spec/`it()` cụ thể: regression sign-off (`S5-QA-REG-1`) · suite phân quyền & data-scope QA-PERM-001 (`S5-SEC-1`) · **UAT kit + biên bản UAT Cycle 0** (`S5-UAT-1`).
+
+### 8.1 Hồ sơ phát hành (RELEASE)
+
+| Mã | Tên tài liệu | Phạm vi |
+| -- | ------------ | ------- |
+| RELEASE-01 | [MVP Release Readiness Checklist (bản chấm thật)](<RELEASE/RELEASE-01_MVP_Release_Readiness_Checklist.md>) | Bản điền số liệu thật của khung QA-10: scorecard 10 nhóm, readiness theo module, deploy/backup/monitoring |
+| RELEASE-02 | [Known Issues & Defer List](<RELEASE/RELEASE-02_Known_Issues_MVP.md>) | Sổ vấn đề đã kiểm chứng + workaround + chủ; danh sách defer và cái KHÔNG được defer |
+| RELEASE-03 | [Release Notes nội bộ](<RELEASE/RELEASE-03_Release_Notes_Internal_MVP.md>) | "Mở hệ thống lên thì làm được gì" theo từng module |
+| RELEASE-04 | [UAT Sign-off · Go/No-Go · Bàn giao Sprint 6](<RELEASE/RELEASE-04_UAT_Signoff_And_Go_NoGo.md>) | Bản thảo chữ ký theo module + cấp release, kết luận Go/No-Go, ánh xạ IMP09-IN-003/004 |
+
+> QA-09/QA-10 là **khung**; bộ RELEASE-01…04 là **bản chấm cho lần phát hành MVP này** (sinh bởi Work Order `S5-UAT-1`, cổng Sprint 5 → Sprint 6). Khi mở đợt phát hành sau, tạo bộ RELEASE mới thay vì sửa đè bản cũ.
+
 ---
 
 ## 9. Bản đồ ghép cặp theo module
