@@ -75,11 +75,15 @@ export function TaskTemplateItemsDialog({
     checklist: splitChecklist(d.checklist),
   });
 
+  /**
+   * Biến của mutation dựng TẠI THỜI ĐIỂM BẤM (không đọc `draft`/`editingId` trong thân `mutationFn`) —
+   * React Query v5 nạp options trong `useEffect`, closure cũ sẽ lưu giá trị CŨ mà không báo lỗi gì.
+   */
   const saveMutation = useMutation({
-    mutationFn: () =>
-      editingId
-        ? taskTemplateApi.updateItem(template.id, editingId, toBody(draft))
-        : taskTemplateApi.createItem(template.id, toBody(draft)),
+    mutationFn: (vars: { itemId: string | null; body: ReturnType<typeof toBody> }) =>
+      vars.itemId
+        ? taskTemplateApi.updateItem(template.id, vars.itemId, vars.body)
+        : taskTemplateApi.createItem(template.id, vars.body),
     onSuccess: async () => {
       await invalidate();
       setDraft(EMPTY_DRAFT);
@@ -242,7 +246,7 @@ export function TaskTemplateItemsDialog({
               size="sm"
               data-testid="task-template-item-save"
               disabled={draft.title.trim() === "" || saveMutation.isPending}
-              onClick={() => saveMutation.mutate()}
+              onClick={() => saveMutation.mutate({ itemId: editingId, body: toBody(draft) })}
             >
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               {editingId ? t("templates.items.saveEdit") : t("templates.items.add")}

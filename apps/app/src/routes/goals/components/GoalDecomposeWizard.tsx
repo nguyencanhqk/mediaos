@@ -16,6 +16,7 @@ import {
 } from "@mediaos/web-core";
 import type {
   DecomposeGoalItemRequest,
+  DecomposeGoalRequest,
   GoalDetailResponseDto,
   TaskTemplatePriorityDto,
 } from "@mediaos/contracts";
@@ -122,28 +123,41 @@ export function GoalDecomposeWizard({
   /** Dòng hợp lệ = có tiêu đề. Nguồn DUY NHẤT cho cả số trên nút lẫn payload gửi lên. */
   const validRows = useMemo(() => rows.filter((row) => row.title.trim().length > 0), [rows]);
 
+  /**
+   * Dựng payload TẠI THỜI ĐIỂM BẤM, rồi truyền vào `mutate(payload)`.
+   *
+   * ⚠️ KHÔNG đọc state trong thân `mutationFn`: React Query v5 nạp lại `options` (kèm closure của
+   * mutationFn) trong `useEffect`, nên nếu người dùng bấm NGAY sau khi preview vừa render — trước khi
+   * effect kịp chạy — `mutationFn` còn giữ closure của lần render CŨ (rows rỗng) ⇒ gửi `items: []`.
+   * CI bắt đúng ca này (máy chậm hơn: effect chưa flush). Payload dựng ở handler thì luôn khớp cái
+   * người dùng đang NHÌN THẤY.
+   *
+   * CHỈ dòng có tiêu đề (`validRows`) — đúng con số hiện trên nút. Gửi cả dòng trống (bấm "Thêm việc"
+   * rồi chưa điền) là để server 400 vì `title` rỗng: lỗi CỦA UI đội lốt lỗi nhập liệu, và vì lô là
+   * tất-cả-hoặc-không nên MỌI việc còn lại cũng không được tạo.
+   */
+  function buildPayload(): DecomposeGoalRequest {
+    return {
+      templateId,
+      items: validRows.map(
+        (row): DecomposeGoalItemRequest => ({
+          ...(row.templateItemId ? { templateItemId: row.templateItemId } : {}),
+          title: row.title.trim(),
+          ...(row.priority !== "none" ? { priority: row.priority } : {}),
+          ...(showAssignee && row.assigneeEmployeeId
+            ? { assigneeEmployeeId: row.assigneeEmployeeId }
+            : {}),
+          ...(showState && row.stateId ? { stateId: row.stateId } : {}),
+          // <input type="date"> cho ngày; server nhận ISO có offset ⇒ ghim cuối ngày UTC.
+          ...(row.dueAt ? { dueAt: `${row.dueAt}T23:59:59.000Z` } : {}),
+          ...(row.checklist.length > 0 ? { checklist: row.checklist } : {}),
+        }),
+      ),
+    };
+  }
+
   const mutation = useMutation({
-    mutationFn: () =>
-      goalApi.decompose(goal.id, {
-        templateId,
-        // CHỈ dòng có tiêu đề (`validRows`) — đúng con số hiện trên nút. Gửi cả dòng trống (người dùng
-        // bấm "Thêm việc" rồi chưa điền) là để server 400 vì `title` rỗng: lỗi CỦA UI, đội lốt lỗi
-        // nhập liệu, và vì lô là tất-cả-hoặc-không nên MỌI việc còn lại cũng không được tạo.
-        items: validRows.map(
-          (row): DecomposeGoalItemRequest => ({
-            ...(row.templateItemId ? { templateItemId: row.templateItemId } : {}),
-            title: row.title.trim(),
-            ...(row.priority !== "none" ? { priority: row.priority } : {}),
-            ...(showAssignee && row.assigneeEmployeeId
-              ? { assigneeEmployeeId: row.assigneeEmployeeId }
-              : {}),
-            ...(showState && row.stateId ? { stateId: row.stateId } : {}),
-            // <input type="date"> cho ngày; server nhận ISO có offset ⇒ ghim cuối ngày UTC.
-            ...(row.dueAt ? { dueAt: `${row.dueAt}T23:59:59.000Z` } : {}),
-            ...(row.checklist.length > 0 ? { checklist: row.checklist } : {}),
-          }),
-        ),
-      }),
+    mutationFn: (payload: DecomposeGoalRequest) => goalApi.decompose(goal.id, payload),
     onSuccess: async () => {
       // Hai phía: tiến độ mục tiêu (mode 'tasks'/'project') VÀ danh sách/board TASK — việc vừa tạo phải
       // hiện ở cả hai chỗ mà không cần F5.
@@ -200,7 +214,7 @@ export function GoalDecomposeWizard({
             disabled={
               templateId === "" || validRows.length === 0 || overLimit || mutation.isPending
             }
-            onClick={() => mutation.mutate()}
+            onClick={() => mutation.mutate(buildPayload())}
           >
             {mutation.isPending
               ? t("decompose.submitting")

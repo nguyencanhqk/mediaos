@@ -8,7 +8,7 @@ import {
   taskTemplateApi,
   taskTemplateInvalidation,
 } from "@mediaos/web-core";
-import type { TaskTemplateResponseDto } from "@mediaos/contracts";
+import type { CreateTaskTemplateRequest, TaskTemplateResponseDto } from "@mediaos/contracts";
 import { Button, Dialog, Input, Select } from "@mediaos/ui";
 
 /**
@@ -45,18 +45,27 @@ export function TaskTemplateFormDialog({
     staleTime: 300_000,
   });
 
+  /**
+   * Dựng body TẠI THỜI ĐIỂM BẤM rồi truyền vào `mutate(body)` — KHÔNG đọc state trong thân
+   * `mutationFn`. React Query v5 nạp lại options (kèm closure) trong `useEffect`, nên bấm ngay sau khi
+   * gõ (trước lúc effect flush) sẽ lưu giá trị CŨ mà không có lỗi nào báo (đã bị CI bắt ở
+   * GoalDecomposeWizard — cùng một lớp bẫy).
+   */
+  function buildBody(): CreateTaskTemplateRequest {
+    return {
+      name: name.trim(),
+      description: description.trim() === "" ? null : description.trim(),
+      departmentId: departmentId === "" ? null : departmentId,
+      isActive,
+    };
+  }
+
   const mutation = useMutation({
-    mutationFn: () => {
-      const body = {
-        name: name.trim(),
-        description: description.trim() === "" ? null : description.trim(),
-        departmentId: departmentId === "" ? null : departmentId,
-        isActive,
-      };
-      return isEdit
+    // `UpdateTaskTemplateRequest` là partial của create ⇒ CÙNG một body dùng được cho cả hai đường.
+    mutationFn: (body: CreateTaskTemplateRequest) =>
+      isEdit
         ? taskTemplateApi.updateTemplate(template.id, body)
-        : taskTemplateApi.createTemplate(body);
-    },
+        : taskTemplateApi.createTemplate(body),
     onSuccess: async (saved) => {
       const keys = isEdit
         ? taskTemplateInvalidation.update(saved.id)
@@ -88,7 +97,7 @@ export function TaskTemplateFormDialog({
             size="sm"
             data-testid="task-template-form-submit"
             disabled={name.trim() === "" || mutation.isPending}
-            onClick={() => mutation.mutate()}
+            onClick={() => mutation.mutate(buildBody())}
           >
             {mutation.isPending ? t("templates.form.saving") : t("templates.form.save")}
           </Button>
