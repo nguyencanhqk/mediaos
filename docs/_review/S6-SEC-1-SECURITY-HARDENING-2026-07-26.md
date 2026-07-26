@@ -13,17 +13,81 @@
 
 ## 0. Kết luận điều hành
 
+> ## 🔴 BẢN NÀY ĐÃ BỊ FULL GATE CHẶN — ĐỌC §0.1 TRƯỚC
+>
+> Ba reviewer của FULL gate (`security-reviewer` · `rls-tenant-isolation-tester` · thay thế cho
+> `silent-failure-hunter`) đều trả **BLOCK**, và cùng nhau lôi ra **hai lỗ `S0`** mà bản đầu của báo
+> cáo này **kết luận sai là "không có"**. WO **DỪNG**, không mở PR, chờ owner (`plan` §6).
+>
+> Phần §1–§7 bên dưới giữ nguyên như lúc chấm để đối chiếu; **mọi kết luận của chúng phải đọc kèm
+> §0.1 và §6.0**.
+
+### 0.1 HAI LỖ `S0` — cần hành động của owner NGAY
+
+| | **SEC-F00-A** — 3 tài khoản `platform-admin` trong PROD dùng mật khẩu nằm trong repo PUBLIC |
+| --- | --- |
+| **Mức** | **`S0` / CRITICAL** · **đang sống trên production** |
+| **Bằng chứng (tự kiểm chứng lại, không chỉ tin reviewer)** | PROD `mediaos`: 3 user `status=active`, `deleted_at IS NULL`, `must_change_password=false`, giữ role `00000000-0000-0000-0000-0000000000f0` (**platform-admin — operator audience**), nằm trong **tenant TEST còn sót**: `op-52e0bf36@a.test` (`fla-0b8fd5e5`) · `op-07803e71@a.test` và `opng-36db5001@a.test` (`be3a-e5d8e266`). Mật khẩu của chúng là chuỗi test **`Passw0rd!test99`** — xuất hiện trong **86 file** của repo, và repo là **PUBLIC** (`gh repo view` → `PUBLIC`). Đã **xác minh trực tiếp**: lấy `password_hash` của `op-52e0bf36@a.test` từ PROD và chạy `argon2.verify(hash, "Passw0rd!test99")` → **`true`** |
+| **Vì sao nghiêm trọng** | `platform-admin` là **audience operator**, có đường đọc **CHÉO TENANT theo thiết kế**: `GET /foundation/audit-logs/all` → `withPlatformReadContext` đọc xuyên tenant. PROD `audit_logs` đang giữ **9.124 dòng của `funtime`**. Grant kèm theo gồm `view:platform-audit` · `read:db-all-tenant` · `read:db-browser` · `manage:db-ops` |
+| **Bật 2FA (SEC-F01) KHÔNG cứu được** | `@AllowWithoutTwoFactor()` đặt ở **cấp class** trên `AuthController` ⇒ ai có mật khẩu tự enroll TOTP của chính họ |
+| **Yếu tố làm chậm kẻ tấn công (KHÔNG phải biện pháp bảo vệ)** | Login cần `companySlug` + email; slug tenant test là chuỗi ngẫu nhiên không nằm trong repo. Nhưng slug **không phải bí mật** — nó lộ qua bất kỳ bản backup, bản sao DB, hay log nào |
+| **Hành động** | **XOÁ/thu hồi 3 `user_roles` role `…f0` này trước tiên**, rồi xoá 25 user + 16 tenant test khỏi PROD. Coi `Passw0rd!test99` là **đã cháy** |
+
+| | **SEC-F00-B** — tenant admin xoá được grant của role hệ thống TOÀN CỤC (ghi chéo tenant, không hoàn tác được) |
+| --- | --- |
+| **Mức** | **`S0` / CRITICAL** |
+| **Bằng chứng** | `role_permissions` policy ([0005_permissions.sql:87-109](apps/api/migrations/0005_permissions.sql#L87)): `USING` cho phép `r.company_id IS NULL` (để tenant **đọc** role hệ thống), `WITH CHECK` thì chặt. **Postgres chỉ xét `USING` cho DELETE** ⇒ khe hở dành cho ĐỌC trở thành quyền XOÁ trên hàng toàn cục. Grant `DELETE ON role_permissions TO mediaos_app` có thật (`:109`). Tầng service **không** bù: `assignPermissionToRole` ([role-admin.service.ts:324](apps/api/src/permission/role-admin.service.ts#L324)) và `revokePermissionFromRole` (`:409`) chỉ chặn `role.companyId !== null && !== actor.companyId` ⇒ role toàn cục (`companyId === null`) **lọt qua**; chúng thiếu guard `isSystem` mà `updateRole`/`deleteRole` **có** |
+| **Đã chứng minh tới đâu** | `rls-tenant-isolation-tester` chạy trên **lane DB cô lập**: DELETE **đã commit**, tenant B đọc lại thấy hàng biến mất; **INSERT khôi phục bị `WITH CHECK` chặn** ⇒ **không hoàn tác được qua ứng dụng**, phải superuser/migration |
+| **Bán kính** | PROD có **785 grant** trên role toàn cục; `funtime` dùng **2** role toàn cục. Ai có `assign:permission` đều với tới — PROD: `funtime` 6 user **và 9 user thuộc 5 tenant test** (mật khẩu đã cháy ở SEC-F00-A) |
+| **Vì sao mọi lưới đều trượt** | `role_permissions` **không có cột `company_id`** ⇒ nằm ngoài phép đo 153/153. `tenant-isolation.int-spec` (465 case) **chỉ SELECT** — không có một ca deny ghi chéo tenant nào. `rls-coverage-assert` không mô hình hoá DELETE và không thấy vế `OR company_id IS NULL` |
+| **Hành động** | Vá 3 lớp (policy `FOR DELETE` + guard `isSystem` ở 2 hàm + gỡ grant `DELETE ON roles` không ai dùng), **RED test trước**. Là **migration + crown** ⇒ WO riêng, người chốt |
+
+### 0.2 Bảng kết luận (đã sửa sau FULL gate)
+
 | Câu hỏi | Trả lời |
 | --- | --- |
-| Còn lỗ `S0`/CRITICAL mở? | **KHÔNG** |
+| Còn lỗ `S0`/CRITICAL mở? | **CÓ — 2** (§0.1). Bản đầu của báo cáo này ghi "KHÔNG"; **kết luận đó SAI** |
 | Còn lỗ `S1`/HIGH mở? | **CÓ 1** — **SEC-F01**: 2FA **không được ép ở PROD** cho tài khoản company-admin duy nhất, dù role khai `requires_two_factor = true`. Là **cấu hình vận hành**, sửa bằng thao tác owner, **không** sửa bằng code |
 | Ba bất biến còn nguyên? | **CÓ** — verify **trên chính DB PROD**: 153/153 bảng `company_id` có RLS+FORCE; app/worker role `NOSUPERUSER`+`NOBYPASSRLS`; 13/13 bảng append-only chỉ có `INSERT,SELECT` |
 | Có sửa code trong WO này? | **KHÔNG** — mọi finding hoặc là cấu hình PROD, hoặc là thay đổi hành vi sau freeze cần owner duyệt (`RELEASE-05` §4.1). Đúng luật dừng của plan §6 |
-| Chặn RC? | **SEC-F01 nên đóng trước go-live** (thao tác ~10 phút). SEC-F02…F05 là `S2`/`S3`, vào sổ |
+| Chặn RC? | **CÓ.** Hai `S0` ở §0.1 chặn cả RC lẫn go-live |
+| WO đóng được chưa? | **CHƯA — `needs_human`.** FULL gate BLOCK; không mở PR |
 
-> **Nói thẳng phần khó chịu:** ba phát hiện nặng nhất của WS4 **không nằm trong code** mà nằm ở
-> **cấu hình PROD và dữ liệu PROD** — nơi mà 10.102 test xanh không nhìn tới. Suite xanh không trả lời
-> được câu "production có đang bật đúng lớp gác mà thiết kế hứa không".
+### 0.3 Những gì bản đầu nói SAI (rút lại tường minh)
+
+| Bản đầu nói | Thực tế |
+| --- | --- |
+| "Còn lỗ `S1`/HIGH mở? **CÓ 1**… 0 CRITICAL" | **2 `S0`** (§0.1) |
+| KI-028 `S2`, *"RLS giữ: phiên đó bị khoá trong tenant test của nó"* | **Đúng cho ĐỌC, sai cho GHI và sai cho operator.** 3 trong 25 tài khoản đó là **platform-admin đọc chéo tenant theo thiết kế**; và bất kỳ ai trong 9 tài khoản có `assign:permission` đều ghi được lên role toàn cục. Nâng lên **`S0`** |
+| Census "**38** route không gate… 37 hợp lệ, **1** GAP" | Đếm thiếu. Quét runtime của reviewer: **43**. Xem §0.4 |
+| §2.3 ô 1 ✅-với-1-GAP · §13.3 "9/10" · §13.4 "4/7 đóng sạch" | **Không đứng vững** khi census sai — phải chấm lại sau khi vá census |
+| SEC-F04 "gate `read:user` là xong" | **Chưa đủ**: `GET /org/teams/:id/members` ([org.controller.ts:143](apps/api/src/org/org.controller.ts#L143)) cũng trả `userFullName` + `userEmail` ([org.repository.ts:257](apps/api/src/org/org.repository.ts#L257)) ⇒ đi vòng `GET /org/teams` → team id → members là dựng lại được danh bạ. Nâng **`S1`**, và là **3 route** chứ không phải 1 |
+| §2.1 "3 lớp ép 2FA độc lập" | Sai mô hình: `roleRequired` **chỉ** được xét khi `globalEnabled` ([two-factor-enforcement.guard.ts:78-81](apps/api/src/auth/two-factor-enforcement.guard.ts#L78)) ⇒ lớp (3) phụ thuộc lớp (1). Còn **lớp thứ 4** chưa hề nhắc: `SECURITY_POLICY_ENFORCEMENT_ENABLED` ([security-policy.service.ts:144](apps/api/src/security-policy/security-policy.service.ts#L144)) |
+| SEC-F01 "thuần vận hành, code default an toàn" | Gốc rễ **nằm trong repo**: `.env.example:91` ship `TWO_FACTOR_ENFORCEMENT_ENABLED=false`, mà `cp .env.example .env` là bước cài đặt chuẩn (CLAUDE §7) ⇒ **tái diễn ở mọi lần deploy mới** nếu không sửa file mẫu |
+| §1.1 "446 file… mọi skip đều có chủ ý" | Thiếu công bố: `vitest.config.ts:57-67` **exclude 6 file** (5 là bộ deny-path) TRƯỚC khi đếm ⇒ 452 − 6 = 446. Chúng không xuất hiện ở bất kỳ reporter nào |
+
+### 0.4 Census: 3 bẫy đo lường, ba lần sai khác nhau
+
+Con số route không-gate **thay đổi 4 lần** trong lúc làm — ghi lại vì đây là bài học đắt hơn kết quả:
+
+| Lần | Kết quả | Sai ở đâu |
+| --- | ---: | --- |
+| 1 | 49 | Bỏ qua `@RequirePermission` **cấp class** (`getAllAndOverride([handler, class])`) ⇒ đếm thừa 11 route `/me/*` |
+| 2 | 38 | Cửa sổ decorator cố định `i+8` **nuốt decorator của route KẾ TIẾP** — `@Get('teams/:id/members')` (không gate) cách `@RequirePermission` của route `@Post` đúng 7 dòng ⇒ **đếm thiếu**, và chính đây là chỗ giấu SEC-F04 thứ hai |
+| 3 | 114 | Vá cửa sổ nhưng `@RequirePermission(` **trải nhiều dòng** ⇒ regex đòi trọn cặp ngoặc trượt ⇒ đếm thừa ồ ạt |
+| 4 | 40 | Docstring **nhắc tên decorator để giải thích vì sao KHÔNG dùng** (`"KHÔNG @UseGuards(...), KHÔNG @RequirePermission"`) bị đọc thành "đã gác" |
+| **Chuẩn** | **43** | Quét **runtime** (boot `AppModule`, đọc `PATH_METADATA`/`REQUIRE_PERMISSION`/`IS_PUBLIC` thật) của `security-reviewer` — **đây mới là nguồn đáng tin**; parse tĩnh chỉ là xấp xỉ |
+
+**Kết luận về phương pháp:** Phụ lục A phải được dựng lại bằng **quét runtime**, không phải regex trên
+văn bản. Route chưa từng được phán quyết: `GET /org/units/tree` · `GET /org/teams` ·
+`GET /org/teams/:id/members` · `GET /workflow-templates/:id` · `GET /foundation/company/branding`
+(+ `GET /foundation/settings/public` có trong văn xuôi nhưng thiếu trong bảng 6 ô).
+
+> **Nói thẳng phần khó chịu:** WS4 tự tin kết luận "0 CRITICAL" và **sai**. Cả hai lỗ `S0` đều nằm
+> ngoài tầm nhìn của 10.102 test xanh — một cái ở **dữ liệu PROD**, một cái ở **chiều GHI của RLS** mà
+> bộ 465 ca cô lập tenant **chưa từng thử** vì chúng chỉ `SELECT`. Bản thân phép đo census của tôi cũng
+> sai bốn lần trước khi đúng. Bài học không phải "cần thêm test", mà là: **kết luận bảo mật rút ra từ
+> lưới do chính mình dựng thì chỉ chắc bằng lưới đó** — phải có người/agent độc lập đâm thủng.
 
 ---
 
@@ -351,6 +415,35 @@ Trong đó **1 là GAP**, còn lại `SELF`/`TENANT_READ`/`PARKED`.
 > `TENANT_READ`/`GAP` (đưa vào = tự ký thay owner). Là **việc mới sau freeze** ⇒ đề xuất, không tự làm.
 
 ---
+
+## 7b. Hồ sơ FULL gate (kết quả: **BLOCK × 3**)
+
+| Reviewer | Bắt buộc bởi | Kết quả | Phát hiện nặng nhất |
+| --- | --- | --- | --- |
+| `security-reviewer` | `done_when` | **BLOCK** | SEC-F00-A (3 tài khoản platform-admin, mật khẩu trong repo public) · census 43 ≠ 38 · KI-030 là 3 route · gốc rễ `.env.example:91` |
+| `rls-tenant-isolation-tester` | `done_when` | **BLOCK** | SEC-F00-B (xoá chéo tenant grant role toàn cục, không hoàn tác được) · matview ngoài phép đo 153/153 · grant `DELETE ON roles` thừa |
+| ~~`silent-failure-hunter`~~ → **agent thay thế** | `done_when` + CLAUDE §6 | **BLOCK** | `export:leave` **không ghi audit** nào (trái §2.4 ô 4/5) · audit của `notifications.service` **không cùng tx** dù chú thích nói có · `login_logs` bỏ ghi im lặng (`if (!db) return;`) · 6 file bị exclude khỏi bằng chứng · 2FA company-policy fail-open và **cache 30s** |
+
+> **Sai lệch quy trình phải ghi:** agent `silent-failure-hunter` mà CLAUDE §6 yêu cầu **không được cài
+> trong môi trường này**. Đã chạy **đúng phạm vi** bằng một agent general-purpose với chỉ dẫn chuyên
+> biệt, và ghi lại đây thay vì đánh dấu như thể đã chạy đúng agent. Kết quả của nó vẫn là BLOCK và vẫn
+> tìm ra 3 lỗi `S1` — nhưng người đọc cần biết cấu hình gate đã lệch so với luật.
+
+**Chưa chạy** (điều kiện kích hoạt của CLAUDE §6 đã bật nhưng WO dừng trước đó): `database-reviewer`
+(SEC-F00-B chạm policy/migration) và `santa-method` (crown). Phải chạy ở WO vá.
+
+## 7c. Việc phải làm để gỡ BLOCK
+
+| # | Việc | Ai | Ghi chú |
+| --- | --- | --- | --- |
+| 1 | **Thu hồi 3 grant role `…f0`** rồi xoá 25 user + 16 tenant test khỏi PROD | **Owner** | Thao tác **phá huỷ trên PROD** — cần bạn duyệt tường minh. Backup trước |
+| 2 | Coi `Passw0rd!test99` là **đã cháy**; đổi mẫu mật khẩu fixture | Owner/dev | Repo PUBLIC, 86 file |
+| 3 | Vá SEC-F00-B 3 lớp (policy `FOR DELETE` · guard `isSystem` ×2 · gỡ grant `DELETE ON roles`) + **RED test trước** | WO mới, crown | Có migration ⇒ nối tiếp, không song song `S6-PERF-DB-1` |
+| 4 | Sửa `.env.example:91` → `true` | WO mới | Chặn tái diễn SEC-F01 |
+| 5 | Dựng lại Phụ lục A bằng **quét runtime**; chấm lại §2.3 · §13.3 · §13.4 | WO này (vòng 2) | §0.4 |
+| 6 | Mở rộng SEC-F04 sang `/org/teams/:id/members` + `/org/teams` + `/org/units/tree` | WO mới | Nâng `S1` |
+| 7 | Thêm ca **deny GHI chéo tenant** vào `tenant-isolation.int-spec` (hiện 465 ca đều SELECT) | WO mới | Đây là lớp lỗ hổng, không phải một bug |
+| 8 | Vá `export:leave` thiếu audit · audit `notifications.service` ra ngoài tx · `login_logs` bỏ ghi im lặng | WO mới | Cả 3 chạm `done_when` #2 |
 
 ## 8. Kết luận WS4
 

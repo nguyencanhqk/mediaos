@@ -37,7 +37,13 @@
 | ~~KI-022~~ | ~~`outboxOf` trong `goal-be2-link.int-spec` không lọc `company_id` ⇒ đỏ-giả ngẫu nhiên~~ — **ĐÃ ĐÓNG 2026-07-26** (`S6-STAB-1`) | S1 | Hạ tầng test | — | — | ✔ xong |
 | ~~KI-023~~ | ~~Đua teardown `audit_logs → companies` trong `cleanupTenants` ⇒ đỏ-giả ngẫu nhiên~~ — **ĐÃ ĐÓNG 2026-07-26** (`S6-STAB-1`) | S1 | Hạ tầng test | — | — | ✔ xong |
 | **KI-027** | **2FA KHÔNG được ép ở PROD** cho `company-admin` dù role khai `requires_two_factor=true` (env `false` + company policy NULL + user flag `false`) | **S1** | Bảo mật (cấu hình) | ❌ | ✅ | Owner |
-| KI-028 | **16 tenant TEST + 25 user còn sống trong DB PROD** (chỉ `funtime` là thật) — đăng nhập được bằng mật khẩu seed test; RLS vẫn khoá trong tenant test của chúng | S2 | Bảo mật (dữ liệu) | ❌ | ⚠️ | Owner/DevOps |
+| **KI-028** | **16 tenant TEST + 25 user còn sống trong DB PROD** — trong đó **3 tài khoản `platform-admin` (audience operator, ĐỌC CHÉO TENANT theo thiết kế) đang `active`, `must_change_password=false`, mật khẩu = `Passw0rd!test99` có trong 86 file của repo PUBLIC** (đã verify argon2 trên hash PROD) | **S0** | Bảo mật | ✅ | ✅ | **Owner — GẤP** |
+| **KI-032** | **Tenant admin XOÁ được `role_permissions` của role hệ thống TOÀN CỤC** — RLS `USING` cho `company_id IS NULL` mà **DELETE không xét `WITH CHECK`**; service thiếu guard `isSystem`. Ghi chéo tenant, **INSERT khôi phục bị chặn ⇒ không hoàn tác qua app**. PROD: 785 grant toàn cục, `funtime` dùng 2 role toàn cục | **S0** | Bảo mật | ✅ | ✅ | **Owner — GẤP** |
+| KI-033 | `export:leave` (`leave-report.service.ts`) đọc số liệu nghỉ phép toàn công ty nhưng **KHÔNG ghi audit nào** — trong khi `hr-export`/`attendance-export` cùng cổng đều audit in-tx. `RELEASE-05` §5.2 nâng tự động ⇒ tối thiểu S1 | S1 | Bảo mật (audit) | ❌ | ⚠️ | WO mới |
+| KI-034 | Audit của `notifications.service` **KHÔNG cùng transaction** dù chú thích khẳng định có; `markRead` còn không `await` promise audit. Notification ghi thành công, audit + outbox mất im lặng | S1 | Bảo mật (audit) | ❌ | ⚠️ | WO mới |
+| KI-035 | `login_logs` bỏ ghi **im lặng** (`auth.service.ts` `if (!db) return;`) — cấp token mà không có dòng log; `emitAccountLocked` cùng dạng ⇒ khoá tài khoản không để lại vết | S1 | Bảo mật (audit) | ❌ | ⚠️ | WO mới |
+| KI-036 | `.env.example:91` ship `TWO_FACTOR_ENFORCEMENT_ENABLED=false` — `cp .env.example .env` là bước cài chuẩn ⇒ **gốc rễ tái diễn** của KI-027 ở mọi deploy mới | S2 | Bảo mật (cấu hình) | ❌ | ⚠️ | WO mới |
+| KI-037 | Bộ `tenant-isolation.int-spec` (465 ca) **chỉ SELECT** — không có một ca deny GHI chéo tenant nào. Là lớp lỗ hổng đã để lọt KI-032, không phải một bug lẻ | S2 | Độ phủ test | ❌ | ❌ | WO mới |
 | KI-029 | `PERMISSION_GUARD_ENABLED` — kill-switch **fail-OPEN toàn hệ**, đọc thẳng `process.env`, KHÔNG có trong `env.schema` lẫn `.env.example` (hiện KHÔNG đặt ở PROD) | S2 | Bảo mật (tiềm ẩn) | ❌ | ❌ | Sau MVP / CR |
 | KI-030 | `GET /org/employees` trả **danh bạ toàn tenant** (email·tên·trạng thái·team) cho mọi user đã đăng nhập — lệch với `/hr/employees` vốn ép data_scope | S2 | Bảo mật (phân quyền) | ❌ | ❌ | CR chờ owner |
 | KI-031 | `INTERNAL_API_KEY` ngoài `env.schema`/`.env.example` (guard **fail-CLOSED** nên chỉ mất tính năng) | S3 | Vận hành | ❌ | ❌ | Sau MVP |
@@ -46,12 +52,18 @@
 > **KI-027…031**. Khi merge cả hai, bảng này sẽ xung đột — **giữ cả hai khối, không đánh số lại**
 > (tài liệu khác đã trỏ tới số hiệu).
 
-**Tổng (cập nhật 2026-07-26 sau `S6-SEC-1`):**
-`S0 = 0` · `S1 = **1 mở**` (KI-027 — **cấu hình PROD, không phải lỗi code**) ·
-`S2 = **8 mở**` (KI-008 · KI-011 · KI-014 · KI-016 · KI-021 · KI-028 · KI-029 · KI-030; **+ KI-025 = 9**
+**Tổng (cập nhật 2026-07-26 sau FULL gate của `S6-SEC-1`):**
+`S0 = **2 mở**` (**KI-028** · **KI-032**) · `S1 = **5 mở**` (KI-027 · KI-030 · KI-033 · KI-034 · KI-035) ·
+`S2 = 9 mở` (KI-008 · KI-011 · KI-014 · KI-016 · KI-021 · KI-029 · KI-036 · KI-037; **+ KI-025 = 9**
 khi #294 merge) · `S3 = 17`.
-Không có defect sản phẩm mức S0/S1 nào đang mở. KI-001/KI-002 **đã đóng**; KI-006 hạ xuống S3 (chỉ còn
-bước cấu hình token + deploy). Giữ nguyên số hiệu KI để tài liệu khác trỏ tới không bị gãy.
+
+> ⛔ **HAI MỤC `S0` ĐANG MỞ — CHẶN CẢ RC LẪN GO-LIVE.** Cả hai do FULL gate của `S6-SEC-1` tìm ra sau
+> khi báo cáo WS4 bản đầu kết luận nhầm là "0 CRITICAL". KI-030 và KI-028 **đã được nâng mức** so với
+> bản đầu. Chi tiết + việc phải làm: `_review/S6-SEC-1-SECURITY-HARDENING-2026-07-26` §0.1 và §7c.
+
+~~Không có defect sản phẩm mức S0/S1 nào đang mở.~~ — **câu này đúng tới trước FULL gate 2026-07-26,
+nay KHÔNG còn đúng** (xem trên). KI-001/KI-002 **đã đóng**; KI-006 hạ xuống S3 (chỉ còn bước cấu hình
+token + deploy). Giữ nguyên số hiệu KI để tài liệu khác trỏ tới không bị gãy.
 
 > **Ngưỡng RC** (`RELEASE-05` §5.3) cho phép **≤3** mục S2 mở, mỗi mục có owner + workaround. Hiện
 > **8** ⇒ trước khi tạo RC phải đóng bớt hoặc owner ký waiver tường minh cho phần vượt. Bốn mục nằm
