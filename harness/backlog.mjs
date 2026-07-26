@@ -8223,7 +8223,9 @@ export const backlog = [
     title:
       "MediaOS BE — mở đường cho LMS đẩy thông báo vào module NOTI: seed nhóm eventCode LMS_* + template vào catalog, cấp danh tính service-to-service cho intake (hiện đòi CẢ JWT user lẫn x-internal-key mà LMS không có JWT user), và chốt cách ánh xạ người nhận khi bên gọi chỉ biết EMAIL",
     zone: "red",
-    status: "in_progress",
+    // CLOSE 2026-07-26: PR #291 merged (a6e7aaf2) — route máy + guard + mig 0529 (seed 4 mã LMS + VÁ 4
+    // CHECK, kể cả lỗi GOAL 0507 bỏ sót). CI xanh; dep-scan đỏ là nợ brace-expansion có sẵn.
+    status: "done",
     paths: [
       "apps/api/src/notifications/**",
       "apps/api/src/permission/guards/internal.guard.ts",
@@ -8266,6 +8268,9 @@ export const backlog = [
     title:
       "LOCAL apps/lms — đẩy sự kiện học tập về NOTI của MediaOS (ghi danh được duyệt · bài thi chấm xong · khoá mới gán · sắp tới hạn) qua intake nội bộ, và dọn chồng lấn với chuông thông báo local để người dùng không nhận đôi",
     zone: "yellow",
+    // 2026-07-26: phần MediaOS (mang mediaosUserId qua sync-users + sub SSO) ĐÃ merge trong PR #291.
+    // Phần apps/lms (9 file, track LOCAL) đã code + tsc/eslint xanh nhưng CHƯA deploy: còn chờ đặt cặp
+    // env LMS_NOTI_TOKEN ↔ MEDIAOS_NOTI_TOKEN + MEDIAOS_API_URL, rồi `m prod-update lms` + backup app.db.
     status: "in_progress",
     paths: [
       "apps/lms/**",
