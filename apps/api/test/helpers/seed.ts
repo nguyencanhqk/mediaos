@@ -611,5 +611,20 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   // actor_user_id → DELETE users vỡ FK audit_logs_actor_user_id_fkey (CI đỏ 2026-07-15, attendance-leave-sync).
   await direct.query("DELETE FROM audit_logs WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM users WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query("DELETE FROM companies WHERE id = ANY($1::uuid[])", ids);
+  // S6-STAB-1 (STAB-F03): cùng lớp đua với processed_events/outbox_events ở trên, nhưng ở NẤC CUỐI.
+  // Lần quét audit_logs ngay trên chỉ che được `DELETE users` (FK actor_user_id); giữa nó và
+  // `DELETE companies` vẫn còn cửa sổ để outbox worker/consumer còn sống ghi thêm audit_logs →
+  // `audit_logs_company_id_fkey` làm vỡ `DELETE companies` (đỏ-giả 2026-07-26, goal-tpl1-decompose).
+  // Dùng ĐÚNG idiom đã có: quét lại bảng phụ thuộc rồi thử lại parent, lặp có trần khi vẫn vướng FK.
+  for (let attempt = 1; ; attempt++) {
+    await direct.query("DELETE FROM audit_logs WHERE company_id = ANY($1::uuid[])", ids);
+    try {
+      await direct.query("DELETE FROM companies WHERE id = ANY($1::uuid[])", ids);
+      break;
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code !== "23503" || attempt >= 5) throw err;
+      await new Promise((r) => setTimeout(r, 200 * attempt));
+    }
+  }
 }
