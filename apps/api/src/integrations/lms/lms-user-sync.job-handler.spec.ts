@@ -45,6 +45,7 @@ function makeHandler(deps: ReturnType<typeof makeDeps>) {
 
 function rowsOf(n: number) {
   return Array.from({ length: n }, (_, i) => ({
+    id: `u-${i}`,
     email: `u${i}@x.co`,
     name: `U${i}`,
     active: true,
@@ -86,16 +87,17 @@ describe("LmsUserSyncJobHandler", () => {
 
   it("enabled: quét users, POST mang name (đường tạo account), audit lms_sync actorType Job ĐẾM (không email)", async () => {
     const rows = [
-      { email: "a@x.co", name: "A", active: true },
-      { email: "b@x.co", name: null, active: false },
+      { id: "u-a", email: "a@x.co", name: "A", active: true },
+      { id: "u-b", email: "b@x.co", name: null, active: false },
     ];
     const deps = makeDeps(rows);
     deps.http.syncUsers.mockResolvedValue(summary({ created: 1, deactivated: 1 }));
     const res = await makeHandler(deps).run({ companyId: LMS_CO });
 
+    // S5-LMS-NOTI-2: job đối soát là đường BACKFILL `mediaos_user_id` — mỗi user trong lô phải mang id.
     expect(deps.http.syncUsers).toHaveBeenCalledWith([
-      { email: "a@x.co", name: "A", active: true },
-      { email: "b@x.co", name: undefined, active: false },
+      { email: "a@x.co", name: "A", active: true, mediaosUserId: "u-a" },
+      { email: "b@x.co", name: undefined, active: false, mediaosUserId: "u-b" },
     ]);
     expect(res).toMatchObject({ total: 2, success: 2, failed: 0 });
 

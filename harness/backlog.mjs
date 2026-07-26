@@ -8266,8 +8266,14 @@ export const backlog = [
     title:
       "LOCAL apps/lms — đẩy sự kiện học tập về NOTI của MediaOS (ghi danh được duyệt · bài thi chấm xong · khoá mới gán · sắp tới hạn) qua intake nội bộ, và dọn chồng lấn với chuông thông báo local để người dùng không nhận đôi",
     zone: "yellow",
-    status: "todo",
-    paths: ["apps/lms/**", "docs/plans/S5-LMS-NOTI-2.md"],
+    status: "in_progress",
+    paths: [
+      "apps/lms/**",
+      // ĐO 2026-07-26: WO seed giả định chỉ chạm apps/lms, nhưng lối (a) đòi LMS BIẾT mediaosUserId — mà
+      // id đó chỉ có thể đến TỪ MediaOS (payload sync-users + token SSO) ⇒ phần này BẮT BUỘC chạm apps/api.
+      "apps/api/src/integrations/lms/**",
+      "docs/plans/S5-LMS-NOTI-2.md",
+    ],
     skills: ["code-review"],
     depends_on: ["S5-LMS-NOTI-1"],
     plan: "docs/plans/S5-LMS-NOTI-2.md",
@@ -8279,6 +8285,9 @@ export const backlog = [
       "dedupe: engine MediaOS có dedupeKey — đặt khoá ổn định theo (eventCode, courseId/examId, userId) để retry không đẻ thông báo trùng",
       "chống nhận ĐÔI: chốt với owner từng loại — sự kiện nào chuyển hẳn sang MediaOS thì TẮT ở chuông local, sự kiện nào giữ local (thuần vận hành LMS: chờ duyệt, chờ chấm) thì KHÔNG đẩy sang",
       "kỷ luật track LOCAL như UI-3: không PR, ship = m prod-update lms + backup data/app.db",
+      "ĐO 2026-07-26 — CHỈ 2/4 mã có nguồn phát THẬT trong LMS: ✅ LMS_ENROLLMENT_APPROVED (manage-courses/actions.ts approveCourseEnrollment) · ✅ LMS_EXAM_GRADED (manage-exam/[id]/actions.ts updateExamScore, chấm tự luận). ❌ LMS_COURSE_ASSIGNED: LMS KHÔNG có luồng quản-trị-gán-khoá (ghi danh là TỰ PHỤC VỤ, khoá is_locked thì pending chờ duyệt). ❌ LMS_COURSE_DEADLINE_NEAR: không có cột hạn hoàn thành trên courses (chỉ exams.essay_deadline) và không có job quét hạn. Hai mã vẫn seed trong catalog (thông lệ sẵn có: nhiều mã ATT_* cũng seed trước khi có producer) — cần TÍNH NĂNG SẢN PHẨM trước, không phải việc của một WO thông báo",
+      "chống nhận đôi (đo thực tế): chỉ enrollment-approved chồng lấn ⇒ ĐÃ TẮT ghi user_notifications ở LMS. exam-available/new-lecture/announcement/missed-call GIỮ local (không đẩy sang). Chấm bài trước đây KHÔNG có thông báo local nào ⇒ LMS_EXAM_GRADED là năng lực MỚI, không có rủi ro nhận đôi. NotificationItem.tsx GIỮ nhánh render kind='enrollment-approved' để hàng CŨ trong chuông vẫn hiện đúng",
+      "CẤM chạy `next build` ở apps/lms khi PROD đang chạy: NSSM phục vụ thẳng apps/lms/.next ⇒ build mà chưa restart = origin lệch manifest (memory lms-next-build-shares-prod-dist). Kiểm tra tĩnh dùng npx tsc --noEmit + eslint",
     ],
     done_when: [
       "Duyệt 1 ghi danh ở LMS ⇒ nhân viên thấy thông báo trong MediaOS, bấm vào đi đúng đích; chấm xong 1 bài thi cũng vậy",

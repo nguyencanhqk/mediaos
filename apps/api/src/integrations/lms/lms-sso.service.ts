@@ -49,13 +49,23 @@ export class LmsSsoService {
    * (email lấy từ JWT, KHÔNG nhận từ input). Đường DUY NHẤT controller dùng là `mintSsoLink` (có audit);
    * method public để unit-test crypto/TTL/jti nhanh không cần DB. Thiếu env → 503.
    */
-  buildSsoUrl(email: string): { url: string; jti: string } {
+  buildSsoUrl(email: string, subjectUserId?: string): { url: string; jti: string } {
     if (!this.secret || !this.baseUrl) {
       throw new ServiceUnavailableException("LMS SSO chưa được cấu hình");
     }
     const now = Date.now();
     const jti = randomUUID();
-    const payload = { email: email.toLowerCase(), iat: now, exp: now + TOKEN_TTL_MS, jti };
+    const payload = {
+      email: email.toLowerCase(),
+      // S5-LMS-NOTI-2 — `sub` = id user MediaOS, để LMS học định danh người nhận thông báo. LƯỚI cho
+      // người ngoài phạm vi `sync-users` (không có hồ sơ nhân viên); kênh CHÍNH vẫn là sync. Thêm field
+      // vào payload là tương thích ngược cả hai phía (verify chỉ kiểm field bắt buộc).
+      // KHÔNG phải secret: token đã ký HMAC + TTL 60s + jti một-lần, và id này chỉ có nghĩa trong nội bộ.
+      ...(subjectUserId ? { sub: subjectUserId } : {}),
+      iat: now,
+      exp: now + TOKEN_TTL_MS,
+      jti,
+    };
     const payloadB64 = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
     const sig = createHmac("sha256", this.secret).update(payloadB64).digest("base64url");
     const token = `${payloadB64}.${sig}`;
@@ -70,7 +80,7 @@ export class LmsSsoService {
    * Token nằm TRONG url trả về (response) — KHÔNG bao giờ log/đưa vào audit before/after (BẤT BIẾN #3).
    */
   async mintSsoLink(user: SsoMintUser): Promise<{ url: string }> {
-    const { url, jti } = this.buildSsoUrl(user.email);
+    const { url, jti } = this.buildSsoUrl(user.email, user.id);
     await this.db.withTenant(user.companyId, (tx) =>
       this.audit.record(tx, {
         action: "sso_link_minted",

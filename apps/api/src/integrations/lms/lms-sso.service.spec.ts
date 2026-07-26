@@ -19,6 +19,7 @@ function decodeToken(url: string) {
   const [payloadB64, sigB64] = token.split(".");
   const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8")) as {
     email: string;
+    sub?: string;
     iat: number;
     exp: number;
     jti: string;
@@ -48,6 +49,20 @@ describe("LmsSsoService", () => {
     const expectedSig = createHmac("sha256", SECRET).update(payloadB64).digest("base64url");
     expect(sigB64).toBe(expectedSig);
     expect(payload.email).toBe("user@example.com"); // email chuẩn hoá lowercase
+  });
+
+  // S5-LMS-NOTI-2 — `sub` (id user MediaOS) để LMS học định danh người nhận thông báo.
+  it("có subjectUserId → payload mang sub; KHÔNG có → payload KHÔNG có sub (tương thích ngược)", () => {
+    const svc = svcPure();
+    const withSub = decodeToken(svc.buildSsoUrl("a@b.co", "u-123").url);
+    expect(withSub.payload.sub).toBe("u-123");
+    // Chữ ký vẫn phải khớp payload MỚI (sub nằm trong phần được ký, không phải phần thêm ngoài).
+    expect(withSub.sigB64).toBe(
+      createHmac("sha256", SECRET).update(withSub.payloadB64).digest("base64url"),
+    );
+
+    const withoutSub = decodeToken(svc.buildSsoUrl("a@b.co").url);
+    expect("sub" in withoutSub.payload).toBe(false);
   });
 
   it("token TTL 60s và jti không lặp giữa 2 lần phát (nền chống replay phía LMS)", () => {
