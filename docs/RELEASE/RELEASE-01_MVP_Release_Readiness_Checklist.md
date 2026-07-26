@@ -121,7 +121,7 @@ Ma trận **5 scope × 7 module** + 13 checklist + 6 negative — mỗi ô cite 
 
 | Mục | Trạng thái |
 | --- | --- |
-| CRITICAL / HIGH mở | **0 / 0** |
+| CRITICAL / HIGH mở | **0 / 1** — cập nhật **2026-07-26** (`S6-SEC-1` WS4): **KI-027** 2FA không được ép ở PROD cho `company-admin`. Là **cấu hình vận hành**, đóng bằng thao tác owner (~10 phút), không sửa code |
 | OWASP API Top 10 | 10/10 PASS hoặc N/A-có-lý-do |
 | 3 bất biến (`company_id`+RLS · append-only/soft-delete · không secret plaintext) | GIỮ VỮNG |
 | Accepted-risk chờ owner ký | **D3** — widget `hr-overview` count-only hiển thị headcount toàn công ty cho HR có scope Department |
@@ -129,7 +129,10 @@ Ma trận **5 scope × 7 module** + 13 checklist + 6 negative — mỗi ô cite 
 | Secret scan (gitleaks) | ✅ xanh trên master |
 | Dependency scan (`pnpm audit`) | ❌ **ĐỎ — do công cụ, không phải lỗ hổng** (xem §7.2) |
 
-Nguồn: `docs/_review/S5-SEC-1-SECURITY-TESTING-2026-07-25.md`.
+Nguồn: `docs/_review/S5-SEC-1-SECURITY-TESTING-2026-07-25.md` · **cập nhật WS4:
+`docs/_review/S6-SEC-1-SECURITY-HARDENING-2026-07-26.md`** (checklist `IMPLEMENTATION-09` §13.2 30/30 ·
+§13.3 9/10 · §13.4 4/7 đóng sạch · 3 bất biến re-verify **trên chính DB PROD**: 153/153 bảng
+`company_id` có RLS+FORCE, 13/13 bảng append-only chỉ `INSERT,SELECT`).
 
 ---
 
