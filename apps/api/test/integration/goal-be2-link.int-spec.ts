@@ -89,10 +89,18 @@ describe.skipIf(!hasLaneDb)("S5-GOAL-BE-2 link task↔goal + NOTI (DB cô lập,
     return res.body.data.id as string;
   };
 
+  /**
+   * S6-STAB-1 (STAB-F02): PHẢI lọc `company_id` — không có nó, truy vấn đếm outbox của MỌI công ty
+   * trong lane DB. Vitest chạy các spec file SONG SONG trên cùng DB, nên spec khác cũng tạo goal
+   * (goal-tpl1-decompose…) sẽ chèn thêm `goal.assigned` giữa hai lần đo ⇒ assert `before + 1` đỏ
+   * NGẪU NHIÊN và `.at(-1)` bắt nhầm payload của tenant khác (đỏ-giả 2026-07-26: assigner_name
+   * 'Hệ thống' thay vì 'Trưởng phòng A'). Mọi spec outbox khác trong repo đều đã lọc company_id —
+   * đây là chỗ duy nhất sót.
+   */
   const outboxOf = async (eventType: string) => {
     const r = await direct.query(
-      "SELECT payload FROM outbox_events WHERE event_type = $1 ORDER BY created_at",
-      [eventType],
+      "SELECT payload FROM outbox_events WHERE company_id = $1 AND event_type = $2 ORDER BY created_at",
+      [A.companyId, eventType],
     );
     return r.rows.map((row) => row.payload as Record<string, unknown>);
   };

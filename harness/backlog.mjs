@@ -5262,6 +5262,7 @@ export const backlog = [
     paths: ["docs/RELEASE/**", "docs/plans/S6-GOV-1.md"],
     skills: [],
     depends_on: ["S5-UAT-1"],
+    plan: "docs/plans/S6-GOV-1.md",
     src: ["IMPLEMENTATION-09 §10 (WS1)", "IMP09-IN-001/005"],
     done_when: [
       "Scope MVP freeze văn bản hoá (danh sách flow P0/P1 chốt); quy tắc change-control sau freeze §10.3 (chỉ nhận blocker release, có owner duyệt)",
@@ -5277,9 +5278,20 @@ export const backlog = [
       "Stabilization & Bug Triage: module stabilization checklist (AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH/Foundation) + fix P0/P1 + daily triage (WS2)",
     zone: "yellow",
     status: "todo",
-    paths: ["apps/api/src/**", "apps/app/src/**", "docs/RELEASE/**", "docs/plans/S6-STAB-1.md"],
+    // paths mở rộng thêm apps/api/test/** (2026-07-26): 2 lỗi S1 tìm được ở WS2 nằm ở TẦNG TEST và
+    // đều sinh ĐỎ-GIẢ ngẫu nhiên (RELEASE-06 §4.2/§4.3) — để nguyên thì mọi kết luận "xanh" của
+    // S6-QA-FINAL-1/S6-SEC-1/S6-PERF-DB-1 sau này đều không đáng tin. Khai tường minh thay vì sửa
+    // lén ngoài phạm vi (paths lái review gate + scheduler).
+    paths: [
+      "apps/api/src/**",
+      "apps/api/test/**",
+      "apps/app/src/**",
+      "docs/RELEASE/**",
+      "docs/plans/S6-STAB-1.md",
+    ],
     skills: ["code-review"],
     depends_on: ["S5-UAT-1"],
+    plan: "docs/plans/S6-STAB-1.md",
     src: ["IMPLEMENTATION-09 §11 (WS2)", "IMP09-IN-004"],
     done_when: [
       "Module stabilization checklist §11.5 chạy đủ 8 nhóm; bug P0/P1 fix + retest + regression; severity matrix + triage cadence §11.2/§11.3 áp dụng",
