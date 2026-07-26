@@ -13,12 +13,12 @@
 
 | ID | Vấn đề | Mức | Loại | Chặn UAT | Chặn go-live | Chủ |
 | --- | --- | --- | --- | --- | --- | --- |
-| KI-001 | 4 tài khoản `uat.*` chưa gắn hồ sơ nhân viên | S2 | Dữ liệu | ✅ | ❌ | Owner/HR |
-| KI-002 | Chưa có số dư phép nào trong công ty `demo` | S2 | Dữ liệu | ✅ | ❌ | Owner/HR |
+| ~~KI-001~~ | ~~Tài khoản `uat.*` chưa gắn hồ sơ nhân viên~~ — **ĐÃ ĐÓNG 2026-07-26** | S2 | Dữ liệu | — | — | ✔ xong |
+| ~~KI-002~~ | ~~Chưa có số dư phép trong công ty `demo`~~ — **ĐÃ ĐÓNG 2026-07-26** | S2 | Dữ liệu | — | — | ✔ xong |
 | KI-003 | Loại nghỉ phép có 3 bản trùng chữ thường | S3 | Dữ liệu | ❌ | ❌ | Owner/HR |
 | KI-004 | Chưa nhập ngày lễ | S3 | Dữ liệu | ❌ | ⚠️ | Owner/HR |
 | KI-005 | Widget "Thông báo" trên dashboard trễ tối đa ~10s | S3 | Sản phẩm | ❌ | ❌ | Sprint 6 |
-| KI-006 | LMS→NOTI chưa hoạt động (thiếu migration `0529` ở PROD+UAT; NOTI-2 chưa deploy) | S2 | Vận hành | ✅ (phần LMS) | ✅ | Owner/DevOps |
+| KI-006 | LMS→NOTI chưa hoạt động — **migration `0529` ĐÃ áp cho cả PROD+UAT 2026-07-26**; còn thiếu `LMS_NOTI_TOKEN` + deploy | S2→S3 | Vận hành | ❌ | ✅ | Owner/DevOps |
 | KI-007 | CI `Security / Dependency scan` đỏ do lỗi công cụ | S3 | CI | ❌ | ⚠️ | Owner/DevOps |
 | KI-008 | Chưa có bằng chứng diễn tập **khôi phục** backup | S2 | Vận hành | ❌ | ✅ | Owner/DevOps |
 | KI-009 | Log chưa có cấu trúc JSON | S3 | Quan sát | ❌ | ❌ | Sprint 6 |
@@ -34,13 +34,20 @@
 | KI-019 | Chỉ 1 ca làm việc + 1 quy tắc chấm công + 0 phân ca trong DB UAT | S3 | Dữ liệu | ❌ | ❌ | Owner/HR |
 | KI-020 | Chưa có dữ liệu GOAL để nghiệm thu | S3 | Dữ liệu | ❌ | ❌ | Owner |
 
-**Tổng: S0 = 0 · S1 = 0 · S2 = 6 · S3 = 14.** Không có defect sản phẩm mức S0/S1 nào đang mở.
+**Tổng (cập nhật 2026-07-26): S0 = 0 · S1 = 0 · S2 = 3 mở (KI-008 · KI-011 · KI-014 · KI-016 — xem ghi chú) · S3 = 15.**
+Không có defect sản phẩm mức S0/S1 nào đang mở. KI-001/KI-002 **đã đóng**; KI-006 hạ xuống S3 (chỉ còn
+bước cấu hình token + deploy). Giữ nguyên số hiệu KI để tài liệu khác trỏ tới không bị gãy.
 
 ---
 
 ## 2. Chi tiết
 
-### KI-001 — Tài khoản UAT chưa gắn hồ sơ nhân viên · S2
+### KI-001 — Tài khoản UAT chưa gắn hồ sơ nhân viên · S2 · ✅ ĐÃ ĐÓNG 2026-07-26
+
+> **Đã đóng:** tạo `UAT-EMP-01` (phòng Nội Dung, quản lý trực tiếp = `uat.manager`) · `UAT-MGR-01` ·
+> `UAT-HR-01` (phòng Nhân Sự) trong `mediaos_dev`, set **cả** `direct_manager_id` **lẫn**
+> `employee_manager_relations`. Bơm bằng SQL idempotent ⇒ **không có vết `audit_logs`** (đánh đổi đã
+> ghi rõ ở `S5-UAT-1-UAT-CYCLE0-DRYRUN.md` §0).
 
 **Kiểm chứng:** `SELECT u.email, e.employee_code FROM users u LEFT JOIN employee_profiles e ON e.user_id=u.id …`
 → cả 4 tài khoản `uat.*` trả `NULL`.
@@ -50,7 +57,10 @@ Employee đều không chạy được.
 **Workaround:** `/hr/employees` → tạo/chọn hồ sơ → **Liên kết tài khoản**; rồi `/hr/org-chart` đặt
 `uat.manager` làm quản lý trực tiếp của `uat.employee`.
 
-### KI-002 — Chưa có số dư phép · S2
+### KI-002 — Chưa có số dư phép · S2 · ✅ ĐÃ ĐÓNG 2026-07-26
+
+> **Đã đóng:** số dư 2026 — `uat.employee` ANNUAL 12 + SICK 5 · `uat.manager` ANNUAL 12
+> (`remaining_days` là cột GENERATED `total_days - used_days`, không ghi tay).
 
 **Kiểm chứng:** `SELECT count(*) FROM leave_balances` → **0**. `leave_types` `ANNUAL`/`SICK`/`COMPENSATORY`
 có `deduct_balance = true`, `allow_negative_balance` NULL.
@@ -75,7 +85,12 @@ Widget `NOTIFICATIONS` **không tự vô hiệu cache** khi có thông báo mớ
 tự lành. Đã có test khoá hành vi này: `qa2-e2e-task-noti-dash.int-spec.ts` (ca E3 — "known-issue
 QA2-HIGH-001"). Chuông thông báo (không qua widget) **không** bị ảnh hưởng.
 
-### KI-006 — LMS→NOTI chưa hoạt động · S2
+### KI-006 — LMS→NOTI chưa hoạt động · S2 → S3 (một nửa đã đóng 2026-07-26)
+
+> **Đã đóng phần migration:** `m migrate` (PROD `mediaos`) + `m dev-online-migrate` (UAT
+> `mediaos_dev`) ⇒ **cả hai 197/197**, 4 mã `LMS_*` có mặt. PROD health 200 sau migrate — 0529 chỉ
+> nới CHECK + INSERT catalog nên **không cần restart** service. **Còn lại:** đặt `LMS_NOTI_TOKEN`
+> hai phía + deploy theo `docs/plans/S5-LMS-NOTI-2.md` §4.
 
 **Kiểm chứng:** `mediaos_dev` **và** `mediaos` (PROD) đều áp **196/197** migration;
 `SELECT event_code FROM notification_events WHERE event_code LIKE 'LMS%'` → **0 dòng** ở cả hai.

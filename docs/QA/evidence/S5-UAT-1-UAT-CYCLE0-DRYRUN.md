@@ -5,12 +5,37 @@
 > Người chạy: phiên Claude Code (dry-run kỹ thuật). **Cycle 1–3 với business user chưa chạy.**
 >
 > **Nguyên tắc:** Cycle 0 KHÔNG nghiệm thu nghiệp vụ. Nó trả lời đúng một câu: *"Bật UAT lên bây giờ
-> thì business user có chạy được script không, hay sẽ kẹt ngay bước 3?"* — và câu trả lời là
-> **chưa chạy được**, vì 3 chặn ở §4.
+> thì business user có chạy được script không, hay sẽ kẹt ngay bước 3?"*
 
 ---
 
-## 1. Kết luận điều hành
+## 0. CẬP NHẬT 2026-07-26 (sau khi owner uỷ quyền) — 3 blocker ĐÃ ĐÓNG
+
+Biên bản bên dưới giữ nguyên hiện trạng **lúc dry-run**. Sau đó owner uỷ quyền và các việc sau **đã
+thực hiện xong**:
+
+| Blocker | Đã làm | Kiểm chứng sau khi làm |
+| --- | --- | --- |
+| **UAT-BLOCK-003** | `m migrate` (PROD `mediaos`) + `m dev-online-migrate` (UAT `mediaos_dev`) | **cả hai DB: 197/197 migration**; 4 mã `LMS_*` có mặt ở cả hai. PROD `/health` + `/health/db` vẫn **200** sau migrate (0529 chỉ nới CHECK + INSERT catalog ⇒ **không cần restart** service) |
+| **UAT-BLOCK-001** | Tạo 3 hồ sơ nhân viên `UAT-EMP-01` / `UAT-MGR-01` / `UAT-HR-01` + quan hệ quản lý | `uat.employee` → phòng Nội Dung, quản lý trực tiếp = `uat.manager`; `uat.hr` → phòng Nhân Sự. Set **cả** `direct_manager_id` **lẫn** `employee_manager_relations` vì Team scope đọc cả hai (`data-scope.service.ts:132` + `data-scope.repository.ts:52`) |
+| **UAT-BLOCK-002** | Cấp số dư phép năm 2026 | `uat.employee` ANNUAL 12 · SICK 5 · `uat.manager` ANNUAL 12 (`remaining_days` là cột GENERATED — không ghi tay) |
+
+**Cách làm & giới hạn của cách làm:**
+
+- Backup PROD trước khi migrate: `pg_dump -Fc mediaos` → `c:\tmp\mediaos-prod-20260726-100718.dump`.
+- Chỉ chạy `m migrate` / `m dev-online-migrate` — **KHÔNG** `m prod-update` đầy đủ (tránh rebuild `dist`
+  dùng chung + deploy FE + restart service ngoài phạm vi được uỷ quyền).
+- Dữ liệu UAT bơm bằng **SQL trực tiếp** vào `mediaos_dev` (idempotent, `company_id` tường minh, chạy
+  lần 2 = 0 dòng mới). **Đánh đổi đã biết:** đường này **KHÔNG đi qua service ⇒ KHÔNG có bản ghi
+  `audit_logs`** như khi thao tác trên UI. Chấp nhận vì đây là dữ liệu dựng-cảnh cho UAT, không phải
+  nghiệp vụ thật; nếu cần vết audit thì tạo lại qua `/hr/employees` + `/leave/balances`.
+
+**Còn lại đúng một việc để mở Cycle 1:** bật stack UAT (`m dev-online-fast`) — **chưa làm**, vì lệnh
+đó biên dịch lại `apps/api/dist` mà service PROD :3100 đang chạy (xem plan §4). Owner tự quyết.
+
+---
+
+## 1. Kết luận điều hành *(hiện trạng LÚC dry-run — 3 blocker sau đó đã đóng, xem §0)*
 
 | Câu hỏi | Trả lời |
 | --- | --- |
@@ -47,7 +72,6 @@ API chạy như CI (`LANE_DB` set ⇒ deny-path / IDOR / cross-tenant **thực t
 
 ```bash
 # tái lập (đúng cách — xem §2.3 về vì sao phải chia chunk)
-
 bash scripts/lane-db-setup.sh uat1
 cd apps/api
 LANE_DB=mediaos_uat1 pnpm exec vitest run <danh-sách-file-chunk>   # 6 chunk × ~75 file
@@ -64,7 +88,7 @@ file thứ 61). Chỉ chia **chunk** (6 lệnh vitest riêng) mới ra số xác
 **(b) Lane DB BẨN gây đỏ-giả.** Chunk 04 đỏ **1 ca** trên lane `mediaos_uat1` (lane đã bị 2 lần chạy
 crash trước đó làm bẩn):
 
-```
+```text
 × goal-be2-link.int-spec.ts > L4 ... payload goal.assigned/goal.finalized KHỚP TỪNG KHOÁ
   → expected 'Hệ thống' to be 'Trưởng phòng A'
 ```
@@ -75,7 +99,11 @@ dư**, không phải regression trên master. (Kết luận này rút ra bằng 
 
 ---
 
-## 3. Đối chiếu Entry Criteria QA-09 §11
+## 3. Đối chiếu Entry Criteria QA-09 §11 *(hiện trạng LÚC dry-run)*
+
+> Sau §0: **ENTRY-002 và ENTRY-008 nay ĐẠT** (migration 197/197 hai DB · hồ sơ nhân viên + số dư phép
+> đã có). Còn thiếu **ENTRY-001** (chưa bật stack UAT) · **ENTRY-009/010** (chờ owner duyệt kịch bản +
+> phổ biến cho người test) ⇒ **7/10 đạt**.
 
 | Mã | Điều kiện | Trạng thái | Bằng chứng / việc còn thiếu |
 | --- | --- | --- | --- |
@@ -136,6 +164,7 @@ VALUES ('notification_skipped','notification','NOTI','e2e16090-…','{}');
 -- ERROR: insert or update on table "audit_logs" violates foreign key constraint
 --        "audit_logs_actor_user_id_fkey"
 ```
+
 (Cùng câu INSERT với `actor_user_id` hợp lệ → **thành công**; `object_type='notification'` NẰM TRONG
 CHECK hợp lệ; RLS/quyền `mediaos_app` đều OK.)
 

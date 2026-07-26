@@ -56,9 +56,9 @@ realtime WebSocket đầy đủ · module media/finance (đã de-media-fy, out-o
 
 | Tài khoản | Vai trò (role seed) | Scope | Dùng để test | Trạng thái dữ liệu |
 | --- | --- | --- | --- | --- |
-| `uat.employee@demo.local` | `employee` | Own | Chấm công · xin nghỉ · việc cá nhân · thông báo | ⚠️ **chưa gắn hồ sơ nhân viên** — xem KI-001 |
-| `uat.manager@demo.local` | `manager` | Team | Duyệt nghỉ/điều chỉnh công · việc của nhóm | ⚠️ **chưa gắn hồ sơ + chưa có cấp dưới** — KI-001 |
-| `uat.hr@demo.local` | `hr` | Company | Hồ sơ · bảng công · phép · hợp đồng | ⚠️ **chưa gắn hồ sơ nhân viên** — KI-001 |
+| `uat.employee@demo.local` | `employee` | Own | Chấm công · xin nghỉ · việc cá nhân · thông báo | ✅ `UAT-EMP-01` · phòng Nội Dung · ANNUAL 12 + SICK 5 ngày |
+| `uat.manager@demo.local` | `manager` | Team | Duyệt nghỉ/điều chỉnh công · việc của nhóm | ✅ `UAT-MGR-01` · cấp dưới trực tiếp = `uat.employee` · ANNUAL 12 |
+| `uat.hr@demo.local` | `hr` | Company | Hồ sơ · bảng công · phép · hợp đồng | ✅ `UAT-HR-01` · phòng Nhân Sự |
 | `uat.admin@demo.local` | `company-admin` | Company | Người dùng · vai trò · quyền · cài đặt · audit | ✅ dùng được ngay |
 | `sa@demo.local` | `super-admin` | System | Kiểm tra cấp hệ thống (N=1 nên ≡ Company) | ✅ dùng được ngay |
 | `admin@demo.local` | `company-admin` | Company | Tài khoản demo cũ (dự phòng) | ✅ |
@@ -79,13 +79,13 @@ realtime WebSocket đầy đủ · module media/finance (đã de-media-fy, out-o
 | Company | 1 công ty active, TZ Asia/Ho_Chi_Minh | 1 (`demo`) | ✅ |
 | Phòng ban | ≥3 | 7 `org_units` | ✅ |
 | Vị trí | ≥4 | 9 `positions` | ✅ |
-| Nhân viên | nhiều trạng thái | 11 hồ sơ, **11/11 đã gắn user** | ⚠️ nhưng **không** gồm 4 tài khoản `uat.*` — KI-001 |
-| Quan hệ quản lý | có cấp dưới cho Manager | 4 quan hệ | ⚠️ không thuộc `uat.manager` — KI-001 |
+| Nhân viên | nhiều trạng thái | **14** hồ sơ (11 cũ + 3 hồ sơ `uat.*` tạo 2026-07-26), tất cả đã gắn user | ✅ |
+| Quan hệ quản lý | có cấp dưới cho Manager | **5** quan hệ | ✅ `uat.manager` → `uat.employee` (set cả `direct_manager_id` lẫn `employee_manager_relations`) |
 | Ca làm việc | ≥2 (hành chính + linh hoạt) | **1** | ⚠️ P1 — check-in vẫn chạy (fallback ca mặc định) |
 | Quy tắc chấm công | mặc định + remote | **1** | ⚠️ P1 — fallback `DEFAULT_OFFICE_RULE` |
 | Phân ca | có | **0** | ℹ️ không chặn (đã có fallback) |
 | Loại nghỉ phép | ≥3 | 11 (8 chuẩn + **3 bản trùng chữ thường** — KI-003) | ⚠️ |
-| Số dư phép | đủ / sắp hết / không đủ | **0 dòng** | ❌ **CHẶN tạo đơn nghỉ trừ phép** — KI-002 |
+| Số dư phép | đủ / sắp hết / không đủ | **3 dòng** (năm 2026) | ✅ đủ để tạo đơn; muốn ca "sắp hết/không đủ" thì HR chỉnh ở `/leave/balances` |
 | Đơn nghỉ | nhiều trạng thái | 5 (Draft 1 · Pending 1 · pending 2 · approved 1) | ✅ đủ để xem, chưa đủ để duyệt-mới |
 | Bản ghi chấm công | có | 21 | ✅ |
 | Việc/dự án | nhiều trạng thái | 8 dự án · 34 việc (Todo 15 · In Progress 10 · In Review 5 · Done 2 · Cancelled 1) | ✅ |
@@ -93,11 +93,9 @@ realtime WebSocket đầy đủ · module media/finance (đã de-media-fy, out-o
 | Ngày lễ | có | **0** | ⚠️ P1 — tính ngày nghỉ coi mọi ngày là ngày làm |
 | Mục tiêu (GOAL) | — | **0** | ℹ️ P2 — cần tạo trong UAT nếu muốn nghiệm thu |
 
-**Việc phải làm TRƯỚC Cycle 1** (chi tiết + cách làm: `RELEASE-02` KI-001/KI-002):
-
-1. Gắn hồ sơ nhân viên cho `uat.employee` · `uat.manager` · `uat.hr`, đặt `uat.manager` làm quản lý
-   trực tiếp của `uat.employee`.
-2. Cấp số dư phép năm cho `uat.employee` (và `uat.manager` nếu muốn test chéo).
+**Cập nhật 2026-07-26:** hai việc chặn (hồ sơ nhân viên + số dư phép) **đã làm xong** — chi tiết và
+đánh đổi (bơm bằng SQL ⇒ không có vết `audit_logs`) ghi ở `S5-UAT-1-UAT-CYCLE0-DRYRUN.md` §0.
+Còn lại trước Cycle 1: **bật stack UAT** (`m dev-online-fast`) rồi smoke health.
 
 ---
 
@@ -273,12 +271,12 @@ Tóm tắt cái người dùng sẽ **gặp trực tiếp**:
 
 | # | Giới hạn | Ảnh hưởng khi UAT |
 | --- | --- | --- |
-| 1 | 4 tài khoản `uat.*` chưa gắn hồ sơ nhân viên (KI-001) | Chấm công / xin nghỉ / bảng công cá nhân **chưa chạy được** cho tới khi gắn |
-| 2 | Chưa có số dư phép (KI-002) | Tạo đơn nghỉ phép năm sẽ báo "không đủ số dư" |
+| 1 | ~~Tài khoản `uat.*` chưa gắn hồ sơ~~ — **đã xử lý 2026-07-26** | không còn ảnh hưởng |
+| 2 | ~~Chưa có số dư phép~~ — **đã cấp 2026-07-26** | không còn ảnh hưởng |
 | 3 | Loại nghỉ phép có 3 bản trùng chữ thường (KI-003) | Danh sách chọn loại nghỉ nhìn bị lặp |
 | 4 | Chưa nhập ngày lễ (KI-004) | Số ngày nghỉ tính không trừ ngày lễ |
 | 5 | Widget "Thông báo" trên dashboard có độ trễ tới ~10s (KI-005) | Số đếm có thể chậm vài giây sau thao tác |
-| 6 | Thông báo học tập từ LMS chưa bật ở PROD (KI-006) | Sự kiện học tập chưa hiện ở chuông MediaOS |
+| 6 | Thông báo học tập từ LMS chưa bật ở PROD (KI-006 — catalog `0529` đã áp, còn token + deploy) | Sự kiện học tập chưa hiện ở chuông MediaOS |
 | 7 | Realtime chưa đầy đủ | Vài màn cần tải lại để thấy thay đổi của người khác |
 
 ---

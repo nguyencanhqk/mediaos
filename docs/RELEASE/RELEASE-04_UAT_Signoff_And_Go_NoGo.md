@@ -37,14 +37,14 @@ Ký từng module sau khi chạy đủ scenario tương ứng ở `S5-UAT-1-UAT-
 | AUTH / Home | UAT-EMP-01…04, 27, 30 | int-spec auth/session/2FA/logout đủ; 0 bug mở | — | ☐ Go ☐ Cond ☐ No-Go | | |
 | ME (`/me`) | UAT-EMP-05, 24…29 | `me-personal-hub` + `me-qa1-idor-sweep` (IDOR sạch) | — | ☐ ☐ ☐ | | |
 | HR | UAT-HR-01…19 | scope Own/Team/Dept/Company + mask lương/CCCD + xuất file ép loại PII | — | ☐ ☐ ☐ | | |
-| ATT | UAT-EMP-07…10, 16, 17 · UAT-MGR-06…09 | chấm trùng→409, đua→1 thắng, cấm tự-duyệt | **KI-001** (thiếu hồ sơ NV) | ☐ ☐ ☐ | | |
-| LEAVE | UAT-EMP-11…15 · UAT-MGR-02…05, 10 · UAT-HR-13…16 | sổ số dư append-only, sync ATT, hoàn phép khi huỷ | **KI-001 + KI-002** | ☐ ☐ ☐ | | |
+| ATT | UAT-EMP-07…10, 16, 17 · UAT-MGR-06…09 | chấm trùng→409, đua→1 thắng, cấm tự-duyệt | ~~KI-001~~ đã đóng | ☐ ☐ ☐ | | |
+| LEAVE | UAT-EMP-11…15 · UAT-MGR-02…05, 10 · UAT-HR-13…16 | sổ số dư append-only, sync ATT, hoàn phép khi huỷ | ~~KI-001 + KI-002~~ đã đóng | ☐ ☐ ☐ | | |
 | TASK | UAT-EMP-18…20 · UAT-MGR-11…15 | ma trận quyền theo dự án, fail-closed 404, việc con đếm-lá | — | ☐ ☐ ☐ | | |
 | NOTI | UAT-EMP-21…23 · UAT-MGR-16 | deep-link mất-quyền→403, delivery log append-only, chống trùng | KI-005 (trễ widget) · **KI-006** (LMS) | ☐ ☐ ☐ | | |
 | DASH | UAT-EMP-06 · UAT-MGR-01 · UAT-HR-01 | widget theo vai, count-only + không PII, suy giảm cục bộ | **KI-012** (D3 chờ ký) · KI-005 | ☐ ☐ ☐ | | |
 | SYSTEM / Foundation | UAT-ADM-01…17 | audit append-only, cài đặt che giá trị nhạy cảm, module toggle | — | ☐ ☐ ☐ | | |
 | GOAL *(ngoài MVP gốc)* | UAT-MGR-18 | phân rã 1 giao dịch, IDOR chéo tenant→404 | KI-020 (chưa có dữ liệu) | ☐ ☐ ☐ | | |
-| LMS *(tích hợp)* | UAT-EMP-28 | SSO-only + audit + đồng bộ người dùng | **KI-006 chặn phần thông báo** | ☐ ☐ ☐ | | |
+| LMS *(tích hợp)* | UAT-EMP-28 | SSO-only + audit + đồng bộ người dùng | KI-006: catalog `0529` đã áp; còn token + deploy | ☐ ☐ ☐ | | |
 
 ---
 
@@ -68,8 +68,8 @@ Ký từng module sau khi chạy đủ scenario tương ứng ở `S5-UAT-1-UAT-
 | 2 | P1 còn lại không chặn RC hoặc có workaround rõ | ✅ | 0 P1; 6 mục S2 đều có workaround (`RELEASE-02`) |
 | 3 | UAT P0 flow đã pass | ❌ | **Cycle 1 chưa chạy** |
 | 4 | Permission/data-scope trọng yếu pass | ✅ | ma trận 5 scope × 7 module, mỗi ô cite spec đang chạy |
-| 5 | Build staging/UAT ổn định | ❌ | UAT :3200 đang tắt; DB UAT thiếu migration `0529` |
-| 6 | Migration/seed pass | ⚠️ | migrate-from-empty ✅ trong CI; **PROD + UAT còn thiếu `0529`** |
+| 5 | Build staging/UAT ổn định | ⚠️ | DB UAT **đã ở head 0529** + dữ liệu UAT đã sẵn; còn **chưa bật** stack :3200 |
+| 6 | Migration/seed pass | ✅ | migrate-from-empty ✅ trong CI; **PROD + UAT đều 197/197** (2026-07-26) |
 | 7 | QA Lead + Product Owner + Tech Lead đồng ý | ⏳ | §5 |
 
 ### 4.2 Khuyến nghị của phiên chạy Cycle 0
@@ -89,8 +89,8 @@ Ký từng module sau khi chạy đủ scenario tương ứng ở `S5-UAT-1-UAT-
 
 | # | Điều kiện | Owner | Hạn đề xuất | Chặn |
 | --- | --- | --- | --- | --- |
-| C1 | Áp migration `0529` cho `mediaos_dev` + `mediaos` (PROD) | Owner/DevOps | ngày đầu Sprint 6 | LMS→NOTI; nợ migration PROD |
-| C2 | Đóng UAT-BLOCK-001/002 (hồ sơ NV + số dư phép cho `uat.*`) | Owner/HR | trước Cycle 1 | mở UAT |
+| ~~C1~~ | ~~Áp migration `0529` cho `mediaos_dev` + `mediaos`~~ | — | ✅ **xong 2026-07-26** | — |
+| ~~C2~~ | ~~Đóng UAT-BLOCK-001/002 (hồ sơ NV + số dư phép)~~ | — | ✅ **xong 2026-07-26** | — |
 | C3 | Chạy UAT Cycle 1 đủ P0 + ghi biên bản | Owner + business user | tuần 1 Sprint 6 | sign-off |
 | C4 | Ký D3 + D1 + quyết định scope 4 nhánh mở rộng | Owner | tuần 1 Sprint 6 | đóng sổ MVP |
 | C5 | Diễn tập khôi phục backup + lưu biên bản | Owner/DevOps | trước RC | go-live |
@@ -139,13 +139,13 @@ Quyết định cuối: ☐ Go ☐ **Conditional Go** ☐ No-Go
 | **IMP09-IN-004** | Known issue đang mở đã được phân loại | `RELEASE-02` — 20 mục, có mức/loại/workaround/chủ |
 | IMP09-IN-001 | Scope MVP đã chốt | ⚠️ **một phần** — 4 nhánh mở rộng cần `S6-GOV-1` đóng băng (§3) |
 | IMP09-IN-002 | Flow P0/P1 đã xác định | `S5-UAT-1-UAT-KIT.md` §2 + §5 |
-| IMP09-IN-006 | Staging hoạt động ổn định | ❌ **chưa** — C1/C2 |
+| IMP09-IN-006 | Staging hoạt động ổn định | ⚠️ DB + dữ liệu đã sẵn (C1/C2 xong); còn bật stack :3200 |
 
 ### 6.2 Việc gợi ý mở WO ở Sprint 6
 
 | Gợi ý WO | Nội dung | Nguồn |
 | --- | --- | --- |
-| `S6-OPS-MIGDEBT-1` | Đưa PROD + UAT lên head `0529`, thêm kiểm tra định kỳ "migration tồn đọng" | KI-006 |
+| `S6-OPS-MIGDEBT-1` | ~~Đưa PROD + UAT lên head `0529`~~ (xong 2026-07-26) — còn: **kiểm tra định kỳ "migration tồn đọng"** để không tái diễn | KI-006 |
 | `S6-QA-CHUNK-1` | Sửa gốc crash `ERR_IPC_CHANNEL_CLOSED` hoặc chuẩn hoá chạy chia chunk vào `check.sh`/CI | KI-014 |
 | `S6-OPS-BACKUP-DRILL-1` | Chạy + ghi biên bản diễn tập khôi phục | KI-008 |
 | `S6-OPS-DISTSPLIT-1` | Tách thư mục build PROD khỏi repo dev | KI-016 |

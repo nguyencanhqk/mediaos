@@ -16,7 +16,7 @@ KHÔNG thể tự ký thay owner. Vì vậy WO chia đôi rành mạch, không g
 | --- | --- | --- |
 | **A. UAT prep** (kit: scope · account · data · script theo role · feedback form · severity guide · known limitations · sign-off template) | Phiên này | ✅ GIAO ĐỦ — `docs/QA/evidence/S5-UAT-1-UAT-KIT.md` |
 | **B. UAT Cycle 0** (readiness / dry-run: kiểm entry criteria, đo dữ liệu UAT thật, chạy bằng chứng tự động) | Phiên này | ✅ ĐÃ CHẠY — `docs/QA/evidence/S5-UAT-1-UAT-CYCLE0-DRYRUN.md` |
-| **C. UAT Cycle 1–3** (business user chạy script trên UI, ghi feedback, ký) | **Owner / business user** | ⏳ CHỜ — kit + runbook đã sẵn, môi trường cần owner bật (xem §4) |
+| **C. UAT Cycle 1–3** (business user chạy script trên UI, ghi feedback, ký) | **Owner / business user** | ⏳ CHỜ — kit + runbook sẵn; **DB + dữ liệu UAT đã dựng xong 2026-07-26**, chỉ còn bật stack (xem §4) |
 | **D. Release readiness + known issues + release notes + Go/No-Go draft** | Phiên này | ✅ GIAO ĐỦ — `docs/RELEASE/**` |
 
 > **Nguyên tắc chống xanh-giả:** mọi ô "PASS" trong bộ tài liệu này phải trỏ tới **bằng chứng chạy
@@ -62,36 +62,26 @@ KHÔNG thể tự ký thay owner. Vì vậy WO chia đôi rành mạch, không g
 > --force`) đều **biên dịch lại `dist` đó**. Nếu build mới yêu cầu migration mà DB `mediaos` (PROD) chưa
 > áp → PROD login 500. Vì vậy phiên này **KHÔNG tự bật dev-online**; owner chạy tay và biết mình đang
 > đánh đổi cái gì.
+>
+> **Cập nhật 2026-07-26:** bước 0–2 **đã làm xong** (owner uỷ quyền trong phiên) — xem
+> `S5-UAT-1-UAT-CYCLE0-DRYRUN.md` §0. Chỉ còn bước 3 trở đi.
 
 ```powershell
-# 0) An toàn PROD trước: PROD đang ở migration nào so với head?
-
-m prod-status                      # đếm migration tồn đọng (S5-DEVOPS-DEPLOYMIG-1)
-
-# 1) Đưa DB UAT (mediaos_dev) lên head 0529 — KHÔNG drop/wipe
-
-m dev-online-db                    # hoặc: m dev-online-migrate
-
-# 2) Bù dữ liệu UAT còn thiếu (xem Cycle-0 §4 — 2 blocker)
-
-#    → hồ sơ nhân viên cho 4 tài khoản uat.* + số dư phép năm
-
-#    (chưa có script; owner làm qua UI Admin/HR hoặc xin 1 WO seed — xem RELEASE-02 KI-001/002)
-
+# ── ĐÃ XONG 2026-07-26 ─────────────────────────────────────────────────────
+# 0) PROD + UAT đều đã ở head 0529 (197/197); PROD health 200 sau migrate
+#    m migrate                     # PROD mediaos  — có pg_dump backup trước
+#    m dev-online-migrate          # UAT mediaos_dev (migrate-only, không seed lại)
+# 1) Hồ sơ nhân viên UAT-EMP-01/UAT-MGR-01/UAT-HR-01 + quan hệ quản lý  → đã tạo
+# 2) Số dư phép 2026: employee ANNUAL 12 + SICK 5, manager ANNUAL 12    → đã cấp
+# ── CÒN LẠI ────────────────────────────────────────────────────────────────
 # 3) Bật stack UAT (bản build, không watch)
-
 m dev-online-fast                  # ⚠️ recompile dist dùng chung với PROD — xem cảnh báo trên
-                                   #    sau khi UAT xong: cân nhắc m prod-update để PROD về đúng build
-
+                                   #    PROD DB nay đã ở head nên build mới KHÔNG lệch schema
 # 4) Chỉ SAU khi health 200 mới smoke login
-
 curl http://localhost:3200/api/v1/health
 bash scripts/canary-watch.sh       # CANARY_BASE_URL=http://localhost:3200/api/v1
-
 # 5) Chạy UAT theo kit
-
 #    docs/QA/evidence/S5-UAT-1-UAT-KIT.md  §5 (script theo role) · §7 (feedback form)
-
 ```
 
 URL UAT: app `https://cian-dev.funtimemediacorp.com` · auth `https://cian-dev-auth…` ·
@@ -102,9 +92,18 @@ KHÔNG ghi vào doc).
 
 ## 5. Bất biến / rủi ro
 
-- **Không đụng PROD.** Mọi thao tác đo đạc của WO này trên `mediaos_dev` là **read-only SELECT**;
-  không INSERT/UPDATE/DELETE, không drop, không seed. PROD `mediaos` không bị chạm.
-- **BẤT BIẾN #1/#2/#3 không suy yếu:** WO docs-only, không code sản phẩm, không migration, không grant.
+- **Giai đoạn khảo sát (Cycle 0):** mọi thao tác trên `mediaos_dev` **và** `mediaos` (PROD) là
+  **read-only SELECT** — không ghi, không drop, không restart service nào.
+- **Giai đoạn khắc phục (sau khi owner uỷ quyền, 2026-07-26)** — ghi lại đúng cái đã đụng:
+  - `mediaos` (PROD): chạy `m migrate` → áp `0529`. **Có `pg_dump -Fc` backup trước**
+    (`c:\tmp\mediaos-prod-20260726-100718.dump`). Không rebuild `dist`, không restart service,
+    không deploy FE. `/health` + `/health/db` vẫn 200 sau khi migrate.
+  - `mediaos_dev` (UAT): `m dev-online-migrate` (migrate-only) + 1 transaction SQL idempotent tạo
+    3 hồ sơ nhân viên · 1 quan hệ quản lý · 3 dòng số dư phép.
+- **BẤT BIẾN #1/#2/#3 không suy yếu:** không code sản phẩm, không migration MỚI, không grant.
+  `company_id` tường minh ở mọi INSERT; không xoá/ghi đè dòng nào; không secret trong doc.
+- **Nợ đã biết từ cách khắc phục:** dữ liệu UAT bơm bằng SQL nên **không có bản ghi `audit_logs`**
+  (khác với làm qua UI). Ghi rõ ở Cycle-0 §0 để không ai đọc audit rồi tưởng dữ liệu tự sinh.
 - **Rủi ro chính:** kit UAT mô tả màn hình theo route THẬT (`apps/app/src/router.tsx`) — nếu Sprint 6
   đổi route thì kit phải cập nhật cùng; đã ghi rõ nguồn route ở KIT §5 để dò lại nhanh.
 
@@ -114,12 +113,13 @@ KHÔNG ghi vào doc).
 
 | done_when | Trạng thái | Ghi chú |
 | --- | --- | --- |
-| UAT script theo role + test data + user chuẩn bị | ✅ ĐẠT | KIT §3/§4/§5 — 4 tài khoản `uat.*` đã tồn tại thật trong `mediaos_dev` |
-| **chạy UAT**, ghi nhận feedback + bug triage | ⚠️ **PARTIAL** | **Cycle 0 (dry-run) ĐÃ chạy** + 2 blocker dữ liệu đã triage. **Cycle 1–3 (business user) = việc của owner** — không tự ký thay |
+| UAT script theo role + test data + user chuẩn bị | ✅ ĐẠT | KIT §3/§4/§5 — 4 tài khoản `uat.*` có thật; hồ sơ nhân viên + số dư phép **đã dựng xong 2026-07-26** |
+| **chạy UAT**, ghi nhận feedback + bug triage | ⚠️ **PARTIAL** | **Cycle 0 ĐÃ chạy**; 3 blocker phát hiện → **đã đóng cả 3**. **Cycle 1–3 (business user) = việc của owner** — không tự ký thay |
 | Release readiness checklist chốt; sign-off draft từng module | ✅ ĐẠT | RELEASE-01 + RELEASE-04 |
 | Known issues + release notes nội bộ | ✅ ĐẠT | RELEASE-02 + RELEASE-03 |
-| `check.sh` xanh | ✅ ĐẠT | xem Cycle-0 §2 (kèm ghi chú flake `ERR_IPC_CHANNEL_CLOSED` đã biết + số đo chạy tuần tự) |
-| Đầu ra là đầu vào IMP09-IN-003/004 | ✅ ĐẠT | RELEASE-04 §5 |
+| `check.sh` xanh | ⚠️ **ĐẠT CÓ ĐIỀU KIỆN** | lint ✅ · typecheck ✅ · test **xanh khi chia chunk** (445 file / 7.113 test, 0 fail). `check.sh` chạy một-tiến-trình **in ĐỎ** vì crash hạ tầng vitest `ERR_IPC_CHANNEL_CLOSED` — **0 ca test đỏ**. Không tô hồng: xem Cycle-0 §2.3 + KI-014 |
+| Đầu ra là đầu vào IMP09-IN-003/004 | ✅ ĐẠT | RELEASE-04 §6.1 |
 
 **Kết luận WO:** đóng ở trạng thái **partial-owner** cho vế "chạy UAT với business user" — KHÔNG
-auto-green giả. Phần máy làm được đã làm hết và có bằng chứng.
+auto-green giả. Phần máy làm được đã làm hết và có bằng chứng; 3 blocker do Cycle 0 phát hiện cũng đã
+được khắc phục sau khi owner uỷ quyền. Việc duy nhất còn lại trước Cycle 1: **bật stack UAT**.

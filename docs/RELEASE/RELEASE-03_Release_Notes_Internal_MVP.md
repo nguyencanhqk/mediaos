@@ -107,7 +107,7 @@ Màn hình: `/goals/**`.
 
 Đăng nhập một lần từ MediaOS (chỉ SSO) · đồng bộ người dùng tự động · tiến độ học hiện ở `/me/training`
 · đẩy sự kiện học tập về chuông thông báo MediaOS.
-⚠️ **Phần thông báo chưa chạy được** — xem `RELEASE-02` KI-006.
+⚠️ **Phần thông báo chưa chạy được** (còn token + deploy; catalog đã áp) — xem `RELEASE-02` KI-006.
 
 ---
 
@@ -138,7 +138,8 @@ Màn hình: `/goals/**`.
 
 Đọc `RELEASE-02_Known_Issues_MVP.md`. Ba thứ ảnh hưởng trực tiếp tới trải nghiệm ngay:
 
-1. **PROD đang thiếu 1 migration (`0529`)** ⇒ thông báo từ LMS chưa về được MediaOS (KI-006).
+1. **Thông báo từ LMS chưa về MediaOS** (KI-006). Catalog `0529` **đã áp cho PROD ngày 2026-07-26**
+   (PROD nay 197/197); còn thiếu biến `LMS_NOTI_TOKEN` hai phía + deploy theo `docs/plans/S5-LMS-NOTI-2.md` §4.
 2. **Widget "Thông báo" trên dashboard có thể trễ ~10 giây** (KI-005) — chuông thì không trễ.
 3. **Chưa nhập ngày lễ** ⇒ tính ngày nghỉ chưa trừ lễ (KI-004).
 

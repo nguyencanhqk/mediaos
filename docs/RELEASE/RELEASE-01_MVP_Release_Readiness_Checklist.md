@@ -17,7 +17,12 @@ quyền · không migration phá huỷ chưa duyệt). Điểm hụt nằm ở *
 1. **Business acceptance = 0** vì **UAT chưa chạy với người dùng thật** (Cycle 0 mới chạy — 3 chặn dữ
    liệu/vận hành phải đóng trước, xem `S5-UAT-1-UAT-CYCLE0-DRYRUN.md` §4).
 2. **Deploy/rollback + monitoring mới đạt một nửa**: chưa có bằng chứng diễn tập khôi phục gần đây,
-   chưa có cảnh báo tự động, PROD đang **thiếu 1 migration**.
+   chưa có cảnh báo tự động.
+
+> **Cập nhật 2026-07-26 (sau khi chốt điểm):** nợ migration của PROD + UAT **đã trả** (cả hai 197/197)
+> và dữ liệu UAT **đã bơm** — tức C1/C2 ở §10 đã đóng. Điểm scorecard giữ nguyên **82,5** vì hai nhóm
+> hụt điểm (business acceptance · deploy&rollback) phụ thuộc UAT thật + diễn tập khôi phục, chưa có cái
+> nào trong hai cái đó xảy ra.
 
 ---
 
@@ -148,10 +153,10 @@ phải SLA dưới tải. Nguồn: `DEVOPS-10_Performance_Smoke_Observability_Ba
 | Mục | Trạng thái | Chi tiết |
 | --- | --- | --- |
 | Môi trường PROD chạy | ✅ | NSSM `MediaOS-API` :3100 + Cloudflare tunnel + Pages; `/health` **200**, `/health/db` **200** (kiểm 2026-07-26) |
-| Môi trường UAT chạy | ❌ | :3200 **không lắng nghe** tại thời điểm chốt |
+| Môi trường UAT chạy | ❌ | :3200 **không lắng nghe** — DB đã sẵn sàng, chỉ chờ owner bật stack |
 | Migration chạy được từ DB trống | ✅ | `scripts/migrate-verify-ephemeral.sh` + step riêng trong `api.yml` (DB ephemeral, guard cấm drop `mediaos`/`mediaos_dev`) |
-| **PROD đã áp hết migration?** | ❌ **KHÔNG** | `mediaos` áp **196/197** — thiếu `0529`. Xác minh: `notification_events` không có mã `LMS_*` |
-| **UAT đã áp hết migration?** | ❌ **KHÔNG** | `mediaos_dev` áp **196/197** — cùng thiếu `0529` |
+| **PROD đã áp hết migration?** | ✅ **RỒI (2026-07-26)** | `m migrate` → `mediaos` **197/197**, 4 mã `LMS_*` có mặt; `/health` + `/health/db` vẫn 200 sau migrate. Có `pg_dump` backup trước khi chạy |
+| **UAT đã áp hết migration?** | ✅ **RỒI (2026-07-26)** | `m dev-online-migrate` → `mediaos_dev` **197/197** (migrate-only, không seed lại) |
 | Migration ép chạy TRƯỚC restart | ✅ | `m prod-update` fail-closed + `m prod-status` đếm migration tồn đọng (`S5-DEVOPS-DEPLOYMIG-1`) |
 | Seed tài khoản UAT tái lập được | ✅ | `scripts/seed-staging-accounts.mjs` idempotent, cred qua env, không đụng `role_permissions` |
 
@@ -208,14 +213,16 @@ lưu biên bản; viết runbook rollback có thời gian mục tiêu.
 
 | # | Điều kiện | Owner | Chặn cái gì |
 | --- | --- | --- | --- |
-| C1 | Áp migration `0529` cho `mediaos_dev` **và** `mediaos` (PROD) | Owner/DevOps | LMS→NOTI; nợ migration PROD |
-| C2 | Đóng UAT-BLOCK-001/002 (hồ sơ nhân viên + số dư phép cho tài khoản `uat.*`) | Owner/HR | Toàn bộ UAT Cycle 1 |
+| ~~C1~~ | ~~Áp migration `0529` cho `mediaos_dev` và `mediaos`~~ — ✅ **XONG 2026-07-26** | — | — |
+| ~~C2~~ | ~~Đóng UAT-BLOCK-001/002 (hồ sơ nhân viên + số dư phép)~~ — ✅ **XONG 2026-07-26** | — | — |
 | C3 | Chạy UAT Cycle 1 theo KIT §5, đạt Exit criteria QA-09 §12 | Owner + business user | Sign-off nghiệm thu |
 | C4 | Owner ký accepted-risk **D3** (dashboard headcount cho HR-Department) | Owner | Đóng sổ bảo mật MVP |
 | C5 | Chạy `backup-restore-drill.sh` + lưu biên bản | Owner/DevOps | Điểm Deploy & rollback |
 | C6 | Xử lý job `Dependency scan` đỏ (sửa công cụ hoặc gỡ khỏi cổng chặn) | Owner/DevOps | CI xanh toàn phần |
 
-**C1–C2 chặn việc mở UAT. C3–C4 chặn sign-off. C5–C6 chặn go-live (Sprint 6), không chặn vào Sprint 6.**
+**C1–C2 đã đóng 2026-07-26** ⇒ việc còn lại để mở Cycle 1 chỉ là **bật stack UAT** (`m dev-online-fast`,
+owner quyết vì đụng `dist` dùng chung với PROD). C3–C4 chặn sign-off. C5–C6 chặn go-live (Sprint 6),
+không chặn vào Sprint 6.
 
 ---
 
