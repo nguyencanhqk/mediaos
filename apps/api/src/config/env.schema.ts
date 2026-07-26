@@ -222,6 +222,13 @@ export const envSchema = z
     // khoá thuần theo email, KHÔNG company-scope). Thiếu → auto-sync TẮT (fail-closed isolation). Producer/
     // bridge/job CHỈ sync khi companyId === LMS_COMPANY_ID ⇒ tenant khác KHÔNG rò email sang LMS (BẤT BIẾN #1).
     LMS_COMPANY_ID: z.string().uuid().optional(),
+    // ── S5-LMS-NOTI-1: LMS→MediaOS đẩy thông báo học tập vào module NOTI (chiều NGƯỢC 3 token trên) ──
+    // Bearer token mà LMS trình khi gọi POST /internal/v1/notifications/lms-events (= MEDIAOS_NOTI_TOKEN
+    // phía LMS). TÁCH BIỆT khỏi LMS_SYNC_TOKEN/LMS_PROGRESS_TOKEN (đó là token MediaOS dùng để GỌI SANG
+    // LMS; cái này là token LMS dùng để GỌI VÀO MediaOS — lộ một cái không được kéo theo cái kia).
+    // OPTIONAL: thiếu → LmsServiceIntakeGuard trả 403 fail-closed (kênh TẮT, không chặn boot). BẤT BIẾN #3.
+    // company_id của thông báo lấy từ LMS_COMPANY_ID ở trên — KHÔNG BAO GIỜ từ body request.
+    LMS_NOTI_TOKEN: z.string().min(32).optional(),
 
     // ⚠️ ALLOW_SUPERUSER_ROTATION (KHÔNG validate qua zod — CỐ Ý): SecretRotationService đọc THẲNG
     // `process.env.ALLOW_SUPERUSER_ROTATION === 'true'` để fail-closed tuyệt đối (mọi giá trị ≠ 'true', kể cả

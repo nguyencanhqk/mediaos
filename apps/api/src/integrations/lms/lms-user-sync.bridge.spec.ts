@@ -23,7 +23,10 @@ describe("LmsUserSyncBridge", () => {
   beforeEach(() => {
     process.env.LMS_COMPANY_ID = LMS_CO;
     bus = { register: vi.fn() };
-    http = { isEnabled: vi.fn().mockReturnValue(true), syncUsers: vi.fn().mockResolvedValue(undefined) };
+    http = {
+      isEnabled: vi.fn().mockReturnValue(true),
+      syncUsers: vi.fn().mockResolvedValue(undefined),
+    };
   });
   afterEach(() => {
     process.env.LMS_COMPANY_ID = saved;
@@ -43,6 +46,22 @@ describe("LmsUserSyncBridge", () => {
   it("enabled + đúng tenant → gọi http.syncUsers với đúng 1 user", async () => {
     await handlerOf()(ctx(LMS_CO));
     expect(http.syncUsers).toHaveBeenCalledWith([{ email: "e@x.co", name: "Emp", active: false }]);
+  });
+
+  // S5-LMS-NOTI-2 — chuyển tiếp mediaosUserId; event CŨ trong outbox (phát trước khi producer thêm field)
+  // KHÔNG được làm hỏng sync.
+  it("payload có mediaosUserId → chuyển tiếp; event CŨ thiếu field → vẫn sync (undefined)", async () => {
+    // Lấy handler MỘT LẦN: handlerOf() ghim bus.register đúng 1 lần, gọi lại sẽ đăng ký chồng.
+    const handle = handlerOf();
+    const newCtx = { ...ctx(LMS_CO), payload: { ...ctx(LMS_CO).payload, mediaosUserId: "u-9" } };
+    await handle(newCtx);
+    expect(http.syncUsers).toHaveBeenCalledWith([
+      { email: "e@x.co", name: "Emp", active: false, mediaosUserId: "u-9" },
+    ]);
+
+    http.syncUsers.mockClear();
+    await handle(ctx(LMS_CO));
+    expect(http.syncUsers.mock.calls[0][0][0].mediaosUserId).toBeUndefined();
   });
 
   it("LMS 5xx (syncUsers throw) → bridge RE-THROW (để outbox retry, KHÔNG nuốt lỗi)", async () => {

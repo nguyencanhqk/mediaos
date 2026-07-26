@@ -8223,11 +8223,16 @@ export const backlog = [
     title:
       "MediaOS BE — mở đường cho LMS đẩy thông báo vào module NOTI: seed nhóm eventCode LMS_* + template vào catalog, cấp danh tính service-to-service cho intake (hiện đòi CẢ JWT user lẫn x-internal-key mà LMS không có JWT user), và chốt cách ánh xạ người nhận khi bên gọi chỉ biết EMAIL",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/notifications/**",
       "apps/api/src/permission/guards/internal.guard.ts",
-      "apps/api/src/db/migrations/**",
+      // ĐO 2026-07-26: migration THẬT nằm ở apps/api/migrations (KHÔNG phải src/db/migrations — đường dẫn
+      // seed ban đầu sai) + catalog registry là nguồn phải đồng bộ 1-1 với migration + env schema khai token.
+      "apps/api/migrations/**",
+      "apps/api/src/foundation/seed/notification-event-catalog.const.ts",
+      "apps/api/src/config/env.schema.ts",
+      "apps/api/test/integration/**",
       "packages/contracts/src/notification.ts",
       "docs/plans/S5-LMS-NOTI-1.md",
     ],
@@ -8243,6 +8248,9 @@ export const backlog = [
       "bộ event đề xuất (chốt với owner trước khi seed): LMS_ENROLLMENT_APPROVED · LMS_COURSE_ASSIGNED · LMS_EXAM_GRADED · LMS_COURSE_DEADLINE_NEAR. Mỗi mã cần template + priority + target_url (engine ném 422 nếu target_url trỏ ra ngoài)",
       "mẫu kênh server-to-server ĐÃ CHẠY theo chiều ngược: apps/lms/app/api/mediaos/progress/route.ts (bearer server-token + rate-limit per-IP và global + cảnh báo 401 dồn dập) — dùng lại kỷ luật đó cho chiều LMS→MediaOS",
       "gate FULL bắt buộc (trust boundary + migration): security-reviewer + database-reviewer + silent-failure-hunter; deny-path test TRƯỚC (thiếu x-internal-key · JWT công ty khác · body company_id lệch token · eventCode không tồn tại)",
+      "OWNER CHỐT 2026-07-26 — danh tính: GUARD RIÊNG cho caller máy (không service-account JWT, không bật lại PAT). Route MỚI POST /internal/v1/notifications/lms-events, @Public bỏ JwtAuthGuard, Bearer LMS_NOTI_TOKEN so hằng-thời-gian, company_id GHIM từ env LMS_COMPANY_ID, allowlist eventCode suy từ NOTI_EVENT_CATALOG, rate-limit 120/phút. Route intake cũ GIỮ NGUYÊN",
+      "🐞 LỖI ĐÃ SHIP phát hiện khi đo (và VÁ trong mig 0529): 0507 nới CHECK trên notification_events nhưng BỎ SÓT 2 CHECK cùng nghĩa trên bảng `notifications` (0479:252-257) ⇒ MỌI GOAL_ASSIGNED/GOAL_FINALIZED vỡ chk_notifications_module_code khi INSERT. Xác minh DB PROD: 0 hàng notifications module_code='GOAL'. Không test nào bắt vì không có int-spec nào chạy intake GOAL tới tận INSERT — ca (j) của lms-noti-service-intake.int-spec.ts giờ giữ chỗ đó",
+      "dedupe: 4 mã LMS seed dedupe_strategy='DedupeKey' (KHÁC default 'None' của 0479 — 'None' nghĩa là retry đẻ thông báo trùng) + controller BẮT BUỘC dedupeKey (400 nếu thiếu) để dedupe không tắt im lặng. KHÔNG chọn EntityRecipient vì DEADLINE_NEAR sẽ chỉ nhắc được đúng 1 lần vĩnh viễn",
     ],
     done_when: [
       "Caller máy (không phải người dùng) đẩy được 1 event LMS_* vào intake và tạo ra notification IN_APP đúng người, đúng company; deny-path RED trước: thiếu internal key → 403 · danh tính công ty khác → không thấy recipient (RLS) · body company_id lệch → 400",
@@ -8258,8 +8266,14 @@ export const backlog = [
     title:
       "LOCAL apps/lms — đẩy sự kiện học tập về NOTI của MediaOS (ghi danh được duyệt · bài thi chấm xong · khoá mới gán · sắp tới hạn) qua intake nội bộ, và dọn chồng lấn với chuông thông báo local để người dùng không nhận đôi",
     zone: "yellow",
-    status: "todo",
-    paths: ["apps/lms/**", "docs/plans/S5-LMS-NOTI-2.md"],
+    status: "in_progress",
+    paths: [
+      "apps/lms/**",
+      // ĐO 2026-07-26: WO seed giả định chỉ chạm apps/lms, nhưng lối (a) đòi LMS BIẾT mediaosUserId — mà
+      // id đó chỉ có thể đến TỪ MediaOS (payload sync-users + token SSO) ⇒ phần này BẮT BUỘC chạm apps/api.
+      "apps/api/src/integrations/lms/**",
+      "docs/plans/S5-LMS-NOTI-2.md",
+    ],
     skills: ["code-review"],
     depends_on: ["S5-LMS-NOTI-1"],
     plan: "docs/plans/S5-LMS-NOTI-2.md",
@@ -8271,6 +8285,9 @@ export const backlog = [
       "dedupe: engine MediaOS có dedupeKey — đặt khoá ổn định theo (eventCode, courseId/examId, userId) để retry không đẻ thông báo trùng",
       "chống nhận ĐÔI: chốt với owner từng loại — sự kiện nào chuyển hẳn sang MediaOS thì TẮT ở chuông local, sự kiện nào giữ local (thuần vận hành LMS: chờ duyệt, chờ chấm) thì KHÔNG đẩy sang",
       "kỷ luật track LOCAL như UI-3: không PR, ship = m prod-update lms + backup data/app.db",
+      "ĐO 2026-07-26 — CHỈ 2/4 mã có nguồn phát THẬT trong LMS: ✅ LMS_ENROLLMENT_APPROVED (manage-courses/actions.ts approveCourseEnrollment) · ✅ LMS_EXAM_GRADED (manage-exam/[id]/actions.ts updateExamScore, chấm tự luận). ❌ LMS_COURSE_ASSIGNED: LMS KHÔNG có luồng quản-trị-gán-khoá (ghi danh là TỰ PHỤC VỤ, khoá is_locked thì pending chờ duyệt). ❌ LMS_COURSE_DEADLINE_NEAR: không có cột hạn hoàn thành trên courses (chỉ exams.essay_deadline) và không có job quét hạn. Hai mã vẫn seed trong catalog (thông lệ sẵn có: nhiều mã ATT_* cũng seed trước khi có producer) — cần TÍNH NĂNG SẢN PHẨM trước, không phải việc của một WO thông báo",
+      "chống nhận đôi (đo thực tế): chỉ enrollment-approved chồng lấn ⇒ ĐÃ TẮT ghi user_notifications ở LMS. exam-available/new-lecture/announcement/missed-call GIỮ local (không đẩy sang). Chấm bài trước đây KHÔNG có thông báo local nào ⇒ LMS_EXAM_GRADED là năng lực MỚI, không có rủi ro nhận đôi. NotificationItem.tsx GIỮ nhánh render kind='enrollment-approved' để hàng CŨ trong chuông vẫn hiện đúng",
+      "CẤM chạy `next build` ở apps/lms khi PROD đang chạy: NSSM phục vụ thẳng apps/lms/.next ⇒ build mà chưa restart = origin lệch manifest (memory lms-next-build-shares-prod-dist). Kiểm tra tĩnh dùng npx tsc --noEmit + eslint",
     ],
     done_when: [
       "Duyệt 1 ghi danh ở LMS ⇒ nhân viên thấy thông báo trong MediaOS, bấm vào đi đúng đích; chấm xong 1 bài thi cũng vậy",

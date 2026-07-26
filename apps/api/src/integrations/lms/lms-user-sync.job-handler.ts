@@ -89,6 +89,9 @@ export class LmsUserSyncJobHandler implements JobHandler {
     const rows = await this.db.withTenant(companyId, (tx) =>
       tx
         .select({
+          // S5-LMS-NOTI-2: id đi kèm để LMS học `mediaos_user_id`. ĐÂY là đường backfill THẬT — job quét
+          // TOÀN BỘ user mỗi nhịp nên mọi người cũ được bù id mà không cần script di trú riêng.
+          id: users.id,
           email: users.email,
           name: users.fullName,
           active: sql<boolean>`(${users.status} = 'active' AND ${employeeProfiles.status} = 'active')`,
@@ -122,6 +125,7 @@ export class LmsUserSyncJobHandler implements JobHandler {
         email: r.email,
         name: r.name ?? undefined,
         active: Boolean(r.active),
+        mediaosUserId: r.id,
       }));
       try {
         const s: LmsSyncSummary | undefined | null = await this.http.syncUsers(batch);

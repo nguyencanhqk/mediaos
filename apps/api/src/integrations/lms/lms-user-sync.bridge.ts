@@ -52,6 +52,15 @@ export class LmsUserSyncBridge implements OnModuleInit {
 
     const p = ctx.payload as LmsAccountSyncPayload;
     // THROW (từ syncUsers) lan ra ⇒ outbox-worker retry ×5 → dead-letter (fail-soft đúng nghĩa).
-    await this.http.syncUsers([{ email: p.email, name: p.name, active: Boolean(p.active) }]);
+    // S5-LMS-NOTI-2: chuyển tiếp `mediaosUserId` khi có. Event CŨ còn nằm trong outbox (phát trước khi
+    // producer thêm field) sẽ có undefined ⇒ LMS bỏ qua field, job đối soát sẽ bù sau.
+    await this.http.syncUsers([
+      {
+        email: p.email,
+        name: p.name,
+        active: Boolean(p.active),
+        mediaosUserId: typeof p.mediaosUserId === "string" ? p.mediaosUserId : undefined,
+      },
+    ]);
   }
 }

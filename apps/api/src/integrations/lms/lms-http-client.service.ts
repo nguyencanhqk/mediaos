@@ -5,6 +5,16 @@ export interface LmsSyncUser {
   email: string;
   name?: string;
   active: boolean;
+  /**
+   * S5-LMS-NOTI-2 — id user MediaOS, để LMS biết đẩy thông báo học tập về ĐÚNG người
+   * (`recipient.userIds` của intake NOTI chỉ nhận UUID MediaOS; LMS vốn chỉ biết email).
+   *
+   * Đi CHUNG kênh sync có chủ đích: job đối soát quét TOÀN BỘ user mỗi nhịp ⇒ backfill người cũ diễn ra
+   * tự nhiên, không cần script riêng và không phải chờ từng người đăng nhập SSO.
+   *
+   * KHÔNG phải PII: là khoá đại diện nội bộ, không lộ thêm gì so với email vốn đã gửi trong cùng payload.
+   */
+  mediaosUserId?: string;
 }
 
 /**

@@ -94,6 +94,11 @@ export const notificationTypeEnumSchema = z.enum([
   "Reminder",
   "Warning",
   "Error",
+  // S5-GOAL-DB-1 (mig 0507) + S5-LMS-NOTI-1 (mig 0529) — engine cast `ev.notificationType as
+  // NotificationTypeEnum` rồi ghi thẳng vào cột `notifications.notification_type`, nên enum này PHẢI
+  // theo kịp CHECK chk_notifications_notification_type (0529 nới cả 'Goal' lẫn 'Training').
+  "Goal",
+  "Training",
 ]);
 export type NotificationTypeEnum = z.infer<typeof notificationTypeEnumSchema>;
 

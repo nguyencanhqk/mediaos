@@ -68,6 +68,11 @@ import { LeaveNotiBridgeRegistrar } from "./leave-noti-bridge.registrar";
 // THIẾU mapping ⇒ trước đó duyệt xong không ai nhận được thông báo. KHÔNG import EmployeesModule (acyclic).
 import { PcrApproverAudienceReader } from "./pcr-approver-audience.reader";
 import { HrPcrNotiBridgeRegistrar } from "./hr-pcr-noti-bridge.registrar";
+// S5-LMS-NOTI-1 (additive): đường intake cho caller MÁY ngoài tiến trình api (LMS/fmc-app) —
+// POST /internal/v1/notifications/lms-events. TÁI DÙNG NotificationEngineService đã provide ở đây (KHÔNG
+// engine thứ 2). Route cũ InternalNotificationsController GIỮ NGUYÊN. Xem docs/plans/S5-LMS-NOTI-1.md §2.
+import { LmsNotificationsController } from "./lms-notifications.controller";
+import { LmsServiceIntakeGuard } from "./lms-service-intake.guard";
 
 @Module({
   imports: [DatabaseModule, EventsModule, RealtimeEmitterModule, PermissionModule],
@@ -79,6 +84,9 @@ import { HrPcrNotiBridgeRegistrar } from "./hr-pcr-noti-bridge.registrar";
     NotificationAdminController,
     MyNotificationsController,
     InternalNotificationsController,
+    // S5-LMS-NOTI-1: route "lms-events" là segment TĨNH dưới cùng prefix "internal/v1/notifications" —
+    // không đụng wildcard nào của MyNotificationsController (prefix khác), thứ tự ở đây không nhạy cảm.
+    LmsNotificationsController,
   ],
   providers: [
     NotificationsRepository,
@@ -122,6 +130,9 @@ import { HrPcrNotiBridgeRegistrar } from "./hr-pcr-noti-bridge.registrar";
     // EventsModule) tại boot qua CÙNG OutboxNotificationBridge INT-1 ở trên (KHÔNG re-provide bridge).
     PcrApproverAudienceReader,
     HrPcrNotiBridgeRegistrar,
+    // S5-LMS-NOTI-1 (additive): guard danh tính máy cho LmsNotificationsController. Provider (không phải
+    // APP_GUARD) — chỉ áp cho đúng controller đó qua @UseGuards, KHÔNG chạm request nào khác.
+    LmsServiceIntakeGuard,
   ],
   // Export engine cho S4-INT-1 (outbox consumer gọi intake() in-process).
   // S4-DASH-BE-2 (additive): + MyNotificationsService cho NOTIFICATIONS widget handler (DASH inject qua DI —

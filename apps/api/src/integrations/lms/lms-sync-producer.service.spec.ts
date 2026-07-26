@@ -29,20 +29,30 @@ describe("LmsSyncProducer — company gate + enqueue", () => {
 
   const make = () => new LmsSyncProducer(outbox as never);
 
-  it("companyId === LMS_COMPANY_ID + có hồ sơ → enqueue eventType riêng + payload {email,name,active}", async () => {
+  it("companyId === LMS_COMPANY_ID + có hồ sơ → enqueue eventType riêng + payload {email,name,active,mediaosUserId}", async () => {
     const tx = fakeTx([{ email: "e@x.co", name: "Emp", active: true }]);
     await make().enqueueSync(tx, LMS_CO, USER);
     expect(outbox.enqueue).toHaveBeenCalledTimes(1);
     const [, event] = outbox.enqueue.mock.calls[0];
     expect(event.eventType).toBe(LMS_ACCOUNT_SYNC_EVENT);
     expect(event.eventType).not.toBe("auth.user_locked"); // né consumer notification (trap #1)
-    expect(event.payload).toEqual({ email: "e@x.co", name: "Emp", active: true });
+    // S5-LMS-NOTI-2: + mediaosUserId để LMS định danh người nhận thông báo (xem LmsSyncUser).
+    expect(event.payload).toEqual({
+      email: "e@x.co",
+      name: "Emp",
+      active: true,
+      mediaosUserId: USER,
+    });
   });
 
   it("name null → payload KHÔNG có field name", async () => {
     const tx = fakeTx([{ email: "e@x.co", name: null, active: false }]);
     await make().enqueueSync(tx, LMS_CO, USER);
-    expect(outbox.enqueue.mock.calls[0][1].payload).toEqual({ email: "e@x.co", active: false });
+    expect(outbox.enqueue.mock.calls[0][1].payload).toEqual({
+      email: "e@x.co",
+      active: false,
+      mediaosUserId: USER,
+    });
   });
 
   it("ISOLATION: companyId ≠ LMS_COMPANY_ID → KHÔNG enqueue (không rò tenant khác sang LMS)", async () => {

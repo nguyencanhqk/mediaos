@@ -13,6 +13,8 @@ export interface LmsAccountSyncPayload {
   email: string;
   name?: string;
   active: boolean;
+  /** S5-LMS-NOTI-2 — id user MediaOS để LMS định danh người nhận thông báo (xem `LmsSyncUser`). */
+  mediaosUserId?: string;
   [key: string]: unknown;
 }
 
@@ -57,7 +59,13 @@ export class LmsSyncProducer {
 
     if (!row) return; // không hồ sơ / đã xoá → ngoài phạm vi LMS
 
-    const payload: LmsAccountSyncPayload = { email: row.email, active: Boolean(row.active) };
+    // `userId` đã được verify thuộc `companyId` bởi chính query resolve ở trên (WHERE users.id = userId
+    // AND users.company_id = companyId) ⇒ an toàn để gửi kèm.
+    const payload: LmsAccountSyncPayload = {
+      email: row.email,
+      active: Boolean(row.active),
+      mediaosUserId: userId,
+    };
     if (row.name) payload.name = row.name;
 
     await this.outbox.enqueue(tx, { eventType: LMS_ACCOUNT_SYNC_EVENT, payload });

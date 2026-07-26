@@ -199,7 +199,11 @@ describe.skipIf(!runIsolatedDb)("S5-LMS-BE-1 · auto-sync MediaOS→LMS (DB cô 
 
     expect(res.total).toBe(1); // chỉ userA1 có hồ sơ (userA2 không hồ sơ → ngoài phạm vi)
     const sent = syncUsers.mock.calls[0][0];
-    expect(sent).toEqual([{ email: "a1@lms.test", name: "Nhan Vien A1", active: true }]);
+    // S5-LMS-NOTI-2: job đối soát mang thêm `mediaosUserId` — ĐÂY là đường backfill định danh người nhận
+    // thông báo ở LMS (job quét toàn bộ user mỗi nhịp nên người cũ được bù id mà không cần script riêng).
+    expect(sent).toEqual([
+      { email: "a1@lms.test", name: "Nhan Vien A1", active: true, mediaosUserId: userA1 },
+    ]);
 
     const audits = await auditSummaries(A.companyId);
     expect(audits.length).toBe(1);
