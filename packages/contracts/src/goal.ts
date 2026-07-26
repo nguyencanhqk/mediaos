@@ -256,3 +256,159 @@ export const goalTaskLinkResultSchema = z.object({
   ),
 });
 export type GoalTaskLinkResultDto = z.infer<typeof goalTaskLinkResultSchema>;
+
+// ══ S5-GOAL-TPL-1 — Đợt D: danh mục template (GOAL-API-012) + phân rã (GOAL-API-011) ══════════════
+
+/**
+ * Ưu tiên mặc định của MỘT task mẫu — LOWERCASE theo CHECK `chk_task_template_items_priority`
+ * (mig 0526, DB-06 §8.5 legacy). ⚠️ KHÁC `taskCorePrioritySchema` (`Low|Medium|High|Urgent`, mig 0478)
+ * của bảng `tasks`: hai bảng hai bộ giá trị. Bắc cầu ở BE bằng MỘT map duy nhất
+ * (`goal-decompose.service.ts` → `TEMPLATE_TO_TASK_PRIORITY`, `'none'` ⇒ null); truyền thẳng = vỡ CHECK.
+ */
+export const taskTemplatePrioritySchema = z.enum(["urgent", "high", "medium", "low", "none"]);
+export type TaskTemplatePriorityDto = z.infer<typeof taskTemplatePrioritySchema>;
+
+/** Trần số item của MỘT template (chống danh mục phình vô hạn — cùng bậc với trần phân rã). */
+export const TASK_TEMPLATE_ITEMS_MAX = 100;
+
+/** Checklist của một task mẫu: mảng chuỗi (DB-11 §6.4 `checklist` JSONB) → `task_checklists` khi áp. */
+const templateChecklistSchema = z.array(z.string().trim().min(1).max(500)).max(50);
+
+/** Thân chung của một task mẫu (dùng cho create/update item + preview phân rã). */
+const taskTemplateItemCoreSchema = z.object({
+  title: z.string().trim().min(1, "Tiêu đề là bắt buộc").max(500),
+  description: z.string().max(20000).nullish(),
+  defaultPriority: taskTemplatePrioritySchema.nullish(),
+  /**
+   * Giờ ước lượng — CHỈ để lập kế hoạch/hiển thị ở danh mục + preview. `tasks` KHÔNG có cột tương ứng
+   * nên phân rã KHÔNG ghi giá trị này vào task (nợ ghi ở docs/plans/S5-GOAL-TPL-1.md §6).
+   */
+  estimateHours: z.number().nonnegative().max(9999).nullish(),
+  checklist: templateChecklistSchema.nullish(),
+  sortOrder: z.number().int().min(0).max(9999).optional(),
+});
+
+/** POST /task-templates (manage:task-template). `items` tuỳ chọn — tạo header + item trong 1 tx. */
+export const createTaskTemplateSchema = z.object({
+  name: z.string().trim().min(1).max(255),
+  description: z.string().max(5000).nullish(),
+  /** NULL = template DÙNG CHUNG công ty. id do client gửi ⇒ BE resolve dưới company actor (404 nếu lạ). */
+  departmentId: z.string().uuid().nullish(),
+  isActive: z.boolean().optional(),
+  items: z.array(taskTemplateItemCoreSchema).max(TASK_TEMPLATE_ITEMS_MAX).optional(),
+});
+export type CreateTaskTemplateRequest = z.infer<typeof createTaskTemplateSchema>;
+
+/** PATCH /task-templates/:id — chỉ HEADER (item sửa qua endpoint item riêng, KHÔNG replace cả mảng). */
+export const updateTaskTemplateSchema = createTaskTemplateSchema.omit({ items: true }).partial();
+export type UpdateTaskTemplateRequest = z.infer<typeof updateTaskTemplateSchema>;
+
+/** POST /task-templates/:templateId/items. */
+export const createTaskTemplateItemSchema = taskTemplateItemCoreSchema;
+export type CreateTaskTemplateItemRequest = z.infer<typeof createTaskTemplateItemSchema>;
+
+/** PATCH /task-templates/:templateId/items/:itemId — partial (≥1 field, BE re-validate). */
+export const updateTaskTemplateItemSchema = taskTemplateItemCoreSchema.partial();
+export type UpdateTaskTemplateItemRequest = z.infer<typeof updateTaskTemplateItemSchema>;
+
+export const taskTemplateItemResponseSchema = z.object({
+  id: z.string().uuid(),
+  templateId: z.string().uuid(),
+  title: z.string(),
+  description: z.string().nullable(),
+  defaultPriority: taskTemplatePrioritySchema.nullable(),
+  estimateHours: z.number().nullable(),
+  checklist: z.array(z.string()),
+  sortOrder: z.number().int(),
+});
+export type TaskTemplateItemResponseDto = z.infer<typeof taskTemplateItemResponseSchema>;
+
+export const taskTemplateResponseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  description: z.string().nullable(),
+  departmentId: z.string().uuid().nullable(),
+  departmentName: z.string().nullable(),
+  isActive: z.boolean(),
+  itemCount: z.number().int().nonnegative(),
+  /** Chỉ GET /task-templates/:id trả items; danh sách trả `[]` (tránh payload N×M). */
+  items: z.array(taskTemplateItemResponseSchema),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type TaskTemplateResponseDto = z.infer<typeof taskTemplateResponseSchema>;
+
+/** GET /task-templates — filter phòng/trạng thái/từ khoá + phân trang. */
+export const listTaskTemplatesQuerySchema = z.object({
+  departmentId: z.string().uuid().optional(),
+  /** `z.coerce` KHÔNG idempotent với boolean ⇒ preprocess (memory zod-query-param-double-pipe-idempotent). */
+  isActive: z
+    .preprocess((v) => {
+      if (typeof v === "boolean") return v;
+      if (v === "true") return true;
+      if (v === "false") return false;
+      return v;
+    }, z.boolean())
+    .optional(),
+  q: z.string().trim().max(255).optional(),
+  limit: z.coerce.number().int().min(1).max(GOAL_PAGE_LIMIT_MAX).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+export type ListTaskTemplatesQueryRequest = z.infer<typeof listTaskTemplatesQuerySchema>;
+
+/** Trần NGHIỆP VỤ số task tạo trong MỘT lần phân rã (SPEC-10 §12 GOAL-ERR-009). Ép ở SERVICE ⇒ 422. */
+export const GOAL_DECOMPOSE_MAX = 50;
+
+/**
+ * Trần CỨNG ở biên (chống payload khổng lồ). CỐ Ý > `GOAL_DECOMPOSE_MAX`: giới hạn 50 là luật nghiệp vụ
+ * CÓ MÃ LỖI nên phải trả 422 `GOAL-ERR-009` từ service, không phải 400 zod vô danh (convention
+ * "lỏng ở Zod, chặt ở service" — xem docblock đầu file).
+ */
+export const GOAL_DECOMPOSE_HARD_MAX = 200;
+
+/**
+ * Một dòng trong preview wizard (GOAL-SCREEN-004): đã cho người dùng sửa/xoá/thêm nên KHÔNG nhất thiết
+ * khớp item gốc của template.
+ *
+ * NEO (dự án/phòng/nhân viên) KHÔNG có ở đây — BE SUY TỪ MỤC TIÊU (plan §3 D4) để task sinh ra tự thoả
+ * GOAL-ERR-008. `assigneeEmployeeId`/`stateId` là phần người dùng được chọn ở preview; BE vẫn cho chúng
+ * đi qua ĐÚNG gate TASK (`create:task` + `update-state:task`) — không có cửa vòng.
+ */
+export const decomposeGoalItemSchema = z.object({
+  /** Nguồn gốc từ template (nếu dòng này không phải do người dùng thêm tay) — chỉ để đối chiếu/audit. */
+  templateItemId: z.string().uuid().optional(),
+  title: z.string().trim().min(1, "Tiêu đề là bắt buộc").max(500),
+  description: z.string().max(20000).nullish(),
+  /** LOWERCASE như template; BE map sang TitleCase của `tasks.task_priority`. */
+  priority: taskTemplatePrioritySchema.nullish(),
+  assigneeEmployeeId: z.string().uuid().nullish(),
+  /** Cột board — CHỈ hợp lệ khi mục tiêu cấp dự án (không có dự án ⇒ 400 của TASK). */
+  stateId: z.string().uuid().nullish(),
+  dueAt: z.string().datetime({ offset: true }).nullish(),
+  startAt: z.string().datetime({ offset: true }).nullish(),
+  checklist: templateChecklistSchema.nullish(),
+});
+export type DecomposeGoalItemRequest = z.infer<typeof decomposeGoalItemSchema>;
+
+/** POST /goals/:id/decompose (GOAL-API-011) — `items` là danh sách CUỐI sau preview. */
+export const decomposeGoalSchema = z.object({
+  /** Template nguồn (provenance + audit). BE resolve dưới company actor ⇒ id lạ = 404. */
+  templateId: z.string().uuid(),
+  items: z.array(decomposeGoalItemSchema).min(1).max(GOAL_DECOMPOSE_HARD_MAX),
+});
+export type DecomposeGoalRequest = z.infer<typeof decomposeGoalSchema>;
+
+/** Kết quả phân rã — tất-cả-hoặc-không (1 transaction), nên `created` = `items.length` khi 2xx. */
+export const decomposeGoalResultSchema = z.object({
+  goalId: z.string().uuid(),
+  templateId: z.string().uuid(),
+  created: z.number().int().nonnegative(),
+  tasks: z.array(
+    z.object({
+      id: z.string().uuid(),
+      taskCode: z.string().nullable(),
+      title: z.string(),
+    }),
+  ),
+});
+export type DecomposeGoalResultDto = z.infer<typeof decomposeGoalResultSchema>;

@@ -2,13 +2,19 @@ import { createZodDto } from "nestjs-zod";
 import {
   checkinGoalSchema,
   createGoalSchema,
+  createTaskTemplateItemSchema,
+  createTaskTemplateSchema,
+  decomposeGoalSchema,
   finalizeGoalSchema,
   linkGoalTasksSchema,
   listGoalUpdatesQuerySchema,
+  listTaskTemplatesQuerySchema,
   goalTreeQuerySchema,
   listGoalsQuerySchema,
   meGoalsQuerySchema,
   updateGoalSchema,
+  updateTaskTemplateItemSchema,
+  updateTaskTemplateSchema,
 } from "@mediaos/contracts";
 
 /**
@@ -47,3 +53,26 @@ export class ListGoalUpdatesQueryDto extends createZodDto(listGoalUpdatesQuerySc
 
 /** POST /goals/:id/tasks (update:goal) — gắn bulk (trần GOAL_LINK_TASKS_MAX). */
 export class LinkGoalTasksDto extends createZodDto(linkGoalTasksSchema) {}
+
+// ── S5-GOAL-TPL-1 — Đợt D: danh mục template (GOAL-API-012) + phân rã (GOAL-API-011) ─────────────
+
+/** POST /task-templates (manage:task-template) — header + items tuỳ chọn. */
+export class CreateTaskTemplateDto extends createZodDto(createTaskTemplateSchema) {}
+
+/** PATCH /task-templates/:id — chỉ header (items qua endpoint riêng). */
+export class UpdateTaskTemplateDto extends createZodDto(updateTaskTemplateSchema) {}
+
+/** GET /task-templates — `isActive` qua `z.preprocess` ⇒ idempotent khi pipe chạy 2 lần. */
+export class ListTaskTemplatesQueryDto extends createZodDto(listTaskTemplatesQuerySchema) {}
+
+/** POST /task-templates/:templateId/items. */
+export class CreateTaskTemplateItemDto extends createZodDto(createTaskTemplateItemSchema) {}
+
+/** PATCH /task-templates/:templateId/items/:itemId — partial. */
+export class UpdateTaskTemplateItemDto extends createZodDto(updateTaskTemplateItemSchema) {}
+
+/**
+ * POST /goals/:id/decompose (update:goal + create:task). Trần Zod là trần CỨNG
+ * `GOAL_DECOMPOSE_HARD_MAX`; giới hạn nghiệp vụ 50 ép ở service để trả 422 `GOAL-ERR-009` có mã.
+ */
+export class DecomposeGoalDto extends createZodDto(decomposeGoalSchema) {}

@@ -175,6 +175,10 @@ export interface TaskCoreInsertValues {
   // S5-TASK-SUBTASK-1 (D-31) — NULL = task gốc. Bất biến cây đã được TaskCoreService kiểm+khoá TRƯỚC
   // khi tới đây (assertParentAssignable); repository chỉ ghi.
   parentTaskId: string | null;
+  // S5-GOAL-TPL-1 (GOAL-API-011) — mục tiêu mà task sinh ra từ phân rã GẮN SẴN (SPEC-10 §10 FUNC-007:
+  // "task tự mang goal_id"). NULL cho mọi đường tạo khác (POST /tasks không có field này ⇒ gắn sau qua
+  // GOAL-API-010). Quyền + neo GOAL-ERR-008 đã kiểm ở GoalDecomposeService TRƯỚC khi tới đây.
+  goalId?: string | null;
 }
 
 export interface TaskCorePatchValues {
@@ -665,12 +669,12 @@ export class TaskCoreRepository {
         company_id, task_type, title, description, task_status, task_priority,
         project_id, department_id, main_assignee_employee_id, assignee_user_id,
         creator_user_id, reporter_employee_id, due_at, start_at, created_by, updated_by, task_code,
-        state_id, parent_task_id
+        state_id, parent_task_id, goal_id
       ) values (
         ${companyId}, 'office', ${v.title}, ${v.description}, ${v.taskStatus}, ${v.taskPriority},
         ${v.projectId}, ${v.departmentId}, ${v.mainAssigneeEmployeeId}, ${v.assigneeUserId},
         ${v.creatorUserId}, ${v.reporterEmployeeId}, ${v.dueAt}, ${v.startAt}, ${v.createdBy}, ${v.createdBy}, ${v.taskCode},
-        ${v.stateId}, ${v.parentTaskId}
+        ${v.stateId}, ${v.parentTaskId}, ${v.goalId ?? null}
       )
       returning id
     `);

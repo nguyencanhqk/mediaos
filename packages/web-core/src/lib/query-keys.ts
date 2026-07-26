@@ -847,6 +847,35 @@ export const goalKeys = {
   updatesOf: (id: string) => [...rootKeys.goals, "updates", id] as const,
 };
 
+// ── S5-GOAL-TPL-1 — danh mục task template (GOAL-API-012, GOAL-SCREEN-006) ─────
+//
+// Nằm DƯỚI prefix `goals/*` (module GOAL sở hữu danh mục — SPEC-10 §10 GOAL-FUNC-008) nhưng là nhánh
+// RIÊNG "task-templates": mutation template KHÔNG được kéo theo invalidate list/tree mục tiêu (danh mục
+// đổi không làm tiến độ mục tiêu nào đổi).
+
+export const taskTemplateKeys = {
+  all: [...rootKeys.goals, "task-templates"] as const,
+  list: (params?: Record<string, unknown>) =>
+    [...rootKeys.goals, "task-templates", "list", params] as const,
+  detail: (id: string) => [...rootKeys.goals, "task-templates", "detail", id] as const,
+};
+
+/** PREFIX 3-phần tử (bỏ slot params) → khớp MỌI biến thể filter (mirror goalListPrefix). */
+const taskTemplateListPrefix = [...rootKeys.goals, "task-templates", "list"] as const;
+
+export const taskTemplateInvalidation = {
+  create: () => [taskTemplateListPrefix] as const,
+  /** Sửa header ⇒ danh sách (tên/phòng/trạng thái hiện ở đó) + chi tiết. */
+  update: (id: string) => [taskTemplateListPrefix, taskTemplateKeys.detail(id)] as const,
+  remove: () => [taskTemplateListPrefix] as const,
+  /**
+   * Thêm/sửa/xoá VIỆC MẪU: chi tiết (danh sách item) VÀ danh sách (cột `itemCount` sống ở đó — bỏ vế
+   * này thì bảng danh mục hiện số việc mẫu CŨ, nhìn vẫn hợp lý nên không ai nghi ngờ).
+   */
+  items: (templateId: string) =>
+    [taskTemplateListPrefix, taskTemplateKeys.detail(templateId)] as const,
+};
+
 // PREFIX 3-phần tử (bỏ slot params) → khớp MỌI biến thể filter (TanStack match theo prefix; key có
 // object params cụ thể KHÔNG khớp filter khác — mirror taskProjectListPrefix/notificationListPrefix).
 const goalListPrefix = [...rootKeys.goals, "list"] as const;
@@ -946,3 +975,21 @@ export const notificationPreferenceKeys = {
   all: [...rootKeys.notifications, "preferences"] as const,
   list: () => [...rootKeys.notifications, "preferences", "list"] as const,
 };
+
+/**
+ * S5-GOAL-TPL-1 — phân rã mục tiêu (GOAL-API-011): tạo N việc MANG `goal_id` ⇒ đổi tiến độ mục tiêu
+ * (mode 'tasks'/'project') VÀ thêm việc vào TASK (danh sách/board/việc-của-tôi).
+ *
+ * Dùng lại `goalInvalidation.taskProgress` cho phía GOAL (đúng tập: list/tree/detail/linkedTasks/me) và
+ * KÈM phía TASK — thiếu vế TASK thì việc vừa tạo không hiện trên board/danh sách cho tới khi F5, đúng
+ * lớp bẫy PR #250 nhưng chiều GOAL→TASK.
+ */
+export const goalDecomposeInvalidation = (input: {
+  goalId: string;
+  projectId?: string | null;
+}): ReadonlyArray<readonly unknown[]> => [
+  ...goalInvalidation.taskProgress(input.goalId),
+  taskListPrefix,
+  taskKeys.my(),
+  ...(input.projectId ? [taskKeys.kanban(input.projectId)] : []),
+];

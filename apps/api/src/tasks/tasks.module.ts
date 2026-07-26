@@ -120,6 +120,14 @@ import { GoalProgressEngineRepository } from "./goal-progress-engine.repository"
   // S5-GOAL-BE-2 (additive): + GoalProgressEngineService (GoalsModule gọi khi check-in/finalize/link) +
   // TaskCoreRepository (GoalTasksLinkService dùng LẠI projection + mapper task hợp nhất cho
   // GET /goals/:id/tasks — KHÔNG dựng bản sao thứ hai, bài học 3-mapper PR #247).
+  // S5-GOAL-TPL-1 (additive): + TaskChecklistsRepository — phân rã mục tiêu map `checklist` JSONB của
+  // task mẫu sang task_checklists/items (DB-11 §6.4) qua ĐÚNG persistence hiện có, KHÔNG raw SQL bản sao
+  // thứ hai trong goals/ (2 nơi ghi 1 cặp bảng = 2 luật soft-delete/order_index sẽ trôi). Repository là
+  // tầng KHÔNG gate — caller (GoalDecomposeService) đã tự authorize qua gate TASK trước khi tới.
+  // + TaskActivityService — ghi dòng `TASK_GOAL_DECOMPOSED` vào task_activity_logs (append-only) trong
+  // CÙNG tx nghiệp vụ. ⚠️ Thiếu export ⇒ Nest KHÔNG resolve được GoalDecomposeService ⇒ sập AppModule ⇒
+  // ĐỎ DÂY CHUYỀN toàn bộ int-spec (memory systemjobhandler-optional-dbw-di): typecheck + unit test đều
+  // MÙ với lỗi này, chỉ int-spec boot AppModule mới bắt được.
   exports: [
     TasksService,
     TaskCoreService,
@@ -127,6 +135,8 @@ import { GoalProgressEngineRepository } from "./goal-progress-engine.repository"
     ProjectAccessService,
     GoalProgressEngineService,
     TaskCoreRepository,
+    TaskChecklistsRepository,
+    TaskActivityService,
   ],
 })
 export class TasksModule implements OnModuleInit {

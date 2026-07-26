@@ -56,7 +56,10 @@ export type TaskActivityAction =
   // S5-TASK-COVER-1 — đặt/gỡ ảnh bìa (target_type "File"; cột `action` KHÔNG có CHECK ở DB nên
   // thêm giá trị mới KHÔNG cần migration — chỉ `target_type` bị CHECK ràng buộc).
   | "TASK_COVER_SET"
-  | "TASK_COVER_CLEARED";
+  | "TASK_COVER_CLEARED"
+  // S5-GOAL-TPL-1 — việc SINH RA từ phân rã mục tiêu (GOAL-API-011, target_type 'Task'). Ghi THÊM cạnh
+  // TASK_CREATED để dòng thời gian của việc trả lời được "việc này ở đâu ra" (mục tiêu + template).
+  | "TASK_GOAL_DECOMPOSED";
 
 /**
  * target_type — tập con của CHECK chk_task_activity_target_type (0478:217-219). S4-TASK-BE-2 (additive):

@@ -34,7 +34,8 @@ export const GOAL_ERR = {
   CHECKIN_AMBIGUOUS:
     "GOAL-ERR-006: chỉ gửi MỘT trong hai giá trị check-in (currentValue hoặc progressPercent).",
   /** GOAL-ERR-008 — gắn task sai neo (vế CHẶN: mục tiêu cấp nhân viên/dự án). */
-  LINK_ANCHOR: (detail: string) => `GOAL-ERR-008: không gắn được công việc vào mục tiêu — ${detail}`,
+  LINK_ANCHOR: (detail: string) =>
+    `GOAL-ERR-008: không gắn được công việc vào mục tiêu — ${detail}`,
   /** GOAL-ERR-014 — finalize chỉ hợp lệ khi status Active hoặc Completed. */
   FINALIZE_STATUS: (status: string) =>
     `GOAL-ERR-014: chỉ chốt kỳ được mục tiêu Active hoặc Completed — mục tiêu này đang ở trạng thái ${status}.`,
@@ -68,4 +69,40 @@ export const GOAL_ERR = {
   /** Actor chưa được liên kết hồ sơ nhân viên ⇒ không suy được người phụ trách. */
   OWNER_UNRESOLVED:
     "GOAL-ERR-010: không xác định được người phụ trách — tài khoản chưa liên kết hồ sơ nhân viên.",
+
+  // ── S5-GOAL-TPL-1 — phân rã từ template (GOAL-API-011) ────────────────────────
+  /**
+   * GOAL-ERR-009 — phân rã bị chặn. 3 vế của SPEC-10 §12: mục tiêu `Cancelled` · template rỗng · vượt
+   * trần 50 task/lần. Vế "đã chốt kỳ" KHÔNG ở đây: §12 xếp nó vào GOAL-ERR-005 (một mã cho MỌI đường
+   * ghi lên mục tiêu đã chốt) và dùng lại `GoalAccessService.assertNotFinalized`.
+   */
+  DECOMPOSE: (detail: string) => `GOAL-ERR-009: không phân rã được mục tiêu — ${detail}`,
+  DECOMPOSE_CANCELLED:
+    "GOAL-ERR-009: không phân rã được mục tiêu — mục tiêu đã huỷ (Cancelled); mở lại trạng thái trước khi tạo việc.",
+  DECOMPOSE_EMPTY:
+    "GOAL-ERR-009: không phân rã được mục tiêu — danh sách việc rỗng (template chưa có việc mẫu nào, hoặc bạn đã xoá hết ở bước xem trước).",
+  DECOMPOSE_LIMIT: (cap: number, got: number) =>
+    `GOAL-ERR-009: không phân rã được mục tiêu — tối đa ${cap} việc mỗi lần (đang gửi ${got}); chia thành nhiều lần.`,
+} as const;
+
+/**
+ * S5-GOAL-TPL-1 — mã lỗi danh mục task template (GOAL-API-012). Tách hằng RIÊNG khỏi `GOAL_ERR`: đây là
+ * tài nguyên khác (`task-template`) với cặp quyền khác (`manage:task-template`), không phải mục tiêu —
+ * nhồi chung sẽ khiến int-spec assert nhầm nhóm mã.
+ */
+export const TPL_ERR = {
+  NOT_FOUND: "GOAL-ERR-TPL-NOT-FOUND: không tìm thấy danh mục việc mẫu.",
+  ITEM_NOT_FOUND: "GOAL-ERR-TPL-NOT-FOUND: không tìm thấy việc mẫu trong danh mục này.",
+  REF_DEPARTMENT_NOT_FOUND: "GOAL-ERR-TPL-NOT-FOUND: không tìm thấy phòng ban trong công ty.",
+  /** Tồn tại trong tenant nhưng ngoài phạm vi actor ⇒ 403 (minh bạch in-tenant, mirror GOAL). */
+  FORBIDDEN:
+    "GOAL-ERR-TPL-FORBIDDEN: danh mục việc mẫu này thuộc phòng ban ngoài phạm vi quản lý của bạn.",
+  /** Template dùng-chung công ty: scope < Company chỉ ĐỌC (đổi nó là đổi công cụ của mọi phòng). */
+  FORBIDDEN_SHARED:
+    "GOAL-ERR-TPL-FORBIDDEN: danh mục dùng chung toàn công ty — chỉ quản trị cấp công ty được tạo/sửa/xoá.",
+  /** UNIQUE (company, name) partial-active mig 0526 — trả 409 thay vì để vỡ constraint thành 500. */
+  NAME_TAKEN: (name: string) =>
+    `GOAL-ERR-TPL-NAME-TAKEN: đã có danh mục việc mẫu tên "${name}" — chọn tên khác.`,
+  ITEMS_LIMIT: (cap: number) =>
+    `GOAL-ERR-TPL-ITEMS-LIMIT: một danh mục chỉ chứa tối đa ${cap} việc mẫu.`,
 } as const;

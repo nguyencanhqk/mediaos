@@ -62,3 +62,29 @@ export const ME_GOALS_PREVIEW_LIMIT = 3;
  * mình sửa được task ngoài phạm vi qua đường vòng mục tiêu).
  */
 export const TASK_UPDATE_PAIR_FOR_GOAL_LINK = { action: "update", resourceType: "task" } as const;
+
+// ─── S5-GOAL-TPL-1 (APPEND) — Đợt D: danh mục template + phân rã ───────────────────────────────────
+
+/**
+ * Cặp quyền danh mục việc mẫu (GOAL-SCREEN-006) — seed mig 0527, is_sensitive=false (⇒ `useCan` đủ).
+ * `resourceType` là `task-template` GẠCH-NỐI (khớp bảng `permissions`); `task_template` GẠCH-DƯỚI là
+ * audit object_type ở BE — KHÔNG lẫn hai cái.
+ */
+export const TASK_TEMPLATE_MANAGE_PAIR = {
+  action: "manage",
+  resourceType: "task-template",
+} as const;
+
+/**
+ * CỔNG THỨ HAI của phân rã (ngoài `update:goal`): phân rã TẠO TASK nên phải có `('create','task')`
+ * (+ `('update-state','task')` nếu chọn cột board). BE ép qua `TaskCoreService.resolveCreateGate` —
+ * FE chỉ ẩn/disable trước cho đỡ bấm-rồi-403.
+ */
+export const TASK_CREATE_PAIR_FOR_DECOMPOSE = { action: "create", resourceType: "task" } as const;
+export const TASK_UPDATE_STATE_PAIR = { action: "update-state", resourceType: "task" } as const;
+
+/**
+ * Ưu tiên của việc mẫu — LOWERCASE theo CHECK mig 0526 (KHÁC `Low|Medium|High|Urgent` của bảng `tasks`;
+ * BE map một chiều khi áp template). `none` = không đặt ưu tiên.
+ */
+export const TASK_TEMPLATE_PRIORITY_OPTIONS = ["urgent", "high", "medium", "low", "none"] as const;

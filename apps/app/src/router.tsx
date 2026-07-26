@@ -1704,6 +1704,10 @@ const GoalFormPage = React.lazy(() =>
 const GoalDetailPage = React.lazy(() =>
   import("@/routes/goals/GoalDetailPage").then((m) => ({ default: m.GoalDetailPage })),
 );
+// S5-GOAL-TPL-1 — GOAL-SCREEN-006 danh mục việc mẫu (gate màn = manage:task-template ở TRONG page).
+const TaskTemplateListPage = React.lazy(() =>
+  import("@/routes/goals/TaskTemplateListPage").then((m) => ({ default: m.TaskTemplateListPage })),
+);
 
 const goalsListRoute = makeModuleRoute("/goals", "goal.list", "GOAL", GoalListPage);
 
@@ -1733,6 +1737,31 @@ const goalNewRoute = createRoute({
       />,
     );
   },
+});
+
+/**
+ * S5-GOAL-TPL-1 — /goals/templates (GOAL-SCREEN-006). Static PHẢI xếp TRÊN "/goals/$goalId", nếu không
+ * TanStack coi "templates" là goalId ⇒ vào chi tiết rồi 404 (cùng bẫy đã ghi cho "/goals/new").
+ * requiredAnyPermissions = access:goal (cổng module); quyền THẬT của màn là manage:task-template — page
+ * tự gate + BE ép, KHÔNG nhét cặp đó vào route (route gate là cổng nav, không phải cổng nghiệp vụ).
+ */
+const goalTemplatesMeta: RouteMeta = {
+  routeKey: "goal.templates",
+  path: "/goals/templates",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "GOAL",
+  screenCode: "GOAL-SCREEN-006",
+  titleKey: "routeTitle.goalTaskTemplates",
+  requiredAnyPermissions: ["access:goal"],
+  showInSidebar: false,
+  order: 55.4,
+};
+const goalTemplatesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/goals/templates",
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(goalTemplatesMeta, "GOAL", <TaskTemplateListPage />),
 });
 
 const goalDetailMeta: RouteMeta = {
@@ -2337,6 +2366,8 @@ const routeTree = rootRoute.addChildren([
   meTrainingRoute,
   meSecurityTwoFactorRoute,
   goalsListRoute,
+  // S5-GOAL-TPL-1 — static TRƯỚC "/goals/$goalId" (xem docblock goalTemplatesMeta).
+  goalTemplatesRoute,
   goalNewRoute,
   goalDetailRoute,
   goalEditRoute,

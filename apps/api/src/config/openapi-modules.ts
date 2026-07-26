@@ -90,7 +90,9 @@ export const API_MODULE_TAGS: readonly ApiModuleTag[] = [
     code: "GOAL",
     tagPrefix: "Goal",
     description: "Cây mục tiêu phòng ban → dự án/nhân viên → công việc (SPEC-10).",
-    segments: ["goals"],
+    // S5-GOAL-TPL-1: `task-templates` (danh mục việc mẫu để phân rã mục tiêu, GOAL-API-012) thuộc module
+    // GOAL — SPEC-10 §10 GOAL-FUNC-008 — dù prefix path đứng riêng vì một danh mục dùng cho nhiều mục tiêu.
+    segments: ["goals", "task-templates"],
   },
   {
     code: "FND",

@@ -14,6 +14,11 @@ import { GoalUpdatesRepository } from "./goal-updates.repository";
 import { GoalCheckinService } from "./goal-checkin.service";
 import { GoalTasksLinkService } from "./goal-tasks-link.service";
 import { GoalReconciliationJobHandler } from "./goal-reconciliation.job-handler";
+// S5-GOAL-TPL-1 (additive) — Đợt D: danh mục task template (GOAL-API-012) + phân rã (GOAL-API-011).
+import { TaskTemplatesController } from "./task-templates.controller";
+import { TaskTemplatesService } from "./task-templates.service";
+import { TaskTemplatesRepository } from "./task-templates.repository";
+import { GoalDecomposeService } from "./goal-decompose.service";
 
 /**
  * S5-GOAL-BE-1/BE-2 — GoalsModule (SPEC-10 · DB-11).
@@ -32,9 +37,19 @@ import { GoalReconciliationJobHandler } from "./goal-reconciliation.job-handler"
  * `GoalReconciliationJobHandler` chỉ cần nằm trong `providers` — SchedulerModule gom qua DiscoveryService
  * theo metadata `@SystemJobHandler()`; GoalsModule KHÔNG import SchedulerModule và ngược lại.
  */
+/**
+ * S5-GOAL-TPL-1 (additive) — Đợt D: `TaskTemplatesController` (/task-templates, gate
+ * `manage:task-template` seed mig 0527) + `GoalDecomposeService` (route `POST /goals/:id/decompose` khai
+ * trong `GoalsController`). Phân rã dùng LẠI từ TasksModule (đã import): `TaskCoreService.createTaskInTx`
+ * (gate + insert + activity + audit của TASK), `TaskChecklistsRepository` (checklist → 2 bảng của TASK),
+ * `GoalProgressEngineService` (recompute). KHÔNG provider bản sao — 2 đường ghi task là 2 luật sẽ trôi.
+ *
+ * `SequenceModule` (đã import cho `goal_code`) cũng cấp `SequenceService` mà phân rã cần để lấy N
+ * `task_code` TRƯỚC business tx (`allocateTaskCodeOutsideTx`).
+ */
 @Module({
   imports: [PermissionModule, SequenceModule, TasksModule],
-  controllers: [GoalsController, MeGoalsController],
+  controllers: [GoalsController, MeGoalsController, TaskTemplatesController],
   providers: [
     GoalsService,
     GoalsValidationService,
@@ -44,6 +59,9 @@ import { GoalReconciliationJobHandler } from "./goal-reconciliation.job-handler"
     GoalCheckinService,
     GoalTasksLinkService,
     GoalReconciliationJobHandler,
+    TaskTemplatesService,
+    TaskTemplatesRepository,
+    GoalDecomposeService,
   ],
   exports: [GoalsService],
 })

@@ -109,6 +109,10 @@ export {
   // S5-GOAL-FE-1 — Mục tiêu (SPEC-10) query key factory + mutation → list/tree/detail invalidation.
   goalKeys,
   goalInvalidation,
+  // S5-GOAL-TPL-1 — danh mục task template (GOAL-SCREEN-006) + invalidation phân rã (GOAL-API-011).
+  taskTemplateKeys,
+  taskTemplateInvalidation,
+  goalDecomposeInvalidation,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -188,7 +192,7 @@ export {
 export { hrMasterDataApi, type HrDepartment } from "./lib/hr-master-data-api";
 export { leaveApi } from "./lib/leave-api";
 // S5-GOAL-FE-1 — GOAL API client (Mục tiêu, SPEC-10 GOAL-API-001..010, GoalsController).
-export { goalApi } from "./lib/goal-api";
+export { goalApi, taskTemplateApi } from "./lib/goal-api";
 export { attendanceApi } from "./lib/attendance-api";
 // S2-FE-HR-7: employee contracts (hợp đồng lao động) CRUD client.
 export { contractsApi } from "./lib/contracts-api";
