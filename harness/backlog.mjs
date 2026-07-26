@@ -8223,11 +8223,16 @@ export const backlog = [
     title:
       "MediaOS BE — mở đường cho LMS đẩy thông báo vào module NOTI: seed nhóm eventCode LMS_* + template vào catalog, cấp danh tính service-to-service cho intake (hiện đòi CẢ JWT user lẫn x-internal-key mà LMS không có JWT user), và chốt cách ánh xạ người nhận khi bên gọi chỉ biết EMAIL",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/notifications/**",
       "apps/api/src/permission/guards/internal.guard.ts",
-      "apps/api/src/db/migrations/**",
+      // ĐO 2026-07-26: migration THẬT nằm ở apps/api/migrations (KHÔNG phải src/db/migrations — đường dẫn
+      // seed ban đầu sai) + catalog registry là nguồn phải đồng bộ 1-1 với migration + env schema khai token.
+      "apps/api/migrations/**",
+      "apps/api/src/foundation/seed/notification-event-catalog.const.ts",
+      "apps/api/src/config/env.schema.ts",
+      "apps/api/test/integration/**",
       "packages/contracts/src/notification.ts",
       "docs/plans/S5-LMS-NOTI-1.md",
     ],
@@ -8243,6 +8248,9 @@ export const backlog = [
       "bộ event đề xuất (chốt với owner trước khi seed): LMS_ENROLLMENT_APPROVED · LMS_COURSE_ASSIGNED · LMS_EXAM_GRADED · LMS_COURSE_DEADLINE_NEAR. Mỗi mã cần template + priority + target_url (engine ném 422 nếu target_url trỏ ra ngoài)",
       "mẫu kênh server-to-server ĐÃ CHẠY theo chiều ngược: apps/lms/app/api/mediaos/progress/route.ts (bearer server-token + rate-limit per-IP và global + cảnh báo 401 dồn dập) — dùng lại kỷ luật đó cho chiều LMS→MediaOS",
       "gate FULL bắt buộc (trust boundary + migration): security-reviewer + database-reviewer + silent-failure-hunter; deny-path test TRƯỚC (thiếu x-internal-key · JWT công ty khác · body company_id lệch token · eventCode không tồn tại)",
+      "OWNER CHỐT 2026-07-26 — danh tính: GUARD RIÊNG cho caller máy (không service-account JWT, không bật lại PAT). Route MỚI POST /internal/v1/notifications/lms-events, @Public bỏ JwtAuthGuard, Bearer LMS_NOTI_TOKEN so hằng-thời-gian, company_id GHIM từ env LMS_COMPANY_ID, allowlist eventCode suy từ NOTI_EVENT_CATALOG, rate-limit 120/phút. Route intake cũ GIỮ NGUYÊN",
+      "🐞 LỖI ĐÃ SHIP phát hiện khi đo (và VÁ trong mig 0529): 0507 nới CHECK trên notification_events nhưng BỎ SÓT 2 CHECK cùng nghĩa trên bảng `notifications` (0479:252-257) ⇒ MỌI GOAL_ASSIGNED/GOAL_FINALIZED vỡ chk_notifications_module_code khi INSERT. Xác minh DB PROD: 0 hàng notifications module_code='GOAL'. Không test nào bắt vì không có int-spec nào chạy intake GOAL tới tận INSERT — ca (j) của lms-noti-service-intake.int-spec.ts giờ giữ chỗ đó",
+      "dedupe: 4 mã LMS seed dedupe_strategy='DedupeKey' (KHÁC default 'None' của 0479 — 'None' nghĩa là retry đẻ thông báo trùng) + controller BẮT BUỘC dedupeKey (400 nếu thiếu) để dedupe không tắt im lặng. KHÔNG chọn EntityRecipient vì DEADLINE_NEAR sẽ chỉ nhắc được đúng 1 lần vĩnh viễn",
     ],
     done_when: [
       "Caller máy (không phải người dùng) đẩy được 1 event LMS_* vào intake và tạo ra notification IN_APP đúng người, đúng company; deny-path RED trước: thiếu internal key → 403 · danh tính công ty khác → không thấy recipient (RLS) · body company_id lệch → 400",

@@ -1373,6 +1373,13 @@
       "when": 1717587317000,
       "tag": "0528_s5_goaldb2_audit_task_template",
       "breakpoints": true
+    },
+    {
+      "idx": 196,
+      "version": "7",
+      "when": 1717587318000,
+      "tag": "0529_s5_lmsnoti1_noti_catalog_lms",
+      "breakpoints": true
     }
   ]
 }
