@@ -471,6 +471,17 @@ Regression bộ quyền/role: **8 file · 152 test xanh** (`permission-admin` ·
 `role-permission-data-scope` · `role-members` · `rbac-operator-escalation` · `auth-seed-canonical-roles` ·
 `permission-rule-apply` · `role-admin.service.spec`).
 
+**Toàn bộ `apps/api` chạy lại trên lane DB dựng mới từ `0000 → 0530`** (bắt buộc dựng lại: migration mới
+phải đi qua cả chain, và bản RED trước đó đã xoá thật một grant trên DB lane cũ ⇒ dữ liệu bẩn):
+
+| | Trước vá (§1.1) | Sau vá |
+| --- | --- | --- |
+| File spec | 446 (445 pass · 1 skip) | **447 (446 pass · 1 skip)** — +1 file mới |
+| Test | 7.113 pass · 0 fail | **7.119 pass · 0 fail** — +6 ca mới |
+
+⇒ vá **không gây regression**; `REVOKE DELETE ON roles` và policy RESTRICTIVE không làm đỏ bất kỳ luồng
+ghi hợp lệ nào trong toàn bộ suite.
+
 > **Hai bẫy gặp khi viết RED test, ghi lại vì đều tạo "xanh-giả ngược"** (tưởng đã chặn, thật ra chưa
 > chạm tới chỗ cần kiểm): (1) `new PermissionRepository()` **không truyền `DatabaseService`** trả về 0
 > grant ⇒ `can()` ra `deny-default` ⇒ test đỏ ở cổng `assertCan` chứ không phải ở guard system-role;
