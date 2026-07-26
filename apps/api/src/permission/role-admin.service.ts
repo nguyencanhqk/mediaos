@@ -324,6 +324,12 @@ export class RoleAdminService {
         if (role.companyId !== null && role.companyId !== actor.companyId) {
           throw new NotFoundException("Role not found");
         }
+        // S6-SEC-1 · S0-B: role hệ thống (kể cả role TOÀN CỤC `company_id IS NULL` mà RLS cố ý lộ cho
+        // tenant ĐỌC) là BẤT KHẢ XÂM PHẠM. Thiếu chốt này thì kiểm tra ở trên lọt: role toàn cục có
+        // `companyId === null` nên KHÔNG rơi vào nhánh cross-tenant. Mirror `updateRole`/`deleteRole`.
+        if (role.isSystem) {
+          throw new BadRequestException("Cannot modify permissions of a system-defined role");
+        }
 
         // Cặp KHÔNG có trong catalog → 400 (KHÔNG 500/FK error).
         const permission = await this.repo.findPermissionTx(tx, dto.action, dto.resourceType);
@@ -408,6 +414,12 @@ export class RoleAdminService {
         }
         if (role.companyId !== null && role.companyId !== actor.companyId) {
           throw new NotFoundException("Role not found");
+        }
+        // S6-SEC-1 · S0-B — xem chú thích ở assignPermissionToRole. Nhánh REVOKE là nhánh ĐÃ BỊ KHAI
+        // THÁC được trong bản RED: nó xoá thật grant của role hệ thống toàn cục và KHÔNG hoàn tác
+        // được qua app (WITH CHECK chặn INSERT khôi phục).
+        if (role.isSystem) {
+          throw new BadRequestException("Cannot modify permissions of a system-defined role");
         }
 
         const permission = await this.repo.findPermissionTx(tx, dto.action, dto.resourceType);

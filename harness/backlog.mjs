@@ -5335,9 +5335,15 @@ export const backlog = [
     // DoD của WS4 buộc cập nhật RELEASE-02 (sổ known-issue) và RELEASE-01 §5 (security readiness) khi
     // trạng thái đổi, cộng backlog theo CLAUDE §8 — khai thiếu thì WO tự đẩy mình ra ngoài phạm vi ở
     // đúng bước cuối. paths lái review gate + scheduler nên khai TRƯỚC khi bắt đầu, không sửa lén.
+    // paths bổ sung đợt VÁ (2026-07-27, owner duyệt "xử lý vá luôn"): FULL gate lôi ra 2 lỗ S0 ⇒ WO
+    // chuyển từ audit-only sang có sửa code. Cần thêm migrations/** (0530 vá RLS DELETE role hệ thống),
+    // scripts/** (script chặn tenant test cho owner chạy trên PROD) và .env.example (gốc rễ KI-036).
     paths: [
       "apps/api/src/**",
       "apps/api/test/**",
+      "apps/api/migrations/**",
+      "scripts/**",
+      ".env.example",
       "docs/_review/**",
       "docs/RELEASE/**",
       "docs/plans/S6-SEC-1.md",

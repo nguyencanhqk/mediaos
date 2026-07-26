@@ -445,6 +445,67 @@ Trong đó **1 là GAP**, còn lại `SELF`/`TENANT_READ`/`PARKED`.
 | 7 | Thêm ca **deny GHI chéo tenant** vào `tenant-isolation.int-spec` (hiện 465 ca đều SELECT) | WO mới | Đây là lớp lỗ hổng, không phải một bug |
 | 8 | Vá `export:leave` thiếu audit · audit `notifications.service` ra ngoài tx · `login_logs` bỏ ghi im lặng | WO mới | Cả 3 chạm `done_when` #2 |
 
+## 7d. Đợt VÁ (2026-07-27 — owner duyệt "xử lý vá luôn")
+
+### S0-B — ĐÃ VÁ, RED → GREEN
+
+Vá **hai tầng độc lập** (tầng nào tuột thì tầng kia vẫn chặn):
+
+| Tầng | Thay đổi |
+| --- | --- |
+| DB | [`migrations/0530_s6sec1_system_role_immutable.sql`](apps/api/migrations/0530_s6sec1_system_role_immutable.sql) — (a) policy **RESTRICTIVE `FOR DELETE`** trên `role_permissions` bắt buộc role thuộc tenant hiện tại (RESTRICTIVE **AND** với policy permissive sẵn có ⇒ **giữ nguyên đường ĐỌC** role hệ thống, chỉ siết DELETE); (b) **`REVOKE DELETE ON roles FROM mediaos_app`** — đặc quyền thừa, không code path nào dùng (`deleteRole` xoá **mềm** bằng UPDATE, và UPDATE vốn an toàn vì `WITH CHECK` **có** áp cho UPDATE) |
+| App | [`role-admin.service.ts`](apps/api/src/permission/role-admin.service.ts) — thêm guard `role.isSystem` vào **cả** `assignPermissionToRole` **và** `revokePermissionFromRole`, mirror `updateRole`/`deleteRole` vốn đã có |
+
+**Bằng chứng RED → GREEN** ([`role-system-immutable.int-spec.ts`](apps/api/test/integration/role-system-immutable.int-spec.ts), 6 ca, phủ **cả hai tầng**):
+
+| | Trước vá | Sau vá |
+| --- | --- | --- |
+| Service `revokePermissionFromRole` trên role toàn cục | ❌ **`promise resolved` — xoá THÀNH CÔNG** | ✅ `BadRequestException`, 0 grant đổi |
+| Service `assignPermissionToRole` trên role toàn cục | ❌ `InternalServerError` (RLS chặn nhưng 500, không phải 400) | ✅ `BadRequestException`, 0 grant đổi |
+| RLS `DELETE role_permissions` role toàn cục | ❌ **xoá 66 hàng** | ✅ **0 hàng** |
+| RLS `DELETE roles` toàn cục | ❌ không bị chặn | ✅ bị chặn (đã thu hồi GRANT) |
+| *Không siết quá tay:* đọc role hệ thống | ✅ vẫn đọc được | ✅ vẫn đọc được |
+| *Không siết quá tay:* xoá grant role **của chính tenant** | ✅ chạy | ✅ vẫn chạy |
+
+Regression bộ quyền/role: **8 file · 152 test xanh** (`permission-admin` · `role-permission-grants` ·
+`role-permission-data-scope` · `role-members` · `rbac-operator-escalation` · `auth-seed-canonical-roles` ·
+`permission-rule-apply` · `role-admin.service.spec`).
+
+> **Hai bẫy gặp khi viết RED test, ghi lại vì đều tạo "xanh-giả ngược"** (tưởng đã chặn, thật ra chưa
+> chạm tới chỗ cần kiểm): (1) `new PermissionRepository()` **không truyền `DatabaseService`** trả về 0
+> grant ⇒ `can()` ra `deny-default` ⇒ test đỏ ở cổng `assertCan` chứ không phải ở guard system-role;
+> (2) `ROLLBACK` đặt trong `try` — assertion ném thì rollback **không chạy** và connection **đang dở
+> transaction** bị trả về pool, làm test kế tiếp đọc trạng thái bẩn. Cả hai đã sửa; `ROLLBACK` nay nằm
+> trong `finally`.
+
+### KI-036 — ĐÃ VÁ
+
+`.env.example:91` `TWO_FACTOR_ENFORCEMENT_ENABLED` đổi **`false` → `true`** kèm cảnh báo thứ tự thao
+tác. Đây là **gốc rễ** của KI-027: `cp .env.example .env` là bước cài chuẩn (CLAUDE §7) nên giá trị
+`false` đã theo vào PROD.
+
+### S0-A — script sẵn sàng, CẦN OWNER CHẠY
+
+[`scripts/s6sec1-contain-test-tenants.sql`](scripts/s6sec1-contain-test-tenants.sql). Phiên này **bị
+lớp phân quyền của công cụ chặn ghi vào DB PROD** — đã dừng đúng chỗ thay vì tìm đường lách. Script:
+thu hồi 3 grant operator → suspend + soft-delete + băm mật khẩu 25 user tenant test → xoá refresh
+token. Một transaction, có chốt an toàn tự `RAISE EXCEPTION` nếu `funtime` lọt vào tập, in số đo
+trước/sau.
+
+**Cố ý KHÔNG hard-delete company/user:** 11 FK tới `companies` là `NO ACTION` (gồm `audit_logs`
+append-only) ⇒ purge là thao tác riêng, rủi ro cascade cao hơn hẳn — tách sang `S6-PERF-DB-1`. **Chặn
+đường vào đã đóng hết bề mặt bảo mật**; purge chỉ còn là vệ sinh dữ liệu.
+
+Backup PROD trước khi vá đã tạo: `c:\tmp\mediaos-prod-pre-s6sec1fix-20260727-004838.dump`.
+
+### Còn LẠI — chưa vá trong đợt này (có chủ ý)
+
+| Mục | Vì sao hoãn |
+| --- | --- |
+| KI-030 `/org/employees` + `/org/teams/:id/members` | Siết quyền là **thay đổi hành vi** có rủi ro 403-storm. `/org/units/tree` và `/org/teams` **đang được `apps/app` dùng** (OrgChartPage, TaskSidebarTree) nên **không** được siết cùng một nhát. Cần tách: gate 2 route console-only, giữ 2 route app-wide làm `TENANT_READ` có chữ ký. Việc của WO riêng, không nhét vào cuối một phiên dài |
+| KI-033/034/035 (audit `export:leave` · audit `notifications` ngoài tx · `login_logs` bỏ ghi im lặng) | Ba lỗi `S1` chạm `done_when` #2, nhưng nằm ở 3 module khác nhau và cần RED test riêng từng cái |
+| Dựng lại Phụ lục A bằng quét runtime | §0.4 — parse tĩnh đã sai 4 lần; phải làm bằng công cụ khác, không phải regex |
+
 ## 8. Kết luận WS4
 
 | `done_when` | Trả lời |
