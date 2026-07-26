@@ -2,6 +2,7 @@
 
 > Sổ vấn đề đã biết tại thời điểm chốt cổng Sprint 5 → Sprint 6. Sinh trong `S5-UAT-1`.
 > Chốt: **2026-07-26** · `master` `153e2101` · migration head **0529**.
+> Cập nhật: `S6-STAB-1` (KI-021…023) · **`S6-QA-FINAL-1` (KI-024…026)** — `master` `c845a777`.
 > Thang mức: `QA-08 §9` (S0 Blocker · S1 Critical · S2 Major · S3 Minor · S4 Trivial).
 >
 > **Quy tắc của sổ này:** chỉ ghi vấn đề đã **kiểm chứng** (có lệnh/truy vấn/số đo/file:dòng). Không
@@ -36,14 +37,19 @@
 | KI-021 | 3 sự kiện NOTI của ATT bật trong danh mục nhưng **không có producer** (`ATT_MISSING_CHECKOUT` · `ATT_LATE_DETECTED` · `ATT_ABSENT_DETECTED`) | S2 | Sản phẩm | ❌ | ❌ | Sau MVP |
 | ~~KI-022~~ | ~~`outboxOf` trong `goal-be2-link.int-spec` không lọc `company_id` ⇒ đỏ-giả ngẫu nhiên~~ — **ĐÃ ĐÓNG 2026-07-26** (`S6-STAB-1`) | S1 | Hạ tầng test | — | — | ✔ xong |
 | ~~KI-023~~ | ~~Đua teardown `audit_logs → companies` trong `cleanupTenants` ⇒ đỏ-giả ngẫu nhiên~~ — **ĐÃ ĐÓNG 2026-07-26** (`S6-STAB-1`) | S1 | Hạ tầng test | — | — | ✔ xong |
+| ~~KI-024~~ | ~~`foundation-audit.e2e-spec` dùng `action` cố định + đếm tuyệt đối ở System scope ⇒ đỏ-giả **vĩnh viễn** sau một lần chạy bị ngắt~~ — **ĐÃ ĐÓNG 2026-07-26** (`S6-QA-FINAL-1`) | S1 | Hạ tầng test | — | — | ✔ xong |
+| KI-025 | **98/346 đường dẫn API (28%) không có test HTTP nào chạm** — phủ ở tầng service (`T-svc`) nên guard/DTO/envelope của route chưa từng chạy. Nặng nhất: `user-invites` (`/users/invite`, `/users/:id/approve`…) + `POST/GET /hr/profile-change-requests` | S2 | Độ phủ test | ❌ | ❌ | Sau MVP |
+| ~~KI-026~~ | ~~Nhãn `[BLOCKED — service.ts bug]` + chú thích "KNOWN BROKEN" nằm trên một test ĐANG XANH (`attendance-adjustment.int.spec.ts`) — bug đã sửa cùng PR #81 nhưng chú thích không gỡ~~ — **ĐÃ ĐÓNG 2026-07-26** (`S6-QA-FINAL-1`) | S3 | Vệ sinh test | — | — | ✔ xong |
 
-**Tổng (cập nhật 2026-07-26 sau `S6-STAB-1`): S0 = 0 · S1 = 0 mở (2 phát hiện + đóng trong ngày) ·
-S2 = 5 mở (KI-008 · KI-011 · KI-014 · KI-016 · KI-021) · S3 = 15.**
+**Tổng (cập nhật 2026-07-26 sau `S6-QA-FINAL-1`): S0 = 0 · S1 = 0 mở (3 phát hiện + đóng trong ngày) ·
+S2 = 6 mở (KI-008 · KI-011 · KI-014 · KI-016 · KI-021 · **KI-025**) · S3 = 16 (KI-026 đóng ngay).**
 Không có defect sản phẩm mức S0/S1 nào đang mở. KI-001/KI-002 **đã đóng**; KI-006 hạ xuống S3 (chỉ còn
 bước cấu hình token + deploy). Giữ nguyên số hiệu KI để tài liệu khác trỏ tới không bị gãy.
 
 > **Ngưỡng RC** (`RELEASE-05` §5.3) cho phép **≤3** mục S2 mở, mỗi mục có owner + workaround. Hiện
-> **5** ⇒ trước khi tạo RC phải đóng bớt hoặc owner ký waiver tường minh cho phần vượt.
+> **6** ⇒ trước khi tạo RC phải đóng bớt hoặc owner ký waiver tường minh cho phần vượt. Hai mục nằm
+> trong tầm đóng được ở Sprint 6: **KI-008** (diễn tập restore — `S6-PERF-DB-1`) và **KI-016** (tách
+> `dist` — cần mở `S6-OPS-DISTSPLIT-1`).
 
 ---
 
@@ -218,6 +224,49 @@ dạng nguy hiểm nhất vì dẫn tới thói quen "chạy lại cho xanh".
 
 Verify: chạy lại **nguyên chunk `f–l`** (tái tạo đúng điều kiện tranh chấp) → **44/44 file ·
 1.022/1.022 test xanh**. Chi tiết: `RELEASE-06` §4.2/§4.3.
+
+### KI-024 — `foundation-audit.e2e-spec` đỏ-giả **vĩnh viễn** · S1 · ✅ ĐÃ ĐÓNG 2026-07-26 (`S6-QA-FINAL-1`)
+
+Cùng họ với KI-022/023 nhưng **nặng hơn**: nó **không** tự khỏi khi chạy lại. `ACTION_A`/`ACTION_B` là
+hằng cố định (`BE3SecretLeakA/B`) trong khi case `3f` đọc ở **System scope** (chéo tenant, RLS không
+khoanh) và assert `length === 1`. `audit_logs` **append-only** ⇒ chỉ cần một lần chạy bị ngắt (Ctrl-C
+hoặc crash worker KI-014) là hàng của lần đó nằm lại DB lane **vĩnh viễn**, mọi lần sau đếm ra 2 → đỏ.
+
+Fix: gắn `RUN_TAG = randomUUID().slice(0,8)` vào `action`, đúng idiom sẵn có
+(`audit-permission-deny.int-spec.ts:66`). Verify: chạy file đó **2 lần liên tiếp không dọn gì ở giữa** →
+8/8 xanh cả hai lần, `count(*) … LIKE 'BE3SecretLeak%'` = 0. Chi tiết: `S6-QA-FINAL-1-FINAL-QA-PASS` §8.1.
+
+### KI-025 — 98/346 đường dẫn API không có test HTTP nào chạm · S2 · phát hiện 2026-07-26 (`S6-QA-FINAL-1`)
+
+**Đo, không phải ước lượng:** 452 route thật (decorator NestJS) / 346 đường dẫn phân biệt, đối chiếu với
+mọi URL literal trong 446 file spec ⇒ **72% đường dẫn có test chạm, 28% không**.
+
+**Rủi ro thật là gì:** guard · `ZodValidationPipe` · response envelope của các route đó **chưa từng chạy
+trong test**. Hai bề mặt nghiệp vụ thật nằm trong nhóm này — `user-invites` (`/users/invite`,
+`/users/pending`, `/users/:id/approve|reject|suspend|reactivate`) và `POST/GET /hr/profile-change-requests`
+— đều được test **rất kỹ ở tầng service** (`new UserInvitesService(...)`, `profile-change-request.int-spec`)
+nên nhìn bảng coverage sẽ tưởng đã phủ.
+
+**Rủi ro KHÔNG phải là gì:** không phải "route bỏ ngỏ quyền". Trong 134 route chưa-test chỉ **9** route
+vừa thiếu `@RequirePermission` vừa thiếu `@Public()`, và đều thuộc nhóm self-scoped có chủ đích
+(`/auth/2fa/*`, `/auth/sessions/*`, `/me/*`) hoặc module CONTENT đã park — nhóm sau đã bị
+`route-guard-coverage.e2e-spec.ts` chặn hồi quy.
+
+**Workaround:** sweep tĩnh `route-guard-coverage.e2e-spec.ts` bắt được route MỚI quên gate.
+**Chủ:** Sau MVP (thêm test = việc mới, `RELEASE-05` §4.2 chặn sau freeze).
+**Bàn giao:** phán quyết từng dòng trong 35 route không-`@RequirePermission` thuộc `S6-SEC-1` (WS4 §13.2).
+
+### KI-026 — Nhãn `[BLOCKED]` trên test ĐANG XANH · S3 · ✅ ĐÃ ĐÓNG 2026-07-26 (`S6-QA-FINAL-1`)
+
+`attendance-adjustment.int.spec.ts` mang 9 dòng chú thích "KNOWN BROKEN" + tên test
+`… → 200 [BLOCKED — see comment above, service.ts bug]`, mô tả `detailInScope()` hard-code
+`orgUnitId/directManagerUserId = null`. **Bug đã sửa trong CHÍNH commit đưa test vào** (`80a1bcd5`,
+PR #81, 2026-07-02 — `detailInScope()` nạp employee thật qua `resolveRequestEmployee()`); chú thích
+không được gỡ. Test XANH suốt từ đó.
+
+Không phải defect, nhưng đủ để làm người đọc kết luận sai là ATT còn lỗi mở — đúng lớp rủi ro mà
+`RELEASE-06` §1 cảnh báo, chỉ theo chiều ngược lại: **"code đọc có vẻ hỏng" cũng không phải bằng chứng**.
+Fix: thay bằng ghi chú lịch sử + bỏ nhãn.
 
 ---
 

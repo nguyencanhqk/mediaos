@@ -5307,8 +5307,13 @@ export const backlog = [
       "QA final pass: regression + E2E + API contract + regression-theo-role + UAT final + điều kiện sign-off (WS3)",
     zone: "yellow",
     status: "todo",
+    // paths mở rộng thêm apps/api/src/**/*.spec.ts (2026-07-26, cùng lý do S6-STAB-1 ở trên): bộ spec
+    // tích hợp của ATT/LEAVE/HR nằm COLOCATED dưới src/ (memory vitest-unit-specs-must-be-colocated),
+    // nên "chỉ apps/api/test/**" không phủ nổi phần regression phải chạm. Khai HẸP tới *.spec.ts —
+    // KHÔNG mở apps/api/src/** — để WO này vẫn không có đường sửa code sản phẩm (paths lái gate).
     paths: [
       "apps/api/test/**",
+      "apps/api/src/**/*.spec.ts",
       "apps/app/src/**",
       "docs/QA/**",
       "docs/RELEASE/**",
