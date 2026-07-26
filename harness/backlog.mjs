@@ -5331,7 +5331,18 @@ export const backlog = [
       "Security / RBAC / Data-Protection final hardening: auth/session · RBAC · field masking · file access · audit · secret/config review (WS4) — crown",
     zone: "red",
     status: "todo",
-    paths: ["apps/api/src/**", "apps/api/test/**", "docs/_review/**", "docs/plans/S6-SEC-1.md"],
+    // paths bổ sung docs/RELEASE/** + harness/backlog.mjs (2026-07-26, plan-reviewer vòng 1 chặn):
+    // DoD của WS4 buộc cập nhật RELEASE-02 (sổ known-issue) và RELEASE-01 §5 (security readiness) khi
+    // trạng thái đổi, cộng backlog theo CLAUDE §8 — khai thiếu thì WO tự đẩy mình ra ngoài phạm vi ở
+    // đúng bước cuối. paths lái review gate + scheduler nên khai TRƯỚC khi bắt đầu, không sửa lén.
+    paths: [
+      "apps/api/src/**",
+      "apps/api/test/**",
+      "docs/_review/**",
+      "docs/RELEASE/**",
+      "docs/plans/S6-SEC-1.md",
+      "harness/backlog.mjs",
+    ],
     skills: ["code-review"],
     depends_on: ["S6-STAB-1"],
     src: ["IMP02-STORY-104/109", "IMPLEMENTATION-09 §13 (WS4)", "docs/permission-matrix-spec.md"],
