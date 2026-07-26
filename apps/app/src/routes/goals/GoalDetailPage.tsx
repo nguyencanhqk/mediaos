@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CheckCircle2, Lock, Pencil, Target, Trash2, Unlock } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Lock, Pencil, Split, Target, Trash2, Unlock } from "lucide-react";
 import {
   ApiError,
   goalApi,
@@ -25,13 +25,14 @@ import {
   TabsList,
   TabsTrigger,
 } from "@mediaos/ui";
-import { GOAL_ENGINE_PAIRS } from "./constants";
+import { GOAL_ENGINE_PAIRS, TASK_CREATE_PAIR_FOR_DECOMPOSE } from "./constants";
 import { formatPeriod } from "./goal-format";
 import { GoalFinalizedBadge, GoalLevelBadge, GoalStatusBadge } from "./components/GoalBadges";
 import { GoalProgressBar } from "./components/GoalProgressBar";
 import { GoalCheckinDialog } from "./components/GoalCheckinDialog";
 import { GoalFinalizeDialog } from "./components/GoalFinalizeDialog";
 import { GoalCheckinsTab } from "./components/GoalCheckinsTab";
+import { GoalDecomposeWizard } from "./components/GoalDecomposeWizard";
 import { GoalLinkedTasksTab } from "./components/GoalLinkedTasksTab";
 import { SimpleTable, TabError, TabSkeleton } from "./components/GoalTabPrimitives";
 
@@ -64,8 +65,15 @@ export function GoalDetailPage({ goalId, onEdit, onBack }: GoalDetailPageProps) 
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [finalizeOpen, setFinalizeOpen] = useState(false);
+  const [decomposeOpen, setDecomposeOpen] = useState(false);
 
   const canDelete = useCan(GOAL_ENGINE_PAIRS.DELETE.action, GOAL_ENGINE_PAIRS.DELETE.resourceType);
+  // S5-GOAL-TPL-1 — phân rã cần HAI cặp: ('update','goal') (PermissionGate bên dưới) VÀ ('create','task')
+  // (cổng thứ hai ở BE — GoalDecomposeService). Thiếu cặp TASK thì nút mở ra chỉ để ăn 403 ⇒ ẩn luôn.
+  const canCreateTask = useCan(
+    TASK_CREATE_PAIR_FOR_DECOMPOSE.action,
+    TASK_CREATE_PAIR_FOR_DECOMPOSE.resourceType,
+  );
 
   const goalQuery = useQuery({
     queryKey: goalKeys.detail(goalId),
@@ -161,6 +169,26 @@ export function GoalDetailPage({ goalId, onEdit, onBack }: GoalDetailPageProps) 
               {finalized ? t("checkinActions.reopen") : t("checkinActions.finalize")}
             </Button>
           </PermissionGate>
+          {/* Phân rã từ template (GOAL-SCREEN-004): cặp ('update','goal') + ('create','task'). Đã chốt
+              kỳ ⇒ disable (GOAL-ERR-005); Cancelled ⇒ disable (GOAL-ERR-009) — chặn trước ở client để
+              không đưa người dùng vào wizard rồi mới báo lỗi ở bước cuối. */}
+          {canCreateTask && (
+            <PermissionGate
+              action={GOAL_ENGINE_PAIRS.UPDATE.action}
+              resourceType={GOAL_ENGINE_PAIRS.UPDATE.resourceType}
+            >
+              <Button
+                size="sm"
+                variant="outline"
+                data-testid="goal-decompose-open"
+                disabled={finalized || goal.status === "Cancelled"}
+                onClick={() => setDecomposeOpen(true)}
+              >
+                <Split className="mr-2 h-4 w-4" />
+                {t("decompose.open")}
+              </Button>
+            </PermissionGate>
+          )}
           <PermissionGate
             action={GOAL_ENGINE_PAIRS.UPDATE.action}
             resourceType={GOAL_ENGINE_PAIRS.UPDATE.resourceType}
@@ -222,6 +250,9 @@ export function GoalDetailPage({ goalId, onEdit, onBack }: GoalDetailPageProps) 
       </Tabs>
 
       {checkinOpen && <GoalCheckinDialog goal={goal} onClose={() => setCheckinOpen(false)} />}
+      {decomposeOpen && (
+        <GoalDecomposeWizard goal={goal} onClose={() => setDecomposeOpen(false)} />
+      )}
       {finalizeOpen && (
         <GoalFinalizeDialog
           goal={goal}

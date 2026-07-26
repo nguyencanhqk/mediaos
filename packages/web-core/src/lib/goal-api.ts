@@ -21,6 +21,19 @@ import {
   type LinkGoalTasksRequest,
   goalTaskLinkResultSchema,
   type GoalTaskLinkResultDto,
+  // S5-GOAL-TPL-1 (APPEND) — Đợt D: danh mục template (GOAL-API-012) + phân rã (GOAL-API-011).
+  taskTemplateResponseSchema,
+  type TaskTemplateResponseDto,
+  taskTemplateItemResponseSchema,
+  type TaskTemplateItemResponseDto,
+  type CreateTaskTemplateRequest,
+  type UpdateTaskTemplateRequest,
+  type CreateTaskTemplateItemRequest,
+  type UpdateTaskTemplateItemRequest,
+  type ListTaskTemplatesQueryRequest,
+  decomposeGoalResultSchema,
+  type DecomposeGoalRequest,
+  type DecomposeGoalResultDto,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -131,4 +144,85 @@ export const goalApi = {
   /** DELETE /goals/:id/tasks/:taskId — tháo việc khỏi mục tiêu. Không gắn đúng mục tiêu này ⇒ 404. */
   unlinkTask: (id: string, taskId: string): Promise<GoalTaskLinkResultDto> =>
     apiFetch(`/goals/${id}/tasks/${taskId}`, goalTaskLinkResultSchema, { method: "DELETE" }),
+
+  // ── S5-GOAL-TPL-1 (APPEND) — phân rã từ template (GOAL-API-011) ───────────────────────────────
+
+  /**
+   * POST /goals/:id/decompose — tạo BULK việc từ template, TẤT-CẢ-HOẶC-KHÔNG (1 transaction ở server).
+   *
+   * `items` là danh sách CUỐI sau bước xem trước (đã sửa/xoá/thêm). NEO (dự án/phòng/nhân viên) KHÔNG
+   * gửi — server suy từ mục tiêu (SPEC-10 §12 GOAL-ERR-008), nên client KHÔNG được "giúp" bằng cách gửi
+   * projectId/departmentId: sẽ bị Zod `strict` loại và làm người đọc code tưởng client quyết được neo.
+   *
+   * Lỗi hay gặp: 422 GOAL-ERR-005 (đã chốt kỳ) · 422 GOAL-ERR-009 (Cancelled/rỗng/>50) ·
+   * 422 GOAL-ERR-008 (mục tiêu cá nhân, giao cho người khác) · 403 (thiếu `create:task`).
+   */
+  decompose: (id: string, body: DecomposeGoalRequest): Promise<DecomposeGoalResultDto> =>
+    apiFetch(`/goals/${id}/decompose`, decomposeGoalResultSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+};
+
+/**
+ * S5-GOAL-TPL-1 — danh mục task template (GOAL-API-012, gate `manage:task-template`). MIRROR BE
+ * `TaskTemplatesController`. Tài nguyên đứng RIÊNG (`/task-templates`) vì một danh mục dùng cho nhiều
+ * mục tiêu — không nằm dưới `/goals/:id`.
+ *
+ * MẢNG TRẦN cho mọi endpoint đọc danh sách (xem docblock `goalApi`): schema là `z.array(...)`, KHÔNG
+ * envelope. `GET /task-templates` KHÔNG trả `items` (chỉ `itemCount`) — mở chi tiết mới có items.
+ */
+export const taskTemplateApi = {
+  listTemplates: (
+    query?: Partial<ListTaskTemplatesQueryRequest>,
+  ): Promise<TaskTemplateResponseDto[]> =>
+    apiFetch(
+      `/task-templates${buildQueryString(query ?? {})}`,
+      z.array(taskTemplateResponseSchema),
+    ),
+
+  /** GET /task-templates/:id — KÈM items (nguồn preview của wizard phân rã). */
+  getTemplate: (id: string): Promise<TaskTemplateResponseDto> =>
+    apiFetch(`/task-templates/${id}`, taskTemplateResponseSchema),
+
+  createTemplate: (body: CreateTaskTemplateRequest): Promise<TaskTemplateResponseDto> =>
+    apiFetch("/task-templates", taskTemplateResponseSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateTemplate: (id: string, body: UpdateTaskTemplateRequest): Promise<TaskTemplateResponseDto> =>
+    apiFetch(`/task-templates/${id}`, taskTemplateResponseSchema, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  /** DELETE /task-templates/:id — xoá MỀM (204) + cascade mềm xuống việc mẫu. */
+  deleteTemplate: (id: string): Promise<void> =>
+    apiFetch(`/task-templates/${id}`, z.void(), { method: "DELETE" }),
+
+  listItems: (templateId: string): Promise<TaskTemplateItemResponseDto[]> =>
+    apiFetch(`/task-templates/${templateId}/items`, z.array(taskTemplateItemResponseSchema)),
+
+  createItem: (
+    templateId: string,
+    body: CreateTaskTemplateItemRequest,
+  ): Promise<TaskTemplateItemResponseDto> =>
+    apiFetch(`/task-templates/${templateId}/items`, taskTemplateItemResponseSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateItem: (
+    templateId: string,
+    itemId: string,
+    body: UpdateTaskTemplateItemRequest,
+  ): Promise<TaskTemplateItemResponseDto> =>
+    apiFetch(`/task-templates/${templateId}/items/${itemId}`, taskTemplateItemResponseSchema, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  deleteItem: (templateId: string, itemId: string): Promise<void> =>
+    apiFetch(`/task-templates/${templateId}/items/${itemId}`, z.void(), { method: "DELETE" }),
 };

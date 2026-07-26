@@ -83,6 +83,8 @@ export default {
     goalNew: "Tạo mục tiêu",
     goalDetail: "Chi tiết mục tiêu",
     goalEdit: "Sửa mục tiêu",
+    // S5-GOAL-TPL-1 — GOAL-SCREEN-006 (danh mục việc mẫu, gate manage:task-template).
+    goalTaskTemplates: "Danh mục việc mẫu",
     notifications: "Thông báo",
     system: "Hệ thống",
     systemUsers: "Người dùng",

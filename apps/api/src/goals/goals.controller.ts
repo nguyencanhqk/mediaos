@@ -20,9 +20,12 @@ import { GoalsService } from "./goals.service";
 // S5-GOAL-BE-2 — vòng đo (check-in/chốt kỳ/gắn-tháo task) nằm ở service RIÊNG; controller chỉ định tuyến.
 import { GoalCheckinService } from "./goal-checkin.service";
 import { GoalTasksLinkService } from "./goal-tasks-link.service";
+// S5-GOAL-TPL-1 — phân rã từ template (GOAL-API-011): service RIÊNG (nó cầm 3 pha + tx bulk).
+import { GoalDecomposeService } from "./goal-decompose.service";
 import {
   CheckinGoalDto,
   CreateGoalDto,
+  DecomposeGoalDto,
   FinalizeGoalDto,
   GoalTreeQueryDto,
   LinkGoalTasksDto,
@@ -53,6 +56,7 @@ export class GoalsController {
     private readonly goals: GoalsService,
     private readonly checkin: GoalCheckinService,
     private readonly links: GoalTasksLinkService,
+    private readonly decomposeService: GoalDecomposeService,
   ) {}
 
   /** GET /goals — danh sách (GOAL-API-001). Scope: nhân viên/trưởng đơn vị @Department · admin @Company. */
@@ -181,5 +185,30 @@ export class GoalsController {
     @Param("taskId") taskId: string,
   ) {
     return this.links.unlinkTask(req.user, id, taskId);
+  }
+
+  // ── S5-GOAL-TPL-1 — phân rã từ template (GOAL-API-011) ──────────────────────────
+
+  /**
+   * POST /goals/:id/decompose — tạo BULK task từ template trong MỘT transaction (GOAL-FUNC-007).
+   *
+   * Cặp quyền ở route = `('update','goal')` (phân rã đổi TẬP ĐO của mục tiêu — cùng lý lẽ với gắn task,
+   * SPEC-10 §11 không định nghĩa cặp riêng). Cổng THỨ HAI `('create','task')` + `('update-state','task')`
+   * do service gọi `TaskCoreService.resolveCreateGate` — KHÔNG khai ở đây vì `@RequirePermission` chỉ
+   * nhận một cặp, và ghép cặp TASK vào route sẽ chặn cả người có quyền mục tiêu nhưng đọc-only ở TASK
+   * bằng 403 sai chỗ (service trả lỗi đúng ngữ cảnh hơn).
+   *
+   * 422 `GOAL-ERR-005` (đã chốt kỳ) · 422 `GOAL-ERR-009` (Cancelled/rỗng/>50) · 422 `GOAL-ERR-008`
+   * (mục tiêu cá nhân, assignee khác) · 404 (mục tiêu/template của công ty khác).
+   */
+  @Post(":id/decompose")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "goal")
+  decompose(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Body() dto: DecomposeGoalDto,
+  ) {
+    return this.decomposeService.decompose(req.user, id, dto);
   }
 }

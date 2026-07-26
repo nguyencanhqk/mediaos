@@ -7709,6 +7709,11 @@ export const backlog = [
       "packages/contracts/src/goal.ts",
       "apps/app/src/routes/goals/**",
       "apps/app/src/i18n/**",
+      // Thực thi 2026-07-26: 3 vùng seed-thiếu (memory wo-paths-drive-gate-and-scheduler) —
+      // web-core (api-client + query keys + routeTitle i18n) và router.tsx (route /goals/templates)
+      // BẮT BUỘC phải chạm để màn hình sống được; khai đủ để gate soi đúng diff.
+      "packages/web-core/src/**",
+      "apps/app/src/router.tsx",
       "apps/api/test/integration/**",
       "docs/plans/S5-GOAL-TPL-1.md",
     ],

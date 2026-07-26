@@ -347,7 +347,17 @@ export class TaskCoreService {
 
   // ── Create ─────────────────────────────────────────────────────────────────────
 
-  async createTask(user: RequestUser, dto: CreateTaskCoreRequest): Promise<TaskCoreResponseDto> {
+  /**
+   * PRE-FLIGHT của đường tạo task — gate cặp quyền, KHÔNG chạm dữ liệu. Tách khỏi `createTask`
+   * (S5-GOAL-TPL-1) để phân rã mục tiêu (`GoalDecomposeService`, GOAL-API-011) đi qua **đúng cùng cổng**
+   * thay vì tự resolve cặp quyền theo cách riêng — hai bản sao của luật gate là bản sao sẽ trôi.
+   *
+   * ⚠️ GỌI NGOÀI tx (resolveAndAssert tự mở connection riêng) và TRƯỚC khi cấp mã task.
+   */
+  async resolveCreateGate(
+    user: RequestUser,
+    dto: Pick<CreateTaskCoreRequest, "stateId" | "projectId" | "parentTaskId">,
+  ): Promise<DataScope> {
     // Gate + scope (double-gate với PermissionGuard controller — defense-in-depth). Company/System = toàn tenant.
     const createScope = await this.dataScope.resolveAndAssert(
       user.id,
@@ -364,6 +374,11 @@ export class TaskCoreService {
       // nuốt im lặng: client gửi stateId cho việc con là hiểu sai mô hình, phải biết ngay.
       if (dto.parentTaskId) throw new BadRequestException(ERR.STATE_INVALID);
     }
+    return createScope;
+  }
+
+  async createTask(user: RequestUser, dto: CreateTaskCoreRequest): Promise<TaskCoreResponseDto> {
+    const createScope = await this.resolveCreateGate(user, dto);
     // S5-NOTI-FIX-2 / S5-TASK-HRCODE-1: cấp task_code Ở TX RIÊNG TRƯỚC business tx (mirror
     // allocateEmployeeCode) — counter FOR UPDATE serialize (0 dup) rồi COMMIT ngay, KHÔNG giữ lock suốt tx
     // insert dài. Rollback business tx ⇒ mã bị "đốt" (gap OK). Ném TRƯỚC insert nếu không cấp được ⇒ KHÔNG
@@ -371,178 +386,215 @@ export class TaskCoreService {
     // lỗi Inactive→409 với HR task (leave/attendance-adjustment). POST /tasks nay trả 409 (không 500 raw).
     const taskCode = await allocateTaskCodeOutsideTx(this.db, this.sequence, user.companyId);
     return this.db.withTenant(user.companyId, async (tx) => {
-      const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
-
-      // ── S5-TASK-SUBTASK-1 (DECISIONS-05 D-31/D-36) — TẠO VIỆC CON ──────────────────────────────
-      // ⚠️ `effectiveProjectId` PHẢI thay `dto.projectId` ở MỌI cửa bên dưới. Việc con thường chỉ gửi
-      // parentTaskId (dự án suy từ cha); nếu các cửa vẫn key theo `dto.projectId` thì lọt 4 lỗ:
-      //   (i) assertProjectUsable bị skip ⇒ TẠO ĐƯỢC việc con trong dự án ĐÃ ĐÓNG (bypass PROJECT_CLOSED);
-      //   (ii) nhánh CREATE_ASSIGNEE_REQUIRED bắn 403 oan cho việc con không có người thực hiện;
-      //   (iii) assertProjectRoleTx bị skip ⇒ scope<Company không bị kiểm Owner/Manager;
-      //   (iv) assignee đi nhánh org-scope thay vì scope-dự-án ⇒ vỡ ca dùng CHÍNH của D-27
-      //        (Manager dự án giao việc cho member ngoài team mình).
-      const isOrgWideCreate = createScope === "Company" || createScope === "System";
-      let parentProjectId: string | null = null;
-      if (dto.parentTaskId) {
-        // ⚠️ AUTHORIZE CHA TRƯỚC MỌI KIỂM CẤU TRÚC — nếu không, chuỗi lỗi phía dưới thành ORACLE DÒ
-        // TRẠNG THÁI: cùng một UUID đoán được, actor chỉ có create:task@Own phân biệt được
-        // 404(không tồn tại/khác tenant) · 400-044(tồn tại VÀ là việc con) · 400-046(tồn tại, gốc,
-        // khác dự án) · 400 PROJECT_CLOSED(dự án đã đóng) · 403(không phải Owner/Manager) — tức đọc
-        // được nhiều bit về task/dự án NGOÀI phạm vi dữ liệu của mình. `assertInScopeForWrite` gộp
-        // "không tồn tại" và "ngoài phạm vi" vào CÙNG một 404 (đúng quy ước 404-trước-403 của D-29).
-        // Company/System bỏ qua (họ vốn thấy toàn tenant nên không có gì để rò).
-        if (!isOrgWideCreate) {
-          await this.assertInScopeForWrite(tx, user, dto.parentTaskId, createScope);
-        }
-        // Khoá cha + kiểm bất biến cây TRƯỚC mọi ghi (D-33). taskId = null: task chưa tồn tại nên luật
-        // (d) không áp; oldParent = null.
-        ({ effectiveProjectId: parentProjectId } = await this.assertParentAssignable(
-          tx,
-          user.companyId,
-          null,
-          dto.parentTaskId,
-          null,
-        ));
-        // Dự án của con do CHA quyết. Gửi kèm projectId mà lệch ⇒ 400 (KHÔNG âm thầm ghi đè).
-        if (dto.projectId && dto.projectId !== parentProjectId) {
-          throw new BadRequestException(ERR.SUBTASK_PROJECT_MISMATCH);
-        }
-      }
-      const effectiveProjectId = dto.parentTaskId ? parentProjectId : (dto.projectId ?? null);
-
-      if (effectiveProjectId)
-        await this.assertProjectUsable(tx, user.companyId, effectiveProjectId);
-      if (dto.departmentId) await this.assertDepartment(tx, user.companyId, dto.departmentId);
-
-      // S5-TASK-PROJROLE-1 — CREATE-SCOPE (D-27, điều kiện un-defer create:task ghi ở
-      // task-permissions.const.ts:80-83 'grant CÙNG release với enforcement'):
-      //   scope Own/Team + KHÔNG projectId ⇒ task cá nhân/đội — assignee BẮT BUỘC và phải thoả
-      //     org-scope (resolveAssignee bên dưới: Own = chính mình, Team = trong team; 403 out-of-scope).
-      //     Thiếu assignee ⇒ 403 (task vô chủ không nằm trong phạm vi nhìn thấy của chính người tạo —
-      //     buildReadScopeExists không có nhánh creator).
-      //   scope Own/Team + projectId ⇒ actor PHẢI là Active member Owner/Manager của dự án (D-24 hàng
-      //     'Tạo task trong dự án'); assignee (nếu có) PHẢI là Active member CÙNG dự án (400) — thay
-      //     cho org-scope check (Manager dự án giao việc cho member ngoài team mình là ca dùng CHÍNH).
-      //   scope Company/System ⇒ hành vi cũ nguyên vẹn (kể cả warning-only assignee ngoài dự án).
-      const isOrgWide = createScope === "Company" || createScope === "System";
-      if (!isOrgWide && !effectiveProjectId && !dto.assigneeEmployeeId) {
-        throw new ForbiddenException(ERR.CREATE_ASSIGNEE_REQUIRED);
-      }
-      if (!isOrgWide && effectiveProjectId) {
-        await this.projectAccess.assertProjectRoleTx(
-          tx,
-          user,
-          effectiveProjectId,
-          actorEmp?.id ?? null,
-          ["Owner", "Manager"],
-        );
-      }
-      // (Quyền GHI trên CHA đã được kiểm Ở TRÊN, trước mọi kiểm cấu trúc — xem ghi chú oracle ở đó.
-      // KHÔNG chuyển xuống đây lại: thứ tự chính là nội dung của chốt này.)
-
-      const assignee = dto.assigneeEmployeeId
-        ? !isOrgWide && effectiveProjectId
-          ? await this.resolveAssigneeForProject(
-              tx,
-              user,
-              dto.assigneeEmployeeId,
-              effectiveProjectId,
-            )
-          : await this.resolveAssignee(tx, user, createScope, dto.assigneeEmployeeId)
-        : null;
-
-      // S5-TASK-PIPELINE-1 — cột + status khởi tạo (plan 1/3c, API-06 §26.2#15):
-      //   stateId tường minh ⇒ validate thuộc ĐÚNG project (404/400) + status suy từ nhóm (KHÔNG
-      //   hardcode 'Todo' — chống desync-lúc-sinh); không ⇒ is_default của project, status CŨNG suy
-      //   từ nhóm cột đó (hardening F4 gate: is_default/state_group mutable qua PATCH /states/:id —
-      //   default thường là unstarted ⇒ 'Todo' như acceptance, nhưng nếu admin flip default sang cột
-      //   nhóm khác thì status theo cột, KHÔNG sinh thẻ desync-lúc-sinh).
-      // S5-TASK-SUBTASK-1 (D-36) — VIỆC CON BỎ QUA TOÀN BỘ nhánh cột: state_id NULL và status khởi tạo
-      // 'Todo' (không suy từ cột vì con không có cột). Nhánh is_default bên dưới cũng phải bị bỏ qua —
-      // nếu không, con sẽ được gán cột mặc định của dự án và hiện lên board ngay lúc tạo.
-      let stateId: string | null = null;
-      let initialStatus: TaskCoreStatus = "Todo";
-      if (!dto.parentTaskId) {
-        if (dto.stateId !== undefined && effectiveProjectId) {
-          const state = await this.repo.findStateForWriteTx(tx, user.companyId, dto.stateId);
-          if (!state) throw new NotFoundException(ERR.STATE_NOT_FOUND);
-          if (state.projectId !== effectiveProjectId) {
-            throw new BadRequestException(ERR.STATE_INVALID);
-          }
-          stateId = state.id;
-          initialStatus = this.statusForGroup(state.stateGroup);
-        } else if (effectiveProjectId) {
-          const fallback = await this.repo.findDefaultStateTx(
-            tx,
-            user.companyId,
-            effectiveProjectId,
-          );
-          stateId = fallback?.id ?? null; // project 0 state ⇒ NULL (hợp lệ)
-          if (fallback) initialStatus = this.statusForGroup(fallback.stateGroup);
-        }
-      }
-
-      const created = await this.repo.insertTaskCoreTx(tx, user.companyId, {
-        title: dto.title,
-        description: dto.description ?? null,
-        projectId: effectiveProjectId,
-        parentTaskId: dto.parentTaskId ?? null,
-        departmentId: dto.departmentId ?? null,
-        mainAssigneeEmployeeId: assignee?.employeeId ?? null,
-        assigneeUserId: assignee?.userId ?? null,
-        reporterEmployeeId: actorEmp?.id ?? null,
-        taskPriority: dto.priority ?? null,
-        dueAt: dto.dueAt ?? null,
-        startAt: dto.startAt ?? null,
-        creatorUserId: user.id,
-        createdBy: user.id,
-        taskCode,
-        stateId,
-        taskStatus: initialStatus,
-      });
-
-      await this.activity.record(tx, {
-        action: "TASK_CREATED",
-        targetType: "Task",
-        targetId: created.id,
-        taskId: created.id,
-        projectId: effectiveProjectId,
-        actorUserId: user.id,
-        actorEmployeeId: actorEmp?.id ?? null,
-        newValues: {
-          title: dto.title,
-          status: initialStatus,
-          stateId,
-          assigneeEmployeeId: assignee?.employeeId ?? null,
-          projectId: effectiveProjectId,
-          parentTaskId: dto.parentTaskId ?? null,
-        },
-        message: `Tạo công việc ${dto.title}`,
-      });
-      await this.audit.record(tx, {
-        action: "TaskCreated",
-        objectType: "task",
-        objectId: created.id,
-        actorUserId: user.id,
-        after: {
-          title: dto.title,
-          status: initialStatus,
-          stateId,
-          assigneeEmployeeId: assignee?.employeeId ?? null,
-          projectId: effectiveProjectId,
-          parentTaskId: dto.parentTaskId ?? null,
-        },
-      });
-
-      // S5-GOAL-BE-2 (SPEC-10 §13.3) — VIỆC MỚI LÀM ĐỔI MẪU SỐ của mục tiêu mode='project' trong dự án
-      // đó (đếm-lá D-35: thêm việc con còn làm CHA rớt khỏi tập lá). Không móc ở đây thì tiến độ mục
-      // tiêu đứng yên cho tới lần đổi trạng thái đầu tiên hoặc tới lượt job đêm — sai trong nhiều giờ
-      // mà nhìn vẫn "hợp lý". Task mới KHÔNG thể mang sẵn `goal_id` (DTO không có field đó) nên chỉ
-      // cần nhánh 'project'.
-      await this.goalProgress.recomputeProjectGoalsTx(tx, user.companyId, effectiveProjectId);
-
+      const created = await this.createTaskInTx(tx, user, dto, { createScope, taskCode });
       return this.reload(tx, user.companyId, created.id);
     });
+  }
+
+  /**
+   * THÂN TRANSACTION của đường tạo task — nhận `tx` của caller nên **N task tạo trong 1 transaction**
+   * (S5-GOAL-TPL-1: phân rã mục tiêu phải rollback HẾT nếu fail giữa chừng; gọi `createTask` 50 lần =
+   * 50 transaction ⇒ vỡ yêu cầu đó).
+   *
+   * Đây là phép DI CHUYỂN THUẦN thân `createTask` cũ — KHÔNG đổi luật, KHÔNG đổi thứ tự kiểm tra (thứ tự
+   * chính là nội dung của chốt oracle-dò-trạng-thái bên dưới). Caller PHẢI:
+   *   • gọi `resolveCreateGate` TRƯỚC (ngoài tx) và truyền `ctx.createScope`;
+   *   • cấp `ctx.taskCode` qua `allocateTaskCodeOutsideTx` TRƯỚC khi mở tx.
+   *
+   * `ctx.goalId` — gắn mục tiêu NGAY lúc INSERT (task phân rã tự mang `goal_id`, SPEC-10 §10 FUNC-007).
+   * `ctx.deferGoalRecompute` — bỏ recompute ở CUỐI hàm để caller bulk recompute MỘT LẦN sau vòng lặp
+   * (50 lần recompute cùng dự án trong 1 tx là công vô ích; caller PHẢI tự gọi, xem GoalDecomposeService).
+   */
+  async createTaskInTx(
+    tx: TenantTx,
+    user: RequestUser,
+    dto: CreateTaskCoreRequest,
+    ctx: {
+      createScope: DataScope;
+      taskCode: string;
+      goalId?: string | null;
+      deferGoalRecompute?: boolean;
+    },
+  ): Promise<{ id: string; taskCode: string }> {
+    const createScope = ctx.createScope;
+    const taskCode = ctx.taskCode;
+    const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
+
+    // ── S5-TASK-SUBTASK-1 (DECISIONS-05 D-31/D-36) — TẠO VIỆC CON ──────────────────────────────
+    // ⚠️ `effectiveProjectId` PHẢI thay `dto.projectId` ở MỌI cửa bên dưới. Việc con thường chỉ gửi
+    // parentTaskId (dự án suy từ cha); nếu các cửa vẫn key theo `dto.projectId` thì lọt 4 lỗ:
+    //   (i) assertProjectUsable bị skip ⇒ TẠO ĐƯỢC việc con trong dự án ĐÃ ĐÓNG (bypass PROJECT_CLOSED);
+    //   (ii) nhánh CREATE_ASSIGNEE_REQUIRED bắn 403 oan cho việc con không có người thực hiện;
+    //   (iii) assertProjectRoleTx bị skip ⇒ scope<Company không bị kiểm Owner/Manager;
+    //   (iv) assignee đi nhánh org-scope thay vì scope-dự-án ⇒ vỡ ca dùng CHÍNH của D-27
+    //        (Manager dự án giao việc cho member ngoài team mình).
+    const isOrgWideCreate = createScope === "Company" || createScope === "System";
+    let parentProjectId: string | null = null;
+    if (dto.parentTaskId) {
+      // ⚠️ AUTHORIZE CHA TRƯỚC MỌI KIỂM CẤU TRÚC — nếu không, chuỗi lỗi phía dưới thành ORACLE DÒ
+      // TRẠNG THÁI: cùng một UUID đoán được, actor chỉ có create:task@Own phân biệt được
+      // 404(không tồn tại/khác tenant) · 400-044(tồn tại VÀ là việc con) · 400-046(tồn tại, gốc,
+      // khác dự án) · 400 PROJECT_CLOSED(dự án đã đóng) · 403(không phải Owner/Manager) — tức đọc
+      // được nhiều bit về task/dự án NGOÀI phạm vi dữ liệu của mình. `assertInScopeForWrite` gộp
+      // "không tồn tại" và "ngoài phạm vi" vào CÙNG một 404 (đúng quy ước 404-trước-403 của D-29).
+      // Company/System bỏ qua (họ vốn thấy toàn tenant nên không có gì để rò).
+      if (!isOrgWideCreate) {
+        await this.assertInScopeForWrite(tx, user, dto.parentTaskId, createScope);
+      }
+      // Khoá cha + kiểm bất biến cây TRƯỚC mọi ghi (D-33). taskId = null: task chưa tồn tại nên luật
+      // (d) không áp; oldParent = null.
+      ({ effectiveProjectId: parentProjectId } = await this.assertParentAssignable(
+        tx,
+        user.companyId,
+        null,
+        dto.parentTaskId,
+        null,
+      ));
+      // Dự án của con do CHA quyết. Gửi kèm projectId mà lệch ⇒ 400 (KHÔNG âm thầm ghi đè).
+      if (dto.projectId && dto.projectId !== parentProjectId) {
+        throw new BadRequestException(ERR.SUBTASK_PROJECT_MISMATCH);
+      }
+    }
+    const effectiveProjectId = dto.parentTaskId ? parentProjectId : (dto.projectId ?? null);
+
+    if (effectiveProjectId)
+      await this.assertProjectUsable(tx, user.companyId, effectiveProjectId);
+    if (dto.departmentId) await this.assertDepartment(tx, user.companyId, dto.departmentId);
+
+    // S5-TASK-PROJROLE-1 — CREATE-SCOPE (D-27, điều kiện un-defer create:task ghi ở
+    // task-permissions.const.ts:80-83 'grant CÙNG release với enforcement'):
+    //   scope Own/Team + KHÔNG projectId ⇒ task cá nhân/đội — assignee BẮT BUỘC và phải thoả
+    //     org-scope (resolveAssignee bên dưới: Own = chính mình, Team = trong team; 403 out-of-scope).
+    //     Thiếu assignee ⇒ 403 (task vô chủ không nằm trong phạm vi nhìn thấy của chính người tạo —
+    //     buildReadScopeExists không có nhánh creator).
+    //   scope Own/Team + projectId ⇒ actor PHẢI là Active member Owner/Manager của dự án (D-24 hàng
+    //     'Tạo task trong dự án'); assignee (nếu có) PHẢI là Active member CÙNG dự án (400) — thay
+    //     cho org-scope check (Manager dự án giao việc cho member ngoài team mình là ca dùng CHÍNH).
+    //   scope Company/System ⇒ hành vi cũ nguyên vẹn (kể cả warning-only assignee ngoài dự án).
+    const isOrgWide = createScope === "Company" || createScope === "System";
+    if (!isOrgWide && !effectiveProjectId && !dto.assigneeEmployeeId) {
+      throw new ForbiddenException(ERR.CREATE_ASSIGNEE_REQUIRED);
+    }
+    if (!isOrgWide && effectiveProjectId) {
+      await this.projectAccess.assertProjectRoleTx(
+        tx,
+        user,
+        effectiveProjectId,
+        actorEmp?.id ?? null,
+        ["Owner", "Manager"],
+      );
+    }
+    // (Quyền GHI trên CHA đã được kiểm Ở TRÊN, trước mọi kiểm cấu trúc — xem ghi chú oracle ở đó.
+    // KHÔNG chuyển xuống đây lại: thứ tự chính là nội dung của chốt này.)
+
+    const assignee = dto.assigneeEmployeeId
+      ? !isOrgWide && effectiveProjectId
+        ? await this.resolveAssigneeForProject(
+            tx,
+            user,
+            dto.assigneeEmployeeId,
+            effectiveProjectId,
+          )
+        : await this.resolveAssignee(tx, user, createScope, dto.assigneeEmployeeId)
+      : null;
+
+    // S5-TASK-PIPELINE-1 — cột + status khởi tạo (plan 1/3c, API-06 §26.2#15):
+    //   stateId tường minh ⇒ validate thuộc ĐÚNG project (404/400) + status suy từ nhóm (KHÔNG
+    //   hardcode 'Todo' — chống desync-lúc-sinh); không ⇒ is_default của project, status CŨNG suy
+    //   từ nhóm cột đó (hardening F4 gate: is_default/state_group mutable qua PATCH /states/:id —
+    //   default thường là unstarted ⇒ 'Todo' như acceptance, nhưng nếu admin flip default sang cột
+    //   nhóm khác thì status theo cột, KHÔNG sinh thẻ desync-lúc-sinh).
+    // S5-TASK-SUBTASK-1 (D-36) — VIỆC CON BỎ QUA TOÀN BỘ nhánh cột: state_id NULL và status khởi tạo
+    // 'Todo' (không suy từ cột vì con không có cột). Nhánh is_default bên dưới cũng phải bị bỏ qua —
+    // nếu không, con sẽ được gán cột mặc định của dự án và hiện lên board ngay lúc tạo.
+    let stateId: string | null = null;
+    let initialStatus: TaskCoreStatus = "Todo";
+    if (!dto.parentTaskId) {
+      if (dto.stateId !== undefined && effectiveProjectId) {
+        const state = await this.repo.findStateForWriteTx(tx, user.companyId, dto.stateId);
+        if (!state) throw new NotFoundException(ERR.STATE_NOT_FOUND);
+        if (state.projectId !== effectiveProjectId) {
+          throw new BadRequestException(ERR.STATE_INVALID);
+        }
+        stateId = state.id;
+        initialStatus = this.statusForGroup(state.stateGroup);
+      } else if (effectiveProjectId) {
+        const fallback = await this.repo.findDefaultStateTx(
+          tx,
+          user.companyId,
+          effectiveProjectId,
+        );
+        stateId = fallback?.id ?? null; // project 0 state ⇒ NULL (hợp lệ)
+        if (fallback) initialStatus = this.statusForGroup(fallback.stateGroup);
+      }
+    }
+
+    const created = await this.repo.insertTaskCoreTx(tx, user.companyId, {
+      title: dto.title,
+      description: dto.description ?? null,
+      projectId: effectiveProjectId,
+      parentTaskId: dto.parentTaskId ?? null,
+      departmentId: dto.departmentId ?? null,
+      mainAssigneeEmployeeId: assignee?.employeeId ?? null,
+      assigneeUserId: assignee?.userId ?? null,
+      reporterEmployeeId: actorEmp?.id ?? null,
+      taskPriority: dto.priority ?? null,
+      dueAt: dto.dueAt ?? null,
+      startAt: dto.startAt ?? null,
+      creatorUserId: user.id,
+      createdBy: user.id,
+      taskCode,
+      stateId,
+      taskStatus: initialStatus,
+      // S5-GOAL-TPL-1 — task sinh từ phân rã mang `goal_id` NGAY lúc INSERT (KHÔNG insert rồi UPDATE:
+      // hai bước sẽ để lộ một khoảnh khắc task chưa gắn mục tiêu cho recompute/reader đọc thấy).
+      goalId: ctx.goalId ?? null,
+    });
+
+    await this.activity.record(tx, {
+      action: "TASK_CREATED",
+      targetType: "Task",
+      targetId: created.id,
+      taskId: created.id,
+      projectId: effectiveProjectId,
+      actorUserId: user.id,
+      actorEmployeeId: actorEmp?.id ?? null,
+      newValues: {
+        title: dto.title,
+        status: initialStatus,
+        stateId,
+        assigneeEmployeeId: assignee?.employeeId ?? null,
+        projectId: effectiveProjectId,
+        parentTaskId: dto.parentTaskId ?? null,
+      },
+      message: `Tạo công việc ${dto.title}`,
+    });
+    await this.audit.record(tx, {
+      action: "TaskCreated",
+      objectType: "task",
+      objectId: created.id,
+      actorUserId: user.id,
+      after: {
+        title: dto.title,
+        status: initialStatus,
+        stateId,
+        assigneeEmployeeId: assignee?.employeeId ?? null,
+        projectId: effectiveProjectId,
+        parentTaskId: dto.parentTaskId ?? null,
+      },
+    });
+
+    // S5-GOAL-BE-2 (SPEC-10 §13.3) — VIỆC MỚI LÀM ĐỔI MẪU SỐ của mục tiêu mode='project' trong dự án
+    // đó (đếm-lá D-35: thêm việc con còn làm CHA rớt khỏi tập lá). Không móc ở đây thì tiến độ mục
+    // tiêu đứng yên cho tới lần đổi trạng thái đầu tiên hoặc tới lượt job đêm — sai trong nhiều giờ
+    // mà nhìn vẫn "hợp lý".
+    // S5-GOAL-TPL-1: phân rã tạo N task CÙNG dự án ⇒ caller hoãn để recompute MỘT LẦN sau vòng lặp
+    // (kết quả y hệt — recompute là hàm của trạng thái cuối, không tích luỹ).
+    if (!ctx.deferGoalRecompute) {
+      await this.goalProgress.recomputeProjectGoalsTx(tx, user.companyId, effectiveProjectId);
+    }
+
+    return { id: created.id, taskCode };
   }
 
   // ── Update (KHÔNG đổi status — action riêng ngoài phạm vi WO) ────────────────────
