@@ -1,128 +1,145 @@
 /**
- * S5-BRAND review-2 (MEDIUM) — GUARD COVERAGE: mọi route của một controller ĐÃ GATE đều phải được gate.
+ * GUARD COVERAGE + CENSUS RUNTIME — mọi route KHÔNG gate phải mang một phán quyết CÓ CHỮ KÝ.
  *
- * VÌ SAO CÓ FILE NÀY. `CompanyBrandingController` chuyển `@UseGuards(PermissionGuard)` từ CẤP CLASS sang
- * THEO ROUTE (bắt buộc: guard fail-closed 403 khi route thiếu `@RequirePermission`, nên route đọc
- * authenticated-only phải nằm NGOÀI guard). Hệ quả là **mặc định của controller đó lật từ fail-closed sang
- * fail-open**:
+ * VÌ SAO CÓ FILE NÀY (S5-BRAND review-2). `CompanyBrandingController` chuyển `@UseGuards(PermissionGuard)`
+ * từ CẤP CLASS sang THEO ROUTE (bắt buộc: guard fail-closed 403 khi route thiếu `@RequirePermission`, nên
+ * route đọc authenticated-only phải nằm NGOÀI guard). Hệ quả là **mặc định của controller đó lật từ
+ * fail-closed sang fail-open**:
  *   - guard cấp class  → route mới quên `@RequirePermission` = 403 (an toàn, ồn ào, sửa ngay).
  *   - guard theo route → route mới quên `@UseGuards`         = MỞ CHO MỌI USER ĐÃ ĐĂNG NHẬP, IM LẶNG.
- * Không có test nào trong repo bắt được lớp lỗi này (đã grep). Đây là test đó.
  *
- * QUY TẮC (cố ý HẸP để không ồn): CHỈ soi controller đã có ÍT NHẤT MỘT route mang `@RequirePermission`
- * — tức controller "có ý định gate". Trong controller đó, MỌI route khác PHẢI hoặc (a) có
- * `@RequirePermission`, hoặc (b) có `@Public()`, hoặc (c) nằm trong `INTENTIONALLY_UNGATED` dưới đây kèm
- * lý do. Controller hoàn toàn không gate (auth/login, health probe…) NẰM NGOÀI phạm vi — chúng có mô hình
- * bảo mật riêng và ép chúng vào đây chỉ tạo allow-list rác.
+ * VÌ SAO FILE NÀY ĐƯỢC VIẾT LẠI (S6-SEC-ROUTEMAP-1). Bản đầu chỉ soi **MUTATION** của **controller đã
+ * gate** — `.filter((r) => r.httpMethod !== "GET")`. Lý do khi đó nghe hợp lý ("quy ước nhà: GHI thì gate,
+ * ĐỌC mở cho thành viên tenant") nhưng nó chính là chỗ **KI-030 lọt qua mọi lưới**: `GET /org/employees`,
+ * `GET /org/teams`, `GET /org/teams/:id/members` lộ danh bạ + cơ cấu team toàn tenant cho mọi user đã đăng
+ * nhập, và không lưới nào kêu. Bộ lọc GET đã bị GỠ. Thay vào đó: **census 100% route** + sổ phán quyết
+ * (`route-verdicts.ts`) — route đọc mới không gate giờ làm ĐỎ test thay vì đi qua trong im lặng.
  *
- * KHÔNG cần Postgres — chỉ scan metadata (mirror openapi-docs.e2e-spec). Vì vậy KHÔNG skipIf(!hasDb):
- * test này PHẢI chạy trong suite mặc định `pnpm test` để CI thực sự gác.
+ * PHẠM VI PHÁN QUYẾT = mọi route không `@RequirePermission`, **kể cả `@Public`**. `@Public` bỏ qua CẢ
+ * JwtAuthGuard lẫn CompanyGuard nên nó là mức rủi ro cao nhất, không phải mức được miễn ký.
+ *
+ * KHÔNG cần Postgres — chỉ boot + đọc metadata. Vì vậy KHÔNG `skipIf(!hasDb)`: test này PHẢI chạy trong
+ * suite mặc định `pnpm test` để CI thực sự gác.
  */
 
-import "reflect-metadata";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { INestApplication } from "@nestjs/common";
-import { PATH_METADATA, METHOD_METADATA } from "@nestjs/common/constants";
-import { DiscoveryService, MetadataScanner } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../../src/app.module";
-import { IS_PUBLIC } from "../../src/permission/public.decorator";
-import { REQUIRE_PERMISSION } from "../../src/permission/require-permission.decorator";
-
-const HTTP_METHOD_NAME = [
-  "GET",
-  "POST",
-  "PUT",
-  "DELETE",
-  "PATCH",
-  "ALL",
-  "OPTIONS",
-  "HEAD",
-] as const;
+import {
+  GLOBAL_PREFIX,
+  collectRoutes,
+  isUngated,
+  routeKey,
+  type RouteInfo,
+} from "./route-census";
+import { FROZEN_GAPS, ROUTE_VERDICTS, type Verdict } from "./route-verdicts";
 
 /**
- * BASELINE NỢ — route MUTATION chưa gate ĐÃ TỒN TẠI TRƯỚC test này. Cố ý liệt kê tường minh thay vì nới
- * luật cho xanh: mục đích của test là chặn route MỚI, đồng thời làm nợ cũ HIỆN RA thay vì ẩn đi.
- *
- * Cả 7 dòng đều thuộc `WorkflowController` — workflow của `content_items`, tức module CONTENT/media đã
- * PARK theo de-media-fy (CLAUDE.md §1: "code media/finance park (out-of-scope), không phát triển tiếp,
- * không xoá ở đợt này"). Chính docstring của controller (workflow.controller.ts:71-72) ghi nhận trạng thái
- * này. KHÔNG vá ở PR này (ngoài phạm vi + chạm module park); ghi nhận để lượng sóng sau quyết định:
- * gate lại hay xoá cùng lúc dọn media.
- *
- * ⚠️ Thêm dòng vào đây là một QUYẾT ĐỊNH BẢO MẬT, không phải thao tác dọn test. Route mutation mới của
- * module đang phát triển PHẢI gate, không được vào danh sách này.
+ * Artifact MÁY-ĐỌC của census — nguồn số liệu DUY NHẤT cho Phụ lục A của báo cáo S6-SEC-1.
+ * Sinh lại bằng: `ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts`
  */
-const MUTATION_BASELINE: Readonly<Record<string, string>> = {
-  "WorkflowController#startWorkflow": "module CONTENT đã park (de-media-fy) — nợ có sẵn",
-  "WorkflowController#startStep": "module CONTENT đã park (de-media-fy) — nợ có sẵn",
-  "WorkflowController#submitStep": "module CONTENT đã park (de-media-fy) — nợ có sẵn",
-  "WorkflowController#checkItem": "module CONTENT đã park (de-media-fy) — nợ có sẵn",
-  "WorkflowController#uncheckItem": "module CONTENT đã park (de-media-fy) — nợ có sẵn",
-  "WorkflowController#approve": "module CONTENT đã park (de-media-fy) — nợ có sẵn",
-  "WorkflowController#requestRevision": "module CONTENT đã park (de-media-fy) — nợ có sẵn",
-};
+// tsconfig module=commonjs → dùng __dirname (mẫu force-before-backfill-order.int-spec) thay vì import.meta.
+// __dirname = apps/api/test/foundation → lùi 4 cấp tới gốc repo, rồi vào docs/_review.
+const ARTIFACT_PATH = join(
+  __dirname,
+  "..",
+  "..",
+  "..",
+  "..",
+  "docs",
+  "_review",
+  "S6-SEC-ROUTEMAP-1-route-census.json",
+);
 
-interface RouteInfo {
-  controller: string;
-  method: string;
-  httpMethod: string;
-  path: string;
-  hasPermission: boolean;
-  isPublic: boolean;
+const VALID_VERDICTS: readonly Verdict[] = [
+  "SELF",
+  "PUBLIC",
+  "OTHER_GUARD",
+  "TENANT_READ",
+  "DEAD-410",
+  "PARKED",
+  "GAP",
+];
+
+/** Ô phán quyết KHÔNG BAO GIỜ hợp lệ cho một route GHI: "mở cho cả tenant" và "lỗ đã biết". */
+const VERDICTS_FORBIDDEN_ON_MUTATION: readonly Verdict[] = ["TENANT_READ", "GAP"];
+
+interface CensusArtifact {
+  readonly note: string;
+  readonly generatedBy: string;
+  readonly regenerate: string;
+  readonly globalPrefix: string;
+  readonly totals: Record<string, number>;
+  readonly verdictCounts: Record<string, number>;
+  readonly routes: readonly Record<string, unknown>[];
 }
 
-function collectRoutes(app: INestApplication): RouteInfo[] {
-  const discovery = app.get(DiscoveryService, { strict: false });
-  const scanner = new MetadataScanner();
-  const routes: RouteInfo[] = [];
-
-  for (const wrapper of discovery.getControllers()) {
-    const { metatype, instance } = wrapper;
-    if (!metatype || instance == null) continue;
-    const prototype = Object.getPrototypeOf(instance) as object;
-
-    for (const methodName of scanner.getAllMethodNames(prototype)) {
-      const handler = (prototype as Record<string, unknown>)[methodName];
-      if (typeof handler !== "function") continue;
-      // Không có PATH_METADATA ⇒ không phải route handler (helper thường của controller).
-      const routePath: unknown = Reflect.getMetadata(PATH_METADATA, handler);
-      if (routePath === undefined) continue;
-
-      const methodIdx: unknown = Reflect.getMetadata(METHOD_METADATA, handler);
-      // Metadata đọc ở CẢ handler LẪN class (getAllAndOverride của guard cũng vậy) — decorator cấp class
-      // phủ cho mọi route là hợp lệ.
-      const hasPermission =
-        Reflect.getMetadata(REQUIRE_PERMISSION, handler) !== undefined ||
-        Reflect.getMetadata(REQUIRE_PERMISSION, metatype) !== undefined;
-      const isPublic =
-        Reflect.getMetadata(IS_PUBLIC, handler) === true ||
-        Reflect.getMetadata(IS_PUBLIC, metatype) === true;
-
-      routes.push({
-        controller: metatype.name,
-        method: methodName,
-        httpMethod:
-          typeof methodIdx === "number" ? (HTTP_METHOD_NAME[methodIdx] ?? String(methodIdx)) : "?",
-        path: String(routePath),
-        hasPermission,
-        isPublic,
-      });
-    }
+function buildArtifact(routes: readonly RouteInfo[]): CensusArtifact {
+  const needVerdict = routes.filter((r) => !r.hasPermission);
+  const verdictCounts: Record<string, number> = {};
+  for (const v of VALID_VERDICTS) verdictCounts[v] = 0;
+  for (const r of needVerdict) {
+    const entry = ROUTE_VERDICTS[routeKey(r)];
+    if (entry) verdictCounts[entry.verdict] = (verdictCounts[entry.verdict] ?? 0) + 1;
   }
-  return routes;
+
+  return {
+    note:
+      "Census runtime 100% route, sinh từ AppModule ĐÃ BOOT (0 regex trên mã nguồn). Sổ phán quyết: apps/api/test/foundation/route-verdicts.ts.",
+    generatedBy: "apps/api/test/foundation/route-guard-coverage.e2e-spec.ts",
+    regenerate:
+      "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
+    globalPrefix: GLOBAL_PREFIX,
+    totals: {
+      routes: routes.length,
+      controllers: new Set(routes.map((r) => r.controller)).size,
+      gated: routes.filter((r) => r.hasPermission).length,
+      gatedAtClassLevel: routes.filter((r) => r.permissionLevel === "class").length,
+      public: routes.filter((r) => r.isPublic).length,
+      ungated: routes.filter(isUngated).length,
+      needVerdict: needVerdict.length,
+    },
+    verdictCounts,
+    routes: routes.map((r) => {
+      const entry = ROUTE_VERDICTS[routeKey(r)];
+      return {
+        key: routeKey(r),
+        httpMethod: r.httpMethod,
+        path: r.path,
+        hasPermission: r.hasPermission,
+        permission: r.permission,
+        permissionLevel: r.permissionLevel,
+        isPublic: r.isPublic,
+        classGuards: [...r.classGuards],
+        routeGuards: [...r.routeGuards],
+        verdict: entry?.verdict ?? null,
+        verdictReason: entry?.reason ?? null,
+        verdictWo: entry?.wo ?? null,
+      };
+    }),
+  };
 }
 
-describe("Route guard coverage — controller đã gate thì gate ĐỦ", () => {
+describe("Route census runtime + phán quyết gate có chữ ký", () => {
   let app: INestApplication;
   let routes: RouteInfo[];
+  /** Tập BẮT BUỘC có phán quyết = mọi route không `@RequirePermission` (gồm cả `@Public`). */
+  let needVerdict: RouteInfo[];
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
     routes = collectRoutes(app);
-  }, 60_000);
+    needVerdict = routes.filter((r) => !r.hasPermission);
+
+    if (process.env.ROUTE_CENSUS_WRITE === "1") {
+      writeFileSync(ARTIFACT_PATH, `${JSON.stringify(buildArtifact(routes), null, 2)}\n`, "utf8");
+    }
+  }, 120_000);
 
   afterAll(async () => {
     await app?.close();
@@ -131,34 +148,100 @@ describe("Route guard coverage — controller đã gate thì gate ĐỦ", () => 
   it("quét được route (sanity — 0 route nghĩa là scanner hỏng, không phải repo sạch)", () => {
     expect(routes.length).toBeGreaterThan(50);
     expect(routes.some((r) => r.hasPermission)).toBe(true);
+    // Bẫy #1 của §0.4: `@RequirePermission` cấp class. Nếu con số này về 0, bộ quét đã mù vế class trở lại
+    // và mọi kết luận "route X có gate" bên dưới thành vô giá trị.
+    expect(
+      routes.filter((r) => r.permissionLevel === "class").length,
+      "phải thấy được @RequirePermission khai ở CẤP CLASS (bẫy đếm thừa 11 route /me/* của §0.4)",
+    ).toBeGreaterThan(0);
   });
 
-  it("mọi route MUTATION của controller đã gate đều được gate (hoặc @Public, hoặc baseline có lý do)", () => {
-    // Vì sao chỉ soi MUTATION: quy ước nhà của repo này là "GHI thì gate, ĐỌC mở cho thành viên tenant"
-    // — OrgController (docstring: "READ (list/tree/members) GIỮ mở cho mọi user tenant"),
-    // ApprovalInboxController (inbox đọc own-scope), WorkflowTemplatesController (list/detail),
-    // SettingsController (settings/public). Bắt cả GET sẽ sinh allow-list rác 15 dòng cho hành vi ĐÚNG,
-    // làm loãng tín hiệu thật. Rủi ro thật khi bỏ guard cấp class là route GHI mới lọt — soi đúng nó.
-    const gatedControllers = new Set(
-      routes.filter((r) => r.hasPermission).map((r) => r.controller),
-    );
-
-    const offenders = routes
-      .filter((r) => gatedControllers.has(r.controller))
-      .filter((r) => r.httpMethod !== "GET")
-      .filter((r) => !r.hasPermission && !r.isPublic)
-      .filter((r) => MUTATION_BASELINE[`${r.controller}#${r.method}`] === undefined);
-
-    const report = offenders
-      .map((r) => `  ${r.controller}#${r.method} (${r.httpMethod} ${r.path || "/"})`)
-      .join("\n");
+  it("MỌI route không gate đều có ĐÚNG MỘT phán quyết (đây là chỗ route GET mới bị bắt)", () => {
+    const missing = needVerdict
+      .filter((r) => ROUTE_VERDICTS[routeKey(r)] === undefined)
+      .map((r) => `  ${routeKey(r)} (${r.httpMethod} ${r.path})`);
 
     expect(
-      offenders,
-      offenders.length === 0
+      missing,
+      missing.length === 0
         ? ""
-        : `Route GHI KHÔNG gate trong controller đã gate — thêm @UseGuards(PermissionGuard) + ` +
-            `@RequirePermission:\n${report}`,
+        : `Route KHÔNG gate mà chưa có phán quyết trong route-verdicts.ts:\n${missing.join("\n")}\n\n` +
+            `Chọn MỘT: (a) thêm @RequirePermission + @UseGuards(PermissionGuard) — mặc định đúng cho hầu hết ` +
+            `route; hoặc (b) ký một phán quyết trong apps/api/test/foundation/route-verdicts.ts kèm lý do. ` +
+            `KHÔNG được nới luật ở file này cho xanh.`,
+    ).toEqual([]);
+  });
+
+  it("mỗi dòng trong sổ phán quyết phải trỏ route CÓ THẬT và ĐANG không gate (nợ trả rồi thì gỡ)", () => {
+    const needVerdictKeys = new Set(needVerdict.map(routeKey));
+    const allKeys = new Set(routes.map(routeKey));
+
+    const stale = Object.keys(ROUTE_VERDICTS).filter((k) => !allKeys.has(k));
+    expect(stale, `sổ trỏ route KHÔNG TỒN TẠI (đã xoá/đổi tên): ${stale.join(", ")}`).toEqual([]);
+
+    const nowGated = Object.keys(ROUTE_VERDICTS).filter((k) => !needVerdictKeys.has(k));
+    expect(
+      nowGated,
+      `route đã được gate rồi nhưng vẫn còn dòng miễn trừ trong sổ — gỡ đi: ${nowGated.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  it("phán quyết hợp lệ: đúng ô, có lý do, GAP phải trỏ Work Order", () => {
+    const bad: string[] = [];
+    for (const [key, entry] of Object.entries(ROUTE_VERDICTS)) {
+      if (!VALID_VERDICTS.includes(entry.verdict)) bad.push(`${key}: ô lạ "${entry.verdict}"`);
+      if (entry.reason.trim().length < 20) bad.push(`${key}: lý do rỗng/quá ngắn`);
+      if (entry.verdict === "GAP" && !entry.wo) bad.push(`${key}: GAP nhưng không trỏ WO nào`);
+      if (entry.verdict !== "GAP" && entry.wo) bad.push(`${key}: chỉ GAP mới được mang wo`);
+    }
+    expect(bad, bad.join("\n")).toEqual([]);
+  });
+
+  it("danh sách GAP bị ĐÓNG BĂNG — không ai mở lỗ mới bằng cách viết thêm một dòng", () => {
+    const gaps = Object.entries(ROUTE_VERDICTS)
+      .filter(([, v]) => v.verdict === "GAP")
+      .map(([k]) => k)
+      .sort();
+    expect(
+      gaps,
+      `Danh sách GAP đổi. Thêm GAP = thêm lỗ bảo mật đã biết ⇒ phải có WO + owner duyệt. ` +
+        `Đóng GAP ⇒ cập nhật FROZEN_GAPS trong route-verdicts.ts kèm bằng chứng.`,
+    ).toEqual([...FROZEN_GAPS].sort());
+  });
+
+  it("route GHI không bao giờ được mang phán quyết TENANT_READ hoặc GAP", () => {
+    // Quy ước nhà cho phép ĐỌC mở trong tenant; nó KHÔNG bao giờ cho phép GHI mở. Một mutation rơi vào
+    // hai ô này là dấu hiệu ai đó dán nhãn cho xanh thay vì gate.
+    const offenders = needVerdict
+      .filter((r) => r.httpMethod !== "GET")
+      .filter((r) => {
+        const entry = ROUTE_VERDICTS[routeKey(r)];
+        return entry !== undefined && VERDICTS_FORBIDDEN_ON_MUTATION.includes(entry.verdict);
+      })
+      .map((r) => `  ${routeKey(r)} (${r.httpMethod} ${r.path}) → ${ROUTE_VERDICTS[routeKey(r)]?.verdict}`);
+
+    expect(offenders, offenders.join("\n")).toEqual([]);
+  });
+
+  it("`@RequirePermission` không bao giờ là TRANG TRÍ — route đã gate phải có PermissionGuard trong chuỗi", () => {
+    // Điểm mù thứ hai của lưới cũ, cùng họ với vế GET. `PermissionGuard` KHÔNG phải APP_GUARD
+    // (app.module.ts:103-105 chỉ đăng ký JwtAuthGuard · CompanyGuard · TwoFactorEnforcementGuard) — nó là
+    // opt-in THEO CONTROLLER. Nghĩa là một route có thể khai `@RequirePermission` đầy đủ, đọc vào tưởng
+    // đã gác, mà runtime KHÔNG hề kiểm quyền vì không guard nào đọc metadata đó. Census hiện cho 0 —
+    // khoá lại để nó không âm thầm khác 0.
+    const decorative = routes
+      .filter((r) => r.hasPermission)
+      .filter(
+        (r) =>
+          !r.classGuards.includes("PermissionGuard") && !r.routeGuards.includes("PermissionGuard"),
+      )
+      .map((r) => `  ${routeKey(r)} (${r.httpMethod} ${r.path}) khai ${r.permission} nhưng không guard nào đọc`);
+
+    expect(
+      decorative,
+      decorative.length === 0
+        ? ""
+        : `@RequirePermission KHÔNG có PermissionGuard đi kèm ⇒ quyền khai ra chỉ để trang trí:\n${decorative.join("\n")}`,
     ).toEqual([]);
   });
 
@@ -175,9 +258,29 @@ describe("Route guard coverage — controller đã gate thì gate ĐỦ", () => 
     expect(mutations.every((r) => r.hasPermission)).toBe(true);
   });
 
-  it("mỗi dòng BASELINE phải trỏ route CÓ THẬT (nợ đã trả thì phải gỡ khỏi danh sách)", () => {
-    const known = new Set(routes.map((r) => `${r.controller}#${r.method}`));
-    const stale = Object.keys(MUTATION_BASELINE).filter((k) => !known.has(k));
-    expect(stale, `baseline trỏ route không tồn tại: ${stale.join(", ")}`).toEqual([]);
+  it("artifact census đã commit khớp census runtime (số trong Phụ lục A không được chép tay)", () => {
+    const live = buildArtifact(routes);
+    const committed = JSON.parse(readFileSync(ARTIFACT_PATH, "utf8")) as CensusArtifact;
+
+    const hint =
+      `\n\nSinh lại artifact bằng:\n  ${live.regenerate}\n` +
+      `rồi đối chiếu lại số liệu Phụ lục A trong docs/_review/S6-SEC-1-*.md.`;
+
+    // So sánh theo KHOÁ trước để thông báo lỗi còn đọc được (452 route in ra nguyên khối thì vô dụng).
+    const liveKeys = new Set(live.routes.map((r) => String(r.key)));
+    const committedKeys = new Set(committed.routes.map((r) => String(r.key)));
+    const added = [...liveKeys].filter((k) => !committedKeys.has(k)).sort();
+    const removed = [...committedKeys].filter((k) => !liveKeys.has(k)).sort();
+    expect(added, `route MỚI chưa có trong artifact: ${added.join(", ")}${hint}`).toEqual([]);
+    expect(removed, `artifact còn route đã BIẾN MẤT: ${removed.join(", ")}${hint}`).toEqual([]);
+
+    const committedByKey = new Map(committed.routes.map((r) => [String(r.key), r]));
+    const changed = live.routes
+      .filter((r) => JSON.stringify(committedByKey.get(String(r.key))) !== JSON.stringify(r))
+      .map((r) => String(r.key));
+    expect(changed, `route đổi thuộc tính gate/phán quyết: ${changed.join(", ")}${hint}`).toEqual([]);
+
+    expect(committed.totals, `tổng số lệch${hint}`).toEqual(live.totals);
+    expect(committed.verdictCounts, `phân bố phán quyết lệch${hint}`).toEqual(live.verdictCounts);
   });
 });
