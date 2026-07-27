@@ -45,8 +45,13 @@ export interface RouteVerdict {
 }
 
 /**
- * PHỤ LỤC A — 55 route (43 không gate + 12 `@Public`), sinh từ census runtime ngày 2026-07-27.
+ * PHỤ LỤC A — 52 route (40 không gate + 12 `@Public`), sinh từ census runtime ngày 2026-07-27.
  * Đối chiếu tổng số với artifact `docs/_review/S6-SEC-ROUTEMAP-1-route-census.json`.
+ *
+ * Lịch sử con số: bản đầu (S6-SEC-ROUTEMAP-1) là **55** = 43 không gate + 12 `@Public`.
+ * S6-SEC-ORG-1 gate 3 route `/org` (KI-030) ⇒ chúng rời tập này ⇒ **52** = 40 + 12.
+ * Phân bố ô hiện tại: SELF 15 · PUBLIC 11 · OTHER_GUARD 3 · TENANT_READ 6 · DEAD-410 4 · PARKED 13 ·
+ * **GAP 0**.
  */
 export const ROUTE_VERDICTS: Readonly<Record<string, RouteVerdict>> = {
   // ── AuthController — SELF (8): chuỗi guard toàn cục đã ép đăng nhập; service lấy chủ thể từ token ──
@@ -93,7 +98,8 @@ export const ROUTE_VERDICTS: Readonly<Record<string, RouteVerdict>> = {
   },
   "AuthController#refresh": {
     verdict: "PUBLIC",
-    reason: "Refresh cookie CHÍNH LÀ chứng thực; access token đã hết hạn nên không thể qua JwtAuthGuard.",
+    reason:
+      "Refresh cookie CHÍNH LÀ chứng thực; access token đã hết hạn nên không thể qua JwtAuthGuard.",
   },
   "AuthController#logout": {
     verdict: "PUBLIC",
@@ -128,7 +134,8 @@ export const ROUTE_VERDICTS: Readonly<Record<string, RouteVerdict>> = {
   // ── HealthController — PUBLIC (2) ──────────────────────────────────────────────────────────────
   "HealthController#health": {
     verdict: "PUBLIC",
-    reason: "Probe hạ tầng (@Public cấp class, health.controller.ts:5) — không trả dữ liệu nghiệp vụ.",
+    reason:
+      "Probe hạ tầng (@Public cấp class, health.controller.ts:5) — không trả dữ liệu nghiệp vụ.",
   },
   "HealthController#healthDb": {
     verdict: "PUBLIC",
@@ -161,7 +168,8 @@ export const ROUTE_VERDICTS: Readonly<Record<string, RouteVerdict>> = {
   // ── SELF ngoài AuthController (7) ──────────────────────────────────────────────────────────────
   "UsersController#updateMe": {
     verdict: "SELF",
-    reason: "PATCH hồ sơ của chính mình — repository ép WHERE id = req.user.id (users.controller.ts:27).",
+    reason:
+      "PATCH hồ sơ của chính mình — repository ép WHERE id = req.user.id (users.controller.ts:27).",
   },
   "ApprovalInboxController#inbox": {
     verdict: "SELF",
@@ -202,12 +210,13 @@ export const ROUTE_VERDICTS: Readonly<Record<string, RouteVerdict>> = {
   },
   "OrgController#listOrgUnits": {
     verdict: "TENANT_READ",
-    reason: "Cơ cấu tổ chức (phòng ban) — danh mục, không phải danh bạ người. Đã tenant-scope.",
+    reason:
+      "Cơ cấu tổ chức (phòng ban): tên + mã + loại + trạng thái, KÈM họ tên trưởng đơn vị (org.repository.ts listOrgUnits chiếu headUserName). KHÔNG email, KHÔNG liệt kê nhân sự thường ⇒ vẫn là danh mục cơ cấu, không phải danh bạ. Đã tenant-scope.",
   },
   "OrgController#getOrgTree": {
     verdict: "TENANT_READ",
     reason:
-      "Sơ đồ tổ chức. GIỮ MỞ có chủ đích: apps/app dùng ở routes/hr/org-chart/OrgChartPage.tsx và layouts/workspace/TaskSidebarTree.tsx ⇒ siết cùng nhát với /org/employees sẽ gãy UI của mọi nhân viên.",
+      "Sơ đồ tổ chức: hình dạng cây + họ tên TRƯỞNG đơn vị (headUserName) + headcount từng đơn vị (employeeCount). GIỮ MỞ có chủ đích: apps/app dùng qua packages/web-core hr-org-api ở routes/hr/org-chart/OrgChartPage.tsx và layouts/workspace/TaskSidebarTree.tsx ⇒ siết cùng nhát với /org/employees sẽ gãy UI của mọi nhân viên.",
   },
   "OrgController#listDepartmentsLegacy": {
     verdict: "TENANT_READ",
@@ -219,30 +228,20 @@ export const ROUTE_VERDICTS: Readonly<Record<string, RouteVerdict>> = {
       "Danh mục vai trò (đã loại role operator-plane) — cần cho ô chọn vai trò ở FE; không lộ ai đang giữ vai trò nào.",
   },
 
-  // ── GAP (3) — KI-030, đóng bởi S6-SEC-ORG-1 ────────────────────────────────────────────────────
-  "OrgController#listEmployees": {
-    verdict: "GAP",
-    reason:
-      "Trả danh bạ TOÀN TENANT (id·email·fullName·status + team membership của mọi user chưa xoá — org.repository.ts:322) cho MỌI user đã đăng nhập, trong khi /hr/employees cùng dữ liệu thì ép data_scope. Đây là SEC-F04.",
-    wo: "S6-SEC-ORG-1 (KI-030)",
-  },
-  "OrgController#listTeams": {
-    verdict: "GAP",
-    reason:
-      "Cùng họ với listEmployees — lộ cơ cấu team toàn tenant không gate. Sweep cũ không thấy vì nó lọc bỏ GET.",
-    wo: "S6-SEC-ORG-1 (KI-030)",
-  },
-  "OrgController#listTeamMembers": {
-    verdict: "GAP",
-    reason:
-      "Lộ THÀNH VIÊN từng team cho mọi user đã đăng nhập. Chính route này bị bẫy 'cửa sổ decorator i+8' của §0.4 nuốt mất ⇒ không xuất hiện trong bản census tĩnh nào.",
-    wo: "S6-SEC-ORG-1 (KI-030)",
-  },
+  // ── GAP (0) — KI-030 ĐÃ ĐÓNG bởi S6-SEC-ORG-1 (2026-07-27) ─────────────────────────────────────
+  // Ba dòng từng ở đây (`OrgController#listEmployees` · `#listTeams` · `#listTeamMembers`) đã được GỠ
+  // vì nợ đã trả, không phải vì ai đó dọn cho xanh: cả ba nay mang `@UseGuards(PermissionGuard)` +
+  // `@RequirePermission` (`read:user` cho employees, `read:team` cho hai route team) nên chúng RỜI tập
+  // "route không gate" ⇒ giữ dòng lại sẽ làm ĐỎ test "nợ trả rồi thì gỡ" (luật 4 ở đầu file).
+  // Bằng chứng RED→GREEN: `test/integration/org-directory-permission.int-spec.ts`.
+  //
+  // `FROZEN_GAPS` ở cuối file theo đó về rỗng: sổ này hiện KHÔNG còn lỗ bảo mật đã biết nào.
 
   // ── DEAD-410 (4) ───────────────────────────────────────────────────────────────────────────────
   "TaskAttachmentsController#createIntent": {
     verdict: "DEAD-410",
-    reason: "Handler luôn `return gone()` (task-attachments.controller.ts:39-60); khoá bởi T legacy-attachments-lock.int-spec.",
+    reason:
+      "Handler luôn `return gone()` (task-attachments.controller.ts:39-60); khoá bởi T legacy-attachments-lock.int-spec.",
   },
   "TaskAttachmentsController#list": {
     verdict: "DEAD-410",
@@ -261,19 +260,60 @@ export const ROUTE_VERDICTS: Readonly<Record<string, RouteVerdict>> = {
   // ⚠ Vẫn MOUNTED ở PROD: user đã đăng nhập gọi được. Rủi ro thực tế thấp (content_items không có dữ
   // liệu nghiệp vụ MVP) nhưng đây là bề mặt tấn công không cần thiết — đề xuất owner gỡ mount hoặc
   // gate cấp class trước RC (giữ nguyên khuyến nghị của báo cáo S6-SEC-1 §7).
-  "WorkflowController#startWorkflow": { verdict: "PARKED", reason: "workflow của content_items (quyền update:content) — module CONTENT đã park." },
-  "WorkflowController#getWorkflow": { verdict: "PARKED", reason: "Đọc workflow instance của content_items — module CONTENT đã park." },
-  "WorkflowController#getWorkflowByContent": { verdict: "PARKED", reason: "Tra workflow theo contentItemId — module CONTENT đã park." },
-  "WorkflowController#startStep": { verdict: "PARKED", reason: "Bước workflow content — module CONTENT đã park." },
-  "WorkflowController#submitStep": { verdict: "PARKED", reason: "Bước workflow content — module CONTENT đã park." },
-  "WorkflowController#getStepChecklist": { verdict: "PARKED", reason: "Checklist bước workflow content — module CONTENT đã park." },
-  "WorkflowController#checkItem": { verdict: "PARKED", reason: "Tick checklist content — module CONTENT đã park." },
-  "WorkflowController#uncheckItem": { verdict: "PARKED", reason: "Bỏ tick checklist content — module CONTENT đã park." },
-  "WorkflowController#listApprovalRequests": { verdict: "PARKED", reason: "Duyệt content (KHÔNG phải FSM nghỉ phép/chấm công — cái đó ở ApprovalInboxController) — module CONTENT đã park." },
-  "WorkflowController#approve": { verdict: "PARKED", reason: "Duyệt content — module CONTENT đã park." },
-  "WorkflowController#requestRevision": { verdict: "PARKED", reason: "Trả lại content để sửa — module CONTENT đã park." },
-  "WorkflowTemplatesController#list": { verdict: "PARKED", reason: "Mẫu workflow-DAG của content — module CONTENT đã park (mutation của controller này VẪN gate workflow-template)." },
-  "WorkflowTemplatesController#detail": { verdict: "PARKED", reason: "Chi tiết mẫu workflow-DAG của content — module CONTENT đã park." },
+  "WorkflowController#startWorkflow": {
+    verdict: "PARKED",
+    reason: "workflow của content_items (quyền update:content) — module CONTENT đã park.",
+  },
+  "WorkflowController#getWorkflow": {
+    verdict: "PARKED",
+    reason: "Đọc workflow instance của content_items — module CONTENT đã park.",
+  },
+  "WorkflowController#getWorkflowByContent": {
+    verdict: "PARKED",
+    reason: "Tra workflow theo contentItemId — module CONTENT đã park.",
+  },
+  "WorkflowController#startStep": {
+    verdict: "PARKED",
+    reason: "Bước workflow content — module CONTENT đã park.",
+  },
+  "WorkflowController#submitStep": {
+    verdict: "PARKED",
+    reason: "Bước workflow content — module CONTENT đã park.",
+  },
+  "WorkflowController#getStepChecklist": {
+    verdict: "PARKED",
+    reason: "Checklist bước workflow content — module CONTENT đã park.",
+  },
+  "WorkflowController#checkItem": {
+    verdict: "PARKED",
+    reason: "Tick checklist content — module CONTENT đã park.",
+  },
+  "WorkflowController#uncheckItem": {
+    verdict: "PARKED",
+    reason: "Bỏ tick checklist content — module CONTENT đã park.",
+  },
+  "WorkflowController#listApprovalRequests": {
+    verdict: "PARKED",
+    reason:
+      "Duyệt content (KHÔNG phải FSM nghỉ phép/chấm công — cái đó ở ApprovalInboxController) — module CONTENT đã park.",
+  },
+  "WorkflowController#approve": {
+    verdict: "PARKED",
+    reason: "Duyệt content — module CONTENT đã park.",
+  },
+  "WorkflowController#requestRevision": {
+    verdict: "PARKED",
+    reason: "Trả lại content để sửa — module CONTENT đã park.",
+  },
+  "WorkflowTemplatesController#list": {
+    verdict: "PARKED",
+    reason:
+      "Mẫu workflow-DAG của content — module CONTENT đã park (mutation của controller này VẪN gate workflow-template).",
+  },
+  "WorkflowTemplatesController#detail": {
+    verdict: "PARKED",
+    reason: "Chi tiết mẫu workflow-DAG của content — module CONTENT đã park.",
+  },
 };
 
 /**
@@ -281,7 +321,9 @@ export const ROUTE_VERDICTS: Readonly<Record<string, RouteVerdict>> = {
  * đóng một lỗ mà quên cập nhật ⇒ cũng ĐỎ. Sửa danh sách này là việc của WO đóng/mở lỗ, kèm bằng chứng.
  */
 export const FROZEN_GAPS: readonly string[] = [
-  "OrgController#listEmployees",
-  "OrgController#listTeamMembers",
-  "OrgController#listTeams",
+  // RỖNG kể từ S6-SEC-ORG-1 (2026-07-27) — KI-030 đã đóng, xem khối "GAP (0)" ở trên.
+  //
+  // Danh sách rỗng KHÔNG làm lưới yếu đi, nó làm lưới CHẶT NHẤT có thể: mọi route không gate từ nay
+  // phải rơi vào 6 ô còn lại (SELF · PUBLIC · OTHER_GUARD · TENANT_READ · DEAD-410 · PARKED). Muốn
+  // thêm một dòng `GAP` là phải sửa chính mảng này ⇒ không ai nhận thêm nợ bảo mật trong im lặng.
 ];

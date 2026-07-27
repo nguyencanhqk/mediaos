@@ -185,10 +185,10 @@ tường minh ([two-factor-enforcement.guard.spec.ts](apps/api/src/auth/two-fact
 
 | # | Mục | KQ | Bằng chứng |
 | --- | --- | --- | --- |
-| 1 | Backend kiểm permission cho **mọi API nghiệp vụ** | ⚠️ **3 GAP** (chấm lại) | ⟲ **ĐO LẠI 2026-07-27 bằng quét runtime** (`S6-SEC-ROUTEMAP-1`, §7): **452 route / 79 controller** · **397** gate · **12** `@Public` · **43** không gate ⇒ **55** route phải có phán quyết. Kết quả: **52 hợp lệ · 3 = GAP** (`GET /org/employees` + `GET /org/teams` + `GET /org/teams/:id/members` — KI-030). ~~Bản 26/7: "452 route / 80 controller; 38 route…; 1 = GAP"~~ — sai 3 chỗ: thừa 1 controller, hụt 17 route khỏi tập phán quyết (10 route `@Public` chưa từng được ký), và **đếm thiếu 2 GAP**. Artifact máy-đọc: [`S6-SEC-ROUTEMAP-1-route-census.json`](S6-SEC-ROUTEMAP-1-route-census.json) |
+| 1 | Backend kiểm permission cho **mọi API nghiệp vụ** | ✅ (`GAP = 0`) | ⟲ **ĐO LẠI 2026-07-27 bằng quét runtime** (`S6-SEC-ROUTEMAP-1`, §7): **452 route / 79 controller** · **12** `@Public` · **43** không gate ⇒ **55** route phải có phán quyết; kết quả **52 hợp lệ · 3 = GAP** (KI-030). ⟲ **CHẤM LẠI cùng ngày sau `S6-SEC-ORG-1`**: 3 route `/org` đã gate ⇒ **400 gate · 40 không gate · 52 phải có phán quyết · GAP = 0**. ~~Bản 26/7: "452 route / 80 controller; 38 route…; 1 = GAP"~~ — sai 3 chỗ: thừa 1 controller, hụt 17 route khỏi tập phán quyết (10 route `@Public` chưa từng được ký), và **đếm thiếu 2 GAP**. Artifact máy-đọc: [`S6-SEC-ROUTEMAP-1-route-census.json`](S6-SEC-ROUTEMAP-1-route-census.json) |
 | 2 | Data scope đúng Own/Team/Department/Project/Company/System | ✅ | `S5-SEC-1-PERM-SCOPE-SUITE` §2 — ma trận 5 scope × 7 module, mỗi ô cite spec đang chạy; **T** `data-scope-resolver.int-spec` (đủ 5 scope + fail-closed) |
-| 3 | API list không trả dữ liệu ngoài scope | ⚠️ **3 GAP** (chấm lại) | ✅ cho `/hr/employees` (**T** `employees-rbac-scope.int-spec:247/253/260/271`), ATT/LEAVE/TASK/NOTI. **Trừ 3 đường đọc `/org`**: `employees` (danh bạ) · `teams` (cơ cấu team) · `teams/:id/members` (thành viên từng team) — ⟲ đo lại 27/7, ~~bản 26/7 chỉ nêu 1 (`/org/employees`)~~. Cả 3 nay có chốt hồi quy: lưới `route-guard-coverage` đã bỏ lọc GET (§7.3) |
-| 4 | Direct URL trái quyền bị **cả** FE guard **và** BE guard | ⚠️ (vế BE, chấm lại) · **C** (vế FE) | ⟲ Vế BE = ô 1 + Phụ lục A — ~~bản 26/7 chấm ✅~~; **hạ xuống ⚠️** vì 3 route `/org` ở ô 3 gọi thẳng bằng URL vẫn trả dữ liệu cho mọi user đã đăng nhập, tức vế BE **chưa** chặn đủ. Đóng bởi `S6-SEC-ORG-1`. Vế FE: `ForbiddenPage` + `PermissionGate` — **178 file** dùng `PermissionGate`/`useCan()` |
+| 3 | API list không trả dữ liệu ngoài scope | ✅ | ✅ cho `/hr/employees` (**T** `employees-rbac-scope.int-spec:247/253/260/271`), ATT/LEAVE/TASK/NOTI. ⟲ **3 đường đọc `/org`** (`employees` · `teams` · `teams/:id/members`) — ~~bản 26/7 chỉ nêu 1~~, đo lại 27/7 thành 3, **đã gate cùng ngày** bởi `S6-SEC-ORG-1` (**T** `org-directory-permission.int-spec` 7/7, RED-trước 3 failed). Chốt hồi quy: lưới `route-guard-coverage` đã bỏ lọc GET (§7.3). ⚠️ Còn nợ có chủ đích: `OrgRepository.listEmployees` **không** ép `data_scope` bên trong — sau gate tập đọc được chỉ còn role `data_scope = Company` nên không còn khoảng lệch thực tế (`docs/plans/S6-SEC-ORG-1.md` §5) |
+| 4 | Direct URL trái quyền bị **cả** FE guard **và** BE guard | ✅ (vế BE) · **C** (vế FE) | ⟲ Vế BE = ô 1 + Phụ lục A — ~~bản 26/7 chấm ✅~~ → **hạ xuống ⚠️** (3 route `/org` gọi thẳng URL vẫn trả dữ liệu) → ⟲ **nâng lại ✅ 2026-07-27** sau `S6-SEC-ORG-1`: gọi thẳng URL bằng token không grant nay trả **403** và thân phản hồi không chứa một địa chỉ email nào (**T** `org-directory-permission.int-spec` ca 1). Vế FE: `ForbiddenPage` + `PermissionGate` — **178 file** dùng `PermissionGate`/`useCan()` |
 | 5 | Widget/dashboard không hiển thị số liệu ngoài scope | ⚠️ **accepted-risk** | **T** `dashboard-widget-security.int-spec` (sweep chéo tenant 7 widget) · `dashboard-agg-routes-deny.int-spec` (gate TRƯỚC aggregate). **Ngoại lệ đã biết: D3/KI-012 chưa ký** — xem §2.1 |
 | 6 | Notification deep-link kiểm quyền **ở module gốc** | ✅ | **T** `noti-deeplink-perm-lost.int-spec:219` — thu hồi `read:task` → `GET /tasks/:id` **403**, trong khi notification vẫn đọc được (own-scope) |
 | 7 | Permission matrix **không hard-code theo role** ở frontend | ✅ | **C** quét `apps/{app,console,auth}/src` + `packages/*/src`: **0** so sánh với tên role hệ thống. 8 hit đều KHÔNG phải role: `goal.level === "employee"` (bậc cây GOAL), `personDialog.kind === "manager"`, và `myProjectRole === "Owner"/"Manager"` ([tasks/constants.ts:60-65](apps/app/src/routes/tasks/constants.ts#L60)) = vai **thành viên dự án do server trả**, chỉ ẩn/hiện affordance — BE `ProjectAccessService` quyết cuối (**T** `task-project-role.int-spec`) |
@@ -575,13 +575,24 @@ trong đó có `POST /auth/login`, `POST /auth/reset-password`, `POST /users/act
 | `GET /api/v1/workflow-templates/:id` | `WorkflowTemplatesController#detail` | Chi tiết mẫu workflow-DAG của content — module CONTENT đã park. |
 | `GET /api/v1/workflow-templates` | `WorkflowTemplatesController#list` | Mẫu workflow-DAG của content — module CONTENT đã park (mutation của controller này VẪN gate workflow-template). |
 
-#### `GAP` — 3 route · LỖ ĐÃ BIẾT — phải trỏ WO đang mở
+#### `GAP` — **0 route** ✅ (2026-07-27: 3 → 0, đóng bởi `S6-SEC-ORG-1`)
 
-| Route | Khoá census | Căn cứ |
+Ba route dưới đây **KHÔNG còn** trong Phụ lục A: chúng đã được gate nên rời tập "route không gate".
+
+| Route (cũ) | Khoá census | Đóng bằng |
 | --- | --- | --- |
-| `GET /api/v1/org/employees` | `OrgController#listEmployees` | Trả danh bạ TOÀN TENANT (id·email·fullName·status + team membership của mọi user chưa xoá — org.repository.ts:322) cho MỌI user đã đăng nhập, trong khi /hr/employees cùng dữ liệu thì ép data_scope. Đây là SEC-F04. → **S6-SEC-ORG-1 (KI-030)** |
-| `GET /api/v1/org/teams/:id/members` | `OrgController#listTeamMembers` | Lộ THÀNH VIÊN từng team cho mọi user đã đăng nhập. Chính route này bị bẫy 'cửa sổ decorator i+8' của §0.4 nuốt mất ⇒ không xuất hiện trong bản census tĩnh nào. → **S6-SEC-ORG-1 (KI-030)** |
-| `GET /api/v1/org/teams` | `OrgController#listTeams` | Cùng họ với listEmployees — lộ cơ cấu team toàn tenant không gate. Sweep cũ không thấy vì nó lọc bỏ GET. → **S6-SEC-ORG-1 (KI-030)** |
+| `GET /api/v1/org/employees` | `OrgController#listEmployees` | `@RequirePermission("read", "user")` |
+| `GET /api/v1/org/teams` | `OrgController#listTeams` | `@RequirePermission("read", "team")` |
+| `GET /api/v1/org/teams/:id/members` | `OrgController#listTeamMembers` | `@RequirePermission("read", "team")` |
+
+Cặp quyền lấy từ seed CÓ THẬT (`0005_permissions.sql:200,205`) ⇒ **0 migration, 0 grant mới**.
+Bằng chứng RED→GREEN: `test/integration/org-directory-permission.int-spec.ts` — trên code chưa vá
+**3 failed / 4 passed** (`expected [200,200,200] to equal [403,403,403]`), sau khi vá **7/7 passed**.
+Ảnh hưởng PROD (`funtime`, 46 user): đọc được `46 → 6`; **KHÔNG backfill grant** (chi tiết + finding
+`hr-manager` thiếu `read:user`: `docs/plans/S6-SEC-ORG-1.md` §2.4).
+
+> Phụ lục A theo đó còn **52 route** (40 không gate + 12 `@Public`), phân bố:
+> SELF 15 · PUBLIC 11 · OTHER_GUARD 3 · TENANT_READ 6 · DEAD-410 4 · PARKED 13 · **GAP 0**.
 
 ### 7.3 Vế GET của sweep đã ĐÓNG
 
@@ -597,7 +608,7 @@ trong sổ chung, cùng luật với mọi dòng khác. Kèm ba chốt chống "
 
 | Chốt | Ép điều gì |
 | --- | --- |
-| `FROZEN_GAPS` | Danh sách `GAP` bị đóng băng đúng 3 route KI-030 — thêm một lỗ mới ⇒ ĐỎ; đóng lỗ mà quên cập nhật ⇒ cũng ĐỎ |
+| `FROZEN_GAPS` | Danh sách `GAP` bị đóng băng — thêm một lỗ mới ⇒ ĐỎ; đóng lỗ mà quên cập nhật ⇒ cũng ĐỎ. ⟲ **Nay là mảng RỖNG** (2026-07-27, `S6-SEC-ORG-1` đóng 3 route KI-030) ⇒ lưới ở trạng thái chặt nhất: mọi route không gate phải rơi vào 6 ô còn lại |
 | Cấm ô trên mutation | Route GHI không bao giờ được mang `TENANT_READ`/`GAP` |
 | Artifact khoá bởi test | Artifact đã commit phải khớp census runtime ⇒ số trong Phụ lục A không thể là số chép tay |
 

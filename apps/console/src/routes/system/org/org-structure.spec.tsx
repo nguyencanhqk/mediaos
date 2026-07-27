@@ -120,6 +120,10 @@ beforeEach(() => {
     "delete:org_unit": true,
     "create:team": true,
     "update:team": true,
+    // S6-SEC-ORG-1: GET /org/teams + /org/teams/:id/members nay gate `read:team`,
+    // GET /org/employees gate `read:user`. Thiếu hai cặp này thì tab Teams không tải gì.
+    "read:team": true,
+    "read:user": true,
   });
 });
 
@@ -156,7 +160,9 @@ describe("CS-3 OrgStructurePage — Đơn vị tổ chức", () => {
 
   it("nút Thêm đơn vị hiện khi có create:org_unit", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Thêm đơn vị" })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Thêm đơn vị" })).toBeInTheDocument(),
+    );
   });
 
   it("KHÔNG hiện Thêm đơn vị khi thiếu create:org_unit", async () => {
@@ -208,7 +214,8 @@ describe("CS-3 OrgStructurePage — Teams tab", () => {
   });
 
   it("Teams tab — KHÔNG hiện Thêm nhóm khi thiếu quyền", async () => {
-    setCaps({ "create:org_unit": true, "update:org_unit": true });
+    // Giữ `read:team` để tab vẫn TẢI ĐƯỢC — bài test này soi affordance GHI, không soi đường đọc.
+    setCaps({ "create:org_unit": true, "update:org_unit": true, "read:team": true });
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Nhóm / Team" }));
     await waitFor(() => expect(screen.getByText("Nhóm A1")).toBeInTheDocument());
@@ -221,15 +228,85 @@ describe("CS-3 OrgStructurePage — Teams tab", () => {
     await waitFor(() => expect(screen.getByText("Nhóm A1")).toBeInTheDocument());
     expect(callsTo("GET", "/org/teams").length).toBeGreaterThan(0);
   });
+
+  // ── S6-SEC-ORG-1 (KI-030) ────────────────────────────────────────────────────────────────────
+  it("thiếu `read:team` → hiện lý do KHÔNG-CÓ-QUYỀN và KHÔNG gọi API chắc chắn 403", async () => {
+    // BE mới là chỗ chặn (org.controller gate read:team). Cờ FE chỉ để không vẽ ra "lỗi tải" —
+    // một thông báo sai bản chất khiến người dùng đi báo lỗi hệ thống thay vì đi xin quyền.
+    setCaps({ "create:team": true, "update:team": true });
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Nhóm / Team" }));
+
+    await waitFor(() => expect(screen.getByText("Không có quyền xem nhóm")).toBeInTheDocument());
+    expect(callsTo("GET", "/org/teams")).toHaveLength(0);
+    expect(callsTo("GET", "/org/employees")).toHaveLength(0);
+    // Không được rơi vào nhánh lỗi — thiếu quyền KHÔNG phải là hỏng.
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("có `read:team` nhưng thiếu `read:user` → vẫn xem được nhóm, chỉ không nạp danh bạ", async () => {
+    // Đây chính là hình dạng của role `hr-manager` ở PROD (plan §2.4): quản trị team được nhưng
+    // không có read:user. Tab phải DÙNG ĐƯỢC, không được sập cả trang vì một truy vấn phụ.
+    setCaps({ "read:team": true, "create:team": true, "update:team": true });
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Nhóm / Team" }));
+
+    await waitFor(() => expect(screen.getByText("Nhóm A1")).toBeInTheDocument());
+    expect(callsTo("GET", "/org/teams").length).toBeGreaterThan(0);
+    expect(callsTo("GET", "/org/employees")).toHaveLength(0);
+  });
+
+  it("thiếu `read:user` → PHẢI NÓI RA lý do ô chọn người rỗng, không im lặng", async () => {
+    // Chốt hồi quy cho F1 (silent-failure gate). "Không gọi API 403" là ĐÚNG nhưng CHƯA ĐỦ: nếu chỉ
+    // dừng ở đó thì ô "Trưởng nhóm"/"Chọn thành viên" rỗng trơn và nút Thêm disabled vĩnh viễn, người
+    // dùng đọc ra "công ty không có nhân viên nào" — sai bản chất. Bản thân bài test cũng là chỗ dễ
+    // đóng đinh trạng thái im lặng thành yêu cầu, nên nó phải khẳng định NGƯỜI DÙNG ĐƯỢC BÁO GÌ.
+    setCaps({ "read:team": true, "create:team": true, "update:team": true });
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Nhóm / Team" }));
+    await waitFor(() => expect(screen.getByText("Nhóm A1")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText("Nhóm A1"));
+
+    await waitFor(() =>
+      expect(screen.getAllByText(/không có quyền xem danh sách nhân viên/i).length).toBeGreaterThan(
+        0,
+      ),
+    );
+
+    // Lý do phải đứng CẠNH đúng chỗ hỏng: cả ô "Trưởng nhóm" lẫn ô "Chọn thành viên".
+    expect(screen.getAllByText(/không có quyền xem danh sách nhân viên/i)).toHaveLength(2);
+
+    // Và ô chọn thành viên đúng là rỗng (chỉ còn placeholder) — tức thông báo trên đang giải thích
+    // một trạng thái CÓ THẬT, không phải dán nhãn thừa lên một ô vẫn dùng được.
+    const memberSelect = screen.getByLabelText("Chọn thành viên");
+    expect(memberSelect.querySelectorAll("option")).toHaveLength(1);
+  });
+
+  it("lỗi tải nhóm → KHÔNG hiện kèm 'chưa có nhóm nào' (F2: hai thông điệp loại trừ nhau)", async () => {
+    fetchMock = vi.fn((input: string) => {
+      const url = String(input);
+      if (url.includes("/org/teams")) return Promise.resolve(jsonErr());
+      if (url.includes("/org/units/tree")) return Promise.resolve(jsonOk([TREE_NODE]));
+      if (url.includes("/org/units")) return Promise.resolve(jsonOk([UNIT]));
+      return Promise.resolve(jsonOk([]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Nhóm / Team" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    // Lỗi tải KHÔNG được kèm "Chưa có nhóm nào." — đọc cùng nhau thành "dữ liệu đã bị xoá".
+    expect(screen.queryByText("Chưa có nhóm nào.")).not.toBeInTheDocument();
+  });
 });
 
 describe("CS-3 OrgStructurePage — deny permission (create:org_unit absent)", () => {
   it("không có bất kỳ quyền nào → không có nút CRUD", async () => {
     setCaps({});
     renderPage();
-    await waitFor(() =>
-      expect(screen.getAllByText("Phòng Kế toán").length).toBeGreaterThan(0),
-    );
+    await waitFor(() => expect(screen.getAllByText("Phòng Kế toán").length).toBeGreaterThan(0));
     expect(screen.queryByRole("button", { name: "Thêm đơn vị" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Sửa" })).not.toBeInTheDocument();
   });

@@ -62,6 +62,40 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 
 > **CHỐT `GET /foundation/settings/public` = Authenticated** (chỉ cần JWT hợp lệ, KHÔNG cần `view:foundation-setting`); server vẫn lọc `is_public && !is_sensitive` + mask secret. `resolve`/`PATCH company-settings` VẪN gate `view`/`update:foundation-setting`. *(Pin API-09 chuẩn hoá surface → S2-FND-DOC-1.)*
 
+> **CHỐT đường ĐỌC `/org` — ranh giới "CƠ CẤU ≠ NGƯỜI" (S6-SEC-ORG-1, đóng KI-030):**
+>
+> | Route | Cổng | Vì sao |
+> |---|---|---|
+> | `GET /org/units` · `/org/units/tree` · `/org/departments` | **Authenticated** | Danh mục cơ cấu: tên phòng ban + hình dạng cây. `apps/app` dùng trực tiếp ở `OrgChartPage` + `TaskSidebarTree` ⇒ gate = gãy UI mọi nhân viên |
+> | `GET /org/roles` | **Authenticated** | Danh mục vai trò, trả đúng `{ id, name }`; **không** nêu ai giữ vai trò nào. Repo đã loại role operator-plane khỏi đường đọc |
+> | `GET /org/employees` | **`read:user`** | Trả danh bạ toàn tenant: `id · email · fullName · status` + team membership |
+> | `GET /org/teams` · `/org/teams/:id/members` | **`read:team`** | Cơ cấu team = ai thuộc nhóm nào; `members` trả cả `userEmail` |
+>
+> Trước 2026-07-27 cả bảy route đều Authenticated theo quy ước cũ "READ mở trong tenant" — đó chính là
+> KI-030: mọi user đã đăng nhập đọc được trọn danh bạ kèm email, trong khi `/hr/employees` cùng lớp dữ
+> liệu thì ép `read:employee` + data_scope. Quy ước "đọc thì mở" **chỉ áp cho DANH MỤC**, không áp cho
+> dữ liệu về NGƯỜI.
+>
+> ⚠️ **Hệ quả đã ghi nhận (KHÔNG backfill):** ở PROD chỉ `company-admin`/`SA`/`project-manager` giữ
+> `read:user`, và `company-admin`/`SA`/`hr-manager` giữ `read:team` — nên role `employee` **mất** quyền
+> đọc 3 route trên (40/46 user tenant `funtime`). Cả 3 chỉ có caller ở `apps/console`. Cấp thêm
+> `read:user` cho `employee` = mở lại chính lỗ vừa vá. Pin bằng `org-directory-permission.int-spec.ts`.
+>
+> ⚠️ **Lệch cặp đã biết — BA role, và có tách từ vựng `read:user` vs `view:user`.** Cả ba hiện **0
+> user** ở PROD nên tác động sống = 0, nhưng phải ghi đủ để WO sau không phải điều tra lại:
+>
+> | Role | Có | Thiếu | Hệ quả khi được dùng thật |
+> |---|---|---|---|
+> | `hr-manager` (…009, mig `0030` §4) | `read:team` + GHI team | `read:user` | Quản trị team được nhưng không liệt kê được user để thêm thành viên |
+> | `hr` (…011, canonical `0444`) | `view:user` | `read:user` · `read:team` | HR **không** xem được danh bạ lẫn nhóm |
+> | `manager` (…010, canonical `0444`) | — | cả ba | Không xem được danh bạ/nhóm |
+>
+> **Gốc rễ là tách từ vựng:** matrix canonical §13 (`0444_s2_authseed1_canonical_roles_perms.sql:87-90`)
+> cố ý giới thiệu `view:user` là động từ thời AUTH ("KHÁC legacy `read:user`"), trong khi đường `/org`
+> vẫn gate bằng `read:user` legacy. WO sau **phải chốt một động từ** thay vì cấp chồng cả hai —
+> hướng dài hạn là `view:user`. Sửa = backfill PER-PAIR bằng migration (chưa có WO —
+> `docs/plans/S6-SEC-ORG-1.md` §2.4).
+
 ---
 
 ## 3. HR — Nhân sự (SPEC-03)
