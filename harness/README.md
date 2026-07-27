@@ -29,6 +29,7 @@ bash harness/finish.sh      # ĐÓNG: full check (+test) → cập nhật backlo
 | **Trạng thái** | tự sinh "đang ở đâu" | `harness/gen-status.mjs` → `docs/STATUS.md` |
 | **Ghi nhớ** | ② 3 tầng: phiên (TodoWrite) → bàn giao → dài hạn | `harness/handoff.md` · `docs/DECISIONS/` |
 | **Kiểm chứng** | verify 1 lệnh + 6 hook + CI RLS gate | `harness/check.sh` · `.claude/hooks/` · `.github/workflows/ci.yml` |
+| ↳ | chạy test chia chunk trên Windows (KI-014) | `harness/chunk-test.mjs` (check.sh tự gọi; `CHUNK_RUNNER=0` để tắt) |
 | **Vòng đời** | ④ mở/đóng phiên | `harness/init.sh` · `harness/finish.sh` |
 | (xuyên suốt) | ③ phân rã→song song→chuyên gia→leo thang · ⑤ routing model/skill | `.claude/workflows/parallel-lanes.mjs` + `policy.md` |
 | (xuyên suốt) | guard-scope: chống sửa ngoài `paths` | `.claude/hooks/guard-scope.mjs` (warn-only) |

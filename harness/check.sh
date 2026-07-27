@@ -25,6 +25,17 @@
 #   Contract mặc định của `bash harness/check.sh` trần (không cờ, không env) KHÔNG đổi: vẫn warn-only,
 #   không tự làm đỏ tier thường chỉ vì thiếu Postgres cục bộ.
 #
+# CHUNK RUNNER (2026-07-27, S6-QA-CHUNK-1 — đóng KI-014) — vì sao thêm:
+#   Trên Windows, `pnpm test` ĐỎ 100% (5/5 lần đo) vì crash hạ tầng của tinypool@1.1.1
+#   (ERR_IPC_CHANNEL_CLOSED / ACCESS_VIOLATION) với **0 ca test đỏ** ⇒ cổng verify local vô dụng,
+#   dạy người đọc bỏ qua đỏ THẬT. Gốc là bug ngược dòng, KHÔNG vá được trong phạm vi WO (số đo:
+#   docs/QA/evidence/S6-QA-CHUNK-1-KI-014-ROOT-CAUSE.md). Nên step test giờ:
+#     • Windows  → `node harness/chunk-test.mjs` (chia chunk + chạy lại chunk chết vì hạ tầng +
+#                   ĐỐI CHIẾU số file với `vitest list` ⇒ không thể giảm phạm vi lén).
+#     • Khác/CI  → GIỮ NGUYÊN `TURBO_FORCE=1 pnpm test` một lần.
+#   Ép tay bằng `CHUNK_RUNNER=1` / `CHUNK_RUNNER=0`. Runner vẫn in dòng summary của vitest nên
+#   lane-db-guard bên dưới hoạt động y như cũ (verify: 184 skip khi thiếu LANE_DB → đỏ ở tier --all).
+#
 # Dùng:
 #   bash harness/check.sh                       # tầng thường: lint + typecheck + test
 #   bash harness/check.sh --quick                # tầng nhanh (Stop hook): lint + typecheck
@@ -62,6 +73,23 @@ done
 
 INT_SKIP_THRESHOLD="${INT_SKIP_THRESHOLD:-20}"
 REQUIRE_LANE_DB="${REQUIRE_LANE_DB:-0}"
+
+# ── KI-014 (S6-QA-CHUNK-1): chọn ĐƯỜNG CHẠY TEST theo nền tảng ───────────────────────────────
+# Windows (máy dev này): `pnpm test` ĐỎ 100% (5/5 lần đo) vì crash hạ tầng tinypool
+# ERR_IPC_CHANNEL_CLOSED — **0 test đỏ**. Gốc nằm ngoài repo và không vá được trong phạm vi WO
+# (số đo đầy đủ: docs/QA/evidence/S6-QA-CHUNK-1-KI-014-ROOT-CAUSE.md) ⇒ chạy chia chunk.
+# Linux/macOS + CI ubuntu: GIỮ NGUYÊN đường `pnpm test` một-lần (CI chưa từng dính KI-014).
+# Ép tay: CHUNK_RUNNER=1 (bật) · CHUNK_RUNNER=0 (tắt, quay lại pnpm test).
+case "${CHUNK_RUNNER:-auto}" in
+  1) USE_CHUNK_RUNNER=1 ;;
+  0) USE_CHUNK_RUNNER=0 ;;
+  *)
+    case "$(uname -s 2>/dev/null || echo unknown)" in
+      MINGW*|MSYS*|CYGWIN*|Windows_NT) USE_CHUNK_RUNNER=1 ;;
+      *)                               USE_CHUNK_RUNNER=0 ;;
+    esac
+    ;;
+esac
 
 FAIL=0
 declare -a SUMMARY
@@ -101,7 +129,13 @@ if [ "$RUN_TEST" = 1 ]; then
   TEST_LOG="$(mktemp 2>/dev/null || echo "/tmp/check-test-$$.log")"
 
   run_test_with_guard() {
-    TURBO_FORCE=1 pnpm test 2>&1 | tee "$TEST_LOG"
+    if [ "$USE_CHUNK_RUNNER" = 1 ]; then
+      # KI-014: trên Windows `pnpm test` chết vì crash hạ tầng của tinypool (0 test đỏ) — chạy chia
+      # chunk thay thế. Runner tự lo `^build` + đối chiếu số file với `vitest list` + gộp 1 mã thoát.
+      node harness/chunk-test.mjs 2>&1 | tee "$TEST_LOG"
+    else
+      TURBO_FORCE=1 pnpm test 2>&1 | tee "$TEST_LOG"
+    fi
     local vitest_status=${PIPESTATUS[0]}
 
     local strict=0
@@ -117,7 +151,15 @@ if [ "$RUN_TEST" = 1 ]; then
     return "$vitest_status"
   }
 
-  step "test ${LANE_DB:+(LANE_DB=$LANE_DB)}" run_test_with_guard
+  if [ "$USE_CHUNK_RUNNER" = 1 ]; then
+    echo ""
+    echo "[check.sh] step test dùng CHUNK RUNNER (harness/chunk-test.mjs) — KI-014, nền tảng $(uname -s)."
+    echo "[check.sh]   tắt bằng CHUNK_RUNNER=0 nếu muốn quay lại \`pnpm test\` một lần."
+  fi
+
+  TEST_LABEL_SUFFIX=""
+  [ "$USE_CHUNK_RUNNER" = 1 ] && TEST_LABEL_SUFFIX=" [chunked]"
+  step "test ${LANE_DB:+(LANE_DB=$LANE_DB)}$TEST_LABEL_SUFFIX" run_test_with_guard
   rm -f "$TEST_LOG" 2>/dev/null || true
 fi
 

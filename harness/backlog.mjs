@@ -5399,10 +5399,11 @@ export const backlog = [
   // §7c "Việc phải làm để gỡ BLOCK" và §7d "Còn LẠI — chưa vá trong đợt này (có chủ ý)".
   // Cả 6 WO đều là NỢ ĐÃ ĐO, không phải scope mới (RELEASE-05 §4.1 operational/security fix).
   //
-  // ⚠️ Verify tier cho MỌI WO dưới đây: `check.sh` KHÔNG thể xanh trên máy Windows này cho tới khi
-  // S6-QA-CHUNK-1 đóng (KI-014 — RELEASE-06 §4.4). Tiêu chí thay thế do S6-STAB-1 chốt:
-  // **lint + typecheck + build xanh, CỘNG số đo chạy chia chunk (ghi rõ số file/test), CỘNG CI xanh
-  // trên PR** — KHÔNG trích một dòng "xanh" từ tier nhẹ hơn.
+  // ✔ Verify tier cho MỌI WO dưới đây — CẬP NHẬT 2026-07-27, S6-QA-CHUNK-1 ĐÃ ĐÓNG (KI-014):
+  // `check.sh` nay XANH ĐƯỢC trên máy Windows này (nó tự chia chunk qua harness/chunk-test.mjs).
+  // ⇒ Tiêu chí quay lại BÌNH THƯỜNG: `LANE_DB=<lane> bash harness/check.sh --all` + CI xanh trên PR.
+  // Bỏ tiêu chí thay thế cũ ("lint+typecheck+build xanh CỘNG số đo chạy chia chunk chép tay").
+  // Vẫn giữ luật: KHÔNG trích một dòng "xanh" từ tier nhẹ hơn.
   //
   // ⚠️ Migration NỐI TIẾP: head hiện tại 0531. LOGINLOG-1 lấy 0532, MV-1 lấy 0533 và depends_on
   // LOGINLOG-1 CHỈ để ép tuần tự (memory wo-paths-drive-gate-and-scheduler — 2 lane trùng số migration).

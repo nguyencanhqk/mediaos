@@ -27,7 +27,7 @@
 | KI-011 | Chưa có cảnh báo tự động (5xx-rate, disk, backup-fail, SSL) | S2 | Vận hành | ❌ | ✅ | Owner/DevOps |
 | KI-012 | Accepted-risk **D3**: widget headcount count-only xuyên phòng ban cho HR scope Department | S3 | Bảo mật (đã chấp nhận) | ❌ | ⚠️ cần chữ ký | Owner |
 | KI-013 | `refresh` / `resetPassword` không throttle (theo thiết kế, có mitigation) | S3 | Bảo mật (theo thiết kế) | ❌ | ❌ | — |
-| KI-014 | Chạy cả suite trong 1 tiến trình bị crash `ERR_IPC_CHANNEL_CLOSED` — **cập nhật 2026-07-26: chạm CẢ `@mediaos/app`, và CHỈ ở máy local Windows (CI ubuntu xanh)** | S2 | Hạ tầng test (local) | ❌ | ❌ | `S6-QA-CHUNK-1` (mở 2026-07-27) |
+| ~~KI-014~~ | **ĐÃ ĐÓNG 2026-07-27** (`S6-QA-CHUNK-1`) — truy được gốc: **bug ngược dòng `tinypool@1.1.1`**, `ProcessWorker.send()` chỉ chặn `isTerminating` chứ không kiểm tra kênh IPC đã đóng. **Ba đính chính so với mô tả cũ:** (1) KHÔNG phải "máy bất ổn ngẫu nhiên" — `pnpm test` đỏ **5/5**, tái hiện 100%; (2) KHÔNG phải file/suite thủ phạm — package nạn nhân đổi mỗi lần chạy (kể cả `console` 23 file, `web-core` 39 file); (3) KHÔNG phải lệch Node 24-local vs 22-CI — **Node 22 vẫn crash**; CI xanh vì runner chỉ 2–4 nhân ⇒ 1–3 worker, còn máy này 32 nhân ⇒ 31 worker/package. Vá = `harness/chunk-test.mjs` (chia chunk + hạ trần worker + chạy lại **chỉ** chunk chết vì hạ tầng), `check.sh` dùng trên Windows, CI giữ đường một-lần. Verify: `LANE_DB=mediaos_qachunk bash harness/check.sh --all` → **XANH** (lint+typecheck+test+build), **761/761 file spec** đối chiếu `vitest list`. Số đo đầy đủ: `docs/QA/evidence/S6-QA-CHUNK-1-KI-014-ROOT-CAUSE.md` | S2 | Hạ tầng test (local) | — | — | ✔ xong |
 | KI-015 | Nhiễu log `OutboxNotificationBridge … intake THẤT BẠI` khi chạy test | S3 | Vệ sinh test | ❌ | ❌ | Sprint 6 |
 | KI-016 | PROD dùng chung `apps/api/dist` với dev-online | S2 | Hạ tầng | ❌ | ✅ | Owner/DevOps |
 | KI-017 | Refresh materialized view dashboard qua `workerDb` hỏng từ G14 ("must be owner") | S3 | Sản phẩm (ngủ) | ❌ | ⚠️ | Sprint 6 |
@@ -63,7 +63,8 @@
 
 **Tổng (cập nhật 2026-07-27 sau re-gate vòng 2 của `S6-SEC-1`):**
 `S0 = **0 mở**` — KI-028 · KI-032 · KI-038 **đều đã đóng VÀ verify trực tiếp trên PROD** (2026-07-27) · `S1 = **3 mở**` (KI-027 · KI-030 · KI-034) — KI-033 **đã vá**; KI-035 **đã vá + hạ xuống `S3`** (hai claim của gate đều sai, xem dòng của nó); KI-034 **vá một phần** (còn phần gộp transaction). KI-027 nay chỉ còn chờ admin enroll 2FA rồi bật cờ, vì gốc rễ KI-036 đã vá ·
-`S2 = **9 mở**` (KI-008 · KI-011 · KI-014 · KI-016 · KI-021 · **KI-025** · KI-029 · KI-037 · KI-041) · `S3 = 17`.
+`S2 = **8 mở**` (KI-008 · KI-011 · KI-016 · KI-021 · **KI-025** · KI-029 · KI-037 · KI-041) · `S3 = 17`.
+**KI-014 rời danh sách 2026-07-27** — đóng bởi `S6-QA-CHUNK-1` (9 → 8).
 
 > ✅ **KHÔNG CÒN `S0` MỞ (2026-07-27) — đã verify trực tiếp trên PROD.**
 > Ba lỗ `S0` do FULL gate của `S6-SEC-1` tìm ra đều đóng:
@@ -81,10 +82,15 @@ nay KHÔNG còn đúng** (xem trên). KI-001/KI-002 **đã đóng**; KI-006 hạ
 token + deploy). Giữ nguyên số hiệu KI để tài liệu khác trỏ tới không bị gãy.
 
 > **Ngưỡng RC** (`RELEASE-05` §5.3) cho phép **≤3** mục S2 mở, mỗi mục có owner + workaround. Hiện
-> **8** ⇒ trước khi tạo RC phải đóng bớt hoặc owner ký waiver tường minh cho phần vượt. Bốn mục nằm
-> trong tầm đóng ở Sprint 6: **KI-008** (diễn tập restore — `S6-PERF-DB-1`) · **KI-016** (tách `dist`
-> — cần mở `S6-OPS-DISTSPLIT-1`) · **KI-028** (dọn 16 tenant test khỏi PROD) · **KI-030** (gate
+> **7** (KI-014 đã đóng 2026-07-27) ⇒ trước khi tạo RC vẫn phải đóng bớt hoặc owner ký waiver tường
+> minh cho phần vượt. Ba mục còn nằm trong tầm đóng ở Sprint 6: **KI-008** (diễn tập restore —
+> `S6-PERF-DB-1`) · **KI-016** (tách `dist` — cần mở `S6-OPS-DISTSPLIT-1`) · **KI-030** (gate
 > `read:user`, đường sửa đã khảo sát ở `S6-SEC-1` §6.4).
+>
+> ⚠️ **Lệch số có từ TRƯỚC WO này, không phải do nó gây ra:** bảng đếm ở trên ghi `S2 = 9 mở` trong
+> khi khối ngưỡng RC ghi `8` (khối RC không tính **KI-028**, vốn đã đóng nhưng vẫn nằm trong danh
+> sách "trong tầm đóng"). `S6-QA-CHUNK-1` chỉ trừ **KI-014** khỏi cả hai (9→8 và 8→7) và **giữ
+> nguyên** chênh lệch cũ thay vì sửa lén cho khớp — việc rà lại thuộc `S6-REL-1` (bug scrub trước RC).
 >
 > **Và một mục `S1` mới: KI-027.** Không chặn RC theo chữ nghĩa của `RELEASE-05` §5.3, nhưng **nên
 > đóng trước go-live** — thao tác ~10 phút của owner, không cần sửa code (thứ tự bắt buộc ở
@@ -184,7 +190,11 @@ không cắt câm) · R3 cảnh báo tự động. **KI-011 là điều kiện g
   không throttle nhưng token entropy cao, lưu hash, dùng-một-lần, hết hạn ngắn. Kết luận: giữ nguyên,
   không thêm throttle suy đoán vào `auth.service.ts` (crown).
 
-### KI-014 — Suite API crash khi chạy 1 tiến trình · S2 (hạ tầng test)
+### KI-014 — Suite API crash khi chạy 1 tiến trình · S2 (hạ tầng test) — ✔ ĐÃ ĐÓNG 2026-07-27
+
+> **ĐÓNG bởi `S6-QA-CHUNK-1`.** Phần mô tả bên dưới giữ nguyên làm lịch sử; **hai câu quy kết
+> "bất ổn native của máy" và "chia chunk là workaround duy nhất" nay đã bị số đo bác bỏ** — xem
+> khối *Kết quả truy gốc* ngay sau đó.
 
 Chạy cả `@mediaos/api` một lần → `Unhandled Rejection: Channel closed` / `ERR_IPC_CHANNEL_CLOSED`,
 **0 ca test đỏ**, suite chết giữa chừng. `--no-file-parallelism` **không** cứu được (chết ở file thứ 61).
@@ -204,6 +214,41 @@ Chạy cả `@mediaos/api` một lần → `Unhandled Rejection: Channel closed`
 
 ⇒ **Hạ "chặn go-live" từ ⚠️ xuống ❌**: không chặn release (CI vẫn là cổng thật). Cái nó chặn là **cổng
 verify local** — `harness/check.sh` mọi tier không thể xanh trên máy Windows này.
+
+#### Kết quả truy gốc 2026-07-27 (`S6-QA-CHUNK-1`) — ĐÓNG
+
+Số đo đầy đủ (ma trận pool · maxForks · isolate · tầng gọi · Node 22 vs 24, mỗi ô 3 lần chạy):
+**`docs/QA/evidence/S6-QA-CHUNK-1-KI-014-ROOT-CAUSE.md`**.
+
+**Gốc:** `tinypool@1.1.1` — `ProcessWorker.send()` chỉ chặn `if (!this.isTerminating)`, **không** kiểm
+tra kênh IPC đã đóng. Worker fork thoát ngoài dự kiến ⇒ message birpc còn trong hàng đợi MessagePort
+vẫn bị đẩy vào `process.send()` của tiến trình chết ⇒ `ERR_IPC_CHANNEL_CLOSED` nổ ở **tiến trình
+chính** ⇒ vitest tính Unhandled Rejection ⇒ cả run ĐỎ dù 0 test sai.
+
+**Ba đính chính so với mô tả ở trên:**
+
+1. **KHÔNG phải "bất ổn native của máy" (nghi RAM/XMP).** `pnpm test` đỏ **5/5 lần** — tái hiện 100%.
+2. **KHÔNG phải kích thước chunk hay file thủ phạm.** Package nạn nhân **đổi ngẫu nhiên mỗi lần**:
+   `console` (23 file) · `api` · `app` · `web-core` (39 file). Suite nhỏ cũng chết.
+3. **KHÔNG phải lệch runtime Node 24-local vs Node 22-CI.** Chạy lại bằng đúng Node 22.23.1 của CI:
+   **vẫn crash**. CI xanh vì runner ubuntu chỉ 2–4 nhân ⇒ vitest sinh 1–3 worker; máy dev 32 nhân sinh
+   **31 worker/package** ⇒ trúng đua liên tục.
+
+**Cũng bác bỏ "chia chunk là workaround duy nhất":** hạ trần `maxForks` cứu được `@mediaos/app`
+(3/3 xanh ở 16) nhưng **không** cứu `@mediaos/api` ở bất kỳ trần nào; `--pool=threads` **tệ hơn**
+(SIGSEGV 139); `--no-isolate` sinh test đỏ thật.
+
+**Vá:** `harness/chunk-test.mjs` — chia chunk (≤40 file/tiến trình) + hạ trần worker (8) + **chạy lại
+chỉ chunk chết vì hạ tầng**. Luật chạy-lại an toàn vì đo được **27/27 lần crash đều có 0 test đỏ**;
+có test đỏ ⇒ cấm chạy lại. Runner đối chiếu số file với `vitest list` (thiếu file ⇒ ĐỎ) và **công bố**
+6 file `exclude` của `apps/api/vitest.config.ts`. `check.sh` dùng runner **chỉ trên Windows**; CI
+ubuntu giữ nguyên `pnpm test` một lần.
+
+**Verify (điều kiện đóng WO):** `LANE_DB=mediaos_qachunk bash harness/check.sh --all` → **XANH**
+(lint ✅ typecheck ✅ test ✅ build ✅, 4m32s) — lần đầu `check.sh` xanh thật trên máy Windows này.
+Phủ **761/761 file spec** toàn workspace (api 448 · app 199 · console 23 · web-core 39 · contracts 32 ·
+ui 16 · auth 4). `lane-db-guard` vẫn bắt được thiếu `LANE_DB` qua runner mới (184 file skip → `red` ở
+tier `--all`); `harness/lane-db-guard.test.mjs` 14/14.
 
 ### KI-015 — Nhiễu log outbox bridge trong test · S3
 

@@ -54,6 +54,12 @@ Frontend + package dùng chung, cùng lần chạy:
 toàn** do KI-014 (§4.4), không phải do lỗi test nào. Chạy chia chunk thì **777 file spec toàn
 workspace đều xanh**.
 
+> **Cập nhật 2026-07-27 (`S6-QA-CHUNK-1` — KI-014 đã đóng, §4.4.1):** dòng "test ❌" ở trên là ảnh
+> chụp ngày **2026-07-26** và **không còn đúng**. `check.sh` nay tự chia chunk trên Windows:
+> `LANE_DB=mediaos_qachunk bash harness/check.sh --all` → **cả 4 bước XANH**. Số file spec cũng đã
+> trôi (777 → **761** đo bằng `vitest list`, api 448 · app 199 · console 23 · web-core 39 ·
+> contracts 32 · ui 16 · auth 4) — từ nay runner sinh số này mỗi lần chạy nên không trôi âm thầm nữa.
+
 ---
 
 ## 3. Checklist §11.5 — 8 nhóm
@@ -222,7 +228,7 @@ Phân mức theo thang chuẩn `RELEASE-05` §5 (`S0…S4`).
 | --- | --- |
 | **Mức** | **S2** (giữ nguyên mức KI-014) · Priority **P2** |
 | **Loại** | Hạ tầng test (local) |
-| **Trạng thái** | **Mở** — sửa gốc thuộc `S6-QA-CHUNK-1`, ngoài `paths` WO này |
+| **Trạng thái** | ✔ **ĐÃ ĐÓNG 2026-07-27** bởi `S6-QA-CHUNK-1` — xem §4.4.1 |
 
 Sau khi đóng F02/F03, `bash harness/check.sh --all` **vẫn ĐỎ** ở bước test. Truy tiếp thì ra **hai
 đính chính** so với mô tả cũ của KI-014:
@@ -252,6 +258,46 @@ gọi `pnpm test` **toàn workspace một lần** và `apps-frontend.yml:95` ch�
 > vẫn chạy đủ. Cái bị chặn là **cổng local**: `harness/check.sh` ở **mọi tier** không thể xanh trên
 > máy Windows này, nên mọi WO Sprint 6 sau phải verify bằng **chạy chia chunk** (§2) và ghi rõ số
 > đo, thay vì trích một dòng "check.sh xanh".
+
+### 4.4.1 ĐÓNG 2026-07-27 (`S6-QA-CHUNK-1`) — gốc đã truy ra, cổng local mở lại
+
+Số đo đầy đủ: **`docs/QA/evidence/S6-QA-CHUNK-1-KI-014-ROOT-CAUSE.md`**.
+
+**Gốc:** bug ngược dòng `tinypool@1.1.1` — `ProcessWorker.send()` chỉ chặn `if (!this.isTerminating)`,
+**không** kiểm tra kênh IPC đã đóng. Worker fork thoát ngoài dự kiến ⇒ message birpc còn trong hàng
+đợi MessagePort vẫn bị đẩy vào `process.send()` của tiến trình đã chết ⇒ `ERR_IPC_CHANNEL_CLOSED` nổ ở
+**tiến trình chính** ⇒ vitest tính Unhandled Rejection ⇒ cả run ĐỎ dù **0 test sai**.
+
+**Ba kết luận của §4.4 bị số đo bác bỏ:**
+
+| §4.4 nói | Số đo 2026-07-27 |
+| --- | --- |
+| Bất ổn native ngẫu nhiên của máy | **Tái hiện 100%** — `pnpm test` đỏ **5/5 lần** |
+| "Crash phụ thuộc **kích thước chunk**" | Sai — **package nạn nhân đổi ngẫu nhiên mỗi lần**: `console` (23 file) · `api` · `app` · `web-core` (39 file). Suite 23 file cũng chết |
+| (ngầm định) CI xanh nhờ ubuntu/Node 22 | Chạy lại bằng **đúng Node 22.23.1 của CI → vẫn crash**. CI xanh vì runner chỉ **2–4 nhân** ⇒ vitest sinh 1–3 worker; máy dev **32 nhân** ⇒ **31 worker/package** ⇒ trúng đua liên tục |
+
+Cũng bác bỏ *"chia chunk là workaround duy nhất"*: hạ trần `maxForks` cứu được `@mediaos/app` (3/3
+xanh ở 16) nhưng **không** cứu `@mediaos/api` ở bất kỳ trần nào (31/16/8/4); `--pool=threads` **tệ
+hơn** (SIGSEGV 139); `--no-isolate` sinh test đỏ thật.
+
+**Vì sao không vá tận gốc:** tinypool 1.1.1 là bản **cuối** nhánh 1.x, `vitest@3.2.6` ghim `^1.1.1`,
+tinypool 2.x là major khác API ⇒ chỉ nâng được bằng cách nâng vitest lên 4.x (di trú toàn workspace,
+ngoài `paths` WO và không nên làm ngay trước RC). `dangerouslyIgnoreUnhandledErrors` bị **từ chối** —
+nó nuốt luôn unhandled rejection THẬT của code sản phẩm.
+
+**Vá đã ship:** `harness/chunk-test.mjs` — chia chunk (≤40 file/tiến trình) + hạ trần worker (8) +
+**chạy lại chỉ chunk chết vì hạ tầng**. Luật chạy-lại an toàn vì đo được **27/27 lần crash đều có 0
+test đỏ**; có test đỏ ⇒ **cấm** chạy lại. Runner đối chiếu số file với `vitest list` (thiếu ⇒ ĐỎ) và
+**công bố** 6 file `exclude` của `apps/api/vitest.config.ts`. `check.sh` gọi runner **chỉ trên
+Windows** (`CHUNK_RUNNER=1|0` ép tay); CI ubuntu giữ nguyên `pnpm test` một lần.
+
+**Verify:** `LANE_DB=mediaos_qachunk bash harness/check.sh --all` → **XANH** (lint ✅ typecheck ✅
+test ✅ build ✅, 4m32s). Phủ **761/761 file spec** toàn workspace. `lane-db-guard` vẫn bắt được thiếu
+`LANE_DB` qua runner mới (**184** file skip → `red` ở tier `--all`); `harness/lane-db-guard.test.mjs`
+**14/14**.
+
+> ⇒ **Câu "mọi WO Sprint 6 sau phải verify bằng chạy chia chunk chép tay" nay HẾT hiệu lực.** Tiêu
+> chí verify quay lại bình thường: `bash harness/check.sh --all` với `LANE_DB` — nó tự chia chunk.
 
 ---
 
