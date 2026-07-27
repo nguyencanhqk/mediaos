@@ -395,7 +395,11 @@ function TeamsTab() {
     enabled: canReadUser,
   });
 
-  const { data: members = [] } = useQuery({
+  const {
+    data: members = [],
+    isError: membersError,
+    isLoading: membersLoading,
+  } = useQuery({
     queryKey: ["console:org", "teams", detailTeamId, "members"],
     queryFn: () => orgApi.listTeamMembers(detailTeamId as string),
     enabled: detailTeamId !== null && canReadTeam,
@@ -506,7 +510,9 @@ function TeamsTab() {
           {t("common:errors.loadFailed")}
         </p>
       )}
-      {teams.length === 0 && !isLoading && (
+      {/* `!isError` là BẮT BUỘC: thiếu nó thì lỗi tải và "chưa có nhóm nào" hiện CÙNG LÚC, người
+          dùng đọc ra "dữ liệu đã bị xoá". Cùng công thức isEmpty của OrgUnitsTab ở trên. */}
+      {teams.length === 0 && !isLoading && !isError && (
         <p className="text-sm text-muted-foreground">{t("teams.empty")}</p>
       )}
 
@@ -663,11 +669,21 @@ function TeamsTab() {
                     </option>
                   ))}
                 </Select>
+                {!canReadUser && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("teams.noUserListPermission")}
+                  </p>
+                )}
               </div>
             )}
 
             <section className="space-y-2">
               <h3 className="text-sm font-medium">{t("teams.detail.membersSection")}</h3>
+              {/* Thiếu `read:user` ⇒ ô chọn rỗng và nút Thêm disabled vĩnh viễn. Không nói ra thì
+                  người dùng đọc thành "công ty không có nhân viên nào" — sai bản chất (F1). */}
+              {canCreate && !canReadUser && (
+                <p className="text-xs text-muted-foreground">{t("teams.noUserListPermission")}</p>
+              )}
               {canCreate && (
                 <div className="flex gap-2">
                   <Select
@@ -712,7 +728,14 @@ function TeamsTab() {
                     </div>
                   </li>
                 ))}
-                {members.length === 0 && (
+                {/* Lỗi tải members KHÔNG được hiện thành "chưa có thành viên nào" — đó là báo sai
+                    bản chất: nhóm có người, chỉ là không lấy được. */}
+                {membersError && (
+                  <li role="alert" className="py-2 text-sm text-destructive">
+                    {t("common:errors.loadFailed")}
+                  </li>
+                )}
+                {members.length === 0 && !membersLoading && !membersError && (
                   <li className="py-2 text-sm text-muted-foreground">
                     {t("teams.detail.noMembers")}
                   </li>

@@ -39,6 +39,7 @@
       "title": "Không có quyền xem nhóm",
       "description": "Bạn cần quyền read:team để xem danh sách nhóm và thành viên."
     },
+    "noUserListPermission": "Bạn không có quyền xem danh sách nhân viên (read:user), nên không chọn được người ở đây. Đây KHÔNG phải là công ty chưa có nhân viên — hãy xin cấp quyền read:user.",
     "leaderLabel": "Trưởng nhóm",
     "types": {
       "production_team": "Nhóm sản xuất",

@@ -222,7 +222,11 @@ describe.skipIf(!hasLaneDb)("S6-SEC-ORG-1 — gate 3 route đọc /org (KI-030)"
   it("có `read:user` → 200 /org/employees; có `read:team` → 200 hai route team", async () => {
     const employees = await api(app).get("/org/employees").set(bearer(tokUserReader));
     expect(employees.status, JSON.stringify(employees.body)).toBe(200);
-    expect(Array.isArray(employees.body.data)).toBe(true);
+    // KHÔNG dừng ở `Array.isArray`: một hồi quy làm hỏng tenant context và trả `[]` sẽ vẫn xanh.
+    // Phải khẳng định DỮ LIỆU THẬT có mặt thì ca allow-path mới chứng minh được điều nó nói.
+    const emails = (employees.body.data as { email: string }[]).map((u) => u.email);
+    expect(emails).toContain(`none@${A.slug}.test`);
+    expect(emails).toContain(`admin@${A.slug}.test`);
 
     const teams = await api(app).get("/org/teams").set(bearer(tokTeamReader));
     const members = await api(app).get(`/org/teams/${teamA}/members`).set(bearer(tokTeamReader));
@@ -257,18 +261,79 @@ describe.skipIf(!hasLaneDb)("S6-SEC-ORG-1 — gate 3 route đọc /org (KI-030)"
   // ── BẤT BIẾN #1 — cô lập tenant trên chính đường vừa gate ───────────────────────────────────────
 
   it("tenant B (có ĐỦ grant) vẫn không thấy user/team của tenant A", async () => {
+    // Khẳng định DANH TÍNH DƯƠNG, không chỉ "vắng mặt email của A": bản trước chỉ kiểm
+    // `not.toContain('@A.test')`, nên nếu ai đó bỏ cột email khỏi projection (rất có thể xảy ra khi
+    // siết PII) thì rò `userId`/`fullName`/`teamId` chéo tenant vẫn xanh.
     const employees = await api(app).get("/org/employees").set(bearer(tokOther));
     expect(employees.status).toBe(200);
-    expect(JSON.stringify(employees.body.data)).not.toContain(`@${A.slug}.test`);
+    expect(new Set((employees.body.data as { id: string }[]).map((u) => u.id))).toEqual(
+      new Set([uOther]),
+    );
 
     const teams = await api(app).get("/org/teams").set(bearer(tokOther));
     expect(teams.status).toBe(200);
-    expect((teams.body.data as { id: string }[]).map((t) => t.id)).not.toContain(teamA);
+    const teamRows = teams.body.data as { id: string; companyId: string }[];
+    expect(teamRows.every((t) => t.companyId === B.companyId)).toBe(true);
+    expect(teamRows.map((t) => t.id)).not.toContain(teamA);
+  });
 
-    // Đọc team của A bằng token B → phải rỗng (RLS + company_id), KHÔNG được trả thành viên của A.
+  it("tenant B ĐỌC ĐƯỢC team của CHÍNH NÓ — loại trừ giả thuyết 'route trả rỗng cho mọi người'", async () => {
+    // Không có ca này thì mọi khẳng định "B không thấy dữ liệu của A" ở trên đều thoả mãn một cách
+    // tầm thường bởi một route hỏng hoàn toàn.
+    const own = await api(app).get(`/org/teams/${teamB}/members`).set(bearer(tokOther));
+    expect(own.status).toBe(200);
+    expect((own.body.data as { userId: string }[]).map((m) => m.userId)).toEqual([uOther]);
+  });
+
+  it("đọc team của tenant A bằng token B → 200 + rỗng TẤT ĐỊNH (không phải phép tuyển 200|403|404)", async () => {
+    // `OrgService.listTeamMembers` KHÔNG ném NotFound cho teamId lạ ⇒ 403/404 là nhánh CHẾT.
+    // Phép tuyển `[200,403,404]` che mất việc status đổi, nên pin cứng hành vi thật.
     const members = await api(app).get(`/org/teams/${teamA}/members`).set(bearer(tokOther));
-    expect([200, 403, 404]).toContain(members.status);
-    expect(JSON.stringify(members.body)).not.toContain(`@${A.slug}.test`);
-    expect(teamB).toBeTruthy();
+    expect(members.status).toBe(200);
+    expect(members.body.data).toEqual([]);
+  });
+
+  it("GHI chéo tenant: token B thêm user của A vào team của A → không tạo được hàng nào", async () => {
+    // Vế GHI trước đây chỉ được chứng minh ở tầng SQL, harness HTTP chưa khoá.
+    const res = await api(app)
+      .post(`/org/teams/${teamA}/members`)
+      .set(bearer(tokOther))
+      .send({ userId: uNone, roleName: "member" });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+
+    const after = await direct.query(
+      "SELECT count(*)::int AS n FROM team_members WHERE team_id = $1 AND deleted_at IS NULL",
+      [teamA],
+    );
+    expect(after.rows[0].n, "team A phải vẫn đúng 2 thành viên đã seed").toBe(2);
+  });
+
+  // ── Ghim tiền đề của quyết định "không ép data_scope" ───────────────────────────────────────────
+
+  it("KHÔNG role HỆ THỐNG nào giữ `read:user`/`read:team` ở data_scope ≠ Company", async () => {
+    // Đây là bẫy NGỦ ĐÔNG mà 3 reviewer cùng chỉ ra. `OrgRepository.listEmployees` chỉ `withTenant`,
+    // KHÔNG ép data_scope — an toàn hôm nay CHỈ VÌ mọi grant của 2 cặp này đều `Company`. Một grant
+    // scope Own/Team/Department sẽ qua guard rồi nhận TRỌN danh bạ kèm email: UI hứa hẹp, API giao
+    // rộng. Ghim tiền đề ở đây để nó vỡ TO TIẾNG thay vì rò trong im lặng.
+    //
+    // PHẠM VI CÓ HẠN, nói rõ để không ai đọc quá: pin này chỉ phủ role HỆ THỐNG (seed/migration) —
+    // tức chỗ một migration tương lai có thể lặng lẽ cấp sai. Nó KHÔNG phủ role tenant tự đúc lúc
+    // chạy qua role-admin (scope ceiling chỉ chặn `System`); bịt vế đó cần ép data_scope trong
+    // repository, đã ghi thành việc kế tiếp ở docs/plans/S6-SEC-ORG-1.md §6.
+    // Lọc `is_system` cũng tránh bắt nhầm role phù du do spec khác seed trên cùng lane DB.
+    const rows = await direct.query(
+      `SELECT r.name AS role, p.action || ':' || p.resource_type AS perm, rp.data_scope
+         FROM role_permissions rp
+         JOIN permissions p ON p.id = rp.permission_id
+         JOIN roles r ON r.id = rp.role_id AND r.deleted_at IS NULL AND r.is_system = true
+        WHERE rp.effect = 'ALLOW'
+          AND (p.action, p.resource_type) IN (('read','user'), ('read','team'))
+          AND rp.data_scope IS DISTINCT FROM 'Company'`,
+    );
+    expect(
+      rows.rows,
+      "Có grant read:user/read:team ở scope hẹp hơn Company ⇒ /org/employees sẽ trả TOÀN TENANT " +
+        "trong khi scope hứa hẹp hơn. Ép data_scope trong OrgRepository.listEmployees trước khi cấp.",
+    ).toEqual([]);
   });
 });

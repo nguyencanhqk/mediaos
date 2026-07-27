@@ -409,11 +409,27 @@ lẫn `.env.prod` (nhớ `m prod-env` ghi đè `.env.prod`) → restart API → 
 > đọc 3 route này** — đúng chủ đích, và cả 3 chỉ có caller ở `apps/console` (màn quản trị).
 > **KHÔNG backfill grant nào** — thêm `read:user` cho `employee` là mở lại chính lỗ vừa vá.
 >
-> ⚠️ **Việc kế tiếp (chưa có WO):** role hệ thống `hr-manager` có `read:team` + quyền GHI team
-> (migration `0030` §4) nhưng **thiếu `read:user`** ⇒ quản trị team được mà không liệt kê được user
-> để thêm thành viên. Hiện **0 user** giữ role này ở PROD nên không có ảnh hưởng sống. Sửa đúng cách
-> = backfill PER-PAIR (`read:user` → `hr-manager`, `Company`) bằng migration, nằm ngoài `paths` của
-> `S6-SEC-ORG-1`. Chi tiết: `docs/plans/S6-SEC-ORG-1.md` §2.4.
+> **FULL gate (2026-07-27) — 4 reviewer, tất cả PASS, 0 CRITICAL, 0 HIGH.** Chạy: `security-reviewer`
+> · `rls-tenant-isolation-tester` (**thay** `database-reviewer`, agent này không có trong môi trường)
+> · `general-purpose` mang brief `silent-failure-hunter` (**thay** agent cùng tên, không có)
+> · `completion-evaluator` (97/100). Ghi rõ việc thay thế theo tiền lệ `S6-SEC-1` §7c.
+> Bằng chứng đáng kể: reviewer **tự tái lập vế RED** (tắt `PERMISSION_GUARD_ENABLED`) ra log trùng
+> từng chữ; normalize-diff chứng minh churn prettier không giấu logic; probe 2-tenant ở tầng SQL
+> (`SET LOCAL ROLE mediaos_app`, ROLLBACK) cho **0 rò** kể cả khi gỡ vị từ `company_id` của repo.
+> **Đã vá ngay trong WO theo yêu cầu gate:** ô chọn người rỗng không lời giải thích · lỗi tải hiện
+> cùng "chưa có nhóm nào" · 4 khẳng định test lỏng · ghim `data_scope` · sửa chữ ký `TENANT_READ`.
+>
+> ⚠️ **Việc kế tiếp (chưa có WO)** — đầy đủ ở `docs/plans/S6-SEC-ORG-1.md` §7 (N-1…N-8). Hai mục đáng
+> chú ý nhất:
+>
+> - **Lệch cặp quyền ở BA role**, không chỉ một: `hr-manager` (…009) thiếu `read:user`; `hr` (…011)
+>   có `view:user` nhưng thiếu cả `read:user` lẫn `read:team`; `manager` (…010) thiếu cả ba. Gốc rễ
+>   là **tách từ vựng** `read:user` (legacy) vs `view:user` (canonical §13, mig `0444`) — WO sau phải
+>   chốt MỘT động từ. Cả ba hiện **0 user** ở PROD ⇒ không ảnh hưởng sống. Sửa cần migration, nằm
+>   ngoài `paths` của `S6-SEC-ORG-1`.
+> - **`listEmployees` không ép `data_scope`**: role tenant tự đúc với scope `Own`/`Team`/`Department`
+>   sẽ qua guard rồi nhận trọn danh bạ. Tiền đề "mọi reader đều Company" nay có test ghim, nhưng pin
+>   chỉ phủ role **hệ thống**, không phủ role đúc lúc chạy.
 
 **Mô tả gốc** (giữ nguyên cho tài liệu khác trỏ tới không gãy):
 

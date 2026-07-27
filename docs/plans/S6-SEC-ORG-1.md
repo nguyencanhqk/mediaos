@@ -147,10 +147,31 @@ gỡ 3 dòng khỏi `ROUTE_VERDICTS`, làm rỗng `FROZEN_GAPS`, regen artifact 
 | Nâng guard lên cấp class ⇒ 403 cho `units/tree` (apps/app dùng) | QĐ-1: guard THEO ROUTE; test giữ `getOrgTree` = 200 cho user không grant |
 | Gate xong quên gỡ `GAP` ⇒ CI đỏ ở PR khác | QĐ-6 làm trong cùng commit; `FROZEN_GAPS` về `[]` |
 | Cám dỗ backfill grant cho `employee` để "hết 403" | QĐ-2 — ghi thành quyết định, không phải thiếu sót |
-| `read:user` gate nhưng repo vẫn trả toàn tenant (không ép `data_scope`) | Ngoài phạm vi WO (done_when #2 chỉ yêu cầu gate). Sau gate, tập người đọc được = 6 user đều `data_scope=Company` ⇒ **không** còn khoảng lệch thực tế. Ghi vào §7 báo cáo như nợ tồn có chủ đích |
+| `read:user` gate nhưng repo vẫn trả toàn tenant (không ép `data_scope`) | Ngoài phạm vi WO (done_when #2 chỉ yêu cầu gate). Sau gate, tập người đọc được = 6 user đều `data_scope=Company` ⇒ không còn khoảng lệch **với tập grant hiện tại** — xem §7 |
 
 ## 6. Ngoài phạm vi
 
-- Ép `data_scope` bên trong `OrgRepository.listEmployees` (xem §5, hàng cuối).
+- Ép `data_scope` bên trong `OrgRepository.listEmployees` (xem §7 — nay đã ghim tiền đề bằng test).
 - Gộp `/org/employees` vào `/hr/employees` (trùng dữ liệu) — là dọn nợ kiến trúc, cần WO riêng.
 - Thêm/sửa bất kỳ migration nào — WO này **0 migration**.
+
+## 7. Nợ tồn sau FULL gate (4 reviewer, 2026-07-27)
+
+Gate chạy: `security-reviewer` · `rls-tenant-isolation-tester` (thay `database-reviewer`, không có
+trong môi trường) · `general-purpose` với brief `silent-failure-hunter` (thay agent cùng tên, không
+có) · `completion-evaluator`. **Cả 4 PASS, 0 CRITICAL, 0 HIGH.** Đã vá ngay trong WO: F1 (thiếu
+`read:user` ⇒ ô chọn rỗng không lời giải thích), F2 (lỗi tải hiện cùng "chưa có nhóm nào"), siết 4
+khẳng định test lỏng, ghim `data_scope`, sửa chữ ký `TENANT_READ` cho khớp payload.
+
+Còn lại, **không chặn merge**, cần WO riêng:
+
+| # | Nợ | Vì sao chưa vá ở đây |
+| --- | --- | --- |
+| N-1 | **`listEmployees` không ép `data_scope`.** Role tenant tự đúc qua role-admin với scope `Own`/`Team`/`Department` (ceiling chỉ chặn `System`) sẽ qua guard rồi nhận TRỌN danh bạ kèm email — UI hứa hẹp, API giao rộng. | Sửa đúng = dùng `buildEmployeeScopeCondition` như `hr-org-chart.service.ts`. Đã ghim tiền đề bằng test (`org-directory-permission.int-spec` ca cuối) nhưng pin chỉ phủ role **hệ thống**, không phủ role đúc lúc chạy |
+| N-2 | **Backfill cặp quyền cho `hr-manager` · `hr` · `manager`** + chốt một động từ giữa `read:user` (legacy) và `view:user` (canonical §13) | Cần migration ⇒ `migrations/**` ngoài `paths` của WO |
+| N-3 | **`/auth/me` trả capabilities `{}` fail-safe khi hạ tầng lỗi** (`permission.service.ts:334-366`), HTTP vẫn 200 ⇒ màn hình mới nói "Bạn cần quyền read:team" với người **có đủ quyền**. Sự cố hạ tầng bị báo thành thiếu quyền | Là hành vi toàn hệ (mọi `PermissionGate` của console dựa vào map này), không phải thứ PR này nên đổi |
+| N-4 | **`/system/permissions` là consumer thứ hai của `/org/employees`**, gate theo `assign-role:user \|\| grant-object-permission` chứ không `read:user`; nút "Thử lại" ở đó không bao giờ thắng 403 | Hôm nay 0 gap (2 quyền đó chỉ thuộc SA + company-admin, vốn có `read:user`), nhưng role tuỳ biến tạo qua chính màn RBAC đó mở lại được |
+| N-5 | **Đường DENY không có tín hiệu vận hành**: `permission.guard.ts` không log deny thường, cặp non-sensitive không sinh audit. WO cắt 46→6 người đọc mà không có đồng hồ đo nào | Đề xuất log WARN đếm deny trên 3 handler này trong cửa sổ RC |
+| N-6 | `mediaos_app` còn **DELETE** trên `teams`/`team_members` dù repo chỉ soft-delete | Thu hồi cần expand-contract (memory `migration-expand-contract-required`) |
+| N-7 | `Dependency scan (pnpm audit)` đỏ pre-existing (override `brace-expansion`) | Cần `chore(deps)` riêng trước RC |
+| N-8 | `apps/console/.../org-structure.tsx` ~780/800 dòng | Tách `TeamsTab` ra file riêng ở lần chạm kế tiếp |

@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-27 14:41Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-27 15:34Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -32,7 +32,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `wo/s6-sec-org-1` · **file đang đổi (dirty)**: 13
+- **branch**: `wo/s6-sec-org-1` · **file đang đổi (dirty)**: 10
 - **migration head**: idx 198 — `0531_s6sec1_noti_catalog_company_immutable` (199 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -41,6 +41,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `d8bc72e5` | 2026-07-27 | fix(sec): S6-SEC-ORG-1 — gate 3 route đọc /org đang lộ danh bạ toàn tenant (KI-030) |
 | `6a614788` | 2026-07-27 | test(sec): S6-SEC-ROUTEMAP-1 — census route runtime + đóng vế GET của route-guard sweep (#296) |
 | `dde98ac5` | 2026-07-27 | chore(harness): S6-QA-CHUNK-1 — đóng KI-014 bằng runner chia chunk trong check.sh |
 | `6c028899` | 2026-07-27 | docs(release): mở 6 WO vá known-issue S6 — KI-030/034/041/042 + Phụ lục A runtime + KI-014 |
@@ -52,7 +53,6 @@
 | `cbd94819` | 2026-07-26 | docs(release): S6-GOV-1 — đóng băng scope MVP + luật phát hành (WS1) |
 | `dcf85eb0` | 2026-07-26 | docs(release): S5-UAT-1 — đóng UAT-BLOCK-001/002/003 + đồng bộ hồ sơ phát hành |
 | `333494be` | 2026-07-26 | docs(release): S5-UAT-1 — UAT kit + biên bản Cycle 0 + hồ sơ phát hành (cổng Sprint 6) (#292) |
-| `153e2101` | 2026-07-26 | docs(lms): runbook deploy S5-LMS-NOTI-2 (env · thứ tự API→LMS · kiểm chứng · rollback) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

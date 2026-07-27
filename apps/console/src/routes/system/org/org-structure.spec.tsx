@@ -255,6 +255,51 @@ describe("CS-3 OrgStructurePage — Teams tab", () => {
     expect(callsTo("GET", "/org/teams").length).toBeGreaterThan(0);
     expect(callsTo("GET", "/org/employees")).toHaveLength(0);
   });
+
+  it("thiếu `read:user` → PHẢI NÓI RA lý do ô chọn người rỗng, không im lặng", async () => {
+    // Chốt hồi quy cho F1 (silent-failure gate). "Không gọi API 403" là ĐÚNG nhưng CHƯA ĐỦ: nếu chỉ
+    // dừng ở đó thì ô "Trưởng nhóm"/"Chọn thành viên" rỗng trơn và nút Thêm disabled vĩnh viễn, người
+    // dùng đọc ra "công ty không có nhân viên nào" — sai bản chất. Bản thân bài test cũng là chỗ dễ
+    // đóng đinh trạng thái im lặng thành yêu cầu, nên nó phải khẳng định NGƯỜI DÙNG ĐƯỢC BÁO GÌ.
+    setCaps({ "read:team": true, "create:team": true, "update:team": true });
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Nhóm / Team" }));
+    await waitFor(() => expect(screen.getByText("Nhóm A1")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText("Nhóm A1"));
+
+    await waitFor(() =>
+      expect(screen.getAllByText(/không có quyền xem danh sách nhân viên/i).length).toBeGreaterThan(
+        0,
+      ),
+    );
+
+    // Lý do phải đứng CẠNH đúng chỗ hỏng: cả ô "Trưởng nhóm" lẫn ô "Chọn thành viên".
+    expect(screen.getAllByText(/không có quyền xem danh sách nhân viên/i)).toHaveLength(2);
+
+    // Và ô chọn thành viên đúng là rỗng (chỉ còn placeholder) — tức thông báo trên đang giải thích
+    // một trạng thái CÓ THẬT, không phải dán nhãn thừa lên một ô vẫn dùng được.
+    const memberSelect = screen.getByLabelText("Chọn thành viên");
+    expect(memberSelect.querySelectorAll("option")).toHaveLength(1);
+  });
+
+  it("lỗi tải nhóm → KHÔNG hiện kèm 'chưa có nhóm nào' (F2: hai thông điệp loại trừ nhau)", async () => {
+    fetchMock = vi.fn((input: string) => {
+      const url = String(input);
+      if (url.includes("/org/teams")) return Promise.resolve(jsonErr());
+      if (url.includes("/org/units/tree")) return Promise.resolve(jsonOk([TREE_NODE]));
+      if (url.includes("/org/units")) return Promise.resolve(jsonOk([UNIT]));
+      return Promise.resolve(jsonOk([]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Nhóm / Team" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    // Lỗi tải KHÔNG được kèm "Chưa có nhóm nào." — đọc cùng nhau thành "dữ liệu đã bị xoá".
+    expect(screen.queryByText("Chưa có nhóm nào.")).not.toBeInTheDocument();
+  });
 });
 
 describe("CS-3 OrgStructurePage — deny permission (create:org_unit absent)", () => {

@@ -210,12 +210,13 @@ export const ROUTE_VERDICTS: Readonly<Record<string, RouteVerdict>> = {
   },
   "OrgController#listOrgUnits": {
     verdict: "TENANT_READ",
-    reason: "Cơ cấu tổ chức (phòng ban) — danh mục, không phải danh bạ người. Đã tenant-scope.",
+    reason:
+      "Cơ cấu tổ chức (phòng ban): tên + mã + loại + trạng thái, KÈM họ tên trưởng đơn vị (org.repository.ts listOrgUnits chiếu headUserName). KHÔNG email, KHÔNG liệt kê nhân sự thường ⇒ vẫn là danh mục cơ cấu, không phải danh bạ. Đã tenant-scope.",
   },
   "OrgController#getOrgTree": {
     verdict: "TENANT_READ",
     reason:
-      "Sơ đồ tổ chức. GIỮ MỞ có chủ đích: apps/app dùng ở routes/hr/org-chart/OrgChartPage.tsx và layouts/workspace/TaskSidebarTree.tsx ⇒ siết cùng nhát với /org/employees sẽ gãy UI của mọi nhân viên.",
+      "Sơ đồ tổ chức: hình dạng cây + họ tên TRƯỞNG đơn vị (headUserName) + headcount từng đơn vị (employeeCount). GIỮ MỞ có chủ đích: apps/app dùng qua packages/web-core hr-org-api ở routes/hr/org-chart/OrgChartPage.tsx và layouts/workspace/TaskSidebarTree.tsx ⇒ siết cùng nhát với /org/employees sẽ gãy UI của mọi nhân viên.",
   },
   "OrgController#listDepartmentsLegacy": {
     verdict: "TENANT_READ",

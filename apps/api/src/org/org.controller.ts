@@ -40,9 +40,14 @@ interface AuthenticatedRequest extends Request {
  * ĐƯỜNG ĐỌC — RANH GIỚI LÀ "CƠ CẤU ≠ NGƯỜI" (S6-SEC-ORG-1, đóng KI-030):
  *
  *   • MỞ cho mọi user tenant (`TENANT_READ`): `units`, `units/tree`, `departments`, `roles`.
- *     Đây là DANH MỤC — tên phòng ban, hình dạng cây, tên vai trò — không nêu ai là ai.
- *     `apps/app` phụ thuộc trực tiếp: `routes/hr/org-chart/OrgChartPage.tsx` và
- *     `layouts/workspace/TaskSidebarTree.tsx` gọi `units/tree`; `roles` nuôi ô chọn vai trò ở FE.
+ *     Đây là DANH MỤC — tên phòng ban, hình dạng cây, tên vai trò.
+ *     ⚠️ Ranh giới KHÔNG tuyệt đối, nói rõ để không ai tin quá: `listOrgUnits`/`getOrgTree` CÓ chiếu
+ *     `headUserName` (họ tên trưởng đơn vị) và `getOrgTree` trả thêm `employeeCount`. Đó là dữ liệu
+ *     về người, nhưng phạm vi hẹp (một cái tên mỗi đơn vị, KHÔNG email · KHÔNG trạng thái tài khoản ·
+ *     KHÔNG liệt kê nhân sự thường) và chính sơ đồ tổ chức mà mọi nhân viên được xem cần nó.
+ *     `apps/app` phụ thuộc GIÁN TIẾP qua `packages/web-core` (`hr-org-api.ts` → `orgApi.getTree()`):
+ *     `routes/hr/org-chart/OrgChartPage.tsx` và `layouts/workspace/TaskSidebarTree.tsx` — grep
+ *     `/org/` trong `apps/app` KHÔNG ra kết quả, nên đừng kết luận "không ai dùng" từ một lần grep.
  *     Siết bốn route này = gãy UI của mọi nhân viên, nên chúng ở lại có CHỮ KÝ trong
  *     `apps/api/test/foundation/route-verdicts.ts` chứ không phải vì bị bỏ quên.
  *
