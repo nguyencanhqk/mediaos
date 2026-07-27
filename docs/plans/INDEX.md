@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**287 WO** · có micro-plan: **147/287** · ⬜ 6 chờ · 🔵 0 đang làm · ✅ 281 xong · 🔴 0 chặn
+**289 WO** · có micro-plan: **147/289** · ⬜ 8 chờ · 🔵 0 đang làm · ✅ 281 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -318,6 +318,8 @@
 | `S6-QA-CHUNK-1` | 🟡 | ✅ xong | [📄](S6-QA-CHUNK-1.md) | — | KI-014 — truy gốc crash ERR_IPC_CHANNEL_CLOSED rồi chuẩn hoá chạy test |
 | `S6-SEC-ROUTEMAP-1` | 🟡 | ✅ xong | [📄](S6-SEC-ROUTEMAP-1.md) | — | Dựng lại Phụ lục A bằng QUÉT RUNTIME (boot AppModule, đọc metadata thậ |
 | `S6-SEC-ORG-1` | 🔴 | ✅ xong | [📄](S6-SEC-ORG-1.md) | ✅S6-SEC-ROUTEMAP-1 | KI-030 — gate 3 route đọc /org đang lộ danh bạ toàn tenant cho MỌI use |
+| `S6-SEC-ORGSCOPE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-SEC-ORG-1 | N-1 (hậu FULL gate S6-SEC-ORG-1) — ép data_scope trong OrgRepository.l |
+| `S6-SEC-PERMVERB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-SEC-ORG-1 | N-2 (hậu FULL gate S6-SEC-ORG-1) — chốt MỘT động từ giữa `read:user` ( |
 | `S6-SEC-NOTITX-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | KI-034 — gộp insert notification + outbox + audit vào MỘT transaction  |
 | `S6-SEC-LOGINLOG-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | KI-042 — login_logs: hàng company_id IS NULL (thử đăng nhập pre-auth,  |
 | `S6-SEC-MV-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-SEC-LOGINLOG-1 | KI-041 — 2 matview dashboard nằm NGOÀI RLS (Postgres không hỗ trợ): dự |

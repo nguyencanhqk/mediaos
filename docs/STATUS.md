@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-27 16:23Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-27 16:28Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -10,6 +10,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🔴 `S6-PERF-DB-1` Performance/Query/Cache hardening + DB Migration/Seed/Backup/Rollback verification (index, query perf, backup/restore rehearsal) — WS5/WS6
+- 🔴 `S6-SEC-ORGSCOPE-1` N-1 (hậu FULL gate S6-SEC-ORG-1) — ép data_scope trong OrgRepository.listEmployees: gate cặp-quyền đã có nhưng role scope Own/Team/Department vẫn nhận TRỌN danh bạ tenant kèm email
+- 🔴 `S6-SEC-PERMVERB-1` N-2 (hậu FULL gate S6-SEC-ORG-1) — chốt MỘT động từ giữa `read:user` (legacy) và `view:user` (canonical mig 0444) rồi backfill PER-PAIR; nay hr/manager/hr-manager đều lệch cặp
 - 🔴 `S6-SEC-NOTITX-1` KI-034 — gộp insert notification + outbox + audit vào MỘT transaction (repo.create nhận tx), bỏ đường .catch nuốt lỗi làm mất audit + sự kiện chỉ với một dòng warn
 - 🔴 `S6-SEC-LOGINLOG-1` KI-042 — login_logs: hàng company_id IS NULL (thử đăng nhập pre-auth, có email + IP) ĐỌC ĐƯỢC CHÉO TENANT; siết vế USING của policy tenant_isolation (migration 0532)
 
@@ -22,7 +24,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 0
+- **branch**: `master` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 198 — `0531_s6sec1_noti_catalog_company_immutable` (199 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -31,6 +33,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `74e79e48` | 2026-07-27 | chore(docs): regen STATUS + plans/INDEX sau khi merge S6-SEC-ORG-1 (KI-030 đóng) |
 | `4d132a2d` | 2026-07-27 | fix(sec): S6-SEC-ORG-1 — gate 3 route đọc /org đang lộ danh bạ toàn tenant (KI-030) (#297) |
 | `6a614788` | 2026-07-27 | test(sec): S6-SEC-ROUTEMAP-1 — census route runtime + đóng vế GET của route-guard sweep (#296) |
 | `dde98ac5` | 2026-07-27 | chore(harness): S6-QA-CHUNK-1 — đóng KI-014 bằng runner chia chunk trong check.sh |
@@ -42,7 +45,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `b4429da1` | 2026-07-26 | fix(qa): S6-STAB-1 — chạy checklist ổn định WS2 + đóng 2 nguồn đỏ-giả trong suite (#293) |
 | `cbd94819` | 2026-07-26 | docs(release): S6-GOV-1 — đóng băng scope MVP + luật phát hành (WS1) |
 | `dcf85eb0` | 2026-07-26 | docs(release): S5-UAT-1 — đóng UAT-BLOCK-001/002/003 + đồng bộ hồ sơ phát hành |
-| `333494be` | 2026-07-26 | docs(release): S5-UAT-1 — UAT kit + biên bản Cycle 0 + hồ sơ phát hành (cổng Sprint 6) (#292) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
