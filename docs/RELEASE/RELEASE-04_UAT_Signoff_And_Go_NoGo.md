@@ -26,6 +26,16 @@ Chỉ ký khi đủ Exit criteria `QA-09 §12`:
 | QA09-EXIT-009 | Business Owner ký nghiệm thu | ❌ chưa |
 | QA09-EXIT-010 | Go/No-Go có kết luận rõ | ⏳ §4 |
 
+> **Cập nhật sau `S6-QA-FINAL-1` (WS3 · 2026-07-26, `master` `c845a777`).** Bằng chứng kỹ thuật cho mọi
+> ô ở §2 nay tập trung ở **`docs/QA/evidence/S6-QA-FINAL-1-FINAL-QA-PASS.md`**: 15/15 flow regression
+> P0, 5/5 vai, 8 nhóm API (đo được **72%** đường dẫn), toàn workspace **759 file spec · 10.102 test ·
+> 0 fail**. `QA09-EXIT-005` vẫn ✅ (`S0=0 · S1=0`); `QA09-EXIT-006` nay là **6** mục S2 (thêm KI-025).
+>
+> **EXIT-001…004 và 009 không nhúc nhích được bằng test** — chúng cần UAT Cycle 1 với người thật, mà
+> Cycle 1 đang kẹt ở đúng **một** nút: stack UAT `:3200` dùng chung `apps/api/dist` với PROD `:3100`
+> (KI-016). Tức **B3 và B4 của `RELEASE-05` §8.4 là cùng một việc**: tách `dist`
+> (`S6-OPS-DISTSPLIT-1`, chưa mở WO) mở khoá cả hai.
+
 ---
 
 ## 2. Sign-off theo module (bản thảo — QA-09 §35)

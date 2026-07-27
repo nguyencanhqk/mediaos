@@ -41,8 +41,17 @@ const COMPANY_ADMIN_ROLE = "00000000-0000-0000-0000-000000000001";
 const PLATFORM_ADMIN_ROLE = "00000000-0000-0000-0000-0000000000f0";
 /** Placeholder vô hại (KHÔNG secret thật) — chỉ để khẳng định KHÔNG xuất hiện trong response. */
 const SECRET = "SHOULD_NOT_LEAK_PLACEHOLDER";
-const ACTION_A = "BE3SecretLeakA";
-const ACTION_B = "BE3SecretLeakB";
+/**
+ * Marker tách dữ liệu audit của LẦN CHẠY này khỏi lần chạy khác trên cùng DB lane (idiom đã có ở
+ * `audit-permission-deny.int-spec.ts:66`). BẮT BUỘC phải duy nhất theo lần chạy: 3f khẳng định
+ * `length === 1` ở **System scope** (đọc CHÉO tenant, không có RLS khoanh vùng) trên một `action` cố
+ * định — mà `audit_logs` là append-only, nên chỉ cần MỘT lần chạy bị ngắt giữa chừng (Ctrl-C, crash
+ * worker KI-014) là hàng của lần đó nằm lại vĩnh viễn ⇒ lần sau đếm ra 2 ⇒ ĐỎ-GIẢ không tự khỏi.
+ * (S6-QA-FINAL-1 · QA-F01 — cùng lớp lỗi với STAB-F02/F03 ở RELEASE-06 §4.)
+ */
+const RUN_TAG = randomUUID().slice(0, 8);
+const ACTION_A = `BE3SecretLeakA-${RUN_TAG}`;
+const ACTION_B = `BE3SecretLeakB-${RUN_TAG}`;
 
 function api(app: INestApplication) {
   return request(app.getHttpServer());
