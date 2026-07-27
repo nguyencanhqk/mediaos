@@ -223,6 +223,28 @@ describe("Route census runtime + phán quyết gate có chữ ký", () => {
     expect(offenders, offenders.join("\n")).toEqual([]);
   });
 
+  it("`@RequirePermission` không bao giờ là TRANG TRÍ — route đã gate phải có PermissionGuard trong chuỗi", () => {
+    // Điểm mù thứ hai của lưới cũ, cùng họ với vế GET. `PermissionGuard` KHÔNG phải APP_GUARD
+    // (app.module.ts:103-105 chỉ đăng ký JwtAuthGuard · CompanyGuard · TwoFactorEnforcementGuard) — nó là
+    // opt-in THEO CONTROLLER. Nghĩa là một route có thể khai `@RequirePermission` đầy đủ, đọc vào tưởng
+    // đã gác, mà runtime KHÔNG hề kiểm quyền vì không guard nào đọc metadata đó. Census hiện cho 0 —
+    // khoá lại để nó không âm thầm khác 0.
+    const decorative = routes
+      .filter((r) => r.hasPermission)
+      .filter(
+        (r) =>
+          !r.classGuards.includes("PermissionGuard") && !r.routeGuards.includes("PermissionGuard"),
+      )
+      .map((r) => `  ${routeKey(r)} (${r.httpMethod} ${r.path}) khai ${r.permission} nhưng không guard nào đọc`);
+
+    expect(
+      decorative,
+      decorative.length === 0
+        ? ""
+        : `@RequirePermission KHÔNG có PermissionGuard đi kèm ⇒ quyền khai ra chỉ để trang trí:\n${decorative.join("\n")}`,
+    ).toEqual([]);
+  });
+
   it("CompanyBrandingController: đúng 1 route đọc mở, 4 route ghi đều gate (chốt hồi quy trực tiếp)", () => {
     const branding = routes.filter((r) => r.controller === "CompanyBrandingController");
     expect(branding.length, "5 route branding").toBe(5);

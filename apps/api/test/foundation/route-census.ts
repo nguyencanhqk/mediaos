@@ -94,9 +94,13 @@ function joinPath(...parts: string[]): string {
   return `/${segments.join("/")}`;
 }
 
-/** `@Controller(['a','b'])` / `@Get(['x','y'])` hợp lệ trong Nest — lấy phần tử đầu, ghi nhận phần còn lại. */
-function firstPath(value: unknown): string {
-  if (Array.isArray(value)) return String(value[0] ?? "");
+/**
+ * `@Controller(['a','b'])` / `@Get(['x','y'])` là hợp lệ trong Nest (một handler, NHIỀU path).
+ * Nối bằng `|` thay vì lặng lẽ lấy phần tử đầu: mất một path là mất một bề mặt khỏi census, đúng kiểu
+ * hụt phạm vi mà WO này tồn tại để chặn. Census 2026-07-27: 0 route dùng dạng mảng.
+ */
+function declaredPath(value: unknown): string {
+  if (Array.isArray(value)) return value.map((v) => String(v)).join("|");
   if (value === undefined || value === null) return "";
   return String(value);
 }
@@ -129,7 +133,7 @@ export function collectRoutes(app: INestApplication): RouteInfo[] {
     if (!metatype || instance == null) continue;
     const prototype = Object.getPrototypeOf(instance) as object;
 
-    const controllerPath = firstPath(Reflect.getMetadata(PATH_METADATA, metatype));
+    const controllerPath = declaredPath(Reflect.getMetadata(PATH_METADATA, metatype));
     const classPermission = Reflect.getMetadata(REQUIRE_PERMISSION, metatype) as
       | RequirePermissionMeta
       | undefined;
@@ -154,7 +158,7 @@ export function collectRoutes(app: INestApplication): RouteInfo[] {
         method: methodName,
         httpMethod:
           typeof methodIdx === "number" ? (HTTP_METHOD_NAME[methodIdx] ?? String(methodIdx)) : "?",
-        path: joinPath(GLOBAL_PREFIX, controllerPath, firstPath(routePath)),
+        path: joinPath(GLOBAL_PREFIX, controllerPath, declaredPath(routePath)),
         controllerPath: joinPath(controllerPath),
         hasPermission: effectivePermission !== undefined,
         permission: effectivePermission

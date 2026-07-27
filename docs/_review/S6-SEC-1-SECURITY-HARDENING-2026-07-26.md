@@ -449,6 +449,14 @@ Sinh lại: `ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run tes
 | Route KHÔNG gate (không permission, không public) | **43** |
 | **Tập bắt buộc có phán quyết** (mọi route không `@RequirePermission`, **gồm cả `@Public`**) | **55** |
 
+**Điểm mù thứ hai đã đo và đóng luôn — `@RequirePermission` trang trí.** `PermissionGuard` **không**
+phải `APP_GUARD` ([app.module.ts:103-105](../../apps/api/src/app.module.ts#L103) chỉ đăng ký
+`JwtAuthGuard` · `CompanyGuard` · `TwoFactorEnforcementGuard`) — nó **opt-in theo controller**. Nghĩa
+là một route có thể khai `@RequirePermission` đầy đủ, đọc vào tưởng đã gác, mà runtime **không hề
+kiểm quyền** vì không guard nào đọc metadata đó. Cả census tĩnh cũ lẫn sweep cũ đều không hỏi câu này.
+Kết quả đo: **0/397** — mọi route đã gate đều có `PermissionGuard` trong chuỗi (cấp class hoặc cấp
+route). Con số 0 nay bị **khoá bởi assertion**, không phải một lần đo rồi thôi.
+
 **Vì sao tập phán quyết là 55 chứ không phải 43:** `@Public` bỏ qua **cả** `JwtAuthGuard` lẫn
 `CompanyGuard` lẫn `PermissionGuard` — đó là mức rủi ro **cao nhất** trong hệ, không phải mức được
 miễn ký. Bản cũ chỉ phán quyết 2/12 route `@Public` (hai probe `/health`), bỏ trắng 10 route còn lại

@@ -55,9 +55,14 @@ chạy trong `pnpm test` mặc định của CI, không phụ thuộc lane DB.
 1. `route-census.ts` — collector runtime dùng chung (verb · path đầy đủ · `hasPermission` + cấp khai ·
    `isPublic` · guard cấp class/route).
 2. `route-verdicts.ts` — sổ 55 phán quyết có chữ ký + `FROZEN_GAPS`.
-3. `route-guard-coverage.e2e-spec.ts` — viết lại: bỏ lọc GET, 8 assertion (sanity · phủ phán quyết ·
+3. `route-guard-coverage.e2e-spec.ts` — viết lại: bỏ lọc GET, 9 assertion (sanity · phủ phán quyết ·
    sổ không có dòng chết · phán quyết hợp lệ · GAP đóng băng · mutation không được TENANT_READ/GAP ·
-   hồi quy branding · artifact khớp census).
+   **`@RequirePermission` không trang trí** · hồi quy branding · artifact khớp census).
+
+   > **QĐ-8 (thêm trong lúc làm):** đo luôn điểm mù cùng họ — `PermissionGuard` **không** phải
+   > `APP_GUARD` mà opt-in theo controller, nên route khai `@RequirePermission` mà thiếu
+   > `@UseGuards(PermissionGuard)` là **gate giả**: đọc code tưởng có gác, runtime không kiểm gì.
+   > Census cho **0/397**; khoá bằng assertion để nó không âm thầm khác 0.
 4. Sinh artifact JSON; dựng lại **Phụ lục A** của báo cáo `S6-SEC-1` từ artifact.
 5. Chấm lại §2.3 · §13.3 · §13.4 theo số mới; **mọi sai lệch ghi tường minh** — không sửa lén số cũ.
 6. RELEASE-02: KI-030 mở rộng theo census (1 → 3 route).
