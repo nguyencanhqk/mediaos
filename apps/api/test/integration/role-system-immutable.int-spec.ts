@@ -182,17 +182,54 @@ describe.skipIf(!runDb)("S6-SEC-1 S0-B — role hệ thống toàn cục bất k
     }
   });
 
+  // ── CÙNG HỌ LỖI trên danh mục NOTI (re-gate S6-SEC-1 tìm ra, mig 0531) ──────
+  // Không phải DELETE mà là UPDATE: `notification_events`/`notification_templates` là danh mục TOÀN
+  // CỤC (company_id IS NULL) dùng chung mọi tenant, app role có UPDATE, và trước 0531 KHÔNG có trigger
+  // bất biến ⇒ một tenant "re-home" được cả danh mục về mình, commit được, và KHÔNG hoàn tác được qua
+  // app (WITH CHECK chặn chiều ngược). Mọi tenant khác mất sạch catalog ⇒ không tạo nổi thông báo.
+  for (const table of ["notification_events", "notification_templates"] as const) {
+    it(`RLS: app role KHÔNG "re-home" được hàng toàn cục của ${table} về tenant mình`, async () => {
+      const globalBefore = (
+        await direct.query(`SELECT count(*)::int AS n FROM ${table} WHERE company_id IS NULL`)
+      ).rows[0].n as number;
+      expect(globalBefore, `fixture: ${table} phải có hàng toàn cục`).toBeGreaterThan(0);
+
+      const c = await app.connect();
+      try {
+        await c.query("BEGIN");
+        await c.query("SELECT set_config('app.current_company_id', $1, true)", [A.companyId]);
+        await expect(
+          c.query(`UPDATE ${table} SET company_id = $1 WHERE company_id IS NULL`, [A.companyId]),
+        ).rejects.toMatchObject({ code: "23514" }); // check_violation từ enforce_company_id_immutable
+      } finally {
+        await c.query("ROLLBACK").catch(() => undefined);
+        c.release();
+      }
+
+      const globalAfter = (
+        await direct.query(`SELECT count(*)::int AS n FROM ${table} WHERE company_id IS NULL`)
+      ).rows[0].n as number;
+      expect(globalAfter, "danh mục toàn cục phải nguyên vẹn").toBe(globalBefore);
+    });
+  }
+
   it("RLS: app role KHÔNG xoá được chính hàng `roles` toàn cục (grant DELETE thừa đã gỡ)", async () => {
     const c = await app.connect();
     try {
       await c.query("BEGIN");
       await c.query("SELECT set_config('app.current_company_id', $1, true)", [A.companyId]);
+      // KHÔNG dùng `catch { blocked = true }` trần: bất kỳ lỗi nào (mất kết nối, sai DB, gõ nhầm SQL)
+      // cũng sẽ đọc thành "đã chặn" ⇒ deny-case crown xanh giả. Lỗi mong đợi là TẤT ĐỊNH:
+      // SQLSTATE 42501 (`permission denied for table roles`) do đã REVOKE DELETE ở mig 0530.
       let blocked = false;
       try {
         const del = await c.query("DELETE FROM roles WHERE company_id IS NULL");
-        blocked = del.rowCount === 0;
-      } catch {
-        // Thu hồi GRANT ⇒ Postgres ném "permission denied" — cũng là chặn, và là cách chặn mạnh hơn.
+        blocked = del.rowCount === 0; // nếu grant còn mà RLS chặn thì cũng chấp nhận
+      } catch (err) {
+        expect(
+          (err as { code?: string }).code,
+          "phải là permission-denied (42501), không phải một lỗi hạ tầng bất kỳ",
+        ).toBe("42501");
         blocked = true;
       }
       expect(blocked, "role hệ thống toàn cục không được phép xoá từ ngữ cảnh tenant").toBe(true);

@@ -282,7 +282,7 @@ Mỗi điều kiện = một phép thử, không phải một dấu tick.
 | --- | --- | --- |
 | Bảng có cột `company_id` **và** `RLS + FORCE` | ✅ `rls-coverage-assert.int-spec` (a) | **P** `153 / 153` |
 | App role không superuser, không bypass RLS | ✅ `rls-guards.int-spec` | **P** `mediaos_app` `rolsuper=f rolbypassrls=f` · `mediaos_worker` `f/f` |
-| Policy ép tenant **cả** `USING` (đọc) **lẫn** `WITH CHECK` (ghi) | ✅ `rls-coverage-assert.int-spec` (b) | — (assert chạy trên lane DB cùng chain migration) |
+| Policy ép tenant **cả** `USING` (đọc) **lẫn** `WITH CHECK` (ghi) | ⚠️ **assert (b) KHÔNG ĐỦ** — xem §7e | — |
 
 Truy vấn PROD đã dùng (read-only):
 
@@ -531,13 +531,81 @@ Backup PROD trước khi vá đã tạo: `c:\tmp\mediaos-prod-pre-s6sec1fix-2026
 | KI-033/034/035 (audit `export:leave` · audit `notifications` ngoài tx · `login_logs` bỏ ghi im lặng) | Ba lỗi `S1` chạm `done_when` #2, nhưng nằm ở 3 module khác nhau và cần RED test riêng từng cái |
 | Dựng lại Phụ lục A bằng quét runtime | §0.4 — parse tĩnh đã sai 4 lần; phải làm bằng công cụ khác, không phải regex |
 
+## 7e. Re-gate vòng 2 (2026-07-27) — thêm MỘT lỗ cùng họ, đã vá
+
+Ba reviewer chạy lại trên bản vá: `database-reviewer` **PASS**; `security-reviewer` và
+`rls-tenant-isolation-tester` **BLOCK**, và **hai reviewer độc lập cùng chỉ ra một lỗ mới**.
+
+### (1) BLOCK của `security-reviewer` — assertion CHÍNH TÔI viết không thể đỏ
+
+Khi vá KI-033, audit rows mới làm 3 test cũ đỏ vì chúng đếm **tuyệt đối**. Tôi đổi sang "assert theo ý
+định" và **để lại comment khẳng định "vẫn nghiêm ngặt"** — câu đó **SAI**. Reviewer chứng minh bằng
+cách gieo policy rò thật (`CREATE POLICY … ON audit_logs FOR SELECT TO mediaos_app USING (true)`):
+file `attendance-be6` vẫn **11/11 XANH** giữa một vụ rò audit chéo tenant toàn diện. Lý do:
+`filter(... includes("tenant A"))` không bao giờ khớp gì — **không fixture nào của tenant A chứa chuỗi
+"tenant A"** (payload thật là `{note,secretRef}` / `{fullName:"Should Not Appear"}`).
+
+Tệ hơn: đổi `find(objectType === …)` thành `find("secretRef" in after)` đã **gỡ mất** bộ dò rò tình cờ
+mà phía LEAVE vẫn còn — làm spec ATT mù hơn spec anh em của nó.
+
+**Đã sửa:** loại hàng do KI-033 sinh ra rồi **giữ nguyên đếm tuyệt đối** trên phần còn lại; `(g)` đổi
+sang lọc theo `action` + đếm (tất định, mạnh hơn cả bản gốc phụ thuộc thứ tự).
+**Nghiệm thu theo đúng tiêu chí reviewer đặt ra** — chạy lại dưới policy rò: **4 case ĐỎ**
+(`att c2`, `att g`, `leave c3`, `leave f`); bỏ policy đi: **28/28 xanh**.
+
+### (2) BLOCK của `rls-tenant-isolation-tester` — cùng họ S0-B, trên danh mục NOTI
+
+`notification_events` (**59** hàng toàn cục ở PROD) và `notification_templates` (**45**) mang đúng hình
+dạng policy mà mig `0436` sinh ra để bảo vệ, nhưng ra đời sau (`0479`) và được cấp `UPDATE` muộn hơn
+(`0487`) **mà không ai gắn trigger `enforce_company_id_immutable`**. Từ ngữ cảnh một tenant:
+
+```sql
+UPDATE notification_events SET company_id = '<tenant-cua-toi>' WHERE company_id IS NULL;  -- UPDATE 59
+```
+
+**commit được**, tenant khác đọc lại thấy **0**, và **không hoàn tác được qua app** (`WITH CHECK` chặn
+chiều ngược). Mọi tenant mất sạch catalog ⇒ theo `CHECK` hợp thành của NOTI, hệ thống không tạo nổi
+thông báo. Tự kiểm chứng trên PROD: cả hai bảng `INSERT,SELECT,UPDATE` cho app role, **0** trigger.
+
+Chú thích ở `0487:12-15` gọi `WITH CHECK` là "BACKSTOP CỨNG" — đúng cho việc **tạo** hàng global, vô
+dụng trước việc **cướp** một hàng global.
+
+**Đã vá:** migration **`0531`** gắn trigger `enforce_company_id_immutable` cho cả hai bảng (tái dùng
+hàm của `0436`, additive, không đụng dữ liệu). RED→GREEN: bỏ trigger ⇒ 2 case đỏ; có trigger ⇒ 8/8 xanh.
+
+### (3) Vì sao lưới cũ mù — đã vá luôn cái lưới
+
+`rls-coverage-assert` assert (b) chỉ kiểm **chuỗi**: có `WITH CHECK` nhắc GUC là xanh. Hai bảng trên
+thoả điều đó mà vẫn khai thác được. **Thêm assert (c):** bảng nào vừa có khe hở `IS NULL` trong `USING`
+vừa cho app role `UPDATE` thì **bắt buộc** phải có trigger bất biến. Đã chứng minh nó ĐỎ khi gỡ trigger.
+
+Đây là lý do §5.1 và §8 của bản này bị hạ từ ✅ xuống ⚠️: phép đo `153/153` trả lời đúng câu **"bảng có
+cột `company_id` đã bật RLS+FORCE chưa"**, KHÔNG trả lời câu **"có đường ghi chéo tenant nào không"** —
+và khoảng cách giữa hai câu đó chứa cả S0-B lẫn lỗ này.
+
+### (4) Hardening nhỏ theo `database-reviewer` (PASS)
+
+Guard app khoá theo **cả** `isSystem` **lẫn** `companyId === null` (hôm nay hai cái trùng nhau nhưng
+không có CHECK nào ràng buộc); `catch` trần trong deny-case đổi thành assert **SQLSTATE `42501`** (bắt
+trần thì lỗi hạ tầng cũng đọc thành "đã chặn" ⇒ xanh giả); audit payload ghi thêm `total` bên cạnh
+`count` (chỉ có `count` thì kéo 5.000 hàng phân trang 20 để lại vết "count: 20", vô nghĩa khi hậu kiểm).
+
+### (5) Còn mở sau re-gate — WO riêng, KHÔNG chặn
+
+| Mục | Mức | Ghi chú |
+| --- | --- | --- |
+| Matview `mv_dashboard_*` ngoài 153/153 (Postgres không hỗ trợ RLS trên matview) | MEDIUM-HIGH | Ranh giới hiện là `WHERE company_id = $1` trong service |
+| `login_logs` đọc được hàng `company_id IS NULL` chéo tenant (email+IP lần thử pre-auth) | MEDIUM | Vế GHI đã đóng — đính chính so với vòng 1 |
+| FK check bỏ qua RLS (tạo con trỏ tới cha của tenant khác) | MEDIUM | Không leo thang, cần biết UUID |
+| `0005:47` còn chú thích sai "App: full DML" | LOW | `0530` header đã đính chính |
+
 ## 8. Kết luận WS4
 
 | `done_when` | Trả lời |
 | --- | --- |
 | Checklist §13.2 đủ 5 nhóm — không lỗi CRITICAL/HIGH mở | ⚠️ **30/30 mục chấm** (§2.7): 23 ✅ · 3 một-phần/accepted · 3 GAP · 1 L. **0 CRITICAL.** **1 HIGH (`S1`)** = **SEC-F01**, là **cấu hình PROD**, đóng bằng thao tác owner |
 | Audit log đầy đủ hành động quan trọng; append-only không phá | ✅ §2.4 ô 5 (1 audit/lần xem identity, kể cả **mỗi hàng** ở list) + §5.2 (**13/13** bảng append-only đúng **trên PROD**) |
-| 3 bất biến verify lại toàn hệ | ✅ §5 — đo trên **cả** lane DB **và** PROD: 153/153 RLS+FORCE · app/worker không bypass · 13/13 append-only · secret dạng envelope |
+| 3 bất biến verify lại toàn hệ | ⚠️ **đính chính** — §5 đo đúng những gì nó nói, nhưng phép đo **hẹp hơn** câu kết luận: re-gate tìm ra một đường GHI chéo tenant mà cả 153/153 lẫn assert (b) đều mù. Xem §7e |
 | §13.3 ma trận | ✅ §3 — **9/10 case khớp**, 1 lệch ở đường đọc phụ (SEC-F04) |
 | §13.4 gate | ⚠️ §4 — **4/7 đóng sạch**, 2 chờ thủ tục (chữ ký D3 · dọn tenant test), 1 lệch `S2` |
 | FULL gate 3 reviewer PASS | *(§9 — chạy sau khi báo cáo này chốt)* |

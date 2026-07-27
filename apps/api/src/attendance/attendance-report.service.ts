@@ -75,7 +75,9 @@ export class AttendanceReportService {
         actorType: "User",
         resultStatus: "Success",
         dataScope: scope,
-        after: { count: rows.length, fromDate: query.fromDate, toDate: query.toDate, scope },
+        // `count` = số hàng TRANG này, `total` = tổng khớp bộ lọc. Ghi cả hai: chỉ có count thì một
+        // lượt kéo 5.000 hàng phân trang 20 sẽ để lại vết "count: 20" — vô nghĩa khi hậu kiểm.
+        after: { count: rows.length, total, fromDate: query.fromDate, toDate: query.toDate, scope },
       });
 
       return {

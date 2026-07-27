@@ -140,4 +140,42 @@ describe.skipIf(!hasDb)("GX-4 RLS coverage assert (registry-independent)", () =>
       `bảng company_id (app ghi được) THIẾU policy ghi (WITH CHECK/USING ${GUC}): ${missingWrite.join(", ")}`,
     ).toEqual([]);
   });
+
+  /**
+   * (c) S6-SEC-1 (re-gate) — CHẶN "RE-HOME" HÀNG TOÀN CỤC.
+   *
+   * VÌ SAO CẦN THÊM VẾ NÀY. Assert (b) ở trên chỉ kiểm tra chuỗi: có `WITH CHECK` nhắc tới GUC là XANH.
+   * `notification_events`/`notification_templates` thoả điều kiện đó **mà vẫn khai thác được**: policy
+   * `USING` của chúng có khe hở `company_id IS NULL` (để mọi tenant ĐỌC danh mục dùng chung), app role
+   * có `UPDATE`, và không có trigger bất biến ⇒ `UPDATE … SET company_id = <mine> WHERE company_id IS
+   * NULL` thoả `WITH CHECK` và **cướp trọn danh mục toàn cục về một tenant**, commit được, không hoàn
+   * tác được qua app. Assert (b) báo XANH suốt — đó là lý do lỗ này sống tới tận re-gate.
+   *
+   * Luật: bảng nào vừa có khe hở `IS NULL` trong `USING`, vừa cho app role `UPDATE`, thì BẮT BUỘC phải
+   * có trigger `enforce_company_id_immutable` (mig 0436) — nếu không, khe hở dành cho ĐỌC lại thành
+   * đường GHI chéo tenant. Cùng lớp lỗi với S0-B (`role_permissions`, mig 0530).
+   */
+  it("(c) bảng có khe hở 'company_id IS NULL' + app role UPDATE ⇒ PHẢI có trigger bất biến company_id", async () => {
+    const res = await direct.query<{ relname: string }>(`
+      SELECT c.relname
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+        JOIN pg_policy   p ON p.polrelid = c.oid
+       WHERE c.relkind = 'r'
+         AND p.polpermissive
+         AND pg_get_expr(p.polqual, p.polrelid) ILIKE '%company_id IS NULL%'
+         AND has_table_privilege('mediaos_app', c.oid, 'UPDATE')
+         AND NOT EXISTS (
+               SELECT 1 FROM pg_trigger t
+                WHERE t.tgrelid = c.oid
+                  AND NOT t.tgisinternal
+                  AND t.tgfoid = 'enforce_company_id_immutable'::regproc)
+       GROUP BY 1
+       ORDER BY 1`);
+    const unprotected = res.rows.map((r) => r.relname);
+    expect(
+      unprotected,
+      `bảng cho phép "re-home" hàng toàn cục sang tenant (thiếu trigger enforce_company_id_immutable): ${unprotected.join(", ")}`,
+    ).toEqual([]);
+  });
 });

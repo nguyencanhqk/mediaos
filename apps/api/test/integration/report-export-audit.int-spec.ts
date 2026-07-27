@@ -94,8 +94,16 @@ describe.skipIf(!runDb)("S6-SEC-1 KI-033 — report toàn công ty phải ghi au
       new PermissionService(new PermissionRepository(dbsvc)),
       new DataScopeRepository(dbsvc),
     );
-    attSvc = new AttendanceReportService(new AttendanceReportRepository(), dbsvc, dataScope);
-    leaveSvc = new LeaveReportService(new LeaveReportRepository(), dbsvc, dataScope);
+    // Truyền AuditService TƯỜNG MINH. Default trong ctor chỉ kích hoạt ở call-site dựng tay và lặng
+    // lẽ tạo instance THỨ HAI thay vì báo lỗi rõ — cùng họ bẫy @SystemJobHandler/@Optional().
+    const audit = new AuditService();
+    attSvc = new AttendanceReportService(
+      new AttendanceReportRepository(),
+      dbsvc,
+      dataScope,
+      audit,
+    );
+    leaveSvc = new LeaveReportService(new LeaveReportRepository(), dbsvc, dataScope, audit);
   });
 
   afterAll(async () => {
@@ -141,7 +149,7 @@ describe.skipIf(!runDb)("S6-SEC-1 KI-033 — report toàn công ty phải ghi au
       expect(row.data_scope).toBe("Company");
       // Payload chỉ được mang SỐ ĐO (count + khoảng ngày + nhãn scope) — không tên/email/mã NV.
       const after = row.after as Record<string, unknown>;
-      expect(Object.keys(after).sort()).toEqual(["count", "fromDate", "scope", "toDate"]);
+      expect(Object.keys(after).sort()).toEqual(["count", "fromDate", "scope", "toDate", "total"]);
       expect(JSON.stringify(after)).not.toMatch(/@|fullName|employeeCode/i);
     }
   });

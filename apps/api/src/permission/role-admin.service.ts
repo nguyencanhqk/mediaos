@@ -327,7 +327,10 @@ export class RoleAdminService {
         // S6-SEC-1 · S0-B: role hệ thống (kể cả role TOÀN CỤC `company_id IS NULL` mà RLS cố ý lộ cho
         // tenant ĐỌC) là BẤT KHẢ XÂM PHẠM. Thiếu chốt này thì kiểm tra ở trên lọt: role toàn cục có
         // `companyId === null` nên KHÔNG rơi vào nhánh cross-tenant. Mirror `updateRole`/`deleteRole`.
-        if (role.isSystem) {
+        // Khoá theo CẢ hai điều kiện: `isSystem` VÀ `companyId === null`. Hôm nay hai cái trùng nhau
+        // (PROD: 13 role toàn cục đều is_system=true, 7 role tenant đều false) nhưng KHÔNG có CHECK nào
+        // ràng buộc điều đó — một migration sau seed role toàn cục với is_system=false là guard hở lại.
+        if (role.isSystem || role.companyId === null) {
           throw new BadRequestException("Cannot modify permissions of a system-defined role");
         }
 
@@ -418,7 +421,10 @@ export class RoleAdminService {
         // S6-SEC-1 · S0-B — xem chú thích ở assignPermissionToRole. Nhánh REVOKE là nhánh ĐÃ BỊ KHAI
         // THÁC được trong bản RED: nó xoá thật grant của role hệ thống toàn cục và KHÔNG hoàn tác
         // được qua app (WITH CHECK chặn INSERT khôi phục).
-        if (role.isSystem) {
+        // Khoá theo CẢ hai điều kiện: `isSystem` VÀ `companyId === null`. Hôm nay hai cái trùng nhau
+        // (PROD: 13 role toàn cục đều is_system=true, 7 role tenant đều false) nhưng KHÔNG có CHECK nào
+        // ràng buộc điều đó — một migration sau seed role toàn cục với is_system=false là guard hở lại.
+        if (role.isSystem || role.companyId === null) {
           throw new BadRequestException("Cannot modify permissions of a system-defined role");
         }
 
