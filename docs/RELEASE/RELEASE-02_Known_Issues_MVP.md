@@ -47,7 +47,7 @@
 | KI-034 | Audit của `notifications.service.create` **KHÔNG cùng transaction** dù docstring khẳng định có ⇒ audit + outbox có thể mất chỉ với một dòng warn. **Vá một phần 2026-07-27:** `markRead` nay `await` promise audit (hết đua với `return`), và docstring sai đã sửa cho khớp code. **Còn lại:** gộp insert+outbox+audit vào MỘT tx — refactor chạm đường nóng mọi module gọi ⇒ WO riêng có RED test | S1 | Bảo mật (audit) | ❌ | ⚠️ | WO mới |
 | ~~KI-035~~ | **ĐÃ VÁ 2026-07-27** + **HẠ MỨC S1 → S3**. *Hai claim của gate đều SAI, đã tự kiểm chứng:* (1) nhánh `if (!db) return;` chỉ chạy cho login **THẤT BẠI pre-auth** (`companyId: null` ở `:202`/`:222`) — hai đường login **thành công** (`:375`/`:507`) đều truyền `companyId` thật nên đi nhánh `withTenant`, KHÔNG có chuyện "cấp token mà không có log"; (2) `emitAccountLocked` **có** log ERROR đầy đủ trong catch (chú thích tại chỗ ghi rõ "KHÔNG nuốt câm"). Lỗi thật còn lại: chỗ bỏ ghi đó **im lặng tuyệt đối** ⇒ đã thêm `logger.warn` | S3 | Bảo mật (quan sát) | — | — | ✔ xong |
 | ~~KI-036~~ | ~~`.env.example:91` ship `TWO_FACTOR_ENFORCEMENT_ENABLED=false`~~ — **ĐÃ VÁ 2026-07-27** (đổi thành `true` + cảnh báo thứ tự thao tác) — `cp .env.example .env` là bước cài chuẩn ⇒ **gốc rễ tái diễn** của KI-027 ở mọi deploy mới | S2 | Bảo mật (cấu hình) | ❌ | ⚠️ | WO mới |
-| ~~KI-038~~ | **ĐÃ VÁ 2026-07-27** (mig `0531`) — **cùng họ lỗi với KI-032, trên hai bảng khác**: `notification_events` (59 hàng toàn cục PROD) + `notification_templates` (45) cho phép một tenant `UPDATE … SET company_id=<mình> WHERE company_id IS NULL` ⇒ **cướp trọn danh mục NOTI dùng chung**, commit được, **không hoàn tác qua app**; mọi tenant khác mất catalog ⇒ không tạo nổi thông báo. Hai reviewer độc lập cùng tìm ra ở vòng re-gate. Vá = gắn trigger `enforce_company_id_immutable` (mig 0436) | **S0** | Bảo mật | — | — | ✔ xong |
+| ~~KI-038~~ | **ĐÃ ĐÓNG 2026-07-27** — mig `0531` **đã áp cho PROD** (verify: 2 trigger `enforce_company_id_immutable` trên `notification_%`, `tgenabled='O'`; 199 migration applied) — **cùng họ lỗi với KI-032, trên hai bảng khác**: `notification_events` (59 hàng toàn cục PROD) + `notification_templates` (45) cho phép một tenant `UPDATE … SET company_id=<mình> WHERE company_id IS NULL` ⇒ **cướp trọn danh mục NOTI dùng chung**, commit được, **không hoàn tác qua app**; mọi tenant khác mất catalog ⇒ không tạo nổi thông báo. Hai reviewer độc lập cùng tìm ra ở vòng re-gate. Vá = gắn trigger `enforce_company_id_immutable` (mig 0436) | **S0** | Bảo mật | — | — | ✔ xong |
 | ~~KI-039~~ | **ĐÃ VÁ 2026-07-27** — `rls-coverage-assert` assert (b) chỉ kiểm **chuỗi** (`WITH CHECK` có nhắc GUC là xanh) nên **mù** với lớp lỗi KI-038. Thêm **assert (c)**: bảng vừa có khe hở `IS NULL` trong `USING` vừa cho app role `UPDATE` thì bắt buộc phải có trigger bất biến. Đã chứng minh đỏ khi gỡ trigger | S2 | Độ phủ test | — | — | ✔ xong |
 | ~~KI-040~~ | **ĐÃ VÁ 2026-07-27** — assertion cô lập tenant mà **chính WO này viết** khi vá KI-033 **không thể đỏ được** (`filter(includes("tenant A"))` không khớp fixture nào); reviewer chứng minh spec vẫn 11/11 xanh giữa một vụ rò audit chéo tenant thật. Đã khôi phục đếm tuyệt đối + nghiệm thu bằng cách gieo policy rò (4 case đỏ) | S1 | Độ phủ test | — | — | ✔ xong |
 | KI-041 | Matview `mv_dashboard_output`/`mv_dashboard_task_status` mang `company_id` nhưng **Postgres không hỗ trợ RLS trên matview** ⇒ nằm ngoài phép đo 153/153; ranh giới duy nhất là `WHERE company_id = $1` trong service | S2 | Bảo mật | ❌ | ⚠️ | WO mới |
@@ -62,20 +62,19 @@
 > (tài liệu khác đã trỏ tới số hiệu).
 
 **Tổng (cập nhật 2026-07-27 sau re-gate vòng 2 của `S6-SEC-1`):**
-`S0 = **0 mở trong code**` — KI-028 · KI-032 · **KI-038** đều đã vá; KI-028/032 **đã verify trên PROD**, còn **KI-038 chỉ đóng ở PROD sau khi áp migration `0531`** (xem cảnh báo dưới) · `S1 = **3 mở**` (KI-027 · KI-030 · KI-034) — KI-033 **đã vá**; KI-035 **đã vá + hạ xuống `S3`** (hai claim của gate đều sai, xem dòng của nó); KI-034 **vá một phần** (còn phần gộp transaction). KI-027 nay chỉ còn chờ admin enroll 2FA rồi bật cờ, vì gốc rễ KI-036 đã vá ·
+`S0 = **0 mở**` — KI-028 · KI-032 · KI-038 **đều đã đóng VÀ verify trực tiếp trên PROD** (2026-07-27) · `S1 = **3 mở**` (KI-027 · KI-030 · KI-034) — KI-033 **đã vá**; KI-035 **đã vá + hạ xuống `S3`** (hai claim của gate đều sai, xem dòng của nó); KI-034 **vá một phần** (còn phần gộp transaction). KI-027 nay chỉ còn chờ admin enroll 2FA rồi bật cờ, vì gốc rễ KI-036 đã vá ·
 `S2 = **9 mở**` (KI-008 · KI-011 · KI-014 · KI-016 · KI-021 · **KI-025** · KI-029 · KI-037 · KI-041) · `S3 = 17`.
 
-> ✅ **KHÔNG CÒN `S0` MỞ (2026-07-27).** Hai lỗ `S0` do FULL gate của `S6-SEC-1` tìm ra đã đóng và
-> **đã verify trực tiếp trên PROD**:
+> ✅ **KHÔNG CÒN `S0` MỞ (2026-07-27) — đã verify trực tiếp trên PROD.**
+> Ba lỗ `S0` do FULL gate của `S6-SEC-1` tìm ra đều đóng:
 >
-> | | Đóng bằng | Verify trên PROD |
+> | | Đóng bằng | Verify trên PROD (read-only) |
 > | --- | --- | --- |
 > | KI-028 | `scripts/s6sec1-contain-test-tenants.sql` | operator-grant ngoài `funtime` = 0 · user tenant test active = 0 · `funtime` nguyên vẹn |
-> | KI-032 | migration `0530` (+ guard `isSystem`, code ở PR #295) | policy `…no_delete_system` `d`/permissive=`f` · grant `roles` hết `DELETE` |
+> | KI-032 | mig `0530` | policy `…no_delete_system` `cmd=d`/`permissive=f` · grant `roles` hết `DELETE` |
+> | KI-038 | mig `0531` | 2 trigger `enforce_company_id_immutable` trên `notification_%`, `tgenabled='O'` (đang hoạt động, không phải chỉ tồn tại) |
 >
-> Lưu ý: **guard tầng app** của KI-032 chỉ live sau khi PR #295 merge + deploy; hiện PROD đang được
-> **tầng DB** chặn — đó là lý do vá hai tầng. Chi tiết:
-> `_review/S6-SEC-1-SECURITY-HARDENING-2026-07-26` §0.1 · §7d.
+> Chi tiết: `_review/S6-SEC-1-SECURITY-HARDENING-2026-07-26` §0.1 · §7d · §7e.
 
 ~~Không có defect sản phẩm mức S0/S1 nào đang mở.~~ — **câu này đúng tới trước FULL gate 2026-07-26,
 nay KHÔNG còn đúng** (xem trên). KI-001/KI-002 **đã đóng**; KI-006 hạ xuống S3 (chỉ còn bước cấu hình
