@@ -54,7 +54,7 @@
 | KI-042 | `login_logs`: hàng `company_id IS NULL` (lần thử đăng nhập pre-auth, có email + IP) **đọc được chéo tenant**. Vế GHI đã đóng — đính chính so với vòng 1 | S3 | Bảo mật | ❌ | ❌ | `S6-SEC-LOGINLOG-1` (mở 2026-07-27) |
 | KI-037 | Bộ `tenant-isolation.int-spec` (465 ca) **chỉ SELECT** — không có một ca deny GHI chéo tenant nào. Là lớp lỗ hổng đã để lọt KI-032, không phải một bug lẻ | S2 | Độ phủ test | ❌ | ❌ | WO mới |
 | KI-029 | `PERMISSION_GUARD_ENABLED` — kill-switch **fail-OPEN toàn hệ**, đọc thẳng `process.env`, KHÔNG có trong `env.schema` lẫn `.env.example` (hiện KHÔNG đặt ở PROD) | S2 | Bảo mật (tiềm ẩn) | ❌ | ❌ | Sau MVP / CR |
-| KI-030 | `GET /org/employees` trả **danh bạ toàn tenant** (email·tên·trạng thái·team) cho mọi user đã đăng nhập — lệch với `/hr/employees` vốn ép data_scope | S2 | Bảo mật (phân quyền) | ❌ | ❌ | `S6-SEC-ORG-1` (mở 2026-07-27) |
+| KI-030 | **3 route** `/org` không gate trả danh bạ + cơ cấu team toàn tenant cho mọi user đã đăng nhập (`employees` · `teams` · `teams/:id/members`) — lệch với `/hr/employees` vốn ép data_scope. ⟲ mở rộng 1 → 3 route bởi census runtime `S6-SEC-ROUTEMAP-1` | S2 | Bảo mật (phân quyền) | ❌ | ❌ | `S6-SEC-ORG-1` (mở 2026-07-27) |
 | KI-031 | `INTERNAL_API_KEY` ngoài `env.schema`/`.env.example` (guard **fail-CLOSED** nên chỉ mất tính năng) | S3 | Vận hành | ❌ | ❌ | Sau MVP |
 
 > **Đánh số:** `S6-QA-FINAL-1` (PR #294) chiếm **KI-024…026**; `S6-SEC-1` (PR #295) tiếp
@@ -396,7 +396,20 @@ lẫn `.env.prod` (nhớ `m prod-env` ghi đè `.env.prod`) → restart API → 
 fullName · status` + team membership của **mọi** user chưa xoá trong tenant, cho **mọi** user đã đăng
 nhập. Lệch với `/hr/employees` vốn ép data_scope (Employee Own chỉ thấy hồ sơ mình).
 **Vì sao lọt lưới:** `route-guard-coverage.e2e-spec.ts:148` lọc `httpMethod !== "GET"` ⇒ sweep tĩnh
-chỉ soi mutation.
+chỉ soi mutation. ⟲ **Lưới đã vá 2026-07-27** (`S6-SEC-ROUTEMAP-1`): bộ lọc GET bị gỡ, thay bằng census
+runtime + sổ phán quyết có chữ ký — route đọc mới không gate nay làm ĐỎ test thay vì đi qua im lặng.
+
+⟲ **PHẠM VI MỞ RỘNG 1 → 3 ROUTE (census runtime 2026-07-27).** Cùng lỗ, cùng controller, cùng hạng:
+
+| Route | Lộ gì |
+| --- | --- |
+| `GET /org/employees` | danh bạ tài khoản toàn tenant (id·email·fullName·status + team) |
+| `GET /org/teams` | toàn bộ cơ cấu team của tenant |
+| `GET /org/teams/:id/members` | **thành viên từng team** — route này chưa từng xuất hiện trong bản census tĩnh nào (bị bẫy cửa sổ decorator nuốt) |
+
+`GET /org/units/tree` được xét cùng đợt và **KHÔNG** vào KI-030: giữ `TENANT_READ` có chữ ký vì
+`apps/app` dùng ở `OrgChartPage.tsx` + `TaskSidebarTree.tsx` ⇒ siết sẽ gãy UI của mọi nhân viên.
+Mức **giữ `S2`** (danh bạ/cơ cấu, không có PII hồ sơ HR). Phán quyết đầy đủ: `S6-SEC-1` §7 Phụ lục A.
 **Vì sao không cao hơn:** danh bạ tài khoản, **không** phải hồ sơ HR (không lương/CCCD/công/phép);
 `withTenant` + RLS giữ, không rò chéo tenant; FE chỉ gọi từ `apps/console`.
 **Đường sửa đã khảo sát:** gate `read:user` — PROD đã cấp cho `company-admin`/`SA`/`project-manager`;
