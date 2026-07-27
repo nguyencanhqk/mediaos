@@ -121,7 +121,7 @@ Ma trận **5 scope × 7 module** + 13 checklist + 6 negative — mỗi ô cite 
 
 | Mục | Trạng thái |
 | --- | --- |
-| CRITICAL / HIGH mở | ⛔ **2 / 5** — cập nhật **2026-07-26 sau FULL gate `S6-SEC-1`**. `S0`: **KI-028** (3 tài khoản `platform-admin` trong PROD dùng mật khẩu có trong repo PUBLIC) · **KI-032** (tenant admin xoá được grant role hệ thống toàn cục, không hoàn tác). `S1`: KI-027 · KI-030 · KI-033 · KI-034 · KI-035. **Chặn RC và go-live** — `_review/S6-SEC-1-SECURITY-HARDENING-2026-07-26` §0.1 |
+| CRITICAL / HIGH mở | **0 / 5** — cập nhật **2026-07-27**. Hai `S0` mà FULL gate `S6-SEC-1` tìm ra (**KI-028** 3 tài khoản `platform-admin` PROD dùng mật khẩu có trong repo PUBLIC · **KI-032** tenant admin xoá được grant role hệ thống toàn cục) **đã đóng và verify trên PROD**. Còn `S1`: KI-027 · KI-030 · KI-033 · KI-034 · KI-035 — `_review/S6-SEC-1-SECURITY-HARDENING-2026-07-26` §0.1 · §7d |
 | OWASP API Top 10 | 10/10 PASS hoặc N/A-có-lý-do |
 | 3 bất biến (`company_id`+RLS · append-only/soft-delete · không secret plaintext) | GIỮ VỮNG |
 | Accepted-risk chờ owner ký | **D3** — widget `hr-overview` count-only hiển thị headcount toàn công ty cho HR có scope Department |

@@ -37,8 +37,8 @@
 | ~~KI-022~~ | ~~`outboxOf` trong `goal-be2-link.int-spec` không lọc `company_id` ⇒ đỏ-giả ngẫu nhiên~~ — **ĐÃ ĐÓNG 2026-07-26** (`S6-STAB-1`) | S1 | Hạ tầng test | — | — | ✔ xong |
 | ~~KI-023~~ | ~~Đua teardown `audit_logs → companies` trong `cleanupTenants` ⇒ đỏ-giả ngẫu nhiên~~ — **ĐÃ ĐÓNG 2026-07-26** (`S6-STAB-1`) | S1 | Hạ tầng test | — | — | ✔ xong |
 | **KI-027** | **2FA KHÔNG được ép ở PROD** cho `company-admin` dù role khai `requires_two_factor=true` (env `false` + company policy NULL + user flag `false`) | **S1** | Bảo mật (cấu hình) | ❌ | ✅ | Owner |
-| **KI-028** | **16 tenant TEST + 25 user còn sống trong DB PROD** — trong đó **3 tài khoản `platform-admin` (audience operator, ĐỌC CHÉO TENANT theo thiết kế) đang `active`, `must_change_password=false`, mật khẩu = `Passw0rd!test99` có trong 86 file của repo PUBLIC** (đã verify argon2 trên hash PROD) | **S0** | Bảo mật | ✅ | ✅ | **Owner — GẤP** |
-| ~~**KI-032**~~ | ~~**Tenant admin XOÁ được `role_permissions` của role hệ thống TOÀN CỤC**~~ — **ĐÃ VÁ 2026-07-27** (mig `0530` RESTRICTIVE FOR DELETE + gỡ `DELETE ON roles` + guard `isSystem` ở 2 hàm; RED→GREEN 6/6). **Còn phải áp `0530` cho PROD.** — RLS `USING` cho `company_id IS NULL` mà **DELETE không xét `WITH CHECK`**; service thiếu guard `isSystem`. Ghi chéo tenant, **INSERT khôi phục bị chặn ⇒ không hoàn tác qua app**. PROD: 785 grant toàn cục, `funtime` dùng 2 role toàn cục | **S0** | Bảo mật | ✅ | ✅ | **Owner — GẤP** |
+| ~~**KI-028**~~ | **ĐÃ ĐÓNG 2026-07-27** (owner chạy `scripts/s6sec1-contain-test-tenants.sql`; verify PROD: operator-grant ngoài funtime = **0**, user tenant test còn active = **0**, funtime nguyên vẹn 46 user / 0 dòng bị script chạm). Còn lại chỉ là **vệ sinh dữ liệu** (purge 16 company) → `S6-PERF-DB-1`. ~~16 tenant TEST + 25 user còn sống trong DB PROD~~ — trong đó **3 tài khoản `platform-admin` (audience operator, ĐỌC CHÉO TENANT theo thiết kế) đang `active`, `must_change_password=false`, mật khẩu = `Passw0rd!test99` có trong 86 file của repo PUBLIC** (đã verify argon2 trên hash PROD) | **S0** | Bảo mật | ✅ | ✅ | **Owner — GẤP** |
+| ~~**KI-032**~~ | ~~**Tenant admin XOÁ được `role_permissions` của role hệ thống TOÀN CỤC**~~ — **ĐÃ ĐÓNG 2026-07-27** (mig `0530` RESTRICTIVE FOR DELETE + gỡ `DELETE ON roles` + guard `isSystem` ở 2 hàm; RED→GREEN 6/6). **`0530` ĐÃ áp cho PROD** — verify: policy `role_permissions_no_delete_system` cmd=`d` permissive=`f`, grant app trên `roles` = `INSERT,SELECT,UPDATE` (hết `DELETE`). — RLS `USING` cho `company_id IS NULL` mà **DELETE không xét `WITH CHECK`**; service thiếu guard `isSystem`. Ghi chéo tenant, **INSERT khôi phục bị chặn ⇒ không hoàn tác qua app**. PROD: 785 grant toàn cục, `funtime` dùng 2 role toàn cục | **S0** | Bảo mật | ✅ | ✅ | **Owner — GẤP** |
 | KI-033 | `export:leave` (`leave-report.service.ts`) đọc số liệu nghỉ phép toàn công ty nhưng **KHÔNG ghi audit nào** — trong khi `hr-export`/`attendance-export` cùng cổng đều audit in-tx. `RELEASE-05` §5.2 nâng tự động ⇒ tối thiểu S1 | S1 | Bảo mật (audit) | ❌ | ⚠️ | WO mới |
 | KI-034 | Audit của `notifications.service` **KHÔNG cùng transaction** dù chú thích khẳng định có; `markRead` còn không `await` promise audit. Notification ghi thành công, audit + outbox mất im lặng | S1 | Bảo mật (audit) | ❌ | ⚠️ | WO mới |
 | KI-035 | `login_logs` bỏ ghi **im lặng** (`auth.service.ts` `if (!db) return;`) — cấp token mà không có dòng log; `emitAccountLocked` cùng dạng ⇒ khoá tài khoản không để lại vết | S1 | Bảo mật (audit) | ❌ | ⚠️ | WO mới |
@@ -53,18 +53,21 @@
 > (tài liệu khác đã trỏ tới số hiệu).
 
 **Tổng (cập nhật 2026-07-26 sau FULL gate của `S6-SEC-1`):**
-`S0 = **1 mở**` (**KI-028** — KI-032 đã vá 2026-07-27, còn chờ áp `0530` cho PROD) · `S1 = **5 mở**` (KI-027 · KI-030 · KI-033 · KI-034 · KI-035) ·
+`S0 = **0 mở**` (KI-028 + KI-032 **đều đóng 2026-07-27**, đã verify trên PROD) · `S1 = **5 mở**` (KI-027 · KI-030 · KI-033 · KI-034 · KI-035 — KI-027 nay CHỈ còn chờ admin enroll 2FA rồi bật cờ, vì gốc rễ KI-036 đã vá) ·
 `S2 = 9 mở` (KI-008 · KI-011 · KI-014 · KI-016 · KI-021 · KI-029 · KI-036 · KI-037; **+ KI-025 = 9**
 khi #294 merge) · `S3 = 17`.
 
-> ⛔ **CÒN MỘT MỤC `S0` MỞ — CHẶN CẢ RC LẪN GO-LIVE: KI-028.** Đóng bằng **thao tác của owner**, không
-> phải bằng code: chạy `scripts/s6sec1-contain-test-tenants.sql` trên PROD (backup trước).
+> ✅ **KHÔNG CÒN `S0` MỞ (2026-07-27).** Hai lỗ `S0` do FULL gate của `S6-SEC-1` tìm ra đã đóng và
+> **đã verify trực tiếp trên PROD**:
 >
-> KI-032 (`S0` còn lại) **đã vá 2026-07-27** ở tầng code + DB — nhưng **chỉ có hiệu lực trên PROD sau
-> khi áp migration `0530`**. Trước lúc đó PROD vẫn hở, và KI-028 chính là đường vào của nó.
+> | | Đóng bằng | Verify trên PROD |
+> | --- | --- | --- |
+> | KI-028 | `scripts/s6sec1-contain-test-tenants.sql` | operator-grant ngoài `funtime` = 0 · user tenant test active = 0 · `funtime` nguyên vẹn |
+> | KI-032 | migration `0530` (+ guard `isSystem`, code ở PR #295) | policy `…no_delete_system` `d`/permissive=`f` · grant `roles` hết `DELETE` |
 >
-> Cả hai `S0` do FULL gate của `S6-SEC-1` tìm ra sau khi báo cáo WS4 bản đầu kết luận nhầm là
-> "0 CRITICAL". Chi tiết: `_review/S6-SEC-1-SECURITY-HARDENING-2026-07-26` §0.1 · §7c · §7d.
+> Lưu ý: **guard tầng app** của KI-032 chỉ live sau khi PR #295 merge + deploy; hiện PROD đang được
+> **tầng DB** chặn — đó là lý do vá hai tầng. Chi tiết:
+> `_review/S6-SEC-1-SECURITY-HARDENING-2026-07-26` §0.1 · §7d.
 
 ~~Không có defect sản phẩm mức S0/S1 nào đang mở.~~ — **câu này đúng tới trước FULL gate 2026-07-26,
 nay KHÔNG còn đúng** (xem trên). KI-001/KI-002 **đã đóng**; KI-006 hạ xuống S3 (chỉ còn bước cấu hình

@@ -13,6 +13,20 @@
 
 ## 0. Kết luận điều hành
 
+> ## ✅ CẬP NHẬT 2026-07-27 — HAI LỖ `S0` ĐÃ ĐÓNG, ĐÃ VERIFY TRÊN PROD
+>
+> | Lỗ | Đóng bằng | Verify trên PROD (read-only) |
+> | --- | --- | --- |
+> | **SEC-F00-A** / KI-028 | Owner chạy [`scripts/s6sec1-contain-test-tenants.sql`](scripts/s6sec1-contain-test-tenants.sql) | operator-grant ngoài `funtime` = **0** · user tenant test còn `active` = **0** · `funtime` **nguyên vẹn** (46 user alive, **0** dòng bị script chạm) |
+> | **SEC-F00-B** / KI-032 | Migration **`0530`** đã áp cho PROD (+ guard `isSystem` ở PR #295) | policy `role_permissions_no_delete_system` `cmd=d` `permissive=f` · grant app trên `roles` = `INSERT,SELECT,UPDATE` (**hết `DELETE`**) |
+>
+> **Guard tầng app của KI-032 chỉ live sau khi PR #295 merge + deploy** — hiện PROD được **tầng DB**
+> chặn. Đó chính là lý do vá hai tầng. §7d.
+>
+> Phần §0.1–§7c bên dưới **giữ nguyên** hiện trạng lúc gate chặn, để đối chiếu.
+
+---
+
 > ## 🔴 BẢN NÀY ĐÃ BỊ FULL GATE CHẶN — ĐỌC §0.1 TRƯỚC
 >
 > Ba reviewer của FULL gate (`security-reviewer` · `rls-tenant-isolation-tester` · thay thế cho
