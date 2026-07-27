@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { LeaveReportQuery, LeaveReportResponse } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
+import { AuditService } from "../events/audit.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { LEAVE_RESOURCES } from "./leave-permissions.const";
 import { LeaveReportRepository, type LeaveReportRow } from "./leave-report.repository";
@@ -22,6 +23,9 @@ export class LeaveReportService {
     private readonly repo: LeaveReportRepository,
     private readonly db: DatabaseService,
     private readonly dataScope: DataScopeService,
+    // S6-SEC-1 · KI-033: optional-với-default để int-spec dựng service bằng tay (3 arg) KHÔNG vỡ —
+    // cùng khuôn với RoleAdminService.permissionCatalog. DI luôn truyền instance thật.
+    private readonly audit: AuditService = new AuditService(),
   ) {}
 
   async getReport(user: RequestUser, query: LeaveReportQuery): Promise<LeaveReportResponse> {
@@ -50,6 +54,21 @@ export class LeaveReportService {
         query.pageSize,
       );
       const totalPages = query.pageSize > 0 ? Math.ceil(total / query.pageSize) : 0;
+
+      // S6-SEC-1 · KI-033 — audit append-only TRONG CÙNG tx (BẤT BIẾN #2), khuôn y hệt
+      // AttendanceExportService/HrExportService. Route này gate bằng `export:leave` (nhạy cảm) và đọc
+      // tổng hợp nghỉ phép của TOÀN công ty; trước đây không để lại vết nào để hậu kiểm ai đã kéo.
+      // Payload chỉ mang SỐ ĐO + nhãn scope — tuyệt đối không tên/email/mã nhân viên (BẤT BIẾN #3).
+      await this.audit.record(tx, {
+        action: "LeaveReportViewed",
+        objectType: "leave_request",
+        actorUserId: user.id,
+        actorType: "User",
+        resultStatus: "Success",
+        dataScope: scope,
+        after: { count: rows.length, fromDate: query.fromDate, toDate: query.toDate, scope },
+      });
+
       return {
         fromDate: query.fromDate,
         toDate: query.toDate,

@@ -371,8 +371,10 @@ describe.skipIf(!runDb)(
       const res = await get(bHrToken, "/leave/audit-logs?limit=100");
       expect(res.status, JSON.stringify(res.body)).toBe(200);
       const rows = res.body.data.data as Array<{ after: unknown }>;
-      expect(rows.length).toBe(1);
-      expect(JSON.stringify(rows[0].after)).toContain("tenant B only");
+      // S6-SEC-1 · KI-033: /leave/reports nay ghi audit (LeaveReportViewed) ⇒ đếm tuyệt đối không còn
+      // đúng. Giữ nguyên ý định: chỉ thấy dữ liệu tenant B, tuyệt đối không có dòng của tenant A.
+      expect(rows.some((r) => JSON.stringify(r.after).includes("tenant B only"))).toBe(true);
+      expect(rows.filter((r) => JSON.stringify(r.after).includes("tenant A"))).toHaveLength(0);
     });
 
     // ── (d) self-service: /leave/me/balance-transactions never leaks other employees ──

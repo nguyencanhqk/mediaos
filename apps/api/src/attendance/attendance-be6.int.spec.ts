@@ -259,8 +259,11 @@ describe.skipIf(!runDb)("S3-ATT-BE-6 reports + ATT audit reader (DB cô lập, �
     const res = await get(token, "/attendance/audit-logs?limit=100");
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     const rows = res.body.data.data as Array<{ after: unknown }>;
-    expect(rows.length).toBe(1); // only the tenant-B-planted row
-    expect(JSON.stringify(rows[0].after)).toContain("tenant B only");
+    // S6-SEC-1 · KI-033: từ nay đọc /attendance/reports CÓ ghi audit (AttendanceReportViewed), nên
+    // đếm TUYỆT ĐỐI ở đây là số ăn may — nó từng = 1 chỉ vì lúc đó chưa ai ghi thêm gì. Assert theo
+    // ĐÚNG Ý ĐỊNH của case: cô lập tenant. Vẫn nghiêm ngặt (0 dòng của A), không nới lỏng.
+    expect(rows.some((r) => JSON.stringify(r.after).includes("tenant B only"))).toBe(true);
+    expect(rows.filter((r) => JSON.stringify(r.after).includes("tenant A"))).toHaveLength(0);
   });
 
   // ── (d) manager Team scope → own team only, NOT another team (IDOR) ────────────
@@ -327,8 +330,10 @@ describe.skipIf(!runDb)("S3-ATT-BE-6 reports + ATT audit reader (DB cô lập, �
       objectType: string;
       after: Record<string, unknown>;
     }>;
-    const row = rows.find((r) => r.objectType === "attendance_record")!;
-    expect(row).toBeDefined();
+    // Phải tìm theo HÀNG ĐƯỢC GIEO (có secretRef), không phải theo objectType: KI-033 thêm hàng
+    // AttendanceReportViewed cũng mang objectType 'attendance_record' và sẽ được find() bắt trước.
+    const row = rows.find((r) => "secretRef" in r.after)!;
+    expect(row, "không tìm thấy hàng audit được gieo có secretRef").toBeDefined();
     expect(row.after.secretRef).toBe("***");
     expect(row.after.note).toBe("ok");
   });

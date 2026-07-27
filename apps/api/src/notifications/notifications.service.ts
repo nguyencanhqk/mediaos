@@ -64,8 +64,12 @@ export class NotificationsService {
     if (rows.length === 0) throw new NotFoundException("Notification not found");
     const dto = toDto(rows[0]);
 
-    // Audit mark-read (best-effort — không throw nếu audit fail)
-    this.db
+    // Audit mark-read (best-effort — không throw nếu audit fail).
+    // S6-SEC-1 · KI-034: trước đây promise này KHÔNG được await ⇒ `return dto` ở cuối hàm CHẠY ĐUA với
+    // nó. Nếu request kết thúc/process xoay vòng trước khi promise settle thì audit mất mà không ai
+    // biết — kể cả dòng warn trong .catch cũng có thể không kịp chạy. Await để thất bại (nếu có) LUÔN
+    // được ghi lại. Vẫn KHÔNG throw: mark-read hỏng audit không được làm hỏng thao tác của người dùng.
+    await this.db
       .withTenant(companyId, (tx) =>
         this.audit.record(tx, {
           action: "mark_read",
@@ -91,9 +95,18 @@ export class NotificationsService {
   /**
    * Tạo notification với:
    *   1. Preference check — type bị tắt → trả null (không tạo).
-   *   2. Insert + enqueue outbox TRONG CÙNG transaction (transactional outbox ADR-0009).
-   *   3. Audit record trong cùng transaction.
+   *   2. Insert notification (repository tự mở + COMMIT transaction của nó).
+   *   3. Outbox + audit trong MỘT transaction RIÊNG, chạy ngay sau — thất bại chỉ log warn.
    *   4. Sau commit → emit WS best-effort qua DTO đã mask.
+   *
+   * ⚠️ NỢ ĐÃ BIẾT (S6-SEC-1 · KI-034) — docstring này TRƯỚC ĐÂY ghi "insert + outbox TRONG CÙNG
+   * transaction" và "audit record trong cùng transaction". **Cả hai đều SAI** so với code bên dưới:
+   * `repo.create()` commit tx của chính nó rồi mới mở tx thứ hai cho outbox + audit, và tx thứ hai bị
+   * `.catch()` nuốt. Hệ quả: notification tồn tại nhưng **audit + sự kiện outbox có thể biến mất chỉ
+   * với một dòng warn** — tức mất cả vết kiểm toán lẫn thông báo, im lặng với người dùng.
+   * Sửa đúng = cho `repo.create()` nhận `tx` để gộp cả ba vào một transaction. Đó là refactor chạm
+   * đường nóng mà MỌI module đều gọi ⇒ tách WO riêng có RED test, KHÔNG vá kèm ở đây.
+   * Đổi docstring cho khớp sự thật trước, để người đọc sau không tin nhầm là đã atomic.
    *
    * Trả NotificationDto (đã mask) hoặc null (bị lọc bởi preference).
    */
@@ -119,7 +132,8 @@ export class NotificationsService {
       return null;
     }
 
-    // 2. Insert + outbox + audit trong cùng 1 withTenant transaction
+    // 2. Insert notification — repository tự mở và COMMIT transaction của nó (xem NỢ ở docstring:
+    //    đây KHÔNG cùng transaction với outbox/audit ở bước 3, dù comment cũ ở đây từng nói vậy).
     const rows = await this.repo.create(companyId, data);
     const row = rows[0];
     if (!row) {

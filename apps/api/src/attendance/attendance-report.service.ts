@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { AttendanceReportQuery, AttendanceReportResponse } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
+import { AuditService } from "../events/audit.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { ATT_RESOURCES } from "./attendance-permissions.const";
 import { AttendanceReportRepository, type AttReportRow } from "./attendance-report.repository";
@@ -26,6 +27,8 @@ export class AttendanceReportService {
     private readonly repo: AttendanceReportRepository,
     private readonly db: DatabaseService,
     private readonly dataScope: DataScopeService,
+    // S6-SEC-1 · KI-033: optional-với-default để int-spec dựng service bằng tay (3 arg) KHÔNG vỡ.
+    private readonly audit: AuditService = new AuditService(),
   ) {}
 
   async getReport(
@@ -60,6 +63,21 @@ export class AttendanceReportService {
         query.pageSize,
       );
       const totalPages = query.pageSize > 0 ? Math.ceil(total / query.pageSize) : 0;
+
+      // S6-SEC-1 · KI-033 — audit append-only TRONG CÙNG tx (BẤT BIẾN #2). Route gate bằng
+      // `view-team`/`view-company:attendance` (nhạy cảm) và trả `employeeCode` + `fullName` TỪNG nhân
+      // viên trên phạm vi được cấp ⇒ phải để lại vết ai đã đọc, y như bản CSV (AttendanceExportService).
+      // Payload chỉ mang SỐ ĐO + nhãn scope — không PII (BẤT BIẾN #3).
+      await this.audit.record(tx, {
+        action: "AttendanceReportViewed",
+        objectType: "attendance_record",
+        actorUserId: user.id,
+        actorType: "User",
+        resultStatus: "Success",
+        dataScope: scope,
+        after: { count: rows.length, fromDate: query.fromDate, toDate: query.toDate, scope },
+      });
+
       return {
         fromDate: query.fromDate,
         toDate: query.toDate,
