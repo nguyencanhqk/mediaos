@@ -35,6 +35,10 @@
     "title": "Nhóm / Team",
     "addButton": "Thêm nhóm",
     "empty": "Chưa có nhóm nào.",
+    "noPermission": {
+      "title": "Không có quyền xem nhóm",
+      "description": "Bạn cần quyền read:team để xem danh sách nhóm và thành viên."
+    },
     "leaderLabel": "Trưởng nhóm",
     "types": {
       "production_team": "Nhóm sản xuất",

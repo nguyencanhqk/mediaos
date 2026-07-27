@@ -90,10 +90,10 @@ function OrgUnitsTab() {
     queryFn: orgApi.listOrgUnits,
   });
 
-  const { data: employees = [] } = useQuery({
-    queryKey: ["console:org", "employees"],
-    queryFn: orgApi.listEmployees,
-  });
+  // S6-SEC-ORG-1: bỏ truy vấn GET /org/employees ở tab ĐƠN VỊ. Nó là code chết — kết quả chỉ được
+  // đổ vào một <span hidden> để dập cảnh báo biến-không-dùng, còn chú thích "employees used in teams
+  // tab" thì SAI (TeamsTab có truy vấn riêng của nó). Sau khi route này gate `read:user`, giữ lại
+  // đồng nghĩa với việc tab Đơn vị — vốn cố ý mở cho mọi user — bắn một request chắc chắn 403.
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["console:org", "tree"] });
@@ -331,9 +331,6 @@ function OrgUnitsTab() {
           )}
         </div>
       </Dialog>
-
-      {/* Suppress unused variable warning — employees used in teams tab */}
-      <span data-employees={employees.length} className="hidden" />
     </div>
   );
 }
@@ -370,6 +367,11 @@ function TeamsTab() {
   const qc = useQueryClient();
   const canCreate = useCan("create", "team");
   const canUpdate = useCan("update", "team");
+  // S6-SEC-ORG-1 — GET /org/teams + /org/teams/:id/members nay gate `read:team`, và
+  // GET /org/employees gate `read:user`. Hai cờ dưới đây CHỈ để hiển thị: chúng tránh gọi API
+  // chắc chắn 403 rồi vẽ ra "lỗi tải" gây hiểu nhầm. Chốt chặn thật nằm ở BE, không ở đây.
+  const canReadTeam = useCan("read", "team");
+  const canReadUser = useCan("read", "user");
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<TeamDto | null>(null);
@@ -384,17 +386,19 @@ function TeamsTab() {
   } = useQuery({
     queryKey: ["console:org", "teams"],
     queryFn: orgApi.listTeams,
+    enabled: canReadTeam,
   });
 
   const { data: employees = [] } = useQuery({
     queryKey: ["console:org", "employees"],
     queryFn: orgApi.listEmployees,
+    enabled: canReadUser,
   });
 
   const { data: members = [] } = useQuery({
     queryKey: ["console:org", "teams", detailTeamId, "members"],
     queryFn: () => orgApi.listTeamMembers(detailTeamId as string),
-    enabled: detailTeamId !== null,
+    enabled: detailTeamId !== null && canReadTeam,
   });
 
   const detailTeam = teams.find((t) => t.id === detailTeamId) ?? null;
@@ -473,6 +477,17 @@ function TeamsTab() {
     setDetailTeamId(null);
     setMemberUserId("");
   };
+
+  // Không có `read:team` ⇒ mọi truy vấn của tab này chắc chắn 403. Hiện lý do thay vì "lỗi tải".
+  if (!canReadTeam) {
+    return (
+      <EmptyState
+        icon={Building2}
+        title={t("teams.noPermission.title")}
+        description={t("teams.noPermission.description")}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">

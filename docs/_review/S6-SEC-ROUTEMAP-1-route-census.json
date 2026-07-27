@@ -6,11 +6,11 @@
   "totals": {
     "routes": 452,
     "controllers": 79,
-    "gated": 397,
+    "gated": 400,
     "gatedAtClassLevel": 8,
     "public": 12,
-    "ungated": 43,
-    "needVerdict": 55
+    "ungated": 40,
+    "needVerdict": 52
   },
   "verdictCounts": {
     "SELF": 15,
@@ -19,7 +19,7 @@
     "TENANT_READ": 6,
     "DEAD-410": 4,
     "PARKED": 13,
-    "GAP": 3
+    "GAP": 0
   },
   "routes": [
     {
@@ -4485,15 +4485,17 @@
       "key": "OrgController#listEmployees",
       "httpMethod": "GET",
       "path": "/api/v1/org/employees",
-      "hasPermission": false,
-      "permission": null,
-      "permissionLevel": null,
+      "hasPermission": true,
+      "permission": "read:user",
+      "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],
-      "routeGuards": [],
-      "verdict": "GAP",
-      "verdictReason": "Trả danh bạ TOÀN TENANT (id·email·fullName·status + team membership của mọi user chưa xoá — org.repository.ts:322) cho MỌI user đã đăng nhập, trong khi /hr/employees cùng dữ liệu thì ép data_scope. Đây là SEC-F04.",
-      "verdictWo": "S6-SEC-ORG-1 (KI-030)"
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
     },
     {
       "key": "OrgController#listOrgUnits",
@@ -4527,29 +4529,33 @@
       "key": "OrgController#listTeamMembers",
       "httpMethod": "GET",
       "path": "/api/v1/org/teams/:id/members",
-      "hasPermission": false,
-      "permission": null,
-      "permissionLevel": null,
+      "hasPermission": true,
+      "permission": "read:team",
+      "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],
-      "routeGuards": [],
-      "verdict": "GAP",
-      "verdictReason": "Lộ THÀNH VIÊN từng team cho mọi user đã đăng nhập. Chính route này bị bẫy 'cửa sổ decorator i+8' của §0.4 nuốt mất ⇒ không xuất hiện trong bản census tĩnh nào.",
-      "verdictWo": "S6-SEC-ORG-1 (KI-030)"
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
     },
     {
       "key": "OrgController#listTeams",
       "httpMethod": "GET",
       "path": "/api/v1/org/teams",
-      "hasPermission": false,
-      "permission": null,
-      "permissionLevel": null,
+      "hasPermission": true,
+      "permission": "read:team",
+      "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],
-      "routeGuards": [],
-      "verdict": "GAP",
-      "verdictReason": "Cùng họ với listEmployees — lộ cơ cấu team toàn tenant không gate. Sweep cũ không thấy vì nó lọc bỏ GET.",
-      "verdictWo": "S6-SEC-ORG-1 (KI-030)"
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
     },
     {
       "key": "OrgController#removeTeamMember",

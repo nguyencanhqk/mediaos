@@ -54,7 +54,7 @@
 | KI-042 | `login_logs`: hàng `company_id IS NULL` (lần thử đăng nhập pre-auth, có email + IP) **đọc được chéo tenant**. Vế GHI đã đóng — đính chính so với vòng 1 | S3 | Bảo mật | ❌ | ❌ | `S6-SEC-LOGINLOG-1` (mở 2026-07-27) |
 | KI-037 | Bộ `tenant-isolation.int-spec` (465 ca) **chỉ SELECT** — không có một ca deny GHI chéo tenant nào. Là lớp lỗ hổng đã để lọt KI-032, không phải một bug lẻ | S2 | Độ phủ test | ❌ | ❌ | WO mới |
 | KI-029 | `PERMISSION_GUARD_ENABLED` — kill-switch **fail-OPEN toàn hệ**, đọc thẳng `process.env`, KHÔNG có trong `env.schema` lẫn `.env.example` (hiện KHÔNG đặt ở PROD) | S2 | Bảo mật (tiềm ẩn) | ❌ | ❌ | Sau MVP / CR |
-| KI-030 | **3 route** `/org` không gate trả danh bạ + cơ cấu team toàn tenant cho mọi user đã đăng nhập (`employees` · `teams` · `teams/:id/members`) — lệch với `/hr/employees` vốn ép data_scope. ⟲ mở rộng 1 → 3 route bởi census runtime `S6-SEC-ROUTEMAP-1` | S2 | Bảo mật (phân quyền) | ❌ | ❌ | `S6-SEC-ORG-1` (mở 2026-07-27) |
+| ~~KI-030~~ | **3 route** `/org` không gate trả danh bạ + cơ cấu team toàn tenant cho mọi user đã đăng nhập (`employees` · `teams` · `teams/:id/members`) — lệch với `/hr/employees` vốn ép data_scope. ⟲ mở rộng 1 → 3 route bởi census runtime `S6-SEC-ROUTEMAP-1` | S2 | Bảo mật (phân quyền) | ✅ | ✅ | **ĐÓNG 2026-07-27** — `S6-SEC-ORG-1` |
 | KI-031 | `INTERNAL_API_KEY` ngoài `env.schema`/`.env.example` (guard **fail-CLOSED** nên chỉ mất tính năng) | S3 | Vận hành | ❌ | ❌ | Sau MVP |
 
 > **Đánh số:** `S6-QA-FINAL-1` (PR #294) chiếm **KI-024…026**; `S6-SEC-1` (PR #295) tiếp
@@ -62,7 +62,7 @@
 > (tài liệu khác đã trỏ tới số hiệu).
 
 **Tổng (cập nhật 2026-07-27 sau re-gate vòng 2 của `S6-SEC-1`):**
-`S0 = **0 mở**` — KI-028 · KI-032 · KI-038 **đều đã đóng VÀ verify trực tiếp trên PROD** (2026-07-27) · `S1 = **3 mở**` (KI-027 · KI-030 · KI-034) — KI-033 **đã vá**; KI-035 **đã vá + hạ xuống `S3`** (hai claim của gate đều sai, xem dòng của nó); KI-034 **vá một phần** (còn phần gộp transaction). KI-027 nay chỉ còn chờ admin enroll 2FA rồi bật cờ, vì gốc rễ KI-036 đã vá ·
+`S0 = **0 mở**` — KI-028 · KI-032 · KI-038 **đều đã đóng VÀ verify trực tiếp trên PROD** (2026-07-27) · `S1 = **2 mở**` (KI-027 · KI-034) — **KI-030 rời danh sách 2026-07-27**, đóng bởi `S6-SEC-ORG-1` (3→2); KI-033 **đã vá**; KI-035 **đã vá + hạ xuống `S3`** (hai claim của gate đều sai, xem dòng của nó); KI-034 **vá một phần** (còn phần gộp transaction). KI-027 nay chỉ còn chờ admin enroll 2FA rồi bật cờ, vì gốc rễ KI-036 đã vá ·
 `S2 = **8 mở**` (KI-008 · KI-011 · KI-016 · KI-021 · **KI-025** · KI-029 · KI-037 · KI-041) · `S3 = 17`.
 **KI-014 rời danh sách 2026-07-27** — đóng bởi `S6-QA-CHUNK-1` (9 → 8).
 
@@ -83,9 +83,10 @@ token + deploy). Giữ nguyên số hiệu KI để tài liệu khác trỏ tớ
 
 > **Ngưỡng RC** (`RELEASE-05` §5.3) cho phép **≤3** mục S2 mở, mỗi mục có owner + workaround. Hiện
 > **7** (KI-014 đã đóng 2026-07-27) ⇒ trước khi tạo RC vẫn phải đóng bớt hoặc owner ký waiver tường
-> minh cho phần vượt. Ba mục còn nằm trong tầm đóng ở Sprint 6: **KI-008** (diễn tập restore —
-> `S6-PERF-DB-1`) · **KI-016** (tách `dist` — cần mở `S6-OPS-DISTSPLIT-1`) · **KI-030** (gate
-> `read:user`, đường sửa đã khảo sát ở `S6-SEC-1` §6.4).
+> minh cho phần vượt. Hai mục còn nằm trong tầm đóng ở Sprint 6: **KI-008** (diễn tập restore —
+> `S6-PERF-DB-1`) · **KI-016** (tách `dist` — cần mở `S6-OPS-DISTSPLIT-1`).
+> **KI-030 đã đóng 2026-07-27** (`S6-SEC-ORG-1` — gate `read:user` + `read:team`); nó **không** nằm
+> trong con số 7 nên ngưỡng RC giữ nguyên.
 >
 > ⚠️ **Lệch số có từ TRƯỚC WO này, không phải do nó gây ra:** bảng đếm ở trên ghi `S2 = 9 mở` trong
 > khi khối ngưỡng RC ghi `8` (khối RC không tính **KI-028**, vốn đã đóng nhưng vẫn nằm trong danh
@@ -390,7 +391,31 @@ lẫn `.env.prod` (nhớ `m prod-env` ghi đè `.env.prod`) → restart API → 
 **Đề xuất:** đưa vào schema (default `"true"`) + `.env.example`, và **fail-loud lúc boot** nếu
 `NODE_ENV=production` mà cờ `false`. Là thay đổi hành vi sau freeze ⇒ cần owner duyệt.
 
-### KI-030 — `GET /org/employees` trả danh bạ toàn tenant · S2 · (`S6-SEC-1`)
+### KI-030 — `GET /org/employees` trả danh bạ toàn tenant · S2 · ✅ ĐÃ ĐÓNG 2026-07-27 (`S6-SEC-ORG-1`)
+
+> **Đã đóng.** Cả 3 route nay mang `@UseGuards(PermissionGuard)` + `@RequirePermission`:
+> `read:user` cho `/org/employees`; `read:team` cho `/org/teams` + `/org/teams/:id/members`.
+> Cặp quyền lấy từ seed CÓ THẬT (`0005_permissions.sql:200,205`) — **0 migration, 0 grant mới**.
+>
+> | Bằng chứng | Chi tiết |
+> | --- | --- |
+> | RED trước | `test/integration/org-directory-permission.int-spec.ts` chạy trên code CHƯA vá: **3 failed \| 4 passed** — `expected [200,200,200] to equal [403,403,403]` |
+> | GREEN sau | cùng file, **7/7 passed** (deny 3 ca · allow 2 ca · chống-siết-quá-tay 1 ca · cô lập tenant 1 ca) |
+> | Lưới census | `route-guard-coverage.e2e-spec.ts` **9/9**; artifact `_review/S6-SEC-ROUTEMAP-1-route-census.json` regen: `GAP 3 → 0`, ungated `43 → 40`, `FROZEN_GAPS = []` |
+> | FE | `apps/console` **23/23**; tab Đơn vị bỏ được truy vấn `/org/employees` chết (chỉ đổ vào `<span hidden>`) |
+>
+> **Ai mất quyền đọc (đo trên PROD `funtime`, 46 user, 2026-07-27):** `46 → 6`. Sáu người còn lại
+> giữ role `SA`/`company-admin` (`data_scope = Company`). **40 user chỉ có role `employee` mất quyền
+> đọc 3 route này** — đúng chủ đích, và cả 3 chỉ có caller ở `apps/console` (màn quản trị).
+> **KHÔNG backfill grant nào** — thêm `read:user` cho `employee` là mở lại chính lỗ vừa vá.
+>
+> ⚠️ **Việc kế tiếp (chưa có WO):** role hệ thống `hr-manager` có `read:team` + quyền GHI team
+> (migration `0030` §4) nhưng **thiếu `read:user`** ⇒ quản trị team được mà không liệt kê được user
+> để thêm thành viên. Hiện **0 user** giữ role này ở PROD nên không có ảnh hưởng sống. Sửa đúng cách
+> = backfill PER-PAIR (`read:user` → `hr-manager`, `Company`) bằng migration, nằm ngoài `paths` của
+> `S6-SEC-ORG-1`. Chi tiết: `docs/plans/S6-SEC-ORG-1.md` §2.4.
+
+**Mô tả gốc** (giữ nguyên cho tài liệu khác trỏ tới không gãy):
 
 `org.controller.ts:173` không `@RequirePermission`; `org.repository.ts:322` trả `id · email ·
 fullName · status` + team membership của **mọi** user chưa xoá trong tenant, cho **mọi** user đã đăng

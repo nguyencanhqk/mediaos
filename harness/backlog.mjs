@@ -5486,7 +5486,7 @@ export const backlog = [
     title:
       "KI-030 — gate 3 route đọc /org đang lộ danh bạ toàn tenant cho MỌI user đăng nhập (employees · teams · teams/:id/members); giữ /org/units/tree + /org/roles làm TENANT_READ có chữ ký",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/org/**",
       "apps/api/test/**",

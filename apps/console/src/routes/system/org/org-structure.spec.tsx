@@ -120,6 +120,10 @@ beforeEach(() => {
     "delete:org_unit": true,
     "create:team": true,
     "update:team": true,
+    // S6-SEC-ORG-1: GET /org/teams + /org/teams/:id/members nay gate `read:team`,
+    // GET /org/employees gate `read:user`. Thiếu hai cặp này thì tab Teams không tải gì.
+    "read:team": true,
+    "read:user": true,
   });
 });
 
@@ -156,7 +160,9 @@ describe("CS-3 OrgStructurePage — Đơn vị tổ chức", () => {
 
   it("nút Thêm đơn vị hiện khi có create:org_unit", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Thêm đơn vị" })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Thêm đơn vị" })).toBeInTheDocument(),
+    );
   });
 
   it("KHÔNG hiện Thêm đơn vị khi thiếu create:org_unit", async () => {
@@ -208,7 +214,8 @@ describe("CS-3 OrgStructurePage — Teams tab", () => {
   });
 
   it("Teams tab — KHÔNG hiện Thêm nhóm khi thiếu quyền", async () => {
-    setCaps({ "create:org_unit": true, "update:org_unit": true });
+    // Giữ `read:team` để tab vẫn TẢI ĐƯỢC — bài test này soi affordance GHI, không soi đường đọc.
+    setCaps({ "create:org_unit": true, "update:org_unit": true, "read:team": true });
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Nhóm / Team" }));
     await waitFor(() => expect(screen.getByText("Nhóm A1")).toBeInTheDocument());
@@ -221,15 +228,40 @@ describe("CS-3 OrgStructurePage — Teams tab", () => {
     await waitFor(() => expect(screen.getByText("Nhóm A1")).toBeInTheDocument());
     expect(callsTo("GET", "/org/teams").length).toBeGreaterThan(0);
   });
+
+  // ── S6-SEC-ORG-1 (KI-030) ────────────────────────────────────────────────────────────────────
+  it("thiếu `read:team` → hiện lý do KHÔNG-CÓ-QUYỀN và KHÔNG gọi API chắc chắn 403", async () => {
+    // BE mới là chỗ chặn (org.controller gate read:team). Cờ FE chỉ để không vẽ ra "lỗi tải" —
+    // một thông báo sai bản chất khiến người dùng đi báo lỗi hệ thống thay vì đi xin quyền.
+    setCaps({ "create:team": true, "update:team": true });
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Nhóm / Team" }));
+
+    await waitFor(() => expect(screen.getByText("Không có quyền xem nhóm")).toBeInTheDocument());
+    expect(callsTo("GET", "/org/teams")).toHaveLength(0);
+    expect(callsTo("GET", "/org/employees")).toHaveLength(0);
+    // Không được rơi vào nhánh lỗi — thiếu quyền KHÔNG phải là hỏng.
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("có `read:team` nhưng thiếu `read:user` → vẫn xem được nhóm, chỉ không nạp danh bạ", async () => {
+    // Đây chính là hình dạng của role `hr-manager` ở PROD (plan §2.4): quản trị team được nhưng
+    // không có read:user. Tab phải DÙNG ĐƯỢC, không được sập cả trang vì một truy vấn phụ.
+    setCaps({ "read:team": true, "create:team": true, "update:team": true });
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Nhóm / Team" }));
+
+    await waitFor(() => expect(screen.getByText("Nhóm A1")).toBeInTheDocument());
+    expect(callsTo("GET", "/org/teams").length).toBeGreaterThan(0);
+    expect(callsTo("GET", "/org/employees")).toHaveLength(0);
+  });
 });
 
 describe("CS-3 OrgStructurePage — deny permission (create:org_unit absent)", () => {
   it("không có bất kỳ quyền nào → không có nút CRUD", async () => {
     setCaps({});
     renderPage();
-    await waitFor(() =>
-      expect(screen.getAllByText("Phòng Kế toán").length).toBeGreaterThan(0),
-    );
+    await waitFor(() => expect(screen.getAllByText("Phòng Kế toán").length).toBeGreaterThan(0));
     expect(screen.queryByRole("button", { name: "Thêm đơn vị" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Sửa" })).not.toBeInTheDocument();
   });
