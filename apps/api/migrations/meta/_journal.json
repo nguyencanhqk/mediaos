@@ -1380,6 +1380,20 @@
       "when": 1717587318000,
       "tag": "0529_s5_lmsnoti1_noti_catalog_lms",
       "breakpoints": true
+    },
+    {
+      "idx": 197,
+      "version": "7",
+      "when": 1717587319000,
+      "tag": "0530_s6sec1_system_role_immutable",
+      "breakpoints": true
+    },
+    {
+      "idx": 198,
+      "version": "7",
+      "when": 1717587320000,
+      "tag": "0531_s6sec1_noti_catalog_company_immutable",
+      "breakpoints": true
     }
   ]
 }

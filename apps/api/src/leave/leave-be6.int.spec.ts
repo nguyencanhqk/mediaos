@@ -370,9 +370,13 @@ describe.skipIf(!runDb)(
     it("(c3) tenant B /leave/audit-logs → only tenant B's row", async () => {
       const res = await get(bHrToken, "/leave/audit-logs?limit=100");
       expect(res.status, JSON.stringify(res.body)).toBe(200);
-      const rows = res.body.data.data as Array<{ after: unknown }>;
-      expect(rows.length).toBe(1);
-      expect(JSON.stringify(rows[0].after)).toContain("tenant B only");
+      const rows = res.body.data.data as Array<{ action: string; after: unknown }>;
+      // S6-SEC-1 · KI-033: /leave/reports nay ghi audit `LeaveReportViewed` ⇒ đếm tuyệt đối cũ không
+      // còn đúng. LOẠI hàng mới đó ra rồi GIỮ NGUYÊN đếm tuyệt đối — xem chú thích dài ở
+      // attendance-be6.int.spec.ts (c2) về lần sửa sai đầu tiên đã bị re-gate bắt.
+      const planted = rows.filter((r) => r.action !== "LeaveReportViewed");
+      expect(planted, "chỉ được thấy đúng 1 hàng audit đã gieo của tenant B").toHaveLength(1);
+      expect(JSON.stringify(planted[0].after)).toContain("tenant B only");
     });
 
     // ── (d) self-service: /leave/me/balance-transactions never leaks other employees ──

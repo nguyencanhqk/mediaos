@@ -1560,7 +1560,17 @@ export class AuthService {
         });
       } else {
         // PRE-AUTH: KHÔNG ngữ cảnh tenant → module db (không set GUC) → company_id NULL.
-        if (!db) return;
+        // S6-SEC-1 · KI-035: trước đây là `if (!db) return;` — bỏ ghi HOÀN TOÀN IM LẶNG, không một dòng
+        // log nào. Nhánh này chỉ chạy cho login THẤT BẠI pre-auth (sai company slug / bị chặn trước khi
+        // biết tenant) — hai đường login THÀNH CÔNG đều có companyId thật nên đi nhánh withTenant ở
+        // trên. Vì vậy đây KHÔNG phải "cấp token mà không có log"; nó là mất dấu vết forensics của
+        // các lần dò tenant. Vẫn không được im lặng: mất log bảo mật phải nhìn thấy được.
+        if (!db) {
+          this.logger.warn(
+            `recordLoginAttempt: bỏ ghi login_logs pre-auth (status=${args.status}) vì module db chưa sẵn sàng — mất dấu vết lần thử này`,
+          );
+          return;
+        }
         await db.insert(loginLogs).values({ companyId: null, ...row });
       }
     } catch (err) {

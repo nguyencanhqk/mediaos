@@ -258,9 +258,22 @@ describe.skipIf(!runDb)("S3-ATT-BE-6 reports + ATT audit reader (DB cô lập, �
     const token = await login(B.slug, `mgr@${B.slug}.test`);
     const res = await get(token, "/attendance/audit-logs?limit=100");
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    const rows = res.body.data.data as Array<{ after: unknown }>;
-    expect(rows.length).toBe(1); // only the tenant-B-planted row
-    expect(JSON.stringify(rows[0].after)).toContain("tenant B only");
+    const rows = res.body.data.data as Array<{ action: string; after: unknown }>;
+    // S6-SEC-1 · KI-033 làm đếm tuyệt đối cũ (`rows.length === 1`) không còn đúng: đọc
+    // /attendance/reports nay CÓ ghi audit `AttendanceReportViewed`.
+    //
+    // ⚠️ LẦN SỬA ĐẦU CỦA WO NÀY LÀ SAI VÀ ĐÃ BỊ re-gate BẮT: nó đổi sang
+    //   expect(rows.filter(r => JSON.stringify(r.after).includes("tenant A"))).toHaveLength(0)
+    // — assertion đó KHÔNG BAO GIỜ đỏ được, vì KHÔNG fixture nào của tenant A chứa chuỗi "tenant A"
+    // (payload thật là {note,secretRef} / {fullName:"Should Not Appear"}). Reviewer chứng minh bằng
+    // cách gieo policy rò thật (`CREATE POLICY … ON audit_logs FOR SELECT USING (true)`): file vẫn
+    // 11/11 XANH giữa một vụ rò audit chéo tenant toàn diện.
+    //
+    // Cách đúng: LOẠI các hàng do KI-033 mới sinh ra, rồi giữ nguyên đếm TUYỆT ĐỐI trên phần còn lại.
+    // Tiêu chí nghiệm thu: chạy lại dưới policy rò ở trên thì case này PHẢI ĐỎ.
+    const planted = rows.filter((r) => r.action !== "AttendanceReportViewed");
+    expect(planted, "chỉ được thấy đúng 1 hàng audit đã gieo của tenant B").toHaveLength(1);
+    expect(JSON.stringify(planted[0].after)).toContain("tenant B only");
   });
 
   // ── (d) manager Team scope → own team only, NOT another team (IDOR) ────────────
@@ -324,11 +337,21 @@ describe.skipIf(!runDb)("S3-ATT-BE-6 reports + ATT audit reader (DB cô lập, �
     const res = await get(token, "/attendance/audit-logs?limit=100");
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     const rows = res.body.data.data as Array<{
+      action: string;
       objectType: string;
       after: Record<string, unknown>;
     }>;
-    const row = rows.find((r) => r.objectType === "attendance_record")!;
-    expect(row).toBeDefined();
+    // Lọc theo ACTION của hàng được gieo, KHÔNG theo objectType: KI-033 thêm hàng
+    // `AttendanceReportViewed` cũng mang objectType 'attendance_record'.
+    //
+    // Vì sao filter + đếm tuyệt đối chứ không `find()`: tenant B cũng gieo một hàng
+    // `AttendanceAdjustmentApproved` (payload {note:"tenant B only"}, KHÔNG có secretRef). Nếu RLS rò,
+    // tenant A thấy cả hai ⇒ length 2 ⇒ ĐỎ. Bản `find()` cũ chỉ đỏ khi tình cờ bốc trúng hàng của B
+    // (phụ thuộc thứ tự); bản lọc-theo-secretRef mà WO này viết lần đầu thì KHÔNG BAO GIỜ đỏ — nó
+    // loại sạch hàng của B trước khi đếm. Bản này tất định và mạnh hơn cả hai.
+    const planted = rows.filter((r) => r.action === "AttendanceAdjustmentApproved");
+    expect(planted, "chỉ được thấy hàng adjustment của CHÍNH tenant mình").toHaveLength(1);
+    const row = planted[0]!;
     expect(row.after.secretRef).toBe("***");
     expect(row.after.note).toBe("ok");
   });

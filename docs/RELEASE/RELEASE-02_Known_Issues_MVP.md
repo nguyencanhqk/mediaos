@@ -40,17 +40,57 @@
 | ~~KI-024~~ | ~~`foundation-audit.e2e-spec` dùng `action` cố định + đếm tuyệt đối ở System scope ⇒ đỏ-giả **vĩnh viễn** sau một lần chạy bị ngắt~~ — **ĐÃ ĐÓNG 2026-07-26** (`S6-QA-FINAL-1`) | S1 | Hạ tầng test | — | — | ✔ xong |
 | KI-025 | **98/346 đường dẫn API (28%) không có test HTTP nào chạm** — phủ ở tầng service (`T-svc`) nên guard/DTO/envelope của route chưa từng chạy. Nặng nhất: `user-invites` (`/users/invite`, `/users/:id/approve`…) + `POST/GET /hr/profile-change-requests` | S2 | Độ phủ test | ❌ | ❌ | Sau MVP |
 | ~~KI-026~~ | ~~Nhãn `[BLOCKED — service.ts bug]` + chú thích "KNOWN BROKEN" nằm trên một test ĐANG XANH (`attendance-adjustment.int.spec.ts`) — bug đã sửa cùng PR #81 nhưng chú thích không gỡ~~ — **ĐÃ ĐÓNG 2026-07-26** (`S6-QA-FINAL-1`) | S3 | Vệ sinh test | — | — | ✔ xong |
+| **KI-027** | **2FA KHÔNG được ép ở PROD** cho `company-admin` dù role khai `requires_two_factor=true` (env `false` + company policy NULL + user flag `false`) | **S1** | Bảo mật (cấu hình) | ❌ | ✅ | Owner |
+| ~~**KI-028**~~ | **ĐÃ ĐÓNG 2026-07-27** (owner chạy `scripts/s6sec1-contain-test-tenants.sql`; verify PROD: operator-grant ngoài funtime = **0**, user tenant test còn active = **0**, funtime nguyên vẹn 46 user / 0 dòng bị script chạm). Còn lại chỉ là **vệ sinh dữ liệu** (purge 16 company) → `S6-PERF-DB-1`. ~~16 tenant TEST + 25 user còn sống trong DB PROD~~ — trong đó **3 tài khoản `platform-admin` (audience operator, ĐỌC CHÉO TENANT theo thiết kế) đang `active`, `must_change_password=false`, mật khẩu = `Passw0rd!test99` có trong 86 file của repo PUBLIC** (đã verify argon2 trên hash PROD) | **S0** | Bảo mật | ✅ | ✅ | **Owner — GẤP** |
+| ~~**KI-032**~~ | ~~**Tenant admin XOÁ được `role_permissions` của role hệ thống TOÀN CỤC**~~ — **ĐÃ ĐÓNG 2026-07-27** (mig `0530` RESTRICTIVE FOR DELETE + gỡ `DELETE ON roles` + guard `isSystem` ở 2 hàm; RED→GREEN 6/6). **`0530` ĐÃ áp cho PROD** — verify: policy `role_permissions_no_delete_system` cmd=`d` permissive=`f`, grant app trên `roles` = `INSERT,SELECT,UPDATE` (hết `DELETE`). — RLS `USING` cho `company_id IS NULL` mà **DELETE không xét `WITH CHECK`**; service thiếu guard `isSystem`. Ghi chéo tenant, **INSERT khôi phục bị chặn ⇒ không hoàn tác qua app**. PROD: 785 grant toàn cục, `funtime` dùng 2 role toàn cục | **S0** | Bảo mật | ✅ | ✅ | **Owner — GẤP** |
+| ~~KI-033~~ | **ĐÃ VÁ 2026-07-27** — thêm audit in-tx cho **CẢ HAI** endpoint report. *Đính chính phạm vi so với bản gate:* không phải "leave lạc đàn giữa hai sibling cùng cổng" — `attendance-report` cũng không audit, và nó gate bằng `view-company:attendance` chứ **không** phải `export`. Đúng là: 2 bản CSV có audit, 2 bản report JSON thì không | S1 | Bảo mật (audit) | — | — | ✔ xong |
+| KI-034 | Audit của `notifications.service.create` **KHÔNG cùng transaction** dù docstring khẳng định có ⇒ audit + outbox có thể mất chỉ với một dòng warn. **Vá một phần 2026-07-27:** `markRead` nay `await` promise audit (hết đua với `return`), và docstring sai đã sửa cho khớp code. **Còn lại:** gộp insert+outbox+audit vào MỘT tx — refactor chạm đường nóng mọi module gọi ⇒ WO riêng có RED test | S1 | Bảo mật (audit) | ❌ | ⚠️ | WO mới |
+| ~~KI-035~~ | **ĐÃ VÁ 2026-07-27** + **HẠ MỨC S1 → S3**. *Hai claim của gate đều SAI, đã tự kiểm chứng:* (1) nhánh `if (!db) return;` chỉ chạy cho login **THẤT BẠI pre-auth** (`companyId: null` ở `:202`/`:222`) — hai đường login **thành công** (`:375`/`:507`) đều truyền `companyId` thật nên đi nhánh `withTenant`, KHÔNG có chuyện "cấp token mà không có log"; (2) `emitAccountLocked` **có** log ERROR đầy đủ trong catch (chú thích tại chỗ ghi rõ "KHÔNG nuốt câm"). Lỗi thật còn lại: chỗ bỏ ghi đó **im lặng tuyệt đối** ⇒ đã thêm `logger.warn` | S3 | Bảo mật (quan sát) | — | — | ✔ xong |
+| ~~KI-036~~ | ~~`.env.example:91` ship `TWO_FACTOR_ENFORCEMENT_ENABLED=false`~~ — **ĐÃ VÁ 2026-07-27** (đổi thành `true` + cảnh báo thứ tự thao tác) — `cp .env.example .env` là bước cài chuẩn ⇒ **gốc rễ tái diễn** của KI-027 ở mọi deploy mới | S2 | Bảo mật (cấu hình) | ❌ | ⚠️ | WO mới |
+| ~~KI-038~~ | **ĐÃ VÁ 2026-07-27** (mig `0531`) — **cùng họ lỗi với KI-032, trên hai bảng khác**: `notification_events` (59 hàng toàn cục PROD) + `notification_templates` (45) cho phép một tenant `UPDATE … SET company_id=<mình> WHERE company_id IS NULL` ⇒ **cướp trọn danh mục NOTI dùng chung**, commit được, **không hoàn tác qua app**; mọi tenant khác mất catalog ⇒ không tạo nổi thông báo. Hai reviewer độc lập cùng tìm ra ở vòng re-gate. Vá = gắn trigger `enforce_company_id_immutable` (mig 0436) | **S0** | Bảo mật | — | — | ✔ xong |
+| ~~KI-039~~ | **ĐÃ VÁ 2026-07-27** — `rls-coverage-assert` assert (b) chỉ kiểm **chuỗi** (`WITH CHECK` có nhắc GUC là xanh) nên **mù** với lớp lỗi KI-038. Thêm **assert (c)**: bảng vừa có khe hở `IS NULL` trong `USING` vừa cho app role `UPDATE` thì bắt buộc phải có trigger bất biến. Đã chứng minh đỏ khi gỡ trigger | S2 | Độ phủ test | — | — | ✔ xong |
+| ~~KI-040~~ | **ĐÃ VÁ 2026-07-27** — assertion cô lập tenant mà **chính WO này viết** khi vá KI-033 **không thể đỏ được** (`filter(includes("tenant A"))` không khớp fixture nào); reviewer chứng minh spec vẫn 11/11 xanh giữa một vụ rò audit chéo tenant thật. Đã khôi phục đếm tuyệt đối + nghiệm thu bằng cách gieo policy rò (4 case đỏ) | S1 | Độ phủ test | — | — | ✔ xong |
+| KI-041 | Matview `mv_dashboard_output`/`mv_dashboard_task_status` mang `company_id` nhưng **Postgres không hỗ trợ RLS trên matview** ⇒ nằm ngoài phép đo 153/153; ranh giới duy nhất là `WHERE company_id = $1` trong service | S2 | Bảo mật | ❌ | ⚠️ | WO mới |
+| KI-042 | `login_logs`: hàng `company_id IS NULL` (lần thử đăng nhập pre-auth, có email + IP) **đọc được chéo tenant**. Vế GHI đã đóng — đính chính so với vòng 1 | S3 | Bảo mật | ❌ | ❌ | WO mới |
+| KI-037 | Bộ `tenant-isolation.int-spec` (465 ca) **chỉ SELECT** — không có một ca deny GHI chéo tenant nào. Là lớp lỗ hổng đã để lọt KI-032, không phải một bug lẻ | S2 | Độ phủ test | ❌ | ❌ | WO mới |
+| KI-029 | `PERMISSION_GUARD_ENABLED` — kill-switch **fail-OPEN toàn hệ**, đọc thẳng `process.env`, KHÔNG có trong `env.schema` lẫn `.env.example` (hiện KHÔNG đặt ở PROD) | S2 | Bảo mật (tiềm ẩn) | ❌ | ❌ | Sau MVP / CR |
+| KI-030 | `GET /org/employees` trả **danh bạ toàn tenant** (email·tên·trạng thái·team) cho mọi user đã đăng nhập — lệch với `/hr/employees` vốn ép data_scope | S2 | Bảo mật (phân quyền) | ❌ | ❌ | CR chờ owner |
+| KI-031 | `INTERNAL_API_KEY` ngoài `env.schema`/`.env.example` (guard **fail-CLOSED** nên chỉ mất tính năng) | S3 | Vận hành | ❌ | ❌ | Sau MVP |
 
-**Tổng (cập nhật 2026-07-26 sau `S6-QA-FINAL-1`): S0 = 0 · S1 = 0 mở (3 phát hiện + đóng trong ngày) ·
-S2 = 6 mở (KI-008 · KI-011 · KI-014 · KI-016 · KI-021 · **KI-025**) · S3 = 16 (KI-026 đóng ngay).**
-Không có defect sản phẩm mức S0/S1 nào đang mở. KI-001/KI-002 **đã đóng**; KI-006 hạ xuống S3 (chỉ còn
-bước cấu hình token + deploy). Giữ nguyên số hiệu KI để tài liệu khác trỏ tới không bị gãy.
+> **Đánh số:** `S6-QA-FINAL-1` (PR #294) chiếm **KI-024…026**; `S6-SEC-1` (PR #295) tiếp
+> **KI-027…042**. Hai PR merge vào cùng bảng này — đã **giữ cả hai khối, không đánh số lại**
+> (tài liệu khác đã trỏ tới số hiệu).
+
+**Tổng (cập nhật 2026-07-27 sau re-gate vòng 2 của `S6-SEC-1`):**
+`S0 = **0 mở trong code**` — KI-028 · KI-032 · **KI-038** đều đã vá; KI-028/032 **đã verify trên PROD**, còn **KI-038 chỉ đóng ở PROD sau khi áp migration `0531`** (xem cảnh báo dưới) · `S1 = **3 mở**` (KI-027 · KI-030 · KI-034) — KI-033 **đã vá**; KI-035 **đã vá + hạ xuống `S3`** (hai claim của gate đều sai, xem dòng của nó); KI-034 **vá một phần** (còn phần gộp transaction). KI-027 nay chỉ còn chờ admin enroll 2FA rồi bật cờ, vì gốc rễ KI-036 đã vá ·
+`S2 = **9 mở**` (KI-008 · KI-011 · KI-014 · KI-016 · KI-021 · **KI-025** · KI-029 · KI-037 · KI-041) · `S3 = 17`.
+
+> ✅ **KHÔNG CÒN `S0` MỞ (2026-07-27).** Hai lỗ `S0` do FULL gate của `S6-SEC-1` tìm ra đã đóng và
+> **đã verify trực tiếp trên PROD**:
+>
+> | | Đóng bằng | Verify trên PROD |
+> | --- | --- | --- |
+> | KI-028 | `scripts/s6sec1-contain-test-tenants.sql` | operator-grant ngoài `funtime` = 0 · user tenant test active = 0 · `funtime` nguyên vẹn |
+> | KI-032 | migration `0530` (+ guard `isSystem`, code ở PR #295) | policy `…no_delete_system` `d`/permissive=`f` · grant `roles` hết `DELETE` |
+>
+> Lưu ý: **guard tầng app** của KI-032 chỉ live sau khi PR #295 merge + deploy; hiện PROD đang được
+> **tầng DB** chặn — đó là lý do vá hai tầng. Chi tiết:
+> `_review/S6-SEC-1-SECURITY-HARDENING-2026-07-26` §0.1 · §7d.
+
+~~Không có defect sản phẩm mức S0/S1 nào đang mở.~~ — **câu này đúng tới trước FULL gate 2026-07-26,
+nay KHÔNG còn đúng** (xem trên). KI-001/KI-002 **đã đóng**; KI-006 hạ xuống S3 (chỉ còn bước cấu hình
+token + deploy). Giữ nguyên số hiệu KI để tài liệu khác trỏ tới không bị gãy.
 
 > **Ngưỡng RC** (`RELEASE-05` §5.3) cho phép **≤3** mục S2 mở, mỗi mục có owner + workaround. Hiện
-> **6** ⇒ trước khi tạo RC phải đóng bớt hoặc owner ký waiver tường minh cho phần vượt. Hai mục nằm
-> trong tầm đóng được ở Sprint 6: **KI-008** (diễn tập restore — `S6-PERF-DB-1`) và **KI-016** (tách
-> `dist` — cần mở `S6-OPS-DISTSPLIT-1`).
-
+> **8** ⇒ trước khi tạo RC phải đóng bớt hoặc owner ký waiver tường minh cho phần vượt. Bốn mục nằm
+> trong tầm đóng ở Sprint 6: **KI-008** (diễn tập restore — `S6-PERF-DB-1`) · **KI-016** (tách `dist`
+> — cần mở `S6-OPS-DISTSPLIT-1`) · **KI-028** (dọn 16 tenant test khỏi PROD) · **KI-030** (gate
+> `read:user`, đường sửa đã khảo sát ở `S6-SEC-1` §6.4).
+>
+> **Và một mục `S1` mới: KI-027.** Không chặn RC theo chữ nghĩa của `RELEASE-05` §5.3, nhưng **nên
+> đóng trước go-live** — thao tác ~10 phút của owner, không cần sửa code (thứ tự bắt buộc ở
+> `_review/S6-SEC-1-SECURITY-HARDENING-2026-07-26` §6.1: **enroll 2FA TRƯỚC, bật cờ SAU** — làm ngược
+> là tự khoá mình ra khỏi hệ thống).
 ---
 
 ## 2. Chi tiết
@@ -268,6 +308,61 @@ Không phải defect, nhưng đủ để làm người đọc kết luận sai l
 `RELEASE-06` §1 cảnh báo, chỉ theo chiều ngược lại: **"code đọc có vẻ hỏng" cũng không phải bằng chứng**.
 Fix: thay bằng ghi chú lịch sử + bỏ nhãn.
 
+### KI-027 — 2FA không được ép ở PROD cho company-admin · **S1** · phát hiện 2026-07-26 (`S6-SEC-1`)
+
+**Kiểm chứng (truy vấn read-only trên PROD `mediaos`):** `roles` có `requires_two_factor = true` cho
+**`company-admin`** và **`platform-admin`**. Nhưng **cả ba lớp ép đều tắt**: (1) `.env` **và**
+`.env.prod` đặt `TWO_FACTOR_ENFORCEMENT_ENABLED=false` (schema default là `"true"`);
+(2) `company_security_policies.two_factor_enforced = NULL` cho `funtime`; (3) user
+`admin@funtimemediacorp.com` có `require_two_factor = false`.
+
+Guard tính `effective2FA = globalEnv || policy.two_factor_enforced` ⇒ global OFF thì **chỉ** ép khi
+công ty tự bật; công ty không bật ⇒ **không ép ai**.
+
+**Hệ quả:** tài khoản quản trị công ty **duy nhất** của production (quản lý user · vai trò · quyền ·
+nhật ký audit) vào được **chỉ bằng mật khẩu**.
+**KHÔNG phải:** không phải bypass đăng nhập — ai **đã** enroll TOTP vẫn bị challenge. Vấn đề là
+**không ai bị bắt buộc enroll**.
+**Cách đóng (thứ tự BẮT BUỘC):** admin enroll 2FA ở `/me/security` → đặt cờ `=true` ở **cả** `.env`
+lẫn `.env.prod` (nhớ `m prod-env` ghi đè `.env.prod`) → restart API → smoke login. **Đảo thứ tự = admin
+ăn 403 `TWO_FACTOR_SETUP_REQUIRED` trên mọi route.**
+
+### KI-028 — 16 tenant TEST + 25 user còn sống trong DB PROD · S2 · (`S6-SEC-1`)
+
+**Kiểm chứng:** `select count(*) from companies` → **17**; khớp mẫu tenant test
+`slug ~ '-[0-9a-f]{8}$'` → **16**; công ty thật duy nhất **`funtime`**. User thuộc 16 tenant đó: **25**.
+**Hệ quả:** tài khoản **đăng nhập được** trong DB production với mật khẩu seed test.
+**Giới hạn thiệt hại:** RLS giữ — phiên đó bị khoá trong tenant test của nó, **không** thấy dữ liệu
+`funtime`; leo thang chéo tenant đã bị chặn (`rbac-operator-escalation.int-spec:92`).
+**Lưu ý:** tái diễn lớp sự cố đã dọn 2026-07-22 (122 công ty test lọt PROD) ⇒ **nguồn rò chưa bịt**.
+**Workaround/cách đóng:** xoá 16 tenant test + chặn test trỏ DB `mediaos`. Gợi ý gộp vào `S6-PERF-DB-1`.
+
+### KI-029 — `PERMISSION_GUARD_ENABLED`: kill-switch fail-OPEN không validate · S2 · (`S6-SEC-1`)
+
+`permission.guard.ts:57-68` đọc thẳng `process.env['PERMISSION_GUARD_ENABLED']`; `=== 'false'` ⇒
+`return true` cho **mọi** route đã gate, chỉ để lại một dòng `logger.warn`. Biến **không** có trong
+`env.schema.ts` lẫn `.env.example` ⇒ zod không validate, không ai biết nó tồn tại.
+**Đã kiểm:** `.env` và `.env.prod` **không** chứa biến này ⇒ guard đang BẬT ở PROD.
+**Đề xuất:** đưa vào schema (default `"true"`) + `.env.example`, và **fail-loud lúc boot** nếu
+`NODE_ENV=production` mà cờ `false`. Là thay đổi hành vi sau freeze ⇒ cần owner duyệt.
+
+### KI-030 — `GET /org/employees` trả danh bạ toàn tenant · S2 · (`S6-SEC-1`)
+
+`org.controller.ts:173` không `@RequirePermission`; `org.repository.ts:322` trả `id · email ·
+fullName · status` + team membership của **mọi** user chưa xoá trong tenant, cho **mọi** user đã đăng
+nhập. Lệch với `/hr/employees` vốn ép data_scope (Employee Own chỉ thấy hồ sơ mình).
+**Vì sao lọt lưới:** `route-guard-coverage.e2e-spec.ts:148` lọc `httpMethod !== "GET"` ⇒ sweep tĩnh
+chỉ soi mutation.
+**Vì sao không cao hơn:** danh bạ tài khoản, **không** phải hồ sơ HR (không lương/CCCD/công/phép);
+`withTenant` + RLS giữ, không rò chéo tenant; FE chỉ gọi từ `apps/console`.
+**Đường sửa đã khảo sát:** gate `read:user` — PROD đã cấp cho `company-admin`/`SA`/`project-manager`;
+caller FE chỉ có 2 màn console của company-admin ⇒ siết không gãy UI.
+
+### KI-031 — `INTERNAL_API_KEY` ngoài `env.schema`/`.env.example` · S3 · (`S6-SEC-1`)
+
+`internal.guard.ts:23` đọc thẳng `process.env`. Guard **fail-CLOSED** (thiếu biến ⇒ 403 mọi route
+`/internal/**`), nên hậu quả là **mất tính năng** (recalculate thủ công, invalidate cache), không phải
+mất kiểm soát. **Đề xuất:** ghi vào `.env.example` + schema optional để lỗi hiện ra lúc boot.
 ---
 
 ## 3. Cái KHÔNG được defer
