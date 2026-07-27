@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**281 WO** · có micro-plan: **140/281** · ⬜ 8 chờ · 🔵 1 đang làm · ✅ 272 xong · 🔴 0 chặn
+**287 WO** · có micro-plan: **144/287** · ⬜ 9 chờ · 🔵 0 đang làm · ✅ 278 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -230,7 +230,7 @@
 | `S5-QA-REG-1` | 🟡 | ✅ xong | [📄](S5-QA-REG-1.md) | ✅S4-QA-2 | QA regression suite MVP (test-case matrix theo module × role) + UI sta |
 | `S5-QA-DASHNOTI-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S4-QA-2 ✅S4-INT-2 | Dashboard & Notification hardening: widget degraded/cache đúng, unread |
 | `S5-PERF-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S4-QA-2 | Performance/reliability smoke + observability baseline: SLA danh sách  |
-| `S5-UAT-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S5-QA-E2E-1 ✅S5-QA-REG-1 ✅S5-SEC-1 | UAT prep + run (script theo role · test data · sign-off) + release rea |
+| `S5-UAT-1` | 🟡 | ✅ xong | [📄](S5-UAT-1.md) | ✅S5-QA-E2E-1 ✅S5-QA-REG-1 ✅S5-SEC-1 | UAT prep + run (script theo role · test data · sign-off) + release rea |
 | `S5-QA-GATE-LANEDB-1` | 🟡 | ✅ xong | [📄](S5-QA-GATE-LANEDB-1.md) | — | Vá false-green cổng local: harness/check.sh chạy `pnpm test` KHÔNG set |
 | `S5-FND-JOBS-OBS-1` | 🟡 | ✅ xong | — *(chưa)* | — | System Jobs observability: GET /foundation/system-jobs đọc lịch sử sys |
 | `S5-ME-DOC-1` | 🟢 | ✅ xong | [📄](S5-ME-DOC-1.md) | — | Docs sync SPEC-09 ME: cập nhật SPEC-01/PRD-00/DB-01·08·09·10/README §8 |
@@ -297,7 +297,7 @@
 | `S5-LMS-UI-4` | 🟢 | ✅ xong | [📄](S5-LMS-UI-4.md) | ✅S5-LMS-UI-3 | LOCAL apps/lms — hòa chrome vào MediaOS: App Switcher thành launcher t |
 | `S5-LMS-OPEN-DIRECT-1` | 🟢 | ✅ xong | — *(chưa)* | — | MediaOS apps/app — mở LMS 'vào thẳng': tile Đào tạo (App Switcher) + n |
 | `S5-LMS-NOTI-1` | 🔴 | ✅ xong | [📄](S5-LMS-NOTI-1.md) | — | MediaOS BE — mở đường cho LMS đẩy thông báo vào module NOTI: seed nhóm |
-| `S5-LMS-NOTI-2` | 🟡 | 🔵 đang làm | [📄](S5-LMS-NOTI-2.md) | ✅S5-LMS-NOTI-1 | LOCAL apps/lms — đẩy sự kiện học tập về NOTI của MediaOS (ghi danh đượ |
+| `S5-LMS-NOTI-2` | 🟡 | ✅ xong | [📄](S5-LMS-NOTI-2.md) | ✅S5-LMS-NOTI-1 | LOCAL apps/lms — đẩy sự kiện học tập về NOTI của MediaOS (ghi danh đượ |
 | `S5-FND-THEME-AA-1` | 🟢 | ✅ xong | [📄](S5-FND-THEME-AA-1.md) | — | packages/ui theme.css — kéo 4 cặp token trượt AA ở chế độ LIGHT lên ≥4 |
 | `S5-FND-UI-GEN-1` | 🟡 | ✅ xong | [📄](S5-FND-UI-GEN-1.md) | — | packages/ui — nâng primitive lên thế hệ shadcn mới (button/badge/input |
 | `S5-SYS-CLEAN-1` | 🔴 | ✅ xong | [📄](S5-SYS-CLEAN-1.md) | ✅S5-LMS-BE-4 | Retention cho system_job_runs (47.126 dòng/18 MB, tăng mỗi nhịp schedu |
@@ -310,12 +310,18 @@
 
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
-| `S6-GOV-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S5-UAT-1 | Scope Freeze & Release Governance: đóng băng scope MVP, quy tắc thay đ |
-| `S6-STAB-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S5-UAT-1 | Stabilization & Bug Triage: module stabilization checklist (AUTH/HR/AT |
-| `S6-QA-FINAL-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S6-STAB-1 | QA final pass: regression + E2E + API contract + regression-theo-role  |
-| `S6-SEC-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-STAB-1 | Security / RBAC / Data-Protection final hardening: auth/session · RBAC |
-| `S6-PERF-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-STAB-1 | Performance/Query/Cache hardening + DB Migration/Seed/Backup/Rollback  |
-| `S6-REL-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-QA-FINAL-1 ⏳S6-SEC-1 ⏳S6-PERF-DB-1 | Release Candidate build + release notes + Go-live runbook + deployment |
+| `S6-GOV-1` | 🟡 | ✅ xong | [📄](S6-GOV-1.md) | ✅S5-UAT-1 | Scope Freeze & Release Governance: đóng băng scope MVP, quy tắc thay đ |
+| `S6-STAB-1` | 🟡 | ✅ xong | [📄](S6-STAB-1.md) | ✅S5-UAT-1 | Stabilization & Bug Triage: module stabilization checklist (AUTH/HR/AT |
+| `S6-QA-FINAL-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S6-STAB-1 | QA final pass: regression + E2E + API contract + regression-theo-role  |
+| `S6-SEC-1` | 🔴 | ✅ xong | [📄](S6-SEC-1.md) | ✅S6-STAB-1 | Security / RBAC / Data-Protection final hardening: auth/session · RBAC |
+| `S6-PERF-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-STAB-1 | Performance/Query/Cache hardening + DB Migration/Seed/Backup/Rollback  |
+| `S6-QA-CHUNK-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | KI-014 — truy gốc crash ERR_IPC_CHANNEL_CLOSED rồi chuẩn hoá chạy test |
+| `S6-SEC-ROUTEMAP-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | Dựng lại Phụ lục A bằng QUÉT RUNTIME (boot AppModule, đọc metadata thậ |
+| `S6-SEC-ORG-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-SEC-ROUTEMAP-1 | KI-030 — gate 3 route đọc /org đang lộ danh bạ toàn tenant cho MỌI use |
+| `S6-SEC-NOTITX-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | KI-034 — gộp insert notification + outbox + audit vào MỘT transaction  |
+| `S6-SEC-LOGINLOG-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | KI-042 — login_logs: hàng company_id IS NULL (thử đăng nhập pre-auth,  |
+| `S6-SEC-MV-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-SEC-LOGINLOG-1 | KI-041 — 2 matview dashboard nằm NGOÀI RLS (Postgres không hỗ trợ): dự |
+| `S6-REL-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-QA-FINAL-1 ✅S6-SEC-1 ⏳S6-PERF-DB-1 ⏳S6-QA-CHUNK-1 ⏳S6-SEC-ROUTEMAP-1 ⏳S6-SEC-ORG-1 ⏳S6-SEC-NOTITX-1 ⏳S6-SEC-LOGINLOG-1 ⏳S6-SEC-MV-1 | Release Candidate build + release notes + Go-live runbook + deployment |
 | `S6-GOLIVE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-REL-1 | Final Sign-off · Go/No-go · Go-live execution · Handoff (admin/user/su |
 
 ## Khác

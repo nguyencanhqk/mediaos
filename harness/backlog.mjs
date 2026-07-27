@@ -5394,6 +5394,233 @@ export const backlog = [
       "check.sh xanh; FULL gate database-reviewer (chạm migration/DB)",
     ],
   },
+  // ──────────── Đợt VÁ known-issue mở sau S6-SEC-1 / S6-STAB-1 (seed 2026-07-27) ────────────
+  // Nguồn: docs/RELEASE/RELEASE-02 (sổ known-issue) + docs/_review/S6-SEC-1-SECURITY-HARDENING-2026-07-26.md
+  // §7c "Việc phải làm để gỡ BLOCK" và §7d "Còn LẠI — chưa vá trong đợt này (có chủ ý)".
+  // Cả 6 WO đều là NỢ ĐÃ ĐO, không phải scope mới (RELEASE-05 §4.1 operational/security fix).
+  //
+  // ⚠️ Verify tier cho MỌI WO dưới đây: `check.sh` KHÔNG thể xanh trên máy Windows này cho tới khi
+  // S6-QA-CHUNK-1 đóng (KI-014 — RELEASE-06 §4.4). Tiêu chí thay thế do S6-STAB-1 chốt:
+  // **lint + typecheck + build xanh, CỘNG số đo chạy chia chunk (ghi rõ số file/test), CỘNG CI xanh
+  // trên PR** — KHÔNG trích một dòng "xanh" từ tier nhẹ hơn.
+  //
+  // ⚠️ Migration NỐI TIẾP: head hiện tại 0531. LOGINLOG-1 lấy 0532, MV-1 lấy 0533 và depends_on
+  // LOGINLOG-1 CHỈ để ép tuần tự (memory wo-paths-drive-gate-and-scheduler — 2 lane trùng số migration).
+  {
+    id: "S6-QA-CHUNK-1",
+    module: "QA",
+    layer: "QA",
+    title:
+      "KI-014 — truy gốc crash ERR_IPC_CHANNEL_CLOSED rồi chuẩn hoá chạy test chia chunk vào check.sh: mở lại cổng verify local (chạm CẢ @mediaos/api và @mediaos/app)",
+    zone: "yellow",
+    status: "todo",
+    // KHÔNG mở apps/*/src/**: WO này sửa HẠ TẦNG chạy test, không sửa test lẫn code sản phẩm.
+    paths: [
+      "harness/**",
+      "apps/api/vitest.config.ts",
+      "apps/app/vitest.config.ts",
+      "apps/api/package.json",
+      "apps/app/package.json",
+      "package.json",
+      "turbo.json",
+      "docs/QA/**",
+      "docs/RELEASE/**",
+      "docs/plans/S6-QA-CHUNK-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S6-QA-CHUNK-1.md",
+    src: [
+      "RELEASE-02 KI-014 (S2 · hạ tầng test local) + RELEASE-04 §bảng WO (S6-QA-CHUNK-1 ↔ KI-014)",
+      "RELEASE-06 §4.4 STAB-F04 — 2 đính chính: (a) @mediaos/app cũng chết (exit 3221225477 = 0xC0000005 ACCESS_VIOLATION), (b) CI ubuntu KHÔNG dính (ci.yml:140 chạy pnpm test một lần, cả 3 workflow success)",
+      "harness/check.sh:99-120 (step test TURBO_FORCE=1 + tee log + lane-db-guard) — điểm gắn runner mới",
+      "docs/_review/S6-SEC-1-…md §0.3 — apps/api/vitest.config.ts:57-67 exclude 6 file (5 là bộ deny-path) TRƯỚC khi đếm 446",
+      "memory: vitest-worker-crash-chunked-runs · turbo-cache-false-green",
+    ],
+    done_when: [
+      "TRUY GỐC TRƯỚC KHI VÁ TRIỆU CHỨNG: phân biệt crash pool/IPC của vitest với ACCESS_VIOLATION native; thử ma trận cấu hình (pool forks/threads · maxWorkers · isolate) và ghi SỐ ĐO từng cấu hình vào docs/QA/evidence/ — kết luận 'không sửa được gốc' phải có bằng chứng, không phải phỏng đoán",
+      "Nếu gốc không sửa được: runner chia chunk sống trong harness/ (không phải chuỗi lệnh chép tay trong doc), chạy đủ 100% file spec của @mediaos/api + @mediaos/app và gộp kết quả thành MỘT mã thoát; check.sh gọi runner này trên Windows, giữ nguyên đường một-lần cho CI ubuntu",
+      "KHÔNG giảm phạm vi lén: số file spec runner chạy phải khớp `vitest list` của từng app (in ra đối chiếu); 6 file exclude ở apps/api/vitest.config.ts phải được CÔNG BỐ trong output chứ không biến mất khỏi mọi reporter",
+      "check.sh --all xanh THẬT trên máy Windows này với LANE_DB set (đây là định nghĩa đóng của WO); lane-db-guard vẫn phát hiện được thiếu LANE_DB sau khi đổi runner (test lại harness/lane-db-guard.test.mjs)",
+      "RELEASE-02 KI-014 + RELEASE-06 §4.4 cập nhật trạng thái kèm bằng chứng; LIGHT gate typescript-reviewer + quality-gate",
+    ],
+  },
+  {
+    id: "S6-SEC-ROUTEMAP-1",
+    module: "INT",
+    layer: "SEC",
+    title:
+      "Dựng lại Phụ lục A bằng QUÉT RUNTIME (boot AppModule, đọc metadata thật) thay parse tĩnh — census 100% route + phán quyết gate có chữ ký; đóng vế GET của route-guard sweep",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/test/foundation/**",
+      "harness/**",
+      "docs/_review/**",
+      "docs/RELEASE/**",
+      "docs/plans/S6-SEC-ROUTEMAP-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S6-SEC-ROUTEMAP-1.md",
+    src: [
+      "docs/_review/S6-SEC-1-…md §0.4 — con số route không-gate SAI 4 LẦN (49 → 38 → 114 → 40); chuẩn = 43 khi quét runtime. 'Phụ lục A phải dựng lại bằng quét runtime, KHÔNG phải regex trên văn bản'",
+      "docs/_review/S6-SEC-1-…md §7c #5 (việc gỡ BLOCK) + §7d (hoãn có chủ ý)",
+      "apps/api/test/foundation/route-guard-coverage.e2e-spec.ts:22-31 — ĐÃ boot AppModule + đọc PATH_METADATA/METHOD_METADATA/REQUIRE_PERMISSION/IS_PUBLIC qua DiscoveryService. TÁI DÙNG hạ tầng này, KHÔNG viết máy quét thứ hai",
+      "route-guard-coverage.e2e-spec.ts:148 — `.filter((r) => r.httpMethod !== 'GET')` chính là lý do SEC-F04 (KI-030) lọt mọi lưới: sweep tĩnh CHỈ soi mutation",
+      "5 route chưa từng được phán quyết (§0.4): GET /org/units/tree · /org/teams · /org/teams/:id/members · /workflow-templates/:id · /foundation/company/branding (+ /foundation/settings/public thiếu trong bảng)",
+    ],
+    done_when: [
+      "Census runtime xuất artifact MÁY-ĐỌC cho MỌI route (controller#method · verb · path đầy đủ · hasPermission · isPublic · guard khác cấp class/route), sinh từ AppModule đã boot — 0 regex trên mã nguồn",
+      "Phụ lục A dựng lại TỪ artifact đó: mỗi route không gate mang ĐÚNG MỘT phán quyết có chữ ký (SELF · PUBLIC · OTHER_GUARD · TENANT_READ · DEAD-410 · PARKED · GAP); 6 route ở §0.4 phải có mặt; tổng số khớp census, không phải con số chép tay",
+      "Chấm lại §2.3 · §13.3 · §13.4 của báo cáo S6-SEC-1 theo số đo mới; MỌI sai lệch so với bản cũ ghi tường minh (không sửa lén con số cũ cho khớp)",
+      "Đóng vế GET của sweep: bỏ lọc `httpMethod !== 'GET'` và thay bằng allow-list GET có chữ ký (mỗi dòng một lý do, cùng luật với MUTATION_BASELINE) ⇒ route GET mới không gate làm ĐỎ test thay vì im lặng",
+      "Sweep vẫn chạy trong `pnpm test` mặc định (KHÔNG cần Postgres — giữ nguyên tính chất hiện có); lint+typecheck+build xanh; LIGHT gate + security-reviewer đọc phán quyết Phụ lục A",
+    ],
+  },
+  {
+    id: "S6-SEC-ORG-1",
+    module: "FOUNDATION",
+    layer: "SEC",
+    title:
+      "KI-030 — gate 3 route đọc /org đang lộ danh bạ toàn tenant cho MỌI user đăng nhập (employees · teams · teams/:id/members); giữ /org/units/tree + /org/roles làm TENANT_READ có chữ ký",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/org/**",
+      "apps/api/test/**",
+      "apps/console/src/**",
+      "docs/_review/**",
+      "docs/RELEASE/**",
+      "docs/permission-matrix-spec.md",
+      "docs/plans/S6-SEC-ORG-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S6-SEC-ROUTEMAP-1"],
+    plan: "docs/plans/S6-SEC-ORG-1.md",
+    src: [
+      "RELEASE-02 KI-030 (S2) — lệch với /hr/employees vốn ép data_scope; đường sửa đã khảo sát: gate `read:user` đã cấp cho company-admin/SA/project-manager ở PROD",
+      "apps/api/src/org/org.controller.ts:173 @Get('employees') · :143 @Get('teams/:id/members') · :100 @Get('teams') — 0 @UseGuards/@RequirePermission; :37 docstring 'READ giữ mở cho mọi user tenant' phải sửa theo",
+      "apps/api/src/org/org.repository.ts:322 — trả id·email·fullName·status + team membership của MỌI user chưa xoá trong tenant",
+      "ĐO LẠI CALLER FE 2026-07-27: /org/employees → apps/console/src/lib/org-api.ts:62 + rbac-api.ts:27 · /org/teams → org-api.ts:40 · /org/teams/:id/members → org-api.ts:52 — CẢ BA console-only. /org/units/tree → CÓ trong apps/app (routes/hr/org-chart/OrgChartPage.tsx + layouts/workspace/TaskSidebarTree.tsx)",
+      "ĐÍNH CHÍNH báo cáo S6-SEC-1 §7d: bản đó ghi '/org/units/tree VÀ /org/teams đang được apps/app dùng'. grep 2026-07-27 cho 0 caller /org/teams trong apps/app ⇒ teams SIẾT ĐƯỢC. WO phải tự xác minh lại trước khi dựa vào đính chính này",
+      "memory: blanket-grant-migration-role-drift (role sinh SAU migration CROSS JOIN lỡ grant) · read-path-gate-pair-must-match-download-pair",
+    ],
+    done_when: [
+      "RED TRƯỚC: deny-path test cho user Employee-Own gọi cả 3 route → 403, và company-admin → 200. Test phải ĐỎ trên code hiện tại trước khi vá (chứng minh bằng log, không tuyên bố)",
+      "Gate GET /org/employees bằng `read:user`; gate GET /org/teams + GET /org/teams/:id/members bằng cặp quyền CÓ THẬT trong seed (đọc seed thay vì phát minh cặp mới — memory s1-fnd-module-metadata-seed-drift)",
+      "GET /org/units/tree + GET /org/roles GIỮ TENANT_READ nhưng phải có chữ ký lý do trong docstring VÀ trong Phụ lục A (apps/app dùng ở OrgChartPage + TaskSidebarTree ⇒ siết cùng nhát sẽ gãy UI)",
+      "Chống 403-storm: liệt kê role PROD nào có cặp quyền vừa gate kèm data_scope; thiếu thì backfill PER-PAIR, TUYỆT ĐỐI không blanket grant; nêu rõ user nào mất quyền xem so với trước",
+      "docstring org.controller.ts:37 sửa cho khớp code (KI-034 vốn là bài học docstring nói một đằng code làm một nẻo); RELEASE-02 KI-030 đóng kèm bằng chứng",
+      "FULL gate security-reviewer PASS; verify tier = lint+typecheck+build + số đo chạy chunk + CI xanh trên PR",
+    ],
+  },
+  {
+    id: "S6-SEC-NOTITX-1",
+    module: "NOTI",
+    layer: "BE",
+    title:
+      "KI-034 — gộp insert notification + outbox + audit vào MỘT transaction (repo.create nhận tx), bỏ đường .catch nuốt lỗi làm mất audit + sự kiện chỉ với một dòng warn",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/notifications/**",
+      "apps/api/src/events/**",
+      "apps/api/test/**",
+      "docs/RELEASE/**",
+      "docs/plans/S6-SEC-NOTITX-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S6-SEC-NOTITX-1.md",
+    src: [
+      "RELEASE-02 KI-034 (S1 · vá MỘT PHẦN 2026-07-27: markRead đã await + docstring sai đã sửa; CÒN LẠI = gộp transaction)",
+      "apps/api/src/notifications/notifications.service.ts:99-112 — docstring ghi nhận nợ: repo.create() commit tx của chính nó rồi mới mở tx thứ hai cho outbox+audit",
+      "notifications.service.ts:136 (insert ngoài tx) · :144-176 (withTenant thứ hai bọc outbox.enqueue + audit.record, .catch chỉ logger.warn)",
+      "docs/_review/S6-SEC-1-…md §7c #8 — 1 trong 3 lỗi S1 chạm done_when #2 (audit đầy đủ)",
+      "memory: noti-outbox-bridge-generic (OutboxNotificationBridge là caller đường nóng) · reviewers-pass-real-bugs (prove test RED trước)",
+    ],
+    done_when: [
+      "RED TRƯỚC: test chứng minh khi outbox.enqueue HOẶC audit.record ném thì notification KHÔNG tồn tại. Trên code hiện tại test phải ĐỎ (nay notification vẫn tồn tại, chỉ có một dòng warn)",
+      "NotificationsRepository.create nhận `tx` tuỳ chọn; NotificationsService.create mở MỘT withTenant bọc cả ba bước; không còn nhánh nuốt lỗi im lặng cho đường tạo",
+      "Rà MỌI caller đường nóng (OutboxNotificationBridge + module gọi create) xem có caller nào đã ở trong transaction khác không ⇒ chống tx lồng/deadlock; nếu có thì nhận tx từ caller thay vì tự mở",
+      "Docstring khớp code sau khi sửa — kiểm lại từng câu, vì chính docstring sai là gốc của KI-034",
+      "Quyết định về markRead ghi rõ lý do: giữ best-effort có chủ ý (đã await 2026-07-27) hay gộp luôn — không để mơ hồ",
+      "FULL gate security-reviewer + silent-failure-hunter (nếu agent không có trong môi trường thì GHI RÕ đã thay bằng gì — theo tiền lệ S6-SEC-1 §7c); RELEASE-02 KI-034 đóng",
+    ],
+  },
+  {
+    id: "S6-SEC-LOGINLOG-1",
+    module: "AUTH",
+    layer: "SEC",
+    title:
+      "KI-042 — login_logs: hàng company_id IS NULL (thử đăng nhập pre-auth, có email + IP) ĐỌC ĐƯỢC CHÉO TENANT; siết vế USING của policy tenant_isolation (migration 0532)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/auth/**",
+      "apps/api/src/foundation/retention/**",
+      "apps/api/test/**",
+      "docs/DB/**",
+      "docs/RELEASE/**",
+      "docs/plans/S6-SEC-LOGINLOG-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S6-SEC-LOGINLOG-1.md",
+    src: [
+      "RELEASE-02 KI-042 (S3) — vế GHI đã đóng, đính chính so với vòng 1; còn vế ĐỌC. Thuộc nhóm 'KHÔNG được defer' (RELEASE-02 §3: lộ dữ liệu ngoài phạm vi quyền = vi phạm BẤT BIẾN #1)",
+      "apps/api/migrations/0443_s2_authdb2_sessions_logs_security_events.sql:115-126 — policy tenant_isolation: USING có `OR company_id IS NULL` (mọi tenant đọc được); WITH CHECK ĐÃ ĐÚNG (chỉ cho ghi NULL khi KHÔNG có ngữ cảnh tenant)",
+      "0443:133 — GRANT SELECT, INSERT (append-only, BẤT BIẾN #2) phải GIỮ NGUYÊN",
+      "Đường đọc: apps/api/src/auth/auth-logs-viewer.service.ts + login-log.repository.ts; đường ghi pre-auth: auth.service.ts",
+      "DB-02 §7.8 — company_id NULLABLE là CHỦ ĐÍCH (fail email-không-tồn-tại không resolve được company nhưng vẫn phải ghi log)",
+    ],
+    done_when: [
+      "QUYẾT ĐỊNH MÔ HÌNH ĐỌC TRƯỚC KHI SỬA: hàng NULL-tenant thuộc về ai (chỉ operator/SA qua đường riêng? hay không ai đọc được qua đường tenant?) — ghi vào docs/DB + docstring migration. N=1 nên hậu quả thực tế bằng 0, nhưng luật phải đúng trước khi mở tenant thứ hai",
+      "Migration 0532 (NỐI TIẾP head 0531): vế USING bỏ `OR company_id IS NULL` (hoặc tách policy riêng theo role); GIỮ NGUYÊN vế WITH CHECK; GIỮ NGUYÊN grant append-only",
+      "RED test hai chiều: (a) ghi log fail pre-auth (không có ngữ cảnh tenant) VẪN INSERT được — không được làm mù đường ghi; (b) trong ngữ cảnh tenant A, SELECT không thấy hàng NULL-tenant. Ca (b) phải ĐỎ trước khi vá",
+      "Verify đường đọc hiện có (auth-logs-viewer) và job retention không bỏ sót IM LẶNG hàng NULL sau khi siết — nếu có thì sửa hoặc ghi nhận tường minh",
+      "Migration áp được từ 0000 → 0532 trên DB lane dựng MỚI (không chỉ trên DB đã có sẵn); database-reviewer + rls-tenant-isolation-tester PASS; RELEASE-02 KI-042 đóng",
+    ],
+  },
+  {
+    id: "S6-SEC-MV-1",
+    module: "DASH",
+    layer: "SEC",
+    title:
+      "KI-041 — 2 matview dashboard nằm NGOÀI RLS (Postgres không hỗ trợ): dựng ranh giới thật ở tầng DB thay vì chỉ WHERE company_id trong service, hoặc rút bề mặt / ký waiver có bằng chứng (migration 0533)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/dashboard/**",
+      "apps/api/test/**",
+      "docs/DB/**",
+      "docs/RELEASE/**",
+      "docs/plans/S6-SEC-MV-1.md",
+    ],
+    skills: ["code-review"],
+    // depends_on CHỈ để ép migration tuần tự (0532 → 0533), không phải phụ thuộc nghiệp vụ.
+    depends_on: ["S6-SEC-LOGINLOG-1"],
+    plan: "docs/plans/S6-SEC-MV-1.md",
+    src: [
+      "RELEASE-02 KI-041 (S2) — mv_dashboard_output/mv_dashboard_task_status mang company_id nhưng nằm NGOÀI phép đo 153/153 bảng RLS; ranh giới DUY NHẤT là WHERE company_id = $1 trong service",
+      "apps/api/src/dashboard/mv-dashboard.service.ts:54 (FROM mv_dashboard_task_status) · :94 (FROM mv_dashboard_output) — đúng 2 điểm đọc",
+      "mv-dashboard.service.ts:36 — mv_dashboard_output là 'media-era PARKED, 0 consumer' ⇒ ứng viên RÚT BỀ MẶT thay vì bọc thêm hạ tầng",
+      "apps/api/src/dashboard/dashboard-refresh.service.ts:73-99 — đường refresh (CONCURRENTLY CHỈ task_status; output KHÔNG BAO GIỜ concurrently được vì unique index là BIỂU THỨC COALESCE) — không được làm gãy",
+      "apps/api/src/dashboard/mv-taskstatus-canonical.int.spec.ts (D-30, mig 0502) — regression phải giữ xanh",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: liệt kê MỌI câu SQL chạm 2 matview + role nào đang có SELECT (đọc ACL từ Postgres THẬT, không suy đoán từ migration)",
+      "RÚT BỀ MẶT trước khi thêm hạ tầng: mv_dashboard_output 0 consumer (media-era park) ⇒ cân nhắc REVOKE SELECT khỏi mediaos_app (hoặc DROP nếu docs/DB xác nhận park) — giải pháp rẻ nhất phải được xét trước",
+      "Với matview CÒN DÙNG: đọc qua wrapper (view `security_barrier` lọc current_setting('app.current_company_id') hoặc hàm SQL) + REVOKE SELECT trực tiếp trên matview khỏi app role ⇒ ranh giới nằm ở DB, không chỉ ở kỷ luật service",
+      "RED test: với app role, query matview KHÔNG kèm WHERE company_id → 0 hàng hoặc permission denied. Hiện tại trả CHÉO TENANT — ca này phải ĐỎ trước khi vá",
+      "Đường refresh của worker role vẫn chạy (REFRESH CONCURRENTLY task_status + REFRESH output); mv-taskstatus-canonical.int.spec giữ xanh",
+      "NẾU chọn waiver thay vì siết: ghi chữ ký + bằng chứng vào RELEASE-02 và docs/DB, nêu rõ đây là ngoại lệ được chấp nhận của BẤT BIẾN #1 và ai chịu trách nhiệm — KHÔNG để trạng thái mơ hồ 'đã biết' trôi qua RC",
+      "Migration 0533 nối tiếp 0532; database-reviewer + rls-tenant-isolation-tester PASS; RELEASE-02 KI-041 đóng",
+    ],
+  },
   {
     id: "S6-REL-1",
     module: "DEVOPS",
@@ -5410,7 +5637,21 @@ export const backlog = [
       "docs/plans/S6-REL-1.md",
     ],
     skills: ["code-review"],
-    depends_on: ["S6-QA-FINAL-1", "S6-SEC-1", "S6-PERF-DB-1"],
+    // depends_on bổ sung 6 WO vá known-issue (2026-07-27): RELEASE-06 §5 buộc bug scrub S0/S1/S2
+    // TRƯỚC RC, và RELEASE-02 §3 xếp KI-030/041/042 vào nhóm "KHÔNG được defer" (lộ dữ liệu ngoài
+    // phạm vi quyền = BẤT BIẾN #1). S6-QA-CHUNK-1 vào đây vì không có nó thì không tier verify nào
+    // của RC xanh được trên máy này.
+    depends_on: [
+      "S6-QA-FINAL-1",
+      "S6-SEC-1",
+      "S6-PERF-DB-1",
+      "S6-QA-CHUNK-1",
+      "S6-SEC-ROUTEMAP-1",
+      "S6-SEC-ORG-1",
+      "S6-SEC-NOTITX-1",
+      "S6-SEC-LOGINLOG-1",
+      "S6-SEC-MV-1",
+    ],
     src: [
       "ISSUE-BOARD-01 §18 (RELEASE-REL-001, RELEASE-GO-001)",
       "IMP02-STORY-112",
