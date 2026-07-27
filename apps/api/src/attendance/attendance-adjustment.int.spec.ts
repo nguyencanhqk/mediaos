@@ -552,7 +552,7 @@ describe.skipIf(!runDb)("S3-ATT-BE-4 adjustment surface (DB cô lập, đường
 
   // ── 16a/b/c · GET /:id detail in scope: Own(self) · Team(manager on report) · Company(hr) → 200 ──
   // Split into 3 separate cases (rather than one combined test) so a single broken scope does not mask
-  // the other two passing ones — precise signal for the fix lane below.
+  // the other two passing ones — precise signal per scope.
   it("GET /:id detail in scope: self (Own) → 200", async () => {
     const empToken = await login(A.slug, `emp@${A.slug}.test`);
     const created = await createAs(empToken, "2024-07-13");
@@ -565,16 +565,14 @@ describe.skipIf(!runDb)("S3-ATT-BE-4 adjustment surface (DB cô lập, đường
     expect(ownRes.body.data.employeeId).toBe(empProfile);
   });
 
-  // KNOWN BROKEN (pre-existing bug, NOT introduced by this test — out of scope for this test-only lane
-  // to fix): attendance-adjustment.service.ts `detailInScope()` builds the scope-check target with
-  // HARDCODED `orgUnitId: null, directManagerUserId: null` instead of loading the real employee row
-  // (unlike listTeam/listCompany, which query employeeProfiles.directManagerId for real). Team's
-  // isEmployeeInScope compares `target.directManagerUserId === ctx.userId`, which is always
-  // `null === ctx.userId` here → always false for a genuine report who isn't also EMR-managed or the
-  // requester's own row. Manager cannot GET /:id a report's request even though listTeam correctly
-  // includes it. Needs a service-layer fix (load target via findEmployeeScopeByIdTx/ByUserIdTx before
-  // detailInScope) in a follow-up lane that owns attendance-adjustment.service.ts.
-  it("GET /:id detail in scope: manager on report (Team) → 200 [BLOCKED — see comment above, service.ts bug]", async () => {
+  // LỊCH SỬ (S6-QA-FINAL-1 · QA-F02 — đã hết hiệu lực, giữ lại vì dễ hiểu nhầm):
+  // Chỗ này từng có chú thích "KNOWN BROKEN" mô tả `detailInScope()` dựng target kiểm scope bằng
+  // `orgUnitId: null, directManagerUserId: null` HARD-CODE ⇒ Team scope luôn false ⇒ manager không
+  // GET được /:id của cấp dưới. Bug ĐÃ ĐƯỢC SỬA **trong chính commit đưa test này vào** (80a1bcd5,
+  // PR #81, 2026-07-02): `detailInScope()` nay nạp employee thật qua `resolveRequestEmployee()`
+  // (findEmployeeScopeByIdTx / ByUserIdTx) rồi mới gọi `inScope()`. Chú thích cũ không được gỡ nên
+  // test này XANH mà vẫn mang nhãn "[BLOCKED]" — đọc lướt sẽ tưởng ATT còn lỗi mở.
+  it("GET /:id detail in scope: manager on report (Team) → 200", async () => {
     const empToken = await login(A.slug, `emp@${A.slug}.test`);
     const created = await createAs(empToken, "2024-07-16");
     expect(created.status, JSON.stringify(created.body)).toBe(201);
