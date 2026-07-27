@@ -1,16 +1,23 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-27 08:48Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-27 11:20Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🟡 S6-SEC-ROUTEMAP-1 — Dựng lại Phụ lục A bằng QUÉT RUNTIME (boot AppModule, đọc metadata thật) thay parse tĩnh — census 100% route + phán quyết gate có chữ ký; đóng vế GET của route-guard sweep
+- **zone**: yellow · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/api/test/foundation/**`, `harness/**`, `docs/_review/**`, `docs/RELEASE/**`, `docs/plans/S6-SEC-ROUTEMAP-1.md`
+- **done_when (đích hội tụ)**:
+  - [ ] Census runtime xuất artifact MÁY-ĐỌC cho MỌI route (controller#method · verb · path đầy đủ · hasPermission · isPublic · guard khác cấp class/route), sinh từ AppModule đã boot — 0 regex trên mã nguồn
+  - [ ] Phụ lục A dựng lại TỪ artifact đó: mỗi route không gate mang ĐÚNG MỘT phán quyết có chữ ký (SELF · PUBLIC · OTHER_GUARD · TENANT_READ · DEAD-410 · PARKED · GAP); 6 route ở §0.4 phải có mặt; tổng số khớp census, không phải con số chép tay
+  - [ ] Chấm lại §2.3 · §13.3 · §13.4 của báo cáo S6-SEC-1 theo số đo mới; MỌI sai lệch so với bản cũ ghi tường minh (không sửa lén con số cũ cho khớp)
+  - [ ] Đóng vế GET của sweep: bỏ lọc `httpMethod !== 'GET'` và thay bằng allow-list GET có chữ ký (mỗi dòng một lý do, cùng luật với MUTATION_BASELINE) ⇒ route GET mới không gate làm ĐỎ test thay vì im lặng
+  - [ ] Sweep vẫn chạy trong `pnpm test` mặc định (KHÔNG cần Postgres — giữ nguyên tính chất hiện có); lint+typecheck+build xanh; LIGHT gate + security-reviewer đọc phán quyết Phụ lục A
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🔴 `S6-PERF-DB-1` Performance/Query/Cache hardening + DB Migration/Seed/Backup/Rollback verification (index, query perf, backup/restore rehearsal) — WS5/WS6
-- 🟡 `S6-SEC-ROUTEMAP-1` Dựng lại Phụ lục A bằng QUÉT RUNTIME (boot AppModule, đọc metadata thật) thay parse tĩnh — census 100% route + phán quyết gate có chữ ký; đóng vế GET của route-guard sweep
 - 🔴 `S6-SEC-NOTITX-1` KI-034 — gộp insert notification + outbox + audit vào MỘT transaction (repo.create nhận tx), bỏ đường .catch nuốt lỗi làm mất audit + sự kiện chỉ với một dòng warn
 - 🔴 `S6-SEC-LOGINLOG-1` KI-042 — login_logs: hàng company_id IS NULL (thử đăng nhập pre-auth, có email + IP) ĐỌC ĐƯỢC CHÉO TENANT; siết vế USING của policy tenant_isolation (migration 0532)
 
@@ -24,7 +31,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 9
+- **branch**: `wo/s6-sec-routemap-1` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 198 — `0531_s6sec1_noti_catalog_company_immutable` (199 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -33,6 +40,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `40d499a0` | 2026-07-27 | test(sec): S6-SEC-ROUTEMAP-1 — census route bằng quét RUNTIME + đóng vế GET của route-guard sweep |
+| `dde98ac5` | 2026-07-27 | chore(harness): S6-QA-CHUNK-1 — đóng KI-014 bằng runner chia chunk trong check.sh |
 | `6c028899` | 2026-07-27 | docs(release): mở 6 WO vá known-issue S6 — KI-030/034/041/042 + Phụ lục A runtime + KI-014 |
 | `094518df` | 2026-07-27 | docs(release): KI-038 đóng — mig 0531 đã áp PROD, verify trigger đang hoạt động |
 | `acdf714a` | 2026-07-27 | fix(sec): S6-SEC-1 — WS4 hardening + vá S0 ghi chéo tenant lên role hệ thống toàn cục (#295) |
@@ -43,8 +52,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `dcf85eb0` | 2026-07-26 | docs(release): S5-UAT-1 — đóng UAT-BLOCK-001/002/003 + đồng bộ hồ sơ phát hành |
 | `333494be` | 2026-07-26 | docs(release): S5-UAT-1 — UAT kit + biên bản Cycle 0 + hồ sơ phát hành (cổng Sprint 6) (#292) |
 | `153e2101` | 2026-07-26 | docs(lms): runbook deploy S5-LMS-NOTI-2 (env · thứ tự API→LMS · kiểm chứng · rollback) |
-| `b05afee0` | 2026-07-26 | chore(docs): regen STATUS sau merge #291 (S5-LMS-NOTI-1 done · NOTI-2 chờ deploy LMS) |
-| `a6e7aaf2` | 2026-07-26 | feat(noti): S5-LMS-NOTI-1 + NOTI-2(BE) — danh tính máy cho intake NOTI, catalog LMS, mang mediaosUserId sang LMS (#291) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

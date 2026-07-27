@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**287 WO** · có micro-plan: **145/287** · ⬜ 8 chờ · 🔵 1 đang làm · ✅ 278 xong · 🔴 0 chặn
+**287 WO** · có micro-plan: **146/287** · ⬜ 7 chờ · 🔵 1 đang làm · ✅ 279 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -315,13 +315,13 @@
 | `S6-QA-FINAL-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S6-STAB-1 | QA final pass: regression + E2E + API contract + regression-theo-role  |
 | `S6-SEC-1` | 🔴 | ✅ xong | [📄](S6-SEC-1.md) | ✅S6-STAB-1 | Security / RBAC / Data-Protection final hardening: auth/session · RBAC |
 | `S6-PERF-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-STAB-1 | Performance/Query/Cache hardening + DB Migration/Seed/Backup/Rollback  |
-| `S6-QA-CHUNK-1` | 🟡 | 🔵 đang làm | [📄](S6-QA-CHUNK-1.md) | — | KI-014 — truy gốc crash ERR_IPC_CHANNEL_CLOSED rồi chuẩn hoá chạy test |
-| `S6-SEC-ROUTEMAP-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | Dựng lại Phụ lục A bằng QUÉT RUNTIME (boot AppModule, đọc metadata thậ |
+| `S6-QA-CHUNK-1` | 🟡 | ✅ xong | [📄](S6-QA-CHUNK-1.md) | — | KI-014 — truy gốc crash ERR_IPC_CHANNEL_CLOSED rồi chuẩn hoá chạy test |
+| `S6-SEC-ROUTEMAP-1` | 🟡 | 🔵 đang làm | [📄](S6-SEC-ROUTEMAP-1.md) | — | Dựng lại Phụ lục A bằng QUÉT RUNTIME (boot AppModule, đọc metadata thậ |
 | `S6-SEC-ORG-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-SEC-ROUTEMAP-1 | KI-030 — gate 3 route đọc /org đang lộ danh bạ toàn tenant cho MỌI use |
 | `S6-SEC-NOTITX-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | KI-034 — gộp insert notification + outbox + audit vào MỘT transaction  |
 | `S6-SEC-LOGINLOG-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | KI-042 — login_logs: hàng company_id IS NULL (thử đăng nhập pre-auth,  |
 | `S6-SEC-MV-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-SEC-LOGINLOG-1 | KI-041 — 2 matview dashboard nằm NGOÀI RLS (Postgres không hỗ trợ): dự |
-| `S6-REL-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-QA-FINAL-1 ✅S6-SEC-1 ⏳S6-PERF-DB-1 ⏳S6-QA-CHUNK-1 ⏳S6-SEC-ROUTEMAP-1 ⏳S6-SEC-ORG-1 ⏳S6-SEC-NOTITX-1 ⏳S6-SEC-LOGINLOG-1 ⏳S6-SEC-MV-1 | Release Candidate build + release notes + Go-live runbook + deployment |
+| `S6-REL-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-QA-FINAL-1 ✅S6-SEC-1 ⏳S6-PERF-DB-1 ✅S6-QA-CHUNK-1 ⏳S6-SEC-ROUTEMAP-1 ⏳S6-SEC-ORG-1 ⏳S6-SEC-NOTITX-1 ⏳S6-SEC-LOGINLOG-1 ⏳S6-SEC-MV-1 | Release Candidate build + release notes + Go-live runbook + deployment |
 | `S6-GOLIVE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-REL-1 | Final Sign-off · Go/No-go · Go-live execution · Handoff (admin/user/su |
 
 ## Khác
