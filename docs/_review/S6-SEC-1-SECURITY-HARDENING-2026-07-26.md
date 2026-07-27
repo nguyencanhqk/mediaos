@@ -590,6 +590,20 @@ không có CHECK nào ràng buộc); `catch` trần trong deny-case đổi thàn
 trần thì lỗi hạ tầng cũng đọc thành "đã chặn" ⇒ xanh giả); audit payload ghi thêm `total` bên cạnh
 `count` (chỉ có `count` thì kéo 5.000 hàng phân trang 20 để lại vết "count: 20", vô nghĩa khi hậu kiểm).
 
+### (4b) Bằng chứng chạy sau re-gate
+
+Lane DB dựng lại từ `0000 → 0531`. **448 file spec (447 pass · 1 skip) · 7.125 test · 0 fail** ·
+typecheck sạch. Diễn biến số liệu khớp từng bước: `446 → 447` (+`role-system-immutable`) → `448`
+(+`report-export-audit`); test `7.113 → 7.119 → 7.122 → 7.125` (+6 crown, +3 audit, +3 re-home/assert-c).
+
+> **Ghi lại một sự cố ĐO LƯỜNG do chính phiên này gây ra** — cùng bài học với KI-040. Ba lần chạy giữa
+> chừng cho ra `527` rồi `307` file: **số rác**, vì một lệnh foreground bị timeout ở 10 phút giết bash
+> nhưng **vitest con vẫn sống**, rồi lần phóng tiếp theo ghi chồng lên cùng `summary.tsv` (tag chunk
+> xen kẽ `19a 19b 01 20 02…` là dấu hiệu). Đã giết đúng tiến trình `vitest`/`tinypool` + script điều
+> khiển (**không** đụng node của PROD — kiểm lại `:3100` và dashboard `:5180` đều `200`), dựng lại lane
+> DB, chạy đúng MỘT lần. Bài học: kiểm **tính toàn vẹn của lần đo** (tag tuần tự, không trùng) trước
+> khi tin con số — y như lý do phải gieo policy rò để nghiệm thu assertion.
+
 ### (5) Còn mở sau re-gate — WO riêng, KHÔNG chặn
 
 | Mục | Mức | Ghi chú |
