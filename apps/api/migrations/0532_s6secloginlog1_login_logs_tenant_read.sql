@@ -50,6 +50,12 @@
 -- chiếu dùng CHUNG có chủ đích. Với `login_logs` thì SAI — hàng NULL là dấu vết bảo mật của người lạ,
 -- không phải dữ liệu dùng chung. Đây là lỗi chép khuôn, không phải quyết định thiết kế.
 
+-- Tái khẳng định RLS (idempotent) để migration policy TỰ ĐỨNG VỮNG: một policy chỉ có hiệu lực khi
+-- bảng bật RLS, và FORCE là thứ khiến chủ bảng cũng bị chi phối. Đã bật ở 0443; lặp lại ở đây để
+-- không phụ thuộc vào việc migration khác không vô tình tắt.
+ALTER TABLE login_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE login_logs FORCE ROW LEVEL SECURITY;
+
 DROP POLICY IF EXISTS tenant_isolation ON login_logs;
 
 CREATE POLICY tenant_isolation ON login_logs

@@ -64,6 +64,13 @@ describe.skipIf(!hasDb)("S2-AUTH-BE-1 /auth/me bootstrap + login_logs", () => {
   });
 
   afterAll(async () => {
+    // S6-SEC-LOGINLOG-1: ca "companySlug sai" sinh hàng login_logs company_id NULL. cleanupTenants
+    // chỉ DELETE theo company_id ⇒ hàng NULL không dính, sẽ tích tụ mỗi lần chạy. Dọn theo marker.
+    await direct
+      .query(
+        "DELETE FROM login_logs WHERE company_id IS NULL AND normalized_email LIKE 'preauth-%@nope.test'",
+      )
+      .catch(() => undefined);
     await cleanupTenants(direct, [A.companyId]);
     await direct.end();
   });

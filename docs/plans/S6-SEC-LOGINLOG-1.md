@@ -53,7 +53,7 @@ Chú thích ở 0443 ghi rõ nó chép khuôn từ `public_holidays` (mig 0434).
 CHUNG có chủ đích. Với `login_logs` thì **sai** — hàng NULL là dấu vết bảo mật của người lạ. Đây là
 **lỗi chép khuôn**, không phải quyết định thiết kế.
 
-Lỗ hổng còn được **hai lớp test che đi** (memory `tests-can-pin-a-hole-open`) — xem §4.
+Lỗ hổng còn được **ba lớp test che đi** (memory `tests-can-pin-a-hole-open`) — xem §4.
 
 ---
 
@@ -104,15 +104,32 @@ từ chối · test end-to-end mới ở `auth-me-bootstrap` chạy qua `auth.lo
 
 ---
 
-## 4. Hai lớp test ĐANG ĐÓNG ĐINH LỖ HỔNG (phải đảo, không phải "bị mình làm đỏ")
+## 4. BA lớp test ĐANG ĐÓNG ĐINH LỖ HỔNG (phải đảo, không phải "bị mình làm đỏ")
 
 > memory `tests-can-pin-a-hole-open` — vá xong mà test đỏ thì **đọc assert trước khi nghi mình hỏng**.
 
 | Nơi | Bản cũ khẳng định | Vì sao SAI |
 | --- | --- | --- |
 | `test/integration/login-logs-rls.int-spec.ts` (d) | `expect(seen).toContain("preauth@lgl.test")` — tenant A **phải** thấy hàng NULL | Đó chính là KI-042 được viết thành yêu cầu |
-| `test/integration/rls-registry.ts` — `login_logs` | `skipNoContext: true`, lý do "giống `roles`/`seed_items` có hàng global" | Hàng NULL của `roles`/`seed_items` là dữ liệu tham chiếu dùng CHUNG; của `login_logs` là dấu vết bảo mật người lạ. Miễn trừ này **che đúng KI-042 khỏi lưới an toàn cả dự án suốt từ S2** |
+| `test/integration/rls-registry.ts` — `login_logs` | `skipNoContext: true`, lý do "giống `roles`/`seed_items` có hàng global" | Hàng NULL của `roles`/`seed_items` là dữ liệu tham chiếu dùng CHUNG; của `login_logs` là dấu vết bảo mật người lạ. Miễn trừ này **che đúng KI-042 khỏi lưới an toàn cả dự án suốt từ S2**. ⚠️ Bỏ miễn trừ THÔI là chưa đủ — xem §4.1 |
 | `test/integration/me-security-activity.int-spec.ts` (nullable-tenant) | "row NULL-company của CHÍNH A **phải hiện**" = true | Hình dạng row `company NULL + user NOT NULL` **không thể sinh ra từ code** (§5). Assert này ghim khe hở ĐỌC mở ra chỉ để phục vụ một row giả lập — và chính nó đẻ ra chú thích sai ở `me-security-activity.repository.ts` |
+
+### 4.1 Bỏ `skipNoContext` thôi thì XANH VÔ NGHĨA — phát hiện của FULL gate
+
+`security-reviewer` bắt được điều mà bản vá đầu của tôi bỏ sót: harness đọc **cả bảng** khi không có
+GUC, nhưng `seedRow` của `login_logs` **chỉ gieo hàng attributed**. Dưới policy CŨ, đọc không-GUC trả về
+**đúng các hàng `company_id IS NULL`** — hàng attributed vốn đã vô hình. Nên nếu không có hàng NULL nào
+trong DB, case "ngoài ngữ cảnh → 0 row" cho **0 ở CẢ HAI phía** ⇒ không bao giờ ĐỎ.
+
+**Đã đo để xác nhận** (policy cũ + chỉ hàng attributed): `count = 0`. Tức là bỏ miễn trừ mà không gieo
+hàng NULL thì ta *tuyên bố* đã phủ nhưng thực chất **không thu được bảo đảm nào** — đúng lớp lỗi mà WO
+này đang đi sửa.
+
+**Đã vá:** `seedRow` gieo THÊM một hàng `company_id IS NULL` (marker `RLS_NULL_MARKER_EMAIL`), và
+`cleanupTenants()` dọn theo marker (hàng NULL không dính `DELETE ... WHERE company_id = ANY(...)`).
+**Chứng minh sau khi vá:** hoàn nguyên policy về bản 0443 ⇒ `tenant-isolation` **1 failed / 453 passed**,
+ca đỏ đúng là `login_logs > ngoài ngữ cảnh tenant → 0 row`. Nay nó ĐỎ tất định, không phụ thuộc
+thứ tự chạy hay rác của spec khác.
 
 ---
 
@@ -122,7 +139,7 @@ Ba đường đọc `login_logs`, đã soi từng đường:
 
 | Đường đọc | Ảnh hưởng của 0532 | Bằng chứng |
 | --- | --- | --- |
-| `AuthLogsViewerService` (AUTH-API-401, admin) | Không mất dòng **hợp lệ** — chỉ hết thấy hàng NULL của người lạ (đúng mục tiêu) | `auth-logs-viewer.int.spec` 16/16 xanh |
+| `AuthLogsViewerService` (AUTH-API-401, admin) | ⚠️ **CÓ mất dòng** — xem §5.2. Không phải rò, nhưng cũng KHÔNG phải "không mất gì" | `auth-logs-viewer.int.spec` 16/16 xanh |
 | `MeSecurityActivityRepository` (GET /me/security/activity) | **Không mất dòng nào** | xem dưới |
 | Job retention | **Không chạm** — `login_logs` nằm trong `PROTECTED_TABLES` (`retention.service.ts:49`), retention KHÔNG BAO GIỜ xoá bảng này ⇒ không có gì để "bỏ sót im lặng" | đọc mã |
 
@@ -144,6 +161,32 @@ NULL đi qua — fail đăng nhập pre-auth của CHÍNH user vẫn phải hi�
 Bất biến này nay được **ghim bằng test** (`auth-me-bootstrap`, assert `user_id` NULL): nếu về sau có
 đường ghi gắn `user_id` vào row NULL-company, test đỏ buộc xét lại mô hình — thay vì để trôi thành mất
 dữ liệu im lặng trên màn hình người dùng.
+
+### 5.2 ⚠️ Cái GIÁ đã trả: admin mất quan sát brute-force nhắm vào chính công ty mình
+
+Cả `security-reviewer` lẫn `rls-tenant-isolation-tester` **độc lập** chỉ ra cùng một điểm, và nó đúng:
+
+`isLoginRateLimited()` chạy **TRƯỚC** `resolveCompanyId()` (`auth.service.ts:199` vs `:215`). Vì vậy hàng
+`blocked / TooManyAttempts` được ghi `company_id = NULL` **kể cả khi `companySlug` HOÀN TOÀN HỢP LỆ** —
+không phải vì nó vô chủ, mà chỉ vì lúc ghi ta CHƯA kịp tra tenant.
+
+Trên PROD, **165/268 hàng NULL (≈62%) là loại này** — tức là **có chủ thật**. Sau 0532, company-admin
+qua AUTH-API-401 **không còn thấy** các lần bị chặn nhắm vào chính công ty mình.
+
+| | |
+| --- | --- |
+| **Đây có phải rò rỉ không?** | Không. Không ai đọc được dữ liệu ngoài phạm vi; đây là mất **tầm nhìn của bên phòng thủ**. |
+| **Có phải hồi quy do 0532 không?** | Không hẳn — dữ liệu vốn đã bị gắn sai chủ từ S2. 0532 chỉ làm hậu quả *lộ ra*. |
+| **Vá đúng là gì?** | Gắn ĐÚNG CHỦ cho hàng `TooManyAttempts` khi slug resolve được — **KHÔNG** nới lại `USING`. |
+
+**CỐ Ý KHÔNG sửa trong WO này.** Cách sửa hiển nhiên (gọi `resolveCompanyId()` trước nhánh rate-limit)
+là **đổi thứ tự đường login** — vùng crown, và có đánh đổi mà cả hai reviewer đều KHÔNG cân: đưa một
+truy vấn DB lên TRƯỚC bộ chặn tần suất nghĩa là kẻ tấn công ép được một lượt tra DB cho MỖI request kể
+cả khi đang bị chặn (bề mặt DoS), đồng thời chạm vào cân bằng timing chống dò tenant mà `:219`
+(`password.hash` để burn thời gian) đang cố giữ. Việc đó cần phân tích riêng, không ghép vào một WO
+về policy RLS.
+
+⇒ Đã mở **KI-044** + WO `S6-SEC-LOGINLOG-2` để không trôi mất.
 
 ---
 
@@ -174,19 +217,50 @@ RED chứng minh bằng cách **hoàn nguyên policy về đúng bản 0443 trê
 | `auth-logs-viewer.int.spec` | **16/16** |
 | `auth-me-bootstrap.int-spec` (+1 ca mới) | **6/6** |
 | `auth-blocked-status.int-spec` | **5/5** |
-| `tenant-isolation.int-spec` (lưới cả dự án) | **454 passed / 11 skipped** — trong đó `login_logs > ngoài ngữ cảnh tenant → 0 row` nay **CHẠY THẬT** (✓, không còn ↓) lần đầu kể từ S2 |
+| `auth-users-admin.int-spec` | **21/21** |
+| `me-qa1-idor-sweep.int-spec` | **38/38** |
+| `tenant-isolation.int-spec` (lưới cả dự án) | **454 passed / 11 skipped** — trong đó `login_logs > ngoài ngữ cảnh tenant → 0 row` nay **CHẠY THẬT** (✓, không còn ↓) lần đầu kể từ S2, và ĐỎ tất định khi policy bị nới lại (§4.1) |
+| **Tổng chạy lại sau khi sửa theo FULL gate** | **8 file · 526 passed / 11 skipped** |
+| Unit suite (không DB) | **3298 passed / 0 failed** |
+| `harness/check.sh --all` (tier tiền-PR vùng đỏ, có `LANE_DB`) | **XANH ✅** — lint · typecheck · test (chunked, LANE_DB) · build · prod-tenant-check |
 
 ---
 
-## 7. Nợ phát hiện khi làm (KHÔNG thuộc phạm vi WO này)
+## 7. FULL gate (done_when #5)
+
+| Reviewer | Verdict | Ghi chú |
+| --- | --- | --- |
+| `security-reviewer` | **PASS** | 0 CRITICAL · 0 HIGH. Tự đối chiếu `WITH CHECK` 0443 ↔ 0532 bằng script bóc comment: **byte-identical**. |
+| `rls-tenant-isolation-tester` | **PASS** | Tự dựng lại RED→GREEN độc lập trên 2 DB lane; quét đường vòng (view · matview · SECURITY DEFINER · rule/trigger · kế thừa · `mediaos_readonly` · nhảy role · `pg_stats` · CREATE schema) ⇒ **không tìm được đường đọc nào còn lại**. |
+
+> **Thay thế agent (tiền lệ `S6-SEC-1` §7c):** done_when yêu cầu `database-reviewer`, agent này **không tồn tại**
+> trong môi trường phiên. Đã thay bằng `security-reviewer` (bao phủ migration/RLS/secret/auth theo CLAUDE §6)
+> kèm `rls-tenant-isolation-tester` (đúng agent mà done_when nêu tên, và là agent chạy SQL thật).
+
+**Đã sửa theo gate trước khi merge:** ba MEDIUM — (1) chú thích RLS đã chết ở `db/schema/auth-logs.ts`
+(đúng lớp lỗi WO này lấy làm luận điểm); (2) `skipNoContext` xanh vô nghĩa (§4.1); (3) plan chép ba
+literal mật khẩu tiền-rotate vào file MỚI của repo PUBLIC (§7 nay chỉ trỏ `file:line`). Cùng hai LOW:
+dọn rác hàng NULL trong `auth-me-bootstrap`, và `0532` tái khẳng định `ENABLE/FORCE ROW LEVEL SECURITY`
+cho tự đứng vững.
+
+**Chuyển thành KI-044 thay vì sửa ở đây:** mất quan sát brute-force của admin (§5.2).
+
+---
+
+## 8. Nợ phát hiện khi làm (KHÔNG thuộc phạm vi WO này)
 
 Hai chỗ vẫn giữ **mật khẩu literal trước khi rotate**, nên chế độ chạy test bằng `LANE_DB` đơn thuần
 không còn xác thực được sau `S6-SEC-ROTATE-1`:
 
 | Nơi | Vấn đề |
 | --- | --- |
-| `scripts/lane-db-setup.sh:25` | `DEV_PW="${OWNER_DB_PASSWORD:-changeme_dev_only}"` dùng cho role **`mediaos`** (superuser). Sau rotate, mật khẩu của `mediaos` nằm ở `SUPERUSER_DB_PASSWORD`, không phải `OWNER_DB_PASSWORD` ⇒ `28P01` |
-| `apps/api/test/db-target.ts:96-99` | Fallback dựng URL từ `LANE_DB` hardcode `changeme_dev_only` / `changeme_app_only` / `changeme_worker_only` ⇒ `28P01` |
+| `scripts/lane-db-setup.sh:25` | Biến `DEV_PW` mặc định về literal cũ và được dùng cho role **`mediaos`** (superuser). Sau rotate, mật khẩu của `mediaos` nằm ở `SUPERUSER_DB_PASSWORD`, **không phải** `OWNER_DB_PASSWORD` ⇒ `28P01` |
+| `apps/api/test/db-target.ts:96-99` | Fallback dựng URL từ `LANE_DB` hardcode **ba literal mật khẩu tiền-rotate** cho `mediaos` / `mediaos_app` / `mediaos_worker` ⇒ `28P01` |
+
+> ⚠️ **Cố ý KHÔNG chép giá trị literal vào file này.** Ba chuỗi đó chính là mật khẩu Postgres bị nêu
+> trong KI-043; chép lại vào một file MỚI của repo PUBLIC chỉ làm phình bề mặt phải purge, không thêm
+> thông tin gì — xem trực tiếp tại `file:line` ở trên. (Cũng là luật fixture giống-secret của CLAUDE.md §5
+> và cổng `scripts/check-no-secret-literals.mjs`.)
 
 **CI không bị ảnh hưởng** (CI truyền URL tường minh + Postgres ephemeral, và URL tường minh có
 precedence cao hơn). Chỉ chế độ lane-local gãy. **Cố ý KHÔNG sửa ở WO này**: `db-target.ts` là artifact
@@ -195,7 +269,7 @@ hai vùng đỏ và làm gate khó đọc. Đề nghị mở WO riêng.
 
 ---
 
-## 8. Quét anh em cùng khuôn (lỗi này có phải lỗi hệ thống không?)
+## 9. Quét anh em cùng khuôn (lỗi này có phải lỗi hệ thống không?)
 
 Vì gốc rễ là **chép khuôn**, đã quét toàn bộ policy trên DB lane dựng mới xem còn bảng nào có
 `company_id IS NULL` trong vế USING:
@@ -219,7 +293,7 @@ mang email + IP + user-agent của người lạ. ⇒ **Đây là lỗi lẻ, kh
 
 ---
 
-## 9. Phạm vi file (mở rộng so với `paths` khai trong backlog)
+## 10. Phạm vi file (mở rộng so với `paths` khai trong backlog)
 
 > memory `wo-paths-drive-gate-and-scheduler` — khai thiếu `paths` ⇒ lọt gate. Ghi lại tường minh:
 

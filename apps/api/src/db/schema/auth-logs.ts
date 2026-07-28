@@ -14,7 +14,15 @@ import { users } from "./users";
 /**
  * login_logs — nhật ký đăng nhập (success/failed/blocked). `company_id` NULLABLE (DB-02 §7.8): fail với email
  * KHÔNG tồn tại không resolve được company nhưng VẪN phải ghi log (chống brute-force, KHÔNG lộ user tồn tại).
- * RLS nullable-tenant (USING own+NULL; WITH CHECK own hoặc NULL khi pre-auth) — DDL/policy ở migration 0443.
+ *
+ * RLS — ⟲ ĐỔI bởi S6-SEC-LOGINLOG-1 / KI-042 (mig 0532, siết vế ĐỌC của policy dựng ở mig 0443):
+ *   • USING     = CHỈ `company_id = <tenant hiện tại>`. Hàng `company_id IS NULL` (telemetry pre-auth
+ *                 VÔ CHỦ, mang email + IP người lạ) KHÔNG đọc được qua đường ứng dụng — kể cả ngoài
+ *                 mọi ngữ cảnh tenant. Chỉ superuser đọc trực tiếp cho forensics.
+ *   • WITH CHECK = giữ nguyên 0443: ghi hàng của tenant mình, HOẶC ghi NULL chỉ khi KHÔNG có ngữ cảnh
+ *                 tenant (pre-auth) ⇒ đường ghi pre-auth không bị làm mù.
+ * ⚠️ Hệ quả: Postgres áp policy SELECT lên mệnh đề RETURNING ⇒ `INSERT … (company_id NULL) RETURNING`
+ * sẽ BỊ TỪ CHỐI. Đường ghi pre-auth TUYỆT ĐỐI không được dùng `.returning()` (xem auth.service.ts).
  */
 export const loginLogs = pgTable(
   "login_logs",

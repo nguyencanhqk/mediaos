@@ -584,6 +584,12 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   // S2-AUTH-DB-2: user_sessions/login_logs/user_security_events FK → users (NO ACTION) → xoá TRƯỚC users.
   //   login_logs.session_id FK → user_sessions → xoá login_logs TRƯỚC user_sessions.
   await direct.query("DELETE FROM login_logs WHERE company_id = ANY($1::uuid[])", ids);
+  // S6-SEC-LOGINLOG-1: hàng login_logs `company_id IS NULL` (telemetry pre-auth vô chủ) KHÔNG dính
+  // DELETE theo company_id ở trên ⇒ dọn riêng theo marker của harness rls-registry, nếu không chúng
+  // tích tụ vô hạn trong DB lane. Giữ ĐỒNG BỘ với `RLS_NULL_MARKER_EMAIL` (test/integration/rls-registry.ts).
+  await direct.query(
+    "DELETE FROM login_logs WHERE company_id IS NULL AND normalized_email LIKE 'rls-nullmarker%'",
+  );
   await direct.query("DELETE FROM user_security_events WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM user_sessions WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM object_permissions WHERE company_id = ANY($1::uuid[])", ids);

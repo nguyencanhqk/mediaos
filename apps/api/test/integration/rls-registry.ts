@@ -12,6 +12,13 @@ import { seedUser, type SeededTenant } from "../helpers/seed";
  * Harness chỉ seed TENANT role (company_id NOT NULL) để kiểm tra cô lập chéo tenant.
  * Test riêng cần xác minh system roles hiển thị cho mọi tenant — ngoài phạm vi harness này.
  */
+/**
+ * Tiền tố email đánh dấu hàng `login_logs` có `company_id IS NULL` do harness gieo (S6-SEC-LOGINLOG-1).
+ * Hàng NULL-tenant KHÔNG dính `DELETE ... WHERE company_id = ANY(...)` nên cần marker riêng để dọn.
+ * Giữ ĐỒNG BỘ với `cleanupTenants()` trong `test/helpers/seed.ts`.
+ */
+export const RLS_NULL_MARKER_EMAIL = "rls-nullmarker";
+
 export interface RlsTableCase {
   /** Tên hiển thị + tên bảng thật. */
   name: string;
@@ -2714,6 +2721,18 @@ export const RLS_TABLES: RlsTableCase[] = [
         `INSERT INTO login_logs (company_id, user_id, email, normalized_email, login_status)
          VALUES ($1, $2, $3, lower($3), 'success') RETURNING id`,
         [t.companyId, u, email],
+      );
+      // ⚠️ BẮT BUỘC gieo THÊM một hàng `company_id IS NULL`, nếu không case "ngoài ngữ cảnh → 0 row"
+      // XANH VÔ NGHĨA cho bảng này: dưới policy CŨ (còn `OR company_id IS NULL`), đọc không-GUC chỉ
+      // trả về ĐÚNG các hàng NULL — hàng attributed vốn đã vô hình. Chỉ gieo hàng attributed ⇒ 0 row
+      // ở CẢ hai phía ⇒ không bao giờ ĐỎ, tức bỏ miễn trừ mà không thu được bảo đảm nào.
+      // (Đã đo trên DB thật: policy cũ + chỉ hàng attributed → count = 0.)
+      // Marker `RLS_NULL_MARKER_EMAIL` để cleanupTenants dọn được — hàng NULL không dính DELETE
+      // theo company_id.
+      await direct.query(
+        `INSERT INTO login_logs (company_id, user_id, email, normalized_email, login_status, ip_address)
+         VALUES (NULL, NULL, $1, lower($1), 'blocked', '203.0.113.55')`,
+        [`${RLS_NULL_MARKER_EMAIL}-${randomUUID().slice(0, 8)}@x.test`],
       );
       return r.rows[0].id as string;
     },
