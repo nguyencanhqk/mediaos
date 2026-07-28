@@ -63,6 +63,33 @@ const CRASH_SIGNATURES = [
 
 const SPEC_FILE_RE = /\.(spec|e2e-spec|int-spec)\.(ts|tsx)$/;
 
+/**
+ * BASELINE "mang tên spec nhưng vitest KHÔNG thu thập" — đo 2026-07-28 (gate bù S6-QA-CHUNK-1).
+ *
+ * Đây là CỔNG, không phải ghi chú. Vế `missing` bên dưới chỉ bắt được file đã lọt vào `vitest list`
+ * rồi không chạy; nó MÙ với kiểu co phạm vi nguy hiểm hơn: file spec nằm NGOÀI `include` nên không
+ * bao giờ vào danh sách. Bẫy này đã có tiền lệ trong repo (apps/api chỉ chạy `src/**\/*.spec.ts` ⇒
+ * spec đặt ở `test/unit/**` không bao giờ chạy mà mọi reporter vẫn XANH). In ra dạng ℹ️ là không đủ:
+ * log dài, không ai đọc.
+ *
+ * LUẬT: file KHÔNG có trong baseline mà không được thu thập ⇒ ĐỎ. Muốn thêm dòng vào đây là một
+ * quyết định (module park / exclude cố ý), phải sửa chính file này.
+ * Dòng thừa (đã xoá hoặc nay chạy được) chỉ CẢNH BÁO — nó không giấu được test nào.
+ *
+ * 6 dòng hiện tại đều là module đã PARK theo de-media-fy (CLAUDE.md §1): finance · ui-config ·
+ * webhooks · workflow-DAG.
+ */
+const UNCOLLECTED_BASELINE = {
+  "@mediaos/api": [
+    "test/integration/finance-cost-allocation-controller-deny.int-spec.ts",
+    "test/integration/finance-cost-controller-deny.int-spec.ts",
+    "test/integration/finance-revenue-controller-deny.int-spec.ts",
+    "test/integration/ui-config-deny.int-spec.ts",
+    "test/integration/webhooks-deny.int-spec.ts",
+    "test/workflow-lifecycle.e2e-spec.ts",
+  ],
+};
+
 // Dấu hiệu test ĐỎ THẬT đọc từ VĂN BẢN (không phải từ báo cáo JSON). Cần thiết cho trường hợp xấu:
 // chunk có test đỏ RỒI mới crash ⇒ không kịp ghi JSON ⇒ `failed` đọc ra 0 ⇒ nếu chỉ tin JSON thì
 // runner sẽ tưởng là crash hạ tầng và CHẠY LẠI, che mất cái đỏ thật. Reporter mặc định của vitest in
@@ -339,7 +366,15 @@ async function main() {
 
     // Chống giảm phạm vi lén: tập file ĐÃ CHẠY phải phủ hết tập `vitest list`.
     const missing = expected.filter((f) => !ran.has(f));
-    const ok = realFailures === 0 && unresolvedCrash === 0 && missing.length === 0;
+    // Vế thứ hai của cùng bất biến: file spec rơi RA NGOÀI `vitest list` (xem UNCOLLECTED_BASELINE).
+    const baseline = UNCOLLECTED_BASELINE[target.name] ?? [];
+    const unexpectedUncollected = uncollected.filter((f) => !baseline.includes(f));
+    const staleBaseline = baseline.filter((f) => !uncollected.includes(f));
+    const ok =
+      realFailures === 0 &&
+      unresolvedCrash === 0 &&
+      missing.length === 0 &&
+      unexpectedUncollected.length === 0;
     if (!ok) hardFail = true;
 
     results.push({
@@ -348,6 +383,8 @@ async function main() {
       ran: ran.size,
       missing,
       uncollected,
+      unexpectedUncollected,
+      staleBaseline,
       realFailures,
       unresolvedCrash,
       retriesUsed,
@@ -372,12 +409,29 @@ async function main() {
       r.missing.slice(0, 20).forEach((f) => console.log(`        · ${f}`));
       if (r.missing.length > 20) console.log(`        · … và ${r.missing.length - 20} file nữa`);
     }
-    if (r.uncollected.length) {
-      // Công bố (done_when[2]) — KHÔNG phải lỗi: exclude cố ý hoặc file đặt ngoài `include`.
+    if (r.unexpectedUncollected.length) {
+      // ĐỎ: file mang tên spec nhưng vitest không thu thập, và KHÔNG có trong baseline ⇒ đúng kiểu
+      // co phạm vi im lặng mà runner này tồn tại để chặn (spec đặt sai thư mục = xanh giả).
       console.log(
-        `      ℹ️  ${r.uncollected.length} file tên-spec KHÔNG được vitest thu thập (exclude cố ý / ngoài include):`,
+        `      ❌ ${r.unexpectedUncollected.length} file tên-spec KHÔNG được vitest thu thập và KHÔNG có trong baseline:`,
       );
-      r.uncollected.forEach((f) => console.log(`        · ${f}`));
+      r.unexpectedUncollected.forEach((f) => console.log(`        · ${f}`));
+      console.log(
+        `        → sửa vị trí file cho khớp \`include\` của ${r.name}, HOẶC thêm vào UNCOLLECTED_BASELINE`,
+      );
+      console.log(`          trong harness/chunk-test.mjs kèm lý do (đó là một quyết định).`);
+    }
+    if (r.staleBaseline.length) {
+      // Chỉ cảnh báo: dòng thừa trong baseline không giấu được test nào (file đã xoá hoặc nay chạy).
+      console.log(`      ⚠️  ${r.staleBaseline.length} dòng UNCOLLECTED_BASELINE đã cũ — gỡ đi:`);
+      r.staleBaseline.forEach((f) => console.log(`        · ${f}`));
+    }
+    const knownUncollected = r.uncollected.length - r.unexpectedUncollected.length;
+    if (knownUncollected > 0) {
+      // Công bố (done_when[2]) — KHÔNG phải lỗi: exclude cố ý / module đã PARK, đã ký trong baseline.
+      console.log(
+        `      ℹ️  ${knownUncollected} file tên-spec không thu thập theo BASELINE đã ký (module park / exclude cố ý)`,
+      );
     }
   }
   console.log("");

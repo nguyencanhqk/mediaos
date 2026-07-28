@@ -5699,6 +5699,42 @@ export const backlog = [
     ],
   },
   {
+    id: "S6-QA-TENANTWRITE-1",
+    module: "QA",
+    layer: "QA",
+    title:
+      "KI-037 — lưới tenant-isolation (156 bảng × 3 ca) CHỈ SELECT: không có một ca deny GHI chéo tenant nào; bổ sung vế INSERT/UPDATE/DELETE vào chính harness data-driven",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/test/**",
+      "apps/api/src/**",
+      "apps/api/migrations/**",
+      "docs/RELEASE/**",
+      "docs/plans/S6-QA-TENANTWRITE-1.md",
+    ],
+    skills: ["code-review"],
+    // KHÔNG depends_on: phần đo + RED test không cần migration. NẾU phải vá bằng migration thì đánh
+    // số TIẾP head tại thời điểm làm (0532/0533 đã cấp cho LOGINLOG/MV) — không hardcode ở đây.
+    depends_on: [],
+    plan: "docs/plans/S6-QA-TENANTWRITE-1.md",
+    src: [
+      "RELEASE-02 KI-037 (S2) — 'là lớp lỗ hổng đã để lọt KI-032, không phải một bug lẻ'",
+      "apps/api/test/integration/tenant-isolation.int-spec.ts — ĐÃ ĐO 2026-07-28: cả file có đúng 3 câu SQL, tất cả là SELECT (visibleIds:45 · idsNoContext:60). 3 `it` cho mỗi bảng đều là vế ĐỌC",
+      "apps/api/test/integration/rls-registry.ts — 156 entry `table:` ⇒ 156 × 3 = 468 ca (KI-037 ghi 465; chênh do `skipIf(tc.skipNoContext)`)",
+      "Vế WITH CHECK của policy là thứ CHƯA có lưới nào chạm ở tầng registry — KI-032 (tenant admin ghi được lên role hệ thống toàn cục) chính là lỗ vế GHI",
+      "Có sẵn ca ghi lẻ theo module (att-core-tenant-deny · task-core-tenant-deny · foundation-tables-tenant-deny · *-appendonly) — ĐO trước xem phủ bao nhiêu/156 bảng, KHÔNG viết lại cái đã có",
+    ],
+    done_when: [
+      "ĐO TRƯỚC (số, không phải cảm giác): trong 156 bảng của rls-registry, bao nhiêu bảng ĐÃ có ca deny GHI chéo tenant ở spec khác — bảng đối chiếu vào plan; phần còn lại là phạm vi thật của WO",
+      "Mở rộng CHÍNH harness data-driven (không dựng file song song): với mỗi bảng RLS thêm vế GHI — (a) INSERT hàng mang company_id của B trong ngữ cảnh A phải bị chặn (WITH CHECK), (b) UPDATE/DELETE hàng của B trong ngữ cảnh A phải chạm 0 hàng. Bảng append-only (BẤT BIẾN #2) dùng biến thể: UPDATE/DELETE phải bị DENY kể cả TRONG tenant",
+      "RED-proof có bằng chứng: nới một policy WITH CHECK trên DB lane rồi chạy ⇒ ca (a) phải ĐỎ và in đúng tên bảng; khôi phục ⇒ xanh. Không có RED-proof thì lưới mới chỉ là trang trí",
+      "NẾU phát hiện lỗ THẬT: vá NGAY TRONG WO này (migration nối tiếp head tại thời điểm làm) — KHÔNG tách WO mới để né FULL gate. Nếu lỗ nằm ngoài phạm vi (cần đổi hành vi app), ghi known-issue mới có S-level + owner",
+      "Chạy trên lane DB cô lập (`bash harness/check.sh --lane-db`); thời gian chạy thêm của harness ghi vào plan (156 bảng × ca mới — nếu vượt ngân sách suite thì chia theo nhóm, KHÔNG giảm số bảng)",
+      "FULL gate security-reviewer + rls-tenant-isolation-tester PASS; RELEASE-02 KI-037 đóng",
+    ],
+  },
+  {
     id: "S6-REL-1",
     module: "DEVOPS",
     layer: "DEVOPS",
