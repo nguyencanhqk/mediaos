@@ -8,6 +8,25 @@ import { z } from "zod";
 export const ENV_FILE_PATHS = [".env", "../../.env"] as const;
 
 /**
+ * URL tuỳ chọn với luật "**biến RỖNG = CHƯA SET**" (`""` → `undefined`), thay vì đỏ
+ * "Invalid environment variables".
+ *
+ * Vì sao cần (S6-SEC-DBFENCE-1 / KI-028): hàng rào test đặt `DATABASE_URL=""` một cách CỐ Ý để nói
+ * "không có DB đích" — và để CHẶN `config/load-env.ts` nạp đè URL PROD từ `.env` (nó bỏ qua khoá đã
+ * `in process.env`, nên phải là chuỗi rỗng chứ không phải khoá vắng mặt). Không có luật này thì
+ * `z.string().url()` ném NGAY LÚC IMPORT (`src/db/index.ts` gọi `loadEnv()` ở top-level) ⇒ mọi spec
+ * chạm chuỗi import đó đỏ ở bước collect, `describe.skipIf` không cứu được.
+ *
+ * Cũng vá một cái bẫy PROD có thật: một dòng `DATABASE_URL=` bỏ trống trong `.env` hiện làm API
+ * sập lúc boot kèm thông điệp khó lần, thay vì hành xử như "chưa cấu hình".
+ */
+const optionalUrl = () =>
+  z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().url().optional(),
+  );
+
+/**
  * Validate biến môi trường tại biên hệ thống (coding-style: fail-fast, không tin dữ liệu ngoài).
  * DB URL để OPTIONAL → API vẫn boot khi DB chưa lên (health/db báo "down"), giúp `pnpm dev` chạy không cần docker.
  */
@@ -24,16 +43,16 @@ export const envSchema = z
     // IP-allowlist hoặc vỡ (mọi request = IP proxy) hoặc bị spoof. Giá trị: "false" | số hop | preset/CIDR.
     TRUST_PROXY: z.string().default("false"),
     // DATABASE_URL → mediaos_app qua PgBouncer (MỌI query nghiệp vụ, RLS ép ở đây).
-    DATABASE_URL: z.string().url().optional(),
+    DATABASE_URL: optionalUrl(),
     // DATABASE_DIRECT_URL → owner/superuser, direct (migration + DDL).
-    DATABASE_DIRECT_URL: z.string().url().optional(),
+    DATABASE_DIRECT_URL: optionalUrl(),
     // DATABASE_WORKER_URL → mediaos_worker, direct (outbox worker, G2-4). Fallback: DIRECT_URL.
-    DATABASE_WORKER_URL: z.string().url().optional(),
+    DATABASE_WORKER_URL: optionalUrl(),
     // PGBOUNCER_URL → mediaos_app QUA PgBouncer transaction-mode (:6432). Chỉ dùng cho integration test
     // kiểm chứng tenant isolation giữ vững khi connection bị tái dùng qua pooler (GX-4, g2rls). App runtime
     // dùng DATABASE_URL (đã trỏ PgBouncer ở prod). Vắng ⇒ test pgbouncer tự skip (không đỏ giả).
-    PGBOUNCER_URL: z.string().url().optional(),
-    VALKEY_URL: z.string().url().optional(),
+    PGBOUNCER_URL: optionalUrl(),
+    VALKEY_URL: optionalUrl(),
     // ── Realtime (G10-1) ───────────────────────────────────────────────────────
     // Kill-switch gateway WS: 'false' tắt hẳn Socket.IO (FE còn poll REST fallback). KHÔNG z.coerce.boolean
     // (bẫy: coi 'false' → true). Default 'true'. VALKEY_URL vắng → adapter fail-soft in-memory (single instance).
@@ -126,13 +145,13 @@ export const envSchema = z
     // Đường dẫn file KEK 32-byte (LocalKekProvider). ADR-0004 cấm KEK-in-env-host cho prod → chỉ dùng dev/test.
     KMS_LOCAL_KEK_PATH: z.string().min(1).default(".secrets/local-kek.bin"),
     // Vault transit — chỉ bắt buộc khi KMS_PROVIDER='vault' (xem superRefine bên dưới).
-    KMS_VAULT_ADDR: z.string().url().optional(),
+    KMS_VAULT_ADDR: optionalUrl(),
     KMS_VAULT_TOKEN: z.string().min(1).optional(),
     // ── Object storage / S3 (B4 task attachments — MinIO/R2 qua @aws-sdk/client-s3) ──────────────
     // OPTIONAL để API vẫn boot khi storage chưa cấu hình (dev không docker). ObjectStorageService
     // fail-fast (StorageNotConfiguredError) KHI DÙNG nếu thiếu — KHÔNG fail-open (không tự bịa endpoint).
     // S3_FORCE_PATH_STYLE=true cho MinIO (bucket-in-path, không virtual-host). Default true.
-    S3_ENDPOINT: z.string().url().optional(),
+    S3_ENDPOINT: optionalUrl(),
     S3_REGION: z.string().min(1).default("us-east-1"),
     S3_ACCESS_KEY: z.string().min(1).optional(),
     S3_SECRET_KEY: z.string().min(1).optional(),
@@ -214,7 +233,7 @@ export const envSchema = z
     // endpoint sso-link fail-fast 503 khi dùng (mirror ANTHROPIC_API_KEY). BẤT BIẾN #3: không hardcode/log.
     LMS_SSO_SECRET: z.string().min(32).optional(),
     // Gốc public của LMS (vd https://lms.example.com) — đích redirect SSO.
-    LMS_BASE_URL: z.string().url().optional(),
+    LMS_BASE_URL: optionalUrl(),
     // ── S5-LMS-BE-1: auto-sync tài khoản MediaOS→LMS (Giai đoạn B) ──
     // Bearer token server-to-server tới LMS POST /api/admin/sync-users (= MEDIAOS_SYNC_TOKEN phía LMS).
     // OPTIONAL: thiếu → bridge/job auto-sync TẮT (warn 1 lần, KHÔNG chặn boot; mirror posture SSO). BẤT BIẾN #3.

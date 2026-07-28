@@ -41,7 +41,7 @@
 | KI-025 | **98/346 đường dẫn API (28%) không có test HTTP nào chạm** — phủ ở tầng service (`T-svc`) nên guard/DTO/envelope của route chưa từng chạy. Nặng nhất: `user-invites` (`/users/invite`, `/users/:id/approve`…) + `POST/GET /hr/profile-change-requests` | S2 | Độ phủ test | ❌ | ❌ | Sau MVP |
 | ~~KI-026~~ | ~~Nhãn `[BLOCKED — service.ts bug]` + chú thích "KNOWN BROKEN" nằm trên một test ĐANG XANH (`attendance-adjustment.int.spec.ts`) — bug đã sửa cùng PR #81 nhưng chú thích không gỡ~~ — **ĐÃ ĐÓNG 2026-07-26** (`S6-QA-FINAL-1`) | S3 | Vệ sinh test | — | — | ✔ xong |
 | ~~**KI-027**~~ | **ĐÃ ĐÓNG 2026-07-28** — verify cả 3 lớp trên PROD: (1) `TWO_FACTOR_ENFORCEMENT_ENABLED=true` ở **cả** `.env` lẫn `.env.prod` (sửa 27/7 08:36) và service `MediaOS-API` boot lúc **28/7 08:49** ⇒ guard đọc cờ MỚI, ép đang SỐNG; (2) `roles.requires_two_factor=true` cho `company-admin` + `platform-admin`; (3) `admin@funtimemediacorp.com` **đã enroll TOTP** (`user_totp.enabled_at` khác NULL) ⇒ không có cửa sổ tự-khoá. ~~2FA KHÔNG được ép ở PROD cho `company-admin`~~ | **S1** | Bảo mật (cấu hình) | ✅ | ✅ | **ĐÓNG** |
-| **KI-028** | **MỞ LẠI 2026-07-28 — containment 27/7 chỉ phủ 16/74 tenant.** Đo lại trên PROD `mediaos`: **74/75 company khớp mẫu tenant test, 0 soft-delete** (16 tạo 24/7 = đúng tập đã xử lý; **58 tạo 26/7 chưa ai chạm**); **226 user `active`**, trong đó **55 có hash argon2/bcrypt THẬT (đăng nhập được)** và **33 giữ role TOÀN CỤC** — giao của hai tập: **13 `company-admin` + 5 `platform-admin` vừa đăng nhập được vừa có role toàn cục**. Hai số verify của lần đóng ("user test còn active = 0", "operator-grant ngoài funtime = 0") **nay đều sai**. Nguồn rò CHƯA bịt: `apps/api/vitest.config.ts:11` lấy `LANE_DB ?? "mediaos"` ⇒ spec chỉ gate `hasDb` (vd `tenant-isolation.int-spec`) ghi thẳng vào DB PROD; run crash (KI-014) bỏ `afterAll` cleanup. **Giảm nhẹ:** email mang hậu tố ngẫu nhiên mỗi lần chạy (không có trong repo) nên không đoán được từ bên ngoài; funtime nguyên vẹn (46 user: 35 active + 11 locked), không có dấu hiệu chạm chéo tenant. ~~ĐÃ ĐÓNG 2026-07-27 (owner chạy `scripts/s6sec1-contain-test-tenants.sql`)~~ — mật khẩu `Passw0rd!test99` có trong 86 file của repo PUBLIC (đã verify argon2 trên hash PROD) | **S1** | Bảo mật | ❌ | ❌ | `S6-SEC-DBFENCE-1` (mở 2026-07-28) |
+| ~~**KI-028**~~ | **ĐÃ ĐÓNG 2026-07-28 — `S6-SEC-DBFENCE-1`: bịt NGUỒN RÒ trước, purge sau, cắm chốt hồi quy.** *Lần đóng 27/7 chỉ dọn rác nên rác mọc lại gấp 4,6 lần trong 2 ngày; lần này khác ở chỗ có hàng rào + chốt.* **Chẩn đoán lại — có HAI vector, không phải một** (truy nguyên 72/74 company về đúng spec sinh ra chúng qua tiền tố slug ↔ đối số `label` của `seedCompany`): **V1** spec chỉ gate `hasDb` chạy khi thiếu `LANE_DB` → 58 company; **V2** spec ĐÃ gate `LANE_DB` vẫn ghi vào `mediaos` (LANE_DB=mediaos, hoặc `DATABASE_URL` tường minh thắng precedence) → 14 company. ⇒ **sự có mặt của `LANE_DB` chưa bao giờ là thuộc tính an toàn — TÊN DB ĐÍCH mới là**; đó là lý do vá không nằm ở 56 file spec mà ở resolver. **Vector thứ 3 lộ ra khi vá:** `src/db/check.ts` gọi `main()` ở top-level và `check.spec.ts` import nó ⇒ **mỗi lần chạy unit test là một lần `migrate()` chạy trên DB PROD**, im lặng (nay chốt `require.main === module`). **Hàng rào 3 lớp:** L1 `test/db-target.ts` fail-closed (thiếu LANE_DB ⇒ 3 URL RỖNG ⇒ int-spec SKIP, hết fallback `"mediaos"`; đích ∈ {`mediaos`,`mediaos_dev`} ngoài CI ⇒ THROW) · L2 `test/global-setup.ts` đòi **con dấu `COMMENT ON DATABASE = 'mediaos-test-lane'`** nằm TRONG database — không giả được bằng env, phủ cả 266 file spec ở MỘT chỗ · L3 `scripts/check-prod-test-tenants.mjs` (nối vào `check.sh --all`) đếm tenant test trong PROD, ≠0 ⇒ ĐỎ. **Bằng chứng:** chạy TRỌN suite 449 file api không `LANE_DB` ⇒ **0 company mới** (75→75, trước đây sinh hàng chục) · lane DB chưa đóng dấu ⇒ từ chối chạy, đóng dấu ⇒ 459 test xanh · 19 unit RED-proof cho L1. **Purge (owner duyệt, có dump `mediaos-pre-purge-20260728.dump`):** dry-run ROLLBACK trên chính PROD pass trước, rồi chạy thật — **56.269 dòng theo `company_id` + 74 company + 13 mồ côi (quét tới điểm bất động)**; chốt trước/sau + **quét toàn vẹn FK toàn schema = 0 tham chiếu treo**. **SAU:** company khớp mẫu test **0** · user test active **0** · **0** grant `platform-admin` còn lại · token sống của tenant test **0** · `funtime` **46 user (35 active + 11 locked), 0 dòng bị chạm** · `check-prod-test-tenants.mjs` exit **0**. ~~**MỞ LẠI 2026-07-28 — containment 27/7 chỉ phủ 16/74 tenant.**~~ Đo lại trên PROD `mediaos`: **74/75 company khớp mẫu tenant test, 0 soft-delete** (16 tạo 24/7 = đúng tập đã xử lý; **58 tạo 26/7 chưa ai chạm**); **226 user `active`**, trong đó **55 có hash argon2/bcrypt THẬT (đăng nhập được)** và **33 giữ role TOÀN CỤC** — giao của hai tập: **13 `company-admin` + 5 `platform-admin` vừa đăng nhập được vừa có role toàn cục**. Hai số verify của lần đóng ("user test còn active = 0", "operator-grant ngoài funtime = 0") **nay đều sai**. Nguồn rò CHƯA bịt: `apps/api/vitest.config.ts:11` lấy `LANE_DB ?? "mediaos"` ⇒ spec chỉ gate `hasDb` (vd `tenant-isolation.int-spec`) ghi thẳng vào DB PROD; run crash (KI-014) bỏ `afterAll` cleanup. **Giảm nhẹ:** email mang hậu tố ngẫu nhiên mỗi lần chạy (không có trong repo) nên không đoán được từ bên ngoài; funtime nguyên vẹn (46 user: 35 active + 11 locked), không có dấu hiệu chạm chéo tenant. ~~ĐÃ ĐÓNG 2026-07-27 (owner chạy `scripts/s6sec1-contain-test-tenants.sql`)~~ — mật khẩu `Passw0rd!test99` có trong 86 file của repo PUBLIC (đã verify argon2 trên hash PROD) | **S1** | Bảo mật | ✅ | ✅ | **ĐÓNG 2026-07-28** — `S6-SEC-DBFENCE-1` |
 | ~~**KI-032**~~ | ~~**Tenant admin XOÁ được `role_permissions` của role hệ thống TOÀN CỤC**~~ — **ĐÃ ĐÓNG 2026-07-27** (mig `0530` RESTRICTIVE FOR DELETE + gỡ `DELETE ON roles` + guard `isSystem` ở 2 hàm; RED→GREEN 6/6). **`0530` ĐÃ áp cho PROD** — verify: policy `role_permissions_no_delete_system` cmd=`d` permissive=`f`, grant app trên `roles` = `INSERT,SELECT,UPDATE` (hết `DELETE`). — RLS `USING` cho `company_id IS NULL` mà **DELETE không xét `WITH CHECK`**; service thiếu guard `isSystem`. Ghi chéo tenant, **INSERT khôi phục bị chặn ⇒ không hoàn tác qua app**. PROD: 785 grant toàn cục, `funtime` dùng 2 role toàn cục | **S0** | Bảo mật | ✅ | ✅ | **Owner — GẤP** |
 | ~~KI-033~~ | **ĐÃ VÁ 2026-07-27** — thêm audit in-tx cho **CẢ HAI** endpoint report. *Đính chính phạm vi so với bản gate:* không phải "leave lạc đàn giữa hai sibling cùng cổng" — `attendance-report` cũng không audit, và nó gate bằng `view-company:attendance` chứ **không** phải `export`. Đúng là: 2 bản CSV có audit, 2 bản report JSON thì không | S1 | Bảo mật (audit) | — | — | ✔ xong |
 | KI-034 | Audit của `notifications.service.create` **KHÔNG cùng transaction** dù docstring khẳng định có ⇒ audit + outbox có thể mất chỉ với một dòng warn. **Vá một phần 2026-07-27:** `markRead` nay `await` promise audit (hết đua với `return`), và docstring sai đã sửa cho khớp code. **Còn lại:** gộp insert+outbox+audit vào MỘT tx — refactor chạm đường nóng mọi module gọi ⇒ WO riêng có RED test | S1 | Bảo mật (audit) | ❌ | ⚠️ | `S6-SEC-NOTITX-1` (mở 2026-07-27) |
@@ -71,7 +71,7 @@
 >
 > | | Đóng bằng | Verify trên PROD (read-only) |
 > | --- | --- | --- |
-> | KI-028 | `scripts/s6sec1-contain-test-tenants.sql` | operator-grant ngoài `funtime` = 0 · user tenant test active = 0 · `funtime` nguyên vẹn |
+> | KI-028 | ⟲ **đóng lại 2026-07-28** bằng `S6-SEC-DBFENCE-1` (hàng rào 3 lớp + `scripts/s6-dbfence-purge-test-tenants.sql`). Bản 27/7 (`s6sec1-contain-test-tenants.sql`) chỉ phủ 16/74 và **không bịt nguồn rò** | company khớp mẫu test = **0**/1 · user test active = **0** · grant `platform-admin` = **0** · `funtime` **46 (35/11)** · `check-prod-test-tenants.mjs` exit **0** · suite 449 file không `LANE_DB` ⇒ **0** company mới |
 > | KI-032 | mig `0530` | policy `…no_delete_system` `cmd=d`/`permissive=f` · grant `roles` hết `DELETE` |
 > | KI-038 | mig `0531` | 2 trigger `enforce_company_id_immutable` trên `notification_%`, `tgenabled='O'` (đang hoạt động, không phải chỉ tồn tại) |
 >
@@ -372,17 +372,33 @@ nhật ký audit) vào được **chỉ bằng mật khẩu**.
 lẫn `.env.prod` (nhớ `m prod-env` ghi đè `.env.prod`) → restart API → smoke login. **Đảo thứ tự = admin
 ăn 403 `TWO_FACTOR_SETUP_REQUIRED` trên mọi route.**
 
-### KI-028 — tenant TEST + user còn sống trong DB PROD · **MỞ LẠI** · S1 · (`S6-SEC-1` → `S6-SEC-DBFENCE-1`)
+### KI-028 — tenant TEST + user còn sống trong DB PROD · **ĐÓNG 2026-07-28** · S1 · (`S6-SEC-1` → `S6-SEC-DBFENCE-1`)
 
 > **ĐO LẠI 2026-07-28 (read-only trên PROD `mediaos`) — con số của lần đóng đã sai.**
 >
-> | Số | 2026-07-26 (lúc phát hiện) | 2026-07-27 (lúc tuyên bố đóng) | **2026-07-28 (đo lại)** |
-> | --- | --- | --- | --- |
-> | company khớp mẫu test | 16 | 0 còn phải xử lý | **74** (16 tạo 24/7 + **58 tạo 26/7**), 0 soft-delete |
-> | user test `active` | 25 | **0** | **226** |
-> | trong đó hash argon2/bcrypt THẬT (đăng nhập được) | — | — | **55** |
-> | giữ role TOÀN CỤC | 3 `platform-admin` | **0** | **33** (23 `company-admin` · 5 `platform-admin` · 5 `employee`) |
-> | **giao: đăng nhập được VÀ role toàn cục** | — | — | **18** (13 `company-admin` + **5 `platform-admin`**) |
+> | Số | 2026-07-26 (lúc phát hiện) | 2026-07-27 (lúc tuyên bố đóng) | **2026-07-28 (đo lại)** | **2026-07-28 SAU purge** |
+> | --- | --- | --- | --- | --- |
+> | company khớp mẫu test | 16 | 0 còn phải xử lý | **74** (16 tạo 24/7 + **58 tạo 26/7**), 0 soft-delete | **0** |
+> | user test `active` | 25 | **0** | **226** | **0** |
+> | trong đó hash argon2/bcrypt THẬT (đăng nhập được) | — | — | **55** | **0** |
+> | giữ role TOÀN CỤC | 3 `platform-admin` | **0** | **33** (23 `company-admin` · 5 `platform-admin` · 5 `employee`) | **0** |
+> | **giao: đăng nhập được VÀ role toàn cục** | — | — | **18** (13 `company-admin` + **5 `platform-admin`**) | **0** |
+> | `funtime` (không được chạm) | 46 | 46 | 46 (35 active + 11 locked) | **46 (35 + 11)** |
+>
+> **Đóng bằng gì (2026-07-28, `S6-SEC-DBFENCE-1`).** Khác lần trước ở chỗ **bịt nguồn rò TRƯỚC, purge
+> SAU, và để lại một chốt hồi quy** — xem dòng KI-028 ở bảng đầu tài liệu cho toàn bộ số đo. Ba điểm
+> đáng nhớ nhất:
+>
+> 1. **`LANE_DB` chưa bao giờ là thuộc tính an toàn.** Truy nguyên 72/74 company về đúng spec sinh ra
+>    chúng cho thấy **14 company đến từ spec ĐÃ gate `LANE_DB`** — connection vẫn về `mediaos` do
+>    `DATABASE_URL` tường minh thắng precedence (hoặc `LANE_DB=mediaos` chép từ CI). Chỉ **TÊN DB
+>    ĐÍCH** mới là thuộc tính an toàn ⇒ hàng rào chốt ở đó, không chốt ở "có LANE_DB hay không".
+> 2. **Vá ở resolver, không vá 56 file spec.** 63/266 file gate thiếu `LANE_DB` (56 file có tạo
+>    company). Vá từng file là mời file thứ 57; hàng rào đặt ở `test/db-target.ts` +
+>    `test/global-setup.ts` phủ cả 266 file tại MỘT chỗ.
+> 3. **Vector thứ ba chỉ lộ ra sau khi bịt hai vector đầu:** `src/db/check.ts` chạy `main()` ở
+>    top-level, `check.spec.ts` import nó ⇒ **mỗi lần chạy unit test là một lần `migrate()` trên DB
+>    PROD**. Không ai thấy suốt thời gian dài vì `DATABASE_DIRECT_URL` luôn được điền ngầm.
 >
 > **Vì sao lệch:** containment `scripts/s6sec1-contain-test-tenants.sql` chạy đúng trên **tập đã đo**
 > (16 company của 24/7). 58 company + 201 user tạo ngày **26/7** chưa từng vào phép đo nên script

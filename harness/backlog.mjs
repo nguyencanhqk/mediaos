@@ -5709,6 +5709,15 @@ export const backlog = [
     paths: [
       "apps/api/vitest.config.ts",
       "apps/api/test/**",
+      // Mở rộng khi thi công (memory wo-paths-drive-gate-and-scheduler — khai thiếu ⇒ lọt gate):
+      //  • src/config/env.schema* — luật "biến RỖNG = CHƯA SET" cho URL, để DATABASE_URL="" của hàng
+      //    rào không làm loadEnv() ném lúc import.
+      //  • src/db/check.ts — chốt `require.main === module`; trước đó import spec = migrate DB PROD.
+      //  • .github/workflows/api.yml — step đóng dấu DB ephemeral cho hàng rào lớp 2.
+      "apps/api/src/config/env.schema.ts",
+      "apps/api/src/config/env.schema.spec.ts",
+      "apps/api/src/db/check.ts",
+      ".github/workflows/api.yml",
       "scripts/**",
       "harness/**",
       "docs/RELEASE/**",

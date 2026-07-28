@@ -145,11 +145,18 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((err) => {
-  if (err instanceof JournalIntegrityError) {
-    console.error(`[db:check] BẤT BIẾN journal vi phạm: ${err.message}`);
-  } else {
-    console.error("[db:check] failed:", err);
-  }
-  process.exit(1);
-});
+// S6-SEC-DBFENCE-1 (KI-028) — CHỈ chạy khi file được gọi NHƯ SCRIPT (`pnpm db:check`), KHÔNG chạy khi
+// bị IMPORT. `check.spec.ts` import các hàm thuần từ đây; không có chốt này thì mỗi lần import là một
+// lần `main()` chạy thật → `migrate()` áp migration lên DATABASE_DIRECT_URL. Trước khi có hàng rào DB,
+// biến đó LUÔN trỏ `mediaos` (PROD) ⇒ **mỗi lần chạy unit test là một lần migrate DB PROD**, im lặng.
+// Đây là vector ghi-vào-PROD thứ hai, độc lập với seedCompany — chỉ lộ ra khi URL thôi được điền ngầm.
+if (require.main === module) {
+  main().catch((err) => {
+    if (err instanceof JournalIntegrityError) {
+      console.error(`[db:check] BẤT BIẾN journal vi phạm: ${err.message}`);
+    } else {
+      console.error("[db:check] failed:", err);
+    }
+    process.exit(1);
+  });
+}

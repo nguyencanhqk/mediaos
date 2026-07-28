@@ -42,6 +42,14 @@ else
   echo "[lane-db] ${DB} đã tồn tại — chỉ chain-migrate (dùng --reset để làm lại từ đầu)"
 fi
 
+# S6-SEC-DBFENCE-1 (KI-028) — ĐÓNG DẤU lane DB. `apps/api/test/global-setup.ts` TỪ CHỐI chạy suite trên
+# DB không mang con dấu này, nên PROD `mediaos` / dev-online `mediaos_dev` (không bao giờ được đóng dấu)
+# không còn đường nhận dữ liệu test. Idempotent — chạy lại vô hại. Giữ ĐỒNG BỘ với TEST_LANE_STAMP
+# trong apps/api/test/db-target.ts.
+TEST_LANE_STAMP="mediaos-test-lane"
+echo "[lane-db] đóng dấu '${TEST_LANE_STAMP}' lên ${DB}"
+psql_super -c "COMMENT ON DATABASE ${DB} IS '${TEST_LANE_STAMP}'"
+
 echo "[lane-db] chain migrate 0000→latest vào ${DB} (dùng migration của worktree cwd: $(pwd))"
 # migrate.ts chỉ cần DATABASE_DIRECT_URL; loadEnv() có default cho mọi field khác → không cần .env.
 DATABASE_DIRECT_URL="postgres://${SUPER}:${DEV_PW}@${HOSTPORT}/${DB}" \
