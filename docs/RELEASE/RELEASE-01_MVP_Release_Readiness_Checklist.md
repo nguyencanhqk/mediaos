@@ -121,7 +121,7 @@ Ma trận **5 scope × 7 module** + 13 checklist + 6 negative — mỗi ô cite 
 
 | Mục | Trạng thái |
 | --- | --- |
-| CRITICAL / HIGH mở | **0 / 5** — cập nhật **2026-07-27**. Hai `S0` mà FULL gate `S6-SEC-1` tìm ra (**KI-028** 3 tài khoản `platform-admin` PROD dùng mật khẩu có trong repo PUBLIC · **KI-032** tenant admin xoá được grant role hệ thống toàn cục) **đã đóng và verify trên PROD**. Còn `S1`: KI-027 · KI-030 · KI-033 · KI-034 · KI-035 — `_review/S6-SEC-1-SECURITY-HARDENING-2026-07-26` §0.1 · §7d |
+| CRITICAL / HIGH mở | **0 / 4** — cập nhật **2026-07-28**. `S0`: **KI-032** (tenant admin xoá được grant role hệ thống toàn cục) đã đóng + verify PROD. **KI-028 MỞ LẠI ở mức `S1`** — đo lại 28/7 cho thấy containment 27/7 chỉ phủ **16/74** tenant test: PROD còn **74 company test · 226 user active · 18 tài khoản vừa đăng-nhập-được vừa giữ role toàn cục (5 `platform-admin`)**, và **nguồn rò chưa bịt** (`vitest.config.ts:11` → `LANE_DB ?? "mediaos"`) ⇒ `S6-SEC-DBFENCE-1`. `S1` còn lại: KI-028 · KI-033(đã vá) · KI-034 · KI-035(hạ S3). **KI-027 ĐÓNG 28/7** (verify PROD: cờ ép 2FA `true` + service boot sau khi đổi + admin đã enroll TOTP). **KI-029 ĐÃ VÁ 28/7**. — `_review/S6-SEC-1-SECURITY-HARDENING-2026-07-26` §0.1 · §7d · RELEASE-02 KI-028 §đo lại |
 | OWASP API Top 10 | 10/10 PASS hoặc N/A-có-lý-do |
 | 3 bất biến (`company_id`+RLS · append-only/soft-delete · không secret plaintext) | GIỮ VỮNG |
 | Accepted-risk chờ owner ký | **D3** — widget `hr-overview` count-only hiển thị headcount toàn công ty cho HR có scope Department |

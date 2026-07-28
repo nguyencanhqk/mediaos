@@ -58,6 +58,13 @@ export const envSchema = z
     // (chống tự-khoá admin khi policy lỗi/parse sai — rollback tức thì, không cần revert). KHÔNG z.coerce.boolean
     // ('false'→true bẫy). LƯU Ý: tắt cờ này KHÔNG hạ sàn 2FA global (TWO_FACTOR_ENFORCEMENT_ENABLED độc lập).
     SECURITY_POLICY_ENFORCEMENT_ENABLED: z.enum(["true", "false"]).default("true"),
+    // KI-029: kill-switch rollback khẩn của PermissionGuard. 'false' ⇒ guard fail-OPEN cho MỌI route đã
+    // gate, chỉ để lại một dòng logger.warn. Trước 2026-07-28 biến này KHÔNG có ở đây lẫn .env.example ⇒
+    // zod không validate và không ai biết nó tồn tại — một cửa hậu toàn hệ không nằm trong hồ sơ nào.
+    // Khai ở đây để (a) sai giá trị là ĐỎ lúc boot thay vì im lặng, (b) nó hiện diện trong hồ sơ phát hành.
+    // Đặt 'false' ở production bị CHẶN BOOT (xem superRefine) — muốn rollback khẩn ở prod thì phải hạ
+    // NODE_ENV hoặc gỡ chốt có chủ đích, không thể lỡ tay. KHÔNG z.coerce.boolean ('false'→true bẫy).
+    PERMISSION_GUARD_ENABLED: z.enum(["true", "false"]).default("true"),
     LOGIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
     LOGIN_LOCKOUT_SEC: z.coerce.number().int().positive().default(900), // khoá tạm 15 phút
     // Bucket THEO TÀI KHOẢN (company|email, mọi IP) — bắt credential-stuffing phân tán nhiều IP lên 1 account.
@@ -260,6 +267,17 @@ export const envSchema = z
         code: z.ZodIssueCode.custom,
         path: ["PLATFORM_OPERATOR_PASSWORD"],
         message: "bắt buộc khi PLATFORM_OPERATOR_EMAIL được set",
+      });
+    }
+    // KI-029 — fail-LOUD: tắt PermissionGuard ở production là mở toang mọi route đã gate. Nếu điều đó
+    // xảy ra thì nó phải DỪNG BOOT, không phải chạy tiếp với một dòng warn lẫn trong log. Chốt này chỉ
+    // ràng ở production: dev/test vẫn tắt được (reviewer dùng chính cờ này để tái lập vế RED của gate).
+    if (env.NODE_ENV === "production" && env.PERMISSION_GUARD_ENABLED === "false") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["PERMISSION_GUARD_ENABLED"],
+        message:
+          "KHÔNG được đặt 'false' khi NODE_ENV=production — tắt PermissionGuard làm mọi route đã gate fail-OPEN cho mọi user đã đăng nhập",
       });
     }
     // Fail-fast: bật super-admin (có EMAIL) thì PHẢI có PASSWORD (mirror operator — không seed full-quyền

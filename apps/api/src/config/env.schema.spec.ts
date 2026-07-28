@@ -145,4 +145,44 @@ describe("loadEnv", () => {
       /Invalid environment variables/,
     );
   });
+
+  // ── KI-029: PERMISSION_GUARD_ENABLED ────────────────────────────────────────────────────────────
+  // Cờ này làm MỌI route đã gate fail-OPEN. Trước 2026-07-28 nó không có trong schema ⇒ không validate,
+  // không ai biết. Bốn ca dưới khoá đúng bốn tính chất phải giữ.
+
+  it("mặc định BẬT PermissionGuard khi không khai gì", () => {
+    expect(loadEnv({}).PERMISSION_GUARD_ENABLED).toBe("true");
+  });
+
+  it("CHẶN BOOT khi tắt PermissionGuard ở production (fail-loud, không phải một dòng warn)", () => {
+    expect(() =>
+      loadEnv({
+        NODE_ENV: "production",
+        PERMISSION_GUARD_ENABLED: "false",
+      } as NodeJS.ProcessEnv),
+    ).toThrow(/PERMISSION_GUARD_ENABLED/);
+  });
+
+  it("production + 'true' vẫn boot bình thường (chốt chỉ nhắm đúng giá trị nguy hiểm)", () => {
+    const env = loadEnv({
+      NODE_ENV: "production",
+      PERMISSION_GUARD_ENABLED: "true",
+    } as NodeJS.ProcessEnv);
+    expect(env.PERMISSION_GUARD_ENABLED).toBe("true");
+  });
+
+  it("dev/test VẪN tắt được — reviewer dùng chính cờ này để tái lập vế RED của gate quyền", () => {
+    for (const NODE_ENV of ["development", "test"] as const) {
+      const env = loadEnv({ NODE_ENV, PERMISSION_GUARD_ENABLED: "false" } as NodeJS.ProcessEnv);
+      expect(env.PERMISSION_GUARD_ENABLED).toBe("false");
+    }
+  });
+
+  it("từ chối giá trị lạ ('False'/'0'/'') thay vì im lặng coi là BẬT", () => {
+    for (const bad of ["False", "0", "", "no"]) {
+      expect(() => loadEnv({ PERMISSION_GUARD_ENABLED: bad } as NodeJS.ProcessEnv)).toThrow(
+        /Invalid environment variables/,
+      );
+    }
+  });
 });

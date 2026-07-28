@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-28 01:41Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-28 02:04Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -14,6 +14,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 - 🔴 `S6-SEC-PERMVERB-1` N-2 (hậu FULL gate S6-SEC-ORG-1) — chốt MỘT động từ giữa `read:user` (legacy) và `view:user` (canonical mig 0444) rồi backfill PER-PAIR; nay hr/manager/hr-manager đều lệch cặp
 - 🔴 `S6-SEC-NOTITX-1` KI-034 — gộp insert notification + outbox + audit vào MỘT transaction (repo.create nhận tx), bỏ đường .catch nuốt lỗi làm mất audit + sự kiện chỉ với một dòng warn
 - 🔴 `S6-SEC-LOGINLOG-1` KI-042 — login_logs: hàng company_id IS NULL (thử đăng nhập pre-auth, có email + IP) ĐỌC ĐƯỢC CHÉO TENANT; siết vế USING của policy tenant_isolation (migration 0532)
+- 🔴 `S6-SEC-DBFENCE-1` KI-028 MỞ LẠI — test ghi thẳng vào DB PROD: bịt nguồn rò (vitest.config LANE_DB ?? 'mediaos') TRƯỚC, rồi purge 74 tenant test / 226 user (18 user vừa đăng nhập được vừa giữ role toàn cục)
 - 🔴 `S6-QA-TENANTWRITE-1` KI-037 — lưới tenant-isolation (156 bảng × 3 ca) CHỈ SELECT: không có một ca deny GHI chéo tenant nào; bổ sung vế INSERT/UPDATE/DELETE vào chính harness data-driven
 
 **CHỜ (kẹt phụ thuộc):**
@@ -25,7 +26,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 7
+- **branch**: `chore/s6-debt-cleanup-20260728` · **file đang đổi (dirty)**: 8
 - **migration head**: idx 198 — `0531_s6sec1_noti_catalog_company_immutable` (199 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -34,6 +35,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `4dc8be4a` | 2026-07-28 | chore(qa): trả nợ hậu-merge S6 — gate bù 2 WO + vá chốt co-phạm-vi + mở WO KI-037 |
 | `cdedef78` | 2026-07-27 | docs(release): mở 2 WO hậu FULL gate S6-SEC-ORG-1 — N-1 data_scope + N-2 chốt động từ quyền |
 | `74e79e48` | 2026-07-27 | chore(docs): regen STATUS + plans/INDEX sau khi merge S6-SEC-ORG-1 (KI-030 đóng) |
 | `4d132a2d` | 2026-07-27 | fix(sec): S6-SEC-ORG-1 — gate 3 route đọc /org đang lộ danh bạ toàn tenant (KI-030) (#297) |
@@ -45,7 +47,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `5ac3fd05` | 2026-07-27 | test(qa): S6-QA-FINAL-1 — QA final pass WS3 + đóng 1 nguồn đỏ-giả vĩnh viễn (#294) |
 | `c845a777` | 2026-07-26 | chore(docs): regen STATUS sau merge #293 (S6-GOV-1 + S6-STAB-1 done) |
 | `b4429da1` | 2026-07-26 | fix(qa): S6-STAB-1 — chạy checklist ổn định WS2 + đóng 2 nguồn đỏ-giả trong suite (#293) |
-| `cbd94819` | 2026-07-26 | docs(release): S6-GOV-1 — đóng băng scope MVP + luật phát hành (WS1) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

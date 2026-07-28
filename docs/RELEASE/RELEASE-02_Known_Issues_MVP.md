@@ -40,8 +40,8 @@
 | ~~KI-024~~ | ~~`foundation-audit.e2e-spec` dùng `action` cố định + đếm tuyệt đối ở System scope ⇒ đỏ-giả **vĩnh viễn** sau một lần chạy bị ngắt~~ — **ĐÃ ĐÓNG 2026-07-26** (`S6-QA-FINAL-1`) | S1 | Hạ tầng test | — | — | ✔ xong |
 | KI-025 | **98/346 đường dẫn API (28%) không có test HTTP nào chạm** — phủ ở tầng service (`T-svc`) nên guard/DTO/envelope của route chưa từng chạy. Nặng nhất: `user-invites` (`/users/invite`, `/users/:id/approve`…) + `POST/GET /hr/profile-change-requests` | S2 | Độ phủ test | ❌ | ❌ | Sau MVP |
 | ~~KI-026~~ | ~~Nhãn `[BLOCKED — service.ts bug]` + chú thích "KNOWN BROKEN" nằm trên một test ĐANG XANH (`attendance-adjustment.int.spec.ts`) — bug đã sửa cùng PR #81 nhưng chú thích không gỡ~~ — **ĐÃ ĐÓNG 2026-07-26** (`S6-QA-FINAL-1`) | S3 | Vệ sinh test | — | — | ✔ xong |
-| **KI-027** | **2FA KHÔNG được ép ở PROD** cho `company-admin` dù role khai `requires_two_factor=true` (env `false` + company policy NULL + user flag `false`) | **S1** | Bảo mật (cấu hình) | ❌ | ✅ | Owner |
-| ~~**KI-028**~~ | **ĐÃ ĐÓNG 2026-07-27** (owner chạy `scripts/s6sec1-contain-test-tenants.sql`; verify PROD: operator-grant ngoài funtime = **0**, user tenant test còn active = **0**, funtime nguyên vẹn 46 user / 0 dòng bị script chạm). Còn lại chỉ là **vệ sinh dữ liệu** (purge 16 company) → `S6-PERF-DB-1`. ~~16 tenant TEST + 25 user còn sống trong DB PROD~~ — trong đó **3 tài khoản `platform-admin` (audience operator, ĐỌC CHÉO TENANT theo thiết kế) đang `active`, `must_change_password=false`, mật khẩu = `Passw0rd!test99` có trong 86 file của repo PUBLIC** (đã verify argon2 trên hash PROD) | **S0** | Bảo mật | ✅ | ✅ | **Owner — GẤP** |
+| ~~**KI-027**~~ | **ĐÃ ĐÓNG 2026-07-28** — verify cả 3 lớp trên PROD: (1) `TWO_FACTOR_ENFORCEMENT_ENABLED=true` ở **cả** `.env` lẫn `.env.prod` (sửa 27/7 08:36) và service `MediaOS-API` boot lúc **28/7 08:49** ⇒ guard đọc cờ MỚI, ép đang SỐNG; (2) `roles.requires_two_factor=true` cho `company-admin` + `platform-admin`; (3) `admin@funtimemediacorp.com` **đã enroll TOTP** (`user_totp.enabled_at` khác NULL) ⇒ không có cửa sổ tự-khoá. ~~2FA KHÔNG được ép ở PROD cho `company-admin`~~ | **S1** | Bảo mật (cấu hình) | ✅ | ✅ | **ĐÓNG** |
+| **KI-028** | **MỞ LẠI 2026-07-28 — containment 27/7 chỉ phủ 16/74 tenant.** Đo lại trên PROD `mediaos`: **74/75 company khớp mẫu tenant test, 0 soft-delete** (16 tạo 24/7 = đúng tập đã xử lý; **58 tạo 26/7 chưa ai chạm**); **226 user `active`**, trong đó **55 có hash argon2/bcrypt THẬT (đăng nhập được)** và **33 giữ role TOÀN CỤC** — giao của hai tập: **13 `company-admin` + 5 `platform-admin` vừa đăng nhập được vừa có role toàn cục**. Hai số verify của lần đóng ("user test còn active = 0", "operator-grant ngoài funtime = 0") **nay đều sai**. Nguồn rò CHƯA bịt: `apps/api/vitest.config.ts:11` lấy `LANE_DB ?? "mediaos"` ⇒ spec chỉ gate `hasDb` (vd `tenant-isolation.int-spec`) ghi thẳng vào DB PROD; run crash (KI-014) bỏ `afterAll` cleanup. **Giảm nhẹ:** email mang hậu tố ngẫu nhiên mỗi lần chạy (không có trong repo) nên không đoán được từ bên ngoài; funtime nguyên vẹn (46 user: 35 active + 11 locked), không có dấu hiệu chạm chéo tenant. ~~ĐÃ ĐÓNG 2026-07-27 (owner chạy `scripts/s6sec1-contain-test-tenants.sql`)~~ — mật khẩu `Passw0rd!test99` có trong 86 file của repo PUBLIC (đã verify argon2 trên hash PROD) | **S1** | Bảo mật | ❌ | ❌ | `S6-SEC-DBFENCE-1` (mở 2026-07-28) |
 | ~~**KI-032**~~ | ~~**Tenant admin XOÁ được `role_permissions` của role hệ thống TOÀN CỤC**~~ — **ĐÃ ĐÓNG 2026-07-27** (mig `0530` RESTRICTIVE FOR DELETE + gỡ `DELETE ON roles` + guard `isSystem` ở 2 hàm; RED→GREEN 6/6). **`0530` ĐÃ áp cho PROD** — verify: policy `role_permissions_no_delete_system` cmd=`d` permissive=`f`, grant app trên `roles` = `INSERT,SELECT,UPDATE` (hết `DELETE`). — RLS `USING` cho `company_id IS NULL` mà **DELETE không xét `WITH CHECK`**; service thiếu guard `isSystem`. Ghi chéo tenant, **INSERT khôi phục bị chặn ⇒ không hoàn tác qua app**. PROD: 785 grant toàn cục, `funtime` dùng 2 role toàn cục | **S0** | Bảo mật | ✅ | ✅ | **Owner — GẤP** |
 | ~~KI-033~~ | **ĐÃ VÁ 2026-07-27** — thêm audit in-tx cho **CẢ HAI** endpoint report. *Đính chính phạm vi so với bản gate:* không phải "leave lạc đàn giữa hai sibling cùng cổng" — `attendance-report` cũng không audit, và nó gate bằng `view-company:attendance` chứ **không** phải `export`. Đúng là: 2 bản CSV có audit, 2 bản report JSON thì không | S1 | Bảo mật (audit) | — | — | ✔ xong |
 | KI-034 | Audit của `notifications.service.create` **KHÔNG cùng transaction** dù docstring khẳng định có ⇒ audit + outbox có thể mất chỉ với một dòng warn. **Vá một phần 2026-07-27:** `markRead` nay `await` promise audit (hết đua với `return`), và docstring sai đã sửa cho khớp code. **Còn lại:** gộp insert+outbox+audit vào MỘT tx — refactor chạm đường nóng mọi module gọi ⇒ WO riêng có RED test | S1 | Bảo mật (audit) | ❌ | ⚠️ | `S6-SEC-NOTITX-1` (mở 2026-07-27) |
@@ -53,7 +53,7 @@
 | KI-041 | Matview `mv_dashboard_output`/`mv_dashboard_task_status` mang `company_id` nhưng **Postgres không hỗ trợ RLS trên matview** ⇒ nằm ngoài phép đo 153/153; ranh giới duy nhất là `WHERE company_id = $1` trong service | S2 | Bảo mật | ❌ | ⚠️ | `S6-SEC-MV-1` (mở 2026-07-27) |
 | KI-042 | `login_logs`: hàng `company_id IS NULL` (lần thử đăng nhập pre-auth, có email + IP) **đọc được chéo tenant**. Vế GHI đã đóng — đính chính so với vòng 1 | S3 | Bảo mật | ❌ | ❌ | `S6-SEC-LOGINLOG-1` (mở 2026-07-27) |
 | KI-037 | Bộ `tenant-isolation.int-spec` (465 ca) **chỉ SELECT** — không có một ca deny GHI chéo tenant nào. Là lớp lỗ hổng đã để lọt KI-032, không phải một bug lẻ. ⟲ đo lại 2026-07-28: cả file có **đúng 3 câu SQL, cả 3 là SELECT**; registry có **156 bảng** ⇒ 156 × 3 = 468 ca | S2 | Độ phủ test | ❌ | ❌ | `S6-QA-TENANTWRITE-1` (mở 2026-07-28) |
-| KI-029 | `PERMISSION_GUARD_ENABLED` — kill-switch **fail-OPEN toàn hệ**, đọc thẳng `process.env`, KHÔNG có trong `env.schema` lẫn `.env.example` (hiện KHÔNG đặt ở PROD) | S2 | Bảo mật (tiềm ẩn) | ❌ | ❌ | Sau MVP / CR |
+| ~~KI-029~~ | **ĐÃ VÁ 2026-07-28** (owner duyệt đổi hành vi sau freeze) — khai `PERMISSION_GUARD_ENABLED` trong `env.schema.ts` (default `"true"`) + `.env.example`; **`NODE_ENV=production` + `"false"` ⇒ CHẶN BOOT** (superRefine), giá trị lạ (`False`/`0`/rỗng) nay ĐỎ thay vì im lặng coi là bật. Guard **vẫn đọc `process.env` mỗi request** có chủ đích: rollback khẩn không cần build lại config, và reviewer dùng chính cờ này để tái lập vế RED của gate quyền. RED-proof: 5 ca mới ĐỎ khi gỡ vá, 24/24 xanh khi có vá; 434 unit vùng permission/auth/config không hồi quy. ~~kill-switch fail-OPEN toàn hệ, ngoài `env.schema`~~ | S2 | Bảo mật (tiềm ẩn) | ✅ | ⚠️ cần deploy | **ĐÓNG** |
 | ~~KI-030~~ | **3 route** `/org` không gate trả danh bạ + cơ cấu team toàn tenant cho mọi user đã đăng nhập (`employees` · `teams` · `teams/:id/members`) — lệch với `/hr/employees` vốn ép data_scope. ⟲ mở rộng 1 → 3 route bởi census runtime `S6-SEC-ROUTEMAP-1` | S2 | Bảo mật (phân quyền) | ✅ | ✅ | **ĐÓNG 2026-07-27** — `S6-SEC-ORG-1` |
 | KI-031 | `INTERNAL_API_KEY` ngoài `env.schema`/`.env.example` (guard **fail-CLOSED** nên chỉ mất tính năng) | S3 | Vận hành | ❌ | ❌ | Sau MVP |
 
@@ -372,9 +372,39 @@ nhật ký audit) vào được **chỉ bằng mật khẩu**.
 lẫn `.env.prod` (nhớ `m prod-env` ghi đè `.env.prod`) → restart API → smoke login. **Đảo thứ tự = admin
 ăn 403 `TWO_FACTOR_SETUP_REQUIRED` trên mọi route.**
 
-### KI-028 — 16 tenant TEST + 25 user còn sống trong DB PROD · S2 · (`S6-SEC-1`)
+### KI-028 — tenant TEST + user còn sống trong DB PROD · **MỞ LẠI** · S1 · (`S6-SEC-1` → `S6-SEC-DBFENCE-1`)
 
-**Kiểm chứng:** `select count(*) from companies` → **17**; khớp mẫu tenant test
+> **ĐO LẠI 2026-07-28 (read-only trên PROD `mediaos`) — con số của lần đóng đã sai.**
+>
+> | Số | 2026-07-26 (lúc phát hiện) | 2026-07-27 (lúc tuyên bố đóng) | **2026-07-28 (đo lại)** |
+> | --- | --- | --- | --- |
+> | company khớp mẫu test | 16 | 0 còn phải xử lý | **74** (16 tạo 24/7 + **58 tạo 26/7**), 0 soft-delete |
+> | user test `active` | 25 | **0** | **226** |
+> | trong đó hash argon2/bcrypt THẬT (đăng nhập được) | — | — | **55** |
+> | giữ role TOÀN CỤC | 3 `platform-admin` | **0** | **33** (23 `company-admin` · 5 `platform-admin` · 5 `employee`) |
+> | **giao: đăng nhập được VÀ role toàn cục** | — | — | **18** (13 `company-admin` + **5 `platform-admin`**) |
+>
+> **Vì sao lệch:** containment `scripts/s6sec1-contain-test-tenants.sql` chạy đúng trên **tập đã đo**
+> (16 company của 24/7). 58 company + 201 user tạo ngày **26/7** chưa từng vào phép đo nên script
+> không chạm tới — cả hai câu verify ("user test còn active = 0", "operator-grant ngoài funtime = 0")
+> đều đúng **trên tập được hỏi**, và sai trên thực tế. Đây là lớp lỗi "số đo tay trong WO có thể
+> thiếu", không phải script chạy hỏng.
+>
+> **Nguồn rò CHƯA bịt (mới truy được):** `apps/api/vitest.config.ts:11` — `const db = process.env.LANE_DB ?? "mediaos"`.
+> Thiếu `LANE_DB`, integration spec trỏ thẳng **DB PROD**. Phần lớn int-spec gate `hasDb && LANE_DB`
+> nên tự skip, nhưng spec chỉ gate `hasDb` (vd `test/integration/tenant-isolation.int-spec.ts:12`
+> `describe.skipIf(!hasDb)`) VẪN chạy và seed company/user thật. Run chết giữa chừng (KI-014, từng
+> 100% trên Windows) bỏ luôn `afterAll` → `cleanupTenants` không chạy ⇒ rác tích lại mỗi lần chạy.
+>
+> **Giảm nhẹ (đo được, không phải suy đoán):** email seed mang hậu tố ngẫu nhiên mỗi lần chạy
+> (`au-admin-5688f84d@…`) — **không** có trong repo, nên không đoán được từ bên ngoài dù mật khẩu là
+> literal công khai. `funtime` nguyên vẹn: 46 user (35 `active` + 11 `locked`), không dấu hiệu chạm
+> chéo tenant. RLS vẫn giữ ranh giới đọc.
+>
+> **Thứ tự bắt buộc khi đóng:** bịt nguồn rò TRƯỚC, purge SAU. Purge trước = rác mọc lại ở lần chạy
+> test kế tiếp — đúng cái đã xảy ra giữa 24/7 và 26/7.
+
+**Kiểm chứng (bản gốc 2026-07-26):** `select count(*) from companies` → **17**; khớp mẫu tenant test
 `slug ~ '-[0-9a-f]{8}$'` → **16**; công ty thật duy nhất **`funtime`**. User thuộc 16 tenant đó: **25**.
 **Hệ quả:** tài khoản **đăng nhập được** trong DB production với mật khẩu seed test.
 **Giới hạn thiệt hại:** RLS giữ — phiên đó bị khoá trong tenant test của nó, **không** thấy dữ liệu

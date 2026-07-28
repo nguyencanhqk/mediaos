@@ -4,12 +4,12 @@ import {
   ForbiddenException,
   Injectable,
   Logger,
-} from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import { IS_PUBLIC } from '../public.decorator';
-import { REQUIRE_PERMISSION, type RequirePermissionMeta } from '../require-permission.decorator';
-import { PermissionService } from '../permission.service';
-import type { AuthRequest } from './jwt-auth.guard';
+} from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import { IS_PUBLIC } from "../public.decorator";
+import { REQUIRE_PERMISSION, type RequirePermissionMeta } from "../require-permission.decorator";
+import { PermissionService } from "../permission.service";
+import type { AuthRequest } from "./jwt-auth.guard";
 
 /**
  * Request shape the guard reads: the authenticated user (JwtAuthGuard) plus the route :id param and the
@@ -55,13 +55,17 @@ export class PermissionGuard implements CanActivate {
     if (isPublic) return true;
 
     // Emergency rollback kill-switch (plan §8): set PERMISSION_GUARD_ENABLED=false to fail-open temporarily.
-    if (process.env['PERMISSION_GUARD_ENABLED'] === 'false') {
+    // KI-029 (2026-07-28): the flag is now declared in env.schema.ts (default "true") and .env.example, and
+    // NODE_ENV=production + "false" FAILS THE BOOT. It is still read from process.env per-request on purpose:
+    // (a) emergency rollback must not need a rebuilt config object, (b) permission gates are proven RED by
+    // flipping this at runtime inside tests/reviews — caching it at construction time would kill that.
+    if (process.env["PERMISSION_GUARD_ENABLED"] === "false") {
       const killMeta = this.reflector.getAllAndOverride<RequirePermissionMeta | undefined>(
         REQUIRE_PERMISSION,
         [ctx.getHandler(), ctx.getClass()],
       );
       this.logger.warn(
-        'PermissionGuard disabled via PERMISSION_GUARD_ENABLED=false — fail-open (emergency only)',
+        "PermissionGuard disabled via PERMISSION_GUARD_ENABLED=false — fail-open (emergency only)",
         { handler: ctx.getHandler().name, hasPermissionDecorator: !!killMeta },
       );
       return true;
@@ -73,17 +77,19 @@ export class PermissionGuard implements CanActivate {
     );
     if (!meta) {
       // Fail-closed: route missing @RequirePermission decorator → 403 (not an unguarded free pass)
-      this.logger.warn('Route missing @RequirePermission decorator — fail-closed 403', {
+      this.logger.warn("Route missing @RequirePermission decorator — fail-closed 403", {
         handler: ctx.getHandler().name,
         class: ctx.getClass().name,
       });
-      throw new ForbiddenException('Route is not decorated with @RequirePermission');
+      throw new ForbiddenException("Route is not decorated with @RequirePermission");
     }
 
     const req = ctx.switchToHttp().getRequest<ReauthAwareRequest>();
     const user = req.user;
     if (!user?.id || !user.companyId) {
-      throw new ForbiddenException('User context missing — ensure JwtAuthGuard + CompanyGuard run first');
+      throw new ForbiddenException(
+        "User context missing — ensure JwtAuthGuard + CompanyGuard run first",
+      );
     }
 
     // AC-5: request đến qua PAT (viaApiKey) → hiệu lực = scope ∩ grant THỰC user (fail-closed).
@@ -98,9 +104,9 @@ export class PermissionGuard implements CanActivate {
         scopeKeys.includes(requiredKey) ||
         scopeKeys.includes(`*:${meta.resourceType}`) ||
         scopeKeys.includes(`${meta.action}:*`) ||
-        scopeKeys.includes('*:*');
+        scopeKeys.includes("*:*");
       if (!inScope) {
-        this.logger.warn('PAT out-of-scope — fail-closed 403', {
+        this.logger.warn("PAT out-of-scope — fail-closed 403", {
           requiredKey,
           handler: ctx.getHandler().name,
         });
@@ -140,13 +146,13 @@ export class PermissionGuard implements CanActivate {
       if (err instanceof ForbiddenException) throw err;
 
       // Any other error (DB down, unexpected) → fail-closed 403
-      this.logger.error('PermissionGuard.can() error — fail-closed 403', {
+      this.logger.error("PermissionGuard.can() error — fail-closed 403", {
         error: err instanceof Error ? err.message : String(err),
         userId: user.id,
         action: meta.action,
         resourceType: meta.resourceType,
       });
-      throw new ForbiddenException('Permission check failed — access denied');
+      throw new ForbiddenException("Permission check failed — access denied");
     }
   }
 }
