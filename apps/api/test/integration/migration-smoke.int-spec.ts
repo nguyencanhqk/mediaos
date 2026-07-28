@@ -31,6 +31,26 @@ import { directPool, hasDb } from "../helpers/integration-db";
  *      (đây là unit-level check; integration giữ lại cho auth-sec spec riêng).
  */
 
+/**
+ * URL của app role (mediaos_app) cho 2 ca deny-path append-only bên dưới — S6-SEC-ROTATE-1 (KI-043).
+ *
+ * TRƯỚC ĐÂY chỗ này tự dựng URL với mật khẩu literal và `LANE_DB ?? "mediaos"` — tức khi thiếu LANE_DB
+ * thì deny-path chạy thẳng vào DB **PROD** bằng chìa khoá nằm trong repo PUBLIC. Đúng cả hai lớp lỗi
+ * KI-028 (test → DB PROD) và KI-043 (literal = mật khẩu thật).
+ *
+ * Giờ chỉ dùng `DATABASE_URL` do `vitest.config.ts` bơm vào từ `test/db-target.ts` (đã qua denylist DB
+ * được bảo vệ). Rỗng ⇒ ném lỗi, KHÔNG bịa đích thay người chạy.
+ */
+function appRoleUrl(): string {
+  const url = (process.env.DATABASE_URL ?? "").trim();
+  if (!url) {
+    throw new Error(
+      "DATABASE_URL rỗng — chạy qua `bash harness/check.sh --lane-db` (KHÔNG tự dựng URL: xem KI-028/KI-043).",
+    );
+  }
+  return url;
+}
+
 // Bảng nền bắt buộc tồn tại sau chain-migrate (subset đại diện — đầy đủ bảng có trong S0-FND-DB-1).
 // NOTE: 'sessions' KHÔNG có trong danh sách này vì bảng phụ thuộc S0-AUTH-DB-1 chưa land.
 //       Xem GATE riêng ở cuối file — skipIf sessions chưa tồn tại (S0-QA-1 acceptance check).
@@ -269,9 +289,7 @@ describe.skipIf(!runIsolatedDb)(
       it("5a. mediaos_app KHÔNG được UPDATE audit_logs", async () => {
         // Dùng app role để thử UPDATE — phải bị từ chối (permission denied for table audit_logs).
         const appDb = new (await import("pg")).Pool({
-          connectionString:
-            process.env.DATABASE_URL ??
-            `postgres://mediaos_app:changeme_app_only@${process.env.PG_HOSTPORT ?? "localhost:5432"}/${process.env.LANE_DB ?? "mediaos"}`,
+          connectionString: appRoleUrl(),
           max: 1,
         });
 
@@ -303,9 +321,7 @@ describe.skipIf(!runIsolatedDb)(
 
       it("5b. mediaos_app KHÔNG được DELETE audit_logs", async () => {
         const appDb = new (await import("pg")).Pool({
-          connectionString:
-            process.env.DATABASE_URL ??
-            `postgres://mediaos_app:changeme_app_only@${process.env.PG_HOSTPORT ?? "localhost:5432"}/${process.env.LANE_DB ?? "mediaos"}`,
+          connectionString: appRoleUrl(),
           max: 1,
         });
 

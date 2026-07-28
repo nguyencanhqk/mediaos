@@ -59,7 +59,29 @@ wait_pg() {
   err "Postgres không sẵn sàng sau 30s"; return 1
 }
 
-seed() { ( cd "$ROOT/apps/api" && node demo-seed-base.mjs && node demo-seed-full.mjs ); }
+# S6-SEC-ROTATE-1 (KI-043): script seed nay FAIL-CLOSED (apps/api/seed-target.mjs). Khai DB đích tường
+# minh từ .env thay vì để người dùng ăn exit 1 từ sâu trong script. `$1 = --allow-protected` chỉ dùng bởi
+# `reset` (vừa xoá sạch volume sau xác nhận) — KHÔNG dùng cho `seed` trần.
+seed() {
+  load_env .env
+  [ -n "${DATABASE_DIRECT_URL:-}" ] || { err ".env thiếu DATABASE_DIRECT_URL -> không biết seed vào DB nào."; return 1; }
+  # Tên DB = đoạn cuối path, bỏ query string nếu có.
+  local db; db="${DATABASE_DIRECT_URL##*/}"; db="${db%%\?*}"
+  [ -n "$db" ] || { err "Không parse được tên DB từ DATABASE_DIRECT_URL."; return 1; }
+  if [ "${1:-}" != "--allow-protected" ]; then
+    case "$db" in
+      mediaos|mediaos_dev)
+        err "DB đích '$db' được BẢO VỆ (PROD / dev-online) — seed demo sẽ ghi company demo + tài khoản quản trị lên dữ liệu THẬT."
+        err "Nếu THẬT SỰ muốn: SEED_ALLOW_PROTECTED_DB=$db bash scripts/dev.sh seed"
+        return 1 ;;
+    esac
+  else
+    export SEED_ALLOW_PROTECTED_DB="$db"
+  fi
+  ( cd "$ROOT/apps/api" \
+      && SEED_DIRECT_URL="$DATABASE_DIRECT_URL" node demo-seed-base.mjs \
+      && SEED_DIRECT_URL="$DATABASE_DIRECT_URL" node demo-seed-full.mjs )
+}
 
 cmd="${1:-help}"; [ $# -gt 0 ] && shift
 
@@ -102,8 +124,8 @@ case "$cmd" in
     log "infra up";                            pnpm db:up
     wait_pg || exit 1
     log "migrate (tạo schema + role)";         pnpm db:migrate
-    log "setup DB role passwords (changeme_* từ .env)"; load_env .env; pnpm db:setup-roles
-    log "seed demo";                           seed
+    log "setup DB role passwords (đọc từ .env — không có literal, xem S6-SEC-ROTATE-1)"; load_env .env; pnpm db:setup-roles
+    log "seed demo";                           seed --allow-protected
     ok "RESET xong: DB sạch + migrate + role + seed" ;;
   help|--help|-h) usage ;;
   *) err "Lệnh không hợp lệ: $cmd"; echo; usage; exit 1 ;;

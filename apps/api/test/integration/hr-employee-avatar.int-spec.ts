@@ -36,6 +36,7 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../helpers/seed";
+import { FALLBACK_S3_SECRET } from "../helpers/fixture-secrets";
 
 const runDb = hasDb && Boolean(process.env.LANE_DB);
 const LOGIN_PW = "Passw0rd!hravatar-1-inttests-1";
@@ -336,7 +337,7 @@ describe.skipIf(!runDb)("S5-HR-AVATAR-1 HR-managed employee avatar (DB cô lập
     beforeAll(async () => {
       process.env.S3_ENDPOINT ??= "http://localhost:9000";
       process.env.S3_ACCESS_KEY ??= "mediaos";
-      process.env.S3_SECRET_KEY ??= "changeme_dev_only";
+      process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
       process.env.S3_BUCKET ??= "mediaos-assets";
       process.env.S3_FORCE_PATH_STYLE ??= "true";
       process.env.S3_REGION ??= "us-east-1";

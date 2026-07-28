@@ -8,6 +8,7 @@ import { AppModule } from "../../src/app.module";
 import { TempFileCleanupJobHandler } from "../../src/foundation/files/temp-file-cleanup.job-handler";
 import { directPool, hasDb } from "../helpers/integration-db";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
+import { FALLBACK_S3_SECRET } from "../helpers/fixture-secrets";
 
 /**
  * S2-FND-JOBS-1 (jobs_tempfile · crown) — TEMP_FILE_CLEANUP link-safety + system soft-delete (🔴 RED-trước).
@@ -158,7 +159,7 @@ describe.skipIf(!runDb)(
     beforeAll(async () => {
       process.env.S3_ENDPOINT ??= "http://localhost:9000";
       process.env.S3_ACCESS_KEY ??= "mediaos";
-      process.env.S3_SECRET_KEY ??= "changeme_dev_only";
+      process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
       process.env.S3_BUCKET ??= "mediaos-assets";
       process.env.S3_FORCE_PATH_STYLE ??= "true";
 

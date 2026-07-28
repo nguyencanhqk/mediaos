@@ -19,7 +19,7 @@
 #   bash apps/api/scripts/seed1-red-evidence.sh
 # Tham số (env, có default):
 #   PG_CONTAINER=mediaos-postgres  PG_SUPERUSER=mediaos  PG_HOSTPORT=localhost:5432
-#   OWNER_DB_PASSWORD=changeme_dev_only
+#   SUPERUSER_DB_PASSWORD=<đọc từ .env — S6-SEC-ROTATE-1, KHÔNG còn default>
 #   RED_DB=mediaos_authseed1red    GREEN_DB=mediaos_authseed1green
 #   EVIDENCE_FILE=docs/QA/evidence/S2-AUTH-SEED-1-RED-before-GREEN.txt
 set -euo pipefail
@@ -32,7 +32,12 @@ REPO_DIR="$(cd "$API_DIR/../.." && pwd)"           # repo root (worktree)
 PG_CONTAINER="${PG_CONTAINER:-mediaos-postgres}"
 SUPER="${PG_SUPERUSER:-mediaos}"
 HOSTPORT="${PG_HOSTPORT:-localhost:5432}"
-DEV_PW="${OWNER_DB_PASSWORD:-changeme_dev_only}"
+# S6-SEC-ROTATE-1 (KI-043): không còn fallback literal — nạp từ .env (không tracked), thiếu thì DỪNG.
+# shellcheck source=../../../scripts/lib/db-secrets.sh
+. "$REPO_DIR/scripts/lib/db-secrets.sh"
+db_secrets_load
+db_secrets_require SUPERUSER_DB_PASSWORD
+DEV_PW="$SUPERUSER_DB_PASSWORD"
 RED_DB="${RED_DB:-mediaos_authseed1red}"
 GREEN_DB="${GREEN_DB:-mediaos_authseed1green}"
 SUITES="test/integration/auth-seed-canonical-roles.int-spec.ts test/integration/super-admin-bootstrap.int-spec.ts"

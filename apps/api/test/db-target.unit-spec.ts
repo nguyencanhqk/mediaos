@@ -17,7 +17,14 @@ import {
  *        trong shell/.env thắng precedence) ⇒ nay: THROW.
  */
 describe("S6-SEC-DBFENCE-1 · resolveTestDbUrls (hàng rào lớp 1)", () => {
-  const base: NodeJS.ProcessEnv = {};
+  // S6-SEC-ROTATE-1 (KI-043): tổng hợp URL từ LANE_DB nay ĐÒI mật khẩu qua env — không còn literal
+  // trong mã nguồn. `base` cấp 3 biến giả để các ca CŨ tiếp tục đo đúng thứ chúng sinh ra để đo
+  // (denylist / precedence), không lẫn với ca thiếu-mật-khẩu được đo riêng ở khối cuối file.
+  const base: NodeJS.ProcessEnv = {
+    SUPERUSER_DB_PASSWORD: "fixture-super",
+    APP_DB_PASSWORD: "fixture-app",
+    WORKER_DB_PASSWORD: "fixture-worker",
+  };
 
   describe("V1 — thiếu LANE_DB", () => {
     it("KHÔNG fallback về 'mediaos': trả 3 URL RỖNG (⇒ hasDb=false ⇒ int-spec SKIP)", () => {
@@ -170,6 +177,52 @@ describe("S6-SEC-DBFENCE-1 · resolveTestDbUrls (hàng rào lớp 1)", () => {
 
     it.each(["true", "TRUE", "1"])("F-4: CI=%s mới được cho qua (lớp 2 vẫn canh)", (ci) => {
       expect(() => resolveTestDbUrls({ ...base, CI: ci, LANE_DB: "mediaos" })).not.toThrow();
+    });
+  });
+
+  // ── S6-SEC-ROTATE-1 (KI-043): mật khẩu role KHÔNG còn nằm trong mã nguồn ────────────────────
+  describe("KI-043 · không literal mật khẩu, fail-loud khi thiếu env", () => {
+    it("URL tổng hợp dùng ĐÚNG mật khẩu từ env, KHÔNG phải hằng số trong file", () => {
+      const urls = resolveTestDbUrls({
+        ...base,
+        LANE_DB: "mediaos_lane1",
+        APP_DB_PASSWORD: "pw-app-tu-env",
+        SUPERUSER_DB_PASSWORD: "pw-super-tu-env",
+        WORKER_DB_PASSWORD: "pw-worker-tu-env",
+      });
+
+      expect(urls.DATABASE_URL).toContain(":pw-app-tu-env@");
+      expect(urls.DATABASE_DIRECT_URL).toContain(":pw-super-tu-env@");
+      expect(urls.DATABASE_WORKER_URL).toContain(":pw-worker-tu-env@");
+    });
+
+    it.each([
+      ["APP_DB_PASSWORD", "mediaos_app"],
+      ["SUPERUSER_DB_PASSWORD", "mediaos"],
+      ["WORKER_DB_PASSWORD", "mediaos_worker"],
+    ])(
+      "thiếu %s ⇒ THROW nêu đúng biến + đúng role (fail-LOUD, không skip im lặng)",
+      (key, role) => {
+        const env: NodeJS.ProcessEnv = { ...base, LANE_DB: "mediaos_lane1" };
+        delete env[key];
+
+        expect(() => resolveTestDbUrls(env)).toThrow(new RegExp(`THIẾU ${key}`));
+        expect(() => resolveTestDbUrls(env)).toThrow(new RegExp(role));
+      },
+    );
+
+    it("thiếu mật khẩu mà KHÔNG có LANE_DB vẫn fail-CLOSED im lặng (luật 1 không đổi)", () => {
+      expect(resolveTestDbUrls({})).toEqual({
+        DATABASE_URL: "",
+        DATABASE_DIRECT_URL: "",
+        DATABASE_WORKER_URL: "",
+      });
+    });
+
+    it("DB được bảo vệ THẮNG lỗi thiếu mật khẩu — thông điệp phải nói đúng vấn đề", () => {
+      // Không có mật khẩu nào trong env VÀ LANE_DB trỏ PROD: người chạy cần đọc "đang chĩa vào PROD",
+      // không phải "quên export biến". Thứ tự kiểm tra trong resolveTestDbUrls chốt điều đó.
+      expect(() => resolveTestDbUrls({ LANE_DB: "mediaos" })).toThrow(/DATABASE ĐƯỢC BẢO VỆ/);
     });
   });
 

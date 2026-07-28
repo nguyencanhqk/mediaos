@@ -6,10 +6,16 @@
 // Idempotent: chạy lại nhiều lần an toàn (ALTER ROLE ... PASSWORD ghi đè).
 //
 // Env:
-//   DATABASE_DIRECT_URL  postgres://<superuser>...  (kết nối bootstrap, có quyền ALTER ROLE)
-//   APP_DB_PASSWORD      mật khẩu cho mediaos_app    (BẮT BUỘC)
-//   WORKER_DB_PASSWORD   mật khẩu cho mediaos_worker (BẮT BUỘC)
-//   OWNER_DB_PASSWORD    mật khẩu cho mediaos_owner  (tuỳ chọn — chỉ cần khi prod chạy migration bằng owner)
+//   DATABASE_DIRECT_URL     postgres://<superuser>...  (kết nối bootstrap, có quyền ALTER ROLE)
+//   APP_DB_PASSWORD         mật khẩu cho mediaos_app    (BẮT BUỘC)
+//   WORKER_DB_PASSWORD      mật khẩu cho mediaos_worker (BẮT BUỘC)
+//   OWNER_DB_PASSWORD       mật khẩu cho mediaos_owner  (tuỳ chọn — chỉ cần khi prod chạy migration bằng owner)
+//   SUPERUSER_DB_PASSWORD   mật khẩu cho mediaos (SUPERUSER) (tuỳ chọn — xem ghi chú S6-SEC-ROTATE-1 bên dưới)
+//
+// S6-SEC-ROTATE-1 (KI-043): trước 2026-07-28, `mediaos.ps1 roles` ALTER 3 role về LITERAL nằm trong
+// repo PUBLIC ⇒ mỗi lần chạy là một lần TÁI NHIỄM lỗ hổng. Đường đồng bộ mật khẩu giờ CHỈ đi qua file
+// này, và file này CHỈ đọc env — không có literal nào để tái nhiễm. `mediaos` (SUPERUSER) được thêm vào
+// danh sách vì nó là role NGUY HIỂM NHẤT mà trước đây không có đường sync nào ngoài literal đó.
 //
 // Dùng: `node scripts/setup-db-roles.mjs`  (hoặc `pnpm db:setup-roles`).
 
@@ -28,12 +34,20 @@ if (!DIRECT_URL) {
 /** Nơi sinh userlist.txt cho PgBouncer auth_query (mount read-only vào container). */
 const USERLIST_PATH = process.env.PGBOUNCER_USERLIST_PATH ?? "./.secrets/pgbouncer/userlist.txt";
 
-/** Role → biến env mật khẩu. owner tuỳ chọn (prod), app/worker/pgbouncer_auth bắt buộc. */
+/**
+ * Role → biến env mật khẩu. owner/superuser tuỳ chọn (prod), app/worker/pgbouncer_auth bắt buộc.
+ *
+ * `mediaos` (SUPERUSER) ĐỨNG CUỐI CÙNG có chủ ý: đây chính là role của `DATABASE_DIRECT_URL` mà script
+ * đang dùng để kết nối. Đổi mật khẩu của nó KHÔNG ngắt session hiện tại, nhưng nếu để ở đầu và một role
+ * sau đó lỗi, lần chạy lại sẽ không nối được bằng URL cũ nữa. Xếp cuối ⇒ mọi role khác đã xong trước khi
+ * chạm vào chìa khoá của chính mình.
+ */
 const ROLE_PASSWORDS = [
   { role: "mediaos_app", env: "APP_DB_PASSWORD", required: true },
   { role: "mediaos_worker", env: "WORKER_DB_PASSWORD", required: true },
   { role: "pgbouncer_auth", env: "PGBOUNCER_AUTH_PASSWORD", required: true },
   { role: "mediaos_owner", env: "OWNER_DB_PASSWORD", required: false },
+  { role: "mediaos", env: "SUPERUSER_DB_PASSWORD", required: false },
 ];
 
 async function main() {

@@ -56,6 +56,14 @@ jobs:
             --source /repo --config /repo/.gitleaks.toml \
             --no-banner --redact --exit-code 1
 
+      # S6-SEC-ROTATE-1 (KI-043) — CHỐT KHÁC LOẠI VỚI GITLEAKS, cố ý không gộp:
+      # gitleaks bắt chuỗi TRÔNG GIỐNG secret (entropy/định dạng). Họ literal `changeme_*` KHÔNG trông
+      # giống secret nên gitleaks cho qua suốt — trong khi nó chính là mật khẩu superuser của cụm PROD.
+      # Cổng này bắt theo DANH TÍNH ĐÃ BIẾT + hình dạng cấu hình (bind 0.0.0.0, secret mặc định trong
+      # .env*.example), tức đúng loại lỗ hổng gitleaks mù. Không có danh sách miễn trừ.
+      - name: No known secret literals / wide port binds
+        run: node scripts/check-no-secret-literals.mjs
+
   # ── Cổng 2: Dependency scan (pnpm audit, SCA) ──────────────────────────────────────────────────
   dependency-scan:
     name: Dependency scan (pnpm audit)

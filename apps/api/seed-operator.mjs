@@ -8,6 +8,7 @@
  */
 import { hash, Algorithm } from "@node-rs/argon2";
 import pg from "pg";
+import { resolveSeedTarget } from "./seed-target.mjs";
 
 const ARGON = { algorithm: Algorithm.Argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 };
 const COMPANY_ID = "401c90a0-dfea-4b0a-986c-4317b798cd7b"; // company demo
@@ -16,9 +17,9 @@ const EMAIL = "operator@demo.local";
 const PASSWORD = "Operator@12345";
 const NAME = "Operator Demo";
 
-const url =
-  process.env.DATABASE_DIRECT_URL ||
-  "postgres://mediaos:changeme_dev_only@localhost:5432/mediaos";
+// S6-SEC-ROTATE-1 (KI-043): fail-closed — script này tạo tài khoản platform-admin, tuyệt đối không
+// được có default trỏ PROD.
+const url = resolveSeedTarget({ label: "seed-operator" });
 
 const c = new pg.Client({ connectionString: url });
 

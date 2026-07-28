@@ -9,9 +9,10 @@
  */
 import pg from "pg";
 import { hash, Algorithm } from "@node-rs/argon2";
+import { resolveSeedTarget } from "./seed-target.mjs";
 
-const DIRECT_URL =
-  process.env.SEED_DIRECT_URL ?? "postgres://mediaos:changeme_dev_only@localhost:5432/mediaos";
+// S6-SEC-ROTATE-1 (KI-043): KHÔNG còn default trỏ DB PROD bằng mật khẩu literal. Xem seed-target.mjs.
+const DIRECT_URL = resolveSeedTarget({ label: "demo-seed-base" });
 
 // Hằng PHẢI khớp demo-seed-full.mjs.
 const COMPANY_ID = "401c90a0-dfea-4b0a-986c-4317b798cd7b";
