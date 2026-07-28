@@ -166,6 +166,12 @@ fi
 [ "$RUN_BUILD" = 1 ]  && step "build" pnpm build
 [ "$RUN_SMOKE" = 1 ]  && step "smoke" bash scripts/smoke-test-g3.sh
 
+# ── S6-SEC-DBFENCE-1 (KI-028): DB PROD có tenant test ⇒ ĐỎ ──────────────────────────────────
+# KI-028 từng được "đóng" bằng cách dọn rác mà KHÔNG có chốt nào canh rác mọc lại — 2 ngày sau
+# 16 tenant test thành 74. Chốt ở tier --all (tier trước khi mở PR vùng đỏ). Script tự BỎ QUA
+# (exit 0 + cảnh báo) khi không với tới DB PROD ⇒ máy không có PROD/CI không bị đỏ-giả.
+[ "$RUN_ALL" = 1 ] && step "prod-tenant-check" node scripts/check-prod-test-tenants.mjs
+
 # ── lane-db guard: banner LOUD + escalate riêng, tách khỏi pass/fail của bản thân step "test" ──
 if [ "$GUARD_LEVEL" = "warn" ] || [ "$GUARD_LEVEL" = "red" ]; then
   echo ""

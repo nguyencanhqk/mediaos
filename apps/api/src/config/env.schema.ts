@@ -8,6 +8,25 @@ import { z } from "zod";
 export const ENV_FILE_PATHS = [".env", "../../.env"] as const;
 
 /**
+ * URL tuỳ chọn với luật "**biến RỖNG = CHƯA SET**" (`""` → `undefined`), thay vì đỏ
+ * "Invalid environment variables".
+ *
+ * Vì sao cần (S6-SEC-DBFENCE-1 / KI-028): hàng rào test đặt `DATABASE_URL=""` một cách CỐ Ý để nói
+ * "không có DB đích" — và để CHẶN `config/load-env.ts` nạp đè URL PROD từ `.env` (nó bỏ qua khoá đã
+ * `in process.env`, nên phải là chuỗi rỗng chứ không phải khoá vắng mặt). Không có luật này thì
+ * `z.string().url()` ném NGAY LÚC IMPORT (`src/db/index.ts` gọi `loadEnv()` ở top-level) ⇒ mọi spec
+ * chạm chuỗi import đó đỏ ở bước collect, `describe.skipIf` không cứu được.
+ *
+ * Cũng vá một cái bẫy PROD có thật: một dòng `DATABASE_URL=` bỏ trống trong `.env` hiện làm API
+ * sập lúc boot kèm thông điệp khó lần, thay vì hành xử như "chưa cấu hình".
+ */
+const optionalUrl = () =>
+  z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().url().optional(),
+  );
+
+/**
  * Validate biến môi trường tại biên hệ thống (coding-style: fail-fast, không tin dữ liệu ngoài).
  * DB URL để OPTIONAL → API vẫn boot khi DB chưa lên (health/db báo "down"), giúp `pnpm dev` chạy không cần docker.
  */
@@ -24,16 +43,16 @@ export const envSchema = z
     // IP-allowlist hoặc vỡ (mọi request = IP proxy) hoặc bị spoof. Giá trị: "false" | số hop | preset/CIDR.
     TRUST_PROXY: z.string().default("false"),
     // DATABASE_URL → mediaos_app qua PgBouncer (MỌI query nghiệp vụ, RLS ép ở đây).
-    DATABASE_URL: z.string().url().optional(),
+    DATABASE_URL: optionalUrl(),
     // DATABASE_DIRECT_URL → owner/superuser, direct (migration + DDL).
-    DATABASE_DIRECT_URL: z.string().url().optional(),
+    DATABASE_DIRECT_URL: optionalUrl(),
     // DATABASE_WORKER_URL → mediaos_worker, direct (outbox worker, G2-4). Fallback: DIRECT_URL.
-    DATABASE_WORKER_URL: z.string().url().optional(),
+    DATABASE_WORKER_URL: optionalUrl(),
     // PGBOUNCER_URL → mediaos_app QUA PgBouncer transaction-mode (:6432). Chỉ dùng cho integration test
     // kiểm chứng tenant isolation giữ vững khi connection bị tái dùng qua pooler (GX-4, g2rls). App runtime
     // dùng DATABASE_URL (đã trỏ PgBouncer ở prod). Vắng ⇒ test pgbouncer tự skip (không đỏ giả).
-    PGBOUNCER_URL: z.string().url().optional(),
-    VALKEY_URL: z.string().url().optional(),
+    PGBOUNCER_URL: optionalUrl(),
+    VALKEY_URL: optionalUrl(),
     // ── Realtime (G10-1) ───────────────────────────────────────────────────────
     // Kill-switch gateway WS: 'false' tắt hẳn Socket.IO (FE còn poll REST fallback). KHÔNG z.coerce.boolean
     // (bẫy: coi 'false' → true). Default 'true'. VALKEY_URL vắng → adapter fail-soft in-memory (single instance).
@@ -58,6 +77,13 @@ export const envSchema = z
     // (chống tự-khoá admin khi policy lỗi/parse sai — rollback tức thì, không cần revert). KHÔNG z.coerce.boolean
     // ('false'→true bẫy). LƯU Ý: tắt cờ này KHÔNG hạ sàn 2FA global (TWO_FACTOR_ENFORCEMENT_ENABLED độc lập).
     SECURITY_POLICY_ENFORCEMENT_ENABLED: z.enum(["true", "false"]).default("true"),
+    // KI-029: kill-switch rollback khẩn của PermissionGuard. 'false' ⇒ guard fail-OPEN cho MỌI route đã
+    // gate, chỉ để lại một dòng logger.warn. Trước 2026-07-28 biến này KHÔNG có ở đây lẫn .env.example ⇒
+    // zod không validate và không ai biết nó tồn tại — một cửa hậu toàn hệ không nằm trong hồ sơ nào.
+    // Khai ở đây để (a) sai giá trị là ĐỎ lúc boot thay vì im lặng, (b) nó hiện diện trong hồ sơ phát hành.
+    // Đặt 'false' ở production bị CHẶN BOOT (xem superRefine) — muốn rollback khẩn ở prod thì phải hạ
+    // NODE_ENV hoặc gỡ chốt có chủ đích, không thể lỡ tay. KHÔNG z.coerce.boolean ('false'→true bẫy).
+    PERMISSION_GUARD_ENABLED: z.enum(["true", "false"]).default("true"),
     LOGIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
     LOGIN_LOCKOUT_SEC: z.coerce.number().int().positive().default(900), // khoá tạm 15 phút
     // Bucket THEO TÀI KHOẢN (company|email, mọi IP) — bắt credential-stuffing phân tán nhiều IP lên 1 account.
@@ -119,13 +145,13 @@ export const envSchema = z
     // Đường dẫn file KEK 32-byte (LocalKekProvider). ADR-0004 cấm KEK-in-env-host cho prod → chỉ dùng dev/test.
     KMS_LOCAL_KEK_PATH: z.string().min(1).default(".secrets/local-kek.bin"),
     // Vault transit — chỉ bắt buộc khi KMS_PROVIDER='vault' (xem superRefine bên dưới).
-    KMS_VAULT_ADDR: z.string().url().optional(),
+    KMS_VAULT_ADDR: optionalUrl(),
     KMS_VAULT_TOKEN: z.string().min(1).optional(),
     // ── Object storage / S3 (B4 task attachments — MinIO/R2 qua @aws-sdk/client-s3) ──────────────
     // OPTIONAL để API vẫn boot khi storage chưa cấu hình (dev không docker). ObjectStorageService
     // fail-fast (StorageNotConfiguredError) KHI DÙNG nếu thiếu — KHÔNG fail-open (không tự bịa endpoint).
     // S3_FORCE_PATH_STYLE=true cho MinIO (bucket-in-path, không virtual-host). Default true.
-    S3_ENDPOINT: z.string().url().optional(),
+    S3_ENDPOINT: optionalUrl(),
     S3_REGION: z.string().min(1).default("us-east-1"),
     S3_ACCESS_KEY: z.string().min(1).optional(),
     S3_SECRET_KEY: z.string().min(1).optional(),
@@ -207,7 +233,7 @@ export const envSchema = z
     // endpoint sso-link fail-fast 503 khi dùng (mirror ANTHROPIC_API_KEY). BẤT BIẾN #3: không hardcode/log.
     LMS_SSO_SECRET: z.string().min(32).optional(),
     // Gốc public của LMS (vd https://lms.example.com) — đích redirect SSO.
-    LMS_BASE_URL: z.string().url().optional(),
+    LMS_BASE_URL: optionalUrl(),
     // ── S5-LMS-BE-1: auto-sync tài khoản MediaOS→LMS (Giai đoạn B) ──
     // Bearer token server-to-server tới LMS POST /api/admin/sync-users (= MEDIAOS_SYNC_TOKEN phía LMS).
     // OPTIONAL: thiếu → bridge/job auto-sync TẮT (warn 1 lần, KHÔNG chặn boot; mirror posture SSO). BẤT BIẾN #3.
@@ -260,6 +286,17 @@ export const envSchema = z
         code: z.ZodIssueCode.custom,
         path: ["PLATFORM_OPERATOR_PASSWORD"],
         message: "bắt buộc khi PLATFORM_OPERATOR_EMAIL được set",
+      });
+    }
+    // KI-029 — fail-LOUD: tắt PermissionGuard ở production là mở toang mọi route đã gate. Nếu điều đó
+    // xảy ra thì nó phải DỪNG BOOT, không phải chạy tiếp với một dòng warn lẫn trong log. Chốt này chỉ
+    // ràng ở production: dev/test vẫn tắt được (reviewer dùng chính cờ này để tái lập vế RED của gate).
+    if (env.NODE_ENV === "production" && env.PERMISSION_GUARD_ENABLED === "false") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["PERMISSION_GUARD_ENABLED"],
+        message:
+          "KHÔNG được đặt 'false' khi NODE_ENV=production — tắt PermissionGuard làm mọi route đã gate fail-OPEN cho mọi user đã đăng nhập",
       });
     }
     // Fail-fast: bật super-admin (có EMAIL) thì PHẢI có PASSWORD (mirror operator — không seed full-quyền

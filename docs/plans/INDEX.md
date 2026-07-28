@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**289 WO** · có micro-plan: **147/289** · ⬜ 8 chờ · 🔵 0 đang làm · ✅ 281 xong · 🔴 0 chặn
+**291 WO** · có micro-plan: **147/291** · ⬜ 10 chờ · 🔵 0 đang làm · ✅ 281 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -323,6 +323,8 @@
 | `S6-SEC-NOTITX-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | KI-034 — gộp insert notification + outbox + audit vào MỘT transaction  |
 | `S6-SEC-LOGINLOG-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | KI-042 — login_logs: hàng company_id IS NULL (thử đăng nhập pre-auth,  |
 | `S6-SEC-MV-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-SEC-LOGINLOG-1 | KI-041 — 2 matview dashboard nằm NGOÀI RLS (Postgres không hỗ trợ): dự |
+| `S6-SEC-DBFENCE-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | KI-028 MỞ LẠI — test ghi thẳng vào DB PROD: bịt nguồn rò (vitest.confi |
+| `S6-QA-TENANTWRITE-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | KI-037 — lưới tenant-isolation (156 bảng × 3 ca) CHỈ SELECT: không có  |
 | `S6-REL-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-QA-FINAL-1 ✅S6-SEC-1 ⏳S6-PERF-DB-1 ✅S6-QA-CHUNK-1 ✅S6-SEC-ROUTEMAP-1 ✅S6-SEC-ORG-1 ⏳S6-SEC-NOTITX-1 ⏳S6-SEC-LOGINLOG-1 ⏳S6-SEC-MV-1 | Release Candidate build + release notes + Go-live runbook + deployment |
 | `S6-GOLIVE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-REL-1 | Final Sign-off · Go/No-go · Go-live execution · Handoff (admin/user/su |
 

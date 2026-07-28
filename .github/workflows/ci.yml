@@ -103,6 +103,22 @@ jobs:
         env:
           PGBOUNCER_USERLIST_PATH: ${{ github.workspace }}/.secrets/pgbouncer/userlist.txt
 
+      # S6-SEC-DBFENCE-1 (KI-028) — ĐÓNG DẤU DB ephemeral của job là "lane test". Bắt buộc: từ WO này
+      # `apps/api/test/global-setup.ts` TỪ CHỐI chạy suite trên DB không mang con dấu. DB PROD `mediaos`
+      # (máy dev) và dev-online `mediaos_dev` KHÔNG BAO GIỜ được đóng dấu ⇒ hết đường ghi dữ liệu test
+      # vào chúng. DB ở đây TRÙNG TÊN `mediaos` nhưng là service container ephemeral, huỷ cùng job.
+      # Dùng node+pg (đã có qua pnpm) để không phụ thuộc psql cài sẵn trên runner.
+      - name: Stamp ephemeral DB as test lane
+        run: >-
+          pnpm --filter @mediaos/api exec node -e "
+          const {Pool}=require('pg');
+          const p=new Pool({connectionString:process.env.DATABASE_DIRECT_URL});
+          p.query(\"COMMENT ON DATABASE mediaos IS 'mediaos-test-lane'\")
+           .then(()=>p.query(\"SELECT shobj_description(oid,'pg_database') s FROM pg_database WHERE datname=current_database()\"))
+           .then(r=>{if(r.rows[0].s!=='mediaos-test-lane')throw new Error('stamp failed');console.log('stamped:',r.rows[0].s);})
+           .then(()=>p.end()).catch(e=>{console.error(e);process.exit(1);});
+          "
+
       # PgBouncer transaction-mode (GX-4): khởi động SAU setup-roles (cần userlist.txt + role có mật khẩu).
       # --network host → reach Postgres service ở localhost:5432 và publish :6432 trên host runner.
       # DB_USER cố tình BỎ TRỐNG → pass-through user (mediaos_app) suốt tới Postgres ⇒ RLS ép thật (KHÔNG

@@ -84,3 +84,26 @@ chạy trong `pnpm test` mặc định của CI, không phụ thuộc lane DB.
 - RED-proof: gỡ phán quyết ⇒ test ĐỎ và in đúng 3 route GET của KI-030.
 - §2.3 · §13.3 · §13.4 chấm lại, kèm bảng delta cũ↔mới.
 - `pnpm lint` + `pnpm typecheck` + `check.sh --all` (LANE_DB) xanh; CI xanh trên PR.
+
+## 6. LIGHT gate + đọc phán quyết, chạy bù — 2026-07-28
+
+PR #296 merge (`6a614788`) khi **chưa chạy** gate (ràng buộc phiên, ghi trong ledger). Chạy bù trên
+master **sau** khi `S6-SEC-ORG-1` đã merge — tức trên trạng thái hiện tại, không phải trạng thái lúc PR.
+
+**Kết luận: PASS** — 0 CRITICAL, 0 HIGH. Bằng chứng chạy lại:
+`route-guard-coverage.e2e-spec.ts` **9/9 xanh** (122ms, boot AppModule thật, không cần Postgres) ⇒
+artifact census đã commit vẫn khớp census runtime **sau** khi 3 route `/org` được gate.
+`FROZEN_GAPS = []` và sổ phán quyết còn **52 dòng = 40 không gate + 12 `@Public`**, `GAP 0` — số
+trong Phụ lục A không phải chép tay mà bị test khoá.
+
+Điểm đáng giá nhất của lưới này là assertion #7 (`@RequirePermission` không có `PermissionGuard`
+trong chuỗi ⇒ ĐỎ): `PermissionGuard` là **opt-in theo controller**, không phải `APP_GUARD`, nên
+"đọc code thấy có `@RequirePermission`" trước nay **không** đồng nghĩa runtime có kiểm quyền.
+
+**Ghi nhận (không phải defect của WO — nó nằm ngoài phạm vi đã tuyên bố):**
+
+| # | Mức | Ghi nhận | Chủ |
+| --- | --- | --- | --- |
+| 1 | MEDIUM | Lưới chứng minh route **có** gate và cặp quyền được guard đọc, nhưng **không** kiểm cặp `action:resourceType` đó có tồn tại trong seed và có đúng động từ chuẩn hay không. Đây chính là lớp lỗi `read:user` (legacy) ↔ `view:user` (canonical, mig 0444) | Đã có WO: **`S6-SEC-PERMVERB-1`** (READY) |
+| 2 | LOW | `ROUTE_CENSUS_WRITE=1` trong `beforeAll` **vừa sinh lại artifact vừa cho spec xanh** trong cùng một lần chạy ⇒ về lý thuyết đặt biến này ở CI sẽ làm chốt artifact tự-lành. Hiện KHÔNG có nơi nào đặt nó (đã kiểm `.github/workflows` + `check.sh`). Vế nguy hiểm hơn — route mới không có phán quyết — **không** bị ảnh hưởng: nó do assertion #2 gác, không do artifact | Chấp nhận; ghi lại |
+| 3 | LOW | Census chỉ thấy route mount qua controller của Nest (`DiscoveryService`). Middleware/handler express thô nếu có sẽ vô hình với phép đo | Chấp nhận; hiện không có |

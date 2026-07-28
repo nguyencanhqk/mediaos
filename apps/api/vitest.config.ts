@@ -1,24 +1,20 @@
 import { fileURLToPath } from "node:url";
 import swc from "unplugin-swc";
 import { configDefaults, defineConfig } from "vitest/config";
+import { resolveTestDbUrls } from "./test/db-target";
 
-// Build the test env, resolving the target Postgres DB from process.env FIRST so per-lane isolation
-// works. Precedence: explicit DATABASE_URL/DIRECT/WORKER from the env > LANE_DB (lane DB name) >
-// shared `mediaos` fallback (CI ephemeral / master). Vitest's `env` literals override process.env, so
-// resolving here (Node config ctx, where process.env is authoritative) is what makes LANE_DB take effect.
+// Build the test env. DB đích do `test/db-target.ts` resolve — FAIL-CLOSED (S6-SEC-DBFENCE-1 / KI-028):
+// KHÔNG còn fallback `?? "mediaos"` (= DB PROD của .env/.env.prod). Thiếu LANE_DB và không có URL tường
+// minh ⇒ 3 URL rỗng ⇒ `hasDb` false ⇒ int-spec SKIP (unit test vẫn chạy). Trỏ vào DB được bảo vệ
+// (mediaos / mediaos_dev) ngoài CI ⇒ THROW. Đọc phần đầu `test/db-target.ts` để biết vì sao.
+// Vitest's `env` literals override process.env, so resolving here (Node config ctx, where process.env
+// is authoritative) is what makes LANE_DB take effect.
 function laneDbEnv(): Record<string, string> {
-  const host = process.env.PG_HOSTPORT ?? "localhost:5432";
-  const db = process.env.LANE_DB ?? "mediaos";
-  const url = process.env.DATABASE_URL ?? `postgres://mediaos_app:changeme_app_only@${host}/${db}`;
-  const directUrl =
-    process.env.DATABASE_DIRECT_URL ?? `postgres://mediaos:changeme_dev_only@${host}/${db}`;
-  const workerUrl =
-    process.env.DATABASE_WORKER_URL ??
-    `postgres://mediaos_worker:changeme_worker_only@${host}/${db}`;
+  const { DATABASE_URL, DATABASE_DIRECT_URL, DATABASE_WORKER_URL } = resolveTestDbUrls(process.env);
   return {
-    DATABASE_URL: url,
-    DATABASE_DIRECT_URL: directUrl,
-    DATABASE_WORKER_URL: workerUrl,
+    DATABASE_URL,
+    DATABASE_DIRECT_URL,
+    DATABASE_WORKER_URL,
     // G6-2g: int-specs construct SecretRotationService for real. The bypass-RLS guard fail-closes unless
     // this is exactly 'true'. mediaos_worker is non-superuser so the guard is inert here, but set it so
     // the harness is robust if DATABASE_WORKER_URL ever falls back to the superuser direct pool.
@@ -44,7 +40,16 @@ export default defineConfig({
     environment: "node",
     root: ".",
     // *.int-spec.ts = integration (Postgres thật) — tự skip khi không có DATABASE_URL (xem helpers/integration-db).
-    include: ["src/**/*.spec.ts", "test/**/*.e2e-spec.ts", "test/**/*.int-spec.ts"],
+    // *.unit-spec.ts = unit test của HẠ TẦNG TEST đặt trong test/ (không cần DB). Không khai glob này thì
+    // spec trong test/ KHÔNG BAO GIỜ chạy = xanh-giả (memory: vitest-unit-specs-must-be-colocated).
+    include: [
+      "src/**/*.spec.ts",
+      "test/**/*.e2e-spec.ts",
+      "test/**/*.int-spec.ts",
+      "test/**/*.unit-spec.ts",
+    ],
+    // S6-SEC-DBFENCE-1 (KI-028) — cổng DUY NHẤT chặn suite chạy vào DB PROD. Xem test/global-setup.ts.
+    globalSetup: ["./test/global-setup.ts"],
     // DE-MEDIA-FY (CLAUDE.md reframe 2026-06-20 · S1-QA-DEBT-1): test của module OUT-OF-SCOPE — finance
     // theo-kênh (cost/revenue/cost-allocation) + workflow-DAG (content/project/channel lifecycle). Code đã
     // PARK (không phát triển, không xoá đợt này) ⇒ test của chúng fail-giả che phạm vi THẬT của suite.

@@ -68,3 +68,22 @@ mà không phải nâng cấp lớn ngoài phạm vi WO. Kết luận phải kè
 
 `bash harness/check.sh --all` xanh THẬT trên máy Windows này **với `LANE_DB` set**, cộng
 `RELEASE-02` KI-014 + `RELEASE-06` §4.4 cập nhật kèm bằng chứng.
+
+## 8. LIGHT gate chạy bù — 2026-07-28
+
+WO merge ở `dde98ac5` khi **chưa chạy** gate (ràng buộc phiên, ghi trong ledger). Chạy bù trên
+đúng diff đã merge. Phạm vi: `harness/chunk-test.mjs` + wiring `harness/check.sh` (0 file sản phẩm).
+
+**Kết luận: PASS** — 0 CRITICAL, 0 HIGH. Luật phân loại crash-vs-đỏ là chỗ dễ sai nhất và nó
+fail-closed đúng chiều: `crashed` đòi **đồng thời** `status≠0` · `failed===0` · **không** có dòng
+`× file` trong văn bản · (có chữ ký crash **hoặc** không ghi nổi JSON). Bất kỳ dấu hiệu đỏ nào —
+kể cả khi report JSON không kịp ghi — đều chặn retry.
+
+| #   | Mức    | Phát hiện                                                                                                                                                                                                                                                                                                                                        | Xử lý                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| --- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | MEDIUM | Chốt "chống giảm phạm vi lén" chỉ bắt file **đã vào** `vitest list` rồi không chạy. Nó **mù** với vế nguy hiểm hơn: file spec nằm ngoài `include` nên không bao giờ vào danh sách — đúng bẫy đã có tiền lệ trong repo (spec đặt ở `test/unit/**` không bao giờ chạy, mọi reporter vẫn XANH). Sáu file này chỉ được in dạng `ℹ️` giữa một log dài | **ĐÃ VÁ 2026-07-28** — `UNCOLLECTED_BASELINE` (6 dòng, đều là module PARK theo de-media-fy). Ngoài baseline ⇒ **ĐỎ**; dòng baseline cũ ⇒ chỉ cảnh báo (không giấu được test nào). **RED-proof:** thêm `packages/ui/tmp-redproof/scope-guard.spec.ts` + `git add -N` ⇒ runner **ĐỎ** đúng tên file dù 16/16 file · 98/98 test xanh; gỡ ⇒ XANH, exit 0. Baseline đối chiếu lại với phép đo thật: 6/6 khớp, 0 thừa 0 thiếu |
+| 2   | LOW    | `parseArgs` không validate số: `--chunk-size=abc` → `NaN` → gom thành một chunk **rỗng** ⇒ vitest chạy TOÀN BỘ file (bỏ qua việc chia chunk) thay vì báo lỗi                                                                                                                                                                                     | Không vá — hệ quả là chạy thừa, không phải chạy thiếu; đường mặc định không đi qua                                                                                                                                                                                                                                                                                                                                      |
+
+**Giới hạn còn lại (không phải lỗi của WO, cần biết):** cả runner lẫn chốt baseline mới **chỉ chạy
+trên Windows** (`check.sh` gọi runner theo `uname`). CI ubuntu vẫn là `pnpm test` một lần ⇒ **CI
+không có** vế chống-co-phạm-vi này. Đúng thiết kế đã chốt ở §5, ghi lại để không ai tưởng CI đang gác.
