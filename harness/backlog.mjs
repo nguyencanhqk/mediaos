@@ -5633,11 +5633,17 @@ export const backlog = [
     title:
       "KI-042 — login_logs: hàng company_id IS NULL (thử đăng nhập pre-auth, có email + IP) ĐỌC ĐƯỢC CHÉO TENANT; siết vế USING của policy tenant_isolation (migration 0532)",
     zone: "red",
-    status: "todo",
+    // Thi công XONG (mig 0532 + RED-proof + hồi quy + FULL gate) nhưng CHƯA merge ⇒ chưa phải "done".
+    status: "in_progress",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/auth/**",
       "apps/api/src/foundation/retention/**",
+      // Mở rộng khi thi công (memory wo-paths-drive-gate-and-scheduler — khai thiếu ⇒ lọt gate):
+      //  • src/me/** — done_when #4 buộc verify đường đọc hiện có; MỘT trong ba đường đó là
+      //    me-security-activity.repository.ts, và chú thích của nó khẳng định SAI rằng màn hình này
+      //    phụ thuộc vào khe hở `USING … OR company_id IS NULL`. Chỉ sửa CHÚ THÍCH, không đổi hành vi.
+      "apps/api/src/me/**",
       "apps/api/test/**",
       "docs/DB/**",
       "docs/RELEASE/**",

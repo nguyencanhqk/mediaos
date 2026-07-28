@@ -2699,12 +2699,14 @@ export const RLS_TABLES: RlsTableCase[] = [
   {
     name: "login_logs",
     table: "login_logs",
-    // company_id NULLABLE: hàng pre-auth (email không tồn tại) có company_id IS NULL → HIỂN THỊ với mọi tenant
-    // qua USING (company_id = GUC OR company_id IS NULL) — GIỐNG roles/seed_items có hàng global. Vì vậy
-    // skipNoContext: test 'no context → 0 row' KHÔNG đúng cho bảng nullable-tenant (sẽ đỏ khi có hàng NULL).
-    // Cô lập chéo tenant + WITH CHECK forge-deny vẫn được harness phủ; hành vi nullable-tenant đã verify ở
-    // auth-appendonly + rls-tenant-isolation (FULL gate). Mẫu: roles/role_permissions/seed_items.
-    skipNoContext: true,
+    // ⟲ S6-SEC-LOGINLOG-1 / KI-042 (mig 0532): skipNoContext ĐÃ TỪNG là `true`, với lý do "company_id
+    // NULLABLE nên hàng pre-auth HIỂN THỊ với mọi tenant — GIỐNG roles/seed_items có hàng global".
+    // Lý do đó SAI: hàng NULL của roles/seed_items là dữ liệu tham chiếu dùng CHUNG có chủ đích, còn
+    // hàng NULL của login_logs là dấu vết bảo mật (email + IP) của NGƯỜI LẠ. Miễn trừ này đã che đúng
+    // lỗ hổng KI-042 khỏi lưới an toàn cả dự án suốt từ S2.
+    // 0532 siết USING về `company_id = GUC` ⇒ "ngoài ngữ cảnh → 0 row" nay ĐÚNG cho bảng này, và test
+    // đó chính là vế deny của KI-042 ⇒ BẬT LẠI (không còn miễn trừ).
+    skipNoContext: false,
     seedRow: async (direct, t) => {
       const u = await seedUser(direct, t.companyId, `llog-${randomUUID().slice(0, 8)}@x.test`);
       const email = `llog-${randomUUID().slice(0, 8)}@x.test`;

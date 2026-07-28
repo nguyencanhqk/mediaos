@@ -166,6 +166,34 @@ describe.skipIf(!hasDb)("S2-AUTH-BE-1 /auth/me bootstrap + login_logs", () => {
     expect(res.rows[0]?.failure_reason).toBe("UserNotFound");
   });
 
+  it("S6-SEC-LOGINLOG-1: companySlug sai → VẪN ghi login_logs company_id NULL qua đường thật (0532 không làm mù ghi pre-auth)", async () => {
+    // done_when #3(a) của KI-042. Đây là đường ghi DUY NHẤT sinh row `company_id IS NULL`
+    // (auth.service.ts:221, nhánh company không resolve được) và cũng là đường 0532 dễ làm gãy nhất:
+    // nếu ai đó thêm `.returning()` vào `db.insert(loginLogs)` thì Postgres áp policy SELECT lên
+    // RETURNING ⇒ INSERT ném ⇒ lỗi bị nuốt vào catch best-effort ⇒ MẤT log pre-auth trong im lặng,
+    // và KHÔNG có test nào khác bắt được. Trước WO này đường ghi đó hoàn toàn không được phủ.
+    const ghostEmail = `preauth-${Date.now()}@nope.test`;
+    await expect(
+      auth.login(
+        { companySlug: "khong-ton-tai-slug-nay", email: ghostEmail, password: PASSWORD },
+        meta,
+      ),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    const res = await direct.query(
+      `SELECT login_status, failure_reason, company_id, user_id
+         FROM login_logs WHERE normalized_email = $1 ORDER BY created_at DESC LIMIT 1`,
+      [ghostEmail.toLowerCase()],
+    );
+    expect(res.rows[0]?.login_status).toBe("failed");
+    expect(res.rows[0]?.failure_reason).toBe("CompanyInactive");
+    expect(res.rows[0]?.company_id).toBeNull();
+    // Ghim BẤT BIẾN mà mô hình đọc mới dựa vào: company NULL ⇒ user NULL. Nếu về sau có đường ghi
+    // gắn user_id vào row NULL-company thì /me/security/activity sẽ MẤT dòng đó (RLS chặn) — case này
+    // phải đỏ để buộc xét lại mô hình, chứ không để trôi thành mất dữ liệu im lặng.
+    expect(res.rows[0]?.user_id).toBeNull();
+  });
+
   it("/auth/me trả bootstrap: roles[], scopes[] (data_scope), capabilities, company, modules; employee=null", async () => {
     const tokens = expectTokens(
       await auth.login({ companySlug: A.slug, email: EMAIL, password: PASSWORD }, meta),

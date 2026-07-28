@@ -1571,6 +1571,13 @@ export class AuthService {
           );
           return;
         }
+        // ⚠️ S6-SEC-LOGINLOG-1 (mig 0532) — TUYỆT ĐỐI KHÔNG thêm `.returning()` vào câu này.
+        // Sau khi vế USING của policy `tenant_isolation` hết cho `company_id IS NULL`, Postgres áp
+        // policy SELECT lên mệnh đề RETURNING ⇒ INSERT ... RETURNING cho hàng NULL sẽ ném
+        // "new row violates row-level security policy", và lỗi đó bị nuốt vào nhánh catch best-effort
+        // bên dưới (chỉ còn một dòng logger.error) ⇒ MẤT TOÀN BỘ log pre-auth trong im lặng.
+        // INSERT không RETURNING thì không đụng policy SELECT — đã đo trên DB thật.
+        // Ghim bởi test: login-logs-rls.int-spec (c) + (c2).
         await db.insert(loginLogs).values({ companyId: null, ...row });
       }
     } catch (err) {

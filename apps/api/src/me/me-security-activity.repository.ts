@@ -16,9 +16,16 @@ import { loginLogs, userSecurityEvents } from "../db/schema/auth-logs";
  * trong row ⇒ không có đường lộ, mạnh hơn redact-at-read (BẤT BIẾN #3, mirror AuthLogsViewerService).
  * KHÔNG SELECT email/normalized_email/failure_reason/session_id/actor_user_id (DTO tối giản §17).
  *
- * Nhánh login_logs KHÔNG AND company_id tường minh: RLS nullable-tenant (USING own+NULL) CỐ Ý cho
- * row company NULL đi qua — fail đăng nhập pre-auth của CHÍNH user vẫn phải hiện; actor-lock
- * `user_id = userId` là hàng rào chống rò user khác (row NULL-company user lạ bị chặn — plan §2.4).
+ * Nhánh login_logs KHÔNG AND company_id tường minh — ranh giới tenant do RLS ép (BẤT BIẾN #1).
+ *
+ * ⟲ S6-SEC-LOGINLOG-1 / KI-042 (mig 0532) — ĐÍNH CHÍNH chú thích cũ. Bản trước ghi rằng USING
+ * nullable-tenant (own + NULL) "CỐ Ý cho row company NULL đi qua — fail đăng nhập pre-auth của CHÍNH
+ * user vẫn phải hiện". Điều đó KHÔNG ĐÚNG với dữ liệu thật: mọi đường sinh row `company_id IS NULL`
+ * (auth.service.ts:201 rate-limit, :221 company không resolve được) đều truyền `userId: null`, nên
+ * row NULL-company LUÔN có `user_id IS NULL` và bị chính actor-lock `user_id = userId` loại từ trước —
+ * chưa bao giờ hiện ở màn hình này. Đo trên PROD 2026-07-28: 268/268 row NULL-company đều user_id NULL,
+ * 0 row vi phạm. Vì vậy 0532 siết USING KHÔNG làm mất dòng nào của /me/security/activity (đã ghim bằng
+ * test hồi quy). Actor-lock `user_id = userId` vẫn là hàng rào chống IDOR giữa user cùng tenant.
  * Nhánh user_security_events AND company_id tường minh (belt-and-suspenders, company NOT NULL).
  */
 
