@@ -1401,6 +1401,13 @@
       "when": 1717587321000,
       "tag": "0532_s6secloginlog1_login_logs_tenant_read",
       "breakpoints": true
+    },
+    {
+      "idx": 200,
+      "version": "7",
+      "when": 1717587322000,
+      "tag": "0533_s6qatenantwrite1_team_members_composite_fk",
+      "breakpoints": true
     }
   ]
 }

@@ -1,13 +1,23 @@
 import type { PoolClient } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
-import { cleanupTenants, seedCompany, type SeededTenant } from "../helpers/seed";
+import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
 import { RLS_TABLES } from "./rls-registry";
 
 /**
  * G2-5 — LƯỚI AN TOÀN CẢ DỰ ÁN: test 2-tenant đối kháng, data-driven theo rls-registry.
  * Với MỌI bảng RLS đã đăng ký: tenant A không bao giờ thấy hàng của B (và ngược lại); ngoài ngữ cảnh
  * thì 0 row. Chạy lại như regression sau mỗi phase. Postgres thật (CI) — KHÔNG mock (rủi ro ảo tưởng xanh).
+ *
+ * ⟲ S6-QA-TENANTWRITE-1 (KI-037) — BỔ SUNG VẾ GHI. Trước đợt này cả file có ĐÚNG 3 câu SQL và cả 3 là
+ * `SELECT`: ba `it` của mỗi bảng đều là vế ĐỌC ⇒ **vế `WITH CHECK` của policy chưa từng bị chạm ở
+ * tầng registry**, trong khi KI-032 (tenant admin ghi được lên role hệ thống toàn cục) chính là lỗ vế
+ * GHI. Đo 2026-07-29 (`node scripts/measure-tenant-write-coverage.mjs`): **119/155 bảng KHÔNG có ca
+ * deny GHI chéo tenant** ở bất kỳ spec nào.
+ *
+ * Ràng buộc thiết kế: registry chỉ cho `table` + `idColumn` + `seedRow()` trả 1 id — harness KHÔNG
+ * biết schema từng bảng. Nên 3 ca GHI dưới đây viết được CHỈ bằng bấy nhiêu thông tin (xem
+ * `docs/plans/S6-QA-TENANTWRITE-1.md` §2).
  */
 describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
   const direct = directPool();
@@ -25,6 +35,23 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
       rowsA.set(tc.table, await tc.seedRow(direct, A));
       rowsB.set(tc.table, await tc.seedRow(direct, B));
     }
+    // Bảng nào có `company_id` — ca W3 (đẩy hàng sang tenant khác) chỉ áp dụng cho nhóm này.
+    const cols = await direct.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND column_name = 'company_id'
+          AND table_name = ANY($1)`,
+      [RLS_TABLES.map((t) => t.table)],
+    );
+    const withCompany = new Set(cols.rows.map((r) => r.table_name));
+    for (const tc of RLS_TABLES) hasCompanyId.set(tc.table, withCompany.has(tc.table));
+
+    const idCols = await direct.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND column_name = 'id' AND table_name = ANY($1)`,
+      [RLS_TABLES.map((t) => t.table)],
+    );
+    const withId = new Set(idCols.rows.map((r) => r.table_name));
+    for (const tc of RLS_TABLES) hasIdColumn.set(tc.table, withId.has(tc.table));
   });
 
   afterAll(async () => {
@@ -47,7 +74,11 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
       return new Set(r.rows.map((x) => x.id as string));
     } catch (e) {
       // Explicit ROLLBACK prevents connection poisoning for the pool
-      try { await c.query("ROLLBACK"); } catch { /* ignore */ }
+      try {
+        await c.query("ROLLBACK");
+      } catch {
+        /* ignore */
+      }
       throw e;
     } finally {
       c.release();
@@ -61,6 +92,88 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
       return r.rows.map((x) => x.id as string);
     } finally {
       c.release();
+    }
+  }
+
+  // ── S6-QA-TENANTWRITE-1 — hạ tầng vế GHI ────────────────────────────────────────────────────────
+
+  /**
+   * Kết quả một lần thử GHI trong ngữ cảnh tenant. `rowCount` chỉ có nghĩa khi `rejected === false`.
+   *
+   * VÌ SAO phải phân biệt "0 hàng" với "bị từ chối": hai thứ này chặn bằng CƠ CHẾ KHÁC NHAU —
+   * RLS `USING` cho 0 hàng, còn `WITH CHECK`/trigger/thiếu-grant thì ném lỗi. Gộp chúng làm một
+   * ("miễn là không ghi được") sẽ khiến một bảng MẤT policy nhưng CÒN grant trông y hệt một bảng
+   * được bảo vệ đúng. Ta cần biết mỗi bảng đang được chặn bằng gì.
+   */
+  interface WriteAttempt {
+    rejected: boolean;
+    /** Mã lỗi Postgres khi bị từ chối: 42501 = insufficient_privilege · 23514/RLS = new row violates… */
+    code?: string;
+    message?: string;
+    rowCount: number;
+  }
+
+  async function attemptWrite(
+    companyId: string,
+    sql: string,
+    params: unknown[],
+  ): Promise<WriteAttempt> {
+    const c: PoolClient = await app.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query("SELECT set_config('app.current_company_id', $1, true)", [companyId]);
+      try {
+        const r = await c.query(sql, params);
+        return { rejected: false, rowCount: r.rowCount ?? 0 };
+      } catch (e) {
+        const err = e as { code?: string; message?: string };
+        return { rejected: true, code: err.code, message: err.message, rowCount: 0 };
+      } finally {
+        // LUÔN rollback: ca W3 có thể THÀNH CÔNG (đó là lúc test ĐỎ) — nếu commit thì hàng của A
+        // đã bị đẩy sang tenant B thật và mọi ca sau đó trên cùng bảng chạy trên dữ liệu hỏng.
+        try {
+          await c.query("ROLLBACK");
+        } catch {
+          /* ignore */
+        }
+      }
+    } finally {
+      c.release();
+    }
+  }
+
+  /** Bảng nào CÓ cột company_id — quyết định ca W3/W0 có áp dụng được không. Đọc 1 lần cho cả suite. */
+  const hasCompanyId = new Map<string, boolean>();
+  /** Bảng nào có cột `id` — để ca W0 cấp id mới, tránh đụng PK trước khi RLS kịp phán. */
+  const hasIdColumn = new Map<string, boolean>();
+
+  /**
+   * Phân loại CƠ CHẾ chặn từ thông điệp lỗi.
+   *
+   * ⚠️ KHÔNG dùng SQLSTATE: Postgres trả **42501 cho CẢ HAI** "permission denied for table" (app role
+   * không có grant) lẫn "new row violates row-level security policy" (vế WITH CHECK làm việc). Gộp
+   * chúng lại sẽ cho một bức tranh SAI theo hướng lạc quan: một bảng chỉ được che bởi việc THIẾU
+   * GRANT sẽ trông như đã có RLS bảo vệ, và ngày ai đó cấp UPDATE thì tuyến phòng thủ duy nhất là
+   * WITH CHECK — thứ ta chưa từng có bằng chứng là chạy.
+   */
+  function classify(r: WriteAttempt): string {
+    if (!r.rejected) return `rowCount=${r.rowCount}`;
+    const m = (r.message ?? "").toLowerCase();
+    if (m.includes("row-level security")) return "RLS-WITH-CHECK";
+    if (m.includes("permission denied")) return "no-grant";
+    if (r.code === "23514" || m.includes("check constraint")) return "CHECK-constraint";
+    if (m.includes("immutable") || r.code === "P0001") return "trigger";
+    return `rejected(${r.code ?? "?"})`;
+  }
+
+  /** Cơ chế chặn quan sát được cho từng (bảng, ca) — in ra cuối suite làm tài liệu sống. */
+  const blockedBy: { table: string; testCase: string; how: string }[] = [];
+  function record(table: string, testCase: string, r: WriteAttempt): void {
+    blockedBy.push({ table, testCase, how: classify(r) });
+    // Cửa gỡ rối: `GRID_DEBUG_TABLE=goals` in NGUYÊN thông điệp Postgres. Cần khi một ca xanh mà ta
+    // chưa giải thích được VÌ SAO — màu xanh không giải thích được là màu xanh không tin được.
+    if (process.env.GRID_DEBUG_TABLE === table) {
+      console.log(`[grid-debug] ${table} ${testCase} →`, JSON.stringify(r));
     }
   }
 
@@ -82,6 +195,167 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
         expect(seen.has(rowsB.get(tc.table)!)).toBe(true);
         expect(seen.has(rowsA.get(tc.table)!)).toBe(false);
       });
+
+      // ── VẾ GHI (S6-QA-TENANTWRITE-1 / KI-037) ──────────────────────────────────────────────────
+
+      // W0 = ca (a) của done_when #2: INSERT hàng mang company_id của B trong ngữ cảnh A.
+      //
+      // VÌ SAO CẦN W0 KHI ĐÃ CÓ W3: W3 (UPDATE) chỉ chạm được `WITH CHECK` ở những bảng app role CÓ
+      // quyền UPDATE. Đo lần đầu: 52/155 bảng chặn W3 chỉ vì THIẾU GRANT — tức `WITH CHECK` của chúng
+      // chưa từng được chứng minh là chạy. Bảng append-only thì ngược lại: KHÔNG có UPDATE nhưng CÓ
+      // INSERT, nên W0 là đường DUY NHẤT chạm tới vế WITH CHECK của chúng.
+      //
+      // Dựng hàng GENERIC (harness không biết schema): đọc hàng của A ra jsonb, ghi đè `company_id`
+      // thành B (và `id` thành uuid mới để không đụng PK TRƯỚC khi RLS kịp phán), rồi
+      // `jsonb_populate_record` dựng lại record đúng kiểu bảng. Nếu vướng ràng buộc khác (FK 23503,
+      // unique 23505) thì `classify()` in ra đúng mã đó — vẫn là DENY nhưng KHÔNG bị đếm nhầm thành
+      // "RLS-WITH-CHECK", nên số đo không nói dối.
+      it("W0 · withTenant(A): INSERT hàng mang company_id của B → PHẢI bị từ chối (WITH CHECK)", async (ctx) => {
+        if (!hasCompanyId.get(tc.table)) {
+          ctx.skip(`${tc.table} không có cột company_id (N/A)`);
+          return;
+        }
+        const override: Record<string, string> = { company_id: B.companyId };
+        const r = await attemptWrite(
+          A.companyId,
+          `INSERT INTO ${tc.table}
+           SELECT (jsonb_populate_record(NULL::${tc.table},
+                     to_jsonb(x) || $1::jsonb
+                     ${hasIdColumn.get(tc.table) ? `|| jsonb_build_object('id', gen_random_uuid())` : ""}
+                   )).*
+             FROM ${tc.table} x WHERE x.${col} = $2`,
+          [JSON.stringify(override), rowsA.get(tc.table)!],
+        );
+        record(tc.table, "W0", r);
+        expect(
+          r.rejected,
+          `INSERT ĐƯỢC ${r.rowCount} hàng mang company_id của tenant B vào ${tc.table} từ ngữ cảnh A: ` +
+            `vế WITH CHECK KHÔNG chặn. Đây đúng hình dạng KI-032.`,
+        ).toBe(true);
+      });
+
+      it("W1 · withTenant(A): UPDATE hàng của B → 0 hàng (hoặc bị từ chối)", async () => {
+        // `SET <id> = <id>` (gán chính nó) chạy được trên MỌI bảng — harness không biết cột nào khác
+        // tồn tại. Nó vẫn đi qua trọn vẹn RLS `USING` của UPDATE, nên đủ để chứng minh vế đó.
+        const r = await attemptWrite(
+          A.companyId,
+          `UPDATE ${tc.table} SET ${col} = ${col} WHERE ${col} = $1`,
+          [rowsB.get(tc.table)!],
+        );
+        record(tc.table, "W1", r);
+        expect(
+          r.rejected || r.rowCount === 0,
+          `UPDATE chạm ${r.rowCount} hàng của tenant B — RLS USING của UPDATE trên ${tc.table} không chặn`,
+        ).toBe(true);
+      });
+
+      it("W2 · withTenant(A): DELETE hàng của B → 0 hàng (hoặc bị từ chối)", async () => {
+        const r = await attemptWrite(A.companyId, `DELETE FROM ${tc.table} WHERE ${col} = $1`, [
+          rowsB.get(tc.table)!,
+        ]);
+        record(tc.table, "W2", r);
+        expect(
+          r.rejected || r.rowCount === 0,
+          `DELETE xoá ${r.rowCount} hàng của tenant B trên ${tc.table} — mất cô lập vế GHI`,
+        ).toBe(true);
+      });
+
+      // W3 = ca CHÍNH của KI-037: vế `WITH CHECK`. Đây là thứ chưa lưới nào chạm, và là đúng hình
+      // dạng của KI-032 (ghi được lên hàng ngoài tenant mình). Bảng không có `company_id` (vd
+      // `role_permissions`) thì ca này KHÔNG áp dụng — skip CÓ LÝ DO, không skip im lặng.
+      it("W3 · withTenant(A): đẩy hàng CỦA MÌNH sang tenant B → PHẢI bị từ chối (WITH CHECK)", async (ctx) => {
+        if (!hasCompanyId.get(tc.table)) {
+          ctx.skip(`${tc.table} không có cột company_id ⇒ không đẩy sang tenant khác được (N/A)`);
+          return;
+        }
+        const r = await attemptWrite(
+          A.companyId,
+          `UPDATE ${tc.table} SET company_id = $1 WHERE ${col} = $2`,
+          [B.companyId, rowsA.get(tc.table)!],
+        );
+        record(tc.table, "W3", r);
+        expect(
+          r.rejected,
+          `GHI ĐƯỢC hàng mang company_id của tenant B trên ${tc.table} (chạm ${r.rowCount} hàng): ` +
+            `vế WITH CHECK KHÔNG chặn. Đây đúng hình dạng KI-032.`,
+        ).toBe(true);
+      });
     });
   }
+
+  // ── Hai ca CẤU TRÚC (không theo bảng) — đến từ FULL gate S6-SEC-ORGSCOPE-1, đo được chứ không đoán ──
+
+  describe("ranh giới GHI không theo bảng", () => {
+    it("(a) `mediaos_app` KHÔNG kế thừa quyền của `mediaos_readonly`", async () => {
+      // Policy `users_all_tenant_read ON users FOR SELECT TO mediaos_readonly USING (true)` (mig 0346:66)
+      // là read TOÀN TENANT sống thật. `mediaos_app` LÀ member của role đó nhưng `WITH INHERIT FALSE`
+      // (0346:47) — nên hôm nay vô hại. Nếu ai đó `GRANT mediaos_readonly TO mediaos_app` mà quên
+      // `INHERIT FALSE`, mọi đường đọc của app biến thành ĐỌC CHÉO TENANT trong im lặng, và KHÔNG ca
+      // nào trong lưới theo-bảng ở trên bắt được (chúng chạy đúng dưới app role, sẽ cùng bị mù).
+      const r = await direct.query<{ member: boolean; usage: boolean }>(
+        `SELECT pg_has_role('mediaos_app','mediaos_readonly','MEMBER') AS member,
+                pg_has_role('mediaos_app','mediaos_readonly','USAGE')  AS usage`,
+      );
+      expect(r.rows[0].usage, "mediaos_app kế thừa được mediaos_readonly ⇒ đọc chéo tenant").toBe(
+        false,
+      );
+    });
+
+    it("(b) KHÔNG chèn được `team_members` trỏ sang `team` của tenant khác", async () => {
+      // FULL gate S6-SEC-ORGSCOPE-1 đo được: FK enforcement BỎ QUA RLS theo thiết kế Postgres, nên
+      // thiếu composite FK (company_id, team_id) thì app role trong ngữ cảnh A gắn được thành viên
+      // vào team của B (`INSERT 0 1`). Đường ĐỌC an toàn nhờ innerJoin, nhưng đây là liên kết chéo
+      // tenant TỒN TẠI THẬT trong dữ liệu + `ON DELETE CASCADE` bắc cầu sang tenant khác.
+      const teamB = await direct.query<{ id: string }>(
+        `INSERT INTO teams (company_id, name, type) VALUES ($1, $2, 'production_team') RETURNING id`,
+        [B.companyId, `xt-team-${Date.now()}`],
+      );
+      const userA = await seedUser(direct, A.companyId, `xtfk-${Date.now()}@a.test`);
+      const r = await attemptWrite(
+        A.companyId,
+        `INSERT INTO team_members (company_id, team_id, user_id, role_name) VALUES ($1, $2, $3, 'member')`,
+        [A.companyId, teamB.rows[0].id, userA],
+      );
+      expect(
+        r.rejected,
+        `Chèn được ${r.rowCount} hàng team_members của tenant A trỏ tới team của tenant B — ` +
+          `thiếu composite FK (company_id, team_id) → teams(company_id, id)`,
+      ).toBe(true);
+    });
+  });
+
+  // Tài liệu sống: mỗi bảng được chặn BẰNG CƠ CHẾ GÌ. Không phải khẳng định — là số đo, để lần sau
+  // ai đó thấy một bảng đổi từ `rejected(42501)` sang `rowCount=0` thì biết grant vừa đổi.
+  afterAll(() => {
+    if (blockedBy.length === 0) return;
+    const byHow = new Map<string, number>();
+    for (const b of blockedBy) {
+      const k = `${b.testCase}:${b.how}`;
+      byHow.set(k, (byHow.get(k) ?? 0) + 1);
+    }
+    // Kết luận có ích nhất KHÔNG phải "bao nhiêu bảng bị chặn" (tất cả đều bị chặn — nếu không thì
+    // test đã ĐỎ), mà là **bảng nào chưa CHỨNG MINH được `WITH CHECK` của nó chạy**. Một bảng chỉ
+    // được che bởi việc thiếu grant vẫn an toàn HÔM NAY, nhưng tuyến phòng thủ của nó nằm sai tầng:
+    // ngày một migration cấp INSERT/UPDATE cho tính năng mới, WITH CHECK là thứ duy nhất còn lại.
+    const proven = new Set(blockedBy.filter((b) => b.how === "RLS-WITH-CHECK").map((b) => b.table));
+    const applicable = RLS_TABLES.filter((t) => hasCompanyId.get(t.table)).map((t) => t.table);
+    const unproven = applicable.filter((t) => !proven.has(t));
+    console.log(
+      `[tenant-write-grid] ${RLS_TABLES.length} bảng · cơ chế chặn quan sát được:\n` +
+        [...byHow.entries()]
+          .sort()
+          .map(([k, v]) => `  ${k} × ${v}`)
+          .join("\n") +
+        `\n[tenant-write-grid] WITH CHECK ĐÃ CHỨNG MINH (W0 hoặc W3): ${proven.size}/${applicable.length}` +
+        `\n[tenant-write-grid] CHƯA chứng minh được (${unproven.length}): ${unproven.join(", ") || "(không có)"}` +
+        // W3 bị CHE bởi cơ chế khác (unique/FK/trigger/thiếu grant) — nghĩa là với những bảng này,
+        // W3 xanh KHÔNG chứng minh gì về WITH CHECK. Liệt kê ra để không ai đọc nhầm màu xanh.
+        `\n[tenant-write-grid] W3 bị CHE bởi cơ chế khác (W3 xanh ≠ WITH CHECK chạy): ` +
+        blockedBy
+          .filter((b) => b.testCase === "W3" && b.how !== "RLS-WITH-CHECK")
+          .map((b) => `${b.table}=${b.how}`)
+          .sort()
+          .join(" · "),
+    );
+  });
 });
