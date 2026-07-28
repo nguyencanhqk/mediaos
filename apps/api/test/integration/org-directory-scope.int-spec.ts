@@ -47,9 +47,13 @@ const PASSWORD = "Passw0rd!test99";
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 
 /**
- * Cặp quyền gate đường danh bạ. GIỮ ĐỒNG BỘ với `ORG_EMPLOYEE_DIRECTORY`
- * (`apps/api/src/org/org.permissions.ts`) — `S6-SEC-PERMVERB-1` đổi động từ sang `view:user` thì
- * đổi ở đây cùng lúc, nếu không test sẽ seed một cặp mà guard không dùng ⇒ 403 khắp nơi.
+ * Cặp quyền gate đường danh bạ.
+ *
+ * ⚠️ LITERAL CÓ CHỦ ĐÍCH — ĐỪNG import `ORG_EMPLOYEE_DIRECTORY` vào đây. Đây là **pin độc lập**: spec
+ * seed grant theo cặp NÀY rồi gọi route thật. Nếu nó đọc chính hằng số mà guard đọc thì hai vế không
+ * bao giờ lệch được và pin mất tác dụng. Giữ literal ⇒ `S6-SEC-PERMVERB-1` đổi hằng số mà quên đây sẽ
+ * seed một cặp guard không dùng ⇒ **403 hàng loạt, ĐỎ TO TIẾNG** (CI có chạy file này —
+ * `.github/workflows/api.yml` đặt `LANE_DB` cho step test). Đó là tính năng, không phải trùng lặp.
  */
 const DIRECTORY_PAIR = ["read", "user"] as const;
 
@@ -148,7 +152,9 @@ describe.skipIf(!hasLaneDb)("S6-SEC-ORGSCOPE-1 — /org/employees ép data_scope
       [A.companyId, "Team orgscope"],
     );
     teamA = t.rows[0].id as string;
-    for (const u of [uPlainWithProfile, uPlainNoProfile]) {
+    // uOwn nằm TRONG teamA có chủ đích: ca "Own chỉ thấy membership của chính mình" cần một vế DƯƠNG,
+    // nếu không nó xanh tầm thường (không thuộc team nào thì `teams` rỗng dù repo có bound hay không).
+    for (const u of [uOwn, uPlainWithProfile, uPlainNoProfile]) {
       await direct.query(
         "INSERT INTO team_members (company_id, team_id, user_id, role_name) VALUES ($1, $2, $3, 'member')",
         [A.companyId, teamA, u],
@@ -204,16 +210,28 @@ describe.skipIf(!hasLaneDb)("S6-SEC-ORGSCOPE-1 — /org/employees ép data_scope
     // phải bị bắt. Đây là dữ liệu PII thật mà KI-030 đã cắt một lần.
     for (const tok of [tokOwn, tokTeam, tokDept]) {
       const res = await api(app).get("/org/employees").set(bearer(tok));
+      // `status` là vế ALIVENESS: thiếu nó thì route 500/403 cũng làm ca này xanh (FULL gate bắt).
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
       expect(JSON.stringify(res.body)).not.toContain(`noprofile@${A.slug}.test`);
       expect(JSON.stringify(res.body)).not.toContain(`withprofile@${A.slug}.test`);
     }
+    // Khẳng định DƯƠNG đối trọng: `Own` PHẢI thấy email CỦA CHÍNH MÌNH. Không có vế này thì mọi
+    // `not.toContain` ở trên vẫn xanh khi ai đó bỏ hẳn cột `email` khỏi projection — lúc đó ca này
+    // không còn chứng minh được điều gì về việc lọc.
+    const own = await api(app).get("/org/employees").set(bearer(tokOwn));
+    expect(JSON.stringify(own.body)).toContain(`own@${A.slug}.test`);
   });
 
-  it("scope hẹp KHÔNG rò membership team của người ngoài scope", async () => {
-    // `listEmployees` trả kèm `teams[]`. Lọc user mà quên bound `team_members` = vẫn rò ai thuộc
-    // nhóm nào (một nửa danh bạ), nên vế này được khoá riêng.
-    const { rows } = await employees(tokOwn);
-    expect(rows.flatMap((r) => r.teams ?? [])).toEqual([]);
+  it("scope `Own` chỉ thấy membership team CỦA CHÍNH MÌNH", async () => {
+    // `listEmployees` trả kèm `teams[]`. Ca này phải có CẢ HAI vế, không chỉ vế vắng mặt:
+    //   • uOwn CÓ trong teamA ⇒ phải thấy đúng [teamA] (đường đi còn sống — nếu chỉ assert "rỗng" thì
+    //     ca xanh tầm thường vì uOwn không thuộc team nào, và xoá `inArray` khỏi repo vẫn xanh),
+    //   • KHÔNG thấy hàng/teams của bất kỳ ai khác.
+    const { status, rows } = await employees(tokOwn);
+    expect(status, JSON.stringify(rows)).toBe(200);
+    expect(rows.map((r) => r.id)).toEqual([uOwn]);
+    // KHÔNG `?? []`: nếu projection rụng mất field `teams` thì phải ĐỎ, không được nuốt thành rỗng.
+    expect(rows[0].teams.map((t) => t.teamId)).toEqual([teamA]);
   });
 
   // ── Vế chống-siết-quá-tay: Company phải KHÔNG hồi quy (done_when #3) ───────────────────────────

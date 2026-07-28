@@ -475,6 +475,20 @@ export class AuthUsersService {
    * bare match-all). Company/System (N=1) → tenant. Own → chính actor. Team/Department (users KHÔNG có
    * org-mapping) + scope null → fail-closed sql`false` (0 rows).
    */
+  /**
+   * ⚠️ BẢN SAO THỨ HAI của cùng một luật — con trỏ HAI CHIỀU (nợ N-1b, `S6-SEC-ORGSCOPE-1`).
+   * Bản kia: `DataScopeService.buildUserScopeCondition` (`../permission/data-scope.service.ts`), dùng
+   * cho `GET /org/employees`. Hai chỗ PHẢI cùng ngữ nghĩa; sửa một bên mà quên bên kia là đúng lớp
+   * drift mà S6 đang đóng.
+   *
+   * Khác biệt ĐÃ BIẾT, đừng "đồng bộ" nhầm chiều: nhánh `Own` ở bản kia CÓ thêm vế `company_id`, bản
+   * này KHÔNG. Bản kia CHẶT HƠN ⇒ khi hợp nhất thì hợp nhất VỀ PHÍA nó. RLS vẫn là sàn cho chỗ này
+   * nên hôm nay không rò, nhưng đừng lấy hình dạng ở đây làm chuẩn.
+   *
+   * Cả hai đều fail-closed `Team`/`Department` → 0 hàng: `users` không mang org-mapping. Hệ quả phi
+   * đơn điệu (thêm role có thể LÀM MẤT hàng vì `resolveStrongestScope` lấy max) mô tả đầy đủ ở
+   * `docs/plans/S6-SEC-ORGSCOPE-1.md` §2.1 — sửa phải sửa CẢ HAI cùng lúc, không vá lẻ một bên.
+   */
   private buildUserScopeCondition(scope: DataScope | null, actor: AuthUserActor): SQL {
     switch (scope) {
       case "System":

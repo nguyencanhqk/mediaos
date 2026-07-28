@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable, Logger } from "@nestjs/common";
 import { and, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { DataScope } from "@mediaos/contracts";
 import { employeeProfiles, users } from "../db/schema";
@@ -50,6 +50,8 @@ export interface EmployeeScopeTarget {
  */
 @Injectable()
 export class DataScopeService {
+  private readonly logger = new Logger(DataScopeService.name);
+
   constructor(
     private readonly permission: PermissionService,
     private readonly repo: DataScopeRepository,
@@ -156,14 +158,33 @@ export class DataScopeService {
    * `test/integration/org-directory-scope.int-spec.ts`.
    *
    * Team/Department FAIL CLOSED to 0 rows: `users` carries no org mapping, and §13 only ever grants
-   * Company on the account-read pair, so a narrower grant has no defined membership here. This mirrors
-   * `AuthUsersService.buildUserScopeCondition` exactly — the two account-listing endpoints share one
-   * permission pair, so they must not disagree on which rows it yields.
+   * Company on the account-read pair, so a narrower grant has no defined membership here. Same rule as
+   * `AuthUsersService.buildUserScopeCondition` — deliberately, so the two account-listing endpoints do
+   * not disagree on which rows a given scope yields.
    *
-   * NOTE (deliberate, plan §2.1): Team/Department therefore return LESS than Own. Non-monotonic, but
-   * it errs narrow, and no role holds those scopes on this pair today (measured on PROD 2026-07-28).
+   * ⚠️ NOT a byte-for-byte mirror (FULL gate 2026-07-28): the `Own` branch here ALSO carries `company_id`
+   * whereas `auth-users.service.ts` does not. This side is the stricter one — if the two are ever merged,
+   * merge TOWARD this shape; copying the `auth-users` shape would drop the tenant belt.
+   * ⚠️ NOT the same permission pair YET either: `/org/employees` gates `read:user`, `/auth/users` gates
+   * `view:user`, and `data_scope` is PER-(permission, role) — so tightening one does NOT tighten the
+   * other. `S6-SEC-PERMVERB-1` unifies the verb; until then treat them as two pairs that happen to agree.
+   *
+   * NOTE (deliberate, plan §2.1): Team/Department therefore return LESS than Own — non-monotonic in TWO
+   * ways. (1) Per-scope: Team < Own. (2) Across the grant UNION: `resolveStrongestScope` takes the max,
+   * so a user holding BOTH Own and Team resolves to Team and sees NOTHING — adding a role REMOVES rows.
+   * Both err narrow (never toward a leak), and no role holds those scopes on this pair today (measured on
+   * PROD 2026-07-28). The systemic fix — flooring Team/Department at the Own predicate so the lattice is
+   * monotonic — must be applied to BOTH endpoints at once, not smuggled in here (nợ N-1b).
    */
-  buildUserScopeCondition(scope: DataScope | null, ctx: ScopeContext): SQL {
+  buildUserScopeCondition(
+    scope: DataScope | null,
+    // Pick, not the full ScopeContext, ON PURPOSE (FULL gate 2026-07-28): this predicate consults ONLY
+    // these two fields, and `OrgService` builds the context by hand instead of calling resolveContext().
+    // Declaring the full type would make that call-site look complete while silently fail-closing to 0
+    // rows the day someone teaches this method about Team/Department. With Pick, that day breaks
+    // TYPECHECK at every call-site instead — loud beats silent.
+    ctx: Pick<ScopeContext, "userId" | "companyId">,
+  ): SQL {
     // Tenant ALWAYS carried, exactly as buildEmployeeScopeCondition does: never a bare predicate that
     // could match-all if RLS were ever bypassed.
     const tenant = eq(users.companyId, ctx.companyId);
@@ -175,6 +196,14 @@ export class DataScopeService {
       case "Own":
         return and(tenant, eq(users.id, ctx.userId)) ?? sql`false`;
       default:
+        // 0 rows over HTTP 200 is indistinguishable from "tenant has no users" at every layer above:
+        // `getCapabilities` publishes {pair: true} WITHOUT data_scope, so `useCan()` is true and the
+        // console renders its plain "no users" empty state to an admin whose tenant has dozens. Log it
+        // so the deny path leaves a trace an operator can actually find (nợ N-5, S6-SEC-ORG-1 §7).
+        this.logger.warn(
+          "account-directory read resolved to a scope with no defined membership on `users` → 0 rows",
+          { userId: ctx.userId, companyId: ctx.companyId, scope },
+        );
         return sql`false`;
     }
   }

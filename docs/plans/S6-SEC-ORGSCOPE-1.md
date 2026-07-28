@@ -77,7 +77,24 @@ Giữ lại như **defense-in-depth về sau**, không phải lời giải chín
 ### 2.1 Hệ quả phải nói rõ (không giấu)
 
 Role có scope `Team`/`Department` trên cặp đọc user sẽ nhận **0 hàng** — tức **hẹp hơn cả `Own`**.
-Đây là **phi đơn điệu** và trông lạ, nhưng:
+
+**Bổ sung sau FULL gate (security-reviewer):** phi đơn điệu **KHÔNG chỉ ở mức "Team < Own"** như bản
+đầu của mục này mô tả — nó lan sang **phép hợp grant**. `resolveStrongestScope` lấy `max(SCOPE_STRENGTH)`,
+nên user giữ **đồng thời** `Own` và `Team` resolve ra `Team` ⇒ **0 hàng**. Ca tái lập: user U có role
+A(`Own`) → `/org/employees` = `[U]`; **gán THÊM** role B(`Team`) → `/org/employees` = `[]`.
+**Thêm quyền làm MẤT quyền.** Fail-closed nên không phải lỗ hổng, nhưng là bẫy vận hành thật (admin
+sẽ đọc thành "màn RBAC hỏng").
+
+Đây là **hành vi toàn hệ**, không phải của riêng route này — `/auth/users` cũng vậy, cùng
+`resolveStrongestScope`, cùng nhánh `false`. Vì thế **không sửa ở WO này**: lời giải (hạ sàn
+`Team`/`Department` xuống chính vị từ `Own` để mạng scope đơn điệu) phải áp cho **CẢ HAI** endpoint
+một lượt, nếu không lại đẻ ra đúng thứ drift mà §2 đang tránh. Ghi thành **nợ N-1b** trong `src[]`
+của `S6-SEC-PERMVERB-1` — WO đó là lúc hai route về chung một cặp quyền, tức thời điểm đúng để hợp nhất.
+
+Cái WO này **có** làm để bớt đau: nhánh fail-closed nay ghi `logger.warn` (xem §5.2), nên "0 hàng vì
+scope" phân biệt được với "0 hàng vì tenant rỗng" trong log.
+
+Vẫn giữ `false` (không hạ sàn về `Own`) vì:
 
 - nó **giống hệt** `GET /auth/users` hôm nay (không đẻ hành vi thứ hai),
 - fail-closed sai về phía **hẹp**, không phải phía rò,
@@ -149,6 +166,38 @@ done_when #4 cho hai đường; chọn **giữ**, vì:
    nữa — nó gây **màn hình rỗng** (fail-closed). Vẫn là hồi quy đáng vỡ to tiếng. Thông điệp
    `expect` đã viết lại theo đúng nghĩa mới, không để ai đọc nhầm là hàng rào an toàn.
 
+### 5.2 Sửa sau FULL gate (3 reviewer, 2026-07-28 — tất cả PASS)
+
+Gate chạy: `security-reviewer` · `rls-tenant-isolation-tester` (**thay** `database-reviewer`, agent
+không có trong môi trường) · `general-purpose` mang brief `silent-failure-hunter` (**thay** agent cùng
+tên, không có) — theo tiền lệ `S6-SEC-ORG-1` §7c. **0 CRITICAL. 1 HIGH + 6 MEDIUM đã vá NGAY trong WO:**
+
+| # | Phát hiện | Đã làm |
+| --- | --- | --- |
+| F1 (HIGH) | Nhánh fail-closed **im lặng tuyệt đối**. `getCapabilities` phát `{pair:true}` KHÔNG kèm `data_scope` ⇒ `useCan()` = true ⇒ console render "không có user nào" cho tenant có 45 người, admin không có đường chẩn | `logger.warn` ở nhánh `default` kèm `userId·companyId·scope`. (Mirror sang `auth-users` = nợ N-1b, không làm lẻ ở đây) |
+| F2 (MED) | Comment ở repo nói `inArray` **vá một lỗ rò** — SAI: `membersByUser.get(u.id)` đã chặn theo id, bỏ `inArray` cũng không rò. Và test "khoá" nó xanh tầm thường (`uOwn` không thuộc team nào ⇒ xoá `inArray` vẫn xanh) | Comment hạ về đúng "defense-in-depth + chặn phình query"; `uOwn` vào `teamA`; ca đổi thành **khẳng định dương** (`teams == [teamA]`); bỏ `?? []` |
+| F3 (MED) | Tôi biến census `org.permissions.spec.ts` từ pin **độc lập** thành **vòng tròn** — cho nó đọc chính hằng số controller đọc ⇒ đổi hằng số thành `read:team` census vẫn PASS | **Hoàn nguyên về literal**, kèm chú thích "đừng DRY, đây là pin độc lập". Comment ở `org.service.spec.ts` viết lại cho đúng thứ nó THẬT SỰ canh |
+| F4 (MED) | Ca "không rò email" thiếu `expect(status)` ⇒ route 500/403 vẫn xanh; và xanh cả khi **bỏ hẳn cột `email`** khỏi projection | Thêm assert `200` + khẳng định **dương** đối trọng (`Own` PHẢI thấy email của chính mình) |
+| F5 (MED) | Call-site dựng `ScopeContext` **thiếu** (không gọi `resolveContext`). Hôm nay vô hại; ngày ai đó dạy method này về `Team` thì nó lặng lẽ trả 0 hàng | Thu hẹp tham số thành `Pick<ScopeContext,"userId"\|"companyId">` ⇒ ngày đó **vỡ typecheck** ở mọi call-site thay vì rò im lặng |
+| F6 (MED) | Docstring nói "mirrors `AuthUsersService` **exactly**" — không đúng (nhánh `Own` bản mới CÓ thêm vế tenant); và nói hai route "share one permission pair" — chưa đúng cho tới khi PERMVERB xong | Docstring sửa cả hai, ghi rõ **hợp nhất phải hợp nhất VỀ PHÍA bản chặt hơn** |
+| — (MED) | Nợ N-1b/N-1c chỉ nằm trong **văn xuôi** plan, không có trong `backlog.mjs`/RELEASE-02 ⇒ "nợ không ai đòi" | N-1c seed thành WO `S6-SEC-ORGTEAMSCOPE-1` + mở trong RELEASE-02; N-1b vào `src[]` của `S6-SEC-PERMVERB-1`; back-reference hai chiều thêm vào `auth-users.service.ts` |
+
+**LOW/INFO ghi nhận, KHÔNG sửa ở đây:** toán tử `??` trước vị từ `false` không thể chạm tới (nhưng
+cần cho kiểu trả về `SQL`) · `inArray` không có trần bind-param (PROD 45 user/tenant, trần PG 65535) · thiếu composite
+FK `team_members(company_id,team_id)` và policy `users_all_tenant_read`/`mediaos_readonly` mong manh
+→ **đã chuyển thành ca cụ thể trong `src[]` của `S6-QA-TENANTWRITE-1`** · `resolveStrongestScope` nuốt
+lỗi hạ tầng thành 403 "out of permission scope" (nợ N-3 toàn hệ, có sẵn từ trước).
+
+### 5.3 Lỗ MỚI phát hiện, KHÔNG do WO này gây ra → `S6-SEC-ORGTEAMSCOPE-1`
+
+2/3 reviewer chỉ độc lập vào cùng một chỗ: `GET /org/teams/:id/members` trả `userEmail` +
+`userFullName`, gate **chỉ** `read:team`, **không** ép `data_scope`. Role `read:user@Own` +
+`read:team@Company` ⇒ `/org/employees` trả đúng 1 hàng (N-1 đã khoá) rồi **`/org/teams` →
+`/org/teams/:id/members` lấy lại trọn danh bạ email**. Gốc rễ chung: `PermissionGuard` không đọc
+`data_scope` một lần nào. Mức: HIGH (rls-tester) / MEDIUM (security-reviewer); không BLOCK PR này vì
+nằm ngoài `paths` đã khai và không do nó gây ra — **nhưng nó khiến câu "N-1 đóng" phải kèm điều kiện**,
+nên đã ghi vào RELEASE-02 + `permission-matrix-spec.md` + backlog thay vì để trôi.
+
 ## 6. Ngoài phạm vi
 
 - Đổi động từ `read:user` → `view:user` — là `S6-SEC-PERMVERB-1` (cần migration).
@@ -157,7 +206,8 @@ done_when #4 cho hai đường; chọn **giữ**, vì:
 - Refactor `AuthUsersService` để dùng chung vị từ mới: **cố ý không làm** — `UsersModule` chưa inject
   `DataScopeService`, thêm phụ thuộc DI vào đường `/auth/users` (crown) để đổi lấy DRY là **đánh đổi
   sai** ở WO này (memory `systemjobhandler-optional-dbw-di` — sai DI đổ dây chuyền 100+ int-spec).
-  Ghi thành nợ N-1b, kèm chú thích trỏ hai chiều giữa hai chỗ.
+  ⇒ **nợ N-1b**, nay đã ĐĂNG KÝ THẬT (không chỉ trong văn xuôi): `src[]` của `S6-SEC-PERMVERB-1` +
+  chú thích trỏ **hai chiều** ở cả `data-scope.service.ts` lẫn `auth-users.service.ts`.
 
 ## 7. Bằng chứng RED → GREEN (lane `mediaos_orgscope`, chain `0000→0532` áp sạch)
 

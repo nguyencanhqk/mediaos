@@ -26,7 +26,6 @@ import { ForbiddenException, type ExecutionContext } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OrgController } from "./org.controller";
-import { ORG_EMPLOYEE_DIRECTORY } from "./org.permissions";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import {
   REQUIRE_PERMISSION,
@@ -69,13 +68,12 @@ const GUARDED_READS: ReadonlyArray<{
   action: string;
   resourceType: string;
 }> = [
-  // S6-SEC-ORGSCOPE-1: đọc từ hằng số dùng chung, KHÔNG viết literal. `S6-SEC-PERMVERB-1` đổi động từ
-  // sang `view:user` ở đúng một chỗ (`org.permissions.ts`) và census này tự đi theo.
-  {
-    handlerName: "listEmployees",
-    action: ORG_EMPLOYEE_DIRECTORY.action,
-    resourceType: ORG_EMPLOYEE_DIRECTORY.resourceType,
-  },
+  // ⚠️ LITERAL CÓ CHỦ ĐÍCH — ĐỪNG "DRY" thành `ORG_EMPLOYEE_DIRECTORY` (FULL gate 2026-07-28 đã bắt
+  // đúng lỗi này ở vòng 1). Census là pin ĐỘC LẬP: nó tồn tại để nói "route phải gate ĐÚNG cặp NÀY".
+  // Cho nó đọc chính hằng số mà controller đọc thì nó thành tautology — đổi hằng số thành `read:team`
+  // census vẫn PASS. `S6-SEC-PERMVERB-1` PHẢI sửa cả hai chỗ, và việc nó buộc phải sửa ở đây chính là
+  // tác dụng của pin, không phải phiền toái.
+  { handlerName: "listEmployees", action: "read", resourceType: "user" },
   { handlerName: "listTeams", action: "read", resourceType: "team" },
   { handlerName: "listTeamMembers", action: "read", resourceType: "team" },
 ];

@@ -291,10 +291,16 @@ describe("OrgService (F3 breadth)", () => {
   // ── S6-SEC-ORGSCOPE-1 (N-1) — danh bạ phải BOUND theo data_scope ───────────────────────────────
 
   it("listEmployees resolve scope theo ĐÚNG cặp quyền mà controller gate", async () => {
-    // Chốt chống bẫy "gate một cặp, resolve scope một cặp khác" (memory
-    // read-path-gate-pair-must-match-download-pair): cả hai vế phải đọc từ ORG_EMPLOYEE_DIRECTORY.
-    // Khi S6-SEC-PERMVERB-1 đổi động từ sang `view:user`, ca này tự đi theo — nếu ai đó chỉ đổi
-    // decorator mà quên service (hoặc ngược lại), literal sẽ lệch và test ĐỎ.
+    // Ca này khẳng định service resolve scope theo ĐÚNG hằng số, KHÔNG phải một cặp tự chế.
+    //
+    // ⚠️ NÓI RÕ NÓ *KHÔNG* CANH GÌ (FULL gate 2026-07-28 bắt được comment cũ nói quá): nó KHÔNG bắt
+    // được "đổi decorator mà quên service". Spec này không chạm controller, và cả hai vế cùng import
+    // một hằng số nên về mặt cấu trúc không có gì lệch được. Thứ THẬT SỰ chống trôi là:
+    //   1. `import` chung ở `org.controller.ts` + `org.service.ts` (sự thật cấu trúc, không phải test),
+    //   2. census literal ĐỘC LẬP ở `org.permissions.spec.ts` (route phải gate đúng cặp đó),
+    //   3. `DIRECTORY_PAIR` literal ĐỘC LẬP ở `test/integration/org-directory-scope.int-spec.ts` —
+    //      hằng số trôi ⇒ seed một cặp mà guard đòi cặp khác ⇒ 403 hàng loạt, ĐỎ TO TIẾNG (CI có chạy:
+    //      `.github/workflows/api.yml` đặt LANE_DB cho step test).
     const { service, dataScope } = makeService();
     await service.listEmployees({ id: USER_ID, companyId: COMPANY_ID });
     expect(dataScope.resolveAndAssert).toHaveBeenCalledWith(

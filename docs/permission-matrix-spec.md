@@ -83,6 +83,15 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 >
 > Cố ý **phi đơn điệu** (`Team` hẹp hơn `Own`): sai về phía 0 hàng, không sai về phía rò. Muốn `Team`
 > có nghĩa thật thì phải thêm org-mapping cho `users` — làm MỘT LẦN cho cả hai route, không vá lẻ.
+> Phi đơn điệu còn có vế thứ hai: `resolveStrongestScope` lấy **max**, nên user giữ ĐỒNG THỜI `Own` và
+> `Team` resolve ra `Team` ⇒ **0 hàng** — thêm role có thể LÀM MẤT quyền xem. Fail-closed, không rò,
+> nhưng là bẫy vận hành thật; nhánh này nay có `logger.warn` để chẩn được.
+>
+> 🔴 **ĐỪNG ĐỌC KHỐI NÀY LÀ "/org ĐÃ CHỐT TOÀN BỘ".** `GET /org/teams/:id/members` trả `userEmail` +
+> `userFullName` mà **chưa** ép `data_scope` — chỉ có cặp `read:team`. Role `read:team`@`Own` vẫn lấy
+> được trọn danh bạ email qua đường teams, tức **vòng qua** vế `/org/employees` vừa siết ở trên. Đây
+> là **N-1c**, WO `S6-SEC-ORGTEAMSCOPE-1` (RELEASE-02, mở 2026-07-28). Gốc rễ chung: `PermissionGuard`
+> không đọc `data_scope`, nên MỌI route chỉ dựa vào guard đều thừa hưởng khoảng hở này.
 >
 > Trước 2026-07-27 cả bảy route đều Authenticated theo quy ước cũ "READ mở trong tenant" — đó chính là
 > KI-030: mọi user đã đăng nhập đọc được trọn danh bạ kèm email, trong khi `/hr/employees` cùng lớp dữ

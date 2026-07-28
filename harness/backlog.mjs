@@ -5530,6 +5530,9 @@ export const backlog = [
       // vị từ hình-`users` (`buildUserScopeCondition`) sống ở DataScopeService — tầng chia sẻ của MỌI
       // module, nên diff chạm nó PHẢI vào FULL gate chứ không chỉ vì có chữ "org" trong đường dẫn.
       "apps/api/src/permission/**",
+      // Chỉ THÊM chú thích back-reference (nợ N-1b) — bản sao thứ hai của cùng luật scope sống ở đây.
+      "apps/api/src/users/auth-users.service.ts",
+      "harness/backlog.mjs",
       "apps/api/test/**",
       "docs/_review/**",
       "docs/RELEASE/**",
@@ -5560,6 +5563,43 @@ export const backlog = [
     ],
   },
   {
+    id: "S6-SEC-ORGTEAMSCOPE-1",
+    module: "FOUNDATION",
+    layer: "SEC",
+    title:
+      "N-1c (FULL gate S6-SEC-ORGSCOPE-1 phát hiện) — GET /org/teams/:id/members trả userEmail+userFullName mà KHÔNG ép data_scope: lấy lại đúng danh bạ mà N-1 vừa khoá, chỉ qua cặp quyền khác",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/org/**",
+      "apps/api/src/permission/**",
+      "apps/api/test/**",
+      "docs/RELEASE/**",
+      "docs/permission-matrix-spec.md",
+      "docs/plans/S6-SEC-ORGTEAMSCOPE-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S6-SEC-ORGSCOPE-1"],
+    plan: "docs/plans/S6-SEC-ORGTEAMSCOPE-1.md",
+    src: [
+      "PHÁT HIỆN ĐỘC LẬP bởi 2/3 reviewer FULL gate của S6-SEC-ORGSCOPE-1 (2026-07-28): rls-tenant-isolation-tester chấm HIGH, security-reviewer chấm MEDIUM. KHÔNG do WO đó gây ra — cùng lớp lỗ, cùng controller",
+      "apps/api/src/org/org.repository.ts:257-258 listTeamMembers trả `userEmail` + `userFullName` · org.controller.ts:175-177 chỉ gate cặp `read:team` · org.service.ts:158-160 KHÔNG resolve scope",
+      "CA TÁI LẬP (reviewer viết ra, chưa chạy trên PROD): cấp role X = read:user@Own + read:team@Company ⇒ GET /org/employees trả 1 hàng (ĐÚNG, N-1 đã khoá), rồi GET /org/teams → GET /org/teams/:id/members trả email TOÀN BỘ thành viên mọi team",
+      "GỐC RỄ CHUNG: `PermissionGuard` KHÔNG đọc `data_scope` một lần nào (grep `dataScope` trong permission.guard.ts = 0 hit) ⇒ MỌI route chỉ gate bằng guard đều thừa hưởng lỗ này; role-admin ceiling chỉ chặn `System` (role-admin.service.ts:309-312)",
+      "⚠️ CHƯA ĐO ĐƯỢC scope thật của `read:team` trên PROD (truy vấn của reviewer bị chặn giữa chừng) — WO phải TỰ ĐO, đừng lấy bảng §1.2 của S6-SEC-ORGSCOPE-1 làm bằng chứng đã kiểm",
+      "MẪU CÓ SẴN: `DataScopeService.buildUserScopeCondition` (S6-SEC-ORGSCOPE-1) + hằng số cặp-quyền `org.permissions.ts`. Nhưng scope trên `teams` là CÂU HỎI THIẾT KẾ MỚI (Own/Team/Department nghĩa là gì với một team?) — phải trả lời trong plan, không suy diễn từ vị từ hình-`users`",
+      "memory: read-path-gate-pair-must-match-download-pair · reused-method-must-be-actor-scoped",
+    ],
+    done_when: [
+      "RED TRƯỚC: dựng ĐÚNG ca tái lập ở src[] (read:user@Own + read:team@Company) → chứng minh bằng log rằng /org/teams/:id/members hiện trả email của người ngoài scope, trong khi /org/employees đã chặn",
+      "Trả lời TƯỜNG MINH trong plan: `Own`/`Team`/`Department` trên `teams` nghĩa là gì (team mình là thành viên? team mình làm leader? fail-closed?) — kèm lý do, không mượn ngữ nghĩa của `users`",
+      "ĐO PROD TRƯỚC KHI SIẾT: role nào giữ `read:team` ở scope nào, bao nhiêu user thật — nêu rõ ai mất quyền xem so với hôm nay",
+      "Cân nhắc GỐC RỄ thay vì vá lẻ: có nên để `PermissionGuard` tự resolve+phơi `data_scope` cho handler không (sửa một chỗ, đóng cả lớp) — nếu KHÔNG chọn đường đó thì ghi lý do",
+      "permission-matrix-spec.md: khối CHỐT /org đang đọc như '/org đã chốt' — sửa cho khớp, vì hôm nay vế teams CHƯA có scope",
+      "FULL gate security-reviewer + rls-tenant-isolation-tester PASS; RELEASE-02 mở + đóng KI kèm số đo",
+    ],
+  },
+  {
     id: "S6-SEC-PERMVERB-1",
     module: "AUTH",
     layer: "SEC",
@@ -5586,6 +5626,11 @@ export const backlog = [
       "Migration: đánh số TIẾP head tại thời điểm làm (head 0531 lúc seed; S6-SEC-LOGINLOG-1 đã nhận 0532) — KHÔNG hardcode số ở đây",
       "⚠️ CẤM blanket grant. memory permissions-0005-bulk-grant-trap: 0005 grant qua INSERT...SELECT nên grep literal TRƯỢT — đọc bằng truy vấn DB, đừng grep",
       "memory: blanket-grant-migration-role-drift (role sinh SAU migration CROSS JOIN lỡ grant) · migration-expand-contract-required (nếu chọn BỎ một động từ thì phải tách 2 release, không revoke cùng lúc code còn enforce)",
+      "⚠️ ĐÍNH CHÍNH TIỀN ĐỀ (đo 2026-07-28, §13 = docs/plans/S2-AUTH-SEED-1.md): §13 ghi AUTH.USER.VIEW → view:user = Employee `-` · **Manager `-`** · HR Company · Company-Admin Company. Vậy `manager` KHÔNG lệch — nó ĐÚNG thiết kế; backfill `manager` là MỞ RỘNG QUYỀN ngoài §13. `hr-manager`(…009) + `project-manager`(…002) là MEDIA-ERA (0444 header ghi rõ 'KHÔNG gộp hr-manager …009 media-era'), nằm NGOÀI §13 ⇒ de-media-fy nói không đụng. Chỉ `hr` lệch thật, VÀ nó ĐÃ CÓ view:user ⇒ đổi gate là đủ, 0 grant mới",
+      "ĐO PROD 2026-07-28: role CÓ user thật = employee(45, không grant) · SA(6, có CẢ read:user lẫn view:user @Company) · company-admin(1, như SA). ⇒ đổi gate read:user→view:user ảnh hưởng 0 user sống; pha EXPAND đã xảy ra từ 0444 nên KHÔNG cần tách 2 release cho vế gate",
+      "ADR đã chốt với owner 2026-07-28: **view:user** (canonical). Lý do: module-app-metadata.ts:10 đã tuyên bố read:user là LEGACY 'KHÔNG dùng'; /auth/users + role-admin + dashboard USER_SUMMARY đều gate view:user; /org/employees là chỗ DUY NHẤT còn lệch",
+      "S6-SEC-ORGSCOPE-1 đã gom cặp quyền về MỘT hằng số `apps/api/src/org/org.permissions.ts` ⇒ vế code chỉ là đổi 1 dòng. NHƯNG còn 2 pin LITERAL ĐỘC LẬP cố ý phải sửa cùng: `org.permissions.spec.ts` (census) + `DIRECTORY_PAIR` trong `test/integration/org-directory-scope.int-spec.ts`. Chúng literal CÓ CHỦ ĐÍCH (import hằng số ⇒ pin thành tautology) — đọc chú thích tại chỗ trước khi 'DRY'",
+      "NỢ N-1b GẮN KÈM (FULL gate S6-SEC-ORGSCOPE-1): có HAI bản cài đặt của cùng luật scope hình-`users` — `DataScopeService.buildUserScopeCondition` và `AuthUsersService.buildUserScopeCondition` (private). Sau WO này hai route dùng CÙNG cặp quyền ⇒ đây là lúc đúng để hợp nhất. Hợp nhất VỀ PHÍA bản DataScopeService (nhánh Own của nó CÓ vế company_id, bản auth-users KHÔNG). Kèm theo: cân nhắc bỏ tính PHI ĐƠN ĐIỆU (user giữ ĐỒNG THỜI Own+Team resolve ra Team ⇒ 0 hàng ⇒ THÊM quyền làm MẤT quyền) bằng cách hạ sàn Team/Department xuống vị từ Own — phải sửa CẢ HAI endpoint cùng lúc",
     ],
     done_when: [
       "Quyết định chốt MỘT động từ, ghi thành ADR/DECISIONS kèm lý do — không cấp chồng cả hai rồi để WO sau tự đoán",
@@ -5730,6 +5775,7 @@ export const backlog = [
       "mv-dashboard.service.ts:36 — mv_dashboard_output là 'media-era PARKED, 0 consumer' ⇒ ứng viên RÚT BỀ MẶT thay vì bọc thêm hạ tầng",
       "apps/api/src/dashboard/dashboard-refresh.service.ts:73-99 — đường refresh (CONCURRENTLY CHỈ task_status; output KHÔNG BAO GIỜ concurrently được vì unique index là BIỂU THỨC COALESCE) — không được làm gãy",
       "apps/api/src/dashboard/mv-taskstatus-canonical.int.spec.ts (D-30, mig 0502) — regression phải giữ xanh",
+      "⚠️ SỐ MIGRATION: title + done_when dưới đây ghi `0533` theo head lúc seed. Head THẬT lúc này = 0532, và S6-SEC-PERMVERB-1 (làm TRƯỚC theo thứ tự owner chốt 2026-07-28) sẽ lấy 0533 ⇒ WO này lấy **0534**. ĐỌC head thật lúc thi công, KHÔNG tin số ở đây (memory wo-paths-drive-gate-and-scheduler — trùng số migration)",
     ],
     done_when: [
       "ĐO TRƯỚC: liệt kê MỌI câu SQL chạm 2 matview + role nào đang có SELECT (đọc ACL từ Postgres THẬT, không suy đoán từ migration)",
@@ -5863,6 +5909,10 @@ export const backlog = [
       "apps/api/test/integration/rls-registry.ts — 156 entry `table:` ⇒ 156 × 3 = 468 ca (KI-037 ghi 465; chênh do `skipIf(tc.skipNoContext)`)",
       "Vế WITH CHECK của policy là thứ CHƯA có lưới nào chạm ở tầng registry — KI-032 (tenant admin ghi được lên role hệ thống toàn cục) chính là lỗ vế GHI",
       "Có sẵn ca ghi lẻ theo module (att-core-tenant-deny · task-core-tenant-deny · foundation-tables-tenant-deny · *-appendonly) — ĐO trước xem phủ bao nhiêu/156 bảng, KHÔNG viết lại cái đã có",
+      "🎯 HAI CA CỤ THỂ do rls-tenant-isolation-tester đo được khi gate S6-SEC-ORGSCOPE-1 (2026-07-28) — thêm vào lưới, đây là bằng chứng đã chạy chứ không phải phỏng đoán:",
+      "  (a) SÀN TENANT CỦA `users` ĐANG TREO VÀO MỘT CỜ ROLE: policy `users_all_tenant_read ON users FOR SELECT TO mediaos_readonly USING (true)` (mig 0346_ac9_all_tenant_readonly.sql:66) là read TOÀN TENANT sống thật — đo: `SET LOCAL ROLE mediaos_readonly` thấy 4/4 user của CẢ HAI tenant. `mediaos_app` LÀ member của `mediaos_readonly` nhưng `WITH INHERIT FALSE` (0346:47); đo `pg_has_role(current_user,'mediaos_readonly','MEMBER')=t` nhưng `'USAGE'=f`. Ai đó chạy `GRANT mediaos_readonly TO mediaos_app` thiếu INHERIT FALSE ⇒ /org/employees biến thành đọc chéo tenant IM LẶNG. Ca đề xuất: assert `pg_has_role('mediaos_app','mediaos_readonly','USAGE') = false` + probe 2-tenant trên `users` bằng app role",
+      "  (b) THIẾU composite FK `team_members(company_id, team_id) → teams(company_id, id)`: đo được `mediaos_app` dưới ctx=A INSERT ĐƯỢC hàng trỏ `team_id` của tenant B (`INSERT 0 1` — FK enforcement bỏ qua RLS theo thiết kế PG). Đường ĐỌC an toàn nhờ innerJoin, nên còn lại là oracle đoán-UUID mù + `ON DELETE CASCADE` chéo tenant. Đây đúng dạng lỗ vế GHI mà KI-037 nói lưới hiện tại không chạm",
+      "GUC rác: `app.current_company_id='not-a-uuid'` → `ERROR: invalid input syntax for type uuid` (NULLIF chỉ trung hoà chuỗi RỖNG). Vẫn fail-closed nhưng là lỗi 500 chứ không phải deny — quyết định xem có đưa vào lưới không",
     ],
     done_when: [
       "ĐO TRƯỚC (số, không phải cảm giác): trong 156 bảng của rls-registry, bao nhiêu bảng ĐÃ có ca deny GHI chéo tenant ở spec khác — bảng đối chiếu vào plan; phần còn lại là phạm vi thật của WO",

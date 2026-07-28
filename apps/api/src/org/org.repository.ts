@@ -336,9 +336,19 @@ export class OrgRepository {
         .from(users)
         .where(and(eq(users.companyId, companyId), isNull(users.deletedAt), scopeCond));
 
-      // Bound membership theo ĐÚNG tập user đã lọc. Thiếu vế này thì lọc user xong vẫn rò "ai thuộc
-      // nhóm nào" cho người ngoài scope — nửa danh bạ. Tập rỗng ⇒ bỏ hẳn truy vấn (inArray với mảng
-      // rỗng là SQL không hợp lệ ở một số driver, và dù sao cũng không có gì để ghép).
+      // Bound membership theo ĐÚNG tập user đã lọc.
+      //
+      // ĐÍNH CHÍNH (FULL gate 2026-07-28 — bản đầu của comment này nói quá): đây là DEFENSE-IN-DEPTH +
+      // chặn phình truy vấn, KHÔNG phải vá một lỗ rò. `membersByUser.get(u.id)` bên dưới chỉ ghép theo
+      // id đã hiện, nên membership của user ngoài scope không có đường ra response kể cả khi bỏ vế này.
+      // Nó tồn tại để lớp bảo vệ không phụ thuộc DUY NHẤT vào hình dạng của bước map — ai đó đổi sang
+      // trả `memberRows` phẳng là mất ngay lớp đó. Đừng gỡ vì "thừa".
+      //
+      // ⚠️ `innerJoin(teams, …)` bên dưới thì NGƯỢC LẠI — nó CHỊU LỰC: FULL gate đo được rằng dựng hàng
+      // `team_members` lệch (company_id=A, team_id của B) rồi chạy truy vấn này KHÔNG có join sẽ rò
+      // UUID team của tenant B. Không được hạ thành LEFT JOIN.
+      //
+      // Tập rỗng ⇒ bỏ hẳn truy vấn (inArray mảng rỗng là SQL không hợp lệ ở một số driver).
       const visibleIds = userRows.map((u) => u.id);
       const memberRows = visibleIds.length
         ? await tx
