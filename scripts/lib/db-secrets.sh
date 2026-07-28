@@ -3,7 +3,7 @@
 #
 # S6-SEC-ROTATE-1 (KI-043) — VÌ SAO FILE NÀY TỒN TẠI
 # ────────────────────────────────────────────────────────────────────────────────────────────────
-# Trước 2026-07-28, mỗi script tự mang một fallback literal kiểu `${OWNER_DB_PASSWORD:-changeme_dev_only}`.
+# Trước 2026-07-28, mỗi script tự mang một fallback literal kiểu `${OWNER_DB_PASSWORD:-<literal họ changeme_*>}`.
 # Repo PUBLIC + cụm PROD chạy đúng literal đó ⇒ mọi "giá trị mặc định cho tiện" là một chìa khoá thật.
 # Tệ hơn: fallback im lặng ⇒ sau khi rotate, script vẫn chạy (nối bằng mật khẩu cũ) rồi mới đỏ ở tận
 # trong ruột, không ai lần ra nguyên nhân.
@@ -39,25 +39,41 @@ _db_secrets_pw_from_url() {
     *) return 0 ;;
   esac
   local rest="${url#*://}"
-  local userinfo="${rest%%@*}"
+  # Chỉ phần TRƯỚC dấu '/' đầu tiên mới là authority. Không cắt thì URL không có userinfo mà có '@' ở
+  # query (`postgres://h:5432/db?opt=a@b`) sẽ trả ra rác làm "mật khẩu".
+  local authority="${rest%%/*}"
+  case "$authority" in
+    *:*@*) : ;;
+    *) return 0 ;;
+  esac
+  local userinfo="${authority%%@*}"
   local pw="${userinfo#*:}"
   pw="${pw%\"}"; pw="${pw#\"}"; pw="${pw%\'}"; pw="${pw#\'}"
-  # %XX → ký tự. printf '%b' hiểu \xNN.
-  printf '%b' "$(printf '%s' "$pw" | sed -e 's/%\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g')"
+  # %XX → ký tự, qua printf '%b' (hiểu \xNN).
+  # PHẢI escape backslash THÔ trước: '%b' cũng diễn giải \n \t \\ và nhất là \c — \c KẾT THÚC output,
+  # tức mật khẩu chứa '\c' sẽ bị CẮT CỤT âm thầm rồi auth trượt ở tận đâu. Mật khẩu base64url hiện tại
+  # không có '\', nhưng hàm này là nguồn duy nhất cho mọi script bash nên phải đúng cho mật khẩu sau này.
+  printf '%b' "$(printf '%s' "$pw" | sed -e 's/\\/\\\\/g' -e 's/%\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g')"
 }
 
 # Nạp các biến mật khẩu DB từ file .env nếu chúng CHƯA có trong môi trường.
 # Precedence khớp apps/api/src/config/load-env.ts: env thật THẮNG file.
 db_secrets_load() {
-  local self_dir root env_file k v
+  local self_dir root k v env_file
   self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   root="$(cd "$self_dir/../.." && pwd)"
 
+  # DUYỆT QUA TẤT CẢ file ứng viên, KHÔNG dừng ở file đầu tiên tồn tại.
+  # Vì sao: chạy từ `apps/api` thì `$PWD/.env` = `apps/api/.env` — file đó CÓ tồn tại nhưng chỉ chứa
+  # JWT_SECRET/VALKEY_URL, không có mật khẩu DB. Bản đầu `break` ngay ở file đó rồi bỏ qua root `.env`
+  # ⇒ báo "THIẾU APP_DB_PASSWORD" dù mật khẩu nằm sẵn ở gốc repo (đo thật 2026-07-28).
+  # Cách này khớp `ENV_FILE_PATHS` của apps/api/src/config/load-env.ts: lặp qua mọi file, FIRST-WINS
+  # theo từng KHOÁ (file đứng trước thắng), env thật vẫn thắng tất cả.
+  local -a env_files=()
   for env_file in "${MEDIAOS_ENV_FILE:-}" "$PWD/.env" "$root/.env"; do
-    [ -n "$env_file" ] && [ -f "$env_file" ] && break
-    env_file=""
+    [ -n "$env_file" ] && [ -f "$env_file" ] && env_files+=("$env_file")
   done
-  [ -n "$env_file" ] || return 0
+  [ "${#env_files[@]}" -gt 0 ] || return 0
 
   # CHỈ export biến MẬT KHẨU. TUYỆT ĐỐI KHÔNG export DATABASE_*_URL.
   #
@@ -69,18 +85,24 @@ db_secrets_load() {
   #     do file .env lén quyết định hộ.
   for k in SUPERUSER_DB_PASSWORD OWNER_DB_PASSWORD APP_DB_PASSWORD WORKER_DB_PASSWORD \
            PGBOUNCER_AUTH_PASSWORD; do
-    if [ -z "${!k:-}" ]; then
+    [ -n "${!k:-}" ] && continue
+    for env_file in "${env_files[@]}"; do
       v="$(_db_secrets_read_key "$env_file" "$k")"
-      [ -n "$v" ] && export "$k=$v"
-    fi
+      if [ -n "$v" ]; then export "$k=$v"; break; fi
+    done
   done
 
   # `mediaos` (SUPERUSER) thường KHÔNG có biến riêng trong .env — mật khẩu của nó nằm trong
   # DATABASE_DIRECT_URL. Suy ra thay vì bắt người dùng khai trùng lặp (hai chỗ = hai chỗ lệch nhau).
   # Đọc vào biến CỤC BỘ: lấy được mật khẩu mà KHÔNG mang theo cái đích PROD đi cùng.
   if [ -z "${SUPERUSER_DB_PASSWORD:-}" ]; then
-    local direct_url
-    direct_url="${DATABASE_DIRECT_URL:-$(_db_secrets_read_key "$env_file" DATABASE_DIRECT_URL)}"
+    local direct_url="${DATABASE_DIRECT_URL:-}"
+    if [ -z "$direct_url" ]; then
+      for env_file in "${env_files[@]}"; do
+        direct_url="$(_db_secrets_read_key "$env_file" DATABASE_DIRECT_URL)"
+        [ -n "$direct_url" ] && break
+      done
+    fi
     if [ -n "$direct_url" ]; then
       v="$(_db_secrets_pw_from_url "$direct_url")"
       [ -n "$v" ] && export "SUPERUSER_DB_PASSWORD=$v"

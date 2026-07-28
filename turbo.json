@@ -18,7 +18,8 @@
     "WORKER_DB_PASSWORD",
     "PGBOUNCER_AUTH_PASSWORD",
     "SUPERUSER_DB_PASSWORD",
-    "OWNER_DB_PASSWORD"
+    "OWNER_DB_PASSWORD",
+    "TEST_DB_DENYLIST"
   ],
   "tasks": {
     "build": {

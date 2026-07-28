@@ -63,24 +63,30 @@ wait_pg() {
 # minh từ .env thay vì để người dùng ăn exit 1 từ sâu trong script. `$1 = --allow-protected` chỉ dùng bởi
 # `reset` (vừa xoá sạch volume sau xác nhận) — KHÔNG dùng cho `seed` trần.
 seed() {
+  # SEED_DIRECT_URL do người gọi export = ý định TƯỜNG MINH, THẮNG .env. Phải chụp TRƯỚC load_env vì
+  # load_env `export` đè mọi khoá có trong .env (nên "đặt DATABASE_DIRECT_URL rồi chạy lại" KHÔNG
+  # hoạt động — đó là lý do lời khuyên cũ sai).
+  local explicit="${SEED_DIRECT_URL:-}"
   load_env .env
-  [ -n "${DATABASE_DIRECT_URL:-}" ] || { err ".env thiếu DATABASE_DIRECT_URL -> không biết seed vào DB nào."; return 1; }
+  local target="${explicit:-${DATABASE_DIRECT_URL:-}}"
+  [ -n "$target" ] || { err "Không có SEED_DIRECT_URL lẫn DATABASE_DIRECT_URL -> không biết seed vào DB nào."; return 1; }
   # Tên DB = đoạn cuối path, bỏ query string nếu có.
-  local db; db="${DATABASE_DIRECT_URL##*/}"; db="${db%%\?*}"
-  [ -n "$db" ] || { err "Không parse được tên DB từ DATABASE_DIRECT_URL."; return 1; }
+  local db; db="${target##*/}"; db="${db%%\?*}"
+  [ -n "$db" ] || { err "Không parse được tên DB từ đích seed."; return 1; }
   if [ "${1:-}" != "--allow-protected" ]; then
     case "$db" in
       mediaos|mediaos_dev)
         err "DB đích '$db' được BẢO VỆ (PROD / dev-online) — seed demo sẽ ghi company demo + tài khoản quản trị lên dữ liệu THẬT."
-        err "Nếu THẬT SỰ muốn: SEED_ALLOW_PROTECTED_DB=$db bash scripts/dev.sh seed"
+        err "Muốn seed lại DB này : bash scripts/dev.sh reset (xoá sạch + migrate + seed, có xác nhận)."
+        err "Seed vào lane riêng  : SEED_DIRECT_URL=postgres://mediaos:<pw>@localhost:5432/mediaos_<lane> bash scripts/dev.sh seed"
         return 1 ;;
     esac
   else
     export SEED_ALLOW_PROTECTED_DB="$db"
   fi
   ( cd "$ROOT/apps/api" \
-      && SEED_DIRECT_URL="$DATABASE_DIRECT_URL" node demo-seed-base.mjs \
-      && SEED_DIRECT_URL="$DATABASE_DIRECT_URL" node demo-seed-full.mjs )
+      && SEED_DIRECT_URL="$target" node demo-seed-base.mjs \
+      && SEED_DIRECT_URL="$target" node demo-seed-full.mjs )
 }
 
 cmd="${1:-help}"; [ $# -gt 0 ] && shift

@@ -3,7 +3,7 @@
  *
  * VÌ SAO KHÔNG VIẾT THẲNG CHUỖI TRONG SPEC
  * ────────────────────────────────────────────────────────────────────────────────────────────────
- * 1. Năm spec từng dùng `process.env.S3_SECRET_KEY ??= "changeme_dev_only"` — CÙNG chuỗi với mật khẩu
+ * 1. Năm spec từng dùng `process.env.S3_SECRET_KEY ??= "<literal họ changeme_*>"` — CÙNG chuỗi với mật khẩu
  *    superuser Postgres của cụm PROD hồi đó. Bản thân fallback vô hại (presign S3 là HMAC offline, không
  *    xác thực với ai), nhưng nó nhân bản một literal thật ra khắp repo PUBLIC và làm nhiễu mọi lần quét.
  * 2. CLAUDE.md §5 (luật fixture-giống-secret): chuỗi high-entropy trong spec trip rule `generic-api-key`

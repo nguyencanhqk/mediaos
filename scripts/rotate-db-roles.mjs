@@ -30,9 +30,45 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const ENV_PATH = process.env.MEDIAOS_ENV_FILE ?? resolve(ROOT, ".env");
+const DEFAULT_ENV = resolve(ROOT, ".env");
+const ENV_PATH = process.env.MEDIAOS_ENV_FILE ? resolve(process.env.MEDIAOS_ENV_FILE) : DEFAULT_ENV;
 const CONTAINER = process.env.PG_CONTAINER ?? "mediaos-postgres";
 const SUPERUSER = process.env.PG_SUPERUSER ?? "mediaos";
+
+/**
+ * ⛔ CHỐT AN TOÀN — thêm sau một SỰ CỐ THẬT (2026-07-28, trong chính FULL gate của WO này).
+ *
+ * Chuyện đã xảy ra: một tác nhân review muốn thử script này mà KHÔNG đụng cụm thật, nên dựng `.env` giả
+ * trong thư mục nháp và một script `docker` giả để chặn. Trên Windows, `execFileSync("docker", …)` của
+ * Node resolve ra `docker.exe` THẬT qua PATHEXT, bỏ qua stub ⇒ script chạy với **mật khẩu giả** lên
+ * **cụm THẬT** và đổi cả 5 role. PROD không sập ngay (pool đang mở vẫn sống) nhưng mọi kết nối MỚI đều
+ * hỏng — đúng loại sự cố im lặng, chỉ lộ ra khi có người tình cờ nối lại.
+ *
+ * Bài học: `.env` quyết định MẬT KHẨU, còn `PG_CONTAINER` quyết định CỤM. Hai thứ đó độc lập nhau, nên
+ * "đổi env cho an toàn" KHÔNG hề làm script an toàn hơn. Script seed đã fail-closed từ đầu; script
+ * rotate — nguy hiểm hơn nhiều — thì chưa. Nay: dùng env file KHÁC mặc định ⇒ phải gọi ĐÚNG TÊN cụm
+ * mình định đổi, một hành động không thể làm nhầm.
+ */
+if (ENV_PATH !== DEFAULT_ENV && process.env.ROTATE_CONFIRM_CONTAINER !== CONTAINER) {
+  console.error(
+    [
+      "",
+      "[rotate-db-roles] ⛔ TỪ CHỐI: dùng env file KHÁC mặc định mà chưa xác nhận cụm đích.",
+      "",
+      `    env file : ${ENV_PATH}`,
+      `    mặc định : ${DEFAULT_ENV}`,
+      `    cụm đích : ${CONTAINER}   ← script sẽ ALTER ROLE trên ĐÚNG cụm này`,
+      "",
+      "  `.env` chỉ quyết định MẬT KHẨU; cụm đích do PG_CONTAINER quyết định. Trỏ sang một .env khác",
+      "  KHÔNG làm lệnh này an toàn hơn — nó vẫn đổi mật khẩu trên cụm ở trên (đã gây sự cố thật).",
+      "",
+      "  Nếu ĐÚNG là ý bạn, khai đích tường minh:",
+      `    ROTATE_CONFIRM_CONTAINER=${CONTAINER} MEDIAOS_ENV_FILE=... node scripts/rotate-db-roles.mjs`,
+      "",
+    ].join("\n"),
+  );
+  process.exit(1);
+}
 
 /** Role → biến env. Giữ ĐỒNG BỘ với ROLE_PASSWORDS trong setup-db-roles.mjs. */
 const ROLES = [
@@ -141,7 +177,7 @@ console.log(
 );
 execFileSync(process.execPath, [resolve(ROOT, "scripts/setup-db-roles.mjs")], {
   stdio: "inherit",
-  env: { ...process.env, ...env },
+  env: { ...env, ...process.env },
 });
 
 console.log(

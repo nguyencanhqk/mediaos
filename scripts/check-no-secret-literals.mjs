@@ -6,7 +6,7 @@
  * VÌ SAO
  *
  * Repo này PUBLIC. Tới 2026-07-28 nó chứa mật khẩu SUPERUSER Postgres của cụm PROD dưới dạng "giá trị
- * mặc định cho tiện" (`changeme_*`) ở 17 file tracked, và `docker-compose.yml` bind cụm ra `0.0.0.0`.
+ * mặc định cho tiện" (họ `changeme_*`) ở 17 file tracked, và `docker-compose.yml` bind cụm ra `0.0.0.0`.
  * Hai thứ đó cộng lại là một lỗ hổng đang mở, không phải nợ kỹ thuật.
  *
  * Rotate mật khẩu KHÔNG đóng được lỗ hổng nếu literal có thể bò trở lại — đúng lớp lỗi KI-036 (vá ngọn,
@@ -14,6 +14,23 @@
  * bind loopback, đều làm ĐỎ ngay tại `harness/check.sh` và CI.
  *
  * Chạy:  node scripts/check-no-secret-literals.mjs        (exit 1 nếu vi phạm)
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────────────────
+ * BA BÀI HỌC ĐÃ TRẢ GIÁ, ĐỪNG ĐẢO NGƯỢC
+ *
+ * 1. QUÉT CẢ FILE CHƯA TRACKED. Bản đầu dùng `git ls-files` (chỉ file ĐÃ tracked) ⇒ hai file MỚI của
+ *    chính WO này không hề được quét, cổng báo XANH suốt, và chỉ ĐỎ sau khi commit. Một cổng bảo mật
+ *    mù với file mới là mù với đúng thứ rủi ro nhất. Nay dùng `--cached --others --exclude-standard`
+ *    (file đã tracked + file mới chưa gitignore). `.env` vẫn bị loại vì nằm trong .gitignore.
+ *
+ * 2. DANH SÁCH TRẮNG, KHÔNG DANH SÁCH ĐEN. Luật bind-cổng bản đầu liệt kê "các dạng xấu" ⇒ FULL gate
+ *    dựng được 10 ca publish ra 0.0.0.0 mà cổng vẫn xanh (flow-style · anchor · alias · comment cuối
+ *    dòng khoá · seq cùng độ thụt · hostname bị nhận nhầm long-syntax · tên file khác…). Nay: hình dạng
+ *    nào KHÔNG hiểu được thì ĐỎ.
+ *
+ * 3. ĐỪNG TIN TÊN FILE. Bản đầu chỉ soi `docker-compose*.yml` ở gốc và `.env*.example`. Đổi tên file là
+ *    lách được. Nay: quét MỌI `.y(a)ml` rồi tự nhận diện compose bằng nội dung (`services:`), và mở
+ *    rộng họ file mẫu env sang `.sample`/`.template`/`.dist`/`env.example` (không dấu chấm đầu).
  *
  * NGUYÊN TẮC: KHÔNG danh sách miễn trừ. Mỗi ngoại lệ là một chỗ để literal quay lại. Cần nhắc tới họ
  * literal cũ trong văn bản thì viết `changeme_*` (có dấu sao) — cố ý không khớp luật 1.
@@ -28,50 +45,81 @@ const SKIP_EXT =
 /** File tự nó ĐỊNH NGHĨA các luật — nếu quét sẽ tự khớp chính mẫu của mình. */
 const SELF = "scripts/check-no-secret-literals.mjs";
 
+/** Họ file "mẫu env": thứ người ta copy thành `.env` rồi chạy thẳng. */
+const ENV_EXAMPLE_FILES = /(^|\/)\.?env[^/]*\.(example|sample|template|dist)$/i;
+
+/**
+ * Khoá mang secret — nhận theo HÌNH DẠNG TÊN, không theo danh sách liệt kê.
+ * FULL gate vòng 2: bản liệt kê bỏ sót SMTP_PASSWORD · VALKEY_PASSWORD · ADMIN_PASSWORD · LMS_NOTI_TOKEN.
+ *
+ * CỐ Ý KHÔNG dùng `_KEY$` trần: `S3_ACCESS_KEY` là ĐỊNH DANH công khai (cặp của nó, `S3_SECRET_KEY`,
+ * mới là bí mật — và đã khớp qua `SECRET`). Bắt cả access-key-id sẽ dạy người ta rằng cổng này hay báo
+ * oan, và cổng hay báo oan là cổng sẽ bị tắt. Các dạng khoá THẬT SỰ mang bí mật được liệt kê tường minh.
+ */
+const SECRET_KEY_SHAPE = /(PASSWORD|PASSWD|SECRET|TOKEN|CREDENTIAL|API_KEY|PRIVATE_KEY)$/i;
+
+/** Giá trị hợp lệ trong file mẫu: rỗng · placeholder cố ý sai · biến `${…}`. */
+function isPlaceholder(v) {
+  const s = stripQuotes(v.trim());
+  return s === "" || s === "__SET_ME__" || s.startsWith("${");
+}
+
+function stripQuotes(v) {
+  const m = v.match(/^(['"])([\s\S]*)\1$/);
+  return m ? m[2] : v;
+}
+
+/** Tách `KEY=VALUE` của file env, chấp nhận tiền tố `export ` và khoá có `-`/`.`. */
+function parseEnvLine(line) {
+  const m = line.match(/^\s*(?:export\s+)?([A-Za-z0-9_.-]+)\s*=\s*([\s\S]*)$/);
+  return m ? { key: m[1], raw: m[2].trim() } : null;
+}
+
 const RULES = [
   {
     id: "db-password-literal",
-    // Họ literal đã từng LÀ mật khẩu thật của cụm PROD: changeme_dev_only / _app_only / _worker_only /
-    // _pgbauth_only / changeme_at_least_32_chars… Yêu cầu ít nhất một ký tự chữ-số sau dấu gạch dưới,
-    // nên `changeme_*` trong văn xuôi KHÔNG khớp.
-    // `i`: FULL gate chỉ ra `CHANGEME_APP_ONLY` viết hoa lọt lưới. Một cổng phân biệt hoa-thường
-    // chỉ chặn được đúng cách gõ mà nó đã thấy.
+    // Họ literal đã từng LÀ mật khẩu thật của cụm PROD. Yêu cầu ít nhất một ký tự chữ-số sau dấu gạch
+    // dưới, nên `changeme_*` trong văn xuôi KHÔNG khớp. Cờ `i`: biến thể VIẾT HOA từng lọt.
     re: /changeme_[A-Za-z0-9]/gi,
     why: [
       "Literal họ `changeme_*` là mật khẩu THẬT của cụm Postgres PROD trước 2026-07-28 (KI-043).",
-      "Không đặt lại giá trị mặc định chạy được cho secret: dùng `__SET_ME__` trong file .env*.example,",
+      "Không đặt lại giá trị mặc định chạy được cho secret: dùng `__SET_ME__` trong file mẫu env,",
       "và đọc từ env ở đường chạy thật (scripts/lib/db-secrets.sh · scripts/setup-db-roles.mjs).",
+      "Nhắc tới họ literal cũ trong VĂN XUÔI thì viết `changeme_*` (có dấu sao) — cố ý không khớp.",
     ].join("\n    "),
   },
   {
     id: "env-example-real-secret",
-    // Chỉ áp cho file mẫu: khoá secret PHẢI để `__SET_ME__` (hoặc rỗng / biến `${...}`).
-    files: /(^|\/)\.env[^/]*\.example$/,
-    lineRe:
-      /^\s*(POSTGRES_PASSWORD|APP_DB_PASSWORD|WORKER_DB_PASSWORD|OWNER_DB_PASSWORD|SUPERUSER_DB_PASSWORD|PGBOUNCER_AUTH_PASSWORD|JWT_SECRET|MINIO_ROOT_PASSWORD|S3_SECRET_KEY|LMS_SSO_SECRET)=(.+)$/,
+    files: ENV_EXAMPLE_FILES,
+    lineRe: /^(?!\s*#)(.*)$/,
     lineCheck: (m) => {
-      const v = m[2].trim();
-      return v !== "" && v !== "__SET_ME__" && !v.startsWith("${");
+      const kv = parseEnvLine(m[1]);
+      if (!kv || !SECRET_KEY_SHAPE.test(kv.key)) return false;
+      return !isPlaceholder(kv.raw);
     },
     why: [
-      "File .env*.example là thứ người ta `cp` thành .env rồi chạy thẳng (CLAUDE.md §7).",
+      "File mẫu env là thứ người ta `cp` thành .env rồi chạy thẳng (CLAUDE.md §7).",
       "Một giá trị 'tiện' ở đây trở thành secret PROD ở nơi khác — đúng đường KI-027 và KI-043 đã đi.",
-      "Để `__SET_ME__` (cố ý không hợp lệ ⇒ fail-closed khi ai đó quên điền).",
+      "Mọi khoá tên kiểu *_PASSWORD/_SECRET/_TOKEN/_KEY phải để `__SET_ME__` (cố ý không hợp lệ).",
     ].join("\n    "),
   },
   {
     id: "env-example-secret-in-url",
-    // FULL gate 2026-07-28 (HIGH-2): luật `env-example-real-secret` chỉ soi dạng `KEY=value`, nên mật
-    // khẩu nhét vào phần userinfo của connection string LỌT SẠCH — mà đó ĐÚNG hình dạng đã gây ra
-    // KI-043 (`DATABASE_URL=postgres://mediaos_app:<mật khẩu thật>@…`). gitleaks cũng bỏ qua dạng này
-    // (đã kiểm: 3 dòng URL lọt, chỉ bắt các dòng `KEY=value`). Vì vậy phải có luật riêng.
-    files: /(^|\/)\.env[^/]*\.example$/,
-    lineRe: /^\s*[A-Z0-9_]+=\s*[a-z][a-z0-9+.-]*:\/\/([^@\s/]*)@/i,
+    // Mật khẩu nhét trong userinfo của connection string — ĐÚNG hình dạng đã gây ra KI-043
+    // (`DATABASE_URL=postgres://mediaos_app:<mật khẩu thật>@…`). gitleaks bỏ qua dạng này (nó soi
+    // `KEY=value`), nên đây là cổng DUY NHẤT chặn. Vòng 2: phải bóc nháy trước khi khớp — bản đầu đòi
+    // scheme đứng ngay sau `=` nên `KEY="postgres://…"` lọt sạch.
+    files: ENV_EXAMPLE_FILES,
+    lineRe: /^(?!\s*#)(.*)$/,
     lineCheck: (m) => {
-      const userinfo = m[1];
-      if (!userinfo.includes(":")) return false; // không có phần mật khẩu
-      const pw = userinfo.slice(userinfo.indexOf(":") + 1).trim();
-      return pw !== "" && pw !== "__SET_ME__" && !pw.startsWith("${");
+      const kv = parseEnvLine(m[1]);
+      if (!kv) return false;
+      const url = stripQuotes(kv.raw);
+      const u = url.match(/^[a-z][a-z0-9+.-]*:\/\/([^@/\s]*)@/i);
+      if (!u) return false;
+      const userinfo = u[1];
+      if (!userinfo.includes(":")) return false; // chỉ có user, không có mật khẩu
+      return !isPlaceholder(userinfo.slice(userinfo.indexOf(":") + 1));
     },
     why: [
       "Connection string trong file mẫu mang mật khẩu thật — ĐÚNG hình dạng đã làm rò cụm PROD (KI-043).",
@@ -81,15 +129,8 @@ const RULES = [
   },
   {
     id: "compose-port-wide-bind",
-    // FULL gate 2026-07-28 (HIGH-3): bản đầu dùng DANH SÁCH ĐEN (đếm dấu hai chấm, chỉ nhận dòng có
-    // dấu nháy kép, chỉ khớp tên file ở gốc repo) ⇒ lách được bằng YAML hoàn toàn bình thường:
-    // không nháy · nháy đơn · long-syntax (`target:`/`published:`) · file trong thư mục con ·
-    // và cả `"0.0.0.0:5433:5432"` (đủ 3 phần nên "hợp lệ").
-    //
-    // Nay đảo thành DANH SÁCH TRẮNG: chỉ chấp nhận địa chỉ bind loopback tường minh hoặc biến `${…}`
-    // có default loopback. MỌI hình dạng khác — kể cả hình dạng chưa ai nghĩ ra — đều ĐỎ.
-    // Một cổng bảo mật phải fail-closed với cái nó KHÔNG hiểu, không phải cho qua.
-    files: /(^|\/)(docker-)?compose[\w.-]*\.ya?ml$/i,
+    // KHÔNG tin tên file: quét mọi YAML, tự nhận diện compose bằng nội dung (xem bài học 3 ở đầu file).
+    files: /\.ya?ml$/i,
     fileScan: scanComposePorts,
     why: [
       "Port publish không bind loopback ⇒ Docker nghe trên MỌI interface (0.0.0.0).",
@@ -103,22 +144,33 @@ const RULES = [
 /** Địa chỉ bind được coi là AN TOÀN (loopback). Ngoài danh sách này ⇒ ĐỎ. */
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
+/** Khoá HỢP LỆ của long-syntax `ports:` (compose spec). Ngoài danh sách ⇒ coi là scalar, không phải key. */
+const LONG_PORT_KEYS = new Set([
+  "target",
+  "published",
+  "host_ip",
+  "protocol",
+  "mode",
+  "name",
+  "app_protocol",
+]);
+
 /**
  * Một mục `ports:` dạng ngắn có vi phạm không? Trả `null` nếu an toàn, hoặc lý do.
- * Danh sách TRẮNG: phải mở đầu bằng địa chỉ loopback tường minh, hoặc `${VAR}`/`${VAR:-loopback}`.
+ * DANH SÁCH TRẮNG: phải mở đầu bằng địa chỉ loopback tường minh, hoặc `${VAR:-<loopback>}`.
  */
 function shortPortViolation(rawSpec) {
-  const spec = rawSpec.trim().replace(/^["']|["']$/g, "");
+  const spec = stripQuotes(rawSpec.trim()).trim();
   if (!spec) return null;
 
-  // `${VAR}` hoặc `${VAR:-default}` ở vị trí địa chỉ bind.
   const varAtStart = spec.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}:/);
   if (varAtStart) {
     const def = (varAtStart[2] ?? "").trim();
-    // Không có default ⇒ do .env quyết định; chấp nhận (repo khai INFRA_BIND_ADDR mặc định loopback).
-    if (def === "" || LOOPBACK.has(def)) return null;
-    // Default là số cổng ⇒ đây là biến CỔNG đứng ở vị trí địa chỉ bind (tức mapping thiếu bind).
-    if (/^\d+$/.test(def)) return `thiếu địa chỉ bind (\`\${${varAtStart[1]}}\` là CỔNG, không phải địa chỉ)`;
+    if (LOOPBACK.has(def)) return null;
+    // KHÔNG có default ⇒ compose thay bằng RỖNG ⇒ `:PORT:PORT` ⇒ 0.0.0.0. Fail-closed (vòng 2).
+    if (def === "") return `\`\${${varAtStart[1]}}\` không có default loopback (rỗng ⇒ 0.0.0.0)`;
+    if (/^\d+$/.test(def))
+      return `thiếu địa chỉ bind (\`\${${varAtStart[1]}}\` là CỔNG, không phải địa chỉ)`;
     return `biến bind có default KHÔNG loopback: \`${def}\``;
   }
 
@@ -128,25 +180,49 @@ function shortPortViolation(rawSpec) {
   const v4 = spec.match(/^([A-Za-z0-9_.-]+):(?=.*:)/);
   if (v4) return LOOPBACK.has(v4[1]) ? null : `bind KHÔNG loopback: \`${v4[1]}\``;
 
-  // Còn lại: "5432:5432" · "5432" · "${PORT:-5432}:5432" … — đều KHÔNG có địa chỉ bind ⇒ 0.0.0.0.
   return "thiếu địa chỉ bind (Docker publish ra 0.0.0.0)";
 }
 
+/** Tách các phần tử của một flow-sequence YAML `[a, "b", 'c']`. */
+function splitFlowItems(inner) {
+  return inner
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
 /**
- * Quét các khối `ports:` của một compose file, cả short-syntax lẫn long-syntax.
- * Long-syntax an toàn CHỈ KHI có `host_ip:` loopback đi kèm `published:`.
+ * Quét khai báo cổng của một compose file. Fail-closed: dạng khai báo KHÔNG hiểu được ⇒ báo vi phạm.
+ * Chỉ chạy khi file thật sự trông như compose (có khoá `services:` ở cột 0).
  */
 function scanComposePorts(lines) {
+  const text = lines.join("\n");
+  // Nhận diện compose bằng CẤU TRÚC, không bằng tên file: `services:` là khoá TOP-LEVEL (cột 0).
+  // KHÔNG được nới thành `^\s*services:` — workflow GitHub Actions cũng có khoá `services:` (service
+  // container) nhưng LỒNG trong job, và cổng của nó chạy trên runner ephemeral, không phải máy PROD.
+  // Nới ra là ăn 4 báo oan ở ci.yml/api.yml (đã đo), mà cổng hay báo oan là cổng sẽ bị tắt.
+  // Khoá có thể có nháy (YAML cho phép, JSON bắt buộc).
+  //
+  // Compose viết THUẦN JSON (YAML là siêu tập của JSON ⇒ vẫn là compose hợp lệ): cả file nằm trong một
+  // cặp `{}` nên `"services"` KHÔNG ở cột 0 và scanner theo dòng cũng không thấy gì. Tách nhánh riêng,
+  // parse thẳng. Vòng 2 đã dựng đúng ca này và nó lọt.
+  if (text.trimStart().startsWith("{")) {
+    return /"services"\s*:/.test(text) ? scanComposeJson(text) : [];
+  }
+
+  const isCompose = /^["']?services["']?\s*:/m.test(text);
+  if (!isCompose) return [];
+
   const out = [];
-  let portsIndent = null; // độ thụt của chính khoá `ports:`
-  let item = null; // mục long-syntax đang gom: { start, hostIp, published }
+  let portsIndent = null;
+  let item = null; // mục long-syntax đang gom
 
   const flush = () => {
     if (!item) return;
     if (item.published !== null) {
       if (item.hostIp === null) {
         out.push({ line: item.start, text: "ports (long syntax) thiếu `host_ip:`" });
-      } else if (!LOOPBACK.has(item.hostIp)) {
+      } else if (!LOOPBACK.has(stripQuotes(item.hostIp))) {
         out.push({ line: item.start, text: `ports host_ip KHÔNG loopback: \`${item.hostIp}\`` });
       }
     }
@@ -154,32 +230,70 @@ function scanComposePorts(lines) {
   };
 
   lines.forEach((line, i) => {
-    if (!line.trim() || line.trim().startsWith("#")) return;
+    // `network_mode: host` bỏ qua toàn bộ cơ chế publish — container dùng thẳng network của host.
+    if (/^\s*network_mode:\s*["']?host["']?\s*(#.*)?$/.test(line)) {
+      out.push({
+        line: i + 1,
+        text: "network_mode: host — container nghe THẲNG trên mọi interface",
+      });
+    }
+
+    if (!line.trim() || /^\s*#/.test(line)) return;
     const indent = line.length - line.trimStart().length;
 
-    if (/^\s*ports:\s*$/.test(line)) {
+    const portsHere = line.match(/^(\s*)ports\s*:(.*)$/);
+    if (portsHere) {
       flush();
       portsIndent = indent;
+      const rest = portsHere[2].replace(/\s+#.*$/, "").trim();
+      if (rest === "") return; // block style — xử ở các dòng sau
+
+      if (rest.startsWith("[")) {
+        // flow style: ports: ["0.0.0.0:1:2", ...]
+        const inner = rest.slice(
+          1,
+          rest.lastIndexOf("]") === -1 ? undefined : rest.lastIndexOf("]"),
+        );
+        for (const it of splitFlowItems(inner)) {
+          const reason = shortPortViolation(it);
+          if (reason) out.push({ line: i + 1, text: `${it}   ← ${reason}` });
+        }
+        portsIndent = null;
+        return;
+      }
+      // anchor `&x`, alias `*x`, JSON, hoặc bất kỳ dạng nào khác ⇒ KHÔNG hiểu ⇒ fail-closed.
+      out.push({
+        line: i + 1,
+        text: `ports: ${rest}   ← dạng khai báo KHÔNG kiểm được (anchor/alias/khác) — fail-closed`,
+      });
+      portsIndent = null;
       return;
     }
+
     if (portsIndent === null) return;
 
-    // Thoát khối `ports:` khi gặp dòng thụt bằng hoặc ít hơn.
-    if (indent <= portsIndent) {
+    const itemMatch = line.match(/^\s*-\s*(.*)$/);
+    // YAML cho phép phần tử `-` THỤT BẰNG khoá `ports:` — thoát khối chỉ khi thụt ÍT HƠN, hoặc bằng mà
+    // không phải phần tử dãy. Bản đầu dùng `<=` nên bỏ sót đúng cách viết rất phổ biến này.
+    if (indent < portsIndent || (indent === portsIndent && !itemMatch)) {
       flush();
       portsIndent = null;
       return;
     }
 
-    const itemMatch = line.match(/^\s*-\s*(.*)$/);
     if (itemMatch) {
       flush();
-      const rest = itemMatch[1].trim();
-      if (!rest || /^[a-z_]+:\s*/i.test(rest)) {
-        // Long syntax: `- target: 5432` (các khoá còn lại ở dòng sau).
+      const rest = itemMatch[1].replace(/\s+#.*$/, "").trim();
+      if (!rest) {
         item = { start: i + 1, hostIp: null, published: null };
-        const kv = rest.match(/^([a-z_]+):\s*(.*)$/i);
-        if (kv) applyLongKey(item, kv[1], kv[2]);
+        return;
+      }
+      const kv = rest.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/);
+      // CHỈ coi là long-syntax khi khoá nằm trong danh sách của compose spec. Nếu không, `- dbhost:1:2`
+      // (bind ra hostname) bị nhận nhầm là key và lọt hoàn toàn.
+      if (kv && LONG_PORT_KEYS.has(kv[1].toLowerCase())) {
+        item = { start: i + 1, hostIp: null, published: null };
+        applyLongKey(item, kv[1], kv[2]);
         return;
       }
       const reason = shortPortViolation(rest);
@@ -187,10 +301,9 @@ function scanComposePorts(lines) {
       return;
     }
 
-    // Dòng thuộc mục long-syntax đang gom.
     if (item) {
-      const kv = line.trim().match(/^([a-z_]+):\s*(.*)$/i);
-      if (kv) applyLongKey(item, kv[1], kv[2]);
+      const kv = line.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/);
+      if (kv && LONG_PORT_KEYS.has(kv[1].toLowerCase())) applyLongKey(item, kv[1], kv[2]);
     }
   });
 
@@ -198,21 +311,68 @@ function scanComposePorts(lines) {
   return out;
 }
 
+/** Compose viết thuần JSON: duyệt AST thay vì quét dòng. Parse hỏng ⇒ ĐỎ (fail-closed). */
+function scanComposeJson(text) {
+  let doc;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    return [{ line: 1, text: "compose dạng JSON nhưng parse HỎNG — fail-closed" }];
+  }
+  const out = [];
+  for (const [name, svc] of Object.entries(doc?.services ?? {})) {
+    if (!svc || typeof svc !== "object") continue;
+    if (String(svc.network_mode ?? "") === "host") {
+      out.push({ line: 1, text: `services.${name}.network_mode: host — nghe THẲNG mọi interface` });
+    }
+    for (const p of Array.isArray(svc.ports) ? svc.ports : []) {
+      if (typeof p === "string") {
+        const reason = shortPortViolation(p);
+        if (reason) out.push({ line: 1, text: `services.${name}.ports "${p}"   ← ${reason}` });
+      } else if (p && typeof p === "object" && p.published !== undefined) {
+        const hostIp = p.host_ip === undefined ? null : String(p.host_ip);
+        if (hostIp === null) {
+          out.push({ line: 1, text: `services.${name}.ports (long syntax) thiếu host_ip` });
+        } else if (!LOOPBACK.has(hostIp)) {
+          out.push({
+            line: 1,
+            text: `services.${name}.ports host_ip KHÔNG loopback: \`${hostIp}\``,
+          });
+        }
+      } else {
+        out.push({ line: 1, text: `services.${name}.ports phần tử KHÔNG hiểu được — fail-closed` });
+      }
+    }
+  }
+  return out;
+}
+
 function applyLongKey(item, key, value) {
-  const v = value.trim().replace(/^["']|["']$/g, "");
+  const v = value.replace(/\s+#.*$/, "").trim();
   if (key.toLowerCase() === "host_ip") item.hostIp = v;
   if (key.toLowerCase() === "published") item.published = v;
 }
 
-function trackedFiles() {
-  return execFileSync("git", ["ls-files", "-z"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
+/**
+ * File đã tracked + file MỚI chưa bị gitignore. Xem bài học 1 ở đầu file: chỉ `git ls-files` là mù với
+ * đúng những file sắp được commit.
+ */
+function scanTargets() {
+  return execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  })
     .split("\0")
     .filter((f) => f && !SKIP_EXT.test(f) && f !== SELF);
 }
 
 function scan() {
   const violations = [];
-  for (const file of trackedFiles()) {
+  const seen = new Set();
+  for (const file of scanTargets()) {
+    if (seen.has(file)) continue;
+    seen.add(file);
+
     let text;
     try {
       text = readFileSync(file, "utf8");
@@ -225,7 +385,6 @@ function scan() {
     for (const rule of RULES) {
       if (rule.files && !rule.files.test(file)) continue;
 
-      // Luật cần NGỮ CẢNH NHIỀU DÒNG (vd long-syntax của compose) tự quét cả file.
       if (rule.fileScan) {
         for (const hit of rule.fileScan(lines)) {
           violations.push({ rule, file, line: hit.line, text: hit.text });
@@ -249,7 +408,7 @@ function scan() {
 
 const violations = scan();
 if (violations.length === 0) {
-  console.log("[check-no-secret-literals] ✅ 0 vi phạm trên file tracked.");
+  console.log("[check-no-secret-literals] ✅ 0 vi phạm (file tracked + file mới chưa gitignore).");
   process.exit(0);
 }
 

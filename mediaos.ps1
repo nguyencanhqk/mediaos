@@ -233,21 +233,28 @@ function Invoke-DevOnlineMigrate {
 #   -AllowProtected: CHỈ Invoke-Reset truyền — nó vừa XOÁ SẠCH volume sau khi người dùng gõ "RESET".
 function Invoke-Seed([switch]$AllowProtected) {
   Write-Step "Seed demo (base + full)"
+  # SEED_DIRECT_URL do người dùng đặt = ý định TƯỜNG MINH "seed vào đúng DB này" ⇒ nó THẮNG .env.
+  # (Phải đọc TRƯỚC Import-DotEnv để không bị lẫn, và phải GATE trên đích ĐÃ RESOLVE — bản trước gate
+  #  trên DATABASE_DIRECT_URL rồi ghi đè SEED_DIRECT_URL, nên lời khuyên "đặt SEED_DIRECT_URL" in ra ở
+  #  nhánh chặn KHÔNG BAO GIỜ chạy được. Chỉ dẫn sai còn tệ hơn không chỉ dẫn.)
+  $explicit = $env:SEED_DIRECT_URL
   Import-DotEnv (Join-Path $Root ".env")
-  if (-not $env:DATABASE_DIRECT_URL) { throw ".env THIẾU DATABASE_DIRECT_URL -> không biết seed vào DB nào." }
-  $dbName = ([uri]$env:DATABASE_DIRECT_URL).AbsolutePath.TrimStart("/")
+  $target = if ($explicit) { $explicit } else { $env:DATABASE_DIRECT_URL }
+  if (-not $target) { throw "Không có SEED_DIRECT_URL lẫn DATABASE_DIRECT_URL -> không biết seed vào DB nào." }
+  $dbName = ([uri]$target).AbsolutePath.TrimStart("/")
   if ((@("mediaos", "mediaos_dev") -contains $dbName) -and (-not $AllowProtected)) {
     Write-Err "DB đích '$dbName' được BẢO VỆ (PROD / dev-online) — seed demo tạo company demo + tài khoản quản trị lên dữ liệu THẬT."
-    Write-Host "  Nếu THẬT SỰ muốn: `$env:SEED_ALLOW_PROTECTED_DB='$dbName'; m seed" -ForegroundColor Yellow
+    Write-Host "  Muốn seed lại DB này : dùng `m reset` (xoá sạch + migrate + seed, có xác nhận)." -ForegroundColor Yellow
+    Write-Host "  Seed vào lane riêng  : `$env:SEED_DIRECT_URL='postgres://mediaos:<pw>@localhost:5432/mediaos_<lane>'; m seed" -ForegroundColor Yellow
     throw "seed bị chặn (fail-closed)"
   }
-  $env:SEED_DIRECT_URL = $env:DATABASE_DIRECT_URL
+  $env:SEED_DIRECT_URL = $target
   if ($AllowProtected) { $env:SEED_ALLOW_PROTECTED_DB = $dbName }
   Push-Location (Join-Path $Root "apps\api")
   try {
     Exec { node demo-seed-base.mjs } "demo-seed-base"
     Exec { node demo-seed-full.mjs } "demo-seed-full"
-  } finally { Pop-Location; $env:SEED_ALLOW_PROTECTED_DB = $null }
+  } finally { Pop-Location; $env:SEED_ALLOW_PROTECTED_DB = $null; $env:SEED_DIRECT_URL = $null }
   Write-Ok "Seed xong (DB: $dbName)"
 }
 
