@@ -87,11 +87,16 @@ export function resolveTestDbUrls(env: NodeJS.ProcessEnv = process.env): TestDbU
   }
 
   const host = trimmed(env.PG_HOSTPORT) || "localhost:5432";
+  // KHÔNG tổng hợp URL khi thiếu `lane`. Nếu tổng hợp, `${lane}` rỗng sinh ra
+  // `postgres://mediaos:…@host:5432/` — libpq resolve database về **tên role** (`mediaos` = PROD) và
+  // nối THÀNH CÔNG, trong khi `parseDbName()` trả null nên denylist không thấy gì. FULL gate đã dựng
+  // đúng ca này (chỉ set `DATABASE_URL`, không set `LANE_DB`) và chứng minh L1 mù.
+  const tuLane = (u: string, r: string, pw: string) =>
+    lane ? `postgres://${r}:${pw}@${host}/${lane}` : u;
   const urls: TestDbUrls = {
-    DATABASE_URL: explicitApp || `postgres://mediaos_app:changeme_app_only@${host}/${lane}`,
-    DATABASE_DIRECT_URL: explicitDirect || `postgres://mediaos:changeme_dev_only@${host}/${lane}`,
-    DATABASE_WORKER_URL:
-      explicitWorker || `postgres://mediaos_worker:changeme_worker_only@${host}/${lane}`,
+    DATABASE_URL: explicitApp || tuLane("", "mediaos_app", "changeme_app_only"),
+    DATABASE_DIRECT_URL: explicitDirect || tuLane("", "mediaos", "changeme_dev_only"),
+    DATABASE_WORKER_URL: explicitWorker || tuLane("", "mediaos_worker", "changeme_worker_only"),
   };
 
   assertNotProtectedDb(urls, env);
@@ -100,26 +105,36 @@ export function resolveTestDbUrls(env: NodeJS.ProcessEnv = process.env): TestDbU
 
 /** Luật 2 — chặn cứng khi DB đích là DB PROD/dev-online. */
 export function assertNotProtectedDb(urls: TestDbUrls, env: NodeJS.ProcessEnv = process.env): void {
-  // CI: DB `mediaos` của job là service-container EPHEMERAL, bị huỷ cùng job ⇒ trùng tên nhưng vô hại.
-  // Đây KHÔNG phải kẽ hở: `global-setup.ts` vẫn đòi con dấu nằm trong DB, `CI=1` không giả được.
-  if (trimmed(env.CI)) return;
-
-  const denylist = new Set(
-    (trimmed(env.TEST_DB_DENYLIST) || PROTECTED_DB_NAMES.join(","))
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
-  );
+  // `TEST_DB_DENYLIST` chỉ MỞ RỘNG danh sách, KHÔNG thay thế — nếu thay thế thì
+  // `TEST_DB_DENYLIST=mediaos_dev` âm thầm gỡ bảo vệ cho chính `mediaos` (PROD).
+  const denylist = new Set<string>(PROTECTED_DB_NAMES);
+  for (const extra of trimmed(env.TEST_DB_DENYLIST).split(",")) {
+    if (extra.trim()) denylist.add(extra.trim());
+  }
 
   const targets = new Map<string, string>();
   for (const [key, url] of Object.entries(urls)) {
+    if (!url) continue;
     const name = parseDbName(url);
-    if (name && denylist.has(name)) targets.set(key, name);
+    // URL khác rỗng mà KHÔNG parse được tên DB ⇒ coi là VI PHẠM, không phải "không biết → cho qua".
+    // `postgres://mediaos:…@host:5432/` (đường dẫn rỗng) nối được và libpq lấy tên DB = tên role
+    // = `mediaos` = PROD. Fail-closed là lựa chọn duy nhất đúng ở đây.
+    if (name === null) {
+      targets.set(key, "(không parse được tên DB — fail-closed)");
+      continue;
+    }
+    if (denylist.has(name)) targets.set(key, name);
   }
   const lane = trimmed(env.LANE_DB);
   if (lane && denylist.has(lane)) targets.set("LANE_DB", lane);
 
   if (targets.size === 0) return;
+
+  // CI: DB `mediaos` của job là service-container EPHEMERAL, bị huỷ cùng job ⇒ trùng tên nhưng vô hại.
+  // Đây KHÔNG phải kẽ hở: `global-setup.ts` vẫn đòi con dấu nằm TRONG DB, `CI=1` không giả được.
+  // Chỉ nhận đúng `true`/`1` — trước đó `trimmed(env.CI)` cho qua cả `CI=0` và `CI=false`.
+  // Đặt SAU vòng quét để log vẫn nêu được đích khi cần chẩn đoán.
+  if (["true", "1"].includes(trimmed(env.CI).toLowerCase())) return;
 
   const chiTiet = [...targets].map(([k, v]) => `  ${k} → ${v}`).join("\n");
   throw new Error(

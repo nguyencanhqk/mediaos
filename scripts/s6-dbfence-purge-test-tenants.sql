@@ -15,6 +15,30 @@
 -- FK-trigger trong phạm vi transaction là an toàn, và PHẦN 6 quét lại toàn bộ FK để chứng minh.
 -- `SET LOCAL` ⇒ tự khôi phục khi commit/rollback. Cần superuser (`mediaos`).
 --
+-- ⚠ ĐÍNH CHÍNH (FULL gate 2026-07-28, đo bằng `pg_trigger`): chế độ `replica` tắt **CẢ 17 trigger
+--   user**, KHÔNG chỉ FK — gồm `trg_audit_logs_block_mutation`, `enforce_company_id_immutable`×8,
+--   `enforce_attendance_period_lock`, `enforce_payroll_period_status`, `enforce_payslip_ack_status`,
+--   `enforce_break_glass_grant_status`, `scrub_reset_token_plaintext`. Vô hại cho THAO TÁC NÀY vì chỉ
+--   `audit_logs` có trigger bắn ON DELETE, và function đó vốn chỉ chặn `current_user='mediaos_app'`
+--   (superuser đi qua được kể cả khi trigger bật). RLS KHÔNG bị ảnh hưởng (superuser bypass sẵn).
+--   Verify hậu kiểm: 17/17 trigger `tgenabled='O'`, `session_replication_role='origin'`, diff
+--   `--schema-only` trước/sau = rỗng. Ai tái sử dụng script phải đọc kỹ đoạn này.
+--
+-- ⚠ HAI GIỚI HẠN CÒN LẠI của bằng chứng (chưa vá, ghi để người sau biết):
+--   1. PHẦN 6 chỉ quét FK ĐƠN CỘT (`array_length(conkey,1)=1`) ⇒ bỏ sót FK composite duy nhất
+--      `tasks_parent_same_company_fk`. Lượt 2026-07-28 đã quét bù bằng tay: 0 dòng treo.
+--   2. PHẦN 5 chỉ đếm lại **user** funtime. Nếu một dòng funtime trỏ tới một dòng của tenant test ở
+--      bảng KHÁC (không phải companies/users), PHẦN 2 không bắt, PHẦN 4b sẽ xoá nó như mồ côi mà
+--      PHẦN 5 không thấy. Muốn dùng lại: chụp `count(*)` mọi bảng có `company_id = funtime` TRƯỚC/SAU
+--      và chốt bằng nhau.
+--
+-- ⚠ KHÔNG PHỦ MATERIALIZED VIEW. Không `DELETE` được trên matview; `mv_dashboard_output` và
+--   `mv_dashboard_task_status` mang `company_id` nên GIỮ LẠI dòng của tenant đã xoá (đo 2026-07-28:
+--   20 dòng ma, trong đó 2 company_id tồn dư từ đợt dọn 27/7). Sau purge PHẢI chạy bằng role OWNER:
+--     REFRESH MATERIALIZED VIEW mv_dashboard_output;
+--     REFRESH MATERIALIZED VIEW mv_dashboard_task_status;
+--   `scripts/check-prod-test-tenants.mjs` nay đếm dòng ma này và ĐỎ nếu ≠ 0.
+--
 -- AN TOÀN:
 --   • Một transaction duy nhất. Bất kỳ chốt nào trượt ⇒ RAISE EXCEPTION ⇒ ROLLBACK toàn bộ.
 --   • `funtime` (46 user = 35 active + 11 locked) được chốt TRƯỚC và SAU; lệch 1 dòng ⇒ rollback.

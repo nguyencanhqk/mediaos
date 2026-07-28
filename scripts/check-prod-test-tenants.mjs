@@ -69,6 +69,14 @@ try {
           JOIN user_roles ur ON ur.user_id = u.id AND ur.deleted_at IS NULL
           JOIN roles r ON r.id = ur.role_id AND r.company_id IS NULL
          WHERE c.slug ~ $1 AND u.deleted_at IS NULL)                                AS user_test_role_toan_cuc,
+       -- Matview KHÔNG được RLS bảo vệ và KHÔNG bị purge chạm tới (không DELETE được trên matview).
+       -- FULL gate 2026-07-28 tìm thấy 20 dòng của tenant ĐÃ XOÁ còn nằm đây — trong đó 2 company_id
+       -- không có cả trong dump 28/7, tức tồn dư từ đợt dọn 27/7: chưa đợt nào từng chạm matview.
+       -- Dọn bằng REFRESH MATERIALIZED VIEW (role OWNER), không phải DELETE.
+       (SELECT count(*) FROM mv_dashboard_output
+         WHERE company_id NOT IN (SELECT id FROM companies))                        AS mv_output_ma,
+       (SELECT count(*) FROM mv_dashboard_task_status
+         WHERE company_id NOT IN (SELECT id FROM companies))                        AS mv_taskstatus_ma,
        (SELECT current_database())                                                  AS db`,
     [TEST_SLUG_PATTERN],
   );
@@ -79,16 +87,56 @@ try {
 }
 
 const r = res.rows[0];
+
+// Chốt này chỉ có nghĩa khi nó đang soi ĐÚNG DB PROD/dev-online. `DATABASE_DIRECT_URL` trong shell
+// THẮNG `.env.prod`, nên trong một shell lane (`export DATABASE_DIRECT_URL=…/mediaos_lane`) thì
+// `harness/check.sh --all` sẽ chấm nhầm DB: lane sạch ⇒ XANH GIẢ trong khi PROD bẩn. In tên DB thôi
+// không đủ — phải TỪ CHỐI phán quyết trên DB không phải PROD.
+const PROTECTED_DB_NAMES = ["mediaos", "mediaos_dev"];
+if (!PROTECTED_DB_NAMES.includes(r.db)) {
+  if (!asJson)
+    console.warn(
+      `[prod-tenant-check] BỎ QUA: đang nối "${r.db}", không phải DB PROD (${PROTECTED_DB_NAMES.join("/")}).\n` +
+        `  Nhiều khả năng shell đang có DATABASE_DIRECT_URL trỏ lane DB — chốt này KHÔNG phán quyết trên lane.`,
+    );
+  await pool.end();
+  ket(0, { skipped: true, reason: "not-prod-db", db: r.db });
+}
+
 const soTest = Number(r.company_test);
+const soMa = Number(r.mv_output_ma) + Number(r.mv_taskstatus_ma);
 const chiTiet = {
   db: r.db,
   company_tong: Number(r.company_tong),
   company_test: soTest,
   user_test_active: Number(r.user_test_active),
   user_test_role_toan_cuc: Number(r.user_test_role_toan_cuc),
+  mv_dong_ma: soMa,
 };
 
 let mau = [];
+if (soTest === 0 && soMa > 0) {
+  await pool.end();
+  if (!asJson) {
+    console.error(`
+╔══════════════════════════════════════════════════════════════════════════════════╗
+║  ĐỎ: matview còn dữ liệu của tenant ĐÃ XOÁ.                                     ║
+╚══════════════════════════════════════════════════════════════════════════════════╝
+  database                 : ${chiTiet.db}
+  mv_dashboard_output      : ${r.mv_output_ma} dòng ma
+  mv_dashboard_task_status : ${r.mv_taskstatus_ma} dòng ma
+
+  Matview KHÔNG được RLS bảo vệ (Postgres không hỗ trợ) và KHÔNG xoá được bằng DELETE.
+  Dọn bằng role OWNER:
+    docker exec -i mediaos-postgres psql -U mediaos -d ${chiTiet.db} \\
+      -c "REFRESH MATERIALIZED VIEW mv_dashboard_output;" \\
+      -c "REFRESH MATERIALIZED VIEW mv_dashboard_task_status;"
+  (KI-041 / S6-SEC-MV-1: refresh tự động đang hỏng vì chạy bằng mediaos_worker — REFRESH đòi OWNER.)
+`);
+  }
+  ket(1, { ok: false, ...chiTiet });
+}
+
 if (soTest > 0) {
   const s = await pool.query(
     `SELECT slug, created_at FROM companies WHERE slug ~ $1 ORDER BY created_at DESC LIMIT 10`,

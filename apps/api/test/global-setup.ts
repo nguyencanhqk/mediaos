@@ -1,5 +1,7 @@
 import { Pool } from "pg";
-import { parseDbName, resolveTestDbUrls, TEST_LANE_STAMP } from "./db-target";
+import { parseDbName, PROTECTED_DB_NAMES, resolveTestDbUrls, TEST_LANE_STAMP } from "./db-target";
+
+const trimmed = (v: string | undefined): string => (v ?? "").trim();
 
 /**
  * S6-SEC-DBFENCE-1 (KI-028) — LỚP 2: CON DẤU NẰM TRONG DATABASE.
@@ -36,16 +38,39 @@ export default async function setup(): Promise<void> {
     );
     stamp = res.rows[0]?.stamp ?? null;
   } catch (err) {
-    // Không nối được ⇒ để suite tự skip/đỏ theo cách cũ; KHÔNG nuốt lỗi im lặng.
-    console.warn(
-      `[db-fence] không kiểm được con dấu của DB "${dbName}": ${(err as Error).message}`,
+    await pool.end().catch(() => {});
+    // FAIL-CLOSED. Đây là lớp chốt CUỐI — nó không được phép có nhánh "đi tiếp".
+    // Bản đầu chỉ `console.warn` rồi `return`: ghép với `CI=1` đặt tay thì thành đường lách trọn
+    // (DIRECT hỏng ⇒ bỏ qua kiểm, trong khi `DATABASE_URL` vẫn trỏ PROD và worker ghi qua mediaos_app).
+    if (trimmed(process.env.TEST_DB_FENCE_ALLOW_UNREACHABLE) === "1") {
+      console.warn(
+        `[db-fence] ⚠ BỎ QUA kiểm con dấu của DB "${dbName}" theo TEST_DB_FENCE_ALLOW_UNREACHABLE=1: ${(err as Error).message}`,
+      );
+      return;
+    }
+    throw new Error(
+      `[db-fence] KHÔNG kiểm được con dấu lane test của DB "${dbName}": ${(err as Error).message}\n` +
+        `Từ chối chạy suite (fail-closed). DB không lên thì đừng chạy int-spec; muốn bỏ qua có chủ đích: TEST_DB_FENCE_ALLOW_UNREACHABLE=1`,
     );
-    await pool.end();
-    return;
   }
   await pool.end();
 
   if (stamp === TEST_LANE_STAMP) return;
+
+  // DB được bảo vệ: TUYỆT ĐỐI không in lệnh đóng dấu — bản đầu in nguyên văn
+  // `COMMENT ON DATABASE mediaos IS '…'`, tức đưa sẵn lệnh copy-paste để tự tay tháo lớp chốt cuối
+  // khỏi chính PROD.
+  const laDbBaoVe = (PROTECTED_DB_NAMES as readonly string[]).includes(dbName);
+  const huongDan = laDbBaoVe
+    ? [
+        `⛔ "${dbName}" là DB ĐƯỢC BẢO VỆ (PROD / dev-online) — KHÔNG đóng dấu nó, dù có cách.`,
+        "   Tạo lane riêng:  bash scripts/lane-db-setup.sh <lane> && export LANE_DB=mediaos_<lane>",
+        "   Và bỏ URL tường minh:  unset DATABASE_URL DATABASE_DIRECT_URL DATABASE_WORKER_URL",
+      ]
+    : [
+        "Nếu đây LÀ lane DB của bạn, đóng dấu (idempotent):",
+        `  bash scripts/lane-db-setup.sh ${dbName.replace(/^mediaos_/, "")}`,
+      ];
 
   throw new Error(
     [
@@ -60,13 +85,7 @@ export default async function setup(): Promise<void> {
       "Integration test SEED dữ liệu thật. Chỉ DB được đóng dấu tường minh là lane test mới được ghi",
       "(KI-028: PROD từng bị seed 74 tenant test / 226 user vì thiếu đúng hàng rào này).",
       "",
-      "Nếu đây LÀ lane DB của bạn, đóng dấu (idempotent):",
-      `  bash scripts/lane-db-setup.sh <lane>`,
-      "hoặc đóng dấu tay:",
-      `  docker exec -i mediaos-postgres psql -U mediaos -d postgres \\`,
-      `    -c "COMMENT ON DATABASE ${dbName} IS '${TEST_LANE_STAMP}'"`,
-      "",
-      "Nếu đây là DB PROD/dev-online: ĐỪNG đóng dấu. Tạo lane riêng bằng scripts/lane-db-setup.sh.",
+      ...huongDan,
       "",
     ].join("\n"),
   );

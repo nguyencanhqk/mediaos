@@ -118,13 +118,58 @@ describe("S6-SEC-DBFENCE-1 · resolveTestDbUrls (hàng rào lớp 1)", () => {
       expect(parseDbName(urls.DATABASE_DIRECT_URL)).toBe("mediaos_lane1");
     });
 
-    it("TEST_DB_DENYLIST nới/thu được danh sách bảo vệ", () => {
+    it("TEST_DB_DENYLIST chỉ MỞ RỘNG, KHÔNG thay thế danh sách bảo vệ", () => {
+      // Thêm được tên mới…
       expect(() =>
         resolveTestDbUrls({ ...base, LANE_DB: "mediaos_x", TEST_DB_DENYLIST: "mediaos_x" }),
       ).toThrow(/DATABASE ĐƯỢC BẢO VỆ/);
+      // …nhưng KHÔNG gỡ được bảo vệ có sẵn. Nếu là ngữ nghĩa "thay thế" thì dòng này âm thầm mở
+      // cửa cho chính PROD — FULL gate bắt đúng ca này.
       expect(() =>
         resolveTestDbUrls({ ...base, LANE_DB: "mediaos", TEST_DB_DENYLIST: "chi_cai_khac" }),
-      ).not.toThrow();
+      ).toThrow(/DATABASE ĐƯỢC BẢO VỆ/);
+    });
+  });
+
+  // ── Các lỗ do FULL gate (security-reviewer) tìm ra bằng probe chạy thật, 2026-07-28 ──────────
+  describe("lỗ FULL gate đã bịt", () => {
+    it("F-1: có URL tường minh mà KHÔNG có LANE_DB ⇒ KHÔNG tổng hợp URL còn thiếu", () => {
+      // Bản đầu dựng `postgres://mediaos:…@host:5432/${lane}` với lane rỗng ⇒ đường dẫn RỖNG.
+      // libpq resolve database về TÊN ROLE (`mediaos` = PROD) và nối THÀNH CÔNG, trong khi
+      // parseDbName() trả null nên denylist không thấy gì. Probe P4 của gate đã chứng minh L1 mù.
+      const urls = resolveTestDbUrls({
+        ...base,
+        DATABASE_URL: "postgres://u:p@localhost:5432/mediaos_ok",
+      });
+      expect(urls.DATABASE_URL).toBe("postgres://u:p@localhost:5432/mediaos_ok");
+      expect(urls.DATABASE_DIRECT_URL).toBe("");
+      expect(urls.DATABASE_WORKER_URL).toBe("");
+    });
+
+    it("F-1: URL khác rỗng mà KHÔNG parse được tên DB ⇒ CHẶN (fail-closed)", () => {
+      expect(() =>
+        assertNotProtectedDb(
+          {
+            DATABASE_URL: "postgres://mediaos:pw@localhost:5432/",
+            DATABASE_DIRECT_URL: "",
+            DATABASE_WORKER_URL: "",
+          },
+          {},
+        ),
+      ).toThrow(/không parse được tên DB/);
+    });
+
+    it.each(["0", "false", "FALSE", " "])(
+      "F-4: CI=%s KHÔNG được coi là CI ⇒ vẫn chặn DB được bảo vệ",
+      (ci) => {
+        expect(() => resolveTestDbUrls({ ...base, CI: ci, LANE_DB: "mediaos" })).toThrow(
+          /DATABASE ĐƯỢC BẢO VỆ/,
+        );
+      },
+    );
+
+    it.each(["true", "TRUE", "1"])("F-4: CI=%s mới được cho qua (lớp 2 vẫn canh)", (ci) => {
+      expect(() => resolveTestDbUrls({ ...base, CI: ci, LANE_DB: "mediaos" })).not.toThrow();
     });
   });
 

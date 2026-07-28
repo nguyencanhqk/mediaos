@@ -184,6 +184,58 @@ Ba điều **khác** so với plan, đều do đo được chứ không do đổ
 > khoản test mật khẩu `Passw0rd!test99`). Cần phiên operator thì phải tạo có chủ đích, không khôi phục
 > từ dump.
 
+## 8b. FULL gate (2026-07-28) — cả hai PASS, và cả hai tìm ra lỗ thật
+
+Hai reviewer chạy **probe thật**, không đọc suông. Điểm đáng giá nhất: gate tìm lỗ **trong chính hàng
+rào**, và một lỗ trong **tuyên bố "đã sạch"** của tôi.
+
+### `security-reviewer` → PASS (có điều kiện) — đã bịt trong PR này
+
+| # | Lỗ | Vì sao nguy |
+| --- | --- | --- |
+| F-1 | Có URL tường minh mà thiếu `LANE_DB` ⇒ 2 URL còn lại dựng với tên DB RỖNG (`…:5432/`). libpq resolve database về **tên role** = `mediaos` = PROD và nối **thành công**; `parseDbName()` trả `null` nên denylist bỏ qua. **L1 mù, chỉ L2 cứu.** | Vá: không tổng hợp URL khi thiếu lane; URL khác rỗng mà không parse được tên DB ⇒ **chặn** (fail-closed). |
+| F-2 | L2 **fail-OPEN** khi không nối được DB (`console.warn` rồi `return`) — comment ghi "KHÔNG nuốt lỗi im lặng" trong khi hành vi ngược lại. Ghép với `CI=1` là đường lách trọn. | Vá: THROW mặc định; muốn bỏ qua phải `TEST_DB_FENCE_ALLOW_UNREACHABLE=1`. |
+| F-3 | `lane-db-setup.sh dev` ⇒ **đóng dấu lên `mediaos_dev` (dev-online)** — vĩnh viễn và vô hình, L2 mất hiệu lực cho DB đó mãi mãi; `--reset` còn **DROP** nó. Script này giờ là *người đóng dấu* nên chốt là bắt buộc. | Vá: từ chối `mediaos`/`mediaos_dev`. Verify: exit 1, cả hai DB vẫn `(không dấu)`. |
+| F-4 | `CI` **bất kỳ giá trị nào** (kể cả `CI=0`, `CI=false`) đều bỏ qua denylist; `TEST_DB_DENYLIST` **thay thế** danh sách ⇒ `TEST_DB_DENYLIST=mediaos_dev` âm thầm gỡ bảo vệ cho chính PROD. | Vá: `CI` chỉ nhận `true`/`1`; denylist **hợp nhất**, không thay thế. |
+| F-5 | L3 chấm **bất kỳ DB nào** `DATABASE_DIRECT_URL` trỏ tới (biến shell thắng `.env.prod`) ⇒ trong shell lane thì `check.sh --all` cho **XANH GIẢ** trong khi PROD bẩn. | Vá: từ chối phán quyết khi `current_database()` không thuộc {`mediaos`,`mediaos_dev`} — BỎ QUA có cảnh báo. |
+| F-7 | Thông điệp L2 in sẵn `COMMENT ON DATABASE mediaos IS '…'` — tức đưa lệnh copy-paste để **tự tay tháo lớp chốt cuối khỏi PROD**. | Vá: DB được bảo vệ ⇒ không in lệnh đóng dấu, chỉ in đường đi đúng. |
+
+F-6 (header script purge nói chưa đủ về `session_replication_role = replica` — nó tắt **cả 17 trigger
+user**, không riêng FK) và F-8 (`VALKEY_URL=` rỗng nay rơi về adapter in-memory thay vì chặn boot):
+đã sửa header; phần còn lại ghi thành việc theo dõi.
+
+### `rls-tenant-isolation-tester` → PASS — nhưng bác một tuyên bố của tôi
+
+- **RLS nguyên vẹn** sau khi chạy `session_replication_role = replica`: diff `--schema-only` giữa dump
+  TRƯỚC và live SAU = **không một khác biệt nào**. 155 ENABLE · 155 FORCE · 172 POLICY · **17/17
+  trigger `tgenabled='O'`** (đủ 8 `enforce_company_id_immutable`, `trg_audit_logs_block_mutation` BẬT)
+  · 464 GRANT. `session_replication_role` hiện = `origin`.
+- **funtime không bị chạm**: 46/46 user ID **trùng byte-for-byte với dump**; số dòng giống hệt ở MỌI
+  bảng (delta duy nhất `system_job_runs` +18 do scheduler chạy sau khi dump).
+- **Dòng toàn cục 402 → 402** (`login_logs` 268 · `notification_events` 59 · `notification_templates`
+  45 · `dashboard_widgets` 17 · `roles` hệ thống 13) — không mất dòng catalog nào.
+- **0 tham chiếu treo / 635 FK** — mạnh hơn bằng chứng của chính script, vốn chỉ quét FK **đơn cột**
+  (`array_length(conkey,1)=1`) nên bỏ sót FK composite duy nhất `tasks_parent_same_company_fk`.
+- ⚠️ **BÁC BỎ "PROD đã sạch 100%":** còn **20 dòng của tenant đã xoá** trong **2 materialized view**
+  (`mv_dashboard_output` 11 · `mv_dashboard_task_status` 9). Postgres **không hỗ trợ RLS trên
+  matview**, purge không `DELETE` được trên matview, và **2 trong 7 `company_id` ma không có cả trong
+  dump 28/7** ⇒ tồn dư từ đợt dọn 27/7: **chưa đợt nào từng chạm matview**. Chốt L3 bản đầu **mù** với
+  nó — đúng cái bẫy WO này sinh ra để tránh.
+  **Đã xử lý:** `REFRESH MATERIALIZED VIEW` bằng role OWNER ⇒ 13→2 và 13→4, **0 dòng ma**; và L3 nay
+  đếm dòng ma trong cả 2 matview, ≠0 ⇒ ĐỎ kèm lệnh sửa.
+
+### Bằng chứng chạy lại SAU khi vá gate
+
+| Kiểm | Kết quả |
+| --- | --- |
+| `db-target.unit-spec.ts` (thêm ca F-1/F-4) | **28/28** |
+| `lane-db-setup.sh dev` | exit **1**, `mediaos`/`mediaos_dev` vẫn `(không dấu)` |
+| L2 trên DB chưa đóng dấu | exit **1** |
+| chunk-test KHÔNG có DB | **XANH** (762 file) |
+| chunk-test trên lane ĐÃ đóng dấu | **XANH** (762 file) |
+| typecheck · lint | xanh |
+| `check-prod-test-tenants.mjs` | `{"ok":true, company_test:0, mv_dong_ma:0}` |
+
 ## 9. Thứ tự thi công
 
 1. Plan này + cập nhật `paths` WO. 2. L1 + unit spec + glob. 3. L2 globalSetup. 4. Đóng dấu ở
