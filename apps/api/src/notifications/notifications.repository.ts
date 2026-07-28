@@ -74,9 +74,14 @@ export class NotificationsRepository {
     });
   }
 
-  markRead(companyId: string, notificationId: string, userId: string) {
-    return this.db.withTenant(companyId, (tx) =>
-      tx
+  /**
+   * S6-SEC-NOTITX-1 (KI-034) — `tx` TUỲ CHỌN: có thì chạy TRONG transaction của caller (để update +
+   * audit là MỘT đơn vị nguyên tử), không có thì tự mở `withTenant` như cũ (backward-compat).
+   * Truyền `tx` ⇒ CALLER chịu trách nhiệm ghi `audit.record` trong cùng tx (xem `create` ở dưới).
+   */
+  markRead(companyId: string, notificationId: string, userId: string, tx?: TenantTx) {
+    const run = (t: TenantTx) =>
+      t
         .update(notifications)
         .set({ isRead: true })
         .where(
@@ -86,8 +91,8 @@ export class NotificationsRepository {
             eq(notifications.userId, userId),
           ),
         )
-        .returning(),
-    );
+        .returning();
+    return tx ? run(tx) : this.db.withTenant(companyId, run);
   }
 
   markAllRead(companyId: string, userId: string) {
@@ -106,6 +111,20 @@ export class NotificationsRepository {
     );
   }
 
+  /**
+   * S6-SEC-NOTITX-1 (KI-034) — `tx` TUỲ CHỌN. Trước đây method này LUÔN tự mở + COMMIT transaction
+   * của chính nó, nên `NotificationsService.create` buộc phải mở tx THỨ HAI cho outbox + audit ⇒
+   * insert commit rồi mà outbox/audit fail thì còn lại một hàng notification KHÔNG có vết kiểm toán
+   * và KHÔNG có sự kiện (BẤT BIẾN #2). Truyền `tx` để cả ba bước nằm trong MỘT transaction.
+   * Không truyền `tx` ⇒ hành vi cũ (tự mở `withTenant`), giữ backward-compat cho caller khác.
+   *
+   * ⚠️ NGHĨA VỤ KHI TRUYỀN `tx`: method này CHỈ insert. Bộ ba "insert + `outbox.enqueue` +
+   * `audit.record`" (và cả preference check) chỉ sống ở `NotificationsService.create`. Gọi thẳng
+   * `repo.create(companyId, data, myTx)` từ tx của bạn ⇒ sinh hàng notification **KHÔNG audit,
+   * KHÔNG outbox, KHÔNG qua preference** — tức tái tạo đúng KI-034 bằng một đường khác. Truyền `tx`
+   * thì CALLER chịu trách nhiệm ghi `audit.record` + `outbox.enqueue` trong CÙNG tx đó; không muốn
+   * gánh thì đừng truyền `tx` mà gọi qua service (hoặc `NotificationEngineService.intake()`).
+   */
   create(
     companyId: string,
     data: {
@@ -115,9 +134,10 @@ export class NotificationsRepository {
       refId?: string | null;
       refType?: string | null;
     },
+    tx?: TenantTx,
   ) {
-    return this.db.withTenant(companyId, (tx) =>
-      tx
+    const run = (t: TenantTx) =>
+      t
         .insert(notifications)
         .values({
           companyId,
@@ -127,8 +147,8 @@ export class NotificationsRepository {
           refId: data.refId ?? null,
           refType: data.refType ?? null,
         })
-        .returning(),
-    );
+        .returning();
+    return tx ? run(tx) : this.db.withTenant(companyId, run);
   }
 
   /**
