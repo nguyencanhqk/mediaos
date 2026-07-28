@@ -1394,6 +1394,13 @@
       "when": 1717587320000,
       "tag": "0531_s6sec1_noti_catalog_company_immutable",
       "breakpoints": true
+    },
+    {
+      "idx": 199,
+      "version": "7",
+      "when": 1717587321000,
+      "tag": "0532_s6secloginlog1_login_logs_tenant_read",
+      "breakpoints": true
     }
   ]
 }

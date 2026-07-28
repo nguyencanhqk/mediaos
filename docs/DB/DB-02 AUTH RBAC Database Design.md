@@ -760,6 +760,35 @@ ON login_logs (ip_address, created_at DESC);
 | `TooManyAttempts` | Quá số lần đăng nhập sai |
 | `CompanyInactive` | Công ty/tenant không hoạt động |
 
+#### Mô hình đọc & RLS (S6-SEC-LOGINLOG-1 · KI-042 · mig `0532`)
+
+`company_id` NULLABLE là **CHỦ ĐÍCH**: lần thử đăng nhập pre-auth chưa resolve được tenant (sai
+company slug, hoặc bị rate-limit chặn trước khi biết tenant) vẫn **phải** ghi được log — nếu không sẽ
+mất dấu vết dò tenant / brute-force.
+
+Nhưng hàng `company_id IS NULL` **KHÔNG thuộc về tenant nào**. Chúng mang `email` + `ip_address` +
+`user_agent` của người lạ, nên **không phải dữ liệu tham chiếu dùng chung** (khác `public_holidays`
+hay `roles`, nơi hàng NULL là dữ liệu global cố ý chia sẻ).
+
+| | Quy tắc |
+| --- | --- |
+| **ĐỌC (USING)** | CHỈ `company_id = current_setting('app.current_company_id')`. Hàng NULL **không đọc được qua đường ứng dụng**, kể cả company-admin, kể cả khi không có ngữ cảnh tenant |
+| **GHI (WITH CHECK)** | Ghi hàng của tenant hiện tại; HOẶC ghi hàng NULL **chỉ khi KHÔNG có ngữ cảnh tenant** (pre-auth). Chặn ghi NULL khi đang đứng trong tenant |
+| **Ai đọc được hàng NULL** | Chỉ role `mediaos` (superuser + `BYPASSRLS`) qua truy cập DB trực tiếp ⇒ **người vận hành nền tảng**, phục vụ forensics. Bảng bật FORCE RLS nên chủ bảng cũng bị policy chi phối |
+| **Grant** | `mediaos_app`: `SELECT, INSERT` · `mediaos_worker`: `SELECT` — append-only (BẤT BIẾN #2), KHÔNG UPDATE/DELETE |
+| **Retention** | `login_logs` nằm trong `PROTECTED_TABLES` — retention **không bao giờ** xoá bảng này |
+
+**BẤT BIẾN dữ liệu:** `company_id IS NULL` ⟹ `user_id IS NULL`. Mọi đường ghi sinh hàng NULL đều
+không có user đã resolve. Đo PROD 2026-07-28: 268/268 đúng, 0 vi phạm. Vì vậy siết vế đọc **không**
+làm mất dòng nào của `GET /me/security/activity` (màn hình đó lọc `user_id = <chính chủ>`).
+
+> ⚠️ **Hệ quả cần biết khi viết code ghi:** Postgres áp policy **SELECT lên mệnh đề `RETURNING`**.
+> Do đó `INSERT … VALUES (NULL, …) RETURNING …` sẽ **bị từ chối**, trong khi `INSERT` không
+> `RETURNING` chạy bình thường. Đường ghi pre-auth **không được** dùng `RETURNING`.
+>
+> Nếu sau này cần một đường đọc hàng NULL cho operator: thêm **policy permissive riêng cho đúng role
+> đó** — KHÔNG nới lại `tenant_isolation`.
+
 ---
 
 ### 7.9 Bảng `user_security_events`

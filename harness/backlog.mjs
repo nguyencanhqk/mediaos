@@ -5633,11 +5633,17 @@ export const backlog = [
     title:
       "KI-042 — login_logs: hàng company_id IS NULL (thử đăng nhập pre-auth, có email + IP) ĐỌC ĐƯỢC CHÉO TENANT; siết vế USING của policy tenant_isolation (migration 0532)",
     zone: "red",
-    status: "todo",
+    // Thi công XONG (mig 0532 + RED-proof + hồi quy + FULL gate) nhưng CHƯA merge ⇒ chưa phải "done".
+    status: "in_progress",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/auth/**",
       "apps/api/src/foundation/retention/**",
+      // Mở rộng khi thi công (memory wo-paths-drive-gate-and-scheduler — khai thiếu ⇒ lọt gate):
+      //  • src/me/** — done_when #4 buộc verify đường đọc hiện có; MỘT trong ba đường đó là
+      //    me-security-activity.repository.ts, và chú thích của nó khẳng định SAI rằng màn hình này
+      //    phụ thuộc vào khe hở `USING … OR company_id IS NULL`. Chỉ sửa CHÚ THÍCH, không đổi hành vi.
+      "apps/api/src/me/**",
       "apps/api/test/**",
       "docs/DB/**",
       "docs/RELEASE/**",
@@ -5659,6 +5665,39 @@ export const backlog = [
       "RED test hai chiều: (a) ghi log fail pre-auth (không có ngữ cảnh tenant) VẪN INSERT được — không được làm mù đường ghi; (b) trong ngữ cảnh tenant A, SELECT không thấy hàng NULL-tenant. Ca (b) phải ĐỎ trước khi vá",
       "Verify đường đọc hiện có (auth-logs-viewer) và job retention không bỏ sót IM LẶNG hàng NULL sau khi siết — nếu có thì sửa hoặc ghi nhận tường minh",
       "Migration áp được từ 0000 → 0532 trên DB lane dựng MỚI (không chỉ trên DB đã có sẵn); database-reviewer + rls-tenant-isolation-tester PASS; RELEASE-02 KI-042 đóng",
+    ],
+  },
+  {
+    id: "S6-SEC-LOGINLOG-2",
+    module: "AUTH",
+    layer: "SEC",
+    title:
+      "KI-044 — hàng blocked/TooManyAttempts ghi company_id NULL kể cả khi slug HỢP LỆ (rate-limit chạy trước resolveCompanyId) ⇒ admin mất quan sát brute-force nhắm vào chính công ty mình sau 0532",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/auth/**",
+      "apps/api/test/**",
+      "docs/RELEASE/**",
+      "docs/plans/S6-SEC-LOGINLOG-2.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S6-SEC-LOGINLOG-1"],
+    plan: "docs/plans/S6-SEC-LOGINLOG-2.md",
+    src: [
+      "RELEASE-02 KI-044 (S3) — mở 2026-07-28 từ FULL gate của S6-SEC-LOGINLOG-1; CẢ HAI reviewer (security-reviewer + rls-tenant-isolation-tester) độc lập chỉ ra cùng điểm",
+      "auth.service.ts:199 isLoginRateLimited() chạy TRƯỚC :215 resolveCompanyId() ⇒ recordLoginAttempt({companyId: null}) ở :201 dù slug hợp lệ",
+      "Đo PROD 2026-07-28: 165/268 hàng NULL-tenant là blocked/TooManyAttempts ⇒ ~62% hàng NULL thực ra CÓ CHỦ",
+      "docs/plans/S6-SEC-LOGINLOG-1.md §5.2 — phân tích đầy đủ + vì sao CỐ Ý không sửa trong WO đó",
+    ],
+    done_when: [
+      "⚠️ CÂN ĐÁNH ĐỔI TRƯỚC KHI ĐỔI THỨ TỰ: đưa resolveCompanyId() lên trước bộ chặn tần suất nghĩa là kẻ tấn công ép được MỘT LƯỢT TRA DB cho MỖI request kể cả khi đang bị chặn (bề mặt DoS) — phải nêu rõ cách giảm thiểu (cache slug→id, hoặc chỉ resolve khi đã qua chặn thô theo IP)",
+      "Giữ cân bằng timing chống dò tenant (auth.service.ts:219 password.hash burn thời gian) — KHÔNG được biến thứ tự mới thành oracle 'slug này có tồn tại'",
+      "TUYỆT ĐỐI KHÔNG nới lại vế USING của policy tenant_isolation trên login_logs (đó là KI-042, đã đóng bởi mig 0532)",
+      "Hàng CompanyInactive (slug sai/inactive) PHẢI vẫn là company_id NULL — đó mới là hàng thực sự vô chủ",
+      "Test: rate-limit với slug HỢP LỆ → hàng ghi ra có company_id = A VÀ withTenant(A) đọc được nó; withTenant(B) → 0 row. Deny-path cross-tenant giữ nguyên",
+      "Bất biến 'company_id IS NULL ⟹ user_id IS NULL' vẫn đúng sau thay đổi (đang được ghim bởi auth-me-bootstrap.int-spec)",
+      "FULL gate security-reviewer + rls-tenant-isolation-tester; RELEASE-02 KI-044 đóng",
     ],
   },
   {

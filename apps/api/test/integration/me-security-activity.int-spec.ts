@@ -380,13 +380,31 @@ describe.skipIf(!runDb)("S5-ME-BE-3 GET /me/security/activity (DB cô lập, đ�
   });
 
   // ── g2. nullable-tenant — company NULL: actor-lock chặn user khác, chính chủ vẫn thấy ──
-  it("nullable-tenant — login_logs company NULL + user B KHÔNG thấy; company NULL + user A THẤY (chính chủ)", async () => {
+  it("nullable-tenant — KHÔNG row NULL-company nào surface (kể cả gắn user A); row attributed của A vẫn hiện", async () => {
+    // ⟲ S6-SEC-LOGINLOG-1 / KI-042 (mig 0532) — ĐẢO assert cũ.
+    //
+    // Bản trước assert "row NULL-company của CHÍNH A PHẢI hiện" = true, dựa trên khe hở
+    // `USING (… OR company_id IS NULL)` của mig 0443. Đó là hình dạng row KHÔNG THỂ SINH RA từ code:
+    // cả 5 call-site của recordLoginAttempt, hai đường duy nhất truyền `companyId: null`
+    // (auth.service.ts:201 rate-limit · :221 company không resolve) đều truyền kèm `userId: null`.
+    // Đo PROD 2026-07-28: 268/268 row NULL-company có user_id NULL, 0 row `company NULL + user NOT NULL`.
+    // Nghĩa là assert cũ ghim một khe hở ĐỌC mở ra chỉ để phục vụ một row giả lập — và chính nó đẻ ra
+    // chú thích sai trong me-security-activity.repository.ts (memory `tests-can-pin-a-hole-open`).
+    //
+    // Sau 0532: KHÔNG row NULL-company nào đọc được qua đường tenant, bất kể user_id. Hoạt động bảo mật
+    // own-scope KHÔNG mất dòng nào, vì dòng thật của user luôn là row ATTRIBUTED (company_id = tenant).
     const roleId = await seedRoleWithPairs(A.companyId, "mesa-null", [PAIR.accessMe]);
     const a = await makeUser(A, roleId);
     const b = await makeUser(A, roleId);
-    // RLS nullable-tenant cho row company NULL đi qua — actor-lock user_id=actor phải là hàng rào.
     await plantLogin({ companyId: null, userId: b.userId, status: "failed", ip: "192.0.2.10" });
     await plantLogin({ companyId: null, userId: a.userId, status: "failed", ip: "198.18.0.1" });
+    // Row THẬT của A (attributed) — đây mới là hình dạng recordLoginAttempt sinh ra khi đã có tenant.
+    await plantLogin({
+      companyId: A.companyId,
+      userId: a.userId,
+      status: "failed",
+      ip: "203.0.113.7",
+    });
 
     const res = await get(ROUTE, a.token);
     expect(res.status).toBe(200);
@@ -397,7 +415,11 @@ describe.skipIf(!runDb)("S5-ME-BE-3 GET /me/security/activity (DB cô lập, đ�
     ).toBe(false);
     expect(
       items.some((i) => i.ipMasked === "198.18.*.*"),
-      "row NULL-company của CHÍNH A phải hiện",
+      "KI-042: row NULL-company KHÔNG còn đọc được qua đường tenant, kể cả khi gắn chính user A",
+    ).toBe(false);
+    expect(
+      items.some((i) => i.ipMasked === "203.0.*.*"),
+      "row attributed của chính A vẫn phải hiện — siết RLS không được làm mất own-scope activity",
     ).toBe(true);
   });
 

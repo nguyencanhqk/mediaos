@@ -12,6 +12,13 @@ import { seedUser, type SeededTenant } from "../helpers/seed";
  * Harness chỉ seed TENANT role (company_id NOT NULL) để kiểm tra cô lập chéo tenant.
  * Test riêng cần xác minh system roles hiển thị cho mọi tenant — ngoài phạm vi harness này.
  */
+/**
+ * Tiền tố email đánh dấu hàng `login_logs` có `company_id IS NULL` do harness gieo (S6-SEC-LOGINLOG-1).
+ * Hàng NULL-tenant KHÔNG dính `DELETE ... WHERE company_id = ANY(...)` nên cần marker riêng để dọn.
+ * Giữ ĐỒNG BỘ với `cleanupTenants()` trong `test/helpers/seed.ts`.
+ */
+export const RLS_NULL_MARKER_EMAIL = "rls-nullmarker";
+
 export interface RlsTableCase {
   /** Tên hiển thị + tên bảng thật. */
   name: string;
@@ -2699,12 +2706,14 @@ export const RLS_TABLES: RlsTableCase[] = [
   {
     name: "login_logs",
     table: "login_logs",
-    // company_id NULLABLE: hàng pre-auth (email không tồn tại) có company_id IS NULL → HIỂN THỊ với mọi tenant
-    // qua USING (company_id = GUC OR company_id IS NULL) — GIỐNG roles/seed_items có hàng global. Vì vậy
-    // skipNoContext: test 'no context → 0 row' KHÔNG đúng cho bảng nullable-tenant (sẽ đỏ khi có hàng NULL).
-    // Cô lập chéo tenant + WITH CHECK forge-deny vẫn được harness phủ; hành vi nullable-tenant đã verify ở
-    // auth-appendonly + rls-tenant-isolation (FULL gate). Mẫu: roles/role_permissions/seed_items.
-    skipNoContext: true,
+    // ⟲ S6-SEC-LOGINLOG-1 / KI-042 (mig 0532): skipNoContext ĐÃ TỪNG là `true`, với lý do "company_id
+    // NULLABLE nên hàng pre-auth HIỂN THỊ với mọi tenant — GIỐNG roles/seed_items có hàng global".
+    // Lý do đó SAI: hàng NULL của roles/seed_items là dữ liệu tham chiếu dùng CHUNG có chủ đích, còn
+    // hàng NULL của login_logs là dấu vết bảo mật (email + IP) của NGƯỜI LẠ. Miễn trừ này đã che đúng
+    // lỗ hổng KI-042 khỏi lưới an toàn cả dự án suốt từ S2.
+    // 0532 siết USING về `company_id = GUC` ⇒ "ngoài ngữ cảnh → 0 row" nay ĐÚNG cho bảng này, và test
+    // đó chính là vế deny của KI-042 ⇒ BẬT LẠI (không còn miễn trừ).
+    skipNoContext: false,
     seedRow: async (direct, t) => {
       const u = await seedUser(direct, t.companyId, `llog-${randomUUID().slice(0, 8)}@x.test`);
       const email = `llog-${randomUUID().slice(0, 8)}@x.test`;
@@ -2712,6 +2721,18 @@ export const RLS_TABLES: RlsTableCase[] = [
         `INSERT INTO login_logs (company_id, user_id, email, normalized_email, login_status)
          VALUES ($1, $2, $3, lower($3), 'success') RETURNING id`,
         [t.companyId, u, email],
+      );
+      // ⚠️ BẮT BUỘC gieo THÊM một hàng `company_id IS NULL`, nếu không case "ngoài ngữ cảnh → 0 row"
+      // XANH VÔ NGHĨA cho bảng này: dưới policy CŨ (còn `OR company_id IS NULL`), đọc không-GUC chỉ
+      // trả về ĐÚNG các hàng NULL — hàng attributed vốn đã vô hình. Chỉ gieo hàng attributed ⇒ 0 row
+      // ở CẢ hai phía ⇒ không bao giờ ĐỎ, tức bỏ miễn trừ mà không thu được bảo đảm nào.
+      // (Đã đo trên DB thật: policy cũ + chỉ hàng attributed → count = 0.)
+      // Marker `RLS_NULL_MARKER_EMAIL` để cleanupTenants dọn được — hàng NULL không dính DELETE
+      // theo company_id.
+      await direct.query(
+        `INSERT INTO login_logs (company_id, user_id, email, normalized_email, login_status, ip_address)
+         VALUES (NULL, NULL, $1, lower($1), 'blocked', '203.0.113.55')`,
+        [`${RLS_NULL_MARKER_EMAIL}-${randomUUID().slice(0, 8)}@x.test`],
       );
       return r.rows[0].id as string;
     },
