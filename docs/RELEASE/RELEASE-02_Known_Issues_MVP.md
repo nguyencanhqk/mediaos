@@ -56,17 +56,23 @@
 | ~~KI-029~~ | **ĐÃ VÁ 2026-07-28** (owner duyệt đổi hành vi sau freeze) — khai `PERMISSION_GUARD_ENABLED` trong `env.schema.ts` (default `"true"`) + `.env.example`; **`NODE_ENV=production` + `"false"` ⇒ CHẶN BOOT** (superRefine), giá trị lạ (`False`/`0`/rỗng) nay ĐỎ thay vì im lặng coi là bật. Guard **vẫn đọc `process.env` mỗi request** có chủ đích: rollback khẩn không cần build lại config, và reviewer dùng chính cờ này để tái lập vế RED của gate quyền. RED-proof: 5 ca mới ĐỎ khi gỡ vá, 24/24 xanh khi có vá; 434 unit vùng permission/auth/config không hồi quy. ~~kill-switch fail-OPEN toàn hệ, ngoài `env.schema`~~ | S2 | Bảo mật (tiềm ẩn) | ✅ | ⚠️ cần deploy | **ĐÓNG** |
 | ~~KI-030~~ | **3 route** `/org` không gate trả danh bạ + cơ cấu team toàn tenant cho mọi user đã đăng nhập (`employees` · `teams` · `teams/:id/members`) — lệch với `/hr/employees` vốn ép data_scope. ⟲ mở rộng 1 → 3 route bởi census runtime `S6-SEC-ROUTEMAP-1` | S2 | Bảo mật (phân quyền) | ✅ | ✅ | **ĐÓNG 2026-07-27** — `S6-SEC-ORG-1` |
 | KI-031 | `INTERNAL_API_KEY` ngoài `env.schema`/`.env.example` (guard **fail-CLOSED** nên chỉ mất tính năng) | S3 | Vận hành | ❌ | ❌ | Sau MVP |
+| **KI-043** | **Mật khẩu Postgres của PROD CHÍNH LÀ literal nằm trong repo PUBLIC.** `gh repo view` → `nguyencanhqk/mediaos` **visibility: PUBLIC**. `.env`/`.env.prod` dùng đúng ba literal mặc định của repo cho cả ba đường kết nối; `mediaos.ps1:245` **chủ động** `ALTER ROLE mediaos WITH LOGIN PASSWORD '<literal>'`. Đếm trên file tracked: **17 / 7 / 6 file** chứa lần lượt literal của `mediaos` (SUPERUSER) · `mediaos_app` · `mediaos_worker`. `docker-compose.yml:29` publish `"${POSTGRES_PORT:-5432}:5432"` ⇒ bind **0.0.0.0** (phơi nhiễm thực tế phụ thuộc firewall/NAT của máy chủ). FULL gate của `S6-SEC-DBFENCE-1` đã **chứng minh thực nghiệm**: nối superuser vào PROD `mediaos` bằng đúng literal trong repo → **THÀNH CÔNG**. Đây cũng là lý do bán kính KI-028 lớn đến vậy — mọi default trong repo đều là chìa khoá thật. Cùng lớp: `apps/api/demo-seed-{base,full}.mjs` + `seed-operator.mjs` mặc định ghi thẳng vào `mediaos` (PROD), **nằm ngoài** hàng rào vitest của KI-028 | **S0** | Bảo mật | ❌ | ❌ | `S6-SEC-ROTATE-1` (mở 2026-07-28) |
 
 > **Đánh số:** `S6-QA-FINAL-1` (PR #294) chiếm **KI-024…026**; `S6-SEC-1` (PR #295) tiếp
 > **KI-027…042**. Hai PR merge vào cùng bảng này — đã **giữ cả hai khối, không đánh số lại**
 > (tài liệu khác đã trỏ tới số hiệu).
 
 **Tổng (cập nhật 2026-07-27 sau re-gate vòng 2 của `S6-SEC-1`):**
-`S0 = **0 mở**` — KI-028 · KI-032 · KI-038 **đều đã đóng VÀ verify trực tiếp trên PROD** (2026-07-27) · `S1 = **2 mở**` (KI-027 · KI-034) — **KI-030 rời danh sách 2026-07-27**, đóng bởi `S6-SEC-ORG-1` (3→2); KI-033 **đã vá**; KI-035 **đã vá + hạ xuống `S3`** (hai claim của gate đều sai, xem dòng của nó); KI-034 **vá một phần** (còn phần gộp transaction). KI-027 nay chỉ còn chờ admin enroll 2FA rồi bật cờ, vì gốc rễ KI-036 đã vá ·
+`S0 = **1 mở**` (**KI-043** — mật khẩu Postgres PROD là literal trong repo PUBLIC, mở 2026-07-28 từ FULL gate của `S6-SEC-DBFENCE-1`; KI-028 · KI-032 · KI-038 **đều đã đóng VÀ verify trực tiếp trên PROD**, riêng KI-028 phải đóng lại lần hai ngày 2026-07-28) · `S1 = **2 mở**` (KI-027 · KI-034) — **KI-030 rời danh sách 2026-07-27**, đóng bởi `S6-SEC-ORG-1` (3→2); KI-033 **đã vá**; KI-035 **đã vá + hạ xuống `S3`** (hai claim của gate đều sai, xem dòng của nó); KI-034 **vá một phần** (còn phần gộp transaction). KI-027 nay chỉ còn chờ admin enroll 2FA rồi bật cờ, vì gốc rễ KI-036 đã vá ·
 `S2 = **8 mở**` (KI-008 · KI-011 · KI-016 · KI-021 · **KI-025** · KI-029 · KI-037 · KI-041) · `S3 = 17`.
 **KI-014 rời danh sách 2026-07-27** — đóng bởi `S6-QA-CHUNK-1` (9 → 8).
 
-> ✅ **KHÔNG CÒN `S0` MỞ (2026-07-27) — đã verify trực tiếp trên PROD.**
+> 🔴 **CÓ 1 `S0` MỞ (2026-07-28): KI-043** — mật khẩu Postgres của PROD chính là literal trong repo
+> PUBLIC, đã chứng minh thực nghiệm bằng một lần nối superuser thành công. **Chặn go-live** cho tới khi
+> rotate (`S6-SEC-ROTATE-1`). Câu "không còn S0 mở" bên dưới đúng cho tới **2026-07-27** và **nay
+> không còn đúng**.
+>
+> ~~✅ **KHÔNG CÒN `S0` MỞ (2026-07-27) — đã verify trực tiếp trên PROD.**~~
 > Ba lỗ `S0` do FULL gate của `S6-SEC-1` tìm ra đều đóng:
 >
 > | | Đóng bằng | Verify trên PROD (read-only) |
