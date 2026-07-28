@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import { and, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { DataScope } from "@mediaos/contracts";
-import { employeeProfiles } from "../db/schema";
+import { employeeProfiles, users } from "../db/schema";
 import { PermissionService } from "./permission.service";
 import { DataScopeRepository } from "./data-scope.repository";
 
@@ -38,8 +38,10 @@ export interface EmployeeScopeTarget {
  * data_scope (Own/Team/Department/Company/System) into a query condition, reusable by every module
  * (HR-BE-1 first; ATT/LEAVE/TASK later) WITHOUT hard-coding roles. BACKEND-03 §18/§26.4.
  *
- * Two surfaces:
- *   - buildEmployeeScopeCondition(): a Drizzle predicate ANDed into a list SELECT (filter at the DB).
+ * Surfaces:
+ *   - buildEmployeeScopeCondition(): a Drizzle predicate ANDed into a list SELECT (filter at the DB),
+ *     shaped on `employee_profiles` (HR records).
+ *   - buildUserScopeCondition(): the same idea shaped on `users` (ACCOUNT directories) — S6-SEC-ORGSCOPE-1.
  *   - isEmployeeInScope(): an in-memory membership check for a single already-loaded resource.
  *
  * AUTHORIZATION CONTRACT (plan-review #3a): isEmployeeInScope is a SCOPE FILTER, NOT a permission gate.
@@ -139,6 +141,41 @@ export class DataScopeService {
         return and(tenant, eq(employeeProfiles.userId, ctx.userId)) ?? falsey;
       default:
         return falsey;
+    }
+  }
+
+  /**
+   * S6-SEC-ORGSCOPE-1 — build the ACCOUNT-directory predicate for `scope`, shaped on `users` (not
+   * `employee_profiles`). For endpoints that list ACCOUNTS (`GET /auth/users`, `GET /org/employees`)
+   * rather than HR records.
+   *
+   * WHY A SECOND SHAPE instead of reusing buildEmployeeScopeCondition: that one filters
+   * `employee_profiles`, so ANDing it into a `users` SELECT would drop every account WITHOUT an HR
+   * profile — including at Company scope. `apps/console` uses `/org/employees` as the subject list of
+   * the RBAC screen, so a freshly-created account would become unassignable. Regression locked by
+   * `test/integration/org-directory-scope.int-spec.ts`.
+   *
+   * Team/Department FAIL CLOSED to 0 rows: `users` carries no org mapping, and §13 only ever grants
+   * Company on the account-read pair, so a narrower grant has no defined membership here. This mirrors
+   * `AuthUsersService.buildUserScopeCondition` exactly — the two account-listing endpoints share one
+   * permission pair, so they must not disagree on which rows it yields.
+   *
+   * NOTE (deliberate, plan §2.1): Team/Department therefore return LESS than Own. Non-monotonic, but
+   * it errs narrow, and no role holds those scopes on this pair today (measured on PROD 2026-07-28).
+   */
+  buildUserScopeCondition(scope: DataScope | null, ctx: ScopeContext): SQL {
+    // Tenant ALWAYS carried, exactly as buildEmployeeScopeCondition does: never a bare predicate that
+    // could match-all if RLS were ever bypassed.
+    const tenant = eq(users.companyId, ctx.companyId);
+    switch (scope) {
+      // N=1 single-tenant MVP: System stays bounded to the current tenant.
+      case "System":
+      case "Company":
+        return tenant;
+      case "Own":
+        return and(tenant, eq(users.id, ctx.userId)) ?? sql`false`;
+      default:
+        return sql`false`;
     }
   }
 

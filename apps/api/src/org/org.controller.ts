@@ -17,6 +17,8 @@ import type { Request } from "express";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import { OrgService } from "./org.service";
+// S6-SEC-ORGSCOPE-1: cặp quyền đường đọc danh bạ — dùng CHUNG với service (xem org.permissions.ts).
+import { ORG_EMPLOYEE_DIRECTORY } from "./org.permissions";
 import {
   AddTeamMemberDto,
   AssignTeamLeaderDto,
@@ -204,11 +206,14 @@ export class OrgController {
 
   // Danh bạ toàn tenant (id·email·fullName·status + team membership) ⇒ cùng lớp dữ liệu với
   // /hr/employees, phải gate. Đây là lỗ KI-030.
+  // S6-SEC-ORGSCOPE-1 (N-1): cặp quyền đến từ `ORG_EMPLOYEE_DIRECTORY` — CÙNG hằng số mà
+  // `OrgService.listEmployees` dùng để resolve `data_scope`. Guard chỉ trả lời "có cặp quyền không";
+  // "scope tới đâu" là việc của service, và hai vế PHẢI hỏi về cùng một cặp.
   @Get("employees")
   @UseGuards(PermissionGuard)
-  @RequirePermission("read", "user")
+  @RequirePermission(ORG_EMPLOYEE_DIRECTORY.action, ORG_EMPLOYEE_DIRECTORY.resourceType)
   listEmployees(@Req() req: AuthenticatedRequest) {
-    return this.org.listEmployees(req.user.companyId);
+    return this.org.listEmployees(req.user);
   }
 
   // ── Roles catalog ─────────────────────────────────────────────────────────────

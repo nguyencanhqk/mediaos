@@ -308,19 +308,26 @@ describe.skipIf(!hasLaneDb)("S6-SEC-ORG-1 — gate 3 route đọc /org (KI-030)"
     expect(after.rows[0].n, "team A phải vẫn đúng 2 thành viên đã seed").toBe(2);
   });
 
-  // ── Ghim tiền đề của quyết định "không ép data_scope" ───────────────────────────────────────────
+  // ── Cảnh báo trôi catalog role HỆ THỐNG (tiền đề CŨ đã được thay bằng code) ─────────────────────
 
   it("KHÔNG role HỆ THỐNG nào giữ `read:user`/`read:team` ở data_scope ≠ Company", async () => {
-    // Đây là bẫy NGỦ ĐÔNG mà 3 reviewer cùng chỉ ra. `OrgRepository.listEmployees` chỉ `withTenant`,
-    // KHÔNG ép data_scope — an toàn hôm nay CHỈ VÌ mọi grant của 2 cặp này đều `Company`. Một grant
-    // scope Own/Team/Department sẽ qua guard rồi nhận TRỌN danh bạ kèm email: UI hứa hẹp, API giao
-    // rộng. Ghim tiền đề ở đây để nó vỡ TO TIẾNG thay vì rò trong im lặng.
+    // LỊCH SỬ: ca này từng là "ghim TIỀN ĐỀ" — `OrgRepository.listEmployees` chỉ `withTenant`, nên an
+    // toàn CHỈ VÌ mọi grant của 2 cặp này đều `Company`; một grant Own/Team/Department sẽ qua guard
+    // rồi nhận TRỌN danh bạ kèm email.
     //
-    // PHẠM VI CÓ HẠN, nói rõ để không ai đọc quá: pin này chỉ phủ role HỆ THỐNG (seed/migration) —
-    // tức chỗ một migration tương lai có thể lặng lẽ cấp sai. Nó KHÔNG phủ role tenant tự đúc lúc
-    // chạy qua role-admin (scope ceiling chỉ chặn `System`); bịt vế đó cần ép data_scope trong
-    // repository, đã ghi thành việc kế tiếp ở docs/plans/S6-SEC-ORG-1.md §6.
-    // Lọc `is_system` cũng tránh bắt nhầm role phù du do spec khác seed trên cùng lane DB.
+    // TIỀN ĐỀ ĐÓ KHÔNG CÒN: `S6-SEC-ORGSCOPE-1` đã ép `data_scope` trong repository, và vế đó được
+    // chứng minh ở `org-directory-scope.int-spec.ts` (Own → chỉ mình · Team/Department → 0 hàng).
+    // Rò do scope hẹp giờ là chuyện KHÔNG THỂ, không phải chuyện "chưa xảy ra".
+    //
+    // VÌ SAO VẪN GIỮ (done_when #4 — "bỏ `is_system` HOẶC nêu rõ vì sao giữ"): ý nghĩa của ca đã ĐỔI
+    // từ hàng-rào-an-toàn sang CẢNH BÁO TRÔI CATALOG. Một migration cấp `Own`/`Team` cho role hệ
+    // thống nay không còn gây rò — nó gây MÀN HÌNH RỖNG cho role đó (fail-closed). Đó vẫn là hồi quy
+    // đáng vỡ to tiếng, chỉ khác loại.
+    //
+    // VÌ SAO KHÔNG BỎ `is_system = true`: `org-directory-scope.int-spec.ts` CỐ Ý seed role tenant với
+    // scope Own/Team/Department trên đúng cặp `read:user` để chứng minh vế deny. Bỏ bộ lọc ⇒ ca này
+    // bắt phải role phù du của spec ANH EM chạy song song trên cùng lane DB ⇒ đỏ ngẫu nhiên. Phạm vi
+    // "role hệ thống (seed/migration)" mới là thứ ca này thực sự canh.
     const rows = await direct.query(
       `SELECT r.name AS role, p.action || ':' || p.resource_type AS perm, rp.data_scope
          FROM role_permissions rp
@@ -332,8 +339,10 @@ describe.skipIf(!hasLaneDb)("S6-SEC-ORG-1 — gate 3 route đọc /org (KI-030)"
     );
     expect(
       rows.rows,
-      "Có grant read:user/read:team ở scope hẹp hơn Company ⇒ /org/employees sẽ trả TOÀN TENANT " +
-        "trong khi scope hứa hẹp hơn. Ép data_scope trong OrgRepository.listEmployees trước khi cấp.",
+      "Role HỆ THỐNG có grant read:user/read:team ở scope hẹp hơn Company. Sau S6-SEC-ORGSCOPE-1 " +
+        "điều này KHÔNG còn gây rò (repo đã ép data_scope) nhưng role đó sẽ nhận MÀN HÌNH RỖNG ở " +
+        "/org/employees — `users` không có org-mapping nên Team/Department fail-closed 0 hàng. " +
+        "Sửa migration để cấp Company, hoặc thêm org-mapping cho `users` trước khi cấp scope hẹp.",
     ).toEqual([]);
   });
 });

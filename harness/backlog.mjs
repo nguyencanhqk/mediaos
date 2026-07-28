@@ -5526,6 +5526,10 @@ export const backlog = [
     status: "todo",
     paths: [
       "apps/api/src/org/**",
+      // Mở rộng khi thi công (memory wo-paths-drive-gate-and-scheduler — khai thiếu ⇒ lọt LIGHT gate):
+      // vị từ hình-`users` (`buildUserScopeCondition`) sống ở DataScopeService — tầng chia sẻ của MỌI
+      // module, nên diff chạm nó PHẢI vào FULL gate chứ không chỉ vì có chữ "org" trong đường dẫn.
+      "apps/api/src/permission/**",
       "apps/api/test/**",
       "docs/_review/**",
       "docs/RELEASE/**",

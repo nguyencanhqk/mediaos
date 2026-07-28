@@ -68,8 +68,21 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > |---|---|---|
 > | `GET /org/units` · `/org/units/tree` · `/org/departments` | **Authenticated** | Danh mục cơ cấu: tên phòng ban + hình dạng cây. `apps/app` dùng trực tiếp ở `OrgChartPage` + `TaskSidebarTree` ⇒ gate = gãy UI mọi nhân viên |
 > | `GET /org/roles` | **Authenticated** | Danh mục vai trò, trả đúng `{ id, name }`; **không** nêu ai giữ vai trò nào. Repo đã loại role operator-plane khỏi đường đọc |
-> | `GET /org/employees` | **`read:user`** | Trả danh bạ toàn tenant: `id · email · fullName · status` + team membership |
+> | `GET /org/employees` | **`read:user`** + **`data_scope`** | Trả `id · email · fullName · status` + team membership. Từ `S6-SEC-ORGSCOPE-1`: hàng được BOUND theo scope, không còn "toàn tenant" |
 > | `GET /org/teams` · `/org/teams/:id/members` | **`read:team`** | Cơ cấu team = ai thuộc nhóm nào; `members` trả cả `userEmail` |
+>
+> **`data_scope` của `GET /org/employees` (S6-SEC-ORGSCOPE-1 — đóng nợ N-1):** guard chỉ trả lời "có
+> cặp quyền không"; số hàng do `DataScopeService.buildUserScopeCondition` quyết, dựng trên bảng
+> `users`:
+>
+> | scope | Thấy gì |
+> |---|---|
+> | `Company` · `System` | Mọi tài khoản trong tenant — **kể cả tài khoản chưa có `employee_profile`** (màn RBAC console dùng route này làm danh sách subject gán role) |
+> | `Own` | Chỉ chính mình |
+> | `Team` · `Department` | **0 hàng (fail-closed)** — `users` không mang org-mapping, và §13 chỉ cấp `Company` cho cặp đọc tài khoản ⇒ scope hẹp ở đây là ngữ nghĩa chưa định nghĩa. Giống hệt `GET /auth/users` |
+>
+> Cố ý **phi đơn điệu** (`Team` hẹp hơn `Own`): sai về phía 0 hàng, không sai về phía rò. Muốn `Team`
+> có nghĩa thật thì phải thêm org-mapping cho `users` — làm MỘT LẦN cho cả hai route, không vá lẻ.
 >
 > Trước 2026-07-27 cả bảy route đều Authenticated theo quy ước cũ "READ mở trong tenant" — đó chính là
 > KI-030: mọi user đã đăng nhập đọc được trọn danh bạ kèm email, trong khi `/hr/employees` cùng lớp dữ

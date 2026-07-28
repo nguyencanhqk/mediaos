@@ -195,6 +195,54 @@ describe("DataScopeService.buildEmployeeScopeCondition", () => {
   });
 });
 
+/**
+ * S6-SEC-ORGSCOPE-1 (N-1) — vị từ hình-`users` cho danh bạ TÀI KHOẢN (`/org/employees`,
+ * `/auth/users`). Khác `buildEmployeeScopeCondition` ở chỗ lọc trên bảng `users`, KHÔNG join
+ * `employee_profiles` — tài khoản chưa có hồ sơ nhân sự vẫn phải hiện ở scope Company.
+ */
+describe("DataScopeService.buildUserScopeCondition", () => {
+  const ctx: ScopeContext = { userId: "u1", companyId: "co1", orgUnitId: "ou1" };
+  let svc: DataScopeService;
+  beforeEach(() => {
+    svc = new DataScopeService(new PermissionService(new ScopeMockRepo()), stubRepo("ou1"));
+  });
+
+  it("Company/System → CHỈ company_id (không thu hẹp thêm, không bao giờ là no-op trần)", () => {
+    for (const scope of ["Company", "System"] as const) {
+      const sql = render(svc.buildUserScopeCondition(scope, ctx));
+      expect(sql).toContain('"company_id"');
+      // Không được lọc theo id: đây chính là vế giữ cho user CHƯA CÓ employee_profile vẫn hiện ra
+      // (chốt hồi quy màn RBAC console — xem test/integration/org-directory-scope.int-spec.ts).
+      expect(sql).not.toContain('"id"');
+    }
+  });
+
+  it("Own → company_id AND users.id (chỉ chính mình)", () => {
+    const sql = render(svc.buildUserScopeCondition("Own", ctx));
+    expect(sql).toContain('"company_id"');
+    expect(sql).toContain('"id"');
+  });
+
+  it("Team/Department → false (fail-closed: `users` KHÔNG có org-mapping)", () => {
+    // Cố ý HẸP HƠN cả Own (plan §2.1). §13 chỉ cấp Company cho cặp đọc tài khoản, nên scope hẹp trên
+    // cặp này là ngữ nghĩa chưa định nghĩa — sai về phía 0 hàng, không sai về phía rò.
+    for (const scope of ["Team", "Department"] as const) {
+      expect(render(svc.buildUserScopeCondition(scope, ctx)).toLowerCase()).toContain("false");
+    }
+  });
+
+  it("null/unknown scope → false", () => {
+    expect(render(svc.buildUserScopeCondition(null, ctx)).toLowerCase()).toContain("false");
+  });
+
+  it("KHÔNG chạm employee_profiles ở BẤT KỲ scope nào (khác hẳn vị từ hình-employee)", () => {
+    // Nếu ai đó “tối ưu” bằng cách join employee_profiles vào đây, ca này ĐỎ trước khi màn RBAC gãy.
+    for (const scope of ["Company", "System", "Own", "Team", "Department", null] as const) {
+      expect(render(svc.buildUserScopeCondition(scope, ctx))).not.toContain("employee_profiles");
+    }
+  });
+});
+
 describe("DataScopeService.isEmployeeInScope", () => {
   const ctx: ScopeContext = { userId: "u1", companyId: "co1", orgUnitId: "ou1" };
   const svc = new DataScopeService(new PermissionService(new ScopeMockRepo()), stubRepo("ou1"));

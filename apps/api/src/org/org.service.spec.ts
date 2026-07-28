@@ -4,9 +4,15 @@
  * Phủ logic nghiệp vụ (mock repo): mapping field, default type, NotFound/Conflict/Internal,
  * PATCH team leader, soft-delete. Repository (DB-bound) phủ riêng bằng RLS integration registry.
  */
-import { ConflictException, InternalServerErrorException, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  ForbiddenException,
+  InternalServerErrorException,
+  NotFoundException,
+} from "@nestjs/common";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OrgService } from "./org.service";
+import { ORG_EMPLOYEE_DIRECTORY } from "./org.permissions";
 
 const COMPANY_ID = "22222222-2222-2222-2222-222222222222";
 const UNIT_ID = "33333333-3333-3333-3333-333333333333";
@@ -44,8 +50,21 @@ function makeRepo() {
   };
 }
 
-function makeService(repo = makeRepo()) {
-  return { service: new OrgService(repo as never), repo };
+/**
+ * S6-SEC-ORGSCOPE-1 — mock DataScopeService. `resolveAndAssert` trả `Company` mặc định để mọi ca cũ
+ * giữ nguyên hành vi; ca scope riêng override trong từng test.
+ */
+function makeDataScope(scope: string | null = "Company") {
+  return {
+    resolveAndAssert: vi.fn().mockResolvedValue(scope),
+    buildUserScopeCondition: vi.fn().mockReturnValue(SCOPE_COND),
+  };
+}
+
+const SCOPE_COND = { __predicate: "scope-cond" } as never;
+
+function makeService(repo = makeRepo(), dataScope = makeDataScope()) {
+  return { service: new OrgService(repo as never, dataScope as never), repo, dataScope };
 }
 
 describe("OrgService (F3 breadth)", () => {
@@ -269,9 +288,41 @@ describe("OrgService (F3 breadth)", () => {
     await expect(service.removeTeamMember(COMPANY_ID, TEAM_ID, USER_ID)).resolves.toBeUndefined();
   });
 
-  it("listEmployees (legacy) returns rows", async () => {
-    const { service, repo } = makeService();
-    await service.listEmployees(COMPANY_ID);
-    expect(repo.listEmployees).toHaveBeenCalledWith(COMPANY_ID);
+  // ── S6-SEC-ORGSCOPE-1 (N-1) — danh bạ phải BOUND theo data_scope ───────────────────────────────
+
+  it("listEmployees resolve scope theo ĐÚNG cặp quyền mà controller gate", async () => {
+    // Chốt chống bẫy "gate một cặp, resolve scope một cặp khác" (memory
+    // read-path-gate-pair-must-match-download-pair): cả hai vế phải đọc từ ORG_EMPLOYEE_DIRECTORY.
+    // Khi S6-SEC-PERMVERB-1 đổi động từ sang `view:user`, ca này tự đi theo — nếu ai đó chỉ đổi
+    // decorator mà quên service (hoặc ngược lại), literal sẽ lệch và test ĐỎ.
+    const { service, dataScope } = makeService();
+    await service.listEmployees({ id: USER_ID, companyId: COMPANY_ID });
+    expect(dataScope.resolveAndAssert).toHaveBeenCalledWith(
+      USER_ID,
+      COMPANY_ID,
+      ORG_EMPLOYEE_DIRECTORY.action,
+      ORG_EMPLOYEE_DIRECTORY.resourceType,
+    );
+  });
+
+  it("listEmployees chuyển vị từ scope XUỐNG repository (không tự ý bỏ qua)", async () => {
+    const { service, repo, dataScope } = makeService();
+    await service.listEmployees({ id: USER_ID, companyId: COMPANY_ID });
+    expect(dataScope.buildUserScopeCondition).toHaveBeenCalledWith("Company", {
+      userId: USER_ID,
+      companyId: COMPANY_ID,
+    });
+    // Vế QUAN TRỌNG NHẤT: repo nhận vị từ. Thiếu nó = hành vi rò cũ quay lại trong im lặng.
+    expect(repo.listEmployees).toHaveBeenCalledWith(COMPANY_ID, SCOPE_COND);
+  });
+
+  it("listEmployees KHÔNG nuốt 403 của resolveAndAssert (fail-closed)", async () => {
+    const dataScope = makeDataScope();
+    dataScope.resolveAndAssert = vi.fn().mockRejectedValue(new ForbiddenException("no grant"));
+    const { service, repo } = makeService(makeRepo(), dataScope);
+    await expect(
+      service.listEmployees({ id: USER_ID, companyId: COMPANY_ID }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repo.listEmployees).not.toHaveBeenCalled();
   });
 });

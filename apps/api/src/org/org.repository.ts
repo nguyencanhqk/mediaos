@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
 import { employeeProfiles, orgUnits, teams, teamMembers, users, roles } from "../db/schema";
 import { notOperatorRole } from "../permission/operator-roles";
@@ -319,7 +319,12 @@ export class OrgRepository {
   }
 
   /** List employees (users) với team memberships — legacy endpoint G4-1. */
-  async listEmployees(companyId: string) {
+  /**
+   * S6-SEC-ORGSCOPE-1 (N-1) — `scopeCond` là vị từ `data_scope` do `OrgService` dựng
+   * (`DataScopeService.buildUserScopeCondition`). BẮT BUỘC, không có giá trị mặc định: một tham số
+   * optional ở đây nghĩa là caller quên truyền thì lặng lẽ quay về hành vi rò cũ.
+   */
+  async listEmployees(companyId: string, scopeCond: SQL) {
     return this.db.withTenant(companyId, async (tx) => {
       const userRows = await tx
         .select({
@@ -329,18 +334,30 @@ export class OrgRepository {
           status: users.status,
         })
         .from(users)
-        .where(and(eq(users.companyId, companyId), isNull(users.deletedAt)));
+        .where(and(eq(users.companyId, companyId), isNull(users.deletedAt), scopeCond));
 
-      const memberRows = await tx
-        .select({
-          userId: teamMembers.userId,
-          teamId: teamMembers.teamId,
-          teamName: teams.name,
-          roleName: teamMembers.roleName,
-        })
-        .from(teamMembers)
-        .innerJoin(teams, and(eq(teamMembers.teamId, teams.id), isNull(teams.deletedAt)))
-        .where(and(eq(teamMembers.companyId, companyId), isNull(teamMembers.deletedAt)));
+      // Bound membership theo ĐÚNG tập user đã lọc. Thiếu vế này thì lọc user xong vẫn rò "ai thuộc
+      // nhóm nào" cho người ngoài scope — nửa danh bạ. Tập rỗng ⇒ bỏ hẳn truy vấn (inArray với mảng
+      // rỗng là SQL không hợp lệ ở một số driver, và dù sao cũng không có gì để ghép).
+      const visibleIds = userRows.map((u) => u.id);
+      const memberRows = visibleIds.length
+        ? await tx
+            .select({
+              userId: teamMembers.userId,
+              teamId: teamMembers.teamId,
+              teamName: teams.name,
+              roleName: teamMembers.roleName,
+            })
+            .from(teamMembers)
+            .innerJoin(teams, and(eq(teamMembers.teamId, teams.id), isNull(teams.deletedAt)))
+            .where(
+              and(
+                eq(teamMembers.companyId, companyId),
+                isNull(teamMembers.deletedAt),
+                inArray(teamMembers.userId, visibleIds),
+              ),
+            )
+        : [];
 
       const membersByUser = new Map<
         string,
