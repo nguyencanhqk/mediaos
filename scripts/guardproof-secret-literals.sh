@@ -6,7 +6,7 @@
 # Cả hai lần đều chỉ lộ ra khi có người CỐ TÌNH dựng ca tấn công. Vì vậy lưới này là một phần của cổng,
 # không phải công cụ dùng một lần: sửa luật trong check-no-secret-literals.mjs thì chạy lại file này.
 #
-#   bash scripts/guardproof-secret-literals.sh      (exit 0 = cả 27 ca đúng kỳ vọng)
+#   bash scripts/guardproof-secret-literals.sh      (exit 0 = cả 31 ca đúng kỳ vọng)
 #
 # Mỗi ca dựng một repo git tạm rồi chạy cổng THẬT trên đó — không mock, không giả lập.
 set -u
@@ -114,6 +114,33 @@ run_case "khoá ngoài danh sách liệt kê cũ" RED "$BASE/e8"
 # ── env mẫu: ca HỢP LỆ ⇒ PHẢI XANH ─────────────────────────────────────────────────────────────
 mk h1; printf 'DATABASE_URL=postgres://u:__SET_ME__@h/db\nAPP_DB_PASSWORD=__SET_ME__\nS3_ACCESS_KEY=mediaos\nPGBOUNCER_URL=${DATABASE_URL}\n# ADMIN_PASSWORD=__SET_ME__\n' > "$BASE/h1/.env.example"
 run_case "OK: placeholder + access-key-id + biến" GREEN "$BASE/h1"
+
+# ── luật 1 `db-password-literal` — luật CHÍNH của WO, trước đây KHÔNG có ca nào ────────────────
+# Bổ sung 2026-07-29 khi đưa nhánh ra PR. Lưới cũ phủ dày luật 2 (env mẫu) và luật 3 (bind cổng)
+# nhưng bỏ trắng đúng luật mang tên KI-043 — tức luật headline chưa từng được chứng minh là ĐỎ,
+# đúng cái bẫy mà chính plan này đặt tên: "một cái chốt chưa từng ĐỎ thì chưa phải là chốt".
+#
+# Literal PHẢI ghép chuỗi (CLAUDE.md §5): viết thẳng vào đây thì chính file này làm cổng đỏ.
+# `changeme_` đứng một mình KHÔNG khớp — luật đòi ít nhất một ký tự chữ-số ngay sau dấu gạch dưới.
+LIT_LOWER='changeme_'
+LIT_UPPER='CHANGEME_'
+
+mk l1; printf 'PGPASSWORD=%sdev_only psql -U mediaos\n' "$LIT_LOWER" > "$BASE/l1/run-db.sh"
+run_case "literal trong file mã nguồn thường" RED "$BASE/l1"
+
+mk l2; printf 'DB_PW = "%sAPP_ONLY"\n' "$LIT_UPPER" > "$BASE/l2/config.ts"
+run_case "biến thể VIẾT HOA (cờ i)" RED "$BASE/l2"
+
+# Không có danh sách miễn trừ — kể cả docs. Đây là điều RELEASE-02 khai; nếu luật lặng lẽ bỏ qua
+# `docs/**` thì lời khai đó sai mà không gì phát hiện.
+mk l3/docs; printf 'Mật khẩu cũ là `%sworker_only`.\n' "$LIT_LOWER" > "$BASE/l3/docs/ghi-chu.md"
+run_case "docs KHÔNG được miễn trừ" RED "$BASE/l3"
+
+# Cửa thoát ĐƯỢC THIẾT KẾ: văn xuôi nhắc tới HỌ literal bằng `changeme_*` (có dấu sao) phải XANH.
+# Nếu ca này đỏ, mọi tài liệu nhắc tên họ literal đều đỏ oan ⇒ người ta sẽ tắt cổng, và cổng bị tắt
+# thì không chặn gì. Giữ ca này để cửa thoát không lặng lẽ biến mất.
+mk l4/docs; printf 'Họ literal cũ (`changeme_*`) đã rotate 2026-07-28.\n' > "$BASE/l4/docs/ghi-chu.md"
+run_case 'OK: văn xuôi changeme_* (có dấu sao)' GREEN "$BASE/l4"
 
 # ── file MỚI chưa tracked (bài học 1) ──────────────────────────────────────────────────────────
 mk n1; printf 'services:\n  a:\n    ports:\n      - "5432:5432"\n' > "$BASE/n1/docker-compose.yml"

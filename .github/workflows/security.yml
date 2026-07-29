@@ -64,6 +64,14 @@ jobs:
       - name: No known secret literals / wide port binds
         run: node scripts/check-no-secret-literals.mjs
 
+      # CHỐT CỦA CHÍNH CHỐT. Cổng trên đã hai lần báo XANH trong khi đang mù (vòng 1 lọt 6 dạng bind
+      # rộng; vòng 2 lọt thêm 10 dạng + không quét file chưa tracked) — cả hai lần chỉ lộ khi có người
+      # CỐ TÌNH dựng ca tấn công. Nếu lưới đó chỉ chạy bằng tay thì một lần nới lỏng luật sẽ không làm
+      # đỏ bất cứ thứ gì, và ta quay lại đúng trạng thái "xanh mà mù". Mỗi ca dựng repo git tạm rồi
+      # chạy cổng THẬT (không mock), nên nó bảo vệ HÀNH VI của cổng chứ không phải hình dạng mã.
+      - name: Guard-proof — 31 ca tấn công vào chính cổng trên
+        run: bash scripts/guardproof-secret-literals.sh
+
   # ── Cổng 2: Dependency scan (pnpm audit, SCA) ──────────────────────────────────────────────────
   dependency-scan:
     name: Dependency scan (pnpm audit)

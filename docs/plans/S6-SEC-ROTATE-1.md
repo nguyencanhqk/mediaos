@@ -662,7 +662,7 @@ Nhánh này đã xong nội dung từ 28/7 nhưng **chưa từng push/PR**, tron
 | 3 literal cũ + 1 mật khẩu-bậy, nối **TỪ HOST** `localhost:5432` | 4/4 `password authentication failed` |
 | 5 role với mật khẩu trong `.env` | 5/5 nối được |
 | `check-no-secret-literals.mjs` | 0 vi phạm |
-| `guardproof-secret-literals.sh` | **PASS 27 / FAIL 0** |
+| `guardproof-secret-literals.sh` | **PASS 31 / FAIL 0** (27 ca cũ + 4 ca mới cho luật 1) |
 | `/health/db` PROD (:3100) | 200 |
 | `docker inspect` 4 container | cả 4 publish `127.0.0.1:…` |
 
@@ -683,3 +683,31 @@ LANE_DB=mediaos_rot1  (KHÔNG set DATABASE_*_URL)
 46/46 ca deny-path/tenant **CHẠY**, không phải SKIP — tức hàng rào đã sống lại bằng lệnh chuẩn.
 Vế "hỏng im lặng" của KI-045 giữ nguyên thiết kế cảnh báo-rồi-chạy-tiếp (lý do ở §4b), nhưng
 `lane-db-guard` escalate ĐỎ ở tier `--all`/`REQUIRE_LANE_DB` nên không thể lỡ merge với deny-path rỗng.
+
+### Lỗ trong chính lưới hồi quy — luật headline chưa từng ĐỎ
+
+Đọc lại `guardproof-secret-literals.sh` khi đưa ra PR: 27 ca chia làm **13+4 ca luật 3** (bind cổng),
+**8+1 ca luật 2** (env mẫu) và **1 ca file-chưa-tracked**. Luật **1** — `db-password-literal`, đúng cái
+luật mang tên KI-043 và là câu chữ của `done_when` ("literal quay lại file tracked ⇒ ĐỎ") — **không có
+ca nào**. Nó "hoạt động" theo nghĩa chạy trên cây sạch thì xanh; không có gì chứng minh nó đỏ được.
+
+Đây là chính cái bẫy §3b đặt tên, lặp lại ở tầng trên: *một cái chốt chưa từng ĐỎ thì chưa phải là
+chốt*. Bổ sung 4 ca:
+
+| Ca | Kỳ vọng | Bảo vệ điều gì |
+| --- | --- | --- |
+| literal trong file mã nguồn thường (`.sh`) | RED | vế cơ bản nhất, trước nay bỏ trống |
+| biến thể **VIẾT HOA** | RED | cờ `i` được thêm ở vòng gate 1 nhưng không ai chốt lại |
+| literal trong `docs/**` | RED | `RELEASE-02` khai "không có danh sách miễn trừ, gồm cả docs" — nay có ca chứng minh |
+| văn xuôi `changeme_*` (có dấu sao) | **GREEN** | cửa thoát được thiết kế; nếu nó đỏ oan thì người ta tắt cổng, mà cổng bị tắt thì không chặn gì |
+
+Literal trong lưới phải **ghép chuỗi** (`LIT_LOWER='changeme_'` + hậu tố) theo CLAUDE.md §5 — viết
+thẳng thì chính file lưới làm cổng đỏ.
+
+> Ca thứ tư suýt XANH vì lý do sai: backtick trong **tên ca** nằm trong nháy kép ⇒ bash chạy nó như
+> lệnh, token biến mất khỏi nhãn. Ca vẫn "PASS". Phải `cat` nội dung fixture ra đọc mới thấy. Cùng lớp
+> với memory `tests-can-pin-a-hole-open`: **PASS không nói lên fixture chứa đúng thứ mình nghĩ.**
+
+Lưới nay chạy **trong CI** (`security.yml`, sau chính cổng) chứ không chỉ chạy tay: nếu chỉ chạy tay
+thì một lần nới lỏng luật sẽ không làm đỏ gì cả, và ta quay lại đúng trạng thái "xanh mà mù" đã xảy ra
+hai lần ở §4b/§4c.
