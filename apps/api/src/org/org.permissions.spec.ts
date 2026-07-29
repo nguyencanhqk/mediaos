@@ -68,6 +68,11 @@ const GUARDED_READS: ReadonlyArray<{
   action: string;
   resourceType: string;
 }> = [
+  // ⚠️ LITERAL CÓ CHỦ ĐÍCH — ĐỪNG "DRY" thành `ORG_EMPLOYEE_DIRECTORY` (FULL gate 2026-07-28 đã bắt
+  // đúng lỗi này ở vòng 1). Census là pin ĐỘC LẬP: nó tồn tại để nói "route phải gate ĐÚNG cặp NÀY".
+  // Cho nó đọc chính hằng số mà controller đọc thì nó thành tautology — đổi hằng số thành `read:team`
+  // census vẫn PASS. `S6-SEC-PERMVERB-1` PHẢI sửa cả hai chỗ, và việc nó buộc phải sửa ở đây chính là
+  // tác dụng của pin, không phải phiền toái.
   { handlerName: "listEmployees", action: "read", resourceType: "user" },
   { handlerName: "listTeams", action: "read", resourceType: "team" },
   { handlerName: "listTeamMembers", action: "read", resourceType: "team" },

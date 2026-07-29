@@ -485,9 +485,24 @@ lẫn `.env.prod` (nhớ `m prod-env` ghi đè `.env.prod`) → restart API → 
 >   là **tách từ vựng** `read:user` (legacy) vs `view:user` (canonical §13, mig `0444`) — WO sau phải
 >   chốt MỘT động từ. Cả ba hiện **0 user** ở PROD ⇒ không ảnh hưởng sống. Sửa cần migration, nằm
 >   ngoài `paths` của `S6-SEC-ORG-1`.
-> - **`listEmployees` không ép `data_scope`**: role tenant tự đúc với scope `Own`/`Team`/`Department`
->   sẽ qua guard rồi nhận trọn danh bạ. Tiền đề "mọi reader đều Company" nay có test ghim, nhưng pin
->   chỉ phủ role **hệ thống**, không phủ role đúc lúc chạy.
+> - 🔴 **MỞ 2026-07-28 — N-1c: cùng lỗ, cửa bên cạnh.** FULL gate của `S6-SEC-ORGSCOPE-1` phát hiện
+>   độc lập bởi 2/3 reviewer: `GET /org/teams/:id/members` trả `userEmail` + `userFullName`, gate
+>   **chỉ** cặp `read:team`, **không** resolve `data_scope`. Gốc rễ chung: `PermissionGuard` **không
+>   đọc `data_scope` một lần nào** (grep `dataScope` trong `permission.guard.ts` = 0 hit), còn ceiling
+>   của role-admin chỉ chặn `System`. **Ca tái lập:** role `read:user@Own` + `read:team@Company` ⇒
+>   `/org/employees` trả đúng 1 hàng (N-1 đã khoá), rồi `/org/teams` → `/org/teams/:id/members`
+>   **lấy lại trọn danh bạ email**. ⇒ **Đừng đọc bảng CHỐT `/org` như "đã chốt toàn bộ"**: vế `teams`
+>   chưa có scope. WO: `S6-SEC-ORGTEAMSCOPE-1` (đã seed vào `harness/backlog.mjs`, zone đỏ).
+>   Mức: rls-tenant-isolation-tester chấm **HIGH**, security-reviewer chấm **MEDIUM** (không BLOCK
+>   PR của N-1 vì không do nó gây ra và nằm ngoài `paths` đã khai).
+> - ~~**`listEmployees` không ép `data_scope`**~~ → **ĐÓNG 2026-07-28 bởi `S6-SEC-ORGSCOPE-1`.**
+>   Role tenant tự đúc với scope `Own`/`Team`/`Department` từng qua guard rồi nhận trọn danh bạ.
+>   Vá bằng `DataScopeService.buildUserScopeCondition` (vị từ hình-`users`, **không** join
+>   `employee_profiles` — join sẽ làm tài khoản chưa có hồ sơ rụng khỏi màn RBAC console).
+>   RED→GREEN: `test/integration/org-directory-scope.int-spec.ts` **5 failed | 2 passed → 7/7**
+>   (2 ca xanh từ vòng RED là chốt *chống siết quá tay*, cố ý phải xanh ở cả hai vòng).
+>   `Team`/`Department` fail-closed 0 hàng — giống hệt `GET /auth/users`; chi tiết + hệ quả
+>   phi-đơn-điệu ở `docs/plans/S6-SEC-ORGSCOPE-1.md` §2.1.
 
 **Mô tả gốc** (giữ nguyên cho tài liệu khác trỏ tới không gãy):
 
