@@ -82,3 +82,10 @@ jobs:
       # (báo cáo để theo dõi, không chặn merge) — khớp QA06-CICD-002 "Không Critical/High chưa xử lý".
       - name: pnpm audit (fail on high|critical)
         run: pnpm audit --audit-level=high
+
+      # Vật thay thế cho phần audit bị ignore (pnpm-workspace.yaml → auditConfig.ignoreGhsas):
+      # GHSA-mh99-v99m-4gvg dùng dải `<=5.0.7` nên cờ cả bản ĐÃ VÁ ⇒ phải ignore để cổng dùng được.
+      # Bù lại, bước này CHẠY THẬT expand() trên đúng file mà require() nạp và ĐỎ nếu lọt bản chưa vá —
+      # bắt được cả ca hiểm "số hiệu đã vá nhưng entry `main` vẫn là code cũ" (1.1.16/2.1.2, đo 2026-07-29).
+      - name: Chốt hồi quy brace-expansion (GHSA-mh99-v99m-4gvg)
+        run: node scripts/check-brace-expansion-guard.mjs

@@ -27,13 +27,26 @@ overrides:
   # drizzle-kit (ERR_PNPM_NO_MATCHING_VERSION). Rà lại khi nâng drizzle-kit/vitest.
   # 2026-07-25 — advisory GHSA-mh99-v99m-4gvg (CVE-2026-14257) đã mở rộng phủ cả 5.0.7 → re-bump 5.x lên
   # ^5.0.8. GIỮ per-major cho 1.x/2.x: minimatch@3.1.5/@9 gọi `require('brace-expansion')()` như HÀM — chỉ
-  # 1.1.16/2.1.2 giữ `module.exports = expand` ở entry `main` (5.0.8 chỉ có `exports.expand` ⇒ ép 5.0.8 vào
-  # minimatch@3.x ⇒ "expand is not a function", VỠ eslint). 1.1.16/2.1.2 ĐÃ CÓ guard EXPANSION_MAX_LENGTH
-  # (đã vá CVE-2026-14257) — audit VẪN cờ chúng vì dùng dải gộp <=5.0.7 = FALSE-POSITIVE. Owner chốt 07-25:
-  # ship bump thật (5.0.7→5.0.8), KHÔNG thêm auditConfig-suppress (giữ nếp repo "luôn vá, không ỉm"); check
-  # Dependency-scan (non-required) còn đỏ vì FP này tới khi advisory metadata ghi nhận backport 1.x/2.x.
-  "brace-expansion@<1.1.16": "^1.1.16"
-  "brace-expansion@>=2.0.0 <2.1.2": "^2.1.2"
+  # dòng 1.x/2.x giữ `module.exports = expand` ở entry `main` (5.0.8 chỉ có `exports.expand` ⇒ ép 5.0.8 vào
+  # minimatch@3.x ⇒ "expand is not a function", VỠ eslint).
+  #
+  # ⚠️ 2026-07-29 — ĐÍNH CHÍNH ghi chú 07-25 ("1.1.16/2.1.2 ĐÃ CÓ guard ⇒ audit là FALSE-POSITIVE"): SAI.
+  # ĐO THỰC NGHIỆM (`expand('{a,b}'.repeat(60))`, `node --max-old-space-size=1024`):
+  #   1.1.16 → exit 134, FATAL V8 out-of-memory   ⇒ KHÔNG có guard
+  #   2.1.2  → exit 134, FATAL V8 out-of-memory   ⇒ KHÔNG có guard
+  #   2.1.3  → 66.666 kết quả / 3.999.960 ký tự (bị cắt tại EXPANSION_MAX_LENGTH) ⇒ CÓ guard
+  #   5.0.8  → 66.666 kết quả / 3.999.960 ký tự                                   ⇒ CÓ guard
+  # Lý do 1.1.16/2.1.2 lừa được người đọc: tarball CÓ ship `ADVISORY-CVE-2026-14257.md` + bản đã vá ở
+  # `dist/commonjs/index.js`, nhưng `package.json` của chúng có `main: index.js` và KHÔNG có `exports` map
+  # ⇒ `require('brace-expansion')` (đường mà minimatch@3/@5 đi) nạp `index.js` = code CŨ, chưa vá.
+  # 2.1.3 (dist-tag `maintenance-v2`) mới đưa guard vào chính `index.js` ⇒ dùng nó cho CẢ 1.x lẫn 2.x.
+  # Dòng 1.x KHÔNG có bản vá nào (1.1.16 là bản cuối) ⇒ redirect 1.x sang 2.1.3: cùng `module.exports =
+  # expandTop`, chỉ khác bỏ dep `concat-map` + yêu cầu Node ≥10 (repo chạy Node ≥20).
+  #
+  # ⚠️ Bump này KHÔNG làm check Dependency-scan xanh: dải advisory là `<=5.0.7` nên nó cờ MỌI bản 1.x–4.x
+  # kể cả bản đã vá. Muốn xanh phải hoặc suppress GHSA (owner 07-25 đã bác — "luôn vá, không ỉm"), hoặc
+  # nâng eslint 9→10 (eslint@10 dùng minimatch@^10 ⇒ brace-expansion@5). Vá này chọn ĐÚNG CODE trước.
+  "brace-expansion@<2.1.3": "^2.1.3"
   "brace-expansion@>=3.0.0 <5.0.8": "^5.0.8"
   "fast-uri@>=3.0.0 <=3.1.3": "^3.1.4"
   "js-yaml@>=4.0.0 <4.3.0": "^4.3.0"
@@ -42,6 +55,17 @@ overrides:
   # qua vitest coverage (apps/api>@vitest/coverage-v8>vitest>…>postcss), KHÔNG vào runtime bundle. Range-
   # scoped để chỉ nâng dải lỗ hổng, không đụng postcss khác. Cổng CI = `pnpm audit --audit-level high`.
   "postcss@<8.5.18": "^8.5.18"
+
+# 2026-07-29 — GHSA-mh99-v99m-4gvg (brace-expansion DoS): dải advisory ghi `<=5.0.7`, tức nó cờ MỌI bản
+# của dòng 1.x–4.x kể cả bản ĐÃ VÁ (2.1.3). `overrides` bên trên đã đưa toàn cây về 2.1.3 + 5.0.8 và ĐO
+# THỰC NGHIỆM xác nhận cả hai đều có guard độ dài ở entry `main` ⇒ phần audit còn báo là dương-tính-giả.
+# ⚠️ Ignore này KHÔNG được đứng một mình: `scripts/check-brace-expansion-guard.mjs` chạy CÙNG job trong
+# security.yml, CHẠY THẬT expand() trên đúng file mà require() nạp và ĐỎ nếu có bản chưa vá lọt vào cây —
+# kể cả ca hiểm là bản "đã vá theo số hiệu" nhưng entry `main` vẫn là code cũ (đúng ca 1.1.16/2.1.2).
+# Gỡ ignore này khi thượng nguồn sửa dải advisory, hoặc khi cây hết sạch brace-expansion <5.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-mh99-v99m-4gvg
 
 # Cho phép chạy postinstall của các gói cần binary native (pnpm 10+ chặn mặc định).
 allowBuilds:
@@ -55,6 +79,7 @@ allowBuilds:
 # Repo đặt minimumReleaseAge (chặn cài gói vừa phát hành — phòng supply-chain). Bản VÁ bảo mật ở
 # `overrides` bên trên phải được miễn trừ ở đây, nếu không install sẽ từ chối chính bản đã vá.
 minimumReleaseAgeExclude:
+  - brace-expansion@2.1.3
   - brace-expansion@5.0.8
   - fast-uri@3.1.4
   - js-yaml@4.3.0
