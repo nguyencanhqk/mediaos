@@ -319,19 +319,53 @@ Chạy trên DB lane cô lập `mediaos_perfdb` (mint từ trống + chain migra
 | `lint` | ✅ |
 | `typecheck` | ✅ (10/10 task) |
 | `migration-no-drop` *(mới)* | ✅ 201 migration · 0 lệnh phá huỷ chưa đăng ký |
-| `test` (LANE_DB=mediaos_perfdb, chunked) | ✅ **0 test đỏ** — xem ghi chú KI-014 bên dưới |
+| `test` (LANE_DB=mediaos_perfdb, chunked) | ✅ **0 test đỏ do code** — 2 dạng đỏ HẠ TẦNG, xem ghi chú bên dưới |
 | `build` | ✅ (7/7 task) |
 | `prod-tenant-check` | ✅ (BỎ QUA đúng — đang nối lane DB, không phán quyết trên lane) |
 | `db-readiness` *(mới)* | ✅ 12/12 index · 0 RLS thiếu FORCE · 0 grant ledger |
 
-> **KI-014 (tinypool crash) — nói rõ để không nhầm với lỗi code.** Lượt chạy `check.sh --all` đầu tiên
-> báo step `test` ĐỎ. Truy nguyên: **crash HẠ TẦNG của tinypool (0 test đỏ)**, không phải test thất bại.
-> Chạy lại chính bộ chunked runner đó với cùng env ⇒ **exit 0**, toàn bộ 12 chunk `@mediaos/api` +
-> các package FE đều xanh; trong lượt này chunk 9 và 11 **cũng** dính crash hạ tầng và **tự phục hồi ở
-> lần retry đầu** (`harness/chunk-test.mjs` có sẵn cơ chế retry).
-> Kiểm chứng "không có test đỏ nào bị giấu": 22 dòng khớp chữ `failed` trong log đều là **fixture lỗi
-> mô phỏng** (`DB connection failed (simulated)`, `Valkey write failed`, …) và log đường-lỗi kỳ vọng —
-> không dòng nào là kết quả test.
+### 8.1 Hai dạng đỏ HẠ TẦNG gặp phải — nói rõ để không nhầm với lỗi code
+
+Step `test` chạy 3 lượt trên máy Windows này. **Không lượt nào có test đỏ vì assertion**; cả hai dạng
+đỏ đều là hạ tầng đã có tên trong sổ. Ghi lại đầy đủ vì cả hai đều dễ bị đọc nhầm thành "code hỏng".
+
+| Lượt | Kết quả | Nguyên nhân |
+| --- | --- | --- |
+| 1 (`check.sh --all`) | step `test` ĐỎ | **KI-014** — crash hạ tầng tinypool (**0 test đỏ**) |
+| 2 (chunked runner riêng, cùng env) | **exit 0** — 12/12 chunk api + FE xanh | chunk 9 & 11 dính KI-014 nhưng **tự phục hồi ở retry đầu** |
+| 3 (`check.sh --all` lần 2) | step `test` ĐỎ — 1 test | **ENOBUFS** (xem dưới) — chunk 8 lại dính KI-014 và tự phục hồi |
+
+**Dạng A — KI-014, tinypool crash (0 test đỏ).** `harness/chunk-test.mjs` nhận diện và tự chạy lại; ở
+lượt 2 và 3 nó phục hồi thành công.
+
+**Dạng B — ENOBUFS (lượt 3).** Đúng một test đỏ:
+
+```
+FAIL test/integration/me-personal-hub.int-spec.ts >
+     cross-tenant — token tenant A KHÔNG surface employee của tenant B (planted rows)
+Error: connect ENOBUFS 127.0.0.1:65531 - Local (undefined:undefined)
+```
+
+Đây là **cạn cổng ephemeral của Windows dưới tải full-suite** (`fullsuite-enobufs-and-unrescued-chunk`),
+không phải assertion thất bại — thông điệp là lỗi **socket**, không phải so sánh giá trị.
+⚠️ Chunk runner **KHÔNG retry ca này** vì nó phân loại theo "có ≥1 test đỏ ⇒ đỏ THẬT"; ENOBUFS lại
+biểu hiện như một test đỏ. Đây chính là vế "unrescued chunk" của bài học đó.
+
+**Chứng minh không phải hồi quy — 3 vế độc lập:**
+1. **Lượt 2** chạy đúng test đó trên đúng codebase này ⇒ **XANH**.
+2. **Chạy cô lập lại sau đó:** `vitest run test/integration/me-personal-hub.int-spec.ts` ⇒
+   **17/17 XANH** (gồm chính ca cross-tenant đã đỏ).
+3. Test đó (`/me` cross-tenant) **không có đường liên hệ nào** với thay đổi của WO này:
+   default cột `sequence_counters.current_value`, script drill, 2 script guard độc lập, dòng wire
+   trong `check.sh`.
+
+**Kiểm chứng "không có test đỏ nào bị giấu":** 22 dòng khớp chữ `failed` trong log lượt 2 đều là
+**fixture lỗi mô phỏng** (`DB connection failed (simulated)`, `Valkey write failed`, `usage insert
+failed`, …) và log đường-lỗi kỳ vọng — không dòng nào là kết quả test.
+
+> **Việc để lại (không thuộc WO này):** chunk runner nên nhận diện ENOBUFS/ECONNRESET như crash hạ
+> tầng để retry thay vì đóng dấu "đỏ THẬT". Đề xuất mở KI riêng — sửa ở đây sẽ là scope creep vào
+> `harness/chunk-test.mjs`, ngoài phạm vi WS5/WS6.
 
 ---
 
