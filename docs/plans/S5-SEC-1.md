@@ -105,9 +105,9 @@ sẵn-sàng-UAT (gate WS-E).
 **Lệnh chạy an toàn (KHÔNG chạm PROD `mediaos`):**
 ```bash
 bash scripts/lane-db-setup.sh sec1            # tạo + chain-migrate mediaos_sec1
-DATABASE_URL="postgres://mediaos_app:changeme_app_only@localhost:5432/mediaos_sec1" \
-DATABASE_DIRECT_URL="postgres://mediaos:changeme_dev_only@localhost:5432/mediaos_sec1" \
-DATABASE_WORKER_URL="postgres://mediaos_worker:changeme_worker_only@localhost:5432/mediaos_sec1" \
+DATABASE_URL="postgres://mediaos_app:${APP_DB_PASSWORD}@localhost:5432/mediaos_sec1" \
+DATABASE_DIRECT_URL="postgres://mediaos:${SUPERUSER_DB_PASSWORD}@localhost:5432/mediaos_sec1" \
+DATABASE_WORKER_URL="postgres://mediaos_worker:${WORKER_DB_PASSWORD}@localhost:5432/mediaos_sec1" \
 LANE_DB=mediaos_sec1 \
   pnpm --filter @mediaos/api test -- test/integration/noti-deeplink-perm-lost.int-spec.ts
 ```
@@ -144,3 +144,5 @@ mới chỉ **củng cố** bằng chứng. Fixture secret = ghép-chuỗi (né 
 ## 7. Ngoài phạm vi
 Test FE UI-state/a11y (→ S5-QA-REG-1) · performance/load (QA-07) · endpoint export MỚI · throttle mới
 refresh/reset (D1) · sửa `src` sản phẩm · migration/permission-seed.
+
+> _S6-SEC-ROTATE-1 (KI-043) 2026-07-28: mật khẩu trong khối lệnh trên đã được thay bằng biến env. Literal gốc là mật khẩu THẬT của cụm PROD (repo PUBLIC) — đã rotate và gỡ khỏi mọi file tracked._

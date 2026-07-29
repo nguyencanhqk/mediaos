@@ -43,6 +43,7 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../helpers/seed";
+import { FALLBACK_S3_SECRET } from "../helpers/fixture-secrets";
 
 const LOGIN_PW = "Passw0rd!test99";
 const runDb = hasDb && Boolean(process.env.LANE_DB);
@@ -88,7 +89,7 @@ describe.skipIf(!runDb)("S2-FND-FILE-2 upload E2E (presigned-PUT + confirm)", ()
   beforeAll(async () => {
     process.env.S3_ENDPOINT ??= "http://localhost:9000";
     process.env.S3_ACCESS_KEY ??= "mediaos";
-    process.env.S3_SECRET_KEY ??= "changeme_dev_only";
+    process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
     process.env.S3_BUCKET ??= "mediaos-assets";
     process.env.S3_FORCE_PATH_STYLE ??= "true";
     process.env.S3_REGION ??= "us-east-1";

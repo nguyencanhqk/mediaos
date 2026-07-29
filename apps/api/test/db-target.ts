@@ -70,6 +70,37 @@ function trimmed(v: string | undefined): string {
 }
 
 /**
+ * Mật khẩu role khi tổng hợp URL từ `LANE_DB` — S6-SEC-ROTATE-1 (KI-043).
+ *
+ * Trước 2026-07-28 ba mật khẩu này là LITERAL ngay trong file (họ `changeme_*`). Vì cụm Postgres
+ * là cluster-global (một mật khẩu/role cho MỌI database, gồm cả PROD `mediaos`), literal ở đây chính là
+ * chìa khoá PROD — nằm trong repo PUBLIC. Đã rotate và gỡ.
+ *
+ * Fail-LOUD chứ không fail-silent: `LANE_DB` được set là TÍN HIỆU CHỦ ĐÍCH "tôi muốn chạy int-spec".
+ * Trả URL rỗng ở đây sẽ biến thiếu-cấu-hình thành 100+ spec SKIP im lặng — đúng cái xanh-giả mà
+ * `harness/lane-db-guard.mjs` sinh ra để chống. Không có `LANE_DB` thì vẫn fail-CLOSED (luật 1 ở trên).
+ */
+function requirePassword(env: NodeJS.ProcessEnv, key: string, role: string): string {
+  const pw = trimmed(env[key]);
+  if (pw) return pw;
+  throw new Error(
+    [
+      "",
+      `LANE_DB được set nhưng THIẾU ${key} (mật khẩu role \`${role}\`).`,
+      "",
+      "Mật khẩu DB không còn literal trong repo (S6-SEC-ROTATE-1 / KI-043 — repo PUBLIC, literal cũ",
+      "CHÍNH LÀ mật khẩu cụm PROD). Test phải lấy từ env:",
+      "",
+      "  bash harness/check.sh --lane-db     # tự nạp .env rồi export 3 biến này",
+      "",
+      "Hoặc tự export APP_DB_PASSWORD / WORKER_DB_PASSWORD / SUPERUSER_DB_PASSWORD trước khi chạy vitest.",
+      "(worktree lane: copy .env từ gốc repo — xem scripts/lib/db-secrets.sh)",
+      "",
+    ].join("\n"),
+  );
+}
+
+/**
  * Resolve 3 URL DB cho test từ `env`. Ném lỗi nếu đích là DB được bảo vệ (xem luật 2 ở đầu file).
  *
  * Precedence mỗi URL: biến tường minh (`DATABASE_URL`/`_DIRECT_URL`/`_WORKER_URL`) > dựng từ `LANE_DB`.
@@ -86,17 +117,30 @@ export function resolveTestDbUrls(env: NodeJS.ProcessEnv = process.env): TestDbU
     return { DATABASE_URL: "", DATABASE_DIRECT_URL: "", DATABASE_WORKER_URL: "" };
   }
 
+  // Kiểm denylist TRƯỚC khi tổng hợp URL (S6-SEC-ROTATE-1). Tổng hợp giờ có thể ném lỗi "thiếu mật
+  // khẩu"; nếu để nó chạy trước, một lệnh trỏ vào PROD sẽ nhận thông báo SAI TRỌNG TÂM ("thiếu
+  // APP_DB_PASSWORD") thay vì "DATABASE ĐƯỢC BẢO VỆ". Cả hai đều fail-closed, nhưng thông điệp nào
+  // hiện ra quyết định người đọc hiểu vấn đề gì — và ở đây vấn đề là đang chĩa vào PROD.
+  assertNotProtectedDb(
+    {
+      DATABASE_URL: explicitApp,
+      DATABASE_DIRECT_URL: explicitDirect,
+      DATABASE_WORKER_URL: explicitWorker,
+    },
+    env,
+  );
+
   const host = trimmed(env.PG_HOSTPORT) || "localhost:5432";
   // KHÔNG tổng hợp URL khi thiếu `lane`. Nếu tổng hợp, `${lane}` rỗng sinh ra
   // `postgres://mediaos:…@host:5432/` — libpq resolve database về **tên role** (`mediaos` = PROD) và
   // nối THÀNH CÔNG, trong khi `parseDbName()` trả null nên denylist không thấy gì. FULL gate đã dựng
   // đúng ca này (chỉ set `DATABASE_URL`, không set `LANE_DB`) và chứng minh L1 mù.
-  const tuLane = (u: string, r: string, pw: string) =>
-    lane ? `postgres://${r}:${pw}@${host}/${lane}` : u;
+  const tuLane = (u: string, r: string, pwEnv: string) =>
+    lane ? `postgres://${r}:${requirePassword(env, pwEnv, r)}@${host}/${lane}` : u;
   const urls: TestDbUrls = {
-    DATABASE_URL: explicitApp || tuLane("", "mediaos_app", "changeme_app_only"),
-    DATABASE_DIRECT_URL: explicitDirect || tuLane("", "mediaos", "changeme_dev_only"),
-    DATABASE_WORKER_URL: explicitWorker || tuLane("", "mediaos_worker", "changeme_worker_only"),
+    DATABASE_URL: explicitApp || tuLane("", "mediaos_app", "APP_DB_PASSWORD"),
+    DATABASE_DIRECT_URL: explicitDirect || tuLane("", "mediaos", "SUPERUSER_DB_PASSWORD"),
+    DATABASE_WORKER_URL: explicitWorker || tuLane("", "mediaos_worker", "WORKER_DB_PASSWORD"),
   };
 
   assertNotProtectedDb(urls, env);

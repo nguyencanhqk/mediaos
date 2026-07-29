@@ -16,6 +16,14 @@
  *   ADMIN_NAME           (tuỳ chọn)  tên hiển thị admin (default "Administrator")
  *   SEED_DIRECT_URL | DATABASE_DIRECT_URL  (bắt buộc)  kết nối superuser/owner direct (:5432)
  *
+ * ⚠️ S6-SEC-ROTATE-1 (KI-043) — CỐ Ý KHÔNG đi qua `seed-target.mjs`:
+ *   Bốn script demo/operator (`demo-seed-*`, `seed-operator`) nay fail-closed và TỪ CHỐI DB được bảo vệ,
+ *   vì chúng tạo dữ liệu GIẢ (company `demo`, tài khoản test) — chạy nhầm lên PROD là hỏng dữ liệu thật.
+ *   File này thì NGƯỢC LẠI: nó là công cụ bootstrap CHÍNH THỨC cho PROD (`m deploy-seed`), tạo company +
+ *   admin THẬT từ biến ADMIN_*. Bắt nó opt-in `SEED_ALLOW_PROTECTED_DB` mỗi lần chỉ tạo ma sát mà không
+ *   thêm an toàn — đích PROD là MỤC ĐÍCH của nó, không phải tai nạn. Nó vẫn fail-closed theo cách riêng:
+ *   thiếu URL hoặc thiếu bất kỳ biến ADMIN_* bắt buộc nào ⇒ exit 1.
+ *
  * Chạy:  node apps/api/seed-admin.mjs        (sau khi nạp .env vào môi trường — xem `m deploy-seed`)
  * Idempotent: chạy lại an toàn (reset mật khẩu admin, không nhân bản company/role).
  */

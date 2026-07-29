@@ -13,9 +13,9 @@
 > **Cách re-run suite này** (DB cô lập, KHÔNG chạm PROD `mediaos`):
 > ```bash
 > bash scripts/lane-db-setup.sh sec1
-> DATABASE_URL=postgres://mediaos_app:changeme_app_only@localhost:5432/mediaos_sec1 \
-> DATABASE_DIRECT_URL=postgres://mediaos:changeme_dev_only@localhost:5432/mediaos_sec1 \
-> DATABASE_WORKER_URL=postgres://mediaos_worker:changeme_worker_only@localhost:5432/mediaos_sec1 \
+> DATABASE_URL=postgres://mediaos_app:${APP_DB_PASSWORD}@localhost:5432/mediaos_sec1 \
+> DATABASE_DIRECT_URL=postgres://mediaos:${SUPERUSER_DB_PASSWORD}@localhost:5432/mediaos_sec1 \
+> DATABASE_WORKER_URL=postgres://mediaos_worker:${WORKER_DB_PASSWORD}@localhost:5432/mediaos_sec1 \
 > LANE_DB=mediaos_sec1 pnpm --filter @mediaos/api exec vitest run \
 >   test/integration/me-qa1-idor-sweep.int-spec.ts \
 >   test/integration/employees-rbac-scope.int-spec.ts \
@@ -148,3 +148,5 @@ Chạy trên DB cô lập `mediaos_sec1`.
 Đợt này **không** migration/grant/đụng `src` sản phẩm ⇒ #1 RLS · #2 append-only · #3 no-secret **không suy
 yếu**; G1 chỉ **củng cố** bằng chứng (assert notification không mất + không rò secret khi mất quyền nguồn).
 Fixture không dùng literal high-entropy (né gitleaks `generic-api-key`).
+
+> _S6-SEC-ROTATE-1 (KI-043) 2026-07-28: mật khẩu trong khối lệnh trên đã được thay bằng biến env. Literal gốc là mật khẩu THẬT của cụm PROD (repo PUBLIC) — đã rotate và gỡ khỏi mọi file tracked._

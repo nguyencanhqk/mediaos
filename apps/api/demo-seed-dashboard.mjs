@@ -14,9 +14,14 @@
 import pg from "pg";
 import { hash, Algorithm } from "@node-rs/argon2";
 import { writeFileSync } from "node:fs";
+import { resolveSeedTarget } from "./seed-target.mjs";
 
-const DIRECT_URL = "postgres://mediaos:changeme_dev_only@localhost:5432/mediaos";
-const API = "http://localhost:3100/api/v1";
+// S6-SEC-ROTATE-1 (KI-043): trước đây HARD-CODE thẳng DB PROD + mật khẩu literal, không cả biến override.
+const DIRECT_URL = resolveSeedTarget({ label: "demo-seed-dashboard" });
+// S6-SEC-ROTATE-1: DB đích nay do SEED_DIRECT_URL quyết định (fail-closed), nhưng URL API vẫn cố định
+// :3100 = API PROD ⇒ script sẽ ĐĂNG NHẬP VÀO PROD (ghi login_logs/session) trong khi seed sang lane khác.
+// Cho phép trỏ đúng instance qua env.
+const API = process.env.SEED_API_BASE ?? "http://localhost:3100/api/v1";
 const OUT = "c:/tmp/mediaos-dashboard.html";
 
 const COMPANY = { name: "MediaOS Demo", slug: "demo" };

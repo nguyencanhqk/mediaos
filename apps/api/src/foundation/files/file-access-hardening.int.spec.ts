@@ -62,6 +62,7 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../../../test/helpers/seed";
+import { FALLBACK_S3_SECRET } from "../../../test/helpers/fixture-secrets";
 
 const LOGIN_PW = "Passw0rd!test99";
 
@@ -221,7 +222,7 @@ describe.skipIf(!runDb)(
       // URL even without a running MinIO. `??=` respects an already-configured shell env.
       process.env.S3_ENDPOINT ??= "http://localhost:9000";
       process.env.S3_ACCESS_KEY ??= "mediaos";
-      process.env.S3_SECRET_KEY ??= "changeme_dev_only";
+      process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
       process.env.S3_BUCKET ??= "mediaos-assets";
       process.env.S3_FORCE_PATH_STYLE ??= "true";
 

@@ -26,7 +26,11 @@ services:
       - -c
       - shared_buffers=256MB
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      # S6-SEC-ROTATE-1 (KI-043): BIND LOOPBACK. Trước 2026-07-28 dạng "PORT:5432" bind 0.0.0.0 ⇒ cụm
+      # Postgres (kể cả PROD trên máy này) nghe MỌI interface, trong khi mật khẩu superuser lại là literal
+      # nằm trong repo PUBLIC. Hai lỗi đó cộng lại = truy cập PROD từ xa. Cần mở ra ngoài thì đổi ở .env
+      # bằng INFRA_BIND_ADDR (vd 0.0.0.0) — CÓ CHỦ ĐÍCH, không phải mặc định.
+      - "${INFRA_BIND_ADDR:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -60,7 +64,9 @@ services:
       #    CHỈ nuôi `auth_user=` của database (generate_config_db_entry KHÔNG phát `user=` per-db) ⇒
       #    client→backend VẪN pass-through (mediaos_app) ⇒ RLS GIỮ NGUYÊN (đã verify current_user).
       #    Mật khẩu trong URL chỉ dùng nếu phải tự sinh userlist; ở đây userlist đã có pgbouncer_auth nên bỏ qua.
-      DATABASE_URL: postgres://pgbouncer_auth:${PGBOUNCER_AUTH_PASSWORD:-changeme_pgbauth_only}@postgres:5432/${POSTGRES_DB:-mediaos}
+      #    S6-SEC-ROTATE-1: KHÔNG default mật khẩu. `${VAR:?msg}` làm `docker compose up` DỪNG khi thiếu
+      #    biến — thà đỏ lúc khởi động còn hơn chạy bằng một chìa khoá ai cũng đọc được trong repo PUBLIC.
+      DATABASE_URL: postgres://pgbouncer_auth:${PGBOUNCER_AUTH_PASSWORD:?thieu PGBOUNCER_AUTH_PASSWORD trong .env}@postgres:5432/${POSTGRES_DB:-mediaos}
       POOL_MODE: transaction
       AUTH_TYPE: scram-sha-256
       AUTH_USER: pgbouncer_auth
@@ -73,7 +79,7 @@ services:
     ports:
       # edoburu/pgbouncer lắng nghe container:5432 (docker logs: 'listening on 0.0.0.0:5432').
       # Host :6432 (đích DATABASE_URL/RLS) forward tới cổng PgBouncer thực nghe (container:5432).
-      - "${PGBOUNCER_PORT:-6432}:5432"
+      - "${INFRA_BIND_ADDR:-127.0.0.1}:${PGBOUNCER_PORT:-6432}:5432"
     volumes:
       # userlist.txt chứa hash của pgbouncer_auth — sinh bởi setup-db-roles.mjs, đã gitignore.
       - ./.secrets/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
@@ -95,7 +101,7 @@ services:
     restart: unless-stopped
     command: ["valkey-server", "--appendonly", "yes", "--save", "60", "1"]
     ports:
-      - "${VALKEY_PORT:-6379}:6379"
+      - "${INFRA_BIND_ADDR:-127.0.0.1}:${VALKEY_PORT:-6379}:6379"
     volumes:
       - valkeydata:/data
     healthcheck:
@@ -113,8 +119,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-mediaos}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
     ports:
-      - "${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "${INFRA_BIND_ADDR:-127.0.0.1}:${MINIO_PORT:-9000}:9000"
+      - "${INFRA_BIND_ADDR:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - miniodata:/data
     healthcheck:

@@ -22,7 +22,15 @@ DB="mediaos_${LANE}"
 CONTAINER="${PG_CONTAINER:-mediaos-postgres}"     # tên container Postgres (docker-compose)
 SUPER="${PG_SUPERUSER:-mediaos}"                  # superuser/owner role (cluster-global, đã có)
 HOSTPORT="${PG_HOSTPORT:-localhost:5432}"         # cổng map ra host cho pnpm db:migrate
-DEV_PW="${OWNER_DB_PASSWORD:-changeme_dev_only}"  # mật khẩu dev của superuser mediaos
+
+# S6-SEC-ROTATE-1 (KI-043): mật khẩu superuser KHÔNG còn literal trong script. Trước đây dòng này là
+# `${OWNER_DB_PASSWORD:-<literal trong repo>}` — tức mọi lane DB đều được tạo bằng chìa khoá công khai của
+# cụm PROD. Giờ đọc từ .env (không tracked); thiếu ⇒ DỪNG, không đoán.
+# shellcheck source=lib/db-secrets.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/db-secrets.sh"
+db_secrets_load
+db_secrets_require SUPERUSER_DB_PASSWORD
+DEV_PW="$SUPERUSER_DB_PASSWORD"
 
 # S6-SEC-DBFENCE-1 — TỪ CHỐI DB ĐƯỢC BẢO VỆ. Script này giờ là NGƯỜI ĐÓNG DẤU lane test, nên nếu
 # không có chốt: `lane-db-setup.sh dev` → DB="mediaos_dev" = DB dev-online ⇒ (a) đóng dấu VĨNH VIỄN và

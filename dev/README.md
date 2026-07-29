@@ -38,12 +38,18 @@ Infra docker: postgres :5432 · pgbouncer :6432 · valkey :6379 · minio :9000/9
 
 - Root `.env` được toggle giữa `.env.dev` (flat-localhost — login browser chạy được) và
   `.env.prod` (cookie `.<domain>` + Secure — KHÔNG dùng chạy local). `m dev`/`m reset` tự copy `.env.dev` → `.env`; `m prod-env` trả lại `.env.prod`.
-- DB + URL runtime dev lấy từ **`apps/<app>/.env`** (mật khẩu `changeme_*`, `VITE_*` flat-localhost) — ưu tiên hơn root `.env`.
+- DB + URL runtime dev lấy từ **`apps/<app>/.env`** (`VITE_*` flat-localhost) — ưu tiên hơn root `.env`.
+  ⚠️ S6-SEC-ROTATE-1 (KI-043): `apps/api/.env` KHÔNG còn khai `DATABASE_*_URL` (chúng trỏ thẳng DB PROD và
+  thắng mọi precedence — đúng vector V2 của KI-028). Mật khẩu DB nay CHỈ nằm ở root `.env`, không tracked.
 
 ## DB role passwords
 
-- Postgres role là **cluster-global** (1 mật khẩu/role). Setup PROD đổi role sang mật khẩu prod ⇒ `changeme_*` của dev hết connect.
-- Login/test báo *"password authentication failed"* → `m roles` (đồng bộ role về `changeme_*`).
+- Postgres role là **cluster-global** (1 mật khẩu/role) ⇒ mọi DB trên cụm dùng chung một mật khẩu/role.
+  Từ 2026-07-28 KHÔNG còn mật khẩu mặc định nào trong repo: repo là PUBLIC nên literal cũ chính là chìa
+  khoá thật của cụm PROD (KI-043). Giá trị thật chỉ sống trong root `.env` (gitignore).
+- Login/test báo *"password authentication failed"* → `m roles` (đồng bộ role THEO root `.env`).
+  Lệnh này tự chữa được cả khi cụm và `.env` đang lệch: nó bootstrap qua local socket của container
+  (`scripts/rotate-db-roles.mjs`) chứ không cần đăng nhập TCP bằng chính mật khẩu đang sai.
 
 ## Deploy domain thật (Cloudflare Pages + cloudflared tunnel)
 

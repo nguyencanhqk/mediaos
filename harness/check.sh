@@ -112,7 +112,27 @@ step() { # step "<nhãn>" <lệnh...>
 if [ "$RUN_LANE_DB" = 1 ] && [ "$RUN_TEST" = 1 ]; then
   echo ""
   echo "──▶ lane-db-setup (--lane-db=$LANE_DB_NAME)"
-  if bash scripts/lane-db-setup.sh "$LANE_DB_NAME"; then
+  # S6-SEC-ROTATE-1 (KI-043): vitest.config → test/db-target.ts tổng hợp URL lane từ 3 biến này. Chúng
+  # KHÔNG còn literal mặc định, nên check.sh phải nạp từ .env (không tracked) rồi export xuống vitest.
+  # shellcheck source=../scripts/lib/db-secrets.sh
+  . scripts/lib/db-secrets.sh
+  db_secrets_load
+  # KHÔNG hard-fail: header file này hứa "lỗi → cảnh báo rõ, KHÔNG bắt buộc Docker, KHÔNG hard-fail",
+  # và worktree lane thường KHÔNG có .env (memory worktree-missing-kek-false-red). Thiếu mật khẩu ⇒ bỏ
+  # LANE_DB, chạy tiếp; int-spec sẽ SKIP và `lane-db-guard` vẫn escalate ĐỎ ở tier --all/REQUIRE_LANE_DB
+  # — tức vẫn không thể lỡ merge với bằng chứng deny-path rỗng.
+  if db_secrets_require SUPERUSER_DB_PASSWORD APP_DB_PASSWORD WORKER_DB_PASSWORD; then
+    export SUPERUSER_DB_PASSWORD APP_DB_PASSWORD WORKER_DB_PASSWORD
+    LANE_SECRETS_OK=1
+  else
+    echo "[check.sh] ⚠️  thiếu mật khẩu DB → BỎ QUA lane-db; int-spec sẽ skip (banner bên dưới sẽ nói rõ)."
+    LANE_SECRETS_OK=0
+  fi
+  # Đích DB của lần chạy này là LANE_DB — mà URL tường minh THẮNG LANE_DB (precedence trong
+  # test/db-target.ts). Nếu shell/parent còn sót DATABASE_*_URL trỏ PROD thì cả suite chạy vào PROD.
+  # Đây chính là điều thông báo lỗi của hàng rào KI-028 dặn làm; làm luôn cho người dùng.
+  unset DATABASE_URL DATABASE_DIRECT_URL DATABASE_WORKER_URL
+  if [ "$LANE_SECRETS_OK" = 1 ] && bash scripts/lane-db-setup.sh "$LANE_DB_NAME"; then
     export LANE_DB="mediaos_${LANE_DB_NAME}"
     echo "[check.sh] LANE_DB=$LANE_DB sẵn sàng — step test chạy NHƯ CI (deny-path/IDOR/cross-tenant KHÔNG bị skip)."
   else
@@ -120,6 +140,11 @@ if [ "$RUN_LANE_DB" = 1 ] && [ "$RUN_TEST" = 1 ]; then
     echo "[check.sh]     Docker KHÔNG bắt buộc để dùng check.sh; xem banner cảnh báo bên dưới nếu int-spec bị skip nhiều."
   fi
 fi
+
+# S6-SEC-ROTATE-1 (KI-043): chốt hồi quy literal secret + bind cổng. Đặt TRƯỚC lint/test vì nó rẻ (chỉ
+# đọc file tracked) và vì nếu vi phạm thì mọi kết quả sau đó cũng không cứu được — literal quay lại repo
+# PUBLIC là lỗ hổng đang mở, không phải một cảnh báo phong cách.
+step "secret-literals" node scripts/check-no-secret-literals.mjs
 
 step "lint"      pnpm lint
 step "typecheck" pnpm typecheck

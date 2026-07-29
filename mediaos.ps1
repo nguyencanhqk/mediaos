@@ -227,24 +227,61 @@ function Invoke-DevOnlineMigrate {
   Write-Ok "mediaos_dev da o head migration"
 }
 
-function Invoke-Seed {
+# S6-SEC-ROTATE-1: script seed nay FAIL-CLOSED (apps/api/seed-target.mjs) — không khai DB đích thì DỪNG,
+# và đích `mediaos`/`mediaos_dev` phải opt-in bằng ĐÚNG TÊN. Hàm này khai tường minh hộ người dùng thay
+# vì để họ ăn exit 1 từ sâu trong script seed (FULL gate 2026-07-28: `m seed`/`m reset` đã gãy im lặng).
+#   -AllowProtected: CHỈ Invoke-Reset truyền — nó vừa XOÁ SẠCH volume sau khi người dùng gõ "RESET".
+function Invoke-Seed([switch]$AllowProtected) {
   Write-Step "Seed demo (base + full)"
+  # SEED_DIRECT_URL do người dùng đặt = ý định TƯỜNG MINH "seed vào đúng DB này" ⇒ nó THẮNG .env.
+  # (Phải đọc TRƯỚC Import-DotEnv để không bị lẫn, và phải GATE trên đích ĐÃ RESOLVE — bản trước gate
+  #  trên DATABASE_DIRECT_URL rồi ghi đè SEED_DIRECT_URL, nên lời khuyên "đặt SEED_DIRECT_URL" in ra ở
+  #  nhánh chặn KHÔNG BAO GIỜ chạy được. Chỉ dẫn sai còn tệ hơn không chỉ dẫn.)
+  $explicit = $env:SEED_DIRECT_URL
+  Import-DotEnv (Join-Path $Root ".env")
+  $target = if ($explicit) { $explicit } else { $env:DATABASE_DIRECT_URL }
+  if (-not $target) { throw "Không có SEED_DIRECT_URL lẫn DATABASE_DIRECT_URL -> không biết seed vào DB nào." }
+  $dbName = ([uri]$target).AbsolutePath.TrimStart("/")
+  if ((@("mediaos", "mediaos_dev") -contains $dbName) -and (-not $AllowProtected)) {
+    Write-Err "DB đích '$dbName' được BẢO VỆ (PROD / dev-online) — seed demo tạo company demo + tài khoản quản trị lên dữ liệu THẬT."
+    Write-Host "  Muốn seed lại DB này : dùng `m reset` (xoá sạch + migrate + seed, có xác nhận)." -ForegroundColor Yellow
+    Write-Host "  Seed vào lane riêng  : `$env:SEED_DIRECT_URL='postgres://mediaos:<pw>@localhost:5432/mediaos_<lane>'; m seed" -ForegroundColor Yellow
+    throw "seed bị chặn (fail-closed)"
+  }
+  $env:SEED_DIRECT_URL = $target
+  if ($AllowProtected) { $env:SEED_ALLOW_PROTECTED_DB = $dbName }
   Push-Location (Join-Path $Root "apps\api")
   try {
     Exec { node demo-seed-base.mjs } "demo-seed-base"
     Exec { node demo-seed-full.mjs } "demo-seed-full"
-  } finally { Pop-Location }
-  Write-Ok "Seed xong"
+  } finally { Pop-Location; $env:SEED_ALLOW_PROTECTED_DB = $null; $env:SEED_DIRECT_URL = $null }
+  Write-Ok "Seed xong (DB: $dbName)"
 }
 
+# S6-SEC-ROTATE-1 (KI-043) — HÀM NÀY TỪNG LÀ NGUỒN TÁI NHIỄM.
+# Trước 2026-07-28 nó `ALTER ROLE ... PASSWORD '<literal>'` với đúng ba chuỗi nằm trong repo PUBLIC.
+# Hệ quả: rotate mật khẩu bao nhiêu lần cũng vô nghĩa — lần chạy `m roles` kế tiếp ÂM THẦM đặt lại cụm
+# về chìa khoá public (đúng lớp lỗi KI-036: vá ngọn, để nguyên cái tự khôi phục).
+# Giờ nó KHÔNG biết mật khẩu nào cả: chỉ nạp `.env` (không tracked) rồi uỷ quyền cho
+# `scripts/setup-db-roles.mjs` — nơi DUY NHẤT đọc mật khẩu, và chỉ đọc từ env.
 function Invoke-Roles {
-  Write-Step "Sync DB role passwords -> DEV (changeme_*)"
-  docker exec mediaos-postgres psql -U mediaos -d postgres -v ON_ERROR_STOP=1 `
-    -c "ALTER ROLE mediaos_app WITH LOGIN PASSWORD 'changeme_app_only'" `
-    -c "ALTER ROLE mediaos_worker WITH LOGIN PASSWORD 'changeme_worker_only'" `
-    -c "ALTER ROLE mediaos WITH LOGIN PASSWORD 'changeme_dev_only'"
-  if ($LASTEXITCODE -ne 0) { throw "sync roles thất bại" }
-  Write-Ok "Đã đồng bộ role về dev (khớp apps/api/.env)"
+  Write-Step "Sync DB role passwords <- .env (KHÔNG literal)"
+  $envPath = Join-Path $Root ".env"
+  if (-not (Test-Path $envPath)) {
+    throw "Không có .env ở gốc repo -> không biết mật khẩu role nào. Chạy 'm prod-env' hoặc copy .env.example rồi điền."
+  }
+  Import-DotEnv $envPath
+  foreach ($k in @("APP_DB_PASSWORD", "WORKER_DB_PASSWORD", "PGBOUNCER_AUTH_PASSWORD")) {
+    if (-not (Get-Item ("Env:" + $k) -ErrorAction SilentlyContinue).Value) { throw ".env THIẾU $k -> không biết đặt mật khẩu nào." }
+  }
+  # Uỷ quyền cho rotate-db-roles.mjs, KHÔNG gọi thẳng setup-db-roles.mjs.
+  # LÝ DO (FULL gate 2026-07-28 bắt): setup-db-roles nối qua TCP bằng chính DATABASE_DIRECT_URL, nên nó
+  # CHỈ chạy được khi mật khẩu đã khớp. Mà đúng tình huống lệnh này sinh ra để chữa — "login báo sai mật
+  # khẩu", tức .env và cụm ĐANG LỆCH — thì nó lại chết vì "password authentication failed". Bản literal
+  # cũ luôn chữa được vì đi `docker exec` (local socket, trust). rotate-db-roles.mjs giữ đúng đường
+  # bootstrap đó rồi mới gọi setup-db-roles => vừa không có literal, vừa không mất khả năng tự chữa.
+  Exec { node scripts/rotate-db-roles.mjs } "rotate-db-roles"
+  Write-Ok "Đã đồng bộ 5 role theo .env (kể cả khi mật khẩu đang lệch)"
 }
 
 function Invoke-Reset {
@@ -259,7 +296,7 @@ function Invoke-Reset {
   Invoke-Migrate
   Import-DotEnv (Join-Path $Root ".env")
   Exec { pnpm db:setup-roles } "pnpm db:setup-roles"
-  Invoke-Seed
+  Invoke-Seed -AllowProtected
   Write-Ok "RESET xong: DB sạch + migrate + role + seed"
   Write-Host "  Login: company=demo  email=admin@demo.local  pass=Admin@12345" -ForegroundColor Magenta
 }
@@ -900,7 +937,7 @@ function Show-Help {
   Write-Host "  DATABASE" -ForegroundColor Yellow
   Write-Host "    migrate           áp migration lên DB của .env đang active (in rõ DB đích trước khi chạy)"
   Write-Host "    seed              seed công ty demo + dữ liệu"
-  Write-Host "    roles             sync mật khẩu DB role về dev (khi login báo sai mật khẩu)"
+  Write-Host "    roles             sync mật khẩu DB role THEO .env (khi login báo sai mật khẩu)"
   Write-Host "    reset             [XOÁ SẠCH] down -v + up + migrate + roles + seed"
   Write-Host ""
   Write-Host "  TEST / CHẤT LƯỢNG" -ForegroundColor Yellow
@@ -962,7 +999,7 @@ function Show-Menu {
     Write-Host "  [19] MIGRATE DB           (áp migration mới — GIỮ NGUYÊN data)" -ForegroundColor Green
     Write-Host "   [6] RESET DB              [XOÁ SẠCH DATA]"
     Write-Host "   [7] Tắt INFRA             (docker compose down)"
-    Write-Host "   [8] Sync DB roles -> dev  (khi login báo sai mật khẩu)"
+    Write-Host "   [8] Sync DB roles <- .env (khi login báo sai mật khẩu)"
     Write-Host "   [9] STATUS                (docker · cổng · health)"
     Write-Host "  [10] Khôi phục .env PROD"
     Write-Host ""

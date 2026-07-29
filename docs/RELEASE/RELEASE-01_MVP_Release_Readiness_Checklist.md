@@ -36,7 +36,7 @@ quyền · không migration phá huỷ chưa duyệt). Điểm hụt nằm ở *
 | E2E QA | 10% | Flow E2E chính pass | **Passed** | 10,0 |
 | API contract | 10% | Contract/response/error/permission pass | **Passed** | 10,0 |
 | Permission & data scope | 15% | Không lộ dữ liệu trái quyền | **Passed** — ma trận 5 scope × 7 module | 15,0 |
-| Security | 10% | Không còn Critical/High mở | **Passed** (1 accepted-risk chờ ký) | 10,0 |
+| Security | 10% | Không còn Critical/High mở | **Passed** (1 accepted-risk chờ ký; KI-043 mở+đóng 28/7) | 10,0 |
 | Performance | 5% | Baseline đạt hoặc được chấp nhận | **Passed** — p95 ≤ 30ms/5 endpoint | 5,0 |
 | Deployment & rollback | 10% | Deploy rehearsal, migration, rollback OK | **In progress** | 5,0 |
 | Monitoring & support | 5% | Log, alert, hypercare sẵn sàng | **In progress** | 2,5 |
@@ -121,7 +121,7 @@ Ma trận **5 scope × 7 module** + 13 checklist + 6 negative — mỗi ô cite 
 
 | Mục | Trạng thái |
 | --- | --- |
-| CRITICAL / HIGH mở | **0 / 3** — cập nhật **2026-07-28 (sau `S6-SEC-DBFENCE-1`)**. `S0`: **KI-032** (tenant admin xoá được grant role hệ thống toàn cục) đã đóng + verify PROD. **KI-028 ĐÓNG 28/7** — bịt nguồn rò TRƯỚC (hàng rào 3 lớp: resolver fail-closed · con dấu `mediaos-test-lane` trong database · chốt hồi quy đếm tenant test trong PROD) rồi purge: PROD nay **0 company test · 0 user test active · 0 grant `platform-admin`**, `funtime` nguyên vẹn **46 user (35 active + 11 locked)**; chạy TRỌN suite 449 file không `LANE_DB` ⇒ **0 company mới**. `S1` còn lại: KI-033(đã vá) · KI-035(hạ S3) — **KI-034 ĐÓNG 28/7** (`S6-SEC-NOTITX-1`: insert+outbox+audit vào MỘT tx). **KI-027 ĐÓNG 28/7** (verify PROD: cờ ép 2FA `true` + service boot sau khi đổi + admin đã enroll TOTP). **KI-029 ĐÃ VÁ 28/7**. — `_review/S6-SEC-1-SECURITY-HARDENING-2026-07-26` §0.1 · §7d · RELEASE-02 KI-028 |
+| CRITICAL / HIGH mở | **0 / 3** — cập nhật **2026-07-28 (sau `S6-SEC-ROTATE-1`)**. **KI-043 (`S0`) MỞ VÀ ĐÓNG cùng ngày 28/7**: mật khẩu Postgres PROD chính là literal trong repo PUBLIC ⇒ đã rotate **5 role**, cắt nguồn tái nhiễm (`m roles` từng `ALTER ROLE` về literal), đưa **5 cổng hạ tầng về `127.0.0.1`**, và cắm chốt hồi quy chặn literal + port-bind rộng ở cả `check.sh` lẫn CI. Bằng chứng đo **TỪ HOST** (đường tấn công thật, vì `docker exec … -h 127.0.0.1` rơi vào `trust` nên chứng minh sai): 3 literal cũ + 1 mật khẩu-bậy đều bị từ chối, 5/5 mật khẩu mới nối được; `funtime` vẫn 46 user. `S0`: **KI-032** (tenant admin xoá được grant role hệ thống toàn cục) đã đóng + verify PROD. **KI-028 ĐÓNG 28/7** — bịt nguồn rò TRƯỚC (hàng rào 3 lớp: resolver fail-closed · con dấu `mediaos-test-lane` trong database · chốt hồi quy đếm tenant test trong PROD) rồi purge: PROD nay **0 company test · 0 user test active · 0 grant `platform-admin`**, `funtime` nguyên vẹn **46 user (35 active + 11 locked)**; chạy TRỌN suite 449 file không `LANE_DB` ⇒ **0 company mới**. `S1` còn lại: KI-033(đã vá) · KI-035(hạ S3) — **KI-034 ĐÓNG 28/7** (`S6-SEC-NOTITX-1`: insert+outbox+audit vào MỘT tx). **KI-027 ĐÓNG 28/7** (verify PROD: cờ ép 2FA `true` + service boot sau khi đổi + admin đã enroll TOTP). **KI-029 ĐÃ VÁ 28/7**. — `_review/S6-SEC-1-SECURITY-HARDENING-2026-07-26` §0.1 · §7d · RELEASE-02 KI-028 |
 | OWASP API Top 10 | 10/10 PASS hoặc N/A-có-lý-do |
 | 3 bất biến (`company_id`+RLS · append-only/soft-delete · không secret plaintext) | GIỮ VỮNG |
 | Accepted-risk chờ owner ký | **D3** — widget `hr-overview` count-only hiển thị headcount toàn công ty cho HR có scope Department |
