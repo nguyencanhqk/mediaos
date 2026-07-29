@@ -61,7 +61,8 @@ const GUARDED_MUTATIONS: ReadonlyArray<{
 
 /**
  * S6-SEC-ORG-1 — route ĐỌC trả dữ liệu VỀ NGƯỜI: phải gate y như mutation.
- * Cặp quyền lấy từ seed CÓ THẬT: `read:user` (0005:205) · `read:team` (0005:200, 0030:28).
+ * Cặp quyền lấy từ seed CÓ THẬT: `view:user` (0444:87-90 — canonical, S6-SEC-PERMVERB-1 đổi từ
+ * legacy `read:user` 0005:205) · `read:team` (0005:200, 0030:28).
  */
 const GUARDED_READS: ReadonlyArray<{
   handlerName: keyof OrgController;
@@ -73,7 +74,10 @@ const GUARDED_READS: ReadonlyArray<{
   // Cho nó đọc chính hằng số mà controller đọc thì nó thành tautology — đổi hằng số thành `read:team`
   // census vẫn PASS. `S6-SEC-PERMVERB-1` PHẢI sửa cả hai chỗ, và việc nó buộc phải sửa ở đây chính là
   // tác dụng của pin, không phải phiền toái.
-  { handlerName: "listEmployees", action: "read", resourceType: "user" },
+  //
+  // S6-SEC-PERMVERB-1 (2026-07-29): `read` → `view`. Động từ canonical của danh bạ tài khoản là
+  // `view:user` (0444), khớp `/auth/users` + role-admin. ADR: DECISIONS-06.
+  { handlerName: "listEmployees", action: "view", resourceType: "user" },
   { handlerName: "listTeams", action: "read", resourceType: "team" },
   { handlerName: "listTeamMembers", action: "read", resourceType: "team" },
 ];

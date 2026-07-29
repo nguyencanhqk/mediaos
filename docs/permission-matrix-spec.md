@@ -68,7 +68,7 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > |---|---|---|
 > | `GET /org/units` · `/org/units/tree` · `/org/departments` | **Authenticated** | Danh mục cơ cấu: tên phòng ban + hình dạng cây. `apps/app` dùng trực tiếp ở `OrgChartPage` + `TaskSidebarTree` ⇒ gate = gãy UI mọi nhân viên |
 > | `GET /org/roles` | **Authenticated** | Danh mục vai trò, trả đúng `{ id, name }`; **không** nêu ai giữ vai trò nào. Repo đã loại role operator-plane khỏi đường đọc |
-> | `GET /org/employees` | **`read:user`** + **`data_scope`** | Trả `id · email · fullName · status` + team membership. Từ `S6-SEC-ORGSCOPE-1`: hàng được BOUND theo scope, không còn "toàn tenant" |
+> | `GET /org/employees` | **`view:user`** + **`data_scope`** | Trả `id · email · fullName · status` + team membership. Từ `S6-SEC-ORGSCOPE-1`: hàng được BOUND theo scope, không còn "toàn tenant". Động từ = `view:user` từ `S6-SEC-PERMVERB-1` (DECISIONS-06 D-41) — **cùng cặp** với `GET /auth/users` |
 > | `GET /org/teams` · `/org/teams/:id/members` | **`read:team`** | Cơ cấu team = ai thuộc nhóm nào; `members` trả cả `userEmail` |
 >
 > **`data_scope` của `GET /org/employees` (S6-SEC-ORGSCOPE-1 — đóng nợ N-1):** guard chỉ trả lời "có
@@ -98,25 +98,34 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > liệu thì ép `read:employee` + data_scope. Quy ước "đọc thì mở" **chỉ áp cho DANH MỤC**, không áp cho
 > dữ liệu về NGƯỜI.
 >
-> ⚠️ **Hệ quả đã ghi nhận (KHÔNG backfill):** ở PROD chỉ `company-admin`/`SA`/`project-manager` giữ
-> `read:user`, và `company-admin`/`SA`/`hr-manager` giữ `read:team` — nên role `employee` **mất** quyền
-> đọc 3 route trên (40/46 user tenant `funtime`). Cả 3 chỉ có caller ở `apps/console`. Cấp thêm
-> `read:user` cho `employee` = mở lại chính lỗ vừa vá. Pin bằng `org-directory-permission.int-spec.ts`.
+> ⚠️ **Hệ quả đã ghi nhận (KHÔNG backfill):** ở PROD chỉ `company-admin`/`SA` giữ cặp danh bạ, và
+> `company-admin`/`SA`/`hr-manager` giữ `read:team` — nên role `employee` **mất** quyền đọc 3 route
+> trên (40/46 user tenant `funtime`). Cả 3 chỉ có caller ở `apps/console`. Cấp thêm cặp danh bạ cho
+> `employee` = mở lại chính lỗ vừa vá. Pin bằng `org-directory-permission.int-spec.ts`.
 >
-> ⚠️ **Lệch cặp đã biết — BA role, và có tách từ vựng `read:user` vs `view:user`.** Cả ba hiện **0
-> user** ở PROD nên tác động sống = 0, nhưng phải ghi đủ để WO sau không phải điều tra lại:
+> ✅ **Lệch động từ `read:user` vs `view:user` — ĐÃ ĐÓNG (`S6-SEC-PERMVERB-1`, 2026-07-29).**
+> ADR: [DECISIONS-06 D-41](<DECISIONS/DECISIONS-06_Permission_Verb_Canonical.md>). `/org/employees`
+> nay gate **`view:user`** — cùng cặp với `/auth/users`, role-admin và widget dashboard
+> `USER_SUMMARY`. Vì `data_scope` là PER-(permission, role), trước đây siết scope trên `view:user`
+> **không** siết `/org/employees`; sau khi thống nhất, một knob siết cả hai đường đọc tài khoản.
 >
-> | Role | Có | Thiếu | Hệ quả khi được dùng thật |
-> |---|---|---|---|
-> | `hr-manager` (…009, mig `0030` §4) | `read:team` + GHI team | `read:user` | Quản trị team được nhưng không liệt kê được user để thêm thành viên |
-> | `hr` (…011, canonical `0444`) | `view:user` | `read:user` · `read:team` | HR **không** xem được danh bạ lẫn nhóm |
-> | `manager` (…010, canonical `0444`) | — | cả ba | Không xem được danh bạ/nhóm |
+> **KHÔNG migration, KHÔNG grant mới** — số đo PROD 2026-07-29 (1 tenant, 46 user):
 >
-> **Gốc rễ là tách từ vựng:** matrix canonical §13 (`0444_s2_authseed1_canonical_roles_perms.sql:87-90`)
-> cố ý giới thiệu `view:user` là động từ thời AUTH ("KHÁC legacy `read:user`"), trong khi đường `/org`
-> vẫn gate bằng `read:user` legacy. WO sau **phải chốt một động từ** thay vì cấp chồng cả hai —
-> hướng dài hạn là `view:user`. Sửa = backfill PER-PAIR bằng migration (chưa có WO —
-> `docs/plans/S6-SEC-ORG-1.md` §2.4).
+> | Role | User sống | Trước | Sau | Ghi chú |
+> |---|---|---|---|---|
+> | `SA` · `company-admin` | 6 + 1 | ✅ | ✅ | Giữ **CẢ HAI** động từ @Company ⇒ đổi gate là no-op |
+> | `employee` | 45 | ❌ | ❌ | Không grant nào — không đổi |
+> | `project-manager` (…002) | **0** | ✅ | ❌ | **Mất** — media-era, ngoài §13, de-media-fy ⇒ cố ý không backfill |
+> | `hr` (…011) | **0** | ❌ | ✅ | **Được** — §13 đặc tả HR = Company; đã có sẵn `view:user` từ `0444`, chỉ chưa dùng được |
+>
+> ⓘ **Đính chính tiền đề cũ của khối này:** bản trước ghi "BA role lệch" và dự trù backfill cả ba.
+> Số đo bác bỏ — `manager` (…010) **đúng thiết kế** (§13 ghi Manager `-` cho `AUTH.USER.VIEW`, backfill
+> = mở rộng quyền ngoài đặc tả) và `hr-manager` (…009) là media-era ngoài §13. Chỉ `hr` lệch thật, và
+> nó **đã có** grant cần thiết ⇒ đổi gate là đủ.
+>
+> **Pha CONTRACT hoãn có chủ đích:** row `read:user` + grant của `project-manager` **vẫn còn** trong
+> catalog (không revoke cùng release đổi enforce — memory `migration-expand-contract-required`), nhưng
+> không route nào đọc tới. Khoá bằng ca chạy-thật *"`read:user` (LEGACY) KHÔNG còn mở được danh bạ"*.
 
 ---
 

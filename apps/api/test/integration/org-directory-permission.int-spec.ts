@@ -13,8 +13,15 @@
  *
  * Cặp quyền dùng để gate là cặp CÓ THẬT trong seed, không phát minh cặp mới
  * (memory `s1-fnd-module-metadata-seed-drift`):
- *   - `read:user` — `0005_permissions.sql:205`
+ *   - `view:user` — `0444_s2_authseed1_canonical_roles_perms.sql:87-90` (CANONICAL, xem ⟲ dưới)
  *   - `read:team` — `0005_permissions.sql:200` (tái khẳng định `0030_g5fix_org_team_perms.sql:28`)
+ *
+ * ⟲ **S6-SEC-PERMVERB-1 (2026-07-29) — động từ danh bạ đổi `read:user` → `view:user`.** 0444 cố ý
+ * giới thiệu `view:user` làm canonical ('KHÁC legacy read:user') và `module-app-metadata.ts:10` tuyên
+ * bố `read:user` là LEGACY 'KHÔNG dùng', nhưng `/org/employees` là chỗ DUY NHẤT còn gate động từ cũ
+ * ⇒ `/auth/users` và `/org/employees` (cùng lớp dữ liệu, cùng hình vị từ scope) chịu HAI cặp khác
+ * nhau, mà `data_scope` là PER-(permission, role) ⇒ siết một bên KHÔNG siết bên kia. ADR:
+ * `docs/DECISIONS/DECISIONS-06_Permission_Verb_Canonical.md`.
  *
  * VẾ NGƯỢC LẠI CŨNG ĐƯỢC KHOÁ (chống siết quá tay): `GET /org/units`, `GET /org/units/tree`,
  * `GET /org/departments`, `GET /org/roles` PHẢI vẫn 200 cho user KHÔNG grant. `apps/app` dùng
@@ -51,6 +58,24 @@ process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-".padEnd(40, "0"
 const PASSWORD = "Passw0rd!test99";
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 
+/**
+ * Cặp quyền CANONICAL gate `/org/employees` sau S6-SEC-PERMVERB-1.
+ *
+ * ⚠️ LITERAL CÓ CHỦ ĐÍCH — ĐỪNG import `ORG_EMPLOYEE_DIRECTORY` từ `src/org/org.permissions.ts`.
+ * Spec này seed grant theo cặp NÀY rồi gọi route THẬT; nếu nó đọc chính hằng số mà guard đọc thì hai
+ * vế không bao giờ lệch được và pin mất tác dụng (đổi hằng số sang `read:team` spec vẫn PASS).
+ * Cùng luật với `DIRECTORY_PAIR` ở `org-directory-scope.int-spec.ts` và census
+ * `src/org/org.permissions.spec.ts` — BA pin độc lập, đổi động từ phải sửa cả ba.
+ */
+const DIRECTORY_PAIR = ["view", "user"] as const;
+
+/**
+ * Động từ LEGACY. Sau S6-SEC-PERMVERB-1 nó KHÔNG còn mở được cửa nào — grant vẫn nằm trong catalog
+ * (pha CONTRACT của expand-contract chưa chạy: `project-manager` còn giữ row này) nhưng không route
+ * nào đọc tới. Giữ ở đây để khoá đúng điều đó bằng một ca chạy thật.
+ */
+const LEGACY_DIRECTORY_PAIR = ["read", "user"] as const;
+
 let _pwHash: string | undefined;
 async function hashedPw(): Promise<string> {
   if (!_pwHash) _pwHash = await new PasswordService().hash(PASSWORD);
@@ -74,8 +99,10 @@ describe.skipIf(!hasLaneDb)("S6-SEC-ORG-1 — gate 3 route đọc /org (KI-030)"
 
   /** Không grant nào — đại diện role `employee` của PROD (45/46 user funtime). */
   let uNone = "";
-  /** Chỉ `read:user` — chứng minh gate hai route team KHÔNG dùng chung cặp với employees. */
+  /** Chỉ `view:user` — chứng minh gate hai route team KHÔNG dùng chung cặp với employees. */
   let uUserReader = "";
+  /** Chỉ `read:user` (LEGACY) — S6-SEC-PERMVERB-1: động từ cũ KHÔNG còn mở được danh bạ. */
+  let uLegacyVerb = "";
   /** Chỉ `read:team`. */
   let uTeamReader = "";
   /** Cả hai — đại diện company-admin/SA. */
@@ -125,6 +152,7 @@ describe.skipIf(!hasLaneDb)("S6-SEC-ORG-1 — gate 3 route đọc /org (KI-030)"
 
   let tokNone = "";
   let tokUserReader = "";
+  let tokLegacyVerb = "";
   let tokTeamReader = "";
   let tokAdmin = "";
   let tokOther = "";
@@ -136,32 +164,18 @@ describe.skipIf(!hasLaneDb)("S6-SEC-ORG-1 — gate 3 route đọc /org (KI-030)"
 
     uNone = await seedUser(direct, A.companyId, `none@${A.slug}.test`, hash);
     uUserReader = await seedUser(direct, A.companyId, `userreader@${A.slug}.test`, hash);
+    uLegacyVerb = await seedUser(direct, A.companyId, `legacyverb@${A.slug}.test`, hash);
     uTeamReader = await seedUser(direct, A.companyId, `teamreader@${A.slug}.test`, hash);
     uAdmin = await seedUser(direct, A.companyId, `admin@${A.slug}.test`, hash);
     uOther = await seedUser(direct, B.companyId, `other@${B.slug}.test`, hash);
 
-    await grant(A.companyId, uUserReader, [["read", "user"]], "u");
+    await grant(A.companyId, uUserReader, [DIRECTORY_PAIR], "u");
+    await grant(A.companyId, uLegacyVerb, [LEGACY_DIRECTORY_PAIR], "legacy");
     await grant(A.companyId, uTeamReader, [["read", "team"]], "t");
-    await grant(
-      A.companyId,
-      uAdmin,
-      [
-        ["read", "user"],
-        ["read", "team"],
-      ],
-      "ut",
-    );
+    await grant(A.companyId, uAdmin, [DIRECTORY_PAIR, ["read", "team"]], "ut");
     // Tenant B: grant ĐỦ cả hai — nếu vẫn không thấy dữ liệu của A thì đó là cô lập tenant
     // đang làm việc, chứ không phải "thiếu quyền" che mất.
-    await grant(
-      B.companyId,
-      uOther,
-      [
-        ["read", "user"],
-        ["read", "team"],
-      ],
-      "ut",
-    );
+    await grant(B.companyId, uOther, [DIRECTORY_PAIR, ["read", "team"]], "ut");
 
     teamA = await seedTeam(A.companyId, "Team A");
     teamB = await seedTeam(B.companyId, "Team B");
@@ -177,6 +191,7 @@ describe.skipIf(!hasLaneDb)("S6-SEC-ORG-1 — gate 3 route đọc /org (KI-030)"
 
     tokNone = await login(A.slug, `none@${A.slug}.test`);
     tokUserReader = await login(A.slug, `userreader@${A.slug}.test`);
+    tokLegacyVerb = await login(A.slug, `legacyverb@${A.slug}.test`);
     tokTeamReader = await login(A.slug, `teamreader@${A.slug}.test`);
     tokAdmin = await login(A.slug, `admin@${A.slug}.test`);
     tokOther = await login(B.slug, `other@${B.slug}.test`);
@@ -206,7 +221,7 @@ describe.skipIf(!hasLaneDb)("S6-SEC-ORG-1 — gate 3 route đọc /org (KI-030)"
     }
   });
 
-  it("`read:user` KHÔNG mở được đường team (mỗi route mang đúng cặp quyền của nó)", async () => {
+  it("`view:user` KHÔNG mở được đường team (mỗi route mang đúng cặp quyền của nó)", async () => {
     const teams = await api(app).get("/org/teams").set(bearer(tokUserReader));
     const members = await api(app).get(`/org/teams/${teamA}/members`).set(bearer(tokUserReader));
     expect([teams.status, members.status]).toEqual([403, 403]);
@@ -217,9 +232,26 @@ describe.skipIf(!hasLaneDb)("S6-SEC-ORG-1 — gate 3 route đọc /org (KI-030)"
     expect(employees.status).toBe(403);
   });
 
+  it("S6-SEC-PERMVERB-1: `read:user` (LEGACY) KHÔNG còn mở được danh bạ", async () => {
+    // VẾ RED của WO này. Trước khi đổi động từ, user chỉ có `read:user` nhận 200 + trọn danh bạ —
+    // chính là trạng thái mà ca này tồn tại để cấm. Sau khi `ORG_EMPLOYEE_DIRECTORY` chuyển sang
+    // `view:user`, động từ legacy trở thành một row catalog KHÔNG mở được cửa nào.
+    //
+    // VÌ SAO ĐÁNG KHOÁ chứ không chỉ xoá grant: pha CONTRACT chưa chạy — `project-manager` (media-era,
+    // 0 user sống, đo PROD 2026-07-29) VẪN giữ row `read:user`@Company. Nếu một hồi quy đưa gate về
+    // động từ cũ thì role đó lặng lẽ lấy lại trọn danh bạ kèm email. Ca này làm điều đó ĐỎ TO TIẾNG.
+    const employees = await api(app).get("/org/employees").set(bearer(tokLegacyVerb));
+    expect(
+      employees.status,
+      "gate /org/employees đã tụt về động từ legacy `read:user` — xem DECISIONS-06",
+    ).toBe(403);
+    // Không chỉ mã lỗi: thân phản hồi cũng không được mang một byte danh bạ nào.
+    expect(JSON.stringify(employees.body)).not.toContain(`@${A.slug}.test`);
+  });
+
   // ── ALLOW (chống siết quá tay — gate sai chiều cũng là hỏng) ────────────────────────────────────
 
-  it("có `read:user` → 200 /org/employees; có `read:team` → 200 hai route team", async () => {
+  it("có `view:user` → 200 /org/employees; có `read:team` → 200 hai route team", async () => {
     const employees = await api(app).get("/org/employees").set(bearer(tokUserReader));
     expect(employees.status, JSON.stringify(employees.body)).toBe(200);
     // KHÔNG dừng ở `Array.isArray`: một hồi quy làm hỏng tenant context và trả `[]` sẽ vẫn xanh.
@@ -310,7 +342,7 @@ describe.skipIf(!hasLaneDb)("S6-SEC-ORG-1 — gate 3 route đọc /org (KI-030)"
 
   // ── Cảnh báo trôi catalog role HỆ THỐNG (tiền đề CŨ đã được thay bằng code) ─────────────────────
 
-  it("KHÔNG role HỆ THỐNG nào giữ `read:user`/`read:team` ở data_scope ≠ Company", async () => {
+  it("KHÔNG role HỆ THỐNG nào giữ `view:user`/`read:team` ở data_scope ≠ Company", async () => {
     // LỊCH SỬ: ca này từng là "ghim TIỀN ĐỀ" — `OrgRepository.listEmployees` chỉ `withTenant`, nên an
     // toàn CHỈ VÌ mọi grant của 2 cặp này đều `Company`; một grant Own/Team/Department sẽ qua guard
     // rồi nhận TRỌN danh bạ kèm email.
@@ -325,21 +357,24 @@ describe.skipIf(!hasLaneDb)("S6-SEC-ORG-1 — gate 3 route đọc /org (KI-030)"
     // đáng vỡ to tiếng, chỉ khác loại.
     //
     // VÌ SAO KHÔNG BỎ `is_system = true`: `org-directory-scope.int-spec.ts` CỐ Ý seed role tenant với
-    // scope Own/Team/Department trên đúng cặp `read:user` để chứng minh vế deny. Bỏ bộ lọc ⇒ ca này
+    // scope Own/Team/Department trên đúng cặp danh bạ để chứng minh vế deny. Bỏ bộ lọc ⇒ ca này
     // bắt phải role phù du của spec ANH EM chạy song song trên cùng lane DB ⇒ đỏ ngẫu nhiên. Phạm vi
     // "role hệ thống (seed/migration)" mới là thứ ca này thực sự canh.
+    //
+    // S6-SEC-PERMVERB-1: cặp canh là `view:user` (canonical) chứ không còn `read:user` — sau khi đổi
+    // động từ, một grant `read:user` scope hẹp KHÔNG gây màn-hình-rỗng nữa vì không route nào đọc nó.
     const rows = await direct.query(
       `SELECT r.name AS role, p.action || ':' || p.resource_type AS perm, rp.data_scope
          FROM role_permissions rp
          JOIN permissions p ON p.id = rp.permission_id
          JOIN roles r ON r.id = rp.role_id AND r.deleted_at IS NULL AND r.is_system = true
         WHERE rp.effect = 'ALLOW'
-          AND (p.action, p.resource_type) IN (('read','user'), ('read','team'))
+          AND (p.action, p.resource_type) IN (('view','user'), ('read','team'))
           AND rp.data_scope IS DISTINCT FROM 'Company'`,
     );
     expect(
       rows.rows,
-      "Role HỆ THỐNG có grant read:user/read:team ở scope hẹp hơn Company. Sau S6-SEC-ORGSCOPE-1 " +
+      "Role HỆ THỐNG có grant view:user/read:team ở scope hẹp hơn Company. Sau S6-SEC-ORGSCOPE-1 " +
         "điều này KHÔNG còn gây rò (repo đã ép data_scope) nhưng role đó sẽ nhận MÀN HÌNH RỖNG ở " +
         "/org/employees — `users` không có org-mapping nên Team/Department fail-closed 0 hàng. " +
         "Sửa migration để cấp Company, hoặc thêm org-mapping cho `users` trước khi cấp scope hẹp.",

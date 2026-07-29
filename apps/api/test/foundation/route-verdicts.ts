@@ -231,7 +231,8 @@ export const ROUTE_VERDICTS: Readonly<Record<string, RouteVerdict>> = {
   // ── GAP (0) — KI-030 ĐÃ ĐÓNG bởi S6-SEC-ORG-1 (2026-07-27) ─────────────────────────────────────
   // Ba dòng từng ở đây (`OrgController#listEmployees` · `#listTeams` · `#listTeamMembers`) đã được GỠ
   // vì nợ đã trả, không phải vì ai đó dọn cho xanh: cả ba nay mang `@UseGuards(PermissionGuard)` +
-  // `@RequirePermission` (`read:user` cho employees, `read:team` cho hai route team) nên chúng RỜI tập
+  // `@RequirePermission` (`view:user` cho employees — S6-SEC-PERMVERB-1 đổi từ legacy `read:user`,
+  // xem DECISIONS-06; `read:team` cho hai route team) nên chúng RỜI tập
   // "route không gate" ⇒ giữ dòng lại sẽ làm ĐỎ test "nợ trả rồi thì gỡ" (luật 4 ở đầu file).
   // Bằng chứng RED→GREEN: `test/integration/org-directory-permission.int-spec.ts`.
   //
