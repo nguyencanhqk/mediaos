@@ -5744,9 +5744,15 @@ export const backlog = [
     status: "todo",
     paths: [
       "apps/api/src/auth/**",
+      // S6-SEC-LOGINLOG-2 khi thi công: docstring ở me-security-activity.repository.ts liệt kê "mọi
+      // đường sinh row company_id IS NULL" và nêu đích danh nhánh rate-limit ⇒ bản vá làm nó SAI, phải
+      // sửa cùng PR. Khai ở đây để không lọt gate (memory wo-paths-drive-gate-and-scheduler).
+      "apps/api/src/me/**",
       "apps/api/test/**",
       "docs/RELEASE/**",
       "docs/plans/S6-SEC-LOGINLOG-2.md",
+      // File này tự sửa chính nó (thêm 2 path trên) ⇒ phải tự khai, nếu không guard-scope kêu.
+      "harness/backlog.mjs",
     ],
     skills: ["code-review"],
     depends_on: ["S6-SEC-LOGINLOG-1"],
