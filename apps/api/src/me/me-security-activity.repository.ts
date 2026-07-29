@@ -21,11 +21,18 @@ import { loginLogs, userSecurityEvents } from "../db/schema/auth-logs";
  * ⟲ S6-SEC-LOGINLOG-1 / KI-042 (mig 0532) — ĐÍNH CHÍNH chú thích cũ. Bản trước ghi rằng USING
  * nullable-tenant (own + NULL) "CỐ Ý cho row company NULL đi qua — fail đăng nhập pre-auth của CHÍNH
  * user vẫn phải hiện". Điều đó KHÔNG ĐÚNG với dữ liệu thật: mọi đường sinh row `company_id IS NULL`
- * (auth.service.ts:201 rate-limit, :221 company không resolve được) đều truyền `userId: null`, nên
+ * (nhánh 429 rate-limit KHI slug không resolve được — xem đính chính KI-044 bên dưới; và nhánh company
+ * không resolve được ở `login`) đều truyền `userId: null`, nên
  * row NULL-company LUÔN có `user_id IS NULL` và bị chính actor-lock `user_id = userId` loại từ trước —
  * chưa bao giờ hiện ở màn hình này. Đo trên PROD 2026-07-28: 268/268 row NULL-company đều user_id NULL,
  * 0 row vi phạm. Vì vậy 0532 siết USING KHÔNG làm mất dòng nào của /me/security/activity (đã ghim bằng
  * test hồi quy). Actor-lock `user_id = userId` vẫn là hàng rào chống IDOR giữa user cùng tenant.
+ *
+ * ⟲ S6-SEC-LOGINLOG-2 / KI-044 — ĐÍNH CHÍNH tiếp: nhánh 429 (rate-limit) nay resolve chủ TRƯỚC khi ghi,
+ * nên hàng `blocked/TooManyAttempts` với companySlug HỢP LỆ mang `company_id` THẬT (không còn NULL).
+ * Nhánh đó chỉ còn sinh hàng NULL khi slug sai/inactive hoặc khi chính lượt resolve lỗi (fail-soft).
+ * Bất biến mà màn hình này dựa vào KHÔNG đổi: hàng NULL-company vẫn LUÔN có `user_id IS NULL` (nhánh
+ * 429 vẫn truyền `userId: null`), nên actor-lock vẫn loại chúng như cũ — vẫn không mất dòng nào.
  * Nhánh user_security_events AND company_id tường minh (belt-and-suspenders, company NOT NULL).
  */
 

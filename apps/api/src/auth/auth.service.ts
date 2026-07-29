@@ -82,6 +82,15 @@ const PLATFORM_ADMIN_ROLE_ID = "00000000-0000-0000-0000-0000000000f0";
 const FORGOT_PW_FLOOR_MS = 250;
 const FORGOT_PW_JITTER_MS = 80;
 
+/**
+ * S6-SEC-LOGINLOG-2 — sàn thời gian cho nhánh 429 của login. Cùng cơ chế/giá trị với forgot, nhưng hằng
+ * số RIÊNG vì lý do tồn tại khác: sau KI-044, nhánh 429 ghi log qua HAI hình dạng khác nhau — slug hợp lệ
+ * đi `withTenant` (BEGIN + set_config + INSERT + COMMIT = 4 round-trip), slug sai đi `db.insert` trần
+ * (1 round-trip). Nhánh này KHÔNG có `password.hash` burn như :219 nên chênh lệch đó lộ thành oracle
+ * "slug này có tồn tại". Xem docs/plans/S6-SEC-LOGINLOG-2.md §2.3.
+ */
+const BLOCKED_LOGIN_FLOOR_MS = 250;
+
 /** Hình dạng envelope reset-token lưu trong outbox payload (Buffer → base64 để truyền JSON). */
 const resetEnvelopeSchema = z.object({
   secretCiphertext: z.string(),
@@ -194,24 +203,70 @@ export class AuthService {
     return row.id;
   }
 
+  /**
+   * S6-SEC-LOGINLOG-2 · KI-044 — resolve chủ sở hữu CHỈ để gắn cho MỘT DÒNG NHẬT KÝ của nhánh 429.
+   * KHÔNG phải quyết định auth (đường đó là `resolveCompanyId` gọi thẳng ở `login`, không qua đây).
+   *
+   * FAIL-SOFT NHƯNG KHÔNG CÂM: trục trặc DB → trả `null` (thoái lui đúng hành vi trước WO này: hàng ghi
+   * vô chủ) và 429 KHÔNG được biến thành 500. Nhưng phải LOG — nuốt câm ở đây nghĩa là một sự cố hạ hàng
+   * CÓ CHỦ xuống vô chủ trong im lặng, tức là tái tạo đúng lớp mù mà KI-044 đang vá.
+   * Thông điệp KHÔNG nội suy `companySlug` — log không được trở thành nguồn liệt kê tenant. Lưu ý giới
+   * hạn: `err.message` là chuỗi truyền thẳng từ driver, ta không kiểm soát nội dung nó; trên đường này
+   * slug đi vào như bind-param của `resolve_company_by_slug` nên PG không dội giá trị ra lỗi, và bản thân
+   * slug là do client gửi (không phải bí mật). Rủi ro còn lại là log-injection, không phải rò tenant.
+   */
+  private async resolveBlockedLogOwner(companySlug: string): Promise<string | null> {
+    try {
+      return await this.resolveCompanyId(companySlug);
+    } catch (err) {
+      this.logger.warn(
+        `resolveBlockedLogOwner thất bại — hàng login_logs 'blocked' sẽ ghi vô chủ (company_id NULL), ` +
+          `admin của tenant đó KHÔNG thấy lần bị chặn này: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    }
+  }
+
   async login(req: LoginRequest, meta: RequestMeta): Promise<AuthTokens | TwoFactorChallenge> {
     const ip = meta.ip ?? "unknown";
     if (await this.isLoginRateLimited(req.companySlug, req.email, ip)) {
-      // PRE-AUTH (chưa resolve tenant) → login_logs company_id NULL (best-effort). reason chỉ ở DB row.
-      await this.recordLoginAttempt({
-        companyId: null,
-        userId: null,
-        email: req.email,
-        status: "blocked",
-        reason: "TooManyAttempts",
-        meta,
-      });
+      // ⟲ S6-SEC-LOGINLOG-2 · KI-044 — GẮN ĐÚNG CHỦ cho hàng bị chặn.
+      // Trước: luôn ghi company_id NULL vì bộ chặn tần suất chạy TRƯỚC resolveCompanyId(). Sau mig 0532
+      // (USING chỉ còn tenant hiện tại) hàng NULL KHÔNG tenant nào đọc được ⇒ company-admin mất hẳn quan
+      // sát brute-force nhắm vào chính công ty mình (đo PROD: 165/268 hàng NULL thực ra CÓ CHỦ).
+      // KHÔNG đảo thứ tự đường login: chỉ resolve BÊN TRONG nhánh đã-bị-chặn ⇒ request KHÔNG bị chặn
+      // không tốn thêm một lượt tra DB nào. Slug sai/inactive vẫn ra NULL (hàng thực sự vô chủ).
+      const startedAt = Date.now();
+      try {
+        const ownerCompanyId = await this.resolveBlockedLogOwner(req.companySlug);
+        await this.recordLoginAttempt({
+          companyId: ownerCompanyId,
+          // GIỮ NGUYÊN: bất biến `company_id IS NULL ⟹ user_id IS NULL` (ghim bởi auth-me-bootstrap
+          // int-spec). Ta chỉ nâng companyId từ NULL lên chủ thật, KHÔNG gắn user cho hàng pre-auth.
+          userId: null,
+          email: req.email,
+          status: "blocked",
+          reason: "TooManyAttempts",
+          meta,
+        });
+      } finally {
+        // SÀN THỜI GIAN — bắt buộc, không phải tô điểm. Hai nhánh trên ghi log bằng HAI hình dạng khác
+        // nhau (withTenant 4 round-trip vs insert trần 1 round-trip) và nhánh 429 không có password.hash
+        // burn để che ⇒ không có sàn thì chính bản vá này đẻ ra oracle "slug tenant có tồn tại".
+        // Đặt trong `finally` để áp cho CẢ nhánh ném. Transaction đã commit + trả connection về pool
+        // TRƯỚC khi ngủ ⇒ chờ ở đây KHÔNG giữ slot DB (chỉ giữ socket). Xem plan §2.3 + số đo §6.
+        await this.applyUniformResponseFloor(startedAt, BLOCKED_LOGIN_FLOOR_MS);
+      }
       throw new HttpException(
         "Quá nhiều lần thử. Vui lòng thử lại sau.",
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
 
+    // ⚠️ Đường QUYẾT ĐỊNH AUTH — TUYỆT ĐỐI KHÔNG cache/tái dùng kết quả resolve của nhánh 429 ở trên.
+    // Công ty bị đình chỉ phải chặn được đăng nhập NGAY; một lớp cache dù chỉ vài chục giây ở ĐÂY nghĩa
+    // là đình chỉ xong vẫn đăng nhập được trong khoảng đó. (Nhánh 429 chỉ gắn chủ cho một dòng nhật ký,
+    // sai lệch ở đó vô hại — nên nó mới được phép fail-soft, còn đường này thì không.)
     const companyId = await this.resolveCompanyId(req.companySlug);
     if (!companyId) {
       // companySlug sai/không active: burn thời gian băm để cân bằng timing (chống dò tenant), rồi 401 đồng
@@ -1258,13 +1313,24 @@ export class AuthService {
   }
 
   /**
-   * S2-AUTH-HARDEN-1 — chờ tới SÀN thời gian (+ jitter ngẫu nhiên) để mọi nhánh forgotPassword phản hồi trong
-   * khoảng ~đồng nhất, làm mờ timing-oracle "email tồn tại?". GIẢM THIỂU, KHÔNG constant-time tuyệt đối: KMS
-   * chậm (vd Vault transit) có thể vượt sàn → cân nhắc nâng FORGOT_PW_FLOOR_MS hoặc dời crypto/mail sang
-   * outbox-consumer (deferred) khi có. Chỉ dùng hằng + setTimeout (KHÔNG tham chiếu field inject) + KHÔNG log.
+   * S2-AUTH-HARDEN-1 — chờ tới SÀN thời gian (+ jitter ngẫu nhiên) để MỌI nhánh của một đường phản hồi
+   * trong khoảng ~đồng nhất, làm mờ timing-oracle. GIẢM THIỂU, KHÔNG constant-time tuyệt đối: nếu công
+   * việc trước đó vượt sàn thì chênh lệch lộ lại ⇒ phải ĐO, đừng chỉ tin lập luận.
+   *
+   * Hai người dùng, hai oracle khác nhau (⟲ S6-SEC-LOGINLOG-2 tổng quát hoá `floorMs`):
+   *   • `forgotPassword` (FORGOT_PW_FLOOR_MS) — "email tồn tại?". KMS chậm (vd Vault transit) có thể vượt
+   *     sàn → cân nhắc nâng hằng hoặc dời crypto/mail sang outbox-consumer (deferred) khi có.
+   *   • nhánh 429 của `login` (BLOCKED_LOGIN_FLOOR_MS) — "slug tenant tồn tại?" (KI-044, xem hằng đó).
+   *
+   * ⚠️ CHỈ dùng hằng module + setTimeout: KHÔNG tham chiếu field inject (`this.<dep>`), KHÔNG log.
+   * `forgot-password-rate-limit.spec.ts` và `auth.service.spec.ts` dựng AuthService bằng
+   * `Object.create(prototype)` + gán MỘT PHẦN field — chạm field khác là vỡ hai spec đó.
    */
-  private async applyUniformResponseFloor(startedAtMs: number): Promise<void> {
-    const target = FORGOT_PW_FLOOR_MS + Math.floor(Math.random() * (FORGOT_PW_JITTER_MS + 1));
+  private async applyUniformResponseFloor(
+    startedAtMs: number,
+    floorMs: number = FORGOT_PW_FLOOR_MS,
+  ): Promise<void> {
+    const target = floorMs + Math.floor(Math.random() * (FORGOT_PW_JITTER_MS + 1));
     const remaining = target - (Date.now() - startedAtMs);
     if (remaining > 0) await new Promise<void>((resolve) => setTimeout(resolve, remaining));
   }
@@ -1561,10 +1627,13 @@ export class AuthService {
       } else {
         // PRE-AUTH: KHÔNG ngữ cảnh tenant → module db (không set GUC) → company_id NULL.
         // S6-SEC-1 · KI-035: trước đây là `if (!db) return;` — bỏ ghi HOÀN TOÀN IM LẶNG, không một dòng
-        // log nào. Nhánh này chỉ chạy cho login THẤT BẠI pre-auth (sai company slug / bị chặn trước khi
-        // biết tenant) — hai đường login THÀNH CÔNG đều có companyId thật nên đi nhánh withTenant ở
-        // trên. Vì vậy đây KHÔNG phải "cấp token mà không có log"; nó là mất dấu vết forensics của
-        // các lần dò tenant. Vẫn không được im lặng: mất log bảo mật phải nhìn thấy được.
+        // log nào. Nhánh này chỉ chạy cho login THẤT BẠI pre-auth mà KHÔNG resolve được tenant — hai
+        // đường login THÀNH CÔNG đều có companyId thật nên đi nhánh withTenant ở trên. Vì vậy đây KHÔNG
+        // phải "cấp token mà không có log"; nó là mất dấu vết forensics của các lần dò tenant. Vẫn
+        // không được im lặng: mất log bảo mật phải nhìn thấy được.
+        // ⟲ S6-SEC-LOGINLOG-2 · KI-044 — thu hẹp: hàng bị chặn (`TooManyAttempts`) với slug HỢP LỆ
+        // KHÔNG còn rơi vào nhánh này nữa (đã resolve được chủ ⇒ đi withTenant). Nhánh NULL giờ chỉ còn
+        // cho: slug sai/inactive, và nhánh fail-soft khi chính lượt resolve đó lỗi.
         if (!db) {
           this.logger.warn(
             `recordLoginAttempt: bỏ ghi login_logs pre-auth (status=${args.status}) vì module db chưa sẵn sàng — mất dấu vết lần thử này`,
