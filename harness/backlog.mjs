@@ -5793,7 +5793,7 @@ export const backlog = [
     module: "DASH",
     layer: "SEC",
     title:
-      "KI-041 — 2 matview dashboard nằm NGOÀI RLS (Postgres không hỗ trợ): dựng ranh giới thật ở tầng DB thay vì chỉ WHERE company_id trong service, hoặc rút bề mặt / ký waiver có bằng chứng (migration 0533)",
+      "KI-041 — 2 matview dashboard nằm NGOÀI RLS (Postgres không hỗ trợ): dựng ranh giới thật ở tầng DB thay vì chỉ WHERE company_id trong service, hoặc rút bề mặt / ký waiver có bằng chứng (migration nối tiếp head THẬT)",
     zone: "red",
     status: "todo",
     paths: [
@@ -5805,7 +5805,7 @@ export const backlog = [
       "docs/plans/S6-SEC-MV-1.md",
     ],
     skills: ["code-review"],
-    // depends_on CHỈ để ép migration tuần tự (0532 → 0533), không phải phụ thuộc nghiệp vụ.
+    // depends_on CHỈ để ép migration tuần tự (nối tiếp head thật), không phải phụ thuộc nghiệp vụ.
     depends_on: ["S6-SEC-LOGINLOG-1"],
     plan: "docs/plans/S6-SEC-MV-1.md",
     src: [
@@ -5814,16 +5814,16 @@ export const backlog = [
       "mv-dashboard.service.ts:36 — mv_dashboard_output là 'media-era PARKED, 0 consumer' ⇒ ứng viên RÚT BỀ MẶT thay vì bọc thêm hạ tầng",
       "apps/api/src/dashboard/dashboard-refresh.service.ts:73-99 — đường refresh (CONCURRENTLY CHỈ task_status; output KHÔNG BAO GIỜ concurrently được vì unique index là BIỂU THỨC COALESCE) — không được làm gãy",
       "apps/api/src/dashboard/mv-taskstatus-canonical.int.spec.ts (D-30, mig 0502) — regression phải giữ xanh",
-      "⚠️ SỐ MIGRATION: title + done_when dưới đây ghi `0533` theo head lúc seed. Head THẬT lúc này = 0532, và S6-SEC-PERMVERB-1 (làm TRƯỚC theo thứ tự owner chốt 2026-07-28) sẽ lấy 0533 ⇒ WO này lấy **0534**. ĐỌC head thật lúc thi công, KHÔNG tin số ở đây (memory wo-paths-drive-gate-and-scheduler — trùng số migration)",
+      "⚠️ SỐ MIGRATION: head THẬT = **0533** (`0533_s6qatenantwrite1_team_members_composite_fk`, merge #303 ngày 2026-07-29) ⇒ WO này sớm nhất lấy **0534**, và còn lùi tiếp nếu S6-SEC-PERMVERB-1 làm trước. ĐỌC head thật lúc thi công, KHÔNG tin số ghi sẵn (memory wo-paths-drive-gate-and-scheduler — trùng số migration)",
     ],
     done_when: [
       "ĐO TRƯỚC: liệt kê MỌI câu SQL chạm 2 matview + role nào đang có SELECT (đọc ACL từ Postgres THẬT, không suy đoán từ migration)",
       "RÚT BỀ MẶT trước khi thêm hạ tầng: mv_dashboard_output 0 consumer (media-era park) ⇒ cân nhắc REVOKE SELECT khỏi mediaos_app (hoặc DROP nếu docs/DB xác nhận park) — giải pháp rẻ nhất phải được xét trước",
       "Với matview CÒN DÙNG: đọc qua wrapper (view `security_barrier` lọc current_setting('app.current_company_id') hoặc hàm SQL) + REVOKE SELECT trực tiếp trên matview khỏi app role ⇒ ranh giới nằm ở DB, không chỉ ở kỷ luật service",
       "RED test: với app role, query matview KHÔNG kèm WHERE company_id → 0 hàng hoặc permission denied. Hiện tại trả CHÉO TENANT — ca này phải ĐỎ trước khi vá",
-      "Đường refresh của worker role vẫn chạy (REFRESH CONCURRENTLY task_status + REFRESH output); mv-taskstatus-canonical.int.spec giữ xanh",
+      "⚠️ TIỀN ĐỀ ĐÃ SAI — ĐO LẠI TRƯỚC: đường refresh KHÔNG chạy. RELEASE-02 KI-041 (bằng chứng 2026-07-28) — dashboard-refresh.service.ts ưu tiên workerDb (mediaos_worker) trong khi REFRESH MATERIALIZED VIEW ĐÒI OWNER ⇒ fail 'must be owner' ở mọi env có DATABASE_WORKER_URL (PROD CÓ) ⇒ dòng ma tồn tại vô thời hạn. Phần việc THẬT còn lại của WO là SỬA đường refresh (role chuyên trách / hàm SECURITY DEFINER), không phải 'giữ nguyên đường đang chạy'; mv-taskstatus-canonical.int.spec giữ xanh",
       "NẾU chọn waiver thay vì siết: ghi chữ ký + bằng chứng vào RELEASE-02 và docs/DB, nêu rõ đây là ngoại lệ được chấp nhận của BẤT BIẾN #1 và ai chịu trách nhiệm — KHÔNG để trạng thái mơ hồ 'đã biết' trôi qua RC",
-      "Migration 0533 nối tiếp 0532; database-reviewer + rls-tenant-isolation-tester PASS; RELEASE-02 KI-041 đóng",
+      "Migration nối tiếp head THẬT (0533 đã bị S6-QA-TENANTWRITE-1 lấy ngày 2026-07-29 ⇒ sớm nhất là 0534); database-reviewer + rls-tenant-isolation-tester PASS; RELEASE-02 KI-041 đóng",
     ],
   },
   {
