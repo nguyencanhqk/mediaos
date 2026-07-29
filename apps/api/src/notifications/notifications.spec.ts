@@ -6,6 +6,11 @@
  *   B. Preference filter — type bị tắt (enabled=false) → KHÔNG tạo notification.
  *   C. Outbox payload contract — payload đi qua notificationSchema.parse (strip field thừa).
  *
+ * S6-SEC-NOTITX-1 (KI-034) thêm nhóm:
+ *   D. Atomicity — insert + outbox + audit phải nằm TRONG MỘT transaction; bất kỳ bước nào ném thì
+ *      thao tác KHÔNG được "thành công một nửa" (hàng tồn tại mà mất audit/sự kiện) và KHÔNG được
+ *      emit WS. Xem docs/plans/S6-SEC-NOTITX-1.md §6 (bảng RED-proof từng ca).
+ *
  * Dùng mock repo (KHÔNG cần Postgres). Xác nhận RED vì behaviour chưa implement.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -76,9 +81,7 @@ function makeEmitter(): RealtimeEmitterService {
 
 function makeDb(): DatabaseService {
   return {
-    withTenant: vi.fn().mockImplementation((_co: string, fn: (tx: unknown) => unknown) =>
-      fn({}),
-    ),
+    withTenant: vi.fn().mockImplementation((_co: string, fn: (tx: unknown) => unknown) => fn({})),
   } as unknown as DatabaseService;
 }
 
@@ -123,9 +126,12 @@ describe("A — Tenant isolation", () => {
 
     await svc.create(CO_A, { userId: USER_B, type: "general", body: "test" });
 
+    // S6-SEC-NOTITX-1: repo.create nay nhận thêm tham số thứ 3 `tx` (một transaction cho cả
+    // insert + outbox + audit). Ý của ca này KHÔNG đổi — companyId vẫn phải là của caller.
     expect(repo.create).toHaveBeenCalledWith(
       CO_A,
       expect.objectContaining({ userId: USER_B }),
+      expect.anything(),
     );
   });
 });
@@ -249,5 +255,128 @@ describe("C — Outbox payload qua notificationSchema.parse (masking)", () => {
       userId: USER_A,
     });
     expect(event.payload.__internal_secret).toBeUndefined();
+  });
+});
+
+// ─── D. Atomicity: insert + outbox + audit trong MỘT transaction (S6-SEC-NOTITX-1 · KI-034) ──
+
+type Mock = ReturnType<typeof vi.fn>;
+
+/** Bộ mock đã wire sẵn cho nhóm D — preference bật, repo.create trả 1 hàng. */
+function makeAtomicFixture() {
+  const repo = makeRepo();
+  const prefRepo = makePrefRepo();
+  const outbox = makeOutbox();
+  const audit = makeAudit();
+  const emitter = makeEmitter();
+  const db = makeDb();
+  (prefRepo.isTypeEnabled as Mock).mockResolvedValue(true);
+  (repo.create as Mock).mockResolvedValue([makeNotifRow()]);
+  const svc = makeService(repo, prefRepo, outbox, audit, emitter, db);
+  return { repo, prefRepo, outbox, audit, emitter, db, svc };
+}
+
+describe("D — create(): atomic insert + outbox + audit", () => {
+  it("D1: outbox.enqueue ném → create() REJECT (không nuốt thành warn rồi trả DTO)", async () => {
+    const f = makeAtomicFixture();
+    (f.outbox.enqueue as Mock).mockRejectedValue(new Error("outbox down"));
+
+    await expect(
+      f.svc.create(CO_A, { userId: USER_A, type: "general", body: "x" }),
+    ).rejects.toThrow("outbox down");
+  });
+
+  it("D2: audit.record ném → create() REJECT (mất vết kiểm toán KHÔNG được im lặng)", async () => {
+    const f = makeAtomicFixture();
+    (f.audit.record as Mock).mockRejectedValue(new Error("audit down"));
+
+    await expect(
+      f.svc.create(CO_A, { userId: USER_A, type: "general", body: "x" }),
+    ).rejects.toThrow("audit down");
+  });
+
+  it("D3: outbox.enqueue ném → KHÔNG emit WS (không phát cho hàng đã rollback)", async () => {
+    const f = makeAtomicFixture();
+    (f.outbox.enqueue as Mock).mockRejectedValue(new Error("outbox down"));
+
+    await expect(
+      f.svc.create(CO_A, { userId: USER_A, type: "general", body: "x" }),
+    ).rejects.toThrow();
+    expect(f.emitter.emitNotification).not.toHaveBeenCalled();
+  });
+
+  it("D4: repo.create · outbox.enqueue · audit.record nhận CÙNG MỘT tx (một transaction duy nhất)", async () => {
+    const f = makeAtomicFixture();
+
+    await f.svc.create(CO_A, { userId: USER_A, type: "general", body: "x" });
+
+    expect(f.db.withTenant).toHaveBeenCalledTimes(1);
+    // Đối số companyId của withTenant CHÍNH LÀ thứ quyết định GUC app.current_company_id (ngữ cảnh
+    // RLS) — khoá luôn, đừng chỉ đếm số lần gọi.
+    expect(f.db.withTenant).toHaveBeenCalledWith(CO_A, expect.any(Function));
+    const txRepo = (f.repo.create as Mock).mock.calls[0][2];
+    const txOutbox = (f.outbox.enqueue as Mock).mock.calls[0][0];
+    const txAudit = (f.audit.record as Mock).mock.calls[0][0];
+    expect(txRepo).toBeDefined();
+    expect(txRepo).toBe(txOutbox);
+    expect(txRepo).toBe(txAudit);
+  });
+
+  it("D5: repo.create trả [] → REJECT (không trả null câm — null CHỈ có nghĩa 'bị preference lọc')", async () => {
+    const f = makeAtomicFixture();
+    (f.repo.create as Mock).mockResolvedValue([]);
+
+    await expect(
+      f.svc.create(CO_A, { userId: USER_A, type: "general", body: "x" }),
+    ).rejects.toThrow();
+    expect(f.emitter.emitNotification).not.toHaveBeenCalled();
+  });
+
+  it("D5b: hồi quy — preference tắt vẫn trả null (KHÔNG ném), phân biệt được với D5", async () => {
+    const f = makeAtomicFixture();
+    (f.prefRepo.isTypeEnabled as Mock).mockResolvedValue(false);
+
+    await expect(
+      f.svc.create(CO_A, { userId: USER_A, type: "general", body: "x" }),
+    ).resolves.toBeNull();
+  });
+});
+
+describe("D — markRead(): audit cùng transaction với update", () => {
+  it("D6: audit.record ném → markRead() REJECT (mark_read đã đáng audit thì không được mất vết)", async () => {
+    const repo = makeRepo();
+    const audit = makeAudit();
+    (repo.markRead as Mock).mockResolvedValue([makeNotifRow()]);
+    (audit.record as Mock).mockRejectedValue(new Error("audit down"));
+    const svc = makeService(repo, makePrefRepo(), makeOutbox(), audit, makeEmitter(), makeDb());
+
+    await expect(svc.markRead(CO_A, NOTIF_ID, USER_A)).rejects.toThrow("audit down");
+  });
+
+  it("D7: repo.markRead và audit.record nhận CÙNG MỘT tx", async () => {
+    const repo = makeRepo();
+    const audit = makeAudit();
+    const db = makeDb();
+    (repo.markRead as Mock).mockResolvedValue([makeNotifRow()]);
+    const svc = makeService(repo, makePrefRepo(), makeOutbox(), audit, makeEmitter(), db);
+
+    await svc.markRead(CO_A, NOTIF_ID, USER_A);
+
+    expect(db.withTenant).toHaveBeenCalledTimes(1);
+    expect(db.withTenant).toHaveBeenCalledWith(CO_A, expect.any(Function));
+    const txRepo = (repo.markRead as Mock).mock.calls[0][3];
+    const txAudit = (audit.record as Mock).mock.calls[0][0];
+    expect(txRepo).toBeDefined();
+    expect(txRepo).toBe(txAudit);
+  });
+
+  it("D8: hồi quy — 0 hàng (tenant/user khác) vẫn NotFoundException, KHÔNG ghi audit", async () => {
+    const repo = makeRepo();
+    const audit = makeAudit();
+    (repo.markRead as Mock).mockResolvedValue([]);
+    const svc = makeService(repo, makePrefRepo(), makeOutbox(), audit, makeEmitter(), makeDb());
+
+    await expect(svc.markRead(CO_B, NOTIF_ID, USER_B)).rejects.toThrow(NotFoundException);
+    expect(audit.record).not.toHaveBeenCalled();
   });
 });
