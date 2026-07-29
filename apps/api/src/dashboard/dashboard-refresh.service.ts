@@ -16,13 +16,22 @@ import * as schema from "../db/schema";
  *  - Subsequent: use REFRESH CONCURRENTLY so reads are not blocked (CHỈ mv_dashboard_task_status —
  *    xem refreshConcurrently).
  *
- * ⚠️ NỢ KIẾN TRÚC G14 (phát hiện S5-DASH-TASKSTATUS-FIX-1, 20/07/2026 — CÓ TỪ TRƯỚC, chưa sửa ở WO đó):
- * REFRESH đòi role là OWNER của MV (= role migrator `mediaos`), nhưng refreshDb ưu tiên workerDb
- * (`mediaos_worker`) ⇒ đường refresh runtime này FAIL "must be owner" ở mọi env có DATABASE_WORKER_URL,
- * từ G14 tới nay (chưa spec/consumer nào gọi tới nên không lộ). KHÔNG được "sửa nhanh" bằng
- * `ALTER MATERIALIZED VIEW ... OWNER TO mediaos_worker`: worker KHÔNG có BYPASSRLS mà `tasks` FORCE
- * RLS ⇒ REFRESH chạy bằng quyền worker sẽ cho MV RỖNG LẶNG LẼ (mất số liệu dashboard không ai biết).
- * Sửa thật = WO riêng (role refresh chuyên trách có BYPASSRLS, hoặc SECURITY DEFINER function).
+ * ⟲ NỢ KIẾN TRÚC G14 — ĐÃ ĐÓNG bởi S6-SEC-MV-1 (mig 0534, 29/07/2026).
+ *
+ * Trước đó: REFRESH đòi quyền chủ sở hữu MV (= role migrator `mediaos`), nhưng `refreshDb` ưu tiên
+ * `workerDb` (`mediaos_worker`) ⇒ đường refresh runtime này CHẾT ở mọi env có DATABASE_WORKER_URL
+ * (PROD CÓ), từ G14 tới nay — chưa consumer nào gọi nên không lộ. Đo lại trên lane 29/07/2026:
+ *   `mediaos_worker` → REFRESH ⇒ "permission denied for materialized view mv_dashboard_task_status"
+ *   `mediaos` (owner) → REFRESH ⇒ OK, và làm 56→54 hàng / 38→37 tenant ⇒ dữ liệu ĐÃ cũ thật.
+ *
+ * Nay: gọi hàm `refresh_dashboard_mvs()` (SECURITY DEFINER, owner = `mediaos`, mig 0534). Thân hàm
+ * chạy bằng quyền chủ sở hữu nên vừa đủ quyền REFRESH vừa CÓ BYPASSRLS để nhìn đủ hàng; worker chỉ
+ * được EXECUTE. Chiến lược concurrent/non-concurrent chuyển VÀO hàm (một nơi duy nhất, cạnh chính
+ * các MV) — xem chú thích trong 0534.
+ *
+ * ⚠️ ĐỪNG "sửa nhanh" bằng `ALTER MATERIALIZED VIEW ... OWNER TO mediaos_worker`: worker KHÔNG có
+ * BYPASSRLS mà `tasks` FORCE RLS ⇒ REFRESH dưới quyền worker cho MV RỖNG LẶNG LẼ (mất sạch số liệu
+ * dashboard mà không ai biết). Đổi chủ sở hữu là cái bẫy, không phải cái vá.
  */
 @Injectable()
 export class DashboardRefreshService {
@@ -51,55 +60,29 @@ export class DashboardRefreshService {
       logger: this.logger,
     });
 
-    // Determine whether MV already has data. Errors here bubble up (fail-loud).
-    const populated = await this.isMvPopulated(db);
-
-    if (!populated) {
-      // First populate — cannot use CONCURRENTLY on empty MV
-      this.logger.log("MV not yet populated — running initial REFRESH (non-concurrent)");
-      await this.refreshNonConcurrent(db);
-    } else {
-      // Subsequent refresh — CONCURRENTLY (chỉ mv_dashboard_task_status) avoids read-lock
-      this.logger.log("Running REFRESH MATERIALIZED VIEW CONCURRENTLY");
-      await this.refreshConcurrently(db);
-    }
-    const refreshedAt = new Date().toISOString();
+    // S6-SEC-MV-1 (mig 0534): MỘT lời gọi. Quyết định concurrent/non-concurrent + thứ tự hai MV nằm
+    // TRONG hàm `refresh_dashboard_mvs()`, cạnh chính các MV — không còn nhân bản ở tầng TS.
+    //
+    // KHÔNG bọc .catch nuốt lỗi: refresh hỏng phải nổi lên cho caller (bài học KI-034). Đường này
+    // vốn đã CHẾT lặng lẽ suốt từ G14; im lặng thêm một lần nữa là đúng cái bẫy vừa gỡ.
+    const refreshedAt = await this.callRefreshFunction(db);
     this.logger.log(`Dashboard MVs refreshed at ${refreshedAt}`);
     return { refreshedAt };
   }
 
-  private async isMvPopulated(db: NonNullable<typeof workerDb>): Promise<boolean> {
-    // Errors surface to refresh() caller — no silent fallback.
-    const result = await db.execute(sql`SELECT 1 FROM mv_dashboard_task_status LIMIT 1`);
-    return result.rows.length > 0;
-  }
-
-  private async refreshNonConcurrent(db: NonNullable<typeof workerDb>): Promise<void> {
-    try {
-      await db.execute(sql`REFRESH MATERIALIZED VIEW mv_dashboard_task_status`);
-      await db.execute(sql`REFRESH MATERIALIZED VIEW mv_dashboard_output`);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Non-concurrent MV refresh failed: ${msg}`);
-      throw new Error(`MV refresh failed: ${msg}`);
-    }
-  }
-
   /**
-   * S5-DASH-TASKSTATUS-FIX-1 (thực nghiệm 20/07, spec C6): CONCURRENTLY CHỈ mv_dashboard_task_status
-   * (unique index CỘT TRẦN — 0502). mv_dashboard_output KHÔNG BAO GIỜ concurrently được — unique
-   * index của nó là BIỂU THỨC COALESCE (0102), Postgres đòi cột trần ⇒ đi REFRESH THƯỜNG ngay trong
-   * nhánh này. Bug tiềm ẩn từ G14 (lần refresh thứ 2 luôn 500); lộ NGAY LẦN ĐẦU sau 0502 (task_status
-   * populate lúc migrate ⇒ probe true ⇒ vào nhánh này). Họ media PARKED, 0 consumer ⇒ chấp nhận khoá
-   * đọc ngắn; sửa thật (index NULLS NOT DISTINCT hoặc gỡ MV) thuộc WO dọn de-media-fy.
+   * Gọi hàm SECURITY DEFINER (mig 0534). Worker chỉ cần EXECUTE — nó KHÔNG còn quyền SELECT hay
+   * REFRESH thẳng trên MV, nên đây là đường refresh DUY NHẤT của runtime.
    */
-  private async refreshConcurrently(db: NonNullable<typeof workerDb>): Promise<void> {
+  private async callRefreshFunction(db: NonNullable<typeof workerDb>): Promise<string> {
     try {
-      await db.execute(sql`REFRESH MATERIALIZED VIEW CONCURRENTLY mv_dashboard_task_status`);
-      await db.execute(sql`REFRESH MATERIALIZED VIEW mv_dashboard_output`);
+      const result = await db.execute(sql`SELECT refresh_dashboard_mvs() AS refreshed_at`);
+      const value = result.rows[0]?.refreshed_at;
+      // Hàm trả timestamptz; chuẩn hoá về ISO để giữ nguyên contract của refresh().
+      return value instanceof Date ? value.toISOString() : new Date(String(value)).toISOString();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Concurrent MV refresh failed: ${msg}`);
+      this.logger.error(`MV refresh failed: ${msg}`);
       throw new Error(`MV refresh failed: ${msg}`);
     }
   }

@@ -5838,7 +5838,9 @@ export const backlog = [
       "mv-dashboard.service.ts:36 — mv_dashboard_output là 'media-era PARKED, 0 consumer' ⇒ ứng viên RÚT BỀ MẶT thay vì bọc thêm hạ tầng",
       "apps/api/src/dashboard/dashboard-refresh.service.ts:73-99 — đường refresh (CONCURRENTLY CHỈ task_status; output KHÔNG BAO GIỜ concurrently được vì unique index là BIỂU THỨC COALESCE) — không được làm gãy",
       "apps/api/src/dashboard/mv-taskstatus-canonical.int.spec.ts (D-30, mig 0502) — regression phải giữ xanh",
-      "⚠️ SỐ MIGRATION: head THẬT = **0533** (`0533_s6qatenantwrite1_team_members_composite_fk`, merge #303 ngày 2026-07-29) ⇒ WO này sớm nhất lấy **0534**, và còn lùi tiếp nếu S6-SEC-PERMVERB-1 làm trước. ĐỌC head thật lúc thi công, KHÔNG tin số ghi sẵn (memory wo-paths-drive-gate-and-scheduler — trùng số migration)",
+      "✅ ĐÃ THI CÔNG 2026-07-29 — migration **0534** `0534_s6secmv1_dashboard_mv_tenant_barrier.sql` (S6-SEC-PERMVERB-1 KHÔNG lấy số nào vì không cần migration). Hướng owner chốt: **wrapper view + REVOKE**, và **sửa đường refresh trong cùng WO**. Nhật ký: docs/plans/S6-SEC-MV-1.md",
+      "⚠️ HAI TIỀN ĐỀ CỦA WO SEED BỊ SỐ ĐO BÁC BỎ: (1) `mv_dashboard_output` KHÔNG '0 consumer' — `GET /dashboard/mv-stats` (gate read:dashboard) trả CẢ hai nửa, chỉ là chưa màn hình nào gọi; (2) `docs/DB/` KHÔNG có dòng nào nhắc tới hai matview ⇒ điều kiện 'DROP nếu docs/DB xác nhận park' KHÔNG thoả, cộng CLAUDE.md §1 'không xóa ở đợt này' ⇒ GIỮ cả hai object, chỉ REVOKE + bọc view chắn. Tiền đề refresh-chết thì ĐÚNG (đo: worker → permission denied; owner → OK và 56→54 hàng / 38→37 tenant)",
+      "🔎 PHÁT HIỆN GỐC RỄ: lưới `rls-guards.int-spec.ts` liệt kê bằng `information_schema.columns` — thứ KHÔNG liệt kê materialized view ⇒ 2 matview CHƯA BAO GIỜ lọt vào phép đo. Đó chính là lý do KI-041 tồn tại được. Đã đổi nguồn sang `pg_class` (thấy cả r·m·v) + phân loại cơ chế cô lập theo từng loại",
     ],
     done_when: [
       "ĐO TRƯỚC: liệt kê MỌI câu SQL chạm 2 matview + role nào đang có SELECT (đọc ACL từ Postgres THẬT, không suy đoán từ migration)",
