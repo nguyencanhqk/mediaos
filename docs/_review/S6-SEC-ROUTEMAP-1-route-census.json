@@ -4486,7 +4486,7 @@
       "httpMethod": "GET",
       "path": "/api/v1/org/employees",
       "hasPermission": true,
-      "permission": "read:user",
+      "permission": "view:user",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],

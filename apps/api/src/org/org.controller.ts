@@ -58,8 +58,12 @@ interface AuthenticatedRequest extends Request {
  *     (`org.repository.ts` listEmployees), `teams/:id/members` trả cả `userEmail`. Trước
  *     S6-SEC-ORG-1 chúng không mang guard nào ⇒ mọi user đã đăng nhập đọc được trọn danh bạ
  *     tenant, trong khi `/hr/employees` cùng lớp dữ liệu thì ép `read:employee` + data_scope.
- *     Cặp quyền lấy từ seed CÓ THẬT, không phát minh: `read:user` (0005_permissions.sql:205),
- *     `read:team` (0005:200, tái khẳng định 0030:28).
+ *     Cặp quyền lấy từ seed CÓ THẬT, không phát minh: `view:user`
+ *     (0444_s2_authseed1_canonical_roles_perms.sql:87-90), `read:team` (0005:200, tái khẳng định
+ *     0030:28). S6-SEC-PERMVERB-1 (2026-07-29) đổi động từ danh bạ từ legacy `read:user` (0005:205)
+ *     sang canonical `view:user` — cùng cặp mà `/auth/users` + role-admin đã gate, nên `data_scope`
+ *     (vốn là PER-(permission, role)) siết MỘT lần cho cả hai đường đọc tài khoản.
+ *     ADR: `docs/DECISIONS/DECISIONS-06_Permission_Verb_Canonical.md`.
  *
  * ⚠️ `@UseGuards(PermissionGuard)` đặt THEO ROUTE, KHÔNG nâng lên cấp class: PermissionGuard
  *    fail-closed khi route thiếu `@RequirePermission`, nên nâng cấp class sẽ biến cả 4 route cơ cấu

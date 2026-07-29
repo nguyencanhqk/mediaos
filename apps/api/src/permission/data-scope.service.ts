@@ -165,9 +165,11 @@ export class DataScopeService {
    * ⚠️ NOT a byte-for-byte mirror (FULL gate 2026-07-28): the `Own` branch here ALSO carries `company_id`
    * whereas `auth-users.service.ts` does not. This side is the stricter one — if the two are ever merged,
    * merge TOWARD this shape; copying the `auth-users` shape would drop the tenant belt.
-   * ⚠️ NOT the same permission pair YET either: `/org/employees` gates `read:user`, `/auth/users` gates
-   * `view:user`, and `data_scope` is PER-(permission, role) — so tightening one does NOT tighten the
-   * other. `S6-SEC-PERMVERB-1` unifies the verb; until then treat them as two pairs that happen to agree.
+   * ✅ SAME permission pair since `S6-SEC-PERMVERB-1` (2026-07-29): both `/org/employees` and
+   * `/auth/users` now gate `view:user`, so `data_scope` — which is PER-(permission, role) — is a
+   * SINGLE knob for both account-read paths instead of two that merely happened to agree. Tightening
+   * the scope on that one pair now tightens both. ADR: `docs/DECISIONS/DECISIONS-06_Permission_Verb_Canonical.md`.
+   * (The two PREDICATE implementations are still duplicated — see nợ N-1b below.)
    *
    * NOTE (deliberate, plan §2.1): Team/Department therefore return LESS than Own — non-monotonic in TWO
    * ways. (1) Per-scope: Team < Own. (2) Across the grant UNION: `resolveStrongestScope` takes the max,

@@ -54,8 +54,12 @@ const hasLaneDb = hasDb && !!process.env.LANE_DB;
  * bao giờ lệch được và pin mất tác dụng. Giữ literal ⇒ `S6-SEC-PERMVERB-1` đổi hằng số mà quên đây sẽ
  * seed một cặp guard không dùng ⇒ **403 hàng loạt, ĐỎ TO TIẾNG** (CI có chạy file này —
  * `.github/workflows/api.yml` đặt `LANE_DB` cho step test). Đó là tính năng, không phải trùng lặp.
+ *
+ * S6-SEC-PERMVERB-1 (2026-07-29) đã đổi `read` → `view` — và pin này làm đúng việc của nó: bỏ quên
+ * ở đây thì mọi ca scope dưới đây seed `read:user` trong khi guard đọc `view:user` ⇒ 403 hàng loạt.
+ * ADR: `docs/DECISIONS/DECISIONS-06_Permission_Verb_Canonical.md`.
  */
-const DIRECTORY_PAIR = ["read", "user"] as const;
+const DIRECTORY_PAIR = ["view", "user"] as const;
 
 let _pwHash: string | undefined;
 async function hashedPw(): Promise<string> {
