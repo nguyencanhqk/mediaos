@@ -1408,6 +1408,13 @@
       "when": 1717587322000,
       "tag": "0533_s6qatenantwrite1_team_members_composite_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 201,
+      "version": "7",
+      "when": 1717587323000,
+      "tag": "0534_s6secmv1_dashboard_mv_tenant_barrier",
+      "breakpoints": true
     }
   ]
 }

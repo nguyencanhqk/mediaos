@@ -12,8 +12,11 @@ import { Pool } from "pg";
  *
  * Seeds 2 tenants (A & B) with tasks, refreshes mv_dashboard_output,
  * then calls MvDashboardService.getOutputStats(A) and asserts ZERO rows from tenant B.
- * Validates the parameterized company_id WHERE clause is the sole tenant boundary
- * (MVs have no RLS).
+ *
+ * ⟲ S6-SEC-MV-1 (2026-07-29, mig 0534): the parameterized `WHERE company_id` is no longer the SOLE
+ * boundary — the service now reads the `security_barrier` views `v_dashboard_*`, which filter on
+ * `current_setting('app.current_company_id')`. This test still earns its keep: it is the one that
+ * exercises the SERVICE (not raw SQL), so it proves the two belts agree instead of fighting.
  *
  * Runs only when DATABASE_DIRECT_URL + DATABASE_URL are set (Postgres required).
  */
@@ -52,10 +55,31 @@ describe.skipIf(!hasDb)("G14-5 MV dashboard tenant isolation", () => {
     // Build MvDashboardService backed by direct pool (bypass PgBouncer in test)
     const db = drizzle(pool, { schema });
 
-    // Minimal DatabaseService stub: withTenant runs the fn directly (direct pool bypasses RLS;
-    // the point of this test is to verify the explicit WHERE company_id param, not RLS).
+    // DatabaseService stub — MUST set `app.current_company_id` like the real `withTenant()` does.
+    //
+    // ⚠️ S6-SEC-MV-1: the previous stub was `(_companyId, fn) => fn(db)` — it dropped the tenant GUC
+    // because back then nothing read it (the MV was queried directly and only the explicit
+    // `WHERE company_id` mattered). Since mig 0534 the service reads `v_dashboard_*`, whose filter IS
+    // that GUC, so the old stub made every query return 0 rows and the suite went red. A stub that
+    // silently omits the mechanism under test is the bug — not the barrier. Set it for real, inside a
+    // transaction so `set_config(..., true)` is scoped exactly as in production.
     const dbService = {
-      withTenant: (_companyId: string, fn: (tx: typeof db) => Promise<unknown>) => fn(db),
+      withTenant: async (companyId: string, fn: (tx: typeof db) => Promise<unknown>) => {
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          await client.query("SELECT set_config('app.current_company_id', $1, true)", [companyId]);
+          const scoped = drizzle(client, { schema });
+          const out = await fn(scoped as unknown as typeof db);
+          await client.query("COMMIT");
+          return out;
+        } catch (err) {
+          await client.query("ROLLBACK").catch(() => undefined);
+          throw err;
+        } finally {
+          client.release();
+        }
+      },
     } as unknown as DatabaseService;
 
     service = new MvDashboardService(dbService);

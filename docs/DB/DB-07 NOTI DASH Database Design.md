@@ -2309,6 +2309,35 @@ LIMIT 1;
 7. Nếu widget chứa dữ liệu nhạy cảm, response phải mask hoặc ẩn field theo permission.
 8. Dashboard chỉ điều hướng hoặc gọi API module nguồn, không tự ghi nghiệp vụ gốc.
 
+### 16.3 Materialized view dashboard — ranh giới tenant nằm ở view chắn, KHÔNG ở RLS
+
+> Bổ sung 29/07/2026 — `S6-SEC-MV-1` (mig `0534`), đóng **KI-041**. Trước đó bộ `docs/DB/` **không mô tả hai matview này ở đâu cả**; đây là chỗ ghi chính thức.
+
+Hai materialized view tổng hợp phục vụ `GET /dashboard/mv-stats`:
+
+| Object | Nội dung | Ghi chú |
+| --- | --- | --- |
+| `mv_dashboard_task_status` | đếm task theo trạng thái **canonical** (D-30, mig `0502`) | đang dùng |
+| `mv_dashboard_output` | breakdown theo channel/project/department/tháng | họ **media-era, park** (CLAUDE.md §1) — giữ, **không xoá ở đợt này** |
+
+**BẤT BIẾN #1 không tự áp được ở đây.** PostgreSQL **không hỗ trợ RLS trên materialized view**, nên hai object này nằm NGOÀI phép đo `153/153` bảng RLS. Đo trên lane 29/07/2026: role `mediaos_app` chạy `SELECT count(*), count(DISTINCT company_id) FROM mv_dashboard_task_status` **không mệnh đề lọc** ⇒ **56 hàng / 38 tenant**.
+
+**Ranh giới hiện tại (mig `0534`):**
+
+1. `REVOKE SELECT` trên **cả hai** matview khỏi `mediaos_app` và `mediaos_worker` — không còn cửa đọc thẳng.
+2. App đọc qua view `security_barrier`: `v_dashboard_task_status` · `v_dashboard_output`, tự lọc
+   `company_id = NULLIF(current_setting('app.current_company_id', true), '')::uuid`
+   — đúng biến mà `withTenant()` set. Ngoài ngữ cảnh tenant ⇒ **0 hàng (fail-closed)**, không ném lỗi.
+3. Vế `WHERE company_id = $1` trong `mv-dashboard.service.ts` **giữ nguyên** làm đai thứ hai (phòng thủ theo lớp) — **không** được "đơn giản hoá" đi.
+
+> `security_barrier` là bắt buộc: thiếu nó, planner được đẩy hàm do người dùng cung cấp xuống **dưới** vế lọc tenant (leaky view) ⇒ quan sát được hàng của tenant khác trước khi chúng bị loại.
+
+**Đường REFRESH** dùng hàm `refresh_dashboard_mvs()` — `SECURITY DEFINER`, chủ sở hữu `mediaos` (role migrator, **có BYPASSRLS**), `search_path` chốt cứng `public, pg_temp`; `mediaos_worker` chỉ được `EXECUTE`.
+
+> ⚠️ **Cấm** `ALTER MATERIALIZED VIEW … OWNER TO mediaos_worker` như một cách "sửa nhanh": worker **không** có BYPASSRLS mà `tasks` thì FORCE RLS ⇒ REFRESH dưới quyền worker cho matview **rỗng lặng lẽ** — mất sạch số liệu dashboard mà không ai biết. Trước `0534`, `DashboardRefreshService` ưu tiên `workerDb` nên đường refresh **chết từ G14** (`permission denied`) và hai matview đứng yên vô thời hạn.
+
+Chốt hồi quy: `test/integration/dashboard-mv-tenant-barrier.int-spec.ts` (13 ca — gồm ca "matview **không bị làm rỗng** sau refresh", khoá đúng cái bẫy đổi-owner ở trên).
+
 ---
 
 ## 17. Test case database đề xuất
