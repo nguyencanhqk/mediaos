@@ -124,6 +124,12 @@ fi
 step "lint"      pnpm lint
 step "typecheck" pnpm typecheck
 
+# ── S6-PERF-DB-1: migration KHÔNG được chứa lệnh phá huỷ chưa đăng ký (§15.5 expand/contract) ──
+# Chạy ở TIER MẶC ĐỊNH (không cần Postgres, ~0.2s — chỉ đọc file .sql) vì lệnh DROP lọt vào migration
+# là lỗi phải chặn SỚM, không đợi tới tier --all. Ngoại lệ hợp lệ đi qua dòng DESTRUCTIVE-APPROVED
+# trong chính file migration.
+step "migration-no-drop" bash scripts/check-migration-no-drop.sh
+
 # ── step test: TURBO_FORCE=1 (chống turbo-cache false-green) + tee ra log tạm cho guard đọc ──
 if [ "$RUN_TEST" = 1 ]; then
   TEST_LOG="$(mktemp 2>/dev/null || echo "/tmp/check-test-$$.log")"
@@ -171,6 +177,14 @@ fi
 # 16 tenant test thành 74. Chốt ở tier --all (tier trước khi mở PR vùng đỏ). Script tự BỎ QUA
 # (exit 0 + cảnh báo) khi không với tới DB PROD ⇒ máy không có PROD/CI không bị đỏ-giả.
 [ "$RUN_ALL" = 1 ] && step "prod-tenant-check" node scripts/check-prod-test-tenants.mjs
+
+# ── S6-PERF-DB-1: độ phủ index query nặng (§14.3) + FORCE RLS + append-only ──────────────────
+# Ba bảo đảm này trước nay chỉ là checklist người đọc / "đã đúng một lần". Một migration xoá index
+# hay quên FORCE RLS trên bảng mới KHÔNG làm đỏ bất cứ thứ gì — hậu quả chỉ lộ ở PROD dưới tải
+# (index) hoặc thành lỗ rò tenant (RLS). Đặt ở tier --all, cùng chỗ prod-tenant-check: tier chạy
+# TRƯỚC khi mở PR vùng đỏ. Script tự BỎ QUA (exit 0 + cảnh báo) khi không với tới DB ⇒ máy/CI không
+# có Postgres KHÔNG bị đỏ-giả.
+[ "$RUN_ALL" = 1 ] && step "db-readiness" node scripts/check-db-readiness.mjs
 
 # ── lane-db guard: banner LOUD + escalate riêng, tách khỏi pass/fail của bản thân step "test" ──
 if [ "$GUARD_LEVEL" = "warn" ] || [ "$GUARD_LEVEL" = "red" ]; then

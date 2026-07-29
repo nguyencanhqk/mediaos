@@ -42,7 +42,13 @@ export const sequenceCounters = pgTable(
     scopeReferenceId: uuid("scope_reference_id"),
     prefix: varchar("prefix", { length: 100 }),
     suffix: varchar("suffix", { length: 100 }),
-    currentValue: bigint("current_value", { mode: "bigint" }).notNull().default(0n),
+    // `.default(sql`0`)` chứ KHÔNG phải `.default(0n)`: literal BigInt đi thẳng vào snapshot của
+    // drizzle-kit, và `diffSchemasOrTables` gọi JSON.stringify trên snapshot đó ⇒ `db:generate` chết
+    // với "TypeError: Do not know how to serialize a BigInt" (drizzle-kit 0.30.6) ⇒ KHÔNG ai chạy được
+    // lệnh kiểm drift. DDL sinh ra giống hệt (`DEFAULT 0`, khớp cột thật `bigint DEFAULT 0` trên DB).
+    currentValue: bigint("current_value", { mode: "bigint" })
+      .notNull()
+      .default(sql`0`),
     incrementBy: integer("increment_by").notNull().default(1),
     paddingLength: integer("padding_length").notNull().default(0),
     resetPolicy: varchar("reset_policy", { length: 50 }).notNull().default("Never"),
