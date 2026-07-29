@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-29 01:55Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-29 03:35Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -59,7 +59,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 3
+- **branch**: `master` · **file đang đổi (dirty)**: 2
 - **migration head**: idx 200 — `0533_s6qatenantwrite1_team_members_composite_fk` (201 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -68,6 +68,8 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `6e90a068` | 2026-07-29 | fix(sec): brace-expansion — bản pin 1.1.16/2.1.2 KHÔNG thực sự vá; bump 2.1.3 + chốt hồi quy chạy-thật (#304) |
+| `54fa86c6` | 2026-07-29 | chore(docs): regen STATUS/INDEX sau merge #301·#302·#303 + gỡ 2 bẫy trong WO S6-SEC-MV-1 |
 | `60d1a321` | 2026-07-29 | fix(sec): S6-QA-TENANTWRITE-1 — KI-037: bổ sung vế GHI vào lưới tenant-isolation (446 → 1087 ca) + vá lỗ FK chéo tenant (#303) |
 | `d943193b` | 2026-07-29 | fix(sec): S6-SEC-ORGSCOPE-1 — N-1: ép data_scope cho /org/employees (role scope hẹp từng nhận trọn danh bạ) (#302) |
 | `bec5c95b` | 2026-07-29 | fix(sec): S6-SEC-NOTITX-1 — KI-034: gộp insert+outbox+audit vào MỘT transaction, bỏ 3 nhánh nuốt lỗi (#301) |
@@ -78,8 +80,6 @@
 | `74e79e48` | 2026-07-27 | chore(docs): regen STATUS + plans/INDEX sau khi merge S6-SEC-ORG-1 (KI-030 đóng) |
 | `4d132a2d` | 2026-07-27 | fix(sec): S6-SEC-ORG-1 — gate 3 route đọc /org đang lộ danh bạ toàn tenant (KI-030) (#297) |
 | `6a614788` | 2026-07-27 | test(sec): S6-SEC-ROUTEMAP-1 — census route runtime + đóng vế GET của route-guard sweep (#296) |
-| `dde98ac5` | 2026-07-27 | chore(harness): S6-QA-CHUNK-1 — đóng KI-014 bằng runner chia chunk trong check.sh |
-| `6c028899` | 2026-07-27 | docs(release): mở 6 WO vá known-issue S6 — KI-030/034/041/042 + Phụ lục A runtime + KI-014 |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
