@@ -12,13 +12,19 @@
 | | WO/KI ghi | Đo lại 2026-07-29 |
 | --- | --- | --- |
 | Số bảng trong `rls-registry.ts` | 156 | **155** |
-| Số ca hiện có | 465 / 468 | **446** (đo bằng chính vitest: 930 ca sau khi thêm 3 ca ghi ⇒ trước đó 446) |
+| Số ca hiện có | 465 / 468 | **465 — KI ghi ĐÚNG** (155 × 3; `it.skipIf` VẪN được đếm) |
 
-> **Hai lần tôi đếm sai, ghi lại để không ai lặp:** `grep -c "table:"` cho **156** vì đếm cả khai báo
-> `table: string;` của interface. Rồi regex `table:\s*"([a-z_]+)"` cho **154** vì lớp ký tự thiếu chữ
-> số — nó âm thầm bỏ sót đúng `i18n_overrides`. Số đúng là **155**, và thứ chốt được nó không phải
-> regex mà là **runtime**: `RLS_TABLES.length` in ra từ chính suite. Bài học: đếm bằng thứ đang chạy,
-> đừng đếm bằng thứ đang đọc.
+> **BA lần tôi đếm sai, ghi lại để không ai lặp:**
+> 1. `grep -c "table:"` cho **156** — đếm cả khai báo `table: string;` của interface.
+> 2. Regex `table:\s*"([a-z_]+)"` cho **154** — lớp ký tự thiếu chữ số, âm thầm bỏ sót `i18n_overrides`.
+> 3. Tôi "đính chính" 465 → **446**, và đó là **thay một số ĐÚNG bằng một số SAI**, ngay trong doc
+>    quản trị RC. FULL gate bắt được bằng hai phép kiểm chéo độc lập: dòng KI-042 đã merge ghi
+>    *"tenant-isolation 454 passed / 11 skipped"* = **465**; và `465 + 155×4 + 4 = 1089` = đúng tổng
+>    vitest in ra hôm nay. `it.skipIf` **vẫn được đăng ký và đếm** — đó là chỗ tôi trừ nhầm.
+>
+> Số đúng: **155 bảng · 465 ca trước · 1089 ca sau (+624)**. Thứ chốt được chúng không phải regex mà là
+> **runtime**. Bài học: đếm bằng thứ đang chạy, đừng đếm bằng thứ đang đọc — và **đừng "đính chính"
+> một con số nếu chưa kiểm chéo được nó ít nhất hai đường**.
 
 ### 1.2 Vế GHI đang phủ tới đâu
 
@@ -37,8 +43,8 @@ nhắc tenant thứ hai hay không:
 
 > ⚠️ **Đây là heuristic regex, không phải chứng minh.** Nó có thể đếm dư (khối `it()` dài ôm cả
 > fixture lẫn assert của thứ khác) và đếm thiếu (spec đặt tên biến tenant khác `B`/`companyB`).
-> Dùng nó để **khoanh phạm vi**, không dùng để tuyên bố "36 bảng đã an toàn". Script tái lập:
-> `harness/…` — xem §4 bước 0. Bảng đầy đủ: `docs/_review/S6-QA-TENANTWRITE-1-baseline.md`.
+> Dùng nó để **khoanh phạm vi**, không dùng để tuyên bố "36 bảng đã an toàn".
+> Tái lập: `node scripts/measure-tenant-write-coverage.mjs --list` (in đủ danh sách từng nhóm).
 
 ### 1.3 Vì sao lưới hiện tại mù vế GHI
 
@@ -88,8 +94,8 @@ Trên lane DB: `ALTER POLICY <p> ON <bảng> WITH CHECK (true)` cho **một** b�
 
 ## 4. Các bước
 
-0. **Baseline**: script đo (§1.2) commit vào `apps/api/test/integration/` hoặc `scripts/`, kèm bảng
-   đầy đủ 154 dòng vào `docs/_review/S6-QA-TENANTWRITE-1-baseline.md` — để lần sau đo lại được.
+0. **Baseline**: script đo (§1.2) commit vào `scripts/measure-tenant-write-coverage.mjs`; danh sách đầy
+   đủ lấy bằng `--list` thay vì đóng băng một file markdown sẽ trôi ngay khi registry đổi.
 1. Mở rộng `tenant-isolation.int-spec.ts`: thêm W1/W2/W3 cho mỗi bảng (đối xứng A↔B như vế đọc?
    — xem §5 ngân sách; mặc định chỉ chiều A→B để giữ thời gian chạy).
 2. Ghi nhận **cơ chế chặn** từng bảng (RLS 0 hàng / WITH CHECK reject / permission denied / trigger)
@@ -105,12 +111,13 @@ Trên lane DB: `ALTER POLICY <p> ON <bảng> WITH CHECK (true)` cho **một** b�
 ### Lưới sau khi mở rộng (lane `mediaos_tenantwrite`, chain `0000→0533`)
 
 ```text
-446 ca  →  1087 ca      (+641)
+465 ca  →  1089 ca      (+624)
 thời gian chạy: 4.8s     ← không cần chia nhóm
-Tests  1072 passed | 15 skipped
+Tests  1074 passed | 15 skipped
 ```
 
-15 skip = 13 `skipNoContext` + 2 bảng không có `company_id` (W0/W3 N/A, skip **có in lý do**).
+15 skip = **11** `skipNoContext` + **4** ca N/A (2 bảng không có `company_id` × 2 ca W0/W3),
+skip **có in lý do**.
 
 ### Cơ chế chặn quan sát được — đây mới là phần có giá trị
 
@@ -119,7 +126,7 @@ Tests  1072 passed | 15 skipped
 | **W0** (INSERT mang `company_id` của B) | **RLS-WITH-CHECK × 146** · no-grant × 4 · `428C9` (generated column) × 3 |
 | **W1** (UPDATE hàng của B) | rowCount=0 × 102 · no-grant × 53 |
 | **W2** (DELETE hàng của B) | no-grant × 122 · rowCount=0 × 33 |
-| **W3** (đẩy hàng của mình sang B) | RLS-WITH-CHECK × 93 · **no-grant × 52** · CHECK-constraint × 8 |
+| **W3** (đẩy hàng của mình sang B) | RLS-WITH-CHECK × 93 · **no-grant × 52** · **trigger × 8** |
 
 **`WITH CHECK` đã CHỨNG MINH chạy: 148/153 bảng.** Còn 5 chưa chứng minh được:
 `dead_letter_events` · `dead_letter_alerts` · `system_job_runs` · `chat_messages` · `dashboard_widgets`.
@@ -130,6 +137,30 @@ Tests  1072 passed | 15 skipped
 > quan**: 145 bảng "rejected(42501)" ở W3 trông như RLS đang bảo vệ, thực tế **52 trong số đó chỉ được
 > che bởi việc app role KHÔNG có grant UPDATE**. Đó là phòng thủ nằm sai tầng — ngày một migration cấp
 > UPDATE cho tính năng mới, `WITH CHECK` là thứ duy nhất còn lại.
+
+### ⚠️ GIỚI HẠN của lưới — phải nói ra, không được để người đọc suy ra sai
+
+FULL gate dựng đúng thí nghiệm này: tháo `WITH CHECK` của `team_members` rồi chạy W0 ⇒
+
+```text
+ERROR: duplicate key value violates unique constraint "team_members_team_user_active_uq"
+```
+
+`rejected = true` ⇒ **W0 VẪN XANH dù `WITH CHECK` đã bị vô hiệu hoàn toàn.** Nguyên nhân: W0 nhân bản
+hàng của A và chỉ đổi `company_id` + `id`, nên **bất kỳ unique index nào KHÔNG chứa `company_id`** cũng
+bị đụng trước khi RLS kịp phán. Đo catalog: **35/153** bảng có unique index kiểu đó; giao với nhóm W3
+cũng mù (`no-grant` 52 + `trigger` 8) ⇒ **~19 bảng mà CẢ W0 lẫn W3 đều không phát hiện được** một
+regression `WITH CHECK`.
+
+Nghịch lý đáng ghi: **chính mig `0533` vừa thêm một tấm che mới** cho W0 của `team_members` (composite
+FK bắn `23503` trước RLS) — may là W3 của bảng đó còn sống.
+
+⇒ Đọc con số **148/153** cho đúng: *"148 bảng CHỨNG MINH ĐƯỢC `WITH CHECK` chạy **hôm nay**"*, **KHÔNG**
+phải *"148 bảng sẽ ĐỎ nếu `WITH CHECK` hỏng"*. Việc thu hẹp khoảng này (probe bằng giá trị unique mới,
+hoặc cho registry khai cột-bỏ-qua) ghi vào `S6-SEC-XTENANTFK-1`.
+
+`classify()` nay tách thêm `unique-index` và `FK` thành nhãn riêng để tấm che hiện ra trong bảng tổng
+kết thay vì ẩn dưới "rejected".
 
 ### RED-proof (done_when #3) — và một phát hiện về chính lưới này
 
@@ -168,13 +199,15 @@ Ca **(b)** của §6: `team_members` chèn được hàng `company_id = A` trỏ
 | `mediaos_orgscope` | `0000→0532` | **ĐỎ** — "Chèn được 1 hàng team_members của tenant A trỏ tới team của tenant B" |
 | `mediaos_tenantwrite` | `0000→0533` | **XANH** |
 
-Vá: migration **`0533`** — `teams(company_id, id)` UNIQUE + composite FK
-`team_members(company_id, team_id) → teams(company_id, id)` `ON DELETE CASCADE`.
+Vá: migration **`0533`** — UNIQUE `teams(company_id, id)` + `users(company_id, id)`, và composite FK
+cho **CẢ HAI CHÂN**: `team_members(company_id, team_id) → teams` **và**
+`team_members(company_id, user_id) → users`, cùng `ON DELETE CASCADE`.
 
 ### ⚠️ Nó là CẢ MỘT LỚP, không phải bug lẻ — KI-045 (mới)
 
-Đo trên catalog: **460 khoá ngoại một-cột** nối hai bảng đều có `company_id`; **chỉ 1** là composite
-(cái vừa thêm). 459 cặp còn lại **cùng hình dạng lỗ hổng**. Không gộp vào WO này: mỗi cặp cần unique
+Đo trên catalog: **460 khoá ngoại một-cột** nối hai bảng đều có `company_id`. Composite đã có **2**
+TRƯỚC migration này — `tasks_parent_same_company_fk` là **tiền lệ có sẵn trong repo** (bản đầu của tôi
+ghi "chỉ 1, vừa thêm ở 0533" — sai) ⇒ số dư đúng là **458**, không phải 459. Không gộp vào WO này: mỗi cặp cần unique
 constraint mới trên bảng đích + rà `ON DELETE` từng cái ⇒ thay đổi schema diện rộng, phải có gate
 riêng. Đã mở **RELEASE-02 KI-045** + WO `S6-SEC-XTENANTFK-1`.
 

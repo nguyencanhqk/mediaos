@@ -5724,6 +5724,10 @@ export const backlog = [
       "ĐO CATALOG trên DB lane: 460 FK một-cột nối 2 bảng đều có company_id · ĐÚNG 1 composite (team_members_company_team_fk, vừa thêm ở mig 0533) ⇒ 459 cặp còn lại cùng hình dạng",
       "CA THAM CHIẾU đã chứng minh khai thác được: ctx=A → INSERT team_members(company_id=A, team_id=<team của B>) → `INSERT 0 1`. Test khoá: `tenant-isolation.int-spec.ts` ca (b)",
       "MẪU VÁ có sẵn: apps/api/migrations/0533_s6qatenantwrite1_team_members_composite_fk.sql — UNIQUE(company_id,id) trên bảng đích + composite FK, giữ ON DELETE khớp FK cũ, KHÔNG drop FK cũ",
+      "⛔ ĐỪNG NHÂN BẢN NGUYÊN XI BƯỚC (0) DELETE của 0533 (FULL gate 2026-07-29 cảnh báo): ở đó an toàn vì PROD có 0 hàng team_members. Nhân ra 458 cặp = HARD-DELETE dữ liệu nghiệp vụ thật, KHÔNG audit, trái BẤT BIẾN #2. Khuôn đúng: đếm + RAISE NOTICE, đẩy hàng lệch sang bảng cách ly HOẶC abort đòi người ký, RỒI mới ADD CONSTRAINT",
+      "TIỀN LỆ có sẵn TRƯỚC 0533: `tasks_parent_same_company_fk` (tasks.parent_task_id) — đọc nó trước khi thiết kế, và nhớ nó khiến số dư là 458 chứ không phải 459",
+      "MỘT ENDPOINT CÓ THỂ CÓ NHIỀU CHÂN: 0533 phải vá CẢ team_id LẪN user_id của team_members vì `addTeamMember` nhận cả hai id từ client. Khi quét 458 cặp, nhóm theo ENDPOINT chứ không theo từng FK lẻ",
+      "GIỚI HẠN LƯỚI cần thu hẹp trong WO này: ca W0 của tenant-isolation bị unique index KHÔNG chứa company_id che (35/153 bảng); giao với nhóm W3 mù ⇒ ~19 bảng mà cả W0 lẫn W3 đều không bắt được regression WITH CHECK",
       "⚠️ KHÔNG vá hàng loạt bằng script sinh tự động mà không rà: mỗi cặp cần (a) UNIQUE mới trên bảng đích — thêm index thật, tốn dung lượng, (b) rà ON DELETE (CASCADE bắc cầu chéo tenant là một phần của lỗ), (c) dọn hàng lệch đã tồn tại TRƯỚC khi thêm constraint",
       "Hậu quả hôm nay chủ yếu là TOÀN VẸN dữ liệu + CASCADE bắc cầu, KHÔNG phải rò trực tiếp (đường đọc được innerJoin che) ⇒ S3, không chặn RC. Nhưng là lớp lỗ nên phải có chốt chống mọc thêm",
     ],
@@ -5880,6 +5884,9 @@ export const backlog = [
       "apps/api/test/**",
       "apps/api/src/**",
       "apps/api/migrations/**",
+      // Mở rộng khi thi công: script đo baseline sống ở scripts/ (FULL gate 2026-07-29 chỉ ra
+      // guard-scope sẽ kêu nếu không khai).
+      "scripts/**",
       "docs/RELEASE/**",
       "docs/plans/S6-QA-TENANTWRITE-1.md",
     ],

@@ -120,9 +120,13 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
   ): Promise<WriteAttempt> {
     const c: PoolClient = await app.connect();
     try {
-      await c.query("BEGIN");
-      await c.query("SELECT set_config('app.current_company_id', $1, true)", [companyId]);
+      // `BEGIN` + `set_config` nằm TRONG cùng try với `ROLLBACK` ở finally (FULL gate 2026-07-29):
+      // bản đầu để chúng NGOÀI, nên nếu một trong hai ném lỗi thì connection được `release()` với
+      // transaction ĐANG MỞ — pool chỉ có 2 connection và được tái dùng, nên mọi ca sau chạy trong tx
+      // cũ. `visibleIds()` phía trên đã xử đúng ca này từ trước; hàm này thì chưa.
       try {
+        await c.query("BEGIN");
+        await c.query("SELECT set_config('app.current_company_id', $1, true)", [companyId]);
         const r = await c.query(sql, params);
         return { rejected: false, rowCount: r.rowCount ?? 0 };
       } catch (e) {
@@ -161,10 +165,24 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
     const m = (r.message ?? "").toLowerCase();
     if (m.includes("row-level security")) return "RLS-WITH-CHECK";
     if (m.includes("permission denied")) return "no-grant";
-    if (r.code === "23514" || m.includes("check constraint")) return "CHECK-constraint";
+    // ⚠️ THỨ TỰ QUAN TRỌNG — `trigger` PHẢI đứng TRƯỚC `CHECK-constraint` (FULL gate 2026-07-29 bắt).
+    // `enforce_company_id_immutable` raise bằng ĐÚNG ERRCODE 23514, nên bản đầu (kiểm 23514 trước) đã
+    // nuốt hết và biến nhánh `trigger` thành CODE CHẾT: 8 bảng bị dán nhãn "CHECK-constraint" trong khi
+    // thực tế được trigger bảo vệ (mạnh hơn mô tả). Đối chiếu catalog cho thấy 8 bảng đó trùng KHÍT với
+    // 8 bảng có trigger `enforce_company_id_immutable`. Đây đúng lớp lỗi mà hàm này sinh ra để chống —
+    // phân loại theo THÔNG ĐIỆP, không theo mã — rồi lại rơi vào nó ở nhánh kế tiếp.
     if (m.includes("immutable") || r.code === "P0001") return "trigger";
+    if (r.code === "23514" || m.includes("check constraint")) return "CHECK-constraint";
+    if (r.code === "23505" || m.includes("duplicate key")) return "unique-index";
+    if (r.code === "23503") return "FK";
     return `rejected(${r.code ?? "?"})`;
   }
+
+  /**
+   * Mốc sàn cho số bảng CHỨNG MINH được `WITH CHECK` chạy (đo 2026-07-29 = 148/153).
+   * Hạ mốc này = tuyên bố có chủ đích, phải kèm lý do trong commit. Nâng lên khi phủ thêm.
+   */
+  const PROVEN_WITH_CHECK_FLOOR = 148;
 
   /** Cơ chế chặn quan sát được cho từng (bảng, ca) — in ra cuối suite làm tài liệu sống. */
   const blockedBy: { table: string; testCase: string; how: string }[] = [];
@@ -321,6 +339,44 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
         `Chèn được ${r.rowCount} hàng team_members của tenant A trỏ tới team của tenant B — ` +
           `thiếu composite FK (company_id, team_id) → teams(company_id, id)`,
       ).toBe(true);
+    });
+
+    it("(c) KHÔNG chèn được `team_members` trỏ sang `user` của tenant khác", async () => {
+      // CHÂN THỨ HAI của CÙNG endpoint. Ca (b) một mình sẽ XANH VĨNH VIỄN trong khi chân này mở —
+      // đúng bẫy memory `tests-can-pin-a-hole-open`. Cả security-reviewer lẫn rls-tenant-isolation-tester
+      // chỉ ĐỘC LẬP vào đây khi gate PR này, và tái lập được trên lane ĐÃ vá chân `team_id`:
+      //   ctx=A → INSERT (company_id=A, team_id=<team CỦA A>, user_id=<user của B>) ⇒ `INSERT 0 1`
+      // `OrgService.addTeamMember` truyền thẳng `dto.userId` xuống repo, không kiểm tenant.
+      const teamA = await direct.query<{ id: string }>(
+        `INSERT INTO teams (company_id, name, type) VALUES ($1, $2, 'production_team') RETURNING id`,
+        [A.companyId, `xtfk-own-${Date.now()}`],
+      );
+      const userB = await seedUser(direct, B.companyId, `xtfk-u-${Date.now()}@b.test`);
+      const r = await attemptWrite(
+        A.companyId,
+        `INSERT INTO team_members (company_id, team_id, user_id, role_name) VALUES ($1, $2, $3, 'member')`,
+        [A.companyId, teamA.rows[0].id, userB],
+      );
+      expect(
+        r.rejected,
+        `Chèn được ${r.rowCount} hàng team_members của tenant A trỏ tới USER của tenant B — ` +
+          `thiếu composite FK (company_id, user_id) → users(company_id, id). ` +
+          `Tác hại: users_id_fkey ON DELETE CASCADE ⇒ xoá user ở B xoá hàng mang company_id = A.`,
+      ).toBe(true);
+    });
+
+    it("PIN: số bảng đã CHỨNG MINH WITH CHECK không được tụt", () => {
+      // Không có `expect` thì "148/153" chỉ là một dòng console.log — nó KHÔNG BAO GIỜ đỏ được khi
+      // tụt (FULL gate 2026-07-29 bắt đúng điểm này). Pin để một policy bị nới trong tương lai làm
+      // ĐỎ, thay vì lặng lẽ rơi khỏi bản tóm tắt.
+      const proven = new Set(
+        blockedBy.filter((b) => b.how === "RLS-WITH-CHECK").map((b) => b.table),
+      );
+      expect(
+        proven.size,
+        `Số bảng chứng minh được WITH CHECK tụt xuống ${proven.size}. Nếu là CHỦ ĐÍCH (bỏ bảng khỏi ` +
+          `registry, đổi grant) thì hạ mốc kèm lý do; nếu KHÔNG thì có policy vừa bị nới.`,
+      ).toBeGreaterThanOrEqual(PROVEN_WITH_CHECK_FLOOR);
     });
   });
 
