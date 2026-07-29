@@ -862,6 +862,25 @@ function Invoke-MigrateVerify {
   Write-Ok "Migrate-from-empty PASS — DB ephemeral đã tự DROP; mediaos/mediaos_dev không bị chạm."
 }
 
+# ── S6-PERF-DB-1: backup-drill (chứng minh backup KHÔI PHỤC ĐƯỢC) ────────────────────────────
+# scripts/backup-restore-drill.sh có từ G16-2 nhưng CHƯA TỪNG chạy được kể từ khi Postgres vào
+# container: host Windows không có pg_dump/pg_restore/psql trên PATH ⇒ script fail ở 3 dòng
+# `command -v` ⇒ "backup khôi phục được" chỉ là giả định. Script nay tự fallback sang pg client
+# TRONG container; wrapper này chỉ lo dựng env + bật Postgres, cùng khuôn Invoke-MigrateVerify.
+#
+# AN TOÀN: drill chỉ pg_dump READ-ONLY trên DB nguồn; DB tạm tên ^mediaos_drill_ và có guard
+# blocklist (mediaos/mediaos_dev/postgres/template*) trước mọi DROP; trap EXIT tự dọn.
+function Invoke-BackupDrill {
+  Write-Step "BACKUP-DRILL — chứng minh backup KHÔI PHỤC ĐƯỢC (dump → restore DB tạm → verify → tự DROP)"
+  $bash = Get-Command bash -ErrorAction SilentlyContinue
+  if (-not $bash) { Write-Err "Không thấy bash (cần Git Bash) — không chạy được scripts/backup-restore-drill.sh"; exit 1 }
+  Exec { docker compose up -d } "docker compose up"
+  if (-not (Wait-Postgres)) { return }
+  Exec { & bash scripts/backup-restore-drill.sh --self-test } "GUARD self-test"
+  Exec { & bash scripts/backup-restore-drill.sh } "backup-restore drill"
+  Write-Ok "Drill PASS — backup khôi phục được; DB tạm đã tự DROP."
+}
+
 # Seed 4 tài khoản UAT (Employee/Manager/HR/company-admin) lên mediaos_dev — idempotent, non-destructive.
 # Cred đọc từ STAGING_SEED_* trong .env.dev-online (script fail-fast ≥12 ký tự TRƯỚC khi ghi DB,
 # không log mật khẩu). Super Admin KHÔNG seed ở đây — qua PLATFORM_SUPERADMIN_* lúc boot API.
@@ -971,6 +990,7 @@ function Show-Help {
   Write-Host ""
   Write-Host "  STAGING / UAT (S5-DEVOPS-1 — luôn ép env dev-online; guard DB-đích, không đụng mediaos prod)" -ForegroundColor Yellow
   Write-Host "    migrate-verify      chứng minh migrate-from-empty (0000→head) trên DB ephemeral tự DROP"
+  Write-Host "    backup-drill        chứng minh BACKUP KHÔI PHỤC ĐƯỢC (dump→restore DB tạm→verify RLS/index→tự DROP)"
   Write-Host "    seed-staging        seed 4 tài khoản UAT (Employee/Manager/HR/Admin) lên mediaos_dev — idempotent"
   Write-Host ""
   Write-Host "  DASHBOARD (tiến độ dự án — chạy ẩn cổng 5180)" -ForegroundColor Yellow
@@ -1102,6 +1122,7 @@ switch ($Command.ToLower()) {
   "dev-online-migrate" { Invoke-DevOnlineMigrate }
   "dev-online-tunnel"  { Invoke-DevOnlineTunnel }
   "migrate-verify"     { Invoke-MigrateVerify }
+  "backup-drill"       { Invoke-BackupDrill }
   "seed-staging"       { Invoke-SeedStaging }
   "dashboard"         { Invoke-Dashboard }
   "dashboard-stop"    { Invoke-DashboardStop }

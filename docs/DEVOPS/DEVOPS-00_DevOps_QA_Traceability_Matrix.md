@@ -197,6 +197,21 @@ Cột "Tham chiếu trực tiếp" đánh dấu nơi tài liệu DEVOPS đã nê
 | QA-06 | S | Security checklist gate | §9 | |
 | QA-01 | S | Quy trình release bám test strategy | §5 | |
 
+### 5.13 DEVOPS-13 — DB Readiness · Backup · Rollback Verification Report (S6-PERF-DB-1)
+
+> Khác các mục trên: DEVOPS-01..12 là **tài liệu thiết kế**; DEVOPS-13 là **báo cáo kiểm chứng** — ghi
+> kết quả CHẠY THẬT của WS5/WS6 (IMPLEMENTATION-09 §14/§15) kèm bằng chứng và phần chưa đạt.
+
+| QA | Mức | Lý do liên kết | Section DEVOPS-13 | Tham chiếu trực tiếp |
+| --- | --- | --- | --- | --- |
+| QA-10 | P | Backup/restore rehearsal + DB readiness là gate release | §3.1, §3.2 | ✅ drill PASS 2026-07-29 |
+| QA-08 | P | Chốt hồi quy chặn regression index/RLS/append-only | §4, §5.2 | ✅ `check-db-readiness.mjs`, `check-migration-no-drop.sh` |
+| QA-07 | S | Ngưỡng performance MVP + độ phủ index query nặng | §4.1, §6 | ⚠️ latency dùng số 2026-07-25 |
+| QA-06 | S | BẤT BIẾN #1 (FORCE RLS) · #2 (append-only) còn nguyên sau restore | §4.2, §4.3 | |
+| QA-05 | S | Permission seed tồn tại sau migration (§15.6.3) | §3.1.1 | |
+
+**Ánh xạ mã kiểm IMP09-DB:** IMP09-DB-001 ✅ (§3.4) · IMP09-DB-003 ✅ (§3.1) · IMP09-DB-002/004/005 ⏳ (§7 mục 3 — chuyển S6-REL-1).
+
 ---
 
 ## 6. Chiều ngược: mỗi tài liệu QA được tiêu thụ ở đâu

@@ -5372,10 +5372,15 @@ export const backlog = [
       "Performance/Query/Cache hardening + DB Migration/Seed/Backup/Rollback verification (index, query perf, backup/restore rehearsal) — WS5/WS6",
     zone: "red",
     status: "todo",
+    // paths bổ sung `mediaos.ps1` + `harness/check.sh` (2026-07-29, khai TRƯỚC khi sửa — paths lái
+    // review gate + scheduler): WO này cắm 2 chốt hồi quy vào check.sh và thêm wrapper `m backup-drill`
+    // cùng khuôn `m migrate-verify`. Khai thiếu thì WO tự đẩy mình ra ngoài phạm vi ở đúng bước cuối.
     paths: [
       "apps/api/src/**",
       "apps/api/migrations/**",
       "scripts/**",
+      "harness/check.sh",
+      "mediaos.ps1",
       "docs/DEVOPS/**",
       "docs/plans/S6-PERF-DB-1.md",
     ],
@@ -5387,11 +5392,22 @@ export const backlog = [
       "DB-01..10",
     ],
     plan: "docs/plans/S6-PERF-DB-1.md",
+    // ⚠️ HAI BẪY đã gỡ trong đợt thi công 2026-07-29 — ghi lại để người sau không tin nhầm:
+    //  (1) `backup-restore-drill.sh` TỒN TẠI từ G16-2 nhưng CHƯA TỪNG chạy được kể từ khi Postgres vào
+    //      container (host Windows không có pg_dump/pg_restore/psql trên PATH ⇒ fail ở `command -v`).
+    //      "Restore rehearsal đạt" trước đợt này là GIẢ ĐỊNH. Đã vá bằng fallback docker-exec + stream
+    //      stdout/stdin (dùng --file thì file rơi vào filesystem CONTAINER ⇒ host nhận dump rỗng ⇒
+    //      restore "thành công" trên dump rỗng = PASS oan).
+    //  (2) done_when "Không db:generate drop" KHÔNG kiểm được bằng db:generate: meta/ chỉ có 1 snapshot
+    //      cho 201 migration (từ 0001 là viết tay) ⇒ diff luôn là "tạo lại cả thế giới", KHÔNG BAO GIỜ
+    //      sinh nổi DROP. Chứng minh: xoá hẳn 1 cột khỏi schema TS ⇒ diff vẫn 0 DROP. Điểm kiểm soát
+    //      THẬT là file migration viết tay ⇒ `scripts/check-migration-no-drop.sh`. Xem DEVOPS-13 §5.2.
     done_when: [
       "Perf/query/cache hardening: API latency, dashboard cache, notification unread, list pagination, export behavior đạt ngưỡng; index đủ cho query nặng",
       "DB readiness: migration/seed verify ở staging từ trống; backup + restore rehearsal thành công; rollback path verify; migration journal forward-only/no-gap",
       "Không db:generate drop; migration additive; RLS/append-only intact sau verify",
       "check.sh xanh; FULL gate database-reviewer (chạm migration/DB)",
+      "Mọi chốt hồi quy mới phải có RED-proof (chứng minh ĐỎ được) — chốt không đỏ được thì gỡ, đừng ship",
     ],
   },
   // ──────────── Đợt VÁ known-issue mở sau S6-SEC-1 / S6-STAB-1 (seed 2026-07-27) ────────────
