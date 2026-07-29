@@ -28,7 +28,7 @@
 -- **460 khoá ngoại một-cột** nối hai bảng đều có `company_id`. Composite đã có **2** (không phải 1 như
 -- bản đầu ghi): `tasks_parent_same_company_fk` là **tiền lệ có TRƯỚC** migration này, không phải do nó
 -- thêm ⇒ số dư đúng là **458**, không phải 459. Toàn bộ phần đó là cùng một lớp lỗ hổng, đã ghi thành
--- known-issue + WO riêng (RELEASE-02 KI-045). KHÔNG gộp vào đây: mỗi cặp cần unique constraint mới
+-- known-issue + WO riêng (RELEASE-02 KI-046). KHÔNG gộp vào đây: mỗi cặp cần unique constraint mới
 -- trên bảng đích + rà `ON DELETE` từng cái, là thay đổi schema diện rộng phải có gate riêng.
 --
 -- HOT-FILE / BẤT BIẾN:

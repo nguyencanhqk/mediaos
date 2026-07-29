@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
 import { employeeProfiles, orgUnits, teams, teamMembers, users, roles } from "../db/schema";
 import { notOperatorRole } from "../permission/operator-roles";
@@ -319,7 +319,12 @@ export class OrgRepository {
   }
 
   /** List employees (users) với team memberships — legacy endpoint G4-1. */
-  async listEmployees(companyId: string) {
+  /**
+   * S6-SEC-ORGSCOPE-1 (N-1) — `scopeCond` là vị từ `data_scope` do `OrgService` dựng
+   * (`DataScopeService.buildUserScopeCondition`). BẮT BUỘC, không có giá trị mặc định: một tham số
+   * optional ở đây nghĩa là caller quên truyền thì lặng lẽ quay về hành vi rò cũ.
+   */
+  async listEmployees(companyId: string, scopeCond: SQL) {
     return this.db.withTenant(companyId, async (tx) => {
       const userRows = await tx
         .select({
@@ -329,18 +334,40 @@ export class OrgRepository {
           status: users.status,
         })
         .from(users)
-        .where(and(eq(users.companyId, companyId), isNull(users.deletedAt)));
+        .where(and(eq(users.companyId, companyId), isNull(users.deletedAt), scopeCond));
 
-      const memberRows = await tx
-        .select({
-          userId: teamMembers.userId,
-          teamId: teamMembers.teamId,
-          teamName: teams.name,
-          roleName: teamMembers.roleName,
-        })
-        .from(teamMembers)
-        .innerJoin(teams, and(eq(teamMembers.teamId, teams.id), isNull(teams.deletedAt)))
-        .where(and(eq(teamMembers.companyId, companyId), isNull(teamMembers.deletedAt)));
+      // Bound membership theo ĐÚNG tập user đã lọc.
+      //
+      // ĐÍNH CHÍNH (FULL gate 2026-07-28 — bản đầu của comment này nói quá): đây là DEFENSE-IN-DEPTH +
+      // chặn phình truy vấn, KHÔNG phải vá một lỗ rò. `membersByUser.get(u.id)` bên dưới chỉ ghép theo
+      // id đã hiện, nên membership của user ngoài scope không có đường ra response kể cả khi bỏ vế này.
+      // Nó tồn tại để lớp bảo vệ không phụ thuộc DUY NHẤT vào hình dạng của bước map — ai đó đổi sang
+      // trả `memberRows` phẳng là mất ngay lớp đó. Đừng gỡ vì "thừa".
+      //
+      // ⚠️ `innerJoin(teams, …)` bên dưới thì NGƯỢC LẠI — nó CHỊU LỰC: FULL gate đo được rằng dựng hàng
+      // `team_members` lệch (company_id=A, team_id của B) rồi chạy truy vấn này KHÔNG có join sẽ rò
+      // UUID team của tenant B. Không được hạ thành LEFT JOIN.
+      //
+      // Tập rỗng ⇒ bỏ hẳn truy vấn (inArray mảng rỗng là SQL không hợp lệ ở một số driver).
+      const visibleIds = userRows.map((u) => u.id);
+      const memberRows = visibleIds.length
+        ? await tx
+            .select({
+              userId: teamMembers.userId,
+              teamId: teamMembers.teamId,
+              teamName: teams.name,
+              roleName: teamMembers.roleName,
+            })
+            .from(teamMembers)
+            .innerJoin(teams, and(eq(teamMembers.teamId, teams.id), isNull(teams.deletedAt)))
+            .where(
+              and(
+                eq(teamMembers.companyId, companyId),
+                isNull(teamMembers.deletedAt),
+                inArray(teamMembers.userId, visibleIds),
+              ),
+            )
+        : [];
 
       const membersByUser = new Map<
         string,

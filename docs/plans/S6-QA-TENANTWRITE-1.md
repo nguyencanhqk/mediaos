@@ -203,13 +203,13 @@ Vá: migration **`0533`** — UNIQUE `teams(company_id, id)` + `users(company_id
 cho **CẢ HAI CHÂN**: `team_members(company_id, team_id) → teams` **và**
 `team_members(company_id, user_id) → users`, cùng `ON DELETE CASCADE`.
 
-### ⚠️ Nó là CẢ MỘT LỚP, không phải bug lẻ — KI-045 (mới)
+### ⚠️ Nó là CẢ MỘT LỚP, không phải bug lẻ — KI-046 (mới)
 
 Đo trên catalog: **460 khoá ngoại một-cột** nối hai bảng đều có `company_id`. Composite đã có **2**
 TRƯỚC migration này — `tasks_parent_same_company_fk` là **tiền lệ có sẵn trong repo** (bản đầu của tôi
 ghi "chỉ 1, vừa thêm ở 0533" — sai) ⇒ số dư đúng là **458**, không phải 459. Không gộp vào WO này: mỗi cặp cần unique
 constraint mới trên bảng đích + rà `ON DELETE` từng cái ⇒ thay đổi schema diện rộng, phải có gate
-riêng. Đã mở **RELEASE-02 KI-045** + WO `S6-SEC-XTENANTFK-1`.
+riêng. Đã mở **RELEASE-02 KI-046** + WO `S6-SEC-XTENANTFK-1`.
 
 ## 5. Ngân sách thời gian chạy
 

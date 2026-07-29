@@ -14,10 +14,23 @@ import type {
 } from "@mediaos/contracts";
 import { OrgRepository } from "./org.repository";
 import { isUniqueViolation } from "../common/db-error";
+import { DataScopeService } from "../permission/data-scope.service";
+import { ORG_EMPLOYEE_DIRECTORY } from "./org.permissions";
+
+/** Actor tối thiểu cho đường đọc có scope (khớp `req.user` của JwtAuthGuard). */
+interface DirectoryActor {
+  id: string;
+  companyId: string;
+}
 
 @Injectable()
 export class OrgService {
-  constructor(private readonly repo: OrgRepository) {}
+  constructor(
+    private readonly repo: OrgRepository,
+    // S6-SEC-ORGSCOPE-1 (N-1): DataScopeService export sẵn từ PermissionModule, OrgModule đã import
+    // module đó cho PermissionGuard ⇒ không cần đổi wiring.
+    private readonly dataScope: DataScopeService,
+  ) {}
 
   // ── Org Units ────────────────────────────────────────────────────────────────
 
@@ -167,8 +180,30 @@ export class OrgService {
     if (rows.length === 0) throw new NotFoundException("Team member not found");
   }
 
-  listEmployees(companyId: string) {
-    return this.repo.listEmployees(companyId);
+  /**
+   * S6-SEC-ORGSCOPE-1 (N-1) — danh bạ tài khoản, BOUND theo `data_scope`.
+   *
+   * `PermissionGuard` đã gate `ORG_EMPLOYEE_DIRECTORY` TRƯỚC; ở đây resolve scope MẠNH NHẤT của
+   * ĐÚNG cặp đó rồi thu hẹp hàng. Trước WO này repo chỉ `withTenant` ⇒ role scope Own/Team/Department
+   * (role-admin đúc được — ceiling chỉ chặn `System`) qua guard rồi nhận TRỌN danh bạ kèm email.
+   *
+   * `resolveAndAssert` ném 403 khi không có grant nào. Về lý thuyết guard đã chặn trước đó; giữ ở đây
+   * là defense-in-depth cho mọi caller tương lai KHÔNG đi qua controller này.
+   */
+  async listEmployees(actor: DirectoryActor) {
+    const scope = await this.dataScope.resolveAndAssert(
+      actor.id,
+      actor.companyId,
+      ORG_EMPLOYEE_DIRECTORY.action,
+      ORG_EMPLOYEE_DIRECTORY.resourceType,
+    );
+    // Vị từ hình-`users` (KHÔNG join employee_profiles): user chưa có hồ sơ nhân sự vẫn phải liệt kê
+    // được ở scope Company — màn RBAC của console dùng chính route này làm danh sách subject gán role.
+    const scopeCond = this.dataScope.buildUserScopeCondition(scope, {
+      userId: actor.id,
+      companyId: actor.companyId,
+    });
+    return this.repo.listEmployees(actor.companyId, scopeCond);
   }
 
   // ── Roles ──────────────────────────────────────────────────────────────────────
