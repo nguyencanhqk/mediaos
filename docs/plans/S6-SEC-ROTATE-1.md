@@ -645,3 +645,41 @@ một hành động không thể làm nhầm. RED-proof: đúng tổ hợp đã 
 | `pg_hba` còn `host all all 127.0.0.1 trust` | Mặc định của image; chỉ áp cho kết nối TỪ TRONG container. Không mở thêm bề mặt sau khi đã bind loopback, nhưng là thứ cần nhớ mỗi lần verify xác thực (Bẫy 2) |
 | `.env.dev-online` / dev-online stack | Đã cập nhật mật khẩu nhưng stack KHÔNG chạy lúc rotate — lần bật tiếp theo cần verify lại |
 | Lane DB `mediaos_rot1`/`rot2` | Tạo trong lúc verify; drop sau khi merge để tránh phình pgdata (memory `pgdata-bloat-lane-dbs-and-job-log`) |
+
+## 6. Đưa ra PR (2026-07-29) — rebase lên master mới + đóng luôn KI-045
+
+Nhánh này đã xong nội dung từ 28/7 nhưng **chưa từng push/PR**, trong khi `master` đi thêm **7 commit**
+(#300…#304). Hệ quả nếu merge thẳng: ba file cùng bị sửa hai phía — `security.yml` (auto-merge được) và
+`RELEASE-01`/`RELEASE-02` (xung đột thật). Bản của nhánh viết `S1 = 2 mở (KI-027 · KI-034)` và `S2` còn
+`KI-037`, đều là số liệu **đã lỗi thời** — lấy nguyên si sẽ *mở lại* trên giấy hai KI mà #301/#303 đã
+đóng. Đã rebase lên `master` hiện tại và hoà theo nguyên tắc: **giữ số liệu mới của master, chỉ ghép vế
+đóng KI-043 của nhánh**.
+
+### Kiểm chứng lại ĐỘC LẬP trên cây đã rebase (không tin lời khai của §3b)
+
+| Ca | Kết quả |
+| --- | --- |
+| 3 literal cũ + 1 mật khẩu-bậy, nối **TỪ HOST** `localhost:5432` | 4/4 `password authentication failed` |
+| 5 role với mật khẩu trong `.env` | 5/5 nối được |
+| `check-no-secret-literals.mjs` | 0 vi phạm |
+| `guardproof-secret-literals.sh` | **PASS 27 / FAIL 0** |
+| `/health/db` PROD (:3100) | 200 |
+| `docker inspect` 4 container | cả 4 publish `127.0.0.1:…` |
+
+### KI-045 đóng luôn ở đây (chính WO này gây ra)
+
+`KI-045` sinh ra từ rotate của WO này, và **hai chỗ nó chỉ đích danh đều nằm trong diff của nhánh** —
+để nó mở là ghi nợ một việc đã làm xong. Bằng chứng bằng **đúng lệnh chuẩn**, không export tay URL:
+
+```text
+bash scripts/lane-db-setup.sh rot1        → OK (mật khẩu tự nạp từ .env qua db-secrets.sh)
+LANE_DB=mediaos_rot1  (KHÔNG set DATABASE_*_URL)
+  db-tenant.int-spec              5/5   ✅ chạy thật
+  admin-users-deny.int-spec      22/22  ✅
+  att-core-tenant-deny.int-spec  19/19  ✅
+  db-target.unit-spec            34/34  ✅
+```
+
+46/46 ca deny-path/tenant **CHẠY**, không phải SKIP — tức hàng rào đã sống lại bằng lệnh chuẩn.
+Vế "hỏng im lặng" của KI-045 giữ nguyên thiết kế cảnh báo-rồi-chạy-tiếp (lý do ở §4b), nhưng
+`lane-db-guard` escalate ĐỎ ở tier `--all`/`REQUIRE_LANE_DB` nên không thể lỡ merge với deny-path rỗng.
