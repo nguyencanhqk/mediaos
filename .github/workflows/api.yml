@@ -125,6 +125,12 @@ jobs:
       - name: Typecheck
         run: pnpm --filter @mediaos/api typecheck
 
+      # S6-REL-1 (D6): test của TOOLING nằm NGOÀI workspace vitest (scripts/ + harness/) nên
+      # `pnpm test` không bao giờ chạm tới. Không gắn vào cổng thì chúng là test mồ côi —
+      # `harness/lane-db-guard.test.mjs` đã ở trạng thái đó từ S5. Rẻ, không cần DB.
+      - name: Tooling tests (node --test)
+        run: node --test scripts/lib/ops-alert-rules.test.mjs harness/lane-db-guard.test.mjs
+
       # Migration TRƯỚC test: tạo bảng + RLS policy + FORCE (policy+FORCE cùng CREATE).
       - name: Apply migrations (ephemeral Postgres)
         run: pnpm --filter @mediaos/api db:migrate

@@ -1,17 +1,24 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-30 05:50Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-30 11:52Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🔴 S6-REL-1 — Release Candidate build + release notes + Go-live runbook + deployment/rollback rehearsal + monitoring/alerting/support readiness (WS7/WS8/WS9) — crown release
+- **zone**: red · **skills**: code-review
+- **sửa ở đâu (paths)**: `.github/workflows/**`, `scripts/**`, `docs/RELEASE/**`, `mediaos.ps1`, `docs/plans/S6-REL-1.md`
+- **phụ thuộc**: S6-QA-FINAL-1✓, S6-SEC-1✓, S6-PERF-DB-1✓, S6-QA-CHUNK-1✓, S6-SEC-ROUTEMAP-1✓, S6-SEC-ORG-1✓, S6-SEC-NOTITX-1✓, S6-SEC-LOGINLOG-1✓, S6-SEC-MV-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] RC build + version/tag + release notes; release candidate checklist (RELEASE-REL-001) đủ mục
+  - [ ] Go-live runbook + deployment path + rollback rehearsal thành công (RELEASE-GO-001); smoke sau deploy; war-room + communication plan
+  - [ ] Monitoring/logging/alerting production + support readiness; đối chiếu hạ tầng PROD/tunnel/NSSM đang chạy
+  - [ ] FULL gate security-reviewer + deploy-gate; KHÔNG push thẳng master; người chốt (crown release)
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🔴 `S6-SEC-IDENTITY-PROJ-1` Gốc rễ của N-1/N-2/N-1c — buộc TẦNG CHIẾU `users.email`/`users.fullName` phải nhận vị từ scope, thiếu thì VỠ TYPECHECK (không phải trả 0 hàng im lặng)
 - 🔴 `S6-SEC-XTENANTFK-1` KI-046 — 459 khoá ngoại MỘT-CỘT nối hai bảng tenant: FK check bỏ qua RLS ⇒ gắn được hàng của mình trỏ sang bản ghi của tenant khác (lớp lỗ, không phải bug lẻ)
-- 🔴 `S6-REL-1` Release Candidate build + release notes + Go-live runbook + deployment/rollback rehearsal + monitoring/alerting/support readiness (WS7/WS8/WS9) — crown release
 
 **CHỜ (kẹt phụ thuộc):**
 - `S6-GOLIVE-1` Final Sign-off · Go/No-go · Go-live execution · Handoff (admin/user/support guide · known issues · post-go-live backlog) — WS10 ⏳ cần: S6-REL-1
@@ -20,7 +27,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 0
+- **branch**: `master` · **file đang đổi (dirty)**: 25
 - **migration head**: idx 201 — `0534_s6secmv1_dashboard_mv_tenant_barrier` (202 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -29,6 +36,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `c4afe351` | 2026-07-30 | chore(docs): regen STATUS sau merge #310 (S6-SEC-ORGTEAMSCOPE-1) |
 | `211a664f` | 2026-07-30 | fix(sec): S6-SEC-ORGTEAMSCOPE-1 — N-1c/KI-049: bound hai cột danh tính của /org/teams/:id/members theo cặp DANH BẠ (+ sửa sổ S1) (#310) |
 | `cbd417ac` | 2026-07-30 | chore(docs): regen STATUS — gỡ WIP ảo S6-SEC-ORGTEAMSCOPE-1 khỏi tiêu điểm phiên |
 | `914ff0ae` | 2026-07-29 | chore(docs): regen STATUS sau khi merge 5 PR (#309 · #305 · #307 · #308 · #306) |
@@ -40,7 +48,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `53bbf492` | 2026-07-29 | fix(harness): reconcile đóng dấu 'done' oan cho WO chưa thi công — chore(docs) lọt guard |
 | `6e90a068` | 2026-07-29 | fix(sec): brace-expansion — bản pin 1.1.16/2.1.2 KHÔNG thực sự vá; bump 2.1.3 + chốt hồi quy chạy-thật (#304) |
 | `54fa86c6` | 2026-07-29 | chore(docs): regen STATUS/INDEX sau merge #301·#302·#303 + gỡ 2 bẫy trong WO S6-SEC-MV-1 |
-| `60d1a321` | 2026-07-29 | fix(sec): S6-QA-TENANTWRITE-1 — KI-037: bổ sung vế GHI vào lưới tenant-isolation (446 → 1087 ca) + vá lỗ FK chéo tenant (#303) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

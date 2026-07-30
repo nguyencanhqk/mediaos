@@ -598,9 +598,15 @@ function Invoke-ProdUpdate([string[]]$updArgs) {
       Write-Warn "dev-online API (:3200) đang chạy — dist API DÙNG CHUNG với PROD."
       Write-Warn "Nên 'm dev-online-stop' trước, kẻo watch ghi đè dist vừa build cho PROD."
     }
-    Write-Host "  build contracts + api (dist mà service PROD sẽ chạy) ..." -ForegroundColor DarkGray
+    Write-Host "  build contracts + api ..." -ForegroundColor DarkGray
     Exec { pnpm --filter "@mediaos/contracts" build } "build contracts"
     Exec { pnpm --filter "@mediaos/api" build } "build api"
+    # S6-REL-1 (D3, KI-016) — đóng băng dist vừa build thành release BẤT BIẾN.
+    # ĐÓNG GÓI trước migrate (gói hỏng thì chưa hề đụng DB) nhưng CHƯA trỏ 'current': nếu migrate
+    # DỪNG fail-closed mà 'current' đã trỏ bản mới, thì một lần restart bất kỳ (crash / reboot /
+    # NSSM AppExit Restart) sẽ khởi động BẢN MỚI TRÊN SCHEMA CŨ — đúng thứ bước migrate sinh ra để
+    # chặn. Kích hoạt nằm SAU migrate, xem bên dưới.
+    Exec { node scripts/release-artifact.mjs snapshot --no-activate } "snapshot release"
     # S5-DEVOPS-DEPLOYMIG-1 — MIGRATE giữa build và restart. Build TRƯỚC migrate: build đỏ thì chưa hề
     # đụng DB. Migrate TRƯỚC restart: dist mới luôn gặp schema >= cái nó cần.
     # So sánh `-ne $true` (không phải `-not`): mảng lọt vào cũng rơi về nhánh DỪNG (fail-closed).
@@ -608,9 +614,15 @@ function Invoke-ProdUpdate([string[]]$updArgs) {
     if ($migrateOk -ne $true) {
       Write-Err "FAIL-CLOSED: schema chua o head -> KHONG restart API PROD (dist moi + schema cu = loi runtime o job nen)."
       Write-Err "Sua xong chay lai 'm prod-update api'. Xem trang thai: 'm prod-status'. Chi migrate: 'm migrate'."
+      Write-Warn "Release da dong goi nhung CHUA kich hoat — 'current' van tro ban CU (an toan)."
       exit 1
     }
+    # Schema đã ở head ⇒ giờ mới trỏ 'current' sang bản vừa đóng gói, rồi mới restart.
+    Exec { node scripts/release-artifact.mjs activate --latest } "activate release"
+    Exec { node scripts/release-artifact.mjs verify } "verify release"
     Restart-OneProdService $ProdApiService "http://localhost:$ApiPort/api/v1/health" "API PROD" $ApiHealthHint
+    Write-Host "  Ban dang chay: curl http://localhost:$ApiPort/api/v1/health  (doc .data.build)" -ForegroundColor DarkGray
+    Write-Host "  Smoke:         node scripts\release-smoke.mjs" -ForegroundColor DarkGray
   }
   if ($doLms) {
     Write-Host "  build LMS (apps\lms — next build, workspace riêng ngoài turbo) ..." -ForegroundColor DarkGray
@@ -642,6 +654,80 @@ function Show-MigrationStatus {
   Write-Host "    Ap bang:  m prod-update api   (migrate xong moi restart)" -ForegroundColor DarkGray
 }
 
+# ── S6-REL-1 (D3 · KI-016) — RELEASE ARTIFACT & ROLLBACK ỨNG DỤNG ───────────────────────────
+# Trước WO này service PROD chạy THẲNG apps\api\dist — thư mục mà 'm dev-online' biên dịch lại
+# (sự cố 2026-07-08) — và vì dist bị ghi đè mỗi lần build nên KHÔNG có bản trước để quay về.
+# Nay: mỗi build đóng băng thành apps\api\releases\<stamp>, service trỏ junction ...\releases\current.
+# Logic ở scripts\release-artifact.mjs (đa nền tảng, đã verify phân giải node_modules bằng resolver thật).
+
+# Khối "release" của m prod-status — CHỈ ĐỌC, KHÔNG BAO GIỜ throw.
+# Trả lời: "service đang trỏ vào đâu, và bản đang chạy có phải bản mới nhất không?"
+function Show-ReleaseStatus {
+  Write-Host "  Release artifact (apps\api\releases):" -ForegroundColor DarkGray
+  $svcPath = $null
+  try {
+    # ImagePath của NSSM = "<node.exe>" "<đường dẫn js>" — đọc để biết service ĐANG trỏ vào đâu.
+    $reg = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\$ProdApiService" -ErrorAction Stop
+    $svcPath = $reg.ImagePath
+  } catch { Write-Warn "khong doc duoc cau hinh service $ProdApiService (can quyen doc registry)"; }
+
+  if ($svcPath) {
+    if ($svcPath -match "releases") {
+      Write-Ok "service tro vao releases\current (da tach khoi dist dung chung)"
+    } else {
+      Write-Warn "service VAN tro thang apps\api\dist — KI-016 CHUA dong o may nay."
+      Write-Warn "  => 'm dev-online' bien dich lai dist co the day binary moi vao PROD."
+      Write-Host "     Cutover (Administrator):  m prod-cutover        (xem docs/RELEASE/RELEASE-08)" -ForegroundColor DarkGray
+    }
+  }
+
+  $out = & node (Join-Path $Root "scripts\release-artifact.mjs") list 2>&1
+  $out | ForEach-Object { Write-Host ("    " + $_) -ForegroundColor DarkGray }
+}
+
+# m prod-rollback [<stamp>]  — quay ung dung ve ban truoc (KHONG dung toi DB).
+# Bo trong = ban NGAY TRUOC ban dang chay. Can Administrator vi co buoc restart service.
+function Invoke-ProdRollback([string[]]$rbArgs) {
+  Write-Step "PROD — ROLLBACK ứng dụng (không đụng DB)"
+  Write-Warn "Rollback ứng dụng KHÔNG hoàn tác migration. Schema đi theo expand-contract (DEVOPS-10):"
+  Write-Warn "bản cũ phải chạy được trên schema MỚI. Nếu lỗi do DỮ LIỆU thì đây không phải cách chữa."
+  if (-not (Test-IsAdmin)) {
+    Write-Warn "Bước restart service cần Administrator — mở cửa sổ elevated (UAC)..."
+    Invoke-Elevated ("prod-rollback " + ($rbArgs -join " "))
+    return
+  }
+  $rbArgs2 = @("rollback") + $rbArgs
+  Exec { & node (Join-Path $Root "scripts\release-artifact.mjs") @rbArgs2 } "rollback release"
+  Exec { & node (Join-Path $Root "scripts\release-artifact.mjs") verify } "verify release"
+  Restart-OneProdService $ProdApiService "http://localhost:$ApiPort/api/v1/health" "API PROD" $ApiHealthHint
+  Write-Host "  Kiểm chứng bản đang chạy:  curl http://localhost:$ApiPort/api/v1/health   (đọc .data.build)" -ForegroundColor DarkGray
+  Write-Host "  Smoke:  node scripts\release-smoke.mjs" -ForegroundColor DarkGray
+}
+
+# m prod-cutover — MOT LAN: tro service PROD tu apps\api\dist sang apps\api\releases\current.
+# Tach rieng khoi prod-update vi doi cau hinh service la hanh dong CO CHU DICH cua owner, khong
+# duoc xay ra nhu tac dung phu cua mot lan deploy thuong.
+function Invoke-ProdCutover {
+  Write-Step "PROD — cutover service sang releases\current (KI-016)"
+  if (-not (Test-IsAdmin)) {
+    Write-Warn "Cần Administrator để đổi cấu hình service — mở cửa sổ elevated (UAC)..."
+    Invoke-Elevated "prod-cutover"
+    return
+  }
+  $current = Join-Path $Root "apps\api\releases\current\main.js"
+  if (-not (Test-Path $current)) {
+    Write-Err "Chưa có apps\api\releases\current\main.js — chạy 'm prod-update api' (hoặc build + snapshot) trước."
+    return
+  }
+  Exec { & node (Join-Path $Root "scripts\release-artifact.mjs") verify } "verify release truoc khi cutover"
+  $nodeExe = (Get-Command node).Source
+  Exec { nssm set $ProdApiService Application "$nodeExe" } "nssm set Application"
+  Exec { nssm set $ProdApiService AppParameters "apps\api\releases\current\main.js" } "nssm set AppParameters"
+  Write-Ok "Da tro service sang releases\current"
+  Restart-OneProdService $ProdApiService "http://localhost:$ApiPort/api/v1/health" "API PROD" $ApiHealthHint
+  Write-Host "  Quay lai duong cu neu can:  nssm set $ProdApiService AppParameters `"apps\api\dist\main.js`"" -ForegroundColor DarkGray
+}
+
 function Invoke-ProdStatus {
   Write-Step "PROD — trạng thái ($DefaultDomain)"
   foreach ($name in @($ProdApiService, $ProdLmsService, "cloudflared")) {
@@ -656,6 +742,8 @@ function Invoke-ProdStatus {
   if (Test-Port 3200)     { Write-Warn "cổng :3200 (dev-online API) CŨNG đang chạy — nhớ landmine dist dùng chung" }
   Write-Host ""
   Show-MigrationStatus
+  Write-Host ""
+  Show-ReleaseStatus
   Write-Host ""
   try {
     $r = Invoke-WebRequest -Uri "http://localhost:$ApiPort/api/v1/health" -UseBasicParsing -TimeoutSec 4
@@ -977,7 +1065,9 @@ function Show-Help {
   Write-Host "                              API: build -> MIGRATE -> restart. Migrate đỏ/huỷ = KHÔNG restart, exit 1."
   Write-Host "                              Lô tồn đọng có REVOKE/DROP thì HỎI xác nhận (bỏ qua: MEDIAOS_MIGRATE_YES=1)."
   Write-Host "    prod-restart [api|lms]    chỉ khởi động lại service PROD, KHÔNG rebuild, KHÔNG migrate (bỏ trống = cả hai)"
-  Write-Host "    prod-status               service (API·LMS·cloudflared) · cổng · migration tồn đọng · health local + online"
+  Write-Host "    prod-status               service (API·LMS·cloudflared) · cổng · migration tồn đọng · release · health local + online"
+  Write-Host "    prod-rollback [<stamp>]   quay API PROD về bản build TRƯỚC (không đụng DB); bỏ trống = ngay trước"
+  Write-Host "    prod-cutover              MỘT LẦN: trỏ service từ apps\api\dist sang releases\current (KI-016)"
   Write-Host ""
   Write-Host "  DEV-ONLINE (lộ dev ra cian-dev.*.funtimemediacorp.com, song song prod)" -ForegroundColor Yellow
   Write-Host "    dev-online          chạy/restart dev stack lộ ra cian-dev.* (tự dừng cũ + rebuild shared)"
@@ -1111,9 +1201,11 @@ switch ($Command.ToLower()) {
   "deploy-api" { Invoke-DeployApi }
   "deploy-env" { Invoke-DeployEnv $Rest }
   "deploy-seed" { Invoke-DeploySeed }
-  "prod-update"  { Invoke-ProdUpdate $Rest }
-  "prod-restart" { Invoke-ProdRestart $Rest }
-  "prod-status"  { Invoke-ProdStatus }
+  "prod-update"   { Invoke-ProdUpdate $Rest }
+  "prod-restart"  { Invoke-ProdRestart $Rest }
+  "prod-status"   { Invoke-ProdStatus }
+  "prod-rollback" { Invoke-ProdRollback $Rest }   # S6-REL-1 (D3) — quay app về bản trước
+  "prod-cutover"  { Invoke-ProdCutover }          # S6-REL-1 (D3) — một lần: dist → releases\current
   "dev-online"        { Invoke-DevOnline }
   "dev-online-fast"   { Invoke-DevOnlineFast }
   "dev-online-stop"   { Invoke-DevOnlineStop }

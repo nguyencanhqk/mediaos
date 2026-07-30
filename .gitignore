@@ -13,6 +13,9 @@ harness/report.md
 
 # build
 dist/
+# S6-REL-1 (D3) — artifact deploy PROD: snapshot BẤT BIẾN của apps/api/dist + junction `current`.
+# Là sản phẩm build, KHÔNG phải nguồn ⇒ không vào git (xem scripts/release-artifact.mjs).
+apps/api/releases/
 build/
 .turbo/
 *.tsbuildinfo

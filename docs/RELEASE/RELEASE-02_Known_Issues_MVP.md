@@ -21,15 +21,15 @@
 | KI-005 | Widget "Thông báo" trên dashboard trễ tối đa ~10s | S3 | Sản phẩm | ❌ | ❌ | Sprint 6 |
 | KI-006 | LMS→NOTI chưa hoạt động — **migration `0529` ĐÃ áp cho cả PROD+UAT 2026-07-26**; còn thiếu `LMS_NOTI_TOKEN` + deploy | S2→S3 | Vận hành | ❌ | ✅ | Owner/DevOps |
 | KI-007 | CI `Security / Dependency scan` đỏ do lỗi công cụ | S3 | CI | ❌ | ⚠️ | Owner/DevOps |
-| KI-008 | Chưa có bằng chứng diễn tập **khôi phục** backup | S2 | Vận hành | ❌ | ✅ | Owner/DevOps |
+| ~~KI-008~~ | **ĐÓNG 2026-07-29** — `S6-PERF-DB-1` (#307). Drill KHÔNG chạy được kể từ khi Postgres vào container (thiếu pg client trên PATH host); đã vá bằng fallback `DRILL_PSQL`/`DRILL_PG_DUMP`/`DRILL_PG_RESTORE` qua `docker exec`, rồi chạy THẬT: dump → restore DB tạm → verify chuỗi migration + schema/RLS/index → tự dọn = **PASS** (`DEVOPS-13` §3.1). ⚠️ **KHÔNG kéo theo "đã có backup"** — drill tự `pg_dump` tại chỗ; chuyện chưa hề có bản backup định kỳ nào là **KI-050** riêng | S2 | Vận hành | — | — | ✔ xong |
 | KI-009 | Log chưa có cấu trúc JSON | S3 | Quan sát | ❌ | ❌ | Sprint 6 |
 | KI-010 | Endpoint cũ `GET /employees` chưa phân trang thật (mới chặn bằng cap 2000) | S3 | Sản phẩm | ❌ | ❌ | Sprint 6 |
-| KI-011 | Chưa có cảnh báo tự động (5xx-rate, disk, backup-fail, SSL) | S2 | Vận hành | ❌ | ✅ | Owner/DevOps |
+| ~~KI-011~~ | **ĐÓNG 2026-07-30** — `S6-REL-1`. `scripts/ops-alert-check.mjs` đo THẬT 8 nhóm (backend down · DB readiness đọc BODY vì /health/db fail-soft · **lệch migration** · job Failed · dòng lỗi log · đĩa · tuổi backup · hạn TLS), quyết định ở `scripts/lib/ops-alert-rules.mjs` — **44 test**, và test ĐƯỢC CHẠY (step `tooling-tests` trong `harness/check.sh` + job trong `api.yml`; trước đó test của `scripts/`+`harness/` nằm ngoài vitest workspace nên mồ côi). Luật nền: **thiếu dữ liệu ⇒ `unknown`, KHÔNG phải `ok`** ⇒ exit ≠ 0 — chính luật này bắt ra KI-050 ngay lần chạy đầu. Rule KHÔNG đo được (5xx theo module · login-fail spike · 403 spike · slow query) ghi thẳng "KHÔNG ĐO ĐƯỢC" ở `RELEASE-09` §2, không tick khống. ⚠️ **cần deploy**: owner phải đăng ký scheduled task (`RELEASE-09` §4) thì cảnh báo mới tự chạy | S2 | Vận hành | — | ⚠️ cần đặt lịch | **ĐÓNG** — `S6-REL-1` |
 | KI-012 | Accepted-risk **D3**: widget headcount count-only xuyên phòng ban cho HR scope Department | S3 | Bảo mật (đã chấp nhận) | ❌ | ⚠️ cần chữ ký | Owner |
 | KI-013 | `refresh` / `resetPassword` không throttle (theo thiết kế, có mitigation) | S3 | Bảo mật (theo thiết kế) | ❌ | ❌ | — |
 | ~~KI-014~~ | **ĐÃ ĐÓNG 2026-07-27** (`S6-QA-CHUNK-1`) — truy được gốc: **bug ngược dòng `tinypool@1.1.1`**, `ProcessWorker.send()` chỉ chặn `isTerminating` chứ không kiểm tra kênh IPC đã đóng. **Ba đính chính so với mô tả cũ:** (1) KHÔNG phải "máy bất ổn ngẫu nhiên" — `pnpm test` đỏ **5/5**, tái hiện 100%; (2) KHÔNG phải file/suite thủ phạm — package nạn nhân đổi mỗi lần chạy (kể cả `console` 23 file, `web-core` 39 file); (3) KHÔNG phải lệch Node 24-local vs 22-CI — **Node 22 vẫn crash**; CI xanh vì runner chỉ 2–4 nhân ⇒ 1–3 worker, còn máy này 32 nhân ⇒ 31 worker/package. Vá = `harness/chunk-test.mjs` (chia chunk + hạ trần worker + chạy lại **chỉ** chunk chết vì hạ tầng), `check.sh` dùng trên Windows, CI giữ đường một-lần. Verify: `LANE_DB=mediaos_qachunk bash harness/check.sh --all` → **XANH** (lint+typecheck+test+build), **761/761 file spec** đối chiếu `vitest list`. Số đo đầy đủ: `docs/QA/evidence/S6-QA-CHUNK-1-KI-014-ROOT-CAUSE.md` | S2 | Hạ tầng test (local) | — | — | ✔ xong |
 | KI-015 | Nhiễu log `OutboxNotificationBridge … intake THẤT BẠI` khi chạy test | S3 | Vệ sinh test | ❌ | ❌ | Sprint 6 |
-| KI-016 | PROD dùng chung `apps/api/dist` với dev-online | S2 | Hạ tầng | ❌ | ✅ | Owner/DevOps |
+| ~~KI-016~~ | **ĐÓNG 2026-07-30** — `S6-REL-1`. Mỗi build nay đóng băng thành `apps/api/releases/<stamp>` (BẤT BIẾN), service trỏ junction `releases/current`; `m dev-online` biên dịch lại `dist` KHÔNG còn chạm được bản PROD đang chạy. Kèm theo là **đường rollback ứng dụng đầu tiên** của dự án (`m prod-rollback`) — trước đây `dist` bị ghi đè mỗi lần build nên không có bản trước để quay về. Vị trí thư mục là RÀNG BUỘC KỸ THUẬT: phải nằm TRONG `apps/api` để `node_modules` phân giải đi lên trúng `apps/api/node_modules` (pnpm isolated, KHÔNG hoist) — đã chứng minh bằng resolver thật + boot artifact trên DB lane, không bằng lý luận. ⚠️ **cần deploy**: `m prod-cutover` (Administrator) MỘT LẦN; `m prod-status` cảnh báo LOUD khi service còn trỏ `dist` | S2 | Hạ tầng | — | ⚠️ cần cutover | **ĐÓNG** — `S6-REL-1` |
 | KI-017 | Refresh materialized view dashboard qua `workerDb` hỏng từ G14 ("must be owner") | S3 | Sản phẩm (ngủ) | ❌ | ⚠️ | Sprint 6 |
 | KI-018 | Dữ liệu demo có trạng thái đơn nghỉ lẫn hoa/thường | S3 | Dữ liệu | ❌ | ❌ | Sprint 6 |
 | KI-019 | Chỉ 1 ca làm việc + 1 quy tắc chấm công + 0 phân ca trong DB UAT | S3 | Dữ liệu | ❌ | ❌ | Owner/HR |
@@ -57,6 +57,7 @@
 | **KI-048** | **Hàng `blocked` giờ HIỆN trong màn admin, và tốc độ sinh chúng do KẺ TẤN CÔNG điều khiển** — hệ quả phái sinh của `S6-SEC-LOGINLOG-2`, phát hiện bởi `security-reviewer` ở FULL gate. **Lượng ghi KHÔNG đổi** (những dòng đó vốn đã được ghi, chỉ là dưới `company_id NULL` nên không ai thấy) ⇒ **delta dung lượng = 0**; cái đổi là **khả năng thấy**. Một khi bucket `(slug,email,ip)` đã khoá, MỌI request kế tiếp trong `LOGIN_LOCKOUT_SEC` (900s) sinh một hàng **có chủ** với chi phí server gần bằng 0 (không argon2), trong khi trước đó muốn có hàng có-chủ thì phải qua rate-limiter, mỗi lần tốn một lượt băm. Cộng ba yếu tố: `login_logs` nằm trong `PROTECTED_TABLES` (`retention.service.ts:49`) ⇒ **không bao giờ được thu hồi**; `loginLogListQuerySchema` (`packages/contracts/src/auth.ts`) **không có filter `failure_reason`** ⇒ admin không lọc nhiễu ra được; `total`/paging của AUTH-API-401 phồng vô hạn. ⇒ Kẻ tấn công vô danh có thể **chôn tín hiệu thật dưới nhiễu ngay trong chính màn hình mà KI-044 vừa khôi phục**. Hướng vá đề xuất: gộp (coalesce) hàng `blocked` theo bucket theo cửa sổ khoá — vá luôn cả giới hạn "sàn thủng khi tải cao" ghi ở KI-044 | S3 | Bảo mật (quan sát) | ❌ | ❌ | WO mới (mở 2026-07-29) |
 | **KI-047** | **Bốn đường 429 KHÁC không ghi một dòng `login_logs` nào** — phát hiện khi khoanh ranh giới KI-044. Trong `apps/api/src/auth/**` có 5 chỗ ném `TOO_MANY_REQUESTS` (tra bằng `grep -n TOO_MANY_REQUESTS`, **KHÔNG neo số dòng** — chúng trôi mỗi lần sửa file): trong `auth.service.ts` là nhánh rate-limit của `login()` (đường **DUY NHẤT** ghi `login_logs`), của `verifyTwoFactorLogin` (bước-2), của `disableTwoFactor`, của `changePassword`; cộng một chỗ trong `two-factor.service.ts`. Bốn chỗ sau **không** gọi `recordLoginAttempt`. Đáng kể nhất là **bước-2 2FA** (bucket rate-limit `rlKey` tiền tố `2fa`) — dò mã TOTP 6 số là brute-force thật, hiện chỉ có `securityAlerts.emit`, **không có dòng nào ở AUTH-API-401**, dù `claims.companyId` đang nằm sẵn trong tay (khác hẳn KI-044, ở đó lý do là chưa resolve kịp). ⇒ Sau khi KI-044 đóng, admin thấy được brute-force **mật khẩu** nhưng vẫn mù với brute-force **mã 2FA**. Cùng lớp "mất tầm nhìn của bên phòng thủ", KHÔNG phải rò rỉ | S3 | Bảo mật (quan sát) | ❌ | ❌ | WO mới (mở 2026-07-29) |
 | ~~KI-037~~ | Bộ `tenant-isolation.int-spec` **chỉ SELECT** — không có một ca deny GHI chéo tenant nào. ⟲ số đúng: registry **155 bảng** (không phải 156); **465 ca** — con số KI ghi ban đầu là ĐÚNG (một bản sửa trung gian ghi 446, đã thu hồi). | S2 | Độ phủ test | ✅ | ✅ | **ĐÓNG 2026-07-29** — `S6-QA-TENANTWRITE-1`: lưới **465 → 1089 ca** (+4 ca ghi/bảng), `WITH CHECK` **đã chứng minh chạy trên 148/153 bảng** |
+| **KI-050** | **Chưa từng có một bản backup nào trên máy PROD** — `scripts/ops-alert-check.mjs` trả `unknown` cho "tuổi bản backup" NGAY lần chạy đầu (2026-07-30): không có thư mục `backups/`, và `Get-ScheduledTask` không có task nào chạy `scripts/backup-db.sh`. **Phân biệt với KI-008 (đã đóng):** `S6-PERF-DB-1` chứng minh **restore drill** chạy được, nhưng drill đó tự `pg_dump` tại chỗ ⇒ nó KHÔNG chứng minh có **backup định kỳ**. Khôi phục được từ bản dump vừa tạo ≠ có bản dump để khôi phục khi máy hỏng. `RELEASE-01` §7.3 tick "Script backup ✅" — script CÓ tồn tại, nhưng **chưa từng chạy**; đúng bài học "script tồn tại ≠ script chạy được" (`DEVOPS-13` §3.1). **Workaround/vá:** chạy tay `bash scripts/backup-db.sh` trước go-live + đăng ký task hằng ngày 02:00 (`RELEASE-09` §4) | **S2** | Vận hành | ❌ | **✅** | Owner/DevOps (mở 2026-07-30, `S6-REL-1`) |
 | **KI-046** | **458 khoá ngoại MỘT-CỘT** nối hai bảng đều có `company_id`: kiểm tra FK của Postgres **bỏ qua RLS theo thiết kế** ⇒ trong ngữ cảnh tenant A gắn được hàng của mình trỏ sang bản ghi của **B**. Đo catalog: 460 FK một-cột; composite đã có **2** TRƯỚC mig `0533` — `tasks_parent_same_company_fk` là tiền lệ có sẵn ⇒ số dư **458**. Đường ĐỌC hôm nay được `innerJoin` che ⇒ không rò trực tiếp, nhưng liên kết chéo tenant TỒN TẠI THẬT + `ON DELETE CASCADE` bắc cầu sang tenant khác | S3 | Bảo mật (toàn vẹn) | ✅ | ❌ | `S6-SEC-XTENANTFK-1` (mở 2026-07-29) |
 | ~~KI-029~~ | **ĐÃ VÁ 2026-07-28** (owner duyệt đổi hành vi sau freeze) — khai `PERMISSION_GUARD_ENABLED` trong `env.schema.ts` (default `"true"`) + `.env.example`; **`NODE_ENV=production` + `"false"` ⇒ CHẶN BOOT** (superRefine), giá trị lạ (`False`/`0`/rỗng) nay ĐỎ thay vì im lặng coi là bật. Guard **vẫn đọc `process.env` mỗi request** có chủ đích: rollback khẩn không cần build lại config, và reviewer dùng chính cờ này để tái lập vế RED của gate quyền. RED-proof: 5 ca mới ĐỎ khi gỡ vá, 24/24 xanh khi có vá; 434 unit vùng permission/auth/config không hồi quy. ~~kill-switch fail-OPEN toàn hệ, ngoài `env.schema`~~ | S2 | Bảo mật (tiềm ẩn) | ✅ | ⚠️ cần deploy | **ĐÓNG** |
 | ~~KI-030~~ | **3 route** `/org` không gate trả danh bạ + cơ cấu team toàn tenant cho mọi user đã đăng nhập (`employees` · `teams` · `teams/:id/members`) — lệch với `/hr/employees` vốn ép data_scope. ⟲ mở rộng 1 → 3 route bởi census runtime `S6-SEC-ROUTEMAP-1` | S2 | Bảo mật (phân quyền) | ✅ | ✅ | **ĐÓNG 2026-07-27** — `S6-SEC-ORG-1` |
@@ -70,7 +71,7 @@
 
 **Tổng (cập nhật 2026-07-27 sau re-gate vòng 2 của `S6-SEC-1`):**
 `S0 = **0 mở**` (**KI-043 rời danh sách 2026-07-28** — đóng bởi `S6-SEC-ROTATE-1`: rotate 5 role + cắt nguồn tái nhiễm + bind loopback + chốt hồi quy, bằng chứng hai chiều đo TỪ HOST; KI-028 · KI-032 · KI-038 **đều đã đóng VÀ verify trực tiếp trên PROD**, riêng KI-028 phải đóng lại lần hai ngày 2026-07-28) · `S1 = **0 mở**` (**KI-027 rời danh sách 2026-07-28** — dòng của nó ghi ĐÃ ĐÓNG kèm verify 3 lớp trên PROD, `RELEASE-01` §5 cũng ghi đóng; khối tổng còn ghi "1 mở" tới 2026-07-29 là **lệch sổ**, đã sửa. Cả 8 dòng mức `S1` trong bảng nay đều gạch) — **KI-030 rời danh sách 2026-07-27**, đóng bởi `S6-SEC-ORG-1` (3→2); **KI-034 rời danh sách 2026-07-28**, đóng bởi `S6-SEC-NOTITX-1` (2→1); KI-033 **đã vá**; KI-035 **đã vá + hạ xuống `S3`** (hai claim của gate đều sai, xem dòng của nó). KI-027 nay chỉ còn chờ admin enroll 2FA rồi bật cờ, vì gốc rễ KI-036 đã vá ·
-`S2 = **6 mở**` (KI-008 · KI-011 · KI-016 · KI-021 · **KI-025** · KI-029) — **KI-049 mở và đóng trong cùng ngày 2026-07-29/30** bởi `S6-SEC-ORGTEAMSCOPE-1` (7→6) — **KI-037 rời danh sách 2026-07-29**, đóng bởi `S6-QA-TENANTWRITE-1` (9→8); **KI-045 rời danh sách 2026-07-29**, đóng bởi `S6-SEC-ROTATE-1` (8→7); **KI-041 rời danh sách 2026-07-29**, đóng bởi `S6-SEC-MV-1` (7→6) · `S3 = **19**` (thêm **KI-046** từ lưới GHI mới; **KI-044 đóng** bởi `S6-SEC-LOGINLOG-2`, đổi lại **KI-047** + **KI-048** mở — tất cả 2026-07-29).
+`S2 = **3 mở**` (KI-021 · **KI-025** · **KI-050**) — **cập nhật 2026-07-30 (`S6-REL-1`)**: đóng **KI-011** (cảnh báo tự động) + **KI-016** (dist dùng chung); đối chiếu lại thì **KI-008 đã đóng từ 2026-07-29** bởi `S6-PERF-DB-1` và **KI-029 đã đóng từ 2026-07-28** bởi `S6-SEC-1` (`env.schema.ts:86`) — cả hai còn bị ĐẾM NHẦM là mở ở bản trước của dòng này; đổi lại **mở KI-050** (chưa từng có backup nào). 6 → 3, vừa đúng ngưỡng `RELEASE-05` §5.3 (≤3) — **KI-049 mở và đóng trong cùng ngày 2026-07-29/30** bởi `S6-SEC-ORGTEAMSCOPE-1` (7→6) — **KI-037 rời danh sách 2026-07-29**, đóng bởi `S6-QA-TENANTWRITE-1` (9→8); **KI-045 rời danh sách 2026-07-29**, đóng bởi `S6-SEC-ROTATE-1` (8→7); **KI-041 rời danh sách 2026-07-29**, đóng bởi `S6-SEC-MV-1` (7→6) · `S3 = **19**` (thêm **KI-046** từ lưới GHI mới; **KI-044 đóng** bởi `S6-SEC-LOGINLOG-2`, đổi lại **KI-047** + **KI-048** mở — tất cả 2026-07-29).
 **KI-045 mở 2026-07-28** trong lúc thi công `S6-SEC-NOTITX-1` — rotate của `S6-SEC-ROTATE-1` làm gãy
 đường `LANE_DB`, tức **hàng rào deny-path/IDOR không chạy được bằng lệnh chuẩn** (8 → 9). **Đóng
 2026-07-29 trong chính nhánh gây ra nó** (credential đọc từ `.env` qua `scripts/lib/db-secrets.sh`,
@@ -204,11 +205,17 @@ restart) · làm theo `docs/plans/S5-LMS-NOTI-2.md` §4 (runbook).
 chứng minh có lỗ hổng high/critical**. **Cảnh báo:** đừng dùng job này làm bằng chứng "sạch lỗ hổng" —
 hiện nó không nói được gì cả.
 
-### KI-008 — Chưa diễn tập khôi phục backup · S2
+### KI-008 — Chưa diễn tập khôi phục backup · S2 · ✅ ĐÃ ĐÓNG 2026-07-29 (`S6-PERF-DB-1`)
 
-Có `scripts/backup-db.sh` + `scripts/backup-restore-drill.sh`, **không tìm thấy biên bản/log drill nào
-trong repo**. Backup chưa restore-test thì chưa tính là backup.
-**Việc:** chạy drill 1 lần trên bản sao PROD, lưu biên bản vào `docs/DEVOPS/` (Sprint 6 `S6-PERF-DB-1`).
+Mô tả gốc: có `scripts/backup-db.sh` + `scripts/backup-restore-drill.sh` nhưng không có biên bản drill nào.
+
+**Đã đóng (#307, `DEVOPS-13` §3.1).** Truy ra gốc: drill **chưa từng chạy được** kể từ khi Postgres vào
+container — script đòi `pg_dump`/`pg_restore`/`psql` trên PATH của host Windows (không có), fail ngay 3
+dòng `command -v`. Vá bằng fallback `DRILL_PSQL`/`DRILL_PG_DUMP`/`DRILL_PG_RESTORE` qua `docker exec`,
+rồi chạy thật: dump → restore DB tạm → verify chuỗi migration + schema/RLS/index → tự dọn = **PASS**.
+
+⚠️ **Đóng KI này KHÔNG có nghĩa là "đã có backup".** Drill tự `pg_dump` tại chỗ; việc chưa hề có bản
+backup định kỳ nào trên máy PROD là vấn đề RIÊNG — **KI-050** (mở 2026-07-30).
 
 ### KI-009 / KI-010 / KI-011 — 3 khuyến nghị treo từ S5-PERF-1
 
@@ -462,14 +469,17 @@ lẫn `.env.prod` (nhớ `m prod-env` ghi đè `.env.prod`) → restart API → 
 **Lưu ý:** tái diễn lớp sự cố đã dọn 2026-07-22 (122 công ty test lọt PROD) ⇒ **nguồn rò chưa bịt**.
 **Workaround/cách đóng:** xoá 16 tenant test + chặn test trỏ DB `mediaos`. Gợi ý gộp vào `S6-PERF-DB-1`.
 
-### KI-029 — `PERMISSION_GUARD_ENABLED`: kill-switch fail-OPEN không validate · S2 · (`S6-SEC-1`)
+### KI-029 — `PERMISSION_GUARD_ENABLED`: kill-switch fail-OPEN không validate · S2 · ✅ ĐÃ ĐÓNG 2026-07-28 (`S6-SEC-1`)
 
 `permission.guard.ts:57-68` đọc thẳng `process.env['PERMISSION_GUARD_ENABLED']`; `=== 'false'` ⇒
 `return true` cho **mọi** route đã gate, chỉ để lại một dòng `logger.warn`. Biến **không** có trong
 `env.schema.ts` lẫn `.env.example` ⇒ zod không validate, không ai biết nó tồn tại.
 **Đã kiểm:** `.env` và `.env.prod` **không** chứa biến này ⇒ guard đang BẬT ở PROD.
-**Đề xuất:** đưa vào schema (default `"true"`) + `.env.example`, và **fail-loud lúc boot** nếu
-`NODE_ENV=production` mà cờ `false`. Là thay đổi hành vi sau freeze ⇒ cần owner duyệt.
+**ĐÃ VÁ** (owner duyệt đổi hành vi sau freeze): `env.schema.ts:86` khai
+`PERMISSION_GUARD_ENABLED: z.enum(["true","false"]).default("true")` + fail-loud lúc boot khi
+`NODE_ENV=production` mà cờ `false`; chốt hồi quy ở `env.schema.spec.ts:168-203`.
+*(Mục này từng bị bỏ quên ở lần cập nhật trước — bảng §1 đã ghi ĐÓNG trong khi đoạn văn này vẫn để
+nguyên chữ "đề xuất", và §3 vẫn đếm KI-029 là mở. Sửa cả ba nơi 2026-07-30, `S6-REL-1`.)*
 
 ### KI-030 — `GET /org/employees` trả danh bạ toàn tenant · S2 · ✅ ĐÃ ĐÓNG 2026-07-27 (`S6-SEC-ORG-1`)
 
@@ -556,6 +566,35 @@ caller FE chỉ có 2 màn console của company-admin ⇒ siết không gãy UI
 `internal.guard.ts:23` đọc thẳng `process.env`. Guard **fail-CLOSED** (thiếu biến ⇒ 403 mọi route
 `/internal/**`), nên hậu quả là **mất tính năng** (recalculate thủ công, invalidate cache), không phải
 mất kiểm soát. **Đề xuất:** ghi vào `.env.example` + schema optional để lỗi hiện ra lúc boot.
+
+### KI-050 — chưa từng có một bản backup nào trên máy PROD · **S2** · mở 2026-07-30 (`S6-REL-1`)
+
+Phát hiện bởi chính công cụ vừa dựng trong WO này: `node scripts/ops-alert-check.mjs` trả **`unknown`**
+cho luật "tuổi bản backup mới nhất" **ngay lần chạy đầu tiên** trên PROD.
+
+**Đo được:**
+
+- không có thư mục `backups/` ở gốc repo (`BACKUP_DIR` mặc định của `scripts/backup-db.sh`);
+- `Get-ScheduledTask` không có task nào chạy `scripts/backup-db.sh` — các task tên `*Backup*` trên máy
+  đều thuộc Windows/phần mềm khác.
+
+**Đừng gộp với KI-008.** `S6-PERF-DB-1` đã chứng minh **restore drill** chạy được — nhưng drill đó tự
+`pg_dump` tại chỗ rồi restore vào DB tạm. Nó trả lời câu *"khôi phục có hoạt động không"*, KHÔNG trả lời
+câu *"có bản nào để khôi phục khi máy này hỏng không"*. Hai câu khác nhau; hôm nay câu thứ hai là KHÔNG.
+
+`RELEASE-01` §7.3 tick "Script backup ✅" — đúng theo nghĩa script tồn tại, nhưng nó **chưa từng chạy**.
+Lại đúng bài học `DEVOPS-13` §3.1 vừa ghi cho drill: *script tồn tại ≠ script chạy được*. Lần này bẫy
+nằm ở tầng cao hơn một bậc: script đã chạy được rồi, nhưng **không ai gọi nó**.
+
+**Chặn go-live: CÓ.** Đưa hệ thống mang dữ liệu nhân sự thật của 45 người vào vận hành mà không có bản
+sao lưu nào là rủi ro mất dữ liệu không chấp nhận được.
+
+**Vá (owner, trước go-live):**
+
+1. Chạy tay một bản ngay: `BACKUP_DIR=./backups bash scripts/backup-db.sh`
+2. Đăng ký task hằng ngày 02:00 — lệnh sẵn ở `RELEASE-09` §4
+3. Verify: `node scripts/ops-alert-check.mjs` phải chuyển luật "tuổi bản backup" từ `unknown` sang `ok`
+
 ---
 
 ## 3. Cái KHÔNG được defer
