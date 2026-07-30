@@ -6033,7 +6033,7 @@ export const backlog = [
     title:
       "Release Candidate build + release notes + Go-live runbook + deployment/rollback rehearsal + monitoring/alerting/support readiness (WS7/WS8/WS9) — crown release",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       ".github/workflows/**",
       "scripts/**",

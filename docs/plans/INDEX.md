@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**296 WO** · có micro-plan: **159/296** · ⬜ 3 chờ · 🔵 1 đang làm · ✅ 292 xong · 🔴 0 chặn
+**296 WO** · có micro-plan: **159/296** · ⬜ 3 chờ · 🔵 0 đang làm · ✅ 293 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -330,8 +330,8 @@
 | `S6-SEC-DBFENCE-1` | 🔴 | ✅ xong | [📄](S6-SEC-DBFENCE-1.md) | — | KI-028 MỞ LẠI — test ghi thẳng vào DB PROD: bịt nguồn rò (vitest.confi |
 | `S6-SEC-ROTATE-1` | 🔴 | ✅ xong | [📄](S6-SEC-ROTATE-1.md) | — | KI-043 (S0, CHẶN GO-LIVE) — mật khẩu Postgres PROD chính là literal tr |
 | `S6-QA-TENANTWRITE-1` | 🔴 | ✅ xong | [📄](S6-QA-TENANTWRITE-1.md) | — | KI-037 — lưới tenant-isolation (156 bảng × 3 ca) CHỈ SELECT: không có  |
-| `S6-REL-1` | 🔴 | 🔵 đang làm | [📄](S6-REL-1.md) | ✅S6-QA-FINAL-1 ✅S6-SEC-1 ✅S6-PERF-DB-1 ✅S6-QA-CHUNK-1 ✅S6-SEC-ROUTEMAP-1 ✅S6-SEC-ORG-1 ✅S6-SEC-NOTITX-1 ✅S6-SEC-LOGINLOG-1 ✅S6-SEC-MV-1 | Release Candidate build + release notes + Go-live runbook + deployment |
-| `S6-GOLIVE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-REL-1 | Final Sign-off · Go/No-go · Go-live execution · Handoff (admin/user/su |
+| `S6-REL-1` | 🔴 | ✅ xong | [📄](S6-REL-1.md) | ✅S6-QA-FINAL-1 ✅S6-SEC-1 ✅S6-PERF-DB-1 ✅S6-QA-CHUNK-1 ✅S6-SEC-ROUTEMAP-1 ✅S6-SEC-ORG-1 ✅S6-SEC-NOTITX-1 ✅S6-SEC-LOGINLOG-1 ✅S6-SEC-MV-1 | Release Candidate build + release notes + Go-live runbook + deployment |
+| `S6-GOLIVE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-REL-1 | Final Sign-off · Go/No-go · Go-live execution · Handoff (admin/user/su |
 
 ## Khác
 
