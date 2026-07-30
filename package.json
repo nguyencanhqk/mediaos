@@ -1,6 +1,6 @@
 {
   "name": "mediaos",
-  "version": "0.0.0",
+  "version": "1.0.0-rc.1",
   "private": true,
   "description": "MediaOS — Hệ thống quản trị doanh nghiệp (modular monolith, multi-tenant, SaaS-ready)",
   "packageManager": "pnpm@11.5.1",

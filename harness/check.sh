@@ -155,6 +155,14 @@ step "typecheck" pnpm typecheck
 # trong chính file migration.
 step "migration-no-drop" bash scripts/check-migration-no-drop.sh
 
+# ── S6-REL-1 (D6): test của TOOLING ngoài workspace vitest ───────────────────────────────────
+# `pnpm test` chỉ chạy vitest trong các package của workspace. Script hạ tầng ở `scripts/` và
+# `harness/` nằm NGOÀI đó, nên test của chúng viết xong là mồ côi: `harness/lane-db-guard.test.mjs`
+# tồn tại từ S5, xanh 14/14, nhưng KHÔNG cổng nào chạy nó ⇒ nó có thể mục ruỗng mà không ai biết.
+# Đây đúng bẫy "script tồn tại ≠ script chạy được" (DEVOPS-13 §3.1). Rẻ (~0.1s, không cần DB) nên
+# đặt ở tier mặc định.
+step "tooling-tests (node --test)" node --test scripts/lib/ops-alert-rules.test.mjs harness/lane-db-guard.test.mjs
+
 # ── step test: TURBO_FORCE=1 (chống turbo-cache false-green) + tee ra log tạm cho guard đọc ──
 if [ "$RUN_TEST" = 1 ]; then
   TEST_LOG="$(mktemp 2>/dev/null || echo "/tmp/check-test-$$.log")"

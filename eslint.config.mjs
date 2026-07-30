@@ -11,6 +11,10 @@ export default tseslint.config(
   {
     ignores: [
       "**/dist/**",
+      // S6-REL-1 (D3): snapshot BẤT BIẾN của dist dùng cho deploy PROD — JS đã biên dịch, cùng loại
+      // với dist. Không loại trừ thì mỗi lần snapshot sẽ đổ hàng nghìn lỗi lint giả (require()/
+      // no-cond-assign của output tsc) và làm ĐỎ cổng verify.
+      "apps/api/releases/**",
       "**/node_modules/**",
       "**/.turbo/**",
       "**/coverage/**",

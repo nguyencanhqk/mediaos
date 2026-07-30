@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**295 WO** · có micro-plan: **153/295** · ⬜ 6 chờ · 🔵 3 đang làm · ✅ 286 xong · 🔴 0 chặn
+**296 WO** · có micro-plan: **159/296** · ⬜ 3 chờ · 🔵 1 đang làm · ✅ 292 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -314,22 +314,23 @@
 | `S6-STAB-1` | 🟡 | ✅ xong | [📄](S6-STAB-1.md) | ✅S5-UAT-1 | Stabilization & Bug Triage: module stabilization checklist (AUTH/HR/AT |
 | `S6-QA-FINAL-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S6-STAB-1 | QA final pass: regression + E2E + API contract + regression-theo-role  |
 | `S6-SEC-1` | 🔴 | ✅ xong | [📄](S6-SEC-1.md) | ✅S6-STAB-1 | Security / RBAC / Data-Protection final hardening: auth/session · RBAC |
-| `S6-PERF-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-STAB-1 | Performance/Query/Cache hardening + DB Migration/Seed/Backup/Rollback  |
+| `S6-PERF-DB-1` | 🔴 | ✅ xong | [📄](S6-PERF-DB-1.md) | ✅S6-STAB-1 | Performance/Query/Cache hardening + DB Migration/Seed/Backup/Rollback  |
 | `S6-QA-CHUNK-1` | 🟡 | ✅ xong | [📄](S6-QA-CHUNK-1.md) | — | KI-014 — truy gốc crash ERR_IPC_CHANNEL_CLOSED rồi chuẩn hoá chạy test |
 | `S6-SEC-ROUTEMAP-1` | 🟡 | ✅ xong | [📄](S6-SEC-ROUTEMAP-1.md) | — | Dựng lại Phụ lục A bằng QUÉT RUNTIME (boot AppModule, đọc metadata thậ |
 | `S6-SEC-ORG-1` | 🔴 | ✅ xong | [📄](S6-SEC-ORG-1.md) | ✅S6-SEC-ROUTEMAP-1 | KI-030 — gate 3 route đọc /org đang lộ danh bạ toàn tenant cho MỌI use |
 | `S6-SEC-ORGSCOPE-1` | 🔴 | ✅ xong | [📄](S6-SEC-ORGSCOPE-1.md) | ✅S6-SEC-ORG-1 | N-1 (hậu FULL gate S6-SEC-ORG-1) — ép data_scope trong OrgRepository.l |
-| `S6-SEC-ORGTEAMSCOPE-1` | 🔴 | 🔵 đang làm | — *(chưa)* | ✅S6-SEC-ORGSCOPE-1 | N-1c (FULL gate S6-SEC-ORGSCOPE-1 phát hiện) — GET /org/teams/:id/memb |
-| `S6-SEC-PERMVERB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-SEC-ORG-1 | N-2 (hậu FULL gate S6-SEC-ORG-1) — chốt MỘT động từ giữa `read:user` ( |
+| `S6-SEC-ORGTEAMSCOPE-1` | 🔴 | ✅ xong | [📄](S6-SEC-ORGTEAMSCOPE-1.md) | ✅S6-SEC-ORGSCOPE-1 | N-1c (FULL gate S6-SEC-ORGSCOPE-1 phát hiện) — GET /org/teams/:id/memb |
+| `S6-SEC-IDENTITY-PROJ-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-SEC-ORGTEAMSCOPE-1 | Gốc rễ của N-1/N-2/N-1c — buộc TẦNG CHIẾU `users.email`/`users.fullNam |
+| `S6-SEC-PERMVERB-1` | 🔴 | ✅ xong | [📄](S6-SEC-PERMVERB-1.md) | ✅S6-SEC-ORG-1 | N-2 (hậu FULL gate S6-SEC-ORG-1) — chốt MỘT động từ giữa `read:user` ( |
 | `S6-SEC-NOTITX-1` | 🔴 | ✅ xong | [📄](S6-SEC-NOTITX-1.md) | — | KI-034 — gộp insert notification + outbox + audit vào MỘT transaction  |
 | `S6-SEC-LOGINLOG-1` | 🔴 | ✅ xong | [📄](S6-SEC-LOGINLOG-1.md) | — | KI-042 — login_logs: hàng company_id IS NULL (thử đăng nhập pre-auth,  |
-| `S6-SEC-LOGINLOG-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-SEC-LOGINLOG-1 | KI-044 — hàng blocked/TooManyAttempts ghi company_id NULL kể cả khi sl |
+| `S6-SEC-LOGINLOG-2` | 🔴 | ✅ xong | [📄](S6-SEC-LOGINLOG-2.md) | ✅S6-SEC-LOGINLOG-1 | KI-044 — hàng blocked/TooManyAttempts ghi company_id NULL kể cả khi sl |
 | `S6-SEC-XTENANTFK-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-QA-TENANTWRITE-1 | KI-046 — 459 khoá ngoại MỘT-CỘT nối hai bảng tenant: FK check bỏ qua R |
-| `S6-SEC-MV-1` | 🔴 | 🔵 đang làm | — *(chưa)* | ✅S6-SEC-LOGINLOG-1 | KI-041 — 2 matview dashboard nằm NGOÀI RLS (Postgres không hỗ trợ): dự |
+| `S6-SEC-MV-1` | 🔴 | ✅ xong | [📄](S6-SEC-MV-1.md) | ✅S6-SEC-LOGINLOG-1 | KI-041 — 2 matview dashboard nằm NGOÀI RLS (Postgres không hỗ trợ): dự |
 | `S6-SEC-DBFENCE-1` | 🔴 | ✅ xong | [📄](S6-SEC-DBFENCE-1.md) | — | KI-028 MỞ LẠI — test ghi thẳng vào DB PROD: bịt nguồn rò (vitest.confi |
-| `S6-SEC-ROTATE-1` | 🔴 | 🔵 đang làm | [📄](S6-SEC-ROTATE-1.md) | — | KI-043 (S0, CHẶN GO-LIVE) — mật khẩu Postgres PROD chính là literal tr |
+| `S6-SEC-ROTATE-1` | 🔴 | ✅ xong | [📄](S6-SEC-ROTATE-1.md) | — | KI-043 (S0, CHẶN GO-LIVE) — mật khẩu Postgres PROD chính là literal tr |
 | `S6-QA-TENANTWRITE-1` | 🔴 | ✅ xong | [📄](S6-QA-TENANTWRITE-1.md) | — | KI-037 — lưới tenant-isolation (156 bảng × 3 ca) CHỈ SELECT: không có  |
-| `S6-REL-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-QA-FINAL-1 ✅S6-SEC-1 ⏳S6-PERF-DB-1 ✅S6-QA-CHUNK-1 ✅S6-SEC-ROUTEMAP-1 ✅S6-SEC-ORG-1 ✅S6-SEC-NOTITX-1 ✅S6-SEC-LOGINLOG-1 ⏳S6-SEC-MV-1 | Release Candidate build + release notes + Go-live runbook + deployment |
+| `S6-REL-1` | 🔴 | 🔵 đang làm | [📄](S6-REL-1.md) | ✅S6-QA-FINAL-1 ✅S6-SEC-1 ✅S6-PERF-DB-1 ✅S6-QA-CHUNK-1 ✅S6-SEC-ROUTEMAP-1 ✅S6-SEC-ORG-1 ✅S6-SEC-NOTITX-1 ✅S6-SEC-LOGINLOG-1 ✅S6-SEC-MV-1 | Release Candidate build + release notes + Go-live runbook + deployment |
 | `S6-GOLIVE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-REL-1 | Final Sign-off · Go/No-go · Go-live execution · Handoff (admin/user/su |
 
 ## Khác

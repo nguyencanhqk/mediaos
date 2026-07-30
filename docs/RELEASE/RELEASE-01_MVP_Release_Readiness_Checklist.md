@@ -38,9 +38,9 @@ quyền · không migration phá huỷ chưa duyệt). Điểm hụt nằm ở *
 | Permission & data scope | 15% | Không lộ dữ liệu trái quyền | **Passed** — ma trận 5 scope × 7 module | 15,0 |
 | Security | 10% | Không còn Critical/High mở | **Passed** (1 accepted-risk chờ ký; KI-043 mở+đóng 28/7) | 10,0 |
 | Performance | 5% | Baseline đạt hoặc được chấp nhận | **Passed** — p95 ≤ 30ms/5 endpoint | 5,0 |
-| Deployment & rollback | 10% | Deploy rehearsal, migration, rollback OK | **In progress** | 5,0 |
-| Monitoring & support | 5% | Log, alert, hypercare sẵn sàng | **In progress** | 2,5 |
-| **TỔNG** | 100% | | | **82,5** |
+| Deployment & rollback | 10% | Deploy rehearsal, migration, rollback OK | **Passed có điều kiện** — restore drill PASS (#307) · rollback ứng dụng có đường thật + đã diễn tập (`S6-REL-1`); trừ điểm vì **rehearsal trên staging chưa chạy** (C8) | 8,5 |
+| Monitoring & support | 5% | Log, alert, hypercare sẵn sàng | **Passed có điều kiện** — 8 alert rule chạy được + support/hypercare có quy trình (`S6-REL-1`); trừ điểm vì **chưa đặt lịch chạy** (C7) và log chưa JSON (KI-009) | 4,0 |
+| **TỔNG** | 100% | | | **87,5** *(cập nhật 2026-07-30 sau `S6-REL-1`; trước đó 82,5)* |
 
 Quy tắc QA-10 §6: `≥90% → Go` · `80–89% → Conditional Go` · `<80% hoặc có gate-fail → No-Go`.
 
@@ -178,8 +178,8 @@ phải SLA dưới tải. Nguồn: `DEVOPS-10_Performance_Smoke_Observability_Ba
 | --- | --- |
 | Script backup | ✅ `scripts/backup-db.sh` (dump → mã hoá → offsite) |
 | Script diễn tập **khôi phục** | ✅ tồn tại `scripts/backup-restore-drill.sh` (dump → restore DB tạm → verify chuỗi migration + schema/RLS/index → tự dọn) |
-| **Bằng chứng đã chạy drill gần đây** | ❌ **KHÔNG CÓ** — không tìm thấy log/biên bản drill nào trong repo. "Backup chưa restore-test = chưa phải backup" |
-| Rollback ứng dụng | ⚠️ có đường (`m prod-update` giữ build cũ, NSSM restart) nhưng **chưa diễn tập ghi biên bản** |
+| **Bằng chứng đã chạy drill gần đây** | ✅ **CÓ (2026-07-29, `S6-PERF-DB-1` #307)** — drill trước đó KHÔNG chạy được vì host Windows thiếu pg client; vá bằng fallback qua `docker exec` rồi chạy thật = PASS. Biên bản: `DEVOPS-13` §3.1 |
+| Rollback ứng dụng | ✅ **CÓ ĐƯỜNG THẬT + đã diễn tập (2026-07-30, `S6-REL-1`)** — `m prod-rollback` đổi junction `releases/current` về bản trước + verify + restart + canary. Trước đó `dist` bị ghi đè mỗi lần build nên KHÔNG có bản trước để quay về. Biên bản: `RELEASE-07` §5.3 |
 | Rollback migration | ⚠️ chưa có runbook down-migration; chiến lược hiện tại là expand-contract + restore từ backup |
 
 ➡️ **Việc Sprint 6 (`S6-PERF-DB-1`):** chạy `backup-restore-drill.sh` một lần trên bản sao PROD và
@@ -196,8 +196,8 @@ lưu biên bản; viết runbook rollback có thời gian mục tiêu.
 | Canary sau deploy | ✅ `scripts/canary-watch.sh` |
 | Job nền quan sát được | ✅ `/system/jobs` + `system_job_runs` |
 | Log có cấu trúc (JSON) | ❌ **chưa** — còn `Logger` text (khuyến nghị R1) |
-| Cảnh báo tự động (5xx-rate, disk, backup-fail, SSL) | ❌ **chưa** (khuyến nghị R3) |
-| Kênh hỗ trợ + hypercare | ❌ **chưa lập** — thuộc `S6-REL-1` |
+| Cảnh báo tự động (5xx-rate, disk, backup-fail, SSL) | ✅ **CÓ (2026-07-30, `S6-REL-1`)** — `scripts/ops-alert-check.mjs` 8 nhóm + 44 test đã gắn cổng; thiếu dữ liệu ⇒ `unknown` chứ không báo xanh. ⚠️ owner còn phải ĐẶT LỊCH (`RELEASE-09` §4) |
+| Kênh hỗ trợ + hypercare | ✅ **CÓ quy trình (2026-07-30, `S6-REL-1`)** — kênh · mẫu incident · escalation · hypercare + điều kiện thoát: `RELEASE-09` §6. *(Bộ guide nội dung thuộc `S6-GOLIVE-1`)* |
 
 ---
 
@@ -207,7 +207,7 @@ lưu biên bản; viết runbook rollback có thời gian mục tiêu.
 | --- | --- | --- |
 | S0 Blocker | 0 | **0** |
 | S1 Critical | 0 | **0** |
-| S2 Major | ≤3, đều có owner + workaround | **3** — UAT-BLOCK-001/002/003 (đều là **dữ liệu/vận hành**, không phải defect sản phẩm; workaround = làm theo `Cycle-0 §4.2`) |
+| S2 Major | ≤3, đều có owner + workaround | **3** — cập nhật **2026-07-30** (`S6-REL-1`): KI-021 · KI-025 · **KI-050**. UAT-BLOCK-001/002 đã đóng 26/7; KI-008/011/016/029 đã đóng ⇒ 6→2, đổi lại **KI-050 mở** (chưa từng có backup nào trên máy PROD) ⇒ **3, vừa sát ngưỡng** |
 | S3 Minor | không giới hạn cứng, phải có sổ | **6** — xem `RELEASE-02` |
 
 ---
@@ -220,8 +220,11 @@ lưu biên bản; viết runbook rollback có thời gian mục tiêu.
 | ~~C2~~ | ~~Đóng UAT-BLOCK-001/002 (hồ sơ nhân viên + số dư phép)~~ — ✅ **XONG 2026-07-26** | — | — |
 | C3 | Chạy UAT Cycle 1 theo KIT §5, đạt Exit criteria QA-09 §12 | Owner + business user | Sign-off nghiệm thu |
 | C4 | Owner ký accepted-risk **D3** (dashboard headcount cho HR-Department) | Owner | Đóng sổ bảo mật MVP |
-| C5 | Chạy `backup-restore-drill.sh` + lưu biên bản | Owner/DevOps | Điểm Deploy & rollback |
-| C6 | Xử lý job `Dependency scan` đỏ (sửa công cụ hoặc gỡ khỏi cổng chặn) | Owner/DevOps | CI xanh toàn phần |
+| ~~C5~~ | ~~Chạy `backup-restore-drill.sh` + lưu biên bản~~ — ✅ **XONG 2026-07-29** (`S6-PERF-DB-1`, biên bản `DEVOPS-13` §3.1). ⚠️ Thay bằng **C7** bên dưới | — | — |
+| ~~C6~~ | ~~Xử lý job `Dependency scan` đỏ~~ — ✅ **XONG** (đo 2026-07-30: `Security` workflow **xanh** trên `master`) | — | — |
+| **C7** | **Tạo backup thật + đặt lịch backup hằng ngày** (KI-050) | Owner/DevOps | **Chặn go-live** |
+| **C8** | Bật staging `:3200` + áp 5 migration còn thiếu, chạy regression P0 + smoke ở đó | Owner | **RC-003 · RC-004** — chặn cắt RC |
+| **C9** | `m prod-cutover` (Administrator) — trỏ service sang `releases/current` | Owner | Đóng KI-016 tại PROD |
 
 **C1–C2 đã đóng 2026-07-26** ⇒ việc còn lại để mở Cycle 1 chỉ là **bật stack UAT** (`m dev-online-fast`,
 owner quyết vì đụng `dist` dùng chung với PROD). C3–C4 chặn sign-off. C5–C6 chặn go-live (Sprint 6),
