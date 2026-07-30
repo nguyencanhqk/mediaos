@@ -151,7 +151,20 @@ export class OrgRepository {
 
   // ── Teams ────────────────────────────────────────────────────────────────────
 
-  listTeams(companyId: string, status?: string) {
+  /**
+   * S6-SEC-IDENTITYBOUND-1 (N-1e, KI-052) — danh sách team trả theo `read:team`, còn `leaderUserName`
+   * (danh tính NGƯỜI) bị buộc bởi `identityCond` — vị từ scope của cặp danh bạ `view:user`.
+   *
+   * Đây là hình dạng N-1c ở phương thức BÊN CẠNH `listTeamMembers`: `S6-SEC-ORGTEAMSCOPE-1` chỉ vá
+   * vế members, `listTeams` vẫn chiếu tên trưởng nhóm không bound cho mọi ai giữ `read:team`.
+   *
+   * ⚠️ KHÁC N-1c một điểm: contract `leaderUserName` là `.nullable().optional()` — team KHÔNG có
+   * trưởng nhóm là trạng thái hợp lệ. Nên `null` ở đây KHÔNG phân biệt được "chưa có trưởng nhóm"
+   * với "ngoài scope", và cơ chế hỏng-ồn-ào của N-1c không áp dụng được. Vì vậy service BẮT BUỘC
+   * phải bỏ hẳn khoá (dùng `identityInScope`), đừng dựa vào `null` để mang thông tin.
+   */
+  listTeams(companyId: string, status: string | undefined, identityCond: SQL | null) {
+    const showIdentity = identityCond ?? sql`false`;
     return this.db.withTenant(companyId, (tx) => {
       const where =
         status != null
@@ -167,7 +180,10 @@ export class OrgRepository {
           code: teams.code,
           type: teams.type,
           leaderUserId: teams.leaderUserId,
-          leaderUserName: users.fullName,
+          identityInScope: sql<boolean>`(${showIdentity})`,
+          leaderUserName: sql<
+            string | null
+          >`case when (${showIdentity}) then ${users.fullName} else null end`,
           description: teams.description,
           capacity: teams.capacity,
           status: teams.status,

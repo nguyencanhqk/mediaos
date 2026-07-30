@@ -135,7 +135,7 @@ export class OrgController {
   @UseGuards(PermissionGuard)
   @RequirePermission("read", "team")
   listTeams(@Req() req: AuthenticatedRequest, @Query("status") status?: string) {
-    return this.org.listTeams(req.user.companyId, status);
+    return this.org.listTeams(req.user, status);
   }
 
   @Post("teams")

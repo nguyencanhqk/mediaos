@@ -164,10 +164,29 @@ describe("OrgService (F3 breadth)", () => {
   });
 
   // ── Teams ──────────────────────────────────────────────────────────────────
-  it("listTeams forwards status filter", async () => {
-    const { service, repo } = makeService();
-    await service.listTeams(COMPANY_ID, "active");
-    expect(repo.listTeams).toHaveBeenCalledWith(COMPANY_ID, "active");
+  it("listTeams forwards status filter KÈM vị từ danh tính (N-1e, KI-052)", async () => {
+    const { service, repo, dataScope } = makeService();
+    await service.listTeams(ACTOR, "active");
+    expect(repo.listTeams).toHaveBeenCalledWith(COMPANY_ID, "active", SCOPE_COND);
+    // Bound theo CẶP DANH BẠ, không phải cặp gate (`read:team`).
+    expect(dataScope.resolveOrNull).toHaveBeenCalledWith(ACTOR.id, ACTOR.companyId, "view", "user");
+  });
+
+  it("listTeams: không có grant danh bạ → BỎ HẲN khoá leaderUserName (N-1e, KI-052)", async () => {
+    const repo = makeRepo();
+    repo.listTeams.mockResolvedValueOnce([
+      { id: TEAM_ID, name: "Team A", identityInScope: false, leaderUserName: null },
+    ]);
+    const { service, repo: r } = makeService(repo, makeDataScope(null));
+
+    const rows = (await service.listTeams(ACTOR)) as Array<Record<string, unknown>>;
+
+    expect(r.listTeams).toHaveBeenCalledWith(COMPANY_ID, undefined, null);
+    expect(rows).toHaveLength(1);
+    // Khoá phải VẮNG MẶT: contract khai `.nullable()` nên `null` KHÔNG phân biệt được
+    // "chưa có trưởng nhóm" với "ngoài scope".
+    expect("leaderUserName" in rows[0]).toBe(false);
+    expect("identityInScope" in rows[0]).toBe(false);
   });
 
   it("createTeam maps fields + returns row", async () => {
