@@ -1,24 +1,15 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-29 15:12Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-30 02:44Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-### 🔴 S6-SEC-ORGTEAMSCOPE-1 — N-1c (FULL gate S6-SEC-ORGSCOPE-1 phát hiện) — GET /org/teams/:id/members trả userEmail+userFullName mà KHÔNG ép data_scope: lấy lại đúng danh bạ mà N-1 vừa khoá, chỉ qua cặp quyền khác
-- **zone**: red · **skills**: code-review
-- **sửa ở đâu (paths)**: `apps/api/src/org/**`, `apps/api/src/permission/**`, `apps/api/test/**`, `docs/RELEASE/**`, `docs/permission-matrix-spec.md`, `docs/plans/S6-SEC-ORGTEAMSCOPE-1.md`
-- **phụ thuộc**: S6-SEC-ORGSCOPE-1✓
-- **done_when (đích hội tụ)**:
-  - [ ] RED TRƯỚC: dựng ĐÚNG ca tái lập ở src[] (read:user@Own + read:team@Company) → chứng minh bằng log rằng /org/teams/:id/members hiện trả email của người ngoài scope, trong khi /org/employees đã chặn
-  - [ ] Trả lời TƯỜNG MINH trong plan: `Own`/`Team`/`Department` trên `teams` nghĩa là gì (team mình là thành viên? team mình làm leader? fail-closed?) — kèm lý do, không mượn ngữ nghĩa của `users`
-  - [ ] ĐO PROD TRƯỚC KHI SIẾT: role nào giữ `read:team` ở scope nào, bao nhiêu user thật — nêu rõ ai mất quyền xem so với hôm nay
-  - [ ] Cân nhắc GỐC RỄ thay vì vá lẻ: có nên để `PermissionGuard` tự resolve+phơi `data_scope` cho handler không (sửa một chỗ, đóng cả lớp) — nếu KHÔNG chọn đường đó thì ghi lý do
-  - [ ] permission-matrix-spec.md: khối CHỐT /org đang đọc như '/org đã chốt' — sửa cho khớp, vì hôm nay vế teams CHƯA có scope
-  - [ ] FULL gate security-reviewer + rls-tenant-isolation-tester PASS; RELEASE-02 mở + đóng KI kèm số đo
+_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
+- 🔴 `S6-SEC-ORGTEAMSCOPE-1` N-1c (FULL gate S6-SEC-ORGSCOPE-1 phát hiện) — GET /org/teams/:id/members trả userEmail+userFullName mà KHÔNG ép data_scope: lấy lại đúng danh bạ mà N-1 vừa khoá, chỉ qua cặp quyền khác
 - 🔴 `S6-SEC-XTENANTFK-1` KI-046 — 459 khoá ngoại MỘT-CỘT nối hai bảng tenant: FK check bỏ qua RLS ⇒ gắn được hàng của mình trỏ sang bản ghi của tenant khác (lớp lỗ, không phải bug lẻ)
 - 🔴 `S6-REL-1` Release Candidate build + release notes + Go-live runbook + deployment/rollback rehearsal + monitoring/alerting/support readiness (WS7/WS8/WS9) — crown release
 
@@ -38,6 +29,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `914ff0ae` | 2026-07-29 | chore(docs): regen STATUS sau khi merge 5 PR (#309 · #305 · #307 · #308 · #306) |
 | `542aa56e` | 2026-07-29 | fix(sec): S6-SEC-MV-1 — KI-041: dựng ranh giới tenant THẬT cho 2 matview dashboard (mig 0534) (#306) |
 | `05913ed3` | 2026-07-29 | fix(sec): S6-SEC-LOGINLOG-2 — KI-044: gắn đúng chủ cho hàng blocked, kèm bịt oracle timing do chính bản vá sinh ra (#308) |
 | `5297f9b3` | 2026-07-29 | fix(devops): S6-PERF-DB-1 — WS5/WS6: restore rehearsal lần đầu chạy được + 2 chốt hồi quy DB có RED-proof (#307) |
@@ -49,7 +41,6 @@
 | `60d1a321` | 2026-07-29 | fix(sec): S6-QA-TENANTWRITE-1 — KI-037: bổ sung vế GHI vào lưới tenant-isolation (446 → 1087 ca) + vá lỗ FK chéo tenant (#303) |
 | `d943193b` | 2026-07-29 | fix(sec): S6-SEC-ORGSCOPE-1 — N-1: ép data_scope cho /org/employees (role scope hẹp từng nhận trọn danh bạ) (#302) |
 | `bec5c95b` | 2026-07-29 | fix(sec): S6-SEC-NOTITX-1 — KI-034: gộp insert+outbox+audit vào MỘT transaction, bỏ 3 nhánh nuốt lỗi (#301) |
-| `b9ea43f2` | 2026-07-28 | fix(sec): S6-SEC-LOGINLOG-1 — KI-042: siết vế ĐỌC của login_logs (hàng NULL-tenant đọc được chéo tenant) (#300) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
