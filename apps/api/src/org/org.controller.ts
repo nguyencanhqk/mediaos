@@ -175,12 +175,15 @@ export class OrgController {
     return this.org.deleteTeam(req.user.companyId, id);
   }
 
-  // Trả `userFullName` + `userEmail` của từng thành viên ⇒ danh bạ, phải gate (cùng cặp với listTeams).
+  // S6-SEC-ORGTEAMSCOPE-1 (N-1c, KI-049) — HAI lớp dữ liệu, HAI chủ quyền:
+  //   • quan hệ thành viên → `read:team` (gate ở đây, giữ nguyên);
+  //   • `userFullName`/`userEmail` → cặp danh bạ `view:user`, bound trong `OrgService.listTeamMembers`.
+  // Truyền cả `req.user` (không chỉ `companyId`) vì service cần `id` để resolve scope danh bạ.
   @Get("teams/:id/members")
   @UseGuards(PermissionGuard)
   @RequirePermission("read", "team")
   listTeamMembers(@Req() req: AuthenticatedRequest, @Param("id") teamId: string) {
-    return this.org.listTeamMembers(req.user.companyId, teamId);
+    return this.org.listTeamMembers(req.user, teamId);
   }
 
   @Post("teams/:id/members")

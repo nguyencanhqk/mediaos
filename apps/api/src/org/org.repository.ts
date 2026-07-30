@@ -245,7 +245,19 @@ export class OrgRepository {
 
   // ── Team Members ──────────────────────────────────────────────────────────────
 
-  listTeamMembers(companyId: string, teamId: string) {
+  /**
+   * S6-SEC-ORGTEAMSCOPE-1 (N-1c, KI-049) — vế quan hệ thành viên trả THEO `read:team`, còn HAI cột
+   * danh tính người bị buộc bởi `identityCond` (vị từ scope của cặp danh bạ `view:user`).
+   *
+   * `identityCond = null` ⇒ actor không có grant danh bạ nào ⇒ **không hàng nào** được chiếu danh tính.
+   *
+   * VÌ SAO khử ở tầng SQL (`case when`) chứ không chỉ xoá khoá ở service: nếu ai đó sau này quên bước
+   * xoá khoá thì hàng ngoài scope trả `null` — mà contract `teamMemberSchema.userEmail` là
+   * `z.string().email().optional()`, KHÔNG `.nullable()` ⇒ FE vỡ Zod **ồn ào** thay vì rò email im
+   * lặng. Chọn chế độ hỏng ồn ào có chủ đích (memory `apifetch-drops-pagination-bare-array`).
+   */
+  listTeamMembers(companyId: string, teamId: string, identityCond: SQL | null) {
+    const showIdentity = identityCond ?? sql`false`;
     return this.db.withTenant(companyId, (tx) =>
       tx
         .select({
@@ -254,8 +266,13 @@ export class OrgRepository {
           userId: teamMembers.userId,
           roleName: teamMembers.roleName,
           joinedAt: teamMembers.joinedAt,
-          userFullName: users.fullName,
-          userEmail: users.email,
+          identityInScope: sql<boolean>`(${showIdentity})`,
+          userFullName: sql<
+            string | null
+          >`case when (${showIdentity}) then ${users.fullName} else null end`,
+          userEmail: sql<
+            string | null
+          >`case when (${showIdentity}) then ${users.email} else null end`,
         })
         .from(teamMembers)
         .innerJoin(users, eq(teamMembers.userId, users.id))

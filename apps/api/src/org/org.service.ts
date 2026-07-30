@@ -2,6 +2,7 @@ import {
   ConflictException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import type {
@@ -25,6 +26,8 @@ interface DirectoryActor {
 
 @Injectable()
 export class OrgService {
+  private readonly logger = new Logger(OrgService.name);
+
   constructor(
     private readonly repo: OrgRepository,
     // S6-SEC-ORGSCOPE-1 (N-1): DataScopeService export sẵn từ PermissionModule, OrgModule đã import
@@ -155,8 +158,55 @@ export class OrgService {
 
   // ── Team Members ──────────────────────────────────────────────────────────────
 
-  listTeamMembers(companyId: string, teamId: string) {
-    return this.repo.listTeamMembers(companyId, teamId);
+  /**
+   * S6-SEC-ORGTEAMSCOPE-1 (N-1c, KI-049) — danh sách thành viên team, danh tính BOUND theo scope danh bạ.
+   *
+   * Route trả HAI lớp dữ liệu và chúng có HAI chủ quyền khác nhau:
+   *   • quan hệ thành viên (`teamId`/`userId`/`roleName`/`joinedAt`) → `read:team`, guard đã gate.
+   *   • danh tính người (`userFullName`/`userEmail`) → cặp danh bạ `ORG_EMPLOYEE_DIRECTORY`.
+   *
+   * Trước WO này chỉ có vế thứ nhất ⇒ **cặp gate (`team`) LỆCH cặp của lớp dữ liệu (`user`)**: một role
+   * giữ `read:team` mà KHÔNG có `view:user` nào đọc được email của mọi thành viên mọi team. Đo PROD
+   * 2026-07-29: role SEEDED `hr-manager` đúng hình dạng đó — nó bị 403 ở `/org/employees` lại lấy được
+   * danh bạ qua cửa này. Cùng lớp lỗi N-1 (`/org/employees`) và cùng bài học
+   * `read-path-gate-pair-must-match-download-pair`.
+   *
+   * CỐ Ý KHÔNG định nghĩa ngữ nghĩa `Own`/`Team`/`Department` mới cho `teams` (plan §3.1): làm vậy là
+   * đẻ ra hành vi thứ hai cho CÙNG lớp dữ liệu, đúng điều N-1 đã tránh. Ở đây tái dùng nguyên vị từ
+   * hình-`users` của danh bạ.
+   *
+   * Ngoài scope ⇒ **BỎ HẲN KHOÁ** (không trả `null`): contract `teamMemberSchema` khai
+   * `userEmail: z.string().email().optional()` — không `.nullable()`.
+   */
+  async listTeamMembers(actor: DirectoryActor, teamId: string) {
+    // `resolveOrNull`, KHÔNG `resolveAndAssert`: thiếu cặp danh bạ KHÔNG được biến thành 403 cả route
+    // — `read:team` vẫn cho phép xem vế quan hệ (owner chốt 2026-07-29, plan §3.2 đường A).
+    const scope = await this.dataScope.resolveOrNull(
+      actor.id,
+      actor.companyId,
+      ORG_EMPLOYEE_DIRECTORY.action,
+      ORG_EMPLOYEE_DIRECTORY.resourceType,
+    );
+    if (scope === null) {
+      // Nhánh fail-closed phải để lại dấu vết. `buildUserScopeCondition` đã tự log cho
+      // Team/Department; ca "không grant nào" không đi qua đó nên log ở đây, nếu không admin thấy
+      // cột danh tính trống mà không có đường chẩn (đúng F1 của FULL gate N-1).
+      this.logger.warn(
+        "team members: actor không có grant nào cho cặp danh bạ → BỎ cột danh tính của mọi hàng",
+        { userId: actor.id, companyId: actor.companyId, teamId },
+      );
+    }
+    const identityCond =
+      scope === null
+        ? null
+        : this.dataScope.buildUserScopeCondition(scope, {
+            userId: actor.id,
+            companyId: actor.companyId,
+          });
+    const rows = await this.repo.listTeamMembers(actor.companyId, teamId, identityCond);
+    return rows.map(({ identityInScope, userFullName, userEmail, ...rest }) =>
+      identityInScope ? { ...rest, userFullName, userEmail } : rest,
+    );
   }
 
   async addTeamMember(companyId: string, teamId: string, dto: AddTeamMemberRequest) {
