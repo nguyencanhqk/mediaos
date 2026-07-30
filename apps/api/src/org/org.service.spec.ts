@@ -57,11 +57,15 @@ function makeRepo() {
 function makeDataScope(scope: string | null = "Company") {
   return {
     resolveAndAssert: vi.fn().mockResolvedValue(scope),
+    // S6-SEC-ORGTEAMSCOPE-1 (N-1c): bản KHÔNG ném, cho route mà cặp gate ≠ cặp bound dữ liệu.
+    resolveOrNull: vi.fn().mockResolvedValue(scope),
     buildUserScopeCondition: vi.fn().mockReturnValue(SCOPE_COND),
   };
 }
 
 const SCOPE_COND = { __predicate: "scope-cond" } as never;
+/** Actor tối thiểu cho đường đọc có scope (khớp `req.user`). */
+const ACTOR = { id: USER_ID, companyId: COMPANY_ID };
 
 function makeService(repo = makeRepo(), dataScope = makeDataScope()) {
   return { service: new OrgService(repo as never, dataScope as never), repo, dataScope };
@@ -241,10 +245,43 @@ describe("OrgService (F3 breadth)", () => {
   });
 
   // ── Team members ───────────────────────────────────────────────────────────
-  it("listTeamMembers returns members", async () => {
-    const { service, repo } = makeService();
-    await service.listTeamMembers(COMPANY_ID, TEAM_ID);
-    expect(repo.listTeamMembers).toHaveBeenCalledWith(COMPANY_ID, TEAM_ID);
+  // S6-SEC-ORGTEAMSCOPE-1 (N-1c, KI-049): danh tính người bound theo cặp DANH BẠ, không theo `read:team`.
+  // Vế hành vi thật (ai thấy email của ai) khoá ở `test/integration/org-team-members-scope.int-spec.ts`
+  // — mock ở đây không chứng minh được điều đó, nó chỉ canh chữ ký call-site.
+  it("listTeamMembers truyền vị từ scope danh bạ xuống repo", async () => {
+    const { service, repo, dataScope } = makeService();
+    await service.listTeamMembers(ACTOR, TEAM_ID);
+    expect(dataScope.resolveOrNull).toHaveBeenCalledWith(ACTOR.id, ACTOR.companyId, "view", "user");
+    expect(repo.listTeamMembers).toHaveBeenCalledWith(COMPANY_ID, TEAM_ID, SCOPE_COND);
+  });
+
+  it("listTeamMembers: KHÔNG grant danh bạ ⇒ repo nhận `null` (fail-closed), KHÔNG 403 cả route", async () => {
+    const { service, repo } = makeService(makeRepo(), makeDataScope(null));
+    await expect(service.listTeamMembers(ACTOR, TEAM_ID)).resolves.toBeInstanceOf(Array);
+    expect(repo.listTeamMembers).toHaveBeenCalledWith(COMPANY_ID, TEAM_ID, null);
+  });
+
+  it("listTeamMembers: hàng ngoài scope bị BỎ KHOÁ danh tính, không phải trả null", async () => {
+    const repo = makeRepo();
+    repo.listTeamMembers.mockResolvedValueOnce([
+      {
+        id: "m1",
+        userId: USER_ID,
+        identityInScope: true,
+        userFullName: "A",
+        userEmail: "a@x.test",
+      },
+      { id: "m2", userId: LEADER_ID, identityInScope: false, userFullName: null, userEmail: null },
+    ]);
+    const { service } = makeService(repo);
+    const rows = (await service.listTeamMembers(ACTOR, TEAM_ID)) as Record<string, unknown>[];
+    expect(rows[0]).toMatchObject({ userEmail: "a@x.test", userFullName: "A" });
+    // Khoá phải VẮNG MẶT: contract `teamMemberSchema.userEmail` không `.nullable()` ⇒ null vỡ Zod ở FE.
+    expect("userEmail" in rows[1]!).toBe(false);
+    expect("userFullName" in rows[1]!).toBe(false);
+    // `identityInScope` là cột nội bộ của repo — KHÔNG được rò ra response.
+    expect("identityInScope" in rows[0]!).toBe(false);
+    expect("identityInScope" in rows[1]!).toBe(false);
   });
 
   it("addTeamMember → Conflict when already a member", async () => {

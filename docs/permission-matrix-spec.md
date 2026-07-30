@@ -69,7 +69,8 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > | `GET /org/units` · `/org/units/tree` · `/org/departments` | **Authenticated** | Danh mục cơ cấu: tên phòng ban + hình dạng cây. `apps/app` dùng trực tiếp ở `OrgChartPage` + `TaskSidebarTree` ⇒ gate = gãy UI mọi nhân viên |
 > | `GET /org/roles` | **Authenticated** | Danh mục vai trò, trả đúng `{ id, name }`; **không** nêu ai giữ vai trò nào. Repo đã loại role operator-plane khỏi đường đọc |
 > | `GET /org/employees` | **`view:user`** + **`data_scope`** | Trả `id · email · fullName · status` + team membership. Từ `S6-SEC-ORGSCOPE-1`: hàng được BOUND theo scope, không còn "toàn tenant". Động từ = `view:user` từ `S6-SEC-PERMVERB-1` (DECISIONS-06 D-41) — **cùng cặp** với `GET /auth/users` |
-> | `GET /org/teams` · `/org/teams/:id/members` | **`read:team`** | Cơ cấu team = ai thuộc nhóm nào; `members` trả cả `userEmail` |
+> | `GET /org/teams` | **`read:team`** | Cơ cấu team = ai thuộc nhóm nào |
+> | `GET /org/teams/:id/members` | **`read:team`** (vế quan hệ) + **`view:user` + `data_scope`** (hai cột danh tính) | **HAI lớp dữ liệu, HAI chủ quyền** — `S6-SEC-ORGTEAMSCOPE-1` (N-1c, KI-049). `read:team` quyết định truy cập *tài nguyên team*; `userFullName`/`userEmail` bị buộc bởi **đúng cặp danh bạ** của `/org/employees`. Ngoài scope ⇒ **BỎ HẲN KHOÁ** (không trả `null`: contract `userEmail` chưa `.nullable()`) |
 >
 > **`data_scope` của `GET /org/employees` (S6-SEC-ORGSCOPE-1 — đóng nợ N-1):** guard chỉ trả lời "có
 > cặp quyền không"; số hàng do `DataScopeService.buildUserScopeCondition` quyết, dựng trên bảng
@@ -87,11 +88,21 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > `Team` resolve ra `Team` ⇒ **0 hàng** — thêm role có thể LÀM MẤT quyền xem. Fail-closed, không rò,
 > nhưng là bẫy vận hành thật; nhánh này nay có `logger.warn` để chẩn được.
 >
-> 🔴 **ĐỪNG ĐỌC KHỐI NÀY LÀ "/org ĐÃ CHỐT TOÀN BỘ".** `GET /org/teams/:id/members` trả `userEmail` +
-> `userFullName` mà **chưa** ép `data_scope` — chỉ có cặp `read:team`. Role `read:team`@`Own` vẫn lấy
-> được trọn danh bạ email qua đường teams, tức **vòng qua** vế `/org/employees` vừa siết ở trên. Đây
-> là **N-1c**, WO `S6-SEC-ORGTEAMSCOPE-1` (RELEASE-02, mở 2026-07-28). Gốc rễ chung: `PermissionGuard`
-> không đọc `data_scope`, nên MỌI route chỉ dựa vào guard đều thừa hưởng khoảng hở này.
+> ✅ **N-1c ĐÃ ĐÓNG 2026-07-30** — `S6-SEC-ORGTEAMSCOPE-1` (KI-049). Trước đó
+> `GET /org/teams/:id/members` trả `userEmail` + `userFullName` mà **chưa** ép `data_scope` (chỉ có cặp
+> `read:team`) ⇒ role `read:team@Own` — và cả role **không có `view:user` nào**, đúng hình dạng
+> `hr-manager` trong seed — lấy được trọn danh bạ email qua đường teams, **vòng qua** vế
+> `/org/employees` vừa siết ở trên.
+>
+> Cách đóng: hai cột danh tính bound theo cặp danh bạ, **không** phát minh ngữ nghĩa
+> `Own`/`Team`/`Department` thứ hai cho `teams` — làm vậy là đẻ hành vi thứ hai cho cùng lớp dữ liệu.
+>
+> ⚠️ **Gốc rễ chung VẪN CÒN, đừng đọc khối này là "/org đã chốt toàn bộ":** `PermissionGuard` không đọc
+> `data_scope`, nên MỌI route chỉ dựa vào guard đều thừa hưởng khoảng hở này. N-1 · N-2 · N-1c là **ba
+> lần vá cùng một lớp lỗi ở ba route khác nhau**. Hướng gốc đề xuất (`S6-SEC-IDENTITY-PROJ-1`, `S3`,
+> không chặn RC): buộc **tầng chiếu** — mọi truy vấn chiếu `users.email`/`users.fullName` phải nhận
+> một vị từ scope, thiếu thì **vỡ typecheck** thay vì trả 0 hàng im lặng. Census 2026-07-29: 40+ điểm
+> chiếu ở 7 module.
 >
 > Trước 2026-07-27 cả bảy route đều Authenticated theo quy ước cũ "READ mở trong tenant" — đó chính là
 > KI-030: mọi user đã đăng nhập đọc được trọn danh bạ kèm email, trong khi `/hr/employees` cùng lớp dữ

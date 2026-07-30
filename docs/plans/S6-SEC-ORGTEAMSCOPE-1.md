@@ -146,3 +146,55 @@ KI-049 là `S2` và đường tới RC đang mở. Trộn hai việc là cách c
 - [ ] `RELEASE-02`: đóng `KI-049` kèm số đo (§2 đã có vế "trước").
 - [ ] Mở đề xuất `S6-SEC-IDENTITY-PROJ-1` vào `harness/backlog.mjs` (hướng gốc §3.3) — để nó không
       biến thành ghi chú văn xuôi rồi mất số hiệu, đúng lỗi đã mắc với chính N-1c.
+
+## 6. Kết quả (2026-07-30)
+
+### RED → GREEN, có ca đối chứng
+
+Lane `mediaos_teamscope`, chain `0000→0534`.
+
+| Ca | Kỳ vọng | Trước vá | Sau vá |
+| --- | --- | --- | --- |
+| `Company` + `read:team@Company` — **đối chứng** | 4 hàng, 4 danh tính | ✅ | ✅ |
+| `view:user@Own` + `read:team@Company` | 4 hàng, **1** danh tính | ❌ **4** | ✅ 1 |
+| `read:team@Company`, **không có `view:user`** (`hr-manager`) | 4 hàng, **0** danh tính | ❌ **4** | ✅ 0 |
+| không có `read:team` — **đối chứng** | **403** | ✅ | ✅ |
+
+Hai ca đối chứng là phần không được bỏ: thiếu ca `Company` thì "0 danh tính" không phân biệt được với
+"route hỏng"; thiếu ca 403 thì bản vá có thể đã âm thầm nới route mà không ai thấy.
+
+Ca thứ ba là lỗ ở dạng thuần nhất — **role không có quyền danh bạ nào vẫn đọc email của mọi thành
+viên**. Nó cũng là ca duy nhất phản ánh cấu hình seed thật (`hr-manager`), nên nếu chỉ dựng ca
+`Own` thì vẫn bỏ sót đúng hình dạng đang tồn tại trên PROD.
+
+Hồi quy: `org.service.spec` 31 · `org.permissions.spec` 56 · `org.permission.spec` 40 ·
+`hr-master-data` 47 · `org.department` 20 · `org-directory-scope` 7 · `org-directory-permission` 12 ·
+`route-guard-coverage` 9 ⇒ **226 ca xanh**. `typecheck` xanh.
+
+### Ba chi tiết của bản vá, kèm lý do
+
+1. **`resolveOrNull` (mới) thay vì `resolveAndAssert`.** Thiếu cặp danh bạ KHÔNG được biến thành 403
+   cả route — đó là siết quá tay, vì `read:team` vốn cho phép xem vế quan hệ. Docstring ghi rõ: đừng
+   dùng hàm này cho route mà cặp gate = cặp bound (ở đó `null` nghĩa là guard đã hỏng).
+2. **Khử ở tầng SQL (`case when`), rồi mới xoá khoá ở service.** Nếu chỉ xoá khoá ở service thì ngày
+   ai đó quên bước đó, email rò im lặng. Khử ở SQL trước ⇒ quên xoá khoá chỉ ra `null`, mà contract
+   `userEmail` chưa `.nullable()` nên FE **vỡ Zod ồn ào**. Chọn chế độ hỏng ồn ào có chủ đích.
+3. **`logger.warn` cho nhánh "không grant nào".** `buildUserScopeCondition` đã tự log cho
+   `Team`/`Department`, nhưng ca `null` không đi qua đó. Không log thì admin thấy cột danh tính trống
+   mà không có đường chẩn — đúng lỗi F1 mà FULL gate của N-1 đã bắt. Đã đo thấy dòng warn trong log
+   lần chạy, không chỉ tin là nó có.
+
+### Hai bẫy gặp khi dựng test (ghi để phiên sau không mất thời gian)
+
+- `app.setGlobalPrefix("api/v1")` trong int-spec ⇒ **404 mọi request**, trông như route biến mất. Các
+  int-spec khác gọi route TRẦN (`/auth/login`).
+- `seedUser` nhận **password HASH**, không phải mật khẩu thô. Truyền thô ⇒ login trả **500
+  `PasswordVerificationError`**, trông như hạ tầng hỏng chứ không như lỗi seed.
+
+### Nợ đã ghi thành WO, không để thành ghi chú
+
+Gốc rễ chung vẫn còn: `PermissionGuard` không đọc `data_scope`. Đã mở
+**`S6-SEC-IDENTITY-PROJ-1`** (`S3`, không chặn RC) trong `harness/backlog.mjs` — buộc tầng chiếu
+`users.email`/`users.fullName` phải nhận vị từ scope, thiếu thì vỡ typecheck. Cố ý ghi thành WO có số
+hiệu **ngay trong nhánh này**, vì đây đúng là lỗi đã mắc với chính N-1c: một phát hiện chỉ nằm dưới
+dạng văn xuôi thì mất số hiệu và không bao giờ bị scrub (§1.1).

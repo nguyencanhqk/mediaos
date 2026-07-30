@@ -83,6 +83,30 @@ export class DataScopeService {
   }
 
   /**
+   * Như `resolveAndAssert` nhưng **KHÔNG ném** khi không có grant nào — trả `null`.
+   *
+   * VÌ SAO cần bản không-ném (S6-SEC-ORGTEAMSCOPE-1 / N-1c, KI-049): có route mà cặp quyền GATE khác
+   * cặp quyền BOUND dữ liệu. `/org/teams/:id/members` gate `read:team` (truy cập tài nguyên team),
+   * còn hai cột danh tính người bị buộc bởi cặp danh bạ `view:user`. Actor hoàn toàn có thể có cặp
+   * thứ nhất mà KHÔNG có cặp thứ hai — role SEEDED `hr-manager` đúng hình dạng đó (đo PROD
+   * 2026-07-29: `read:team@Company`, không có `view:user` nào).
+   *
+   * Dùng `resolveAndAssert` ở đó sẽ biến "không được xem danh bạ" thành **403 cả route** — siết quá
+   * tay, vì `read:team` vốn cho phép xem vế quan hệ thành viên (owner chốt 2026-07-29, plan §3.2
+   * đường A). Người gọi PHẢI tự xử lý `null`; đừng dùng hàm này cho route mà cặp gate = cặp bound
+   * (ở đó `resolveAndAssert` mới đúng, vì `null` nghĩa là guard đã hỏng).
+   */
+  async resolveOrNull(
+    userId: string,
+    companyId: string,
+    action: string,
+    resourceType: string,
+    opts?: { isSensitive?: boolean },
+  ): Promise<DataScope | null> {
+    return this.permission.resolveStrongestScope(userId, companyId, action, resourceType, opts);
+  }
+
+  /**
    * Resolve the acting user's full scope context: own org_unit (Department), the EMR-managed user set
    * (Team multi-manager) and headed org_units (Department over a headed unit). Read fresh from the DB
    * each call — never cached — so a manager/head reassignment takes effect on the next request (S2-INT-2).
