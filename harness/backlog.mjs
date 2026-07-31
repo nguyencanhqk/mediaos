@@ -6125,7 +6125,21 @@ export const backlog = [
       "Final Sign-off · Go/No-go · Go-live execution · Handoff (admin/user/support guide · known issues · post-go-live backlog) — WS10",
     zone: "red",
     status: "todo",
-    paths: ["docs/RELEASE/**", "docs/**", "docs/plans/S6-GOLIVE-1.md"],
+    // paths MỞ RỘNG ngoài docs/** có chủ đích (S6-GOLIVE-1 §2.1): WO này phán quyết go-live THEO
+    // runbook, mà bước T-0 #3 của runbook (backup DB) KHÔNG chạy được trên máy PROD — `backup-db.sh`
+    // chặn cứng ở `command -v pg_dump` trong khi host Windows chỉ có pg client TRONG container.
+    // Phán quyết "GO" trên runbook có bước bắt buộc gãy là phán quyết sai ⇒ vá tại chỗ, không hoãn.
+    // Khai đủ ở đây vì paths lái CẢ review gate LẪN scheduler (bài học: khai thiếu ⇒ lọt LIGHT gate).
+    paths: [
+      "docs/RELEASE/**",
+      "docs/**",
+      "docs/plans/S6-GOLIVE-1.md",
+      "scripts/backup-db.sh",
+      "scripts/lib/backup-db-resolve.test.mjs",
+      "harness/check.sh",
+      ".github/workflows/api.yml",
+      ".gitignore",
+    ],
     skills: [],
     depends_on: ["S6-REL-1"],
     src: ["IMP02-STORY-111/112", "IMPLEMENTATION-09 §9 (WS10)", "IMP09-IN-015/016/017"],

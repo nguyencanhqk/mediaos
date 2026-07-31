@@ -174,8 +174,20 @@ Mọi tài liệu đều liên kết chéo với nhau: mỗi file có breadcrumb
 | RELEASE-02 | [Known Issues & Defer List](<RELEASE/RELEASE-02_Known_Issues_MVP.md>) | Sổ vấn đề đã kiểm chứng + workaround + chủ; danh sách defer và cái KHÔNG được defer |
 | RELEASE-03 | [Release Notes nội bộ](<RELEASE/RELEASE-03_Release_Notes_Internal_MVP.md>) | "Mở hệ thống lên thì làm được gì" theo từng module |
 | RELEASE-04 | [UAT Sign-off · Go/No-Go · Bàn giao Sprint 6](<RELEASE/RELEASE-04_UAT_Signoff_And_Go_NoGo.md>) | Bản thảo chữ ký theo module + cấp release, kết luận Go/No-Go, ánh xạ IMP09-IN-003/004 |
+| RELEASE-05 | [Scope Freeze & Release Governance](<RELEASE/RELEASE-05_Scope_Freeze_And_Release_Governance.md>) | **LUẬT** của Sprint 6: đóng băng scope, thang `S0..S4`, ngưỡng chặn RC, chính sách tag/nhánh |
+| RELEASE-06 | [Stabilization Checklist & Bug Triage](<RELEASE/RELEASE-06_Stabilization_Checklist_And_Bug_Triage.md>) | Checklist ổn định 8 nhóm theo module + nhịp triage (WS2) |
+| RELEASE-07 | [Release Candidate `v1.0.0-rc.1`](<RELEASE/RELEASE-07_Release_Candidate_v1.0.0-rc.1.md>) | Điều kiện cắt RC (`IMP09-RC-001…008`), scope, release notes, test summary (WS7) |
+| RELEASE-08 | [Go-live Runbook · Deployment · Rollback](<RELEASE/RELEASE-08_Go_Live_Runbook.md>) | Dòng thời gian T-3→T+3, mỗi bước là **lệnh chạy được**, rollback đã diễn tập (WS8) |
+| RELEASE-09 | [Monitoring · Logging · Alerting · Support Readiness](<RELEASE/RELEASE-09_Monitoring_Alerting_Support_Readiness.md>) | 8 nhóm cảnh báo chạy được, logging checklist, **quy trình** support + hypercare (WS9) |
+| RELEASE-10 | [Final Sign-off · Go/No-go Decision](<RELEASE/RELEASE-10_Final_Signoff_Go_NoGo_Decision.md>) | **Biên bản quyết định go-live**: checklist 15 nhóm có bằng chứng, ma trận sign-off, điều kiện lật NO-GO→GO (WS10) |
+| RELEASE-11 | [Admin Guide](<RELEASE/RELEASE-11_Admin_Guide.md>) | HANDOFF-007 — 3 app, vai/phân quyền, bảo mật tài khoản, vận hành máy chủ, backup/lịch tự động |
+| RELEASE-12 | [User Guide](<RELEASE/RELEASE-12_User_Guide.md>) | HANDOFF-008 — hướng dẫn nhân viên/quản lý/HR dùng hằng ngày |
+| RELEASE-13 | [Support FAQ & Triage](<RELEASE/RELEASE-13_Support_FAQ.md>) | HANDOFF-009 — phân loại P0..P4, mẫu tiếp nhận, loại trừ theo thứ tự, FAQ, leo thang |
+| RELEASE-14 | [Post-go-live Backlog](<RELEASE/RELEASE-14_Post_Go_Live_Backlog.md>) | HANDOFF-010 — `PGL-*` P-NOW/P-NEXT/P-LATER/P-PHASE2, đầu vào cho IMPLEMENTATION-10 |
 
 > QA-09/QA-10 là **khung**; bộ RELEASE-01…04 là **bản chấm cho lần phát hành MVP này** (sinh bởi Work Order `S5-UAT-1`, cổng Sprint 5 → Sprint 6). Khi mở đợt phát hành sau, tạo bộ RELEASE mới thay vì sửa đè bản cũ.
+>
+> **RELEASE-05…14 là hồ sơ Sprint 6** (WS1→WS10). Đường vào khi cần quyết định phát hành: **RELEASE-10** (biên bản Go/No-go) → từ đó trỏ về RC (07), runbook (08), giám sát (09), bộ bàn giao (11–14).
 
 ---
 
