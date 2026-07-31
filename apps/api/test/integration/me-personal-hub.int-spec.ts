@@ -49,6 +49,7 @@ import {
   seedUser,
   seedUserRole,
   type SeededTenant,
+  seedCrossTenantViolation,
 } from "../helpers/seed";
 
 // Chạy CHỈ khi có Postgres THẬT + LANE_DB (không skip-giả trên DB dev chung — memory gate).
@@ -89,11 +90,20 @@ async function insertEmployee(
   userId: string,
   code: string,
   status = "active",
+  /**
+   * Gieo hàng CÓ CHỦ ĐÍCH lệch tenant (ca cross-tenant). Từ mig `0535` (S6-SEC-XTENANTFK-1),
+   * composite FK `(company_id, user_id)` CHẶN `employee_profiles` của tenant B trỏ vào user của A —
+   * kể cả qua superuser. Vẫn giữ ca test này vì nó kiểm TUYẾN THỨ HAI: RLS/reader phải không surface
+   * dữ liệu lệch, kể cả khi nó lọt vào bằng đường khác.
+   */
+  crossTenant = false,
 ): Promise<string> {
-  const r = await direct.query(
-    "INSERT INTO employee_profiles (company_id, user_id, status, employee_code) VALUES ($1,$2,$3,$4) RETURNING id",
-    [companyId, userId, status, code],
-  );
+  const sql =
+    "INSERT INTO employee_profiles (company_id, user_id, status, employee_code) VALUES ($1,$2,$3,$4) RETURNING id";
+  const params = [companyId, userId, status, code];
+  const r = crossTenant
+    ? await seedCrossTenantViolation(direct, (client) => client.query(sql, params))
+    : await direct.query(sql, params);
   return r.rows[0].id as string;
 }
 
@@ -286,7 +296,7 @@ describe.skipIf(!runDb)("S5-ME-BE-1 MeModule Personal Hub (DB cô lập, đườ
     ]);
     const a = await makeUser(A, { roleId: roleA, empCode: "E-XT-A" });
     // Plant employee tenant B gắn CÙNG user id A (dữ liệu lệch) — RLS withTenant(A) KHÔNG được lấy.
-    await insertEmployee(direct, B.companyId, a.userId, "E-XT-B-PLANT");
+    await insertEmployee(direct, B.companyId, a.userId, "E-XT-B-PLANT", "active", true);
 
     const me = await get("/me", a.token);
     expect(me.status).toBe(200);

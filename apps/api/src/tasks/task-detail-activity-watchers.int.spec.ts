@@ -43,6 +43,7 @@ import {
   seedUser,
   seedUserRole,
   type SeededTenant,
+  seedCrossTenantViolation,
 } from "../../test/helpers/seed";
 
 const runDb = hasDb && Boolean(process.env.LANE_DB);
@@ -148,19 +149,28 @@ describe.skipIf(!runDb)(
       oldValues: unknown,
       newValues: unknown,
       createdAt: string,
+      /**
+       * Gieo hàng CÓ CHỦ ĐÍCH lệch tenant. Từ mig `0535` (S6-SEC-XTENANTFK-1), composite FK
+       * `(company_id, task_id)` chặn `task_activity_logs` của tenant A trỏ vào task của B — kể cả qua
+       * superuser. Ca cuối của `beforeAll` gieo đúng hàng đó: log THUỘC A nhưng trỏ vào task của B,
+       * để 404 ở `/tasks/:TB/activity` phải đến từ kiểm-tra-task-thuộc-tenant chứ KHÔNG phải từ việc
+       * RLS tình cờ lọc mất hàng. Đổi `company_id` thành B sẽ làm ca deny-path yếu đi trong im lặng.
+       */
+      crossTenant = false,
     ): Promise<string> {
-      const r = await direct.query(
-        `INSERT INTO task_activity_logs (company_id, task_id, action, target_type, old_values, new_values, created_at)
-         VALUES ($1,$2,$3,'Task',$4,$5,$6) RETURNING id`,
-        [
-          companyId,
-          taskId,
-          action,
-          oldValues === null ? null : JSON.stringify(oldValues),
-          newValues === null ? null : JSON.stringify(newValues),
-          createdAt,
-        ],
-      );
+      const sql = `INSERT INTO task_activity_logs (company_id, task_id, action, target_type, old_values, new_values, created_at)
+         VALUES ($1,$2,$3,'Task',$4,$5,$6) RETURNING id`;
+      const params = [
+        companyId,
+        taskId,
+        action,
+        oldValues === null ? null : JSON.stringify(oldValues),
+        newValues === null ? null : JSON.stringify(newValues),
+        createdAt,
+      ];
+      const r = crossTenant
+        ? await seedCrossTenantViolation(direct, (client) => client.query(sql, params))
+        : await direct.query(sql, params);
       return r.rows[0].id as string;
     }
 
@@ -295,6 +305,7 @@ describe.skipIf(!runDb)(
         { status: "Todo" },
         { status: "Done" },
         "2026-07-12T09:00:00.000Z",
+        true,
       );
     });
 

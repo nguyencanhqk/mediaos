@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { collectFkPairs, pairKey } from "../foundation/fk-tenant-census";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
 import { RLS_TABLES } from "./rls-registry";
@@ -109,6 +110,12 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
     rejected: boolean;
     /** Mã lỗi Postgres khi bị từ chối: 42501 = insufficient_privilege · 23514/RLS = new row violates… */
     code?: string;
+    /**
+     * `error.constraint` của node-postgres — TÊN constraint đã từ chối. Cần cho ca W4: mã 23503 một
+     * mình không cho biết FK NÀO nổ, nên không phân biệt được "composite FK chéo tenant đang chạy"
+     * với "một FK khác tình cờ chặn".
+     */
+    constraint?: string;
     message?: string;
     rowCount: number;
   }
@@ -130,8 +137,14 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
         const r = await c.query(sql, params);
         return { rejected: false, rowCount: r.rowCount ?? 0 };
       } catch (e) {
-        const err = e as { code?: string; message?: string };
-        return { rejected: true, code: err.code, message: err.message, rowCount: 0 };
+        const err = e as { code?: string; message?: string; constraint?: string };
+        return {
+          rejected: true,
+          code: err.code,
+          constraint: err.constraint,
+          message: err.message,
+          rowCount: 0,
+        };
       } finally {
         // LUÔN rollback: ca W3 có thể THÀNH CÔNG (đó là lúc test ĐỎ) — nếu commit thì hàng của A
         // đã bị đẩy sang tenant B thật và mọi ca sau đó trên cùng bảng chạy trên dữ liệu hỏng.
@@ -183,6 +196,19 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
    * Hạ mốc này = tuyên bố có chủ đích, phải kèm lý do trong commit. Nâng lên khi phủ thêm.
    */
   const PROVEN_WITH_CHECK_FLOOR = 148;
+
+  /**
+   * Mốc sàn cho ca W4 (S6-SEC-XTENANTFK-1): số cặp bị chặn ĐÚNG bằng FK chéo tenant (SQLSTATE 23503).
+   *
+   * Đo trên lane đã áp mig `0535` (2026-07-31): **449 cặp thử được · 267 bị chặn bằng 23503**. 182 cặp
+   * còn lại vẫn BỊ TỪ CHỐI (assert chính phủ chúng) nhưng bằng cơ chế khác (unique-index/CHECK/
+   * NOT NULL) nên chúng KHÔNG chứng minh gì về composite FK — đó là lý do phải pin riêng con số 23503
+   * thay vì đọc màu xanh của assert chính là "đã phủ 449".
+   *
+   * Sàn để 260 (đệm nhỏ dưới 267): tụt sâu = composite FK bị gỡ hoặc bộ lọc co lưới. Việc bắt CHÍNH XÁC
+   * từng constraint bị gỡ là của `xtenant-fk-ratchet.int-spec.ts` (a) — ca này là lưới thứ hai.
+   */
+  const W4_FK_BLOCKED_FLOOR = 260;
 
   /** Cơ chế chặn quan sát được cho từng (bảng, ca) — in ra cuối suite làm tài liệu sống. */
   const blockedBy: { table: string; testCase: string; how: string }[] = [];
@@ -363,6 +389,92 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
           `thiếu composite FK (company_id, user_id) → users(company_id, id). ` +
           `Tác hại: users_id_fkey ON DELETE CASCADE ⇒ xoá user ở B xoá hàng mang company_id = A.`,
       ).toBe(true);
+    });
+
+    /**
+     * W4 (S6-SEC-XTENANTFK-1 / KI-046) — DATA-DRIVEN thay cho hai ca (b)/(c) viết tay ở trên.
+     *
+     * VÌ SAO. (b)/(c) chỉ phủ `team_members`. Đo được cùng lúc: **457 cặp FK một-cột** cùng hình dạng
+     * nằm nguyên — tức lưới cũ sẽ XANH VĨNH VIỄN trong khi 456 cặp còn hở (đúng bẫy memory
+     * `tests-can-pin-a-hole-open`). Ca này lấy danh sách cặp THẲNG TỪ CATALOG rồi thử từng cặp, nên
+     * bảng mới thêm ngày mai cũng tự nằm trong lưới mà không ai phải nhớ viết thêm `it`.
+     *
+     * Dựng hàng bằng đúng máy móc `jsonb_populate_record` của W0 (harness không biết schema từng
+     * bảng): lấy hàng của A, ghi đè CỘT FK = id hàng của **B**, cấp `id` mới, INSERT trong ngữ cảnh A.
+     *
+     * ⚠️ CHỐNG XANH-GIẢ. Một INSERT bị chặn bởi unique-index/CHECK vẫn "rejected" nhưng KHÔNG chứng
+     * minh gì về FK chéo tenant. Vì vậy ngoài "phải bị từ chối", ca này còn PIN số cặp bị chặn ĐÚNG
+     * bằng FK (SQLSTATE 23503) — bộ lọc sai làm danh sách co về rỗng sẽ ĐỎ, không im lặng xanh.
+     */
+    it("W4 · data-driven: KHÔNG cặp FK nào cho phép trỏ sang bản ghi của tenant khác", async () => {
+      const registry = new Map(RLS_TABLES.map((t) => [t.table, t]));
+      const pairs = (await collectFkPairs(direct)).filter(
+        (p) =>
+          p.targetTenantOnly &&
+          registry.has(p.srcTable) &&
+          registry.has(p.tgtTable) &&
+          // rowsB chỉ giữ giá trị của `idColumn`; FK luôn trỏ tới `id`, nên bảng đích dùng idColumn
+          // khác thì id ta có trong tay KHÔNG phải thứ FK cần → bỏ qua, có lý do.
+          (registry.get(p.tgtTable)!.idColumn ?? "id") === "id" &&
+          hasIdColumn.get(p.srcTable) === true &&
+          hasCompanyId.get(p.srcTable) === true,
+      );
+
+      const leaked: string[] = [];
+      /** Cặp bị chặn ĐÚNG bởi composite FK của chính nó — bằng chứng duy nhất đáng tính. */
+      const provenByCompositeFk: string[] = [];
+      /** Cặp "rejected" nhưng bởi cơ chế KHÁC ⇒ KHÔNG chứng minh gì về composite FK. */
+      const blockedByOther: string[] = [];
+      for (const p of pairs) {
+        const targetIdOfB = rowsB.get(p.tgtTable);
+        const ownRowOfA = rowsA.get(p.srcTable);
+        if (!targetIdOfB || !ownRowOfA) continue;
+        const srcCase = registry.get(p.srcTable)!;
+        const r = await attemptWrite(
+          A.companyId,
+          `INSERT INTO ${p.srcTable}
+           SELECT (jsonb_populate_record(NULL::${p.srcTable},
+                     to_jsonb(x) || $1::jsonb || jsonb_build_object('id', gen_random_uuid())
+                   )).*
+             FROM ${p.srcTable} x WHERE x.${srcCase.idColumn ?? "id"} = $2`,
+          [JSON.stringify({ [p.srcColumn]: targetIdOfB }), ownRowOfA],
+        );
+        if (!r.rejected) {
+          leaked.push(`${pairKey(p)} (${r.rowCount} hàng)`);
+          continue;
+        }
+        // 23503 MỘT MÌNH chưa đủ: phải đúng constraint COMPOSITE của cặp này. Một 23503 từ FK khác
+        // (hoặc từ FK một-cột cũ) vẫn là "rejected" nhưng không chứng minh composite FK đang chạy.
+        if (r.code === "23503" && r.constraint && r.constraint === p.coveringConstraint) {
+          provenByCompositeFk.push(pairKey(p));
+        } else {
+          blockedByOther.push(
+            `${pairKey(p)}=${r.code ?? "?"}${r.constraint ? `/${r.constraint}` : ""}`,
+          );
+        }
+      }
+
+      expect(
+        leaked,
+        `GHI ĐƯỢC hàng của tenant A trỏ sang bản ghi của tenant B. Kiểm tra FK của Postgres BỎ QUA ` +
+          `RLS ⇒ thiếu composite FK (company_id, <cột>) là lỗ KI-046. Vá bằng migration mới.`,
+      ).toEqual([]);
+
+      // Tài liệu sống: cặp nào "bị từ chối" mà KHÔNG phải nhờ composite FK. Với chúng, màu xanh của
+      // assert trên KHÔNG chứng minh gì về KI-046 — in ra để không ai đọc nhầm độ phủ.
+      console.log(
+        `[W4] ${pairs.length} cặp thử · ${provenByCompositeFk.length} CHỨNG MINH bằng composite FK · ` +
+          `${blockedByOther.length} bị chặn bởi cơ chế khác (chưa chứng minh):\n  ` +
+          blockedByOther.sort().join(" · "),
+      );
+
+      expect(
+        provenByCompositeFk.length,
+        `Chỉ ${provenByCompositeFk.length}/${pairs.length} cặp bị chặn ĐÚNG bởi composite FK của chính ` +
+          `nó (23503 + khớp tên constraint). Số này tụt = hoặc composite FK bị gỡ, hoặc bộ lọc phía ` +
+          `trên vừa co lưới lại — cả hai đều phải điều tra, không được đọc màu xanh của assert trên ` +
+          `là "đã phủ ${pairs.length} cặp".`,
+      ).toBeGreaterThanOrEqual(W4_FK_BLOCKED_FLOOR);
     });
 
     it("PIN: số bảng đã CHỨNG MINH WITH CHECK không được tụt", () => {

@@ -11,6 +11,12 @@
 3. Secret/mật khẩu **hash/encrypt**, không plaintext (BẤT BIẾN #3).
 4. Audit/event ghi qua **outbox** trong cùng transaction nghiệp vụ.
 5. **Soft-delete** (`deleted_at`/`deleted_by`) cho dữ liệu quan trọng — KHÔNG hard-delete.
+6. **FK giữa hai bảng tenant phải là COMPOSITE** `(company_id, x) → parent(company_id, id)` — vì kiểm
+   tra FK của Postgres **bỏ qua RLS theo thiết kế**, FK một-cột KHÔNG chặn được liên kết chéo tenant
+   (KI-046). Quy ước đầy đủ + 3 bẫy (`SET NULL` phải kèm danh sách cột · giữ FK cũ · bảng catalog toàn
+   cục thì KHÔNG vá): **DB-01 §6.3.1**. Hiện trạng sau mig `0535`: **446/446 cặp lớp tenant-thuần đã
+   bịt · 11 cặp catalog toàn cục ký waiver** (`fk-tenant-verdicts.ts`, theo dõi ở KI-055). Chốt hồi
+   quy chạy ở CI: `xtenant-fk-ratchet.int-spec.ts` + ca W4 của `tenant-isolation.int-spec.ts`.
 
 ## Quy ước
 

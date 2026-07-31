@@ -54,6 +54,7 @@ import {
   seedUser,
   seedUserRole,
   type SeededTenant,
+  seedCrossTenantViolation,
 } from "../helpers/seed";
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-".padEnd(40, "0");
@@ -677,13 +678,20 @@ describe.skipIf(!runDb)(
       // vì DashboardCacheInvalidationService luôn withTenant(companyId thật của event)).
       const other = await seedCompany(direct, "int2fixatt");
       companyIds.push(other.companyId);
-      const cCrossTenant = await direct.query(
-        `INSERT INTO dashboard_widget_cache
+      // S6-SEC-XTENANTFK-1: mig `0535` thêm composite FK `(company_id, user_id)` trên
+      // `dashboard_widget_cache`, nên hàng "company khác + user của W" KHÔNG chèn thẳng được nữa —
+      // đúng ý đồ bản vá. Gieo qua `seedCrossTenantViolation` để giữ ca kiểm TUYẾN THỨ HAI: service
+      // luôn `withTenant(companyId thật của event)` nên KHÔNG được đụng cache của công ty khác, kể cả
+      // khi hàng lệch lọt vào bằng đường khác.
+      const cCrossTenant = await seedCrossTenantViolation(direct, (client) =>
+        client.query(
+          `INSERT INTO dashboard_widget_cache
            (company_id, widget_id, dashboard_type, user_id, cache_scope, cache_key, data, status,
             generated_at, expires_at)
          VALUES ($1,$2,'Employee',$3,'Own',$4,'{}'::jsonb,'Fresh', now(), now() + interval '5 minutes')
          RETURNING id`,
-        [other.companyId, attTodayWidget, approvedUser, `Employee:fixatt:cross-tenant`],
+          [other.companyId, attTodayWidget, approvedUser, `Employee:fixatt:cross-tenant`],
+        ),
       );
       const cCrossTenantId = cCrossTenant.rows[0].id as string;
 

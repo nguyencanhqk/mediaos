@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 
 /**
  * Seed tiện ích cho integration test. Dùng kết nối DIRECT (superuser, bypass RLS) để dựng dữ liệu
@@ -9,6 +9,57 @@ import type { Pool } from "pg";
 export interface SeededTenant {
   companyId: string;
   slug: string;
+}
+
+/**
+ * GIEO HÀNG CHÉO TENANT CÓ CHỦ ĐÍCH — chỉ dùng cho test ĐỐI KHÁNG (`S6-SEC-XTENANTFK-1`).
+ *
+ * VÌ SAO CẦN. Mig `0535` thêm 446 composite FK `(company_id, x) → parent(company_id, id)`, nên từ nay
+ * Postgres **TỪ CHỐI** mọi hàng trỏ sang bản ghi của tenant khác — kể cả khi gieo bằng superuser.
+ * Đó chính là mục đích của bản vá. Nhưng nó làm gãy một lớp test có giá trị RIÊNG: những test gieo
+ * hàng chéo tenant HỎNG SẴN rồi chứng minh **đường ĐỌC vẫn không rò** (resolver/DTO/RLS đều bịt).
+ *
+ * Hai lớp phòng thủ đó KHÔNG thay thế nhau:
+ *   • composite FK  = dữ liệu hỏng không VÀO được (tuyến 1, mới có từ 0535);
+ *   • đường đọc bịt = dữ liệu hỏng có LỠ vào thì cũng không rò (tuyến 2, đã có từ trước).
+ * Tuyến 2 vẫn phải được test, vì nó là thứ duy nhất còn lại sau một lần restore từ backup cũ, một
+ * migration gỡ nhầm constraint (đã suýt xảy ra khi thử đường lùi của 0535), hay một bảng lớp G
+ * (catalog toàn cục) mà composite FK KHÔNG áp được — xem KI-055.
+ *
+ * `session_replication_role = replica` tắt trigger RI (gồm FK) cho ĐÚNG phiên này. Chỉ superuser đặt
+ * được, nên nó KHÔNG phải lỗ hổng: app role (`mediaos_app`) không bao giờ làm được điều này.
+ *
+ * ⚠️ CHỈ dùng để GIEO. Đừng bọc phần assert — nếu bọc, ta sẽ đo hành vi của một DB đã tắt FK,
+ * không phải hành vi thật.
+ *
+ * ⚠️ Callback nhận `client` và PHẢI chạy câu lệnh trên CHÍNH client đó. `session_replication_role`
+ * là cấu hình theo PHIÊN, nên một `pool.query()` bên trong callback sẽ mượn connection KHÁC và vẫn
+ * bị FK chặn — im lặng và khó hiểu. Đó là lý do API này trả `client` thay vì chạy `fn()` trống.
+ */
+export async function seedCrossTenantViolation<T>(
+  direct: Pool,
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await direct.connect();
+  let restored = false;
+  try {
+    await client.query("SET session_replication_role = replica");
+    return await fn(client);
+  } finally {
+    // Trả cấu hình về TRƯỚC khi release: connection quay lại pool và sẽ được spec khác mượn lại.
+    // Quên bước này = mọi test sau đó chạy trên một connection đã tắt FK ⇒ xanh-giả hàng loạt.
+    try {
+      await client.query("SET session_replication_role = DEFAULT");
+      restored = true;
+    } catch {
+      restored = false;
+    }
+    // ⚠️ NUỐT lỗi reset rồi `release()` là hỏng-im-lặng NẶNG NHẤT của helper này (rls-tenant-isolation-tester
+    // FULL gate 2026-07-31, MEDIUM): connection vẫn ở chế độ `replica` quay lại pool (`directPool` max=4)
+    // ⇒ FK/trigger TẮT cho mọi spec mượn sau đó = xanh-giả hàng loạt, đúng thứ mà chính helper này cảnh
+    // báo. `release(true)` HUỶ connection thay vì trả về pool: mất 1 connection còn hơn mất cả lưới.
+    client.release(restored ? undefined : true);
+  }
 }
 
 /** Tạo 1 company với slug ngẫu nhiên (tránh đụng giữa các lần chạy CI). */
@@ -629,7 +680,12 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
       break;
     } catch (err) {
       const code = (err as { code?: string }).code;
-      if (code !== "23503" || attempt >= 5) throw err;
+      // 40P01 = deadlock_detected. Thêm 2026-07-31 (S6-SEC-XTENANTFK-1): mig `0535` thêm 446 composite
+      // FK, nên `DELETE companies` cascade qua NHIỀU bảng hơn và lấy khoá theo thứ tự rộng hơn ⇒ hai
+      // spec song song cùng dọn tenant có thể khoá chéo nhau (quan sát được 1 lần ở full-suite
+      // 2026-07-31, không tái lập khi chạy cô lập). Cùng HỌ lỗi tạm thời với 23503 (đua với worker còn
+      // sống) nên dùng CHUNG vòng thử lại, không đẻ cơ chế mới.
+      if ((code !== "23503" && code !== "40P01") || attempt >= 5) throw err;
       await new Promise((r) => setTimeout(r, 200 * attempt));
     }
   }

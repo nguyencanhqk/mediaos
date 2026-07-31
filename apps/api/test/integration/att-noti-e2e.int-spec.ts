@@ -58,6 +58,7 @@ import {
   seedUser,
   seedUserRole,
   type SeededTenant,
+  seedCrossTenantViolation,
 } from "../helpers/seed";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
@@ -173,16 +174,24 @@ describe.skipIf(!hasLaneDb)(
       return `2025-${month}-${day}`;
     }
 
+    /**
+     * `crossTenant` = gieo hàng CÓ CHỦ ĐÍCH vi phạm ranh giới tenant (ca 9). Từ mig `0535`
+     * (S6-SEC-XTENANTFK-1) composite FK `(company_id, direct_manager_id)` CHẶN hàng như vậy — kể cả
+     * qua superuser — nên phải gieo qua `seedCrossTenantViolation`. Mặc định FALSE: đường gieo bình
+     * thường vẫn chịu đầy đủ ràng buộc, không được nới lỏng cho tiện.
+     */
     async function seedEmp(
       companyId: string,
       userId: string,
       directManagerUserId: string | null,
+      crossTenant = false,
     ): Promise<string> {
-      const r = await direct.query(
-        `INSERT INTO employee_profiles (company_id, user_id, direct_manager_id, status)
-       VALUES ($1,$2,$3,'active') RETURNING id`,
-        [companyId, userId, directManagerUserId],
-      );
+      const sql = `INSERT INTO employee_profiles (company_id, user_id, direct_manager_id, status)
+       VALUES ($1,$2,$3,'active') RETURNING id`;
+      const params = [companyId, userId, directManagerUserId];
+      const r = crossTenant
+        ? await seedCrossTenantViolation(direct, (client) => client.query(sql, params))
+        : await direct.query(sql, params);
       return r.rows[0].id as string;
     }
 
@@ -204,7 +213,10 @@ describe.skipIf(!hasLaneDb)(
     }
 
     /** 1 nhân viên mới (user + employee_profiles) có đủ grant create-own/cancel-own ATT + token đăng nhập. */
-    async function mkEmployee(directManagerUserId: string | null): Promise<{
+    async function mkEmployee(
+      directManagerUserId: string | null,
+      crossTenantManager = false,
+    ): Promise<{
       userId: string;
       employeeId: string;
       token: string;
@@ -212,7 +224,12 @@ describe.skipIf(!hasLaneDb)(
       seq += 1;
       const email = `emp${seq}@${A.slug}.test`;
       const userId = await seedUser(direct, A.companyId, email, passwordHash);
-      const employeeId = await seedEmp(A.companyId, userId, directManagerUserId);
+      const employeeId = await seedEmp(
+        A.companyId,
+        userId,
+        directManagerUserId,
+        crossTenantManager,
+      );
       await grant(A.companyId, userId, `emp${seq}`, [
         ["create-own", "adjustment", "Own"],
         ["create-own", "remote-request", "Own"],
@@ -566,7 +583,7 @@ describe.skipIf(!hasLaneDb)(
       // Cross-company reference cố ý (defense-in-depth) — plant thẳng qua direct pool (superuser, bypass
       // RLS); service KHÔNG cho phép actor tự gán direct_manager_id — đây là kiểm tra tầng dưới: reader/
       // resolver PHẢI tự lọc dù dữ liệu THÔ có tham chiếu chéo tenant.
-      const emp = await mkEmployee(bUser);
+      const emp = await mkEmployee(bUser, true);
       const created = await createAdjustment(emp.token);
       expect(created.status, JSON.stringify(created.body)).toBe(201);
       await processOutbox();
