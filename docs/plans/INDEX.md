@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**296 WO** · có micro-plan: **159/296** · ⬜ 3 chờ · 🔵 0 đang làm · ✅ 293 xong · 🔴 0 chặn
+**297 WO** · có micro-plan: **160/297** · ⬜ 3 chờ · 🔵 0 đang làm · ✅ 294 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -321,6 +321,7 @@
 | `S6-SEC-ORGSCOPE-1` | 🔴 | ✅ xong | [📄](S6-SEC-ORGSCOPE-1.md) | ✅S6-SEC-ORG-1 | N-1 (hậu FULL gate S6-SEC-ORG-1) — ép data_scope trong OrgRepository.l |
 | `S6-SEC-ORGTEAMSCOPE-1` | 🔴 | ✅ xong | [📄](S6-SEC-ORGTEAMSCOPE-1.md) | ✅S6-SEC-ORGSCOPE-1 | N-1c (FULL gate S6-SEC-ORGSCOPE-1 phát hiện) — GET /org/teams/:id/memb |
 | `S6-SEC-IDENTITY-PROJ-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-SEC-ORGTEAMSCOPE-1 | Gốc rễ của N-1/N-2/N-1c — buộc TẦNG CHIẾU `users.email`/`users.fullNam |
+| `S6-SEC-IDENTITYBOUND-1` | 🔴 | ✅ xong | [📄](S6-SEC-IDENTITYBOUND-1.md) | ✅S6-SEC-ORGTEAMSCOPE-1 | N-1d/N-1e (KI-051 · KI-052) — bound hai đường chiếu danh tính còn hở:  |
 | `S6-SEC-PERMVERB-1` | 🔴 | ✅ xong | [📄](S6-SEC-PERMVERB-1.md) | ✅S6-SEC-ORG-1 | N-2 (hậu FULL gate S6-SEC-ORG-1) — chốt MỘT động từ giữa `read:user` ( |
 | `S6-SEC-NOTITX-1` | 🔴 | ✅ xong | [📄](S6-SEC-NOTITX-1.md) | — | KI-034 — gộp insert notification + outbox + audit vào MỘT transaction  |
 | `S6-SEC-LOGINLOG-1` | 🔴 | ✅ xong | [📄](S6-SEC-LOGINLOG-1.md) | — | KI-042 — login_logs: hàng company_id IS NULL (thử đăng nhập pre-auth,  |
