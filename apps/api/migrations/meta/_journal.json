@@ -1415,6 +1415,13 @@
       "when": 1717587323000,
       "tag": "0534_s6secmv1_dashboard_mv_tenant_barrier",
       "breakpoints": true
+    },
+    {
+      "idx": 202,
+      "version": "7",
+      "when": 1717587324000,
+      "tag": "0535_s6secxtenantfk1_composite_tenant_fk",
+      "breakpoints": true
     }
   ]
 }

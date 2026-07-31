@@ -43,6 +43,7 @@ import {
   seedUser,
   seedUserRole,
   type SeededTenant,
+  seedCrossTenantViolation,
 } from "../helpers/seed";
 
 const runDb = hasDb && Boolean(process.env.LANE_DB);
@@ -112,8 +113,18 @@ describe.skipIf(!runDb)("S5-ME-BE-3 GET /me/security/activity (DB cô lập, đ�
     ua?: string | null;
     metadata?: Record<string, unknown>;
     createdAt?: string;
+    /**
+     * Gieo hàng CÓ CHỦ ĐÍCH lệch tenant. Từ mig `0535` (S6-SEC-XTENANTFK-1) composite FK
+     * `(company_id, user_id)` CHẶN `login_logs` của tenant B trỏ vào user của A — kể cả qua superuser.
+     * Giữ ca test vì nó kiểm TUYẾN THỨ HAI: RLS không được surface hàng lệch qua token tenant A.
+     */
+    crossTenant?: boolean;
   }): Promise<void> {
-    await direct.query(
+    const run = opts.crossTenant
+      ? (sql: string, params: unknown[]) =>
+          seedCrossTenantViolation(direct, (client) => client.query(sql, params))
+      : (sql: string, params: unknown[]) => direct.query(sql, params);
+    await run(
       `INSERT INTO login_logs
          (company_id, user_id, email, normalized_email, login_status, ip_address, user_agent, metadata, created_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb, COALESCE($9::timestamptz, now()))`,
@@ -141,8 +152,14 @@ describe.skipIf(!runDb)("S5-ME-BE-3 GET /me/security/activity (DB cô lập, đ�
     ua?: string | null;
     payload?: Record<string, unknown>;
     createdAt?: string;
+    /** Xem ghi chú `crossTenant` ở `plantLogin`. */
+    crossTenant?: boolean;
   }): Promise<void> {
-    await direct.query(
+    const run = opts.crossTenant
+      ? (sql: string, params: unknown[]) =>
+          seedCrossTenantViolation(direct, (client) => client.query(sql, params))
+      : (sql: string, params: unknown[]) => direct.query(sql, params);
+    await run(
       `INSERT INTO user_security_events
          (company_id, user_id, event_type, severity, ip_address, user_agent, payload, created_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb, COALESCE($8::timestamptz, now()))`,
@@ -362,11 +379,13 @@ describe.skipIf(!runDb)("S5-ME-BE-3 GET /me/security/activity (DB cô lập, đ�
       userId: a.userId,
       status: "success",
       ip: "198.51.100.99",
+      crossTenant: true,
     });
     await plantEvent({
       companyId: B.companyId,
       userId: a.userId,
       eventType: "PLANT_XT_EVT_TENANT_B",
+      crossTenant: true,
     });
 
     const res = await get(ROUTE, a.token);

@@ -499,7 +499,12 @@ describe.skipIf(!runDb)(
       const readProjectB = await seedPermissionCatalog(direct, "read", "project", false);
       await seedRolePermission(direct, roleB, readProjectB, "ALLOW", "Company");
 
-      await grantRole(targetB, roleB, B.companyId, adminA);
+      // `grantedBy` PHẢI là actor CỦA CHÍNH tenant B. Bản cũ truyền `adminA` (user tenant A) — hàng
+      // `user_roles` của B mang `granted_by` trỏ sang user A, tức đúng lớp lỗ KI-046 nằm ngay trong
+      // fixture. Mig `0535` (S6-SEC-XTENANTFK-1) chặn bằng `user_roles_granted_by_company_fk`; sửa cho
+      // ĐÚNG nghiệp vụ thay vì nới ràng buộc — ca test không hề cần người cấp quyền là người của A.
+      const adminB = await seedUser(direct, B.companyId, `admin-${B.slug}@t.local`);
+      await grantRole(targetB, roleB, B.companyId, adminB);
       await grantRole(targetA, capRole, A.companyId, adminA);
 
       // Soft-delete role của A — B KHÔNG bị ảnh hưởng.

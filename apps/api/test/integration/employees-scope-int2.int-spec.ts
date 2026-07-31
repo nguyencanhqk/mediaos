@@ -37,6 +37,7 @@ import {
   seedUser,
   seedUserRole,
   type SeededTenant,
+  seedCrossTenantViolation,
 } from "../helpers/seed";
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-".padEnd(40, "0");
@@ -121,17 +122,27 @@ describe.skipIf(!hasLaneDb)("S2-INT-2 HR manager-tree ↔ data-scope (HTTP, real
     return r.rows[0].id as string;
   }
 
-  /** Seed an ACTIVE EMR relation: `managerUserId` manages `employeeUserId` (default a non-direct type). */
+  /**
+   * Seed an ACTIVE EMR relation: `managerUserId` manages `employeeUserId` (default a non-direct type).
+   *
+   * S6-SEC-XTENANTFK-1: mig `0535` thêm composite FK `(company_id, employee_user_id)` /
+   * `(company_id, manager_user_id)` nên các hàng CHÉO TENANT bên dưới không còn chèn thẳng được nữa —
+   * đó là mục đích của bản vá. Gieo qua `seedCrossTenantViolation` để giữ nguyên giá trị của test này:
+   * nó kiểm **tuyến phòng thủ thứ hai** (resolver + AND-predicate `company_id`), thứ vẫn phải đúng
+   * kể cả khi dữ liệu hỏng lọt vào bằng đường khác (restore backup, constraint bị gỡ nhầm).
+   */
   async function seedEmr(
     companyId: string,
     managerUserId: string,
     employeeUserId: string,
     relationType = "project_manager",
   ): Promise<void> {
-    await direct.query(
-      `INSERT INTO employee_manager_relations (company_id, manager_user_id, employee_user_id, relation_type, status)
-       VALUES ($1, $2, $3, $4, 'active')`,
-      [companyId, managerUserId, employeeUserId, relationType],
+    await seedCrossTenantViolation(direct, (client) =>
+      client.query(
+        `INSERT INTO employee_manager_relations (company_id, manager_user_id, employee_user_id, relation_type, status)
+         VALUES ($1, $2, $3, $4, 'active')`,
+        [companyId, managerUserId, employeeUserId, relationType],
+      ),
     );
   }
 

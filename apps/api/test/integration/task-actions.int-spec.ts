@@ -124,6 +124,13 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-3 task actions crown-FSM (DB cô lập, 
     dueAt?: string | null;
     startAt?: string | null;
     taskCode?: string | null;
+    /**
+     * Mặc định `adminUser` (tenant A). PHẢI truyền khi `companyId` là tenant khác: mig `0535`
+     * (S6-SEC-XTENANTFK-1) thêm composite FK `(company_id, creator_user_id)` nên "task của B do admin
+     * A tạo" không còn chèn được — và đó là hàng VÔ NGHĨA về nghiệp vụ, fixture cũ tạo ra do sơ ý chứ
+     * không phải có chủ đích.
+     */
+    creatorUserId?: string;
   }): Promise<string> {
     const r = await direct.query(
       `INSERT INTO tasks
@@ -141,7 +148,7 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-3 task actions crown-FSM (DB cô lập, 
         opts.dueAt ?? null,
         opts.startAt ?? null,
         opts.taskCode ?? null,
-        adminUser,
+        opts.creatorUserId ?? adminUser,
       ],
     );
     return r.rows[0].id as string;
@@ -303,7 +310,7 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-3 task actions crown-FSM (DB cô lập, 
       ["update-deadline", "Company"],
       ["watch", "Company"],
     ]);
-    bTask = await mkTask({ companyId: B.companyId });
+    bTask = await mkTask({ companyId: B.companyId, creatorUserId: bAdmin });
 
     tok.admin = await login(A.slug, `admin@${A.slug}.test`);
     tok.mgr = await login(A.slug, `mgr@${A.slug}.test`);

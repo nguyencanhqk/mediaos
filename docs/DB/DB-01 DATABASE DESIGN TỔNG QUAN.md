@@ -387,6 +387,44 @@ project_id
 task_id
 ```
 
+### 6.3.1 BẮT BUỘC — khoá ngoại giữa hai bảng tenant phải là COMPOSITE (`S6-SEC-XTENANTFK-1`, KI-046)
+
+> Đây là quy ước **ép bởi test**, không phải khuyến nghị: `apps/api/test/integration/xtenant-fk-ratchet.int-spec.ts`
+> sẽ ĐỎ ở CI khi có cặp mới vi phạm.
+
+Kiểm tra khoá ngoại của Postgres **chạy với quyền hệ thống và KHÔNG áp RLS** — đó là hành vi thiết kế
+của PG. Nên một FK **một cột** `child.x → parent(id)` giữa hai bảng đều có `company_id` **không** ngăn
+được việc hàng của tenant A trỏ sang bản ghi của tenant B: FK thấy hàng đích tồn tại nên cho qua, còn
+RLS `WITH CHECK` chỉ soi `company_id` của chính hàng con (hợp lệ).
+
+Khi thêm bảng nghiệp vụ mới có `company_id`, MỖI khoá ngoại trỏ tới một bảng tenant khác phải khai:
+
+```sql
+-- 1) trên bảng CHA (một lần cho mỗi bảng đích)
+ALTER TABLE <parent> ADD CONSTRAINT <parent>_company_id_id_uq UNIQUE (company_id, id);
+
+-- 2) trên bảng CON, GIỮ NGUYÊN FK một-cột cũ và THÊM composite
+ALTER TABLE <child> ADD CONSTRAINT <child>_<col>_company_fk
+  FOREIGN KEY (company_id, <col>) REFERENCES <parent> (company_id, id)
+  ON DELETE <sao chép đúng hành vi của FK một-cột cũ>;
+```
+
+Ba điều **dễ làm sai**, đều đã có tiền lệ trong repo:
+
+1. **`ON DELETE SET NULL` PHẢI kèm danh sách cột**: `ON DELETE SET NULL (<col>)`. Dạng trần set NULL
+   cho **mọi** cột của FK, tức **cả `company_id`** ⇒ hoặc nổ NOT NULL, hoặc (bảng có `company_id`
+   nullable) âm thầm biến hàng nghiệp vụ thành hàng vô chủ **nằm ngoài mọi policy RLS**. Xem header
+   `0503` và `0535`.
+2. **KHÔNG DROP FK một-cột cũ.** Với bảng con có `company_id` NULLABLE, MATCH SIMPLE khiến composite
+   FK bỏ qua hàng `company_id IS NULL` — FK cũ là ràng buộc duy nhất còn hiệu lực cho những hàng đó.
+3. **Bảng đích là CATALOG TOÀN CỤC** (`company_id` NULLABLE, có hàng dùng chung như `roles` hệ thống,
+   `dashboard_widgets`, `notification_events`, `public_holidays`) ⇒ **KHÔNG** thêm composite FK, nó sẽ
+   chặn tham chiếu hợp lệ. Thay vào đó ký waiver ở `apps/api/test/foundation/fk-tenant-verdicts.ts`
+   kèm lý do. Lỗ tồn dư của nhóm này được theo dõi ở **KI-055**.
+
+Bảng đích lớp tenant thuần còn phải **giữ `company_id NOT NULL`**: nới thành nullable sẽ khiến các
+composite FK sẵn có chặn mọi tham chiếu tới hàng toàn cục mới (ratchet ca (i) bắt việc này).
+
 ## 6.4 Quy ước tên bảng trung gian many-to-many
 
 Dùng format:

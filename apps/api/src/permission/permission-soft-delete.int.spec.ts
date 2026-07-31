@@ -97,14 +97,25 @@ describe.skipIf(!runDb)("S2-AUTH-DB-3 user_roles soft-delete (Postgres thật, L
     await direct.query("DELETE FROM user_roles WHERE company_id = $1", [A.companyId]);
   });
 
-  /** Chèn 1 user_role ACTIVE (grantedBy=actor) qua app-role path; trả về id. */
-  async function grantActive(userId: string, roleId: string, companyId: string): Promise<string> {
+  /**
+   * Chèn 1 user_role ACTIVE (grantedBy=actor) qua app-role path; trả về id.
+   *
+   * `grantedBy` mặc định `actorA` — CHỈ đúng khi `companyId` là tenant A. Truyền `grantedBy` tường
+   * minh cho tenant khác: mig `0535` (S6-SEC-XTENANTFK-1) thêm `user_roles_granted_by_company_fk`, nên
+   * hàng của B mang người-cấp thuộc A không còn chèn được — và hàng đó vốn vô nghĩa về nghiệp vụ.
+   */
+  async function grantActive(
+    userId: string,
+    roleId: string,
+    companyId: string,
+    grantedBy = actorA,
+  ): Promise<string> {
     const row = await db.withTenant(companyId, (tx) =>
       adminRepo.insertUserRole(tx, {
         companyId,
         userId,
         roleId,
-        grantedBy: actorA,
+        grantedBy,
         expiresAt: null,
       }),
     );
@@ -299,7 +310,8 @@ describe.skipIf(!runDb)("S2-AUTH-DB-3 user_roles soft-delete (Postgres thật, L
     const permId = await seedPermissionCatalog(direct, "read", "project", false);
     await seedRolePermission(direct, roleB, permId, "ALLOW", "Company");
 
-    await grantActive(targetB, roleB, B.companyId);
+    const actorB = await seedUser(direct, B.companyId, `actor-${B.slug}@t.local`);
+    await grantActive(targetB, roleB, B.companyId, actorB);
     await grantActive(targetA, roleA, A.companyId);
 
     // Soft-delete role của A — B KHÔNG bị ảnh hưởng.

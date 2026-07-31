@@ -152,12 +152,18 @@ describe.skipIf(!hasLaneDb)("S5-TASK-PROJROLE-1 per-project role (DB cô lập, 
     title: string,
     assigneeEmp: string | null,
     assigneeUser: string | null,
+    /**
+     * Mặc định `caUser` (tenant A). PHẢI truyền khi `companyId` là tenant khác: mig `0535`
+     * (S6-SEC-XTENANTFK-1) thêm composite FK `(company_id, creator_user_id)` nên "task của B do user A
+     * tạo" không còn chèn được — hàng đó vô nghĩa về nghiệp vụ, fixture cũ tạo do sơ ý.
+     */
+    creatorUser?: string,
   ): Promise<string> {
     const r = await direct.query(
       `INSERT INTO tasks
          (company_id, task_type, title, task_status, main_assignee_employee_id, assignee_user_id, creator_user_id, project_id)
        VALUES ($1,'office',$2,'Todo',$3,$4,$5,$6) RETURNING id`,
-      [companyId, title, assigneeEmp, assigneeUser, caUser, projectId],
+      [companyId, title, assigneeEmp, assigneeUser, creatorUser ?? caUser, projectId],
     );
     return r.rows[0].id as string;
   }
@@ -354,7 +360,7 @@ describe.skipIf(!hasLaneDb)("S5-TASK-PROJROLE-1 per-project role (DB cô lập, 
       [B.companyId, bEmp],
     );
     PB = pb.rows[0].id as string;
-    TB = await seedTask(B.companyId, null, "T bên B", null, null);
+    TB = await seedTask(B.companyId, null, "T bên B", null, null, bUser);
   }, 120_000);
 
   afterAll(async () => {

@@ -5855,9 +5855,9 @@ export const backlog = [
     module: "FOUNDATION",
     layer: "SEC",
     title:
-      "KI-046 — 459 khoá ngoại MỘT-CỘT nối hai bảng tenant: FK check bỏ qua RLS ⇒ gắn được hàng của mình trỏ sang bản ghi của tenant khác (lớp lỗ, không phải bug lẻ)",
+      "KI-046 — 457 khoá ngoại MỘT-CỘT nối hai bảng tenant (số đúng: 460 một-cột − 3 đã được composite che; bản đầu ghi 459/458 là SAI): FK check bỏ qua RLS ⇒ gắn được hàng của mình trỏ sang bản ghi của tenant khác (lớp lỗ, không phải bug lẻ)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/db/schema/**",
@@ -5865,6 +5865,11 @@ export const backlog = [
       "docs/DB/**",
       "docs/RELEASE/**",
       "docs/plans/S6-SEC-XTENANTFK-1.md",
+      // Bổ sung 2026-07-31 sau plan-reviewer #5: ba đích ghi THẬT của WO này nằm ngoài `paths` gốc
+      // ⇒ guard-scope kêu + diff lọt gate (memory `wo-paths-drive-gate-and-scheduler`).
+      "docs/_review/**", // artifact census máy-đọc
+      "docs/erd-current.md", // Phụ lục A: quy ước composite FK cho bảng tenant
+      "harness/backlog.mjs", // đóng dấu status + mở WO kế
     ],
     skills: ["code-review"],
     depends_on: ["S6-QA-TENANTWRITE-1"],

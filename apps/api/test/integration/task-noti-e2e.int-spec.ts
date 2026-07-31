@@ -60,6 +60,7 @@ import {
   seedUser,
   seedUserRole,
   type SeededTenant,
+  seedCrossTenantViolation,
 } from "../helpers/seed";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
@@ -138,6 +139,13 @@ describe.skipIf(!hasLaneDb)(
         assigneeUserId?: string | null;
         creatorUserId?: string | null;
         projectId?: string | null;
+        /**
+         * Gieo tham chiếu CHÉO TENANT có chủ đích (ca 13). Từ mig `0535` (S6-SEC-XTENANTFK-1)
+         * composite FK `(company_id, assignee_user_id)` CHẶN hàng như vậy — kể cả qua superuser.
+         * Giữ ca test vì nó kiểm TUYẾN THỨ HAI: reader/engine phải tự lọc dù dữ liệu THÔ có tham
+         * chiếu chéo tenant.
+         */
+        crossTenant?: boolean;
       } = {},
     ): Promise<string> {
       const created = await authPost(tok.admin, "/tasks").send({ title: "T" });
@@ -157,7 +165,12 @@ describe.skipIf(!hasLaneDb)(
       if (opts.creatorUserId !== undefined) setCol("creator_user_id", opts.creatorUserId);
       if (opts.projectId !== undefined) setCol("project_id", opts.projectId);
       if (sets.length > 0) {
-        await direct.query(`UPDATE tasks SET ${sets.join(", ")} WHERE id=$1`, params);
+        const sql = `UPDATE tasks SET ${sets.join(", ")} WHERE id=$1`;
+        if (opts.crossTenant) {
+          await seedCrossTenantViolation(direct, (client) => client.query(sql, params));
+        } else {
+          await direct.query(sql, params);
+        }
       }
       return id;
     }
@@ -717,7 +730,11 @@ describe.skipIf(!hasLaneDb)(
       const creatorA = await seedUser(direct, A.companyId, `crA13@${A.slug}.test`, "x");
       // Cross-company reference cố ý (defense-in-depth) — bind raw SQL, KHÔNG qua service (service không cho
       // phép gán assignee khác tenant — đây là kiểm tra tầng dưới: reader/engine PHẢI tự lọc dù dữ liệu THÔ có).
-      const taskId = await mkTask({ assigneeUserId: bUser, creatorUserId: creatorA });
+      const taskId = await mkTask({
+        assigneeUserId: bUser,
+        creatorUserId: creatorA,
+        crossTenant: true,
+      });
 
       const res = await authPost(tok.admin, `/tasks/${taskId}/change-status`).send({
         status: "In Progress",
