@@ -16,6 +16,7 @@
 //   - chỉ soi nhánh tích hợp (origin/master → master → HEAD), --first-parent (bỏ commit nội bộ feature);
 //   - khớp mã WO theo ranh giới token (không lẫn S2-HR-BE-1 vào S2-HR-BE-12);
 //   - chỉ đụng WO CÓ trong backlog (không bịa WO);
+//   - KHÔNG lật WO đang 'blocked' (xem shouldAutoStamp);
 //   - git lỗi / không có ref ⇒ trả rỗng (no-op).
 
 import { execSync } from "node:child_process";
@@ -64,7 +65,30 @@ const tokenRe = (id) => new RegExp(`(^|[^\\w-])${esc(id)}([^\\w-]|$)`);
 //   Bằng chứng cho thấy nới rộng là AN TOÀN: toàn bộ commit `chore(docs)` trên origin/master đều là
 //   regen STATUS; WO tài liệu ship bằng `docs(<scope>): <WO-ID> — …` (vd 0572b8d7 S5-ME-DOC-1,
 //   af33fc15 S5-GOAL-DOC-1, cbd94819 S6-GOV-1) nên KHÔNG bị mất dấu bởi luật này.
-const BOOKKEEPING_RE = /^chore\((harness|docs)\)/i;
+//
+// Vì sao `chore(gov)` cũng phải nằm đây (thêm 2026-07-31 — false-positive ĐÃ XẢY RA LẦN 2):
+//   `chore(gov): HOÃN S6-SEC-IDENTITY-PROJ-1 ra ngoài cửa sổ RC + chặn WIP ảo tái phát (#314)` (555ed415)
+//   là commit HOÃN — nội dung của nó nói WO này KHÔNG thi công — nhưng scope `gov` không có trong danh
+//   sách trên ⇒ reconcile đọc thành "WO đã ship" và đóng dấu 'finished' cho một WO chưa hề có dòng code
+//   nào (KI-053 + KI-054 vẫn MỞ). Commit quản trị (`gov`) mô tả QUYẾT ĐỊNH về WO, không phải việc ship WO.
+const BOOKKEEPING_RE = /^chore\((harness|docs|gov)\)/i;
+
+// Subject có phải commit ghi sổ/quản trị (KHÔNG BAO GIỜ là "WO này đã ship") không?
+// Tách riêng để test soi được — đây là lớp chắn đã thủng 2 lần (S6-SEC-MV-1 · S6-SEC-IDENTITY-PROJ-1).
+export function isBookkeeping(subject) {
+  return BOOKKEEPING_RE.test(subject || "");
+}
+
+// Có được phép auto-stamp 'finished' cho WO đang ở status hiệu dụng này không?
+//   'done'    ⇒ không (đã đúng, không drift).
+//   'blocked' ⇒ KHÔNG. Đây là quyết định NGƯỜI (hoãn có chủ đích / chặn chờ chốt). Reconcile chỉ là
+//              heuristic khớp chuỗi trên subject — heuristic KHÔNG được lật quyết định người. Bỏ luật
+//              này thì mọi commit nhắc tên một WO đang hoãn đều biến nó thành "Đã xong", và vì commit
+//              nằm vĩnh viễn trong lịch sử master, dấu sai TÁI PHÁT ở MỌI lần chạy gen-status sau đó.
+//              Gỡ chặn là việc của người: `node harness/ledger.mjs event <WO> reopened "<lý do>"`.
+export function shouldAutoStamp(effectiveStatus) {
+  return effectiveStatus !== "done" && effectiveStatus !== "blocked";
+}
 
 // Map<woId, {sha,subject}> — commit MỚI NHẤT trên ref tích hợp có subject chứa mã WO.
 export function mergedCommits(ids, ref = integrationRef()) {
@@ -81,7 +105,7 @@ export function mergedCommits(ids, ref = integrationRef()) {
       const i = l.indexOf("::");
       return { sha: l.slice(0, i), subject: l.slice(i + 2) };
     })
-    .filter((c) => !BOOKKEEPING_RE.test(c.subject));
+    .filter((c) => !isBookkeeping(c.subject));
   for (const id of ids) {
     const re = tokenRe(id);
     const hit = commits.find((c) => re.test(c.subject)); // log mới→cũ ⇒ commit gần nhất
@@ -102,7 +126,7 @@ export function reconcileMerged(backlog, { apply = true } = {}) {
     const hit = merged.get(b.id);
     if (!hit) continue;
     const eff = ov.has(b.id) ? ov.get(b.id) : b.status;
-    if (eff === "done") continue; // ledger (hoặc literal) đã done → không drift
+    if (!shouldAutoStamp(eff)) continue; // đã done, HOẶC đang blocked (quyết định người) → không đụng
     drift.push({ id: b.id, sha: hit.sha, subject: hit.subject, was: eff });
   }
   if (apply) {
