@@ -56,3 +56,11 @@ docs/prompts/
 
 # Runtime service logs (NSSM/PROD) — không bao giờ commit (từng chứa token)
 logs/
+
+# Dump backup DB (scripts/backup-db.sh) — chứa PII 45 nhân viên + hash mật khẩu + audit log.
+# BẤT BIẾN #3: KHÔNG BAO GIỜ commit, kể cả bản đã mã hoá (repo PUBLIC). Thêm ở S6-GOLIVE-1 —
+# trước đó thư mục này không bị ignore, chạy backup ở gốc repo là đẩy thẳng PII vào tầm với của `git add`.
+backups/
+*.dump
+*.dump.age
+*.dump.gpg
