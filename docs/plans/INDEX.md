@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**297 WO** · có micro-plan: **160/297** · ⬜ 3 chờ · 🔵 0 đang làm · ✅ 294 xong · 🔴 0 chặn
+**297 WO** · có micro-plan: **161/297** · ⬜ 2 chờ · 🔵 0 đang làm · ✅ 295 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -326,7 +326,7 @@
 | `S6-SEC-NOTITX-1` | 🔴 | ✅ xong | [📄](S6-SEC-NOTITX-1.md) | — | KI-034 — gộp insert notification + outbox + audit vào MỘT transaction  |
 | `S6-SEC-LOGINLOG-1` | 🔴 | ✅ xong | [📄](S6-SEC-LOGINLOG-1.md) | — | KI-042 — login_logs: hàng company_id IS NULL (thử đăng nhập pre-auth,  |
 | `S6-SEC-LOGINLOG-2` | 🔴 | ✅ xong | [📄](S6-SEC-LOGINLOG-2.md) | ✅S6-SEC-LOGINLOG-1 | KI-044 — hàng blocked/TooManyAttempts ghi company_id NULL kể cả khi sl |
-| `S6-SEC-XTENANTFK-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S6-QA-TENANTWRITE-1 | KI-046 — 459 khoá ngoại MỘT-CỘT nối hai bảng tenant: FK check bỏ qua R |
+| `S6-SEC-XTENANTFK-1` | 🔴 | ✅ xong | [📄](S6-SEC-XTENANTFK-1.md) | ✅S6-QA-TENANTWRITE-1 | KI-046 — 457 khoá ngoại MỘT-CỘT nối hai bảng tenant (số đúng: 460 một- |
 | `S6-SEC-MV-1` | 🔴 | ✅ xong | [📄](S6-SEC-MV-1.md) | ✅S6-SEC-LOGINLOG-1 | KI-041 — 2 matview dashboard nằm NGOÀI RLS (Postgres không hỗ trợ): dự |
 | `S6-SEC-DBFENCE-1` | 🔴 | ✅ xong | [📄](S6-SEC-DBFENCE-1.md) | — | KI-028 MỞ LẠI — test ghi thẳng vào DB PROD: bịt nguồn rò (vitest.confi |
 | `S6-SEC-ROTATE-1` | 🔴 | ✅ xong | [📄](S6-SEC-ROTATE-1.md) | — | KI-043 (S0, CHẶN GO-LIVE) — mật khẩu Postgres PROD chính là literal tr |

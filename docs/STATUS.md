@@ -1,25 +1,15 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-31 04:57Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-31 05:21Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-### 🔴 S6-SEC-IDENTITY-PROJ-1 — Gốc rễ của N-1/N-2/N-1c — buộc TẦNG CHIẾU `users.email`/`users.fullName` phải nhận vị từ scope, thiếu thì VỠ TYPECHECK (không phải trả 0 hàng im lặng)
-- **zone**: red · **skills**: code-review
-- **sửa ở đâu (paths)**: `apps/api/src/permission/**`, `apps/api/src/**/*.repository.ts`, `apps/api/test/**`, `docs/permission-matrix-spec.md`, `docs/RELEASE/**`, `docs/plans/S6-SEC-IDENTITY-PROJ-1.md`
-- **phụ thuộc**: S6-SEC-ORGTEAMSCOPE-1✓
-- **done_when (đích hội tụ)**:
-  - [ ] Chọn cơ chế ép ở tầng type, KHÔNG phải quy ước: hàm chiếu danh tính nhận tham số vị từ BẮT BUỘC (kiểu thu hẹp như `Pick<ScopeContext,…>` của N-1 F5) ⇒ call-site thiếu scope vỡ typecheck
-  - [ ] RED TRƯỚC: dựng 1 ca cho mỗi module trong census chứng minh hôm nay chiếu được danh tính ngoài scope (hoặc ghi rõ module đó đã kín kèm bằng chứng)
-  - [ ] KHÔNG đổi hành vi allow-path: mỗi module phải có ca đối chứng scope rộng vẫn thấy đủ — thiếu ca này thì '0 hàng' không phân biệt được với 'route hỏng'
-  - [ ] ✅ XONG — ĐO PROD 2026-07-30 (xem src[]): role nào giữ cặp nào ở scope nào + ai mất quyền. Khi thi công cơ chế thì ĐO LẠI nếu seed/role đã đổi, đừng tin lại số cũ
-  - [ ] Đóng KI-053 (role-admin) + KI-054 (auth-logs-viewer) — hai điểm chiếu không bound còn lại, đã cấp số hiệu 2026-07-30
-  - [ ] S3 — KHÔNG chặn RC. Nếu đang trong cửa sổ RC thì hoãn, đừng trộn vào đường tới RC
-  - [ ] FULL gate security-reviewer PASS; RELEASE-02 mở + đóng KI kèm số đo
+_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
+- 🔴 `S6-SEC-IDENTITY-PROJ-1` Gốc rễ của N-1/N-2/N-1c — buộc TẦNG CHIẾU `users.email`/`users.fullName` phải nhận vị từ scope, thiếu thì VỠ TYPECHECK (không phải trả 0 hàng im lặng)
 - 🔴 `S6-GOLIVE-1` Final Sign-off · Go/No-go · Go-live execution · Handoff (admin/user/support guide · known issues · post-go-live backlog) — WS10
 
 **CHỜ (kẹt phụ thuộc):**
@@ -29,7 +19,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `s6-sec-xtenantfk-1` · **file đang đổi (dirty)**: 0
+- **branch**: `master` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 202 — `0535_s6secxtenantfk1_composite_tenant_fk` (203 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -38,7 +28,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
-| `fdb93264` | 2026-07-31 | fix(sec): S6-SEC-XTENANTFK-1 — KI-046: bịt LỚP lỗ "FK một-cột nối hai bảng tenant" (mig 0535, 446 composite FK) + chốt chống mọc thêm |
+| `277154dc` | 2026-07-31 | fix(sec): S6-SEC-XTENANTFK-1 — KI-046: bịt LỚP lỗ "FK một-cột nối hai bảng tenant" (mig 0535, 446 composite FK) + chốt chống mọc thêm (#313) |
 | `c172ccfc` | 2026-07-31 | chore(docs): regen STATUS/INDEX sau merge #312 + gỡ WIP ảo S6-SEC-IDENTITY-PROJ-1 |
 | `eb6dbd75` | 2026-07-31 | fix(sec): S6-SEC-IDENTITYBOUND-1 — N-1d/N-1e: bound danh tính ở /recycle-bin/employees (KI-051) + /org/teams (KI-052) (#312) |
 | `b4d66b1b` | 2026-07-30 | chore(docs): regen STATUS/INDEX + đóng dấu S6-REL-1 done sau merge #311 |
