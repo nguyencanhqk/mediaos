@@ -20,6 +20,32 @@ import { execSync } from "node:child_process";
 import { backlog as rawBacklog, meta } from "./backlog.mjs";
 import { applyStatus } from "./lib/wo-state.mjs";
 import { reconcileMerged } from "./lib/reconcile-merged.mjs";
+import { readEvents } from "./ledger.mjs";
+
+// Lý do chặn = detail của sự kiện chặn GẦN NHẤT trong ledger. Không có lý do thì "BLOCKED" đọc
+// như "kẹt phụ thuộc", trong khi nó có thể là HOÃN có chủ đích — đúng loại mơ hồ đã gây WIP ảo.
+// Bộ type phải khớp BLOCKED/BLOCK_DETAIL của lib/wo-state.mjs (nguồn quyết định status).
+const BLOCK_TYPES = new Set(["needs_human", "stopped_red", "evaluate_block", "blocked", "stopped"]);
+const BLOCK_DETAIL_RE =
+  /^\s*(needs_human|plan_block|stopped_red|evaluate_block|blocked|stopped)\b/i;
+const MAX_REASON = 220;
+
+function blockReason(woId) {
+  let events;
+  try {
+    events = readEvents(); // fail-soft: ledger gitignore/thiếu ⇒ vẫn sinh được STATUS
+  } catch {
+    return "";
+  }
+  const hit = events
+    .filter(
+      (e) => e?.wo === woId && (BLOCK_TYPES.has(e.type) || BLOCK_DETAIL_RE.test(e.detail || "")),
+    )
+    .pop();
+  const d = (hit?.detail || "").replace(/\s+/g, " ").trim();
+  if (!d) return "";
+  return d.length > MAX_REASON ? d.slice(0, MAX_REASON - 1) + "…" : d;
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -152,7 +178,10 @@ waiting.length
 md.push("");
 if (blocked.length) {
   md.push("**🛑 BLOCKED:**");
-  blocked.forEach((b) => md.push(`- \`${b.id}\` ${b.title}`));
+  blocked.forEach((b) => {
+    const why = blockReason(b.id);
+    md.push(`- \`${b.id}\` ${b.title}${why ? `\n  - **vì sao chặn**: ${why}` : ""}`);
+  });
   md.push("");
 }
 md.push(`**Đã xong (v2):** ${done.length ? done.map((b) => `\`${b.id}\``).join(", ") : "—"}`);
