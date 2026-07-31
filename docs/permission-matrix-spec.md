@@ -69,7 +69,8 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > | `GET /org/units` · `/org/units/tree` · `/org/departments` | **Authenticated** | Danh mục cơ cấu: tên phòng ban + hình dạng cây. `apps/app` dùng trực tiếp ở `OrgChartPage` + `TaskSidebarTree` ⇒ gate = gãy UI mọi nhân viên |
 > | `GET /org/roles` | **Authenticated** | Danh mục vai trò, trả đúng `{ id, name }`; **không** nêu ai giữ vai trò nào. Repo đã loại role operator-plane khỏi đường đọc |
 > | `GET /org/employees` | **`view:user`** + **`data_scope`** | Trả `id · email · fullName · status` + team membership. Từ `S6-SEC-ORGSCOPE-1`: hàng được BOUND theo scope, không còn "toàn tenant". Động từ = `view:user` từ `S6-SEC-PERMVERB-1` (DECISIONS-06 D-41) — **cùng cặp** với `GET /auth/users` |
-> | `GET /org/teams` | **`read:team`** | Cơ cấu team = ai thuộc nhóm nào |
+> | `GET /org/teams` | **`read:team`** (vế cơ cấu) + **`view:user` + `data_scope`** (`leaderUserName`) | Cơ cấu team = ai thuộc nhóm nào. Từ `S6-SEC-IDENTITYBOUND-1` (N-1e, KI-052): **tên trưởng nhóm** là danh tính NGƯỜI nên bound theo cặp danh bạ. ⚠️ Khác `members`: `leaderUserName` là `.nullable()` HỢP LỆ (team chưa có trưởng nhóm) ⇒ `null` không mang được thông tin "ngoài scope" ⇒ **bắt buộc bỏ khoá** |
+> | `GET /recycle-bin/employees` | **`read:employee`** (vế nghiệp vụ) + **`view:user` + `data_scope`** (hai cột danh tính) | `S6-SEC-IDENTITYBOUND-1` (N-1d, **KI-051**). Trước đó gate `read:employee` rồi trả `userFullName`+`userEmail` của MỌI hồ sơ xoá mềm, **không resolve scope nào** — mà role seeded `employee` giữ `read:employee@Own` với **45/46 user sống** và không có `view:user` nào |
 > | `GET /org/teams/:id/members` | **`read:team`** (vế quan hệ) + **`view:user` + `data_scope`** (hai cột danh tính) | **HAI lớp dữ liệu, HAI chủ quyền** — `S6-SEC-ORGTEAMSCOPE-1` (N-1c, KI-049). `read:team` quyết định truy cập *tài nguyên team*; `userFullName`/`userEmail` bị buộc bởi **đúng cặp danh bạ** của `/org/employees`. Ngoài scope ⇒ **BỎ HẲN KHOÁ** (không trả `null`: contract `userEmail` chưa `.nullable()`) |
 >
 > **`data_scope` của `GET /org/employees` (S6-SEC-ORGSCOPE-1 — đóng nợ N-1):** guard chỉ trả lời "có
@@ -96,6 +97,14 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 >
 > Cách đóng: hai cột danh tính bound theo cặp danh bạ, **không** phát minh ngữ nghĩa
 > `Own`/`Team`/`Department` thứ hai cho `teams` — làm vậy là đẻ hành vi thứ hai cho cùng lớp dữ liệu.
+>
+> ✅ **N-1d + N-1e ĐÃ ĐÓNG 2026-07-30** — `S6-SEC-IDENTITYBOUND-1` (KI-051 · KI-052).
+> **KI-051 `GET /recycle-bin/employees`** là lỗ NẶNG NHẤT của cả loạt N-1: cùng lớp lỗi KI-049 nhưng
+> **45/46 user sống** giữ cặp gate (`employee` → `read:employee@Own`) và **không ai trong số đó có
+> `view:user`**, trong khi KI-049 có 0 người. Phơi nhiễm lúc phát hiện = 0 hàng chỉ vì chưa có hồ sơ
+> nào bị xoá mềm — chặn bởi *thiếu dữ liệu*, không phải bởi một lớp kiểm soát nào.
+> **KI-052 `GET /org/teams`** nằm ở **phương thức bên cạnh trong chính file mà N-1c vừa vá** ⇒ bằng
+> chứng cụ thể rằng vá-theo-route không quét hết file; lần sau vá lớp lỗi này thì quét CẢ FILE.
 >
 > ⚠️ **Gốc rễ chung VẪN CÒN, đừng đọc khối này là "/org đã chốt toàn bộ":** `PermissionGuard` không đọc
 > `data_scope`, nên MỌI route chỉ dựa vào guard đều thừa hưởng khoảng hở này. N-1 · N-2 · N-1c là **ba

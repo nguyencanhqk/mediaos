@@ -37,17 +37,19 @@ const okList = (rows: unknown[]) => ({
   error: null,
 });
 
-function makeDeleted(overrides: Partial<{
-  id: string;
-  userId: string;
-  userFullName: string;
-  userEmail: string;
-  employeeCode: string | null;
-  orgUnitName: string | null;
-  positionName: string | null;
-  status: string;
-  deletedAt: string;
-}> = {}) {
+function makeDeleted(
+  overrides: Partial<{
+    id: string;
+    userId: string;
+    userFullName: string;
+    userEmail: string;
+    employeeCode: string | null;
+    orgUnitName: string | null;
+    positionName: string | null;
+    status: string;
+    deletedAt: string;
+  }> = {},
+) {
   return {
     id: overrides.id ?? "00000000-0000-0000-0000-000000000001",
     userId: overrides.userId ?? "00000000-0000-0000-0000-000000000002",
@@ -85,9 +87,7 @@ describe("CS-6 RecycleBinPage — permission gate", () => {
     stubFetch({ ok: true, status: 200, body: okList([]) });
     renderPage();
     // Tabs should appear
-    await waitFor(() =>
-      expect(screen.getByRole("tab", { name: "Nhân viên" })).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Nhân viên" })).toBeInTheDocument());
   });
 });
 
@@ -108,9 +108,7 @@ describe("CS-6 RecycleBinPage — danh sách & tab", () => {
     setCaps({ "read:employee": true });
     stubFetch({ ok: true, status: 200, body: okList([]) });
     renderPage();
-    await waitFor(() =>
-      expect(screen.getByText("Thùng rác trống")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("Thùng rác trống")).toBeInTheDocument());
   });
 
   it("có dữ liệu → tên nhân viên render", async () => {
@@ -124,13 +122,30 @@ describe("CS-6 RecycleBinPage — danh sách & tab", () => {
     await waitFor(() => expect(screen.getByText("Trần Thị B")).toBeInTheDocument());
   });
 
+  // ── S6-SEC-IDENTITYBOUND-1 (N-1d, KI-051) ────────────────────────────────────────────────────
+  // SERVER bỏ hẳn `userFullName`/`userEmail` cho hàng ngoài scope danh bạ. Nếu schema đòi hai khoá
+  // này bắt buộc thì `apiFetch` ném ZodError DÙ HTTP 200 ⇒ trang vỡ trắng cho đúng role mà bản vá
+  // bảo vệ. Ca này khoá điều đó lại: thiếu khoá phải RENDER được, không phải role=alert.
+  it("hàng bị server mask (vắng userFullName/userEmail) → vẫn render, KHÔNG vỡ Zod", async () => {
+    setCaps({ "read:employee": true });
+    const masked = makeDeleted();
+    delete (masked as Record<string, unknown>).userFullName;
+    delete (masked as Record<string, unknown>).userEmail;
+    stubFetch({ ok: true, status: 200, body: okList([masked]) });
+    renderPage();
+
+    // Fallback của cột tên là `userId` khi cả hai khoá danh tính vắng mặt.
+    await waitFor(() =>
+      expect(screen.getByText("00000000-0000-0000-0000-000000000002")).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("load lỗi → role=alert", async () => {
     setCaps({ "read:employee": true });
     stubFetch({ ok: false, status: 500, body: { success: false, data: null } });
     renderPage();
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
   });
 });
 
@@ -157,9 +172,7 @@ describe("CS-6 RecycleBinPage — nút Khôi phục", () => {
       body: okList([makeDeleted()]),
     });
     renderPage();
-    await waitFor(() =>
-      expect(screen.getByText("Khôi phục")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("Khôi phục")).toBeInTheDocument());
   });
 
   it("click Khôi phục → gọi POST /recycle-bin/employees/:id/restore", async () => {
@@ -177,7 +190,11 @@ describe("CS-6 RecycleBinPage — nút Khôi phục", () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => ({ success: true, data: { id: "00000000-0000-0000-0000-000000000001" }, error: null }),
+      json: async () => ({
+        success: true,
+        data: { id: "00000000-0000-0000-0000-000000000001" },
+        error: null,
+      }),
       text: async () => "",
     });
     // Lần 3: re-fetch sau invalidate
@@ -196,7 +213,9 @@ describe("CS-6 RecycleBinPage — nút Khôi phục", () => {
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining("/recycle-bin/employees/00000000-0000-0000-0000-000000000001/restore"),
+        expect.stringContaining(
+          "/recycle-bin/employees/00000000-0000-0000-0000-000000000001/restore",
+        ),
         expect.objectContaining({ method: "POST" }),
       ),
     );

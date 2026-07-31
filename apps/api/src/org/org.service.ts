@@ -96,8 +96,38 @@ export class OrgService {
 
   // ── Teams ────────────────────────────────────────────────────────────────────
 
-  listTeams(companyId: string, status?: string) {
-    return this.repo.listTeams(companyId, status);
+  /**
+   * S6-SEC-IDENTITYBOUND-1 (N-1e, KI-052) — `leaderUserName` bound theo scope của cặp danh bạ.
+   *
+   * Cùng khuôn `listTeamMembers` (N-1c): `read:team` giữ nguyên việc quyết định truy cập *tài nguyên
+   * team*; riêng cột danh tính người đi theo `view:user`. `resolveOrNull` chứ không `resolveAndAssert`
+   * — role giữ `read:team` mà không có cặp danh bạ (`hr-manager` seeded) vẫn phải xem được danh sách
+   * team, chỉ là không nhận tên trưởng nhóm.
+   */
+  async listTeams(actor: DirectoryActor, status?: string) {
+    const scope = await this.dataScope.resolveOrNull(
+      actor.id,
+      actor.companyId,
+      ORG_EMPLOYEE_DIRECTORY.action,
+      ORG_EMPLOYEE_DIRECTORY.resourceType,
+    );
+    if (scope === null) {
+      this.logger.warn(
+        "teams: actor không có grant nào cho cặp danh bạ → BỎ cột tên trưởng nhóm của mọi hàng",
+        { userId: actor.id, companyId: actor.companyId },
+      );
+    }
+    const identityCond =
+      scope === null
+        ? null
+        : this.dataScope.buildUserScopeCondition(scope, {
+            userId: actor.id,
+            companyId: actor.companyId,
+          });
+    const rows = await this.repo.listTeams(actor.companyId, status, identityCond);
+    return rows.map(({ identityInScope, leaderUserName, ...rest }) =>
+      identityInScope ? { ...rest, leaderUserName } : rest,
+    );
   }
 
   async createTeam(companyId: string, dto: CreateTeamRequest) {
