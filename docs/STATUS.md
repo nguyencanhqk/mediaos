@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-31 15:06Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-31 23:57Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -31,6 +31,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `14306b8a` | 2026-07-31 | chore(docs): regen STATUS sau merge #314 · #315 · #316 |
 | `1e862d68` | 2026-07-31 | fix(harness): reconcile không được lật quyết định HOÃN của người (false-done lần 2) (#316) |
 | `a20eec1d` | 2026-07-31 | feat(release): S6-GOLIVE-1 — WS10: biên bản Go/No-go + bộ bàn giao 10/10, vá lỗ backup chặn go-live (#315) |
 | `555ed415` | 2026-07-31 | chore(gov): HOÃN S6-SEC-IDENTITY-PROJ-1 ra ngoài cửa sổ RC + chặn WIP ảo tái phát (lần 3) (#314) |
@@ -42,7 +43,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `943e59da` | 2026-07-30 | feat(release): S6-REL-1 — WS7/8/9: RC v1.0.0-rc.1 + go-live/rollback runbook + alerting chạy được (đóng KI-011 · KI-016, mở KI-050) (#311) |
 | `c4afe351` | 2026-07-30 | chore(docs): regen STATUS sau merge #310 (S6-SEC-ORGTEAMSCOPE-1) |
 | `211a664f` | 2026-07-30 | fix(sec): S6-SEC-ORGTEAMSCOPE-1 — N-1c/KI-049: bound hai cột danh tính của /org/teams/:id/members theo cặp DANH BẠ (+ sửa sổ S1) (#310) |
-| `cbd417ac` | 2026-07-30 | chore(docs): regen STATUS — gỡ WIP ảo S6-SEC-ORGTEAMSCOPE-1 khỏi tiêu điểm phiên |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
