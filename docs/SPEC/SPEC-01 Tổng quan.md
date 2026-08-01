@@ -1,7 +1,7 @@
 # SPEC-01: TỔNG QUAN HỆ THỐNG QUẢN LÝ DOANH NGHIỆP
 
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
-> **SPEC-01 Tổng quan** · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>)
+> **SPEC-01 Tổng quan** · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
 >
 > **Liên quan:** [Thiết kế DB: DB-01 Tổng quan](<../DB/DB-01 DATABASE DESIGN TỔNG QUAN.md>) · [Sản phẩm: PRD-00](<../PRD/PRD-00 Enterprise Management System .md>) · [Thiết kế API: API-01 Tổng quan](<../API Design/API-01 TỔNG QUAN.md>) · [Chỉ mục tài liệu](<../README.md>)
 
@@ -165,7 +165,7 @@ Các module sau chưa triển khai chi tiết trong MVP v1.0, nhưng hệ thốn
 | RECRUIT   | Tuyển dụng             | SPEC-12           | Phase 2   |
 | ASSET     | Quản lý tài sản        | SPEC-13           | Phase 3   |
 | ROOM      | Quản lý phòng họp      | SPEC-14           | Phase 3   |
-| CHAT      | Chat nội bộ            | SPEC-15           | Phase 4   |
+| CHAT      | Chat nội bộ            | [SPEC-15](<SPEC-15 CHAT.md>) | Phase 4 — spec **đã viết** (Draft) |
 | SOCIAL    | Mạng xã hội nội bộ     | SPEC-16           | Phase 4   |
 | MOBILE    | Mobile app             | SPEC-17           | Phase 5   |
 | AI        | AI & tích hợp nâng cao | SPEC-18           | Phase 5   |
@@ -195,7 +195,7 @@ Bộ tài liệu spec của dự án sẽ được tổ chức như sau:
 | SPEC-12     | Tuyển dụng                        | Spec module |
 | SPEC-13     | Quản lý tài sản                   | Spec module |
 | SPEC-14     | Quản lý phòng họp                 | Spec module |
-| SPEC-15     | Chat nội bộ                       | Spec module |
+| SPEC-15     | [Chat nội bộ](<SPEC-15 CHAT.md>)  | Spec module — **đã viết** (Draft) |
 | SPEC-16     | Mạng xã hội nội bộ                | Spec module |
 | SPEC-17     | Mobile app                        | Spec module |
 | SPEC-18     | AI & tích hợp nâng cao            | Spec module |
@@ -917,7 +917,7 @@ Module liên quan:
 
 ### 12.12 CHAT — Chat nội bộ
 
-Tài liệu chi tiết: SPEC-15
+Tài liệu chi tiết: **[SPEC-15 CHAT](<SPEC-15 CHAT.md>)** — đã viết (Draft, 01/08/2026), kèm [DB-12](<../DB/DB-12 CHAT Database Design.md>) · [API-13](<../API Design/API-13_CHAT_API_Design.md>) · [ma trận phân quyền §9c](<../permission-matrix-spec.md>). Thi công ở wave `S7-CHAT`, **sau** cửa sổ go-live.
 
 Giai đoạn: Phase 4
 

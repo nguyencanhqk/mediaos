@@ -1,0 +1,361 @@
+# DB-12: CHAT DATABASE DESIGN — CHAT NỘI BỘ
+
+> **Nguồn nghiệp vụ:** [SPEC-15 CHAT](<../SPEC/SPEC-15 CHAT.md>) · Quy ước chung: [DB-01](<DB-01 DATABASE DESIGN TỔNG QUAN.md>) §3.1/§7.9/§19b
+>
+> **Liên quan:** [API-13 CHAT API Design](<../API Design/API-13_CHAT_API_Design.md>) · [DB-08 Files/Audit/Seeds](<DB-08 Audit Files Settings Seeds Database Design.md>) · [DB-07 NOTI](<DB-07 NOTI DASH Database Design.md>) · [DB-09 Index](<DB-09 Database Index Query Pattern Performance Design.md>) · [DB-10 Seed](<DB-10_Migration_Plan_Initial_Seed_Data_Database_Design.md>) · [Ma trận phân quyền §9c](<../permission-matrix-spec.md>) · [Chỉ mục tài liệu](<../README.md>)
+
+---
+
+## 1. Thông tin tài liệu
+
+| Trường | Nội dung |
+| --- | --- |
+| Mã tài liệu | DB-12 |
+| Tên tài liệu | CHAT Database Design — Chat nội bộ |
+| Module | CHAT (SPEC-15) |
+| Phiên bản | v1.0 — **Draft**, duyệt cùng SPEC-15 |
+| Ngày tạo / cập nhật | 01/08/2026 / 01/08/2026 |
+| Head migration lúc viết | **idx 202 / `0535_s6secxtenantfk1_composite_tenant_fk`** ⇒ migration CHAT bắt đầu **0536+** |
+| Giai đoạn | Phase 4 · wave S7-CHAT — ngoài RC v1.0.0 |
+
+> ⚠️ Số migration dưới đây là **dự kiến**. Wave chạy sau go-live nên head thật gần như chắc chắn đã trôi. Luôn đọc `apps/api/migrations/meta/_journal.json` **tại thời điểm chạy** (bẫy `wo-paths-drive-gate-and-scheduler` — khai thiếu `migrations/**` trong `paths` của WO làm lọt LIGHT gate và trùng số migration).
+
+---
+
+## 2. Mục đích tài liệu
+
+Đặc tả tầng dữ liệu cho module CHAT. Điểm khác mọi DB-xx trước: **CHAT không tạo bảng mới từ số không** — ba bảng lõi đã tồn tại thật trong DB từ migration `0010` (tạo) và `0050` (mở rộng), đã có RLS + FORCE, GRANT append-only và composite tenant FK (`0535`). Tài liệu này mô tả **đối chiếu hiện trạng + phần ALTER bổ sung**.
+
+Quy tắc nghiệp vụ (mã lỗi, luồng đồng bộ, công thức đếm chưa đọc) sống ở SPEC-15 — file này chỉ nói về dữ liệu.
+
+---
+
+## 3. Phạm vi thiết kế
+
+### 3.1 Bảng ĐÃ CÓ trong DB — wave này chỉ ALTER
+
+| Bảng | Tạo tại | Hiện trạng đáng chú ý |
+| --- | --- | --- |
+| `chat_rooms` | `0010` + `0050` | RLS+FORCE; GRANT `SELECT,INSERT,UPDATE,DELETE`; cột `ref_id`(project) · `channel_id` · `org_unit_id` · `direct_key` · `created_by`; 4 unique index partial |
+| `chat_room_members` | `0010` + `0050` | RLS+FORCE; GRANT `SELECT,INSERT,DELETE` + **column-level** `UPDATE (role, last_read_at)` |
+| `chat_messages` | `0010` + `0050` | RLS+FORCE; GRANT **chỉ `SELECT,INSERT`** (append-only) + **column-level** `UPDATE (pinned_at, pinned_by)`; `seq bigint GENERATED ALWAYS AS IDENTITY` |
+
+### 3.2 Bảng MỚI
+
+| Bảng | Vai trò | Ghi chú |
+| --- | --- | --- |
+| _(không có)_ | | Toàn bộ nhu cầu v1 phủ được bằng 3 bảng trên + `file_links` của FOUNDATION |
+
+> "Đã xem bởi ai" là **dẫn xuất** từ `last_read_seq` (SPEC-15 §13.2) — không cần bảng `chat_message_reads`. Đính kèm dùng `file_links` — không cần `chat_message_attachments`. Đây là lựa chọn chống phình bảng có chủ đích.
+
+### 3.3 Bảng dùng lại (không tạo mới)
+
+`companies` · `users` · `employees` · `org_units` · `projects` / `project_members` (TASK) · `files` / `file_links` (FOUNDATION) · `audit_logs` · `sequence_counters` · `modules` + `permissions`/`role_permissions` (AUTH) · `notification_events` / `notification_templates` / `notifications` (NOTI) · `system_jobs` (job đối soát).
+
+---
+
+## 4. Nguyên tắc thiết kế
+
+1. **Giữ nguyên RLS + FORCE** đã có từ `0010` — wave này **không** đụng policy cô lập tenant. Mọi repository đi qua `withTenant` (bất biến #1).
+2. **Giữ nguyên append-only `chat_messages`** (bất biến #2): không cấp `DELETE`, không cấp `UPDATE` cấp bảng. Cột thu hồi mới chỉ được mở bằng **column-level GRANT**, đúng cơ chế `pinned_at` đã dùng ở `0050`.
+3. **Mở rộng bằng ALTER, không tạo bảng song song.** `0050` đã ghi thẳng bài học này ở đầu file ("KHÔNG tạo bảng chat_members/messages MỚI — 0010 đã tạo bảng cùng chức năng").
+4. **Expand-contract cho phần khai tử.** Cột `channel_id` / `file_url` / `file_name` **ngừng dùng ở release N**, **DROP ở release N+1** sau khi xác minh 0 hàng và không còn code đọc (memory `migration-expand-contract-required`).
+5. **`seq` là khoá thứ tự duy nhất** — mọi index đọc/phân trang neo vào `seq`, không vào `created_at`.
+6. Soft delete cho `chat_rooms`; `chat_messages` **không bao giờ** xoá (thu hồi ≠ xoá).
+7. UUID PK `gen_random_uuid()`, timestamp UTC — theo DB-01.
+
+---
+
+## 5. ERD cấp module
+
+```text
+companies 1─n chat_rooms
+org_units 1─1 chat_rooms (room_type='department', partial unique)
+projects  1─1 chat_rooms (room_type='project',    partial unique qua ref_id)
+users     2─1 chat_rooms (room_type='direct',     partial unique qua direct_key)
+
+chat_rooms       1─n chat_room_members ─n─1 users
+chat_rooms       1─n chat_messages     ─n─1 users (sender)
+chat_messages    1─n chat_messages     (reply_to_message_id, đúng 1 tầng)
+chat_messages    1─n file_links        (moduleCode='CHAT', entityType='chat_message')
+```
+
+---
+
+## 6. Chi tiết bảng
+
+### 6.1 `chat_rooms` — hiện trạng + ALTER
+
+**Cột đã có:** `id` · `company_id` · `ref_id`(→`projects`) · `channel_id`(→`channels`, **khai tử**) · `org_unit_id`(→`org_units`) · `direct_key` · `room_type` · `name` · `created_by` · `created_at`.
+
+**Cột THÊM:**
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `room_code` | VARCHAR(100) | Có (sau backfill) | qua `sequence_counters`, unique theo company |
+| `description` | TEXT | Không | phòng nhóm |
+| `sync_source` | VARCHAR(20) | Có | `manual` / `department` / `project`, default `manual` |
+| `synced_at` | TIMESTAMPTZ | Không | lần đối soát thành công gần nhất |
+| `last_message_at` | TIMESTAMPTZ | Không | sắp xếp danh sách phòng |
+| `last_message_seq` | BIGINT | Không | **mẫu số của phép trừ đếm chưa đọc** (SPEC-15 §13.2) — không có cột này thì danh sách phòng thành N+1 `COUNT(*)` |
+| `is_archived` | BOOLEAN | Có | default false |
+| `archived_at` / `archived_by` | TIMESTAMPTZ / UUID | Không | |
+| `updated_at` / `updated_by` | TIMESTAMPTZ / UUID | Không | |
+| `deleted_at` / `deleted_by` | TIMESTAMPTZ / UUID | Không | soft delete |
+
+**Đổi ràng buộc:**
+
+```sql
+-- (a) room_type: bỏ 'channel' (media out-of-scope). DROP+ADD an toàn vì đây là CHECK
+--     RIÊNG của chat_rooms (chat_rooms_room_type_chk, 0050:35) — KHÔNG phải hot-file
+--     dùng chung cross-lane như audit_logs.object_type ⇒ không cần UNION.
+--     BẮT BUỘC kiểm 0 hàng room_type='channel' TRƯỚC, nếu có thì migrate sang 'group'.
+ALTER TABLE chat_rooms DROP CONSTRAINT chat_rooms_room_type_chk;
+ALTER TABLE chat_rooms ADD  CONSTRAINT chat_rooms_room_type_chk
+  CHECK (room_type IN ('direct','group','department','project'));
+
+-- (b) loại phòng ↔ neo (CHAT-ERR-002) — đúng 1 neo, các neo khác NULL
+ALTER TABLE chat_rooms ADD CONSTRAINT chk_chat_rooms_type_anchor CHECK (
+  (room_type = 'direct'     AND direct_key IS NOT NULL AND org_unit_id IS NULL     AND ref_id IS NULL) OR
+  (room_type = 'group'      AND direct_key IS NULL     AND org_unit_id IS NULL     AND ref_id IS NULL) OR
+  (room_type = 'department' AND direct_key IS NULL     AND org_unit_id IS NOT NULL AND ref_id IS NULL) OR
+  (room_type = 'project'    AND direct_key IS NULL     AND org_unit_id IS NULL     AND ref_id IS NOT NULL)
+);
+
+-- (c) sync_source ↔ room_type
+ALTER TABLE chat_rooms ADD CONSTRAINT chk_chat_rooms_sync_source CHECK (
+  (room_type = 'department' AND sync_source = 'department') OR
+  (room_type = 'project'    AND sync_source = 'project')    OR
+  (room_type IN ('direct','group') AND sync_source = 'manual')
+);
+
+-- (d) name: 'direct' KHÔNG lưu tên (dẫn xuất từ người đối thoại) ⇒ nới NOT NULL,
+--     nhưng ép NOT NULL cho 3 loại còn lại.
+ALTER TABLE chat_rooms ALTER COLUMN name DROP NOT NULL;
+ALTER TABLE chat_rooms ADD CONSTRAINT chk_chat_rooms_name
+  CHECK (room_type = 'direct' OR name IS NOT NULL);
+```
+
+**Index thêm:**
+
+```sql
+CREATE UNIQUE INDEX uq_chat_rooms_company_code ON chat_rooms (company_id, room_code)
+  WHERE deleted_at IS NULL;
+CREATE INDEX idx_chat_rooms_company_activity   ON chat_rooms (company_id, last_message_at DESC)
+  WHERE deleted_at IS NULL AND is_archived = false;
+CREATE INDEX idx_chat_rooms_sync               ON chat_rooms (company_id, sync_source)
+  WHERE deleted_at IS NULL AND sync_source <> 'manual';   -- job đối soát đêm
+```
+
+**Index đã có, giữ nguyên:** `chat_rooms_company_id_idx` · `chat_rooms_ref_id_idx` · `chat_rooms_project_uq` · `chat_rooms_org_unit_uq` · `chat_rooms_direct_uq` · `chat_rooms_channel_uq` (bỏ cùng cột `channel_id` ở bước contract).
+
+### 6.2 `chat_room_members` — hiện trạng + ALTER
+
+**Cột đã có:** `id` · `company_id` · `room_id` · `user_id` · `role`(`member`/`admin`) · `last_read_at` · `joined_at`.
+
+**Cột THÊM:**
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `last_read_seq` | BIGINT | Có | default 0; **nguồn sự thật của "đã đọc"**, chỉ tiến (SPEC-15 §13.2) |
+| `muted_until` | TIMESTAMPTZ | Không | tắt thông báo phòng |
+| `left_at` | TIMESTAMPTZ | Không | rời phòng — **giữ hàng lại**, không DELETE |
+| `visible_from_seq` | BIGINT | Không | v1 luôn NULL = đọc toàn bộ lịch sử (SPEC-15 §13.4) |
+| `added_by` | UUID | Không | ai thêm vào phòng nhóm |
+
+```sql
+ALTER TABLE chat_room_members ADD CONSTRAINT chk_chat_members_read_seq CHECK (last_read_seq >= 0);
+
+-- Unique CŨ (room_id, user_id) GIỮ NGUYÊN: 1 hàng/người/phòng kể cả sau khi rời
+-- (rời = set left_at, vào lại = clear left_at). KHÔNG đổi thành partial unique —
+-- nhiều hàng lịch sử sẽ làm mọi truy vấn membership phải chọn "hàng nào mới nhất".
+
+CREATE INDEX idx_chat_members_user_active ON chat_room_members (company_id, user_id)
+  WHERE left_at IS NULL;
+```
+
+**GRANT bổ sung — column-level:**
+
+```sql
+-- 0050 đã cấp UPDATE (role, last_read_at). Bổ sung 4 cột ghi được:
+GRANT UPDATE (last_read_seq, muted_until, left_at, visible_from_seq)
+  ON chat_room_members TO mediaos_app;
+```
+
+> ⚠️ `left_at IS NULL` là **điều kiện bắt buộc trong MỌI truy vấn membership** (đọc tin · tìm kiếm · tệp · WS join · đích emit). Thiếu nó ở bất kỳ đường nào = người đã rời phòng vẫn đọc được tin mới. Vì vậy điều kiện này phải nằm trong **một hàm dùng chung** (`ChatAccessService`), không rải ở từng truy vấn (SPEC-15 §3.2).
+
+### 6.3 `chat_messages` — hiện trạng + ALTER
+
+**Cột đã có:** `id` · `company_id` · `room_id` · `sender_id` · `body` · `message_type`(`text`/`file`) · `file_url`(**khai tử**) · `file_name`(**khai tử**) · `mentions` jsonb · `pinned_at` · `pinned_by` · `seq` · `created_at`.
+
+**Cột THÊM:**
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `client_message_id` | UUID | Không | chống trùng khi gửi lại (CHAT-ERR-014) |
+| `reply_to_message_id` | UUID | Không | FK `chat_messages.id`, cùng phòng (ép ở service) |
+| `recalled_at` / `recalled_by` | TIMESTAMPTZ / UUID | Không | thu hồi — **không** xoá |
+| `attachment_count` | SMALLINT | Có | default 0, cập nhật cùng transaction khi tạo `file_links` |
+| `search_vector` | TSVECTOR | — | **GENERATED ALWAYS … STORED**, DB tự tính |
+
+```sql
+ALTER TABLE chat_messages DROP CONSTRAINT <tên CHECK message_type của 0050>;
+ALTER TABLE chat_messages ADD  CONSTRAINT chk_chat_messages_type
+  CHECK (message_type IN ('text','file','system'));
+
+ALTER TABLE chat_messages ADD CONSTRAINT chk_chat_messages_attachment_count
+  CHECK (attachment_count >= 0);
+
+-- Chống double-submit: 1 clientMessageId / (phòng, người gửi).
+CREATE UNIQUE INDEX uq_chat_messages_client_id
+  ON chat_messages (company_id, room_id, sender_id, client_message_id)
+  WHERE client_message_id IS NOT NULL;
+
+-- Đọc/phân trang theo con trỏ seq (SPEC-15 §13.1). Thay thế vai trò của
+-- chat_messages_room_seq_idx (0050) — index cũ thiếu company_id nên vẫn phải
+-- lọc heap theo tenant.
+CREATE INDEX idx_chat_messages_room_seq
+  ON chat_messages (company_id, room_id, seq DESC);
+
+CREATE INDEX idx_chat_messages_reply
+  ON chat_messages (company_id, reply_to_message_id)
+  WHERE reply_to_message_id IS NOT NULL;
+```
+
+**GRANT bổ sung — column-level, giữ append-only:**
+
+```sql
+-- 0050 đã cấp UPDATE (pinned_at, pinned_by). Bổ sung ĐÚNG 2 cột thu hồi:
+GRANT UPDATE (recalled_at, recalled_by) ON chat_messages TO mediaos_app;
+-- KHÔNG cấp UPDATE cấp bảng. KHÔNG cấp DELETE. body/sender_id/seq vẫn bất biến.
+-- attachment_count: cập nhật trong CÙNG transaction INSERT ⇒ không cần GRANT UPDATE.
+```
+
+> ⚠️ **Kiểm bất biến ở tầng DB, không chỉ tầng service.** Test phải thử `UPDATE chat_messages SET body=…` và `DELETE FROM chat_messages` **bằng app role** và mong đợi lỗi quyền. Reviewer đọc code service sẽ không thấy được lỗ này (memory `reviewers-pass-real-bugs`).
+
+### 6.4 Tìm kiếm toàn văn tiếng Việt
+
+```sql
+CREATE EXTENSION IF NOT EXISTS unaccent;
+
+-- unaccent() gốc chỉ STABLE ⇒ KHÔNG dùng được trong cột generated / index expression.
+-- Wrapper IMMUTABLE là bắt buộc; chỉ định schema tường minh để không phụ thuộc search_path.
+CREATE OR REPLACE FUNCTION f_unaccent(text)
+RETURNS text
+LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT
+AS $$ SELECT public.unaccent('public.unaccent'::regdictionary, $1) $$;
+
+ALTER TABLE chat_messages
+  ADD COLUMN search_vector tsvector
+  GENERATED ALWAYS AS (to_tsvector('simple', f_unaccent(coalesce(body, '')))) STORED;
+
+CREATE INDEX idx_chat_messages_search ON chat_messages USING GIN (search_vector);
+```
+
+Ghi chú bắt buộc:
+
+- `'simple'` — Postgres **không có** bộ từ điển tiếng Việt; dùng `'english'` sẽ cắt gốc từ sai và làm hỏng kết quả.
+- `f_unaccent` cho phép gõ không dấu ra kết quả có dấu ("bao cao" → "báo cáo").
+- Cột **GENERATED STORED** ⇒ DB tự tính lúc INSERT, **không** cần cấp thêm quyền UPDATE lên bảng append-only. Đây là lý do chọn generated thay vì trigger.
+- Thêm cột generated trên bảng đã có dữ liệu = **rewrite toàn bảng** (khoá ACCESS EXCLUSIVE). Ở quy mô hiện tại (bảng gần như rỗng) là tức thì; nếu chạy khi đã có hàng triệu tin thì phải tách cửa sổ bảo trì.
+- Truy vấn: `WHERE search_vector @@ websearch_to_tsquery('simple', f_unaccent($q))` — **luôn** kèm `JOIN chat_room_members … AND left_at IS NULL` (SPEC-15 §13.7).
+
+### 6.5 Đính kèm — dùng `file_links`, không bảng mới
+
+```text
+files       (FOUNDATION — tệp đã tải lên, đã quét virus)
+file_links  (module_code='CHAT', entity_type='chat_message', entity_id=<messageId>,
+             link_type='Attachment')
+```
+
+- `file_links.entity_type` là `varchar(100)` **không có CHECK** ⇒ không cần migration nới ràng buộc.
+- **Bắt buộc đăng ký `ChatMessageFileResolver`** — `FilePolicyService.decideForLinkedFile` fail-closed với cặp `(module_code, entity_type)` chưa có resolver: trả `deny-no-resolver`, **không** rơi xuống fallback `FOUNDATION.FILE.*`. Thiếu resolver ⇒ gửi được tệp mà không ai tải được (SPEC-15 §13.5).
+- Thu hồi tin → gỡ `file_links` của tin đó ⇒ FilePolicy tự động từ chối tải. Không cần xoá tệp vật lý.
+
+### 6.6 Cột khai tử — kế hoạch contract
+
+| Cột | Vì sao bỏ | Bước expand (release N) | Bước contract (release N+1) |
+| --- | --- | --- | --- |
+| `chat_rooms.channel_id` | `channels` là bảng media out-of-scope | ngừng ghi/đọc; bỏ khỏi Drizzle schema | `DROP INDEX chat_rooms_channel_uq` → drop **composite tenant FK** `(company_id, channel_id)` do `0535` tạo → `DROP COLUMN` |
+| `chat_messages.file_url` | URL trần, rò tệp không qua kiểm quyền | ngừng ghi; đường đọc trả `null` | `DROP COLUMN` |
+| `chat_messages.file_name` | như trên | như trên | `DROP COLUMN` |
+
+Điều kiện vào bước contract: `SELECT count(*) … WHERE <cột> IS NOT NULL` **= 0** trên **cả** PROD lẫn dev-online, và `grep` toàn repo không còn tham chiếu. Gộp hai bước vào một release là vi phạm expand-contract — sẽ tạo cửa sổ 500 cho tiến trình cũ còn đang chạy.
+
+---
+
+## 7. Enum chuẩn (đồng bộ `packages/contracts/src/chat.ts`)
+
+| Nhóm | Giá trị | Thay đổi so với hiện tại |
+| --- | --- | --- |
+| `room_type` | `direct` · `group` · `department` · `project` | **bỏ** `channel`; `project` giữ nguyên |
+| `sync_source` | `manual` · `department` · `project` | mới |
+| `message_type` | `text` · `file` · `system` | **thêm** `system` |
+| member `role` | `member` · `admin` | giữ nguyên |
+
+> `packages/contracts/src/chat.ts` hiện khai `chatRoomTypeSchema` gồm cả `channel` — phải sửa **cùng commit** với migration đổi CHECK, nếu không FE/BE lệch với DB.
+
+---
+
+## 8. Index theo use case
+
+| Use case | Index dùng |
+| --- | --- |
+| Danh sách phòng của tôi (sắp theo hoạt động) | `idx_chat_members_user_active` + `idx_chat_rooms_company_activity` |
+| Đọc 50 tin gần nhất / cuộn lên | `idx_chat_messages_room_seq` |
+| Bù tin sau khi WS đứt (`afterSeq`) | `idx_chat_messages_room_seq` |
+| Tìm kiếm toàn văn | `idx_chat_messages_search` (GIN) + `idx_chat_members_user_active` |
+| Tin đã ghim của phòng | `chat_messages_pinned_idx` (đã có từ 0050) |
+| Mở DM idempotent | `chat_rooms_direct_uq` (đã có) |
+| Phòng tự động theo phòng ban / dự án | `chat_rooms_org_unit_uq` · `chat_rooms_project_uq` (đã có) |
+| Job đối soát đêm | `idx_chat_rooms_sync` |
+| Chống double-submit | `uq_chat_messages_client_id` |
+
+> **Cấm** khẳng định EXPLAIN chọn đích danh một index trong test — planner đổi kế hoạch theo thống kê (memory `pg-planner-index-assert-trap`). Đo bằng ngưỡng thời gian/số buffer, không bằng tên index.
+
+---
+
+## 9. Seed & kế hoạch migration (0536+ dự kiến, lane DB tuần tự)
+
+| Bước | Nội dung | Ràng buộc thứ tự |
+| --- | --- | --- |
+| **A** | ALTER `chat_rooms` (cột mới + 4 CHECK §6.1 + 3 index) · ALTER `chat_room_members` (5 cột + index + **GRANT UPDATE 4 cột**) · ALTER `chat_messages` (5 cột + CHECK + 2 index + **GRANT UPDATE `recalled_at`,`recalled_by`**) | RLS đã có từ 0010 — **không** đụng policy. Kiểm 0 hàng `room_type='channel'` TRƯỚC khi đổi CHECK |
+| **B** | `CREATE EXTENSION unaccent` + `f_unaccent()` IMMUTABLE + cột generated `search_vector` + GIN index | sau A (cần `body` ổn định). Rewrite bảng — chạy khi bảng còn nhỏ |
+| **C** | Backfill `room_code` cho phòng đã có (nếu có hàng) + **seed `sequence_counters` `'chat_room'` cho MỌI company** (scope Company, prefix + padding, reset Never, `ON CONFLICT DO NOTHING` + **verify fail-loud**) | Thiếu counter ⇒ `SequenceNotFoundError` ngay phòng đầu tiên — đúng bug `QA2-CRIT-002` của `task_code` |
+| **D** | Seed module `CHAT` vào `modules` (mirror `0435`/`0506`, `ON CONFLICT DO NOTHING`) + **9 cặp permission** (SPEC-15 §11) + grant per-pair `data_scope` cho 4 role canonical (**DELETE-wrong-scope + INSERT ON CONFLICT**, verify fail-loud — mirror `0466`/`0476`) | `is_sensitive` của cả 9 cặp phải chốt **trong plan WO này**, không để mở sau seed (bẫy `canonical-seed-pin-regression`) |
+| **E** | **Verify** `audit_logs.object_type` CHECK đã chứa `'chat_room'` + `'chat_message'` — **đã UNION-ADD từ `0050`**, chỉ kiểm tra fail-loud, KHÔNG thêm lại | Nếu phải thêm: neo parse vào vế `object_type = ANY (` ở **cả hai** tầng, không quét `{…}`/`ARRAY[…]` trên toàn `constraintdef` (bẫy `audit-check-union-parse-anchor-trap`) |
+| **F** | Seed NOTI: `CHAT_MENTIONED` + `CHAT_DIRECT_MESSAGE` vào `notification-event-catalog.const.ts` (`isEnabled=true`) + `notification_events` + template. **Nới CHECK trên CẢ HAI bảng:** `notification_events` (`chk_notification_events_module_code` += `'CHAT'`, `chk_notification_events_notification_type` += `'Chat'`) **VÀ** `notifications` (`chk_notifications_module_code` += `'CHAT'`, `chk_notifications_notification_type` += `'Chat'`, **giữ nhánh `IS NULL OR`**) | ⚠️ Quên vế `notifications` là **lỗi đã ship thật** ở `0507` (GOAL) và phải vá ở `0529`. Dùng cách **guard LIKE + re-stamp superset tường minh** của `0507`/`0529`, **không** dùng parser DO-block mẫu `0474` (giả định array-literal `'{…}'`, trả NULL với dạng `= ANY(ARRAY[…]::text[])` ⇒ **silent skip**) |
+| **G** | _(release sau)_ Contract: drop `chat_rooms.channel_id` + `chat_messages.file_url`/`file_name` + composite FK/index kèm theo | Chỉ chạy khi §6.6 đủ điều kiện |
+
+Bước **F phải xong TRƯỚC** khi WO backend đăng ký registrar outbox: `registerSource()` **fail-loud ngay lúc boot** nếu `eventCode` chưa có trong catalog với `isEnabled=true` ⇒ API sập lúc khởi động.
+
+Giá trị superset hiện hành để re-stamp (đo tại `0529`, xác minh lại lúc chạy):
+
+```text
+module_code       : 'AUTH','HR','ATT','LEAVE','TASK','DASH','NOTI','SYSTEM','GOAL','LMS'  (+ 'CHAT')
+notification_type : … 'Goal','Training' …                                                  (+ 'Chat')
+```
+
+---
+
+## 10. Đối chiếu bất biến
+
+| Bất biến | Áp dụng trong DB-12 |
+| --- | --- |
+| **#1** `company_id` + RLS FORCE | Cả 3 bảng đã bật từ `0010` — wave này **không** đụng policy; composite tenant FK đã gắn ở `0535`; mọi repo qua `withTenant`. Cô lập **tenant** ở DB; ranh giới **phòng** ép ở service (`ChatAccessService`) — hai tầng khác nhau, không thay thế nhau |
+| **#2** append-only / soft delete | `chat_messages` giữ nguyên GRANT `SELECT,INSERT`; thu hồi/ghim chỉ qua **column-level UPDATE**; không cấp `DELETE`. `chat_rooms` soft delete. `chat_room_members` rời phòng = `left_at`, không DELETE hàng |
+| **#3** không secret plaintext | Module không lưu secret. Tệp đính kèm chỉ ra bằng URL ký hạn ngắn; payload notification **không** chứa nội dung tin nhắn |
+
+---
+
+## 11. Rủi ro dữ liệu đã nhận diện
+
+| Rủi ro | Vì sao nguy hiểm | Chốt chặn |
+| --- | --- | --- |
+| Truy vấn membership quên `left_at IS NULL` | Người đã rời phòng vẫn đọc tin mới — im lặng, không lỗi | Một hàm dùng chung duy nhất + int-spec ca "đã rời" |
+| Đường tìm kiếm không JOIN membership | Rò **toàn bộ** nội dung công ty qua một endpoint | Deny-path test viết TRƯỚC; cặp gate trùng đường đọc |
+| Cấp nhầm `UPDATE` cấp bảng cho `chat_messages` | Mất bất biến #2 mà service vẫn "trông đúng" | Test chạy `UPDATE`/`DELETE` bằng **app role** thật |
+| `f_unaccent` quên `IMMUTABLE` | Migration đỏ giữa chừng khi tạo cột generated | Kiểm ngay trong migration bước B |
+| Đổi CHECK `room_type` khi còn hàng `'channel'` | Migration đỏ trên DB đã có dữ liệu (dev-online/PROD) | Đếm trước, migrate sang `'group'` nếu có |
+| Quên nới CHECK trên `notifications` | **Mọi** notification CHAT vỡ khi INSERT — đã xảy ra thật với GOAL | Bước F làm cả hai bảng trong cùng migration |
+| Cột generated rewrite bảng lớn | Khoá ACCESS EXCLUSIVE lâu | Chạy khi bảng còn nhỏ (hiện tại ~0 hàng) |

@@ -315,6 +315,40 @@ Ghi chú:
 
 ---
 
+## 9c. CHAT — Chat nội bộ (SPEC-15) · *Phase 4 — chưa seed*
+
+⚠️ **CHAT không dùng thang `own / department / all` như các module khác.** Ranh giới dữ liệu của chat là **thành viên phòng**, không phải phạm vi tổ chức: một nhân viên có thể nhắn riêng với giám đốc (ngoài phòng ban của mình), và trưởng phòng **không** được đọc tin nhắn riêng của nhân viên trong phòng mình dù `data_scope` là `department`.
+
+```text
+Quyền CHAT.* (per-pair)  =  CỔNG MODULE     — "được dùng chat không, làm được hành động gì"
+Thành viên phòng          =  RANH GIỚI DỮ LIỆU — "được đọc/ghi ở phòng nào"
+```
+
+Cả hai phải cùng đúng. Membership ép ở **service layer** qua đúng một hàm `ChatAccessService.assertMember` (SPEC-15 §3.2) — không phải ở RLS, không phải ở `data_scope`.
+
+| Cặp quyền (SPEC-15 §11) | Ý nghĩa | Nhân viên | Trưởng đơn vị | BOD/Admin |
+| --- | --- | --- | --- | --- |
+| `('access','chat')` | Cổng nav + panel nổi | có | có | có |
+| `('view','chat-room')` | Xem phòng · đọc tin · **tìm kiếm** · tải tệp đính kèm | all | all | all |
+| `('create','chat-room')` | Tạo phòng nhóm + mở DM | có | có | có |
+| `('update','chat-room')` | Sửa tên/mô tả phòng nhóm | có (admin phòng) | có | có |
+| `('archive','chat-room')` | Lưu trữ phòng nhóm | có (admin phòng) | có | có |
+| `('manage','chat-member')` | Thêm/bớt/phong admin trong phòng nhóm | có (admin phòng) | có | có |
+| `('send','chat-message')` | Gửi tin + đính kèm | có | có | có |
+| `('recall','chat-message')` | Thu hồi tin | có (tin của mình) | có | có |
+| `('pin','chat-message')` | Ghim/bỏ ghim | có (admin phòng) | có | có |
+
+Ghi chú:
+
+- Cột "có (admin phòng)" = **quyền là điều kiện cần, `chat_room_members.role='admin'` là điều kiện đủ** — kiểm ở service, không phải ở seed.
+- **Không có cặp nào cho phép đọc phòng mình không thuộc — kể cả Super Admin** (CHAT-DEC-004). Nếu về sau owner duyệt kiểm duyệt nội dung, cặp mới phải là `('moderate','chat-report')` gắn với **tin bị báo cáo**, không phải mở rộng scope của `('view','chat-room')`.
+- Cặp gate của **tìm kiếm** và **tải tệp** PHẢI trùng cặp của đường đọc (`view:chat-room`). Tách cặp riêng sẽ đẻ ra role "tìm được mà đọc không được" — đúng lỗ đã gặp ở `S5-TASK-COVER-1`.
+- `is_sensitive` đề xuất `false` cho cả 9 cặp; phải chốt tường minh **trong plan WO DB đầu tiên** của wave, không để mở sau seed.
+- RLS+FORCE trên `chat_rooms`/`chat_room_members`/`chat_messages` đã có từ migration `0010` — đó là cô lập **tenant**, khác tầng với ranh giới **phòng**.
+- Chi tiết mã lỗi/quy tắc: [SPEC-15 CHAT §11–12](<SPEC/SPEC-15 CHAT.md>); schema: [DB-12](<DB/DB-12 CHAT Database Design.md>).
+
+---
+
 ## 10. Nguyên tắc dữ liệu nhạy cảm (SPEC-01 §11.3)
 
 Dữ liệu nhạy cảm: lương · tài khoản ngân hàng · CCCD/CMND · hợp đồng · hồ sơ nhân sự · dữ liệu kỷ luật/nghỉ việc · chấm công chi tiết · log hệ thống.

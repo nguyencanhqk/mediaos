@@ -79,7 +79,7 @@ Database MVP cần hỗ trợ các module sau:
 | RECRUIT | Tuyển dụng         | Có thể chuyển candidate thành employee              |
 | ASSET   | Tài sản            | Gắn asset với employee                              |
 | ROOM    | Phòng họp          | Gắn booking với user/employee                       |
-| CHAT    | Chat nội bộ        | Gắn message với user                                |
+| CHAT    | Chat nội bộ        | **Đã có thiết kế: [DB-12](<DB-12 CHAT Database Design.md>)** (SPEC-15). Bảng `chat_rooms`/`chat_room_members`/`chat_messages` **tồn tại thật** trong DB từ migration `0010`+`0050` — RLS+FORCE sẵn, `chat_messages` append-only (chỉ `SELECT`/`INSERT`, `UPDATE` theo cột). Wave `S7-CHAT` chỉ ALTER bổ sung |
 | SOCIAL  | Mạng xã hội nội bộ | Gắn post/comment/reaction với user                  |
 | MOBILE  | Mobile app         | Bổ sung device token, push notification             |
 | AI      | AI & tích hợp      | Bổ sung AI logs, suggestions, summaries             |

@@ -39,6 +39,9 @@ Mọi tài liệu đều liên kết chéo với nhau: mỗi file có breadcrumb
 | SPEC-08 | [Thông báo hệ thống](<SPEC/SPEC-08 NOTI.md>) | NOTI |
 | SPEC-09 | [ME - Trung tâm cá nhân & Cài đặt tài khoản](<SPEC/SPEC-09 ME.md>) | ME |
 | SPEC-10 | [GOAL - Mục tiêu (Phòng ban · Dự án · Nhân viên)](<SPEC/SPEC-10 GOAL.md>) | GOAL |
+| SPEC-15 | [CHAT - Chat nội bộ (1-1 · Nhóm · Phòng ban · Dự án)](<SPEC/SPEC-15 CHAT.md>) | CHAT — *Phase 4, Draft* |
+
+> SPEC-11…14 (PAYROLL · RECRUIT · ASSET · ROOM) là module Phase 2–3 **chưa viết**; CHAT giữ đúng số SPEC-15 đã khoá tại SPEC-01 §5 — không dồn số.
 
 ---
 
@@ -57,6 +60,7 @@ Mọi tài liệu đều liên kết chéo với nhau: mỗi file có breadcrumb
 | DB-09 | [Index, Query Pattern & Performance Design](<DB/DB-09 Database Index Query Pattern Performance Design.md>) | Hiệu năng |
 | DB-10 | [Migration Plan & Initial Seed Data](<DB/DB-10_Migration_Plan_Initial_Seed_Data_Database_Design.md>) | Migration / Seed |
 | DB-11 | [GOAL Database Design](<DB/DB-11 GOAL Database Design.md>) | GOAL |
+| DB-12 | [CHAT Database Design](<DB/DB-12 CHAT Database Design.md>) | CHAT — *Phase 4, Draft* |
 
 ---
 
@@ -75,6 +79,7 @@ Mọi tài liệu đều liên kết chéo với nhau: mỗi file có breadcrumb
 | API-09 | [FOUNDATION API Design](<API Design/API-09_FOUNDATION_API_Design.md>) | Foundation / Shared |
 | API-11 | [ME API Design](<API Design/API-11_ME_API_Design.md>) | ME |
 | API-12 | [GOAL API Design](<API Design/API-12_GOAL_API_Design.md>) | GOAL |
+| API-13 | [CHAT API Design](<API Design/API-13_CHAT_API_Design.md>) | CHAT — *Phase 4, Draft* |
 
 > Tham khảo thêm: [API-10 Permission Matrix](<API Design/API-10 PERMISSION MATRIX.md>) · [API-10 Permission Audit Report](<API Design/API-10 PERMISSION AUDIT REPORT.md>) · [OpenAPI](<API Design/openapi/README.md>)
 
@@ -207,6 +212,7 @@ Mỗi module nghiệp vụ được mô tả xuyên suốt qua 5 nhóm tài li�
 | **NOTI** | PRD §9.7 | [SPEC-08](<SPEC/SPEC-08 NOTI.md>) | [DB-07](<DB/DB-07 NOTI DASH Database Design.md>) | [API-07](<API Design/API-07_NOTI_API_Design.md>) | [UI-09](<UI/UI-09_Module_UI_Design.md>) | [FRONTEND-12](<FRONTEND/FRONTEND-12_Notification_Frontend.md>) | [BACKEND-09](<BACKEND/BACKEND-09_Notification_Backend.md>) |
 | **ME** | PRD §8.1 (MVP bổ sung) | [SPEC-09](<SPEC/SPEC-09 ME.md>) | [DB-08](<DB/DB-08 Audit Files Settings Seeds Database Design.md>) §`user_preferences` · [DB-09](<DB/DB-09 Database Index Query Pattern Performance Design.md>) index · [DB-10](<DB/DB-10_Migration_Plan_Initial_Seed_Data_Database_Design.md>) seed ME | [API-11](<API Design/API-11_ME_API_Design.md>) (stub — DTO chi tiết ở WO backend) | UI — dự kiến (WO sau) | FRONTEND — dự kiến (WO sau); code đã ship `apps/app/src/routes/me/` (S5-ME-FE-1..3) | BACKEND — dự kiến (WO sau); code đã ship `apps/api/src/me/` (S5-ME-BE-1..3) |
 | **GOAL** | PRD §8.1 (MVP bổ sung) | [SPEC-10](<SPEC/SPEC-10 GOAL.md>) | [DB-11](<DB/DB-11 GOAL Database Design.md>) · [DB-09](<DB/DB-09 Database Index Query Pattern Performance Design.md>) §8.14 index · [DB-10](<DB/DB-10_Migration_Plan_Initial_Seed_Data_Database_Design.md>) seed GOAL | [API-12](<API Design/API-12_GOAL_API_Design.md>) (stub — DTO chi tiết ở WO backend) | UI — dự kiến (WO sau) | FRONTEND — dự kiến (WO sau) | BACKEND — dự kiến (WO sau); code đã ship `apps/api/src/goals/` (S5-GOAL-BE-1) |
+| **CHAT** | PRD §8.1 (Phase 4) | [SPEC-15](<SPEC/SPEC-15 CHAT.md>) *(Draft)* | [DB-12](<DB/DB-12 CHAT Database Design.md>) — bảng đã tồn tại thật từ migration `0010`/`0050` | [API-13](<API Design/API-13_CHAT_API_Design.md>) (stub) | UI — dự kiến (wave S7-CHAT) | FRONTEND — dự kiến (wave S7-CHAT) | BACKEND — **chưa có code**; module cũ đã gỡ ở de-media-fy (`2591db13`) |
 | Audit / Files / Settings | PRD §12.4 | SPEC-01 §16 | [DB-08](<DB/DB-08 Audit Files Settings Seeds Database Design.md>) | [API-09](<API Design/API-09_FOUNDATION_API_Design.md>) | [UI-09](<UI/UI-09_Module_UI_Design.md>) | [FRONTEND-13](<FRONTEND/FRONTEND-13_System_Foundation_Frontend.md>) | [BACKEND-04](<BACKEND/BACKEND-04_Foundation_Backend.md>) · [BACKEND-11](<BACKEND/BACKEND-11_File_Audit_Settings_System_Jobs.md>) |
 | Home Portal / App Switcher | PRD §9 | SPEC-01 | — | [API-09](<API Design/API-09_FOUNDATION_API_Design.md>) | [UI-06](<UI/UI-06_Home_Portal_App_Switcher_UI_Design.md>) · [UI-07](<UI/UI-07_Module_Workspace_Template_Design.md>) | [FRONTEND-05](<FRONTEND/FRONTEND-05_Layout_Implementation.md>) | [BACKEND-04](<BACKEND/BACKEND-04_Foundation_Backend.md>) · [BACKEND-11](<BACKEND/BACKEND-11_File_Audit_Settings_System_Jobs.md>) |
 | Hiệu năng / Index | PRD §12.2 | SPEC-01 §23 | [DB-09](<DB/DB-09 Database Index Query Pattern Performance Design.md>) | [API-01 §16,21,22](<API Design/API-01 TỔNG QUAN.md>) | — | [FRONTEND-14](<FRONTEND/FRONTEND-14_QA_Performance_Release_Readiness.md>) | [BACKEND-13](<BACKEND/BACKEND-13_Backend_Testing_Security_Performance.md>) |
