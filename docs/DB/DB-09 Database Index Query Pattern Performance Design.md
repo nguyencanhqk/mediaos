@@ -747,6 +747,28 @@ ON user_preferences (company_id, user_id);
 
 > Cô lập tenant ép ở RLS + FORCE (DB-11 §4, bất biến #1); mọi index trên đều dẫn đầu bằng `company_id`.
 
+### 8.15 CHAT (`chat_rooms`, `chat_room_members`, `chat_messages`) · *Phase 4 — chưa thi công*
+
+> Chi tiết đầy đủ + DDL: [DB-12 CHAT Database Design §8](<DB-12 CHAT Database Design.md>). Bảng đã tồn tại thật trong DB từ migration `0010`/`0050`; wave `S7-CHAT` chỉ ALTER bổ sung.
+
+| Use case | Index dùng |
+| --- | --- |
+| Danh sách phòng của tôi (sắp theo hoạt động) | `idx_chat_members_user_active` + `idx_chat_rooms_company_activity` |
+| Đọc 50 tin gần nhất / cuộn lên / bù tin sau khi WS đứt | `idx_chat_messages_room_seq` (`company_id, room_id, seq DESC`) |
+| Tìm kiếm toàn văn tiếng Việt | `idx_chat_messages_search` (GIN trên cột generated `search_vector`) + `idx_chat_members_user_active` |
+| Tin đã ghim của phòng | `chat_messages_pinned_idx` (đã có từ `0050`) |
+| Mở DM idempotent | `chat_rooms_direct_uq` (đã có) |
+| Phòng tự động theo phòng ban / dự án | `chat_rooms_org_unit_uq` · `chat_rooms_project_uq` (đã có) |
+| Job đối soát thành viên phòng dẫn xuất | `idx_chat_rooms_sync` |
+| Chống double-submit khi gửi tin | `uq_chat_messages_client_id` |
+
+Ghi chú riêng của CHAT:
+
+- **Phân trang bằng con trỏ `seq`, cấm `offset`** — kết quả trôi khi có tin mới chèn vào giữa lúc cuộn.
+- **Số chưa đọc tính bằng phép trừ** `chat_rooms.last_message_seq − chat_room_members.last_read_seq`, KHÔNG `COUNT(*)` trên `chat_messages` (đó là lý do cột `last_message_seq` tồn tại — chống N+1 ở danh sách phòng).
+- `search_vector` là cột **GENERATED STORED** dùng `to_tsvector('simple', f_unaccent(body))`; `f_unaccent` phải là wrapper **IMMUTABLE** vì `unaccent()` gốc chỉ `STABLE` ⇒ không dùng trực tiếp trong index/cột generated được.
+- Cô lập tenant ép ở RLS + FORCE (đã có từ `0010`); ranh giới **phòng** ép ở service layer — khác tầng, không thay thế nhau.
+
 ---
 
 ## 9. Index cho AUTH / DB-02

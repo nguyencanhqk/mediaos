@@ -427,8 +427,10 @@ KHÔNG thuộc thiết kế MVP, còn sót trong DB:
 - **media** (`media.ts`): platforms · channels · channel_members · platform_accounts · encryption_keys · channel_accounts · projects(media) · project_channels/teams/members · content_types · content_items · content_channels · content_assets.
 - **finance** (`finance.ts`): revenue_records · cost_records · cost_allocations · profit_snapshots · expense_requests · expense_approvals.
 - **payroll** (`payroll.ts`, Phase 2): salary_profiles · payroll_periods · payslips · payslip_items · bonus_penalties · payslip_acknowledgements.
-- **kpi/evaluation/meeting/chat/workflow** (`kpi.ts`/`evaluation.ts`/`meeting.ts`/`communication.ts` chat · `workflow.ts`/`approval.ts` engine) + **break-glass** (`break-glass.ts`).
+- **kpi/evaluation/meeting/workflow** (`kpi.ts`/`evaluation.ts`/`meeting.ts` · `workflow.ts`/`approval.ts` engine) + **break-glass** (`break-glass.ts`).
 
+> **⚠️ Cụm chat KHÔNG còn out-of-scope (01/08/2026).** `chat_rooms` · `chat_room_members` · `chat_messages` (`communication.ts`, mig `0010`+`0050`, composite tenant FK `0535`) là **nền của module CHAT** — có [SPEC-15](<SPEC/SPEC-15 CHAT.md>) · [DB-12](<DB/DB-12 CHAT Database Design.md>) · [API-13](<API Design/API-13_CHAT_API_Design.md>), thi công ở wave `S7-CHAT` sau go-live. Bảng đã có RLS+FORCE + GRANT append-only đúng bất biến ⇒ **giữ nguyên, KHÔNG dọn**. Riêng `chat_rooms.channel_id` (→ `channels` media) và `chat_messages.file_url`/`file_name` là **khai tử theo expand-contract** — xem DB-12 §6.6.
+>
 > Reconcile-first (CLAUDE.md §STATUS): giữ phần A1, đổi tên/bổ sung theo A2–A4 khi build từng module, **park/dọn** A5. Khi có mâu thuẫn → **`docs/DB` + `docs/spec` là chuẩn**, không phải code.
 
 ---

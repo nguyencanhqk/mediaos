@@ -83,6 +83,7 @@
 | **PGL-043** | Dọn bảng/module di sản (media · finance · payroll · operator-plane) trong `apps/api` | `docs/erd-current.md` Phụ lục A |
 | **PGL-044** | Đưa `docs/TESTABLE-FEATURES.md` khớp bản phát hành | Tài liệu nghiệm thu |
 | **PGL-045** | Ứng dụng di động | `SPEC-01` §7 — Phase 5 |
+| **PGL-046** | `S7-GOAL-PROJTAB-1` — tab **Mục tiêu** trong trang dự án: mục tiêu của dự án + phủ mục tiêu của việc thực tế (gồm việc **chưa gắn**) + gắn việc tại chỗ | Chiều tra cứu ngược đang thiếu: hiện chỉ đi được từ mục tiêu → việc, người quản lý dự án không có đường thấy việc nào đang trôi ngoài mọi mục tiêu. Owner duyệt hướng 2026-08-01, **cố ý hoãn ra ngoài cửa sổ RC** (`RELEASE-05` scope freeze). Plan: `docs/plans/S7-GOAL-PROJTAB-1.md` |
 
 > `PGL-042` đáng làm sớm hơn thứ hạng của nó: mỗi việc quản trị phải mượn tài khoản `SA` là mỗi lần
 > dùng quyền lớn hơn nhu cầu — và đó cũng là thứ khiến `KI-056` nguy hiểm.
@@ -98,7 +99,8 @@ Theo `SPEC-01` §7 · §25 — thiết kế đã tính chỗ, chưa xây.
 | **Phase 2** | **PAYROLL** — bảng lương, phiếu lương | Kéo theo bảng append-only mới (`payslips`) + vùng crown-jewel mới |
 | **Phase 2** | **RECRUIT** — tuyển dụng | |
 | Phase 3 | **ASSET** · **ROOM** | Tài sản · phòng họp |
-| Phase 4 | **CHAT** · **SOCIAL** | |
+| Phase 4 | **CHAT** — chat nội bộ | ✅ **Đã có bộ tài liệu** (01/08/2026): [SPEC-15](<../SPEC/SPEC-15 CHAT.md>) · [DB-12](<../DB/DB-12 CHAT Database Design.md>) · [API-13](<../API Design/API-13_CHAT_API_Design.md>) · [phân quyền §9c](<../permission-matrix-spec.md>). Wave `S7-CHAT` trong `harness/backlog.mjs`, thi công **sau** khi cửa sổ go-live đóng. Nền dữ liệu đã có sẵn trong DB (mig `0010`/`0050`) |
+| Phase 4 | **SOCIAL** — mạng xã hội nội bộ | Chưa có spec |
 | Phase 5 | **MOBILE** · **AI** · **INTEGRATION** | |
 
 > Khi mở PAYROLL: nó là **crown-jewel** ngay từ dòng code đầu (lương = dữ liệu nhạy cảm nhất). Áp
