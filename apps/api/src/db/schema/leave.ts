@@ -162,6 +162,12 @@ export const leaveBalanceTransactions = pgTable(
       .on(t.companyId, t.leaveRequestId)
       .where(sql`leave_request_id IS NOT NULL`),
     index("idx_leave_balance_tx_type_date").on(t.companyId, t.transactionType, t.transactionDate),
+    // S6-LEAVE-ACCRUAL-1 (mig 0536) — KHOÁ idempotency của engine cộng dồn: mỗi (nhân viên, loại nghỉ,
+    // kỳ) cấp ĐÚNG MỘT LẦN. Kỳ mã hoá trong transaction_date (Monthly = ngày cuối tháng · Yearly = 01/01,
+    // đơn ánh). PARTIAL theo ACCRUAL ⇒ KHÔNG ràng buộc CARRY_OVER/EXPIRE/ADJUSTMENT (S6-LEAVE-CARRYOVER-1).
+    uniqueIndex("uq_leave_balance_tx_accrual_period")
+      .on(t.companyId, t.employeeId, t.leaveTypeId, t.transactionDate)
+      .where(sql`transaction_type = 'ACCRUAL'`),
     check(
       "chk_leave_balance_transactions_type",
       sql`transaction_type IN ('OPENING','GRANT','ACCRUAL','RESERVE','RELEASE','USE','REFUND','ADJUSTMENT','EXPIRE','CARRY_OVER','IMPORT','SYSTEM_RECALCULATE')`,

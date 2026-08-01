@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LEAVE_ENGINE_ACCRUAL_METHODS } from "@mediaos/contracts";
 import type {
   CreateLeavePolicyRequest,
   UpdateLeavePolicyRequest,
@@ -85,7 +86,19 @@ export const leavePolicyFormSchema = z
   .refine((v) => v.policyScope !== "ContractType" || v.contractTypeId !== "", {
     message: "masterData.leavePolicies.validation.contractTypeRequired",
     path: ["contractTypeId"],
-  });
+  })
+  // S6-LEAVE-ACCRUAL-1 §5 — GƯƠNG của ràng buộc cùng tên ở `packages/contracts` (createLeavePolicySchema /
+  // updateLeavePolicySchema). Server vẫn là lớp ép cuối; ở đây chỉ để HR thấy lỗi ngay tại ô nhập thay vì
+  // ăn 422 sau khi bấm Lưu.
+  .refine(
+    (v) =>
+      !(LEAVE_ENGINE_ACCRUAL_METHODS as readonly string[]).includes(v.accrualMethod) ||
+      (v.yearlyQuotaDays !== "" && Number(v.yearlyQuotaDays) > 0),
+    {
+      message: "masterData.leavePolicies.validation.quotaRequiredForAccrual",
+      path: ["yearlyQuotaDays"],
+    },
+  );
 
 export type LeavePolicyFormValues = z.infer<typeof leavePolicyFormSchema>;
 

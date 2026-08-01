@@ -6,6 +6,9 @@ import { HolidaysModule } from "../foundation/holidays/holidays.module";
 import { SeedModule } from "../foundation/seed/seed.module";
 import { PermissionModule } from "../permission/permission.module";
 import { LeaveController } from "./leave.controller";
+import { LeaveAccrualJobHandler } from "./leave-accrual.job-handler";
+import { LeaveAccrualRepository } from "./leave-accrual.repository";
+import { LeaveAccrualService } from "./leave-accrual.service";
 import { LeaveAdminRepository } from "./leave-admin.repository";
 import { LeaveAdminService } from "./leave-admin.service";
 import { LeaveApprovalRepository } from "./leave-approval.repository";
@@ -87,6 +90,13 @@ import { LeaveService } from "./leave.service";
     LeaveReportRepository,
     LeaveAuditService,
     AuditRepository,
+    // S6-LEAVE-ACCRUAL-1 (additive) — engine cộng dồn phép theo `accrual_method`. AuditService/
+    // DatabaseService đến từ @Global EventsModule/DatabaseModule (không cần import thêm gì).
+    // LeaveAccrualJobHandler mang metadata @SystemJobHandler() → SchedulerModule (DiscoveryService) tự
+    // gom; LeaveModule KHÔNG import SchedulerModule (phụ thuộc MỘT HƯỚNG, không cycle).
+    LeaveAccrualService,
+    LeaveAccrualRepository,
+    LeaveAccrualJobHandler,
   ],
   // S4-DASH-BE-2 (additive): + LeaveApprovalService cho PENDING_LEAVE widget handler (DASH inject qua DI —
   // KHÔNG re-provide instance thứ 2). Chỉ thêm vào exports[], KHÔNG method mới.
