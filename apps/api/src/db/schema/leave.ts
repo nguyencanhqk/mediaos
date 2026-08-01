@@ -69,6 +69,13 @@ export const leavePolicies = pgTable(
     reserveBalanceOnPending: boolean("reserve_balance_on_pending").notNull().default(true),
     allowNegativeBalance: boolean("allow_negative_balance").notNull().default(false),
     maxNegativeDays: numeric("max_negative_days", { precision: 8, scale: 2 }),
+    // S6-LEAVE-CARRYOVER-1 (mig 0537) — cấu hình chuyển tiếp phép (SPEC-05 §16.2). Mốc hết hạn là cặp
+    // THÁNG+NGÀY lặp theo năm chứ không phải một cột `date`: chính sách sống nhiều năm, một mốc chết kiểu
+    // '2027-03-31' sẽ sai ngay năm sau. `maxCarryForwardDays` NULL CÓ NGHĨA = không trần (owner D-A3).
+    allowCarryForward: boolean("allow_carry_forward").notNull().default(false),
+    maxCarryForwardDays: numeric("max_carry_forward_days", { precision: 8, scale: 2 }),
+    carryForwardExpiryMonth: integer("carry_forward_expiry_month").notNull().default(3),
+    carryForwardExpiryDay: integer("carry_forward_expiry_day").notNull().default(31),
     allowCancelAfterApproved: boolean("allow_cancel_after_approved").notNull().default(true),
     cancelBeforeDays: integer("cancel_before_days"),
     requiresManagerApproval: boolean("requires_manager_approval").notNull().default(true),
@@ -110,6 +117,14 @@ export const leavePolicies = pgTable(
     check(
       "chk_leave_policies_effective_date",
       sql`effective_to IS NULL OR effective_to >= effective_from`,
+    ),
+    // S6-LEAVE-CARRYOVER-1 (mig 0537). Cặp (tháng, ngày) vô nghĩa về LỊCH (31/02, 31/04) chặn ở DTO —
+    // ở đây chỉ chặn khoảng thô; engine vẫn clamp về ngày cuối tháng thật khi dựng mốc của từng năm.
+    check(
+      "chk_leave_policies_carry_forward",
+      sql`(max_carry_forward_days IS NULL OR max_carry_forward_days >= 0)
+        AND carry_forward_expiry_month BETWEEN 1 AND 12
+        AND carry_forward_expiry_day BETWEEN 1 AND 31`,
     ),
   ],
 );
@@ -168,6 +183,18 @@ export const leaveBalanceTransactions = pgTable(
     uniqueIndex("uq_leave_balance_tx_accrual_period")
       .on(t.companyId, t.employeeId, t.leaveTypeId, t.transactionDate)
       .where(sql`transaction_type = 'ACCRUAL'`),
+    // S6-LEAVE-CARRYOVER-1 (mig 0537) — lớp PHỤ: chống ghi trùng TRONG CÙNG NGÀY. Chốt CHÍNH của hai
+    // nghiệp vụ này là ràng buộc SỐ NGÀY trong WHERE của lệnh UPDATE số dư (leave-carryover.repository.ts),
+    // vì số dư năm cũ vẫn đổi được sau khi đã chuyển (từ chối/huỷ đơn trả lại used/pending) ⇒ khoá theo KỲ
+    // như ACCRUAL sẽ hoặc đâm unique mỗi 60s, hoặc bỏ rơi số ngày vừa được trả về. Khoá theo
+    // `leave_balance_id` (KHÔNG phải employee_id): hai chân nợ/có ghi cùng ngày khác dòng balance, và
+    // balance duy nhất theo user_id nên khoá theo employee_id lọt ca một user có hai hồ sơ nhân sự.
+    uniqueIndex("uq_leave_balance_tx_carryover_daily")
+      .on(t.companyId, t.leaveBalanceId, t.transactionDate)
+      .where(sql`transaction_type = 'CARRY_OVER'`),
+    uniqueIndex("uq_leave_balance_tx_expire_daily")
+      .on(t.companyId, t.leaveBalanceId, t.transactionDate)
+      .where(sql`transaction_type = 'EXPIRE'`),
     check(
       "chk_leave_balance_transactions_type",
       sql`transaction_type IN ('OPENING','GRANT','ACCRUAL','RESERVE','RELEASE','USE','REFUND','ADJUSTMENT','EXPIRE','CARRY_OVER','IMPORT','SYSTEM_RECALCULATE')`,

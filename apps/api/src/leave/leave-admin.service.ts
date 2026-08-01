@@ -5,6 +5,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  UnprocessableEntityException,
 } from "@nestjs/common";
 import type {
   AdjustLeaveBalanceRequest,
@@ -18,6 +19,12 @@ import type {
   LeaveTypeAdminView,
   UpdateLeavePolicyRequest,
   UpdateLeaveTypeAdminRequest,
+} from "@mediaos/contracts";
+import {
+  CARRY_FORWARD_DEADLINE_INVALID,
+  CARRY_FORWARD_SCOPE_UNSUPPORTED,
+  carryForwardScopeIsSupported,
+  hasValidCarryForwardDeadline,
 } from "@mediaos/contracts";
 import { isUniqueViolation } from "../common/db-error";
 import { DatabaseService } from "../db/db.service";
@@ -259,6 +266,12 @@ export class LeaveAdminService {
             reserveBalanceOnPending: dto.reserveBalanceOnPending,
             allowNegativeBalance: dto.allowNegativeBalance,
             maxNegativeDays: dto.maxNegativeDays != null ? String(dto.maxNegativeDays) : null,
+            // S6-LEAVE-CARRYOVER-1: trần null = KHÔNG trần (D-A3); hai cột mốc NOT NULL ở DB nên luôn có giá trị.
+            allowCarryForward: dto.allowCarryForward,
+            maxCarryForwardDays:
+              dto.maxCarryForwardDays != null ? String(dto.maxCarryForwardDays) : null,
+            carryForwardExpiryMonth: dto.carryForwardExpiryMonth,
+            carryForwardExpiryDay: dto.carryForwardExpiryDay,
             allowCancelAfterApproved: dto.allowCancelAfterApproved,
             cancelBeforeDays: dto.cancelBeforeDays ?? null,
             requiresManagerApproval: dto.requiresManagerApproval,
@@ -297,6 +310,40 @@ export class LeaveAdminService {
       });
   }
 
+  /**
+   * S6-LEAVE-CARRYOVER-1 — hai luật cấu hình chuyển tiếp, xét trên trạng thái SAU khi hoà body vào dòng
+   * hiện có. Cả hai đều đã có ở `packages/contracts` cho `create`; ở `update` thì Zod không đủ dữ kiện
+   * (PATCH bán phần, `policyScope` immutable nên không nằm trong body), nên lớp ép cuối phải ở đây.
+   */
+  private assertCarryForwardMerged(
+    existing: {
+      policyScope: string;
+      allowCarryForward: boolean;
+      carryForwardExpiryMonth: number;
+      carryForwardExpiryDay: number;
+    },
+    dto: UpdateLeavePolicyRequest,
+  ): void {
+    const merged = {
+      allowCarryForward: dto.allowCarryForward ?? existing.allowCarryForward,
+      carryForwardExpiryMonth: dto.carryForwardExpiryMonth ?? existing.carryForwardExpiryMonth,
+      carryForwardExpiryDay: dto.carryForwardExpiryDay ?? existing.carryForwardExpiryDay,
+      policyScope: existing.policyScope,
+    };
+    if (!hasValidCarryForwardDeadline(merged)) {
+      throw new UnprocessableEntityException({
+        code: LEAVE_ERR.CARRY_FORWARD_INVALID,
+        message: CARRY_FORWARD_DEADLINE_INVALID.message,
+      });
+    }
+    if (!carryForwardScopeIsSupported(merged)) {
+      throw new UnprocessableEntityException({
+        code: LEAVE_ERR.CARRY_FORWARD_INVALID,
+        message: CARRY_FORWARD_SCOPE_UNSUPPORTED.message,
+      });
+    }
+  }
+
   async updatePolicy(
     actor: Actor,
     id: string,
@@ -315,6 +362,11 @@ export class LeaveAdminService {
           });
         }
         const [type] = await this.repo.findTypeByIdTx(actor.companyId, existing.leaveTypeId, tx);
+        // S6-LEAVE-CARRYOVER-1 — validate cấu hình chuyển tiếp trên TRẠNG THÁI ĐÃ HOÀ (existing + dto).
+        // Refine ở Zod chỉ thấy body: PATCH bán phần gửi đúng `{carryForwardExpiryMonth: 2}` lên một chính
+        // sách ĐÃ bật chuyển tiếp với ngày 31 sẽ lọt qua cả DTO lẫn CHECK ở DB (31 vẫn BETWEEN 1 AND 31),
+        // rồi engine lặng lẽ cắt về 28/02 — HR khai một mốc, hệ thống xoá phép theo mốc khác.
+        this.assertCarryForwardMerged(existing, dto);
         const [row] = await this.repo.updatePolicyTx(
           actor.companyId,
           id,
@@ -347,6 +399,16 @@ export class LeaveAdminService {
                 : dto.maxNegativeDays === null
                   ? null
                   : String(dto.maxNegativeDays),
+            // S6-LEAVE-CARRYOVER-1 (cùng khuôn undefined/null/value như maxNegativeDays ở trên).
+            allowCarryForward: dto.allowCarryForward,
+            maxCarryForwardDays:
+              dto.maxCarryForwardDays === undefined
+                ? undefined
+                : dto.maxCarryForwardDays === null
+                  ? null
+                  : String(dto.maxCarryForwardDays),
+            carryForwardExpiryMonth: dto.carryForwardExpiryMonth,
+            carryForwardExpiryDay: dto.carryForwardExpiryDay,
             allowCancelAfterApproved: dto.allowCancelAfterApproved,
             cancelBeforeDays: dto.cancelBeforeDays,
             requiresManagerApproval: dto.requiresManagerApproval,
@@ -364,8 +426,25 @@ export class LeaveAdminService {
           objectType: "leave_policy",
           objectId: id,
           actorUserId: actor.id,
-          before: { name: existing.name, status: existing.status },
-          after: { name: row.name, status: row.status },
+          // S6-LEAVE-CARRYOVER-1: 4 cột chuyển tiếp PHẢI nằm trong before/after. `allow_carry_forward`
+          // bật đường XOÁ ngày phép và mốc quyết định XOÁ LÚC NÀO — cả hai không hoàn tác được (sổ cái
+          // append-only). Thiếu ở đây thì câu hỏi "ai đặt mốc 31/03, lúc nào" không có chỗ nào trả lời.
+          before: {
+            name: existing.name,
+            status: existing.status,
+            allowCarryForward: existing.allowCarryForward,
+            maxCarryForwardDays: existing.maxCarryForwardDays,
+            carryForwardExpiryMonth: existing.carryForwardExpiryMonth,
+            carryForwardExpiryDay: existing.carryForwardExpiryDay,
+          },
+          after: {
+            name: row.name,
+            status: row.status,
+            allowCarryForward: row.allowCarryForward,
+            maxCarryForwardDays: row.maxCarryForwardDays,
+            carryForwardExpiryMonth: row.carryForwardExpiryMonth,
+            carryForwardExpiryDay: row.carryForwardExpiryDay,
+          },
         });
         return toPolicyView({
           ...row,
@@ -626,6 +705,10 @@ interface PolicyRow {
   reserveBalanceOnPending: boolean;
   allowNegativeBalance: boolean;
   maxNegativeDays: string | null;
+  allowCarryForward: boolean;
+  maxCarryForwardDays: string | null;
+  carryForwardExpiryMonth: number;
+  carryForwardExpiryDay: number;
   requiresManagerApproval: boolean;
   requiresHrApproval: boolean;
   effectiveFrom: string;
@@ -654,6 +737,12 @@ function toPolicyView(row: PolicyRow): LeavePolicyView {
     reserveBalanceOnPending: row.reserveBalanceOnPending,
     allowNegativeBalance: row.allowNegativeBalance,
     maxNegativeDays: numOrNull(row.maxNegativeDays),
+    // S6-LEAVE-CARRYOVER-1 — view PHẢI trả 4 field này: form Chính sách pre-fill từ đây, thiếu là mỗi lần
+    // HR sửa field khác sẽ gửi lại `allowCarryForward=false` và tự tắt cấu hình chuyển tiếp trong im lặng.
+    allowCarryForward: row.allowCarryForward,
+    maxCarryForwardDays: numOrNull(row.maxCarryForwardDays),
+    carryForwardExpiryMonth: row.carryForwardExpiryMonth,
+    carryForwardExpiryDay: row.carryForwardExpiryDay,
     requiresManagerApproval: row.requiresManagerApproval,
     requiresHrApproval: row.requiresHrApproval,
     effectiveFrom: row.effectiveFrom,

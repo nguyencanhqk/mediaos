@@ -292,7 +292,7 @@ erDiagram
 | Bảng | Mô tả | Cột chính |
 | --- | --- | --- |
 | **leave_types** 🗑️ | Loại nghỉ | leave_type_code(ANNUAL/SICK/UNPAID) · is_paid · deduct_balance · require_attachment |
-| **leave_policies** | Chính sách nghỉ | leave_type_id · scope_type(Company/Department/Employee/JobLevel) · annual_quota_days · allow_negative_balance · carry_forward_allowed · max_carry_forward_days · policy_config jsonb |
+| **leave_policies** | Chính sách nghỉ | leave_type_id · scope_type(Company/Department/Employee/JobLevel) · annual_quota_days · allow_negative_balance · **allow_carry_forward** · max_carry_forward_days · **carry_forward_expiry_month** · **carry_forward_expiry_day** · policy_config jsonb |
 | **leave_balances** | Số dư phép NV | employee_id · leave_type_id · year · granted_days · used_days · pending_days · adjusted_days · carried_forward_days · remaining_days. **UK (company_id, employee_id, leave_type_id, year)** |
 | **leave_balance_transactions** 🔁 | Ledger biến động phép | leave_balance_id · transaction_type(GRANT/USE/REFUND/ADJUST/EXPIRE/CARRY_OVER) · days · reference_type(LeaveRequest/Manual/System) · reference_id |
 | **leave_request_approvals** | Lịch sử duyệt đơn | leave_request_id · approver_user_id · action(APPROVE/REJECT/CANCEL/REVOKE) · acted_at |

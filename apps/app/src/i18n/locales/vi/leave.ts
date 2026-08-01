@@ -525,6 +525,24 @@ export default {
     createdByType: {
       User: "Người dùng",
       System: "Hệ thống",
+      Job: "Tác vụ nền",
+    },
+    // S6-LEAVE-CARRYOVER-1: trang này vốn in THÔ mã loại giao dịch. Hai loại mới CARRY_OVER/EXPIRE đi kèm
+    // số ÂM và là bằng chứng duy nhất nhân viên nhìn thấy khi ngày phép bị chuyển đi hoặc bị xoá —
+    // để nguyên tiếng Anh viết hoa thì người đọc không biết chuyện gì vừa xảy ra với phép của mình.
+    transactionType: {
+      OPENING: "Số dư đầu kỳ",
+      GRANT: "Được cấp",
+      ACCRUAL: "Cộng dồn định kỳ",
+      RESERVE: "Giữ chỗ (chờ duyệt)",
+      RELEASE: "Trả lại chỗ giữ",
+      USE: "Đã dùng",
+      REFUND: "Hoàn lại",
+      ADJUSTMENT: "Điều chỉnh thủ công",
+      EXPIRE: "Hết hạn",
+      CARRY_OVER: "Chuyển tiếp năm",
+      IMPORT: "Nhập từ dữ liệu ngoài",
+      SYSTEM_RECALCULATE: "Hệ thống tính lại",
     },
     empty: {
       title: "Chưa có giao dịch",

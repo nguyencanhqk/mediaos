@@ -134,7 +134,14 @@ function useColumns(
     {
       accessorKey: "transactionType",
       header: t("balanceTransactions.columns.type"),
-      cell: ({ row }) => <span className="text-sm">{row.original.transactionType}</span>,
+      // Mã lạ (loại mới chưa kịp dịch) rơi về chính mã đó thay vì ra chuỗi rỗng — thà thô còn hơn trống.
+      cell: ({ row }) => (
+        <span className="text-sm">
+          {t(`balanceTransactions.transactionType.${row.original.transactionType}`, {
+            defaultValue: row.original.transactionType,
+          })}
+        </span>
+      ),
     },
     { accessorKey: "transactionDate", header: t("balanceTransactions.columns.date") },
     {
