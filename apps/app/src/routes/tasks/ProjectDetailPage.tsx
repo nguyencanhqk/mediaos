@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, Lock, Pencil, RefreshCw, Settings2, Trash2 } from "lucide-react";
+import { Lock, Pencil, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import {
   taskProjectApi,
   taskKeys,
@@ -42,6 +42,7 @@ import {
   type WorkspaceTaskFilters,
 } from "./workspace-constants";
 import { useWorkspaceTabOrder } from "./use-workspace-tab-order";
+import { WorkspaceTabOrderMenu } from "./WorkspaceTabOrderMenu";
 
 /**
  * ProjectDetailPage — VỎ WORKSPACE dự án (S5-TASK-WORKSPACE-1 đợt D1, SPEC-06 §13.3 TASK-SCREEN-003;
@@ -241,10 +242,6 @@ function ProjectSettingsTab({
   showClose,
   showDelete,
   canManageColumns,
-  tabOrder,
-  isTabOrderCustomized,
-  onMoveTab,
-  onResetTabOrder,
   onEdit,
   onCloseProject,
   onDeleteProject,
@@ -255,11 +252,6 @@ function ProjectSettingsTab({
   showClose: boolean;
   showDelete: boolean;
   canManageColumns: boolean;
-  /** Thứ tự tab (tuỳ chọn hiển thị cá nhân, localStorage — useWorkspaceTabOrder). */
-  tabOrder: ProjectWorkspaceTab[];
-  isTabOrderCustomized: boolean;
-  onMoveTab: (tab: ProjectWorkspaceTab, dir: -1 | 1) => void;
-  onResetTabOrder: () => void;
   onEdit: () => void;
   onCloseProject: () => void;
   onDeleteProject: () => void;
@@ -334,60 +326,6 @@ function ProjectSettingsTab({
           </Button>
         </Card>
       )}
-
-      <Card className="space-y-3 p-4" data-testid="settings-tab-order">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <h3 className="text-sm font-semibold text-foreground">
-              {t("projects.detail.settings.tabOrder.title")}
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              {t("projects.detail.settings.tabOrder.description")}
-            </p>
-          </div>
-          {isTabOrderCustomized && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onResetTabOrder}
-              data-testid="settings-tab-order-reset"
-            >
-              {t("projects.detail.settings.tabOrder.reset")}
-            </Button>
-          )}
-        </div>
-        <ul className="divide-y divide-border rounded-md border border-border">
-          {tabOrder.map((key, index) => (
-            <li key={key} className="flex items-center justify-between gap-3 px-3 py-1.5">
-              <span className="text-sm text-foreground">{t(`projects.detail.tabs.${key}`)}</span>
-              <span className="flex items-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 px-0"
-                  disabled={index === 0}
-                  onClick={() => onMoveTab(key, -1)}
-                  aria-label={t("projects.detail.settings.tabOrder.moveUp")}
-                  data-testid={`tab-move-up-${key}`}
-                >
-                  <ChevronUp className="h-4 w-4" aria-hidden="true" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 px-0"
-                  disabled={index === tabOrder.length - 1}
-                  onClick={() => onMoveTab(key, 1)}
-                  aria-label={t("projects.detail.settings.tabOrder.moveDown")}
-                  data-testid={`tab-move-down-${key}`}
-                >
-                  <ChevronDown className="h-4 w-4" aria-hidden="true" />
-                </Button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </Card>
 
       {(showClose || showDelete) && (
         <Card className="space-y-3 border-destructive/40 p-4">
@@ -693,6 +631,17 @@ export function ProjectDetailPage({
   // Tab "Cài đặt" chỉ hiện khi có ÍT NHẤT một việc làm được trong đó; deep-link ?tab=settings khi
   // không đủ quyền → EmptyState forbidden (mirror pattern report/activity).
   const showSettings = showEdit || showClose || showDelete || canManageColumns;
+  // Tập tab người này THẬT SỰ thấy — dùng chung cho thanh tab VÀ menu sắp thứ tự, nên menu không bao
+  // giờ nêu tab họ không có quyền xem (cũng là căn cứ để "lên/xuống" nhảy đúng ô liền kề nhìn thấy).
+  const visibleTabs = tabOrder.filter((key) =>
+    key === "report"
+      ? canViewReport
+      : key === "activity"
+        ? canViewActivity
+        : key === "settings"
+          ? showSettings
+          : true,
+  );
 
   return (
     <div className="space-y-6 p-6">
@@ -701,18 +650,9 @@ export function ProjectDetailPage({
       {/* 3 nút Sửa/Đóng/Xóa dự án đã CHUYỂN vào tab Cài đặt — header chỉ còn tiêu đề. */}
       <PageHeader title={project.name} description={project.code ?? undefined} />
 
-      <div className="flex gap-2 overflow-x-auto border-b border-border">
-        {tabOrder
-          .filter((key) =>
-            key === "report"
-              ? canViewReport
-              : key === "activity"
-                ? canViewActivity
-                : key === "settings"
-                  ? showSettings
-                  : true,
-          )
-          .map((key) => (
+      <div className="flex items-center gap-2 border-b border-border">
+        <div className="flex flex-1 gap-2 overflow-x-auto">
+          {visibleTabs.map((key) => (
             <button
               key={key}
               type="button"
@@ -728,6 +668,15 @@ export function ProjectDetailPage({
               {t(`projects.detail.tabs.${key}`)}
             </button>
           ))}
+        </div>
+        {/* Thứ tự tab = tuỳ chọn CÁ NHÂN ⇒ ở ngay thanh tab, KHÔNG nhét trong tab Cài đặt (tab đó
+            ẩn với Viewer/Member ⇒ họ mất luôn đường chỉnh hiển thị của chính mình). */}
+        <WorkspaceTabOrderMenu
+          tabs={visibleTabs}
+          isCustomized={isCustomized}
+          onMove={(key, dir) => moveTab(key, dir, visibleTabs)}
+          onReset={resetTabOrder}
+        />
       </div>
 
       {(tab === "board" || tab === "list") && (
@@ -777,10 +726,6 @@ export function ProjectDetailPage({
           showClose={canCloseAction && showClose}
           showDelete={showDelete}
           canManageColumns={canManageColumns}
-          tabOrder={tabOrder}
-          isTabOrderCustomized={isCustomized}
-          onMoveTab={moveTab}
-          onResetTabOrder={resetTabOrder}
           onEdit={() => setEditOpen(true)}
           onCloseProject={() => setCloseOpen(true)}
           onDeleteProject={() => setDeleteOpen(true)}

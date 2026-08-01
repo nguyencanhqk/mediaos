@@ -228,21 +228,23 @@ describe("ProjectDetailPage", () => {
     expect(screen.getByTestId("settings-manage-columns")).toBeInTheDocument();
   });
 
-  // ── Thẻ "Thứ tự tab" — tuỳ chọn hiển thị cá nhân, lưu localStorage (use-workspace-tab-order) ──
-  it("sắp thứ tự tab trong Cài đặt → tab bar đổi theo + lưu localStorage; khôi phục về mặc định", async () => {
+  // ── Menu "Thứ tự tab" — tuỳ chọn hiển thị cá nhân, lưu localStorage (use-workspace-tab-order) ──
+  const tabBarOrder = () =>
+    Array.from(document.querySelectorAll('[data-testid^="workspace-tab-"]')).map((el) =>
+      el.getAttribute("data-testid"),
+    );
+
+  it("sắp thứ tự tab từ menu trên thanh tab → tab bar đổi theo + lưu localStorage; khôi phục về mặc định", async () => {
     setCapabilities({ "read:project": true });
     vi.mocked(taskProjectApi.getProject).mockResolvedValue({
       ...MOCK_PROJECT,
       myProjectRole: "Owner",
     });
-    searchRef.current = { tab: "settings" };
     renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
-    await waitFor(() => expect(screen.getByTestId("settings-tab-order")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("tab-order-trigger")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("tab-order-trigger"));
+    await waitFor(() => expect(screen.getByTestId("tab-order-menu")).toBeInTheDocument());
 
-    const tabBarOrder = () =>
-      Array.from(document.querySelectorAll('[data-testid^="workspace-tab-"]')).map((el) =>
-        el.getAttribute("data-testid"),
-      );
     expect(tabBarOrder()[0]).toBe("workspace-tab-overview");
 
     // "Tổng quan" xuống 1 bậc → "Bảng" lên đầu tab bar; thứ tự mới ghi vào localStorage.
@@ -253,9 +255,62 @@ describe("ProjectDetailPage", () => {
     ).toBe("board");
 
     // Khôi phục mặc định → về thứ tự gốc + xoá storage.
-    fireEvent.click(screen.getByTestId("settings-tab-order-reset"));
+    fireEvent.click(screen.getByTestId("tab-order-reset"));
     expect(tabBarOrder()[0]).toBe("workspace-tab-overview");
     expect(window.localStorage.getItem("mediaos.tasks.workspaceTabOrder")).toBeNull();
+  });
+
+  // Hồi quy: control này TỪNG nằm trong tab "Cài đặt" — tab ẩn với Member ⇒ chính họ mất đường
+  // chỉnh thứ tự tab của mình (người dùng báo: "đổi ở Owner mà tài khoản thành viên không đổi").
+  it("Member không có tab Cài đặt VẪN sắp được thứ tự tab, và menu chỉ liệt kê tab họ thấy", async () => {
+    setCapabilities({ "read:project": true });
+    vi.mocked(taskProjectApi.getProject).mockResolvedValue({
+      ...MOCK_PROJECT,
+      myProjectRole: "Member",
+    });
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(screen.queryByTestId("workspace-tab-settings")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("tab-order-trigger"));
+    await waitFor(() => expect(screen.getByTestId("tab-order-menu")).toBeInTheDocument());
+    // Menu KHÔNG nêu tab bị ẩn theo quyền (Báo cáo/Hoạt động/Cài đặt).
+    expect(screen.queryByTestId("tab-move-up-settings")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("tab-move-up-report")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("tab-move-up-activity")).not.toBeInTheDocument();
+
+    expect(tabBarOrder()[0]).toBe("workspace-tab-overview");
+    fireEvent.click(screen.getByTestId("tab-move-down-overview"));
+    expect(tabBarOrder()[0]).toBe("workspace-tab-board");
+  });
+
+  // "Xuống" phải nhảy qua ô LIỀN KỀ ĐANG HIỆN: với người chỉ thấy 4 tab, đẩy "Danh sách" xuống phải
+  // đổi chỗ với "Thành viên" (tab kế tiếp họ thấy), không phải với "Báo cáo" đang ẩn — bấm mà thanh
+  // tab không nhúc nhích là lỗi cũ dễ tái phát nhất.
+  it("bỏ qua tab đang ẩn khi đổi chỗ: 'Danh sách' xuống → đứng sau 'Thành viên'", async () => {
+    setCapabilities({ "read:project": true });
+    vi.mocked(taskProjectApi.getProject).mockResolvedValue({
+      ...MOCK_PROJECT,
+      myProjectRole: "Member",
+    });
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("tab-order-trigger")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("tab-order-trigger"));
+    await waitFor(() => expect(screen.getByTestId("tab-order-menu")).toBeInTheDocument());
+
+    expect(tabBarOrder()).toEqual([
+      "workspace-tab-overview",
+      "workspace-tab-board",
+      "workspace-tab-list",
+      "workspace-tab-members",
+    ]);
+    fireEvent.click(screen.getByTestId("tab-move-down-list"));
+    expect(tabBarOrder()).toEqual([
+      "workspace-tab-overview",
+      "workspace-tab-board",
+      "workspace-tab-members",
+      "workspace-tab-list",
+    ]);
   });
 
   it("thứ tự tab đã lưu được áp lại khi mở trang (đọc từ localStorage)", async () => {
