@@ -121,6 +121,16 @@ export default {
         title: "Không thể tải dự án",
         description: "Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.",
       },
+      // Thứ tự tab — tuỳ chọn hiển thị CÁ NHÂN, nút ở cuối thanh tab (WorkspaceTabOrderMenu).
+      // KHÔNG nằm trong `settings.*`: đó là tuỳ chọn của riêng người xem, không phải cài đặt dự án.
+      tabOrder: {
+        title: "Thứ tự tab",
+        description:
+          "Sắp xếp thứ tự tab cho riêng bạn — chỉ lưu trên trình duyệt này và áp dụng cho mọi dự án. Người khác không bị ảnh hưởng.",
+        moveUp: "Chuyển tab lên",
+        moveDown: "Chuyển tab xuống",
+        reset: "Khôi phục mặc định",
+      },
       // Tab "Cài đặt" — gom hành động quản trị dự án (trước đây nằm rải ở header + board toolbar).
       settings: {
         forbidden: {
@@ -134,14 +144,6 @@ export default {
         pipeline: {
           title: "Cột quy trình (pipeline)",
           description: "Thêm, đổi tên, đổi màu, sắp xếp hoặc xoá các cột trên bảng công việc.",
-        },
-        tabOrder: {
-          title: "Thứ tự tab",
-          description:
-            "Sắp xếp thứ tự các tab của trang dự án theo ý bạn (lưu trên trình duyệt này, áp dụng cho mọi dự án).",
-          moveUp: "Chuyển tab lên",
-          moveDown: "Chuyển tab xuống",
-          reset: "Khôi phục mặc định",
         },
         danger: {
           title: "Vùng nguy hiểm",

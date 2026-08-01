@@ -52,6 +52,34 @@ export function sanitizeWorkspaceTabOrder(raw: unknown): ProjectWorkspaceTab[] {
   return [...unique, ...missing];
 }
 
+/**
+ * Đổi chỗ `tab` với tab LIỀN KỀ **đang hiện** theo chiều `dir` (-1 lên / +1 xuống), trả MẢNG MỚI.
+ *
+ * Vì sao tính theo `visible` chứ không theo vị trí trong mảng đầy đủ: mỗi người thấy một tập tab
+ * khác nhau (Báo cáo/Hoạt động/Cài đặt ẩn theo quyền). Nếu nhảy theo mảng đầy đủ, một cú bấm có
+ * thể đổi chỗ với tab NGƯỜI ĐÓ KHÔNG THẤY ⇒ nhìn như "bấm mà không có gì xảy ra". Dùng phép ĐỔI
+ * CHỖ (không splice) nên các tab đang ẩn giữ nguyên khe của mình — người có quyền cao hơn mở lên
+ * không thấy thứ tự của họ bị xáo.
+ */
+export function moveWorkspaceTab(
+  order: readonly ProjectWorkspaceTab[],
+  tab: ProjectWorkspaceTab,
+  dir: -1 | 1,
+  visible: readonly ProjectWorkspaceTab[] = order,
+): ProjectWorkspaceTab[] {
+  const visibleSeq = order.filter((t) => visible.includes(t));
+  const at = visibleSeq.indexOf(tab);
+  const target = at + dir;
+  if (at < 0 || target < 0 || target >= visibleSeq.length) return [...order];
+  const neighbor = visibleSeq[target];
+  const from = order.indexOf(tab);
+  const to = order.indexOf(neighbor);
+  const next = [...order];
+  next[from] = neighbor;
+  next[to] = tab;
+  return next;
+}
+
 // ─── Bộ lọc toolbar dùng chung (tìm · lọc · sắp xếp) ──────────────────────────
 export const WORKSPACE_TASK_SORTS = [
   "default",
