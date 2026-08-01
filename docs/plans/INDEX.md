@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**317 WO** · có micro-plan: **168/317** · ⬜ 14 chờ · 🔵 1 đang làm · ✅ 301 xong · 🔴 1 chặn
+**318 WO** · có micro-plan: **169/318** · ⬜ 14 chờ · 🔵 1 đang làm · ✅ 302 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -337,6 +337,7 @@
 | `S6-LEAVE-ACCRUAL-1` | 🔴 | ✅ xong | [📄](S6-LEAVE-ACCRUAL-1.md) | — | Engine cộng dồn phép theo chính sách (accrual_method) — cấp vào NGÀY C |
 | `S6-LEAVE-CARRYOVER-1` | 🔴 | ✅ xong | [📄](S6-LEAVE-CARRYOVER-1.md) | ✅S6-LEAVE-ACCRUAL-1 | Chuyển tiếp phép chưa nghỉ sang năm sau + hết hạn theo mốc CẤU HÌNH ĐƯ |
 | `S6-LEAVE-MAXNEG-1` | 🔴 | ✅ xong | [📄](S6-LEAVE-MAXNEG-1.md) | — | Ép trần số ngày âm (max_negative_days) ở đường quyết định đơn nghỉ — h |
+| `S6-LEAVE-TYPEADMIN-1` | 🟡 | ✅ xong | [📄](S6-LEAVE-TYPEADMIN-1.md) | — | Màn Loại nghỉ là CỬA MỘT CHIỀU — đặt 'Ngưng áp dụng' xong không bật lạ |
 
 ## Khác
 
