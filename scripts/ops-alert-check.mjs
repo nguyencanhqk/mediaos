@@ -22,7 +22,7 @@
  * Lịch chạy (Windows Task Scheduler) — xem docs/RELEASE/RELEASE-09.
  *
  * ENV: OPS_BASE_URL (mặc định http://localhost:3100/api/v1) · OPS_DOMAIN (cert) · OPS_WINDOW_MIN
- *      OPS_BACKUP_DIR · OPS_LOG_FILE · OPS_ALERT_LOG · OPS_ALERT_WEBHOOK (tuỳ chọn)
+ *      OPS_BACKUP_DIR · OPS_LOG_FILE · OPS_LOG_TAIL_BYTES · OPS_ALERT_LOG · OPS_ALERT_WEBHOOK (tuỳ chọn)
  *      DATABASE_DIRECT_URL (đọc migration + system_job_runs; thiếu ⇒ 2 rule đó `unknown`)
  *
  * Exit: 0 tất cả ok · 1 có warn hoặc unknown · 2 có crit · 3 lỗi cấu hình.
@@ -32,6 +32,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluate, exitCodeFor, worstSeverity } from "./lib/ops-alert-rules.mjs";
+import { DEFAULT_TAIL_BYTES, countErrorLinesInFile } from "./lib/ops-log-window.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "..");
@@ -72,6 +73,14 @@ const DOMAIN = process.env.OPS_DOMAIN ?? "api.funtimemediacorp.com";
 const WINDOW_MIN = Number.parseInt(process.env.OPS_WINDOW_MIN ?? "60", 10);
 const BACKUP_DIR = process.env.OPS_BACKUP_DIR ?? path.join(REPO_ROOT, "backups");
 const LOG_FILE = process.env.OPS_LOG_FILE ?? path.join(REPO_ROOT, "logs", "api.err.log");
+/**
+ * Đuôi log đọc mỗi lần. Đủ rộng để phủ hết cửa sổ khi log phun mạnh — xem `lib/ops-log-window.mjs`.
+ * Giá trị env rác ⇒ quay về mặc định, KHÔNG để `NaN` biến rule thành `unknown` vĩnh viễn.
+ */
+const LOG_TAIL_BYTES = (() => {
+  const n = Number.parseInt(process.env.OPS_LOG_TAIL_BYTES ?? "", 10);
+  return Number.isNaN(n) || n <= 0 ? DEFAULT_TAIL_BYTES : n;
+})();
 const ALERT_LOG = process.env.OPS_ALERT_LOG ?? path.join(REPO_ROOT, "logs", "ops-alerts.log");
 const WEBHOOK = process.env.OPS_ALERT_WEBHOOK ?? "";
 const TIMEOUT_MS = 8000;
@@ -159,23 +168,16 @@ function collectJobFailed() {
   return Number.isNaN(n) ? null : n;
 }
 
-/** Đếm dòng lỗi trong cửa sổ. File log NSSM không có timestamp chuẩn ⇒ đếm theo phần ĐUÔI mới ghi. */
+/**
+ * Đếm dòng lỗi trong cửa sổ — đọc TIMESTAMP TỪNG DÒNG (`lib/ops-log-window.mjs`), không suy từ
+ * `mtime` của file.
+ *
+ * Bản trước gate bằng `mtime` rồi đếm mọi chữ `ERROR` trong 2MB cuối. Ngày 2026-08-01 nó trả **1787**
+ * "lỗi trong 60 phút" trong khi dòng lỗi mới nhất là của **30/07** — CRIT giả nổ mỗi 10 phút. Lý do
+ * đầy đủ + chiều hỏng ngược lại (âm tính giả): xem đầu `lib/ops-log-window.mjs`.
+ */
 function collectErrorLines() {
-  try {
-    const stat = fs.statSync(LOG_FILE);
-    const ageMin = (Date.now() - stat.mtimeMs) / 60000;
-    if (ageMin > WINDOW_MIN) return 0; // log không được ghi thêm trong cửa sổ ⇒ 0 lỗi mới
-    // Chỉ đọc 2MB cuối: file này từng phình tới 149MB (sự cố 2026-07-24), không đọc cả file.
-    const size = stat.size;
-    const readBytes = Math.min(size, 2 * 1024 * 1024);
-    const fd = fs.openSync(LOG_FILE, "r");
-    const buf = Buffer.alloc(readBytes);
-    fs.readSync(fd, buf, 0, readBytes, size - readBytes);
-    fs.closeSync(fd);
-    return (buf.toString("utf8").match(/\bERROR\b/g) ?? []).length;
-  } catch {
-    return null;
-  }
+  return countErrorLinesInFile(LOG_FILE, { windowMin: WINDOW_MIN, maxBytes: LOG_TAIL_BYTES });
 }
 
 function collectDiskFreeGb() {

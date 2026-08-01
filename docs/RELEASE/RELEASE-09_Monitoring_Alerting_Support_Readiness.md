@@ -54,7 +54,7 @@ unknown) / `2` (crit).
 | 2 | DB connection | `/health/db` **body** (fail-soft: luôn HTTP 200 ⇒ phải đọc body) | latency > 500ms | `status=down` | DevOps/BE |
 | 3 | *(thêm)* Lệch migration | journal ↔ `drizzle.__drizzle_migrations` | ≥ 1 tồn đọng | — | BE Lead |
 | 4 | Notification/job failure | `system_job_runs` status `Failed` trong cửa sổ | ≥ 1 | ≥ 10 | BE/DevOps |
-| 5 | API 5xx spike | đếm `ERROR` ở 2MB cuối `logs/api.err.log` | ≥ 20 | ≥ 200 | BE Lead |
+| 5 | API 5xx spike | dòng `ERROR` có **timestamp nằm trong cửa sổ**, đọc 8MB cuối `logs/api.err.log` | ≥ 20 | ≥ 200 | BE Lead |
 | 6 | Disk | dung lượng trống ổ chứa repo/pgdata | ≤ 10 GB | ≤ 2 GB | DevOps |
 | 7 | Backup fail | tuổi bản backup mới nhất | > 26h | > 50h | DevOps |
 | 8 | SSL expiry | hạn cert của domain API | ≤ 14 ngày | ≤ 3 ngày | DevOps |
@@ -64,6 +64,12 @@ unknown) / `2` (crit).
 
 Rule #3 và #5 không nằm trong §18.3 gốc — thêm vì **sự cố PROD ĐÃ xảy ra**: 2026-07-24 thiếu mig `0511`
 ⇒ job nền Failed mỗi nhịp, `api.err.log` phình **149 MB**, không có cảnh báo nào nổ.
+
+> ⚠️ **Rule #5 đọc TIMESTAMP TỪNG DÒNG, không dùng `mtime` của file** (`S6-OPS-LOGWINDOW-1`). Bản đầu
+> gate bằng `mtime` rồi đếm mọi chữ `ERROR` trong 2MB cuối — hỏng **cả hai chiều**: ngày 2026-08-01 nó
+> trả **1787 "lỗi trong 60 phút"** trong khi dòng lỗi mới nhất là của **30/07** (CRIT giả nổ mỗi 10
+> phút); và ở chiều ngược lại, một lỗi ghi ở phút 59 rồi im 61 phút sẽ bị báo **XANH**. Logic + lý do
+> đầy đủ: `scripts/lib/ops-log-window.mjs`, spec `scripts/lib/ops-log-window.test.mjs`.
 
 ### Kết quả chạy thật — 2026-07-30 trên PROD
 
@@ -87,6 +93,31 @@ OPS ALERT CHECK (IMPL-09 §18.3) — http://localhost:3100/api/v1 · cửa sổ 
 > `scripts/backup-db.sh` tồn tại từ G1-8 và `S6-PERF-DB-1` đã chứng minh restore-drill chạy được — nhưng
 > drill đó tự `pg_dump` tại chỗ, nó KHÔNG chứng minh có backup định kỳ. Đúng lại bài học của chính dự
 > án: *script tồn tại ≠ script chạy được*. Xem `RELEASE-02` KI-050 — **chặn go-live**.
+
+### Kết quả chạy thật — 2026-08-01 trên PROD (sau `S6-OPS-LOGWINDOW-1`)
+
+```text
+OPS ALERT CHECK (IMPL-09 §18.3) — http://localhost:3100/api/v1 · cửa sổ 60 phút
+
+  ✓ ok      Backend down                       /health 200 status=ok
+  ✓ ok      DB connection/readiness            latency 8ms
+  ✓ ok      Lệch migration (schema ↔ journal)  schema ở head
+  ✓ ok      Job nền thất bại                   0 lần chạy Failed trong cửa sổ
+  ✓ ok      Lỗi ứng dụng trong log             0 dòng lỗi trong cửa sổ
+  ✓ ok      Dung lượng trống                   còn 395.5 GB
+  ✓ ok      Tuổi bản backup mới nhất           2.8 giờ kể từ bản gần nhất
+  ✓ ok      Hạn chứng chỉ TLS                  còn 46 ngày
+
+  Tổng thể: OK   (exit 0)
+```
+
+So với lần chạy đã lên lịch ngay trước đó (`logs/ops-alerts.log`, 2026-08-01T00:17:23Z) — **đúng một
+nhóm đổi kết luận**, 7 nhóm còn lại giữ nguyên:
+
+| Nhóm | Trước | Sau |
+| --- | --- | --- |
+| Lỗi ứng dụng trong log | `crit` — *1787 dòng lỗi trong cửa sổ* | `ok` — *0 dòng lỗi trong cửa sổ* |
+| 7 nhóm còn lại | `ok` | `ok` (KI-050 đã đóng: backup 2.8 giờ) |
 
 ---
 
@@ -132,7 +163,33 @@ env của máy, **không commit**).
 | Background job có id/status/duration/error | ✅ | `system_job_runs` + `/system/jobs` |
 | Migration/deployment log được lưu | ✅ | `drizzle.__drizzle_migrations` · `logs/api.*.log` · **MỚI**: định danh build ở `/health` |
 | Export/file access log | ✅ | `file_access_logs` (append-only) |
+| **Xoay log (chống phình đĩa)** | ✅ **ĐÃ BẬT trên PROD 2026-08-01** | NSSM xoay khi > 32 MB hoặc quá 1 ngày, xoay được cả khi đang chạy. Dọn: `scripts\windows\08-log-rotate.ps1`. Cài mới tự bật qua `04-build-install-service.ps1` |
 | **Log có cấu trúc JSON** | ❌ **CHƯA** | Nest `Logger` dạng text — **KI-009** (`S3`, không chặn go-live) |
+
+> 🔴 **Đo 2026-08-01 TRƯỚC khi vá — service `MediaOS-API` TẮT hoàn toàn xoay log:** `AppRotateFiles` ·
+> `AppRotateOnline` · `AppRotateBytes` · `AppRotateSeconds` đều `= 0` ⇒ hai file log **chưa từng được
+> xoay** kể từ ngày cài (dòng đầu `api.out.log` là lần khởi động 18/06). Hậu quả đo được:
+> `api.out.log` = **688 MB** (lấy mẫu 8MB giữa file: **99 %** là dòng `RetentionCleanupJob` lặp lại),
+> `api.err.log` = 2 MB. Bản vá 24/07 là cắt tay (`api.err.log.2026-07-24-truncated-tail`) — tức chuyện
+> này đã xảy ra một lần và **không có gì chặn nó lặp lại**.
+>
+> ✅ **Đã xử lý 2026-08-01** bằng `08-log-rotate.ps1 -Configure`:
+>
+> ```text
+> tong log truoc: 690.8 MB   (api.out.log 688.5 MB · api.err.log 2.1 MB)
+>   [OK] Da dat: xoay khi > 32 MB hoac qua 1 ngay, xoay duoc ca khi dang chay
+>   [OK] API song lai sau restart
+>   [OK] cat api.out-20260801T031432.052.log: 688.5 MB -> 10.0 MB
+> tong log sau : 12.3 MB   (giai phong 678.4 MB)
+> ```
+>
+> `data.build` **giống hệt trước và sau restart** (`14306b8a-dirty` · `builtAt 2026-08-01T00:11:47Z`)
+> — restart, KHÔNG phải rebuild. Bản 688 MB không bị xoá: nó được cắt giữa, giữ 2 MB đầu + 8 MB đuôi
+> trong `api.out-20260801T031432.052.trimmed.log`.
+>
+> 🔬 **Bằng chứng cuối cùng cho rule #5:** ngay lần restart này, `api.err.log` có `mtime` nhảy lên
+> 10:14 trong khi kích thước **không đổi một byte** (2 179 073 B) — NSSM mở file để ghi tiếp là đã đủ
+> làm mới `mtime`. Đúng cơ chế sinh ra con số 1787 giả. Cách bật + dọn định kỳ: `RELEASE-11` §6.2b.
 
 ---
 

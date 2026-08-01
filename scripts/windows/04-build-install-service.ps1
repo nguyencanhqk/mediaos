@@ -43,6 +43,13 @@ nssm set $ServiceName AppDirectory "$RepoRoot"
 nssm set $ServiceName AppEnvironmentExtra NODE_ENV=production
 nssm set $ServiceName AppStdout "$logDir\api.out.log"
 nssm set $ServiceName AppStderr "$logDir\api.err.log"
+# Xoay log — KHÔNG bỏ 4 dòng này. Bản cài trước để cả 4 tham số = 0 ⇒ api.out.log phình tới 688 MB và
+# api.err.log phải cắt tay hai lần (24/07 và 01/08). AppRotateOnline cho phép xoay khi service ĐANG
+# chạy; NSSM cũng xoay ngay lúc khởi động nếu file đã vượt ngưỡng. Dọn bản cũ: 08-log-rotate.ps1.
+nssm set $ServiceName AppRotateFiles 1
+nssm set $ServiceName AppRotateOnline 1
+nssm set $ServiceName AppRotateBytes 33554432    # 32 MB
+nssm set $ServiceName AppRotateSeconds 86400     # hoặc quá 1 ngày
 nssm set $ServiceName Start SERVICE_AUTO_START
 nssm set $ServiceName AppExit Default Restart
 nssm set $ServiceName DisplayName "MediaOS API (NestJS)"
