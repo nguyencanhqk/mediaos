@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**297 WO** · có micro-plan: **162/297** · ⬜ 0 chờ · 🔵 0 đang làm · ✅ 296 xong · 🔴 1 chặn
+**317 WO** · có micro-plan: **168/317** · ⬜ 14 chờ · 🔵 1 đang làm · ✅ 301 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -333,6 +333,10 @@
 | `S6-QA-TENANTWRITE-1` | 🔴 | ✅ xong | [📄](S6-QA-TENANTWRITE-1.md) | — | KI-037 — lưới tenant-isolation (156 bảng × 3 ca) CHỈ SELECT: không có  |
 | `S6-REL-1` | 🔴 | ✅ xong | [📄](S6-REL-1.md) | ✅S6-QA-FINAL-1 ✅S6-SEC-1 ✅S6-PERF-DB-1 ✅S6-QA-CHUNK-1 ✅S6-SEC-ROUTEMAP-1 ✅S6-SEC-ORG-1 ✅S6-SEC-NOTITX-1 ✅S6-SEC-LOGINLOG-1 ✅S6-SEC-MV-1 | Release Candidate build + release notes + Go-live runbook + deployment |
 | `S6-GOLIVE-1` | 🔴 | ✅ xong | [📄](S6-GOLIVE-1.md) | ✅S6-REL-1 | Final Sign-off · Go/No-go · Go-live execution · Handoff (admin/user/su |
+| `S6-OPS-LOGWINDOW-1` | 🟡 | ✅ xong | [📄](S6-OPS-LOGWINDOW-1.md) | — | Cảnh báo vận hành đếm SAI cửa sổ — ops-alert-check trả CRIT vì đếm 5 n |
+| `S6-LEAVE-ACCRUAL-1` | 🔴 | ✅ xong | [📄](S6-LEAVE-ACCRUAL-1.md) | — | Engine cộng dồn phép theo chính sách (accrual_method) — cấp vào NGÀY C |
+| `S6-LEAVE-CARRYOVER-1` | 🔴 | ✅ xong | [📄](S6-LEAVE-CARRYOVER-1.md) | ✅S6-LEAVE-ACCRUAL-1 | Chuyển tiếp phép chưa nghỉ sang năm sau + hết hạn theo mốc CẤU HÌNH ĐƯ |
+| `S6-LEAVE-MAXNEG-1` | 🔴 | ✅ xong | [📄](S6-LEAVE-MAXNEG-1.md) | — | Ép trần số ngày âm (max_negative_days) ở đường quyết định đơn nghỉ — h |
 
 ## Khác
 
@@ -342,6 +346,27 @@
 | `HR-PROFILE-UI-2` | 🟡 | ✅ xong | [📄](HR-PROFILE-UI-2.md) | ✅HR-PROFILE-UI-1 | Hồ sơ nhân sự phần 2: gom nhóm bảng 1/2 cấp (Tùy chỉnh cột) + export d |
 | `HR-PERF-1` | 🔴 | ✅ xong | [📄](HR-PERF-1.md) | ✅HR-PROFILE-UI-1 | Tối ưu hiệu năng nền tảng: (a) code-split router theo module (bundle a |
 | `HR-IDENTITY-READ-1` | 🔴 | ✅ xong | [📄](HR-IDENTITY-READ-1.md) | ✅HR-PROFILE-UI-1 | Lộ identity_number/issue_date/issue_place (CCCD §14.18) qua read surfa |
+
+## Sprint 7
+
+| WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
+| --- | --- | --- | --- | --- | --- |
+| `S7-GOAL-PROJTAB-1` | 🟡 | ✅ xong | [📄](S7-GOAL-PROJTAB-1.md) | ✅S6-GOLIVE-1 | Tab 'Mục tiêu' trong trang dự án: mục tiêu của dự án + phủ mục tiêu củ |
+| `S7-CHAT-DOC-1` | 🟢 | 🔵 đang làm | [📄](docs/SPEC/SPEC-15 CHAT.md) | — | Bộ tài liệu CHAT: SPEC-15 + DB-12 + API-13 + ma trận phân quyền §9c +  |
+| `S7-CHAT-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-DOC-1 ✅S6-GOLIVE-1 | Migration CHAT: ALTER 3 bảng đã có (cột v1 + CHECK loại↔neo + column-G |
+| `S7-CHAT-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-DB-1 | ChatAccessService — ĐIỂM KHẲNG ĐỊNH MEMBERSHIP DUY NHẤT (fail-closed,  |
+| `S7-CHAT-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-BE-1 | Tin nhắn: đọc theo con trỏ seq (cấm offset) · gửi idempotent theo clie |
+| `S7-CHAT-BE-3` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-BE-2 | Đính kèm tệp/ảnh qua FOUNDATION Files + ChatMessageFileResolver (BẮT B |
+| `S7-CHAT-BE-4` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-BE-2 | Tìm kiếm toàn văn tiếng Việt (có dấu/không dấu) — LUÔN giới hạn theo p |
+| `S7-CHAT-BE-5` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-BE-1 | Phòng tự động theo phòng ban + dự án: tạo/đóng phòng, đồng bộ thành vi |
+| `S7-CHAT-BE-6` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-BE-2 ⏳S7-CHAT-DB-1 | Thông báo CHAT qua OutboxNotificationBridge: mention gửi ngay + DM gộp |
+| `S7-CHAT-RT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-BE-2 | Realtime CHAT: join phòng SERVER-SIDE lúc handshake (không nhận danh s |
+| `S7-CHAT-FE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-BE-2 ⏳S7-CHAT-RT-1 | Nền FE chat: contracts + api-client + store Zustand dùng chung + MỘT k |
+| `S7-CHAT-FE-2` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-FE-1 ⏳S7-CHAT-BE-3 | Trang /chat full-screen: 3 cột (danh sách phòng · hội thoại · thông ti |
+| `S7-CHAT-FE-3` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-FE-2 | Panel chat nổi toàn hệ thống (tối đa 3 hội thoại) + badge tổng chưa đọ |
+| `S7-CHAT-FE-4` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-FE-2 ⏳S7-CHAT-BE-4 | Màn hình tìm kiếm tin nhắn (nhảy tới tin trong ngữ cảnh) + tab tệp/tin |
+| `S7-CHAT-QA-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-FE-3 ⏳S7-CHAT-BE-5 ⏳S7-CHAT-BE-6 ⏳S7-CHAT-FE-4 | Bộ test trọn vẹn CHAT: 11 nhóm scenario SPEC-15 §21 trên LANE_DB + E2E |
+| `S7-CHAT-CLEAN-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-QA-1 | Contract (release SAU): drop chat_rooms.channel_id + chat_messages.fil |
 
 ---
 
