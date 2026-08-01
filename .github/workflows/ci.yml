@@ -157,3 +157,17 @@ jobs:
 
       # DEFER → S0-CI-2: secret-scan (gitleaks) + dependency-scan (pnpm audit) — ĐÃ hiện thực ở security.yml
       # (WO S0-CI-2); KHÔNG bỏ qua silently (DEVOPS-02 §9.2/§11/§17.2). Đặt ở workflow riêng để tránh trùng lặp.
+
+  # ── Test công cụ vận hành (không phụ thuộc gì ngoài node builtins) ─────────────────────────
+  # KHÔNG có path-filter, KHÔNG cần install: đây là gate cho `scripts/lib/**` + `harness/*.mjs`, vốn
+  # nằm NGOÀI path-filter của api.yml. Trước S6-OPS-LOGWINDOW-1, một PR chỉ sửa `scripts/**` không
+  # kích hoạt job nào chạy các spec này ⇒ spec tồn tại mà không bao giờ chạy. Job này đóng lỗ đó.
+  tooling:
+    name: Tooling tests (node --test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test scripts/lib/ops-alert-rules.test.mjs scripts/lib/ops-log-window.test.mjs scripts/lib/backup-db-resolve.test.mjs harness/lane-db-guard.test.mjs harness/reconcile-merged.test.mjs

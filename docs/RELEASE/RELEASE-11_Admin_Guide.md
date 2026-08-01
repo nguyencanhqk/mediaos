@@ -206,6 +206,51 @@ Start-ScheduledTask -TaskName MediaOS-BackupDaily    # chạy thử NGAY một l
 Get-ChildItem backups\                               # phải thấy file .dump mới
 ```
 
+### 6.2b Xoay log
+
+> ✅ **Đã bật trên PROD 2026-08-01** — 690.8 MB → 12.3 MB (giải phóng 678.4 MB). Mục này giữ lại để
+> dựng lại máy khác, hoặc khi `nssm get` cho thấy xoay log bị tắt.
+
+Trước đó service NSSM để cả 4 tham số xoay log = `0` ⇒ hai file log **chưa từng được xoay** kể từ ngày
+cài, `api.out.log` phình tới **688 MB**. Bản cài mới đã tự bật (`04-build-install-service.ps1`); service
+**đang chạy** thì phải bấm tay:
+
+```powershell
+# 1) Xem sẽ làm gì, KHÔNG đụng file
+powershell -File scripts\windows\08-log-rotate.ps1 -DryRun
+
+# 2) Bật xoay + xử lý file đang phình — CẦN Administrator
+#    ⚠️ Lệnh này RESTART service ⇒ API gián đoạn ~10-20 giây. Chọn giờ vắng.
+powershell -File scripts\windows\08-log-rotate.ps1 -Configure
+```
+
+> **Vì sao phải restart:** NSSM chỉ đọc tham số I/O lúc khởi động — không restart thì cấu hình nằm im
+> trong registry. Đổi lại, chính lúc khởi động NSSM xoay ngay file đang vượt ngưỡng, nên đây cũng là
+> đường xử lý file 688 MB. Sau khi bật, NSSM tự xoay khi file > 32 MB hoặc quá 1 ngày.
+>
+> **Sau restart, kiểm `data.build` phải GIỐNG HỆT trước đó** (§6.1) — restart không được làm đổi bản
+> đang chạy. Bản log cũ KHÔNG bị xoá: nó bị cắt giữa, giữ 2 MB đầu + 8 MB đuôi trong `*.trimmed.log`.
+
+Dọn định kỳ (**không** cần Administrator, **không** restart gì) — giữ 5 bản xoay mỗi luồng, cắt bản
+> 64 MB thành `.trimmed.log` giữ đầu + đuôi:
+
+```powershell
+$repo = "C:\dev 2\MediaOS"
+$l = New-ScheduledTaskAction -Execute "powershell.exe" `
+     -Argument "-NoProfile -File scripts\windows\08-log-rotate.ps1" -WorkingDirectory $repo
+$lt = New-ScheduledTaskTrigger -Daily -At 3am
+Register-ScheduledTask -TaskName "MediaOS-LogRotate" -Action $l -Trigger $lt `
+     -Description "Don log NSSM (S6-OPS-LOGWINDOW-1)"
+```
+
+**Kiểm nhanh xem xoay đã bật chưa:**
+
+```powershell
+foreach ($p in 'AppRotateFiles','AppRotateOnline','AppRotateBytes','AppRotateSeconds') {
+  "$p = $(nssm get MediaOS-API $p)"      # cả 4 = 0 nghĩa là CHƯA bật
+}
+```
+
 ### 6.3 Backup & khôi phục
 
 ```bash

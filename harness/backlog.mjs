@@ -9851,7 +9851,7 @@ export const backlog = [
     title:
       "Cảnh báo vận hành đếm SAI cửa sổ — ops-alert-check trả CRIT vì đếm 5 ngày lịch sử log thành 'lỗi trong 60 phút'; + xoay api.out.log 721 MB",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     // Không chạm permission/RLS/secret/audit/migration ⇒ LIGHT gate. Khai đủ scripts/** vì đây là
     // đường ra quyết định go-live (RELEASE-10 ô #12) — sai ở đây là sai cả phán quyết.
     // Mở rộng khi thi công 2026-08-01: spec mới phải được GẮN vào lệnh chạy, nếu không nó không tồn
@@ -9884,6 +9884,19 @@ export const backlog = [
       "Chạy thật trên máy PROD: node scripts/ops-alert-check.mjs ⇒ nhóm 'Lỗi ứng dụng trong log' về ok, các nhóm khác giữ nguyên kết luận",
       "Cập nhật RELEASE-09 §4 + RELEASE-11 §6.2 nếu lệnh/ngưỡng đổi; LIGHT gate (typescript-reviewer + quality-gate) PASS",
     ],
+    // ĐÃ XONG 2026-08-01 — bằng chứng đo được, không phải "đọc code thấy đúng":
+    //  · RED trước: fixture log lỗi 3 ngày trước + mtime đặt hiện tại ⇒ code cũ trả 5 thay vì 0.
+    //  · scripts/lib/ops-log-window.mjs — đếm dòng có CẢ nhãn ERROR VÀ timestamp ≥ mốc cắt; dòng
+    //    không parse được giờ KHÔNG tính. Gỡ mtime hoàn toàn (hỏng cả 2 chiều, xem đầu file đó).
+    //  · 21 spec mới, 90/90 tooling-test xanh. Gắn vào harness/check.sh VÀ job `tooling` mới ở
+    //    ci.yml — api.yml path-filter không phủ scripts/** nên spec suýt không bao giờ chạy ở CI.
+    //  · PROD: nhóm "Lỗi ứng dụng trong log" crit(1787) → ok(0), 7 nhóm còn lại GIỮ NGUYÊN kết luận.
+    //    Không mù âm thầm: cùng file, cửa sổ 7 ngày vẫn đếm ra 1865 dòng.
+    //  · Xoay log: NSSM có AppRotate* đều = 0 ⇒ chưa từng xoay kể từ ngày cài. Bật + xoay:
+    //    690.8 MB → 12.3 MB. File 688 MB cắt giữa (giữ 2MB đầu + 8MB đuôi), KHÔNG xoá.
+    //    data.build giống hệt trước/sau restart ⇒ restart, không phải rebuild.
+    //  · Ngoài phạm vi, đã chuyển tiếp: RetentionCleanupJob log 3 dòng/nhịp ở LOG/DEBUG trên PROD —
+    //    chính là thứ bơm ra 688 MB. Đụng apps/api/** ⇒ RELEASE-14 PGL-036.
   },
   {
     id: "S6-LEAVE-ACCRUAL-1",
