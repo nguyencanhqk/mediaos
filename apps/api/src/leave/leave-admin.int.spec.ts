@@ -50,6 +50,12 @@ type Pair = [action: string, resource: string, scope: Scope, sensitive?: boolean
 
 // Full admin grant set (HR@Company) — every S3-LEAVE-BE-4 pair from the REAL catalog (mig 0455).
 const HR_ADMIN_PAIRS: Pair[] = [
+  // S6-LEAVE-TYPEADMIN-1 — fixture TRƯỚC ĐÂY cấp create/update/delete:leave-type mà THIẾU
+  // `view:leave-type`, tức persona HR ghi được nhưng đọc không được — hình dạng "role ghi được mà
+  // đọc không được" đã từng sinh lỗ scope ở repo này. Vai THẬT có cặp này (mig 0455 cấp @Company cho
+  // employee/manager/hr/company-admin), nên bổ sung ở đây là đưa fixture về đúng thực tế, KHÔNG phải
+  // nới quyền cho test dễ xanh. `view:leave-type` KHÔNG sensitive ⇒ cờ cuối = false.
+  ["view", "leave-type", "Company", false],
   ["create", "leave-type", "Company", true],
   ["update", "leave-type", "Company", true],
   ["delete", "leave-type", "Company", true],
@@ -93,14 +99,18 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-4 admin surface (DB cô lập, đường th
     await seedUserRole(direct, userId, roleId, companyId);
   }
 
-  async function plantType(companyId: string, code = `LT-${randomUUID().slice(0, 8)}`) {
+  async function plantType(
+    companyId: string,
+    code = `LT-${randomUUID().slice(0, 8)}`,
+    status: "active" | "inactive" = "active",
+  ) {
     const r = await direct.query(
       `INSERT INTO leave_types
          (company_id, code, name, paid, status, deduct_balance, balance_unit,
           allow_full_day, allow_half_day, allow_hourly, allow_multiple_days,
           require_reason, min_notice_days, sort_order, allow_negative_balance)
-       VALUES ($1,$2,$3,true,'active',true,'Day',true,true,false,true,false,0,1,false) RETURNING id`,
-      [companyId, code, "Annual"],
+       VALUES ($1,$2,$3,true,$4,true,'Day',true,true,false,true,false,0,1,false) RETURNING id`,
+      [companyId, code, "Annual", status],
     );
     return r.rows[0].id as string;
   }
@@ -397,5 +407,45 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-4 admin surface (DB cô lập, đường th
     } finally {
       await pool.end();
     }
+  });
+  // ═══════════ S6-LEAVE-TYPEADMIN-1 — hai đường đọc, hai mục đích, KHÓA CẢ HAI CHIỀU ═══════════
+  // Sự cố thật (PROD 2026-08-01): màn quản trị gọi `GET /leave/types` (active-only) ⇒ đặt SICK và
+  // COMPENSATORY sang "Ngưng áp dụng" là cửa MỘT CHIỀU — tắt được, không bật lại được bằng giao diện.
+  // Ca thứ hai quan trọng ngang ca đầu: vá xong KHÔNG được để loại đã ngưng lọt vào ô chọn của nhân
+  // viên — đó là đổi một cửa kẹt lấy một lỗ nghiệp vụ.
+  it("admin/types TRẢ loại inactive (bật lại được) — CHIỀU 1", async () => {
+    const code = `INACT-${randomUUID().slice(0, 6)}`;
+    const id = await plantType(A.companyId, code, "inactive");
+
+    const res = await get(hrToken, "/leave/admin/types");
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const row = (res.body.data as Array<{ id: string; status: string }>).find((x) => x.id === id);
+    expect(row, "loai inactive PHAI co trong danh sach quan tri").toBeTruthy();
+    expect(row?.status).toBe("inactive");
+
+    // …và bật lại được qua chính màn đó (đóng vòng: thấy → sửa → sống lại).
+    const back = await patch(hrToken, `/leave/admin/types/${id}`, { status: "active" });
+    expect(back.status, JSON.stringify(back.body)).toBe(200);
+    expect(back.body.data.status).toBe("active");
+  });
+
+  it("GET /leave/types KHÔNG trả loại inactive (ô chọn của nhân viên) — CHIỀU 2", async () => {
+    const id = await plantType(A.companyId, `HIDE-${randomUUID().slice(0, 6)}`, "inactive");
+
+    const res = await get(hrToken, "/leave/types");
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const ids = (res.body.data as Array<{ id: string }>).map((x) => x.id);
+    expect(ids, "loai da ngung KHONG duoc lot vao o chon tao don").not.toContain(id);
+  });
+
+  it("admin/types gate đúng cặp view:leave-type — thiếu quyền → 403", async () => {
+    expect((await get(noviewToken, "/leave/admin/types")).status).toBe(403);
+  });
+
+  it("admin/types KHÔNG rò loại của tenant khác (RLS)", async () => {
+    const foreign = await plantType(B.companyId, `X-${randomUUID().slice(0, 6)}`, "inactive");
+    const res = await get(hrToken, "/leave/admin/types");
+    expect(res.status).toBe(200);
+    expect((res.body.data as Array<{ id: string }>).map((x) => x.id)).not.toContain(foreign);
   });
 });

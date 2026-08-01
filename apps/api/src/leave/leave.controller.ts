@@ -385,6 +385,23 @@ export class LeaveController {
   // Distinct `admin/` prefix — never shadows the legacy /leave/types (GET+POST+PATCH `manage:leave`) routes
   // above; both surfaces coexist during migration (legacy DEFERRED, not removed this WO).
 
+  /**
+   * S6-LEAVE-TYPEADMIN-1 — danh sách cho màn QUẢN TRỊ: trả cả loại `inactive`.
+   *
+   * KHÔNG gộp với `GET /leave/types` ở trên. Route kia phục vụ ô chọn loại nghỉ lúc nhân viên tạo
+   * đơn nên PHẢI chỉ có `active` — cho inactive lọt vào đó là đổi một cửa kẹt lấy một lỗ nghiệp vụ
+   * (nhân viên nộp đơn theo loại công ty đã ngưng). Hai đường đọc, hai mục đích, giữ tách.
+   *
+   * Gate `view:leave-type` — CÙNG cặp mà màn hình gate, không mạnh hơn không yếu hơn.
+   */
+  @Get("admin/types")
+  @RequirePermission(VIEW_LEAVE_TYPE.action, VIEW_LEAVE_TYPE.resourceType, {
+    isSensitive: VIEW_LEAVE_TYPE.sensitive,
+  })
+  listTypesAdmin(@Req() req: AuthenticatedRequest) {
+    return this.leaveAdmin.listTypes(req.user);
+  }
+
   @Post("admin/types")
   @RequirePermission(CREATE_LEAVE_TYPE.action, CREATE_LEAVE_TYPE.resourceType, {
     isSensitive: CREATE_LEAVE_TYPE.sensitive,
