@@ -70,6 +70,7 @@
 | **PGL-033** | `KI-017` — refresh materialized view dashboard qua `workerDb` hỏng ("must be owner") | `S3` | dashboard có thể đứng số |
 | **PGL-034** | `KI-006` — LMS→NOTI còn thiếu `LMS_NOTI_TOKEN` + deploy hai phía | `S3` | `RELEASE-02` |
 | **PGL-035** | `KI-005` — widget "Thông báo" trễ tối đa ~10s | `S3` | trải nghiệm |
+| **PGL-036** | `RetentionCleanupJob` ghi 3 dòng `LOG`/`DEBUG` mỗi nhịp trên PROD — hạ mức log hoặc chỉ ghi khi thật sự có việc | `S4` | Chính là thứ bơm `api.out.log` lên **688 MB** (mẫu 8MB giữa file: **99 %** là dòng của job này). `S6-OPS-LOGWINDOW-1` đã bật xoay log nên **hậu quả** bị chặn, nhưng **nguồn** thì chưa — đụng `apps/api/**`, ngoài phạm vi WO đó |
 
 ---
 
