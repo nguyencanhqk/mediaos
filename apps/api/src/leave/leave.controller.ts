@@ -22,6 +22,7 @@ import {
   type LeavePermissionPair,
   type LeaveResourceType,
 } from "./leave-permissions.const";
+import { LeaveAccrualService } from "./leave-accrual.service";
 import { LeaveAdminService } from "./leave-admin.service";
 import { LeaveApprovalService } from "./leave-approval.service";
 import { LeaveCalendarService } from "./leave-calendar.service";
@@ -128,6 +129,8 @@ export class LeaveController {
     private readonly leaveCalendar: LeaveCalendarService,
     private readonly leaveAdmin: LeaveAdminService,
     private readonly leaveRevoke: LeaveRevokeService,
+    // S6-LEAVE-ACCRUAL-1 (additive): dry-run engine cộng dồn phép (chỉ ĐỌC, không ghi gì).
+    private readonly leaveAccrual: LeaveAccrualService,
   ) {}
 
   // ─── Leave types ─────────────────────────────────────────────────────────────
@@ -483,5 +486,24 @@ export class LeaveController {
     @Body() dto: AdjustLeaveBalanceDto,
   ) {
     return this.leaveAdmin.adjustBalance(req.user, id, dto);
+  }
+
+  // ─── Admin: dry-run engine cộng dồn phép (S6-LEAVE-ACCRUAL-1) ────────────────
+  //
+  // CHỈ ĐỌC — không ghi số dư, không ghi sổ cái, không audit. Trả về CHÍNH bức tranh mà job nền sẽ áp
+  // dụng ở nhịp kế: kỳ nào sắp cấp, kỳ nào đã cấp rồi, và **hồ sơ nào bị bỏ qua vì lý do gì**. Phần cuối
+  // là lý do endpoint này tồn tại: WO sinh ra vì engine im lặng, nên phải có một chỗ NGƯỜI nhìn thấy được
+  // "vì sao anh A không có ngày phép nào" trước khi cấp thật.
+  //
+  // Gate: view:leave-balance @ Company (SENSITIVE) — ĐÚNG cặp đang gác GET admin/balances, vì đây là dữ
+  // liệu số dư sắp hình thành của toàn công ty (cặp màn-hình phải khớp cặp đường-tải).
+  @Get("admin/accrual/preview")
+  @RequirePermission(VIEW_LEAVE_BALANCE.action, VIEW_LEAVE_BALANCE.resourceType, {
+    isSensitive: VIEW_LEAVE_BALANCE.sensitive,
+  })
+  previewAccrual(@Req() req: AuthenticatedRequest) {
+    // Ngày mốc do SERVER quyết (không nhận từ query) — cho client chọn ngày = cho client tự chọn kỳ nào
+    // "đã kết thúc", tức là điều khiển được số ngày phép sắp cấp.
+    return this.leaveAccrual.previewCompanyForResponse(req.user.companyId);
   }
 }

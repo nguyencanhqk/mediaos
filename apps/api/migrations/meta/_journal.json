@@ -1422,6 +1422,13 @@
       "when": 1717587324000,
       "tag": "0535_s6secxtenantfk1_composite_tenant_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 203,
+      "version": "7",
+      "when": 1717587325000,
+      "tag": "0536_s6leaveaccrual1_accrual_period_uq",
+      "breakpoints": true
     }
   ]
 }

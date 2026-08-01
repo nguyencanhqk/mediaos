@@ -98,6 +98,10 @@ const leaveMasterDataVi = {
         contractTypeRequired: "Phạm vi 'Loại hợp đồng' bắt buộc chọn loại hợp đồng.",
         effectiveFromRequired: "Vui lòng nhập ngày hiệu lực.",
         dateInvalid: "Ngày không hợp lệ (định dạng YYYY-MM-DD).",
+        // S6-LEAVE-ACCRUAL-1: chọn cộng dồn mà bỏ trống hạn mức = engine không có gì để chia ⇒ cấp 0
+        // ngày, im lặng. Chặn tại chỗ nhập thay vì để HR phát hiện sau một tháng không ai có phép.
+        quotaRequiredForAccrual:
+          "Phương thức cộng dồn 'Theo tháng/Theo năm/Chia theo tỷ lệ' bắt buộc có hạn mức năm (ngày) lớn hơn 0.",
       },
     },
   },

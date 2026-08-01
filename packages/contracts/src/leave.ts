@@ -792,37 +792,75 @@ function refineLeavePolicyTarget<
     });
 }
 
-export const createLeavePolicySchema = refineLeavePolicyTarget(leavePolicyBaseSchema);
+/**
+ * S6-LEAVE-ACCRUAL-1 — phương thức engine cộng dồn THỰC SỰ chạy. Phải khớp `ENGINE_ACCRUAL_METHODS`
+ * (apps/api/src/leave/leave-accrual.logic.ts); int-spec đối chiếu hai danh sách để chúng không trôi.
+ */
+export const LEAVE_ENGINE_ACCRUAL_METHODS = ["Monthly", "Yearly", "Prorated"] as const;
+
+/**
+ * Chặn CẤU HÌNH CÂM (S6-LEAVE-ACCRUAL-1 §5): chọn phương thức cộng dồn mà bỏ trống hạn mức năm ⇒ engine
+ * không có gì để chia ⇒ 0 ngày được cấp và KHÔNG có lỗi nào báo — đúng cái bẫy WO này đi vá, chỉ đổi chỗ
+ * từ `accrual_method` sang `yearly_quota_days`. Chặn ngay ở biên nhập liệu thay vì để phát hiện sau 1 tháng.
+ */
+export function hasQuotaForAccrualMethod(v: {
+  accrualMethod?: string | null;
+  yearlyQuotaDays?: number | null;
+}): boolean {
+  if (v.accrualMethod == null) return true;
+  if (!(LEAVE_ENGINE_ACCRUAL_METHODS as readonly string[]).includes(v.accrualMethod)) return true;
+  return v.yearlyQuotaDays != null && v.yearlyQuotaDays > 0;
+}
+
+export const QUOTA_REQUIRED_FOR_ACCRUAL = {
+  message:
+    "Phương thức cộng dồn Monthly/Yearly/Prorated bắt buộc có hạn mức năm (ngày) lớn hơn 0 — thiếu thì engine không cấp được ngày nào",
+  path: ["yearlyQuotaDays"] as const,
+};
+
+export const createLeavePolicySchema = refineLeavePolicyTarget(leavePolicyBaseSchema).refine(
+  hasQuotaForAccrualMethod,
+  { message: QUOTA_REQUIRED_FOR_ACCRUAL.message, path: ["yearlyQuotaDays"] },
+);
 export type CreateLeavePolicyRequest = z.infer<typeof createLeavePolicySchema>;
 
 /** PATCH bán phần — policyCode/leaveTypeId immutable sau khi tạo. status thêm ở đây (Active/Inactive). */
-export const updateLeavePolicySchema = z.object({
-  name: z.string().min(1).max(200).optional(),
-  description: z.string().max(1000).nullable().optional(),
-  status: z.enum(["Active", "Inactive"]).optional(),
-  yearlyQuotaDays: z.number().min(0).max(366).nullable().optional(),
-  yearlyQuotaHours: z
-    .number()
-    .min(0)
-    .max(24 * 366)
-    .nullable()
-    .optional(),
-  accrualMethod: leavePolicyAccrualMethodSchema.optional(),
-  accrualDayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
-  prorateOnJoinDate: z.boolean().optional(),
-  includeWeekends: z.boolean().optional(),
-  includePublicHolidays: z.boolean().optional(),
-  reserveBalanceOnPending: z.boolean().optional(),
-  allowNegativeBalance: z.boolean().optional(),
-  maxNegativeDays: z.number().min(0).max(366).nullable().optional(),
-  allowCancelAfterApproved: z.boolean().optional(),
-  cancelBeforeDays: z.number().int().min(0).max(365).nullable().optional(),
-  requiresManagerApproval: z.boolean().optional(),
-  requiresHrApproval: z.boolean().optional(),
-  effectiveFrom: z.string().date().optional(),
-  effectiveTo: z.string().date().nullable().optional(),
-  priority: z.number().int().min(0).max(1000).optional(),
-});
+export const updateLeavePolicySchema = z
+  .object({
+    name: z.string().min(1).max(200).optional(),
+    description: z.string().max(1000).nullable().optional(),
+    status: z.enum(["Active", "Inactive"]).optional(),
+    yearlyQuotaDays: z.number().min(0).max(366).nullable().optional(),
+    yearlyQuotaHours: z
+      .number()
+      .min(0)
+      .max(24 * 366)
+      .nullable()
+      .optional(),
+    accrualMethod: leavePolicyAccrualMethodSchema.optional(),
+    accrualDayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+    prorateOnJoinDate: z.boolean().optional(),
+    includeWeekends: z.boolean().optional(),
+    includePublicHolidays: z.boolean().optional(),
+    reserveBalanceOnPending: z.boolean().optional(),
+    allowNegativeBalance: z.boolean().optional(),
+    maxNegativeDays: z.number().min(0).max(366).nullable().optional(),
+    allowCancelAfterApproved: z.boolean().optional(),
+    cancelBeforeDays: z.number().int().min(0).max(365).nullable().optional(),
+    requiresManagerApproval: z.boolean().optional(),
+    requiresHrApproval: z.boolean().optional(),
+    effectiveFrom: z.string().date().optional(),
+    effectiveTo: z.string().date().nullable().optional(),
+    priority: z.number().int().min(0).max(1000).optional(),
+  })
+  // Cùng luật §5 với create. PATCH bán phần nên chỉ quyết được khi `accrualMethod` CÓ trong body: form
+  // Chính sách luôn gửi cả `accrualMethod` lẫn `yearlyQuotaDays` (leavePolicyToUpdate) ⇒ đường người dùng
+  // thật được chặn. Client bỏ trống `accrualMethod` thì không phán được ở đây — engine vẫn báo
+  // MISSING_QUOTA ra `skipped[]`/log/metadata (không im lặng).
+  .refine(hasQuotaForAccrualMethod, {
+    message: QUOTA_REQUIRED_FOR_ACCRUAL.message,
+    path: ["yearlyQuotaDays"],
+  });
 export type UpdateLeavePolicyRequest = z.infer<typeof updateLeavePolicySchema>;
 
 export const leavePolicyViewSchema = z.object({
@@ -1005,3 +1043,65 @@ export const leaveReportResponseSchema = z.object({
   }),
 });
 export type LeaveReportResponse = z.infer<typeof leaveReportResponseSchema>;
+
+// ─── S6-LEAVE-ACCRUAL-1 — dry-run engine cộng dồn phép (GET /leave/admin/accrual/preview) ──────
+
+/**
+ * Lý do một hồ sơ KHÔNG được cấp. Là phần quan trọng nhất của màn này: lỗi gốc của WO là engine (trước
+ * đây không tồn tại) im lặng, nên mọi trường hợp không cấp PHẢI có tên gọi đọc được, không phải khoảng trống.
+ */
+export const leaveAccrualSkipReasonSchema = z.enum([
+  "METHOD_DISABLED",
+  "MISSING_QUOTA",
+  "MISSING_USER",
+  "MISSING_START_DATE",
+  "TERMINATED_WITHOUT_END_DATE",
+]);
+export type LeaveAccrualSkipReason = z.infer<typeof leaveAccrualSkipReasonSchema>;
+
+export const leaveAccrualPendingLineSchema = z.object({
+  employeeId: z.string().uuid(),
+  employeeCode: z.string().nullable(),
+  leaveTypeId: z.string().uuid(),
+  policyCode: z.string(),
+  /** `2026-07` (kỳ tháng) hoặc `2026` (kỳ năm). */
+  periodKey: z.string(),
+  year: z.number().int(),
+  transactionDate: z.string().date(),
+  amountDays: z.number(),
+});
+export type LeaveAccrualPendingLine = z.infer<typeof leaveAccrualPendingLineSchema>;
+
+export const leaveAccrualSkipEntrySchema = z.object({
+  employeeId: z.string().uuid(),
+  employeeCode: z.string().nullable(),
+  leaveTypeId: z.string().uuid(),
+  policyCode: z.string(),
+  reason: leaveAccrualSkipReasonSchema,
+});
+export type LeaveAccrualSkipEntry = z.infer<typeof leaveAccrualSkipEntrySchema>;
+
+export const leaveAccrualPreviewSchema = z.object({
+  today: z.string().date(),
+  policies: z.array(
+    z.object({
+      policyCode: z.string(),
+      leaveTypeId: z.string().uuid(),
+      accrualMethod: leavePolicyAccrualMethodSchema,
+      quotaDays: z.number().nullable(),
+    }),
+  ),
+  employeesScanned: z.number().int().nonnegative(),
+  /** Chi tiết CẮT theo trần (xem `pendingTruncated`) — số tổng ở `pendingTotal`/`totalDays` LUÔN đủ. */
+  pending: z.array(leaveAccrualPendingLineSchema),
+  pendingTotal: z.number().int().nonnegative(),
+  pendingTruncated: z.boolean(),
+  totalDays: z.number(),
+  employeesAffected: z.number().int().nonnegative(),
+  /** Kỳ đã có dòng sổ cái ⇒ sẽ KHÔNG cấp lại (bằng chứng idempotency nhìn thấy được). */
+  alreadyGranted: z.number().int().nonnegative(),
+  skipped: z.array(leaveAccrualSkipEntrySchema),
+  skippedTotal: z.number().int().nonnegative(),
+  skippedTruncated: z.boolean(),
+});
+export type LeaveAccrualPreview = z.infer<typeof leaveAccrualPreviewSchema>;
