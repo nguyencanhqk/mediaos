@@ -100,22 +100,35 @@ describe("leaveApi — management/approval endpoints (URL + method + Zod validat
 
   // ── S3-FE-LEAVE-5: admin — loại nghỉ / chính sách / số dư phép ────────────────
 
-  it("listTypesAdmin → GET /leave/types + leaveTypeViewSchema validator, maps allowNegativeBalance:null", async () => {
+  // S6-LEAVE-TYPEADMIN-1 — màn quản trị PHẢI đọc route admin (trả cả `inactive`). Ca này khoá đúng
+  // cái đã gây sự cố PROD: trỏ về `/leave/types` (active-only) làm loại đã ngưng biến mất khỏi màn
+  // quản trị ⇒ tắt được mà không bật lại được.
+  it("listTypesAdmin → GET /leave/admin/types (KHÔNG phải /leave/types) + trả nguyên allowNegativeBalance", async () => {
     vi.mocked(apiClient.apiFetch).mockResolvedValueOnce([
-      { id: "lt-1", name: "Annual", code: "annual", paid: true, status: "active" },
-    ] as never);
-    const result = await leaveApi.listTypesAdmin();
-    const [url] = lastCall();
-    expect(url).toBe("/leave/types");
-    expect(result).toEqual([
       {
         id: "lt-1",
         name: "Annual",
         code: "annual",
         paid: true,
         status: "active",
+        allowNegativeBalance: false,
+      },
+      {
+        id: "lt-2",
+        name: "Sick",
+        code: "sick",
+        paid: true,
+        status: "inactive",
         allowNegativeBalance: null,
       },
+    ] as never);
+    const result = await leaveApi.listTypesAdmin();
+    const [url] = lastCall();
+    expect(url).toBe("/leave/admin/types");
+    // KHÔNG còn vá `allowNegativeBalance: null` — server trả thật, giữ nguyên.
+    expect(result.map((r) => [r.status, r.allowNegativeBalance])).toEqual([
+      ["active", false],
+      ["inactive", null],
     ]);
   });
 

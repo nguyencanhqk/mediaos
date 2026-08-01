@@ -10015,4 +10015,42 @@ export const backlog = [
       "FULL gate (security-reviewer + silent-failure-hunter) PASS; chạy trên staging trước PROD",
     ],
   },
+  {
+    id: "S6-LEAVE-TYPEADMIN-1",
+    module: "LEAVE",
+    layer: "BE",
+    title:
+      "Màn Loại nghỉ là CỬA MỘT CHIỀU — đặt 'Ngưng áp dụng' xong không bật lại được vì màn quản trị đọc route active-only; thêm GET /leave/admin/types trả cả inactive",
+    zone: "yellow",
+    status: "todo",
+    // Không chạm permission mới/RLS/secret/audit/migration ⇒ LIGHT gate. Cổng dùng LẠI đúng cặp
+    // view:leave-type mà màn hình đang gate — không tạo cặp mới, không nới scope.
+    paths: [
+      "apps/api/src/leave/leave.controller.ts",
+      "apps/api/src/leave/leave-admin.service.ts",
+      "apps/api/src/leave/leave-admin.repository.ts",
+      "apps/api/src/leave/leave-admin.int.spec.ts",
+      "packages/web-core/src/lib/leave-api.ts",
+      "packages/web-core/src/lib/leave-api.spec.ts",
+      "docs/plans/S6-LEAVE-TYPEADMIN-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S6-LEAVE-TYPEADMIN-1.md",
+    src: [
+      "RELEASE-05 §4.1 (UX blocker) — người dùng KHÔNG hoàn thành được flow: bật lại một loại nghỉ đã ngưng",
+      "SỰ CỐ THẬT PROD 2026-08-01: owner đặt SICK + COMPENSATORY sang 'Ngưng áp dụng' ⇒ cả hai biến mất khỏi mọi danh sách, không đường nào bật lại bằng giao diện. Phải vá tay qua DB",
+      "Gốc: leave-api.ts:218 listTypesAdmin gọi GET /leave/types = LeaveReadRepository.findActiveTypesTx (lọc status='active'). Comment 'HẠN CHẾ ĐÃ BIẾT' đã nằm sẵn trong code TỪ TRƯỚC — biết mà chưa xử lý",
+      "memory: ui-promises-backend-never-reads (cùng họ: dữ liệu có trong DB nhưng đường đọc của giao diện không với tới)",
+    ],
+    done_when: [
+      "RED trước: ca int-spec gọi GET /leave/admin/types phải 404 trên code cũ, rồi mới thêm route",
+      "GET /leave/admin/types trả MỌI loại chưa xoá mềm KỂ CẢ inactive; vẫn loại deleted_at; gate ĐÚNG cặp view:leave-type (không mạnh/yếu hơn cặp màn hình gate)",
+      "KHÓA CẢ HAI CHIỀU: (1) admin thấy inactive và PATCH bật lại được; (2) GET /leave/types VẪN KHÔNG trả inactive — ô chọn của nhân viên không được phép chứa loại đã ngưng",
+      "Ca cross-tenant: admin/types không rò loại của công ty khác",
+      "FE listTypesAdmin trỏ route mới + validate bằng leaveTypeAdminViewSchema thật (bỏ vá allowNegativeBalance:null); gỡ comment 'HẠN CHẾ ĐÃ BIẾT'",
+      "KHÔNG đụng MasterDataCrudScreen dùng chung (5 màn khác) — bảng đã có cột trạng thái, không cần thêm bộ lọc để đóng lỗ này",
+      "LIGHT gate (typescript-reviewer + quality-gate) PASS",
+    ],
+  },
 ];

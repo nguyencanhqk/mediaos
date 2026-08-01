@@ -63,6 +63,28 @@ export class LeaveAdminService {
 
   // ─── leave_types (view/create/update/delete:leave-type) ──────────────────────
 
+  /**
+   * S6-LEAVE-TYPEADMIN-1 — danh sách cho MÀN QUẢN TRỊ: mọi loại chưa xoá mềm, kể cả `inactive`.
+   *
+   * Cổng = `view:leave-type` (KHÔNG sensitive) — CỐ Ý khớp đúng cặp mà màn hình đang gate
+   * (`leaveTypesMeta.requiredAnyPermissions`). Gate đường-tải lệch cặp gate màn-hình là cách sinh ra
+   * lỗ scope: người mở được màn mà không đọc được dữ liệu, hoặc ngược lại.
+   *
+   * Không nhận tham số lọc: lọc trạng thái làm ở client trên tập nhỏ (một công ty có hàng chục loại
+   * nghỉ, không phải hàng nghìn) — thêm query param ở đây chỉ tạo thêm bề mặt phải test.
+   */
+  async listTypes(actor: Actor): Promise<LeaveTypeAdminView[]> {
+    await this.dataScope.resolveAndAssert(actor.id, actor.companyId, "view", "leave-type", {
+      isSensitive: false,
+    });
+    return this.db
+      .withTenant(actor.companyId, async (tx) => {
+        const rows = await this.repo.findAllTypesTx(actor.companyId, tx);
+        return rows.map(toTypeAdminView);
+      })
+      .catch((err: unknown) => this.mapError(err, "listTypes", { companyId: actor.companyId }));
+  }
+
   async createType(actor: Actor, dto: CreateLeaveTypeAdminRequest): Promise<LeaveTypeAdminView> {
     await this.dataScope.resolveAndAssert(actor.id, actor.companyId, "create", "leave-type", {
       isSensitive: true,

@@ -211,17 +211,21 @@ export const leaveApi = {
   // Company-scope hr/company-admin — mig 0455). Client chỉ chọn endpoint + validate response.
 
   /**
-   * GET /leave/types — nguồn ĐỌC DUY NHẤT hiện có cho màn quản trị Loại nghỉ. Validate qua
-   * `leaveTypeViewSchema` (schema THẬT server trả cho route này — KHÔNG có `allowNegativeBalance`, BE
-   * chưa có endpoint list riêng cho mặt admin/S3-LEAVE-BE-4) rồi map thêm `allowNegativeBalance: null`
-   * để khớp shape `LeaveTypeAdminView` (admin create/update TRẢ field này).
-   * HẠN CHẾ ĐÃ BIẾT (BE gap): route chỉ trả loại ĐANG active (findActiveTypesTx) — loại inactive sẽ
-   * KHÔNG hiện trong danh sách quản trị cho tới khi BE bổ sung endpoint list-admin riêng.
+   * GET /leave/admin/types — danh sách cho màn QUẢN TRỊ: mọi loại chưa xoá mềm, **kể cả `inactive`**.
+   * Permission: view:leave-type (đúng cặp màn hình gate).
+   *
+   * S6-LEAVE-TYPEADMIN-1 — TRƯỚC ĐÂY hàm này gọi `GET /leave/types` (chỉ trả `active`) nên đặt một
+   * loại sang "Ngưng áp dụng" là cửa MỘT CHIỀU: giao diện tắt được nhưng không bật lại được, và
+   * không endpoint nào liệt kê nó ra. Đã xảy ra thật trên PROD với `SICK` + `COMPENSATORY`.
+   *
+   * ĐỪNG trỏ ngược về `/leave/types` "cho gọn": route đó nuôi ô chọn loại nghỉ lúc nhân viên tạo
+   * đơn và PHẢI chỉ có `active`. Hai đường đọc, hai mục đích.
+   *
+   * Nay validate bằng `leaveTypeAdminViewSchema` THẬT (server trả đủ `allowNegativeBalance`) —
+   * không còn phải vá `allowNegativeBalance: null`, tức form sửa nay prefill đúng giá trị đang lưu.
    */
   listTypesAdmin: (): Promise<LeaveTypeAdminView[]> =>
-    apiFetch("/leave/types", z.array(leaveTypeViewSchema)).then((rows) =>
-      rows.map((r) => ({ ...r, allowNegativeBalance: null })),
-    ),
+    apiFetch("/leave/admin/types", z.array(leaveTypeAdminViewSchema)),
 
   /** POST /leave/admin/types — tạo loại nghỉ (đủ field cấu hình). Permission: create:leave-type. */
   createTypeAdmin: (body: CreateLeaveTypeAdminRequest): Promise<LeaveTypeAdminView> =>

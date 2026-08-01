@@ -433,6 +433,15 @@ where c.table_schema = 'public' and c.column_name = 'company_id' and rel.relkind
 **Nguồn số liệu (máy-đọc):** [`docs/_review/S6-SEC-ROUTEMAP-1-route-census.json`](S6-SEC-ROUTEMAP-1-route-census.json)
 — toàn bộ 452 route kèm verb · path đầy đủ · `hasPermission` (+ cấp khai handler/class) · `isPublic` ·
 guard cấp class/route · phán quyết.
+
+> **Con số trong tài liệu này là ẢNH CHỤP ngày 2026-07-27, KHÔNG cập nhật theo từng WO sau đó.**
+> Route mới sinh ra ở các WO tiếp theo ⇒ artifact tăng lên, còn bản ghi kiểm toán này giữ nguyên số
+> đã ký. **Số sống luôn nằm ở artifact JSON**, và cổng ép là `route-guard-coverage.e2e-spec.ts` (so
+> artifact ↔ runtime), không phải con số chép trong văn bản. Đừng sửa số ở đây cho "khớp" — làm vậy
+> là viết lại một kết luận đã ký mà không đo lại.
+> Lần chạm gần nhất: `S6-LEAVE-TYPEADMIN-1` (2026-08-01) thêm `GET /leave/admin/types`
+> (gate `view:leave-type`, cấp handler) ⇒ artifact **455 route · 403 gate · 40 không gate** — tập
+> route phải-có-phán-quyết **không đổi** (route mới có gate nên không rơi vào diện phải ký).
 **Sổ phán quyết (code, có chữ ký):** [`apps/api/test/foundation/route-verdicts.ts`](../../apps/api/test/foundation/route-verdicts.ts).
 **Bộ quét:** [`route-census.ts`](../../apps/api/test/foundation/route-census.ts) · **lưới ép:**
 [`route-guard-coverage.e2e-spec.ts`](../../apps/api/test/foundation/route-guard-coverage.e2e-spec.ts).

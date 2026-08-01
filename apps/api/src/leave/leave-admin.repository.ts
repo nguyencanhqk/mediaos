@@ -25,6 +25,28 @@ export class LeaveAdminRepository {
       .returning();
   }
 
+  /**
+   * S6-LEAVE-TYPEADMIN-1 — MỌI loại nghỉ chưa xoá mềm, **kể cả `inactive`**.
+   *
+   * Khác `LeaveReadRepository.findActiveTypesTx` ĐÚNG MỘT vị từ: không lọc `status='active'`. Hai
+   * đường đọc phục vụ hai mục đích ngược nhau và PHẢI giữ tách bạch:
+   *   · read  (`GET /leave/types`)       → ô chọn loại nghỉ lúc nhân viên tạo đơn ⇒ CHỈ active.
+   *   · admin (`GET /leave/admin/types`) → màn quản trị ⇒ phải thấy cả loại đã ngưng để BẬT LẠI.
+   *
+   * Vì sao có WO này: màn quản trị trước đây gọi route `read` ⇒ đặt một loại sang `inactive` là cửa
+   * MỘT CHIỀU — tắt được, không bật lại được, không endpoint nào liệt kê nó ra. Đã xảy ra thật trên
+   * PROD với `SICK` + `COMPENSATORY` (2026-08-01).
+   *
+   * Vẫn loại `deleted_at` — xoá mềm là quyết định khác, có màn thùng rác riêng.
+   */
+  findAllTypesTx(companyId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(leaveTypes)
+      .where(and(eq(leaveTypes.companyId, companyId), isNull(leaveTypes.deletedAt)))
+      .orderBy(asc(leaveTypes.sortOrder), asc(leaveTypes.name));
+  }
+
   findTypeByIdTx(companyId: string, id: string, tx: TenantTx) {
     return tx
       .select()
