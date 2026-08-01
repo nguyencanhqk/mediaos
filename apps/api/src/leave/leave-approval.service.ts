@@ -20,7 +20,14 @@ import { DataScopeService } from "../permission/data-scope.service";
 import { LeaveRepository } from "./leave.repository";
 import { LeaveRequestRepository } from "./leave-request.repository";
 import { LeaveApprovalRepository } from "./leave-approval.repository";
-import { LEAVE_ERR, numOrNull, round2, yearOf, type LeaveRequestRow } from "./leave-request.logic";
+import {
+  LEAVE_ERR,
+  numOrNull,
+  resolveNegativeAllowance,
+  round2,
+  yearOf,
+  type LeaveRequestRow,
+} from "./leave-request.logic";
 import { toDetailView } from "./leave-request.mappers";
 import { toManagementListItemView } from "./leave-approval.mappers";
 
@@ -376,9 +383,28 @@ export class LeaveApprovalService {
     const usedBefore = balance.usedDays != null ? Number(balance.usedDays) : 0;
     const pendingBefore = balance.pendingDays != null ? Number(balance.pendingDays) : 0;
 
+    // S6-LEAVE-MAXNEG-1 — phân giải CÙNG trần nợ phép mà đường `submit` đã dùng. Thiếu bước này thì
+    // đơn nợ phép nộp được nhưng duyệt luôn rollback (xem jsdoc convertReserveToUseByBalanceIdTx).
+    // Loại/chính sách đọc TRONG tx: cấu hình có thể đổi giữa lúc nộp và lúc duyệt — trần lúc DUYỆT
+    // là trần có hiệu lực, không phải trần đã cache lúc nộp.
+    const [approveType] = await this.leaveRepo.findTypeByIdTx(
+      actor.companyId,
+      request.leaveTypeId,
+      tx,
+    );
+    const approvePolicy = await this.reqRepo.findActivePolicyForTypeTx(
+      actor.companyId,
+      request.leaveTypeId,
+      request.startDate,
+      tx,
+    );
+    const { maxNegative } = approveType
+      ? resolveNegativeAllowance(approvePolicy, approveType)
+      : { maxNegative: 0 };
+
     const updated = await this.approvalRepo.convertReserveToUseByBalanceIdTx(
       actor.companyId,
-      { balanceId: balance.id, delta: String(usedDays) },
+      { balanceId: balance.id, delta: String(usedDays), maxNegative },
       tx,
     );
     if (!updated) {

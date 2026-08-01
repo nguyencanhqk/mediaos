@@ -9981,4 +9981,38 @@ export const backlog = [
       "FULL gate (database-reviewer + security-reviewer + silent-failure-hunter) PASS; chạy trên staging trước PROD",
     ],
   },
+  {
+    id: "S6-LEAVE-MAXNEG-1",
+    module: "LEAVE",
+    layer: "BE",
+    title:
+      "Ép trần số ngày âm (max_negative_days) ở đường quyết định đơn nghỉ — hiện bật allow_negative = âm VÔ HẠN dù form vẫn cho nhập trần",
+    zone: "red",
+    status: "todo",
+    // ĐỎ: chạm đúng vị từ chặn của đơn nghỉ (cấp quyền lợi có giá trị tiền). KHÔNG cần migration —
+    // cột leave_policies.max_negative_days ĐÃ tồn tại, chỉ chưa ai đọc nó ở đường quyết định.
+    paths: [
+      "apps/api/src/leave/**",
+      "packages/contracts/**",
+      "apps/app/src/routes/leave/**",
+      "docs/plans/S6-LEAVE-MAXNEG-1.md",
+    ],
+    skills: ["code-review", "security-review"],
+    depends_on: [],
+    plan: "docs/plans/S6-LEAVE-MAXNEG-1.md",
+    src: [
+      "RELEASE-05 §4.1 (Data integrity) · owner chốt 2026-08-01: vá TRONG cửa sổ RC, không đẩy sau go-live",
+      "Đo 2026-08-01: max_negative_days chỉ xuất hiện ở leave-admin.repository (đọc) + leave-admin.service (CRUD/mapper) + leave-policy-form (nhập). KHÔNG có mặt trong leave-request.service.ts — đường duy nhất quyết định 422",
+      "leave-request.service.ts:545-555 — chỉ có nhánh `if (!allowNegative) { …422 }`; allowNegative=true ⇒ KHÔNG kiểm gì nữa ⇒ âm không giới hạn",
+      "Cùng họ bẫy 'giao diện hứa, backend không làm' với accrual_method (đã vá ở S6-LEAVE-ACCRUAL-1) — lần này chốt luôn để không lặp lần ba",
+    ],
+    done_when: [
+      "RED trước: spec chứng minh hành vi HÔM NAY — policy allow_negative=true + max_negative_days=5 vẫn cho tạo đơn 500 ngày ⇒ spec đỏ, rồi mới vá",
+      "Ép trần ở leave-request.service (đường tạo VÀ đường submit, không chỉ một cửa); vượt trần ⇒ 422 với mã lỗi LEAVE-ERR riêng, thông điệp nêu rõ trần và mức đang âm",
+      "Chốt tường minh trong plan (qua plan-reviewer) nghĩa của max_negative_days = NULL khi allow_negative=true: 'không trần' hay 'fail-closed = 0'. Chọn xong phải ghi vào jsdoc + i18n cảnh báo trên form — KHÔNG để nghĩa ngầm",
+      "Giữ đúng thứ tự nguồn cấu hình đang có: policy?.x ?? leaveType.x ?? mặc định; test cả 3 tầng",
+      "Test biên: trần 0 · trần NULL · đã âm sẵn rồi xin thêm · pending cộng dồn vượt trần · nhiều đơn song song (đua)",
+      "FULL gate (security-reviewer + silent-failure-hunter) PASS; chạy trên staging trước PROD",
+    ],
+  },
 ];

@@ -32,6 +32,7 @@ import {
   daysBetweenLocalDates,
   mapDayType,
   numOrNull,
+  resolveNegativeAllowance,
   round2,
   yearOf,
   type LeavePolicyRow,
@@ -531,7 +532,10 @@ export class LeaveRequestService {
     const isDeduct = type.deductBalance === true;
     if (!isDeduct) return "None";
 
-    const allowNegative = policy?.allowNegativeBalance ?? type.allowNegativeBalance ?? false;
+    // S6-LEAVE-MAXNEG-1 — TRƯỚC WO này: allowNegative=true thì KHÔNG kiểm gì nữa ⇒ nợ phép KHÔNG
+    // GIỚI HẠN, trong khi form vẫn cho HR nhập `max_negative_days` và DB vẫn lưu. Trần nay được ép
+    // ở đây. Nghĩa của max=NULL (⇒ 0, fail-closed) giải thích ở resolveNegativeAllowance.
+    const { allowNegative, maxNegative } = resolveNegativeAllowance(policy, type);
     const reserveOnPending = policy?.reserveBalanceOnPending ?? isDeduct;
     const year = yearOf(request.startDate);
     const [balance] = await this.leaveRepo.findBalanceTx(
@@ -542,21 +546,28 @@ export class LeaveRequestService {
       tx,
     );
 
-    if (!allowNegative) {
-      const remaining = balance?.remainingDays != null ? Number(balance.remainingDays) : 0;
-      const pending = balance?.pendingDays != null ? Number(balance.pendingDays) : 0;
-      const available = round2(remaining - pending);
-      if (calculatedDays > available) {
+    // MỘT vị từ cho cả hai đường: allowNegative=false ⇒ maxNegative=0 ⇒ trần = available, TRÙNG KHỚP
+    // hành vi cũ (mã lỗi + thông điệp giữ nguyên cho đường đang dùng thật). Hai nhánh throw chỉ khác
+    // nhau ở CÁCH GỌI TÊN tình huống, không khác ngưỡng.
+    const remaining = balance?.remainingDays != null ? Number(balance.remainingDays) : 0;
+    const pending = balance?.pendingDays != null ? Number(balance.pendingDays) : 0;
+    const available = round2(remaining - pending);
+    if (calculatedDays > round2(available + maxNegative)) {
+      if (!allowNegative) {
         throw new UnprocessableEntityException({
           code: LEAVE_ERR.BALANCE_NOT_ENOUGH,
           message: `Số dư phép không đủ: cần ${calculatedDays} ngày, còn khả dụng ${available} ngày`,
         });
       }
+      throw new UnprocessableEntityException({
+        code: LEAVE_ERR.NEGATIVE_LIMIT_EXCEEDED,
+        message: `Vượt trần nợ phép: cần ${calculatedDays} ngày, còn khả dụng ${available} ngày, được nợ tối đa ${maxNegative} ngày`,
+      });
     }
 
     if (!reserveOnPending) return "None";
-    // reserveOnPending nhưng KHÔNG có balance row: chỉ tới đây khi allowNegative (else đã 422). Không bịa số
-    // dư — bỏ qua tx, giữ effect 'None' (BE-3 sẽ xử lý khi duyệt/cấp phép).
+    // reserveOnPending nhưng KHÔNG có balance row: chỉ tới đây khi allowNegative CÓ trần > 0 (mọi
+    // đường còn lại đã 422 ở trên). Không bịa số dư — bỏ qua tx, giữ effect 'None' (BE-3 xử lý khi duyệt).
     if (!balance) return "None";
 
     const pendingBefore = balance.pendingDays != null ? Number(balance.pendingDays) : 0;

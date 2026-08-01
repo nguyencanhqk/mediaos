@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   LEAVE_TYPE_CODES,
   createLeavePolicySchema,
+  hasMaxNegativeForAllowNegative,
   hasValidCarryForwardDeadline,
   leaveTypeCodeSchema,
 } from "./index";
@@ -175,5 +176,61 @@ describe("createLeavePolicySchema — cấu hình chuyển tiếp", () => {
         maxCarryForwardDays: -1,
       }).success,
     ).toBe(false);
+  });
+});
+
+/**
+ * S6-LEAVE-MAXNEG-1 — engine coi trần bỏ trống là 0 (fail-closed). Ràng buộc này KHÔNG phải lớp an
+ * toàn (thiếu trần chỉ làm chặt hơn) mà là lớp chống CẤU HÌNH VÔ NGHĨA: "cho nợ phép + không trần"
+ * hành xử y hệt "không cho nợ phép", tức HR bật một công tắc không có tác dụng gì.
+ */
+describe("hasMaxNegativeForAllowNegative (S6-LEAVE-MAXNEG-1)", () => {
+  it("không bật cho-âm → luôn hợp lệ, trần không liên quan", () => {
+    expect(hasMaxNegativeForAllowNegative({ allowNegativeBalance: false })).toBe(true);
+    expect(hasMaxNegativeForAllowNegative({})).toBe(true);
+    expect(
+      hasMaxNegativeForAllowNegative({ allowNegativeBalance: false, maxNegativeDays: null }),
+    ).toBe(true);
+  });
+
+  it("bật cho-âm mà trần trống/0/âm → KHÔNG hợp lệ", () => {
+    expect(hasMaxNegativeForAllowNegative({ allowNegativeBalance: true })).toBe(false);
+    expect(
+      hasMaxNegativeForAllowNegative({ allowNegativeBalance: true, maxNegativeDays: null }),
+    ).toBe(false);
+    expect(hasMaxNegativeForAllowNegative({ allowNegativeBalance: true, maxNegativeDays: 0 })).toBe(
+      false,
+    );
+  });
+
+  it("bật cho-âm + trần > 0 → hợp lệ", () => {
+    expect(
+      hasMaxNegativeForAllowNegative({ allowNegativeBalance: true, maxNegativeDays: 0.5 }),
+    ).toBe(true);
+    expect(hasMaxNegativeForAllowNegative({ allowNegativeBalance: true, maxNegativeDays: 5 })).toBe(
+      true,
+    );
+  });
+
+  it("createLeavePolicySchema REJECT cho-âm thiếu trần, báo đúng vào ô maxNegativeDays", () => {
+    const base = {
+      leaveTypeId: "11111111-1111-4111-8111-111111111111",
+      policyCode: "STD",
+      name: "Chính sách chuẩn",
+      policyScope: "Company" as const,
+      effectiveFrom: "2026-01-01",
+    };
+    const r = createLeavePolicySchema.safeParse({ ...base, allowNegativeBalance: true });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(r.error.issues.some((i) => i.path.includes("maxNegativeDays"))).toBe(true);
+    }
+    expect(
+      createLeavePolicySchema.safeParse({
+        ...base,
+        allowNegativeBalance: true,
+        maxNegativeDays: 5,
+      }).success,
+    ).toBe(true);
   });
 });

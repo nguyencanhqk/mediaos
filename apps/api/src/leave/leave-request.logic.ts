@@ -46,6 +46,10 @@ export const LEAVE_ERR = {
   // Cấu hình chuyển tiếp không hợp lệ khi xét trên TRẠNG THÁI ĐÃ HOÀ (PATCH bán phần + dòng hiện có):
   // mốc hết hạn không có thật trên lịch, hoặc bật công tắc trên phạm vi engine chưa đọc tới.
   CARRY_FORWARD_INVALID: "LEAVE-ERR-CARRY-FORWARD-INVALID",
+  // ─── S6-LEAVE-MAXNEG-1 ───────────────────────────────────────────────────────
+  // Cho phép nợ phép NHƯNG vượt trần `max_negative_days`. TÁCH khỏi BALANCE_NOT_ENOUGH vì là hai
+  // tình huống nghiệp vụ khác nhau: hết phép (không được nợ) vs nợ quá hạn mức (được nợ, nhưng hết cỡ).
+  NEGATIVE_LIMIT_EXCEEDED: "LEAVE-ERR-NEGATIVE-LIMIT-EXCEEDED",
 } as const;
 
 /** TZ công ty mặc định (SPEC-01; SettingService per-company DEFERRED — dùng default VN). */
@@ -59,6 +63,35 @@ export function yearOf(isoDate: string): number {
 /** Làm tròn 2 chữ số — diệt float drift từ phép /8 và tổng 0.5. */
 export function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * S6-LEAVE-MAXNEG-1 — phân giải "được nợ phép tới mức nào" cho MỘT (loại nghỉ, chính sách).
+ *
+ * NGHĨA CỦA `maxNegativeDays = NULL` KHI `allowNegative = true` LÀ **0** (fail-closed) — quyết định
+ * D-1 của `docs/plans/S6-LEAVE-MAXNEG-1.md`. Đọc kỹ trước khi "sửa cho tiện":
+ *
+ *   · Trước WO này, `allowNegative=true` KHÔNG kiểm gì ⇒ nợ phép KHÔNG GIỚI HẠN, dù form vẫn cho HR
+ *     nhập trần. Nếu để NULL = "không trần" thì lỗ đó vẫn nguyên, chỉ đóng khi HR NHỚ điền —
+ *     biến an toàn thành việc-phải-nhớ.
+ *   · Đo lúc chốt: 0 chính sách và 0 loại nghỉ đang bật cho-âm ⇒ fail-closed KHÔNG chặn oan ai.
+ *   · Hệ quả có chủ đích: `allowNegative=true` + `max=NULL` hành xử GIỐNG HỆT `allowNegative=false`.
+ *     Để cấu hình đó không âm thầm vô nghĩa, FE BẮT BUỘC nhập trần khi bật cho-âm (leave-policy-form).
+ *
+ * `leave_types` KHÔNG có cột `max_negative_days` (chỉ `allow_negative_balance`) ⇒ trần chỉ phân giải
+ * 2 tầng: chính sách → mặc định 0. Đừng thêm tầng `type` mà không thêm cột.
+ */
+export function resolveNegativeAllowance(
+  policy: Pick<LeavePolicyRow, "allowNegativeBalance" | "maxNegativeDays"> | undefined,
+  type: Pick<LeaveTypeRow, "allowNegativeBalance">,
+): { allowNegative: boolean; maxNegative: number } {
+  const allowNegative = policy?.allowNegativeBalance ?? type.allowNegativeBalance ?? false;
+  if (!allowNegative) return { allowNegative: false, maxNegative: 0 };
+  const raw = policy?.maxNegativeDays;
+  const parsed = raw != null ? Number(raw) : 0;
+  // NaN (dữ liệu numeric hỏng) hoặc số âm ⇒ 0, KHÔNG phải "vô hạn". Fail-closed ở mọi nhánh.
+  const maxNegative = Number.isFinite(parsed) && parsed > 0 ? round2(parsed) : 0;
+  return { allowNegative: true, maxNegative };
 }
 
 /** Số ngày lịch từ `from` → `to` (dương khi to sau from). Thuần số học lịch, không tz. */
