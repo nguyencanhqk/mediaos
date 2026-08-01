@@ -9936,9 +9936,12 @@ export const backlog = [
     title:
       "Chuyển tiếp phép chưa nghỉ sang năm sau + hết hạn theo mốc CẤU HÌNH ĐƯỢC (mặc định 31/03) — thêm cột chính sách + engine + trường trên màn hình Chính sách",
     zone: "red",
-    status: "todo",
+    status: "done",
     // ĐỎ + CÓ MIGRATION ⇒ lane NỐI TIẾP, không chạy song song với migration lane khác. Đánh số tiếp
     // head hiện tại (0535). Nối tiếp SAU S6-LEAVE-ACCRUAL-1 vì cùng chạm sổ cái phép.
+    // THI CÔNG 2026-08-01: head thật lúc làm là 0536 (accrual #317 đã merge) ⇒ migration 0537.
+    // Plan v1 bị `plan-reviewer` BLOCK 2 lỗi CRITICAL; bản v2 đổi mô hình chốt an toàn từ "một dòng/kỳ"
+    // sang RÀNG BUỘC SỐ NGÀY ở tầng DB + cho phép ghi bù — xem docs/plans/S6-LEAVE-CARRYOVER-1.md §11.
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/db/schema/leave.ts",

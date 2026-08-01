@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { LEAVE_ENGINE_ACCRUAL_METHODS } from "@mediaos/contracts";
+import {
+  LEAVE_ENGINE_ACCRUAL_METHODS,
+  carryForwardScopeIsSupported,
+  hasValidCarryForwardDeadline,
+} from "@mediaos/contracts";
 import type {
   CreateLeavePolicyRequest,
   UpdateLeavePolicyRequest,
@@ -55,6 +59,11 @@ export const leavePolicyFormSchema = z
     reserveBalanceOnPending: z.boolean(),
     allowNegativeBalance: z.boolean(),
     maxNegativeDays: optionalNumber(),
+    // S6-LEAVE-CARRYOVER-1 — chuyển tiếp phép. Trần để trống = KHÔNG trần (owner D-A3).
+    allowCarryForward: z.boolean(),
+    maxCarryForwardDays: optionalNumber(),
+    carryForwardExpiryMonth: optionalInt(),
+    carryForwardExpiryDay: optionalInt(),
     allowCancelAfterApproved: z.boolean(),
     cancelBeforeDays: optionalInt(),
     requiresManagerApproval: z.boolean(),
@@ -98,7 +107,29 @@ export const leavePolicyFormSchema = z
       message: "masterData.leavePolicies.validation.quotaRequiredForAccrual",
       path: ["yearlyQuotaDays"],
     },
-  );
+  )
+  // S6-LEAVE-CARRYOVER-1 §6 — GƯƠNG của `hasValidCarryForwardDeadline` ở `packages/contracts`. Bật chuyển
+  // tiếp thì mốc hết hạn phải là ngày CÓ THẬT trên lịch (chặn 31/02, 31/04). Server vẫn là lớp ép cuối.
+  .refine(
+    (v) =>
+      hasValidCarryForwardDeadline({
+        allowCarryForward: v.allowCarryForward,
+        carryForwardExpiryMonth:
+          v.carryForwardExpiryMonth === "" ? null : Number(v.carryForwardExpiryMonth),
+        carryForwardExpiryDay:
+          v.carryForwardExpiryDay === "" ? null : Number(v.carryForwardExpiryDay),
+      }),
+    {
+      message: "masterData.leavePolicies.validation.carryForwardDeadlineInvalid",
+      path: ["carryForwardExpiryDay"],
+    },
+  )
+  // Engine chuyển tiếp CHỈ đọc chính sách phạm vi Công ty. Cho bật trên phạm vi khác là dựng lại đúng cái
+  // bẫy WO này đi vá: lưu được, mở ra thấy còn nguyên, mà không bao giờ chạy.
+  .refine((v) => carryForwardScopeIsSupported(v), {
+    message: "masterData.leavePolicies.validation.carryForwardScopeUnsupported",
+    path: ["allowCarryForward"],
+  });
 
 export type LeavePolicyFormValues = z.infer<typeof leavePolicyFormSchema>;
 
@@ -122,6 +153,10 @@ export const EMPTY_LEAVE_POLICY_FORM: LeavePolicyFormValues = {
   reserveBalanceOnPending: true,
   allowNegativeBalance: false,
   maxNegativeDays: "",
+  allowCarryForward: false,
+  maxCarryForwardDays: "",
+  carryForwardExpiryMonth: "3",
+  carryForwardExpiryDay: "31",
   allowCancelAfterApproved: true,
   cancelBeforeDays: "",
   requiresManagerApproval: true,
@@ -154,6 +189,12 @@ export function leavePolicyToForm(item: LeavePolicyView): LeavePolicyFormValues 
     reserveBalanceOnPending: item.reserveBalanceOnPending,
     allowNegativeBalance: item.allowNegativeBalance,
     maxNegativeDays: item.maxNegativeDays != null ? String(item.maxNegativeDays) : "",
+    // S6-LEAVE-CARRYOVER-1 — pre-fill TỪ VIEW (không để mặc định như accrualDayOfMonth ở trên): nếu
+    // không, mỗi lần HR sửa một field bất kỳ là PATCH gửi `allowCarryForward=false` và tự tắt chuyển tiếp.
+    allowCarryForward: item.allowCarryForward,
+    maxCarryForwardDays: item.maxCarryForwardDays != null ? String(item.maxCarryForwardDays) : "",
+    carryForwardExpiryMonth: String(item.carryForwardExpiryMonth),
+    carryForwardExpiryDay: String(item.carryForwardExpiryDay),
     allowCancelAfterApproved: true,
     cancelBeforeDays: "",
     requiresManagerApproval: item.requiresManagerApproval,
@@ -192,6 +233,14 @@ export function leavePolicyToCreate(values: LeavePolicyFormValues): CreateLeaveP
     reserveBalanceOnPending: values.reserveBalanceOnPending,
     allowNegativeBalance: values.allowNegativeBalance,
     maxNegativeDays: values.maxNegativeDays ? Number(values.maxNegativeDays) : undefined,
+    allowCarryForward: values.allowCarryForward,
+    maxCarryForwardDays: values.maxCarryForwardDays
+      ? Number(values.maxCarryForwardDays)
+      : undefined,
+    carryForwardExpiryMonth: values.carryForwardExpiryMonth
+      ? Number(values.carryForwardExpiryMonth)
+      : 3,
+    carryForwardExpiryDay: values.carryForwardExpiryDay ? Number(values.carryForwardExpiryDay) : 31,
     allowCancelAfterApproved: values.allowCancelAfterApproved,
     cancelBeforeDays: values.cancelBeforeDays ? Number(values.cancelBeforeDays) : undefined,
     requiresManagerApproval: values.requiresManagerApproval,
@@ -217,6 +266,12 @@ export function leavePolicyToUpdate(values: LeavePolicyFormValues): UpdateLeaveP
     reserveBalanceOnPending: values.reserveBalanceOnPending,
     allowNegativeBalance: values.allowNegativeBalance,
     maxNegativeDays: values.maxNegativeDays ? Number(values.maxNegativeDays) : null,
+    allowCarryForward: values.allowCarryForward,
+    maxCarryForwardDays: values.maxCarryForwardDays ? Number(values.maxCarryForwardDays) : null,
+    carryForwardExpiryMonth: values.carryForwardExpiryMonth
+      ? Number(values.carryForwardExpiryMonth)
+      : 3,
+    carryForwardExpiryDay: values.carryForwardExpiryDay ? Number(values.carryForwardExpiryDay) : 31,
     allowCancelAfterApproved: values.allowCancelAfterApproved,
     cancelBeforeDays: values.cancelBeforeDays ? Number(values.cancelBeforeDays) : null,
     requiresManagerApproval: values.requiresManagerApproval,

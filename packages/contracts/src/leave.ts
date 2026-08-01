@@ -745,6 +745,12 @@ const leavePolicyBaseSchema = z.object({
   reserveBalanceOnPending: z.boolean().default(true),
   allowNegativeBalance: z.boolean().default(false),
   maxNegativeDays: z.number().min(0).max(366).optional(),
+  // S6-LEAVE-CARRYOVER-1 — chuyển tiếp phép chưa nghỉ. `maxCarryForwardDays` bỏ trống = KHÔNG trần
+  // (owner D-A3); mốc hết hạn là cặp THÁNG+NGÀY lặp theo năm (mặc định 31/03 năm sau).
+  allowCarryForward: z.boolean().default(false),
+  maxCarryForwardDays: z.number().min(0).max(366).optional(),
+  carryForwardExpiryMonth: z.number().int().min(1).max(12).default(3),
+  carryForwardExpiryDay: z.number().int().min(1).max(31).default(31),
   allowCancelAfterApproved: z.boolean().default(true),
   cancelBeforeDays: z.number().int().min(0).max(365).optional(),
   requiresManagerApproval: z.boolean().default(true),
@@ -818,10 +824,75 @@ export const QUOTA_REQUIRED_FOR_ACCRUAL = {
   path: ["yearlyQuotaDays"] as const,
 };
 
-export const createLeavePolicySchema = refineLeavePolicyTarget(leavePolicyBaseSchema).refine(
-  hasQuotaForAccrualMethod,
-  { message: QUOTA_REQUIRED_FOR_ACCRUAL.message, path: ["yearlyQuotaDays"] },
-);
+/**
+ * S6-LEAVE-CARRYOVER-1 — số ngày TỐI ĐA của một tháng, không phụ thuộc năm (tháng 2 lấy 29 để 29/02 là
+ * mốc HỢP LỆ). Engine cắt 29/02 về 28/02 ở năm không nhuận khi dựng mốc thật của từng năm.
+ */
+const MAX_DAY_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
+
+/**
+ * Chặn mốc hết hạn VÔ NGHĨA VỀ LỊCH (31/02, 31/04). CHECK ở DB chỉ chặn được khoảng thô (1..12 / 1..31);
+ * biểu thức biết-số-ngày-của-tháng viết trong SQL thì dài và khó đọc, nên luật thật nằm ở đây — cùng một
+ * hàm cho DTO server lẫn form client, không có bản sao thứ hai để trôi.
+ *
+ * Chỉ soi khi `allowCarryForward = true`: chính sách tắt công tắc thì mốc không có tác dụng gì, bắt lỗi
+ * ở đó chỉ làm HR không lưu nổi form.
+ */
+export function hasValidCarryForwardDeadline(v: {
+  allowCarryForward?: boolean | null;
+  carryForwardExpiryMonth?: number | null;
+  carryForwardExpiryDay?: number | null;
+}): boolean {
+  if (v.allowCarryForward !== true) return true;
+  const month = v.carryForwardExpiryMonth;
+  const day = v.carryForwardExpiryDay;
+  if (month == null || day == null) return false;
+  if (!Number.isInteger(month) || month < 1 || month > 12) return false;
+  if (!Number.isInteger(day) || day < 1) return false;
+  return day <= MAX_DAY_IN_MONTH[month - 1];
+}
+
+export const CARRY_FORWARD_DEADLINE_INVALID = {
+  message:
+    "Mốc hết hạn phép chuyển không có thật trên lịch (ví dụ 31/02, 31/04) — chọn ngày hợp lệ của tháng đã chọn",
+  path: ["carryForwardExpiryDay"] as const,
+};
+
+/**
+ * Engine chuyển tiếp CHỈ đọc chính sách phạm vi `Company` (`listActiveCompanyPoliciesTx` — cùng luật với
+ * đường tạo đơn và engine cộng dồn; scope hẹp hơn vẫn DEFERRED). Cho HR bật công tắc trên một chính sách
+ * Phòng ban/Nhân viên là dựng lại ĐÚNG cái bẫy Work Order này đi vá: lưu được, mở ra thấy còn nguyên, mà
+ * engine không bao giờ đọc tới — và tệ hơn, nhân viên đó vẫn bị mốc hết hạn của chính sách Công ty áp lên.
+ * Chặn ở biên nhập liệu cho tới khi engine hiểu scope hẹp.
+ */
+export function carryForwardScopeIsSupported(v: {
+  allowCarryForward?: boolean | null;
+  policyScope?: string | null;
+}): boolean {
+  if (v.allowCarryForward !== true) return true;
+  if (v.policyScope == null) return true;
+  return v.policyScope === "Company";
+}
+
+export const CARRY_FORWARD_SCOPE_UNSUPPORTED = {
+  message:
+    "Chuyển tiếp phép hiện chỉ chạy cho chính sách phạm vi 'Toàn công ty' — bật trên phạm vi khác sẽ không có tác dụng",
+  path: ["allowCarryForward"] as const,
+};
+
+export const createLeavePolicySchema = refineLeavePolicyTarget(leavePolicyBaseSchema)
+  .refine(hasQuotaForAccrualMethod, {
+    message: QUOTA_REQUIRED_FOR_ACCRUAL.message,
+    path: ["yearlyQuotaDays"],
+  })
+  .refine(hasValidCarryForwardDeadline, {
+    message: CARRY_FORWARD_DEADLINE_INVALID.message,
+    path: ["carryForwardExpiryDay"],
+  })
+  .refine(carryForwardScopeIsSupported, {
+    message: CARRY_FORWARD_SCOPE_UNSUPPORTED.message,
+    path: ["allowCarryForward"],
+  });
 export type CreateLeavePolicyRequest = z.infer<typeof createLeavePolicySchema>;
 
 /** PATCH bán phần — policyCode/leaveTypeId immutable sau khi tạo. status thêm ở đây (Active/Inactive). */
@@ -845,6 +916,12 @@ export const updateLeavePolicySchema = z
     reserveBalanceOnPending: z.boolean().optional(),
     allowNegativeBalance: z.boolean().optional(),
     maxNegativeDays: z.number().min(0).max(366).nullable().optional(),
+    // S6-LEAVE-CARRYOVER-1. `maxCarryForwardDays` nullable = xoá trần (về "không trần"); hai cột mốc là
+    // NOT NULL ở DB nên KHÔNG nhận null ở đây — nhận null rồi ghi xuống sẽ vỡ ràng buộc thay vì báo lỗi rõ.
+    allowCarryForward: z.boolean().optional(),
+    maxCarryForwardDays: z.number().min(0).max(366).nullable().optional(),
+    carryForwardExpiryMonth: z.number().int().min(1).max(12).optional(),
+    carryForwardExpiryDay: z.number().int().min(1).max(31).optional(),
     allowCancelAfterApproved: z.boolean().optional(),
     cancelBeforeDays: z.number().int().min(0).max(365).nullable().optional(),
     requiresManagerApproval: z.boolean().optional(),
@@ -860,6 +937,12 @@ export const updateLeavePolicySchema = z
   .refine(hasQuotaForAccrualMethod, {
     message: QUOTA_REQUIRED_FOR_ACCRUAL.message,
     path: ["yearlyQuotaDays"],
+  })
+  // Cùng luật với create. PATCH bán phần chỉ phán được khi `allowCarryForward` CÓ trong body — form
+  // Chính sách luôn gửi cả ba field (leavePolicyToUpdate) ⇒ đường người dùng thật được chặn.
+  .refine(hasValidCarryForwardDeadline, {
+    message: CARRY_FORWARD_DEADLINE_INVALID.message,
+    path: ["carryForwardExpiryDay"],
   });
 export type UpdateLeavePolicyRequest = z.infer<typeof updateLeavePolicySchema>;
 
@@ -882,6 +965,13 @@ export const leavePolicyViewSchema = z.object({
   reserveBalanceOnPending: z.boolean(),
   allowNegativeBalance: z.boolean(),
   maxNegativeDays: z.number().nullable(),
+  // S6-LEAVE-CARRYOVER-1 — PHẢI có ở view, không chỉ ở create/update. View là thứ `leavePolicyToForm`
+  // dùng để pre-fill; thiếu ở đây thì HR sửa BẤT KỲ field nào khác cũng gửi lại `allowCarryForward=false`
+  // ⇒ màn hình TỰ TẮT cấu hình chuyển tiếp trong im lặng (đúng lớp lỗi cả họ WO này đi vá).
+  allowCarryForward: z.boolean(),
+  maxCarryForwardDays: z.number().nullable(),
+  carryForwardExpiryMonth: z.number().int(),
+  carryForwardExpiryDay: z.number().int(),
   requiresManagerApproval: z.boolean(),
   requiresHrApproval: z.boolean(),
   effectiveFrom: z.string().date(),

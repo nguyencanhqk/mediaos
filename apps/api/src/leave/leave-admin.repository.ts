@@ -104,6 +104,11 @@ export class LeaveAdminRepository {
         reserveBalanceOnPending: leavePolicies.reserveBalanceOnPending,
         allowNegativeBalance: leavePolicies.allowNegativeBalance,
         maxNegativeDays: leavePolicies.maxNegativeDays,
+        // S6-LEAVE-CARRYOVER-1 — bốn cột này phải đi ra tới view (form Chính sách pre-fill từ nó).
+        allowCarryForward: leavePolicies.allowCarryForward,
+        maxCarryForwardDays: leavePolicies.maxCarryForwardDays,
+        carryForwardExpiryMonth: leavePolicies.carryForwardExpiryMonth,
+        carryForwardExpiryDay: leavePolicies.carryForwardExpiryDay,
         requiresManagerApproval: leavePolicies.requiresManagerApproval,
         requiresHrApproval: leavePolicies.requiresHrApproval,
         effectiveFrom: leavePolicies.effectiveFrom,

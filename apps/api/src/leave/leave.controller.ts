@@ -23,6 +23,7 @@ import {
   type LeaveResourceType,
 } from "./leave-permissions.const";
 import { LeaveAccrualService } from "./leave-accrual.service";
+import { LeaveCarryoverService } from "./leave-carryover.service";
 import { LeaveAdminService } from "./leave-admin.service";
 import { LeaveApprovalService } from "./leave-approval.service";
 import { LeaveCalendarService } from "./leave-calendar.service";
@@ -131,6 +132,8 @@ export class LeaveController {
     private readonly leaveRevoke: LeaveRevokeService,
     // S6-LEAVE-ACCRUAL-1 (additive): dry-run engine cộng dồn phép (chỉ ĐỌC, không ghi gì).
     private readonly leaveAccrual: LeaveAccrualService,
+    // S6-LEAVE-CARRYOVER-1 (additive): dry-run engine chuyển tiếp/hết hạn (chỉ ĐỌC, không ghi gì).
+    private readonly leaveCarryover: LeaveCarryoverService,
   ) {}
 
   // ─── Leave types ─────────────────────────────────────────────────────────────
@@ -505,5 +508,23 @@ export class LeaveController {
     // Ngày mốc do SERVER quyết (không nhận từ query) — cho client chọn ngày = cho client tự chọn kỳ nào
     // "đã kết thúc", tức là điều khiển được số ngày phép sắp cấp.
     return this.leaveAccrual.previewCompanyForResponse(req.user.companyId);
+  }
+
+  // ─── Admin: dry-run engine chuyển tiếp / hết hạn phép (S6-LEAVE-CARRYOVER-1) ─────────────────
+  //
+  // CHỈ ĐỌC. Quan trọng hơn dry-run của accrual một bậc: engine này còn có hướng XOÁ ngày phép (hết hạn),
+  // mà sổ cái là append-only nên không có đường hoàn tác. Người chốt phải nhìn được "sẽ chuyển bao nhiêu,
+  // sẽ xoá bao nhiêu, dòng nào bị bỏ qua vì lý do gì" TRƯỚC khi bật công tắc `allow_carry_forward`.
+  //
+  // Gate: view:leave-balance @ Company (SENSITIVE) — ĐÚNG cặp đang gác GET admin/balances và
+  // admin/accrual/preview (cặp màn-hình phải khớp cặp đường-tải).
+  @Get("admin/carryover/preview")
+  @RequirePermission(VIEW_LEAVE_BALANCE.action, VIEW_LEAVE_BALANCE.resourceType, {
+    isSensitive: VIEW_LEAVE_BALANCE.sensitive,
+  })
+  previewCarryover(@Req() req: AuthenticatedRequest) {
+    // Ngày mốc do SERVER quyết (không nhận từ query) — giữ nguyên lý do ở route accrual phía trên: cho
+    // client chọn ngày là cho client tự chọn kỳ nào "đã qua mốc", tức điều khiển được số ngày bị xoá.
+    return this.leaveCarryover.previewCompanyForResponse(req.user.companyId);
   }
 }

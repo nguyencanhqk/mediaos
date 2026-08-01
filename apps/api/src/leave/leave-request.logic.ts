@@ -42,6 +42,10 @@ export const LEAVE_ERR = {
   BALANCE_NOT_FOUND: "LEAVE-ERR-BALANCE-NOT-FOUND",
   // adjust đưa remaining < 0 khi allow_negative_balance=false (chốt trong WHERE — race-safe).
   ADJUST_NEGATIVE_BALANCE: "LEAVE-ERR-ADJUST-NEGATIVE-BALANCE",
+  // ─── S6-LEAVE-CARRYOVER-1 ────────────────────────────────────────────────────
+  // Cấu hình chuyển tiếp không hợp lệ khi xét trên TRẠNG THÁI ĐÃ HOÀ (PATCH bán phần + dòng hiện có):
+  // mốc hết hạn không có thật trên lịch, hoặc bật công tắc trên phạm vi engine chưa đọc tới.
+  CARRY_FORWARD_INVALID: "LEAVE-ERR-CARRY-FORWARD-INVALID",
 } as const;
 
 /** TZ công ty mặc định (SPEC-01; SettingService per-company DEFERRED — dùng default VN). */

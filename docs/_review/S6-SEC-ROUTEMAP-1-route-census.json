@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 453,
+    "routes": 454,
     "controllers": 79,
-    "gated": 401,
+    "gated": 402,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 40,
@@ -3523,6 +3523,22 @@
       "key": "LeaveController#previewAccrual",
       "httpMethod": "GET",
       "path": "/api/v1/leave/admin/accrual/preview",
+      "hasPermission": true,
+      "permission": "view:leave-balance",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "LeaveController#previewCarryover",
+      "httpMethod": "GET",
+      "path": "/api/v1/leave/admin/carryover/preview",
       "hasPermission": true,
       "permission": "view:leave-balance",
       "permissionLevel": "handler",

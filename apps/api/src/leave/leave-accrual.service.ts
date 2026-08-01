@@ -115,7 +115,20 @@ export class LeaveAccrualService {
     companyId: string,
     today = LeaveAccrualService.today(),
   ): Promise<AccrualPreview> {
-    return this.db.withTenant(companyId, (tx) => this.plan(companyId, today, tx));
+    return this.db.withTenant(companyId, (tx) => this.planWithTx(companyId, today, tx));
+  }
+
+  /**
+   * S6-LEAVE-CARRYOVER-1 — CÙNG phép tính với `previewCompany` nhưng chạy TRONG tx của caller.
+   *
+   * Vì sao phải có: engine chuyển tiếp cần biết "accrual đã cấp xong năm cũ chưa" TRONG KHI nó đang giữ
+   * `FOR UPDATE` trên dòng số dư. Gọi `previewCompany()` ở đó sẽ mở `withTenant` thứ hai = transaction thứ
+   * hai trên connection thứ hai ⇒ đúng cái "tx LỒNG = treo" mà PgBouncer transaction-mode cấm.
+   *
+   * Thân hàm KHÔNG đổi — chỉ mở rộng khả năng gọi. `plan()` cũ giữ nguyên vai trò private bên trong.
+   */
+  async planWithTx(companyId: string, today: string, tx: TenantTx): Promise<AccrualPreview> {
+    return this.plan(companyId, today, tx);
   }
 
   /**

@@ -67,6 +67,10 @@ const leaveMasterDataVi = {
         reserveBalanceOnPending: "Giữ chỗ số dư khi đơn chờ duyệt",
         allowNegativeBalance: "Cho phép số dư âm",
         maxNegativeDays: "Số ngày âm tối đa",
+        allowCarryForward: "Chuyển phép chưa nghỉ sang năm sau",
+        maxCarryForwardDays: "Số ngày chuyển tối đa (bỏ trống = không giới hạn)",
+        carryForwardExpiryMonth: "Hạn dùng phép chuyển — tháng",
+        carryForwardExpiryDay: "Hạn dùng phép chuyển — ngày",
         allowCancelAfterApproved: "Cho huỷ đơn sau khi đã duyệt",
         cancelBeforeDays: "Số ngày phải huỷ trước",
         requiresManagerApproval: "Cần quản lý duyệt",
@@ -102,6 +106,12 @@ const leaveMasterDataVi = {
         // ngày, im lặng. Chặn tại chỗ nhập thay vì để HR phát hiện sau một tháng không ai có phép.
         quotaRequiredForAccrual:
           "Phương thức cộng dồn 'Theo tháng/Theo năm/Chia theo tỷ lệ' bắt buộc có hạn mức năm (ngày) lớn hơn 0.",
+        // S6-LEAVE-CARRYOVER-1: mốc hết hạn phải là ngày CÓ THẬT trên lịch — 31/02 hay 31/04 sẽ bị engine
+        // cắt về ngày cuối tháng, tức HR nghĩ một đằng hệ thống làm một nẻo.
+        carryForwardScopeUnsupported:
+          "Chuyển tiếp phép hiện chỉ chạy cho phạm vi 'Toàn công ty' — bật ở phạm vi khác sẽ không có tác dụng.",
+        carryForwardDeadlineInvalid:
+          "Mốc hết hạn phép chuyển không có thật trên lịch (ví dụ 31/02, 31/04) — chọn ngày hợp lệ của tháng đã chọn.",
       },
     },
   },

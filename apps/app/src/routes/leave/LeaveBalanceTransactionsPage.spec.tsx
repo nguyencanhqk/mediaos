@@ -32,6 +32,8 @@ function setCaps(caps: Record<string, boolean>) {
   });
 }
 
+// S6-LEAVE-CARRYOVER-1: cột "Loại giao dịch" nay hiện NHÃN tiếng Việt thay vì mã thô — hai loại mới
+// CARRY_OVER/EXPIRE đi kèm số ÂM và là bằng chứng duy nhất nhân viên thấy khi phép bị chuyển đi/bị xoá.
 const TX: LeaveBalanceTransactionView = {
   id: "tx-1",
   transactionType: "ADJUSTMENT",
@@ -62,7 +64,7 @@ describe("LeaveBalanceTransactionsPage (LEAVE-SCREEN-013, gate = view-transactio
   it("renders the ledger (read-only) when user has view-transaction:leave-balance", async () => {
     setCaps({ "view-transaction:leave-balance": true });
     renderWithQuery(<LeaveBalanceTransactionsPage balanceId="bal-1" onBack={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText("ADJUSTMENT")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Điều chỉnh thủ công")).toBeInTheDocument());
     expect(screen.getByText("Điều chỉnh do nghỉ ốm bổ sung")).toBeInTheDocument();
     expect(leaveApi.listBalanceTransactions).toHaveBeenCalledWith("bal-1");
   });
@@ -70,14 +72,14 @@ describe("LeaveBalanceTransactionsPage (LEAVE-SCREEN-013, gate = view-transactio
   it("hides Điều chỉnh action when user lacks adjust:leave-balance", async () => {
     setCaps({ "view-transaction:leave-balance": true });
     renderWithQuery(<LeaveBalanceTransactionsPage balanceId="bal-1" onBack={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText("ADJUSTMENT")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Điều chỉnh thủ công")).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: /điều chỉnh/i })).not.toBeInTheDocument();
   });
 
   it("shows Điều chỉnh action + opens adjust dialog when user has adjust:leave-balance", async () => {
     setCaps({ "view-transaction:leave-balance": true, "adjust:leave-balance": true });
     renderWithQuery(<LeaveBalanceTransactionsPage balanceId="bal-1" onBack={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText("ADJUSTMENT")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Điều chỉnh thủ công")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /điều chỉnh/i }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
@@ -86,7 +88,7 @@ describe("LeaveBalanceTransactionsPage (LEAVE-SCREEN-013, gate = view-transactio
     const onBack = vi.fn();
     setCaps({ "view-transaction:leave-balance": true });
     renderWithQuery(<LeaveBalanceTransactionsPage balanceId="bal-1" onBack={onBack} />);
-    await waitFor(() => expect(screen.getByText("ADJUSTMENT")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Điều chỉnh thủ công")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /quay lại danh sách/i }));
     expect(onBack).toHaveBeenCalledTimes(1);
   });

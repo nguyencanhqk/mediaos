@@ -189,6 +189,26 @@ function LeavePolicyFields({ form }: { form: UseFormReturn<LeavePolicyFormValues
         label={t("masterData.leavePolicies.fields.cancelBeforeDays")}
         type="number"
       />
+      {/* S6-LEAVE-CARRYOVER-1 — chuyển tiếp phép chưa nghỉ. Công tắc nằm ở khối checkbox bên dưới;
+          ba ô này là tham số của nó. Trần để trống = KHÔNG giới hạn (owner D-A3). */}
+      <TextField
+        form={form}
+        name="maxCarryForwardDays"
+        label={t("masterData.leavePolicies.fields.maxCarryForwardDays")}
+        type="number"
+      />
+      <TextField
+        form={form}
+        name="carryForwardExpiryMonth"
+        label={t("masterData.leavePolicies.fields.carryForwardExpiryMonth")}
+        type="number"
+      />
+      <TextField
+        form={form}
+        name="carryForwardExpiryDay"
+        label={t("masterData.leavePolicies.fields.carryForwardExpiryDay")}
+        type="number"
+      />
       <TextField
         form={form}
         name="effectiveFrom"
@@ -216,6 +236,11 @@ function LeavePolicyFields({ form }: { form: UseFormReturn<LeavePolicyFormValues
           form={form}
           name="allowNegativeBalance"
           label={t("masterData.leavePolicies.fields.allowNegativeBalance")}
+        />
+        <CheckboxField
+          form={form}
+          name="allowCarryForward"
+          label={t("masterData.leavePolicies.fields.allowCarryForward")}
         />
         <CheckboxField
           form={form}

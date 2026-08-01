@@ -9,6 +9,9 @@ import { LeaveController } from "./leave.controller";
 import { LeaveAccrualJobHandler } from "./leave-accrual.job-handler";
 import { LeaveAccrualRepository } from "./leave-accrual.repository";
 import { LeaveAccrualService } from "./leave-accrual.service";
+import { LeaveCarryoverJobHandler } from "./leave-carryover.job-handler";
+import { LeaveCarryoverRepository } from "./leave-carryover.repository";
+import { LeaveCarryoverService } from "./leave-carryover.service";
 import { LeaveAdminRepository } from "./leave-admin.repository";
 import { LeaveAdminService } from "./leave-admin.service";
 import { LeaveApprovalRepository } from "./leave-approval.repository";
@@ -97,6 +100,12 @@ import { LeaveService } from "./leave.service";
     LeaveAccrualService,
     LeaveAccrualRepository,
     LeaveAccrualJobHandler,
+    // S6-LEAVE-CARRYOVER-1 (additive) — engine chuyển tiếp phép cuối năm + hết hạn theo mốc cấu hình.
+    // Dùng lại LeaveAccrualRepository.ensureBalanceTx (một nguồn sự thật cho hình dạng dòng số dư) và
+    // LeaveAccrualService.planWithTx (hỏi "accrual cấp xong năm cũ chưa" NGAY TRONG tx đang mở).
+    LeaveCarryoverService,
+    LeaveCarryoverRepository,
+    LeaveCarryoverJobHandler,
   ],
   // S4-DASH-BE-2 (additive): + LeaveApprovalService cho PENDING_LEAVE widget handler (DASH inject qua DI —
   // KHÔNG re-provide instance thứ 2). Chỉ thêm vào exports[], KHÔNG method mới.
