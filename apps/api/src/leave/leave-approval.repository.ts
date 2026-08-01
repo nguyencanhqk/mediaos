@@ -65,11 +65,23 @@ export class LeaveApprovalRepository {
    * updated row, or undefined when the guard fails (would exceed quota) — so two concurrent approvals
    * can NEVER both deduct (the row lock + WHERE guard serialize + reject the loser). delta = decimal string.
    */
+  /**
+   * S6-LEAVE-MAXNEG-1 — `maxNegative` là TRẦN NỢ PHÉP đã phân giải (resolveNegativeAllowance), mặc
+   * định **0** ⇒ caller chưa truyền giữ NGUYÊN vị từ cũ `used + delta <= total`.
+   *
+   * Vì sao phải nới ở đây: trước WO này đường `submit` cho nợ phép (allow_negative) còn đường duyệt
+   * chặn cứng ở `total` ⇒ đơn nợ phép nộp được nhưng KHÔNG BAO GIỜ duyệt được, người duyệt bấm thì
+   * rơi vào nhánh rollback "over-quota". Hai đầu phải dùng CÙNG một trần.
+   *
+   * Vị từ GIỮ NGUYÊN VỊ TRÍ trong `WHERE` của `UPDATE` (atomic, an toàn ca đua) — KHÔNG được đổi
+   * thành kiểm tra ở tầng app.
+   */
   async convertReserveToUseByBalanceIdTx(
     companyId: string,
-    data: { balanceId: string; delta: string },
+    data: { balanceId: string; delta: string; maxNegative?: number },
     tx: TenantTx,
   ): Promise<typeof leaveBalances.$inferSelect | undefined> {
+    const maxNegative = Number.isFinite(data.maxNegative) ? Math.max(0, data.maxNegative!) : 0;
     const [row] = await tx
       .update(leaveBalances)
       .set({
@@ -81,7 +93,7 @@ export class LeaveApprovalRepository {
         and(
           eq(leaveBalances.companyId, companyId),
           eq(leaveBalances.id, data.balanceId),
-          sql`${leaveBalances.usedDays} + ${data.delta}::numeric <= ${leaveBalances.totalDays}`,
+          sql`${leaveBalances.usedDays} + ${data.delta}::numeric <= ${leaveBalances.totalDays} + ${String(maxNegative)}::numeric`,
         ),
       )
       .returning();

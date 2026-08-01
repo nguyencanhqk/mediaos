@@ -38,6 +38,21 @@ export const leaveTypeCodeSchema = z.enum([
 ]);
 export type LeaveTypeCode = z.infer<typeof leaveTypeCodeSchema>;
 
+/**
+ * Ràng buộc `code` khi TẠO loại nghỉ (dùng chung create legacy + create admin).
+ *
+ * PHẢI cho phép CHỮ HOA: bộ mã canonical `LEAVE_TYPE_CODES` ở trên là UPPERCASE (ANNUAL/SICK/…) và đã nằm
+ * trong DB môi trường đang chạy. Regex `^[a-z0-9_-]+$` trước đây (a) chặn tạo mới đúng quy ước canonical,
+ * (b) làm form SỬA của LEAVE-SCREEN-010 không bao giờ lưu được loại nghỉ đã seed — field `code` là immutable
+ * (disabled, không gửi trong PATCH) nhưng vẫn bị validate ⇒ "SICK" trượt regex. Khớp với `policyCode`
+ * (leavePolicyBaseSchema) vốn đã cho phép cả hoa lẫn thường.
+ */
+export const leaveTypeCodeInputSchema = z
+  .string()
+  .min(1)
+  .max(50)
+  .regex(/^[A-Za-z0-9_-]+$/, "Mã loại nghỉ chỉ gồm chữ, số, '-', '_'");
+
 // ─── leave_types ──────────────────────────────────────────────────────────────
 
 export const leaveTypeSchema = z.object({
@@ -53,11 +68,7 @@ export type LeaveTypeDto = z.infer<typeof leaveTypeSchema>;
 
 export const createLeaveTypeSchema = z.object({
   name: z.string().min(1).max(200),
-  code: z
-    .string()
-    .min(1)
-    .max(50)
-    .regex(/^[a-z0-9_-]+$/, "Code chỉ gồm a-z, 0-9, '-', '_'"),
+  code: leaveTypeCodeInputSchema,
   paid: z.boolean().default(true),
   annualQuota: z.number().min(0).max(366).nullable().optional(),
 });
@@ -633,11 +644,7 @@ export type LeaveManagementListResponse = z.infer<typeof leaveManagementListResp
 /** Body tạo loại nghỉ (mặt admin — đủ field cấu hình DB-05 §7.1, mig 0453). code immutable sau khi tạo. */
 export const createLeaveTypeAdminSchema = z.object({
   name: z.string().min(1).max(200),
-  code: z
-    .string()
-    .min(1)
-    .max(50)
-    .regex(/^[a-z0-9_-]+$/, "Code chỉ gồm a-z, 0-9, '-', '_'"),
+  code: leaveTypeCodeInputSchema,
   paid: z.boolean().default(true),
   description: z.string().max(1000).optional(),
   deductBalance: z.boolean().default(true),
@@ -825,6 +832,31 @@ export const QUOTA_REQUIRED_FOR_ACCRUAL = {
 };
 
 /**
+ * S6-LEAVE-MAXNEG-1 — bật `allowNegativeBalance` thì BẮT BUỘC có `maxNegativeDays > 0`.
+ *
+ * Engine coi trần bỏ trống là **0** (fail-closed, quyết định D-1) ⇒ "cho nợ phép + không trần" hành xử
+ * GIỐNG HỆT "không cho nợ phép". Đó là cấu hình trông như có tác dụng nhưng không có — cùng một hạng
+ * lỗi với `accrual_method` đặt mà thiếu hạn mức. Chặn ở biên nhập liệu, không để HR phát hiện qua đơn
+ * bị từ chối.
+ *
+ * KHÔNG phải ràng buộc an toàn (thiếu trần chỉ làm chặt hơn, không nới lỏng) — đây là ràng buộc CHỐNG
+ * CẤU HÌNH VÔ NGHĨA. Đừng gỡ nó ra rồi bảo "server vẫn fail-closed nên bỏ được".
+ */
+export function hasMaxNegativeForAllowNegative(v: {
+  allowNegativeBalance?: boolean | null;
+  maxNegativeDays?: number | null;
+}): boolean {
+  if (v.allowNegativeBalance !== true) return true;
+  return v.maxNegativeDays != null && v.maxNegativeDays > 0;
+}
+
+export const MAX_NEGATIVE_REQUIRED = {
+  message:
+    "Cho phép nợ phép thì bắt buộc nhập số ngày âm tối đa lớn hơn 0 — bỏ trống được hiểu là 0, tức không cho nợ",
+  path: ["maxNegativeDays"] as const,
+};
+
+/**
  * S6-LEAVE-CARRYOVER-1 — số ngày TỐI ĐA của một tháng, không phụ thuộc năm (tháng 2 lấy 29 để 29/02 là
  * mốc HỢP LỆ). Engine cắt 29/02 về 28/02 ở năm không nhuận khi dựng mốc thật của từng năm.
  */
@@ -892,6 +924,10 @@ export const createLeavePolicySchema = refineLeavePolicyTarget(leavePolicyBaseSc
   .refine(carryForwardScopeIsSupported, {
     message: CARRY_FORWARD_SCOPE_UNSUPPORTED.message,
     path: ["allowCarryForward"],
+  })
+  .refine(hasMaxNegativeForAllowNegative, {
+    message: MAX_NEGATIVE_REQUIRED.message,
+    path: ["maxNegativeDays"],
   });
 export type CreateLeavePolicyRequest = z.infer<typeof createLeavePolicySchema>;
 
@@ -943,6 +979,13 @@ export const updateLeavePolicySchema = z
   .refine(hasValidCarryForwardDeadline, {
     message: CARRY_FORWARD_DEADLINE_INVALID.message,
     path: ["carryForwardExpiryDay"],
+  })
+  // Cùng luật với create. PATCH bán phần chỉ phán được khi `allowNegativeBalance` CÓ trong body — form
+  // Chính sách luôn gửi cả cặp (leavePolicyToUpdate) ⇒ đường người dùng thật được chặn. Bỏ sót ở đây
+  // KHÔNG mở lỗ an toàn: engine vẫn coi trần trống là 0.
+  .refine(hasMaxNegativeForAllowNegative, {
+    message: MAX_NEGATIVE_REQUIRED.message,
+    path: ["maxNegativeDays"],
   });
 export type UpdateLeavePolicyRequest = z.infer<typeof updateLeavePolicySchema>;
 

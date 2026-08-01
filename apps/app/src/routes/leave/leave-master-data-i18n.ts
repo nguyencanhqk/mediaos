@@ -106,6 +106,10 @@ const leaveMasterDataVi = {
         // ngày, im lặng. Chặn tại chỗ nhập thay vì để HR phát hiện sau một tháng không ai có phép.
         quotaRequiredForAccrual:
           "Phương thức cộng dồn 'Theo tháng/Theo năm/Chia theo tỷ lệ' bắt buộc có hạn mức năm (ngày) lớn hơn 0.",
+        // S6-LEAVE-MAXNEG-1: trần bỏ trống được hiểu là 0 (fail-closed) ⇒ bật cho nợ phép mà không
+        // nhập trần thì hành xử y hệt KHÔNG cho nợ — cấu hình trông có tác dụng nhưng không có.
+        maxNegativeDaysRequired:
+          "Cho phép nợ phép thì bắt buộc nhập số ngày âm tối đa (bỏ trống được hiểu là 0 — tức không cho nợ).",
         // S6-LEAVE-CARRYOVER-1: mốc hết hạn phải là ngày CÓ THẬT trên lịch — 31/02 hay 31/04 sẽ bị engine
         // cắt về ngày cuối tháng, tức HR nghĩ một đằng hệ thống làm một nẻo.
         carryForwardScopeUnsupported:

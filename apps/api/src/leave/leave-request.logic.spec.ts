@@ -18,6 +18,7 @@ import {
   type LeaveTypeRow,
   assertDurationAllowed,
   buildLeaveHolidayDates,
+  resolveNegativeAllowance,
   daysBetweenLocalDates,
   mapDayType,
   numOrNull,
@@ -156,5 +157,51 @@ describe("leave-request.logic — buildLeaveHolidayDates", () => {
       holiday({ date: "2027-05-01", status: "Active", affectsLeave: false }),
     ]);
     expect(set.size).toBe(0);
+  });
+});
+
+// ═══════════════════════ S6-LEAVE-MAXNEG-1 — resolveNegativeAllowance ═══════════════════════
+// Hợp đồng khoá ở đây là NGHĨA CỦA NULL (quyết định D-1): allowNegative=true + max=NULL ⇒ 0, KHÔNG
+// phải "vô hạn". Trước WO này allowNegative=true bỏ qua MỌI kiểm tra ⇒ nợ phép không giới hạn dù
+// form vẫn cho HR nhập trần — đúng họ bẫy "giao diện hứa, backend không làm" của accrual_method.
+describe("resolveNegativeAllowance (S6-LEAVE-MAXNEG-1)", () => {
+  const type = (allow: boolean | null) => ({ allowNegativeBalance: allow }) as LeaveTypeRow;
+  const policy = (allow: boolean | null, max: string | null) =>
+    ({ allowNegativeBalance: allow, maxNegativeDays: max }) as never;
+
+  it("không cho âm → maxNegative = 0", () => {
+    expect(resolveNegativeAllowance(undefined, type(false))).toEqual({
+      allowNegative: false,
+      maxNegative: 0,
+    });
+  });
+
+  it("cho âm + trần 5 → nhận đúng 5", () => {
+    expect(resolveNegativeAllowance(policy(true, "5"), type(null))).toEqual({
+      allowNegative: true,
+      maxNegative: 5,
+    });
+  });
+
+  it("D-1: cho âm + trần NULL → 0 (fail-closed), KHÔNG phải vô hạn", () => {
+    expect(resolveNegativeAllowance(policy(true, null), type(null))).toEqual({
+      allowNegative: true,
+      maxNegative: 0,
+    });
+  });
+
+  it("trần âm hoặc numeric hỏng → 0, không bao giờ thành vô hạn", () => {
+    expect(resolveNegativeAllowance(policy(true, "-3"), type(null)).maxNegative).toBe(0);
+    expect(resolveNegativeAllowance(policy(true, "khong-phai-so"), type(null)).maxNegative).toBe(0);
+  });
+
+  it("chính sách ghi đè loại nghỉ (policy ?? type ?? false)", () => {
+    expect(resolveNegativeAllowance(policy(false, "9"), type(true)).allowNegative).toBe(false);
+    expect(resolveNegativeAllowance(policy(null, "9"), type(true)).allowNegative).toBe(true);
+    expect(resolveNegativeAllowance(undefined, type(true)).maxNegative).toBe(0);
+  });
+
+  it("giữ 2 chữ số thập phân cho trần nửa ngày", () => {
+    expect(resolveNegativeAllowance(policy(true, "2.5"), type(null)).maxNegative).toBe(2.5);
   });
 });

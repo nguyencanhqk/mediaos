@@ -37,7 +37,7 @@ export const leavePolicyFormSchema = z
       .trim()
       .min(1, "masterData.common.validation.codeRequired")
       .max(50, "masterData.common.validation.codeTooLong")
-      .regex(/^[A-Za-z0-9_-]+$/, "masterData.common.validation.codeRequired"),
+      .regex(/^[A-Za-z0-9_-]+$/, "masterData.common.validation.codeInvalid"),
     name: z
       .string()
       .trim()
@@ -95,6 +95,13 @@ export const leavePolicyFormSchema = z
   .refine((v) => v.policyScope !== "ContractType" || v.contractTypeId !== "", {
     message: "masterData.leavePolicies.validation.contractTypeRequired",
     path: ["contractTypeId"],
+  })
+  // S6-LEAVE-MAXNEG-1 (D-1) — bật cho nợ phép thì BẮT BUỘC nhập trần. Backend coi trần bỏ trống là 0
+  // (fail-closed), nên "bật cho-âm + bỏ trống" hành xử GIỐNG HỆT tắt cho-âm — một cấu hình trông như
+  // có tác dụng nhưng không có. Chặn ngay tại ô nhập thay vì để HR phát hiện qua đơn bị từ chối.
+  .refine((v) => !v.allowNegativeBalance || v.maxNegativeDays.trim() !== "", {
+    message: "masterData.leavePolicies.validation.maxNegativeDaysRequired",
+    path: ["maxNegativeDays"],
   })
   // S6-LEAVE-ACCRUAL-1 §5 — GƯƠNG của ràng buộc cùng tên ở `packages/contracts` (createLeavePolicySchema /
   // updateLeavePolicySchema). Server vẫn là lớp ép cuối; ở đây chỉ để HR thấy lỗi ngay tại ô nhập thay vì

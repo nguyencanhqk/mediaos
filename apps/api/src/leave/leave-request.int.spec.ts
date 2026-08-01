@@ -109,14 +109,16 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-2 request workflow (DB cô lập, đường
       requireReason?: boolean;
       allowHourly?: boolean;
       minNotice?: number;
+      /** S6-LEAVE-MAXNEG-1 — tầng loại nghỉ của cho-phép-nợ-phép (KHÔNG có cột trần ở bảng này). */
+      allowNegative?: boolean | null;
     },
   ): Promise<string> {
     const r = await direct.query(
       `INSERT INTO leave_types
          (company_id, code, name, paid, status, deduct_balance, balance_unit,
           allow_full_day, allow_half_day, allow_hourly, allow_multiple_days,
-          require_reason, min_notice_days, sort_order)
-       VALUES ($1,$2,$3,true,'active',$4,'Day',true,true,$5,true,$6,$7,1) RETURNING id`,
+          require_reason, min_notice_days, sort_order, allow_negative_balance)
+       VALUES ($1,$2,$3,true,'active',$4,'Day',true,true,$5,true,$6,$7,1,$8) RETURNING id`,
       [
         companyId,
         `LT-${randomUUID().slice(0, 8)}`,
@@ -125,6 +127,33 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-2 request workflow (DB cô lập, đường
         opts.allowHourly ?? false,
         opts.requireReason ?? false,
         opts.minNotice ?? 0,
+        opts.allowNegative ?? null,
+      ],
+    );
+    return r.rows[0].id as string;
+  }
+
+  /**
+   * S6-LEAVE-MAXNEG-1 — chính sách Company còn hiệu lực cho một loại nghỉ. Đây là tầng DUY NHẤT mang
+   * trần nợ phép (`max_negative_days`); `leave_types` không có cột đó.
+   */
+  async function plantPolicy(
+    companyId: string,
+    leaveTypeId: string,
+    opts: { allowNegative: boolean; maxNegative: number | null },
+  ): Promise<string> {
+    const r = await direct.query(
+      `INSERT INTO leave_policies
+         (company_id, leave_type_id, policy_code, name, policy_scope,
+          allow_negative_balance, max_negative_days, effective_from, status)
+       VALUES ($1,$2,$3,$4,'Company',$5,$6,'2020-01-01','Active') RETURNING id`,
+      [
+        companyId,
+        leaveTypeId,
+        `POL-${randomUUID().slice(0, 8)}`,
+        "Policy maxneg",
+        opts.allowNegative,
+        opts.maxNegative,
       ],
     );
     return r.rows[0].id as string;
@@ -660,5 +689,137 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-2 request workflow (DB cô lập, đường
     const items = list.body.data.items as Array<{ id: string }>;
     expect(items.some((x) => x.id === id)).toBe(true);
     expect(list.body.data.meta.total).toBeGreaterThanOrEqual(items.length);
+  });
+  // ═══════════════ S6-LEAVE-MAXNEG-1 — trần nợ phép được ÉP ở đường quyết định ═══════════════
+  // TRƯỚC WO này: `allowNegative = true` làm reserveIfNeeded bỏ qua MỌI kiểm tra ⇒ nợ phép KHÔNG
+  // GIỚI HẠN, dù form vẫn cho HR nhập `max_negative_days` và DB vẫn lưu. Ba ca đầu là RED-proof:
+  // chạy trên code cũ thì đơn 500 ngày ĐƯỢC TẠO.
+  // Đơn DÀI nhưng CÙNG NĂM: đơn vắt qua năm bị chặn từ tầng DTO (400, luật cùng-năm) nên không bao
+  // giờ chạm tới vị từ trần — dùng nó làm ca test là chứng minh nhầm lớp.
+  it("MAXNEG R1: cho-âm + trần 5, số dư 0, xin ~43 ngày → 422 NEGATIVE-LIMIT-EXCEEDED, KHÔNG ghi sổ", async () => {
+    const type = await plantType(A.companyId, { deduct: true });
+    await plantPolicy(A.companyId, type, { allowNegative: true, maxNegative: 5 });
+    await setupUser(A.companyId, "maxneg1", { pairs: FULL_PAIRS });
+    const token = await login(A.slug, `maxneg1@${A.slug}.test`);
+
+    const draft = await post(token, "/leave/requests", {
+      leaveTypeId: type,
+      startDate: "2026-11-02",
+      endDate: "2026-12-31",
+      durationType: "MultipleDays",
+    });
+    expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+    expect(draft.body.data.totalDays).toBeGreaterThan(5);
+
+    const submit = await post(token, `/leave/requests/${draft.body.data.id}/submit`, {});
+    expect(submit.status, JSON.stringify(submit.body)).toBe(422);
+    expect(submit.body.error.code).toBe("LEAVE-ERR-NEGATIVE-LIMIT-EXCEEDED");
+    expect(await countTx(draft.body.data.id)).toBe(0);
+  });
+
+  it("MAXNEG R2: đúng trần (5 ngày, số dư 0) → submit QUA, đơn nợ phép hợp lệ", async () => {
+    const type = await plantType(A.companyId, { deduct: true });
+    await plantPolicy(A.companyId, type, { allowNegative: true, maxNegative: 5 });
+    await setupUser(A.companyId, "maxneg2", { pairs: FULL_PAIRS });
+    const token = await login(A.slug, `maxneg2@${A.slug}.test`);
+
+    const draft = await post(token, "/leave/requests", {
+      leaveTypeId: type,
+      startDate: OVER_START,
+      endDate: OVER_END,
+      durationType: "MultipleDays",
+    });
+    expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+    expect(draft.body.data.totalDays).toBe(5);
+
+    const submit = await post(token, `/leave/requests/${draft.body.data.id}/submit`, {});
+    expect(submit.status, JSON.stringify(submit.body)).toBe(200);
+  });
+
+  it("MAXNEG R3: vượt trần 1 ngày (trần 4, xin 5) → 422 NEGATIVE-LIMIT-EXCEEDED", async () => {
+    const type = await plantType(A.companyId, { deduct: true });
+    await plantPolicy(A.companyId, type, { allowNegative: true, maxNegative: 4 });
+    await setupUser(A.companyId, "maxneg3", { pairs: FULL_PAIRS });
+    const token = await login(A.slug, `maxneg3@${A.slug}.test`);
+
+    const draft = await post(token, "/leave/requests", {
+      leaveTypeId: type,
+      startDate: OVER_START,
+      endDate: OVER_END,
+      durationType: "MultipleDays",
+    });
+    expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+    const submit = await post(token, `/leave/requests/${draft.body.data.id}/submit`, {});
+    expect(submit.status, JSON.stringify(submit.body)).toBe(422);
+    expect(submit.body.error.code).toBe("LEAVE-ERR-NEGATIVE-LIMIT-EXCEEDED");
+  });
+
+  // D-1: trần NULL nghĩa là 0 (fail-closed) — KHÔNG phải "vô hạn". Đây là ca đổi hành vi rõ nhất:
+  // trên code cũ, allow_negative ở TẦNG LOẠI NGHỈ (không có chính sách nào) = nợ phép vô hạn.
+  it("MAXNEG D-1: cho-âm ở loại nghỉ, KHÔNG có chính sách ⇒ trần = 0 ⇒ 422", async () => {
+    const type = await plantType(A.companyId, { deduct: true, allowNegative: true });
+    await setupUser(A.companyId, "maxneg4", { pairs: FULL_PAIRS });
+    const token = await login(A.slug, `maxneg4@${A.slug}.test`);
+
+    const draft = await post(token, "/leave/requests", {
+      leaveTypeId: type,
+      startDate: OVER_START,
+      endDate: OVER_END,
+      durationType: "MultipleDays",
+    });
+    expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+    const submit = await post(token, `/leave/requests/${draft.body.data.id}/submit`, {});
+    expect(submit.status, JSON.stringify(submit.body)).toBe(422);
+    expect(submit.body.error.code).toBe("LEAVE-ERR-NEGATIVE-LIMIT-EXCEEDED");
+  });
+
+  // Chống hồi quy: đường KHÔNG cho-âm phải giữ NGUYÊN mã lỗi cũ (client/i18n đang bám vào nó).
+  it("MAXNEG #8: !allowNegative giữ nguyên mã BALANCE-NOT-ENOUGH (không đổi sang mã mới)", async () => {
+    const type = await plantType(A.companyId, { deduct: true });
+    await plantPolicy(A.companyId, type, { allowNegative: false, maxNegative: 99 });
+    await setupUser(A.companyId, "maxneg5", { pairs: FULL_PAIRS });
+    const token = await login(A.slug, `maxneg5@${A.slug}.test`);
+
+    const draft = await post(token, "/leave/requests", {
+      leaveTypeId: type,
+      startDate: OVER_START,
+      endDate: OVER_END,
+      durationType: "MultipleDays",
+    });
+    expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+    const submit = await post(token, `/leave/requests/${draft.body.data.id}/submit`, {});
+    expect(submit.status, JSON.stringify(submit.body)).toBe(422);
+    expect(submit.body.error.code).toBe("LEAVE-ERR-BALANCE-NOT-ENOUGH");
+  });
+
+  // Ca #7 của plan: trần tính trên AVAILABLE (remaining - pending), không phải từng đơn riêng lẻ.
+  it("MAXNEG #7: pending cộng dồn qua NHIỀU đơn vẫn bị trần chặn ở đơn sau", async () => {
+    const type = await plantType(A.companyId, { deduct: true });
+    await plantPolicy(A.companyId, type, { allowNegative: true, maxNegative: 5 });
+    await setupUser(A.companyId, "maxneg6", { pairs: FULL_PAIRS });
+    const token = await login(A.slug, `maxneg6@${A.slug}.test`);
+    await plantBalance(A.companyId, u.maxneg6.id, type, { total: 0 });
+
+    const first = await post(token, "/leave/requests", {
+      leaveTypeId: type,
+      startDate: "2026-11-02",
+      endDate: "2026-11-04",
+      durationType: "MultipleDays",
+    });
+    expect(first.status, JSON.stringify(first.body)).toBe(201);
+    const firstSubmit = await post(token, `/leave/requests/${first.body.data.id}/submit`, {});
+    expect(firstSubmit.status, JSON.stringify(firstSubmit.body)).toBe(200);
+
+    // Đã nợ 3/5. Đơn thứ hai 3 ngày ⇒ tổng 6 > trần 5 ⇒ chặn.
+    const second = await post(token, "/leave/requests", {
+      leaveTypeId: type,
+      startDate: "2026-11-09",
+      endDate: "2026-11-11",
+      durationType: "MultipleDays",
+    });
+    expect(second.status, JSON.stringify(second.body)).toBe(201);
+    const secondSubmit = await post(token, `/leave/requests/${second.body.data.id}/submit`, {});
+    expect(secondSubmit.status, JSON.stringify(secondSubmit.body)).toBe(422);
+    expect(secondSubmit.body.error.code).toBe("LEAVE-ERR-NEGATIVE-LIMIT-EXCEEDED");
   });
 });
