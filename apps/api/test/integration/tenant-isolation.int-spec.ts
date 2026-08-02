@@ -205,8 +205,21 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
    * NOT NULL) nên chúng KHÔNG chứng minh gì về composite FK — đó là lý do phải pin riêng con số 23503
    * thay vì đọc màu xanh của assert chính là "đã phủ 449".
    *
-   * Sàn để 260 (đệm nhỏ dưới 267): tụt sâu = composite FK bị gỡ hoặc bộ lọc co lưới. Việc bắt CHÍNH XÁC
-   * từng constraint bị gỡ là của `xtenant-fk-ratchet.int-spec.ts` (a) — ca này là lưới thứ hai.
+   * ⟲ RE-BASELINE 2026-08-02 (mig `0538`, S7-CHAT-DB-1): **267 → 263**. KHÔNG phải mất hàng rào —
+   * 4 cặp bị RÀNG BUỘC MỚI CHE, đo bằng đột biến (drop ràng buộc trong tx rồi rollback ⇒ cả 4 lật về
+   * 23503):
+   *   · `chat_rooms.created_by` + `.channel_id`  ← `uq_chat_rooms_company_code` (mới) chặn trước, 23505
+   *   · `chat_rooms.org_unit_id` + `.ref_id`     ← `chk_chat_rooms_type_anchor` (mới) chặn trước, 23514
+   * Composite FK của cả 4 vẫn chặn 23503 khi thử bằng danh sách cột tường minh (FULL gate
+   * `rls-tenant-isolation-tester` 2026-08-02, mục F-1).
+   *
+   * ⚠️ ĐỆM CHỈ CÒN 3 (263 vs sàn 260). Thêm một unique/CHECK nữa lên bảng đang được W4 nhân bản là ĐỎ,
+   * và lối thoát rẻ nhất lúc đó là HẠ SÀN thay vì điều tra — đừng làm vậy. Cách đúng: W4 phải xáo các
+   * cột mang neo unique/CHECK khi nhân bản hàng (sinh lại `room_code`, đặt nhất quán các cột neo của
+   * CHECK anchor) để cặp quay về chứng minh bằng 23503.
+   *
+   * Sàn giữ 260: tụt sâu = composite FK bị gỡ hoặc bộ lọc co lưới. Việc bắt CHÍNH XÁC từng constraint
+   * bị gỡ là của `xtenant-fk-ratchet.int-spec.ts` (a) — ca này là lưới thứ hai.
    */
   const W4_FK_BLOCKED_FLOOR = 260;
 

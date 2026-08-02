@@ -60,22 +60,30 @@ UPDATE chat_rooms SET sync_source = room_type WHERE room_type IN ('department', 
 -- ⚠️ Tên CHECK phải RESOLVE lúc chạy: 0010 tạo inline (tên auto), 0050:22-32 drop bằng cách quét
 --    pg_get_constraintdef. KHÔNG hard-code tên, KHÔNG tự tạo mới nếu không thấy (tránh nuốt CHECK lane khác).
 DO $$
-DECLARE v_name text; v_moved int;
+DECLARE v_name text; v_moved int; v_cnt int;
 BEGIN
-  UPDATE chat_rooms SET room_type = 'group', sync_source = 'manual' WHERE room_type = 'channel';
-  GET DIAGNOSTICS v_moved = ROW_COUNT;
+  -- ⚠️ KHÔNG dùng RAISE NOTICE để báo việc ĐỔI DỮ LIỆU NGHIỆP VỤ: `src/db/migrate.ts` tạo Pool mà
+  --    KHÔNG đăng ký listener 'notice' ⇒ mọi NOTICE bị VỨT, người vận hành không thấy một dòng nào.
+  --    Có hàng 'channel' là chuyện phải được NGƯỜI quyết (chuyển sang 'group' hay xử lý khác), nên
+  --    fail-loud kèm số + câu SQL chữa, đúng cách khối anchor bên dưới đang làm.
+  SELECT count(*) INTO v_moved FROM chat_rooms WHERE room_type = 'channel';
   IF v_moved > 0 THEN
-    RAISE NOTICE '[0538] da chuyen % phong room_type=channel sang group (de-media-fy)', v_moved;
+    RAISE EXCEPTION '[0538] con % phong room_type=''channel'' (de-media-fy). Chay truoc roi migrate lai: '
+                    'UPDATE chat_rooms SET room_type=''group'', sync_source=''manual'' WHERE room_type=''channel'';',
+                    v_moved;
   END IF;
 
-  SELECT conname INTO v_name
+  -- ⚠️ ĐẾM TRƯỚC. plpgsql `SELECT INTO` KHÔNG báo lỗi khi nhiều hàng — nó lấy hàng đầu TUỲ Ý. Nếu một
+  --    lane khác thêm CHECK có nhắc `room_type` và land trước 0538, khối này sẽ DROP NHẦM constraint
+  --    của họ rồi add của mình. (Sau 0538 bảng có 4 CHECK chứa chuỗi 'room_type'; lúc chạy phải đúng 1.)
+  SELECT count(*), min(conname) INTO v_cnt, v_name
     FROM pg_constraint
    WHERE conrelid = 'chat_rooms'::regclass
      AND contype = 'c'
      AND pg_get_constraintdef(oid) ILIKE '%room_type%';
 
-  IF v_name IS NULL THEN
-    RAISE EXCEPTION '[0538] khong tim thay CHECK room_type tren chat_rooms — abort (khong tu tao moi)';
+  IF v_cnt <> 1 THEN
+    RAISE EXCEPTION '[0538] ky vong DUNG 1 CHECK room_type tren chat_rooms, dem duoc % — abort', v_cnt;
   END IF;
 
   EXECUTE format('ALTER TABLE chat_rooms DROP CONSTRAINT %I', v_name);
@@ -129,6 +137,14 @@ ALTER TABLE chat_rooms ADD CONSTRAINT chk_chat_rooms_name
   CHECK (room_type = 'direct' OR name IS NOT NULL);
 --> statement-breakpoint
 
+-- M-1 (FULL gate): DEFAULT cũ `room_type='project'` (0010:50) nay LUÔN vi phạm bộ CHECK mới —
+-- project đòi `ref_id NOT NULL` (anchor) VÀ `sync_source='project'`, trong khi sync_source DEFAULT là
+-- 'manual'. Nghĩa là cặp DEFAULT của bảng là một tổ hợp KHÔNG hợp lệ được: mọi INSERT bỏ trống 2 cột
+-- này đều 23514. Đổi sang 'group' — loại duy nhất mà bộ DEFAULT còn lại (sync_source='manual', 3 neo
+-- NULL) tạo ra hàng HỢP LỆ.
+ALTER TABLE chat_rooms ALTER COLUMN room_type SET DEFAULT 'group';
+--> statement-breakpoint
+
 -- ═══════════════ (B) room_code: COUNTER → BACKFILL → SYNC → NOT NULL (MỘT KHỐI, ĐÚNG THỨ TỰ) ═══════════════
 -- ⚠️ Mẫu 0498 là BỘ BA NGUYÊN KHỐI, bỏ bước nào cũng vỡ. Bỏ bước SYNC là bẫy chết người:
 --    ON CONFLICT DO NOTHING để counter ở current_value = 0 ⇒ phòng đầu tiên tạo qua API gọi
@@ -150,20 +166,27 @@ ON CONFLICT DO NOTHING;
 --> statement-breakpoint
 
 DO $$
-DECLARE r record; v_n int; v_last text;
+-- ⚠️ HAI BIẾN RIÊNG, KHÔNG tái dùng một biến. `GET DIAGNOSTICS` ghi đè biến nhận ROW_COUNT, nên nếu
+--    dùng chung `v_n` cho cả `current_value` gốc lẫn số hàng đã cấp thì MẤT giá trị gốc — và lối thoát
+--    rẻ nhất lúc đó là quay sang `COUNT(*)`, vốn SAI bất cứ khi nào có khoảng trống mã.
+--    Kịch bản vỡ: counter=10, 9 phòng đã bị hard-DELETE (DELETE VẪN được cấp trên chat_rooms cho tới
+--    chính migration này), còn 1 phòng ROOM-0010 + 3 phòng chưa có mã ⇒ backfill cấp 0011..0013 nhưng
+--    COUNT(*)=4 ⇒ GREATEST(10,4)=10 ⇒ nextCode (= current_value + increment_by, KHÔNG phải MAX(code)+1)
+--    sinh ROOM-0011 → 23505, và chạy lại migration KHÔNG cứu (backfill lọc room_code IS NULL).
+DECLARE r record; v_base bigint; v_rows int; v_last text;
 BEGIN
   -- (2) backfill room_code, đánh số tiếp TỪ current_value của từng company
   FOR r IN SELECT id AS company_id FROM companies WHERE deleted_at IS NULL LOOP
-    SELECT current_value INTO v_n
+    SELECT current_value INTO v_base
       FROM sequence_counters
      WHERE company_id = r.company_id AND sequence_key = 'chat_room' AND deleted_at IS NULL;
 
-    IF v_n IS NULL THEN
+    IF v_base IS NULL THEN
       RAISE EXCEPTION '[0538] company % thieu counter chat_room sau seed', r.company_id;
     END IF;
 
     WITH numbered AS (
-      SELECT id, v_n + row_number() OVER (ORDER BY created_at, id) AS n
+      SELECT id, v_base + row_number() OVER (ORDER BY created_at, id) AS n
         FROM chat_rooms
        WHERE company_id = r.company_id AND room_code IS NULL
     )
@@ -171,21 +194,20 @@ BEGIN
        SET room_code = 'ROOM-' || lpad(numbered.n::text, 4, '0')
       FROM numbered
      WHERE cr.id = numbered.id AND cr.company_id = r.company_id;
-    GET DIAGNOSTICS v_n = ROW_COUNT;
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
 
-    -- (3) SYNC current_value + last_generated_code — BẮT BUỘC, xem ghi chú đầu khối
-    IF v_n > 0 THEN
+    -- (3) SYNC current_value + last_generated_code — BẮT BUỘC, xem ghi chú đầu khối.
+    --     current_value = SỐ LỚN NHẤT ĐÃ CẤP (= base + số hàng vừa cấp), KHÔNG phải count(*).
+    IF v_rows > 0 THEN
       SELECT max(room_code) INTO v_last
         FROM chat_rooms WHERE company_id = r.company_id AND room_code IS NOT NULL;
 
       UPDATE sequence_counters sc
-         SET current_value       = GREATEST(sc.current_value,
-                                     (SELECT count(*) FROM chat_rooms
-                                       WHERE company_id = r.company_id AND room_code IS NOT NULL)),
+         SET current_value       = GREATEST(sc.current_value, v_base + v_rows),
              last_generated_code = v_last
        WHERE sc.company_id = r.company_id AND sc.sequence_key = 'chat_room' AND sc.deleted_at IS NULL;
 
-      RAISE NOTICE '[0538] company %: backfill % room_code, sync counter -> %', r.company_id, v_n, v_last;
+      RAISE NOTICE '[0538] company %: backfill % room_code, sync counter -> %', r.company_id, v_rows, v_last;
     END IF;
   END LOOP;
 END;
@@ -199,7 +221,8 @@ ALTER TABLE chat_rooms ALTER COLUMN room_code SET NOT NULL;
 CREATE UNIQUE INDEX uq_chat_rooms_company_code ON chat_rooms (company_id, room_code)
   WHERE deleted_at IS NULL;
 --> statement-breakpoint
-CREATE INDEX idx_chat_rooms_active ON chat_rooms (company_id, last_message_at DESC)
+-- Tên theo DB-12 §6.1/§8 (bảng tra "use case → index") — WO sau grep theo tên, lệch tên là trượt.
+CREATE INDEX idx_chat_rooms_company_activity ON chat_rooms (company_id, last_message_at DESC)
   WHERE deleted_at IS NULL AND is_archived = false;
 --> statement-breakpoint
 -- Job đối soát đêm chỉ quét phòng DẪN XUẤT (DB-12 §8) — vị từ sync_source <> 'manual' là chủ ý.
@@ -264,16 +287,17 @@ ALTER TABLE chat_messages
 -- message_type += 'system' (tin do server sinh: thêm/bớt thành viên, đổi tên phòng).
 -- Tên CHECK resolve lúc chạy — 0050:71 tạo inline nên tên là auto.
 DO $$
-DECLARE v_name text;
+DECLARE v_name text; v_cnt int;
 BEGIN
-  SELECT conname INTO v_name
+  -- Đếm trước, cùng lý do như khối room_type ở trên.
+  SELECT count(*), min(conname) INTO v_cnt, v_name
     FROM pg_constraint
    WHERE conrelid = 'chat_messages'::regclass
      AND contype = 'c'
      AND pg_get_constraintdef(oid) ILIKE '%message_type%';
 
-  IF v_name IS NULL THEN
-    RAISE EXCEPTION '[0538] khong tim thay CHECK message_type tren chat_messages — abort';
+  IF v_cnt <> 1 THEN
+    RAISE EXCEPTION '[0538] ky vong DUNG 1 CHECK message_type tren chat_messages, dem duoc % — abort', v_cnt;
   END IF;
 
   EXECUTE format('ALTER TABLE chat_messages DROP CONSTRAINT %I', v_name);
@@ -430,6 +454,8 @@ BEGIN
         ('pin',     'chat-message')
       ) AS p(act, res)
     LOOP
+      -- KHÔNG lọc deleted_at: bảng `permissions` chỉ có (id, action, resource_type, is_sensitive)
+      -- — đã đo trên PROD. FULL gate đề xuất thêm `AND deleted_at IS NULL` là dựa trên tiền đề SAI.
       SELECT id INTO v_perm_id FROM permissions
        WHERE action = r.act AND resource_type = r.res;
       IF v_perm_id IS NULL THEN
@@ -471,23 +497,49 @@ $$;
 -- CHỐT TIỀN ĐỀ: re-stamp bên dưới VIẾT TAY tập giá trị cũ, nên nếu baseline khác giả định thì ta sẽ
 -- ÂM THẦM XOÁ giá trị của lane khác. Chặn trước: 4 constraint phải đang ở đúng baseline 0529 (có LMS +
 -- Training). Lệch ⇒ dừng, đọc lại def thật rồi cập nhật superset.
+-- ⚠️ ASSERT ĐẢO CHIỀU. Bản đầu chỉ khẳng định def CÓ CHỨA 'LMS'/'Training' — điều đó KHÔNG chặn được
+--    kịch bản nó tự nhận là chặn: một lane song song re-stamp 4 CHECK này để thêm 'MEETING'/'Meeting'
+--    rồi land TRƯỚC 0538. Guard cũ vẫn PASS (LMS còn nguyên), rồi superset viết tay của 0538 XOÁ IM LẶNG
+--    giá trị của lane kia ⇒ mọi INSERT notifications của module đó vỡ 23514 lúc RUNTIME, không gì đỏ lúc
+--    migrate. Cách đúng: trích tập literal THẬT từ def rồi đòi nó là TẬP CON của superset ta sắp ghi.
 DO $$
-DECLARE v_bad text;
+DECLARE r record; v_extra text[]; v_super text[];
 BEGIN
-  SELECT string_agg(conname, ', ') INTO v_bad
-    FROM pg_constraint
-   WHERE conname IN ('chk_notification_events_module_code', 'chk_notifications_module_code')
-     AND pg_get_constraintdef(oid) NOT LIKE '%''LMS''%';
-  IF v_bad IS NOT NULL THEN
-    RAISE EXCEPTION '[0538] baseline lech: % chua co LMS — superset viet tay se xoa gia tri lane khac', v_bad;
-  END IF;
+  FOR r IN
+    SELECT c.conname, c.conrelid::regclass::text AS tbl, pg_get_constraintdef(c.oid) AS def
+      FROM pg_constraint c
+     WHERE c.conrelid IN ('notification_events'::regclass, 'notifications'::regclass)
+       AND c.conname IN ('chk_notification_events_module_code', 'chk_notification_events_type',
+                         'chk_notifications_module_code', 'chk_notifications_notification_type')
+  LOOP
+    v_super := CASE
+      WHEN r.conname LIKE '%module_code%'
+        THEN ARRAY['AUTH','HR','ATT','LEAVE','TASK','DASH','NOTI','SYSTEM','GOAL','LMS','CHAT']
+      ELSE ARRAY['System','Account','HR','Attendance','Leave','Task','Project','Approval','Reminder',
+                 'Warning','Error','Goal','Training','Chat']
+    END;
 
-  SELECT string_agg(conname, ', ') INTO v_bad
-    FROM pg_constraint
-   WHERE conname IN ('chk_notification_events_type', 'chk_notifications_notification_type')
-     AND pg_get_constraintdef(oid) NOT LIKE '%''Training''%';
-  IF v_bad IS NOT NULL THEN
-    RAISE EXCEPTION '[0538] baseline lech: % chua co Training — superset viet tay se xoa gia tri lane khac', v_bad;
+    SELECT array_agg(m[1]) INTO v_extra
+      FROM regexp_matches(r.def, '''([^'']+)''', 'g') AS m
+     WHERE m[1] <> ALL (v_super);
+
+    IF v_extra IS NOT NULL AND array_length(v_extra, 1) > 0 THEN
+      RAISE EXCEPTION '[0538] % (%) chua gia tri NGOAI superset cua 0538: % — superset viet tay se XOA chung. '
+                      'Cap nhat danh sach trong 0538 roi chay lai.', r.conname, r.tbl, v_extra;
+    END IF;
+  END LOOP;
+
+  -- Vế còn lại: baseline phải ĐÚNG là bản sau 0529 (có LMS + Training). Thiếu ⇒ chuỗi migration lệch.
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname IN ('chk_notification_events_module_code', 'chk_notifications_module_code')
+       AND pg_get_constraintdef(oid) NOT LIKE '%''LMS''%'
+  ) OR EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname IN ('chk_notification_events_type', 'chk_notifications_notification_type')
+       AND pg_get_constraintdef(oid) NOT LIKE '%''Training''%'
+  ) THEN
+    RAISE EXCEPTION '[0538] baseline lech: thieu LMS/Training — chuoi migration khong phai ban sau 0529';
   END IF;
 END;
 $$;
@@ -642,7 +694,8 @@ BEGIN
            ('access','chat'), ('view','chat-room'), ('create','chat-room'), ('update','chat-room'),
            ('archive','chat-room'), ('manage','chat-member'), ('send','chat-message'),
            ('recall','chat-message'), ('pin','chat-message'))
-     AND r.company_id IS NULL AND r.deleted_at IS NULL;
+     AND r.company_id IS NULL AND r.deleted_at IS NULL
+     AND rp.effect = 'ALLOW' AND rp.data_scope = 'Company';
   IF v_n <> 36 THEN
     RAISE EXCEPTION '[0538] verify: % grant chat cho role canonical, ky vong 36 — over/under-grant (drift?)', v_n;
   END IF;
@@ -696,8 +749,12 @@ BEGIN
   --    (so chuỗi con cũng sai chiều ngược lại: 'chat_room' là chuỗi con của 'chat_rooms' nếu sau này có).
   DECLARE v_types text[];
   BEGIN
-    SELECT string_to_array(substring(pg_get_constraintdef(oid) from '\{(.*?)\}'), ',')
-      INTO v_types
+    -- NEO vào vế `object_type = ANY (` — DB-12 §9-E cấm quét `{…}` trên TOÀN constraintdef
+    -- (memory `audit-check-union-parse-anchor-trap`). Hôm nay def chỉ có một cụm {…} nên quét trần
+    -- vẫn đúng, nhưng đó là MAY, không phải neo.
+    SELECT string_to_array(
+             substring(pg_get_constraintdef(oid) from 'object_type = ANY \(''\{(.*?)\}'), ',')
+           INTO v_types
       FROM pg_constraint
      WHERE conrelid = 'audit_logs'::regclass AND conname = 'audit_logs_object_type_chk';
 
@@ -721,6 +778,29 @@ BEGIN
      AND company_id IS NULL AND deleted_at IS NULL AND is_enabled;
   IF v_n <> 2 THEN
     RAISE EXCEPTION '[0538] verify: % event CHAT enabled, ky vong 2 — OutboxNotificationBridge se sap luc boot', v_n;
+  END IF;
+
+  -- (10) dedupe_strategy — ON CONFLICT DO NOTHING sẽ GIỮ NGUYÊN cấu hình cũ nếu event đã tồn tại với
+  --      'None'. Để 'None' thì S7-CHAT-BE-6 không gộp lô 15 phút được và phải đẻ MIGRATION THỨ HAI.
+  --      (0529:200-205 có ô này; bản đầu của 0538 bỏ ⇒ hỏng im lặng.)
+  SELECT count(*) INTO v_n FROM notification_events
+   WHERE company_id IS NULL AND deleted_at IS NULL
+     AND ((event_code = 'CHAT_DIRECT_MESSAGE' AND dedupe_strategy = 'DedupeKey')
+       OR (event_code = 'CHAT_MENTIONED'      AND dedupe_strategy = 'None'));
+  IF v_n <> 2 THEN
+    RAISE EXCEPTION '[0538] verify: dedupe_strategy CHAT sai (ky vong DM=DedupeKey, mention=None), khop % / 2', v_n;
+  END IF;
+
+  -- (11) template — INSERT dùng JOIN notification_events; JOIN khớp 0 hàng ⇒ insert 0 template và
+  --      THÀNH CÔNG IM LẶNG. Lưới duy nhất khác là int-spec gate LANE_DB mà CI không set.
+  SELECT count(*) INTO v_n
+    FROM notification_templates t
+    JOIN notification_events e ON e.id = t.event_id
+   WHERE e.event_code IN ('CHAT_MENTIONED', 'CHAT_DIRECT_MESSAGE')
+     AND t.company_id IS NULL AND t.deleted_at IS NULL
+     AND t.status = 'Active' AND t.channel = 'IN_APP' AND t.target_url_template IS NOT NULL;
+  IF v_n <> 2 THEN
+    RAISE EXCEPTION '[0538] verify: % template CHAT Active/IN_APP co target_url, ky vong 2', v_n;
   END IF;
 
   RAISE NOTICE '[0538] VERIFY OK: 10 cap · 36 grant canonical · 0 grant oversight · counter du · NOTI 2 event';

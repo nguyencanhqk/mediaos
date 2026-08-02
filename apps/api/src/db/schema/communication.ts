@@ -141,7 +141,9 @@ export type NewNotification = typeof notifications.$inferInsert;
 // ─── chat_rooms ──────────────────────────────────────────────────────────────
 // G10-1: mở rộng room_type + auto-room (channel/org_unit) + direct DM dedup (direct_key).
 
-export type ChatRoomType = "project" | "direct" | "group" | "channel" | "department";
+// S7-CHAT-DB-1 (mig 0538 · CHAT-DEC-001): BỎ "channel" — khớp CHECK chat_rooms_room_type_chk và
+// packages/contracts/src/chat.ts. Ba nguồn phải cùng một tập giá trị.
+export type ChatRoomType = "direct" | "group" | "department" | "project";
 
 // S7-CHAT-DB-1 (mig 0538): `tsvector` không có sẵn trong drizzle-orm/pg-core.
 const tsvector = customType<{ data: string; driverData: string }>({
@@ -316,7 +318,9 @@ export type NewChatRoomMember = typeof chatRoomMembers.$inferInsert;
 // Append-only cho body/sender (BẤT BIẾN #2). G10-1 chỉ cấp UPDATE 2 cột (pinned_at, pinned_by)
 // qua column-level GRANT — KHÔNG sửa được body/sender. seq = thứ tự tổng ổn định trong room.
 
-export type ChatMessageType = "text" | "file";
+// "system" = tin do server sinh (thêm/bớt thành viên, đổi tên phòng) — mig 0538 thêm vào
+// chk_chat_messages_type. Thiếu ở đây thì S7-CHAT-BE-* không có kiểu để dùng.
+export type ChatMessageType = "text" | "file" | "system";
 
 export const chatMessages = pgTable(
   "chat_messages",

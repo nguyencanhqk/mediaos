@@ -9518,6 +9518,7 @@ export const backlog = [
       "Mọi hành động quản trị phòng ghi audit_logs (object_type 'chat_room'); nội dung tin nhắn KHÔNG vào audit",
       "PermissionGuard áp per-controller với đúng cặp SPEC-15 §11 (guard opt-in — không tự có, xem memory s1-fnd-module-metadata-seed-drift); khai API_MODULE_TAGS cho OpenAPI (đừng gắn tay @ApiTags)",
       "RED-trước: CHỦ THỂ TEST KHÔNG ĐƯỢC LÀ SUPER ADMIN — SA có *:* nên sẽ mang luôn ('view','chat-oversight') và lọt qua mọi ca deny-path. Dùng (a) role thường và (b) role CÓ ('view','chat-room') nhưng KHÔNG có ('view','chat-oversight') → 404 ở phòng không thuộc · người đã left_at không đọc được · cross-tenant mọi endpoint; int-spec chạy trên LANE_DB",
+      "⚠️ NỢ TỪ S7-CHAT-DB-1 (FULL gate 02/08): counter sequence_counters 'chat_room' CHỈ được seed cho company TỒN TẠI LÚC MIGRATE (mig 0538 `INSERT ... SELECT FROM companies`). KHÔNG seeder runtime nào cấp cho company tạo SAU (sequence_counters không có trong master-data-seeder.registry) ⇒ company mới sẽ SequenceNotFoundError ở phòng đầu tiên. Lỗ CÓ SẴN — 'task' (mig 0498) y hệt, bị che vì PROD chỉ 1 company. WO này phải cấp counter lúc tạo company HOẶC lazy-create trong ChatRoomService, và nêu rõ chọn cách nào",
       "assertMember của WO này KHÔNG nhận tham số/cờ nào để bỏ qua membership. Đường đọc-vượt là service+controller RIÊNG ở S7-CHAT-BE-7 — giữ được tính chất 'đọc code là chứng minh được' cho đường đọc thường (API-13 §5.3 ràng buộc 1)",
       "FULL gate (security-reviewer + silent-failure-hunter) PASS",
     ],

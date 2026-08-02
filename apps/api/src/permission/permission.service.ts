@@ -177,6 +177,11 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   "view:leave-balance",
   "adjust:leave-balance",
   "view-transaction:leave-balance",
+  // S7-CHAT-DB-1 (mig 0538) — APPEND-only. CHAT-DEC-004: đọc-vượt membership, is_sensitive=true
+  // ⇒ getCapabilities() LỌC khỏi /auth/me trừ khi có ở đây ⇒ CHAT-SCREEN-007/008 ẨN dù DB có
+  // quyền (KI-058, lớp lỗi đã lặp 8+ lần). Thêm NGAY dù màn chưa dựng: đây chỉ là cờ HIỂN THỊ,
+  // enforcement vẫn là PermissionGuard per-resource. FE gate bằng useCanExact (useCan rơi *:*).
+  "view:chat-oversight",
 ]);
 
 /**
@@ -211,6 +216,8 @@ export const SENSITIVE_SCREEN_GATE_PAIRS: readonly string[] = [
   "update:dashboard-config",
   // HR — /hr/employees/import (S5-HR-IMPORT-FE-1)
   "import:employee",
+  // CHAT — CHAT-SCREEN-007 (quản trị đọc-vượt) + 008 (nhật ký), S7-CHAT-FE-5
+  "view:chat-oversight",
 ];
 
 /** Chỉ dùng cho test khoá — KHÔNG export ra ngoài module permission. */
