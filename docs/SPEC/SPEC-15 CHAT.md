@@ -354,19 +354,28 @@ Quy tắc bổ sung (không cần mã lỗi riêng):
 
 ### 13.1 Thứ tự tin nhắn và phân trang
 
-`seq` (bigint `GENERATED ALWAYS AS IDENTITY`) là thứ tự tổng trong phòng — dùng cho **mọi** việc sắp xếp và phân trang; `created_at` chỉ để hiển thị. Lý do: hai tin cùng mili-giây có thứ tự nhập nhằng, và đồng hồ có thể lùi.
+**`room_seq`** (bigint, liên tục từ 1 **trong từng phòng** — mig `0539`) là thứ tự dùng cho **mọi** việc sắp xếp, phân trang và đếm chưa đọc; `created_at` chỉ để hiển thị. Lý do dùng số thứ tự thay đồng hồ: hai tin cùng mili-giây có thứ tự nhập nhằng, và đồng hồ có thể lùi.
+
+> ⚠️ **ĐÍNH CHÍNH 02/08/2026 — bản trước của mục này SAI.** Nó viết "`seq` … là thứ tự tổng **trong phòng**", chép theo comment `0050:79`. DDL thật (`0050:77`) là `GENERATED ALWAYS AS IDENTITY` **cấp BẢNG**: tăng xuyên mọi phòng và mọi tenant. Hai hệ quả đã đo được:
+> 1. Công thức đếm chưa đọc ở §13.2 cho **số của phòng khác**: phòng A 2 tin, phòng B 50 tin ⇒ badge phòng A hiện **51** thay vì **1**.
+> 2. `seq` là con trỏ **lộ ra client**, nên thành viên một phòng suy ra được lưu lượng tin **toàn công ty** giữa hai lần mình nhắn — gồm cả DM họ không thuộc.
+>
+> `seq` toàn cục **vẫn còn** trong bảng (identity không drop sạch được) nhưng **KHÔNG được lộ ra client** và **KHÔNG được đem trừ**. Mọi thứ hướng-client dùng `room_seq`.
 
 ```text
 GET /chat/rooms/:id/messages?beforeSeq=<n>&limit=50   → n-1, n-2, … (cuộn lên đọc tin cũ)
 GET /chat/rooms/:id/messages?afterSeq=<n>&limit=50    → n+1, n+2, … (bù tin lỡ sau khi WS đứt)
+
+# `beforeSeq`/`afterSeq` mang giá trị `room_seq` (per-room), KHÔNG phải `seq` toàn cục. Tên tham số
+# giữ nguyên để khỏi churn FE; ngữ nghĩa đã đổi ở mig 0539.
 ```
 
 Cấm phân trang bằng `offset` (kết quả trôi khi có tin mới chèn vào giữa lúc cuộn).
 
 ### 13.2 Đã xem — `last_read_seq` chỉ tiến
 
-- Client báo đã đọc tới `seq` nào → server `UPDATE … SET last_read_seq = GREATEST(last_read_seq, $1)`. Không bao giờ lùi (CHAT-ERR-018): nhiều thiết bị cùng mở, thiết bị chậm không được kéo lùi trạng thái của thiết bị nhanh.
-- Số chưa đọc của một phòng = `room.last_message_seq - member.last_read_seq` (đếm bằng phép trừ, **không** `COUNT(*)` trên `chat_messages`).
+- Client báo đã đọc tới `room_seq` nào → server `UPDATE … SET last_read_seq = GREATEST(last_read_seq, $1)`. Không bao giờ lùi (CHAT-ERR-018): nhiều thiết bị cùng mở, thiết bị chậm không được kéo lùi trạng thái của thiết bị nhanh.
+- Số chưa đọc của một phòng = `room.last_message_seq - member.last_read_seq`, **cả hai trong hệ `room_seq`** (đếm bằng phép trừ, **không** `COUNT(*)` trên `chat_messages`). Phép trừ chỉ đúng vì `room_seq` liên tục trong phòng — đem trừ trên `seq` toàn cục là lỗi đã đo (xem cảnh báo §13.1).
 - "Đã xem bởi ai" = danh sách thành viên có `last_read_seq >= seq` của tin đang xét — dẫn xuất, không lưu bảng riêng.
 - Tin do chính mình gửi luôn tự nâng `last_read_seq` trong cùng transaction.
 

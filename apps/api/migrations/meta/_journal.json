@@ -1443,6 +1443,13 @@
       "when": 1717587327000,
       "tag": "0538_s7chatdb1_chat_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 206,
+      "version": "7",
+      "when": 1717587328000,
+      "tag": "0539_s7chatdb2_room_seq",
+      "breakpoints": true
     }
   ]
 }

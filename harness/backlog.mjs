@@ -9485,6 +9485,47 @@ export const backlog = [
       "Chạy trên LANE_DB riêng; FULL gate (security-reviewer + database-reviewer + silent-failure-hunter) PASS",
     ],
   },
+  // ── DB-2: sinh ra từ FULL gate của BE-1 plan (02/08). `seq` của mig 0050 là identity CẤP BẢNG, không
+  //    phải per-room — comment 0050:79 ("thứ tự tổng ổn định trong room") SAI, và SPEC-15 §13.2 xây công
+  //    thức đếm chưa đọc lên câu đó. Đo thật: phòng A 2 tin, phòng B 50 tin ⇒ badge phòng A hiện 51.
+  {
+    id: "S7-CHAT-DB-2",
+    module: "CHAT",
+    layer: "DB",
+    title:
+      "Migration 0539: chat_messages.room_seq PER-ROOM (sửa công thức đếm chưa đọc SAI + bịt rò lưu lượng qua con trỏ phân trang toàn cục)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/communication.ts",
+      "packages/contracts/src/chat.ts",
+      "docs/SPEC/SPEC-15 CHAT.md",
+      "docs/DB/DB-12 CHAT Database Design.md",
+      "docs/API Design/API-13_CHAT_API_Design.md",
+      "apps/api/test/integration/**",
+      "docs/plans/S7-CHAT-DB-2.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S7-CHAT-DB-1"],
+    plan: "docs/plans/S7-CHAT-DB-2.md",
+    src: [
+      "plan-reviewer FULL gate trên docs/plans/S7-CHAT-BE-1.md (02/08) mục B1 — CRITICAL",
+      "0050:77 `ADD COLUMN seq bigint GENERATED ALWAYS AS IDENTITY` (cấp BẢNG) vs 0050:79 comment nói 'trong room' — comment sai, DDL đúng",
+      "đo thật rollback trên lane: phòng A 2 tin/phòng B 50 tin ⇒ last_message_seq - last_read_seq = 51, đúng phải là 1",
+      "owner chốt 02/08: thêm room_seq NGAY vì chat_messages đang 0 hàng trên PROD — đợi có dữ liệu thì backfill đắt + đổi ngữ nghĩa con trỏ là breaking change FE",
+    ],
+    done_when: [
+      "ADD COLUMN room_seq bigint cho chat_messages + backfill row_number() OVER (PARTITION BY company_id, room_id ORDER BY seq) + SET NOT NULL (PROD 0 hàng nên miễn phí; câu backfill vẫn giữ cho môi trường có dữ liệu)",
+      "Cấp room_seq bằng UPDATE chat_rooms SET last_message_seq = COALESCE(last_message_seq,0)+1 RETURNING — khoá hàng phòng nên TUẦN TỰ HOÁ theo phòng; app role đã có UPDATE trên chat_rooms (đo thật)",
+      "UNIQUE (company_id, room_id, room_seq) làm ĐAI THỨ HAI: race lọt qua khoá hàng thì 23505 fail-loud, KHÔNG trùng số im lặng",
+      "Thay idx_chat_messages_room_seq sang (company_id, room_id, room_seq DESC) — con trỏ phân trang đổi sang room_seq",
+      "GIỮ cột seq toàn cục (identity không bỏ được, còn index 0050 dùng) nhưng NGỪNG LỘ ra client: DTO/contracts KHÔNG trả seq, beforeSeq/afterSeq nay mang nghĩa room_seq",
+      "Đổi ngữ nghĩa last_read_seq + visible_from_seq + last_message_seq sang room_seq — sửa comment ở 0538, schema drizzle, SPEC-15 §13.1/§13.2/§13.4, DB-12 §6.3, API-13",
+      "RED-trước: phòng A 2 tin + phòng B 50 tin ⇒ unread phòng A = 1 (ca này ĐỎ trước migration, XANH sau) · room_seq của mỗi phòng bắt đầu từ 1 và liên tục · 2 INSERT đồng thời cùng phòng KHÔNG trùng room_seq",
+      "FULL gate PASS",
+    ],
+  },
   {
     id: "S7-CHAT-BE-1",
     module: "CHAT",
@@ -9503,7 +9544,7 @@ export const backlog = [
       "docs/plans/S7-CHAT-BE-1.md",
     ],
     skills: ["code-review"],
-    depends_on: ["S7-CHAT-DB-1"],
+    depends_on: ["S7-CHAT-DB-2"],
     plan: "docs/plans/S7-CHAT-BE-1.md",
     src: [
       "SPEC-15 §3.2 (membership là ranh giới, không phải data_scope) · §3.3 (ĐÃ VIẾT LẠI 02/08 — ngoại lệ đọc-vượt nằm ở WO RIÊNG S7-CHAT-BE-7, controller riêng; WO này KHÔNG được thêm nhánh oversight vào đường đọc thường) · §12 (20 mã lỗi) · API-13 §5.1 cột Membership",

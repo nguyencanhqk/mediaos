@@ -250,7 +250,11 @@ CREATE INDEX idx_chat_members_user_active ON chat_room_members (company_id, user
 
 -- GIỮ unique (room_id, user_id) đã có từ 0010: rời phòng = SET left_at, KHÔNG DELETE hàng.
 -- ⚠️ Hệ quả cho S7-CHAT-BE-1: người rời rồi vào lại phòng nhóm TÁI DÙNG đúng hàng cũ
---    (left_at = NULL, cập nhật joined_at) — insert hàng thứ hai sẽ dính 23505.
+--    (SET left_at = NULL) — insert hàng thứ hai sẽ dính 23505 trên unique (room_id, user_id).
+--    ⚠️⚠️ ĐÍNH CHÍNH (FULL gate 02/08, mục B7): bản đầu của comment này viết "cập nhật joined_at" —
+--    LÀM THEO SẼ 42501. Tập cột UPDATE được của mediaos_app là ĐÚNG 6: role, last_read_at (0050:64) +
+--    last_read_seq, muted_until, left_at, visible_from_seq (dòng dưới). `joined_at` và `added_by`
+--    KHÔNG được cấp. Vào lại thì GIỮ NGUYÊN joined_at (mốc "từng ở đây", đúng ngữ nghĩa SPEC-15 §13.3).
 GRANT UPDATE (last_read_seq, muted_until, left_at, visible_from_seq) ON chat_room_members TO mediaos_app;
 --> statement-breakpoint
 

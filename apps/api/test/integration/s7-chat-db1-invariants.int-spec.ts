@@ -89,8 +89,11 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
     const mkMsg = async (companyId: string, roomId: string, sender: string, body: string) =>
       (
         await direct.query(
-          `INSERT INTO chat_messages (company_id, room_id, sender_id, body)
-           VALUES ($1, $2, $3, $4) RETURNING id`,
+          // room_seq NOT NULL từ mig 0539 — cấp qua bộ đếm của phòng, đúng đường ghi thật.
+          `INSERT INTO chat_messages (company_id, room_id, sender_id, body, room_seq)
+           VALUES ($1, $2, $3, $4,
+                   (SELECT COALESCE(max(room_seq), 0) + 1 FROM chat_messages
+                     WHERE company_id = $1 AND room_id = $2)) RETURNING id`,
           [companyId, roomId, sender, body],
         )
       ).rows[0].id as string;
@@ -218,8 +221,10 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
       let constraint: string | undefined;
       try {
         await direct.query(
-          `INSERT INTO chat_messages (company_id, room_id, sender_id, body, reply_to_message_id)
-           VALUES ($1, $2, $3, 'reply cross-tenant', $4)`,
+          // room_seq phải cấp: thiếu thì 23502 (NOT NULL) bắn TRƯỚC khi Postgres kiểm FK ⇒ ca này
+          // sẽ "đỏ vì lý do khác" hoặc, nếu assert lỏng, xanh-giả mà không chứng minh composite FK.
+          `INSERT INTO chat_messages (company_id, room_id, sender_id, body, reply_to_message_id, room_seq)
+           VALUES ($1, $2, $3, 'reply cross-tenant', $4, (SELECT COALESCE(max(room_seq), 0) + 1 FROM chat_messages WHERE company_id = $1 AND room_id = $2))`,
           [tenantA.companyId, roomA, userA, msgB],
         );
       } catch (e) {
@@ -233,8 +238,8 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
 
     it("ĐỐI CHỨNG DƯƠNG: trả lời tin CÙNG tenant thì được", async () => {
       const r = await direct.query(
-        `INSERT INTO chat_messages (company_id, room_id, sender_id, body, reply_to_message_id)
-         VALUES ($1, $2, $3, 'reply cung tenant', $4) RETURNING id`,
+        `INSERT INTO chat_messages (company_id, room_id, sender_id, body, reply_to_message_id, room_seq)
+         VALUES ($1, $2, $3, 'reply cung tenant', $4, (SELECT COALESCE(max(room_seq), 0) + 1 FROM chat_messages WHERE company_id = $1 AND room_id = $2)) RETURNING id`,
         [tenantA.companyId, roomA, userA, msgA],
       );
       expect(r.rows).toHaveLength(1);
@@ -272,8 +277,8 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
   describe("D. CHECK + unique", () => {
     it("gửi lại cùng client_message_id → 23505 (nền DB của CHAT-ERR-014 idempotent)", async () => {
       const cid = "11111111-2222-3333-4444-555555555555";
-      const ins = `INSERT INTO chat_messages (company_id, room_id, sender_id, body, client_message_id)
-                   VALUES ($1, $2, $3, 'idem', $4)`;
+      const ins = `INSERT INTO chat_messages (company_id, room_id, sender_id, body, client_message_id, room_seq)
+                   VALUES ($1, $2, $3, 'idem', $4, (SELECT COALESCE(max(room_seq), 0) + 1 FROM chat_messages WHERE company_id = $1 AND room_id = $2))`;
       const r = await asApp(tenantA.companyId, async (c) => {
         await c.query(ins, [tenantA.companyId, roomA, userA, cid]);
         try {
@@ -359,6 +364,83 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
         [tenantA.companyId],
       );
       expect(Number(miss.rows[0].n)).toBe(0);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // E2. room_seq PER-ROOM (mig 0539) — chốt công thức đếm chưa đọc
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe("E2. room_seq per-room (mig 0539)", () => {
+    it("phép trừ đếm chưa đọc KHÔNG bị tin của phòng khác làm sai", async () => {
+      // Kịch bản ĐÃ BẮT ĐƯỢC LỖI: phòng A 1 tin → đọc hết → phòng B 50 tin → phòng A thêm 1 tin.
+      // Trên hệ `seq` toàn cục (trước 0539) badge ra 51; đúng phải là 1. Ca này ĐỎ nếu ai đó quay lại
+      // dùng `seq` cho phép trừ. Phải có ≥2 phòng — ca 1 phòng không bao giờ bắt được.
+      const mk = async (code: string) =>
+        (
+          await direct.query<{ id: string }>(
+            `INSERT INTO chat_rooms (company_id, room_type, sync_source, name, room_code)
+             VALUES ($1, 'group', 'manual', $2, $3) RETURNING id`,
+            [tenantA.companyId, `rs ${code}`, code],
+          )
+        ).rows[0].id;
+
+      // Đường ghi THẬT của BE-2: khoá hàng phòng để cấp số rồi INSERT với số đó.
+      const send = async (roomId: string) => {
+        const b = await direct.query<{ last_message_seq: string }>(
+          `UPDATE chat_rooms SET last_message_seq = COALESCE(last_message_seq, 0) + 1
+            WHERE id = $1 AND company_id = $2 RETURNING last_message_seq`,
+          [roomId, tenantA.companyId],
+        );
+        const rs = b.rows[0].last_message_seq;
+        await direct.query(
+          `INSERT INTO chat_messages (company_id, room_id, sender_id, body, room_seq)
+           VALUES ($1, $2, $3, 'x', $4)`,
+          [tenantA.companyId, roomId, userA, rs],
+        );
+        return Number(rs);
+      };
+
+      const rA = await mk(`RSA-${Date.now() % 100000}`);
+      const rB = await mk(`RSB-${Date.now() % 100000}`);
+      await send(rA);
+      await direct.query(
+        `INSERT INTO chat_room_members (company_id, room_id, user_id, last_read_seq)
+         VALUES ($1, $2, $3, 1)`,
+        [tenantA.companyId, rA, userA],
+      );
+      for (let i = 0; i < 50; i++) await send(rB);
+      await send(rA);
+
+      const row = (
+        await direct.query<{ lms: number; lrs: number; n: number }>(
+          `SELECT r.last_message_seq::int AS lms, m.last_read_seq::int AS lrs,
+                  (SELECT count(*)::int FROM chat_messages x WHERE x.room_id = r.id) AS n
+             FROM chat_rooms r JOIN chat_room_members m ON m.room_id = r.id AND m.user_id = $2
+            WHERE r.id = $1`,
+          [rA, userA],
+        )
+      ).rows[0];
+      expect(row.n, "phòng A phải có đúng 2 tin").toBe(2);
+      expect(row.lms - row.lrs, "unread phòng A phải = 1 (hệ seq toàn cục cho 51)").toBe(1);
+    });
+
+    it("room_seq liên tục từ 1 trong TỪNG phòng, và trùng số → 23505", async () => {
+      const bad = await direct.query<{ room_id: string }>(
+        `SELECT room_id FROM chat_messages
+          GROUP BY company_id, room_id
+         HAVING min(room_seq) <> 1 OR max(room_seq) <> count(*)`,
+      );
+      expect(bad.rows, "room_seq phải liên tục từ 1 trong mỗi phòng").toEqual([]);
+
+      const r = await attempt(
+        tenantA.companyId,
+        `INSERT INTO chat_messages (company_id, room_id, sender_id, body, room_seq)
+         VALUES ($1, $2, $3, 'dup', 1)`,
+        [tenantA.companyId, roomA, userA],
+      );
+      // roomA đã có msgA ở room_seq=1 ⇒ trùng phải bị đai thứ hai chặn, không lặng lẽ trùng số.
+      expect(r.code).toBe("23505");
+      expect(r.constraint).toBe("uq_chat_messages_room_seq");
     });
   });
 

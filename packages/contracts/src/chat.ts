@@ -18,7 +18,11 @@ export const chatRoomSchema = z.object({
   lastMessageAt: z.string().datetime().nullable().optional(),
   lastMessageSeq: z.number().int().nullable().optional(),
   isArchived: z.boolean().optional(),
-  /** Số tin chưa đọc của người gọi = lastMessageSeq − lastReadSeq (SPEC-15 §13.2). */
+  /**
+   * Số tin chưa đọc = lastMessageSeq − lastReadSeq, CẢ HAI trong hệ `room_seq` (per-room, mig 0539).
+   * ⚠️ KHÔNG dùng `chat_messages.seq` — đó là identity CẤP BẢNG, phép trừ trên nó cho ra tổng số tin
+   * TOÀN HỆ THỐNG giữa hai mốc (đo thật: 51 thay vì 1) và làm lộ lưu lượng của phòng mình không thuộc.
+   */
   unreadCount: z.number().int().nonnegative().optional(),
   createdAt: z.string().datetime(),
 });

@@ -343,7 +343,20 @@ export const chatMessages = pgTable(
     mentions: jsonb("mentions").$type<string[]>().notNull().default([]),
     pinnedAt: timestamp("pinned_at", { withTimezone: true }),
     pinnedBy: uuid("pinned_by").references(() => users.id, { onDelete: "set null" }),
+    /**
+     * ⚠️ IDENTITY CẤP BẢNG — tăng xuyên MỌI phòng và MỌI tenant. Comment ở mig 0050:79 ("thứ tự tổng
+     * ổn định trong room") SAI. Thứ tự BÊN TRONG một phòng thì vẫn đúng, nhưng đem TRỪ thì sai, và nó
+     * là kênh rò khối lượng nếu lộ ra client. Dùng `roomSeq` cho MỌI thứ hướng-client (con trỏ phân
+     * trang, đếm chưa đọc). GIỮ cột này vì identity không drop sạch được và index 0050 còn dùng.
+     */
     seq: bigint("seq", { mode: "number" }).notNull().generatedAlwaysAsIdentity(),
+    /**
+     * S7-CHAT-DB-2 (mig 0539): số thứ tự PER-ROOM, liên tục từ 1. Cấp lúc INSERT bằng
+     * `UPDATE chat_rooms SET last_message_seq = COALESCE(last_message_seq,0)+1 RETURNING`
+     * (khoá hàng phòng ⇒ tuần tự hoá theo phòng); đai thứ hai là uq_chat_messages_room_seq.
+     * Đây là cột dùng cho `beforeSeq`/`afterSeq` và cho phép trừ đếm chưa đọc.
+     */
+    roomSeq: bigint("room_seq", { mode: "number" }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     // ─── S7-CHAT-DB-1 (mig 0538) ───
     /** Chống trùng khi gửi lại (CHAT-ERR-014) — uq (company,room,sender,client_message_id). */

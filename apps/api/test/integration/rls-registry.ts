@@ -1386,9 +1386,12 @@ export const RLS_TABLES: RlsTableCase[] = [
          VALUES ($1, 'group', $2, $3) RETURNING id`,
         [t.companyId, `rls-room-msg-${roomSuffix}`, `RLSMSG-${roomSuffix}`],
       );
+      // room_seq NOT NULL tu mig 0539 (per-room). Cap qua bo dem cua phong, dung duong ghi that.
       const r = await direct.query(
-        `INSERT INTO chat_messages (company_id, room_id, sender_id, body)
-         VALUES ($1, $2, $3, 'rls-msg') RETURNING id`,
+        `INSERT INTO chat_messages (company_id, room_id, sender_id, body, room_seq)
+         VALUES ($1, $2, $3, 'rls-msg',
+                 (SELECT COALESCE(max(room_seq), 0) + 1 FROM chat_messages
+                   WHERE company_id = $1 AND room_id = $2)) RETURNING id`,
         [t.companyId, roomRes.rows[0].id, u],
       );
       return r.rows[0].id as string;
