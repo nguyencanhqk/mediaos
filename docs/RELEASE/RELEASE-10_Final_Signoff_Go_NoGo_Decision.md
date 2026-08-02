@@ -158,9 +158,20 @@ Thứ tự bắt buộc — đảo là dẫm vào landmine `dist` dùng chung (`
 | G6 | Regression P0 + smoke trên staging | `node scripts/release-smoke.mjs --base http://localhost:3200/api/v1 --strict` | **`RC-003`** ⇒ ô #4 | Owner | ✅ **10 PASS · 0 FAIL · 0 SKIP** |
 | G7 | Đăng ký 2 scheduled task (bản đã sửa) | `RELEASE-11` §6.2 | ô #12 · phần còn lại **KI-050** | Owner (**Administrator**) | ⬜ |
 | G8 | Ký UAT | `RELEASE-04` | ô #5 | Business owner | ⬜ |
-| G9 | Cắt tag RC | `RELEASE-08` §2 | ô #2 | Owner | ⬜ chờ deploy sạch |
+| G9 | Cắt tag RC | `RELEASE-08` §2 | ô #2 | Owner | ✅ **`v1.0.0-rc.2` @ `a968fcfe`** |
 | G10 | Gửi thông báo go-live | `RELEASE-08` §7 | ô #14 | Owner | ⬜ |
 
+> 🚫 **`v1.0.0-rc.1` KHÔNG được dùng để rollback.** Nó trỏ vào `6f160b9a`, được cắt **trước** lần build
+> lại cuối cùng, nên **không phải bản đang chạy**. Phần chênh đúng bằng PR #324 ⇒ quay về `rc.1` sẽ đưa
+> FE **về đúng bản lỗi màn Loại nghỉ** (mọi loại nghỉ đã seed không lưu được). Tag không bao giờ move
+> (`RELEASE-05` §6.2 quy tắc 4) nên đã cắt **`v1.0.0-rc.2` @ `a968fcfe`** = bản PROD đang chạy, xác minh
+> bằng `release-smoke.mjs --expect-commit a968fcfe` (`RC-BUILD-MATCH` ✓).
+> **Mốc rollback đúng = `v1.0.0-rc.2`.**
+>
+> ℹ️ `package.json` vẫn giữ chuỗi `1.0.0-rc.1` ⇒ `GET /health` trả `data.build.version = 1.0.0-rc.1`
+> kể cả ở rc.2. Định danh có thẩm quyền là **`data.build.commit`** — cũng là thứ `--expect-commit` đối
+> chiếu. Cả 6 release artifact đang lưu đều mang cùng chuỗi version ở các commit khác nhau.
+>
 > **Bằng chứng G4 · G5 · G6 + nghiệm thu:** `docs/_review/S6-GOLIVE-G4-G6-EVIDENCE-2026-08-02.md`.
 >
 > **Ba đính chính bảng này (đo 2026-08-02, đừng đọc bản cũ):**

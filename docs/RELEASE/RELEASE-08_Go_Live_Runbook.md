@@ -35,14 +35,27 @@ nhánh `release/*`. Version nguồn = `package.json` gốc (**`1.0.0-rc.1`**), �
 ```bash
 # SAU khi PR đã merge vào master (RELEASE-05 §6.2.1 — không tag nhánh làm việc)
 git checkout master && git pull
-git tag -a v1.0.0-rc.1 -m "MediaOS MVP RC1
-migration head: 0534_s6secmv1_dashboard_mv_tenant_barrier (202 migration)
+
+# ⚠️ TAG SAU CÙNG, KHÔNG TAG TRƯỚC: phải deploy xong rồi mới tag, và tag đúng commit ĐANG CHẠY.
+#    Xác minh trước khi tag — bước này đã cứu được một lần tag lệch (xem bên dưới):
+node scripts/release-smoke.mjs --expect-commit "$(git rev-parse --short HEAD)"
+
+git tag -a v1.0.0-rc.<n> -m "MediaOS MVP RC<n>
+migration head: <head hiện tại — đọc bằng 'm prod-status', KHÔNG chép lại số ở đây>
 release notes: docs/RELEASE/RELEASE-07_Release_Candidate_v1.0.0-rc.1.md
-CR nhận từ RC trước: (không có — đây là RC đầu tiên)"
-git push origin v1.0.0-rc.1
+CR nhận từ RC trước: <liệt kê PR đã vào từ RC trước>"
+git push origin v1.0.0-rc.<n>
 ```
 
-Tag **không bao giờ move**. Sai thì cắt `-rc.2` (`RELEASE-05` §6.2.4).
+Tag **không bao giờ move**. Sai thì cắt `-rc.<n+1>` (`RELEASE-05` §6.2 quy tắc 4).
+
+> **Đã dẫm phải 2026-08-02 — đọc trước khi tag.** `v1.0.0-rc.1` bị cắt tại `6f160b9a` **trước** lần
+> build lại cuối, trong khi PROD sau đó chạy `a968fcfe`. Phần chênh đúng bằng PR #324, nên `rc.1` trỏ
+> vào một bản có lỗi FE đã được vá ⇒ **`v1.0.0-rc.1` không dùng để rollback được**; mốc đúng là
+> **`v1.0.0-rc.2` @ `a968fcfe`**. Bài học: **deploy → `--expect-commit` → mới tag**, đừng tag rồi deploy.
+>
+> Lưu ý `data.build.version` đọc từ `package.json` nên **không đổi** giữa các rc (`1.0.0-rc.1` ở cả
+> rc.1 lẫn rc.2). Định danh có thẩm quyền là **`data.build.commit`**.
 
 ---
 
