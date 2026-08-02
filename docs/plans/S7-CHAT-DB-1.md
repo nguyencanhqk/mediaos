@@ -351,4 +351,10 @@ Cảnh báo đã gộp: CHECK thiếu so với DB-12 (`read_seq`, `attachment_co
 - [ ] `bash harness/check.sh --lane-db` xanh (không phải "xanh không đủ bằng chứng")
 - [ ] FULL gate PASS: `security-reviewer` + `database-reviewer` + `silent-failure-hunter`
 - [ ] PR base = **`wave/s7-chat`**, **không** nhãn auto-merge
+- [ ] **SAU KHI DEPLOY PROD — kiểm tay, KHÔNG bỏ qua:** role quản trị thật (`SA`) phải giữ **đủ 10 cặp CHAT**.
+      Khối (F′) cấp theo luật "role đang giữ toàn bộ catalog-ngoài-CHAT"; nếu `SA` lỡ **thiếu đúng 1 cặp**
+      nào đó thì luật không khớp và **không cấp gì, im lặng** (verify (12) vẫn PASS vì 0 == 0).
+      Đo 02/08: `SA` = 379/379 nên sẽ khớp — nhưng phải xác nhận lại sau deploy:
+      `SELECT count(*) FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id
+         JOIN roles r ON r.id=rp.role_id WHERE r.name='SA' AND p.resource_type LIKE 'chat%';`  → kỳ vọng **10**
 - [ ] Lane DB đã drop

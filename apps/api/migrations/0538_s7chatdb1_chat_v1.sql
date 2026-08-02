@@ -485,6 +485,84 @@ $$;
 --    đúng role SPEC-15 §11 CẤM. Khẳng định "SA có cặp" là int-spec chạy SAU BOOT, không phải ở đây.
 --    Chốt vĩnh viễn: cặp này nằm trong FORBIDDEN_PAIRS của auth-seed-canonical-roles.int-spec.ts.
 
+-- ─────────── (F′) GRANT 10 cặp CHAT cho ROLE ĐANG GIỮ TOÀN BỘ CATALOG (owner chốt 02/08/2026) ───────────
+-- VÌ SAO KHỐI NÀY TỒN TẠI. Tiền đề "SA nhận cặp mới qua SuperAdminBootstrapService lúc boot" là SAI trên
+-- PROD — đo thật 02/08: KHÔNG có role tên `super-admin`; role quyền cao thật tên `SA` (company-scoped,
+-- 10 user, 379/379 cặp @Company); `PLATFORM_SUPERADMIN_*` VẮNG ở .env và .env.prod ⇒ bootstrap là no-op.
+-- Nghĩa là 379 cặp đó do enumerate MỘT LẦN, không ai giữ đồng bộ ⇒ MỌI cặp quyền mới của MỌI migration
+-- đều âm thầm không tới role quản trị. Không vá ở đây thì CHAT-DEC-004 chết lặng ở S7-CHAT-BE-7.
+--
+-- LUẬT THEO THUỘC TÍNH, KHÔNG HARD-CODE TÊN: "role đang giữ TOÀN BỘ cặp catalog ngoài CHAT". Tên `SA` là
+-- dữ liệu tenant, có thể đổi; thuộc tính thì không.
+-- Owner đã BÁC phương án bật PLATFORM_SUPERADMIN_* vì bootstrap tạo role RIÊNG tên 'super-admin'
+-- (KHÔNG đụng `SA`), hard-code requires_two_factor=false — trong khi `SA`/`company-admin` đều true và
+-- G1 (enroll TOTP) còn là cổng go-live đang mở — cộng thêm việc thêm một tài khoản đặc quyền mới vào PROD.
+--
+-- Cấp cả `('view','chat-oversight')`: đúng CHAT-DEC-004 (SA đọc được mọi phòng). KHÔNG phá chốt
+-- FORBIDDEN_PAIRS vì chốt đó chỉ soi role CANONICAL, còn role này company-scoped.
+DO $$
+DECLARE
+  v_non_chat int;
+  v_role     record;
+  v_found    int := 0;
+  v_scope    text;
+  v_perm_id  uuid;
+  r          record;
+BEGIN
+  SELECT count(*) INTO v_non_chat FROM permissions
+   WHERE resource_type NOT IN ('chat', 'chat-room', 'chat-member', 'chat-message', 'chat-oversight');
+
+  -- Chặn suy biến: catalog rỗng ⇒ MỌI role "giữ đủ 0 cặp" ⇒ cấp bừa cho tất cả.
+  IF v_non_chat = 0 THEN
+    RAISE EXCEPTION '[0538] catalog ngoai CHAT rong — abort (luat "giu toan bo catalog" se khop moi role)';
+  END IF;
+
+  FOR v_role IN
+    SELECT r2.id, r2.name
+      FROM roles r2
+     WHERE r2.deleted_at IS NULL
+       AND (SELECT count(DISTINCT rp.permission_id)
+              FROM role_permissions rp
+              JOIN permissions p ON p.id = rp.permission_id
+             WHERE rp.role_id = r2.id AND rp.effect = 'ALLOW'
+               AND p.resource_type NOT IN ('chat','chat-room','chat-member','chat-message','chat-oversight')
+           ) = v_non_chat
+  LOOP
+    v_found := v_found + 1;
+
+    -- Dùng đúng data_scope mà role đó đang dùng phổ biến nhất (SA = 'Company'), không áp đặt 'System'.
+    SELECT rp.data_scope INTO v_scope
+      FROM role_permissions rp
+     WHERE rp.role_id = v_role.id AND rp.effect = 'ALLOW'
+     GROUP BY rp.data_scope
+     ORDER BY count(*) DESC
+     LIMIT 1;
+
+    FOR r IN
+      SELECT * FROM (VALUES
+        ('access','chat'), ('view','chat-room'), ('create','chat-room'), ('update','chat-room'),
+        ('archive','chat-room'), ('manage','chat-member'), ('send','chat-message'),
+        ('recall','chat-message'), ('pin','chat-message'), ('view','chat-oversight')
+      ) AS x(act, res)
+    LOOP
+      SELECT id INTO v_perm_id FROM permissions WHERE action = r.act AND resource_type = r.res;
+      DELETE FROM role_permissions
+       WHERE role_id = v_role.id AND permission_id = v_perm_id AND effect = 'ALLOW' AND data_scope <> v_scope;
+      INSERT INTO role_permissions (role_id, permission_id, effect, data_scope)
+      VALUES (v_role.id, v_perm_id, 'ALLOW', v_scope)
+      ON CONFLICT DO NOTHING;
+    END LOOP;
+  END LOOP;
+
+  -- >1 role giữ toàn bộ catalog = mơ hồ, KHÔNG đoán. 0 role là HỢP LỆ trên DB dựng-từ-rỗng (lane/cài mới)
+  -- vì role quản trị chưa được dựng — verify (12) bên dưới ép tính NHẤT QUÁN cho cả hai trường hợp.
+  IF v_found > 1 THEN
+    RAISE EXCEPTION '[0538] % role cung giu toan bo catalog — mo ho, khong biet cap cho role nao', v_found;
+  END IF;
+END;
+$$;
+--> statement-breakpoint
+
 -- ═══════════════ (G) SEED counter đã làm ở (B) · NOTI catalog + nới CHECK 2 BẢNG ═══════════════
 -- ⚠️ CHECK catalog NOTI nằm ở HAI bảng. 0507 (GOAL) nới trên notification_events nhưng QUÊN
 --    notification_types/module_code trên `notifications` ⇒ MỌI thông báo GOAL vỡ khi INSERT; phải vá ở
@@ -802,6 +880,35 @@ BEGIN
   IF v_n <> 2 THEN
     RAISE EXCEPTION '[0538] verify: % template CHAT Active/IN_APP co target_url, ky vong 2', v_n;
   END IF;
+
+  -- (12) NHẤT QUÁN giữa (F′) và thực tế: số role giữ TOÀN BỘ catalog-ngoài-CHAT phải BẰNG số role giữ
+  --      đủ 10 cặp CHAT. Đúng cho cả DB dựng-từ-rỗng (0 == 0) lẫn PROD (1 == 1), và ĐỎ nếu (F′) không
+  --      land — thay vì "0 role thì bỏ qua" im lặng.
+  DECLARE v_non_chat int; v_full int; v_chat int;
+  BEGIN
+    SELECT count(*) INTO v_non_chat FROM permissions
+     WHERE resource_type NOT IN ('chat','chat-room','chat-member','chat-message','chat-oversight');
+
+    SELECT count(*) INTO v_full FROM roles r2
+     WHERE r2.deleted_at IS NULL
+       AND (SELECT count(DISTINCT rp.permission_id) FROM role_permissions rp
+             JOIN permissions p ON p.id = rp.permission_id
+            WHERE rp.role_id = r2.id AND rp.effect = 'ALLOW'
+              AND p.resource_type NOT IN ('chat','chat-room','chat-member','chat-message','chat-oversight')
+           ) = v_non_chat;
+
+    SELECT count(*) INTO v_chat FROM roles r2
+     WHERE r2.deleted_at IS NULL
+       AND (SELECT count(DISTINCT rp.permission_id) FROM role_permissions rp
+             JOIN permissions p ON p.id = rp.permission_id
+            WHERE rp.role_id = r2.id AND rp.effect = 'ALLOW'
+              AND p.resource_type IN ('chat','chat-room','chat-member','chat-message','chat-oversight')
+           ) = 10;
+
+    IF v_full <> v_chat THEN
+      RAISE EXCEPTION '[0538] verify: % role giu toan bo catalog-ngoai-CHAT nhung % role giu du 10 cap CHAT — khoi (F-prime) khong land', v_full, v_chat;
+    END IF;
+  END;
 
   RAISE NOTICE '[0538] VERIFY OK: 10 cap · 36 grant canonical · 0 grant oversight · counter du · NOTI 2 event';
 END;

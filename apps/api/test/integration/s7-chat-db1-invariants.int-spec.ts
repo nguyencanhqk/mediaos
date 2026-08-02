@@ -411,6 +411,37 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
       );
     });
 
+    it("role giữ TOÀN BỘ catalog-ngoài-CHAT thì PHẢI giữ đủ 10 cặp CHAT (khối F′ mig 0538)", async () => {
+      // Trên PROD, role quản trị thật (`SA`, company-scoped, 10 user) giữ toàn bộ catalog nhưng KHÔNG
+      // được bootstrap giữ đồng bộ (PLATFORM_SUPERADMIN_* vắng ⇒ no-op) ⇒ mọi cặp MỚI của mọi migration
+      // âm thầm không tới nó. Khối (F′) cấp theo LUẬT THUỘC TÍNH, không hard-code tên 'SA'.
+      // Ca này pin KẾT QUẢ (bất biến), không pin cơ chế — nên vẫn đúng nếu sau này đổi cách cấp.
+      // ⚠️ Tập có thể RỖNG trên DB dựng-từ-rỗng (lane/cài mới) vì role quản trị chưa được dựng — đó là
+      // hợp lệ, và console.log dưới đây nói ra để không ai đọc màu xanh này thành "đã phủ".
+      const CHAT_RT = "('chat','chat-room','chat-member','chat-message','chat-oversight')";
+      const rows = await direct.query<{ name: string; chat_pairs: string }>(
+        `SELECT r2.name,
+                (SELECT count(DISTINCT rp.permission_id) FROM role_permissions rp
+                   JOIN permissions p ON p.id = rp.permission_id
+                  WHERE rp.role_id = r2.id AND rp.effect = 'ALLOW'
+                    AND p.resource_type IN ${CHAT_RT})::text AS chat_pairs
+           FROM roles r2
+          WHERE r2.deleted_at IS NULL
+            AND (SELECT count(DISTINCT rp.permission_id) FROM role_permissions rp
+                   JOIN permissions p ON p.id = rp.permission_id
+                  WHERE rp.role_id = r2.id AND rp.effect = 'ALLOW'
+                    AND p.resource_type NOT IN ${CHAT_RT})
+                = (SELECT count(*) FROM permissions WHERE resource_type NOT IN ${CHAT_RT})`,
+      );
+      console.log(
+        `[s7-chat-db1] role giữ toàn bộ catalog-ngoài-CHAT: ${rows.rows.length} ` +
+          `(0 là hợp lệ trên DB dựng-từ-rỗng)`,
+      );
+      for (const r of rows.rows) {
+        expect(Number(r.chat_pairs), `role '${r.name}' giữ toàn catalog nhưng thiếu cặp CHAT`).toBe(10);
+      }
+    });
+
     it("CHAT-DEC-004: KHÔNG role canonical nào giữ view:chat-oversight", async () => {
       // Chốt HỒI QUY, không phải chốt-một-lần. Verify trong migration chỉ sống lúc migrate; ca này
       // chặn một migration/seed SAU cấp cặp đọc-vượt-mọi-phòng cho company-admin
