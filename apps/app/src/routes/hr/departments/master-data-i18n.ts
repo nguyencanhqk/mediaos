@@ -98,6 +98,7 @@ const masterDataVi = {
       validation: {
         nameRequired: "Vui lòng nhập tên.",
         codeRequired: "Vui lòng nhập mã.",
+        codeInvalid: "Mã chỉ gồm chữ, số, '-', '_' (không dấu, không khoảng trắng).",
         nameTooLong: "Tên quá dài (tối đa 200 ký tự).",
         codeTooLong: "Mã quá dài (tối đa 50 ký tự).",
         numberInvalid: "Giá trị không hợp lệ.",

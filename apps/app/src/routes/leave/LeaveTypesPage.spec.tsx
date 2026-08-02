@@ -119,6 +119,31 @@ describe("LeaveTypesPage (LEAVE-SCREEN-010, gate = view:leave-type / create|upda
     expect(payload).not.toHaveProperty("status");
   });
 
+  // Hồi quy: loại nghỉ đã SEED mang mã canonical UPPERCASE (LEAVE_TYPE_CODES: ANNUAL/SICK/…). `code` là
+  // immutable ⇒ field disabled và KHÔNG nằm trong payload PATCH, nhưng vẫn đi qua schema form. Regex
+  // lowercase-only trước đây làm mọi loại nghỉ đã seed không thể lưu, kèm lỗi sai ngữ cảnh "Vui lòng nhập mã".
+  it("saves an edit on a seeded UPPERCASE code (immutable code must not block submit)", async () => {
+    setCaps({ "view:leave-type": true, "update:leave-type": true });
+    const seeded: LeaveTypeAdminView = { ...LEAVE_TYPE, code: "SICK", name: "Nghỉ ốm" };
+    vi.mocked(leaveApi.listTypesAdmin).mockResolvedValue([seeded]);
+    vi.mocked(leaveApi.updateTypeAdmin).mockResolvedValue({ ...seeded, status: "inactive" });
+    const { container } = renderWithQuery(<LeaveTypesPage />);
+    await waitFor(() => expect(screen.getByText("Nghỉ ốm")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /^sửa$/i }));
+    fireEvent.change(container.querySelector("#status") as HTMLSelectElement, {
+      target: { value: "inactive" },
+    });
+    fireEvent.submit(container.querySelector("#master-data-form") as HTMLFormElement);
+
+    await waitFor(() => expect(leaveApi.updateTypeAdmin).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/vui lòng nhập mã/i)).not.toBeInTheDocument();
+    const [id, payload] = vi.mocked(leaveApi.updateTypeAdmin).mock.calls[0];
+    expect(id).toBe("lt-1");
+    expect(payload).toMatchObject({ name: "Nghỉ ốm", status: "inactive" });
+    expect(payload).not.toHaveProperty("code"); // code immutable — BE strip, FE không gửi
+  });
+
   it("deletes via confirm dialog and refetches the list", async () => {
     setCaps({ "view:leave-type": true, "delete:leave-type": true });
     vi.mocked(leaveApi.deleteTypeAdmin).mockResolvedValue(undefined);

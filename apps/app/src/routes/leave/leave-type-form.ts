@@ -21,7 +21,10 @@ export const leaveTypeFormSchema = z.object({
     .trim()
     .min(1, "masterData.common.validation.codeRequired")
     .max(50, "masterData.common.validation.codeTooLong")
-    .regex(/^[a-z0-9_-]+$/, "masterData.common.validation.codeRequired"),
+    // Cho phép CHỮ HOA — mã canonical là UPPERCASE (LEAVE_TYPE_CODES: ANNUAL/SICK/…). Regex lowercase-only
+    // trước đây khiến form SỬA của loại nghỉ đã seed không lưu được: `code` immutable (disabled, không nằm
+    // trong payload PATCH) nhưng vẫn bị validate ⇒ chặn Lưu bằng lỗi "Vui lòng nhập mã" sai ngữ cảnh.
+    .regex(/^[A-Za-z0-9_-]+$/, "masterData.common.validation.codeInvalid"),
   name: z
     .string()
     .trim()
