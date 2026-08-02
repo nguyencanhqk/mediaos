@@ -7,6 +7,7 @@ import type { ChatMessageType } from "../db/schema/communication";
 import { fileLinks } from "../db/schema/files";
 import { users } from "../db/schema/users";
 import { CHAT_MODULE_CODE } from "./chat.errors";
+import { unreadSeqExpr, visibleFromSeqScalar } from "./chat-visibility";
 
 export interface ChatMessageRow {
   id: string;
@@ -114,11 +115,19 @@ export class ChatMessagesRepository {
     return rows[0];
   }
 
-  /** Tin theo id, kèm `senderName` — dùng để dựng DTO sau khi ghi. KHÔNG gate membership (caller lo). */
+  /**
+   * Tin theo id, kèm `senderName` — dùng để dựng DTO sau khi ghi. KHÔNG gate membership (caller lo).
+   *
+   * `visibleFromSeq` là THAM SỐ BẮT BUỘC, không optional: caller đã phải chạy `assertMessageAccess`
+   * trước (không có đường nào khác lấy được `messageId` hợp lệ), nên nó luôn cầm sẵn giá trị — và bắt
+   * buộc thì TypeScript chặn caller MỚI quên truyền, thay vì mặc định `null` = "cho xem tất cả" trong
+   * im lặng (SPEC-15 §13.4).
+   */
   async findMessageForDto(
     tx: TenantTx,
     companyId: string,
     messageId: string,
+    visibleFromSeq: number | null,
   ): Promise<ChatMessageRow | undefined> {
     const rows = await tx
       .select(MESSAGE_COLUMNS)
@@ -127,14 +136,25 @@ export class ChatMessagesRepository {
         users,
         and(eq(users.id, chatMessages.senderId), eq(users.companyId, chatMessages.companyId)),
       )
-      .where(and(eq(chatMessages.companyId, companyId), eq(chatMessages.id, messageId)))
+      .where(
+        and(
+          eq(chatMessages.companyId, companyId),
+          eq(chatMessages.id, messageId),
+          visibleFromSeqScalar(visibleFromSeq),
+        ),
+      )
       .limit(1);
     return rows[0]
       ? { ...rows[0], messageType: rows[0].messageType as ChatMessageType }
       : undefined;
   }
 
-  /** Bản ghi đã gửi trước đó với cùng `clientMessageId` (idempotency — `uq_chat_messages_client_id`). */
+  /**
+   * Bản ghi đã gửi trước đó với cùng `clientMessageId` (idempotency — `uq_chat_messages_client_id`).
+   *
+   * CỐ Ý KHÔNG mang vị từ §13.4: đã bound `senderId = actor`, tin của chính mình không thể nằm trước
+   * mốc mình vào phòng (xem `chat-visibility.ts`).
+   */
   async findByClientMessageId(
     tx: TenantTx,
     companyId: string,
@@ -167,8 +187,9 @@ export class ChatMessagesRepository {
    * CHAT-API-009 — một trang tin theo CON TRỎ. **Không có tham số `offset` ở bất kỳ đâu** (API-13 §6.4:
    * offset trôi khi có tin mới chèn vào giữa lúc cuộn).
    *
-   * Vị từ SPEC-15 §13.4 `(visible_from_seq IS NULL OR room_seq >= visible_from_seq)` viết SẴN từ v1 dù
-   * cột luôn NULL — thêm sau sẽ sót đường đọc.
+   * Vị từ SPEC-15 §13.4 lấy từ `chat-visibility.ts` (bản sao DUY NHẤT), viết SẴN từ v1 dù cột luôn
+   * NULL — thêm sau sẽ sót đường đọc, và GATE-2 đã chứng minh đúng điều đó: v1 chỉ hàm này có vị từ,
+   * 5 đường đọc còn lại thì không.
    *
    * Trả về LUÔN TĂNG DẦN theo `room_seq`: nhánh `beforeSeq`/mặc định phải quét DESC để lấy đúng k tin
    * gần con trỏ nhất, rồi đảo lại ở đây. Trả hai chiều khác nhau tuỳ tham số là bắt FE tự đoán chiều.
@@ -185,9 +206,8 @@ export class ChatMessagesRepository {
     },
   ): Promise<ChatMessageRow[]> {
     const conds: SQL[] = [eq(chatMessages.companyId, companyId), eq(chatMessages.roomId, roomId)];
-    if (opts.visibleFromSeq !== null) {
-      conds.push(sql`${chatMessages.roomSeq} >= ${opts.visibleFromSeq}`);
-    }
+    const visible = visibleFromSeqScalar(opts.visibleFromSeq);
+    if (visible) conds.push(visible);
     if (opts.beforeSeq !== undefined) conds.push(lt(chatMessages.roomSeq, opts.beforeSeq));
     if (opts.afterSeq !== undefined) conds.push(gt(chatMessages.roomSeq, opts.afterSeq));
 
@@ -207,8 +227,19 @@ export class ChatMessagesRepository {
     return ascending ? mapped : mapped.reverse();
   }
 
-  /** CHAT-API-013 — tin đã ghim còn hiệu lực (tin thu hồi rơi khỏi danh sách ghim). */
-  async listPinned(tx: TenantTx, companyId: string, roomId: string): Promise<ChatMessageRow[]> {
+  /**
+   * CHAT-API-013 — tin đã ghim còn hiệu lực (tin thu hồi rơi khỏi danh sách ghim).
+   *
+   * Mang vị từ §13.4: ghim là hành động của phòng, nhưng ĐỌC tin ghim vẫn là đọc tin. Thiếu nó thì
+   * `/pinned` là cửa hậu đọc nguyên văn phần lịch sử mà `/messages` đã chặn — cùng một `MESSAGE_COLUMNS`,
+   * cùng `body`, chỉ khác đường vào.
+   */
+  async listPinned(
+    tx: TenantTx,
+    companyId: string,
+    roomId: string,
+    visibleFromSeq: number | null,
+  ): Promise<ChatMessageRow[]> {
     const rows = await tx
       .select(MESSAGE_COLUMNS)
       .from(chatMessages)
@@ -222,12 +253,20 @@ export class ChatMessagesRepository {
           eq(chatMessages.roomId, roomId),
           isNotNull(chatMessages.pinnedAt),
           isNull(chatMessages.recalledAt),
+          visibleFromSeqScalar(visibleFromSeq),
         ),
       )
       .orderBy(desc(chatMessages.pinnedAt));
     return rows.map((r) => ({ ...r, messageType: r.messageType as ChatMessageType }));
   }
 
+  /**
+   * Đếm ghim cho trần 20 (CHAT-ERR-008).
+   *
+   * CỐ Ý KHÔNG mang vị từ §13.4 — trần là bất biến của PHÒNG, không của người đang nhìn. Lọc theo
+   * `visible_from_seq` ở đây cho hai thành viên cùng phòng đếm ra hai số khác nhau ⇒ người vào sau
+   * ghim vượt trần mà vẫn 200 (xem `chat-visibility.ts`).
+   */
   async countPinned(tx: TenantTx, companyId: string, roomId: string): Promise<number> {
     const rows = await tx
       .select({ n: sql<number>`count(*)::int` })
@@ -243,12 +282,20 @@ export class ChatMessagesRepository {
     return rows[0]?.n ?? 0;
   }
 
-  /** Tin được trả lời phải CÙNG PHÒNG và chưa thu hồi (CHAT-ERR-009). */
+  /**
+   * Tin được trả lời phải CÙNG PHÒNG, chưa thu hồi (CHAT-ERR-009) và **người trả lời phải nhìn thấy
+   * được nó** (§13.4).
+   *
+   * Vế cuối là đường đọc gián tiếp: trích dẫn một tin nằm trước mốc `visible_from_seq` sẽ kéo nội dung
+   * tin đó lên màn hình người không được xem, qua chính DTO của tin trả lời. Chặn ở đây thì người dùng
+   * nhận CHAT-ERR-009 giống hệt ca "tin không tồn tại" — không có oracle nào cho biết tin đó có thật.
+   */
   async replyTargetIsValid(
     tx: TenantTx,
     companyId: string,
     roomId: string,
     replyToMessageId: string,
+    visibleFromSeq: number | null,
   ): Promise<boolean> {
     const rows = await tx
       .select({ id: chatMessages.id })
@@ -259,6 +306,7 @@ export class ChatMessagesRepository {
           eq(chatMessages.id, replyToMessageId),
           eq(chatMessages.roomId, roomId),
           isNull(chatMessages.recalledAt),
+          visibleFromSeqScalar(visibleFromSeq),
         ),
       )
       .limit(1);
@@ -382,13 +430,17 @@ export class ChatMessagesRepository {
    * KHÔNG `COUNT(*)` trên `chat_messages`: đó là bảng lớn nhất module, và đếm per-room là N+1 ngay trên
    * đường chạy mỗi lần đổi trang của FE (badge header). Bỏ phòng đã lưu trữ để con số khớp đúng danh
    * sách phòng mặc định — badge kêu vì một phòng người dùng không nhìn thấy là badge không tắt được.
+   *
+   * Công thức lấy từ `unreadSeqExpr()` — DÙNG CHUNG với `listRoomsForUser` (CHAT-API-001). Hai bản sao
+   * của một công thức đếm là hai bản sao sẽ trôi, và badge header lệch badge từng phòng thì không ai
+   * biết bên nào đúng.
    */
   async unreadTotals(
     tx: TenantTx,
     companyId: string,
     userId: string,
   ): Promise<{ total: number; rooms: number }> {
-    const unread = sql<number>`greatest(0, coalesce(${chatRooms.lastMessageSeq}, 0) - ${chatRoomMembers.lastReadSeq})`;
+    const unread = unreadSeqExpr();
     const rows = await tx
       .select({
         total: sql<number>`coalesce(sum(${unread}), 0)::int`,

@@ -5,6 +5,7 @@ import type { TenantTx } from "../db/db.service";
 import { chatRoomMembers, chatRooms } from "../db/schema/communication";
 import type { ChatMemberRole, ChatRoomType } from "../db/schema/communication";
 import { users } from "../db/schema/users";
+import { unreadSeqExpr } from "./chat-visibility";
 
 export interface ChatRoomListRow {
   id: string;
@@ -103,6 +104,10 @@ export class ChatRoomsRepository {
    * `COALESCE` không phải trang trí: `last_message_seq` là NULL ở phòng chưa có tin nào (`0538` không
    * đặt DEFAULT) ⇒ thiếu nó thì `unreadCount` ra null và FE ăn ZodError dù HTTP 200.
    * `GREATEST(0, …)` chặn số âm khi con trỏ đã đọc vượt (dữ liệu lệch do đồng bộ) — badge âm là bug hiển thị.
+   *
+   * Công thức lấy từ `unreadSeqExpr()` — DÙNG CHUNG với `unreadTotals` (CHAT-API-016), và đó là nơi vị
+   * từ SPEC-15 §13.4 sống trong phép trừ (sàn `visible_from_seq − 1`). Trước GATE-2 công thức bị chép
+   * tay ở cả hai file, và bản ở đây là bản KHÔNG có sàn.
    */
   async listRoomsForUser(
     tx: TenantTx,
@@ -132,7 +137,7 @@ export class ChatRoomsRepository {
         lastMessageSeq: chatRooms.lastMessageSeq,
         isArchived: chatRooms.isArchived,
         createdAt: chatRooms.createdAt,
-        unreadCount: sql<number>`greatest(0, coalesce(${chatRooms.lastMessageSeq}, 0) - ${chatRoomMembers.lastReadSeq})::int`,
+        unreadCount: sql<number>`${unreadSeqExpr()}::int`,
       })
       .from(chatRooms)
       .innerJoin(

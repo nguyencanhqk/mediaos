@@ -3,6 +3,7 @@ import type { ChatMessageDto } from "@mediaos/contracts";
 import { AuditService } from "../events/audit.service";
 import { DatabaseService } from "../db/db.service";
 import { ChatAccessService } from "./chat-access.service";
+import type { ChatMessageAccess } from "./chat-access.service";
 import { ChatMessagesRepository } from "./chat-messages.repository";
 import { CHAT_AUDIT, CHAT_ERR, CHAT_MODULE_CODE } from "./chat.errors";
 import { assertCanRecall, assertPinBudget, assertPinnable } from "./chat-message-rules";
@@ -42,7 +43,7 @@ export class ChatMessageModerationService {
       // Phòng lưu trữ = CHỈ ĐỌC (CHAT-ERR-005). Đặt TRƯỚC nhánh idempotent: một phòng đã đóng thì cả
       // lần bấm thứ hai cũng không được báo "thành công" cho một thao tác ghi không được phép.
       assertNotArchived(acc.room);
-      if (acc.message.recalledAt) return this.readDto(tx, actor, messageId);
+      if (acc.message.recalledAt) return this.readDto(tx, actor, acc);
 
       const now = new Date();
       assertCanRecall(acc, now);
@@ -67,7 +68,7 @@ export class ChatMessageModerationService {
         },
       });
 
-      return this.readDto(tx, actor, messageId);
+      return this.readDto(tx, actor, acc);
     });
   }
 
@@ -78,7 +79,7 @@ export class ChatMessageModerationService {
       assertNotArchived(acc.room);
       this.access.requirePinAuthority(acc);
       assertPinnable(acc);
-      if (acc.message.pinnedAt) return this.readDto(tx, actor, messageId);
+      if (acc.message.pinnedAt) return this.readDto(tx, actor, acc);
 
       // Khoá phòng TRƯỚC khi đếm: `countPinned` → `setPinned` không khoá là TOCTOU, hai request cùng
       // đọc 19 rồi cùng ghim ⇒ 21 tin ghim, cả hai 200, CHAT-ERR-008 bị phá trong im lặng.
@@ -97,7 +98,7 @@ export class ChatMessageModerationService {
         resultStatus: "Success",
         newValues: { roomId: acc.message.roomId },
       });
-      return this.readDto(tx, actor, messageId);
+      return this.readDto(tx, actor, acc);
     });
   }
 
@@ -107,7 +108,7 @@ export class ChatMessageModerationService {
       const acc = await this.access.assertMessageAccess(tx, actor.companyId, messageId, actor.id);
       assertNotArchived(acc.room);
       this.access.requirePinAuthority(acc);
-      if (!acc.message.pinnedAt) return this.readDto(tx, actor, messageId);
+      if (!acc.message.pinnedAt) return this.readDto(tx, actor, acc);
 
       await this.repo.setPinned(tx, actor.companyId, messageId, null);
       await this.audit.record(tx, {
@@ -119,17 +120,28 @@ export class ChatMessageModerationService {
         resultStatus: "Success",
         oldValues: { roomId: acc.message.roomId, pinned: true },
       });
-      return this.readDto(tx, actor, messageId);
+      return this.readDto(tx, actor, acc);
     });
   }
 
-  /** Đọc lại trong CÙNG tx (membership đã khẳng định ở đầu method — không mở cửa thứ hai). */
+  /**
+   * Đọc lại trong CÙNG tx (membership đã khẳng định ở đầu method — không mở cửa thứ hai).
+   *
+   * Nhận nguyên `acc` thay vì `messageId` rời: `findMessageForDto` đòi `visibleFromSeq` bắt buộc
+   * (§13.4), và cả `messageId` lẫn `visibleFromSeq` đều đã nằm sẵn trong kết quả `assertMessageAccess`.
+   * Truyền cả cụm thì không có đường nào ghép nhầm id của tin này với mốc hiển thị của tin khác.
+   */
   private async readDto(
     tx: Parameters<Parameters<DatabaseService["withTenant"]>[1]>[0],
     actor: ChatActor,
-    messageId: string,
+    acc: ChatMessageAccess,
   ): Promise<ChatMessageDto> {
-    const row = await this.repo.findMessageForDto(tx, actor.companyId, messageId);
+    const row = await this.repo.findMessageForDto(
+      tx,
+      actor.companyId,
+      acc.message.id,
+      acc.membership.visibleFromSeq,
+    );
     if (!row) throw new UnprocessableEntityException(CHAT_ERR.MESSAGE_NOT_FOUND);
     return toChatMessageDto(row);
   }

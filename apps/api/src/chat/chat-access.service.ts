@@ -4,6 +4,7 @@ import type { TenantTx } from "../db/db.service";
 import { chatMessages, chatRoomMembers, chatRooms } from "../db/schema/communication";
 import type { ChatMemberRole, ChatMessageType, ChatRoomType } from "../db/schema/communication";
 import { CHAT_ERR } from "./chat.errors";
+import { visibleFromSeqColumn } from "./chat-visibility";
 
 /** Phòng + tư cách thành viên của actor, lấy trong ĐÚNG MỘT truy vấn. */
 export interface ChatRoomAccess {
@@ -25,7 +26,11 @@ export interface ChatRoomAccess {
     userId: string;
     role: ChatMemberRole;
     lastReadSeq: number;
-    /** v1 LUÔN NULL (CHAT-DEC-008). Mọi truy vấn đọc tin PHẢI viết sẵn vị từ SPEC-15 §13.4 với nó. */
+    /**
+     * v1 LUÔN NULL (CHAT-DEC-008). Mọi truy vấn đọc tin PHẢI mang vị từ SPEC-15 §13.4 với nó — lấy từ
+     * `chat-visibility.ts`, KHÔNG viết lại tay. Trường này có mặt ở đây chính là để caller truyền
+     * xuống repo: hàm repo nào đọc `chat_messages` cũng nhận nó làm tham số BẮT BUỘC.
+     */
     visibleFromSeq: number | null;
     joinedAt: Date;
   };
@@ -186,8 +191,15 @@ export class ChatAccessService {
    *
    * Vị từ membership tái dùng ĐÚNG hai helper của `assertMember` — không có bản sao thứ hai của luật.
    *
+   * ⚠️ Hàm này là cửa vào của THU HỒI · GHIM · BỎ GHIM — ba thao tác GHI. Vị từ §13.4 ở đây vì thế
+   * không chỉ chặn đọc: thiếu nó, một thành viên có `visible_from_seq` sẽ ghim/thu hồi được tin nằm
+   * trước mốc mình vào phòng, và tin đó nhảy lên `/pinned` của **cả phòng**. Dùng dạng CỘT
+   * (`visibleFromSeqColumn`) chứ không dạng scalar: truy vấn này lấy membership và tin trong CÙNG một
+   * câu nên chưa có giá trị nào ở JS để truyền vào — đó là điểm khác biệt duy nhất, luật vẫn là một.
+   *
    * @throws NotFoundException (404) khi: tin không tồn tại · tin của tenant khác · phòng chứa tin đã xoá
-   *   mềm · actor không phải thành viên phòng đó · actor đã rời.
+   *   mềm · actor không phải thành viên phòng đó · actor đã rời · tin nằm TRƯỚC `visible_from_seq` của
+   *   actor (SPEC-15 §13.4) — tất cả trả về BYTE GIỐNG HỆT NHAU.
    */
   async assertMessageAccess(
     tx: TenantTx,
@@ -235,6 +247,7 @@ export class ChatAccessService {
           eq(chatMessages.id, messageId),
           eq(chatMessages.companyId, companyId),
           this.visibleRoom(companyId),
+          visibleFromSeqColumn(),
         ),
       )
       .limit(1);

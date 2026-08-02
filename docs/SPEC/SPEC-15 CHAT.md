@@ -408,7 +408,15 @@ projects đóng/xoá mềm          kết thúc dự án                  lưu t
 
 v1: thành viên đọc **toàn bộ** lịch sử phòng mình đang thuộc (`visible_from_seq` luôn NULL). Người mới vào dự án đọc được ngữ cảnh trước đó — đúng nhu cầu §2.
 
-Cột `visible_from_seq` được tạo sẵn để phase sau bật chế độ "chỉ đọc từ lúc vào" cho phòng nhóm nhạy cảm mà **không phải migration đổi hình dạng bảng**. Mọi truy vấn đọc tin phải viết sẵn điều kiện `(m.visible_from_seq IS NULL OR msg.seq >= m.visible_from_seq)` ngay từ v1 — thêm sau sẽ sót đường đọc.
+Cột `visible_from_seq` được tạo sẵn để phase sau bật chế độ "chỉ đọc từ lúc vào" cho phòng nhóm nhạy cảm mà **không phải migration đổi hình dạng bảng**. Mọi truy vấn đọc tin phải viết sẵn điều kiện `(m.visible_from_seq IS NULL OR msg.room_seq >= m.visible_from_seq)` ngay từ v1 — thêm sau sẽ sót đường đọc.
+
+**Làm rõ 03/08/2026 (`S7-CHAT-BE-GATE-2`) — ba điểm, đều đã đo trên code:**
+
+1. **Hệ quy chiếu là `room_seq`, KHÔNG phải `seq`.** Bản viết trước ghi `msg.seq` vì có TRƯỚC `S7-CHAT-DB-2` (mig `0539`). `chat_messages.seq` là identity **cấp bảng** — tăng xuyên mọi phòng và mọi tenant; so một mốc per-room với nó là cắt lịch sử ở một điểm ngẫu nhiên, lệch dần theo lưu lượng các phòng khác. `visible_from_seq` sống cùng hệ với `last_read_seq` · `last_message_seq` · `beforeSeq`/`afterSeq`. (Comment trong mig `0538` còn giữ chữ `msg.seq` — migration đã áp, không sửa được; điểm này là bản đính chính.)
+2. **KHÔNG writer nào của v1 được set cột này** — kể cả `S7-CHAT-BE-5` (đồng bộ phòng ban/dự án): người được thêm vào phòng dẫn xuất đọc **toàn bộ** lịch sử, đó chính là tiêu chí nghiệm thu §20 mục 3. Cột chỉ đổi giá trị khi có một Work Order riêng bật tính năng, và khi đó nó là **một câu UPDATE**, không phải một đợt sửa code.
+3. **Vị từ nằm ở đúng MỘT chỗ**: `apps/api/src/chat/chat-visibility.ts` (`visibleFromSeqScalar` · `visibleFromSeqColumn` · `unreadSeqExpr`). Mọi đường đọc gọi helper, không viết lại tay. Hai đường **cố ý** đứng ngoài, có lý do ghi trong file đó: `countPinned` (trần 20 là bất biến của PHÒNG, không của người đang nhìn) và `findByClientMessageId` (đã bound theo `senderId`). Danh sách miễn trừ được đóng đinh trong `chat-visibility.spec.ts`; thêm tên vào đó là một quyết định phải giải trình.
+
+Trong phép **đếm chưa đọc**, vị từ xuất hiện dưới dạng sàn của phép trừ: `unread = GREATEST(0, last_message_seq − GREATEST(last_read_seq, visible_from_seq − 1))`. Thiếu sàn thì badge của người mới vào phòng đếm cả phần lịch sử họ không mở ra được ⇒ badge **không bao giờ tắt được** (không thao tác nào của họ đẩy con trỏ qua đoạn đó). Khi cột NULL, sàn = `−1` ⇒ công thức rút về đúng bản cũ, không đổi một con số nào ở v1.
 
 ### 13.5 Tệp đính kèm
 

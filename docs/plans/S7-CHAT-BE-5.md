@@ -54,6 +54,14 @@ controllers: ChatRoomsController, ChatMessagesController
 exports: ChatAccessService, ChatRoomsRepository, ChatMessagesRepository
 ```
 
+⚠️ **CẬP NHẬT 03/08/2026 sau `S7-CHAT-BE-GATE-2`** — số đo "16 file" ở trên KHÔNG còn đúng: thư mục
+`apps/api/src/chat/` giờ có **18 file**, thêm `chat-visibility.ts` (bản sao DUY NHẤT của vị từ SPEC-15
+§13.4) và `chat-visibility.spec.ts`. GATE-2 cũng đổi CHỮ KÝ 4 hàm mà WO này KHÔNG chạm nhưng có thể
+đọc nhầm khi grep: `ChatMessagesRepository.listPinned` · `findMessageForDto` · `replyTargetIsValid` nay
+nhận thêm tham số BẮT BUỘC `visibleFromSeq`, và `ChatRoomsRepository.listRoomsForUser` dùng
+`unreadSeqExpr()` thay vì công thức chép tay. **Ràng buộc cứng cho WO này: KHÔNG được ghi
+`visible_from_seq` ở bất kỳ đâu** — xem §5.
+
 `chat.errors.ts` `CHAT_AUDIT` đã có khối `// ── S7-CHAT-BE-2 ──` (dòng 143-155: `MESSAGE_RECALLED` ·
 `MESSAGE_PINNED` · `MESSAGE_UNPINNED`) — **đo lại 03/08, dịch xuống từ 136-148 của bản đo cũ** vì `631d683e`
 chèn thêm `ROOM_DIRECT_RESTORED` (dòng 136, action `chat.room.direct_restored`, thuộc vá FULL-gate BE-1
@@ -476,7 +484,13 @@ rời rạc của rev 1 (compiler không bắt được tổ hợp sai, phải t
 **Test** — `apps/api/test/integration/chat-be5-derived-rooms.int-spec.ts` (mới), mẫu `chat-be1-*.int-spec.ts`.
 
 **KHÔNG sửa**: `packages/contracts/src/chat.ts`, `config/openapi-modules.ts` (không route mới, §2 rev 1 #19
-giữ nguyên), `chat-message*.ts` (phạm vi BE-2, không liên quan tin nhắn).
+giữ nguyên), `chat-message*.ts` (phạm vi BE-2, không liên quan tin nhắn), `chat-visibility.ts` +
+`chat-visibility.spec.ts` (phạm vi GATE-2 — WO này không có lý do gì chạm vị từ §13.4).
+
+⚠️ **`insertMember` / câu `ON CONFLICT … DO UPDATE SET left_at = NULL` (§3.4 Pha 3) TUYỆT ĐỐI KHÔNG kèm
+`visible_from_seq`.** Cột đó nằm trong tập 6 cột `mediaos_app` UPDATE được (`0538:258`) nên viết vào là
+**chạy được**, không có lỗi nào chặn — đó chính là chỗ nguy hiểm. Set nó ở đây là lặng lẽ lật CHAT-DEC-008
+và phá tiêu chí nghiệm thu SPEC-15 §20 mục 3 ("thêm người vào dự án → đọc được lịch sử trước đó").
 
 ---
 
@@ -493,6 +507,10 @@ giữ nguyên), `chat-message*.ts` (phạm vi BE-2, không liên quan tin nhắn
   "vừa được thêm vào phòng" (BE-6).
 - ❌ Cặp quyền mới, route mới, `PermissionGuard` mới — WO này không có controller.
 - ❌ `room_type='channel'`, migration schema.
+- ❌ **Ghi `chat_room_members.visible_from_seq`** (CHAT-DEC-008 · SPEC-15 §13.4 "Làm rõ 03/08/2026").
+  Người được đồng bộ vào phòng ban/dự án đọc **toàn bộ** lịch sử — đúng §20 mục 3. Cột này chỉ đổi giá
+  trị bởi một WO riêng bật tính năng "chỉ đọc từ lúc vào", và khi đó là một câu UPDATE, không phải sửa
+  code. Ca 21 (§6) gác điều này.
 
 ---
 
@@ -533,6 +551,7 @@ giữ nguyên), `chat-message*.ts` (phạm vi BE-2, không liên quan tin nhắn
 | 18 | H2: seed 1 hàng `project_members` với `member_status IS NULL, deleted_at IS NULL` (data cũ trước 0478) đang có `chat_room_members` active tương ứng | Job leave hàng này khỏi phòng (đúng theo predicate `='Active'` tường minh — xem §3.3 lý do đây là ĐÚNG hành vi, không phải oan) |
 | 19 | W9a/W9b: đổi `orgUnitId` sang phòng ĐÍCH CHƯA TỒN TẠI (org_unit mới tạo, job chưa chạy) | Rời phòng cũ vẫn thành công (LOUD path không kích hoạt vì không lỗi thật), join mới NO-OP êm (log DEBUG), `updateEmployee` vẫn trả 200 — chứng minh SAVEPOINT không lây lỗi "phòng chưa có" thành lỗi cứng |
 | 20 | `EmployeesService.deleteEmployee` (W14) — NV đang member 1 dept + 1 project | Rời MỌI phòng dẫn xuất, response 204 như cũ (không đổi hợp đồng API) |
+| 21 | Sau KHI chạy đủ ca 1-20 (mọi writer + job đã chạy ít nhất một lượt): `SELECT count(*) FROM chat_room_members WHERE visible_from_seq IS NOT NULL` | **0** — CHAT-DEC-008 giữ nguyên. Kèm grep: 0 lần xuất hiện `visibleFromSeq` trong file WO này tạo/sửa. Ca này rẻ và là ĐAI DUY NHẤT: viết vào cột đó không sinh lỗi nào (`0538:258` cấp UPDATE), nên không có gì khác bắt được |
 
 ---
 

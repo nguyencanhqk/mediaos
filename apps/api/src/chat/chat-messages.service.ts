@@ -61,11 +61,16 @@ export class ChatMessagesService {
     });
   }
 
-  /** CHAT-API-013 — tin đã ghim của phòng. */
+  /** CHAT-API-013 — tin đã ghim của phòng. Mang vị từ §13.4 y như `/messages` (cùng cột `body`). */
   async listPinned(actor: ChatActor, roomId: string): Promise<ChatMessageDto[]> {
     return this.db.withTenant(actor.companyId, async (tx) => {
-      await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
-      const rows = await this.repo.listPinned(tx, actor.companyId, roomId);
+      const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
+      const rows = await this.repo.listPinned(
+        tx,
+        actor.companyId,
+        roomId,
+        acc.membership.visibleFromSeq,
+      );
       return rows.map(toChatMessageDto);
     });
   }
@@ -111,6 +116,9 @@ export class ChatMessagesService {
             actor.companyId,
             roomId,
             dto.replyToMessageId,
+            // §13.4 — không trích dẫn được tin nằm trước mốc mình vào phòng (trích dẫn kéo nội dung
+            // tin gốc lên màn hình qua DTO của tin trả lời).
+            acc.membership.visibleFromSeq,
           );
           if (!ok) throw new UnprocessableEntityException(CHAT_ERR.REPLY_INVALID);
         }
@@ -217,8 +225,13 @@ export class ChatMessagesService {
    */
   private async readMessage(actor: ChatActor, messageId: string): Promise<ChatMessageDto> {
     return this.db.withTenant(actor.companyId, async (tx) => {
-      await this.access.assertMessageAccess(tx, actor.companyId, messageId, actor.id);
-      const row = await this.repo.findMessageForDto(tx, actor.companyId, messageId);
+      const acc = await this.access.assertMessageAccess(tx, actor.companyId, messageId, actor.id);
+      const row = await this.repo.findMessageForDto(
+        tx,
+        actor.companyId,
+        messageId,
+        acc.membership.visibleFromSeq,
+      );
       if (!row) throw new UnprocessableEntityException(CHAT_ERR.MESSAGE_NOT_FOUND);
       return toChatMessageDto(row);
     });
