@@ -555,6 +555,96 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-2 — tin nhắn (DB cô lập, đườn
     expect(other.body.data.unreadCount, "người khác vẫn thấy chưa đọc").toBe(1);
   });
 
+  // ── Ca 23..26: vá FULL gate BE-1/BE-2 ──────────────────────────────────────
+
+  it("ca 23: hai giao dịch /read ĐỒNG THỜI → con trỏ KHÔNG lùi (clamp phải nằm trong SQL)", async () => {
+    // ⚠️ CA NÀY KHÔNG THỂ VIẾT TUẦN TỰ. Bản cũ tính `Math.max` ở JS rồi GÁN ĐÈ: gọi /read 5 rồi /read 2
+    // vẫn ra 5 (vì nó đọc lại con trỏ trước khi ghi) ⇒ test tuần tự XANH trên cả code hỏng. Chỉ khi hai
+    // giao dịch CHỒNG NHAU — bên đến sau đã đọc trạng thái CŨ — thì phép gán đè mới lộ ra là đường lùi.
+    const r = await newRoom("Phòng đua con trỏ");
+    for (let i = 0; i < 5; i += 1) await send(tAdmin, r, `tin ${i}`);
+    const mrow = await direct.query(
+      "SELECT id FROM chat_room_members WHERE room_id = $1 AND user_id = $2",
+      [r, uMember],
+    );
+    const memberRowId = mrow.rows[0].id as string;
+    const db = app.get(DatabaseService);
+    const repo = app.get(ChatMessagesRepository);
+
+    // T1 nâng con trỏ lên 5 rồi GIỮ giao dịch mở ⇒ giữ khoá hàng thành viên.
+    let release!: () => void;
+    const held = new Promise<void>((res) => {
+      release = res;
+    });
+    const t1 = db.withTenant(A.companyId, async (tx) => {
+      await repo.advanceLastReadSeq(tx, A.companyId, memberRowId, 5, 5);
+      await held;
+    });
+    await new Promise((res) => setTimeout(res, 150));
+
+    // T2 vào sau với số NHỎ HƠN: bị chặn tại UPDATE cho tới khi T1 commit, rồi mới đánh giá vế phải.
+    const t2 = db.withTenant(A.companyId, (tx) =>
+      repo.advanceLastReadSeq(tx, A.companyId, memberRowId, 2, 2),
+    );
+    setTimeout(release, 150);
+    const [, afterT2] = await Promise.all([t1, t2]);
+
+    expect(afterT2, "T2 thấy 5 đã commit ⇒ GREATEST giữ 5; gán đè sẽ ra 2").toBe(5);
+    const dbrow = await direct.query("SELECT last_read_seq FROM chat_room_members WHERE id = $1", [
+      memberRowId,
+    ]);
+    expect(Number(dbrow.rows[0].last_read_seq)).toBe(5);
+  });
+
+  it("ca 24: ghim DÙNG ĐƯỢC trong phòng direct — DM không bao giờ có admin phòng", async () => {
+    // DM insert cả hai người với role 'member' và `assertManualMembership` chặn đổi vai trò trên phòng
+    // `direct` ⇒ nếu ghim đòi admin phòng thì đó là tính năng CHẾT, không phải tính năng bị hạn chế.
+    const dm = await authPost(tAdmin, "/chat/rooms/direct").send({ peerUserId: uMember });
+    expect(dm.status, JSON.stringify(dm.body)).toBe(200);
+    const dmId = dm.body.data.id as string;
+
+    const sent = await send(tAdmin, dmId, "tin trong DM");
+    const id = sent.body.data.id as string;
+    expect(
+      (await authPost(tMember, `/chat/messages/${id}/pin`)).status,
+      "hai người DM ngang vai — không có ai để mà đòi làm admin",
+    ).toBe(200);
+    const pinned = await authGet(tMember, `/chat/rooms/${dmId}/pinned`);
+    expect((pinned.body.data as unknown[]).length).toBe(1);
+    expect((await authDelete(tMember, `/chat/messages/${id}/pin`)).status).toBe(200);
+  });
+
+  it("ca 25: phòng ĐÃ LƯU TRỮ chặn CẢ thu hồi/ghim/bỏ ghim — chỉ-đọc là chỉ-đọc", async () => {
+    const r = await newRoom("Phòng đóng - kiểm duyệt", []);
+    const a = await send(tAdmin, r, "tin sẽ ghim trước khi đóng");
+    const b = await send(tAdmin, r, "tin sẽ thu hồi sau khi đóng");
+    const idA = a.body.data.id as string;
+    const idB = b.body.data.id as string;
+    expect((await authPost(tAdmin, `/chat/messages/${idA}/pin`)).status).toBe(200);
+    expect((await authPost(tAdmin, `/chat/rooms/${r}/archive`)).status).toBe(200);
+
+    const cases = [
+      ["ghim", await authPost(tAdmin, `/chat/messages/${idB}/pin`)],
+      ["bỏ ghim", await authDelete(tAdmin, `/chat/messages/${idA}/pin`)],
+      ["thu hồi", await authPost(tAdmin, `/chat/messages/${idB}/recall`)],
+    ] as const;
+    for (const [label, res] of cases) {
+      expect(res.status, `${label} trong phòng lưu trữ`).toBe(422);
+      expect(JSON.stringify(res.body), label).toContain("CHAT-ERR-005");
+    }
+    expect((await authGet(tAdmin, `/chat/rooms/${r}/pinned`)).status, "đọc vẫn phải được").toBe(
+      200,
+    );
+  });
+
+  it("ca 26: tạo phòng với >200 thành viên → 400 (chặn cạn tài nguyên bằng tài khoản HỢP LỆ)", async () => {
+    const res = await authPost(tAdmin, "/chat/rooms").send({
+      name: "Phòng khổng lồ",
+      memberUserIds: Array.from({ length: 201 }, () => randomUUID()),
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+  });
+
   // ── Ca 20: tổng chưa đọc ───────────────────────────────────────────────────
 
   it("ca 20: /unread-count bằng tổng phép trừ và dùng ĐÚNG 1 truy vấn (không COUNT(*) per-room)", async () => {

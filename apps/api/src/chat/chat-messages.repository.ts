@@ -323,17 +323,57 @@ export class ChatMessagesRepository {
       );
   }
 
-  /** Con trỏ đã đọc — `last_read_seq` nằm trong 6 cột UPDATE-được của `chat_room_members` (`0538:258`). */
-  async setLastReadSeq(
+  /**
+   * Con trỏ đã đọc — CHỈ TIẾN + kẹp trần, tính **TRONG CÂU UPDATE** (SPEC-15 §13.2 · plan BE-2 §1.6).
+   * `last_read_seq` nằm trong 6 cột UPDATE-được của `chat_room_members` (`0538:258`).
+   *
+   * ⚠️ TUYỆT ĐỐI KHÔNG đọc-rồi-ghi ở tầng JS. `assertMember` chạy `SELECT` thường (không `FOR UPDATE`),
+   * nên dưới READ COMMITTED hai thiết bị cùng `POST /read` đều đọc con trỏ CŨ rồi cùng gán đè: bên ghi
+   * SAU thắng, kể cả khi nó mang số NHỎ HƠN. Kết quả là con trỏ LÙI — 200 cho cả hai, badge sáng lại
+   * hàng chục tin đã đọc, không lỗi, không log. Đặt `GREATEST` vào chính câu UPDATE thì hàng bị khoá tại
+   * chỗ và vế phải đọc bản đã commit của bên thắng ⇒ nguyên tử, không cần khoá tay.
+   *
+   * `LEAST(wanted, ceiling)` = trần `last_message_seq`: client không tự đẩy con trỏ vượt số tin thật để
+   * "dọn" badge — cho vượt thì tin gửi SAU đó bị tính là đã đọc mà người dùng chưa hề thấy. Trần lấy từ
+   * `assertMember` có thể cũ hơn thực tế một nhịp; kẹp bằng số cũ luôn AN TOÀN (chỉ tiến chậm hơn, không
+   * bao giờ tiến quá).
+   *
+   * @returns con trỏ SAU khi ghi. Caller PHẢI dựng phản hồi từ số này — dùng lại số tính ở JS là trả về
+   *   trạng thái mà DB không hề có.
+   */
+  async advanceLastReadSeq(
     tx: TenantTx,
     companyId: string,
     memberRowId: string,
-    seq: number,
-  ): Promise<void> {
-    await tx
+    wanted: number,
+    ceiling: number,
+  ): Promise<number> {
+    const rows = await tx
       .update(chatRoomMembers)
-      .set({ lastReadSeq: seq, lastReadAt: new Date() })
-      .where(and(eq(chatRoomMembers.companyId, companyId), eq(chatRoomMembers.id, memberRowId)));
+      .set({
+        lastReadSeq: sql`GREATEST(${chatRoomMembers.lastReadSeq}, LEAST(${wanted}::int, ${ceiling}::int))`,
+        lastReadAt: new Date(),
+      })
+      .where(and(eq(chatRoomMembers.companyId, companyId), eq(chatRoomMembers.id, memberRowId)))
+      .returning({ seq: chatRoomMembers.lastReadSeq });
+    return rows[0].seq;
+  }
+
+  /**
+   * Khoá hàng phòng cho một chuỗi đọc-rồi-ghi ở phạm vi PHÒNG (trần ghim 20 — CHAT-ERR-008).
+   *
+   * `SELECT … FOR UPDATE` chứ KHÔNG mượn `allocateRoomSeq`: hàm kia tăng `last_message_seq`, mà `0539`
+   * verify ép `room_seq` liên tục từ 1 trong mỗi phòng ⇒ mượn nó để lấy khoá là tự tạo lỗ số.
+   *
+   * Không khoá thì `countPinned` → `setPinned` là TOCTOU kinh điển: hai request ghim cùng lúc đều đọc
+   * 19, đều ghim, phòng thành 21 tin ghim — cả hai 200, trần bị phá trong im lặng.
+   */
+  async lockRoom(tx: TenantTx, companyId: string, roomId: string): Promise<void> {
+    await tx
+      .select({ id: chatRooms.id })
+      .from(chatRooms)
+      .where(and(eq(chatRooms.companyId, companyId), eq(chatRooms.id, roomId)))
+      .for("update");
   }
 
   /**

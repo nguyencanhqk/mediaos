@@ -34,7 +34,13 @@ export const createChatRoomSchema = z.object({
   name: z.string().min(1).max(200),
   roomType: z.literal("group").default("group"),
   description: z.string().max(500).optional(),
-  memberUserIds: z.array(z.string().uuid()).default([]),
+  /**
+   * Trần 200 — KHÔNG phải con số thẩm mỹ. Mọi role canonical đều giữ `create:chat-room` @Company
+   * (`0538:452`), nên không có trần thì bất kỳ nhân viên nào cũng POST được 5.000 UUID hợp lệ và
+   * `createGroup` chạy 5.000 INSERT tuần tự trong MỘT transaction đang giữ hàng phòng — giao dịch dài
+   * trên pool PgBouncer transaction-mode. Cạn tài nguyên bằng tài khoản hợp lệ, không cần lỗ hổng nào.
+   */
+  memberUserIds: z.array(z.string().uuid()).max(200).default([]),
 });
 export type CreateChatRoomRequest = z.infer<typeof createChatRoomSchema>;
 

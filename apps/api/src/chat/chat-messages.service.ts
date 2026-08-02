@@ -12,7 +12,7 @@ import { DatabaseService } from "../db/db.service";
 import { ChatAccessService } from "./chat-access.service";
 import { ChatMessagesRepository } from "./chat-messages.repository";
 import { CHAT_ERR } from "./chat.errors";
-import { assertCursorExclusive, clampReadCursor } from "./chat-message-rules";
+import { assertCursorExclusive } from "./chat-message-rules";
 import { unreadOf } from "./chat-room-rules";
 import { toChatMessageDto } from "./chat.mapper";
 import type { ChatActor } from "./chat-rooms.service";
@@ -141,7 +141,15 @@ export class ChatMessagesService {
 
         // Tin của chính mình luôn tự nâng con trỏ đọc, TRONG CÙNG tx (SPEC-15 §13.2) — nếu không,
         // người gửi thấy badge chưa-đọc của chính tin mình vừa gửi.
-        await this.repo.setLastReadSeq(tx, actor.companyId, acc.membership.id, roomSeq);
+        // Vẫn đi qua `GREATEST` (trần = chính `roomSeq`): một `POST /read` chạy song song đã đọc con trỏ
+        // CŨ mà commit sau lệnh này thì phép gán đè sẽ kéo con trỏ của CHÍNH NGƯỜI GỬI lùi lại.
+        await this.repo.advanceLastReadSeq(
+          tx,
+          actor.companyId,
+          acc.membership.id,
+          roomSeq,
+          roomSeq,
+        );
         return inserted.id;
       })
       .catch(async (err: unknown) => {
@@ -167,8 +175,11 @@ export class ChatMessagesService {
   }
 
   /**
-   * CHAT-API-014 — đánh dấu đã đọc. Con trỏ CHỈ TIẾN và không vượt thực tế (`clampReadCursor`).
+   * CHAT-API-014 — đánh dấu đã đọc. Con trỏ CHỈ TIẾN và không vượt thực tế.
    * Gửi số nhỏ hơn → **200, bỏ qua im lặng** (CHAT-ERR-018), không phải lỗi.
+   *
+   * Cả hai vế (chỉ-tiến + kẹp trần) chạy TRONG câu UPDATE — xem `advanceLastReadSeq`. Tính ở JS rồi ghi
+   * đè là đường LÙI con trỏ khi hai thiết bị cùng gửi, và đó là đúng thứ §13.2 sinh ra để chặn.
    */
   async markRead(
     actor: ChatActor,
@@ -177,14 +188,17 @@ export class ChatMessagesService {
   ): Promise<ChatMarkReadResultDto> {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
-      const next = clampReadCursor(dto.seq, acc.membership.lastReadSeq, acc.room.lastMessageSeq);
-      if (next !== acc.membership.lastReadSeq) {
-        await this.repo.setLastReadSeq(tx, actor.companyId, acc.membership.id, next);
-      }
+      const lastReadSeq = await this.repo.advanceLastReadSeq(
+        tx,
+        actor.companyId,
+        acc.membership.id,
+        dto.seq,
+        acc.room.lastMessageSeq ?? 0,
+      );
       return {
         roomId,
-        lastReadSeq: next,
-        unreadCount: unreadOf(acc.room.lastMessageSeq, next),
+        lastReadSeq,
+        unreadCount: unreadOf(acc.room.lastMessageSeq, lastReadSeq),
       };
     });
   }

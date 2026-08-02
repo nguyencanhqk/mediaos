@@ -200,7 +200,8 @@ Chạy: `bash scripts/lane-db-setup.sh chatbe2` → nạp env như §4.1 plan BE
 - [x] 404 của cả 3 route `/messages/:id/*` **không phân biệt được**
 - [x] `room_seq` cấp trong CÙNG tx, liên tục, không lỗ kể cả khi gửi trùng `clientMessageId`
 - [x] Gửi idempotent theo `clientMessageId` (bắt 23505 ĐÚNG constraint, retry ngoài tx)
-- [x] Con trỏ `beforeSeq` XOR `afterSeq`, `limit ≤ 100`, **0 chỗ dùng `offset`**; vị từ `visible_from_seq` có mặt
+- [x] Con trỏ `beforeSeq` XOR `afterSeq`, `limit ≤ 100`, **0 chỗ dùng `offset`**
+- [ ] ⚠️ Ô này TỪNG đánh dấu xong SAI: vị từ `visible_from_seq` chỉ có ở `listMessages`, **thiếu ở 5 đường đọc khác** — FULL gate bắt (xem §6)
 - [x] Thu hồi: hằng số 15 phút **một chỗ**; `body: null` che ở SERVER; `file_links` gỡ bằng **soft delete**
 - [x] Ghim ≤ 20, tin `system`/đã-thu-hồi không ghim/thu hồi được
 - [x] `/read` chỉ tiến + kẹp trần; người gửi tự nâng con trỏ trong cùng tx
@@ -211,5 +212,39 @@ Chạy: `bash scripts/lane-db-setup.sh chatbe2` → nạp env như §4.1 plan BE
 - [x] 22 ca RED-trước xanh trên `LANE_DB` + 3 bằng chứng RED
 - [x] `harness/check.sh --lane-db=chatbe2`: **api 466/466 file chạy · 4 spec CHAT xanh · 6 package FE/contracts xanh** · secret-literals · lint · typecheck · migration-no-drop xanh
 - [ ] ⚠️ Còn **1 đỏ KHÔNG thuộc CHAT**: `task-recon-grants.int-spec.ts` ném ở `afterAll` → `cleanupTenants` (`seed.ts:670`, FK `audit_logs_actor_user_id_fkey`). Chạy CÔ LẬP: 30/30 xanh. Đúng lớp đua đã ghi chú ngay trong helper (outbox worker còn sống ghi thêm `audit_logs` giữa lần quét và `DELETE users`). Helper CÓ vòng thử-lại cho `DELETE companies` nhưng KHÔNG có cho `DELETE users` — đó là chỗ vỡ. `test/helpers/**` NGOÀI `paths` của WO này ⇒ ghi nợ, không tự sửa
-- [ ] FULL gate (security-reviewer + silent-failure-hunter) — **CHƯA chạy** (phiên này không spawn sub-agent)
+- [x] FULL gate (security-reviewer + silent-failure-hunter) — **ĐÃ chạy 2026-08-02** trên diff hợp nhất `4c5c2da6..54b4d8cd` (cả BE-1 lẫn BE-2). Kết quả + phần đã vá / còn nợ: §6
 - [x] lane DB `mediaos_chatbe2` drop sau khi xong
+
+---
+
+## 6. FULL gate BE-1 + BE-2 (2026-08-02)
+
+Chạy 2 lane độc lập trên diff hợp nhất `4c5c2da6..54b4d8cd` (17 file code + 3 int-spec).
+Verdict: **security-reviewer PASS** (0 CRIT · 0 HIGH) · **silent-failure-hunter BLOCK** (1 HIGH).
+Hai lane không mâu thuẫn dữ kiện — lane security không soi trục nguyên-tử/đồng-thời.
+
+### 6.1 ĐÃ VÁ trong commit này
+
+| Mức | Vấn đề | Cách vá |
+| --- | --- | --- |
+| HIGH | `last_read_seq` clamp ở JS + ghi GÁN ĐÈ ⇒ hai `/read` đồng thời kéo con trỏ **LÙI** (SPEC-15 §13.2 · plan §1.6 đều ghi rõ phải `GREATEST` trong SQL) | `advanceLastReadSeq` — `GREATEST(last_read_seq, LEAST($wanted,$ceiling))` ngay trong câu UPDATE, `RETURNING` số thật; xoá `clampReadCursor` (hàm thuần KHÔNG giữ nổi bất biến này) |
+| MED | Trần ghim 20 là TOCTOU (`countPinned` → `setPinned` không khoá) | `lockRoom()` = `SELECT … FOR UPDATE` trước khi đếm (KHÔNG mượn `allocateRoomSeq` — nó tăng `last_message_seq`, sinh lỗ `room_seq`) |
+| MED | Ghim **bất khả thi trong DM**: `direct` luôn role `member` + cấm đổi vai trò ⇒ `/pin` luôn 403 dù CHAT-SCREEN-004 vẽ tin ghim cho mọi loại phòng | `requirePinAuthority` = admin phòng **HOẶC** phòng `direct` |
+| MED | `recall`/`pin`/`unpin` thiếu `assertNotArchived` ⇒ phòng "chỉ đọc" vẫn kiểm duyệt được | Thêm cả 3, ĐẶT TRƯỚC nhánh idempotent |
+| MED | `memberUserIds` không có trần (mọi role đều có `create:chat-room`) ⇒ cạn tài nguyên bằng tài khoản hợp lệ | `.max(200)` ở contracts |
+| MED | `resurrectDirect` un-delete phòng + kích hoạt lại thành viên **không audit** | `chat.room.direct_restored` (cột `action` là text tự do — KHÔNG cần migration) |
+
+Test: ca 23 (đua `/read` 2 giao dịch chồng nhau) · ca 24 (ghim trong DM) · ca 25 (phòng lưu trữ chặn cả 3 route kiểm duyệt) · ca 26 (>200 thành viên → 400).
+**Bằng chứng RED của ca 23:** bỏ `GREATEST`, con trỏ ra `2` thay vì `5` — test tuần tự KHÔNG phát hiện được lỗi này (code cũ đọc lại con trỏ trước khi ghi nên vẫn xanh).
+`LANE_DB=mediaos_chatgate`: **59/59 xanh** (55 cũ + 4 mới) · typecheck 10/10 · lint 0 error.
+
+### 6.2 CÒN NỢ — không vá ở đợt này (có lý do)
+
+1. **`visible_from_seq` chỉ ở 1/6 đường đọc** (`listPinned`·`findMessageForDto`·`assertMessageAccess`·2 truy vấn unread thiếu) — CẢ HAI lane độc lập cùng chỉ ra. v1 cột luôn NULL nên chưa nổ; **thủng ngay khi `S7-CHAT-BE-5` ghi cột này**. ⇒ WO riêng, CHẶN trước BE-5: chạm 5 truy vấn + cần test khi cột có giá trị thật, nhét chung vào commit vá sẽ phình diff vùng crown.
+2. **Cặp gate của `pin`/`unpin` không kèm `view:chat-room`** (route trả DTO có `body`) — hạ xuống LOW: `RequirePermission` chỉ mang MỘT cặp, ép 2 cặp phải sửa `PermissionGuard` + shape route-census (kéo cả vùng crown vào); và muốn rút body thì phải **biết trước `messageId` UUID**, mà đường lấy id chính là cặp `view:chat-room` kẻ đó không có. Xem lại nếu guard có ngày hỗ trợ nhiều cặp.
+3. **Thiếu test deny theo CẶP QUYỀN** (mọi chủ thể test đều được cấp đủ 8 cặp; chỉ deny-path *membership* được phủ) — hạ cặp của một route ghi sẽ KHÔNG làm đỏ gì. Nên thêm `chat.permissions.spec.ts` đóng đinh route→cặp như `tasks.permissions.spec.ts`.
+4. LOW còn mở: `findRoomById` (0 caller, comment "KHÔNG lọc membership" — mồi cho BE-3..7) · `BODY_INVALID`/`EDIT_UNSUPPORTED` 0 caller · `listMembers`/`listPinned`/`listRoomsForUser` không LIMIT (nổ khi BE-5 đồng bộ thành viên dẫn xuất cả phòng ban) · `MESSAGE_NOT_FOUND` ra 2 mã HTTP (404 và 422) · `sendMessage` dựng DTO ở tx THỨ HAI (bị bớt khỏi phòng giữa 2 tx → 404 dù tin đã ghi) · nhánh idempotent của `recall` chạy TRƯỚC `assertCanRecall` (200 không xứng đáng, nhưng `body` đã bị che `null` nên không rò gì).
+
+### 6.3 Ghi nhớ vận hành
+
+3 int-spec CHAT gate bằng `describe.skipIf(!LANE_DB)`. Không có `LANE_DB` thì `pnpm test` báo **55 skipped, exit 0** — xanh-giả 100%. CI có `LANE_DB=mediaos` (`api.yml:221`) nên chạy thật. Verify tay PHẢI qua `harness/check.sh --lane-db`.

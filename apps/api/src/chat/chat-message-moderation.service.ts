@@ -6,6 +6,7 @@ import { ChatAccessService } from "./chat-access.service";
 import { ChatMessagesRepository } from "./chat-messages.repository";
 import { CHAT_AUDIT, CHAT_ERR, CHAT_MODULE_CODE } from "./chat.errors";
 import { assertCanRecall, assertPinBudget, assertPinnable } from "./chat-message-rules";
+import { assertNotArchived } from "./chat-room-rules";
 import { toChatMessageDto } from "./chat.mapper";
 import type { ChatActor } from "./chat-rooms.service";
 
@@ -38,6 +39,9 @@ export class ChatMessageModerationService {
   async recall(actor: ChatActor, messageId: string): Promise<ChatMessageDto> {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMessageAccess(tx, actor.companyId, messageId, actor.id);
+      // Phòng lưu trữ = CHỈ ĐỌC (CHAT-ERR-005). Đặt TRƯỚC nhánh idempotent: một phòng đã đóng thì cả
+      // lần bấm thứ hai cũng không được báo "thành công" cho một thao tác ghi không được phép.
+      assertNotArchived(acc.room);
       if (acc.message.recalledAt) return this.readDto(tx, actor, messageId);
 
       const now = new Date();
@@ -71,10 +75,14 @@ export class ChatMessageModerationService {
   async pin(actor: ChatActor, messageId: string): Promise<ChatMessageDto> {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMessageAccess(tx, actor.companyId, messageId, actor.id);
-      this.access.requireRoomAdmin(acc);
+      assertNotArchived(acc.room);
+      this.access.requirePinAuthority(acc);
       assertPinnable(acc);
       if (acc.message.pinnedAt) return this.readDto(tx, actor, messageId);
 
+      // Khoá phòng TRƯỚC khi đếm: `countPinned` → `setPinned` không khoá là TOCTOU, hai request cùng
+      // đọc 19 rồi cùng ghim ⇒ 21 tin ghim, cả hai 200, CHAT-ERR-008 bị phá trong im lặng.
+      await this.repo.lockRoom(tx, actor.companyId, acc.message.roomId);
       const pinned = await this.repo.countPinned(tx, actor.companyId, acc.message.roomId);
       assertPinBudget(pinned);
 
@@ -97,7 +105,8 @@ export class ChatMessageModerationService {
   async unpin(actor: ChatActor, messageId: string): Promise<ChatMessageDto> {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMessageAccess(tx, actor.companyId, messageId, actor.id);
-      this.access.requireRoomAdmin(acc);
+      assertNotArchived(acc.room);
+      this.access.requirePinAuthority(acc);
       if (!acc.message.pinnedAt) return this.readDto(tx, actor, messageId);
 
       await this.repo.setPinned(tx, actor.companyId, messageId, null);

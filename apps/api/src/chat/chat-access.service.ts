@@ -161,6 +161,22 @@ export class ChatAccessService {
   }
 
   /**
+   * Quyền GHIM trong phòng (CHAT-API-012a/b). = admin phòng **HOẶC** phòng `direct`.
+   *
+   * ⚠️ Vế `direct` KHÔNG phải nới lỏng cho tiện — thiếu nó thì ghim là tính năng CHẾT trong DM: thành
+   * viên DM luôn được insert `role:'member'` (`ChatRoomsService.openDirect`) và `assertManualMembership`
+   * chặn đổi vai trò trên phòng `direct` ⇒ một DM KHÔNG BAO GIỜ có admin ⇒ `/pin` luôn 403 và
+   * `/pinned` luôn rỗng, trong khi SPEC-15 CHAT-SCREEN-004 vẽ "tin đã ghim" cho MỌI loại phòng.
+   *
+   * An toàn vì DM đúng 2 người ngang vai, hành động đảo ngược được, và trần 20 vẫn áp. Vẫn phải qua
+   * `assertMessageAccess` trước — đây là hàm THUẦN trên kết quả đó, không phải điểm khẳng định thứ hai.
+   */
+  requirePinAuthority(access: ChatRoomAccess): void {
+    if (access.room.roomType === "direct") return;
+    this.requireRoomAdmin(access);
+  }
+
+  /**
    * S7-CHAT-BE-2 — cửa vào cho 3 route nhận `messageId` thay vì `roomId` (thu hồi · ghim · bỏ ghim).
    *
    * ⚠️ VÌ SAO KHÔNG viết `findMessage()` rồi `assertMember(msg.roomId)`: hai bước ⇒ hai thông điệp lỗi

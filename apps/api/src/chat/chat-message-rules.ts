@@ -78,20 +78,14 @@ export function assertCursorExclusive(beforeSeq?: number, afterSeq?: number): vo
   }
 }
 
-/**
- * Con trỏ đã đọc CHỈ TIẾN và không vượt thực tế (SPEC-15 §13.2 · CHAT-ERR-018).
+/*
+ * ⚠️ KHÔNG có `clampReadCursor()` ở đây nữa — CỐ Ý, đừng viết lại.
  *
- * Hai vế, mỗi vế bịt một lỗi khác nhau:
- *   • `Math.max(current, wanted)` — thiết bị chậm không kéo lùi trạng thái của thiết bị nhanh;
- *   • kẹp trần `lastMessageSeq` — client không tự đẩy con trỏ vượt số tin thật để "dọn" badge; nếu cho
- *     vượt thì tin gửi SAU đó sẽ bị tính là đã đọc mà người dùng chưa hề thấy.
- * Cả hai đều IM LẶNG (không lỗi): đây là đường chạy mỗi lần cuộn, báo lỗi ở đây chỉ tạo nhiễu.
+ * Bản cũ tính `Math.max(current, Math.min(wanted, ceiling))` ở JS từ số đọc bởi `assertMember` (một
+ * `SELECT` thường), rồi ghi bằng phép GÁN ĐÈ. Dưới READ COMMITTED, hai `POST /read` đồng thời đều đọc
+ * con trỏ CŨ và bên ghi sau thắng kể cả khi mang số nhỏ hơn ⇒ con trỏ LÙI trong im lặng, đúng thứ
+ * SPEC-15 §13.2 dựng ra để chặn. Cả hai vế giờ nằm trong câu UPDATE:
+ * `ChatMessagesRepository.advanceLastReadSeq` (`GREATEST(last_read_seq, LEAST($wanted, $ceiling))`).
+ *
+ * Hàm thuần ở tầng này KHÔNG thể giữ bất biến "chỉ tiến" — nó không thấy giao dịch song song.
  */
-export function clampReadCursor(
-  wanted: number,
-  current: number,
-  lastMessageSeq: number | null,
-): number {
-  const ceiling = lastMessageSeq ?? 0;
-  return Math.max(current, Math.min(wanted, ceiling));
-}

@@ -336,9 +336,11 @@ export class ChatRoomsService {
     actor: ChatActor,
     room: ChatRoomRow,
   ): Promise<string> {
-    if (room.deletedAt) {
+    const restoredRoom = Boolean(room.deletedAt);
+    if (restoredRoom) {
       await this.repo.restoreRoom(tx, actor.companyId, room.id);
     }
+    const reactivated: string[] = [];
     for (const userId of [actor.id, ...this.peerOf(room, actor)]) {
       const existing = await this.repo.findMemberRow(tx, actor.companyId, room.id, userId);
       if (!existing) {
@@ -349,9 +351,27 @@ export class ChatRoomsService {
           role: "member",
           addedBy: actor.id,
         });
+        reactivated.push(userId);
       } else if (existing.leftAt) {
         await this.repo.reactivateMember(tx, actor.companyId, existing.id, existing.role);
+        reactivated.push(userId);
       }
+    }
+
+    // Un-delete + kích hoạt lại thành viên KHÔNG được đi qua trong im lặng: `openDirect` chỉ ghi audit ở
+    // nhánh INSERT mới, nên không có dòng này thì đường làm-sống-lại dữ liệu đã xoá là đường DUY NHẤT
+    // của module không để lại vết (CLAUDE.md §8 · SPEC-15 §349).
+    // Không có gì đổi (DM đang sống, cả hai còn trong phòng) thì KHÔNG ghi — audit của một no-op là nhiễu.
+    if (restoredRoom || reactivated.length > 0) {
+      await this.audit.record(tx, {
+        action: CHAT_AUDIT.ROOM_DIRECT_RESTORED,
+        objectType: "chat_room",
+        objectId: room.id,
+        actorUserId: actor.id,
+        moduleCode: CHAT_MODULE_CODE,
+        resultStatus: "Success",
+        newValues: { roomType: "direct", restoredRoom, reactivatedUserIds: reactivated },
+      });
     }
     return room.id;
   }

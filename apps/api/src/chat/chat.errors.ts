@@ -127,6 +127,13 @@ export const CHAT_ERR = {
 export const CHAT_AUDIT = {
   ROOM_CREATED: "chat.room.created",
   ROOM_DIRECT_OPENED: "chat.room.direct_opened",
+  /**
+   * Bỏ tombstone của một DM đã xoá mềm + kích hoạt lại tư cách thành viên (`resurrectDirect`).
+   * KHÔNG gộp vào `direct_opened`: đây là hành động UN-DELETE trên dữ liệu đã bị xoá, và đó chính là
+   * loại hành động mà sổ audit sinh ra để trả lời "ai đã làm sống lại phòng này".
+   * `object_type` tái dùng `chat_room` (đã có trong CHECK) — cột `action` là text tự do, không cần migration.
+   */
+  ROOM_DIRECT_RESTORED: "chat.room.direct_restored",
   ROOM_UPDATED: "chat.room.updated",
   ROOM_ARCHIVED: "chat.room.archived",
   MEMBER_ADDED: "chat.room.member_added",
