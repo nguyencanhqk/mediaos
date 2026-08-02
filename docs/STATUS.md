@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-02 15:29Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-02 17:03Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -20,19 +20,34 @@
   - [ ] assertMember của WO này KHÔNG nhận tham số/cờ nào để bỏ qua membership. Đường đọc-vượt là service+controller RIÊNG ở S7-CHAT-BE-7 — giữ được tính chất 'đọc code là chứng minh được' cho đường đọc thường (API-13 §5.3 ràng buộc 1)
   - [ ] FULL gate (security-reviewer + silent-failure-hunter) PASS
 
+### 🔴 S7-CHAT-BE-2 — Tin nhắn: đọc theo con trỏ seq (cấm offset) · gửi idempotent theo clientMessageId · trả lời · thu hồi (15 phút / admin phòng) · ghim ≤20 · đánh dấu đã đọc chỉ-tiến + tổng chưa đọc
+- **zone**: red · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/api/src/chat/**`, `packages/contracts/src/chat.ts`, `apps/api/test/integration/**`, `docs/_review/S6-SEC-ROUTEMAP-1-route-census.json`, `docs/plans/S7-CHAT-BE-2.md`
+- **phụ thuộc**: S7-CHAT-BE-1⏳
+- **done_when (đích hội tụ)**:
+  - [ ] GET messages: beforeSeq HOẶC afterSeq (cả hai cùng lúc → CHAT-ERR-016), limit ≤ 100, sắp theo seq. CẤM offset ở mọi đường
+  - [ ] POST messages idempotent: clientMessageId trùng trong (company,room,sender) → trả ĐÚNG bản ghi cũ với 200, không tạo bản sao, không báo lỗi (CHAT-ERR-014); đua 2 request đồng thời vẫn đúng 1 hàng (dựa unique index, bắt 23505 → trả bản ghi cũ)
+  - [ ] Cập nhật chat_rooms.last_message_at/last_message_seq + tự nâng last_read_seq của người gửi TRONG CÙNG transaction
+  - [ ] Thu hồi: người gửi ≤ 15 phút (hằng số 1 chỗ, KHÔNG rải) hoặc admin phòng nhóm; DTO trả body:null + recalledAt; gỡ file_links của tin; audit
+  - [ ] POST /read: last_read_seq = GREATEST(cũ, seq); gửi số nhỏ hơn → bỏ qua IM LẶNG không lỗi (CHAT-ERR-018); test 2 thiết bị chứng minh không lùi
+  - [ ] GET /unread-count = tổng phép trừ, KHÔNG COUNT(*) trên chat_messages
+  - [ ] Ghim/bỏ ghim ≤ 20/phòng (CHAT-ERR-008 → 409); tin 'system' không ghim/thu hồi được
+  - [ ] Mention user ngoài phòng → loại khỏi mentions, KHÔNG chặn gửi, KHÔNG sinh notification (CHAT-ERR-010)
+  - [ ] RED-trước: sửa body qua mọi đường → từ chối (CHAT-ERR-007) · thu hồi tin người khác → 403 · gửi vào phòng đã archive → 409 · con trỏ sai → 422; int-spec trên LANE_DB
+  - [ ] FULL gate PASS
+
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
-- _(trống)_
+- 🔴 `S7-CHAT-RT-0` Hạ tầng WS: GẮN ValkeyIoAdapter (hiện định nghĩa rồi nhưng KHÔNG chỗ nào dùng) — Socket.IO đang chạy in-memory và KHÔNG có CORS ⇒ trình duyệt không nối được
 
 **CHỜ (kẹt phụ thuộc):**
-- `S7-CHAT-BE-2` Tin nhắn: đọc theo con trỏ seq (cấm offset) · gửi idempotent theo clientMessageId · trả lời · thu hồi (15 phút / admin phòng) · ghim ≤20 · đánh dấu đã đọc chỉ-tiến + tổng chưa đọc ⏳ cần: S7-CHAT-BE-1
 - `S7-CHAT-BE-3` Đính kèm tệp/ảnh qua FOUNDATION Files + ChatMessageFileResolver (BẮT BUỘC — FilePolicy fail-closed, thiếu resolver là tính năng chết trong im lặng) ⏳ cần: S7-CHAT-BE-2
 - `S7-CHAT-BE-4` Tìm kiếm toàn văn tiếng Việt (có dấu/không dấu) — LUÔN giới hạn theo phòng người tìm là thành viên; đây là đường đọc RỘNG NHẤT của module ⏳ cần: S7-CHAT-BE-2
-- `S7-CHAT-BE-5` Phòng tự động theo phòng ban + dự án: tạo/đóng phòng, đồng bộ thành viên tại sự kiện HR/TASK, job đối soát đêm idempotent sửa lệch ⏳ cần: S7-CHAT-BE-1
+- `S7-CHAT-BE-5` Phòng tự động theo phòng ban + dự án: tạo/đóng phòng, đồng bộ thành viên tại sự kiện HR/TASK (thu hồi chạy TRONG tx nguồn), job đối soát định kỳ idempotent sửa lệch ⏳ cần: S7-CHAT-BE-1
 - `S7-CHAT-BE-6` Thông báo CHAT qua OutboxNotificationBridge: mention gửi ngay + DM gộp lô 15 phút khi vắng mặt; tôn trọng muted_until; payload KHÔNG chứa nội dung tin ⏳ cần: S7-CHAT-BE-2
 - `S7-CHAT-RT-1` Realtime CHAT: join phòng SERVER-SIDE lúc handshake (không nhận danh sách từ client) · emit SAU commit · đồng bộ join/leave ngay khi membership đổi · giữ WS một chiều ⏳ cần: S7-CHAT-BE-2
-- `S7-CHAT-FE-1` Nền FE chat: contracts + api-client + store Zustand dùng chung + MỘT kết nối WS duy nhất cho toàn app shell (trang full-screen và panel nổi dùng chung) ⏳ cần: S7-CHAT-BE-2, S7-CHAT-RT-1
+- `S7-CHAT-FE-1` Nền FE chat: contracts + api-client + store Zustand dùng chung + MỘT kết nối WS duy nhất cho toàn app shell (trang full-screen và panel nổi dùng chung) ⏳ cần: S7-CHAT-BE-2, S7-CHAT-RT-1, S7-CHAT-RT-0
 - `S7-CHAT-FE-2` Trang /chat full-screen: 3 cột (danh sách phòng · hội thoại · thông tin phòng) + tạo nhóm/mở DM + gửi tin/tệp/ảnh + trả lời/ghim/thu hồi + đã xem ⏳ cần: S7-CHAT-FE-1, S7-CHAT-BE-3
 - `S7-CHAT-FE-3` Panel chat nổi toàn hệ thống (tối đa 3 hội thoại) + badge tổng chưa đọc trên header + lối vào sidebar, thay lối vào /chat tạm của LMS ⏳ cần: S7-CHAT-FE-2
 - `S7-CHAT-FE-4` Màn hình tìm kiếm tin nhắn (nhảy tới tin trong ngữ cảnh) + tab tệp/tin ghim/thành viên trong bảng thông tin phòng ⏳ cần: S7-CHAT-FE-2, S7-CHAT-BE-4
@@ -49,7 +64,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `wave/s7-chat` · **file đang đổi (dirty)**: 8
+- **branch**: `wave/s7-chat` · **file đang đổi (dirty)**: 9
 - **migration head**: idx 206 — `0539_s7chatdb2_room_seq` (207 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -58,6 +73,9 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `631d683e` | 2026-08-03 | fix(chat): vá FULL gate S7-CHAT-BE-1/BE-2 — 1 HIGH + 5 MEDIUM |
+| `54b4d8cd` | 2026-08-02 | feat(chat): S7-CHAT-BE-2 — tin nhắn (CHAT-API-009..014, 016) |
+| `c77f48e0` | 2026-08-02 | feat(chat): S7-CHAT-BE-1 — ChatAccessService + phòng/thành viên (CHAT-API-001..008) |
 | `4c5c2da6` | 2026-08-02 | feat(chat): S7-CHAT-DB-2 (mig 0539) — room_seq per-room, sửa công thức đếm chưa đọc SAI |
 | `7822abd7` | 2026-08-02 | feat(chat): khối (F′) — cấp 10 cặp CHAT cho role đang giữ toàn bộ catalog |
 | `d28d69e8` | 2026-08-02 | fix(chat): vá FULL gate cho S7-CHAT-DB-1 — 3 HIGH + 9 MEDIUM |
@@ -67,9 +85,6 @@
 | `9d0eb5b3` | 2026-08-02 | docs(release): accrual ĐÃ chạy thật trên PROD — 245 ngày/41 NV, chặn go-live về phép đã gỡ |
 | `e1eebddd` | 2026-08-02 | docs(release): KI-058 (4 màn quản trị LEAVE ẩn) + G9 = v1.0.0-rc.3 @ 30540ab0 |
 | `30540ab0` | 2026-08-02 | fix(perm): 4 màn quản trị LEAVE không vào được từ UI — thiếu allowlist cặp nhạy cảm (#325) |
-| `d759c1bc` | 2026-08-02 | docs(release): G9 xong — v1.0.0-rc.2 @ a968fcfe; rc.1 KHÔNG dùng để rollback |
-| `a968fcfe` | 2026-08-02 | fix(leave+ops): mã loại nghỉ UPPERCASE không lưu được · key i18n treo · ô cutover báo NO-GO giả (#324) |
-| `6f160b9a` | 2026-08-02 | docs(release): bằng chứng G4/G5/G6 + nghiệm thu engine phép 245 ngày ĐẠT |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

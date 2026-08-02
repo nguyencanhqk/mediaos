@@ -60,7 +60,7 @@ CHAT **không sở hữu** dữ liệu của module khác: nhân sự vẫn thu�
 | `project` | Hệ thống (theo `projects` của TASK) | **Dẫn xuất** từ `project_members` | Không rời, không xoá |
 
 - **Thủ công** = `chat_room_members` là nguồn sự thật, người quản trị phòng ghi trực tiếp.
-- **Dẫn xuất** = `chat_room_members` là **cache đồng bộ** từ module nguồn; đồng bộ tại sự kiện (thêm/bớt nhân sự, đổi phòng ban, thêm/bớt project member) + **job đối soát đêm** sửa lệch. Người dùng không tự thêm/bớt được (CHAT-ERR-012).
+- **Dẫn xuất** = `chat_room_members` là **cache đồng bộ** từ module nguồn; đồng bộ tại sự kiện (thêm/bớt nhân sự, đổi phòng ban, thêm/bớt project member) + **job đối soát định kỳ** sửa lệch. Người dùng không tự thêm/bớt được (CHAT-ERR-012).
 - Loại `channel` của bản chat cũ (media, G10) **bị loại bỏ** cùng đợt de-media-fy — xem §5.3.
 
 ### 3.2 Thành viên phòng LÀ ranh giới quyền — không phải data_scope
@@ -147,7 +147,7 @@ CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ 
 | --- | --- | --- |
 | Phòng 1-1 | Mở chat riêng với bất kỳ nhân viên nào trong công ty, idempotent theo `direct_key` | Chat 1-1 |
 | Phòng nhóm | Tạo/đổi tên/thêm-bớt thành viên/rời/lưu trữ | Chat nhóm |
-| Phòng ban | Phòng tự động theo `org_units`, thành viên dẫn xuất + đối soát đêm | Chat theo phòng ban |
+| Phòng ban | Phòng tự động theo `org_units`, thành viên dẫn xuất + đối soát định kỳ | Chat theo phòng ban |
 | Dự án | Phòng tự động theo `projects`, thành viên dẫn xuất từ `project_members` | Chat theo dự án |
 | Gửi tệp | Đính kèm qua FOUNDATION Files + resolver quyền riêng của CHAT | Gửi file |
 | Gửi hình ảnh | Cùng đường tệp + xem trước ảnh (thumbnail ký hạn ngắn) | Gửi hình ảnh |
@@ -204,7 +204,7 @@ CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ 
 | AUTH | permission `CHAT.*`; token access dùng lại cho handshake WS; khoá/vô hiệu user → cắt phiên WS | CHAT ← AUTH |
 | HR | `employees` (danh bạ chọn người nhắn), `org_units` (phòng tự động), sự kiện đổi phòng ban → đồng bộ thành viên | CHAT ← HR |
 | TASK | `projects` + `project_members` (phòng dự án tự động); dự án đóng/xoá → lưu trữ phòng | CHAT ← TASK |
-| FOUNDATION | Files (đính kèm + resolver quyền), `audit_logs`, `sequence_counters` (mã phòng), system-jobs (đối soát đêm) | CHAT ← FOUNDATION |
+| FOUNDATION | Files (đính kèm + resolver quyền), `audit_logs`, `sequence_counters` (mã phòng), system-jobs (đối soát định kỳ) | CHAT ← FOUNDATION |
 | NOTI | phát `CHAT_MENTIONED` · `CHAT_DIRECT_MESSAGE` qua OutboxNotificationBridge | CHAT → NOTI |
 | ME | badge tổng số tin chưa đọc trên header; `muted_until` hiển thị trong tuỳ chọn cá nhân | CHAT → ME |
 | LMS | thay lối vào `/chat` tạm hiện tại của LMS bằng CHAT nội bộ (ghi chú S5-LMS-UI-4) | CHAT → LMS |
@@ -273,7 +273,7 @@ Chi tiết cột/kiểu/constraint: [DB-12](<../DB/DB-12 CHAT Database Design.md
 | CHAT-FUNC-002 | Tạo & quản trị phòng nhóm | tạo · đổi tên/mô tả · thêm/bớt thành viên · phong admin · rời · lưu trữ |
 | CHAT-FUNC-003 | Phòng ban tự động | tạo/đóng theo `org_units`; thành viên dẫn xuất từ nhân sự đang làm việc |
 | CHAT-FUNC-004 | Dự án tự động | tạo/đóng theo `projects`; thành viên dẫn xuất từ `project_members` |
-| CHAT-FUNC-005 | Đồng bộ thành viên + đối soát đêm | tại sự kiện + job idempotent so khớp lại toàn bộ phòng dẫn xuất (§13.3) |
+| CHAT-FUNC-005 | Đồng bộ thành viên + đối soát định kỳ | tại sự kiện + job idempotent so khớp lại toàn bộ phòng dẫn xuất (§13.3) |
 | CHAT-FUNC-006 | Gửi tin nhắn | text/file, mention, trả lời, chống trùng theo `client_message_id` |
 | CHAT-FUNC-007 | Đính kèm tệp & ảnh | presign upload → link vào tin nhắn qua `file_links` (§13.5) |
 | CHAT-FUNC-008 | Đọc lịch sử | phân trang theo con trỏ `seq` (trước/sau), không dùng offset |
@@ -392,7 +392,16 @@ projects đóng/xoá mềm          kết thúc dự án                  lưu t
 ```
 
 - Đồng bộ chạy **trong cùng transaction** với thao tác nguồn khi rẻ; nếu module nguồn không tiện gọi trực tiếp thì đi qua outbox.
-- **Job đối soát đêm** (`@SystemJobHandler`, idempotent — mẫu `retention-cleanup.job-handler.ts`) so khớp lại toàn bộ phòng dẫn xuất với nguồn và sửa lệch; lệch > 0 → log cảnh báo kèm số phòng/số thành viên. Đây là lưới an toàn cho mọi đường ghi bị bỏ sót.
+- **Job đối soát định kỳ** (`@SystemJobHandler`, idempotent — mẫu `retention-cleanup.job-handler.ts`) so khớp lại toàn bộ phòng dẫn xuất với nguồn và sửa lệch; lệch > 0 → log cảnh báo kèm số phòng/số thành viên. Đây là lưới an toàn cho mọi đường ghi bị bỏ sót.
+
+> **Làm rõ 02/08/2026 — owner chốt, đọc trước khi thi công `S7-CHAT-BE-5`:**
+>
+> 1. **"Đêm" là chữ sai, đã sửa thành "định kỳ".** Hệ **không có cron**: mọi `@SystemJobHandler` chạy chung một `setInterval` (`apps/api/src/scheduler/worker-scheduler.config.ts`), và PROD đặt `SYSTEM_JOBS_POLL_MS=900000` — **15 phút** (`.env.prod:9`; chỉ `.env.example` để 60000). Ai đọc "đêm" rồi đi tìm cron sẽ không thấy gì.
+> 2. **Đường THU HỒI quyền chạy trong CÙNG transaction nguồn** — rời phòng khi đổi phòng ban · nghỉ việc · unlink · bớt `project_members`. Cửa sổ lệch phải bằng **0**, không được dựa vào job (15 phút là quá rộng cho một thao tác thu hồi quyền đọc). Hỏng ở nhánh này phải **LOUD** (log ERROR + audit `resultStatus='Failure'`), cấm nuốt bằng `logger.warn`.
+> 3. **Đường TẠO PHÒNG được phép ngoài transaction nguồn** — cấp `room_code` đi qua `SequenceService.nextCode()` vốn tự mở `withTenant` nên **không lồng được** vào tx nghiệp vụ (xem jsdoc `chat-room-code.service.ts`); phải cấp mã TRƯỚC khi mở tx, chấp nhận phí số khi rollback (hành vi đã có ở `task`). Thiếu một phòng ≠ rò quyền đọc, nên đánh đổi này an toàn còn ở mục 2 thì không.
+> 4. Riêng `OrgService.createOrgUnit`: `OrgRepository.createOrgUnit` **không nhận `tx`** (`org.repository.ts:89`, tự mở `withTenant`) — muốn đồng bộ cùng tx thì phải nới chữ ký repo trước; nếu không thì ghi rõ writer này nằm ngoài tx.
+> 5. Vị từ "tập thành viên mong muốn" phải **DUY NHẤT**, dùng chung cho cả hook lẫn job. Với phòng `project` bắt buộc kèm `employee_profiles.status='active' AND deleted_at IS NULL` — thiếu vế này thì nhịp job kế tiếp **join lại người vừa nghỉ việc** (vì `changeStatus` không chạm `project_members`).
+
 - Rời phòng dẫn xuất = set `left_at`, **giữ lại hàng** để còn biết "từng ở đây" (và để `visible_from_seq` phase sau có nghĩa). Mọi truy vấn membership phải lọc `left_at IS NULL` — thiếu điều kiện này là lỗ đọc sau khi rời phòng.
 
 ### 13.4 Lịch sử trước khi tham gia
@@ -556,7 +565,7 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 - Tìm kiếm toàn văn trong phạm vi phòng của một người < 800ms ở quy mô ~1 triệu tin.
 - Độ trễ tin từ lúc commit tới lúc hiện ở máy người nhận < 1 giây khi WS bật.
 - Danh sách phòng + số chưa đọc **một truy vấn**, không N+1 (đó là lý do có `last_message_seq` trên `chat_rooms`).
-- Job đối soát đêm là **system-jobs handler** (`@SystemJobHandler` + DiscoveryService — không dùng BullMQ trực tiếp), idempotent. Nhớ: `SchedulerModule` phải import tường minh module chứa handler, và tham số không phải Nest DI trong handler cần `@Optional()` (memory `systemjobhandler-optional-dbw-di` — thiếu là sập `AppModule`, kéo đỏ hàng trăm int-spec).
+- Job đối soát định kỳ là **system-jobs handler** (`@SystemJobHandler` + DiscoveryService — không dùng BullMQ trực tiếp), idempotent. Nhớ: `SchedulerModule` phải import tường minh module chứa handler, và tham số không phải Nest DI trong handler cần `@Optional()` (memory `systemjobhandler-optional-dbw-di` — thiếu là sập `AppModule`, kéo đỏ hàng trăm int-spec).
 - i18n: toàn bộ nhãn tiếng Việt qua react-i18next namespace `chat`.
 - Panel nổi: **một** kết nối WS cho cả app; mở/đóng panel không tạo kết nối mới.
 
