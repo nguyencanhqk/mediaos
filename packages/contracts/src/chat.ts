@@ -1,13 +1,8 @@
 import { z } from "zod";
 
-// G10-1: mở rộng room_type (project/direct giữ nguyên + group/channel/department cho auto-room G10-2).
-export const chatRoomTypeSchema = z.enum([
-  "project",
-  "direct",
-  "group",
-  "channel",
-  "department",
-]);
+// S7-CHAT-DB-1 (mig 0538 · CHAT-DEC-001): BỎ 'channel' — cụm media out-of-scope sau de-media-fy.
+// Đổi CÙNG COMMIT với migration đổi CHECK chat_rooms_room_type_chk, nếu không FE/BE lệch DB.
+export const chatRoomTypeSchema = z.enum(["direct", "group", "department", "project"]);
 export type ChatRoomType = z.infer<typeof chatRoomTypeSchema>;
 
 export const chatRoomSchema = z.object({
@@ -15,15 +10,27 @@ export const chatRoomSchema = z.object({
   companyId: z.string().uuid(),
   refId: z.string().uuid().nullable(),
   roomType: chatRoomTypeSchema,
-  name: z.string(),
+  // ⚠️ NULLABLE: phòng `direct` không có tên (mig 0538 DROP NOT NULL) — client dựng tên từ 2 người.
+  // Thiếu .nullable() ở đây là ZodError runtime DÙ HTTP 200 (lớp server-masking-needs-optional-fe-schema).
+  name: z.string().nullable(),
+  roomCode: z.string(),
+  description: z.string().nullable().optional(),
+  lastMessageAt: z.string().datetime().nullable().optional(),
+  lastMessageSeq: z.number().int().nullable().optional(),
+  isArchived: z.boolean().optional(),
+  /** Số tin chưa đọc của người gọi = lastMessageSeq − lastReadSeq (SPEC-15 §13.2). */
+  unreadCount: z.number().int().nonnegative().optional(),
   createdAt: z.string().datetime(),
 });
 export type ChatRoomDto = z.infer<typeof chatRoomSchema>;
 
+// Chỉ tạo được phòng NHÓM qua đường này: `direct` mở bằng POST /chat/rooms/direct (idempotent theo
+// direct_key), `department`/`project` do hệ thống tự dựng (thành viên dẫn xuất — CHAT-DEC-003).
 export const createChatRoomSchema = z.object({
   name: z.string().min(1).max(200),
-  roomType: chatRoomTypeSchema.default("direct"),
-  refId: z.string().uuid().optional(),
+  roomType: z.literal("group").default("group"),
+  description: z.string().max(500).optional(),
+  memberUserIds: z.array(z.string().uuid()).default([]),
 });
 export type CreateChatRoomRequest = z.infer<typeof createChatRoomSchema>;
 
