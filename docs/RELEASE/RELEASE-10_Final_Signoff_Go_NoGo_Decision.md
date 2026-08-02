@@ -147,18 +147,35 @@ Phát hiện khi đối chiếu `RELEASE-09` §4 với thực tế máy. Ghi ở
 
 Thứ tự bắt buộc — đảo là dẫm vào landmine `dist` dùng chung (`RELEASE-08` §3).
 
-| # | Việc | Lệnh | Mở cổng nào | Ai |
-| --- | --- | --- | --- | --- |
-| G1 | Enroll TOTP cho 4 tài khoản `SA` | App `/me/security/2fa` | **KI-056** ⇒ `S2` về 3 | 4 người đó |
-| G2 | Backup trước khi đụng schema | `DATABASE_DIRECT_URL=… BACKUP_DIR=./backups bash scripts/backup-db.sh` | an toàn cho G3 | Owner |
-| G3 | Deploy PROD lên `0535` | `m prod-update api` | ô #8 (hết tồn đọng) · warn migration | Owner |
-| G4 | **Cutover** (tách PROD khỏi `dist`) | `m prod-cutover` | **KI-016**; mở khoá G5 an toàn | Owner (**Administrator**) |
-| G5 | Dựng staging | `m dev-online-db` → `m dev-online-fast` | tiền đề `RC-003`/`RC-004` | Owner |
-| G6 | Regression P0 + smoke trên staging | `node scripts/release-smoke.mjs --base http://localhost:3200/api/v1 --strict` | **`RC-003`** · **`RC-004`** ⇒ ô #4 · #8 | Owner |
-| G7 | Đăng ký 2 scheduled task (bản đã sửa) | `RELEASE-11` §6.2 | ô #12 · phần còn lại **KI-050** | Owner (**Administrator**) |
-| G8 | Ký UAT | `RELEASE-04` | ô #5 | Business owner |
-| G9 | Cắt tag RC | `RELEASE-08` §2 | ô #2 | Owner |
-| G10 | Gửi thông báo go-live | `RELEASE-08` §7 | ô #14 | Owner |
+| # | Việc | Lệnh | Mở cổng nào | Ai | Trạng thái |
+| --- | --- | --- | --- | --- | --- |
+| G1 | Enroll TOTP cho 4 tài khoản `SA` | App `/me/security/2fa` | **KI-056** ⇒ `S2` về 3 | 4 người đó | ⬜ |
+| G2 | Backup trước khi đụng schema | `DATABASE_DIRECT_URL=… BACKUP_DIR=./backups bash scripts/backup-db.sh` | an toàn cho G3 | Owner | ✅ `backups/mediaos-20260802-010032.dump` |
+| G3 | Deploy PROD lên head | `m prod-update api` | ô #8 (hết tồn đọng) · warn migration | Owner | ✅ PROD **205/205 @ `0537`** |
+| G4 | **Cutover** (tách PROD khỏi `dist`) | `m prod-cutover` | **KI-016**; mở khoá G5 an toàn | Owner (**Administrator**) | ✅ **ĐÃ XONG** — chứng minh bằng thực nghiệm |
+| G5 | Dựng staging | clone PROD → `mediaos_dev` → `m dev-online-fast` | tiền đề `RC-003`/`RC-004` | Owner | ✅ trên **dữ liệu PROD thật** |
+| — | **Nghiệm thu engine cộng dồn phép** | `GET /leave/admin/accrual/preview` | chặn 422 ngày đầu | Owner | ✅ **245 ngày / 41 NV** |
+| G6 | Regression P0 + smoke trên staging | `node scripts/release-smoke.mjs --base http://localhost:3200/api/v1 --strict` | **`RC-003`** ⇒ ô #4 | Owner | ✅ **10 PASS · 0 FAIL · 0 SKIP** |
+| G7 | Đăng ký 2 scheduled task (bản đã sửa) | `RELEASE-11` §6.2 | ô #12 · phần còn lại **KI-050** | Owner (**Administrator**) | ⬜ |
+| G8 | Ký UAT | `RELEASE-04` | ô #5 | Business owner | ⬜ |
+| G9 | Cắt tag RC | `RELEASE-08` §2 | ô #2 | Owner | ⬜ chờ deploy sạch |
+| G10 | Gửi thông báo go-live | `RELEASE-08` §7 | ô #14 | Owner | ⬜ |
+
+> **Bằng chứng G4 · G5 · G6 + nghiệm thu:** `docs/_review/S6-GOLIVE-G4-G6-EVIDENCE-2026-08-02.md`.
+>
+> **Ba đính chính bảng này (đo 2026-08-02, đừng đọc bản cũ):**
+>
+> 1. **Ô #8 sai** — PROD KHÔNG tồn đọng `0535`; đang ở head **`0537`, 205/205**.
+> 2. **G4 đã xong từ trước** nhưng `m prod-status` báo ngược, vì `Show-ReleaseStatus` đọc `ImagePath`
+>    (với NSSM luôn là `nssm.exe`, không bao giờ khớp `releases`) thay vì subkey `Parameters\AppParameters`.
+>    Đây là **tín hiệu NO-GO GIẢ** đã tính vào phán quyết 2026-07-31. Vá ở PR #324.
+> 3. **`RC-004` (migration trên staging) không áp dụng được** — PROD đã ở head nên không còn migration
+>    nào đang chờ để diễn tập. G6 vì thế chỉ đóng `RC-003`.
+>
+> ⚠️ **Chặn go-live mới, KHÔNG nằm trong G1…G10:** PROD có `DEFAULT_ANNUAL.accrual_method='None'` và
+> `leave_balances` = **0 dòng**, trong khi `ANNUAL` vẫn `deduct_balance=true` ⇒ **mọi đơn nghỉ phép năm
+> trả 422 `BALANCE_NOT_ENOUGH`** ngay ngày đầu. Engine đã deploy nhưng đang ngủ; bật công tắc là quyết
+> định của owner (xem §3.3 của file bằng chứng để biết chính xác điều gì sẽ xảy ra).
 
 **Sau G1…G10:** 15/15 ô §2 ĐẠT hoặc chấp nhận-có-chữ-ký ⇒ phán quyết chuyển **GO**.
 
