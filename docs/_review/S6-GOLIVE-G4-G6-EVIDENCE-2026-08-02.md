@@ -229,6 +229,37 @@ RED-first: bỏ bản vá regex ⇒ ca mới đỏ đúng lý do (`updateTypeAdm
 
 ---
 
+## 6b. ĐÃ CHẠY THẬT TRÊN PROD (2026-08-02 07:10Z) — chặn go-live đã GỠ
+
+Owner bật `DEFAULT_ANNUAL.accrual_method = Monthly` lúc `06:58:50Z` qua màn `/leave/policies` (vào được
+sau khi `KI-058` / PR #325 lên PROD). Job `LEAVE_ACCRUAL` chạy ở nhịp kế:
+
+```
+status=Success  total_items=245  success_items=245  failed_items=0
+metadata: {"granted":245,"grantedDays":245,"failed":0,"policies":1,
+           "employeesScanned":45,"alreadyGranted":0,
+           "skippedByReason":{"MISSING_START_DATE":1}}
+```
+
+**Khớp staging đến từng dòng:**
+
+| Nguồn | PROD | Staging |
+| --- | --- | --- |
+| preview / job (`grantedDays`) | **245** | 245 |
+| `leave_balances` | **41 dòng · 245.0** | 41 · 245.0 |
+| `leave_balance_transactions` | **245 dòng · 245.00** | 245 · 245.00 |
+| phân bố | `30×7 · 2×5 · 3×4 · 3×3 · 1×2 · 2×1` | y hệt |
+| không được cấp | `1111`·`1119`·`1129` (nghỉ trước 2026) + `1136` (`MISSING_START_DATE`) | y hệt |
+
+⚠️ **Ba lần chạy 06:15/06:30/06:45 trả `total=0` KHÔNG phải hỏng** — chúng chạy TRƯỚC khi công tắc được
+bật (06:58:50Z). Và nhịp bị **reset theo lần khởi động API**: API restart lúc `06:55:54Z` nên nhịp đầu
+sau đó rơi vào `07:10:54Z`, không phải `07:00`. Khi chờ job: tính nhịp từ **giờ boot**, đừng tính từ lần
+chạy trước.
+
+**Việc còn lại của HR:** điền `start_date` cho `1136` — engine tự bù ở nhịp sau, không cần thao tác gì thêm.
+
+---
+
 ## 7. Chốt lại tình trạng PROD tại thời điểm viết
 
 | Đo | Giá trị |

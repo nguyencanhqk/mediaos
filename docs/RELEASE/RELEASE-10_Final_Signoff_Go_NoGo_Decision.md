@@ -193,10 +193,13 @@ Thứ tự bắt buộc — đảo là dẫm vào landmine `dist` dùng chung (`
 > 3. **`RC-004` (migration trên staging) không áp dụng được** — PROD đã ở head nên không còn migration
 >    nào đang chờ để diễn tập. G6 vì thế chỉ đóng `RC-003`.
 >
-> ⚠️ **Chặn go-live mới, KHÔNG nằm trong G1…G10:** PROD có `DEFAULT_ANNUAL.accrual_method='None'` và
-> `leave_balances` = **0 dòng**, trong khi `ANNUAL` vẫn `deduct_balance=true` ⇒ **mọi đơn nghỉ phép năm
-> trả 422 `BALANCE_NOT_ENOUGH`** ngay ngày đầu. Engine đã deploy nhưng đang ngủ; bật công tắc là quyết
-> định của owner (xem §3.3 của file bằng chứng để biết chính xác điều gì sẽ xảy ra).
+> ✅ **Chặn go-live về phép ĐÃ GỠ (2026-08-02 07:10Z).** Owner bật
+> `DEFAULT_ANNUAL.accrual_method = Monthly` qua `/leave/policies` (vào được sau khi `KI-058`/PR #325 lên
+> PROD); job `LEAVE_ACCRUAL` cấp **245 ngày cho 41 NV**, `failed=0`. Ba nguồn khớp tuyệt đối:
+> job `grantedDays=245` = `leave_balances` 41 dòng/**245.0** = sổ cái `ACCRUAL` 245 dòng/**245.00** —
+> **đúng bằng số nghiệm thu đo trước trên staging**. Không được cấp: `1111`/`1119`/`1129` (nghỉ trước
+> 2026) + `1136` (`MISSING_START_DATE`, bỏ qua **kèm báo cáo**). Chi tiết: §6b của file bằng chứng.
+> **Còn lại cho HR:** điền `start_date` cho `1136` — engine tự bù ở nhịp sau.
 
 **Sau G1…G10:** 15/15 ô §2 ĐẠT hoặc chấp nhận-có-chữ-ký ⇒ phán quyết chuyển **GO**.
 
