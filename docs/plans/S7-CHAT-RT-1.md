@@ -4,22 +4,25 @@
 > **Nguồn sự thật:** [SPEC-15 §3.5 · §13.8](<../SPEC/SPEC-15 CHAT.md>) · [API-13 §7](<../API Design/API-13_CHAT_API_Design.md>) · `apps/api/src/realtime/**` (hạ tầng đã ship) · `apps/api/src/chat/**` (BE-1 + BE-2, **đã commit**, xem đo thật §0) · [`S7-CHAT-BE-2.md`](S7-CHAT-BE-2.md) (chỗ tuyên bố "chừa nguyên") · `harness/backlog.mjs` (done_when RT-1, owner chốt 02/08/2026)
 > **Nhánh:** tạo `wo/s7-chat-rt1` từ `wave/s7-chat`, PR **vào** `wave/s7-chat` (KHÔNG commit thẳng lên `wave/s7-chat`, KHÔNG bao giờ vào `master`) — `docs/plans/S7-CHAT-WAVE.md:98-100`. `autoMerge` TẮT (WAVE §4 dòng 100).
 > **Lập ngày:** 02/08/2026 · **rev 2** — vá 9 điều kiện gỡ BLOCK từ HAI `plan-reviewer` độc lập (rev 1 bị BLOCK cả hai) + các mục MEDIUM kèm theo. Không đụng code, chỉ viết lại plan.
+> **Neo lại (re-anchor) 03/08/2026 lên `104294bd`** — rev 2 gốc đo tại `54b4d8cd`, TRƯỚC khi `631d683e` (vá FULL gate BE-1/BE-2) xoá `clampReadCursor`, thêm `assertNotArchived` vào `recall`, thêm khối `audit.record` vào `resurrectDirect`. Đợt này chỉ đo lại `file:line` + viết lại 3 khối pseudo-code toàn-thân (§1.6.1, §1.9b, §1.9c) thành điểm-chèn + danh sách CẤM đụng theo code thật — **KHÔNG đổi quyết định thiết kế/chiến lược test/phạm vi**. ⚠️ **6 mục BLOCK từ 2 vòng `plan-reviewer` độc lập vẫn CÒN MỞ** (cổng quyền bị `syncRoomMembership` đi vòng · `chat:room` phát qua `userRoomName` thay vì đích chuyên biệt · bước (C) re-check nằm ngoài `try/catch` · `join`/`leave` không `await` · ca test 9 và ca test 2 không tự chứng minh được RED · thiếu positive control) — để nguyên cho vòng review kế tiếp, KHÔNG vá ở đợt neo lại này.
 
 ---
 
-## 0. Đo thật trước khi thiết kế — đo lại 100% lúc viết rev 2
+## 0. Đo thật trước khi thiết kế — đo lại 100% lúc RE-ANCHOR 03/08/2026
 
-**Commit-sha đo lúc viết rev 2:** `git log --oneline -5` tại HEAD của `wave/s7-chat`:
+**Commit-sha đo lúc RE-ANCHOR:** `git log --oneline -5` tại HEAD của `wave/s7-chat`:
 
 ```text
+104294bd docs(chat): CHAT-DEC-013 + 6 micro-plan wave S7 (5 rev 2 + RT-0 mới) + đồng bộ backlog/STATUS
+631d683e fix(chat): vá FULL gate S7-CHAT-BE-1/BE-2 — 1 HIGH + 5 MEDIUM
 54b4d8cd feat(chat): S7-CHAT-BE-2 — tin nhắn (CHAT-API-009..014, 016)
 c77f48e0 feat(chat): S7-CHAT-BE-1 — ChatAccessService + phòng/thành viên (CHAT-API-001..008)
 4c5c2da6 feat(chat): S7-CHAT-DB-2 (mig 0539) — room_seq per-room, sửa công thức đếm chưa đọc SAI
-7822abd7 feat(chat): khối (F′) — cấp 10 cặp CHAT cho role đang giữ toàn bộ catalog
-d28d69e8 fix(chat): vá FULL gate cho S7-CHAT-DB-1 — 3 HIGH + 9 MEDIUM
 ```
 
-`git status --short` lúc đo: chỉ 3 file M ngoài phạm vi RT-1 (`docs/SPEC/SPEC-15 CHAT.md`, `docs/plans/S7-CHAT-WAVE.md`, `harness/backlog.mjs` — quyết định owner, không phải code). **`apps/api/src/chat/**` đã commit sạch, không còn nằm trong working tree.**
+`git status --short` lúc RE-ANCHOR: **SẠCH** (0 file M/??). Cây làm việc khớp đúng `wave/s7-chat` HEAD.
+
+⚠️ **`631d683e` đã vào nhánh SAU khi rev 2 đo (`54b4d8cd`) nhưng TRƯỚC lần neo lại này** — vá 1 HIGH ("con trỏ đã đọc LÙI ĐƯỢC") + 5 MEDIUM trên đúng vùng `apps/api/src/chat/**` mà rev 2 mô tả bằng pseudo-code. Cụ thể: **xoá hẳn `clampReadCursor`** (bia mộ giải thích lý do ở `chat-message-rules.ts:81-91`) và thay bằng `ChatMessagesRepository.advanceLastReadSeq` (GREATEST/LEAST NGAY TRONG câu UPDATE); **thêm `assertNotArchived(acc.room)`** vào đầu `ChatMessageModerationService.recall`, đặt TRƯỚC nhánh idempotent; **thêm khối `audit.record` + cổng `if (restoredRoom || reactivated.length > 0)`** vào `resurrectDirect`. Ba khối pseudo-code toàn-thân ở §1.6.1/§1.9b/§1.9c bên dưới đã được viết lại thành điểm-chèn + danh sách CẤM đụng theo đúng code hiện có — không còn dựng lại thân hàm giả định.
 
 ⚠️ **Khác rev 1:** rev 1 đo lúc `S7-CHAT-BE-1` còn nằm ở working tree chưa commit và `S7-CHAT-BE-2` **chưa tồn tại**. Cả hai giờ đã commit. §1.9 của rev 1 (viết phần nhắn tin như "hợp đồng tích hợp giả định") **sai theo thời gian** — BE-2 là code thật, đọc được, và tự tuyên bố "chừa nguyên" phần emit (xem hàng 18 dưới). rev 2 thay bằng bảng ánh xạ cứng vào đúng dòng code thật.
 
@@ -41,13 +44,13 @@ d28d69e8 fix(chat): vá FULL gate cho S7-CHAT-DB-1 — 3 HIGH + 9 MEDIUM
 | 14 | 0 cơ chế "kick-on-lock" một socket đang sống | Grep `disconnect` toàn `apps/api/src` chỉ khớp nhánh handshake fail-closed. `auth/**` NGOÀI `paths` của WO này | `realtime.gateway.ts:90` · `env.schema.ts:64` (`ACCESS_TOKEN_TTL_SEC` default 900s) |
 | 15 | Khuôn test WS+DB colocated (KHÔNG ở `test/integration/`) | `realtime.gateway.spec.ts` + `realtime.gateway.io.spec.ts` nằm **`apps/api/src/realtime/`** (memory `vitest-unit-specs-must-be-colocated`) — server+client Socket.IO thật nhưng **không có DB/AppModule**. `apps/api/test/integration/chat-be1-*.int-spec.ts` + `chat-be2-messages.int-spec.ts` có `AppModule`+`LANE_DB` thật nhưng **không có WS**. RT-1 cần cả hai — file mới đặt `apps/api/test/integration/chat-rt1-*.int-spec.ts` theo đúng khuôn đặt tên đã có | `apps/api/src/realtime/realtime.gateway.io.spec.ts:39-69` · `apps/api/test/integration/chat-be1-access.int-spec.ts:23-44` |
 | 16 | Comment đầu 3 file realtime sẽ SAI sau khi RT-1 ship | `realtime.gateway.ts:29-31`, `realtime.module.ts:13`, `realtime-emitter.service.ts:20` đều viết "cụm chat = out-of-scope đã gỡ" — **không đổi từ rev 1**, vẫn phải sửa cùng lúc | như trên |
-| 17 🆕 | **BE-2 đã là code thật, đọc được, VÀ tự tuyên bố không emit** | `ChatMessagesService.sendMessage` (tx tại `chat-messages.service.ts:91-146`, xử lý race tại `:147-164`), `.markRead` (`:173-190`); `ChatMessageModerationService.recall` (`:38-68`). Docstring BE-2 nói thẳng: *"`RealtimeEmitterService` đã tồn tại, nhưng WS là `S7-CHAT-RT-1`. Emit ở đây sẽ (a) thiếu room join server-side nên không ai nhận, (b) dễ bị viết TRONG tx… Chừa nguyên."* | `docs/plans/S7-CHAT-BE-2.md:106-108` |
+| 17 🆕 | **BE-2 đã là code thật, đọc được, VÀ tự tuyên bố không emit** | `ChatMessagesService.sendMessage` (tx tại `chat-messages.service.ts:92-154`, xử lý race tại `:155-172`), `.markRead` (`:184-204`); `ChatMessageModerationService.recall` (`chat-message-moderation.service.ts:39-72`). Docstring BE-2 nói thẳng: *"`RealtimeEmitterService` đã tồn tại, nhưng WS là `S7-CHAT-RT-1`. Emit ở đây sẽ (a) thiếu room join server-side nên không ai nhận, (b) dễ bị viết TRONG tx… Chừa nguyên."* | `docs/plans/S7-CHAT-BE-2.md:106-108` |
 | 18 🆕 | Backlog `done_when` của RT-1 — owner đã chốt quyền sở hữu điểm gọi (02/08/2026) | *"⚠️ WO NÀY SỞ HỮU CẢ ĐIỂM GỌI: tự thêm lời gọi emit vào `ChatMessagesService.sendMessage`/`markRead` + `ChatMessageModerationService.recall` — S7-CHAT-BE-2 đã tuyên bố 'chừa nguyên' nên KHÔNG ai khác wire; dựng emitter mà không có nơi gọi = 3/4 sự kiện là dead code"* — cùng dòng cũng chốt luôn cổng quyền WS (#2 dưới) và payload recall không kèm `body` (#4 dưới) | `harness/backlog.mjs:9789-9799` |
-| 19 🆕 | `packages/contracts/src/chat.ts` — con trỏ `roomSeq`, **KHÔNG còn `seq` toàn cục ở `chatMessageSchema`** | Comment tại chỗ: *"CỐ Ý KHÔNG CÓ `seq`. `chat_messages.seq` là identity cấp BẢNG…"*; field thật là `roomSeq: z.number().int().positive()`. Nợ `seq` mà rev 1 §1.9 nhắc BE-2 phải tự đối chiếu **đã không còn tồn tại** — DB-2 (mig `0539`) + BE-2 đã dọn xong trước khi RT-1 viết lại plan này | `chat.ts:86` (comment) · `chat.ts:91` (field) |
-| 20 🆕 | Cặp quyền `('view','chat-room')` — `is_sensitive = false` | Verify block của `0538` tự RAISE EXCEPTION nếu flip — pin cứng, không phải suy đoán. Cần cho thiết kế cổng quyền WS (#2): gọi `PermissionService.can()` type-level, KHÔNG cần `ctx` reauth | `apps/api/migrations/0538_s7chatdb1_chat_v1.sql:408,797-813` |
+| 19 🆕 | `packages/contracts/src/chat.ts` — con trỏ `roomSeq`, **KHÔNG còn `seq` toàn cục ở `chatMessageSchema`** | Comment tại chỗ: *"CỐ Ý KHÔNG CÓ `seq`. `chat_messages.seq` là identity cấp BẢNG…"*; field thật là `roomSeq: z.number().int().positive()`. Nợ `seq` mà rev 1 §1.9 nhắc BE-2 phải tự đối chiếu **đã không còn tồn tại** — DB-2 (mig `0539`) + BE-2 đã dọn xong trước khi RT-1 viết lại plan này | `chat.ts:88-96` (comment) · `chat.ts:97` (field) |
+| 20 🆕 | Cặp quyền `('view','chat-room')` — `is_sensitive = false` | Verify block của `0538` tự RAISE EXCEPTION nếu flip — pin cứng, không phải suy đoán. Cần cho thiết kế cổng quyền WS (#2): gọi `PermissionService.can()` type-level, KHÔNG cần `ctx` reauth | `apps/api/migrations/0538_s7chatdb1_chat_v1.sql:408,805-814` |
 | 21 🆕 | `PermissionService.can()` — chữ ký & cách gọi trực tiếp từ service (không qua Guard) đã có TIỀN LỆ | `CanInput{userId,companyId,action,resourceType,resourceId?,isSensitive?,ctx?}` → `Promise<PermissionDecision{allow:boolean,...}>` (field là `.allow`, KHÔNG phải `.allowed`). `PermissionModule.exports` gồm `PermissionService` — module khác import thẳng `PermissionModule` là gọi được, không bắt buộc qua `PermissionGuard`. Tiền lệ gọi trực tiếp từ service (ngoài guard): `file-policy.service.ts`, `me-avatar-file.resolver.ts` (memory `avatar-own-scope-presign-wrapper`) | `permission/permission.types.ts:16-23,31-46` · `permission/guards/permission.guard.ts:128-139` · `permission/permission.module.ts:146-153` |
-| 22 🆕 | `ChatRoomsRepository.listRoomsForUser` dùng **ĐÚNG cùng 4 điều kiện** với `ChatAccessService.assertMember` | `listRoomsForUser`: `companyId` khớp · `chatRooms.deletedAt IS NULL` · `chatRoomMembers.userId = userId` · `leftAt IS NULL`. `assertMember`/`activeMembershipJoin`+`visibleRoom`: CÙNG 4 điều kiện, cột-cho-cột. Đây là đọc DẠNG DANH SÁCH của cùng luật, không phải luật thứ hai — dùng cho §1.11 | `chat-rooms.repository.ts:113-119` · `chat-access.service.ts:276-288` |
-| 23 🆕 | `resurrectDirect` hiện tại — lỗ 0 sync khi cả hai thành viên còn active | Vòng lặp chỉ gọi `insertMember`/`reactivateMember` khi `!existing` hoặc `existing.leftAt` — nhánh "existing && !leftAt" (thành viên chưa từng rời) không có hành động nào, kể cả khi phòng vừa được `restoreRoom` (undelete). Bug CÓ THẬT trong code đã ship, không phải suy đoán | `chat-rooms.service.ts:334-357` |
+| 22 🆕 | `ChatRoomsRepository.listRoomsForUser` dùng **ĐÚNG cùng 4 điều kiện** với `ChatAccessService.assertMember` | `listRoomsForUser`: `companyId` khớp · `chatRooms.deletedAt IS NULL` · `chatRoomMembers.userId = userId` · `leftAt IS NULL`. `assertMember`/`activeMembershipJoin`+`visibleRoom`: CÙNG 4 điều kiện, cột-cho-cột. Đây là đọc DẠNG DANH SÁCH của cùng luật, không phải luật thứ hai — dùng cho §1.11 | `chat-rooms.repository.ts:113-119` · `chat-access.service.ts:292-304` |
+| 23 🆕 | `resurrectDirect` hiện tại — audit CHỈ liệt kê hàng ĐỔI, không liệt kê hàng active-không-đổi | Vòng lặp (`chat-rooms.service.ts:343-359`) chỉ đẩy vào `reactivated: string[]` khi `!existing` hoặc `existing.leftAt` — nhánh "existing && !leftAt" (thành viên chưa từng rời) không được đẩy vào, kể cả khi phòng vừa được `restoreRoom` (undelete). `reactivated` sau đó được audit dùng làm `newValues.reactivatedUserIds` (dòng 365-375, cổng `if (restoredRoom \|\| reactivated.length > 0)`) — **audit này KHÔNG được đổi**. Bug CÓ THẬT trong code đã ship, không phải suy đoán | `chat-rooms.service.ts:334-377` |
 | 24 🆕 | 10 call-site `new RealtimeGateway(...)` cần cập nhật khi đổi constructor | `realtime.gateway.spec.ts` — 9 site (dòng 62,80,96,119,135,154,172,183,194); `realtime.gateway.io.spec.ts` — 1 site (dòng 47). Cả 10 đều gọi `new RealtimeGateway(tokens, emitter)` 2 tham số — đổi constructor RT-1 (thêm `PermissionService`, `ChatRoomsRepository`, `DatabaseService`) làm ĐỦ 10 chỗ gãy compile cùng lúc | `grep -n "new RealtimeGateway(" apps/api/src/realtime/*.spec.ts` → đúng 10 dòng |
 | 25 🆕 | Luật nhánh WAVE — RT-1 rev 1 viết sai | *"nhánh wave: `wave/s7-chat`… mỗi WO: `wo/s7-chat-<xx>` → PR vào `wave/s7-chat` ❗KHÔNG vào master… autoMerge: TẮT"* — rev 1 ghi "commit lên `wave/s7-chat`" là sai, đã sửa ở header | `docs/plans/S7-CHAT-WAVE.md:98-100` |
 
@@ -210,21 +213,23 @@ Lý do tách: reviewer đọc "đây thật sự là dọn dẹp cấu trúc, kh
 
 #### 1.6.1 MEDIUM — `resurrectDirect` phải sync CẢ thành viên không đổi hàng
 
-Code hiện tại (đo thật #23, `chat-rooms.service.ts:334-357`) chỉ chạm hàng của người **mới thêm** (`!existing`) hoặc **vừa rời** (`existing.leftAt`) — người vẫn đang active không có hành động gì, kể cả khi CHÍNH PHÒNG vừa được `restoreRoom` (undelete). Đổi chữ ký nội bộ: `resurrectDirect` trả về `Promise<string[]>` = TOÀN BỘ userId active sau khi xử lý (không còn trả `room.id`, caller đã có `room.id` từ `again.id`):
+Code hiện tại (đo thật #23, `chat-rooms.service.ts:334-377`) như sau, KHÔNG được chép lại thân hàm — chỉ tả điểm chèn + luật CẤM đụng:
 
-```text
-resurrectDirect(tx, actor, room):
-  if room.deletedAt: restoreRoom(tx, ...)
-  affected = []
-  for userId of [actor.id, ...peerOf(room, actor)]:
-    existing = findMemberRow(tx, ..., userId)
-    if !existing: insertMember(tx, ...); affected.push(userId)
-    elif existing.leftAt: reactivateMember(tx, ...); affected.push(userId)
-    else: affected.push(userId)   // 🆕 MEDIUM fix — vẫn active, nhưng phòng vừa hồi sinh là sự kiện có ý nghĩa với họ
-  return affected
-```
+- Vòng lặp `for (const userId of [actor.id, ...this.peerOf(room, actor)])` (dòng 344-359) tính `reactivated: string[]` — chỉ đẩy `userId` vào khi `!existing` (dòng 346-354, INSERT mới) hoặc `existing.leftAt` (dòng 355-358, `reactivateMember`). Nhánh "existing && !leftAt" (thành viên vẫn đang active, chưa từng rời) **không đẩy gì vào `reactivated`**, kể cả khi CHÍNH PHÒNG vừa được `restoreRoom` (undelete, dòng 340-342).
+- Khối `audit.record` (dòng 365-375), có cổng `if (restoredRoom || reactivated.length > 0)` (dòng 365) và comment "Không có gì đổi (DM đang sống, cả hai còn trong phòng) thì KHÔNG ghi — audit của một no-op là nhiễu" (dòng 364), dùng ĐÚNG `reactivated` này cho `newValues.reactivatedUserIds` (dòng 373).
 
-`syncRoomMembership("join")` cho một socket đã join sẵn là no-op an toàn (Socket.IO `socketsJoin` idempotent) — không có tác dụng phụ khi thêm người "vẫn active" vào danh sách affected.
+**Điểm chèn** — RT-1 cần một danh sách KHÁC với `reactivated`: TOÀN BỘ userId active sau xử lý (kể cả người không đổi hàng), để làm `affectedUserIds` cho `emitChatRoom`/`syncRoomMembership` (§1.6, hàng `resurrectDirect` của bảng). Đây PHẢI là **biến THỨ HAI**, ví dụ `activeUserIds: string[]`:
+
+- Trong CHÍNH vòng lặp hiện có (dòng 344-359), thêm một dòng đẩy `userId` vào `activeUserIds` ở **cả ba nhánh** — nhánh `!existing`, nhánh `existing.leftAt`, VÀ nhánh còn lại (hiện chưa có code nào chạy — thêm một `else { activeUserIds.push(userId); }` hoặc tương đương).
+- Đổi kiểu trả về của `resurrectDirect` để mang thêm `activeUserIds` ra ngoài cho `openDirect` dùng làm `affectedUserIds` khi emit `chat:room{created}` (chữ ký chính xác — ví dụ `Promise<{ roomId: string; activeUserIds: string[] }>` — do người thi công chọn, miễn trả đủ hai giá trị; `openDirect` hiện dùng `return this.resurrectDirect(tx, actor, again);` trực tiếp làm giá trị của nhánh tx nên cần đọc lại `.roomId` ở đó).
+
+**CẤM tuyệt đối:**
+
+- CẤM xoá, đổi tên, hay gộp biến `reactivated` — audit PHẢI tiếp tục dùng đúng danh sách "hàng có đổi" như hiện tại, KHÔNG được lẫn với `activeUserIds`.
+- CẤM đổi khối `audit.record(...)` (dòng 365-375) hay cổng `if (restoredRoom || reactivated.length > 0)` (dòng 365) bao quanh nó.
+- CẤM xoá comment "audit của một no-op là nhiễu" (dòng 364) — giữ nguyên lý do đã ghi.
+
+`syncRoomMembership("join")` cho một socket đã join sẵn là no-op an toàn (Socket.IO `socketsJoin` idempotent) — không có tác dụng phụ khi thêm người "vẫn active" vào `activeUserIds`.
 
 ### 1.7 Vị trí gọi — mirror khuôn `notifications.service.ts:197-199`
 
@@ -259,16 +264,16 @@ export function chatRoomName(companyId: string, roomId: string): string {
 
 ⚠️ Thay hoàn toàn "hợp đồng tích hợp giả định" của rev 1 §1.9. BE-2 đã commit (đo thật #17), tự tuyên bố chừa nguyên (đo thật #17-18) — RT-1 **CHỈNH SỬA TRỰC TIẾP** 2 file dưới đây (thêm vào `paths` của WO — đã có sẵn `apps/api/src/chat/**`).
 
-#### (a) `ChatMessagesService.sendMessage` (`chat-messages.service.ts:86-167`) → `chat:message`
+#### (a) `ChatMessagesService.sendMessage` (`chat-messages.service.ts:86-175`) → `chat:message`
 
-Vấn đề cần vá cùng lúc (điều kiện gỡ BLOCK #5 — không emit lặp): gửi lại cùng `clientMessageId` (early return `if (existing) return existing.id;`, dòng 106) và nhánh đua-thua trong `.catch` (dòng 152-163) đều KHÔNG được emit — chỉ nhánh **INSERT thật sự chạy** mới emit. Đổi tx trả về `{ messageId, isNew: boolean }` thay vì chỉ `id`:
+Vấn đề cần vá cùng lúc (điều kiện gỡ BLOCK #5 — không emit lặp): gửi lại cùng `clientMessageId` (early return `if (existing) return existing.id;`, dòng 106) và nhánh đua-thua trong `.catch` (dòng 155-172) đều KHÔNG được emit — chỉ nhánh **INSERT thật sự chạy** mới emit. Đổi tx trả về `{ messageId, isNew: boolean }` thay vì chỉ `id`:
 
 ```text
 sendMessage(actor, roomId, dto):
   { messageId, isNew } = await withTenant(tx => {
       ... assertMember, chặn archived, tra clientMessageId ...
       if (existing) return { messageId: existing.id, isNew: false }        // replay — KHÔNG emit
-      ... validate reply, mentions, allocateRoomSeq, insertMessage, setLastReadSeq (tự-nâng, §1.9.3) ...
+      ... validate reply, mentions, allocateRoomSeq, insertMessage, advanceLastReadSeq (tự-nâng, §1.9.2) ...
       return { messageId: inserted.id, isNew: true }                       // thật sự tạo mới
     }).catch(err => {
       if (!isClientIdConflict(err)) throw err
@@ -284,50 +289,52 @@ sendMessage(actor, roomId, dto):
 
 Test bắt buộc (§4): gửi lại đúng `clientMessageId` → đúng **1** `chat:message` (không phải 2).
 
-#### (b) `ChatMessagesService.markRead` (`chat-messages.service.ts:173-190`) → `chat:read`
+#### (b) `ChatMessagesService.markRead` (`chat-messages.service.ts:184-204`) → `chat:read`
 
-`clampReadCursor` đã tự bảo vệ "số nhỏ hơn → bỏ qua im lặng" — nhưng code hiện tại LUÔN trả 200 dù có ghi hay không. Thread cờ `changed` ra khỏi tx:
+⚠️ **`clampReadCursor` KHÔNG tồn tại trong codebase — hàm này đã bị `631d683e` XOÁ CÓ CHỦ Ý, đừng viết lại.** Bia mộ giải thích tại chỗ (`chat-message-rules.ts:81-91`): bản cũ tính `Math.max(current, Math.min(wanted, ceiling))` ở JS từ số đọc bởi `assertMember` (một `SELECT` thường, không `FOR UPDATE`) rồi ghi bằng phép GÁN ĐÈ — dưới READ COMMITTED, hai `POST /read` đồng thời đều đọc con trỏ CŨ và bên ghi SAU thắng kể cả khi mang số nhỏ hơn ⇒ con trỏ LÙI trong im lặng. Cả hai vế ("chỉ tiến" + "kẹp trần") giờ nằm TRONG câu UPDATE của `ChatMessagesRepository.advanceLastReadSeq` (`chat-messages.repository.ts:344-360`, chữ ký `(tx, companyId, memberRowId, wanted, ceiling): Promise<number>`, SQL `GREATEST(last_read_seq, LEAST($wanted::int, $ceiling::int))`) — `markRead` hiện tại (`chat-messages.service.ts:184-204`) **đã gọi đúng hàm này** (dòng 191-197), chỉ chưa thread cờ "có ghi hay không" ra để quyết định emit.
 
-```text
-markRead(actor, roomId, dto):
-  result = await withTenant(tx => {
-      acc = assertMember(...)
-      next = clampReadCursor(dto.seq, acc.membership.lastReadSeq, acc.room.lastMessageSeq)
-      changed = next !== acc.membership.lastReadSeq
-      if (changed): setLastReadSeq(tx, ..., next)
-      return { roomId, lastReadSeq: next, unreadCount: unreadOf(acc.room.lastMessageSeq, next), changed }
-    })
-  if (result.changed):
-    this.realtime.emitChatRead(actor.companyId, roomId, { roomId, userId: actor.id, lastReadSeq: result.lastReadSeq })
-  const { changed, ...dto2 } = result   // ⚠️ `changed` là cờ NỘI BỘ — KHÔNG được lọt vào ChatMarkReadResultDto trả cho client
-  return dto2
-```
+**Điểm chèn** — trong `markRead`, NGAY SAU lệnh `advanceLastReadSeq` đã có sẵn (dòng 191-197):
+
+- Suy cờ `changed = next !== acc.membership.lastReadSeq`, so `next` (giá trị `advanceLastReadSeq` trả về) với `acc.membership.lastReadSeq` (con trỏ đọc được từ `assertMember` TRƯỚC lệnh UPDATE — không đọc lại DB lần hai).
+- Trả `{ roomId, lastReadSeq: next, unreadCount: unreadOf(acc.room.lastMessageSeq, next), changed }` ra khỏi `withTenant`.
+- Sau khi tx commit: `if (result.changed) this.realtime.emitChatRead(actor.companyId, roomId, { roomId, userId: actor.id, lastReadSeq: result.lastReadSeq })`.
+- Bóc `changed` khỏi object trả cho client trước khi `return` — **`changed` là cờ NỘI BỘ, KHÔNG được lọt vào `ChatMarkReadResultDto`.**
+
+**CẤM tuyệt đối:**
+
+- CẤM viết lại hoặc gọi một hàm tên `clampReadCursor` dưới bất kỳ hình thức nào — hàm đó không còn tồn tại.
+- CẤM tái lập bất kỳ phép kẹp/so sánh trị số nào (`Math.max`, `Math.min`, hoặc tương đương) ở tầng JS cho `lastReadSeq` — MỌI phép so sánh PHẢI nằm trong câu UPDATE của `advanceLastReadSeq`, không phải ở service.
+- CẤM đụng vào `ChatMessagesRepository.advanceLastReadSeq` (`chat-messages.repository.ts:344-360`) — chữ ký, tham số, hay câu SQL bên trong. RT-1 chỉ được GỌI hàm này (đã gọi sẵn), không sửa nó. `sendMessage` cũng gọi cùng hàm cho nhánh tự-nâng (§1.9.2) — đổi chữ ký ở đây làm gãy cả hai caller.
 
 Test bắt buộc: `markRead` với `seq` nhỏ hơn con trỏ hiện tại → HTTP 200 như cũ, nhưng **0** `chat:read`.
 
-#### (c) `ChatMessageModerationService.recall` (`chat-message-moderation.service.ts:38-68`) → `chat:message-recalled`
+#### (c) `ChatMessageModerationService.recall` (`chat-message-moderation.service.ts:39-72`) → `chat:message-recalled`
 
-Idempotent (dòng 41: `if (acc.message.recalledAt) return this.readDto(...)`) — nhánh idempotent KHÔNG được emit lại. Thread `recalledNow`:
+`631d683e` đã thêm `assertNotArchived(acc.room)` (dòng 44) NGAY SAU `assertMessageAccess` (dòng 41) và TRƯỚC nhánh idempotent (dòng 45) — comment tại chỗ (dòng 42-43) giải thích chủ ý: phòng đã lưu trữ = chỉ đọc, kể cả lần bấm thu hồi thứ hai (vốn idempotent) cũng KHÔNG được báo "thành công" cho một thao tác ghi bị khoá. Thứ tự hiện có, **bất-khả-xâm-phạm**, KHÔNG được đảo hay bỏ bất kỳ bước nào:
+
+1. `assertMessageAccess(tx, ...)` (dòng 41) — xác nhận actor có quyền vào tin.
+2. `assertNotArchived(acc.room)` (dòng 44) — PHẢI đứng TRƯỚC nhánh idempotent.
+3. Nhánh idempotent (dòng 45): `if (acc.message.recalledAt) return this.readDto(...)` — KHÔNG emit.
+4. `assertCanRecall(acc, now)` (dòng 48) rồi `setRecalled` + `unlinkMessageFiles` (dòng 50-52).
+5. `audit.record(...)` (dòng 54-68) — KHÔNG ĐỔI, giữ nguyên `newValues` (không có `body`).
+6. `return this.readDto(tx, actor, messageId)` (dòng 70).
+
+**Điểm chèn** — thread một cờ `recalledNow: boolean` ra khỏi `withTenant`: `false` ở nhánh idempotent (bước 3, cùng với `roomId`/`recalledAt: null` để giữ shape trả về đồng nhất), `true` ở nhánh thật sự thu hồi (sau bước 5, mang theo `roomId: acc.message.roomId` và `recalledAt: now.toISOString()` — cả hai đã có sẵn trong tx, không cần đọc lại). Sau khi tx commit:
 
 ```text
-recall(actor, messageId):
-  result = await withTenant(tx => {
-      acc = assertMessageAccess(...)
-      if (acc.message.recalledAt):
-        return { dto: readDto(tx,...), recalledNow: false, roomId: acc.message.roomId, recalledAt: null }
-      now = new Date()
-      assertCanRecall(acc, now)
-      setRecalled(tx, ..., now, actor.id); unlinkMessageFiles(tx, ..., now)
-      audit.record(tx, ...)   // KHÔNG ĐỔI
-      return { dto: readDto(tx,...), recalledNow: true, roomId: acc.message.roomId, recalledAt: now.toISOString() }
-    })
-  if (result.recalledNow):
-    this.realtime.emitChatMessageRecalled(actor.companyId, result.roomId,
-      { messageId, roomId: result.roomId, recalledAt: result.recalledAt })
-  return result.dto
+if (result.recalledNow):
+  this.realtime.emitChatMessageRecalled(actor.companyId, result.roomId,
+    { messageId, roomId: result.roomId, recalledAt: result.recalledAt })
+return result.dto
 ```
 
-⚠️ **Payload KHÔNG kèm `body`** (kể cả `null`) — **owner đã chốt 02/08/2026** (đo thật #18), đúng API-13 §7 dòng 2. Câu "emit `body:null`" từng có trong một bản backlog cũ đã được owner sửa — plan này ghi nhận quyết định CHỐT, không phải đang đề xuất. Test bắt buộc: thu hồi 2 lần liên tiếp → đúng **1** `chat:message-recalled`.
+**CẤM tuyệt đối:**
+
+- CẤM bỏ hoặc đổi vị trí `assertNotArchived(acc.room)` (dòng 44) — PHẢI đứng TRƯỚC nhánh idempotent (dòng 45).
+- CẤM đụng nội dung `audit.record(...)` (dòng 54-68) — không thêm `body`, không đổi `newValues`.
+- CẤM emit ở nhánh idempotent (bước 3).
+
+⚠️ **Payload KHÔNG kèm `body`** (kể cả `null`) — **owner đã chốt 02/08/2026** (đo thật #18), đúng API-13 §7 dòng 2. Câu "emit `body:null`" từng có trong một bản backlog cũ đã được owner sửa — plan này ghi nhận quyết định CHỐT, không phải đang đề xuất. Test bắt buộc: thu hồi 2 lần liên tiếp → đúng **1** `chat:message-recalled`; payload không có key `body`.
 
 #### 1.9.1 Constructor injection
 
@@ -335,7 +342,7 @@ recall(actor, messageId):
 
 #### 1.9.2 KHÔNG emit `chat:read` cho lần tự-nâng con trỏ của chính người gửi (MEDIUM)
 
-`sendMessage` tự gọi `this.repo.setLastReadSeq(tx, ..., roomSeq)` cho CHÍNH người gửi TRONG CÙNG tx (`chat-messages.service.ts:144`, giữ nguyên — SPEC-15 §13.2). Thiết kế (a) ở trên **chỉ** gọi `emitChatMessage`, không bao giờ gọi `emitChatRead` từ `sendMessage` — đây là RÀNG BUỘC, không phải tình cờ. Người thi công KHÔNG được "tiện tay" thêm `emitChatRead` vào nhánh tự-nâng: người gửi đã biết mình vừa gửi tin (chính họ bấm gửi), một `chat:read` dội lại là nhiễu vô nghĩa, và với phòng nhóm đông người sẽ nhân N sự kiện `chat:read` giả cho mỗi tin gửi. Chỉ đường `markRead` tường minh (b) mới được gọi `emitChatRead`.
+`sendMessage` tự gọi `this.repo.advanceLastReadSeq(tx, actor.companyId, acc.membership.id, roomSeq, roomSeq)` cho CHÍNH người gửi TRONG CÙNG tx (`chat-messages.service.ts:146-152`, giữ nguyên — SPEC-15 §13.2; trần = chính `roomSeq` vừa cấp). Thiết kế (a) ở trên **chỉ** gọi `emitChatMessage`, không bao giờ gọi `emitChatRead` từ `sendMessage` — đây là RÀNG BUỘC, không phải tình cờ. Người thi công KHÔNG được "tiện tay" thêm `emitChatRead` vào nhánh tự-nâng: người gửi đã biết mình vừa gửi tin (chính họ bấm gửi), một `chat:read` dội lại là nhiễu vô nghĩa, và với phòng nhóm đông người sẽ nhân N sự kiện `chat:read` giả cho mỗi tin gửi. Chỉ đường `markRead` tường minh (b) mới được gọi `emitChatRead`.
 
 ### 1.10 "user bị khoá/vô hiệu hoá → cắt phiên WS" — diễn giải HẸP, KHÔNG tự chế cơ chế ngoài phạm vi
 
@@ -450,7 +457,7 @@ Chạy: `bash scripts/lane-db-setup.sh chatrt1` → `export LANE_DB=mediaos_chat
 | Bỏ cờ `changed` ở `markRead`, luôn emit | ca 20 |
 | Thêm nhầm `emitChatRead` vào nhánh tự-nâng của `sendMessage` | ca 21 |
 | Đổi `emitChatRoom` chỉ target `chatRoomName` (bỏ `affectedUserIds`) | ca 23 |
-| Bỏ nhánh "else: affected.push(userId)" ở `resurrectDirect` (§1.6.1) | ca 12 |
+| Bỏ nhánh `else` (đẩy `userId` "vẫn active, không đổi hàng" vào `activeUserIds`) ở `resurrectDirect` (§1.6.1) | ca 12 |
 | Bọc `emitChatRoom`/`syncRoomMembership` TRONG `withTenant` (trước commit) thay vì sau | ca 9 |
 
 ---
@@ -467,6 +474,8 @@ Chạy: `bash scripts/lane-db-setup.sh chatrt1` → `export LANE_DB=mediaos_chat
 - [ ] RED-trước: socket ngoài phòng KHÔNG nhận emit dù đoán đúng `roomId`; cross-tenant không bao giờ chung room — ca test 7, 8
 - [ ] "user bị khoá/vô hiệu hoá → cắt phiên WS" — diễn giải hẹp đã ghi rõ ở §1.10, owner chưa yêu cầu mở rộng `paths`
 - [ ] FULL gate (`security-reviewer` + `database-reviewer` + `silent-failure-hunter`) PASS — chờ sau khi code xong
+
+⚠️ **Nếu các file `BE-2` khác §0 khi bắt đầu code ⇒ DỪNG, neo lại bằng cách ĐỌC file** (không tin trích dẫn cũ, kể cả của chính lần neo lại này) — `apps/api/src/chat/**` là hot-file dùng chung nhiều WO song song (§2), một PR khác merge trước có thể lại làm lệch dòng.
 
 ---
 

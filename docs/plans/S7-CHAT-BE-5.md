@@ -7,24 +7,45 @@
 > `S7-CHAT-BE-5`, `done_when` bản 02/08).
 > **Nhánh:** `wave/s7-chat` (KHÔNG `master` — WAVE §4).
 >
-> ⚠️ **rev 1 bị `plan-reviewer` chấm BLOCK (6 CRITICAL).** rev 2 này vá đúng 10 điều kiện owner + reviewer
-> chốt (C1-C6, H1-H3, H5) — xem §1 cho từng điều kiện đã vá ở đâu. **KHÔNG code cho tới khi rev 2 này PASS.**
+> ⚠️ **rev 1 bị `plan-reviewer` chấm BLOCK (6 CRITICAL).** rev 2 vá đúng 10 điều kiện owner + reviewer
+> chốt (C1-C6, H1-H3, H5) — xem §1 cho từng điều kiện đã vá ở đâu.
+>
+> ⚠️ **rev 2 (bản dưới đây) VẪN CÒN 7 mục BLOCK thiết kế của `plan-reviewer` CHƯA vá** — để nguyên cho một
+> pass sau, KHÔNG được code cho tới khi cả 7 mục này có quyết định: (1) `DESIRED_PROJECT_MEMBER` (§3.3)
+> thiếu vế `employee_profiles.status='active' AND deleted_at IS NULL` phía chủ sở hữu row `project_members`
+> — chỉ lọc theo `employee_profiles.deletedAt`/`member_status`, chưa lọc `status`; (2) `PATCH /employees/:id
+> {status}` (W9b) không có hook thu hồi khi chuyển sang non-active — chỉ `changeStatus` (W12, họ 1) mới có;
+> (3) `ProjectsService.updateProject` là writer bị bỏ sót khỏi bảng W1-W14; (4) SQL Pha 3 (§3.4) thiếu
+> `company_id` tường minh trong các câu `INSERT…SELECT`/`UPDATE…WHERE` (dựa hoàn toàn vào RLS, trái "mọi
+> query PHẢI có `company_id` tường minh" — CLAUDE.md §2 mục 1); (5) bán kính nổ của C6 (kênh audit-Failure
+> ngoài-tx, §3.2a) chưa được review kỹ; (6) `insertRoom` union (§3.9) mất field `companyId` trong shape đề
+> xuất; (7) `.returning()` của `restoreEmployeeTx` (§3.5/W13, đề xuất thêm `orgUnitId`/`userId`/`status`)
+> đổi shape mà chưa xét ảnh hưởng tới body HTTP response hiện tại của `RecycleBinService.restoreEmployee`.
+> **KHÔNG tự vá 7 mục này ở lần neo lại này** — chỉ ghi nhận để pass sau xử lý.
 
-## 0. Commit-sha đã đo (02/08/2026, đầu phiên viết rev 2)
+## 0. Commit-sha đã đo — NEO LẠI 03/08/2026 lên HEAD hiện tại
 
 ```text
-54b4d8cd feat(chat): S7-CHAT-BE-2 — tin nhắn (CHAT-API-009..014, 016)   ← ĐÃ COMMIT
-c77f48e0 feat(chat): S7-CHAT-BE-1 — ChatAccessService + phòng/thành viên (CHAT-API-001..008)  ← ĐÃ COMMIT
+104294bd docs(chat): CHAT-DEC-013 + 6 micro-plan wave S7 (5 rev 2 + RT-0 mới) + đồng bộ backlog/STATUS  ← ĐÃ COMMIT (rev 2 của CHÍNH plan này nằm trong commit này)
+631d683e fix(chat): vá FULL gate S7-CHAT-BE-1/BE-2 — 1 HIGH + 5 MEDIUM                                   ← ĐÃ COMMIT (đổi apps/api/src/chat/*.ts — dịch số dòng dùng ở rev 2)
+54b4d8cd feat(chat): S7-CHAT-BE-2 — tin nhắn (CHAT-API-009..014, 016)                                    ← ĐÃ COMMIT
+c77f48e0 feat(chat): S7-CHAT-BE-1 — ChatAccessService + phòng/thành viên (CHAT-API-001..008)             ← ĐÃ COMMIT
 ```
 
-`S7-CHAT-BE-1` VÀ `S7-CHAT-BE-2` đều **đã commit lên `wave/s7-chat`** — không còn "đang chạy song song,
-chưa commit" như rev 1 mô tả. `apps/api/src/chat/` hiện có 16 file (không phải 5-6 file của lúc BE-1 vừa
-xong): `chat.module.ts`, `chat.errors.ts`, `chat.mapper.ts`, `chat.dto.ts`, `chat-access.service.ts`,
-`chat-room-rules.ts`, `chat-message-rules.ts`, `chat-room-code.service.ts`, `chat-rooms.repository.ts`,
-`chat-rooms.service.ts`, `chat-members.service.ts`, `chat-rooms.controller.ts`, `chat-messages.repository.ts`,
-`chat-messages.service.ts`, `chat-message-moderation.service.ts`, `chat-messages.controller.ts`.
+`git status --short` **RỖNG** tại thời điểm neo (03/08/2026, đo trực tiếp) — cây sạch, không có gì đang dở.
 
-`ChatModule` (`chat.module.ts:35-50`) hiện có **8 provider, 2 controller**:
+`S7-CHAT-BE-1`, `S7-CHAT-BE-2` VÀ bản vá FULL-gate `631d683e` đều **đã commit lên `wave/s7-chat`**. `631d683e`
+sửa 7 file trong `apps/api/src/chat/` (`chat-access.service.ts`, `chat-message-moderation.service.ts`,
+`chat-message-rules.ts`, `chat-messages.repository.ts`, `chat-messages.service.ts`, `chat-rooms.service.ts`,
+`chat.errors.ts`) sau khi rev 1 và bản đo đầu của rev 2 đã lấy số dòng — mọi trích dẫn `chat.errors.ts` bị
+dịch, đã đo lại toàn bộ ở §2/§3 bên dưới. `apps/api/src/chat/` hiện vẫn đúng 16 file (không đổi số lượng,
+chỉ đổi NỘI DUNG 7 file trên): `chat.module.ts`, `chat.errors.ts`, `chat.mapper.ts`, `chat.dto.ts`,
+`chat-access.service.ts`, `chat-room-rules.ts`, `chat-message-rules.ts`, `chat-room-code.service.ts`,
+`chat-rooms.repository.ts`, `chat-rooms.service.ts`, `chat-members.service.ts`, `chat-rooms.controller.ts`,
+`chat-messages.repository.ts`, `chat-messages.service.ts`, `chat-message-moderation.service.ts`,
+`chat-messages.controller.ts`.
+
+`ChatModule` (`chat.module.ts:35-50`) hiện vẫn có **8 provider, 2 controller** (không đổi bởi `631d683e`):
 
 ```text
 providers: ChatAccessService, ChatRoomsService, ChatMembersService, ChatRoomsRepository,
@@ -33,12 +54,24 @@ controllers: ChatRoomsController, ChatMessagesController
 exports: ChatAccessService, ChatRoomsRepository, ChatMessagesRepository
 ```
 
-`chat.errors.ts` `CHAT_AUDIT` đã có khối `// ── S7-CHAT-BE-2 ──` (dòng 136-148: `MESSAGE_RECALLED` ·
-`MESSAGE_PINNED` · `MESSAGE_UNPINNED`). **Câu "KHÔNG sửa bất kỳ file nào trong phạm vi BE-2" của rev 1 là
-SAI** — `chat.module.ts` và `chat.errors.ts` là file **CHUNG** của cả module, WO này chắc chắn phải append
-vào cả hai (thêm provider mới, thêm audit action mới) cạnh khối BE-2 đã có, không phải file "cấm đụng".
-**Trước khi code thật: `git log --oneline -3 -- apps/api/src/chat/` một lần nữa** — nếu có WO khác (BE-3/
-BE-4/BE-6/BE-7/RT-1) đã chạy tiếp trong lúc chờ duyệt plan này, số dòng ở §1 dưới có thể đã trôi thêm.
+`chat.errors.ts` `CHAT_AUDIT` đã có khối `// ── S7-CHAT-BE-2 ──` (dòng 143-155: `MESSAGE_RECALLED` ·
+`MESSAGE_PINNED` · `MESSAGE_UNPINNED`) — **đo lại 03/08, dịch xuống từ 136-148 của bản đo cũ** vì `631d683e`
+chèn thêm `ROOM_DIRECT_RESTORED` (dòng 136, action `chat.room.direct_restored`, thuộc vá FULL-gate BE-1
+chứ KHÔNG phải BE-5 hay BE-2) NGAY TRƯỚC khối này trong CÙNG `CHAT_AUDIT` (giờ span 127-156). WO này append
+5 action MỚI vào SAU khối BE-2 (dòng 155), y hệt ý đồ ban đầu — chỉ số dòng neo đổi. **Câu "KHÔNG sửa bất
+kỳ file nào trong phạm vi BE-2" là SAI** — `chat.module.ts` và `chat.errors.ts` là file **CHUNG** của cả
+module, WO này chắc chắn phải append vào cả hai (thêm provider mới, thêm audit action mới) cạnh khối BE-2
+đã có, không phải file "cấm đụng".
+
+⚠️ **Điều kiện bắt buộc TRƯỚC khi code (mới, 03/08):** `git status --porcelain apps/api/src/chat/
+packages/contracts/src/chat.ts` **PHẢI RỖNG** ngay trước khi bắt đầu commit đầu tiên của WO này. `paths`
+của Work Order `S7-CHAT-BE-5` trong `harness/backlog.mjs` liệt kê CHÍNH hai đường dẫn này — `git add -A`
+(hoặc `git add apps/api/src/chat`) trong lúc code WO này sẽ CUỐN THEO bất kỳ thay đổi chưa commit nào của
+một phiên/lane KHÁC đang chạm cùng thư mục (BE-3/BE-4/BE-6/BE-7/RT-0/RT-1 đều `paths` chồng lên
+`apps/api/src/chat/**`), trộn diff của hai WO làm một mà không ai để ý cho tới khi review. **`git log --
+<path>` KHÔNG thấy được thay đổi chưa commit** — kiểm bằng `git status`/`git diff`, không phải `git log`,
+mới bắt được rủi ro này. Nếu lệnh trên KHÔNG rỗng khi bắt đầu: DỪNG, xác định ai đang giữ thay đổi đó, đợi
+họ commit/stash trước khi chạm vào các file chung (`chat.module.ts`, `chat.errors.ts`).
 
 ---
 
@@ -74,7 +107,7 @@ BE-4/BE-6/BE-7/RT-1) đã chạy tiếp trong lúc chờ duyệt plan này, số
 | 4 | `JobRunContext` chỉ có `companyId` | `interface JobRunContext { companyId: string }` — không có `tx`; handler tự mở `withTenant` bên trong `run()` | `job-handler.ts:23-25` |
 | 5 | `GoalReconciliationJobHandler` KHÔNG cấp mã | `run()` chỉ mở 1 `withTenant` gọi `engine.reconcileCompanyTx` — không có bước allocate sequence nào, nên **không đụng bẫy lồng-tx-cấp-mã** mà job CHAT chắc chắn gặp. Không mirror được 1-1. | `goal-reconciliation.job-handler.ts:50-54` |
 | 6 | `insertRoom` hiện tại — CHƯA sửa | `values` không có `orgUnitId`/`refId`, hard-code `syncSource: "manual"` trong `.values({...values, syncSource: "manual"})`; `createdBy: string` (TS non-null dù DB cột nullable) | `chat-rooms.repository.ts:183-200` |
-| 7 | `chat_rooms` — cột nullable ở DB nhưng TS ép non-null | `createdBy` (dòng 171, KHÔNG `.notNull()`), `archivedBy`/`archivedAt` (184-185, nullable) — TS `archiveRoom(actorUserId: string)` (225-229) và `insertMember(addedBy: string)` (302-310) đang hẹp hơn DB | `chat-rooms.repository.ts:171,184-185,225-229,302-310` · `communication.ts:171,184-185` |
+| 7 | `chat_rooms` — cột nullable ở DB nhưng TS ép non-null | DB: `createdBy` (dòng 171, KHÔNG `.notNull()`), `archivedAt`/`archivedBy` (184-185, nullable) — cả hai đọc từ `communication.ts`. TS hẹp hơn: `archiveRoom(actorUserId: string)` (`chat-rooms.repository.ts:225-229`) và `insertMember(addedBy: string)` (`chat-rooms.repository.ts:302-310`) ép non-null cho cột DB cho phép NULL — **tách TỪ bản đo cũ gộp nhầm số dòng của 2 file vào 1 ô** | DB: `communication.ts:171,184-185` · TS: `chat-rooms.repository.ts:225-229,302-310` |
 | 8 | Unique idempotency phòng dẫn xuất | `chat_rooms_org_unit_uq` (company_id, org_unit_id WHERE NOT NULL, dòng 200-202) · `chat_rooms_project_uq` (company_id, ref_id WHERE NOT NULL, dòng 194-196) — **không lọc `deleted_at`** | `communication.ts:194-196,200-202` |
 | 9 | `chat_rooms.synced_at` tồn tại, chưa từng ghi | Cột `syncedAt` (dòng 179) không xuất hiện trong bất kỳ `.set()`/`.values()` nào ở `chat-rooms.repository.ts` hiện tại — rev 2 CHỐT dùng nó (§4.4), không ghi nợ tiếp | `communication.ts:179` |
 | 10 | `chk_chat_rooms_sync_source` ràng buộc CHÉO field | `syncSource` phải khớp `roomType` (comment dòng 177: "manual \| department \| project — ràng buộc theo room_type") — `orgUnitId`/`refId`/`directKey` cũng phải khớp đúng `roomType` tương ứng (footgun nếu API nhận rời rạc, xem §4.4) | `communication.ts:161-179` |
@@ -86,7 +119,7 @@ BE-4/BE-6/BE-7/RT-1) đã chạy tiếp trong lúc chờ duyệt plan này, số
 | 16 | `createProject` chèn owner vào `project_members` NGAY trong tx tạo project | Dòng 246-255, `insertMemberTx` bên trong `this.db.withTenant(...)` của chính `createProject` — TRƯỚC KHI hàm return. Đây là NGUỒN của H1 (rev 1 chỉ tạo phòng rỗng, không sync membership hiện có) | `tasks/projects.service.ts:211-289` |
 | 17 | `addMember`/`removeMember` phạm vi dòng chính xác | `addMember`: 480-555 (insertMemberTx dòng 505-512, outbox.enqueue dòng 540); `removeMember`: 610-645 (softRemoveMemberTx dòng 624) | `tasks/projects.service.ts` |
 | 18 | `outbox.enqueue` CÓ SẴN trong 2 file WO này phải sửa | `hr-write.service.ts:222` (`auth.user_created`) · `projects.service.ts:540` (`project.member_added`) — rev 1 dùng câu này để bác bỏ outbox nhưng KHÔNG cần outbox cho WO này nữa (§4.2 lý do khác) | grep trực tiếp |
-| 19 | `SAVEPOINT` (`tx.transaction(sp => …)`) là idiom ĐÃ CÓ trong repo, an toàn trên PgBouncer transaction-mode | Dùng ở `leave-accrual.service.ts:191`, `leave-carryover.service.ts:180`, `sequence.repository.ts:104`, `notification-event.repository.ts:149`, `notification-template.repository.ts:155` — cô lập lỗi 1 nhánh phụ mà KHÔNG poison tx cha (không mở connection mới, chỉ `SAVEPOINT`/`ROLLBACK TO SAVEPOINT` trên CÙNG connection) | grep `tx.transaction(` |
+| 19 | `SAVEPOINT` (`tx.transaction(sp => …)`) là idiom ĐÃ CÓ trong repo, an toàn trên PgBouncer transaction-mode | Dùng ở `leave-accrual.service.ts:191`, `leave-carryover.service.ts:180`, `sequence.repository.ts:104`, `notification-event.repository.ts:149`, `notification-template.repository.ts:157` (đo lại 03/08 — bản cũ ghi `:155`, SAI 2 dòng) — cô lập lỗi 1 nhánh phụ mà KHÔNG poison tx cha (không mở connection mới, chỉ `SAVEPOINT`/`ROLLBACK TO SAVEPOINT` trên CÙNG connection) | grep `tx.transaction(` |
 | 20 | `withTenant` LỒNG (mở tx MỚI trong callback của tx khác) = TREO trên PgBouncer transaction-mode | `withTenant` = `db.transaction(...)` xin **connection mới** từ pool; gọi nó lần 2 TRƯỚC KHI callback đầu return/reject có thể chờ connection trong khi connection đầu đang giữ ⇒ đây là lớp lỗi khác ARCHIVE-BIẾT (`avatar-presign.service.ts:48`, `goal-reconciliation.job-handler.ts:21-23`) — **PHẢI tránh** khi thiết kế "ghi audit Failure ở kênh riêng" (§4.3) | `db.service.ts:74-92` |
 | 21 | `restoreEmployeeTx` chỉ `.returning({id})` | KHÔNG trả `orgUnitId`/`userId`/`status` — `RecycleBinService.restoreEmployee` hiện KHÔNG có dữ liệu để biết join phòng nào | `recycle-bin.repository.ts:59-72` |
 | 22 | `deleteEmployee` (họ 2) mở tx Ở TẦNG REPO, không phải SERVICE | `EmployeesService.deleteEmployee` (`employees.service.ts:378-381`) gọi thẳng `this.repo.softDeleteEmployee(companyId, id)`; hàm đó tự `this.db.withTenant(...)` bên trong (`employees.repository.ts:210-224`) — KHÁC với `createEmployee`/`updateEmployee` trong CÙNG file (tx mở ở service, dòng 234/307) | `employees/employees.service.ts:378-381` · `employees/employees.repository.ts:210-224` |
@@ -116,7 +149,7 @@ BE-4/BE-6/BE-7/RT-1) đã chạy tiếp trong lúc chờ duyệt plan này, số
 | W5 | `ProjectsService.deleteProject` | `projects.service.ts:450-476` | delete project | archive phòng | ngoài tx |
 | W6 | `ProjectsService.addMember` | `projects.service.ts:480-555` | add project member | join phòng project | **GRANT**, trong tx + SAVEPOINT |
 | W7 | `ProjectsService.removeMember` | `projects.service.ts:610-645` | remove project member | leave phòng project | **REVOKE**, trong tx, LOUD |
-| W8a | `HrWriteService.createEmployee` | `hr-write.service.ts:150-~275` | tạo NV (họ 1) | join phòng department nếu có `orgUnitId`+`userId` | **GRANT**, trong tx + SAVEPOINT |
+| W8a | `HrWriteService.createEmployee` | `hr-write.service.ts:150-264` (đo lại 03/08 — bản cũ ghi phỏng chừng `150-~275`) | tạo NV (họ 1) | join phòng department nếu có `orgUnitId`+`userId` | **GRANT**, trong tx + SAVEPOINT |
 | W8b | `EmployeesService.createEmployee` | `employees.service.ts:218-301` | tạo NV (họ 2, legacy) | như trên | **GRANT**, trong tx + SAVEPOINT |
 | W9a | `HrWriteService.updateEmployee` | `hr-write.service.ts:350-433` | sửa hồ sơ, `orgUnitId` đổi | rời cũ (LOUD) + vào mới (best-effort) | **REVOKE+GRANT**, trong tx |
 | W9b | `EmployeesService.updateEmployee` | `employees.service.ts:303-376` | `PATCH /employees/:id`, `orgUnitId` đổi | như trên — **đúng ca C1 done_when#2** | **REVOKE+GRANT**, trong tx |
@@ -145,45 +178,58 @@ lỗi JS thuần), **toàn bộ transaction Postgres đã bị ABORT** — mọi
 `25P02: current transaction is aborted`. Nuốt lỗi bằng try/catch KHÔNG cứu được tx đã aborted trừ khi bọc
 `SAVEPOINT` (§2 #19). Rev 2 tách 2 hình dạng rõ ràng:
 
-**(a) REVOKE (W7, W9a, W9b, W11, W12, W14) — KHÔNG bọc `SAVEPOINT`, để lỗi propagate tự nhiên:**
+**(a) REVOKE (W7, W9a, W9b, W11, W12, W14) — KHÔNG bọc `SAVEPOINT`, để lỗi propagate tự nhiên.**
 
-```text
-async updateEmployee(user, id, dto) {
-  try {
-    const updated = await this.db.withTenant(user.companyId, async (tx) => {
-      … (logic hiện có) …
-      if (orgUnitIdChanging) {
-        // KHÔNG catch ở đây — lỗi tự nhiên làm Postgres abort tx, callback reject,
-        // withTenant() rollback + trả connection về pool.
-        await this.chatSync.leaveOrgUnitRoomTx(tx, user.companyId, row.userId, oldOrgUnitId);
-        await this.chatSync.tryJoinOrgUnitRoomTx(tx, user.companyId, row.userId, newOrgUnitId); // SAVEPOINT bên trong, xem (b)
-      }
-      … return row;
-    });
-    return maskSalary(updated, false);
-  } catch (err) {
-    if (isUniqueViolation(err)) { … } // giữ nguyên logic cũ
-    if (err instanceof ChatSyncRevokeError) {
-      // tx GỐC đã rollback xong (callback đã reject) — AN TOÀN mở tx MỚI ở đây, KHÔNG lồng (§2 #20).
-      this.logger.error(`CHAT sync thu hồi THẤT BẠI — updateEmployee id=${id}: ${err.message}`, err.stack);
-      await this.chatSync
-        .recordRevokeFailureAudit(user.companyId, { action: "orgUnitChanged", actorUserId: user.id, targetId: id, cause: err })
-        .catch((e2) => this.logger.error("Ghi audit Failure cũng lỗi (best-effort)", e2));
-    }
-    throw err; // LUÔN rethrow — HTTP caller nhận 500, KHÔNG có state nào commit nửa vời.
-  }
-}
-```
+⚠️ Bản đo trước liệt kê nguyên thân hàm `updateEmployee` dưới dạng pseudo-code — RỦI RO: pseudo-code trông
+như code thật (kể cả gọi `maskSalary(updated, false)` là fragment THẬT của MỘT writer cụ thể) nhưng 6 writer
+của (a) có hình dạng KHÁC nhau (có/không try-catch sẵn, có/không mask). Bản neo lại này thay bằng **điểm
+chèn + danh sách bước** theo hình dạng THẬT của TỪNG writer (đo 03/08), để không đóng đinh code giả làm
+chuẩn khi thân hàm thật đổi sau này:
 
-- `ChatSyncRevokeError` (lớp lỗi RIÊNG, export từ `chat-derived-rooms-sync.service.ts`) bọc lỗi gốc — caller
-  phân biệt được "lỗi tới từ nhánh sync thu hồi" (cần ghi Failure-audit) với lỗi nghiệp vụ khác của chính
-  `updateEmployee` (không ghi audit sai ngữ cảnh).
-- `recordRevokeFailureAudit` mở `this.db.withTenant(companyId, tx2 => this.audit.record(tx2, {…}))` **SAU KHI**
-  tx gốc đã reject hẳn (đang ở nhánh `catch` NGOÀI `await this.db.withTenant(...)`, không phải trong callback)
-  — không vi phạm §2 #20. Action `chat.room.member_sync_failed` (§3.7), `resultStatus: 'Failure'`.
-- Kết quả: (1) `updateEmployee` THẤT BẠI TOÀN BỘ nếu rời phòng cũ lỗi — không có "orgUnitId đã đổi nhưng vẫn
-  còn trong phòng cũ" (đúng "cửa sổ = 0"); (2) có audit `Failure` độc lập cho điều tra; (3) log ERROR ngay
-  lập tức — không phải `warn` bị bỏ qua trong dashboard log-level mặc định INFO+.
+- **Writer ĐÃ có try/catch outer bọc `this.db.withTenant(...)`** — `HrWriteService.updateEmployee`
+  (`hr-write.service.ts:350-433`, catch ở 427-432) và `HrWriteService.linkUser`
+  (`hr-write.service.ts:530-563`, catch ở 557-562) là 2 ví dụ có sẵn khuôn này; `EmployeesService.updateEmployee`
+  (`employees.service.ts:303-376`, catch ở 370-375) cũng có. Với các writer này:
+  1. Chèn lệnh gọi `await this.chatSync.leave*Tx(tx, companyId, …)` NGAY TRONG callback `withTenant` hiện
+     có, SAU KHI write nghiệp vụ chính đã có kết quả (đã có `row`/`updated`) — KHÔNG bọc try/catch RIÊNG
+     quanh lệnh gọi này (để lỗi Postgres tự nhiên abort tx, callback reject, `withTenant()` tự rollback).
+     Ví dụ cụ thể W9b (`employees.service.ts:303-376`): điểm chèn nằm giữa dòng 351 (kết thúc nhánh
+     `syncDirectManagerEmr` hiện có) và dòng 365 (`return row;`), SAU KHI đã có `row.orgUnitId` mới và biết
+     `orgUnitId` cũ (đọc trước UPDATE — xem §3.6 cho cách lấy `before`).
+  2. Trong khối `catch (err) { … }` đã có SẴN, THÊM đúng 1 nhánh `if (err instanceof ChatSyncRevokeError) { … }`
+     TRƯỚC dòng `throw err;` hiện có (W9b: trước dòng 374; W9a: trước dòng 431; W10/linkUser không thuộc
+     nhóm REVOKE nên không áp). Nhánh mới: log ERROR + gọi `chatSync.recordRevokeFailureAudit(companyId, {…})`
+     mở tx MỚI RIÊNG (an toàn vì tx gốc đã reject hẳn, KHÔNG lồng — §2 #20), `.catch()` best-effort cho lỗi
+     ghi audit thứ hai.
+  3. **CẤM đụng**: nhánh `catch` hiện có cho `isUniqueViolation`/lỗi nghiệp vụ khác, thứ tự các bước write
+     nghiệp vụ chính trước điểm chèn, giá trị trả về ở happy-path, chữ ký hàm public.
+
+- **Writer HIỆN CHƯA có try/catch outer** — `HrWriteService.changeStatus` (`hr-write.service.ts:437-488`,
+  thân hàm là `return this.db.withTenant(...)` trần, không catch), `HrWriteService.unlinkUser`
+  (`hr-write.service.ts:565-599`, tương tự), `ProjectsService.removeMember` (`projects.service.ts:610-645`,
+  tương tự) đo 03/08 đều KHÔNG có catch bọc ngoài. Với các writer này:
+  1. Chèn lệnh gọi `leave*Tx` NGAY TRONG callback hiện có, cùng vị trí nguyên tắc như trên (sau write chính,
+     trước khi callback return) — KHÔNG SAVEPOINT.
+  2. PHẢI THÊM một khối `try { … } catch (err) { if (err instanceof ChatSyncRevokeError) { … } throw err; }`
+     BAO NGOÀI lệnh `this.db.withTenant(...)` hiện có (đổi `return this.db.withTenant(...)` thành
+     `const result = await this.db.withTenant(...)` bên trong `try`, `return result;` sau khối try/catch,
+     hoặc tương đương) — KHÔNG đổi logic BÊN TRONG callback ngoài điểm chèn ở bước 1.
+  3. **CẤM đụng**: mọi guard/validate hiện có TRƯỚC điểm chèn (vd `assertWriteScope`, kiểm `STATUS_TRANSITIONS`
+     ở `changeStatus`, kiểm tự-unlink ở `unlinkUser`, kiểm last-owner ở `removeMember`), thứ tự audit.record
+     hiện có, giá trị trả về ở happy-path.
+
+- `W14` (`EmployeesService.deleteEmployee`, sau khi refactor tx lên service theo §3.5) mirror đúng khuôn
+  "chưa có try/catch" ở trên — vì trước refactor nó KHÔNG có tx nào ở tầng service để bọc.
+
+Chung cho cả (a): `ChatSyncRevokeError` (lớp lỗi RIÊNG, export từ `chat-derived-rooms-sync.service.ts`) bọc
+lỗi gốc — caller phân biệt được "lỗi tới từ nhánh sync thu hồi" (cần ghi Failure-audit) với lỗi nghiệp vụ
+khác của chính writer (không ghi audit sai ngữ cảnh). `recordRevokeFailureAudit` mở
+`this.db.withTenant(companyId, tx2 => this.audit.record(tx2, {…}))` **SAU KHI** tx gốc đã reject hẳn (đang ở
+nhánh `catch` NGOÀI `this.db.withTenant(...)`, không phải trong callback) — không vi phạm §2 #20. Action
+`chat.room.member_sync_failed` (§3.7), `resultStatus: 'Failure'`. Kết quả: (1) writer THẤT BẠI TOÀN BỘ nếu
+rời phòng cũ lỗi — không có "orgUnitId đã đổi nhưng vẫn còn trong phòng cũ" (đúng "cửa sổ = 0"); (2) có audit
+`Failure` độc lập cho điều tra; (3) log ERROR ngay lập tức — không phải `warn` bị bỏ qua trong dashboard
+log-level mặc định INFO+.
 
 **(b) GRANT gắn kèm REVOKE cùng sự kiện (nửa "join mới" của W9a/W9b) — CÓ bọc `SAVEPOINT`:**
 
@@ -367,13 +413,26 @@ rời rạc của rev 1 (compiler không bắt được tổ hợp sai, phải t
 - `createFromImportTx` (`hr-write.service.ts:276`) luôn `userId: null` (UNLINKED, never-provision) — KHÔNG
   cần hook (giữ kết luận rev 1, xác nhận lại 02/08 qua `hr-employee-import.service.spec.ts:170-175`).
   `ChatSyncService` không inject vào `HrEmployeeImportService`.
-- PCR (`profile-change-request.service.ts`) — grep `orgUnitId` = 0 hit (xác nhận lại 02/08) — không ghi
-  `orgUnitId`, không cần hook.
+- PCR — allow-list field ghi được nằm ở **REPOSITORY**, không phải service: `FIELD_TO_COLUMN`
+  (`profile-change-request.repository.ts:113-128`, 14 khoá: `phone`/`avatar_file_id`/`notes`/`date_of_birth`/
+  `gender`/`marital_status`/`personal_email`/`current_address`/`permanent_address`/`emergency_contact_name`/
+  `emergency_contact_phone`/`identity_number`/`identity_issue_date`/`identity_issue_place`) không có
+  `orgUnitId`/`status`/`userId` — service chỉ IMPORT hằng số này (`profile-change-request.service.ts:24`)
+  và áp dụng qua nó (dòng 405), không tự định nghĩa allow-list riêng. **Sửa lại BẰNG CHỨNG (bản đo cũ grep
+  `orgUnitId` trên `profile-change-request.service.ts` — đúng 0 hit, nhưng đó không phải nơi allow-list
+  SỐNG nên là bằng chứng gián tiếp/dễ trôi), GIỮ NGUYÊN kết luận**: PCR không ghi `orgUnitId`, không cần hook.
 - Job handler chỉ nhận `ChatDerivedRoomsSyncService` + `DatabaseService` (2 Nest provider bình thường, KHÔNG
   `Database`/`workerDb` thô) — **KHÔNG cần `@Optional()`** (mirror `RetentionCleanupJobHandler`, §2 #10 rev
   1 giữ nguyên, memory `systemjobhandler-optional-dbw-di`).
-- Composite tenant FK cho `org_unit_id`/`ref_id` trên `chat_rooms` đã có sẵn (indexes §2 #8 dùng
-  `(company_id, org_unit_id)`/`(company_id, ref_id)`) — KHÔNG cần migration mới cho WO này.
+- Composite tenant FK cho `org_unit_id`/`ref_id` trên `chat_rooms` **ĐÃ CÓ SẴN** — KHÔNG cần migration mới
+  cho WO này. **Sửa lại BẰNG CHỨNG (bản đo cũ trỏ nhầm vào 2 unique INDEX ở §2 #8 — `chat_rooms_org_unit_uq`/
+  `chat_rooms_project_uq` là ràng buộc UNIQUE, KHÔNG phải FOREIGN KEY, nên không chứng minh được điều cần
+  chứng minh; kết luận vô tình vẫn đúng nhờ trùng hợp), GIỮ NGUYÊN kết luận**: đăng ký FK composite thật nằm
+  ở migration `S6-SEC-XTENANTFK-1` (`apps/api/migrations/0535_s6secxtenantfk1_composite_tenant_fk.sql:176-177`
+  — bảng dữ liệu `xtfk_pairs` có 2 dòng `('chat_rooms', 'org_unit_id', 'org_units', 'SET NULL')` và
+  `('chat_rooms', 'ref_id', 'projects', 'SET NULL')`, được migration này generate thành FK 2 cột
+  `(company_id, org_unit_id)`/`(company_id, ref_id)` theo cùng cơ chế áp dụng cho 446 cặp bảng khác trong
+  file — KHÔNG phải trường hợp đặc biệt của `chat_rooms`, không cần WO này tự làm lại).
 
 ---
 

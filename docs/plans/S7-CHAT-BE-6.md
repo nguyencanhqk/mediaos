@@ -1,16 +1,22 @@
-# Micro-plan — `S7-CHAT-BE-6` (🟡 yellow · LIGHT gate + `security-reviewer` bắt buộc + `database-reviewer`/`silent-failure-hunter` bổ sung cho diff `chat/**`) — rev 2 (02/08/2026)
+# Micro-plan — `S7-CHAT-BE-6` (🟡 yellow · LIGHT gate + `security-reviewer` bắt buộc + `database-reviewer`/`silent-failure-hunter` bổ sung cho diff `chat/**`) — rev 2 (02/08/2026), NEO LẠI 03/08/2026
 
 > **WO:** Thông báo CHAT qua `OutboxNotificationBridge` — `CHAT_MENTIONED` (gửi ngay) + `CHAT_DIRECT_MESSAGE`
 > (gộp lô 15 phút), tôn trọng `muted_until`, payload KHÔNG chứa nội dung tin nhắn.
 > **Nguồn sự thật:** [SPEC-15 §17](<../SPEC/SPEC-15 CHAT.md>) · mig `0538` (khối G/H) · memory
 > `noti-outbox-bridge-generic` · `idempotency-key-must-be-content-derived` · `noti-catalog-check-lives-on-two-tables`.
 > **Nhánh:** commit lên `wave/s7-chat` (❗KHÔNG `master` — WAVE §4).
-> **Commit-sha đã đo lúc viết rev 2 (02/08/2026):** `HEAD = 54b4d8cd` — `feat(chat): S7-CHAT-BE-2 — tin nhắn
-> (CHAT-API-009..014, 016)`, đứng trên `c77f48e0` — `feat(chat): S7-CHAT-BE-1 — ChatAccessService + phòng/
-> thành viên (CHAT-API-001..008)`, đứng trên `4c5c2da6` (mig `0539`). `git status --short` tại thời điểm đo:
-> chỉ 3 file KHÔNG liên quan WO này đang sửa dở (`docs/SPEC/SPEC-15 CHAT.md`, `docs/plans/S7-CHAT-WAVE.md`,
-> `harness/backlog.mjs` — cập nhật DEC-013 + vài WO khác cùng tối). `apps/api/src/chat/**` và
-> `apps/api/src/notifications/**` SẠCH (đã commit trong `54b4d8cd`).
+> **Commit-sha NEO LẠI (03/08/2026):** `HEAD = 104294bd` — `docs(chat): CHAT-DEC-013 + 6 micro-plan wave S7
+> (5 rev 2 + RT-0 mới) + đồng bộ backlog/STATUS`, đứng trên `631d683e` — `fix(chat): vá FULL gate
+> S7-CHAT-BE-1/BE-2 — 1 HIGH + 5 MEDIUM`, đứng trên `54b4d8cd` (mốc đo CŨ của rev 2 — nay đã LỆCH). `git
+> status --short`: **SẠCH** (0 file thay đổi). `631d683e` sửa 7 file trong `apps/api/src/chat/**`
+> (`setLastReadSeq` → `advanceLastReadSeq` dạng `GREATEST` trong UPDATE, `lockRoom()`, `requirePinAuthority`,
+> `assertNotArchived` cho 3 route kiểm duyệt, trần `memberUserIds`, audit `chat.room.direct_restored`) — MỌI
+> trích dẫn `file:line` bên dưới đã đo lại trên `104294bd`, không còn dựa vào ảnh chụp `54b4d8cd`.
+>
+> ⚠️ **BLOCK thiết kế còn MỞ** (nêu bởi `plan-reviewer`, KHÔNG vá ở lần neo lại này — để nguyên cho pass sau):
+> ca census 19 (§4), thiếu ca re-consume, `findDirectPeer()` trả `null` chưa có test, 5 ca assert-bằng-0
+> thiếu đối chứng dương, thứ tự merge giữa các WO cùng chạm `chat-messages.service.ts`/`.repository.ts`,
+> xử lý `muted_until`. Chỉ số dòng/tên hàm trong plan này được đo lại — quyết định thiết kế giữ nguyên.
 
 ---
 
@@ -34,10 +40,10 @@ Rev 2 viết lại toàn bộ §1–§5 cho khớp với BE-2 **CODE THẬT** (k
 | --- | --- | --- |
 | `apps/api/src/chat/` có 16 file (BE-1: 11, BE-2 thêm 5: `chat-messages.controller.ts`, `chat-messages.service.ts`, `chat-messages.repository.ts`, `chat-message-moderation.service.ts`, `chat-message-rules.ts`) | `ls apps/api/src/chat/` | Bash |
 | `enqueue\|Outbox\|EventBus` trong `apps/api/src/chat/**` = **0 hit** — xác nhận lại lỗ mà rev 1 bỏ sót | Grep | Grep |
-| `ChatMessagesService.sendMessage` — thứ tự tx THẬT: `assertMember` → chặn phòng lưu trữ → tra `clientMessageId` (idempotent replay) → validate `replyToMessageId` → `filterMentionsToMembers` → `allocateRoomSeq` → `insertMessage` → `setLastReadSeq` (BƯỚC CUỐI của tx) → (ngoài tx) `.catch` bắt `23505` retry tx MỚI | `chat-messages.service.ts:86-167` | đọc code |
-| `ChatActor` chỉ có `{id, companyId}` — **KHÔNG có tên hiển thị** | `chat-rooms.service.ts:26-29`; `AuthenticatedRequest.user: {id, companyId}` — `chat-messages.controller.ts:23` | đọc code |
+| `ChatMessagesService.sendMessage` — thứ tự tx THẬT: `assertMember` → chặn phòng lưu trữ → tra `clientMessageId` (idempotent replay) → validate `replyToMessageId` → `filterMentionsToMembers` → `allocateRoomSeq` → `insertMessage` → `advanceLastReadSeq` (BƯỚC CUỐI của tx, 5 tham số `tx, companyId, membershipId, wanted, ceiling` — tên đổi từ `setLastReadSeq` bởi FULL-gate fix `631d683e`) → (ngoài tx) `.catch` bắt `23505` retry tx MỚI | `ChatMessagesService.sendMessage` (`chat-messages.service.ts:86-175`) | đọc code |
+| `ChatActor` chỉ có `{id, companyId}` — **KHÔNG có tên hiển thị** | `ChatActor` (`chat-rooms.service.ts:26-29`); `AuthenticatedRequest.user: {id, companyId}` (`chat-messages.controller.ts:23-25`) | đọc code |
 | `ChatRoomAccess.room`/`.membership` (trả về từ `assertMember`) **không có** `directKey` lẫn tên hiển thị của actor — chỉ đủ cho payload `room_name` (`acc.room.name`/`acc.room.roomCode`), KHÔNG đủ cho `actor_name` lẫn `recipientUserId` của phòng `direct` | `chat-access.service.ts:9-32` | đọc code |
-| `ChatMessagesRepository` đã có tiền lệ đọc `chat_room_members` cho mục đích AUDIENCE (không phải bảo mật, không 404) — `filterMentionsToMembers` | `chat-messages.repository.ts:381-401` | đọc code |
+| `ChatMessagesRepository` đã có tiền lệ đọc `chat_room_members` cho mục đích AUDIENCE (không phải bảo mật, không 404) — `filterMentionsToMembers` | `ChatMessagesRepository.filterMentionsToMembers` (`chat-messages.repository.ts:421-441`) | đọc code |
 | `users.email` là `NOT NULL` — fallback an toàn khi `fullName` NULL, đúng tiền lệ `task-comments.service.ts:104-112` ("đọc lại row NGAY sau insert để lấy `userName`, coalesce `email`") | `users.ts:20`; `task-comments.service.ts:104-112` | đọc code |
 | `chat-access.service.ts` là file **3 BẤT BIẾN** (điểm khẳng định membership DUY NHẤT, vừa qua FULL gate) — KHÔNG được sửa trong WO này | `chat-access.service.ts:60-77` (comment 3 bất biến) | đọc code |
 | `OutboxService.enqueue(tx, {eventType, payload})` — `companyId` lấy từ ngữ cảnh `tx` (RLS GUC), không phải tham số | `outbox.service.ts:16-23` | đọc code |
@@ -54,7 +60,7 @@ Rev 2 viết lại toàn bộ §1–§5 cho khớp với BE-2 **CODE THẬT** (k
 | Census ca 14 (`assertMember` là đường DUY NHẤT) hiện CHỈ quét `apps/api/src/chat/` — reader ở `notifications/**` dựng lại đúng vế predicate mà không bị bắt | `chat-be1-access.int-spec.ts:451` (`chatDir = join(__dirname, "..", "..", "src", "chat")`), quét toàn bộ describe ca 14 dòng 448-554 | đọc code |
 | `CHAT-DEC-013` **đã chốt và đã ghi vào SPEC** — "gửi mọi DM trừ khi `muted_until` còn hiệu lực, bỏ điều kiện presence ở v1" | `docs/SPEC/SPEC-15 CHAT.md:627` (bảng quyết định) + `:631` (ghi chú thời điểm chốt) | SPEC |
 | `chat_room_members.mutedUntil` **vẫn 0 đường ghi HTTP** — grep `mutedUntil` trong `chat.dto.ts`/`chat-rooms.controller.ts`/`chat-messages.controller.ts`/`packages/contracts/src/chat.ts` = 0 hit | grep | grep |
-| Không WO nào trong `harness/backlog.mjs` (id `S7-CHAT-*`) nhận việc cấp API set `muted_until` — 19 id hiện có (`DOC-1/2, DB-1/2, BE-1..7, RT-0/1, FE-1..5, QA-1, CLEAN-1`), không id nào rảnh cho việc này | `grep 'id: "S7-CHAT' harness/backlog.mjs'` | backlog |
+| Không WO nào trong `harness/backlog.mjs` (id `S7-CHAT-*`) nhận việc cấp API set `muted_until` — 20 id hiện có (`DOC-1/2, DB-1/2, BE-1..7, RT-0/1, FE-1..5, QA-1, CLEAN-1`), không id nào rảnh cho việc này | `grep -c 'id: "S7-CHAT' harness/backlog.mjs` = 20 | backlog |
 
 ---
 
@@ -67,36 +73,46 @@ Rev 2 viết lại toàn bộ §1–§5 cho khớp với BE-2 **CODE THẬT** (k
 cho phép, chỉ chưa ai code. `S7-CHAT-BE-2.md:125` tự loại NOTI khỏi phạm vi của nó. Owner chốt 02/08: **BE-6
 là chủ của việc enqueue.**
 
-**Vị trí chính xác** — sửa `apps/api/src/chat/chat-messages.service.ts` (KHÔNG file mới), chèn MỘT lời gọi
-`await this.enqueueNotifications(tx, actor, acc, {...})` **giữa** `insertMessage` và `setLastReadSeq`
-(dòng 127-144 hiện tại):
+**Vị trí chính xác** — sửa `apps/api/src/chat/chat-messages.service.ts` (KHÔNG file mới). Đo lại trên
+`104294bd`: trong `ChatMessagesService.sendMessage` (`chat-messages.service.ts:86-175`), lời gọi
+`this.repo.insertMessage(...)` kết thúc ở dòng 140 (`});`), rồi TRƯỚC khối comment mở đầu dòng 142 ("Tin của
+chính mình luôn tự nâng con trỏ đọc…") dẫn tới lời gọi `this.repo.advanceLastReadSeq(...)` (dòng 146-152).
+
+**ĐIỂM CHÈN = giữa dòng 140 và dòng 142.** Chèn ĐÚNG MỘT lời gọi:
 
 ```ts
-const inserted = await this.repo.insertMessage(tx, { …, roomSeq, attachmentCount: 0 });
-
-// S7-CHAT-BE-6 — enqueue TRONG CÙNG tx, SAU insert (có messageId/roomSeq), TRƯỚC setLastReadSeq.
 await this.enqueueNotifications(tx, actor, acc, {
   messageId: inserted.id,
   roomSeq,
   mentions,           // biến CỤC BỘ đã lọc bởi filterMentionsToMembers — KHÔNG query lại
   createdAt: now,      // biến CỤC BỘ đã có — KHÔNG Date.now() lần hai
 });
-
-// Tin của chính mình luôn tự nâng con trỏ đọc, TRONG CÙNG tx — GIỮ NGUYÊN vị trí CUỐI CÙNG của tx (lý do:
-// test rollback §4 ca 11 spy đúng lời gọi NÀY để buộc throw SAU enqueue).
-await this.repo.setLastReadSeq(tx, actor.companyId, acc.membership.id, roomSeq);
-return inserted.id;
 ```
+
+⚠️ **CẤM đụng khi chèn** — `chat-messages.service.ts` đã đổi so với ảnh chụp rev 1 (vá FULL-gate `631d683e`);
+copy nguyên khối pseudo-code cũ đè lên sẽ xoá mất các bước vá đó:
+
+- KHÔNG đổi/xoá lời gọi `this.repo.advanceLastReadSeq(tx, actor.companyId, acc.membership.id, roomSeq, roomSeq)`
+  (dòng 146-152) hay gọi nó bằng tên cũ `setLastReadSeq` — hàm đó **KHÔNG CÒN TỒN TẠI**, bị xoá bởi `631d683e`
+  (vá HIGH "con trỏ đã đọc LÙI ĐƯỢC"; chữ ký nay có 5 tham số `tx, companyId, membershipId, wanted, ceiling`).
+- KHÔNG xoá 4 dòng comment (142-145) giải thích vì sao `advanceLastReadSeq` giữ nguyên vị trí CUỐI CÙNG của
+  tx (lý do: ca test 11 §4 spy đúng lời gọi này để buộc throw SAU enqueue).
+- KHÔNG đổi vị trí `return inserted.id;` (dòng 153) — vẫn đứng SAU `advanceLastReadSeq`.
+- KHÔNG chạm nhánh `.catch` (dòng 155-172) hay nhánh `if (existing) return existing.id;` (dòng 106) — xem
+  ràng buộc (a)/(b) ngay dưới.
+
+HÀNH VI dự định giữ nguyên như rev 2 gốc: `enqueueNotifications` chạy TRONG CÙNG tx, SAU `insertMessage`
+(có sẵn `messageId`/`roomSeq`), TRƯỚC `advanceLastReadSeq`.
 
 **Ba ràng buộc vị trí bắt buộc** (theo yêu cầu C1):
 
 - **(a) KHÔNG enqueue ở nhánh idempotent-replay.** Nhánh `if (existing) return existing.id;` (dòng 106,
   TRƯỚC `allocateRoomSeq`) **return SỚM**, không bao giờ chạm `enqueueNotifications` — đúng bằng CẤU TRÚC
   code (return nằm trước lời gọi), không cần cờ canh riêng. Ca test 9 (§4) chứng minh bằng HTTP thật.
-- **(b) KHÔNG enqueue trong nhánh `.catch` đua 23505.** Nhánh `.catch(async (err) => {...})` (dòng 147-164)
-  chỉ gọi lại `findByClientMessageId` trong tx MỚI rồi `return raced.id` — KHÔNG gọi lại `enqueueNotifications`
-  (đúng bằng cấu trúc: `enqueueNotifications` chỉ tồn tại trong closure của tx ĐẦU, không phải trong `.catch`).
-  Ca test 10 (§4) ép race thật bằng `Promise.all` chứng minh.
+- **(b) KHÔNG enqueue trong nhánh `.catch` đua 23505.** Nhánh `.catch(async (err: unknown) => {...})`
+  (dòng 155-172) chỉ gọi lại `findByClientMessageId` trong tx MỚI rồi `return raced.id` — KHÔNG gọi lại
+  `enqueueNotifications` (đúng bằng cấu trúc: `enqueueNotifications` chỉ tồn tại trong closure của tx ĐẦU,
+  không phải trong `.catch`). Ca test 10 (§4) ép race thật bằng `Promise.all` chứng minh.
 - **(c) Dữ liệu payload lấy từ `acc` — KHÔNG dựng điểm khẳng định membership thứ hai.** `enqueueNotifications`
   KHÔNG được gọi `assertMember`/`assertMessageAccess` lần nữa, KHÔNG viết lại predicate
   `isNull(chatRooms.deletedAt) + isNull(chatRoomMembers.leftAt) + eq(...userId, actorUserId)` (đó là bản sao
@@ -172,7 +188,7 @@ chat.message.direct_sent:
 ```
 
 `messageId` → `sourceEntityIdOf`, `sourceEntityType = 'chat_message'` (`notifications.source_entity_type`
-tự do, không CHECK — `0479:225`). `sourceModule = 'CHAT'` (khớp `CHAT_MODULE_CODE` — `chat.errors.ts:152`).
+tự do, không CHECK — `0479:225`). `sourceModule = 'CHAT'` (khớp `CHAT_MODULE_CODE` — `chat.errors.ts:159`).
 
 ### 1.3 `dedupeKeyOf` — bucket từ `payload.createdAt`, KHÔNG `Date.now()` lúc consume — GIỮ NGUYÊN rev 1
 
@@ -329,7 +345,7 @@ KHÔNG BAO GIỜ cập nhật cho tới bucket kế tiếp.
 
 **Chốt: (a).** Ca test 6 (§4) assert TƯỜNG MINH: 3 tin cùng bucket → `unread_count` trong body của
 notification DUY NHẤT bằng giá trị TẠI TIN ĐẦU (không phải tổng 3), và số này CÓ THỂ khác badge
-`GET /chat/unread-count` (tính real-time qua `unreadOf`, luôn đúng — `chat-messages.repository.ts:346-375`)
+`GET /chat/unread-count` (tính real-time qua `unreadOf`, luôn đúng — `ChatMessagesRepository.unreadTotals`, `chat-messages.repository.ts:386-415`)
 — đây là sai khác CHỦ Ý giữa notification (ảnh chụp lúc gửi) và badge (real-time), ghi vào plan để QA không
 mở bug.
 
@@ -348,7 +364,7 @@ chat/** " nghĩa là được phép import `ChatModule` vào `NotificationsModul
 
 | File | Việc |
 | --- | --- |
-| `apps/api/src/chat/chat-messages.service.ts` (SỬA — không phải file mới) | Thêm `outbox: OutboxService` vào constructor; thêm method `private async enqueueNotifications(...)` (§1.1/§1.2); 1 lời gọi chèn giữa `insertMessage` và `setLastReadSeq` trong `sendMessage` |
+| `apps/api/src/chat/chat-messages.service.ts` (SỬA — không phải file mới) | Thêm `outbox: OutboxService` vào constructor; thêm method `private async enqueueNotifications(...)` (§1.1/§1.2); 1 lời gọi chèn giữa `insertMessage` và `advanceLastReadSeq` trong `sendMessage` |
 | `apps/api/src/chat/chat-messages.repository.ts` (SỬA) | Thêm `findSenderDisplayName` + `findDirectPeer` (§1.1c); thêm `ne` vào import `drizzle-orm` |
 | `apps/api/src/chat/chat-access.service.ts` | **KHÔNG sửa** — file 3-bất-biến, giữ nguyên (§1.1) |
 | `apps/api/src/notifications/chat-audience.reader.ts` (MỚI) | 2 hàm §1.4a, predicate dùng chung có `deletedAt`/`isArchived`/`mutedUntil` |
@@ -366,7 +382,7 @@ chat/** " nghĩa là được phép import `ChatModule` vào `NotificationsModul
 file NHIỀU WO cùng sửa: `S7-CHAT-BE-3` (đính kèm, `attachmentCount`/`fileIds`), `S7-CHAT-BE-4` (tìm kiếm),
 đề xuất `S7-CHAT-BE-8` (§1.6) đều còn `todo` và sẽ chạm lại 2 file này. Sửa của WO này PHẢI là **APPEND**
 (thêm 1 method `enqueueNotifications` + 1 lời gọi chèn giữa 2 dòng có sẵn; thêm 2 method mới cuối
-`ChatMessagesRepository`), **KHÔNG** đổi chữ ký `insertMessage`/`setLastReadSeq`/thứ tự tham số hiện có —
+`ChatMessagesRepository`), **KHÔNG** đổi chữ ký `insertMessage`/`advanceLastReadSeq`/thứ tự tham số hiện có —
 WO sau đọc diff sẽ thấy khối thêm rõ ràng, không phải rewrite lẫn vào code cũ (mirror nguyên tắc CLAUDE.md
 §9 "Hot-file = append, KHÔNG rewrite").
 
@@ -412,7 +428,7 @@ export LANE_DB=mediaos_chatbe6
 | 8 | **HTTP thật** — gửi tin phòng `group` KHÔNG mention | supertest | 0 outbox event mới cho `roomId` này (so đếm trước/sau) |
 | 9 | **HTTP thật** — gửi lại CÙNG `clientMessageId` vào phòng `direct` (idempotent replay) | supertest × 2 | Ràng buộc (a) §1.1: CHỈ **1** `notifications` (không phải 2), `last_message_seq` không tăng lần 2 |
 | 10 | **HTTP thật, đồng thời** — 2 request `Promise.all`, CÙNG actor + CÙNG `clientMessageId`, phòng `direct` | supertest × 2 song song | Ràng buộc (b) §1.1: race `23505` → CHỈ **1** hàng `chat_messages`, CHỈ **1** `notifications` |
-| 11 | **Rollback** — `vi.spyOn(app.get(ChatMessagesRepository), "setLastReadSeq").mockRejectedValueOnce(...)` (bước CUỐI trong tx, chạy SAU `enqueueNotifications` — §1.1) rồi gọi HTTP thật | supertest, 500 | `chat_messages` VÀ `outbox_events` đều **0 hàng mới** cho phòng đó — chứng minh transaction thật rollback cả 2, không phải chỉ outbox (khác `outbox.int-spec.ts:29-38` vốn chỉ chứng minh cơ chế generic) |
+| 11 | **Rollback** — `vi.spyOn(app.get(ChatMessagesRepository), "advanceLastReadSeq").mockRejectedValueOnce(...)` (bước CUỐI trong tx, chạy SAU `enqueueNotifications` — §1.1; tên hàm đổi từ `setLastReadSeq` bởi `631d683e` — spy phải trỏ đúng tên THẬT hoặc mock không bao giờ kích hoạt và ca này XANH GIẢ) rồi gọi HTTP thật | supertest, 500 | `chat_messages` VÀ `outbox_events` đều **0 hàng mới** cho phòng đó — chứng minh transaction thật rollback cả 2, không phải chỉ outbox (khác `outbox.int-spec.ts:29-38` vốn chỉ chứng minh cơ chế generic) |
 | 12 | Adversarial (fixture — `outbox.enqueue` tay, KHÔNG qua producer thật) — payload CÓ thêm khoá `body`/`preview` | fixture tx + `OutboxWorker.processBatch()` | `notifications.payload` KHÔNG chứa `body`/`preview` — chỉ đúng field whitelist §1.5 |
 | 13 | Adversarial (fixture) — enqueue `chat.message.direct_sent` cho phòng `roomType != 'direct'` | fixture | 0 notification (reader chặn qua `room_type` — defense-in-depth) |
 | 14 | Adversarial (fixture) — enqueue `chat.message.mentioned` với payload THIẾU `roomId` | fixture + `processBatch()` | `target_url` render còn `{room_id}` → `assertInternalTargetUrl` ném `TargetUnavailableError` (422) LOUD; bridge re-throw (không nuốt); OutboxWorker đánh dấu lỗi — chứng minh payload hỏng KHÔNG rơi vào notification rác trong im lặng |
@@ -439,7 +455,7 @@ chạy sau). Drop lane DB sau khi xong (`pgdata-bloat-lane-dbs-and-job-log`).
 
 ## 5. Definition of Done / Nợ & rủi ro
 
-- [ ] `enqueueNotifications` nằm TRONG `ChatMessagesService.sendMessage`, đúng vị trí §1.1 (giữa `insertMessage` và `setLastReadSeq`); `chat-access.service.ts` KHÔNG bị đụng (`git diff --stat` xác nhận)
+- [ ] `enqueueNotifications` nằm TRONG `ChatMessagesService.sendMessage`, đúng vị trí §1.1 (giữa `insertMessage` và `advanceLastReadSeq`); `chat-access.service.ts` KHÔNG bị đụng (`git diff --stat` xác nhận)
 - [ ] Ràng buộc (a)/(b)/(c) §1.1 đúng bằng CẤU TRÚC code, không chỉ bằng test — reviewer đọc lại vị trí dòng
 - [ ] `findSenderDisplayName`/`findDirectPeer` mới trong `chat-messages.repository.ts`, KHÔNG viết lại predicate membership (mirror `filterMentionsToMembers`)
 - [ ] `ChatAudienceReader` predicate CÓ `deletedAt`/`isArchived`/`mutedUntil` (H6.i)
@@ -455,6 +471,11 @@ chạy sau). Drop lane DB sau khi xong (`pgdata-bloat-lane-dbs-and-job-log`).
 - [ ] Câu treo DEC-013 ("cần owner xác nhận"/"phải chốt hay chặn WO") đã xoá khỏi văn bản, trỏ `SPEC-15 CHAT.md:621-627`
 - [ ] Đề xuất WO `S7-CHAT-BE-8` (§1.6) đã ghi rõ trong plan — ghi vào `harness/backlog.mjs`/`S7-CHAT-WAVE.md` là bước tiếp theo, NGOÀI phạm vi sửa file của rev 2
 - [ ] lane DB `mediaos_chatbe6` drop sau khi xong
+
+⚠️ **Kỷ luật neo số dòng:** Nếu `chat-messages.service.ts` (hoặc bất kỳ file nào trích dẫn `file:line` trong
+plan này) khác với §0 khi bắt đầu code ⇒ **DỪNG**, neo lại bằng cách ĐỌC file thật, KHÔNG tin số dòng đã ghi
+— plan này đã một lần LỆCH so với mốc đo ban đầu do 2 commit chen giữa (`631d683e`, `104294bd`), và có thể
+lệch lần nữa nếu WO khác chạm hot-file trước khi WO này chạy.
 
 **Rủi ro cao nhất cho reviewer:** `enqueueNotifications` chạm lại `ChatMessagesService.sendMessage` — file
 vừa qua FULL gate của `S7-CHAT-BE-2`. Sai vị trí (đặt trước `insertMessage`, hoặc trong nhánh `.catch`, hoặc

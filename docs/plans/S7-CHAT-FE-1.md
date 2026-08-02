@@ -1,15 +1,24 @@
-# Micro-plan — `S7-CHAT-FE-1` (🟡 yellow · LIGHT gate) — rev 2 (02/08/2026)
+# Micro-plan — `S7-CHAT-FE-1` (🟡 yellow · LIGHT gate) — rev 2 (02/08/2026), NEO LẠI 03/08/2026
 
 > **rev 1 → `plan-reviewer` chấm BLOCK** (2 điều kiện gỡ khối C1/C2 + 6 HIGH H1..H6). rev 2 vá cả 8, cộng
 > danh sách "cũng nên vá" của owner. Không đổi WO/phạm vi tổng thể — vẫn LIGHT gate, vẫn 0 UI.
 >
-> **Commit đã đo cho rev 2 (02/08/2026):** `HEAD = 54b4d8cd` ("feat(chat): S7-CHAT-BE-2 — tin nhắn
-> (CHAT-API-009..014, 016)"), lên trước đó `c77f48e0` ("S7-CHAT-BE-1"). `git status --short` tại thời
-> điểm viết rev 2: chỉ 3 file đang sửa dở KHÔNG thuộc CHAT code (`docs/SPEC/SPEC-15 CHAT.md`,
-> `docs/plans/S7-CHAT-WAVE.md`, `harness/backlog.mjs`) — cây `apps/api/src/chat/**` và
-> `packages/contracts/src/chat.ts` đã **commit đầy đủ**, không còn ở trạng thái "working tree chưa
-> commit" như rev 1 mô tả. **`S7-CHAT-RT-1` VẪN chỉ là plan doc, CHƯA có code** — `packages/contracts/src/realtime.ts`
+> **Commit-sha NEO LẠI (03/08/2026):** `HEAD = 104294bd` — `docs(chat): CHAT-DEC-013 + 6 micro-plan wave S7
+> (5 rev 2 + RT-0 mới) + đồng bộ backlog/STATUS`, đứng trên `631d683e` — `fix(chat): vá FULL gate
+> S7-CHAT-BE-1/BE-2 — 1 HIGH + 5 MEDIUM`, đứng trên `54b4d8cd` (mốc đo CŨ của rev 2 — nay đã LỆCH). `git
+> status --short`: **SẠCH** (0 file thay đổi). MỌI trích dẫn `file:line` bên dưới đã đo lại trên
+> `104294bd`, không còn dựa vào ảnh chụp `54b4d8cd`. **`S7-CHAT-RT-0` giờ ĐÃ CÓ file plan**
+> (`docs/plans/S7-CHAT-RT-0.md`, 198 dòng, thêm bởi `104294bd`) — SỬA khẳng định "MISSING" của bản đo
+> trước — nhưng **CODE VẪN CHƯA LAND** (`apps/api/src/main.ts` chưa gọi `useWebSocketAdapter`, đo lại ở
+> §0). **`S7-CHAT-RT-1` VẪN chỉ là plan doc, CHƯA có code** — `packages/contracts/src/realtime.ts`
 > và `apps/api/src/realtime/**` chưa đổi gì so với HEAD (đo lại ở §0).
+>
+> ⚠️ **BLOCK thiết kế còn MỞ** (nêu bởi `plan-reviewer`, KHÔNG vá ở lần neo lại này — để nguyên cho pass
+> sau): `event.affectedUserId` dùng trong §1.7.1 không tồn tại trong payload `chat:room` thật ·
+> `socket.io-client` khai sai vị trí/tên gói ở §2 · kiểu trả về của `getAppSocket()` chưa chốt · quy tắc
+> FIFO ở §1.7.2 có thể nuốt tin gửi lỗi · vi phạm Rules of Hooks tiềm ẩn ở gate `useChatRealtime` ·
+> thiếu 4 file trong `paths` §2. Chỉ số dòng/tên hàm trong plan này được đo lại — quyết định thiết kế
+> giữ nguyên.
 >
 > **WO:** Nền FE chat — `packages/contracts` (2 schema kết quả phụ) + `packages/web-core` (api-client +
 > query-keys + **socket dùng chung app-shell**) + store Zustand `apps/app` + hook CHAT tiêu thụ socket đó.
@@ -21,9 +30,16 @@
 > **Nhánh:** commit lên `wave/s7-chat` (❗KHÔNG `master` — [WAVE §4](<S7-CHAT-WAVE.md>)).
 >
 > **Phụ thuộc (backlog `harness/backlog.mjs:9816`):** `["S7-CHAT-BE-2", "S7-CHAT-RT-1", "S7-CHAT-RT-0"]`.
-> `S7-CHAT-BE-2` **đã done** (commit `54b4d8cd`). `S7-CHAT-RT-1` VÀ `S7-CHAT-RT-0` **còn `status:"todo"`**
-> — `S7-CHAT-RT-0` (`backlog.mjs:9737-9766`) còn CHƯA có file plan (`docs/plans/S7-CHAT-RT-0.md` — MISSING,
-> đo `test -f` 02/08/2026). Người thi công FE-1 **PHẢI** xác nhận cả hai `status:"done"` trong backlog
+> `S7-CHAT-BE-2` code **đã land** (commit `54b4d8cd`, xác nhận lại ở §0) dù backlog vẫn ghi `status:"todo"`
+> cho cả ba (ledger chưa đóng dấu — không phải tín hiệu code chưa xong). `S7-CHAT-RT-1` **và**
+> `S7-CHAT-RT-0` đều **CHƯA có code**. `S7-CHAT-RT-0` (`backlog.mjs:9737-9766`) giờ **ĐÃ có file plan**
+> (`docs/plans/S7-CHAT-RT-0.md`, đo `test -f` 03/08/2026 — sửa khẳng định "MISSING" của bản đo trước),
+> nhưng phần code (`main.ts` gọi `useWebSocketAdapter`) chưa land (đo lại ở §0). RT-0 §1.5-§1.6 giao
+> ngược hai việc cho FE-1, không phải quyết định mới của plan này: (a) tự chốt `transports` phía client
+> khi tới lúc code — RT-0 CHỦ Ý không quyết thay (test cả `["polling","websocket"]` mặc định lẫn
+> `["websocket"]` ở phía server); (b) chấp nhận giới hạn "client Node không thực thi CORS nên int-spec
+> KHÔNG chứng minh được hành vi trình duyệt thật" — khớp đúng nhánh mặc định §1.6 mà plan này đã thiết kế
+> sẵn (xem hàng RT-0 ở §0). Người thi công FE-1 **PHẢI** xác nhận cả hai `status:"done"` trong backlog
 > trước khi bắt đầu code — plan này viết trước cả hai tồn tại, y hệt tình huống rev 1, nhưng rev 2 đã sửa
 > để KHÔNG còn tự chế hợp đồng yếu hơn bản thật sẽ có (xem H1 §1.5).
 
@@ -37,18 +53,19 @@
 | Nền BE-1 (rooms/members) | **Đã commit** (`c77f48e0`) — 11 route thật | `apps/api/src/chat/chat-rooms.controller.ts:65-180` |
 | Nền BE-2 (tin nhắn) | **Đã commit** (`54b4d8cd`) — 8 route thật (`GET/POST messages`, `recall`, `pin`/`unpin`, `pinned`, `POST read`, `GET unread-count`) | `docs/plans/S7-CHAT-BE-2.md:112-125` |
 | `listRooms` trả **mảng trần** | `async listRooms(...): Promise<ChatRoomDto[]>` — KHÔNG wrapper `{data,meta}` | `apps/api/src/chat/chat-rooms.service.ts:65-72` |
-| `unreadCount` per-room LUÔN là số | `unreadCount ?? row.unreadCount ?? 0` | `apps/api/src/chat/chat.mapper.ts:59` |
-| **`chatMessageSchema.body` ĐÃ `.nullable()`** (SỬA số đo SAI của rev 1 §0) | `body: z.string().nullable()`, comment trích đúng `server-masking-needs-optional-fe-schema` — BE-2 land xong việc này, FE-1 KHÔNG còn gì phải sửa ở field này | `packages/contracts/src/chat.ts:63` |
-| **`chatMessageSchema.roomSeq` ĐÃ có, BẮT BUỘC** (SỬA số đo SAI của rev 1 §0) | `roomSeq: z.number().int().positive()` — KHÔNG `.optional()`. Trường `seq` (cấp bảng) không còn xuất hiện trong DTO | `packages/contracts/src/chat.ts:91` |
-| **`chatMessageSchema` KHÔNG mang `clientMessageId`** | DTO đọc (REST GET + WS `chat:message`, RT-1 §1.9.2 tái dùng cùng DTO) không có khoá này — chỉ `sendMessageSchema` (request POST) có; server lưu cột này để dedupe nhưng không echo lại qua response object | `packages/contracts/src/chat.ts:51-94,106-113` · `apps/api/src/chat/chat-messages.repository.ts:106` |
+| `unreadCount` per-room LUÔN là số | `unreadCount ?? row.unreadCount ?? 0` | `apps/api/src/chat/chat.mapper.ts:65` |
+| **`chatMessageSchema.body` ĐÃ `.nullable()`** (SỬA số đo SAI của rev 1 §0) | `body: z.string().nullable()`, comment trích đúng `server-masking-needs-optional-fe-schema` — BE-2 land xong việc này, FE-1 KHÔNG còn gì phải sửa ở field này | `packages/contracts/src/chat.ts:69` |
+| **`chatMessageSchema.roomSeq` ĐÃ có, BẮT BUỘC** (SỬA số đo SAI của rev 1 §0) | `roomSeq: z.number().int().positive()` — KHÔNG `.optional()`. Trường `seq` (cấp bảng) không còn xuất hiện trong DTO | `packages/contracts/src/chat.ts:97` |
+| **`chatMessageSchema` KHÔNG mang `clientMessageId`** | DTO đọc (REST GET + WS `chat:message` — `wsChatMessageEventSchema = chatMessageSchema`, tái dùng nguyên, không phải bản sao) không có khoá này — chỉ `sendMessageSchema` (request POST) có; server lưu cột này để dedupe nhưng không echo lại qua response object | `packages/contracts/src/chat.ts:52-100` (`chatMessageSchema`) · `:102-119` (`sendMessageSchema`, `clientMessageId` dòng 114) · `packages/contracts/src/realtime.ts:70` (`wsChatMessageEventSchema`) · `apps/api/src/chat/chat-messages.repository.ts:106` |
 | **2 route trả shape KHÁC `chatRoomSchema`** | `leaveRoom` → `Promise<{left: true}>`; `removeMember` → `Promise<{removed: true}>` — parse response bằng `chatRoomSchema` cho hai hàm này ăn `ZodError` (thiếu toàn bộ field bắt buộc của phòng) | `apps/api/src/chat/chat-rooms.service.ts:295,315` · `apps/api/src/chat/chat-members.service.ts:141,162` |
 | **C1 — root cause thật của "WS không mở được từ trình duyệt"** | `ValkeyIoAdapter` (nơi DUY NHẤT set `cors` Socket.IO từ `CORS_ORIGIN` — `createIOServer`) **chưa bao giờ được gắn**: grep `useWebSocketAdapter` (không tính `node_modules`) = **0 hit** trong `apps/api/src/**`. `main.ts` KHÔNG gọi `app.useWebSocketAdapter(...)` lẫn `connectToValkey(...)` — `bootstrap()` chỉ gọi `app.enableCors()` (chỉ áp HTTP, KHÔNG áp engine.io) rồi `app.listen()` thẳng | `apps/api/src/main.ts:27-63` (0 dòng nào nhắc `ValkeyIoAdapter`) · `apps/api/src/realtime/valkey-io.adapter.ts:60-71` |
 | Vì sao lỗ sống sót tới giờ | Client WS DUY NHẤT trong repo hiện tại là client Node (`realtime.gateway.io.spec.ts`) — Node không thực thi CORS nên int-spec không bao giờ chạm lỗ này | `harness/backlog.mjs:9757` (đo của `S7-CHAT-RT-0`) |
 | **Việc vá C1 đã tách WO riêng, NGOÀI `paths` FE-1** | `S7-CHAT-RT-0` (`zone:"red"`, `paths: ["apps/api/src/main.ts","apps/api/src/realtime/**",...]`) — FE-1 **KHÔNG được** đụng `main.ts`/`realtime/**`. FE-1 chỉ phải **chịu đựng đúng** trạng thái "kết nối lỗi mà không biết lý do" (§1.6) chừng nào RT-0 chưa `done` | `harness/backlog.mjs:9737-9766` |
+| **RT-0 giao ngược 2 việc cho FE-1 khi tới lúc thi công** (không phải quyết định mới của lần neo lại này) | (a) `transports` phía client — RT-0 CHỦ Ý không chốt thay, tự test cả `["polling","websocket"]` (mặc định) và `["websocket"]` ở phía server để FE-1 tự chọn theo nhu cầu mạng người dùng thật; (b) giới hạn: test `socket.io-client` (Node) của RT-0 KHÔNG thực thi Same-Origin Policy nên KHÔNG chứng minh được hành vi trình duyệt thật — khớp đúng phát hiện FE-1 tự đo ở hàng dưới (`harness/backlog.mjs:9757`) và nhánh mặc định §1.6 mà FE-1 đã thiết kế sẵn | `docs/plans/S7-CHAT-RT-0.md` §1.5 (dòng 96-98) · §1.6 (dòng 100-102) |
 | Sự kiện WS v1 theo SPEC | 4 sự kiện server→client: `chat:message` · `chat:message-recalled` · `chat:read` · `chat:room`; **0** `@SubscribeMessage` (một chiều, CHAT-DEC-005) | SPEC-15 §13.8 |
-| **`realtime.ts` HIỆN TẠI (HEAD `54b4d8cd`) vẫn LỆCH SPEC v1 y hệt rev 1 đo** — RT-1 CHƯA code | `WS_EVENTS` còn 5 sự kiện client→server đời cũ (`CHAT_JOIN`/`LEAVE`/`SEND`/`TYPING`/`PRESENCE_LIST`) + `wsChatSendAckSchema`/`wsPresenceListAckSchema`/`wsAckSchema`; `chat:message-recalled`/`chat:read`/`chat:room` **CHƯA có schema nào** — xác nhận file này 0 thay đổi so với rev 1 vì `S7-CHAT-RT-1` còn `status:"todo"` | `packages/contracts/src/realtime.ts:16-114` |
-| **RT-1 (plan, chưa code) ĐÃ CHỐT hình dạng 3 schema còn thiếu** — FE-1 không được tự đoán khác | `wsChatRoomActionSchema = z.enum(["created","updated","archived","member_added","member_removed","member_role_changed","left"])`; `wsChatRoomEventSchema = z.object({roomId, action, room: chatRoomSchema.omit({unreadCount:true}).optional()})` — `room` **CHỈ** điền cho `created`/`updated`/`archived`; `wsChatMessageRecalledEventSchema = {messageId, roomId, recalledAt}` (KHÔNG kèm `body`); `wsChatReadEventSchema = {roomId, userId, lastReadSeq}` (đơn vị `room_seq`) | `docs/plans/S7-CHAT-RT-1.md:84-101,160-168` |
-| RT-1 cũng đã chốt xoá 5 event hai chiều đời cũ + đổi `WS_EVENTS.CHAT_MESSAGE_RECALLED="chat:message-recalled"`/`CHAT_READ="chat:read"`/`CHAT_ROOM="chat:room"` | | `docs/plans/S7-CHAT-RT-1.md:106-113` |
+| **`realtime.ts` HIỆN TẠI (HEAD `104294bd`) vẫn LỆCH SPEC v1 y hệt rev 1 đo** — RT-1 CHƯA code | `WS_EVENTS` còn 5 sự kiện client→server đời cũ (`CHAT_JOIN`/`LEAVE`/`SEND`/`TYPING`/`PRESENCE_LIST`) + `wsChatSendAckSchema`/`wsPresenceListAckSchema`/`wsAckSchema`; `chat:message-recalled`/`chat:read`/`chat:room` **CHƯA có schema nào** — xác nhận file này 0 thay đổi so với rev 1 vì `S7-CHAT-RT-1` còn `status:"todo"` | `packages/contracts/src/realtime.ts:16-114` |
+| **RT-1 rev 2 (plan, chưa code) ĐÃ CHỐT hình dạng 3 schema còn thiếu** — FE-1 không được tự đoán khác | `wsChatRoomActionSchema = z.enum(["created","updated","archived","member_added","member_removed","member_role_changed","left"])`; `wsChatRoomEventSchema = z.object({roomId, action, room: chatRoomSchema.omit({unreadCount:true}).optional()})` — `room` **CHỈ** điền cho `created`/`updated`/`archived`; `wsChatMessageRecalledEventSchema = {messageId, roomId, recalledAt}` (KHÔNG kèm `body`); `wsChatReadEventSchema = {roomId, userId, lastReadSeq}` (đơn vị `room_seq`) — trích theo TÊN SCHEMA, không theo số dòng, vì RT-1 đang ở rev 2 và có thể neo lại tiếp | `docs/plans/S7-CHAT-RT-1.md` (rev 2) §1.3 `wsChatMessageRecalledEventSchema`/`wsChatReadEventSchema` · §1.4 `wsChatRoomActionSchema`/`wsChatRoomEventSchema` |
+| RT-1 rev 2 cũng đã chốt xoá 7 event-key cũ (`CHAT_JOIN`/`CHAT_LEAVE`/`CHAT_SEND`/`CHAT_TYPING`/`CHAT_PRESENCE_LIST`/`CHAT_TYPING_EVENT`/`CHAT_PRESENCE`) + 10 schema chết + đổi `WS_EVENTS.CHAT_MESSAGE_RECALLED="chat:message-recalled"`/`CHAT_READ="chat:read"`/`CHAT_ROOM="chat:room"` | | `docs/plans/S7-CHAT-RT-1.md` (rev 2) §1.5 |
 | Gateway hiện tại CHƯA join phòng chat | `handleConnection` chỉ `client.join(userRoomName(...))` | `apps/api/src/realtime/realtime.gateway.ts:84-94` |
 | Auth handshake WS đọc token ở đâu | `client.handshake.auth.token` **hoặc** header `Authorization: Bearer …`; sai/thiếu → `next(new Error("unauthorized"))`; `REALTIME_ENABLED=false` → `next(new Error("realtime_disabled"))` cho MỌI client | `apps/api/src/realtime/realtime.gateway.ts:54-79,104-109` |
 | **0 client WS ở FE hiện tại** | Grep `socket\|WS_NAMESPACE\|io(` trên `packages/web-core/src` + `apps/app/src` = 0 kết quả. `NotificationBadge` chỉ poll REST mỗi 30s | `apps/app/src/components/notifications/NotificationBadge.tsx` |
