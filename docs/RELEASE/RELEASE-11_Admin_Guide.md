@@ -176,6 +176,20 @@ curl -s http://localhost:3100/api/v1/health   # data.build = {version, commit, b
 ⚠️ Lệnh ở `RELEASE-09` §4 **thiếu biến môi trường** ⇒ task backup sẽ chạy rồi thoát ngay vì không có
 `DATABASE_DIRECT_URL` (Task Scheduler không đọc `.env` của repo). Bản đã sửa:
 
+> **Đính chính 2026-08-03 — đã CHẠY THẬT, không phải đọc mà tin.** Bản `set -a; . ./.env; set +a` ở
+> dưới **có chạy** (dump `4 247 941` byte trong ~1s) nhưng in 2 dòng lỗi và **nạp thiếu 2 biến**:
+> `bash` coi `.env` là script, nên dòng có DẤU CÁCH hoặc BACKSLASH trong giá trị bị tách từ
+> (`KMS_LOCAL_KEK_PATH=C:\dev 2\MediaOS\.secrets\local-kek.bin` → `2MediaOS.secretslocal-kek.bin:
+> command not found`; `ADMIN_COMPANY_NAME` cũng vậy). Backup **không** cần hai biến đó nên vẫn đúng
+> — nhưng ai sao khuôn idiom này cho một task CẦN `KMS_LOCAL_KEK_PATH` sẽ hỏng IM LẶNG lúc 02:00.
+> **Dùng bản chỉ đọc ĐÚNG khoá cần** (đã chạy thật, 0 dòng lỗi):
+>
+> ```powershell
+> $b = New-ScheduledTaskAction -Execute $bash `
+>      -Argument '-lc "export DATABASE_DIRECT_URL=\"$(sed -n \"s/^DATABASE_DIRECT_URL=//p\" .env | head -n1)\"; BACKUP_DIR=./backups ./scripts/backup-db.sh"' `
+>      -WorkingDirectory $repo
+> ```
+
 ```powershell
 # PowerShell Administrator, tại gốc repo
 $repo = "C:\dev 2\MediaOS"

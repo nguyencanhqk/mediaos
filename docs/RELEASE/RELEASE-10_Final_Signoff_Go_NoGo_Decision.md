@@ -79,6 +79,13 @@ Chi tiết lỗ #1 và vì sao nó là lỗ chặn: [`docs/plans/S6-GOLIVE-1.md`
 
 ## 4. `KI-056` — 4/6 tài khoản `SA` không có lớp bảo vệ thứ hai · `S2` · phát hiện 2026-07-31
 
+> 🔄 **TRẠNG THÁI ĐÃ ĐỔI — đo lại 2026-08-03, đọc §6a TRƯỚC KHI HÀNH ĐỘNG THEO MỤC NÀY.**
+> `SA.requires_two_factor` giờ là **`true`** (mục này chép `f`), và `TWO_FACTOR_ENFORCEMENT_ENABLED`
+> vốn **luôn** `true` (là default trong `env.schema.ts:74`, không phải "chưa ai bật"). Tức **cờ đã bật
+> TRƯỚC khi 4 người enroll** — đúng thứ tự mà đoạn cuối mục này dặn tránh. Hệ quả thực tế và cách xử
+> lý: §6a. Bốn tài khoản đó **vẫn tự enroll được** (`/auth/*` miễn trừ ở cấp controller), nên đây là
+> ép-enroll chứ không phải khoá cửa — nhưng họ không dùng được route nghiệp vụ nào cho tới khi xong.
+
 Đo trực tiếp trên DB PROD `mediaos` (chỉ đọc):
 
 ```sql
@@ -149,14 +156,14 @@ Thứ tự bắt buộc — đảo là dẫm vào landmine `dist` dùng chung (`
 
 | # | Việc | Lệnh | Mở cổng nào | Ai | Trạng thái |
 | --- | --- | --- | --- | --- | --- |
-| G1 | Enroll TOTP cho 4 tài khoản `SA` | App `/me/security/2fa` | **KI-056** ⇒ `S2` về 3 | 4 người đó | ⬜ |
+| G1 | Enroll TOTP cho 4 tài khoản `SA` | App `/me/security/2fa` | **KI-056** ⇒ `S2` về 3 | 4 người đó | ⬜ **2/6 xong · còn 4** (đo 03/08, §6a) |
 | G2 | Backup trước khi đụng schema | `DATABASE_DIRECT_URL=… BACKUP_DIR=./backups bash scripts/backup-db.sh` | an toàn cho G3 | Owner | ✅ `backups/mediaos-20260802-010032.dump` |
 | G3 | Deploy PROD lên head | `m prod-update api` | ô #8 (hết tồn đọng) · warn migration | Owner | ✅ PROD **205/205 @ `0537`** |
 | G4 | **Cutover** (tách PROD khỏi `dist`) | `m prod-cutover` | **KI-016**; mở khoá G5 an toàn | Owner (**Administrator**) | ✅ **ĐÃ XONG** — chứng minh bằng thực nghiệm |
 | G5 | Dựng staging | clone PROD → `mediaos_dev` → `m dev-online-fast` | tiền đề `RC-003`/`RC-004` | Owner | ✅ trên **dữ liệu PROD thật** |
 | — | **Nghiệm thu engine cộng dồn phép** | `GET /leave/admin/accrual/preview` | chặn 422 ngày đầu | Owner | ✅ **245 ngày / 41 NV** |
 | G6 | Regression P0 + smoke trên staging | `node scripts/release-smoke.mjs --base http://localhost:3200/api/v1 --strict` | **`RC-003`** ⇒ ô #4 | Owner | ✅ **10 PASS · 0 FAIL · 0 SKIP** |
-| G7 | Đăng ký 2 scheduled task (bản đã sửa) | `RELEASE-11` §6.2 | ô #12 · phần còn lại **KI-050** | Owner (**Administrator**) | ⬜ |
+| G7 | Đăng ký 2 scheduled task (bản đã sửa) | `RELEASE-11` §6.2 | ô #12 · phần còn lại **KI-050** | Owner (**Administrator**) | ⬜ **0/2 task tồn tại**; payload backup ĐÃ chạy thật (§6a) |
 | G8 | Ký UAT | `RELEASE-04` | ô #5 | Business owner | ⬜ |
 | G9 | Cắt tag RC | `RELEASE-08` §2 | ô #2 | Owner | ✅ **`v1.0.0-rc.3` @ `30540ab0`** |
 | G10 | Gửi thông báo go-live | `RELEASE-08` §7 | ô #14 | Owner | ⬜ |
@@ -200,6 +207,38 @@ Thứ tự bắt buộc — đảo là dẫm vào landmine `dist` dùng chung (`
 > **đúng bằng số nghiệm thu đo trước trên staging**. Không được cấp: `1111`/`1119`/`1129` (nghỉ trước
 > 2026) + `1136` (`MISSING_START_DATE`, bỏ qua **kèm báo cáo**). Chi tiết: §6b của file bằng chứng.
 > **Còn lại cho HR:** điền `start_date` cho `1136` — engine tự bù ở nhịp sau.
+
+### 6a. Đo lại 4 cổng còn mở — 2026-08-03
+
+> Đo trực tiếp trên PROD (`mediaos`) và trên máy PROD-host, KHÔNG đọc lại bảng cũ. Lý do phải đo:
+> ô trạng thái ở bảng trên từng báo NO-GO GIẢ vì chỉ báo đọc sai nguồn (§6 đính chính 2).
+
+**⚠️ Thứ tự KI-056 đã bị ĐẢO — cảnh báo ở §4 nay là MÔ TẢ HIỆN TRẠNG, không còn là phòng ngừa.**
+
+| Đo | Giá trị | Nguồn |
+| --- | --- | --- |
+| `roles.requires_two_factor` của `SA` | **`true`** (cùng với `company-admin`, `platform-admin`) | `SELECT` trên `mediaos` |
+| `TWO_FACTOR_ENFORCEMENT_ENABLED` | **`true`** ở CẢ `.env` và `.env.prod` — và là **default trong code** (`env.schema.ts:74`), tức cờ này chưa từng ở trạng thái tắt | đọc trực tiếp |
+| Hệ quả ở guard | `TwoFactorEnforcementGuard` (`two-factor-enforcement.guard.ts:78-91`): `globalEnabled=true` ⇒ hỏi `requiresTwoFactor` ⇒ `true` cho người giữ vai `SA` ⇒ chưa enroll thì **403 `TWO_FACTOR_SETUP_REQUIRED` ở mọi route nghiệp vụ** | đọc code |
+
+**KHÔNG phải deadlock:** cả controller `/auth/*` mang `@AllowWithoutTwoFactor` ở CẤP LỚP
+(`auth.controller.ts:53-56`), nên 4 người còn lại vẫn đăng nhập và tự enroll được. Nhưng cho tới khi
+enroll xong, họ **không dùng được gì khác** — đây là hành vi ép-enroll đúng thiết kế, không phải sự cố.
+
+**G1 — đích danh 6 tài khoản giữ ít nhất một vai bắt buộc 2FA:**
+
+| TOTP | Tài khoản |
+| --- | --- |
+| ✅ đã enroll | `admin@funtimemediacorp.com` · `ng.canh9x@gmail.com` |
+| ❌ **chưa enroll** | `luongphuonganh82@gmail.com` · `ngocha.nguyen20385@gmail.com` · `tienbac308@gmail.com` · `tranphuong1994.hr@gmail.com` |
+
+**G7 — `Get-ScheduledTask -TaskName MediaOS-*` trả về `count=0`**: chưa đăng ký task nào. Nhưng
+**payload backup đã được chạy thật** (không đợi tới lúc có Administrator mới biết nó có chạy được
+không — bài học "workaround có thể chưa từng chạy"): dump `4 247 941` byte trong ~1s →
+`backups/mediaos-20260802-174933.dump`. Kèm một lỗi ĐÃ SỬA trong runbook: `. ./.env` nạp thiếu 2 biến
+có dấu cách/backslash — chi tiết + bản thay thế ở `RELEASE-11` §6.2.
+
+**G8 · G10** — thuần chữ ký và thông báo của owner, không có gì đo được từ máy; giữ ⬜.
 
 **Sau G1…G10:** 15/15 ô §2 ĐẠT hoặc chấp nhận-có-chữ-ký ⇒ phán quyết chuyển **GO**.
 
