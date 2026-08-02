@@ -1,8 +1,8 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
-import { chatRoomMembers, chatRooms } from "../db/schema/communication";
-import type { ChatMemberRole, ChatRoomType } from "../db/schema/communication";
+import { chatMessages, chatRoomMembers, chatRooms } from "../db/schema/communication";
+import type { ChatMemberRole, ChatMessageType, ChatRoomType } from "../db/schema/communication";
 import { CHAT_ERR } from "./chat.errors";
 
 /** Phòng + tư cách thành viên của actor, lấy trong ĐÚNG MỘT truy vấn. */
@@ -25,7 +25,24 @@ export interface ChatRoomAccess {
     userId: string;
     role: ChatMemberRole;
     lastReadSeq: number;
+    /** v1 LUÔN NULL (CHAT-DEC-008). Mọi truy vấn đọc tin PHẢI viết sẵn vị từ SPEC-15 §13.4 với nó. */
+    visibleFromSeq: number | null;
     joinedAt: Date;
+  };
+}
+
+/** Tin nhắn + phòng + tư cách thành viên, lấy trong ĐÚNG MỘT truy vấn (S7-CHAT-BE-2). */
+export interface ChatMessageAccess extends ChatRoomAccess {
+  message: {
+    id: string;
+    companyId: string;
+    roomId: string;
+    senderId: string;
+    messageType: ChatMessageType;
+    roomSeq: number;
+    pinnedAt: Date | null;
+    recalledAt: Date | null;
+    createdAt: Date;
   };
 }
 
@@ -93,28 +110,12 @@ export class ChatAccessService {
         memberUserId: chatRoomMembers.userId,
         memberRole: chatRoomMembers.role,
         lastReadSeq: chatRoomMembers.lastReadSeq,
+        visibleFromSeq: chatRoomMembers.visibleFromSeq,
         joinedAt: chatRoomMembers.joinedAt,
       })
       .from(chatRooms)
-      .innerJoin(
-        chatRoomMembers,
-        and(
-          eq(chatRoomMembers.roomId, chatRooms.id),
-          // company_id ở CẢ HAI vế của join: RLS đã ép, viết tường minh là defense-in-depth — và nó là
-          // vế duy nhất chặn việc một hàng membership của tenant khác ghép vào phòng của tenant này nếu
-          // ngữ cảnh GUC có bao giờ bị đặt sai.
-          eq(chatRoomMembers.companyId, chatRooms.companyId),
-          eq(chatRoomMembers.userId, actorUserId),
-          isNull(chatRoomMembers.leftAt),
-        ),
-      )
-      .where(
-        and(
-          eq(chatRooms.id, roomId),
-          eq(chatRooms.companyId, companyId),
-          isNull(chatRooms.deletedAt),
-        ),
-      )
+      .innerJoin(chatRoomMembers, this.activeMembershipJoin(actorUserId))
+      .where(and(eq(chatRooms.id, roomId), this.visibleRoom(companyId)))
       .limit(1);
 
     const row = rows[0];
@@ -139,6 +140,7 @@ export class ChatAccessService {
         userId: row.memberUserId,
         role: row.memberRole as ChatMemberRole,
         lastReadSeq: row.lastReadSeq,
+        visibleFromSeq: row.visibleFromSeq,
         joinedAt: row.joinedAt,
       },
     };
@@ -156,5 +158,132 @@ export class ChatAccessService {
     if (access.membership.role !== "admin") {
       throw new ForbiddenException(CHAT_ERR.NOT_ROOM_ADMIN);
     }
+  }
+
+  /**
+   * S7-CHAT-BE-2 — cửa vào cho 3 route nhận `messageId` thay vì `roomId` (thu hồi · ghim · bỏ ghim).
+   *
+   * ⚠️ VÌ SAO KHÔNG viết `findMessage()` rồi `assertMember(msg.roomId)`: hai bước ⇒ hai thông điệp lỗi
+   * khác nhau ("tin không tồn tại" vs "phòng không tìm thấy") ⇒ bắn `messageId` ngẫu nhiên là **dò được
+   * tin nào có thật** trong toàn công ty. Đúng lớp oracle mà CHAT-ERR-001 dựng 404 để chặn, chỉ đổi trục
+   * từ *phòng* sang *tin*. Ở đây: MỘT truy vấn, MỘT hằng thông điệp cho MỌI lý do.
+   *
+   * Vị từ membership tái dùng ĐÚNG hai helper của `assertMember` — không có bản sao thứ hai của luật.
+   *
+   * @throws NotFoundException (404) khi: tin không tồn tại · tin của tenant khác · phòng chứa tin đã xoá
+   *   mềm · actor không phải thành viên phòng đó · actor đã rời.
+   */
+  async assertMessageAccess(
+    tx: TenantTx,
+    companyId: string,
+    messageId: string,
+    actorUserId: string,
+  ): Promise<ChatMessageAccess> {
+    const rows = await tx
+      .select({
+        messageId: chatMessages.id,
+        messageCompanyId: chatMessages.companyId,
+        messageRoomId: chatMessages.roomId,
+        senderId: chatMessages.senderId,
+        messageType: chatMessages.messageType,
+        messageRoomSeq: chatMessages.roomSeq,
+        messagePinnedAt: chatMessages.pinnedAt,
+        messageRecalledAt: chatMessages.recalledAt,
+        messageCreatedAt: chatMessages.createdAt,
+        roomId: chatRooms.id,
+        roomCompanyId: chatRooms.companyId,
+        refId: chatRooms.refId,
+        roomType: chatRooms.roomType,
+        name: chatRooms.name,
+        roomCode: chatRooms.roomCode,
+        description: chatRooms.description,
+        isArchived: chatRooms.isArchived,
+        lastMessageAt: chatRooms.lastMessageAt,
+        lastMessageSeq: chatRooms.lastMessageSeq,
+        createdAt: chatRooms.createdAt,
+        memberId: chatRoomMembers.id,
+        memberUserId: chatRoomMembers.userId,
+        memberRole: chatRoomMembers.role,
+        lastReadSeq: chatRoomMembers.lastReadSeq,
+        visibleFromSeq: chatRoomMembers.visibleFromSeq,
+        joinedAt: chatRoomMembers.joinedAt,
+      })
+      .from(chatMessages)
+      .innerJoin(
+        chatRooms,
+        and(eq(chatRooms.id, chatMessages.roomId), eq(chatRooms.companyId, chatMessages.companyId)),
+      )
+      .innerJoin(chatRoomMembers, this.activeMembershipJoin(actorUserId))
+      .where(
+        and(
+          eq(chatMessages.id, messageId),
+          eq(chatMessages.companyId, companyId),
+          this.visibleRoom(companyId),
+        ),
+      )
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) throw new NotFoundException(CHAT_ERR.MESSAGE_NOT_FOUND);
+
+    return {
+      message: {
+        id: row.messageId,
+        companyId: row.messageCompanyId,
+        roomId: row.messageRoomId,
+        senderId: row.senderId,
+        messageType: row.messageType as ChatMessageType,
+        roomSeq: row.messageRoomSeq,
+        pinnedAt: row.messagePinnedAt,
+        recalledAt: row.messageRecalledAt,
+        createdAt: row.messageCreatedAt,
+      },
+      room: {
+        id: row.roomId,
+        companyId: row.roomCompanyId,
+        refId: row.refId,
+        roomType: row.roomType as ChatRoomType,
+        name: row.name,
+        roomCode: row.roomCode,
+        description: row.description,
+        isArchived: row.isArchived,
+        lastMessageAt: row.lastMessageAt,
+        lastMessageSeq: row.lastMessageSeq,
+        createdAt: row.createdAt,
+      },
+      membership: {
+        id: row.memberId,
+        userId: row.memberUserId,
+        role: row.memberRole as ChatMemberRole,
+        lastReadSeq: row.lastReadSeq,
+        visibleFromSeq: row.visibleFromSeq,
+        joinedAt: row.joinedAt,
+      },
+    };
+  }
+
+  // ─── vị từ dùng chung — BẢN SAO DUY NHẤT của luật truy cập ────────────────────
+
+  /**
+   * `actor` là thành viên ĐANG hoạt động của phòng đang join.
+   *
+   * `company_id` ở CẢ HAI vế: RLS đã ép, viết tường minh là defense-in-depth — và nó là vế duy nhất chặn
+   * một hàng membership của tenant khác ghép vào phòng của tenant này nếu ngữ cảnh GUC bị đặt sai.
+   *
+   * ⚠️ Cả hai điểm khẳng định gọi ĐÚNG helper này. Inline lại nó ở nơi thứ ba là dựng bản sao của luật
+   * quyền — bản sao sẽ trôi (`module-closed-by-second-assert-not-scope`).
+   */
+  private activeMembershipJoin(actorUserId: string): SQL {
+    return and(
+      eq(chatRoomMembers.roomId, chatRooms.id),
+      eq(chatRoomMembers.companyId, chatRooms.companyId),
+      eq(chatRoomMembers.userId, actorUserId),
+      isNull(chatRoomMembers.leftAt),
+    ) as SQL;
+  }
+
+  /** Phòng còn sống trong tenant này (chưa xoá mềm). */
+  private visibleRoom(companyId: string): SQL {
+    return and(eq(chatRooms.companyId, companyId), isNull(chatRooms.deletedAt)) as SQL;
   }
 }

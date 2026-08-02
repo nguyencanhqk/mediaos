@@ -124,7 +124,37 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-1 — membership deny-path (DB cô lập
         v.createdBy ?? null,
       ],
     );
+    await syncRoomCounter(companyId);
     return r.rows[0].id as string;
+  }
+
+  /**
+   * Gieo phòng thẳng bằng SQL thì PHẢI đồng bộ counter `chat_room` — nếu không, bất biến của
+   * `s7-chat-db1-invariants.int-spec` ("current_value KHÔNG bao giờ thấp hơn số phòng đã cấp mã") ĐỎ
+   * khi hai spec chạy chồng lấn trong cùng lane DB. Bất biến đó ĐÚNG và phải giữ: current_value thấp
+   * hơn số mã đã cấp nghĩa là `nextCode` sẽ đụng mã cũ ⇒ 23505 ở phòng kế tiếp.
+   *
+   * Đây là ca "bất biến DB giết fixture đối kháng": lối đúng là MỞ LỐI GIEO CÓ KIỂM SOÁT, không phải
+   * nới bất biến hay xoá ca test.
+   */
+  async function syncRoomCounter(companyId: string): Promise<void> {
+    await direct.query(
+      `INSERT INTO sequence_counters
+         (company_id, module_code, sequence_key, scope_type, prefix, padding_length,
+          reset_policy, increment_by, current_value, status)
+       VALUES ($1,'CHAT','chat_room','Company','ROOM-',4,'Never',1,0,'Active')
+       ON CONFLICT DO NOTHING`,
+      [companyId],
+    );
+    await direct.query(
+      `UPDATE sequence_counters sc
+          SET current_value = GREATEST(
+                sc.current_value,
+                (SELECT count(*) FROM chat_rooms cr
+                  WHERE cr.company_id = $1 AND cr.room_code IS NOT NULL))
+        WHERE sc.company_id = $1 AND sc.sequence_key = 'chat_room'`,
+      [companyId],
+    );
   }
 
   async function seedMember(
@@ -433,11 +463,23 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-1 — membership deny-path (DB cô lập
     const stripComments = (src: string): string =>
       src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
-    it("chỉ ĐÚNG MỘT file định nghĩa `assertMember`", () => {
-      const definers = readAll().filter((f) =>
-        /async\s+assertMember\s*\(/.test(stripComments(f.src)),
-      );
-      expect(definers.map((f) => f.file)).toEqual(["chat-access.service.ts"]);
+    /**
+     * S7-CHAT-BE-2 mở rộng: module giờ có HAI cửa vào — `assertMember` (theo `roomId`) và
+     * `assertMessageAccess` (theo `messageId`) — cộng predicate dùng chung `activeMembershipJoin`.
+     * Cả ba PHẢI ở đúng một file; tách ra là "một điểm khẳng định" chỉ còn đúng trên giấy.
+     */
+    it("chỉ ĐÚNG MỘT file định nghĩa hai cửa vào membership + predicate dùng chung", () => {
+      for (const fn of ["assertMember", "assertMessageAccess", "activeMembershipJoin"]) {
+        const definers = readAll().filter((f) =>
+          new RegExp(`(private\\s+)?(async\\s+)?${fn}\\s*\\(`).test(
+            stripComments(f.src).replace(new RegExp(`(this\\.|\\.)${fn}\\s*\\(`, "g"), ""),
+          ),
+        );
+        expect(
+          definers.map((x) => x.file),
+          `nơi ĐỊNH NGHĨA ${fn}`,
+        ).toEqual(["chat-access.service.ts"]);
+      }
     });
 
     it("MỌI method PUBLIC của service nhận `roomId` đều gọi assertMember (trực tiếp hoặc qua cổng ghi)", () => {
@@ -453,19 +495,27 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-1 — membership deny-path (DB cô lập
         for (const body of methods) {
           const head = body.split("\n")[0];
           const signature = body.slice(0, body.indexOf("{"));
-          if (!/roomId\s*:\s*string/.test(signature)) continue;
+          const takesRoom = /roomId\s*:\s*string/.test(signature);
+          const takesMessage = /messageId\s*:\s*string/.test(signature);
+          if (!takesRoom && !takesMessage) continue;
           publicMethods.push(`${file} › ${head.trim()}`);
+          // `assertRoomAdminForWrite` là cổng ghi của ChatMembersService — bên trong nó gọi assertMember.
           const asserts =
-            body.includes("assertMember(") || body.includes("assertRoomAdminForWrite(");
+            body.includes("assertMember(") ||
+            body.includes("assertRoomAdminForWrite(") ||
+            body.includes("assertMessageAccess(");
           if (!asserts) gaps.push(`${file} › ${head.trim()}`);
         }
       }
-      // Chống test rỗng-nên-xanh: nếu cách cắt method hỏng (đổi khuôn class, đổi thụt lề) thì danh sách
-      // rỗng và `toEqual([])` PASS oan. Neo bằng số lượng tối thiểu đã đếm tay: 8 method public nhận roomId.
-      expect(publicMethods.length, `method public nhận roomId: ${publicMethods.join(" | ")}`).toBe(
-        8,
-      );
-      expect(gaps, "method nhận roomId mà KHÔNG qua assertMember").toEqual([]);
+      // Chống test rỗng-nên-xanh: cách cắt method hỏng (đổi khuôn class/thụt lề) thì danh sách rỗng và
+      // `toEqual([])` PASS oan. Neo bằng SÀN đã đếm tay: BE-1 có 8 (4 phòng + 4 thành viên), BE-2 thêm 7
+      // (4 nhận roomId + 3 nhận messageId) ⇒ ≥15. Dùng sàn để WO sau thêm endpoint không phải sửa test,
+      // nhưng GỠ endpoint khỏi lưới thì vẫn đỏ.
+      expect(
+        publicMethods.length,
+        `method public nhận roomId/messageId: ${publicMethods.join(" | ")}`,
+      ).toBeGreaterThanOrEqual(15);
+      expect(gaps, "method nhận roomId/messageId mà KHÔNG qua điểm khẳng định").toEqual([]);
     });
 
     it("KHÔNG file nào ngoài chat-access.service.ts dựng lại BỘ ĐIỀU KIỆN truy cập phòng", () => {

@@ -73,6 +73,48 @@ export const CHAT_ERR = {
   /** CHAT-ERR-013 — chỉ rời được phòng `group` (SPEC-15 §3.1). */
   LEAVE_BLOCKED: (roomType: string): string =>
     `CHAT-ERR-013: không rời được phòng loại ${roomType} — chỉ phòng nhóm mới rời được.`,
+
+  // ═══════════ S7-CHAT-BE-2 — tin nhắn ═══════════
+
+  /**
+   * CHAT-ERR-001 (trục TIN NHẮN) — HẰNG, cùng lý do với `ROOM_NOT_FOUND`: "tin không tồn tại" và "tin có
+   * thật nhưng ở phòng mình không thuộc" PHẢI không phân biệt được, nếu không `messageId` trở thành trục
+   * dò thứ hai bên cạnh `roomId`.
+   */
+  MESSAGE_NOT_FOUND: "CHAT-ERR-001: không tìm thấy tin nhắn.",
+
+  /** CHAT-ERR-004 — thân tin rỗng / vượt trần. (Zod chặn ở biên; hằng này cho đường gọi service.) */
+  BODY_INVALID:
+    "CHAT-ERR-004: nội dung tin nhắn không hợp lệ — tối đa 4000 ký tự và không được rỗng.",
+
+  /** CHAT-ERR-005 — gửi vào phòng đã lưu trữ hoặc đã xoá mềm. */
+  SEND_ARCHIVED: "CHAT-ERR-005: phòng đã lưu trữ — không gửi thêm tin được.",
+
+  /**
+   * CHAT-ERR-006 — thu hồi tin người khác, hoặc quá cửa sổ thu hồi (SPEC-15 §13.6).
+   * MỘT thông điệp cho cả hai vế: tách ra sẽ nói cho người ngoài biết "tin này của bạn hay không".
+   */
+  RECALL_DENIED: (windowMinutes: number): string =>
+    `CHAT-ERR-006: chỉ người gửi (trong ${windowMinutes} phút) hoặc quản trị viên phòng nhóm mới thu hồi được tin này.`,
+
+  /** CHAT-ERR-007 — sửa nội dung tin: KHÔNG hỗ trợ ở v1, mọi đường ghi vào `body` bị từ chối. */
+  EDIT_UNSUPPORTED: "CHAT-ERR-007: không sửa được nội dung tin nhắn — thu hồi rồi gửi lại tin mới.",
+
+  /** CHAT-ERR-008 — vượt trần ghim của phòng. */
+  PIN_LIMIT: (max: number): string =>
+    `CHAT-ERR-008: mỗi phòng chỉ ghim tối đa ${max} tin — bỏ ghim bớt trước.`,
+
+  /** CHAT-ERR-009 — trả lời tin không cùng phòng, hoặc tin đã thu hồi. */
+  REPLY_INVALID:
+    "CHAT-ERR-009: không trả lời được tin này — tin phải thuộc cùng phòng và chưa bị thu hồi.",
+
+  /** CHAT-ERR-016 — con trỏ phân trang không hợp lệ. */
+  CURSOR_EXCLUSIVE:
+    "CHAT-ERR-016: chỉ dùng MỘT trong hai con trỏ beforeSeq hoặc afterSeq, không dùng cả hai.",
+
+  /** Tin `system` / tin đã thu hồi không phải đối tượng của thao tác kiểm duyệt. */
+  MESSAGE_NOT_ACTIONABLE:
+    "CHAT-ERR-006: tin hệ thống hoặc tin đã thu hồi không thực hiện được thao tác này.",
 } as const;
 
 /**
@@ -91,6 +133,19 @@ export const CHAT_AUDIT = {
   MEMBER_ROLE_CHANGED: "chat.room.member_role_changed",
   MEMBER_REMOVED: "chat.room.member_removed",
   ROOM_LEFT: "chat.room.left",
+  // ── S7-CHAT-BE-2 ──
+  /**
+   * CỐ Ý CHỈ CÓ 3 HÀNH ĐỘNG TIN NHẮN — thu hồi và ghim/bỏ ghim.
+   *
+   * Gửi và đọc tin KHÔNG ghi audit: mỗi tin một dòng sẽ nhấn chìm `audit_logs` (bảng append-only DÙNG
+   * CHUNG, đang phục vụ điều tra AUTH/HR/LEAVE) và biến nó thành bản sao thứ hai của `chat_messages`.
+   * Ba hành động dưới đây khác về chất: chúng tác động lên nội dung của NGƯỜI KHÁC.
+   *
+   * `object_id` = messageId. TUYỆT ĐỐI KHÔNG kèm `body` (SPEC-15 §18 · API-13 §6.8).
+   */
+  MESSAGE_RECALLED: "chat.message.recalled",
+  MESSAGE_PINNED: "chat.message.pinned",
+  MESSAGE_UNPINNED: "chat.message.unpinned",
 } as const;
 
 /** `module_code` cho mọi dòng audit của CHAT — CHAT-API-019 lọc theo cột này. */

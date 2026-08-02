@@ -517,7 +517,9 @@ Nguồn chuẩn: [DB-12](<../DB/DB-12 CHAT Database Design.md>). Tóm tắt:
 | Event code | Khi nào | Người nhận | Gộp lô |
 | --- | --- | --- | --- |
 | `CHAT_MENTIONED` | tin nhắn có mention thành viên phòng | người được mention | không — gửi ngay |
-| `CHAT_DIRECT_MESSAGE` | tin mới trong phòng `direct` mà người nhận **không đang mở phòng đó** | người nhận | có — gộp theo phòng, tối đa 1 thông báo / 15 phút |
+| `CHAT_DIRECT_MESSAGE` | tin mới trong phòng `direct`, **trừ khi người nhận đã tắt thông báo phòng đó** (`muted_until`) — xem **CHAT-DEC-013** | người nhận | có — gộp theo phòng, tối đa 1 thông báo / 15 phút |
+
+> ⚠️ **Sửa 02/08/2026 (CHAT-DEC-013):** dòng trên trước đây ghi điều kiện *"người nhận không đang mở phòng đó"*. Điều kiện ấy cần **presence**, mà §7 đã đẩy presence **ra ngoài v1** — spec tự mâu thuẫn, và WO thi công (`S7-CHAT-BE-6`) không có cách nào đáp ứng. Owner chốt bỏ điều kiện presence ở v1: chống spam dựa vào **gộp lô 15 phút** (đã seed `dedupe_strategy='DedupeKey'` ở migration `0538`) cộng `muted_until`.
 
 Nguyên tắc chống spam (quan trọng — chat sinh sự kiện nhiều gấp hàng chục lần mọi module khác):
 
@@ -613,8 +615,13 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 | CHAT-DEC-010 | Notification chỉ cho mention + DM (gộp lô); phòng nhóm/phòng ban/dự án chỉ có badge | theo đề xuất §17 | ✅ chốt |
 | CHAT-DEC-011 | Payload notification **không** chứa nội dung tin nhắn | không chứa | ✅ chốt |
 | CHAT-DEC-012 | Tìm kiếm bằng `unaccent` + `tsvector('simple')` trong Postgres, không thêm search engine | theo đề xuất §13.7 | ✅ chốt |
+| CHAT-DEC-013 | Điều kiện gửi `CHAT_DIRECT_MESSAGE` khi §17 đòi presence mà §7 loại presence khỏi v1 | **Gửi mọi DM, trừ khi `muted_until` còn hiệu lực** — bỏ điều kiện "không đang mở phòng" ở v1. Chống spam = gộp lô 15 phút (`dedupe_strategy='DedupeKey'`, seed `0538`). Xem §17 | ✅ **chốt 02/08/2026** |
 
 > **Ghi chú lịch sử — đọc kỹ trước khi tra git:** bản Draft 01/08/2026 đề xuất CHAT-DEC-004 = "không ai đọc được, kể cả Super Admin", và §3.3 · §11 · §18 · §20 · §21 khi đó được viết quanh mệnh đề ấy. Owner **bác** đề xuất ngày 02/08/2026. Các mục đó đã được viết lại trong `S7-CHAT-DOC-2`; mô tả cũ còn trong lịch sử git **không** còn giá trị tham chiếu.
+>
+> **CHAT-DEC-013 thêm SAU cổng mở wave** (tối 02/08/2026): nó không phải quyết định thứ 13 của đợt chốt ban đầu mà là **phán quyết gỡ một mâu thuẫn nội bộ** giữa §17 và §7, phát hiện lúc lập micro-plan `S7-CHAT-BE-6`. Không thay đổi điều kiện cổng dưới đây.
+>
+> ⚠️ **Hệ quả chưa có lời giải:** sau DEC-013, `muted_until` là **cơ chế duy nhất** để người dùng chặn thông báo DM — nhưng đo ngày 02/08 cho thấy cột `chat_room_members.muted_until` (`communication.ts:300`) **không có đường ghi nào**: 0 endpoint, 0 DTO trong `packages/contracts/src/chat.ts`. Không có WO nào trong wave đang nhận việc này. Phải cấp đường ghi trước khi CHAT lên PROD, nếu không v1 ship một nút tắt mà không ai bấm được.
 >
 > Điều kiện mở WO code của wave (đã đủ): 12 quyết định chốt · §1 = `Approved` · `plan-reviewer` PASS trên SPEC-15 + DB-12. Điều kiện merge vào `master` (**chưa** đủ): go-live đóng — xem §1 và `docs/plans/S7-CHAT-WAVE.md` §4.
 

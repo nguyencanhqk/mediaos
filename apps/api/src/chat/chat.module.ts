@@ -2,11 +2,16 @@ import { Module } from "@nestjs/common";
 import { PermissionModule } from "../permission/permission.module";
 import { SequenceModule } from "../foundation/sequences/sequence.module";
 import { ChatRoomsController } from "./chat-rooms.controller";
+import { ChatMessagesController } from "./chat-messages.controller";
 import { ChatAccessService } from "./chat-access.service";
 import { ChatRoomsService } from "./chat-rooms.service";
 import { ChatMembersService } from "./chat-members.service";
 import { ChatRoomsRepository } from "./chat-rooms.repository";
 import { ChatRoomCodeService } from "./chat-room-code.service";
+// S7-CHAT-BE-2 (additive): tin nhắn — đọc theo con trỏ · gửi idempotent · thu hồi · ghim · đã đọc.
+import { ChatMessagesService } from "./chat-messages.service";
+import { ChatMessageModerationService } from "./chat-message-moderation.service";
+import { ChatMessagesRepository } from "./chat-messages.repository";
 
 /**
  * S7-CHAT-BE-1 — `ChatModule` (SPEC-15 · DB-12 · API-13).
@@ -29,14 +34,17 @@ import { ChatRoomCodeService } from "./chat-room-code.service";
  */
 @Module({
   imports: [PermissionModule, SequenceModule],
-  controllers: [ChatRoomsController],
+  controllers: [ChatRoomsController, ChatMessagesController],
   providers: [
     ChatAccessService,
     ChatRoomsService,
     ChatMembersService,
     ChatRoomsRepository,
     ChatRoomCodeService,
+    ChatMessagesService,
+    ChatMessageModerationService,
+    ChatMessagesRepository,
   ],
-  exports: [ChatAccessService, ChatRoomsRepository],
+  exports: [ChatAccessService, ChatRoomsRepository, ChatMessagesRepository],
 })
 export class ChatModule {}

@@ -1,9 +1,12 @@
 import { createZodDto } from "nestjs-zod";
 import {
   addChatMemberSchema,
+  chatMarkReadSchema,
   createChatRoomSchema,
+  listChatMessagesQuerySchema,
   listChatRoomsQuerySchema,
   openDirectRoomSchema,
+  sendMessageSchema,
   updateChatMemberSchema,
   updateChatRoomSchema,
 } from "@mediaos/contracts";
@@ -30,3 +33,14 @@ export class AddChatMemberDto extends createZodDto(addChatMemberSchema) {}
 
 /** PATCH /chat/rooms/:id/members/:userId (manage:chat-member). */
 export class UpdateChatMemberDto extends createZodDto(updateChatMemberSchema) {}
+
+// ── S7-CHAT-BE-2 — tin nhắn (CHAT-API-009, 010, 014) ────────────────────────────
+
+/** GET /chat/rooms/:id/messages (view:chat-room) — `z.coerce` ⇒ idempotent khi pipe chạy 2 lần. */
+export class ListChatMessagesQueryDto extends createZodDto(listChatMessagesQuerySchema) {}
+
+/** POST /chat/rooms/:id/messages (send:chat-message) — `clientMessageId` BẮT BUỘC (idempotency). */
+export class SendChatMessageDto extends createZodDto(sendMessageSchema) {}
+
+/** POST /chat/rooms/:id/read (view:chat-room) — con trỏ chỉ tiến. */
+export class ChatMarkReadDto extends createZodDto(chatMarkReadSchema) {}

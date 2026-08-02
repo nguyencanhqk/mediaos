@@ -1,6 +1,12 @@
-import type { ChatRoomDetailDto, ChatRoomDto, ChatRoomMemberDto } from "@mediaos/contracts";
+import type {
+  ChatMessageDto,
+  ChatRoomDetailDto,
+  ChatRoomDto,
+  ChatRoomMemberDto,
+} from "@mediaos/contracts";
 import type { ChatMemberRole } from "../db/schema/communication";
 import type { ChatMemberListRow } from "./chat-rooms.repository";
+import type { ChatMessageRow } from "./chat-messages.repository";
 
 /**
  * Tập cột TỐI THIỂU để dựng `ChatRoomDto`. Khai structural (không phải union của các row cụ thể) để cả
@@ -57,6 +63,39 @@ export function toChatRoomDto(
     // (`unreadOf`, đường đọc một phòng) hoặc qua cột `unreadCount` của câu SELECT (đường danh sách).
     // Giữ lưới vì `unreadCount: null` làm FE ăn ZodError = TRẮNG TRANG, tệ hơn hẳn một badge sai.
     unreadCount: unreadCount ?? row.unreadCount ?? 0,
+    createdAt: toIso(row.createdAt) ?? EPOCH,
+  };
+}
+
+/**
+ * S7-CHAT-BE-2 — row tin nhắn → DTO. **ĐÂY là lớp che của thu hồi** (SPEC-15 §13.6 · CLAUDE.md §5):
+ * `recalled_at IS NOT NULL` ⇒ `body: null`. Bản gốc vẫn nằm trong DB (append-only, cho tranh chấp nội
+ * bộ) nhưng KHÔNG rời server. Che ở client là không che gì cả — payload vẫn đi qua dây.
+ *
+ * Và đây là chỗ `seq` toàn cục bị chặn: repo không select nó, mapper không có khoá nào cho nó. Hai lớp
+ * chứ không một, vì thêm cột vào `MESSAGE_COLUMNS` là việc dễ làm lúc vội.
+ */
+export function toChatMessageDto(row: ChatMessageRow): ChatMessageDto {
+  const recalled = row.recalledAt !== null;
+  return {
+    id: row.id,
+    companyId: row.companyId,
+    roomId: row.roomId,
+    senderId: row.senderId,
+    senderName: row.senderName,
+    body: recalled ? null : row.body,
+    messageType: row.messageType,
+    // Hai cột KHAI TỬ (BE-3 dùng file_links) — đường đọc trả null, không phải đọc từ DB.
+    fileUrl: null,
+    fileName: null,
+    // Tin đã thu hồi không còn ai để nhắc tới: giữ mentions là gửi thông báo về một nội dung đã rút.
+    mentions: recalled ? [] : row.mentions,
+    pinnedAt: toIso(row.pinnedAt),
+    pinnedBy: row.pinnedBy,
+    replyToMessageId: row.replyToMessageId,
+    recalledAt: toIso(row.recalledAt),
+    attachmentCount: row.attachmentCount,
+    roomSeq: row.roomSeq,
     createdAt: toIso(row.createdAt) ?? EPOCH,
   };
 }

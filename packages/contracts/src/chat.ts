@@ -38,8 +38,9 @@ export const createChatRoomSchema = z.object({
 });
 export type CreateChatRoomRequest = z.infer<typeof createChatRoomSchema>;
 
-// G10-1: kiểu tin nhắn — text mặc định, file đính kèm (fileUrl/fileName).
-export const chatMessageTypeSchema = z.enum(["text", "file"]);
+// S7-CHAT-BE-2: += "system" — tin do SERVER sinh (thêm/bớt thành viên, đổi tên phòng). Khớp CHECK
+// `chk_chat_messages_type` (mig 0538). Client KHÔNG gửi được kiểu này (sendMessageSchema khoá riêng).
+export const chatMessageTypeSchema = z.enum(["text", "file", "system"]);
 export type ChatMessageType = z.infer<typeof chatMessageTypeSchema>;
 
 /**
@@ -53,42 +54,104 @@ export const chatMessageSchema = z.object({
   roomId: z.string().uuid(),
   senderId: z.string().uuid(),
   senderName: z.string().nullable(),
-  body: z.string(),
+  /**
+   * ⚠️ NULLABLE CÓ CHỦ ĐÍCH — tin đã thu hồi trả `null` (SPEC-15 §13.6). Che ở **SERVER**, không ở
+   * client: bản ghi và body gốc vẫn nằm trong DB cho tranh chấp nội bộ, nhưng DTO bỏ trắng.
+   * Bỏ `.nullable()` ở đây là ZodError làm TRẮNG TRANG dù HTTP 200
+   * (memory `server-masking-needs-optional-fe-schema`).
+   */
+  body: z.string().nullable(),
   messageType: chatMessageTypeSchema,
+  /**
+   * ⚠️ HAI CỘT KHAI TỬ. Đính kèm đi qua FOUNDATION Files + `file_links` (SPEC-15 §13.5,
+   * `S7-CHAT-BE-3`) — KHÔNG ghi vào `chat_messages.file_url/file_name` nữa. Đường đọc trả `null`.
+   * Giữ khoá trong DTO để FE cũ không vỡ; bỏ hẳn ở đợt dọn sau.
+   */
   fileUrl: z.string().nullable(),
   fileName: z.string().nullable(),
+  /** Đã LỌC ở server: chỉ còn userId thực sự là thành viên phòng (CHAT-ERR-010). */
   mentions: z.array(z.string().uuid()),
   pinnedAt: z.string().datetime().nullable(),
   pinnedBy: z.string().uuid().nullable(),
+  /** Tin được trả lời (cùng phòng). NULL = tin độc lập. */
+  replyToMessageId: z.string().uuid().nullable(),
+  /** Mốc thu hồi. Khác NULL ⇒ `body` là `null` — hai trường đi CÙNG NHAU, đừng đọc lẻ một cái. */
+  recalledAt: z.string().datetime().nullable(),
+  /** Số tệp đính kèm (đặt ngay lúc INSERT — `S7-CHAT-BE-3`). v1 của BE-2 luôn 0. */
+  attachmentCount: z.number().int().nonnegative(),
   /**
-   * ⚠️ NỢ CHƯA TRẢ — KHÔNG dùng field này khi dựng `S7-CHAT-BE-2`.
+   * Số thứ tự **PER-ROOM**, liên tục từ 1 (mig `0539`). Đây là con trỏ dùng cho `beforeSeq`/`afterSeq`,
+   * cho đếm chưa đọc và cho "đã xem bởi".
    *
-   * `chat_messages.seq` là `GENERATED ALWAYS AS IDENTITY` **cấp BẢNG**: tăng xuyên MỌI phòng và MỌI
-   * tenant. Comment cũ ở đây ("thứ tự tổng trong room", chép từ `0050:79`) đã bị `0539` bác — xem
-   * SPEC-15 §13.1 ĐÍNH CHÍNH 02/08/2026. Lộ nó ra client = thành viên một phòng suy được lưu lượng tin
-   * TOÀN CÔNG TY giữa hai lần mình nhắn, gồm cả DM họ không thuộc.
-   *
-   * `S7-CHAT-DB-2` chốt "DTO/contracts KHÔNG trả `seq`" nhưng chỉ kịp sửa `chatRoomSchema`. Field này
-   * còn đây vì bỏ nó là quyết định hình dạng DTO tin nhắn — thuộc `S7-CHAT-BE-2`, WO dựng endpoint tin
-   * nhắn. `S7-CHAT-BE-1` KHÔNG có endpoint nào trả tin nhắn nên chưa rò gì ra client.
-   *
-   * ⇒ BE-2 phải thay bằng `roomSeq` (per-room, liên tục từ 1) cho MỌI thứ hướng-client: con trỏ
-   * `beforeSeq`/`afterSeq`, đếm chưa đọc, "đã xem bởi".
+   * ⚠️ CỐ Ý KHÔNG CÓ `seq`. `chat_messages.seq` là identity **cấp BẢNG** — tăng xuyên mọi phòng và mọi
+   * tenant; lộ ra client thì thành viên MỘT phòng suy được lưu lượng tin TOÀN CÔNG TY giữa hai lần mình
+   * nhắn, gồm cả DM họ không thuộc (SPEC-15 §13.1 ĐÍNH CHÍNH 02/08/2026). Cột vẫn còn trong DB (identity
+   * không drop sạch được) nhưng KHÔNG BAO GIỜ ra khỏi server. Đây là nợ của `S7-CHAT-DB-2`, trả ở đây.
    */
-  seq: z.number().int().nonnegative(),
+  roomSeq: z.number().int().positive(),
   createdAt: z.string().datetime(),
 });
 export type ChatMessageDto = z.infer<typeof chatMessageSchema>;
 
+/**
+ * POST /chat/rooms/:id/messages (CHAT-API-010).
+ *
+ * `clientMessageId` **BẮT BUỘC**, do client sinh **MỘT LẦN khi bắt đầu soạn** (API-13 §6.5). Sinh lại
+ * trong thân hàm gửi thì khoá là ngẫu nhiên mỗi lần ⇒ **không chống trùng gì cả**
+ * (memory `idempotency-key-must-be-content-derived`). Để `.optional()` là mời gọi đúng lỗi đó.
+ *
+ * KHÔNG có `messageType`: `text` là kiểu duy nhất client gửi được ở v1 — `file` do `S7-CHAT-BE-3` mở
+ * cùng `fileIds`, `system` do server sinh.
+ */
 export const sendMessageSchema = z.object({
   body: z.string().min(1).max(4000),
-  messageType: chatMessageTypeSchema.default("text"),
-  fileUrl: z.string().url().max(2000).optional(),
-  fileName: z.string().max(255).optional(),
-  /** userId được mention — server kiểm membership trước khi tạo notification `mentioned`. */
+  clientMessageId: z.string().uuid(),
+  replyToMessageId: z.string().uuid().optional(),
+  /** userId được mention. Server LỌC bỏ người ngoài phòng, KHÔNG chặn gửi (CHAT-ERR-010). */
   mentions: z.array(z.string().uuid()).max(20).optional(),
 });
 export type SendMessageRequest = z.infer<typeof sendMessageSchema>;
+
+/**
+ * GET /chat/rooms/:id/messages (CHAT-API-009) — phân trang bằng CON TRỎ, **cấm `offset`**
+ * (kết quả trôi khi có tin mới chèn vào giữa lúc cuộn — API-13 §6.4).
+ *
+ * `beforeSeq` và `afterSeq` LOẠI TRỪ NHAU; gửi cả hai → CHAT-ERR-016. Giá trị mang nghĩa `room_seq`
+ * (per-room), KHÔNG phải `seq` toàn cục — tên tham số giữ nguyên để khỏi churn FE.
+ *
+ * `z.coerce.number()` idempotent dưới `ZodValidationPipe` chạy 2 lần (Number(5) === 5) — khác boolean,
+ * không cần preprocess (memory `zod-query-param-double-pipe-idempotent`).
+ */
+export const listChatMessagesQuerySchema = z.object({
+  beforeSeq: z.coerce.number().int().positive().optional(),
+  afterSeq: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type ListChatMessagesQuery = z.infer<typeof listChatMessagesQuerySchema>;
+
+/**
+ * POST /chat/rooms/:id/read (CHAT-API-014) — con trỏ CHỈ TIẾN.
+ * Gửi số nhỏ hơn giá trị hiện có → bỏ qua IM LẶNG, không lỗi (CHAT-ERR-018): nhiều thiết bị cùng mở,
+ * thiết bị chậm không được kéo lùi trạng thái của thiết bị nhanh.
+ */
+export const chatMarkReadSchema = z.object({
+  seq: z.number().int().nonnegative(),
+});
+export type ChatMarkReadRequest = z.infer<typeof chatMarkReadSchema>;
+
+export const chatMarkReadResultSchema = z.object({
+  roomId: z.string().uuid(),
+  lastReadSeq: z.number().int().nonnegative(),
+  unreadCount: z.number().int().nonnegative(),
+});
+export type ChatMarkReadResultDto = z.infer<typeof chatMarkReadResultSchema>;
+
+/** GET /chat/unread-count (CHAT-API-016) — badge header. Tổng PHÉP TRỪ, không `COUNT(*)`. */
+export const chatUnreadCountSchema = z.object({
+  total: z.number().int().nonnegative(),
+  rooms: z.number().int().nonnegative(),
+});
+export type ChatUnreadCountDto = z.infer<typeof chatUnreadCountSchema>;
 
 // ─── direct room (DM 1-1 idempotent) ─────────────────────────────────────────
 

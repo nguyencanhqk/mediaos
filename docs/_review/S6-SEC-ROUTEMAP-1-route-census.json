@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 466,
-    "controllers": 80,
-    "gated": 414,
+    "routes": 474,
+    "controllers": 81,
+    "gated": 422,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 40,
@@ -1313,6 +1313,134 @@
         "PermissionGuard"
       ],
       "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatMessagesController#listMessages",
+      "httpMethod": "GET",
+      "path": "/api/v1/chat/rooms/:id/messages",
+      "hasPermission": true,
+      "permission": "view:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatMessagesController#listPinned",
+      "httpMethod": "GET",
+      "path": "/api/v1/chat/rooms/:id/pinned",
+      "hasPermission": true,
+      "permission": "view:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatMessagesController#markRead",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/rooms/:id/read",
+      "hasPermission": true,
+      "permission": "view:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatMessagesController#pin",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/messages/:id/pin",
+      "hasPermission": true,
+      "permission": "pin:chat-message",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatMessagesController#recall",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/messages/:id/recall",
+      "hasPermission": true,
+      "permission": "recall:chat-message",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatMessagesController#sendMessage",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/rooms/:id/messages",
+      "hasPermission": true,
+      "permission": "send:chat-message",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatMessagesController#unpin",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/chat/messages/:id/pin",
+      "hasPermission": true,
+      "permission": "pin:chat-message",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatMessagesController#unreadCount",
+      "httpMethod": "GET",
+      "path": "/api/v1/chat/unread-count",
+      "hasPermission": true,
+      "permission": "view:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
       "verdict": null,
       "verdictReason": null,
       "verdictWo": null
