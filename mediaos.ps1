@@ -664,12 +664,22 @@ function Show-MigrationStatus {
 # Trả lời: "service đang trỏ vào đâu, và bản đang chạy có phải bản mới nhất không?"
 function Show-ReleaseStatus {
   Write-Host "  Release artifact (apps\api\releases):" -ForegroundColor DarkGray
+  # ⚠️ ImagePath của một service NSSM = đường dẫn tới **nssm.exe**, KHÔNG BAO GIỜ chứa đường dẫn .js.
+  # Mục tiêu thật nằm ở subkey `Parameters\Application` + `Parameters\AppParameters` (đó chính là thứ
+  # `m prod-cutover` ghi bằng `nssm set`). Đọc nhầm ImagePath ⇒ phép thử `-match "releases"` không bao
+  # giờ đúng ⇒ ô này báo "KI-016 CHƯA đóng" VĨNH VIỄN, kể cả khi cutover đã chạy xong từ lâu — tức một
+  # tín hiệu NO-GO GIẢ cho cổng G4 của RELEASE-10.
   $svcPath = $null
   try {
-    # ImagePath của NSSM = "<node.exe>" "<đường dẫn js>" — đọc để biết service ĐANG trỏ vào đâu.
-    $reg = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\$ProdApiService" -ErrorAction Stop
-    $svcPath = $reg.ImagePath
-  } catch { Write-Warn "khong doc duoc cau hinh service $ProdApiService (can quyen doc registry)"; }
+    $p = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\$ProdApiService\Parameters" -ErrorAction Stop
+    $svcPath = ("{0} {1}" -f $p.Application, $p.AppParameters).Trim()
+  } catch {
+    try {
+      $reg = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\$ProdApiService" -ErrorAction Stop
+      $svcPath = $reg.ImagePath
+      Write-Warn "khong doc duoc $ProdApiService\Parameters — doc tam ImagePath (co the bao sai o cutover)"
+    } catch { Write-Warn "khong doc duoc cau hinh service $ProdApiService (can quyen doc registry)" }
+  }
 
   if ($svcPath) {
     if ($svcPath -match "releases") {
