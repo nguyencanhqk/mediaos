@@ -151,7 +151,70 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   // (hr-import.controller.ts) + assertImportScope (Company/System only, hr-employee-import.service.ts)
   // vẫn là cổng THẬT. Chỉ mở CỜ HIỂN THỊ.
   "import:employee",
+  // S6-LEAVE-CAPALLOW-1 — APPEND-only: 10 cặp NHẠY CẢM gác 4 màn QUẢN TRỊ của LEAVE (is_sensitive=true,
+  // seed mig 0455), grant Company CHỈ hr + company-admin (employee/manager KHÔNG có ⇒ least-privilege).
+  // Thiếu allowlist ⇒ getCapabilities() lọc bỏ sensitive + getAllowlistedSensitiveCapabilities KHÔNG
+  // surface ⇒ /auth/me KHÔNG BAO GIỜ trả ⇒ với hr/company-admin:
+  //   · LEAVE-SCREEN-011 Chính sách nghỉ — `view:leave-policy` là gate ROUTE ⇒ màn KHÔNG VÀO ĐƯỢC, cũng
+  //     KHÔNG hiện trong sidebar. Đây là màn DUY NHẤT bật `accrual_method`, tức đường duy nhất khởi động
+  //     engine cộng dồn phép ⇒ lỗi này CHẶN GO-LIVE: `ANNUAL` có deduct_balance=true mà số dư 0 thì mọi
+  //     đơn phép năm trả 422 BALANCE_NOT_ENOUGH (phát hiện 2026-08-02 khi chạy cổng go-live).
+  //   · LEAVE-SCREEN-010 Loại nghỉ — đọc được (`view:leave-type` KHÔNG sensitive) nhưng 3 nút ghi ẨN.
+  //   · LEAVE-SCREEN-012 Số dư phép + màn Giao dịch số dư — ẨN cả route lẫn nút Điều chỉnh.
+  // Trước đó CHỈ `SA` dùng được, và chỉ nhờ TAI NẠN: SA có grant `*:*` (is_sensitive=false) nên lọt qua
+  // fallback wildcard của useCan() — KHÔNG phải vì allowlist đúng. useCanExact() thì SA cũng trượt.
+  // Đây là lần lặp thứ 8+ của CAP-2/USEROPS-1/EXPORT-1/NOTI-BE-3/DASH-3/IDENTITY-READ-1/IMPORT-FE-1 ⇒
+  // kèm test khoá `sensitive-screen-gate-allowlist.spec.ts` để lần sau CI đỏ thay vì im lặng.
+  // Enforcement KHÔNG đổi — @RequirePermission per-resource (leave.controller.ts) + data-scope + RLS
+  // company_id vẫn là cổng THẬT; wildcard *:* KHÔNG thuộc allowlist ⇒ KHÔNG kế thừa. Chỉ mở CỜ HIỂN THỊ.
+  "view:leave-policy",
+  "create:leave-policy",
+  "update:leave-policy",
+  "delete:leave-policy",
+  "create:leave-type",
+  "update:leave-type",
+  "delete:leave-type",
+  "view:leave-balance",
+  "adjust:leave-balance",
+  "view-transaction:leave-balance",
 ]);
+
+/**
+ * Cặp NHẠY CẢM đang được dùng làm **cổng MÀN HÌNH** ở FE (route gate hoặc nút hành động chính).
+ *
+ * Vì sao tồn tại: `getCapabilities()` lọc bỏ TOÀN BỘ cặp `is_sensitive`, nên một cặp gác màn mà quên
+ * thêm vào `SENSITIVE_CAPABILITY_ALLOWLIST` sẽ làm màn đó **biến mất** với đúng những vai được cấp
+ * quyền — im lặng, không lỗi, không log. Lớp lỗi này đã lặp **8+ lần** trong repo (CAP-2 → USEROPS-1 →
+ * EXPORT-1 → NOTI-BE-3 → DASH-3 → IDENTITY-READ-1 → IMPORT-FE-1 → LEAVE-CAPALLOW-1) và lần gần nhất
+ * chặn go-live vì màn bật engine cộng dồn phép không vào được.
+ *
+ * **Thêm màn quản trị mới gác bằng cặp `is_sensitive` ⇒ thêm cặp đó vào ĐÂY.** Test
+ * `sensitive-screen-gate-allowlist.spec.ts` ép nó phải nằm trong allowlist, nên quên sẽ ĐỎ CI thay vì
+ * ẩn màn trong im lặng.
+ */
+export const SENSITIVE_SCREEN_GATE_PAIRS: readonly string[] = [
+  // LEAVE-SCREEN-010 Loại nghỉ (view:leave-type KHÔNG sensitive nên không liệt kê ở đây)
+  "create:leave-type",
+  "update:leave-type",
+  "delete:leave-type",
+  // LEAVE-SCREEN-011 Chính sách nghỉ — view là gate ROUTE
+  "view:leave-policy",
+  "create:leave-policy",
+  "update:leave-policy",
+  "delete:leave-policy",
+  // LEAVE-SCREEN-012 Số dư phép + Giao dịch số dư — view/view-transaction là gate ROUTE
+  "view:leave-balance",
+  "adjust:leave-balance",
+  "view-transaction:leave-balance",
+  // DASH — DashboardConfigPage (S4-FE-DASH-3)
+  "view:dashboard-config",
+  "update:dashboard-config",
+  // HR — /hr/employees/import (S5-HR-IMPORT-FE-1)
+  "import:employee",
+];
+
+/** Chỉ dùng cho test khoá — KHÔNG export ra ngoài module permission. */
+export const __SENSITIVE_CAPABILITY_ALLOWLIST_FOR_TEST = SENSITIVE_CAPABILITY_ALLOWLIST;
 
 @Injectable()
 export class PermissionService {
