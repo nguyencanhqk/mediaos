@@ -326,6 +326,8 @@ Thành viên phòng          =  RANH GIỚI DỮ LIỆU — "được đọc/ghi
 
 Cả hai phải cùng đúng. Membership ép ở **service layer** qua đúng một hàm `ChatAccessService.assertMember` (SPEC-15 §3.2) — không phải ở RLS, không phải ở `data_scope`.
 
+Ngoại lệ **duy nhất** với ranh giới membership là cặp `('view','chat-oversight')` (CHAT-DEC-004): nó **không** nới scope của cặp nào, mà mở một đường đọc **riêng** (`/chat/oversight/*`, chỉ đọc, có audit) — xem ghi chú bên dưới bảng.
+
 | Cặp quyền (SPEC-15 §11) | Ý nghĩa | Nhân viên | Trưởng đơn vị | BOD/Admin |
 | --- | --- | --- | --- | --- |
 | `('access','chat')` | Cổng nav + panel nổi | có | có | có |
@@ -337,13 +339,16 @@ Cả hai phải cùng đúng. Membership ép ở **service layer** qua đúng m�
 | `('send','chat-message')` | Gửi tin + đính kèm | có | có | có |
 | `('recall','chat-message')` | Thu hồi tin | có (tin của mình) | có | có |
 | `('pin','chat-message')` | Ghim/bỏ ghim | có (admin phòng) | có | có |
+| `('view','chat-oversight')` 🔒 | **Đọc-vượt membership**: mở đích danh một phòng với tư cách quản trị, chỉ đọc, có audit | — | — | **chỉ Super Admin** |
 
 Ghi chú:
 
 - Cột "có (admin phòng)" = **quyền là điều kiện cần, `chat_room_members.role='admin'` là điều kiện đủ** — kiểm ở service, không phải ở seed.
-- **Không có cặp nào cho phép đọc phòng mình không thuộc — kể cả Super Admin** (CHAT-DEC-004). Nếu về sau owner duyệt kiểm duyệt nội dung, cặp mới phải là `('moderate','chat-report')` gắn với **tin bị báo cáo**, không phải mở rộng scope của `('view','chat-room')`.
+- **Đúng MỘT cặp cho phép đọc phòng mình không thuộc: `('view','chat-oversight')`** (CHAT-DEC-004, owner chốt 02/08/2026 — **ngược** đề xuất Draft ban đầu). Ràng buộc bắt buộc: migration chỉ INSERT catalog `permissions`, **0** hàng `role_permissions` cho mọi role canonical (⚠️ `super-admin` **không** phải role canonical — SA nhận cặp qua `SuperAdminBootstrapService` lúc boot; grant trong migration sẽ khớp 0 hàng và đẩy người thi công sang grant lạc `company-admin`) · `is_sensitive=true` · path riêng `/chat/oversight/*` (**không** dùng chung path với đường đọc thường) · audit ghi trong **cùng transaction trước khi trả dữ liệu** · **KHÔNG** áp cho tìm kiếm. Chi tiết: [SPEC-15 §3.3](<SPEC/SPEC-15 CHAT.md>).
+- **Ngoài** `('view','chat-oversight')`, mọi cặp CHAT còn lại — kể cả `('view','chat-room')` — vẫn bị membership chặn **tuyệt đối**, không có ngoại lệ nào cho role nào.
+- Nếu về sau owner duyệt kiểm duyệt nội dung, cặp mới phải là `('manage','chat-report')` gắn với **tin bị báo cáo**, không phải mở rộng scope của `('view','chat-room')` hay `('view','chat-oversight')`.
 - Cặp gate của **tìm kiếm** và **tải tệp** PHẢI trùng cặp của đường đọc (`view:chat-room`). Tách cặp riêng sẽ đẻ ra role "tìm được mà đọc không được" — đúng lỗ đã gặp ở `S5-TASK-COVER-1`.
-- `is_sensitive` đề xuất `false` cho cả 9 cặp; phải chốt tường minh **trong plan WO DB đầu tiên** của wave, không để mở sau seed.
+- `is_sensitive` **đã chốt**: `false` cho 9 cặp thường, **`true`** cho riêng `('view','chat-oversight')`. Cặp nhạy cảm phải vào `SENSITIVE_CAPABILITY_ALLOWLIST` — **backend** `apps/api/src/permission/permission.service.ts`, pin bởi `apps/api/src/auth/auth-me-capabilities.int.spec.ts` — **cùng commit với seed**. Thiếu là màn quản trị ẩn dù DB có quyền, và test bằng chính tài khoản SA **không tái hiện được** (KI-058 đã mất một phán quyết vì đúng bẫy này ở LEAVE). FE gate bằng **`useCanExact`**, không phải `useCan` (wildcard `*:*` sẽ lọt).
 - RLS+FORCE trên `chat_rooms`/`chat_room_members`/`chat_messages` đã có từ migration `0010` — đó là cô lập **tenant**, khác tầng với ranh giới **phòng**.
 - Chi tiết mã lỗi/quy tắc: [SPEC-15 CHAT §11–12](<SPEC/SPEC-15 CHAT.md>); schema: [DB-12](<DB/DB-12 CHAT Database Design.md>).
 

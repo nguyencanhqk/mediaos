@@ -20,7 +20,7 @@
 | Module phụ thuộc trực tiếp | AUTH (RBAC · token WS), HR (employees/departments), TASK (projects), FOUNDATION (files · audit · sequences) |
 | Module liên quan | NOTI, ME, DASH, LMS (lối vào /chat hiện tại) |
 | Phiên bản | v1.0 |
-| Trạng thái | **Draft** — chờ owner duyệt (§22 có 12 quyết định cần chốt) |
+| Trạng thái | **Approved** — owner chốt 12 quyết định §22 ngày 02/08/2026 (CHAT-DEC-004 chốt **ngược** đề xuất ban đầu — xem §3.3) |
 | Giai đoạn | **Phase 4 · wave S7-CHAT** — NGOÀI phạm vi RC v1.0.0 (scope freeze RELEASE-05) |
 | Ngày tạo | 01/08/2026 |
 | Ngày cập nhật | 01/08/2026 |
@@ -74,16 +74,31 @@ Thành viên phòng          =  RANH GIỚI DỮ LIỆU — "được đọc/ghi
 
 Cả hai phải cùng đúng. Mọi đường đọc — danh sách phòng, đọc tin, **tìm kiếm**, tải tệp đính kèm, join room WebSocket, đích emit realtime — đi qua **đúng một** hàm khẳng định: `ChatAccessService.assertMember(companyId, roomId, actorUserId)`. Không route nào tự viết lại điều kiện membership (bài học `module-closed-by-second-assert-not-scope` — ATT/LEAVE đã tự-bound theo `actor.id` cùng kiểu này).
 
-### 3.3 Không ai đọc được phòng mình không thuộc về — kể cả Super Admin
+### 3.3 Membership là ranh giới — đúng MỘT ngoại lệ, có cặp quyền riêng và audit bắt buộc
 
-Không có quyền "đọc mọi phòng chat". Không có `moderate` toàn cục ở v1. Đây là quyết định **riêng tư** (CHAT-DEC-004): một hệ thống nội bộ mà quản trị viên đọc được tin nhắn riêng sẽ không ai dùng thật, và cửa hậu đó là mục tiêu tấn công đắt giá nhất trong toàn hệ thống.
+**CHAT-DEC-004 (owner chốt 02/08/2026):** Super Admin **đọc được mọi phòng, có audit**.
 
-Hệ quả bắt buộc:
+> ⚠️ Bản Draft của tài liệu này đề xuất ngược lại ("không ai đọc được, kể cả Super Admin"). Owner đã bác đề xuất đó. Mục này là **văn bản có hiệu lực**; mọi mô tả cũ trong lịch sử git không còn giá trị tham chiếu.
 
-- Không endpoint nào nhận `roomId` mà bỏ qua assert membership — kể cả endpoint quản trị.
+Ngoại lệ này được đóng khung chặt để không biến thành lỗ đọc toàn cục:
+
+| Ràng buộc | Nội dung | Vì sao ràng buộc này tồn tại |
+| --- | --- | --- |
+| **Cặp quyền RIÊNG** | `('view','chat-oversight')` — **không** nới scope của `('view','chat-room')` | Nới cặp cũ buộc **mọi** route thường phải tự phân biệt member/không-member; một chỗ quên là lỗ. Cặp riêng giữ toàn bộ đường đọc thường fail-closed **nguyên vẹn**, chỉ một nhánh mới phải chứng minh (`read-path-gate-pair-must-match-download-pair`) |
+| **Chỉ Super Admin — nhưng KHÔNG grant trong migration** | Migration **chỉ INSERT catalog `permissions`**; **0** hàng `role_permissions` cho mọi role canonical. SA nhận cặp qua `SuperAdminBootstrapService` lúc boot | ⚠️ **`super-admin` KHÔNG phải role canonical.** 4 role canonical (`roles.company_id IS NULL`) = `employee` · `manager` · `hr` · `company-admin`; SA là role **company-scoped dựng lúc boot**. Viết `INSERT … WHERE code='super-admin'` trong migration khớp **0 hàng** ⇒ verify "SA có cặp" **luôn đỏ** ⇒ lối thoát dễ nhất của người thi công là grant lạc sang `company-admin`, đúng role mục này cấm. Verify trong migration đúng **một vế**: 0 role canonical giữ cặp. Khẳng định SA có cặp là **int-spec chạy SAU boot** (DB-12 §9 bước D′) |
+| **`is_sensitive = true`** | riêng cặp này; 9 cặp kia giữ `false` | Cặp nhạy cảm bị `getCapabilities()` **lọc khỏi `/auth/me`** trừ khi có trong `SENSITIVE_CAPABILITY_ALLOWLIST` (**backend** — `apps/api/src/permission/permission.service.ts`, KHÔNG phải file FE). Thiếu ⇒ màn quản trị **ẩn dù DB có quyền**; và test bằng chính tài khoản SA **không tái hiện được** (SA lọt nhờ tai nạn `*:*`). FE phải gate bằng **`useCanExact`**, không phải `useCan` — `useCan` rơi xuống `*:resource → action:* → *:*` nên sẽ hiện lối vào màn nguy hiểm nhất module cho mọi người giữ wildcard trong khi BE vẫn 403 |
+| **Audit — hai mô hình transaction** | **thành công**: `Success` trong **cùng** tx với truy vấn đọc, ghi **trước khi** trả dữ liệu · **từ chối**: `Denied` trong tx **RIÊNG đã commit** rồi mới ném 403 | Audit ghi sau/ngoài transaction là đường im lặng: lỗi ghi audit vẫn trả dữ liệu ⇒ "có audit" mất sạch ý nghĩa. Ngược lại, ném 403 **trong** cùng tx sẽ **rollback mất** dòng audit từ chối — đúng thứ ta dựng nó để ghi lại |
+| **KHÔNG mở tìm kiếm** | `/chat/search` giữ nguyên vị từ membership, **kể cả** với Super Admin | Tìm kiếm là đường đọc rộng nhất module. Mở toàn cục biến một ô search thành cửa xuất toàn bộ nội dung công ty, và dấu vết audit sẽ ghi theo *câu truy vấn* thay vì theo *phòng* ⇒ mất khả năng trả lời "ai đã đọc phòng nào" |
+| **KHÔNG cấp quyền tải tệp** | `ChatMessageFileResolver` **cấm** đọc cặp `chat-oversight`; DTO oversight trả metadata tệp **không kèm URL ký** | Thêm cặp vào resolver đẻ ra đường tải đi qua route FOUNDATION Files — **không dòng audit CHAT nào**. Và tái dùng nguyên DTO tin nhắn thường (vốn kèm URL ký) làm chính payload oversight phát ra khoá đọc tệp không cần membership |
+| **Lối vào tường minh trên UI** | màn quản trị riêng + xác nhận "xem với tư cách quản trị"; **không** trộn vào danh sách phòng thường; FE gate bằng `useCanExact` | Không bao giờ xảy ra do vô ý, và làm cho mỗi dòng audit tương ứng một chủ đích có thật |
+
+Hệ quả vẫn giữ nguyên từ bản Draft:
+
+- Ngoài nhánh `('view','chat-oversight')`, **không** endpoint nào nhận `roomId` mà bỏ qua assert membership — kể cả endpoint quản trị khác.
 - Không widget DASH nào đếm/hiện nội dung tin nhắn.
-- Export/backup nội dung chat cho mục đích pháp lý là **quy trình vận hành cấp DB** (RELEASE-11 Admin Guide), không phải tính năng ứng dụng.
-- Trường hợp cần kiểm duyệt nội dung vi phạm → xem §5.2 (cơ chế **báo cáo tin nhắn**, không phải quyền đọc).
+- Trường hợp cần kiểm duyệt nội dung vi phạm → xem §5.2 (cơ chế **báo cáo tin nhắn**), không phải mở thêm quyền đọc.
+
+**Phạm vi đọc-vượt bao gồm cả phòng `direct` (tin nhắn riêng)** — đây là phần nhạy cảm nhất của quyết định. Phải ghi thẳng trong RELEASE-11 Admin Guide để người dùng biết ranh giới riêng tư thật của hệ thống, không chôn trong code.
 
 ### 3.4 Tin nhắn là ledger append-only
 
@@ -112,7 +127,7 @@ CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ 
 2. Mỗi phòng ban và mỗi dự án có sẵn một kênh chung, không ai phải lập nhóm thủ công và không ai bị bỏ sót.
 3. Nội dung trao đổi công việc là **tài sản công ty** — còn lại sau khi nhân viên nghỉ việc.
 4. Tìm lại được tin nhắn cũ bằng tiếng Việt, có dấu lẫn không dấu.
-5. Trao đổi riêng tư vẫn thực sự riêng tư (§3.3).
+5. Trao đổi riêng tư chỉ mở cho thành viên phòng; ngoại lệ quản trị duy nhất đi qua cặp quyền riêng và **để lại dấu vết** (§3.3).
 
 ### 4.2 Mục tiêu kỹ thuật
 
@@ -177,7 +192,7 @@ CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ 
 | Nhân viên | Nhắn riêng đồng nghiệp; theo dõi kênh phòng ban/dự án của mình; tìm lại tin cũ; tắt thông báo phòng ồn |
 | Trưởng đơn vị | Thông báo cho cả phòng qua kênh phòng ban; lập nhóm công việc liên phòng |
 | Quản lý dự án | Trao đổi trong kênh dự án; người mới vào dự án đọc được ngữ cảnh trước đó |
-| BOD / Admin | Dùng chat như nhân viên. **Không** có quyền đọc phòng mình không thuộc (§3.3) |
+| BOD / Admin | Dùng chat như nhân viên. **Không** có quyền đọc phòng mình không thuộc — cặp `('view','chat-oversight')` chỉ cấp cho Super Admin (§3.3) |
 | Quản trị hệ thống | Bật/tắt module CHAT; đối soát phòng tự động; theo dõi sức khoẻ WS |
 
 ---
@@ -219,7 +234,7 @@ Chi tiết cột/kiểu/constraint: [DB-12](<../DB/DB-12 CHAT Database Design.md
 | Vai trò | `role` (`member` / `admin`) | phòng nhóm mới có admin do người chỉ định |
 | Đã đọc | `last_read_seq`, `last_read_at` | **`seq` là nguồn sự thật**, `at` chỉ để hiển thị (§13.2) |
 | Tuỳ chọn | `muted_until` | tắt thông báo tới thời điểm |
-| Vòng đời | `joined_at`, `left_at`, `visible_from_seq` | `visible_from_seq` chừa sẵn, v1 luôn NULL (§13.4) |
+| Vòng đời | `joined_at`, `left_at`, `visible_from_seq` | `visible_from_seq` chừa sẵn, v1 **luôn NULL** (§13.4 · CHAT-DEC-008) |
 
 **Tin nhắn (`chat_messages`)**
 
@@ -245,6 +260,8 @@ Chi tiết cột/kiểu/constraint: [DB-12](<../DB/DB-12 CHAT Database Design.md
 | CHAT-SCREEN-004 | Bảng thông tin phòng | thành viên · tệp đã gửi · tin đã ghim · nút rời/lưu trữ (theo quyền + loại phòng) |
 | CHAT-SCREEN-005 | Tìm kiếm tin nhắn | phạm vi: tất cả phòng của tôi, hoặc trong 1 phòng; nhảy tới tin trong ngữ cảnh |
 | CHAT-SCREEN-006 | Badge chưa đọc trên header | tổng theo user, đồng bộ realtime qua `chat:read` |
+| CHAT-SCREEN-007 🔒 | **Quản trị: đọc-vượt membership** (§3.3) | Chỉ hiện với cặp `('view','chat-oversight')`. Tra phòng theo mã/tên → **hộp thoại xác nhận "xem với tư cách quản trị"** → mở phòng ở chế độ **chỉ đọc** (không gửi/ghim/thu hồi được). **Không** trộn vào danh sách phòng của CHAT-SCREEN-001 |
+| CHAT-SCREEN-008 🔒 | **Quản trị: nhật ký đọc-vượt** | Danh sách lần dùng CHAT-SCREEN-007 (ai · phòng nào · lúc nào · thành công/bị từ chối), đọc từ `audit_logs`. Audit không xem được trên UI thì không phải là kiểm soát (§18) |
 
 ---
 
@@ -287,13 +304,15 @@ Theo chuẩn per-pair `(action, resource)` + data_scope per-(permission, role). 
 | `('send','chat-message')` | gửi tin + đính kèm | có | có | có |
 | `('recall','chat-message')` | thu hồi tin | có (tin của mình) | có | có |
 | `('pin','chat-message')` | ghim/bỏ ghim | có (admin phòng) | có | có |
+| `('view','chat-oversight')` 🔒 | **đọc-vượt membership** — mở đích danh một phòng với tư cách quản trị, có audit (§3.3) | — | — | **chỉ Super Admin** |
 
 Ghi chú bắt buộc:
 
 - **Cặp gate của tìm kiếm và tải tệp PHẢI trùng cặp của đường đọc** (`view:chat-room`). Dùng cặp khác (ví dụ tách `('search','chat-message')`) sẽ tạo role "tìm được mà đọc không được" hoặc ngược lại — đúng lỗ đã gặp ở `S5-TASK-COVER-1` (bài học `read-path-gate-pair-must-match-download-pair`).
 - Cột "có (admin phòng)" nghĩa là: **quyền là điều kiện cần, `chat_room_members.role='admin'` là điều kiện đủ** — kiểm ở service, không phải ở seed.
-- `is_sensitive` đề xuất **`false`** cho cả 9 cặp; phải chốt tường minh **trong plan của WO DB đầu tiên**, không để mở sau seed (bẫy `canonical-seed-pin-regression`: flip `is_sensitive` sau seed làm ĐỎ pin `auth-seed-canonical-roles` và phải sửa đồng thời allowlist sensitive FE).
-- Không có cặp nào cho phép đọc phòng mình không thuộc (§3.3) — nếu về sau owner duyệt kiểm duyệt nội dung, cặp mới phải là `('moderate','chat-report')` gắn với **tin bị báo cáo**, không phải `('view','chat-room')` mở rộng scope.
+- `is_sensitive` **CHỐT**: `false` cho 9 cặp thường, **`true`** cho riêng `('view','chat-oversight')`. Giá trị này là cuối cùng, không để mở sau seed (bẫy `canonical-seed-pin-regression`: flip `is_sensitive` sau seed làm ĐỎ pin `auth-seed-canonical-roles` và phải sửa đồng thời allowlist sensitive FE). Cặp `chat-oversight` **phải** có mặt trong `SENSITIVE_CAPABILITY_ALLOWLIST` — nằm ở **backend** `apps/api/src/permission/permission.service.ts` (pin bởi `apps/api/src/auth/auth-me-capabilities.int.spec.ts`), **không** phải file phía FE — **cùng commit** với seed; thiếu là màn quản trị ẩn dù DB có quyền (KI-058).
+- **Đúng một cặp cho phép đọc phòng mình không thuộc:** `('view','chat-oversight')`, chỉ Super Admin, luôn kèm audit, **không** áp cho tìm kiếm (§3.3). Mọi cặp khác — kể cả `('view','chat-room')` — vẫn bị membership chặn tuyệt đối.
+- Nếu về sau owner duyệt cơ chế kiểm duyệt nội dung, cặp mới phải là `('manage','chat-report')` gắn với **tin bị báo cáo**, không phải mở rộng scope của `('view','chat-room')` hay của `('view','chat-oversight')`.
 
 ---
 
@@ -317,8 +336,10 @@ Ghi chú bắt buộc:
 | CHAT-ERR-014 | `client_message_id` trùng trong cùng (phòng, người gửi) → **trả lại tin đã tạo lần đầu, 200 idempotent** — không tạo bản sao, không báo lỗi |
 | CHAT-ERR-015 | Tệp đính kèm không thuộc quyền của người gửi, chưa quét virus xong, hoặc đã bị đánh dấu nhiễm |
 | CHAT-ERR-016 | Con trỏ phân trang không hợp lệ (`beforeSeq`/`afterSeq` sai kiểu, hoặc dùng cả hai cùng lúc) |
-| CHAT-ERR-017 | Truy vấn tìm kiếm ngắn hơn 2 ký tự, hoặc phạm vi chỉ định phòng mà người tìm không thuộc |
+| CHAT-ERR-017 | Truy vấn tìm kiếm ngắn hơn 2 ký tự → **400/422** (lỗi validate thuần). Chỉ định `roomId` mà người tìm không thuộc → **404, GIỐNG HỆT** trường hợp `roomId` không tồn tại — trả mã khác nhau là biến ô tìm kiếm thành oracle dò sự tồn tại của phòng, đúng thứ CHAT-ERR-001 dựng 404 để chặn |
 | CHAT-ERR-018 | `last_read_seq` gửi lên nhỏ hơn giá trị hiện có → bỏ qua im lặng (chỉ tiến, không lùi), không lỗi |
+| CHAT-ERR-019 | Gọi đường đọc-vượt (§3.3) mà **thiếu cặp** `('view','chat-oversight')` → **403** (không phải 404: người gọi biết mình đang cố dùng chức năng quản trị, không có gì để dò). Ghi audit cả lần **bị từ chối** |
+| CHAT-ERR-020 | Đường đọc-vượt được gọi nhưng **ghi `audit_logs` thất bại** → **rollback, không trả dữ liệu**. Đọc-vượt không có dấu vết thì không được phép xảy ra (§3.3) |
 
 Quy tắc bổ sung (không cần mã lỗi riêng):
 
@@ -459,6 +480,10 @@ Envelope/error/pagination theo API-01. Chi tiết request/response: [API-13](<..
 | CHAT-API-015 | `GET /chat/search` | `q` + `roomId?` + con trỏ; luôn giới hạn theo membership (§13.7) |
 | CHAT-API-016 | `GET /chat/unread-count` | tổng chưa đọc cho badge header |
 | CHAT-API-017 | `GET /chat/rooms/:id/files` | tệp đã gửi trong phòng, URL ký hạn ngắn |
+| CHAT-API-018 🔒 | `GET /chat/oversight/rooms` · `GET /chat/oversight/rooms/:id` · `GET /chat/oversight/rooms/:id/messages` | **Đọc-vượt membership** (§3.3). Cặp `('view','chat-oversight')` — **không** dùng chung path với CHAT-API-001/004/009 để đường đọc thường không bao giờ phải phân nhánh. Chỉ đọc: **không** có biến thể ghi. Mỗi lần gọi ghi `audit_logs`, **hai mô hình khác nhau**: thành công → `Success` trong **cùng** transaction với truy vấn đọc (CHAT-ERR-020); từ chối → `Denied` trong transaction **RIÊNG đã commit** rồi mới ném 403 (CHAT-ERR-019). Ném 403 trong cùng tx sẽ **rollback mất** chính dòng audit từ chối |
+| CHAT-API-019 🔒 | `GET /chat/oversight/audit` | Nhật ký đọc-vượt cho CHAT-SCREEN-008 |
+
+> ⚠️ **Không có `GET /chat/oversight/search`.** Tìm kiếm giữ nguyên vị từ membership cho mọi role, kể cả Super Admin (§3.3) — đây là ràng buộc thiết kế, không phải thiếu sót.
 
 ---
 
@@ -470,7 +495,7 @@ Nguồn chuẩn: [DB-12](<../DB/DB-12 CHAT Database Design.md>). Tóm tắt:
 - Cột thêm mới, cột khai tử, extension `unaccent` + hàm `f_unaccent`, cột generated `search_vector`: DB-12 §6.
 - Seed đi kèm **bắt buộc** (thiếu là 500 ngay bản ghi đầu — bài học 0498/0474/0507):
   1. module `CHAT` vào `modules`;
-  2. 9 cặp permission + grant per-pair data_scope 4 role canonical (verify fail-loud);
+  2. 10 cặp permission — 9 cặp thường grant per-pair data_scope cho 4 role canonical (verify fail-loud); cặp thứ 10 `('view','chat-oversight')` **chỉ vào catalog, KHÔNG grant role canonical nào** (SA nhận qua bootstrap lúc boot — DB-12 §9 bước D′);
   3. `sequence_counters` cho `room_code`;
   4. `audit_logs.object_type`: `'chat_room'` + `'chat_message'` **đã được UNION-ADD từ migration 0050** — wave này chỉ **verify fail-loud**, không thêm lại;
   5. catalog + template 2 event NOTI — và **nới CHECK trên CẢ HAI bảng** `notification_events` **lẫn** `notifications` (`module_code += 'CHAT'`, `notification_type += 'Chat'`). Quên vế `notifications` là lỗi đã ship thật ở 0507 và phải vá ở 0529 (memory `noti-catalog-check-lives-on-two-tables`).
@@ -507,7 +532,8 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
   ⚠️ Khi server bỏ khoá `body` khỏi payload, schema Zod phía FE phải khai `.optional()`/`.nullable()` — thiếu là `ZodError` làm trắng trang **đúng cho người dùng vừa được bảo vệ** (memory `server-masking-needs-optional-fe-schema`).
 - **Audit** hành động quản trị phòng, **không** audit nội dung tin (§12).
 - **404 chứ không 403** cho phòng người dùng không thuộc (CHAT-ERR-001) — chống dò sự tồn tại của phòng.
-- Không có quyền đọc toàn cục (§3.3).
+- **Đọc-vượt membership (§3.3)** là bề mặt rủi ro lớn nhất của module: đúng một cặp `('view','chat-oversight')`, chỉ Super Admin, `is_sensitive=true`, audit ghi **trong cùng transaction trước khi trả dữ liệu** (CHAT-ERR-020), **không** áp cho `/chat/search`, lối vào UI tường minh. Cả lần **bị từ chối** cũng ghi audit (CHAT-ERR-019) — chuỗi thử-và-trượt là tín hiệu điều tra.
+- Nhật ký đọc-vượt phải **xem được trên UI** (màn quản trị §9), không chỉ nằm trong bảng `audit_logs`: audit không ai đọc được thì không phải là kiểm soát.
 - Token WS dùng access token có hạn; user bị khoá/đổi mật khẩu → cắt phiên WS đang mở.
 - Nội dung tin nhắn là văn bản thuần: **không** render HTML/Markdown thô từ người dùng (chống XSS), chỉ tự động nhận diện liên kết ở tầng hiển thị đã escape.
 
@@ -535,7 +561,11 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 6. Thu hồi tin → mọi máy đang mở thấy "đã thu hồi" ngay; tệp đính kèm hết tải được.
 7. Tắt `REALTIME_ENABLED` → ứng dụng vẫn gửi/nhận đúng qua bù `afterSeq`, không mất tin.
 8. Cross-tenant: mọi endpoint deny dữ liệu company khác (int-spec bắt buộc, chạy với `LANE_DB`).
-9. Super Admin **không** đọc được phòng mình không thuộc — deny-path test viết TRƯỚC.
+9. Role **không** có `('view','chat-oversight')` (kể cả Company Admin, HR, Manager) không đọc được phòng mình không thuộc qua **bất kỳ** đường nào — deny-path test viết TRƯỚC.
+10. **Chủ thể = role dựng trong test được grant đúng cặp `('view','chat-oversight')` — KHÔNG dùng tài khoản Super Admin.** Role đó mở một phòng mình không thuộc qua lối vào quản trị → đọc được **và** sinh đúng một hàng `audit_logs`; ép lỗi ghi audit → **không** trả dữ liệu (CHAT-ERR-020). Ca đối chứng: **cùng role, bỏ cặp** → 403 **và** vẫn +1 hàng audit `Denied`.
+    > ⚠️ Dùng SA làm chủ thể ca này là **tautology**: SA có `*:*` **và** được `SuperAdminBootstrapService` grant mọi cặp catalog ⇒ test vẫn XANH kể cả khi guard khai sai resource (`chat-oversite`), sai action, hoặc **quên guard hoàn toàn**. Thêm nữa, lane DB không set `PLATFORM_SUPERADMIN_EMAIL` thì role SA có thể **không tồn tại** và ca test không chạy được.
+11. Người dùng có `('view','chat-oversight')` gọi `/chat/search` → kết quả **chỉ** từ phòng mình là thành viên, giống hệt nhân viên thường (§3.3 không mở tìm kiếm).
+12. Tài khoản chỉ giữ wildcard `*:*` (không có grant tường minh cặp `chat-oversight`) → **không** thấy lối vào CHAT-SCREEN-007 trên UI (FE phải dùng `useCanExact`, không phải `useCan`).
 
 ---
 
@@ -543,9 +573,10 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 
 | Nhóm | Scenario |
 | --- | --- |
-| Deny-path (RED trước) | không phải thành viên: đọc tin · tìm kiếm · tải tệp · join WS room · nhận emit · đọc tệp qua id trực tiếp · Super Admin cũng bị chặn · người đã `left_at` không đọc tin mới · cross-tenant mọi endpoint |
+| Deny-path (RED trước) | không phải thành viên: đọc tin · tìm kiếm · tải tệp · join WS room · nhận emit · đọc tệp qua id trực tiếp · người đã `left_at` không đọc tin mới · cross-tenant mọi endpoint. **Không** dùng Super Admin làm chủ thể của nhóm này (SA có `*:*`, sẽ lọt) — dùng role thường **và** một role có `('view','chat-room')` nhưng **không** có `('view','chat-oversight')` |
+| Đọc-vượt membership (§3.3) | **Chủ thể = role dựng trong test, KHÔNG phải SA** (cả vế deny lẫn vế allow — xem §20 ca 10). Role thiếu cặp → **403** + vẫn **+1** hàng audit `Denied` sau khi request kết thúc (CHAT-ERR-019) · role có cặp → đọc được + **đúng 1** hàng `Success` · ép ghi audit lỗi → **rollback, 0 byte dữ liệu** (CHAT-ERR-020) · gọi `/chat/search` → **không** thấy phòng ngoài membership · tải tệp trong phòng không thuộc → **403**, và payload `018c` chứa **0 URL ký** · `019` không trả dòng audit của module khác · cặp có trong `SENSITIVE_CAPABILITY_ALLOWLIST` (backend) · tài khoản chỉ có `*:*` → **không** thấy lối vào trên UI |
 | Ranh giới tìm kiếm | truy vấn khớp tin ở phòng ngoài phạm vi → 0 kết quả; chỉ định `roomId` không thuộc → CHAT-ERR-017 |
-| Validate | 18 mã lỗi §12, mỗi mã ≥ 1 ca |
+| Validate | **20** mã lỗi §12, mỗi mã ≥ 1 ca |
 | Idempotent | gửi lại cùng `clientMessageId` → đúng 1 hàng, trả về cùng id; mở DM 2 lần → 1 phòng |
 | Thứ tự & phân trang | `beforeSeq`/`afterSeq` không trùng lặp/không sót khi có tin chèn giữa; cấm offset |
 | Đã đọc | `last_read_seq` không lùi (2 thiết bị); số chưa đọc = phép trừ; "đã xem bởi" đúng tập |
@@ -557,24 +588,26 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 
 ---
 
-## 22. Quyết định nghiệp vụ — **CHỜ OWNER CHỐT**
+## 22. Quyết định nghiệp vụ — **ĐÃ CHỐT 02/08/2026**
 
-| Mã | Quyết định | Đề xuất | Trạng thái |
+| Mã | Quyết định | Kết quả owner chốt | Trạng thái |
 | --- | --- | --- | --- |
-| CHAT-DEC-001 | Bốn loại phòng `direct`/`group`/`department`/`project`; bỏ `channel` (media) | như §3.1 | ⏳ chờ chốt |
-| CHAT-DEC-002 | Thành viên phòng là ranh giới quyền, data_scope chỉ là cổng module | như §3.2 | ⏳ chờ chốt |
-| CHAT-DEC-003 | Phòng `department`/`project` có thành viên **dẫn xuất**, người dùng không tự thêm/bớt | như §3.1, §13.3 | ⏳ chờ chốt |
-| CHAT-DEC-004 | **Không ai** đọc được phòng mình không thuộc, kể cả Super Admin; không có `moderate` toàn cục ở v1 | như §3.3 | ⏳ **chốt sớm — ảnh hưởng toàn bộ thiết kế quyền** |
-| CHAT-DEC-005 | Client ghi qua REST, WS chỉ một chiều server→client | như §3.5 | ⏳ chờ chốt |
-| CHAT-DEC-006 | Không sửa tin nhắn ở v1; thu hồi bằng `recalled_at`, body giữ trong DB | như §3.4, §13.6 | ⏳ chờ chốt |
-| CHAT-DEC-007 | Cửa sổ thu hồi của người gửi = **15 phút** | 15 phút | ⏳ chờ chốt (con số) |
-| CHAT-DEC-008 | Thành viên mới đọc **toàn bộ** lịch sử phòng; `visible_from_seq` chừa sẵn | như §13.4 | ⏳ chờ chốt |
-| CHAT-DEC-009 | **Không** làm chat theo từng task — TASK đã có bình luận riêng | không làm | ⏳ chờ chốt (SPEC-01 §12.12 có nhắc "task") |
-| CHAT-DEC-010 | Notification chỉ cho mention + DM (gộp lô); phòng nhóm/phòng ban/dự án chỉ có badge | như §17 | ⏳ chờ chốt |
-| CHAT-DEC-011 | Payload notification **không** chứa nội dung tin nhắn | không chứa | ⏳ chờ chốt |
-| CHAT-DEC-012 | Tìm kiếm bằng `unaccent` + `tsvector('simple')` trong Postgres, không thêm search engine | như §13.7 | ⏳ chờ chốt |
+| CHAT-DEC-001 | Bốn loại phòng `direct`/`group`/`department`/`project`; bỏ `channel` (media) | theo đề xuất §3.1 | ✅ chốt |
+| CHAT-DEC-002 | Thành viên phòng là ranh giới quyền, data_scope chỉ là cổng module | theo đề xuất §3.2 | ✅ chốt |
+| CHAT-DEC-003 | Phòng `department`/`project` có thành viên **dẫn xuất**, người dùng không tự thêm/bớt | theo đề xuất §3.1, §13.3 | ✅ chốt |
+| CHAT-DEC-004 | Ai đọc được phòng mình không thuộc? | ⚠️ **NGƯỢC đề xuất Draft** — **Super Admin đọc được mọi phòng, có audit**. Đóng khung bằng cặp quyền riêng `('view','chat-oversight')` (`is_sensitive=true`, chỉ SA), audit trong cùng transaction, **không** áp cho tìm kiếm, lối vào UI tường minh — xem **§3.3** | ✅ **chốt** |
+| CHAT-DEC-005 | Client ghi qua REST, WS chỉ một chiều server→client | theo đề xuất §3.5 | ✅ chốt |
+| CHAT-DEC-006 | Không sửa tin nhắn ở v1; thu hồi bằng `recalled_at`, body giữ trong DB | theo đề xuất §3.4, §13.6 | ✅ chốt |
+| CHAT-DEC-007 | Cửa sổ thu hồi của người gửi | **15 phút** | ✅ chốt |
+| CHAT-DEC-008 | Thành viên mới đọc lịch sử phòng tới đâu? | **Toàn bộ** lịch sử; `visible_from_seq` vẫn chừa sẵn nhưng **luôn NULL** ở v1 (không phải `0` — vị từ đọc đã viết `IS NULL OR …`) — theo đề xuất §13.4 | ✅ chốt |
+| CHAT-DEC-009 | Chat theo từng task? | **KHÔNG làm** — TASK đã có bình luận riêng (SPEC-06), tránh hai kênh trùng | ✅ chốt |
+| CHAT-DEC-010 | Notification chỉ cho mention + DM (gộp lô); phòng nhóm/phòng ban/dự án chỉ có badge | theo đề xuất §17 | ✅ chốt |
+| CHAT-DEC-011 | Payload notification **không** chứa nội dung tin nhắn | không chứa | ✅ chốt |
+| CHAT-DEC-012 | Tìm kiếm bằng `unaccent` + `tsvector('simple')` trong Postgres, không thêm search engine | theo đề xuất §13.7 | ✅ chốt |
 
-> Cách chốt: owner duyệt PR docs của WO `S7-CHAT-DOC-1` ⇒ flip Trạng thái §1 `Draft` → `Approved` và cột trạng thái ở bảng này. **Không WO code nào của wave được bắt đầu trước khi CHAT-DEC-004 được chốt** — nó quyết định hình dạng của toàn bộ tầng quyền.
+> **Ghi chú lịch sử — đọc kỹ trước khi tra git:** bản Draft 01/08/2026 đề xuất CHAT-DEC-004 = "không ai đọc được, kể cả Super Admin", và §3.3 · §11 · §18 · §20 · §21 khi đó được viết quanh mệnh đề ấy. Owner **bác** đề xuất ngày 02/08/2026. Các mục đó đã được viết lại trong `S7-CHAT-DOC-2`; mô tả cũ còn trong lịch sử git **không** còn giá trị tham chiếu.
+>
+> Điều kiện mở WO code của wave (đã đủ): 12 quyết định chốt · §1 = `Approved` · `plan-reviewer` PASS trên SPEC-15 + DB-12. Điều kiện merge vào `master` (**chưa** đủ): go-live đóng — xem §1 và `docs/plans/S7-CHAT-WAVE.md` §4.
 
 ---
 
@@ -582,7 +615,7 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 
 1. **SPEC-01**: §12.12 trỏ sang SPEC-15 (đã có sẵn dòng "Tài liệu chi tiết: SPEC-15"); bổ sung CHAT vào sơ đồ phụ thuộc; thanh điều hướng của 10 file SPEC cũ thêm liên kết SPEC-15.
 2. **docs/README.md** §2/§3/§4/§9: thêm dòng SPEC-15 · DB-12 · API-13 và một hàng module CHAT trong bản đồ ghép cặp.
-3. **docs/permission-matrix-spec.md**: thêm **§9c CHAT** với 9 cặp quyền (§11) + ghi chú "membership là ranh giới, không phải scope".
+3. **docs/permission-matrix-spec.md**: thêm **§9c CHAT** với 10 cặp quyền (§11) + ghi chú "membership là ranh giới, không phải scope" + ngoại lệ đọc-vượt duy nhất.
 4. **DB-01**: ghi nhận nhóm bảng CHAT (đã tồn tại từ 0010/0050) + ERD cấp cao; **DB-09**: index CHAT; **DB-10**: seed module CHAT.
 5. Tạo **DB-12** và **API-13** (stub endpoint đã khoá theo §15).
 6. **docs/erd-current.md** Phụ lục A: chuyển cụm `communication.ts` chat từ nhóm "park/out-of-scope" sang "đang dùng — module CHAT (SPEC-15)".
@@ -593,7 +626,7 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 
 ## 24. Definition of Done cho SPEC-15
 
-- [ ] Owner chốt 12 quyết định §22 (ưu tiên CHAT-DEC-004) → flip Trạng thái §1 Draft → Approved
+- [x] Owner chốt 12 quyết định §22 (02/08/2026, CHAT-DEC-004 chốt ngược đề xuất) → §1 = **Approved**
 - [ ] DB-12 + API-13 + permission-matrix §9c đồng bộ, không mâu thuẫn SPEC-15
 - [ ] Wave `S7-CHAT-*` trong `harness/backlog.mjs` trace về đúng mã CHAT-FUNC/API/ERR của tài liệu này
 - [ ] Mọi WO code lấy SPEC-15 + DB-12 làm nguồn sự thật; lệch → sửa code, không sửa ngầm spec
@@ -603,4 +636,4 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 
 ## 25. Kết luận
 
-CHAT đóng khoảng trống cuối cùng khiến nhân viên vẫn phải rời hệ thống để làm việc: trao đổi tức thời. Thiết kế dựa trên ba lựa chọn cứng — **thành viên phòng là ranh giới quyền duy nhất**, **không ai đọc được phòng mình không thuộc**, và **tin nhắn là ledger append-only** — cộng với việc tái dùng gần như toàn bộ hạ tầng đã có (bảng chat từ mig 0010/0050 với RLS và append-only sẵn sàng, gateway WS, Files, outbox NOTI). Phần thực sự mới chỉ là tầng nghiệp vụ, tìm kiếm tiếng Việt và giao diện.
+CHAT đóng khoảng trống cuối cùng khiến nhân viên vẫn phải rời hệ thống để làm việc: trao đổi tức thời. Thiết kế dựa trên ba lựa chọn cứng — **thành viên phòng là ranh giới quyền**, **đúng một ngoại lệ đọc-vượt có cặp quyền riêng và audit bắt buộc** (§3.3), và **tin nhắn là ledger append-only** — cộng với việc tái dùng gần như toàn bộ hạ tầng đã có (bảng chat từ mig 0010/0050 với RLS và append-only sẵn sàng, gateway WS, Files, outbox NOTI). Phần thực sự mới chỉ là tầng nghiệp vụ, tìm kiếm tiếng Việt và giao diện.

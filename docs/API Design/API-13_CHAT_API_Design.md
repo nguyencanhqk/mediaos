@@ -45,7 +45,7 @@ Mô tả thiết kế API cho module **CHAT** — kênh trao đổi tức thời
 2. **SPEC-15 CHAT** — nguồn sự thật nghiệp vụ: loại phòng (§3.1), ranh giới quyền theo thành viên (§3.2–3.3), append-only (§3.4), WS một chiều (§3.5), permission (§11), mã lỗi (§12), lõi nghiệp vụ (§13), API (§15), thông báo (§17), bảo mật (§18), CHAT-DEC-001..012 (§22).
 3. **DB-12** — `chat_rooms` / `chat_room_members` / `chat_messages` (RLS+FORCE, append-only, `seq` identity), `search_vector` generated, đính kèm qua `file_links`.
 4. **DB-08 / API-09 FOUNDATION** — Files (presign upload, `file_links`, `FilePolicyService` fail-closed), audit, `sequence_counters`.
-5. **permission-matrix-spec §9c** — 9 cặp `(action, resource_type)` mà permission engine thực thi.
+5. **permission-matrix-spec §9c** — 10 cặp `(action, resource_type)` mà permission engine thực thi (9 cặp thường + `('view','chat-oversight')` cho đường đọc-vượt §5.3).
 6. **SPEC-08 / API-07 NOTI** — `CHAT_MENTIONED`, `CHAT_DIRECT_MESSAGE` qua OutboxNotificationBridge.
 
 ---
@@ -71,7 +71,10 @@ Mô tả thiết kế API cho module **CHAT** — kênh trao đổi tức thời
 - Thả cảm xúc (reaction).
 - Chat theo từng task (CHAT-DEC-009 — TASK đã có bình luận riêng).
 - Kiểm duyệt / báo cáo tin nhắn (cần owner chốt chính sách trước).
-- **Bất kỳ endpoint nào cho phép đọc phòng mà người gọi không thuộc** — kể cả cho vai trò quản trị (CHAT-DEC-004).
+- **Tìm kiếm vượt membership** — `GET /chat/search` giữ nguyên vị từ membership cho **mọi** role, kể cả Super Admin (SPEC-15 §3.3). Không có `/chat/oversight/search`.
+- **Mọi biến thể GHI trên đường đọc-vượt** — `/chat/oversight/*` chỉ đọc; Super Admin không gửi/ghim/thu hồi/sửa thành viên được ở phòng mình không thuộc.
+
+> **Đổi so với bản 01/08/2026:** dòng "bất kỳ endpoint nào cho phép đọc phòng mà người gọi không thuộc" đã bị **gỡ** khỏi danh sách ngoài-phạm-vi. Owner chốt CHAT-DEC-004 ngược đề xuất Draft ngày 02/08/2026 ⇒ đường đọc-vượt **có** trong v1, đóng khung ở §5.3.
 
 ---
 
@@ -101,6 +104,12 @@ POST   /api/v1/chat/messages/{message_id}/pin
 DELETE /api/v1/chat/messages/{message_id}/pin
 GET    /api/v1/chat/search
 GET    /api/v1/chat/unread-count
+
+# 🔒 đọc-vượt membership — cặp riêng, chỉ đọc, có audit (§5.3)
+GET    /api/v1/chat/oversight/rooms
+GET    /api/v1/chat/oversight/rooms/{room_id}
+GET    /api/v1/chat/oversight/rooms/{room_id}/messages
+GET    /api/v1/chat/oversight/audit
 ```
 
 ### 5.1 Bảng endpoint (stub — chi tiết DTO ở WO backend)
@@ -144,6 +153,67 @@ Cột **Membership** ghi rõ endpoint có phải chạy `ChatAccessService.asser
 
 > Bản chat cũ (`2591db13~1:apps/api/src/chat/`) chỉ kiểm membership, **không** permission guard, **không** audit, **không** data-scope, và trả `403` chỗ đáng lẽ `404`. Dùng làm **tham chiếu**, KHÔNG khôi phục nguyên trạng.
 
+### 5.3 🔒 Đường đọc-vượt membership (CHAT-DEC-004 — owner chốt 02/08/2026)
+
+```http
+GET /api/v1/chat/oversight/rooms
+GET /api/v1/chat/oversight/rooms/{room_id}
+GET /api/v1/chat/oversight/rooms/{room_id}/messages
+GET /api/v1/chat/oversight/audit
+```
+
+| Mã | Method | Path | Chức năng | Permission | Membership | Audit |
+| --- | --- | --- | --- | --- | --- | --- |
+| CHAT-API-018a | GET | `/chat/oversight/rooms` | Tra phòng theo mã/tên/loại — trả **siêu dữ liệu** phòng (tên · loại · số thành viên · hoạt động cuối), **không** kèm nội dung tin | `('view','chat-oversight')` | ❌ bỏ qua (đó là mục đích) | ✅ |
+| CHAT-API-018b | GET | `/chat/oversight/rooms/{room_id}` | Chi tiết phòng + danh sách thành viên | `('view','chat-oversight')` | ❌ bỏ qua | ✅ **mỗi lần gọi** |
+| CHAT-API-018c | GET | `/chat/oversight/rooms/{room_id}/messages` | Đọc tin theo con trỏ `seq` — **chỉ đọc** | `('view','chat-oversight')` | ❌ bỏ qua | ✅ **mỗi lần gọi** |
+| CHAT-API-019 | GET | `/chat/oversight/audit` | Nhật ký đọc-vượt cho CHAT-SCREEN-008 (ai · phòng nào · lúc nào · thành công/từ chối) | `('view','chat-oversight')` | — | — |
+
+**Ràng buộc thi công — cả 8 điều đều là điều kiện PASS của FULL gate:**
+
+1. **Path riêng, controller riêng, service method riêng.** Không tái dùng handler của CHAT-API-001/004/009 kèm cờ `isOversight`. Lý do: đường đọc thường phải giữ được tính chất "gọi `assertMember` vô điều kiện" để đọc code là chứng minh được — thêm một nhánh `if` vào đó là mất tính chất ấy vĩnh viễn.
+2. **Đường THÀNH CÔNG — audit trong CÙNG transaction, ghi TRƯỚC khi trả dữ liệu.** Ghi audit lỗi ⇒ rollback ⇒ **0 byte** dữ liệu ra ngoài (CHAT-ERR-020). Ghi audit sau khi trả, hoặc ở interceptor ngoài transaction, là **không đạt**.
+3. **Đường BỊ TỪ CHỐI — `ChatOversightAuditGuard` chạy TRƯỚC `PermissionGuard`** (CHAT-ERR-019).
+
+   Ba cạm bẫy, cả ba đều PASS review code rồi hỏng lặng lẽ hoặc làm đỏ CI:
+   - `AuditService.record(tx, …)` chỉ ghi **trong** tx. Ném 403 trong chính tx đó ⇒ dòng audit từ chối **bị rollback mất** — đúng cái ta định ghi lại.
+   - Dùng `PermissionGuard` **class-level** rồi trông chờ ghi audit trong thân controller ⇒ thân controller **không bao giờ chạy** ⇒ **không có dòng audit nào cả**.
+   - Nhưng **bỏ `PermissionGuard` cũng không được**: `apps/api/test/foundation/route-guard-coverage.e2e-spec.ts` ép "route khai `@RequirePermission` mà không có `PermissionGuard` trong chuỗi guard ⇒ **ĐỎ** (quyền khai ra chỉ để trang trí)"; còn bỏ luôn metadata thì route rơi vào `needVerdict` và phải ký `route-verdicts.ts`, tức là đưa **route nguy hiểm nhất module** vào rổ "không gate" của census và lật controller sang fail-open cho mọi route thêm sau.
+
+   ⇒ **Chốt — giữ CẢ HAI, đúng thứ tự:**
+
+   ```ts
+   @RequirePermission('view', 'chat-oversight', { isSensitive: true })
+   @UseGuards(ChatOversightAuditGuard, PermissionGuard)   // ⚠️ THỨ TỰ có ý nghĩa
+   ```
+
+   `ChatOversightAuditGuard` chạy trước, tự gọi `PermissionService.can()`; thấy **deny** thì ghi `audit_logs` `resultStatus:'Denied'` trong `withTenant` tx **riêng đã commit**, rồi **`return true`** để **`PermissionGuard` mới là bên ném 403**. Nhờ vậy fail-closed vẫn là mặc định (guard audit không bao giờ tự cho qua), census vẫn xanh, và dòng audit từ chối đã commit trước khi 403 rời server.
+
+   **Lỗi hạ tầng bên trong `ChatOversightAuditGuard` (ghi audit hỏng) → `logger.error` + `return true`, KHÔNG biến thành allow và KHÔNG ném 503** — `PermissionGuard` phía sau vẫn quyết định cuối cùng, nên đường xấu nhất chỉ mất một dòng audit *từ chối*, không mở thêm quyền nào. (Đường **thành công** thì ngược lại: mất audit là **rollback**, xem ràng buộc 2 — vì ở đó audit là điều kiện để dữ liệu được rời server.)
+
+   Thành công ghi `resultStatus:'Success'` trong **cùng** tx với truy vấn đọc ở service. Ca test bắt buộc: *sau khi request trả 403, đếm `audit_logs` vẫn phải **+1***.
+
+   > Vì thêm ~21 route, `S7-CHAT-BE-1` và `S7-CHAT-BE-7` phải khai `apps/api/test/foundation/**` + `docs/_review/S6-SEC-ROUTEMAP-1-route-census.json` trong `paths` và **regen census** (`ROUTE_CENSUS_WRITE=1`) kèm ký phán quyết — nếu không, route-census runtime gate đỏ (memory `route-census-runtime-gate`).
+4. **Không có biến thể ghi.** Không `POST`/`PATCH`/`DELETE` nào dưới `/chat/oversight/`.
+5. **Không có `/chat/oversight/search`** — ràng buộc thiết kế (SPEC-15 §3.3), không phải hạng mục còn thiếu. Ai thêm vào sau này phải mở lại CHAT-DEC-004 với owner.
+6. **Không emit WS** cho phiên đọc-vượt: Super Admin không join room `co:{companyId}:chatroom:{roomId}`, không nhận `chat:message` realtime. Đọc-vượt là hành vi **tra cứu có chủ đích tại một thời điểm**, không phải giám sát liên tục — và mỗi lần tra để lại đúng một dòng audit.
+7. **Oversight KHÔNG cấp quyền tải tệp.** `ChatMessageFileResolver` (SPEC-15 §13.5) **cấm** đọc cặp `chat-oversight` — resolver chỉ biết `('view','chat-room')` + `assertMember`. Và DTO của `CHAT-API-018c` trả **metadata tệp** (tên · kích thước · loại) **không kèm URL ký hạn ngắn**. Hai lỗ bị bịt ở đây: (a) thêm `chat-oversight` vào resolver sẽ đẻ ra đường tải đi qua route FOUNDATION Files, **không có dòng audit nào của CHAT**; (b) tái dùng nguyên DTO tin nhắn của `CHAT-API-009` (vốn kèm URL ký) làm chính payload oversight phát ra một khoá đọc tệp **không cần membership**. Muốn SA tải được tệp thì phải là endpoint riêng `/chat/oversight/rooms/{room_id}/files/{file_id}` có audit cùng tx — **không có ở v1**.
+8. **`CHAT-API-018c` KHÔNG tái dùng truy vấn có JOIN `chat_room_members`.** SA không có hàng membership, nên vị từ dùng chung `(m.visible_from_seq IS NULL OR msg.seq >= m.visible_from_seq)` của SPEC-15 §13.4 không áp dụng — tái dùng sẽ trả **rỗng**, hỏng lặng lẽ theo chiều ngược lại. Oversight đọc toàn bộ dải `seq` của phòng, phân trang bằng con trỏ riêng.
+
+**Hình dạng dòng audit — chốt ở đây để CHAT-SCREEN-008 lọc đúng và assert "đúng 1 hàng" của QA không lệch:**
+
+| Trường | Giá trị |
+| --- | --- |
+| `action` | `chat.oversight.read` (cột `action` là `text` **không có CHECK** — `apps/api/src/db/schema/audit.ts:33` — nên **không cần migration**) |
+| `object_type` | `chat_room` (đã có trong catalog từ mig `0050` **và** trong mảng TS `audit.ts` — chỉ verify) |
+| `object_id` | `room_id`. Với `018a` (tra cứu danh sách) → `NULL`, và tiêu chí tìm ghi vào `metadata` |
+| `result_status` | `Success` \| `Denied` (enum sẵn có) |
+| `module_code` | `CHAT` |
+
+> **`CHAT-API-019` phải bó truy vấn** `action = 'chat.oversight.read' AND module_code = 'CHAT'`. Không bó là biến một cặp quyền CHAT thành **cổng đọc audit toàn hệ thống**. Ca test bắt buộc: gieo dòng audit của module khác → `019` **không** trả về.
+>
+> **`CHAT-API-018a` hẹp hơn "liệt kê mọi phòng":** yêu cầu từ khoá tìm ≥ 2 ký tự, có trần trang, và audit ghi lại tiêu chí tìm. Không có ràng buộc này thì một lần gọi xuất được đồ thị "ai nhắn riêng với ai" của cả công ty — rộng hơn hẳn ngoại lệ mà owner chốt ("mở **đích danh** một phòng").
+
 ---
 
 ## 6. Nguyên tắc API BẮT BUỘC (SPEC-15 §3, §13, §18)
@@ -184,16 +254,19 @@ Ràng buộc:
 
 ## 8. Mã lỗi
 
-18 mã `CHAT-ERR-001..018` định nghĩa tại [SPEC-15 §12](<../SPEC/SPEC-15 CHAT.md>). Ánh xạ HTTP:
+**20** mã `CHAT-ERR-001..020` định nghĩa tại [SPEC-15 §12](<../SPEC/SPEC-15 CHAT.md>). Ánh xạ HTTP:
 
 | HTTP | Dùng cho |
 | --- | --- |
 | `200` | Idempotent trả bản ghi đã có (CHAT-ERR-014, mở DM lần 2) |
-| `400` / `422` | Validate đầu vào: CHAT-ERR-002/003/004/009/016/017 |
-| `403` | Đã là thành viên nhưng thiếu quyền/vai trò: CHAT-ERR-006/011/012/013 · tệp CHAT-ERR-015 |
-| `404` | **Không phải thành viên** hoặc phòng/tin không tồn tại: CHAT-ERR-001 |
+| `400` / `422` | Validate đầu vào: CHAT-ERR-002/003/004/009/016 |
+| `403` | Đã là thành viên nhưng thiếu quyền/vai trò: CHAT-ERR-006/011/012/013 · tệp CHAT-ERR-015 · **thiếu cặp `('view','chat-oversight')` trên `/chat/oversight/*`: CHAT-ERR-019** (403 chứ không 404 — người gọi biết mình đang dùng chức năng quản trị, không có gì để dò) |
+| `404` | **Không phải thành viên** hoặc phòng/tin không tồn tại: CHAT-ERR-001 · **và CHAT-ERR-017 khi `roomId` chỉ định không thuộc phạm vi người tìm** |
 | `409` | Xung đột trạng thái: gửi vào phòng đã lưu trữ (CHAT-ERR-005), ghim quá hạn mức (CHAT-ERR-008) |
+| `500` | **CHAT-ERR-020** — ghi `audit_logs` của đường đọc-vượt thất bại ⇒ rollback. Trả thân lỗi chuẩn API-01; **tuyệt đối không** trả `200` với thân rỗng (đó là "đọc-vượt không dấu vết" ngụy trang thành kết quả trống) |
 | `501`/`405` | Sửa tin nhắn (CHAT-ERR-007) — không hỗ trợ ở v1 |
+
+> ⚠️ **CHAT-ERR-017 trả `404`, không phải `400`/`422`.** Nếu `roomId` không-thuộc trả `422` còn `roomId` không-tồn-tại trả `404` thì chính ô tìm kiếm thành oracle dò sự tồn tại của phòng — đúng thứ CHAT-ERR-001 dựng `404` để chặn. Hai trường hợp phải trả **cùng một** phản hồi. Truy vấn `q` < 2 ký tự vẫn là `400`/`422` (lỗi validate thuần, không tiết lộ gì).
 
 CHAT-ERR-010 (mention người ngoài phòng) và CHAT-ERR-018 (`last_read_seq` lùi) **không** trả lỗi — bỏ qua im lặng theo thiết kế.
 

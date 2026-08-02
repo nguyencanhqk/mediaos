@@ -13,9 +13,9 @@
 | Mã tài liệu | DB-12 |
 | Tên tài liệu | CHAT Database Design — Chat nội bộ |
 | Module | CHAT (SPEC-15) |
-| Phiên bản | v1.0 — **Draft**, duyệt cùng SPEC-15 |
-| Ngày tạo / cập nhật | 01/08/2026 / 01/08/2026 |
-| Head migration lúc viết | **idx 202 / `0535_s6secxtenantfk1_composite_tenant_fk`** ⇒ migration CHAT bắt đầu **0536+** |
+| Phiên bản | v1.0 — **Approved** cùng SPEC-15 (owner chốt 12 quyết định 02/08/2026; CHAT-DEC-004 lật ngược ⇒ bước D′ + §6.3 đã sửa theo) |
+| Ngày tạo / cập nhật | 01/08/2026 / **02/08/2026** (S7-CHAT-DOC-2 — hoà CHAT-DEC-004) |
+| Head migration lúc viết | idx 202 / `0535` ⇒ dự kiến `0536+`. ⚠️ **ĐÃ TRÔI — head thật 02/08/2026 là idx 204 / `0537_s6leavecarryover1_carry_forward`.** WO DB phải đọc `migrations/meta/_journal.json` THẬT lấy head, TUYỆT ĐỐI không hard-code số trong tài liệu này |
 | Giai đoạn | Phase 4 · wave S7-CHAT — ngoài RC v1.0.0 |
 
 > ⚠️ Số migration dưới đây là **dự kiến**. Wave chạy sau go-live nên head thật gần như chắc chắn đã trôi. Luôn đọc `apps/api/migrations/meta/_journal.json` **tại thời điểm chạy** (bẫy `wo-paths-drive-gate-and-scheduler` — khai thiếu `migrations/**` trong `paths` của WO làm lọt LIGHT gate và trùng số migration).
@@ -195,7 +195,7 @@ GRANT UPDATE (last_read_seq, muted_until, left_at, visible_from_seq)
 | `client_message_id` | UUID | Không | chống trùng khi gửi lại (CHAT-ERR-014) |
 | `reply_to_message_id` | UUID | Không | FK `chat_messages.id`, cùng phòng (ép ở service) |
 | `recalled_at` / `recalled_by` | TIMESTAMPTZ / UUID | Không | thu hồi — **không** xoá |
-| `attachment_count` | SMALLINT | Có | default 0, cập nhật cùng transaction khi tạo `file_links` |
+| `attachment_count` | SMALLINT | Có | default 0, **đặt ngay trong câu INSERT** (`fileIds.length`) — app role không có quyền UPDATE cột này, xem §6.3 |
 | `search_vector` | TSVECTOR | — | **GENERATED ALWAYS … STORED**, DB tự tính |
 
 ```sql
@@ -228,7 +228,13 @@ CREATE INDEX idx_chat_messages_reply
 -- 0050 đã cấp UPDATE (pinned_at, pinned_by). Bổ sung ĐÚNG 2 cột thu hồi:
 GRANT UPDATE (recalled_at, recalled_by) ON chat_messages TO mediaos_app;
 -- KHÔNG cấp UPDATE cấp bảng. KHÔNG cấp DELETE. body/sender_id/seq vẫn bất biến.
--- attachment_count: cập nhật trong CÙNG transaction INSERT ⇒ không cần GRANT UPDATE.
+-- attachment_count: ĐẶT NGAY TRONG CÂU INSERT (fileIds.length đã biết từ §13.5 bước 2).
+-- CẤM UPDATE sau khi insert — app role KHÔNG có quyền cột đó.
+--   ⚠️ Đính chính bản 01/08: câu "cập nhật trong CÙNG transaction ⇒ không cần GRANT UPDATE" là SAI.
+--   Quyền Postgres không đến từ việc nằm cùng transaction. chat_messages chỉ có SELECT,INSERT +
+--   column-GRANT 4 cột (pinned_at, pinned_by, recalled_at, recalled_by) ⇒ mọi
+--   UPDATE ... SET attachment_count bị TỪ CHỐI ⇒ MỌI TIN CÓ TỆP TRẢ 500.
+--   (Nếu về sau cần cập nhật rời thì phải thêm GRANT UPDATE (attachment_count) tường minh.)
 ```
 
 > ⚠️ **Kiểm bất biến ở tầng DB, không chỉ tầng service.** Test phải thử `UPDATE chat_messages SET body=…` và `DELETE FROM chat_messages` **bằng app role** và mong đợi lỗi quyền. Reviewer đọc code service sẽ không thấy được lỗ này (memory `reviewers-pass-real-bugs`).
@@ -319,10 +325,11 @@ file_links  (module_code='CHAT', entity_type='chat_message', entity_id=<messageI
 
 | Bước | Nội dung | Ràng buộc thứ tự |
 | --- | --- | --- |
-| **A** | ALTER `chat_rooms` (cột mới + 4 CHECK §6.1 + 3 index) · ALTER `chat_room_members` (5 cột + index + **GRANT UPDATE 4 cột**) · ALTER `chat_messages` (5 cột + CHECK + 2 index + **GRANT UPDATE `recalled_at`,`recalled_by`**) | RLS đã có từ 0010 — **không** đụng policy. Kiểm 0 hàng `room_type='channel'` TRƯỚC khi đổi CHECK |
+| **A** | ALTER `chat_rooms` (cột mới + **BACKFILL** + 4 CHECK §6.1 + 3 index) · ALTER `chat_room_members` (5 cột + index + **GRANT UPDATE 4 cột**) · ALTER `chat_messages` (5 cột + CHECK + 2 index + **GRANT UPDATE `recalled_at`,`recalled_by`**) | RLS đã có từ 0010 — **không** đụng policy. ⚠️ **BACKFILL TRƯỚC KHI THÊM CHECK, nếu không migration ĐỎ trên DB đã có dữ liệu:** `sync_source` là cột **thêm mới DEFAULT `'manual'`**, trong khi `chk_chat_rooms_sync_source` (§6.1) ép `department→'department'` và `project→'project'` ⇒ mọi hàng `department`/`project` đang tồn tại **vi phạm ngay lúc `ADD CONSTRAINT`**. Thứ tự đúng: thêm cột → `UPDATE … SET sync_source = room_type WHERE room_type IN ('department','project')` → **đếm fail-loud hàng vi phạm từng CHECK** (hoặc `ADD CONSTRAINT … NOT VALID` rồi `VALIDATE` sau khi chữa) → mới `ADD CONSTRAINT`. Áp cùng cách cho `chk_chat_rooms_type_anchor`. Và kiểm 0 hàng `room_type='channel'` TRƯỚC khi đổi CHECK loại phòng |
 | **B** | `CREATE EXTENSION unaccent` + `f_unaccent()` IMMUTABLE + cột generated `search_vector` + GIN index | sau A (cần `body` ổn định). Rewrite bảng — chạy khi bảng còn nhỏ |
 | **C** | Backfill `room_code` cho phòng đã có (nếu có hàng) + **seed `sequence_counters` `'chat_room'` cho MỌI company** (scope Company, prefix + padding, reset Never, `ON CONFLICT DO NOTHING` + **verify fail-loud**) | Thiếu counter ⇒ `SequenceNotFoundError` ngay phòng đầu tiên — đúng bug `QA2-CRIT-002` của `task_code` |
-| **D** | Seed module `CHAT` vào `modules` (mirror `0435`/`0506`, `ON CONFLICT DO NOTHING`) + **9 cặp permission** (SPEC-15 §11) + grant per-pair `data_scope` cho 4 role canonical (**DELETE-wrong-scope + INSERT ON CONFLICT**, verify fail-loud — mirror `0466`/`0476`) | `is_sensitive` của cả 9 cặp phải chốt **trong plan WO này**, không để mở sau seed (bẫy `canonical-seed-pin-regression`) |
+| **D** | Seed module `CHAT` vào `modules` (mirror `0435`/`0506`, `ON CONFLICT DO NOTHING`) + **10 cặp permission** (SPEC-15 §11) + grant per-pair `data_scope` cho 4 role canonical **CHỈ với 9 cặp thường** (**DELETE-wrong-scope + INSERT ON CONFLICT**, verify fail-loud — mirror `0466`/`0476`) | `is_sensitive` **đã chốt** (SPEC-15 §11): `false` cho 9 cặp thường, **`true`** cho riêng `('view','chat-oversight')`. ⚠️ **Cặp thứ 10 KHÔNG grant cho role canonical nào** — xem ô ngay dưới |
+| **D′** | **Cặp `('view','chat-oversight')`: chỉ INSERT vào catalog `permissions`, KHÔNG INSERT `role_permissions` cho bất kỳ role canonical nào.** Verify fail-loud **đúng một vế**: `0` role canonical giữ cặp này | ⚠️ **`super-admin` KHÔNG phải role canonical** — 4 role canonical là `roles.company_id IS NULL`, và super-admin **không có hàng ở đó** (`dashboard-widget-catalog.const.ts:33` · mirror `0481:35` · lặp ở `notification-event-catalog.const.ts:51,267`). SA là role **company-scoped dựng lúc boot** bởi `SuperAdminBootstrapService`, và bootstrap **grant TẤT CẢ cặp catalog** ⇒ cặp mới **tự động** vào SA, không cần (và không thể) grant trong migration. Viết `INSERT … WHERE role.code='super-admin'` trong migration sẽ khớp **0 hàng** ⇒ verify "SA có cặp" **luôn đỏ**, và lối thoát dễ nhất của người thi công là grant nhầm sang `company-admin` — đúng role mà SPEC-15 §11 cấm. Khẳng định "SA có cặp" phải là **int-spec chạy SAU boot**, không phải verify trong migration |
 | **E** | **Verify** `audit_logs.object_type` CHECK đã chứa `'chat_room'` + `'chat_message'` — **đã UNION-ADD từ `0050`**, chỉ kiểm tra fail-loud, KHÔNG thêm lại | Nếu phải thêm: neo parse vào vế `object_type = ANY (` ở **cả hai** tầng, không quét `{…}`/`ARRAY[…]` trên toàn `constraintdef` (bẫy `audit-check-union-parse-anchor-trap`) |
 | **F** | Seed NOTI: `CHAT_MENTIONED` + `CHAT_DIRECT_MESSAGE` vào `notification-event-catalog.const.ts` (`isEnabled=true`) + `notification_events` + template. **Nới CHECK trên CẢ HAI bảng:** `notification_events` (`chk_notification_events_module_code` += `'CHAT'`, `chk_notification_events_notification_type` += `'Chat'`) **VÀ** `notifications` (`chk_notifications_module_code` += `'CHAT'`, `chk_notifications_notification_type` += `'Chat'`, **giữ nhánh `IS NULL OR`**) | ⚠️ Quên vế `notifications` là **lỗi đã ship thật** ở `0507` (GOAL) và phải vá ở `0529`. Dùng cách **guard LIKE + re-stamp superset tường minh** của `0507`/`0529`, **không** dùng parser DO-block mẫu `0474` (giả định array-literal `'{…}'`, trả NULL với dạng `= ANY(ARRAY[…]::text[])` ⇒ **silent skip**) |
 | **G** | _(release sau)_ Contract: drop `chat_rooms.channel_id` + `chat_messages.file_url`/`file_name` + composite FK/index kèm theo | Chỉ chạy khi §6.6 đủ điều kiện |
