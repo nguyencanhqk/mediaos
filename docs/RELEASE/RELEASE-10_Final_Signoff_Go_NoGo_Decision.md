@@ -158,15 +158,25 @@ Thứ tự bắt buộc — đảo là dẫm vào landmine `dist` dùng chung (`
 | G6 | Regression P0 + smoke trên staging | `node scripts/release-smoke.mjs --base http://localhost:3200/api/v1 --strict` | **`RC-003`** ⇒ ô #4 | Owner | ✅ **10 PASS · 0 FAIL · 0 SKIP** |
 | G7 | Đăng ký 2 scheduled task (bản đã sửa) | `RELEASE-11` §6.2 | ô #12 · phần còn lại **KI-050** | Owner (**Administrator**) | ⬜ |
 | G8 | Ký UAT | `RELEASE-04` | ô #5 | Business owner | ⬜ |
-| G9 | Cắt tag RC | `RELEASE-08` §2 | ô #2 | Owner | ✅ **`v1.0.0-rc.2` @ `a968fcfe`** |
+| G9 | Cắt tag RC | `RELEASE-08` §2 | ô #2 | Owner | ✅ **`v1.0.0-rc.3` @ `30540ab0`** |
 | G10 | Gửi thông báo go-live | `RELEASE-08` §7 | ô #14 | Owner | ⬜ |
 
-> 🚫 **`v1.0.0-rc.1` KHÔNG được dùng để rollback.** Nó trỏ vào `6f160b9a`, được cắt **trước** lần build
-> lại cuối cùng, nên **không phải bản đang chạy**. Phần chênh đúng bằng PR #324 ⇒ quay về `rc.1` sẽ đưa
-> FE **về đúng bản lỗi màn Loại nghỉ** (mọi loại nghỉ đã seed không lưu được). Tag không bao giờ move
-> (`RELEASE-05` §6.2 quy tắc 4) nên đã cắt **`v1.0.0-rc.2` @ `a968fcfe`** = bản PROD đang chạy, xác minh
-> bằng `release-smoke.mjs --expect-commit a968fcfe` (`RC-BUILD-MATCH` ✓).
-> **Mốc rollback đúng = `v1.0.0-rc.2`.**
+> 🚫 **`v1.0.0-rc.1` VÀ `v1.0.0-rc.2` đều KHÔNG được dùng để rollback.** Mỗi lần deploy lại mà tag đã cắt
+> trước đó thì tag thành mốc chết — đã xảy ra **hai lần liên tiếp**:
+>
+> - `rc.1` → `6f160b9a`: thiếu **#324** ⇒ quay về là đưa FE **về đúng bản lỗi màn Loại nghỉ** (mọi loại
+>   nghỉ đã seed không lưu được).
+> - `rc.2` → `a968fcfe`: thiếu **#325** ⇒ quay về là **4 màn quản trị LEAVE biến mất** khỏi UI, gồm màn
+>   duy nhất bật `accrual_method` (`KI-058`).
+>
+> Tag không bao giờ move (`RELEASE-05` §6.2 quy tắc 4) nên đã cắt **`v1.0.0-rc.3` @ `30540ab0`** = bản
+> PROD đang chạy, xác minh bằng `release-smoke.mjs --expect-commit 30540ab0` (`RC-BUILD-MATCH` ✓).
+> **Mốc rollback đúng = `v1.0.0-rc.3`.**
+>
+> ⚠️ **Gốc của cả hai lần lệch giống nhau: `m prod-update` build từ CÂY ĐANG CHECKOUT.** Lần 2 còn đang
+> đứng trên nhánh feature ⇒ PROD mang một commit **chỉ có trên nhánh**, xoá nhánh là sha mồ côi. Định
+> danh vẫn sạch (không `-dirty`) nên **không có tín hiệu cảnh báo nào**.
+> **Luật: `git checkout master && git pull` TRƯỚC `m prod-update`, `--expect-commit` SAU, rồi mới tag.**
 >
 > ℹ️ `package.json` vẫn giữ chuỗi `1.0.0-rc.1` ⇒ `GET /health` trả `data.build.version = 1.0.0-rc.1`
 > kể cả ở rc.2. Định danh có thẩm quyền là **`data.build.commit`** — cũng là thứ `--expect-commit` đối
