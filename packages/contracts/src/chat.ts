@@ -60,7 +60,21 @@ export const chatMessageSchema = z.object({
   mentions: z.array(z.string().uuid()),
   pinnedAt: z.string().datetime().nullable(),
   pinnedBy: z.string().uuid().nullable(),
-  /** seq = bigint GENERATED ALWAYS AS IDENTITY — thứ tự tổng trong room (ordering ổn định hơn createdAt). */
+  /**
+   * ⚠️ NỢ CHƯA TRẢ — KHÔNG dùng field này khi dựng `S7-CHAT-BE-2`.
+   *
+   * `chat_messages.seq` là `GENERATED ALWAYS AS IDENTITY` **cấp BẢNG**: tăng xuyên MỌI phòng và MỌI
+   * tenant. Comment cũ ở đây ("thứ tự tổng trong room", chép từ `0050:79`) đã bị `0539` bác — xem
+   * SPEC-15 §13.1 ĐÍNH CHÍNH 02/08/2026. Lộ nó ra client = thành viên một phòng suy được lưu lượng tin
+   * TOÀN CÔNG TY giữa hai lần mình nhắn, gồm cả DM họ không thuộc.
+   *
+   * `S7-CHAT-DB-2` chốt "DTO/contracts KHÔNG trả `seq`" nhưng chỉ kịp sửa `chatRoomSchema`. Field này
+   * còn đây vì bỏ nó là quyết định hình dạng DTO tin nhắn — thuộc `S7-CHAT-BE-2`, WO dựng endpoint tin
+   * nhắn. `S7-CHAT-BE-1` KHÔNG có endpoint nào trả tin nhắn nên chưa rò gì ra client.
+   *
+   * ⇒ BE-2 phải thay bằng `roomSeq` (per-room, liên tục từ 1) cho MỌI thứ hướng-client: con trỏ
+   * `beforeSeq`/`afterSeq`, đếm chưa đọc, "đã xem bởi".
+   */
   seq: z.number().int().nonnegative(),
   createdAt: z.string().datetime(),
 });
@@ -101,5 +115,58 @@ export const chatRoomMemberSchema = z.object({
   userId: z.string().uuid(),
   role: chatMemberRoleSchema,
   joinedAt: z.string().datetime(),
+  // ── S7-CHAT-BE-1 (additive, optional — caller cũ không gãy) ──
+  /** Tên hiển thị (join `users.full_name`) — phòng `direct` dựng tên từ 2 người ở client. */
+  userName: z.string().nullable().optional(),
+  /** Con trỏ đã đọc trong hệ `room_seq` — FE dựng "đã xem bởi" (SPEC-15 §13.2), KHÔNG cần bảng riêng. */
+  lastReadSeq: z.number().int().nonnegative().optional(),
 });
 export type ChatRoomMemberDto = z.infer<typeof chatRoomMemberSchema>;
+
+// ═══════════════ S7-CHAT-BE-1 — phòng & thành viên (CHAT-API-001..008) ═══════════════
+
+/**
+ * GET /chat/rooms (CHAT-API-001). Boolean query-param phải IDEMPOTENT dưới `ZodValidationPipe` chạy 2
+ * lần (memory `zod-query-param-double-pipe-idempotent`) ⇒ `z.preprocess`, KHÔNG `z.coerce.boolean`
+ * ("false" là chuỗi không rỗng nên coerce ra `true` — ngược hẳn ý người dùng).
+ */
+export const listChatRoomsQuerySchema = z.object({
+  type: chatRoomTypeSchema.optional(),
+  archived: z
+    .preprocess(
+      (v) => (v === true || v === "true" ? true : v === false || v === "false" ? false : undefined),
+      z.boolean().optional(),
+    )
+    .optional(),
+});
+export type ListChatRoomsQuery = z.infer<typeof listChatRoomsQuerySchema>;
+
+/**
+ * PATCH /chat/rooms/:id (CHAT-API-005) — chỉ `name`/`description`, chỉ phòng `group`.
+ * `.refine` ép ít nhất một trường: body rỗng mà trả 200 là báo "đã đổi" trong khi không đổi gì.
+ */
+export const updateChatRoomSchema = z
+  .object({
+    name: z.string().min(1).max(200).optional(),
+    description: z.string().max(500).nullable().optional(),
+  })
+  .refine((v) => v.name !== undefined || v.description !== undefined, {
+    message: "Cần ít nhất một trường để cập nhật (name hoặc description).",
+  });
+export type UpdateChatRoomRequest = z.infer<typeof updateChatRoomSchema>;
+
+/** PATCH /chat/rooms/:id/members/:userId (CHAT-API-007c) — phong/hạ vai trò trong phòng. */
+export const updateChatMemberSchema = z.object({
+  role: chatMemberRoleSchema,
+});
+export type UpdateChatMemberRequest = z.infer<typeof updateChatMemberSchema>;
+
+/**
+ * GET /chat/rooms/:id (CHAT-API-004) — phòng + thành viên + vai trò CỦA TÔI.
+ * `myRole` để FE khỏi phải tự dò mình trong `members[]` (và khỏi tự suy ra luật admin ở client).
+ */
+export const chatRoomDetailSchema = chatRoomSchema.extend({
+  members: z.array(chatRoomMemberSchema),
+  myRole: chatMemberRoleSchema,
+});
+export type ChatRoomDetailDto = z.infer<typeof chatRoomDetailSchema>;

@@ -31,6 +31,8 @@ import { MeModule } from "./me/me.module";
 import { IntegrationsLmsModule } from "./integrations/lms/lms.module";
 // S5-GOAL-BE-1 (additive): GoalsModule — cây mục tiêu 3 cấp + /me/goals (SPEC-10 / DB-11).
 import { GoalsModule } from "./goals/goals.module";
+// S7-CHAT-BE-1 (additive): ChatModule — phòng chat & thành viên (SPEC-15 / DB-12 / API-13).
+import { ChatModule } from "./chat/chat.module";
 import { IdempotencyModule } from "./common/idempotency/idempotency.module";
 import { JwtAuthGuard } from "./permission/guards/jwt-auth.guard";
 import { CompanyGuard } from "./permission/guards/company.guard";
@@ -90,6 +92,10 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     // S5-BE-CONTRACT-1 (additive): thực thi `Idempotency-Key` cho mutation gắn @Idempotent()
     // (IMPLEMENTATION-08 §13.2). Module LÁ, tự cung cấp ValkeyService → không tạo vòng phụ thuộc.
     IdempotencyModule,
+    // S7-CHAT-BE-1 (additive): module CHAT (SPEC-15) — phòng (danh sách/tạo nhóm/mở DM idempotent/chi
+    // tiết/sửa/lưu trữ/rời) + thành viên. Ranh giới dữ liệu là THÀNH VIÊN PHÒNG (ChatAccessService),
+    // KHÔNG phải data_scope. Đường đọc-vượt của Super Admin nằm ở WO RIÊNG S7-CHAT-BE-7.
+    ChatModule,
   ],
   providers: [
     // Global guard pipeline (THỨ TỰ QUAN TRỌNG):

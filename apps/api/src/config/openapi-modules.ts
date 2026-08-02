@@ -95,6 +95,15 @@ export const API_MODULE_TAGS: readonly ApiModuleTag[] = [
     segments: ["goals", "task-templates"],
   },
   {
+    // S7-CHAT-BE-1: BẮT BUỘC khai TRƯỚC khi route `/chat/**` đầu tiên lên — route không có mục ở đây rơi
+    // vào UNCLASSIFIED_PREFIX, và `openapi-contract.e2e-spec` coi đó là LỖI (không phải "mất nhãn đẹp").
+    code: "CHAT",
+    tagPrefix: "Chat",
+    description:
+      "Chat nội bộ: phòng (DM/nhóm/phòng ban/dự án), thành viên, tin nhắn, tệp đính kèm (SPEC-15).",
+    segments: ["chat"],
+  },
+  {
     code: "FND",
     tagPrefix: "Foundation",
     description:

@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 455,
-    "controllers": 79,
-    "gated": 403,
+    "routes": 466,
+    "controllers": 80,
+    "gated": 414,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 40,
@@ -1313,6 +1313,182 @@
         "PermissionGuard"
       ],
       "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#addMember",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/rooms/:id/members",
+      "hasPermission": true,
+      "permission": "manage:chat-member",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#archiveRoom",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/rooms/:id/archive",
+      "hasPermission": true,
+      "permission": "archive:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#createRoom",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/rooms",
+      "hasPermission": true,
+      "permission": "create:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#getRoom",
+      "httpMethod": "GET",
+      "path": "/api/v1/chat/rooms/:id",
+      "hasPermission": true,
+      "permission": "view:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#leaveRoom",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/rooms/:id/leave",
+      "hasPermission": true,
+      "permission": "view:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#listMembers",
+      "httpMethod": "GET",
+      "path": "/api/v1/chat/rooms/:id/members",
+      "hasPermission": true,
+      "permission": "view:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#listRooms",
+      "httpMethod": "GET",
+      "path": "/api/v1/chat/rooms",
+      "hasPermission": true,
+      "permission": "view:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#openDirect",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/rooms/direct",
+      "hasPermission": true,
+      "permission": "create:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#removeMember",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/chat/rooms/:id/members/:userId",
+      "hasPermission": true,
+      "permission": "manage:chat-member",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#updateMember",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/chat/rooms/:id/members/:userId",
+      "hasPermission": true,
+      "permission": "manage:chat-member",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#updateRoom",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/chat/rooms/:id",
+      "hasPermission": true,
+      "permission": "update:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
       "verdict": null,
       "verdictReason": null,
       "verdictWo": null
