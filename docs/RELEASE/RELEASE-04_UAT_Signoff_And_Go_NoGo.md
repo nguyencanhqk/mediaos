@@ -31,10 +31,27 @@ Chỉ ký khi đủ Exit criteria `QA-09 §12`:
 > P0, 5/5 vai, 8 nhóm API (đo được **72%** đường dẫn), toàn workspace **759 file spec · 10.102 test ·
 > 0 fail**. `QA09-EXIT-005` vẫn ✅ (`S0=0 · S1=0`); `QA09-EXIT-006` nay là **6** mục S2 (thêm KI-025).
 >
-> **EXIT-001…004 và 009 không nhúc nhích được bằng test** — chúng cần UAT Cycle 1 với người thật, mà
-> Cycle 1 đang kẹt ở đúng **một** nút: stack UAT `:3200` dùng chung `apps/api/dist` với PROD `:3100`
-> (KI-016). Tức **B3 và B4 của `RELEASE-05` §8.4 là cùng một việc**: tách `dist`
-> (`S6-OPS-DISTSPLIT-1`, chưa mở WO) mở khoá cả hai.
+> **EXIT-001…004 và 009 không nhúc nhích được bằng test** — chúng cần UAT Cycle 1 với người thật.
+>
+> ~~Cycle 1 đang kẹt ở đúng **một** nút: stack UAT `:3200` dùng chung `apps/api/dist` với PROD `:3100`
+> (KI-016)... tách `dist` (`S6-OPS-DISTSPLIT-1`, chưa mở WO) mở khoá cả hai.~~
+>
+> ✅ **NÚT ĐÓ ĐÃ HẾT — đo lại 2026-08-04.** `G4` cutover xong 02/08 và **KI-016 đóng**. Bằng chứng là
+> HÀNH VI, không phải cấu hình: dịch vụ `MediaOS-API` chạy `apps\api\releases\current\main.js`
+> (release `20260802-065551__1.0.0-rc.1__e1eebddd`), trong khi `apps\api\dist\main.js` **đã bị build
+> lại lúc 03/08 20:24** bởi các lượt `pnpm build`/`typecheck` của phiên dev — và PROD **không hề hấn
+> gì**. Đó đúng là kịch bản từng làm PROD login 500 trước cutover (memory
+> `prod-dist-shared-with-devonline-landmine`). ⇒ Không còn `S6-OPS-DISTSPLIT-1` nào phải mở.
+>
+> **Việc còn lại để mở Cycle 1 thuần là VẬN HÀNH, không phải kỹ thuật:** hiện **không có gì nghe ở
+> `:3200`** (đo `Get-NetTCPConnection`) — stack UAT chỉ là chưa dựng. Dựng lại theo `G5`
+> (clone PROD → `mediaos_dev` → `m dev-online-fast`) rồi chạy bộ kịch bản `S5-UAT-1-UAT-KIT.md` §5 với
+> người thật. Sau đó `EXIT-001…004` mới có số, và `EXIT-009` mới ký được.
+>
+> ⚠️ **`EXIT-006` cập nhật 2026-08-04:** không còn 6 mục S2 mà **3** — `KI-021` · `KI-025` · `KI-050`
+> (`KI-056` đóng nhờ `G1`; ba mục kia rời danh sách ở các đợt trước, xem `RELEASE-02` §cuối). Cả 3 đều
+> có workaround; vẫn **chờ Business Owner chấp nhận**. Thêm một rủi ro **đã ký** ngoài danh sách KI:
+> mục **`D4`** ở §3 (tắt ép-2FA trên vai `QUẢN LÝ CẤP CAO`).
 
 ---
 

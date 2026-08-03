@@ -218,6 +218,55 @@ sau khi đã dump bản hiện tại.
 | Khi rollback | Toàn công ty | "Tạm hoãn, hệ thống về bản cũ, dữ liệu an toàn" | Thông báo nội bộ |
 | T+3 | Owner | Tổng kết hypercare | `RELEASE-09` §6 |
 
+### 7.1 Nội dung soạn sẵn (chép thẳng, thay phần trong «…»)
+
+> Soạn 2026-08-04 cho `G10`. **Ba chỗ owner phải điền**, cố ý không điền hộ: «kênh báo lỗi» (RELEASE-09
+> §6.1 để owner công bố ở T-0), «ngày giờ», «N phút». URL lấy từ `CORS_ORIGIN` của PROD.
+
+**T-1 — báo trước**
+
+```text
+[THÔNG BÁO] Hệ thống quản lý nội bộ sẽ chính thức vận hành từ «ngày giờ».
+
+Trong khoảng «N phút» của quá trình triển khai, hệ thống có thể gián đoạn — anh/chị vui lòng
+không thao tác trong khung giờ này để tránh mất dữ liệu đang nhập dở.
+
+Sau khi xong, anh/chị đăng nhập tại: https://funtimemediacorp.com
+Mọi lỗi hoặc vướng mắc, báo qua: «kênh báo lỗi»
+```
+
+**T-0 bắt đầu**
+
+```text
+[BẮT ĐẦU TRIỂN KHAI] Hệ thống có thể gián đoạn khoảng «N phút» kể từ bây giờ.
+Anh/chị tạm dừng thao tác. Sẽ có thông báo khi xong.
+```
+
+**T-0 xong — tin quan trọng nhất**
+
+```text
+[ĐÃ XONG] Hệ thống đã hoạt động bình thường.
+
+Đăng nhập: https://funtimemediacorp.com
+Lần đầu đăng nhập, hệ thống sẽ yêu cầu đổi mật khẩu.
+Báo lỗi: «kênh báo lỗi»
+
+Lưu ý: tài khoản quản trị cấp cao sẽ được hỏi thêm mã xác thực 2 lớp khi đăng nhập.
+```
+
+**Khi phải rollback**
+
+```text
+[TẠM HOÃN] Việc triển khai được tạm hoãn, hệ thống đã quay về bản trước đó.
+DỮ LIỆU CỦA ANH/CHỊ AN TOÀN, không mất gì.
+Chúng tôi sẽ thông báo lại lịch mới. Xin lỗi vì sự bất tiện.
+```
+
+> ⚠️ Tin **T-0 xong** nói "đổi mật khẩu lần đầu" và "mã xác thực 2 lớp" vì cả hai đều được ép ở server
+> và sẽ làm người dùng bối rối nếu không báo trước — `mustChangePassword` (S2-FND-SEED-3) áp cho tài
+> khoản seed, còn 2FA áp cho vai `SA` và `company-admin` (`RELEASE-10` §6b). Nói trước một dòng rẻ hơn
+> nhiều so với một buổi sáng trả lời từng người.
+
 ---
 
 ## 8. Cái runbook này KHÔNG làm
