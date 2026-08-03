@@ -10133,39 +10133,43 @@ export const backlog = [
   },
 
   // ════════════════ HẬU FULL GATE S7-CHAT-BE-GATE-3 — chốt owner 2026-08-03 ════════════════
-  // Ba WO sinh từ gate 5 lane trên bề mặt CHAT (commit 03f9a924). CAPSWEEP KHÔNG thuộc wave CHAT và
-  // KHÔNG phụ thuộc nó: nó chạm TASK — module đã ship, đang chạy PROD — nên tách ra làm trước.
+  // Ba WO sinh từ gate 5 lane trên bề mặt CHAT (commit 03f9a924).
+  //
+  // ⚠️ ĐÍNH CHÍNH 2026-08-03 (commit 4f52948c): WO `S7-AUTH-CAPSWEEP-1` từng được seed ở đây với tiền đề
+  // "update:project là is_sensitive nhưng ngoài allowlist ⇒ màn quản trị đang ẩn trên PROD" — **TIỀN ĐỀ
+  // SAI, đã GỠ**. Catalog THẬT khai `('update','project', false)` (`0005:224`), và `0485` bước (b) chỉ
+  // nâng 8 cặp (delete/close/archive/manage-member/view-report:project + delete/export:task +
+  // view:task-audit-log) — KHÔNG có `update:project`. Giá trị `TRUE` đo được là RÁC do fixture của
+  // `chat-be5-derived-rooms.int-spec.ts` đóng dấu vào bảng `permissions` TOÀN CỤC. Không có lỗ phân quyền.
+  // Thay vào đó là WO dưới đây, nhắm đúng cơ chế đã gây hiểu nhầm.
   {
-    id: "S7-AUTH-CAPSWEEP-1",
-    module: "AUTH",
-    layer: "BE",
+    id: "S7-QA-CATALOGFIXTURE-1",
+    module: "FOUNDATION",
+    layer: "QA",
     title:
-      "Quét TOÀN BỘ cặp is_sensitive ↔ SENSITIVE_CAPABILITY_ALLOWLIST ↔ useCanExact — đóng cả LỚP lỗi 'màn quản trị ẩn với người có quyền' (lần lặp thứ 8+), khởi từ update:project",
+      "Fixture test KHÔNG được đổi `permissions.is_sensitive` của cặp CHÍNH TẮC — bảng toàn cục, không company_id, không ai dọn ⇒ một spec lật cờ là đổi hành vi phân quyền của MỌI spec dùng chung DB (gồm CI)",
     zone: "red",
     status: "todo",
     paths: [
-      "apps/api/src/permission/**",
-      "apps/api/src/auth/**",
-      "apps/app/src/**",
-      "apps/console/src/**",
+      "apps/api/test/helpers/**",
       "apps/api/test/integration/**",
-      "docs/plans/S7-AUTH-CAPSWEEP-1.md",
+      "docs/plans/S7-QA-CATALOGFIXTURE-1.md",
     ],
     skills: ["code-review"],
     depends_on: [],
-    plan: "docs/plans/S7-AUTH-CAPSWEEP-1.md",
+    plan: "docs/plans/S7-QA-CATALOGFIXTURE-1.md",
     src: [
-      "S7-CHAT-BE-GATE-3 — 3 ca ĐỎ ở auth-me-capabilities.int.spec.ts (company-admin/hr/manager thiếu update:project). ĐÃ CHỨNG MINH không do wave CHAT: stash sạch toàn bộ thay đổi, chạy lại CÙNG lane DB ⇒ đỏ y hệt",
-      "probe DB thật (lane mediaos_outboxfifo): permissions.update/project có is_sensitive = TRUE",
-      "memory: capability-allowlist-hides-admin-screens · sensitive-capability-allowlist-is-backend · superadmin-not-a-canonical-role",
-      "KI-058 (RELEASE-02) — cùng khuôn, 4 màn LEAVE từng biến mất vì đúng cơ chế này",
+      "Đo 2026-08-03 (commit 4f52948c): `seedPermissionCatalog` upsert `DO UPDATE SET is_sensitive = EXCLUDED.is_sensitive` vào `permissions` — bảng TOÀN CỤC (không company_id), `cleanupTenants` không chạm",
+      "Ca thật: `WRITER_PAIRS` của chat-be5 khai `['update','project', …, true]` ⇒ lật cặp sang sensitive ⇒ `getCapabilities()` lọc bỏ ⇒ `/auth/me` thiếu cặp ⇒ 3 ca TASKCAP đỏ ở spec KHÁC. CI đặt `LANE_DB: mediaos` (api.yml:221) nên mọi spec dùng CHUNG một DB",
+      "Đo 5 DB: mediaos · mediaos_chatgate2 · mediaos_s7chatbe3 · mediaos_s7chatbe4 đều `f`; RIÊNG mediaos_outboxfifo (lane chạy chat-be5) là `t`",
+      "⚠️ BÀI HỌC PHƯƠNG PHÁP: `git stash` rồi chạy lại trên CÙNG lane KHÔNG phân biệt được lỗi loại này — hỏng nằm trong DB, không trong code. Một phiên đã dùng đúng phép thử đó và kết luận NHẦM thành 'lỗ phân quyền có sẵn trên nhánh'",
+      "memory: capability-allowlist-hides-admin-screens · canonical-seed-pin-regression",
     ],
     done_when: [
-      "update:project vào SENSITIVE_CAPABILITY_ALLOWLIST, GIỮ NGUYÊN is_sensitive=true — allowlist chỉ điều khiển cặp nào TRẢ VỀ FE, KHÔNG cấp quyền; PermissionGuard phía server không đổi một dòng (ghi rõ điều này vào plan để reviewer không đọc nhầm thành nới quyền)",
-      "QUÉT TOÀN BỘ (đây mới là giá trị của WO, không phải vá 1 cặp): liệt kê MỌI cặp is_sensitive=true từ DB thật → đối chiếu (a) allowlist backend, (b) mọi chỗ FE gọi useCanExact. Mỗi cặp gác màn hình mà thiếu allowlist = một màn đang ẩn ⇒ liệt kê thành bảng trong plan",
-      "CẢNH GIÁC tautology: SA có '*:*' (is_sensitive=false) nên lọt fallback của useCan và KHÔNG tái hiện được lỗi. Chủ thể test PHẢI là role thường có đúng cặp đó",
-      "Test khoá mở rộng: SENSITIVE_SCREEN_GATE_PAIRS ⊆ allowlist phải phủ CẢ các cặp mới tìm ra ⇒ CI đỏ thay vì màn hình biến mất im lặng",
-      "3 ca auth-me-capabilities.int.spec.ts xanh; RED-proof: gỡ ĐÚNG MỘT vế (không phải cả hai — memory ghi sed từng khớp cả 2 chỗ làm RED-proof vô hiệu)",
+      "`seedPermissionCatalog` KHÔNG được đổi `is_sensitive` của cặp đã tồn tại trong catalog chính tắc — hoặc từ chối (ném), hoặc chỉ set khi INSERT mới. Fixture cần cặp nhạy cảm thì phải dùng cặp RIÊNG của test, không mượn cặp sản phẩm",
+      "RED trước: spec A đóng dấu `('update','project')` sang sensitive → spec B (`auth-me-capabilities`) phải VẪN xanh. Hiện tại B đỏ",
+      "Quét MỌI caller của `seedPermissionCatalog` (+ helper seed tương tự) tìm chỗ khác đang lật cờ cặp chính tắc — đây là bảng toàn cục nên mỗi caller là một nguồn ô nhiễm tiềm tàng",
+      "Cân nhắc đai thứ hai: assert cuối suite rằng `permissions.is_sensitive` của bộ cặp chính tắc khớp seed (pin), để lần lật tiếp theo ĐỎ ngay tại spec gây ra thay vì ở spec nạn nhân",
       "FULL gate PASS",
     ],
   },

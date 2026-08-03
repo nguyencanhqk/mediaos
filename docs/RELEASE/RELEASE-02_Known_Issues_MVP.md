@@ -130,12 +130,22 @@ dòng KI, jsdoc `claim()`, lẫn chú thích ca 6b; ba chỗ này là nơi ngư�
 **Cập nhật 2026-08-03 (`S7-CHAT-BE-GATE-3`, owner chốt 3 mục):** `S3` **20 → 21** — **KI-060 mở** (tệp
 đa-link mất `url`, owner CHẤP NHẬN cho v1). `S2` vẫn **4**. Gate 5 lane trên toàn bề mặt CHAT đã vá 1
 CRITICAL (URL ký rò cho cả phòng qua WS — hai lane độc lập cùng tìm ra) + 5 HIGH; chi tiết ở commit
-`03f9a924`. Ba WO sinh ra và ĐÃ seed vào `harness/backlog.mjs`: **`S7-AUTH-CAPSWEEP-1`** (🔴, KHÔNG thuộc
-wave CHAT — nó chạm TASK đang chạy PROD, làm TRƯỚC) · **`S7-CHAT-DB-3`** (🔴 expand-contract
-least-privilege, gồm lỗ BẤT BIẾN #2: `users` còn `DELETE` ⇒ cascade xoá CỨNG `chat_messages` append-only)
-· **`S7-CHAT-CLEAN-2`** (🟡 dọn nhẹ). Ghi số hiệu cho KI-060 thay vì để nó nằm dạng văn xuôi — theo đúng
-luật đã áp với KI-057: **một quyết định chấp nhận rủi ro mà không có số hiệu thì vô hình với bug-scrub
-trước RC**.
+`03f9a924`. Ba WO sinh ra và ĐÃ seed vào `harness/backlog.mjs`: **`S7-QA-CATALOGFIXTURE-1`** (🔴) ·
+**`S7-CHAT-DB-3`** (🔴 expand-contract least-privilege, gồm lỗ BẤT BIẾN #2: `users` còn `DELETE` ⇒ cascade
+xoá CỨNG `chat_messages` append-only) · **`S7-CHAT-CLEAN-2`** (🟡 dọn nhẹ). Ghi số hiệu cho KI-060 thay vì
+để nó nằm dạng văn xuôi — theo đúng luật đã áp với KI-057: **một quyết định chấp nhận rủi ro mà không có
+số hiệu thì vô hình với bug-scrub trước RC**.
+
+**ĐÍNH CHÍNH cùng ngày (commit `4f52948c`) — KHÔNG có lỗ phân quyền `update:project`.** Bản trước của
+dòng này (và WO `S7-AUTH-CAPSWEEP-1`, đã GỠ) khẳng định `update:project` là `is_sensitive` nhưng ngoài
+`SENSITIVE_CAPABILITY_ALLOWLIST` ⇒ màn quản trị đang ẩn trên PROD. **Sai.** Catalog thật khai
+`('update','project', false)` (`0005:224`); `0485` bước (b) chỉ nâng 8 cặp và không có cặp này. Giá trị
+`TRUE` đo được là **rác do fixture `WRITER_PAIRS` của `chat-be5-derived-rooms.int-spec.ts`** đóng dấu vào
+`permissions` — bảng TOÀN CỤC, không `company_id`, `cleanupTenants` không chạm. Đo 5 DB: chỉ đúng lane
+từng chạy chat-be5 là `t`, bốn DB còn lại `f`. **Bài học phương pháp, đáng nhớ hơn cả sự cố:** phép thử
+"`git stash` rồi chạy lại trên CÙNG lane" — vốn trông rất thuyết phục — **không phân biệt được lỗi loại
+này**, vì hỏng nằm trong DB chứ không trong code; stash bao nhiêu lần thì hàng catalog vẫn `t`. Muốn quy
+trách nhiệm cho code thì phải đổi **DB sạch**, không phải đổi code.
 **KI-045 mở 2026-07-28** trong lúc thi công `S6-SEC-NOTITX-1` — rotate của `S6-SEC-ROTATE-1` làm gãy
 đường `LANE_DB`, tức **hàng rào deny-path/IDOR không chạy được bằng lệnh chuẩn** (8 → 9). **Đóng
 2026-07-29 trong chính nhánh gây ra nó** (credential đọc từ `.env` qua `scripts/lib/db-secrets.sh`,

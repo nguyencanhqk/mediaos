@@ -60,10 +60,13 @@ xác nhận đỏ, khôi phục) — không có vá nào chỉ "xanh sau khi s�
 
 ### 3 mục CHỜ OWNER (chưa ai chốt)
 
-1. **`update:project` là `is_sensitive` nhưng NGOÀI `SENSITIVE_CAPABILITY_ALLOWLIST`** ⇒ 3 ca
-   `auth-me-capabilities.int.spec.ts` ĐỎ. **Đã chứng minh KHÔNG do wave CHAT**: stash sạch toàn bộ thay
-   đổi, chạy lại trên CÙNG lane DB — đỏ y hệt. Đúng khuôn KI-058 (màn quản trị ẩn với người có quyền).
-   Cần WO riêng.
+1. ~~`update:project` là `is_sensitive` nhưng ngoài allowlist~~ — **KẾT LUẬN NÀY SAI, đã đính chính ở
+   commit `4f52948c`.** Catalog thật khai `('update','project', false)` (`0005:224`); giá trị `TRUE` tôi
+   đo được là **rác do fixture của `chat-be5` đóng dấu vào bảng `permissions` toàn cục**. Không có lỗ phân
+   quyền; WO `S7-AUTH-CAPSWEEP-1` đã GỠ, thay bằng `S7-QA-CATALOGFIXTURE-1` (nhắm đúng cơ chế ô nhiễm).
+   **Bài học phương pháp — đây mới là thứ đáng mang đi:** phép thử "`git stash` rồi chạy lại trên CÙNG
+   lane" trông rất thuyết phục nhưng **không phân biệt được lỗi nằm trong DB**; stash bao nhiêu lần thì
+   hàng catalog vẫn `t`. Muốn quy trách nhiệm cho code phải đổi **DB sạch**, không phải đổi code.
 2. **Hành vi gửi lại tệp sang phòng thứ hai** làm mất `url` ở phòng thứ nhất — quyết định SẢN PHẨM: chấp
    nhận (an toàn, gây bất ngờ) hay đổi tầng GHI để gửi-lại tạo **bản sao tệp** thay vì link thứ hai.
 3. **~15 MEDIUM** còn tồn. Đáng gom nhất: 4 mục least-privilege của L3 — `GRANT UPDATE(visible_from_seq)`
