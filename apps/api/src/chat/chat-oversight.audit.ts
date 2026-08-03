@@ -13,12 +13,20 @@ export const CHAT_OVERSIGHT_ACTION = "view" as const;
 export const CHAT_OVERSIGHT_RESOURCE = "chat-oversight" as const;
 export const CHAT_OVERSIGHT_PERMISSION_CODE = "CHAT.CHAT-OVERSIGHT.VIEW";
 
-/** Nhãn loại truy cập ghi vào `metadata.endpoint` — CHAT-SCREEN-008 dùng để phân loại dòng. */
+/**
+ * Nhãn loại truy cập ghi vào `metadata.endpoint` — CHAT-SCREEN-008 dùng để phân loại dòng.
+ *
+ * `UNKNOWN` **không phải** một endpoint của SPEC: nó là nhãn cho đường dẫn KHÔNG khớp khuôn nào đã khai
+ * (route thứ 5 thêm sau, hoặc request tới guard khi `req.route` chưa được gắn). Có nó thì `endpointOf`
+ * không phải mượn nhãn của một endpoint CÓ THẬT làm mặc định — mượn thì dòng audit vẫn hợp lệ, vẫn hiện
+ * trên màn hình, chỉ là nói SAI người ta đã đọc gì, và không có gì đỏ (S7-CHAT-CLEAN-2).
+ */
 export const CHAT_OVERSIGHT_ENDPOINT = {
   ROOM_SEARCH: "018a",
   ROOM_DETAIL: "018b",
   ROOM_MESSAGES: "018c",
   AUDIT_LOG: "019",
+  UNKNOWN: "unknown",
 } as const;
 export type ChatOversightEndpoint =
   (typeof CHAT_OVERSIGHT_ENDPOINT)[keyof typeof CHAT_OVERSIGHT_ENDPOINT];

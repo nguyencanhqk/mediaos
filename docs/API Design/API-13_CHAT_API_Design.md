@@ -207,7 +207,7 @@ GET /api/v1/chat/oversight/audit
 | `action` | `chat.oversight.read` (cột `action` là `text` **không có CHECK** — `apps/api/src/db/schema/audit.ts:33` — nên **không cần migration**) |
 | `object_type` | `chat_room` (đã có trong catalog từ mig `0050` **và** trong mảng TS `audit.ts` — chỉ verify) |
 | `object_id` | `room_id`. Với `018a` (tra cứu danh sách) → `NULL`, và tiêu chí tìm ghi vào `metadata` |
-| `result_status` | `Success` \| `Denied` (enum sẵn có) |
+| `result_status` | **GHI**: `Success` \| `Denied` (đường đọc-vượt chỉ sinh hai giá trị này). **ĐỌC** (`CHAT-API-019`): DTO map đủ 4 giá trị của cột — `Success` \| `Failure` \| `Denied` \| `Error` — cộng `Unknown` cho NULL/giá trị lạ. Hai vế KHÁC NHAU là chủ ý: gộp `Failure`/`Error` vào `Denied` lúc đọc = audit nói SAI loại sự kiện (S7-CHAT-CLEAN-2) |
 | `module_code` | `CHAT` |
 
 > **`CHAT-API-019` phải bó truy vấn** `action = 'chat.oversight.read' AND module_code = 'CHAT'`. Không bó là biến một cặp quyền CHAT thành **cổng đọc audit toàn hệ thống**. Ca test bắt buộc: gieo dòng audit của module khác → `019` **không** trả về.

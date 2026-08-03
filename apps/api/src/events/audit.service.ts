@@ -58,7 +58,12 @@ export interface AuditEntry {
  */
 const AUDIT_ACTOR_TYPES = ["User", "System", "Job", "Integration"] as const;
 const AUDIT_SENSITIVITY_LEVELS = ["Normal", "Sensitive", "HighlySensitive"] as const;
-const AUDIT_RESULT_STATUSES = ["Success", "Failure", "Denied", "Error"] as const;
+/**
+ * EXPORT (S7-CHAT-CLEAN-2): đường ĐỌC cũng cần đúng danh sách này để nhãn hoá dòng audit
+ * (`chat-oversight.mapper.ts`). Chép bản thứ hai là mời trôi — thêm giá trị ở đây mà quên bên kia thì
+ * bên kia gán nhãn SAI, im lặng. Nguồn sự thật gốc vẫn là CHECK ở mig `0432`.
+ */
+export const AUDIT_RESULT_STATUSES = ["Success", "Failure", "Denied", "Error"] as const;
 const AUDIT_DATA_SCOPES = ["Own", "Team", "Department", "Company", "System"] as const;
 
 /**

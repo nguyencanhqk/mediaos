@@ -375,8 +375,11 @@ export const chatMessages = pgTable(
     ),
   },
   (t) => [
-    index("chat_messages_room_id_idx").on(t.roomId),
-    index("chat_messages_company_id_idx").on(t.companyId),
+    // ⚠️ `chat_messages_room_id_idx (room_id)` và `chat_messages_company_id_idx (company_id)` ĐÃ BỊ GỠ ở
+    // mig `0541` (S7-CHAT-CLEAN-2): cả hai là TIỀN TỐ CHẶT của index ngay dưới / của
+    // `idx_chat_messages_room_seq (company_id, room_id, room_seq DESC)`, đo `idx_scan = 0` sau khi chạy
+    // toàn bộ chat int-spec. Khai lại ở đây = `db:generate` dựng lại chúng ở migration sau, và khối
+    // VERIFY của `0541` sẽ KHÔNG bắt được (nó chỉ chạy một lần lúc migrate).
     index("chat_messages_room_seq_idx").on(t.roomId, t.seq),
     index("chat_messages_pinned_idx")
       .on(t.roomId, t.pinnedAt)

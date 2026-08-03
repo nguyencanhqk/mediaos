@@ -625,8 +625,16 @@ export const chatOversightAuditEntrySchema = z.object({
   roomId: z.string().uuid().nullable(),
   roomCode: z.string().nullable(),
   roomName: z.string().nullable(),
-  resultStatus: z.enum(["Success", "Denied"]),
-  /** `018a` | `018b` | `018c` | `019` — để CHAT-SCREEN-008 nhãn hoá đúng loại truy cập. */
+  /**
+   * BỐN giá trị của `audit_logs.result_status` (`audit.service.ts` `AUDIT_RESULT_STATUSES`) + `Unknown`.
+   *
+   * Đường đọc-vượt CHỈ ghi `Success` (service) và `Denied` (guard) — API-13 §5.3 giữ nguyên. Nhưng đây là
+   * hợp đồng ĐỌC: nó phải tả đúng thứ có thể nằm trong cột, nếu không thì mapper buộc phải gộp, và gộp
+   * `Failure`/`Error` vào `Denied` là **audit nói sai loại sự kiện** (S7-CHAT-CLEAN-2).
+   * `Unknown` = dòng có `result_status` NULL/lạ (dữ liệu hỏng) — cố ý KHÔNG quy về `Success`.
+   */
+  resultStatus: z.enum(["Success", "Failure", "Denied", "Error", "Unknown"]),
+  /** `018a` | `018b` | `018c` | `019` | `unknown` — để CHAT-SCREEN-008 nhãn hoá đúng loại truy cập. */
   endpoint: z.string().nullable(),
   /** Tiêu chí tìm của `018a` (`q`, `roomType`) — bằng chứng "đã tra cái gì". KHÔNG chứa nội dung tin. */
   criteria: z.record(z.unknown()).nullable(),

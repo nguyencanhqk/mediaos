@@ -10248,12 +10248,25 @@ export const backlog = [
     layer: "BE",
     title:
       "Dọn nhẹ hậu gate: comment đã chết ở đường quyết định · endpointOf fallback gán nhãn SAI · mapper result_status gộp Failure/Error thành Denied · index dư trên chat_messages",
-    zone: "yellow",
-    status: "todo",
+    // ⚠️ ZONE LẬT yellow→red khi thi công 2026-08-04, có chủ ý và đã hỏi owner. Mục "index dư" hoá ra
+    // KHÔNG làm được trong phạm vi `src/chat/**`: hai index dư được KHAI trong drizzle schema, nên drop
+    // = migration + sửa `db/schema/**` ⇒ theo CLAUDE.md §6 diff chạm migration là FULL gate. Owner chốt
+    // "làm luôn, chịu FULL gate" (cửa sổ rẻ nhất — CHAT chưa live, is_active=false, 0 dòng PROD).
+    // paths mở rộng theo đúng vùng đã đụng — memory `wo-paths-drive-gate-and-scheduler`.
+    zone: "red",
+    status: "done",
+    // ⚠️ `docs/plans/S7-CHAT-CLEAN-2.md` ĐÃ GỠ khỏi paths: WO không có khoá `plan`, không ai viết file
+    // đó, và `paths` khai một file không tồn tại là nói dối gate + scheduler. Lý lẽ đầy đủ của WO nằm ở
+    // header mig 0541 + các dòng `src[]` dưới đây.
     paths: [
       "apps/api/src/chat/**",
+      "apps/api/src/events/audit.service.ts", // export AUDIT_RESULT_STATUSES — bỏ bản chép ở mapper
+      "apps/api/src/db/schema/communication.ts",
+      "apps/api/migrations/**",
       "apps/api/test/integration/**",
-      "docs/plans/S7-CHAT-CLEAN-2.md",
+      "packages/contracts/src/chat.ts",
+      "docs/API Design/API-13_CHAT_API_Design.md",
+      "docs/plans/S7-CHAT-BE-7.md",
     ],
     skills: ["code-review"],
     depends_on: [],
@@ -10261,6 +10274,10 @@ export const backlog = [
       "S7-CHAT-BE-GATE-3 — L1 (LOW×3) + L3 (M-2·L-1·L-2)",
       "chat-rooms.repository.ts:517-520 comment nói FK một-cột KHÔNG chặn cross-tenant — SAI từ 0535 (đã có composite tenant FK); memory wo-plans-built-on-code-comments",
       "chat-oversight-audit.guard.ts:185-191 endpointOf rơi về ROOM_SEARCH cho MỌI path lạ ⇒ route thứ 5 thêm sau ghi Denied mang nhãn SAI mà không gì đỏ",
+      "✅ ĐÓNG 2026-08-04 (mig 0541). Số đo index — lane `mediaos_chatclean2`, `pg_stat_reset()` → 9 file chat int-spec (207 xanh) → `pg_stat_user_indexes`: idx_chat_messages_room_seq 1167 · chat_messages_room_seq_idx 102 · pinned 9 · pkey 6, còn lại 0.",
+      "⚠️ BÀI HỌC NGƯỢC VỚI done_when: 'drop mọi cái idx_scan=0' là BẪY — 5/7 cái zero phải GIỮ. (a) `idx_scan` KHÔNG đếm phép kiểm UNIQUE lúc INSERT ⇒ 3 unique (company_id_id_uq đỡ composite FK · uq_client_id · uq_room_seq) hiện 0 dù chính int-spec chứng minh chúng bắn 23505; (b) bảng 19 dòng ⇒ planner luôn seq-scan ⇒ GIN `idx_chat_messages_search` hiện 0 dù 22 ca BE-4 chạy qua. Chỉ drop khi CÓ CẢ HAI: idx_scan=0 VÀ tồn tại index khác bao trùm cột dẫn đầu.",
+      "Kết quả: gỡ ĐÚNG 2 index tiền-tố-trùng di sản mig 0010 — `chat_messages_company_id_idx` (⊂ company_id_id_uq và ⊂ idx_chat_messages_room_seq) · `chat_messages_room_id_idx` (⊂ chat_messages_room_seq_idx đang chạy 102 lượt). Đã soi CẢ BA FK trỏ ra ngoài: không FK nào rơi về seq-scan sau drop (lập luận đầy đủ trong header 0541).",
+      "Comment `findUsableUserIds` đính chính bằng SỐ ĐO chứ không bằng đọc migration: `chat_room_members_user_id_company_fk FOREIGN KEY (company_id,user_id) REFERENCES users(company_id,id) ON DELETE RESTRICT`, cả hai cột NOT NULL ⇒ MATCH SIMPLE không có lối lách. Hàm VẪN GIỮ vì DB không biết status/deleted_at, và vì FK chặn bằng 23503 = HTTP 500 trong khi caller cần CHAT-ERR-003 (422).",
     ],
     done_when: [
       "endpointOf trả nhãn 'unknown' ở nhánh cuối thay vì mặc định vào một endpoint CÓ THẬT; test phủ path lạ",
@@ -10268,7 +10285,8 @@ export const backlog = [
       "Index dư trên chat_messages: ĐO trước bằng pg_stat_user_indexes sau khi chạy full chat int-spec, chỉ drop cái idx_scan=0. CẤM assert EXPLAIN chọn index nào (memory pg-planner-index-assert-trap)",
       "s7-chat-db1-invariants.int-spec.ts:427-433 thêm WHERE company_id — đang khẳng định room_seq liên tục TOÀN BẢNG mọi tenant trong suite chạy song song ⇒ đỏ oan, và lối sửa rẻ nhất sẽ là xoá ca",
       "Sửa comment sai ở chat-rooms.repository.ts (giữ hàm — DB không biết status/deleted_at nên vẫn cần, chỉ lý do ghi ra đã chết)",
-      "LIGHT gate PASS",
+      "LIGHT gate PASS ⇒ ĐÃ NÂNG THÀNH FULL gate (diff chạm migration, xem ghi chú zone ở trên)",
+      "Ratchet chống trôi hai chiều: `s7-chat-db1-invariants.int-spec.ts` điểm danh 9 index phải-giữ + 2 index đã-gỡ. VERIFY của migration chỉ chạy MỘT LẦN lúc migrate; khai lại index trong `communication.ts` là đường trôi im lặng qua `db:generate`.",
     ],
   },
 

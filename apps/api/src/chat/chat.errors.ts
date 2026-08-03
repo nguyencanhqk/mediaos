@@ -216,7 +216,9 @@ export const CHAT_AUDIT = {
    * Vì sao một chứ không bốn: `CHAT-API-019` phải bó truy vấn `action = 'chat.oversight.read' AND
    * module_code = 'CHAT'`. Bốn action là bốn thứ phải nhớ liệt kê, và quên một cái làm nhật ký
    * CHAT-SCREEN-008 **thiếu dòng trong im lặng** — tức mất đúng thứ nó sinh ra để ghi. Loại route nằm ở
-   * `metadata.endpoint` ('018a'|'018b'|'018c'|'019'), là chi tiết hiển thị chứ không phải khoá lọc.
+   * `metadata.endpoint` ('018a'|'018b'|'018c'|'019'|'unknown' — nguồn: `CHAT_OVERSIGHT_ENDPOINT`), là
+   * chi tiết hiển thị chứ không phải khoá lọc. `'unknown'` = đường dẫn không khớp khuôn nào đã khai
+   * (S7-CHAT-CLEAN-2): thà lộ ra là chưa biết còn hơn mượn nhãn của một endpoint CÓ THẬT.
    *
    * `object_type` = `'chat_room'` (đã có trong catalog CHECK + union TS ⇒ KHÔNG cần migration);
    * `object_id` = `roomId` với 018b/018c, **NULL** với 018a/019.

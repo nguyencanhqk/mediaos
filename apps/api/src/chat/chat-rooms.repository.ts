@@ -515,9 +515,21 @@ export class ChatRoomsRepository {
   /**
    * Lọc ra các userId THỰC SỰ dùng được: cùng tenant, chưa xoá mềm, `status='active'`.
    *
-   * Vì sao phải kiểm ở app dù đã có RLS + FK: FK `chat_room_members.user_id → users.id` là FK MỘT CỘT và
-   * kiểm tra FK của Postgres BỎ QUA RLS theo thiết kế ⇒ nó KHÔNG chặn được userId của tenant khác. Và
-   * không ràng buộc nào của DB biết `status`/`deleted_at`.
+   * ┌─ VÌ SAO VẪN KIỂM Ở APP DÙ ĐÃ CÓ RLS + FK (đính chính 2026-08-04, S7-CHAT-CLEAN-2) ────────────────┐
+   * │ Bản đầu ghi lý do là "FK `chat_room_members.user_id → users.id` là FK MỘT CỘT nên không chặn được  │
+   * │ userId của tenant khác". Lý do đó **ĐÃ CHẾT** từ mig `0535` (S6-SEC-XTENANTFK-1). Đo trên DB:      │
+   * │     chat_room_members_user_id_company_fk                                                           │
+   * │       FOREIGN KEY (company_id, user_id) REFERENCES users(company_id, id) ON DELETE RESTRICT        │
+   * │ cả hai cột NOT NULL ⇒ MATCH SIMPLE không có lối lách; ghi chéo tenant bị chặn ở tầng DB (hành vi   │
+   * │ 23503 ghim ở `s7-chat-db1-invariants.int-spec.ts` mục C).                                          │
+   * │                                                                                                     │
+   * │ HÀM VẪN CẦN, vì hai lý do CÒN SỐNG:                                                                 │
+   * │  1. Không ràng buộc nào của DB biết `status`/`deleted_at` — user đã nghỉ việc hay bị khoá vẫn thoả  │
+   * │     FK, vẫn được gán vào phòng.                                                                     │
+   * │  2. Composite FK chặn bằng cách NÉM 23503 = HTTP 500, sau khi tx đã làm việc. Caller               │
+   * │     (`chat-members.service.ts:64` · `chat-rooms.service.ts:226,491`) cần biết TRƯỚC để trả          │
+   * │     `CHAT-ERR-003 USER_INVALID` (422) — lỗi nghiệp vụ đọc được, thay vì một 500 vô nghĩa với client.│
+   * └─────────────────────────────────────────────────────────────────────────────────────────────────────┘
    */
   async findUsableUserIds(
     tx: TenantTx,
