@@ -9783,6 +9783,36 @@ export const backlog = [
     ],
   },
   {
+    id: "S7-INT-OUTBOX-FIFO-1",
+    module: "INT",
+    layer: "BE",
+    title:
+      "OutboxWorker dispatch ĐÚNG THỨ TỰ trong cùng lô claim (KI-059): RETURNING của UPDATE không theo ORDER BY của CTE ⇒ event tiêu thụ sai thứ tự, hỏng-im-lặng ở mọi consumer phụ thuộc thứ tự",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/events/outbox-worker.ts",
+      "apps/api/test/integration/**",
+      "docs/plans/S7-INT-OUTBOX-FIFO-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S7-INT-OUTBOX-FIFO-1.md",
+    src: [
+      "KI-059 (RELEASE-02) — bằng chứng đo 2026-08-03 trên lane mediaos_chatbe6: enqueue 1→2→3, claim trả [2,1,3]; ba lượt trước cho thứ tự ĐẢO",
+      "Phát hiện khi thi công S7-CHAT-BE-6 — CHAT_DIRECT_MESSAGE là consumer ĐẦU TIÊN gộp N event thành 1 thông báo nên là consumer đầu tiên QUAN SÁT ĐƯỢC lỗi này",
+      "memory: tests-can-pin-a-hole-open · pg-planner-index-assert-trap (cấm assert plan cụ thể — assert HÀNH VI thứ tự, không assert planner chọn gì)",
+    ],
+    done_when: [
+      "RED trước: test tầng events gieo N event với available_at TĂNG DẦN + đủ hàng nhiễu để planner đổi plan, đo THỨ TỰ consumer thực sự nhận được (EventBus ghi lại), chứng minh ĐỎ trên code hiện tại",
+      "Vá: bọc UPDATE vào CTE thứ hai rồi SELECT … ORDER BY available_at, created_at, id ở ngoài cùng — KHÔNG sort ở tầng JS làm lớp che, và KHÔNG bỏ FOR UPDATE SKIP LOCKED (claim vẫn phải atomic, không double-claim)",
+      "Hồi quy: outbox.int-spec.ts hiện có vẫn xanh (retry/backoff/dead-letter/reaper không đổi hành vi)",
+      "Chạy lại chat-noti-e2e.int-spec.ts SONG SONG với spec khác ≥3 lượt: ca 6 'unread_count = giá trị của tin ĐẦU' (đang it.skip, gắn KI-059) BỎ skip và xanh — đây là nghiệm thu end-to-end của WO này",
+      "Ghi rõ giới hạn tồn dư: event enqueue trong CÙNG transaction chia sẻ now() ⇒ vẫn hoà; muốn đúng tuyệt đối cần cột bigserial = migration, TÁCH WO khác. Đóng KI-059 kèm câu này, đừng đóng lửng",
+      "LIGHT gate + silent-failure-hunter (đây đúng khuôn hỏng-im-lặng) PASS",
+    ],
+  },
+  {
     id: "S7-CHAT-RT-0",
     module: "CHAT",
     layer: "BE",

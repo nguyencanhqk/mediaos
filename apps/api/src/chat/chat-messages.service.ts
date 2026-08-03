@@ -9,11 +9,13 @@ import type {
   SendMessageRequest,
 } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
+import { OutboxService } from "../events/outbox.service";
 import { FileAccessLogService } from "../foundation/files/file-access-log.service";
-import { ChatAccessService } from "./chat-access.service";
+import { ChatAccessService, type ChatRoomAccess } from "./chat-access.service";
 import { ChatAttachmentPresignService } from "./chat-attachments.service";
 import { ChatAttachmentsRepository } from "./chat-attachments.repository";
 import { CHAT_MESSAGE_ENTITY_TYPE, isAttachableFile } from "./chat-file.constants";
+import type { ChatMessageType } from "../db/schema/communication";
 import { ChatMessagesRepository } from "./chat-messages.repository";
 import { CHAT_ERR, CHAT_MODULE_CODE } from "./chat.errors";
 import { assertCursorExclusive } from "./chat-message-rules";
@@ -49,6 +51,9 @@ export class ChatMessagesService {
     private readonly attachmentRepo: ChatAttachmentsRepository,
     private readonly attachments: ChatAttachmentPresignService,
     private readonly accessLog: FileAccessLogService,
+    // ── S7-CHAT-BE-6 (additive) ── outbox producer cho thông báo CHAT. `OutboxService` đến từ
+    // `EventsModule` (@Global, cùng nguồn với `AuditService`) ⇒ KHÔNG đổi `chat.module.ts`.
+    private readonly outbox: OutboxService,
   ) {}
 
   /** CHAT-API-009 — một trang tin theo con trỏ. Cấm offset (API-13 §6.4). */
@@ -166,6 +171,21 @@ export class ChatMessagesService {
         // nên nhánh đua ở `.catch` bên dưới không cần dọn link.
         await this.linkAttachments(tx, actor, inserted.id, fileIds);
 
+        // S7-CHAT-BE-6 — enqueue thông báo TRONG CÙNG tx. Vị trí có ba ràng buộc, cả ba đúng bằng CẤU
+        // TRÚC code chứ không bằng cờ canh:
+        //   (a) nhánh idempotent-replay `if (existing) return existing.id;` return SỚM ở trên ⇒ gửi lại
+        //       cùng `clientMessageId` KHÔNG sinh thông báo thứ hai;
+        //   (b) nhánh `.catch` đua 23505 nằm NGOÀI closure này ⇒ bên thua cuộc không enqueue;
+        //   (c) đứng SAU `insertMessage` (cần `messageId`) và TRƯỚC `advanceLastReadSeq` ⇒ tin, tệp,
+        //       thông báo và con trỏ đọc cùng commit hoặc cùng rollback.
+        await this.enqueueNotifications(tx, actor, acc, {
+          messageId: inserted.id,
+          roomSeq,
+          mentions,
+          messageType: fileIds.length > 0 ? "file" : "text",
+          createdAt: now,
+        });
+
         // Tin của chính mình luôn tự nâng con trỏ đọc, TRONG CÙNG tx (SPEC-15 §13.2) — nếu không,
         // người gửi thấy badge chưa-đọc của chính tin mình vừa gửi.
         // Vẫn đi qua `GREATEST` (trần = chính `roomSeq`): một `POST /read` chạy song song đã đọc con trỏ
@@ -199,6 +219,95 @@ export class ChatMessagesService {
       });
 
     return this.readMessage(actor, messageId);
+  }
+
+  /**
+   * S7-CHAT-BE-6 — phát sự kiện outbox cho thông báo CHAT (SPEC-15 §17). Chạy TRONG tx của `sendMessage`.
+   *
+   * ══ NỘI DUNG TIN NHẮN KHÔNG VÀO PAYLOAD ══
+   * Payload mang `messageId` để FE điều hướng, KHÔNG mang `body`/trích đoạn. `outbox_events` là dữ liệu
+   * BỀN và chảy tiếp vào `notifications.payload` rồi vào push/email — nội dung tin lọt vào đó là rời khỏi
+   * phạm vi kiểm soát của module CHAT vĩnh viễn. Bridge còn một lớp whitelist nữa ở `payloadOf`, nhưng
+   * lớp đó không cứu được thứ đã được ghi vào outbox.
+   *
+   * ══ Hai nhánh, loại trừ nhau ══
+   *   • phòng `direct`      → `chat.message.direct_sent`  → CHAT_DIRECT_MESSAGE (gộp lô 15 phút)
+   *   • phòng khác + mention → `chat.message.mentioned`   → CHAT_MENTIONED (gửi ngay)
+   *   • còn lại (group/department/project không nhắc ai) → KHÔNG enqueue gì. Thông báo cho MỌI tin của
+   *     mọi phòng là cách nhanh nhất để người dùng tắt sạch thông báo của hệ thống.
+   *
+   * Khoá snake_case (`actor_name`, `room_name`, `unread_count`) là giá trị ĐÃ RENDER SẴN, khớp CHÍNH XÁC
+   * `variables_schema` của template (`0538:736-747`). Chúng phải được tính ở ĐÂY vì `payloadOf` của bridge
+   * là hàm ĐỒNG BỘ — nó đổi tên khoá được, nhưng không query DB được.
+   */
+  private async enqueueNotifications(
+    tx: TenantTx,
+    actor: ChatActor,
+    acc: ChatRoomAccess,
+    msg: {
+      messageId: string;
+      roomSeq: number;
+      mentions: string[];
+      messageType: ChatMessageType;
+      createdAt: Date;
+    },
+  ): Promise<void> {
+    // Tin hệ thống ("X đã vào phòng") không sinh thông báo. Hôm nay `sendMessage` chưa bao giờ sinh
+    // `system` — guard đứng sẵn để WO nào bắt đầu sinh loại tin đó không phải nhớ quay lại đây.
+    if (msg.messageType === "system") return;
+
+    const isDirect = acc.room.roomType === "direct";
+    if (!isDirect && msg.mentions.length === 0) return;
+
+    const actorName = await this.repo.findSenderDisplayName(tx, actor.companyId, actor.id);
+    // `users.email` NOT NULL nên `findSenderDisplayName` chỉ trả null khi user biến mất giữa chừng —
+    // không có tên thì thông báo sẽ hiện literal "{actor_name}", thà bỏ qua còn hơn.
+    if (!actorName) return;
+
+    const createdAt = msg.createdAt.toISOString();
+
+    if (isDirect) {
+      const peer = await this.repo.findDirectPeer(tx, actor.companyId, acc.room.id, actor.id);
+      if (!peer) return; // người kia đã rời phòng — không còn ai để báo.
+      await this.outbox.enqueue(tx, {
+        eventType: "chat.message.direct_sent",
+        payload: {
+          roomId: acc.room.id,
+          messageId: msg.messageId,
+          actorUserId: actor.id,
+          recipientUserId: peer.userId,
+          createdAt,
+          actor_name: actorName,
+          // Số chưa đọc tại thời điểm CHÍNH TIN NÀY được gửi. `NotificationEngineService.intake` SKIP
+          // hoàn toàn khi trùng `dedupeKey` (không có nhánh UPDATE) ⇒ chỉ tin ĐẦU TIÊN CỦA LÔ ĐƯỢC TIÊU
+          // THỤ mới đóng dấu con số của mình vào thông báo; mọi tin sau bị bỏ qua — CHỦ Ý. Badge
+          // `GET /chat/unread-count` mới là số real-time; hai con số lệch nhau là đúng thiết kế.
+          //
+          // ⚠️ "Tin đầu tiên ĐƯỢC TIÊU THỤ" ≠ "tin đầu tiên theo thời gian": `OutboxWorker.claim()` trả
+          // hàng theo thứ tự KHÔNG bảo đảm (KI-059) nên con số hiển thị hiện là 1|2|3 tuỳ lượt chạy. Sai
+          // lệch thuần hiển thị (không chạm quyền/toàn vẹn), vá ở `S7-INT-OUTBOX-FIFO-1`. Đừng "sửa" nó
+          // bằng một nhánh UPDATE trong engine — đó là hạ tầng dùng chung của cả TASK/LEAVE/ATT.
+          unread_count: unreadOf(msg.roomSeq, peer.lastReadSeq),
+        },
+      });
+      return;
+    }
+
+    await this.outbox.enqueue(tx, {
+      eventType: "chat.message.mentioned",
+      payload: {
+        roomId: acc.room.id,
+        messageId: msg.messageId,
+        actorUserId: actor.id,
+        mentionedUserIds: msg.mentions,
+        createdAt,
+        actor_name: actorName,
+        // Phòng `direct` không có tên, nhưng nhánh này chỉ chạy cho phòng KHÁC `direct` (nơi
+        // `chk_chat_rooms_name` ép `name` NOT NULL). `?? roomCode` là lưới cuối để `{room_name}` không
+        // bao giờ rơi ra ngoài dưới dạng literal.
+        room_name: acc.room.name ?? acc.room.roomCode,
+      },
+    });
   }
 
   /**

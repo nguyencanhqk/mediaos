@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { chatMessages, chatRoomMembers, chatRooms } from "../db/schema/communication";
@@ -472,5 +472,72 @@ export class ChatMessagesRepository {
       );
     const allowed = new Set(rows.map((r) => r.userId));
     return userIds.filter((id) => allowed.has(id));
+  }
+
+  // ─── S7-CHAT-BE-6 — hai truy vấn phục vụ PAYLOAD thông báo (APPEND, không đụng hàm nào ở trên) ───
+  //
+  // Cả hai KHÔNG phải cổng quyền: không 404, không quyết định ai đọc được gì. Chúng mirror đúng tính chất
+  // của `filterMentionsToMembers` ngay trên — đọc `chat_room_members` cho mục đích AUDIENCE. Điểm khẳng
+  // định membership vẫn là `ChatAccessService.assertMember` và vẫn là bản sao DUY NHẤT.
+
+  /**
+   * Tên hiển thị người gửi cho payload outbox.
+   *
+   * `users.email` là `NOT NULL` nên coalesce về email cho ra chuỗi KHÔNG BAO GIỜ rỗng — cần thế vì
+   * `payloadOf` của bridge là hàm ĐỒNG BỘ, không query lại được, và template `{actor_name}` thiếu giá trị
+   * sẽ render nguyên chuỗi `{actor_name}` vào thông báo gửi cho người dùng. Mirror
+   * `task-comments.service.ts` (đọc lại row ngay sau insert để lấy `userName`, coalesce `email`).
+   *
+   * ⚠️ Dùng `.trim() ||` chứ KHÔNG dùng `??`: `users.full_name` là `text` NULLABLE **không có CHECK
+   * non-empty** (ràng buộc `.min(1)` chỉ sống ở DTO admin), nên một hàng do import/backfill/seed tạo ra
+   * có thể mang chuỗi RỖNG. Với `??` thì chuỗi rỗng đi lọt, `enqueueNotifications` gặp `if (!actorName)
+   * return` và người đó **vĩnh viễn không sinh nổi một thông báo nào** — không lỗi, không log, không audit.
+   */
+  async findSenderDisplayName(
+    tx: TenantTx,
+    companyId: string,
+    userId: string,
+  ): Promise<string | null> {
+    const rows = await tx
+      .select({ fullName: users.fullName, email: users.email })
+      .from(users)
+      .where(and(eq(users.companyId, companyId), eq(users.id, userId)))
+      .limit(1);
+    if (!rows[0]) return null;
+    return (rows[0].fullName ?? "").trim() || rows[0].email;
+  }
+
+  /**
+   * Người CÒN hoạt động khác `excludeUserId` trong phòng — phòng `direct` luôn đúng 2 thành viên nên đây
+   * là "người kia". Trả `null` khi người kia đã rời phòng (đua hiếm): caller bỏ qua enqueue thay vì gửi
+   * cho một người không còn ở đó.
+   *
+   * `lastReadSeq` trả kèm để tính `unread_count` NGAY tại thời điểm enqueue — xem `enqueueNotifications`.
+   *
+   * `ORDER BY joined_at` chứ không `LIMIT 1` trần: hôm nay phòng `direct` luôn đúng 2 thành viên
+   * (`assertManualMembership` chặn thêm người), nhưng nếu một WO sau hoặc job đối soát làm phòng có 3 hàng
+   * active thì `LIMIT 1` không thứ tự trả về **một người tuỳ planner** — tức chỉ 1 trong N người nhận được
+   * DM, im lặng và không tái hiện được. Thứ tự tường minh biến ca đó thành sai-ổn-định thay vì sai-ngẫu-nhiên.
+   */
+  async findDirectPeer(
+    tx: TenantTx,
+    companyId: string,
+    roomId: string,
+    excludeUserId: string,
+  ): Promise<{ userId: string; lastReadSeq: number } | null> {
+    const rows = await tx
+      .select({ userId: chatRoomMembers.userId, lastReadSeq: chatRoomMembers.lastReadSeq })
+      .from(chatRoomMembers)
+      .where(
+        and(
+          eq(chatRoomMembers.companyId, companyId),
+          eq(chatRoomMembers.roomId, roomId),
+          isNull(chatRoomMembers.leftAt),
+          ne(chatRoomMembers.userId, excludeUserId),
+        ),
+      )
+      .orderBy(asc(chatRoomMembers.joinedAt), asc(chatRoomMembers.userId))
+      .limit(1);
+    return rows[0] ?? null;
   }
 }

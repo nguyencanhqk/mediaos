@@ -20,6 +20,30 @@
 
 ---
 
+## Kết quả thi công (03/08/2026)
+
+**6 mục BLOCK ở trên:** đã đóng 5 bằng code + test trong `chat-noti-e2e.int-spec.ts` — ca census 19 · ca
+re-consume · ca `findDirectPeer()` trả `null` · đối chứng dương cho các ca assert-bằng-0 (ca 3 · ca 4 · ca 8 ·
+ca 17) · `muted_until` (vị từ `stillReceiving()` + ca 4). Mục còn lại — thứ tự merge giữa các WO cùng chạm
+`chat-messages.service.ts`/`.repository.ts` — là việc điều phối, không đóng được bằng code; BE-6 là WO cuối
+cùng chạm hai file đó trong wave nên nó tự tiêu.
+
+**Phát sinh — KI-059, tách WO riêng.** Ca 6 ("3 DM cùng lô 15 phút") ĐỎ NGẮT QUÃNG khi chạy song song với
+spec khác. Truy tới gốc: **không phải lỗi dedupe** — cả hai tầng chống-trùng đều đúng, mọi lượt đo đều cho
+ĐÚNG 1 thông báo với `dedupe_key` đúng. Sai ở `unread_count` (nhận 1|2|3 tuỳ lượt), và gốc nằm ở
+`OutboxWorker.claim()`: vế `ORDER BY available_at` trong CTE chỉ chọn HÀNG NÀO được claim, còn thứ tự hàng
+của `RETURNING` là do planner sinh — `processEvent` lặp đúng theo thứ tự đó nên event được tiêu thụ sai thứ
+tự. Đo bằng log tạm đặt ngay sau `claim()`: enqueue 1→2→3 trả về `[2,1,3]`; ba lượt trước cho thứ tự ĐẢO.
+Chạy cô lập thì bảng nhỏ, plan tình cờ ra đúng FIFO ⇒ chỉ lộ khi có instance khác chạy song song.
+
+Đây là **hạ tầng event bus dùng chung** (ảnh hưởng cả 30 event-type của TASK/LEAVE/ATT/GOAL/HR-PCR), KHÔNG
+phải lỗi CHAT ⇒ owner chốt 03/08 **tách `S7-INT-OUTBOX-FIFO-1`** thay vì vá kèm. Trong BE-6: ca 6 giữ khẳng
+định ĐÃ chứng minh được dưới tải (đúng 1 thông báo + `dedupe_key` đúng bucket, 4/4 lượt chạy song song), còn
+vế "`unread_count` = giá trị của tin ĐẦU" tách xuống **ca 6b `it.skip`** giữ NGUYÊN assert đúng — không hạ
+assert cho khớp hành vi hỏng (bài học `tests-can-pin-a-hole-open`). WO mới bỏ `skip` đó làm nghiệm thu.
+
+---
+
 ## Vì sao có rev 2
 
 `plan-reviewer` chấm rev 1 **BLOCK**. Lỗ nghiêm trọng nhất: rev 1 chốt "`apps/api/src/chat/**` — KHÔNG sửa"
