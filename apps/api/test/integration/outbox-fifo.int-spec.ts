@@ -83,13 +83,23 @@ describe.skipIf(!hasDb)("S7-INT-OUTBOX-FIFO-1 — outbox dispatch đúng thứ t
       );
     }
 
+    // MỘT mốc thời gian cho cả lô — KHÔNG dùng `now()` của từng câu INSERT. Mỗi INSERT là một transaction
+    // riêng nên `now()` nhích theo thời gian thực, trong khi khoảng lùi lại giảm dần theo vòng lặp: hai đại
+    // lượng chạy NGƯỢC chiều nhau và chỉ cách nhau 50ms. Dưới tải song song, một câu chậm >50ms là đủ để đảo
+    // đúng cái trật tự mà spec đang cố dựng — quan sát thật 2026-08-03: consumer nhận `[0..8, 11, 9, 10]`,
+    // seq 11 (chèn ĐẦU, `now()` sớm nhất) vượt lên trước 9/10 vì hai câu sau nó chậm hơn 50ms. Đỏ như thế
+    // trông y hệt "bản vá FIFO hỏng" nhưng thực ra là spec tự dựng sai tiền đề. Neo một mốc rồi trừ khoảng
+    // cách cố định ⇒ giãn cách ĐÚNG 50ms bất kể độ trễ chèn, và không bao giờ hoà (tie-break không bị gọi tới).
+    const { rows: anchorRows } = await direct.query<{ t: Date }>("SELECT now() AS t");
+    const anchor = anchorRows[0].t;
+
     // seq 0..N-1 `available_at` TĂNG DẦN nhưng CHÈN từ N-1 về 0 ⇒ heap order = nghịch đảo.
-    // Lùi tối đa ~600ms: đủ để `available_at <= now()`, KHÔNG đủ già để thành mồi ngon cho worker khác.
+    // Lùi tối đa ~600ms so với MỐC: đủ để `available_at <= now()`, KHÔNG đủ già để thành mồi ngon cho worker khác.
     for (let seq = N - 1; seq >= 0; seq--) {
       await direct.query(
         `INSERT INTO outbox_events (company_id, event_type, payload, status, available_at)
-         VALUES ($1, $2, $3::jsonb, 'pending', now() - make_interval(secs => $4::float8))`,
-        [A.companyId, EVENT_TYPE, JSON.stringify({ seq }), (N - seq) * 0.05],
+         VALUES ($1, $2, $3::jsonb, 'pending', $4::timestamptz - make_interval(secs => $5::float8))`,
+        [A.companyId, EVENT_TYPE, JSON.stringify({ seq }), anchor, (N - seq) * 0.05],
       );
     }
 

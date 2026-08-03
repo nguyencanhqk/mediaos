@@ -180,7 +180,7 @@ describe("AuthUsersService", () => {
 
   // S2-AUTH-BE-9: lock = thu hồi MỌI phiên (refresh_tokens + user_sessions) TRONG cùng tx qua
   // AuthService.revokeAllForUserTx; count vào audit after.revokedSessionCount.
-  it("lock: gọi auth.revokeAllForUserTx(TX, id, 'locked') ĐÚNG 1 lần + audit after.revokedSessionCount = count", async () => {
+  it("lock: gọi auth.revokeAllForUserTx(TX, companyId, id, 'locked') ĐÚNG 1 lần + audit after.revokedSessionCount = count", async () => {
     auth.revokeAllForUserTx = vi.fn(async () => 3);
     service = new AuthUsersService(
       db as never,
@@ -193,7 +193,7 @@ describe("AuthUsersService", () => {
     );
     await service.lockUser(ACTOR, TARGET_ID, "abuse");
     expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
-    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, TARGET_ID, "locked");
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID, "locked");
     const entry = audit.record.mock.calls[0][1];
     expect(entry.after.revokedSessionCount).toBe(3);
   });
@@ -327,7 +327,7 @@ describe("AuthUsersService", () => {
     expect(res.revokedSessionCount).toBe(3);
     expect(repo.deleteTwoFactorTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID);
     expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
-    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, TARGET_ID, "2fa_reset");
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID, "2fa_reset");
     const auditEntry = audit.record.mock.calls[0][1];
     expect(auditEntry.action).toBe("user.2fa_reset");
     expect(auditEntry.objectType).toBe("user");
@@ -373,7 +373,7 @@ describe("AuthUsersService", () => {
     const dto = await service.deleteUser(ACTOR, TARGET_ID);
     expect(repo.softDeleteTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID, ACTOR.id);
     expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
-    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, TARGET_ID, "deleted");
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID, "deleted");
     expect(dto.deletedAt).not.toBeNull();
     const entry = audit.record.mock.calls[0][1];
     expect(entry.action).toBe("user.deleted");
@@ -478,7 +478,7 @@ describe("AuthUsersService", () => {
       ACTOR.id,
     );
     expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
-    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, TARGET_ID, "admin_password_reset");
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID, "admin_password_reset");
 
     // audit + security event KHÔNG BAO GIỜ chứa temp password / hash (BẤT BIẾN #3)
     const entry = audit.record.mock.calls[0][1];

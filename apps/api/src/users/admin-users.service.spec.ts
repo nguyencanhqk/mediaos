@@ -124,12 +124,12 @@ describe("AdminUsersService", () => {
 
   // S2-AUTH-BE-9: suspend = thu hồi MỌI phiên TRONG cùng tx qua AuthService.revokeAllForUserTx; count →
   // audit after.revokedSessionCount (đối xứng lock).
-  it("suspendUser: gọi auth.revokeAllForUserTx(TX, id, 'suspended') ĐÚNG 1 lần + audit after.revokedSessionCount = count", async () => {
+  it("suspendUser: gọi auth.revokeAllForUserTx(TX, companyId, id, 'suspended') ĐÚNG 1 lần + audit after.revokedSessionCount = count", async () => {
     auth.revokeAllForUserTx = vi.fn(async () => 4);
     service = new AdminUsersService(db as never, repo, audit as never, auth as never);
     await service.suspendUser(ACTOR, TARGET_ID, "vi phạm");
     expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
-    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, TARGET_ID, "suspended");
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID, "suspended");
     const entry = audit.record.mock.calls[0][1];
     expect(entry.after.revokedSessionCount).toBe(4);
   });

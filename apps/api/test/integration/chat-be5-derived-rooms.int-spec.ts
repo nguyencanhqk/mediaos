@@ -54,13 +54,23 @@ const LOGIN_PW = ["Passw0rd", "chatbe5"].join("!");
 type Scope = "Own" | "Team" | "Department" | "Company";
 type PairGrant = [action: string, resource: string, scope: Scope, sensitive?: boolean];
 
-/** Cặp quyền tối thiểu để 14 writer chạy được — WO này KHÔNG thêm cặp mới nào. */
+/**
+ * Cặp quyền tối thiểu để 14 writer chạy được — WO này KHÔNG thêm cặp mới nào.
+ *
+ * ⚠️ Cờ `sensitive` ở đây PHẢI khớp catalog THẬT (mig `0005` + `0485` bước (b)): sensitive CHỈ gồm
+ * delete/close/archive/manage-member/view-report:project. `seedPermissionCatalog` upsert vào
+ * `permissions` — bảng catalog TOÀN CỤC, không có `company_id` và không ai dọn — nên khai sai một cờ
+ * là ĐÓNG DẤU VĨNH VIỄN lên lane DB, rồi mọi spec chạy sau phải chịu. Đã xảy ra thật: `update:project`
+ * từng khai `true` ở đây ⇒ lane `mediaos_outboxfifo` mang `is_sensitive=t` trong khi 4 DB khác đều `f`
+ * ⇒ 3 ca TASKCAP của `auth-me-capabilities.int.spec.ts` đỏ, và đỏ đó SỐNG SÓT qua cả `git stash` (hỏng
+ * nằm trong DB, không nằm trong code) nên bị đọc nhầm thành lỗ phân quyền cần WO riêng.
+ */
 const WRITER_PAIRS: PairGrant[] = [
   ["create", "employee", "Company"],
   ["update", "employee", "Company"],
   ["change-status", "employee", "Company"],
   ["read", "project", "Company"],
-  ["update", "project", "Company", true],
+  ["update", "project", "Company"],
   ["close", "project", "Company", true],
   ["delete", "project", "Company", true],
   ["manage-member", "project", "Company", true],
