@@ -520,7 +520,9 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
           `(0 là hợp lệ trên DB dựng-từ-rỗng)`,
       );
       for (const r of rows.rows) {
-        expect(Number(r.chat_pairs), `role '${r.name}' giữ toàn catalog nhưng thiếu cặp CHAT`).toBe(10);
+        expect(Number(r.chat_pairs), `role '${r.name}' giữ toàn catalog nhưng thiếu cặp CHAT`).toBe(
+          10,
+        );
       }
     });
 
@@ -573,7 +575,9 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
       const n = await direct.query<{ n: string }>(
         `SELECT count(*) AS n FROM sequence_counters WHERE sequence_key = 'chat_room' AND deleted_at IS NULL`,
       );
-      console.log(`[s7-chat-db1] counter chat_room đang có: ${n.rows[0].n} (0 là hợp lệ trên DB dựng-từ-rỗng)`);
+      console.log(
+        `[s7-chat-db1] counter chat_room đang có: ${n.rows[0].n} (0 là hợp lệ trên DB dựng-từ-rỗng)`,
+      );
     });
 
     it("counter KHÔNG bao giờ thấp hơn số phòng đã cấp mã (chống 23505 ở phòng kế tiếp)", async () => {
@@ -639,6 +643,218 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
       // Bật module khi backend chưa có gì = hứa suông với người dùng (lớp `ui-promises-backend-never-reads`).
       // Việc bật thuộc WO CUỐI của wave S7-CHAT.
       expect(r.rows[0].is_active).toBe(false);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // G. S7-CHAT-DB-3 (mig 0540) — LEAST-PRIVILEGE: gỡ quyền không ai dùng, chặn CASCADE xoá append-only
+  //
+  // Ba lỗ mục này pin, tất cả đã ĐO trên lane trước khi vá (docs/plans/S7-CHAT-DB-3.md §0):
+  //   L1 `chat_rooms` có UPDATE CẤP BẢNG ⇒ app role sửa được cả company_id/id/room_type — 4 writer thật
+  //      chỉ chạm 11/22 cột.
+  //   L2 `visible_from_seq` là column-GRANT CHẾT — 0 writer trong src, CHAT-DEC-008 chỉ được gác bằng
+  //      một comment.
+  //   L3 FK `users` → chat là ON DELETE CASCADE ⇒ hard-delete user XOÁ CỨNG `chat_messages`
+  //      (append-only, bất biến #2) qua RI chạy quyền owner — bỏ qua mọi GRANT.
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe("H. least-privilege bề mặt CHAT (mig 0540)", () => {
+    /** Tập cột UPDATE-được, pin THEO TÊN. "count > 0" hay "≤" đều PASS oan khi ai đó cấp thêm cột. */
+    const GRANTED_UPDATE_COLUMNS: Record<string, string[]> = {
+      chat_messages: ["pinned_at", "pinned_by", "recalled_at", "recalled_by"],
+      chat_room_members: ["last_read_at", "last_read_seq", "left_at", "muted_until", "role"],
+      chat_rooms: [
+        "archived_at",
+        "archived_by",
+        "deleted_at",
+        "deleted_by",
+        "description",
+        "is_archived",
+        "last_message_at",
+        "last_message_seq",
+        "name",
+        "updated_at",
+        "updated_by",
+      ],
+    };
+
+    it("app role KHÔNG sửa được visible_from_seq — CHAT-DEC-008 ép ở tầng DB, không phải bằng comment", async () => {
+      const r = await attempt(
+        tenantA.companyId,
+        `UPDATE chat_room_members SET visible_from_seq = 5 WHERE room_id = $1`,
+        [roomA],
+      );
+      expect(r.code, `kỳ vọng 42501, nhận ${r.code}: ${r.message}`).toBe("42501");
+    });
+
+    it("app role KHÔNG sửa được cột định danh/neo của chat_rooms — company_id · org_unit_id · room_type", async () => {
+      // company_id là ca NẶNG nhất: UPDATE cấp bảng cho phép chuyển hàng sang tenant khác. RLS `WITH CHECK`
+      // có thể chặn, nhưng chặn bằng policy là lớp KHÁC — bất biến #1 đòi quyền ghi không tồn tại ngay từ ACL.
+      const moved = await attempt(
+        tenantA.companyId,
+        `UPDATE chat_rooms SET company_id = $2 WHERE id = $1`,
+        [roomA, tenantB.companyId],
+      );
+      expect(moved.code, `company_id: kỳ vọng 42501, nhận ${moved.code}: ${moved.message}`).toBe(
+        "42501",
+      );
+
+      const anchor = await attempt(
+        tenantA.companyId,
+        `UPDATE chat_rooms SET org_unit_id = NULL WHERE id = $1`,
+        [roomA],
+      );
+      expect(anchor.code, `org_unit_id: kỳ vọng 42501, nhận ${anchor.code}`).toBe("42501");
+
+      const kind = await attempt(
+        tenantA.companyId,
+        `UPDATE chat_rooms SET room_type = 'direct' WHERE id = $1`,
+        [roomA],
+      );
+      expect(kind.code, `room_type: kỳ vọng 42501, nhận ${kind.code}`).toBe("42501");
+    });
+
+    it("ĐỐI CHỨNG DƯƠNG: 4 writer thật của chat_rooms VẪN ghi được (revoke không được đẻ cửa sổ 500)", async () => {
+      // Mỗi câu dưới đây là đúng tập cột của một writer trong repository — bỏ sót cột nào ở GRANT là
+      // 42501 lúc chạy, tức HTTP 500 trên đường ghi đã ship. Đây là lưới duy nhất bắt được việc đó.
+      const bump = await attempt(
+        tenantA.companyId,
+        `UPDATE chat_rooms SET last_message_seq = COALESCE(last_message_seq, 0) + 1, last_message_at = now() WHERE id = $1`,
+        [roomA],
+      );
+      expect(bump.code, `bumpRoomSeq phải ghi được, nhận ${bump.code}: ${bump.message}`).toBeNull();
+
+      const restore = await attempt(
+        tenantA.companyId,
+        `UPDATE chat_rooms SET deleted_at = NULL, deleted_by = NULL WHERE id = $1`,
+        [roomA],
+      );
+      expect(restore.code, `restoreRoom phải ghi được, nhận ${restore.code}`).toBeNull();
+
+      const update = await attempt(
+        tenantA.companyId,
+        `UPDATE chat_rooms SET name = 'đổi tên', description = 'mô tả', updated_at = now(), updated_by = $2 WHERE id = $1`,
+        [roomA, userA],
+      );
+      expect(update.code, `updateRoom phải ghi được, nhận ${update.code}`).toBeNull();
+
+      const archive = await attempt(
+        tenantA.companyId,
+        `UPDATE chat_rooms SET is_archived = true, archived_at = now(), archived_by = $2, updated_at = now() WHERE id = $1`,
+        [roomA, userA],
+      );
+      expect(archive.code, `archiveRoom phải ghi được, nhận ${archive.code}`).toBeNull();
+    });
+
+    it("hard-delete user KHÔNG xoá được tin nhắn — 23503, và tin nhắn còn NGUYÊN", async () => {
+      // CHẠY BẰNG `direct` (owner), KHÔNG phải asApp: app role vốn đã không có DELETE trên `users`
+      // (mig 0467 thu hồi), nên chạy bằng nó chỉ được 42501 — ca sẽ xanh mà chẳng chứng minh gì.
+      // Lỗ THẬT nằm ở tầng owner: CASCADE của RI bỏ qua GRANT.
+      const victim = await seedUser(
+        direct,
+        tenantA.companyId,
+        `chat-cascade-${tenantA.slug}@x.test`,
+      );
+      await direct.query(
+        `INSERT INTO chat_messages (company_id, room_id, sender_id, body, room_seq)
+         VALUES ($1, $2, $3, 'tin của người sắp bị xoá',
+                 (SELECT COALESCE(max(room_seq), 0) + 1 FROM chat_messages
+                   WHERE company_id = $1 AND room_id = $2))`,
+        [tenantA.companyId, roomA, victim],
+      );
+
+      let code: string | null = null;
+      try {
+        await direct.query(`DELETE FROM users WHERE id = $1`, [victim]);
+      } catch (e) {
+        code = (e as { code?: string }).code ?? "UNKNOWN";
+      }
+      expect(code, "xoá user còn tin nhắn phải vướng FK RESTRICT (23503)").toBe("23503");
+
+      const left = await direct.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM chat_messages WHERE sender_id = $1`,
+        [victim],
+      );
+      expect(left.rows[0].n, "tin nhắn của user bị xoá phải CÒN NGUYÊN").toBe(1);
+
+      // Dọn theo đúng thứ tự mà cleanupTenants dùng (chat trước, users sau) — nếu không, afterAll đỏ.
+      await direct.query(`DELETE FROM chat_messages WHERE sender_id = $1`, [victim]);
+      await direct.query(`DELETE FROM users WHERE id = $1`, [victim]);
+    });
+
+    it("4 FK users→chat đều RESTRICT (cả một-cột lẫn composite) — lệch một cái là CASCADE vẫn chạy", async () => {
+      const rows = await direct.query<{ conname: string; confdeltype: string }>(
+        `SELECT con.conname, con.confdeltype
+           FROM pg_constraint con
+           JOIN pg_class c ON c.oid = con.conrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE con.contype = 'f' AND n.nspname = 'public'
+            AND con.confrelid = 'public.users'::regclass
+            AND c.relname IN ('chat_messages', 'chat_room_members')
+            AND con.conkey @> ARRAY[(
+              SELECT attnum FROM pg_attribute
+               WHERE attrelid = c.oid
+                 AND attname = CASE c.relname WHEN 'chat_messages' THEN 'sender_id' ELSE 'user_id' END
+            )]
+          ORDER BY con.conname`,
+      );
+      expect(rows.rows.map((r) => r.conname)).toEqual([
+        "chat_messages_sender_id_company_fk",
+        "chat_messages_sender_id_fkey",
+        "chat_room_members_user_id_company_fk",
+        "chat_room_members_user_id_fkey",
+      ]);
+      for (const r of rows.rows) {
+        // 'r' = RESTRICT. 'c' = CASCADE (dạng cũ), 'a' = NO ACTION — NO ACTION hoãn kiểm tới cuối câu
+        // lệnh nên vẫn chặn, nhưng ta pin RESTRICT để lệch dạng là đỏ, không im lặng trôi.
+        expect(r.confdeltype, `${r.conname} phải ON DELETE RESTRICT`).toBe("r");
+      }
+    });
+
+    it("tập cột UPDATE-được của 3 bảng chat khớp ĐÚNG pin (không thừa, không thiếu)", async () => {
+      for (const [table, expected] of Object.entries(GRANTED_UPDATE_COLUMNS)) {
+        // aclexplode(attacl) đọc THẲNG ACL cấp cột — `information_schema.column_privileges` phụ thuộc
+        // vai trò hiện tại là grantor/grantee nên có thể trả thiếu tuỳ connection.
+        const cols = await direct.query<{ column_name: string }>(
+          `SELECT a.attname AS column_name
+             FROM pg_class c
+             JOIN pg_namespace n ON n.oid = c.relnamespace
+             JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+             CROSS JOIN LATERAL aclexplode(a.attacl) acl
+            WHERE n.nspname = 'public' AND c.relname = $1
+              AND acl.grantee = 'mediaos_app'::regrole AND acl.privilege_type = 'UPDATE'
+            ORDER BY 1`,
+          [table],
+        );
+        expect(
+          cols.rows.map((r) => r.column_name),
+          `column-GRANT UPDATE của ${table}`,
+        ).toEqual(expected);
+
+        // Và KHÔNG bảng nào trong ba bảng này còn UPDATE/DELETE cấp BẢNG — column-GRANT chỉ có nghĩa
+        // khi vế cấp bảng đã tắt, ngược lại nó chỉ là trang trí.
+        const tbl = await direct.query<{ upd: boolean; del: boolean }>(
+          `SELECT has_table_privilege('mediaos_app', $1, 'UPDATE') AS upd,
+                  has_table_privilege('mediaos_app', $1, 'DELETE') AS del`,
+          [`public.${table}`],
+        );
+        expect(tbl.rows[0].upd, `${table} KHÔNG được có UPDATE cấp bảng`).toBe(false);
+        expect(tbl.rows[0].del, `${table} KHÔNG được có DELETE cấp bảng`).toBe(false);
+      }
+    });
+
+    it("RLS + FORCE còn bật trên cả 3 bảng chat", async () => {
+      const rows = await direct.query<{ relname: string; rls: boolean; force: boolean }>(
+        `SELECT c.relname, c.relrowsecurity AS rls, c.relforcerowsecurity AS force
+           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public'
+            AND c.relname IN ('chat_messages', 'chat_room_members', 'chat_rooms')
+          ORDER BY 1`,
+      );
+      expect(rows.rows).toHaveLength(3);
+      for (const r of rows.rows) {
+        expect(r.rls, `${r.relname} phải bật RLS`).toBe(true);
+        expect(r.force, `${r.relname} phải FORCE RLS (owner cũng không được vượt)`).toBe(true);
+      }
     });
   });
 });
