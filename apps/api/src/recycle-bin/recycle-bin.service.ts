@@ -7,6 +7,10 @@ import { DataScopeService } from "../permission/data-scope.service";
 // (memory `read-path-gate-pair-must-match-download-pair`). Chỉ import HẰNG SỐ — không phụ thuộc DI
 // vào OrgModule, không có vòng import.
 import { ORG_EMPLOYEE_DIRECTORY } from "../org/org.permissions";
+import {
+  ChatDerivedRoomsSyncService,
+  ChatSyncRevokeError,
+} from "../chat/chat-derived-rooms-sync.service";
 import { RecycleBinRepository } from "./recycle-bin.repository";
 
 type RequestUser = { id: string; companyId: string };
@@ -21,6 +25,8 @@ export class RecycleBinService {
     private readonly auditService: AuditService,
     // PermissionModule (đã import sẵn cho PermissionGuard) export DataScopeService ⇒ không đổi wiring.
     private readonly dataScope: DataScopeService,
+    // S7-CHAT-BE-5 (W13): vào lại phòng dẫn xuất ngay trong tx khôi phục.
+    private readonly chatSync: ChatDerivedRoomsSyncService,
   ) {}
 
   /**
@@ -71,18 +77,36 @@ export class RecycleBinService {
    * without the restore committing (and vice-versa).
    */
   async restoreEmployee(user: RequestUser, id: string) {
-    return this.db.withTenant(user.companyId, async (tx) => {
-      const row = await this.repo.restoreEmployeeTx(tx, id, user.companyId);
-      if (!row) throw new NotFoundException("Employee not found in recycle bin");
+    try {
+      return await this.db.withTenant(user.companyId, async (tx) => {
+        const row = await this.repo.restoreEmployeeTx(tx, id, user.companyId);
+        if (!row) throw new NotFoundException("Employee not found in recycle bin");
 
-      await this.auditService.record(tx, {
-        action: "employee.restored",
-        objectType: "employee",
-        objectId: id,
-        actorUserId: user.id,
+        await this.auditService.record(tx, {
+          action: "employee.restored",
+          objectType: "employee",
+          objectId: id,
+          actorUserId: user.id,
+        });
+
+        // S7-CHAT-BE-5 (W13) — khôi phục ⇒ vào lại phòng dẫn xuất NGAY trong tx khôi phục, không chờ
+        // nhịp job. Đối xứng với W14 (xoá mềm ⇒ rời phòng): thiếu vế này thì thùng rác trở thành đường
+        // một chiều — xoá nhầm rồi khôi phục xong người đó vẫn ngồi ngoài phòng tới 15 phút.
+        //
+        // Đọc `user_id` từ `.returning()` của chính câu UPDATE khôi phục (repo trả thêm cột) — KHÔNG
+        // query lại: query lại là đọc một trạng thái khác thời điểm với câu ghi.
+        await this.chatSync.syncUserDerivedMembershipTx(tx, user.companyId, row.userId, {
+          kind: "system",
+          userId: user.id,
+        });
+
+        return { id: row.id };
       });
-
-      return row;
-    });
+    } catch (err) {
+      if (err instanceof ChatSyncRevokeError) {
+        await this.chatSync.reportRevokeFailure(user.companyId, err);
+      }
+      throw err;
+    }
   }
 }

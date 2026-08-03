@@ -152,6 +152,21 @@ function makeDataScope(
   };
 }
 
+/**
+ * S7-CHAT-BE-5: stub `ChatDerivedRoomsSyncService`. Spec này kiểm luật của CHÍNH service đang test, không
+ * kiểm đồng bộ phòng chat — hành vi thật của hook nằm ở `chat-be5-derived-rooms.int-spec.ts` (DB thật).
+ */
+function makeChatSync() {
+  return {
+    syncUserDerivedMembershipTx: vi.fn().mockResolvedValue(undefined),
+    syncEmployeeDerivedMembershipTx: vi.fn().mockResolvedValue(undefined),
+    tryEnsureOrgUnitRoom: vi.fn().mockResolvedValue(undefined),
+    tryEnsureProjectRoom: vi.fn().mockResolvedValue(undefined),
+    tryArchiveProjectRoom: vi.fn().mockResolvedValue(undefined),
+    reportRevokeFailure: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 function makeService(
   opts: {
     perms?: Record<string, Decision>;
@@ -175,6 +190,7 @@ function makeService(
     password as never,
     securityPolicy as never,
     dataScope as never,
+    makeChatSync() as never,
   );
   return { svc, repo, db, permission, audit, password, securityPolicy, dataScope };
 }

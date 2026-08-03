@@ -207,20 +207,27 @@ export class EmployeesRepository {
       .returning();
   }
 
+  /**
+   * S7-CHAT-BE-5 (W14) — lõi nhận `tx` TỪ NGOÀI, để service đặt xoá mềm và đồng bộ phòng chat vào CÙNG
+   * một transaction. Tách thuần tuý, KHÔNG đổi câu UPDATE.
+   */
+  softDeleteEmployeeTx(tx: TenantTx, companyId: string, id: string) {
+    return tx
+      .update(employeeProfiles)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          eq(employeeProfiles.companyId, companyId),
+          eq(employeeProfiles.id, id),
+          isNull(employeeProfiles.deletedAt),
+        ),
+      )
+      .returning();
+  }
+
+  /** Giữ nguyên chữ ký cũ cho caller khác — additive, không breaking. */
   softDeleteEmployee(companyId: string, id: string) {
-    return this.db.withTenant(companyId, (tx) =>
-      tx
-        .update(employeeProfiles)
-        .set({ deletedAt: new Date(), updatedAt: new Date() })
-        .where(
-          and(
-            eq(employeeProfiles.companyId, companyId),
-            eq(employeeProfiles.id, id),
-            isNull(employeeProfiles.deletedAt),
-          ),
-        )
-        .returning(),
-    );
+    return this.db.withTenant(companyId, (tx) => this.softDeleteEmployeeTx(tx, companyId, id));
   }
 
   // ── Login account (F7 — create users row when none supplied) ───────────────────

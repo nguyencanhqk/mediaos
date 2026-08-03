@@ -24,6 +24,9 @@ import { ChatMessageFileResolver } from "./chat-message-file.resolver";
 import { ChatSearchController } from "./chat-search.controller";
 import { ChatSearchService } from "./chat-search.service";
 import { ChatSearchRepository } from "./chat-search.repository";
+// S7-CHAT-BE-5 (additive): phòng dẫn xuất theo phòng ban/dự án + job đối soát định kỳ.
+import { ChatDerivedRoomsSyncService } from "./chat-derived-rooms-sync.service";
+import { ChatDerivedRoomsReconcileJobHandler } from "./chat-derived-rooms-reconcile.job-handler";
 
 /**
  * S7-CHAT-BE-1 — `ChatModule` (SPEC-15 · DB-12 · API-13).
@@ -70,8 +73,19 @@ import { ChatSearchRepository } from "./chat-search.repository";
     // ── S7-CHAT-BE-4 ──
     ChatSearchService,
     ChatSearchRepository,
+    // ── S7-CHAT-BE-5 ──
+    ChatDerivedRoomsSyncService,
+    ChatDerivedRoomsReconcileJobHandler,
   ],
-  exports: [ChatAccessService, ChatRoomsRepository, ChatMessagesRepository],
+  // `ChatDerivedRoomsSyncService` export cho 5 module writer (org · employees · tasks · recycle-bin).
+  // Job handler CỐ Ý KHÔNG export: nó được SchedulerModule gom qua DiscoveryService bằng metadata, không
+  // ai được phép inject và tự gọi `run()` ngoài nhịp scheduler (mirror `SystemJobRunsRetentionJobHandler`).
+  exports: [
+    ChatAccessService,
+    ChatRoomsRepository,
+    ChatMessagesRepository,
+    ChatDerivedRoomsSyncService,
+  ],
 })
 export class ChatModule implements OnModuleInit {
   constructor(

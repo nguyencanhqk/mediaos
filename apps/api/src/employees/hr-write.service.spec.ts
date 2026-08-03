@@ -127,6 +127,7 @@ function makeService(opts: { repo?: ReturnType<typeof makeRepo>; sequence?: unkn
     permissions as never,
     outbox as never,
     lmsSync as never,
+    makeChatSync() as never,
   );
   return { svc, repo, db, audit, sequence, dataScope, permissions, outbox, lmsSync };
 }
@@ -145,6 +146,22 @@ function assertNoSensitiveAuditKeys(audit: { record: ReturnType<typeof vi.fn> })
 }
 
 // ─── change-status FSM ─────────────────────────────────────────────────────────────
+
+/**
+ * S7-CHAT-BE-5: stub `ChatDerivedRoomsSyncService`. Spec này kiểm luật của CHÍNH service đang test, không
+ * kiểm đồng bộ phòng chat — hành vi thật của hook nằm ở `chat-be5-derived-rooms.int-spec.ts` (DB thật).
+ */
+function makeChatSync() {
+  return {
+    syncUserDerivedMembershipTx: vi.fn().mockResolvedValue(undefined),
+    syncEmployeeDerivedMembershipTx: vi.fn().mockResolvedValue(undefined),
+    tryEnsureOrgUnitRoom: vi.fn().mockResolvedValue(undefined),
+    tryEnsureProjectRoom: vi.fn().mockResolvedValue(undefined),
+    tryArchiveProjectRoom: vi.fn().mockResolvedValue(undefined),
+    reportRevokeFailure: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 
 describe("HrWriteService.changeStatus — FSM", () => {
   it("404 when the employee does not exist (no audit, no history)", async () => {
@@ -418,6 +435,7 @@ describe("HrWriteService.createEmployee", () => {
       permissions as never,
       outbox as never,
       { enqueueSync: vi.fn().mockResolvedValue(undefined) } as never,
+      makeChatSync() as never,
     );
     await expect(svc.createEmployee(actorA, { userId: OTHER_USER } as never)).rejects.toThrow(
       ForbiddenException,

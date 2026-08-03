@@ -67,7 +67,9 @@ export class RecycleBinRepository {
           isNotNull(employeeProfiles.deletedAt),
         ),
       )
-      .returning({ id: employeeProfiles.id });
+      // S7-CHAT-BE-5 (W13): + `user_id` để caller đồng bộ phòng chat mà không phải query lại. Thêm cột
+      // vào `.returning()` KHÔNG đổi câu UPDATE; body HTTP cũng không đổi vì service chiếu lại `{id}`.
+      .returning({ id: employeeProfiles.id, userId: employeeProfiles.userId });
     return row;
   }
 }

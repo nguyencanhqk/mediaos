@@ -135,6 +135,21 @@ describe("HrDepartmentService — cycle detection + 2-tenant deny (S2-HR-BE-3 RE
     return { record: vi.fn().mockResolvedValue(undefined) };
   }
 
+/**
+ * S7-CHAT-BE-5: stub `ChatDerivedRoomsSyncService`. Spec này kiểm luật của CHÍNH service đang test, không
+ * kiểm đồng bộ phòng chat — hành vi thật của hook nằm ở `chat-be5-derived-rooms.int-spec.ts` (DB thật).
+ */
+function makeChatSync() {
+  return {
+    syncUserDerivedMembershipTx: vi.fn().mockResolvedValue(undefined),
+    syncEmployeeDerivedMembershipTx: vi.fn().mockResolvedValue(undefined),
+    tryEnsureOrgUnitRoom: vi.fn().mockResolvedValue(undefined),
+    tryEnsureProjectRoom: vi.fn().mockResolvedValue(undefined),
+    tryArchiveProjectRoom: vi.fn().mockResolvedValue(undefined),
+    reportRevokeFailure: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
   function makeService(opts: {
     repo?: ReturnType<typeof makeRepo>;
     db?: ReturnType<typeof makeDb>;
@@ -143,7 +158,12 @@ describe("HrDepartmentService — cycle detection + 2-tenant deny (S2-HR-BE-3 RE
     const repo = opts.repo ?? makeRepo();
     const db = opts.db ?? makeDb();
     const audit = opts.audit ?? makeAudit();
-    const service = new HrDepartmentService(repo as never, db as never, audit as never);
+    const service = new HrDepartmentService(
+      repo as never,
+      db as never,
+      audit as never,
+      makeChatSync() as never,
+    );
     return { service, repo, db, audit };
   }
 

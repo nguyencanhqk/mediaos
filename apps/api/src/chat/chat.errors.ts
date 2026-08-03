@@ -175,6 +175,26 @@ export const CHAT_AUDIT = {
   MESSAGE_RECALLED: "chat.message.recalled",
   MESSAGE_PINNED: "chat.message.pinned",
   MESSAGE_UNPINNED: "chat.message.unpinned",
+  // ── S7-CHAT-BE-5 — phòng dẫn xuất theo phòng ban/dự án ──
+  /**
+   * Bốn hành động ĐỒNG BỘ + một hành động THẤT BẠI. Chúng tách khỏi `ROOM_CREATED`/`MEMBER_ADDED`… của
+   * BE-1 vì trả lời câu hỏi điều tra KHÁC: "ai cho người này vào phòng" với đáp án "không ai — hệ thống
+   * suy ra từ hồ sơ nhân sự". Gộp chung thì mọi dòng máy sinh sẽ trông như thao tác tay của một admin.
+   *
+   * `actorType`: `'System'` cho hook thời-gian-thực (có `actorUserId` = người vừa ghi HR/TASK),
+   * `'Job'` cho job đối soát (KHÔNG có `actorUserId` — không người nào đứng sau).
+   */
+  ROOM_AUTO_CREATED: "chat.room.auto_created",
+  ROOM_AUTO_ARCHIVED: "chat.room.auto_archived",
+  MEMBER_AUTO_ADDED: "chat.room.member_auto_added",
+  MEMBER_AUTO_REMOVED: "chat.room.member_auto_removed",
+  /**
+   * Đường THU HỒI thất bại — `resultStatus='Failure'`, ghi ở transaction RIÊNG sau khi tx nghiệp vụ đã
+   * rollback hẳn (không có gì để atomic CÙNG, vì hành động chính đã biến mất). Đây là dòng audit DUY
+   * NHẤT của hệ được phép nằm ngoài tx nghiệp vụ, và lý do nằm ở chính bản chất "audit của một thất bại".
+   * `after` chỉ chứa lý do đã lược PII + loại đích — KHÔNG kèm thông điệp lỗi thô của Postgres.
+   */
+  MEMBER_SYNC_FAILED: "chat.room.member_sync_failed",
 } as const;
 
 /** `module_code` cho mọi dòng audit của CHAT — CHAT-API-019 lọc theo cột này. */

@@ -26,6 +26,7 @@ import { StorageModule } from "../storage/storage.module";
 import { SettingsModule } from "../foundation/settings/settings.module";
 // S5-NOTI-FIX-2 (additive) — SequenceService cấp task_code (QA2-CRIT-002 code-gen cut-over, counter 'task' 0498).
 import { SequenceModule } from "../foundation/sequences/sequence.module";
+import { ChatModule } from "../chat/chat.module";
 // S4-TASK-BE-4 (additive) — Kanban board + move · comment/mention · checklist/items · activity feed.
 import { TaskKanbanService } from "./task-kanban.service";
 import { TaskCommentsService } from "./task-comments.service";
@@ -58,6 +59,8 @@ import { GoalProgressEngineRepository } from "./goal-progress-engine.repository"
     SettingsModule,
     FilesModule,
     SequenceModule,
+    // S7-CHAT-BE-5: ChatDerivedRoomsSyncService cho W3-W7 (phòng chat dự án + đồng bộ thành viên).
+    ChatModule,
   ],
   controllers: [
     TasksController,

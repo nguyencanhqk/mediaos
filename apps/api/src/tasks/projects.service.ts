@@ -29,6 +29,10 @@ import {
   TASK_PROJECT_REPORT_WORKLOAD_LIMIT,
 } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
+import {
+  ChatDerivedRoomsSyncService,
+  ChatSyncRevokeError,
+} from "../chat/chat-derived-rooms-sync.service";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { PermissionService } from "../permission/permission.service";
@@ -104,6 +108,9 @@ export class ProjectsService {
     private readonly outbox: OutboxService,
     // S5-TASK-PROJROLE-1 (D-25) - governance re-anchor doc project_role qua tang doc duy nhat.
     private readonly projectAccess: ProjectAccessService,
+    // S7-CHAT-BE-5 (W3-W7) — phòng chat dự án. TasksModule import ChatModule (một hướng: job CHAT đọc
+    // thẳng bảng `projects`/`project_members` bằng SQL, KHÔNG inject ProjectsRepository ⇒ không cycle).
+    private readonly chatSync: ChatDerivedRoomsSyncService,
   ) {}
 
   // ── Reads (data-scope Own/Team EXISTS; Company/System thấy toàn tenant) ─────────
@@ -212,6 +219,21 @@ export class ProjectsService {
     user: RequestUser,
     dto: CreateTaskProjectRequest,
   ): Promise<TaskProjectResponseDto> {
+    const created = await this.createProjectCore(user, dto);
+    // S7-CHAT-BE-5 (W3) — phòng chat dự án, NGOÀI tx (cấp `room_code` không lồng được vào tx nghiệp vụ).
+    // Owner-member đã được chèn TRONG tx ở trên, và `ensureProjectRoom` seed thành viên trong CÙNG tx tạo
+    // phòng ⇒ người tạo đọc được phòng NGAY, không phải chờ nhịp job (đóng H1 của micro-plan).
+    await this.chatSync.tryEnsureProjectRoom(user.companyId, created.projectId, dto.name, {
+      kind: "system",
+      userId: user.id,
+    });
+    return created.detail;
+  }
+
+  private async createProjectCore(
+    user: RequestUser,
+    dto: CreateTaskProjectRequest,
+  ): Promise<{ detail: TaskProjectResponseDto; projectId: string }> {
     return this.db.withTenant(user.companyId, async (tx) => {
       if (await this.repo.nameExistsTx(tx, user.companyId, dto.name)) {
         throw new ConflictException(ERR.NAME_TAKEN);
@@ -281,10 +303,11 @@ export class ProjectsService {
         },
       });
 
-      return this.reloadDetail(tx, user.companyId, project.id, {
+      const detail = await this.reloadDetail(tx, user.companyId, project.id, {
         employeeId: actorEmp?.id ?? null,
         userId: user.id,
       });
+      return { detail, projectId: project.id };
     });
   }
 
@@ -409,6 +432,22 @@ export class ProjectsService {
     id: string,
     dto: CloseTaskProjectRequest,
   ): Promise<TaskProjectResponseDto> {
+    const detail = await this.closeProjectCore(user, id, dto);
+    // S7-CHAT-BE-5 (W4) — đóng dự án ⇒ ĐÓNG BĂNG phòng: lưu trữ phòng, giữ nguyên danh sách thành viên
+    // để họ đọc lại lịch sử qua `GET /chat/rooms?archived=true`. KHÔNG đuổi ai — `applyLeavesTx` loại
+    // phòng đã lưu trữ ra khỏi phạm vi chính vì lý do này.
+    await this.chatSync.tryArchiveProjectRoom(user.companyId, id, {
+      kind: "system",
+      userId: user.id,
+    });
+    return detail;
+  }
+
+  private async closeProjectCore(
+    user: RequestUser,
+    id: string,
+    dto: CloseTaskProjectRequest,
+  ): Promise<TaskProjectResponseDto> {
     return this.db.withTenant(user.companyId, async (tx) => {
       const raw = await this.repo.findRawByIdTx(tx, user.companyId, id);
       if (!raw) throw new NotFoundException(ERR.NOT_FOUND);
@@ -448,6 +487,15 @@ export class ProjectsService {
   }
 
   async deleteProject(user: RequestUser, id: string): Promise<void> {
+    await this.deleteProjectCore(user, id);
+    // S7-CHAT-BE-5 (W5) — cùng hình dạng W4: xoá mềm dự án ⇒ lưu trữ phòng, không xoá phòng, không đuổi ai.
+    await this.chatSync.tryArchiveProjectRoom(user.companyId, id, {
+      kind: "system",
+      userId: user.id,
+    });
+  }
+
+  private async deleteProjectCore(user: RequestUser, id: string): Promise<void> {
     await this.db.withTenant(user.companyId, async (tx) => {
       const raw = await this.repo.findRawByIdTx(tx, user.companyId, id);
       if (!raw) throw new NotFoundException(ERR.NOT_FOUND);
@@ -550,6 +598,13 @@ export class ProjectsService {
         },
       });
 
+      // S7-CHAT-BE-5 (W6) — TRONG tx nguồn. Hàm sync tính LẠI toàn bộ tập phòng dẫn xuất mong muốn của
+      // người này rồi diff: nó không biết "vừa thêm vào dự án nào", nên không có nhánh nào để bỏ sót.
+      await this.chatSync.syncUserDerivedMembershipTx(tx, user.companyId, emp.userId, {
+        kind: "system",
+        userId: user.id,
+      });
+
       return this.reloadMember(tx, user.companyId, id, member.id);
     });
   }
@@ -607,7 +662,26 @@ export class ProjectsService {
     });
   }
 
+  /**
+   * S7-CHAT-BE-5 (W7) — writer THU HỒI. Khối `try/catch` bao NGOÀI `withTenant` là bắt buộc và nó là thứ
+   * DUY NHẤT được thêm ở tầng này: bắt `ChatSyncRevokeError`, ghi ERROR + audit `Failure` ở tx RIÊNG
+   * (tx gốc lúc này đã rollback hẳn nên `withTenant` mới KHÔNG lồng), rồi **ném tiếp**.
+   *
+   * Không nuốt: gỡ người khỏi dự án mà họ vẫn ở trong phòng chat dự án = đúng cái cửa sổ lệch mà owner
+   * ra lệnh phải bằng 0 (chốt 02/08, điểm 2).
+   */
   async removeMember(user: RequestUser, id: string, memberId: string): Promise<void> {
+    try {
+      await this.removeMemberCore(user, id, memberId);
+    } catch (err) {
+      if (err instanceof ChatSyncRevokeError) {
+        await this.chatSync.reportRevokeFailure(user.companyId, err);
+      }
+      throw err;
+    }
+  }
+
+  private async removeMemberCore(user: RequestUser, id: string, memberId: string): Promise<void> {
     await this.db.withTenant(user.companyId, async (tx) => {
       const raw = await this.repo.findRawByIdTx(tx, user.companyId, id);
       if (!raw) throw new NotFoundException(ERR.NOT_FOUND);
@@ -640,6 +714,13 @@ export class ProjectsService {
         objectId: id,
         actorUserId: user.id,
         before: { memberId, employeeId: member.employeeId, projectRole: member.projectRole },
+      });
+
+      // S7-CHAT-BE-5 (W7) — THU HỒI, KHÔNG bọc SAVEPOINT: lỗi phải abort cả tx này để `project_members`
+      // quay về nguyên trạng. Nửa vời ("đã gỡ khỏi dự án nhưng còn trong phòng chat") là trạng thái cấm.
+      await this.chatSync.syncUserDerivedMembershipTx(tx, user.companyId, member.userId, {
+        kind: "system",
+        userId: user.id,
       });
     });
   }

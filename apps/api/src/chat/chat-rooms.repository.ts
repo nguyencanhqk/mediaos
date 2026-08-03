@@ -61,6 +61,102 @@ export interface ChatMemberRow {
   leftAt: Date | null;
 }
 
+/**
+ * S7-CHAT-BE-5 — hình dạng INSERT phòng, **union theo `roomType`** (micro-plan §3.9).
+ *
+ * Ba cột neo (`direct_key`, `org_unit_id`, `ref_id`) bị `chk_chat_rooms_type_anchor` (mig `0538:116`)
+ * ràng buộc CHÉO với `room_type`, và `sync_source` bị `chk_chat_rooms_sync_source` (`0538:124`) ràng buộc
+ * chéo lần nữa. Nhận chúng làm 4 tham số optional rời rạc (hình dạng cũ) thì TypeScript **không bắt được
+ * tổ hợp sai** — caller phải tự nhớ hai CHECK đó, và sai thì ra `23514` lúc chạy. Union này khiến
+ * compiler ép đúng bộ neo cho từng loại, và `sync_source` KHÔNG còn là tham số: nó được SUY ra bên trong
+ * (`roomAnchors`), nên không có đường nào truyền giá trị lệch vào.
+ *
+ * `createdBy: string | null` CHỈ ở hai nhánh dẫn xuất: job đối soát tạo phòng khi không có người dùng
+ * nào đứng sau (cột DB vốn nullable — `communication.ts:171`). `direct`/`group` do người tạo qua API nên
+ * giữ `string` bắt buộc — nới đúng nhánh cần nới.
+ */
+export type InsertRoomValues =
+  | {
+      companyId: string;
+      roomType: "direct";
+      directKey: string;
+      name: null;
+      description: string | null;
+      roomCode: string;
+      createdBy: string;
+    }
+  | {
+      companyId: string;
+      roomType: "group";
+      directKey: null;
+      name: string;
+      description: string | null;
+      roomCode: string;
+      createdBy: string;
+    }
+  | {
+      companyId: string;
+      roomType: "department";
+      orgUnitId: string;
+      name: string;
+      description: string | null;
+      roomCode: string;
+      createdBy: string | null;
+    }
+  | {
+      companyId: string;
+      roomType: "project";
+      refId: string;
+      name: string;
+      description: string | null;
+      roomCode: string;
+      createdBy: string | null;
+    };
+
+/**
+ * Bộ neo + `sync_source` + `synced_at` suy TỪ `roomType` — nơi DUY NHẤT biết luật của hai CHECK chéo.
+ *
+ * `syncedAt` chỉ set cho phòng dẫn xuất và chỉ ở thời điểm TẠO: nó là mốc "phòng này sinh ra từ đồng bộ
+ * lúc nào", KHÔNG phải "lần đối soát thành viên gần nhất" (cập nhật mỗi nhịp diff sẽ là write-amplify
+ * vô ích trên bảng nóng — micro-plan §3.10).
+ */
+function roomAnchors(values: InsertRoomValues) {
+  switch (values.roomType) {
+    case "direct":
+      return {
+        directKey: values.directKey,
+        orgUnitId: null,
+        refId: null,
+        syncSource: "manual",
+        syncedAt: null,
+      };
+    case "group":
+      return {
+        directKey: null,
+        orgUnitId: null,
+        refId: null,
+        syncSource: "manual",
+        syncedAt: null,
+      };
+    case "department":
+      return {
+        directKey: null,
+        orgUnitId: values.orgUnitId,
+        refId: null,
+        syncSource: "department",
+        syncedAt: new Date(),
+      };
+    case "project":
+      return {
+        directKey: null,
+        orgUnitId: null,
+        refId: values.refId,
+        syncSource: "project",
+        syncedAt: new Date(),
+      };
+  }
+}
+
 const ROOM_COLUMNS = {
   id: chatRooms.id,
   companyId: chatRooms.companyId,
@@ -185,21 +281,51 @@ export class ChatRoomsRepository {
     return rows[0] ? { ...rows[0], roomType: rows[0].roomType as ChatRoomType } : undefined;
   }
 
-  async insertRoom(
+  /**
+   * S7-CHAT-BE-5 — phòng theo `org_unit_id` (phòng ban). Mirror `findRoomByDirectKey`: **không** lọc
+   * `deleted_at`, vì partial-unique `chat_rooms_org_unit_uq` phủ cả hàng tombstone ⇒ bỏ qua hàng đã xoá
+   * mềm ở đây là đi thẳng vào `23505` mà không có nhánh xử lý.
+   */
+  async findRoomByOrgUnitId(
     tx: TenantTx,
-    values: {
-      companyId: string;
-      roomType: ChatRoomType;
-      name: string | null;
-      description: string | null;
-      roomCode: string;
-      directKey: string | null;
-      createdBy: string;
-    },
-  ): Promise<ChatRoomRow> {
+    companyId: string,
+    orgUnitId: string,
+  ): Promise<ChatRoomRow | undefined> {
+    const rows = await tx
+      .select(ROOM_COLUMNS)
+      .from(chatRooms)
+      .where(and(eq(chatRooms.companyId, companyId), eq(chatRooms.orgUnitId, orgUnitId)))
+      .limit(1);
+    return rows[0] ? { ...rows[0], roomType: rows[0].roomType as ChatRoomType } : undefined;
+  }
+
+  /** S7-CHAT-BE-5 — phòng theo `ref_id` (dự án). Cùng lý do không lọc `deleted_at` như trên. */
+  async findRoomByRefId(
+    tx: TenantTx,
+    companyId: string,
+    refId: string,
+  ): Promise<ChatRoomRow | undefined> {
+    const rows = await tx
+      .select(ROOM_COLUMNS)
+      .from(chatRooms)
+      .where(and(eq(chatRooms.companyId, companyId), eq(chatRooms.refId, refId)))
+      .limit(1);
+    return rows[0] ? { ...rows[0], roomType: rows[0].roomType as ChatRoomType } : undefined;
+  }
+
+  async insertRoom(tx: TenantTx, values: InsertRoomValues): Promise<ChatRoomRow> {
+    const anchors = roomAnchors(values);
     const rows = await tx
       .insert(chatRooms)
-      .values({ ...values, syncSource: "manual" })
+      .values({
+        companyId: values.companyId,
+        roomType: values.roomType,
+        name: values.name,
+        description: values.description,
+        roomCode: values.roomCode,
+        createdBy: values.createdBy,
+        ...anchors,
+      })
       .returning(ROOM_COLUMNS);
     return { ...rows[0], roomType: rows[0].roomType as ChatRoomType };
   }
@@ -227,11 +353,16 @@ export class ChatRoomsRepository {
     return { ...rows[0], roomType: rows[0].roomType as ChatRoomType };
   }
 
+  /**
+   * `actorUserId: string | null` — S7-CHAT-BE-5 nới ĐÚNG cho đường máy (job đóng phòng của dự án đã
+   * kết thúc, không có người nào đứng sau). Cột `archived_by` vốn nullable ở DB (`communication.ts:185`);
+   * chữ ký cũ hẹp hơn cột thật, không phải ràng buộc nghiệp vụ.
+   */
   async archiveRoom(
     tx: TenantTx,
     companyId: string,
     roomId: string,
-    actorUserId: string,
+    actorUserId: string | null,
   ): Promise<ChatRoomRow> {
     const now = new Date();
     const rows = await tx
@@ -304,6 +435,7 @@ export class ChatRoomsRepository {
     return rows[0] ? { ...rows[0], role: rows[0].role as ChatMemberRole } : undefined;
   }
 
+  /** `addedBy: string | null` — cùng lý do như `archiveRoom`: cột nullable, đường máy không có actor. */
   async insertMember(
     tx: TenantTx,
     values: {
@@ -311,7 +443,7 @@ export class ChatRoomsRepository {
       roomId: string;
       userId: string;
       role: ChatMemberRole;
-      addedBy: string;
+      addedBy: string | null;
     },
   ): Promise<void> {
     await tx.insert(chatRoomMembers).values(values);

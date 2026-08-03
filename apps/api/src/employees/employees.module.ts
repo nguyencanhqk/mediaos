@@ -12,6 +12,7 @@ import { SettingsModule } from "../foundation/settings/settings.module";
 // S2-FND-SEED-2 (additive): SeedModule exports MasterDataSeederRegistry — HrSeedRegistrar registers
 // HrMasterDataSeeder (job_levels/contract_types/employee_code_configs) at onModuleInit (mirror ATT/LEAVE).
 import { SeedModule } from "../foundation/seed/seed.module";
+import { ChatModule } from "../chat/chat.module";
 import { LmsSyncModule } from "../integrations/lms/lms-sync.module";
 import { HrMasterDataSeeder } from "./hr-master-data.seeder";
 import { HrSeedRegistrar } from "./hr-seed.registrar";
@@ -87,6 +88,9 @@ import { HrEmployeeAvatarService } from "./hr-employee-avatar.service";
     // S5-LMS-BE-1: LmsSyncProducer (auto-sync tài khoản→LMS) cho HrWriteService.changeStatus. Module này
     // KHÔNG import PermissionModule ⇒ không kéo dep thừa/cycle; mọi dep của nó (@Global) đã sẵn.
     LmsSyncModule,
+    // S7-CHAT-BE-5: ChatDerivedRoomsSyncService cho 9 điểm ghi phía nhân viên (W8a-W14). Một hướng —
+    // ChatModule KHÔNG import EmployeesModule (job đọc thẳng `employee_profiles` bằng SQL).
+    ChatModule,
     MulterModule.register({ limits: { fileSize: 5 * 1024 * 1024 } }),
   ],
   controllers: [
