@@ -8,6 +8,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   UnauthorizedException,
   forwardRef,
 } from "@nestjs/common";
@@ -51,6 +52,7 @@ import { SecretEncryptionService } from "../crypto/secret-encryption.service";
 import type { EncryptedColumns } from "../crypto/secret-encryption.types";
 import { ACCESS_RESTRICTED_CODE } from "@mediaos/contracts";
 import { SecurityPolicyService } from "../security-policy/security-policy.service";
+import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 
 /** Ngữ cảnh request đưa vào audit (ip/user agent). */
 export interface RequestMeta {
@@ -174,6 +176,12 @@ export class AuthService {
     // S2-AUTH-BE-8: optional-với-default (mirror AuditService.masker) — DI luôn truyền instance đã đăng ký ở
     // AuthModule; hand-built int-spec (không truyền) → default-construct (cùng logic mask/severity).
     securityEvents?: SecurityEventWriter,
+    // S7-CHAT-BE-GATE-3 (L2 HIGH): cắt phiên WS khi thu hồi phiên (SPEC-15 §18). Đi qua
+    // `RealtimeEmitterModule` — module LÁ dựng riêng để phá vòng `Realtime → Chat → Realtime`, nên cạnh
+    // `Auth → RealtimeEmitter` KHÔNG sinh cycle (RealtimeModule mới là bên import AuthModule).
+    // `@Optional()` theo đúng khuôn 2 tham số trên: hàng chục int-spec dựng AuthService bằng tay theo vị
+    // trí; vắng ⇒ chỉ mất lớp cắt socket, đường thu hồi ở DB vẫn nguyên.
+    @Optional() private readonly realtime?: RealtimeEmitterService,
   ) {
     this.securityEvents = securityEvents ?? new SecurityEventWriter();
   }
@@ -649,7 +657,7 @@ export class AuthService {
         .update(refreshTokens)
         .set({ revokedAt: new Date() })
         .where(and(eq(refreshTokens.userId, user.id), isNull(refreshTokens.revokedAt)));
-      await this.revokeAllSessionsForUserTx(tx, user.id, "password_changed");
+      await this.revokeAllSessionsForUserTx(tx, user.companyId, user.id, "password_changed");
       await this.audit.record(tx, {
         action: "auth.password_changed",
         objectType: "auth",
@@ -731,7 +739,7 @@ export class AuthService {
           .update(refreshTokens)
           .set({ revokedAt: new Date() })
           .where(and(eq(refreshTokens.familyId, row.familyId), isNull(refreshTokens.revokedAt)));
-        await this.revokeAllSessionsForUserTx(tx, row.userId, "reuse_detected");
+        await this.revokeAllSessionsForUserTx(tx, companyId, row.userId, "reuse_detected");
         await this.audit.record(tx, {
           action: "auth.token_reuse_detected",
           objectType: "auth",
@@ -767,7 +775,7 @@ export class AuthService {
           .update(refreshTokens)
           .set({ revokedAt: new Date() })
           .where(and(eq(refreshTokens.familyId, row.familyId), isNull(refreshTokens.revokedAt)));
-        await this.revokeAllSessionsForUserTx(tx, user.id, "suspended");
+        await this.revokeAllSessionsForUserTx(tx, companyId, user.id, "suspended");
         await this.audit.record(tx, {
           action: "auth.refresh_blocked",
           objectType: "auth",
@@ -797,7 +805,7 @@ export class AuthService {
           .update(refreshTokens)
           .set({ revokedAt: new Date() })
           .where(and(eq(refreshTokens.familyId, row.familyId), isNull(refreshTokens.revokedAt)));
-        await this.revokeAllSessionsForUserTx(tx, user.id, "company_inactive");
+        await this.revokeAllSessionsForUserTx(tx, companyId, user.id, "company_inactive");
         await this.audit.record(tx, {
           action: "auth.refresh_blocked",
           objectType: "auth",
@@ -893,7 +901,7 @@ export class AuthService {
         .update(refreshTokens)
         .set({ revokedAt: new Date() })
         .where(and(eq(refreshTokens.familyId, row.familyId), isNull(refreshTokens.revokedAt)));
-      await this.revokeAllSessionsForUserTx(tx, row.userId, "logout");
+      await this.revokeAllSessionsForUserTx(tx, companyId, row.userId, "logout");
       await this.audit.record(tx, {
         action: "auth.logout",
         objectType: "auth",
@@ -987,6 +995,10 @@ export class AuthService {
         .update(userSessions)
         .set({ revokedAt: new Date(), revokedBy: userId, revokedReason: "self_revoke" })
         .where(eq(userSessions.id, sessionId));
+      // S7-CHAT-BE-GATE-3: cắt socket của user. Không map được socket→session (socket chỉ mang userId),
+      // nên cắt TẤT CẢ rồi để thiết bị còn phiên hợp lệ tự reconnect — mất realtime vài giây ở thiết bị
+      // đang dùng còn hơn để thiết bị vừa bị thu hồi tiếp tục nhận nội dung tin nhắn.
+      this.realtime?.severUserSessions(companyId, userId);
       // Fail-closed thật sự: khoá luôn refresh token tương ứng (revoke session KHÔNG chỉ ẩn khỏi list —
       // request refresh KẾ TIẾP bằng token của phiên này PHẢI 401, mirror logout/reuse-detection).
       await tx
@@ -1037,6 +1049,8 @@ export class AuthService {
         .update(userSessions)
         .set({ revokedAt: new Date(), revokedBy: userId, revokedReason: "self_revoke_others" })
         .where(and(eq(userSessions.userId, userId), inArray(userSessions.id, targetIds)));
+      // S7-CHAT-BE-GATE-3: xem ghi chú ở `self_revoke` — cắt tất cả rồi để thiết bị hiện tại reconnect.
+      this.realtime?.severUserSessions(companyId, userId);
 
       const hashes = targets.map((t) => t.refreshTokenHash);
       await tx
@@ -1364,7 +1378,7 @@ export class AuthService {
         .update(refreshTokens)
         .set({ revokedAt: new Date() })
         .where(and(eq(refreshTokens.userId, row.userId), isNull(refreshTokens.revokedAt)));
-      await this.revokeAllSessionsForUserTx(tx, row.userId, "password_reset");
+      await this.revokeAllSessionsForUserTx(tx, companyId, row.userId, "password_reset");
       await this.audit.record(tx, {
         action: "auth.password_reset",
         objectType: "auth",
@@ -1526,8 +1540,22 @@ export class AuthService {
    * có cột family_id (khác refreshTokens) nên thu hồi theo userId (khớp phạm vi "đăng xuất MỌI phiên" —
    * rộng hơn 1 family nhưng ĐÚNG Ý các nhánh này, KHÔNG hẹp hơn = fail-closed).
    */
+  /**
+   * Thu hồi mọi `user_sessions` còn sống + CẮT mọi phiên WS đang mở.
+   *
+   * ⚠️ ĐIỂM CHỐT DUY NHẤT của việc cắt socket — cả 7 đường thu hồi (đổi mật khẩu · reuse-detected ·
+   * suspended · company-inactive · logout · password-reset · và `revokeAllForUserTx` cho lock/suspend)
+   * đều đi qua đây. CẤM rải `severUserSessions` ra từng call-site: bất biến kiểu này phải chốt ở method
+   * dùng chung, nếu không đường thu hồi thứ 8 thêm sau sẽ lặng lẽ bỏ sót (bài học đã trả giá ở
+   * `S5-TASK-SUBTASK-1` — bất biến phải kèm DANH SÁCH WRITER và chốt ở một chỗ).
+   *
+   * Vì sao cần cắt socket chứ không chỉ revoke ở DB: access token là STATELESS và cổng quyền WS chỉ
+   * chạy lúc handshake ⇒ socket đang mở KHÔNG bao giờ tự biết phiên đã bị thu hồi (xem jsdoc
+   * `RealtimeEmitterService.severUserSessions`).
+   */
   private async revokeAllSessionsForUserTx(
     tx: TenantTx,
+    companyId: string,
     userId: string,
     reason: string,
   ): Promise<void> {
@@ -1535,6 +1563,7 @@ export class AuthService {
       .update(userSessions)
       .set({ revokedAt: new Date(), revokedReason: reason })
       .where(and(eq(userSessions.userId, userId), isNull(userSessions.revokedAt)));
+    this.realtime?.severUserSessions(companyId, userId);
   }
 
   /**
@@ -1550,7 +1579,12 @@ export class AuthService {
    * OUT-OF-SCOPE: access token STATELESS đã cấp còn hiệu lực tối đa ACCESS_TOKEN_TTL_SEC (~900s / ≤15');
    * chặn tức thì hoàn toàn cần denylist theo `jti` (Valkey) — DEFER sang follow-up WO, KHÔNG làm ở đây.
    */
-  async revokeAllForUserTx(tx: TenantTx, userId: string, reason: string): Promise<number> {
+  async revokeAllForUserTx(
+    tx: TenantTx,
+    companyId: string,
+    userId: string,
+    reason: string,
+  ): Promise<number> {
     const [counted] = await tx
       .select({ count: sql<number>`count(*)::int` })
       .from(userSessions)
@@ -1559,7 +1593,7 @@ export class AuthService {
       .update(refreshTokens)
       .set({ revokedAt: new Date() })
       .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
-    await this.revokeAllSessionsForUserTx(tx, userId, reason);
+    await this.revokeAllSessionsForUserTx(tx, companyId, userId, reason);
     return counted?.count ?? 0;
   }
 

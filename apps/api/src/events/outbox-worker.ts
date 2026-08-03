@@ -98,23 +98,53 @@ export class OutboxWorker {
     const dbw = workerDb!;
     // CTE: inner SELECT...FOR UPDATE SKIP LOCKED và UPDATE chung 1 snapshot ⇒ claim atomic, không
     // double-claim dưới đồng thời (review G2: `UPDATE...WHERE id IN (subquery SKIP LOCKED)` có thể rò).
+    //
+    // ⚠️ S7-INT-OUTBOX-FIFO-1 (KI-059) — `ORDER BY` trong CTE `claimed` chỉ quyết định HÀNG NÀO được
+    // claim; nó KHÔNG định thứ tự hàng của `RETURNING`. Thứ tự đó do planner sinh, nên bản cũ (UPDATE
+    // là câu ngoài cùng) giao event cho consumer theo thứ tự tuỳ ý — đo thật trên lane: gieo seq 0..11
+    // nhận về [0,8,10,7,6,11,5,2,1,4,3,9]. Bảng nhỏ thì plan tình cờ ra đúng FIFO ⇒ chạy cô lập là
+    // XANH, chỉ lộ dưới tải, dạng hỏng-im-lặng ở mọi consumer phụ thuộc thứ tự.
+    //
+    // Vá: bọc UPDATE vào CTE thứ hai rồi `SELECT … ORDER BY` ở NGOÀI CÙNG — đây là chỗ DUY NHẤT
+    // Postgres bảo đảm thứ tự. CẤM thay bằng sort ở tầng JS: làm vậy chỉ che triệu chứng ở đường này
+    // và người sau thêm đường claim mới sẽ dính lại. CẤM bỏ `FOR UPDATE SKIP LOCKED`.
+    // Tie-break `created_at, id` có ở CẢ HAI vế: vế trong để TẬP hàng được claim là tất định khi
+    // `available_at` bằng nhau, vế ngoài để thứ tự giao là tất định.
+    //
+    // ⚠️ PHẠM VI BẢO ĐẢM — nói CHÍNH XÁC vì người sau sẽ dựa vào câu này:
+    // bảo đảm chỉ có hiệu lực **trong MỘT lô claim của MỘT worker**. Ba chỗ nó KHÔNG với tới:
+    //   1. Trong CÙNG một transaction: `available_at`/`created_at` đều mặc định `now()` = mốc BẮT ĐẦU
+    //      TRANSACTION ⇒ nhiều event enqueue cùng tx bằng nhau ở CẢ HAI cột, tie-break rơi xuống `id`
+    //      = UUID ngẫu nhiên. Thứ tự trong-tx là tất định-theo-tập nhưng KHÔNG phải thứ tự enqueue.
+    //   2. Sau RETRY: `finalizeStatus` đẩy `available_at = now() + backoff` ⇒ event lỗi được giao SAU
+    //      những event sinh sau nó. Đây là đánh đổi CÓ CHỦ ĐÍCH của backoff, không phải lỗi.
+    //   3. Đa-instance: hai worker claim hai tập RỜI NHAU đồng thời — không có thứ tự chéo-worker nào.
+    // Muốn thứ tự toàn cục đúng tuyệt đối cần cột đơn điệu (bigserial) + đổi hợp đồng đọc ⇒ WO RIÊNG,
+    // đừng vá lén ở đây. Consumer nào cần thứ tự mạnh hơn phải tự chốt bằng dữ liệu trong payload.
     const res = await dbw.execute(sql`
       WITH claimed AS (
         SELECT id FROM outbox_events
         WHERE status = 'pending' AND available_at <= now()
-        ORDER BY available_at
+        ORDER BY available_at, created_at, id
         FOR UPDATE SKIP LOCKED
         LIMIT ${batchSize}
+      ),
+      updated AS (
+        UPDATE outbox_events SET status = 'processing', updated_at = now()
+        WHERE id IN (SELECT id FROM claimed)
+        RETURNING id, company_id, event_type, payload, attempts, available_at, created_at
       )
-      UPDATE outbox_events SET status = 'processing', updated_at = now()
-      WHERE id IN (SELECT id FROM claimed)
-      RETURNING id, company_id, event_type, payload, attempts
+      SELECT id, company_id, event_type, payload, attempts
+      FROM updated
+      ORDER BY available_at, created_at, id
     `);
     return res.rows.map((r) => {
       const row = r as Record<string, unknown>;
       if (row.payload == null) {
         // payload NOT NULL ở schema; null = vi phạm toàn vẹn dữ liệu → ném (không nuốt bằng `?? {}`).
-        throw new Error(`outbox event ${String(row.id)} có payload null — vi phạm toàn vẹn dữ liệu.`);
+        throw new Error(
+          `outbox event ${String(row.id)} có payload null — vi phạm toàn vẹn dữ liệu.`,
+        );
       }
       return {
         id: row.id as string,

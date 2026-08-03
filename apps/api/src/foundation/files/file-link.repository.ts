@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { TenantTx } from "../../db/db.service";
 import { fileLinks, type FileLink, type NewFileLink } from "../../db/schema/files";
 
@@ -36,6 +36,23 @@ export class FileLinkRepository {
       )
       .limit(1);
     return row;
+  }
+
+  /**
+   * S7-FND-LINKFALLBACK-1 — tệp này ĐÃ TỪNG thuộc về một module chưa (kể cả link đã gỡ)?
+   *
+   * ⚠️ CỐ Ý **KHÔNG** lọc `deleted_at` — đó là toàn bộ mục đích của hàm. `listByFileTx` ngay dưới chỉ
+   * trả link SỐNG; khi nó trả rỗng thì `decideForLinkedFile` không phân biệt được "chưa bao giờ có
+   * module nào sở hữu" với "đã bị gỡ khỏi module", mà hai ca đó phải cho hai phán quyết NGƯỢC NHAU.
+   * Gỡ link là THU HỒI; rơi xuống fallback `FOUNDATION.FILE.*` biến nó thành MỞ RỘNG quyền.
+   */
+  async hasEverBeenLinkedTx(companyId: string, fileId: string, tx: TenantTx): Promise<boolean> {
+    const [row] = await tx
+      .select({ one: sql<number>`1` })
+      .from(fileLinks)
+      .where(and(eq(fileLinks.companyId, companyId), eq(fileLinks.fileId, fileId)))
+      .limit(1);
+    return row !== undefined;
   }
 
   /** Liệt kê link chưa gỡ của 1 file (cho FileMetadataDto.links eager-load). RLS-scoped. */

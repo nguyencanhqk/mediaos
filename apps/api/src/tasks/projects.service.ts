@@ -756,10 +756,27 @@ export class ProjectsService {
 
       // S7-CHAT-BE-5 (W7) — THU HỒI, KHÔNG bọc SAVEPOINT: lỗi phải abort cả tx này để `project_members`
       // quay về nguyên trạng. Nửa vời ("đã gỡ khỏi dự án nhưng còn trong phòng chat") là trạng thái cấm.
-      await this.chatSync.syncUserDerivedMembershipTx(tx, user.companyId, member.userId, {
-        kind: "system",
-        userId: user.id,
-      });
+      //
+      // ⚠️ S7-CHAT-BE-GATE-3 (L5 HIGH) — ĐỒNG BỘ THEO CẢ HAI DANH TÍNH, không chỉ `member.userId`.
+      // `desiredProjectPairsSql` tính thành viên phòng chat qua `pm.employee_id → employee_profiles.user_id`,
+      // trong khi `member.userId` là `project_members.user_id` — cột LEGACY, không có FK/CHECK nào ghim hai
+      // cột với nhau. Chúng lệch nhau bằng đường HR đang sống: `unlinkUser(E)` rồi `linkUser(E, V)` đổi
+      // `employee_profiles.user_id` sang V mà KHÔNG chạm `pm.user_id` (vẫn là U). Khi đó đồng bộ theo cột
+      // legacy thu hẹp `AND m.user_id = U` ⇒ 0 hàng ⇒ V bị gỡ khỏi dự án nhưng VẪN đọc/gửi trong phòng chat
+      // dự án tới nhịp job (15 phút), và VĨNH VIỄN nếu `WORKERS_SCHEDULER_ENABLED=false`.
+      //
+      // Hai lời gọi chứ không phải thay thế: hàng legacy có `employee_id` NULL thì chỉ `member.userId` mới
+      // là danh tính có thật. Gọi dư một lần là no-op rẻ; gọi thiếu là lỗ quyền đọc.
+      const derivedUserId = member.employeeId
+        ? await this.repo.findEmployeeUserByIdTx(tx, user.companyId, member.employeeId)
+        : null;
+      const syncTargets = [...new Set([derivedUserId, member.userId].filter(Boolean))] as string[];
+      for (const targetUserId of syncTargets) {
+        await this.chatSync.syncUserDerivedMembershipTx(tx, user.companyId, targetUserId, {
+          kind: "system",
+          userId: user.id,
+        });
+      }
     });
   }
 

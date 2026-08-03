@@ -214,7 +214,14 @@ export type ListChatMessagesQuery = z.infer<typeof listChatMessagesQuerySchema>;
  * thiết bị chậm không được kéo lùi trạng thái của thiết bị nhanh.
  */
 export const chatMarkReadSchema = z.object({
-  seq: z.number().int().nonnegative(),
+  /**
+   * Trần `MAX_SAFE_INTEGER` là ĐAI THỨ HAI, không phải trang trí: `.int()` của Zod chỉ gọi
+   * `Number.isInteger`, mà `Number.isInteger(1e300) === true`. Không có trần thì `1e300` đi thẳng xuống
+   * bind bigint và ném `22003` ⇒ 500. Kẹp ở biên bằng chính giới hạn an toàn của JS number, vẫn nhỏ hơn
+   * trần bigint của Postgres ⇒ không đường nào tràn. Giá trị hợp lệ nhưng lớn hơn số tin thật vẫn được
+   * SQL kẹp về `last_message_seq` và trả 200 (đúng thiết kế con-trỏ-chỉ-tiến), KHÔNG phải 400.
+   */
+  seq: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
 });
 export type ChatMarkReadRequest = z.infer<typeof chatMarkReadSchema>;
 

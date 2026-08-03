@@ -1,0 +1,136 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { LoggerAlertSink } from "../../src/events/alert.service";
+import { EventBus } from "../../src/events/event-bus";
+import { OutboxWorker } from "../../src/events/outbox-worker";
+import { directPool, hasDb } from "../helpers/integration-db";
+import { cleanupTenants, seedCompany, type SeededTenant } from "../helpers/seed";
+
+/**
+ * S7-INT-OUTBOX-FIFO-1 (KI-059) — `OutboxWorker.claim()` phải giao event cho consumer THEO ĐÚNG
+ * thứ tự `available_at` trong CÙNG một lô claim.
+ *
+ * Vì sao lỗi tồn tại được lâu: `ORDER BY` nằm trong CTE `claimed` chỉ quyết định **hàng nào** được
+ * claim, KHÔNG quyết định thứ tự hàng của `RETURNING` ở câu `UPDATE` bọc ngoài — thứ tự đó do planner
+ * sinh. Bảng nhỏ thì plan tình cờ ra đúng FIFO ⇒ chạy cô lập là XANH, chỉ lộ dưới tải, dạng hỏng-im-lặng.
+ *
+ * ══ HAI RÀNG BUỘC VỆ SINH — đọc trước khi sửa spec này ══
+ * `outbox_events` là bảng CHUNG và claim dùng `FOR UPDATE SKIP LOCKED` **không lọc tenant**, trong khi
+ * vitest chạy các file int-spec SONG SONG trên cùng một lane DB. Hai chiều hỏng, cả hai đã có tiền lệ
+ * trên master (xem `test/helpers/outbox-drain.ts` — CI đỏ 2 lần liên tiếp 2026-07-15):
+ *
+ *  (1) BỊ CƯỚP — worker của spec khác claim probe của mình trước ⇒ `received` thiếu. Giảm thiểu: probe
+ *      KHÔNG được là hàng già nhất DB (`ORDER BY available_at` khiến hàng già bị nhặt trước, tất định),
+ *      nên gieo `available_at` chỉ lùi vài trăm ms thay vì 1 giờ. Còn sót thì bước (3) bắt và nói rõ lý do.
+ *  (2) ĐI CƯỚP — `processEvent` gặp event KHÔNG có consumer trong bus của mình sẽ đánh `'done'`, TERMINAL
+ *      và IM LẶNG (`outbox-worker.ts` nhánh `consumers.length === 0`) ⇒ nuốt mất event của spec khác.
+ *      Giảm thiểu: batch đúng bằng số probe (không phải 50), và bước (4) TRẢ LẠI mọi event đã bị đánh
+ *      `'done'` mà không có dòng `processed_events` nào — tức thứ mình lỡ nuốt chứ không xử lý.
+ *
+ * Đòn bẩy RED là **chèn ngược**: `available_at` tăng dần nhưng thứ tự chèn là nghịch đảo, nên thứ tự vật
+ * lý trong heap ngược với thứ tự logic. Plan nào trả theo thứ tự heap (bitmap heap scan, hash semi-join)
+ * sẽ lộ ngay — và seq scan chính là plan phơi bug rõ nhất, hàng nhiễu ở đây chỉ để bảng không nhỏ tới mức
+ * mọi plan đều trùng nhau. KHÔNG assert planner chọn gì (memory: pg-planner-index-assert-trap) — chỉ
+ * assert HÀNH VI thứ tự consumer thực sự nhận được.
+ */
+describe.skipIf(!hasDb)("S7-INT-OUTBOX-FIFO-1 — outbox dispatch đúng thứ tự (KI-059)", () => {
+  const direct = directPool();
+  const EVENT_TYPE = "fifo.probe";
+  const NOISE_TYPE = "fifo.noise";
+  const CONSUMER = "fifo-probe-consumer";
+  const N = 12;
+  let A: SeededTenant;
+
+  const purgeProbes = () =>
+    direct
+      .query(
+        `DELETE FROM dead_letter_events WHERE event_id IN
+           (SELECT id FROM outbox_events WHERE event_type IN ($1, $2))`,
+        [EVENT_TYPE, NOISE_TYPE],
+      )
+      .then(() =>
+        direct.query(
+          `DELETE FROM processed_events WHERE event_id IN
+             (SELECT id FROM outbox_events WHERE event_type IN ($1, $2))`,
+          [EVENT_TYPE, NOISE_TYPE],
+        ),
+      )
+      .then(() =>
+        direct.query("DELETE FROM outbox_events WHERE event_type IN ($1, $2)", [
+          EVENT_TYPE,
+          NOISE_TYPE,
+        ]),
+      );
+
+  beforeAll(async () => {
+    A = await seedCompany(direct, "obfifo");
+    // Rác của lượt chạy TRƯỚC bị crash: probe kẹt 'processing' quá 5 phút sẽ được reaper NGAY TRONG
+    // `processBatch` trả về 'pending' rồi claim luôn ⇒ `received` dài hơn N, đỏ khó hiểu.
+    await purgeProbes();
+  });
+
+  afterAll(async () => {
+    await purgeProbes();
+    await cleanupTenants(direct, [A.companyId]);
+    await direct.end();
+  });
+
+  it("consumer nhận event theo đúng thứ tự available_at, dù thứ tự chèn là NGƯỢC", async () => {
+    for (let i = 0; i < 200; i++) {
+      await direct.query(
+        `INSERT INTO outbox_events (company_id, event_type, payload, status, available_at)
+         VALUES ($1, $2, '{}'::jsonb, 'done', now() - interval '2 hours')`,
+        [A.companyId, NOISE_TYPE],
+      );
+    }
+
+    // seq 0..N-1 `available_at` TĂNG DẦN nhưng CHÈN từ N-1 về 0 ⇒ heap order = nghịch đảo.
+    // Lùi tối đa ~600ms: đủ để `available_at <= now()`, KHÔNG đủ già để thành mồi ngon cho worker khác.
+    for (let seq = N - 1; seq >= 0; seq--) {
+      await direct.query(
+        `INSERT INTO outbox_events (company_id, event_type, payload, status, available_at)
+         VALUES ($1, $2, $3::jsonb, 'pending', now() - make_interval(secs => $4::float8))`,
+        [A.companyId, EVENT_TYPE, JSON.stringify({ seq }), (N - seq) * 0.05],
+      );
+    }
+
+    const received: number[] = [];
+    const bus = new EventBus();
+    bus.register({
+      consumerName: CONSUMER,
+      eventType: EVENT_TYPE,
+      handle: async (ctx) => {
+        received.push((ctx.payload as { seq: number }).seq);
+      },
+    });
+
+    const { rows: before } = await direct.query<{ t: Date }>("SELECT now() AS t");
+    // Batch ĐÚNG bằng N — không phải 50. Cận trên chặt là thứ giới hạn thiệt hại nếu có event lạ lọt vào lô.
+    await new OutboxWorker(bus, new LoggerAlertSink()).processBatch(N);
+
+    // (4) TRẢ LẠI thứ đã lỡ nuốt: event bị đánh terminal trong cửa sổ của mình mà KHÔNG consumer nào
+    // ghi `processed_events` = event của spec khác, bus của mình không có consumer cho nó.
+    const { rowCount: stolen } = await direct.query(
+      `UPDATE outbox_events SET status = 'pending', available_at = now(), updated_at = now()
+         WHERE status = 'done' AND event_type <> $1 AND updated_at >= $2
+           AND NOT EXISTS (SELECT 1 FROM processed_events pe WHERE pe.event_id = outbox_events.id)`,
+      [EVENT_TYPE, before[0].t],
+    );
+    if (stolen) console.warn(`[outbox-fifo] đã trả lại ${stolen} event claim nhầm của spec khác`);
+
+    // (3) Phân biệt "vá hỏng" với "bị spec khác cướp probe" — nếu không, lỗi thứ hai hiện ra dưới dạng
+    // lệch length và người đọc sẽ đi sửa nhầm chỗ.
+    const { rows: mine } = await direct.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM outbox_events o
+         JOIN processed_events pe ON pe.event_id = o.id AND pe.consumer_name = $2
+        WHERE o.event_type = $1`,
+      [EVENT_TYPE, CONSUMER],
+    );
+    expect(
+      Number(mine[0].n),
+      "probe bị worker của spec khác claim mất — KHÔNG phải lỗi thứ tự; chạy lại cô lập file này",
+    ).toBe(N);
+
+    expect(received).toHaveLength(N);
+    expect(received).toEqual(Array.from({ length: N }, (_, i) => i));
+  });
+});

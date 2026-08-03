@@ -207,9 +207,8 @@ export class ChatAttachmentPresignService {
     if (!isAttachableFile(row)) return null;
 
     try {
-      // 0 link = tệp đã rời mọi entity ⇒ KHÔNG ký. `decideForLinkedFile` với `links=[]` rơi xuống nhánh
-      // foundation-owned ⇒ fallback `FOUNDATION.FILE.DOWNLOAD`, tức là **bỏ qua** resolver CHAT. Chặn
-      // thẳng ở đây là đai thứ hai cho đúng lỗ mà việc "giữ link sống khi thu hồi" đã đóng ở tầng ghi.
+      // 0 link = tệp đã rời mọi entity ⇒ KHÔNG ký. Giữ đai này dù `S7-FND-LINKFALLBACK-1` đã vá lỗ ở
+      // tầng policy: đây là đường ký của CHAT, chặn sớm thì rẻ hơn và không phụ thuộc cờ do caller truyền.
       if (links.length === 0) return null;
       const decision = await this.policy.decideForLinkedFile(
         {
@@ -223,11 +222,29 @@ export class ChatAttachmentPresignService {
         },
         links,
         FilePolicyAction.Download,
+        // `everLinked` chỉ được policy dùng khi `links` RỖNG — mà đường này đã chặn 0-link ở trên nên
+        // không bao giờ tới đó. Truyền `true` để nếu ai gỡ đai kia thì hành vi rơi về FAIL-CLOSED
+        // (deny-links-revoked) chứ không phải mở fallback FOUNDATION.FILE.*.
+        true,
       );
       if (!decision.allow) {
         // Không log ồn cho đường từ chối THƯỜNG GẶP (`deny-resolver` = không phải thành viên nữa).
         // `deny-no-resolver` thì ngược lại: đó là dấu hiệu resolver rơi khỏi đăng ký ⇒ tính năng chết
         // trong im lặng, phải kêu.
+        // S7-CHAT-BE-GATE-3 (L4 HIGH) — từ chối do LINK KHÁC, không phải do tin đang đọc.
+        // Ca thật: chủ tệp gửi LẠI cùng tệp sang phòng thứ hai ⇒ tệp có 2 link `chat_message`; luật AND
+        // khiến người ở phòng A (không thuộc phòng B) mất `url` NGAY TẠI PHÒNG A. Trước đây câm hoàn
+        // toàn: người dùng thấy tên + kích thước, bấm tải không được, 0 lỗi, 0 log, không cách nào chẩn.
+        // KHÔNG hạ luật AND để "sửa" — xem ghi chú ở đầu lớp: nới nó là mở đường leo thang.
+        const blocker = decision.deniedByLink;
+        if (blocker && blocker.entityId !== row.messageId) {
+          this.logger.warn(
+            `chat attachment presign denied bởi LINK KHÁC: file=${row.fileId} ` +
+              `tin đang đọc=${row.messageId} nhưng bị chặn tại ` +
+              `${blocker.moduleCode}/${blocker.entityType}/${blocker.entityId} — ` +
+              `tệp đang được dùng ở nhiều nơi, người này không đủ quyền ở TẤT CẢ.`,
+          );
+        }
         if (decision.reason === "deny-no-resolver" || decision.reason === "deny-error") {
           this.logger.error(
             `chat attachment presign denied: reason=${decision.reason} file=${row.fileId} ` +

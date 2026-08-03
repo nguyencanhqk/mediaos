@@ -545,6 +545,43 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-2 — tin nhắn (DB cô lập, đườn
     expect(detail.body.data.unreadCount, "tin mới sau khi đã đọc phải hiện chưa đọc").toBe(1);
   });
 
+  /**
+   * FULL gate S7-CHAT-BE-GATE-3 (L3 H-1) — `seq` lớn phải KẸP TRẦN, không được 500.
+   *
+   * `advanceLastReadSeq` từng ép `LEAST(${wanted}::int, ${ceiling}::int)`, trong khi `last_read_seq` /
+   * `room_seq` / `last_message_seq` đều là **bigint**. Mọi `seq >= 2^31` ném `22003 integer out of range`
+   * ⇒ HTTP 500, tức đúng cái trần mà jsdoc hứa bị vô hiệu. Idiom FE "mark-all-read gửi sentinel lớn" rơi
+   * thẳng vào đây, mà ca 17+18 chỉ thử `seq: 999` nên lưới hoàn toàn mù. typecheck + unit test cũng mù —
+   * chỉ int-spec chạm DB thật mới bắt được (cùng lớp `drizzle-array-bind-sql-param`).
+   */
+  it("ca 18b: /read với seq ≥ 2^31 và sentinel MAX_SAFE_INTEGER ⇒ 200 kẹp trần, KHÔNG 500", async () => {
+    const r = await newRoom("Phòng sentinel");
+    for (let i = 0; i < 3; i += 1) await send(tAdmin, r, `tin ${i}`);
+
+    // Ngay trên biên int4 — giá trị nhỏ hơn 1 đơn vị (2^31 - 1) vẫn chạy được trên code CŨ, nên biên
+    // này mới là chỗ phân định; thử 2^31 - 1 thì ca sẽ xanh trên cả code hỏng.
+    const atBoundary = await authPost(tMember, `/chat/rooms/${r}/read`).send({ seq: 2 ** 31 });
+    expect(atBoundary.status, "2^31 phải kẹp trần, không được 500").toBe(200);
+    expect(atBoundary.body.data.lastReadSeq).toBe(3);
+
+    // Sentinel thật sự mà FE hay dùng cho "đánh dấu đọc hết".
+    const sentinel = await authPost(tMember, `/chat/rooms/${r}/read`).send({
+      seq: Number.MAX_SAFE_INTEGER,
+    });
+    expect(sentinel.status).toBe(200);
+    expect(sentinel.body.data.lastReadSeq).toBe(3);
+
+    // Vượt trần an toàn của JS number ⇒ chặn ở BIÊN (400), không để rơi xuống bind bigint rồi 22003.
+    const absurd = await authPost(tMember, `/chat/rooms/${r}/read`).send({ seq: 1e300 });
+    expect(absurd.status, "giá trị ngoài MAX_SAFE_INTEGER phải bị chặn ở validation").toBe(400);
+
+    const db = await direct.query(
+      "SELECT last_read_seq FROM chat_room_members WHERE room_id = $1 AND user_id = $2",
+      [r, uMember],
+    );
+    expect(Number(db.rows[0].last_read_seq), "con trỏ không được vượt số tin thật").toBe(3);
+  });
+
   it("ca 19: tin của CHÍNH MÌNH tự nâng con trỏ đọc trong cùng tx — unread của người gửi = 0", async () => {
     const r = await newRoom("Phòng tự nâng");
     await send(tAdmin, r, "tin của tôi");

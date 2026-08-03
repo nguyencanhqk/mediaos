@@ -376,6 +376,7 @@ describe("FilePolicyService", () => {
         foundationInput(),
         [],
         FilePolicyAction.Download,
+        false,
       );
       expect(decision.allow).toBe(true);
       expect(decision.reason).toBe("allow-foundation");
@@ -389,9 +390,48 @@ describe("FilePolicyService", () => {
         foundationInput(),
         [],
         FilePolicyAction.View,
+        false,
       );
       expect(decision.allow).toBe(false);
       expect(decision.reason).toBe("deny-foundation");
+    });
+
+    /**
+     * S7-FND-LINKFALLBACK-1 — "0 link sống" có HAI nghĩa và phải cho hai phán quyết NGƯỢC NHAU.
+     *
+     * Ca này dùng fallback CẤP QUYỀN (`grantDecision`) làm đòn bẩy: nếu bản vá hỏng thì nhánh fallback
+     * chạy và trả `allow: true`, nên ca đỏ ngay chứ không đỏ mơ hồ. Đây là lỗ mà `gỡ link = MỞ RỘNG
+     * quyền` — company-admin giữ `download:foundation-file` qua bulk grant 0435.
+     */
+    it("🔒 đã TỪNG có link, nay 0 link sống → deny-links-revoked, KHÔNG rơi xuống fallback đang CẤP quyền", async () => {
+      const grant = makePermissionMock(allowDecision());
+      service = new FilePolicyService(grant.service);
+      const decision = await service.decideForLinkedFile(
+        foundationInput(),
+        [],
+        FilePolicyAction.Download,
+        true,
+      );
+      expect(decision.allow).toBe(false);
+      expect(decision.reason).toBe("deny-links-revoked");
+      // Fallback KHÔNG được hỏi tới — hỏi rồi mới bỏ qua vẫn là sai kiến trúc (và tốn 1 lượt can()).
+      expect(grant.calls).toHaveLength(0);
+    });
+
+    it("CHƯA BAO GIỜ có link (foundation-owned thật) → GIỮ NGUYÊN fallback — vế đối chứng", async () => {
+      // Thiếu ca này thì bản vá trên có thể chặn nhầm MỌI tệp foundation mà không ai biết: cả hai ca
+      // đều đi vào nhánh `links.length === 0`, chỉ khác đúng một cờ.
+      const grant = makePermissionMock(allowDecision());
+      service = new FilePolicyService(grant.service);
+      const decision = await service.decideForLinkedFile(
+        foundationInput(),
+        [],
+        FilePolicyAction.Download,
+        false,
+      );
+      expect(decision.allow).toBe(true);
+      expect(decision.reason).toBe("allow-foundation");
+      expect(grant.calls).toHaveLength(1);
     });
 
     it("≥1 link whose (module,entity) has NO registered resolver → deny-no-resolver, NEVER fallback", async () => {
@@ -407,6 +447,7 @@ describe("FilePolicyService", () => {
         foundationInput(),
         links,
         FilePolicyAction.Download,
+        true,
       );
       expect(decision.allow).toBe(false);
       expect(decision.reason).toBe("deny-no-resolver");
@@ -426,6 +467,7 @@ describe("FilePolicyService", () => {
         foundationInput(),
         links,
         FilePolicyAction.Download,
+        true,
       );
       expect(decision.allow).toBe(true);
       expect(decision.reason).toBe("allow-resolver");
@@ -446,6 +488,7 @@ describe("FilePolicyService", () => {
         foundationInput(),
         links,
         FilePolicyAction.Download,
+        true,
       );
       expect(decision.allow).toBe(false);
       expect(decision.reason).toBe("deny-resolver");
@@ -458,6 +501,7 @@ describe("FilePolicyService", () => {
         foundationInput(),
         links,
         FilePolicyAction.Download,
+        true,
       );
       expect(decision.allow).toBe(false);
       expect(decision.reason).toBe("deny-error");
@@ -470,6 +514,7 @@ describe("FilePolicyService", () => {
         baseInput({ companyId: "", moduleCode: "FOUNDATION", entityType: "File" }),
         links,
         FilePolicyAction.Download,
+        true,
       );
       expect(decision.allow).toBe(false);
       expect(decision.reason).toBe("deny-tenant");
@@ -505,6 +550,7 @@ describe("FilePolicyService", () => {
         foundationInput(),
         [{ moduleCode: "HR", entityType: "contract", entityId: "c1" }],
         FilePolicyAction.Download,
+        true,
       );
       expect(decision).toEqual({ allow: true, reason: "allow-resolver" });
       expect(hr.calls).toEqual(["download:contract"]); // dispatched on the link's OWN lowercase entity
@@ -520,8 +566,9 @@ describe("FilePolicyService", () => {
         foundationInput(),
         [{ moduleCode: "HR", entityType: "contract", entityId: "c1" }],
         FilePolicyAction.Download,
+        true,
       );
-      expect(decision).toEqual({ allow: false, reason: "deny-resolver" });
+      expect(decision).toMatchObject({ allow: false, reason: "deny-resolver" });
       expect(grant.calls).toHaveLength(0);
     });
 
@@ -535,8 +582,9 @@ describe("FilePolicyService", () => {
         foundationInput(),
         [{ moduleCode: "HR", entityType: "EmployeeContract", entityId: "c1" }],
         FilePolicyAction.Download,
+        true,
       );
-      expect(decision).toEqual({ allow: false, reason: "deny-no-resolver" });
+      expect(decision).toMatchObject({ allow: false, reason: "deny-no-resolver" });
       expect(grant.calls).toHaveLength(0); // must NOT fall back to a broad file grant
     });
   });

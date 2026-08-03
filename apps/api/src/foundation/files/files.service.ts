@@ -378,13 +378,12 @@ export class FileService {
 
     // S2-FND-BE-4 (H1): load links BEFORE the decision — a module-owned file must be authorized by its
     // owning module's resolver (link-aware), not the FOUNDATION.FILE.* fallback (deny-no-resolver otherwise).
-    const links = await this.db.withTenant(user.companyId, (tx) =>
-      this.linkRepo.listByFileTx(user.companyId, fileId, tx),
-    );
+    const { links, everLinked } = await this.loadLinkContext(user, fileId);
     const decision = await this.policy.decideForLinkedFile(
       this.policyInputForFile(user, fileId, FilePolicyAction.View),
       links.map((l) => this.toLinkRef(l)),
       FilePolicyAction.View,
+      everLinked,
     );
     if (!decision.allow) {
       await this.logDeny(user, {
@@ -443,13 +442,12 @@ export class FileService {
 
     // S2-FND-BE-4 (H1): link-aware authorization — a module-owned file with no registered resolver is
     // fail-closed (deny-no-resolver); foundation-owned (0-link) keeps the FOUNDATION.FILE.* fallback.
-    const links = await this.db.withTenant(user.companyId, (tx) =>
-      this.linkRepo.listByFileTx(user.companyId, fileId, tx),
-    );
+    const { links, everLinked } = await this.loadLinkContext(user, fileId);
     const decision = await this.policy.decideForLinkedFile(
       this.policyInputForFile(user, fileId, FilePolicyAction.Download),
       links.map((l) => this.toLinkRef(l)),
       FilePolicyAction.Download,
+      everLinked,
     );
     if (!decision.allow) {
       await this.logDeny(user, {
@@ -730,13 +728,12 @@ export class FileService {
     // S2-FND-BE-4 (H1): deleting a module-owned file is also link-aware (fail-closed no-resolver). A
     // module-owned file cannot be deleted through the foundation surface until its module registers a
     // resolver — orphaned-file cleanup is the owning module's responsibility (S2-FND-BE-5+).
-    const links = await this.db.withTenant(user.companyId, (tx) =>
-      this.linkRepo.listByFileTx(user.companyId, fileId, tx),
-    );
+    const { links, everLinked } = await this.loadLinkContext(user, fileId);
     const decision = await this.policy.decideForLinkedFile(
       this.policyInputForFile(user, fileId, FilePolicyAction.Delete),
       links.map((l) => this.toLinkRef(l)),
       FilePolicyAction.Delete,
+      everLinked,
     );
     if (!decision.allow) {
       await this.logDeny(user, {
@@ -913,6 +910,27 @@ export class FileService {
    * Dựng FilePermissionInput cho thao tác trên 1 file foundation-owned (module=FOUNDATION, entity=File,
    * entityId=fileId) — fallback FOUNDATION.FILE.* khi không có resolver module.
    */
+  /**
+   * S7-FND-LINKFALLBACK-1 — nạp NGỮ CẢNH LINK cho một quyết định FilePolicy: link SỐNG + cờ "đã từng có
+   * link module".
+   *
+   * Hai truy vấn trong CÙNG một `withTenant` (không phải hai lần mở tx): chúng phải nhìn CÙNG một ảnh
+   * chụp. Tách ra hai tx thì có cửa sổ mà link cuối bị gỡ ở giữa ⇒ `links` rỗng nhưng `everLinked` đọc
+   * trước khi gỡ trả `false` ⇒ rơi xuống fallback FOUNDATION.FILE.* đúng lúc vừa bị thu hồi.
+   *
+   * Gom về một chỗ cho cả 3 đường (View/Download/Delete) để không có đường nào lỡ quên cờ — đây là loại
+   * bất biến phải chốt ở method dùng chung, không rải theo từng route.
+   */
+  private async loadLinkContext(
+    user: RequestUser,
+    fileId: string,
+  ): Promise<{ links: FileLink[]; everLinked: boolean }> {
+    return this.db.withTenant(user.companyId, async (tx) => ({
+      links: await this.linkRepo.listByFileTx(user.companyId, fileId, tx),
+      everLinked: await this.linkRepo.hasEverBeenLinkedTx(user.companyId, fileId, tx),
+    }));
+  }
+
   private policyInputForFile(
     user: RequestUser,
     fileId: string,

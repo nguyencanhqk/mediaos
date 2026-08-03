@@ -468,6 +468,50 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-5 — phòng dẫn xuất (DB cô lập,
       expect(await isActiveMember(roomD, uid), "phòng ban vẫn nguyên").toBe(true);
     });
 
+    /**
+     * FULL gate S7-CHAT-BE-GATE-3 (L5 HIGH) — `removeMember` phải thu hồi theo danh tính mà VỊ TỪ dùng.
+     *
+     * `desiredProjectPairsSql` tính thành viên phòng qua `pm.employee_id → employee_profiles.user_id`,
+     * còn `removeMemberCore` từng đồng bộ theo `pm.user_id` — cột LEGACY, không FK/CHECK nào ghim hai cột.
+     * Ca 10 ở trên KHÔNG bắt được vì `addMember` tự đặt `pm.user_id = emp.userId` nên hai danh tính luôn
+     * trùng; phải làm chúng LỆCH bằng đường HR đang sống (unlink rồi link sang user khác) mới lộ.
+     *
+     * Hỏng thì: V bị gỡ khỏi dự án nhưng vẫn đọc/gửi trong phòng chat dự án tới nhịp job (15 phút), và
+     * VĨNH VIỄN nếu `WORKERS_SCHEDULER_ENABLED=false` — đúng cửa sổ mà chính sách LOUD sinh ra để bằng 0.
+     */
+    it("ca 10b — pm.user_id LỆCH employee_profiles.user_id: removeMember vẫn phải đuổi ĐÚNG người", async () => {
+      const uOld = await seedUser(direct, A.companyId, `drift-old-${Date.now()}@${A.slug}.test`);
+      const uNew = await seedUser(direct, A.companyId, `drift-new-${Date.now()}@${A.slug}.test`);
+      const empId = await seedEmployee(A.companyId, { userId: uOld });
+
+      const detail = await projects.createProject(actor, { name: `Drift ${Date.now()}` } as never);
+      const roomP = (await roomOfProject(detail.id))!.id as string;
+
+      const member = await projects.addMember(actor, detail.id, {
+        employeeId: empId,
+        projectRole: "Member",
+      } as never);
+      expect(await isActiveMember(roomP, uOld), "người cũ vào phòng").toBe(true);
+
+      // Làm hai danh tính LỆCH: hồ sơ đổi sang user MỚI, `project_members.user_id` vẫn giữ user CŨ.
+      await hrWrite.unlinkUser(actor, empId, { lockUser: false } as never);
+      await hrWrite.linkUser(actor, empId, { userId: uNew });
+      expect(await isActiveMember(roomP, uNew), "người mới vào phòng theo vị từ employee_id").toBe(
+        true,
+      );
+
+      const pm = await direct.query("SELECT user_id FROM project_members WHERE id = $1", [
+        member.id,
+      ]);
+      expect(pm.rows[0].user_id, "tiền đề của ca: cột legacy KHÔNG được cập nhật theo").toBe(uOld);
+
+      await projects.removeMember(actor, detail.id, member.id);
+      expect(
+        await isActiveMember(roomP, uNew),
+        "người đang thực sự ở trong phòng phải bị đuổi — thu hồi theo cột legacy là no-op",
+      ).toBe(false);
+    });
+
     it("ca 19 — phòng đích CHƯA tồn tại: rời phòng cũ vẫn xong, vào phòng mới NO-OP êm, writer trả bình thường", async () => {
       const ouOld = await seedOrgUnit(A.companyId, `Old ${Date.now()}`);
       const roomOld = await chatSync.ensureOrgUnitRoom(A.companyId, ouOld, "Old", { kind: "job" });
@@ -647,9 +691,10 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-5 — phòng dẫn xuất (DB cô lập,
            JOIN chat_rooms rm ON rm.id = m.room_id
           WHERE rm.sync_source IN ('department','project')`,
       );
-      expect(total.rows[0].n, "phải có hàng membership thật để phép đếm dưới có nghĩa").toBeGreaterThan(
-        0,
-      );
+      expect(
+        total.rows[0].n,
+        "phải có hàng membership thật để phép đếm dưới có nghĩa",
+      ).toBeGreaterThan(0);
 
       const r = await direct.query(
         `SELECT count(*)::int AS n FROM chat_room_members m
