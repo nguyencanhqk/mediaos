@@ -49,7 +49,10 @@ export default defineConfig({
       "test/**/*.unit-spec.ts",
     ],
     // S6-SEC-DBFENCE-1 (KI-028) — cổng DUY NHẤT chặn suite chạy vào DB PROD. Xem test/global-setup.ts.
-    globalSetup: ["./test/global-setup.ts"],
+    // S7-QA-CATALOGFIXTURE-1 — đai 2 chống fixture đóng dấu catalog `permissions` (toàn cục, không có
+    // company_id nên cleanupTenants không dọn). THỨ TỰ CÓ Ý NGHĨA: db-fence chạy TRƯỚC để mọi kết nối
+    // sau nó đã qua kiểm "đúng lane DB"; catalog-fence chỉ chụp/đối chiếu.
+    globalSetup: ["./test/global-setup.ts", "./test/global-catalog-fence.ts"],
     // DE-MEDIA-FY (CLAUDE.md reframe 2026-06-20 · S1-QA-DEBT-1): test của module OUT-OF-SCOPE — finance
     // theo-kênh (cost/revenue/cost-allocation) + workflow-DAG (content/project/channel lifecycle). Code đã
     // PARK (không phát triển, không xoá đợt này) ⇒ test của chúng fail-giả che phạm vi THẬT của suite.

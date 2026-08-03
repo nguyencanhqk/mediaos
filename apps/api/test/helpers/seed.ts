@@ -184,8 +184,44 @@ export async function seedRole(direct: Pool, companyId: string, name: string): P
 }
 
 /**
- * Seed 1 permission trong catalog (upsert by action+resource_type).
- * Trả về permissionId.
+ * Seed 1 cặp permission trong catalog. **INSERT-ONLY với `is_sensitive`.** Trả về permissionId.
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────────────────
+ * VÌ SAO KHÔNG CÒN UPSERT (S7-QA-CATALOGFIXTURE-1 — đọc trước khi "sửa lại cho tiện")
+ *
+ * `permissions` là catalog **TOÀN CỤC**: không có `company_id`, nên `cleanupTenants()` (xoá theo
+ * `company_id`) KHÔNG BAO GIỜ chạm tới nó. Bản cũ dùng
+ * `ON CONFLICT … DO UPDATE SET is_sensitive = EXCLUDED.is_sensitive` ⇒ một fixture khai lệch MỘT cờ là
+ * **ghi đè VĨNH VIỄN** lên lane DB, và mọi spec chạy sau — trong CÙNG lượt chạy hoặc lượt sau — phải
+ * chịu. CI đặt `LANE_DB: mediaos` (`.github/workflows/api.yml`) nên toàn bộ suite dùng CHUNG một DB:
+ * bán kính sát thương là cả suite, không phải một file.
+ *
+ * Hệ quả không phải lý thuyết. `is_sensitive` là cổng của `getCapabilities()`
+ * (`permission.service.ts`): cặp sensitive bị LỌC khỏi `/auth/me` trừ khi nằm trong
+ * `SENSITIVE_CAPABILITY_ALLOWLIST`. Lật một cặp sản phẩm sang `true` = **đổi hành vi phân quyền của
+ * mọi spec dùng chung DB**.
+ *
+ * Ca thật (2026-08-03): `WRITER_PAIRS` của `chat-be5-derived-rooms.int-spec.ts` khai
+ * `['update','project', …, true]` trong khi catalog chính tắc là `false` (`0005`) ⇒ 3 ca `TASKCAP-P*`
+ * của `auth-me-capabilities.int.spec.ts` — một spec KHÁC, module KHÁC — đi ĐỎ.
+ *
+ * ⚠️ BÀI HỌC PHƯƠNG PHÁP, đây mới là phần đắt: hỏng nằm trong **DB**, không nằm trong code, nên
+ * `git stash` rồi chạy lại trên CÙNG lane **không phân biệt được**. Hàng catalog vẫn `t` dù stash bao
+ * nhiêu lần ⇒ một phiên đã đọc nhầm thành "lỗ phân quyền có sẵn trên nhánh" và suýt seed một WO sai
+ * tiền đề. Muốn quy trách nhiệm cho code thì phải đổi **DB sạch**, không phải đổi code.
+ *
+ * LUẬT:
+ *   • cặp CHƯA có  → INSERT với `isSensitive` của caller (fixture tự chế cặp riêng: thoải mái);
+ *   • cặp ĐÃ có    → giữ NGUYÊN giá trị trong DB, KHÔNG ghi gì cả;
+ *   • đòi giá trị khác → **NÉM**, ngay tại spec GÂY RA, kèm hướng dẫn — thay vì đỏ ở spec nạn nhân.
+ *
+ * Cần một cặp nhạy cảm để test? Dùng cặp RIÊNG của test (vd `('view', 'px-res-<uuid>')`), ĐỪNG mượn
+ * cặp sản phẩm. Muốn ĐỔI cờ của cặp chính tắc là việc của MIGRATION (+ cập nhật
+ * `SENSITIVE_CAPABILITY_ALLOWLIST` và pin ở `auth-seed-canonical-roles.int-spec.ts`), không phải của
+ * fixture.
+ *
+ * Đai thứ hai (bắt cả đường ghi thẳng SQL, không qua helper này): `test/global-catalog-fence.ts` —
+ * chụp catalog đầu suite, đối chiếu cuối suite.
  */
 export async function seedPermissionCatalog(
   direct: Pool,
@@ -193,15 +229,64 @@ export async function seedPermissionCatalog(
   resourceType: string,
   isSensitive: boolean,
 ): Promise<string> {
-  // Upsert — permissions is a global catalog (no company_id)
-  const res = await direct.query(
+  const pair = `${action}:${resourceType}`;
+
+  // `DO NOTHING` (không phải `DO UPDATE`): cặp đã có thì KHÔNG phát sinh câu ghi nào. Vẫn nguyên tử
+  // nên an toàn với vitest chạy song song nhiều worker trên cùng lane DB.
+  const inserted = await direct.query<{ id: string }>(
     `INSERT INTO permissions (action, resource_type, is_sensitive)
      VALUES ($1, $2, $3)
-     ON CONFLICT (action, resource_type) DO UPDATE SET is_sensitive = EXCLUDED.is_sensitive
+     ON CONFLICT (action, resource_type) DO NOTHING
      RETURNING id`,
     [action, resourceType, isSensitive],
   );
-  return res.rows[0].id as string;
+  if (inserted.rows.length > 0) return inserted.rows[0].id;
+
+  const existing = await direct.query<{ id: string; is_sensitive: boolean }>(
+    `SELECT id, is_sensitive FROM permissions WHERE action = $1 AND resource_type = $2`,
+    [action, resourceType],
+  );
+  // Xung đột INSERT nhưng SELECT không thấy. HAI nguyên nhân, đừng quy tội một chiều: (a) tiến trình
+  // khác vừa XOÁ cặp giữa hai câu; (b) `DO NOTHING` đụng một speculative insertion CHƯA commit của
+  // transaction khác rồi transaction đó rollback — Postgres KHÔNG hứa "0 hàng ⇒ hàng đã commit"
+  // (khác `DO UPDATE`, vốn chờ transaction xung đột kết thúc). Cả hai đều hiếm và đều không có cách
+  // xử đúng ở đây, nên NÓI TO thay vì đoán — im lặng trả một id sai là kiểu hỏng tệ nhất cho fixture.
+  if (existing.rows.length === 0) {
+    throw new Error(
+      `[seedPermissionCatalog] cặp (${pair}) vừa xung đột INSERT nhưng SELECT không thấy — ` +
+        `hoặc tiến trình khác đang XOÁ khỏi catalog permissions, hoặc một transaction chèn cùng cặp ` +
+        `đã rollback. Dừng thay vì đoán; chạy lại thường là hết.`,
+    );
+  }
+
+  const row = existing.rows[0];
+  if (row.is_sensitive !== isSensitive) {
+    throw new Error(
+      [
+        "",
+        "╔══════════════════════════════════════════════════════════════════════════════════╗",
+        "║  DỪNG: fixture đang đòi ĐỔI `is_sensitive` của một cặp permission ĐÃ CÓ.        ║",
+        "╚══════════════════════════════════════════════════════════════════════════════════╝",
+        `  cặp          : ${pair}`,
+        `  trong catalog: is_sensitive = ${row.is_sensitive}`,
+        `  fixture đòi  : is_sensitive = ${isSensitive}`,
+        "",
+        "`permissions` là catalog TOÀN CỤC (không có company_id) nên cleanupTenants() KHÔNG dọn nó.",
+        "Ghi đè ở đây là ĐÓNG DẤU VĨNH VIỄN lên lane DB: `is_sensitive` là cổng của getCapabilities()",
+        "⇒ mọi spec chạy sau (CI dùng CHUNG một DB) sẽ thấy /auth/me thiếu/thừa cặp và đi ĐỎ ở NƠI KHÁC.",
+        "",
+        "Cách đúng:",
+        `  • cần cặp NHẠY CẢM để test  → tự chế cặp RIÊNG, đừng mượn cặp sản phẩm`,
+        `                                 (vd: seedPermissionCatalog(direct, 'view', 'px-res-<uuid>', true))`,
+        `  • chỉ cần cặp ${pair} tồn tại → truyền ĐÚNG giá trị catalog: ${row.is_sensitive}`,
+        `  • thật sự muốn đổi cờ của cặp chính tắc → đó là việc của MIGRATION, kèm cập nhật`,
+        `    SENSITIVE_CAPABILITY_ALLOWLIST (permission.service.ts) + pin ở`,
+        `    test/integration/auth-seed-canonical-roles.int-spec.ts`,
+        "",
+      ].join("\n"),
+    );
+  }
+  return row.id;
 }
 
 /**
