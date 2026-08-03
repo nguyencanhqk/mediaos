@@ -318,6 +318,21 @@ export class ProjectsService {
     id: string,
     dto: UpdateTaskProjectRequest,
   ): Promise<TaskProjectResponseDto> {
+    try {
+      return await this.updateProjectCore(user, id, dto);
+    } catch (err) {
+      if (err instanceof ChatSyncRevokeError) {
+        await this.chatSync.reportRevokeFailure(user.companyId, err);
+      }
+      throw err;
+    }
+  }
+
+  private async updateProjectCore(
+    user: RequestUser,
+    id: string,
+    dto: UpdateTaskProjectRequest,
+  ): Promise<TaskProjectResponseDto> {
     return this.db.withTenant(user.companyId, async (tx) => {
       const raw = await this.repo.findRawByIdTx(tx, user.companyId, id);
       if (!raw) throw new NotFoundException(ERR.NOT_FOUND);
@@ -397,6 +412,14 @@ export class ProjectsService {
       // chưa ⇒ insert). KHÔNG tự hạ role chủ cũ — nhiều Owner hợp lệ.
       if (reassigningOwner && newOwner) {
         await this.syncOwnerMemberTx(tx, user, id, newOwner, actorEmp?.id ?? null);
+        // S7-CHAT-BE-5 (W15) — `syncOwnerMemberTx` có nhánh INSERT `project_members` cho chủ mới CHƯA là
+        // thành viên. Micro-plan rev 3 §B3 đo rằng `updateProject` "không trường nào chạm project_members"
+        // — SAI: `ownerEmployeeId` chạm, qua đúng nhánh này. Thiếu hook ở đây thì chủ mới thấy dự án ở
+        // TASK nhưng `assertMember` phòng chat trả 404, im lặng tới nhịp job kế tiếp.
+        await this.chatSync.syncUserDerivedMembershipTx(tx, user.companyId, newOwner.userId, {
+          kind: "system",
+          userId: user.id,
+        });
       }
 
       await this.activity.record(tx, {
@@ -526,6 +549,21 @@ export class ProjectsService {
   // ── Members (sensitive manage-member → owner-check khi scope < Company) ─────────
 
   async addMember(
+    user: RequestUser,
+    id: string,
+    dto: AddMemberRequest,
+  ): Promise<MemberResponseDto> {
+    try {
+      return await this.addMemberCore(user, id, dto);
+    } catch (err) {
+      if (err instanceof ChatSyncRevokeError) {
+        await this.chatSync.reportRevokeFailure(user.companyId, err);
+      }
+      throw err;
+    }
+  }
+
+  private async addMemberCore(
     user: RequestUser,
     id: string,
     dto: AddMemberRequest,

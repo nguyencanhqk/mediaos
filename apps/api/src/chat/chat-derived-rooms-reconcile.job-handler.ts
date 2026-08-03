@@ -16,6 +16,17 @@ export const CHAT_DERIVED_ROOMS_RECONCILE_JOB_CODE = "CHAT_DERIVED_ROOMS_RECONCI
 /** Trạng thái dự án ĐÃ KẾT THÚC — phòng của chúng phải được đóng. Mirror `TERMINAL_STATUSES` của TASK. */
 const TERMINAL_PROJECT_STATUSES = ["Completed", "Cancelled", "Archived"] as const;
 
+/**
+ * Cận trên MỖI NHỊP cho Pha 2 (tạo/đóng phòng). Pha 2 tốn ~3 transaction cho mỗi phòng thiếu (tra trước →
+ * cấp `room_code` ở tx riêng → tạo phòng), chạy TUẦN TỰ. Trên tenant có hàng nghìn dự án, lần chạy đầu
+ * không cận trên có thể vượt `JobRunner.DEFAULT_LOCK_TTL_MS` (10 phút) ⇒ khoá hết hạn GIỮA CHỪNG ⇒ instance
+ * thứ hai vào chạy song song. Tính đúng đắn vẫn được idempotency cứu, nhưng nó đốt `room_code` và nhân đôi
+ * `system_job_runs` (bảng này từng phình 3 triệu dòng).
+ *
+ * Cắt bớt KHÔNG im lặng: phần dư được `log()` và nhịp sau tự thấy lại (Pha 1 vẫn báo chúng thiếu).
+ */
+const PHASE2_MAX_PER_TICK = 200;
+
 interface ScanRow {
   id: string;
   name: string;
@@ -60,17 +71,18 @@ export class ChatDerivedRoomsReconcileJobHandler implements JobHandler {
 
   async run(ctx: JobRunContext): Promise<JobRunResult> {
     const scan = await this.scanTx(ctx.companyId);
+    this.warnIfCapped(ctx.companyId, scan);
 
     let created = 0;
     let failed = 0;
-    for (const unit of scan.orgUnitsMissingRoom) {
+    for (const unit of scan.orgUnitsMissingRoom.slice(0, PHASE2_MAX_PER_TICK)) {
       const ok = await this.ensure(() =>
         this.sync.ensureOrgUnitRoom(ctx.companyId, unit.id, unit.name, JOB_ACTOR),
       );
       if (ok) created++;
       else failed++;
     }
-    for (const project of scan.projectsMissingRoom) {
+    for (const project of scan.projectsMissingRoom.slice(0, PHASE2_MAX_PER_TICK)) {
       const ok = await this.ensure(() =>
         this.sync.ensureProjectRoom(ctx.companyId, project.id, project.name, JOB_ACTOR),
       );
@@ -85,6 +97,13 @@ export class ChatDerivedRoomsReconcileJobHandler implements JobHandler {
       if (ok) archived++;
       else failed++;
     }
+    for (const unit of scan.orgUnitsNeedingArchive) {
+      const ok = await this.ensure(() =>
+        this.sync.archiveOrgUnitRoom(ctx.companyId, unit.id, JOB_ACTOR),
+      );
+      if (ok) archived++;
+      else failed++;
+    }
 
     // Pha 3 — transaction MỚI (Pha 1 đã đóng, Pha 2 chạy ngoài tx) ⇒ không lồng.
     const diff = await this.db.withTenant(ctx.companyId, (tx) =>
@@ -92,7 +111,12 @@ export class ChatDerivedRoomsReconcileJobHandler implements JobHandler {
     );
 
     const total = created + archived + diff.joined + diff.left;
-    if (total > 0) {
+    if (failed > 0) {
+      this.logger.error(
+        `${this.jobCode} tenant=${ctx.companyId}: ${failed} mục KHÔNG sửa được (đã sửa ${total}). ` +
+          `Nhịp sau thử lại — nếu số này không giảm thì lệch đang TỒN ĐỌNG.`,
+      );
+    } else if (total > 0) {
       this.logger.warn(
         `${this.jobCode} tenant=${ctx.companyId}: LỆCH đã sửa — phòng mới ${created}, đóng ${archived}, vào ${diff.joined}, rời ${diff.left}.`,
       );
@@ -124,6 +148,7 @@ export class ChatDerivedRoomsReconcileJobHandler implements JobHandler {
     orgUnitsMissingRoom: ScanRow[];
     projectsMissingRoom: ScanRow[];
     projectsNeedingArchive: ScanRow[];
+    orgUnitsNeedingArchive: ScanRow[];
   }> {
     return this.db.withTenant(companyId, async (tx) => {
       const eligibleTypes = sql.join(
@@ -144,7 +169,12 @@ export class ChatDerivedRoomsReconcileJobHandler implements JobHandler {
           AND o.deleted_at IS NULL
           AND NOT EXISTS (
             SELECT 1 FROM chat_rooms r
-            WHERE r.company_id = ${companyId}::uuid AND r.org_unit_id = o.id
+            WHERE r.company_id = ${companyId}::uuid
+              AND r.org_unit_id = o.id
+              -- Bỏ qua tombstone: phòng đã xoá mềm KHÔNG tính là đã-có-phòng, nếu không org_unit này
+              -- vĩnh viễn không có phòng chat và không nhịp nào phát hiện được (ensureOrgUnitRoom hồi
+              -- sinh đúng hàng cũ, vì unique partial phủ cả tombstone nên INSERT mới sẽ là 23505).
+              AND r.deleted_at IS NULL
           )
       `);
 
@@ -156,7 +186,7 @@ export class ChatDerivedRoomsReconcileJobHandler implements JobHandler {
           AND (p.project_status IS NULL OR p.project_status NOT IN (${terminal}))
           AND NOT EXISTS (
             SELECT 1 FROM chat_rooms r
-            WHERE r.company_id = ${companyId}::uuid AND r.ref_id = p.id
+            WHERE r.company_id = ${companyId}::uuid AND r.ref_id = p.id AND r.deleted_at IS NULL
           )
       `);
 
@@ -173,12 +203,48 @@ export class ChatDerivedRoomsReconcileJobHandler implements JobHandler {
           AND (p.deleted_at IS NOT NULL OR p.project_status IN (${terminal}))
       `);
 
+      // Phòng ban bị xoá mềm / chuyển `inactive` mà phòng còn mở — ĐỐI XỨNG với dự án ở trên.
+      //
+      // Không có vế này thì `deleteOrgUnit`/`updateOrgUnit(status='inactive')` để lại một phòng chat SỐNG:
+      // vẫn nhận tin mới, thành viên nguyên vẹn, không log gì. Vị từ thành viên
+      // (`desiredDepartmentPairsSql`) nối qua `r.org_unit_id = ep.org_unit_id` và KHÔNG đọc bảng
+      // `org_units` lần nào, nên nó cũng không tự phát hiện được phòng ban đã biến mất.
+      const staleOrgUnits = await tx.execute(sql`
+        SELECT o.id, o.name
+        FROM org_units o
+        JOIN chat_rooms r
+          ON r.company_id = o.company_id AND r.org_unit_id = o.id
+        WHERE o.company_id = ${companyId}::uuid
+          AND r.company_id = ${companyId}::uuid
+          AND r.is_archived = false
+          AND r.deleted_at IS NULL
+          AND (o.deleted_at IS NOT NULL OR o.status <> 'active' OR o.type NOT IN (${eligibleTypes}))
+      `);
+
       return {
         orgUnitsMissingRoom: (orgUnits as unknown as { rows: ScanRow[] }).rows ?? [],
         projectsMissingRoom: (projects as unknown as { rows: ScanRow[] }).rows ?? [],
         projectsNeedingArchive: (stale as unknown as { rows: ScanRow[] }).rows ?? [],
+        orgUnitsNeedingArchive: (staleOrgUnits as unknown as { rows: ScanRow[] }).rows ?? [],
       };
     });
+  }
+
+  /**
+   * Cắt bớt phải NÓI RA. Một job lặng lẽ xử lý 200/5000 mục rồi báo "xong" đọc y hệt như "không có gì
+   * lệch" — đó là cách một tồn đọng lớn sống sót qua hàng trăm nhịp mà không ai biết.
+   */
+  private warnIfCapped(
+    companyId: string,
+    scan: { orgUnitsMissingRoom: ScanRow[]; projectsMissingRoom: ScanRow[] },
+  ): void {
+    const pending = scan.orgUnitsMissingRoom.length + scan.projectsMissingRoom.length;
+    if (pending > PHASE2_MAX_PER_TICK) {
+      this.logger.warn(
+        `${this.jobCode} tenant=${companyId}: ${pending} phòng còn thiếu, nhịp này chỉ tạo ` +
+          `${PHASE2_MAX_PER_TICK} (cận trên chống vượt TTL khoá). Phần dư sẽ được nhịp sau xử lý.`,
+      );
+    }
   }
 
   /** Lỗi MỘT phòng không được chặn phòng còn lại — nhịp sau thử lại (Pha 1 vẫn thấy nó thiếu). */

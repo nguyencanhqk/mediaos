@@ -55,6 +55,28 @@ function messageOf(err: unknown): string {
 }
 
 /**
+ * PHÂN LOẠI lỗi thành chuỗi ổn định, KHÔNG mang nội dung tự do — dùng cho dòng audit `Failure`.
+ *
+ * Vì sao không ghi `err.message`: drizzle bọc MỌI lỗi query thành `DrizzleQueryError` với message
+ * `Failed query: <SQL đầy đủ>\nparams: <mảng bind>`, và `23505` của Postgres còn kèm `Key (a,b)=(giá trị)`.
+ * `AuditMaskerService` mask theo TÊN KHOÁ nên một chuỗi tự do đi qua nguyên vẹn — mà `audit_logs` là bảng
+ * app role KHÔNG có UPDATE/DELETE. Ghi nhầm một lần là vĩnh viễn.
+ *
+ * `scrubErrorMessage` (scheduler) che được `password=…`/`scheme://user:pass@host` nhưng KHÔNG che câu SQL
+ * lẫn giá trị hàng, nên nó không đủ cho đường này. Toàn văn vẫn đi vào `logger.error` — nơi có xoay vòng.
+ */
+function classifyFailure(err: unknown): string {
+  let cur: unknown = err;
+  for (let depth = 0; depth < 3 && cur !== null && typeof cur === "object"; depth++) {
+    const e = cur as { code?: unknown; cause?: unknown; name?: unknown };
+    if (typeof e.code === "string" && e.code.length > 0) return `pg:${e.code}`;
+    if (depth === 0 && typeof e.name === "string" && e.name.length > 0 && !e.cause) return e.name;
+    cur = e.cause;
+  }
+  return err instanceof Error ? err.name : "unknown";
+}
+
+/**
  * S7-CHAT-BE-5 — phòng chat dẫn xuất theo phòng ban & dự án (SPEC-15 §3.1 · §13.3 · DB-12 §6).
  *
  * ══ Hình dạng đã chốt (micro-plan rev 3, mục B2) ══
@@ -108,6 +130,7 @@ export class ChatDerivedRoomsSyncService {
 
     try {
       await this.applyLeavesTx(tx, companyId, scope, actor);
+      await this.applyOffboardLeavesTx(tx, companyId, scope, actor);
     } catch (err) {
       throw new ChatSyncRevokeError(err, { companyId, userId });
     }
@@ -122,24 +145,6 @@ export class ChatDerivedRoomsSyncService {
         `CHAT: vào phòng dẫn xuất thất bại (KHÔNG chặn ghi nghiệp vụ) user=${userId}: ${messageOf(err)}`,
       );
     }
-  }
-
-  /**
-   * Biến thể cho writer chỉ cầm `employeeId`. Đọc `user_id` **không lọc `deleted_at`/`status`**: writer
-   * gọi ngay SAU khi vừa xoá mềm/đổi trạng thái, và ta cần đúng người đó để thu hồi.
-   */
-  async syncEmployeeDerivedMembershipTx(
-    tx: TenantTx,
-    companyId: string,
-    employeeId: string,
-    actor: ChatSyncActor,
-  ): Promise<void> {
-    const rows = await tx
-      .select({ userId: employeeProfiles.userId })
-      .from(employeeProfiles)
-      .where(and(eq(employeeProfiles.companyId, companyId), eq(employeeProfiles.id, employeeId)))
-      .limit(1);
-    await this.syncUserDerivedMembershipTx(tx, companyId, rows[0]?.userId ?? null, actor);
   }
 
   // ═══════════════════ Hai câu ghi — dùng chung hook & job ═══════════════════
@@ -160,7 +165,6 @@ export class ChatDerivedRoomsSyncService {
   ): Promise<number> {
     const desired = desiredDerivedPairsSql(companyId, scope);
     const userFilter = scope.userId ? sql`AND m.user_id = ${scope.userId}::uuid` : sql``;
-    const roomFilter = scope.roomId ? sql`AND r.id = ${scope.roomId}::uuid` : sql``;
 
     const res = await tx.execute(sql`
       UPDATE chat_room_members m
@@ -174,10 +178,65 @@ export class ChatDerivedRoomsSyncService {
         AND r.is_archived = false
         AND m.left_at IS NULL
         ${userFilter}
-        ${roomFilter}
         AND NOT EXISTS (
           SELECT 1 FROM ${desired} d
           WHERE d.room_id = m.room_id AND d.user_id = m.user_id
+        )
+      RETURNING m.room_id AS room_id, m.user_id AS user_id
+    `);
+
+    const rows = (res as unknown as { rows: PairRow[] }).rows ?? [];
+    for (const row of rows) {
+      await this.recordMembershipAudit(tx, CHAT_AUDIT.MEMBER_AUTO_REMOVED, row, actor);
+    }
+    return rows.length;
+  }
+
+  /**
+   * RỜI (vế thứ hai) — **rời công ty thì rời cả phòng ĐÃ LƯU TRỮ**.
+   *
+   * `applyLeavesTx` cố ý bỏ qua phòng đã lưu trữ để "lưu trữ = đóng băng danh sách thành viên". Nhưng đóng
+   * băng phải theo **tư cách NGƯỜI**, không theo trạng thái PHÒNG — nếu không thì chuỗi này để hở:
+   *
+   *   đóng dự án (phòng lưu trữ, mọi người giữ nguyên membership — ĐÚNG)
+   *   → nhân viên nghỉ việc / xoá mềm hồ sơ / gỡ tài khoản
+   *   → `applyLeavesTx` không chạm phòng đã lưu trữ ⇒ `left_at` vẫn NULL
+   *   → `assertMember` KHÔNG có vế `is_archived`, `listRoomsForUser(archived=true)` vẫn trả phòng đó
+   *   → người đã nghỉ đăng nhập lại (đăng nhập chỉ gate `users.status`, KHÔNG gate trạng thái nhân sự;
+   *     `lockUser` là TUỲ CHỌN và `deleteEmployee`/`unlinkUser` không chạm `users`) và đọc TOÀN BỘ lịch sử
+   *     dự án — CHAT-DEC-008 không cắt lịch sử.
+   *
+   * SPEC-15 §13.3 nói "rời **MỌI** phòng dẫn xuất", không phải "mọi phòng còn mở".
+   *
+   * Vế phân biệt hai ca: người chỉ **đổi phòng ban / rời một dự án** vẫn còn hồ sơ `active` ⇒ KHÔNG bị câu
+   * này đụng, giữ nguyên quyền đọc lại phòng cũ đã lưu trữ. Người **rời công ty** không còn hồ sơ `active`
+   * nào ⇒ rời sạch. Phòng đã xoá mềm không cần xử lý: `assertMember` đã lọc `deleted_at`.
+   */
+  private async applyOffboardLeavesTx(
+    tx: TenantTx,
+    companyId: string,
+    scope: DerivedMembershipScope,
+    actor: ChatSyncActor,
+  ): Promise<number> {
+    const userFilter = scope.userId ? sql`AND m.user_id = ${scope.userId}::uuid` : sql``;
+
+    const res = await tx.execute(sql`
+      UPDATE chat_room_members m
+      SET left_at = now()
+      FROM chat_rooms r
+      WHERE m.company_id = ${companyId}::uuid
+        AND r.company_id = ${companyId}::uuid
+        AND r.id = m.room_id
+        AND r.sync_source IN ('department', 'project')
+        AND r.is_archived = true
+        AND m.left_at IS NULL
+        ${userFilter}
+        AND NOT EXISTS (
+          SELECT 1 FROM employee_profiles ep
+          WHERE ep.company_id = ${companyId}::uuid
+            AND ep.user_id = m.user_id
+            AND ep.status = 'active'
+            AND ep.deleted_at IS NULL
         )
       RETURNING m.room_id AS room_id, m.user_id AS user_id
     `);
@@ -257,7 +316,9 @@ export class ChatDerivedRoomsSyncService {
     companyId: string,
     actor: ChatSyncActor,
   ): Promise<{ joined: number; left: number }> {
-    const left = await this.applyLeavesTx(tx, companyId, {}, actor);
+    const left =
+      (await this.applyLeavesTx(tx, companyId, {}, actor)) +
+      (await this.applyOffboardLeavesTx(tx, companyId, {}, actor));
     const joined = await this.applyJoinsTx(tx, companyId, {}, actor);
     return { joined, left };
   }
@@ -280,7 +341,7 @@ export class ChatDerivedRoomsSyncService {
     const existing = await this.db.withTenant(companyId, (tx) =>
       this.repo.findRoomByOrgUnitId(tx, companyId, orgUnitId),
     );
-    if (existing) return existing.id;
+    if (existing) return this.reviveIfTombstoned(companyId, existing, actor);
 
     const roomCode = await this.roomCode.allocate(companyId);
     try {
@@ -325,7 +386,7 @@ export class ChatDerivedRoomsSyncService {
     const existing = await this.db.withTenant(companyId, (tx) =>
       this.repo.findRoomByRefId(tx, companyId, projectId),
     );
-    if (existing) return existing.id;
+    if (existing) return this.reviveIfTombstoned(companyId, existing, actor);
 
     const roomCode = await this.roomCode.allocate(companyId);
     try {
@@ -360,6 +421,31 @@ export class ChatDerivedRoomsSyncService {
     }
   }
 
+  /**
+   * Phòng dẫn xuất bị xoá mềm = ngõ cụt nếu không xử lý: `findRoomBy*` CỐ Ý không lọc `deleted_at` (unique
+   * partial phủ cả tombstone, nên INSERT phòng mới sẽ là `23505`), nên nếu ta trả thẳng id của tombstone
+   * thì org_unit/dự án đó **vĩnh viễn không có phòng sống** và không nhịp nào phát hiện được.
+   *
+   * Hồi sinh đúng hàng cũ — mirror `resurrectDirect` của `openDirect` (BE-1). Hôm nay chưa đường code nào
+   * set `deleted_at` cho phòng dẫn xuất, nên đây là lưới chờ sẵn cho WO thêm "xoá phòng" về sau; nó ghi
+   * audit để việc hồi sinh không diễn ra âm thầm.
+   */
+  private async reviveIfTombstoned(
+    companyId: string,
+    room: { id: string; deletedAt: Date | null },
+    actor: ChatSyncActor,
+  ): Promise<string> {
+    if (!room.deletedAt) return room.id;
+    await this.db.withTenant(companyId, async (tx) => {
+      await this.repo.restoreRoom(tx, companyId, room.id);
+      await this.recordRoomAudit(tx, CHAT_AUDIT.ROOM_AUTO_CREATED, room.id, actor, {
+        revivedFromTombstone: true,
+      });
+    });
+    this.logger.warn(`CHAT: hồi sinh phòng dẫn xuất đã xoá mềm room=${room.id}`);
+    return room.id;
+  }
+
   /** Đóng phòng của dự án đã kết thúc/xoá. Idempotent: phòng đã lưu trữ ⇒ no-op, không ghi audit lần hai. */
   async archiveProjectRoom(
     companyId: string,
@@ -368,16 +454,43 @@ export class ChatDerivedRoomsSyncService {
   ): Promise<void> {
     await this.db.withTenant(companyId, async (tx) => {
       const room = await this.repo.findRoomByRefId(tx, companyId, projectId);
-      if (!room || room.isArchived || room.deletedAt) return;
-
-      await this.repo.archiveRoom(
-        tx,
-        companyId,
-        room.id,
-        actor.kind === "system" ? (actor.userId ?? null) : null,
-      );
-      await this.recordRoomAudit(tx, CHAT_AUDIT.ROOM_AUTO_ARCHIVED, room.id, actor, { projectId });
+      await this.archiveRoomIfOpen(tx, companyId, room, actor, { projectId });
     });
+  }
+
+  /**
+   * Đối xứng cho phòng ban bị xoá mềm / chuyển `inactive` / đổi sang `type` không đủ điều kiện.
+   *
+   * Thiếu hàm này thì `deleteOrgUnit` để lại một phòng chat SỐNG — vẫn nhận tin mới, thành viên nguyên
+   * vẹn, không dấu vết. Vị từ thành viên nối qua `r.org_unit_id = ep.org_unit_id` và không đọc bảng
+   * `org_units` lần nào, nên nó cũng không tự thấy phòng ban đã biến mất.
+   */
+  async archiveOrgUnitRoom(
+    companyId: string,
+    orgUnitId: string,
+    actor: ChatSyncActor,
+  ): Promise<void> {
+    await this.db.withTenant(companyId, async (tx) => {
+      const room = await this.repo.findRoomByOrgUnitId(tx, companyId, orgUnitId);
+      await this.archiveRoomIfOpen(tx, companyId, room, actor, { orgUnitId });
+    });
+  }
+
+  private async archiveRoomIfOpen(
+    tx: TenantTx,
+    companyId: string,
+    room: { id: string; isArchived: boolean; deletedAt: Date | null } | undefined,
+    actor: ChatSyncActor,
+    newValues: Record<string, unknown>,
+  ): Promise<void> {
+    if (!room || room.isArchived || room.deletedAt) return;
+    await this.repo.archiveRoom(
+      tx,
+      companyId,
+      room.id,
+      actor.kind === "system" ? (actor.userId ?? null) : null,
+    );
+    await this.recordRoomAudit(tx, CHAT_AUDIT.ROOM_AUTO_ARCHIVED, room.id, actor, newValues);
   }
 
   // ═══════════════════ Vỏ best-effort cho writer nghiệp vụ ═══════════════════
@@ -454,15 +567,21 @@ export class ChatDerivedRoomsSyncService {
   }
 
   /**
-   * Vỏ dùng chung cho 6 writer THU HỒI: log ERROR (không phải WARN — WARN chìm dưới mức log mặc định
+   * Vỏ dùng chung cho MỌI writer gọi sync: log ERROR (không phải WARN — WARN chìm dưới mức log mặc định
    * INFO+ của dashboard) rồi ghi audit `Failure`. KHÔNG nuốt lỗi: caller vẫn ném tiếp.
    */
   async reportRevokeFailure(companyId: string, err: ChatSyncRevokeError): Promise<void> {
-    const reason = messageOf(err.reason);
+    // Toàn văn CHỈ vào log; audit nhận PHÂN LOẠI ổn định. Lý do: drizzle bọc MỌI lỗi query thành
+    // `DrizzleQueryError` với message `Failed query: <SQL>\nparams: <bind>` — ghi thẳng vào `audit_logs`
+    // là chôn nguyên câu SQL kèm tham số bind vào một bảng KHÔNG sửa/xoá được. `AuditMaskerService` mask
+    // theo TÊN KHOÁ nên chuỗi tự do đi qua nguyên vẹn, không có lưới nào phía sau.
     this.logger.error(
-      `CHAT: THU HỒI phòng dẫn xuất THẤT BẠI — ghi nghiệp vụ đã rollback toàn bộ. user=${err.context.userId}: ${reason}`,
+      `CHAT: THU HỒI phòng dẫn xuất THẤT BẠI — ghi nghiệp vụ đã rollback toàn bộ. user=${err.context.userId}: ${messageOf(err.reason)}`,
     );
-    await this.recordRevokeFailureAudit(companyId, { userId: err.context.userId, reason });
+    await this.recordRevokeFailureAudit(companyId, {
+      userId: err.context.userId,
+      reason: classifyFailure(err.reason),
+    });
   }
 
   private async recordRoomAudit(

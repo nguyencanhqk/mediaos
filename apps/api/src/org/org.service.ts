@@ -50,7 +50,12 @@ export class OrgService {
     return this.repo.getOrgTree(companyId);
   }
 
-  async createOrgUnit(companyId: string, dto: CreateOrgUnitRequest) {
+  /**
+   * `actorUserId` tuỳ chọn (S7-CHAT-BE-5): dòng audit `chat.room.auto_created` phải nói được AI vừa tạo
+   * phòng ban. Không truyền ⇒ `actor_user_id` NULL, và writer song sinh `HrDepartmentService` thì có —
+   * hai hàng audit cho cùng một loại hành động lệch nhau về "ai", đúng thứ sổ audit sinh ra để trả lời.
+   */
+  async createOrgUnit(companyId: string, dto: CreateOrgUnitRequest, actorUserId?: string) {
     let unit: Awaited<ReturnType<OrgRepository["createOrgUnit"]>>[number];
     try {
       const rows = await this.repo.createOrgUnit(companyId, {
@@ -77,7 +82,10 @@ export class OrgService {
     // (owner chốt 02/08, điểm 3). Hệ quả chấp nhận: tạo phòng hỏng ⇒ org_unit vẫn ra đời, nhịp job kế
     // tiếp vá — "thiếu một phòng ≠ rò quyền đọc". `try*` đã nuốt lỗi bên trong, KHÔNG throw ra đây.
     if (CHAT_ROOM_ELIGIBLE_ORG_UNIT_TYPES.includes(unit.type as "department")) {
-      await this.chatSync.tryEnsureOrgUnitRoom(companyId, unit.id, unit.name, { kind: "system" });
+      await this.chatSync.tryEnsureOrgUnitRoom(companyId, unit.id, unit.name, {
+        kind: "system",
+        userId: actorUserId ?? null,
+      });
     }
 
     return unit;

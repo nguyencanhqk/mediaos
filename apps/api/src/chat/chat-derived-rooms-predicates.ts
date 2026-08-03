@@ -38,10 +38,15 @@ export interface DerivedMembershipScope {
   roomId?: string;
 }
 
-function narrow(scope: DerivedMembershipScope, roomAlias: string, userExpr: string): SQL {
+/**
+ * Hai vế thu hẹp. Viết TƯỜNG MINH bằng `sql` (không `sql.raw` với alias truyền vào): alias là thứ chỉ tồn
+ * tại trong chính câu SQL bao quanh, nên nhận nó qua tham số chuỗi biến một lỗi đổi-tên-alias thành
+ * `42P01`/`42703` lúc chạy mà typecheck hoàn toàn mù.
+ */
+function narrow(scope: DerivedMembershipScope): SQL {
   const parts: SQL[] = [];
-  if (scope.userId) parts.push(sql`AND ${sql.raw(userExpr)} = ${scope.userId}::uuid`);
-  if (scope.roomId) parts.push(sql`AND ${sql.raw(roomAlias)}.id = ${scope.roomId}::uuid`);
+  if (scope.userId) parts.push(sql`AND ep.user_id = ${scope.userId}::uuid`);
+  if (scope.roomId) parts.push(sql`AND r.id = ${scope.roomId}::uuid`);
   return parts.length > 0 ? sql.join(parts, sql` `) : sql``;
 }
 
@@ -79,7 +84,7 @@ export function desiredDepartmentPairsSql(companyId: string, scope: DerivedMembe
       AND ep.status = 'active'
       AND ep.deleted_at IS NULL
       AND ep.user_id IS NOT NULL
-      ${narrow(scope, "r", "ep.user_id")}
+      ${narrow(scope)}
   `;
 }
 
@@ -119,7 +124,7 @@ export function desiredProjectPairsSql(companyId: string, scope: DerivedMembersh
       AND ep.status = 'active'
       AND ep.deleted_at IS NULL
       AND ep.user_id IS NOT NULL
-      ${narrow(scope, "r", "ep.user_id")}
+      ${narrow(scope)}
   `;
 }
 

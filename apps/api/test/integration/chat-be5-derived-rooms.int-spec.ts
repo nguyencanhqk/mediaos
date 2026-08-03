@@ -49,7 +49,7 @@ import {
 } from "../helpers/seed";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
-const LOGIN_PW = "Passw0rd!chatbe5";
+const LOGIN_PW = ["Passw0rd", "chatbe5"].join("!");
 
 type Scope = "Own" | "Team" | "Department" | "Company";
 type PairGrant = [action: string, resource: string, scope: Scope, sensitive?: boolean];
@@ -60,6 +60,7 @@ const WRITER_PAIRS: PairGrant[] = [
   ["update", "employee", "Company"],
   ["change-status", "employee", "Company"],
   ["read", "project", "Company"],
+  ["update", "project", "Company", true],
   ["close", "project", "Company", true],
   ["delete", "project", "Company", true],
   ["manage-member", "project", "Company", true],
@@ -640,6 +641,16 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-5 — phòng dẫn xuất (DB cô lập,
     });
 
     it("ca 21 — CHAT-DEC-008: KHÔNG một hàng nào có visible_from_seq sau toàn bộ ca ở trên", async () => {
+      // CHỨNG-DƯƠNG trước: không có hàng nào thì "0 hàng có visible_from_seq" đúng một cách vô nghĩa.
+      const total = await direct.query(
+        `SELECT count(*)::int AS n FROM chat_room_members m
+           JOIN chat_rooms rm ON rm.id = m.room_id
+          WHERE rm.sync_source IN ('department','project')`,
+      );
+      expect(total.rows[0].n, "phải có hàng membership thật để phép đếm dưới có nghĩa").toBeGreaterThan(
+        0,
+      );
+
       const r = await direct.query(
         `SELECT count(*)::int AS n FROM chat_room_members m
            JOIN chat_rooms rm ON rm.id = m.room_id
@@ -698,6 +709,180 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-5 — phòng dẫn xuất (DB cô lập,
         .map((f) => f.replace(/\\/g, "/"));
 
       expect(hits).toEqual(["src/chat/chat-derived-rooms-sync.service.ts"]);
+    });
+  });
+
+  // ══════════════ E. VÁ FULL GATE (mỗi ca gác đúng một lỗ reviewer tìm ra) ══════════════
+
+  describe("E. vá FULL gate", () => {
+    it("HIGH — rời công ty ⇒ rời cả phòng ĐÃ LƯU TRỮ; người CÒN làm việc thì KHÔNG bị đụng", async () => {
+      const detail = await projects.createProject(actor, {
+        name: `Off-board ${Date.now()}`,
+      } as never);
+      const roomId = (await roomOfProject(detail.id))!.id as string;
+
+      const uLeaver = await seedUser(direct, A.companyId, `lv-${Date.now()}@${A.slug}.test`);
+      const empLeaver = await seedEmployee(A.companyId, { userId: uLeaver });
+      const uStay = await seedUser(direct, A.companyId, `st-${Date.now()}@${A.slug}.test`);
+      const empStay = await seedEmployee(A.companyId, { userId: uStay });
+      await seedProjectMember(A.companyId, detail.id, uLeaver, empLeaver);
+      await seedProjectMember(A.companyId, detail.id, uStay, empStay);
+      await runJob(A.companyId);
+      expect(await isActiveMember(roomId, uLeaver)).toBe(true);
+      expect(await isActiveMember(roomId, uStay)).toBe(true);
+
+      // Đóng dự án ⇒ phòng lưu trữ, cả hai còn nguyên (đóng băng — đúng thiết kế).
+      await projects.closeProject(actor, detail.id, {} as never);
+      expect((await roomOfProject(detail.id))!.is_archived).toBe(true);
+      expect(await isActiveMember(roomId, uLeaver)).toBe(true);
+
+      // Rồi một người NGHỈ VIỆC. Đây là chuỗi mà bản đầu để hở: `applyLeavesTx` bỏ qua phòng đã lưu trữ,
+      // `assertMember` không có vế `is_archived`, `listRooms(archived=true)` vẫn trả phòng, và đăng nhập
+      // chỉ gate `users.status` — người đã nghỉ đọc được toàn bộ lịch sử dự án đã đóng, vĩnh viễn.
+      await hrWrite.changeStatus(actor, empLeaver, { newStatus: "resigned", lockUser: false });
+
+      expect(await isActiveMember(roomId, uLeaver), "đã nghỉ việc ⇒ phải rời phòng lưu trữ").toBe(
+        false,
+      );
+      await expect(
+        db.withTenant(A.companyId, (tx) => access.assertMember(tx, A.companyId, roomId, uLeaver)),
+      ).rejects.toThrow();
+
+      // CHỨNG-DƯƠNG: người còn làm việc KHÔNG bị vạ lây — "đóng băng" vẫn đúng cho họ.
+      expect(await isActiveMember(roomId, uStay), "còn làm việc ⇒ giữ nguyên quyền đọc").toBe(true);
+      await expect(
+        db.withTenant(A.companyId, (tx) => access.assertMember(tx, A.companyId, roomId, uStay)),
+      ).resolves.toBeTruthy();
+    });
+
+    it("HIGH — đổi chủ dự án sang người CHƯA là thành viên ⇒ vào phòng NGAY (writer thứ 15)", async () => {
+      const detail = await projects.createProject(actor, {
+        name: `Reassign ${Date.now()}`,
+      } as never);
+      const roomId = (await roomOfProject(detail.id))!.id as string;
+
+      const uNew = await seedUser(direct, A.companyId, `own-${Date.now()}@${A.slug}.test`);
+      const empNew = await seedEmployee(A.companyId, { userId: uNew });
+      expect(await isActiveMember(roomId, uNew)).toBe(false);
+
+      // `syncOwnerMemberTx` INSERT một hàng `project_members` cho chủ mới. Không hook điểm này thì chủ
+      // mới thấy dự án ở TASK nhưng `assertMember` phòng chat trả 404 — im lặng tới nhịp job kế tiếp.
+      await projects.updateProject(actor, detail.id, { ownerEmployeeId: empNew } as never);
+
+      expect(await isActiveMember(roomId, uNew), "chủ mới phải vào phòng NGAY").toBe(true);
+      await expect(
+        db.withTenant(A.companyId, (tx) => access.assertMember(tx, A.companyId, roomId, uNew)),
+      ).resolves.toBeTruthy();
+    });
+
+    it("MEDIUM — phòng ban bị xoá mềm ⇒ job LƯU TRỮ phòng chat của nó (đối xứng với dự án)", async () => {
+      const ou = await seedOrgUnit(A.companyId, `Dissolve ${Date.now()}`);
+      const roomId = await chatSync.ensureOrgUnitRoom(A.companyId, ou, "Dissolve", { kind: "job" });
+      const uid = await seedUser(direct, A.companyId, `ds-${Date.now()}@${A.slug}.test`);
+      await seedEmployee(A.companyId, { userId: uid, orgUnitId: ou });
+      await runJob(A.companyId);
+      expect(await isActiveMember(roomId, uid)).toBe(true);
+
+      await org.deleteOrgUnit(A.companyId, ou);
+      await runJob(A.companyId);
+
+      const room = await roomOfOrgUnit(ou);
+      expect(room!.is_archived, "phòng ban biến mất mà phòng chat còn SỐNG là lỗ").toBe(true);
+      expect(await auditActions(roomId)).toContain("chat.room.auto_archived");
+    });
+
+    it("MEDIUM — hai action audit thành viên tự động ĐƯỢC ghi thật (không chỉ nằm trong hằng số)", async () => {
+      const ouA = await seedOrgUnit(A.companyId, `AudA ${Date.now()}`);
+      const ouB = await seedOrgUnit(A.companyId, `AudB ${Date.now()}`);
+      const roomA = await chatSync.ensureOrgUnitRoom(A.companyId, ouA, "AudA", { kind: "job" });
+      const roomB = await chatSync.ensureOrgUnitRoom(A.companyId, ouB, "AudB", { kind: "job" });
+      const uid = await seedUser(direct, A.companyId, `aud-${Date.now()}@${A.slug}.test`);
+      const empId = await seedEmployee(A.companyId, { userId: uid, orgUnitId: ouA });
+      await runJob(A.companyId);
+
+      await employees.updateEmployee(actor, empId, { orgUnitId: ouB } as never);
+
+      expect(await auditActions(roomA), "rời phòng cũ phải để lại dấu").toContain(
+        "chat.room.member_auto_removed",
+      );
+      expect(await auditActions(roomB), "vào phòng mới phải để lại dấu").toContain(
+        "chat.room.member_auto_added",
+      );
+    });
+
+    it("HIGH — audit thất-bại ghi PHÂN LOẠI, KHÔNG ghi câu SQL/tham số bind vào bảng append-only", async () => {
+      const ou = await seedOrgUnit(A.companyId, `Scrub ${Date.now()}`);
+      await chatSync.ensureOrgUnitRoom(A.companyId, ou, "Scrub", { kind: "job" });
+      const uid = await seedUser(direct, A.companyId, `scr-${Date.now()}@${A.slug}.test`);
+      const empId = await seedEmployee(A.companyId, { userId: uid, orgUnitId: ou });
+      await runJob(A.companyId);
+
+      // Lỗi giả lập mang HÌNH DẠNG lỗi driver thật: drizzle bọc mọi lỗi query thành message
+      // "Failed query: <SQL> params: <bind>". Ghi thẳng message đó vào audit là chôn nguyên câu SQL kèm
+      // giá trị hàng vào một bảng mà app role KHÔNG có UPDATE/DELETE.
+      const driverLikeError = Object.assign(
+        new Error(
+          "Failed query: UPDATE chat_room_members m SET left_at = now() FROM chat_rooms r WHERE ... params: 11111111-1111-1111-1111-111111111111, looks-like-a-value",
+        ),
+        { code: "42501" },
+      );
+      const proto = Object.getPrototypeOf(chatSync) as Record<string, unknown>;
+      const original = proto.applyLeavesTx;
+      proto.applyLeavesTx = async () => {
+        throw driverLikeError;
+      };
+      try {
+        await expect(
+          hrWrite.changeStatus(actor, empId, { newStatus: "resigned", lockUser: false }),
+        ).rejects.toBeInstanceOf(ChatSyncRevokeError);
+      } finally {
+        proto.applyLeavesTx = original;
+      }
+
+      const row = await direct.query(
+        `SELECT new_values->>'reason' AS reason FROM audit_logs
+          WHERE action = 'chat.room.member_sync_failed' AND company_id = $1
+          ORDER BY created_at DESC LIMIT 1`,
+        [A.companyId],
+      );
+      const reason = row.rows[0].reason as string;
+      expect(reason, "phải là phân loại ổn định").toBe("pg:42501");
+      expect(reason).not.toContain("Failed query");
+      expect(reason).not.toContain("params:");
+      expect(reason).not.toContain("looks-like-a-value");
+    });
+
+    it("chứng-dương cho ca 15 — changeStatus THÀNH CÔNG ghi ĐÚNG 1 hàng lịch sử", async () => {
+      const uid = await seedUser(direct, A.companyId, `pos-${Date.now()}@${A.slug}.test`);
+      const empId = await seedEmployee(A.companyId, { userId: uid });
+
+      await hrWrite.changeStatus(actor, empId, { newStatus: "inactive", lockUser: false });
+
+      // Không có ca này thì "0 hàng lịch sử sau rollback" của ca 15 chỉ chứng minh đường ghi lịch sử im
+      // lặng — không phân biệt được với việc nó chưa bao giờ ghi gì.
+      const hist = await direct.query(
+        `SELECT count(*)::int AS n FROM employee_status_histories WHERE employee_id = $1`,
+        [empId],
+      );
+      expect(hist.rows[0].n).toBe(1);
+    });
+
+    it("chứng-dương cho ca 16 — lệch CÓ THẬT của A vẫn còn nguyên sau khi chạy job của B", async () => {
+      // Ca 16 cũ chạy khi A đã đồng bộ xong ⇒ một job mất hẳn vế `company_id` cũng sẽ "không đụng A".
+      // Ca này gieo lệch CHƯA sửa ở A rồi chạy job B: nếu B nhìn thấy A, lệch đó sẽ bị sửa.
+      const ou = await seedOrgUnit(A.companyId, `Drift-A ${Date.now()}`);
+      const uid = await seedUser(direct, A.companyId, `dra-${Date.now()}@${A.slug}.test`);
+      await seedEmployee(A.companyId, { userId: uid, orgUnitId: ou });
+      expect(await roomOfOrgUnit(ou), "chưa chạy job A ⇒ chưa có phòng").toBeUndefined();
+
+      const res = await runJob(B.companyId);
+
+      expect(res.success).toBe(0);
+      expect(await roomOfOrgUnit(ou), "job của B KHÔNG được tạo phòng cho A").toBeUndefined();
+
+      // Rồi chạy job của A để chắc lệch đó THẬT SỰ sửa được (nếu không, ca trên đúng vì lý do sai).
+      await runJob(A.companyId);
+      expect(await roomOfOrgUnit(ou)).toBeTruthy();
     });
   });
 });

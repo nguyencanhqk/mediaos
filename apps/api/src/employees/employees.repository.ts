@@ -225,10 +225,10 @@ export class EmployeesRepository {
       .returning();
   }
 
-  /** Giữ nguyên chữ ký cũ cho caller khác — additive, không breaking. */
-  softDeleteEmployee(companyId: string, id: string) {
-    return this.db.withTenant(companyId, (tx) => this.softDeleteEmployeeTx(tx, companyId, id));
-  }
+  // Bản KHÔNG-tx của xoá mềm đã được GỠ HẲN (S7-CHAT-BE-5): sau khi `EmployeesService.deleteEmployee`
+  // chuyển sang tự mở transaction, nó còn 0 caller. Giữ lại "phòng khi cần" chính là đặt mìn — caller
+  // tương lai gọi nó sẽ xoá mềm hồ sơ mà KHÔNG thu hồi tư cách thành viên phòng chat, và không có gì
+  // báo. Cần xoá mềm ở nơi khác thì mở tx rồi gọi `softDeleteEmployeeTx` + sync, như `deleteEmployee`.
 
   // ── Login account (F7 — create users row when none supplied) ───────────────────
 
