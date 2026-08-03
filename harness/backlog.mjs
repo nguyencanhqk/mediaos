@@ -10186,7 +10186,7 @@ export const backlog = [
     title:
       "Chùm đỏ NGẮT QUÃNG họ KI-059 dưới tải song song: `outbox-fifo` (probe bị worker spec khác claim) + `chat-noti-e2e` ca 6b (unread_count 2≠1) — cả hai xanh khi chạy cô lập",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/test/integration/outbox-fifo.int-spec.ts",
       "apps/api/test/integration/chat-noti-e2e.int-spec.ts",
@@ -10203,6 +10203,10 @@ export const backlog = [
       "Chính spec đã tự chẩn: assert tại `outbox-fifo.int-spec.ts:140` ghi 'probe bị worker của spec khác claim mất — KHÔNG phải lỗi thứ tự; chạy lại cô lập file này' — tức khiếm khuyết đã biết nhưng chưa ai đóng",
       "Luật sẵn có phải đọc trước khi sửa: `dead-letter-alert-threshold.int-spec.ts:12-15` + `test/helpers/outbox-drain.ts`",
       "memory: outbox-returning-order-not-fifo",
+      "✅ ĐÓNG 2026-08-04. PHÂN LOẠI xong — giả thuyết của chính WO này về vế B SAI: B KHÔNG phải tie-break uuid trong-transaction (ba tin đi qua BA tx HTTP riêng, `available_at` tăng thật). Đo bằng log `claim()` kèm `process.pid` trên lane `mediaos_obprobe`: ba event của CÙNG phòng bị chia cho HAI tiến trình — `pid=30784 claimed=734bef5d` (tin #1) vs `pid=40996 claimed=a903418d,dcc733f8` (tin #2,#3); `processed_at` tin #2 (.285089) TRƯỚC tin #1 (.289006) ⇒ tin #2 thắng gộp dedupe. Cả ba hàng `attempts=0`, `available_at` NGUYÊN VẸN, cùng consumer ⇒ không retry, không ghi đè available_at, không hoà tie-break. Gốc = giới hạn (3) 'đa-instance' mà claim() tự khai: hạ tầng test dựng ra 11 worker song song trên bảng outbox dùng chung",
+      "Vế A hoá ra là chiều thứ BA, chưa từng được đặt tên: BỊ CHIẾM SLOT — event của spec khác `available_at` GIÀ hơn probe đứng trước theo `ORDER BY available_at` và ăn một chỗ trong lô N ⇒ chỉ N-1 probe được claim. KHÔNG cần worker nào khác chạy, chỉ cần spec khác đã enqueue mà chưa drain ⇒ mutex KHÔNG với tới. Lộ ra đúng ở `check.sh --lane-db` chunk 11/13 (2026-08-04) khi mutex đã bật: `expected 11 to be 12` kèm dòng 'đã trả lại 1 event claim nhầm của spec khác'",
+      "Bản vá: (1) `test/helpers/outbox-worker-lock.ts` — mutex pg_advisory_lock tầm-session, 11 spec lái worker giữ ở cuối beforeAll (boot vẫn song song, chỉ THÂN test xếp hàng); (2) `outbox-fifo` claim NHIỀU LƯỢT tới đủ N probe thay vì đúng một lượt; (3) `outbox-worker-lock.unit-spec.ts` — điểm danh chống quên (spec lái worker mà không gọi acquire ⇒ ĐỎ, đã RED-proof). KHÔNG đổi một dòng code sản phẩm, KHÔNG nới assert nào",
+      "Số đo (cùng bộ 11 file outbox, cùng phép phán quyết bằng exit code): TRƯỚC 2 đỏ assert / 18 lượt (ca 6b) · SAU 0 đỏ assert / 36 + 14 lượt, 13 lượt xanh LIÊN TIẾP. Đỏ còn lại là crash hạ tầng tinypool KI-014 (`ERR_IPC_CHANNEL_CLOSED`, có ở CẢ baseline) — chunk runner của check.sh tự chạy lại. `check.sh --lane-db=obprobe` XANH ✅ exit 0, 492/492 file api",
     ],
     done_when: [
       "PHÂN LOẠI TRƯỚC KHI VÁ — hai vế có thể KHÁC gốc: A là tranh chấp probe ở tầng TEST (vá bằng cô lập); B có thể là giới hạn tồn dư THẬT của sản phẩm (tie-break uuid trong cùng transaction). Đừng vá B bằng cách nới assert của test: nếu B là thật thì đó là quyết định sản phẩm (thêm cột đơn điệu) hoặc là ca test phải khai rõ nó không bảo đảm gì trong-transaction",

@@ -34,6 +34,11 @@ import { OutboxWorker } from "../../src/events/outbox-worker";
 import { OutboxService } from "../../src/events/outbox.service";
 import { DatabaseService } from "../../src/db/db.service";
 import { drainOutboxUntilSettled } from "../helpers/outbox-drain";
+import {
+  acquireOutboxWorkerLock,
+  OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS,
+  type OutboxWorkerLock,
+} from "../helpers/outbox-worker-lock";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
 
@@ -49,6 +54,7 @@ describe.skipIf(!hasLaneDb)(
     let db: DatabaseService;
     let outbox: OutboxService;
     const companyIds: string[] = [];
+    let outboxLock: OutboxWorkerLock | undefined;
 
     let managerUser = "";
     let employeeUser = "";
@@ -127,9 +133,13 @@ describe.skipIf(!hasLaneDb)(
 
       db = app.get(DatabaseService);
       outbox = app.get(OutboxService);
-    });
+
+      // S7-QA-OUTBOXPROBE-1 — mutex toàn cục cho spec lái OutboxWorker (xem helpers/outbox-worker-lock).
+      outboxLock = await acquireOutboxWorkerLock("s5-noti-fix1-deeplink");
+    }, OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS);
 
     afterAll(async () => {
+      await outboxLock?.release();
       await direct
         ?.query("DELETE FROM employee_profiles WHERE company_id = ANY($1::uuid[])", [companyIds])
         .catch(() => undefined);

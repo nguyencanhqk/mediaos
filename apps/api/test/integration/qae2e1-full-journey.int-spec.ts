@@ -33,6 +33,11 @@ import { SeedTrackingService } from "../../src/foundation/seed/seed-tracking.ser
 import { AttMasterDataSeeder } from "../../src/attendance/att-master-data.seeder";
 import { OutboxWorker } from "../../src/events/outbox-worker";
 import { drainOutboxUntilSettled } from "../helpers/outbox-drain";
+import {
+  acquireOutboxWorkerLock,
+  OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS,
+  type OutboxWorkerLock,
+} from "../helpers/outbox-worker-lock";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -64,6 +69,7 @@ describe.skipIf(!hasLaneDb)("S5-QA-E2E-1 chuỗi E2E xuyên module (1 lượt li
   let appConn: Pool;
   let W: SeededTenant;
   const companyIds: string[] = [];
+  let outboxLock: OutboxWorkerLock | undefined;
 
   let employeeUserId = "";
   let employeeProfileId = "";
@@ -224,9 +230,13 @@ describe.skipIf(!hasLaneDb)("S5-QA-E2E-1 chuỗi E2E xuyên module (1 lượt li
     tok.manager = await login(`mgr@${W.slug}.test`);
 
     await seedWidgetConfig("MY_TASKS", 20);
-  });
+
+    // S7-QA-OUTBOXPROBE-1 — mutex toàn cục cho spec lái OutboxWorker (xem helpers/outbox-worker-lock).
+    outboxLock = await acquireOutboxWorkerLock("qae2e1-full-journey");
+  }, OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
+    await outboxLock?.release();
     await direct.query("DELETE FROM dashboard_widget_cache WHERE company_id = $1", [W.companyId]);
     await direct.query("DELETE FROM dashboard_widget_configs WHERE company_id = $1", [W.companyId]);
     await cleanupTenants(direct, companyIds);

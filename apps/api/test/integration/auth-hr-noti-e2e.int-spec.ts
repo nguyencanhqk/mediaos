@@ -47,6 +47,11 @@ import { LoginRateLimiter } from "../../src/auth/login-rate-limiter";
 import { EventBus } from "../../src/events/event-bus";
 import { OutboxWorker } from "../../src/events/outbox-worker";
 import { drainOutboxUntilSettled } from "../helpers/outbox-drain";
+import {
+  acquireOutboxWorkerLock,
+  OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS,
+  type OutboxWorkerLock,
+} from "../helpers/outbox-worker-lock";
 import type { NotificationEngineService } from "../../src/notifications/notification-engine.service";
 import { OutboxNotificationBridge } from "../../src/notifications/outbox-notification-bridge.service";
 import { AuthHrNotiBridgeRegistrar } from "../../src/notifications/auth-hr-noti-bridge.registrar";
@@ -114,6 +119,7 @@ describe.skipIf(!hasLaneDb)("S4-INT-5 AUTH/HR → NOTI bridge (DB cô lập, đ�
   let A: SeededTenant;
   let B: SeededTenant;
   const companyIds: string[] = [];
+  let outboxLock: OutboxWorkerLock | undefined;
 
   let hrEmail = "";
   let hrUserId = "";
@@ -230,9 +236,13 @@ describe.skipIf(!hasLaneDb)("S4-INT-5 AUTH/HR → NOTI bridge (DB cô lập, đ�
     ]);
 
     bUserId = await seedUser(direct, B.companyId, `bu@${B.slug}.test`, hash);
-  });
+
+    // S7-QA-OUTBOXPROBE-1 — mutex toàn cục cho spec lái OutboxWorker (xem helpers/outbox-worker-lock).
+    outboxLock = await acquireOutboxWorkerLock("auth-hr-noti-e2e");
+  }, OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
+    await outboxLock?.release();
     // employee_profiles + lịch sử KHÔNG nằm trong cleanupTenants → dọn tường minh trước (mirror hr-write).
     for (const id of companyIds) {
       await direct

@@ -35,6 +35,11 @@ import { ChatMessagesRepository } from "../../src/chat/chat-messages.repository"
 import { directPool, hasDb } from "../helpers/integration-db";
 import { drainOutboxUntilSettled } from "../helpers/outbox-drain";
 import {
+  acquireOutboxWorkerLock,
+  OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS,
+  type OutboxWorkerLock,
+} from "../helpers/outbox-worker-lock";
+import {
   cleanupTenants,
   seedCompany,
   seedPermissionCatalog,
@@ -80,6 +85,9 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-6 — thông báo CHAT (DB cô lập, đ
   let bridge: OutboxNotificationBridge;
   let reader: ChatAudienceReader;
   let messagesRepo: ChatMessagesRepository;
+  // S7-QA-OUTBOXPROBE-1 — ca 6b đo THỨ TỰ giao event, mà thứ tự chỉ có bảo đảm trong MỘT lô claim của MỘT
+  // worker. Không có khoá này, worker của spec outbox khác chia lẻ ba event của cùng một phòng ⇒ đỏ ngắt quãng.
+  let outboxLock: OutboxWorkerLock | undefined;
 
   // ─── helper ───
 
@@ -207,9 +215,13 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-6 — thông báo CHAT (DB cô lập, đ
       await grant(A.companyId, u, label);
     }
     tSender = await login(A.slug, `sender@${A.slug}.test`);
-  }, 120_000);
+
+    // CUỐI beforeAll: boot + seed vẫn chạy SONG SONG với spec khác, chỉ THÂN test mới xếp hàng.
+    outboxLock = await acquireOutboxWorkerLock("chat-noti-e2e");
+  }, OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
+    await outboxLock?.release();
     await app?.close();
     await cleanupTenants(direct, companyIds);
     await direct?.end();

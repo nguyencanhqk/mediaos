@@ -3,6 +3,11 @@ import { LoggerAlertSink } from "../../src/events/alert.service";
 import { EventBus } from "../../src/events/event-bus";
 import { OutboxWorker } from "../../src/events/outbox-worker";
 import { directPool, hasDb } from "../helpers/integration-db";
+import {
+  acquireOutboxWorkerLock,
+  OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS,
+  type OutboxWorkerLock,
+} from "../helpers/outbox-worker-lock";
 import { cleanupTenants, seedCompany, type SeededTenant } from "../helpers/seed";
 
 /**
@@ -13,18 +18,23 @@ import { cleanupTenants, seedCompany, type SeededTenant } from "../helpers/seed"
  * claim, KHÔNG quyết định thứ tự hàng của `RETURNING` ở câu `UPDATE` bọc ngoài — thứ tự đó do planner
  * sinh. Bảng nhỏ thì plan tình cờ ra đúng FIFO ⇒ chạy cô lập là XANH, chỉ lộ dưới tải, dạng hỏng-im-lặng.
  *
- * ══ HAI RÀNG BUỘC VỆ SINH — đọc trước khi sửa spec này ══
+ * ══ BA RÀNG BUỘC VỆ SINH — đọc trước khi sửa spec này ══
  * `outbox_events` là bảng CHUNG và claim dùng `FOR UPDATE SKIP LOCKED` **không lọc tenant**, trong khi
- * vitest chạy các file int-spec SONG SONG trên cùng một lane DB. Hai chiều hỏng, cả hai đã có tiền lệ
+ * vitest chạy các file int-spec SONG SONG trên cùng một lane DB. Ba chiều hỏng, cả ba đã có tiền lệ
  * trên master (xem `test/helpers/outbox-drain.ts` — CI đỏ 2 lần liên tiếp 2026-07-15):
  *
- *  (1) BỊ CƯỚP — worker của spec khác claim probe của mình trước ⇒ `received` thiếu. Giảm thiểu: probe
+ *  (a) BỊ CƯỚP — worker của spec khác claim probe của mình trước ⇒ `received` thiếu. Giảm thiểu: probe
  *      KHÔNG được là hàng già nhất DB (`ORDER BY available_at` khiến hàng già bị nhặt trước, tất định),
  *      nên gieo `available_at` chỉ lùi vài trăm ms thay vì 1 giờ. Còn sót thì bước (3) bắt và nói rõ lý do.
- *  (2) ĐI CƯỚP — `processEvent` gặp event KHÔNG có consumer trong bus của mình sẽ đánh `'done'`, TERMINAL
+ *  (b) ĐI CƯỚP — `processEvent` gặp event KHÔNG có consumer trong bus của mình sẽ đánh `'done'`, TERMINAL
  *      và IM LẶNG (`outbox-worker.ts` nhánh `consumers.length === 0`) ⇒ nuốt mất event của spec khác.
  *      Giảm thiểu: batch đúng bằng số probe (không phải 50), và bước (4) TRẢ LẠI mọi event đã bị đánh
  *      `'done'` mà không có dòng `processed_events` nào — tức thứ mình lỡ nuốt chứ không xử lý.
+ *  (c) BỊ CHIẾM SLOT (S7-QA-OUTBOXPROBE-1) — event của spec khác, `available_at` GIÀ hơn probe, đứng
+ *      TRƯỚC theo `ORDER BY available_at` và ăn mất một chỗ trong lô N ⇒ chỉ N-1 probe được claim.
+ *      KHÔNG cần worker nào khác chạy: chỉ cần spec khác ĐÃ enqueue và CHƯA drain. Mutex
+ *      `acquireOutboxWorkerLock` không với tới chiều này (nó chỉ tuần-tự-hoá WORKER, không cấm ENQUEUE).
+ *      Giảm thiểu: bước (5) claim NHIỀU LƯỢT tới khi đủ N probe, thay vì đúng một lượt.
  *
  * Đòn bẩy RED là **chèn ngược**: `available_at` tăng dần nhưng thứ tự chèn là nghịch đảo, nên thứ tự vật
  * lý trong heap ngược với thứ tự logic. Plan nào trả theo thứ tự heap (bitmap heap scan, hash semi-join)
@@ -39,6 +49,7 @@ describe.skipIf(!hasDb)("S7-INT-OUTBOX-FIFO-1 — outbox dispatch đúng thứ t
   const CONSUMER = "fifo-probe-consumer";
   const N = 12;
   let A: SeededTenant;
+  let outboxLock: OutboxWorkerLock | undefined;
 
   const purgeProbes = () =>
     direct
@@ -66,9 +77,14 @@ describe.skipIf(!hasDb)("S7-INT-OUTBOX-FIFO-1 — outbox dispatch đúng thứ t
     // Rác của lượt chạy TRƯỚC bị crash: probe kẹt 'processing' quá 5 phút sẽ được reaper NGAY TRONG
     // `processBatch` trả về 'pending' rồi claim luôn ⇒ `received` dài hơn N, đỏ khó hiểu.
     await purgeProbes();
-  });
+
+    // S7-QA-OUTBOXPROBE-1 — mutex toàn cục: chỉ MỘT spec lái worker tại một thời điểm. Khoá này chỉ đóng
+    // chiều (a)/(b); ba ràng buộc vệ sinh ở docblock GIỮ NGUYÊN làm đai thứ hai, KHÔNG thay bằng khoá.
+    outboxLock = await acquireOutboxWorkerLock("outbox-fifo");
+  }, OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
+    await outboxLock?.release();
     await purgeProbes();
     await cleanupTenants(direct, [A.companyId]);
     await direct.end();
@@ -115,7 +131,26 @@ describe.skipIf(!hasDb)("S7-INT-OUTBOX-FIFO-1 — outbox dispatch đúng thứ t
 
     const { rows: before } = await direct.query<{ t: Date }>("SELECT now() AS t");
     // Batch ĐÚNG bằng N — không phải 50. Cận trên chặt là thứ giới hạn thiệt hại nếu có event lạ lọt vào lô.
-    await new OutboxWorker(bus, new LoggerAlertSink()).processBatch(N);
+    //
+    // (5) NHIỀU LƯỢT, không phải một — S7-QA-OUTBOXPROBE-1. Mutex `acquireOutboxWorkerLock` chặn worker
+    // của spec KHÁC chạy đồng thời, nhưng KHÔNG chặn spec khác ENQUEUE: `outbox_events` vẫn là bảng chung,
+    // và một spec đang xếp hàng chờ khoá thường đã có event 'pending' nằm sẵn đó. Event lạ nào `available_at`
+    // GIÀ hơn probe sẽ đứng trước theo `ORDER BY available_at` và CHIẾM MỘT SLOT của lô 12 ⇒ chỉ 11 probe
+    // được claim ⇒ `expected 11 to be 12`. Đo thật trong `check.sh --lane-db` (chunk 11/13, 2026-08-04):
+    // đỏ đúng như vậy, kèm chính dòng cảnh báo "đã trả lại 1 event claim nhầm của spec khác" ở bước (4).
+    //
+    // Lặp tới khi đủ N probe KHÔNG làm yếu phép đo: `ORDER BY available_at` lấy hàng GIÀ NHẤT trước, mà
+    // `available_at` của probe tăng đơn điệu ⇒ probe luôn được claim theo đúng thứ tự seq dù rơi vào mấy lô.
+    // Đòn bẩy RED (chèn ngược ⇒ heap order nghịch đảo) nằm TRONG từng lô và giữ nguyên hiệu lực.
+    const worker = new OutboxWorker(bus, new LoggerAlertSink());
+    const deadline = Date.now() + 15_000;
+    for (;;) {
+      const { claimed } = await worker.processBatch(N);
+      if (received.length >= N || Date.now() > deadline) break;
+      // Không claim được gì mà vẫn thiếu probe = trạng thái bất thường; nghỉ ngắn rồi thử lại tới hạn chót
+      // thay vì quay vòng nóng. Hết hạn thì assert (3) bên dưới báo LOUD kèm chẩn đoán.
+      if (claimed === 0) await new Promise((r) => setTimeout(r, 50));
+    }
 
     // (4) TRẢ LẠI thứ đã lỡ nuốt: event bị đánh terminal trong cửa sổ của mình mà KHÔNG consumer nào
     // ghi `processed_events` = event của spec khác, bus của mình không có consumer cho nó.
@@ -128,7 +163,9 @@ describe.skipIf(!hasDb)("S7-INT-OUTBOX-FIFO-1 — outbox dispatch đúng thứ t
     if (stolen) console.warn(`[outbox-fifo] đã trả lại ${stolen} event claim nhầm của spec khác`);
 
     // (3) Phân biệt "vá hỏng" với "bị spec khác cướp probe" — nếu không, lỗi thứ hai hiện ra dưới dạng
-    // lệch length và người đọc sẽ đi sửa nhầm chỗ.
+    // lệch length và người đọc sẽ đi sửa nhầm chỗ. Từ S7-QA-OUTBOXPROBE-1, bước (5) đã lặp tới hạn chót
+    // nên chiều (c) "bị chiếm slot" KHÔNG còn tới được đây; thiếu probe ở đây nghĩa là probe THẬT SỰ bị
+    // worker khác claim mất (chiều a) — tức mutex hở, chứ không phải lô quá nhỏ.
     const { rows: mine } = await direct.query<{ n: string }>(
       `SELECT count(*)::text AS n FROM outbox_events o
          JOIN processed_events pe ON pe.event_id = o.id AND pe.consumer_name = $2
@@ -137,7 +174,8 @@ describe.skipIf(!hasDb)("S7-INT-OUTBOX-FIFO-1 — outbox dispatch đúng thứ t
     );
     expect(
       Number(mine[0].n),
-      "probe bị worker của spec khác claim mất — KHÔNG phải lỗi thứ tự; chạy lại cô lập file này",
+      "probe bị worker của spec khác claim mất DÙ đã giữ mutex + claim lại tới 15s — KHÔNG phải lỗi thứ tự. " +
+        "Kiểm `acquireOutboxWorkerLock` có được gọi ở MỌI spec lái worker không (outbox-worker-lock.unit-spec.ts)",
     ).toBe(N);
 
     expect(received).toHaveLength(N);

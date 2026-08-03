@@ -48,6 +48,11 @@ import { PasswordService } from "../../src/auth/password.service";
 import { EventBus } from "../../src/events/event-bus";
 import { OutboxWorker } from "../../src/events/outbox-worker";
 import { drainOutboxUntilSettled } from "../helpers/outbox-drain";
+import {
+  acquireOutboxWorkerLock,
+  OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS,
+  type OutboxWorkerLock,
+} from "../helpers/outbox-worker-lock";
 import type { NotificationEngineService } from "../../src/notifications/notification-engine.service";
 import { OutboxNotificationBridge } from "../../src/notifications/outbox-notification-bridge.service";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
@@ -102,6 +107,7 @@ describe.skipIf(!hasLaneDb)(
     let A: SeededTenant;
     let B: SeededTenant;
     const companyIds: string[] = [];
+    let outboxLock: OutboxWorkerLock | undefined;
 
     let adminUser = "";
     let mentionTargetUser = "";
@@ -333,9 +339,13 @@ describe.skipIf(!hasLaneDb)(
 
       tok.admin = await login(A.slug, `admin@${A.slug}.test`);
       tok.qa = await login(A.slug, `qa@${A.slug}.test`);
-    });
+
+      // S7-QA-OUTBOXPROBE-1 — mutex toàn cục cho spec lái OutboxWorker (xem helpers/outbox-worker-lock).
+      outboxLock = await acquireOutboxWorkerLock("task-noti-e2e");
+    }, OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS);
 
     afterAll(async () => {
+      await outboxLock?.release();
       await cleanupTenants(direct, companyIds);
       await appConn?.end();
       await direct?.end();

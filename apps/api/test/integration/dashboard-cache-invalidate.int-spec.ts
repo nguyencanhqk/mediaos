@@ -44,6 +44,11 @@ import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/respo
 import { PasswordService } from "../../src/auth/password.service";
 import { OutboxWorker } from "../../src/events/outbox-worker";
 import { drainOutboxUntilSettled } from "../helpers/outbox-drain";
+import {
+  acquireOutboxWorkerLock,
+  OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS,
+  type OutboxWorkerLock,
+} from "../helpers/outbox-worker-lock";
 import { directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -418,6 +423,7 @@ describe.skipIf(!runDb)(
     let adminEmail = "";
     let adminUserId = "";
     let adminToken = "";
+    let outboxLock: OutboxWorkerLock | undefined;
 
     async function seedEmp(
       companyId: string,
@@ -517,9 +523,13 @@ describe.skipIf(!runDb)(
       await nest.init();
 
       adminToken = await login(nest, W.slug, adminEmail);
-    });
+
+      // S7-QA-OUTBOXPROBE-1 — mutex toàn cục cho spec lái OutboxWorker (xem helpers/outbox-worker-lock).
+      outboxLock = await acquireOutboxWorkerLock("dashboard-cache-invalidate");
+    }, OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS);
 
     afterAll(async () => {
+      await outboxLock?.release();
       await cleanupTenants(direct, companyIds);
       await direct.end();
       if (nest) await nest.close();
