@@ -336,3 +336,113 @@ export const chatRoomDetailSchema = chatRoomSchema.extend({
   myRole: chatMemberRoleSchema,
 });
 export type ChatRoomDetailDto = z.infer<typeof chatRoomDetailSchema>;
+
+// ═══════════ S7-CHAT-BE-4 — tìm kiếm toàn văn (CHAT-API-015) ═══════════
+//
+// ⚠️ KHỐI APPEND — `contracts/src/chat.ts` là hot-file của 4 WO trong wave S7. Thêm ở CUỐI file, không
+// chèn vào giữa, không sắp xếp lại khối của WO khác.
+
+/**
+ * `GET /chat/search` (CHAT-API-015 · SPEC-15 §13.7).
+ *
+ * `q` đi qua `trim → NFC → min(2)`:
+ *   • `.trim()` TRƯỚC `min(2)` — `"  a  "` phải trượt, không được lọt vì đếm cả khoảng trắng;
+ *   • `.normalize("NFC")` vì macOS/iOS gửi tiếng Việt ở dạng **NFD** (ký tự cơ sở + dấu tổ hợp) mà
+ *     `f_unaccent` không gỡ được dấu tổ hợp ⇒ người gõ CÓ DẤU từ máy Mac ra **0 kết quả**, hỏng theo
+ *     chiều khó phát hiện nhất (người test gõ không dấu thấy chạy, tưởng xong);
+ *   • `max(200)` — không có trần thì một câu 10KB đi thẳng vào `websearch_to_tsquery`.
+ *
+ * Cả ba phép biến đổi đều **idempotent**, an toàn khi `ZodValidationPipe` chạy 2 lần trên query-param
+ * (memory `zod-query-param-double-pipe-idempotent`).
+ *
+ * `limit` max 50 (thấp hơn `/messages`): mỗi hàng kết quả kéo thêm join `chat_rooms` + `users`.
+ */
+/**
+ * Có ký tự ĐIỀU KHIỂN C0/C1 không (trừ tab · newline · CR — chúng vô hại và người dùng dán vào là
+ * chuyện thường)?
+ *
+ * ⚠️ **So mã điểm, KHÔNG dùng regex.** Một character-class chứa ký tự điều khiển làm luật `eslint`
+ * `no-control-regex` ĐỎ, và lối thoát nhanh nhất lúc đó là tắt luật — tức bỏ một luật đúng để giữ một
+ * cách viết không cần thiết. Vòng lặp này nói rõ ý định hơn và không cần miễn trừ nào.
+ *
+ * ⚠️ Cũng KHÔNG viết ký tự điều khiển dạng literal vào file nguồn: một byte NUL thật làm cả file thành
+ * "binary" với `grep`/`git diff` và biến mất im lặng qua nhiều công cụ chỉnh sửa (đã xảy ra khi viết
+ * chính hàm này).
+ */
+function hasControlChar(s: string): boolean {
+  for (const ch of s) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (cp === 0x09 || cp === 0x0a || cp === 0x0d) continue;
+    if (cp < 0x20 || (cp >= 0x7f && cp <= 0x9f)) return true;
+  }
+  return false;
+}
+
+export const chatSearchQuerySchema = z.object({
+  q: z
+    .string()
+    .trim()
+    .transform((s) => s.normalize("NFC"))
+    .pipe(
+      z
+        .string()
+        .min(2, "CHAT-ERR-017: từ khoá tìm kiếm phải có ít nhất 2 ký tự.")
+        .max(200, "CHAT-ERR-017: từ khoá tìm kiếm quá dài (tối đa 200 ký tự).")
+        // ⚠️ Byte NUL phải chặn ở BIÊN. Đo thật trên lane DB: `websearch_to_tsquery('simple',
+        // f_unaccent($1))` với chuỗi chứa NUL ném `22021 invalid byte sequence for encoding "UTF8"`
+        // ⇒ `GET /chat/search?q=%00ab` trả **500**. Không rò gì (bộ lọc lỗi trả "Lỗi hệ thống"), nhưng
+        // mỗi request mở rồi rollback một transaction và bơm stack vào log — DoS rẻ tiền trên đúng
+        // đường gõ-là-gọi. Mọi ký tự cú pháp khác (`&`, `|`, `!`, `(`, `:*`, `'`, `"`) thì
+        // `websearch_to_tsquery` nuốt bình thường; NUL là ngoại lệ DUY NHẤT đo được.
+        .refine((s) => !hasControlChar(s), {
+          message: "CHAT-ERR-017: từ khoá tìm kiếm chứa ký tự không hợp lệ.",
+        }),
+    ),
+  /** Bó theo MỘT phòng. Không thuộc phòng → 404 GIỐNG HỆT phòng không tồn tại (CHAT-ERR-017). */
+  roomId: z.string().uuid().optional(),
+  /** Con trỏ opaque của trang trước. Rác → 400, KHÔNG im lặng rơi về trang đầu (vòng lặp vô hạn ở FE). */
+  cursor: z.string().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+export type ChatSearchQuery = z.infer<typeof chatSearchQuerySchema>;
+
+/**
+ * Một dòng kết quả tìm kiếm.
+ *
+ * ⚠️ **KHÔNG extend `chatMessageSchema`** — lý do là bảo mật, không phải gọn code. `chatMessageSchema`
+ * (sau `S7-CHAT-BE-3`) mang `attachments` **kèm URL ký**; tái dùng nó ở đây biến một ô tìm kiếm thành máy
+ * phát URL ký hàng loạt trên toàn bộ kho tệp người dùng có quyền — 50 URL/trang, mỗi lần gõ phím. Đường
+ * tìm kiếm chỉ trả `attachmentCount`; muốn tệp thì mở phòng (`/rooms/:id/files`, có access-log).
+ *
+ * `roomSeq` phơi ở đây AN TOÀN: nó per-room (mig `0539`) và người tìm đã là thành viên đúng phòng đó.
+ * Nó là thứ FE cần để "nhảy tới tin trong ngữ cảnh" (CHAT-SCREEN-005).
+ */
+export const chatSearchResultSchema = z.object({
+  id: z.string().uuid(),
+  roomId: z.string().uuid(),
+  /** DM không có tên phòng ⇒ `.nullable()` (memory `server-masking-needs-optional-fe-schema`). */
+  roomName: z.string().nullable(),
+  roomType: chatRoomTypeSchema,
+  roomSeq: z.number().int().positive(),
+  senderId: z.string().uuid(),
+  senderName: z.string().nullable(),
+  body: z.string(),
+  createdAt: z.string().datetime(),
+  attachmentCount: z.number().int().nonnegative(),
+});
+export type ChatSearchResultDto = z.infer<typeof chatSearchResultSchema>;
+
+/**
+ * Phản hồi keyset — `{ data, nextCursor }`, **không** đi qua `paginated()`.
+ *
+ * Khối `Pagination` dùng chung của repo là page/offset, không dùng được cho keyset. Sau
+ * `ResponseEnvelopeInterceptor` phía FE nhận `data.data` + `data.nextCursor` — ghi ở đây để FE-4 không
+ * dính bẫy `apifetch-drops-pagination-bare-array`.
+ *
+ * `nextCursor: null` = trang cuối.
+ */
+export const chatSearchResponseSchema = z.object({
+  data: z.array(chatSearchResultSchema),
+  nextCursor: z.string().nullable(),
+});
+export type ChatSearchResponseDto = z.infer<typeof chatSearchResponseSchema>;

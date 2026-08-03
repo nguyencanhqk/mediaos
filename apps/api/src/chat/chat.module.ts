@@ -19,6 +19,11 @@ import { ChatMessagesRepository } from "./chat-messages.repository";
 import { ChatAttachmentsRepository } from "./chat-attachments.repository";
 import { ChatAttachmentPresignService } from "./chat-attachments.service";
 import { ChatMessageFileResolver } from "./chat-message-file.resolver";
+// S7-CHAT-BE-4 (additive): tìm kiếm toàn văn — controller RIÊNG vì đây là ngoại lệ membership duy nhất
+// của module (xem jsdoc `ChatSearchController`).
+import { ChatSearchController } from "./chat-search.controller";
+import { ChatSearchService } from "./chat-search.service";
+import { ChatSearchRepository } from "./chat-search.repository";
 
 /**
  * S7-CHAT-BE-1 — `ChatModule` (SPEC-15 · DB-12 · API-13).
@@ -48,7 +53,7 @@ import { ChatMessageFileResolver } from "./chat-message-file.resolver";
   // Thiếu dòng này thì `ChatAttachmentPresignService` không resolve được và **AppModule sập lúc khởi
   // động** — kéo theo mọi int-spec đỏ dây chuyền, không chỉ CHAT (lớp `systemjobhandler-optional-dbw-di`).
   imports: [PermissionModule, SequenceModule, FilesModule, StorageModule],
-  controllers: [ChatRoomsController, ChatMessagesController],
+  controllers: [ChatRoomsController, ChatMessagesController, ChatSearchController],
   providers: [
     ChatAccessService,
     ChatRoomsService,
@@ -62,6 +67,9 @@ import { ChatMessageFileResolver } from "./chat-message-file.resolver";
     ChatAttachmentsRepository,
     ChatAttachmentPresignService,
     ChatMessageFileResolver,
+    // ── S7-CHAT-BE-4 ──
+    ChatSearchService,
+    ChatSearchRepository,
   ],
   exports: [ChatAccessService, ChatRoomsRepository, ChatMessagesRepository],
 })

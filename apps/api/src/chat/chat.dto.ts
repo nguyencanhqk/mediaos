@@ -2,6 +2,7 @@ import { createZodDto } from "nestjs-zod";
 import {
   addChatMemberSchema,
   chatMarkReadSchema,
+  chatSearchQuerySchema,
   createChatRoomSchema,
   listChatMessagesQuerySchema,
   listChatRoomFilesQuerySchema,
@@ -50,3 +51,11 @@ export class ChatMarkReadDto extends createZodDto(chatMarkReadSchema) {}
 
 /** GET /chat/rooms/:id/files (view:chat-room) — con trỏ `beforeSeq`, cấm offset. */
 export class ListChatRoomFilesQueryDto extends createZodDto(listChatRoomFilesQuerySchema) {}
+
+// ── S7-CHAT-BE-4 — tìm kiếm (CHAT-API-015) ──────────────────────────────────────
+
+/**
+ * GET /chat/search (view:chat-room) — `q` ≥2 ký tự sau `trim`+NFC, `roomId?`, con trỏ opaque.
+ * `z.coerce` cho `limit` ⇒ idempotent khi pipe chạy 2 lần.
+ */
+export class ChatSearchQueryDto extends createZodDto(chatSearchQuerySchema) {}

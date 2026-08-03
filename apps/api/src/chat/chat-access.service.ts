@@ -315,4 +315,58 @@ export class ChatAccessService {
   private visibleRoom(companyId: string): SQL {
     return and(eq(chatRooms.companyId, companyId), isNull(chatRooms.deletedAt)) as SQL;
   }
+
+  /**
+   * S7-CHAT-BE-4 — **NGUYÊN BỘ** điều kiện cho một truy vấn đọc `chat_messages` TRẢI NHIỀU PHÒNG, tức
+   * đường mà `assertMember` **không dùng được** vì nó không biết trước tập phòng.
+   *
+   * ┌─ ĐÂY LÀ NGOẠI LỆ DUY NHẤT CỦA "ĐIỂM KHẲNG ĐỊNH MEMBERSHIP DUY NHẤT" ───────────────────────────┐
+   * │ Mọi đường đọc khác của module bó theo MỘT `roomId` đã đi qua `assertMember`/`assertMessageAccess`│
+   * │ Tìm kiếm (`GET /chat/search`) thì quét toàn bộ `chat_messages` của tenant rồi mới lọc — sai một │
+   * │ vế là rò nguyên nội dung công ty, và rò IM LẶNG (HTTP 200, kết quả trông hợp lý).               │
+   * │                                                                                                 │
+   * │ Vì vậy hàm trả **cả bộ**, không phải từng núm rời. Trả rời (`activeMembershipJoin` +            │
+   * │ `visibleRoom`) là để lọt một hiện thực rất tự nhiên:                                            │
+   * │   `.from(chatMessages).innerJoin(chatRooms, access.visibleRoom(companyId))`                     │
+   * │ — SQL HỢP LỆ, chạy được, và là **TÍCH DESCARTES** giữa mọi tin của tenant với mọi phòng actor là │
+   * │ thành viên. Nó còn trả `roomId`/`roomName` SAI kèm theo. Một test đếm "có đủ các vế membership" │
+   * │ vẫn PASS trên chính truy vấn hỏng đó, vì vế thiếu là vế NỐI TIN↔PHÒNG chứ không phải vế quyền.  │
+   * │                                                                                                 │
+   * │ Trả cả bộ làm cho **không ai dùng được nửa luật**.                                              │
+   * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * Caller PHẢI join đủ ba bảng: `.from(chatMessages).innerJoin(chatRooms, …).innerJoin(chatRoomMembers, …)`
+   * — thứ tự join không quan trọng, các vế dưới đây đã ràng buộc đủ quan hệ.
+   *
+   * Năm vế, thiếu vế nào cũng là LỖ (không phải cơ hội tối ưu):
+   *
+   * | # | Vế | Thiếu nó thì |
+   * | - | --- | --- |
+   * | 1 | tin ↔ phòng (id + company_id) | tích Descartes — rò toàn bộ nội dung tenant |
+   * | 2 | phòng ↔ membership (room_id + company_id) | ghép membership của phòng khác |
+   * | 3 | `user_id = actor` + `left_at IS NULL` | đọc phòng mình không thuộc / đã rời |
+   * | 4 | `chat_rooms.deleted_at IS NULL` | phòng đã xoá mềm vẫn tìm ra được |
+   * | 5 | `visibleFromSeqColumn()` (§13.4) | lịch sử trước mốc mình vào phòng |
+   *
+   * `company_id` xuất hiện **4 lần** (một lần mỗi bảng + hai lần bắc cầu): RLS đã ép, viết tường minh là
+   * defense-in-depth và là vế duy nhất chặn ghép chéo tenant nếu GUC bị đặt sai (CLAUDE.md §2 mục 1).
+   *
+   * ⚠️ Hàm này **KHÔNG** thay `assertMember`. Đường có `roomId` chỉ định vẫn phải gọi `assertMember` để
+   * có đúng 404 `ROOM_NOT_FOUND`, rồi THÊM `eq(chatMessages.roomId, roomId)` vào cùng truy vấn này.
+   */
+  messageReadConditions(companyId: string, actorUserId: string): SQL[] {
+    return [
+      // 1 — tin ↔ phòng. VẾ HAY BỊ QUÊN NHẤT; thiếu nó là tích Descartes.
+      eq(chatRooms.id, chatMessages.roomId),
+      eq(chatRooms.companyId, chatMessages.companyId),
+      // 2 + 3 — membership đang hoạt động của actor trên phòng đó.
+      this.activeMembershipJoin(actorUserId),
+      // 4 — phòng còn sống trong tenant này.
+      this.visibleRoom(companyId),
+      // company_id của chính bảng tin (vế thứ tư của `company_id`, không suy ra từ bắc cầu).
+      eq(chatMessages.companyId, companyId),
+      // 5 — SPEC-15 §13.4, bản sao DUY NHẤT ở `chat-visibility.ts`.
+      visibleFromSeqColumn(),
+    ];
+  }
 }

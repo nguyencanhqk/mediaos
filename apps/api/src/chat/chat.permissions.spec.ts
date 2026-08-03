@@ -21,6 +21,7 @@ import { Reflector } from "@nestjs/core";
 import { beforeEach, describe, expect, it } from "vitest";
 import { vi } from "vitest";
 import { ChatMessagesController } from "./chat-messages.controller";
+import { ChatSearchController } from "./chat-search.controller";
 import { ChatRoomsController } from "./chat-rooms.controller";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import {
@@ -37,7 +38,10 @@ const USER = {
 const ALLOW: PermissionDecision = { allow: true, reason: "allow", auditRequired: false };
 const DENY: PermissionDecision = { allow: false, reason: "deny-default", auditRequired: false };
 
-type AnyChatController = typeof ChatRoomsController | typeof ChatMessagesController;
+type AnyChatController =
+  | typeof ChatRoomsController
+  | typeof ChatMessagesController
+  | typeof ChatSearchController;
 
 interface RouteGate {
   controller: AnyChatController;
@@ -55,6 +59,25 @@ interface RouteGate {
 // Giữ dạng BẢNG (một dòng = một route) là có chủ đích: prettier bung mỗi mục thành 6 dòng, bảng dài
 // gấp 6 và mất khả năng đọc-quét theo cột — thứ khiến một cặp quyền sai đập vào mắt. Directive dưới đây
 // phải đứng SÁT node và không kèm chữ nào khác thì prettier mới nhận.
+/**
+ * MỌI controller của module CHAT — nguồn DUY NHẤT cho ba ca cấp-module bên dưới.
+ *
+ * ⚠️ Trước `S7-CHAT-BE-4`, ba ca đó lặp CỨNG `[ChatRoomsController, ChatMessagesController]`. Khi WO này
+ * thêm `ChatSearchController`, route mới đứng ngoài **cả ba** lưới ("route mới phải khai cặp" · "0 route
+ * thiếu `@RequirePermission`" · "không controller nào dùng `chat-oversight`") mà không ca nào đỏ — tức
+ * suite tự nhận là "nơi DUY NHẤT soi chính cặp quyền" lại mù với controller mới nhất. Gom về một hằng để
+ * lần sau quên là **lỗi biên dịch/đỏ ngay**, không phải im lặng.
+ *
+ * ⚠️ `S7-CHAT-BE-7` (`/chat/oversight/*`) sẽ có controller RIÊNG dùng cặp `('view','chat-oversight')` —
+ * controller ĐÓ **không** được thêm vào danh sách này (ca thứ ba sẽ đỏ đúng như thiết kế); nó cần bảng
+ * gate riêng của WO ấy.
+ */
+const CHAT_CONTROLLERS = [
+  ChatRoomsController,
+  ChatMessagesController,
+  ChatSearchController,
+] as const;
+
 // prettier-ignore
 const ROUTE_GATES: readonly RouteGate[] = [
   // ── ChatRoomsController (CHAT-API-001..008) ──
@@ -81,6 +104,11 @@ const ROUTE_GATES: readonly RouteGate[] = [
   // `ChatMessageFileResolver.canRead` hỏi: `data_scope` là per-(permission, role), nên ba chỗ lệch nhau
   // sẽ đẻ ra role "thấy danh sách tệp mà tải không được" (API-13 §6 nguyên tắc 3).
   { controller: ChatMessagesController, handlerName: "listRoomFiles", action: "view", resourceType: "chat-room" },
+  // ── ChatSearchController (CHAT-API-015) ──
+  // Cặp TRÙNG NGUYÊN VĂN cặp đường đọc tin. Cặp riêng (vd `search:chat-message`) đẻ role "tìm được mà
+  // đọc không được"; cặp CHƯA SEED thì guard hỏi một permission không tồn tại ⇒ 403 cho MỌI người =
+  // tính năng chết trong im lặng.
+  { controller: ChatSearchController, handlerName: "searchMessages", action: "view", resourceType: "chat-room" },
   // CHAT-API-014 — đánh dấu đã đọc là thao tác trên trạng thái ĐỌC của chính mình, KHÔNG phải gửi tin.
   // Gắn `send:chat-message` vào đây làm người chỉ có quyền xem không bao giờ tắt được badge.
   { controller: ChatMessagesController, handlerName: "markRead", action: "view", resourceType: "chat-room" },
@@ -165,7 +193,7 @@ describe("CHAT controllers — cặp quyền per-route (S7-CHAT-BE-GATE-2)", () 
   it("KHÔNG route nào của 2 controller đứng ngoài bảng (route mới phải khai cặp)", () => {
     const declared = new Set(ROUTE_GATES.map((g) => `${g.controller.name}.${g.handlerName}`));
     const missing: string[] = [];
-    for (const controller of [ChatRoomsController, ChatMessagesController] as const) {
+    for (const controller of CHAT_CONTROLLERS) {
       for (const name of routeMethodsOf(controller)) {
         if (!declared.has(`${controller.name}.${name}`)) missing.push(`${controller.name}.${name}`);
       }
@@ -177,7 +205,7 @@ describe("CHAT controllers — cặp quyền per-route (S7-CHAT-BE-GATE-2)", () 
 
   it("0 route CHAT nào không có @RequirePermission (không có 'read mở' ở module này)", () => {
     const open: string[] = [];
-    for (const controller of [ChatRoomsController, ChatMessagesController] as const) {
+    for (const controller of CHAT_CONTROLLERS) {
       for (const name of routeMethodsOf(controller)) {
         const meta = Reflect.getMetadata(REQUIRE_PERMISSION, handlerOf(controller, name));
         if (!meta) open.push(`${controller.name}.${name}`);
@@ -193,7 +221,7 @@ describe("CHAT controllers — cặp quyền per-route (S7-CHAT-BE-GATE-2)", () 
     // `0538:419`) trên controller RIÊNG `/chat/oversight/*`. Cặp đó rơi vào một route ở đây là mất tính
     // chất "đường đọc thường gọi assertMember vô điều kiện" (API-13 §5.3 ràng buộc 1).
     const offenders: string[] = [];
-    for (const controller of [ChatRoomsController, ChatMessagesController] as const) {
+    for (const controller of CHAT_CONTROLLERS) {
       for (const name of routeMethodsOf(controller)) {
         const meta = Reflect.getMetadata(REQUIRE_PERMISSION, handlerOf(controller, name)) as
           | RequirePermissionMeta

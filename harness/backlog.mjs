@@ -9686,6 +9686,11 @@ export const backlog = [
     paths: [
       "apps/api/src/chat/**",
       "apps/api/test/integration/**",
+      // packages/contracts + backlog THIẾU ở bản seed — WO sửa cả hai (3 schema mới + sửa done_when §19).
+      // Thiếu chúng: guard-scope kêu ngoài phạm vi giữa chừng, và scheduler KHÔNG thấy BE-4 tranh chấp
+      // `contracts/src/chat.ts` với FE-1/BE-5/BE-6 (memory wo-paths-drive-gate-and-scheduler).
+      "packages/contracts/src/chat.ts",
+      "harness/backlog.mjs",
       "docs/_review/S6-SEC-ROUTEMAP-1-route-census.json",
       "docs/plans/S7-CHAT-BE-4.md",
     ],
@@ -9702,7 +9707,10 @@ export const backlog = [
       "Tin đã thu hồi bị loại khỏi kết quả; kết quả trả kèm ngữ cảnh đủ để nhảy tới tin (roomId + seq)",
       "RED-TRƯỚC (bắt buộc, viết trước code): gieo tin ở phòng actor KHÔNG thuộc với từ khoá khớp chính xác → kết quả PHẢI rỗng; cross-tenant",
       "CHAT-DEC-004 KHÔNG mở tìm kiếm: ca 'Super Admin gọi /chat/search chỉ thấy phòng mình là thành viên' là BẮT BUỘC và là ca quan trọng nhất của WO này. SA có ('view','chat-oversight') nhưng cặp đó CHỈ dùng ở /chat/oversight/* — tuyệt đối KHÔNG có nhánh nào trong truy vấn tìm kiếm đọc tới nó. Không có /chat/oversight/search (SPEC-15 §3.3 · API-13 §5.3 ràng buộc 5)",
-      "Đo ngưỡng §19 (< 800ms ở ~1 triệu tin) bằng thời gian/buffer, KHÔNG assert tên index",
+      "CHUYỂN GIAO 03/08/2026 — ngưỡng §19 (< 800ms ở ~1 triệu tin) KHÔNG đo ở WO này mà ở S7-CHAT-QA-1: đo trên lane vài trăm hàng là vô nghĩa, còn assert planner chọn đích danh idx_chat_messages_search là ĐỎ OAN trên chính hành vi tối ưu (memory pg-planner-index-assert-trap). Ghi tường minh để WO không bị đóng dấu 'xong' với một dòng nghiệm thu không ai làm (memory wo-status-auto-ledger)",
+      "Con trỏ phân trang KHÔNG được phơi chat_messages.seq (identity CẤP BẢNG ⇒ rò lưu lượng toàn công ty — đúng lỗ S7-CHAT-DB-2/mig 0539 vừa bịt) và KHÔNG được dùng room_seq (per-room ⇒ vô nghĩa khi trộn nhiều phòng). Keyset (date_trunc('milliseconds', created_at), id), opaque base64url. date_trunc là BẮT BUỘC: created_at là timestamptz micro-giây còn JS Date chỉ mili-giây ⇒ sắp xếp theo cột thô mà con trỏ mang mili-giây làm trang sau SÓT TIN trong im lặng",
+      "Đường tìm kiếm KHÔNG ký URL tệp nào (chỉ trả attachmentCount) — tái dùng chatMessageSchema (đã mang attachments + URL ký từ BE-3) biến ô search thành máy phát URL ký hàng loạt, mỗi lần gõ phím",
+      "KHÔNG ghi audit cho /chat/search — tường minh, không phải bỏ quên: SPEC-15 §3.3/§18 chốt audit theo PHÒNG, không theo CÂU TRUY VẤN; ghi ở đây là lưu nội dung người dùng gõ vào bảng append-only dùng chung",
       "FULL gate PASS",
     ],
   },

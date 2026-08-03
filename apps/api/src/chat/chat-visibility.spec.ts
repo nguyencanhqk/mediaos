@@ -129,6 +129,37 @@ describe("census — MỌI truy vấn đọc `chat_messages` mang vị từ §13
     expect(offenders, `đường đọc thiếu vị từ SPEC-15 §13.4: ${offenders.join(", ")}`).toEqual([]);
   });
 
+  it("chat-search.repository.ts: hàm SELECT trên chat_messages mang vị từ §13.4 (dạng CỘT)", () => {
+    // S7-CHAT-BE-4 mở đường đọc `chat_messages` ở file THỨ BA. Census cũ liệt kê CỨNG hai file và lọc
+    // bằng chuỗi `visibleFromSeqScalar(` ⇒ file này lọt lưới hoàn toàn — đúng lớp lỗi GATE-2 vừa bắt,
+    // chỉ đổi tên file (plan-reviewer BE-4, mục chặn 2).
+    //
+    // ⚠️ Bộ lọc chấp nhận CẢ HAI dạng vị từ. Đường tìm kiếm đa phòng KHÔNG có sẵn giá trị
+    // `visibleFromSeq` ở JS (nó không biết trước tập phòng) nên phải dùng dạng CỘT. Nếu chỉ chấp nhận
+    // dạng scalar thì hàm hợp lệ này bị báo offender, và cách sửa rẻ nhất lúc đó là nhét tên nó vào
+    // `DOCUMENTED_EXCEPTIONS` — tức ĐÓNG ĐINH LỖ MỞ (`tests-can-pin-a-hole-open`). CẤM làm thế.
+    const offenders = methodsOf(codeOf("chat-search.repository.ts"))
+      .filter((m) => m.block.includes(".from(chatMessages)"))
+      .filter((m) => !DOCUMENTED_EXCEPTIONS.has(m.name))
+      .filter(
+        (m) =>
+          !m.block.includes("visibleFromSeqScalar(") &&
+          !m.block.includes("visibleFromSeqColumn(") &&
+          // Dạng thứ ba HỢP LỆ: mượn NGUYÊN BỘ điều kiện của `ChatAccessService` (vế 5 nằm trong đó).
+          !m.block.includes("messageReadConditions("),
+      )
+      .map((m) => m.name);
+    expect(offenders, `đường đọc thiếu vị từ SPEC-15 §13.4: ${offenders.join(", ")}`).toEqual([]);
+  });
+
+  it("`DOCUMENTED_EXCEPTIONS` KHÔNG chứa hàm tìm kiếm nào", () => {
+    // Miễn trừ vị từ §13.4 cho đường đọc RỘNG NHẤT module là mở lại đúng lỗ mà cả GATE-2 lẫn BE-4 dựng
+    // census để chặn. Ca này làm việc miễn trừ đó thành ĐỎ tự động thay vì một quyết định lặng lẽ.
+    for (const name of DOCUMENTED_EXCEPTIONS) {
+      expect(name.toLowerCase()).not.toContain("search");
+    }
+  });
+
   it("chat-access.service.ts: `assertMessageAccess` gọi `visibleFromSeqColumn()`", () => {
     const code = codeOf("chat-access.service.ts");
     const method = methodsOf(code).find((m) => m.name === "assertMessageAccess");
@@ -152,6 +183,8 @@ describe("census — MỌI truy vấn đọc `chat_messages` mang vị từ §13
       "chat-messages.repository.ts",
       "chat-rooms.repository.ts",
       "chat-attachments.repository.ts",
+      // S7-CHAT-BE-4 — file thứ ba đọc `chat_messages`.
+      "chat-search.repository.ts",
     ].filter((f) => codeOf(f).includes("visible_from_seq"));
     expect(offenders, `bản sao thứ hai của luật §13.4 ở: ${offenders.join(", ")}`).toEqual([]);
   });

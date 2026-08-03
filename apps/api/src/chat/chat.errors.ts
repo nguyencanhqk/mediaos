@@ -112,6 +112,15 @@ export const CHAT_ERR = {
   CURSOR_EXCLUSIVE:
     "CHAT-ERR-016: chỉ dùng MỘT trong hai con trỏ beforeSeq hoặc afterSeq, không dùng cả hai.",
 
+  /**
+   * CHAT-ERR-016 (trục TÌM KIẾM) — con trỏ opaque của `/chat/search` hỏng.
+   *
+   * Hằng RIÊNG chứ không tái dùng `CURSOR_EXCLUSIVE`: mã kia nói về `beforeSeq`/`afterSeq` của
+   * `/messages`, dùng lại là báo sai nguyên nhân cho người gọi. Hỏng phải **400**, KHÔNG được im lặng
+   * rơi về trang đầu — rơi về trang đầu biến con trỏ hỏng thành vòng lặp vô hạn ở FE.
+   */
+  SEARCH_CURSOR_INVALID: "CHAT-ERR-016: con trỏ phân trang tìm kiếm không hợp lệ.",
+
   /** Tin `system` / tin đã thu hồi không phải đối tượng của thao tác kiểm duyệt. */
   MESSAGE_NOT_ACTIONABLE:
     "CHAT-ERR-006: tin hệ thống hoặc tin đã thu hồi không thực hiện được thao tác này.",
