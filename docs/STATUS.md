@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-03 06:29Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-03 06:53Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -41,6 +41,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `2ec0082f` | 2026-08-03 | chore(harness): regen STATUS sau S7-CHAT-BE-6 |
 | `1d6ba5d9` | 2026-08-03 | feat(chat): S7-CHAT-BE-6 — thông báo CHAT qua OutboxNotificationBridge |
 | `361d345b` | 2026-08-03 | fix(chat): S7-CHAT-BE-5 FULL gate — 3 HIGH + 5 MEDIUM + 4 LOW |
 | `9a0a0ce0` | 2026-08-03 | chore(harness): regen STATUS sau S7-CHAT-BE-5 |
@@ -52,7 +53,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `5365e0d0` | 2026-08-03 | fix(chat): S7-CHAT-BE-GATE-2 — vị từ §13.4 trên MỌI đường đọc + đóng đinh cặp quyền route |
 | `8effc061` | 2026-08-03 | docs(chat): neo lại 5 micro-plan wave S7 lên 104294bd + gỡ pseudo-code toàn-thân |
 | `104294bd` | 2026-08-03 | docs(chat): CHAT-DEC-013 + 6 micro-plan wave S7 (5 rev 2 + RT-0 mới) + đồng bộ backlog/STATUS |
-| `631d683e` | 2026-08-03 | fix(chat): vá FULL gate S7-CHAT-BE-1/BE-2 — 1 HIGH + 5 MEDIUM |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
