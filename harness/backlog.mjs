@@ -10153,6 +10153,12 @@ export const backlog = [
     paths: [
       "apps/api/test/helpers/**",
       "apps/api/test/integration/**",
+      // Đai 2 là một globalSetup nên nó KHÔNG nằm trong test/integration/**: file globalSetup phải ở
+      // test/ cạnh global-setup.ts (db-fence) và phải được khai trong vitest.config.ts. Thiếu 2 path
+      // này thì diff rơi ra ngoài scope của WO (memory: wo-paths-drive-gate-and-scheduler).
+      "apps/api/test/global-catalog-fence.ts",
+      "apps/api/test/global-catalog-fence.unit-spec.ts",
+      "apps/api/vitest.config.ts",
       "docs/plans/S7-QA-CATALOGFIXTURE-1.md",
     ],
     skills: ["code-review"],
@@ -10171,6 +10177,39 @@ export const backlog = [
       "Quét MỌI caller của `seedPermissionCatalog` (+ helper seed tương tự) tìm chỗ khác đang lật cờ cặp chính tắc — đây là bảng toàn cục nên mỗi caller là một nguồn ô nhiễm tiềm tàng",
       "Cân nhắc đai thứ hai: assert cuối suite rằng `permissions.is_sensitive` của bộ cặp chính tắc khớp seed (pin), để lần lật tiếp theo ĐỎ ngay tại spec gây ra thay vì ở spec nạn nhân",
       "FULL gate PASS",
+    ],
+  },
+  {
+    id: "S7-QA-OUTBOXPROBE-1",
+    module: "FOUNDATION",
+    layer: "QA",
+    title:
+      "Chùm đỏ NGẮT QUÃNG họ KI-059 dưới tải song song: `outbox-fifo` (probe bị worker spec khác claim) + `chat-noti-e2e` ca 6b (unread_count 2≠1) — cả hai xanh khi chạy cô lập",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/test/integration/outbox-fifo.int-spec.ts",
+      "apps/api/test/integration/chat-noti-e2e.int-spec.ts",
+      "apps/api/test/helpers/**",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Tách ra từ FULL gate của S7-QA-CATALOGFIXTURE-1 (2026-08-03). Ca đỏ duy nhất của `check.sh --lane-db` lượt đó, và ĐÃ xác minh KHÔNG liên quan tới WO ấy: spec không gọi `seedPermissionCatalog` (grep=0), đai catalog không nổ lần nào trong lượt đó",
+      "Triệu chứng A — `outbox-fifo.int-spec.ts`: `consumer nhận event theo đúng thứ tự available_at` → `expected 11 to be 12`. Đo cô lập: 1 đỏ / 5 lượt",
+      "Triệu chứng B — `chat-noti-e2e.int-spec.ts` ca 6b (KI-059) `unread_count giữ giá trị của tin ĐẦU trong lô` → `expected 2 to be 1`. Đo cô lập: 0 đỏ / 5 lượt. HAI lượt `check.sh --lane-db` liên tiếp mỗi lượt đỏ ĐÚNG MỘT ca, và là ca KHÁC NHAU trong cùng họ ⇒ phụ thuộc tải, không tất định",
+      "⚠️ Vế B khớp ĐÚNG giới hạn tồn dư mà RELEASE-02 KI-059 tự khai: bản vá chỉ bảo đảm thứ tự TRONG MỘT LÔ CLAIM của MỘT worker; event enqueue trong CÙNG transaction chia sẻ `now()` cho cả `available_at` lẫn `created_at` ⇒ hoà ⇒ tie-break rơi xuống `id` = uuid NGẪU NHIÊN. Muốn đúng tuyệt đối cần cột `bigserial` = migration + đổi hợp đồng đọc",
+      "⚠️ KHÔNG phải KI-059: KI-059 (thứ tự RETURNING) ĐÃ ĐÓNG 2026-08-03 (RELEASE-02 dòng 64) bằng CTE thứ hai + ORDER BY ngoài cùng. Đây là khiếm khuyết của TEST HARNESS: outbox là bảng dùng chung, worker của spec khác nhặt mất probe trước",
+      "Chính spec đã tự chẩn: assert tại `outbox-fifo.int-spec.ts:140` ghi 'probe bị worker của spec khác claim mất — KHÔNG phải lỗi thứ tự; chạy lại cô lập file này' — tức khiếm khuyết đã biết nhưng chưa ai đóng",
+      "Luật sẵn có phải đọc trước khi sửa: `dead-letter-alert-threshold.int-spec.ts:12-15` + `test/helpers/outbox-drain.ts`",
+      "memory: outbox-returning-order-not-fifo",
+    ],
+    done_when: [
+      "PHÂN LOẠI TRƯỚC KHI VÁ — hai vế có thể KHÁC gốc: A là tranh chấp probe ở tầng TEST (vá bằng cô lập); B có thể là giới hạn tồn dư THẬT của sản phẩm (tie-break uuid trong cùng transaction). Đừng vá B bằng cách nới assert của test: nếu B là thật thì đó là quyết định sản phẩm (thêm cột đơn điệu) hoặc là ca test phải khai rõ nó không bảo đảm gì trong-transaction",
+      "Chọn CÁCH CÔ LẬP cho A, đừng nới assert: hoặc advisory lock serialize mọi spec lái worker outbox (mẫu `acquireRegistryLock` trong `test/helpers/integration-db.ts`), hoặc gắn nhãn probe theo spec rồi worker chỉ claim nhãn của mình",
+      "RED trước: dựng được lượt chạy tái hiện tranh chấp (chạy SONG SONG với spec lái worker khác) và chứng minh nó đỏ TRƯỚC bản vá — chạy cô lập KHÔNG tái hiện được, đừng dùng lượt cô lập làm bằng chứng",
+      "Sau vá: 10 lượt liên tiếp chạy CÙNG các spec outbox khác đều xanh — 1 lượt xanh KHÔNG đủ kết luận cho lỗi ngắt quãng",
+      "KHÔNG được làm yếu vế đang đo thứ tự dispatch (đó là hồi quy của KI-059)",
     ],
   },
   {
