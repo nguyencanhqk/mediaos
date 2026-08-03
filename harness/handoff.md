@@ -47,9 +47,17 @@ vào RED: nó xanh sẵn, chứng minh 0 điều. Vế `users` chuyển hẳn th
 
 Sau squash-merge, nhánh **local** giữ N commit riêng lẻ còn đích có **1** commit ⇒ git graph vẽ hai
 đường ⇒ người dùng đọc thành "chưa merge, sao không merge nốt". Xảy ra với `wo/s7-chat-be-gate-3`,
-`wo/s7-chat-be-gate-fix`, rồi `wave/s7-chat`. **Cách dứt điểm: `git diff <remote> <local>` — rỗng thì
-xoá nhánh local ngay, đừng để nó nằm đó.** Đã xảy ra ≥2 lần ⇒ đáng gọi `skill-smith` đóng thành skill
-"post-merge branch reconcile".
+`wo/s7-chat-be-gate-fix`, rồi `wave/s7-chat`. **Cách dứt điểm: `git diff <remote> <local>` HAI CHẤM —
+rỗng thì xoá nhánh local ngay, đừng để nó nằm đó.**
+
+✅ **ĐÃ ĐÓNG BĂNG THÀNH SKILL: `.claude/skills/post-merge-branch-reconcile/`** (owner chốt 03/08). Skill
+ghi rõ vì sao `git log A..B`, `git branch --merged` và `git diff A...B` **ba chấm** đều báo sai sau
+squash, kèm bẫy `push --delete` báo `remote ref does not exist` (GitHub đã tự xoá, phải `fetch --prune`)
+và điều cấm **đổi nhánh khi cây làm việc đang chia sẻ với phiên khác**.
+
+> Ứng viên skill-smith CÒN LẠI (đã ghi ≥2 lần, chưa đóng): chạy int-spec với `LANE_DB` — nạp `.env` làm
+> `DATABASE_URL` đè `LANE_DB` rồi bị `S6-SEC-DBFENCE-1` chặn; câu đúng nằm ở ô Friction phiên
+> `2026-08-01`. Xem thêm ô Friction phiên đó về `unset DATABASE_*`.
 
 ### Việc tiếp theo
 
