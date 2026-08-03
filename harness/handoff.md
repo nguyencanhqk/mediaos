@@ -4,7 +4,63 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
-## Phiên 2026-08-03 (session 56e133e4) — FULL gate `S7-CHAT-BE-GATE-3` + 6 vá 🔴 · **26 FILE CHƯA COMMIT**
+## Phiên 2026-08-03b (session 99a7c530) — chốt PR #327 cho gate-3 + tìm ra nguyên nhân THẬT của 2 mục "chờ owner"
+
+> Tiếp nối phiên `56e133e4`. **Cảnh báo "26 file dirty" của ô dưới đã LỖI THỜI** — phiên đó có commit
+> (`03f9a924`) SAU khi viết handoff. Cây sạch, đang đứng trên `wo/s7-chat-be-gate-3`.
+
+**Đã làm:** đóng sổ 4 WO CHAT còn treo → mở **PR #327** (base `wave/s7-chat`, KHÔNG gắn auto-merge vì
+vùng đỏ) → CI đỏ ở **hai** job → truy ra **ba** nguyên nhân, **tất cả nằm trong test**, vá ở `4f52948c`.
+
+### Hai kết luận của phiên trước bị lật — cùng một gốc: đỏ nằm trong DB, không trong code
+
+1. **"`update:project` là `is_sensitive` nhưng ngoài allowlist ⇒ cần WO riêng"** — **KHÔNG PHẢI.**
+   `chat-be5-derived-rooms.int-spec.ts` khai `["update","project",…,true]` trong khi catalog THẬT là
+   `false` (mig `0005` L224; `0485` bước (b) chỉ nâng 5 cặp khác). `seedPermissionCatalog` upsert
+   `DO UPDATE SET is_sensitive = EXCLUDED.is_sensitive` vào `permissions` — **bảng TOÀN CỤC**, không
+   `company_id`, không ai dọn. Và **CI đặt `LANE_DB: mediaos` = chính DB của job** (api.yml:221) nên
+   chat-be5 lật cờ ngay trong DB mà `auth-me-capabilities.int.spec.ts` dùng ⇒ 3 ca TASKCAP đỏ, **phụ
+   thuộc thứ tự chạy**.
+   ⚠️ Phép thử "stash sạch code, chạy lại trên CÙNG lane, vẫn đỏ y hệt" nghe đanh thép nhưng **không
+   phân biệt được gì**: stash bao nhiêu lần thì hàng catalog vẫn `t`. Cách đúng tốn 10 giây: đo hàng đó
+   ở **nhiều DB** — 4 DB cho `f`, riêng lane từng chạy chat-be5 cho `t`.
+2. **"Lô int-spec thứ hai đỏ 1/4 lượt, không bắt được tên ca"** — thực ra là **HAI chế độ đỏ khác nhau**,
+   và chính vì trộn lẫn nên không ai bắt được tên:
+   - **Có tên:** `outbox-fifo.int-spec.ts` — spec **tự dựng sai tiền đề**. `available_at` lấy `now()` của
+     TỪNG câu INSERT (mỗi câu một tx) trong khi khoảng lùi giảm dần: hai đại lượng ngược chiều, cách nhau
+     đúng 50ms ⇒ một câu chậm >50ms là đảo trật tự. Nhận `[0..8, 11, 9, 10]` — trông y hệt "bản vá FIFO
+     hỏng". Vá: neo **MỘT** mốc `now()`.
+   - **KHÔNG tên:** `ERR_IPC_CHANNEL_CLOSED` (tinypool@1.1.1) — `rc=1` với **0 ca đỏ**. 2/8 lượt dính.
+     Đây là ứng viên số một bị đọc thành "test đỏ".
+
+### Bài học phương pháp
+
+- **RED-proof flake không cần chờ may.** Ép đúng điều kiện tải: thêm `sleep(50ms+ε)` giữa các INSERT →
+  dạng CŨ ĐỎ, dạng VÁ XANH. Một phút, tất định, thay cho "chạy 4 lượt xem có đỏ không".
+- **Sửa spec xong phải kiểm spec CÒN BẮT ĐƯỢC BUG KHÔNG.** Đã hoàn nguyên `claim()` về dạng trước khi vá
+  → spec (đã sửa timing) vẫn ĐỎ → khôi phục → XANH. Không có bước này thì "vá flake" rất dễ là "làm cùn
+  cái test".
+- **Đo trước khi lặp lại phát hiện của reviewer.** MEDIUM "`users` còn DELETE ⇒ cascade xoá CỨNG
+  `chat_messages`" sai một nửa: `mediaos_app` **chỉ có UPDATE** trên `users`, DELETE chỉ role owner có ⇒
+  runtime không với tới. Phần thật là FK `chat_messages_sender_id_fkey ON DELETE CASCADE` — rủi ro ở tầng
+  migration/script, không phải lỗ phân quyền. (`UPDATE(visible_from_seq)` cho `mediaos_app` thì **đúng**.)
+
+### Số đo
+
+api `src/**` **253 file / 4060 test XANH** (lane `mediaos_outboxfifo`, gồm `auth-me-capabilities` 48/48) ·
+lô 14 int-spec CHAT+outbox **8 lượt, 0 ca đỏ có tên** · typecheck 10/10 · lint 7/7 (đều `TURBO_FORCE=1`).
+
+### Chưa xong / chờ người
+
+- **PR #327 chờ owner review+merge** vào `wave/s7-chat`. Không gắn nhãn auto-merge (vùng đỏ + base là
+  nhánh wave). Sau khi merge: hàng đợi kế là **`S7-CHAT-FE-1`** — toàn bộ lớp BE của wave đã đóng.
+- **Còn 2 mục chờ owner** (mục thứ 3 đã gỡ, xem trên): ① gửi lại tệp sang phòng thứ hai làm mất `url` ở
+  phòng thứ nhất — quyết định SẢN PHẨM; ② ~15 MEDIUM, đáng gom nhất là 4 mục least-privilege.
+- **Ứng viên WO mới:** `seedPermissionCatalog` ghi đè `is_sensitive` im lặng và không hoàn nguyên. Vá đúng
+  tầng là ở helper (giữ giá trị migration, kêu to khi lệch) nhưng phải audit mọi caller đang CỐ Ý lật cờ.
+- **`S7-CHAT-RT-0` còn nguyên một mục `done_when` là bước NGƯỜI:** smoke bằng trình duyệt thật.
+
+## Phiên 2026-08-03 (session 56e133e4) — FULL gate `S7-CHAT-BE-GATE-3` + 6 vá 🔴 · ~~26 FILE CHƯA COMMIT~~ (ĐÃ COMMIT `03f9a924`)
 
 > ⛔ **ĐỌC Ô NÀY TRƯỚC KHI CHẠY BẤT KỲ LỆNH GIT NÀO.** Cây `wave/s7-chat` đang có **26 file dirty** là
 > công việc đã hoàn thành + verify của phiên này, **chưa commit**. Chỉ có MỘT worktree ⇒ phiên sau đứng
