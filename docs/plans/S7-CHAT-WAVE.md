@@ -2,7 +2,7 @@
 
 > **Loại:** kế hoạch cấp WAVE (không phải plan của một WO). Plan chi tiết từng WO nằm ở `docs/plans/S7-CHAT-<WO>.md`, viết ngay trước khi thi công WO đó.
 > **Nguồn sự thật nghiệp vụ:** [SPEC-15 CHAT](<../SPEC/SPEC-15 CHAT.md>) · [DB-12](<../DB/DB-12 CHAT Database Design.md>) · [API-13](<../API Design/API-13_CHAT_API_Design.md>) · [ma trận phân quyền §9c](<../permission-matrix-spec.md>)
-> **Ngày lập:** 02/08/2026 · **Trạng thái:** chờ thực thi Bước 0
+> **Ngày lập:** 02/08/2026 · **Trạng thái (cập nhật 03/08/2026):** ĐANG THI CÔNG trên nhánh `wave/s7-chat` — xong `DOC-1`·`DOC-2`·`DB-1`(mig `0538`)·`DB-2`(mig `0539`)·`BE-1`·`BE-2` (FULL gate vá ở `631d683e`, nợ vị từ `visible_from_seq` đã trả ở `5365e0d0`); đang làm `BE-3` (chưa commit). Trạng thái LIVE = [`docs/STATUS.md`](../STATUS.md), không phải file này.
 
 ---
 
@@ -132,7 +132,7 @@ KHÔNG kéo dài đường găng: FE-2 vốn đã phụ thuộc BE-3.
 | 4b | `S7-CHAT-BE-4` | 🔴 red | FULL · Opus | **Đường đọc rộng nhất module.** Luôn bó theo phòng người tìm là thành viên — **không** nới theo DEC-004 (§3.1) |
 | 4c | `S7-CHAT-RT-1` | 🔴 red | FULL · Opus | Join phòng **server-side lúc handshake** (không nhận danh sách phòng từ client) · emit **SAU commit** · membership đổi thì join/leave ngay |
 | 4d | `S7-CHAT-BE-6` | 🟡 yellow | LIGHT · Sonnet | Qua `OutboxNotificationBridge`. `registerSource()` **chỉ** chạy sau khi DB-1 seed catalog — bridge fail-loud lúc boot nếu eventCode chưa `isEnabled=true` ⇒ **API sập lúc khởi động** |
-| 4e | `S7-CHAT-BE-5` | 🔴 red | FULL · Opus | Phòng dẫn xuất theo phòng ban/dự án + job đối soát đêm **idempotent** |
+| 4e | `S7-CHAT-BE-5` | 🔴 red | FULL · Opus | Phòng dẫn xuất theo phòng ban/dự án + job đối soát **định kỳ** idempotent (lưới an toàn; đường thu hồi chạy TRONG tx nguồn) |
 | 5 | `S7-CHAT-FE-1` | 🟡 | LIGHT · Sonnet | **MỘT** kết nối WS duy nhất cho toàn app shell, dùng chung giữa trang full-screen và panel nổi |
 | 6 | `S7-CHAT-FE-2` | 🟡 | LIGHT · Sonnet | Trang `/chat` 3 cột |
 | 7 | `S7-CHAT-FE-3` | 🟡 | LIGHT · Sonnet | Panel nổi (≤3 hội thoại) + badge header; thay lối vào `/chat` tạm của LMS |

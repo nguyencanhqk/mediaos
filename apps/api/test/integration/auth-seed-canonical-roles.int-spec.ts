@@ -127,6 +127,10 @@ const FORBIDDEN_PAIRS = [
   { action: "reveal-secret", resourceType: "platform-account" },
   { action: "view-salary", resourceType: "employee" },
   { action: "update-salary", resourceType: "employee" },
+  // mig 0538 (S7-CHAT-DB-1) · CHAT-DEC-004: đọc-vượt membership — mở ĐÍCH DANH một phòng mình không
+  // thuộc, gồm cả tin nhắn riêng. Verify trong migration chỉ sống LÚC MIGRATE; dòng này là chốt HỒI QUY
+  // chặn một migration/seed SAU cấp cặp cho company-admin (lớp `blanket-grant-migration-role-drift`).
+  { action: "view", resourceType: "chat-oversight" },
 ];
 
 const CANONICAL_ROLES = ["employee", "manager", "hr", "company-admin"] as const;

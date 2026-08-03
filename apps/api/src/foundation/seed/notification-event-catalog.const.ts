@@ -13,7 +13,7 @@
  *   event_code VERBATIM: TASK_MENTIONED + TASK_COMMENT_CREATED (KHÔNG TASK_COMMENT_MENTIONED).
  */
 
-/** module_code hợp lệ (CHECK chk_notification_events_module_code — 0479 + 'GOAL' 0507 + 'LMS' 0529). */
+/** module_code hợp lệ (CHECK chk_notification_events_module_code — 0479 + 'GOAL' 0507 + 'LMS' 0529 + 'CHAT' 0538). */
 export type NotiModuleCode =
   | "AUTH"
   | "HR"
@@ -24,9 +24,10 @@ export type NotiModuleCode =
   | "NOTI"
   | "SYSTEM"
   | "GOAL"
-  | "LMS";
+  | "LMS"
+  | "CHAT";
 
-/** notification_type hợp lệ (CHECK chk_notification_events_type — 0479 + 'Goal' 0507 + 'Training' 0529). */
+/** notification_type hợp lệ (CHECK chk_notification_events_type — 0479 + 'Goal' 0507 + 'Training' 0529 + 'Chat' 0538). */
 export type NotiType =
   | "System"
   | "Account"
@@ -40,7 +41,8 @@ export type NotiType =
   | "Warning"
   | "Error"
   | "Goal"
-  | "Training";
+  | "Training"
+  | "Chat";
 
 /** default_priority hợp lệ (CHECK chk_notification_events_priority — 0479). */
 export type NotiPriority = "Low" | "Normal" | "High" | "Urgent" | "Critical";
@@ -122,6 +124,13 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
   { module: "LMS", eventCode: "LMS_COURSE_ASSIGNED", type: "Training", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "LMS", eventCode: "LMS_EXAM_GRADED", type: "Training", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "LMS", eventCode: "LMS_COURSE_DEADLINE_NEAR", type: "Reminder", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  // ===== CHAT (SPEC-15 §17 · mig 0538 · S7-CHAT-DB-1) =====
+  // CHAT-DEC-010: CHỈ mention + DM có notification; phòng nhóm/phòng ban/dự án chỉ có badge chưa đọc.
+  // CHAT-DEC-011: payload KHÔNG chứa nội dung tin nhắn — template chỉ có tên người gửi / tên phòng / số đếm.
+  // CHAT_DIRECT_MESSAGE = DedupeKey vì S7-CHAT-BE-6 gộp lô 15 phút theo
+  // dedupeKey 'chat:{roomId}:{recipientUserId}:{bucket15m}'; CHAT_MENTIONED gửi ngay nên None.
+  { module: "CHAT", eventCode: "CHAT_MENTIONED", type: "Chat", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "CHAT", eventCode: "CHAT_DIRECT_MESSAGE", type: "Chat", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   // ===== Phần dư SPEC-08 §15 (ngoài MVP) — isEnabled = false, GIỮ trong catalog (14 mã) =====
   { module: "AUTH", eventCode: "AUTH_PASSWORD_CHANGED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
   { module: "AUTH", eventCode: "AUTH_USER_UNLOCKED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
@@ -141,14 +150,14 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
 ] as const;
 
 /** Tổng số event UNION (pin để test bắt thiếu/thừa mã). */
-export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 59
+export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 61 (59 + 2 CHAT, mig 0538)
 
 /** Danh mục event ENABLED (MVP set DB-07 §14.1) — mỗi mã PHẢI có đúng 1 template IN_APP/vi-VN. */
 export const NOTI_ENABLED_EVENTS: readonly NotiEventCatalogEntry[] = NOTI_EVENT_CATALOG.filter(
   (e) => e.isEnabled,
 );
 
-export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 45
+export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 47 (45 + 2 CHAT, mig 0538)
 
 /**
  * S5-LMS-NOTI-1 — ALLOWLIST eventCode mà token máy LMS (`LMS_NOTI_TOKEN`) được phép đẩy vào intake.

@@ -11,6 +11,7 @@ import { ResponseEnvelopeInterceptor } from "./common/interceptors/response-enve
 import { requestIdMiddleware } from "./common/middleware/request-id.middleware";
 import { loadEnv } from "./config/env.schema";
 import { SWAGGER_PATH, setupSwagger } from "./config/swagger";
+import { setupWebSocketAdapter } from "./realtime/setup-websocket-adapter";
 
 /**
  * CS-9: diễn giải env TRUST_PROXY sang giá trị Express `trust proxy`.
@@ -42,6 +43,11 @@ async function bootstrap(): Promise<void> {
     origin: env.CORS_ORIGIN.split(",").map((o) => o.trim()),
     credentials: true,
   });
+
+  // S7-CHAT-RT-0: `enableCors` ở trên CHỈ áp cho HTTP — engine.io/Socket.IO không đọc nó. Biên cross-origin
+  // của namespace `/ws` (và adapter Valkey cho broadcast đa instance) sống trong ValkeyIoAdapter. PHẢI gọi
+  // TRƯỚC `app.listen()` — gắn sau khi gateway đã khởi tạo là vô hiệu (xem setup-websocket-adapter.ts).
+  await setupWebSocketAdapter(app, env);
 
   // Zod = nguồn sự thật cho validate input (nestjs-zod). Envelope + filter chuẩn hoá output.
   app.useGlobalPipes(new ZodValidationPipe());

@@ -92,7 +92,7 @@ export class OrgController {
   @UseGuards(PermissionGuard)
   @RequirePermission("create", "org_unit")
   createOrgUnit(@Req() req: AuthenticatedRequest, @Body() dto: CreateOrgUnitDto) {
-    return this.org.createOrgUnit(req.user.companyId, dto);
+    return this.org.createOrgUnit(req.user.companyId, dto, req.user.id);
   }
 
   @Patch("units/:id")
@@ -125,7 +125,7 @@ export class OrgController {
   @UseGuards(PermissionGuard)
   @RequirePermission("create", "org_unit")
   createDepartmentLegacy(@Req() req: AuthenticatedRequest, @Body() dto: CreateOrgUnitDto) {
-    return this.org.createOrgUnit(req.user.companyId, dto);
+    return this.org.createOrgUnit(req.user.companyId, dto, req.user.id);
   }
 
   // ── Teams ────────────────────────────────────────────────────────────────────

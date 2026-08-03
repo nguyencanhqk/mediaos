@@ -316,9 +316,22 @@ FOUNDATION-DB-001
 | DASH | Dashboard |
 | FRONTEND | Frontend common |
 | BACKEND | Backend common |
+| INTEGRATION | Tích hợp liên module & bảo mật xuyên suốt (EPIC-10) |
 | QA | QA chung |
 | DEVOPS | DevOps chung |
 | RELEASE | Release, go-live, UAT, stabilization |
+
+**Bổ sung 2026-08-03 — module hậu-MVP** (wave sau go-live, mỗi mã có epic riêng trong IMPLEMENTATION-02 §8.13-8.17):
+
+| Module code | Ý nghĩa | Epic |
+| --- | --- | --- |
+| ME | Trung tâm cá nhân `/me` (SPEC-09) | EPIC-12 |
+| GOAL | Mục tiêu & Kết quả then chốt (SPEC-10) | EPIC-13 |
+| LMS | Đào tạo nội bộ — tích hợp `apps/lms` | EPIC-14 |
+| BRAND | Thương hiệu công ty (logo, favicon) | EPIC-15 |
+| CHAT | Nhắn tin nội bộ (SPEC-15) | EPIC-16 |
+
+> **Mã KHÔNG hợp lệ** (đã dọn 2026-08-03, đừng dùng lại): `INT` -> dùng `INTEGRATION` · `FND` -> dùng `FOUNDATION` · `SYSTEM` -> dùng `BRAND` hoặc `FOUNDATION` tuỳ việc. Mã ngoài bảng này khiến Work Order rơi khỏi thẻ module trên `harness/dashboard` và bị suy đoán theo từ khoá.
 
 ### 8.3 Layer code
 

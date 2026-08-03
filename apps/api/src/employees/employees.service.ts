@@ -23,6 +23,10 @@ import { SecurityPolicyService } from "../security-policy/security-policy.servic
 // S2-INT-1: same pure snapshot helper the HR write core uses — guarantees the user.created audit
 // never carries password_hash/normalized_email (BẤT BIẾN #3). Pure function → no DI/module cycle.
 import { authUserSnapshot } from "../users/auth-users.repository";
+import {
+  ChatDerivedRoomsSyncService,
+  ChatSyncRevokeError,
+} from "../chat/chat-derived-rooms-sync.service";
 import { EMPLOYEE_LIST_MAX_ROWS, EmployeesRepository } from "./employees.repository";
 import { isUniqueViolation } from "../common/db-error";
 
@@ -58,6 +62,9 @@ export class EmployeesService {
     // S2-HR-EMP-LEGACY-LOCK-1: same resolver the HR read core uses — added LAST (DI is by type; the
     // unit spec constructs positionally, so new deps go at the end to keep existing arg order stable).
     private readonly dataScope: DataScopeService,
+    // S7-CHAT-BE-5 (W8b/W9b/W14) — thêm CUỐI danh sách, cùng lý do đã ghi cho dataScope: unit spec dựng
+    // service theo THỨ TỰ tham số, chèn giữa sẽ làm lệch mọi call-site đang có.
+    private readonly chatSync: ChatDerivedRoomsSyncService,
   ) {}
 
   /**
@@ -285,12 +292,23 @@ export class EmployeesService {
             after: { base_salary: dto.baseSalary ?? null },
           });
         }
+        // S7-CHAT-BE-5 (W8b) — họ writer THỨ HAI (route legacy `POST /employees`). Hook cả hai họ là
+        // bắt buộc: hook một họ thì nửa số đường tạo nhân viên không bao giờ vào phòng.
+        await this.chatSync.syncUserDerivedMembershipTx(tx, user.companyId, userId, {
+          kind: "system",
+          userId: user.id,
+        });
+
         return profile;
       });
 
       // Mutation responses mask salary by default — view it via the audited GET /employees/:id.
       return maskSalary(created, false);
     } catch (err) {
+      if (err instanceof ChatSyncRevokeError) {
+        await this.chatSync.reportRevokeFailure(user.companyId, err);
+        throw err;
+      }
       if (isUniqueViolation(err)) {
         throw new ConflictException(
           "Email or employee code already exists, or the user already has a profile in this company",
@@ -362,12 +380,25 @@ export class EmployeesService {
             after: { base_salary: dto.baseSalary ?? null },
           });
         }
+        // S7-CHAT-BE-5 (W9b) — route `PATCH /employees/:id` ghi CẢ `orgUnitId` LẪN `status` (dòng
+        // `status: dto.status` ở trên). Đây chính là điểm rev 2 bỏ sót. Không có nhánh `if` nào ở đây:
+        // hàm sync tính lại tập mong muốn từ trạng thái SAU ghi, nên nó đúng cho cả hai trường và cho
+        // mọi trường tương lai mà ai đó thêm vào `updateEmployeeTx`.
+        await this.chatSync.syncUserDerivedMembershipTx(tx, user.companyId, row.userId, {
+          kind: "system",
+          userId: user.id,
+        });
+
         return row;
       });
 
       // Mutation responses mask salary by default — view it via the audited GET /employees/:id.
       return maskSalary(updated, false);
     } catch (err) {
+      if (err instanceof ChatSyncRevokeError) {
+        await this.chatSync.reportRevokeFailure(user.companyId, err);
+        throw err;
+      }
       if (isUniqueViolation(err)) {
         throw new ConflictException("Employee code already exists");
       }
@@ -375,9 +406,34 @@ export class EmployeesService {
     }
   }
 
-  async deleteEmployee(companyId: string, id: string) {
-    const rows = await this.repo.softDeleteEmployee(companyId, id);
-    if (rows.length === 0) throw new NotFoundException("Employee not found");
+  /**
+   * S7-CHAT-BE-5 (W14) — xoá mềm hồ sơ ⇒ rời MỌI phòng dẫn xuất, TRONG CÙNG transaction.
+   *
+   * Transaction chuyển từ tầng REPO lên tầng SERVICE (mirror `createEmployee`/`updateEmployee` trong
+   * CÙNG file này, không phải khuôn lạ): `softDeleteEmployee` tự mở `withTenant` bên trong nên trước đây
+   * không có ranh giới tx nào ở service để đính lời gọi sync vào. Hàm repo cũ GIỮ NGUYÊN cho caller khác.
+   *
+   * `deleted_at` là một vế của vị từ desired-set, nên xoá mềm đưa người đó ra khỏi tập mong muốn y hệt
+   * `changeStatus` — không hook writer này là để hở đúng cửa sổ mà owner ra lệnh phải bằng 0.
+   */
+  async deleteEmployee(companyId: string, id: string, actorUserId?: string) {
+    try {
+      await this.db.withTenant(companyId, async (tx) => {
+        const rows = await this.repo.softDeleteEmployeeTx(tx, companyId, id);
+        const row = rows[0];
+        if (!row) throw new NotFoundException("Employee not found");
+
+        await this.chatSync.syncUserDerivedMembershipTx(tx, companyId, row.userId, {
+          kind: "system",
+          userId: actorUserId ?? null,
+        });
+      });
+    } catch (err) {
+      if (err instanceof ChatSyncRevokeError) {
+        await this.chatSync.reportRevokeFailure(companyId, err);
+      }
+      throw err;
+    }
   }
 
   // ── F7: resolve an existing user or create a login account ──────────────────────

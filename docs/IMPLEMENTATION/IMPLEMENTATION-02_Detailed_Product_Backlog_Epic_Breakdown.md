@@ -181,7 +181,9 @@ Một story đạt **Done** khi:
 | EPIC-11 | QA, UAT & Release Readiness | P0 | 7 | 68 | Tất cả epic P0/P1 |
 | **Tổng** | **12 epic** | — | **112** | **869** | — |
 
-> Bổ sung sau baseline: **EPIC-12 ME** (§8.13, 8 story / 44 point, 2026-07-13) và **4 story HR** thêm vào EPIC-03 (IMP02-STORY-121..124, 36 point — liên kết tài khoản UI · import Excel kéo từ PMVP-HR-006 · sơ đồ tổ chức trực quan kéo một phần PMVP-HR-007 · hoàn thiện Thông tin công việc, 2026-07-13). Tổng hiệu dụng: **124 story / 949 point** (EPIC-03 hiệu dụng: 17 story / 136 point).
+> Bổ sung sau baseline: **EPIC-12 ME** (§8.13, 8 story / 44 point, 2026-07-13) và **4 story HR** thêm vào EPIC-03 (IMP02-STORY-121..124, 36 point — liên kết tài khoản UI · import Excel kéo từ PMVP-HR-006 · sơ đồ tổ chức trực quan kéo một phần PMVP-HR-007 · hoàn thiện Thông tin công việc, 2026-07-13). Tổng sau đợt 2026-07-13: **124 story / 949 point** (EPIC-03 hiệu dụng: 17 story / 136 point).
+>
+> Bổ sung 2026-08-03 (story hoá ngược wave hậu-MVP để bảng tiến độ `/progress` gom đúng module thay vì dồn vào rổ "WO nền / hạ tầng"): **EPIC-13 GOAL** (§8.14, 8 story / 45 point, SPEC-10) · **EPIC-14 LMS** (§8.15, 6 story / 34 point) · **EPIC-15 BRAND** (§8.16, 2 story / 8 point) · **EPIC-16 CHAT** (§8.17, 12 story / 97 point, SPEC-15 — **wave S7 đang chạy, epic DUY NHẤT chưa 100%**). Tổng hiệu dụng: **152 story / 1133 point**.
 >
 > Crosswalk epic: bộ epic theo module trong IMPLEMENTATION-01 §9 (EPIC-FND/AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH) ánh xạ sang bộ epic chi tiết ở đây như sau: EPIC-FND -> EPIC-01; EPIC-AUTH -> EPIC-02; EPIC-HR -> EPIC-03; EPIC-ATT -> EPIC-04; EPIC-LEAVE -> EPIC-05; EPIC-TASK -> EPIC-06; EPIC-NOTI -> EPIC-07; EPIC-DASH -> EPIC-08. Ba epic EPIC-00 (Governance), EPIC-09 (Frontend Core), EPIC-10 (Integration) và EPIC-11 (QA/Release) là epic xuyên suốt, không thuộc một module nghiệp vụ đơn lẻ.
 
@@ -588,9 +590,126 @@ ME phụ thuộc module nguồn đã xong (AUTH/HR/ATT/LEAVE/TASK/NOTI — Sprin
 
 ---
 
+## 8.14 EPIC-13: GOAL - Mục tiêu & Kết quả then chốt
+
+> **Bổ sung 2026-08-03** theo SPEC-10 GOAL (wave S5-GOAL). Wave đã ship; story hoá ngược từ Work Order để bảng tiến độ gom đúng module thay vì dồn vào rổ "WO nền / hạ tầng".
+
+**Mục tiêu:** Quản trị mục tiêu 3 cấp (công ty → phòng ban → cá nhân) theo kỳ, đo tiến độ 4 mode kèm rollup lên cha, check-in append-only, gắn công việc vào mục tiêu và phân rã mục tiêu thành task từ template. GOAL **không thay TASK** — chỉ neo công việc vào kết quả (SPEC-10 §3).
+
+| Story ID | Actor | User Story / Technical Story | Priority | Point | Acceptance Criteria tóm tắt |
+| --- | --- | --- | --- | ---: | --- |
+| IMP02-STORY-125 | Manager/Admin | Là một Manager/Admin, tôi muốn tạo và quản lý mục tiêu 3 cấp theo kỳ, xem dưới dạng cây hoặc danh sách lọc theo kỳ, cấp và phòng ban. | P0 | 8 | CRUD soft-delete, validate level↔neo↔parent, cây tối đa 3 tầng kèm % từng nút, data-scope own/department/all ở service layer, goal_code cấp qua sequence (GOAL-FUNC-001/002, GOAL-SCREEN-001/003). |
+| IMP02-STORY-126 | Owner mục tiêu | Là một Owner mục tiêu, tôi muốn check-in tiến độ định kỳ với giá trị hiện tại, mức tự tin và ghi chú, rồi xem lại toàn bộ lịch sử. | P0 | 5 | Ghi goal_updates append-only (app role không UPDATE/DELETE), lịch sử hiển thị cũ→mới ở tab Lịch sử check-in (GOAL-FUNC-003, GOAL-SCREEN-002). |
+| IMP02-STORY-127 | Manager | Là một Manager, tôi muốn tiến độ được tính tự động theo mode đo và tự dồn lên mục tiêu cha. | P0 | 8 | 4 mode đo, rollup theo weight lên cha, job đối soát đêm qua system-jobs, cache progress trên bản ghi goal (GOAL-FUNC-004). |
+| IMP02-STORY-128 | Manager/Admin | Là một Manager/Admin, tôi muốn chốt kỳ mục tiêu và mở lại khi cần, có kiểm soát quyền và dấu vết. | P1 | 3 | Cặp quyền finalize riêng, finalized_at/by, audit log bắt buộc cho cả finalize lẫn reopen (GOAL-FUNC-005). |
+| IMP02-STORY-129 | Employee/Manager | Là một Employee/Manager, tôi muốn gắn hoặc tháo công việc vào mục tiêu từ panel task hoặc từ trang mục tiêu. | P1 | 5 | tasks.goal_id, picker từ panel task và gắn hàng loạt từ trang goal, tôn trọng quyền cả hai phía (GOAL-FUNC-006). |
+| IMP02-STORY-130 | Manager/Admin | Là một Manager/Admin, tôi muốn phân rã mục tiêu thành bộ công việc từ template dựng sẵn và quản lý danh mục template. | P1 | 8 | CRUD task_templates và items với quyền manage riêng, wizard preview cho sửa/xóa/thêm/gán người/cột board, bulk task trong MỘT transaction mang sẵn goal_id (GOAL-FUNC-007/008, GOAL-SCREEN-004/006). |
+| IMP02-STORY-131 | Manager/Admin | Là một Manager/Admin, tôi muốn widget "Mục tiêu kỳ này" trên dashboard để nắm tiến độ theo phòng ban. | P2 | 5 | Widget đọc qua cache dashboard, tiến độ theo phòng ban, tôn trọng data-scope của người xem. |
+| IMP02-STORY-132 | Thành viên dự án | Là một thành viên dự án, tôi muốn tab Mục tiêu ngay trong trang dự án để thấy mục tiêu của dự án và mục tiêu mà công việc trong dự án đang phục vụ. | P2 | 3 | Tab Mục tiêu trong workspace dự án, gộp mục tiêu neo dự án và mục tiêu phủ từ task, deep-link về trang goal. |
+
+### Phạm vi kỹ thuật chính
+
+- Bảng `goals` + `goal_updates` (append-only) + `tasks.goal_id` + `task_templates`/`task_template_items`, RLS FORCE cả bộ
+- Seed module GOAL + 8 cặp permission (7 cặp wave lõi + manage task-template), scope per-(permission,role)
+- UNION-ADD `'goal'` vào audit `object_type` CHECK + 2 event NOTI
+- Progress engine 4 mode + rollup + job đối soát qua system-jobs
+
+### Ghi chú dependency
+
+GOAL phụ thuộc TASK (gắn task, template sinh task) và Foundation sequence (goal_code). Docs-sync SPEC-10 (S5-GOAL-DOC-1) chạy trước, không gắn story người dùng.
+
+---
+
+## 8.15 EPIC-14: LMS - Đào tạo nội bộ (tích hợp)
+
+> **Bổ sung 2026-08-03** — wave S5-LMS. LMS là ứng dụng RIÊNG (repo git local trong `apps/lms`); MediaOS đóng vai nhà cung cấp danh tính + cổng hiển thị. Story ở đây chỉ mô tả phần người dùng MediaOS nhìn thấy.
+
+**Mục tiêu:** Người dùng MediaOS vào thẳng hệ đào tạo bằng một phiên duy nhất (SSO-only), tài khoản LMS bám theo trạng thái nhân sự, tiến độ học hiện trong `/me`, và sự kiện học tập chảy về NOTI.
+
+| Story ID | Actor | User Story / Technical Story | Priority | Point | Acceptance Criteria tóm tắt |
+| --- | --- | --- | --- | ---: | --- |
+| IMP02-STORY-133 | User | Là một User đã đăng nhập MediaOS, tôi muốn vào LMS mà không phải đăng nhập lần hai, và LMS không còn đường tự đăng ký. | P0 | 8 | Cờ SSO_ONLY đóng register/forgot/reset, MỌI điểm tạo phiên đều gate đủ, link SSO dùng-một-lần, ghi audit_logs objectType lms_sso action sso_link_minted tại nơi thực sự cấp link. |
+| IMP02-STORY-134 | HR/Admin | Là một HR/Admin, tôi muốn tài khoản LMS tự bám theo trạng thái nhân sự MediaOS mà không phải thao tác tay. | P0 | 5 | Outbox event riêng hr.employee_status_changed đẩy sang LMS, job đối soát CHỈ ghi audit khi có thay đổi thật (không ghi nhiễu mỗi nhịp). |
+| IMP02-STORY-135 | Employee | Là một Employee, tôi muốn xem tiến độ đào tạo của mình ngay trong Trung tâm cá nhân /me. | P1 | 5 | LMS phơi GET /api/mediaos/progress với bearer token máy, MediaOS proxy GET /me/training resolve email TỪ TOKEN (không nhận từ client), card Đào tạo fail-soft như các section khác của /me. |
+| IMP02-STORY-136 | Employee | Là một Employee, tôi muốn nhận thông báo MediaOS khi có sự kiện học tập như ghi danh được duyệt hay khoá học mới. | P1 | 5 | Route máy lms-events có guard riêng, dedupeKey bắt buộc, seed nhóm eventCode LMS trong catalog NOTI, render đúng target_url. |
+| IMP02-STORY-137 | User | Là một User, tôi muốn giao diện LMS trông và dùng giống MediaOS để không phải học lại. | P1 | 8 | Port token màu :root/.dark từ packages/ui, đồng bộ component lõi (button/badge/card/table/input), shell topbar full-width, App Switcher thành launcher toàn hệ. |
+| IMP02-STORY-138 | User | Là một User, tôi muốn mở LMS trực tiếp từ MediaOS qua tile Đào tạo và nút Mở LMS. | P2 | 3 | Tile Đào tạo trong App Switcher và nút mở thẳng, vào là đã có phiên (không rơi về màn đăng nhập LMS). |
+
+### Phạm vi kỹ thuật chính
+
+- SSO bridge dùng-một-lần + `SSO_ONLY` ở `apps/lms` (repo git RIÊNG — commit vào repo local đó)
+- Outbox event riêng cho đồng bộ tài khoản + job đối soát im-lặng-khi-không-đổi
+- Proxy `GET /me/training` (email TỪ token) + card Đào tạo trong `/me`
+- Kênh máy `lms-events` → NOTI với dedupeKey bắt buộc
+
+### Ghi chú dependency
+
+LMS phụ thuộc AUTH (phiên + token máy), HR (trạng thái nhân sự), NOTI (catalog event) và ME (nơi hiển thị tiến độ).
+
+---
+
+## 8.16 EPIC-15: BRAND - Thương hiệu công ty
+
+> **Bổ sung 2026-08-03** — wave S5-BRAND. Các Work Order của wave này trước đây gắn nhầm mã module `SYSTEM` (không có trong ISSUE-BOARD-01 §8.2) nên rơi khỏi mọi thẻ module.
+
+**Mục tiêu:** Công ty tự đặt logo và favicon, và thương hiệu đó áp ra toàn bộ vỏ ứng dụng.
+
+| Story ID | Actor | User Story / Technical Story | Priority | Point | Acceptance Criteria tóm tắt |
+| --- | --- | --- | --- | ---: | --- |
+| IMP02-STORY-139 | Admin | Là một Admin, tôi muốn tải lên, xem trước và gỡ logo cùng favicon của công ty trong /system/company. | P1 | 5 | Wrapper presign logo và favicon trên FileService theo pattern own-scope (gate ở controller), khối Thương hiệu trong /system/company, gỡ thì trả về mặc định. |
+| IMP02-STORY-140 | User | Là một User, tôi muốn thấy logo công ty trên thanh điều hướng và favicon đúng trên tab trình duyệt. | P1 | 3 | GlobalTopbar hiện logo công ty với fallback wordmark khi chưa đặt, favicon áp lúc chạy. |
+
+### Phạm vi kỹ thuật chính
+
+- Presign wrapper logo + favicon trên FileService (gate đặt ở controller)
+- Khối Thương hiệu trong `/system/company` + áp ra GlobalTopbar và favicon runtime
+
+### Ghi chú dependency
+
+BRAND phụ thuộc Foundation Files (presign) và Foundation company/settings.
+
+---
+
+## 8.17 EPIC-16: CHAT - Nhắn tin nội bộ
+
+> **Bổ sung 2026-08-03** theo SPEC-15 CHAT (wave S7 — **ĐANG CHẠY**). Đây là epic DUY NHẤT chưa hoàn thành: các story dưới đây phản ánh trạng thái thật của wave, không phải 100%.
+
+**Mục tiêu:** Nhắn tin nội bộ: phòng 1-1, phòng nhóm, phòng phòng-ban và phòng dự án tự động; gửi/đọc theo con trỏ seq; đính kèm qua Foundation Files; tìm kiếm toàn văn tiếng Việt; realtime qua Socket.IO + Valkey; và đường đọc-vượt membership có kiểm soát cho quản trị (CHAT-DEC-004).
+
+| Story ID | Actor | User Story / Technical Story | Priority | Point | Acceptance Criteria tóm tắt |
+| --- | --- | --- | --- | ---: | --- |
+| IMP02-STORY-141 | Employee | Là một Employee, tôi muốn mở hội thoại 1-1 với đồng nghiệp và tạo, quản trị phòng nhóm. | P0 | 8 | Phòng 1-1 idempotent theo direct_key (2 userId sắp xếp tăng dần), quản trị phòng nhóm gồm đổi tên, thêm bớt thành viên, phong admin, rời, lưu trữ; ChatAccessService là điểm khẳng định membership DUY NHẤT, fail-closed trả 404 không tiết lộ phòng có tồn tại (CHAT-FUNC-001/002, CHAT-SCREEN-003). |
+| IMP02-STORY-142 | Employee | Là một Employee, tôi muốn phòng chat của phòng ban và dự án tự có sẵn, thành viên tự đồng bộ khi nhân sự hoặc dự án đổi. | P0 | 8 | Tạo và đóng phòng theo org_units cùng projects, thành viên dẫn xuất từ nhân sự đang làm việc và project_members, đồng bộ tại sự kiện cộng job đối soát idempotent (CHAT-FUNC-003/004/005). |
+| IMP02-STORY-143 | Employee | Là một Employee, tôi muốn gửi tin nhắn không bị trùng và đọc lịch sử mượt theo con trỏ. | P0 | 13 | Phân trang theo con trỏ seq trước và sau, CẤM offset; chống trùng theo client_message_id; room_seq đánh số PER-PHÒNG (CHAT-FUNC-006/008). |
+| IMP02-STORY-144 | Employee | Là một Employee, tôi muốn đính kèm tệp và ảnh vào tin nhắn. | P0 | 5 | Presign upload rồi link vào tin qua file_links; ChatMessageFileResolver BẮT BUỘC đi qua Foundation Files, không dựng đường tệp riêng (CHAT-FUNC-007). |
+| IMP02-STORY-145 | Employee | Là một Employee, tôi muốn số tin chưa đọc chính xác và tự giảm khi tôi đã đọc. | P0 | 5 | last_read_seq CHỈ TIẾN không lùi, đếm chưa đọc theo room_seq per-phòng, badge tổng trên header đồng bộ realtime (CHAT-FUNC-009, CHAT-SCREEN-006). |
+| IMP02-STORY-146 | Employee | Là một Employee, tôi muốn ghim tin quan trọng và thu hồi tin gửi nhầm. | P1 | 3 | Tối đa 20 tin ghim mỗi phòng; người gửi thu hồi trong cửa sổ N phút, admin phòng nhóm thu hồi bất kỳ lúc nào (CHAT-FUNC-010/011). |
+| IMP02-STORY-147 | Employee | Là một Employee, tôi muốn tìm tin nhắn cũ bằng tiếng Việt có dấu hoặc không dấu và nhảy tới tin trong ngữ cảnh. | P1 | 8 | Tìm toàn văn tiếng Việt cả có dấu lẫn không dấu, LUÔN giới hạn trong phòng người tìm là thành viên, kết quả nhảy tới tin kèm ngữ cảnh, kèm tab tệp, tin ghim và thành viên (CHAT-FUNC-012, CHAT-SCREEN-005). |
+| IMP02-STORY-148 | Employee | Là một Employee, tôi muốn tin nhắn tới ngay lập tức mà không cần tải lại trang. | P0 | 13 | Gắn ValkeyIoAdapter vào vòng đời app (hiện đã định nghĩa nhưng không nơi nào dùng), join phòng SERVER-SIDE lúc handshake không nhận danh sách phòng từ client, đồng bộ join-leave khi membership đổi (CHAT-FUNC-013). |
+| IMP02-STORY-149 | Employee | Là một Employee, tôi muốn được báo khi bị nhắc tên, nhận DM gộp lô khi vắng mặt, và tắt thông báo phòng ồn. | P1 | 5 | Mention gửi ngay, DM gộp lô 15 phút khi người nhận vắng mặt, muted_until không sinh notification nhưng VẪN tăng badge, đi qua OutboxNotificationBridge chung (CHAT-FUNC-014/015). |
+| IMP02-STORY-150 | Employee | Là một Employee, tôi muốn trang chat full-screen và panel chat nổi dùng được ở mọi màn hình. | P0 | 13 | Trang /chat ba cột, panel nổi tối đa 3 hội thoại, dùng CHUNG store Zustand và MỘT kết nối WS duy nhất, bảng thông tin phòng có thành viên, tệp và tin ghim (CHAT-SCREEN-001/002/004). |
+| IMP02-STORY-151 | Super Admin | Là một Super Admin, tôi muốn tra cứu nội dung phòng bất kỳ khi có yêu cầu điều tra, và mọi lần tra đều để lại dấu vết. | P1 | 8 | Controller và service RIÊNG cho /chat/oversight tách hẳn đường thường, cặp quyền view chat-oversight, mỗi lần đọc-vượt ghi nhật ký ai đọc phòng nào lúc nào, có màn tra cứu và màn nhật ký riêng (CHAT-DEC-004, CHAT-SCREEN-007/008). |
+| IMP02-STORY-152 | QA/Security | Là một QA/Security, tôi muốn bộ test trọn vẹn cho CHAT trước khi mở cho người dùng. | P1 | 8 | 12 nhóm scenario SPEC-15 §21 chạy trên LANE_DB, E2E luồng tới hạn, deny-path membership và cross-tenant thực thi thật chứ không bị skip. |
+
+### Phạm vi kỹ thuật chính
+
+- 3 bảng chat đã có được ALTER thêm cột v1, backfill TRƯỚC khi thêm CHECK, GRANT theo cột
+- `room_seq` PER-PHÒNG (migration 0539 sửa công thức đếm chưa đọc sai của bản đầu)
+- `ChatAccessService` = điểm khẳng định membership duy nhất, fail-closed
+- Realtime: ValkeyIoAdapter gắn vào vòng đời app, room `co:{companyId}:…`
+- Đường đọc-vượt tách hẳn controller/service, có nhật ký riêng
+
+### Ghi chú dependency
+
+CHAT phụ thuộc AUTH (danh tính + quyền), HR/org_units (phòng ban), TASK/projects (dự án), Foundation Files (đính kèm) và NOTI (mention/DM). **Cảnh báo hạ tầng:** Valkey đang dùng chung cho cả 4 môi trường và KHÔNG có tiền tố kênh — gắn adapter mà không tách kênh sẽ nối test vào cụm Socket.IO của PROD.
+
+---
+
 ## 9. Backlog theo Sprint đề xuất
 
 > Sprint mapping dưới đây bám đúng các IMPLEMENTATION execution plan (IMPLEMENTATION-03 -> IMPLEMENTATION-09): mô hình **7 sprint (Sprint 0 -> Sprint 6)**. Tổng MVP baseline: **112 story / 869 point** (+ EPIC-12 ME bổ sung 2026-07-13: 8 story / 44 point; + 4 story HR bổ sung EPIC-03 2026-07-13: IMP02-STORY-121..124, 36 point → **124 story / 949 point**). Khi biết velocity thực tế, Product Owner và Tech Lead cần điều chỉnh lại số story trong từng sprint (xem cảnh báo capacity ở §9.1).
+>
+> **Sprint hậu-MVP (bổ sung 2026-08-03):** wave sau go-live không nằm trong mô hình 7 sprint gốc. Sprint 5 nhận thêm GOAL/LMS/BRAND (IMP02-STORY-125..131, 133..140) vì chạy cùng đợt; IMP02-STORY-132 (tab Mục tiêu trong dự án) giao ở Sprint 7. **Sprint 7 = wave CHAT** (IMP02-STORY-141..152, SPEC-15) — đang chạy tại thời điểm cập nhật.
 
 | Sprint | Execution plan | Mục tiêu | Story trọng tâm | Point | Deliverable demo |
 | --- | --- | --- | --- | ---: | --- |
@@ -601,6 +720,7 @@ ME phụ thuộc module nguồn đã xong (AUTH/HR/ATT/LEAVE/TASK/NOTI — Sprin
 | Sprint 4 | IMPLEMENTATION-07 | Task, Notification & Dashboard | 065-092, 101-103 | 231 | Project/task/Kanban, event notification, unread/dropdown, role dashboards, widget cache |
 | Sprint 5 | IMPLEMENTATION-08 | Integration, QA Hardening & UAT | 097, 104-110, 113-120 (EPIC-12 ME), 121-124 (HR bổ sung) | 159 | Field/export security, OpenAPI contract, test matrix, API/E2E/security/perf test, responsive P0, Trung tâm cá nhân /me (SPEC-09), liên kết tài khoản UI + import Excel nhân viên + sơ đồ tổ chức trực quan + thông tin công việc đầy đủ |
 | Sprint 6 | IMPLEMENTATION-09 | Stabilization, Release Candidate & Go-live | 111-112 + bugfix | 13 | UAT sign-off, release readiness, RC build, go-live runbook |
+| Sprint 7 | SPEC-15 + docs/plans/S7-CHAT-WAVE.md | CHAT - Nhắn tin nội bộ (hậu go-live) | 132, 141-152 (EPIC-16 CHAT) | 100 | Phòng 1-1/nhóm/phòng-ban/dự án, gửi-đọc theo con trỏ seq, đính kèm qua Foundation Files, tìm kiếm tiếng Việt, realtime Valkey adapter, đọc-vượt membership có nhật ký, tab Mục tiêu trong dự án |
 
 ### 9.1 Lưu ý capacity
 

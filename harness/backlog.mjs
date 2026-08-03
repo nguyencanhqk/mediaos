@@ -29,7 +29,10 @@
 //
 // Schema 1 item:
 //   id          : mã ngắn ổn định <MODULE>-<LAYER>-<n> (ISSUE-BOARD-01 §8)        — string, bắt buộc
-//   module      : mã module ISSUE-BOARD-01 §8.2 (PROJECT·FOUNDATION·AUTH·HR·ATT·LEAVE·TASK·NOTI·DASH·FRONTEND·BACKEND·QA·DEVOPS·RELEASE) — dashboard nhóm thẻ. Thiếu → suy từ id/title/paths.
+//   module      : mã module ISSUE-BOARD-01 §8.2 — dashboard nhóm thẻ. Thiếu/sai → suy từ id/title/paths (hay xếp NHẦM).
+//                 MVP:      PROJECT·FOUNDATION·AUTH·HR·ATT·LEAVE·TASK·NOTI·DASH·FRONTEND·BACKEND·INTEGRATION·QA·DEVOPS·RELEASE
+//                 hậu-MVP:  ME·GOAL·LMS·BRAND·CHAT  (mỗi mã có epic riêng — IMPLEMENTATION-02 §8.13–8.17)
+//                 ĐÃ BỎ (2026-08-03, đừng dùng lại): INT→INTEGRATION · FND→FOUNDATION · SYSTEM→BRAND
 //   layer       : mã layer ISSUE-BOARD-01 §8.3 (DOC·DB·API·BE·FE·UI·QA·DEVOPS·SEC·PERF·INT·REL)                                       — dashboard chip lớp. Thiếu → suy từ paths/title.
 //   title       : một câu mô tả                                                   — string, bắt buộc
 //   zone        : 'green' | 'yellow' | 'red'   → model/gate/autonomy (policy.md)
@@ -659,7 +662,7 @@ export const backlog = [
   },
   {
     id: "S1-INT-MOUNT-1",
-    module: "BACKEND",
+    module: "INTEGRATION",
     layer: "INT",
     title:
       "Quyết scope + mount-or-skip: webhooks-deny + ui-config-deny đang 404 (module chưa mount) — mount nếu trong MVP, else exclude test có vé Phase",
@@ -1160,7 +1163,7 @@ export const backlog = [
   },
   {
     id: "S2-INT-1",
-    module: "BACKEND",
+    module: "INTEGRATION",
     layer: "INT",
     title:
       "Tích hợp HR tạo employee ↔ AUTH tạo/link user (giao dịch nhất quán, unique active link, audit cả 2 phía)",
@@ -1184,7 +1187,7 @@ export const backlog = [
   },
   {
     id: "S2-INT-2",
-    module: "BACKEND",
+    module: "INTEGRATION",
     layer: "INT",
     title:
       "Tích hợp HR direct_manager ↔ data-scope Team/Department của permission resolver (approval scope nền cho LEAVE/ATT sau)",
@@ -2454,7 +2457,7 @@ export const backlog = [
   // ── Integration (crown — LEAVE→ATT sync) ──
   {
     id: "S3-INT-1",
-    module: "BACKEND",
+    module: "INTEGRATION",
     layer: "INT",
     title:
       "LEAVE→ATT sync: onLeaveApproved handler + AttendanceLeaveSyncService (full-day=Leave/required 0 · half-day/hourly reduce · recalc existing check-in) + sync_status/retry + onLeaveCancelled/Revoked recalc + balance restore idempotent (S3-SYNC-004)",
@@ -3839,7 +3842,7 @@ export const backlog = [
   },
   {
     id: "S2-FND-CONTRACT-1",
-    module: "BACKEND",
+    module: "FOUNDATION",
     layer: "API",
     title:
       "API contract hygiene theo BACKEND-12 (audit §6.2, P2): Swagger/OpenAPI /docs + bộ mã FOUNDATION-ERR-* + chốt pagination request + migrate DTO cục bộ vào contracts",
@@ -4698,7 +4701,7 @@ export const backlog = [
   },
   {
     id: "S4-INT-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "BE",
     title:
       "Tích hợp TASK → NOTI: wiring event producer (outbox) → consumer intake, tạo notification đúng recipient cho mọi event TASK/PROJECT — E2E task→noti — crown",
@@ -4729,7 +4732,7 @@ export const backlog = [
   },
   {
     id: "S4-INT-2",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "BE",
     title:
       "Tích hợp DASH cache invalidation từ event TASK/NOTI/ATT/LEAVE (POST /internal/v1/dashboard/cache/invalidate) — chỉ mã do producer thật phát (§11.5 reconcile)",
@@ -5028,7 +5031,7 @@ export const backlog = [
   },
   {
     id: "S4-QA-2",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "QA",
     title:
       "QA Sprint 4 E2E + regression sign-off: flow task→noti→dash (§15.1) + notification deep link + dashboard degraded + regression S0–S3",
@@ -5090,7 +5093,7 @@ export const backlog = [
   },
   {
     id: "S5-QA-E2E-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "QA",
     title:
       "Integration freeze + system smoke P0 + cross-module E2E: login→Home Portal→module workspace→check-in→nghỉ phép→task→notification→dashboard (WS-B/C)",
@@ -5109,7 +5112,7 @@ export const backlog = [
   },
   {
     id: "S5-BE-CONTRACT-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "BE",
     title:
       "API contract & OpenAPI/Swagger chuẩn hoá theo module + FE integration hardening (401/403/422/500 mapping, request-id, idempotency, query invalidation sau mutation) — WS-D",
@@ -5133,7 +5136,7 @@ export const backlog = [
   },
   {
     id: "S5-SEC-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "SEC",
     title:
       "Permission & data-scope hardening + field-level/export permission + security testing (IDOR, file access, sensitive fields, rate-limit auth) — WS-E, crown",
@@ -5158,7 +5161,7 @@ export const backlog = [
   },
   {
     id: "S5-QA-REG-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "QA",
     title:
       "QA regression suite MVP (test-case matrix theo module × role) + UI state hardening + responsive/accessibility smoke — WS-F",
@@ -5301,7 +5304,7 @@ export const backlog = [
   },
   {
     id: "S6-QA-FINAL-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "QA",
     title:
       "QA final pass: regression + E2E + API contract + regression-theo-role + UAT final + điều kiện sign-off (WS3)",
@@ -5330,7 +5333,7 @@ export const backlog = [
   },
   {
     id: "S6-SEC-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "SEC",
     title:
       "Security / RBAC / Data-Protection final hardening: auth/session · RBAC · field masking · file access · audit · secret/config review (WS4) — crown",
@@ -5464,7 +5467,7 @@ export const backlog = [
   },
   {
     id: "S6-SEC-ROUTEMAP-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "SEC",
     title:
       "Dựng lại Phụ lục A bằng QUÉT RUNTIME (boot AppModule, đọc metadata thật) thay parse tĩnh — census 100% route + phán quyết gate có chữ ký; đóng vế GET của route-guard sweep",
@@ -6823,7 +6826,7 @@ export const backlog = [
   // ─── Nhóm D: NOTI wiring crown (generic OutboxNotificationBridge — depends_on S4-INT-1) ───
   {
     id: "S4-INT-3",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "BE",
     title:
       "Tích hợp LEAVE → NOTI qua OutboxNotificationBridge (INT-1): event-type leave.request.{submitted,approved,rejected,cancelled,revoked} → NOTI intake, recipient theo SPEC-05 §19.1/§14.19 — hiện event LEAVE rơi im lặng, requester không được báo",
@@ -6860,7 +6863,7 @@ export const backlog = [
   },
   {
     id: "S4-INT-4",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "BE",
     title:
       "Tích hợp ATT → NOTI: bổ sung producer outbox trong ATT (adjustment submit/approve/reject · remote-work submit/approve/reject/cancel) + đăng ký event-type + recipient-resolver vào OutboxNotificationBridge — ATT hiện CHƯA phát event nào",
@@ -6891,7 +6894,7 @@ export const backlog = [
   },
   {
     id: "S4-INT-5",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "BE",
     title:
       "Tích hợp HR/AUTH → NOTI: HR tạo employee → activation/welcome notification (mảnh thiếu STORY-098) + AUTH password-reset-requested/account-locked → notify chủ tài khoản — producer HR/AUTH + đăng ký vào OutboxNotificationBridge",
@@ -7722,7 +7725,7 @@ export const backlog = [
   },
   {
     id: "S5-SEQ-HARDEN-1",
-    module: "FND",
+    module: "FOUNDATION",
     layer: "BE",
     title:
       "Gia cố cấp mã tuần tự: SAVEPOINT cho recovery 23505 (ensure-on-miss race hiện trả 500 do 25P02), allocate sau authz tầng-service (chống đốt counter), phân biệt constraint khi map unique-violation",
@@ -9199,7 +9202,7 @@ export const backlog = [
   // cần endpoint public) = đợt sau, NGOÀI phạm vi wave này.
   {
     id: "S5-BRAND-BE-1",
-    module: "SYSTEM",
+    module: "BRAND",
     layer: "BE",
     title:
       "BE Thương hiệu công ty: wrapper presign logo + favicon trên FileService (pattern ME avatar) — /foundation/company/branding, logo→companies.logo_url (fileId), favicon→company_settings key, KHÔNG migration, KHÔNG quyền mới",
@@ -9233,7 +9236,7 @@ export const backlog = [
   },
   {
     id: "S5-BRAND-FE-1",
-    module: "SYSTEM",
+    module: "BRAND",
     layer: "FE",
     title:
       "FE khối 'Thương hiệu' trong /system/company: upload/preview/gỡ logo + favicon qua wrapper BE-1 (pattern AvatarUploadCard 4 pha), gate update:foundation-company + dọn ô URL thô ở console",
@@ -9266,7 +9269,7 @@ export const backlog = [
   },
   {
     id: "S5-BRAND-FE-2",
-    module: "SYSTEM",
+    module: "BRAND",
     layer: "FE",
     title:
       "FE áp thương hiệu ra vỏ app: GlobalTopbar hiện logo công ty (fallback wordmark) + hook useFavicon set favicon động sau đăng nhập + sửa favicon tĩnh vỡ /vite.svg ở cả 3 app",
@@ -9485,6 +9488,47 @@ export const backlog = [
       "Chạy trên LANE_DB riêng; FULL gate (security-reviewer + database-reviewer + silent-failure-hunter) PASS",
     ],
   },
+  // ── DB-2: sinh ra từ FULL gate của BE-1 plan (02/08). `seq` của mig 0050 là identity CẤP BẢNG, không
+  //    phải per-room — comment 0050:79 ("thứ tự tổng ổn định trong room") SAI, và SPEC-15 §13.2 xây công
+  //    thức đếm chưa đọc lên câu đó. Đo thật: phòng A 2 tin, phòng B 50 tin ⇒ badge phòng A hiện 51.
+  {
+    id: "S7-CHAT-DB-2",
+    module: "CHAT",
+    layer: "DB",
+    title:
+      "Migration 0539: chat_messages.room_seq PER-ROOM (sửa công thức đếm chưa đọc SAI + bịt rò lưu lượng qua con trỏ phân trang toàn cục)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/communication.ts",
+      "packages/contracts/src/chat.ts",
+      "docs/SPEC/SPEC-15 CHAT.md",
+      "docs/DB/DB-12 CHAT Database Design.md",
+      "docs/API Design/API-13_CHAT_API_Design.md",
+      "apps/api/test/integration/**",
+      "docs/plans/S7-CHAT-DB-2.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S7-CHAT-DB-1"],
+    plan: "docs/plans/S7-CHAT-DB-2.md",
+    src: [
+      "plan-reviewer FULL gate trên docs/plans/S7-CHAT-BE-1.md (02/08) mục B1 — CRITICAL",
+      "0050:77 `ADD COLUMN seq bigint GENERATED ALWAYS AS IDENTITY` (cấp BẢNG) vs 0050:79 comment nói 'trong room' — comment sai, DDL đúng",
+      "đo thật rollback trên lane: phòng A 2 tin/phòng B 50 tin ⇒ last_message_seq - last_read_seq = 51, đúng phải là 1",
+      "owner chốt 02/08: thêm room_seq NGAY vì chat_messages đang 0 hàng trên PROD — đợi có dữ liệu thì backfill đắt + đổi ngữ nghĩa con trỏ là breaking change FE",
+    ],
+    done_when: [
+      "ADD COLUMN room_seq bigint cho chat_messages + backfill row_number() OVER (PARTITION BY company_id, room_id ORDER BY seq) + SET NOT NULL (PROD 0 hàng nên miễn phí; câu backfill vẫn giữ cho môi trường có dữ liệu)",
+      "Cấp room_seq bằng UPDATE chat_rooms SET last_message_seq = COALESCE(last_message_seq,0)+1 RETURNING — khoá hàng phòng nên TUẦN TỰ HOÁ theo phòng; app role đã có UPDATE trên chat_rooms (đo thật)",
+      "UNIQUE (company_id, room_id, room_seq) làm ĐAI THỨ HAI: race lọt qua khoá hàng thì 23505 fail-loud, KHÔNG trùng số im lặng",
+      "Thay idx_chat_messages_room_seq sang (company_id, room_id, room_seq DESC) — con trỏ phân trang đổi sang room_seq",
+      "GIỮ cột seq toàn cục (identity không bỏ được, còn index 0050 dùng) nhưng NGỪNG LỘ ra client: DTO/contracts KHÔNG trả seq, beforeSeq/afterSeq nay mang nghĩa room_seq",
+      "Đổi ngữ nghĩa last_read_seq + visible_from_seq + last_message_seq sang room_seq — sửa comment ở 0538, schema drizzle, SPEC-15 §13.1/§13.2/§13.4, DB-12 §6.3, API-13",
+      "RED-trước: phòng A 2 tin + phòng B 50 tin ⇒ unread phòng A = 1 (ca này ĐỎ trước migration, XANH sau) · room_seq của mỗi phòng bắt đầu từ 1 và liên tục · 2 INSERT đồng thời cùng phòng KHÔNG trùng room_seq",
+      "FULL gate PASS",
+    ],
+  },
   {
     id: "S7-CHAT-BE-1",
     module: "CHAT",
@@ -9503,7 +9547,7 @@ export const backlog = [
       "docs/plans/S7-CHAT-BE-1.md",
     ],
     skills: ["code-review"],
-    depends_on: ["S7-CHAT-DB-1"],
+    depends_on: ["S7-CHAT-DB-2"],
     plan: "docs/plans/S7-CHAT-BE-1.md",
     src: [
       "SPEC-15 §3.2 (membership là ranh giới, không phải data_scope) · §3.3 (ĐÃ VIẾT LẠI 02/08 — ngoại lệ đọc-vượt nằm ở WO RIÊNG S7-CHAT-BE-7, controller riêng; WO này KHÔNG được thêm nhánh oversight vào đường đọc thường) · §12 (20 mã lỗi) · API-13 §5.1 cột Membership",
@@ -9518,6 +9562,7 @@ export const backlog = [
       "Mọi hành động quản trị phòng ghi audit_logs (object_type 'chat_room'); nội dung tin nhắn KHÔNG vào audit",
       "PermissionGuard áp per-controller với đúng cặp SPEC-15 §11 (guard opt-in — không tự có, xem memory s1-fnd-module-metadata-seed-drift); khai API_MODULE_TAGS cho OpenAPI (đừng gắn tay @ApiTags)",
       "RED-trước: CHỦ THỂ TEST KHÔNG ĐƯỢC LÀ SUPER ADMIN — SA có *:* nên sẽ mang luôn ('view','chat-oversight') và lọt qua mọi ca deny-path. Dùng (a) role thường và (b) role CÓ ('view','chat-room') nhưng KHÔNG có ('view','chat-oversight') → 404 ở phòng không thuộc · người đã left_at không đọc được · cross-tenant mọi endpoint; int-spec chạy trên LANE_DB",
+      "⚠️ NỢ TỪ S7-CHAT-DB-1 (FULL gate 02/08): counter sequence_counters 'chat_room' CHỈ được seed cho company TỒN TẠI LÚC MIGRATE (mig 0538 `INSERT ... SELECT FROM companies`). KHÔNG seeder runtime nào cấp cho company tạo SAU (sequence_counters không có trong master-data-seeder.registry) ⇒ company mới sẽ SequenceNotFoundError ở phòng đầu tiên. Lỗ CÓ SẴN — 'task' (mig 0498) y hệt, bị che vì PROD chỉ 1 company. WO này phải cấp counter lúc tạo company HOẶC lazy-create trong ChatRoomService, và nêu rõ chọn cách nào",
       "assertMember của WO này KHÔNG nhận tham số/cờ nào để bỏ qua membership. Đường đọc-vượt là service+controller RIÊNG ở S7-CHAT-BE-7 — giữ được tính chất 'đọc code là chứng minh được' cho đường đọc thường (API-13 §5.3 ràng buộc 1)",
       "FULL gate (security-reviewer + silent-failure-hunter) PASS",
     ],
@@ -9534,6 +9579,7 @@ export const backlog = [
       "apps/api/src/chat/**",
       "packages/contracts/src/chat.ts",
       "apps/api/test/integration/**",
+      "docs/_review/S6-SEC-ROUTEMAP-1-route-census.json",
       "docs/plans/S7-CHAT-BE-2.md",
     ],
     skills: ["code-review"],
@@ -9569,6 +9615,7 @@ export const backlog = [
       "apps/api/src/chat/**",
       "apps/api/src/foundation/files/**",
       "apps/api/test/integration/**",
+      "docs/_review/S6-SEC-ROUTEMAP-1-route-census.json",
       "docs/plans/S7-CHAT-BE-3.md",
     ],
     skills: ["code-review"],
@@ -9588,6 +9635,47 @@ export const backlog = [
       "KHÔNG ghi chat_messages.file_url/file_name (cột khai tử); đường đọc trả null",
       "RED-trước: gỡ đăng ký resolver → mọi đường tải 403 (chứng minh fail-closed là thật, không phải giả định) · người ngoài phòng tải bằng fileId trực tiếp → từ chối · gắn tệp người khác → từ chối",
       "FULL gate PASS",
+      "⚠️ ĐÍNH CHÍNH lúc thi công 03/08/2026 — 3 điểm lệch với dòng done_when ở trên, ghi lại để reviewer đối chiếu ĐÚNG hiện thực chứ không đúng dự định:",
+      "(a) THUMBNAIL: repo KHÔNG có pipeline sinh biến thể ảnh (không thư viện xử lý ảnh, không job, không khoá biến thể trong storage — đã quét toàn apps/api/src). DTO có khoá `thumbnailUrl` với ngữ nghĩa 'URL xem-trước': ảnh → CHÍNH URL bản gốc (FE co bằng CSS), không-phải-ảnh → null. Biến thể resize THẬT là WO riêng (ngoài paths của WO này). Giới hạn ghi trong jsdoc contracts + micro-plan §1.6",
+      "(b) 'MỌI đường tải 403' đúng cho đường FOUNDATION (GET /foundation/files/:id/download → 403). Đường CHAT (DTO tin + tab Tệp) fail-soft: trả `url: null` + logger.error, KHÔNG ném — một tệp hỏng không được làm trắng cả trang tin. Cùng tính chất fail-closed (không có URL nào được ký), khác hình dạng phản hồi. Cả hai đi qua CÙNG decideForLinkedFile",
+      "(c) canLink có VẾ THỨ BA ngoài spec: người gọi phải là NGƯỜI GỬI tin đích. Thêm điều kiện cần, không nới lỏng vế nào. Lý do: attachment_count không có GRANT UPDATE ⇒ mọi link gắn sau qua route FOUNDATION làm DTO tin lệch VĨNH VIỄN với tab Tệp, và không có nó thì bất kỳ ai giữ send:chat-message cũng chèn được tệp vào phát ngôn người khác (micro-plan §1.2)",
+      "PHÁT SINH: ChatModule phải import StorageModule TƯỜNG MINH (FilesModule chỉ import, KHÔNG re-export STORAGE_ADAPTER) — thiếu là AppModule SẬP lúc khởi động, đỏ dây chuyền mọi int-spec chứ không riêng CHAT",
+      "⚠️ VÁ FULL GATE 03/08/2026 — 2 HIGH + 5 MEDIUM, cả hai HIGH đo được bằng probe trên DB thật:",
+      "(HIGH-1) THU HỒI KHÔNG CÒN GỠ file_links. Gỡ link ⇒ decideForLinkedFile thấy links.length===0 ⇒ coi là foundation-owned ⇒ fallback FOUNDATION.FILE.DOWNLOAD (company-admin đang giữ, bulk grant 0435). Probe: người NGOÀI phòng 403 TRƯỚC thu hồi, 302 SAU thu hồi ⇒ thu hồi MỞ RỘNG phạm vi tệp. Nay link giữ sống (tệp vẫn module-owned) + ChatMessageFileResolver.canRead từ chối khi recalled_at IS NOT NULL. SPEC-15 §13.6 đã đính chính. ChatMessagesRepository.unlinkMessageFiles ĐÃ GỠ BỎ",
+      "(HIGH-2) Khoá điều phối phải CHÍNH TẮC ở biên ghi. Registry FilePolicyService tra resolver bằng khoá đã lowercase, còn module truy vấn file_links bằng so-chuỗi CHÍNH XÁC ⇒ client khai moduleCode:'chat'/entityType:'Chat_Message' tạo được link 'ma': resolver VẪN cấp quyền tải cho mọi thành viên phòng, nhưng CHAT không thấy để hiển thị, unlinkMessageFiles không chạm, canUnlinkFile luôn false ⇒ grant KHÔNG quan sát được và KHÔNG thu hồi được. FileService.link nay từ chối 400 qua FilePolicyService.canonicalOwnerKey",
+      "(MED) canAttach phải ép ĐỦ luật của sendMessage — POST /foundation/files/:id/links là ĐƯỜNG GHI THỨ HAI không đi qua ChatMessagesService: thêm vế phòng-lưu-trữ (CHAT-ERR-005 bị vòng qua), vế tin-đã-thu-hồi, và vế TRẦN CHAT_MAX_ATTACHMENTS_PER_MESSAGE (trần chỉ ở Zod ⇒ vượt trần phá điều kiện tiên quyết của trimToMessageBoundary ⇒ tab Tệp MẤT tệp im lặng)",
+      "(MED) decorate() bỏ vế lọc attachmentCount>0 — cột không có GRANT UPDATE nên tệp gắn qua đường FOUNDATION vô hình VĨNH VIỄN trên /messages dù tab Tệp vẫn liệt kê + vẫn ký URL",
+      "(MED) signMany nạp link CẢ LÔ bằng MỘT truy vấn (listLinksForFiles) thay vì mỗi tệp một withTenant; logSignedUrls đổi từ best-effort sang FAIL-CLOSED (nuốt lỗi ghi = giữ nguyên trạng thái 'kéo cả kho không để lại dấu vết'); orderBy thêm fileLinks.id (created_at trùng nhau trong một tx ⇒ thứ tự do planner quyết, ảnh đảo chỗ giữa hai lần cuộn)",
+      "NỢ CÓ CHỦ: mỗi tệp vẫn tốn 1 dispatch policy (đã bỏ được vế nạp link). Lỗ 'links.length===0 ⇒ tụt fallback FOUNDATION' KHÔNG riêng CHAT (HR contract · task file · avatar · branding) ⇒ WO riêng S7-FND-LINKFALLBACK-1",
+    ],
+  },
+  {
+    id: "S7-FND-LINKFALLBACK-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "FilePolicy: tệp TỪNG có link module thì KHÔNG bao giờ tụt xuống fallback FOUNDATION.FILE.* — lỗ chung của 5 module, phát hiện khi vá S7-CHAT-BE-3",
+    zone: "red",
+    status: "done",
+    paths: [
+      "apps/api/src/foundation/files/**",
+      "apps/api/test/integration/**",
+      "apps/api/test/foundation/**",
+      "docs/plans/S7-FND-LINKFALLBACK-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S7-CHAT-BE-3"],
+    src: [
+      "apps/api/src/foundation/files/file-policy.service.ts (nhánh links.length === 0 → decide() foundation-owned)",
+      "apps/api/migrations/0435_foundation_db5_retention_seed_modules.sql:375-380 (company-admin được bulk-grant download:foundation-file)",
+      "S7-CHAT-BE-3 FULL gate — HIGH-1, đo bằng probe trên DB thật",
+    ],
+    done_when: [
+      "Tệp có ÍT NHẤT MỘT link module-owned đã soft-delete và 0 link sống ⇒ decideForLinkedFile KHÔNG rơi xuống fallback FOUNDATION.FILE.*, trả deny (lý do riêng, phân biệt được với deny-no-resolver)",
+      "Tệp CHƯA BAO GIỜ có link module (foundation-owned thật) ⇒ giữ NGUYÊN hành vi fallback hiện tại — đây là vế đối chứng, thiếu nó thì bản vá chặn nhầm mọi tệp foundation",
+      "Chạy lại TOÀN BỘ int-spec của 5 module đăng ký resolver (CHAT · HR contract · HR employee-file · ME avatar · TASK · branding) — đây là đổi hợp đồng dùng chung, bán kính nổ ~15 int-spec chạm luồng link/unlink",
+      "RED-trước: gỡ link của HR contract → company-admin KHÔNG tải lại được qua /foundation/files/:id/download",
+      "FULL gate PASS",
     ],
   },
   {
@@ -9598,7 +9686,17 @@ export const backlog = [
       "Tìm kiếm toàn văn tiếng Việt (có dấu/không dấu) — LUÔN giới hạn theo phòng người tìm là thành viên; đây là đường đọc RỘNG NHẤT của module",
     zone: "red",
     status: "todo",
-    paths: ["apps/api/src/chat/**", "apps/api/test/integration/**", "docs/plans/S7-CHAT-BE-4.md"],
+    paths: [
+      "apps/api/src/chat/**",
+      "apps/api/test/integration/**",
+      // packages/contracts + backlog THIẾU ở bản seed — WO sửa cả hai (3 schema mới + sửa done_when §19).
+      // Thiếu chúng: guard-scope kêu ngoài phạm vi giữa chừng, và scheduler KHÔNG thấy BE-4 tranh chấp
+      // `contracts/src/chat.ts` với FE-1/BE-5/BE-6 (memory wo-paths-drive-gate-and-scheduler).
+      "packages/contracts/src/chat.ts",
+      "harness/backlog.mjs",
+      "docs/_review/S6-SEC-ROUTEMAP-1-route-census.json",
+      "docs/plans/S7-CHAT-BE-4.md",
+    ],
     skills: ["code-review"],
     depends_on: ["S7-CHAT-BE-2"],
     plan: "docs/plans/S7-CHAT-BE-4.md",
@@ -9612,7 +9710,10 @@ export const backlog = [
       "Tin đã thu hồi bị loại khỏi kết quả; kết quả trả kèm ngữ cảnh đủ để nhảy tới tin (roomId + seq)",
       "RED-TRƯỚC (bắt buộc, viết trước code): gieo tin ở phòng actor KHÔNG thuộc với từ khoá khớp chính xác → kết quả PHẢI rỗng; cross-tenant",
       "CHAT-DEC-004 KHÔNG mở tìm kiếm: ca 'Super Admin gọi /chat/search chỉ thấy phòng mình là thành viên' là BẮT BUỘC và là ca quan trọng nhất của WO này. SA có ('view','chat-oversight') nhưng cặp đó CHỈ dùng ở /chat/oversight/* — tuyệt đối KHÔNG có nhánh nào trong truy vấn tìm kiếm đọc tới nó. Không có /chat/oversight/search (SPEC-15 §3.3 · API-13 §5.3 ràng buộc 5)",
-      "Đo ngưỡng §19 (< 800ms ở ~1 triệu tin) bằng thời gian/buffer, KHÔNG assert tên index",
+      "CHUYỂN GIAO 03/08/2026 — ngưỡng §19 (< 800ms ở ~1 triệu tin) KHÔNG đo ở WO này mà ở S7-CHAT-QA-1: đo trên lane vài trăm hàng là vô nghĩa, còn assert planner chọn đích danh idx_chat_messages_search là ĐỎ OAN trên chính hành vi tối ưu (memory pg-planner-index-assert-trap). Ghi tường minh để WO không bị đóng dấu 'xong' với một dòng nghiệm thu không ai làm (memory wo-status-auto-ledger)",
+      "Con trỏ phân trang KHÔNG được phơi chat_messages.seq (identity CẤP BẢNG ⇒ rò lưu lượng toàn công ty — đúng lỗ S7-CHAT-DB-2/mig 0539 vừa bịt) và KHÔNG được dùng room_seq (per-room ⇒ vô nghĩa khi trộn nhiều phòng). Keyset (date_trunc('milliseconds', created_at), id), opaque base64url. date_trunc là BẮT BUỘC: created_at là timestamptz micro-giây còn JS Date chỉ mili-giây ⇒ sắp xếp theo cột thô mà con trỏ mang mili-giây làm trang sau SÓT TIN trong im lặng",
+      "Đường tìm kiếm KHÔNG ký URL tệp nào (chỉ trả attachmentCount) — tái dùng chatMessageSchema (đã mang attachments + URL ký từ BE-3) biến ô search thành máy phát URL ký hàng loạt, mỗi lần gõ phím",
+      "KHÔNG ghi audit cho /chat/search — tường minh, không phải bỏ quên: SPEC-15 §3.3/§18 chốt audit theo PHÒNG, không theo CÂU TRUY VẤN; ghi ở đây là lưu nội dung người dùng gõ vào bảng append-only dùng chung",
       "FULL gate PASS",
     ],
   },
@@ -9621,7 +9722,7 @@ export const backlog = [
     module: "CHAT",
     layer: "BE",
     title:
-      "Phòng tự động theo phòng ban + dự án: tạo/đóng phòng, đồng bộ thành viên tại sự kiện HR/TASK, job đối soát đêm idempotent sửa lệch",
+      "Phòng tự động theo phòng ban + dự án: tạo/đóng phòng, đồng bộ thành viên tại sự kiện HR/TASK (thu hồi chạy TRONG tx nguồn), job đối soát định kỳ idempotent sửa lệch",
     zone: "red",
     status: "todo",
     paths: [
@@ -9629,6 +9730,8 @@ export const backlog = [
       "apps/api/src/employees/**",
       "apps/api/src/org/**",
       "apps/api/src/tasks/**",
+      "apps/api/src/scheduler/**",
+      "apps/api/src/recycle-bin/**",
       "apps/api/src/foundation/system-jobs/**",
       "apps/api/test/integration/**",
       "docs/plans/S7-CHAT-BE-5.md",
@@ -9644,8 +9747,10 @@ export const backlog = [
     done_when: [
       "Tạo org_unit → phòng department (idempotent qua chat_rooms_org_unit_uq); tạo project → phòng project (qua chat_rooms_project_uq)",
       "Đổi phòng ban của nhân viên → left_at phòng cũ + vào phòng mới; nghỉ việc/vô hiệu hoá → rời MỌI phòng dẫn xuất; thêm/bớt project_members → vào/rời; dự án đóng/xoá mềm → archive phòng (KHÔNG xoá tin)",
-      "Đồng bộ chạy trong CÙNG transaction với thao tác nguồn khi rẻ, nếu không thì qua outbox — KHÔNG để đường ghi nào của HR/TASK bỏ sót (liệt kê DANH SÁCH WRITER trong plan, chốt ở method dùng chung — bài học DECISIONS-05)",
-      "Job đối soát đêm @SystemJobHandler idempotent so khớp lại toàn bộ phòng sync_source<>'manual' với nguồn, sửa lệch, log cảnh báo số phòng/số thành viên đã sửa; SchedulerModule import tường minh ChatModule",
+      "OWNER CHỐT 02/08/2026 — đường THU HỒI (rời phòng: đổi phòng ban · nghỉ việc · unlink · bớt project_member) chạy trong CÙNG transaction nguồn, cửa sổ lệch = 0. KHÔNG nuốt lỗi bằng logger.warn ở nhánh này: hỏng phải LOUD (log ERROR + audit resultStatus='Failure'). Đường TẠO PHÒNG được phép ngoài tx vì cấp room_code phải gọi TRƯỚC khi mở tx (SequenceService.nextCode tự mở withTenant, không lồng được — chat-room-code.service.ts jsdoc). OrgRepository.createOrgUnit hiện KHÔNG nhận tx (org.repository.ts:89) ⇒ phải nới chữ ký repo, hoặc ghi rõ writer này ở ngoài tx",
+      "Liệt kê DANH SÁCH WRITER đầy đủ trong plan và chốt hook ở method DÙNG CHUNG. ⚠️ Có HAI họ writer ghi employee_profiles, không phải một: HrWriteService VÀ employees.service.ts (createEmployee:218 · updateEmployee:303 — ghi cả orgUnitId lẫn status · deleteEmployee:378, route sống ở employees.controller.ts:45/58/68), cộng RecycleBinService.restoreEmployee. Thiếu họ thứ hai = đổi phòng ban qua PATCH /employees/:id KHÔNG có hook nào",
+      "Job đối soát ĐỊNH KỲ theo nhịp system-jobs @SystemJobHandler idempotent so khớp lại toàn bộ phòng sync_source<>'manual' với nguồn, sửa lệch, log số phòng/thành viên đã sửa; SchedulerModule import tường minh ChatModule. ⚠️ KHÔNG có cron 'đêm' trong hệ: mọi handler chạy chung một setInterval (worker-scheduler.config.ts) và PROD đặt SYSTEM_JOBS_POLL_MS=900000 = 15 PHÚT (.env.prod:9), không phải 60s như .env.example. Job là LƯỚI AN TOÀN, không phải đường chính",
+      "Vị từ 'tập mong muốn' phải DUY NHẤT, dùng chung cho hook và job. Phòng project phải kèm employee_profiles.status='active' AND deleted_at IS NULL — thiếu vế này thì nhịp job kế tiếp JOIN LẠI người vừa nghỉ việc (changeStatus không chạm project_members), tự phá ca RED 'người nghỉ việc mất mọi đường đọc'",
       "RED-trước: gieo lệch cố ý (thừa/thiếu thành viên) → job sửa đúng · người vừa chuyển phòng ban KHÔNG đọc được tin MỚI của phòng cũ · người nghỉ việc mất mọi đường đọc",
       "FULL gate PASS",
     ],
@@ -9681,13 +9786,74 @@ export const backlog = [
     ],
   },
   {
+    id: "S7-INT-OUTBOX-FIFO-1",
+    module: "INTEGRATION",
+    layer: "BE",
+    title:
+      "OutboxWorker dispatch ĐÚNG THỨ TỰ trong cùng lô claim (KI-059): RETURNING của UPDATE không theo ORDER BY của CTE ⇒ event tiêu thụ sai thứ tự, hỏng-im-lặng ở mọi consumer phụ thuộc thứ tự",
+    zone: "yellow",
+    status: "done",
+    paths: [
+      "apps/api/src/events/outbox-worker.ts",
+      "apps/api/test/integration/**",
+      "docs/plans/S7-INT-OUTBOX-FIFO-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S7-INT-OUTBOX-FIFO-1.md",
+    src: [
+      "KI-059 (RELEASE-02) — bằng chứng đo 2026-08-03 trên lane mediaos_chatbe6: enqueue 1→2→3, claim trả [2,1,3]; ba lượt trước cho thứ tự ĐẢO",
+      "Phát hiện khi thi công S7-CHAT-BE-6 — CHAT_DIRECT_MESSAGE là consumer ĐẦU TIÊN gộp N event thành 1 thông báo nên là consumer đầu tiên QUAN SÁT ĐƯỢC lỗi này",
+      "memory: tests-can-pin-a-hole-open · pg-planner-index-assert-trap (cấm assert plan cụ thể — assert HÀNH VI thứ tự, không assert planner chọn gì)",
+    ],
+    done_when: [
+      "RED trước: test tầng events gieo N event với available_at TĂNG DẦN + đủ hàng nhiễu để planner đổi plan, đo THỨ TỰ consumer thực sự nhận được (EventBus ghi lại), chứng minh ĐỎ trên code hiện tại",
+      "Vá: bọc UPDATE vào CTE thứ hai rồi SELECT … ORDER BY available_at, created_at, id ở ngoài cùng — KHÔNG sort ở tầng JS làm lớp che, và KHÔNG bỏ FOR UPDATE SKIP LOCKED (claim vẫn phải atomic, không double-claim)",
+      "Hồi quy: outbox.int-spec.ts hiện có vẫn xanh (retry/backoff/dead-letter/reaper không đổi hành vi)",
+      "Chạy lại chat-noti-e2e.int-spec.ts SONG SONG với spec khác ≥3 lượt: ca 6 'unread_count = giá trị của tin ĐẦU' (đang it.skip, gắn KI-059) BỎ skip và xanh — đây là nghiệm thu end-to-end của WO này",
+      "Ghi rõ giới hạn tồn dư: event enqueue trong CÙNG transaction chia sẻ now() ⇒ vẫn hoà; muốn đúng tuyệt đối cần cột bigserial = migration, TÁCH WO khác. Đóng KI-059 kèm câu này, đừng đóng lửng",
+      "LIGHT gate + silent-failure-hunter (đây đúng khuôn hỏng-im-lặng) PASS",
+    ],
+  },
+  {
+    id: "S7-CHAT-RT-0",
+    module: "CHAT",
+    layer: "BE",
+    title:
+      "Hạ tầng WS: GẮN ValkeyIoAdapter (hiện định nghĩa rồi nhưng KHÔNG chỗ nào dùng) — Socket.IO đang chạy in-memory và KHÔNG có CORS ⇒ trình duyệt không nối được",
+    zone: "red",
+    status: "done",
+    paths: [
+      "apps/api/src/main.ts",
+      "apps/api/src/realtime/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S7-CHAT-RT-0.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S7-CHAT-RT-0.md",
+    src: [
+      "ĐO 02/08/2026: grep toàn repo `ValkeyIoAdapter|useWebSocketAdapter` = 3 hit, CẢ BA nằm trong chính apps/api/src/realtime/valkey-io.adapter.ts (định nghĩa + logger + jsdoc). KHÔNG có lời gọi `app.useWebSocketAdapter(...)` ở bất kỳ đâu ⇒ override createIOServer() CHƯA BAO GIỜ CHẠY",
+      "Hệ quả 1 — KHÔNG CORS: valkey-io.adapter.ts:60-70 là nơi DUY NHẤT set cors từ env.CORS_ORIGIN. app.enableCors() ở main.ts CHỈ áp cho HTTP, KHÔNG áp cho engine.io. socket.io-client thử polling TRƯỚC ⇒ request cross-origin bị chặn ⇒ connect_error 'xhr poll error'. FE dev :5273 vs API :3100 là khác origin, PROD khác domain hẳn",
+      "Hệ quả 2 — KHÔNG đa-instance: server.adapter(this.adapterConstructor) không chạy ⇒ socketsJoin/socketsLeave của RealtimeEmitterService KHÔNG vượt sang instance khác. PROD hiện 1 instance nên chưa lộ",
+      "Vì sao lỗ sống sót tới giờ: client WS duy nhất trong repo là client NODE (realtime.gateway.io.spec.ts) — Node không thực thi CORS; và test chạy 1 instance nên phần pub/sub không bao giờ bị kiểm",
+    ],
+    done_when: [
+      "main.ts gọi app.useWebSocketAdapter(new ValkeyIoAdapter(app)) + await connectToValkey() TRƯỚC app.listen; thứ tự sai thì adapter gắn sau khi gateway đã tạo server = vô hiệu, phải có test/assert chứng minh thứ tự",
+      "CORS Socket.IO đọc đúng CORS_ORIGIN (nhiều origin phân tách bởi dấu phẩy, trim); test chứng minh origin NGOÀI danh sách bị từ chối ở handshake — không phải chỉ 'có cấu hình'",
+      "Adapter KHÔNG nối được Valkey → hiện fail-soft im lặng (WARN, rơi in-memory). Đổi thành CẢNH BÁO LOUD lúc boot (log ERROR + đánh dấu trạng thái) vì ở chế độ đó mọi ràng buộc join/leave chỉ đúng trên 1 instance — im lặng = tin nhắn rò sang người vừa bị gỡ ở instance khác",
+      "Smoke bằng TRÌNH DUYỆT THẬT (không phải client Node): mở apps/app, thấy đúng 1 kết nối /ws lên, không có lỗi CORS ở console. Client Node KHÔNG thực thi CORS nên int-spec hiện tại KHÔNG chứng minh được điều này",
+      "FULL gate PASS",
+    ],
+  },
+  {
     id: "S7-CHAT-RT-1",
     module: "CHAT",
     layer: "BE",
     title:
       "Realtime CHAT: join phòng SERVER-SIDE lúc handshake (không nhận danh sách từ client) · emit SAU commit · đồng bộ join/leave ngay khi membership đổi · giữ WS một chiều",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/realtime/**",
       "apps/api/src/chat/**",
@@ -9705,8 +9871,9 @@ export const backlog = [
     done_when: [
       "chatRoomName(companyId, roomId) thêm vào realtime/rooms.ts (KHÔNG string-concat rải rác); prefix co:{companyId}: giữ nguyên để cô lập tenant ở tầng room",
       "handleConnection join TẤT CẢ phòng của user, danh sách đọc từ DB phía SERVER — CẤM nhận roomId từ payload client; TUYỆT ĐỐI KHÔNG thêm @SubscribeMessage nào (giữ WS một chiều, CHAT-DEC-005)",
-      "Emit chat:message / chat:message-recalled / chat:read / chat:room SAU KHI transaction commit — test chứng minh transaction rollback thì KHÔNG có emit",
-      "Mọi payload .parse() qua schema contracts trong RealtimeEmitterService — cấm io.emit row DB thẳng; tin thu hồi emit body:null",
+      "Emit chat:message / chat:message-recalled / chat:read / chat:room SAU KHI transaction commit — test chứng minh transaction rollback thì KHÔNG có emit. ⚠️ WO NÀY SỞ HỮU CẢ ĐIỂM GỌI (owner chốt 02/08/2026): tự thêm lời gọi emit vào ChatMessagesService.sendMessage/markRead + ChatMessageModerationService.recall — S7-CHAT-BE-2 đã tuyên bố 'chừa nguyên' nên KHÔNG ai khác wire; dựng emitter mà không có nơi gọi = 3/4 sự kiện là dead code",
+      "Cổng quyền đường đọc WS: trước khi join phòng chat phải kiểm cặp ('view','chat-room') — đường REST tương đương đã bắt buộc cặp này (chat-rooms.controller.ts). Phòng department/project có thành viên DẪN XUẤT nên membership KHÔNG thay được cặp quyền: người bị thu hồi quyền CHAT vẫn còn hàng chat_room_members. RED-trước bằng role thường (KHÔNG phải SA): là thành viên nhưng thiếu cặp → connect OK, nhận 0 chat:message",
+      "Mọi payload .parse() qua schema contracts trong RealtimeEmitterService — cấm io.emit row DB thẳng; tin thu hồi emit ĐÚNG {messageId, roomId, recalledAt}, KHÔNG kèm body (kể cả null) — owner chốt 02/08/2026 theo API-13 §7, thay cho câu 'emit body:null' của bản seed (hai văn bản từng lệch nhau)",
       "Membership đổi (thêm/bớt/rời/đồng bộ dẫn xuất) → server buộc socket join/leave NGAY, không đợi kết nối lại; user bị khoá/vô hiệu hoá → cắt phiên WS",
       "REALTIME_ENABLED=false → gateway từ chối ở handshake, nghiệp vụ vẫn ĐÚNG HOÀN TOÀN qua bù afterSeq (test chạy cả 2 chế độ)",
       "RED-trước: socket của người không thuộc phòng KHÔNG nhận được emit dù đoán đúng roomId; cross-tenant không bao giờ chung room",
@@ -9728,7 +9895,7 @@ export const backlog = [
       "docs/plans/S7-CHAT-FE-1.md",
     ],
     skills: ["code-review"],
-    depends_on: ["S7-CHAT-BE-2", "S7-CHAT-RT-1"],
+    depends_on: ["S7-CHAT-BE-2", "S7-CHAT-RT-1", "S7-CHAT-RT-0"],
     plan: "docs/plans/S7-CHAT-FE-1.md",
     src: [
       "SPEC-15 §9 (CHAT-SCREEN-002 dùng chung store + 1 kết nối) · §19",
@@ -9962,6 +10129,103 @@ export const backlog = [
       "Thứ tự: DROP INDEX chat_rooms_channel_uq → DROP composite tenant FK (company_id, channel_id) do 0535 tạo → DROP COLUMN channel_id; rồi drop file_url/file_name",
       "Đồng bộ schema Drizzle + contracts CÙNG commit; chạy TRÊN RELEASE KHÁC với S7-CHAT-DB-1 (không gộp)",
       "FULL gate (database-reviewer + security-reviewer) PASS",
+    ],
+  },
+
+  // ════════════════ HẬU FULL GATE S7-CHAT-BE-GATE-3 — chốt owner 2026-08-03 ════════════════
+  // Ba WO sinh từ gate 5 lane trên bề mặt CHAT (commit 03f9a924).
+  //
+  // ⚠️ ĐÍNH CHÍNH 2026-08-03 (commit 4f52948c): WO `S7-AUTH-CAPSWEEP-1` từng được seed ở đây với tiền đề
+  // "update:project là is_sensitive nhưng ngoài allowlist ⇒ màn quản trị đang ẩn trên PROD" — **TIỀN ĐỀ
+  // SAI, đã GỠ**. Catalog THẬT khai `('update','project', false)` (`0005:224`), và `0485` bước (b) chỉ
+  // nâng 8 cặp (delete/close/archive/manage-member/view-report:project + delete/export:task +
+  // view:task-audit-log) — KHÔNG có `update:project`. Giá trị `TRUE` đo được là RÁC do fixture của
+  // `chat-be5-derived-rooms.int-spec.ts` đóng dấu vào bảng `permissions` TOÀN CỤC. Không có lỗ phân quyền.
+  // Thay vào đó là WO dưới đây, nhắm đúng cơ chế đã gây hiểu nhầm.
+  {
+    id: "S7-QA-CATALOGFIXTURE-1",
+    module: "FOUNDATION",
+    layer: "QA",
+    title:
+      "Fixture test KHÔNG được đổi `permissions.is_sensitive` của cặp CHÍNH TẮC — bảng toàn cục, không company_id, không ai dọn ⇒ một spec lật cờ là đổi hành vi phân quyền của MỌI spec dùng chung DB (gồm CI)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/test/helpers/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S7-QA-CATALOGFIXTURE-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S7-QA-CATALOGFIXTURE-1.md",
+    src: [
+      "Đo 2026-08-03 (commit 4f52948c): `seedPermissionCatalog` upsert `DO UPDATE SET is_sensitive = EXCLUDED.is_sensitive` vào `permissions` — bảng TOÀN CỤC (không company_id), `cleanupTenants` không chạm",
+      "Ca thật: `WRITER_PAIRS` của chat-be5 khai `['update','project', …, true]` ⇒ lật cặp sang sensitive ⇒ `getCapabilities()` lọc bỏ ⇒ `/auth/me` thiếu cặp ⇒ 3 ca TASKCAP đỏ ở spec KHÁC. CI đặt `LANE_DB: mediaos` (api.yml:221) nên mọi spec dùng CHUNG một DB",
+      "Đo 5 DB: mediaos · mediaos_chatgate2 · mediaos_s7chatbe3 · mediaos_s7chatbe4 đều `f`; RIÊNG mediaos_outboxfifo (lane chạy chat-be5) là `t`",
+      "⚠️ BÀI HỌC PHƯƠNG PHÁP: `git stash` rồi chạy lại trên CÙNG lane KHÔNG phân biệt được lỗi loại này — hỏng nằm trong DB, không trong code. Một phiên đã dùng đúng phép thử đó và kết luận NHẦM thành 'lỗ phân quyền có sẵn trên nhánh'",
+      "memory: capability-allowlist-hides-admin-screens · canonical-seed-pin-regression",
+    ],
+    done_when: [
+      "`seedPermissionCatalog` KHÔNG được đổi `is_sensitive` của cặp đã tồn tại trong catalog chính tắc — hoặc từ chối (ném), hoặc chỉ set khi INSERT mới. Fixture cần cặp nhạy cảm thì phải dùng cặp RIÊNG của test, không mượn cặp sản phẩm",
+      "RED trước: spec A đóng dấu `('update','project')` sang sensitive → spec B (`auth-me-capabilities`) phải VẪN xanh. Hiện tại B đỏ",
+      "Quét MỌI caller của `seedPermissionCatalog` (+ helper seed tương tự) tìm chỗ khác đang lật cờ cặp chính tắc — đây là bảng toàn cục nên mỗi caller là một nguồn ô nhiễm tiềm tàng",
+      "Cân nhắc đai thứ hai: assert cuối suite rằng `permissions.is_sensitive` của bộ cặp chính tắc khớp seed (pin), để lần lật tiếp theo ĐỎ ngay tại spec gây ra thay vì ở spec nạn nhân",
+      "FULL gate PASS",
+    ],
+  },
+  {
+    id: "S7-CHAT-DB-3",
+    module: "CHAT",
+    layer: "DB",
+    title:
+      "Expand-contract least-privilege: REVOKE UPDATE(visible_from_seq) + UPDATE cấp bảng chat_rooms + đổi FK cascade users→chat_messages (đang xoá CỨNG bảng append-only) + siết khối VERIFY của 0539",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/migrations/**", "apps/api/test/integration/**", "docs/plans/S7-CHAT-DB-3.md"],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S7-CHAT-DB-3.md",
+    src: [
+      "S7-CHAT-BE-GATE-3 lane L3 (M-1·M-3·M-4·M-6) — rà tĩnh, mỗi mục kèm probe SQL để tự xác minh trên lane",
+      "0538:258 GRANT UPDATE(visible_from_seq) là quyền CHẾT (v1 không writer nào set) đang gác CHAT-DEC-008 bằng MỘT unit test",
+      "⚠️ ĐÍNH CHÍNH 2026-08-03 (đo bằng has_table_privilege trên 2 lane DB): mediaos_app KHÔNG có DELETE trên users — 0002:70 GRANT nhưng 0467_s2_fnddb1_companies_users_revoke_delete.sql ĐÃ THU HỒI. Phát hiện gốc của lane L3 đọc 0002 mà bỏ qua 0467 ⇒ vế 'users.DELETE' là NGUỒN CŨ, không phải hiện trạng. Phần CÒN THẬT: FK 0535:171,173 ON DELETE CASCADE (chat_messages.sender_id / chat_room_members.user_id) — hard-delete users ở tầng OWNER (script dọn, migration, test cleanup) vẫn xoá cứng bảng append-only, im lặng",
+      "memory: migration-expand-contract-required · audit-check-union-parse-anchor-trap",
+    ],
+    done_when: [
+      "RED trước, đo bằng role mediaos_app trên lane: UPDATE chat_room_members SET visible_from_seq=… phải 42501 · UPDATE chat_rooms SET org_unit_id=… phải 42501. HAI mục này hiện ĐANG THÀNH CÔNG (đã xác minh 03/08 bằng has_column_privilege/has_table_privilege). ⛔ ĐỪNG thêm ca 'DELETE FROM users phải 42501' vào RED: hôm nay nó ĐÃ 42501 (0467 thu hồi rồi) ⇒ ca đó xanh sẵn, không chứng minh gì, và REVOKE thêm sẽ khớp 0 hàng",
+      "Vế users chuyển thành việc FK, KHÔNG phải việc GRANT: chat_messages.sender_id / chat_room_members.user_id đang ON DELETE CASCADE ⇒ mọi hard-delete users ở tầng OWNER (script dọn, migration, cleanupTenants của test) xoá CỨNG bảng append-only và để lại lỗ room_seq vĩnh viễn (last_message_seq không giảm ⇒ badge chưa-đọc phồng). Đổi sang RESTRICT/SET NULL phải cân với đường xoá tenant của test — đo caller TRƯỚC khi đổi, đừng làm vỡ cleanup",
+      "chat_rooms: REVOKE UPDATE cấp bảng rồi GRANT LẠI đúng tập cột writer đang dùng — EXPAND-CONTRACT vì BE-1 đã ship, revoke thẳng là cửa sổ 500 cho tiến trình đang chạy",
+      "Khối VERIFY của 0539 hiện chỉ đọc table_privileges: thêm information_schema.column_privileges (GRANT UPDATE cấp CỘT lọt hoàn toàn) + assert relrowsecurity AND relforcerowsecurity còn bật + vế table_schema='public'",
+      "FULL gate (database-reviewer + security-reviewer) PASS",
+    ],
+  },
+  {
+    id: "S7-CHAT-CLEAN-2",
+    module: "CHAT",
+    layer: "BE",
+    title:
+      "Dọn nhẹ hậu gate: comment đã chết ở đường quyết định · endpointOf fallback gán nhãn SAI · mapper result_status gộp Failure/Error thành Denied · index dư trên chat_messages",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/chat/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S7-CHAT-CLEAN-2.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "S7-CHAT-BE-GATE-3 — L1 (LOW×3) + L3 (M-2·L-1·L-2)",
+      "chat-rooms.repository.ts:517-520 comment nói FK một-cột KHÔNG chặn cross-tenant — SAI từ 0535 (đã có composite tenant FK); memory wo-plans-built-on-code-comments",
+      "chat-oversight-audit.guard.ts:185-191 endpointOf rơi về ROOM_SEARCH cho MỌI path lạ ⇒ route thứ 5 thêm sau ghi Denied mang nhãn SAI mà không gì đỏ",
+    ],
+    done_when: [
+      "endpointOf trả nhãn 'unknown' ở nhánh cuối thay vì mặc định vào một endpoint CÓ THẬT; test phủ path lạ",
+      "chat-oversight.mapper.ts map tường minh 4 giá trị AUDIT_RESULT_STATUSES; giá trị lạ → nhãn riêng (hiện Failure/Error đều hiện thành 'Denied' = audit nói SAI loại sự kiện)",
+      "Index dư trên chat_messages: ĐO trước bằng pg_stat_user_indexes sau khi chạy full chat int-spec, chỉ drop cái idx_scan=0. CẤM assert EXPLAIN chọn index nào (memory pg-planner-index-assert-trap)",
+      "s7-chat-db1-invariants.int-spec.ts:427-433 thêm WHERE company_id — đang khẳng định room_seq liên tục TOÀN BẢNG mọi tenant trong suite chạy song song ⇒ đỏ oan, và lối sửa rẻ nhất sẽ là xoá ca",
+      "Sửa comment sai ở chat-rooms.repository.ts (giữ hàm — DB không biết status/deleted_at nên vẫn cần, chỉ lý do ghi ra đã chết)",
+      "LIGHT gate PASS",
     ],
   },
 

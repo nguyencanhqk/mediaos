@@ -1340,10 +1340,14 @@ export const RLS_TABLES: RlsTableCase[] = [
     name: "chat_rooms",
     table: "chat_rooms",
     seedRow: async (direct, t) => {
+      // S7-CHAT-DB-1 (mig 0538): chat_rooms nay co room_code NOT NULL + chk_chat_rooms_type_anchor.
+      // Doi 'direct' -> 'group' vi 'direct' DOI direct_key IS NOT NULL; 'group' doi ca 3 neo NULL —
+      // dung hinh dang fixture nay dang gieo. room_code phai co that (unique theo company).
+      const suffix = randomUUID().slice(0, 8);
       const r = await direct.query(
-        `INSERT INTO chat_rooms (company_id, room_type, name)
-         VALUES ($1, 'direct', $2) RETURNING id`,
-        [t.companyId, `rls-room-${randomUUID().slice(0, 8)}`],
+        `INSERT INTO chat_rooms (company_id, room_type, name, room_code)
+         VALUES ($1, 'group', $2, $3) RETURNING id`,
+        [t.companyId, `rls-room-${suffix}`, `RLS-${suffix}`],
       );
       return r.rows[0].id as string;
     },
@@ -1353,10 +1357,13 @@ export const RLS_TABLES: RlsTableCase[] = [
     table: "chat_room_members",
     seedRow: async (direct, t) => {
       const u = await seedUser(direct, t.companyId, `crm-${randomUUID().slice(0, 8)}@x.test`);
+      // S7-CHAT-DB-1 (mig 0538): room_code NOT NULL + chk_chat_rooms_type_anchor
+      // ('direct' doi direct_key IS NOT NULL) ⇒ dung 'group' + cap room_code that.
+      const roomSuffix = randomUUID().slice(0, 8);
       const roomRes = await direct.query(
-        `INSERT INTO chat_rooms (company_id, room_type, name)
-         VALUES ($1, 'direct', $2) RETURNING id`,
-        [t.companyId, `rls-room-m-${randomUUID().slice(0, 8)}`],
+        `INSERT INTO chat_rooms (company_id, room_type, name, room_code)
+         VALUES ($1, 'group', $2, $3) RETURNING id`,
+        [t.companyId, `rls-room-m-${roomSuffix}`, `RLSM-${roomSuffix}`],
       );
       const r = await direct.query(
         `INSERT INTO chat_room_members (company_id, room_id, user_id)
@@ -1371,14 +1378,20 @@ export const RLS_TABLES: RlsTableCase[] = [
     table: "chat_messages",
     seedRow: async (direct, t) => {
       const u = await seedUser(direct, t.companyId, `cm-${randomUUID().slice(0, 8)}@x.test`);
+      // S7-CHAT-DB-1 (mig 0538): room_code NOT NULL + chk_chat_rooms_type_anchor
+      // ('direct' doi direct_key IS NOT NULL) ⇒ dung 'group' + cap room_code that.
+      const roomSuffix = randomUUID().slice(0, 8);
       const roomRes = await direct.query(
-        `INSERT INTO chat_rooms (company_id, room_type, name)
-         VALUES ($1, 'direct', $2) RETURNING id`,
-        [t.companyId, `rls-room-msg-${randomUUID().slice(0, 8)}`],
+        `INSERT INTO chat_rooms (company_id, room_type, name, room_code)
+         VALUES ($1, 'group', $2, $3) RETURNING id`,
+        [t.companyId, `rls-room-msg-${roomSuffix}`, `RLSMSG-${roomSuffix}`],
       );
+      // room_seq NOT NULL tu mig 0539 (per-room). Cap qua bo dem cua phong, dung duong ghi that.
       const r = await direct.query(
-        `INSERT INTO chat_messages (company_id, room_id, sender_id, body)
-         VALUES ($1, $2, $3, 'rls-msg') RETURNING id`,
+        `INSERT INTO chat_messages (company_id, room_id, sender_id, body, room_seq)
+         VALUES ($1, $2, $3, 'rls-msg',
+                 (SELECT COALESCE(max(room_seq), 0) + 1 FROM chat_messages
+                   WHERE company_id = $1 AND room_id = $2)) RETURNING id`,
         [t.companyId, roomRes.rows[0].id, u],
       );
       return r.rows[0].id as string;

@@ -60,7 +60,7 @@ CHAT **không sở hữu** dữ liệu của module khác: nhân sự vẫn thu�
 | `project` | Hệ thống (theo `projects` của TASK) | **Dẫn xuất** từ `project_members` | Không rời, không xoá |
 
 - **Thủ công** = `chat_room_members` là nguồn sự thật, người quản trị phòng ghi trực tiếp.
-- **Dẫn xuất** = `chat_room_members` là **cache đồng bộ** từ module nguồn; đồng bộ tại sự kiện (thêm/bớt nhân sự, đổi phòng ban, thêm/bớt project member) + **job đối soát đêm** sửa lệch. Người dùng không tự thêm/bớt được (CHAT-ERR-012).
+- **Dẫn xuất** = `chat_room_members` là **cache đồng bộ** từ module nguồn; đồng bộ tại sự kiện (thêm/bớt nhân sự, đổi phòng ban, thêm/bớt project member) + **job đối soát định kỳ** sửa lệch. Người dùng không tự thêm/bớt được (CHAT-ERR-012).
 - Loại `channel` của bản chat cũ (media, G10) **bị loại bỏ** cùng đợt de-media-fy — xem §5.3.
 
 ### 3.2 Thành viên phòng LÀ ranh giới quyền — không phải data_scope
@@ -147,7 +147,7 @@ CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ 
 | --- | --- | --- |
 | Phòng 1-1 | Mở chat riêng với bất kỳ nhân viên nào trong công ty, idempotent theo `direct_key` | Chat 1-1 |
 | Phòng nhóm | Tạo/đổi tên/thêm-bớt thành viên/rời/lưu trữ | Chat nhóm |
-| Phòng ban | Phòng tự động theo `org_units`, thành viên dẫn xuất + đối soát đêm | Chat theo phòng ban |
+| Phòng ban | Phòng tự động theo `org_units`, thành viên dẫn xuất + đối soát định kỳ | Chat theo phòng ban |
 | Dự án | Phòng tự động theo `projects`, thành viên dẫn xuất từ `project_members` | Chat theo dự án |
 | Gửi tệp | Đính kèm qua FOUNDATION Files + resolver quyền riêng của CHAT | Gửi file |
 | Gửi hình ảnh | Cùng đường tệp + xem trước ảnh (thumbnail ký hạn ngắn) | Gửi hình ảnh |
@@ -204,7 +204,7 @@ CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ 
 | AUTH | permission `CHAT.*`; token access dùng lại cho handshake WS; khoá/vô hiệu user → cắt phiên WS | CHAT ← AUTH |
 | HR | `employees` (danh bạ chọn người nhắn), `org_units` (phòng tự động), sự kiện đổi phòng ban → đồng bộ thành viên | CHAT ← HR |
 | TASK | `projects` + `project_members` (phòng dự án tự động); dự án đóng/xoá → lưu trữ phòng | CHAT ← TASK |
-| FOUNDATION | Files (đính kèm + resolver quyền), `audit_logs`, `sequence_counters` (mã phòng), system-jobs (đối soát đêm) | CHAT ← FOUNDATION |
+| FOUNDATION | Files (đính kèm + resolver quyền), `audit_logs`, `sequence_counters` (mã phòng), system-jobs (đối soát định kỳ) | CHAT ← FOUNDATION |
 | NOTI | phát `CHAT_MENTIONED` · `CHAT_DIRECT_MESSAGE` qua OutboxNotificationBridge | CHAT → NOTI |
 | ME | badge tổng số tin chưa đọc trên header; `muted_until` hiển thị trong tuỳ chọn cá nhân | CHAT → ME |
 | LMS | thay lối vào `/chat` tạm hiện tại của LMS bằng CHAT nội bộ (ghi chú S5-LMS-UI-4) | CHAT → LMS |
@@ -273,7 +273,7 @@ Chi tiết cột/kiểu/constraint: [DB-12](<../DB/DB-12 CHAT Database Design.md
 | CHAT-FUNC-002 | Tạo & quản trị phòng nhóm | tạo · đổi tên/mô tả · thêm/bớt thành viên · phong admin · rời · lưu trữ |
 | CHAT-FUNC-003 | Phòng ban tự động | tạo/đóng theo `org_units`; thành viên dẫn xuất từ nhân sự đang làm việc |
 | CHAT-FUNC-004 | Dự án tự động | tạo/đóng theo `projects`; thành viên dẫn xuất từ `project_members` |
-| CHAT-FUNC-005 | Đồng bộ thành viên + đối soát đêm | tại sự kiện + job idempotent so khớp lại toàn bộ phòng dẫn xuất (§13.3) |
+| CHAT-FUNC-005 | Đồng bộ thành viên + đối soát định kỳ | tại sự kiện + job idempotent so khớp lại toàn bộ phòng dẫn xuất (§13.3) |
 | CHAT-FUNC-006 | Gửi tin nhắn | text/file, mention, trả lời, chống trùng theo `client_message_id` |
 | CHAT-FUNC-007 | Đính kèm tệp & ảnh | presign upload → link vào tin nhắn qua `file_links` (§13.5) |
 | CHAT-FUNC-008 | Đọc lịch sử | phân trang theo con trỏ `seq` (trước/sau), không dùng offset |
@@ -354,19 +354,28 @@ Quy tắc bổ sung (không cần mã lỗi riêng):
 
 ### 13.1 Thứ tự tin nhắn và phân trang
 
-`seq` (bigint `GENERATED ALWAYS AS IDENTITY`) là thứ tự tổng trong phòng — dùng cho **mọi** việc sắp xếp và phân trang; `created_at` chỉ để hiển thị. Lý do: hai tin cùng mili-giây có thứ tự nhập nhằng, và đồng hồ có thể lùi.
+**`room_seq`** (bigint, liên tục từ 1 **trong từng phòng** — mig `0539`) là thứ tự dùng cho **mọi** việc sắp xếp, phân trang và đếm chưa đọc; `created_at` chỉ để hiển thị. Lý do dùng số thứ tự thay đồng hồ: hai tin cùng mili-giây có thứ tự nhập nhằng, và đồng hồ có thể lùi.
+
+> ⚠️ **ĐÍNH CHÍNH 02/08/2026 — bản trước của mục này SAI.** Nó viết "`seq` … là thứ tự tổng **trong phòng**", chép theo comment `0050:79`. DDL thật (`0050:77`) là `GENERATED ALWAYS AS IDENTITY` **cấp BẢNG**: tăng xuyên mọi phòng và mọi tenant. Hai hệ quả đã đo được:
+> 1. Công thức đếm chưa đọc ở §13.2 cho **số của phòng khác**: phòng A 2 tin, phòng B 50 tin ⇒ badge phòng A hiện **51** thay vì **1**.
+> 2. `seq` là con trỏ **lộ ra client**, nên thành viên một phòng suy ra được lưu lượng tin **toàn công ty** giữa hai lần mình nhắn — gồm cả DM họ không thuộc.
+>
+> `seq` toàn cục **vẫn còn** trong bảng (identity không drop sạch được) nhưng **KHÔNG được lộ ra client** và **KHÔNG được đem trừ**. Mọi thứ hướng-client dùng `room_seq`.
 
 ```text
 GET /chat/rooms/:id/messages?beforeSeq=<n>&limit=50   → n-1, n-2, … (cuộn lên đọc tin cũ)
 GET /chat/rooms/:id/messages?afterSeq=<n>&limit=50    → n+1, n+2, … (bù tin lỡ sau khi WS đứt)
+
+# `beforeSeq`/`afterSeq` mang giá trị `room_seq` (per-room), KHÔNG phải `seq` toàn cục. Tên tham số
+# giữ nguyên để khỏi churn FE; ngữ nghĩa đã đổi ở mig 0539.
 ```
 
 Cấm phân trang bằng `offset` (kết quả trôi khi có tin mới chèn vào giữa lúc cuộn).
 
 ### 13.2 Đã xem — `last_read_seq` chỉ tiến
 
-- Client báo đã đọc tới `seq` nào → server `UPDATE … SET last_read_seq = GREATEST(last_read_seq, $1)`. Không bao giờ lùi (CHAT-ERR-018): nhiều thiết bị cùng mở, thiết bị chậm không được kéo lùi trạng thái của thiết bị nhanh.
-- Số chưa đọc của một phòng = `room.last_message_seq - member.last_read_seq` (đếm bằng phép trừ, **không** `COUNT(*)` trên `chat_messages`).
+- Client báo đã đọc tới `room_seq` nào → server `UPDATE … SET last_read_seq = GREATEST(last_read_seq, $1)`. Không bao giờ lùi (CHAT-ERR-018): nhiều thiết bị cùng mở, thiết bị chậm không được kéo lùi trạng thái của thiết bị nhanh.
+- Số chưa đọc của một phòng = `room.last_message_seq - member.last_read_seq`, **cả hai trong hệ `room_seq`** (đếm bằng phép trừ, **không** `COUNT(*)` trên `chat_messages`). Phép trừ chỉ đúng vì `room_seq` liên tục trong phòng — đem trừ trên `seq` toàn cục là lỗi đã đo (xem cảnh báo §13.1).
 - "Đã xem bởi ai" = danh sách thành viên có `last_read_seq >= seq` của tin đang xét — dẫn xuất, không lưu bảng riêng.
 - Tin do chính mình gửi luôn tự nâng `last_read_seq` trong cùng transaction.
 
@@ -383,14 +392,31 @@ projects đóng/xoá mềm          kết thúc dự án                  lưu t
 ```
 
 - Đồng bộ chạy **trong cùng transaction** với thao tác nguồn khi rẻ; nếu module nguồn không tiện gọi trực tiếp thì đi qua outbox.
-- **Job đối soát đêm** (`@SystemJobHandler`, idempotent — mẫu `retention-cleanup.job-handler.ts`) so khớp lại toàn bộ phòng dẫn xuất với nguồn và sửa lệch; lệch > 0 → log cảnh báo kèm số phòng/số thành viên. Đây là lưới an toàn cho mọi đường ghi bị bỏ sót.
+- **Job đối soát định kỳ** (`@SystemJobHandler`, idempotent — mẫu `retention-cleanup.job-handler.ts`) so khớp lại toàn bộ phòng dẫn xuất với nguồn và sửa lệch; lệch > 0 → log cảnh báo kèm số phòng/số thành viên. Đây là lưới an toàn cho mọi đường ghi bị bỏ sót.
+
+> **Làm rõ 02/08/2026 — owner chốt, đọc trước khi thi công `S7-CHAT-BE-5`:**
+>
+> 1. **"Đêm" là chữ sai, đã sửa thành "định kỳ".** Hệ **không có cron**: mọi `@SystemJobHandler` chạy chung một `setInterval` (`apps/api/src/scheduler/worker-scheduler.config.ts`), và PROD đặt `SYSTEM_JOBS_POLL_MS=900000` — **15 phút** (`.env.prod:9`; chỉ `.env.example` để 60000). Ai đọc "đêm" rồi đi tìm cron sẽ không thấy gì.
+> 2. **Đường THU HỒI quyền chạy trong CÙNG transaction nguồn** — rời phòng khi đổi phòng ban · nghỉ việc · unlink · bớt `project_members`. Cửa sổ lệch phải bằng **0**, không được dựa vào job (15 phút là quá rộng cho một thao tác thu hồi quyền đọc). Hỏng ở nhánh này phải **LOUD** (log ERROR + audit `resultStatus='Failure'`), cấm nuốt bằng `logger.warn`.
+> 3. **Đường TẠO PHÒNG được phép ngoài transaction nguồn** — cấp `room_code` đi qua `SequenceService.nextCode()` vốn tự mở `withTenant` nên **không lồng được** vào tx nghiệp vụ (xem jsdoc `chat-room-code.service.ts`); phải cấp mã TRƯỚC khi mở tx, chấp nhận phí số khi rollback (hành vi đã có ở `task`). Thiếu một phòng ≠ rò quyền đọc, nên đánh đổi này an toàn còn ở mục 2 thì không.
+> 4. Riêng `OrgService.createOrgUnit`: `OrgRepository.createOrgUnit` **không nhận `tx`** (`org.repository.ts:89`, tự mở `withTenant`) — muốn đồng bộ cùng tx thì phải nới chữ ký repo trước; nếu không thì ghi rõ writer này nằm ngoài tx.
+> 5. Vị từ "tập thành viên mong muốn" phải **DUY NHẤT**, dùng chung cho cả hook lẫn job. Với phòng `project` bắt buộc kèm `employee_profiles.status='active' AND deleted_at IS NULL` — thiếu vế này thì nhịp job kế tiếp **join lại người vừa nghỉ việc** (vì `changeStatus` không chạm `project_members`).
+
 - Rời phòng dẫn xuất = set `left_at`, **giữ lại hàng** để còn biết "từng ở đây" (và để `visible_from_seq` phase sau có nghĩa). Mọi truy vấn membership phải lọc `left_at IS NULL` — thiếu điều kiện này là lỗ đọc sau khi rời phòng.
 
 ### 13.4 Lịch sử trước khi tham gia
 
 v1: thành viên đọc **toàn bộ** lịch sử phòng mình đang thuộc (`visible_from_seq` luôn NULL). Người mới vào dự án đọc được ngữ cảnh trước đó — đúng nhu cầu §2.
 
-Cột `visible_from_seq` được tạo sẵn để phase sau bật chế độ "chỉ đọc từ lúc vào" cho phòng nhóm nhạy cảm mà **không phải migration đổi hình dạng bảng**. Mọi truy vấn đọc tin phải viết sẵn điều kiện `(m.visible_from_seq IS NULL OR msg.seq >= m.visible_from_seq)` ngay từ v1 — thêm sau sẽ sót đường đọc.
+Cột `visible_from_seq` được tạo sẵn để phase sau bật chế độ "chỉ đọc từ lúc vào" cho phòng nhóm nhạy cảm mà **không phải migration đổi hình dạng bảng**. Mọi truy vấn đọc tin phải viết sẵn điều kiện `(m.visible_from_seq IS NULL OR msg.room_seq >= m.visible_from_seq)` ngay từ v1 — thêm sau sẽ sót đường đọc.
+
+**Làm rõ 03/08/2026 (`S7-CHAT-BE-GATE-2`) — ba điểm, đều đã đo trên code:**
+
+1. **Hệ quy chiếu là `room_seq`, KHÔNG phải `seq`.** Bản viết trước ghi `msg.seq` vì có TRƯỚC `S7-CHAT-DB-2` (mig `0539`). `chat_messages.seq` là identity **cấp bảng** — tăng xuyên mọi phòng và mọi tenant; so một mốc per-room với nó là cắt lịch sử ở một điểm ngẫu nhiên, lệch dần theo lưu lượng các phòng khác. `visible_from_seq` sống cùng hệ với `last_read_seq` · `last_message_seq` · `beforeSeq`/`afterSeq`. (Comment trong mig `0538` còn giữ chữ `msg.seq` — migration đã áp, không sửa được; điểm này là bản đính chính.)
+2. **KHÔNG writer nào của v1 được set cột này** — kể cả `S7-CHAT-BE-5` (đồng bộ phòng ban/dự án): người được thêm vào phòng dẫn xuất đọc **toàn bộ** lịch sử, đó chính là tiêu chí nghiệm thu §20 mục 3. Cột chỉ đổi giá trị khi có một Work Order riêng bật tính năng, và khi đó nó là **một câu UPDATE**, không phải một đợt sửa code.
+3. **Vị từ nằm ở đúng MỘT chỗ**: `apps/api/src/chat/chat-visibility.ts` (`visibleFromSeqScalar` · `visibleFromSeqColumn` · `unreadSeqExpr`). Mọi đường đọc gọi helper, không viết lại tay. Hai đường **cố ý** đứng ngoài, có lý do ghi trong file đó: `countPinned` (trần 20 là bất biến của PHÒNG, không của người đang nhìn) và `findByClientMessageId` (đã bound theo `senderId`). Danh sách miễn trừ được đóng đinh trong `chat-visibility.spec.ts`; thêm tên vào đó là một quyết định phải giải trình.
+
+Trong phép **đếm chưa đọc**, vị từ xuất hiện dưới dạng sàn của phép trừ: `unread = GREATEST(0, last_message_seq − GREATEST(last_read_seq, visible_from_seq − 1))`. Thiếu sàn thì badge của người mới vào phòng đếm cả phần lịch sử họ không mở ra được ⇒ badge **không bao giờ tắt được** (không thao tác nào của họ đẩy con trỏ qua đoạn đó). Khi cột NULL, sàn = `−1` ⇒ công thức rút về đúng bản cũ, không đổi một con số nào ở v1.
 
 ### 13.5 Tệp đính kèm
 
@@ -418,7 +444,11 @@ Cột `visible_from_seq` được tạo sẵn để phase sau bật chế độ 
 | Admin phòng **nhóm** | bất kỳ lúc nào, chỉ trong phòng nhóm mình quản trị | như trên + audit |
 | Bất kỳ ai khác | — | CHAT-ERR-006 |
 
-Sau thu hồi: DTO trả `body: null` + `recalledAt` để UI hiện "Tin nhắn đã được thu hồi". Tệp đính kèm bị **gỡ link** (link mất → FilePolicy từ chối tải). Bản ghi và body gốc **vẫn nằm trong DB** — append-only không cho xoá, và đó là chủ đích: có dấu vết cho tranh chấp nội bộ.
+Sau thu hồi: DTO trả `body: null` + `recalledAt` để UI hiện "Tin nhắn đã được thu hồi". Tệp đính kèm **không còn tải được**: `ChatMessageFileResolver` từ chối mọi `View`/`Download` khi `recalled_at IS NOT NULL`, và tệp rơi khỏi `attachments` của DTO lẫn tab "Tệp" của phòng. Bản ghi và body gốc **vẫn nằm trong DB** — append-only không cho xoá, và đó là chủ đích: có dấu vết cho tranh chấp nội bộ.
+
+> ⚠️ **Hàng `file_links` được GIỮ NGUYÊN (không soft-delete) — đính chính 03/08/2026, `S7-CHAT-BE-3` FULL gate.** Bản Draft của mục này viết "tệp bị **gỡ link** (link mất → FilePolicy từ chối tải)". Mệnh đề trong ngoặc **sai với hiện thực FOUNDATION**: `FilePolicyService.decideForLinkedFile` xử lý `links.length === 0` là **foundation-owned** và rơi xuống fallback `FOUNDATION.FILE.DOWNLOAD` — cặp mà company-admin đang giữ (bulk grant mig `0435`). Đo bằng probe trên DB thật: một người **ngoài phòng** giữ cặp đó nhận **403 trước** thu hồi và **302 sau** thu hồi ⇒ thu hồi **mở rộng** phạm vi tệp thay vì thu hẹp, đúng ngược ý định của §13.6. Vì vậy link được giữ sống để tệp vẫn **module-owned**, và quyền tải vẫn do resolver của CHAT quyết định.
+>
+> Lỗ "0 link ⇒ tụt về fallback FOUNDATION" **không riêng CHAT** (HR contract · task file · avatar · branding cùng dính) — vá ở tầng FOUNDATION là Work Order riêng `S7-FND-LINKFALLBACK-1`, không gộp vào CHAT vì nó đổi hợp đồng dùng chung của 5 module.
 
 ### 13.7 Tìm kiếm tiếng Việt
 
@@ -508,7 +538,9 @@ Nguồn chuẩn: [DB-12](<../DB/DB-12 CHAT Database Design.md>). Tóm tắt:
 | Event code | Khi nào | Người nhận | Gộp lô |
 | --- | --- | --- | --- |
 | `CHAT_MENTIONED` | tin nhắn có mention thành viên phòng | người được mention | không — gửi ngay |
-| `CHAT_DIRECT_MESSAGE` | tin mới trong phòng `direct` mà người nhận **không đang mở phòng đó** | người nhận | có — gộp theo phòng, tối đa 1 thông báo / 15 phút |
+| `CHAT_DIRECT_MESSAGE` | tin mới trong phòng `direct`, **trừ khi người nhận đã tắt thông báo phòng đó** (`muted_until`) — xem **CHAT-DEC-013** | người nhận | có — gộp theo phòng, tối đa 1 thông báo / 15 phút |
+
+> ⚠️ **Sửa 02/08/2026 (CHAT-DEC-013):** dòng trên trước đây ghi điều kiện *"người nhận không đang mở phòng đó"*. Điều kiện ấy cần **presence**, mà §7 đã đẩy presence **ra ngoài v1** — spec tự mâu thuẫn, và WO thi công (`S7-CHAT-BE-6`) không có cách nào đáp ứng. Owner chốt bỏ điều kiện presence ở v1: chống spam dựa vào **gộp lô 15 phút** (đã seed `dedupe_strategy='DedupeKey'` ở migration `0538`) cộng `muted_until`.
 
 Nguyên tắc chống spam (quan trọng — chat sinh sự kiện nhiều gấp hàng chục lần mọi module khác):
 
@@ -545,7 +577,7 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 - Tìm kiếm toàn văn trong phạm vi phòng của một người < 800ms ở quy mô ~1 triệu tin.
 - Độ trễ tin từ lúc commit tới lúc hiện ở máy người nhận < 1 giây khi WS bật.
 - Danh sách phòng + số chưa đọc **một truy vấn**, không N+1 (đó là lý do có `last_message_seq` trên `chat_rooms`).
-- Job đối soát đêm là **system-jobs handler** (`@SystemJobHandler` + DiscoveryService — không dùng BullMQ trực tiếp), idempotent. Nhớ: `SchedulerModule` phải import tường minh module chứa handler, và tham số không phải Nest DI trong handler cần `@Optional()` (memory `systemjobhandler-optional-dbw-di` — thiếu là sập `AppModule`, kéo đỏ hàng trăm int-spec).
+- Job đối soát định kỳ là **system-jobs handler** (`@SystemJobHandler` + DiscoveryService — không dùng BullMQ trực tiếp), idempotent. Nhớ: `SchedulerModule` phải import tường minh module chứa handler, và tham số không phải Nest DI trong handler cần `@Optional()` (memory `systemjobhandler-optional-dbw-di` — thiếu là sập `AppModule`, kéo đỏ hàng trăm int-spec).
 - i18n: toàn bộ nhãn tiếng Việt qua react-i18next namespace `chat`.
 - Panel nổi: **một** kết nối WS cho cả app; mở/đóng panel không tạo kết nối mới.
 
@@ -582,7 +614,7 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 | Đã đọc | `last_read_seq` không lùi (2 thiết bị); số chưa đọc = phép trừ; "đã xem bởi" đúng tập |
 | Đồng bộ phòng dẫn xuất | đổi phòng ban · nghỉ việc · thêm/bớt project member · dự án đóng; job đối soát sửa lệch cố ý gieo |
 | Append-only | app role không `DELETE`/`UPDATE body` được trên `chat_messages` (kiểm ở tầng DB, không chỉ tầng service) |
-| Tệp | resolver fail-closed khi chưa đăng ký · gắn tệp người khác bị chặn ở nguồn · thu hồi → gỡ link → 403 tải |
+| Tệp | resolver fail-closed khi chưa đăng ký · gắn tệp người khác bị chặn ở nguồn · thu hồi → resolver từ chối → **403 tải, và link KHÔNG bị gỡ** (§13.6 đính chính) · gắn tệp qua `POST /foundation/files/:id/links` chịu ĐÚNG luật của `sendMessage` (phòng lưu trữ · tin thu hồi · trần tệp · khoá điều phối chính tắc) |
 | Realtime | emit sau commit (rollback không emit) · membership đổi → join/leave ngay · WS tắt vẫn đúng nghiệp vụ |
 | Hiệu năng | danh sách phòng không N+1; 1 triệu tin vẫn đạt ngưỡng §19 |
 
@@ -604,8 +636,13 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 | CHAT-DEC-010 | Notification chỉ cho mention + DM (gộp lô); phòng nhóm/phòng ban/dự án chỉ có badge | theo đề xuất §17 | ✅ chốt |
 | CHAT-DEC-011 | Payload notification **không** chứa nội dung tin nhắn | không chứa | ✅ chốt |
 | CHAT-DEC-012 | Tìm kiếm bằng `unaccent` + `tsvector('simple')` trong Postgres, không thêm search engine | theo đề xuất §13.7 | ✅ chốt |
+| CHAT-DEC-013 | Điều kiện gửi `CHAT_DIRECT_MESSAGE` khi §17 đòi presence mà §7 loại presence khỏi v1 | **Gửi mọi DM, trừ khi `muted_until` còn hiệu lực** — bỏ điều kiện "không đang mở phòng" ở v1. Chống spam = gộp lô 15 phút (`dedupe_strategy='DedupeKey'`, seed `0538`). Xem §17 | ✅ **chốt 02/08/2026** |
 
 > **Ghi chú lịch sử — đọc kỹ trước khi tra git:** bản Draft 01/08/2026 đề xuất CHAT-DEC-004 = "không ai đọc được, kể cả Super Admin", và §3.3 · §11 · §18 · §20 · §21 khi đó được viết quanh mệnh đề ấy. Owner **bác** đề xuất ngày 02/08/2026. Các mục đó đã được viết lại trong `S7-CHAT-DOC-2`; mô tả cũ còn trong lịch sử git **không** còn giá trị tham chiếu.
+>
+> **CHAT-DEC-013 thêm SAU cổng mở wave** (tối 02/08/2026): nó không phải quyết định thứ 13 của đợt chốt ban đầu mà là **phán quyết gỡ một mâu thuẫn nội bộ** giữa §17 và §7, phát hiện lúc lập micro-plan `S7-CHAT-BE-6`. Không thay đổi điều kiện cổng dưới đây.
+>
+> ⚠️ **Hệ quả chưa có lời giải:** sau DEC-013, `muted_until` là **cơ chế duy nhất** để người dùng chặn thông báo DM — nhưng đo ngày 02/08 cho thấy cột `chat_room_members.muted_until` (`communication.ts:300`) **không có đường ghi nào**: 0 endpoint, 0 DTO trong `packages/contracts/src/chat.ts`. Không có WO nào trong wave đang nhận việc này. Phải cấp đường ghi trước khi CHAT lên PROD, nếu không v1 ship một nút tắt mà không ai bấm được.
 >
 > Điều kiện mở WO code của wave (đã đủ): 12 quyết định chốt · §1 = `Approved` · `plan-reviewer` PASS trên SPEC-15 + DB-12. Điều kiện merge vào `master` (**chưa** đủ): go-live đóng — xem §1 và `docs/plans/S7-CHAT-WAVE.md` §4.
 

@@ -83,4 +83,17 @@ export const DEFAULT_DEDUPE: Readonly<Record<string, DedupeDefaultConfig>> = {
   LEAVE_REQUEST_REJECTED: { strategy: "DedupeKey", windowSeconds: null },
   LEAVE_REQUEST_CANCELLED: { strategy: "DedupeKey", windowSeconds: null },
   LEAVE_REQUEST_REVOKED: { strategy: "DedupeKey", windowSeconds: null },
+  // S7-CHAT-BE-6 (additive) — ChatNotiBridgeRegistrar. CHỈ `CHAT_MENTIONED` cần entry ở đây.
+  //
+  // `CHAT_DIRECT_MESSAGE` KHÔNG có mặt là CỐ Ý: catalog DB đã seed `dedupe_strategy='DedupeKey'`
+  // (`0538:719`) và `resolveStrategy` cho CATALOG THẮNG — thêm vào đây là dựng nguồn sự thật thứ hai cho
+  // cùng một giá trị, hai bản sẽ trôi khỏi nhau lần đầu ai đó đổi seed.
+  //
+  // `CHAT_MENTIONED` seed `'None'` (`0538:717`) đúng nghĩa "gửi ngay, KHÔNG gộp theo cửa sổ thời gian" —
+  // nhưng 'None' ⇒ `computeKey` trả null ⇒ `dedupe_key` NULL ⇒ partial-unique
+  // `uq_notifications_dedupe_active` coi mọi NULL là distinct ⇒ **tầng 2 biến mất hoàn toàn**. Khi outbox
+  // event bị re-claim mà `processed_events` (tầng 1) đã mất dấu vì crash giữa insert↔markProcessed, người
+  // được nhắc tên nhận thông báo trùng. Đừng nhầm "không gộp lô" với "không cần idempotent" — hai chuyện
+  // khác nhau, và chỉ chuyện thứ hai được quyết ở đây.
+  CHAT_MENTIONED: { strategy: "DedupeKey", windowSeconds: null },
 };

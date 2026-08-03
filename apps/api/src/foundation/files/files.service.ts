@@ -31,6 +31,7 @@ import { buildFileKey, InvalidStorageKeyError } from "../../storage/file-storage
 import type { FileLink, FileRecord, NewFileLink, NewFileRecord } from "../../db/schema/files";
 import { SettingService } from "../settings/setting.service";
 import { FileAccessLogService } from "./file-access-log.service";
+import { fileDownloadStateDenyReason, type FileDownloadDenyReason } from "./file-download-state";
 import { FileLinkRepository } from "./file-link.repository";
 import { FilePolicyService } from "./file-policy.service";
 import { FileRepository } from "./file.repository";
@@ -377,13 +378,12 @@ export class FileService {
 
     // S2-FND-BE-4 (H1): load links BEFORE the decision — a module-owned file must be authorized by its
     // owning module's resolver (link-aware), not the FOUNDATION.FILE.* fallback (deny-no-resolver otherwise).
-    const links = await this.db.withTenant(user.companyId, (tx) =>
-      this.linkRepo.listByFileTx(user.companyId, fileId, tx),
-    );
+    const { links, everLinked } = await this.loadLinkContext(user, fileId);
     const decision = await this.policy.decideForLinkedFile(
       this.policyInputForFile(user, fileId, FilePolicyAction.View),
       links.map((l) => this.toLinkRef(l)),
       FilePolicyAction.View,
+      everLinked,
     );
     if (!decision.allow) {
       await this.logDeny(user, {
@@ -442,13 +442,12 @@ export class FileService {
 
     // S2-FND-BE-4 (H1): link-aware authorization — a module-owned file with no registered resolver is
     // fail-closed (deny-no-resolver); foundation-owned (0-link) keeps the FOUNDATION.FILE.* fallback.
-    const links = await this.db.withTenant(user.companyId, (tx) =>
-      this.linkRepo.listByFileTx(user.companyId, fileId, tx),
-    );
+    const { links, everLinked } = await this.loadLinkContext(user, fileId);
     const decision = await this.policy.decideForLinkedFile(
       this.policyInputForFile(user, fileId, FilePolicyAction.Download),
       links.map((l) => this.toLinkRef(l)),
       FilePolicyAction.Download,
+      everLinked,
     );
     if (!decision.allow) {
       await this.logDeny(user, {
@@ -529,6 +528,24 @@ export class FileService {
    * ép bởi company_id NOT NULL + RLS+FORCE (mig 0433). Validate entity-existence để WO module-owner sau.
    */
   async link(user: RequestUser, input: LinkFileInput): Promise<FileLinkDto> {
+    // S7-CHAT-BE-3 (FULL gate, HIGH): khoá điều phối phải ở dạng CHÍNH TẮC của module sở hữu.
+    // Registry tra resolver bằng khoá đã `toLowerCase()`, còn module truy vấn `file_links` của mình bằng
+    // so-chuỗi chính xác ⇒ một cặp lệch chính tả tạo được link "ma": resolver vẫn CẤP QUYỀN TẢI, module
+    // KHÔNG thấy để hiển thị và KHÔNG gỡ được. Từ chối ở biên ghi thay vì âm thầm nhận (hoặc âm thầm
+    // viết lại — viết lại là đổi thứ client khai mà không nói). Xem `FilePolicyService.canonicalOwnerKey`.
+    const canonical = this.policy.canonicalOwnerKey(input.moduleCode, input.entityType);
+    if (
+      canonical &&
+      (canonical.moduleCode !== input.moduleCode || canonical.entityType !== input.entityType)
+    ) {
+      throw new BadRequestException({
+        code: FOUNDATION_FILE_ERROR_CODES.LINK,
+        message:
+          `${FOUNDATION_FILE_ERROR_CODES.LINK}: moduleCode/entityType phải đúng dạng chính tắc ` +
+          `("${canonical.moduleCode}"/"${canonical.entityType}").`,
+      });
+    }
+
     const decision = await this.policy.canLink(
       this.policyInput(user, {
         fileId: input.fileId,
@@ -711,13 +728,12 @@ export class FileService {
     // S2-FND-BE-4 (H1): deleting a module-owned file is also link-aware (fail-closed no-resolver). A
     // module-owned file cannot be deleted through the foundation surface until its module registers a
     // resolver — orphaned-file cleanup is the owning module's responsibility (S2-FND-BE-5+).
-    const links = await this.db.withTenant(user.companyId, (tx) =>
-      this.linkRepo.listByFileTx(user.companyId, fileId, tx),
-    );
+    const { links, everLinked } = await this.loadLinkContext(user, fileId);
     const decision = await this.policy.decideForLinkedFile(
       this.policyInputForFile(user, fileId, FilePolicyAction.Delete),
       links.map((l) => this.toLinkRef(l)),
       FilePolicyAction.Delete,
+      everLinked,
     );
     if (!decision.allow) {
       await this.logDeny(user, {
@@ -894,6 +910,27 @@ export class FileService {
    * Dựng FilePermissionInput cho thao tác trên 1 file foundation-owned (module=FOUNDATION, entity=File,
    * entityId=fileId) — fallback FOUNDATION.FILE.* khi không có resolver module.
    */
+  /**
+   * S7-FND-LINKFALLBACK-1 — nạp NGỮ CẢNH LINK cho một quyết định FilePolicy: link SỐNG + cờ "đã từng có
+   * link module".
+   *
+   * Hai truy vấn trong CÙNG một `withTenant` (không phải hai lần mở tx): chúng phải nhìn CÙNG một ảnh
+   * chụp. Tách ra hai tx thì có cửa sổ mà link cuối bị gỡ ở giữa ⇒ `links` rỗng nhưng `everLinked` đọc
+   * trước khi gỡ trả `false` ⇒ rơi xuống fallback FOUNDATION.FILE.* đúng lúc vừa bị thu hồi.
+   *
+   * Gom về một chỗ cho cả 3 đường (View/Download/Delete) để không có đường nào lỡ quên cờ — đây là loại
+   * bất biến phải chốt ở method dùng chung, không rải theo từng route.
+   */
+  private async loadLinkContext(
+    user: RequestUser,
+    fileId: string,
+  ): Promise<{ links: FileLink[]; everLinked: boolean }> {
+    return this.db.withTenant(user.companyId, async (tx) => ({
+      links: await this.linkRepo.listByFileTx(user.companyId, fileId, tx),
+      everLinked: await this.linkRepo.hasEverBeenLinkedTx(user.companyId, fileId, tx),
+    }));
+  }
+
   private policyInputForFile(
     user: RequestUser,
     fileId: string,
@@ -944,14 +981,13 @@ export class FileService {
 
   /**
    * S2-FND-BE-4 (H2) — return the deny reason if a file must NOT be presigned for download, else null.
-   * Infected takes precedence (security-relevant) over not-uploaded. AV is not yet wired ⇒ the default
-   * scan_status is 'NotRequired' — only 'Infected' blocks; Pending/Failed/Clean/NotRequired stay
-   * downloadable (chỉ Infected chặn). upload_status MUST be 'Uploaded' (Pending/Failed/Deleted ⇒ not-uploaded).
+   *
+   * S7-CHAT-BE-3: thân luật chuyển sang hàm thuần `fileDownloadStateDenyReason` (file-download-state.ts)
+   * để CHAT ký đính kèm bằng ĐÚNG luật này thay vì chép sang một bản sao sẽ trôi. Method giữ lại nguyên
+   * chữ ký + hành vi — đây là uỷ quyền, KHÔNG phải đổi hành vi.
    */
-  private downloadStateDenyReason(row: FileRecord): "infected" | "not-uploaded" | null {
-    if (row.scanStatus === "Infected") return "infected";
-    if (row.uploadStatus !== "Uploaded") return "not-uploaded";
-    return null;
+  private downloadStateDenyReason(row: FileRecord): FileDownloadDenyReason | null {
+    return fileDownloadStateDenyReason(row);
   }
 
   /**

@@ -23,6 +23,20 @@
 // đo: 27/27 lần crash IPC quan sát được đều có **0 test đỏ** (xem evidence §3). Test đỏ THẬT thì
 // KHÔNG BAO GIỜ được chạy lại.
 //
+// ── BISECT (2026-08-03) — vì sao chạy-lại-nguyên-chunk là KHÔNG ĐỦ ──────────────────────────
+// Đo trên chính máy này (@mediaos/api, 469 file, LANE_DB): chunk 8/12 crash hạ tầng, chạy lại 2
+// lần vẫn crash ⇒ **429/469 file chạy, MẤT 40 file**. Runner báo ĐỎ đúng (không xanh-giả), nhưng
+// kết quả thực dụng là 40 file không có bằng chứng gì — trong đó có cả cổng như
+// `xtenant-fk-ratchet`. Chạy lại NGUYÊN chunk không cứu được vì xác suất crash phụ thuộc KÍCH
+// THƯỚC chunk (RELEASE-06 §4.4: gộp 64 file chết, tách <50 thì xanh) — chạy lại y nguyên là lặp
+// lại đúng điều kiện đã hỏng.
+//
+// Nên khi chạy lại hết lượt mà VẪN crash: CHIA ĐÔI rồi đệ quy. Hai thứ thu được:
+//   1. cứu phần lớn file (nửa lành vẫn chạy) ⇒ phạm vi không còn co 40 file một lúc;
+//   2. hội tụ về ĐÍCH DANH file gây crash. "1 file crash không cứu được: <tên>" là thứ sửa được;
+//      "40 file thiếu" thì không.
+// Test đỏ THẬT vẫn KHÔNG chia, KHÔNG chạy lại — chia đôi chỉ áp cho nhánh crash hạ tầng.
+//
 // CHỐNG GIẢM PHẠM VI LÉN: danh sách file lấy từ chính `vitest list --filesOnly` của từng package;
 // cuối run đối chiếu tập file ĐÃ CHẠY (đọc từ reporter JSON) với tập mong đợi — thiếu file ⇒ ĐỎ.
 // File khớp tên spec nhưng vitest KHÔNG thu thập (exclude/parked/đặt sai thư mục) được CÔNG BỐ
@@ -43,6 +57,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { rescueRun } from "./chunk-bisect.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
@@ -50,7 +65,7 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 // Trần mặc định. chunk-size: RELEASE-06 §4.4 đo được crash phụ thuộc KÍCH THƯỚC chunk (gộp 64 file
 // chết, tách <50 thì xanh). max-forks: mặc định của vitest là `availableParallelism()-1` = 31 trên
 // máy 32 nhân này; hạ trần làm giảm hẳn số vòng tạo/huỷ worker (xem evidence §2).
-const DEFAULTS = { chunkSize: 40, maxForks: 8, retries: 2 };
+const DEFAULTS = { chunkSize: 40, maxForks: 8, retries: 2, bisect: true };
 
 // Chữ ký crash HẠ TẦNG (được phép chạy lại). KHÔNG bao gồm test đỏ.
 const CRASH_SIGNATURES = [
@@ -106,6 +121,8 @@ function parseArgs(argv) {
     else if (a.startsWith("--max-forks=")) opts.maxForks = Number(a.slice(12));
     else if (a.startsWith("--retries=")) opts.retries = Number(a.slice(10));
     else if (a === "--no-build") opts.build = false;
+    // Thoát hiểm khi cần tái hiện HÀNH VI CŨ để so sánh (vd. đo lại số đo trong header).
+    else if (a === "--no-bisect") opts.bisect = false;
   }
   return opts;
 }
@@ -325,44 +342,35 @@ async function main() {
     const ran = new Set();
     let realFailures = 0;
     let retriesUsed = 0;
-    let unresolvedCrash = 0;
+    const crashedFiles = []; // file KHÔNG cứu được kể cả sau khi chia đôi
+    let runSeq = 0;
+
+    // Luật cứu (chạy lại → chia đôi → gọi tên thủ phạm) sống ở `chunk-bisect.mjs` để test được TẤT
+    // ĐỊNH; ở đây chỉ bơm cách chạy THẬT một nhóm file vào.
+    const runOne = async (files, label) => {
+      console.log(`\n  ── ${label}`);
+      return runChunk(
+        target,
+        files,
+        opts,
+        path.join(tmpDir, `${target.name.replace(/[^a-z0-9]/gi, "-")}-${runSeq++}.json`),
+      );
+    };
 
     for (let gi = 0; gi < groups.length; gi++) {
-      const files = groups[gi];
-      const label = `${target.name} chunk ${gi + 1}/${groups.length} (${files.length} file)`;
-      let attempt = 0;
-      let res;
-
-      for (;;) {
-        console.log(`\n  ── ${label}${attempt > 0 ? ` — chạy lại lần ${attempt}` : ""}`);
-        res = await runChunk(
-          target,
-          files,
-          opts,
-          path.join(tmpDir, `${target.name.replace(/[^a-z0-9]/gi, "-")}-${gi}-${attempt}.json`),
-        );
-        res.ranFiles.forEach((f) => ran.add(f));
-
-        if (res.status === 0) break;
-        if (!res.crashed) break; // đỏ THẬT — KHÔNG chạy lại
-        if (attempt >= opts.retries) break;
-        attempt++;
-        retriesUsed++;
-        console.log(
-          `  ⚠️  ${label}: crash HẠ TẦNG (0 test đỏ) — chạy lại (${attempt}/${opts.retries})`,
-        );
-      }
-
-      if (res.status !== 0) {
-        if (res.crashed) {
-          unresolvedCrash++;
-          console.log(`  ❌ ${label}: vẫn crash hạ tầng sau ${opts.retries} lần chạy lại`);
-        } else {
-          realFailures += res.failed || 1;
-          console.log(`  ❌ ${label}: ${res.failed} test ĐỎ THẬT`);
-        }
-      }
+      const r = await rescueRun({
+        files: groups[gi],
+        label: `${target.name} chunk ${gi + 1}/${groups.length} (${groups[gi].length} file)`,
+        runOne,
+        opts,
+        log: (m) => console.log(m),
+      });
+      r.ran.forEach((f) => ran.add(f));
+      realFailures += r.realFailures;
+      retriesUsed += r.retriesUsed;
+      crashedFiles.push(...r.crashedFiles);
     }
+    const unresolvedCrash = crashedFiles.length;
 
     // Chống giảm phạm vi lén: tập file ĐÃ CHẠY phải phủ hết tập `vitest list`.
     const missing = expected.filter((f) => !ran.has(f));
@@ -387,6 +395,7 @@ async function main() {
       staleBaseline,
       realFailures,
       unresolvedCrash,
+      crashedFiles,
       retriesUsed,
       ok,
     });
@@ -402,8 +411,16 @@ async function main() {
       `  ${mark} ${r.name}: ${r.ran}/${r.expected} file chạy` +
         (r.retriesUsed ? ` · ${r.retriesUsed} lần chạy lại (crash hạ tầng)` : "") +
         (r.realFailures ? ` · ${r.realFailures} ĐỎ THẬT` : "") +
-        (r.unresolvedCrash ? ` · ${r.unresolvedCrash} chunk crash không cứu được` : ""),
+        (r.unresolvedCrash ? ` · ${r.unresolvedCrash} file crash không cứu được` : ""),
     );
+    if (r.crashedFiles.length) {
+      // Sau khi chia đôi, danh sách này đã hội tụ về ĐÍCH DANH file gây crash — khác hẳn
+      // "thiếu 40 file" của bản trước, vốn không chỉ ra được gì để sửa.
+      console.log(
+        `      ❌ ${r.crashedFiles.length} file crash hạ tầng KHÔNG cứu được (chạy cô lập để xác nhận):`,
+      );
+      r.crashedFiles.forEach((f) => console.log(`        · ${f}`));
+    }
     if (r.missing.length) {
       console.log(`      ⚠️  THIẾU ${r.missing.length} file (phạm vi bị co lại):`);
       r.missing.slice(0, 20).forEach((f) => console.log(`        · ${f}`));

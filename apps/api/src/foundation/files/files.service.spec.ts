@@ -91,6 +91,7 @@ interface Harness {
     insertTx: ReturnType<typeof vi.fn>;
     findByIdTx: ReturnType<typeof vi.fn>;
     listByFileTx: ReturnType<typeof vi.fn>;
+    hasEverBeenLinkedTx: ReturnType<typeof vi.fn>;
     softDeleteTx: ReturnType<typeof vi.fn>;
   };
   accessLog: FileAccessLogService;
@@ -102,6 +103,7 @@ interface Harness {
     canUnlink: ReturnType<typeof vi.fn>;
     canDelete: ReturnType<typeof vi.fn>;
     decideForLinkedFile: ReturnType<typeof vi.fn>;
+    canonicalOwnerKey: ReturnType<typeof vi.fn>;
   };
   storage: {
     get: ReturnType<typeof vi.fn>;
@@ -148,6 +150,7 @@ function makeHarness(policyDecision: FilePolicyDecision = ALLOW): Harness {
     insertTx: vi.fn(),
     findByIdTx: vi.fn(),
     listByFileTx: vi.fn(async () => []),
+    hasEverBeenLinkedTx: vi.fn(async () => false),
     softDeleteTx: vi.fn(async () => 1),
   };
 
@@ -168,6 +171,9 @@ function makeHarness(policyDecision: FilePolicyDecision = ALLOW): Harness {
     // mirrors the single-file decision (returns policyDecision) so existing ALLOW/DENY cases still hold;
     // link-aware branching itself is unit-tested in file-policy.service.spec.ts.
     decideForLinkedFile: vi.fn(async () => policyDecision),
+    // S7-CHAT-BE-3 (FULL gate): `link()` từ chối khoá điều phối lệch chính tả TRƯỚC khi hỏi quyền.
+    // Mặc định `null` = "không resolver nào nhận cặp này" ⇒ mọi ca sẵn có giữ nguyên hành vi.
+    canonicalOwnerKey: vi.fn(() => null),
   };
 
   const storage = {

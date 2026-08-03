@@ -66,6 +66,11 @@ import { LeaveNotiBridgeRegistrar } from "./leave-noti-bridge.registrar";
 // (additive): outbox→NOTI 3 mapping HR "yêu cầu cập nhật hồ sơ" (submit/approve/reject, SPEC-08 §15) qua
 // CÙNG OutboxNotificationBridge INT-1. Catalog + template IN_APP đã seed từ trước nhưng THIẾU producer và
 // THIẾU mapping ⇒ trước đó duyệt xong không ai nhận được thông báo. KHÔNG import EmployeesModule (acyclic).
+// S7-CHAT-BE-6 (additive): outbox→NOTI 2 mapping CHAT (mention gửi ngay · DM gộp lô 15 phút) qua CÙNG
+// OutboxNotificationBridge INT-1. Reader đọc thẳng bảng chat_room_members/chat_rooms — KHÔNG import
+// ChatModule (acyclic; producer enqueue sống ở chat/**, consumer sống ở đây).
+import { ChatAudienceReader } from "./chat-audience.reader";
+import { ChatNotiBridgeRegistrar } from "./chat-noti-bridge.registrar";
 import { PcrApproverAudienceReader } from "./pcr-approver-audience.reader";
 import { HrPcrNotiBridgeRegistrar } from "./hr-pcr-noti-bridge.registrar";
 // S5-LMS-NOTI-1 (additive): đường intake cho caller MÁY ngoài tiến trình api (LMS/fmc-app) —
@@ -130,6 +135,10 @@ import { LmsServiceIntakeGuard } from "./lms-service-intake.guard";
     // EventsModule) tại boot qua CÙNG OutboxNotificationBridge INT-1 ở trên (KHÔNG re-provide bridge).
     PcrApproverAudienceReader,
     HrPcrNotiBridgeRegistrar,
+    // S7-CHAT-BE-6 (additive): reader + registrar CHAT đăng ký 2 consumer lên EventBus (@Global
+    // EventsModule) tại boot qua CÙNG OutboxNotificationBridge INT-1 ở trên (KHÔNG re-provide bridge).
+    ChatAudienceReader,
+    ChatNotiBridgeRegistrar,
     // S5-LMS-NOTI-1 (additive): guard danh tính máy cho LmsNotificationsController. Provider (không phải
     // APP_GUARD) — chỉ áp cho đúng controller đó qua @UseGuards, KHÔNG chạm request nào khác.
     LmsServiceIntakeGuard,

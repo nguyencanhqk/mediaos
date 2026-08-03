@@ -97,7 +97,7 @@ chat_messages    1─n file_links        (moduleCode='CHAT', entityType='chat_me
 | `sync_source` | VARCHAR(20) | Có | `manual` / `department` / `project`, default `manual` |
 | `synced_at` | TIMESTAMPTZ | Không | lần đối soát thành công gần nhất |
 | `last_message_at` | TIMESTAMPTZ | Không | sắp xếp danh sách phòng |
-| `last_message_seq` | BIGINT | Không | **mẫu số của phép trừ đếm chưa đọc** (SPEC-15 §13.2) — không có cột này thì danh sách phòng thành N+1 `COUNT(*)` |
+| `last_message_seq` | BIGINT | Không | **mẫu số của phép trừ đếm chưa đọc** (SPEC-15 §13.2) — không có cột này thì danh sách phòng thành N+1 `COUNT(*)`. ⚠️ Từ mig `0539` cột này mang giá trị **`room_seq`** (per-room), KHÔNG phải `seq` toàn cục; nó cũng chính là **bộ cấp số**: `UPDATE … SET last_message_seq = COALESCE(last_message_seq,0)+1 RETURNING` khoá hàng phòng ⇒ tuần tự hoá theo phòng |
 | `is_archived` | BOOLEAN | Có | default false |
 | `archived_at` / `archived_by` | TIMESTAMPTZ / UUID | Không | |
 | `updated_at` / `updated_by` | TIMESTAMPTZ / UUID | Không | |

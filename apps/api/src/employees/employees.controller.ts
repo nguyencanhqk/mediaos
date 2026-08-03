@@ -69,6 +69,7 @@ export class EmployeesController {
   @HttpCode(204)
   @RequirePermission("delete", "employee")
   deleteEmployee(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
-    return this.employees.deleteEmployee(req.user.companyId, id);
+    // S7-CHAT-BE-5 (W14): truyền actor để dòng audit "rời phòng vì hồ sơ bị xoá" nói được AI đã xoá.
+    return this.employees.deleteEmployee(req.user.companyId, id, req.user.id);
   }
 }

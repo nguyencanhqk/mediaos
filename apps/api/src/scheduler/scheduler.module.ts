@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { DiscoveryModule } from "@nestjs/core";
 import { AuditMaskerService } from "../events/audit-masker.service";
+import { ChatModule } from "../chat/chat.module";
 import { FilesModule } from "../foundation/files/files.module";
 import { RetentionModule } from "../foundation/retention/retention.module";
 import { JobLockService } from "./job-lock.service";
@@ -22,7 +23,10 @@ import { WorkerSchedulerService } from "./worker-scheduler.service";
  * Nest resolve kiểu Drizzle non-token). AuditMaskerService từ @Global EventsModule (inject vào factory).
  */
 @Module({
-  imports: [DiscoveryModule, RetentionModule, FilesModule],
+  // S7-CHAT-BE-5: thêm ChatModule để `ChatDerivedRoomsReconcileJobHandler` được khởi tạo TRƯỚC khi
+  // DiscoveryService quét — cùng lý do đã có với RetentionModule/FilesModule. Chiều vẫn MỘT HƯỚNG
+  // (ChatModule KHÔNG import SchedulerModule; nó chỉ import file hợp đồng standalone `job-handler.ts`).
+  imports: [DiscoveryModule, RetentionModule, FilesModule, ChatModule],
   providers: [
     { provide: WORKER_SCHEDULER_CONFIG, useFactory: loadWorkerSchedulerConfig },
     { provide: JobLockService, useFactory: (): JobLockService => new JobLockService() },

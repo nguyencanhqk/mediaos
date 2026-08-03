@@ -2,7 +2,9 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   index,
+  smallint,
   jsonb,
   pgTable,
   text,
@@ -139,7 +141,14 @@ export type NewNotification = typeof notifications.$inferInsert;
 // ─── chat_rooms ──────────────────────────────────────────────────────────────
 // G10-1: mở rộng room_type + auto-room (channel/org_unit) + direct DM dedup (direct_key).
 
-export type ChatRoomType = "project" | "direct" | "group" | "channel" | "department";
+// S7-CHAT-DB-1 (mig 0538 · CHAT-DEC-001): BỎ "channel" — khớp CHECK chat_rooms_room_type_chk và
+// packages/contracts/src/chat.ts. Ba nguồn phải cùng một tập giá trị.
+export type ChatRoomType = "direct" | "group" | "department" | "project";
+
+// S7-CHAT-DB-1 (mig 0538): `tsvector` không có sẵn trong drizzle-orm/pg-core.
+const tsvector = customType<{ data: string; driverData: string }>({
+  dataType: () => "tsvector",
+});
 
 export const chatRooms = pgTable(
   "chat_rooms",
@@ -156,9 +165,28 @@ export const chatRooms = pgTable(
     // G10-1 DM 1-1: direct_key = 2 userId (sort asc) join ":" → dedup idempotent phòng direct.
     directKey: text("direct_key"),
     roomType: text("room_type").notNull().default("project"),
-    name: text("name").notNull(),
+    // S7-CHAT-DB-1 (mig 0538): phòng `direct` KHÔNG có tên (dựng từ tên 2 người lúc hiển thị)
+    // ⇒ DROP NOT NULL; chk_chat_rooms_name vẫn ép NOT NULL cho 3 loại còn lại.
+    name: text("name"),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // ─── S7-CHAT-DB-1 (mig 0538) ───
+    /** Mã phòng sinh qua sequence_counters key 'chat_room' (prefix ROOM-, padding 4). */
+    roomCode: varchar("room_code", { length: 100 }).notNull(),
+    description: text("description"),
+    /** manual | department | project — chk_chat_rooms_sync_source ràng buộc theo room_type. */
+    syncSource: varchar("sync_source", { length: 20 }).notNull().default("manual"),
+    syncedAt: timestamp("synced_at", { withTimezone: true }),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+    /** Mẫu số của phép trừ đếm chưa đọc (SPEC-15 §13.2) — không có cột này thì list phòng thành N+1. */
+    lastMessageSeq: bigint("last_message_seq", { mode: "number" }),
+    isArchived: boolean("is_archived").notNull().default(false),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    archivedBy: uuid("archived_by"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }),
+    updatedBy: uuid("updated_by"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedBy: uuid("deleted_by"),
   },
   (t) => [
     index("chat_rooms_company_id_idx").on(t.companyId),
@@ -266,6 +294,15 @@ export const chatRoomMembers = pgTable(
     role: text("role").notNull().default("member"),
     lastReadAt: timestamp("last_read_at", { withTimezone: true }),
     joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+    // ─── S7-CHAT-DB-1 (mig 0538) ───
+    /** Con trỏ đã đọc, CHỈ TIẾN (CHAT-ERR-018). Số chưa đọc = last_message_seq − last_read_seq. */
+    lastReadSeq: bigint("last_read_seq", { mode: "number" }).notNull().default(0),
+    mutedUntil: timestamp("muted_until", { withTimezone: true }),
+    /** Rời phòng = SET left_at, KHÔNG DELETE hàng (unique (room_id,user_id) vẫn giữ). */
+    leftAt: timestamp("left_at", { withTimezone: true }),
+    /** v1 LUÔN NULL (CHAT-DEC-008: đọc toàn bộ lịch sử). Chừa sẵn cho phase sau. */
+    visibleFromSeq: bigint("visible_from_seq", { mode: "number" }),
+    addedBy: uuid("added_by"),
   },
   (t) => [
     index("chat_room_members_room_id_idx").on(t.roomId),
@@ -281,7 +318,9 @@ export type NewChatRoomMember = typeof chatRoomMembers.$inferInsert;
 // Append-only cho body/sender (BẤT BIẾN #2). G10-1 chỉ cấp UPDATE 2 cột (pinned_at, pinned_by)
 // qua column-level GRANT — KHÔNG sửa được body/sender. seq = thứ tự tổng ổn định trong room.
 
-export type ChatMessageType = "text" | "file";
+// "system" = tin do server sinh (thêm/bớt thành viên, đổi tên phòng) — mig 0538 thêm vào
+// chk_chat_messages_type. Thiếu ở đây thì S7-CHAT-BE-* không có kiểu để dùng.
+export type ChatMessageType = "text" | "file" | "system";
 
 export const chatMessages = pgTable(
   "chat_messages",
@@ -304,8 +343,36 @@ export const chatMessages = pgTable(
     mentions: jsonb("mentions").$type<string[]>().notNull().default([]),
     pinnedAt: timestamp("pinned_at", { withTimezone: true }),
     pinnedBy: uuid("pinned_by").references(() => users.id, { onDelete: "set null" }),
+    /**
+     * ⚠️ IDENTITY CẤP BẢNG — tăng xuyên MỌI phòng và MỌI tenant. Comment ở mig 0050:79 ("thứ tự tổng
+     * ổn định trong room") SAI. Thứ tự BÊN TRONG một phòng thì vẫn đúng, nhưng đem TRỪ thì sai, và nó
+     * là kênh rò khối lượng nếu lộ ra client. Dùng `roomSeq` cho MỌI thứ hướng-client (con trỏ phân
+     * trang, đếm chưa đọc). GIỮ cột này vì identity không drop sạch được và index 0050 còn dùng.
+     */
     seq: bigint("seq", { mode: "number" }).notNull().generatedAlwaysAsIdentity(),
+    /**
+     * S7-CHAT-DB-2 (mig 0539): số thứ tự PER-ROOM, liên tục từ 1. Cấp lúc INSERT bằng
+     * `UPDATE chat_rooms SET last_message_seq = COALESCE(last_message_seq,0)+1 RETURNING`
+     * (khoá hàng phòng ⇒ tuần tự hoá theo phòng); đai thứ hai là uq_chat_messages_room_seq.
+     * Đây là cột dùng cho `beforeSeq`/`afterSeq` và cho phép trừ đếm chưa đọc.
+     */
+    roomSeq: bigint("room_seq", { mode: "number" }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // ─── S7-CHAT-DB-1 (mig 0538) ───
+    /** Chống trùng khi gửi lại (CHAT-ERR-014) — uq (company,room,sender,client_message_id). */
+    clientMessageId: uuid("client_message_id"),
+    replyToMessageId: uuid("reply_to_message_id"),
+    /** Thu hồi ≠ xoá: body giữ trong DB, DTO bỏ trắng ở SERVER khi recalled_at IS NOT NULL. */
+    recalledAt: timestamp("recalled_at", { withTimezone: true }),
+    recalledBy: uuid("recalled_by"),
+    /** ⚠️ ĐẶT NGAY TRONG CÂU INSERT (= fileIds.length). App role KHÔNG có GRANT UPDATE cột này
+     *  ⇒ mọi UPDATE ... SET attachment_count bị từ chối ⇒ tin có tệp trả 500. */
+    attachmentCount: smallint("attachment_count").notNull().default(0),
+    /** GENERATED ALWAYS — DB tự tính. Thiếu khai generated ⇒ INSERT đỏ
+     *  "cannot insert into generated column". Dùng 'simple' + public.f_unaccent (IMMUTABLE). */
+    searchVector: tsvector("search_vector").generatedAlwaysAs(
+      sql`to_tsvector('simple', public.f_unaccent(coalesce(body, '')))`,
+    ),
   },
   (t) => [
     index("chat_messages_room_id_idx").on(t.roomId),

@@ -77,6 +77,21 @@ function makeDataScope(scope: string | null = "Company") {
   };
 }
 
+/**
+ * S7-CHAT-BE-5: stub `ChatDerivedRoomsSyncService`. Spec này kiểm luật của CHÍNH service đang test, không
+ * kiểm đồng bộ phòng chat — hành vi thật của hook nằm ở `chat-be5-derived-rooms.int-spec.ts` (DB thật).
+ */
+function makeChatSync() {
+  return {
+    syncUserDerivedMembershipTx: vi.fn().mockResolvedValue(undefined),
+    syncEmployeeDerivedMembershipTx: vi.fn().mockResolvedValue(undefined),
+    tryEnsureOrgUnitRoom: vi.fn().mockResolvedValue(undefined),
+    tryEnsureProjectRoom: vi.fn().mockResolvedValue(undefined),
+    tryArchiveProjectRoom: vi.fn().mockResolvedValue(undefined),
+    reportRevokeFailure: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 function makeService(
   repoOverrides: Record<string, unknown> = {},
   scope: string | null = "Company",
@@ -86,7 +101,13 @@ function makeService(
   const audit = makeAudit();
   const dataScope = makeDataScope(scope);
 
-  const svc = new RecycleBinService(repo as never, db as never, audit as never, dataScope as never);
+  const svc = new RecycleBinService(
+    repo as never,
+    db as never,
+    audit as never,
+    dataScope as never,
+    makeChatSync() as never,
+  );
   return { svc, repo, db, audit, dataScope };
 }
 

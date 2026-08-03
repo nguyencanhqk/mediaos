@@ -207,21 +207,28 @@ export class EmployeesRepository {
       .returning();
   }
 
-  softDeleteEmployee(companyId: string, id: string) {
-    return this.db.withTenant(companyId, (tx) =>
-      tx
-        .update(employeeProfiles)
-        .set({ deletedAt: new Date(), updatedAt: new Date() })
-        .where(
-          and(
-            eq(employeeProfiles.companyId, companyId),
-            eq(employeeProfiles.id, id),
-            isNull(employeeProfiles.deletedAt),
-          ),
-        )
-        .returning(),
-    );
+  /**
+   * S7-CHAT-BE-5 (W14) — lõi nhận `tx` TỪ NGOÀI, để service đặt xoá mềm và đồng bộ phòng chat vào CÙNG
+   * một transaction. Tách thuần tuý, KHÔNG đổi câu UPDATE.
+   */
+  softDeleteEmployeeTx(tx: TenantTx, companyId: string, id: string) {
+    return tx
+      .update(employeeProfiles)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          eq(employeeProfiles.companyId, companyId),
+          eq(employeeProfiles.id, id),
+          isNull(employeeProfiles.deletedAt),
+        ),
+      )
+      .returning();
   }
+
+  // Bản KHÔNG-tx của xoá mềm đã được GỠ HẲN (S7-CHAT-BE-5): sau khi `EmployeesService.deleteEmployee`
+  // chuyển sang tự mở transaction, nó còn 0 caller. Giữ lại "phòng khi cần" chính là đặt mìn — caller
+  // tương lai gọi nó sẽ xoá mềm hồ sơ mà KHÔNG thu hồi tư cách thành viên phòng chat, và không có gì
+  // báo. Cần xoá mềm ở nơi khác thì mở tx rồi gọi `softDeleteEmployeeTx` + sync, như `deleteEmployee`.
 
   // ── Login account (F7 — create users row when none supplied) ───────────────────
 

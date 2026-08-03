@@ -35,6 +35,10 @@ import { isUniqueViolation } from "../common/db-error";
 // into HR's DI graph (no module cycle).
 import { authUserSnapshot } from "../users/auth-users.repository";
 import type { User } from "../db/schema";
+import {
+  ChatDerivedRoomsSyncService,
+  ChatSyncRevokeError,
+} from "../chat/chat-derived-rooms-sync.service";
 import { HrWriteRepository, type EmployeeUpdateData } from "./hr-write.repository";
 
 type RequestUser = { id: string; companyId: string };
@@ -106,6 +110,8 @@ export class HrWriteService {
     // S5-LMS-BE-1 — auto-sync tài khoản MediaOS→LMS. Enqueue outbox (cùng tx) khi đổi status của employee
     // có linked user. ZERO HTTP (fail-soft cấu trúc); company-gated bên trong producer. LmsSyncModule imported.
     private readonly lmsSync: LmsSyncProducer,
+    // S7-CHAT-BE-5 (W8a/W9a/W10/W11/W12) — phòng chat dẫn xuất. MỘT hàm cho cả 5 điểm ghi.
+    private readonly chatSync: ChatDerivedRoomsSyncService,
   ) {}
 
   /**
@@ -251,9 +257,19 @@ export class HrWriteService {
           }),
         });
 
+        // S7-CHAT-BE-5 (W8a) — TRONG tx nguồn. Nhân viên chưa có tài khoản (`userId` null) ⇒ no-op.
+        await this.chatSync.syncUserDerivedMembershipTx(tx, user.companyId, userId, {
+          kind: "system",
+          userId: user.id,
+        });
+
         return { id: created.id, employeeCode: created.employeeCode, userId };
       });
     } catch (err) {
+      if (err instanceof ChatSyncRevokeError) {
+        await this.chatSync.reportRevokeFailure(user.companyId, err);
+        throw err;
+      }
       if (isUniqueViolation(err)) {
         throw new ConflictException(
           "Employee code or login email already exists, or that user is already linked to an active employee",
@@ -422,9 +438,21 @@ export class HrWriteService {
             diffSummary: changedFields.join(","),
           });
         }
+        // S7-CHAT-BE-5 (W9a) — đổi `orgUnitId`: rời phòng cũ (LOUD) + vào phòng mới (SAVEPOINT), TRONG
+        // CÙNG tx. Gọi vô điều kiện, KHÔNG `if (dto.orgUnitId !== undefined)`: hàm sync tính lại tập
+        // mong muốn nên tự no-op khi không có gì đổi, và không có nhánh nào để bỏ sót trường.
+        await this.chatSync.syncUserDerivedMembershipTx(tx, user.companyId, subjectUserId, {
+          kind: "system",
+          userId: user.id,
+        });
+
         return { id, changedFields };
       });
     } catch (err) {
+      if (err instanceof ChatSyncRevokeError) {
+        await this.chatSync.reportRevokeFailure(user.companyId, err);
+        throw err;
+      }
       if (isUniqueViolation(err)) {
         throw new ConflictException("Employee code already exists");
       }
@@ -434,7 +462,23 @@ export class HrWriteService {
 
   // ── Change status ──────────────────────────────────────────────────────────────────
 
+  /**
+   * S7-CHAT-BE-5 (W12) — writer THU HỒI quan trọng nhất: `newStatus !== 'active'` ⇒ rời **MỌI** phòng
+   * dẫn xuất. Khối try/catch bao ngoài là phần DUY NHẤT được thêm ở tầng này (thân `withTenant` chỉ nhận
+   * đúng một lời gọi sync); mọi guard/FSM/audit hiện có giữ nguyên thứ tự.
+   */
   async changeStatus(user: RequestUser, id: string, dto: ChangeEmployeeStatusRequest) {
+    try {
+      return await this.changeStatusCore(user, id, dto);
+    } catch (err) {
+      if (err instanceof ChatSyncRevokeError) {
+        await this.chatSync.reportRevokeFailure(user.companyId, err);
+      }
+      throw err;
+    }
+  }
+
+  private async changeStatusCore(user: RequestUser, id: string, dto: ChangeEmployeeStatusRequest) {
     await this.assertWriteScope(user, "change-status");
     return this.db.withTenant(user.companyId, async (tx) => {
       const row = await this.repo.findForUpdateTx(tx, user.companyId, id);
@@ -483,6 +527,14 @@ export class HrWriteService {
       // S5-LMS-BE-1: enqueue LMS auto-sync CÙNG tx SAU mutation (đọc state post-change). Employee có linked
       // user (row.userId) → producer resolve {email,active} + enqueue; userId null / ngoài LMS-company → no-op.
       await this.lmsSync.enqueueSync(tx, user.companyId, row.userId);
+
+      // S7-CHAT-BE-5 (W12) — THU HỒI, KHÔNG SAVEPOINT. `status` vừa ghi ở trên là nguồn của vị từ
+      // desired-set (`status='active'`), nên chuyển sang inactive/resigned/terminated ⇒ tập mong muốn
+      // rỗng ⇒ rời mọi phòng dẫn xuất trong CÙNG tx. Không có "cửa sổ vẫn đọc được tin sau khi nghỉ".
+      await this.chatSync.syncUserDerivedMembershipTx(tx, user.companyId, row.userId, {
+        kind: "system",
+        userId: user.id,
+      });
       return { id, status: newStatus };
     });
   }
@@ -552,9 +604,19 @@ export class HrWriteService {
           before: { userId: null },
           after: { userId: dto.userId },
         });
+        // S7-CHAT-BE-5 (W10) — gắn tài khoản ⇒ người đó vào phòng theo `orgUnitId` sẵn có của hồ sơ.
+        await this.chatSync.syncUserDerivedMembershipTx(tx, user.companyId, dto.userId, {
+          kind: "system",
+          userId: user.id,
+        });
+
         return { id, userId: dto.userId };
       });
     } catch (err) {
+      if (err instanceof ChatSyncRevokeError) {
+        await this.chatSync.reportRevokeFailure(user.companyId, err);
+        throw err;
+      }
       if (isUniqueViolation(err)) {
         throw new ConflictException("User is already linked to another active employee");
       }
@@ -562,7 +624,19 @@ export class HrWriteService {
     }
   }
 
+  /** S7-CHAT-BE-5 (W11) — writer THU HỒI: gỡ tài khoản ⇒ tài khoản đó rời mọi phòng dẫn xuất. */
   async unlinkUser(user: RequestUser, id: string, dto: UnlinkUserRequest) {
+    try {
+      return await this.unlinkUserCore(user, id, dto);
+    } catch (err) {
+      if (err instanceof ChatSyncRevokeError) {
+        await this.chatSync.reportRevokeFailure(user.companyId, err);
+      }
+      throw err;
+    }
+  }
+
+  private async unlinkUserCore(user: RequestUser, id: string, dto: UnlinkUserRequest) {
     await this.assertWriteScope(user, "update");
     return this.db.withTenant(user.companyId, async (tx) => {
       const row = await this.repo.findForUpdateTx(tx, user.companyId, id);
@@ -593,6 +667,14 @@ export class HrWriteService {
         actorUserId: user.id,
         before: { userId: detachedUserId },
         after: { userId: null },
+      });
+
+      // S7-CHAT-BE-5 (W11) — đồng bộ cho tài khoản VỪA BỊ GỠ, không phải cho hồ sơ: sau `setUserIdTx(…,
+      // null)` hồ sơ không còn trỏ tới ai, nên tính theo hồ sơ sẽ tìm ra 0 người và im lặng bỏ sót. Tập
+      // mong muốn của `detachedUserId` giờ rỗng (không hồ sơ hoạt động nào trỏ tới nó) ⇒ rời mọi phòng.
+      await this.chatSync.syncUserDerivedMembershipTx(tx, user.companyId, detachedUserId, {
+        kind: "system",
+        userId: user.id,
       });
       return { id, userId: null };
     });

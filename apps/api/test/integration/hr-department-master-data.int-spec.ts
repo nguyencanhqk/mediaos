@@ -64,7 +64,17 @@ describe.skipIf(!hasLaneDb)("S2-HR-BE-3 HR department + master-data on real Post
   // so every service call goes through withTenant → RLS FORCE is enforced at the DB.
   const db = new DatabaseService();
   const audit = new AuditService(new AuditMaskerService());
-  const deptService = new HrDepartmentService(new HrDepartmentRepository(db), db, audit);
+  // S7-CHAT-BE-5: stub đồng bộ phòng chat — spec này đo CRUD phòng ban + RLS, không đo hook CHAT (hành
+  // vi thật của hook chạy trên DB thật ở `chat-be5-derived-rooms.int-spec.ts`).
+  const chatSyncStub = {
+    tryEnsureOrgUnitRoom: async () => undefined,
+  } as never;
+  const deptService = new HrDepartmentService(
+    new HrDepartmentRepository(db),
+    db,
+    audit,
+    chatSyncStub,
+  );
   const masterService = new HrMasterDataService(new HrMasterDataRepository(db), db, audit);
   const guard = new PermissionGuard(
     new Reflector(),

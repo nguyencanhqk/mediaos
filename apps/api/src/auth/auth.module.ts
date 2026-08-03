@@ -1,4 +1,5 @@
 import { Module, forwardRef } from "@nestjs/common";
+import { RealtimeEmitterModule } from "../realtime/realtime-emitter.module";
 import { CryptoModule } from "../crypto/crypto.module";
 import { DatabaseModule } from "../db/db.module";
 import { ModuleCatalogModule } from "../foundation/module-catalog/module-catalog.module";
@@ -40,6 +41,10 @@ import { TwoFactorEnforcementGuard } from "./two-factor-enforcement.guard";
     // S2-AUTH-BE-1: /auth/me TÁI DÙNG ModuleCatalogService.getMyApps() cho `modules`. ModuleCatalogModule
     // KHÔNG import AuthModule (chỉ Permission/Settings/Database) → import thẳng, KHÔNG cần forwardRef.
     ModuleCatalogModule,
+    // S7-CHAT-BE-GATE-3 (L2 HIGH): cắt phiên WS khi thu hồi phiên (SPEC-15 §18). RealtimeEmitterModule là
+    // module LÁ (0 phụ thuộc nghiệp vụ) — cạnh này KHÔNG sinh cycle; chiều `Realtime → Auth` mới là chiều
+    // RealtimeModule import AuthModule để lấy TokenService.
+    RealtimeEmitterModule,
   ],
   // S2-AUTH-BE-5 (APPEND): AuthLogsViewerController = viewer READ-ONLY login_logs + user_security_events.
   controllers: [AuthController, AuthLogsViewerController],

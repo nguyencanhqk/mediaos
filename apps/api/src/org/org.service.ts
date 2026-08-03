@@ -17,6 +17,8 @@ import { OrgRepository } from "./org.repository";
 import { isUniqueViolation } from "../common/db-error";
 import { DataScopeService } from "../permission/data-scope.service";
 import { ORG_EMPLOYEE_DIRECTORY } from "./org.permissions";
+import { ChatDerivedRoomsSyncService } from "../chat/chat-derived-rooms-sync.service";
+import { CHAT_ROOM_ELIGIBLE_ORG_UNIT_TYPES } from "../chat/chat-derived-rooms-predicates";
 
 /** Actor tối thiểu cho đường đọc có scope (khớp `req.user` của JwtAuthGuard). */
 interface DirectoryActor {
@@ -33,6 +35,9 @@ export class OrgService {
     // S6-SEC-ORGSCOPE-1 (N-1): DataScopeService export sẵn từ PermissionModule, OrgModule đã import
     // module đó cho PermissionGuard ⇒ không cần đổi wiring.
     private readonly dataScope: DataScopeService,
+    // S7-CHAT-BE-5 (W1): phòng chat phòng-ban. OrgModule import ChatModule (một hướng — ChatModule
+    // KHÔNG import OrgModule; job đọc thẳng bảng `org_units` bằng SQL, không qua OrgRepository).
+    private readonly chatSync: ChatDerivedRoomsSyncService,
   ) {}
 
   // ── Org Units ────────────────────────────────────────────────────────────────
@@ -45,7 +50,12 @@ export class OrgService {
     return this.repo.getOrgTree(companyId);
   }
 
-  async createOrgUnit(companyId: string, dto: CreateOrgUnitRequest) {
+  /**
+   * `actorUserId` tuỳ chọn (S7-CHAT-BE-5): dòng audit `chat.room.auto_created` phải nói được AI vừa tạo
+   * phòng ban. Không truyền ⇒ `actor_user_id` NULL, và writer song sinh `HrDepartmentService` thì có —
+   * hai hàng audit cho cùng một loại hành động lệch nhau về "ai", đúng thứ sổ audit sinh ra để trả lời.
+   */
+  async createOrgUnit(companyId: string, dto: CreateOrgUnitRequest, actorUserId?: string) {
     let unit: Awaited<ReturnType<OrgRepository["createOrgUnit"]>>[number];
     try {
       const rows = await this.repo.createOrgUnit(companyId, {
@@ -63,6 +73,19 @@ export class OrgService {
         throw new ConflictException("Department name or code already exists");
       }
       throw err;
+    }
+
+    // S7-CHAT-BE-5 (W1) — phòng chat phòng-ban, NGOÀI tx tạo org_unit.
+    //
+    // Ngoài tx là BẮT BUỘC chứ không phải tiện tay: `ChatRoomCodeService.allocate` gọi
+    // `SequenceService.nextCode()`, hàm này tự mở `withTenant` riêng nên không lồng được vào tx nghiệp vụ
+    // (owner chốt 02/08, điểm 3). Hệ quả chấp nhận: tạo phòng hỏng ⇒ org_unit vẫn ra đời, nhịp job kế
+    // tiếp vá — "thiếu một phòng ≠ rò quyền đọc". `try*` đã nuốt lỗi bên trong, KHÔNG throw ra đây.
+    if (CHAT_ROOM_ELIGIBLE_ORG_UNIT_TYPES.includes(unit.type as "department")) {
+      await this.chatSync.tryEnsureOrgUnitRoom(companyId, unit.id, unit.name, {
+        kind: "system",
+        userId: actorUserId ?? null,
+      });
     }
 
     return unit;

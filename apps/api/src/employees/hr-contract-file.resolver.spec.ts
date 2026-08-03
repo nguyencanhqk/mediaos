@@ -197,9 +197,10 @@ describe("HrContractFileResolver — FilePolicyService registry dispatch (the fi
       baseInput({ action: FilePolicyAction.Download }),
       [link],
       FilePolicyAction.Download,
+      true,
     );
     // This is exactly the 403 the shipped download button hit before this WO.
-    expect(decision).toEqual({ allow: false, reason: "deny-no-resolver" });
+    expect(decision).toMatchObject({ allow: false, reason: "deny-no-resolver" });
   });
 
   it("AFTER registration + in-scope → allow-resolver; FOUNDATION.FILE.* fallback NOT reached", async () => {
@@ -211,6 +212,7 @@ describe("HrContractFileResolver — FilePolicyService registry dispatch (the fi
       baseInput(),
       [link],
       FilePolicyAction.Download,
+      true,
     );
 
     expect(decision).toEqual({ allow: true, reason: "allow-resolver" });
@@ -227,8 +229,9 @@ describe("HrContractFileResolver — FilePolicyService registry dispatch (the fi
       baseInput(),
       [link],
       FilePolicyAction.Download,
+      true,
     );
-    expect(decision).toEqual({ allow: false, reason: "deny-resolver" });
+    expect(decision).toMatchObject({ allow: false, reason: "deny-resolver" });
   });
 
   it("AFTER registration + no view grant (resolver throws) → deny-error (fail-closed)", async () => {
@@ -240,8 +243,9 @@ describe("HrContractFileResolver — FilePolicyService registry dispatch (the fi
       baseInput(),
       [link],
       FilePolicyAction.Download,
+      true,
     );
-    expect(decision).toEqual({ allow: false, reason: "deny-error" });
+    expect(decision).toMatchObject({ allow: false, reason: "deny-error" });
   });
 
   it("hasResolver: REAL ('HR','contract') true; fictitious ('HR','EmployeeContract') false", () => {
@@ -260,8 +264,8 @@ describe("HrContractFileResolver — FilePolicyService registry dispatch (the fi
     const { resolver, fns } = buildResolver({ canManage: false });
     policy.registerResolver(resolver);
 
-    const del = await policy.decideForLinkedFile(baseInput(), [link], FilePolicyAction.Delete);
-    expect(del).toEqual({ allow: false, reason: "deny-resolver" });
+    const del = await policy.decideForLinkedFile(baseInput(), [link], FilePolicyAction.Delete, true);
+    expect(del).toMatchObject({ allow: false, reason: "deny-resolver" });
     expect(fns.can).toHaveBeenCalledWith(
       expect.objectContaining({ action: "manage", resourceType: "contract" }),
     );

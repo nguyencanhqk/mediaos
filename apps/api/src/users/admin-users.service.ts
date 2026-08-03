@@ -100,7 +100,7 @@ export class AdminUsersService {
       if (!updated) throw new NotFoundException(USER_NOT_FOUND);
       // S2-AUTH-BE-9: tạm khoá = thu hồi MỌI phiên (refresh_tokens + user_sessions) NGAY trong CÙNG tx
       // (đối xứng lock). Refresh token cũ trình lại → 401 tức thì. count vào audit after.
-      const revokedSessionCount = await this.auth.revokeAllForUserTx(tx, id, "suspended");
+      const revokedSessionCount = await this.auth.revokeAllForUserTx(tx, actor.companyId, id, "suspended");
       await this.audit.record(tx, {
         action: "user.suspended",
         objectType: "user",

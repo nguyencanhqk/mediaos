@@ -114,6 +114,39 @@ export class FilePolicyService {
     }
   }
 
+  /**
+   * Dạng CHÍNH TẮC của cặp `(moduleCode, entityType)` theo resolver đang giữ khoá — `null` khi không
+   * resolver nào nhận cặp này (tệp foundation-owned; giữ nguyên hành vi cũ).
+   *
+   * ┌─ VÌ SAO CẦN ─ S7-CHAT-BE-3 FULL gate, HIGH ─────────────────────────────────────────────────┐
+   * │ Registry ở đây tra resolver bằng khoá ĐÃ CHUẨN HOÁ (`trim().toLowerCase()`), nhưng các module │
+   * │ truy vấn `file_links` của chính mình bằng SO-CHUỖI CHÍNH XÁC. Hai cách nhìn khác nhau về cùng │
+   * │ một khoá ⇒ client khai `moduleCode:"chat"` + `entityType:"Chat_Message"` qua                  │
+   * │ `POST /foundation/files/:id/links` tạo được một hàng link mà:                                  │
+   * │   • resolver VẪN nhận (khoá normalize trùng) ⇒ **cấp quyền tải** cho mọi thành viên phòng;     │
+   * │   • module KHÔNG thấy (truy vấn exact-match trượt) ⇒ không lên DTO, không lên tab Tệp;         │
+   * │   • module không gỡ được, và thu hồi tin cũng không chạm tới.                                  │
+   * │ Tức một grant **không quan sát được và không thu hồi được** — đo bằng probe trên DB thật.      │
+   * │ Vì vậy biên GHI phải TỪ CHỐI cặp lệch chính tả, chứ không âm thầm chấp nhận.                   │
+   * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * Trả về chuỗi resolver TỰ KHAI (không phải bản lowercase) — đó mới là giá trị mà module dùng khi
+   * INSERT và khi truy vấn lại.
+   */
+  canonicalOwnerKey(
+    moduleCode: string,
+    entityType: string,
+  ): { moduleCode: string; entityType: string } | null {
+    const resolver = this.lookupResolver(moduleCode, entityType);
+    if (!resolver) return null;
+    const declared = (resolver.entityTypes ?? []).find(
+      (e) => this.normalize(e) === this.normalize(entityType),
+    );
+    // Resolver dạng module-wildcard (không khai `entityTypes`) không có dạng chính tắc cho entity ⇒ giữ
+    // nguyên phần client khai, chỉ đóng đinh `moduleCode`.
+    return { moduleCode: resolver.moduleCode, entityType: declared ?? entityType };
+  }
+
   // ─── Public decision API ─────────────────────────────────────────────────────
 
   canView(input: FilePermissionInput): Promise<FilePolicyDecision> {
@@ -167,6 +200,7 @@ export class FilePolicyService {
     input: FilePermissionInput,
     links: readonly FileLinkRef[],
     action: FilePolicyAction,
+    everLinked: boolean,
   ): Promise<FilePolicyDecision> {
     // Tenant guard first — consistent with decide(), runs before any resolver probe/dispatch.
     if (!input.companyId || !input.userId) {
@@ -178,8 +212,18 @@ export class FilePolicyService {
     }
 
     try {
-      // Foundation-owned (no links) → unchanged single-file decision (FOUNDATION.FILE.* fallback).
       if (links.length === 0) {
+        // S7-FND-LINKFALLBACK-1 — 0 live links has TWO very different meanings and they must not share
+        // a verdict:
+        //   • never linked  → genuinely foundation-owned → keep the FOUNDATION.FILE.* fallback (below).
+        //   • was linked, now unlinked → REVOCATION. Falling back here makes unlinking *widen* access:
+        //     company-admin holds `download:foundation-file` through the bulk grant in migration 0435,
+        //     so the moment a module drops its last link the file becomes readable by everyone with that
+        //     broad grant — the exact opposite of what unlinking means. Fail-closed instead.
+        // The policy layer does no DB access, so the caller must state which case it is. The parameter is
+        // REQUIRED (not optional-defaulting-to-false) on purpose: a new caller that forgets it breaks the
+        // build instead of silently re-opening the hole.
+        if (everLinked) return { allow: false, reason: "deny-links-revoked" };
         return this.decide({ ...input, action });
       }
 
@@ -200,7 +244,20 @@ export class FilePolicyService {
           action,
         });
         // Most-restrictive: the first deny (resolver-deny / deny-error / deny-tenant) is final.
-        if (!decision.allow) return decision;
+        //
+        // Attach WHICH link denied (diagnostic only — see `deniedByLink`). This is the difference
+        // between an operator being able to answer "why can't they download it?" in one grep and not at
+        // all: with several links the deny may come from an entity the caller never mentioned.
+        if (!decision.allow) {
+          return {
+            ...decision,
+            deniedByLink: {
+              moduleCode: link.moduleCode,
+              entityType: link.entityType,
+              entityId: link.entityId,
+            },
+          };
+        }
       }
       return { allow: true, reason: "allow-resolver" };
     } catch (err) {

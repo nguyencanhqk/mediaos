@@ -9,6 +9,7 @@ import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { isUniqueViolation } from "../common/db-error";
 import { HrDepartmentRepository } from "./hr-department.repository";
+import { ChatDerivedRoomsSyncService } from "../chat/chat-derived-rooms-sync.service";
 
 /**
  * S2-HR-BE-3 — HR department service.
@@ -22,6 +23,8 @@ export class HrDepartmentService {
     private readonly repo: HrDepartmentRepository,
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
+    // S7-CHAT-BE-5 (W2) — xem ghi chú ở `OrgService`.
+    private readonly chatSync: ChatDerivedRoomsSyncService,
   ) {}
 
   listDepartments(companyId: string, status?: string) {
@@ -60,6 +63,24 @@ export class HrDepartmentService {
   }
 
   async createDepartment(companyId: string, actorUserId: string, dto: CreateDepartmentRequest) {
+    const created = await this.createDepartmentCore(companyId, actorUserId, dto);
+    // S7-CHAT-BE-5 (W2) — writer THỨ HAI trên cùng bảng `org_units` (route `POST /hr/departments`).
+    // Hook cả hai là bắt buộc: hook một bên thì phòng ban tạo qua route kia sẽ không bao giờ có phòng
+    // chat cho tới nhịp job. Ngoài tx, cùng lý do đã ghi ở W1 (`OrgService.createOrgUnit`).
+    // `createDepartment` LUÔN sinh `org_units.type = 'department'` (repo không nhận `type`) ⇒ không cần
+    // kiểm `CHAT_ROOM_ELIGIBLE_ORG_UNIT_TYPES` ở đây.
+    await this.chatSync.tryEnsureOrgUnitRoom(companyId, created.id, created.name, {
+      kind: "system",
+      userId: actorUserId,
+    });
+    return created;
+  }
+
+  private async createDepartmentCore(
+    companyId: string,
+    actorUserId: string,
+    dto: CreateDepartmentRequest,
+  ) {
     try {
       return await this.db.withTenant(companyId, async (tx) => {
         // PRE-INSERT: validate parentId exists in the same company (BẤT BIẾN #1 — company_id query).

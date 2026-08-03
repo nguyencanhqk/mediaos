@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**318 WO** · có micro-plan: **169/318** · ⬜ 14 chờ · 🔵 1 đang làm · ✅ 302 xong · 🔴 1 chặn
+**325 WO** · có micro-plan: **181/325** · ⬜ 7 chờ · 🔵 4 đang làm · ✅ 313 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -353,20 +353,27 @@
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
 | `S7-GOAL-PROJTAB-1` | 🟡 | ✅ xong | [📄](S7-GOAL-PROJTAB-1.md) | ✅S6-GOLIVE-1 | Tab 'Mục tiêu' trong trang dự án: mục tiêu của dự án + phủ mục tiêu củ |
-| `S7-CHAT-DOC-1` | 🟢 | 🔵 đang làm | [📄](docs/SPEC/SPEC-15 CHAT.md) | — | Bộ tài liệu CHAT: SPEC-15 + DB-12 + API-13 + ma trận phân quyền §9c +  |
-| `S7-CHAT-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-DOC-1 ✅S6-GOLIVE-1 | Migration CHAT: ALTER 3 bảng đã có (cột v1 + CHECK loại↔neo + column-G |
-| `S7-CHAT-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-DB-1 | ChatAccessService — ĐIỂM KHẲNG ĐỊNH MEMBERSHIP DUY NHẤT (fail-closed,  |
-| `S7-CHAT-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-BE-1 | Tin nhắn: đọc theo con trỏ seq (cấm offset) · gửi idempotent theo clie |
-| `S7-CHAT-BE-3` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-BE-2 | Đính kèm tệp/ảnh qua FOUNDATION Files + ChatMessageFileResolver (BẮT B |
-| `S7-CHAT-BE-4` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-BE-2 | Tìm kiếm toàn văn tiếng Việt (có dấu/không dấu) — LUÔN giới hạn theo p |
-| `S7-CHAT-BE-5` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-BE-1 | Phòng tự động theo phòng ban + dự án: tạo/đóng phòng, đồng bộ thành vi |
-| `S7-CHAT-BE-6` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-BE-2 ⏳S7-CHAT-DB-1 | Thông báo CHAT qua OutboxNotificationBridge: mention gửi ngay + DM gộp |
-| `S7-CHAT-RT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-BE-2 | Realtime CHAT: join phòng SERVER-SIDE lúc handshake (không nhận danh s |
-| `S7-CHAT-FE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-BE-2 ⏳S7-CHAT-RT-1 | Nền FE chat: contracts + api-client + store Zustand dùng chung + MỘT k |
-| `S7-CHAT-FE-2` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-FE-1 ⏳S7-CHAT-BE-3 | Trang /chat full-screen: 3 cột (danh sách phòng · hội thoại · thông ti |
+| `S7-CHAT-DOC-1` | 🟢 | ✅ xong | [📄](docs/SPEC/SPEC-15 CHAT.md) | — | Bộ tài liệu CHAT: SPEC-15 + DB-12 + API-13 + ma trận phân quyền §9c +  |
+| `S7-CHAT-DOC-2` | 🟢 | ✅ xong | [📄](S7-CHAT-WAVE.md) | ✅S7-CHAT-DOC-1 | Hoà CHAT-DEC-004 (owner lật: SA đọc được mọi phòng, có audit) vào bộ d |
+| `S7-CHAT-DB-1` | 🔴 | ✅ xong | [📄](S7-CHAT-DB-1.md) | ✅S7-CHAT-DOC-1 ✅S6-GOLIVE-1 | Migration CHAT: ALTER 3 bảng đã có (cột v1 + backfill TRƯỚC CHECK + co |
+| `S7-CHAT-DB-2` | 🔴 | ✅ xong | — *(chưa)* | ✅S7-CHAT-DB-1 | Migration 0539: chat_messages.room_seq PER-ROOM (sửa công thức đếm chư |
+| `S7-CHAT-BE-1` | 🔴 | ✅ xong | [📄](S7-CHAT-BE-1.md) | ✅S7-CHAT-DB-2 | ChatAccessService — ĐIỂM KHẲNG ĐỊNH MEMBERSHIP DUY NHẤT (fail-closed,  |
+| `S7-CHAT-BE-2` | 🔴 | ✅ xong | [📄](S7-CHAT-BE-2.md) | ✅S7-CHAT-BE-1 | Tin nhắn: đọc theo con trỏ seq (cấm offset) · gửi idempotent theo clie |
+| `S7-CHAT-BE-3` | 🔴 | ✅ xong | [📄](S7-CHAT-BE-3.md) | ✅S7-CHAT-BE-2 | Đính kèm tệp/ảnh qua FOUNDATION Files + ChatMessageFileResolver (BẮT B |
+| `S7-FND-LINKFALLBACK-1` | 🔴 | 🔵 đang làm | — *(chưa)* | ✅S7-CHAT-BE-3 | FilePolicy: tệp TỪNG có link module thì KHÔNG bao giờ tụt xuống fallba |
+| `S7-CHAT-BE-4` | 🔴 | ✅ xong | [📄](S7-CHAT-BE-4.md) | ✅S7-CHAT-BE-2 | Tìm kiếm toàn văn tiếng Việt (có dấu/không dấu) — LUÔN giới hạn theo p |
+| `S7-CHAT-BE-5` | 🔴 | ✅ xong | [📄](S7-CHAT-BE-5.md) | ✅S7-CHAT-BE-1 | Phòng tự động theo phòng ban + dự án: tạo/đóng phòng, đồng bộ thành vi |
+| `S7-CHAT-BE-6` | 🟡 | ✅ xong | [📄](S7-CHAT-BE-6.md) | ✅S7-CHAT-BE-2 ✅S7-CHAT-DB-1 | Thông báo CHAT qua OutboxNotificationBridge: mention gửi ngay + DM gộp |
+| `S7-INT-OUTBOX-FIFO-1` | 🟡 | 🔵 đang làm | — *(chưa)* | — | OutboxWorker dispatch ĐÚNG THỨ TỰ trong cùng lô claim (KI-059): RETURN |
+| `S7-CHAT-RT-0` | 🔴 | 🔵 đang làm | [📄](S7-CHAT-RT-0.md) | — | Hạ tầng WS: GẮN ValkeyIoAdapter (hiện định nghĩa rồi nhưng KHÔNG chỗ n |
+| `S7-CHAT-RT-1` | 🔴 | 🔵 đang làm | [📄](S7-CHAT-RT-1.md) | ✅S7-CHAT-BE-2 | Realtime CHAT: join phòng SERVER-SIDE lúc handshake (không nhận danh s |
+| `S7-CHAT-FE-1` | 🟡 | ⬜ chờ | [📄](S7-CHAT-FE-1.md) | ✅S7-CHAT-BE-2 ⏳S7-CHAT-RT-1 ⏳S7-CHAT-RT-0 | Nền FE chat: contracts + api-client + store Zustand dùng chung + MỘT k |
+| `S7-CHAT-FE-2` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-FE-1 ✅S7-CHAT-BE-3 | Trang /chat full-screen: 3 cột (danh sách phòng · hội thoại · thông ti |
 | `S7-CHAT-FE-3` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-FE-2 | Panel chat nổi toàn hệ thống (tối đa 3 hội thoại) + badge tổng chưa đọ |
-| `S7-CHAT-FE-4` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-FE-2 ⏳S7-CHAT-BE-4 | Màn hình tìm kiếm tin nhắn (nhảy tới tin trong ngữ cảnh) + tab tệp/tin |
-| `S7-CHAT-QA-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-FE-3 ⏳S7-CHAT-BE-5 ⏳S7-CHAT-BE-6 ⏳S7-CHAT-FE-4 | Bộ test trọn vẹn CHAT: 11 nhóm scenario SPEC-15 §21 trên LANE_DB + E2E |
+| `S7-CHAT-FE-4` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-FE-2 ✅S7-CHAT-BE-4 | Màn hình tìm kiếm tin nhắn (nhảy tới tin trong ngữ cảnh) + tab tệp/tin |
+| `S7-CHAT-BE-7` | 🔴 | ✅ xong | [📄](S7-CHAT-BE-7.md) | ✅S7-CHAT-BE-2 ✅S7-CHAT-BE-3 | 🔒 Đường đọc-vượt membership (CHAT-DEC-004): controller+service RIÊNG  |
+| `S7-CHAT-FE-5` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S7-CHAT-BE-7 ⏳S7-CHAT-FE-2 | 🔒 Màn quản trị đọc-vượt (CHAT-SCREEN-007) + nhật ký đọc-vượt (CHAT-SC |
+| `S7-CHAT-QA-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-FE-3 ✅S7-CHAT-BE-5 ✅S7-CHAT-BE-6 ⏳S7-CHAT-FE-4 ⏳S7-CHAT-FE-5 | Bộ test trọn vẹn CHAT: 12 nhóm scenario SPEC-15 §21 trên LANE_DB + E2E |
 | `S7-CHAT-CLEAN-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CHAT-QA-1 | Contract (release SAU): drop chat_rooms.channel_id + chat_messages.fil |
 
 ---
