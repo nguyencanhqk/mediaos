@@ -919,10 +919,16 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
      * Danh sách dưới đây là HỢP ĐỒNG: sửa một dòng phải có lý do viết kèm, y như sửa SPEC.
      */
     it("index chat_messages: 9 cái phải-giữ còn nguyên, 2 cái tiền-tố-trùng đã gỡ (mig 0541)", async () => {
-      const rows = await direct.query<{ indexrelname: string }>(
-        `SELECT indexrelname FROM pg_stat_user_indexes WHERE relname = 'chat_messages' ORDER BY 1`,
+      const rows = await direct.query<{ indexrelname: string; isunique: boolean }>(
+        // ⚠️ Kéo theo `indisunique`: điểm danh bằng TÊN THÔI thì `DROP INDEX uq_x; CREATE INDEX uq_x ON
+        // chat_messages(room_id)` lọt cổng — tên còn, ràng buộc duy nhất thì mất. Ca vế-âm 23505 ở mục
+        // D/E là đai thứ hai, nhưng đai thứ nhất không nên hở sẵn.
+        `SELECT i.indexrelname, x.indisunique AS isunique
+           FROM pg_stat_user_indexes i JOIN pg_index x ON x.indexrelid = i.indexrelid
+          WHERE i.relname = 'chat_messages' ORDER BY 1`,
       );
       const have = new Set(rows.rows.map((r) => r.indexrelname));
+      const unique = new Set(rows.rows.filter((r) => r.isunique).map((r) => r.indexrelname));
 
       const PHAI_GIU = [
         "chat_messages_company_id_id_uq", // unique đỡ composite tenant FK reply_to (KI-046)
@@ -945,6 +951,16 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
         DA_GO.filter((n) => have.has(n)),
         "index tiền-tố-trùng đã quay lại — kiểm `communication.ts` có khai lại không",
       ).toEqual([]);
+
+      // Vế thứ hai của ratchet: 4 cái này phải còn DUY NHẤT, không chỉ còn TÊN. `DROP INDEX uq_x;
+      // CREATE INDEX uq_x ON chat_messages(room_id)` giữ nguyên tên nhưng mất ràng buộc — điểm danh
+      // theo tên sẽ cho qua, và lỗ chỉ lộ ra khi có hai tin trùng `room_seq` trên PROD.
+      expect([...unique].sort(), "tập index UNIQUE của chat_messages").toEqual([
+        "chat_messages_company_id_id_uq",
+        "chat_messages_pkey",
+        "uq_chat_messages_client_id",
+        "uq_chat_messages_room_seq",
+      ]);
     });
   });
 });

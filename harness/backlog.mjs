@@ -10251,13 +10251,18 @@ export const backlog = [
     // paths mở rộng theo đúng vùng đã đụng — memory `wo-paths-drive-gate-and-scheduler`.
     zone: "red",
     status: "done",
+    // ⚠️ `docs/plans/S7-CHAT-CLEAN-2.md` ĐÃ GỠ khỏi paths: WO không có khoá `plan`, không ai viết file
+    // đó, và `paths` khai một file không tồn tại là nói dối gate + scheduler. Lý lẽ đầy đủ của WO nằm ở
+    // header mig 0541 + các dòng `src[]` dưới đây.
     paths: [
       "apps/api/src/chat/**",
+      "apps/api/src/events/audit.service.ts", // export AUDIT_RESULT_STATUSES — bỏ bản chép ở mapper
       "apps/api/src/db/schema/communication.ts",
       "apps/api/migrations/**",
       "apps/api/test/integration/**",
       "packages/contracts/src/chat.ts",
-      "docs/plans/S7-CHAT-CLEAN-2.md",
+      "docs/API Design/API-13_CHAT_API_Design.md",
+      "docs/plans/S7-CHAT-BE-7.md",
     ],
     skills: ["code-review"],
     depends_on: [],

@@ -7,6 +7,9 @@ import type {
   ChatRoomMemberDto,
 } from "@mediaos/contracts";
 import type { ChatMemberRole } from "../db/schema/communication";
+// Danh sách DUY NHẤT — không chép bản thứ hai ở đây (nguồn gốc: CHECK mig 0432, ép ở tầng ghi bởi
+// `AuditService`). Chép = thêm giá trị bên kia mà quên bên này ⇒ nhãn SAI, im lặng.
+import { AUDIT_RESULT_STATUSES } from "../events/audit.service";
 import type { ChatAttachmentRow } from "./chat-attachments.repository";
 import { isImageMimeType } from "./chat-file.constants";
 import type {
@@ -159,15 +162,6 @@ export function toOversightAuditEntryDto(row: ChatOversightAuditRow): ChatOversi
   };
 }
 
-/**
- * Bốn giá trị hợp lệ của `audit_logs.result_status` — nguồn sự thật là CHECK ở mig `0432`, được
- * `audit.service.ts` (`AUDIT_RESULT_STATUSES`) ép lại ở tầng ghi.
- *
- * Đây là bản sao ĐỌC, cố ý không import từ `events/`: nó là **allowlist**, nên khi nguồn thêm giá trị thứ
- * năm mà quên chỗ này thì hỏng theo chiều AN TOÀN — giá trị mới hiện `Unknown` (chưa biết nhãn) chứ
- * không hiện sai thành một sự kiện có thật. Ca test khoá đúng tính chất đó.
- */
-const AUDIT_RESULT_STATUSES = ["Success", "Failure", "Denied", "Error"] as const;
 type AuditResultStatus = (typeof AUDIT_RESULT_STATUSES)[number];
 
 /**
@@ -182,6 +176,10 @@ type AuditResultStatus = (typeof AUDIT_RESULT_STATUSES)[number];
  *
  * `Unknown` KHÔNG khẳng định gì cả — đó là điểm: dữ liệu hỏng phải LỘ RA, không được đội lốt một sự kiện
  * có thật. Bất biến "lạ/NULL không bao giờ ra `Success`" được khoá bằng ca test riêng.
+ *
+ * Nếu `AUDIT_RESULT_STATUSES` được thêm giá trị thứ năm, hàm này hỏng theo chiều AN TOÀN cho tới khi có
+ * người đặt nhãn: giá trị mới đi qua nguyên vẹn (nó nằm trong danh sách), còn giá trị NGOÀI danh sách
+ * vẫn ra `Unknown`.
  */
 function toAuditResultStatus(raw: string | null): AuditResultStatus | "Unknown" {
   return (AUDIT_RESULT_STATUSES as readonly string[]).includes(raw ?? "")

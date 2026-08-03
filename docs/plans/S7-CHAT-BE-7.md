@@ -132,7 +132,7 @@ return true;
 | `resultStatus` | `Success` \| `Denied` |
 | `moduleCode` | `CHAT` |
 | `actorType` | `User` · `sensitivityLevel` `HighlySensitive` · `permissionCode` `view:chat-oversight` |
-| `metadata` | `{ endpoint: '018a'\|'018b'\|'018c'\|'019', … tiêu chí tìm của 018a, … con trỏ của 018c }` |
+| `metadata` | `{ endpoint: '018a'\|'018b'\|'018c'\|'019'\|'unknown', … tiêu chí tìm của 018a, … con trỏ của 018c }` — `'unknown'` thêm ở S7-CHAT-CLEAN-2 cho đường dẫn không khớp khuôn nào đã khai (thà lộ ra là chưa biết, còn hơn mượn nhãn của một endpoint CÓ THẬT) |
 
 **KHÔNG BAO GIỜ** đưa `body` tin nhắn vào audit (SPEC-15 §18 · API-13 §6.8) — kể cả trích đoạn, kể cả đếm
 từ khoá. `metadata` của 018a chỉ chứa `q` (chuỗi người dùng tự gõ) + `roomType` + số kết quả.
