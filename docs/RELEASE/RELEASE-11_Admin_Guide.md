@@ -193,7 +193,13 @@ curl -s http://localhost:3100/api/v1/health   # data.build = {version, commit, b
 ```powershell
 # PowerShell Administrator, tại gốc repo
 $repo = "C:\dev 2\MediaOS"
-$bash = (Get-Command bash).Source     # KHÔNG hard-code \Git\bin\ — máy này là \Git\usr\bin\
+# ⛔ ĐỪNG dùng `(Get-Command bash).Source` — ĐÃ HỎNG THẬT 2026-08-04. Trên máy PROD này nó trả
+#    C:\WINDOWS\system32\bash.exe = shim WSL, mà WSL KHÔNG có bash cài trong đó:
+#      execvpe(/bin/bash) failed: No such file or directory
+#    Task vẫn đăng ký THÀNH CÔNG và State=Ready, chỉ đến 02:00 mới hỏng — im lặng, đúng khuôn KI-050.
+#    Bản cũ của dòng này còn tự trấn an "KHÔNG hard-code \Git\bin\", tức lời khuyên đó CHÍNH LÀ lỗi.
+$bash = "C:\Program Files\Git\bin\bash.exe"
+if (-not (Test-Path $bash)) { throw "Khong thay Git Bash tai $bash - kiem lai truoc khi dang ky task" }
 
 # Cảnh báo vận hành mỗi 10 phút
 $a = New-ScheduledTaskAction -Execute "node.exe" `
@@ -218,7 +224,24 @@ Register-ScheduledTask -TaskName "MediaOS-BackupDaily" -Action $b -Trigger $bt -
 Get-ScheduledTask -TaskName MediaOS-*
 Start-ScheduledTask -TaskName MediaOS-BackupDaily    # chạy thử NGAY một lần
 Get-ChildItem backups\                               # phải thấy file .dump mới
+
+# BẮT BUỘC: đọc kết quả lần chạy, KHÔNG dừng ở "State=Ready"
+Get-ScheduledTask -TaskName MediaOS-* | Get-ScheduledTaskInfo |
+  Select-Object TaskName, LastRunTime, LastTaskResult
 ```
+
+**Đọc `LastTaskResult` cho đúng** — đây là chỗ dễ kết luận ngược:
+
+| Giá trị | Nghĩa |
+| --- | --- |
+| `267011` (`0x41303`) | **CHƯA CHẠY LẦN NÀO.** Không phải "ổn". Vừa đăng ký xong luôn là số này |
+| `0` | chạy xong, exit 0 |
+| `1` ở `MediaOS-OpsAlert` | **BÌNH THƯỜNG** — `ops-alert-check.mjs` trả `1` khi có nhóm `warn`. Không phải task hỏng |
+| `1` ở `MediaOS-BackupDaily` | **HỎNG THẬT** — script backup trả 0 khi thành công |
+
+⚠️ **`State = Ready` KHÔNG chứng minh gì.** Task trỏ tới một `bash.exe` không chạy được vẫn hiện
+`Ready` và vẫn đăng ký thành công; nó chỉ hỏng lúc trigger nổ. Verify bằng `LastTaskResult` + file
+`.dump` mới, không bằng `State`.
 
 ### 6.2b Xoay log
 
