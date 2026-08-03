@@ -6,7 +6,9 @@ import type {
   ListChatRoomsQuery,
   OpenDirectRoomRequest,
   UpdateChatRoomRequest,
+  WsChatRoomAction,
 } from "@mediaos/contracts";
+import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 import { AuditService } from "../events/audit.service";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import type { ChatRoomType } from "../db/schema/communication";
@@ -26,6 +28,16 @@ import { toChatRoomDetailDto, toChatRoomDto } from "./chat.mapper";
 export interface ChatActor {
   id: string;
   companyId: string;
+}
+
+/**
+ * S7-CHAT-RT-1 — kết quả một lần `openDirect`, đủ để quyết định CÓ phát `chat:room{created}` hay không.
+ * `changed=false` cho hai nhánh idempotent (DM đang sống · đua-thua) — bên thắng đã phát rồi.
+ */
+interface DirectOpenResult {
+  roomId: string;
+  changed: boolean;
+  activeUserIds: string[];
 }
 
 /** `chat_rooms_direct_uq` (mig 0010) — partial unique (company_id, direct_key) WHERE direct_key IS NOT NULL. */
@@ -52,7 +64,38 @@ export class ChatRoomsService {
     private readonly access: ChatAccessService,
     private readonly roomCode: ChatRoomCodeService,
     private readonly audit: AuditService,
+    // S7-CHAT-RT-1 (additive) — emit SAU commit, không bao giờ trong tx (xem `broadcastRoom`).
+    private readonly realtime: RealtimeEmitterService,
   ) {}
+
+  /**
+   * S7-CHAT-RT-1 — phát `chat:room` + ép join/leave. GỌI SAU KHI `withTenant` đã RESOLVE (tx commit).
+   *
+   * Thứ tự emit-trước-sync là cố ý: `emitChatRoom` nhắm cả `chatUserRoomName` của từng người bị ảnh
+   * hưởng nên không phụ thuộc việc socket đã ở trong phòng hay chưa.
+   */
+  private broadcastRoom(
+    actor: ChatActor,
+    roomId: string,
+    action: WsChatRoomAction,
+    affectedUserIds: readonly string[],
+    opts: {
+      room?: ChatRoomDto;
+      membership?: readonly { userId: string; action: "join" | "leave" }[];
+    } = {},
+  ): void {
+    this.realtime.emitChatRoom(
+      actor.companyId,
+      roomId,
+      // `room` đi qua `wsChatRoomEventSchema` ⇒ `unreadCount` (PER-MEMBER) bị strip, không phát số của
+      // riêng actor cho cả phòng. Xem jsdoc schema.
+      { roomId, action, ...(opts.room ? { room: opts.room } : {}) },
+      affectedUserIds,
+    );
+    for (const change of opts.membership ?? []) {
+      this.realtime.syncRoomMembership(actor.companyId, roomId, change.userId, change.action);
+    }
+  }
 
   /**
    * CHAT-API-001 — phòng của tôi. Tự-bound theo actor: truy vấn JOIN membership nên không có đường nào
@@ -100,7 +143,7 @@ export class ChatRoomsService {
     // Hệ quả chấp nhận: tx rollback ⇒ mã bị bỏ phí (lỗ số). Counter cần DUY NHẤT, không cần LIÊN TỤC.
     const roomCode = await this.roomCode.allocate(actor.companyId);
 
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const created = await this.db.withTenant(actor.companyId, async (tx) => {
       const invitees = await this.resolveInvitees(tx, actor, dto.memberUserIds);
 
       const room = await this.repo.insertRoom(tx, {
@@ -141,8 +184,17 @@ export class ChatRoomsService {
         newValues: { roomType: "group", name: dto.name, memberCount: invitees.length + 1 },
       });
 
-      return toChatRoomDto(room, 0);
+      return { dto: toChatRoomDto(room, 0), members: [actor.id, ...invitees] };
     });
+
+    // SAU commit. `affectedUserIds` = TOÀN BỘ thành viên khởi tạo, không phải chỉ người mời: lúc này
+    // chưa socket nào ở trong `chatRoomName` của phòng vừa tạo, nên nhắm mỗi phòng là phát vào chỗ
+    // không có ai. Đích `chatUserRoomName` thì LUÔN có người (join ngay lúc handshake nếu qua cổng).
+    this.broadcastRoom(actor, created.dto.id, "created", created.members, {
+      room: created.dto,
+      membership: created.members.map((userId) => ({ userId, action: "join" as const })),
+    });
+    return created.dto;
   }
 
   /**
@@ -169,8 +221,8 @@ export class ChatRoomsService {
 
     const roomCode = await this.roomCode.allocate(actor.companyId);
 
-    const roomId = await this.db
-      .withTenant(actor.companyId, async (tx) => {
+    const opened = await this.db
+      .withTenant(actor.companyId, async (tx): Promise<DirectOpenResult> => {
         const usable = await this.repo.findUsableUserIds(tx, actor.companyId, [dto.peerUserId]);
         if (!usable.has(dto.peerUserId)) {
           throw new UnprocessableEntityException(CHAT_ERR.USER_INVALID);
@@ -210,7 +262,7 @@ export class ChatRoomsService {
           resultStatus: "Success",
           newValues: { roomType: "direct", peerUserId: dto.peerUserId },
         });
-        return room.id;
+        return { roomId: room.id, changed: true, activeUserIds: [actor.id, dto.peerUserId] };
       })
       .catch(async (err: unknown) => {
         if (!isDirectKeyConflict(err)) throw err;
@@ -218,10 +270,20 @@ export class ChatRoomsService {
           this.repo.findRoomByDirectKey(tx, actor.companyId, directKey),
         );
         if (!raced) throw err;
-        return raced.id;
+        // Đua THUA: bên thắng đã emit `chat:room{created}` rồi. `changed:false` để không phát bản thứ hai.
+        return { roomId: raced.id, changed: false, activeUserIds: [] };
       });
 
-    return this.readOwnRoom(actor, roomId);
+    const room = await this.readOwnRoom(actor, opened.roomId);
+    // SAU commit, và CHỈ khi giao dịch thật sự tạo/hồi sinh phòng. Thiếu cờ này thì gọi `openDirect`
+    // lần hai (idempotent, đúng thiết kế) vẫn bắn `created` thêm lần nữa — sai ngữ nghĩa.
+    if (opened.changed) {
+      this.broadcastRoom(actor, opened.roomId, "created", opened.activeUserIds, {
+        room,
+        membership: opened.activeUserIds.map((userId) => ({ userId, action: "join" as const })),
+      });
+    }
+    return room;
   }
 
   /** CHAT-API-005 — đổi tên/mô tả. Chỉ phòng `group`, chỉ admin phòng, chỉ khi chưa lưu trữ. */
@@ -230,7 +292,7 @@ export class ChatRoomsService {
     roomId: string,
     dto: UpdateChatRoomRequest,
   ): Promise<ChatRoomDto> {
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const updated = await this.db.withTenant(actor.companyId, async (tx) => {
       // THỨ TỰ: membership (404) → loại phòng (422) → vai trò admin (403) → lưu trữ (422). Loại phòng
       // đứng trước vai trò vì phòng `direct` không có admin nào — xếp sau thì đổi tên DM ra 403 thay vì
       // CHAT-ERR-012. Xem ghi chú đầy đủ ở `ChatMembersService.assertRoomAdminForWrite`.
@@ -256,11 +318,15 @@ export class ChatRoomsService {
       });
       return toChatRoomDto(updated, unreadOf(updated.lastMessageSeq, acc.membership.lastReadSeq));
     });
+
+    // SAU commit. `affectedUserIds` rỗng: thành viên hiện có đã ở trong `chatRoomName` từ trước.
+    this.broadcastRoom(actor, roomId, "updated", [], { room: updated });
+    return updated;
   }
 
   /** CHAT-API-006 — lưu trữ phòng nhóm (sau đó CHỈ ĐỌC). */
   async archiveRoom(actor: ChatActor, roomId: string): Promise<ChatRoomDto> {
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const archived = await this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
       assertManualEdit(acc.room);
       this.access.requireRoomAdmin(acc);
@@ -281,6 +347,11 @@ export class ChatRoomsService {
       });
       return toChatRoomDto(updated, unreadOf(updated.lastMessageSeq, acc.membership.lastReadSeq));
     });
+
+    // SAU commit. KHÔNG `syncRoomMembership`: lưu trữ ĐÓNG BĂNG danh sách thành viên (họ vẫn đọc lại
+    // được lịch sử), chỉ khoá đường ghi — đá mọi người ra khỏi room Socket.IO là đổi luật đó.
+    this.broadcastRoom(actor, roomId, "archived", [], { room: archived });
+    return archived;
   }
 
   /**
@@ -293,7 +364,7 @@ export class ChatRoomsService {
    * không ai thêm/bớt được nữa, không có đường sửa qua API. Là người cuối cùng thì rời tự do.
    */
   async leaveRoom(actor: ChatActor, roomId: string): Promise<{ left: true }> {
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const result = await this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
       assertLeavable(acc.room);
 
@@ -314,6 +385,13 @@ export class ChatRoomsService {
       });
       return { left: true as const };
     });
+
+    // SAU commit. `affectedUserIds = [actor.id]` để CÁC THIẾT BỊ KHÁC của chính actor cùng cập nhật UI —
+    // họ vừa bị `socketsLeave` khỏi `chatRoomName` nên không còn nhận qua đích phòng nữa.
+    this.broadcastRoom(actor, roomId, "left", [actor.id], {
+      membership: [{ userId: actor.id, action: "leave" }],
+    });
+    return result;
   }
 
   // ─── nội bộ ──────────────────────────────────────────────────────────────────
@@ -335,12 +413,19 @@ export class ChatRoomsService {
     tx: TenantTx,
     actor: ChatActor,
     room: ChatRoomRow,
-  ): Promise<string> {
+  ): Promise<DirectOpenResult> {
     const restoredRoom = Boolean(room.deletedAt);
     if (restoredRoom) {
       await this.repo.restoreRoom(tx, actor.companyId, room.id);
     }
+    // HAI danh sách khác nhau, CỐ Ý — đừng gộp:
+    //   • `reactivated`  = hàng CÓ ĐỔI. audit dùng đúng danh sách này (giữ nguyên nghĩa cũ).
+    //   • `activeUserIds`= MỌI thành viên active sau xử lý, kể cả người không đổi hàng. Cần cho
+    //     `chat:room{created}`/`syncRoomMembership`: khi phòng vừa được undelete, người CHƯA từng rời
+    //     cũng phải được kéo vào lại room Socket.IO — nhưng hàng DB của họ không đổi nên họ KHÔNG nằm
+    //     trong `reactivated`. `socketsJoin` cho socket đã ở sẵn trong phòng là no-op an toàn.
     const reactivated: string[] = [];
+    const activeUserIds: string[] = [];
     for (const userId of [actor.id, ...this.peerOf(room, actor)]) {
       const existing = await this.repo.findMemberRow(tx, actor.companyId, room.id, userId);
       if (!existing) {
@@ -356,6 +441,7 @@ export class ChatRoomsService {
         await this.repo.reactivateMember(tx, actor.companyId, existing.id, existing.role);
         reactivated.push(userId);
       }
+      activeUserIds.push(userId);
     }
 
     // Un-delete + kích hoạt lại thành viên KHÔNG được đi qua trong im lặng: `openDirect` chỉ ghi audit ở
@@ -373,7 +459,13 @@ export class ChatRoomsService {
         newValues: { roomType: "direct", restoredRoom, reactivatedUserIds: reactivated },
       });
     }
-    return room.id;
+    // `changed` dùng ĐÚNG cổng với audit: DM đang sống mà cả hai còn trong phòng thì đây là no-op —
+    // không ghi audit, và cũng không phát `chat:room{created}` lần thứ hai.
+    return {
+      roomId: room.id,
+      changed: restoredRoom || reactivated.length > 0,
+      activeUserIds,
+    };
   }
 
   /** Người còn lại của một DM, suy từ `direct_key` — KHÔNG query thêm. */

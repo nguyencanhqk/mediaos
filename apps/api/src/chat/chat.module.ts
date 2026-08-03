@@ -4,6 +4,7 @@ import { SequenceModule } from "../foundation/sequences/sequence.module";
 import { FilesModule } from "../foundation/files/files.module";
 import { FilePolicyService } from "../foundation/files/file-policy.service";
 import { StorageModule } from "../storage/storage.module";
+import { RealtimeEmitterModule } from "../realtime/realtime-emitter.module";
 import { ChatRoomsController } from "./chat-rooms.controller";
 import { ChatMessagesController } from "./chat-messages.controller";
 import { ChatAccessService } from "./chat-access.service";
@@ -67,7 +68,10 @@ import { ChatOversightRepository } from "./chat-oversight.repository";
   // ⚠️ `StorageModule` phải khai RIÊNG: `FilesModule` chỉ IMPORT nó, KHÔNG re-export `STORAGE_ADAPTER`.
   // Thiếu dòng này thì `ChatAttachmentPresignService` không resolve được và **AppModule sập lúc khởi
   // động** — kéo theo mọi int-spec đỏ dây chuyền, không chỉ CHAT (lớp `systemjobhandler-optional-dbw-di`).
-  imports: [PermissionModule, SequenceModule, FilesModule, StorageModule],
+  // S7-CHAT-RT-1 (additive): `RealtimeEmitterModule` là module LÁ — chỉ cấp `RealtimeEmitterService`.
+  // CẤM đổi thành `RealtimeModule`: đó là vòng `Realtime → Chat → Realtime` mà module lá được tách ra
+  // để phá (xem jsdoc `realtime-emitter.module.ts` + `realtime.module.ts`).
+  imports: [PermissionModule, SequenceModule, FilesModule, StorageModule, RealtimeEmitterModule],
   controllers: [
     ChatRoomsController,
     ChatMessagesController,

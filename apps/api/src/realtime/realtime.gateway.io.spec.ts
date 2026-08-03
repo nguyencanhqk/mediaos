@@ -44,7 +44,15 @@ describe("RealtimeGateway (socket.io integration)", () => {
 
   beforeAll(async () => {
     process.env.REALTIME_ENABLED = "true";
-    const gateway = new RealtimeGateway(makeStubTokenService(), new RealtimeEmitterService());
+    const gateway = new RealtimeGateway(
+      makeStubTokenService(),
+      new RealtimeEmitterService(),
+      // S7-CHAT-RT-1: spec này dựng server socket.io TRẦN (không AppModule, không DB) — 3 phụ thuộc mới
+      // chỉ cần đủ để `handleConnection` chạy tới hết. Cổng quyền cho qua, 0 phòng chat.
+      { can: async () => ({ allow: true, reason: "ok", auditRequired: false }) } as never,
+      { listRoomsForUser: async () => [] } as never,
+      { withTenant: async (_c: string, fn: (tx: unknown) => Promise<unknown>) => fn({}) } as never,
+    );
 
     httpServer = createServer();
     io = new Server(httpServer);

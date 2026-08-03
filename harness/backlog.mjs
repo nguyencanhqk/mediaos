@@ -9850,7 +9850,7 @@ export const backlog = [
     title:
       "Realtime CHAT: join phòng SERVER-SIDE lúc handshake (không nhận danh sách từ client) · emit SAU commit · đồng bộ join/leave ngay khi membership đổi · giữ WS một chiều",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/realtime/**",
       "apps/api/src/chat/**",

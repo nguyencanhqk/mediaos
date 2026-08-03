@@ -5,6 +5,7 @@ import { DatabaseService, type TenantTx } from "../db/db.service";
 import { employeeProfiles } from "../db/schema";
 import { ChatRoomCodeService } from "./chat-room-code.service";
 import { ChatRoomsRepository } from "./chat-rooms.repository";
+import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 import { CHAT_AUDIT, CHAT_MODULE_CODE } from "./chat.errors";
 import {
   desiredDerivedPairsSql,
@@ -107,6 +108,8 @@ export class ChatDerivedRoomsSyncService {
     private readonly repo: ChatRoomsRepository,
     private readonly roomCode: ChatRoomCodeService,
     private readonly audit: AuditService,
+    // S7-CHAT-RT-1 (additive) — CHỈ dùng cho nhánh THU HỒI, xem `forceSocketLeave`.
+    private readonly realtime: RealtimeEmitterService,
   ) {}
 
   // ═══════════════════ Hook — đường DUY NHẤT của 14 writer ═══════════════════
@@ -188,6 +191,7 @@ export class ChatDerivedRoomsSyncService {
     const rows = (res as unknown as { rows: PairRow[] }).rows ?? [];
     for (const row of rows) {
       await this.recordMembershipAudit(tx, CHAT_AUDIT.MEMBER_AUTO_REMOVED, row, actor);
+      this.forceSocketLeave(companyId, row);
     }
     return rows.length;
   }
@@ -244,6 +248,7 @@ export class ChatDerivedRoomsSyncService {
     const rows = (res as unknown as { rows: PairRow[] }).rows ?? [];
     for (const row of rows) {
       await this.recordMembershipAudit(tx, CHAT_AUDIT.MEMBER_AUTO_REMOVED, row, actor);
+      this.forceSocketLeave(companyId, row);
     }
     return rows.length;
   }
@@ -287,6 +292,27 @@ export class ChatDerivedRoomsSyncService {
       await this.recordMembershipAudit(tx, CHAT_AUDIT.MEMBER_AUTO_ADDED, row, actor);
     }
     return rows.length;
+  }
+
+  /**
+   * S7-CHAT-RT-1 — đá socket của người vừa bị THU HỒI tư cách thành viên phòng dẫn xuất ra khỏi room
+   * Socket.IO NGAY, không đợi họ kết nối lại (SPEC-15 §13.3).
+   *
+   * ⚠️ Gọi TRONG transaction nghiệp vụ — CỐ Ý, và là NGOẠI LỆ DUY NHẤT của luật "emit sau commit".
+   * Lý do: `syncUserDerivedMembershipTx` nhận `tx` từ 14 writer ở các module khác (employees · org ·
+   * tasks · recycle-bin) và không sở hữu vòng đời transaction đó; `DatabaseService.withTenant` KHÔNG có
+   * hook after-commit. Thread điểm gọi ra ngoài cả 14 writer nằm ngoài phạm vi WO này.
+   *
+   * An toàn vì HƯỚNG của sai số: nếu tx rollback, ta đã đá một socket ra khỏi phòng mà đáng lẽ họ còn ở
+   * trong — hệ quả là mất realtime của phòng đó tới lần reconnect kế tiếp (`handleConnection` tra lại DB
+   * và join đúng trạng thái thật). Đó là FAIL-SAFE. Chiều ngược lại — `socketsJoin` trước commit — mới
+   * là rò: kéo người vào phòng họ rốt cuộc không thuộc.
+   *
+   * ⚠️ Vì thế nhánh VÀO (`applyJoinsTx`) CỐ Ý KHÔNG được wire ở đây. Bỏ sót một join chỉ làm người dùng
+   * chưa thấy realtime của phòng mới tới lần reconnect — không phải lỗ bảo mật. Đừng "cho đối xứng".
+   */
+  private forceSocketLeave(companyId: string, row: PairRow): void {
+    this.realtime.syncRoomMembership(companyId, row.room_id, row.user_id, "leave");
   }
 
   private async recordMembershipAudit(

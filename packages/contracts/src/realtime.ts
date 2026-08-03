@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { chatMessageSchema } from "./chat";
+import { chatMessageSchema, chatRoomSchema } from "./chat";
 import { notificationSchema } from "./notification";
 
 /**
@@ -12,18 +12,23 @@ import { notificationSchema } from "./notification";
 
 export const WS_NAMESPACE = "ws";
 
-/** Tên event WS — dùng chung 2 phía, không hard-code chuỗi rải rác. */
+/**
+ * Tên event WS — dùng chung 2 phía, không hard-code chuỗi rải rác.
+ *
+ * ⚠️ **WS MỘT CHIỀU (CHAT-DEC-005).** KHÔNG có event client → server nào. Client muốn ghi thì gọi REST;
+ * WS chỉ để server ĐẨY. `S7-CHAT-RT-1` đã xoá 7 key hai-chiều (`chat:join`/`chat:leave`/`chat:send`/
+ * `chat:typing`/`chat:presence:list` + 2 event typing/presence) — chúng được khai từ trước
+ * CLEAN-DECOUPLE-1 nhưng **0 nơi dùng**, và mâu thuẫn trực tiếp với CHAT-DEC-005. Thêm lại một key
+ * client→server ở đây là mở lại đúng bề mặt đã đóng: tham số do client kiểm soát quyết định server làm
+ * gì, trong khi mô hình hiện tại là server tự tra DB.
+ * Typing indicator / presence online-offline: SPEC-15 chốt "đo nhu cầu thật SAU v1".
+ */
 export const WS_EVENTS = {
-  // client → server (có ack)
-  CHAT_JOIN: "chat:join",
-  CHAT_LEAVE: "chat:leave",
-  CHAT_SEND: "chat:send",
-  CHAT_TYPING: "chat:typing",
-  CHAT_PRESENCE_LIST: "chat:presence:list",
-  // server → client
+  // server → client — CHỈ một chiều này tồn tại.
   CHAT_MESSAGE: "chat:message",
-  CHAT_TYPING_EVENT: "chat:typing:event",
-  CHAT_PRESENCE: "chat:presence",
+  CHAT_MESSAGE_RECALLED: "chat:message-recalled",
+  CHAT_READ: "chat:read",
+  CHAT_ROOM: "chat:room",
   NOTIFICATION_NEW: "notification:new",
   // S4-NOTI-BE-1 (additive): phát sau mark-read/mark-all-read/xoá mềm — payload CHỈ unread_count (không
   // row) để DASH/header badge invalidate mà không rò nội dung thông báo qua kênh phụ.
@@ -31,58 +36,63 @@ export const WS_EVENTS = {
 } as const;
 export type WsEventName = (typeof WS_EVENTS)[keyof typeof WS_EVENTS];
 
-// ─── client → server payloads ────────────────────────────────────────────────
-// LƯU Ý: KHÔNG có companyId/userId trong payload client — server LUÔN lấy từ socket.data.user
-// (đã verify JWT ở handshake). Client gửi companyId = vô nghĩa, server không bao giờ đọc.
-
-export const wsChatJoinSchema = z.object({
-  roomId: z.string().uuid(),
-});
-export type WsChatJoinRequest = z.infer<typeof wsChatJoinSchema>;
-
-export const wsChatLeaveSchema = z.object({
-  roomId: z.string().uuid(),
-});
-export type WsChatLeaveRequest = z.infer<typeof wsChatLeaveSchema>;
-
-export const wsChatSendSchema = z.object({
-  roomId: z.string().uuid(),
-  body: z.string().min(1).max(4000),
-  /** Danh sách userId được mention — server kiểm membership trước khi tạo notification. */
-  mentions: z.array(z.string().uuid()).max(20).optional(),
-});
-export type WsChatSendRequest = z.infer<typeof wsChatSendSchema>;
-
-export const wsChatTypingSchema = z.object({
-  roomId: z.string().uuid(),
-  isTyping: z.boolean(),
-});
-export type WsChatTypingRequest = z.infer<typeof wsChatTypingSchema>;
-
-export const wsChatPresenceListSchema = z.object({
-  roomId: z.string().uuid(),
-});
-export type WsChatPresenceListRequest = z.infer<typeof wsChatPresenceListSchema>;
-
 // ─── server → client payloads (masking layer) ───────────────────────────────
 
 /** chat:message — đúng DTO REST (chatMessageSchema), không hơn không kém. */
 export const wsChatMessageEventSchema = chatMessageSchema;
 export type WsChatMessageEvent = z.infer<typeof wsChatMessageEventSchema>;
 
-export const wsChatTypingEventSchema = z.object({
+/**
+ * chat:message-recalled (API-13 §7) — CHỈ ba khoá.
+ *
+ * ⚠️ TUYỆT ĐỐI KHÔNG kèm `body`, **kể cả `body: null`** (owner chốt 02/08/2026). Tin đã thu hồi thì nội
+ * dung không được đi qua kênh nào nữa; một khoá `body` trong hợp đồng là lời mời cho lần sửa sau điền
+ * giá trị thật vào. Client tự xoá nội dung đang giữ khi nhận sự kiện này.
+ *
+ * `recalledAt` KHÔNG nullable (khác `chatMessageSchema.recalledAt`): lúc phát sự kiện này việc thu hồi
+ * chắc chắn vừa xảy ra, nên luôn có mốc thời gian thật.
+ */
+export const wsChatMessageRecalledEventSchema = z.object({
+  messageId: z.string().uuid(),
   roomId: z.string().uuid(),
-  userId: z.string().uuid(),
-  isTyping: z.boolean(),
+  recalledAt: z.string().datetime(),
 });
-export type WsChatTypingEvent = z.infer<typeof wsChatTypingEventSchema>;
+export type WsChatMessageRecalledEvent = z.infer<typeof wsChatMessageRecalledEventSchema>;
 
-export const wsChatPresenceEventSchema = z.object({
+/** chat:read — con trỏ đã đọc của MỘT người trong phòng (hệ `room_seq` per-room, mig 0539). */
+export const wsChatReadEventSchema = z.object({
   roomId: z.string().uuid(),
   userId: z.string().uuid(),
-  status: z.enum(["online", "offline"]),
+  lastReadSeq: z.number().int().nonnegative(),
 });
-export type WsChatPresenceEvent = z.infer<typeof wsChatPresenceEventSchema>;
+export type WsChatReadEvent = z.infer<typeof wsChatReadEventSchema>;
+
+export const wsChatRoomActionSchema = z.enum([
+  "created",
+  "updated",
+  "archived",
+  "member_added",
+  "member_removed",
+  "member_role_changed",
+  "left",
+]);
+export type WsChatRoomAction = z.infer<typeof wsChatRoomActionSchema>;
+
+/**
+ * chat:room — siêu dữ liệu phòng đổi. `room` CHỈ điền cho `created`/`updated`/`archived`; với nhóm
+ * action về thành viên thì để trống (client tự refetch danh sách nếu cần).
+ *
+ * ⚠️ `unreadCount` bị `.omit()` CÓ CHỦ Ý. Field đó là PER-MEMBER — không tồn tại giá trị đúng để phát
+ * chung cho cả phòng. `toChatRoomDto` LUÔN gán một số cụ thể (`unreadCount ?? row.unreadCount ?? 0`,
+ * `chat.mapper.ts`), nên tái dùng thẳng hàm đó cho payload broadcast sẽ phát "0 chưa đọc" SAI cho mọi
+ * người nhận. Zod `.omit()` strip triệt để ở `.parse()` — kể cả khi code dựng payload lỡ set tay.
+ */
+export const wsChatRoomEventSchema = z.object({
+  roomId: z.string().uuid(),
+  action: wsChatRoomActionSchema,
+  room: chatRoomSchema.omit({ unreadCount: true }).optional(),
+});
+export type WsChatRoomEvent = z.infer<typeof wsChatRoomEventSchema>;
 
 /** notification:new — đúng DTO REST (notificationSchema). */
 export const wsNotificationEventSchema = notificationSchema;
@@ -94,21 +104,6 @@ export const wsNotificationReadEventSchema = z.object({
 });
 export type WsNotificationReadEvent = z.infer<typeof wsNotificationReadEventSchema>;
 
-// ─── ack chuẩn cho mọi event client → server ─────────────────────────────────
-
-export const wsAckSchema = z.object({
-  ok: z.boolean(),
-  /** Mã lỗi ngắn khi ok=false (không leak chi tiết nội bộ). */
-  error: z.string().optional(),
-});
-export type WsAck = z.infer<typeof wsAckSchema>;
-
-export const wsChatSendAckSchema = wsAckSchema.extend({
-  data: chatMessageSchema.optional(),
-});
-export type WsChatSendAck = z.infer<typeof wsChatSendAckSchema>;
-
-export const wsPresenceListAckSchema = wsAckSchema.extend({
-  userIds: z.array(z.string().uuid()).optional(),
-});
-export type WsPresenceListAck = z.infer<typeof wsPresenceListAckSchema>;
+// KHÔNG có schema `ack` nào: ack chỉ có nghĩa cho event client → server, mà WS một chiều
+// (CHAT-DEC-005) không có loại đó. `wsAckSchema`/`wsChatSendAckSchema`/`wsPresenceListAckSchema` đã bị
+// `S7-CHAT-RT-1` xoá cùng cụm hai-chiều — xem ghi chú ở `WS_EVENTS`.

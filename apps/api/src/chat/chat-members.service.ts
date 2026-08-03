@@ -11,6 +11,7 @@ import { ChatRoomsRepository } from "./chat-rooms.repository";
 import { CHAT_AUDIT, CHAT_ERR, CHAT_MODULE_CODE } from "./chat.errors";
 import { assertManualMembership, assertNotArchived } from "./chat-room-rules";
 import { toChatMemberDto } from "./chat.mapper";
+import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 import type { ChatActor } from "./chat-rooms.service";
 
 /**
@@ -31,6 +32,8 @@ export class ChatMembersService {
     private readonly repo: ChatRoomsRepository,
     private readonly access: ChatAccessService,
     private readonly audit: AuditService,
+    // S7-CHAT-RT-1 (additive) — emit SAU commit; KHÔNG gọi bên trong `withTenant`.
+    private readonly realtime: RealtimeEmitterService,
   ) {}
 
   /** CHAT-API-007a — thành viên đang hoạt động + `lastReadSeq` (dựng "đã xem bởi"). */
@@ -55,7 +58,7 @@ export class ChatMembersService {
     roomId: string,
     dto: AddChatMemberRequest,
   ): Promise<ChatRoomMemberDto> {
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const added = await this.db.withTenant(actor.companyId, async (tx) => {
       await this.assertRoomAdminForWrite(tx, actor, roomId);
 
       const usable = await this.repo.findUsableUserIds(tx, actor.companyId, [dto.userId]);
@@ -91,6 +94,14 @@ export class ChatMembersService {
 
       return this.readMemberDto(tx, actor, roomId, dto.userId);
     });
+
+    // SAU commit. Người vừa được thêm CHƯA ở trong `chatRoomName` ⇒ phải nhắm thêm `chatUserRoomName`
+    // của họ, nếu không họ chỉ biết mình được thêm sau lần reconnect kế tiếp.
+    this.emitRoomEvent(actor, roomId, "member_added", [dto.userId], {
+      userId: dto.userId,
+      action: "join",
+    });
+    return added;
   }
 
   /**
@@ -105,7 +116,7 @@ export class ChatMembersService {
     targetUserId: string,
     dto: UpdateChatMemberRequest,
   ): Promise<ChatRoomMemberDto> {
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const changed = await this.db.withTenant(actor.companyId, async (tx) => {
       await this.assertRoomAdminForWrite(tx, actor, roomId);
 
       const target = await this.repo.findMemberRow(tx, actor.companyId, roomId, targetUserId);
@@ -131,6 +142,11 @@ export class ChatMembersService {
 
       return this.readMemberDto(tx, actor, roomId, targetUserId);
     });
+
+    // SAU commit. KHÔNG `syncRoomMembership`: đổi VAI TRÒ không đổi tư cách thành viên phòng — người đó
+    // đã ở trong `chatRoomName` và phải ở nguyên đó.
+    this.emitRoomEvent(actor, roomId, "member_role_changed", [targetUserId]);
+    return changed;
   }
 
   /** CHAT-API-007d — bớt thành viên = SET `left_at` (DELETE đã REVOKE ở `0538`). */
@@ -139,7 +155,7 @@ export class ChatMembersService {
     roomId: string,
     targetUserId: string,
   ): Promise<{ removed: true }> {
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const result = await this.db.withTenant(actor.companyId, async (tx) => {
       await this.assertRoomAdminForWrite(tx, actor, roomId);
 
       const target = await this.repo.findMemberRow(tx, actor.companyId, roomId, targetUserId);
@@ -161,9 +177,39 @@ export class ChatMembersService {
       });
       return { removed: true as const };
     });
+
+    // SAU commit. Người bị gỡ nhận `chat:room{member_removed}` qua `chatUserRoomName` của họ (đích
+    // `chatRoomName` không tới được nữa sau `socketsLeave`), rồi bị đá khỏi room chat NGAY — không đợi
+    // reconnect. Đây là nửa NHẠY CẢM AN NINH của WO: sót nó là tin tiếp theo vẫn tới người vừa bị gỡ.
+    this.emitRoomEvent(actor, roomId, "member_removed", [targetUserId], {
+      userId: targetUserId,
+      action: "leave",
+    });
+    return result;
   }
 
   // ─── nội bộ ──────────────────────────────────────────────────────────────────
+
+  /** S7-CHAT-RT-1 — phát `chat:room` (+ ép join/leave nếu có). GỌI SAU KHI tx đã commit. */
+  private emitRoomEvent(
+    actor: ChatActor,
+    roomId: string,
+    action: "member_added" | "member_removed" | "member_role_changed",
+    affectedUserIds: readonly string[],
+    membership?: { userId: string; action: "join" | "leave" },
+  ): void {
+    // `room` để trống cho nhóm action về thành viên: siêu dữ liệu phòng không đổi, client tự refetch
+    // danh sách thành viên nếu đang mở panel đó.
+    this.realtime.emitChatRoom(actor.companyId, roomId, { roomId, action }, affectedUserIds);
+    if (membership) {
+      this.realtime.syncRoomMembership(
+        actor.companyId,
+        roomId,
+        membership.userId,
+        membership.action,
+      );
+    }
+  }
 
   /**
    * Cổng chung của 3 đường GHI thành viên. THỨ TỰ CỐ ĐỊNH, mỗi bước có lý do riêng:

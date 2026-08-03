@@ -490,3 +490,66 @@ Chạy: `bash scripts/lane-db-setup.sh chatrt1` → `export LANE_DB=mediaos_chat
 7. **`resurrectDirect` §1.6.1 chỉ có ý nghĩa khi có đường xoá mềm phòng thật** — v1 chưa có endpoint đó (chỉ có nhánh nội bộ dùng cho race/lưới tương lai) — ca test 12 phải tự dựng trạng thái "phòng đã xoá mềm" thẳng qua repo/SQL trong test, không qua API công khai.
 8. **Kỷ luật hot-file (§2) dựa vào con người rebase đúng** — không có gate tự động nào chặn 2 WO song song ghi đè nhau ở `chat.module.ts`/`chat-*.service.ts` ngoài review-by-eye lúc merge PR. Nếu wave chạy nhiều lane song song thật (không chỉ tuần tự như mô hình hiện tại — CLAUDE.md §9), rủi ro này tăng.
 9. FULL gate (`security-reviewer` + `database-reviewer` + `silent-failure-hunter`) **CHƯA chạy** — để dành sau khi code xong (không spawn sub-agent ở giai đoạn lập plan).
+
+---
+
+## 7. Đóng 6 mục BLOCK + re-anchor thi công (03/08/2026)
+
+### 7.0 Re-anchor: plan đo ở BE-2, code đã đi tới BE-7
+
+rev 2 đo tại `54b4d8cd`/`104294bd`. Khi thi công, `wave/s7-chat` đã có thêm **BE-3 · BE-4 · BE-5 · BE-6 · BE-7 + GATE-2**. Lệch thật so với §0:
+
+| §0 nói | Thực tế lúc thi công |
+| --- | --- |
+| `chat.module.ts` `exports` = 3 | **4** (thêm `ChatDerivedRoomsSyncService` của BE-5) |
+| `chat.module.ts` `imports` = 4 | `PermissionModule, SequenceModule, FilesModule, StorageModule` |
+| `ChatMessagesService` constructor 4 tham số | **7** (BE-3 thêm 3, BE-6 thêm `OutboxService`) |
+| `ChatMessageModerationService` 4 tham số | **5** (BE-3 thêm `ChatAttachmentPresignService`); `recall` trả ROW rồi `decorateOne` NGOÀI tx |
+| BE-5 "chưa tồn tại, `syncRoomMembership` chỉ là primitive chờ" | BE-5 **đã ship** — `ChatDerivedRoomsSyncService` thu hồi membership thật, xem §7.2 |
+| Thu hồi tin = `DELETE /chat/messages/:id` (ngầm định trong ca test) | `POST /chat/messages/:id/recall`, `@HttpCode(200)` |
+| Ngầm định POST → 201 | Các endpoint IDEMPOTENT cố ý `@HttpCode(200)`: gửi tin · mở DM · thêm thành viên · đánh dấu đọc · thu hồi. Chỉ `POST /chat/rooms` là 201 |
+
+### 7.1 Sáu mục BLOCK — cách đóng
+
+| # | BLOCK | Cách đóng | Bằng chứng ĐỎ |
+| --- | --- | --- | --- |
+| 1 | **Cổng quyền bị `syncRoomMembership` đi vòng** | Thêm room thứ ba `chatUserRoomName(companyId,userId)` = `co:{c}:chatuser:{u}` — socket CHỈ join sau khi qua cổng `view:chat-room`. `syncRoomMembership('join')` quét room này thay vì `userRoomName`, nên socket đã trượt cổng KHÔNG BAO GIỜ bị kéo vào phòng chat ở lần đổi thành viên sau. Nhánh `leave` CỐ Ý vẫn quét `userRoomName` (rộng hơn): rời nhầm là fail-safe, sót lại là rò | Đổi bộ chọn `join` sang `userRoomName` ⇒ **2 ca đỏ** |
+| 2 | **`chat:room` phát qua `userRoomName`** | Cùng cơ chế: `emitChatRoom` nhắm `[chatRoomName, ...affected.map(chatUserRoomName)]`. Dùng `userRoomName` là để người ĐÃ BỊ THU HỒI cặp `view:chat-room` vẫn nhận sự kiện chat — họ luôn ở trong `userRoomName` vì đó là đích `notification:new` | Đổi sang `userRoomName` ⇒ **3 ca đỏ** |
+| 3 | **Bước (C) re-check nằm ngoài try/catch** | (A)(B)(C) gộp vào MỘT `try`. Bước (C) cũng chạm DB; để ngoài thì lỗi ở đúng bước tự-vá thành exception không ai bắt trong callback async mà Socket.IO không await | Ca "bước (C) ném → VẪN disconnect" |
+| 4 | **`join`/`leave` không `await`** | `await client.join(...)`, `await Promise.all(...)` cho cả vòng join lẫn vòng leave | Ca "AWAIT mọi lời gọi join" — treo cổng ở một `join` rồi chứng minh `handleConnection` CHƯA resolve |
+| 5 | **Ca 9 và ca 2 không tự chứng minh được RED** | **Ca 9 (rollback):** mock `withTenant` **CHẠY XONG callback rồi mới ném** (mô phỏng COMMIT hỏng). Mock ném NGAY sẽ xanh-giả — thân tx không chạy thì code đặt emit SAI CHỖ cũng không emit. **Ca 2 (đua):** thay ca đua-thời-gian-thật bằng unit TẤT ĐỊNH — `listRoomsForUser` trả `[R1,R2]` lần 1 và `[R2]` lần 2, assert `leave(R1)` | Bọc emit vào trong tx ⇒ đỏ; gỡ bước (C) ⇒ **2 ca đỏ** |
+| 6 | **Thiếu positive control** | MỌI assert "0 sự kiện" đi kèm một positive control TRONG CÙNG ca: người có quyền / trước khi bị gỡ / phòng còn hợp lệ PHẢI nhận được. Không có nó, "0 sự kiện" có thể chỉ vì harness hỏng | — |
+
+### 7.2 Quyết định MỚI (không có trong plan): BE-5 đồng bộ dẫn xuất
+
+`done_when` đòi "membership đổi (**đồng bộ dẫn xuất**) → join/leave NGAY". BE-5 đã ship SAU khi plan viết, nên đây là bề mặt thật chứ không còn là giả định.
+
+`ChatDerivedRoomsSyncService.syncUserDerivedMembershipTx(tx, …)` nhận `tx` từ **14 writer** ở module khác (employees · org · tasks · recycle-bin) và KHÔNG sở hữu vòng đời transaction đó; `DatabaseService.withTenant` **không có hook after-commit** (đã đọc `db.service.ts` xác nhận). Thread điểm gọi ra ngoài cả 14 writer là vượt xa `paths` của WO.
+
+**Chốt — bất đối xứng có chủ đích:**
+
+- **Nhánh THU HỒI** (`applyLeavesTx` · `applyOffboardLeavesTx`) → gọi `syncRoomMembership('leave')` NGAY, **trong tx**. Đây là ngoại lệ DUY NHẤT của luật "emit sau commit", an toàn vì HƯỚNG của sai số: tx rollback ⇒ ta đã đá một socket ra khỏi phòng họ đáng lẽ còn ở trong ⇒ mất realtime tới lần reconnect (`handleConnection` tra lại DB và join đúng trạng thái thật) = **fail-safe**.
+- **Nhánh VÀO** (`applyJoinsTx`) → **KHÔNG** wire. `socketsJoin` trước commit là chiều RÒ (kéo người vào phòng rốt cuộc họ không thuộc). Bỏ sót một join chỉ làm người dùng chưa thấy realtime của phòng mới tới lần reconnect — không phải lỗ bảo mật. Ghi rõ "đừng cho đối xứng" ngay tại chỗ.
+
+### 7.3 Lệch khác so với plan
+
+- **`chat:room{archived}` KHÔNG `syncRoomMembership`** — lưu trữ ĐÓNG BĂNG danh sách thành viên (họ vẫn đọc lại lịch sử được), chỉ khoá đường ghi. Đá mọi người khỏi room Socket.IO là đổi luật đó.
+- **`resurrectDirect`** trả `{roomId, changed, activeUserIds}`. `changed` dùng ĐÚNG cổng với audit (`restoredRoom || reactivated.length > 0`) nên DM đang sống mà cả hai còn trong phòng = no-op: không audit, không `chat:room{created}` lần hai. `reactivated` (hàng CÓ đổi, cho audit) và `activeUserIds` (mọi thành viên active, cho emit/sync) là HAI biến tách bạch — audit giữ nguyên nghĩa cũ.
+- **`markRead`** suy `changed` bằng cách so giá trị `advanceLastReadSeq` trả về với `acc.membership.lastReadSeq` đọc trong cùng tx — KHÔNG đọc DB lần hai, KHÔNG tái lập phép kẹp nào ở JS. Cờ bị bóc khỏi object trả về ngay tại `destructure`, có ca test pin `res` không có khoá `changed`.
+- **Dọn `packages/contracts/src/realtime.ts`**: xoá 5 event-key client→server + 2 event typing/presence + 10 schema (gồm 3 ack). Grep xác nhận 0 consumer ngoài chính file khai. Không tách commit riêng như §1.5 đề xuất — phần xoá nằm gọn trong 1 file và được mô tả tường minh ở message; tách ra không làm reviewer dễ soi hơn.
+
+### 7.4 Kết quả đo
+
+- **Unit** (colocated `src/**`): 3134 xanh / 0 đỏ toàn `apps/api` (`TURBO_FORCE=1`).
+- **Int-spec** `LANE_DB=mediaos_chatrt1`: `chat-rt1-realtime` **14/14**; hồi quy CHAT cũ **134/134** (BE-1 · BE-2 · BE-3 · BE-4 · BE-5 · BE-7 · GATE-2 · DB-1 · NOTI-e2e).
+- **8 vá-tạm ĐỎ đã chạy và hoàn nguyên**: bỏ cổng quyền (2) · `emitChatRoom` dùng `userRoomName` (3) · `syncRoomMembership` join quét `userRoomName` (2) · bỏ bước (C) (2) · bỏ `isNew` (1) · bỏ `changed` (2) · bỏ `recalled` (1) · bỏ `socketsLeave` khi bớt thành viên (2).
+- ⚠️ **`harness/check.sh` step `test` ĐỎ — TOÀN BỘ là ĐỎ CÓ SẴN của nhánh, không phải của WO này.** Cả hai cụm đều đã đo đối chứng bằng `git stash -u` (cây SẠCH), KHÔNG suy đoán:
+
+  | Cụm đỏ | Đo trên cây SẠCH | Kết luận |
+  | --- | --- | --- |
+  | FE: `app` 1381 · `auth` 23 · `console` 174 · `ui` 95 · `web-core` 32 | `node harness/chunk-test.mjs` cho ra **ĐÚNG cùng những con số** | Có sẵn. Gốc: `React.act is not a function` — chunk runner giải `vitest` từ ROOT (`chunk-test.mjs:163`) nên package FE nhận bản React khác. Chạy riêng từng package thì XANH (`web-core` 635/635, kể cả qua chính chunk runner với `--packages=`) |
+  | api: 1 đỏ — `hr-employee-write.int-spec.ts` › "no code counter provisioned → 422, not 500" | Lane DB **MỚI TINH** (`mediaos_hrprobe`), cây sạch → **vẫn đỏ y hệt** | Có sẵn. Không liên quan CHAT/realtime; cũng không phải nhiễm bẩn lane DB từ test của WO này |
+
+  Số đỏ api dao động giữa các lần chạy chunk (5 → 3 → 1) do chunk chia lại + nhiễm bẩn chéo trên lane DB dùng chung — bản thân sự dao động đó cũng là tính chất có sẵn của runner, không phải của diff này.
+
+  `secret-literals` · `lint` · `typecheck` · `migration-no-drop` · `tooling-tests` đều XANH.

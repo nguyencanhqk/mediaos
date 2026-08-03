@@ -10,6 +10,7 @@ import type { ChatMessageRow } from "./chat-messages.repository";
 import { CHAT_AUDIT, CHAT_ERR, CHAT_MODULE_CODE } from "./chat.errors";
 import { assertCanRecall, assertPinBudget, assertPinnable } from "./chat-message-rules";
 import { assertNotArchived } from "./chat-room-rules";
+import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 import type { ChatActor } from "./chat-rooms.service";
 
 /**
@@ -32,6 +33,8 @@ export class ChatMessageModerationService {
     private readonly audit: AuditService,
     // S7-CHAT-BE-3 (additive) — dựng DTO kèm tệp đã ký, NGOÀI tx (xem `readRow`).
     private readonly attachments: ChatAttachmentPresignService,
+    // S7-CHAT-RT-1 (additive) — emit SAU commit; KHÔNG gọi bên trong `withTenant`.
+    private readonly realtime: RealtimeEmitterService,
   ) {}
 
   /**
@@ -41,12 +44,15 @@ export class ChatMessageModerationService {
    * người dùng bấm hai lần (mạng chậm, double-tap) không đáng nhận màn hình đỏ.
    */
   async recall(actor: ChatActor, messageId: string): Promise<ChatMessageDto> {
-    const row = await this.db.withTenant(actor.companyId, async (tx) => {
+    const { row, recalled } = await this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMessageAccess(tx, actor.companyId, messageId, actor.id);
       // Phòng lưu trữ = CHỈ ĐỌC (CHAT-ERR-005). Đặt TRƯỚC nhánh idempotent: một phòng đã đóng thì cả
       // lần bấm thứ hai cũng không được báo "thành công" cho một thao tác ghi không được phép.
       assertNotArchived(acc.room);
-      if (acc.message.recalledAt) return this.readRow(tx, actor, acc);
+      // Nhánh IDEMPOTENT — `recalled: null` ⇒ KHÔNG phát sự kiện. Bấm thu hồi lần hai không được sinh
+      // `chat:message-recalled` thứ hai (cùng lập luận với việc nhánh này không ghi thêm dòng audit).
+      if (acc.message.recalledAt)
+        return { row: await this.readRow(tx, actor, acc), recalled: null };
 
       const now = new Date();
       assertCanRecall(acc, now);
@@ -74,10 +80,25 @@ export class ChatMessageModerationService {
         },
       });
 
-      return this.readRow(tx, actor, acc);
+      return {
+        row: await this.readRow(tx, actor, acc),
+        recalled: { roomId: acc.message.roomId, recalledAt: now.toISOString() },
+      };
     });
     // Ký tệp SAU khi tx đã commit — xem cảnh báo ở `readRow`.
-    return this.attachments.decorateOne(actor, row);
+    const dto = await this.attachments.decorateOne(actor, row);
+
+    // SAU commit, và chỉ ở nhánh THẬT SỰ thu hồi.
+    // ⚠️ Payload đúng BA khoá — KHÔNG kèm `body`, kể cả `null` (API-13 §7, owner chốt 02/08/2026).
+    // Phát nguyên `dto` ở đây là gửi lại nội dung của chính tin vừa bị thu hồi qua kênh realtime.
+    if (recalled) {
+      this.realtime.emitChatMessageRecalled(actor.companyId, recalled.roomId, {
+        messageId,
+        roomId: recalled.roomId,
+        recalledAt: recalled.recalledAt,
+      });
+    }
+    return dto;
   }
 
   /** CHAT-API-012a — ghim. Quyền `pin:chat-message` + **admin phòng**; trần 20/phòng (CHAT-ERR-008). */

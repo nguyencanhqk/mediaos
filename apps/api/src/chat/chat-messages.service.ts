@@ -20,6 +20,7 @@ import { ChatMessagesRepository } from "./chat-messages.repository";
 import { CHAT_ERR, CHAT_MODULE_CODE } from "./chat.errors";
 import { assertCursorExclusive } from "./chat-message-rules";
 import { unreadOf } from "./chat-room-rules";
+import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 import type { ChatActor } from "./chat-rooms.service";
 
 /** `permission_code` ghi vào `file_access_logs` khi gắn tệp vào tin — cặp gate của `POST …/messages`. */
@@ -54,6 +55,8 @@ export class ChatMessagesService {
     // ── S7-CHAT-BE-6 (additive) ── outbox producer cho thông báo CHAT. `OutboxService` đến từ
     // `EventsModule` (@Global, cùng nguồn với `AuditService`) ⇒ KHÔNG đổi `chat.module.ts`.
     private readonly outbox: OutboxService,
+    // ── S7-CHAT-RT-1 (additive) ── emit SAU commit; KHÔNG gọi bên trong `withTenant`.
+    private readonly realtime: RealtimeEmitterService,
   ) {}
 
   /** CHAT-API-009 — một trang tin theo con trỏ. Cấm offset (API-13 §6.4). */
@@ -105,8 +108,8 @@ export class ChatMessagesService {
     roomId: string,
     dto: SendMessageRequest,
   ): Promise<ChatMessageDto> {
-    const messageId = await this.db
-      .withTenant(actor.companyId, async (tx) => {
+    const sent = await this.db
+      .withTenant(actor.companyId, async (tx): Promise<{ messageId: string; isNew: boolean }> => {
         const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
         if (acc.room.isArchived) {
           // 409 (không phải 422): xung đột với TRẠNG THÁI của phòng, body gửi lên vẫn hợp lệ.
@@ -120,7 +123,9 @@ export class ChatMessagesService {
           actor.id,
           dto.clientMessageId,
         );
-        if (existing) return existing.id;
+        // `isNew:false` — gửi lại cùng `clientMessageId` KHÔNG được phát `chat:message` lần thứ hai
+        // (đúng cùng lập luận với việc nhánh này không enqueue thông báo, xem chú thích bên dưới).
+        if (existing) return { messageId: existing.id, isNew: false };
 
         if (dto.replyToMessageId) {
           const ok = await this.repo.replyTargetIsValid(
@@ -197,7 +202,7 @@ export class ChatMessagesService {
           roomSeq,
           roomSeq,
         );
-        return inserted.id;
+        return { messageId: inserted.id, isNew: true };
       })
       .catch(async (err: unknown) => {
         // Đua thật sự: cả hai qua SELECT rồi cùng INSERT. Bên thua nhận 23505 của ĐÚNG constraint
@@ -215,10 +220,20 @@ export class ChatMessagesService {
           ),
         );
         if (!raced) throw err;
-        return raced.id;
+        // Đua THUA: bên thắng đã phát `chat:message` rồi — phát nữa là hai bản cho cùng một tin.
+        return { messageId: raced.id, isNew: false };
       });
 
-    return this.readMessage(actor, messageId);
+    const message = await this.readMessage(actor, sent.messageId);
+    // SAU commit, và CHỈ ở nhánh INSERT thật sự. `readMessage` chạy trong tx RIÊNG đã đóng.
+    // ⚠️ KHÔNG gọi `emitChatRead` ở đây dù `sendMessage` có tự nâng con trỏ đọc của chính người gửi
+    // (`advanceLastReadSeq` ở trên, SPEC-15 §13.2): người gửi biết thừa là mình vừa gửi, và ở phòng
+    // nhóm đông người điều đó nhân thêm N sự kiện `chat:read` vô nghĩa cho MỖI tin. Chỉ đường
+    // `markRead` tường minh mới phát `chat:read`.
+    if (sent.isNew) {
+      this.realtime.emitChatMessage(actor.companyId, roomId, message);
+    }
+    return message;
   }
 
   /**
@@ -322,7 +337,7 @@ export class ChatMessagesService {
     roomId: string,
     dto: ChatMarkReadRequest,
   ): Promise<ChatMarkReadResultDto> {
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const { changed, ...result } = await this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
       const lastReadSeq = await this.repo.advanceLastReadSeq(
         tx,
@@ -335,8 +350,26 @@ export class ChatMessagesService {
         roomId,
         lastReadSeq,
         unreadCount: unreadOf(acc.room.lastMessageSeq, lastReadSeq),
+        // ⚠️ CỜ NỘI BỘ — bị bóc ra ngay ở destructure trên, KHÔNG được lọt vào `ChatMarkReadResultDto`.
+        // So con trỏ SAU (giá trị `advanceLastReadSeq` trả về) với con trỏ TRƯỚC (đọc bởi `assertMember`
+        // trong CÙNG tx) — không đọc DB lần hai. `advanceLastReadSeq` là `GREATEST(…, LEAST(…))` NGAY
+        // TRONG câu UPDATE, nên gửi `seq` nhỏ hơn con trỏ hiện tại là no-op ⇒ `changed=false`.
+        // CẤM tái lập bất kỳ phép Math.max/Math.min nào ở tầng JS: đọc-rồi-ghi ở đây là lối con-trỏ-lùi
+        // mà `631d683e` đã vá bằng cách đẩy cả hai vế xuống SQL.
+        changed: lastReadSeq !== acc.membership.lastReadSeq,
       };
     });
+
+    // SAU commit, và chỉ khi con trỏ THỰC SỰ tiến. Không có cờ này thì mỗi lần FE bấm "đã đọc" lại (rất
+    // hay xảy ra: đổi tab, cuộn) đều phát một `chat:read` không mang thông tin mới cho cả phòng.
+    if (changed) {
+      this.realtime.emitChatRead(actor.companyId, roomId, {
+        roomId,
+        userId: actor.id,
+        lastReadSeq: result.lastReadSeq,
+      });
+    }
+    return result;
   }
 
   /** CHAT-API-016 — badge header. Tự-bound theo actor; phép trừ, KHÔNG `COUNT(*)`. */
