@@ -4,6 +4,64 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
+## Phiên 2026-08-03c (session 6fc9d44c) — `S7-CHAT-DB-3` + ĐƯA CẢ WAVE CHAT LÊN MASTER
+
+> ⚠️ **Cây KHÔNG sạch khi phiên này đóng, và đó KHÔNG phải rác của nó.** `apps/api/test/helpers/seed.ts`
+> đang dirty vì **phiên khác — `sess:eb2cc14a`** — bắt đầu `S7-QA-CATALOGFIXTURE-1` lúc `15:11:19Z`
+> (ledger `harness/activity.jsonl`). Đó là instrumentation tạm ghi mọi lời gọi `seedPermissionCatalog`
+> ra JSONL, **tự comment "GỠ trước khi commit"**. ĐỪNG `git checkout --` file đó. Nếu phiên kia đã kết
+> thúc mà file còn dirty: đọc diff, xác nhận chỉ là bộ dò, rồi mới hoàn nguyên. Cũng canh
+> `catalog-mismatch.jsonl` sinh ra ở thư mục gốc — không được lọt vào commit.
+
+**Đã làm:** `S7-CHAT-DB-3` (mig `0540`, PR #328 → wave) → **PR #329 đưa cả 29 commit wave lên master**
+(owner merge, squash `b5bc7a0c`). Fence go-live cho CHAT **đã gỡ**. Nhánh `wave/s7-chat` local+remote đã
+xoá. Hiện chỉ còn `master`, 0 PR mở, migration head **`0540`**.
+
+### Bài học đáng giá nhất: khối VERIFY bắt lỗi trong chính migration viết ra nó
+
+Bản đầu của `0540` xếp `GRANT` cột **trước** rồi `REVOKE` cấp bảng **sau**, lập luận "expand-contract;
+`relacl` và `attacl` là hai ACL độc lập". **Sai.** Postgres: revoke quyền cấp bảng thì **cuốn theo toàn
+bộ column-GRANT cùng bảng**. Đo 10 giây trong một transaction:
+
+```sql
+GRANT UPDATE (name, description) ON chat_rooms  -->  attacl = {name,description}
+REVOKE UPDATE ON chat_rooms                     -->  attacl = {}      -- MẤT SẠCH
+```
+
+Thứ tự "an toàn" theo trực giác tạo ra **đúng** trạng thái nó định tránh — `chat_rooms` không cột nào
+ghi được — và là **vĩnh viễn**. Nếu VERIFY chỉ đếm `information_schema.table_privileges` như `0539` thì
+đã ship. ⇒ `0540` dùng `aclexplode(relacl/attacl)`, pin tập cột **bằng đúng theo TÊN**, assert RLS+FORCE,
+đếm **dương** 4 FK RESTRICT. Đã tách memory `revoke-table-grant-wipes-column-grants`.
+
+Và **cửa sổ 500 vốn không tồn tại**: `migrate()` của drizzle chạy trong MỘT transaction, ACL là
+transactional. "Expand-contract" cho GRANT nằm ở **kết quả**, không ở thứ tự câu lệnh.
+
+### Tiền đề WO sai — vế thứ hai trong hai phiên liên tiếp
+
+`done_when` của `S7-CHAT-DB-3` dựng trên "app role còn DELETE trên `users`" (đọc `0002:70`, bỏ qua
+`0467` đã REVOKE). Đo `has_table_privilege` ra `f`. ⇒ **không** thêm ca `DELETE FROM users phải 42501`
+vào RED: nó xanh sẵn, chứng minh 0 điều. Vế `users` chuyển hẳn thành việc FK. Cùng lớp với phiên trước
+(`update:project` là `is_sensitive`): **đọc migration cũ ≠ hiện trạng, phải đo.**
+
+### Friction — LẶP LẠI 3 LẦN TRONG MỘT PHIÊN
+
+Sau squash-merge, nhánh **local** giữ N commit riêng lẻ còn đích có **1** commit ⇒ git graph vẽ hai
+đường ⇒ người dùng đọc thành "chưa merge, sao không merge nốt". Xảy ra với `wo/s7-chat-be-gate-3`,
+`wo/s7-chat-be-gate-fix`, rồi `wave/s7-chat`. **Cách dứt điểm: `git diff <remote> <local>` — rỗng thì
+xoá nhánh local ngay, đừng để nó nằm đó.** Đã xảy ra ≥2 lần ⇒ đáng gọi `skill-smith` đóng thành skill
+"post-merge branch reconcile".
+
+### Việc tiếp theo
+
+`S7-QA-CATALOGFIXTURE-1` 🔴 **đang có phiên khác giữ** (xem cảnh báo đầu mục). WO an toàn để làm ngay:
+**`S7-CHAT-CLEAN-2`** 🟡 (`apps/api/src/chat/**` — `endpointOf` gán nhãn SAI cho path lạ · mapper gộp
+Failure/Error thành Denied · index dư trên `chat_messages` phải đo `pg_stat_user_indexes` trước khi drop
+· `s7-chat-db1-invariants.int-spec.ts:427-433` thiếu `WHERE company_id`). Sau đó là cả nhánh FE
+`S7-CHAT-FE-1..5` — `FE-1` mở khoá 4 WO còn lại. Module `CHAT` vẫn `is_active=false`, việc bật thuộc WO
+cuối wave.
+
+---
+
 ## Phiên 2026-08-03b (session 99a7c530) — chốt PR #327 cho gate-3 + tìm ra nguyên nhân THẬT của 2 mục "chờ owner"
 
 > Tiếp nối phiên `56e133e4`. **Cảnh báo "26 file dirty" của ô dưới đã LỖI THỜI** — phiên đó có commit
