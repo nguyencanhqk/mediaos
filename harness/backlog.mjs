@@ -10178,7 +10178,7 @@ export const backlog = [
     module: "CHAT",
     layer: "DB",
     title:
-      "Expand-contract least-privilege: REVOKE UPDATE(visible_from_seq) + UPDATE cấp bảng chat_rooms + DELETE trên users (cascade đang xoá CỨNG chat_messages append-only) + siết khối VERIFY của 0539",
+      "Expand-contract least-privilege: REVOKE UPDATE(visible_from_seq) + UPDATE cấp bảng chat_rooms + đổi FK cascade users→chat_messages (đang xoá CỨNG bảng append-only) + siết khối VERIFY của 0539",
     zone: "red",
     status: "todo",
     paths: ["apps/api/migrations/**", "apps/api/test/integration/**", "docs/plans/S7-CHAT-DB-3.md"],
@@ -10188,12 +10188,12 @@ export const backlog = [
     src: [
       "S7-CHAT-BE-GATE-3 lane L3 (M-1·M-3·M-4·M-6) — rà tĩnh, mỗi mục kèm probe SQL để tự xác minh trên lane",
       "0538:258 GRANT UPDATE(visible_from_seq) là quyền CHẾT (v1 không writer nào set) đang gác CHAT-DEC-008 bằng MỘT unit test",
-      "0002_companies_users.sql:70 GRANT DELETE ON users + 0535:171,173 on_del CASCADE cho chat_messages.sender_id/chat_room_members.user_id",
+      "⚠️ ĐÍNH CHÍNH 2026-08-03 (đo bằng has_table_privilege trên 2 lane DB): mediaos_app KHÔNG có DELETE trên users — 0002:70 GRANT nhưng 0467_s2_fnddb1_companies_users_revoke_delete.sql ĐÃ THU HỒI. Phát hiện gốc của lane L3 đọc 0002 mà bỏ qua 0467 ⇒ vế 'users.DELETE' là NGUỒN CŨ, không phải hiện trạng. Phần CÒN THẬT: FK 0535:171,173 ON DELETE CASCADE (chat_messages.sender_id / chat_room_members.user_id) — hard-delete users ở tầng OWNER (script dọn, migration, test cleanup) vẫn xoá cứng bảng append-only, im lặng",
       "memory: migration-expand-contract-required · audit-check-union-parse-anchor-trap",
     ],
     done_when: [
-      "RED trước, đo bằng role mediaos_app trên lane: UPDATE chat_room_members SET visible_from_seq=… phải 42501 · UPDATE chat_rooms SET org_unit_id=… phải 42501 · DELETE FROM users phải 42501. Cả ba HIỆN ĐANG THÀNH CÔNG",
-      "users.DELETE là lỗ BẤT BIẾN #2: cascade xoá CỨNG chat_messages (bảng append-only) VÀ để lại lỗ room_seq vĩnh viễn (last_message_seq không giảm ⇒ badge chưa-đọc phồng). Hôm nay chỉ được gác bằng comment 'KHÔNG BAO GIỜ .delete(users)' = kỷ luật dev, đúng thứ CLAUDE.md §2 cấm",
+      "RED trước, đo bằng role mediaos_app trên lane: UPDATE chat_room_members SET visible_from_seq=… phải 42501 · UPDATE chat_rooms SET org_unit_id=… phải 42501. HAI mục này hiện ĐANG THÀNH CÔNG (đã xác minh 03/08 bằng has_column_privilege/has_table_privilege). ⛔ ĐỪNG thêm ca 'DELETE FROM users phải 42501' vào RED: hôm nay nó ĐÃ 42501 (0467 thu hồi rồi) ⇒ ca đó xanh sẵn, không chứng minh gì, và REVOKE thêm sẽ khớp 0 hàng",
+      "Vế users chuyển thành việc FK, KHÔNG phải việc GRANT: chat_messages.sender_id / chat_room_members.user_id đang ON DELETE CASCADE ⇒ mọi hard-delete users ở tầng OWNER (script dọn, migration, cleanupTenants của test) xoá CỨNG bảng append-only và để lại lỗ room_seq vĩnh viễn (last_message_seq không giảm ⇒ badge chưa-đọc phồng). Đổi sang RESTRICT/SET NULL phải cân với đường xoá tenant của test — đo caller TRƯỚC khi đổi, đừng làm vỡ cleanup",
       "chat_rooms: REVOKE UPDATE cấp bảng rồi GRANT LẠI đúng tập cột writer đang dùng — EXPAND-CONTRACT vì BE-1 đã ship, revoke thẳng là cửa sổ 500 cho tiến trình đang chạy",
       "Khối VERIFY của 0539 hiện chỉ đọc table_privileges: thêm information_schema.column_privileges (GRANT UPDATE cấp CỘT lọt hoàn toàn) + assert relrowsecurity AND relforcerowsecurity còn bật + vế table_schema='public'",
       "FULL gate (database-reviewer + security-reviewer) PASS",

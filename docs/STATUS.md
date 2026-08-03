@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-03 11:14Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-03 11:58Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -10,6 +10,9 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🟡 `S7-CHAT-FE-1` Nền FE chat: contracts + api-client + store Zustand dùng chung + MỘT kết nối WS duy nhất cho toàn app shell (trang full-screen và panel nổi dùng chung)
+- 🔴 `S7-QA-CATALOGFIXTURE-1` Fixture test KHÔNG được đổi `permissions.is_sensitive` của cặp CHÍNH TẮC — bảng toàn cục, không company_id, không ai dọn ⇒ một spec lật cờ là đổi hành vi phân quyền của MỌI spec dùng chung DB (gồm CI)
+- 🔴 `S7-CHAT-DB-3` Expand-contract least-privilege: REVOKE UPDATE(visible_from_seq) + UPDATE cấp bảng chat_rooms + đổi FK cascade users→chat_messages (đang xoá CỨNG bảng append-only) + siết khối VERIFY của 0539
+- 🟡 `S7-CHAT-CLEAN-2` Dọn nhẹ hậu gate: comment đã chết ở đường quyết định · endpointOf fallback gán nhãn SAI · mapper result_status gộp Failure/Error thành Denied · index dư trên chat_messages
 
 **CHỜ (kẹt phụ thuộc):**
 - `S7-CHAT-FE-2` Trang /chat full-screen: 3 cột (danh sách phòng · hội thoại · thông tin phòng) + tạo nhóm/mở DM + gửi tin/tệp/ảnh + trả lời/ghim/thu hồi + đã xem ⏳ cần: S7-CHAT-FE-1
@@ -27,7 +30,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `wo/s7-chat-be-gate-3` · **file đang đổi (dirty)**: 3
+- **branch**: `wo/s7-chat-be-gate-3` · **file đang đổi (dirty)**: 2
 - **migration head**: idx 206 — `0539_s7chatdb2_room_seq` (207 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -36,6 +39,11 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `084d1f0e` | 2026-08-03 | docs(harness): bàn giao phiên 99a7c530 — hai kết luận của phiên trước bị lật |
+| `99d05e83` | 2026-08-03 | fix(gov): đính chính — KHÔNG có lỗ phân quyền update:project; gỡ CAPSWEEP, thay bằng CATALOGFIXTURE |
+| `4f52948c` | 2026-08-03 | fix(test): 3 lỗi CI của gate-3 — fixture đóng dấu catalog · spec tự dựng sai tiền đề · assert chữ ký cũ |
+| `95535904` | 2026-08-03 | chore(gov): chốt 3 quyết định hậu S7-CHAT-BE-GATE-3 — 3 WO + KI-060 |
+| `91cf0d9b` | 2026-08-03 | chore(harness): đóng sổ 4 WO CHAT đã land trong gate-3 + regen STATUS |
 | `03f9a924` | 2026-08-03 | fix(chat): S7-CHAT-BE-GATE-3 — FULL gate 5 lane: 1 CRITICAL + 5 HIGH |
 | `debbd979` | 2026-08-03 | chore(harness): regen STATUS |
 | `c17af6a7` | 2026-08-03 | feat(harness): gom story/Work Order về đúng module — 4 epic hậu-MVP + dọn mã lệch |
@@ -43,11 +51,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `57bce4df` | 2026-08-03 | feat(chat): S7-CHAT-RT-0 — gắn ValkeyIoAdapter vào bootstrap + CORS /ws cưỡng chế thật |
 | `c1a3168f` | 2026-08-03 | chore(harness): regen STATUS sau S7-CHAT-BE-7 |
 | `2a633415` | 2026-08-03 | feat(chat): S7-CHAT-BE-7 — đường đọc-vượt membership (CHAT-DEC-004) |
-| `712f18c0` | 2026-08-03 | chore(harness): regen STATUS |
-| `2ec0082f` | 2026-08-03 | chore(harness): regen STATUS sau S7-CHAT-BE-6 |
-| `1d6ba5d9` | 2026-08-03 | feat(chat): S7-CHAT-BE-6 — thông báo CHAT qua OutboxNotificationBridge |
-| `361d345b` | 2026-08-03 | fix(chat): S7-CHAT-BE-5 FULL gate — 3 HIGH + 5 MEDIUM + 4 LOW |
-| `9a0a0ce0` | 2026-08-03 | chore(harness): regen STATUS sau S7-CHAT-BE-5 |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

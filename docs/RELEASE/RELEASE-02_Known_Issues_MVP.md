@@ -131,10 +131,18 @@ dòng KI, jsdoc `claim()`, lẫn chú thích ca 6b; ba chỗ này là nơi ngư�
 đa-link mất `url`, owner CHẤP NHẬN cho v1). `S2` vẫn **4**. Gate 5 lane trên toàn bề mặt CHAT đã vá 1
 CRITICAL (URL ký rò cho cả phòng qua WS — hai lane độc lập cùng tìm ra) + 5 HIGH; chi tiết ở commit
 `03f9a924`. Ba WO sinh ra và ĐÃ seed vào `harness/backlog.mjs`: **`S7-QA-CATALOGFIXTURE-1`** (🔴) ·
-**`S7-CHAT-DB-3`** (🔴 expand-contract least-privilege, gồm lỗ BẤT BIẾN #2: `users` còn `DELETE` ⇒ cascade
-xoá CỨNG `chat_messages` append-only) · **`S7-CHAT-CLEAN-2`** (🟡 dọn nhẹ). Ghi số hiệu cho KI-060 thay vì
+**`S7-CHAT-DB-3`** (🔴 expand-contract least-privilege) · **`S7-CHAT-CLEAN-2`** (🟡 dọn nhẹ). Ghi số hiệu cho KI-060 thay vì
 để nó nằm dạng văn xuôi — theo đúng luật đã áp với KI-057: **một quyết định chấp nhận rủi ro mà không có
 số hiệu thì vô hình với bug-scrub trước RC**.
+
+**ĐÍNH CHÍNH thứ hai cùng ngày — `users` KHÔNG còn `DELETE` cho app role.** Phát hiện của lane L3 đọc
+`0002_companies_users.sql:70` (`GRANT … DELETE ON users`) mà bỏ qua
+`0467_s2_fnddb1_companies_users_revoke_delete.sql` **đã thu hồi**. Đo bằng
+`has_table_privilege('mediaos_app','users','DELETE')` trên 2 lane DB: **false** ⇒ **runtime không với tới
+được**. Phần CÓ THẬT và vẫn nằm trong `S7-CHAT-DB-3`: FK `ON DELETE CASCADE` từ `chat_messages.sender_id`
+— hard-delete `users` ở tầng **owner** (script dọn / migration / cleanup của test) vẫn xoá cứng bảng
+append-only. Tức đây là rủi ro **quy trình + FK**, KHÔNG phải lỗ phân quyền. Hai vế còn lại của WO đo lại
+vẫn ĐÚNG: `UPDATE(visible_from_seq)` và `UPDATE` cấp bảng `chat_rooms` đều đang mở cho `mediaos_app`.
 
 **ĐÍNH CHÍNH cùng ngày (commit `4f52948c`) — KHÔNG có lỗ phân quyền `update:project`.** Bản trước của
 dòng này (và WO `S7-AUTH-CAPSWEEP-1`, đã GỠ) khẳng định `update:project` là `is_sensitive` nhưng ngoài
