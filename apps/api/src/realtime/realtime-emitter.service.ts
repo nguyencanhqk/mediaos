@@ -184,6 +184,40 @@ export class RealtimeEmitterService {
   }
 
   /**
+   * CẮT MỌI phiên WS đang mở của một user (SPEC-15 §18) — gọi khi thu hồi phiên ở tầng AUTH.
+   *
+   * ══ VÌ SAO CẦN: cổng quyền WS chỉ chạy MỘT LẦN ══
+   * `RealtimeGateway` verify JWT ở middleware handshake và kiểm cặp `view:chat-room` ở
+   * `handleConnection` — cả hai chỉ chạy lúc NỐI. Socket.IO không tái xác thực trên kết nối đang mở và
+   * không có tick nào soi `exp`, nên `ACCESS_TOKEN_TTL_SEC` (~15 phút) chỉ chặn lần RECONNECT. Một tab
+   * mở liên tục giữ phiên sống nhiều ngày. Trước RT-1 điều đó chỉ ảnh hưởng NOTI; từ khi RT-1 đẩy **nội
+   * dung tin nhắn** lên WS thì đó là đường rò nội dung với cửa sổ KHÔNG GIỚI HẠN — không phải "≤15 phút"
+   * như plan RT-1 từng ghi (FULL gate S7-CHAT-BE-GATE-3, L2).
+   *
+   * Nhắm `userRoomName` (RỘNG NHẤT — mọi socket đã xác thực của user), KHÔNG phải `chatUserRoomName`:
+   * cùng lập luận bất đối xứng của nhánh `leave` ở `syncRoomMembership` — cắt nhầm chỉ làm mất realtime
+   * tới lần reconnect (fail-safe), sót lại một socket là RÒ.
+   *
+   * Gọi TRONG tx của caller là CÓ CHỦ ĐÍCH: rollback sau khi đã cắt ⇒ client chỉ reconnect lại và đi
+   * qua cổng quyền lần nữa — chiều an toàn. Đặt sau commit thì có cửa sổ mà phiên đã bị thu hồi ở DB
+   * nhưng socket vẫn đang nhận tin.
+   */
+  severUserSessions(companyId: string, userId: string): void {
+    if (!this.server) return;
+    try {
+      this.server.in(userRoomName(companyId, userId)).disconnectSockets(true);
+    } catch (err) {
+      // KHÔNG throw lên caller: thu hồi phiên ở DB là việc chính và đã xong; cắt socket là lớp bồi.
+      // Nhưng phải KÊU — im lặng ở đây nghĩa là phiên WS sống sót sau khi tài khoản đã bị khoá.
+      this.logger.error(
+        `severUserSessions THẤT BẠI cho user=${userId} — phiên WS có thể còn sống sau khi thu hồi: ` +
+          (err instanceof Error ? err.message : String(err)),
+        err instanceof Error ? err.stack : undefined,
+      );
+    }
+  }
+
+  /**
    * Khuôn chung của 3 emit tới phòng: no-op khi chưa có server · `.parse()` TRƯỚC emit (masking) ·
    * KHÔNG BAO GIỜ throw lên caller (realtime là phụ trợ; giao dịch nghiệp vụ đã commit rồi).
    */

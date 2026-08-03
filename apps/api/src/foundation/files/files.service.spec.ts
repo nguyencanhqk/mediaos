@@ -91,6 +91,7 @@ interface Harness {
     insertTx: ReturnType<typeof vi.fn>;
     findByIdTx: ReturnType<typeof vi.fn>;
     listByFileTx: ReturnType<typeof vi.fn>;
+    hasEverBeenLinkedTx: ReturnType<typeof vi.fn>;
     softDeleteTx: ReturnType<typeof vi.fn>;
   };
   accessLog: FileAccessLogService;
@@ -149,6 +150,7 @@ function makeHarness(policyDecision: FilePolicyDecision = ALLOW): Harness {
     insertTx: vi.fn(),
     findByIdTx: vi.fn(),
     listByFileTx: vi.fn(async () => []),
+    hasEverBeenLinkedTx: vi.fn(async () => false),
     softDeleteTx: vi.fn(async () => 1),
   };
 

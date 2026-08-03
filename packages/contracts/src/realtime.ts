@@ -38,8 +38,48 @@ export type WsEventName = (typeof WS_EVENTS)[keyof typeof WS_EVENTS];
 
 // ─── server → client payloads (masking layer) ───────────────────────────────
 
-/** chat:message — đúng DTO REST (chatMessageSchema), không hơn không kém. */
-export const wsChatMessageEventSchema = chatMessageSchema;
+/**
+ * Đính kèm trên kênh WS — **CỐ TÌNH KHÔNG CÓ `url`/`thumbnailUrl`**.
+ *
+ * ══ VÌ SAO: quyết định ký là PER-RECIPIENT, còn emit là fan-out MỘT payload cho CẢ PHÒNG ══
+ * `FilePolicyService.decideForLinkedFile` là luật AND-khắt-khe-nhất trên MỌI link của tệp, tính RIÊNG
+ * cho từng `userId`: cùng một tệp có thể `allow` cho người gửi và `deny` cho người nhận (tệp còn link
+ * sang task/hồ sơ mà người nhận không có quyền). Đường REST vì thế ký theo đúng người gọi.
+ *
+ * `sendMessage` dựng DTO bằng `readMessage(actor, …)` — tức ĐÃ KÝ CHO NGƯỜI GỬI — rồi phát nguyên
+ * object đó tới `chatRoomName`. Nếu payload WS mang `url`, mọi thành viên phòng nhận được **URL ký của
+ * người gửi**. URL presign là **bearer capability**: ai cầm cũng tải được, không qua guard nào nữa và
+ * không sinh dòng `file_access_logs` nào. Đó là đi vòng qua đúng lớp quyết định mà FilePolicy dựng ra
+ * (phát hiện bởi FULL gate S7-CHAT-BE-GATE-3, hai lane độc lập cùng chỉ ra).
+ *
+ * ⚠️ CẤM thêm `url`/`thumbnailUrl` vào đây, kể cả `.nullable()`, kể cả "để FE khỏi gọi thêm": một khoá
+ * URL trong hợp đồng WS là lời mời cho lần sửa sau điền giá trị thật vào. FE nhận sự kiện rồi gọi
+ * `GET /chat/rooms/:id/messages` (hoặc đường ký riêng) để lấy URL của CHÍNH MÌNH.
+ *
+ * Khai LẠI thay vì `chatAttachmentSchema.omit({url, thumbnailUrl})` — cùng lý do đã ghi ở
+ * `chat.ts` §DTO đọc-vượt: `.omit()` là hợp đồng ĐI THEO schema gốc, nên thêm khoá nhạy cảm vào
+ * `chatAttachmentSchema` sau này sẽ tự động chảy sang kênh WS mà không ai phải duyệt.
+ */
+export const wsChatAttachmentSchema = z.object({
+  id: z.string().uuid(),
+  fileId: z.string().uuid(),
+  name: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  isImage: z.boolean(),
+});
+export type WsChatAttachmentDto = z.infer<typeof wsChatAttachmentSchema>;
+
+/**
+ * chat:message — DTO REST TRỪ URL ký của đính kèm (xem `wsChatAttachmentSchema`).
+ *
+ * Zod object mặc định **strip** khoá thừa, nên `.parse()` ở `emitChatMessage` tự gỡ `url`/`thumbnailUrl`
+ * kể cả khi caller truyền vào DTO đầy đủ — masking nằm ở chính bước parse, không dựa vào kỷ luật của
+ * điểm gọi. Đây là lý do phải parse TRƯỚC emit chứ không emit thẳng object.
+ */
+export const wsChatMessageEventSchema = chatMessageSchema.extend({
+  attachments: wsChatAttachmentSchema.array(),
+});
 export type WsChatMessageEvent = z.infer<typeof wsChatMessageEventSchema>;
 
 /**

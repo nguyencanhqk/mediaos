@@ -9656,7 +9656,7 @@ export const backlog = [
     title:
       "FilePolicy: tệp TỪNG có link module thì KHÔNG bao giờ tụt xuống fallback FOUNDATION.FILE.* — lỗ chung của 5 module, phát hiện khi vá S7-CHAT-BE-3",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/foundation/files/**",
       "apps/api/test/integration/**",
@@ -9792,7 +9792,7 @@ export const backlog = [
     title:
       "OutboxWorker dispatch ĐÚNG THỨ TỰ trong cùng lô claim (KI-059): RETURNING của UPDATE không theo ORDER BY của CTE ⇒ event tiêu thụ sai thứ tự, hỏng-im-lặng ở mọi consumer phụ thuộc thứ tự",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/events/outbox-worker.ts",
       "apps/api/test/integration/**",
@@ -10129,6 +10129,103 @@ export const backlog = [
       "Thứ tự: DROP INDEX chat_rooms_channel_uq → DROP composite tenant FK (company_id, channel_id) do 0535 tạo → DROP COLUMN channel_id; rồi drop file_url/file_name",
       "Đồng bộ schema Drizzle + contracts CÙNG commit; chạy TRÊN RELEASE KHÁC với S7-CHAT-DB-1 (không gộp)",
       "FULL gate (database-reviewer + security-reviewer) PASS",
+    ],
+  },
+
+  // ════════════════ HẬU FULL GATE S7-CHAT-BE-GATE-3 — chốt owner 2026-08-03 ════════════════
+  // Ba WO sinh từ gate 5 lane trên bề mặt CHAT (commit 03f9a924).
+  //
+  // ⚠️ ĐÍNH CHÍNH 2026-08-03 (commit 4f52948c): WO `S7-AUTH-CAPSWEEP-1` từng được seed ở đây với tiền đề
+  // "update:project là is_sensitive nhưng ngoài allowlist ⇒ màn quản trị đang ẩn trên PROD" — **TIỀN ĐỀ
+  // SAI, đã GỠ**. Catalog THẬT khai `('update','project', false)` (`0005:224`), và `0485` bước (b) chỉ
+  // nâng 8 cặp (delete/close/archive/manage-member/view-report:project + delete/export:task +
+  // view:task-audit-log) — KHÔNG có `update:project`. Giá trị `TRUE` đo được là RÁC do fixture của
+  // `chat-be5-derived-rooms.int-spec.ts` đóng dấu vào bảng `permissions` TOÀN CỤC. Không có lỗ phân quyền.
+  // Thay vào đó là WO dưới đây, nhắm đúng cơ chế đã gây hiểu nhầm.
+  {
+    id: "S7-QA-CATALOGFIXTURE-1",
+    module: "FOUNDATION",
+    layer: "QA",
+    title:
+      "Fixture test KHÔNG được đổi `permissions.is_sensitive` của cặp CHÍNH TẮC — bảng toàn cục, không company_id, không ai dọn ⇒ một spec lật cờ là đổi hành vi phân quyền của MỌI spec dùng chung DB (gồm CI)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/test/helpers/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S7-QA-CATALOGFIXTURE-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S7-QA-CATALOGFIXTURE-1.md",
+    src: [
+      "Đo 2026-08-03 (commit 4f52948c): `seedPermissionCatalog` upsert `DO UPDATE SET is_sensitive = EXCLUDED.is_sensitive` vào `permissions` — bảng TOÀN CỤC (không company_id), `cleanupTenants` không chạm",
+      "Ca thật: `WRITER_PAIRS` của chat-be5 khai `['update','project', …, true]` ⇒ lật cặp sang sensitive ⇒ `getCapabilities()` lọc bỏ ⇒ `/auth/me` thiếu cặp ⇒ 3 ca TASKCAP đỏ ở spec KHÁC. CI đặt `LANE_DB: mediaos` (api.yml:221) nên mọi spec dùng CHUNG một DB",
+      "Đo 5 DB: mediaos · mediaos_chatgate2 · mediaos_s7chatbe3 · mediaos_s7chatbe4 đều `f`; RIÊNG mediaos_outboxfifo (lane chạy chat-be5) là `t`",
+      "⚠️ BÀI HỌC PHƯƠNG PHÁP: `git stash` rồi chạy lại trên CÙNG lane KHÔNG phân biệt được lỗi loại này — hỏng nằm trong DB, không trong code. Một phiên đã dùng đúng phép thử đó và kết luận NHẦM thành 'lỗ phân quyền có sẵn trên nhánh'",
+      "memory: capability-allowlist-hides-admin-screens · canonical-seed-pin-regression",
+    ],
+    done_when: [
+      "`seedPermissionCatalog` KHÔNG được đổi `is_sensitive` của cặp đã tồn tại trong catalog chính tắc — hoặc từ chối (ném), hoặc chỉ set khi INSERT mới. Fixture cần cặp nhạy cảm thì phải dùng cặp RIÊNG của test, không mượn cặp sản phẩm",
+      "RED trước: spec A đóng dấu `('update','project')` sang sensitive → spec B (`auth-me-capabilities`) phải VẪN xanh. Hiện tại B đỏ",
+      "Quét MỌI caller của `seedPermissionCatalog` (+ helper seed tương tự) tìm chỗ khác đang lật cờ cặp chính tắc — đây là bảng toàn cục nên mỗi caller là một nguồn ô nhiễm tiềm tàng",
+      "Cân nhắc đai thứ hai: assert cuối suite rằng `permissions.is_sensitive` của bộ cặp chính tắc khớp seed (pin), để lần lật tiếp theo ĐỎ ngay tại spec gây ra thay vì ở spec nạn nhân",
+      "FULL gate PASS",
+    ],
+  },
+  {
+    id: "S7-CHAT-DB-3",
+    module: "CHAT",
+    layer: "DB",
+    title:
+      "Expand-contract least-privilege: REVOKE UPDATE(visible_from_seq) + UPDATE cấp bảng chat_rooms + đổi FK cascade users→chat_messages (đang xoá CỨNG bảng append-only) + siết khối VERIFY của 0539",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/migrations/**", "apps/api/test/integration/**", "docs/plans/S7-CHAT-DB-3.md"],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S7-CHAT-DB-3.md",
+    src: [
+      "S7-CHAT-BE-GATE-3 lane L3 (M-1·M-3·M-4·M-6) — rà tĩnh, mỗi mục kèm probe SQL để tự xác minh trên lane",
+      "0538:258 GRANT UPDATE(visible_from_seq) là quyền CHẾT (v1 không writer nào set) đang gác CHAT-DEC-008 bằng MỘT unit test",
+      "⚠️ ĐÍNH CHÍNH 2026-08-03 (đo bằng has_table_privilege trên 2 lane DB): mediaos_app KHÔNG có DELETE trên users — 0002:70 GRANT nhưng 0467_s2_fnddb1_companies_users_revoke_delete.sql ĐÃ THU HỒI. Phát hiện gốc của lane L3 đọc 0002 mà bỏ qua 0467 ⇒ vế 'users.DELETE' là NGUỒN CŨ, không phải hiện trạng. Phần CÒN THẬT: FK 0535:171,173 ON DELETE CASCADE (chat_messages.sender_id / chat_room_members.user_id) — hard-delete users ở tầng OWNER (script dọn, migration, test cleanup) vẫn xoá cứng bảng append-only, im lặng",
+      "memory: migration-expand-contract-required · audit-check-union-parse-anchor-trap",
+    ],
+    done_when: [
+      "RED trước, đo bằng role mediaos_app trên lane: UPDATE chat_room_members SET visible_from_seq=… phải 42501 · UPDATE chat_rooms SET org_unit_id=… phải 42501. HAI mục này hiện ĐANG THÀNH CÔNG (đã xác minh 03/08 bằng has_column_privilege/has_table_privilege). ⛔ ĐỪNG thêm ca 'DELETE FROM users phải 42501' vào RED: hôm nay nó ĐÃ 42501 (0467 thu hồi rồi) ⇒ ca đó xanh sẵn, không chứng minh gì, và REVOKE thêm sẽ khớp 0 hàng",
+      "Vế users chuyển thành việc FK, KHÔNG phải việc GRANT: chat_messages.sender_id / chat_room_members.user_id đang ON DELETE CASCADE ⇒ mọi hard-delete users ở tầng OWNER (script dọn, migration, cleanupTenants của test) xoá CỨNG bảng append-only và để lại lỗ room_seq vĩnh viễn (last_message_seq không giảm ⇒ badge chưa-đọc phồng). Đổi sang RESTRICT/SET NULL phải cân với đường xoá tenant của test — đo caller TRƯỚC khi đổi, đừng làm vỡ cleanup",
+      "chat_rooms: REVOKE UPDATE cấp bảng rồi GRANT LẠI đúng tập cột writer đang dùng — EXPAND-CONTRACT vì BE-1 đã ship, revoke thẳng là cửa sổ 500 cho tiến trình đang chạy",
+      "Khối VERIFY của 0539 hiện chỉ đọc table_privileges: thêm information_schema.column_privileges (GRANT UPDATE cấp CỘT lọt hoàn toàn) + assert relrowsecurity AND relforcerowsecurity còn bật + vế table_schema='public'",
+      "FULL gate (database-reviewer + security-reviewer) PASS",
+    ],
+  },
+  {
+    id: "S7-CHAT-CLEAN-2",
+    module: "CHAT",
+    layer: "BE",
+    title:
+      "Dọn nhẹ hậu gate: comment đã chết ở đường quyết định · endpointOf fallback gán nhãn SAI · mapper result_status gộp Failure/Error thành Denied · index dư trên chat_messages",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/chat/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S7-CHAT-CLEAN-2.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "S7-CHAT-BE-GATE-3 — L1 (LOW×3) + L3 (M-2·L-1·L-2)",
+      "chat-rooms.repository.ts:517-520 comment nói FK một-cột KHÔNG chặn cross-tenant — SAI từ 0535 (đã có composite tenant FK); memory wo-plans-built-on-code-comments",
+      "chat-oversight-audit.guard.ts:185-191 endpointOf rơi về ROOM_SEARCH cho MỌI path lạ ⇒ route thứ 5 thêm sau ghi Denied mang nhãn SAI mà không gì đỏ",
+    ],
+    done_when: [
+      "endpointOf trả nhãn 'unknown' ở nhánh cuối thay vì mặc định vào một endpoint CÓ THẬT; test phủ path lạ",
+      "chat-oversight.mapper.ts map tường minh 4 giá trị AUDIT_RESULT_STATUSES; giá trị lạ → nhãn riêng (hiện Failure/Error đều hiện thành 'Denied' = audit nói SAI loại sự kiện)",
+      "Index dư trên chat_messages: ĐO trước bằng pg_stat_user_indexes sau khi chạy full chat int-spec, chỉ drop cái idx_scan=0. CẤM assert EXPLAIN chọn index nào (memory pg-planner-index-assert-trap)",
+      "s7-chat-db1-invariants.int-spec.ts:427-433 thêm WHERE company_id — đang khẳng định room_seq liên tục TOÀN BẢNG mọi tenant trong suite chạy song song ⇒ đỏ oan, và lối sửa rẻ nhất sẽ là xoá ca",
+      "Sửa comment sai ở chat-rooms.repository.ts (giữ hàm — DB không biết status/deleted_at nên vẫn cần, chỉ lý do ghi ra đã chết)",
+      "LIGHT gate PASS",
     ],
   },
 

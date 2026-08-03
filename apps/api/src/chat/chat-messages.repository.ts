@@ -381,7 +381,12 @@ export class ChatMessagesRepository {
     const rows = await tx
       .update(chatRoomMembers)
       .set({
-        lastReadSeq: sql`GREATEST(${chatRoomMembers.lastReadSeq}, LEAST(${wanted}::int, ${ceiling}::int))`,
+        // ⚠️ `::bigint`, KHÔNG phải `::int`. `last_read_seq`/`room_seq`/`last_message_seq` đều bigint;
+        // ép tham số về int4 làm `seq >= 2^31` ném `22003 integer out of range` ⇒ **HTTP 500** thay vì
+        // 200-kẹp-trần — tức chính cái trần mô tả ở jsdoc trên bị vô hiệu đúng lúc cần nó nhất. Idiom FE
+        // "mark-all-read gửi sentinel lớn" rơi thẳng vào đây. typecheck + unit test đều mù với lỗi này
+        // (cùng lớp `drizzle-array-bind-sql-param`), nên lưới duy nhất là int-spec ca 2^31.
+        lastReadSeq: sql`GREATEST(${chatRoomMembers.lastReadSeq}, LEAST(${wanted}::bigint, ${ceiling}::bigint))`,
         lastReadAt: new Date(),
       })
       .where(and(eq(chatRoomMembers.companyId, companyId), eq(chatRoomMembers.id, memberRowId)))

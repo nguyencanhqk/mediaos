@@ -16,6 +16,7 @@ function makeServer() {
   const emit = vi.fn();
   const socketsJoin = vi.fn();
   const socketsLeave = vi.fn();
+  const disconnectSockets = vi.fn();
   const toTargets: unknown[] = [];
   const inTargets: string[] = [];
   const server = {
@@ -25,10 +26,10 @@ function makeServer() {
     }),
     in: vi.fn((t: string) => {
       inTargets.push(t);
-      return { socketsJoin, socketsLeave };
+      return { socketsJoin, socketsLeave, disconnectSockets };
     }),
   };
-  return { server, emit, socketsJoin, socketsLeave, toTargets, inTargets };
+  return { server, emit, socketsJoin, socketsLeave, disconnectSockets, toTargets, inTargets };
 }
 
 function makeEmitter() {
@@ -64,6 +65,74 @@ describe("RealtimeEmitterService — cụm CHAT (S7-CHAT-RT-1)", () => {
     vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
   });
   afterEach(() => vi.restoreAllMocks());
+
+  // ─── 🔒 masking đính kèm (FULL gate S7-CHAT-BE-GATE-3 — CRITICAL) ───────────────
+  //
+  // `sendMessage` dựng DTO bằng `readMessage(actor, …)` = ĐÃ KÝ CHO NGƯỜI GỬI, rồi phát nguyên object
+  // đó cho CẢ PHÒNG. Quyết định ký là per-recipient (`decideForLinkedFile` = AND trên mọi link, tính
+  // riêng từng user), nên một `url` lọt vào payload WS là URL của người gửi tới tay mọi người nhận —
+  // và URL presign là bearer, ai cầm cũng tải được, không guard nào chặn nữa.
+  //
+  // Ca này gieo DTO có `url`/`thumbnailUrl` KHÁC null (đúng thứ `readMessage` trả cho người gửi) và
+  // đòi payload phát ra KHÔNG CÒN hai khoá đó. Gỡ `.extend({attachments})` ở `wsChatMessageEventSchema`
+  // ⇒ ca này ĐỎ ngay.
+  it("🔒 emitChatMessage KHÔNG phát url/thumbnailUrl của đính kèm (URL ký là per-recipient)", () => {
+    const { svc, emit } = makeEmitter();
+    const withSignedFile = {
+      ...messageDto,
+      attachmentCount: 1,
+      attachments: [
+        {
+          id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          fileId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          name: "hop-dong.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 1024,
+          isImage: false,
+          url: "https://storage.example/signed?token=SECRET-BEARER",
+          thumbnailUrl: "https://storage.example/signed-thumb?token=SECRET-BEARER",
+        },
+      ],
+    };
+
+    svc.emitChatMessage(COMPANY, ROOM, withSignedFile as never);
+
+    const [, payload] = emit.mock.calls[0] as [string, { attachments: Record<string, unknown>[] }];
+    // Metadata vẫn tới (FE hiện tên/kích thước ngay, không phải đợi REST) — đây là đối chứng dương:
+    // nếu ca này chỉ assert "vắng url" thì một payload RỖNG cũng làm nó xanh.
+    expect(payload.attachments).toHaveLength(1);
+    expect(payload.attachments[0].name).toBe("hop-dong.pdf");
+    expect(payload.attachments[0].fileId).toBe("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
+    // Khoá phải VẮNG MẶT, không phải `null`: khoá tồn tại là lời mời điền giá trị thật ở lần sửa sau.
+    expect(Object.keys(payload.attachments[0]).sort()).toEqual([
+      "fileId",
+      "id",
+      "isImage",
+      "mimeType",
+      "name",
+      "sizeBytes",
+    ]);
+    // Chốt cuối bằng chuỗi thô: không byte nào của URL ký rời server qua kênh này.
+    expect(JSON.stringify(payload)).not.toContain("SECRET-BEARER");
+  });
+
+  // ─── 🔒 cắt phiên WS (FULL gate S7-CHAT-BE-GATE-3 — L2 HIGH) ───────────────────
+  it("🔒 severUserSessions cắt MỌI socket của user qua user-room (rộng nhất), có tiền tố tenant", () => {
+    const { svc, server, disconnectSockets } = makeEmitter();
+    svc.severUserSessions(COMPANY, USER_B);
+
+    // `userRoomName` chứ KHÔNG phải `chatUserRoomName`: socket trượt cổng quyền CHAT vẫn nằm trong
+    // user-room và vẫn nhận `notification:new` — bỏ sót nó là để phiên sống sau khi tài khoản bị khoá.
+    expect(server.in).toHaveBeenCalledWith(userRoomName(COMPANY, USER_B));
+    expect(server.in).not.toHaveBeenCalledWith(chatUserRoomName(COMPANY, USER_B));
+    // `true` = đóng cả kết nối tầng dưới, không chỉ rời namespace.
+    expect(disconnectSockets).toHaveBeenCalledWith(true);
+  });
+
+  it("severUserSessions no-op khi chưa gắn server (boot sớm / REALTIME_ENABLED=false)", () => {
+    const svc = new RealtimeEmitterService();
+    expect(() => svc.severUserSessions(COMPANY, USER_B)).not.toThrow();
+  });
 
   // ─── đích phát ─────────────────────────────────────────────────────────────────
   it("emitChatMessage phát tới ĐÚNG room của phòng (tiền tố tenant `co:{companyId}:`)", () => {

@@ -327,21 +327,24 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-6 — thông báo CHAT (DB cô lập, đ
       expect(mine[0].dedupe_key).toMatch(new RegExp(`chat:${roomId}:${peer}:\\d+$`));
       // `unread_count` là ảnh chụp của MỘT trong ba tin, không phải tổng 3 và cũng không phải placeholder
       // chưa thay — vế này đúng bất kể event nào thắng cuộc gộp lô. Vế MẠNH hơn ("đúng giá trị của tin
-      // ĐẦU") phụ thuộc thứ tự tiêu thụ outbox, hiện KHÔNG được bảo đảm ⇒ tách xuống ca dưới, gắn KI-059.
+      // ĐẦU") nằm ở ca 6b; giữ vế yếu ở đây để ca này vẫn đo ĐÚNG thứ nó nói (gộp lô), không đo thứ tự.
       expect([1, 2, 3]).toContain(mine[0].payload.unread_count);
     });
 
-    // ⛔ KI-059 — `outbox_events` KHÔNG phải FIFO. `OutboxWorker.claim()` chọn hàng theo `ORDER BY
-    // available_at` nhưng thứ tự hàng của `RETURNING` là do planner sinh, và `processEvent` lặp đúng theo
-    // thứ tự đó. Đo 2026-08-03 (lane mediaos_chatbe6, log tạm trong `claim()`): enqueue 1→2→3 trả về
-    // `[2,1,3]`; ba lượt khác cho thứ tự ĐẢO. Event nào được tiêu thụ TRƯỚC sẽ thắng cuộc gộp lô và đóng
-    // dấu `unread_count` của chính nó, nên con số này hiện là 1 HOẶC 2 HOẶC 3 tuỳ lượt chạy.
+    // ✅ KI-059 ĐÃ ĐÓNG bởi `S7-INT-OUTBOX-FIFO-1` — ca này là NGHIỆM THU end-to-end của bản vá đó.
     //
-    // Ca này giữ nguyên khẳng định ĐÚNG (giá trị của tin ĐẦU) và để SKIP — KHÔNG hạ assert xuống cho khớp
-    // hành vi hỏng, vì làm thế là đóng đinh lỗ hổng ở tư thế mở. Gốc nằm ở hạ tầng event bus dùng chung
-    // (ảnh hưởng cả TASK/LEAVE/ATT/GOAL), KHÔNG ở CHAT ⇒ owner chốt tách `S7-INT-OUTBOX-FIFO-1`; WO đó
-    // BỎ `skip` ở đây làm nghiệm thu end-to-end của mình.
-    it.skip("ca 6b (KI-059) — unread_count giữ giá trị của tin ĐẦU trong lô", async () => {
+    // Lịch sử để người sau không vá lùi: `OutboxWorker.claim()` từng đặt `UPDATE … RETURNING` làm câu
+    // NGOÀI CÙNG, nên `ORDER BY` trong CTE chỉ chọn hàng nào được claim chứ không định thứ tự trả về —
+    // planner sinh thứ tự đó. Đo thật: gieo seq 0..11 nhận về `[0,8,10,7,6,11,5,2,1,4,3,9]`. Event nào
+    // tiêu thụ TRƯỚC thắng cuộc gộp lô và đóng dấu `unread_count` của chính nó ⇒ con số này từng là 1
+    // HOẶC 2 HOẶC 3 tuỳ lượt chạy. Ca này khi đó để `skip` với assert ĐÚNG (không hạ assert xuống cho
+    // khớp hành vi hỏng — làm thế là đóng đinh lỗ hổng ở tư thế mở).
+    //
+    // ⚠️ Giới hạn tồn dư (KHÔNG do ca này phủ): ba tin dưới đi qua BA transaction HTTP riêng nên
+    // `available_at` tăng thật. Event enqueue trong CÙNG một transaction thì chia sẻ `now()` ⇒ cả
+    // `available_at` lẫn `created_at` bằng nhau, tie-break rơi xuống `id` (UUID ngẫu nhiên) ⇒ thứ tự
+    // trong-tx vẫn KHÔNG phải thứ tự enqueue. Muốn đúng tuyệt đối cần cột bigserial = migration = WO khác.
+    it("ca 6b (KI-059) — unread_count giữ giá trị của tin ĐẦU trong lô", async () => {
       const peer = await freshPeer("bucketfirst");
       const roomId = await openDirect(tSender, peer);
       for (const i of [1, 2, 3]) {

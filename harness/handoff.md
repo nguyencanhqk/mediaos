@@ -4,6 +4,139 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
+## Phiên 2026-08-03b (session 99a7c530) — chốt PR #327 cho gate-3 + tìm ra nguyên nhân THẬT của 2 mục "chờ owner"
+
+> Tiếp nối phiên `56e133e4`. **Cảnh báo "26 file dirty" của ô dưới đã LỖI THỜI** — phiên đó có commit
+> (`03f9a924`) SAU khi viết handoff. Cây sạch, đang đứng trên `wo/s7-chat-be-gate-3`.
+
+**Đã làm:** đóng sổ 4 WO CHAT còn treo → mở **PR #327** (base `wave/s7-chat`, KHÔNG gắn auto-merge vì
+vùng đỏ) → CI đỏ ở **hai** job → truy ra **ba** nguyên nhân, **tất cả nằm trong test**, vá ở `4f52948c`.
+
+### Hai kết luận của phiên trước bị lật — cùng một gốc: đỏ nằm trong DB, không trong code
+
+1. **"`update:project` là `is_sensitive` nhưng ngoài allowlist ⇒ cần WO riêng"** — **KHÔNG PHẢI.**
+   `chat-be5-derived-rooms.int-spec.ts` khai `["update","project",…,true]` trong khi catalog THẬT là
+   `false` (mig `0005` L224; `0485` bước (b) chỉ nâng 5 cặp khác). `seedPermissionCatalog` upsert
+   `DO UPDATE SET is_sensitive = EXCLUDED.is_sensitive` vào `permissions` — **bảng TOÀN CỤC**, không
+   `company_id`, không ai dọn. Và **CI đặt `LANE_DB: mediaos` = chính DB của job** (api.yml:221) nên
+   chat-be5 lật cờ ngay trong DB mà `auth-me-capabilities.int.spec.ts` dùng ⇒ 3 ca TASKCAP đỏ, **phụ
+   thuộc thứ tự chạy**.
+   ⚠️ Phép thử "stash sạch code, chạy lại trên CÙNG lane, vẫn đỏ y hệt" nghe đanh thép nhưng **không
+   phân biệt được gì**: stash bao nhiêu lần thì hàng catalog vẫn `t`. Cách đúng tốn 10 giây: đo hàng đó
+   ở **nhiều DB** — 4 DB cho `f`, riêng lane từng chạy chat-be5 cho `t`.
+2. **"Lô int-spec thứ hai đỏ 1/4 lượt, không bắt được tên ca"** — thực ra là **HAI chế độ đỏ khác nhau**,
+   và chính vì trộn lẫn nên không ai bắt được tên:
+   - **Có tên:** `outbox-fifo.int-spec.ts` — spec **tự dựng sai tiền đề**. `available_at` lấy `now()` của
+     TỪNG câu INSERT (mỗi câu một tx) trong khi khoảng lùi giảm dần: hai đại lượng ngược chiều, cách nhau
+     đúng 50ms ⇒ một câu chậm >50ms là đảo trật tự. Nhận `[0..8, 11, 9, 10]` — trông y hệt "bản vá FIFO
+     hỏng". Vá: neo **MỘT** mốc `now()`.
+   - **KHÔNG tên:** `ERR_IPC_CHANNEL_CLOSED` (tinypool@1.1.1) — `rc=1` với **0 ca đỏ**. 2/8 lượt dính.
+     Đây là ứng viên số một bị đọc thành "test đỏ".
+
+### Bài học phương pháp
+
+- **RED-proof flake không cần chờ may.** Ép đúng điều kiện tải: thêm `sleep(50ms+ε)` giữa các INSERT →
+  dạng CŨ ĐỎ, dạng VÁ XANH. Một phút, tất định, thay cho "chạy 4 lượt xem có đỏ không".
+- **Sửa spec xong phải kiểm spec CÒN BẮT ĐƯỢC BUG KHÔNG.** Đã hoàn nguyên `claim()` về dạng trước khi vá
+  → spec (đã sửa timing) vẫn ĐỎ → khôi phục → XANH. Không có bước này thì "vá flake" rất dễ là "làm cùn
+  cái test".
+- **Đo trước khi lặp lại phát hiện của reviewer.** MEDIUM "`users` còn DELETE ⇒ cascade xoá CỨNG
+  `chat_messages`" sai một nửa: `mediaos_app` **chỉ có UPDATE** trên `users`, DELETE chỉ role owner có ⇒
+  runtime không với tới. Phần thật là FK `chat_messages_sender_id_fkey ON DELETE CASCADE` — rủi ro ở tầng
+  migration/script, không phải lỗ phân quyền. (`UPDATE(visible_from_seq)` cho `mediaos_app` thì **đúng**.)
+
+### Số đo
+
+api `src/**` **253 file / 4060 test XANH** (lane `mediaos_outboxfifo`, gồm `auth-me-capabilities` 48/48) ·
+lô 14 int-spec CHAT+outbox **8 lượt, 0 ca đỏ có tên** · typecheck 10/10 · lint 7/7 (đều `TURBO_FORCE=1`).
+
+### Chưa xong / chờ người
+
+- **PR #327 chờ owner review+merge** vào `wave/s7-chat`. Không gắn nhãn auto-merge (vùng đỏ + base là
+  nhánh wave). Sau khi merge: hàng đợi kế là **`S7-CHAT-FE-1`** — toàn bộ lớp BE của wave đã đóng.
+- **Còn 2 mục chờ owner** (mục thứ 3 đã gỡ, xem trên): ① gửi lại tệp sang phòng thứ hai làm mất `url` ở
+  phòng thứ nhất — quyết định SẢN PHẨM; ② ~15 MEDIUM, đáng gom nhất là 4 mục least-privilege.
+- **Ứng viên WO mới:** `seedPermissionCatalog` ghi đè `is_sensitive` im lặng và không hoàn nguyên. Vá đúng
+  tầng là ở helper (giữ giá trị migration, kêu to khi lệch) nhưng phải audit mọi caller đang CỐ Ý lật cờ.
+- **`S7-CHAT-RT-0` còn nguyên một mục `done_when` là bước NGƯỜI:** smoke bằng trình duyệt thật.
+
+## Phiên 2026-08-03 (session 56e133e4) — FULL gate `S7-CHAT-BE-GATE-3` + 6 vá 🔴 · ~~26 FILE CHƯA COMMIT~~ (ĐÃ COMMIT `03f9a924`)
+
+> ⛔ **ĐỌC Ô NÀY TRƯỚC KHI CHẠY BẤT KỲ LỆNH GIT NÀO.** Cây `wave/s7-chat` đang có **26 file dirty** là
+> công việc đã hoàn thành + verify của phiên này, **chưa commit**. Chỉ có MỘT worktree ⇒ phiên sau đứng
+> đúng trên cây này. **CẤM `git add -A`, cấm `git checkout`/`git stash`/đổi nhánh** khi chưa chốt. Đây
+> đúng bẫy đã dính với phiên `69de512c` (xem ô Friction phiên 2026-08-01).
+> Chốt nhanh: `git checkout -b wo/s7-chat-be-gate-3 && git add <đúng path của mình> && git commit`.
+
+**Đã làm:** chạy FULL gate 5 lane trên TOÀN bề mặt CHAT (`master...HEAD`: 62 file, +12.747 dòng) rồi vá
+hết CRITICAL + 5 HIGH. Lý do gate: 5 WO **chưa từng qua gate** (`DB-2`, `BE-7`, `RT-0`, `RT-1`, và `BE-6`
+mới có 1/3 reviewer), cộng với việc gate cũ đã TRÔI — `chat-access.service.ts` (file 3-bất-biến) bị +69
+dòng SAU khi được bless ở `631d683e`.
+
+- **Verdict:** L1 PASS · L2/L3/L4/L5 BLOCK. **L2 và L4 độc lập tìm ra CÙNG một CRITICAL** — tín hiệu mạnh
+  hơn bất kỳ verdict đơn lẻ nào. L1 thì **bác bỏ** giả thuyết trôi-gate tôi đưa cho nó (phần +69 dòng là
+  siết chặt, không nới) — giữ được cách làm này: đưa giả thuyết cho reviewer và chấp nhận nó nói "sai".
+- **CRITICAL đã vá:** `sendMessage` dựng DTO bằng `readMessage(actor,…)` = **đã ký cho NGƯỜI GỬI** rồi
+  `emitChatMessage` phát nguyên object đó cho CẢ PHÒNG; `wsChatMessageEventSchema = chatMessageSchema` giữ
+  nguyên `attachments[].url`. URL presign là **bearer** ⇒ ai cầm cũng tải được, 0 dòng `file_access_logs`.
+  Vá: khai `wsChatAttachmentSchema` KHÔNG có `url`/`thumbnailUrl` (khai LẠI, không `.omit()`).
+- **5 HIGH đã vá:** cắt phiên WS khi thu hồi phiên (SPEC-15 §18, chốt ở `revokeAllSessionsForUserTx`) ·
+  `LEAST(${x}::int)` trên cột **bigint** ⇒ `seq ≥ 2^31` trả **500** thay vì kẹp trần · `removeMember` đồng
+  bộ theo `pm.user_id` legacy trong khi vị từ phòng chat đi qua `employee_profiles.user_id` ·
+  `S7-FND-LINKFALLBACK-1` · phần im-lặng của tệp đa-link.
+- **KI-059 ĐÓNG** (`S7-INT-OUTBOX-FIFO-1`) kèm **phạm vi bảo đảm nói chính xác**: chỉ đúng trong MỘT lô
+  claim của MỘT worker — không với tới ties trong cùng tx, retry-backoff, và đa-instance.
+
+### Ba bài học đắt nhất phiên này
+
+1. **Đề xuất của reviewer có thể là VECTOR LEO THANG — phải tự thẩm định trước khi làm.** L4 đề nghị nới
+   luật AND của `decideForLinkedFile` để "người có quyền ở phòng mình vẫn tải được". Làm nguyên văn thì kẻ
+   tấn công chỉ cần link tệp của phòng nó KHÔNG thuộc vào tin nhắn của CHÍNH NÓ là được cấp quyền — và đó
+   đúng là lỗ `S5-TASK-COVER-1` đã đóng. **Giữ AND**, chỉ vá phần khuyết tật thật (sự im lặng) bằng
+   `deniedByLink` (chẩn đoán, CẤM dùng để phân quyền).
+2. **Spec lái worker thật trên lane DB dùng chung vừa ăn cắp vừa bị cướp.** Spec bằng chứng ĐẦU TIÊN của
+   tôi cho KI-059 dùng `processBatch(50)` + gieo probe `available_at` lùi 1 giờ (= già nhất DB) ⇒ worker
+   spec khác nhặt trước (tất định, vì `ORDER BY available_at`), còn worker của tôi đánh `'done'` im lặng
+   mọi event không có consumer trong bus. LIGHT gate bắt được. Luật đã có sẵn ở
+   `dead-letter-alert-threshold.int-spec.ts:12-15` và `test/helpers/outbox-drain.ts` — **đọc trước khi viết
+   spec đụng outbox**. Bản viết lại: probe lùi ~600ms, batch đúng bằng N, TRẢ LẠI event lỡ nuốt, và tách
+   bạch "bị cướp probe" khỏi "vá hỏng" bằng assert riêng có thông điệp chẩn đoán.
+3. **Đổi chữ ký thành BẮT BUỘC để TypeScript chỉ mặt caller.** `revokeAllForUserTx(+companyId)` và
+   `decideForLinkedFile(+everLinked)` — không dùng tham số optional-mặc-định-false, vì caller mới quên là
+   lỗ mở lại IM LẶNG. Cách này lôi ra 5 + 15 điểm gọi mà grep sẽ sót.
+   Kèm: **census nguồn bắt được 2 lỗ mà reviewer không thấy** — `self_revoke` và `self_revoke_others` thu
+   hồi phiên ở DB nhưng không cắt socket (thiết bị vừa bị "đăng xuất từ xa" vẫn nhận tin). Nhánh `rotated`
+   CỐ Ý không cắt và census khoá luôn ngoại lệ đó.
+
+### Số đo (LANE_DB=mediaos_outboxfifo)
+
+Unit **1217/1220** · int-spec 5 module resolver **139/139** · CHAT int-spec **164/164** (chạy 2 lô) ·
+typecheck workspace **10/10** · lint **0 error**. **Mọi vá đều có RED-proof thật** (lật ngược bản vá,
+xác nhận đỏ, khôi phục) — không có vá nào chỉ "xanh sau khi sửa".
+
+### 3 mục CHỜ OWNER (chưa ai chốt)
+
+1. ~~`update:project` là `is_sensitive` nhưng ngoài allowlist~~ — **KẾT LUẬN NÀY SAI, đã đính chính ở
+   commit `4f52948c`.** Catalog thật khai `('update','project', false)` (`0005:224`); giá trị `TRUE` tôi
+   đo được là **rác do fixture của `chat-be5` đóng dấu vào bảng `permissions` toàn cục**. Không có lỗ phân
+   quyền; WO `S7-AUTH-CAPSWEEP-1` đã GỠ, thay bằng `S7-QA-CATALOGFIXTURE-1` (nhắm đúng cơ chế ô nhiễm).
+   **Bài học phương pháp — đây mới là thứ đáng mang đi:** phép thử "`git stash` rồi chạy lại trên CÙNG
+   lane" trông rất thuyết phục nhưng **không phân biệt được lỗi nằm trong DB**; stash bao nhiêu lần thì
+   hàng catalog vẫn `t`. Muốn quy trách nhiệm cho code phải đổi **DB sạch**, không phải đổi code.
+2. **Hành vi gửi lại tệp sang phòng thứ hai** làm mất `url` ở phòng thứ nhất — quyết định SẢN PHẨM: chấp
+   nhận (an toàn, gây bất ngờ) hay đổi tầng GHI để gửi-lại tạo **bản sao tệp** thay vì link thứ hai.
+3. **~15 MEDIUM** còn tồn. Đáng gom nhất: 4 mục least-privilege của L3 — `GRANT UPDATE(visible_from_seq)`
+   là quyền CHẾT đang gác bất biến CHAT-DEC-008 bằng *một unit test*; `users` còn DELETE ⇒ cascade xoá
+   CỨNG `chat_messages` (bảng append-only). Một migration expand-contract là gọn.
+
+### Chưa xong / chưa chắc
+
+- **Chưa commit, chưa PR, chưa lên master.**
+- Lô int-spec thứ hai **đỏ 1 lần trong 4 lượt**, KHÔNG bắt được tên ca; 3 lượt sau xanh sạch. Chưa kết
+  luận được — đừng đọc thành "đã ổn định".
+- Lệnh chạy lại: `set -a; . ./.env; set +a; unset DATABASE_URL DATABASE_DIRECT_URL DATABASE_WORKER_URL;
+  export LANE_DB=mediaos_outboxfifo` (lane này còn sống, nhớ `DROP DATABASE` khi xong — pgdata từng phình).
+
 ## Phiên 2026-08-02 (session b817bc82) — chuỗi cổng G4→G6 + NGHIỆM THU engine phép ĐẠT
 
 > Bằng chứng đầy đủ: **`docs/_review/S6-GOLIVE-G4-G6-EVIDENCE-2026-08-02.md`**. `RELEASE-10` §6 đã thêm cột Trạng thái.

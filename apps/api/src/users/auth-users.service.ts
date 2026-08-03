@@ -252,7 +252,12 @@ export class AuthUsersService {
       if (!target) throw new NotFoundException(USER_NOT_FOUND);
 
       await this.repo.deleteTwoFactorTx(tx, actor.companyId, id);
-      const revokedSessionCount = await this.auth.revokeAllForUserTx(tx, id, "2fa_reset");
+      const revokedSessionCount = await this.auth.revokeAllForUserTx(
+        tx,
+        actor.companyId,
+        id,
+        "2fa_reset",
+      );
       await this.audit.record(tx, {
         action: "user.2fa_reset",
         objectType: "user",
@@ -284,7 +289,12 @@ export class AuthUsersService {
       if (!updated) throw new NotFoundException(USER_NOT_FOUND);
       // S2-AUTH-BE-9: khoá tài khoản = thu hồi MỌI phiên (refresh_tokens + user_sessions) NGAY trong CÙNG
       // tx (cùng commit/rollback với status). Refresh token cũ trình lại → 401 tức thì. count vào audit.
-      const revokedSessionCount = await this.auth.revokeAllForUserTx(tx, id, "locked");
+      const revokedSessionCount = await this.auth.revokeAllForUserTx(
+        tx,
+        actor.companyId,
+        id,
+        "locked",
+      );
       await this.audit.record(tx, {
         action: "user.locked",
         objectType: "user",
@@ -358,7 +368,12 @@ export class AuthUsersService {
       if (!before) throw new NotFoundException(USER_NOT_FOUND);
       const deleted = await this.repo.softDeleteTx(tx, actor.companyId, id, actor.id);
       if (!deleted) throw new NotFoundException(USER_NOT_FOUND);
-      const revokedSessionCount = await this.auth.revokeAllForUserTx(tx, id, "deleted");
+      const revokedSessionCount = await this.auth.revokeAllForUserTx(
+        tx,
+        actor.companyId,
+        id,
+        "deleted",
+      );
       await this.audit.record(tx, {
         action: "user.deleted",
         objectType: "user",
@@ -445,6 +460,7 @@ export class AuthUsersService {
       if (!updated) throw new NotFoundException(USER_NOT_FOUND);
       const revokedSessionCount = await this.auth.revokeAllForUserTx(
         tx,
+        actor.companyId,
         id,
         "admin_password_reset",
       );

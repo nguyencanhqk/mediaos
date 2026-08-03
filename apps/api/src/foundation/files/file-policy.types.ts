@@ -55,6 +55,16 @@ export interface FilePolicyDecision {
   allow: boolean;
   /** Machine-readable reason — for log/audit only, never a privilege source. */
   reason: FilePolicyReason;
+  /**
+   * S7-CHAT-BE-GATE-3 (L4 HIGH) — WHICH link produced the deny, when the file has several.
+   *
+   * `decideForLinkedFile` ANDs the verdict over every live link, so a file the caller legitimately sees
+   * through link A can still be denied because of link B (the same file re-attached elsewhere). Without
+   * this field the caller only learns "deny-resolver" and the user is left with a file that shows its
+   * name and size but never downloads — no error, no log, nothing to grep. Diagnostic ONLY: never branch
+   * authorization on it, and never surface it to a client (it names an entity the caller cannot see).
+   */
+  deniedByLink?: { moduleCode: string; entityType: string; entityId: string };
 }
 
 export type FilePolicyReason =
@@ -65,6 +75,11 @@ export type FilePolicyReason =
   | "deny-no-resolver" // S2-FND-BE-4 (H1): a LINKED file whose owning (module,entity) has NO registered
   // resolver → fail-closed DENY. Must NOT fall back to FOUNDATION.FILE.* — a broad file-download grant
   // must never read a module-owned file (e.g. HR contract) until that module registers its resolver.
+  | "deny-links-revoked" // S7-FND-LINKFALLBACK-1: the file HAS been module-owned (≥1 link, all now
+  // soft-deleted) and has 0 live links. It must NOT fall back to FOUNDATION.FILE.* — unlinking is a
+  // REVOCATION, and falling back would make it WIDEN access instead of narrowing it (company-admin holds
+  // download:foundation-file via bulk grant 0435). Kept distinct from `deny-no-resolver` on purpose: the
+  // two need opposite operator responses (register a resolver vs. the file is intentionally orphaned).
   | "deny-tenant" // missing/invalid tenant scope (companyId/userId)
   | "deny-error"; // exception while deciding — fail-closed
 

@@ -369,6 +369,31 @@ export class ProjectsRepository {
 
   // ── Actor / lookup ─────────────────────────────────────────────────────────
 
+  /**
+   * `employee_profiles.user_id` theo employeeId — danh tính dùng để ĐỒNG BỘ phòng chat dẫn xuất.
+   *
+   * ⚠️ CỐ Ý KHÔNG lọc `status = 'active'` và KHÔNG lọc `deleted_at` (khác `findActiveEmployeeByUserTx`
+   * ngay dưới). Hàm này phục vụ đường THU HỒI: người vừa bị vô hiệu hoá/xoá mềm chính là người cần gỡ
+   * khỏi phòng chat nhất. Thêm bộ lọc trạng thái ở đây = trả `undefined` đúng lúc cần nhất ⇒ không thu
+   * hồi được, im lặng.
+   *
+   * Vì sao tồn tại: vị từ thành viên phòng dự án (`desiredProjectPairsSql`) lấy danh tính qua
+   * `pm.employee_id → employee_profiles.user_id`, KHÔNG qua `project_members.user_id` (cột legacy).
+   * Hai cột đó không có ràng buộc nào ghim với nhau, nên đồng bộ theo cột legacy là đồng bộ SAI NGƯỜI.
+   */
+  async findEmployeeUserByIdTx(
+    tx: TenantTx,
+    companyId: string,
+    employeeId: string,
+  ): Promise<string | null> {
+    const [row] = await tx
+      .select({ userId: employeeProfiles.userId })
+      .from(employeeProfiles)
+      .where(and(eq(employeeProfiles.companyId, companyId), eq(employeeProfiles.id, employeeId)))
+      .limit(1);
+    return row?.userId ?? null;
+  }
+
   /** employee_profiles ACTIVE của actor (userId) trong tenant → {id,userId} | undefined (creator=owner). */
   async findActiveEmployeeByUserTx(
     tx: TenantTx,
