@@ -7,7 +7,9 @@
 >
 > **Re-anchor (03/08/2026):** đo lại toàn bộ trích dẫn ở HEAD `104294bd` (chính là commit đã thêm plan này — chưa có commit nào sau đó trên `wave/s7-chat`; `631d683e` "vá FULL gate BE-1/BE-2" là CHA trực tiếp, đã nằm sẵn trong lịch sử, không phải commit mới thêm). `git status --short` sạch. `main.ts` + `realtime/**` (và mọi file khác được trích ở §0) **không đổi** kể từ khi plan viết — toàn bộ trích dẫn cũ đã được đối chiếu lại nguyên trạng; 3 chỗ sửa ở §0 (dòng `useGlobalPipes/…`, dòng `VALKEY_URL`, dòng grep shutdown-hook) là lỗi đo có sẵn từ bản gốc, không phải do code trôi.
 >
-> **Mục BLOCK thiết kế reviewer đã nêu — CÒN MỞ, KHÔNG vá ở pass re-anchor này:** chuỗi bằng chứng CORS dựng trên tiền đề sai về engine.io (cors middleware không bao giờ từ chối, chỉ bỏ header ACAO) · test dùng chung kênh pub/sub với PROD · rò client ioredis ở nhánh connect lỗi · `isMultiInstanceReady()` là ảnh chụp lúc boot · smoke trình duyệt không cưỡng chế được · int-spec phụ thuộc env. **Nghiêm trọng nhất:** gắn adapter khi **4 môi trường** (`.env` gốc, `apps/api/.env` test-only, `.env.dev`, `.env.prod` — đo lại 03/08: cả 4 đều có `VALKEY_URL=redis://localhost:6379`) dùng chung một Valkey, và `createAdapter(pubClient, subClient)` ở `valkey-io.adapter.ts:47` gọi KHÔNG truyền `opts.key` (mặc định channel prefix `"socket.io"` — xác nhận ở `@socket.io/redis-adapter@8.3.0` `RedisAdapterOptions.key`) ⇒ mọi môi trường phát/nhận trên CÙNG namespace pub/sub, int-spec (§4, ca 8-11) chạy trên máy dev có thể nối vào đúng kênh mà PROD/`.env.dev` đang dùng.
+> **✅ ĐÃ THI CÔNG 03/08/2026 — 6 mục BLOCK bên dưới đã ĐÓNG, xem §7.** Hai mục đổi cả thiết kế: (1) chuỗi bằng chứng CORS dựng trên tiền đề SAI đã được thay bằng `allowRequest` (cưỡng chế thật) — đo lại engine.io@6.6.8 xác nhận tiền đề sai đúng như reviewer nêu; (2) kênh pub/sub Valkey giờ LUÔN có `opts.key` suy theo môi trường. Phần văn bản gốc bên dưới GIỮ NGUYÊN làm dấu vết thiết kế.
+>
+> **Mục BLOCK thiết kế reviewer đã nêu (bản gốc — nay đã đóng ở §7):** chuỗi bằng chứng CORS dựng trên tiền đề sai về engine.io (cors middleware không bao giờ từ chối, chỉ bỏ header ACAO) · test dùng chung kênh pub/sub với PROD · rò client ioredis ở nhánh connect lỗi · `isMultiInstanceReady()` là ảnh chụp lúc boot · smoke trình duyệt không cưỡng chế được · int-spec phụ thuộc env. **Nghiêm trọng nhất:** gắn adapter khi **4 môi trường** (`.env` gốc, `apps/api/.env` test-only, `.env.dev`, `.env.prod` — đo lại 03/08: cả 4 đều có `VALKEY_URL=redis://localhost:6379`) dùng chung một Valkey, và `createAdapter(pubClient, subClient)` ở `valkey-io.adapter.ts:47` gọi KHÔNG truyền `opts.key` (mặc định channel prefix `"socket.io"` — xác nhận ở `@socket.io/redis-adapter@8.3.0` `RedisAdapterOptions.key`) ⇒ mọi môi trường phát/nhận trên CÙNG namespace pub/sub, int-spec (§4, ca 8-11) chạy trên máy dev có thể nối vào đúng kênh mà PROD/`.env.dev` đang dùng.
 
 ---
 
@@ -200,3 +202,36 @@ Bổ sung (không phải done_when gốc nhưng bắt buộc theo CLAUDE.md §8/
 - [ ] Route census không đổi — tự verify, không cần `ROUTE_CENSUS_WRITE=1`.
 - [ ] Lane DB `mediaos_chatrt0` drop sau khi xong.
 - [ ] `harness/backlog.mjs` — cập nhật `status` của `S7-CHAT-RT-0` khi xong (không sửa tay `docs/STATUS.md`, tự sinh).
+
+---
+
+## 7. Đóng 6 mục BLOCK — quyết định thi công 03/08/2026
+
+| # | BLOCK reviewer nêu | Cách đóng | Bằng chứng |
+| --- | --- | --- | --- |
+| 1 | **Chuỗi bằng chứng CORS dựng trên tiền đề SAI** — `cors` middleware không bao giờ từ chối, chỉ bỏ header ACAO | **ĐÚNG, đo lại xác nhận:** engine.io@6.6.8 `build/server.js:61-62` chỉ `this.use(require("cors")(this.opts.cors))`; middleware `cors` khi origin lạ chỉ bỏ header rồi `next()`. ⇒ `done_when` #2 ("bị từ chối ở handshake") KHÔNG thể đạt bằng riêng option `cors`. Thêm **`allowRequest`** (`valkey-io.adapter.ts`) — engine.io `build/server.js:153-161` trả `Server.errors.FORBIDDEN`, cưỡng chế cho MỌI loại client. `cors` giữ nguyên bên cạnh để trình duyệt nhận đúng header ở đường hợp lệ. Request KHÔNG có `Origin` (client không phải trình duyệt) được CHO PHÉP — lý do đầy đủ ở `ws-adapter-config.ts#isOriginAllowed` | ĐO ĐỎ THẬT: gỡ `allowRequest` (giữ nguyên `cors`) ⇒ **3 ca đỏ**, trong đó client Node với origin `http://evil.test` **NỐI THÀNH CÔNG** — đúng như reviewer dự đoán, bản test theo plan gốc sẽ là XANH GIẢ |
+| 2 | **Test dùng chung kênh pub/sub với PROD** (4 môi trường 1 Valkey, `createAdapter` không truyền `opts.key`) | `createAdapter(pub, sub, { key })` với `key = socket.io:{NODE_ENV}:{db}`, `db` = `LANE_DB` ?? tên DB trong `DATABASE_URL` ?? `nodb` (`resolveValkeyChannelKey`). Hai tiến trình chỉ chung kênh khi phục vụ CÙNG database ở CÙNG chế độ chạy. Không cần thêm env var, không cần ops đổi gì | `ws-adapter-config.spec.ts` — ca "kênh của test KHÔNG BAO GIỜ trùng kênh PROD" + "KHÔNG BAO GIỜ trả về khoá mặc định `socket.io` trần". Gỡ `opts.key` ⇒ 1 ca đỏ |
+| 3 | **Rò client ioredis ở nhánh connect lỗi** | `catch` đóng CẢ HAI client (`quit()`, fallback `disconnect()`) — trước đây pub connect xong + sub hỏng thì pubClient bị bỏ rơi, retry nền suốt vòng đời tiến trình. Kèm bản vá thứ hai reviewer chưa nêu: **listener `'error'` gắn TRƯỚC `connect()`** (bản gốc gắn SAU `await`, tức nhánh hỏng là nhánh KHÔNG có listener ⇒ `unhandled 'error' event` có thể giết tiến trình) | `valkey-io.adapter.spec.ts` — ca "pub connect XONG nhưng sub HỎNG → ĐÓNG cả hai client" |
+| 4 | **`isMultiInstanceReady()` là ảnh chụp lúc boot** | ĐÚNG, không sửa được rẻ — không đổi thành health-check (sẽ là hạ tầng riêng). Thay vào đó **ghi thẳng giới hạn vào JSDoc của hàm**: "KHÔNG dùng làm tín hiệu liveness". Người đọc getter không thể hiểu nhầm nữa | JSDoc `isMultiInstanceReady()`; nợ giữ nguyên ở §5 |
+| 5 | **Smoke trình duyệt không cưỡng chế được** | Không giả vờ tự động hoá. Nhưng phần "trình duyệt sẽ chặn" giờ được chứng minh bằng HAI assert máy chạy được: (a) origin hợp lệ → response CÓ `Access-Control-Allow-Origin` đúng origin; (b) origin lạ → KHÔNG có header **và** HTTP **403**. Bước NGƯỜI ở §6 done_when #4 vẫn giữ, nhưng giờ nó xác nhận lại một hành vi đã có bằng chứng máy, không còn là bằng chứng DUY NHẤT | 2 ca `fetch` thô trong int-spec |
+| 6 | **int-spec phụ thuộc env** | int-spec tự set `CORS_ORIGIN` + `REALTIME_ENABLED` trong `beforeAll` TRƯỚC `app.listen` (`createIOServer` đọc `loadEnv()` lúc listen) ⇒ allowlist tất định, không phụ thuộc `.env` của máy chạy | `chat-rt0-ws-adapter.int-spec.ts` `beforeAll` |
+
+### 7.1 Lệch so với plan gốc (cố ý)
+
+- **Chữ ký `connectToValkey(url, channelKey)`** — thêm tham số bắt buộc (mục 2). 0 caller cũ nên không gãy gì.
+- **`setup-websocket-adapter.ts` KHÔNG log lặp** khi `connectToValkey` trả `false` — nhánh đó đã log ERROR bên trong adapter; plan gốc §1.1 log ở cả hai chỗ ⇒ 2 dòng ERROR cho 1 sự cố.
+- **Ca test 8 của §4 (plan gốc) là XANH GIẢ, đã thay.** "Client Node cross-origin connect thành công" KHÔNG chứng minh adapter đã wire: không có adapter thì socket.io v4 không cấu hình `cors`, engine.io không áp middleware nào, và client Node — vốn không thực thi SOP — vẫn nối được. Thứ THẬT SỰ đỏ khi adapter chưa wire là 2 ca deny + 2 ca header. Đo: gỡ `app.useWebSocketAdapter(adapter)` (đúng trạng thái trước WO) ⇒ **4/10 ca int-spec đỏ**.
+- **Ca test 6 (đọc source `main.ts`)** phải BỎ COMMENT trước khi so vị trí — chính comment giải thích thứ tự cũng chứa chuỗi `app.listen()`, quét thô đo nhầm văn xuôi (memory `guard-immutability-matches-comments`; đã tự vấp một lần khi thi công).
+
+### 7.2 Bằng chứng ĐỎ đã chạy (patch → run → hoàn nguyên)
+
+| Vá tạm | Kết quả |
+| --- | --- |
+| `logger.error` → `logger.warn` (nhánh connect-fail) | 1 ca đỏ |
+| `logger.error` → `logger.warn` (nhánh thiếu `VALKEY_URL`) | 1 ca đỏ |
+| Bỏ `opts.key` khỏi `createAdapter` | 1 ca đỏ |
+| Bỏ `allowRequest` (giữ `cors`) | 3 ca đỏ (unit) · 3 ca đỏ (int-spec) |
+| Bỏ `app.useWebSocketAdapter(adapter)` | 3 ca đỏ (unit) · **4 ca đỏ (int-spec)** |
+| Đảo thứ tự: `setupWebSocketAdapter` SAU `app.listen` | 1 ca đỏ |
+
+Hoàn nguyên xong: **47/47 unit + 10/10 int-spec XANH** (`LANE_DB=mediaos_chatrt0`).

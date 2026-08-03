@@ -9819,7 +9819,7 @@ export const backlog = [
     title:
       "Hạ tầng WS: GẮN ValkeyIoAdapter (hiện định nghĩa rồi nhưng KHÔNG chỗ nào dùng) — Socket.IO đang chạy in-memory và KHÔNG có CORS ⇒ trình duyệt không nối được",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/main.ts",
       "apps/api/src/realtime/**",
