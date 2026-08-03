@@ -45,6 +45,11 @@ import { PasswordService } from "../../src/auth/password.service";
 import { EventBus } from "../../src/events/event-bus";
 import { OutboxWorker } from "../../src/events/outbox-worker";
 import { drainOutboxUntilSettled } from "../helpers/outbox-drain";
+import {
+  acquireOutboxWorkerLock,
+  OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS,
+  type OutboxWorkerLock,
+} from "../helpers/outbox-worker-lock";
 import type { NotificationEngineService } from "../../src/notifications/notification-engine.service";
 import { OutboxNotificationBridge } from "../../src/notifications/outbox-notification-bridge.service";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
@@ -124,6 +129,7 @@ describe.skipIf(!hasLaneDb)("S4-INT-3 outbox LEAVE (đơn nghỉ phép) → NOTI
   let A: SeededTenant;
   let B: SeededTenant;
   const companyIds: string[] = [];
+  let outboxLock: OutboxWorkerLock | undefined;
 
   let passwordHash = "";
   let leaveTypeA = "";
@@ -355,9 +361,13 @@ describe.skipIf(!hasLaneDb)("S4-INT-3 outbox LEAVE (đơn nghỉ phép) → NOTI
     hrToken = await login(A.slug, `hr@${A.slug}.test`);
 
     bUser = await seedUser(direct, B.companyId, `b@${B.slug}.test`, passwordHash);
-  });
+
+    // S7-QA-OUTBOXPROBE-1 — mutex toàn cục cho spec lái OutboxWorker (xem helpers/outbox-worker-lock).
+    outboxLock = await acquireOutboxWorkerLock("leave-noti-e2e");
+  }, OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
+    await outboxLock?.release();
     await direct
       ?.query("DELETE FROM employee_profiles WHERE company_id = ANY($1::uuid[])", [companyIds])
       .catch(() => undefined);

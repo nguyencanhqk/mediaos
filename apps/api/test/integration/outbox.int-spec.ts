@@ -7,6 +7,11 @@ import { EventBus } from "../../src/events/event-bus";
 import { OutboxService } from "../../src/events/outbox.service";
 import { OutboxWorker } from "../../src/events/outbox-worker";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
+import {
+  acquireOutboxWorkerLock,
+  OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS,
+  type OutboxWorkerLock,
+} from "../helpers/outbox-worker-lock";
 import { cleanupTenants, seedCompany, type SeededTenant } from "../helpers/seed";
 
 /**
@@ -17,11 +22,16 @@ describe.skipIf(!hasDb)("G2-4 audit + outbox + event bus", () => {
   const dbsvc = new DatabaseService();
   const outbox = new OutboxService();
   let A: SeededTenant;
+  let outboxLock: OutboxWorkerLock | undefined;
 
   beforeAll(async () => {
     A = await seedCompany(direct, "ob");
-  });
+    // S7-QA-OUTBOXPROBE-1 — bus của spec này CHỈ có consumer riêng, nên `processEvent` sẽ đánh 'done' TERMINAL
+    // và IM LẶNG mọi event của spec khác mà nó claim phải. Mutex toàn cục là thứ chặn chiều "đi cướp" đó.
+    outboxLock = await acquireOutboxWorkerLock("outbox");
+  }, OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS);
   afterAll(async () => {
+    await outboxLock?.release();
     await cleanupTenants(direct, [A.companyId]);
     await direct.end();
   });

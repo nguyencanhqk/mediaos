@@ -61,6 +61,11 @@ import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/respo
 import { PasswordService } from "../../src/auth/password.service";
 import { OutboxWorker } from "../../src/events/outbox-worker";
 import { drainOutboxUntilSettled } from "../helpers/outbox-drain";
+import {
+  acquireOutboxWorkerLock,
+  OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS,
+  type OutboxWorkerLock,
+} from "../helpers/outbox-worker-lock";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -95,6 +100,7 @@ describe.skipIf(!hasLaneDb)(
     let appConn: Pool;
     let W: SeededTenant;
     const companyIds: string[] = [];
+    let outboxLock: OutboxWorkerLock | undefined;
 
     let managerUser = "";
     let employeeUser = "";
@@ -240,9 +246,13 @@ describe.skipIf(!hasLaneDb)(
 
       tok.manager = await login(`manager@${W.slug}.test`);
       tok.employee = await login(`employee@${W.slug}.test`);
-    });
+
+      // S7-QA-OUTBOXPROBE-1 — mutex toàn cục cho spec lái OutboxWorker (xem helpers/outbox-worker-lock).
+      outboxLock = await acquireOutboxWorkerLock("qa2-e2e-task-noti-dash");
+    }, OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS);
 
     afterAll(async () => {
+      await outboxLock?.release();
       await direct.query("DELETE FROM dashboard_widget_cache WHERE company_id = $1", [W.companyId]);
       await direct.query("DELETE FROM dashboard_widget_configs WHERE company_id = $1", [
         W.companyId,
