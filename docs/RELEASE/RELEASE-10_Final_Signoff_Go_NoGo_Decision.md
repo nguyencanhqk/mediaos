@@ -276,13 +276,25 @@ lối vào để thiết lập). Nghĩa là ai trộm được **mật khẩu** 
 vẫn đăng nhập được rồi **tự enroll authenticator CỦA HẮN**. Cờ chỉ thành lớp bảo vệ thật **sau khi
 người thật đã enroll**. ⇒ Với 3 tài khoản trên, rủi ro y hệt mô tả gốc của `KI-056`, chỉ khác tên vai.
 
-**Ba lựa chọn cho phần dư này (owner quyết, KHÔNG tự làm — là quyền của người có tên):**
+**➡️ OWNER CHỐT 2026-08-04: TẮT cờ trên `QUẢN LÝ CẤP CAO`** (phương án 3 — chấp nhận có chữ ký).
+Đã thực thi: `UPDATE roles SET requires_two_factor = false WHERE id = '18172dcf-…'`, đo trước `t` → sau
+`f`. Rủi ro tồn dư ký ở **`RELEASE-04` §3 mục `D4`**. Trạng thái sau khi tắt:
 
-1. **3 người enroll TOTP** — đóng đúng gốc, và mở khoá cho họ dùng hệ thống.
-2. **Gỡ luôn `QUẢN LÝ CẤP CAO`** khỏi tài khoản nào không thực sự cần: `luongphuonganh82` và
-   `tienbac308` đăng nhập **đúng MỘT lần, 21/07** (`login_logs`) — 369 quyền cho tài khoản chưa từng
-   dùng là bán kính thiệt hại không có ai đổi lại. Họ giữ `employee` nên vẫn vào được phần của mình.
-3. **Chấp nhận có chữ ký** — ghi vào `RELEASE-04` rằng 3 tài khoản gần-toàn-quyền đang chỉ có mật khẩu.
+| Vai | Quyền | Ép 2FA |
+| --- | --- | --- |
+| `SA` | 379 | ✅ **t** (giữ) — 2/2 tài khoản đã enroll |
+| `QUẢN LÝ CẤP CAO` | 369 | ⬜ **f** ← vừa tắt |
+| `company-admin` | 329 | ✅ **t** (giữ) |
+
+**0 tài khoản còn bị chặn** vì chưa enroll (đo lại sau khi tắt). ⚠️ `ngocha.nguyen20385@gmail.com` đã
+tự bật TOTP nên **vẫn bị hỏi mã lúc đăng nhập** — login challenge chạy theo `user_totp.enabled_at`,
+**độc lập** với cờ vai; tắt cờ KHÔNG gỡ 2FA của người đã bật (memory `twofactor-enforcement-model`).
+Không cần restart API: cờ vai đọc tươi mỗi request.
+
+**Hai phương án đã cân nhắc và KHÔNG chọn**, ghi lại để lần sau không phải bàn lại: (1) 3 người enroll
+TOTP — đóng đúng gốc nhưng chờ người; (2) gỡ `QUẢN LÝ CẤP CAO` khỏi `luongphuonganh82` + `tienbac308`
+(đăng nhập **đúng MỘT lần, 21/07**) để thu nhỏ bán kính thiệt hại — vẫn là việc đáng làm về sau, độc
+lập với cờ 2FA.
 
 **(3) 🐛 MÀN "SỬA VAI TRÒ" HIỂN THỊ SAI CỜ NÀY — phát hiện 04/08, đừng dùng nó làm bằng chứng.**
 Owner mở `/system/roles/:id/edit` cho `QUẢN LÝ CẤP CAO` và thấy ô **"Bắt buộc 2FA" KHÔNG tick**, trong
