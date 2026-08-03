@@ -1,4 +1,105 @@
-# Micro-plan — `S7-CHAT-BE-5` (🔴 red · FULL gate) — rev 2 (02/08/2026 — vá BLOCK rev 1)
+# Micro-plan — `S7-CHAT-BE-5` (🔴 red · FULL gate) — **rev 3** (03/08/2026 — vá 7 BLOCK còn lại của rev 2)
+
+> ## rev 3 — 7 mục BLOCK của rev 2 đã có quyết định. **Được phép code.**
+>
+> Nền đã đổi kể từ rev 2: `S7-CHAT-BE-3` land ở `8bd4e59f`, `S7-CHAT-BE-4` land ở `73f4862a`. Mọi
+> `file:dòng` của rev 2 vẫn đúng cho `employees`/`org`/`tasks` (BE-3/BE-4 chỉ chạm `src/chat` +
+> `foundation/files` + `contracts`).
+>
+> ### B1 — `DESIRED_PROJECT_MEMBER` thiếu vế trạng thái nhân viên → **gộp vào một bộ đồng bộ theo NGƯỜI**
+>
+> Vế thiếu là thật: `project_members.member_status='Active'` **không** nói gì về việc người đó còn làm việc
+> hay không. Nhân viên nghỉ việc (`status≠'active'`) hoặc bị xoá mềm vẫn giữ hàng `project_members` Active
+> ⇒ vẫn ở trong phòng chat dự án. Lời hứa của W12/W14 ("rời **MỌI** phòng dẫn xuất") khi đó chỉ đúng cho
+> phòng **department**, sai cho phòng **project** — đúng loại hỏng-một-nửa khó thấy nhất.
+>
+> **Chốt:** `DESIRED_PROJECT_MEMBER` join thêm `employee_profiles` theo `project_members.employee_id` và
+> đòi `status='active' AND deleted_at IS NULL AND user_id IS NOT NULL`. Vế `user_id IS NOT NULL` vốn đã
+> **bắt buộc về mặt kỹ thuật** — `chat_room_members` khoá theo `user_id`, không phải `employee_id` — nên
+> đây không phải điều kiện thêm mà là điều kiện vốn đã ngầm định, nay viết ra.
+>
+> ### B2 — `PATCH /employees/:id {status}` không có hook → **bỏ hẳn lối phân nhánh theo TRƯỜNG ĐÃ ĐỔI**
+>
+> Đo lại 03/08: `employees.service.ts:342` ghi `status: dto.status` ⇒ route họ-2 **đổi được trạng thái**,
+> không chỉ `orgUnitId`. Nhưng vá bằng cách "thêm một nhánh `if (dto.status)`" là chữa triệu chứng: bảng
+> W1-W14 có **9 điểm ghi phía nhân viên**, mỗi điểm tự quyết định "trường nào đổi thì thu hồi gì" là **9
+> bản sao của một luật** — và rev 2 đã bỏ sót đúng một trong chín.
+>
+> **Chốt — đổi hình dạng, không thêm nhánh:** mọi writer phía nhân viên gọi **đúng một** hàm
+>
+> ```text
+> syncEmployeeDerivedMembership(tx, companyId, employeeId, actor)
+> ```
+>
+> Hàm đó **tính lại tập mong muốn** cho riêng người đó (§3.3) rồi **diff với tập thực tế**, áp chênh lệch.
+> Nó KHÔNG nhận biết trường nào vừa đổi, nên không thể bỏ sót trường nào. Bảng W1-W14 giữ nguyên **danh
+> sách điểm chèn**; thứ đổi là mỗi điểm chỉ còn MỘT lời gọi thay vì một nhánh riêng.
+>
+> Hệ quả kéo theo (tốt): W8a/W8b/W9a/W9b/W10/W11/W12/W13/W14 dùng chung một đường; ca test "đổi phòng ban
+> qua route họ-2" và "nghỉ việc qua route họ-2" đi qua **cùng** một hàm nên không thể xanh-một-nửa.
+> Tương tự phía dự án: W6/W7 gọi `syncProjectRoomMembership(tx, companyId, projectId, employeeId, actor)`.
+>
+> ### B3 — `ProjectsService.updateProject` → **KHÔNG phải writer thành viên** (đo, không suy đoán)
+>
+> `updateTaskProjectSchema` (`packages/contracts/src/task.ts:435-449`) có đúng 9 trường:
+> `name · code · description · ownerEmployeeId · departmentId · priority · startDate · endDate` — **không
+> có `status`**, và không trường nào chạm `project_members`. Đóng/xoá dự án đi qua `closeProject` (W4) /
+> `deleteProject` (W5); thêm/bớt thành viên đi qua `addMember` (W6) / `removeMember` (W7). `departmentId`
+> của dự án **không** quyết định thành viên phòng chat dự án (thành viên đến từ `project_members`).
+>
+> Còn lại đúng một tác dụng: đổi `name` làm **tên phòng** dẫn xuất trôi. Đó là **cùng một món nợ** đã ghi
+> cho `OrgService.updateOrgUnit`/`HrDepartmentService.updateDepartment` ("rename không đồng bộ lại — nợ
+> §6"), không phải lỗ mới. **Chốt:** thêm `updateProject` vào danh sách "KHÔNG hook" §3.1 kèm đúng lý do
+> này, để lần rà sau không phải đo lại.
+>
+> ### B4 — SQL Pha 3 thiếu `company_id` tường minh → **thêm, không tranh luận**
+>
+> CLAUDE.md §2 mục 1: `company_id` ở **MỌI** query nghiệp vụ; RLS là hàng rào ép ở tầng DB, **không phải
+> lý do bỏ vế trong câu lệnh**. Job chạy dưới role worker và mỗi pha mở `withTenant` riêng — một GUC đặt
+> sai là ghi chéo tenant **hàng loạt** (job xử lý mọi company), bán kính nổ lớn hơn hẳn một request lẻ.
+> **Chốt:** mọi `INSERT … SELECT` và `UPDATE … WHERE` của Pha 3 mang `company_id = $companyId` tường minh
+> ở **cả** vế nguồn lẫn vế đích; ca test đọc SQL đã render đếm số lần xuất hiện (mẫu
+> `chat-search.sql.spec.ts` của BE-4).
+>
+> ### B5 — Bán kính nổ của kênh audit-`Failure` ngoài-tx
+>
+> Rủi ro thật: gọi `withTenant` thứ hai **trong khi** đang ở trong callback của `withTenant` thứ nhất là
+> chiếm client thứ hai từ pool khi client thứ nhất còn giữ transaction ⇒ **TREO** trên PgBouncer
+> transaction-mode, không báo lỗi (đúng bẫy `S7-CHAT-BE-3` §6.1 đã gặp).
+>
+> **Chốt:** dòng audit `Failure` ghi ở **catch NGOÀI** `withTenant` — sau khi `withTenant` đã ném và **đã
+> trả client về pool** — rồi mới ném tiếp. Tuyệt đối không ghi trong callback: tx ở đó đã ABORT
+> (`25P02`), dòng audit sẽ **rollback mất** cùng transaction, tức "có audit" là ảo tưởng. Cùng khuôn mà
+> WAVE §3.1 chốt cho CHAT-ERR-019 (từ chối → tx RIÊNG đã commit → rồi mới ném).
+>
+> ### B6 — `insertRoom` union mất `companyId` → **thêm vào cả 4 nhánh**
+>
+> Thiếu nó thì `companyId` phải đến từ ngữ cảnh ngầm, đúng thứ B4 vừa cấm. Cả 4 nhánh mang
+> `companyId: string` **bắt buộc**.
+>
+> ### B7 — `.returning()` của `restoreEmployeeTx` → **KHÔNG đổi shape công khai**
+>
+> Đổi `.returning()` là đổi **body HTTP** của `POST /recycle-bin/employees/:id/restore` — một hợp đồng API
+> đang chạy, ngoài phạm vi WO này, và không có ca test nào của WO này canh nó.
+>
+> **Chốt:** giữ nguyên `.returning()`. Hàm `syncEmployeeDerivedMembership` (B2) **tự SELECT** các trường nó
+> cần (`org_unit_id`, `user_id`, `status`, `deleted_at`) theo `employeeId` **trong cùng tx** — nó vốn phải
+> đọc tập mong muốn từ DB chứ không tin tham số truyền vào, nên đây không phải truy vấn thêm mà là truy vấn
+> nó luôn cần. Cũng gỡ luôn được phụ thuộc "writer phải nhớ trả đúng field".
+>
+> ### Hệ quả lên §3, §4, §6 của rev 2
+>
+> §3.1 giữ nguyên 14 điểm chèn, đổi mô tả cột "Hình" thành **một lời gọi đồng bộ** thay vì "REVOKE/GRANT"
+> riêng lẻ · §3.3 `DESIRED_PROJECT_MEMBER` thêm vế nhân viên (B1) · §3.4 thêm `company_id` tường minh (B4)
+> · §3.5 bỏ đề xuất đổi `.returning()` (B7) · §3.9 union thêm `companyId` (B6) · §6 thêm 3 ca RED:
+> "đổi trạng thái qua `PATCH /employees/:id` → rời mọi phòng dẫn xuất", "nhân viên nghỉ việc còn hàng
+> `project_members` Active → **vẫn** rời phòng dự án", "SQL Pha 3 đếm đủ `company_id`".
+
+---
+
+## (rev 2 — giữ nguyên bên dưới làm hồ sơ đo đạc)
+
+### Micro-plan rev 2 (02/08/2026 — vá BLOCK rev 1)
 
 > **WO:** phòng chat tự động theo phòng ban + dự án — tạo/đóng phòng, đồng bộ thành viên tại sự kiện HR/TASK
 > (đường THU HỒI chạy TRONG tx nguồn, cửa sổ lệch = 0), job đối soát định kỳ idempotent sửa lệch.
