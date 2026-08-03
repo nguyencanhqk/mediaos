@@ -2,6 +2,9 @@ import { createZodDto } from "nestjs-zod";
 import {
   addChatMemberSchema,
   chatMarkReadSchema,
+  chatOversightAuditQuerySchema,
+  chatOversightMessagesQuerySchema,
+  chatOversightRoomQuerySchema,
   chatSearchQuerySchema,
   createChatRoomSchema,
   listChatMessagesQuerySchema,
@@ -59,3 +62,18 @@ export class ListChatRoomFilesQueryDto extends createZodDto(listChatRoomFilesQue
  * `z.coerce` cho `limit` ⇒ idempotent khi pipe chạy 2 lần.
  */
 export class ChatSearchQueryDto extends createZodDto(chatSearchQuerySchema) {}
+
+// ── S7-CHAT-BE-7 🔒 — đọc-vượt membership (CHAT-API-018/019) ────────────────────
+//
+// ⚠️ `@UsePipes(ZodValidationPipe)` ở `ChatOversightController` là ĐIỀU KIỆN để 3 DTO dưới đây có tác
+// dụng. Thiếu nó thì `q` không bị ép ≥2 ký tự và `limit` không bị chặn trần — tức hai trong ba vế làm
+// `018a` "hẹp hơn liệt kê mọi phòng" (API-13 §5.3) biến thành trang trí.
+
+/** GET /chat/oversight/rooms (view:chat-oversight) — `q` BẮT BUỘC ≥2 ký tự sau `trim`+NFC, trần trang. */
+export class ChatOversightRoomQueryDto extends createZodDto(chatOversightRoomQuerySchema) {}
+
+/** GET /chat/oversight/rooms/:id/messages — con trỏ RIÊNG, toàn dải `room_seq` (không `visible_from_seq`). */
+export class ChatOversightMessagesQueryDto extends createZodDto(chatOversightMessagesQuerySchema) {}
+
+/** GET /chat/oversight/audit — keyset con trỏ opaque (codec dùng chung `chat-search-cursor.ts`). */
+export class ChatOversightAuditQueryDto extends createZodDto(chatOversightAuditQuerySchema) {}

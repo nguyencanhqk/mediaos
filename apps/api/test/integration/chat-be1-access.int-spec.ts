@@ -482,11 +482,53 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-1 — membership deny-path (DB cô lập
       }
     });
 
+    /**
+     * NGOẠI LỆ DUY NHẤT của luật "method public nhận `roomId` phải qua điểm khẳng định membership".
+     *
+     * `chat-oversight.service.ts` (`S7-CHAT-BE-7` · CHAT-DEC-004, owner chốt 02/08/2026) **CỐ Ý** không
+     * gọi `assertMember` — đó là chức năng của nó, không phải lỗ. Nó trả giá bằng một ràng buộc KHÁC và
+     * mạnh hơn, được canh ở `chat-be7-oversight.int-spec.ts`: MỌI hàm public phải ghi `audit_logs` trong
+     * CÙNG transaction với truy vấn đọc, TRƯỚC khi dữ liệu rời server (CHAT-ERR-020) — ca ngay dưới ép
+     * điều đó trên chính mã nguồn.
+     *
+     * ⚠️ **DANH SÁCH ĐÓNG.** Ca "rổ miễn trừ đúng một file" bên dưới làm ĐỎ ngay khi ai đó thêm file thứ
+     * hai. Không có nó thì miễn trừ này là cửa sau: WO sau chỉ cần thêm một tên vào mảng là thoát lưới.
+     */
+    const MEMBERSHIP_EXEMPT_SERVICES = ["chat-oversight.service.ts"];
+
+    it("rổ miễn trừ membership ĐÚNG MỘT file — thêm file thứ hai là mở cửa sau", () => {
+      expect(MEMBERSHIP_EXEMPT_SERVICES).toEqual(["chat-oversight.service.ts"]);
+      // Và file đó phải TỒN TẠI: rổ trỏ vào một file đã bị xoá/đổi tên thì luật chính đang miễn cho hư vô.
+      expect(readAll().map((f) => f.file)).toContain("chat-oversight.service.ts");
+    });
+
+    it("file được MIỄN membership phải ghi audit ở MỌI method public nhận `roomId` (giá phải trả)", () => {
+      // Miễn `assertMember` mà không ghi audit = đường đọc toàn tenant KHÔNG DẤU VẾT. Ca này là vế thứ
+      // hai của cặp: một method public mới thêm vào service đọc-vượt mà quên audit sẽ ĐỎ ở đây.
+      const src = stripComments(
+        readAll().find((f) => f.file === "chat-oversight.service.ts")?.src ?? "",
+      );
+      const gaps: string[] = [];
+      let counted = 0;
+      for (const body of src.split(/\n {2}async /).slice(1)) {
+        const head = body.split("\n")[0];
+        if (!/roomId\s*:\s*string/.test(body.slice(0, body.indexOf("{")))) continue;
+        counted += 1;
+        if (!body.includes("recordSuccess(")) gaps.push(head.trim());
+      }
+      expect(
+        counted,
+        "phải quét được method public nhận roomId (0 = cách cắt hỏng)",
+      ).toBeGreaterThan(0);
+      expect(gaps, "method đọc-vượt nhận roomId mà KHÔNG ghi audit").toEqual([]);
+    });
+
     it("MỌI method PUBLIC của service nhận `roomId` đều gọi assertMember (trực tiếp hoặc qua cổng ghi)", () => {
       const gaps: string[] = [];
       const publicMethods: string[] = [];
       for (const { file, src } of readAll()) {
         if (!file.endsWith(".service.ts") || file === "chat-access.service.ts") continue;
+        if (MEMBERSHIP_EXEMPT_SERVICES.includes(file)) continue;
         // Cắt thân từng method PUBLIC: `\n  async ` (thụt lề 2 dấu cách). `private async` không khớp vì
         // sau 2 dấu cách là chữ `private` — helper nội bộ chạy SAU cổng nên không phải chủ thể của luật.
         const methods = stripComments(src)
@@ -544,12 +586,25 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-1 — membership deny-path (DB cô lập
       expect(hits, "cửa sau bỏ qua membership trong module CHAT").toEqual([]);
     });
 
-    it("KHÔNG route nào của /chat/oversight/* lọt vào WO này", () => {
-      const hits = readAll()
+    it("route `/chat/oversight/*` chỉ sống ở ĐÚNG MỘT controller riêng (không lẫn vào đường đọc thường)", () => {
+      // Bản đầu (trước `S7-CHAT-BE-7`) khẳng định "0 route oversight trong module" — đúng khi đường
+      // đọc-vượt chưa được thi công. Nay CHAT-DEC-004 đã có code, luật thật là chặt HƠN chứ không lỏng
+      // hơn: các route đó phải nằm gọn trong `chat-oversight.controller.ts`. Một route oversight xuất
+      // hiện ở `chat-rooms.controller.ts`/`chat-messages.controller.ts` là mất tính chất "đường đọc
+      // thường gọi `assertMember` vô điều kiện" (API-13 §5.3 ràng buộc 1).
+      const OVERSIGHT_CONTROLLER = "chat-oversight.controller.ts";
+      const withOversightRoutes = readAll()
         .map((f) => ({ file: f.file, src: stripComments(f.src) }))
         .filter((f) => /@(Get|Post|Patch|Delete|Put)\(["'`][^"'`]*oversight/i.test(f.src))
         .map((f) => f.file);
-      expect(hits).toEqual([]);
+      expect(withOversightRoutes).toEqual([OVERSIGHT_CONTROLLER]);
+
+      // Và controller đó CHỈ ĐỌC — không biến thể ghi (ràng buộc 4). Nếu ca trên trở thành `[]` vì file
+      // bị xoá thì `toEqual([OVERSIGHT_CONTROLLER])` đã đỏ trước, nên đây là vế bổ sung chứ không lưới đơn.
+      const controllerSrc = stripComments(
+        readAll().find((f) => f.file === OVERSIGHT_CONTROLLER)?.src ?? "",
+      );
+      expect(controllerSrc).not.toMatch(/@(Post|Patch|Delete|Put)\(/);
     });
   });
 });

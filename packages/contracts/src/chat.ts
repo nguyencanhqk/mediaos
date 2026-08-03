@@ -446,3 +446,190 @@ export const chatSearchResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 export type ChatSearchResponseDto = z.infer<typeof chatSearchResponseSchema>;
+
+// ═══════════ S7-CHAT-BE-7 🔒 — ĐỌC-VƯỢT MEMBERSHIP (CHAT-API-018/019) ═══════════
+//
+// ⚠️ KHỐI APPEND ở CUỐI file — `contracts/src/chat.ts` là hot-file của 5 WO trong wave S7.
+//
+// ┌─ VÌ SAO KHỐI NÀY KHÔNG `extend` MỘT SCHEMA NÀO Ở TRÊN ────────────────────────────────────────────┐
+// │ CHAT-DEC-004 mở đúng MỘT thứ: ranh giới MEMBERSHIP. Nó KHÔNG mở đường tải tệp (SPEC-15 §3.3 ·      │
+// │ API-13 §5.3 ràng buộc 7). `chatAttachmentSchema` mang `url`/`thumbnailUrl` = URL ký hạn ngắn;      │
+// │ `chatMessageSchema` nhúng nguyên mảng đó. Tái dùng — kể cả qua `.extend()`/`.omit()` — biến chính  │
+// │ payload oversight thành máy phát khoá đọc tệp KHÔNG CẦN MEMBERSHIP, và `.omit()` thì im lặng phục  │
+// │ hồi khoá mỗi khi ai đó thêm trường mới vào schema gốc. Khai LẠI tường minh là lớp phòng vệ duy     │
+// │ nhất không trôi. Ca census `chat-oversight.census.spec.ts` đóng đinh điều đó.                       │
+// └────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * `GET /chat/oversight/rooms` (CHAT-API-018a) — TRA phòng theo mã/tên/loại.
+ *
+ * `q` BẮT BUỘC và tối thiểu 2 ký tự (API-13 §5.3: "018a hẹp hơn 'liệt kê mọi phòng'"). Cùng khuôn
+ * `trim → NFC → min(2)` với `chatSearchQuerySchema`: NFD từ máy Mac và chuỗi toàn khoảng trắng đều bị
+ * chặn ở BIÊN, và cả ba phép biến đổi idempotent khi `ZodValidationPipe` chạy 2 lần
+ * (memory `zod-query-param-double-pipe-idempotent`).
+ *
+ * **KHÔNG có con trỏ phân trang** — CÓ CHỦ Ý, xem `chatOversightRoomListSchema`.
+ */
+export const chatOversightRoomQuerySchema = z.object({
+  q: z
+    .string()
+    .trim()
+    .transform((s) => s.normalize("NFC"))
+    .pipe(
+      z
+        .string()
+        .min(2, "CHAT-ERR-019: từ khoá tra cứu phòng phải có ít nhất 2 ký tự.")
+        .max(200, "CHAT-ERR-019: từ khoá tra cứu phòng quá dài (tối đa 200 ký tự).")
+        .refine((s) => !hasControlChar(s), {
+          message: "CHAT-ERR-019: từ khoá tra cứu phòng chứa ký tự không hợp lệ.",
+        }),
+    ),
+  roomType: chatRoomTypeSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+export type ChatOversightRoomQuery = z.infer<typeof chatOversightRoomQuerySchema>;
+
+/**
+ * Siêu dữ liệu MỘT phòng ở kết quả tra cứu.
+ *
+ * ⚠️ **KHÔNG có `members`** — đây là vế giữ cho `018a` không xuất được đồ thị "ai nhắn riêng với ai" của
+ * cả công ty ngay cả khi `q` khớp rộng (ví dụ tiền tố `room_code`). Muốn biết ai ở trong một phòng thì
+ * phải gọi `018b` ĐÍCH DANH một `roomId`, và mỗi lần gọi để lại ĐÚNG MỘT dòng audit — chính là ngoại lệ
+ * "mở đích danh một phòng" mà owner chốt (SPEC-15 §3.3).
+ *
+ * ⚠️ **KHÔNG có `directKey`**: cột đó ghép từ 2 `userId` nên bản thân nó LÀ quan hệ ai-nhắn-với-ai.
+ * ⚠️ **KHÔNG có `unreadCount`**: người đọc-vượt không thuộc phòng nên "chưa đọc" vô nghĩa; trả 0 là bịa.
+ */
+export const chatOversightRoomSummarySchema = z.object({
+  id: z.string().uuid(),
+  roomCode: z.string(),
+  /** Phòng `direct` KHÔNG có tên (mig `0538` DROP NOT NULL) ⇒ tra theo tên không bao giờ ra DM. */
+  name: z.string().nullable(),
+  roomType: chatRoomTypeSchema,
+  isArchived: z.boolean(),
+  /** Số thành viên ĐANG hoạt động — một con số, KHÔNG phải danh sách người. */
+  memberCount: z.number().int().nonnegative(),
+  lastMessageAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type ChatOversightRoomSummaryDto = z.infer<typeof chatOversightRoomSummarySchema>;
+
+/**
+ * Kết quả `018a`. **Không phân trang** (không con trỏ, không offset) — CÓ CHỦ Ý:
+ * không lật trang được thì không enumerate được toàn bộ phòng bằng một chuỗi request.
+ *
+ * `truncated: true` = còn kết quả bị cắt ⇒ UI buộc người dùng thu hẹp truy vấn. Cờ này BẮT BUỘC phải
+ * tồn tại: cắt trang mà im lặng đọc ra y hệt "đã trả hết", và người dùng kết luận sai về phạm vi.
+ */
+export const chatOversightRoomListSchema = z.object({
+  data: z.array(chatOversightRoomSummarySchema),
+  truncated: z.boolean(),
+});
+export type ChatOversightRoomListDto = z.infer<typeof chatOversightRoomListSchema>;
+
+/**
+ * `GET /chat/oversight/rooms/:id` (CHAT-API-018b) — chi tiết phòng + thành viên.
+ *
+ * ⚠️ **KHÔNG có `myRole`** (khác `chatRoomDetailSchema`): người đọc-vượt KHÔNG có hàng
+ * `chat_room_members` nào, nên mọi giá trị điền vào đó đều là bịa — và một FE đọc `myRole === 'admin'`
+ * sẽ bật nút quản trị trên phòng mà BE luôn 403. Vắng trường = FE buộc phải render chế độ CHỈ ĐỌC.
+ */
+export const chatOversightRoomDetailSchema = chatOversightRoomSummarySchema.extend({
+  description: z.string().nullable(),
+  members: z.array(chatRoomMemberSchema),
+});
+export type ChatOversightRoomDetailDto = z.infer<typeof chatOversightRoomDetailSchema>;
+
+/**
+ * Đính kèm ở đường ĐỌC-VƯỢT — **metadata thuần, 0 URL** (API-13 §5.3 ràng buộc 7).
+ *
+ * ⚠️ Khai LẠI thay vì `chatAttachmentSchema.omit({ url: true, thumbnailUrl: true })`: `.omit()` là hợp
+ * đồng NGƯỢC (liệt kê thứ bị bỏ), nên mọi trường URL thêm vào schema gốc về sau sẽ tự động chảy vào
+ * payload oversight — im lặng, đúng lúc không ai review lại WO này nữa.
+ */
+export const chatOversightAttachmentSchema = z.object({
+  fileId: z.string().uuid(),
+  name: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  isImage: z.boolean(),
+});
+export type ChatOversightAttachmentDto = z.infer<typeof chatOversightAttachmentSchema>;
+
+/**
+ * `GET /chat/oversight/rooms/:id/messages` (CHAT-API-018c).
+ *
+ * `body` vẫn `.nullable()` — **tin đã thu hồi VẪN bị che ở đường này** (SPEC-15 §13.6). CHAT-DEC-004 mở
+ * ranh giới MEMBERSHIP, KHÔNG mở lớp masking; nới thêm là một năng lực mới không ai chốt.
+ *
+ * `roomSeq` per-room; `seq` cấp bảng KHÔNG BAO GIỜ rời server (SPEC-15 §13.1).
+ */
+export const chatOversightMessageSchema = z.object({
+  id: z.string().uuid(),
+  roomId: z.string().uuid(),
+  senderId: z.string().uuid(),
+  senderName: z.string().nullable(),
+  body: z.string().nullable(),
+  messageType: chatMessageTypeSchema,
+  mentions: z.array(z.string().uuid()),
+  pinnedAt: z.string().datetime().nullable(),
+  replyToMessageId: z.string().uuid().nullable(),
+  recalledAt: z.string().datetime().nullable(),
+  attachmentCount: z.number().int().nonnegative(),
+  attachments: z.array(chatOversightAttachmentSchema),
+  roomSeq: z.number().int().positive(),
+  createdAt: z.string().datetime(),
+});
+export type ChatOversightMessageDto = z.infer<typeof chatOversightMessageSchema>;
+
+/**
+ * Con trỏ của `018c` — RIÊNG, không mượn `listChatMessagesQuerySchema`.
+ *
+ * Không phải để khác cho khác: đường oversight đọc **toàn dải `seq`** của phòng (API-13 §5.3 ràng buộc 8),
+ * còn đường thường bị kẹp thêm bởi `visible_from_seq` của người đọc. Dùng chung một DTO là mời người thi
+ * công dùng chung luôn truy vấn — và truy vấn đó JOIN `chat_room_members`, thứ mà người đọc-vượt KHÔNG có
+ * hàng nào ⇒ trả về RỖNG, hỏng lặng lẽ theo chiều ngược lại.
+ */
+export const chatOversightMessagesQuerySchema = z.object({
+  beforeSeq: z.coerce.number().int().positive().optional(),
+  afterSeq: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type ChatOversightMessagesQuery = z.infer<typeof chatOversightMessagesQuerySchema>;
+
+/** `GET /chat/oversight/audit` (CHAT-API-019) — nhật ký đọc-vượt cho CHAT-SCREEN-008. */
+export const chatOversightAuditQuerySchema = z.object({
+  /** Con trỏ opaque keyset `(created_at, id)`. Rác → 400, KHÔNG im lặng rơi về trang đầu. */
+  cursor: z.string().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type ChatOversightAuditQuery = z.infer<typeof chatOversightAuditQuerySchema>;
+
+/**
+ * Một dòng nhật ký đọc-vượt: **ai · phòng nào · lúc nào · thành công/từ chối** (SPEC-15 §9 CHAT-SCREEN-008).
+ *
+ * `roomId`/`roomCode`/`roomName` NULL với `018a` (tra danh sách — không có phòng đích) và với dòng
+ * `Denied` không mang `:id` trên URL.
+ */
+export const chatOversightAuditEntrySchema = z.object({
+  id: z.string().uuid(),
+  actorUserId: z.string().uuid().nullable(),
+  actorName: z.string().nullable(),
+  roomId: z.string().uuid().nullable(),
+  roomCode: z.string().nullable(),
+  roomName: z.string().nullable(),
+  resultStatus: z.enum(["Success", "Denied"]),
+  /** `018a` | `018b` | `018c` | `019` — để CHAT-SCREEN-008 nhãn hoá đúng loại truy cập. */
+  endpoint: z.string().nullable(),
+  /** Tiêu chí tìm của `018a` (`q`, `roomType`) — bằng chứng "đã tra cái gì". KHÔNG chứa nội dung tin. */
+  criteria: z.record(z.unknown()).nullable(),
+  createdAt: z.string().datetime(),
+});
+export type ChatOversightAuditEntryDto = z.infer<typeof chatOversightAuditEntrySchema>;
+
+/** Keyset — `{ data, nextCursor }`, KHÔNG đi qua `paginated()` (memory `apifetch-drops-pagination-bare-array`). */
+export const chatOversightAuditResponseSchema = z.object({
+  data: z.array(chatOversightAuditEntrySchema),
+  nextCursor: z.string().nullable(),
+});
+export type ChatOversightAuditResponseDto = z.infer<typeof chatOversightAuditResponseSchema>;

@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 476,
-    "controllers": 82,
-    "gated": 424,
+    "routes": 480,
+    "controllers": 83,
+    "gated": 428,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 40,
@@ -1455,6 +1455,74 @@
       "isPublic": false,
       "classGuards": [],
       "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatOversightController#getRoom",
+      "httpMethod": "GET",
+      "path": "/api/v1/chat/oversight/rooms/:id",
+      "hasPermission": true,
+      "permission": "view:chat-oversight",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "ChatOversightAuditGuard",
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatOversightController#listAudit",
+      "httpMethod": "GET",
+      "path": "/api/v1/chat/oversight/audit",
+      "hasPermission": true,
+      "permission": "view:chat-oversight",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "ChatOversightAuditGuard",
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatOversightController#listMessages",
+      "httpMethod": "GET",
+      "path": "/api/v1/chat/oversight/rooms/:id/messages",
+      "hasPermission": true,
+      "permission": "view:chat-oversight",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "ChatOversightAuditGuard",
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatOversightController#searchRooms",
+      "httpMethod": "GET",
+      "path": "/api/v1/chat/oversight/rooms",
+      "hasPermission": true,
+      "permission": "view:chat-oversight",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "ChatOversightAuditGuard",
         "PermissionGuard"
       ],
       "verdict": null,

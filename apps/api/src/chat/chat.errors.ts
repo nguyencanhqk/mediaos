@@ -137,6 +137,20 @@ export const CHAT_ERR = {
    */
   ATTACHMENT_INVALID:
     "CHAT-ERR-015: tệp đính kèm không hợp lệ — chỉ gắn được tệp do chính bạn tải lên, đã tải xong và đã qua kiểm virus.",
+
+  // ═══════════ S7-CHAT-BE-7 🔒 — đọc-vượt membership ═══════════
+
+  /**
+   * CHAT-ERR-020 (500) — ghi `audit_logs` của đường ĐỌC-VƯỢT thất bại ⇒ **rollback, 0 byte dữ liệu**.
+   *
+   * ⚠️ Đây là mã lỗi DUY NHẤT của module mà đường đúng là **500**, và điều đó có chủ đích: trên đường
+   * đọc-vượt, dòng audit là ĐIỀU KIỆN để dữ liệu được rời server (SPEC-15 §3.3). Trả `200` với thân rỗng
+   * là "đọc-vượt không dấu vết" ngụy trang thành kết quả trống — API-13 §8 cấm tuyệt đối.
+   *
+   * Thông điệp KHÔNG kèm chi tiết lỗi Postgres (không rò tên bảng/cột ra ngoài).
+   */
+  OVERSIGHT_AUDIT_FAILED:
+    "CHAT-ERR-020: không ghi được nhật ký truy cập quản trị — yêu cầu đã bị huỷ và không trả về dữ liệu.",
 } as const;
 
 /**
@@ -195,6 +209,22 @@ export const CHAT_AUDIT = {
    * `after` chỉ chứa lý do đã lược PII + loại đích — KHÔNG kèm thông điệp lỗi thô của Postgres.
    */
   MEMBER_SYNC_FAILED: "chat.room.member_sync_failed",
+  // ── S7-CHAT-BE-7 🔒 — đọc-vượt membership (CHAT-DEC-004) ──
+  /**
+   * MỘT action duy nhất cho CẢ BỐN route `/chat/oversight/*` — API-13 §5.3 "hình dạng dòng audit".
+   *
+   * Vì sao một chứ không bốn: `CHAT-API-019` phải bó truy vấn `action = 'chat.oversight.read' AND
+   * module_code = 'CHAT'`. Bốn action là bốn thứ phải nhớ liệt kê, và quên một cái làm nhật ký
+   * CHAT-SCREEN-008 **thiếu dòng trong im lặng** — tức mất đúng thứ nó sinh ra để ghi. Loại route nằm ở
+   * `metadata.endpoint` ('018a'|'018b'|'018c'|'019'), là chi tiết hiển thị chứ không phải khoá lọc.
+   *
+   * `object_type` = `'chat_room'` (đã có trong catalog CHECK + union TS ⇒ KHÔNG cần migration);
+   * `object_id` = `roomId` với 018b/018c, **NULL** với 018a/019.
+   *
+   * ⚠️ NỘI DUNG TIN NHẮN KHÔNG BAO GIỜ VÀO ĐÂY (SPEC-15 §18) — kể cả trích đoạn, kể cả số lần khớp từ
+   * khoá. `metadata` của 018a chỉ mang chuỗi người dùng TỰ GÕ (`q`) + `roomType` + số kết quả.
+   */
+  OVERSIGHT_READ: "chat.oversight.read",
 } as const;
 
 /** `module_code` cho mọi dòng audit của CHAT — CHAT-API-019 lọc theo cột này. */

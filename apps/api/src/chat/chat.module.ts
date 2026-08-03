@@ -27,6 +27,12 @@ import { ChatSearchRepository } from "./chat-search.repository";
 // S7-CHAT-BE-5 (additive): phòng dẫn xuất theo phòng ban/dự án + job đối soát định kỳ.
 import { ChatDerivedRoomsSyncService } from "./chat-derived-rooms-sync.service";
 import { ChatDerivedRoomsReconcileJobHandler } from "./chat-derived-rooms-reconcile.job-handler";
+// S7-CHAT-BE-7 🔒 (additive): ĐỌC-VƯỢT MEMBERSHIP — controller/service/repo RIÊNG, path `/chat/oversight/*`,
+// cặp quyền RIÊNG `('view','chat-oversight')`. Xem cảnh báo ở jsdoc `@Module` bên dưới.
+import { ChatOversightController } from "./chat-oversight.controller";
+import { ChatOversightAuditGuard } from "./chat-oversight-audit.guard";
+import { ChatOversightService } from "./chat-oversight.service";
+import { ChatOversightRepository } from "./chat-oversight.repository";
 
 /**
  * S7-CHAT-BE-1 — `ChatModule` (SPEC-15 · DB-12 · API-13).
@@ -45,7 +51,13 @@ import { ChatDerivedRoomsReconcileJobHandler } from "./chat-derived-rooms-reconc
  *
  * ⚠️ `S7-CHAT-BE-7` (đọc-vượt membership, CHAT-DEC-004) KHÔNG được thêm vào đây dưới dạng nhánh của
  * `ChatRoomsService`/`ChatRoomsController`: nó là service + controller RIÊNG, path `/chat/oversight/*`,
- * cặp quyền riêng `('view','chat-oversight')` (API-13 §5.3 ràng buộc 1).
+ * cặp quyền riêng `('view','chat-oversight')` (API-13 §5.3 ràng buộc 1). ĐÃ thi công — 4 provider +
+ * 1 controller ở khối `S7-CHAT-BE-7` bên dưới.
+ *
+ * ⚠️ `ChatOversightService` và `ChatOversightRepository` **CỐ Ý KHÔNG `exports`**. Chúng là đường đọc
+ * BỎ QUA ranh giới membership; lọt vào một module khác là một đường đọc toàn tenant KHÔNG DẤU VẾT (mọi
+ * dòng audit chỉ được ghi vì `ChatOversightService` tự ghi trong cùng transaction). Mirror lý do
+ * `ChatDerivedRoomsReconcileJobHandler` không export.
  */
 @Module({
   // S7-CHAT-BE-3 (additive): `FilesModule` cấp `FilePolicyService` (CÙNG singleton — điều kiện để
@@ -56,7 +68,12 @@ import { ChatDerivedRoomsReconcileJobHandler } from "./chat-derived-rooms-reconc
   // Thiếu dòng này thì `ChatAttachmentPresignService` không resolve được và **AppModule sập lúc khởi
   // động** — kéo theo mọi int-spec đỏ dây chuyền, không chỉ CHAT (lớp `systemjobhandler-optional-dbw-di`).
   imports: [PermissionModule, SequenceModule, FilesModule, StorageModule],
-  controllers: [ChatRoomsController, ChatMessagesController, ChatSearchController],
+  controllers: [
+    ChatRoomsController,
+    ChatMessagesController,
+    ChatSearchController,
+    ChatOversightController,
+  ],
   providers: [
     ChatAccessService,
     ChatRoomsService,
@@ -76,6 +93,12 @@ import { ChatDerivedRoomsReconcileJobHandler } from "./chat-derived-rooms-reconc
     // ── S7-CHAT-BE-5 ──
     ChatDerivedRoomsSyncService,
     ChatDerivedRoomsReconcileJobHandler,
+    // ── S7-CHAT-BE-7 🔒 ── `ChatOversightAuditGuard` phải là PROVIDER (không `new` trong `@UseGuards`):
+    // nó cần DI 4 thứ (`Reflector`, `PermissionService`, `DatabaseService`, `AuditService`). Khai dạng
+    // lớp trong `@UseGuards` để Nest tự dựng qua container — mẫu `PermissionGuard`.
+    ChatOversightAuditGuard,
+    ChatOversightService,
+    ChatOversightRepository,
   ],
   // `ChatDerivedRoomsSyncService` export cho 5 module writer (org · employees · tasks · recycle-bin).
   // Job handler CỐ Ý KHÔNG export: nó được SchedulerModule gom qua DiscoveryService bằng metadata, không
