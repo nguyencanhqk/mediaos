@@ -116,6 +116,19 @@ describe("census — MỌI truy vấn đọc `chat_messages` mang vị từ §13
     expect(offenders, `đường đọc thiếu vị từ SPEC-15 §13.4: ${offenders.join(", ")}`).toEqual([]);
   });
 
+  it("chat-attachments.repository.ts: mỗi hàm SELECT trên chat_messages đều GỌI `visibleFromSeqScalar()`", () => {
+    // S7-CHAT-BE-3 mở đường đọc `chat_messages` ở một file THỨ HAI (tab "Tệp" — CHAT-API-017). Census
+    // chỉ soi `chat-messages.repository.ts` sẽ bỏ lọt nó hoàn toàn: đúng lớp "đường đọc mới sinh ra ở
+    // chỗ khác" mà GATE-2 đã bắt trên `/pinned`, chỉ đổi file. `listAttachmentsForMessages` KHÔNG có
+    // trong danh sách vì nó đọc `file_links`, không đọc `chat_messages`.
+    const offenders = methodsOf(codeOf("chat-attachments.repository.ts"))
+      .filter((m) => m.block.includes(".from(chatMessages)"))
+      .filter((m) => !DOCUMENTED_EXCEPTIONS.has(m.name))
+      .filter((m) => !m.block.includes("visibleFromSeqScalar("))
+      .map((m) => m.name);
+    expect(offenders, `đường đọc thiếu vị từ SPEC-15 §13.4: ${offenders.join(", ")}`).toEqual([]);
+  });
+
   it("chat-access.service.ts: `assertMessageAccess` gọi `visibleFromSeqColumn()`", () => {
     const code = codeOf("chat-access.service.ts");
     const method = methodsOf(code).find((m) => m.name === "assertMessageAccess");
@@ -135,9 +148,11 @@ describe("census — MỌI truy vấn đọc `chat_messages` mang vị từ §13
   });
 
   it("vị từ chỉ có MỘT nguồn: không file chat nào tự viết `visible_from_seq` trong SQL thô", () => {
-    const offenders = ["chat-messages.repository.ts", "chat-rooms.repository.ts"].filter((f) =>
-      codeOf(f).includes("visible_from_seq"),
-    );
+    const offenders = [
+      "chat-messages.repository.ts",
+      "chat-rooms.repository.ts",
+      "chat-attachments.repository.ts",
+    ].filter((f) => codeOf(f).includes("visible_from_seq"));
     expect(offenders, `bản sao thứ hai của luật §13.4 ở: ${offenders.join(", ")}`).toEqual([]);
   });
 });

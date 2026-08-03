@@ -2,7 +2,7 @@
 
 > **Loại:** kế hoạch cấp WAVE (không phải plan của một WO). Plan chi tiết từng WO nằm ở `docs/plans/S7-CHAT-<WO>.md`, viết ngay trước khi thi công WO đó.
 > **Nguồn sự thật nghiệp vụ:** [SPEC-15 CHAT](<../SPEC/SPEC-15 CHAT.md>) · [DB-12](<../DB/DB-12 CHAT Database Design.md>) · [API-13](<../API Design/API-13_CHAT_API_Design.md>) · [ma trận phân quyền §9c](<../permission-matrix-spec.md>)
-> **Ngày lập:** 02/08/2026 · **Trạng thái:** chờ thực thi Bước 0
+> **Ngày lập:** 02/08/2026 · **Trạng thái (cập nhật 03/08/2026):** ĐANG THI CÔNG trên nhánh `wave/s7-chat` — xong `DOC-1`·`DOC-2`·`DB-1`(mig `0538`)·`DB-2`(mig `0539`)·`BE-1`·`BE-2` (FULL gate vá ở `631d683e`, nợ vị từ `visible_from_seq` đã trả ở `5365e0d0`); đang làm `BE-3` (chưa commit). Trạng thái LIVE = [`docs/STATUS.md`](../STATUS.md), không phải file này.
 
 ---
 

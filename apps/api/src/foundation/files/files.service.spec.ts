@@ -102,6 +102,7 @@ interface Harness {
     canUnlink: ReturnType<typeof vi.fn>;
     canDelete: ReturnType<typeof vi.fn>;
     decideForLinkedFile: ReturnType<typeof vi.fn>;
+    canonicalOwnerKey: ReturnType<typeof vi.fn>;
   };
   storage: {
     get: ReturnType<typeof vi.fn>;
@@ -168,6 +169,9 @@ function makeHarness(policyDecision: FilePolicyDecision = ALLOW): Harness {
     // mirrors the single-file decision (returns policyDecision) so existing ALLOW/DENY cases still hold;
     // link-aware branching itself is unit-tested in file-policy.service.spec.ts.
     decideForLinkedFile: vi.fn(async () => policyDecision),
+    // S7-CHAT-BE-3 (FULL gate): `link()` từ chối khoá điều phối lệch chính tả TRƯỚC khi hỏi quyền.
+    // Mặc định `null` = "không resolver nào nhận cặp này" ⇒ mọi ca sẵn có giữ nguyên hành vi.
+    canonicalOwnerKey: vi.fn(() => null),
   };
 
   const storage = {

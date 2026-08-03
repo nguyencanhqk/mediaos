@@ -18,7 +18,13 @@ import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import { ChatMessagesService } from "./chat-messages.service";
 import { ChatMessageModerationService } from "./chat-message-moderation.service";
-import { ChatMarkReadDto, ListChatMessagesQueryDto, SendChatMessageDto } from "./chat.dto";
+import { ChatAttachmentPresignService } from "./chat-attachments.service";
+import {
+  ChatMarkReadDto,
+  ListChatMessagesQueryDto,
+  ListChatRoomFilesQueryDto,
+  SendChatMessageDto,
+} from "./chat.dto";
 
 interface AuthenticatedRequest extends Request {
   user: { id: string; companyId: string };
@@ -45,6 +51,8 @@ export class ChatMessagesController {
   constructor(
     private readonly messages: ChatMessagesService,
     private readonly moderation: ChatMessageModerationService,
+    // S7-CHAT-BE-3 (additive) — CHAT-API-017.
+    private readonly attachments: ChatAttachmentPresignService,
   ) {}
 
   /** GET /chat/unread-count — CHAT-API-016. Tự-bound theo actor, không nhận roomId. */
@@ -84,6 +92,25 @@ export class ChatMessagesController {
     @Body() dto: SendChatMessageDto,
   ) {
     return this.messages.sendMessage(req.user, id, dto);
+  }
+
+  /**
+   * GET /chat/rooms/:id/files — CHAT-API-017 (tab "Tệp" của phòng).
+   *
+   * Cặp `view:chat-room` — **TRÙNG NGUYÊN VĂN** cặp của `listMessages` và của
+   * `ChatMessageFileResolver`. API-13 §6 nguyên tắc 3: `data_scope` là per-(permission, role), nên gắn
+   * một cặp riêng cho tệp sẽ đẻ ra role "thấy tệp mà không đọc được tin" (hoặc ngược lại). Ba chỗ này
+   * phải đổi cùng nhau hoặc không đổi chỗ nào.
+   */
+  @Get("rooms/:id/files")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("view", "chat-room")
+  listRoomFiles(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query() query: ListChatRoomFilesQueryDto,
+  ) {
+    return this.attachments.listRoomFiles(req.user, id, query);
   }
 
   /** GET /chat/rooms/:id/pinned — CHAT-API-013. */

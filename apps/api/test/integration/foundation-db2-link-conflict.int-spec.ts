@@ -59,6 +59,8 @@ const allowPolicy = {
     allow: true,
     reason: "allow-foundation",
   }),
+  // S7-CHAT-BE-3 (FULL gate): `link()` chặn khoá điều phối lệch chính tả. `null` = foundation-owned.
+  canonicalOwnerKey: (): { moduleCode: string; entityType: string } | null => null,
 };
 
 /** Stub storage adapter — link() never touches storage; kept only to satisfy the constructor. */

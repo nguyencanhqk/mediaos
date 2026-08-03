@@ -1,6 +1,9 @@
-import { Module } from "@nestjs/common";
+import { Module, type OnModuleInit } from "@nestjs/common";
 import { PermissionModule } from "../permission/permission.module";
 import { SequenceModule } from "../foundation/sequences/sequence.module";
+import { FilesModule } from "../foundation/files/files.module";
+import { FilePolicyService } from "../foundation/files/file-policy.service";
+import { StorageModule } from "../storage/storage.module";
 import { ChatRoomsController } from "./chat-rooms.controller";
 import { ChatMessagesController } from "./chat-messages.controller";
 import { ChatAccessService } from "./chat-access.service";
@@ -12,6 +15,10 @@ import { ChatRoomCodeService } from "./chat-room-code.service";
 import { ChatMessagesService } from "./chat-messages.service";
 import { ChatMessageModerationService } from "./chat-message-moderation.service";
 import { ChatMessagesRepository } from "./chat-messages.repository";
+// S7-CHAT-BE-3 (additive): đính kèm qua FOUNDATION Files + resolver quyền riêng của CHAT.
+import { ChatAttachmentsRepository } from "./chat-attachments.repository";
+import { ChatAttachmentPresignService } from "./chat-attachments.service";
+import { ChatMessageFileResolver } from "./chat-message-file.resolver";
 
 /**
  * S7-CHAT-BE-1 — `ChatModule` (SPEC-15 · DB-12 · API-13).
@@ -33,7 +40,14 @@ import { ChatMessagesRepository } from "./chat-messages.repository";
  * cặp quyền riêng `('view','chat-oversight')` (API-13 §5.3 ràng buộc 1).
  */
 @Module({
-  imports: [PermissionModule, SequenceModule],
+  // S7-CHAT-BE-3 (additive): `FilesModule` cấp `FilePolicyService` (CÙNG singleton — điều kiện để
+  // `registerResolver` bên dưới có tác dụng) + `FileLinkRepository`/`FileAccessLogService` (CHAT tự ghi
+  // link trong tx gửi tin, mẫu `HrEmployeeAvatarService`).
+  //
+  // ⚠️ `StorageModule` phải khai RIÊNG: `FilesModule` chỉ IMPORT nó, KHÔNG re-export `STORAGE_ADAPTER`.
+  // Thiếu dòng này thì `ChatAttachmentPresignService` không resolve được và **AppModule sập lúc khởi
+  // động** — kéo theo mọi int-spec đỏ dây chuyền, không chỉ CHAT (lớp `systemjobhandler-optional-dbw-di`).
+  imports: [PermissionModule, SequenceModule, FilesModule, StorageModule],
   controllers: [ChatRoomsController, ChatMessagesController],
   providers: [
     ChatAccessService,
@@ -44,7 +58,32 @@ import { ChatMessagesRepository } from "./chat-messages.repository";
     ChatMessagesService,
     ChatMessageModerationService,
     ChatMessagesRepository,
+    // ── S7-CHAT-BE-3 ──
+    ChatAttachmentsRepository,
+    ChatAttachmentPresignService,
+    ChatMessageFileResolver,
   ],
   exports: [ChatAccessService, ChatRoomsRepository, ChatMessagesRepository],
 })
-export class ChatModule {}
+export class ChatModule implements OnModuleInit {
+  constructor(
+    private readonly filePolicy: FilePolicyService,
+    private readonly messageFileResolver: ChatMessageFileResolver,
+  ) {}
+
+  /**
+   * S7-CHAT-BE-3 — đăng ký `(CHAT, chat_message)` vào singleton `FilePolicyService` dùng chung
+   * (mẫu `CompanyModule.onModuleInit` / `MeModule`).
+   *
+   * ⚠️ **BẮT BUỘC, không phải tối ưu.** `decideForLinkedFile` fail-closed `deny-no-resolver` cho MỌI link
+   * chưa có resolver và **KHÔNG** escalate xuống fallback `FOUNDATION.FILE.*` ⇒ thiếu đúng một dòng này
+   * thì tệp gửi được mà **không ai tải được**, kể cả người vừa gửi — tính năng chết trong im lặng (đúng
+   * lỗi đã ship thật ở `S5-BRAND-BE-1`). Ca test số 1 của WO gỡ dòng này để chứng minh tính chất đó.
+   *
+   * Additive — KHÔNG đụng `app.module.ts`. `registerResolver` NÉM khi trùng key ⇒ đăng ký hai lần là sập
+   * boot fail-loud, không ghi đè im lặng.
+   */
+  onModuleInit(): void {
+    this.filePolicy.registerResolver(this.messageFileResolver);
+  }
+}

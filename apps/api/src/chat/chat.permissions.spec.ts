@@ -52,6 +52,10 @@ interface RouteGate {
  * Cặp quyền theo API-13 §5.1 + seed mig `0538`. Bảng này là **HỢP ĐỒNG**, không phải ảnh chụp: sửa một
  * dòng ở đây phải có lý do nghiệp vụ viết kèm, y như sửa SPEC.
  */
+// Giữ dạng BẢNG (một dòng = một route) là có chủ đích: prettier bung mỗi mục thành 6 dòng, bảng dài
+// gấp 6 và mất khả năng đọc-quét theo cột — thứ khiến một cặp quyền sai đập vào mắt. Directive dưới đây
+// phải đứng SÁT node và không kèm chữ nào khác thì prettier mới nhận.
+// prettier-ignore
 const ROUTE_GATES: readonly RouteGate[] = [
   // ── ChatRoomsController (CHAT-API-001..008) ──
   { controller: ChatRoomsController, handlerName: "listRooms", action: "view", resourceType: "chat-room" },
@@ -73,6 +77,10 @@ const ROUTE_GATES: readonly RouteGate[] = [
   { controller: ChatMessagesController, handlerName: "listMessages", action: "view", resourceType: "chat-room" },
   { controller: ChatMessagesController, handlerName: "sendMessage", action: "send", resourceType: "chat-message" },
   { controller: ChatMessagesController, handlerName: "listPinned", action: "view", resourceType: "chat-room" },
+  // CHAT-API-017 (S7-CHAT-BE-3) — tab "Tệp". Cặp PHẢI trùng `listMessages` **và** trùng cặp mà
+  // `ChatMessageFileResolver.canRead` hỏi: `data_scope` là per-(permission, role), nên ba chỗ lệch nhau
+  // sẽ đẻ ra role "thấy danh sách tệp mà tải không được" (API-13 §6 nguyên tắc 3).
+  { controller: ChatMessagesController, handlerName: "listRoomFiles", action: "view", resourceType: "chat-room" },
   // CHAT-API-014 — đánh dấu đã đọc là thao tác trên trạng thái ĐỌC của chính mình, KHÔNG phải gửi tin.
   // Gắn `send:chat-message` vào đây làm người chỉ có quyền xem không bao giờ tắt được badge.
   { controller: ChatMessagesController, handlerName: "markRead", action: "view", resourceType: "chat-room" },
@@ -125,7 +133,8 @@ describe("CHAT controllers — cặp quyền per-route (S7-CHAT-BE-GATE-2)", () 
 
       it("được bọc bởi PermissionGuard (@UseGuards) — guard là OPT-IN, quên = route MỞ", () => {
         const guards =
-          (Reflect.getMetadata("__guards__", handlerOf(controller, handlerName)) as unknown[]) ?? [];
+          (Reflect.getMetadata("__guards__", handlerOf(controller, handlerName)) as unknown[]) ??
+          [];
         expect(guards).toContain(PermissionGuard);
       });
 
@@ -161,10 +170,9 @@ describe("CHAT controllers — cặp quyền per-route (S7-CHAT-BE-GATE-2)", () 
         if (!declared.has(`${controller.name}.${name}`)) missing.push(`${controller.name}.${name}`);
       }
     }
-    expect(
-      missing,
-      `route chưa khai cặp quyền trong ROUTE_GATES: ${missing.join(", ")}`,
-    ).toEqual([]);
+    expect(missing, `route chưa khai cặp quyền trong ROUTE_GATES: ${missing.join(", ")}`).toEqual(
+      [],
+    );
   });
 
   it("0 route CHAT nào không có @RequirePermission (không có 'read mở' ở module này)", () => {

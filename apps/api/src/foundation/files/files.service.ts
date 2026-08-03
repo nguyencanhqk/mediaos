@@ -31,6 +31,7 @@ import { buildFileKey, InvalidStorageKeyError } from "../../storage/file-storage
 import type { FileLink, FileRecord, NewFileLink, NewFileRecord } from "../../db/schema/files";
 import { SettingService } from "../settings/setting.service";
 import { FileAccessLogService } from "./file-access-log.service";
+import { fileDownloadStateDenyReason, type FileDownloadDenyReason } from "./file-download-state";
 import { FileLinkRepository } from "./file-link.repository";
 import { FilePolicyService } from "./file-policy.service";
 import { FileRepository } from "./file.repository";
@@ -529,6 +530,24 @@ export class FileService {
    * ép bởi company_id NOT NULL + RLS+FORCE (mig 0433). Validate entity-existence để WO module-owner sau.
    */
   async link(user: RequestUser, input: LinkFileInput): Promise<FileLinkDto> {
+    // S7-CHAT-BE-3 (FULL gate, HIGH): khoá điều phối phải ở dạng CHÍNH TẮC của module sở hữu.
+    // Registry tra resolver bằng khoá đã `toLowerCase()`, còn module truy vấn `file_links` của mình bằng
+    // so-chuỗi chính xác ⇒ một cặp lệch chính tả tạo được link "ma": resolver vẫn CẤP QUYỀN TẢI, module
+    // KHÔNG thấy để hiển thị và KHÔNG gỡ được. Từ chối ở biên ghi thay vì âm thầm nhận (hoặc âm thầm
+    // viết lại — viết lại là đổi thứ client khai mà không nói). Xem `FilePolicyService.canonicalOwnerKey`.
+    const canonical = this.policy.canonicalOwnerKey(input.moduleCode, input.entityType);
+    if (
+      canonical &&
+      (canonical.moduleCode !== input.moduleCode || canonical.entityType !== input.entityType)
+    ) {
+      throw new BadRequestException({
+        code: FOUNDATION_FILE_ERROR_CODES.LINK,
+        message:
+          `${FOUNDATION_FILE_ERROR_CODES.LINK}: moduleCode/entityType phải đúng dạng chính tắc ` +
+          `("${canonical.moduleCode}"/"${canonical.entityType}").`,
+      });
+    }
+
     const decision = await this.policy.canLink(
       this.policyInput(user, {
         fileId: input.fileId,
@@ -944,14 +963,13 @@ export class FileService {
 
   /**
    * S2-FND-BE-4 (H2) — return the deny reason if a file must NOT be presigned for download, else null.
-   * Infected takes precedence (security-relevant) over not-uploaded. AV is not yet wired ⇒ the default
-   * scan_status is 'NotRequired' — only 'Infected' blocks; Pending/Failed/Clean/NotRequired stay
-   * downloadable (chỉ Infected chặn). upload_status MUST be 'Uploaded' (Pending/Failed/Deleted ⇒ not-uploaded).
+   *
+   * S7-CHAT-BE-3: thân luật chuyển sang hàm thuần `fileDownloadStateDenyReason` (file-download-state.ts)
+   * để CHAT ký đính kèm bằng ĐÚNG luật này thay vì chép sang một bản sao sẽ trôi. Method giữ lại nguyên
+   * chữ ký + hành vi — đây là uỷ quyền, KHÔNG phải đổi hành vi.
    */
-  private downloadStateDenyReason(row: FileRecord): "infected" | "not-uploaded" | null {
-    if (row.scanStatus === "Infected") return "infected";
-    if (row.uploadStatus !== "Uploaded") return "not-uploaded";
-    return null;
+  private downloadStateDenyReason(row: FileRecord): FileDownloadDenyReason | null {
+    return fileDownloadStateDenyReason(row);
   }
 
   /**

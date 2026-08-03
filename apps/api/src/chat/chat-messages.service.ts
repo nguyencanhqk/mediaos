@@ -1,4 +1,4 @@
-import { Injectable, UnprocessableEntityException } from "@nestjs/common";
+import { ForbiddenException, Injectable, UnprocessableEntityException } from "@nestjs/common";
 import { ConflictException } from "@nestjs/common";
 import type {
   ChatMarkReadRequest,
@@ -8,14 +8,20 @@ import type {
   ListChatMessagesQuery,
   SendMessageRequest,
 } from "@mediaos/contracts";
-import { DatabaseService } from "../db/db.service";
+import { DatabaseService, type TenantTx } from "../db/db.service";
+import { FileAccessLogService } from "../foundation/files/file-access-log.service";
 import { ChatAccessService } from "./chat-access.service";
+import { ChatAttachmentPresignService } from "./chat-attachments.service";
+import { ChatAttachmentsRepository } from "./chat-attachments.repository";
+import { CHAT_MESSAGE_ENTITY_TYPE, isAttachableFile } from "./chat-file.constants";
 import { ChatMessagesRepository } from "./chat-messages.repository";
-import { CHAT_ERR } from "./chat.errors";
+import { CHAT_ERR, CHAT_MODULE_CODE } from "./chat.errors";
 import { assertCursorExclusive } from "./chat-message-rules";
 import { unreadOf } from "./chat-room-rules";
-import { toChatMessageDto } from "./chat.mapper";
 import type { ChatActor } from "./chat-rooms.service";
+
+/** `permission_code` ghi vào `file_access_logs` khi gắn tệp vào tin — cặp gate của `POST …/messages`. */
+const CHAT_ATTACH_PERMISSION_CODE = "CHAT.CHAT-MESSAGE.SEND";
 
 /** `uq_chat_messages_client_id` (mig 0538) — partial unique (company, room, sender, client_message_id). */
 const CLIENT_ID_UNIQUE_CONSTRAINT = "uq_chat_messages_client_id";
@@ -39,6 +45,10 @@ export class ChatMessagesService {
     private readonly db: DatabaseService,
     private readonly access: ChatAccessService,
     private readonly repo: ChatMessagesRepository,
+    // ── S7-CHAT-BE-3 (additive) ──
+    private readonly attachmentRepo: ChatAttachmentsRepository,
+    private readonly attachments: ChatAttachmentPresignService,
+    private readonly accessLog: FileAccessLogService,
   ) {}
 
   /** CHAT-API-009 — một trang tin theo con trỏ. Cấm offset (API-13 §6.4). */
@@ -48,31 +58,28 @@ export class ChatMessagesService {
     query: ListChatMessagesQuery,
   ): Promise<ChatMessageDto[]> {
     assertCursorExclusive(query.beforeSeq, query.afterSeq);
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const rows = await this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
-      const rows = await this.repo.listMessages(tx, actor.companyId, roomId, {
+      return this.repo.listMessages(tx, actor.companyId, roomId, {
         beforeSeq: query.beforeSeq,
         afterSeq: query.afterSeq,
         limit: query.limit,
         // Vị từ SPEC-15 §13.4 — v1 luôn NULL, nhưng đường đọc phải mang sẵn nó từ đầu.
         visibleFromSeq: acc.membership.visibleFromSeq,
       });
-      return rows.map(toChatMessageDto);
     });
+    // Gắn tệp SAU khi tx đã commit — ký tệp mở transaction riêng, lồng vào đây sẽ TREO trên PgBouncer
+    // transaction-mode (xem cảnh báo ở `ChatAttachmentPresignService.decorate`).
+    return this.attachments.decorate(actor, rows);
   }
 
   /** CHAT-API-013 — tin đã ghim của phòng. Mang vị từ §13.4 y như `/messages` (cùng cột `body`). */
   async listPinned(actor: ChatActor, roomId: string): Promise<ChatMessageDto[]> {
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const rows = await this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
-      const rows = await this.repo.listPinned(
-        tx,
-        actor.companyId,
-        roomId,
-        acc.membership.visibleFromSeq,
-      );
-      return rows.map(toChatMessageDto);
+      return this.repo.listPinned(tx, actor.companyId, roomId, acc.membership.visibleFromSeq);
     });
+    return this.attachments.decorate(actor, rows);
   }
 
   /**
@@ -127,6 +134,11 @@ export class ChatMessagesService {
           ...new Set(dto.mentions ?? []),
         ]);
 
+        // S7-CHAT-BE-3 — validate tệp TRƯỚC khi cấp số: `fileIds` sai thì tin không được sinh ra, và
+        // `last_message_seq` không được đụng tới. (Rollback cũng trả lại số, nhưng dựa vào rollback để
+        // giữ đúng bất biến là dựa vào may — cùng lập luận với nhánh idempotent ở trên.)
+        const fileIds = await this.resolveAttachments(tx, actor, dto.fileIds);
+
         const now = new Date();
         const roomSeq = await this.repo.allocateRoomSeq(tx, actor.companyId, roomId, now);
 
@@ -137,15 +149,22 @@ export class ChatMessagesService {
           roomId,
           senderId: actor.id,
           body: dto.body,
-          messageType: "text",
+          // Kiểu do SERVER suy, client không chọn: có tệp ⇒ `'file'`. `'system'` chỉ server sinh.
+          messageType: fileIds.length > 0 ? "file" : "text",
           mentions,
           clientMessageId: dto.clientMessageId,
           replyToMessageId: dto.replyToMessageId ?? null,
           roomSeq,
-          // ĐẶT NGAY TRONG CÂU INSERT — `attachment_count` không có GRANT UPDATE (0538:350).
-          // BE-2 chưa có đính kèm; BE-3 sẽ truyền `fileIds.length` vào đúng chỗ này.
-          attachmentCount: 0,
+          // ĐẶT NGAY TRONG CÂU INSERT — `attachment_count` không có GRANT UPDATE (0538:350). Mọi
+          // `UPDATE … SET attachment_count` là 42501 ⇒ MỌI TIN CÓ TỆP TRẢ 500. Đừng chuyển xuống dưới.
+          attachmentCount: fileIds.length,
         });
+
+        // Link nằm CÙNG transaction với INSERT tin (SPEC-15 §13.5 bước 3): tin và tệp của nó cùng có
+        // hoặc cùng không, không bao giờ có tin trỏ vào link chưa tồn tại. PHẢI đứng SAU insert (cần
+        // `messageId` làm `entity_id`) — kéo theo: `23505` idempotency xảy ra TRƯỚC khi có link nào,
+        // nên nhánh đua ở `.catch` bên dưới không cần dọn link.
+        await this.linkAttachments(tx, actor, inserted.id, fileIds);
 
         // Tin của chính mình luôn tự nâng con trỏ đọc, TRONG CÙNG tx (SPEC-15 §13.2) — nếu không,
         // người gửi thấy badge chưa-đọc của chính tin mình vừa gửi.
@@ -224,16 +243,92 @@ export class ChatMessagesService {
    * cho "mọi đường đọc tin đều qua một điểm khẳng định" đúng theo nghĩa đen.)
    */
   private async readMessage(actor: ChatActor, messageId: string): Promise<ChatMessageDto> {
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const row = await this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMessageAccess(tx, actor.companyId, messageId, actor.id);
-      const row = await this.repo.findMessageForDto(
+      const found = await this.repo.findMessageForDto(
         tx,
         actor.companyId,
         messageId,
         acc.membership.visibleFromSeq,
       );
-      if (!row) throw new UnprocessableEntityException(CHAT_ERR.MESSAGE_NOT_FOUND);
-      return toChatMessageDto(row);
+      if (!found) throw new UnprocessableEntityException(CHAT_ERR.MESSAGE_NOT_FOUND);
+      return found;
     });
+    return this.attachments.decorateOne(actor, row);
+  }
+
+  // ─── S7-CHAT-BE-3 — đính kèm (SPEC-15 §13.5) ─────────────────────────────────
+
+  /**
+   * `fileIds` đã khử trùng + đã kiểm ĐỦ BỐN VẾ, hoặc ném CHAT-ERR-015 (403).
+   *
+   * Bốn vế: tệp thuộc tenant (RLS lọc còn 0 hàng nếu không) · `owner_user_id = người gửi` · đã
+   * `Uploaded` · không `Infected`. Ba vế đầu ở SQL (`findOwnedFiles`), vế trạng thái ở
+   * `isAttachableFile` — cùng luật với FOUNDATION, không phải bản sao (xem jsdoc hàm đó).
+   *
+   * ⚠️ KHỬ TRÙNG là bắt buộc, không phải dọn dẹp cho đẹp: `uq_file_links_entity_file_active` cấm gắn
+   * cùng một tệp hai lần vào cùng một tin ⇒ `[f, f]` sẽ `23505` giữa tx và biến một request hợp lệ
+   * thành 500. Giữ THỨ TỰ client gửi (Set giữ thứ tự chèn) để FE hiển thị đúng thứ tự người dùng chọn.
+   *
+   * ⚠️ "Cùng transaction" KHÔNG cấp quyền và KHÔNG thay được vế trạng thái — đây là kiểm tra nghiệp vụ ở
+   * tầng service, độc lập hoàn toàn với quyền Postgres (DB-12 §6.3 đính chính 01/08).
+   */
+  private async resolveAttachments(
+    tx: TenantTx,
+    actor: ChatActor,
+    fileIds: string[] | undefined,
+  ): Promise<string[]> {
+    const unique = [...new Set(fileIds ?? [])];
+    if (unique.length === 0) return [];
+
+    const rows = await this.attachmentRepo.findOwnedFiles(tx, actor.companyId, actor.id, unique);
+    const usable = new Set(rows.filter(isAttachableFile).map((r) => r.id));
+    // So khớp TOÀN BỘ: thiếu bất kỳ tệp nào ⇒ từ chối cả tin. Gửi một phần là im lặng bỏ rơi tệp mà
+    // người dùng tin là đã gửi — tệ hơn hẳn một lỗi rõ ràng.
+    if (usable.size !== unique.length) {
+      throw new ForbiddenException(CHAT_ERR.ATTACHMENT_INVALID);
+    }
+    return unique;
+  }
+
+  /**
+   * Tạo `file_links` + `file_access_logs` cho tin vừa INSERT — TRONG cùng tx.
+   *
+   * Tự ghi link thay vì gọi `FileService.link`: hàm kia tự mở `withTenant` riêng nên không lồng được vào
+   * tx gửi tin (PgBouncer transaction-mode), mà SPEC-15 §13.5 bước 3 đòi CÙNG transaction. Đây đúng tiền
+   * lệ `HrEmployeeAvatarService` — và `FilesModule` export `FileLinkRepository`/`FileAccessLogService`
+   * chính vì trường hợp này (xem jsdoc `files.module.ts`).
+   *
+   * Đổi lại, hai thứ `FileService.link` làm hộ phải tự làm ở đây: quyền (đã kiểm ở
+   * `resolveAttachments`, cùng luật với `ChatMessageFileResolver.canLinkFile`) và access-log.
+   * KHÔNG ghi `audit_logs`: `S7-CHAT-BE-2` đã chốt gửi tin không sinh dòng audit nào — mỗi tin một dòng
+   * sẽ nhấn chìm bảng append-only dùng chung. `file_access_logs` là nơi đúng cho dấu vết tệp.
+   */
+  private async linkAttachments(
+    tx: TenantTx,
+    actor: ChatActor,
+    messageId: string,
+    fileIds: string[],
+  ): Promise<void> {
+    if (fileIds.length === 0) return;
+    const created = await this.attachmentRepo.insertAttachmentLinks(tx, {
+      companyId: actor.companyId,
+      messageId,
+      createdBy: actor.id,
+      fileIds,
+    });
+    for (const link of created) {
+      await this.accessLog.record(tx, {
+        fileId: link.fileId,
+        action: "Link",
+        accessGranted: true,
+        actorUserId: actor.id,
+        fileLinkId: link.id,
+        moduleCode: CHAT_MODULE_CODE,
+        entityType: CHAT_MESSAGE_ENTITY_TYPE,
+        entityId: messageId,
+        permissionCode: CHAT_ATTACH_PERMISSION_CODE,
+      });
+    }
   }
 }

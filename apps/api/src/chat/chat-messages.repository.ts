@@ -4,9 +4,7 @@ import type { SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { chatMessages, chatRoomMembers, chatRooms } from "../db/schema/communication";
 import type { ChatMessageType } from "../db/schema/communication";
-import { fileLinks } from "../db/schema/files";
 import { users } from "../db/schema/users";
-import { CHAT_MODULE_CODE } from "./chat.errors";
 import { unreadSeqExpr, visibleFromSeqScalar } from "./chat-visibility";
 
 export interface ChatMessageRow {
@@ -343,33 +341,17 @@ export class ChatMessagesRepository {
       .where(and(eq(chatMessages.companyId, companyId), eq(chatMessages.id, messageId)));
   }
 
-  /**
-   * Gỡ tệp đính kèm của một tin đã thu hồi — **SOFT DELETE**. `file_links` chỉ có
-   * `GRANT SELECT, INSERT, UPDATE` (`0433:182`); viết `tx.delete(fileLinks)` là 42501 lúc chạy, mà
-   * typecheck và unit test đều mù.
+  /*
+   * ⚠️ `unlinkMessageFiles` ĐÃ BỊ GỠ ở S7-CHAT-BE-3 (FULL gate) — ĐỪNG VIẾT LẠI.
    *
-   * Link mất ⇒ `FilePolicyService` từ chối tải (SPEC-15 §13.6). v1 của BE-2 chưa có đường gắn tệp (đó là
-   * `S7-CHAT-BE-3`) nên câu này chạy 0 hàng — viết sẵn để BE-3 không phải nhớ quay lại đây.
+   * Nó soft-delete `file_links` trong tx thu hồi. Đo bằng probe trên DB thật: 0 link sống ⇒
+   * `FilePolicyService.decideForLinkedFile` rơi vào nhánh `links.length === 0` ⇒ fallback
+   * `FOUNDATION.FILE.DOWNLOAD` — cặp company-admin ĐANG giữ (bulk grant `0435`). Người ngoài phòng đo
+   * được **403 trước** thu hồi và **302 sau** thu hồi ⇒ thao tác khắc phục lại MỞ RỘNG phạm vi tệp.
+   *
+   * Thay bằng: giữ link sống (tệp vẫn module-owned) + `ChatMessageFileResolver.canRead` từ chối khi
+   * `recalled_at IS NOT NULL`. Xem jsdoc lớp của resolver, khối "VÌ SAO THU HỒI KHÔNG GỠ LINK".
    */
-  async unlinkMessageFiles(
-    tx: TenantTx,
-    companyId: string,
-    messageId: string,
-    at: Date,
-  ): Promise<void> {
-    await tx
-      .update(fileLinks)
-      .set({ deletedAt: at })
-      .where(
-        and(
-          eq(fileLinks.companyId, companyId),
-          eq(fileLinks.moduleCode, CHAT_MODULE_CODE),
-          eq(fileLinks.entityType, "chat_message"),
-          eq(fileLinks.entityId, messageId),
-          isNull(fileLinks.deletedAt),
-        ),
-      );
-  }
 
   /**
    * Con trỏ đã đọc — CHỈ TIẾN + kẹp trần, tính **TRONG CÂU UPDATE** (SPEC-15 §13.2 · plan BE-2 §1.6).

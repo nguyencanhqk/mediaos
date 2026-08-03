@@ -444,7 +444,11 @@ Trong phép **đếm chưa đọc**, vị từ xuất hiện dưới dạng sàn
 | Admin phòng **nhóm** | bất kỳ lúc nào, chỉ trong phòng nhóm mình quản trị | như trên + audit |
 | Bất kỳ ai khác | — | CHAT-ERR-006 |
 
-Sau thu hồi: DTO trả `body: null` + `recalledAt` để UI hiện "Tin nhắn đã được thu hồi". Tệp đính kèm bị **gỡ link** (link mất → FilePolicy từ chối tải). Bản ghi và body gốc **vẫn nằm trong DB** — append-only không cho xoá, và đó là chủ đích: có dấu vết cho tranh chấp nội bộ.
+Sau thu hồi: DTO trả `body: null` + `recalledAt` để UI hiện "Tin nhắn đã được thu hồi". Tệp đính kèm **không còn tải được**: `ChatMessageFileResolver` từ chối mọi `View`/`Download` khi `recalled_at IS NOT NULL`, và tệp rơi khỏi `attachments` của DTO lẫn tab "Tệp" của phòng. Bản ghi và body gốc **vẫn nằm trong DB** — append-only không cho xoá, và đó là chủ đích: có dấu vết cho tranh chấp nội bộ.
+
+> ⚠️ **Hàng `file_links` được GIỮ NGUYÊN (không soft-delete) — đính chính 03/08/2026, `S7-CHAT-BE-3` FULL gate.** Bản Draft của mục này viết "tệp bị **gỡ link** (link mất → FilePolicy từ chối tải)". Mệnh đề trong ngoặc **sai với hiện thực FOUNDATION**: `FilePolicyService.decideForLinkedFile` xử lý `links.length === 0` là **foundation-owned** và rơi xuống fallback `FOUNDATION.FILE.DOWNLOAD` — cặp mà company-admin đang giữ (bulk grant mig `0435`). Đo bằng probe trên DB thật: một người **ngoài phòng** giữ cặp đó nhận **403 trước** thu hồi và **302 sau** thu hồi ⇒ thu hồi **mở rộng** phạm vi tệp thay vì thu hẹp, đúng ngược ý định của §13.6. Vì vậy link được giữ sống để tệp vẫn **module-owned**, và quyền tải vẫn do resolver của CHAT quyết định.
+>
+> Lỗ "0 link ⇒ tụt về fallback FOUNDATION" **không riêng CHAT** (HR contract · task file · avatar · branding cùng dính) — vá ở tầng FOUNDATION là Work Order riêng `S7-FND-LINKFALLBACK-1`, không gộp vào CHAT vì nó đổi hợp đồng dùng chung của 5 module.
 
 ### 13.7 Tìm kiếm tiếng Việt
 
@@ -610,7 +614,7 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 | Đã đọc | `last_read_seq` không lùi (2 thiết bị); số chưa đọc = phép trừ; "đã xem bởi" đúng tập |
 | Đồng bộ phòng dẫn xuất | đổi phòng ban · nghỉ việc · thêm/bớt project member · dự án đóng; job đối soát sửa lệch cố ý gieo |
 | Append-only | app role không `DELETE`/`UPDATE body` được trên `chat_messages` (kiểm ở tầng DB, không chỉ tầng service) |
-| Tệp | resolver fail-closed khi chưa đăng ký · gắn tệp người khác bị chặn ở nguồn · thu hồi → gỡ link → 403 tải |
+| Tệp | resolver fail-closed khi chưa đăng ký · gắn tệp người khác bị chặn ở nguồn · thu hồi → resolver từ chối → **403 tải, và link KHÔNG bị gỡ** (§13.6 đính chính) · gắn tệp qua `POST /foundation/files/:id/links` chịu ĐÚNG luật của `sendMessage` (phòng lưu trữ · tin thu hồi · trần tệp · khoá điều phối chính tắc) |
 | Realtime | emit sau commit (rollback không emit) · membership đổi → join/leave ngay · WS tắt vẫn đúng nghiệp vụ |
 | Hiệu năng | danh sách phòng không N+1; 1 triệu tin vẫn đạt ngưỡng §19 |
 

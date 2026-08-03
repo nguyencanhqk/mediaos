@@ -115,6 +115,19 @@ export const CHAT_ERR = {
   /** Tin `system` / tin đã thu hồi không phải đối tượng của thao tác kiểm duyệt. */
   MESSAGE_NOT_ACTIONABLE:
     "CHAT-ERR-006: tin hệ thống hoặc tin đã thu hồi không thực hiện được thao tác này.",
+
+  // ═══════════ S7-CHAT-BE-3 — đính kèm ═══════════
+
+  /**
+   * CHAT-ERR-015 (403 — API-13 §8) — tệp đính kèm không dùng được.
+   *
+   * HẰNG, một thông điệp cho CẢ BỐN lý do: tệp không tồn tại · thuộc tenant khác (RLS lọc còn 0 hàng) ·
+   * **do người khác tải lên** · chưa `Uploaded` hoặc đã `Infected`. Tách ra là nói cho người gọi biết
+   * "fileId này có thật không / của ai" — oracle dò tệp, cùng lớp với CHAT-ERR-001 trên trục phòng/tin.
+   * Thông điệp KHÔNG kèm fileId.
+   */
+  ATTACHMENT_INVALID:
+    "CHAT-ERR-015: tệp đính kèm không hợp lệ — chỉ gắn được tệp do chính bạn tải lên, đã tải xong và đã qua kiểm virus.",
 } as const;
 
 /**

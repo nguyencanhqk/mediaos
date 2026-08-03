@@ -4,6 +4,7 @@ import {
   chatMarkReadSchema,
   createChatRoomSchema,
   listChatMessagesQuerySchema,
+  listChatRoomFilesQuerySchema,
   listChatRoomsQuerySchema,
   openDirectRoomSchema,
   sendMessageSchema,
@@ -44,3 +45,8 @@ export class SendChatMessageDto extends createZodDto(sendMessageSchema) {}
 
 /** POST /chat/rooms/:id/read (view:chat-room) — con trỏ chỉ tiến. */
 export class ChatMarkReadDto extends createZodDto(chatMarkReadSchema) {}
+
+// ── S7-CHAT-BE-3 — đính kèm (CHAT-API-017) ──────────────────────────────────────
+
+/** GET /chat/rooms/:id/files (view:chat-room) — con trỏ `beforeSeq`, cấm offset. */
+export class ListChatRoomFilesQueryDto extends createZodDto(listChatRoomFilesQuerySchema) {}

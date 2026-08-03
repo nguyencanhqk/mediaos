@@ -50,6 +50,41 @@ export const chatMessageTypeSchema = z.enum(["text", "file", "system"]);
 export type ChatMessageType = z.infer<typeof chatMessageTypeSchema>;
 
 /**
+ * S7-CHAT-BE-3 — một tệp đính kèm ĐÃ qua kiểm quyền (SPEC-15 §13.5 · DB-12 §6.5).
+ *
+ * Nguồn dữ liệu là `file_links` (module `CHAT`, entity `chat_message`) ⋈ `files` — CHAT **không** lưu
+ * URL trần trên `chat_messages` nữa (`file_url`/`file_name` khai tử).
+ *
+ * ⚠️ `url` và `thumbnailUrl` **`.nullable()`** CÓ CHỦ ĐÍCH. Server bỏ trắng khi `FilePolicyService` từ
+ * chối (tệp còn link của module khác — luật AND most-restrictive), khi tệp `Infected`/chưa `Uploaded`,
+ * hoặc khi ký lỗi. Trả metadata + `url: null` để FE hiện "tệp không tải được" thay vì làm hỏng cả trang
+ * tin vì một tệp; bỏ `.nullable()` ở đây là `ZodError` = TRẮNG TRANG dù HTTP 200
+ * (memory `server-masking-needs-optional-fe-schema`).
+ */
+export const chatAttachmentSchema = z.object({
+  /** id của hàng `file_links` — khoá ổn định để FE `key=`; KHÔNG phải id tệp. */
+  id: z.string().uuid(),
+  fileId: z.string().uuid(),
+  /** `files.original_name` — đã sanitize lúc upload (chống path-traversal). */
+  name: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  /** Server quyết định (`mimeType` bắt đầu `image/`) — KHÔNG để FE tự đoán từ phần mở rộng. */
+  isImage: z.boolean(),
+  /** URL ký hạn ngắn (mặc định 300s). `null` = không được phép tải hoặc ký lỗi. */
+  url: z.string().nullable(),
+  /**
+   * URL hiện XEM-TRƯỚC. `null` cho tệp không phải ảnh (FE hiện tên + kích thước — SPEC-15 §13.5).
+   *
+   * ⚠️ v1: với ảnh, đây là URL của **chính bản gốc**, KHÔNG phải biến thể đã resize — repo chưa có
+   * pipeline sinh biến thể (không thư viện xử lý ảnh, không job, không khoá biến thể trong storage).
+   * FE co bằng CSS. Tên khoá giữ nguyên để khi có biến thể thật thì chỉ đổi ở SERVER.
+   */
+  thumbnailUrl: z.string().nullable(),
+});
+export type ChatAttachmentDto = z.infer<typeof chatAttachmentSchema>;
+
+/**
  * chatMessageSchema — DTO chung REST + WS (realtime.ts re-export làm payload `chat:message`).
  * BẤT BIẾN masking (CLAUDE.md §5): server PHẢI `.parse()` row qua schema này trước khi trả/emit —
  * key thừa bị strip. Mọi field dưới đây server PHẢI cung cấp (repo select đủ cột + join senderName).
@@ -83,8 +118,19 @@ export const chatMessageSchema = z.object({
   replyToMessageId: z.string().uuid().nullable(),
   /** Mốc thu hồi. Khác NULL ⇒ `body` là `null` — hai trường đi CÙNG NHAU, đừng đọc lẻ một cái. */
   recalledAt: z.string().datetime().nullable(),
-  /** Số tệp đính kèm (đặt ngay lúc INSERT — `S7-CHAT-BE-3`). v1 của BE-2 luôn 0. */
+  /** Số tệp đính kèm (đặt ngay lúc INSERT — `S7-CHAT-BE-3`). Tin không tệp = 0. */
   attachmentCount: z.number().int().nonnegative(),
+  /**
+   * S7-CHAT-BE-3 — tệp đính kèm ĐÃ dựng sẵn URL ký (SPEC-15 §13.5).
+   *
+   * KHÔNG `.optional()`: server LUÔN cung cấp (mảng rỗng khi không có tệp). Để optional là mời FE viết
+   * `attachments?.map` rồi quên nhánh undefined ở đúng chỗ khó tái hiện nhất.
+   *
+   * Tin ĐÃ THU HỒI luôn `[]` — cùng lớp che với `body: null` (§13.6). Có thể LỆCH với `attachmentCount`
+   * (đếm lúc gửi, bất biến vì cột không có GRANT UPDATE): tin thu hồi giữ `attachmentCount: 2` nhưng
+   * `attachments: []`. Đọc `attachments` để render, `attachmentCount` chỉ là số liệu lịch sử.
+   */
+  attachments: z.array(chatAttachmentSchema),
   /**
    * Số thứ tự **PER-ROOM**, liên tục từ 1 (mig `0539`). Đây là con trỏ dùng cho `beforeSeq`/`afterSeq`,
    * cho đếm chưa đọc và cho "đã xem bởi".
@@ -106,16 +152,43 @@ export type ChatMessageDto = z.infer<typeof chatMessageSchema>;
  * trong thân hàm gửi thì khoá là ngẫu nhiên mỗi lần ⇒ **không chống trùng gì cả**
  * (memory `idempotency-key-must-be-content-derived`). Để `.optional()` là mời gọi đúng lỗi đó.
  *
- * KHÔNG có `messageType`: `text` là kiểu duy nhất client gửi được ở v1 — `file` do `S7-CHAT-BE-3` mở
- * cùng `fileIds`, `system` do server sinh.
+ * KHÔNG có `messageType`: client không chọn kiểu. Server suy ra — `fileIds` không rỗng ⇒ `'file'`,
+ * ngược lại `'text'`; `'system'` chỉ do server sinh.
  */
-export const sendMessageSchema = z.object({
-  body: z.string().min(1).max(4000),
-  clientMessageId: z.string().uuid(),
-  replyToMessageId: z.string().uuid().optional(),
-  /** userId được mention. Server LỌC bỏ người ngoài phòng, KHÔNG chặn gửi (CHAT-ERR-010). */
-  mentions: z.array(z.string().uuid()).max(20).optional(),
-});
+export const sendMessageSchema = z
+  .object({
+    /**
+     * S7-CHAT-BE-3 — `.default("")` thay cho `.min(1)`: tin CHỈ có ảnh là ca thường gặp nhất của tính
+     * năng đính kèm. Ràng buộc "không được rỗng" chuyển xuống `.superRefine` bên dưới (rỗng **và**
+     * không tệp mới là lỗi) ⇒ tin rỗng-không-tệp vẫn 422 y như trước.
+     * `chat_messages.body` NOT NULL nên chuỗi rỗng là giá trị hợp lệ ở DB.
+     */
+    body: z.string().max(4000).default(""),
+    clientMessageId: z.string().uuid(),
+    replyToMessageId: z.string().uuid().optional(),
+    /** userId được mention. Server LỌC bỏ người ngoài phòng, KHÔNG chặn gửi (CHAT-ERR-010). */
+    mentions: z.array(z.string().uuid()).max(20).optional(),
+    /**
+     * S7-CHAT-BE-3 — fileId đã upload xong qua FOUNDATION Files (SPEC-15 §13.5 bước 2).
+     *
+     * Server kiểm ĐỦ bốn vế trước khi gắn: tệp thuộc tenant + **do chính người gửi upload** + đã
+     * `Uploaded` + không `Infected` — sai bất kỳ vế nào → CHAT-ERR-015 (403).
+     *
+     * Trần 10: mỗi fileId là một INSERT `file_links` trong CÙNG transaction đang giữ hàng phòng. Không
+     * trần thì một POST hợp lệ giữ giao dịch dài trên pool PgBouncer transaction-mode (cùng lớp bẫy với
+     * trần 200 thành viên của `createChatRoomSchema`).
+     */
+    fileIds: z.array(z.string().uuid()).max(10).optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.body.trim().length === 0 && (v.fileIds?.length ?? 0) === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["body"],
+        message: "CHAT-ERR-004: tin nhắn phải có nội dung hoặc ít nhất một tệp đính kèm.",
+      });
+    }
+  });
 export type SendMessageRequest = z.infer<typeof sendMessageSchema>;
 
 /**
@@ -151,6 +224,30 @@ export const chatMarkReadResultSchema = z.object({
   unreadCount: z.number().int().nonnegative(),
 });
 export type ChatMarkReadResultDto = z.infer<typeof chatMarkReadResultSchema>;
+
+/**
+ * GET /chat/rooms/:id/files (CHAT-API-017) — tab "Tệp" của phòng.
+ *
+ * Con trỏ `beforeSeq` (theo `room_seq` của tin chứa tệp), **cấm `offset`** — cùng luật với
+ * `/messages` (API-13 §6.4). `z.coerce` idempotent khi `ZodValidationPipe` chạy 2 lần
+ * (memory `zod-query-param-double-pipe-idempotent`).
+ */
+export const listChatRoomFilesQuerySchema = z.object({
+  beforeSeq: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(30),
+});
+export type ListChatRoomFilesQuery = z.infer<typeof listChatRoomFilesQuerySchema>;
+
+/** Một dòng của tab "Tệp": đính kèm + ngữ cảnh tin chứa nó (để FE nhảy tới tin). */
+export const chatRoomFileSchema = chatAttachmentSchema.extend({
+  messageId: z.string().uuid(),
+  /** `room_seq` của tin chứa tệp — cũng là con trỏ cho trang kế (`beforeSeq`). */
+  roomSeq: z.number().int().positive(),
+  senderId: z.string().uuid(),
+  senderName: z.string().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type ChatRoomFileDto = z.infer<typeof chatRoomFileSchema>;
 
 /** GET /chat/unread-count (CHAT-API-016) — badge header. Tổng PHÉP TRỪ, không `COUNT(*)`. */
 export const chatUnreadCountSchema = z.object({

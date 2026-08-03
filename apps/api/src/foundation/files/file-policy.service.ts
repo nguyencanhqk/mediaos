@@ -114,6 +114,39 @@ export class FilePolicyService {
     }
   }
 
+  /**
+   * Dạng CHÍNH TẮC của cặp `(moduleCode, entityType)` theo resolver đang giữ khoá — `null` khi không
+   * resolver nào nhận cặp này (tệp foundation-owned; giữ nguyên hành vi cũ).
+   *
+   * ┌─ VÌ SAO CẦN ─ S7-CHAT-BE-3 FULL gate, HIGH ─────────────────────────────────────────────────┐
+   * │ Registry ở đây tra resolver bằng khoá ĐÃ CHUẨN HOÁ (`trim().toLowerCase()`), nhưng các module │
+   * │ truy vấn `file_links` của chính mình bằng SO-CHUỖI CHÍNH XÁC. Hai cách nhìn khác nhau về cùng │
+   * │ một khoá ⇒ client khai `moduleCode:"chat"` + `entityType:"Chat_Message"` qua                  │
+   * │ `POST /foundation/files/:id/links` tạo được một hàng link mà:                                  │
+   * │   • resolver VẪN nhận (khoá normalize trùng) ⇒ **cấp quyền tải** cho mọi thành viên phòng;     │
+   * │   • module KHÔNG thấy (truy vấn exact-match trượt) ⇒ không lên DTO, không lên tab Tệp;         │
+   * │   • module không gỡ được, và thu hồi tin cũng không chạm tới.                                  │
+   * │ Tức một grant **không quan sát được và không thu hồi được** — đo bằng probe trên DB thật.      │
+   * │ Vì vậy biên GHI phải TỪ CHỐI cặp lệch chính tả, chứ không âm thầm chấp nhận.                   │
+   * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * Trả về chuỗi resolver TỰ KHAI (không phải bản lowercase) — đó mới là giá trị mà module dùng khi
+   * INSERT và khi truy vấn lại.
+   */
+  canonicalOwnerKey(
+    moduleCode: string,
+    entityType: string,
+  ): { moduleCode: string; entityType: string } | null {
+    const resolver = this.lookupResolver(moduleCode, entityType);
+    if (!resolver) return null;
+    const declared = (resolver.entityTypes ?? []).find(
+      (e) => this.normalize(e) === this.normalize(entityType),
+    );
+    // Resolver dạng module-wildcard (không khai `entityTypes`) không có dạng chính tắc cho entity ⇒ giữ
+    // nguyên phần client khai, chỉ đóng đinh `moduleCode`.
+    return { moduleCode: resolver.moduleCode, entityType: declared ?? entityType };
+  }
+
   // ─── Public decision API ─────────────────────────────────────────────────────
 
   canView(input: FilePermissionInput): Promise<FilePolicyDecision> {

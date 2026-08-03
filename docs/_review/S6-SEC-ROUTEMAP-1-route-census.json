@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 474,
+    "routes": 475,
     "controllers": 81,
-    "gated": 422,
+    "gated": 423,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 40,
@@ -1337,6 +1337,22 @@
       "key": "ChatMessagesController#listPinned",
       "httpMethod": "GET",
       "path": "/api/v1/chat/rooms/:id/pinned",
+      "hasPermission": true,
+      "permission": "view:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatMessagesController#listRoomFiles",
+      "httpMethod": "GET",
+      "path": "/api/v1/chat/rooms/:id/files",
       "hasPermission": true,
       "permission": "view:chat-room",
       "permissionLevel": "handler",

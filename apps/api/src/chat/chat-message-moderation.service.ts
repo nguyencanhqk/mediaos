@@ -4,11 +4,12 @@ import { AuditService } from "../events/audit.service";
 import { DatabaseService } from "../db/db.service";
 import { ChatAccessService } from "./chat-access.service";
 import type { ChatMessageAccess } from "./chat-access.service";
+import { ChatAttachmentPresignService } from "./chat-attachments.service";
 import { ChatMessagesRepository } from "./chat-messages.repository";
+import type { ChatMessageRow } from "./chat-messages.repository";
 import { CHAT_AUDIT, CHAT_ERR, CHAT_MODULE_CODE } from "./chat.errors";
 import { assertCanRecall, assertPinBudget, assertPinnable } from "./chat-message-rules";
 import { assertNotArchived } from "./chat-room-rules";
-import { toChatMessageDto } from "./chat.mapper";
 import type { ChatActor } from "./chat-rooms.service";
 
 /**
@@ -29,6 +30,8 @@ export class ChatMessageModerationService {
     private readonly access: ChatAccessService,
     private readonly repo: ChatMessagesRepository,
     private readonly audit: AuditService,
+    // S7-CHAT-BE-3 (additive) — dựng DTO kèm tệp đã ký, NGOÀI tx (xem `readRow`).
+    private readonly attachments: ChatAttachmentPresignService,
   ) {}
 
   /**
@@ -38,19 +41,22 @@ export class ChatMessageModerationService {
    * người dùng bấm hai lần (mạng chậm, double-tap) không đáng nhận màn hình đỏ.
    */
   async recall(actor: ChatActor, messageId: string): Promise<ChatMessageDto> {
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const row = await this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMessageAccess(tx, actor.companyId, messageId, actor.id);
       // Phòng lưu trữ = CHỈ ĐỌC (CHAT-ERR-005). Đặt TRƯỚC nhánh idempotent: một phòng đã đóng thì cả
       // lần bấm thứ hai cũng không được báo "thành công" cho một thao tác ghi không được phép.
       assertNotArchived(acc.room);
-      if (acc.message.recalledAt) return this.readDto(tx, actor, acc);
+      if (acc.message.recalledAt) return this.readRow(tx, actor, acc);
 
       const now = new Date();
       assertCanRecall(acc, now);
 
       await this.repo.setRecalled(tx, actor.companyId, messageId, now, actor.id);
-      // Gỡ tệp = SOFT DELETE (`file_links` không có GRANT DELETE). Link mất ⇒ FilePolicy từ chối tải.
-      await this.repo.unlinkMessageFiles(tx, actor.companyId, messageId, now);
+      // ⚠️ KHÔNG gỡ `file_links` ở đây — CÓ CHỦ Ý, và ngược với bản đầu của WO. Gỡ link làm tệp hết
+      // module-owned ⇒ `decideForLinkedFile` tụt xuống fallback `FOUNDATION.FILE.DOWNLOAD` (company-admin
+      // ĐANG giữ cặp đó) ⇒ thu hồi MỞ RỘNG phạm vi tải thay vì thu hẹp. Link giữ sống để resolver vẫn là
+      // người quyết định, và nó từ chối vì `recalled_at IS NOT NULL`.
+      // Đầy đủ: jsdoc lớp `ChatMessageFileResolver`, khối "VÌ SAO THU HỒI KHÔNG GỠ LINK".
 
       await this.audit.record(tx, {
         action: CHAT_AUDIT.MESSAGE_RECALLED,
@@ -68,18 +74,20 @@ export class ChatMessageModerationService {
         },
       });
 
-      return this.readDto(tx, actor, acc);
+      return this.readRow(tx, actor, acc);
     });
+    // Ký tệp SAU khi tx đã commit — xem cảnh báo ở `readRow`.
+    return this.attachments.decorateOne(actor, row);
   }
 
   /** CHAT-API-012a — ghim. Quyền `pin:chat-message` + **admin phòng**; trần 20/phòng (CHAT-ERR-008). */
   async pin(actor: ChatActor, messageId: string): Promise<ChatMessageDto> {
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const row = await this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMessageAccess(tx, actor.companyId, messageId, actor.id);
       assertNotArchived(acc.room);
       this.access.requirePinAuthority(acc);
       assertPinnable(acc);
-      if (acc.message.pinnedAt) return this.readDto(tx, actor, acc);
+      if (acc.message.pinnedAt) return this.readRow(tx, actor, acc);
 
       // Khoá phòng TRƯỚC khi đếm: `countPinned` → `setPinned` không khoá là TOCTOU, hai request cùng
       // đọc 19 rồi cùng ghim ⇒ 21 tin ghim, cả hai 200, CHAT-ERR-008 bị phá trong im lặng.
@@ -98,17 +106,19 @@ export class ChatMessageModerationService {
         resultStatus: "Success",
         newValues: { roomId: acc.message.roomId },
       });
-      return this.readDto(tx, actor, acc);
+      return this.readRow(tx, actor, acc);
     });
+    // Ký tệp SAU khi tx đã commit — xem cảnh báo ở `readRow`.
+    return this.attachments.decorateOne(actor, row);
   }
 
   /** CHAT-API-012b — bỏ ghim. Idempotent: tin chưa ghim thì trả nguyên trạng, không lỗi. */
   async unpin(actor: ChatActor, messageId: string): Promise<ChatMessageDto> {
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const row = await this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMessageAccess(tx, actor.companyId, messageId, actor.id);
       assertNotArchived(acc.room);
       this.access.requirePinAuthority(acc);
-      if (!acc.message.pinnedAt) return this.readDto(tx, actor, acc);
+      if (!acc.message.pinnedAt) return this.readRow(tx, actor, acc);
 
       await this.repo.setPinned(tx, actor.companyId, messageId, null);
       await this.audit.record(tx, {
@@ -120,8 +130,10 @@ export class ChatMessageModerationService {
         resultStatus: "Success",
         oldValues: { roomId: acc.message.roomId, pinned: true },
       });
-      return this.readDto(tx, actor, acc);
+      return this.readRow(tx, actor, acc);
     });
+    // Ký tệp SAU khi tx đã commit — xem cảnh báo ở `readRow`.
+    return this.attachments.decorateOne(actor, row);
   }
 
   /**
@@ -130,12 +142,17 @@ export class ChatMessageModerationService {
    * Nhận nguyên `acc` thay vì `messageId` rời: `findMessageForDto` đòi `visibleFromSeq` bắt buộc
    * (§13.4), và cả `messageId` lẫn `visibleFromSeq` đều đã nằm sẵn trong kết quả `assertMessageAccess`.
    * Truyền cả cụm thì không có đường nào ghép nhầm id của tin này với mốc hiển thị của tin khác.
+   *
+   * ⚠️ S7-CHAT-BE-3 — trả về ROW, không phải DTO. Dựng DTO cần ký tệp, mà ký tệp mở transaction riêng
+   * (`FilePolicyService` → resolver → `withTenant`): lồng nó vào tx đang mở là chiếm client thứ hai từ
+   * pool trong khi client thứ nhất còn giữ transaction ⇒ TREO trên PgBouncer transaction-mode, không
+   * báo lỗi. Vì thế cả ba method đóng tx trước rồi mới `decorateOne`.
    */
-  private async readDto(
+  private async readRow(
     tx: Parameters<Parameters<DatabaseService["withTenant"]>[1]>[0],
     actor: ChatActor,
     acc: ChatMessageAccess,
-  ): Promise<ChatMessageDto> {
+  ): Promise<ChatMessageRow> {
     const row = await this.repo.findMessageForDto(
       tx,
       actor.companyId,
@@ -143,6 +160,6 @@ export class ChatMessageModerationService {
       acc.membership.visibleFromSeq,
     );
     if (!row) throw new UnprocessableEntityException(CHAT_ERR.MESSAGE_NOT_FOUND);
-    return toChatMessageDto(row);
+    return row;
   }
 }

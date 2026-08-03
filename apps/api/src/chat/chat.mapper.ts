@@ -1,4 +1,5 @@
 import type {
+  ChatAttachmentDto,
   ChatMessageDto,
   ChatRoomDetailDto,
   ChatRoomDto,
@@ -75,7 +76,17 @@ export function toChatRoomDto(
  * Và đây là chỗ `seq` toàn cục bị chặn: repo không select nó, mapper không có khoá nào cho nó. Hai lớp
  * chứ không một, vì thêm cột vào `MESSAGE_COLUMNS` là việc dễ làm lúc vội.
  */
-export function toChatMessageDto(row: ChatMessageRow): ChatMessageDto {
+export function toChatMessageDto(
+  row: ChatMessageRow,
+  /**
+   * S7-CHAT-BE-3 — tệp ĐÃ qua `FilePolicyService` và đã ký URL (`ChatAttachmentPresignService`).
+   *
+   * THAM SỐ BẮT BUỘC, không optional với mặc định `[]`: caller mới quên truyền sẽ được TypeScript chặn
+   * thay vì âm thầm trả về tin "không có tệp" — cùng lý do `findMessageForDto` bắt buộc `visibleFromSeq`.
+   * Mapper KHÔNG tự đi lấy tệp: lấy tệp cần ký, ký cần transaction riêng, và mapper là hàm thuần.
+   */
+  attachments: ChatAttachmentDto[],
+): ChatMessageDto {
   const recalled = row.recalledAt !== null;
   return {
     id: row.id,
@@ -95,6 +106,11 @@ export function toChatMessageDto(row: ChatMessageRow): ChatMessageDto {
     replyToMessageId: row.replyToMessageId,
     recalledAt: toIso(row.recalledAt),
     attachmentCount: row.attachmentCount,
+    // Tin đã thu hồi: tệp biến mất khỏi DTO — cùng lớp che với `body`/`mentions` (SPEC-15 §13.6). Link
+    // của chúng đã soft-delete nên truy vấn vốn đã trả rỗng; đây là ĐAI THỨ HAI, đặt ngay cạnh hai luật
+    // che kia để không ai tách chúng ra. `attachmentCount` CỐ Ý giữ số cũ (cột không có GRANT UPDATE) —
+    // nó là số liệu lịch sử, không phải nguồn để render.
+    attachments: recalled ? [] : attachments,
     roomSeq: row.roomSeq,
     createdAt: toIso(row.createdAt) ?? EPOCH,
   };
