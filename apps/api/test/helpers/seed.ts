@@ -479,6 +479,31 @@ export async function seedTwoFactorEnabled(
 }
 
 /** Dọn dữ liệu test theo companyId — xoá theo THỨ TỰ phụ thuộc FK (con trước, companies sau cùng). */
+/**
+ * Xoá một bảng CHA trong teardown, chịu được đua với worker/consumer còn sống.
+ *
+ * Lớp đua: outbox worker của spec này HOẶC của spec song song (claim KHÔNG lọc tenant) vẫn có thể ghi
+ * `audit_logs` mang `actor_user_id`/`company_id` của tenant đang dọn, ngay GIỮA lúc mình quét bảng con và
+ * lúc mình xoá bảng cha ⇒ 23503. Cách duy nhất đóng được là quét-lại-rồi-thử-lại, không phải quét một lần.
+ *
+ * Trần 5 lượt + ném lại mọi mã lỗi khác: teardown vẫn ỒN khi hỏng thật, chỉ nuốt đúng lớp đua tạm thời.
+ * 40P01 = deadlock_detected (mig 0535 thêm 446 composite FK ⇒ cascade lấy khoá rộng hơn, hai spec song
+ * song cùng dọn tenant khoá chéo nhau) — cùng HỌ lỗi tạm thời nên đi chung vòng thử lại.
+ */
+async function deleteWithFkRetry(direct: Pool, ids: string[][], deleteSql: string): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    await direct.query("DELETE FROM audit_logs WHERE company_id = ANY($1::uuid[])", ids);
+    try {
+      await direct.query(deleteSql, ids);
+      return;
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if ((code !== "23503" && code !== "40P01") || attempt >= 5) throw err;
+      await new Promise((r) => setTimeout(r, 200 * attempt));
+    }
+  }
+}
+
 export async function cleanupTenants(direct: Pool, companyIds: string[]): Promise<void> {
   if (companyIds.length === 0) return;
   const ids = [companyIds];
@@ -751,27 +776,17 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   // Quét LẠI audit_logs NGAY trước users: giữa lần xoá audit đầu (đầu hàm) và đây, outbox worker/consumer
   // của app còn sống (spec này hoặc spec song song đã claim event own-tenant) có thể ghi thêm audit có
   // actor_user_id → DELETE users vỡ FK audit_logs_actor_user_id_fkey (CI đỏ 2026-07-15, attendance-leave-sync).
-  await direct.query("DELETE FROM audit_logs WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query("DELETE FROM users WHERE company_id = ANY($1::uuid[])", ids);
+  //
+  // S7-QA-OUTBOXPROBE-1: MỘT lần quét lại là KHÔNG đủ — nó chỉ thu hẹp cửa sổ chứ không đóng. Worker còn
+  // sống có thể ghi audit ngay GIỮA câu quét và câu `DELETE users` kế tiếp, và khi đó teardown ném 23503,
+  // vitest tính là "Failed Suite" dù 0 test nào đỏ (CI lại đỏ 2026-08-03, cùng `attendance-leave-sync`).
+  // `DELETE companies` bên dưới đã có vòng thử lại có trần cho ĐÚNG lớp đua này; ở đây thiếu — bất đối
+  // xứng đó chính là chỗ hở. Dùng CHUNG idiom, không đẻ cơ chế mới.
+  await deleteWithFkRetry(direct, ids, "DELETE FROM users WHERE company_id = ANY($1::uuid[])");
   // S6-STAB-1 (STAB-F03): cùng lớp đua với processed_events/outbox_events ở trên, nhưng ở NẤC CUỐI.
   // Lần quét audit_logs ngay trên chỉ che được `DELETE users` (FK actor_user_id); giữa nó và
   // `DELETE companies` vẫn còn cửa sổ để outbox worker/consumer còn sống ghi thêm audit_logs →
   // `audit_logs_company_id_fkey` làm vỡ `DELETE companies` (đỏ-giả 2026-07-26, goal-tpl1-decompose).
   // Dùng ĐÚNG idiom đã có: quét lại bảng phụ thuộc rồi thử lại parent, lặp có trần khi vẫn vướng FK.
-  for (let attempt = 1; ; attempt++) {
-    await direct.query("DELETE FROM audit_logs WHERE company_id = ANY($1::uuid[])", ids);
-    try {
-      await direct.query("DELETE FROM companies WHERE id = ANY($1::uuid[])", ids);
-      break;
-    } catch (err) {
-      const code = (err as { code?: string }).code;
-      // 40P01 = deadlock_detected. Thêm 2026-07-31 (S6-SEC-XTENANTFK-1): mig `0535` thêm 446 composite
-      // FK, nên `DELETE companies` cascade qua NHIỀU bảng hơn và lấy khoá theo thứ tự rộng hơn ⇒ hai
-      // spec song song cùng dọn tenant có thể khoá chéo nhau (quan sát được 1 lần ở full-suite
-      // 2026-07-31, không tái lập khi chạy cô lập). Cùng HỌ lỗi tạm thời với 23503 (đua với worker còn
-      // sống) nên dùng CHUNG vòng thử lại, không đẻ cơ chế mới.
-      if ((code !== "23503" && code !== "40P01") || attempt >= 5) throw err;
-      await new Promise((r) => setTimeout(r, 200 * attempt));
-    }
-  }
+  await deleteWithFkRetry(direct, ids, "DELETE FROM companies WHERE id = ANY($1::uuid[])");
 }
