@@ -169,7 +169,7 @@ Thứ tự bắt buộc — đảo là dẫm vào landmine `dist` dùng chung (`
 | G5 | Dựng staging | clone PROD → `mediaos_dev` → `m dev-online-fast` | tiền đề `RC-003`/`RC-004` | Owner | ✅ trên **dữ liệu PROD thật** |
 | — | **Nghiệm thu engine cộng dồn phép** | `GET /leave/admin/accrual/preview` | chặn 422 ngày đầu | Owner | ✅ **245 ngày / 41 NV** |
 | G6 | Regression P0 + smoke trên staging | `node scripts/release-smoke.mjs --base http://localhost:3200/api/v1 --strict` | **`RC-003`** ⇒ ô #4 | Owner | ✅ **10 PASS · 0 FAIL · 0 SKIP** |
-| G7 | Đăng ký 2 scheduled task (bản đã sửa) | `RELEASE-11` §6.2 | ô #12 · phần còn lại **KI-050** | Owner (**Administrator**) | ⬜ **0/2 task tồn tại**; payload backup ĐÃ chạy thật (§6a) |
+| G7 | Đăng ký 2 scheduled task (bản đã sửa) | `RELEASE-11` §6.2 | ô #12 · phần còn lại **KI-050** | Owner (**Administrator**) | ✅ **2/2 chạy THẬT 04/08** — `BackupDaily` `LastTaskResult=0` + dump 4.339.263 byte do chính task đẻ ra; `OpsAlert` `=1` (WARN đúng thiết kế). Xem §6c |
 | G8 | Ký UAT | `RELEASE-04` | ô #5 | Business owner | ⬜ |
 | G9 | Cắt tag RC | `RELEASE-08` §2 | ô #2 | Owner | ✅ **`v1.0.0-rc.3` @ `30540ab0`** |
 | G10 | Gửi thông báo go-live | `RELEASE-08` §7 | ô #14 | Owner | ⬜ |
@@ -324,6 +324,31 @@ Cộng `company_security_policies` **0 hàng** (không có vế công ty) ⇒ qu
 **G7 — vẫn `0/2`.** `Get-ScheduledTask -TaskName "MediaOS*"` trả rỗng (04/08). Phiên công cụ **không có
 quyền Administrator** (`IsInRole(Administrator) = False`) nên không đăng ký được từ đây — lệnh
 copy-paste đã verify ở `RELEASE-11` §6.2, phải chạy trong PowerShell **Run as Administrator**.
+
+### 6c. G7 — đăng ký xong và ĐÃ CHẠY THẬT — 2026-08-04
+
+| Task | Execute | `LastTaskResult` | NextRun |
+| --- | --- | --- | --- |
+| `MediaOS-BackupDaily` | `C:\Program Files\Git\bin\bash.exe` | **`0`** | 05/08 02:00 |
+| `MediaOS-OpsAlert` | `node.exe` | **`1`** = WARN đúng thiết kế | mỗi 10 phút |
+
+**Bằng chứng backup là HÀNH VI, không phải trạng thái:** dump `mediaos-20260803-235232.dump`
+(4.339.263 byte) ghi lúc **06:52:33**, khớp `LastRunTime` của task ⇒ chính task đẻ ra nó, không phải
+lượt chạy tay. ⇒ Phần **"lịch tự động"** của `KI-050` ĐÓNG. Còn lại của KI-050: dump **chưa mã hoá**
+(`BACKUP_GPG_RECIPIENT` trống) + **chưa offsite** (`BACKUP_B2_REMOTE` trống) — `RELEASE-14` `PGL-001`.
+
+> 🐛 **Suýt hỏng im lặng — đã vá, ghi lại vì đây là lần thứ BA của cùng lớp lỗi.** Lần đăng ký đầu dùng
+> `(Get-Command bash).Source` theo runbook cũ; trên máy này nó trả `C:\WINDOWS\system32\bash.exe` =
+> **shim WSL**, mà WSL không có bash (`execvpe(/bin/bash) failed`). Task vẫn đăng ký thành công và
+> `State = Ready` — **chỉ đến 02:00 mới hỏng**. Bắt được nhờ chạy thử ngay thay vì đợi trigger. Runbook
+> `RELEASE-11` §6.2 nay trỏ đích danh Git Bash + `Test-Path` fail-loud, kèm bảng đọc `LastTaskResult`
+> (`267011` = **chưa chạy lần nào**, KHÔNG phải "ổn"). Bài học `KI-050`: script tồn tại ≠ script chạy được.
+
+⚠️ **`OpsAlert` sẽ kêu WARN mỗi 10 phút cho tới khi PROD lên head.** Nhóm đang warn là *"Lệch migration
+(schema ↔ journal) — 4 migration chưa áp"* (`0538 · 0539 · 0540 · 0541` = wave CHAT + CLEAN-2). Hôm nay
+**không có gì hỏng**: PROD chạy build `rc.3 @ 30540ab0`, tức code và schema cùng ở 205. Nhưng cảnh báo
+lặp liên tục là alert-fatigue — đúng thứ `S6-OPS-LOGWINDOW-1` vừa đi sửa cho một nguyên nhân khác. Hoặc
+deploy PROD lên head (áp migration TRƯỚC), hoặc chấp nhận và ghi rõ, đừng để nó kêu vô chủ.
 
 **Sau G1…G10:** 15/15 ô §2 ĐẠT hoặc chấp nhận-có-chữ-ký ⇒ phán quyết chuyển **GO**.
 
