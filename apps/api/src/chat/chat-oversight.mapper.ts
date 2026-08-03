@@ -152,14 +152,41 @@ export function toOversightAuditEntryDto(row: ChatOversightAuditRow): ChatOversi
     roomId: row.roomId,
     roomCode: row.roomCode,
     roomName: row.roomName,
-    // `resultStatus` ở DB là `varchar` nullable (writer cũ không set). Đường oversight LUÔN set, nên
-    // NULL ở đây là dữ liệu hỏng — quy về `Denied` là an toàn hơn: một dòng đáng ngờ hiện lên như một
-    // lần bị từ chối, thay vì như một lần đọc thành công hợp lệ.
-    resultStatus: row.resultStatus === "Success" ? "Success" : "Denied",
+    resultStatus: toAuditResultStatus(row.resultStatus),
     endpoint,
     criteria,
     createdAt: toIso(row.createdAt) ?? EPOCH,
   };
+}
+
+/**
+ * Bốn giá trị hợp lệ của `audit_logs.result_status` — nguồn sự thật là CHECK ở mig `0432`, được
+ * `audit.service.ts` (`AUDIT_RESULT_STATUSES`) ép lại ở tầng ghi.
+ *
+ * Đây là bản sao ĐỌC, cố ý không import từ `events/`: nó là **allowlist**, nên khi nguồn thêm giá trị thứ
+ * năm mà quên chỗ này thì hỏng theo chiều AN TOÀN — giá trị mới hiện `Unknown` (chưa biết nhãn) chứ
+ * không hiện sai thành một sự kiện có thật. Ca test khoá đúng tính chất đó.
+ */
+const AUDIT_RESULT_STATUSES = ["Success", "Failure", "Denied", "Error"] as const;
+type AuditResultStatus = (typeof AUDIT_RESULT_STATUSES)[number];
+
+/**
+ * `result_status` thô → nhãn nhật ký. Map TƯỜNG MINH cả bốn giá trị; lạ/NULL → nhãn RIÊNG `Unknown`.
+ *
+ * ⚠️ Bản đầu viết `row.resultStatus === 'Success' ? 'Success' : 'Denied'`. Nó giữ đúng bất biến quan
+ * trọng nhất (dòng hỏng KHÔNG được hiện thành `Success`) nhưng đạt bằng cách **nói sai loại sự kiện**:
+ * một dòng `Failure` (thu hồi tin hỏng — `chat.errors.ts`) hay `Error` (lỗi hạ tầng) hiện lên nhật ký
+ * như "đã bị TỪ CHỐI", và đi thẳng vào thống kê từ chối của CHAT-SCREEN-008. Hôm nay CHAT-API-019 lọc
+ * `action = OVERSIGHT_READ` nên chỉ hai writer đẻ ra dòng ⇒ chưa lộ; bẫy bung khi có writer thứ ba, lúc
+ * đó không ai nhớ dòng ba-ngôi này (S7-CHAT-CLEAN-2).
+ *
+ * `Unknown` KHÔNG khẳng định gì cả — đó là điểm: dữ liệu hỏng phải LỘ RA, không được đội lốt một sự kiện
+ * có thật. Bất biến "lạ/NULL không bao giờ ra `Success`" được khoá bằng ca test riêng.
+ */
+function toAuditResultStatus(raw: string | null): AuditResultStatus | "Unknown" {
+  return (AUDIT_RESULT_STATUSES as readonly string[]).includes(raw ?? "")
+    ? (raw as AuditResultStatus)
+    : "Unknown";
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {

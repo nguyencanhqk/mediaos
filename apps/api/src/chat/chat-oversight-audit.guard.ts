@@ -181,12 +181,21 @@ export class ChatOversightAuditGuard implements CanActivate {
   /**
    * Nhãn loại truy cập suy từ ĐƯỜNG DẪN đã khai của route (`req.route.path`), không từ URL thật: URL thật
    * mang giá trị `:id` của người dùng, còn ta cần khuôn `/chat/oversight/rooms/:id/messages`.
+   *
+   * ⚠️ **NHÁNH CUỐI PHẢI LÀ `UNKNOWN`, KHÔNG PHẢI MỘT ENDPOINT CÓ THẬT** (S7-CHAT-CLEAN-2). Bản đầu để
+   * `ROOM_SEARCH` làm mặc định, nghĩa là route thứ 5 dùng lại cặp đọc-vượt — hoặc bất kỳ request nào tới
+   * đây khi `req.route` chưa được gắn — sẽ ghi dòng `Denied` **mang nhãn của endpoint tra danh sách**.
+   * Dòng đó hợp lệ về mọi mặt máy kiểm được (schema đúng, có mặt trên CHAT-SCREEN-008), nên KHÔNG có gì
+   * đỏ; nó chỉ nói sai chuyện đã xảy ra. Nhãn `unknown` thì hiện ra ngay trên chính màn hình nhật ký.
+   *
+   * `018a` giờ khớp TƯỜNG MINH theo đuôi `/rooms` — nó là route tra danh sách, không phải "phần còn lại".
    */
   private endpointOf(req: OversightRequest): ChatOversightEndpoint {
     const path = req.route?.path ?? req.path ?? "";
     if (path.includes("/messages")) return CHAT_OVERSIGHT_ENDPOINT.ROOM_MESSAGES;
     if (path.includes("/audit")) return CHAT_OVERSIGHT_ENDPOINT.AUDIT_LOG;
     if (path.includes("/rooms/")) return CHAT_OVERSIGHT_ENDPOINT.ROOM_DETAIL;
-    return CHAT_OVERSIGHT_ENDPOINT.ROOM_SEARCH;
+    if (path.endsWith("/rooms")) return CHAT_OVERSIGHT_ENDPOINT.ROOM_SEARCH;
+    return CHAT_OVERSIGHT_ENDPOINT.UNKNOWN;
   }
 }

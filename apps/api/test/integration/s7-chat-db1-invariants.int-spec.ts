@@ -28,6 +28,8 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
   let tenantA: SeededTenant;
   let tenantB: SeededTenant;
   let userA: string;
+  /** Dùng cho ca ghi CHÉO tenant ở mục C — phải sống ngoài `beforeAll`. */
+  let userB: string;
   let roomA: string;
   let msgA: string;
   let msgB: string;
@@ -72,7 +74,7 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
     tenantA = await seedCompany(direct, "chatA");
     tenantB = await seedCompany(direct, "chatB");
     userA = await seedUser(direct, tenantA.companyId, `chat-a-${tenantA.slug}@x.test`);
-    const userB = await seedUser(direct, tenantB.companyId, `chat-b-${tenantB.slug}@x.test`);
+    userB = await seedUser(direct, tenantB.companyId, `chat-b-${tenantB.slug}@x.test`);
 
     const mkRoom = async (companyId: string, code: string) =>
       (
@@ -241,6 +243,47 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
         `INSERT INTO chat_messages (company_id, room_id, sender_id, body, reply_to_message_id, room_seq)
          VALUES ($1, $2, $3, 'reply cung tenant', $4, (SELECT COALESCE(max(room_seq), 0) + 1 FROM chat_messages WHERE company_id = $1 AND room_id = $2)) RETURNING id`,
         [tenantA.companyId, roomA, userA, msgA],
+      );
+      expect(r.rows).toHaveLength(1);
+    });
+
+    /**
+     * S7-CHAT-CLEAN-2 — ĐO cái mà một comment trong `chat-rooms.repository.ts` từng khẳng định ngược lại.
+     *
+     * Comment ở `findUsableUserIds` viết rằng FK `chat_room_members.user_id → users.id` là FK MỘT CỘT nên
+     * KHÔNG chặn được userId của tenant khác. Điều đó ĐÚNG cho tới `0535` (S6-SEC-XTENANTFK-1), nơi cặp
+     * `('chat_room_members','user_id','users')` được composite hoá. Đo trên DB thật:
+     *     chat_room_members_user_id_company_fk
+     *       FOREIGN KEY (company_id, user_id) REFERENCES users(company_id, id) ON DELETE RESTRICT
+     * và CẢ HAI cột đều NOT NULL ⇒ MATCH SIMPLE không có lối lách. Ca này ghim hành vi (23503), để lần sau
+     * comment và hiện trạng có chỗ đối chiếu — chứ không phải chỗ này tin chỗ kia (memory
+     * `wo-plans-built-on-code-comments` · `grant-in-old-migration-is-not-current-state`).
+     */
+    it("thành viên của tenant A KHÔNG trỏ được tới user của tenant B — 23503", async () => {
+      let code: string | null = null;
+      let constraint: string | undefined;
+      try {
+        await direct.query(
+          `INSERT INTO chat_room_members (company_id, room_id, user_id, role)
+           VALUES ($1, $2, $3, 'member')`,
+          [tenantA.companyId, roomA, userB],
+        );
+      } catch (e) {
+        const err = e as { code?: string; constraint?: string };
+        code = err.code ?? null;
+        constraint = err.constraint;
+      }
+      expect(code, "gán user tenant B vào phòng tenant A PHẢI bị chặn ở tầng DB").toBe("23503");
+      expect(constraint).toBe("chat_room_members_user_id_company_fk");
+    });
+
+    it("ĐỐI CHỨNG DƯƠNG: gán user CÙNG tenant thì được", async () => {
+      // Không có ca này thì ca trên xanh kể cả khi INSERT hỏng vì lý do khác (cột thiếu, CHECK role…).
+      const r = await direct.query(
+        `INSERT INTO chat_room_members (company_id, room_id, user_id, role)
+         VALUES ($1, $2, $3, 'member')
+         ON CONFLICT (room_id, user_id) DO UPDATE SET left_at = NULL RETURNING id`,
+        [tenantA.companyId, roomA, userA],
       );
       expect(r.rows).toHaveLength(1);
     });
@@ -425,10 +468,18 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
     });
 
     it("room_seq liên tục từ 1 trong TỪNG phòng, và trùng số → 23505", async () => {
+      // ⚠️ BÓ THEO TENANT CỦA CHÍNH FILE NÀY (S7-CHAT-CLEAN-2). Bản đầu quét TOÀN BẢNG: nó khẳng định
+      // `room_seq` liên tục cho MỌI phòng của MỌI tenant đang có trong lane DB — kể cả phòng do spec khác
+      // đang chạy SONG SONG gieo, và những spec đó có quyền gieo `room_seq` thưa/lệch cho ca test của
+      // riêng chúng. Hỏng theo kiểu tệ nhất: ĐỎ OAN, không tái hiện được khi chạy cô lập, và lối sửa rẻ
+      // nhất lúc 2 giờ sáng là XOÁ luôn ca này — mất một bất biến thật (memory
+      // `parallel-int-specs-share-one-outbox` · `test-fixture-stamps-global-permission-catalog`).
       const bad = await direct.query<{ room_id: string }>(
         `SELECT room_id FROM chat_messages
+          WHERE company_id = ANY($1::uuid[])
           GROUP BY company_id, room_id
          HAVING min(room_seq) <> 1 OR max(room_seq) <> count(*)`,
+        [[tenantA.companyId, tenantB.companyId]],
       );
       expect(bad.rows, "room_seq phải liên tục từ 1 trong mỗi phòng").toEqual([]);
 
@@ -855,6 +906,45 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
         expect(r.rls, `${r.relname} phải bật RLS`).toBe(true);
         expect(r.force, `${r.relname} phải FORCE RLS (owner cũng không được vượt)`).toBe(true);
       }
+    });
+
+    /**
+     * S7-CHAT-CLEAN-2 (mig 0541) — ĐIỂM DANH index của `chat_messages`, cả hai chiều.
+     *
+     * Khối VERIFY của `0541` chỉ chạy ĐÚNG MỘT LẦN lúc migrate. Hai đường trôi sau đó, cả hai đều IM:
+     *  · khai lại `index("chat_messages_room_id_idx")` trong `communication.ts` ⇒ `db:generate` dựng lại
+     *    ở migration sau, hai index tiền tố trùng quay về;
+     *  · "dọn tiếp theo `idx_scan = 0`" ⇒ gỡ nhầm một UNIQUE (phép kiểm unique lúc INSERT KHÔNG được
+     *    đếm vào `idx_scan`) hay gỡ GIN search (bảng test nhỏ nên planner luôn seq-scan).
+     * Danh sách dưới đây là HỢP ĐỒNG: sửa một dòng phải có lý do viết kèm, y như sửa SPEC.
+     */
+    it("index chat_messages: 9 cái phải-giữ còn nguyên, 2 cái tiền-tố-trùng đã gỡ (mig 0541)", async () => {
+      const rows = await direct.query<{ indexrelname: string }>(
+        `SELECT indexrelname FROM pg_stat_user_indexes WHERE relname = 'chat_messages' ORDER BY 1`,
+      );
+      const have = new Set(rows.rows.map((r) => r.indexrelname));
+
+      const PHAI_GIU = [
+        "chat_messages_company_id_id_uq", // unique đỡ composite tenant FK reply_to (KI-046)
+        "chat_messages_pinned_idx",
+        "chat_messages_pkey",
+        "chat_messages_room_seq_idx", // đường vào theo room_id còn lại sau khi gỡ room_id_idx
+        "idx_chat_messages_reply",
+        "idx_chat_messages_room_seq", // đường đọc chính + tiền tố RI (company_id, room_id)
+        "idx_chat_messages_search", // GIN — idx_scan=0 trên bảng test là BÌNH THƯỜNG
+        "uq_chat_messages_client_id", // chống gửi trùng (CHAT-ERR-014)
+        "uq_chat_messages_room_seq", // đai thứ hai của room_seq (0539)
+      ];
+      expect(
+        PHAI_GIU.filter((n) => !have.has(n)),
+        "index phải-giữ bị gỡ mất",
+      ).toEqual([]);
+
+      const DA_GO = ["chat_messages_company_id_idx", "chat_messages_room_id_idx"];
+      expect(
+        DA_GO.filter((n) => have.has(n)),
+        "index tiền-tố-trùng đã quay lại — kiểm `communication.ts` có khai lại không",
+      ).toEqual([]);
     });
   });
 });

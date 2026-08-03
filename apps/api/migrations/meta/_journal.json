@@ -1457,6 +1457,13 @@
       "when": 1717587329000,
       "tag": "0540_s7chatdb3_least_privilege",
       "breakpoints": true
+    },
+    {
+      "idx": 208,
+      "version": "7",
+      "when": 1717587330000,
+      "tag": "0541_s7chatclean2_drop_dup_idx",
+      "breakpoints": true
     }
   ]
 }

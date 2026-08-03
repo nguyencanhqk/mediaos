@@ -299,4 +299,26 @@ describe("ChatOversightAuditGuard — đường TỪ CHỐI để lại đúng 1
       expect(entry.metadata?.endpoint, `${routePath} → ${expected}`).toBe(expected);
     }
   });
+
+  /**
+   * S7-CHAT-CLEAN-2 — đường dẫn LẠ phải mang nhãn `unknown`, KHÔNG rơi vào một endpoint CÓ THẬT.
+   *
+   * Bản đầu để `018a` (ROOM_SEARCH) làm nhánh mặc định. Route thứ 5 thêm sau — hoặc một request tới guard
+   * mà `req.route` chưa được express gắn — sẽ ghi dòng `Denied` **mang nhãn của endpoint tra danh sách**,
+   * và KHÔNG có gì đỏ: dòng vẫn hợp lệ, vẫn hiện ở CHAT-SCREEN-008, chỉ là nói SAI người ta đã đọc gì.
+   * Ca "KHÔNG route nào đứng ngoài bảng" ở suite trên bắt route thứ 5 **ở tầng controller**; ca này bắt
+   * phần còn lại (path rỗng / khuôn chưa khai) ở tầng guard.
+   */
+  it("đường dẫn LẠ ⇒ nhãn `unknown`, KHÔNG mượn nhãn của endpoint có thật (018a)", async () => {
+    permSvc.can.mockResolvedValue(DENY);
+    // Không dùng handler bịa: `handlerOf` đòi method có thật. Lấy handler thật + khuôn đường dẫn LẠ —
+    // đúng hình dạng của "route thứ 5 dùng lại cặp quyền đọc-vượt".
+    const strangePaths = ["/chat/oversight/exports", "/chat/oversight", ""];
+    for (const routePath of strangePaths) {
+      audit.record.mockClear();
+      await guard.canActivate(ctxFor("searchRooms", { routePath }));
+      const entry = audit.record.mock.calls[0]?.[1] as { metadata?: { endpoint?: string } };
+      expect(entry.metadata?.endpoint, `${routePath || "(rỗng)"} → unknown`).toBe("unknown");
+    }
+  });
 });
