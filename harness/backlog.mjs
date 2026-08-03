@@ -10290,6 +10290,39 @@ export const backlog = [
     ],
   },
 
+  {
+    id: "S7-SEC-ROLE2FA-UI-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      'Màn "Sửa vai trò" hiển thị SAI cờ Bắt buộc 2FA (luôn chưa-tick) và KHÔNG TẮT được từ UI — BE thiếu cờ ở list/detail',
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/permission/**",
+      "packages/contracts/src/auth.ts",
+      "apps/app/src/routes/system/roles/**",
+      "apps/api/test/integration/**",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Owner phát hiện 2026-08-04: mở /system/roles/:id/edit cho `QUẢN LÝ CẤP CAO`, ô 'Bắt buộc 2FA' KHÔNG tick — trong khi DB PROD `roles.requires_two_factor = true` và guard ĐANG cưỡng chế thật (3 người giữ vai này nhận 403 TWO_FACTOR_SETUP_REQUIRED)",
+      "GỐC: `apps/app/src/routes/system/roles/role-form-schema.ts:32-36` hard-code `requiresTwoFactor: false` trong `roleToFormValues()`. Không phải ẩu — chính file đó ghi rõ lý do: `roleSchema` của GET /auth/roles (list) KHÔNG mang cột này và KHÔNG có route GET /auth/roles/:id. Lane FE hồi đó cố ý không tự thêm endpoint, hẹn 'follow-up BE' — follow-up chưa từng làm",
+      "HỆ QUẢ 2 (nặng hơn): KHÔNG TẮT ĐƯỢC TỪ UI. `toUpdateRoleDto` (role-form-schema.ts:56-60) chỉ gửi field DIRTY; mặc định false ⇒ tick-rồi-bỏ-tick đưa giá trị VỀ ĐÚNG mặc định ⇒ react-hook-form xoá dirty ⇒ field bị loại khỏi PATCH ⇒ DB giữ nguyên true. Màn chỉ BẬT được, không TẮT được",
+      "Đo 04/08 trên PROD: SA (379 quyền) + QUẢN LÝ CẤP CAO (369 quyền) + company-admin (329) đều `requires_two_factor=t`. Mig 0120 chỉ đóng dấu `company-admin` HỆ THỐNG (is_system, company_id NULL) ⇒ cờ trên 2 vai company-scoped kia đến từ lúc TẠO vai (audit `RoleCreated` 21/07 08:20, `new_values` rỗng nên không truy được ai tick)",
+      "memory: ui-promises-backend-never-reads · gate-indicator-can-read-wrong-source · read-path-gate-pair-must-match-download-pair",
+    ],
+    done_when: [
+      "RED trước: spec chứng minh màn edit hiện SAI — dựng role có `requiresTwoFactor: true` rồi assert form khởi tạo `true` (hiện đang `false` ⇒ đỏ trên code cũ)",
+      "RED thứ hai, ca ĐANG KHÔNG AI PHỦ: từ trạng thái DB `true`, thao tác tắt trên UI phải gửi `requiresTwoFactor: false` trong PATCH. Đừng chỉ sửa prefill rồi coi là xong — prefill đúng làm mặc định thành `true`, lúc đó bỏ tick MỚI thành dirty và mới tắt được; phải có ca khoá cả hai chiều bật/tắt",
+      "BE: thêm `requiresTwoFactor` vào `roleSchema` của GET /auth/roles HOẶC thêm GET /auth/roles/:id. Chọn cái nào phải cân với route-census (thêm route ⇒ ĐỎ route-guard-coverage, phải regen ROUTE_CENSUS_WRITE=1 — memory route-census-runtime-gate)",
+      "Gỡ hard-code `requiresTwoFactor: false` ở `roleToFormValues` + gỡ ghi-chú giới hạn đã chết trong cùng file (đừng để lại comment mô tả trạng thái cũ — memory wo-plans-built-on-code-comments)",
+      "KHÔNG đổi hành vi cưỡng chế của `TwoFactorEnforcementGuard`. WO này chỉ sửa đường ĐỌC/GHI cờ ở tầng quản trị; đụng guard là mở cửa hạ chuẩn 2FA trên PROD",
+      "FULL gate (security-reviewer) PASS — diff chạm auth/permission",
+    ],
+  },
+
   // ════════════════ CR CỬA SỔ RC — chốt owner 2026-08-01 (RELEASE-05 §4.1) ════════════════
   // Ba CR được nhận trong cửa sổ freeze, mỗi cái trỏ về một nhóm ở §4.1:
   //   · S6-OPS-LOGWINDOW-1  → "Operational fix" (monitoring). Báo động ĐỎ GIẢ chặn giá trị của G7.

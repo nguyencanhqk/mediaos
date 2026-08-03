@@ -79,7 +79,13 @@ Chi tiết lỗ #1 và vì sao nó là lỗ chặn: [`docs/plans/S6-GOLIVE-1.md`
 
 ## 4. `KI-056` — 4/6 tài khoản `SA` không có lớp bảo vệ thứ hai · `S2` · phát hiện 2026-07-31
 
-> 🔄 **TRẠNG THÁI ĐÃ ĐỔI — đo lại 2026-08-03, đọc §6a TRƯỚC KHI HÀNH ĐỘNG THEO MỤC NÀY.**
+> ✅ **ĐÓNG 2026-08-04 — đọc §6b.** Owner gỡ vai `SA` khỏi 4 tài khoản; còn **2** tài khoản `SA`, cả
+> hai đã bật TOTP ⇒ không còn tài khoản `SA` nào chỉ có mật khẩu ⇒ `S2` **4 → 3**, hết vượt ngưỡng
+> `RELEASE-05` §5.3. ⚠️ **Phần dư CÓ THẬT và §6b nói rõ:** 4 người đó vẫn giữ `QUẢN LÝ CẤP CAO`
+> (**369/379 quyền**) và 3 trong số đó chưa enroll — cùng rủi ro, khác tên vai. Đừng đọc mục này thành
+> "đã hết tài khoản gần-toàn-quyền không có lớp thứ hai".
+>
+> 🔄 **Bối cảnh trước đó — đo lại 2026-08-03, đọc §6a TRƯỚC KHI HÀNH ĐỘNG THEO MỤC NÀY.**
 > `SA.requires_two_factor` giờ là **`true`** (mục này chép `f`), và `TWO_FACTOR_ENFORCEMENT_ENABLED`
 > vốn **luôn** `true` (là default trong `env.schema.ts:74`, không phải "chưa ai bật"). Tức **cờ đã bật
 > TRƯỚC khi 4 người enroll** — đúng thứ tự mà đoạn cuối mục này dặn tránh. Hệ quả thực tế và cách xử
@@ -156,7 +162,7 @@ Thứ tự bắt buộc — đảo là dẫm vào landmine `dist` dùng chung (`
 
 | # | Việc | Lệnh | Mở cổng nào | Ai | Trạng thái |
 | --- | --- | --- | --- | --- | --- |
-| G1 | Enroll TOTP cho 4 tài khoản `SA` | App `/me/security/2fa` | **KI-056** ⇒ `S2` về 3 | 4 người đó | ⬜ **2/6 xong · còn 4** (đo 03/08, §6a) |
+| G1 | Enroll TOTP cho tài khoản `SA` | App `/me/security/2fa` | **KI-056** ⇒ `S2` về 3 | Owner | ✅ **2/2 `SA` đã bật TOTP** (owner gỡ 4 vai `SA` 04/08) — phần dư đổi sang vai `QUẢN LÝ CẤP CAO`, §6b |
 | G2 | Backup trước khi đụng schema | `DATABASE_DIRECT_URL=… BACKUP_DIR=./backups bash scripts/backup-db.sh` | an toàn cho G3 | Owner | ✅ `backups/mediaos-20260802-010032.dump` |
 | G3 | Deploy PROD lên head | `m prod-update api` | ô #8 (hết tồn đọng) · warn migration | Owner | ✅ PROD **205/205 @ `0537`** |
 | G4 | **Cutover** (tách PROD khỏi `dist`) | `m prod-cutover` | **KI-016**; mở khoá G5 an toàn | Owner (**Administrator**) | ✅ **ĐÃ XONG** — chứng minh bằng thực nghiệm |
@@ -239,6 +245,73 @@ không — bài học "workaround có thể chưa từng chạy"): dump `4 247 9
 có dấu cách/backslash — chi tiết + bản thay thế ở `RELEASE-11` §6.2.
 
 **G8 · G10** — thuần chữ ký và thông báo của owner, không có gì đo được từ máy; giữ ⬜.
+
+### 6b. Đo lại sau khi owner gỡ bớt vai `SA` — 2026-08-04
+
+**G1 ĐẠT.** Owner gỡ vai `SA` khỏi 4 tài khoản (04/08). Còn **2** tài khoản `SA`, **cả hai đã bật TOTP**:
+`admin@funtimemediacorp.com` (08/07) · `ng.canh9x@gmail.com` (27/07). Không còn tài khoản `SA` nào
+không có lớp thứ hai ⇒ `KI-056` **ĐÓNG** ⇒ `S2` **4 → 3**, về đúng ngưỡng `RELEASE-05` §5.3 (≤3).
+
+> ⚠️ **Đếm `user_roles` PHẢI lọc `deleted_at IS NULL`.** Gỡ vai là **xoá mềm**; truy vấn thiếu vế đó
+> đếm cả hàng đã gỡ và trả **6** thay vì 2 (đã dính đúng lỗi này lúc đo lần đầu 04/08 — mỗi người hiện
+> 2 dòng vì một hàng sống + một hàng đã xoá). Vế đúng, dùng lại nguyên văn:
+> `JOIN user_roles ur ON ur.user_id = u.id AND ur.deleted_at IS NULL AND (ur.expires_at IS NULL OR ur.expires_at > now())`
+
+**⚠️ NHƯNG RỦI RO CỦA `KI-056` KHÔNG BIẾN MẤT — NÓ ĐỔI TÊN VAI.** Cả 4 người bị gỡ `SA` vẫn giữ
+`QUẢN LÝ CẤP CAO`, và vai đó có **369/379 quyền** (kém `SA` đúng 10) — tức "tài khoản gần-toàn-quyền"
+vẫn còn, chỉ khác nhãn. Trạng thái 2FA của 4 người đó:
+
+| Tài khoản | Vai còn lại | TOTP |
+| --- | --- | --- |
+| `ngocha.nguyen20385@gmail.com` | QUẢN LÝ CẤP CAO · employee | ✅ đã bật 03/08 |
+| `tranphuong1994.hr@gmail.com` | QUẢN LÝ CẤP CAO · employee | ⚠️ có bản ghi `user_totp` nhưng `enabled_at IS NULL` — enroll dở dang, `isEnabled()` vẫn coi là CHƯA |
+| `luongphuonganh82@gmail.com` | QUẢN LÝ CẤP CAO · employee | ⛔ chưa có |
+| `tienbac308@gmail.com` | QUẢN LÝ CẤP CAO · employee | ⛔ chưa có |
+
+`QUẢN LÝ CẤP CAO.requires_two_factor = true` ⇒ **3 người chưa bật vẫn bị `403 TWO_FACTOR_SETUP_REQUIRED`
+ở mọi route nghiệp vụ**, y như trước khi gỡ `SA`. Gỡ vai KHÔNG mở khoá cho họ; chỉ enroll mới mở.
+
+**⚠️ Và bật cờ ≠ đã bảo vệ.** Đường enroll được miễn trừ có chủ đích (nếu không thì deadlock: không có
+lối vào để thiết lập). Nghĩa là ai trộm được **mật khẩu** của một tài khoản 369-quyền **chưa enroll**
+vẫn đăng nhập được rồi **tự enroll authenticator CỦA HẮN**. Cờ chỉ thành lớp bảo vệ thật **sau khi
+người thật đã enroll**. ⇒ Với 3 tài khoản trên, rủi ro y hệt mô tả gốc của `KI-056`, chỉ khác tên vai.
+
+**Ba lựa chọn cho phần dư này (owner quyết, KHÔNG tự làm — là quyền của người có tên):**
+
+1. **3 người enroll TOTP** — đóng đúng gốc, và mở khoá cho họ dùng hệ thống.
+2. **Gỡ luôn `QUẢN LÝ CẤP CAO`** khỏi tài khoản nào không thực sự cần: `luongphuonganh82` và
+   `tienbac308` đăng nhập **đúng MỘT lần, 21/07** (`login_logs`) — 369 quyền cho tài khoản chưa từng
+   dùng là bán kính thiệt hại không có ai đổi lại. Họ giữ `employee` nên vẫn vào được phần của mình.
+3. **Chấp nhận có chữ ký** — ghi vào `RELEASE-04` rằng 3 tài khoản gần-toàn-quyền đang chỉ có mật khẩu.
+
+**(3) 🐛 MÀN "SỬA VAI TRÒ" HIỂN THỊ SAI CỜ NÀY — phát hiện 04/08, đừng dùng nó làm bằng chứng.**
+Owner mở `/system/roles/:id/edit` cho `QUẢN LÝ CẤP CAO` và thấy ô **"Bắt buộc 2FA" KHÔNG tick**, trong
+khi DB là `true`. Ô đó **luôn** hiện chưa-tick khi sửa, với **mọi** vai: `RoleFormPage.tsx:88` gọi
+`reset(roleToFormValues(existing))`, mà `role-form-schema.ts:32-36` **hard-code `requiresTwoFactor: false`**
+— vì `GET /auth/roles` (list) không trả cột này và **không có** `GET /auth/roles/:id`. Chính file đó đã
+ghi sẵn giới hạn này và hẹn "follow-up BE"; follow-up chưa từng làm.
+
+Hai hệ quả, cái thứ hai nặng hơn:
+
+- **Đọc sai:** admin nhìn màn này sẽ kết luận "vai này không ép 2FA" trong khi nó ĐANG ép. Đúng khuôn
+  `gate-indicator-can-read-wrong-source` — chỉ báo đọc nhầm nguồn rồi nói ngược sự thật.
+- **KHÔNG TẮT ĐƯỢC TỪ UI:** `toUpdateRoleDto` chỉ gửi field **dirty**. Mặc định là `false`; tick rồi
+  bỏ tick đưa giá trị **về đúng mặc định** ⇒ react-hook-form xoá cờ dirty ⇒ field bị **loại khỏi PATCH**
+  ⇒ DB giữ nguyên `true`. Màn này chỉ có thể BẬT, không thể TẮT. Muốn tắt phải gọi thẳng
+  `PATCH /auth/roles/:id {"requiresTwoFactor": false}`.
+
+⇒ Theo dõi ở WO **`S7-SEC-ROLE2FA-UI-1`**. **Không chặn go-live** (cưỡng chế đang chạy đúng hướng
+fail-closed), nhưng phải sửa trước khi ai đó dựa vào màn này để ra quyết định bảo mật.
+
+**(2) Cưỡng chế ĐANG SỐNG trên PROD — đo, không suy.** Dịch vụ `MediaOS-API` (NSSM) chạy
+`apps\api\releases\current\main.js` với `AppDirectory = C:\dev 2\MediaOS`, không có `TWO_FACTOR_*`
+trong `AppEnvironmentExtra` ⇒ nó đọc `.env` của thư mục đó, nơi `TWO_FACTOR_ENFORCEMENT_ENABLED=true`.
+Cộng `company_security_policies` **0 hàng** (không có vế công ty) ⇒ quyết định ép 2FA đến hoàn toàn từ
+`roles.requires_two_factor`. Đây là lý do vai `QUẢN LÝ CẤP CAO` đủ sức chặn, không cần cấu hình thêm.
+
+**G7 — vẫn `0/2`.** `Get-ScheduledTask -TaskName "MediaOS*"` trả rỗng (04/08). Phiên công cụ **không có
+quyền Administrator** (`IsInRole(Administrator) = False`) nên không đăng ký được từ đây — lệnh
+copy-paste đã verify ở `RELEASE-11` §6.2, phải chạy trong PowerShell **Run as Administrator**.
 
 **Sau G1…G10:** 15/15 ô §2 ĐẠT hoặc chấp nhận-có-chữ-ký ⇒ phán quyết chuyển **GO**.
 
