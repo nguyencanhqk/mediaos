@@ -9656,7 +9656,7 @@ export const backlog = [
     title:
       "FilePolicy: tệp TỪNG có link module thì KHÔNG bao giờ tụt xuống fallback FOUNDATION.FILE.* — lỗ chung của 5 module, phát hiện khi vá S7-CHAT-BE-3",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/foundation/files/**",
       "apps/api/test/integration/**",
@@ -9792,7 +9792,7 @@ export const backlog = [
     title:
       "OutboxWorker dispatch ĐÚNG THỨ TỰ trong cùng lô claim (KI-059): RETURNING của UPDATE không theo ORDER BY của CTE ⇒ event tiêu thụ sai thứ tự, hỏng-im-lặng ở mọi consumer phụ thuộc thứ tự",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/events/outbox-worker.ts",
       "apps/api/test/integration/**",
