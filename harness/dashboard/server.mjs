@@ -21,7 +21,10 @@ import crypto from "node:crypto";
 
 import { byWorkOrder } from "../ledger.mjs"; // sổ hoạt động có timestamp (start/finish/milestone)
 import { applyStatus } from "../lib/wo-state.mjs"; // status hiệu dụng = overlay ledger đè literal backlog
-import { buildProgress } from "../lib/stories.mjs"; // ma trận Module→Tính năng (112 story) map sang WO
+// ma trận Module→Tính năng (IMPLEMENTATION-02, 17 epic) map sang Work Order.
+// KHÔNG import tĩnh: ESM cache theo URL ⇒ sửa stories.mjs mà không restart thì server phục vụ
+// code CŨ (đã dính 2026-08-03: doc mới parse ra 17 epic nhưng map module/override vẫn là bản cũ).
+const loadStories = () => import(`../lib/stories.mjs?u=${Date.now()}`);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "../..");
@@ -361,7 +364,8 @@ const server = http.createServer(async (req, res) => {
     if (url === "/api/health") return send(res, 200, JSON.stringify({ ok: true }));
     if (!authzOk(req)) return sendUnauthorized(res);
     if (url === "/api/status") return send(res, 200, JSON.stringify(await computeStatus()));
-    if (url === "/api/progress") return send(res, 200, JSON.stringify(await buildProgress()));
+    if (url === "/api/progress")
+      return send(res, 200, JSON.stringify(await (await loadStories()).buildProgress()));
     if (url === "/api/docs") return send(res, 200, JSON.stringify(listDocs()));
     if (url === "/api/docs/raw") return serveDocRaw(req, res);
     if (url === "/" || url === "/index.html") {

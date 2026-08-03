@@ -35,6 +35,13 @@ const EPIC_MODULE = {
   10: "INTEGRATION",
   11: "QA",
   12: "ME", // EPIC-12 bổ sung 2026-07-13 theo SPEC-09 (IMP02 §8.13)
+  // ── EPIC-13..16 bổ sung 2026-08-03: story hoá ngược 4 wave hậu-MVP (IMP02 §8.14–8.17).
+  //    Trước đó 48 Work Order của 4 wave này KHÔNG khớp story nào ⇒ rơi hết vào rổ phẳng
+  //    "WO nền / hạ tầng" ⇒ board báo 100% trong khi wave CHAT còn 10 WO chưa xong.
+  13: "GOAL", // SPEC-10 — wave S5-GOAL
+  14: "LMS", // wave S5-LMS (apps/lms = repo git riêng)
+  15: "BRAND", // wave S5-BRAND (WO trước đây gắn nhầm mã module 'SYSTEM')
+  16: "CHAT", // SPEC-15 — wave S7, ĐANG CHẠY
 };
 
 // Sprint của 1 story theo IMPLEMENTATION-02 §9 (story trọng tâm mỗi sprint, không chỉ theo epic).
@@ -46,7 +53,9 @@ function sprintOfStory(n) {
   if (inR(38, 64) || n === 100) return "S3";
   if (inR(65, 92) || inR(101, 103)) return "S4";
   if (n === 97 || inR(104, 110) || inR(113, 124)) return "S5"; // 113-120 = EPIC-12 ME · 121-124 = HR bổ sung 2026-07-13
+  if (inR(125, 131) || inR(133, 140)) return "S5"; // GOAL lõi · LMS · BRAND — cùng đợt S5 (IMP02 §9)
   if (inR(111, 112)) return "S6";
+  if (n === 132 || inR(141, 152)) return "S7"; // 132 = tab Mục tiêu trong dự án (giao ở S7) · 141-152 = wave CHAT
   return "?";
 }
 
@@ -129,6 +138,42 @@ const STORY_WO_OVERRIDE = {
     "S4-QA-NOTI-1",
     "S5-QA-REG-1",
   ], // test case matrix theo module/role — gộp QA S2/S3 (trước đây không map)
+
+  // ── EPIC-13 GOAL (IMP02 §8.14) — bổ sung 2026-08-03 ──────────────────────────
+  125: ["S5-GOAL-DB-1", "S5-GOAL-BE-1", "S5-GOAL-FE-1"], // CRUD 3 cấp + cây theo kỳ
+  126: ["S5-GOAL-BE-2", "S5-GOAL-FE-2"], // check-in + lịch sử append-only
+  127: ["S5-GOAL-BE-2"], // progress engine 4 mode + rollup + job đối soát
+  128: ["S5-GOAL-BE-2", "S5-GOAL-FE-2"], // chốt kỳ / mở lại
+  129: ["S5-GOAL-BE-1", "S5-GOAL-FE-2"], // gắn/tháo task ↔ goal
+  130: ["S5-GOAL-DB-2", "S5-GOAL-TPL-1"], // task template + wizard phân rã
+  131: ["S5-GOAL-DASH-1"], // widget dashboard "Mục tiêu kỳ này"
+  132: ["S7-GOAL-PROJTAB-1"], // tab Mục tiêu trong trang dự án (giao ở S7)
+
+  // ── EPIC-14 LMS (IMP02 §8.15) ────────────────────────────────────────────────
+  133: ["S5-LMS-APP-2", "S5-LMS-BE-2", "S5-LMS-DB-1"], // SSO-only + audit sso_link_minted
+  134: ["S5-LMS-BE-1", "S5-LMS-BE-4"], // auto-sync tài khoản theo trạng thái nhân sự
+  135: ["S5-LMS-APP-3", "S5-LMS-BE-3", "S5-LMS-FE-1"], // tiến độ đào tạo trong /me
+  136: ["S5-LMS-NOTI-1", "S5-LMS-NOTI-2"], // sự kiện học tập → NOTI (kênh máy lms-events)
+  137: ["S5-LMS-APP-1", "S5-LMS-UI-1", "S5-LMS-UI-2", "S5-LMS-UI-3", "S5-LMS-UI-4"], // đồng bộ UI
+  138: ["S5-LMS-OPEN-DIRECT-1"], // mở LMS "vào thẳng"
+
+  // ── EPIC-15 BRAND (IMP02 §8.16) ──────────────────────────────────────────────
+  139: ["S5-BRAND-BE-1", "S5-BRAND-FE-1"], // presign + khối Thương hiệu /system/company
+  140: ["S5-BRAND-FE-2"], // áp logo + favicon ra vỏ app
+
+  // ── EPIC-16 CHAT (IMP02 §8.17) — wave S7 ĐANG CHẠY ───────────────────────────
+  141: ["S7-CHAT-DB-1", "S7-CHAT-BE-1"], // phòng 1-1 + nhóm, ChatAccessService fail-closed
+  142: ["S7-CHAT-BE-5"], // phòng ban/dự án tự động + đồng bộ thành viên
+  143: ["S7-CHAT-BE-2", "S7-CHAT-DB-2"], // gửi idempotent + đọc theo con trỏ seq
+  144: ["S7-CHAT-BE-3"], // đính kèm qua FOUNDATION Files
+  145: ["S7-CHAT-DB-2", "S7-CHAT-BE-2"], // last_read_seq chỉ tiến + badge chưa đọc
+  146: ["S7-CHAT-BE-2"], // ghim / thu hồi tin
+  147: ["S7-CHAT-BE-4", "S7-CHAT-FE-4"], // tìm kiếm toàn văn tiếng Việt
+  148: ["S7-CHAT-RT-0", "S7-CHAT-RT-1"], // realtime: gắn ValkeyIoAdapter + join server-side
+  149: ["S7-CHAT-BE-6"], // thông báo mention + DM gộp lô + tắt phòng
+  150: ["S7-CHAT-FE-1", "S7-CHAT-FE-2", "S7-CHAT-FE-3"], // trang /chat + panel nổi
+  151: ["S7-CHAT-BE-7", "S7-CHAT-FE-5", "S7-CHAT-DOC-2"], // đọc-vượt membership (CHAT-DEC-004)
+  152: ["S7-CHAT-QA-1"], // bộ test trọn vẹn CHAT
 };
 
 // Vite dev port mỗi app (apps/*/vite.config.ts) → link "chạy thử" FE.
@@ -347,7 +392,11 @@ export async function buildProgress(backlogItems) {
   }
 
   // WO trong backlog KHÔNG map tới story nào = WO nền/hạ tầng (DB·CI·env·wire·QA-debt…).
-  const infraWOs = backlog
+  //
+  // 2026-08-03: TRƯỚC ĐÂY danh sách này là một rổ PHẲNG — 176 WO đổ chung một chỗ bất kể
+  // `module`, nên nhìn board không biết nợ kỹ thuật nằm ở module nào. Giờ gom về ĐÚNG thẻ
+  // module (epic.infraWOs); chỉ WO thuộc module KHÔNG có epic mới còn nằm ở rổ chung.
+  const allInfra = backlog
     .filter((b) => !usedWoIds.has(b.id))
     .map((b) => ({
       id: b.id,
@@ -357,6 +406,28 @@ export async function buildProgress(backlogItems) {
       module: b.module || null,
       layer: b.layer || null,
     }));
+
+  const infraByModule = new Map();
+  for (const w of allInfra) {
+    const k = w.module || "(chưa gắn module)";
+    if (!infraByModule.has(k)) infraByModule.set(k, []);
+    infraByModule.get(k).push(w);
+  }
+  const infraStatsOf = (list) => ({
+    total: list.length,
+    done: list.filter((w) => w.status === "done").length,
+    open: list.filter((w) => w.status !== "done").length,
+  });
+  for (const ep of epics) {
+    ep.infraWOs = infraByModule.get(ep.module) || [];
+    ep.infraStats = infraStatsOf(ep.infraWOs);
+    infraByModule.delete(ep.module);
+  }
+  // Còn lại = module KHÔNG có epic trong IMPLEMENTATION-02 (DEVOPS, RELEASE, mã lệch…).
+  const infraWOs = [...infraByModule.values()].flat();
+  const infraGroups = [...infraByModule.entries()]
+    .map(([module, wos]) => ({ module, wos, stats: infraStatsOf(wos) }))
+    .sort((a, b) => b.wos.length - a.wos.length);
 
   const allStories = epics.flatMap((e) => e.stories);
   const totals = {
@@ -385,5 +456,7 @@ export async function buildProgress(backlogItems) {
     }
   }
 
-  return { generatedAt: new Date().toISOString(), totals, sprints, epics, infraWOs };
+  totals.infra = infraStatsOf(allInfra);
+
+  return { generatedAt: new Date().toISOString(), totals, sprints, epics, infraWOs, infraGroups };
 }

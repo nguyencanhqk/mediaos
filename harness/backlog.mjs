@@ -29,7 +29,10 @@
 //
 // Schema 1 item:
 //   id          : mã ngắn ổn định <MODULE>-<LAYER>-<n> (ISSUE-BOARD-01 §8)        — string, bắt buộc
-//   module      : mã module ISSUE-BOARD-01 §8.2 (PROJECT·FOUNDATION·AUTH·HR·ATT·LEAVE·TASK·NOTI·DASH·FRONTEND·BACKEND·QA·DEVOPS·RELEASE) — dashboard nhóm thẻ. Thiếu → suy từ id/title/paths.
+//   module      : mã module ISSUE-BOARD-01 §8.2 — dashboard nhóm thẻ. Thiếu/sai → suy từ id/title/paths (hay xếp NHẦM).
+//                 MVP:      PROJECT·FOUNDATION·AUTH·HR·ATT·LEAVE·TASK·NOTI·DASH·FRONTEND·BACKEND·INTEGRATION·QA·DEVOPS·RELEASE
+//                 hậu-MVP:  ME·GOAL·LMS·BRAND·CHAT  (mỗi mã có epic riêng — IMPLEMENTATION-02 §8.13–8.17)
+//                 ĐÃ BỎ (2026-08-03, đừng dùng lại): INT→INTEGRATION · FND→FOUNDATION · SYSTEM→BRAND
 //   layer       : mã layer ISSUE-BOARD-01 §8.3 (DOC·DB·API·BE·FE·UI·QA·DEVOPS·SEC·PERF·INT·REL)                                       — dashboard chip lớp. Thiếu → suy từ paths/title.
 //   title       : một câu mô tả                                                   — string, bắt buộc
 //   zone        : 'green' | 'yellow' | 'red'   → model/gate/autonomy (policy.md)
@@ -659,7 +662,7 @@ export const backlog = [
   },
   {
     id: "S1-INT-MOUNT-1",
-    module: "BACKEND",
+    module: "INTEGRATION",
     layer: "INT",
     title:
       "Quyết scope + mount-or-skip: webhooks-deny + ui-config-deny đang 404 (module chưa mount) — mount nếu trong MVP, else exclude test có vé Phase",
@@ -1160,7 +1163,7 @@ export const backlog = [
   },
   {
     id: "S2-INT-1",
-    module: "BACKEND",
+    module: "INTEGRATION",
     layer: "INT",
     title:
       "Tích hợp HR tạo employee ↔ AUTH tạo/link user (giao dịch nhất quán, unique active link, audit cả 2 phía)",
@@ -1184,7 +1187,7 @@ export const backlog = [
   },
   {
     id: "S2-INT-2",
-    module: "BACKEND",
+    module: "INTEGRATION",
     layer: "INT",
     title:
       "Tích hợp HR direct_manager ↔ data-scope Team/Department của permission resolver (approval scope nền cho LEAVE/ATT sau)",
@@ -2454,7 +2457,7 @@ export const backlog = [
   // ── Integration (crown — LEAVE→ATT sync) ──
   {
     id: "S3-INT-1",
-    module: "BACKEND",
+    module: "INTEGRATION",
     layer: "INT",
     title:
       "LEAVE→ATT sync: onLeaveApproved handler + AttendanceLeaveSyncService (full-day=Leave/required 0 · half-day/hourly reduce · recalc existing check-in) + sync_status/retry + onLeaveCancelled/Revoked recalc + balance restore idempotent (S3-SYNC-004)",
@@ -3839,7 +3842,7 @@ export const backlog = [
   },
   {
     id: "S2-FND-CONTRACT-1",
-    module: "BACKEND",
+    module: "FOUNDATION",
     layer: "API",
     title:
       "API contract hygiene theo BACKEND-12 (audit §6.2, P2): Swagger/OpenAPI /docs + bộ mã FOUNDATION-ERR-* + chốt pagination request + migrate DTO cục bộ vào contracts",
@@ -4698,7 +4701,7 @@ export const backlog = [
   },
   {
     id: "S4-INT-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "BE",
     title:
       "Tích hợp TASK → NOTI: wiring event producer (outbox) → consumer intake, tạo notification đúng recipient cho mọi event TASK/PROJECT — E2E task→noti — crown",
@@ -4729,7 +4732,7 @@ export const backlog = [
   },
   {
     id: "S4-INT-2",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "BE",
     title:
       "Tích hợp DASH cache invalidation từ event TASK/NOTI/ATT/LEAVE (POST /internal/v1/dashboard/cache/invalidate) — chỉ mã do producer thật phát (§11.5 reconcile)",
@@ -5028,7 +5031,7 @@ export const backlog = [
   },
   {
     id: "S4-QA-2",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "QA",
     title:
       "QA Sprint 4 E2E + regression sign-off: flow task→noti→dash (§15.1) + notification deep link + dashboard degraded + regression S0–S3",
@@ -5090,7 +5093,7 @@ export const backlog = [
   },
   {
     id: "S5-QA-E2E-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "QA",
     title:
       "Integration freeze + system smoke P0 + cross-module E2E: login→Home Portal→module workspace→check-in→nghỉ phép→task→notification→dashboard (WS-B/C)",
@@ -5109,7 +5112,7 @@ export const backlog = [
   },
   {
     id: "S5-BE-CONTRACT-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "BE",
     title:
       "API contract & OpenAPI/Swagger chuẩn hoá theo module + FE integration hardening (401/403/422/500 mapping, request-id, idempotency, query invalidation sau mutation) — WS-D",
@@ -5133,7 +5136,7 @@ export const backlog = [
   },
   {
     id: "S5-SEC-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "SEC",
     title:
       "Permission & data-scope hardening + field-level/export permission + security testing (IDOR, file access, sensitive fields, rate-limit auth) — WS-E, crown",
@@ -5158,7 +5161,7 @@ export const backlog = [
   },
   {
     id: "S5-QA-REG-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "QA",
     title:
       "QA regression suite MVP (test-case matrix theo module × role) + UI state hardening + responsive/accessibility smoke — WS-F",
@@ -5301,7 +5304,7 @@ export const backlog = [
   },
   {
     id: "S6-QA-FINAL-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "QA",
     title:
       "QA final pass: regression + E2E + API contract + regression-theo-role + UAT final + điều kiện sign-off (WS3)",
@@ -5330,7 +5333,7 @@ export const backlog = [
   },
   {
     id: "S6-SEC-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "SEC",
     title:
       "Security / RBAC / Data-Protection final hardening: auth/session · RBAC · field masking · file access · audit · secret/config review (WS4) — crown",
@@ -5464,7 +5467,7 @@ export const backlog = [
   },
   {
     id: "S6-SEC-ROUTEMAP-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "SEC",
     title:
       "Dựng lại Phụ lục A bằng QUÉT RUNTIME (boot AppModule, đọc metadata thật) thay parse tĩnh — census 100% route + phán quyết gate có chữ ký; đóng vế GET của route-guard sweep",
@@ -6823,7 +6826,7 @@ export const backlog = [
   // ─── Nhóm D: NOTI wiring crown (generic OutboxNotificationBridge — depends_on S4-INT-1) ───
   {
     id: "S4-INT-3",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "BE",
     title:
       "Tích hợp LEAVE → NOTI qua OutboxNotificationBridge (INT-1): event-type leave.request.{submitted,approved,rejected,cancelled,revoked} → NOTI intake, recipient theo SPEC-05 §19.1/§14.19 — hiện event LEAVE rơi im lặng, requester không được báo",
@@ -6860,7 +6863,7 @@ export const backlog = [
   },
   {
     id: "S4-INT-4",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "BE",
     title:
       "Tích hợp ATT → NOTI: bổ sung producer outbox trong ATT (adjustment submit/approve/reject · remote-work submit/approve/reject/cancel) + đăng ký event-type + recipient-resolver vào OutboxNotificationBridge — ATT hiện CHƯA phát event nào",
@@ -6891,7 +6894,7 @@ export const backlog = [
   },
   {
     id: "S4-INT-5",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "BE",
     title:
       "Tích hợp HR/AUTH → NOTI: HR tạo employee → activation/welcome notification (mảnh thiếu STORY-098) + AUTH password-reset-requested/account-locked → notify chủ tài khoản — producer HR/AUTH + đăng ký vào OutboxNotificationBridge",
@@ -7722,7 +7725,7 @@ export const backlog = [
   },
   {
     id: "S5-SEQ-HARDEN-1",
-    module: "FND",
+    module: "FOUNDATION",
     layer: "BE",
     title:
       "Gia cố cấp mã tuần tự: SAVEPOINT cho recovery 23505 (ensure-on-miss race hiện trả 500 do 25P02), allocate sau authz tầng-service (chống đốt counter), phân biệt constraint khi map unique-violation",
@@ -9199,7 +9202,7 @@ export const backlog = [
   // cần endpoint public) = đợt sau, NGOÀI phạm vi wave này.
   {
     id: "S5-BRAND-BE-1",
-    module: "SYSTEM",
+    module: "BRAND",
     layer: "BE",
     title:
       "BE Thương hiệu công ty: wrapper presign logo + favicon trên FileService (pattern ME avatar) — /foundation/company/branding, logo→companies.logo_url (fileId), favicon→company_settings key, KHÔNG migration, KHÔNG quyền mới",
@@ -9233,7 +9236,7 @@ export const backlog = [
   },
   {
     id: "S5-BRAND-FE-1",
-    module: "SYSTEM",
+    module: "BRAND",
     layer: "FE",
     title:
       "FE khối 'Thương hiệu' trong /system/company: upload/preview/gỡ logo + favicon qua wrapper BE-1 (pattern AvatarUploadCard 4 pha), gate update:foundation-company + dọn ô URL thô ở console",
@@ -9266,7 +9269,7 @@ export const backlog = [
   },
   {
     id: "S5-BRAND-FE-2",
-    module: "SYSTEM",
+    module: "BRAND",
     layer: "FE",
     title:
       "FE áp thương hiệu ra vỏ app: GlobalTopbar hiện logo công ty (fallback wordmark) + hook useFavicon set favicon động sau đăng nhập + sửa favicon tĩnh vỡ /vite.svg ở cả 3 app",
@@ -9784,7 +9787,7 @@ export const backlog = [
   },
   {
     id: "S7-INT-OUTBOX-FIFO-1",
-    module: "INT",
+    module: "INTEGRATION",
     layer: "BE",
     title:
       "OutboxWorker dispatch ĐÚNG THỨ TỰ trong cùng lô claim (KI-059): RETURNING của UPDATE không theo ORDER BY của CTE ⇒ event tiêu thụ sai thứ tự, hỏng-im-lặng ở mọi consumer phụ thuộc thứ tự",
