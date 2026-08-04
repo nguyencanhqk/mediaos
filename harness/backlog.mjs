@@ -10010,6 +10010,9 @@ export const backlog = [
       // chuỗi cứng, nên tệp locale BẮT BUỘC nằm trong scope. Thiếu dòng này thì `guard-scope` cảnh báo
       // và gate đọc thiếu một nửa diff (memory `wo-paths-drive-gate-and-scheduler`).
       "apps/app/src/i18n/locales/vi/chat.ts",
+      // Smoke trình duyệt (chạy tay, KHÔNG vào CI) — ba `done_when` của WO này chỉ đo được trên trình
+      // duyệt thật: "chung MỘT kết nối WS", "không chặn thao tác trang nền", trần 3 cửa sổ.
+      "apps/app/scripts/chat-dock-smoke.mjs",
       "docs/plans/S7-CHAT-FE-3.md",
     ],
     skills: ["frontend-design", "code-review"],
