@@ -9887,7 +9887,7 @@ export const backlog = [
     title:
       "Nền FE chat: contracts + api-client + store Zustand dùng chung + MỘT kết nối WS duy nhất cho toàn app shell (trang full-screen và panel nổi dùng chung)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     // paths mở rộng theo plan rev 3 §R3.6 — 3 file §2 yêu cầu sửa mà bản cũ KHÔNG phủ. Khai thiếu thì
     // hook guard-scope cảnh báo oan và gate đọc sai vùng (memory wo-paths-drive-gate-and-scheduler).
     paths: [

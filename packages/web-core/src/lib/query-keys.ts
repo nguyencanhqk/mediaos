@@ -24,6 +24,8 @@ export const rootKeys = {
   me: ["me"] as const,
   // S5-GOAL-FE-1 — Mục tiêu (SPEC-10). Module RIÊNG (GOAL-DEC-002).
   goals: ["goals"] as const,
+  // S7-CHAT-FE-1 — Chat nội bộ (SPEC-15). Module RIÊNG: trang /chat và panel nổi dùng CHUNG cache này.
+  chat: ["chat"] as const,
 } as const;
 
 // ── Auth keys ─────────────────────────────────────────────────────────────────
@@ -993,3 +995,28 @@ export const goalDecomposeInvalidation = (input: {
   taskKeys.my(),
   ...(input.projectId ? [taskKeys.kanban(input.projectId)] : []),
 ];
+
+// ── S7-CHAT-FE-1 — Chat nội bộ (SPEC-15) ──────────────────────────────────────
+//
+// ⚠️ **KHÔNG có `chatInvalidation` ở WO này.** Nguồn sự thật hiển thị của CHAT là store Zustand
+// (`apps/app/src/stores/chat.store.ts`) được WS đẩy vào, KHÔNG phải cache react-query — nên "mutation X
+// ⇒ invalidate key Y" chưa có ca dùng thật nào. Dựng sẵn bảng invalidation cho mutation chưa có UI gọi
+// là đóng đinh một hợp đồng chưa ai kiểm chứng; FE-2/FE-3 tự thêm khi wire nút bấm đầu tiên
+// (`query-invalidation-contract.spec.ts` cũng vì thế chưa có entry `chat`).
+//
+// `messages` CỐ Ý KHÔNG nằm ở đây: tin nhắn phân trang theo CON TRỎ (`beforeSeq`/`afterSeq`) và sống
+// trong store, không phải trong cache theo key.
+
+export const chatKeys = {
+  all: rootKeys.chat,
+  rooms: {
+    all: [...rootKeys.chat, "rooms"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.chat, "rooms", "list", params] as const,
+    detail: (roomId: string) => [...rootKeys.chat, "rooms", "detail", roomId] as const,
+    members: (roomId: string) => [...rootKeys.chat, "rooms", "members", roomId] as const,
+    pinned: (roomId: string) => [...rootKeys.chat, "rooms", "pinned", roomId] as const,
+  },
+  /** Badge tổng chưa đọc (CHAT-API-016) — lối vào của FE-3; FE-1 chỉ khai key. */
+  unreadCount: () => [...rootKeys.chat, "unread-count"] as const,
+};
