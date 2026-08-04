@@ -110,6 +110,26 @@ export interface PendingChatMessage {
 }
 
 /**
+ * S7-CHAT-FE-4 — mỏ neo của chế độ **xem ngữ cảnh** (CHAT-SCREEN-005 "nhảy tới tin trong ngữ cảnh").
+ *
+ * ┌─ VÌ SAO PHẢI CÓ TRẠNG THÁI RIÊNG, KHÔNG CHỈ "cuộn tới id" ────────────────────────────────────────┐
+ * │ `messagesByRoom[roomId]` là MỘT danh sách phẳng sắp theo `roomSeq`, và `MessageList` vẽ liền mạch. │
+ * │ Nạp dải `[900…950]` vào danh sách đang giữ `[4980…5000]` cho ra màn hình mà hai tin cách nhau      │
+ * │ 4.000 số nằm SÁT NHAU dưới cùng một dải ngày — người đọc không có cách nào biết ở giữa còn gì.     │
+ * │ Vì thế cửa sổ ngữ cảnh THAY THẾ danh sách, và tin mới hơn `windowEndSeq` KHÔNG được chèn vào       │
+ * │ (vẫn cập nhật tổng hợp phòng để badge chạy). Trạng thái này LUÔN hiện dải báo + nút thoát trên UI, │
+ * │ nên nó không thể hỏng im lặng.                                                                     │
+ * └────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ */
+export interface ChatMessageContext {
+  /** Tin đích của lần nhảy — UI làm nổi đúng tin này. */
+  targetMessageId: string;
+  targetSeq: number;
+  /** `roomSeq` LỚN NHẤT của cửa sổ đã nạp. Tin mới hơn số này không được chèn (xem docblock trên). */
+  windowEndSeq: number;
+}
+
+/**
  * Việc cần làm SAU khi xử lý một sự kiện `chat:room` — trả về cho caller thay vì tự gọi API.
  *
  * Store giữ đồng bộ và thuần để test được bằng gọi hàm trực tiếp; mọi I/O nằm ở `useChatRealtime`.
@@ -134,6 +154,8 @@ interface ChatStoreState {
   pendingByClientId: Record<string, PendingChatMessage>;
   connectionStatus: ChatConnectionStatus;
   subscribedRoomIds: Record<string, SubscribedRoom>;
+  /** S7-CHAT-FE-4 — phòng nào đang xem NGỮ CẢNH của một kết quả tìm kiếm. Vắng khoá = dòng thời gian thường. */
+  contextByRoom: Record<string, ChatMessageContext>;
 
   setMyUserId: (userId: string | null) => void;
   setConnectionStatus: (status: ChatConnectionStatus) => void;
@@ -156,6 +178,23 @@ interface ChatStoreState {
   prependOlderMessages: (roomId: string, older: readonly StoredChatMessage[]) => void;
   /** Trả RAM về trần sống sau khi rời khỏi phòng đang xem — giữ 200 tin MỚI NHẤT. */
   trimRoomHistory: (roomId: string) => void;
+  /**
+   * S7-CHAT-FE-4 — vào chế độ xem ngữ cảnh: THAY THẾ danh sách của phòng bằng `window` (một dải LIÊN
+   * TỤC quanh tin đích, do caller nạp bằng `beforeSeq`+`afterSeq`) và đặt mỏ neo.
+   */
+  enterMessageContext: (
+    roomId: string,
+    window: readonly StoredChatMessage[],
+    target: { messageId: string; seq: number },
+  ) => void;
+  /**
+   * Thoát chế độ ngữ cảnh: xoá mỏ neo **VÀ** xoá danh sách của phòng.
+   *
+   * Vế thứ hai không phải tiện tay: danh sách đang giữ là một dải CŨ, còn tin mới thì đã bị chặn chèn
+   * suốt thời gian xem. Giữ nó lại rồi nối tiếp tin mới vào sau chính là cái khe hở câm mà chế độ này
+   * dựng ra để tránh. Caller gọi tiếp `reload()` của `useChatConversation` để nạp trang mới nhất.
+   */
+  exitMessageContext: (roomId: string) => void;
   applyMessageRecalled: (event: WsChatMessageRecalledEvent) => void;
   applyReadEvent: (event: WsChatReadEvent) => void;
   applyOptimisticSend: (clientMessageId: string, roomId: string, body: string) => void;
@@ -347,6 +386,7 @@ const createInitialState = () => ({
   pendingByClientId: {} as Record<string, PendingChatMessage>,
   connectionStatus: "connecting" as ChatConnectionStatus,
   subscribedRoomIds: {} as Record<string, SubscribedRoom>,
+  contextByRoom: {} as Record<string, ChatMessageContext>,
   hasLoadedRooms: false,
 });
 
@@ -478,10 +518,14 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       const { [roomId]: _room, ...roomsById } = state.roomsById;
       const { [roomId]: _msgs, ...messagesByRoom } = state.messagesByRoom;
       const { [roomId]: _sub, ...subscribedRoomIds } = state.subscribedRoomIds;
+      // S7-CHAT-FE-4: mỏ neo ngữ cảnh phải đi cùng — bỏ lại là một mỏ neo mồ côi trỏ vào phòng mình
+      // không còn quyền đọc, và nó sẽ chặn chèn nếu phòng đó quay lại (được thêm lại vào nhóm).
+      const { [roomId]: _ctx, ...contextByRoom } = state.contextByRoom;
       return {
         roomsById,
         messagesByRoom,
         subscribedRoomIds,
+        contextByRoom,
         roomOrder: state.roomOrder.filter((id) => id !== roomId),
       };
     });
@@ -495,11 +539,31 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   applyIncomingMessage: (message) =>
     set((state) => {
       const current = state.messagesByRoom[message.roomId] ?? [];
-      const next = insertMessage(current, message);
-      if (next === current) return state; // trùng id — không set lại để khỏi re-render vô ích
+
+      /**
+       * S7-CHAT-FE-4 — CHỐT CHÈN của chế độ xem ngữ cảnh.
+       *
+       * Đặt ở ĐÂY chứ không ở từng caller vì mọi đường vào danh sách đều chạy qua hàm này: WS
+       * `chat:message`, response POST (`resolvePendingSend`), response `pin`/`recall`, lưới bù
+       * `afterSeq`, trang đầu của `useChatConversation`. Chặn ở caller là chặn 5 chỗ và bỏ sót chỗ thứ 6.
+       *
+       * Phần TỔNG HỢP phòng (`unreadCount`/`lastMessageSeq`/thứ tự) vẫn chạy bình thường: người đang đọc
+       * ngữ cảnh cũ vẫn phải thấy badge nhảy khi có tin mới — nếu không, "yên tĩnh" trở thành trạng thái
+       * không phân biệt được với "đang bị chặn".
+       */
+      const context = state.contextByRoom[message.roomId];
+      const isBeyondContextWindow = context !== undefined && message.roomSeq > context.windowEndSeq;
+
+      const next = isBeyondContextWindow ? current : insertMessage(current, message);
+      const listChanged = next !== current;
 
       const room = state.roomsById[message.roomId];
-      if (!room) return { messagesByRoom: { ...state.messagesByRoom, [message.roomId]: next } };
+      if (!room) {
+        // trùng id (hoặc bị chốt ngữ cảnh chặn) và không có phòng để cập nhật ⇒ không set lại, khỏi re-render
+        return listChanged
+          ? { messagesByRoom: { ...state.messagesByRoom, [message.roomId]: next } }
+          : state;
+      }
 
       // ⚠️ CHỈ tin nào MỚI HƠN con trỏ phòng mới được đụng vào tổng hợp của phòng. Hàm này nhận cả tin
       // CŨ: lưới bù gọi `getMessages(roomId, {})` khi phòng chưa có tin nào trong bộ nhớ (`afterSeq`
@@ -509,7 +573,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // `polling-fallback` (`REALTIME_ENABLED=false`) không có `chat:read` nào để sửa lại, badge sai
       // tới khi F5. Tin vẫn được CHÈN bình thường; chỉ phần tổng hợp bị chặn.
       if (message.roomSeq <= (room.lastMessageSeq ?? 0)) {
-        return { messagesByRoom: { ...state.messagesByRoom, [message.roomId]: next } };
+        return listChanged
+          ? { messagesByRoom: { ...state.messagesByRoom, [message.roomId]: next } }
+          : state;
       }
 
       // Tin của người KHÁC làm tăng badge; tin của chính mình thì không (mình vừa gửi = đã đọc).
@@ -523,7 +589,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       };
       const roomsById = { ...state.roomsById, [message.roomId]: updatedRoom };
       return {
-        messagesByRoom: { ...state.messagesByRoom, [message.roomId]: next },
+        // Bị chốt ngữ cảnh chặn ⇒ KHÔNG đụng `messagesByRoom` (mảng y hệt trong một object mới vẫn làm
+        // mọi component đọc `messagesByRoom` render lại vô ích). Tổng hợp phòng thì vẫn cập nhật.
+        ...(listChanged
+          ? { messagesByRoom: { ...state.messagesByRoom, [message.roomId]: next } }
+          : {}),
         roomsById,
         roomOrder: sortRoomIds(roomsById),
       };
@@ -578,6 +648,36 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           [roomId]: list.slice(list.length - MAX_MESSAGES_PER_ROOM),
         },
       };
+    }),
+
+  enterMessageContext: (roomId, window, target) =>
+    set((state) => {
+      // Lọc + sắp ở ĐÂY chứ không tin caller: hai lời gọi `beforeSeq`/`afterSeq` về không theo thứ tự
+      // gửi, và một `roomId` lạ lọt vào danh sách của phòng khác là dữ liệu sai, không phải hiển thị sai.
+      const list = window
+        .filter((m) => m.roomId === roomId)
+        .slice()
+        .sort((a, b) => a.roomSeq - b.roomSeq);
+      if (list.length === 0) return state;
+      return {
+        messagesByRoom: { ...state.messagesByRoom, [roomId]: list },
+        contextByRoom: {
+          ...state.contextByRoom,
+          [roomId]: {
+            targetMessageId: target.messageId,
+            targetSeq: target.seq,
+            windowEndSeq: list[list.length - 1].roomSeq,
+          },
+        },
+      };
+    }),
+
+  exitMessageContext: (roomId) =>
+    set((state) => {
+      if (state.contextByRoom[roomId] === undefined) return state;
+      const { [roomId]: _left, ...contextByRoom } = state.contextByRoom;
+      const { [roomId]: _stale, ...messagesByRoom } = state.messagesByRoom;
+      return { contextByRoom, messagesByRoom };
     }),
 
   /**
@@ -726,6 +826,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
  * `afterSeq=0` là 400 chứ không phải "lấy từ đầu". Chưa có tin ⇒ bỏ tham số ⇒ server trả trang mới nhất.
  */
 async function pollRoomMessages(roomId: string): Promise<void> {
+  // S7-CHAT-FE-4 — phòng đang xem NGỮ CẢNH thì không bù: `lastKnownSeq` khi đó là cuối CỬA SỔ (một dải
+  // cũ), nên mỗi nhịp sẽ kéo về đúng những tin mà chốt chèn từ chối — 10 giây một lần, vô thời hạn.
+  // Thoát ngữ cảnh xoá danh sách + `reload()` nạp lại trang mới nhất, tức không mất tin nào.
+  if (useChatStore.getState().contextByRoom[roomId] !== undefined) return;
   const afterSeq = useChatStore.getState().lastKnownSeq(roomId);
   try {
     const messages = await chatApi.getMessages(roomId, afterSeq ? { afterSeq } : {});

@@ -14,6 +14,7 @@ import type { ChatRoomDto } from "@mediaos/contracts";
 
 const getRoom = vi.fn();
 const getMessages = vi.fn();
+const search = vi.fn();
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
@@ -23,6 +24,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       ...actual.chatApi,
       getRoom: (...a: unknown[]) => getRoom(...a),
       getMessages: (...a: unknown[]) => getMessages(...a),
+      search: (...a: unknown[]) => search(...a),
+      listRoomFiles: vi.fn().mockResolvedValue([]),
       listRooms: vi.fn().mockResolvedValue([]),
       getPinned: vi.fn().mockResolvedValue([]),
       markRead: vi.fn().mockResolvedValue({ roomId: "", lastReadSeq: 0, unreadCount: 0 }),
@@ -69,12 +72,18 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  // jsdom KHÔNG implement `scrollIntoView` — stub cho đường "cuộn tới tin được làm nổi" của FE-4
+  // (cùng khuôn `TaskCommentThread.spec.tsx`). Thiếu nó thì effect NÉM và cả cây component chết,
+  // biến một bài test về con trỏ thành một bài test về jsdom.
+  window.HTMLElement.prototype.scrollIntoView = vi.fn();
   mockUseCan.mockReset();
   mockUseCan.mockReturnValue(true);
   getRoom.mockReset();
   getRoom.mockResolvedValue({ ...room(), members: [], myRole: "member" });
   getMessages.mockReset();
   getMessages.mockResolvedValue([]);
+  search.mockReset();
+  search.mockResolvedValue({ data: [], nextCursor: null });
   useChatStore.getState().resetChatStore();
   useChatStore.getState().setMyUserId(ME);
 });
@@ -198,5 +207,143 @@ describe("ChatPage · cô lập state theo phòng", () => {
 
     fireEvent.click(await screen.findByText("Đổi tên / mô tả"));
     expect((screen.getByLabelText("Tên phòng") as HTMLInputElement).value).toBe("Phòng B");
+  });
+});
+
+/**
+ * S7-CHAT-FE-4 — tìm kiếm + nhảy tới tin trong ngữ cảnh (CHAT-SCREEN-005).
+ *
+ * Ca đắt nhất là con trỏ: `/messages` KHÔNG có `aroundSeq`, nên cửa sổ dựng bằng hai lời gọi và
+ * `beforeSeq` là vị từ LOẠI TRỪ. Viết `beforeSeq: seq` (thay vì `seq + 1`) làm rơi đúng tin người dùng
+ * vừa bấm vào — màn hình mở ra "gần đúng chỗ" và không ai gọi đó là bug.
+ */
+describe("ChatPage · tìm kiếm + nhảy tới ngữ cảnh", () => {
+  const searchResult = {
+    id: "00000042-1111-4111-8111-111111111111",
+    roomId: ROOM_ID,
+    roomName: "Phòng thử",
+    roomType: "group" as const,
+    roomSeq: 42,
+    senderId: PEER,
+    senderName: "Trần B",
+    body: "báo cáo tuần",
+    createdAt: "2026-08-04T09:00:00.000Z",
+    attachmentCount: 0,
+  };
+
+  function contextMessage(seq: number) {
+    return {
+      id: `${String(seq).padStart(8, "0")}-1111-4111-8111-111111111111`,
+      companyId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      roomId: ROOM_ID,
+      senderId: PEER,
+      senderName: "Trần B",
+      body: `tin ${seq}`,
+      messageType: "text" as const,
+      fileUrl: null,
+      fileName: null,
+      mentions: [],
+      pinnedAt: null,
+      pinnedBy: null,
+      replyToMessageId: null,
+      recalledAt: null,
+      attachmentCount: 0,
+      attachments: [],
+      roomSeq: seq,
+      createdAt: "2026-08-04T09:00:00.000Z",
+    };
+  }
+
+  it("mở panel tìm kiếm từ danh sách phòng, đóng lại thì về danh sách", async () => {
+    useChatStore.getState().syncRoomList([room()], false);
+    renderPage();
+
+    fireEvent.click(await screen.findByTestId("chat-open-search"));
+    expect(await screen.findByTestId("chat-search-panel")).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Quay lại danh sách phòng"));
+    await waitFor(() => expect(screen.queryByTestId("chat-search-panel")).toBeNull());
+    expect(screen.getAllByTestId("chat-room-item").length).toBeGreaterThan(0);
+  });
+
+  /**
+   * Ca này bắt một lỗi THẬT đã xảy ra khi viết WO: nút phạm vi ban đầu gửi lại `scope.roomId` hiện tại,
+   * mà ở phạm vi "tất cả" giá trị đó là `null` ⇒ bấm "Trong phòng này" gửi `null` và không đổi gì.
+   * Bài test của riêng panel KHÔNG bắt được (nó stub `onScopeChange`) — phải đo ở chỗ nối dây.
+   */
+  it("đổi phạm vi sang 'Trong phòng này' ⇒ truy vấn KÈM roomId của phòng đang mở", async () => {
+    useChatStore.getState().syncRoomList([room()], false);
+    renderPage();
+
+    fireEvent.click(await screen.findByTestId("chat-room-item"));
+    fireEvent.click(screen.getByTestId("chat-open-search"));
+    fireEvent.change(screen.getByTestId("chat-search-input"), { target: { value: "báo cáo" } });
+    await waitFor(() => expect(search).toHaveBeenLastCalledWith({ q: "báo cáo", limit: 20 }));
+
+    fireEvent.click(screen.getByText(/^Trong: /));
+    await waitFor(() =>
+      expect(search).toHaveBeenLastCalledWith({ q: "báo cáo", limit: 20, roomId: ROOM_ID }),
+    );
+  });
+
+  it("bấm kết quả ⇒ nạp cửa sổ bằng ĐÚNG hai con trỏ (beforeSeq = seq + 1, afterSeq = seq)", async () => {
+    useChatStore.getState().syncRoomList([room({ lastMessageSeq: 500 })], false);
+    search.mockResolvedValue({ data: [searchResult], nextCursor: null });
+    getMessages.mockImplementation((_roomId: string, q?: { beforeSeq?: number }) =>
+      Promise.resolve(
+        q?.beforeSeq === 43 ? [contextMessage(41), contextMessage(42)] : [contextMessage(43)],
+      ),
+    );
+    renderPage();
+
+    fireEvent.click(await screen.findByTestId("chat-open-search"));
+    fireEvent.change(screen.getByTestId("chat-search-input"), { target: { value: "báo cáo" } });
+    fireEvent.click(await screen.findByTestId("chat-search-result"));
+
+    await waitFor(() =>
+      expect(getMessages).toHaveBeenCalledWith(ROOM_ID, { beforeSeq: 43, limit: 25 }),
+    );
+    expect(getMessages).toHaveBeenCalledWith(ROOM_ID, { afterSeq: 42, limit: 25 });
+
+    // Cửa sổ THAY THẾ danh sách + mỏ neo trỏ đúng tin đích.
+    await waitFor(() =>
+      expect(useChatStore.getState().contextByRoom[ROOM_ID]).toMatchObject({
+        targetSeq: 42,
+        windowEndSeq: 43,
+      }),
+    );
+    expect(await screen.findByTestId("chat-context-banner")).toBeTruthy();
+  });
+
+  it("tin đích KHÔNG có trong cửa sổ (đã thu hồi) ⇒ báo lỗi, KHÔNG vào chế độ ngữ cảnh", async () => {
+    useChatStore.getState().syncRoomList([room()], false);
+    search.mockResolvedValue({ data: [searchResult], nextCursor: null });
+    getMessages.mockResolvedValue([contextMessage(41)]); // thiếu tin 42
+
+    renderPage();
+    fireEvent.click(await screen.findByTestId("chat-open-search"));
+    fireEvent.change(screen.getByTestId("chat-search-input"), { target: { value: "báo cáo" } });
+    fireEvent.click(await screen.findByTestId("chat-search-result"));
+
+    expect(await screen.findByText(/Không mở được tin đó/)).toBeTruthy();
+    expect(useChatStore.getState().contextByRoom[ROOM_ID]).toBeUndefined();
+  });
+
+  it("'Về tin mới nhất' ⇒ xoá mỏ neo và nạp lại trang mới nhất", async () => {
+    useChatStore.getState().syncRoomList([room({ lastMessageSeq: 500 })], false);
+    search.mockResolvedValue({ data: [searchResult], nextCursor: null });
+    getMessages.mockImplementation((_roomId: string, q?: { beforeSeq?: number }) =>
+      Promise.resolve(q?.beforeSeq === 43 ? [contextMessage(42)] : [contextMessage(43)]),
+    );
+    renderPage();
+
+    fireEvent.click(await screen.findByTestId("chat-open-search"));
+    fireEvent.change(screen.getByTestId("chat-search-input"), { target: { value: "báo cáo" } });
+    fireEvent.click(await screen.findByTestId("chat-search-result"));
+    await screen.findByTestId("chat-context-banner");
+
+    fireEvent.click(screen.getByText("Về tin mới nhất"));
+    await waitFor(() => expect(useChatStore.getState().contextByRoom[ROOM_ID]).toBeUndefined());
+    await waitFor(() => expect(screen.queryByTestId("chat-context-banner")).toBeNull());
   });
 });

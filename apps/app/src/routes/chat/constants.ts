@@ -80,5 +80,34 @@ export const NEAR_BOTTOM_THRESHOLD_PX = 80;
 /** Khoảng chống dội của `markRead` — cuộn là chuỗi sự kiện dày, không nện API mỗi khung hình. */
 export const MARK_READ_DEBOUNCE_MS = 400;
 
-/** Số lần nạp thêm tối đa khi nhảy tới một tin ghim nằm ngoài phần đã tải. Hết thì báo, không lặp vô hạn. */
-export const JUMP_TO_MESSAGE_MAX_PAGES = 5;
+/*
+ * `JUMP_TO_MESSAGE_MAX_PAGES` ĐÃ XOÁ ở `S7-CHAT-FE-4` — hằng này chưa từng có người dùng.
+ *
+ * Nó sinh ra từ ý tưởng FE-2 "nạp ngược từng trang cho tới khi thấy tin đích". Cách đó chỉ chạy được với
+ * tin gần: một kết quả tìm kiếm cách đáy 3.000 tin cần 60 vòng `beforeSeq`, và giới hạn 5 trang biến
+ * `done_when` "kết quả bấm được → cuộn tới đúng seq" thành "chỉ khi tin đủ gần". FE-4 nạp thẳng cửa sổ
+ * quanh `roomSeq` bằng ĐÚNG hai lời gọi (§0.4 của plan) nên không có vòng lặp nào để chặn.
+ */
+
+// ── S7-CHAT-FE-4 — tìm kiếm tin nhắn (CHAT-SCREEN-005) ────────────────────────
+
+/** Khớp `chatSearchQuerySchema.q.min(2)`. Dưới ngưỡng: nhắc tại chỗ, KHÔNG gọi API (đỡ 422 vô ích). */
+export const SEARCH_MIN_CHARS = 2;
+
+/** Chống dội trước khi gọi `/chat/search` — gõ-là-gọi biến mỗi ký tự thành một truy vấn toàn văn. */
+export const SEARCH_DEBOUNCE_MS = 350;
+
+/** Khớp trần `chatSearchQuerySchema.limit.max(50)`; 20 vừa một màn cột trái, tải thêm bằng con trỏ. */
+export const SEARCH_PAGE_SIZE = 20;
+
+/** Số tệp mỗi trang của tab Tệp — khớp `listChatRoomFilesQuerySchema.limit` (max 50). */
+export const ROOM_FILES_PAGE_SIZE = 30;
+
+/**
+ * Cửa sổ ngữ cảnh quanh tin đích: `CONTEXT_BEFORE` tin (KỂ CẢ tin đích) + `CONTEXT_AFTER` tin sau nó.
+ *
+ * Nạp bằng đúng hai lời gọi `getMessages`: `beforeSeq = seq + 1` (loại trừ ⇒ lấy tới chính tin đích) và
+ * `afterSeq = seq`. Lệch một đơn vị ở `beforeSeq` là mất chính tin người dùng vừa bấm vào.
+ */
+export const CONTEXT_BEFORE = 25;
+export const CONTEXT_AFTER = 25;

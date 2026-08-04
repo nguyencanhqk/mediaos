@@ -51,7 +51,10 @@ export default {
     membersCount: "{{count}} thành viên",
     infoToggle: "Thông tin phòng",
     infoToggleClose: "Đóng thông tin phòng",
-    jumpNotLoaded: "Không tìm thấy tin đó trong phần lịch sử đã tải.",
+    // S7-CHAT-FE-4 — dải báo của chế độ xem ngữ cảnh. Nói rõ CẢ hệ quả ("tin mới không hiện ở đây") vì
+    // đó chính là điều người dùng sẽ thắc mắc, và im lặng về nó là để họ tưởng chat bị hỏng.
+    contextMode: "Đang xem đoạn hội thoại quanh tin đã chọn — tin mới chưa hiện ở đây.",
+    contextExit: "Về tin mới nhất",
   },
 
   connection: {
@@ -123,7 +126,16 @@ export default {
     createdAt: "Tạo lúc",
     tabs: {
       members: "Thành viên",
+      files: "Tệp",
       pinned: "Tin ghim",
+    },
+    files: {
+      empty: "Phòng chưa có tệp nào được gửi.",
+      loadError: "Không tải được danh sách tệp.",
+      loadMoreError: "Không tải thêm được tệp cũ hơn.",
+      loadMore: "Tải tệp cũ hơn",
+      loadingMore: "Đang tải…",
+      jump: "Xem trong hội thoại",
     },
     members: {
       empty: "Phòng chưa có thành viên nào.",
@@ -131,6 +143,11 @@ export default {
       roleAdmin: "Quản trị phòng",
       roleMember: "Thành viên",
       you: "Bạn",
+      // S7-CHAT-FE-4 — "đã xem tới đâu" (§13.2), dẫn xuất từ `last_read_seq`.
+      seenLatest: "Đã xem tin mới nhất",
+      seenBehind: "Chưa xem {{count}} tin",
+      seenNone: "Chưa xem tin nào",
+      seenUnknown: "Chưa rõ đã xem tới đâu",
       add: "Thêm thành viên",
       addDialogTitle: "Thêm thành viên vào phòng",
       addDialogDescription: "Chọn nhân viên để thêm vào phòng nhóm này.",
@@ -231,6 +248,30 @@ export default {
     expandShort: "Mở rộng",
     openFullScreen: "Mở toàn màn hình",
     close: "Đóng cuộc trò chuyện",
+  },
+
+  /** S7-CHAT-FE-4 — màn tìm kiếm tin nhắn (CHAT-SCREEN-005 · SPEC-15 §13.7). */
+  search: {
+    heading: "Tìm tin nhắn",
+    openAria: "Tìm trong nội dung tin nhắn",
+    backToRooms: "Quay lại danh sách phòng",
+    placeholder: "Nhập nội dung cần tìm",
+    scopeLabel: "Phạm vi tìm kiếm",
+    scopeAll: "Tất cả phòng của tôi",
+    scopeRoom: "Trong: {{room}}",
+    // Nói cho người dùng biết họ KHÔNG cần gõ dấu — luật bỏ dấu nằm ở server (`f_unaccent`), đây chỉ là
+    // lời hứa đúng với hành vi thật.
+    accentHint: "Gõ có dấu hay không dấu đều tìm được (ví dụ “bao cao” ra “báo cáo”).",
+    tooShort: "Nhập ít nhất {{count}} ký tự để tìm.",
+    idle: "Nhập từ khoá để tìm trong tin nhắn.",
+    empty: "Không có tin nhắn nào khớp “{{query}}”.",
+    loadError: "Không tìm được. Kiểm tra kết nối rồi thử lại.",
+    loadMore: "Tải thêm kết quả",
+    loadingMore: "Đang tải…",
+    attachmentCount: "{{count}} tệp",
+    membershipNote: "Chỉ tìm trong những phòng bạn là thành viên.",
+    jumpFailed: "Không mở được tin đó. Có thể tin đã bị thu hồi.",
+    dismiss: "Đóng",
   },
 
   time: {

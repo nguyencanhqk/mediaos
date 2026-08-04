@@ -8,7 +8,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Info, MessageSquare } from "lucide-react";
+import { History, Info, MessageSquare } from "lucide-react";
 import { ApiError, chatApi, chatKeys, useCan } from "@mediaos/web-core";
 import { Button, EmptyState, Skeleton } from "@mediaos/ui";
 import type { ChatRoomDto, ChatRoomMemberDto } from "@mediaos/contracts";
@@ -62,8 +62,23 @@ export function ConversationPanel({
   const pendingMap = useChatStore((s) => s.pendingByClientId);
   const discardPendingSend = useChatStore((s) => s.discardPendingSend);
   const applyIncomingMessage = useChatStore((s) => s.applyIncomingMessage);
+  // S7-CHAT-FE-4 — phòng này có đang xem NGỮ CẢNH của một kết quả tìm kiếm/ghim/tệp không.
+  const context = useChatStore((s) => s.contextByRoom[room.id]);
+  const exitMessageContext = useChatStore((s) => s.exitMessageContext);
 
   const conversation = useChatConversation(room.id);
+
+  /**
+   * Rời chế độ ngữ cảnh về dòng thời gian mới nhất.
+   *
+   * HAI vế bắt buộc đi cùng: `exitMessageContext` xoá mỏ neo **và** danh sách cũ, `reload()` nạp lại
+   * trang mới nhất. Thiếu vế hai thì phòng đứng trắng cho tới khi người dùng đổi sang phòng khác rồi
+   * quay lại — trạng thái trông y hệt "mất mạng".
+   */
+  const leaveContext = useCallback(() => {
+    exitMessageContext(room.id);
+    conversation.reload();
+  }, [conversation, exitMessageContext, room.id]);
 
   const [replyTo, setReplyTo] = useState<StoredChatMessage | null>(null);
   const [recallTarget, setRecallTarget] = useState<StoredChatMessage | null>(null);
@@ -84,6 +99,10 @@ export function ConversationPanel({
 
   const submit = useCallback(
     async (payload: ComposerSubmitPayload): Promise<boolean> => {
+      // S7-CHAT-FE-4 — gửi tin trong lúc đang xem ngữ cảnh ⇒ RỜI ngữ cảnh TRƯỚC. Tin vừa gửi có
+      // `roomSeq` lớn hơn cửa sổ nên chốt chèn sẽ chặn nó: người dùng bấm Gửi, thấy bong bóng "đang
+      // gửi" rồi… không thấy tin đâu. Không có thông báo lỗi nào vì không có lỗi nào cả.
+      if (context !== undefined) leaveContext();
       if (payload.fileIds.length > 0) {
         pendingFileIdsRef.current[payload.clientMessageId] = payload.fileIds;
       }
@@ -96,7 +115,7 @@ export function ConversationPanel({
       if (ok) delete pendingFileIdsRef.current[payload.clientMessageId];
       return ok;
     },
-    [conversation],
+    [context, conversation, leaveContext],
   );
 
   const resend = useCallback(
@@ -184,6 +203,27 @@ export function ConversationPanel({
 
       <ConnectionBanner />
 
+      {/*
+       * Dải "đang xem ngữ cảnh" — bắt buộc phải LUÔN hiện khi chốt chèn đang bật (§0.5 của plan): trong
+       * chế độ này tin mới không rơi vào danh sách, và một phòng im lặng không có lời giải thích là
+       * trạng thái không phân biệt được với hỏng.
+       */}
+      {context !== undefined && (
+        <div
+          className="flex items-center gap-2 border-b border-border bg-muted px-4 py-2 text-xs"
+          role="status"
+          data-testid="chat-context-banner"
+        >
+          <History className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span className="min-w-0 flex-1 text-muted-foreground">
+            {t("conversation.contextMode")}
+          </span>
+          <Button variant="outline" size="sm" className="h-7 shrink-0" onClick={leaveContext}>
+            {t("conversation.contextExit")}
+          </Button>
+        </div>
+      )}
+
       {actionError !== null && (
         <p
           className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive"
@@ -227,6 +267,7 @@ export function ConversationPanel({
           hasMoreOlder={conversation.hasMoreOlder}
           isLoadingOlder={conversation.isLoadingOlder}
           historyLimitReached={conversation.historyLimitReached}
+          highlightMessageId={context?.targetMessageId ?? null}
           onLoadOlder={conversation.loadOlder}
           onMarkRead={conversation.markReadUpTo}
           onResendPending={resend}

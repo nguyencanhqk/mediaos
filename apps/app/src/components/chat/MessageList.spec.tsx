@@ -72,6 +72,7 @@ interface HarnessProps {
   historyLimitReached?: boolean;
   onLoadOlder?: () => Promise<number>;
   onMarkRead?: (seq: number) => void;
+  highlightMessageId?: string | null;
 }
 
 function renderList(props: HarnessProps) {
@@ -91,6 +92,7 @@ function renderList(props: HarnessProps) {
         historyLimitReached={props.historyLimitReached ?? false}
         onLoadOlder={props.onLoadOlder ?? (() => Promise.resolve(0))}
         onMarkRead={props.onMarkRead ?? vi.fn()}
+        highlightMessageId={props.highlightMessageId ?? null}
         onResendPending={vi.fn()}
         onDiscardPending={vi.fn()}
         actions={noopActions}
@@ -316,5 +318,71 @@ describe("MessageList · đã xem bởi (§13.2 — dẫn xuất, không bảng 
     const seen = screen.getByText(/Đã xem/);
     expect(seen.textContent).toContain("Trần B");
     expect(seen.textContent).not.toContain("Lê C");
+  });
+});
+
+/**
+ * S7-CHAT-FE-4 — tin đích của một lần nhảy.
+ *
+ * Ca thứ hai là ca thật sự đắt: lần vẽ ĐẦU của một cửa sổ ngữ cảnh trùng đúng nhánh "tin mới tới ⇒ cuộn
+ * xuống đáy" của FE-2. Không chặn nhánh đó thì người dùng bấm một kết quả ở giữa lịch sử và bị ném
+ * thẳng xuống đáy cửa sổ — thao tác họ vừa làm bị huỷ bởi chính màn hình vừa mở ra cho họ.
+ */
+describe("MessageList · làm nổi tin đích (S7-CHAT-FE-4)", () => {
+  it("chỉ tin đích được đánh dấu, và nó được cuộn tới", () => {
+    const scrollIntoView = vi.fn();
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    const target = message(2);
+
+    renderList({ messages: [message(1), target, message(3)], highlightMessageId: target.id });
+
+    const marked = document.querySelectorAll('[data-highlighted="true"]');
+    expect(marked).toHaveLength(1);
+    expect(marked[0].querySelector(`[data-message-id="${target.id}"]`)).toBeTruthy();
+    expect(scrollIntoView).toHaveBeenCalled();
+  });
+
+  it("có tin đích ⇒ KHÔNG tự cuộn xuống đáy khi danh sách đổi", () => {
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+    // Vẽ lần đầu KHÔNG có tin đích, rồi mới gắn hình học giả: `scrollHeight` của jsdom là 0, nên đo
+    // ngay sau lần vẽ đầu thì `scrollTop` bằng 0 dù nhánh cuộn-xuống-đáy CÓ chạy — ca xanh-giả.
+    const { rerender } = renderList({ messages: [message(1)] });
+    const scroller = screen.getByTestId("chat-message-scroll");
+    stubGeometry(scroller, 2000);
+
+    rerender(
+      <I18nextProvider i18n={i18n}>
+        <MessageList
+          room={room}
+          messages={[message(1), message(2)]}
+          pending={[]}
+          members={[]}
+          myUserId={ME}
+          myRole="member"
+          canRecallPair={false}
+          canPinPair={false}
+          hasMoreOlder={false}
+          isLoadingOlder={false}
+          historyLimitReached={false}
+          highlightMessageId={message(1).id}
+          onLoadOlder={() => Promise.resolve(0)}
+          onMarkRead={vi.fn()}
+          onResendPending={vi.fn()}
+          onDiscardPending={vi.fn()}
+          actions={noopActions}
+        />
+      </I18nextProvider>,
+    );
+
+    // `scrollToBottom` gán `scrollTop = scrollHeight` (2000). Nhánh đó phải KHÔNG chạy.
+    expect(scroller.scrollTop).toBe(0);
+  });
+
+  it("tin đích KHÔNG có trong danh sách ⇒ không cuộn, không nổ", () => {
+    const scrollIntoView = vi.fn();
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    renderList({ messages: [message(1)], highlightMessageId: message(9).id });
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(document.querySelectorAll('[data-highlighted="true"]')).toHaveLength(0);
   });
 });

@@ -14,12 +14,18 @@ import {
   type ChatRoomMemberDto,
   chatRoomSchema,
   type ChatRoomDto,
+  chatRoomFileSchema,
+  type ChatRoomFileDto,
+  chatSearchResponseSchema,
+  type ChatSearchResponseDto,
+  type ChatSearchQuery,
   chatUnreadCountSchema,
   type ChatUnreadCountDto,
   type AddChatMemberRequest,
   type ChatMarkReadRequest,
   type CreateChatRoomRequest,
   type ListChatMessagesQuery,
+  type ListChatRoomFilesQuery,
   type ListChatRoomsQuery,
   type OpenDirectRoomRequest,
   type SendMessageRequest,
@@ -43,10 +49,8 @@ import { buildQueryString } from "./api-params";
  * ⚠️ **`leaveRoom` và `removeMember` KHÔNG trả phòng** — parse chúng bằng `chatRoomSchema` là bug đã
  * biết trước, không phải lỗi phát hiện sau: xem `chatLeaveRoomResultSchema`/`chatRemoveMemberResultSchema`.
  *
- * ⚠️ CHAT-API-015 (`/chat/search`) và CHAT-API-017 (`/chat/rooms/:id/files`) **CỐ Ý chưa mirror ở đây** —
- * chúng phục vụ CHAT-SCREEN-005 + tab "Tệp", thuộc `S7-CHAT-FE-4`. WO nền tảng này không dựng hàm cho
- * màn hình chưa tồn tại (`chatSearchResponseSchema`/`chatRoomFileSchema` đã có sẵn trong contracts để
- * FE-4 append thẳng vào file này).
+ * ⚠️ CHAT-API-015 (`/chat/search`) và CHAT-API-017 (`/chat/rooms/:id/files`) **đã mirror ở cuối file**
+ * (`S7-CHAT-FE-4`) — hai đường này có hình dạng phản hồi KHÁC NHAU, xem docblock từng hàm.
  */
 export const chatApi = {
   // ── CHAT-API-001..008 — phòng & thành viên (ChatRoomsController) ───────────────────────────────
@@ -199,4 +203,43 @@ export const chatApi = {
   /** DELETE /chat/messages/:id/pin (CHAT-API-012b). */
   unpinMessage: (messageId: string): Promise<ChatMessageDto> =>
     apiFetch(`/chat/messages/${messageId}/pin`, chatMessageSchema, { method: "DELETE" }),
+
+  // ── S7-CHAT-FE-4 — CHAT-API-015 + 017 (tìm kiếm & tab Tệp) ────────────────────────────────────
+
+  /**
+   * GET /chat/search (CHAT-API-015) — tìm toàn văn trong CÁC PHÒNG MÌNH LÀ THÀNH VIÊN (SPEC-15 §13.7).
+   *
+   * ⚠️ Phản hồi là **OBJECT keyset** `{ data, nextCursor }`, KHÔNG phải mảng trần như mọi endpoint danh
+   * sách khác của module này (chúng không đi qua `paginated()` của repo — khối `Pagination` dùng chung là
+   * page/offset, không dùng được cho keyset). Truyền `z.array(...)` vào đây là `ZodError` runtime DÙ HTTP
+   * 200 (memory `apifetch-drops-pagination-bare-array`). `nextCursor: null` = trang cuối.
+   *
+   * ⚠️ `q` gửi **NGUYÊN VĂN**. Bỏ dấu ở client là làm HỎNG: server so bằng
+   * `websearch_to_tsquery('simple', f_unaccent($q))` — chính nó lo cả hai chiều có dấu/không dấu, còn
+   * một bản luật thứ hai ở FE chỉ tạo ra hai kết quả khác nhau cho cùng một câu.
+   *
+   * Vị từ membership nằm ở SERVER (JOIN `chat_room_members` với `left_at IS NULL`) — **không** có đường
+   * tìm kiếm toàn công ty cho bất kỳ role nào, kể cả Super Admin (SPEC-15 §3.3).
+   */
+  search: (query: ChatSearchQuery): Promise<ChatSearchResponseDto> =>
+    apiFetch(`/chat/search${buildQueryString(query)}`, chatSearchResponseSchema),
+
+  /**
+   * GET /chat/rooms/:id/files (CHAT-API-017) — tệp đã gửi trong phòng, kèm URL ký hạn ngắn.
+   *
+   * MẢNG TRẦN (khác `search` ngay bên trên — đừng chép nhầm schema).
+   *
+   * ⚠️ Con trỏ trang kế = `min(roomSeq)` của trang này, và **KHÔNG** suy được "còn trang sau" từ
+   * `rows.length === limit`: server gọi `trimToMessageBoundary` để không chẻ đôi nhóm tệp của một tin,
+   * nên trang có thể NGẮN hơn `limit` dù còn dữ liệu (và dài hơn `limit` khi một tin có nhiều tệp hơn
+   * `limit`). Chỉ một trang RỖNG mới chứng minh đã hết.
+   */
+  listRoomFiles: (
+    roomId: string,
+    query?: Partial<ListChatRoomFilesQuery>,
+  ): Promise<ChatRoomFileDto[]> =>
+    apiFetch(
+      `/chat/rooms/${roomId}/files${buildQueryString(query ?? {})}`,
+      z.array(chatRoomFileSchema),
+    ),
 };

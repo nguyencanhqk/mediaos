@@ -51,6 +51,7 @@ function renderPanel(props: Partial<Parameters<typeof RoomListPanel>[0]> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const onSelectRoom = props.onSelectRoom ?? vi.fn();
   const onCreateRoom = props.onCreateRoom ?? vi.fn();
+  const onOpenSearch = props.onOpenSearch ?? vi.fn();
   render(
     <QueryClientProvider client={client}>
       <I18nextProvider i18n={i18n}>
@@ -61,11 +62,12 @@ function renderPanel(props: Partial<Parameters<typeof RoomListPanel>[0]> = {}) {
           {...props}
           onSelectRoom={onSelectRoom}
           onCreateRoom={onCreateRoom}
+          onOpenSearch={onOpenSearch}
         />
       </I18nextProvider>
     </QueryClientProvider>,
   );
-  return { onSelectRoom, onCreateRoom };
+  return { onSelectRoom, onCreateRoom, onOpenSearch };
 }
 
 beforeEach(() => {
