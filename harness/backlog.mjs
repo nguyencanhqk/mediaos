@@ -10005,7 +10005,9 @@ export const backlog = [
     paths: [
       "apps/app/src/layouts/**",
       "apps/app/src/components/chat/**",
-      "apps/lms/**",
+      // `apps/lms/**` GO khoi WO nay 04/08: ve LMS tach sang `S7-CHAT-LMS-1`, va no phai CHO
+      // duong goi cua MediaOS san sang (owner chot phuong an C) — go som la nguoi dung LMS mat
+      // cuoc goi trong khoang trong. Xem docs/plans/S7-CHAT-LMS-CONSOLIDATION.md §3.1.
       // Chuỗi hiển thị của panel nổi + badge sống ở namespace `chat` (FE-2 tạo) — JSX KHÔNG được có
       // chuỗi cứng, nên tệp locale BẮT BUỘC nằm trong scope. Thiếu dòng này thì `guard-scope` cảnh báo
       // và gate đọc thiếu một nửa diff (memory `wo-paths-drive-gate-and-scheduler`).
@@ -10189,6 +10191,222 @@ export const backlog = [
       "FE: bỏ lọc client-side ở chat-oversight-audit-page.tsx + GỠ nhãn 'chỉ áp trên các dòng đã tải' (nhãn đó là bù cho thiếu sót ở server; giữ lại sau khi server lọc thật = nói sai với người dùng theo chiều ngược lại). Cập nhật spec tương ứng — ca 'nhãn phạm vi' hiện đang PIN hành vi cũ",
       "RED-trước, chủ thể là role dựng trong test (KHÔNG dùng SA — SA có *:* nên ca positive xanh kể cả khi guard khai sai)",
       "FULL gate PASS (đường đọc-vượt = bề mặt rủi ro lớn nhất module)",
+    ],
+  },
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Wave CALL — owner chốt phương án C ngày 04/08/2026 (làm cuộc gọi thoại/hình ở MediaOS).
+  // Căn cứ đo: docs/plans/S7-CHAT-LMS-CONSOLIDATION.md §1 — chat LMS chỉ 84 tin / 4 người, nhưng cuộc
+  // gọi là tính năng DUY NHẤT có người dùng thật mà MediaOS thiếu (24 cuộc, 14 kết nối được).
+  // ⚠️ TOÀN BỘ wave này bị FENCE sau chữ ký owner ở DECISIONS-07 §7: nó nới CHAT-DEC-005 — một bất biến
+  // kiến trúc đang có hiệu lực và đang được ép bằng code (`realtime.gateway.ts:38`).
+  // ══════════════════════════════════════════════════════════════════════════════
+  {
+    id: "S7-CALL-DOC-1",
+    module: "CHAT",
+    layer: "DOC",
+    title:
+      "Owner ký DECISIONS-07 (nới CHAT-DEC-005 có hàng rào R1-R4) + sửa SPEC-15 §5.2 đưa cuộc gọi VÀO phạm vi + bổ sung màn/API/quyền/mã lỗi CALL",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "docs/DECISIONS/DECISIONS-07_Chat_Call_Signalling.md",
+      "docs/SPEC/SPEC-15 CHAT.md",
+      "docs/API Design/API-13_CHAT_API_Design.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "⚠️ ĐÁNH SỐ ĐÃ ĐỔI 05/08 khi rebase lên master: wave S8-CHAT-UX (PR #350) ĐÃ CHIẾM CHAT-DEC-014…019 · CHAT-API-018…023 · CHAT-ERR-021…025. Bản seed 04/08 của WO này ghi DEC-010 (đã bị chiếm từ lâu) + API-020..023 + ERR-021..025 ⇒ đổi sang DEC-020 · API-024..027 · ERR-026..030. Đo lại dải rỗng bằng grep TRƯỚC khi viết, đừng tin con số trong WO nếu master đã trôi",
+      "docs/plans/S7-CHAT-LMS-CONSOLIDATION.md §4 — ba lựa chọn A/B/C, owner chốt C",
+      "SPEC-15 §5.2 dòng 'Cuộc gọi thoại/hình | Ngoài phạm vi sản phẩm' — mệnh đề PHẢI sửa ở SPEC, không sửa lén trong code",
+      "SPEC-15 §3.5 + §22 CHAT-DEC-005 — NỚI, không huỷ",
+    ],
+    done_when: [
+      "DECISIONS-07 §7 có chữ ký owner (3 ô tick) — MỌI WO S7-CALL-* khác bị chặn tới khi có",
+      "SPEC-15 §5.2 sửa dòng cuộc gọi; §22 thêm CHAT-DEC-020 ghi rõ ngoại lệ signalling + 4 hàng rào R1-R4",
+      "SPEC-15 bổ sung: màn CHAT-SCREEN-009 · CHAT-API-024..027 · cặp ('call','chat-room') · mã lỗi CHAT-ERR-026..030",
+      "Ghi TƯỜNG MINH: ('view','chat-oversight') KHÔNG cấp quyền nghe/tham gia cuộc gọi — chống suy diễn từ CHAT-DEC-004",
+      "plan-reviewer đối kháng PASS",
+    ],
+  },
+  {
+    id: "S7-CALL-DB-1",
+    module: "CHAT",
+    layer: "DB",
+    title:
+      "Migration CALL: chat_calls + chat_call_participants (company_id + RLS FORCE + append-only) + seed cặp ('call','chat-room')",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/communication.ts",
+      "apps/api/src/db/schema/index.ts",
+      "packages/contracts/src/chat-call.ts",
+      "docs/DB/**",
+      "docs/plans/S7-CALL-DB-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S7-CALL-DOC-1"],
+    plan: "docs/plans/S7-CALL-DB-1.md",
+    src: [
+      "apps/lms/server.mjs:115-149 — DDL SQLite THAM CHIẾU (direct_message_calls + _call_participants). THIẾT KẾ LẠI chứ không port: bản LMS không có company_id, không RLS, không audit",
+      "memory: new-fk-column-needs-composite-tenant-fk · migration-expand-contract-required · audit-check-union-parse-anchor-trap",
+    ],
+    done_when: [
+      "chat_calls(company_id, room_id, initiator_user_id, kind, status, started_at, accepted_at, ended_at) + chat_call_participants; RLS policy + FORCE TẠO TRƯỚC backfill company_id",
+      "Lịch sử cuộc gọi APPEND-ONLY: app role KHÔNG có DELETE; UPDATE chỉ column-GRANT đúng cột vòng đời (mẫu mig 0050)",
+      "FK tới chat_rooms là composite (company_id, id) — cột một-vế mở lại KI-046 + ĐỎ ratchet CI",
+      "Seed cặp ('call','chat-room') is_sensitive=false, grant role canonical như 9 cặp CHAT; cập nhật pin canonical seed",
+      "audit object_types CHECK = UNION (append, KHÔNG rewrite) += 'chat_call'; neo parse đúng 'object_type = ANY'",
+      "FULL gate PASS",
+    ],
+  },
+  {
+    id: "S7-CALL-BE-1",
+    module: "CHAT",
+    layer: "BE",
+    title:
+      "Vòng đời cuộc gọi qua REST (mời · nhận · từ chối · huỷ · kết thúc) + GET /chat/calls/ice-config — audit đầy đủ, KHÔNG đi qua WebSocket",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/chat/chat-calls.controller.ts",
+      "apps/api/src/chat/chat-calls.service.ts",
+      "apps/api/src/chat/chat-calls.repository.ts",
+      "apps/api/src/chat/chat-call-ice.service.ts",
+      "apps/api/src/chat/chat.module.ts",
+      "apps/api/test/integration/**",
+      "docs/plans/S7-CALL-BE-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S7-CALL-DB-1"],
+    plan: "docs/plans/S7-CALL-BE-1.md",
+    src: [
+      "DECISIONS-07 §3.1 R4 — vòng đời đi REST là ĐIỂM KHÁC QUAN TRỌNG NHẤT so với LMS (LMS ghi cả vòng đời trong handler socket, server.mjs:895..1099)",
+      "apps/lms/app/api/messages/calls/ice-config/route.ts — Cloudflare TURN, credential sinh phía SERVER (CLOUDFLARE_TURN_KEY_ID/API_TOKEN) + STUN Google dự phòng. PORT sang Nest + THÊM gate quyền",
+      "memory: route-census-runtime-gate · systemjobhandler-optional-dbw-di",
+    ],
+    done_when: [
+      "CHAT-API-020..023 REST, gate ('call','chat-room') + assertMember phòng; MỖI thao tác vòng đời ghi audit_logs",
+      "ice-config KHÔNG log credential; secret từ env, KHÔNG hard-code (BẤT BIẾN #3)",
+      "Cuộc gọi 'ringing' quá hạn → 'missed' bằng @SystemJobHandler idempotent (mẫu retention-cleanup) + @Optional() cho DI",
+      "Deny-path RED-TRƯỚC: người NGOÀI phòng → 404 giống hệt phòng không tồn tại; người trong phòng thiếu cặp ('call','chat-room') → 403",
+      "ROUTE_CENSUS regen; route-guard-coverage xanh",
+      "FULL gate PASS",
+    ],
+  },
+  {
+    id: "S7-CALL-RT-1",
+    module: "CHAT",
+    layer: "BE",
+    title:
+      "🔒 Gateway /ws-call: allowlist ĐÓNG 8 sự kiện inbound, relay SDP/ICE KHÔNG đọc-KHÔNG lưu, /ws giữ nguyên 0 @SubscribeMessage",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/realtime/call-signalling.gateway.ts",
+      "apps/api/src/realtime/realtime.module.ts",
+      "packages/contracts/src/chat-call.ts",
+      "apps/api/test/integration/**",
+      "docs/plans/S7-CALL-RT-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S7-CALL-BE-1"],
+    plan: "docs/plans/S7-CALL-RT-1.md",
+    src: [
+      "DECISIONS-07 §3.1 R1-R3 + §4 — danh sách 8 sự kiện ĐÓNG",
+      "apps/lms/server.mjs:1156-1158 forwardCallSignaling — tham chiếu relay",
+      "memory: engineio-cors-never-rejects (cưỡng chế ở allowRequest) · ws-permission-gate-needs-its-own-room · valkey-shared-across-all-envs-no-channel-prefix",
+    ],
+    done_when: [
+      "Namespace RIÊNG /ws-call; realtime.gateway.ts (/ws) VẪN 0 @SubscribeMessage — có test đóng đinh, ĐỎ nếu ai thêm",
+      "Allowlist 8 sự kiện; sự kiện ngoài danh sách → ngắt + ghi user_security_events. Test census đếm handler khớp ĐÚNG 8 (mẫu route-guard-coverage)",
+      "MỖI sự kiện kiểm LẠI tư cách tham gia cuộc gọi từ DB — KHÔNG tin việc socket đang ở trong room",
+      "SDP/ICE: chuỗi mờ có trần độ dài, Zod ở biên, KHÔNG parse, KHÔNG ghi DB, KHÔNG lên DTO — test chứng minh 0 hàng DB sinh ra từ một phiên signalling",
+      "Deny-path RED-TRƯỚC: người ngoài cuộc gọi emit sdp-offer → từ chối + ghi security event; callId cross-tenant → không relay",
+      "FULL gate PASS — WO nới bất biến, BẮT BUỘC security-reviewer + silent-failure-hunter",
+    ],
+  },
+  {
+    id: "S7-CALL-FE-1",
+    module: "CHAT",
+    layer: "FE",
+    title:
+      "UI cuộc gọi: nút gọi trong phòng · chuông đến · khung đang gọi (thu nhỏ/toàn màn) · tắt mic-cam · chia sẻ màn hình — port từ LMS, bỏ phần tự ghi vòng đời qua WS",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/components/chat/call/**",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/lib/chat-call-api.ts",
+      "docs/plans/S7-CALL-FE-1.md",
+    ],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S7-CALL-RT-1", "S7-CHAT-FE-3"],
+    plan: "docs/plans/S7-CALL-FE-1.md",
+    src: [
+      "apps/lms/components/chat/useDirectMessageCall.ts (885 dòng — máy trạng thái WebRTC + trickle ICE + nhiều bên): PORT CÓ SỬA, bỏ phần emit vòng đời (DECISIONS-07 R4)",
+      "apps/lms/components/chat/CallExperience.tsx · CallButtons.tsx · CallProvider.tsx · callRingtone.ts — port gần nguyên (UI thuần)",
+      "memory: ws-payload-narrower-than-rest-dto · react-query-v5-stale-mutationfn-closure",
+    ],
+    done_when: [
+      "Gọi 1-1 chạy THẬT giữa hai trình duyệt: mời → chuông → nhận → thấy/nghe được → kết thúc; có bằng chứng (ảnh/quay màn)",
+      "Vòng đời gọi đi REST (không emit); chỉ SDP/ICE/media-state đi /ws-call",
+      "Mất mạng giữa cuộc gọi → trạng thái rõ ràng + tự dọn peer connection, KHÔNG treo camera đang bật",
+      "Gate useCan('call','chat-room'); thiếu quyền ⇒ KHÔNG hiện nút gọi",
+      "i18n vi đầy đủ; light + dark đạt tương phản",
+      "LIGHT gate PASS",
+    ],
+  },
+  {
+    id: "S7-CHAT-LMS-1",
+    module: "CHAT",
+    layer: "FE",
+    title:
+      "Gỡ chat khỏi LMS (GIỮ trợ lý AI) + trỏ lối vào sidebar sang /chat MediaOS + xuất 84 tin lịch sử ra tệp lưu trữ",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/lms/**", "docs/plans/S7-CHAT-LMS-1.md"],
+    skills: ["code-review"],
+    // ⚠️ PHỤ THUỘC S7-CALL-FE-1 CÓ CHỦ ĐÍCH: owner chốt C (làm cuộc gọi ở MediaOS). Gỡ chat LMS TRƯỚC
+    // khi MediaOS gọi được là người dùng mất cuộc gọi trong khoảng trống — 14 cuộc kết nối được là
+    // bằng chứng có người dùng thật (LMS-CONSOLIDATION §1).
+    depends_on: ["S7-CALL-FE-1"],
+    plan: "docs/plans/S7-CHAT-LMS-1.md",
+    src: [
+      "docs/plans/S7-CHAT-LMS-CONSOLIDATION.md §3.1 + §3.2",
+      "apps/lms/components/sidebar/app-sidebar.tsx:163 — mục 'Trò chuyện' trỏ /chat của LMS",
+      "memory: lms-local-git-repo (apps/lms có repo git RIÊNG — commit vào repo LOCAL) · lms-next-build-shares-prod-dist (CẤM build LMS lúc PROD đang chạy) · lms-sso-only-live",
+    ],
+    done_when: [
+      "Sidebar LMS 'Trò chuyện' trỏ /chat của MediaOS (cùng tab); MediaOS tự chặn quyền khi tới",
+      "Gỡ apps/lms/app/(app)/chat/** + components/chat/** + app/api/messages/** + app/api/polls/**",
+      "⚠️ GIỮ NGUYÊN trợ lý AI: app/api/chat/** + app/(app)/ai-assistant/** + bảng chat_messages (19 hàng, cột role/citations_json/confidence) — KHÔNG phải chat này",
+      "84 tin + 6 phòng xuất ra tệp lưu trữ (JSON) giao owner; KHÔNG dựng đường di trú SQLite→Postgres",
+      "Commit vào repo git LOCAL trong apps/lms; build LMS chỉ khi PROD không chạy",
+      "LIGHT gate PASS",
+    ],
+  },
+  {
+    id: "S7-CALL-QA-1",
+    module: "CHAT",
+    layer: "QA",
+    title:
+      "Bộ test CALL: deny-path signalling · cô lập 2-tenant · vòng đời cuộc gọi trên LANE_DB · E2E gọi 1-1 hai trình duyệt",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/test/**", "apps/app/src/**", "docs/plans/S7-CALL-QA-1.md"],
+    skills: ["code-review"],
+    depends_on: ["S7-CALL-FE-1"],
+    plan: "docs/plans/S7-CALL-QA-1.md",
+    src: [
+      "memory: integration-test-lane-db-gate (LANE_DB bắt buộc để deny-path chạy THẬT) · src-green-is-not-integration-green",
+    ],
+    done_when: [
+      "Chạy như CI: bash harness/check.sh --lane-db — deny-path signalling THỰC THI, không skip",
+      "Cô lập tenant: callId của công ty khác → không relay, không lộ tồn tại",
+      "Coverage ≥80% vùng CALL (gateway signalling cao hơn)",
+      "E2E gọi 1-1 hai trình duyệt có bằng chứng chạy được",
     ],
   },
   {
