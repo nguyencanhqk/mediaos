@@ -9,12 +9,15 @@
  * chat nào. Nhưng nó VẪN đi qua `ChatOversightAuditGuard`, nên gọi khi thiếu quyền vẫn để lại `Denied`
  * — thêm một lý do để cổng FE đóng TRƯỚC khi query chạy thay vì để người dùng ăn 403.
  *
- * ⚠️ **BỘ LỌC LÀ CLIENT-SIDE, TRÊN CÁC DÒNG ĐÃ TẢI.** `chatOversightAuditQuerySchema` chỉ nhận
- * `cursor` + `limit` — không có tham số lọc theo người hay khoảng thời gian ở server (đo 04/08/2026).
- * Giao diện PHẢI nói ra điều đó (nhãn "trong N dòng đã tải"): lọc im lặng trên một tập con làm người
- * đọc kết luận "không có lần truy cập nào" trong khi bằng chứng nằm ở trang chưa tải.
+ * ⚠️ **BỘ LỌC CHẠY Ở SERVER** (`S7-CHAT-BE-9`): `actorUserId` + `from`/`to` đi thẳng vào CHAT-API-019 và
+ * áp trên TOÀN BỘ nhật ký, không phải trên các dòng đã tải. `from`/`to` gửi dạng NGÀY `YYYY-MM-DD` và
+ * server quy đổi theo cột `companies.timezone` — client KHÔNG được tự đổi sang mốc UTC, nếu không thì hai
+ * người ở hai múi giờ lọc ra hai kết quả khác nhau trên cùng một câu hỏi.
+ *
+ * ⚠️ Bộ lọc nằm trong `queryKey` ⇒ đổi bộ lọc là một truy vấn MỚI, con trỏ trang cũ không bao giờ bị mang
+ * sang. Server còn kiểm lần nữa (con trỏ mang dấu vân bộ lọc; lệch → 400 `CHAT-ERR-016`).
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useTranslation } from "react-i18next";
@@ -24,11 +27,13 @@ import { Badge, Button, DataTable, EmptyState, Input, PageHeader, Select } from 
 import { chatOversightApi } from "@mediaos/web-core";
 import { useCanChatOversight } from "@/lib/chat-oversight-gate";
 import {
+  auditFilterParams,
   distinctActors,
-  filterAuditEntries,
   formatCriteria,
   formatDateTime,
+  mergeActorOptions,
   roomLabel,
+  type ActorOption,
   type AuditFilterInput,
 } from "./chat-oversight-format";
 
@@ -54,29 +59,48 @@ export function ChatOversightAuditPage() {
   const canOversight = useCanChatOversight();
 
   const [filter, setFilter] = useState<AuditFilterInput>(EMPTY_FILTER);
+  const params = useMemo(() => auditFilterParams(filter), [filter]);
+
+  /**
+   * Khoảng ngày NGƯỢC — chặn ở FE, KHÔNG để nó thành 400.
+   *
+   * ⚠️ Đây là hồi quy do chính việc chuyển lọc sang server sinh ra: chọn "Đến ngày" trước "Từ ngày" là
+   * thao tác rất thường, trước đây chỉ ra bảng rỗng, giờ thành `400` ⇒ banner đỏ "Không tải được nhật ký"
+   * — đọc như hệ thống hỏng chứ không phải "bạn chọn ngược hai ô". Server VẪN validate (`.refine` ở
+   * `chatOversightAuditQuerySchema`); vế này chỉ để người dùng thấy đúng nguyên nhân, không thay thế nó.
+   */
+  const isRangeInverted = filter.from !== "" && filter.to !== "" && filter.from > filter.to;
 
   const audit = useInfiniteQuery({
-    queryKey: ["console:chat-oversight:audit"],
+    // Bộ lọc NẰM TRONG khoá: đổi bộ lọc = truy vấn mới, các trang cũ (và con trỏ của chúng) bị bỏ đi.
+    queryKey: ["console:chat-oversight:audit", params],
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) =>
       chatOversightApi.listAudit({
         limit: AUDIT_PAGE_SIZE,
+        ...params,
         ...(pageParam === null ? {} : { cursor: pageParam }),
       }),
     // `nextCursor === null` = trang cuối (keyset của server), KHÔNG suy từ độ dài trang.
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    enabled: canOversight,
+    enabled: canOversight && !isRangeInverted,
     refetchOnWindowFocus: false,
     retry: false,
   });
 
-  const loadedRows = useMemo<ChatOversightAuditEntryDto[]>(
+  const rows = useMemo<ChatOversightAuditEntryDto[]>(
     () => (audit.data?.pages ?? []).flatMap((page) => page.data),
     [audit.data],
   );
 
-  const actors = useMemo(() => distinctActors(loadedRows), [loadedRows]);
-  const rows = useMemo(() => filterAuditEntries(loadedRows, filter), [loadedRows, filter]);
+  /**
+   * Option của ô "Người thực hiện" TÍCH LUỸ qua mọi lần tải — xem `mergeActorOptions`. Dựng lại từ
+   * `rows` sẽ làm mọi người khác biến mất ngay khi lọc theo một người (server chỉ trả người đó).
+   */
+  const [actors, setActors] = useState<ActorOption[]>([]);
+  useEffect(() => {
+    setActors((prev) => mergeActorOptions(prev, distinctActors(rows)));
+  }, [rows]);
 
   const columns = useMemo<ColumnDef<ChatOversightAuditEntryDto>[]>(
     () => [
@@ -173,7 +197,7 @@ export function ChatOversightAuditPage() {
           <Select
             id="audit-actor"
             value={filter.actorUserId}
-            onChange={(e) => setFilter({ ...filter, actorUserId: e.target.value })}
+            onChange={(e) => setFilter((prev) => ({ ...prev, actorUserId: e.target.value }))}
           >
             <option value="">{t("audit.filter.allActors")}</option>
             {actors.map((actor) => (
@@ -182,6 +206,10 @@ export function ChatOversightAuditPage() {
               </option>
             ))}
           </Select>
+          {/* Danh sách GỢI Ý rút từ các dòng đã tải — khác với PHẠM VI LỌC (toàn bộ nhật ký, ở server).
+              Hai câu đó không mâu thuẫn, và nói cả hai là cách duy nhất để người dùng không suy ra
+              "người này chưa từng đọc-vượt" chỉ vì chưa thấy tên trong ô chọn. */}
+          <p className="text-xs text-muted-foreground">{t("audit.filter.actorHint")}</p>
         </div>
 
         <div className="w-44 space-y-1">
@@ -192,7 +220,7 @@ export function ChatOversightAuditPage() {
             id="audit-from"
             type="date"
             value={filter.from}
-            onChange={(e) => setFilter({ ...filter, from: e.target.value })}
+            onChange={(e) => setFilter((prev) => ({ ...prev, from: e.target.value }))}
           />
         </div>
 
@@ -204,7 +232,7 @@ export function ChatOversightAuditPage() {
             id="audit-to"
             type="date"
             value={filter.to}
-            onChange={(e) => setFilter({ ...filter, to: e.target.value })}
+            onChange={(e) => setFilter((prev) => ({ ...prev, to: e.target.value }))}
           />
         </div>
 
@@ -213,14 +241,25 @@ export function ChatOversightAuditPage() {
         </Button>
       </div>
 
-      {/* Nói THẲNG phạm vi của bộ lọc. Xem docblock đầu file — đây là phần bắt buộc của UI chừng nào
-          CHAT-API-019 chưa nhận tham số lọc ở server. */}
+      {/* Nói THẲNG phạm vi của bộ lọc — giờ là TOÀN BỘ nhật ký ở server (S7-CHAT-BE-9).
+          ⚠️ Giữ lại nhãn "chỉ áp trên các dòng đã tải" sau khi server đã lọc thật là nói SAI theo chiều
+          ngược lại: người dùng sẽ tưởng còn bằng chứng chưa được xét và đi tải thêm vô ích. */}
       <p role="status" className="text-sm text-muted-foreground">
-        {t("audit.scopeNotice", { shown: rows.length, loaded: loadedRows.length })}
+        {t("audit.scopeNotice", { loaded: rows.length })}
         {audit.hasNextPage ? ` ${t("audit.scopeMore")}` : ""}
       </p>
 
-      {audit.isError && (
+      {isRangeInverted && (
+        <p
+          role="alert"
+          aria-live="assertive"
+          className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive"
+        >
+          {t("audit.filter.rangeInverted")}
+        </p>
+      )}
+
+      {audit.isError && !isRangeInverted && (
         <p
           role="alert"
           aria-live="assertive"
@@ -230,21 +269,32 @@ export function ChatOversightAuditPage() {
         </p>
       )}
 
-      <DataTable
-        columns={columns}
-        data={rows}
-        isLoading={audit.isPending}
-        pageSize={20}
-        emptyState={
-          <EmptyState
-            icon={ScrollText}
-            title={t("audit.emptyTitle")}
-            description={t("audit.emptyDescription")}
-          />
-        }
-      />
+      {/*
+        ⚠️ Bộ lọc KHÔNG hợp lệ ⇒ **không render bảng**, chỉ còn banner ở trên. Hai lối kia đều nói dối:
+          · `isLoading={audit.isPending}` ⇒ query `enabled:false` chưa có data thì `isPending` TRUE còn
+            `isFetching` FALSE (React Query v5: `isLoading = isPending && isFetching`) ⇒ bảng quay 5 hàng
+            skeleton VĨNH VIỄN — vẫn là tín hiệu "hệ thống treo", chỉ đổi hình dạng;
+          · render bảng rỗng ⇒ empty-state đọc thành "Chưa có lần đọc-vượt nào", tức trả lời một câu hỏi
+            mà server CHƯA HỀ được hỏi — đúng loại nói dối mà cả WO này tồn tại để diệt.
+        Không có kết quả để hiện thì không hiện chỗ chứa kết quả.
+      */}
+      {!isRangeInverted && (
+        <DataTable
+          columns={columns}
+          data={rows}
+          isLoading={audit.isLoading}
+          pageSize={20}
+          emptyState={
+            <EmptyState
+              icon={ScrollText}
+              title={t("audit.emptyTitle")}
+              description={t("audit.emptyDescription")}
+            />
+          }
+        />
+      )}
 
-      {audit.hasNextPage && (
+      {audit.hasNextPage && !isRangeInverted && (
         <div className="flex justify-center">
           <Button
             variant="outline"

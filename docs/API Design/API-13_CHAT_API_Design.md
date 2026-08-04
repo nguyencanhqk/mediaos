@@ -167,7 +167,7 @@ GET /api/v1/chat/oversight/audit
 | CHAT-API-018a | GET | `/chat/oversight/rooms` | Tra phòng theo mã/tên/loại — trả **siêu dữ liệu** phòng (tên · loại · số thành viên · hoạt động cuối), **không** kèm nội dung tin | `('view','chat-oversight')` | ❌ bỏ qua (đó là mục đích) | ✅ |
 | CHAT-API-018b | GET | `/chat/oversight/rooms/{room_id}` | Chi tiết phòng + danh sách thành viên | `('view','chat-oversight')` | ❌ bỏ qua | ✅ **mỗi lần gọi** |
 | CHAT-API-018c | GET | `/chat/oversight/rooms/{room_id}/messages` | Đọc tin theo con trỏ `seq` — **chỉ đọc** | `('view','chat-oversight')` | ❌ bỏ qua | ✅ **mỗi lần gọi** |
-| CHAT-API-019 | GET | `/chat/oversight/audit` | Nhật ký đọc-vượt cho CHAT-SCREEN-008 (ai · phòng nào · lúc nào · thành công/từ chối) | `('view','chat-oversight')` | — | — |
+| CHAT-API-019 | GET | `/chat/oversight/audit` | Nhật ký đọc-vượt cho CHAT-SCREEN-008 (ai · phòng nào · lúc nào · thành công/từ chối). Query: `cursor` · `limit` · `actorUserId` · `from`/`to` (**NGÀY** `YYYY-MM-DD`) | `('view','chat-oversight')` | — | — |
 
 **Ràng buộc thi công — cả 8 điều đều là điều kiện PASS của FULL gate:**
 
@@ -211,6 +211,13 @@ GET /api/v1/chat/oversight/audit
 | `module_code` | `CHAT` |
 
 > **`CHAT-API-019` phải bó truy vấn** `action = 'chat.oversight.read' AND module_code = 'CHAT'`. Không bó là biến một cặp quyền CHAT thành **cổng đọc audit toàn hệ thống**. Ca test bắt buộc: gieo dòng audit của module khác → `019` **không** trả về.
+>
+> **Bộ lọc của `CHAT-API-019` (`S7-CHAT-BE-9`) — bốn ràng buộc, đều là điều kiện PASS của FULL gate:**
+>
+> 1. **Bộ lọc chỉ THU HẸP.** `actorUserId` / `from` / `to` đứng SAU ba vế bó cứng (`company_id`, `action`, `module_code`). Ca test bắt buộc: gieo dòng audit **module khác nhưng CÙNG `actor_user_id`** rồi lọc theo actor đó → `019` **không** trả về. Nới một vế bó cứng "cho bộ lọc linh hoạt hơn" là mở lại đúng cổng ở đoạn trên.
+> 2. **`from`/`to` là NGÀY `YYYY-MM-DD`, quy đổi ở SERVER theo cột **`companies.timezone`**.** Đọc đúng nguồn mà sản phẩm GHI là một phần của ràng buộc: khoá KV `company.timezone` (DB-10 §11.2) hiện **không có writer nào**, còn ô múi giờ admin thật sự bấm (`PATCH /settings/company`) ghi vào cột — đọc nhầm nguồn thì CHAT-SCREEN-008 cắt cửa sổ theo mặc định trong khi DASHBOARD đã theo TZ mới, và người điều tra mất nửa ngày bằng chứng mà không có tín hiệu nào. Ca test phải ghim **nguồn**, không chỉ ghim cơ chế. Hợp đồng **từ chối** mốc thời gian đầy đủ (`…T17:00:00Z`) — nhận vào là để client tự quy đổi múi giờ, và khi đó hai người ngồi hai múi giờ nhận hai kết quả khác nhau cho cùng một câu hỏi trên một sổ kiểm soát. Biên trên là **nửa mở** tại `00:00` ngày kế: `created_at` là `timestamptz` (micro-giây) nên mốc đóng `23:59:59.999` làm mất những dòng cuối ngày — HTTP 200, không lỗi.
+> 3. **Con trỏ keyset phải mang dấu vân của bộ lọc.** Con trỏ sinh ở bộ lọc A dùng lại với bộ lọc B → **400 `CHAT-ERR-016`**, KHÔNG im lặng trả một trang cắt theo tập kết quả khác. Dấu vân tính trên **instant đã quy đổi**, nên đổi `company.timezone` giữa hai lần lật trang cũng làm con trỏ hết hiệu lực.
+> 4. **Vẫn KHÔNG ghi audit `Success`** (cột Audit của `019` ở bảng trên vẫn là `—`). Thêm bộ lọc không phải lý do để đổi điều đó: đọc nhật ký không tiết lộ một byte nội dung chat nào, và ghi `Success` ở đây làm chính CHAT-SCREEN-008 tự sinh nhiễu mỗi lần mở.
 >
 > **`CHAT-API-018a` hẹp hơn "liệt kê mọi phòng":** yêu cầu từ khoá tìm ≥ 2 ký tự, có trần trang, và audit ghi lại tiêu chí tìm. Không có ràng buộc này thì một lần gọi xuất được đồ thị "ai nhắn riêng với ai" của cả công ty — rộng hơn hẳn ngoại lệ mà owner chốt ("mở **đích danh** một phòng").
 

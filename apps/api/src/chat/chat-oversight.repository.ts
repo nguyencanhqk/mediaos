@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, gt, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { auditLogs } from "../db/schema/audit";
@@ -319,11 +319,29 @@ export class ChatOversightRepository {
    * codec thứ hai: luật "cắt về mili-giây ở CẢ khoá lẫn con trỏ" là thứ dễ hiện thực sai một cách im
    * lặng, nên nó chỉ được phép có MỘT bản. Trả `limit + 1` để service dựng `nextCursor`. Cấm offset: bảng
    * append-only tăng liên tục nên offset trôi giữa hai lần lật trang.
+   *
+   * ═══ S7-CHAT-BE-9 — bộ lọc `actorUserId` / `[fromInstant, toInstantExclusive)` ═══
+   *
+   * ⚠️ **Bộ lọc ĐỨNG SAU ba vế bó cứng, và chỉ THU HẸP.** Thứ tự trong `conds` không đổi ngữ nghĩa SQL,
+   * nhưng nó là thứ khiến "019 không thể thành cổng đọc `audit_logs` toàn hệ thống" ĐỌC RA ĐƯỢC ngay ở
+   * đầu hàm. Ai gỡ một vế bó cứng để "cho bộ lọc linh hoạt hơn" đang mở một bảng dùng chung đang phục vụ
+   * điều tra AUTH/HR/LEAVE. Ca int-spec 26c gieo dòng module HR **cùng `actor_user_id`** và đòi 019 KHÔNG
+   * trả về — nó chết ngay nếu ai đó đổi thứ tự thành "lọc theo actor rồi mới bó module".
+   *
+   * ⚠️ Khoảng thời gian so trên `created_at` **THÔ**, KHÔNG trên `sortAt`: `sortAt` là
+   * `date_trunc('milliseconds', …)`, sinh ra để khớp độ chính xác của CON TRỎ. Dùng nó làm biên cửa sổ là
+   * đẩy mọi mốc lùi tới 1ms — nhỏ nhưng sai, và sai theo hướng lặng lẽ.
    */
   async listOversightAudit(
     tx: TenantTx,
     companyId: string,
-    opts: { limit: number; cursor?: ChatSearchCursor },
+    opts: {
+      limit: number;
+      cursor?: ChatSearchCursor;
+      actorUserId?: string;
+      fromInstant?: Date;
+      toInstantExclusive?: Date;
+    },
   ): Promise<ChatOversightAuditRow[]> {
     const sortAt = auditSortAtExpr();
     const conds: SQL[] = [
@@ -331,6 +349,15 @@ export class ChatOversightRepository {
       eq(auditLogs.action, CHAT_AUDIT.OVERSIGHT_READ),
       eq(auditLogs.moduleCode, CHAT_MODULE_CODE),
     ];
+    if (opts.actorUserId !== undefined) {
+      conds.push(eq(auditLogs.actorUserId, opts.actorUserId));
+    }
+    if (opts.fromInstant !== undefined) {
+      conds.push(gte(auditLogs.createdAt, opts.fromInstant));
+    }
+    if (opts.toInstantExclusive !== undefined) {
+      conds.push(lt(auditLogs.createdAt, opts.toInstantExclusive));
+    }
     if (opts.cursor) {
       // Hàng "cũ hơn" theo ĐÚNG thứ tự sắp xếp `(sortAt DESC, id DESC)` — mirror `chat-search.repository`.
       conds.push(

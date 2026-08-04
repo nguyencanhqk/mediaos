@@ -24,18 +24,13 @@ export function formatDateTimeShort(iso: string): string {
   return full === "" ? "" : full.slice(0, full.length - 3);
 }
 
-/**
- * Khoá ngày `YYYY-MM-DD` theo giờ **ĐỊA PHƯƠNG**.
+/*
+ * ⚠️ `dayKeyOf` đã bị GỠ ở `S7-CHAT-BE-9` — cùng lúc với `filterAuditEntries`.
  *
- * KHÔNG dùng `toISOString().slice(0,10)`: nó đổi sang UTC ⇒ một dòng audit lúc 06:30 sáng giờ VN rơi
- * sang ngày HÔM TRƯỚC, và bộ lọc "từ ngày…đến ngày" bỏ sót đúng những dòng người dùng đang tìm.
+ * Nó quy đổi mốc audit sang ngày theo giờ **MÁY NGƯỜI DÙNG**. Từ khi CHAT-API-019 lọc ở server theo
+ * `company.timezone`, một hàm quy đổi ngày ở client là **nguồn sự thật thứ hai** cho cùng câu hỏi — và
+ * hai người ngồi hai múi giờ sẽ đọc ra hai kết quả. Đừng dựng lại nó để "lọc nhanh phía client".
  */
-export function dayKeyOf(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const p2 = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
-}
 
 const SIZE_UNITS = ["B", "KB", "MB", "GB"] as const;
 
@@ -80,45 +75,41 @@ export function formatCriteria(criteria: Record<string, unknown> | null): string
   return parts.join(" · ");
 }
 
-/** Bộ lọc CLIENT-SIDE của CHAT-SCREEN-008 — xem `filterAuditEntries`. */
+/**
+ * Bộ lọc của CHAT-SCREEN-008 — **gửi lên SERVER** (`S7-CHAT-BE-9`), không còn lọc trên dòng đã tải.
+ *
+ * `""` = không giới hạn (ô trống). Trường rỗng bị BỎ khỏi query string chứ không gửi chuỗi rỗng:
+ * `chatOversightAuditQuerySchema` khai `.uuid()`/`YYYY-MM-DD` nên `""` là **400**, không phải "bỏ lọc".
+ */
 export interface AuditFilterInput {
   /** `""` = mọi người. So khớp theo `actorUserId` (id ổn định), KHÔNG theo tên (tên trùng nhau được). */
   actorUserId: string;
-  /** `YYYY-MM-DD` giờ địa phương, BAO GỒM cả ngày này. `""` = không giới hạn. */
+  /** `YYYY-MM-DD` — NGÀY theo lịch công ty; server quy đổi theo `company.timezone`. BAO GỒM ngày này. */
   from: string;
-  /** `YYYY-MM-DD` giờ địa phương, BAO GỒM cả ngày này. `""` = không giới hạn. */
+  /** `YYYY-MM-DD` — như trên, BAO GỒM ngày này. */
   to: string;
 }
 
-/**
- * Lọc nhật ký **trên các dòng ĐÃ TẢI**.
- *
- * ⚠️ Đây KHÔNG phải lọc toàn cục, và giao diện BẮT BUỘC phải nói ra điều đó. CHAT-API-019 chỉ nhận
- * `cursor` + `limit` (đo trên `chatOversightAuditQuerySchema`, 04/08/2026) — không có tham số lọc theo
- * người hay khoảng thời gian ở server. Lọc im lặng trên một tập con làm người đọc kết luận "không có
- * lần truy cập nào" trong khi bằng chứng nằm ở trang chưa tải — đúng thứ SPEC-15 §18 gọi là audit
- * không dùng được làm kiểm soát. Nới CHAT-API-019 là việc của WO backend tiếp theo.
- */
-export function filterAuditEntries(
-  rows: readonly ChatOversightAuditEntryDto[],
-  filter: AuditFilterInput,
-): ChatOversightAuditEntryDto[] {
-  return rows.filter((row) => {
-    if (filter.actorUserId !== "" && row.actorUserId !== filter.actorUserId) return false;
-    const key = dayKeyOf(row.createdAt);
-    // Mốc hỏng (`key === ""`) KHÔNG bị lọc bỏ khi người dùng có đặt khoảng ngày: một dòng audit không
-    // đọc được ngày vẫn là bằng chứng, giấu nó đi là tệ hơn hiện nó ngoài khoảng.
-    if (key === "") return true;
-    if (filter.from !== "" && key < filter.from) return false;
-    if (filter.to !== "" && key > filter.to) return false;
-    return true;
-  });
+/** Tham số gửi lên CHAT-API-019: chỉ những ô người dùng ĐÃ điền. */
+export function auditFilterParams(filter: AuditFilterInput): {
+  actorUserId?: string;
+  from?: string;
+  to?: string;
+} {
+  return {
+    ...(filter.actorUserId === "" ? {} : { actorUserId: filter.actorUserId }),
+    ...(filter.from === "" ? {} : { from: filter.from }),
+    ...(filter.to === "" ? {} : { to: filter.to }),
+  };
+}
+
+export interface ActorOption {
+  userId: string;
+  name: string | null;
 }
 
 /** Danh sách người thực hiện RÚT TỪ các dòng đã tải (dựng option cho bộ lọc), sắp theo tên. */
-export function distinctActors(
-  rows: readonly ChatOversightAuditEntryDto[],
-): { userId: string; name: string | null }[] {
+export function distinctActors(rows: readonly ChatOversightAuditEntryDto[]): ActorOption[] {
   const byId = new Map<string, string | null>();
   for (const row of rows) {
     if (row.actorUserId === null) continue;
@@ -128,9 +119,44 @@ export function distinctActors(
       byId.set(row.actorUserId, row.actorName);
     }
   }
-  return [...byId.entries()]
-    .map(([userId, name]) => ({ userId, name }))
-    .sort((a, b) => (a.name ?? a.userId).localeCompare(b.name ?? b.userId, "vi"));
+  return sortActors([...byId.entries()].map(([userId, name]) => ({ userId, name })));
+}
+
+/**
+ * Gộp ĐƠN ĐIỆU danh sách option người thực hiện.
+ *
+ * ┌─ VÌ SAO PHẢI TÍCH LUỸ, KHÔNG DỰNG LẠI TỪ TRANG HIỆN TẠI ────────────────────────────────────────┐
+ * │ Từ khi lọc chạy ở SERVER, chọn "Trần Thị B" làm mọi dòng trả về đều của B ⇒ nếu option dựng lại  │
+ * │ từ dữ liệu vừa nhận thì mọi người khác **biến mất khỏi ô chọn** và người dùng kẹt: không có đường │
+ * │ quay lại A ngoài nút Đặt lại. Tích luỹ giữ nguyên những ai đã từng thấy.                          │
+ * └───────────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * Trả về CHÍNH `prev` khi không có gì mới — để `setState` bail-out và effect không tự kích lại vòng lặp.
+ */
+export function mergeActorOptions(
+  prev: readonly ActorOption[],
+  next: readonly ActorOption[],
+): ActorOption[] {
+  const byId = new Map(prev.map((a) => [a.userId, a]));
+  let changed = false;
+  for (const actor of next) {
+    const current = byId.get(actor.userId);
+    if (current === undefined) {
+      byId.set(actor.userId, actor);
+      changed = true;
+      continue;
+    }
+    // Tên đến muộn (dòng đầu thiếu tên vì user đã xoá) vẫn được nhận — nhưng không xoá tên đã có.
+    if (current.name === null && actor.name !== null) {
+      byId.set(actor.userId, actor);
+      changed = true;
+    }
+  }
+  return changed ? sortActors([...byId.values()]) : (prev as ActorOption[]);
+}
+
+function sortActors(actors: ActorOption[]): ActorOption[] {
+  return [...actors].sort((a, b) => (a.name ?? a.userId).localeCompare(b.name ?? b.userId, "vi"));
 }
 
 /**

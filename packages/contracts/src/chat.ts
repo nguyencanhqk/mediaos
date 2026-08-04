@@ -604,12 +604,56 @@ export const chatOversightMessagesQuerySchema = z.object({
 });
 export type ChatOversightMessagesQuery = z.infer<typeof chatOversightMessagesQuerySchema>;
 
-/** `GET /chat/oversight/audit` (CHAT-API-019) — nhật ký đọc-vượt cho CHAT-SCREEN-008. */
-export const chatOversightAuditQuerySchema = z.object({
-  /** Con trỏ opaque keyset `(created_at, id)`. Rác → 400, KHÔNG im lặng rơi về trang đầu. */
-  cursor: z.string().max(200).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-});
+/**
+ * Ngày lịch `YYYY-MM-DD` — **KHÔNG** phải mốc thời gian.
+ *
+ * ⚠️ Cố ý KHÔNG dùng `z.coerce.date()`: nó nuốt luôn `"2026-08-04T17:00:00Z"`, tức mở lại đúng cánh cửa
+ * "client tự quy đổi múi giờ" mà `S7-CHAT-BE-9` đóng — hai người ở hai múi giờ sẽ lọc ra hai kết quả khác
+ * nhau trên cùng một câu hỏi. Quy đổi ngày → khoảng thời gian là việc của SERVER, theo `company.timezone`.
+ *
+ * `.refine` kiểm ngày CÓ THẬT: regex một mình cho `2026-02-31` đi qua, và `new Date()` thì cuộn nó thành
+ * 03-03 — một cửa sổ lọc lệch 2 ngày, HTTP 200, không lỗi.
+ *
+ * Chỉ `.regex` + `.refine` (KHÔNG `.transform`) nên chạy pipe hai lần vẫn cho cùng kết quả — nestjs-zod
+ * parse query DTO hai lượt (memory `zod-query-param-double-pipe-idempotent`).
+ */
+const calendarDaySchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Ngày phải có dạng YYYY-MM-DD.")
+  .refine((s) => {
+    const [y, m, d] = s.split("-").map(Number);
+    const probe = new Date(Date.UTC(y, m - 1, d));
+    return (
+      probe.getUTCFullYear() === y && probe.getUTCMonth() === m - 1 && probe.getUTCDate() === d
+    );
+  }, "Ngày không tồn tại trên lịch.");
+
+/**
+ * `GET /chat/oversight/audit` (CHAT-API-019) — nhật ký đọc-vượt cho CHAT-SCREEN-008.
+ *
+ * ⚠️ Ba bộ lọc dưới đây chỉ **THU HẸP**. Vế bó cứng `action = 'chat.oversight.read' AND
+ * module_code = 'CHAT'` (`ChatOversightRepository.listOversightAudit`) là BẤT BIẾN của 019 — thêm bộ lọc
+ * KHÔNG được biến một cặp quyền CHAT thành cổng đọc `audit_logs` toàn hệ thống (API-13 §5.3).
+ */
+export const chatOversightAuditQuerySchema = z
+  .object({
+    /**
+     * Con trỏ opaque keyset `(created_at, id)` **kèm dấu vân bộ lọc**. Rác, hoặc sinh ra ở một bộ lọc
+     * khác → 400 (`CHAT-ERR-016`), KHÔNG im lặng rơi về trang đầu và KHÔNG im lặng trả sai trang.
+     */
+    cursor: z.string().max(200).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+    /** Lọc theo NGƯỜI đọc-vượt. Khớp `audit_logs.actor_user_id`. */
+    actorUserId: z.string().uuid().optional(),
+    /** Ngày bắt đầu (BAO GỒM), theo **TZ công ty** — server quy đổi, xem `calendarDaySchema`. */
+    from: calendarDaySchema.optional(),
+    /** Ngày kết thúc (BAO GỒM), theo **TZ công ty**. */
+    to: calendarDaySchema.optional(),
+  })
+  .refine((q) => q.from === undefined || q.to === undefined || q.from <= q.to, {
+    message: "Khoảng ngày không hợp lệ — `from` phải nhỏ hơn hoặc bằng `to`.",
+    path: ["from"],
+  });
 export type ChatOversightAuditQuery = z.infer<typeof chatOversightAuditQuerySchema>;
 
 /**

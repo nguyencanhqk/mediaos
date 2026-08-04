@@ -326,10 +326,18 @@ export const chatOversightApi = {
    * Phản hồi **object keyset** `{ data, nextCursor }`; `nextCursor === null` = trang cuối. Con trỏ rác →
    * 400 (server KHÔNG im lặng rơi về trang đầu — rơi về trang đầu biến con trỏ hỏng thành vòng lặp vô hạn).
    *
-   * ⚠️ Truy vấn CHỈ nhận `cursor` + `limit`: **không** có lọc theo người thực hiện hay khoảng thời gian
-   * ở server (đo trên `chatOversightAuditQuerySchema`, 04/08/2026). CHAT-SCREEN-008 lọc phía client trên
-   * các dòng ĐÃ TẢI và phải nói rõ điều đó trên UI — lọc im lặng trên một tập con làm người đọc tưởng
-   * đã thấy hết, đúng thứ SPEC-15 §18 gọi là "audit không xem được thì không phải kiểm soát".
+   * ⚠️ **BỘ LỌC CHẠY Ở SERVER** (`S7-CHAT-BE-9`): `actorUserId` · `from`/`to`. **KHÔNG được lọc phía
+   * client** trên các dòng đã tải — lọc trên một tập con làm người đọc kết luận "không có lần truy cập
+   * nào" trong khi bằng chứng nằm ở trang chưa tải, đúng thứ SPEC-15 §18 gọi là "audit không xem được
+   * thì không phải kiểm soát". Bản trước của chính docblock này dạy làm điều đó; nếu bạn định dựng lại
+   * `filterAuditEntries` ở client thì đây là chỗ nói KHÔNG.
+   *
+   * ⚠️ `from`/`to` là **NGÀY** `YYYY-MM-DD` và server quy đổi theo `companies.timezone`. Client **không**
+   * được tự đổi sang mốc UTC: làm vậy thì hai người ở hai múi giờ lọc ra hai kết quả khác nhau trên cùng
+   * một câu hỏi. Gửi mốc thời gian đầy đủ → 400.
+   *
+   * ⚠️ Con trỏ mang **dấu vân bộ lọc**: dùng lại con trỏ của bộ lọc KHÁC → 400 `CHAT-ERR-016`. Đổi bộ lọc
+   * thì phải tải lại từ trang đầu (đưa bộ lọc vào `queryKey` là đủ).
    */
   listAudit: (query?: Partial<ChatOversightAuditQuery>): Promise<ChatOversightAuditResponseDto> =>
     apiFetch(

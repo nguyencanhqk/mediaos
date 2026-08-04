@@ -4,13 +4,13 @@
 import { describe, expect, it } from "vitest";
 import type { ChatOversightAuditEntryDto } from "@mediaos/contracts";
 import {
-  dayKeyOf,
+  auditFilterParams,
   distinctActors,
-  filterAuditEntries,
   formatBytes,
   formatCriteria,
   formatDateTime,
   formatDateTimeShort,
+  mergeActorOptions,
   olderCursorOf,
   roomLabel,
 } from "./chat-oversight-format";
@@ -42,19 +42,32 @@ describe("formatDateTime / formatDateTimeShort", () => {
   });
 });
 
-describe("dayKeyOf — giờ ĐỊA PHƯƠNG, không UTC", () => {
-  it("06:30 sáng giờ máy vẫn thuộc CHÍNH ngày đó (dùng toISOString sẽ lùi 1 ngày ở UTC+7)", () => {
-    const local = new Date(2026, 7, 4, 6, 30, 0);
-    expect(dayKeyOf(local.toISOString())).toBe("2026-08-04");
+/*
+ * `dayKeyOf` và `filterAuditEntries` đã bị GỠ ở `S7-CHAT-BE-9` — bộ lọc chuyển hẳn sang server.
+ *
+ * ⚠️ Ca test của chúng KHÔNG biến mất mà chuyển tầng, đúng chỗ hành vi bây giờ sống:
+ *   · "khoảng ngày BAO GỒM cả hai đầu mút" → `apps/api/src/chat/chat-oversight-audit-filter.spec.ts`
+ *     (biên trên nửa mở ở 00:00 ngày kế) + int-spec ca 26e (quy đổi theo TZ CÔNG TY, không phải giờ máy);
+ *   · "lọc theo NGƯỜI dùng id"             → int-spec ca 26d;
+ * Xoá ca test mà không có ca thay thế ở tầng mới là cách phổ biến nhất để một hành vi lặng lẽ mất canh
+ * (memory `review-gate-blind-to-deletions`).
+ */
+
+describe("auditFilterParams — ô trống bị BỎ khỏi query, không gửi chuỗi rỗng", () => {
+  it("không điền gì ⇒ không tham số nào", () => {
+    expect(auditFilterParams({ actorUserId: "", from: "", to: "" })).toEqual({});
   });
 
-  it("23:30 đêm không bị đẩy sang ngày hôm sau", () => {
-    const local = new Date(2026, 7, 4, 23, 30, 0);
-    expect(dayKeyOf(local.toISOString())).toBe("2026-08-04");
+  it('chỉ gửi ô đã điền — `""` gửi lên là 400 (server khai `.uuid()` / `YYYY-MM-DD`)', () => {
+    expect(auditFilterParams({ actorUserId: "u1", from: "", to: "2026-08-04" })).toEqual({
+      actorUserId: "u1",
+      to: "2026-08-04",
+    });
   });
 
-  it("mốc hỏng ⇒ rỗng", () => {
-    expect(dayKeyOf("x")).toBe("");
+  it("`from`/`to` giữ NGUYÊN dạng ngày — client KHÔNG tự quy đổi sang mốc UTC", () => {
+    const out = auditFilterParams({ actorUserId: "", from: "2026-08-04", to: "2026-08-05" });
+    expect(out).toEqual({ from: "2026-08-04", to: "2026-08-05" });
   });
 });
 
@@ -103,45 +116,32 @@ describe("formatCriteria", () => {
   });
 });
 
-describe("filterAuditEntries — CLIENT-SIDE, trên các dòng ĐÃ TẢI", () => {
-  const other = "99999999-9999-4999-8999-999999999999";
-  const rows = [
-    entry({ id: "a", createdAt: new Date(2026, 7, 1, 10, 0).toISOString() }),
-    entry({ id: "b", createdAt: new Date(2026, 7, 4, 10, 0).toISOString() }),
-    entry({
-      id: "c",
-      actorUserId: other,
-      actorName: "Trần Thị B",
-      createdAt: new Date(2026, 7, 6, 10, 0).toISOString(),
-    }),
-  ];
+describe("mergeActorOptions — tích luỹ ĐƠN ĐIỆU", () => {
+  const A = { userId: "u1", name: "Nguyễn Văn A" };
+  const B = { userId: "u2", name: "Trần Thị B" };
 
-  it("không đặt gì ⇒ trả nguyên", () => {
-    expect(filterAuditEntries(rows, { actorUserId: "", from: "", to: "" })).toHaveLength(3);
+  it("[crown] lọc theo MỘT người không làm những người khác biến mất khỏi ô chọn", () => {
+    const both = mergeActorOptions([], [A, B]);
+    // Server lọc theo B ⇒ trang trả về chỉ còn B. Option của A phải còn, nếu không người dùng kẹt.
+    const afterFilter = mergeActorOptions(both, [B]);
+    expect(afterFilter.map((a) => a.userId)).toEqual(["u1", "u2"]);
   });
 
-  it("lọc theo NGƯỜI dùng id (tên trùng nhau được, id thì không)", () => {
-    const out = filterAuditEntries(rows, { actorUserId: other, from: "", to: "" });
-    expect(out.map((r) => r.id)).toEqual(["c"]);
+  it("không có gì mới ⇒ trả về CHÍNH mảng cũ (setState bail-out, effect không tự kích lại)", () => {
+    const prev = mergeActorOptions([], [A]);
+    expect(mergeActorOptions(prev, [A])).toBe(prev);
+    expect(mergeActorOptions(prev, [])).toBe(prev);
   });
 
-  it("khoảng ngày BAO GỒM cả hai đầu mút", () => {
-    const out = filterAuditEntries(rows, {
-      actorUserId: "",
-      from: "2026-08-04",
-      to: "2026-08-06",
-    });
-    expect(out.map((r) => r.id)).toEqual(["b", "c"]);
+  it("tên đến muộn được nhận, nhưng tên đã có KHÔNG bị ghi đè bằng null", () => {
+    const seeded = mergeActorOptions([], [{ userId: "u1", name: null }]);
+    const named = mergeActorOptions(seeded, [A]);
+    expect(named).toEqual([A]);
+    expect(mergeActorOptions(named, [{ userId: "u1", name: null }])).toBe(named);
   });
 
-  it("dòng có mốc HỎNG không bị giấu đi khi lọc theo ngày — audit hỏng vẫn là bằng chứng", () => {
-    const broken = entry({ id: "x", createdAt: "khong-phai-ngay" });
-    const out = filterAuditEntries([...rows, broken], {
-      actorUserId: "",
-      from: "2026-08-04",
-      to: "2026-08-04",
-    });
-    expect(out.map((r) => r.id)).toEqual(["b", "x"]);
+  it("sắp theo tên (vi), rơi về id khi thiếu tên", () => {
+    expect(mergeActorOptions([], [B, A]).map((a) => a.userId)).toEqual(["u1", "u2"]);
   });
 });
 
