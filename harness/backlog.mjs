@@ -9888,10 +9888,15 @@ export const backlog = [
       "Nền FE chat: contracts + api-client + store Zustand dùng chung + MỘT kết nối WS duy nhất cho toàn app shell (trang full-screen và panel nổi dùng chung)",
     zone: "yellow",
     status: "todo",
+    // paths mở rộng theo plan rev 3 §R3.6 — 3 file §2 yêu cầu sửa mà bản cũ KHÔNG phủ. Khai thiếu thì
+    // hook guard-scope cảnh báo oan và gate đọc sai vùng (memory wo-paths-drive-gate-and-scheduler).
     paths: [
       "packages/contracts/src/chat.ts",
       "packages/web-core/src/**",
+      "packages/web-core/package.json", // socket.io-client — nơi THẬT import nó (rev 3 §R3.2)
       "apps/app/src/**",
+      "eslint.config.mjs", // no-restricted-imports cho socket.io-client
+      "pnpm-lock.yaml", // hệ quả bắt buộc của pnpm install
       "docs/plans/S7-CHAT-FE-1.md",
     ],
     skills: ["code-review"],
@@ -9900,6 +9905,9 @@ export const backlog = [
     src: [
       "SPEC-15 §9 (CHAT-SCREEN-002 dùng chung store + 1 kết nối) · §19",
       "memory: apifetch-drops-pagination-bare-array · web-core-stale-dist-white-page (REBUILD web-core dist) · react-query-v5-stale-mutationfn-closure · server-masking-needs-optional-fe-schema",
+      "⚠️ PLAN rev 3 (04/08) — ĐỌC TRƯỚC §0. Đóng 6 mục BLOCK mà rev 2 cố ý để mở, và đính chính 5 hàng phụ thuộc đã chết: RT-0 + RT-1 ĐÃ land master (adapter WS đã gắn, contract WS v1 có thật) ⇒ nhánh 'DỪNG không code tiếp' của §1.5 KHÔNG kích hoạt; nhánh wave/s7-chat ĐÃ XOÁ ⇒ cắt nhánh từ master",
+      "R3.1 lỗ nặng nhất: `chat:room` KHÔNG mang affectedUserId, VÀ nhận được event không có nghĩa nó nói về mình — emitChatRoom phát tới CẢ chatRoomName lẫn chatUserRoomName. Chốt: hỏi server (getRoom → 200 hydrate / 404 removeRoomForSelf), cấm suy diễn",
+      "R3.4 lỗ im lặng: ghép echo WS với pending theo FIFO NUỐT tin gửi lỗi (gửi A rồi B, echo B về khi A còn sending ⇒ A mang resolvedMessageId của B ⇒ A hỏng mà không ai thấy). Chốt: pending CHỈ do response POST của chính nó giải quyết",
     ],
     done_when: [
       "socket.io-client thêm vào apps/app (hiện chỉ apps/api có, dạng devDependency cho test); MỘT provider WS ở app shell — mở/đóng panel KHÔNG tạo kết nối mới",

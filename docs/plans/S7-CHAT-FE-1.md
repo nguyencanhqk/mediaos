@@ -1,5 +1,11 @@
-# Micro-plan — `S7-CHAT-FE-1` (🟡 yellow · LIGHT gate) — rev 2 (02/08/2026), NEO LẠI 03/08/2026
+# Micro-plan — `S7-CHAT-FE-1` (🟡 yellow · LIGHT gate) — **rev 3 (04/08/2026)**
 
+> 🔴 **ĐỌC MỤC `rev 3` NGAY DƯỚI HEADER TRƯỚC KHI ĐỌC §0.** Nó đóng cả 6 mục BLOCK mà rev 2 cố ý để mở,
+> và đính chính 5 hàng phụ thuộc đã chết (RT-0 + RT-1 đã land master). Khi rev 3 mâu thuẫn với phần thân
+> bên dưới, **rev 3 thắng**.
+>
+> ───────────── lịch sử rev trước, giữ nguyên làm hồ sơ ─────────────
+>
 > **rev 1 → `plan-reviewer` chấm BLOCK** (2 điều kiện gỡ khối C1/C2 + 6 HIGH H1..H6). rev 2 vá cả 8, cộng
 > danh sách "cũng nên vá" của owner. Không đổi WO/phạm vi tổng thể — vẫn LIGHT gate, vẫn 0 UI.
 >
@@ -42,6 +48,160 @@
 > sẵn (xem hàng RT-0 ở §0). Người thi công FE-1 **PHẢI** xác nhận cả hai `status:"done"` trong backlog
 > trước khi bắt đầu code — plan này viết trước cả hai tồn tại, y hệt tình huống rev 1, nhưng rev 2 đã sửa
 > để KHÔNG còn tự chế hợp đồng yếu hơn bản thật sẽ có (xem H1 §1.5).
+
+---
+
+## rev 3 (04/08/2026) — ĐÍNH CHÍNH TOÀN BỘ PHỤ THUỘC + ĐÓNG 6 MỤC BLOCK CÒN MỞ
+
+> **Đọc mục này TRƯỚC §0.** Mọi thứ dưới đây thắng bản rev 2 khi mâu thuẫn. rev 2 neo ở `104294bd`
+> (03/08); từ đó `S7-CHAT-RT-0`, `S7-CHAT-RT-1`, `S7-CHAT-BE-7`, `S7-CHAT-DB-3`, `S7-CHAT-CLEAN-2` đều đã
+> **land master**. Đo lại trên `master @ 708eaaa9`.
+
+### R3.0 — Năm hàng §0/header ĐÃ CHẾT (theo hướng có lợi)
+
+| rev 2 nói | Đo lại 04/08 | Hệ quả |
+| --- | --- | --- |
+| C1: `main.ts` chưa gọi `useWebSocketAdapter` ⇒ trình duyệt không mở nổi WS | ✅ **`await setupWebSocketAdapter(app, env)`** đứng trước `app.listen()` (`main.ts`) | Nhánh "chịu đựng lỗi không rõ lý do" của §1.6 **vẫn giữ** (fail-soft), nhưng không còn là đường mặc định kỳ vọng |
+| RT-1 chưa code, `realtime.ts` còn 5 event hai chiều đời cũ | ✅ **Đã land** — `WS_EVENTS` sạch, có `chat:message-recalled` · `chat:read` · `chat:room` | §1.5 nhánh "DỪNG, không code tiếp" **KHÔNG kích hoạt** |
+| 3 schema RT-1 mới chỉ là plan, FE-1 không được đoán | ✅ Có thật: `wsChatMessageRecalledEventSchema` · `wsChatReadEventSchema` · `wsChatRoomActionSchema` · `wsChatRoomEventSchema` | Import thẳng, cấm dựng bản sao |
+| "PHẢI xác nhận RT-0/RT-1 `status:"done"` trong backlog trước khi code" | Ledger đã đóng dấu cả hai | Điều kiện tiền đề ĐẠT |
+| **Nhánh: commit lên `wave/s7-chat`** | ❌ **Nhánh wave đã merge (PR #329) và bị xoá** | Cắt nhánh WO **từ `master`**, mở PR về `master` |
+
+> ⚠️ Khi tự kiểm C1 lần đầu, `grep useWebSocketAdapter` **trúng đúng một comment** ở `main.ts:48` và
+> suýt cho kết luận ngược. Phải đọc thân hàm mới thấy lời gọi thật — memory
+> `guard-immutability-matches-comments`.
+
+### R3.1 — `affectedUserId` KHÔNG tồn tại, và cũng KHÔNG suy ra được (đóng BLOCK #1)
+
+Payload thật: `wsChatRoomEventSchema = { roomId, action, room? }` — **không có** `affectedUserId`.
+
+Và điều rev 2 không lường: **nhận được event KHÔNG có nghĩa nó nói về mình.** Đo `emitChatRoom`
+(`realtime-emitter.service.ts:136-140`):
+
+```ts
+const targets = [chatRoomName(companyId, roomId), ...affectedUserIds.map(uid => chatUserRoomName(companyId, uid))];
+this.server.to(targets).emit(WS_EVENTS.CHAT_ROOM, parsed);
+```
+
+⇒ `member_removed` tới **cả phòng** lẫn người bị gỡ. Client không có bất kỳ tín hiệu nào để phân biệt
+"tôi bị gỡ" với "người khác bị gỡ". Suy từ việc mình còn/không còn trong socket-room cũng không được:
+`syncRoomMembership` đá socket ra **bất đồng bộ** với event, và trạng thái room-membership của socket
+không đọc được từ phía client.
+
+**Chốt: HỎI SERVER, KHÔNG ĐOÁN.** Thay 5 nhánh của §1.7.1 cho nhóm thành viên bằng:
+
+```text
+case "member_added":
+  nếu roomsById[roomId] ĐÃ có → no-op        // người khác vào phòng mình đang ở; FE-1 không vẽ danh sách thành viên
+  ngược lại → refetchRoom(roomId)             // có thể mình vừa được thêm
+
+case "member_removed" | "left":
+  nếu roomsById[roomId] KHÔNG có → no-op      // không có gì để gỡ
+  ngược lại → refetchRoom(roomId)             // có thể là mình
+
+case "member_role_changed":
+  no-op                                        // không đổi metadata phòng lẫn tập phòng của mình
+
+refetchRoom(roomId):
+  chatApi.getRoom(roomId)
+    200 → hydrateRooms([dto])                  // vẫn là thành viên; unreadCount lấy từ SERVER, không suy
+    404 → removeRoomForSelf(roomId)            // không còn là thành viên — assertMember fail-closed (CHAT-ERR-001)
+    lỗi khác (5xx/mạng) → GIỮ NGUYÊN store, đánh dấu stale
+                          // ⚠️ TUYỆT ĐỐI không xoá phòng vì một lỗi mạng: mất lịch sử hiển thị do server hắt hơi
+```
+
+**Cái giá, nói thẳng:** một thay đổi thành viên làm **N thành viên** cùng gọi `GET /chat/rooms/:id`.
+Chấp nhận ở v1 vì đổi thành viên là sự kiện hiếm (không phải mỗi tin nhắn). **Cách sửa đúng về sau**
+(WO của RT-1, KHÔNG phải FE-1): thêm `affectedUserIds` vào `wsChatRoomEventSchema` — lúc đó FE bỏ hẳn
+refetch. Ghi ra đây để người sau không tưởng refetch là thiết kế mong muốn.
+
+### R3.2 — `socket.io-client` khai SAI CHỖ (đóng BLOCK #2)
+
+§2 rev 2 ghi thêm vào `apps/app/package.json`. **Sai**: `getAppSocket()` sống ở
+`packages/web-core/src/lib/realtime-socket.ts`, tức **`packages/web-core`** là nơi `import` gói này ⇒
+phải khai ở **`packages/web-core/package.json`** → `dependencies` (không phải `devDependencies`: nó đi
+vào bundle runtime). `apps/app` **không** cần khai vì nó không bao giờ import trực tiếp — và chính luật
+`no-restricted-imports` (§1.2.1) ép điều đó.
+
+Hôm nay chạy được nếu khai ở `apps/app` chỉ nhờ **hoisting của pnpm**, và sẽ vỡ ngay khi bật
+`node-linker=isolated`/strict. Version bám `^4.8.3` (khớp `apps/api` + `apps/lms`).
+
+### R3.3 — Kiểu trả về `getAppSocket()` (đóng BLOCK #3)
+
+```ts
+import type { Socket } from "socket.io-client";
+export function getAppSocket(): Socket | null;
+```
+
+`null` khi **chưa có phiên xác thực** (`getAccessToken()` trả `null`) — đúng ca test 3 của §4. KHÔNG
+dựng type alias riêng bọc `Socket`: web-core build dual ESM/CJS, một alias tự chế sẽ rò vào `.d.ts`
+public và buộc mọi consumer phụ thuộc hình dạng nội bộ. `Socket` là type của một dependency THẬT của
+web-core (R3.2) nên export nó là hợp lệ.
+
+### R3.4 — FIFO nuốt tin gửi lỗi (đóng BLOCK #4)
+
+**Kịch bản hỏng, dựng được:** gửi A rồi B. Echo WS của **B** về khi A vẫn `sending` ⇒ quy tắc "pending
+CŨ NHẤT còn `sending`" gán bản thật của **B** vào pending **A** (`A.resolvedMessageId = B.id`). Sau đó
+POST của A hỏng → `resolvePendingSend(A, null)` đặt `status='failed'`, nhưng A đã mang
+`resolvedMessageId` ⇒ UI coi A đã gửi xong. **Tin A biến mất, không báo lỗi, không nút gửi lại.**
+
+Gốc: ghép theo **thứ tự** là phỏng đoán, mà `chatMessageSchema` KHÔNG mang `clientMessageId` (§0) nên
+không có khoá ghép thật.
+
+**Chốt: bỏ hẳn ghép-theo-FIFO. `pending` chỉ được giải quyết bởi CHÍNH response POST của nó.**
+
+```text
+applyIncomingMessage(message)      // nguồn: WS chat:message HOẶC response POST
+  nếu messagesByRoom[roomId] đã có message.id → bỏ qua (dedupe theo id)
+  chèn message vào messagesByRoom[roomId]
+  // KHÔNG đụng pendingByClientId. Kể cả khi message.senderId === mình.
+
+resolvePendingSend(clientMessageId, message | null)
+  message === null → pending.status = 'failed'; GIỮ pending (gửi lại dùng LẠI clientMessageId cũ)
+  message !== null → applyIncomingMessage(message); XOÁ pendingByClientId[clientMessageId]
+```
+
+Đánh đổi **có ý thức**: nếu echo WS về trước response POST, người dùng thấy bong bóng tạm **và** tin
+thật trong vài chục mili-giây, tới khi POST resolve thì bong bóng biến mất. Nhìn hơi giật một nhịp —
+đổi lại **không bao giờ nuốt một tin gửi lỗi**. Trùng lặp thoáng qua thì thấy được và tự hết; tin mất
+thì không ai thấy. Bỏ luôn field `resolvedMessageId` khỏi `PendingChatMessage` (không còn ai đọc).
+
+### R3.5 — Rules of Hooks ở `useChatRealtime` (đóng BLOCK #5)
+
+**Cấm** `if (!canReadChat) return;` đặt trước bất kỳ hook nào — số lượng hook gọi ra sẽ đổi giữa các lần
+render khi quyền được nạp xong (`useCan` phụ thuộc `/auth/me`, lần render đầu thường `false`), và React
+ném *"Rendered fewer hooks than expected"*, làm trắng nguyên app shell.
+
+**Chốt:** gọi **mọi** hook vô điều kiện, gate **bên trong**:
+
+```ts
+const canReadChat = useCan("view", "chat-room");
+useQuery({ queryKey: chatKeys.rooms(), queryFn: chatApi.listRooms, enabled: canReadChat });
+useEffect(() => {
+  if (!canReadChat) return;          // gate TRONG thân effect
+  const s = getAppSocket();
+  if (!s) return;
+  /* đăng ký 4 listener; cleanup gỡ đúng 4 listener đó */
+}, [canReadChat]);
+```
+
+Hook này gắn vào `ProtectedShell` (mount-once) nên gate sai là hỏng toàn app, không chỉ hỏng CHAT.
+
+### R3.6 — `paths` thiếu file (đóng BLOCK #6)
+
+`paths` hiện tại (`packages/contracts/src/chat.ts` · `packages/web-core/src/**` · `apps/app/src/**` ·
+plan) **không phủ** 3 file mà §2 yêu cầu sửa. Bổ sung vào `harness/backlog.mjs`:
+
+| File | Vì sao ngoài paths |
+| --- | --- |
+| `packages/web-core/package.json` | thêm `socket.io-client` (R3.2 — không phải `apps/app/package.json` như rev 2 ghi) |
+| `pnpm-lock.yaml` | hệ quả bắt buộc của `pnpm install` |
+| `eslint.config.mjs` | block `no-restricted-imports` (§1.2.1) |
+
+`apps/app/src/layouts/protected/ProtectedShell.tsx` **đã** được phủ bởi `apps/app/src/**` — không cần thêm.
+
+> Không mở rộng gì khác. `paths` lái gate và scheduler; khai thừa cũng sai như khai thiếu
+> (memory `wo-paths-drive-gate-and-scheduler`).
 
 ---
 
