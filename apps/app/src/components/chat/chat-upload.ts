@@ -1,18 +1,22 @@
 /**
- * S7-CHAT-FE-2 — đưa MỘT tệp lên storage rồi trả `fileId` để gắn vào tin nhắn (SPEC-15 §13.5 bước 1-2).
+ * S7-CHAT-FE-2 → **S7-CHAT-BE-8** — đưa MỘT tệp lên storage rồi trả `fileId` để gắn vào tin nhắn
+ * (SPEC-15 §13.5 bước 1-2).
  *
- * ⚠️ ĐỌC TRƯỚC KHI SỬA — vì sao gọi thẳng FOUNDATION chứ không có `chatApi.uploadAttachment`:
- * CHAT hôm nay KHÔNG có route upload nào (soát toàn bộ `apps/api/src/chat/*.controller.ts`). Đường duy
- * nhất là `POST /foundation/files/upload` + `POST /foundation/files/:id/confirm`, cả hai gate
- * `upload:foundation-file`. Đo trên DB dev: cặp đó chỉ có ở `SA` · `company-admin` · `QUẢN LÝ CẤP CAO`;
- * `employee`/`hr`/`manager` KHÔNG có ⇒ **đa số người dùng không đính kèm được**. Đó là lý do nút đính
- * kèm bị gate bằng chính cặp `upload:foundation-file` (xem `FOUNDATION_FILE_UPLOAD_PAIR`), và là lý do
- * WO `S7-CHAT-BE-8` tồn tại. Khi BE-8 land: đổi ĐÚNG hai lời gọi `apiFetch` dưới đây sang
- * `/chat/files/upload-url` + `/chat/files/:id/confirm` — 0 component phải sửa.
+ * ⚠️ ĐỌC TRƯỚC KHI SỬA — vì sao là `/chat/files/*` chứ KHÔNG phải `/foundation/files/*`:
+ * hai route FOUNDATION gate `upload:foundation-file`, mà cặp đó (đo trên DB) chỉ có ở `SA` ·
+ * `company-admin` · `QUẢN LÝ CẤP CAO` — `employee`/`hr`/`manager` KHÔNG có, tức **đa số người dùng
+ * không đính kèm được**. `S7-CHAT-BE-8` đóng lỗ đó bằng wrapper own-scope `POST /chat/files/upload-url`
+ * + `POST /chat/files/:id/confirm`, cả hai gate `send:chat-message` — CÙNG cặp mà nút "Gửi" đã đòi.
+ * Đổi ngược hai URL này về FOUNDATION là khoá lại tính năng cho gần hết công ty.
+ *
+ * Response giữ NGUYÊN hình dạng của FOUNDATION (`registerFileResponseSchema` /
+ * `confirmUploadResponseSchema`): hai route CHAT là wrapper quanh chính `FileService`, không khai
+ * schema riêng — nên phần parse dưới đây không đổi một dòng nào so với bản FE-2.
  *
  * KHÔNG khai `moduleCode`/`entityType`/`entityId` lúc register: tin nhắn CHƯA TỒN TẠI (nó chỉ ra đời ở
  * `POST /chat/rooms/:id/messages`). Link `file_links` do CHAT tạo trong CÙNG transaction với INSERT tin
  * (`chat-messages.service.ts`) — client không được tự gắn, vì gắn tay bỏ qua kiểm "tệp thuộc người gửi".
+ * `visibility` cũng KHÔNG gửi: route CHAT ép `Private` ở server và bỏ qua mọi khoá lạ trong body.
  */
 import {
   confirmUploadResponseSchema,
@@ -43,7 +47,7 @@ export async function uploadChatAttachment(
   const declaredMimeType = file.type || DEFAULT_UPLOAD_MIME;
 
   const registered = await apiFetch<RegisterFileResponse>(
-    "/foundation/files/upload",
+    "/chat/files/upload-url",
     registerFileResponseSchema,
     {
       method: "POST",
@@ -51,7 +55,6 @@ export async function uploadChatAttachment(
         originalName: file.name,
         declaredMimeType,
         sizeBytes: file.size,
-        visibility: "Private",
       }),
       signal: options?.signal,
     },
@@ -61,7 +64,7 @@ export async function uploadChatAttachment(
   // 403 SignatureDoesNotMatch (docblock `putBytesToStorage`).
   await putBytesToStorage(registered.uploadUrl, file, declaredMimeType);
 
-  await apiFetch(`/foundation/files/${registered.fileId}/confirm`, confirmUploadResponseSchema, {
+  await apiFetch(`/chat/files/${registered.fileId}/confirm`, confirmUploadResponseSchema, {
     method: "POST",
     body: JSON.stringify({}),
     signal: options?.signal,

@@ -1,6 +1,7 @@
 import { createZodDto } from "nestjs-zod";
 import {
   addChatMemberSchema,
+  chatFileUploadUrlInputSchema,
   chatMarkReadSchema,
   chatOversightAuditQuerySchema,
   chatOversightMessagesQuerySchema,
@@ -54,6 +55,17 @@ export class ChatMarkReadDto extends createZodDto(chatMarkReadSchema) {}
 
 /** GET /chat/rooms/:id/files (view:chat-room) — con trỏ `beforeSeq`, cấm offset. */
 export class ListChatRoomFilesQueryDto extends createZodDto(listChatRoomFilesQuerySchema) {}
+
+// ── S7-CHAT-BE-8 — presign upload own-scope (SPEC-15 §13.5 bước 1-2) ───────────
+
+/**
+ * POST /chat/files/upload-url (send:chat-message) — 3 trường, HẸP HƠN `uploadFileInputSchema` có chủ
+ * đích: `visibility` server-set `'Private'`, và `moduleCode`/`entityType`/`entityId` KHÔNG nhận từ client
+ * (chúng đi thẳng vào `audit_logs`/`file_access_logs`). Xem `chatFileUploadUrlInputSchema`.
+ *
+ * `/chat/files/:id/confirm` KHÔNG có DTO: body rỗng, `fileId` lấy từ route (`ParseUUIDPipe`).
+ */
+export class ChatFileUploadUrlDto extends createZodDto(chatFileUploadUrlInputSchema) {}
 
 // ── S7-CHAT-BE-4 — tìm kiếm (CHAT-API-015) ──────────────────────────────────────
 

@@ -30,6 +30,10 @@ import { ChatDerivedRoomsSyncService } from "./chat-derived-rooms-sync.service";
 import { ChatDerivedRoomsReconcileJobHandler } from "./chat-derived-rooms-reconcile.job-handler";
 // S7-CHAT-BE-7 🔒 (additive): ĐỌC-VƯỢT MEMBERSHIP — controller/service/repo RIÊNG, path `/chat/oversight/*`,
 // cặp quyền RIÊNG `('view','chat-oversight')`. Xem cảnh báo ở jsdoc `@Module` bên dưới.
+// S7-CHAT-BE-8 (additive): presign upload own-scope — controller RIÊNG (`/chat/files/*`), cặp
+// `('send','chat-message')`. Không cặp quyền mới, không migration.
+import { ChatFilesController } from "./chat-files.controller";
+import { ChatFilesService } from "./chat-files.service";
 import { ChatOversightController } from "./chat-oversight.controller";
 import { ChatOversightAuditGuard } from "./chat-oversight-audit.guard";
 import { ChatOversightService } from "./chat-oversight.service";
@@ -76,6 +80,11 @@ import { ChatOversightRepository } from "./chat-oversight.repository";
     ChatRoomsController,
     ChatMessagesController,
     ChatSearchController,
+    // S7-CHAT-BE-8 — `/chat/files/*`. Controller RIÊNG chứ không thêm route vào `ChatMessagesController`:
+    // hai route này KHÔNG nhận `roomId` và KHÔNG đi qua `assertMember` (tệp chưa thuộc phòng nào), nên
+    // đứng chung với các route luôn-assertMember sẽ làm mờ đúng tính chất đó — mirror lý do
+    // `ChatSearchController` tách ra vì là ngoại lệ membership.
+    ChatFilesController,
     ChatOversightController,
   ],
   providers: [
@@ -97,6 +106,10 @@ import { ChatOversightRepository } from "./chat-oversight.repository";
     // ── S7-CHAT-BE-5 ──
     ChatDerivedRoomsSyncService,
     ChatDerivedRoomsReconcileJobHandler,
+    // ── S7-CHAT-BE-8 ── `FileService` + `FileRepository` đến từ `FilesModule` ĐÃ import ở trên (BE-3),
+    // không thêm import nào. CỐ Ý KHÔNG export: đây là đường GHI bỏ qua gate `upload:foundation-file`,
+    // module khác cần thì phải tự bọc bằng cặp quyền CỦA NÓ (mirror `ChatOversightService`).
+    ChatFilesService,
     // ── S7-CHAT-BE-7 🔒 ── `ChatOversightAuditGuard` phải là PROVIDER (không `new` trong `@UseGuards`):
     // nó cần DI 4 thứ (`Reflector`, `PermissionService`, `DatabaseService`, `AuditService`). Khai dạng
     // lớp trong `@UseGuards` để Nest tự dựng qua container — mẫu `PermissionGuard`.

@@ -668,3 +668,34 @@ export type ChatLeaveRoomResultDto = z.infer<typeof chatLeaveRoomResultSchema>;
 /** Kết quả `DELETE /chat/rooms/:id/members/:userId` (CHAT-API-007d) — KHÔNG phải `ChatRoomDto`. */
 export const chatRemoveMemberResultSchema = z.object({ removed: z.literal(true) });
 export type ChatRemoveMemberResultDto = z.infer<typeof chatRemoveMemberResultSchema>;
+
+// ═══════════ S7-CHAT-BE-8 — presign upload own-scope của CHAT (SPEC-15 §13.5 bước 1-2) ═══════════
+//
+// ⚠️ KHỐI APPEND ở CUỐI file (hot-file của wave S7).
+//
+// Chỉ có INPUT ở đây. Response của `POST /chat/files/upload-url` và `POST /chat/files/:id/confirm` TÁI
+// DÙNG NGUYÊN VĂN `registerFileResponseSchema` / `confirmUploadResponseSchema` (`contracts/files.ts`):
+// hai route này là wrapper own-scope quanh CHÍNH `FileService.upload/confirmUpload`, nên khai schema
+// response riêng là dựng bản sao thứ hai của cùng một hợp đồng — và bản sao sẽ trôi lần đầu FOUNDATION
+// thêm một trường (mirror lý do `chat-file.constants.ts` uỷ quyền `isAttachableFile` sang FOUNDATION).
+
+/**
+ * `POST /api/v1/chat/files/upload-url` body — đăng ký MỘT tệp Private owned-by-token để chuẩn bị đính
+ * kèm vào tin nhắn (gate `send:chat-message`).
+ *
+ * ⚠️ **HẸP HƠN `uploadFileInputSchema` CÓ CHỦ ĐÍCH** — 3 trường, không hơn:
+ *   • `visibility` KHÔNG nhận từ client (server ép `'Private'`): nhận vào là để client tự khai `Public`;
+ *   • `moduleCode`/`entityType`/`entityId` KHÔNG nhận: chúng đi thẳng vào `audit_logs`/`file_access_logs`
+ *     của `FileService.upload`, nên nhận vào là để client tự khai tệp của mình thuộc entity module khác
+ *     trong dấu vết điều tra. Tin nhắn lúc này còn CHƯA TỒN TẠI — `file_links` do CHAT tạo trong cùng
+ *     transaction với INSERT tin (§13.5 bước 3), client không được tự gắn.
+ *
+ * `originalName` PHẢI mang đuôi khớp `declaredMimeType`, và MIME phải ∈ allowlist `system_settings` —
+ * `FileService.upload` re-validate cả hai (FOUNDATION-FILE-ERR-EXTENSION / -MIME / -SIZE / -BLOCKED).
+ */
+export const chatFileUploadUrlInputSchema = z.object({
+  originalName: z.string().trim().min(1).max(500),
+  declaredMimeType: z.string().min(1).max(255),
+  sizeBytes: z.number().int().nonnegative(),
+});
+export type ChatFileUploadUrlInput = z.infer<typeof chatFileUploadUrlInputSchema>;

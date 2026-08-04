@@ -20,6 +20,7 @@ import { ForbiddenException, type ExecutionContext } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { beforeEach, describe, expect, it } from "vitest";
 import { vi } from "vitest";
+import { ChatFilesController } from "./chat-files.controller";
 import { ChatMessagesController } from "./chat-messages.controller";
 import { ChatSearchController } from "./chat-search.controller";
 import { ChatRoomsController } from "./chat-rooms.controller";
@@ -41,7 +42,8 @@ const DENY: PermissionDecision = { allow: false, reason: "deny-default", auditRe
 type AnyChatController =
   | typeof ChatRoomsController
   | typeof ChatMessagesController
-  | typeof ChatSearchController;
+  | typeof ChatSearchController
+  | typeof ChatFilesController;
 
 interface RouteGate {
   controller: AnyChatController;
@@ -76,6 +78,10 @@ const CHAT_CONTROLLERS = [
   ChatRoomsController,
   ChatMessagesController,
   ChatSearchController,
+  // S7-CHAT-BE-8 — `/chat/files/*`. Đây là controller GHI DUY NHẤT của module không đi qua
+  // `assertMember` (tệp chưa thuộc phòng nào lúc register), nên cặp quyền của nó là thứ duy nhất đứng
+  // giữa "người dùng thường đính kèm được" và "ai đăng nhập cũng ghi được vào bảng `files`".
+  ChatFilesController,
 ] as const;
 
 // prettier-ignore
@@ -117,6 +123,13 @@ const ROUTE_GATES: readonly RouteGate[] = [
   { controller: ChatMessagesController, handlerName: "recall", action: "recall", resourceType: "chat-message" },
   { controller: ChatMessagesController, handlerName: "pin", action: "pin", resourceType: "chat-message" },
   { controller: ChatMessagesController, handlerName: "unpin", action: "pin", resourceType: "chat-message" },
+
+  // ── ChatFilesController (S7-CHAT-BE-8 — SPEC-15 §13.5 bước 1-2) ──
+  // Cặp `send:chat-message`, KHÔNG phải `view:chat-room`: đây là hai bước ĐẦU của luồng GỬI tin, người
+  // chỉ có quyền xem không được tạo tệp mới trong tenant. Cặp này TRÙNG NGUYÊN VĂN cặp mà
+  // `ChatMessageFileResolver.canLink` hỏi ở bước 3 — lệch nhau sẽ đẻ role "tải lên được mà gắn không được".
+  { controller: ChatFilesController, handlerName: "createUploadUrl", action: "send", resourceType: "chat-message" },
+  { controller: ChatFilesController, handlerName: "confirmUpload", action: "send", resourceType: "chat-message" },
 ];
 
 function handlerOf(controller: AnyChatController, name: string): (...args: unknown[]) => unknown {

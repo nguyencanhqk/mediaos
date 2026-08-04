@@ -3,8 +3,11 @@
  *  (a) §14 gửi lỗi ⇒ **KHÔNG mất nội dung đang soạn**;
  *  (b) `clientMessageId` sinh MỘT LẦN — lần gửi thứ hai của CÙNG nháp phải mang ĐÚNG khoá cũ, nếu không
  *      server coi là tin mới và dedupe mất tác dụng hoàn toàn;
- *  (c) nút đính kèm gate bằng cặp `upload:foundation-file` (KHÔNG phải `send:chat-message`) — và test
- *      khẳng định ĐÚNG ĐỐI SỐ truyền vào `useCan`, không chỉ khẳng định nút ẩn/hiện.
+ *  (c) **S7-CHAT-BE-8** — nút đính kèm gate bằng cặp CHAT `send:chat-message`, và **KHÔNG** hỏi cặp
+ *      FOUNDATION `upload:foundation-file` nữa. Test khẳng định ĐÚNG ĐỐI SỐ truyền vào `useCan` chứ
+ *      không chỉ khẳng định nút ẩn/hiện: hỏi lại cặp FOUNDATION là khoá tính năng cho gần hết công ty
+ *      (cặp đó chỉ có ở SA · company-admin · QUẢN LÝ CẤP CAO), mà nút ẩn/hiện thì vẫn "đúng" trong một
+ *      test mà `useCan` luôn trả true.
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -107,28 +110,23 @@ describe("MessageComposer · khoá idempotency", () => {
 });
 
 describe("MessageComposer · cổng quyền + trạng thái phòng", () => {
-  it("nút đính kèm hỏi ĐÚNG cặp `upload:foundation-file` (không phải cặp CHAT)", () => {
+  it("S7-CHAT-BE-8: KHÔNG hỏi cặp FOUNDATION nữa — chỉ `send:chat-message`", () => {
     renderComposer();
-    expect(mockUseCan).toHaveBeenCalledWith("upload", "foundation-file");
     expect(mockUseCan).toHaveBeenCalledWith("send", "chat-message");
+    // Đường upload giờ là `/chat/files/*` (gate `send:chat-message`). Hỏi lại cặp FOUNDATION là ẩn nút
+    // của đúng những người mà server sẵn sàng phục vụ — lỗi cũ mà BE-8 sinh ra để xoá.
+    expect(mockUseCan).not.toHaveBeenCalledWith("upload", "foundation-file");
   });
 
-  it("thiếu `upload:foundation-file` ⇒ KHÔNG hiện nút đính kèm (dù vẫn gửi được chữ)", () => {
+  it("có `send:chat-message` ⇒ hiện nút đính kèm (không cần cặp foundation nào)", () => {
     mockUseCan.mockImplementation(
-      (action: string, resource: string) =>
-        !(action === "upload" && resource === "foundation-file"),
+      (action: string, resource: string) => action === "send" && resource === "chat-message",
     );
-    renderComposer();
-    expect(screen.queryByLabelText("Chọn tệp đính kèm")).toBeNull();
-    expect((textbox() as HTMLTextAreaElement).disabled).toBe(false);
-  });
-
-  it("có `upload:foundation-file` ⇒ hiện nút đính kèm", () => {
     renderComposer();
     expect(screen.getByLabelText("Chọn tệp đính kèm")).toBeTruthy();
   });
 
-  it("thiếu `send:chat-message` ⇒ ô soạn KHOÁ + placeholder nói rõ lý do", () => {
+  it("thiếu `send:chat-message` ⇒ ô soạn KHOÁ + placeholder nói rõ lý do + KHÔNG hiện nút đính kèm", () => {
     mockUseCan.mockImplementation(
       (action: string, resource: string) => !(action === "send" && resource === "chat-message"),
     );
@@ -136,6 +134,8 @@ describe("MessageComposer · cổng quyền + trạng thái phòng", () => {
     const box = textbox() as HTMLTextAreaElement;
     expect(box.disabled).toBe(true);
     expect(box.placeholder).toMatch(/không có quyền/i);
+    // Cổng của nút đính kèm ĐÚNG BẰNG cổng của ô soạn: không gửi được thì tải tệp lên cũng vô nghĩa.
+    expect(screen.queryByLabelText("Chọn tệp đính kèm")).toBeNull();
   });
 
   it("§14 phòng ĐÃ LƯU TRỮ ⇒ khoá ô soạn + nhãn chỉ-đọc", () => {

@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 480,
-    "controllers": 83,
-    "gated": 428,
+    "routes": 482,
+    "controllers": 84,
+    "gated": 430,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 40,
@@ -1313,6 +1313,38 @@
         "PermissionGuard"
       ],
       "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatFilesController#confirmUpload",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/files/:id/confirm",
+      "hasPermission": true,
+      "permission": "send:chat-message",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatFilesController#createUploadUrl",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/files/upload-url",
+      "hasPermission": true,
+      "permission": "send:chat-message",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
       "verdict": null,
       "verdictReason": null,
       "verdictWo": null
