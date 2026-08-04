@@ -2,7 +2,7 @@ import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { AppShell } from "@mediaos/ui";
 import { useFavicon } from "@mediaos/web-core";
 import { useConsoleBranding } from "@/lib/use-console-branding";
-import { NAV_ITEMS } from "@/lib/nav";
+import { useConsoleNavItems } from "@/lib/nav";
 import { BrandLogo } from "@/components/brand/brand-mark";
 import { BRAND } from "@/lib/brand";
 
@@ -19,6 +19,10 @@ const brand = (
 export function RootLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
+  // S7-CHAT-FE-5 — sidebar đọc bản ĐÃ LỌC QUYỀN (mục đọc-vượt CHAT chỉ hiện với cặp
+  // `view:chat-oversight` khớp CHÍNH XÁC). Hook gọi TRƯỚC nhánh BARE_ROUTES để thứ tự hook ổn định.
+  const navItems = useConsoleNavItems();
+
   // S5-BRAND-FE-2 — favicon động theo thương hiệu công ty (áp cho CẢ route bare lẫn route có shell).
   // Fail-soft: chưa đặt/lỗi → giữ favicon tĩnh /favicon.svg. Console CỐ Ý không đổi logo góc trái:
   // đây là app quản trị hệ thống, brand Funtime của nó là chủ đích (khác vỏ nghiệp vụ apps/app).
@@ -31,7 +35,7 @@ export function RootLayout() {
   // Slot `notifications` bỏ trống — console không có chuông NOTI; SPEC-08/FRONTEND-12 chỉ định NOTI
   // cho apps/app (owner chốt 2026-07-10).
   return (
-    <AppShell navItems={NAV_ITEMS} brand={brand}>
+    <AppShell navItems={navItems} brand={brand}>
       <Outlet />
     </AppShell>
   );

@@ -137,6 +137,30 @@ bật xác thực 2 bước**. Đây là `KI-056` (`RELEASE-10` §4) và là m�
 | Tệp đã tải lên | App `/system/files` |
 | Nhật ký kiểm toán | App `/system/audit-logs` · `/hr/audit-logs` · `/leave/audit-logs` · `/attendance/audit-logs` · Console `/system/activity-log` |
 | API key · Webhook | Console `/system/api-keys` · `/system/webhooks` |
+| 🔒 Đọc-vượt hội thoại · nhật ký đọc-vượt | Console `/system/chat-oversight` · `/system/chat-oversight/audit` (xem §4.4) |
+
+### 4.4 🔒 Đọc-vượt hội thoại (chat) — ranh giới riêng tư, công bố tường minh
+
+Chat trong hệ thống này mặc định **chỉ thành viên phòng đọc được**. Có **đúng một ngoại lệ**, và đây là
+chỗ công bố nó — chứ không để nó nằm im trong code (SPEC-15 §3.3):
+
+- **Phạm vi thật:** người giữ quyền `view:chat-oversight` mở được **mọi phòng**, **bao gồm cả phòng nhắn
+  riêng (tin nhắn 1-1) giữa hai người khác**. Đừng nói với nhân viên rằng "tin nhắn riêng không ai đọc
+  được" — câu đúng là "tin nhắn riêng chỉ đọc được bởi tài khoản có quyền đọc-vượt, và mỗi lần đọc đều
+  để lại dấu vết mang tên người đọc".
+- **Quyền này KHÔNG cấp cho vai nào theo mặc định** — kể cả Quản trị công ty / BOD. Chỉ Super Admin, và
+  chỉ khi được cấp tường minh (cặp quyền nhạy cảm, không rơi vào grant wildcard).
+- **Chỉ đọc.** Không gửi, không ghim, không thu hồi, không sửa thành viên, **không tải được tệp đính
+  kèm** (chỉ thấy tên · cỡ · loại tệp). Tin đã thu hồi vẫn bị che.
+- **Không có tìm kiếm toàn công ty.** Tra cứu phòng theo mã/tên (tối thiểu 2 ký tự) rồi mở **đích danh**
+  một phòng — không có đường liệt kê hay tìm nội dung xuyên mọi phòng cho bất kỳ ai.
+- **Mọi lần dùng đều được ghi**, kể cả lần **bị từ chối**. Xem tại Console `/system/chat-oversight/audit`
+  (ai · phòng nào · lúc nào · thành công/bị từ chối · đã tra bằng tiêu chí gì).
+- **Bộ lọc của màn nhật ký chỉ áp trên các dòng đã tải** — bấm "Tải thêm" trước khi kết luận "không có
+  lần truy cập nào". Màn hình có nhãn ghi rõ số dòng đang lọc trên tổng số đã tải.
+
+> Nếu công ty **không muốn** ai đọc-vượt được: thu hồi cặp `view:chat-oversight` khỏi mọi tài khoản
+> (Console `/system/permissions`). Lối vào biến mất khỏi menu và mọi lời gọi trả 403 — có ghi nhật ký.
 
 ---
 

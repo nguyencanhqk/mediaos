@@ -339,6 +339,9 @@ export {
 export { putBytesToStorage, DEFAULT_UPLOAD_MIME } from "./lib/storage-upload";
 // S7-CHAT-FE-1 — CHAT API client (SPEC-15 · API-13 §5.1, ChatRooms+ChatMessages controller).
 export { chatApi } from "./lib/chat-api";
+// S7-CHAT-FE-5 🔒 — export RIÊNG (không gộp vào `chatApi`): đường đọc-vượt membership phải nhìn thấy
+// được ở tầng import, xem docblock `chatOversightApi`.
+export { chatOversightApi } from "./lib/chat-api";
 // S7-CHAT-FE-1 — kết nối Socket.IO DUY NHẤT của app shell (`/ws`), dùng chung CHAT + NOTI.
 // Trả `null` khi chưa có phiên — caller PHẢI xử lý nhánh đó, KHÔNG `!`-assert.
 export { getAppSocket } from "./lib/realtime-socket";

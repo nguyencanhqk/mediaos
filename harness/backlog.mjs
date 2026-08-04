@@ -10145,6 +10145,45 @@ export const backlog = [
       "LIGHT gate PASS",
     ],
   },
+  // ── BE-9: sinh ra TỪ thi công FE-5 (04/08). Đo trên hợp đồng đã ship, không phải suy đoán:
+  //    `chatOversightAuditQuerySchema` (packages/contracts/src/chat.ts) chỉ có `cursor` + `limit`, và
+  //    `ChatOversightService.listAudit` chuyển thẳng hai giá trị đó xuống repo. Không có `actorUserId`,
+  //    không có `from`/`to`. Nhưng done_when của FE-5 đòi "lọc theo người và khoảng thời gian".
+  //    FE-5 đã giao bằng lọc CLIENT-SIDE trên các dòng ĐÃ TẢI + nhãn nói thẳng phạm vi ("đang hiện N/M
+  //    dòng đã tải") — trung thực, nhưng không thay được lọc ở server khi nhật ký dài ra.
+  {
+    id: "S7-CHAT-BE-9",
+    module: "CHAT",
+    layer: "BE",
+    title:
+      "🔒 CHAT-API-019 nhận bộ lọc actorUserId + from/to (giữ keyset) — để CHAT-SCREEN-008 lọc ở SERVER thay vì trên các dòng đã tải",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/chat/**",
+      "packages/contracts/src/chat.ts",
+      "apps/console/src/routes/system/chat-oversight/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S7-CHAT-BE-9.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S7-CHAT-FE-5"],
+    plan: "docs/plans/S7-CHAT-BE-9.md",
+    src: [
+      "SPEC-15 §9 CHAT-SCREEN-008 · §18 · §15 CHAT-API-019 · API-13 §5.3",
+      "S7-CHAT-FE-5 §0.4 (đo lệch giữa done_when và hợp đồng đã ship)",
+      "memory: apifetch-drops-pagination-bare-array · zod-query-param-double-pipe-idempotent",
+    ],
+    done_when: [
+      "Thêm `actorUserId?` + `from?`/`to?` vào chatOversightAuditQuerySchema; `from`/`to` là NGÀY (không phải datetime) và quy đổi ở SERVER theo TZ công ty — quy đổi ở client thì hai người ở hai múi giờ lọc ra hai kết quả khác nhau trên cùng một câu hỏi",
+      "GIỮ NGUYÊN vế bó cứng `action='chat.oversight.read' AND module_code='CHAT'`. Thêm bộ lọc KHÔNG được biến 019 thành cổng đọc audit_logs toàn hệ thống — ca test: gieo dòng audit module khác + actorUserId khớp ⇒ 019 KHÔNG trả về",
+      "Con trỏ keyset `(created_at, id)` phải TƯƠNG THÍCH với bộ lọc: cursor sinh ở trang có filter A mà dùng lại với filter B ⇒ 400, KHÔNG im lặng trả sai trang (con trỏ opaque phải mang dấu vân của filter, hoặc filter phải nằm trong cursor)",
+      "019 vẫn KHÔNG ghi audit `Success` (API-13 §5.3) — thêm bộ lọc không phải lý do để đổi điều đó",
+      "FE: bỏ lọc client-side ở chat-oversight-audit-page.tsx + GỠ nhãn 'chỉ áp trên các dòng đã tải' (nhãn đó là bù cho thiếu sót ở server; giữ lại sau khi server lọc thật = nói sai với người dùng theo chiều ngược lại). Cập nhật spec tương ứng — ca 'nhãn phạm vi' hiện đang PIN hành vi cũ",
+      "RED-trước, chủ thể là role dựng trong test (KHÔNG dùng SA — SA có *:* nên ca positive xanh kể cả khi guard khai sai)",
+      "FULL gate PASS (đường đọc-vượt = bề mặt rủi ro lớn nhất module)",
+    ],
+  },
   {
     id: "S7-CHAT-QA-1",
     module: "CHAT",

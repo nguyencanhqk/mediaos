@@ -19,6 +19,17 @@ import {
   chatSearchResponseSchema,
   type ChatSearchResponseDto,
   type ChatSearchQuery,
+  chatOversightAuditResponseSchema,
+  type ChatOversightAuditResponseDto,
+  type ChatOversightAuditQuery,
+  chatOversightMessageSchema,
+  type ChatOversightMessageDto,
+  type ChatOversightMessagesQuery,
+  chatOversightRoomDetailSchema,
+  type ChatOversightRoomDetailDto,
+  chatOversightRoomListSchema,
+  type ChatOversightRoomListDto,
+  type ChatOversightRoomQuery,
   chatUnreadCountSchema,
   type ChatUnreadCountDto,
   type AddChatMemberRequest,
@@ -241,5 +252,88 @@ export const chatApi = {
     apiFetch(
       `/chat/rooms/${roomId}/files${buildQueryString(query ?? {})}`,
       z.array(chatRoomFileSchema),
+    ),
+};
+
+// ═══════════ S7-CHAT-FE-5 🔒 — ĐỌC-VƯỢT MEMBERSHIP (CHAT-API-018a/b/c + 019) ═══════════
+
+/**
+ * Client của đường ĐỌC-VƯỢT — CHAT-SCREEN-007/008 (SPEC-15 §3.3 · §9 · API-13 §5.3).
+ *
+ * ⚠️ **ĐỐI TƯỢNG RIÊNG, CỐ Ý KHÔNG nhét vào `chatApi`.** Backend tách hẳn controller · service ·
+ * repository · mapper cho đường này để câu "mọi đường đọc thường gọi `assertMember` VÔ ĐIỀU KIỆN" còn
+ * chứng minh được bằng một lời grep. Trộn 4 hàm dưới đây vào `chatApi` là phá vế đó ở tầng client: mọi
+ * call-site đang cầm `chatApi` (trang `/chat`, panel nổi, store) tự nhiên có trong tay đường đọc-vượt
+ * chỉ bằng cách gõ dấu chấm, và bản review sau sẽ phải đọc từng call-site thay vì đọc từng import.
+ *
+ * ⚠️ Bốn route đều `GET`. KHÔNG có hàm gửi/ghim/thu hồi/sửa thành viên ở đây, và cũng KHÔNG có
+ * `search` — `/chat/oversight/search` KHÔNG TỒN TẠI (ràng buộc 5 của API-13 §5.3, không phải thiếu sót).
+ * Muốn tìm toàn văn thì vẫn là `chatApi.search`, vốn giữ nguyên vị từ membership cho MỌI role.
+ *
+ * ⚠️ Mọi lời gọi ở đây để lại dấu vết trong `audit_logs` (`action = 'chat.oversight.read'`) — kể cả lần
+ * BỊ TỪ CHỐI (guard ghi `Denied` ở transaction riêng ĐÃ COMMIT rồi mới 403). UI vì thế không được gọi
+ * "thăm dò" trước khi người dùng thật sự quyết định (xem hộp thoại xác nhận ở CHAT-SCREEN-007).
+ */
+export const chatOversightApi = {
+  /**
+   * GET /chat/oversight/rooms (CHAT-API-018a) — tra phòng theo mã/tên/loại.
+   *
+   * `q` BẮT BUỘC ≥2 ký tự (server 422 nếu ngắn hơn) — UI chặn TRƯỚC khi gọi, vì một request chắc chắn
+   * hỏng vẫn đốt một dòng audit.
+   *
+   * Phản hồi là **object** `{ data, truncated }`, KHÔNG phải mảng trần và KHÔNG có con trỏ: không lật
+   * trang được thì không enumerate được toàn bộ phòng công ty. `truncated: true` = còn kết quả bị cắt ⇒
+   * UI PHẢI nói ra, đọc im lặng thành "đã trả hết" là để người dùng kết luận sai về phạm vi.
+   */
+  searchRooms: (query: ChatOversightRoomQuery): Promise<ChatOversightRoomListDto> =>
+    apiFetch(`/chat/oversight/rooms${buildQueryString(query)}`, chatOversightRoomListSchema),
+
+  /**
+   * GET /chat/oversight/rooms/:id (CHAT-API-018b) — chi tiết phòng + thành viên. Audit MỖI LẦN GỌI.
+   *
+   * ⚠️ **KHÔNG có `myRole`** trong `ChatOversightRoomDetailDto` (khác `chatApi.getRoom`): người đọc-vượt
+   * không có hàng `chat_room_members` nào nên mọi giá trị điền vào đó đều là bịa. Vắng trường = UI
+   * không có nhánh nào bật được nút quản trị.
+   *
+   * Phòng lạ / đã xoá mềm / tenant khác ⇒ 404 GIỐNG HỆT đường đọc thường (không phải oracle dò tồn tại).
+   */
+  getRoom: (roomId: string): Promise<ChatOversightRoomDetailDto> =>
+    apiFetch(`/chat/oversight/rooms/${roomId}`, chatOversightRoomDetailSchema),
+
+  /**
+   * GET /chat/oversight/rooms/:id/messages (CHAT-API-018c) — MẢNG TRẦN, toàn dải `roomSeq`.
+   *
+   * ⚠️ Hình dạng KHÁC `listAudit` ngay bên dưới (object keyset) — chép nhầm schema là `ZodError` runtime
+   * DÙ HTTP 200 (memory `apifetch-drops-pagination-bare-array`).
+   *
+   * ⚠️ Đính kèm trả về là **metadata thuần, 0 URL** (`chatOversightAttachmentSchema`): CHAT-DEC-004 mở
+   * ranh giới MEMBERSHIP, KHÔNG mở đường tải tệp. UI render tên/cỡ/loại, tuyệt đối không dựng `href`.
+   *
+   * `body === null` với tin đã thu hồi — masking KHÔNG được nới ở đường này (SPEC-15 §13.6).
+   */
+  listMessages: (
+    roomId: string,
+    query?: Partial<ChatOversightMessagesQuery>,
+  ): Promise<ChatOversightMessageDto[]> =>
+    apiFetch(
+      `/chat/oversight/rooms/${roomId}/messages${buildQueryString(query ?? {})}`,
+      z.array(chatOversightMessageSchema),
+    ),
+
+  /**
+   * GET /chat/oversight/audit (CHAT-API-019) — nhật ký đọc-vượt cho CHAT-SCREEN-008.
+   *
+   * Phản hồi **object keyset** `{ data, nextCursor }`; `nextCursor === null` = trang cuối. Con trỏ rác →
+   * 400 (server KHÔNG im lặng rơi về trang đầu — rơi về trang đầu biến con trỏ hỏng thành vòng lặp vô hạn).
+   *
+   * ⚠️ Truy vấn CHỈ nhận `cursor` + `limit`: **không** có lọc theo người thực hiện hay khoảng thời gian
+   * ở server (đo trên `chatOversightAuditQuerySchema`, 04/08/2026). CHAT-SCREEN-008 lọc phía client trên
+   * các dòng ĐÃ TẢI và phải nói rõ điều đó trên UI — lọc im lặng trên một tập con làm người đọc tưởng
+   * đã thấy hết, đúng thứ SPEC-15 §18 gọi là "audit không xem được thì không phải kiểm soát".
+   */
+  listAudit: (query?: Partial<ChatOversightAuditQuery>): Promise<ChatOversightAuditResponseDto> =>
+    apiFetch(
+      `/chat/oversight/audit${buildQueryString(query ?? {})}`,
+      chatOversightAuditResponseSchema,
     ),
 };

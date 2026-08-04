@@ -193,6 +193,10 @@ export default {
   adminUsers: "Quản lý người dùng",
   apiKeys: "API key",
   webhooks: "Webhooks",
+  // S7-CHAT-FE-5 🔒 — CHAT-SCREEN-007/008 (apps/console). Nhãn nói thẳng "đọc-vượt" chứ không làm mềm
+  // thành "xem hội thoại": người bấm phải biết mình sắp đọc phòng mình không thuộc (SPEC-15 §3.3).
+  chatOversight: "Đọc-vượt hội thoại",
+  chatOversightAudit: "Nhật ký đọc-vượt",
   logout: "Đăng xuất",
   group: {
     work: "Công việc & Nội dung",
