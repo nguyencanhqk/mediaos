@@ -10,9 +10,11 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { ApiError } from "@mediaos/web-core";
 import {
   chatMessageSchema,
   wsChatMessageEventSchema,
+  wsChatMessageRecalledEventSchema,
   wsChatRoomEventSchema,
   type ChatMessageDto,
   type ChatRoomDto,
@@ -23,12 +25,18 @@ import {
   attachmentUrl,
   createClientMessageId,
   useChatStore,
+  type StoredChatMessage,
 } from "./chat.store";
 
 const getMessages = vi.fn<(roomId: string, q?: unknown) => Promise<ChatMessageDto[]>>();
-vi.mock("@mediaos/web-core", () => ({
-  chatApi: { getMessages: (roomId: string, q?: unknown) => getMessages(roomId, q) },
-}));
+vi.mock("@mediaos/web-core", async (importOriginal) => {
+  // Giữ module THẬT (cần `ApiError` để dựng lỗi đúng kiểu mà `apiFetch` ném) — chỉ stub tầng mạng.
+  const actual = await importOriginal<typeof import("@mediaos/web-core")>();
+  return {
+    ...actual,
+    chatApi: { getMessages: (roomId: string, q?: unknown) => getMessages(roomId, q) },
+  };
+});
 
 const ROOM_A = "11111111-1111-4111-8111-111111111111";
 const ROOM_B = "22222222-2222-4222-8222-222222222222";
@@ -85,6 +93,14 @@ function message(seq: number, over: Partial<ChatMessageDto> = {}): ChatMessageDt
     createdAt: `2026-08-04T01:${String(seq).padStart(2, "0")}:00.000Z`,
     ...over,
   };
+}
+
+/**
+ * Biến thể "đến từ WS": cùng một tin nhưng `attachments` KHÔNG mang URL ký. `message()` giữ nguyên kiểu
+ * `ChatMessageDto` (DTO REST) — trộn hai hình dạng vào một fixture là mất đúng cái phân biệt đang test.
+ */
+function storedMessage(seq: number, over: Partial<StoredChatMessage> = {}): StoredChatMessage {
+  return { ...message(seq), ...over };
 }
 
 const s = () => useChatStore.getState();
@@ -211,16 +227,190 @@ describe("applyIncomingMessage", () => {
   });
 });
 
+// ── vá sau LIGHT gate: 4 lỗ reviewer chỉ ra, đã kiểm chứng bằng code BE thật ──
+
+describe("syncRoomList — vắng mặt trong payload là tín hiệu 'mình đã bị bớt khỏi phòng'", () => {
+  it("gỡ phòng KHÔNG còn trong danh sách server trả về", () => {
+    s().hydrateRooms([room(ROOM_A), room(ROOM_B)]);
+    s().syncRoomList([room(ROOM_B)], false);
+    expect(s().roomsById[ROOM_A]).toBeUndefined();
+    expect(s().roomsById[ROOM_B]).toBeDefined();
+    expect(s().roomOrder).toEqual([ROOM_B]);
+  });
+
+  it("gỡ kèm DỪNG lưới bù — không để interval nện 404 mỗi 10 giây cho phòng đã rời", () => {
+    vi.useFakeTimers();
+    s().hydrateRooms([room(ROOM_A)]);
+    s().subscribeToRoom(ROOM_A);
+    s().setConnectionStatus("disconnected");
+    s().syncRoomList([], false);
+    expect(s().subscribedRoomIds[ROOM_A]).toBeUndefined();
+    getMessages.mockClear();
+    vi.advanceTimersByTime(CHAT_POLL_INTERVAL_MS * 3);
+    expect(getMessages).not.toHaveBeenCalled();
+  });
+
+  it("KHÔNG đụng phòng ĐÃ LƯU TRỮ — `listRooms()` ép `archived:false` nên chúng vốn không có trong payload", () => {
+    // Đây là cái bẫy của chính bản vá: gỡ mù theo payload sẽ xoá sạch phòng lưu trữ mà mình VẪN thuộc.
+    s().hydrateRooms([room(ROOM_A, { isArchived: true }), room(ROOM_B, { isArchived: false })]);
+    s().syncRoomList([], false);
+    expect(s().roomsById[ROOM_A]).toBeDefined(); // rổ archived — ngoài phạm vi truy vấn
+    expect(s().roomsById[ROOM_B]).toBeUndefined(); // rổ đã truy vấn, vắng mặt ⇒ gỡ
+  });
+});
+
+describe("mergeServerRoom — ảnh chụp REST CŨ không được đè trạng thái WS mới hơn", () => {
+  it("giữ badge/con trỏ của store khi payload server cũ hơn (lost-update lúc reconnect)", () => {
+    s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 10, unreadCount: 0 })]);
+    s().applyIncomingMessage(message(11, { senderId: OTHER })); // WS: tin mới, badge 1
+    expect(s().roomsById[ROOM_A].unreadCount).toBe(1);
+
+    // Response `GET /chat/rooms` phát đi TRƯỚC tin đó mới về tới nơi.
+    s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 10, unreadCount: 0, name: "Tên server" })]);
+    expect(s().roomsById[ROOM_A].unreadCount).toBe(1); // badge KHÔNG bị xoá
+    expect(s().roomsById[ROOM_A].lastMessageSeq).toBe(11);
+    expect(s().roomsById[ROOM_A].name).toBe("Tên server"); // siêu dữ liệu vẫn lấy của server
+  });
+
+  it("payload server MỚI hơn thì thắng (đọc ở thiết bị khác ⇒ badge phải về 0)", () => {
+    s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 10, unreadCount: 5 })]);
+    s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 12, unreadCount: 0 })]);
+    expect(s().roomsById[ROOM_A].unreadCount).toBe(0);
+  });
+});
+
+describe("applyIncomingMessage — tin CŨ không được thổi phồng badge", () => {
+  it("nạp cả trang tin đã đọc (lưới bù không có afterSeq) KHÔNG làm badge nhảy", () => {
+    // pollRoomMessages bỏ `afterSeq` khi phòng chưa có tin trong bộ nhớ ⇒ server trả TRANG MỚI NHẤT 50
+    // tin. Không có chốt roomSeq thì badge nhảy lên ~50 cho phòng thật ra 0 chưa đọc.
+    s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 10, unreadCount: 0 })]);
+    for (let seq = 1; seq <= 10; seq += 1) {
+      s().applyIncomingMessage(message(seq, { senderId: OTHER }));
+    }
+    expect(s().roomsById[ROOM_A].unreadCount).toBe(0);
+    expect(s().roomsById[ROOM_A].lastMessageSeq).toBe(10); // con trỏ KHÔNG lùi
+    expect(s().messagesByRoom[ROOM_A]).toHaveLength(10); // tin vẫn được CHÈN bình thường
+  });
+
+  it("tin thật sự MỚI vẫn tăng badge như thường", () => {
+    s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 10, unreadCount: 0 })]);
+    s().applyIncomingMessage(message(11, { senderId: OTHER }));
+    expect(s().roomsById[ROOM_A].unreadCount).toBe(1);
+    expect(s().roomsById[ROOM_A].lastMessageSeq).toBe(11);
+  });
+});
+
+describe("trùng id = NÂNG CẤP đính kèm, không phải no-op", () => {
+  const WS_ATTACHMENT = {
+    id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    fileId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    name: "bao-cao.pdf",
+    mimeType: "application/pdf",
+    sizeBytes: 1024,
+    isImage: false,
+  };
+  const REST_ATTACHMENT = {
+    ...WS_ATTACHMENT,
+    url: "https://storage/signed",
+    thumbnailUrl: null,
+  };
+
+  beforeEach(() => s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 0 })]));
+
+  it("echo WS (không URL) về TRƯỚC, response POST (có URL) về SAU → URL ký được nạp", () => {
+    // Không có nâng cấp thì dedupe-theo-id vứt bản REST, và `attachmentUrl` mãi `undefined` — trong khi
+    // lưới bù chỉ xin `afterSeq` (tin MỚI HƠN) nên KHÔNG có đường nào lấy lại URL. Đính kèm của chính
+    // mình vừa gửi vĩnh viễn không tải được.
+    s().applyIncomingMessage(storedMessage(11, { attachmentCount: 1, attachments: [WS_ATTACHMENT] }));
+    expect(attachmentUrl(s().messagesByRoom[ROOM_A][0].attachments[0])).toBeUndefined();
+
+    s().applyIncomingMessage(message(11, { attachmentCount: 1, attachments: [REST_ATTACHMENT] }));
+    expect(s().messagesByRoom[ROOM_A]).toHaveLength(1); // vẫn KHÔNG nhân bản
+    expect(attachmentUrl(s().messagesByRoom[ROOM_A][0].attachments[0])).toBe(
+      "https://storage/signed",
+    );
+  });
+
+  it("bản REST tới trước, echo WS tới sau KHÔNG được hạ cấp mất URL", () => {
+    s().applyIncomingMessage(message(11, { attachmentCount: 1, attachments: [REST_ATTACHMENT] }));
+    s().applyIncomingMessage(storedMessage(11, { attachmentCount: 1, attachments: [WS_ATTACHMENT] }));
+    expect(attachmentUrl(s().messagesByRoom[ROOM_A][0].attachments[0])).toBe(
+      "https://storage/signed",
+    );
+  });
+
+  it("tin ĐÃ THU HỒI không bị phục hồi đính kèm (masking §13.6 không được nới)", () => {
+    s().applyIncomingMessage(storedMessage(11, { attachmentCount: 1, attachments: [WS_ATTACHMENT] }));
+    s().applyMessageRecalled({
+      messageId: messageId(11),
+      roomId: ROOM_A,
+      recalledAt: "2026-08-04T02:00:00.000Z",
+    });
+    s().applyIncomingMessage(message(11, { attachmentCount: 1, attachments: [REST_ATTACHMENT] }));
+    expect(s().messagesByRoom[ROOM_A][0].attachments).toEqual([]);
+    expect(s().messagesByRoom[ROOM_A][0].body).toBeNull();
+  });
+});
+
+describe("pollRoomMessages — 404 là 'mình không còn trong phòng', không phải lỗi tạm", () => {
+  it("404 ⇒ dọn phòng + dừng interval, KHÔNG thử lại vô hạn", async () => {
+    vi.useFakeTimers();
+    s().hydrateRooms([room(ROOM_A)]);
+    s().subscribeToRoom(ROOM_A);
+    s().setConnectionStatus("disconnected");
+    getMessages.mockRejectedValue(new ApiError(404, "CHAT-ERR-001", "not a member"));
+
+    vi.advanceTimersByTime(CHAT_POLL_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(s().roomsById[ROOM_A]).toBeUndefined();
+    expect(s().subscribedRoomIds[ROOM_A]).toBeUndefined();
+    getMessages.mockClear();
+    vi.advanceTimersByTime(CHAT_POLL_INTERVAL_MS * 3);
+    expect(getMessages).not.toHaveBeenCalled();
+  });
+
+  it("lỗi 5xx ⇒ GIỮ phòng và tiếp tục thử lại (khác hẳn 404)", async () => {
+    vi.useFakeTimers();
+    s().hydrateRooms([room(ROOM_A)]);
+    s().subscribeToRoom(ROOM_A);
+    s().setConnectionStatus("disconnected");
+    getMessages.mockRejectedValue(new ApiError(500, "INTERNAL", "boom"));
+
+    vi.advanceTimersByTime(CHAT_POLL_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(s().roomsById[ROOM_A]).toBeDefined();
+    vi.advanceTimersByTime(CHAT_POLL_INTERVAL_MS);
+    expect(getMessages).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("resetChatStore trả về trạng thái SẠCH, không dùng chung tham chiếu", () => {
+  it("hai lần reset cho hai object khác nhau (INITIAL_STATE dùng chung là bẫy ngầm)", () => {
+    s().hydrateRooms([room(ROOM_A)]);
+    s().resetChatStore();
+    const first = s().roomsById;
+    s().hydrateRooms([room(ROOM_B)]);
+    s().resetChatStore();
+    expect(s().roomsById).not.toBe(first);
+    expect(Object.keys(s().roomsById)).toHaveLength(0);
+  });
+});
+
 describe("applyMessageRecalled", () => {
   it("xoá nội dung + đính kèm, đặt recalledAt (payload KHÔNG mang body, kể cả null)", () => {
     s().hydrateRooms([room(ROOM_A)]);
     s().applyIncomingMessage(message(11, { attachmentCount: 1 }));
     const id = s().messagesByRoom[ROOM_A][0].id;
-    s().applyMessageRecalled({
-      messageId: id,
-      roomId: ROOM_A,
-      recalledAt: "2026-08-04T02:00:00.000Z",
-    });
+    // Đi qua schema THẬT (§4 ca 14) chứ không object literal: literal vẫn xanh kể cả khi hợp đồng RT-1
+    // đổi hình dạng, tức test mất hết sức phân biệt đúng lúc cần nhất.
+    s().applyMessageRecalled(
+      wsChatMessageRecalledEventSchema.parse({
+        messageId: id,
+        roomId: ROOM_A,
+        recalledAt: "2026-08-04T02:00:00.000Z",
+      }),
+    );
     const m = s().messagesByRoom[ROOM_A][0];
     expect(m.body).toBeNull();
     expect(m.recalledAt).toBe("2026-08-04T02:00:00.000Z");

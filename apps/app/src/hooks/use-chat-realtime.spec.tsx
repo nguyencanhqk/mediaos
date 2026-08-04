@@ -11,7 +11,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode, type ReactNode } from "react";
-import { useAuthStore } from "@mediaos/web-core";
+import { ApiError, useAuthStore } from "@mediaos/web-core";
 import { WS_EVENTS } from "@mediaos/contracts";
 import { useChatStore } from "@/stores/chat.store";
 import { useChatRealtime } from "./use-chat-realtime";
@@ -233,6 +233,17 @@ describe("vòng đời", () => {
     expect(s().connectionStatus).toBe("connecting");
   });
 
+  it("unmount HOÀN NGUYÊN auto-reconnect — không để cờ tắt nằm lại trên Manager dùng chung với NOTI", async () => {
+    // Một lần `realtime_disabled` thoáng qua mà không hoàn nguyên = NOTI realtime chết theo VĨNH VIỄN
+    // (tới khi tải lại tab), dù NOTI chưa bao giờ đồng ý và không có cách nào biết vì sao.
+    const { unmount } = renderHook(() => useChatRealtime(), { wrapper });
+    await waitFor(() => expect(socket.totalHandlers()).toBe(7));
+    act(() => socket.fire("connect_error", new Error("realtime_disabled")));
+    expect(socket.io.reconnection).toHaveBeenCalledWith(false);
+    unmount();
+    expect(socket.io.reconnection).toHaveBeenLastCalledWith(true);
+  });
+
   it("unmount gỡ SẠCH 7 handler và TUYỆT ĐỐI KHÔNG disconnect (socket dùng chung với NOTI)", async () => {
     const { unmount } = renderHook(() => useChatRealtime(), { wrapper });
     await waitFor(() => expect(socket.totalHandlers()).toBe(7));
@@ -323,6 +334,13 @@ describe("kiểm hình dạng payload trước khi merge", () => {
   beforeEach(async () => {
     renderHook(() => useChatRealtime(), { wrapper });
     await waitFor(() => expect(socket.totalHandlers()).toBe(7));
+    // ⚠️ PHẢI đợi lượt đồng bộ danh sách ĐẦU TIÊN xong trước khi test gieo phòng vào store.
+    // `syncRoomList` GỠ phòng vắng mặt trong payload (mock trả `[]`), nên nếu nó chạy sau lúc gieo thì
+    // phòng vừa gieo bị dọn — test đỏ vì lý do KHÔNG liên quan tới điều đang kiểm.
+    await waitFor(() => expect(listRooms).toHaveBeenCalled());
+    await act(async () => {
+      await Promise.resolve();
+    });
   });
 
   it.each([
@@ -339,7 +357,7 @@ describe("kiểm hình dạng payload trước khi merge", () => {
 
   it("`chat:room` member_removed + getRoom 404 → CHÍNH MÌNH bị gỡ ⇒ dọn phòng khỏi store", async () => {
     act(() => s().hydrateRooms([room(ROOM_A)]));
-    getRoom.mockRejectedValue(Object.assign(new Error("not found"), { status: 404 }));
+    getRoom.mockRejectedValue(new ApiError(404, "CHAT-ERR-001", "not found"));
 
     act(() => socket.fire(WS_EVENTS.CHAT_ROOM, { roomId: ROOM_A, action: "member_removed" }));
 
@@ -349,7 +367,7 @@ describe("kiểm hình dạng payload trước khi merge", () => {
 
   it("`chat:room` member_removed + getRoom 500 → GIỮ NGUYÊN phòng (không xoá vì server hắt hơi)", async () => {
     act(() => s().hydrateRooms([room(ROOM_A, { unreadCount: 4 })]));
-    getRoom.mockRejectedValue(Object.assign(new Error("boom"), { status: 500 }));
+    getRoom.mockRejectedValue(new ApiError(500, "INTERNAL", "boom"));
 
     act(() => socket.fire(WS_EVENTS.CHAT_ROOM, { roomId: ROOM_A, action: "member_removed" }));
 
@@ -379,6 +397,15 @@ describe("kiểm hình dạng payload trước khi merge", () => {
     expect(s().roomsById[ROOM_A].name).toBe("Phòng mới");
     expect(s().roomsById[ROOM_A]).not.toHaveProperty("members");
     expect(s().roomsById[ROOM_A]).not.toHaveProperty("myRole");
+  });
+
+  it("`chat:room` created THIẾU `room` (lệch hợp đồng RT-1) → refetch CẢ danh sách, không đoán", async () => {
+    // Nhánh fail-soft `refetch-rooms`: RT-1 hứa điền `room` cho action `created`. Nếu một ngày nó không
+    // điền nữa, FE KHÔNG được bịa một phòng rỗng — phải đi hỏi lại toàn bộ danh sách.
+    listRooms.mockClear();
+    act(() => socket.fire(WS_EVENTS.CHAT_ROOM, { roomId: ROOM_A, action: "created" }));
+    await waitFor(() => expect(listRooms).toHaveBeenCalled());
+    expect(getRoom).not.toHaveBeenCalled();
   });
 
   it("`chat:room` member_added phòng ĐÃ có → KHÔNG gọi getRoom (không đẻ round-trip thừa)", () => {

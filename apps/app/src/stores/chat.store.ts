@@ -12,7 +12,7 @@
  * re-render; sửa tại chỗ thì component không vẽ lại và lỗi hiện ra như "realtime không chạy".
  */
 import { create } from "zustand";
-import { chatApi } from "@mediaos/web-core";
+import { ApiError, chatApi } from "@mediaos/web-core";
 import type {
   ChatAttachmentDto,
   ChatMessageDto,
@@ -118,7 +118,7 @@ interface ChatStoreState {
   /** Thứ tự hiển thị: `lastMessageAt` GIẢM DẦN, phòng chưa có tin xếp CUỐI. */
   roomOrder: string[];
   /** Tin theo phòng, TĂNG DẦN theo `roomSeq`, trần `MAX_MESSAGES_PER_ROOM`. */
-  messagesByRoom: Record<string, StoredChatMessage[]>;
+  messagesByRoom: Record<string, readonly StoredChatMessage[]>;
   pendingByClientId: Record<string, PendingChatMessage>;
   connectionStatus: ChatConnectionStatus;
   subscribedRoomIds: Record<string, SubscribedRoom>;
@@ -126,6 +126,8 @@ interface ChatStoreState {
   setMyUserId: (userId: string | null) => void;
   setConnectionStatus: (status: ChatConnectionStatus) => void;
   hydrateRooms: (rooms: readonly ChatRoomDto[]) => void;
+  /** Đồng bộ TRỌN một rổ phòng theo `GET /chat/rooms` — upsert cái có, GỠ cái vắng mặt. */
+  syncRoomList: (rooms: readonly ChatRoomDto[], archivedScope: boolean) => void;
   applyRoomEvent: (event: WsChatRoomEvent) => ChatRoomEffect;
   removeRoomForSelf: (roomId: string) => void;
   applyIncomingMessage: (message: StoredChatMessage) => void;
@@ -166,19 +168,52 @@ function sortRoomIds(roomsById: Record<string, ChatRoomDto>): string[] {
     .map((r) => r.id);
 }
 
+/** Bản này có mang URL ký không? (nguồn REST) — phân biệt với bản đến từ WS (metadata trần). */
+function hasSignedUrls(attachments: readonly StoredChatAttachment[]): boolean {
+  return attachments.some((a) => "url" in a);
+}
+
 /**
  * Chèn một tin vào danh sách ĐÃ sắp theo `roomSeq`, dedupe theo `id`, cắt trần từ đầu (tin CŨ NHẤT ra
- * trước). Trả về CHÍNH mảng cũ khi trùng id — caller dựa vào đó để bỏ qua `set()` thừa.
+ * trước). Trả về CHÍNH mảng cũ khi không có gì đổi — caller dựa vào đó để bỏ qua `set()` thừa.
+ *
+ * ⚠️ **Trùng `id` KHÔNG phải lúc nào cũng là no-op.** Cùng một tin đến từ hai nguồn có nội dung KHÁC
+ * nhau: bản WS bị strip `url`/`thumbnailUrl` (masking per-recipient), bản REST có. Echo WS thường về
+ * TRƯỚC response POST (push đang bay sẵn trong khi `fetch` còn resolve) ⇒ nếu dedupe mù thì bản có URL
+ * bị vứt IM LẶNG, và đính kèm của chính mình vừa gửi vĩnh viễn không tải được.
+ *
+ * Tệ hơn: lời hứa trong docblock `attachmentUrl` ("`undefined` ⇒ đi hỏi REST") KHÔNG THỰC HIỆN ĐƯỢC nếu
+ * dedupe mù — lưới bù chỉ xin `afterSeq` (tin MỚI HƠN), nên mọi tin REST mang URL đều đã có `id` trong
+ * danh sách và bị loại. Vì thế trùng id ⇒ NÂNG CẤP riêng `attachments`, không thay cả tin.
  */
 function insertMessage(
   list: readonly StoredChatMessage[],
   message: StoredChatMessage,
-): StoredChatMessage[] {
-  if (list.some((m) => m.id === message.id)) return list as StoredChatMessage[];
+): readonly StoredChatMessage[] {
+  const existingAt = list.findIndex((m) => m.id === message.id);
+  if (existingAt !== -1) {
+    const stored = list[existingAt];
+    // Chỉ đi một chiều WS→REST. Tin ĐÃ THU HỒI thì server trả `attachments: []` ở CẢ hai đường, nên một
+    // bản "có URL" cho tin thu hồi là dữ liệu lệch — không phục hồi nội dung đã bị che.
+    if (
+      stored.recalledAt !== null ||
+      !hasSignedUrls(message.attachments) ||
+      hasSignedUrls(stored.attachments)
+    ) {
+      return list;
+    }
+    const upgraded = [...list];
+    upgraded[existingAt] = { ...stored, attachments: message.attachments };
+    return upgraded;
+  }
 
   // Đường thường là tin MỚI NHẤT ⇒ quét từ cuối, dừng ngay ở vị trí đúng.
   let at = list.length;
   while (at > 0 && list[at - 1].roomSeq > message.roomSeq) at -= 1;
+
+  // Tin cũ hơn MỌI tin đang giữ trong một danh sách đã đầy: chèn vào đầu rồi bị cắt bỏ ngay ở dòng
+  // dưới. Kết quả giống hệt `list` nhưng là mảng MỚI ⇒ Zustand vẫn phát re-render vô ích.
+  if (at === 0 && list.length >= MAX_MESSAGES_PER_ROOM) return list;
 
   const next = [...list.slice(0, at), message, ...list.slice(at)];
   return next.length > MAX_MESSAGES_PER_ROOM
@@ -210,6 +245,29 @@ function mergeRoomMetadata(
   return merged;
 }
 
+/**
+ * Ghép một phòng từ REST vào phòng đang giữ — **theo mốc nước `lastMessageSeq`**, không đè mù.
+ *
+ * ⚠️ Đây là chống LOST-UPDATE, không phải tối ưu. Cửa sổ đua mở đúng lúc reconnect (lúc dễ dồn tin
+ * nhất): t0 phát `GET /chat/rooms` (server tính `unreadCount = 0`) → t0+50ms tin mới về qua WS, badge
+ * lên 1 → t0+120ms response CŨ (ảnh chụp t0) về và ghi `unreadCount: 0`. Người dùng có tin chưa đọc mà
+ * **không có badge** ⇒ không bao giờ vào xem. Chỉ tin server khi ảnh chụp của nó KHÔNG cũ hơn thứ ta
+ * đang giữ.
+ */
+function mergeServerRoom(current: ChatRoomDto | undefined, incoming: ChatRoomDto): ChatRoomDto {
+  if (!current) return incoming;
+  const currentSeq = current.lastMessageSeq ?? 0;
+  const incomingSeq = incoming.lastMessageSeq ?? 0;
+  if (incomingSeq >= currentSeq) return incoming;
+  // Ảnh chụp của server CŨ hơn: lấy siêu dữ liệu (tên/mô tả/lưu trữ) của nó, giữ ba trường "mới nhất".
+  return {
+    ...incoming,
+    lastMessageAt: current.lastMessageAt,
+    lastMessageSeq: current.lastMessageSeq,
+    unreadCount: current.unreadCount,
+  };
+}
+
 /** Chưa đọc = `lastMessageSeq − lastReadSeq`, CẢ HAI trong hệ `room_seq` (SPEC-15 §13.1). Kẹp ≥ 0. */
 function unreadFrom(room: ChatRoomDto, lastReadSeq: number): number {
   return Math.max(0, (room.lastMessageSeq ?? 0) - lastReadSeq);
@@ -236,31 +294,65 @@ export function createClientMessageId(): string {
 
 // ── store ─────────────────────────────────────────────────────────────────────
 
-const INITIAL_STATE = {
+/**
+ * FACTORY, không phải hằng dùng chung. `set({ ...INITIAL_STATE })` chỉ sao chép TẦNG TRÊN — mọi lần
+ * `resetChatStore()` sẽ trỏ lại CÙNG object `roomsById`/`messagesByRoom`/… Hôm nay mọi writer đều
+ * spread nên chưa hỏng, nhưng một dòng ghi tại chỗ ở đâu đó sẽ làm "trạng thái khởi tạo" bẩn vĩnh viễn.
+ */
+const createInitialState = () => ({
   myUserId: null as string | null,
   roomsById: {} as Record<string, ChatRoomDto>,
   roomOrder: [] as string[],
-  messagesByRoom: {} as Record<string, StoredChatMessage[]>,
+  messagesByRoom: {} as Record<string, readonly StoredChatMessage[]>,
   pendingByClientId: {} as Record<string, PendingChatMessage>,
   connectionStatus: "connecting" as ChatConnectionStatus,
   subscribedRoomIds: {} as Record<string, SubscribedRoom>,
-};
+});
 
 export const useChatStore = create<ChatStoreState>((set, get) => ({
-  ...INITIAL_STATE,
+  ...createInitialState(),
 
   setMyUserId: (myUserId) => set({ myUserId }),
 
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
 
-  /** REST `listRooms`/`getRoom` trả object ĐẦY ĐỦ (có `unreadCount` đúng) ⇒ đặt THẲNG, không merge. */
+  /**
+   * Nạp/cập nhật MỘT SỐ phòng từ REST (đường `getRoom` một phòng). Chỉ upsert — KHÔNG xoá phòng vắng
+   * mặt, vì caller không hứa đã đưa danh sách đầy đủ. Muốn đồng bộ cả danh sách thì dùng `syncRoomList`.
+   */
   hydrateRooms: (rooms) =>
     set((state) => {
       if (rooms.length === 0) return state;
       const roomsById = { ...state.roomsById };
-      for (const room of rooms) roomsById[room.id] = room;
+      for (const room of rooms)
+        roomsById[room.id] = mergeServerRoom(state.roomsById[room.id], room);
       return { roomsById, roomOrder: sortRoomIds(roomsById) };
     }),
+
+  /**
+   * Đồng bộ TOÀN BỘ một "rổ" phòng theo kết quả `GET /chat/rooms` — upsert cái có, GỠ cái vắng mặt.
+   *
+   * ⚠️ Vì sao cần hàm riêng chứ không để `hydrateRooms` tự gỡ: **vắng mặt là tín hiệu DUY NHẤT** cho
+   * biết mình đã bị bớt khỏi phòng khi sự kiện `chat:room` rơi vào lúc WS đứt (Socket.IO KHÔNG bật
+   * `connectionStateRecovery` ⇒ sự kiện lỡ là mất vĩnh viễn). `listRoomsForUser` inner-join
+   * `chat_room_members` với `left_at IS NULL`, nên phòng đã rời BIẾN MẤT khỏi payload. Chỉ merge thì
+   * phòng "ma" ở lại với badge cũ, bấm vào ăn 404, và interval bù nện `GET …/messages` 404 mỗi 10 giây.
+   *
+   * ⚠️ `archivedScope` KHÔNG phải tham số trang trí. `chat-rooms.service.ts` ép `archived: query.archived
+   * ?? false`, tức `listRooms()` **chỉ trả phòng CHƯA lưu trữ**. Gỡ mù theo payload đó sẽ xoá sạch mọi
+   * phòng đã lưu trữ mà mình VẪN là thành viên. Chỉ gỡ trong đúng rổ đã truy vấn.
+   */
+  syncRoomList: (rooms, archivedScope) => {
+    const state = get();
+    const incoming = new Set(rooms.map((r) => r.id));
+    const stale = Object.values(state.roomsById).filter(
+      (r) => (r.isArchived ?? false) === archivedScope && !incoming.has(r.id),
+    );
+    // Đi qua `removeRoomForSelf` chứ không tự xoá khoá: chỉ nó dọn luôn `messagesByRoom` và
+    // `clearInterval` của lưới bù — thiếu vế đó thì phòng biến khỏi danh sách mà interval vẫn sống.
+    for (const room of stale) get().removeRoomForSelf(room.id);
+    get().hydrateRooms(rooms);
+  },
 
   /**
    * Sự kiện `chat:room`. Nhóm THÀNH VIÊN không tự quyết được ở client — phải HỎI SERVER.
@@ -364,6 +456,17 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
       const room = state.roomsById[message.roomId];
       if (!room) return { messagesByRoom: { ...state.messagesByRoom, [message.roomId]: next } };
+
+      // ⚠️ CHỈ tin nào MỚI HƠN con trỏ phòng mới được đụng vào tổng hợp của phòng. Hàm này nhận cả tin
+      // CŨ: lưới bù gọi `getMessages(roomId, {})` khi phòng chưa có tin nào trong bộ nhớ (`afterSeq`
+      // phải `.positive()` nên không gửi được 0) và server trả nguyên TRANG MỚI NHẤT 50 tin đã đọc từ
+      // lâu; FE-2 cuộn ngược bằng `beforeSeq` cũng đổ tin cũ vào đây. Không có chốt này thì mở panel một
+      // phòng lúc mất mạng làm badge nhảy lên ~50 cho phòng thật ra 0 chưa đọc — và ở
+      // `polling-fallback` (`REALTIME_ENABLED=false`) không có `chat:read` nào để sửa lại, badge sai
+      // tới khi F5. Tin vẫn được CHÈN bình thường; chỉ phần tổng hợp bị chặn.
+      if (message.roomSeq <= (room.lastMessageSeq ?? 0)) {
+        return { messagesByRoom: { ...state.messagesByRoom, [message.roomId]: next } };
+      }
 
       // Tin của người KHÁC làm tăng badge; tin của chính mình thì không (mình vừa gửi = đã đọc).
       // Badge tổng của FE-3 cộng dồn `unreadCount` từng phòng — KHÔNG gọi `GET /chat/unread-count`.
@@ -505,7 +608,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     for (const sub of Object.values(get().subscribedRoomIds)) {
       if (sub.pollIntervalId) clearInterval(sub.pollIntervalId);
     }
-    set({ ...INITIAL_STATE });
+    set(createInitialState());
   },
 }));
 
@@ -520,8 +623,17 @@ async function pollRoomMessages(roomId: string): Promise<void> {
   try {
     const messages = await chatApi.getMessages(roomId, afterSeq ? { afterSeq } : {});
     for (const message of messages) useChatStore.getState().applyIncomingMessage(message);
-  } catch {
-    // Nhịp sau tự thử lại. KHÔNG đổi `connectionStatus` từ đây: trạng thái kết nối là việc của socket,
-    // một lần REST hỏng không chứng minh WS đã chết (và ngược lại).
+  } catch (err: unknown) {
+    // 404 = `assertMember` từ chối ⇒ mình KHÔNG còn trong phòng. Đây là đường phát hiện DUY NHẤT khi sự
+    // kiện `chat:room` rơi vào lúc WS đứt (Socket.IO không bật `connectionStateRecovery` ⇒ lỡ là mất).
+    // Không xử ca này thì interval nện 404 mỗi 10 giây VÔ THỜI HẠN, im lặng tuyệt đối.
+    if (err instanceof ApiError && err.status === 404) {
+      useChatStore.getState().removeRoomForSelf(roomId);
+      return;
+    }
+    // Lỗi khác (mạng chập/5xx): nhịp sau tự thử lại. KHÔNG đổi `connectionStatus` từ đây — trạng thái
+    // kết nối là việc của socket, một lần REST hỏng không chứng minh WS đã chết. Nhưng PHẢI để lại dấu:
+    // nuốt câm là cách một phòng ngừng cập nhật mà không ai tìm ra nguyên nhân (CLAUDE.md §5).
+    console.error(`[chat] bù tin phòng ${roomId} thất bại:`, err);
   }
 }

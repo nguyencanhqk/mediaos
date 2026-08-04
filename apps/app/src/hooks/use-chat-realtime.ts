@@ -10,6 +10,7 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  ApiError,
   chatApi,
   chatKeys,
   getAppSocket,
@@ -33,6 +34,16 @@ import { useChatStore } from "@/stores/chat.store";
 const WS_ERR_UNAUTHORIZED = "unauthorized";
 const WS_ERR_REALTIME_DISABLED = "realtime_disabled";
 
+/**
+ * Payload sai hình dạng: BỎ QUA (không throw trong listener socket) nhưng KHÔNG câm lặng.
+ *
+ * `packages/contracts/src/realtime.ts` thuộc `S7-CHAT-RT-1`. Một lần đổi shape ở đó làm CHAT ngừng cập
+ * nhật HOÀN TOÀN; không có dòng log này thì triệu chứng duy nhất là "chat đứng im" — không lần ra được.
+ */
+function warnBadPayload(event: string, error: unknown): void {
+  console.error(`[chat] payload WS sai hợp đồng trên kênh ${event} — bỏ qua:`, error);
+}
+
 export function useChatRealtime(): void {
   // ⚠️ MỌI hook dưới đây gọi VÔ ĐIỀU KIỆN. Đặt `if (!canReadChat) return;` phía trên chúng sẽ làm số
   // hook thay đổi giữa các lần render (`useCan` đọc capabilities nạp sau `/auth/me`, lần render đầu gần
@@ -42,7 +53,7 @@ export function useChatRealtime(): void {
   const myUserId = useAuthStore((s) => s.user?.id ?? null);
 
   const setMyUserId = useChatStore((s) => s.setMyUserId);
-  const hydrateRooms = useChatStore((s) => s.hydrateRooms);
+  const syncRoomList = useChatStore((s) => s.syncRoomList);
 
   const roomsQuery = useQuery({
     queryKey: chatKeys.rooms.list(),
@@ -57,8 +68,11 @@ export function useChatRealtime(): void {
   }, [myUserId, setMyUserId]);
 
   useEffect(() => {
-    if (rooms) hydrateRooms(rooms);
-  }, [rooms, hydrateRooms]);
+    // `syncRoomList` chứ KHÔNG phải `hydrateRooms`: vắng mặt trong payload là tín hiệu DUY NHẤT cho biết
+    // mình đã bị bớt khỏi phòng khi sự kiện `chat:room` rơi đúng lúc WS đứt. `false` = rổ CHƯA lưu trữ,
+    // khớp `archived: query.archived ?? false` mà service ép cho `listRooms()` không tham số.
+    if (rooms) syncRoomList(rooms, false);
+  }, [rooms, syncRoomList]);
 
   useEffect(() => {
     if (!canReadChat) return;
@@ -90,32 +104,39 @@ export function useChatRealtime(): void {
           store().hydrateRooms([room]);
         })
         .catch((err: unknown) => {
-          const status = (err as { status?: number } | null)?.status;
-          if (status === 404) store().removeRoomForSelf(roomId);
+          // `instanceof ApiError` chứ KHÔNG ép `err as {status?}`: `fetch` ném `TypeError` khi mất mạng,
+          // và cast đó nói với TS rằng MỌI thứ ném ra đều có `status` — người sửa sau sẽ đọc tiếp
+          // `err.code`/`err.message` từ một object không có chúng.
+          if (err instanceof ApiError && err.status === 404) {
+            store().removeRoomForSelf(roomId);
+            return;
+          }
+          // Lỗi khác ⇒ GIỮ NGUYÊN phòng (không xoá vì server hắt hơi), nhưng phải để lại dấu.
+          console.error(`[chat] không tra được phòng ${roomId} sau sự kiện chat:room:`, err);
         });
     };
 
     const onChatMessage = (payload: unknown): void => {
       const parsed = wsChatMessageEventSchema.safeParse(payload);
-      if (!parsed.success) return; // payload méo → bỏ qua, KHÔNG throw trong listener socket
+      if (!parsed.success) return void warnBadPayload("chat:message", parsed.error);
       store().applyIncomingMessage(parsed.data);
     };
 
     const onChatMessageRecalled = (payload: unknown): void => {
       const parsed = wsChatMessageRecalledEventSchema.safeParse(payload);
-      if (!parsed.success) return;
+      if (!parsed.success) return void warnBadPayload("chat:message-recalled", parsed.error);
       store().applyMessageRecalled(parsed.data);
     };
 
     const onChatRead = (payload: unknown): void => {
       const parsed = wsChatReadEventSchema.safeParse(payload);
-      if (!parsed.success) return;
+      if (!parsed.success) return void warnBadPayload("chat:read", parsed.error);
       store().applyReadEvent(parsed.data);
     };
 
     const onChatRoom = (payload: unknown): void => {
       const parsed = wsChatRoomEventSchema.safeParse(payload);
-      if (!parsed.success) return;
+      if (!parsed.success) return void warnBadPayload("chat:room", parsed.error);
       const effect = store().applyRoomEvent(parsed.data);
       if (effect.kind === "refetch-room") refetchRoom(effect.roomId);
       else if (effect.kind === "refetch-rooms") void refetchRooms();
@@ -166,6 +187,12 @@ export function useChatRealtime(): void {
       if (err.message === WS_ERR_REALTIME_DISABLED) {
         // Server fail-closed THEO CHỦ ĐÍCH (`REALTIME_ENABLED=false`). Thử lại là vô ích tới khi
         // operator bật lại ⇒ TẮT auto-reconnect và chuyển hẳn sang bù bằng REST.
+        // ⚠️ `socket.io` là MANAGER dùng chung với NOTI. Tắt ở đây là quyết định toàn-tab, và điều đó
+        // ĐÚNG về mặt nghiệp vụ (`REALTIME_ENABLED=false` giết realtime của MỌI module, không riêng
+        // CHAT) — nhưng CHAT không được giữ cờ đó vĩnh viễn hộ cả app: cleanup hoàn nguyên (xem dưới).
+        // Giới hạn còn lại, ghi ra để không ai tưởng đã xong: operator bật lại `REALTIME_ENABLED` giữa
+        // phiên thì tab này KHÔNG tự nối lại cho tới lần tải trang kế. Quyền sở hữu công tắc này thuộc
+        // về `realtime-socket.ts` (chủ socket), là việc của WO NOTI-FE/realtime, không phải FE-1.
         socket.io.reconnection(false);
         store().setConnectionStatus("polling-fallback");
         return;
@@ -202,6 +229,10 @@ export function useChatRealtime(): void {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
       socket.off("connect_error", onConnectError);
+      // Trả lại chính sách kết nối cho chủ socket. Không hoàn nguyên thì một lần `realtime_disabled`
+      // thoáng qua để lại cờ tắt-reconnect trên Manager DÙNG CHUNG — NOTI realtime chết theo, vĩnh viễn,
+      // dù nó chưa bao giờ đồng ý và không có cách nào biết vì sao.
+      socket.io.reconnection(true);
     };
   }, [canReadChat, refetchRooms]);
 }
