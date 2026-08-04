@@ -151,6 +151,21 @@ export const CHAT_ERR = {
    */
   OVERSIGHT_AUDIT_FAILED:
     "CHAT-ERR-020: không ghi được nhật ký truy cập quản trị — yêu cầu đã bị huỷ và không trả về dữ liệu.",
+
+  // ═══════════ S7-CHAT-BE-9 🔒 — bộ lọc của CHAT-API-019 ═══════════
+
+  /**
+   * CHAT-ERR-016 (trục NHẬT KÝ ĐỌC-VƯỢT) — con trỏ được sinh ra dưới MỘT bộ lọc khác.
+   *
+   * ⚠️ Vẫn là mã `CHAT-ERR-016` (SPEC-15 §12: "con trỏ phân trang không hợp lệ") — KHÔNG đẻ mã ngoài sổ.
+   * Nhưng thông điệp RIÊNG: "con trỏ hỏng" và "con trỏ của bộ lọc khác" dẫn tới hai cách sửa khác nhau ở
+   * FE (một cái là bug dựng URL, một cái là phải tải lại từ trang đầu sau khi đổi bộ lọc).
+   *
+   * Vì sao 400 chứ không im lặng: xem `chat-oversight-audit-cursor.ts`. Trả 200 kèm trang cắt theo mốc
+   * của một tập kết quả khác là làm hỏng chính thứ màn CHAT-SCREEN-008 dùng để đếm bằng chứng.
+   */
+  OVERSIGHT_CURSOR_FILTER_MISMATCH:
+    "CHAT-ERR-016: con trỏ phân trang không khớp bộ lọc hiện tại — hãy tải lại từ trang đầu.",
 } as const;
 
 /**

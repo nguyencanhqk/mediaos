@@ -619,7 +619,253 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-7 — đọc-vượt membership (DB cô 
 
   it("ca 27c: đọc 019 KHÔNG tự sinh dòng `Success` (bảng endpoint API-13 §5.3: cột Audit = —)", async () => {
     const before = await auditCount("Success");
-    await authGet(tOvs, "/chat/oversight/audit?limit=10");
+    // Assert status TRƯỚC — một request 400 cũng "không tăng audit", nên thiếu vế này thì ca đo rỗng.
+    const res = await authGet(tOvs, "/chat/oversight/audit?limit=10");
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(await auditCount("Success")).toBe(before);
+  });
+
+  // ═══════════ S7-CHAT-BE-9 — BỘ LỌC CHẠY Ở SERVER ═══════════
+  //
+  // Bộ lọc chỉ được THU HẸP. Mọi ca dưới đây đều có ĐỐI CHỨNG DƯƠNG (bỏ lọc thì thấy) — thiếu vế đó thì
+  // một hiện thực "lọc quá tay, luôn trả rỗng" cũng xanh, và đó là hỏng lặng lẽ đúng chiều nguy hiểm
+  // nhất trên một sổ kiểm soát.
+
+  /** Gieo THẲNG một dòng `audit_logs` với mốc thời gian CHỈ ĐỊNH — API không cho đặt `created_at`. */
+  async function seedAuditRow(opts: {
+    actorUserId: string;
+    createdAt: string;
+    moduleCode?: string;
+    action?: string;
+  }): Promise<string> {
+    const id = randomUUID();
+    await direct().query(
+      `INSERT INTO audit_logs (id, company_id, actor_user_id, action, object_type, object_id,
+         module_code, result_status, created_at)
+       VALUES ($1,$2,$3,$4,'chat_room',$5,$6,'Success',$7)`,
+      [
+        id,
+        A.companyId,
+        opts.actorUserId,
+        opts.action ?? CHAT_AUDIT.OVERSIGHT_READ,
+        pGroup,
+        opts.moduleCode ?? CHAT_MODULE_CODE,
+        opts.createdAt,
+      ],
+    );
+    return id;
+  }
+
+  async function auditIds(query: string): Promise<string[]> {
+    const res = await authGet(tOvs, `/chat/oversight/audit?${query}`);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    return (res.body.data.data as Array<{ id: string }>).map((r) => r.id);
+  }
+
+  it("ca 26c: [crown] lọc theo `actorUserId` KHÔNG nới vế bó cứng — dòng module khác CÙNG actor vẫn bị loại", async () => {
+    const at = "2026-05-01T02:00:00.000Z";
+    // Ba dòng, CÙNG một actor. Chỉ dòng đầu là đọc-vượt CHAT thật.
+    const mine = await seedAuditRow({ actorUserId: uPeer, createdAt: at });
+    const otherModule = await seedAuditRow({ actorUserId: uPeer, createdAt: at, moduleCode: "HR" });
+    const otherAction = await seedAuditRow({
+      actorUserId: uPeer,
+      createdAt: at,
+      action: "hr.employee.viewed",
+    });
+
+    const ids = await auditIds(`actorUserId=${uPeer}&limit=100`);
+    // Đối chứng DƯƠNG trước: nếu vế này hỏng thì hai assert sau xanh một cách vô nghĩa.
+    expect(ids, "dòng đọc-vượt CHAT của chính actor phải thấy").toContain(mine);
+    expect(ids, "module HR lọt qua ⇒ 019 đã thành cổng đọc audit toàn hệ thống").not.toContain(
+      otherModule,
+    );
+    expect(ids, "action khác lọt qua ⇒ vế `action` đã bị nới").not.toContain(otherAction);
+  });
+
+  it("ca 26d: `actorUserId` lọc thật — chỉ dòng của người đó, và bỏ lọc thì thấy cả hai", async () => {
+    const at = "2026-05-02T02:00:00.000Z";
+    const ofPeer = await seedAuditRow({ actorUserId: uPeer, createdAt: at });
+    const ofOwner = await seedAuditRow({ actorUserId: uOwner, createdAt: at });
+
+    const filtered = await auditIds(`actorUserId=${uOwner}&limit=100`);
+    expect(filtered).toContain(ofOwner);
+    expect(filtered).not.toContain(ofPeer);
+
+    const all = await auditIds("limit=100");
+    expect(all).toContain(ofOwner);
+    expect(all).toContain(ofPeer);
+  });
+
+  it("ca 26e: [crown] `from`/`to` quy đổi theo ĐÚNG NGUỒN mà sản phẩm ghi — cột `companies.timezone`", async () => {
+    // ┌─ GHIM NGUỒN, KHÔNG CHỈ GHIM CƠ CHẾ ────────────────────────────────────────────────────────┐
+    // │ Bản đầu của ca này gieo vào khoá KV `company_settings['company.timezone']`. Nó chứng minh   │
+    // │ "nếu khoá đó có giá trị thì server tôn trọng" — nhưng KHÔNG có writer nào trong sản phẩm ghi │
+    // │ khoá đó (đo 04/08/2026: 0 hàng ở cả `company_settings` lẫn `system_settings`). Ô múi giờ mà  │
+    // │ admin thật sự bấm ghi vào **cột `companies.timezone`** (`PATCH /settings/company`), và       │
+    // │ DASHBOARD đọc đúng cột đó. Một ca xanh trên đường không ai đi = tính năng trơ.                │
+    // │ Vì vậy ở đây gieo bằng UPDATE lên CỘT — đúng thứ mà `SettingsService` sẽ ghi.                │
+    // └─────────────────────────────────────────────────────────────────────────────────────────────┘
+    //
+    // Chọn New York (UTC-5 vào tháng 1) chứ KHÔNG chọn VN: hard-code `Asia/Ho_Chi_Minh` cũng làm ca
+    // này đỏ. Chọn VN thì không phân biệt được "đọc setting" với "hard-code mặc định".
+    const tzBefore = (
+      await direct().query(`SELECT timezone FROM companies WHERE id = $1`, [A.companyId])
+    ).rows[0].timezone as string;
+    await direct().query(`UPDATE companies SET timezone = $2 WHERE id = $1`, [
+      A.companyId,
+      "America/New_York",
+    ]);
+
+    try {
+      // 03:30Z ngày 16/01 = 22:30 ngày **15/01** giờ New York.
+      const row = await seedAuditRow({
+        actorUserId: uOwner,
+        createdAt: "2026-01-16T03:30:00.000Z",
+      });
+
+      expect(
+        await auditIds("from=2026-01-15&to=2026-01-15&limit=100"),
+        "ngày CÔNG TY (New York) phải thấy",
+      ).toContain(row);
+      expect(
+        await auditIds("from=2026-01-16&to=2026-01-16&limit=100"),
+        "ngày UTC KHÔNG được thấy — server đang quy đổi theo UTC chứ không theo TZ công ty",
+      ).not.toContain(row);
+
+      // Biên trên BAO GỒM cả ngày `to`: cùng dòng đó phải nằm trong dải nhiều ngày kết thúc ở 15/01.
+      expect(await auditIds("from=2026-01-01&to=2026-01-15&limit=100")).toContain(row);
+
+      // Đối chứng cuối: đổi CỘT sang VN thì cùng câu hỏi cho kết quả NGƯỢC LẠI. Không có vế này thì một
+      // hiện thực hard-code New York cũng xanh.
+      await direct().query(`UPDATE companies SET timezone = 'Asia/Ho_Chi_Minh' WHERE id = $1`, [
+        A.companyId,
+      ]);
+      expect(
+        await auditIds("from=2026-01-16&to=2026-01-16&limit=100"),
+        "10:30 sáng 16/01 giờ VN ⇒ phải thuộc ngày 16/01 khi TZ công ty là VN",
+      ).toContain(row);
+    } finally {
+      await direct().query(`UPDATE companies SET timezone = $2 WHERE id = $1`, [
+        A.companyId,
+        tzBefore,
+      ]);
+    }
+  });
+
+  it("ca 26j: `companies.timezone` HỎNG ⇒ degrade về mặc định + vẫn 200 (không giết cả màn điều tra)", async () => {
+    // Đường GHI đã có `assertValidTimezone` (`SettingsService.updateCompanySettings`), nên trạng thái này
+    // chỉ tới được bằng hàng hỏng/di trú tay — gieo thẳng qua directPool là cách duy nhất chạm nhánh đó.
+    const tzBefore = (
+      await direct().query(`SELECT timezone FROM companies WHERE id = $1`, [A.companyId])
+    ).rows[0].timezone as string;
+    await direct().query(`UPDATE companies SET timezone = 'Khong/Ton_Tai' WHERE id = $1`, [
+      A.companyId,
+    ]);
+
+    try {
+      const row = await seedAuditRow({
+        actorUserId: uOwner,
+        createdAt: "2026-03-10T02:00:00.000Z", // 09:00 ngày 10/03 giờ VN (mặc định)
+      });
+
+      const res = await authGet(
+        tOvs,
+        "/chat/oversight/audit?from=2026-03-10&to=2026-03-10&limit=100",
+      );
+      expect(res.status, "tz hỏng KHÔNG được làm sập màn nhật ký").toBe(200);
+      // Và cửa sổ phải chạy theo ĐÚNG mặc định, không phải UTC hay một hằng thứ ba.
+      expect((res.body.data.data as Array<{ id: string }>).map((r) => r.id)).toContain(row);
+    } finally {
+      await direct().query(`UPDATE companies SET timezone = $2 WHERE id = $1`, [
+        A.companyId,
+        tzBefore,
+      ]);
+    }
+  });
+
+  it("ca 26f: [crown] con trỏ sinh ở bộ lọc A dùng lại với bộ lọc B → 400 CHAT-ERR-016, KHÔNG trả sai trang", async () => {
+    for (const at of ["2026-06-01T01:00:00.000Z", "2026-06-01T02:00:00.000Z"]) {
+      await seedAuditRow({ actorUserId: uPeer, createdAt: at });
+    }
+
+    const first = await authGet(tOvs, `/chat/oversight/audit?actorUserId=${uPeer}&limit=1`);
+    expect(first.status).toBe(200);
+    const cursor = first.body.data.nextCursor as string;
+    expect(cursor, "cần còn trang sau để có con trỏ").toBeTruthy();
+
+    // Cùng con trỏ, ĐỔI bộ lọc ⇒ phải nổ, không được trả 200 với trang cắt theo tập kết quả khác.
+    const mismatched = await authGet(
+      tOvs,
+      `/chat/oversight/audit?actorUserId=${uOwner}&limit=1&cursor=${encodeURIComponent(cursor)}`,
+    );
+    expect(mismatched.status).toBe(400);
+    expect(JSON.stringify(mismatched.body)).toContain("CHAT-ERR-016");
+
+    // Đổi khoảng ngày cũng vậy — dấu vân phủ cả `from`/`to`, không chỉ `actorUserId`.
+    const dateChanged = await authGet(
+      tOvs,
+      `/chat/oversight/audit?actorUserId=${uPeer}&from=2026-06-01&limit=1&cursor=${encodeURIComponent(cursor)}`,
+    );
+    expect(dateChanged.status).toBe(400);
+
+    // Đối chứng DƯƠNG: GIỮ nguyên bộ lọc thì con trỏ vẫn dùng được.
+    const same = await authGet(
+      tOvs,
+      `/chat/oversight/audit?actorUserId=${uPeer}&limit=1&cursor=${encodeURIComponent(cursor)}`,
+    );
+    expect(same.status, JSON.stringify(same.body)).toBe(200);
+  });
+
+  it("ca 26g: phân trang KHI CÓ bộ lọc — không lặp, không sót, mọi dòng đều thuộc bộ lọc", async () => {
+    const seeded: string[] = [];
+    for (const at of [
+      "2026-07-01T01:00:00.000Z",
+      "2026-07-01T02:00:00.000Z",
+      "2026-07-01T03:00:00.000Z",
+    ]) {
+      seeded.push(await seedAuditRow({ actorUserId: uPlain, createdAt: at }));
+    }
+
+    const collected: string[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 5; page += 1) {
+      const url =
+        `/chat/oversight/audit?actorUserId=${uPlain}&limit=2` +
+        (cursor === null ? "" : `&cursor=${encodeURIComponent(cursor)}`);
+      const res = await authGet(tOvs, url);
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      collected.push(...(res.body.data.data as Array<{ id: string }>).map((r) => r.id));
+      cursor = res.body.data.nextCursor as string | null;
+      if (cursor === null) break;
+    }
+
+    expect(new Set(collected).size, "trang sau lặp dòng của trang trước").toBe(collected.length);
+    for (const id of seeded) expect(collected).toContain(id);
+  });
+
+  it("ca 26h: khoảng ngày vô nghĩa bị chặn ở BIÊN — `from > to` và ngày không có thật đều 400", async () => {
+    expect(
+      (await authGet(tOvs, "/chat/oversight/audit?from=2026-08-05&to=2026-08-04")).status,
+    ).toBe(400);
+    expect((await authGet(tOvs, "/chat/oversight/audit?from=2026-02-31")).status).toBe(400);
+    // Mốc thời gian đầy đủ bị TỪ CHỐI: nhận vào là mở lại đường "client tự quy đổi múi giờ".
+    expect((await authGet(tOvs, "/chat/oversight/audit?from=2026-08-04T17:00:00Z")).status).toBe(
+      400,
+    );
+    expect((await authGet(tOvs, `/chat/oversight/audit?actorUserId=khong-phai-uuid`)).status).toBe(
+      400,
+    );
+  });
+
+  it("ca 26i: [crown] lọc KHÔNG làm 019 sinh dòng `Success` (API-13 §5.3 cột Audit = — vẫn nguyên)", async () => {
+    const before = await auditCount("Success");
+    const res = await authGet(
+      tOvs,
+      `/chat/oversight/audit?actorUserId=${uOwner}&from=2026-01-01&to=2026-12-31`,
+    );
+    // ⚠️ Assert status TRƯỚC: nếu sau này một `.refine` chặt hơn làm request thành 400 thì "audit không
+    // tăng" trở thành ĐÚNG một cách vô nghĩa — ca xanh trong khi không đo gì.
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(await auditCount("Success")).toBe(before);
   });
 

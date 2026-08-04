@@ -61,17 +61,19 @@
   "audit": {
     "title": "Nhật ký đọc-vượt",
     "subtitle": "Ai đã dùng chức năng đọc-vượt, mở phòng nào, lúc nào, thành công hay bị từ chối.",
-    "scopeNotice": "Đang hiện {{shown}} / {{loaded}} dòng đã tải. Bộ lọc chỉ áp trên các dòng đã tải.",
-    "scopeMore": "Còn dòng cũ hơn chưa tải — bấm \"Tải thêm\" để mở rộng phạm vi lọc.",
+    "scopeNotice": "Bộ lọc áp trên toàn bộ nhật ký ở máy chủ. Đã tải {{loaded}} dòng.",
+    "scopeMore": "Còn dòng cũ hơn chưa tải — bấm \"Tải thêm\" để xem tiếp.",
     "loadMore": "Tải thêm",
     "error": "Không tải được nhật ký.",
     "emptyTitle": "Chưa có lần đọc-vượt nào",
     "emptyDescription": "Chưa ai dùng chức năng đọc-vượt, hoặc không dòng nào khớp bộ lọc hiện tại.",
     "filter": {
       "actor": "Người thực hiện",
+      "actorHint": "Danh sách gợi ý rút từ các dòng đã tải.",
       "allActors": "Tất cả",
       "from": "Từ ngày",
       "to": "Đến ngày",
+      "rangeInverted": "Khoảng ngày bị ngược: \"Từ ngày\" phải trước hoặc bằng \"Đến ngày\".",
       "reset": "Xoá lọc"
     },
     "table": {

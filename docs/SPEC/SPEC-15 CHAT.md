@@ -261,7 +261,7 @@ Chi tiết cột/kiểu/constraint: [DB-12](<../DB/DB-12 CHAT Database Design.md
 | CHAT-SCREEN-005 | Tìm kiếm tin nhắn | phạm vi: tất cả phòng của tôi, hoặc trong 1 phòng; nhảy tới tin trong ngữ cảnh |
 | CHAT-SCREEN-006 | Badge chưa đọc trên header | tổng theo user, đồng bộ realtime qua `chat:read` |
 | CHAT-SCREEN-007 🔒 | **Quản trị: đọc-vượt membership** (§3.3) | Chỉ hiện với cặp `('view','chat-oversight')`. Tra phòng theo mã/tên → **hộp thoại xác nhận "xem với tư cách quản trị"** → mở phòng ở chế độ **chỉ đọc** (không gửi/ghim/thu hồi được). **Không** trộn vào danh sách phòng của CHAT-SCREEN-001 |
-| CHAT-SCREEN-008 🔒 | **Quản trị: nhật ký đọc-vượt** | Danh sách lần dùng CHAT-SCREEN-007 (ai · phòng nào · lúc nào · thành công/bị từ chối), đọc từ `audit_logs`. Audit không xem được trên UI thì không phải là kiểm soát (§18) |
+| CHAT-SCREEN-008 🔒 | **Quản trị: nhật ký đọc-vượt** | Danh sách lần dùng CHAT-SCREEN-007 (ai · phòng nào · lúc nào · thành công/bị từ chối), đọc từ `audit_logs`. Audit không xem được trên UI thì không phải là kiểm soát (§18). **Lọc theo người thực hiện + khoảng ngày chạy ở SERVER** (CHAT-API-019), trên toàn bộ nhật ký — **không** lọc trên các dòng client đã tải: lọc trên một tập con làm người đọc kết luận "không có lần truy cập nào" trong khi bằng chứng nằm ở trang chưa tải. Khoảng ngày là **NGÀY của công ty** (cột `companies.timezone` — đúng nguồn mà màn Cài đặt công ty ghi và DASHBOARD đọc), quy đổi ở server — quy đổi ở client thì hai người ở hai múi giờ nhận hai kết quả khác nhau cho cùng một câu hỏi |
 
 ---
 
@@ -511,7 +511,7 @@ Envelope/error/pagination theo API-01. Chi tiết request/response: [API-13](<..
 | CHAT-API-016 | `GET /chat/unread-count` | tổng chưa đọc cho badge header |
 | CHAT-API-017 | `GET /chat/rooms/:id/files` | tệp đã gửi trong phòng, URL ký hạn ngắn |
 | CHAT-API-018 🔒 | `GET /chat/oversight/rooms` · `GET /chat/oversight/rooms/:id` · `GET /chat/oversight/rooms/:id/messages` | **Đọc-vượt membership** (§3.3). Cặp `('view','chat-oversight')` — **không** dùng chung path với CHAT-API-001/004/009 để đường đọc thường không bao giờ phải phân nhánh. Chỉ đọc: **không** có biến thể ghi. Mỗi lần gọi ghi `audit_logs`, **hai mô hình khác nhau**: thành công → `Success` trong **cùng** transaction với truy vấn đọc (CHAT-ERR-020); từ chối → `Denied` trong transaction **RIÊNG đã commit** rồi mới ném 403 (CHAT-ERR-019). Ném 403 trong cùng tx sẽ **rollback mất** chính dòng audit từ chối |
-| CHAT-API-019 🔒 | `GET /chat/oversight/audit` | Nhật ký đọc-vượt cho CHAT-SCREEN-008 |
+| CHAT-API-019 🔒 | `GET /chat/oversight/audit` | Nhật ký đọc-vượt cho CHAT-SCREEN-008. Lọc ở **server**: `actorUserId` · `from`/`to` (**NGÀY** `YYYY-MM-DD`, quy đổi theo cột `companies.timezone`), phân trang keyset `cursor` + `limit`. Bộ lọc chỉ **thu hẹp** — vế bó cứng `action = 'chat.oversight.read' AND module_code = 'CHAT'` giữ nguyên, và con trỏ mang **dấu vân bộ lọc** (dùng lại ở bộ lọc khác → CHAT-ERR-016). Chi tiết ràng buộc: [API-13 §5.3](<../API Design/API-13_CHAT_API_Design.md>) |
 
 > ⚠️ **Không có `GET /chat/oversight/search`.** Tìm kiếm giữ nguyên vị từ membership cho mọi role, kể cả Super Admin (§3.3) — đây là ràng buộc thiết kế, không phải thiếu sót.
 

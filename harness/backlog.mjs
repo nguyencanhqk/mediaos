@@ -10162,9 +10162,16 @@ export const backlog = [
     paths: [
       "apps/api/src/chat/**",
       "packages/contracts/src/chat.ts",
+      // FULL gate (04/08) bắt: docblock `listAudit` ở client khai "server KHÔNG lọc" và DẠY người sau
+      // dựng lại lọc client-side — tức lời hứa ngược với hợp đồng WO này vừa ship. Nới paths thay vì để
+      // nó trôi sang WO khác (lớp `review-gate-blind-to-deletions`, chiều "xoá code nhưng giữ lời hứa").
+      "packages/web-core/src/lib/chat-api.ts",
       "apps/console/src/routes/system/chat-oversight/**",
+      "apps/console/src/i18n/locales/vi/chat-oversight.json",
       "apps/api/test/integration/**",
       "docs/plans/S7-CHAT-BE-9.md",
+      "docs/SPEC/SPEC-15 CHAT.md",
+      "docs/API Design/API-13_CHAT_API_Design.md",
     ],
     skills: ["code-review"],
     depends_on: ["S7-CHAT-FE-5"],
