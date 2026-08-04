@@ -21,6 +21,7 @@ import {
 } from "@mediaos/contracts";
 import {
   CHAT_POLL_INTERVAL_MS,
+  MAX_HISTORY_PER_ROOM,
   MAX_MESSAGES_PER_ROOM,
   attachmentUrl,
   createClientMessageId,
@@ -321,7 +322,9 @@ describe("trùng id = NÂNG CẤP đính kèm, không phải no-op", () => {
     // Không có nâng cấp thì dedupe-theo-id vứt bản REST, và `attachmentUrl` mãi `undefined` — trong khi
     // lưới bù chỉ xin `afterSeq` (tin MỚI HƠN) nên KHÔNG có đường nào lấy lại URL. Đính kèm của chính
     // mình vừa gửi vĩnh viễn không tải được.
-    s().applyIncomingMessage(storedMessage(11, { attachmentCount: 1, attachments: [WS_ATTACHMENT] }));
+    s().applyIncomingMessage(
+      storedMessage(11, { attachmentCount: 1, attachments: [WS_ATTACHMENT] }),
+    );
     expect(attachmentUrl(s().messagesByRoom[ROOM_A][0].attachments[0])).toBeUndefined();
 
     s().applyIncomingMessage(message(11, { attachmentCount: 1, attachments: [REST_ATTACHMENT] }));
@@ -333,14 +336,18 @@ describe("trùng id = NÂNG CẤP đính kèm, không phải no-op", () => {
 
   it("bản REST tới trước, echo WS tới sau KHÔNG được hạ cấp mất URL", () => {
     s().applyIncomingMessage(message(11, { attachmentCount: 1, attachments: [REST_ATTACHMENT] }));
-    s().applyIncomingMessage(storedMessage(11, { attachmentCount: 1, attachments: [WS_ATTACHMENT] }));
+    s().applyIncomingMessage(
+      storedMessage(11, { attachmentCount: 1, attachments: [WS_ATTACHMENT] }),
+    );
     expect(attachmentUrl(s().messagesByRoom[ROOM_A][0].attachments[0])).toBe(
       "https://storage/signed",
     );
   });
 
   it("tin ĐÃ THU HỒI không bị phục hồi đính kèm (masking §13.6 không được nới)", () => {
-    s().applyIncomingMessage(storedMessage(11, { attachmentCount: 1, attachments: [WS_ATTACHMENT] }));
+    s().applyIncomingMessage(
+      storedMessage(11, { attachmentCount: 1, attachments: [WS_ATTACHMENT] }),
+    );
     s().applyMessageRecalled({
       messageId: messageId(11),
       roomId: ROOM_A,
@@ -760,5 +767,186 @@ describe("pin hợp đồng chatMessageSchema", () => {
     expect(wsChatRoomEventSchema.safeParse({ roomId: ROOM_A, action: "nuked" }).success).toBe(
       false,
     );
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// S7-CHAT-FE-2 — lịch sử cuộn ngược (plan §0.4 / §3)
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe("S7-CHAT-FE-2 · prependOlderMessages", () => {
+  it("chèn tin CŨ lên đầu, giữ thứ tự tăng dần theo roomSeq", () => {
+    s().applyIncomingMessage(storedMessage(10));
+    s().applyIncomingMessage(storedMessage(11));
+
+    // Trang cũ về theo thứ tự BẤT KỲ — hàm phải tự sắp, không tin thứ tự server trả.
+    s().prependOlderMessages(ROOM_A, [storedMessage(8), storedMessage(7), storedMessage(9)]);
+
+    expect(s().messagesByRoom[ROOM_A].map((m) => m.roomSeq)).toEqual([7, 8, 9, 10, 11]);
+  });
+
+  it("RED-PROOF trang cũ thứ hai: danh sách ĐÃ ĐẦY vẫn nhận thêm lịch sử (applyIncomingMessage thì KHÔNG)", () => {
+    // Dựng đúng ngưỡng trần sống: 200 tin, seq 201..400.
+    for (let seq = 201; seq <= 200 + MAX_MESSAGES_PER_ROOM; seq += 1) {
+      s().applyIncomingMessage(storedMessage(seq));
+    }
+    expect(s().messagesByRoom[ROOM_A]).toHaveLength(MAX_MESSAGES_PER_ROOM);
+
+    // (a) Đường CŨ bỏ qua im lặng — đây chính là bug "nút tải thêm không làm gì".
+    s().applyIncomingMessage(storedMessage(150));
+    expect(s().messagesByRoom[ROOM_A].some((m) => m.roomSeq === 150)).toBe(false);
+
+    // (b) Đường MỚI nhận.
+    s().prependOlderMessages(ROOM_A, [storedMessage(150)]);
+    expect(s().messagesByRoom[ROOM_A][0].roomSeq).toBe(150);
+    expect(s().messagesByRoom[ROOM_A]).toHaveLength(MAX_MESSAGES_PER_ROOM + 1);
+  });
+
+  it("dedupe theo id — nạp lại đúng trang đó không nhân đôi", () => {
+    s().applyIncomingMessage(storedMessage(10));
+    s().prependOlderMessages(ROOM_A, [storedMessage(8), storedMessage(9)]);
+    s().prependOlderMessages(ROOM_A, [storedMessage(8), storedMessage(9)]);
+    expect(s().messagesByRoom[ROOM_A].map((m) => m.roomSeq)).toEqual([8, 9, 10]);
+  });
+
+  it("bỏ tin của phòng KHÁC lẫn trong payload — không nhét chéo phòng", () => {
+    s().applyIncomingMessage(storedMessage(10));
+    s().prependOlderMessages(ROOM_A, [storedMessage(9, { roomId: ROOM_B })]);
+    expect(s().messagesByRoom[ROOM_A].map((m) => m.roomSeq)).toEqual([10]);
+  });
+
+  it("mảng rỗng / toàn trùng ⇒ KHÔNG tạo state mới (không re-render thừa)", () => {
+    s().applyIncomingMessage(storedMessage(10));
+    const before = s().messagesByRoom;
+    s().prependOlderMessages(ROOM_A, []);
+    expect(s().messagesByRoom).toBe(before);
+    s().prependOlderMessages(ROOM_A, [storedMessage(10)]);
+    expect(s().messagesByRoom).toBe(before);
+  });
+
+  it("KHÔNG đụng unreadCount/lastMessageAt của phòng — tin CŨ không phải tin mới", () => {
+    s().hydrateRooms([room(ROOM_A, { unreadCount: 3, lastMessageSeq: 10 })]);
+    s().applyIncomingMessage(storedMessage(10));
+    s().prependOlderMessages(ROOM_A, [storedMessage(1), storedMessage(2)]);
+    expect(s().roomsById[ROOM_A].unreadCount).toBe(3);
+    expect(s().roomsById[ROOM_A].lastMessageSeq).toBe(10);
+  });
+
+  it("chạm trần lịch sử: nhận PHẦN MỚI NHẤT của trang, không vượt MAX_HISTORY_PER_ROOM", () => {
+    for (let seq = 1; seq <= MAX_HISTORY_PER_ROOM - 2; seq += 1) {
+      s().prependOlderMessages(ROOM_A, [storedMessage(MAX_HISTORY_PER_ROOM + seq)]);
+    }
+    const len = s().messagesByRoom[ROOM_A].length;
+    expect(len).toBe(MAX_HISTORY_PER_ROOM - 2);
+
+    // Trang 5 tin, chỉ còn chỗ cho 2 ⇒ giữ 2 tin MỚI NHẤT (liền mạch với danh sách đang có).
+    s().prependOlderMessages(
+      ROOM_A,
+      [10, 11, 12, 13, 14].map((n) => storedMessage(n)),
+    );
+    expect(s().messagesByRoom[ROOM_A]).toHaveLength(MAX_HISTORY_PER_ROOM);
+    expect(
+      s()
+        .messagesByRoom[ROOM_A].slice(0, 2)
+        .map((m) => m.roomSeq),
+    ).toEqual([13, 14]);
+  });
+});
+
+describe("S7-CHAT-FE-2 · trần ĐỘNG của insertMessage", () => {
+  it("RED-PROOF: một tin mới KHÔNG được cắt phần lịch sử vừa nạp", () => {
+    s().applyIncomingMessage(storedMessage(500));
+    // Nạp 300 tin lịch sử ⇒ tổng 301 > trần sống 200.
+    s().prependOlderMessages(
+      ROOM_A,
+      Array.from({ length: 300 }, (_, i) => storedMessage(200 + i)),
+    );
+    const lengthAfterHistory = s().messagesByRoom[ROOM_A].length;
+    expect(lengthAfterHistory).toBe(301);
+
+    s().applyIncomingMessage(storedMessage(501));
+
+    // Luật CŨ (trần cứng 200) sẽ trả về 200 và tin cũ nhất bị vứt ⇒ khung nhìn tụt xuống đáy.
+    expect(s().messagesByRoom[ROOM_A]).toHaveLength(302);
+    expect(s().messagesByRoom[ROOM_A][0].roomSeq).toBe(200);
+  });
+
+  it("phòng CHƯA nạp lịch sử vẫn giữ nguyên trần sống 200", () => {
+    for (let seq = 1; seq <= MAX_MESSAGES_PER_ROOM + 50; seq += 1) {
+      s().applyIncomingMessage(storedMessage(seq));
+    }
+    expect(s().messagesByRoom[ROOM_A]).toHaveLength(MAX_MESSAGES_PER_ROOM);
+    expect(s().messagesByRoom[ROOM_A][0].roomSeq).toBe(51);
+  });
+});
+
+describe("S7-CHAT-FE-2 · trimRoomHistory", () => {
+  it("cắt về 200 tin MỚI NHẤT sau khi rời phòng", () => {
+    s().applyIncomingMessage(storedMessage(500));
+    s().prependOlderMessages(
+      ROOM_A,
+      Array.from({ length: 300 }, (_, i) => storedMessage(200 + i)),
+    );
+    s().trimRoomHistory(ROOM_A);
+    const list = s().messagesByRoom[ROOM_A];
+    expect(list).toHaveLength(MAX_MESSAGES_PER_ROOM);
+    expect(list[list.length - 1].roomSeq).toBe(500);
+  });
+
+  it("danh sách dưới trần ⇒ KHÔNG đổi tham chiếu", () => {
+    s().applyIncomingMessage(storedMessage(1));
+    const before = s().messagesByRoom;
+    s().trimRoomHistory(ROOM_A);
+    expect(s().messagesByRoom).toBe(before);
+  });
+});
+
+describe("S7-CHAT-FE-2 · oldestKnownSeq + discardPendingSend", () => {
+  it("oldestKnownSeq trả seq NHỎ nhất (con trỏ beforeSeq); rỗng ⇒ undefined", () => {
+    expect(s().oldestKnownSeq(ROOM_A)).toBeUndefined();
+    s().applyIncomingMessage(storedMessage(10));
+    s().prependOlderMessages(ROOM_A, [storedMessage(4)]);
+    expect(s().oldestKnownSeq(ROOM_A)).toBe(4);
+  });
+
+  it("discardPendingSend xoá HẲN entry gửi lỗi (resolvePendingSend(null) thì GIỮ để gửi lại)", () => {
+    const cid = createClientMessageId();
+    s().applyOptimisticSend(cid, ROOM_A, "nội dung người dùng gõ");
+    s().resolvePendingSend(cid, null);
+    expect(s().pendingByClientId[cid].status).toBe("failed");
+    expect(s().pendingByClientId[cid].body).toBe("nội dung người dùng gõ");
+
+    s().discardPendingSend(cid);
+    expect(s().pendingByClientId[cid]).toBeUndefined();
+  });
+
+  it("discardPendingSend với khoá lạ ⇒ no-op, không đổi tham chiếu", () => {
+    const before = s().pendingByClientId;
+    s().discardPendingSend("khong-ton-tai");
+    expect(s().pendingByClientId).toBe(before);
+  });
+});
+
+describe("S7-CHAT-FE-2 · hasLoadedRooms", () => {
+  it("false lúc khởi tạo — 'chưa tải' KHÁC 'tải xong, 0 phòng'", () => {
+    expect(s().hasLoadedRooms).toBe(false);
+  });
+
+  it("syncRoomList với rổ RỖNG vẫn bật cờ (server đã trả lời là đã trả lời)", () => {
+    s().syncRoomList([], false);
+    expect(s().hasLoadedRooms).toBe(true);
+    expect(s().roomOrder).toEqual([]);
+  });
+
+  it("hydrateRooms KHÔNG bật cờ — nó chỉ upsert vài phòng, không hứa đã có danh sách đầy đủ", () => {
+    s().hydrateRooms([room(ROOM_A)]);
+    expect(s().hasLoadedRooms).toBe(false);
+  });
+
+  it("resetChatStore (đăng xuất) đưa cờ về false", () => {
+    s().syncRoomList([room(ROOM_A)], false);
+    expect(s().hasLoadedRooms).toBe(true);
+    s().resetChatStore();
+    expect(s().hasLoadedRooms).toBe(false);
   });
 });

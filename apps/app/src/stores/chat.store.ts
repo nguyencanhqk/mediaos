@@ -65,6 +65,18 @@ export type StoredChatMessage = Omit<ChatMessageDto, "attachments"> & {
  */
 export const MAX_MESSAGES_PER_ROOM = 200;
 
+/**
+ * S7-CHAT-FE-2 — trần TUYỆT ĐỐI khi người dùng CHỦ ĐỘNG cuộn ngược (`prependOlderMessages`).
+ *
+ * `MAX_MESSAGES_PER_ROOM` là trần của dòng tin SỐNG (đẩy về từ WS/bù REST) — người dùng không xin nó,
+ * nên cắt bớt phần cũ ở đó là vô hại. Lịch sử cuộn ngược thì NGƯỢC LẠI: nó là thứ người dùng vừa bấm
+ * "tải thêm" để có. Cắt nó vì một tin mới vừa tới = danh sách nhảy phắt xuống đáy giữa lúc đang đọc.
+ *
+ * Vì vậy có HAI trần. Chạm trần này thì UI **ngừng mời "tải thêm"** và nói rõ ra — KHÔNG âm thầm cắt:
+ * cắt là đúng thứ làm vỡ neo cuộn. Rời khỏi phòng ⇒ `trimRoomHistory` trả RAM về trần sống.
+ */
+export const MAX_HISTORY_PER_ROOM = 1000;
+
 /** Chu kỳ bù tin khi WS KHÔNG ở trạng thái `connected` (SPEC-15 §14 "mất kết nối"). */
 export const CHAT_POLL_INTERVAL_MS = 10_000;
 
@@ -128,17 +140,40 @@ interface ChatStoreState {
   hydrateRooms: (rooms: readonly ChatRoomDto[]) => void;
   /** Đồng bộ TRỌN một rổ phòng theo `GET /chat/rooms` — upsert cái có, GỠ cái vắng mặt. */
   syncRoomList: (rooms: readonly ChatRoomDto[], archivedScope: boolean) => void;
+  /**
+   * S7-CHAT-FE-2 — `GET /chat/rooms` đã trả về ÍT NHẤT một lần chưa (bất kể rỗng hay không).
+   *
+   * Cần cờ TƯỜNG MINH vì "chưa tải xong" và "tải xong, không có phòng nào" trông y hệt nhau từ phía
+   * `roomOrder` (đều là mảng rỗng). Suy từ độ dài mảng là hiện "Chưa có cuộc trò chuyện nào" ngay
+   * khung hình đầu — người dùng có 20 phòng vẫn thấy màn hình nói họ chẳng có phòng nào (§14 "loading").
+   * Đường nạp nằm ở `useChatRealtime` (app shell), nên trang `/chat` không tự biết được.
+   */
+  hasLoadedRooms: boolean;
   applyRoomEvent: (event: WsChatRoomEvent) => ChatRoomEffect;
   removeRoomForSelf: (roomId: string) => void;
   applyIncomingMessage: (message: StoredChatMessage) => void;
+  /** S7-CHAT-FE-2 — nạp MỘT TRANG tin CŨ HƠN (cuộn ngược `beforeSeq`). Xem `MAX_HISTORY_PER_ROOM`. */
+  prependOlderMessages: (roomId: string, older: readonly StoredChatMessage[]) => void;
+  /** Trả RAM về trần sống sau khi rời khỏi phòng đang xem — giữ 200 tin MỚI NHẤT. */
+  trimRoomHistory: (roomId: string) => void;
   applyMessageRecalled: (event: WsChatMessageRecalledEvent) => void;
   applyReadEvent: (event: WsChatReadEvent) => void;
   applyOptimisticSend: (clientMessageId: string, roomId: string, body: string) => void;
   resolvePendingSend: (clientMessageId: string, message: StoredChatMessage | null) => void;
+  /**
+   * S7-CHAT-FE-2 — người dùng bấm "Bỏ tin này" trên một bong bóng GỬI LỖI.
+   *
+   * Cần hàm riêng vì `resolvePendingSend(id, null)` là "đánh dấu lỗi, GIỮ lại để gửi lại" — không có
+   * đường nào xoá. Thiếu nó thì bong bóng đỏ nằm lại vĩnh viễn và cách duy nhất để dọn là tải lại trang.
+   * CHỈ người dùng gọi được (không có đường tự động), nên nó không thể vô tình nuốt tin của ai.
+   */
+  discardPendingSend: (clientMessageId: string) => void;
   subscribeToRoom: (roomId: string) => void;
   unsubscribeFromRoom: (roomId: string) => void;
   /** `room_seq` lớn nhất đang giữ của phòng — con trỏ `afterSeq` khi bù tin. `undefined` = chưa có tin. */
   lastKnownSeq: (roomId: string) => number | undefined;
+  /** `room_seq` NHỎ nhất đang giữ — con trỏ `beforeSeq` khi cuộn ngược. `undefined` = chưa có tin. */
+  oldestKnownSeq: (roomId: string) => number | undefined;
   /** Dọn TOÀN BỘ (đăng xuất / đổi phiên): xoá mọi interval rồi về trạng thái khởi tạo. */
   resetChatStore: () => void;
 }
@@ -211,14 +246,19 @@ function insertMessage(
   let at = list.length;
   while (at > 0 && list[at - 1].roomSeq > message.roomSeq) at -= 1;
 
+  // ⚠️ S7-CHAT-FE-2 — trần ĐỘNG, không phải hằng. Danh sách chưa vượt trần sống ⇒ giữ nguyên luật cũ
+  // (200). Danh sách ĐÃ vượt ⇒ phần dôi ra là lịch sử người dùng chủ động nạp bằng "tải thêm", và một
+  // tin mới tới KHÔNG được phép vứt nó đi: cắt ở đây làm khung nhìn tụt thẳng xuống đáy giữa lúc người
+  // ta đang đọc tin cũ. Trần tuyệt đối vẫn còn (`MAX_HISTORY_PER_ROOM`) để RAM không trôi vô hạn.
+  const cap = list.length > MAX_MESSAGES_PER_ROOM ? MAX_HISTORY_PER_ROOM : MAX_MESSAGES_PER_ROOM;
+
   // Tin cũ hơn MỌI tin đang giữ trong một danh sách đã đầy: chèn vào đầu rồi bị cắt bỏ ngay ở dòng
   // dưới. Kết quả giống hệt `list` nhưng là mảng MỚI ⇒ Zustand vẫn phát re-render vô ích.
-  if (at === 0 && list.length >= MAX_MESSAGES_PER_ROOM) return list;
+  // (Nạp lịch sử đi bằng `prependOlderMessages` — đường đó CỐ Ý không qua hàm này.)
+  if (at === 0 && list.length >= cap) return list;
 
   const next = [...list.slice(0, at), message, ...list.slice(at)];
-  return next.length > MAX_MESSAGES_PER_ROOM
-    ? next.slice(next.length - MAX_MESSAGES_PER_ROOM)
-    : next;
+  return next.length > cap ? next.slice(next.length - cap) : next;
 }
 
 /**
@@ -307,6 +347,7 @@ const createInitialState = () => ({
   pendingByClientId: {} as Record<string, PendingChatMessage>,
   connectionStatus: "connecting" as ChatConnectionStatus,
   subscribedRoomIds: {} as Record<string, SubscribedRoom>,
+  hasLoadedRooms: false,
 });
 
 export const useChatStore = create<ChatStoreState>((set, get) => ({
@@ -344,6 +385,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
    */
   syncRoomList: (rooms, archivedScope) => {
     const state = get();
+    // Đặt cờ TRƯỚC mọi việc khác: kể cả rổ rỗng cũng là "server đã trả lời" — đó chính là lúc UI được
+    // phép nói "chưa có cuộc trò chuyện nào".
+    if (!state.hasLoadedRooms) set({ hasLoadedRooms: true });
     const incoming = new Set(rooms.map((r) => r.id));
     const stale = Object.values(state.roomsById).filter(
       (r) => (r.isArchived ?? false) === archivedScope && !incoming.has(r.id),
@@ -486,6 +530,57 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }),
 
   /**
+   * S7-CHAT-FE-2 — một TRANG tin cũ hơn từ `getMessages(roomId, { beforeSeq })`.
+   *
+   * ⚠️ KHÔNG đi qua `applyIncomingMessage`. Hai lý do, cả hai đều làm hỏng im lặng:
+   *   1. `insertMessage` **bỏ qua** tin cũ hơn mọi tin đang giữ khi danh sách đã đầy ⇒ từ trang thứ hai
+   *      trở đi "tải thêm" không thêm gì, không lỗi, không dấu vết — người dùng chỉ thấy nút không chạy.
+   *   2. `applyIncomingMessage` còn đụng `unreadCount`/`lastMessageAt` của phòng. Tin CŨ không được
+   *      quyền chạm mấy thứ đó (nó có chốt `roomSeq <= lastMessageSeq`, nhưng đi vòng qua là đủ).
+   *
+   * Lịch sử vào CHÍNH `messagesByRoom` chứ không vào buffer riêng của component — nhờ vậy
+   * `applyMessageRecalled` với tới được phần cuộn ngược. Buffer thứ hai nghĩa là một tin bị admin thu hồi
+   * vẫn hiện NGUYÊN NỘI DUNG với người đang đọc lịch sử, và không sự kiện nào sửa được.
+   */
+  prependOlderMessages: (roomId, older) =>
+    set((state) => {
+      if (older.length === 0) return state;
+      const list = state.messagesByRoom[roomId] ?? [];
+      const known = new Set(list.map((m) => m.id));
+      const fresh = older
+        .filter((m) => m.roomId === roomId && !known.has(m.id))
+        .sort((a, b) => a.roomSeq - b.roomSeq);
+      if (fresh.length === 0) return state;
+
+      // Chạm trần tuyệt đối: nhận PHẦN MỚI NHẤT của trang (giữ liền mạch với danh sách đang có) thay vì
+      // nhận trọn rồi cắt đầu — cắt đầu là vứt đúng thứ người dùng vừa xin.
+      const room = fresh.length + list.length;
+      const toAdd =
+        room <= MAX_HISTORY_PER_ROOM
+          ? fresh
+          : fresh.slice(Math.max(0, fresh.length - (MAX_HISTORY_PER_ROOM - list.length)));
+      if (toAdd.length === 0) return state;
+
+      return { messagesByRoom: { ...state.messagesByRoom, [roomId]: [...toAdd, ...list] } };
+    }),
+
+  /**
+   * Cắt về 200 tin MỚI NHẤT. Gọi khi người dùng RỜI khỏi phòng đang xem — không gọi lúc đang xem, vì
+   * cắt trong khi khung nhìn đang neo vào một tin cũ là cách chắc chắn nhất làm cuộn nhảy.
+   */
+  trimRoomHistory: (roomId) =>
+    set((state) => {
+      const list = state.messagesByRoom[roomId];
+      if (!list || list.length <= MAX_MESSAGES_PER_ROOM) return state;
+      return {
+        messagesByRoom: {
+          ...state.messagesByRoom,
+          [roomId]: list.slice(list.length - MAX_MESSAGES_PER_ROOM),
+        },
+      };
+    }),
+
+  /**
    * `chat:message-recalled` — che nội dung tin đã thu hồi.
    *
    * Payload CHỈ có 3 khoá (không kèm `body`, kể cả `null`) theo đúng hợp đồng: nội dung tin thu hồi
@@ -566,9 +661,21 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     });
   },
 
+  discardPendingSend: (clientMessageId) =>
+    set((state) => {
+      if (state.pendingByClientId[clientMessageId] === undefined) return state;
+      const { [clientMessageId]: _dropped, ...pendingByClientId } = state.pendingByClientId;
+      return { pendingByClientId };
+    }),
+
   lastKnownSeq: (roomId) => {
     const list = get().messagesByRoom[roomId];
     return list?.length ? list[list.length - 1].roomSeq : undefined;
+  },
+
+  oldestKnownSeq: (roomId) => {
+    const list = get().messagesByRoom[roomId];
+    return list?.length ? list[0].roomSeq : undefined;
   },
 
   /**

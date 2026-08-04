@@ -9920,6 +9920,46 @@ export const backlog = [
     ],
   },
   {
+    // SEED 04/08/2026 khi thi công S7-CHAT-FE-2 (plan §0.1). KHÔNG phải scope creep — đây là lỗ đã ĐO
+    // trên DB dev, không phải suy đoán: đường upload duy nhất là POST /foundation/files/upload +
+    // /confirm, cả hai gate ('upload','foundation-file'); mig 0435:376 cấp foundation-% CHỈ cho role
+    // company-admin, và 0 migration nào khác chạm cặp đó. Đo `role_permissions ⋈ permissions` trên
+    // mediaos: có = SA · company-admin · QUẢN LÝ CẤP CAO; KHÔNG có = employee · hr · manager.
+    // ⇒ CHAT-FUNC-007 (SPEC-15 §13.5) chết với đa số người dùng dù BE-3 đã dựng xong đường ĐỌC.
+    id: "S7-CHAT-BE-8",
+    module: "CHAT",
+    layer: "BE",
+    title:
+      "Presign upload own-scope cho CHAT — nhân viên thường gửi được tệp/ảnh (hiện chỉ company-admin gửi được vì đường upload gate upload:foundation-file)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/chat/chat-files.controller.ts",
+      "apps/api/src/chat/chat-files.service.ts",
+      "apps/api/src/chat/chat.module.ts",
+      "apps/api/test/integration/**",
+      "packages/web-core/src/lib/chat-api.ts",
+      "apps/app/src/components/chat/chat-upload.ts",
+      "docs/plans/S7-CHAT-BE-8.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S7-CHAT-BE-3"],
+    plan: "docs/plans/S7-CHAT-BE-8.md",
+    src: [
+      "SPEC-15 §13.5 bước 1-2 (client xin presign → PUT → gửi fileIds)",
+      "memory: avatar-own-scope-presign-wrapper — CÙNG lỗ, đã đóng ở ME: gate `*:foundation-file` nằm ở FilesController, `FileService` KHÔNG gate ⇒ controller own-scope gọi thẳng service là hợp lệ. Sao khuôn me-avatar.controller.ts (upload-url · confirm owner-check TRƯỚC)",
+      "chat-attachments.repository.ts findOwnedFiles: vế owner_user_id nằm trong SQL — wrapper KHÔNG được nới nó",
+    ],
+    done_when: [
+      "POST /chat/files/upload-url + POST /chat/files/:id/confirm, gate ('send','chat-message') — KHÔNG cấp thêm cặp quyền mới, KHÔNG migration",
+      "confirm kiểm CHỦ SỞ HỮU TRƯỚC (files.owner_user_id = actor) rồi mới gọi FileService.confirmUpload — thiếu vế này là ai cũng confirm hộ tệp người khác",
+      "Đăng ký ở chat.module.ts + ROUTE_CENSUS regen (memory route-census-runtime-gate: thêm route ⇒ ĐỎ route-guard-coverage nếu quên)",
+      "int-spec deny-path RED-TRƯỚC: tài khoản CHỈ có 9 cặp CHAT (0 foundation-file) upload→confirm→gửi tin kèm fileIds TRỌN luồng; và KHÔNG confirm được tệp của người khác",
+      "chat-upload.ts (FE) đổi ĐÚNG 2 lời gọi sang route mới; bỏ gate useCan('upload','foundation-file') ở nút đính kèm",
+      "FULL gate PASS (đường tệp + quyền)",
+    ],
+  },
+  {
     id: "S7-CHAT-FE-2",
     module: "CHAT",
     layer: "FE",
@@ -9932,6 +9972,11 @@ export const backlog = [
       "apps/app/src/components/chat/**",
       "apps/app/src/i18n/**",
       "packages/ui/src/**",
+      // Bổ sung 03→04/08 khi thi công: trang không tồn tại nếu không đăng ký route, và cuộn ngược
+      // beforeSeq buộc phải sửa store FE-1 (trần 200 cắt mất lịch sử vừa nạp — plan §0.4/§3).
+      // Cả ba đều vùng vàng ⇒ gate vẫn LIGHT (memory `wo-paths-drive-gate-and-scheduler`).
+      "apps/app/src/router.tsx",
+      "apps/app/src/stores/chat.store.ts",
       "docs/plans/S7-CHAT-FE-2.md",
     ],
     skills: ["frontend-design", "code-review"],

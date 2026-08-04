@@ -22,6 +22,8 @@ import goalsVi from "./locales/vi/goals";
 // EmployeeMultiPickerDialog (components/) — khóa chung deep-merge THÊM vào namespace "common"
 // đã có sẵn ở @mediaos/web-core (KHÔNG ghi đè khóa cũ).
 import employeePickerVi from "./locales/vi/employee-picker";
+// S7-CHAT-FE-2 — trang /chat (namespace mới "chat", SPEC-15 §9/§14).
+import chatVi from "./locales/vi/chat";
 
 registerI18nResources("vi", {
   common: employeePickerVi,
@@ -35,6 +37,7 @@ registerI18nResources("vi", {
   dashboard: dashboardVi,
   me: meVi,
   goals: goalsVi,
+  chat: chatVi,
   // S4-FE-NOTI-2 — ĐÈ THÊM 1 khoá routeTitle.notiEvents vào bundle "nav" đã nhúng sẵn ở @mediaos/web-core
   // (deep-merge, KHÔNG đụng khoá cũ) — route noti.events (ROUTE_REGISTRY) cần titleKey này.
   // S4-FE-NOTI-4 — THÊM notiTemplates (route noti.templates, MỚI) + notificationDeliveryLogs (route
@@ -48,6 +51,8 @@ registerI18nResources("vi", {
       // S5-FE-TASK-6 — titleKey cho 2 route mới (task.overdue / task.projects.report, ROUTE_REGISTRY).
       taskOverdue: "Task quá hạn",
       taskProjectReport: "Báo cáo tiến độ dự án",
+      // S7-CHAT-FE-2 — titleKey của CHAT_ROUTE_META (RouteMeta cục bộ routes/chat/constants.ts).
+      chat: "Tin nhắn",
     },
   },
 });
