@@ -1,0 +1,107 @@
+{
+  "title": "Đọc-vượt hội thoại",
+  "subtitle": "Mở đích danh một phòng chat với tư cách quản trị, ở chế độ chỉ đọc. Mọi thao tác đều được ghi nhật ký.",
+  "banner": {
+    "title": "Đây là chức năng đọc phòng bạn KHÔNG phải thành viên",
+    "description": "Phạm vi bao gồm cả phòng nhắn riêng (tin nhắn 1-1) giữa hai người khác. Mỗi lần tra cứu và mỗi lần mở phòng đều để lại dấu vết trong nhật ký kiểm toán (ai · phòng nào · lúc nào), xem được ở màn Nhật ký đọc-vượt. Bạn không gửi, ghim, thu hồi hay sửa thành viên được ở đây, và cũng không tải được tệp đính kèm."
+  },
+  "search": {
+    "label": "Tra phòng theo mã hoặc tên",
+    "placeholder": "Ví dụ: PHONG-001 hoặc Kỹ thuật",
+    "roomType": "Loại phòng",
+    "allTypes": "Tất cả",
+    "submit": "Tìm",
+    "tooShort": "Nhập ít nhất 2 ký tự để tra cứu.",
+    "truncated": "Kết quả đã bị cắt ở {{limit}} dòng. Thu hẹp từ khoá để chắc chắn không bỏ sót phòng cần tìm.",
+    "error": "Không tra cứu được. Thử lại hoặc kiểm tra quyền của bạn.",
+    "emptyTitle": "Không có phòng nào khớp",
+    "emptyDescription": "Thử mã phòng chính xác hơn, hoặc đổi loại phòng. Phòng nhắn riêng không có tên nên chỉ tra được theo mã."
+  },
+  "table": {
+    "room": "Phòng",
+    "roomType": "Loại",
+    "memberCount": "Thành viên",
+    "lastMessageAt": "Tin cuối",
+    "status": "Trạng thái"
+  },
+  "roomType": {
+    "direct": "Nhắn riêng",
+    "group": "Nhóm",
+    "department": "Phòng ban",
+    "project": "Dự án"
+  },
+  "actions": {
+    "openAsAdmin": "Xem với tư cách quản trị"
+  },
+  "confirm": {
+    "title": "Xem với tư cách quản trị?",
+    "description": "Bạn sắp đọc nội dung của một phòng mà bạn không phải thành viên.",
+    "auditNotice": "Hành động này được ghi vào nhật ký kiểm toán: tên bạn, phòng này và thời điểm. Phòng sẽ mở ở chế độ chỉ đọc.",
+    "cancel": "Huỷ",
+    "accept": "Tôi hiểu, mở phòng"
+  },
+  "room": {
+    "back": "Quay lại tra cứu",
+    "readOnlyBadge": "Chỉ đọc — chế độ quản trị",
+    "messagesLabel": "Nội dung hội thoại",
+    "infoLabel": "Thông tin phòng",
+    "members": "{{count}} thành viên",
+    "roleAdmin": "Quản trị phòng",
+    "archived": "Đã lưu trữ",
+    "loadOlder": "Tải tin cũ hơn",
+    "pinned": "Đã ghim",
+    "recalled": "Tin đã được thu hồi",
+    "unknownSender": "Người dùng không xác định",
+    "attachments": "Tệp đính kèm",
+    "emptyTitle": "Phòng chưa có tin nhắn nào",
+    "emptyDescription": "Không có nội dung để hiển thị.",
+    "messagesError": "Không tải được tin nhắn của phòng này.",
+    "detailError": "Không tải được thông tin phòng."
+  },
+  "audit": {
+    "title": "Nhật ký đọc-vượt",
+    "subtitle": "Ai đã dùng chức năng đọc-vượt, mở phòng nào, lúc nào, thành công hay bị từ chối.",
+    "scopeNotice": "Đang hiện {{shown}} / {{loaded}} dòng đã tải. Bộ lọc chỉ áp trên các dòng đã tải.",
+    "scopeMore": "Còn dòng cũ hơn chưa tải — bấm \"Tải thêm\" để mở rộng phạm vi lọc.",
+    "loadMore": "Tải thêm",
+    "error": "Không tải được nhật ký.",
+    "emptyTitle": "Chưa có lần đọc-vượt nào",
+    "emptyDescription": "Chưa ai dùng chức năng đọc-vượt, hoặc không dòng nào khớp bộ lọc hiện tại.",
+    "filter": {
+      "actor": "Người thực hiện",
+      "allActors": "Tất cả",
+      "from": "Từ ngày",
+      "to": "Đến ngày",
+      "reset": "Xoá lọc"
+    },
+    "table": {
+      "at": "Thời điểm",
+      "actor": "Người thực hiện",
+      "endpoint": "Loại truy cập",
+      "room": "Phòng",
+      "result": "Kết quả",
+      "criteria": "Tiêu chí tra"
+    },
+    "endpoint": {
+      "018a": "Tra cứu phòng",
+      "018b": "Mở phòng",
+      "018c": "Đọc tin nhắn",
+      "019": "Xem nhật ký",
+      "unknown": "Không rõ"
+    },
+    "result": {
+      "Success": "Thành công",
+      "Denied": "Bị từ chối",
+      "Failure": "Thất bại",
+      "Error": "Lỗi",
+      "Unknown": "Không rõ"
+    }
+  },
+  "noPermission": {
+    "title": "Bạn không có quyền dùng chức năng này",
+    "description": "Đọc-vượt hội thoại cần quyền riêng (view:chat-oversight) và chỉ được cấp cho tài khoản quản trị hệ thống. Liên hệ quản trị viên nếu bạn cần quyền này."
+  },
+  "common": {
+    "loading": "Đang tải…"
+  }
+}

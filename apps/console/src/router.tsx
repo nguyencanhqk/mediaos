@@ -18,6 +18,10 @@ import { UsagePage } from "@/routes/system/usage";
 import { ApiKeysPage } from "@/routes/system/api-keys/api-keys-page";
 import { WebhooksPage } from "@/routes/system/webhooks/webhooks-page";
 import { RecycleBinPage } from "@/routes/recycle-bin";
+// S7-CHAT-FE-5 🔒 — CHAT-SCREEN-007/008 (đọc-vượt membership).
+import { ChatOversightPage } from "@/routes/system/chat-oversight/chat-oversight-page";
+import { ChatOversightAuditPage } from "@/routes/system/chat-oversight/chat-oversight-audit-page";
+import { hasChatOversightCapability } from "@/lib/chat-oversight-gate";
 // ACCT-2-FE: Quản lý người dùng (admin user CRUD — manage:user + suspend:user + delete-user:user).
 import { UsersPage } from "@/routes/system/users/users-page";
 
@@ -168,6 +172,36 @@ const adminUsersRoute = createRoute({
   component: UsersPage,
 });
 
+/**
+ * S7-CHAT-FE-5 🔒 — cổng route cho hai màn đọc-vượt (CHAT-SCREEN-007/008).
+ *
+ * Khác các route khác của console (gate quyền XỬ LÝ TRONG COMPONENT): ở đây thêm một lớp NGOÀI React
+ * nữa, vì gõ thẳng URL vào màn nguy hiểm nhất module không nên phụ thuộc vào việc component sau này còn
+ * nhớ gọi `useCanChatOversight`. Không có đua trạng thái: `main.tsx` `await bootstrapSession()` (nạp
+ * `/me` + `capabilities`) TRƯỚC khi mount router, nên `beforeLoad` luôn đọc được map đã đầy đủ.
+ *
+ * Thiếu quyền ⇒ về trang chủ, KHÔNG hiện màn rỗng — lớp trang vẫn giữ `EmptyState` "không có quyền" cho
+ * trường hợp component được render trực tiếp (test, hoặc route mới trỏ vào sau này).
+ */
+const chatOversightGuard = () => {
+  authGuard();
+  if (!hasChatOversightCapability()) throw redirect({ to: "/" });
+};
+
+const chatOversightRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/chat-oversight",
+  beforeLoad: chatOversightGuard,
+  component: ChatOversightPage,
+});
+
+const chatOversightAuditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/chat-oversight/audit",
+  beforeLoad: chatOversightGuard,
+  component: ChatOversightAuditPage,
+});
+
 // CS-6: Thùng rác — khôi phục nhân viên bị xoá mềm (restore:employee sensitive), gate trong component.
 const recycleBinRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -195,6 +229,8 @@ const routeTree = rootRoute.addChildren([
   apiKeysRoute,
   webhooksRoute,
   recycleBinRoute,
+  chatOversightRoute,
+  chatOversightAuditRoute,
 ]);
 
 export const router = createRouter({ routeTree });

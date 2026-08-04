@@ -9,7 +9,7 @@ import { getHealth, logoutSession } from "@mediaos/web-core";
 import { BrandLogo } from "@/components/brand/brand-mark";
 import { SignalBar } from "@/components/brand/signal-bar";
 import { BRAND, BRAND_SYSTEM_LABEL } from "@/lib/brand";
-import { NAV_CATEGORIES, NAV_ITEMS, type NavCategory } from "@/lib/nav";
+import { NAV_CATEGORIES, useConsoleNavItems, type NavCategory } from "@/lib/nav";
 import { useAuthStore } from "@mediaos/web-core";
 
 type Filter = "all" | NavCategory;
@@ -39,21 +39,25 @@ export function HomePage() {
     void logoutSession();
   };
 
+  // S7-CHAT-FE-5 — bản ĐÃ LỌC QUYỀN (mục đọc-vượt CHAT chỉ hiện với cặp `view:chat-oversight` khớp
+  // chính xác). Launcher và sidebar phải đọc CÙNG một nguồn, nếu không lối vào chỉ bị giấu một nửa.
+  const navItems = useConsoleNavItems();
+
   // App tách (FS-4) chỉ có subset category → chỉ render chip của các category THỰC SỰ có app,
   // tránh chip "ma" lọc ra rỗng gây hiểu nhầm app hỏng (silent-failure gate).
   const visibleCategories = useMemo(
-    () => NAV_CATEGORIES.filter((c) => NAV_ITEMS.some((it) => it.category === c.id)),
-    [],
+    () => NAV_CATEGORIES.filter((c) => navItems.some((it) => it.category === c.id)),
+    [navItems],
   );
 
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return NAV_ITEMS.filter((it) => {
+    return navItems.filter((it) => {
       if (filter !== "all" && it.category !== filter) return false;
       if (q && !t(`nav:${it.labelKey}`).toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [filter, query, t]);
+  }, [navItems, filter, query, t]);
 
   return (
     <div className="control-room-bg min-h-screen text-foreground">

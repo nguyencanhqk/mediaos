@@ -1,10 +1,13 @@
+import { useMemo } from "react";
 import {
   BarChart2,
   Briefcase,
   Building2,
   ClipboardList,
+  Eye,
   KeyRound,
   Mail,
+  ScrollText,
   Settings,
   Shield,
   ShieldAlert,
@@ -17,6 +20,7 @@ import {
   Webhook,
 } from "lucide-react";
 import { type NavItem } from "@mediaos/web-core";
+import { CHAT_OVERSIGHT_CAPABILITY, useCanChatOversight } from "./chat-oversight-gate";
 
 /**
  * NAV registry của apps/console (Hệ thống — tenant, aud=user) — SUBSET category `system`.
@@ -197,4 +201,56 @@ export const NAV_ITEMS: readonly NavItem[] = [
     category: "system",
     subcategory: "DevOps",
   },
+  // S7-CHAT-FE-5 🔒 — CHAT-SCREEN-007/008. LỐI VÀO RIÊNG, có cổng (xem `useConsoleNavItems`).
+  // SPEC-15 §9: KHÔNG trộn vào danh sách phòng của trang /chat và KHÔNG vào panel nổi — đọc-vượt
+  // membership phải là một hành động người dùng CHỌN, không bao giờ là thứ xảy ra do vô ý.
+  {
+    id: "chatOversight",
+    labelKey: "chatOversight",
+    to: "/system/chat-oversight",
+    icon: Eye,
+    tile: "bg-red-500/15 text-red-700 dark:text-red-400",
+    category: "system",
+    subcategory: "Kiểm toán",
+    permission: CHAT_OVERSIGHT_CAPABILITY,
+  },
+  {
+    id: "chatOversightAudit",
+    labelKey: "chatOversightAudit",
+    to: "/system/chat-oversight/audit",
+    icon: ScrollText,
+    tile: "bg-violet-500/15 text-violet-700 dark:text-violet-400",
+    category: "system",
+    subcategory: "Kiểm toán",
+    permission: CHAT_OVERSIGHT_CAPABILITY,
+  },
 ] as const;
+
+/**
+ * S7-CHAT-FE-5 — NAV_ITEMS ĐÃ LỌC QUYỀN. Dùng ở CẢ HAI nơi render nav (`root-layout` → `AppShell`,
+ * `home` → launcher) — bỏ sót một nơi là lối vào vẫn hiện ở nơi đó.
+ *
+ * ⚠️ Trước WO này, `NAV_ITEMS` là hằng TĨNH và trường `NavItem.permission` KHÔNG được ai đọc trên đường
+ * render của console (`filterSidebarItems` thuộc registry cũ, không nằm trên đường này). Tức là khai
+ * `permission` rồi tin là đã gate sẽ cho ra một cổng chỉ tồn tại trong trí tưởng tượng. Hook này làm
+ * trường đó CÓ HIỆU LỰC THẬT.
+ *
+ * ⚠️ **FAIL-CLOSED:** item khai `permission` mà key đó không nằm trong `granted` bên dưới thì bị ẨN.
+ * Thêm một item có quyền ⇒ phải thêm một dòng `useCanExact` tương ứng ở đây; quên thì item biến mất
+ * (nhìn thấy ngay), chứ KHÔNG hiện cho tất cả mọi người (không nhìn thấy được).
+ *
+ * ⚠️ Vị từ là `useCanExact`, KHÔNG `useCan`: cặp `view:chat-oversight` là cặp nhạy cảm — xem
+ * `lib/chat-oversight-gate.ts`.
+ */
+export function useConsoleNavItems(): readonly NavItem[] {
+  const canChatOversight = useCanChatOversight();
+
+  return useMemo(() => {
+    const granted: Record<string, boolean> = {
+      [CHAT_OVERSIGHT_CAPABILITY]: canChatOversight,
+    };
+    return NAV_ITEMS.filter(
+      (item) => item.permission === undefined || granted[item.permission] === true,
+    );
+  }, [canChatOversight]);
+}
