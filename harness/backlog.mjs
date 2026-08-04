@@ -9887,7 +9887,7 @@ export const backlog = [
     title:
       "Nền FE chat: contracts + api-client + store Zustand dùng chung + MỘT kết nối WS duy nhất cho toàn app shell (trang full-screen và panel nổi dùng chung)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     // paths mở rộng theo plan rev 3 §R3.6 — 3 file §2 yêu cầu sửa mà bản cũ KHÔNG phủ. Khai thiếu thì
     // hook guard-scope cảnh báo oan và gate đọc sai vùng (memory wo-paths-drive-gate-and-scheduler).
     paths: [
@@ -9895,6 +9895,7 @@ export const backlog = [
       "packages/web-core/src/**",
       "packages/web-core/package.json", // socket.io-client — nơi THẬT import nó (rev 3 §R3.2)
       "apps/app/src/**",
+      "apps/app/scripts/**", // smoke đếm kết nối /ws (DoD §5, chạy tay)
       "eslint.config.mjs", // no-restricted-imports cho socket.io-client
       "pnpm-lock.yaml", // hệ quả bắt buộc của pnpm install
       "docs/plans/S7-CHAT-FE-1.md",
@@ -9910,7 +9911,7 @@ export const backlog = [
       "R3.4 lỗ im lặng: ghép echo WS với pending theo FIFO NUỐT tin gửi lỗi (gửi A rồi B, echo B về khi A còn sending ⇒ A mang resolvedMessageId của B ⇒ A hỏng mà không ai thấy). Chốt: pending CHỈ do response POST của chính nó giải quyết",
     ],
     done_when: [
-      "socket.io-client thêm vào apps/app (hiện chỉ apps/api có, dạng devDependency cho test); MỘT provider WS ở app shell — mở/đóng panel KHÔNG tạo kết nối mới",
+      "socket.io-client khai ở packages/web-core (ĐÍNH CHÍNH rev 3 §R3.2 — KHÔNG phải apps/app: getAppSocket() sống ở web-core nên đó mới là nơi import THẬT; khai ở apps/app chỉ chạy nhờ hoisting pnpm); MỘT provider WS ở app shell — mở/đóng panel KHÔNG tạo kết nối mới",
       "Store chat (Zustand) là nguồn sự thật dùng chung; cache tin theo phòng + con trỏ seq; nhận chat:* từ WS merge vào store; WS đứt → tự bù bằng afterSeq mỗi 10 giây",
       "Schema Zod FE: body .nullable() (tin thu hồi server bỏ khoá) — thiếu là ZodError trắng trang dù HTTP 200",
       "Tin gửi lạc quan mang clientMessageId sinh MỘT LẦN lúc soạn; gửi lại dùng ĐÚNG id cũ (không sinh mới) để server dedupe",

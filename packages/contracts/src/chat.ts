@@ -648,3 +648,23 @@ export const chatOversightAuditResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 export type ChatOversightAuditResponseDto = z.infer<typeof chatOversightAuditResponseSchema>;
+
+// ═══════════ S7-CHAT-FE-1 — hai route KHÔNG trả `ChatRoomDto` ═══════════
+//
+// ⚠️ KHỐI APPEND ở CUỐI file — `contracts/src/chat.ts` là hot-file của 6 WO trong wave S7.
+//
+// Đo thật trên master: `ChatRoomsService.leaveRoom` và `ChatMembersService.removeMember` trả
+// `{ left: true }` / `{ removed: true }`, KHÔNG phải phòng. Client parse hai response đó bằng
+// `chatRoomSchema` sẽ ăn `ZodError` (thiếu TOÀN BỘ field bắt buộc của phòng) — HTTP 200 mà UI vỡ, đúng
+// lớp bẫy `server-masking-needs-optional-fe-schema` nhưng theo chiều "schema quá rộng cho payload hẹp".
+//
+// `z.literal(true)` chứ không `z.boolean()`: server không có nhánh nào trả `false`, nên một `false` lọt
+// tới đây là hợp đồng đã trôi — phải nổ ở biên, không được im lặng đọc thành "đã rời phòng".
+
+/** Kết quả `POST /chat/rooms/:id/leave` (CHAT-API-008) — KHÔNG phải `ChatRoomDto`. */
+export const chatLeaveRoomResultSchema = z.object({ left: z.literal(true) });
+export type ChatLeaveRoomResultDto = z.infer<typeof chatLeaveRoomResultSchema>;
+
+/** Kết quả `DELETE /chat/rooms/:id/members/:userId` (CHAT-API-007d) — KHÔNG phải `ChatRoomDto`. */
+export const chatRemoveMemberResultSchema = z.object({ removed: z.literal(true) });
+export type ChatRemoveMemberResultDto = z.infer<typeof chatRemoveMemberResultSchema>;

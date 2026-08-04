@@ -12,7 +12,9 @@
       "require": "./dist/cjs/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json",
     "dev": "tsc -p tsconfig.cjs.json --watch",
@@ -23,6 +25,7 @@
   "dependencies": {
     "@mediaos/contracts": "workspace:*",
     "lucide-react": "^0.469.0",
+    "socket.io-client": "^4.8.3",
     "zod": "^3.25.0",
     "zustand": "^5.0.2"
   },

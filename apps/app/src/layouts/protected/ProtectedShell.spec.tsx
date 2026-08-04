@@ -33,6 +33,11 @@ vi.mock("../topbar/GlobalTopbar", () => ({ GlobalTopbar: () => <div data-testid=
 vi.mock("../home/AppSwitcher", () => ({ AppSwitcher: () => null }));
 vi.mock("@/hooks/use-current-route-meta", () => ({ useCurrentRouteMeta: () => undefined }));
 
+// S7-CHAT-FE-1: cô lập hạ tầng realtime khỏi spec guard (hành vi của hook có spec riêng —
+// `use-chat-realtime.spec.tsx`), ĐỒNG THỜI làm điểm neo cho ca "shell có thật sự gọi hook" bên dưới.
+const useChatRealtimeMock = vi.hoisted(() => vi.fn());
+vi.mock("@/hooks/use-chat-realtime", () => ({ useChatRealtime: useChatRealtimeMock }));
+
 function setUser(mustSetupTwoFactor: boolean) {
   useAuthStore.setState({
     isAuthenticated: true,
@@ -97,5 +102,31 @@ describe("ProtectedShell — guard ép enroll 2FA (AUTH-003)", () => {
 
     expect(navigateMock).not.toHaveBeenCalled();
     expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+  });
+});
+
+describe("ProtectedShell — nối hạ tầng realtime CHAT (S7-CHAT-FE-1)", () => {
+  // Ca này bắt đúng một lớp hỏng: hook realtime được viết, có test riêng xanh, nhưng KHÔNG AI GẮN nó vào
+  // shell. Mọi thứ xanh, chat im lặng không bao giờ nhận tin, và không có test nào nói ra
+  // (memory `ui-promises-backend-never-reads` — kiểm CẢ HAI đầu luồng).
+  beforeEach(() => {
+    pathnameRef.current = "/home";
+    useChatRealtimeMock.mockClear();
+  });
+  afterEach(() => {
+    cleanup();
+    useAuthStore.setState({ isAuthenticated: false, user: null, mustSetupTwoFactor: false });
+  });
+
+  it("shell mount → gọi useChatRealtime ĐÚNG 1 lần (một kết nối, không nhân theo route con)", () => {
+    setUser(false);
+    renderShell("/home");
+    expect(useChatRealtimeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("gọi cả khi đang bị ép enroll 2FA — panel chat của FE-3 nằm ở shell, không nằm trong nhánh nội dung", () => {
+    setUser(true);
+    renderShell("/home");
+    expect(useChatRealtimeMock).toHaveBeenCalledTimes(1);
   });
 });
