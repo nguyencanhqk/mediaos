@@ -11,7 +11,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { Archive, MessageSquarePlus, Search } from "lucide-react";
+// `Filter` cho ô LỌC PHÒNG, `Search` cho lối vào tìm theo NỘI DUNG TIN (CHAT-SCREEN-005). Hai biểu
+// tượng kính lúp cạnh nhau là lời mời gõ nhầm ô — chính hiểu nhầm mà docblock `visible` cảnh báo.
+import { Archive, Filter, MessageSquarePlus, Search } from "lucide-react";
 import { chatApi, chatKeys, useCan } from "@mediaos/web-core";
 import { Badge, Button, Input, Skeleton, cn } from "@mediaos/ui";
 import type { ChatRoomDto } from "@mediaos/contracts";
@@ -23,6 +25,8 @@ interface RoomListPanelProps {
   selectedRoomId: string | null;
   onSelectRoom: (roomId: string) => void;
   onCreateRoom: () => void;
+  /** S7-CHAT-FE-4 — mở CHAT-SCREEN-005 (tìm theo NỘI DUNG tin), khác hẳn ô lọc phòng bên dưới. */
+  onOpenSearch: () => void;
   /** Tên đã dựng của phòng `direct` (cache theo `roomId` ở trang) — vắng thì dùng nhãn mã phòng. */
   resolvedNames: Readonly<Record<string, string>>;
   isBootstrapping: boolean;
@@ -32,6 +36,7 @@ export function RoomListPanel({
   selectedRoomId,
   onSelectRoom,
   onCreateRoom,
+  onOpenSearch,
   resolvedNames,
   isBootstrapping,
 }: RoomListPanelProps): React.ReactElement {
@@ -80,6 +85,15 @@ export function RoomListPanel({
     >
       <div className="flex items-center gap-2 border-b border-border px-3 py-3">
         <h2 className="flex-1 text-sm font-semibold">{t("rooms.heading")}</h2>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          aria-label={t("search.openAria")}
+          onClick={onOpenSearch}
+          data-testid="chat-open-search"
+        >
+          <Search className="h-4 w-4" aria-hidden="true" />
+        </Button>
         {canCreate && (
           <Button
             size="icon-sm"
@@ -94,7 +108,7 @@ export function RoomListPanel({
 
       <div className="space-y-2 border-b border-border px-3 py-2">
         <div className="relative">
-          <Search
+          <Filter
             className="absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
           />

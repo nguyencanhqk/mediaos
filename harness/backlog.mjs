@@ -10038,10 +10038,21 @@ export const backlog = [
     title:
       "Màn hình tìm kiếm tin nhắn (nhảy tới tin trong ngữ cảnh) + tab tệp/tin ghim/thành viên trong bảng thông tin phòng",
     zone: "green",
-    status: "todo",
+    status: "in_progress",
+    // ⚠️ `paths` mở rộng 04/08 (memory `wo-paths-drive-gate-and-scheduler`): bản seed CHỈ liệt kê
+    // `routes/chat` + `components/chat`, nhưng chính docblock FE-1 hẹn "FE-4 append thẳng vào file này"
+    // cho `chat-api.ts` (CHAT-API-015/017 cố ý chưa mirror) — và không có key react-query, không có
+    // chuỗi i18n, không có store thì màn tìm kiếm không tồn tại được. Thiếu path ⇒ hook `guard-scope`
+    // kêu oan mỗi lần sửa đúng file phải sửa, và gate đọc sai diện tích diff.
     paths: [
       "apps/app/src/routes/chat/**",
       "apps/app/src/components/chat/**",
+      "apps/app/src/stores/chat.store.ts",
+      "apps/app/src/stores/chat.store.spec.ts",
+      "apps/app/src/i18n/locales/vi/chat.ts",
+      "packages/web-core/src/lib/chat-api.ts",
+      "packages/web-core/src/lib/chat-api.spec.ts",
+      "packages/web-core/src/lib/query-keys.ts",
       "docs/plans/S7-CHAT-FE-4.md",
     ],
     skills: ["frontend-design", "code-review"],

@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowDown } from "lucide-react";
-import { Button, Skeleton } from "@mediaos/ui";
+import { Button, Skeleton, cn } from "@mediaos/ui";
 import type { ChatRoomDto, ChatRoomMemberDto } from "@mediaos/contracts";
 import type { PendingChatMessage, StoredChatMessage } from "@/stores/chat.store";
 import { MAX_HISTORY_PER_ROOM } from "@/stores/chat.store";
@@ -36,6 +36,14 @@ interface MessageListProps {
   hasMoreOlder: boolean;
   isLoadingOlder: boolean;
   historyLimitReached: boolean;
+  /**
+   * S7-CHAT-FE-4 — tin cần LÀM NỔI + cuộn tới (đích của một lần nhảy từ tìm kiếm/ghim/tệp).
+   *
+   * `null` = không có gì để làm nổi. Khi khác `null`, danh sách **không** tự cuộn xuống đáy dù đây là
+   * lần vẽ đầu: kéo người dùng xuống đáy ngay sau khi họ bấm vào một kết quả ở giữa lịch sử là huỷ đúng
+   * thao tác họ vừa làm.
+   */
+  highlightMessageId?: string | null;
   onLoadOlder: () => Promise<number>;
   onMarkRead: (seq: number) => void;
   onResendPending: (pending: PendingChatMessage) => void;
@@ -55,6 +63,7 @@ export function MessageList({
   hasMoreOlder,
   isLoadingOlder,
   historyLimitReached,
+  highlightMessageId = null,
   onLoadOlder,
   onMarkRead,
   onResendPending,
@@ -119,10 +128,26 @@ export function MessageList({
     lastMessageIdRef.current = latestId;
     if (latest === null) return;
 
+    // S7-CHAT-FE-4: đang có tin được làm nổi ⇒ khung nhìn thuộc về nó, không phải về đáy. Thiếu vế này
+    // thì lần vẽ đầu của một cửa sổ ngữ cảnh cuộn thẳng xuống đáy và tin người dùng vừa bấm biến mất
+    // khỏi màn hình trước khi họ kịp đọc.
+    if (highlightMessageId !== null) return;
+
     // Người dùng đang đọc tin cũ ⇒ TUYỆT ĐỐI không kéo khung nhìn của họ. Chỉ báo có tin mới.
     if (isFirstPaint || isNearBottom) scrollToBottom();
     else setUnseenBelow(true);
-  }, [messages, isNearBottom, scrollToBottom]);
+  }, [messages, isNearBottom, scrollToBottom, highlightMessageId]);
+
+  // ── Cuộn tới tin được làm nổi (S7-CHAT-FE-4) ───────────────────────────────
+  useEffect(() => {
+    if (highlightMessageId === null) return;
+    const el = scrollRef.current?.querySelector(
+      `[data-message-id="${CSS.escape(highlightMessageId)}"]`,
+    );
+    // Tin đích KHÔNG có trong danh sách là ca thật (cửa sổ nạp hụt, tin bị thu hồi và lọc đi): không
+    // cuộn còn hơn cuộn tới chỗ sai. Dải "đang xem ngữ cảnh" vẫn hiện nên người dùng có đường thoát.
+    el?.scrollIntoView({ block: "center" });
+  }, [highlightMessageId, messages]);
 
   // ── Đánh dấu đã đọc ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -197,8 +222,17 @@ export function MessageList({
               GROUP_WINDOW_MS;
           previous = message;
 
+          const isHighlighted = message.id === highlightMessageId;
+
           return (
-            <div key={message.id}>
+            <div
+              key={message.id}
+              className={cn(
+                isHighlighted &&
+                  "rounded-md bg-primary/10 ring-1 ring-primary/40 ring-inset transition-colors",
+              )}
+              data-highlighted={isHighlighted ? "true" : undefined}
+            >
               {showDay && (
                 <div className="my-2 flex items-center gap-3 px-3">
                   <span className="h-px flex-1 bg-border" />

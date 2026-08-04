@@ -950,3 +950,129 @@ describe("S7-CHAT-FE-2 · hasLoadedRooms", () => {
     expect(s().hasLoadedRooms).toBe(false);
   });
 });
+
+/**
+ * S7-CHAT-FE-4 — chế độ XEM NGỮ CẢNH (CHAT-SCREEN-005 "nhảy tới tin trong ngữ cảnh").
+ *
+ * Ba ca đầu là ba cách hỏng IM LẶNG khác nhau của cùng một tính năng: khe hở câm giữa hai dải, badge
+ * đứng hình, và phòng kẹt vĩnh viễn ở dải cũ sau khi bấm "Về tin mới nhất".
+ */
+describe("S7-CHAT-FE-4 · cửa sổ ngữ cảnh", () => {
+  it("enterMessageContext THAY THẾ danh sách (không ghép vào dải đang giữ) + đặt mỏ neo", () => {
+    s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 500 })]);
+    for (const seq of [498, 499, 500]) s().applyIncomingMessage(storedMessage(seq));
+    expect(s().messagesByRoom[ROOM_A]).toHaveLength(3);
+
+    s().enterMessageContext(ROOM_A, [storedMessage(10), storedMessage(11), storedMessage(12)], {
+      messageId: messageId(11),
+      seq: 11,
+    });
+
+    expect(s().messagesByRoom[ROOM_A]?.map((m) => m.roomSeq)).toEqual([10, 11, 12]);
+    expect(s().contextByRoom[ROOM_A]).toEqual({
+      targetMessageId: messageId(11),
+      targetSeq: 11,
+      windowEndSeq: 12,
+    });
+  });
+
+  it("sắp lại + LỌC theo roomId — hai lời gọi beforeSeq/afterSeq về không theo thứ tự gửi", () => {
+    s().enterMessageContext(
+      ROOM_A,
+      [
+        storedMessage(12),
+        storedMessage(10),
+        { ...storedMessage(99), roomId: ROOM_B }, // tin của phòng khác lọt vào ⇒ phải bị loại
+        storedMessage(11),
+      ],
+      { messageId: messageId(11), seq: 11 },
+    );
+    expect(s().messagesByRoom[ROOM_A]?.map((m) => m.roomSeq)).toEqual([10, 11, 12]);
+    expect(s().contextByRoom[ROOM_A]?.windowEndSeq).toBe(12);
+  });
+
+  it("cửa sổ RỖNG (tin đích đã biến mất) ⇒ KHÔNG vào chế độ ngữ cảnh, giữ nguyên trạng thái", () => {
+    const before = s().messagesByRoom;
+    s().enterMessageContext(ROOM_A, [], { messageId: messageId(11), seq: 11 });
+    expect(s().contextByRoom[ROOM_A]).toBeUndefined();
+    expect(s().messagesByRoom).toBe(before);
+  });
+
+  it("tin MỚI hơn cửa sổ KHÔNG chèn vào danh sách — nhưng badge phòng VẪN tăng", () => {
+    s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 12, unreadCount: 0 })]);
+    s().enterMessageContext(ROOM_A, [storedMessage(11), storedMessage(12)], {
+      messageId: messageId(12),
+      seq: 12,
+    });
+
+    s().applyIncomingMessage(storedMessage(13));
+
+    expect(s().messagesByRoom[ROOM_A]?.map((m) => m.roomSeq)).toEqual([11, 12]);
+    expect(s().roomsById[ROOM_A].unreadCount).toBe(1);
+    expect(s().roomsById[ROOM_A].lastMessageSeq).toBe(13);
+  });
+
+  it("tin TRONG cửa sổ (seq ≤ windowEnd) vẫn chèn bình thường — chốt không được rộng hơn mức cần", () => {
+    s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 12 })]);
+    s().enterMessageContext(ROOM_A, [storedMessage(10), storedMessage(12)], {
+      messageId: messageId(12),
+      seq: 12,
+    });
+
+    s().applyIncomingMessage(storedMessage(11));
+
+    expect(s().messagesByRoom[ROOM_A]?.map((m) => m.roomSeq)).toEqual([10, 11, 12]);
+  });
+
+  it("cuộn ngược (prependOlderMessages) vẫn chạy trong chế độ ngữ cảnh — dải vẫn liên tục", () => {
+    s().enterMessageContext(ROOM_A, [storedMessage(10), storedMessage(11)], {
+      messageId: messageId(10),
+      seq: 10,
+    });
+    s().prependOlderMessages(ROOM_A, [storedMessage(8), storedMessage(9)]);
+    expect(s().messagesByRoom[ROOM_A]?.map((m) => m.roomSeq)).toEqual([8, 9, 10, 11]);
+  });
+
+  it("exitMessageContext xoá mỏ neo VÀ danh sách — giữ lại dải cũ là đúng cái khe hở cần tránh", () => {
+    s().enterMessageContext(ROOM_A, [storedMessage(10)], { messageId: messageId(10), seq: 10 });
+    s().exitMessageContext(ROOM_A);
+    expect(s().contextByRoom[ROOM_A]).toBeUndefined();
+    expect(s().messagesByRoom[ROOM_A]).toBeUndefined();
+  });
+
+  it("exitMessageContext trên phòng KHÔNG ở chế độ ngữ cảnh ⇒ no-op (không xoá nhầm lịch sử)", () => {
+    s().hydrateRooms([room(ROOM_A)]);
+    s().applyIncomingMessage(storedMessage(11));
+    const before = s().messagesByRoom;
+    s().exitMessageContext(ROOM_A);
+    expect(s().messagesByRoom).toBe(before);
+  });
+
+  it("bị bớt khỏi phòng ⇒ mỏ neo đi cùng, không để lại neo mồ côi chặn chèn khi được thêm lại", () => {
+    s().hydrateRooms([room(ROOM_A)]);
+    s().enterMessageContext(ROOM_A, [storedMessage(10)], { messageId: messageId(10), seq: 10 });
+    s().removeRoomForSelf(ROOM_A);
+    expect(s().contextByRoom[ROOM_A]).toBeUndefined();
+  });
+
+  it("lưới bù KHÔNG gọi API cho phòng đang xem ngữ cảnh (10s/lần cho kết quả bị chặn = rác)", () => {
+    vi.useFakeTimers();
+    s().hydrateRooms([room(ROOM_A)]);
+    s().setConnectionStatus("disconnected");
+    s().subscribeToRoom(ROOM_A);
+    s().enterMessageContext(ROOM_A, [storedMessage(10)], { messageId: messageId(10), seq: 10 });
+
+    vi.advanceTimersByTime(CHAT_POLL_INTERVAL_MS * 2);
+    expect(getMessages).not.toHaveBeenCalled();
+
+    s().exitMessageContext(ROOM_A);
+    vi.advanceTimersByTime(CHAT_POLL_INTERVAL_MS);
+    expect(getMessages).toHaveBeenCalledWith(ROOM_A, {});
+  });
+
+  it("resetChatStore (đăng xuất) dọn sạch mỏ neo", () => {
+    s().enterMessageContext(ROOM_A, [storedMessage(10)], { messageId: messageId(10), seq: 10 });
+    s().resetChatStore();
+    expect(s().contextByRoom).toEqual({});
+  });
+});

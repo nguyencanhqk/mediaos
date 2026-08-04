@@ -16,15 +16,16 @@ import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { MessagesSquare } from "lucide-react";
 import { chatApi, chatKeys, useCan } from "@mediaos/web-core";
-import { EmptyState } from "@mediaos/ui";
+import { Button, EmptyState } from "@mediaos/ui";
 import type { ChatRoomDto } from "@mediaos/contracts";
 import { ConversationPanel } from "@/components/chat/ConversationPanel";
 import { CreateRoomDialog } from "@/components/chat/CreateRoomDialog";
+import { MessageSearchPanel } from "@/components/chat/MessageSearchPanel";
 import { RoomInfoPanel } from "@/components/chat/RoomInfoPanel";
 import { RoomListPanel } from "@/components/chat/RoomListPanel";
 import { roomDisplayName } from "@/components/chat/chat-format";
 import { useChatStore } from "@/stores/chat.store";
-import { CHAT_PAIRS } from "./constants";
+import { CHAT_PAIRS, CONTEXT_AFTER, CONTEXT_BEFORE } from "./constants";
 
 export function ChatPage(): React.ReactElement {
   const { t } = useTranslation("chat");
@@ -38,9 +39,30 @@ export function ChatPage(): React.ReactElement {
   // ngay khung hình đầu cho người có 20 phòng.
   const hasLoadedRooms = useChatStore((s) => s.hasLoadedRooms);
 
+  const enterMessageContext = useChatStore((s) => s.enterMessageContext);
+
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [isInfoOpen, setInfoOpen] = useState(true);
   const [isCreateOpen, setCreateOpen] = useState(false);
+  /**
+   * S7-CHAT-FE-4 — cột trái có HAI chế độ: danh sách phòng ↔ tìm kiếm tin nhắn (CHAT-SCREEN-005).
+   *
+   * Không mở cột thứ tư: trang này cố ý không bọc `ModuleWorkspaceLayout` để tránh đúng chuyện đó
+   * (docblock đầu file). Câu tìm kiếm giữ ở ĐÂY chứ không trong panel: đóng/mở lại panel mà mất câu vừa
+   * gõ là bắt người dùng gõ lại sau mỗi lần xem một kết quả.
+   */
+  const [isSearchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  /**
+   * Giữ Ý ĐỊNH ("tất cả" ↔ "trong phòng này"), KHÔNG giữ một `roomId` đã chốt.
+   *
+   * Chốt id vào state là để lại một phạm vi CŨ khi người dùng đổi phòng: nhãn nút nói tên phòng đang
+   * mở còn truy vấn lại bó theo phòng trước đó — sai theo kiểu không ai đối chiếu được. Suy từ
+   * `selectedRoomId` mỗi lần render thì nhãn và truy vấn không thể lệch nhau.
+   */
+  const [searchScope, setSearchScope] = useState<"all" | "room">("all");
+  const [activeResultId, setActiveResultId] = useState<string | null>(null);
+  const [jumpError, setJumpError] = useState(false);
   /**
    * Tên đã dựng của phòng `direct`, cache theo `roomId`.
    *
@@ -85,18 +107,43 @@ export function ChatPage(): React.ReactElement {
   const myRole = detail?.myRole ?? null;
 
   /**
-   * Nhảy tới một tin trong hội thoại.
+   * S7-CHAT-FE-4 — nhảy tới MỘT tin bất kỳ trong ngữ cảnh của nó (CHAT-SCREEN-005).
    *
-   * v1 chỉ tìm trong phần lịch sử ĐÃ TẢI và cuộn tới nó; không có thì trả `false` để bảng ghim nói
-   * thẳng "không tìm thấy trong phần đã tải". Tự nạp ngược tới khi thấy là vòng lặp có thể chạy rất lâu
-   * trên phòng nghìn tin — thuộc `S7-CHAT-FE-4` (màn tìm kiếm mới là nơi có con trỏ để nhảy thẳng).
+   * FE-2 chỉ quét DOM phần đã tải và trả "không thấy" cho mọi tin cũ hơn. Nay nạp hẳn cửa sổ quanh
+   * `roomSeq` bằng ĐÚNG hai lời gọi (`/messages` không có `aroundSeq`):
+   *
+   *   beforeSeq = seq + 1  → 25 tin có seq ≤ seq, GỒM chính tin đích (vị từ `lt`, loại trừ)
+   *   afterSeq  = seq      → 25 tin sau nó (vị từ `gt`)
+   *
+   * ⚠️ `+ 1` không phải làm tròn cho đẹp: `beforeSeq = seq` loại trừ đúng tin người dùng vừa bấm vào.
+   *
+   * Cửa sổ THAY THẾ danh sách của phòng (`enterMessageContext`) — ghép vào dải đang giữ sẽ dựng một khe
+   * hở câm giữa hai đoạn cách nhau hàng nghìn tin (xem docblock `ChatMessageContext`).
    */
-  const jumpToMessage = useCallback((messageId: string): boolean => {
-    const el = document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
-    if (!el) return false;
-    el.scrollIntoView({ block: "center" });
-    return true;
-  }, []);
+  const jumpToMessage = useCallback(
+    async (roomId: string, messageId: string, roomSeq: number): Promise<void> => {
+      setSelectedRoomId(roomId);
+      setJumpError(false);
+      try {
+        const [olderPage, newerPage] = await Promise.all([
+          chatApi.getMessages(roomId, { beforeSeq: roomSeq + 1, limit: CONTEXT_BEFORE }),
+          chatApi.getMessages(roomId, { afterSeq: roomSeq, limit: CONTEXT_AFTER }),
+        ]);
+        const window = [...olderPage, ...newerPage];
+        // Tin đích vắng mặt (vừa bị thu hồi + lọc, hoặc con trỏ lệch): KHÔNG vào chế độ ngữ cảnh — vào
+        // rồi thì người dùng ngồi trong một cửa sổ đóng băng mà không có tin nào được làm nổi.
+        if (!window.some((m) => m.id === messageId)) {
+          setJumpError(true);
+          return;
+        }
+        enterMessageContext(roomId, window, { messageId, seq: roomSeq });
+      } catch (err: unknown) {
+        setJumpError(true);
+        console.error(`[chat] không mở được ngữ cảnh của tin ${messageId}:`, err);
+      }
+    },
+    [enterMessageContext],
+  );
 
   if (!canViewRoom) {
     // §14 "không có quyền": ẩn nội dung, không hard-code role. Cổng thật vẫn ở server.
@@ -111,15 +158,41 @@ export function ChatPage(): React.ReactElement {
     );
   }
 
+  const selectedRoomLabel =
+    selectedRoom === null
+      ? null
+      : (resolvedNames[selectedRoom.id] ??
+        selectedRoom.name ??
+        t("rooms.directFallback", { code: selectedRoom.roomCode }));
+
   return (
-    <div className="flex h-[calc(100vh-4rem)] min-h-0" data-testid="chat-page">
-      <RoomListPanel
-        selectedRoomId={selectedRoomId}
-        onSelectRoom={setSelectedRoomId}
-        onCreateRoom={() => setCreateOpen(true)}
-        resolvedNames={resolvedNames}
-        isBootstrapping={!hasLoadedRooms}
-      />
+    <div className="relative flex h-[calc(100vh-4rem)] min-h-0" data-testid="chat-page">
+      {isSearchOpen ? (
+        <MessageSearchPanel
+          query={searchQuery}
+          onQueryChange={setSearchQuery}
+          scope={{
+            roomId: searchScope === "room" ? selectedRoomId : null,
+            roomLabel: selectedRoomLabel,
+          }}
+          onScopeChange={setSearchScope}
+          onOpenResult={(result) => {
+            setActiveResultId(result.id);
+            void jumpToMessage(result.roomId, result.id, result.roomSeq);
+          }}
+          onClose={() => setSearchOpen(false)}
+          activeMessageId={activeResultId}
+        />
+      ) : (
+        <RoomListPanel
+          selectedRoomId={selectedRoomId}
+          onSelectRoom={setSelectedRoomId}
+          onCreateRoom={() => setCreateOpen(true)}
+          onOpenSearch={() => setSearchOpen(true)}
+          resolvedNames={resolvedNames}
+          isBootstrapping={!hasLoadedRooms}
+        />
+      )}
 
       {selectedRoom === null ? (
         <div className="flex min-w-0 flex-1 items-center justify-center p-6">
@@ -152,9 +225,32 @@ export function ChatPage(): React.ReactElement {
           isLoading={detailQuery.isLoading}
           loadError={detailQuery.isError}
           onChanged={() => void detailQuery.refetch()}
-          onJumpToMessage={jumpToMessage}
+          onJumpToMessage={(messageId, roomSeq) =>
+            void jumpToMessage(selectedRoom.id, messageId, roomSeq)
+          }
           onRoomLeft={() => setSelectedRoomId(null)}
         />
+      )}
+
+      {/*
+       * Lỗi mở ngữ cảnh là lỗi của một THAO TÁC, không phải của một khung nhìn — nó không có chỗ nào
+       * trong 3 cột để nằm, nên báo nổi ở góc và người dùng bấm tiếp kết quả khác được ngay.
+       */}
+      {jumpError && (
+        <div
+          className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 rounded-md border border-destructive/50 bg-background px-3 py-2 text-xs shadow-md"
+          role="alert"
+        >
+          <span className="text-destructive">{t("search.jumpFailed")}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-2 h-6"
+            onClick={() => setJumpError(false)}
+          >
+            {t("search.dismiss")}
+          </Button>
+        </div>
       )}
 
       {isCreateOpen && (

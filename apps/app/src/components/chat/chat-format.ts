@@ -41,6 +41,19 @@ export function formatClock(iso: string): string {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+/**
+ * S7-CHAT-FE-4 — `dd/MM HH:mm` cho những danh sách KHÔNG có dải phân cách ngày: kết quả tìm kiếm và tab
+ * Tệp. Ở đó `formatClock` (chỉ `HH:mm`) làm hai dòng cách nhau ba tháng trông y hệt nhau, và người dùng
+ * chọn nhầm kết quả vì tưởng nó của hôm nay.
+ */
+export function formatDateTimeShort(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `${day}/${month} ${formatClock(iso)}`;
+}
+
 /** Khoá nhóm-theo-ngày (`YYYY-MM-DD` giờ ĐỊA PHƯƠNG). Không dùng `toISOString` — nó đổi sang UTC ⇒ tin
  * lúc 23:30 rơi sang ngày hôm sau và dải phân cách ngày hiện sai. */
 export function dayKeyOf(iso: string): string {

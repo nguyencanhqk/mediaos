@@ -1016,6 +1016,13 @@ export const chatKeys = {
     detail: (roomId: string) => [...rootKeys.chat, "rooms", "detail", roomId] as const,
     members: (roomId: string) => [...rootKeys.chat, "rooms", "members", roomId] as const,
     pinned: (roomId: string) => [...rootKeys.chat, "rooms", "pinned", roomId] as const,
+    /**
+     * S7-CHAT-FE-4 — tab "Tệp" (CHAT-API-017). KHÔNG kèm con trỏ `beforeSeq` vào key: trang sau được
+     * NỐI vào state của tab (đọc thêm), không phải một cache entry khác — key theo con trỏ sẽ giữ mỗi
+     * trang một entry và mỗi entry lại ký một bộ URL mới (URL ký có hạn 300s, ký lại là ghi thêm
+     * `file_access_logs`).
+     */
+    files: (roomId: string) => [...rootKeys.chat, "rooms", "files", roomId] as const,
   },
   /** Badge tổng chưa đọc (CHAT-API-016) — lối vào của FE-3; FE-1 chỉ khai key. */
   unreadCount: () => [...rootKeys.chat, "unread-count"] as const,

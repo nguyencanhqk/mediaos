@@ -17,6 +17,7 @@ import type { ChatRoomDto, ChatRoomMemberDto } from "@mediaos/contracts";
 const leaveRoom = vi.fn();
 const archiveRoom = vi.fn();
 const getPinned = vi.fn();
+const listRoomFiles = vi.fn();
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
@@ -27,6 +28,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       leaveRoom: (...a: unknown[]) => leaveRoom(...a),
       archiveRoom: (...a: unknown[]) => archiveRoom(...a),
       getPinned: (...a: unknown[]) => getPinned(...a),
+      listRoomFiles: (...a: unknown[]) => listRoomFiles(...a),
     },
   };
 });
@@ -63,6 +65,28 @@ const members = [
   { id: "m2", roomId: ROOM_ID, userId: OTHER, role: "member", joinedAt: "", userName: "Trần B" },
 ] as unknown as ChatRoomMemberDto[];
 
+const MSG_ID = "00000007-1111-4111-8111-111111111111";
+
+/** S7-CHAT-FE-4 — một dòng của tab Tệp (`ChatRoomFileDto`). */
+function file(over: Record<string, unknown> = {}) {
+  return {
+    id: "f1",
+    fileId: "88888888-8888-4888-8888-888888888888",
+    name: "anh.png",
+    mimeType: "image/png",
+    sizeBytes: 1024,
+    isImage: false,
+    url: "https://storage.example/x?sig=1",
+    thumbnailUrl: null,
+    messageId: MSG_ID,
+    roomSeq: 7,
+    senderId: OTHER,
+    senderName: "Trần B",
+    createdAt: "2026-08-04T10:00:00.000Z",
+    ...over,
+  };
+}
+
 function renderPanel(props: Partial<Parameters<typeof RoomInfoPanel>[0]> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const onRoomLeft = props.onRoomLeft ?? vi.fn();
@@ -76,7 +100,7 @@ function renderPanel(props: Partial<Parameters<typeof RoomInfoPanel>[0]> = {}) {
           isLoading={false}
           loadError={false}
           onChanged={vi.fn()}
-          onJumpToMessage={() => true}
+          onJumpToMessage={vi.fn()}
           {...props}
           onRoomLeft={onRoomLeft}
         />
@@ -92,16 +116,79 @@ beforeEach(() => {
   leaveRoom.mockReset().mockResolvedValue({ left: true });
   archiveRoom.mockReset().mockResolvedValue(room({ isArchived: true }));
   getPinned.mockReset().mockResolvedValue([]);
+  listRoomFiles.mockReset().mockResolvedValue([]);
   useChatStore.getState().resetChatStore();
   useChatStore.getState().setMyUserId(ME);
 });
 
 describe("RoomInfoPanel · tab", () => {
-  it("chỉ có HAI tab: Thành viên + Tin ghim — KHÔNG có tab Tệp (thuộc S7-CHAT-FE-4)", () => {
+  it("BA tab: Thành viên + Tệp + Tin ghim (tab Tệp mở ở S7-CHAT-FE-4)", () => {
     renderPanel();
     expect(screen.getByRole("tab", { name: "Thành viên" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Tệp" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Tin ghim" })).toBeTruthy();
-    expect(screen.queryByRole("tab", { name: "Tệp" })).toBeNull();
+  });
+
+  /**
+   * S7-CHAT-FE-4 — mỗi lần gọi `/rooms/:id/files` là một lô URL ký hạn ngắn **và** một lô bản ghi
+   * `file_access_logs`. Nạp sẵn ở nền cho người chỉ mở tab Thành viên là ghi vào nhật ký truy cập một
+   * hành vi người dùng KHÔNG làm — bản ghi đó về sau không phân biệt được với truy cập thật.
+   */
+  it("KHÔNG gọi /files khi tab Tệp chưa mở", () => {
+    renderPanel();
+    expect(listRoomFiles).not.toHaveBeenCalled();
+  });
+
+  it("mở tab Tệp ⇒ gọi listRoomFiles; ảnh có xem trước, tệp thường hiện tên + cỡ", async () => {
+    listRoomFiles.mockResolvedValue([
+      file({ isImage: true, thumbnailUrl: "https://s/thumb.png", name: "anh.png" }),
+      file({
+        id: "f2",
+        name: "bao-cao.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 2048,
+        messageId: "00000009-1111-4111-8111-111111111111",
+        roomSeq: 9,
+      }),
+    ]);
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: "Tệp" }));
+
+    await waitFor(() => expect(listRoomFiles).toHaveBeenCalledWith(ROOM_ID, { limit: 30 }));
+    expect(await screen.findByAltText("anh.png")).toBeTruthy();
+    expect(screen.getByText("bao-cao.pdf")).toBeTruthy();
+    expect(screen.getByText("2.0 KB")).toBeTruthy();
+  });
+
+  it("tệp bị TỪ CHỐI ký (`url: null`) ⇒ nói 'không tải được', KHÔNG dựng liên kết chết", async () => {
+    listRoomFiles.mockResolvedValue([file({ url: null, thumbnailUrl: null, name: "cam.docx" })]);
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: "Tệp" }));
+
+    expect(await screen.findByTestId("chat-file-unavailable")).toBeTruthy();
+    expect(screen.getByText("Tệp không tải được")).toBeTruthy();
+    expect(document.querySelector('a[href="null"]')).toBeNull();
+  });
+
+  it("bấm 'Xem trong hội thoại' ⇒ báo lên trang KÈM roomSeq (con trỏ để nạp ngữ cảnh)", async () => {
+    listRoomFiles.mockResolvedValue([file({ messageId: MSG_ID, roomSeq: 42 })]);
+    const onJumpToMessage = vi.fn();
+    renderPanel({ onJumpToMessage });
+    fireEvent.click(screen.getByRole("tab", { name: "Tệp" }));
+
+    fireEvent.click(await screen.findByText("Xem trong hội thoại"));
+    expect(onJumpToMessage).toHaveBeenCalledWith(MSG_ID, 42);
+  });
+
+  it("tab Tệp lỗi ⇒ báo + cho thử lại, không im lặng để danh sách trống", async () => {
+    listRoomFiles.mockRejectedValue(new Error("mạng chập"));
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: "Tệp" }));
+
+    expect(await screen.findByText("Không tải được danh sách tệp.")).toBeTruthy();
+    listRoomFiles.mockResolvedValue([file({ name: "lai-duoc.pdf" })]);
+    fireEvent.click(screen.getByText("Thử lại"));
+    expect(await screen.findByText("lai-duoc.pdf")).toBeTruthy();
   });
 
   it("mở tab Tin ghim ⇒ gọi getPinned; rỗng ⇒ nói rõ", async () => {
@@ -124,6 +211,63 @@ describe("RoomInfoPanel · tab", () => {
     renderPanel();
     fireEvent.click(screen.getByRole("tab", { name: "Tin ghim" }));
     expect(await screen.findByText("Tin nhắn đã được thu hồi")).toBeTruthy();
+  });
+});
+
+/**
+ * S7-CHAT-FE-4 — "đã xem tới đâu" (SPEC-15 §13.2), dẫn xuất từ `last_read_seq` của từng thành viên.
+ *
+ * Ca `undefined` là ca quan trọng nhất: trường này `.optional()` trong hợp đồng, và gộp nó với `0` sẽ
+ * bêu "Chưa xem tin nào" lên CẢ phòng ngay khi payload thiếu trường — một lời khẳng định sai về người
+ * thật, đọc như thể đồng nghiệp đang phớt lờ nhau.
+ */
+describe("RoomInfoPanel · đã xem tới đâu", () => {
+  const seenMembers = (over: Array<Record<string, unknown>>) =>
+    [
+      { id: "m1", roomId: ROOM_ID, userId: ME, role: "admin", joinedAt: "", userName: "Tôi" },
+      ...over.map((o, i) => ({
+        id: `s${i}`,
+        roomId: ROOM_ID,
+        userId: `${OTHER.slice(0, -1)}${i}`,
+        role: "member",
+        joinedAt: "",
+        ...o,
+      })),
+    ] as unknown as ChatRoomMemberDto[];
+
+  it("đọc tới tin cuối ⇒ 'Đã xem tin mới nhất'", () => {
+    renderPanel({
+      room: room({ lastMessageSeq: 10 }),
+      members: seenMembers([{ userName: "Trần B", lastReadSeq: 10 }]),
+    });
+    expect(screen.getByText(/Đã xem tin mới nhất/)).toBeTruthy();
+  });
+
+  it("đọc dở ⇒ nói CÒN BAO NHIÊU tin chưa xem (không phơi số hiệu tin ra UI)", () => {
+    renderPanel({
+      room: room({ lastMessageSeq: 10 }),
+      members: seenMembers([{ userName: "Trần B", lastReadSeq: 7 }]),
+    });
+    expect(screen.getByText(/Chưa xem 3 tin/)).toBeTruthy();
+  });
+
+  it("`lastReadSeq: 0` ⇒ 'Chưa xem tin nào'", () => {
+    renderPanel({
+      room: room({ lastMessageSeq: 10 }),
+      members: seenMembers([{ userName: "Trần B", lastReadSeq: 0 }]),
+    });
+    expect(screen.getByText(/Chưa xem tin nào/)).toBeTruthy();
+  });
+
+  it("server KHÔNG gửi `lastReadSeq` ⇒ 'chưa rõ', KHÔNG khẳng định họ chưa đọc", () => {
+    renderPanel({
+      room: room({ lastMessageSeq: 10 }),
+      members: seenMembers([{ userName: "Trần B" }]),
+    });
+    // CẢ HAI hàng (mình + Trần B) đều thiếu trường ⇒ cả hai phải nói "chưa rõ", không hàng nào bị
+    // khẳng định là chưa đọc.
+    expect(screen.getAllByText(/Chưa rõ đã xem tới đâu/)).toHaveLength(2);
+    expect(screen.queryByText(/Chưa xem tin nào/)).toBeNull();
   });
 });
 

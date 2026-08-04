@@ -4,7 +4,7 @@
  * (đang gửi/gửi lỗi), `MessageBubble.spec` (đã thu hồi) và `ChatPage.spec` (không có quyền).
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
@@ -145,5 +145,70 @@ describe("ConversationPanel · vòng đời phòng", () => {
     renderPanel();
     await waitFor(() => expect(getMessages).toHaveBeenCalled());
     expect(getMessages.mock.calls[0][0]).toBe(ROOM_ID);
+  });
+});
+
+/**
+ * S7-CHAT-FE-4 — chế độ xem ngữ cảnh.
+ *
+ * Ca "gửi tin trong lúc xem ngữ cảnh" là ca nguy hiểm nhất của WO: tin vừa gửi có `roomSeq` lớn hơn cửa
+ * sổ nên chốt chèn CHẶN nó. Người dùng bấm Gửi, POST thành công, và tin không xuất hiện ở đâu cả —
+ * không lỗi, không cảnh báo, không cách nào đoán ra.
+ */
+describe("ConversationPanel · ngữ cảnh tìm kiếm", () => {
+  function contextMessage(seq: number) {
+    return {
+      id: `${String(seq).padStart(8, "0")}-1111-4111-8111-111111111111`,
+      companyId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      roomId: ROOM_ID,
+      senderId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      senderName: "Trần B",
+      body: `tin ${seq}`,
+      messageType: "text" as const,
+      fileUrl: null,
+      fileName: null,
+      mentions: [],
+      pinnedAt: null,
+      pinnedBy: null,
+      replyToMessageId: null,
+      recalledAt: null,
+      attachmentCount: 0,
+      attachments: [],
+      roomSeq: seq,
+      createdAt: "2026-08-04T09:00:00.000Z",
+    };
+  }
+
+  beforeEach(() => {
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
+  it("đang xem ngữ cảnh ⇒ LUÔN hiện dải báo + nút thoát (không có trạng thái ẩn)", async () => {
+    useChatStore.getState().hydrateRooms([room]);
+    useChatStore.getState().enterMessageContext(ROOM_ID, [contextMessage(41), contextMessage(42)], {
+      messageId: contextMessage(42).id,
+      seq: 42,
+    });
+    renderPanel();
+
+    expect(await screen.findByTestId("chat-context-banner")).toBeTruthy();
+    expect(screen.getByText("Về tin mới nhất")).toBeTruthy();
+  });
+
+  it("GỬI TIN trong lúc xem ngữ cảnh ⇒ rời ngữ cảnh TRƯỚC (nếu không, tin gửi xong biến mất)", async () => {
+    useChatStore.getState().hydrateRooms([room]);
+    useChatStore.getState().enterMessageContext(ROOM_ID, [contextMessage(41)], {
+      messageId: contextMessage(41).id,
+      seq: 41,
+    });
+    renderPanel();
+    await screen.findByTestId("chat-context-banner");
+
+    fireEvent.change(screen.getByPlaceholderText("Nhập tin nhắn…"), {
+      target: { value: "tin mới" },
+    });
+    fireEvent.click(screen.getByLabelText("Gửi tin nhắn"));
+
+    await waitFor(() => expect(useChatStore.getState().contextByRoom[ROOM_ID]).toBeUndefined());
   });
 });
