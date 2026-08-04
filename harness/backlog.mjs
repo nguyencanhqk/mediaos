@@ -10006,6 +10006,10 @@ export const backlog = [
       "apps/app/src/layouts/**",
       "apps/app/src/components/chat/**",
       "apps/lms/**",
+      // Chuỗi hiển thị của panel nổi + badge sống ở namespace `chat` (FE-2 tạo) — JSX KHÔNG được có
+      // chuỗi cứng, nên tệp locale BẮT BUỘC nằm trong scope. Thiếu dòng này thì `guard-scope` cảnh báo
+      // và gate đọc thiếu một nửa diff (memory `wo-paths-drive-gate-and-scheduler`).
+      "apps/app/src/i18n/locales/vi/chat.ts",
       "docs/plans/S7-CHAT-FE-3.md",
     ],
     skills: ["frontend-design", "code-review"],

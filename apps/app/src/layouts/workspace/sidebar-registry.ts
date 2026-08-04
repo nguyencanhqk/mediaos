@@ -979,6 +979,27 @@ export const ME_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 60,
     requiredAnyPermissions: ["access:lms"],
   },
+  // S7-CHAT-FE-3 — lối vào /chat (SPEC-15, đóng lời hứa "dài hạn = module CHAT nội bộ" của S5-LMS-UI-4).
+  //
+  // Vì sao nằm trong ME_SIDEBAR chứ không phải một CHAT_SIDEBAR riêng: `ModuleSidebar` chỉ render
+  // `SIDEBAR_REGISTRY[moduleCode]` của module ĐANG mở trong `ModuleWorkspaceLayout`, mà `/chat` CỐ Ý
+  // không bọc layout đó (FE-2: trang đã 3 cột, thêm sidebar là cột thứ tư). Khai `SIDEBAR_REGISTRY.CHAT`
+  // sẽ là code chết — không layout nào render nó. ME là nơi duy nhất mọi nhân viên đều có, và đã có tiền
+  // lệ đúng hình dạng này: `me.lms` cũng là link RỜI khỏi module ME.
+  //
+  // Lối vào TOÀN HỆ THỐNG thật sự là `ChatBadge` trên header (có mặt ở mọi route đã đăng nhập); mục này
+  // là lối vào trong workspace. Gate cặp engine LITERAL `access:chat` (mig 0538, non-sensitive, grant
+  // Company cho 4 role canonical) — `filterSidebarItems` tự ẩn khi thiếu quyền, KHÔNG hard-code role.
+  {
+    sidebarKey: "me.chat",
+    moduleCode: "ME",
+    label: "Tin nhắn",
+    path: "/chat",
+    icon: "messages-square",
+    group: "Trao đổi",
+    order: 70,
+    requiredAnyPermissions: ["access:chat"],
+  },
 ];
 
 // ---------------------------------------------------------------------------

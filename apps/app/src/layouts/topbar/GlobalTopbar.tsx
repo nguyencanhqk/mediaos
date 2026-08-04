@@ -24,6 +24,7 @@ import { BrandLogo } from "./BrandLogo";
 import { DirtyFormConfirmDialog } from "../shared/DirtyFormConfirmDialog";
 import { DynamicIcon } from "../workspace/DynamicIcon";
 import { NotificationBadge } from "@/components/notifications/NotificationBadge";
+import { ChatBadge } from "@/components/chat/ChatBadge";
 import { APP_REGISTRY } from "@mediaos/web-core";
 
 // Module accent colors mapped from registry icon — hiển thị trên chrome navy hằng số
@@ -134,6 +135,11 @@ export function GlobalTopbar() {
 
           {/* Chuyển giao diện sáng/tối */}
           <ThemeToggle />
+
+          {/* S7-CHAT-FE-3 — badge tổng tin chưa đọc (CHAT-SCREEN-006). Tự gate access:chat, tự ẩn khi
+              thiếu quyền. Đứng TRƯỚC chuông: chat là kênh người-với-người (cần trả lời), thông báo là
+              kênh hệ thống — đọc từ trái sang phải theo thứ tự cấp thiết. */}
+          <ChatBadge />
 
           {/* Notification badge — tự gate read:notification (NOTI_ENGINE_PAIRS.READ), tự ẩn khi thiếu quyền */}
           <NotificationBadge />

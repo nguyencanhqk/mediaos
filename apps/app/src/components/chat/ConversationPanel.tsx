@@ -25,16 +25,28 @@ interface ConversationPanelProps {
   room: ChatRoomDto;
   members: readonly ChatRoomMemberDto[];
   myRole: "member" | "admin" | null;
-  isInfoOpen: boolean;
-  onToggleInfo: () => void;
+  isInfoOpen?: boolean;
+  onToggleInfo?: () => void;
+  /**
+   * S7-CHAT-FE-3 — vẽ thanh đầu phòng (tên + nút ⓘ) hay không. Mặc định `true` (trang `/chat`).
+   *
+   * Panel nổi truyền `false` vì nó CÓ thanh tiêu đề riêng với affordance khác hẳn (thu nhỏ · đóng · mở
+   * toàn màn hình). Hai thanh chồng nhau trong một cửa sổ cao 26rem là ăn mất ~15% chiều cao đọc tin.
+   *
+   * Đây là MỘT cờ hiển thị, KHÔNG phải một chế độ: không có nhánh logic nào khác rẽ theo nó. Mọi hành vi
+   * còn lại (gửi · gửi lại · thu hồi · ghim · cuộn ngược · đánh dấu đã đọc · banner mất kết nối) giống
+   * hệt trang — đó là lý do panel nổi dùng LẠI component này thay vì có bản rút gọn của riêng nó.
+   */
+  showHeader?: boolean;
 }
 
 export function ConversationPanel({
   room,
   members,
   myRole,
-  isInfoOpen,
+  isInfoOpen = false,
   onToggleInfo,
+  showHeader = true,
 }: ConversationPanelProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const queryClient = useQueryClient();
@@ -144,25 +156,31 @@ export function ConversationPanel({
 
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col" aria-label={title}>
-      <header className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-sm font-semibold">{title}</h2>
-          <p className="truncate text-xs text-muted-foreground">
-            {t(`rooms.types.${room.roomType}`)}
-            {members.length > 0 &&
-              ` · ${t("conversation.membersCount", { count: members.length })}`}
-          </p>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={isInfoOpen ? t("conversation.infoToggleClose") : t("conversation.infoToggle")}
-          aria-pressed={isInfoOpen}
-          onClick={onToggleInfo}
-        >
-          <Info className="h-4 w-4" aria-hidden="true" />
-        </Button>
-      </header>
+      {showHeader && (
+        <header className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-sm font-semibold">{title}</h2>
+            <p className="truncate text-xs text-muted-foreground">
+              {t(`rooms.types.${room.roomType}`)}
+              {members.length > 0 &&
+                ` · ${t("conversation.membersCount", { count: members.length })}`}
+            </p>
+          </div>
+          {onToggleInfo && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={
+                isInfoOpen ? t("conversation.infoToggleClose") : t("conversation.infoToggle")
+              }
+              aria-pressed={isInfoOpen}
+              onClick={onToggleInfo}
+            >
+              <Info className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          )}
+        </header>
+      )}
 
       <ConnectionBanner />
 
