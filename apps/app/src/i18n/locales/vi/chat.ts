@@ -215,6 +215,24 @@ export default {
     body: "Liên hệ quản trị hệ thống nếu bạn cần truy cập module Chat.",
   },
 
+  /** S7-CHAT-FE-3 — badge tổng chưa đọc trên header (CHAT-SCREEN-006). */
+  badge: {
+    ariaLabel: "Tin nhắn — {{count}} tin chưa đọc",
+    totalUnread: "Tin nhắn — {{count}} tin chưa đọc",
+    heading: "Tin nhắn gần đây",
+    openFullPage: "Mở trang tin nhắn",
+  },
+
+  /** S7-CHAT-FE-3 — panel chat nổi (CHAT-SCREEN-002). */
+  dock: {
+    minimize: "Thu nhỏ cuộc trò chuyện với {{name}}",
+    expand: "Mở lại cuộc trò chuyện với {{name}}",
+    minimizeShort: "Thu nhỏ",
+    expandShort: "Mở rộng",
+    openFullScreen: "Mở toàn màn hình",
+    close: "Đóng cuộc trò chuyện",
+  },
+
   time: {
     today: "Hôm nay",
     yesterday: "Hôm qua",
