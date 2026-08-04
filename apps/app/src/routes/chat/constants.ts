@@ -27,23 +27,15 @@ export const CHAT_PAIRS = {
   PIN_MESSAGE: { action: "pin", resourceType: "chat-message" },
 } as const;
 
-/**
- * Cặp gate của đường UPLOAD tệp đính kèm.
+/*
+ * `FOUNDATION_FILE_UPLOAD_PAIR` ĐÃ XOÁ ở `S7-CHAT-BE-8` — đừng khai lại.
  *
- * ⚠️ ĐÂY KHÔNG PHẢI cặp của CHAT. `SPEC-15 §13.5` bước 1 đi qua FOUNDATION Files
- * (`POST /foundation/files/upload` + `/confirm`), cả hai gate `upload:foundation-file` ở
- * `files.controller.ts`. Đo trên DB: cặp đó CHỈ có ở `SA` · `company-admin` · `QUẢN LÝ CẤP CAO` —
- * `employee`/`hr`/`manager` KHÔNG có (mig `0435:376` cấp `foundation-%` cho mỗi role company-admin).
- *
- * ⇒ Nút đính kèm gate bằng cặp NÀY chứ không phải `send:chat-message`: hiện nút cho người chắc chắn
- * ăn 403 là "UI hứa, backend không đọc" (memory `ui-promises-backend-never-reads`).
- *
- * Gỡ khi `S7-CHAT-BE-8` (wrapper presign own-scope, sao khuôn `MeAvatarController`) land.
+ * FE-2 phải gate nút đính kèm bằng cặp FOUNDATION `upload:foundation-file` vì đường upload khi đó là
+ * `POST /foundation/files/upload` + `/confirm`; cặp đó chỉ có ở `SA` · `company-admin` ·
+ * `QUẢN LÝ CẤP CAO` nên nút biến mất với `employee`/`hr`/`manager`. BE-8 chuyển đường upload sang
+ * `POST /chat/files/upload-url` + `/chat/files/:id/confirm`, gate `send:chat-message`. Từ đó cổng của
+ * nút đính kèm ĐÚNG BẰNG cổng của nút Gửi — thêm cặp thứ hai chỉ ẩn nút của người server sẵn sàng phục vụ.
  */
-export const FOUNDATION_FILE_UPLOAD_PAIR = {
-  action: "upload",
-  resourceType: "foundation-file",
-} as const;
 
 /**
  * RouteMeta CỤC BỘ (không ở `ROUTE_REGISTRY` của web-core) — cùng kỹ thuật `hrOrgChartMeta` /

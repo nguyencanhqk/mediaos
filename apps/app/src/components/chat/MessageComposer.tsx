@@ -17,7 +17,6 @@ import type { StoredChatMessage } from "@/stores/chat.store";
 import { createClientMessageId } from "@/stores/chat.store";
 import {
   CHAT_PAIRS,
-  FOUNDATION_FILE_UPLOAD_PAIR,
   MAX_ATTACHMENTS_PER_MESSAGE,
   MAX_MESSAGE_LENGTH,
 } from "@/routes/chat/constants";
@@ -49,12 +48,15 @@ export function MessageComposer({
   onSubmit,
 }: MessageComposerProps): React.ReactElement {
   const { t } = useTranslation("chat");
+  /**
+   * MỘT cổng quyền duy nhất cho cả gõ chữ lẫn đính kèm — `S7-CHAT-BE-8`.
+   *
+   * Trước BE-8, nút đính kèm phải hỏi RIÊNG cặp FOUNDATION `upload:foundation-file` vì đường upload đi
+   * qua `/foundation/files/*`; cặp đó chỉ có ở company-admin nên nút biến mất với gần hết công ty. BE-8
+   * chuyển đường upload sang `/chat/files/*` gate `send:chat-message` ⇒ ai gửi được tin thì tải được
+   * tệp, và hỏi thêm một cặp thứ hai ở FE giờ chỉ ẩn nút của người server sẵn sàng phục vụ.
+   */
   const canSend = useCan(CHAT_PAIRS.SEND_MESSAGE.action, CHAT_PAIRS.SEND_MESSAGE.resourceType);
-  // ⚠️ Gate của nút đính kèm là cặp FOUNDATION, KHÔNG phải cặp CHAT — xem `FOUNDATION_FILE_UPLOAD_PAIR`.
-  const canUpload = useCan(
-    FOUNDATION_FILE_UPLOAD_PAIR.action,
-    FOUNDATION_FILE_UPLOAD_PAIR.resourceType,
-  );
 
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<ChatUploadResult[]>([]);
@@ -218,8 +220,9 @@ export function MessageComposer({
 
       <div className="flex items-end gap-2">
         {/* Nút đính kèm CHỈ hiện khi thực sự upload được — hiện nút rồi để server 403 là "UI hứa,
-            backend không đọc". Đường upload hôm nay gate `upload:foundation-file` (xem constants). */}
-        {canUpload && !disabled && (
+            backend không đọc". Từ `S7-CHAT-BE-8`, điều kiện đó CHÍNH LÀ `!disabled` (phòng chưa lưu trữ
+            + có `send:chat-message`), vì `/chat/files/*` gate đúng cặp ấy. */}
+        {!disabled && (
           <>
             <input
               ref={fileInputRef}
