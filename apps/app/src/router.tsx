@@ -453,6 +453,8 @@ import {
   ME_SETUP_2FA_PATH,
 } from "@/routes/account/constants";
 import { FILES_PATH } from "@/routes/system/files/constants";
+// S7-CHAT-FE-2 — /chat (RouteMeta CỤC BỘ, không ở ROUTE_REGISTRY web-core — cùng pattern hrOrgChartMeta).
+import { CHAT_PATH, CHAT_ROUTE_META } from "@/routes/chat/constants";
 import { MODULES_PATH } from "@/routes/system/modules/constants";
 const UsersPage = React.lazy(() =>
   import("@/routes/system/UsersPage").then((m) => ({ default: m.UsersPage })),
@@ -1760,8 +1762,7 @@ const goalTemplatesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/goals/templates",
   beforeLoad: authGuard,
-  component: () =>
-    buildModuleRouteContent(goalTemplatesMeta, "GOAL", <TaskTemplateListPage />),
+  component: () => buildModuleRouteContent(goalTemplatesMeta, "GOAL", <TaskTemplateListPage />),
 });
 
 const goalDetailMeta: RouteMeta = {
@@ -2044,6 +2045,28 @@ const accountSessionsRoute = createRoute({
   path: "/account/sessions",
   beforeLoad: authGuard,
   component: () => buildShellRouteContent(<AccountSessionsPage />),
+});
+
+// S7-CHAT-FE-2 — /chat (CHAT-SCREEN-001). CỐ Ý **không** qua `ModuleWorkspaceLayout`: trang đã là 3 cột
+// (danh sách phòng · hội thoại · thông tin phòng), thêm sidebar module là cột thứ TƯ. Cổng quyền không
+// mất gì vì nó nằm ở `ProtectedRoute meta` — `buildChatRouteContent` vẫn bọc nguyên tầng đó.
+// Lối vào (sidebar + badge chưa đọc trên header) thuộc `S7-CHAT-FE-3`; hôm nay vào bằng URL trực tiếp.
+const ChatPage = React.lazy(() =>
+  import("@/routes/chat/ChatPage").then((m) => ({ default: m.ChatPage })),
+);
+const chatRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: CHAT_PATH,
+  beforeLoad: authGuard,
+  component: () => (
+    <ProtectedShell>
+      <ProtectedRoute meta={CHAT_ROUTE_META}>
+        <React.Suspense fallback={<RouteSuspenseFallback />}>
+          <ChatPage />
+        </React.Suspense>
+      </ProtectedRoute>
+    </ProtectedShell>
+  ),
 });
 
 // Tích hợp LMS Giai đoạn A — /lms: authenticated-only (không permission pair — mọi nhân viên
@@ -2394,6 +2417,7 @@ const routeTree = rootRoute.addChildren([
   systemSequencesRoute,
   systemSeedsRoute,
   accountSessionsRoute,
+  chatRoute,
   lmsRedirectRoute,
   accountSetupTwoFactorRoute,
   accountProfileRoute,
