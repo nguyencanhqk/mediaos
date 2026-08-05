@@ -22,18 +22,18 @@ export const EMPTY_ROLE_FORM: RoleFormValues = {
 /**
  * Role đã tải (list catalog hoặc write-result) → giá trị form.
  *
- * ⚠️ GIỚI HẠN FE-only (BE-gap, KHÔNG tự thêm endpoint ở lane FE — mirror ghi-chú RolePermissionsPage):
- * `roleSchema` của GET /auth/roles (list) KHÔNG mang cột `requiresTwoFactor`, và KHÔNG có route
- * GET /auth/roles/:id (detail). Vì vậy khi PREFILL form edit, `requiresTwoFactor` mặc định `false` —
- * KHÔNG phản chiếu trạng thái thật của role. Người dùng phải chủ động bật lại nếu muốn giữ. Chỉ khi
- * BE bổ sung cờ này vào list/detail thì mới prefill đúng được. Follow-up BE: thêm requiresTwoFactor
- * vào roleSchema (list) hoặc GET /auth/roles/:id.
+ * `requiresTwoFactor` PHẢI đến từ role thật (S7-SEC-ROLE2FA-UI-1). Nó vừa là giá trị hiển thị, vừa là
+ * MẶC ĐỊNH của react-hook-form — mà `toUpdateRoleDto` chỉ gửi field dirty. Prefill sai một chiều là
+ * khoá luôn chiều kia: mặc-định-false ⇒ "bỏ tick" trả về đúng mặc định ⇒ hết dirty ⇒ cờ rơi khỏi PATCH
+ * ⇒ role bật 2FA rồi thì KHÔNG tắt được từ UI. Đừng thay bằng `?? false`.
  */
-export function roleToFormValues(role: Pick<RoleDto, "name" | "description">): RoleFormValues {
+export function roleToFormValues(
+  role: Pick<RoleDto, "name" | "description" | "requiresTwoFactor">,
+): RoleFormValues {
   return {
     name: role.name,
     description: role.description ?? "",
-    requiresTwoFactor: false,
+    requiresTwoFactor: role.requiresTwoFactor,
   };
 }
 

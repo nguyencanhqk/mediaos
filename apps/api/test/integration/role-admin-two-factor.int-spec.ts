@@ -170,6 +170,44 @@ describe.skipIf(!hasLaneDb)(
       expect((updated!.after as Record<string, unknown>).requiresTwoFactor).toBe(true);
     });
 
+    // ── §downgrade (S7-SEC-ROLE2FA-UI-1) ────────────────────────────────────────────────────────
+    // Chiều true→false là chiều HẠ chuẩn bảo mật, và trước WO này màn quản trị KHÔNG gọi tới nó được
+    // (prefill sai ⇒ bỏ tick không thành dirty ⇒ cờ rơi khỏi PATCH). Giờ UI mở được đường đó thì
+    // đường đó phải có bằng chứng: DB lật, audit ghi ĐÚNG chiều, và GET /auth/roles đồng thuận ngay.
+    it("§downgrade — PATCH true→false → DB false + audit RoleUpdated ghi ĐÚNG chiều hạ + list đồng thuận", async () => {
+      const name = `r2fa-down-${randomUUID().slice(0, 8)}`;
+      const createRes = await api(app)
+        .post("/auth/roles")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ name, requiresTwoFactor: true });
+      expect(createRes.status, JSON.stringify(createRes.body)).toBe(201);
+      const roleId = createRes.body.data.id as string;
+      expect(await roleFlagInDb(direct, roleId)).toBe(true);
+
+      const res = await api(app)
+        .patch(`/auth/roles/${roleId}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ requiresTwoFactor: false });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.data.requiresTwoFactor).toBe(false);
+      expect(await roleFlagInDb(direct, roleId)).toBe(false);
+
+      // Audit phải ghi chiều hạ chuẩn — không được im lặng như lần lật cờ ngoài ứng dụng.
+      const updated = (await auditRowsFor(direct, roleId)).find((a) => a.action === "RoleUpdated");
+      expect(updated).toBeDefined();
+      expect((updated!.before as Record<string, unknown>).requiresTwoFactor).toBe(true);
+      expect((updated!.after as Record<string, unknown>).requiresTwoFactor).toBe(false);
+
+      // Đường ĐỌC (prefill màn edit) phải thấy ngay giá trị mới — nếu không, lần mở form kế tiếp lại
+      // tick sẵn và người dùng vô tình bật lại cờ vừa tắt.
+      const list = await api(app).get("/auth/roles").set("Authorization", `Bearer ${adminToken}`);
+      expect(list.status).toBe(200);
+      const row = (list.body.data.roles as Array<{ id: string; requiresTwoFactor: boolean }>).find(
+        (r) => r.id === roleId,
+      );
+      expect(row?.requiresTwoFactor).toBe(false);
+    });
+
     it("§deny — PATCH cờ lên SYSTEM role → 400 REJECT trước update/audit; DB giữ nguyên, không audit rác", async () => {
       const before = await roleFlagInDb(direct, COMPANY_ADMIN_ROLE_ID); // mig 0120 seed = true
       const auditCountBefore = (await auditRowsFor(direct, COMPANY_ADMIN_ROLE_ID)).length;

@@ -12,12 +12,21 @@ import { z } from "zod";
 export const AUTH_ROLE = { action: "view", resource: "role" } as const;
 export const AUTH_PERMISSION = { action: "view", resource: "permission" } as const;
 
-/** 1 role (catalog gán quyền). isSystem=true ⇒ role hệ thống (company_id NULL). */
+/**
+ * 1 role (catalog gán quyền). isSystem=true ⇒ role hệ thống (company_id NULL).
+ *
+ * `requiresTwoFactor` (S7-SEC-ROLE2FA-UI-1): phản chiếu roles.requires_two_factor. Endpoint này là
+ * ĐƯỜNG ĐỌC DUY NHẤT của cờ ở tầng quản trị — KHÔNG có GET /auth/roles/:id, màn "Sửa vai trò"
+ * prefill bằng list + find-by-id. Thiếu cột ở đây ⇒ form mặc định false ⇒ hiển thị sai VÀ khoá luôn
+ * chiều TẮT (patch chỉ gửi field dirty). Bắt buộc (không `.optional()`) để mọi nơi dựng RoleDto phải
+ * khai tường minh — mặc-định-ngầm chính là lỗi đang vá. ⚠️ Deploy: BE TRƯỚC FE (FE parse schema này).
+ */
 export const roleSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   description: z.string().nullable(),
   isSystem: z.boolean(),
+  requiresTwoFactor: z.boolean(),
 });
 export type RoleDto = z.infer<typeof roleSchema>;
 

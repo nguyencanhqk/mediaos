@@ -4,6 +4,45 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
+## Phiên 2026-08-05 (session b74ca3cc) — `S7-SEC-ROLE2FA-UI-1` → PR #345
+
+**Đã làm:** vá màn "Sửa vai trò" đọc sai + không tắt được cờ `requires_two_factor`. `roleSchema`
+(GET /auth/roles) += `requiresTwoFactor` **bắt buộc** · `listRolesTx` select thêm cột ·
+`roleToFormValues` bỏ hard-code `false`. Không route mới, không migration, không đụng
+`TwoFactorEnforcementGuard`. `check.sh --lane-db=role2fa` XANH; FULL gate PASS.
+
+### Bài học: prefill sai là một lỗi GHI, không phải lỗi hiển thị
+
+Ai đọc `roleToFormValues()` hard-code `false` cũng thấy "hiển thị sai". Lớp thứ hai mới đắt: giá trị
+prefill **cũng là `defaultValues` của react-hook-form**, mà patch chỉ gửi field **dirty**. Mặc-định-
+`false` ⇒ tick-rồi-bỏ-tick trả giá trị *về đúng mặc định* ⇒ RHF **xoá dirty** ⇒ field rơi khỏi PATCH.
+Kết quả: màn chỉ **BẬT** được, không **TẮT** được — và không có lỗi nào hiện ra.
+
+⇒ Với form dirty-patch, **mọi ô prefill sai đều là lỗ ghi một chiều**, không phải lỗi cosmetic. Sửa
+prefill xong PHẢI có ca khoá **chiều ngược**; sửa xong tự thấy đúng là bẫy, vì prefill đúng làm chiều
+kia mới bắt đầu chạy lần đầu. Cùng lý do: `§downgrade` (PATCH `true→false`) ở BE trước nay **chưa ai
+phủ** — UI không gọi tới được thì test cũng không nghĩ ra để viết.
+
+### Contract: chọn `required` chứ không `.optional()` — và cái giá của nó
+
+`.optional()`/`.default(false)` "cho an toàn deploy" chính là tái tạo lỗ vừa vá (mặc-định-ngầm). Đã
+chọn **required** + ratchet ở `user-admin.spec.ts` từ chối hàng thiếu cờ. Giá phải trả là thật:
+**BE phải lên TRƯỚC FE**, nếu không `apiFetch` ném ZodError cho *mọi* consumer `/auth/roles`
+(7 màn, gồm cả gán vai). Fail-closed nên chấp nhận được — nhưng đây là **luật cho mọi PR thêm field
+vào một read-schema đã có**, không riêng PR này.
+
+### 🔴 Chưa xong — việc của owner
+
+FULL gate đo PROD: `QUẢN LÝ CẤP CAO` hiện `requires_two_factor = f`, **không có dòng audit nào ghi
+chiều `true→false`** (dòng role mới nhất là `false→true` 03/08); 3/4 thành viên chưa enroll TOTP. Cả
+hai writer lên `roles` đều audit trong cùng tx ⇒ nếu đúng thì cú lật đi **ngoài API** (SQL tay/restore).
+**Chưa tự xác minh được** — truy vấn DB PROD bị safety classifier chặn. Nếu đúng: tiền đề đo-04/08 ở
+`harness/backlog.mjs:10467` đã cũ, và bước nghiệm thu "mở màn edit thấy đã tick" phải chọn vai khác.
+
+**Friction:** chạy một int-spec lẻ với `LANE_DB` cần `. scripts/lib/db-secrets.sh && db_secrets_load`
+trước, nếu không vitest.config chết ngay lúc load ("THIẾU APP_DB_PASSWORD"). `set -a; . ./.env` KHÔNG
+đủ. (Lần 2 gặp — lần sau nữa thì gọi `skill-smith`.)
+
 ## Phiên 2026-08-03c (session 6fc9d44c) — `S7-CHAT-DB-3` + ĐƯA CẢ WAVE CHAT LÊN MASTER
 
 > ⚠️ **Cây KHÔNG sạch khi phiên này đóng, và đó KHÔNG phải rác của nó.** `apps/api/test/helpers/seed.ts`

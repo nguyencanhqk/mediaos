@@ -126,7 +126,15 @@ describe("S2-AUTH-BE-3 contracts — role/permission list", () => {
   it("roleListSchema + permissionListSchema parse hợp lệ", () => {
     expect(
       roleListSchema.safeParse({
-        roles: [{ id: UUID, name: "company-admin", description: null, isSystem: true }],
+        roles: [
+          {
+            id: UUID,
+            name: "company-admin",
+            description: null,
+            isSystem: true,
+            requiresTwoFactor: true,
+          },
+        ],
       }).success,
     ).toBe(true);
     expect(
@@ -134,5 +142,15 @@ describe("S2-AUTH-BE-3 contracts — role/permission list", () => {
         permissions: [{ id: UUID, action: "view", resourceType: "user", isSensitive: false }],
       }).success,
     ).toBe(true);
+  });
+
+  // S7-SEC-ROLE2FA-UI-1 — ratchet: cờ 2FA phải BẮT BUỘC ở đường đọc role.
+  // Nới thành `.optional()`/`.default(false)` cho "tương thích ngược" là mở lại đúng lỗi vừa vá:
+  // hàng thiếu cờ ⇒ form edit mặc định false ⇒ hiển thị sai VÀ mất chiều TẮT (patch chỉ gửi dirty).
+  it("roleListSchema TỪ CHỐI hàng thiếu requiresTwoFactor (không mặc-định-ngầm)", () => {
+    const parsed = roleListSchema.safeParse({
+      roles: [{ id: UUID, name: "company-admin", description: null, isSystem: true }],
+    });
+    expect(parsed.success).toBe(false);
   });
 });
