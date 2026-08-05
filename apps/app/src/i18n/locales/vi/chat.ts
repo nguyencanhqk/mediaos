@@ -29,6 +29,16 @@ export default {
       department: "Phòng ban",
       project: "Dự án",
     },
+    /**
+     * S8-CHAT-UX-FE-1 — tiêu đề MỤC trong danh sách. Bốn mục theo loại phòng dùng LẠI `rooms.types.*`
+     * (cùng chữ, một nguồn) — ở đây chỉ khai thứ không suy được từ `room_type`.
+     */
+    sections: {
+      pinned: "Đã ghim",
+      collapseAria: "Thu gọn mục {{name}}",
+      expandAria: "Mở rộng mục {{name}}",
+      unreadAria: "{{count}} tin chưa đọc trong mục {{name}}",
+    },
     /** Phòng `direct` không có `name`; danh sách phòng không kèm thành viên nên nhãn dự phòng là mã phòng. */
     directFallback: "Tin nhắn riêng · {{code}}",
   },

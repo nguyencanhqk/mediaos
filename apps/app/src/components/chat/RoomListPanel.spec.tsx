@@ -7,7 +7,7 @@
  *  (b) nút tạo phòng hỏi ĐÚNG cặp `create:chat-room`.
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
@@ -157,6 +157,154 @@ describe("RoomListPanel · tìm + rổ lưu trữ", () => {
     renderPanel();
     fireEvent.click(screen.getByText("Xem phòng đã lưu trữ"));
     expect(await screen.findByText("Không có phòng nào đã lưu trữ.")).toBeTruthy();
+  });
+});
+
+/**
+ * S8-CHAT-UX-FE-1 — chia mục theo loại phòng (CHAT-DEC-013).
+ *
+ * Luật chia rổ đã có test riêng trên DỮ LIỆU ở `room-list-sections.spec.ts`. Ở đây chỉ kiểm những thứ
+ * chỉ DOM mới trả lời được: đếm NODE thật (không phải "code render 1 element"), thu/mở, và dấu vết tin
+ * chưa đọc khi mục bị thu.
+ */
+describe("RoomListPanel · chia mục theo loại phòng", () => {
+  beforeEach(() => {
+    globalThis.localStorage?.clear();
+  });
+
+  function seedFourTypes() {
+    useChatStore
+      .getState()
+      .hydrateRooms([
+        room("d1", { roomType: "direct", name: null, unreadCount: 2 }),
+        room("g1", { roomType: "group", unreadCount: 5 }),
+        room("dep1", { roomType: "department" }),
+        room("p1", { roomType: "project" }),
+      ]);
+  }
+
+  it("vẽ MỘT mục cho mỗi loại phòng có mặt, theo thứ tự Riêng → Nhóm → Phòng ban → Dự án", () => {
+    seedFourTypes();
+    renderPanel();
+
+    const sections = screen.getAllByTestId("chat-room-section");
+    expect(sections.map((s) => s.getAttribute("data-section"))).toEqual([
+      "direct",
+      "group",
+      "department",
+      "project",
+    ]);
+  });
+
+  it("mục KHÔNG có phòng nào thì KHÔNG vẽ tiêu đề trống", () => {
+    useChatStore.getState().hydrateRooms([room("g1", { roomType: "group" })]);
+    renderPanel();
+
+    expect(
+      screen.getAllByTestId("chat-room-section").map((s) => s.getAttribute("data-section")),
+    ).toEqual(["group"]);
+  });
+
+  it("mỗi phòng có ĐÚNG MỘT node trong DOM — chia mục không nhân bản dòng", () => {
+    seedFourTypes();
+    renderPanel();
+
+    // ĐẾM NODE, không đếm phần tử React: hai anh em cùng `key` render ra hai node mà React không hề
+    // cảnh báo (memory duplicate-sibling-key-leaks-dom-node).
+    const items = screen.getAllByTestId("chat-room-item");
+    expect(items).toHaveLength(4);
+    const labels = items.map((el) => el.textContent);
+    expect(new Set(labels).size).toBe(4);
+  });
+
+  it("bấm tiêu đề mục ⇒ THU mục đó, các phòng của nó rời khỏi DOM; mục khác không đổi", () => {
+    seedFourTypes();
+    renderPanel();
+
+    const groupToggle = screen
+      .getAllByTestId("chat-room-section-toggle")
+      .find((b) => b.textContent?.includes("Nhóm"))!;
+    fireEvent.click(groupToggle);
+
+    expect(screen.getAllByTestId("chat-room-item")).toHaveLength(3);
+    expect(screen.queryByText("Phòng g1")).toBeNull();
+    expect(screen.getByText("Phòng dep1")).toBeTruthy();
+  });
+
+  it("mục ĐANG THU vẫn hiện tổng tin chưa đọc — thu lại không được làm mất dấu vết", () => {
+    seedFourTypes();
+    renderPanel();
+
+    fireEvent.click(
+      screen
+        .getAllByTestId("chat-room-section-toggle")
+        .find((b) => b.textContent?.includes("Nhóm"))!,
+    );
+
+    expect(screen.getByLabelText("5 tin chưa đọc trong mục Nhóm")).toBeTruthy();
+  });
+
+  it("aria-expanded phản ánh đúng trạng thái thu/mở", () => {
+    seedFourTypes();
+    renderPanel();
+
+    const toggle = screen
+      .getAllByTestId("chat-room-section-toggle")
+      .find((b) => b.textContent?.includes("Nhóm"))!;
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(toggle);
+    expect(
+      screen
+        .getAllByTestId("chat-room-section-toggle")
+        .find((b) => b.textContent?.includes("Nhóm"))!
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
+  });
+
+  it("trạng thái thu được NHỚ qua lần mở lại (localStorage)", () => {
+    seedFourTypes();
+    const first = renderPanel();
+    expect(first).toBeTruthy();
+    fireEvent.click(
+      screen
+        .getAllByTestId("chat-room-section-toggle")
+        .find((b) => b.textContent?.includes("Nhóm"))!,
+    );
+    cleanup();
+
+    renderPanel();
+    expect(screen.queryByText("Phòng g1")).toBeNull();
+    expect(screen.getAllByTestId("chat-room-item")).toHaveLength(3);
+  });
+
+  it("ĐANG LỌC thì mở hết — kết quả khớp không được nằm trong mục đã thu từ trước", () => {
+    seedFourTypes();
+    renderPanel();
+
+    fireEvent.click(
+      screen
+        .getAllByTestId("chat-room-section-toggle")
+        .find((b) => b.textContent?.includes("Nhóm"))!,
+    );
+    expect(screen.queryByText("Phòng g1")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Tìm phòng theo tên hoặc mã"), {
+      target: { value: "g1" },
+    });
+
+    expect(screen.getByText("Phòng g1")).toBeTruthy();
+    // Chỉ mục CÓ kết quả mới hiện.
+    expect(screen.getAllByTestId("chat-room-section")).toHaveLength(1);
+  });
+
+  it("chưa có cột pinned_at ⇒ KHÔNG vẽ mục 'Đã ghim' (không bịa mục ma)", () => {
+    seedFourTypes();
+    renderPanel();
+
+    expect(
+      screen.getAllByTestId("chat-room-section").map((s) => s.getAttribute("data-section")),
+    ).not.toContain("pinned");
   });
 });
 
