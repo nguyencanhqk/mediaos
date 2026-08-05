@@ -29,7 +29,18 @@ on:
 
 concurrency:
   group: apps-frontend-${{ github.ref }}
-  cancel-in-progress: true
+  # ⚠️ KHÔNG cancel trên master/main — chỉ cancel trên nhánh PR.
+  #
+  # Luồng chuẩn của dự án là `merge PR → gen-status → commit → push`, tức HAI commit cách nhau ~2 phút
+  # trên cùng `master` ⇒ cùng concurrency group. Với `cancel-in-progress: true`, commit STATUS (docs-only)
+  # GIẾT run đang build/deploy của chính commit merge; run STATUS thì `Detect changed apps` thấy không app
+  # nào đổi nên Build/Deploy `skipped` và kết thúc `success`. Kết quả: **không app nào lên Pages**, mà
+  # `gh run list` nhìn qua thì "xong hết" — `cancelled` + `skipped` đều KHÔNG phải failure nên không có gì
+  # báo đỏ. Đã cắn thật 2 lần ngày 2026-08-04: S7-CHAT-FE-1 (run 30875769114) và S7-CHAT-FE-2
+  # (run 30880774978) — code trang /chat nằm trên master nhưng PROD vẫn chạy bundle cũ tới tận merge sau.
+  #
+  # Trên master, hai run nối đuôi nhau (chậm hơn vài phút) LUÔN đúng hơn một run bị giết giữa lúc deploy.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -176,3 +187,33 @@ jobs:
           esac
           echo "deploy dist → $PROJECT"
           npx wrangler@3 pages deploy dist --project-name "$PROJECT" --branch main
+
+      # Nghiệm thu BẰNG NỘI DUNG, không bằng trạng thái job. Bài học lặp lại của dự án: một job xanh chỉ
+      # nói "lệnh chạy xong", không nói "bản mới đang phục vụ" — deploy nhầm nhánh preview, sai tên
+      # project, hay alias không cập nhật đều để lại exit 0 + bundle CŨ trên domain. So tên bundle trong
+      # dist với tên bundle mà alias production ĐANG trả về; lệch quá 2 phút ⇒ ĐỎ, có tên bản để đối chiếu.
+      #
+      # Dùng `<project>.pages.dev` chứ không custom domain: alias production là thứ wrangler vừa ghi, còn
+      # custom domain thêm biến số DNS/cache — đỏ vì DNS thì thông điệp lỗi trỏ sai chỗ.
+      - name: Verify bundle live == bundle vừa deploy
+        run: |
+          case "${{ matrix.app }}" in
+            app) PROJECT="web-mediaos" ;;
+            *)   PROJECT="${{ matrix.app }}-mediaos" ;;
+          esac
+          want="$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' dist/index.html | head -1)"
+          if [ -z "$want" ]; then
+            echo "::error::Không đọc được tên bundle trong dist/index.html — artifact build hỏng." >&2
+            exit 1
+          fi
+          for attempt in 1 2 3 4 5 6 7 8; do
+            got="$(curl -fsSL --max-time 20 "https://${PROJECT}.pages.dev/" | grep -o 'assets/index-[A-Za-z0-9_-]*\.js' | head -1 || true)"
+            if [ "$got" = "$want" ]; then
+              echo "OK (lần thử ${attempt}): ${PROJECT} đang phục vụ ${want}"
+              exit 0
+            fi
+            echo "lần ${attempt}: live=${got:-<không đọc được>} ≠ vừa deploy=${want} — chờ 15s"
+            sleep 15
+          done
+          echo "::error::https://${PROJECT}.pages.dev vẫn KHÔNG phục vụ ${want} sau ~2 phút: wrangler exit 0 nhưng bản cũ còn nguyên." >&2
+          exit 1

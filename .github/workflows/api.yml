@@ -17,7 +17,9 @@ on:
 
 concurrency:
   group: api-${{ github.ref }}
-  cancel-in-progress: true
+  # Chỉ cancel trên nhánh PR — cùng lý do đã ghi ở `apps-frontend.yml` (commit STATUS ngay sau merge giết
+  # run của commit merge; cancelled + skipped đều không báo đỏ).
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
