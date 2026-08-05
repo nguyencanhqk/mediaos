@@ -255,7 +255,7 @@ Chi tiết cột/kiểu/constraint: [DB-12](<../DB/DB-12 CHAT Database Design.md
 | Mã | Màn hình | Ghi chú |
 | --- | --- | --- |
 | CHAT-SCREEN-001 | Trang Chat full-screen (`/chat`) | 3 cột: danh sách phòng · khung hội thoại · thông tin phòng |
-| CHAT-SCREEN-002 | Panel chat nổi (mọi màn hình) | thu nhỏ/mở rộng, tối đa 3 hội thoại mở, **dùng chung store + chung 1 kết nối WS** với CHAT-SCREEN-001 |
+| CHAT-SCREEN-002 | Panel chat nổi (mọi màn hình) | thu nhỏ/mở rộng, **đúng 1 hội thoại mở tại một thời điểm** — bấm phòng khác thì THAY CHỖ phòng đang mở (đổi 2026-08-05 từ "tối đa 3": nhiều cửa sổ cộng dồn ở cạnh dưới, người dùng đọc ra là "cứ bấm là mở thêm khung, không ẩn phần chat cũ"). **Dùng chung store + chung 1 kết nối WS** với CHAT-SCREEN-001 |
 | CHAT-SCREEN-003 | Hộp thoại tạo nhóm / chọn người nhắn riêng | danh bạ nhân viên có tìm kiếm, tôn trọng quyền xem danh bạ của HR |
 | CHAT-SCREEN-004 | Bảng thông tin phòng | thành viên · tệp đã gửi · tin đã ghim · nút rời/lưu trữ (theo quyền + loại phòng) |
 | CHAT-SCREEN-005 | Tìm kiếm tin nhắn | phạm vi: tất cả phòng của tôi, hoặc trong 1 phòng; nhảy tới tin trong ngữ cảnh |
