@@ -11,16 +11,29 @@
 import { create } from "zustand";
 
 /**
- * Trần cửa sổ mở cùng lúc — SPEC-15 §9 CHAT-SCREEN-002 ghi rõ "tối đa 3 hội thoại mở".
+ * Trần cửa sổ mở cùng lúc — SPEC-15 §9 CHAT-SCREEN-002: **đúng MỘT hội thoại tại một thời điểm**.
  *
- * Không phải con số tuỳ ý: mỗi cửa sổ mở là một `useChatConversation` đang chạy (một lưới bù tin 10 giây
- * + một truy vấn chi tiết phòng). Trần giữ chi phí đó có biên, và 3 cửa sổ 320px là thứ cuối cùng còn
- * nằm vừa cạnh dưới một màn hình laptop mà không đè lên nhau.
+ * Đổi 2026-08-05 (quyết định của owner) từ 3 xuống 1. Lý do đo được trên máy thật: mỗi lần bấm một phòng
+ * là THÊM một cửa sổ mà cửa sổ cũ vẫn nằm đó, nên dải dưới màn hình dồn thành nhiều khung hẹp — người
+ * dùng đọc ra là "cứ bấm là mở thêm khung, không ẩn phần chat cũ". Trần 1 biến thao tác "mở phòng" thành
+ * THAY CHỖ: luôn còn đúng một hội thoại trước mắt, không ai phải tự dọn cửa sổ thừa.
+ *
+ * Vẫn để dưới dạng hằng số (không hard-code `[roomId]` trong `openRoom`) vì đây là một CHÍNH SÁCH chứ
+ * không phải một phép gán: mọi nhánh đẩy-cửa-sổ-cũ-ra bên dưới chạy theo con số này, nên đổi lại về >1
+ * chỉ là đổi một chỗ — và bài test trần vẫn còn nguyên hiệu lực.
+ *
+ * Ràng buộc chi phí không đổi: mỗi cửa sổ mở là một `useChatConversation` đang chạy (một lưới bù tin 10
+ * giây + một truy vấn chi tiết phòng), nên trần thấp hơn chỉ có lợi.
  */
-export const MAX_DOCK_WINDOWS = 3;
+export const MAX_DOCK_WINDOWS = 1;
 
 interface ChatDockState {
-  /** Thứ tự vẽ TRÁI→PHẢI; cửa sổ mở GẦN ĐÂY NHẤT nằm CUỐI mảng (sát mép phải, gần tầm tay nhất). */
+  /**
+   * Hội thoại đang mở. Ở trần hiện tại (`MAX_DOCK_WINDOWS === 1`) mảng này dài tối đa MỘT phần tử.
+   *
+   * Vẫn là MẢNG chứ không phải `string | null`: thứ tự "mở gần đây nhất nằm CUỐI" là thứ luật đẩy cửa sổ
+   * cũ ra dựa vào, và đổi kiểu ở đây sẽ bắt viết lại `openRoom`/`closeRoom` nếu trần được nới lại.
+   */
   openRoomIds: readonly string[];
   minimizedRoomIds: Readonly<Record<string, true>>;
   /**
@@ -42,7 +55,9 @@ interface ChatDockState {
    * bấm vào nó làm con trỏ chuột trỏ vào một phòng khác so với thứ họ định mở.
    *
    * Quá trần ⇒ đẩy cái CŨ NHẤT (index 0) ra, KHÔNG từ chối mở. Từ chối là một nút bấm không phản hồi:
-   * người dùng vừa chọn một phòng và không có gì xảy ra, không lời giải thích.
+   * người dùng vừa chọn một phòng và không có gì xảy ra, không lời giải thích. Ở trần 1, "đẩy cái cũ
+   * nhất ra" chính là hành vi THAY CHỖ mà người dùng mong đợi — phòng vừa bấm chiếm khung, phòng trước
+   * đó đóng lại.
    */
   openRoom: (roomId: string) => void;
   closeRoom: (roomId: string) => void;
@@ -83,13 +98,25 @@ export const useChatDockStore = create<ChatDockState>((set) => ({
       const next = [...state.openRoomIds, roomId];
       if (next.length <= MAX_DOCK_WINDOWS) return { openRoomIds: next };
 
-      // Vượt trần: cắt phần đầu và dọn LUÔN cờ thu nhỏ của những cửa sổ vừa bị đẩy ra. Giữ lại cờ đó
-      // nghĩa là lần sau mở lại chính phòng ấy nó hiện ra ở trạng thái thu nhỏ của một phiên đã quên,
-      // không ai lần được vì sao.
+      // Vượt trần: cắt phần đầu và dọn state của những cửa sổ vừa bị đẩy ra ĐÚNG NHƯ `closeRoom` — bị
+      // đẩy ra và tự đóng là cùng một kết cục, để lại hai loại tàn dư khác nhau thì không ai lần được.
+      //
+      //  · cờ thu nhỏ: giữ lại ⇒ lần sau mở lại chính phòng ấy nó hiện ra ở trạng thái thu nhỏ của một
+      //    phiên đã quên;
+      //  · tên đã dựng: giữ lại ⇒ tích luỹ khoá chết suốt phiên. Ở trần 1, MỖI lần đổi phòng đều đi qua
+      //    nhánh này (không còn là ca hiếm như hồi trần 3), nên rò rỉ ở đây là rò rỉ theo số lần bấm.
       const evicted = next.slice(0, next.length - MAX_DOCK_WINDOWS);
       let minimizedRoomIds = state.minimizedRoomIds;
-      for (const id of evicted) minimizedRoomIds = omitKey(minimizedRoomIds, id);
-      return { openRoomIds: next.slice(next.length - MAX_DOCK_WINDOWS), minimizedRoomIds };
+      let resolvedNames = state.resolvedNames;
+      for (const id of evicted) {
+        minimizedRoomIds = omitKey(minimizedRoomIds, id);
+        resolvedNames = omitKey(resolvedNames, id);
+      }
+      return {
+        openRoomIds: next.slice(next.length - MAX_DOCK_WINDOWS),
+        minimizedRoomIds,
+        resolvedNames,
+      };
     }),
 
   closeRoom: (roomId) =>

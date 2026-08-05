@@ -1,7 +1,7 @@
 /**
  * S7-CHAT-FE-3 — màn hình có đủ chỗ cho panel nổi hay không.
  *
- * `ChatDock` ẩn dưới breakpoint `md` (ba cửa sổ 320px không nằm vừa màn hình điện thoại; ở đó lối vào là
+ * `ChatDock` ẩn dưới breakpoint `md` (cửa sổ 320px × 26rem không nằm vừa màn hình điện thoại; ở đó lối vào là
  * trang `/chat` full-screen). Nhưng CSS chỉ giấu phần NHÌN THẤY — `ChatBadge` vẫn sẽ gọi `openRoom()` và
  * người dùng trên điện thoại bấm một phòng rồi **không thấy gì xảy ra**. Đó là nút chết, đúng loại lỗi
  * "UI hứa nhưng đường dưới không đọc". Vì thế hành vi và hiển thị phải đọc CÙNG một sự thật.

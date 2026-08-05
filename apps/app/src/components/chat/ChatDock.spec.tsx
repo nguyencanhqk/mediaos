@@ -72,7 +72,7 @@ describe("ChatDock", () => {
     useChatStore.getState().resetChatStore();
   });
 
-  it("vẽ một cửa sổ cho mỗi hội thoại đang mở", async () => {
+  it("mở phòng thứ hai ⇒ vẫn ĐÚNG MỘT cửa sổ, và là phòng vừa bấm", async () => {
     // `syncRoomList` (không `hydrateRooms`) để bật `hasLoadedRooms` — mirror đường thật ở app shell.
     useChatStore.getState().syncRoomList([room("a"), room("b")], false);
     useChatDockStore.getState().openRoom("a");
@@ -82,7 +82,10 @@ describe("ChatDock", () => {
     // `findAll…` chứ không `getAll…`: `ChatDockWindow` vào qua `React.lazy` (tách khỏi bundle khởi
     // động), nên khung hình đầu là `Suspense fallback`. Dùng bản đồng bộ thì bài test chỉ xanh khi một
     // bài TRƯỚC nó đã nạp sẵn module — xanh theo thứ tự chạy, đúng loại phụ thuộc ẩn.
-    expect(await screen.findAllByTestId("chat-dock-window")).toHaveLength(2);
+    const windows = await screen.findAllByTestId("chat-dock-window");
+    expect(windows).toHaveLength(1);
+    // Khẳng định ĐỦ CẶP: đúng-một-khung mà giữ nhầm phòng cũ thì bấm xong không thấy phòng vừa chọn.
+    expect(windows[0]).toHaveAttribute("data-room-id", "b");
   });
 
   it("KHÔNG render trên /chat (trang đã là khung nhìn đầy đủ) nhưng GIỮ trạng thái dock", () => {
@@ -116,15 +119,16 @@ describe("ChatDock", () => {
   it("phòng biến khỏi store (bị bớt/tự rời) ⇒ tự đóng cửa sổ", async () => {
     useChatStore.getState().syncRoomList([room("a"), room("b")], false);
     useChatDockStore.getState().openRoom("a");
-    useChatDockStore.getState().openRoom("b");
 
     const { rerender } = render(<ChatDock />);
-    expect(await screen.findAllByTestId("chat-dock-window")).toHaveLength(2);
+    expect(await screen.findAllByTestId("chat-dock-window")).toHaveLength(1);
 
     useChatStore.getState().removeRoomForSelf("a");
     rerender(<ChatDock />);
 
-    expect(useChatDockStore.getState().openRoomIds).toEqual(["b"]);
+    // Không có vế này thì cửa sổ "ma" đứng lại và nện `GET /chat/rooms/:id/messages` (nay 404) theo
+    // nhịp lưới bù, vô thời hạn.
+    expect(useChatDockStore.getState().openRoomIds).toEqual([]);
   });
 
   it("chưa nạp xong danh sách phòng ⇒ KHÔNG đóng dock (chống 'dock tự quên' sau mỗi lần F5)", () => {
