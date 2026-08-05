@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-05 16:34Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-05 17:33Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -9,10 +9,17 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
+- 🔴 `S7-CALL-DOC-1` Owner ký DECISIONS-07 (nới CHAT-DEC-005 có hàng rào R1-R4) + sửa SPEC-15 §5.2 đưa cuộc gọi VÀO phạm vi + bổ sung màn/API/quyền/mã lỗi CALL
 - 🔴 `S8-CHAT-UX-DB-1` Mig 0543: chat_room_members.pinned_at (ghim per-user) + chat_rooms.avatar_file_id (composite tenant FK) + bảng chat_message_reactions (RLS+FORCE) — GRANT THÊM CỘT, cấm REVOKE cấp bảng
 - 🔴 `S8-CHAT-UX-RT-1` Đang gõ (REST-ping → emitter, KHÔNG mở @SubscribeMessage) + đang online (presence thuần server, khoá Valkey CÓ TIỀN TỐ MÔI TRƯỜNG)
 
 **CHỜ (kẹt phụ thuộc):**
+- `S7-CALL-DB-1` Migration CALL: chat_calls + chat_call_participants (company_id + RLS FORCE + append-only) + seed cặp ('call','chat-room') ⏳ cần: S7-CALL-DOC-1
+- `S7-CALL-BE-1` Vòng đời cuộc gọi qua REST (mời · nhận · từ chối · huỷ · kết thúc) + GET /chat/calls/ice-config — audit đầy đủ, KHÔNG đi qua WebSocket ⏳ cần: S7-CALL-DB-1
+- `S7-CALL-RT-1` 🔒 Gateway /ws-call: allowlist ĐÓNG 8 sự kiện inbound, relay SDP/ICE KHÔNG đọc-KHÔNG lưu, /ws giữ nguyên 0 @SubscribeMessage ⏳ cần: S7-CALL-BE-1
+- `S7-CALL-FE-1` UI cuộc gọi: nút gọi trong phòng · chuông đến · khung đang gọi (thu nhỏ/toàn màn) · tắt mic-cam · chia sẻ màn hình — port từ LMS, bỏ phần tự ghi vòng đời qua WS ⏳ cần: S7-CALL-RT-1
+- `S7-CHAT-LMS-1` Gỡ chat khỏi LMS (GIỮ trợ lý AI) + trỏ lối vào sidebar sang /chat MediaOS + xuất 84 tin lịch sử ra tệp lưu trữ ⏳ cần: S7-CALL-FE-1
+- `S7-CALL-QA-1` Bộ test CALL: deny-path signalling · cô lập 2-tenant · vòng đời cuộc gọi trên LANE_DB · E2E gọi 1-1 hai trình duyệt ⏳ cần: S7-CALL-FE-1
 - `S8-CHAT-UX-BE-1` Tuỳ chọn per-phòng: ghim/bỏ ghim (trần 10) · tắt thông báo (muted_until — CÓ CỘT TỪ 0538 mà 0 đường ghi) · đánh dấu chưa đọc ⏳ cần: S8-CHAT-UX-DB-1
 - `S8-CHAT-UX-BE-2` Avatar phòng cho group/department/project — presign wrapper gate ('update','chat-room') sao khuôn ChatFilesService + resolver riêng; direct KHÔNG có avatar riêng (dẫn xuất) ⏳ cần: S8-CHAT-UX-DB-1
 - `S8-CHAT-UX-BE-3` Thả cảm xúc: PUT/DELETE /chat/messages/:id/reactions/:emoji + tổng hợp vào DTO tin + phát chat:reaction ⏳ cần: S8-CHAT-UX-DB-1
@@ -37,6 +44,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `a0b67bee` | 2026-08-06 | docs(chat): owner chốt C — ADR nới CHAT-DEC-005 có hàng rào + seed wave CALL 7 WO (#337) |
+| `7401f668` | 2026-08-05 | docs(status): regen sau khi #349 (chia mục danh sách hội thoại) + #350 (hoà 6 quyết định S8-CHAT-UX + seed 10 WO) land — READY = DB-1 · RT-1 (đều vùng đỏ) |
 | `65eae02f` | 2026-08-05 | docs(chat): hoà 6 quyết định nâng cấp giao diện vào SPEC-15 + DB-12 + API-13, seed wave S8-CHAT-UX (S8-CHAT-UX-DOC-1) (#350) |
 | `966dd4db` | 2026-08-05 | feat(chat): danh sách hội thoại CHIA MỤC theo loại phòng, thu/mở được và nhớ trạng thái (S8-CHAT-UX-FE-1) (#349) |
 | `69fa2fe3` | 2026-08-05 | docs(status): regen sau khi #347 (CI concurrency) + #346 (dock 1 khung) + #348 (key trùng làm rơi khung chat) land — hàng đợi READY rỗng, PROD FE = index-Cd1kGJ1H |
@@ -47,8 +56,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `1d667209` | 2026-08-05 | fix(auth): S7-SEC-ROLE2FA-UI-1 — màn "Sửa vai trò" đọc đúng cờ Bắt buộc 2FA và TẮT được (#345) |
 | `24dc2eb5` | 2026-08-05 | docs(status): regen sau khi S7-CHAT-QA-1 (#343) land — wave CHAT ĐÓNG (0 WO đang làm), READY = ROLE2FA-UI-1 |
 | `ce72e5d3` | 2026-08-05 | test(chat): S7-CHAT-QA-1 — nghiệm thu 12 nhóm §21 + bằng chứng RED-trước-GREEN cho §20 ca 5·9·10·11·12 (#343) |
-| `a1e44e1a` | 2026-08-05 | docs(status): regen sau khi S7-CHAT-CLEAN-1 (#344) land — wave CHAT hết WO, READY = ROLE2FA-UI-1 |
-| `23bf11b5` | 2026-08-05 | feat(chat): S7-CHAT-CLEAN-1 (mig 0542) — bước CONTRACT: drop chat_rooms.channel_id + chat_messages.file_url/file_name (#344) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
