@@ -103,13 +103,10 @@ export const chatMessageSchema = z.object({
    */
   body: z.string().nullable(),
   messageType: chatMessageTypeSchema,
-  /**
-   * ⚠️ HAI CỘT KHAI TỬ. Đính kèm đi qua FOUNDATION Files + `file_links` (SPEC-15 §13.5,
-   * `S7-CHAT-BE-3`) — KHÔNG ghi vào `chat_messages.file_url/file_name` nữa. Đường đọc trả `null`.
-   * Giữ khoá trong DTO để FE cũ không vỡ; bỏ hẳn ở đợt dọn sau.
-   */
-  fileUrl: z.string().nullable(),
-  fileName: z.string().nullable(),
+  // ⚠️ `fileUrl`/`fileName` ĐÃ BỎ HẲN — `S7-CHAT-CLEAN-1` (mig `0542`) drop luôn hai cột dưới DB.
+  // Đây chính là "đợt dọn sau" mà comment cũ hẹn. Đính kèm đi qua FOUNDATION Files + `file_links`
+  // + URL ký hạn ngắn (SPEC-15 §13.5, `S7-CHAT-BE-3`) — đọc `attachments` bên dưới.
+  // Đừng thêm lại: URL trần trong DTO là đường rò tệp KHÔNG qua kiểm quyền, đúng lý do khai tử.
   /** Đã LỌC ở server: chỉ còn userId thực sự là thành viên phòng (CHAT-ERR-010). */
   mentions: z.array(z.string().uuid()),
   pinnedAt: z.string().datetime().nullable(),

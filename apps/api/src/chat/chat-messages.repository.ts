@@ -29,8 +29,9 @@ export interface ChatMessageRow {
  * Tập cột ra khỏi repo. LIỆT KÊ TƯỜNG MINH, không `select()` trần:
  *   • `seq` (identity CẤP BẢNG) tuyệt đối không được rời server — SPEC-15 §13.1;
  *   • `client_message_id` là khoá idempotency của client, không phải dữ liệu hiển thị;
- *   • `search_vector` là cột generated to đùng, kéo về là phí băng thông mỗi trang tin;
- *   • `file_url`/`file_name` là hai cột KHAI TỬ (BE-3) — đường đọc trả `null` từ mapper.
+ *   • `search_vector` là cột generated to đùng, kéo về là phí băng thông mỗi trang tin.
+ * (`file_url`/`file_name` từng nằm trong danh sách này — `S7-CHAT-CLEAN-1` mig `0542` đã DROP hẳn hai
+ * cột, nên không còn gì để mà loại trừ.)
  * `select()` trần sẽ tự động kéo theo mọi cột thêm vào bảng sau này, gồm cả cột chưa ai kịp nghĩ có
  * được lộ hay không.
  */

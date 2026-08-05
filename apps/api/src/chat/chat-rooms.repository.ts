@@ -180,7 +180,12 @@ const ROOM_COLUMNS = {
  * nghiệp vụ và dòng audit cùng commit/rollback. Mọi vị từ đều có `company_id` tường minh bên cạnh RLS.
  *
  * ⚠️ QUYỀN GHI Ở DB — đọc trước khi thêm câu UPDATE nào (mig `0010`/`0050`/`0538`):
- *   • `chat_rooms`        : UPDATE cấp bảng CÓ · **DELETE đã REVOKE** ⇒ `delete()` = 42501 lúc chạy.
+ *   • `chat_rooms`        : UPDATE **chỉ ĐÚNG 11 cột** — `name`, `description`, `is_archived`,
+ *     `archived_at`, `archived_by`, `last_message_at`, `last_message_seq`, `updated_at`, `updated_by`,
+ *     `deleted_at`, `deleted_by` (`0540` khối A gỡ vế CẤP BẢNG rồi cấp lại theo cột). **DELETE đã
+ *     REVOKE** ⇒ `delete()` = 42501 lúc chạy. ⚠️ Dòng này TRƯỚC 2026-08-05 ghi "UPDATE cấp bảng CÓ" —
+ *     đúng tới `0538`, CHẾT từ `0540`; đo lại bằng `has_table_privilege('mediaos_app','chat_rooms',
+ *     'UPDATE')` = `f` (FULL gate S7-CHAT-CLEAN-1).
  *   • `chat_room_members` : UPDATE chỉ ĐÚNG 6 cột — `role`, `last_read_at`, `last_read_seq`,
  *     `muted_until`, `left_at`, `visible_from_seq`. **`joined_at` và `added_by` KHÔNG được cấp** ⇒
  *     "vào lại phòng thì làm mới joined_at" là 42501, không phải lựa chọn thiết kế. DELETE cũng đã REVOKE

@@ -10229,10 +10229,28 @@ export const backlog = [
     title:
       "Contract (release SAU): drop chat_rooms.channel_id + chat_messages.file_url/file_name + composite FK/index kèm theo — chỉ chạy khi đã xác minh 0 hàng và 0 tham chiếu",
     zone: "red",
-    status: "todo",
+    status: "done",
+    // ⚠️ paths MỞ RỘNG so với bản seed (memory `wo-paths-drive-gate-and-scheduler`): bản seed chỉ khai
+    // migrations + communication.ts + plan, nhưng owner chốt gỡ CẢ DTO ⇒ diff chạm contracts, mapper,
+    // 9 file fixture spec và 3 doc thiết kế. Khai thiếu = diff rơi ra ngoài scope của WO.
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/db/schema/communication.ts",
+      "apps/api/src/chat/chat.mapper.ts",
+      "apps/api/src/chat/chat-messages.repository.ts",
+      "apps/api/src/realtime/realtime-emitter.chat.spec.ts",
+      "apps/api/test/integration/s7-chat-db1-invariants.int-spec.ts",
+      "packages/contracts/src/chat.ts",
+      "packages/web-core/src/lib/chat-api.spec.ts",
+      "apps/app/src/components/chat/**",
+      "apps/app/src/hooks/use-chat-realtime.spec.tsx",
+      "apps/app/src/stores/chat.store.spec.ts",
+      "apps/app/src/routes/chat/ChatPage.spec.tsx",
+      "docs/DB/DB-12 CHAT Database Design.md",
+      // ⚠️ HOA/THƯỜNG: git theo dõi `docs/SPEC/…` (viết hoa). Windows nuốt được `docs/spec/`, CI Linux
+      // thì KHÔNG — glob trượt đúng file nó định cho phép (memory `wo-paths-drive-gate-and-scheduler`).
+      "docs/SPEC/SPEC-15 CHAT.md",
+      "docs/erd-current.md",
       "docs/plans/S7-CHAT-CLEAN-1.md",
     ],
     skills: ["code-review"],
@@ -10241,6 +10259,20 @@ export const backlog = [
     src: [
       "DB-12 §6.6 (bảng expand-contract) · mig 0535 (composite tenant FK chat_rooms.channel_id → channels)",
       "memory: migration-expand-contract-required (gộp 2 bước vào 1 release = cửa sổ 500 cho tiến trình cũ)",
+      "✅ ĐÓNG 2026-08-05 — mig 0542. Điều kiện vào đo trên PROD (`mediaos`): chat_rooms 23 hàng · channel_id IS NOT NULL = 0 · chat_rooms theo loại = department 11 + project 12 (0 phòng 'channel') · chat_messages 0 HÀNG ⇒ file_url/file_name cùng 0. Tách release: 0538 ĐÃ deploy (room_code/sync_source/last_message_seq có mặt) + 0541 đã deploy (2 index dư đã biến mất).",
+      "⚠️ VẾ dev-online của done_when KHÔNG chạy được: DB `mediaos_dev` KHÔNG TỒN TẠI trên cụm (pg_database có 9 hàng: mediaos + 5 lane + postgres + template0/1). Đó là 'chưa provision', KHÔNG phải 'đã xác minh 0 hàng' — ghi đúng như đo thay vì tick ô không chạy.",
+      "⚠️ BẪY 1 — file .sql KHÔNG đăng ký `migrations/meta/_journal.json` thì bị BỎ QUA và migrate VẪN in 'applied migrations' + exit 0. Lần chạy đầu 0542 không chạy chút nào mà mọi lệnh đều xanh; chỉ lộ ra khi ĐO LẠI SCHEMA sau migrate. Đọc exit code là không đủ.",
+      "⚠️ BẪY 2 — grep khoanh vùng bỏ sót 3 file fixture (`apps/app/src/hooks/use-chat-realtime.spec.tsx`, `apps/app/src/stores/chat.store.spec.ts`, `packages/web-core/src/lib/chat-api.spec.ts`); cả ba chỉ lộ khi `pnpm typecheck` đỏ TS2353. 'grep = 0 tham chiếu' chỉ đáng tin SAU khi typecheck toàn workspace xanh.",
+      "⚠️ BẪY 3 — đột biến RED-proof để lại vết TRONG DB: `lane-db-setup.sh <lane>` (không cờ) thấy DB đã tồn tại nên chỉ chain-migrate, mà 0538 đã nằm trong __drizzle_migrations ⇒ index bị drop tay KHÔNG được dựng lại ⇒ full-suite đỏ 1 test không nằm trong code. Phải dùng `--reset` (DROP DATABASE).",
+      "Ratchet mới ở s7-chat-db1-invariants.int-spec.ts — RED-proof HAI vector: (a) ADD COLUMN channel_id ⇒ đỏ 'cột khai tử quay lại'; (b) DROP INDEX idx_chat_rooms_sync ⇒ đỏ 'index phải-giữ bị gỡ mất'.",
+      "Census FK một-cột giữa hai bảng tenant: 460 → 459, sàn FK_SINGLE_COL_PAIRS_FLOOR = 440 ⇒ còn đệm 19. `fk-tenant-census.ts` đọc thẳng pg_constraint (0 danh sách viết tay) nên không file nào phải sửa theo, và không cần waiver (cặp bị GỠ, không xin miễn).",
+      "✅ FULL gate PASS 2026-08-05 — 3 lane, 0 CRIT/0 HIGH: `security-reviewer` (1 MED + 4 LOW) · `rls-tenant-isolation-tester` (2 MED, CẢ HAI có trước 0542) · `general-purpose` đóng vai database-reviewer (1 MED + 5 LOW). ⚠️ `database-reviewer` KHÔNG tồn tại trong `.claude/agents/` — cùng lỗ với typescript-reviewer/quality-gate mà CLAUDE.md §6 nhắc.",
+      "⚠️ GATE BÁC BỎ 1 — `modules.is_active = false` KHÔNG phải cổng, đừng dùng làm đệm an toàn: `grep -rn ModuleActiveGuard apps/api/src` = 0 file; cờ chỉ lọc catalog ở module-catalog.repository.ts:24. PROD có 46 user giữ quyền chat + 23 phòng. Đã gỡ vế này khỏi header 0542 + plan; vế đứng vững DUY NHẤT là SỐ HÀNG (chat_messages = 0).",
+      "⚠️ GATE BÁC BỎ 2 — ratchet ghim TÊN + cờ `indisunique` LỌT THẬT: `DROP INDEX chat_rooms_direct_uq; CREATE UNIQUE INDEX chat_rooms_direct_uq ON chat_rooms (id);` giữ tên + giữ unique ⇒ 39/39 XANH trong khi dedup DM đã chết. Đã đổi sang ghim `pg_get_indexdef` (mang cả cột, thứ tự cột, vị từ partial) — vector RED thứ ba, đã chạy lại chính đột biến đó và giờ ĐỎ.",
+      "⚠️ GATE BÁC BỎ 3 — hai số của plan sai: `__drizzle_migrations` là 209 hàng (ghi 212 = đọc nhầm max(id) thành count); grep đếm 6 file fixture, thật ra 9.",
+      "Vá theo gate: VERIFY thêm nhánh (3b) điểm danh 9 index chat_messages (migration cũng drop 2 cột ở đó) · DESTRUCTIVE-APPROVED dồn MỘT dòng để cổng log được tên người duyệt · comment chết `chat-rooms.repository.ts:183` ('UPDATE cấp bảng CÓ' — chết từ 0540) · `tenant-isolation.int-spec.ts:211` · DB-12 dòng 39 (GRANT) · SPEC-15 §7 · casing `docs/spec/`→`docs/SPEC/` (Windows nuốt, CI Linux thì không).",
+      "NỢ ghi ra, KHÔNG thuộc WO này: ratchet 0541 cho chat_messages có CÙNG lỗ ghim-theo-cờ · `chat_messages` chưa chứng minh được vế RLS WITH CHECK qua lưới tenant-isolation (W0 nổ 428C9 vì seq identity + search_vector generated; lane tenant đã đóng khoảng trống bằng 4 ca thủ công, KHÔNG phải rò) · PROVEN_WITH_CHECK_FLOOR = 148 đang có đệm 0.",
+      "⚠️ BẪY QUY TRÌNH — lane `security-reviewer` chạy `git checkout` và KÉO HEAD phiên cha về `feat/s7-chat-qa-1` (memory subagent-git-checkout-moves-parent-head). Commit còn nguyên local+origin nên không mất gì, nhưng phải verify `git branch` TRƯỚC mọi commit sau khi chạy subagent. Và hai lane chạy song song trên CÙNG lane DB ⇒ ô nhiễm chéo, lượt chốt phải chạy trên lane vừa `--reset`.",
     ],
     done_when: [
       "Điều kiện vào: SELECT count(*) WHERE <cột> IS NOT NULL = 0 trên CẢ PROD lẫn dev-online, và grep toàn repo 0 tham chiếu — ghi bằng chứng vào plan",

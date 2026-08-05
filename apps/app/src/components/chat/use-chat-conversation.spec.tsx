@@ -49,8 +49,6 @@ function baseMessage(): Omit<ChatMessageDto, "attachments"> {
     senderName: "Tôi",
     body: "kèm tệp",
     messageType: "file",
-    fileUrl: null,
-    fileName: null,
     mentions: [],
     pinnedAt: null,
     pinnedBy: null,

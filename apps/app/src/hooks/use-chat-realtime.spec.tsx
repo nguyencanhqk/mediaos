@@ -68,8 +68,6 @@ function seededMessage(seq: number): ChatMessageDto {
     senderName: "T",
     body: "cũ",
     messageType: "text",
-    fileUrl: null,
-    fileName: null,
     mentions: [],
     pinnedAt: null,
     pinnedBy: null,
