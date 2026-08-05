@@ -182,7 +182,7 @@ CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ 
 | **Thư mục hội thoại tự đặt** | Owner chốt 05/08/2026 là **mục cố định theo loại phòng** (CHAT-DEC-014). Thư mục tự đặt cần 2 bảng + CRUD + kéo-thả ⇒ wave sau |
 | Chat theo **task** (không phải dự án) | SPEC-01 §12.12 nêu "task"; TASK đã có bình luận riêng (SPEC-06) ⇒ tránh hai kênh trùng. Xem CHAT-DEC-009 |
 | Kiểm duyệt / báo cáo tin nhắn | Thiết kế đề xuất: `chat_message_reports` → người xử lý chỉ thấy **tin bị báo cáo** + ngữ cảnh 5 tin quanh nó, KHÔNG mở khoá đọc cả phòng. Cần owner chốt chính sách trước khi làm |
-| Cuộc gọi thoại/hình | Ngoài phạm vi sản phẩm |
+| Cuộc gọi thoại/hình | ⚠️ **Dòng này đã LỖI THỜI, đang chờ PR #337.** Owner chốt **phương án C** ngày 04/08/2026 = **làm** cuộc gọi, qua ADR `DECISIONS-07` (nới `CHAT-DEC-005` bằng namespace RIÊNG `/ws-call` + 4 hàng rào). ADR **chưa trên master** nên dòng này giữ nguyên chữ cũ để không khẳng định thứ chưa merge; `S7-CALL-DOC-1` là WO chịu trách nhiệm sửa nó. **Wave S8-CHAT-UX không đụng cuộc gọi** |
 | Chat với người ngoài công ty | Đơn-công-ty, không có khách |
 | Ứng dụng di động | Phase 5 (MOBILE) |
 | Lưu trữ/xoá theo chính sách lưu giữ | Nối vào `retention` của FOUNDATION ở phase sau; v1 không tự xoá tin |
@@ -707,6 +707,15 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 | CHAT-DEC-012 | Tìm kiếm bằng `unaccent` + `tsvector('simple')` trong Postgres, không thêm search engine | theo đề xuất §13.7 | ✅ chốt |
 | CHAT-DEC-013 | Điều kiện gửi `CHAT_DIRECT_MESSAGE` khi §17 đòi presence mà §7 loại presence khỏi v1 | **Gửi mọi DM, trừ khi `muted_until` còn hiệu lực** — bỏ điều kiện "không đang mở phòng" ở v1. Chống spam = gộp lô 15 phút (`dedupe_strategy='DedupeKey'`, seed `0538`). Xem §17 | ✅ **chốt 02/08/2026** |
 
+
+> **Ghi chú lịch sử — đọc kỹ trước khi tra git:** bản Draft 01/08/2026 đề xuất CHAT-DEC-004 = "không ai đọc được, kể cả Super Admin", và §3.3 · §11 · §18 · §20 · §21 khi đó được viết quanh mệnh đề ấy. Owner **bác** đề xuất ngày 02/08/2026. Các mục đó đã được viết lại trong `S7-CHAT-DOC-2`; mô tả cũ còn trong lịch sử git **không** còn giá trị tham chiếu.
+>
+> **CHAT-DEC-013 thêm SAU cổng mở wave** (tối 02/08/2026): nó không phải quyết định thứ 13 của đợt chốt ban đầu mà là **phán quyết gỡ một mâu thuẫn nội bộ** giữa §17 và §7, phát hiện lúc lập micro-plan `S7-CHAT-BE-6`. Không thay đổi điều kiện cổng dưới đây.
+>
+> ⚠️ **Hệ quả — ĐÃ CÓ CHỦ (cập nhật 05/08/2026):** sau DEC-013, `muted_until` là **cơ chế duy nhất** để người dùng chặn thông báo DM — nhưng đo ngày 02/08 cho thấy cột `chat_room_members.muted_until` (`communication.ts:300`) **không có đường ghi nào**: 0 endpoint, 0 DTO trong `packages/contracts/src/chat.ts`. Wave S7 kết thúc mà lỗ này **vẫn còn**. Việc cấp đường ghi + lối vào UI nay thuộc **`S8-CHAT-UX-BE-1`** (API `PUT /chat/rooms/:id/mute`) và **`S8-CHAT-UX-FE-2`** (menu ngữ cảnh). **Vẫn là điều kiện chặn trước khi CHAT lên PROD** — v1 không được ship một nút tắt mà không ai bấm được.
+>
+> Điều kiện mở WO code của wave (đã đủ): 12 quyết định chốt · §1 = `Approved` · `plan-reviewer` PASS trên SPEC-15 + DB-12. Điều kiện merge vào `master` (**chưa** đủ): go-live đóng — xem §1 và `docs/plans/S7-CHAT-WAVE.md` §4.
+
 ### 22a. Wave S8-CHAT-UX — quyết định nâng cấp giao diện, **ĐÃ CHỐT 05/08/2026**
 
 > Đánh số bắt đầu từ **014**: `CHAT-DEC-013` đã bị chiếm ở bảng trên. Kế hoạch wave: [`docs/plans/S8-CHAT-UX-WAVE.md`](../plans/S8-CHAT-UX-WAVE.md).
@@ -720,13 +729,9 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 | CHAT-DEC-018 | Thả cảm xúc | **Làm.** Bảng riêng `chat_message_reactions`, bộ emoji **ĐÓNG** (6 mã, CHECK cấp DB). Bỏ thả = `DELETE` thật — reaction **không** thuộc nhóm audit/snapshot/ledger của BẤT BIẾN #2 | ⚠️ **ĐẢO §5.2** — chốt |
 | CHAT-DEC-019 | Avatar người gửi trong khung chat lấy ở đâu? | Từ **roster phòng**, ký **1 lần/phòng**. **Không** ký theo từng tin: 50 tin = 50 lần ký + 50 hạn lệch nhau. Người **đã rời phòng** vẫn phải có trong roster, nếu không tin cũ mất avatar lẫn tên | ✅ chốt |
 
-> **Ghi chú lịch sử — đọc kỹ trước khi tra git:** bản Draft 01/08/2026 đề xuất CHAT-DEC-004 = "không ai đọc được, kể cả Super Admin", và §3.3 · §11 · §18 · §20 · §21 khi đó được viết quanh mệnh đề ấy. Owner **bác** đề xuất ngày 02/08/2026. Các mục đó đã được viết lại trong `S7-CHAT-DOC-2`; mô tả cũ còn trong lịch sử git **không** còn giá trị tham chiếu.
+> **`CHAT-DEC-017` KHÔNG chọi với ADR cuộc gọi đang chờ (PR #337).** `DECISIONS-07` nới `CHAT-DEC-005` cho WebRTC, nhưng hàng rào **R1** của nó ghi rõ: nới bằng **namespace RIÊNG `/ws-call`**, còn `/ws` (CHAT + NOTI) **giữ nguyên 0 `@SubscribeMessage`, có test đóng đinh**. `DEC-017` đứng đúng phía đó — "đang gõ" đi REST-ping trên `/ws` chứ không mở handler inbound. Hai quyết định **củng cố nhau**, không phải hai lối thoát cho cùng một ràng buộc.
 >
-> **CHAT-DEC-013 thêm SAU cổng mở wave** (tối 02/08/2026): nó không phải quyết định thứ 13 của đợt chốt ban đầu mà là **phán quyết gỡ một mâu thuẫn nội bộ** giữa §17 và §7, phát hiện lúc lập micro-plan `S7-CHAT-BE-6`. Không thay đổi điều kiện cổng dưới đây.
->
-> ⚠️ **Hệ quả — ĐÃ CÓ CHỦ (cập nhật 05/08/2026):** sau DEC-013, `muted_until` là **cơ chế duy nhất** để người dùng chặn thông báo DM — nhưng đo ngày 02/08 cho thấy cột `chat_room_members.muted_until` (`communication.ts:300`) **không có đường ghi nào**: 0 endpoint, 0 DTO trong `packages/contracts/src/chat.ts`. Wave S7 kết thúc mà lỗ này **vẫn còn**. Việc cấp đường ghi + lối vào UI nay thuộc **`S8-CHAT-UX-BE-1`** (API `PUT /chat/rooms/:id/mute`) và **`S8-CHAT-UX-FE-2`** (menu ngữ cảnh). **Vẫn là điều kiện chặn trước khi CHAT lên PROD** — v1 không được ship một nút tắt mà không ai bấm được.
->
-> Điều kiện mở WO code của wave (đã đủ): 12 quyết định chốt · §1 = `Approved` · `plan-reviewer` PASS trên SPEC-15 + DB-12. Điều kiện merge vào `master` (**chưa** đủ): go-live đóng — xem §1 và `docs/plans/S7-CHAT-WAVE.md` §4.
+> ⚠️ Ai thi công `S8-CHAT-UX-RT-1` mà thấy `/ws-call` đã có `@SubscribeMessage`: **đó không phải giấy phép** để thêm handler vào `/ws`. Ratchet `chat-realtime-structure.spec.ts` quét **toàn bộ `apps/api/src`**, và nếu wave CALL có nới phạm vi quét thì phần `/ws` vẫn phải còn một khẳng định riêng giữ mức 0.
 
 ---
 
