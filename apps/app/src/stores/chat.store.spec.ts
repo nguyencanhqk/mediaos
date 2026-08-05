@@ -81,8 +81,6 @@ function message(seq: number, over: Partial<ChatMessageDto> = {}): ChatMessageDt
     senderName: "Người khác",
     body: `tin ${seq}`,
     messageType: "text",
-    fileUrl: null,
-    fileName: null,
     mentions: [],
     pinnedAt: null,
     pinnedBy: null,

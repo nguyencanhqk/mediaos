@@ -30,8 +30,6 @@ function message(over: Partial<StoredChatMessage> = {}): StoredChatMessage {
     senderName: "Nguyễn Văn A",
     body: "xin chào",
     messageType: "text",
-    fileUrl: null,
-    fileName: null,
     mentions: [],
     pinnedAt: null,
     pinnedBy: null,

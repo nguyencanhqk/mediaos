@@ -240,8 +240,6 @@ describe("ChatPage · tìm kiếm + nhảy tới ngữ cảnh", () => {
       senderName: "Trần B",
       body: `tin ${seq}`,
       messageType: "text" as const,
-      fileUrl: null,
-      fileName: null,
       mentions: [],
       pinnedAt: null,
       pinnedBy: null,

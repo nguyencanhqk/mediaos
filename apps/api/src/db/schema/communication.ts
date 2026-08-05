@@ -16,7 +16,7 @@ import {
 import { sql } from "drizzle-orm";
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
-import { channels, projects } from "./media";
+import { projects } from "./media";
 import { orgUnits } from "./org";
 import { users } from "./users";
 
@@ -159,8 +159,10 @@ export const chatRooms = pgTable(
       .default(currentCompanyDefault)
       .references(() => companies.id, { onDelete: "cascade" }),
     refId: uuid("ref_id").references(() => projects.id, { onDelete: "set null" }),
-    // G10-2 auto-room: 1 channel/org_unit ↔ 1 room (unique partial idx bên dưới).
-    channelId: uuid("channel_id").references(() => channels.id, { onDelete: "set null" }),
+    // S7-CHAT-CLEAN-1 (mig 0542): `channel_id` ĐÃ DROP — `channels` là bảng media out-of-scope sau
+    // de-media-fy. Khai lại cột ở đây là đường trôi im lặng qua `db:generate`; ratchet ở
+    // `s7-chat-db1-invariants.int-spec.ts` sẽ ĐỎ.
+    // G10-2 auto-room: 1 org_unit ↔ 1 room (unique partial idx bên dưới).
     orgUnitId: uuid("org_unit_id").references(() => orgUnits.id, { onDelete: "set null" }),
     // G10-1 DM 1-1: direct_key = 2 userId (sort asc) join ":" → dedup idempotent phòng direct.
     directKey: text("direct_key"),
@@ -194,9 +196,7 @@ export const chatRooms = pgTable(
     uniqueIndex("chat_rooms_project_uq")
       .on(t.companyId, t.refId)
       .where(sql`ref_id IS NOT NULL`),
-    uniqueIndex("chat_rooms_channel_uq")
-      .on(t.companyId, t.channelId)
-      .where(sql`channel_id IS NOT NULL`),
+    // S7-CHAT-CLEAN-1 (mig 0542): `chat_rooms_channel_uq` ĐÃ DROP cùng cột `channel_id`.
     uniqueIndex("chat_rooms_org_unit_uq")
       .on(t.companyId, t.orgUnitId)
       .where(sql`org_unit_id IS NOT NULL`),
@@ -338,8 +338,8 @@ export const chatMessages = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     body: text("body").notNull(),
     messageType: text("message_type").notNull().default("text"),
-    fileUrl: text("file_url"),
-    fileName: text("file_name"),
+    // S7-CHAT-CLEAN-1 (mig 0542): `file_url`/`file_name` ĐÃ DROP — URL trần rò tệp không qua kiểm
+    // quyền. Đính kèm đi qua FOUNDATION `files` + `file_links` + URL ký hạn ngắn (SPEC-15 §13.5).
     mentions: jsonb("mentions").$type<string[]>().notNull().default([]),
     pinnedAt: timestamp("pinned_at", { withTimezone: true }),
     pinnedBy: uuid("pinned_by").references(() => users.id, { onDelete: "set null" }),

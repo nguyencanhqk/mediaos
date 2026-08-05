@@ -47,8 +47,6 @@ const messageDto = {
   senderName: "Người A",
   body: "xin chào",
   messageType: "text" as const,
-  fileUrl: null,
-  fileName: null,
   mentions: [],
   pinnedAt: null,
   pinnedBy: null,

@@ -43,8 +43,6 @@ function message(seq: number): StoredChatMessage {
     senderName: "Tôi",
     body: `tin ${seq}`,
     messageType: "text",
-    fileUrl: null,
-    fileName: null,
     mentions: [],
     pinnedAt: null,
     pinnedBy: null,
