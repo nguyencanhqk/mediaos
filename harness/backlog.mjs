@@ -10203,6 +10203,10 @@ export const backlog = [
       "apps/api/test/integration/**",
       "apps/api/src/chat/**",
       "apps/app/src/**",
+      // Màn đọc-vượt CHAT-SCREEN-007/008 sống ở apps/console (KHÔNG apps/app) — §20 ca 12 nghiệm thu
+      // cổng `useCanExact` nằm ở console/src/lib/nav.spec.ts. Thiếu path này thì guard-scope cảnh báo
+      // và gate đọc sai vùng (memory wo-paths-drive-gate-and-scheduler).
+      "apps/console/src/**",
       "docs/QA/**",
       "docs/plans/S7-CHAT-QA-1.md",
     ],

@@ -61,10 +61,20 @@ Tài liệu này dùng để:
 | RECRUIT | Chỉ test placeholder/permission nếu hiển thị Coming Soon |
 | ASSET | Chỉ test placeholder/permission nếu hiển thị Coming Soon |
 | ROOM | Chỉ test placeholder/permission nếu hiển thị Coming Soon |
-| CHAT | Chỉ test placeholder/permission nếu hiển thị Coming Soon |
 | SOCIAL | Chỉ test placeholder/permission nếu hiển thị Coming Soon |
 | MOBILE native | Chưa test native app, chỉ test responsive/mobile web nếu có |
 | AI | Chưa test trong MVP |
+
+> **CHAT đã RỜI bảng này (S7-CHAT-QA-1, 05/08/2026).** Module không còn là placeholder: backend v1 +
+> FE đã lên master, và bộ test là **577 ca / 28 file** (15 int-spec cần `LANE_DB` + 13 unit colocated),
+> phủ đủ 12 nhóm scenario SPEC-15 §21. Ma trận test case của CHAT **không** nhân bản vào
+> tài liệu này — nguồn duy nhất là
+> [`evidence/S7-CHAT-QA-1-TRACEABILITY.md`](evidence/S7-CHAT-QA-1-TRACEABILITY.md) (§21 × §20 → tên
+> file : tên ca), kèm [bằng chứng RED-trước-GREEN](evidence/S7-CHAT-QA-1-RED-before-GREEN.md) và
+> [số coverage](evidence/S7-CHAT-QA-1-COVERAGE.md).
+>
+> ⚠️ Module vẫn `is_active = false` trong `modules` — CHAT chưa bật cho người dùng cuối. "Test xong"
+> ≠ "đã phát hành".
 
 ---
 
