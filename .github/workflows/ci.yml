@@ -7,7 +7,11 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Chỉ cancel trên nhánh PR — xem docblock concurrency của `apps-frontend.yml`: commit "regen STATUS"
+  # đẩy ~2 phút sau merge giết run của CHÍNH commit merge, và cả `cancelled` lẫn `skipped` đều không phải
+  # failure nên không có gì báo đỏ. Ở file này hậu quả là mất BẰNG CHỨNG cổng tích hợp của commit đã nằm
+  # trên master (run còn lại là docs-only, xanh trong ~26s).
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main' }}
 
 jobs:
   verify:
