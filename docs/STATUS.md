@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-05 08:04Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-05 10:59Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -31,6 +31,10 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `21a2dba7` | 2026-08-05 | fix(chat): key TRÙNG giữa hai anh em làm khung hội thoại cũ KHÔNG bị gỡ (rơi lại mỗi lần đổi phòng) (#348) |
+| `b8901534` | 2026-08-05 | fix(chat): panel nổi chỉ giữ ĐÚNG 1 hội thoại — bấm phòng khác THAY CHỖ, không cộng dồn khung (#346) |
+| `dfa57c44` | 2026-08-05 | ci: master/main KHÔNG bị cancel giữa chừng + nghiệm thu deploy FE bằng NỘI DUNG (#347) |
+| `6d218fdb` | 2026-08-05 | docs(status): regen sau khi S7-SEC-ROLE2FA-UI-1 (#345) land — hàng đợi READY rỗng, PROD BE+FE đã đồng bộ 1d667209 |
 | `1d667209` | 2026-08-05 | fix(auth): S7-SEC-ROLE2FA-UI-1 — màn "Sửa vai trò" đọc đúng cờ Bắt buộc 2FA và TẮT được (#345) |
 | `24dc2eb5` | 2026-08-05 | docs(status): regen sau khi S7-CHAT-QA-1 (#343) land — wave CHAT ĐÓNG (0 WO đang làm), READY = ROLE2FA-UI-1 |
 | `ce72e5d3` | 2026-08-05 | test(chat): S7-CHAT-QA-1 — nghiệm thu 12 nhóm §21 + bằng chứng RED-trước-GREEN cho §20 ca 5·9·10·11·12 (#343) |
@@ -39,10 +43,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `32ccd2a4` | 2026-08-04 | docs(status): regen sau khi S7-CHAT-BE-9 (#342) land — READY = QA-1 / ROLE2FA-UI-1 |
 | `9ffcc1f0` | 2026-08-04 | feat(chat): S7-CHAT-BE-9 — CHAT-API-019 lọc ở SERVER (actorUserId + from/to), con trỏ mang dấu vân bộ lọc (#342) |
 | `9cb57bae` | 2026-08-04 | docs(status): regen sau khi S7-CHAT-FE-4 (#340) + S7-CHAT-FE-5 (#341) land — READY = BE-9 / QA-1 / ROLE2FA-UI-1 |
-| `d6fdbf06` | 2026-08-04 | feat(chat): S7-CHAT-FE-5 — màn quản trị đọc-vượt + nhật ký đọc-vượt (CHAT-SCREEN-007/008) (#341) |
-| `a94f4b38` | 2026-08-04 | feat(chat): S7-CHAT-FE-4 — tìm kiếm tin nhắn + nhảy tới tin trong ngữ cảnh + tab Tệp/Thành viên (CHAT-SCREEN-004/005) (#340) |
-| `ad297d96` | 2026-08-04 | feat(chat): S7-CHAT-BE-8 — presign upload own-scope, nhân viên thường gửi được tệp/ảnh (CHAT-FUNC-007) (#339) |
-| `5faa71e7` | 2026-08-04 | docs(status): regen sau khi S7-CHAT-FE-3 (#338) land — READY = BE-8 / FE-4 / FE-5 |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
