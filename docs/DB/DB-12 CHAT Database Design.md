@@ -36,7 +36,7 @@ Quy tắc nghiệp vụ (mã lỗi, luồng đồng bộ, công thức đếm ch
 
 | Bảng | Tạo tại | Hiện trạng đáng chú ý |
 | --- | --- | --- |
-| `chat_rooms` | `0010` + `0050` | RLS+FORCE; GRANT `SELECT,INSERT,UPDATE,DELETE`; cột `ref_id`(project) · `org_unit_id` · `direct_key` · `created_by`; 3 unique index partial (`channel_id` + `chat_rooms_channel_uq` **đã DROP** ở `0542`) |
+| `chat_rooms` | `0010` + `0050` | RLS+FORCE; GRANT cấp bảng `SELECT,INSERT` + UPDATE **cấp cột** (11 cột, `0540`), DELETE đã REVOKE; cột `ref_id`(project) · `org_unit_id` · `direct_key` · `created_by`; 3 unique index partial (`channel_id` + `chat_rooms_channel_uq` **đã DROP** ở `0542`) |
 | `chat_room_members` | `0010` + `0050` | RLS+FORCE; GRANT `SELECT,INSERT,DELETE` + **column-level** `UPDATE (role, last_read_at)` |
 | `chat_messages` | `0010` + `0050` | RLS+FORCE; GRANT **chỉ `SELECT,INSERT`** (append-only) + **column-level** `UPDATE (pinned_at, pinned_by)`; `seq bigint GENERATED ALWAYS AS IDENTITY` |
 

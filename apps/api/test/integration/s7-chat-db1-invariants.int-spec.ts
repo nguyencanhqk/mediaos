@@ -1014,8 +1014,13 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
 
       // Vế NGƯỢC — cái phải GIỮ trên `chat_rooms`. Danh sách là HỢP ĐỒNG: sửa một dòng phải có lý do
       // viết kèm, y như sửa SPEC.
-      const idx = await direct.query<{ indexrelname: string; isunique: boolean }>(
-        `SELECT i.indexrelname, x.indisunique AS isunique
+      const idx = await direct.query<{
+        indexrelname: string;
+        isunique: boolean;
+        indexdef: string;
+      }>(
+        `SELECT i.indexrelname, x.indisunique AS isunique,
+                pg_get_indexdef(i.indexrelid) AS indexdef
            FROM pg_stat_user_indexes i JOIN pg_index x ON x.indexrelid = i.indexrelid
           WHERE i.relname = 'chat_rooms' ORDER BY 1`,
       );
@@ -1037,21 +1042,34 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
         "index phải-giữ của chat_rooms bị gỡ mất (DROP COLUMN nuốt kèm?)",
       ).toEqual([]);
 
-      // Còn DUY NHẤT, không chỉ còn TÊN — cùng lý lẽ với vế unique của ratchet 0541.
+      // Ghim ĐỊNH NGHĨA, không phải tên + cờ `indisunique`.
+      //
+      // ⚠️ FULL gate 2026-08-05 đã CHỨNG MINH bản ghim-theo-cờ lọt: `DROP INDEX chat_rooms_direct_uq;
+      // CREATE UNIQUE INDEX chat_rooms_direct_uq ON chat_rooms (id);` giữ nguyên TÊN, giữ nguyên
+      // `indisunique = true` ⇒ ca vẫn XANH, trong khi ràng buộc "1 cặp user ↔ 1 phòng direct" đã bốc hơi
+      // và dedup DM chết im lặng. Cờ unique chỉ nói "đây LÀ một unique index", không nói "nó ép ĐÚNG cái
+      // duy-nhất cần ép". `pg_get_indexdef` mang cả cột, thứ tự cột lẫn vị từ partial nên bịt được cả ba.
+      //
+      // Danh sách này là HỢP ĐỒNG: đổi một dòng phải có lý do viết kèm, y như sửa SPEC.
       expect(
-        idx.rows
-          .filter((r) => r.isunique)
-          .map((r) => r.indexrelname)
-          .sort(),
-        "tập index UNIQUE của chat_rooms",
-      ).toEqual([
-        "chat_rooms_company_id_id_uq",
-        "chat_rooms_direct_uq",
-        "chat_rooms_org_unit_uq",
-        "chat_rooms_pkey",
-        "chat_rooms_project_uq",
-        "uq_chat_rooms_company_code",
-      ]);
+        Object.fromEntries(
+          idx.rows.filter((r) => r.isunique).map((r) => [r.indexrelname, r.indexdef]),
+        ),
+        "định nghĩa index UNIQUE của chat_rooms",
+      ).toEqual({
+        chat_rooms_company_id_id_uq:
+          "CREATE UNIQUE INDEX chat_rooms_company_id_id_uq ON public.chat_rooms USING btree (company_id, id)",
+        chat_rooms_direct_uq:
+          "CREATE UNIQUE INDEX chat_rooms_direct_uq ON public.chat_rooms USING btree (company_id, direct_key) WHERE (direct_key IS NOT NULL)",
+        chat_rooms_org_unit_uq:
+          "CREATE UNIQUE INDEX chat_rooms_org_unit_uq ON public.chat_rooms USING btree (company_id, org_unit_id) WHERE (org_unit_id IS NOT NULL)",
+        chat_rooms_pkey:
+          "CREATE UNIQUE INDEX chat_rooms_pkey ON public.chat_rooms USING btree (id)",
+        chat_rooms_project_uq:
+          "CREATE UNIQUE INDEX chat_rooms_project_uq ON public.chat_rooms USING btree (company_id, ref_id) WHERE (ref_id IS NOT NULL)",
+        uq_chat_rooms_company_code:
+          "CREATE UNIQUE INDEX uq_chat_rooms_company_code ON public.chat_rooms USING btree (company_id, room_code) WHERE (deleted_at IS NULL)",
+      });
     });
   });
 });

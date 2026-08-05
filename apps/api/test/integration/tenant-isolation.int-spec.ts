@@ -210,6 +210,12 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
    * 23503):
    *   · `chat_rooms.created_by` + `.channel_id`  ← `uq_chat_rooms_company_code` (mới) chặn trước, 23505
    *   · `chat_rooms.org_unit_id` + `.ref_id`     ← `chk_chat_rooms_type_anchor` (mới) chặn trước, 23514
+   *
+   * ⟲ CẬP NHẬT 2026-08-05 (mig `0542`, `S7-CHAT-CLEAN-1`): **`chat_rooms.channel_id` KHÔNG CÒN** — cột
+   * đã DROP ở bước contract của expand-contract. Giữ tên nó ở dòng trên vì đó là lý lẽ LỊCH SỬ giải
+   * thích vì sao 267→263, không phải mô tả hiện trạng. Số đo sau `0542`: **448 cặp thử · 263 chứng minh
+   * bằng 23503** — cặp biến mất vốn nằm trong nhóm "chặn bằng cơ chế khác" (23505) nên **sàn KHÔNG đổi**;
+   * đã xác minh bằng lần chạy thật, không chỉ bằng lập luận. Ba cặp còn lại của khối này vẫn đúng.
    * Composite FK của cả 4 vẫn chặn 23503 khi thử bằng danh sách cột tường minh (FULL gate
    * `rls-tenant-isolation-tester` 2026-08-02, mục F-1).
    *

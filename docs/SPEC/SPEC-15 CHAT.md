@@ -178,7 +178,7 @@ CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ 
 | Thứ | Trạng thái | Xử lý |
 | --- | --- | --- |
 | `chat_rooms.channel_id` → `channels` (media) | Bảng `channels` out-of-scope sau de-media-fy | ✅ **XONG** — ngừng dùng ở v1 (`0538`), DROP cột ở migration **riêng** `0542` sau khi xác minh 0 hàng (expand-contract) |
-| `chat_rooms.room_type = 'channel'` | Không còn nghĩa | Loại khỏi enum contracts + CHECK |
+| `chat_rooms.room_type = 'channel'` | Không còn nghĩa | ✅ **XONG** — đã loại khỏi `chatRoomTypeSchema` và khỏi CHECK `chat_rooms_room_type_chk` (mig `0538`) |
 | `chat_messages.file_url` / `file_name` | URL trần — rò tệp không qua kiểm quyền | ✅ **XONG** — ngừng ghi từ v1 (`0538`), DROP ở migration riêng `0542`; hai khoá cũng rời `chatMessageSchema` cùng commit |
 | `apps/api/src/chat/*` (G4-6/G10, đã `git rm` ở `2591db13`) | Chỉ kiểm membership, **không** permission guard, **không** audit, **không** data-scope | Dùng làm **tham chiếu**, KHÔNG khôi phục nguyên trạng |
 | `packages/contracts/src/chat.ts` | Còn trong repo, thiếu nhiều trường v1 | Mở rộng tại chỗ (thêm trường + bỏ `channel`) |

@@ -1,7 +1,7 @@
 # S7-CHAT-CLEAN-1 — Bước CONTRACT của expand-contract cụm CHAT
 
 > **Zone:** 🔴 red · **Gate:** FULL (`database-reviewer` + `security-reviewer`) · **Model:** Opus
-> **Nguồn:** [DB-12 §6.6](<../DB/DB-12 CHAT Database Design.md>) · [SPEC-15 §5.3, §7](<../spec/SPEC-15 CHAT.md>) · `harness/backlog.mjs::S7-CHAT-CLEAN-1`
+> **Nguồn:** [DB-12 §6.6](<../DB/DB-12 CHAT Database Design.md>) · [SPEC-15 §5.3, §7](<../SPEC/SPEC-15 CHAT.md>) · `harness/backlog.mjs::S7-CHAT-CLEAN-1`
 > **Nhánh:** `feat/s7-chat-clean-1` (base `master` @ `32ccd2a4`) · **Migration:** `0542`
 
 Bỏ ba cột khai tử khỏi `chat_rooms` / `chat_messages` cùng toàn bộ index + khoá ngoại bám theo, và gỡ
@@ -59,7 +59,7 @@ phải "đã xác minh 0 hàng"** — ghi ra đúng như đo được thay vì t
 | --- | --- | --- |
 | `chatRooms.channelId` | `db/schema/communication.ts:163` (khai cột) · `:198` (index `chat_rooms_channel_uq`) | khai báo — **gỡ ở WO này** |
 | `chat_rooms.channel_id` | `test/integration/tenant-isolation.int-spec.ts:211` | **comment**, không phải code chạy — xem §4.3 |
-| `fileUrl`/`fileName` (CHAT) | `chat.mapper.ts:100-101` (hardcode `null`) · `contracts/src/chat.ts:111-112` (khoá DTO) · 6 file fixture spec | **gỡ ở WO này** |
+| `fileUrl`/`fileName` (CHAT) | `chat.mapper.ts:100-101` (hardcode `null`) · `contracts/src/chat.ts:111-112` (khoá DTO) · ~~6~~ **9** file fixture spec (§7.2 — grep này đếm THIẾU 3) | **gỡ ở WO này** |
 
 **0 đường đọc, 0 đường ghi.** Ba cột không xuất hiện trong bất kỳ `SELECT`/`INSERT`/`UPDATE` nào:
 
@@ -83,10 +83,15 @@ Luật: gộp expand + contract vào **một** release là mở cửa sổ 500 c
 | --- | --- |
 | Cột do `0538` tạo có mặt: `room_code`, `sync_source`, `last_message_seq` | ✅ `0538` đã áp |
 | Index do `0541` gỡ đã biến mất: `chat_messages_company_id_idx`, `chat_messages_room_id_idx` | ✅ `0541` đã áp |
-| `drizzle.__drizzle_migrations` | 212 hàng |
+| `drizzle.__drizzle_migrations` | **209 hàng** (`max(id)` = 212 — cột `id` là serial CÓ khoảng trống; bản đầu của plan ghi "212 hàng" là đọc nhầm max thành count, FULL gate 2026-08-05 chỉ ra) |
 
-Thêm một lớp đệm ngoài luật: **CHAT chưa live** (`modules.is_active = false`), `chat_messages` **0 hàng**
-⇒ không có tiến trình nào đang đọc ba cột này ngay cả trong cửa sổ deploy.
+Đệm thứ hai, độc lập với luật: `chat_messages` **0 hàng** trên PROD ⇒ mọi đường đọc tin trả `[]`.
+
+⚠️ **ĐÍNH CHÍNH (FULL gate 05/08, lane an ninh):** bản đầu còn viện thêm "CHAT chưa live
+(`modules.is_active = false`)". **Vế đó SAI, đã gỡ** — `is_active` KHÔNG chặn request nào:
+`grep -rn ModuleActiveGuard apps/api/src` = **0 file**; cờ chỉ lọc danh sách catalog ở
+`module-catalog.repository.ts:24`. Đo trên PROD: **46 user** giữ quyền chat, **23 phòng** đã tồn tại.
+CHAT không "tắt", nó chỉ chưa có lối vào UI. Vế đứng vững DUY NHẤT là SỐ HÀNG.
 
 ---
 
@@ -168,7 +173,7 @@ Theo khuôn `0541`: đỏ thì hoàn nguyên sạch.
 | `packages/contracts/src/chat.ts` | gỡ `fileUrl`/`fileName` khỏi `chatMessageSchema` (`:105-112`) kèm khối comment "khai tử" |
 | `apps/api/src/chat/chat.mapper.ts` | gỡ 2 dòng `fileUrl: null` / `fileName: null` (`:99-101`) |
 | `apps/api/src/chat/chat-messages.repository.ts` | cập nhật comment `:33` — hai cột không còn tồn tại để mà "không select" |
-| 6 file fixture spec | gỡ 2 dòng khỏi object literal: `realtime-emitter.chat.spec.ts` · `ConversationPanel.spec.tsx` · `MessageBubble.spec.tsx` · `MessageList.spec.tsx` · `use-chat-conversation.spec.tsx` · `ChatPage.spec.tsx` |
+| **9** file fixture spec | gỡ 2 dòng khỏi object literal: `realtime-emitter.chat.spec.ts` · `ConversationPanel.spec.tsx` · `MessageBubble.spec.tsx` · `MessageList.spec.tsx` · `use-chat-conversation.spec.tsx` · `ChatPage.spec.tsx` · **`use-chat-realtime.spec.tsx` · `chat.store.spec.ts` · `web-core/lib/chat-api.spec.ts`** (ba cái sau chỉ lộ qua typecheck — §7.2) |
 | `docs/DB/DB-12`, `docs/spec/SPEC-15`, `docs/erd-current.md` | đổi "khai tử / sẽ drop" → "**đã drop** ở `0542`" |
 
 **Ratchet mới** (`s7-chat-db1-invariants.int-spec.ts`): điểm danh 3 cột đã-gỡ + danh sách index
@@ -195,8 +200,13 @@ merge master → FE Cloudflare Pages TỰ deploy   (schema mới, không còn đ
 Giữa hai mốc, server **thừa** hai khoá so với schema FE — Zod object không `.strict()` bỏ qua khoá
 thừa. An toàn.
 
-Đệm thứ hai, độc lập với thứ tự: `chat_messages` **0 hàng** trên PROD và module `is_active = false` ⇒
-không có response CHAT nào để mà parse trong cửa sổ đó.
+Đệm thứ hai, độc lập với thứ tự: `chat_messages` **0 hàng** trên PROD ⇒ mọi đường đọc tin trả `[]`, và
+`z.array(...).parse([])` xanh với MỌI phiên bản schema. Cửa duy nhất còn lại: một tab giữ bundle CŨ
+xuyên qua cửa sổ deploy **và** người đó POST một tin — response bị ZodError phía client trong khi tin đã
+ghi thành công. Không mất dữ liệu, không rò.
+
+⚠️ **KHÔNG viện `modules.is_active = false` làm đệm** — xem đính chính ở §1.4. Không có
+`ModuleActiveGuard` nào; cờ đó không chặn request.
 
 ### 4.2 Ratchet FK chéo tenant — đo trước, không đoán
 
@@ -272,8 +282,73 @@ cờ riêng cho đúng bẫy này).
 - [x] `bash harness/check.sh --lane-db=s7chatclean1` — **XANH toàn bộ**: secret-literals · lint ·
       typecheck · migration-no-drop · tooling-tests · test 496/496 file api + 216 app + 42 web-core +
       32 contracts + 27 console + 16 ui + 4 auth
-- [x] Ratchet mới ĐỎ khi bị vi phạm — chứng minh bằng đột biến, **hai vector** (§7.3)
-- [ ] FULL gate: `database-reviewer` + `security-reviewer` PASS
+- [x] Ratchet mới ĐỎ khi bị vi phạm — chứng minh bằng đột biến, **ba vector** (§7.3)
+- [x] **FULL gate PASS** — 3 lane, 0 CRITICAL / 0 HIGH (§8)
+
+---
+
+## 8. FULL gate — 2026-08-05
+
+`database-reviewer` **không tồn tại** trong `.claude/agents/` (cùng lỗ với `typescript-reviewer`/
+`quality-gate` mà `chat-module-s7-wave-docs-first` đã ghi). Chạy 3 lane có thật:
+
+| Lane | Verdict | Phát hiện |
+| --- | --- | --- |
+| `security-reviewer` | **PASS** | 0 CRIT · 0 HIGH · 1 MEDIUM · 4 LOW |
+| `rls-tenant-isolation-tester` | **PASS** | 0 CRIT · 0 HIGH · 2 MEDIUM (**cả hai CÓ TRƯỚC `0542`**) |
+| `general-purpose` đóng vai database-reviewer | **PASS** | 0 CRIT · 0 HIGH · 1 MEDIUM · 5 LOW |
+
+### 8.1 Điều gate BÁC BỎ trong lập luận của tôi — đã sửa
+
+**`modules.is_active = false` KHÔNG phải cổng.** Tôi dùng nó làm đệm an toàn ở header migration và
+plan §1.4/§4.1. Số đo của lane an ninh: `grep -rn ModuleActiveGuard apps/api/src` = **0 file**; cờ chỉ
+lọc catalog ở `module-catalog.repository.ts:24`; trên PROD có **46 user** giữ quyền chat và **23 phòng**.
+CHAT không "tắt", nó chỉ chưa có lối vào UI. Đã gỡ vế này khỏi cả hai chỗ — vế đứng vững DUY NHẤT là
+**số hàng** (`chat_messages` = 0).
+
+**Ratchet của tôi ghim TÊN + cờ `indisunique`, không ghim ĐỊNH NGHĨA.** Lane DB chứng minh lọt thật:
+
+```sql
+DROP INDEX chat_rooms_direct_uq;
+CREATE UNIQUE INDEX chat_rooms_direct_uq ON chat_rooms (id);   -- tên còn, unique còn, dedup DM CHẾT
+```
+
+→ 39/39 **XANH**. Đã đổi sang ghim `pg_get_indexdef` (mang cả cột, thứ tự cột lẫn vị từ partial).
+**Vector RED thứ ba**, đã chạy lại chính đột biến đó: giờ ĐỎ với diff nguyên văn
+`… USING btree (company_id, direct_key) WHERE (direct_key IS NOT NULL)` vs `… USING btree (id)`.
+
+**Hai con số của tôi sai.** `__drizzle_migrations` là **209 hàng** (tôi ghi 212 = đọc nhầm `max(id)`
+thành count); grep khoanh vùng đếm **6** file fixture, thật ra **9**.
+
+### 8.2 Đã sửa theo gate
+
+Header `0542` (bỏ vế `is_active`, dồn `DESTRUCTIVE-APPROVED` về MỘT dòng để cổng log được tên người
+duyệt) · VERIFY thêm nhánh **(3b)** điểm danh 9 index `chat_messages` (migration cũng drop 2 cột ở đó,
+nhánh cũ chỉ soi `chat_rooms`) · ratchet ghim `pg_get_indexdef` · `chat-rooms.repository.ts:183` comment
+"UPDATE cấp bảng CÓ" (chết từ `0540`, đo `has_table_privilege` = `f`) · `tenant-isolation.int-spec.ts:211`
+(§4.3 hứa sửa mà bản đầu quên) · DB-12 dòng 39 còn ghi GRANT `UPDATE,DELETE` cấp bảng · SPEC-15 §7 dòng
+`room_type='channel'` còn ở dạng việc-chưa-làm · `harness/backlog.mjs` + link header plan viết
+`docs/spec/` trong khi git theo dõi `docs/SPEC/` (Windows nuốt được, CI Linux thì không).
+
+### 8.3 Nợ ghi ra, KHÔNG thuộc WO này
+
+- Ratchet `0541` cho `chat_messages` có **cùng** lỗ ghim-theo-cờ vừa vá cho `chat_rooms`.
+- `chat_messages` chưa từng chứng minh được vế RLS `WITH CHECK` qua lưới `tenant-isolation` (W0 nổ
+  **428C9** vì `seq` identity + `search_vector` generated; W3 `no-grant`). **Không phải rò** — lane
+  tenant đã đóng khoảng trống bằng 4 ca thủ công: INSERT `company_id` của tenant khác → *"new row
+  violates row-level security policy"*; trỏ `room_id`/`user_id` sang tenant khác → **23503** ×2; đọc
+  chéo → 0 hàng. Vá đúng cần `rls-registry.ts` nhận `insertColumns?: string[]` — việc riêng.
+- `PROVEN_WITH_CHECK_FLOOR = 148` đang có **đệm 0** (148/153 ở cả trước lẫn sau `0542`).
+
+### 8.4 Bẫy quy trình gặp trong chính lượt gate
+
+- Lane `security-reviewer` chạy `git checkout` và **kéo HEAD của phiên cha** về `feat/s7-chat-qa-1`
+  (memory `subagent-git-checkout-moves-parent-head`). Commit `10bd82e6` còn nguyên local + origin nên
+  không mất gì, nhưng phải `git checkout` lại trước khi làm tiếp — **verify `git branch` trước mọi commit
+  sau khi chạy subagent**.
+- Hai lane chạy song song trên **cùng** lane DB ⇒ ô nhiễm chéo: lane an ninh thấy ratchet ĐỎ vì lane
+  tenant đang giữ cột `channel_id` phục hồi tạm. Cả hai tự phát hiện và đo lại. Lượt chốt tiền-merge đã
+  chạy trên lane vừa `--reset`.
 
 ---
 

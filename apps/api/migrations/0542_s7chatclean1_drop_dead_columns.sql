@@ -5,8 +5,9 @@
 --   · chat_messages.file_name    → như trên
 -- Đính kèm thật đi qua FOUNDATION `files` + `file_links` + URL ký hạn ngắn (S7-CHAT-BE-3, SPEC-15 §13.5).
 --
--- DESTRUCTIVE-APPROVED: 3 cột khai tử (chat_rooms.channel_id, chat_messages.file_url/file_name)
---   — 0 hàng PROD, 0 tham chiếu code, release TÁCH khỏi 0538 đã deploy (Cian)
+-- DESTRUCTIVE-APPROVED: 3 cột khai tử (chat_rooms.channel_id, chat_messages.file_url/file_name) — 0 hàng PROD, 0 tham chiếu code, release TÁCH khỏi 0538 đã deploy (duyệt: Cian, 2026-08-05)
+-- (một dòng có chủ ý: `check-migration-no-drop.sh` log bằng `grep -oE "DESTRUCTIVE-APPROVED:.*" | head -1`,
+--  xuống dòng thì tên người duyệt KHÔNG hiện trong log của cổng.)
 --
 -- ═══════════════ ĐIỀU KIỆN VÀO — ĐÃ ĐO 2026-08-05, KHÔNG SUY LUẬN ═══════════════
 -- Đo bằng psql trên đúng cụm đang chạy (`mediaos-postgres` 127.0.0.1:5432), DB `mediaos` = PROD:
@@ -26,8 +27,15 @@
 -- vào MỘT release là mở cửa sổ 500 cho tiến trình cũ còn chạy. Bằng chứng release N đã đóng:
 --   · cột do 0538 tạo CÓ MẶT trên PROD: room_code · sync_source · last_message_seq
 --   · index do 0541 gỡ ĐÃ BIẾN MẤT: chat_messages_company_id_idx · chat_messages_room_id_idx
--- Đệm thứ hai, độc lập với luật: CHAT chưa live (`modules.is_active = false`) và chat_messages 0 hàng
--- ⇒ không tiến trình nào đang đọc ba cột này ngay cả trong cửa sổ deploy.
+-- Đệm thứ hai, độc lập với luật: `chat_messages` **0 hàng** trên PROD ⇒ mọi đường đọc tin trả `[]`,
+-- không có response nào để mà lệch trong cửa sổ deploy.
+--
+-- ⚠️ ĐÍNH CHÍNH (FULL gate 2026-08-05, lane an ninh): bản đầu của khối này còn viện thêm "CHAT chưa live
+-- (`modules.is_active = false`)". **Vế đó SAI và đã gỡ** — `is_active` KHÔNG chặn request nào:
+-- `grep -rn ModuleActiveGuard apps/api/src` = **0 file**, cờ này chỉ lọc danh sách catalog ở
+-- `foundation/module-catalog/module-catalog.repository.ts:24`. Đo trên PROD: **46 user** đang giữ
+-- `view:chat-room`/`send:chat-message`/… và **23 phòng** đã tồn tại. CHAT không "tắt", nó chỉ chưa có lối
+-- vào UI. ĐỪNG tái dùng lập luận is_active ở WO sau — vế đứng vững DUY NHẤT là SỐ HÀNG.
 --
 -- ═══════════════ VÌ SAO VIẾT (A)–(C) TƯỜNG MINH KHI `DROP COLUMN` TỰ DỌN CHÚNG ═══════════════
 -- Vì tự-dọn là IM LẶNG. Viết ra thì tên constraint nằm trong file (người sau đọc được), `IF EXISTS`
@@ -149,6 +157,29 @@ BEGIN
     RAISE EXCEPTION '[0542] THIEU index phai-giu tren chat_rooms: %', v_thieu;
   END IF;
 
+  -- (3b) ĐỐI XỨNG cho `chat_messages` — migration này cũng drop 2 cột ở ĐÓ. Bản đầu của khối VERIFY chỉ
+  --      điểm danh `chat_rooms` (FULL gate 2026-08-05 chỉ ra): nếu `file_url`/`file_name` từng nằm trong
+  --      một index đa cột của `chat_messages` thì `DROP COLUMN` nuốt im và VERIFY vẫn in OK.
+  --      Danh sách = đúng 9 index mà `0541` đã chốt là phải-giữ.
+  SELECT string_agg(x.ten, ', ') INTO v_thieu
+    FROM unnest(ARRAY[
+           'chat_messages_pkey',
+           'chat_messages_company_id_id_uq',
+           'uq_chat_messages_client_id',
+           'uq_chat_messages_room_seq',
+           'idx_chat_messages_room_seq',
+           'chat_messages_room_seq_idx',
+           'idx_chat_messages_search',
+           'idx_chat_messages_reply',
+           'chat_messages_pinned_idx'
+         ]) AS x(ten)
+   WHERE NOT EXISTS (
+           SELECT 1 FROM pg_stat_user_indexes i
+            WHERE i.relname = 'chat_messages' AND i.indexrelname = x.ten);
+  IF v_thieu IS NOT NULL THEN
+    RAISE EXCEPTION '[0542] THIEU index phai-giu tren chat_messages: %', v_thieu;
+  END IF;
+
   -- (4) Tập cột UPDATE-được của 0540 trên chat_rooms còn ĐÚNG 11 cột. Bắt trường hợp `DROP COLUMN`
   --     làm xô lệch `attacl` (cấp thừa là đỏ, mất một cột cũng đỏ — pin theo TÊN, không theo count).
   SELECT coalesce(array_agg(a.attname::text ORDER BY a.attname COLLATE "C"), '{}')
@@ -175,6 +206,6 @@ BEGIN
     RAISE EXCEPTION '[0542] RLS/FORCE TAT tren: %', v_con;
   END IF;
 
-  RAISE NOTICE '[0542] OK — go 3 cot khai tu + 1 index + 2 FK; 10 index phai-giu con nguyen, GRANT/RLS khong doi';
+  RAISE NOTICE '[0542] OK — go 3 cot khai tu + 1 index + 2 FK; 10 index chat_rooms + 9 index chat_messages con nguyen, GRANT/RLS khong doi';
 END;
 $$;
