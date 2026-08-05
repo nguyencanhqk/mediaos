@@ -67,8 +67,9 @@ Mô tả thiết kế API cho module **CHAT** — kênh trao đổi tức thời
 ### 4.2 Không bao gồm (ngoài phạm vi v1)
 
 - Sửa tin nhắn đã gửi (SPEC-15 §5.2, CHAT-ERR-007).
-- Đang gõ / trạng thái online (typing, presence).
-- Thả cảm xúc (reaction).
+- ~~Đang gõ / trạng thái online (typing, presence).~~ → **ĐÃ VÀO PHẠM VI** ở wave S8-CHAT-UX (CHAT-DEC-017): `CHAT-API-023` + sự kiện `chat:typing`/`chat:presence` §7.
+- ~~Thả cảm xúc (reaction).~~ → **ĐÃ VÀO PHẠM VI** ở wave S8-CHAT-UX (CHAT-DEC-018): `CHAT-API-022a/b` + sự kiện `chat:reaction` §7.
+- **Thư mục hội thoại tự đặt** — owner chốt mục cố định theo `room_type` (CHAT-DEC-014), chia mục làm **hoàn toàn ở FE**, không endpoint.
 - Chat theo từng task (CHAT-DEC-009 — TASK đã có bình luận riêng).
 - Kiểm duyệt / báo cáo tin nhắn (cần owner chốt chính sách trước).
 - **Tìm kiếm vượt membership** — `GET /chat/search` giữ nguyên vị từ membership cho **mọi** role, kể cả Super Admin (SPEC-15 §3.3). Không có `/chat/oversight/search`.
@@ -104,6 +105,18 @@ POST   /api/v1/chat/messages/{message_id}/pin
 DELETE /api/v1/chat/messages/{message_id}/pin
 GET    /api/v1/chat/search
 GET    /api/v1/chat/unread-count
+
+# wave S8-CHAT-UX — nâng cấp giao diện (§5.1b). KHÔNG cặp quyền mới.
+PUT    /api/v1/chat/rooms/{room_id}/pin
+DELETE /api/v1/chat/rooms/{room_id}/pin
+PUT    /api/v1/chat/rooms/{room_id}/mute
+POST   /api/v1/chat/rooms/{room_id}/unread
+POST   /api/v1/chat/rooms/{room_id}/typing
+POST   /api/v1/chat/rooms/{room_id}/avatar
+DELETE /api/v1/chat/rooms/{room_id}/avatar
+POST   /api/v1/chat/rooms/{room_id}/avatar/upload-url
+PUT    /api/v1/chat/messages/{message_id}/reactions/{emoji}
+DELETE /api/v1/chat/messages/{message_id}/reactions/{emoji}
 
 # 🔒 đọc-vượt membership — cặp riêng, chỉ đọc, có audit (§5.3)
 GET    /api/v1/chat/oversight/rooms
@@ -141,6 +154,29 @@ Cột **Membership** ghi rõ endpoint có phải chạy `ChatAccessService.asser
 | CHAT-API-017 | GET | `/chat/rooms/{room_id}/files` | Tệp đã gửi trong phòng, URL ký hạn ngắn | `('view','chat-room')` | ✅ | — |
 
 > **Notation permission:** Chuỗi `('action','resource')` là **cặp engine thực thi** (permission-matrix-spec §9c + seed DB-12 §9 bước D) — không phải chuỗi dotted `MODULE.RESOURCE.ACTION` hiển thị FE.
+
+#### 5.1b Endpoint bổ sung — wave S8-CHAT-UX (SPEC-15 §5.1b · CHAT-DEC-014…019)
+
+> **KHÔNG cặp quyền mới.** Cả 8 endpoint dưới đây dùng lại đúng 3 cặp đã seed ở v1 — xem SPEC-15 §11a. Hệ quả: 0 migration seed quyền, 0 đổi `SENSITIVE_CAPABILITY_ALLOWLIST`.
+
+| Mã | Method | Path | Chức năng | Permission | Membership | Audit |
+| --- | --- | --- | --- | --- | --- | --- |
+| CHAT-API-018a | PUT | `/chat/rooms/{room_id}/pin` | Ghim hội thoại (per-user). Vượt **10** → 409 CHAT-ERR-021 | `('view','chat-room')` | ✅ | — |
+| CHAT-API-018b | DELETE | `/chat/rooms/{room_id}/pin` | Bỏ ghim | `('view','chat-room')` | ✅ | — |
+| CHAT-API-019 | PUT | `/chat/rooms/{room_id}/mute` | `{ mutedUntil \| null }` — tắt/bật thông báo phòng. **Đóng lỗ v1**: cột có từ `0538` mà chưa từng có đường ghi | `('view','chat-room')` | ✅ | — |
+| CHAT-API-020 | POST | `/chat/rooms/{room_id}/unread` | Đánh dấu chưa đọc thủ công (`marked_unread_at`). **KHÔNG** lùi `last_read_seq` | `('view','chat-room')` | ✅ | — |
+| CHAT-API-021a | POST | `/chat/rooms/{room_id}/avatar` | Đặt ảnh đại diện phòng từ `fileId` đã upload+confirm. `direct` → 422 CHAT-ERR-022; không đủ tư cách → 403 CHAT-ERR-023 | `('update','chat-room')` | ✅ + tư cách theo **SPEC-15 §11b** | ✅ |
+| CHAT-API-021b | DELETE | `/chat/rooms/{room_id}/avatar` | Gỡ ảnh đại diện | `('update','chat-room')` | ✅ + §11b | ✅ |
+| CHAT-API-021c | POST | `/chat/rooms/{room_id}/avatar/upload-url` | Presign upload — **wrapper riêng của CHAT**, sao khuôn `ChatFilesService` (S7-CHAT-BE-8) | `('update','chat-room')` | ✅ + §11b | — |
+| CHAT-API-022a | PUT | `/chat/messages/{message_id}/reactions/{emoji}` | Thả cảm xúc. Idempotent (thả 2 lần = 1 hàng). Tin đã thu hồi → 422 CHAT-ERR-024; emoji ngoài bộ đóng → 422 CHAT-ERR-025 | `('send','chat-message')` | ✅ (phòng chứa tin) | — |
+| CHAT-API-022b | DELETE | `/chat/messages/{message_id}/reactions/{emoji}` | Bỏ thả. Chưa thả → **204**, không 404 | `('send','chat-message')` | ✅ | — |
+| CHAT-API-023 | POST | `/chat/rooms/{room_id}/typing` | Báo "đang gõ" → fan-out WS. **204**, 0 ghi DB, 0 audit | `('send','chat-message')` | ✅ | — |
+
+⚠️ **Vì sao ghim/tắt/đánh-dấu gate bằng `('view','chat-room')` chứ không phải một cặp mạnh hơn:** ba thứ đó là **tuỳ chọn cá nhân trên hàng membership của chính mình**. Gate mạnh hơn tạo ra role "đọc được phòng mà không tắt nổi thông báo của chính mình" — đúng họ lỗi `read-path-gate-pair-must-match-download-pair`.
+
+⚠️ **CHAT-API-021c KHÔNG được thay bằng `POST /foundation/files/upload`.** Cặp `('upload','foundation-file')` chỉ có ở `SA` · `company-admin` · `QUẢN LÝ CẤP CAO` (mig `0435:376`) ⇒ trưởng nhóm thường sẽ không đặt được avatar. Đây đúng là lỗ đã phải vá ở `S7-CHAT-BE-8` cho đính kèm; đừng lặp lại.
+
+⚠️ **CHAT-API-007a phải trả thêm `avatarUrl` cho từng thành viên** (CHAT-DEC-019) — đó là **nguồn duy nhất** để FE vẽ avatar người gửi trong khung chat. Ký **1 lần/phòng** ở đây, **không** ký theo từng tin. Người đã rời phòng vẫn phải có trong danh sách (kèm `leftAt`), nếu không tin cũ của họ mất cả avatar lẫn tên.
 
 ### 5.2 Trạng thái hiện thực (đối chiếu code, 01/08/2026)
 
@@ -248,10 +284,15 @@ Namespace `/ws` (Socket.IO), auth ở handshake bằng access token — hạ t�
 | `chat:message-recalled` | server → client | `{ messageId, roomId, recalledAt }` | như trên |
 | `chat:read` | server → client | `{ roomId, userId, lastReadSeq }` | như trên |
 | `chat:room` | server → client | `{ roomId, action, room? }` | như trên + `co:{companyId}:user:{userId}` của người bị ảnh hưởng |
+| `chat:reaction` *(S8)* | server → client | `{ messageId, roomId, emoji, count, actorUserId }` | `co:{companyId}:chatroom:{roomId}` |
+| `chat:typing` *(S8)* | server → client | `{ roomId, userId }` — **không** nội dung đang gõ | như trên |
+| `chat:presence` *(S8)* | server → client | `{ userId, status }` | `co:{companyId}:user:{userId}` của những người có chung phòng `direct` |
 
 Ràng buộc:
 
 - **Không có `@SubscribeMessage` nào** — client không ghi gì qua WS (CHAT-DEC-005). Gửi tin đi REST (CHAT-API-010).
+- *(S8)* **Ba sự kiện mới KHÔNG mở kênh client→server.** `chat:typing` do **REST** `CHAT-API-023` kích hoạt; `chat:presence` do **vòng đời kết nối** (`handleConnection`/`handleDisconnect`) kích hoạt. Ratchet `chat-realtime-structure.spec.ts` (0 `@SubscribeMessage` toàn `apps/api/src`) **phải vẫn xanh** sau wave S8 — xem CHAT-DEC-017.
+- *(S8)* **Khoá presence trên Valkey BẮT BUỘC mang tiền tố môi trường.** Valkey dùng chung cho cả 4 môi trường và **không** có tiền tố kênh sẵn; thiếu prefix thì người đang mở dev-online hiện "đang online" với người dùng PROD. Khoá phải có **TTL** — ngắt kết nối bẩn (kill process) không được để lại trạng thái online vĩnh viễn, vì `handleDisconnect` không đảm bảo chạy.
 - Socket **join tất cả phòng của user ngay tại kết nối**, danh sách đọc từ DB phía server; **không** nhận danh sách phòng từ client.
 - Membership đổi → server buộc socket `join`/`leave` ngay, không đợi kết nối lại.
 - Mọi payload `.parse()` qua schema contracts trước khi emit (`RealtimeEmitterService`) — cấm `io.emit` row DB thẳng.
@@ -261,15 +302,15 @@ Ràng buộc:
 
 ## 8. Mã lỗi
 
-**20** mã `CHAT-ERR-001..020` định nghĩa tại [SPEC-15 §12](<../SPEC/SPEC-15 CHAT.md>). Ánh xạ HTTP:
+**25** mã `CHAT-ERR-001..025` (021-025 thêm ở wave S8-CHAT-UX) định nghĩa tại [SPEC-15 §12](<../SPEC/SPEC-15 CHAT.md>). Ánh xạ HTTP:
 
 | HTTP | Dùng cho |
 | --- | --- |
 | `200` | Idempotent trả bản ghi đã có (CHAT-ERR-014, mở DM lần 2) |
-| `400` / `422` | Validate đầu vào: CHAT-ERR-002/003/004/009/016 |
-| `403` | Đã là thành viên nhưng thiếu quyền/vai trò: CHAT-ERR-006/011/012/013 · tệp CHAT-ERR-015 · **thiếu cặp `('view','chat-oversight')` trên `/chat/oversight/*`: CHAT-ERR-019** (403 chứ không 404 — người gọi biết mình đang dùng chức năng quản trị, không có gì để dò) |
+| `400` / `422` | Validate đầu vào: CHAT-ERR-002/003/004/009/016 · *(S8)* đặt avatar cho phòng `direct` (CHAT-ERR-022) · react vào tin đã thu hồi (CHAT-ERR-024) · emoji ngoài bộ đóng (CHAT-ERR-025) |
+| `403` | Đã là thành viên nhưng thiếu quyền/vai trò: CHAT-ERR-006/011/012/013 · tệp CHAT-ERR-015 · *(S8)* không đủ tư cách đặt avatar theo loại phòng (CHAT-ERR-023, SPEC-15 §11b) · **thiếu cặp `('view','chat-oversight')` trên `/chat/oversight/*`: CHAT-ERR-019** (403 chứ không 404 — người gọi biết mình đang dùng chức năng quản trị, không có gì để dò) |
 | `404` | **Không phải thành viên** hoặc phòng/tin không tồn tại: CHAT-ERR-001 · **và CHAT-ERR-017 khi `roomId` chỉ định không thuộc phạm vi người tìm** |
-| `409` | Xung đột trạng thái: gửi vào phòng đã lưu trữ (CHAT-ERR-005), ghim quá hạn mức (CHAT-ERR-008) |
+| `409` | Xung đột trạng thái: gửi vào phòng đã lưu trữ (CHAT-ERR-005), ghim quá hạn mức tin (CHAT-ERR-008) **và ghim quá 10 hội thoại (CHAT-ERR-021)** |
 | `500` | **CHAT-ERR-020** — ghi `audit_logs` của đường đọc-vượt thất bại ⇒ rollback. Trả thân lỗi chuẩn API-01; **tuyệt đối không** trả `200` với thân rỗng (đó là "đọc-vượt không dấu vết" ngụy trang thành kết quả trống) |
 | `501`/`405` | Sửa tin nhắn (CHAT-ERR-007) — không hỗ trợ ở v1 |
 

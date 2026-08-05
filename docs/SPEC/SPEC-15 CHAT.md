@@ -159,13 +159,27 @@ CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ 
 | Thông báo | `CHAT_MENTIONED` (mention) + `CHAT_DIRECT_MESSAGE` (DM khi vắng mặt, gộp theo lô) | NOTI: thông báo tin nhắn mới |
 | Tắt thông báo | `muted_until` per-phòng | Bổ sung tối thiểu để dùng thật |
 
+### 5.1b Bổ sung wave S8-CHAT-UX — nâng cấp giao diện (owner chốt 05/08/2026)
+
+> Wave này **chỉ nâng trải nghiệm**. Ranh giới dữ liệu KHÔNG đổi: membership vẫn là ranh giới duy nhất (§3.2), và **không thêm cặp quyền nào** — xem ghi chú cuối §11.
+
+| Nhóm | Nội dung | Quyết định |
+| --- | --- | --- |
+| Chia mục hội thoại | Danh sách phòng chia **mục cố định theo `room_type`** + mục "Đã ghim" đứng đầu; thu/mở từng mục, trạng thái nhớ ở client theo user. **Không** phải thư mục tự đặt | CHAT-DEC-014 |
+| Ghim hội thoại | `chat_room_members.pinned_at` — **per-user**, trần **10** phòng/người | CHAT-DEC-015 |
+| Avatar phòng | `chat_rooms.avatar_file_id` cho `group` · `department` · `project`; `direct` **không** có cột riêng (dẫn xuất từ avatar người đối thoại) | CHAT-DEC-016 |
+| Tắt thông báo — đường ghi | `muted_until` **đã có cột + đã có `GRANT UPDATE` từ mig `0538`** nhưng **0 đường ghi, 0 lối vào UI**. Bổ sung API + menu ngữ cảnh | CHAT-FUNC-015 (đã spec từ v1, chưa hiện thực) |
+| Đánh dấu chưa đọc | Cờ riêng per-member. **CẤM** lùi `last_read_seq` — con trỏ chỉ-tiến là bất biến §13.2, không được phá để làm tính năng tiện | CHAT-DEC-015 |
+| Đang gõ · đang online | ⬅ **CHUYỂN TỪ §5.2**. Đang gõ đi qua **REST-ping**, presence làm **thuần server** ⇒ giữ nguyên §3.5 | CHAT-DEC-017 |
+| Thả cảm xúc | ⬅ **CHUYỂN TỪ §5.2**. Bảng `chat_message_reactions`, bộ emoji **ĐÓNG** (6 mã, ép bằng CHECK) | CHAT-DEC-018 |
+| Avatar người gửi trong khung chat | Lấy từ **roster phòng** (ký 1 lần/phòng), **không** ký theo từng tin | CHAT-DEC-019 |
+
 ### 5.2 Ngoài v1 (chừa thiết kế, KHÔNG làm đợt này)
 
 | Nhóm | Ghi chú |
 | --- | --- |
 | Sửa tin nhắn đã gửi | Phá append-only thuần (§3.4); nếu cần → bảng `chat_message_revisions`, không UPDATE tại chỗ |
-| Đang gõ / đang online (typing · presence) | Cần kênh WS hai chiều + Valkey presence; đo nhu cầu thật sau v1 |
-| Thả cảm xúc (reaction) | Không nằm trong SPEC-01 §12.12 |
+| **Thư mục hội thoại tự đặt** | Owner chốt 05/08/2026 là **mục cố định theo loại phòng** (CHAT-DEC-014). Thư mục tự đặt cần 2 bảng + CRUD + kéo-thả ⇒ wave sau |
 | Chat theo **task** (không phải dự án) | SPEC-01 §12.12 nêu "task"; TASK đã có bình luận riêng (SPEC-06) ⇒ tránh hai kênh trùng. Xem CHAT-DEC-009 |
 | Kiểm duyệt / báo cáo tin nhắn | Thiết kế đề xuất: `chat_message_reports` → người xử lý chỉ thấy **tin bị báo cáo** + ngữ cảnh 5 tin quanh nó, KHÔNG mở khoá đọc cả phòng. Cần owner chốt chính sách trước khi làm |
 | Cuộc gọi thoại/hình | Ngoài phạm vi sản phẩm |
@@ -224,6 +238,7 @@ Chi tiết cột/kiểu/constraint: [DB-12](<../DB/DB-12 CHAT Database Design.md
 | Loại & neo | `room_type` + neo tương ứng: `org_unit_id` / `ref_id` (project) / `direct_key` | CHECK ràng buộc loại ↔ neo |
 | Đồng bộ | `sync_source` (`manual` / `department` / `project`), `synced_at` | phòng dẫn xuất mới có |
 | Hoạt động | `last_message_at`, `last_message_seq` | sắp xếp danh sách phòng, tránh N+1 |
+| Ảnh đại diện | `avatar_file_id` *(S8)* | chỉ `group` · `department` · `project`. Phòng `direct` **KHÔNG** dùng cột này — avatar là dẫn xuất từ người đối thoại (CHAT-DEC-016) |
 | Vòng đời | `is_archived`, `archived_at`, `deleted_at` | soft delete |
 
 **Thành viên (`chat_room_members`)**
@@ -233,8 +248,12 @@ Chi tiết cột/kiểu/constraint: [DB-12](<../DB/DB-12 CHAT Database Design.md
 | Neo | `room_id`, `user_id` | unique theo phòng |
 | Vai trò | `role` (`member` / `admin`) | phòng nhóm mới có admin do người chỉ định |
 | Đã đọc | `last_read_seq`, `last_read_at` | **`seq` là nguồn sự thật**, `at` chỉ để hiển thị (§13.2) |
-| Tuỳ chọn | `muted_until` | tắt thông báo tới thời điểm |
+| Tuỳ chọn | `muted_until`, `pinned_at` *(S8)*, `marked_unread_at` *(S8)* | tắt thông báo tới thời điểm · **ghim per-user** (trần 10, CHAT-DEC-015) · đánh dấu chưa đọc thủ công |
 | Vòng đời | `joined_at`, `left_at`, `visible_from_seq` | `visible_from_seq` chừa sẵn, v1 **luôn NULL** (§13.4 · CHAT-DEC-008) |
+
+> ⚠️ **Ba cột tuỳ chọn trên nằm ở `chat_room_members`, KHÔNG ở `chat_rooms` — cố ý.** Ghim/tắt/đánh-dấu là lựa chọn CỦA MỘT NGƯỜI. Đặt ở bảng phòng thì một người ghim là **cả phòng bị ghim**, một người tắt là **cả phòng mất thông báo**.
+>
+> ⚠️ **`marked_unread_at` KHÔNG được hiện thực bằng cách lùi `last_read_seq`.** Con trỏ chỉ-tiến là bất biến §13.2 (CHAT-ERR-018); lùi nó để làm một tính năng tiện sẽ làm hỏng phép trừ đếm chưa đọc và mọi thứ dựng trên nó.
 
 **Tin nhắn (`chat_messages`)**
 
@@ -247,6 +266,7 @@ Chi tiết cột/kiểu/constraint: [DB-12](<../DB/DB-12 CHAT Database Design.md
 | Ghim | `pinned_at`, `pinned_by` | column-level UPDATE |
 | Thu hồi | `recalled_at`, `recalled_by` | column-level UPDATE; body bị che ở DTO |
 | Tìm kiếm | `search_vector` | cột **GENERATED STORED**, DB tự tính — không đường ghi nào chạm |
+| Cảm xúc *(S8)* | bảng RIÊNG `chat_message_reactions` | **Không** nhét vào `chat_messages`: bảng đó append-only, mà bỏ thả cảm xúc là xoá thật. Bộ emoji **ĐÓNG** (CHAT-DEC-018) |
 
 ---
 
@@ -254,14 +274,26 @@ Chi tiết cột/kiểu/constraint: [DB-12](<../DB/DB-12 CHAT Database Design.md
 
 | Mã | Màn hình | Ghi chú |
 | --- | --- | --- |
-| CHAT-SCREEN-001 | Trang Chat full-screen (`/chat`) | 3 cột: danh sách phòng · khung hội thoại · thông tin phòng |
+| CHAT-SCREEN-001 | Trang Chat full-screen (`/chat`) | 3 cột: danh sách phòng · khung hội thoại · thông tin phòng. Cột trái chia mục — xem ghi chú §9a |
 | CHAT-SCREEN-002 | Panel chat nổi (mọi màn hình) | thu nhỏ/mở rộng, **đúng 1 hội thoại mở tại một thời điểm** — bấm phòng khác thì THAY CHỖ phòng đang mở (đổi 2026-08-05 từ "tối đa 3": nhiều cửa sổ cộng dồn ở cạnh dưới, người dùng đọc ra là "cứ bấm là mở thêm khung, không ẩn phần chat cũ"). **Dùng chung store + chung 1 kết nối WS** với CHAT-SCREEN-001 |
 | CHAT-SCREEN-003 | Hộp thoại tạo nhóm / chọn người nhắn riêng | danh bạ nhân viên có tìm kiếm, tôn trọng quyền xem danh bạ của HR |
-| CHAT-SCREEN-004 | Bảng thông tin phòng | thành viên · tệp đã gửi · tin đã ghim · nút rời/lưu trữ (theo quyền + loại phòng) |
+| CHAT-SCREEN-004 | Bảng thông tin phòng | thành viên · tệp đã gửi · tin đã ghim · nút rời/lưu trữ (theo quyền + loại phòng). *(S8)* Thêm lối **đặt/gỡ ảnh đại diện phòng** — chỉ hiện đúng với chủ thể được phép theo CHAT-DEC-016, **không** hiện nút rồi để server trả 403 |
 | CHAT-SCREEN-005 | Tìm kiếm tin nhắn | phạm vi: tất cả phòng của tôi, hoặc trong 1 phòng; nhảy tới tin trong ngữ cảnh |
 | CHAT-SCREEN-006 | Badge chưa đọc trên header | tổng theo user, đồng bộ realtime qua `chat:read` |
 | CHAT-SCREEN-007 🔒 | **Quản trị: đọc-vượt membership** (§3.3) | Chỉ hiện với cặp `('view','chat-oversight')`. Tra phòng theo mã/tên → **hộp thoại xác nhận "xem với tư cách quản trị"** → mở phòng ở chế độ **chỉ đọc** (không gửi/ghim/thu hồi được). **Không** trộn vào danh sách phòng của CHAT-SCREEN-001 |
 | CHAT-SCREEN-008 🔒 | **Quản trị: nhật ký đọc-vượt** | Danh sách lần dùng CHAT-SCREEN-007 (ai · phòng nào · lúc nào · thành công/bị từ chối), đọc từ `audit_logs`. Audit không xem được trên UI thì không phải là kiểm soát (§18). **Lọc theo người thực hiện + khoảng ngày chạy ở SERVER** (CHAT-API-019), trên toàn bộ nhật ký — **không** lọc trên các dòng client đã tải: lọc trên một tập con làm người đọc kết luận "không có lần truy cập nào" trong khi bằng chứng nằm ở trang chưa tải. Khoảng ngày là **NGÀY của công ty** (cột `companies.timezone` — đúng nguồn mà màn Cài đặt công ty ghi và DASHBOARD đọc), quy đổi ở server — quy đổi ở client thì hai người ở hai múi giờ nhận hai kết quả khác nhau cho cùng một câu hỏi |
+
+### 9a. Cột trái CHAT-SCREEN-001 — luật chia mục *(S8, CHAT-DEC-014)*
+
+Mục cố định, đúng thứ tự: **Đã ghim** · **Tin nhắn riêng** · **Nhóm** · **Phòng ban** · **Dự án**.
+
+- Mục **rỗng ẩn hẳn** — không vẽ tiêu đề trống.
+- Thu/mở từng mục; trạng thái nhớ ở client **theo user** (máy dùng chung thì người sau không thừa hưởng bố cục người trước). Không đồng bộ lên server.
+- Mục đang **THU** vẫn phải hiện **tổng tin chưa đọc** của cả mục. Thu lại mà mất dấu vết tin chưa đọc là lỗi — người dùng không còn cách nào biết.
+- Đang lọc thì **mở hết**, và chỉ hiện mục **có** kết quả. Kết quả khớp mà nằm trong một mục người dùng đã thu từ tuần trước thì màn hình nói "không có gì" trong khi phòng vẫn ở đó.
+- Mỗi phòng xuất hiện **đúng một lần** trên toàn danh sách: **ghim THẮNG loại phòng**.
+- `room_type` lạ (server thêm loại mới mà client chưa biết) phải **vẫn hiện ra** ở một mục cuối, **không** được biến mất. Mất phòng trong im lặng tệ hơn một tiêu đề xấu.
+- **KHÔNG** phải thư mục tự đặt — xem §5.2.
 
 ---
 
@@ -284,6 +316,12 @@ Chi tiết cột/kiểu/constraint: [DB-12](<../DB/DB-12 CHAT Database Design.md
 | CHAT-FUNC-013 | Realtime | đẩy tin/đã đọc/đổi phòng; đồng bộ join-leave WS room khi membership đổi |
 | CHAT-FUNC-014 | Thông báo | mention tức thì; DM gộp lô khi người nhận vắng mặt (§17) |
 | CHAT-FUNC-015 | Tắt thông báo phòng | `muted_until`; phòng đã tắt không sinh notification nhưng vẫn tăng badge |
+| CHAT-FUNC-016 *(S8)* | Ghim / bỏ ghim **hội thoại** | per-user qua `chat_room_members.pinned_at`; trần **10** phòng/người, ép ở service. **Khác** CHAT-FUNC-010 (ghim TIN trong phòng) |
+| CHAT-FUNC-017 *(S8)* | Đánh dấu chưa đọc | đặt `marked_unread_at`; mở phòng ⇒ xoá cờ. **KHÔNG** lùi `last_read_seq` (§13.2) |
+| CHAT-FUNC-018 *(S8)* | Đặt / gỡ ảnh đại diện phòng | `group` · `department` · `project`; chủ thể theo CHAT-DEC-016; dùng lại pipeline FOUNDATION Files như §13.5 |
+| CHAT-FUNC-019 *(S8)* | Thả / bỏ cảm xúc | 6 emoji cố định; idempotent; **không** thả được vào tin đã thu hồi |
+| CHAT-FUNC-020 *(S8)* | Báo "đang gõ" | REST-ping → fan-out WS; không ghi DB, không audit; chỉ báo tự tắt sau 5s |
+| CHAT-FUNC-021 *(S8)* | Hiện "đang online" | presence server-side theo vòng đời kết nối WS; **chỉ** hiện ở phòng `direct` và danh sách thành viên |
 
 ---
 
@@ -314,6 +352,30 @@ Ghi chú bắt buộc:
 - **Đúng một cặp cho phép đọc phòng mình không thuộc:** `('view','chat-oversight')`, chỉ Super Admin, luôn kèm audit, **không** áp cho tìm kiếm (§3.3). Mọi cặp khác — kể cả `('view','chat-room')` — vẫn bị membership chặn tuyệt đối.
 - Nếu về sau owner duyệt cơ chế kiểm duyệt nội dung, cặp mới phải là `('manage','chat-report')` gắn với **tin bị báo cáo**, không phải mở rộng scope của `('view','chat-room')` hay của `('view','chat-oversight')`.
 
+### 11a. Wave S8-CHAT-UX — **KHÔNG cặp quyền mới** *(chốt 05/08/2026)*
+
+Toàn bộ 7 tính năng của §5.1b dùng lại **đúng 10 cặp** ở trên. Hệ quả: **0 migration seed quyền · 0 thay đổi `SENSITIVE_CAPABILITY_ALLOWLIST` · 0 rủi ro `canonical-seed-pin-regression`.**
+
+| Tính năng | Cặp dùng lại | Điều kiện ĐỦ (kiểm ở service) |
+| --- | --- | --- |
+| Ghim · tắt thông báo · đánh dấu chưa đọc | `('view','chat-room')` | là thành viên phòng (`left_at IS NULL`) |
+| Đặt/gỡ avatar phòng | `('update','chat-room')` | theo loại phòng — bảng §11b |
+| Thả cảm xúc · báo "đang gõ" | `('send','chat-message')` | là thành viên phòng |
+| Xem "đang online" | `('view','chat-room')` | là thành viên phòng |
+
+⚠️ **Ghim / tắt thông báo / đánh dấu chưa đọc là TUỲ CHỌN CÁ NHÂN.** Cặp gate của chúng phải **trùng cặp đường đọc phòng** (`view:chat-room`) chứ không phải một cặp quản trị. Gate mạnh hơn sẽ tạo ra role "đọc được phòng mà không tắt được thông báo của chính mình" — đúng họ lỗi `read-path-gate-pair-must-match-download-pair`, và đúng thứ đã xảy ra một lần ở màn tuỳ chọn cá nhân.
+
+### 11b. Ai được đặt ảnh đại diện phòng — **CHAT-DEC-016**
+
+> ⚠️ **Vì sao không dùng luật "admin phòng" cho tất cả:** đo ngày 05/08/2026 — `chat-derived-rooms-sync.service.ts` **không gán `role='admin'` lần nào**, nên phòng `department` và `project` có **0 admin**. Áp luật admin-phòng cho hai loại đó nghĩa là avatar **vĩnh viễn không đặt được** ở đúng hai loại phòng owner vừa yêu cầu.
+
+| Loại phòng | Quyền (điều kiện CẦN) | Tư cách (điều kiện ĐỦ) |
+| --- | --- | --- |
+| `group` | `('update','chat-room')` | `chat_room_members.role = 'admin'` |
+| `department` | `('update','chat-room')` | có `('update','org-unit')` với đơn vị neo của phòng |
+| `project` | `('update','chat-room')` | giữ vai trò quản lý dự án của `projects` neo (`projectRole` — DECISIONS-04) |
+| `direct` | — | **không ai**; đặt avatar cho phòng `direct` ⇒ **CHAT-ERR-022** |
+
 ---
 
 ## 12. Quy tắc nghiệp vụ và mã lỗi
@@ -340,6 +402,13 @@ Ghi chú bắt buộc:
 | CHAT-ERR-018 | `last_read_seq` gửi lên nhỏ hơn giá trị hiện có → bỏ qua im lặng (chỉ tiến, không lùi), không lỗi |
 | CHAT-ERR-019 | Gọi đường đọc-vượt (§3.3) mà **thiếu cặp** `('view','chat-oversight')` → **403** (không phải 404: người gọi biết mình đang cố dùng chức năng quản trị, không có gì để dò). Ghi audit cả lần **bị từ chối** |
 | CHAT-ERR-020 | Đường đọc-vượt được gọi nhưng **ghi `audit_logs` thất bại** → **rollback, không trả dữ liệu**. Đọc-vượt không có dấu vết thì không được phép xảy ra (§3.3) |
+| CHAT-ERR-021 *(S8)* | Ghim quá **10** hội thoại/người → **409** (cùng ánh xạ với CHAT-ERR-008 — vượt hạn mức là xung đột trạng thái, không phải sai đầu vào), thông điệp nêu rõ trần đang là bao nhiêu. Khác CHAT-ERR-008 (ghim TIN, trần 20/phòng) |
+| CHAT-ERR-022 *(S8)* | Đặt ảnh đại diện cho phòng `direct` → **422**. Avatar phòng `direct` là **dẫn xuất** từ người đối thoại, không có cột để ghi (§11b) |
+| CHAT-ERR-023 *(S8)* | Có `('update','chat-room')` nhưng **không đủ tư cách** theo loại phòng (§11b) → **403**. Không phải thành viên phòng → **404** theo CHAT-ERR-001 |
+| CHAT-ERR-024 *(S8)* | Thả cảm xúc vào tin **đã thu hồi** → **422**. Thả vào tin của phòng mình không thuộc → **404** (CHAT-ERR-001) |
+| CHAT-ERR-025 *(S8)* | Emoji ngoài **bộ đóng** → **422**. Bộ emoji ép ở **CHECK cấp DB**, không chỉ ở Zod: chuỗi tự do là bề mặt lưu trữ vô hạn |
+
+> ⚠️ **Ghim TIN và ghim HỘI THOẠI là hai thứ khác nhau.** CHAT-FUNC-010 + CHAT-ERR-008 + `chat_messages.pinned_at` = ghim một **tin** trong phòng, mọi thành viên đều thấy. CHAT-FUNC-016 + CHAT-ERR-021 + `chat_room_members.pinned_at` = ghim một **hội thoại** lên đầu danh sách, **chỉ mình thấy**. Trùng chữ "ghim" nhưng khác bảng, khác trần, khác phạm vi nhìn thấy.
 
 Quy tắc bổ sung (không cần mã lỗi riêng):
 
@@ -638,11 +707,24 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 | CHAT-DEC-012 | Tìm kiếm bằng `unaccent` + `tsvector('simple')` trong Postgres, không thêm search engine | theo đề xuất §13.7 | ✅ chốt |
 | CHAT-DEC-013 | Điều kiện gửi `CHAT_DIRECT_MESSAGE` khi §17 đòi presence mà §7 loại presence khỏi v1 | **Gửi mọi DM, trừ khi `muted_until` còn hiệu lực** — bỏ điều kiện "không đang mở phòng" ở v1. Chống spam = gộp lô 15 phút (`dedupe_strategy='DedupeKey'`, seed `0538`). Xem §17 | ✅ **chốt 02/08/2026** |
 
+### 22a. Wave S8-CHAT-UX — quyết định nâng cấp giao diện, **ĐÃ CHỐT 05/08/2026**
+
+> Đánh số bắt đầu từ **014**: `CHAT-DEC-013` đã bị chiếm ở bảng trên. Kế hoạch wave: [`docs/plans/S8-CHAT-UX-WAVE.md`](../plans/S8-CHAT-UX-WAVE.md).
+
+| Mã | Quyết định | Kết quả owner chốt | Trạng thái |
+| --- | --- | --- | --- |
+| CHAT-DEC-014 | Chia nhóm hội thoại theo cách nào? | **Mục cố định theo `room_type`** (§9a), **không** phải thư mục tự đặt. Thư mục tự đặt lùi sang wave sau (§5.2) | ✅ chốt |
+| CHAT-DEC-015 | Ghim hội thoại đặt ở đâu, trần bao nhiêu? | `chat_room_members.pinned_at` — **per-user**, trần **10** phòng/người. **Không** đặt ở `chat_rooms`: ghim ở bảng phòng = một người ghim thì cả phòng bị ghim | ✅ chốt |
+| CHAT-DEC-016 | Ai được đặt ảnh đại diện phòng? | Theo **loại phòng** — bảng §11b. Không dùng luật "admin phòng" cho tất cả vì `department`/`project` đo được là **0 admin** (05/08/2026) ⇒ avatar sẽ vĩnh viễn không đặt được ở hai loại đó | ✅ chốt |
+| CHAT-DEC-017 | "Đang gõ" và "đang online" — có mở kênh client→server không? | **KHÔNG.** Đang gõ đi **REST-ping** (`POST /chat/rooms/:id/typing`) rồi fan-out WS; presence làm **thuần server** theo vòng đời kết nối. Ratchet **0 `@SubscribeMessage`** (§3.5 · CHAT-DEC-005) **giữ nguyên**. Khoá presence trên Valkey **bắt buộc có tiền tố môi trường** — Valkey dùng chung 4 môi trường | ⚠️ **ĐẢO §5.2** — chốt |
+| CHAT-DEC-018 | Thả cảm xúc | **Làm.** Bảng riêng `chat_message_reactions`, bộ emoji **ĐÓNG** (6 mã, CHECK cấp DB). Bỏ thả = `DELETE` thật — reaction **không** thuộc nhóm audit/snapshot/ledger của BẤT BIẾN #2 | ⚠️ **ĐẢO §5.2** — chốt |
+| CHAT-DEC-019 | Avatar người gửi trong khung chat lấy ở đâu? | Từ **roster phòng**, ký **1 lần/phòng**. **Không** ký theo từng tin: 50 tin = 50 lần ký + 50 hạn lệch nhau. Người **đã rời phòng** vẫn phải có trong roster, nếu không tin cũ mất avatar lẫn tên | ✅ chốt |
+
 > **Ghi chú lịch sử — đọc kỹ trước khi tra git:** bản Draft 01/08/2026 đề xuất CHAT-DEC-004 = "không ai đọc được, kể cả Super Admin", và §3.3 · §11 · §18 · §20 · §21 khi đó được viết quanh mệnh đề ấy. Owner **bác** đề xuất ngày 02/08/2026. Các mục đó đã được viết lại trong `S7-CHAT-DOC-2`; mô tả cũ còn trong lịch sử git **không** còn giá trị tham chiếu.
 >
 > **CHAT-DEC-013 thêm SAU cổng mở wave** (tối 02/08/2026): nó không phải quyết định thứ 13 của đợt chốt ban đầu mà là **phán quyết gỡ một mâu thuẫn nội bộ** giữa §17 và §7, phát hiện lúc lập micro-plan `S7-CHAT-BE-6`. Không thay đổi điều kiện cổng dưới đây.
 >
-> ⚠️ **Hệ quả chưa có lời giải:** sau DEC-013, `muted_until` là **cơ chế duy nhất** để người dùng chặn thông báo DM — nhưng đo ngày 02/08 cho thấy cột `chat_room_members.muted_until` (`communication.ts:300`) **không có đường ghi nào**: 0 endpoint, 0 DTO trong `packages/contracts/src/chat.ts`. Không có WO nào trong wave đang nhận việc này. Phải cấp đường ghi trước khi CHAT lên PROD, nếu không v1 ship một nút tắt mà không ai bấm được.
+> ⚠️ **Hệ quả — ĐÃ CÓ CHỦ (cập nhật 05/08/2026):** sau DEC-013, `muted_until` là **cơ chế duy nhất** để người dùng chặn thông báo DM — nhưng đo ngày 02/08 cho thấy cột `chat_room_members.muted_until` (`communication.ts:300`) **không có đường ghi nào**: 0 endpoint, 0 DTO trong `packages/contracts/src/chat.ts`. Wave S7 kết thúc mà lỗ này **vẫn còn**. Việc cấp đường ghi + lối vào UI nay thuộc **`S8-CHAT-UX-BE-1`** (API `PUT /chat/rooms/:id/mute`) và **`S8-CHAT-UX-FE-2`** (menu ngữ cảnh). **Vẫn là điều kiện chặn trước khi CHAT lên PROD** — v1 không được ship một nút tắt mà không ai bấm được.
 >
 > Điều kiện mở WO code của wave (đã đủ): 12 quyết định chốt · §1 = `Approved` · `plan-reviewer` PASS trên SPEC-15 + DB-12. Điều kiện merge vào `master` (**chưa** đủ): go-live đóng — xem §1 và `docs/plans/S7-CHAT-WAVE.md` §4.
 
