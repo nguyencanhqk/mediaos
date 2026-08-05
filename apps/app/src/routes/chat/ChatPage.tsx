@@ -204,7 +204,18 @@ export function ChatPage(): React.ReactElement {
         </div>
       ) : (
         <ConversationPanel
-          key={selectedRoom.id}
+          // ⚠️ TIỀN TỐ `conv-` KHÔNG phải trang trí — nó là bản vá của một lỗi ĐÃ RA PROD (05/08).
+          //
+          // Panel này và `RoomInfoPanel` là hai anh em trong CÙNG một mảng children. Khi cả hai cùng
+          // mang `key={selectedRoom.id}`, lúc đổi phòng React dựng map fiber cũ THEO KEY để tìm cái
+          // cần xoá — key trùng nên fiber của panel này bị fiber của info ghi đè khỏi map, và cuối
+          // vòng reconcile React chỉ xoá những gì CÒN trong map. Hệ quả: khung hội thoại cũ không bao
+          // giờ bị gỡ, mỗi lần bấm một phòng lại rơi lại một khung nằm cạnh nhau (owner báo: "cứ ấn
+          // vào là mở thêm khung"). React KHÔNG cảnh báo trùng key cho children tĩnh, nên không có
+          // gì đỏ ở console lẫn ở test.
+          //
+          // Giữ `key` (để đổi phòng là dựng lại state cục bộ) nhưng phải DUY NHẤT trong mảng anh em.
+          key={`conv-${selectedRoom.id}`}
           room={selectedRoom}
           members={members}
           myRole={myRole}
@@ -215,10 +226,14 @@ export function ChatPage(): React.ReactElement {
 
       {selectedRoom !== null && isInfoOpen && (
         <RoomInfoPanel
-          // ⚠️ `key` BẮT BUỘC (mirror ConversationPanel): panel giữ state cục bộ theo phòng — nháp đổi
-          // tên/mô tả, tab đang mở, hộp xác nhận đang chờ. Không keyed thì chuyển sang phòng khác vẫn
-          // mang nguyên form đã điền TÊN CỦA PHÒNG CŨ, và bấm Lưu là đổi tên nhầm phòng.
-          key={selectedRoom.id}
+          // ⚠️ `key` BẮT BUỘC: panel giữ state cục bộ theo phòng — nháp đổi tên/mô tả, tab đang mở,
+          // hộp xác nhận đang chờ. Không keyed thì chuyển sang phòng khác vẫn mang nguyên form đã
+          // điền TÊN CỦA PHÒNG CŨ, và bấm Lưu là đổi tên nhầm phòng.
+          //
+          // Tiền tố `info-` cũng bắt buộc: dùng CHUNG một chuỗi key với `ConversationPanel` ở trên là
+          // đúng cái đã làm rò khung hội thoại ra PROD (xem docblock ở đó). Hai anh em cùng mảng
+          // children PHẢI có key khác nhau.
+          key={`info-${selectedRoom.id}`}
           room={selectedRoom}
           members={members}
           myRole={myRole}

@@ -208,6 +208,51 @@ describe("ChatPage · cô lập state theo phòng", () => {
     fireEvent.click(await screen.findByText("Đổi tên / mô tả"));
     expect((screen.getByLabelText("Tên phòng") as HTMLInputElement).value).toBe("Phòng B");
   });
+
+  /**
+   * Hồi quy cho lỗi ĐÃ RA PROD (owner báo 05/08: "cứ ấn vào là mở thêm khung chat, không ẩn cái cũ").
+   *
+   * `ConversationPanel` và `RoomInfoPanel` là hai anh em cùng mảng children và từng mang CÙNG
+   * `key={selectedRoom.id}`. Đổi phòng ⇒ React dựng map fiber cũ theo key để biết cần xoá gì; key
+   * trùng nên fiber của hội thoại bị fiber của info ghi đè khỏi map ⇒ không bao giờ bị xoá ⇒ mỗi cú
+   * bấm rơi lại một khung. Đo được trên PROD: 7 khung nằm cạnh nhau.
+   *
+   * ⚠️ Bài "đổi phòng ⇒ form không mang state cũ" ngay phía trên ĐÃ đổi phòng và VẪN XANH suốt thời
+   * gian lỗi tồn tại — vì nó chỉ hỏi về state của form, không hỏi DOM còn mấy khung. React cũng KHÔNG
+   * cảnh báo trùng key với children tĩnh. Vì thế khẳng định phải là ĐẾM NODE, không phải nội dung.
+   */
+  it("đổi phòng liên tiếp ⇒ CHỈ CÒN MỘT khung hội thoại trong DOM (không cộng dồn)", async () => {
+    const ROOM_B = "22222222-2222-4222-8222-222222222222";
+    const ROOM_C = "33333333-3333-4333-8333-333333333333";
+    const rooms = [
+      room(),
+      room({ id: ROOM_B, name: "Phòng B", roomCode: "CHAT-0002" }),
+      room({ id: ROOM_C, name: "Phòng C", roomCode: "CHAT-0003" }),
+    ];
+    useChatStore.getState().syncRoomList(rooms, false);
+    getRoom.mockImplementation((id: string) => {
+      const found = rooms.find((r) => r.id === id) ?? rooms[0];
+      return Promise.resolve({ ...found, members: [], myRole: "member" });
+    });
+
+    const { container } = renderPage();
+
+    const rows = await screen.findAllByTestId("chat-room-item");
+    expect(rows).toHaveLength(3);
+    let lastRowText = "";
+    for (const row of rows) {
+      lastRowText = row.textContent ?? "";
+      fireEvent.click(row);
+      await waitFor(() => expect(getRoom).toHaveBeenCalled());
+    }
+
+    const page = container.querySelector('[data-testid="chat-page"]');
+    const panels = page?.querySelectorAll(":scope > section") ?? [];
+    expect(panels).toHaveLength(1);
+    // ĐỐI CHỨNG: đúng-một-khung mà giữ nhầm phòng cũ cũng là hỏng, và `toHaveLength(1)` một mình
+    // không phân biệt được hai ca đó.
+    expect(lastRowText).toContain(panels[0].getAttribute("aria-label"));
+  });
 });
 
 /**
