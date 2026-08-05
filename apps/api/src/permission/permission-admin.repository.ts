@@ -237,16 +237,33 @@ export class PermissionAdminRepository {
    * Danh sách role gán được (UI assign): own-tenant + system (RLS lộ company_id IS NULL) chưa xoá mềm,
    * LOẠI role operator-audience (platform-admin …f0) — KHÔNG để tenant gán role chéo-plane (mirror
    * findAssignableRole / notOperatorRole). CHỈ ĐỌC. Sắp theo name.
+   *
+   * `requiresTwoFactor` (S7-SEC-ROLE2FA-UI-1): cờ ép 2FA theo ROLE. Không có GET /auth/roles/:id, nên
+   * đây là đường ĐỌC duy nhất của cờ cho màn "Sửa vai trò" — bỏ cột này ra là màn edit lại prefill sai
+   * và mất chiều TẮT.
+   *
+   * Cổng: đi CÙNG `view:role` với phần còn lại của hàng, tức người đọc được cờ là MỌI chủ thể có
+   * `view:role` — rộng hơn tập thành viên của role. Chấp nhận được vì cờ là siêu-dữ-liệu tư thế bảo
+   * mật (role nào ép 2FA), không phải secret, và đã lộ sẵn qua `roleWriteResultSchema` từ
+   * S2-AUTH-BE-11. Nếu về sau `view:role` được cấp lẻ cho vai KHÔNG có `update:role`/wildcard thì hãy
+   * xem lại: lúc đó cặp ĐỌC mới thực sự rộng hơn cặp GHI (memory read-path-gate-pair-must-match-…).
    */
-  async listRolesTx(
-    tx: TenantTx,
-  ): Promise<Array<{ id: string; name: string; description: string | null; isSystem: boolean }>> {
+  async listRolesTx(tx: TenantTx): Promise<
+    Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      isSystem: boolean;
+      requiresTwoFactor: boolean;
+    }>
+  > {
     return tx
       .select({
         id: roles.id,
         name: roles.name,
         description: roles.description,
         isSystem: roles.isSystem,
+        requiresTwoFactor: roles.requiresTwoFactor,
       })
       .from(roles)
       .where(and(isNull(roles.deletedAt), notOperatorRole()))

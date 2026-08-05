@@ -39,8 +39,14 @@ function setCaps(caps: Record<string, boolean>) {
 }
 
 const ROLES = [
-  { id: "role-1", name: "Kế toán", description: "Vai trò kế toán", isSystem: false },
-  { id: "role-sys", name: "Super Admin", description: null, isSystem: true },
+  {
+    id: "role-1",
+    name: "Kế toán",
+    description: "Vai trò kế toán",
+    isSystem: false,
+    requiresTwoFactor: false,
+  },
+  { id: "role-sys", name: "Super Admin", description: null, isSystem: true, requiresTwoFactor: true },
 ];
 
 describe("RoleDetailPage", () => {

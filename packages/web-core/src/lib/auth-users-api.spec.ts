@@ -59,7 +59,9 @@ const TWO_FACTOR_RESET: AuthUserTwoFactorResetDto = { revokedSessionCount: 3 };
 // List item = superset AuthUserDto + hasEmployeeProfile (đối soát AUTH↔HR do SERVER tính).
 const USER_LIST: AuthUserListDto = { users: [{ ...USER, hasEmployeeProfile: false }], total: 1 };
 const ROLE_LIST: RoleListDto = {
-  roles: [{ id: "role-001", name: "HR", description: null, isSystem: false }],
+  roles: [
+    { id: "role-001", name: "HR", description: null, isSystem: false, requiresTwoFactor: false },
+  ],
 };
 const USER_ROLE: UserRoleDto = {
   id: "ur-1",

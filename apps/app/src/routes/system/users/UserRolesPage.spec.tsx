@@ -57,8 +57,14 @@ const TARGET_USER_ID = "44444444-4444-4444-4444-444444444444";
 
 const ROLES: RoleListDto = {
   roles: [
-    { id: "role-001", name: "HR Manager", description: "Quản lý nhân sự", isSystem: false },
-    { id: "role-002", name: "Employee", description: null, isSystem: true },
+    {
+      id: "role-001",
+      name: "HR Manager",
+      description: "Quản lý nhân sự",
+      isSystem: false,
+      requiresTwoFactor: false,
+    },
+    { id: "role-002", name: "Employee", description: null, isSystem: true, requiresTwoFactor: true },
   ],
 };
 

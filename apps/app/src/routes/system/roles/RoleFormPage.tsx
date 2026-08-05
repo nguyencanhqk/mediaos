@@ -221,7 +221,8 @@ export function RoleFormPage({ roleId, onSuccess, onCancel }: RoleFormPageProps)
               Ép 2FA cho MỌI user mang role này (roles.requires_two_factor). Checkbox native (semantics
               role=checkbox) styled switch — @mediaos/ui chưa có Switch primitive; register() map trực
               tiếp boolean. DISABLED khi role hệ thống (defense-in-depth; server cũng REJECT 400).
-              GIỚI HẠN: prefill edit luôn false (list/detail BE chưa mang cờ) — xem role-form-schema.ts.
+              Prefill edit lấy cờ THẬT từ GET /auth/roles (S7-SEC-ROLE2FA-UI-1) — đó cũng là điều kiện
+              để bỏ tick trở thành dirty, tức để TẮT được cờ. Xem role-form-schema.ts.
             */}
             <div className="flex items-start gap-3 rounded-md border border-border p-3">
               <input

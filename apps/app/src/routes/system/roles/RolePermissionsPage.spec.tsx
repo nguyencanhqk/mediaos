@@ -41,7 +41,9 @@ function setCaps(caps: Record<string, boolean>) {
   });
 }
 
-const ROLES = [{ id: "role-1", name: "Kế toán", description: null, isSystem: false }];
+const ROLES = [
+  { id: "role-1", name: "Kế toán", description: null, isSystem: false, requiresTwoFactor: false },
+];
 const PERMISSIONS = [
   { id: "p1", action: "view", resourceType: "department", isSensitive: false },
   { id: "p2", action: "assign", resourceType: "permission", isSensitive: true },

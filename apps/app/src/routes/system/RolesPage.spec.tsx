@@ -42,9 +42,15 @@ function renderWithQuery(ui: React.ReactElement) {
 }
 
 const MOCK_ROLES = [
-  { id: "role-001", name: "Super Admin", description: null, isSystem: true },
-  { id: "role-002", name: "HR Manager", description: "Quản lý nhân sự", isSystem: false },
-  { id: "role-003", name: "Employee", description: null, isSystem: false },
+  { id: "role-001", name: "Super Admin", description: null, isSystem: true, requiresTwoFactor: true },
+  {
+    id: "role-002",
+    name: "HR Manager",
+    description: "Quản lý nhân sự",
+    isSystem: false,
+    requiresTwoFactor: false,
+  },
+  { id: "role-003", name: "Employee", description: null, isSystem: false, requiresTwoFactor: false },
 ];
 
 function setCapabilities(caps: Record<string, boolean>) {

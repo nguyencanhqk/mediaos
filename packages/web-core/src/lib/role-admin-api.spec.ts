@@ -38,14 +38,24 @@ describe("roleAdminApi — read catalogs (GET /auth/roles · /auth/permissions)"
 
   it("listRoles → GET /auth/roles + roleListSchema, unwrap .roles", async () => {
     vi.mocked(apiClient.apiFetch).mockResolvedValue({
-      roles: [{ id: "r1", name: "HR Manager", description: null, isSystem: false }],
+      roles: [
+        {
+          id: "r1",
+          name: "HR Manager",
+          description: null,
+          isSystem: false,
+          requiresTwoFactor: true,
+        },
+      ],
     } as never);
     const roles = await roleAdminApi.listRoles();
     const [url, schema, opts] = lastCall();
     expect(url).toBe("/auth/roles");
     expect(schema).toBe(roleListSchema);
     expect(opts?.method ?? "GET").toBe("GET");
-    expect(roles).toEqual([{ id: "r1", name: "HR Manager", description: null, isSystem: false }]);
+    expect(roles).toEqual([
+      { id: "r1", name: "HR Manager", description: null, isSystem: false, requiresTwoFactor: true },
+    ]);
   });
 
   it("listPermissions → GET /auth/permissions + permissionListSchema, unwrap .permissions", async () => {
