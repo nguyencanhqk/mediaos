@@ -1464,6 +1464,13 @@
       "when": 1717587330000,
       "tag": "0541_s7chatclean2_drop_dup_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 209,
+      "version": "7",
+      "when": 1717587331000,
+      "tag": "0542_s7chatclean1_drop_dead_columns",
+      "breakpoints": true
     }
   ]
 }

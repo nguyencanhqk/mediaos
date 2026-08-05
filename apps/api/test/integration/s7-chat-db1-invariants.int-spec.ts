@@ -962,5 +962,96 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
         "uq_chat_messages_room_seq",
       ]);
     });
+
+    /**
+     * S7-CHAT-CLEAN-1 (mig `0542`) — bước CONTRACT của expand-contract: ba cột khai tử đã DROP.
+     *
+     * Cùng lý do tồn tại như ratchet `0541` ngay trên: khối VERIFY của `0542` chỉ chạy ĐÚNG MỘT LẦN
+     * lúc migrate, nên nó không chặn được đường trôi nào SAU đó. Ở đây có đúng hai đường, cả hai IM:
+     *  · khai lại `channelId` / `fileUrl` / `fileName` trong `communication.ts` ⇒ `db:generate` dựng
+     *    lại cột ở migration sau, và `chat_messages.file_url` quay về đúng lúc không ai còn nhớ vì
+     *    sao nó bị bỏ (URL trần = rò tệp KHÔNG qua kiểm quyền — SPEC-15 §5.3);
+     *  · `DROP COLUMN` kéo theo MỌI index/constraint có nhắc cột, nên nếu ai đó từng thêm
+     *    `channel_id` vào một index đa cột khác thì cú drop đã nuốt luôn index đó trong im lặng.
+     *    Vế PHAI_GIU dưới đây là chỗ điều đó lộ ra.
+     */
+    it("cột khai tử đã DROP + index/FK của chat_rooms còn nguyên (mig 0542)", async () => {
+      const DA_GO: readonly [string, string][] = [
+        ["chat_rooms", "channel_id"], // `channels` = bảng media out-of-scope sau de-media-fy
+        ["chat_messages", "file_url"], // URL trần, rò tệp không qua kiểm quyền
+        ["chat_messages", "file_name"],
+      ];
+      const con = await direct.query<{ table_name: string; column_name: string }>(
+        // information_schema KHÔNG thấy cột `attisdropped` ⇒ đúng phép đo cho "đã drop thật".
+        `SELECT table_name, column_name
+           FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND (table_name, column_name) IN (('chat_rooms','channel_id'),
+                                              ('chat_messages','file_url'),
+                                              ('chat_messages','file_name'))
+          ORDER BY 1, 2`,
+      );
+      expect(
+        con.rows.map((r) => `${r.table_name}.${r.column_name}`),
+        `cột khai tử quay lại — kiểm \`communication.ts\` có khai lại không (${DA_GO.length} cột)`,
+      ).toEqual([]);
+
+      // Index + HAI khoá ngoại bám theo `channel_id` cũng phải biến mất. Kiểm riêng chứ không tin
+      // "DROP COLUMN tự dọn": nếu cột quay lại kèm FK thì ca trên đã đỏ, còn nếu ai đó dựng lại
+      // RIÊNG constraint (trỏ cột khác) thì chỉ ca này bắt được.
+      const objs = await direct.query<{ ten: string }>(
+        `SELECT relname AS ten FROM pg_class
+          WHERE relnamespace = 'public'::regnamespace AND relname = 'chat_rooms_channel_uq'
+          UNION ALL
+         SELECT conname FROM pg_constraint
+          WHERE connamespace = 'public'::regnamespace
+            AND conname IN ('chat_rooms_channel_id_company_fk', 'chat_rooms_channel_id_fkey')`,
+      );
+      expect(
+        objs.rows.map((r) => r.ten),
+        "index/FK của channel_id quay lại",
+      ).toEqual([]);
+
+      // Vế NGƯỢC — cái phải GIỮ trên `chat_rooms`. Danh sách là HỢP ĐỒNG: sửa một dòng phải có lý do
+      // viết kèm, y như sửa SPEC.
+      const idx = await direct.query<{ indexrelname: string; isunique: boolean }>(
+        `SELECT i.indexrelname, x.indisunique AS isunique
+           FROM pg_stat_user_indexes i JOIN pg_index x ON x.indexrelid = i.indexrelid
+          WHERE i.relname = 'chat_rooms' ORDER BY 1`,
+      );
+      const have = new Set(idx.rows.map((r) => r.indexrelname));
+      const PHAI_GIU = [
+        "chat_rooms_company_id_id_uq", // unique đỡ MỌI composite tenant FK trỏ VÀO chat_rooms (KI-046)
+        "chat_rooms_company_id_idx",
+        "chat_rooms_direct_uq", // dedup DM 1-1
+        "chat_rooms_org_unit_uq", // 1 org_unit ↔ 1 phòng dẫn xuất
+        "chat_rooms_pkey",
+        "chat_rooms_project_uq", // 1 project ↔ 1 phòng dẫn xuất
+        "chat_rooms_ref_id_idx",
+        "idx_chat_rooms_company_activity", // 0538 — đường đọc danh sách phòng
+        "idx_chat_rooms_sync", // 0538 — job đối soát phòng dẫn xuất (BE-5)
+        "uq_chat_rooms_company_code", // 0538 — room_code sinh qua sequence_counters
+      ];
+      expect(
+        PHAI_GIU.filter((n) => !have.has(n)),
+        "index phải-giữ của chat_rooms bị gỡ mất (DROP COLUMN nuốt kèm?)",
+      ).toEqual([]);
+
+      // Còn DUY NHẤT, không chỉ còn TÊN — cùng lý lẽ với vế unique của ratchet 0541.
+      expect(
+        idx.rows
+          .filter((r) => r.isunique)
+          .map((r) => r.indexrelname)
+          .sort(),
+        "tập index UNIQUE của chat_rooms",
+      ).toEqual([
+        "chat_rooms_company_id_id_uq",
+        "chat_rooms_direct_uq",
+        "chat_rooms_org_unit_uq",
+        "chat_rooms_pkey",
+        "chat_rooms_project_uq",
+        "uq_chat_rooms_company_code",
+      ]);
+    });
   });
 });

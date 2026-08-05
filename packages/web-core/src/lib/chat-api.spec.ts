@@ -55,8 +55,6 @@ const MESSAGE_PAYLOAD = {
   senderName: "Nguyễn Văn A",
   body: "xin chào",
   messageType: "text",
-  fileUrl: null,
-  fileName: null,
   mentions: [],
   pinnedAt: null,
   pinnedBy: null,

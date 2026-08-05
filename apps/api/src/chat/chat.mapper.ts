@@ -96,9 +96,7 @@ export function toChatMessageDto(
     senderName: row.senderName,
     body: recalled ? null : row.body,
     messageType: row.messageType,
-    // Hai cột KHAI TỬ (BE-3 dùng file_links) — đường đọc trả null, không phải đọc từ DB.
-    fileUrl: null,
-    fileName: null,
+    // S7-CHAT-CLEAN-1 (mig 0542): `fileUrl`/`fileName` đã rời cả DTO lẫn DB — không còn gì để trả.
     // Tin đã thu hồi không còn ai để nhắc tới: giữ mentions là gửi thông báo về một nội dung đã rút.
     mentions: recalled ? [] : row.mentions,
     pinnedAt: toIso(row.pinnedAt),

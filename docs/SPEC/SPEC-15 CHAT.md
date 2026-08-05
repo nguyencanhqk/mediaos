@@ -115,7 +115,7 @@ Lý do: mỗi khung tin qua WS sẽ phải tự kiểm token còn hạn + permis
 
 ### 3.6 Không sao chép dữ liệu nguồn
 
-CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ module nguồn khi hiển thị. Ảnh đại diện người gửi lấy từ ME/HR. Tệp đính kèm **không** lưu URL trần trên `chat_messages` (cột `file_url`/`file_name` của bản cũ bị **khai tử**, §5.3) mà đi qua `file_links` của FOUNDATION + URL ký hạn ngắn.
+CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ module nguồn khi hiển thị. Ảnh đại diện người gửi lấy từ ME/HR. Tệp đính kèm **không** lưu URL trần trên `chat_messages` (cột `file_url`/`file_name` của bản cũ đã **DROP** ở mig `0542`, §5.3) mà đi qua `file_links` của FOUNDATION + URL ký hạn ngắn.
 
 ---
 
@@ -177,9 +177,9 @@ CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ 
 
 | Thứ | Trạng thái | Xử lý |
 | --- | --- | --- |
-| `chat_rooms.channel_id` → `channels` (media) | Bảng `channels` out-of-scope sau de-media-fy | Ngừng dùng ở v1; DROP cột ở migration **riêng** sau khi xác minh 0 hàng (expand-contract) |
+| `chat_rooms.channel_id` → `channels` (media) | Bảng `channels` out-of-scope sau de-media-fy | ✅ **XONG** — ngừng dùng ở v1 (`0538`), DROP cột ở migration **riêng** `0542` sau khi xác minh 0 hàng (expand-contract) |
 | `chat_rooms.room_type = 'channel'` | Không còn nghĩa | Loại khỏi enum contracts + CHECK |
-| `chat_messages.file_url` / `file_name` | URL trần — rò tệp không qua kiểm quyền | Ngừng ghi ngay từ v1, đọc trả `null`; DROP ở migration riêng |
+| `chat_messages.file_url` / `file_name` | URL trần — rò tệp không qua kiểm quyền | ✅ **XONG** — ngừng ghi từ v1 (`0538`), DROP ở migration riêng `0542`; hai khoá cũng rời `chatMessageSchema` cùng commit |
 | `apps/api/src/chat/*` (G4-6/G10, đã `git rm` ở `2591db13`) | Chỉ kiểm membership, **không** permission guard, **không** audit, **không** data-scope | Dùng làm **tham chiếu**, KHÔNG khôi phục nguyên trạng |
 | `packages/contracts/src/chat.ts` | Còn trong repo, thiếu nhiều trường v1 | Mở rộng tại chỗ (thêm trường + bỏ `channel`) |
 

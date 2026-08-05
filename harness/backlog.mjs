@@ -10229,10 +10229,26 @@ export const backlog = [
     title:
       "Contract (release SAU): drop chat_rooms.channel_id + chat_messages.file_url/file_name + composite FK/index kèm theo — chỉ chạy khi đã xác minh 0 hàng và 0 tham chiếu",
     zone: "red",
-    status: "todo",
+    status: "done",
+    // ⚠️ paths MỞ RỘNG so với bản seed (memory `wo-paths-drive-gate-and-scheduler`): bản seed chỉ khai
+    // migrations + communication.ts + plan, nhưng owner chốt gỡ CẢ DTO ⇒ diff chạm contracts, mapper,
+    // 9 file fixture spec và 3 doc thiết kế. Khai thiếu = diff rơi ra ngoài scope của WO.
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/db/schema/communication.ts",
+      "apps/api/src/chat/chat.mapper.ts",
+      "apps/api/src/chat/chat-messages.repository.ts",
+      "apps/api/src/realtime/realtime-emitter.chat.spec.ts",
+      "apps/api/test/integration/s7-chat-db1-invariants.int-spec.ts",
+      "packages/contracts/src/chat.ts",
+      "packages/web-core/src/lib/chat-api.spec.ts",
+      "apps/app/src/components/chat/**",
+      "apps/app/src/hooks/use-chat-realtime.spec.tsx",
+      "apps/app/src/stores/chat.store.spec.ts",
+      "apps/app/src/routes/chat/ChatPage.spec.tsx",
+      "docs/DB/DB-12 CHAT Database Design.md",
+      "docs/spec/SPEC-15 CHAT.md",
+      "docs/erd-current.md",
       "docs/plans/S7-CHAT-CLEAN-1.md",
     ],
     skills: ["code-review"],
@@ -10241,6 +10257,13 @@ export const backlog = [
     src: [
       "DB-12 §6.6 (bảng expand-contract) · mig 0535 (composite tenant FK chat_rooms.channel_id → channels)",
       "memory: migration-expand-contract-required (gộp 2 bước vào 1 release = cửa sổ 500 cho tiến trình cũ)",
+      "✅ ĐÓNG 2026-08-05 — mig 0542. Điều kiện vào đo trên PROD (`mediaos`): chat_rooms 23 hàng · channel_id IS NOT NULL = 0 · chat_rooms theo loại = department 11 + project 12 (0 phòng 'channel') · chat_messages 0 HÀNG ⇒ file_url/file_name cùng 0. Tách release: 0538 ĐÃ deploy (room_code/sync_source/last_message_seq có mặt) + 0541 đã deploy (2 index dư đã biến mất).",
+      "⚠️ VẾ dev-online của done_when KHÔNG chạy được: DB `mediaos_dev` KHÔNG TỒN TẠI trên cụm (pg_database có 9 hàng: mediaos + 5 lane + postgres + template0/1). Đó là 'chưa provision', KHÔNG phải 'đã xác minh 0 hàng' — ghi đúng như đo thay vì tick ô không chạy.",
+      "⚠️ BẪY 1 — file .sql KHÔNG đăng ký `migrations/meta/_journal.json` thì bị BỎ QUA và migrate VẪN in 'applied migrations' + exit 0. Lần chạy đầu 0542 không chạy chút nào mà mọi lệnh đều xanh; chỉ lộ ra khi ĐO LẠI SCHEMA sau migrate. Đọc exit code là không đủ.",
+      "⚠️ BẪY 2 — grep khoanh vùng bỏ sót 3 file fixture (`apps/app/src/hooks/use-chat-realtime.spec.tsx`, `apps/app/src/stores/chat.store.spec.ts`, `packages/web-core/src/lib/chat-api.spec.ts`); cả ba chỉ lộ khi `pnpm typecheck` đỏ TS2353. 'grep = 0 tham chiếu' chỉ đáng tin SAU khi typecheck toàn workspace xanh.",
+      "⚠️ BẪY 3 — đột biến RED-proof để lại vết TRONG DB: `lane-db-setup.sh <lane>` (không cờ) thấy DB đã tồn tại nên chỉ chain-migrate, mà 0538 đã nằm trong __drizzle_migrations ⇒ index bị drop tay KHÔNG được dựng lại ⇒ full-suite đỏ 1 test không nằm trong code. Phải dùng `--reset` (DROP DATABASE).",
+      "Ratchet mới ở s7-chat-db1-invariants.int-spec.ts — RED-proof HAI vector: (a) ADD COLUMN channel_id ⇒ đỏ 'cột khai tử quay lại'; (b) DROP INDEX idx_chat_rooms_sync ⇒ đỏ 'index phải-giữ bị gỡ mất'.",
+      "Census FK một-cột giữa hai bảng tenant: 460 → 459, sàn FK_SINGLE_COL_PAIRS_FLOOR = 440 ⇒ còn đệm 19. `fk-tenant-census.ts` đọc thẳng pg_constraint (0 danh sách viết tay) nên không file nào phải sửa theo, và không cần waiver (cặp bị GỠ, không xin miễn).",
     ],
     done_when: [
       "Điều kiện vào: SELECT count(*) WHERE <cột> IS NOT NULL = 0 trên CẢ PROD lẫn dev-online, và grep toàn repo 0 tham chiếu — ghi bằng chứng vào plan",

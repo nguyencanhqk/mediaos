@@ -36,7 +36,7 @@ Quy tắc nghiệp vụ (mã lỗi, luồng đồng bộ, công thức đếm ch
 
 | Bảng | Tạo tại | Hiện trạng đáng chú ý |
 | --- | --- | --- |
-| `chat_rooms` | `0010` + `0050` | RLS+FORCE; GRANT `SELECT,INSERT,UPDATE,DELETE`; cột `ref_id`(project) · `channel_id` · `org_unit_id` · `direct_key` · `created_by`; 4 unique index partial |
+| `chat_rooms` | `0010` + `0050` | RLS+FORCE; GRANT `SELECT,INSERT,UPDATE,DELETE`; cột `ref_id`(project) · `org_unit_id` · `direct_key` · `created_by`; 3 unique index partial (`channel_id` + `chat_rooms_channel_uq` **đã DROP** ở `0542`) |
 | `chat_room_members` | `0010` + `0050` | RLS+FORCE; GRANT `SELECT,INSERT,DELETE` + **column-level** `UPDATE (role, last_read_at)` |
 | `chat_messages` | `0010` + `0050` | RLS+FORCE; GRANT **chỉ `SELECT,INSERT`** (append-only) + **column-level** `UPDATE (pinned_at, pinned_by)`; `seq bigint GENERATED ALWAYS AS IDENTITY` |
 
@@ -59,7 +59,7 @@ Quy tắc nghiệp vụ (mã lỗi, luồng đồng bộ, công thức đếm ch
 1. **Giữ nguyên RLS + FORCE** đã có từ `0010` — wave này **không** đụng policy cô lập tenant. Mọi repository đi qua `withTenant` (bất biến #1).
 2. **Giữ nguyên append-only `chat_messages`** (bất biến #2): không cấp `DELETE`, không cấp `UPDATE` cấp bảng. Cột thu hồi mới chỉ được mở bằng **column-level GRANT**, đúng cơ chế `pinned_at` đã dùng ở `0050`.
 3. **Mở rộng bằng ALTER, không tạo bảng song song.** `0050` đã ghi thẳng bài học này ở đầu file ("KHÔNG tạo bảng chat_members/messages MỚI — 0010 đã tạo bảng cùng chức năng").
-4. **Expand-contract cho phần khai tử.** Cột `channel_id` / `file_url` / `file_name` **ngừng dùng ở release N**, **DROP ở release N+1** sau khi xác minh 0 hàng và không còn code đọc (memory `migration-expand-contract-required`).
+4. **Expand-contract cho phần khai tử — ĐÃ HOÀN TẤT.** Cột `channel_id` / `file_url` / `file_name` ngừng dùng ở release N (`0538`), **DROP ở release N+1 (`0542`, `S7-CHAT-CLEAN-1`)** sau khi xác minh 0 hàng và không còn code đọc (memory `migration-expand-contract-required`). Xem §6.6.
 5. **`seq` là khoá thứ tự duy nhất** — mọi index đọc/phân trang neo vào `seq`, không vào `created_at`.
 6. Soft delete cho `chat_rooms`; `chat_messages` **không bao giờ** xoá (thu hồi ≠ xoá).
 7. UUID PK `gen_random_uuid()`, timestamp UTC — theo DB-01.
@@ -86,7 +86,7 @@ chat_messages    1─n file_links        (moduleCode='CHAT', entityType='chat_me
 
 ### 6.1 `chat_rooms` — hiện trạng + ALTER
 
-**Cột đã có:** `id` · `company_id` · `ref_id`(→`projects`) · `channel_id`(→`channels`, **khai tử**) · `org_unit_id`(→`org_units`) · `direct_key` · `room_type` · `name` · `created_by` · `created_at`.
+**Cột đã có:** `id` · `company_id` · `ref_id`(→`projects`) · `org_unit_id`(→`org_units`) · `direct_key` · `room_type` · `name` · `created_by` · `created_at`. _(`channel_id` **đã DROP** ở `0542`.)_
 
 **Cột THÊM:**
 
@@ -147,7 +147,7 @@ CREATE INDEX idx_chat_rooms_sync               ON chat_rooms (company_id, sync_s
   WHERE deleted_at IS NULL AND sync_source <> 'manual';   -- job đối soát đêm
 ```
 
-**Index đã có, giữ nguyên:** `chat_rooms_company_id_idx` · `chat_rooms_ref_id_idx` · `chat_rooms_project_uq` · `chat_rooms_org_unit_uq` · `chat_rooms_direct_uq` · `chat_rooms_channel_uq` (bỏ cùng cột `channel_id` ở bước contract).
+**Index đã có, giữ nguyên:** `chat_rooms_company_id_idx` · `chat_rooms_ref_id_idx` · `chat_rooms_project_uq` · `chat_rooms_org_unit_uq` · `chat_rooms_direct_uq`. _(`chat_rooms_channel_uq` **đã DROP** cùng cột `channel_id` ở `0542`.)_
 
 ### 6.2 `chat_room_members` — hiện trạng + ALTER
 
@@ -186,7 +186,7 @@ GRANT UPDATE (last_read_seq, muted_until, left_at, visible_from_seq)
 
 ### 6.3 `chat_messages` — hiện trạng + ALTER
 
-**Cột đã có:** `id` · `company_id` · `room_id` · `sender_id` · `body` · `message_type`(`text`/`file`) · `file_url`(**khai tử**) · `file_name`(**khai tử**) · `mentions` jsonb · `pinned_at` · `pinned_by` · `seq` · `created_at`.
+**Cột đã có:** `id` · `company_id` · `room_id` · `sender_id` · `body` · `message_type`(`text`/`file`) · `mentions` jsonb · `pinned_at` · `pinned_by` · `seq` · `created_at`. _(`file_url`/`file_name` **đã DROP** ở `0542`.)_
 
 **Cột THÊM:**
 
@@ -280,13 +280,17 @@ file_links  (module_code='CHAT', entity_type='chat_message', entity_id=<messageI
 
 ### 6.6 Cột khai tử — kế hoạch contract
 
-| Cột | Vì sao bỏ | Bước expand (release N) | Bước contract (release N+1) |
+| Cột | Vì sao bỏ | Bước expand (release N = `0538`) | Bước contract (release N+1 = `0542`) |
 | --- | --- | --- | --- |
-| `chat_rooms.channel_id` | `channels` là bảng media out-of-scope | ngừng ghi/đọc; bỏ khỏi Drizzle schema | `DROP INDEX chat_rooms_channel_uq` → drop **composite tenant FK** `(company_id, channel_id)` do `0535` tạo → `DROP COLUMN` |
-| `chat_messages.file_url` | URL trần, rò tệp không qua kiểm quyền | ngừng ghi; đường đọc trả `null` | `DROP COLUMN` |
-| `chat_messages.file_name` | như trên | như trên | `DROP COLUMN` |
+| `chat_rooms.channel_id` | `channels` là bảng media out-of-scope | ngừng ghi/đọc; bỏ khỏi Drizzle schema | ✅ `DROP INDEX chat_rooms_channel_uq` → drop **composite tenant FK** `(company_id, channel_id)` do `0535` tạo → drop FK một-cột `chat_rooms_channel_id_fkey` (`0050`) → `DROP COLUMN` |
+| `chat_messages.file_url` | URL trần, rò tệp không qua kiểm quyền | ngừng ghi; đường đọc trả `null` | ✅ `DROP COLUMN` |
+| `chat_messages.file_name` | như trên | như trên | ✅ `DROP COLUMN` |
 
-Điều kiện vào bước contract: `SELECT count(*) … WHERE <cột> IS NOT NULL` **= 0** trên **cả** PROD lẫn dev-online, và `grep` toàn repo không còn tham chiếu. Gộp hai bước vào một release là vi phạm expand-contract — sẽ tạo cửa sổ 500 cho tiến trình cũ còn đang chạy.
+**✅ ĐÃ CHẠY 2026-08-05 — mig `0542` (`S7-CHAT-CLEAN-1`), PR #344.** Bằng chứng điều kiện vào, đo trên PROD (`mediaos`): `chat_rooms` 23 hàng · `channel_id IS NOT NULL` **0** · `chat_messages` **0 hàng** ⇒ `file_url`/`file_name` cùng 0. `chatMessageSchema` cũng bỏ luôn hai khoá `fileUrl`/`fileName` cùng commit. Chi tiết + đường lui: [`docs/plans/S7-CHAT-CLEAN-1.md`](../plans/S7-CHAT-CLEAN-1.md).
+
+⚠️ **Vế dev-online của điều kiện vào KHÔNG chạy được:** DB `mediaos_dev` không tồn tại trên cụm (chưa provision) — đó là "không có DB", KHÔNG phải "đã xác minh 0 hàng". Ghi ra đúng như đo được.
+
+Điều kiện vào bước contract (giữ lại làm khuôn cho lần sau): `SELECT count(*) … WHERE <cột> IS NOT NULL` **= 0** trên **cả** PROD lẫn dev-online, và `grep` toàn repo không còn tham chiếu. Gộp hai bước vào một release là vi phạm expand-contract — sẽ tạo cửa sổ 500 cho tiến trình cũ còn đang chạy.
 
 ---
 
@@ -332,7 +336,7 @@ file_links  (module_code='CHAT', entity_type='chat_message', entity_id=<messageI
 | **D′** | **Cặp `('view','chat-oversight')`: chỉ INSERT vào catalog `permissions`, KHÔNG INSERT `role_permissions` cho bất kỳ role canonical nào.** Verify fail-loud **đúng một vế**: `0` role canonical giữ cặp này | ⚠️ **`super-admin` KHÔNG phải role canonical** — 4 role canonical là `roles.company_id IS NULL`, và super-admin **không có hàng ở đó** (`dashboard-widget-catalog.const.ts:33` · mirror `0481:35` · lặp ở `notification-event-catalog.const.ts:51,267`). SA là role **company-scoped dựng lúc boot** bởi `SuperAdminBootstrapService`, và bootstrap **grant TẤT CẢ cặp catalog** ⇒ cặp mới **tự động** vào SA, không cần (và không thể) grant trong migration. Viết `INSERT … WHERE role.code='super-admin'` trong migration sẽ khớp **0 hàng** ⇒ verify "SA có cặp" **luôn đỏ**, và lối thoát dễ nhất của người thi công là grant nhầm sang `company-admin` — đúng role mà SPEC-15 §11 cấm. Khẳng định "SA có cặp" phải là **int-spec chạy SAU boot**, không phải verify trong migration |
 | **E** | **Verify** `audit_logs.object_type` CHECK đã chứa `'chat_room'` + `'chat_message'` — **đã UNION-ADD từ `0050`**, chỉ kiểm tra fail-loud, KHÔNG thêm lại | Nếu phải thêm: neo parse vào vế `object_type = ANY (` ở **cả hai** tầng, không quét `{…}`/`ARRAY[…]` trên toàn `constraintdef` (bẫy `audit-check-union-parse-anchor-trap`) |
 | **F** | Seed NOTI: `CHAT_MENTIONED` + `CHAT_DIRECT_MESSAGE` vào `notification-event-catalog.const.ts` (`isEnabled=true`) + `notification_events` + template. **Nới CHECK trên CẢ HAI bảng:** `notification_events` (`chk_notification_events_module_code` += `'CHAT'`, `chk_notification_events_notification_type` += `'Chat'`) **VÀ** `notifications` (`chk_notifications_module_code` += `'CHAT'`, `chk_notifications_notification_type` += `'Chat'`, **giữ nhánh `IS NULL OR`**) | ⚠️ Quên vế `notifications` là **lỗi đã ship thật** ở `0507` (GOAL) và phải vá ở `0529`. Dùng cách **guard LIKE + re-stamp superset tường minh** của `0507`/`0529`, **không** dùng parser DO-block mẫu `0474` (giả định array-literal `'{…}'`, trả NULL với dạng `= ANY(ARRAY[…]::text[])` ⇒ **silent skip**) |
-| **G** | _(release sau)_ Contract: drop `chat_rooms.channel_id` + `chat_messages.file_url`/`file_name` + composite FK/index kèm theo | Chỉ chạy khi §6.6 đủ điều kiện |
+| **G** | ✅ **XONG — mig `0542`** (`S7-CHAT-CLEAN-1`, release TÁCH khỏi `0538`). Contract: drop `chat_rooms.channel_id` + `chat_messages.file_url`/`file_name` + composite FK/index kèm theo | Điều kiện §6.6 đã đo và đạt. Ratchet điểm danh ở `s7-chat-db1-invariants.int-spec.ts` chặn cột quay lại qua `db:generate` |
 
 Bước **F phải xong TRƯỚC** khi WO backend đăng ký registrar outbox: `registerSource()` **fail-loud ngay lúc boot** nếu `eventCode` chưa có trong catalog với `isEnabled=true` ⇒ API sập lúc khởi động.
 
