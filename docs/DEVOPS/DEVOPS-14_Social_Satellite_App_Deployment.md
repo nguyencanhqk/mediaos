@@ -54,9 +54,23 @@ Một phép đo là không đủ — đúng bài học chung của DEVOPS-14.
 | --- | --- | --- |
 | `MEDIAOS_SSO_SECRET` | có | Khớp `SOCIAL_SSO_SECRET` phía API. Lệch ⇒ mọi lần vào đều bị đá về `/login`. |
 | `SOCIAL_SESSION_SECRET` | có | Ký cookie phiên, ≥32 ký tự. **Không có giá trị mặc định** — thiếu thì không ai đăng nhập được (cố ý: một giá trị dự phòng sẽ âm thầm biến hệ thành mở toang). |
+| `SOCIAL_BASE_URL` | có (khi chạy sau tunnel) | **Cùng giá trị** với `SOCIAL_BASE_URL` ở `.env` gốc. Đây là gốc công khai dùng để dựng `redirect_uri` gửi cho Facebook. Thiếu ⇒ code lùi về origin của request, mà sau cloudflared origin đó là `https://localhost:3500` ⇒ đăng nhập Facebook xong người dùng nhận `ERR_SSL_PROTOCOL_ERROR` (xem §2.3). |
 | `SOCIAL_KEK_PATH` | không | Mặc định `.secrets/fbpost-kek.bin`. |
 | `SOCIAL_DATA_DIR` | không | Mặc định `<cwd>/data`. Đặt tường minh khi chạy dưới NSSM — thư mục làm việc của dịch vụ không nhất thiết là thư mục mã nguồn. |
 | `NEXT_PUBLIC_MEDIAOS_URL` | không | Hiện nút "Mở MediaOS" trên trang `/login`. |
+
+### 2.3 Đăng nhập Facebook sau tunnel — hai loại chuyển hướng, hai luật khác nhau
+
+Sau cloudflared, Next thấy `Host: localhost:3500`, nên `request.nextUrl.origin` = `https://localhost:3500`. **Không bao giờ** dựng URL người-dùng-nhìn-thấy từ giá trị đó. Hai loại chuyển hướng phải xử lý khác nhau:
+
+| Loại | Cách đúng | Vì sao |
+| --- | --- | --- |
+| **Nội bộ** (`/settings`, `/login`, `/`) | `Location` **tương đối** — `lib/http/relative-redirect.ts` | Trình duyệt giải theo URL yêu cầu (URL công khai) ⇒ đúng ở mọi cách triển khai, không cần cấu hình, không phải tin `X-Forwarded-Host`. |
+| **`redirect_uri` gửi cho Facebook** | **Tuyệt đối**, lấy từ `SOCIAL_BASE_URL` — `resolvePublicOrigin()` trong `lib/fb/oauth.ts` | OAuth bắt buộc tuyệt đối và Facebook đối chiếu **từng ký tự** với "URI chuyển hướng OAuth hợp lệ". Không thể suy từ request. |
+
+> **Bẫy đã cắn thật 06/08/2026 (lần 2, sau bug route SSO).** `redirect_uri` dựng từ origin của request ⇒ `https://localhost:3500/api/auth/facebook/callback`. Facebook **không chặn** — app đang ở chế độ Development nên localhost được miễn khỏi danh sách hợp lệ, kể cả khi "Chế độ sử dụng nghiêm ngặt" đang bật. Lỗi chỉ lộ ra trên màn hình người dùng: đồng ý xong, trình duyệt đi tới `https://localhost:3500/...` — cổng đó không có TLS ⇒ **`ERR_SSL_PROTOCOL_ERROR`**, token không bao giờ được đổi.
+>
+> Khi đổi domain: phải sửa **ba** chỗ cùng lúc — `SOCIAL_BASE_URL` ở `.env` gốc, `SOCIAL_BASE_URL` ở `apps/fbpost/.env.production`, và "URI chuyển hướng OAuth hợp lệ" trong app Facebook (`<domain>/api/auth/facebook/callback`). Lệch một chỗ thì Facebook báo *URL Blocked* — đỏ tường minh, không phải hỏng câm.
 
 ## 3. Cài lần đầu
 

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import {
   SESSION_COOKIE,
   SESSION_TTL_SECONDS,
@@ -6,6 +6,7 @@ import {
   signSession,
 } from "@/lib/auth/session";
 import { consumeSsoToken } from "@/lib/auth/sso";
+import { redirectTo } from "@/lib/http/relative-redirect";
 // Import gay hieu ung phu: khoi dong worker hen gio khi route dau tien duoc nap.
 import "@/lib/worker-boot";
 
@@ -25,25 +26,9 @@ export const dynamic = "force-dynamic";
  * quay lai MediaOS bam lai", va log server thi ghi du chi tiet de chan doan.
  */
 /**
- * Dieu huong bang `Location` TUONG DOI, KHONG dung `NextResponse.redirect(new URL(..., origin))`.
- *
- * VI SAO (bug that, do duoc 06/08/2026 sau khi mo domain): fbpost dung sau Cloudflare tunnel —
- * cloudflared chuyen tiep toi `http://localhost:3500`, nen Next thay `Host: localhost:3500` va
- * `request.nextUrl.origin` thanh `https://localhost:3500`. Dung no de dung URL tuyet doi thi
- * nguoi dung dang nhap XONG se bi day toi `https://localhost:3500/` — mot dia chi khong ton tai
- * tren may ho. Cookie dat dung, ma van khong vao duoc.
- *
- * `Location` tuong doi duoc trinh duyet giai theo URL YEU CAU (chinh la URL cong khai), nen dung
- * o MOI cach trien khai: localhost, sau tunnel, sau reverse-proxy, doi domain — khong can cau hinh
- * gi them, khong phai tin `X-Forwarded-Host` (header do gia duoc neu khong dung sau proxy tin cay).
- *
- * Middleware KHONG dinh loi nay: Next tu chuan hoa redirect cung-goc trong middleware thanh tuong
- * doi. Chi route handler moi phat nguyen URL tuyet doi minh dua vao.
+ * Dieu huong bang `Location` TUONG DOI, KHONG dung `NextResponse.redirect(new URL(..., origin))` —
+ * ly do day du nam trong `lib/http/relative-redirect` (bug that do duoc 06/08/2026 sau khi mo domain).
  */
-function redirectTo(path: string): NextResponse {
-  return new NextResponse(null, { status: 307, headers: { Location: path } });
-}
-
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
 

@@ -19,6 +19,7 @@ const BASELINE_RED = new Set();   // ◀ từ new Set(["@mediaos/api", "@mediaos
 
 import process from "node:process";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 const WIN = process.platform === "win32";
 
@@ -29,10 +30,49 @@ async function readStdin() {
   return data;
 }
 
+// Hai app vệ tinh nằm NGOÀI pnpm workspace (`pnpm-workspace.yaml`: `!apps/lms`, `!apps/fbpost` —
+// hàng rào R3 của DECISIONS-08). `turbo --filter` KHÔNG thấy chúng: nó thoát khác 0 với
+// "No package found with name '@mediaos/fbpost'" ⇒ gate cũ quy thành ĐỎ, chặn phiên bằng một lỗi
+// không tồn tại, và tệ hơn: KHÔNG bao giờ kiểm thật hai app đó. Chạy script của chính chúng.
+const STANDALONE = new Map([
+  ["apps/fbpost", "npm"],
+  ["apps/lms", "pnpm"],
+]);
+
 // apps/<x> | packages/<x>  →  @mediaos/<x>   (đúng quy ước đặt tên package trong monorepo)
 function workspaceOf(path) {
   const m = path.match(/^(?:apps|packages)\/([^/]+)\//);
   return m ? `@mediaos/${m[1]}` : null;
+}
+
+function standaloneOf(path) {
+  for (const dir of STANDALONE.keys()) if (path.startsWith(`${dir}/`)) return dir;
+  return null;
+}
+
+/** Chạy đúng những script CÓ KHAI trong package.json của app đứng riêng. Không có script nào → xanh. */
+function runStandalone(dir) {
+  const pm = STANDALONE.get(dir);
+  let scripts = {};
+  try {
+    scripts = JSON.parse(readFileSync(`${dir}/package.json`, "utf8")).scripts ?? {};
+  } catch {
+    return { ok: true, out: "" };
+  }
+
+  let out = "";
+  for (const task of ["lint", "typecheck"]) {
+    if (!scripts[task]) continue;
+    const res = spawnSync(pm, ["run", task], {
+      cwd: dir,
+      stdio: ["ignore", "pipe", "pipe"],
+      encoding: "utf8",
+      shell: WIN,
+    });
+    out += `${res.stdout ?? ""}${res.stderr ?? ""}`;
+    if (res.status !== 0) return { ok: false, out: out.trim() };
+  }
+  return { ok: true, out: out.trim() };
 }
 
 // Chạy lint + typecheck cho 1 nhóm workspace (turbo bỏ qua task không định nghĩa, có cache). Trả {ok, out}.
@@ -59,21 +99,34 @@ try {
   if (status.status !== 0) process.exit(0); // không phải repo git → fail-open
 
   const filters = new Set();
+  const standalone = new Set();
   for (const line of (status.stdout || "").split("\n")) {
     const path = line.slice(3).trim().replace(/^"|"$/g, "");
     if (!path || !/\.(ts|tsx|mjs|cjs|js|jsx)$/i.test(path)) continue;
+    const alone = standaloneOf(path);
+    if (alone) {
+      standalone.add(alone);
+      continue; // KHÔNG đưa vào --filter: turbo không biết app này tồn tại.
+    }
     const ws = workspaceOf(path);
     if (ws) filters.add(ws);
   }
-  if (filters.size === 0) process.exit(0); // không đổi code app/package → không gì để gate
+  if (filters.size === 0 && standalone.size === 0) process.exit(0); // không đổi code app/package
 
   // Đường nhanh: chạy 1 lượt cho TẤT CẢ workspace đã đổi. Xanh → cho kết phiên ngay.
-  const all = runTurbo([...filters]);
+  const aloneRuns = [...standalone].map((dir) => [dir, runStandalone(dir)]);
+  const aloneOut = aloneRuns.map(([, r]) => r.out).join("\n");
+  const turboAll = filters.size > 0 ? runTurbo([...filters]) : { ok: true, out: "" };
+  const all = { ok: turboAll.ok && aloneRuns.every(([, r]) => r.ok), out: `${turboAll.out}\n${aloneOut}` };
   if (all.ok) process.exit(0);
 
   // Có đỏ — quy trách: workspace KHÔNG nằm trong baseline-red có đỏ không?
-  const blocking = [...filters].filter((f) => !BASELINE_RED.has(f));
-  const blockingRed = blocking.length > 0 && !runTurbo(blocking).ok;
+  const blocking = [...filters, ...standalone].filter((f) => !BASELINE_RED.has(f));
+  const blockingTurbo = [...filters].filter((f) => !BASELINE_RED.has(f));
+  const blockingAlone = aloneRuns.filter(([dir]) => !BASELINE_RED.has(dir));
+  const blockingRed =
+    blockingAlone.some(([, r]) => !r.ok) ||
+    (blockingTurbo.length > 0 && !runTurbo(blockingTurbo).ok);
 
   if (MODE === "block" && blockingRed) {
     process.stderr.write(

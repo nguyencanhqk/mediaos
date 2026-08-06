@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { exchangeCodeForUserToken } from "@/lib/fb/auth";
 import { connectAccount, resolveLoginApp } from "@/lib/fb/connect";
 import { OAUTH_STATE_COOKIE, resolveRedirectUri } from "@/lib/fb/oauth";
+import { redirectToPath } from "@/lib/http/relative-redirect";
 // Import gay hieu ung phu: khoi dong worker hen gio khi route dau tien duoc nap.
 import "@/lib/worker-boot";
 
@@ -14,15 +15,15 @@ export const dynamic = "force-dynamic";
  * Doi authorization code sang token, nap tai khoan va toan bo Page cua no,
  * roi dua nguoi dung ve trang Cai dat kem ket qua. Moi ket thuc deu la mot
  * lan chuyen huong - nguoi dung khong bao gio nhin thay JSON.
+ *
+ * Chuyen huong ve /settings dung `Location` TUONG DOI: dung sau tunnel, URL tuyet doi dung tu
+ * request se tro toi `https://localhost:3500` (xem `lib/http/relative-redirect`).
  */
 export async function GET(request: NextRequest) {
-  const origin = request.nextUrl.origin;
-  const settingsPage = new URL("/settings", origin);
   const params = request.nextUrl.searchParams;
 
   const failWith = (message: string) => {
-    settingsPage.searchParams.set("loginError", message);
-    const response = NextResponse.redirect(settingsPage);
+    const response = redirectToPath("/settings", { loginError: message });
     response.cookies.delete(OAUTH_STATE_COOKIE);
     return response;
   };
@@ -51,7 +52,8 @@ export async function GET(request: NextRequest) {
     const userToken = await exchangeCodeForUserToken(
       app.appId,
       app.appSecret,
-      resolveRedirectUri("local", origin),
+      // PHAI la dung chuoi da gui o buoc /start - Facebook doi chieu tung ky tu khi doi code.
+      resolveRedirectUri("local", request.nextUrl.origin),
       code,
     );
 
@@ -61,14 +63,16 @@ export async function GET(request: NextRequest) {
       userToken,
     });
 
-    settingsPage.searchParams.set("connected", result.account.name);
-    settingsPage.searchParams.set("pages", String(result.account.pageCount));
-    settingsPage.searchParams.set("added", String(result.added));
+    const outcome: Record<string, string> = {
+      connected: result.account.name,
+      pages: String(result.account.pageCount),
+      added: String(result.added),
+    };
     if (result.missingScopes.length > 0) {
-      settingsPage.searchParams.set("missingScopes", result.missingScopes.join(","));
+      outcome.missingScopes = result.missingScopes.join(",");
     }
 
-    const response = NextResponse.redirect(settingsPage);
+    const response = redirectToPath("/settings", outcome);
     response.cookies.delete(OAUTH_STATE_COOKIE);
     return response;
   } catch (error) {

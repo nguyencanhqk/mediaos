@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/plan", label: "Lên lịch" },
   { href: "/compose", label: "Soạn bài" },
   { href: "/import", label: "Nhập từ file" },
+  { href: "/library", label: "Kho video" },
   { href: "/pages", label: "Page" },
   { href: "/settings", label: "Cài đặt" },
 ];
