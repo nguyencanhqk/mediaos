@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { z } from "zod";
-import { apiFetch } from "@mediaos/web-core";
+import { ApiError, apiFetch } from "@mediaos/web-core";
 import { Button } from "@mediaos/ui";
 
 const ssoLinkSchema = z.object({ url: z.string().url() });
@@ -25,12 +25,20 @@ export function SocialRedirectPage() {
         window.location.assign(url);
       })
       .catch((err: unknown) => {
-        const raw = err instanceof Error ? err.message : "";
-        const message = raw.includes("503")
-          ? "Cầu SSO sang ứng dụng Đăng bài chưa được cấu hình trên máy chủ."
-          : raw.includes("403")
-            ? "Công ty của bạn chưa được bật ứng dụng Đăng bài."
-            : "Không lấy được liên kết mở ứng dụng Đăng bài. Vui lòng thử lại.";
+        // Đọc `status` của ApiError, KHÔNG dò chuỗi trong `message`.
+        // Bản đầu dùng `err.message.includes("503")` và đã hỏng thật ngày 06/08/2026: máy chủ trả
+        // ĐÚNG 503 (thiếu SOCIAL_* trong .env) nhưng thông điệp của ApiError không chứa chuỗi "503",
+        // nên người dùng nhận câu chung chung "Vui lòng thử lại" — vô nghĩa, vì thử lại bao nhiêu
+        // lần cũng vậy. Chẩn đoán sai ở đây khiến người ta đi mò nhầm chỗ.
+        const status = err instanceof ApiError ? err.status : 0;
+        const message =
+          status === 503
+            ? "Cầu SSO sang ứng dụng Đăng bài chưa được cấu hình trên máy chủ. Báo quản trị hệ thống — thử lại sẽ không hết."
+            : status === 403
+              ? "Công ty của bạn chưa được bật ứng dụng Đăng bài."
+              : status === 401
+                ? "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại."
+                : "Không lấy được liên kết mở ứng dụng Đăng bài. Vui lòng thử lại.";
         setError(message);
       });
   }, []);
