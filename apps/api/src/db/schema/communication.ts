@@ -189,6 +189,14 @@ export const chatRooms = pgTable(
     updatedBy: uuid("updated_by"),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     deletedBy: uuid("deleted_by"),
+    // ─── S8-CHAT-UX-DB-1 (mig 0543) ───
+    /**
+     * Avatar phòng cho `group`/`department`/`project`. `direct` LUÔN NULL — avatar dẫn xuất từ người
+     * đối thoại (CHAT-DEC-016), ép bằng `chk_chat_rooms_avatar_direct`.
+     * ⚠️ KHÔNG khai `.references()`: FK ở DB là COMPOSITE `(company_id, avatar_file_id) → files` —
+     * FK một-cột giữa hai bảng đều có company_id là lớp lỗ KI-046 và làm xtenant-fk-ratchet ĐỎ.
+     */
+    avatarFileId: uuid("avatar_file_id"),
   },
   (t) => [
     index("chat_rooms_company_id_idx").on(t.companyId),
@@ -303,6 +311,15 @@ export const chatRoomMembers = pgTable(
     /** v1 LUÔN NULL (CHAT-DEC-008: đọc toàn bộ lịch sử). Chừa sẵn cho phase sau. */
     visibleFromSeq: bigint("visible_from_seq", { mode: "number" }),
     addedBy: uuid("added_by"),
+    // ─── S8-CHAT-UX-DB-1 (mig 0543) ───
+    /** Ghim hội thoại PER-USER (CHAT-DEC-015). NULL = không ghim. Trần 10/người ép ở service (BE-1). */
+    pinnedAt: timestamp("pinned_at", { withTimezone: true }),
+    /**
+     * Đánh dấu chưa đọc thủ công. Mở phòng ⇒ về NULL.
+     * ⚠️ Cột RIÊNG — KHÔNG được hiện thực bằng cách lùi `lastReadSeq`: con trỏ chỉ-tiến là bất biến
+     * (SPEC-15 §13.2 · CHAT-ERR-018).
+     */
+    markedUnreadAt: timestamp("marked_unread_at", { withTimezone: true }),
   },
   (t) => [
     index("chat_room_members_room_id_idx").on(t.roomId),
@@ -389,3 +406,52 @@ export const chatMessages = pgTable(
 
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type NewChatMessage = typeof chatMessages.$inferInsert;
+
+// ─── chat_message_reactions ──────────────────────────────────────────────────
+// S8-CHAT-UX-DB-1 (mig 0543) · CHAT-DEC-018 — thả cảm xúc vào tin nhắn.
+//
+// BẢNG RIÊNG chứ không cột jsonb trên `chat_messages`: bảng tin là append-only (app role không có
+// UPDATE/DELETE cấp bảng), nhét reaction vào jsonb buộc UPDATE cột đó mỗi lần ai thả/bỏ — vừa phải cấp
+// thêm column-GRANT trên bảng ledger, vừa tạo đường đua ghi-đè giữa hai người thả cùng lúc.
+//
+// ⚠️ BỎ THẢ = DELETE THẬT, và app role CÓ quyền DELETE trên bảng này — KHÔNG vi phạm BẤT BIẾN #2:
+// reaction là trạng thái hiện tại của một nút bấm bật/tắt, không phải dấu vết audit/snapshot/ledger.
+// Đây là bảng DUY NHẤT trong cụm CHAT được cấp DELETE (mig 0543 khối VERIFY canh vế còn lại).
+
+/** Bộ emoji ĐÓNG — đồng bộ `chat_message_reactions_emoji_chk` (DB) và Zod ở BE-3. Sửa phải sửa CẢ HAI. */
+export const CHAT_REACTION_EMOJIS = ["like", "love", "haha", "wow", "sad", "angry"] as const;
+export type ChatReactionEmoji = (typeof CHAT_REACTION_EMOJIS)[number];
+
+export const chatMessageReactions = pgTable(
+  "chat_message_reactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    /**
+     * ⚠️ KHÔNG khai `.references()` cho `messageId`/`userId`: FK ở DB là COMPOSITE
+     * `(company_id, message_id) → chat_messages` và `(company_id, user_id) → users`. FK một-cột giữa
+     * hai bảng đều có company_id là lớp lỗ KI-046 (kiểm tra FK của PG bỏ qua RLS) và làm
+     * `xtenant-fk-ratchet` ca (a) ĐỎ trên CI.
+     */
+    messageId: uuid("message_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    emoji: varchar("emoji", { length: 32 }).$type<ChatReactionEmoji>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // 1 người / 1 tin / 1 emoji — cùng người vẫn thả được nhiều emoji khác nhau trên cùng tin.
+    // ⚠️ KHÔNG thêm index `(company_id, message_id)`: nó là TIỀN TỐ CHẶT của unique này, đúng loại
+    // index trùng mà mig 0541 vừa đi dọn. Truy vấn tổng hợp theo trang dùng chính index này.
+    uniqueIndex("chat_message_reactions_uq").on(t.companyId, t.messageId, t.userId, t.emoji),
+    check(
+      "chat_message_reactions_emoji_chk",
+      sql`emoji IN ('like','love','haha','wow','sad','angry')`,
+    ),
+  ],
+);
+
+export type ChatMessageReaction = typeof chatMessageReactions.$inferSelect;
+export type NewChatMessageReaction = typeof chatMessageReactions.$inferInsert;

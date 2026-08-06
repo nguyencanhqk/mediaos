@@ -1397,6 +1397,36 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  {
+    // S8-CHAT-UX-DB-1 (mig 0543) · CHAT-DEC-018 — tha cam xuc vao tin nhan.
+    // Thieu entry nay thi rls-guards.int-spec DO ("bang co company_id chua dang ky harness") VA
+    // tenant-isolation bo sot phep do co lap cheo tenant cua chinh bang moi.
+    name: "chat_message_reactions",
+    table: "chat_message_reactions",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `cmr-${randomUUID().slice(0, 8)}@x.test`);
+      const roomSuffix = randomUUID().slice(0, 8);
+      const roomRes = await direct.query(
+        `INSERT INTO chat_rooms (company_id, room_type, name, room_code)
+         VALUES ($1, 'group', $2, $3) RETURNING id`,
+        [t.companyId, `rls-room-react-${roomSuffix}`, `RLSRE-${roomSuffix}`],
+      );
+      const msgRes = await direct.query(
+        `INSERT INTO chat_messages (company_id, room_id, sender_id, body, room_seq)
+         VALUES ($1, $2, $3, 'rls-react',
+                 (SELECT COALESCE(max(room_seq), 0) + 1 FROM chat_messages
+                   WHERE company_id = $1 AND room_id = $2)) RETURNING id`,
+        [t.companyId, roomRes.rows[0].id, u],
+      );
+      // emoji phai nam trong bo DONG (chat_message_reactions_emoji_chk) — chuoi tu do se 23514.
+      const r = await direct.query(
+        `INSERT INTO chat_message_reactions (company_id, message_id, user_id, emoji)
+         VALUES ($1, $2, $3, 'like') RETURNING id`,
+        [t.companyId, msgRes.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 
   // ── G11 HR — Attendance (mig 0061) ───────────────────────────────────────────
   // Chống XANH-GIẢ (rủi ro #1): 6 bảng HR có company_id ⇒ rls-guards.int-spec sẽ ĐỎ
