@@ -10995,12 +10995,15 @@ export const backlog = [
     title:
       "Mig 0543: chat_room_members.pinned_at (ghim per-user) + chat_rooms.avatar_file_id (composite tenant FK) + bảng chat_message_reactions (RLS+FORCE) — GRANT THÊM CỘT, cấm REVOKE cấp bảng",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/db/schema/communication.ts",
       "apps/api/src/db/schema/index.ts",
-      "apps/api/src/chat/s7-chat-db1-invariants.int-spec.ts",
+      // ĐÍNH CHÍNH 06/08: file KHÔNG nằm ở apps/api/src/chat/ — đường dẫn cũ trong WO trỏ vào
+      // chỗ không tồn tại ⇒ guard-scope cảnh báo oan và gate đọc sai vùng chạm.
+      "apps/api/test/integration/s7-chat-db1-invariants.int-spec.ts",
+      "docs/DB/DB-12 CHAT Database Design.md",
       "docs/plans/S8-CHAT-UX-DB-1.md",
     ],
     skills: ["code-review", "security-review"],
@@ -11010,7 +11013,7 @@ export const backlog = [
       "0540:61-89 — vế UPDATE cấp bảng của chat_rooms ĐÃ BỊ REVOKE, thay bằng GRANT 11 cột; chat_room_members chỉ có GRANT (last_read_seq, muted_until, left_at)",
       "memory: revoke-table-grant-wipes-column-grants — GRANT-cột-rồi-REVOKE-bảng để lại bảng KHÔNG cột nào ghi được, VĨNH VIỄN. Wave này CHỈ GRANT THÊM, tuyệt đối không REVOKE",
       "memory: new-fk-column-needs-composite-tenant-fk — avatar_file_id FK một cột mở lại KI-046",
-      "⛔ CHẶN ĐÃ ĐO 05/08: `chat_messages` CHƯA có UNIQUE (company_id, id). Trong 0535 nó chỉ ở vai NGUỒN của xtfk_pairs (dòng 169-171), KHÔNG nằm trong danh sách 63 bảng được cấp unique (~590-649: chat_rooms CÓ, files CÓ, chat_messages KHÔNG) ⇒ composite FK của chat_message_reactions LỖI NGAY lúc migrate nếu không ADD CONSTRAINT chat_messages_company_id_id_uq TRƯỚC",
+      "⛔ ĐÍNH CHÍNH 06/08 — TIỀN ĐỀ CHẶN Ở TRÊN LÀ SAI: `chat_messages_company_id_id_uq` ĐÃ TỒN TẠI, do mig 0538:279 thêm cho FK tự tham chiếu reply_to_message_id. Phép đo 05/08 chỉ nhìn 0535 (đúng: không nằm trong danh sách 63 bảng) và bỏ sót 0538. Đo lại trên lane sạch mediaos_s8db1 + mediaos: count = 1. ⇒ ADD CONSTRAINT như DB-12 phác sẽ chết 42710 duplicate_object. 0543 dùng TIỀN KIỂM ASSERT thay vì ADD",
       "⛔ BẪY 0535 header: `ON DELETE SET NULL` TRẦN trên FK 2 cột null LUÔN company_id (cột NOT NULL mang tenant) — phải viết `ON DELETE SET NULL (avatar_file_id)`. 279/446 cặp của 0535 rơi vào nhóm này",
       "memory: migration-not-in-journal-is-silently-skipped — db:migrate vẫn in 'applied' + exit 0; phải ĐO LẠI SCHEMA sau khi chạy",
       "CHAT-DEC-018: reaction bỏ thả = DELETE THẬT. Ghi rõ trong plan vì sao KHÔNG vi phạm BẤT BIẾN #2 (reaction không thuộc nhóm audit/snapshot/ledger), nếu không security-reviewer BLOCK đúng lý",
@@ -11020,7 +11023,10 @@ export const backlog = [
       "GRANT UPDATE (pinned_at) ON chat_room_members + GRANT UPDATE (avatar_file_id, …) ON chat_rooms — thêm vào, KHÔNG có câu REVOKE nào trong migration này",
       "chat_message_reactions: RLS + FORCE RLS TẠO TRƯỚC mọi backfill; unique (message_id, user_id, emoji); CHECK ép bộ emoji ĐÓNG; composite tenant FK tới chat_messages",
       "avatar_file_id: composite tenant FK (company_id, avatar_file_id) → files với `ON DELETE SET NULL (avatar_file_id)` — KHÔNG phải FK một cột, KHÔNG phải SET NULL trần",
-      "Thêm `ALTER TABLE chat_messages ADD CONSTRAINT chat_messages_company_id_id_uq UNIQUE (company_id, id)` TRƯỚC khi tạo chat_message_reactions; verify trong migration rằng constraint tồn tại rồi mới ADD FK",
+      "KHÔNG ADD `chat_messages_company_id_id_uq` (đã có từ 0538 — thêm nữa là 42710); thay bằng TIỀN KIỂM ASSERT 3 đích composite FK (chat_messages · files · users) rồi mới ADD FK",
+      "`chat_message_reactions.user_id` phải là COMPOSITE FK (company_id, user_id) → users — bản phác DB-12 ghi FK MỘT CỘT, đã RED-proof: FK một-cột cho tenant A ghi hàng mang user_id của B (INSERT 0 1)",
+      "`company_id` phải có DEFAULT theo GUC app.current_company_id như mọi bảng tenant khác — thiếu thì đường ghi drizzle (schema khai .default) bỏ qua cột ⇒ 23502 lúc chạy",
+      "Đăng ký bảng mới vào `apps/api/test/integration/rls-registry.ts` — thiếu thì rls-guards.int-spec ĐỎ và tenant-isolation bỏ sót bảng",
       "Bổ sung ca vào mục H của s7-chat-db1-invariants.int-spec.ts cho MỌI writer mới — cột được cấp mà không ai chứng minh ghi được thì 42501 sẽ nổ ở runtime",
       "Test cross-tenant: user công ty A không đọc/ghi được reaction của công ty B",
       "FULL gate (security-reviewer + database-reviewer + silent-failure-hunter) PASS",

@@ -340,27 +340,33 @@ GRANT UPDATE (pinned_at, marked_unread_at) ON chat_room_members TO mediaos_app;
 
 **Bảng MỚI `chat_message_reactions`:**
 
-> ⚠️ **Bước bắt buộc TRƯỚC khi tạo bảng — đo ngày 05/08/2026:** `chat_messages` **CHƯA có** `UNIQUE (company_id, id)`. Trong `0535` nó chỉ xuất hiện ở vai **nguồn** của `xtfk_pairs` (dòng 169-171), **không** nằm trong danh sách 63 bảng được cấp unique (dòng ~590-649 — `chat_rooms` có, `files` có, `chat_messages` **không**). Không thêm unique này thì `ADD CONSTRAINT … REFERENCES chat_messages (company_id, id)` **lỗi ngay lúc migrate**.
+> ⛔ **ĐÍNH CHÍNH 06/08/2026 (S8-CHAT-UX-DB-1) — đoạn cảnh báo cũ ở đây đã SAI, và làm theo sẽ hỏng migration.**
+>
+> Bản ngày 05/08 viết: _"`chat_messages` **CHƯA có** `UNIQUE (company_id, id)` … không thêm thì `ADD CONSTRAINT … REFERENCES chat_messages (company_id, id)` **lỗi ngay lúc migrate**"_, kèm câu `ALTER TABLE chat_messages ADD CONSTRAINT chat_messages_company_id_id_uq UNIQUE (company_id, id);`.
+>
+> Phép đo đó **chỉ nhìn `0535`** (đúng: `chat_messages` không nằm trong danh sách 63 bảng) và **bỏ sót `0538:279`**, nơi wave S7 đã tự thêm constraint này để đỡ FK tự tham chiếu `reply_to_message_id`. Đo lại 06/08 trên lane sạch `mediaos_s8db1` (chain `0000→0542`) **và** trên `mediaos`: constraint **TỒN TẠI** (count = 1). Ngoài ra `0541:114` + `0542:167` ghi "⛔ CẤM DROP" và `s7-chat-db1-invariants.int-spec.ts:934` đang pin nó là "phải-giữ".
+>
+> ⇒ Chạy `ADD CONSTRAINT` như bản cũ viết thì `0543` **chết ngay dòng đầu với `42710 duplicate_object`** — ngược hẳn với thất bại được dự báo. `0543` vì vậy dùng **tiền kiểm ASSERT** (còn thì đi tiếp, mất thì `RAISE EXCEPTION`), không `ADD CONSTRAINT`. Xem [`docs/plans/S8-CHAT-UX-DB-1.md`](../plans/S8-CHAT-UX-DB-1.md) §0.
 
 ```sql
--- (0) Cấp đích cho composite FK. Cùng khuôn tên 0535 dùng cho 63 bảng khác.
---     `id` đã là PK nên cặp (company_id, id) unique một cách tầm thường — index này chỉ để
---     Postgres CHẤP NHẬN nó làm đích FK, không thêm ràng buộc nghiệp vụ nào.
-ALTER TABLE chat_messages
-  ADD CONSTRAINT chat_messages_company_id_id_uq UNIQUE (company_id, id);
+-- (0) KHÔNG `ADD CONSTRAINT` — `chat_messages_company_id_id_uq` ĐÃ CÓ từ 0538:279 (đo 06/08).
+--     0543 chỉ ASSERT nó (cùng với files_company_id_id_uq · users_company_id_id_uq) rồi mới tạo bảng.
 
 CREATE TABLE chat_message_reactions (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   message_id  UUID NOT NULL,
-  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id     UUID NOT NULL,        -- ⚠️ KHÔNG `REFERENCES users(id)` — xem ghi chú (1) dưới bảng
   emoji       VARCHAR(32) NOT NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-  -- composite tenant FK: reaction KHÔNG được trỏ sang tin của công ty khác (KI-046).
-  -- CASCADE (không phải SET NULL) ⇒ không dính bẫy null-luôn-company_id, và message_id NOT NULL.
+  -- composite tenant FK: reaction KHÔNG được trỏ sang tin/người của công ty khác (KI-046).
+  -- CASCADE (không phải SET NULL) ⇒ không dính bẫy null-luôn-company_id, và cả hai cột đều NOT NULL.
   CONSTRAINT chat_message_reactions_message_id_company_fk
     FOREIGN KEY (company_id, message_id) REFERENCES chat_messages (company_id, id)
+    ON DELETE CASCADE,
+  CONSTRAINT chat_message_reactions_user_id_company_fk
+    FOREIGN KEY (company_id, user_id) REFERENCES users (company_id, id)
     ON DELETE CASCADE,
 
   -- bộ emoji ĐÓNG, ép ở DB chứ không chỉ ở Zod: chuỗi tự do là bề mặt lưu trữ vô hạn
@@ -368,19 +374,26 @@ CREATE TABLE chat_message_reactions (
     CHECK (emoji IN ('like','love','haha','wow','sad','angry'))
 );
 
--- 1 người / 1 tin / 1 emoji — cho phép cùng người thả NHIỀU emoji khác nhau
+-- 1 người / 1 tin / 1 emoji — cho phép cùng người thả NHIỀU emoji khác nhau. Xem ghi chú (2)+(3).
 CREATE UNIQUE INDEX chat_message_reactions_uq
-  ON chat_message_reactions (message_id, user_id, emoji);
-
--- tổng hợp reaction cho một TRANG tin nhắn bằng 1 truy vấn (chống N+1)
-CREATE INDEX chat_message_reactions_message_idx
-  ON chat_message_reactions (company_id, message_id);
+  ON chat_message_reactions (company_id, message_id, user_id, emoji);
 
 ALTER TABLE chat_message_reactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_message_reactions FORCE  ROW LEVEL SECURITY;
--- policy tenant theo đúng khuôn 3 bảng chat hiện có (app.current_company_id)
+CREATE POLICY tenant_isolation ON chat_message_reactions
+  USING      (company_id = NULLIF(current_setting('app.current_company_id', true), '')::uuid)
+  WITH CHECK (company_id = NULLIF(current_setting('app.current_company_id', true), '')::uuid);
+
+-- KHÔNG `GRANT UPDATE`: đổi cảm xúc = DELETE + INSERT. KHÔNG cấp cho worker/readonly (0 job đọc).
+GRANT SELECT, INSERT, DELETE ON chat_message_reactions TO mediaos_app;
 ```
 
+> **Ba chỗ khối trên đã ĐỔI so với bản nháp 05/08** (đo + chứng minh khi thi công `0543`, 06/08):
+>
+> 1. **`user_id` dùng composite FK, KHÔNG phải `REFERENCES users(id)` một cột.** FK một-cột giữa hai bảng đều có `company_id` chính là lớp lỗ KI-046 — kiểm tra FK của Postgres chạy quyền hệ thống và **không áp RLS**. Đã tái lập trên lane: với FK một-cột, tenant A `INSERT` thành công (`INSERT 0 1`) một hàng `company_id = A` mang `user_id` của B; với composite thì `23503`. Ngoài ra `xtenant-fk-ratchet.int-spec.ts` ca (a) sẽ **ĐỎ trên CI** (file gate `hasDb`, không gate `LANE_DB`).
+> 2. **Unique là 4 cột `(company_id, message_id, user_id, emoji)`**, khớp bảng quyết định của wave doc (bản nháp code ở đây ghi 3 cột — hai chỗ lệch nhau). Bản 4 cột **không nới lỏng gì**: composite FK ép mỗi `message_id` ứng đúng một `company_id`.
+> 3. **BỎ index phụ `(company_id, message_id)`** — nó là **tiền tố chặt** của unique 4 cột ở trên, đúng loại index trùng mà `0541` vừa đi dọn. Truy vấn tổng hợp reaction theo trang dùng chính unique index.
+>
 > **Quan hệ với BẤT BIẾN #2 (không hard-delete) — đã cân nhắc, KHÔNG vi phạm.** Nhóm append-only là `audit_logs` · `login_logs` · … · `chat_messages`: dấu vết ai-làm-gì và nội dung trao đổi. Một reaction là **trạng thái hiện tại của một nút bấm bật/tắt**, không phải dấu vết cần đối chứng; giữ lại hàng đã bỏ thả chỉ tạo rác và buộc mọi truy vấn đếm phải thêm vế lọc. Vì vậy app role **có** `DELETE` trên bảng này — và **chỉ** bảng này trong cụm CHAT.
 >
 > Người thả reaction rồi **rời phòng**: hàng reaction **giữ nguyên** (không xoá theo `left_at`) — cùng lý do tin nhắn của người đã nghỉ việc được giữ (SPEC-15 §4.1).
