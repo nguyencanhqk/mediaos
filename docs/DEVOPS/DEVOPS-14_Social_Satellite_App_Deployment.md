@@ -2,7 +2,7 @@
 
 > **Phạm vi:** cách chạy, cấu hình, build lại và sao lưu ứng dụng Đăng bài Facebook Page.
 > **Quyết định nền:** [DECISIONS-08](../DECISIONS/DECISIONS-08_Social_Satellite_App.md) · kế hoạch wave: [S9-SOCIAL-WAVE](../plans/S9-SOCIAL-WAVE.md)
-> **Trạng thái:** 🟡 **checklist đã soạn, CHƯA cài dịch vụ.** Việc cài NSSM + mở cổng là hành động trên máy PROD, chờ owner thực hiện hoặc cho phép.
+> **Trạng thái:** 🟢 **ĐÃ LIVE 06/08/2026** — dịch vụ NSSM `MediaOS-Social` chạy cổng 3500, domain `https://dangfb.funtimemediacorp.com`. Chi tiết + bằng chứng đo: §7.
 
 ---
 
@@ -13,7 +13,7 @@
 | MediaOS API (PROD) | 3100 | NSSM |
 | MediaOS API (dev-online) | 3200 | NSSM |
 | LMS (`apps/lms`) | 3400 | NSSM `MediaOS-LMS` |
-| **fbpost (`apps/fbpost`)** | **3500** | NSSM `MediaOS-Social` — **chưa cài** |
+| **fbpost (`apps/fbpost`)** | **3500** | NSSM `MediaOS-Social` — tunnel `dangfb.<domain>` |
 
 3500 chọn vì trống và cách xa dải đang dùng. Đổi thì phải đổi đồng thời `SOCIAL_BASE_URL` phía API.
 
@@ -24,7 +24,7 @@
 | Biến | Bắt buộc | Ý nghĩa |
 | --- | --- | --- |
 | `SOCIAL_SSO_SECRET` | có | Shared secret HMAC ≥32 ký tự. **Phải khớp** `MEDIAOS_SSO_SECRET` phía fbpost. Tách biệt khỏi `LMS_SSO_SECRET` — lộ một cái không kéo theo cái kia. |
-| `SOCIAL_BASE_URL` | có | Gốc public của fbpost, vd `https://social.funtimemediacorp.com`. |
+| `SOCIAL_BASE_URL` | có | Gốc public của fbpost — hiện là `https://dangfb.funtimemediacorp.com` (owner chốt 06/08/2026). Đây là đích mà cầu SSO đưa người dùng tới, nên sai giá trị = ô "Đăng bài" dẫn vào hư không. |
 | `SOCIAL_COMPANY_ID` | có | UUID công ty DUY NHẤT được dùng. Thiếu ⇒ endpoint trả **503**, KHÔNG phải "cho mọi công ty". |
 
 Thiếu cả ba thì API vẫn boot bình thường; chỉ endpoint `GET /api/v1/integrations/social/sso-link` trả 503.
@@ -134,7 +134,26 @@ Script làm 5 bước, dừng ngay khi có bước hỏng: kiểm điều kiện
 
 > ⚠️ Bản script đầu (ở scratchpad) **không chạy được** vì có dòng `#requires -RunAsAdministrator`: PowerShell từ chối nạp file ngay từ đầu khi cửa sổ chưa elevated, kèm lỗi *"cannot be run because it contains a #requires statement"*. Bản hiện tại bỏ dòng đó và tự `Start-Process -Verb RunAs`. Đã xoá bản cũ để không chạy nhầm.
 
-- [ ] **Tunnel/domain public** trỏ tới `localhost:3500`, rồi sửa `SOCIAL_BASE_URL` trong `apps/api/.env` cho khớp (hiện để `http://localhost:3500`).
+### 7.2b Domain `dangfb.funtimemediacorp.com` (owner chốt 06/08/2026)
+
+Đã làm **không cần admin**: DNS CNAME `dangfb` → tunnel `95d2e685` (`cloudflared tunnel route dns mediaos-api dangfb.funtimemediacorp.com`); `SOCIAL_BASE_URL` trong `apps/api/.env` đổi sang `https://dangfb.funtimemediacorp.com`.
+
+Đo lúc đó: `https://dangfb.…/login` → **404**, `https://train.…` → 307. 404 ở đây có nghĩa rất cụ thể — **DNS + tunnel đã tới nơi, chỉ thiếu ingress rule** (rơi vào quy tắc bắt-tất-cả `http_status:404`), khác hẳn "không phản hồi" (DNS/tunnel chết). `m prod-status` nay phân biệt đúng hai ca này.
+
+Phần **cần Administrator** gói trong một lệnh:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "C:\Users\fmcai\social-domain.ps1"
+```
+
+Thêm ingress rule vào `C:\ProgramData\cloudflared\config.yml` → `cloudflared tunnel ingress validate` → `tunnel ingress rule` (khẳng định hostname map đúng cổng 3500, vì `validate` chỉ kiểm cú pháp) → restart `cloudflared` + `MediaOS-API` → kiểm qua domain thật.
+
+> ⚠️ `config.yml` đó phục vụ **cả 8 hostname** (`api`, `train`, `cian-dev*`, `tasklive`, `danews`). Sai file là sập hết. Vì vậy script **backup trước, validate sau, và khôi phục backup ngay nếu validate đỏ** — không bao giờ restart với file chưa validate. Rule mới chèn **trước** quy tắc `http_status:404`; đặt sau nó thì không bao giờ được đọc tới.
+>
+> Phép thử quan trọng nhất ở cuối: `https://dangfb.…/api/pages` phải trả **401**. Đây là lần đầu cổng phiên bị kiểm **trên đường công khai** — khác hẳn kiểm qua `localhost`. Khác 401 ⇒ script dừng và bảo gỡ ingress rule ra ngay: fbpost sẽ đang lộ ra Internet mà không có cổng nào chắn.
+
+### 7.2c Còn lại sau khi có domain
+
 - [ ] Đường sao lưu riêng cho `data/` + `.secrets/` — **tách nhau**.
 - [ ] Cảnh báo token Facebook sắp hết hạn (`accounts.token_expires_at` có sẵn, chưa ai đọc) — ngoài phạm vi wave S9.
 
