@@ -10,6 +10,8 @@ import { ChatMessagesController } from "./chat-messages.controller";
 import { ChatAccessService } from "./chat-access.service";
 import { ChatRoomsService } from "./chat-rooms.service";
 import { ChatMembersService } from "./chat-members.service";
+// S8-CHAT-UX-RT-1 (additive): "đang gõ" — REST-ping → fan-out WS, 0 ghi DB, 0 audit (CHAT-DEC-017).
+import { ChatTypingService } from "./chat-typing.service";
 import { ChatRoomsRepository } from "./chat-rooms.repository";
 import { ChatRoomCodeService } from "./chat-room-code.service";
 // S7-CHAT-BE-2 (additive): tin nhắn — đọc theo con trỏ · gửi idempotent · thu hồi · ghim · đã đọc.
@@ -116,6 +118,10 @@ import { ChatOversightRepository } from "./chat-oversight.repository";
     ChatOversightAuditGuard,
     ChatOversightService,
     ChatOversightRepository,
+    // ── S8-CHAT-UX-RT-1 ── CHAT-API-023. Đi qua `RealtimeEmitterModule` (module LÁ) đã import ở trên —
+    // KHÔNG import `realtime.module`/`realtime.gateway` (ratchet `chat-realtime-structure.spec.ts`).
+    // CỐ Ý KHÔNG export: lối vào duy nhất là route CHAT-API-023, đã gate bằng `send:chat-message`.
+    ChatTypingService,
   ],
   // `ChatDerivedRoomsSyncService` export cho 5 module writer (org · employees · tasks · recycle-bin).
   // Job handler CỐ Ý KHÔNG export: nó được SchedulerModule gom qua DiscoveryService bằng metadata, không

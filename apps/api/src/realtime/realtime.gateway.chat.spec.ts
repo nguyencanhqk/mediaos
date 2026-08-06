@@ -24,6 +24,9 @@ function makeSocket(user?: { id: string; companyId: string }) {
   const joined: string[] = [];
   const left: string[] = [];
   return {
+    // Socket.IO cấp `id` cho MỌI socket; presence khoá theo id này nên fake phải có nó, nếu không ca
+    // presence đo một `undefined` và vẫn xanh.
+    id: `sock-${user?.id ?? "anon"}`,
     data: user ? { user } : {},
     joined,
     left,
@@ -63,14 +66,23 @@ function makeGateway(over: {
       vi.fn(async (_c: string, fn: (tx: unknown) => Promise<unknown>) => fn({})),
   } as unknown as DatabaseService;
 
+  // S8-CHAT-UX-RT-1 — presence stub (mỹ thuật, không ném). Trả ra để ca test cổng quyền đóng đinh được
+  // "người trượt `view:chat-room` KHÔNG vào presence".
+  const presence = {
+    markOnline: vi.fn(async () => {}),
+    markOffline: vi.fn(async () => {}),
+    refreshLocal: vi.fn(async () => {}),
+  };
+
   const gw = new RealtimeGateway(
     { verifyAccessToken: vi.fn() } as unknown as TokenService,
     { setServer: vi.fn() } as unknown as RealtimeEmitterService,
     permissions,
     { listRoomsForUser } as unknown as ChatRoomsRepository,
     db,
+    presence as never,
   );
-  return { gw, permissions, listRoomsForUser };
+  return { gw, permissions, listRoomsForUser, presence };
 }
 
 describe("RealtimeGateway.handleConnection — S7-CHAT-RT-1", () => {
@@ -131,6 +143,61 @@ describe("RealtimeGateway.handleConnection — S7-CHAT-RT-1", () => {
     expect(client.disconnect).not.toHaveBeenCalled();
     // Không đọc danh sách phòng khi đã bị cổng quyền chặn — không tốn truy vấn thừa.
     expect(listRoomsForUser).not.toHaveBeenCalled();
+  });
+
+  // ─── (A2) presence — S8-CHAT-UX-RT-1 ──────────────────────────────────────────
+  describe("presence bám theo cổng quyền CHAT (CHAT-DEC-017)", () => {
+    it("🔒 THIẾU cặp view:chat-room → KHÔNG vào presence của ai", async () => {
+      const { gw, presence } = makeGateway({ allow: false, rooms: [[ROOM_1]] });
+      const client = makeSocket({ id: USER, companyId: COMPANY });
+
+      await gw.handleConnection(client as never);
+
+      // Cổng quyền CHAT phủ CẢ kênh presence, không riêng kênh tin nhắn: người bị thu hồi quyền chat
+      // không được phép hiện "đang online" với các peer DM cũ.
+      expect(presence.markOnline).not.toHaveBeenCalled();
+    });
+
+    it("qua cổng quyền → đánh dấu online với socket id THẬT của kết nối", async () => {
+      const { gw, presence } = makeGateway({ allow: true, rooms: [[ROOM_1]] });
+      const client = makeSocket({ id: USER, companyId: COMPANY });
+
+      await gw.handleConnection(client as never);
+
+      expect(presence.markOnline).toHaveBeenCalledWith(COMPANY, USER, client.id);
+    });
+
+    it("disconnect → gỡ khỏi presence (đường mà severUserSessions đi qua)", () => {
+      const { gw, presence } = makeGateway({ allow: true, rooms: [[ROOM_1]] });
+      const client = makeSocket({ id: USER, companyId: COMPANY });
+
+      // `severUserSessions` (tài khoản bị khoá/vô hiệu) gọi `disconnectSockets(true)` ⇒ Socket.IO phát
+      // `disconnect` ⇒ gateway chạy hook này. Đo hook, không đo lời hứa trong jsdoc.
+      gw.handleDisconnect(client as never);
+
+      expect(presence.markOffline).toHaveBeenCalledWith(COMPANY, USER, client.id);
+    });
+
+    it("🔒 presence NÉM → KHÔNG ngắt kết nối (mỹ thuật không được giết đường sống của tin nhắn)", async () => {
+      const { gw, presence } = makeGateway({ allow: true, rooms: [[ROOM_1]] });
+      presence.markOnline.mockRejectedValue(new Error("valkey down") as never);
+      const client = makeSocket({ id: USER, companyId: COMPANY });
+
+      await gw.handleConnection(client as never);
+
+      // Đây là ĐIỂM KHÁC BIỆT có chủ đích với `listRoomsForUser` ném (ca dưới → disconnect):
+      // "connected mà 0 phòng" là sống dối; "connected mà không ai thấy mình online" chỉ là thiếu mỹ thuật.
+      expect(client.disconnect).not.toHaveBeenCalled();
+      expect(client.joined).toContain(chatRoomName(COMPANY, ROOM_1));
+    });
+
+    it("handleDisconnect nuốt promise reject — không đẻ unhandledRejection (Socket.IO không await)", () => {
+      const { gw, presence } = makeGateway({ allow: true, rooms: [[ROOM_1]] });
+      presence.markOffline.mockRejectedValue(new Error("valkey down") as never);
+      const client = makeSocket({ id: USER, companyId: COMPANY });
+
+      expect(() => gw.handleDisconnect(client as never)).not.toThrow();
+    });
   });
 
   // ─── (B) danh sách phòng đọc TỪ SERVER ─────────────────────────────────────────

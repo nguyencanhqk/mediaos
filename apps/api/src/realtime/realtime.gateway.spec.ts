@@ -60,12 +60,26 @@ function makeDeps() {
       fn({} as unknown),
     ),
   } as unknown as DatabaseService;
-  return { tokens, emitter, permissions, chatRooms, db, listRoomsForUser };
+  // S8-CHAT-UX-RT-1: presence là phụ thuộc MỸ THUẬT — stub đủ 3 method mà gateway gọi. Nó KHÔNG BAO GIỜ
+  // được ném (jsdoc `ChatPresenceService`), nên stub mặc định cũng không ném.
+  const presence = {
+    markOnline: vi.fn(async () => {}),
+    markOffline: vi.fn(async () => {}),
+    refreshLocal: vi.fn(async () => {}),
+  };
+  return { tokens, emitter, permissions, chatRooms, db, listRoomsForUser, presence };
 }
 
 /** Dựng gateway với bộ phụ thuộc đầy đủ — 1 chỗ duy nhất phải sửa khi constructor đổi. */
 function makeGateway(d: ReturnType<typeof makeDeps>): RealtimeGateway {
-  return new RealtimeGateway(d.tokens, d.emitter, d.permissions, d.chatRooms, d.db);
+  return new RealtimeGateway(
+    d.tokens,
+    d.emitter,
+    d.permissions,
+    d.chatRooms,
+    d.db,
+    d.presence as never,
+  );
 }
 
 /** Cast a fake to the real Socket type the handlers expect (we only exercise the touched surface). */
