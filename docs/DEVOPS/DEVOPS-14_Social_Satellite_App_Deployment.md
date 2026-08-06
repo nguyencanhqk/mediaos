@@ -19,7 +19,13 @@
 
 ## 2. Biến môi trường
 
-### 2.1 Phía MediaOS API (`apps/api/.env.production`)
+### 2.1 Phía MediaOS API — **`.env` ở GỐC REPO**, không phải `apps/api/.env`
+
+> ⚠️ **Đặt nhầm file là bug câm.** `ENV_FILE_PATHS = [".env", "../../.env"]` (`apps/api/src/config/env.schema.ts`) tính theo **CWD**, mà NSSM chạy API với `AppDirectory` = **gốc repo** ⇒ file được đọc là `<repo>\.env`. `apps/api/.env` **không bao giờ** được đọc ở PROD (nó chỉ có tác dụng khi chạy dev với cwd = `apps/api`).
+>
+> Đã cắn thật 06/08/2026: 3 biến `SOCIAL_*` đặt vào `apps/api/.env`, API restart bình thường, `m prod-status` báo "cầu SSO OK" — nhưng người dùng bấm ô "Đăng bài" nhận **503**. Đối chiếu để khỏi nhầm: `LMS_*` (6 biến) vốn nằm ở `.env` gốc.
+>
+> `m prod-status` nay kiểm thẳng sự hiện diện của 3 biến trong `.env` gốc, vì phép thử HTTP không phát hiện được ca này (xem §2.1b).
 
 | Biến | Bắt buộc | Ý nghĩa |
 | --- | --- | --- |
@@ -28,6 +34,19 @@
 | `SOCIAL_COMPANY_ID` | có | UUID công ty DUY NHẤT được dùng. Thiếu ⇒ endpoint trả **503**, KHÔNG phải "cho mọi công ty". |
 
 Thiếu cả ba thì API vẫn boot bình thường; chỉ endpoint `GET /api/v1/integrations/social/sso-link` trả 503.
+
+### 2.1b Vì sao không thể phát hiện thiếu env bằng phép thử HTTP
+
+Gọi `sso-link` **không xác thực** luôn trả **401** — guard xác thực chạy **trước** service, nên một cầu thiếu env trả 401 y hệt một cầu hoàn hảo. Nói cách khác: `401` chỉ chứng minh **route tồn tại**, không chứng minh **cầu dùng được**.
+
+Vì vậy `m prod-status` dùng **hai phép đo khác loại**:
+
+| Phép đo | Nói được gì | Mù chỗ nào |
+| --- | --- | --- |
+| HTTP `sso-link` | `404` = API chạy dist cũ · `401` = route có | không thấy thiếu env |
+| Đọc `.env` gốc | thiếu biến nào, tên cụ thể | không thấy dist cũ |
+
+Một phép đo là không đủ — đúng bài học chung của DEVOPS-14.
 
 ### 2.2 Phía fbpost (`apps/fbpost/.env.production`)
 

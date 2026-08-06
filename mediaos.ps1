@@ -834,15 +834,39 @@ function Invoke-ProdStatus {
     else { Write-Err ("SOCIAL cổng phiên bất thường: /api/pages -> " + $sc + " (kỳ vọng 401)") }
   }
   # Cầu SSO phía API: 404 = dist đang chạy CHƯA có module social (deploy chưa tới nơi), 401 = có route.
+  #
+  # ⚠️ 401 chỉ chứng minh ROUTE tồn tại, KHÔNG chứng minh cầu SSO dùng được: guard xác thực chạy
+  # TRƯỚC service, nên một cầu thiếu env cũng trả 401 y hệt một cầu hoàn hảo. Đã cắn thật 06/08/2026
+  # — `prod-status` báo "cầu SSO OK" trong khi người dùng bấm ô "Đăng bài" nhận 503. Vì vậy phải kiểm
+  # THÊM sự hiện diện của env ở khối dưới; hai phép đo khác loại mới nói được điều mà một phép không nói nổi.
   try {
     $r = Invoke-WebRequest -Uri "http://localhost:$ApiPort/api/v1/integrations/social/sso-link" -UseBasicParsing -TimeoutSec 4
     Write-Warn ("cầu SSO social trả HTTP " + $r.StatusCode + " khi CHƯA xác thực — bất thường, kỳ vọng 401")
   } catch {
     $sc = try { $_.Exception.Response.StatusCode.value__ } catch { 0 }
-    if ($sc -eq 401) { Write-Ok "cầu SSO social OK (API có route, trả 401 khi chưa xác thực)" }
+    if ($sc -eq 401) { Write-Ok "cầu SSO social: route CÓ (401 khi chưa xác thực) — xem thêm dòng env bên dưới" }
     elseif ($sc -eq 404) { Write-Err "cầu SSO social 404 — API PROD đang chạy DIST CŨ, chạy 'm prod-update api'" }
-    elseif ($sc -eq 503) { Write-Err "cầu SSO social 503 — thiếu SOCIAL_SSO_SECRET/BASE_URL/COMPANY_ID trong apps\api\.env" }
     else { Write-Warn ("cầu SSO social: không đo được (HTTP " + $sc + ")") }
+  }
+
+  # Kiểm env SOCIAL_* trong ĐÚNG file API đọc.
+  #
+  # File nào? `ENV_FILE_PATHS = [".env", "../../.env"]` tính theo CWD, mà NSSM chạy API với
+  # AppDirectory = GỐC REPO ⇒ file thật là `<repo>\.env`. `apps\api\.env` KHÔNG BAO GIỜ được đọc ở
+  # PROD (nó chỉ có tác dụng khi chạy dev với cwd = apps/api). Đặt nhầm vào đó chính là bug 06/08.
+  $rootEnvPath = Join-Path $Root ".env"
+  if (-not (Test-Path $rootEnvPath)) {
+    Write-Err "không thấy $rootEnvPath — không kiểm được env SOCIAL_*"
+  } else {
+    $envText = Get-Content $rootEnvPath -Raw
+    $missing = @("SOCIAL_SSO_SECRET", "SOCIAL_BASE_URL", "SOCIAL_COMPANY_ID") |
+      Where-Object { $envText -notmatch ("(?m)^" + $_ + "=\S") }
+    if ($missing.Count -gt 0) {
+      Write-Err ("SOCIAL env THIẾU trong .env gốc: " + ($missing -join ", ") + " ⇒ cầu SSO sẽ trả 503 cho người dùng")
+      Write-Err "  (đặt ở apps\api\.env là KHÔNG có tác dụng — PROD chạy với cwd = gốc repo)"
+    } else {
+      Write-Ok "SOCIAL env đủ 3 biến trong .env gốc"
+    }
   }
 }
 
