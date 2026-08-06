@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-06 04:22Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-06 05:18Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -32,7 +32,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 22
+- **branch**: `master` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 212 — `0545_s9socialdb1_audit_social` (213 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -41,6 +41,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `98516e01` | 2026-08-06 | feat(social): nhập fbpost thành app vệ tinh SOCIAL — mã hoá token FB, cổng phiên, cầu SSO (wave S9-SOCIAL) (#354) |
 | `46021aa5` | 2026-08-06 | feat(chat): CHAT-API-023 đang gõ (REST-ping) + presence thuần server, khoá Valkey có tiền tố môi trường (S8-CHAT-UX-RT-1) (#352) |
 | `4e407608` | 2026-08-06 | feat(chat): mig 0543 — ghim per-user · avatar phòng (composite tenant FK) · bảng chat_message_reactions (RLS+FORCE) (S8-CHAT-UX-DB-1) (#351) |
 | `5e9700a6` | 2026-08-06 | docs(status): regen sau khi #337 (ADR DECISIONS-07 nới CHAT-DEC-005 + seed wave CALL 7 WO) land — READY = S8-CHAT-UX-DB-1 · S8-CHAT-UX-RT-1 · S7-CALL-DOC-1 (cả ba vùng đỏ) |
@@ -52,7 +53,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `21a2dba7` | 2026-08-05 | fix(chat): key TRÙNG giữa hai anh em làm khung hội thoại cũ KHÔNG bị gỡ (rơi lại mỗi lần đổi phòng) (#348) |
 | `b8901534` | 2026-08-05 | fix(chat): panel nổi chỉ giữ ĐÚNG 1 hội thoại — bấm phòng khác THAY CHỖ, không cộng dồn khung (#346) |
 | `dfa57c44` | 2026-08-05 | ci: master/main KHÔNG bị cancel giữa chừng + nghiệm thu deploy FE bằng NỘI DUNG (#347) |
-| `6d218fdb` | 2026-08-05 | docs(status): regen sau khi S7-SEC-ROLE2FA-UI-1 (#345) land — hàng đợi READY rỗng, PROD BE+FE đã đồng bộ 1d667209 |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

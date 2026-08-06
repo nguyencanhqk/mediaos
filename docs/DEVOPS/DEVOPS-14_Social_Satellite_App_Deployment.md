@@ -91,12 +91,34 @@ Hệ quả phải chấp nhận (đã ghi ở DECISIONS-08 §6): dịch vụ ch�
 
 Dừng dịch vụ trước khi copy `fbpost.db`, hoặc dùng `sqlite3 .backup` — SQLite ở chế độ WAL không an toàn khi copy nóng bằng `cp`.
 
-## 7. Việc CHƯA làm (bàn giao)
+## 7. Trạng thái triển khai (cập nhật 06/08/2026)
 
-- [ ] Cài dịch vụ NSSM `MediaOS-Social`, cổng 3500 — **cần owner**.
-- [ ] Tạo tunnel/domain public + trỏ `SOCIAL_BASE_URL`.
-- [ ] Sinh và nạp 2 secret (`SOCIAL_SSO_SECRET` ↔ `MEDIAOS_SSO_SECRET`, `SOCIAL_SESSION_SECRET`).
-- [ ] Đặt `SOCIAL_COMPANY_ID` = id công ty funtime.
-- [ ] Áp migration `0544`/`0545` lên DB PROD — **cùng nhóm nợ với `0542`/`0543` đang chờ** (xem RELEASE).
-- [ ] Cấu hình đường sao lưu riêng cho `data/` + `.secrets/`.
+### 7.1 ĐÃ XONG — có bằng chứng đo được
+
+- [x] **PR #354 merge vào master** (`98516e01`), CI 12/12 xanh.
+- [x] **Migration lên DB PROD**: `mediaos` từ **210 → 213**. Áp `0543` (wave CHAT — owner đồng ý áp kèm, vì migrator đơn điệu nên không tách được) + `0544` + `0545`.
+      Sao lưu trước khi áp: `pg_dump -Fc` 4,58 MB, **333 mục ACL** (giữ quyền — tránh bẫy 28P01 lúc restore).
+      Đo lại schema sau khi áp (KHÔNG tin dòng log "applied"): `pinned_at`=1 · `avatar_file_id`=1 · bảng `chat_message_reactions` có RLS **và** FORCE · 3 cặp quyền + 3 grant `social` · CHECK `object_type` 106 giá trị, có `social_sso`+`social_account`, **canary `defect` và `notification` còn nguyên**.
+      PROD API + LMS vẫn `200` sau khi áp.
+- [x] **KEK production**: `apps/fbpost/.secrets/fbpost-kek.bin` (32 byte). `gen-kek.mjs` đã kiểm: chạy lần 2 từ chối ghi đè, exit 1.
+- [x] **Secret + env**: `apps/fbpost/.env.production` + `apps/fbpost/.env.production.api-block` (khối dán cho `apps/api/.env`). Cả ba file **đã xác minh bị `.gitignore` loại** (`.env.*` dòng 29, `.secrets/` dòng 32).
+- [x] **`SOCIAL_COMPANY_ID`** = `257e5de2-d1e6-4b81-87d9-944b2d9d006c` (Funtime Media Corp).
+- [x] **Chạy thử ĐÚNG lệnh NSSM sẽ dùng, với CHÍNH cấu hình production**: smoke đầu-cuối **8/8** — 401 khi không phiên · SSO cấp cookie HttpOnly+Lax · phát lại bị từ chối · sai chữ ký bị từ chối.
+
+### 7.2 CÒN LẠI — cần quyền Administrator hoặc tài khoản ngoài
+
+- [ ] **Cài dịch vụ + nạp env API.** Có sẵn script làm trọn gói, chạy trong cửa sổ **PowerShell Administrator**:
+      `powershell -ExecutionPolicy Bypass -File "<scratchpad>\install-social-service.ps1"`
+      Script tự: nạp 3 biến `SOCIAL_*` vào `apps/api/.env` (bỏ qua biến đã có) → cài/cập nhật NSSM `MediaOS-Social` cổng 3500 → khởi động → **kiểm `GET /api/pages` phải trả 401** và DỪNG nếu không (cổng phiên hỏng thì tuyệt đối không mở ra ngoài).
+- [ ] **Restart API PROD** để nạp 3 biến mới: `m prod-update api` (cũng cần Administrator; nó build lại + migrate fail-closed + activate release + restart).
+- [ ] **Tunnel/domain public** trỏ tới `localhost:3500`, rồi sửa `SOCIAL_BASE_URL` trong `apps/api/.env` cho khớp (hiện để `http://localhost:3500`).
+- [ ] Đường sao lưu riêng cho `data/` + `.secrets/` — **tách nhau**.
 - [ ] Cảnh báo token Facebook sắp hết hạn (`accounts.token_expires_at` có sẵn, chưa ai đọc) — ngoài phạm vi wave S9.
+
+### 7.3 ⚠️ Cửa sổ "tile chết" — biết trước để không đi tìm bug
+
+FE tự deploy lên Cloudflare Pages khi merge master (`DEPLOY_FE_ENABLED=true`), và `0544` đã cấp `view:social-post` cho `company-admin` **trên PROD**. Nghĩa là ô **"Đăng bài" hiện ra ngay**, trong khi API PROD vẫn chạy dist CŨ (chưa có `/integrations/social/sso-link`) và dịch vụ 3500 chưa tồn tại.
+
+⇒ Từ lúc FE lên Pages đến khi xong §7.2, **company-admin bấm ô "Đăng bài" sẽ thấy thông báo lỗi** ("Không lấy được liên kết mở ứng dụng Đăng bài"). Không sập, không rò gì — chỉ là cửa chưa thông.
+
+**CỐ Ý không thu hồi grant để bịt tạm.** Làm vậy tạo lệch giữa "migration đã áp" và "hiện trạng DB" — đúng bẫy `grant-in-old-migration-is-not-current-state`: người đọc `0544` sau này sẽ tin có grant mà thực tế không có. Thà một cửa sổ lỗi đọc được, còn hơn một cái bẫy im lặng.
