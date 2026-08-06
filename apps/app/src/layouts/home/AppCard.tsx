@@ -41,6 +41,10 @@ const MODULE_ACCENT_BG: Partial<Record<string, string>> = {
   ME: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
   // S5-GOAL-FE-1 — Mục tiêu.
   GOAL: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  // S8-CHAT-ENTRY-1 — Tin nhắn. Thiếu dòng này thẻ vẫn render nhưng đeo màu xám `bg-muted` của
+  // FOUNDATION/AUTH, đọc như một mục hệ thống chứ không phải app nghiệp vụ. Teal là màu chưa ai dùng
+  // trong bảng này — trùng màu với TASK (cyan) thì hai thẻ cạnh nhau mất tác dụng nhận diện.
+  CHAT: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
 };
 
 interface AppCardProps {

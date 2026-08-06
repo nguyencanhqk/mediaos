@@ -635,6 +635,37 @@ export const APP_REGISTRY: readonly AppRegistryItem[] = [
     // order phải tăng dần THEO VỊ TRÍ trong mảng (registry.spec "thứ tự order tăng dần") — đặt sau me(65).
     order: 66,
   },
+  // S8-CHAT-ENTRY-1 — thẻ "Tin nhắn" ở Home Portal / App Switcher. S7-CHAT-FE-3 ship badge header +
+  // mục sidebar ME + URL /chat nhưng KHÔNG khai app ở đây, mà lưới "Ứng dụng của tôi" dựng 100% từ
+  // APP_REGISTRY ⇒ Chat vô hình ở màn đầu tiên sau đăng nhập dù user đủ quyền (owner báo 05/08/2026).
+  //
+  // Gate = cặp engine LITERAL (mig 0538, non-sensitive, grant Company cho 4 role canonical) — KHÔNG qua
+  // PERMISSION_CODE_TO_PAIR, giống access:me / access:goal / access:lms (tránh pair-drift).
+  //
+  // Vì sao `requiredPermissions` (ĐỦ CẢ HAI) chứ không phải `requiredAnyPermissions: ['access:chat']` như
+  // badge header và mục sidebar ME: thẻ này ĐIỀU HƯỚNG tới /chat, mà CHAT_ROUTE_META đòi `view:chat-room`.
+  // Gate thẻ bằng mình `access:chat` là dựng lại đúng lỗ đã vá ở SYSTEM_APP_PERMISSIONS (§ ngay trên):
+  // role bị thu `view:chat-room` mà còn `access:chat` sẽ thấy thẻ rồi ăn SHOW_403 khi bấm. Hôm nay 0538
+  // cấp cả 9 cặp cùng lúc nên hai vế trùng nhau, nhưng admin thu hồi per-role được — fail-closed ở đây là
+  // thẻ biến mất, không phải người dùng đâm vào tường.
+  //
+  // KHÔNG khai SIDEBAR_REGISTRY.CHAT kèm theo: /chat cố ý không bọc ModuleWorkspaceLayout (trang đã 3 cột),
+  // nên sidebar của module CHAT sẽ là code chết — lối vào trong workspace vẫn là mục ME "Tin nhắn".
+  {
+    appKey: "chat",
+    moduleCode: "CHAT",
+    nameKey: "app.chat",
+    descKey: "appDesc.chat",
+    icon: "messages-square",
+    rootPath: "/chat",
+    defaultRoute: "/chat",
+    category: "collaboration",
+    aliases: ["tin nhan", "chat", "hoi thoai", "nhan tin", "message", "tro chuyen"],
+    requiredPermissions: ["access:chat", "view:chat-room"],
+    status: "active",
+    // order phải tăng dần THEO VỊ TRÍ trong mảng (registry.spec) — xen giữa goals(66) và system(70).
+    order: 67,
+  },
   {
     appKey: "system",
     moduleCode: "FOUNDATION",
