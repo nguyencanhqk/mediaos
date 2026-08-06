@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { apiSend, apiUpload } from "@/lib/client-api";
 import type { MediaFile, PostType } from "@/lib/types";
+import { LibraryPicker } from "./library-picker";
 import { Spinner } from "./ui";
 
 /** O chon file dung chung cho trang Soan bai va trang Thu vien noi dung. */
@@ -36,6 +37,7 @@ export function MediaInput({
   removeMode = "delete",
 }: MediaInputProps) {
   const [uploading, setUploading] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const singleOnly = type === "video" || type === "reel";
 
   const handleUpload = async (files: FileList | null) => {
@@ -73,6 +75,31 @@ export function MediaInput({
         <div className="mt-3">
           <Spinner label="Đang tải file lên…" />
         </div>
+      )}
+
+      {type !== "text" && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-ghost text-sm"
+            onClick={() => setPickerOpen((open) => !open)}
+          >
+            {pickerOpen ? "Ẩn kho video" : "Chọn từ kho video"}
+          </button>
+          {/* Noi ro tran o day, canh chinh o upload — nguoi dung gap loi la gap ngay tai day. */}
+          <span className="hint">
+            File nặng hơn 96 MB phải lấy từ kho video (tải qua trình duyệt sẽ bị chặn).
+          </span>
+        </div>
+      )}
+
+      {pickerOpen && (
+        <LibraryPicker
+          singleOnly={singleOnly}
+          kind={type === "photo" ? "image" : "video"}
+          onPicked={(picked) => onChange(singleOnly ? picked.slice(0, 1) : [...media, ...picked])}
+          onClose={() => setPickerOpen(false)}
+        />
       )}
 
       {media.length > 0 && (

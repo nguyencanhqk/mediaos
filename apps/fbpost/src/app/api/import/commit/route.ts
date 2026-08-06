@@ -25,7 +25,10 @@ const rowSchema = z.object({
 });
 
 const schema = z.object({
-  rows: z.array(rowSchema).min(1, "Không có dòng nào để nhập"),
+  // Tran tren: moi `mediaPaths` la mot lan cham he thong file, va tren o dia mang mot lan cham
+  // co the treo hang chuc giay (dong bo, khoa ca tien trinh). Khong co tran thi mot file CSV du
+  // dai la mot cong tat de ha dich vu.
+  rows: z.array(rowSchema).min(1, "Không có dòng nào để nhập").max(1000, "Tối đa 1000 dòng mỗi lần nhập"),
   /**
    * - library: chi nap vao thu vien noi dung, chua xep lich
    * - schedule: tao luon lich dang len cac Page

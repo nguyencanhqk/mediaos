@@ -11532,4 +11532,138 @@ export const backlog = [
       "bash harness/check.sh --all XANH có bằng chứng LANE_DB",
     ],
   },
+
+  // ─────────────────────────────────────────────────────────────────────────────────────────────
+  // WAVE S10-SOCIAL-MEDIA (seed 06/08/2026) — ĐƯỜNG NẠP VIDEO NẶNG cho app vệ tinh Đăng bài.
+  //
+  // Owner (06/08/2026): "cần đăng video khá nhiều và khá nặng" — upload qua trình duyệt KHÔNG dùng
+  // được cho việc này. Hai trần đã ĐO:
+  //   (1) Next 15.5 `experimental.middlewareClientMaxBodySize` mặc định 10MB. fbpost gác middleware
+  //       trên TOÀN BỘ path (kể cả /api) ⇒ Next đệm body và cắt ở 10MB. Bằng chứng trong
+  //       apps/fbpost/social.err.log 06/08 16:27: "Request body exceeded 10MB for /api/media" +
+  //       "[Error: aborted] ECONNRESET".
+  //   (2) dangfb.funtimemediacorp.com đi qua proxy Cloudflare (đo: Server: cloudflare, CF-RAY
+  //       a26d034d…-HKG) ⇒ trần body 100MB của gói Free/Pro. KHÔNG sửa được bằng code.
+  // ⇒ Hướng chốt: nạp từ THƯ MỤC (share LAN) thay vì đẩy file qua HTTP. Facebook phía sau đã dùng
+  //    chunked upload sẵn (src/lib/fb/videos.ts start/transfer/finish) nên không phải nút thắt.
+  // Owner chốt 06/08: nguồn video ở MÁY KHÁC TRONG LAN (share) · kho dữ liệu chuyển sang ổ D:.
+  // ─────────────────────────────────────────────────────────────────────────────────────────────
+  {
+    id: "S10-SOCIAL-LIB-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Kho video đọc từ thư mục có WHITELIST: SOCIAL_MEDIA_LIBRARY_DIRS + GET /api/library duyệt cây (chặn traversal) + nạp bằng copy/hardlink KHÔNG qua RAM + tab 'Kho video' — vá luôn lỗ đọc-file-tuỳ-ý ở /api/import/commit",
+    zone: "red",
+    status: "in_progress",
+    paths: [
+      "apps/fbpost/src/lib/media-service.ts",
+      "apps/fbpost/src/lib/library/**",
+      "apps/fbpost/src/lib/import/map-rows.ts",
+      "apps/fbpost/src/app/api/library/**",
+      "apps/fbpost/src/app/api/import/commit/route.ts",
+      "apps/fbpost/src/app/library/**",
+      "apps/fbpost/src/components/**",
+      "apps/fbpost/next.config.ts",
+      "docs/plans/S10-SOCIAL-LIB-1.md",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S9-SOCIAL-QA-1"],
+    plan: "docs/plans/S10-SOCIAL-LIB-1.md",
+    src: [
+      "ĐO 06/08/2026 apps/fbpost/social.err.log: 'Request body exceeded 10MB for /api/media' + ECONNRESET — đây là lỗi người dùng gặp, KHÔNG phải Cloudflare 413",
+      "ĐO 06/08/2026: next@15.5.22 node_modules/next/dist/server/config-shared.d.ts:754 — experimental.middlewareClientMaxBodySize, mặc định 10MB, nhận '96mb' hoặc số byte",
+      "ĐO 06/08/2026: curl -D - https://dangfb.funtimemediacorp.com/login → 'Server: cloudflare', 'CF-RAY: a26d034d0aeab6a3-HKG' ⇒ trần 100MB gói Free/Pro, code KHÔNG nới được",
+      "LỖ ĐANG MỞ: /api/import/commit nhận mediaPaths: z.array(z.string()) từ client → resolveMediaIds → importMediaFromPath đọc file BẤT KỲ trên máy chủ (chỉ chặn theo đuôi ảnh/video ở kindFromMime), rồi tải về được qua /api/media/:id/file. Whitelist thư mục bịt lỗ này — làm GỘP, không tách WO",
+      "BẪY RAM: media-service.ts:64 importMediaFromPath dùng fs.readFileSync → nạp CẢ file vào heap Node. Video 2GB sẽ sập. Phải đổi sang fs.copyFileSync (OS copy) — hardlink fs.linkSync chỉ khi CÙNG volume, mà nguồn ở máy khác nên thực tế luôn copy",
+      "BẪY QUYỀN: dịch vụ MediaOS-Social chạy StartName=LocalSystem (đo bằng Win32_Service) — LocalSystem KHÔNG mang danh tính ra mạng, đọc \\\\MAY\\share sẽ bị từ chối. Xử ở S10-SOCIAL-OPS-1, nhưng CODE phải phân biệt được 'không có quyền' với 'không tồn tại' trong thông báo lỗi",
+      "memory: sensitive-capability-allowlist-is-backend — whitelist là việc của BACKEND, UI chỉ hiển thị",
+    ],
+    done_when: [
+      "RED-proof TRƯỚC: test chứng minh /api/import/commit hiện nạp được file NGOÀI whitelist (vd C:\\Windows\\...\\*.jpg), rồi bản vá làm nó 400",
+      "Mọi đường dẫn từ client đều path.resolve rồi assert nằm trong một gốc của SOCIAL_MEDIA_LIBRARY_DIRS — test đủ: '..' · symlink trỏ ra ngoài · UNC lạ · biến thể hoa-thường Windows · tiền tố trùng một phần (D:\\kho-video-khac KHÔNG được coi là trong D:\\kho-video)",
+      "SOCIAL_MEDIA_LIBRARY_DIRS rỗng/không đặt ⇒ /api/library trả rỗng và KHÔNG nạp được gì (fail-closed), không phải mở toang",
+      "Không còn readFileSync trên đường nạp — chứng minh bằng test nạp file lớn với --max-old-space-size thấp mà không sập",
+      "GET /api/library có cổng phiên như mọi route khác (thêm vào ma trận deny-path 401 của S9-SOCIAL-QA-1)",
+      "ĐỔI THIẾT KẾ khi thi công (06/08): KHÔNG làm tab 'Kho video' riêng mà nhúng LibraryPicker THẲNG vào MediaInput — chỗ người dùng đang bị chặn là ô chọn file trong Soạn bài/Nội dung, một tab riêng bắt họ nạp trước rồi quay lại là thêm một bước thừa. Bulk vẫn đi đường CSV sẵn có (cột media giờ cũng qua whitelist)",
+      "Picker duyệt được cây thư mục, tick nhiều file, báo lỗi phân biệt 'không có quyền đọc share' · 'gốc kho cấu hình sai' · 'file không tồn tại' — ba nguyên nhân, ba việc phải làm khác nhau",
+      "next.config.ts đặt middlewareClientMaxBodySize '96mb' (sát dưới trần Cloudflare để lỗi hiện ra bằng tiếng Việt của app thay vì 413 trần trụi)",
+      "FULL gate PASS (security-reviewer + silent-failure-hunter)",
+    ],
+  },
+  {
+    id: "S10-SOCIAL-LIB-2",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Màn 'Kho video': cấu hình thư mục gốc từ giao diện (lưu ở settings, không cần restart) + duyệt kho + tạo nội dung hàng loạt — cổng GHI theo SOCIAL_ADMIN_EMAILS",
+    zone: "red",
+    status: "in_progress",
+    paths: [
+      "apps/fbpost/src/lib/library/**",
+      "apps/fbpost/src/lib/auth/admin.ts",
+      "apps/fbpost/src/lib/auth/current-user.ts",
+      "apps/fbpost/src/app/api/library/**",
+      "apps/fbpost/src/app/library/**",
+      "apps/fbpost/src/components/**",
+      "docs/plans/S10-SOCIAL-LIB-2.md",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S10-SOCIAL-LIB-1"],
+    plan: "docs/plans/S10-SOCIAL-LIB-2.md",
+    src: [
+      "Owner yêu cầu 06/08: 'cần một giao diện có thể cấu hình kho và đọc kho' — trước đó chỉ sửa được bằng env + restart dịch vụ",
+      "RỦI RO GỐC: fbpost KHÔNG có vai trò trong app (phiên là nhị phân — memory s9-social-fbpost-wave). Cho mọi phiên thêm thư mục gốc = tự cấp quyền đọc file bất kỳ trên máy chủ, tức phá đúng thứ whitelist S10-SOCIAL-LIB-1 vừa dựng lên",
+      "CHỐT: tách ĐỌC (mọi phiên) khỏi GHI (email trong SOCIAL_ADMIN_EMAILS). Email lấy từ SessionPayload do MediaOS ký HMAC — client không tự khai được. Không đặt biến = KHÔNG AI ghi được (fail-closed), kho vẫn chạy bằng SOCIAL_MEDIA_LIBRARY_DIRS",
+      "ĐO 06/08: 5 user mở được app = 2 company-admin + 3 SEO ⇒ seed SOCIAL_ADMIN_EMAILS = 2 company-admin",
+      "Khoá gốc đổi từ CHỈ SỐ sang CHUỖI ổn định (env:0 / cfg:3): xoá một gốc làm mọi chỉ số sau nó xê dịch, tab đang mở sẽ đọc nhầm kho khác mà không ai biết",
+      "memory: sensitive-capability-allowlist-is-backend — cổng ở BACKEND, giao diện chỉ ẩn/hiện nút",
+    ],
+    done_when: [
+      "Cổng ghi RED-proof: POST/DELETE /api/library/roots trả 403 với email ngoài danh sách, và trả 403 khi KHÔNG đặt SOCIAL_ADMIN_EMAILS (fail-closed) — không phải chỉ ẩn nút ở giao diện",
+      "id gốc KHÔNG bao giờ dùng lại sau khi xoá (bộ đếm seq lưu bền) — bài test đã bắt được đúng lỗi này ở bản đầu: max(id)+1 cấp lại id vừa xoá",
+      "Thêm gốc mà đọc không được thì KHÔNG lưu — danh sách không chứa mục hỏng",
+      "Trạng thái từng gốc tách ba: ok · denied (thiếu quyền, việc vận hành) · missing (sai đường dẫn, việc cấu hình) — mỗi loại kèm câu hướng dẫn khác nhau",
+      "Ô nhập đường dẫn hướng dẫn dùng GẠCH XUÔI cho ổ mạng (dấu \\ bị nuốt một cái ⇒ âm thầm trỏ sang ổ C: máy chủ — đã dính thật khi seed .env)",
+      "FULL gate PASS (security-reviewer + silent-failure-hunter) — CHƯA CHẠY, phiên bị cấm tự gọi agent",
+      "NỢ KỸ THUẬT ghi rõ: đúng bài là phiên SSO mang capability từ MediaOS để dùng cặp manage:social-account (đã seed, is_sensitive=true, hiện KHÔNG ai đọc). Danh sách email chỉ là giải pháp tạm đúng mức",
+      "Owner nhập ĐƯỢC tài khoản ổ chia sẻ từ giao diện — dịch vụ tự đăng nhập SMB, KHÔNG phải tạo tài khoản Windows trùng tên/mật khẩu trên hai máy",
+      "Mật khẩu ổ chia sẻ mã hoá bằng secret-box (AES-256-GCM dưới KEK, AAD neo vào libraryRoot:<id>) — test đọc THÔ bảng settings chứng minh không nằm trần, và KHÔNG có đường nào trả nó ra response",
+      "Mật khẩu KHÔNG nằm trên dòng lệnh: dùng `net use <share> * /user:<tên>` rồi ghi mật khẩu vào stdin — ĐO ĐƯỢC là net đọc stdin thật (không treo). Truyền thẳng làm tham số thì bất kỳ ai xem được danh sách tiến trình đều đọc được",
+    ],
+  },
+  {
+    id: "S10-SOCIAL-OPS-1",
+    module: "SOCIAL",
+    layer: "DEVOPS",
+    title:
+      "Đưa kho sang ổ D: (SOCIAL_DATA_DIR) + đổi dịch vụ MediaOS-Social từ LocalSystem sang tài khoản Windows có quyền trên share LAN + sao lưu data/ và .secrets/ TÁCH nhau",
+    zone: "red",
+    status: "todo",
+    paths: [
+      ".env",
+      "scripts/windows/**",
+      "docs/DEVOPS/DEVOPS-14_Social_Satellite_App_Deployment.md",
+      "docs/plans/S10-SOCIAL-OPS-1.md",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S10-SOCIAL-LIB-1"],
+    plan: "docs/plans/S10-SOCIAL-OPS-1.md",
+    src: [
+      "ĐO 06/08/2026: Win32_LogicalDisk — C: còn 410.8GB/930.6GB · D: còn 1407.1GB/11176GB. Video nặng phải nằm ở D:",
+      "ĐO 06/08/2026: SOCIAL_DATA_DIR CHƯA đặt trong .env gốc ⇒ paths.ts rơi về process.cwd()/data trên ổ C:",
+      "ĐO 06/08/2026: kho còn gần trống (data/uploads = 0 byte, fbpost.db 4KB) — chuyển BÂY GIỜ là rẻ nhất, để lâu thì phải dời hàng trăm GB",
+      "ĐO 06/08/2026: Win32_Service MediaOS-Social StartName=LocalSystem — phải đổi bằng nssm set MediaOS-Social ObjectName <account> <password>",
+      "memory: s9-social-fbpost-wave — env của API nằm ở .env GỐC REPO, KHÔNG phải apps/api/.env (AppDirectory của NSSM = gốc repo)",
+      "memory: prod-restart-does-not-rebuild-dist — restart KHÔNG build lại; đổi next.config.ts phải next build rồi mới restart",
+      "memory: powershell-native-stdout-poisons-return — CẤM 2>&1 trên native exe trong PS tool",
+    ],
+    done_when: [
+      "SOCIAL_DATA_DIR trỏ ổ D:, dịch vụ khởi động lại và ĐỌC ĐÚNG kho mới — chứng minh bằng việc thêm 1 media rồi thấy file xuất hiện dưới D:, KHÔNG phải chỉ đọc log",
+      "Tài khoản dịch vụ đọc được share LAN — chứng minh bằng lệnh chạy DƯỚI CHÍNH tài khoản đó (không phải test bằng phiên đăng nhập của owner, sẽ đỏ oan/xanh oan)",
+      "Mật khẩu tài khoản dịch vụ KHÔNG vào git, KHÔNG vào log (BẤT BIẾN #3)",
+      "DEVOPS-14 thêm mục: đường nạp video nặng, trần 100MB của Cloudflare, và vì sao KHÔNG dùng LocalSystem",
+      "Sao lưu định kỳ data/ (ổ D:) và .secrets/ (KEK) TÁCH nhau — ghi đè KEK = mọi token FB thành rác vĩnh viễn",
+    ],
+  },
 ];

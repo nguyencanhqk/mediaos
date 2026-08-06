@@ -43,7 +43,10 @@ describe("cong phien", () => {
       (r) => r !== "/api/auth/sso",
     );
     // Neu con so nay tut xuong bat ngo thi bai test dang quet nham cho — bao dong som.
-    expect(routes.length).toBeGreaterThanOrEqual(20);
+    // Nang 20 → 24 khi them /api/library, /api/library/import, /api/library/roots
+    // (S10-SOCIAL-LIB-1/2): nguong phai di theo so route THAT, khong thi mot ngay nao do nua so
+    // route bien mat ma bai van xanh. Hien co 25 route, tru /api/auth/sso da loc ra = 24.
+    expect(routes.length).toBeGreaterThanOrEqual(24);
 
     const lotQua: string[] = [];
     for (const route of routes) {
