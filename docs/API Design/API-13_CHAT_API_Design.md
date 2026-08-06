@@ -283,15 +283,16 @@ Namespace `/ws` (Socket.IO), auth ở handshake bằng access token — hạ t�
 | `chat:message` | server → client | `ChatMessageDto` (cùng DTO REST) | `co:{companyId}:chatroom:{roomId}` |
 | `chat:message-recalled` | server → client | `{ messageId, roomId, recalledAt }` | như trên |
 | `chat:read` | server → client | `{ roomId, userId, lastReadSeq }` | như trên |
-| `chat:room` | server → client | `{ roomId, action, room? }` | như trên + `co:{companyId}:user:{userId}` của người bị ảnh hưởng |
+| `chat:room` | server → client | `{ roomId, action, room? }` | như trên + `co:{companyId}:chatuser:{userId}` của người bị ảnh hưởng |
 | `chat:reaction` *(S8)* | server → client | `{ messageId, roomId, emoji, count, actorUserId }` | `co:{companyId}:chatroom:{roomId}` |
 | `chat:typing` *(S8)* | server → client | `{ roomId, userId }` — **không** nội dung đang gõ | như trên |
-| `chat:presence` *(S8)* | server → client | `{ userId, status }` | `co:{companyId}:user:{userId}` của những người có chung phòng `direct` |
+| `chat:presence` *(S8)* | server → client | `{ userId, status }` | `co:{companyId}:chatuser:{userId}` của những người có chung phòng `direct` |
 
 Ràng buộc:
 
 - **Không có `@SubscribeMessage` nào** — client không ghi gì qua WS (CHAT-DEC-005). Gửi tin đi REST (CHAT-API-010).
 - *(S8)* **Ba sự kiện mới KHÔNG mở kênh client→server.** `chat:typing` do **REST** `CHAT-API-023` kích hoạt; `chat:presence` do **vòng đời kết nối** (`handleConnection`/`handleDisconnect`) kích hoạt. Ratchet `chat-realtime-structure.spec.ts` (0 `@SubscribeMessage` toàn `apps/api/src`) **phải vẫn xanh** sau wave S8 — xem CHAT-DEC-017.
+- *(S8)* ⚠️ **Đích của `chat:room`/`chat:presence` là `chatuser`, KHÔNG phải `user`** — sửa 06/08/2026 (S8-CHAT-UX-RT-1) cho doc khớp code đã qua FULL gate S7. Room `co:{co}:user:{uid}` chứa **mọi** socket đã xác thực (đích của `notification:new`), kể cả của người đã bị **thu hồi** cặp `view:chat-room`; bắn sự kiện CHAT vào đó là đi vòng qua cổng quyền WS — cổng chỉ chạy một lần lúc `handleConnection`. Room `co:{co}:chatuser:{uid}` chỉ nhận socket **đã qua** cổng đó (`apps/api/src/realtime/rooms.ts`).
 - *(S8)* **Khoá presence trên Valkey BẮT BUỘC mang tiền tố môi trường.** Valkey dùng chung cho cả 4 môi trường và **không** có tiền tố kênh sẵn; thiếu prefix thì người đang mở dev-online hiện "đang online" với người dùng PROD. Khoá phải có **TTL** — ngắt kết nối bẩn (kill process) không được để lại trạng thái online vĩnh viễn, vì `handleDisconnect` không đảm bảo chạy.
 - Socket **join tất cả phòng của user ngay tại kết nối**, danh sách đọc từ DB phía server; **không** nhận danh sách phòng từ client.
 - Membership đổi → server buộc socket `join`/`leave` ngay, không đợi kết nối lại.

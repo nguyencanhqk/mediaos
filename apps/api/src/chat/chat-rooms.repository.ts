@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { chatRoomMembers, chatRooms } from "../db/schema/communication";
@@ -253,6 +254,54 @@ export class ChatRoomsRepository {
       .orderBy(sql`${chatRooms.lastMessageAt} desc nulls last`, desc(chatRooms.createdAt));
 
     return rows.map((r) => ({ ...r, roomType: r.roomType as ChatRoomType }));
+  }
+
+  /**
+   * S8-CHAT-UX-RT-1 — id những người có chung **ít nhất một phòng `direct`** đang hoạt động với `userId`.
+   *
+   * Đây là tập người nhận `chat:presence` (API-13 §7). Phạm vi hẹp có chủ đích: presence là dữ liệu hiện
+   * diện của một con người, chỉ những người đã có kênh 1-1 với họ mới thấy — KHÔNG fan-out ra mọi phòng
+   * nhóm (một phòng phòng-ban vài trăm người sẽ biến presence thành bảng chấm công thời gian thực mà
+   * SPEC-15 không cấp phép, và CHAT-FUNC-021 chỉ vẽ nó ở phòng `direct` + danh sách thành viên).
+   *
+   * `company_id` khớp ở CẢ BA vế (`chat_rooms` · membership của actor · membership của peer) — thiếu vế
+   * nào là mở đường ghép thành viên tenant khác qua một `room_id` đoán được (memory
+   * `new-fk-column-needs-composite-tenant-fk`). RLS vẫn là hàng rào cuối, nhưng vị từ ở đây phải tự đúng.
+   *
+   * Lọc `left_at IS NULL` ở CẢ HAI vế: người đã rời DM không còn được nhận trạng thái của người kia nữa.
+   */
+  async listDirectPeerUserIds(tx: TenantTx, companyId: string, userId: string): Promise<string[]> {
+    const peer = alias(chatRoomMembers, "peer_member");
+    const rows = await tx
+      .selectDistinct({ userId: peer.userId })
+      .from(chatRooms)
+      .innerJoin(
+        chatRoomMembers,
+        and(
+          eq(chatRoomMembers.roomId, chatRooms.id),
+          eq(chatRoomMembers.companyId, chatRooms.companyId),
+          eq(chatRoomMembers.userId, userId),
+          isNull(chatRoomMembers.leftAt),
+        ),
+      )
+      .innerJoin(
+        peer,
+        and(
+          eq(peer.roomId, chatRooms.id),
+          eq(peer.companyId, chatRooms.companyId),
+          isNull(peer.leftAt),
+          ne(peer.userId, userId),
+        ),
+      )
+      .where(
+        and(
+          eq(chatRooms.companyId, companyId),
+          isNull(chatRooms.deletedAt),
+          eq(chatRooms.roomType, "direct"),
+        ),
+      );
+
+    return rows.map((r) => r.userId);
   }
 
   /** Phòng theo id — KHÔNG lọc membership. CHỈ dùng sau khi `assertMember` đã chạy, hoặc cho dedup DM. */

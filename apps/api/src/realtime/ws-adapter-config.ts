@@ -49,21 +49,40 @@ function databaseNameOf(url: string | undefined): string | undefined {
 }
 
 /**
+ * **Danh tính môi trường** dùng cho MỌI không gian khoá trên Valkey dùng chung.
+ *
+ * ══ VÌ SAO PHẢI CÓ ══
+ * Cả bốn môi trường của dự án (`.env` PROD · `.env.dev` · `.env.dev-online` · `apps/api/.env` test-only)
+ * đều trỏ **CÙNG MỘT** Valkey `redis://localhost:6379`, và Valkey **không** có tiền tố kênh sẵn. Bất kỳ
+ * khoá nào không mang danh tính môi trường sẽ bị hai môi trường cùng đọc-ghi: tiến trình test trên máy dev
+ * phát/nhận đúng kênh PROD đang dùng, hoặc người đang mở dev-online hiện "đang online" với người dùng PROD.
+ *
+ * Phạm vi = `{NODE_ENV}:{db}` — hai tiến trình chỉ chung không gian khoá khi chúng phục vụ CÙNG một cơ sở
+ * dữ liệu ở CÙNG một chế độ chạy. Đo thật 06/08/2026:
+ *   PROD `production:mediaos` · dev-online `development:mediaos_dev` · dev local `development:mediaos`
+ *   · lane test `test:mediaos_<lane>` — bốn giá trị PHÂN BIỆT từng đôi một.
+ * `LANE_DB` thắng khi có, vì đó chính là DB mà tiến trình test đang phục vụ (`apps/api/vitest.config.ts`).
+ *
+ * ⚠️ Một phép suy DUY NHẤT cho cả kênh Socket.IO lẫn khoá presence (`ChatPresenceService`, S8-CHAT-UX-RT-1).
+ * Viết phép thứ hai là mở cửa cho hai không gian khoá lệch nhau rồi trôi mà không ai đo được.
+ */
+export function resolveEnvScope(
+  env: { NODE_ENV: string; DATABASE_URL?: string },
+  laneDb?: string,
+): string {
+  const db = laneDb?.trim() || databaseNameOf(env.DATABASE_URL) || "nodb";
+  return `${env.NODE_ENV}:${db}`;
+}
+
+/**
  * Tiền tố kênh pub/sub Valkey cho `@socket.io/redis-adapter`.
  *
- * BẮT BUỘC phải truyền: `createAdapter(pub, sub)` không kèm `opts.key` dùng mặc định `"socket.io"`, mà
- * CẢ BỐN môi trường của dự án (`.env`, `.env.dev`, `.env.prod`, `apps/api/.env` test-only) đều trỏ CÙNG
- * MỘT Valkey `redis://localhost:6379`. Không tiền tố ⇒ int-spec chạy trên máy dev phát/nhận trên ĐÚNG
- * kênh mà PROD đang dùng, tức là nối thẳng tiến trình test vào cụm Socket.IO PROD.
- *
- * Khoá = `socket.io:{NODE_ENV}:{db}` — hai tiến trình chỉ chung kênh broadcast khi chúng phục vụ CÙNG một
- * cơ sở dữ liệu ở CÙNG một chế độ chạy. `LANE_DB` thắng khi có, vì đó chính là DB mà tiến trình test đang
- * phục vụ (`apps/api/vitest.config.ts`).
+ * BẮT BUỘC phải truyền: `createAdapter(pub, sub)` không kèm `opts.key` dùng mặc định `"socket.io"` —
+ * xem `resolveEnvScope` cho lý do đầy đủ.
  */
 export function resolveValkeyChannelKey(
   env: { NODE_ENV: string; DATABASE_URL?: string },
   laneDb?: string,
 ): string {
-  const db = laneDb?.trim() || databaseNameOf(env.DATABASE_URL) || "nodb";
-  return `socket.io:${env.NODE_ENV}:${db}`;
+  return `socket.io:${resolveEnvScope(env, laneDb)}`;
 }

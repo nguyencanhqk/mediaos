@@ -11154,9 +11154,26 @@ export const backlog = [
       "apps/api/src/realtime/realtime.gateway.ts",
       "apps/api/src/realtime/realtime-emitter.service.ts",
       "apps/api/src/realtime/chat-presence.service.ts",
+      "apps/api/src/realtime/realtime.module.ts",
+      // `resolveEnvScope` rút ra từ đây để khoá presence và kênh Socket.IO dùng CHUNG một phép suy
+      // danh tính môi trường — hai phép suy song song sẽ trôi.
+      "apps/api/src/realtime/ws-adapter-config.ts",
       "apps/api/src/realtime/**/*.spec.ts",
       "apps/api/src/chat/chat-rooms.controller.ts",
-      "packages/contracts/src/chat.ts",
+      "apps/api/src/chat/chat-typing.service.ts",
+      "apps/api/src/chat/chat-rooms.repository.ts",
+      "apps/api/src/chat/chat.module.ts",
+      "apps/api/src/chat/**/*.spec.ts",
+      // Primitive SET (SADD/SREM/SCARD) cho presence — ValkeyService chỉ có get/set/setNx/incr/del.
+      "apps/api/src/permission/valkey.service.ts",
+      "apps/api/test/integration/chat-s8-rt1-typing.int-spec.ts",
+      // Thêm route ⇒ census PHẢI regen, nếu không `route-guard-coverage` ĐỎ (ROUTE_CENSUS_WRITE=1).
+      "docs/_review/S6-SEC-ROUTEMAP-1-route-census.json",
+      // WS_EVENTS + schema WS sống ở realtime.ts, KHÔNG ở chat.ts (seed WO ghi nhầm file).
+      "packages/contracts/src/realtime.ts",
+      // §7 ghi đích `chat:room`/`chat:presence` là `user`, trong khi code (qua FULL gate S7) dùng
+      // `chatuser` — sửa doc theo code trong WO này.
+      "docs/API Design/API-13_CHAT_API_Design.md",
       "docs/plans/S8-CHAT-UX-RT-1.md",
     ],
     skills: ["code-review", "security-review"],

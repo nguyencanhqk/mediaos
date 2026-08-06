@@ -21,7 +21,15 @@ export const WS_NAMESPACE = "ws";
  * CLEAN-DECOUPLE-1 nhưng **0 nơi dùng**, và mâu thuẫn trực tiếp với CHAT-DEC-005. Thêm lại một key
  * client→server ở đây là mở lại đúng bề mặt đã đóng: tham số do client kiểm soát quyết định server làm
  * gì, trong khi mô hình hiện tại là server tự tra DB.
- * Typing indicator / presence online-offline: SPEC-15 chốt "đo nhu cầu thật SAU v1".
+ *
+ * ══ S8-CHAT-UX-RT-1 — typing/presence QUAY LẠI, nhưng CHỈ chiều server→client ══
+ * Ghi chú cũ ở đây ("SPEC-15 chốt đo nhu cầu thật SAU v1") đã bị **CHAT-DEC-017 đảo** ngày 05/08/2026:
+ * hai tính năng vào phạm vi, `API-13 §4.2` gạch dòng ngoài-phạm-vi tương ứng. Điều **không** đổi là
+ * chiều: `chat:typing` do **REST** `CHAT-API-023` (`POST /chat/rooms/:id/typing`) kích hoạt, `chat:presence`
+ * do **vòng đời kết nối** (`handleConnection`/`handleDisconnect`) kích hoạt. Cả hai vẫn là server → client,
+ * nên ratchet 0 `@SubscribeMessage` (`chat-realtime-structure.spec.ts`) giữ nguyên hiệu lực.
+ * ⇒ Hai key dưới đây KHÔNG phải cửa cho client gửi lên. Đặt một handler inbound cho chúng là phá
+ * CHAT-DEC-005 lẫn hàng rào R1 của DECISIONS-07.
  */
 export const WS_EVENTS = {
   // server → client — CHỈ một chiều này tồn tại.
@@ -29,6 +37,10 @@ export const WS_EVENTS = {
   CHAT_MESSAGE_RECALLED: "chat:message-recalled",
   CHAT_READ: "chat:read",
   CHAT_ROOM: "chat:room",
+  // S8-CHAT-UX-RT-1 (additive) — xem khối ⚠️ ở trên: kích hoạt bởi REST / vòng đời kết nối, KHÔNG phải
+  // bởi event từ client.
+  CHAT_TYPING: "chat:typing",
+  CHAT_PRESENCE: "chat:presence",
   NOTIFICATION_NEW: "notification:new",
   // S4-NOTI-BE-1 (additive): phát sau mark-read/mark-all-read/xoá mềm — payload CHỈ unread_count (không
   // row) để DASH/header badge invalidate mà không rò nội dung thông báo qua kênh phụ.
@@ -133,6 +145,43 @@ export const wsChatRoomEventSchema = z.object({
   room: chatRoomSchema.omit({ unreadCount: true }).optional(),
 });
 export type WsChatRoomEvent = z.infer<typeof wsChatRoomEventSchema>;
+
+/**
+ * chat:typing (S8 · API-13 §7 · CHAT-DEC-017) — ĐÚNG hai khoá.
+ *
+ * ⚠️ **KHÔNG có `body`/`preview`/`text` và không được thêm.** "Đang gõ" là tín hiệu hiện diện, không phải
+ * kênh xem trước nội dung; một khoá nội dung ở đây đẩy bản nháp chưa gửi tới cả phòng — kể cả đoạn người
+ * dùng gõ rồi xoá đi và không bao giờ gửi. Đó là dữ liệu chưa từng qua bất kỳ kiểm duyệt/audit nào.
+ *
+ * ⚠️ **KHÔNG có `isTyping`/`state`.** Server không giữ trạng thái gõ và không phát sự kiện "ngừng gõ":
+ * chỉ báo tự tắt ở FE sau 5 s (CHAT-DEC-017). Thêm cờ vào đây là mời một máy trạng thái phân tán mà không
+ * ai đóng được — sự kiện "stop" mất là chỉ báo kẹt vĩnh viễn.
+ */
+export const wsChatTypingEventSchema = z.object({
+  roomId: z.string().uuid(),
+  userId: z.string().uuid(),
+});
+export type WsChatTypingEvent = z.infer<typeof wsChatTypingEventSchema>;
+
+export const wsChatPresenceStatusSchema = z.enum(["online", "offline"]);
+export type WsChatPresenceStatus = z.infer<typeof wsChatPresenceStatusSchema>;
+
+/**
+ * chat:presence (S8 · API-13 §7 · CHAT-FUNC-021) — ĐÚNG hai khoá.
+ *
+ * Chỉ `online`/`offline`. **KHÔNG** `lastSeenAt`, **KHÔNG** `deviceCount`, **KHÔNG** `idle`:
+ *  - `lastSeenAt` biến presence thành **nhật ký hoạt động** của nhân viên — dữ liệu giám sát mà SPEC-15
+ *    chưa cấp phép và không có cặp quyền nào gác;
+ *  - `deviceCount` rò số thiết bị/tab của người khác, không phục vụ màn hình nào trong CHAT-SCREEN-*.
+ *
+ * Sự kiện phát tới `chatUserRoomName` của những người có chung phòng `direct` — **không** phải
+ * `userRoomName` (xem `rooms.ts`: room đó chứa cả socket đã bị thu hồi cặp `view:chat-room`).
+ */
+export const wsChatPresenceEventSchema = z.object({
+  userId: z.string().uuid(),
+  status: wsChatPresenceStatusSchema,
+});
+export type WsChatPresenceEvent = z.infer<typeof wsChatPresenceEventSchema>;
 
 /** notification:new — đúng DTO REST (notificationSchema). */
 export const wsNotificationEventSchema = notificationSchema;

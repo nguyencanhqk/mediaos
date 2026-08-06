@@ -1,6 +1,6 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import Redis from 'ioredis';
-import { loadEnv } from '../config/env.schema';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import Redis from "ioredis";
+import { loadEnv } from "../config/env.schema";
 
 /**
  * ValkeyService — thin wrapper around ioredis for Valkey/Redis.
@@ -17,7 +17,9 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     const env = loadEnv();
     if (!env.VALKEY_URL) {
-      this.logger.warn('VALKEY_URL not configured — Valkey cache disabled, all reads fallback to DB');
+      this.logger.warn(
+        "VALKEY_URL not configured — Valkey cache disabled, all reads fallback to DB",
+      );
       return;
     }
     this.client = new Redis(env.VALKEY_URL, {
@@ -25,8 +27,8 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
       enableOfflineQueue: false,
       maxRetriesPerRequest: 1,
     });
-    this.client.on('error', (err: Error) => {
-      this.logger.warn('Valkey connection error', { message: err.message });
+    this.client.on("error", (err: Error) => {
+      this.logger.warn("Valkey connection error", { message: err.message });
     });
   }
 
@@ -58,7 +60,7 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
       if (n === 1) await this.client.expire(key, ttlSec);
       return n;
     } catch (err) {
-      this.logger.warn('Valkey INCR error', { key, error: (err as Error).message });
+      this.logger.warn("Valkey INCR error", { key, error: (err as Error).message });
       return null;
     }
   }
@@ -69,7 +71,7 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
     try {
       return await this.client.get(key);
     } catch (err) {
-      this.logger.warn('Valkey GET error', { key, error: (err as Error).message });
+      this.logger.warn("Valkey GET error", { key, error: (err as Error).message });
       return null;
     }
   }
@@ -82,10 +84,10 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
   async set(key: string, value: string, ttlSec: number): Promise<boolean> {
     if (!this.client) return true;
     try {
-      await this.client.set(key, value, 'EX', ttlSec);
+      await this.client.set(key, value, "EX", ttlSec);
       return true;
     } catch (err) {
-      this.logger.warn('Valkey SET error', { key, error: (err as Error).message });
+      this.logger.warn("Valkey SET error", { key, error: (err as Error).message });
       return false;
     }
   }
@@ -111,6 +113,71 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * S8-CHAT-UX-RT-1 — SADD + EXPIRE + SCARD **trong một pipeline**, trả SỐ PHẦN TỬ SAU khi thêm.
+   *
+   * Dùng cho presence: một user có nhiều socket (nhiều tab/thiết bị), nên trạng thái online là "tập hợp
+   * socket còn sống KHÁC RỖNG", không phải một cờ boolean. Trả `1` nghĩa là caller vừa gây chuyển
+   * offline→online; giá trị >1 nghĩa là user đã online từ trước.
+   *
+   * ⚠️ Ba lệnh phải đi CÙNG một pipeline: tách ra thì hai socket nối đồng thời có thể **cùng** đọc
+   * `SCARD === 1` và phát hai sự kiện "online", hoặc `EXPIRE` chạy sau một `DEL` xen giữa và dựng lại một
+   * khoá KHÔNG có TTL — khoá presence vĩnh viễn là đúng thứ TTL sinh ra để chặn.
+   *
+   * `EXPIRE` đặt lại hạn ở MỖI lần gọi ⇒ nhịp tim chỉ cần gọi lại hàm này (idempotent với cùng member).
+   * Trả `null` khi Valkey chưa cấu hình / lỗi — caller coi như presence không khả dụng và KHÔNG phát sự
+   * kiện (thà không biết còn hơn nói sai). Never throws.
+   */
+  async sAddWithTtl(key: string, member: string, ttlSec: number): Promise<number | null> {
+    if (!this.client) return null;
+    try {
+      const res = await this.client
+        .pipeline()
+        .sadd(key, member)
+        .expire(key, ttlSec)
+        .scard(key)
+        .exec();
+      // ioredis: exec() → [[err, val], …] theo thứ tự lệnh; null khi pipeline bị huỷ.
+      const scard = res?.[2];
+      if (!scard || scard[0]) return null;
+      return typeof scard[1] === "number" ? scard[1] : null;
+    } catch (err) {
+      this.logger.warn("Valkey SADD pipeline error", { key, error: (err as Error).message });
+      return null;
+    }
+  }
+
+  /**
+   * S8-CHAT-UX-RT-1 — SREM + SCARD trong một pipeline, trả SỐ PHẦN TỬ CÒN LẠI.
+   *
+   * Trả `0` nghĩa là caller vừa gỡ socket CUỐI CÙNG ⇒ chuyển online→offline. Cùng lý do pipeline như
+   * `sAddWithTtl`: tách ra thì hai socket đóng đồng thời có thể cùng đọc `0` và phát hai sự kiện "offline".
+   * Trả `null` khi Valkey chưa cấu hình / lỗi. Never throws.
+   */
+  async sRemCount(key: string, member: string): Promise<number | null> {
+    if (!this.client) return null;
+    try {
+      const res = await this.client.pipeline().srem(key, member).scard(key).exec();
+      const scard = res?.[1];
+      if (!scard || scard[0]) return null;
+      return typeof scard[1] === "number" ? scard[1] : null;
+    } catch (err) {
+      this.logger.warn("Valkey SREM pipeline error", { key, error: (err as Error).message });
+      return null;
+    }
+  }
+
+  /** S8-CHAT-UX-RT-1 — số phần tử của SET (0 khi khoá vắng). `null` khi Valkey tắt/lỗi. Never throws. */
+  async sCard(key: string): Promise<number | null> {
+    if (!this.client) return null;
+    try {
+      return await this.client.scard(key);
+    } catch (err) {
+      this.logger.warn("Valkey SCARD error", { key, error: (err as Error).message });
+      return null;
+    }
+  }
+
+  /**
    * Returns true when the DEL succeeds or Valkey is not configured.
    * Returns false on error (caller can decide whether to retry or surface the failure).
    * Never throws.
@@ -121,7 +188,10 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
       if (keys.length > 0) await this.client.del(...keys);
       return true;
     } catch (err) {
-      this.logger.warn('Valkey DEL error', { keys, error: err instanceof Error ? err.message : String(err) });
+      this.logger.warn("Valkey DEL error", {
+        keys,
+        error: err instanceof Error ? err.message : String(err),
+      });
       return false;
     }
   }

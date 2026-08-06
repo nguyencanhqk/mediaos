@@ -19,6 +19,7 @@ import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import { ChatMembersService } from "./chat-members.service";
 import { ChatRoomsService } from "./chat-rooms.service";
+import { ChatTypingService } from "./chat-typing.service";
 import {
   AddChatMemberDto,
   CreateChatRoomDto,
@@ -59,6 +60,8 @@ export class ChatRoomsController {
   constructor(
     private readonly rooms: ChatRoomsService,
     private readonly members: ChatMembersService,
+    // S8-CHAT-UX-RT-1 (additive) — CHAT-API-023.
+    private readonly typingService: ChatTypingService,
   ) {}
 
   /** GET /chat/rooms — CHAT-API-001. Tự-bound theo actor; 1 truy vấn, unread bằng phép trừ. */
@@ -131,6 +134,23 @@ export class ChatRoomsController {
   @RequirePermission("view", "chat-room")
   leaveRoom(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.rooms.leaveRoom(req.user, id);
+  }
+
+  /**
+   * POST /chat/rooms/:id/typing — CHAT-API-023 (S8 · CHAT-DEC-017). Báo "đang gõ" → fan-out `chat:typing`.
+   *
+   * `204` cho MỌI nhánh thành công, kể cả khi bị tiết lưu hoặc phòng đã lưu trữ (không emit): client không
+   * có gì để xử lý khác đi giữa các nhánh đó.
+   *
+   * Cặp `('send','chat-message')` — KHÔNG phải `('view','chat-room')`: "đang gõ" là lời hứa sắp GỬI. Ai
+   * chỉ có quyền đọc mà báo được đang gõ thì màn hình hiện một tin nhắn sẽ không bao giờ tới.
+   */
+  @Post("rooms/:id/typing")
+  @HttpCode(204)
+  @UseGuards(PermissionGuard)
+  @RequirePermission("send", "chat-message")
+  typing(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
+    return this.typingService.ping(req.user, id);
   }
 
   /** GET /chat/rooms/:id/members — CHAT-API-007a. */

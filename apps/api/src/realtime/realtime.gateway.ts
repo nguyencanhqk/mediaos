@@ -1,4 +1,4 @@
-import { Logger } from "@nestjs/common";
+import { Logger, type OnModuleDestroy } from "@nestjs/common";
 import {
   type OnGatewayConnection,
   type OnGatewayDisconnect,
@@ -14,6 +14,7 @@ import { DatabaseService } from "../db/db.service";
 import { PermissionService } from "../permission/permission.service";
 import { ChatRoomsRepository } from "../chat/chat-rooms.repository";
 import { RealtimeEmitterService } from "./realtime-emitter.service";
+import { ChatPresenceService, PRESENCE_HEARTBEAT_MS } from "./chat-presence.service";
 import { chatRoomName, chatUserRoomName, userRoomName } from "./rooms";
 
 /** Cặp quyền đường ĐỌC của CHAT — CÙNG cặp mà `chat-rooms.controller.ts` bắt buộc cho mọi route đọc. */
@@ -47,9 +48,12 @@ function getUser(client: Socket): SocketUser | undefined {
  *  - Emit server→client luôn qua DTO `.parse()` (RealtimeEmitterService) — masking như REST.
  */
 @WebSocketGateway({ namespace: WS_NAMESPACE })
-export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+export class RealtimeGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy
+{
   private readonly logger = new Logger(RealtimeGateway.name);
   private readonly enabled = loadEnv().REALTIME_ENABLED === "true";
+  private heartbeat: ReturnType<typeof setInterval> | null = null;
 
   @WebSocketServer()
   private server!: Server;
@@ -61,6 +65,8 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     private readonly permissions: PermissionService,
     private readonly chatRooms: ChatRoomsRepository,
     private readonly db: DatabaseService,
+    // ── S8-CHAT-UX-RT-1 (additive) ── "đang online" theo vòng đời kết nối (CHAT-DEC-017).
+    private readonly presence: ChatPresenceService,
   ) {}
 
   afterInit(server: Server): void {
@@ -92,6 +98,16 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       }
     });
     this.emitter.setServer(server);
+
+    // S8-CHAT-UX-RT-1 — nhịp tim presence. Chỉ khởi động khi realtime BẬT (nhánh trên đã `return`), nên
+    // các test dựng gateway trực tiếp mà không gọi `afterInit` sẽ không có timer nào để rò.
+    // `.unref()`: một interval "sống" giữ tiến trình Node không thoát được — với suite vitest thì đó là
+    // treo lúc teardown, với worker/CLI thì đó là process không bao giờ kết thúc.
+    this.heartbeat = setInterval(() => {
+      void this.presence.refreshLocal();
+    }, PRESENCE_HEARTBEAT_MS);
+    this.heartbeat.unref?.();
+
     this.logger.log(`Realtime gateway sẵn sàng (namespace /${WS_NAMESPACE})`);
   }
 
@@ -144,6 +160,20 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       // nhắm vào room này, nên socket trượt cổng ở trên không bao giờ bị kéo vào phòng chat về sau.
       await client.join(chatUserRoomName(user.companyId, user.id));
 
+      // ── (A2) Presence — S8-CHAT-UX-RT-1 ──────────────────────────────────────────
+      // ĐẶT SAU cổng quyền (A) có chủ đích: người trượt cặp `view:chat-room` không xuất hiện trong
+      // presence của bất kỳ ai — cổng quyền CHAT phủ cả kênh này, không riêng kênh tin nhắn.
+      //
+      // ⚠️ `.catch()` TẠI ĐÂY là bắt buộc, KHÔNG thừa dù `ChatPresenceService` đã tự nuốt lỗi bên trong.
+      // Khối `try` này fail-LOUD (`disconnect(true)` ở `catch` dưới) vì "connected mà 0 phòng" là trạng
+      // thái sống dối. Presence KHÔNG thuộc nhóm đó: "connected mà không ai thấy mình online" chỉ là
+      // thiếu mỹ thuật. Để lỗi presence rơi vào `catch` chung nghĩa là một Valkey lỗi sẽ NGẮT phiên chat
+      // của mọi người — biến một tính năng phụ thành điểm chết của cả module. Không dựa vào kỷ luật nội
+      // bộ của service: hàng rào phải nằm ở chỗ hệ quả xảy ra.
+      await this.presence
+        .markOnline(user.companyId, user.id, client.id)
+        .catch((err: unknown) => this.logPresenceFailure("markOnline", user.id, err));
+
       // ── (B) Tra danh sách phòng + join ───────────────────────────────────────────
       const rooms = await this.listActiveRooms(user);
       await Promise.all(rooms.map((roomId) => client.join(chatRoomName(user.companyId, roomId))));
@@ -173,10 +203,47 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     }
   }
 
+  /**
+   * Socket.IO tự rời mọi room khi disconnect — không có gì phải dọn ở tầng room.
+   *
+   * S8-CHAT-UX-RT-1 thêm gỡ presence. Đây CŨNG là đường mà việc thu hồi phiên đi qua:
+   * `RealtimeEmitterService.severUserSessions` (tài khoản bị khoá/vô hiệu) gọi `disconnectSockets(true)`
+   * ⇒ Socket.IO phát `disconnect` ⇒ hàm này chạy ⇒ người đó biến khỏi presence. Không cần móc riêng.
+   *
+   * ⚠️ Socket.IO **không await** hook này. Một promise reject thoát ra đây là `unhandledRejection` —
+   * đủ để giết cả tiến trình test (memory `vitest-unhandled-rejection-after-teardown`). `markOffline` đã
+   * tự bắt lỗi bên trong; `.catch()` ở đây là lớp bồi cho đúng tính chất "không await" đó.
+   */
   handleDisconnect(client: Socket): void {
-    // Socket.IO tự rời mọi room khi disconnect.
     const user = getUser(client);
-    if (user) this.logger.debug(`WS disconnect user=${user.id}`);
+    if (!user) return;
+    this.logger.debug(`WS disconnect user=${user.id}`);
+    void this.presence
+      .markOffline(user.companyId, user.id, client.id)
+      .catch((err: unknown) => this.logPresenceFailure("markOffline", user.id, err));
+  }
+
+  /**
+   * Presence hỏng là chuyện MỸ THUẬT — nhưng im lặng ở đây nghĩa là cả tính năng "đang online" chết mà
+   * không ai biết, và người dùng thì thấy đồng nghiệp offline vĩnh viễn. WARN, không ERROR: không có
+   * nghiệp vụ nào sai vì việc này.
+   */
+  private logPresenceFailure(op: string, userId: string, err: unknown): void {
+    this.logger.warn(`WS: ${op} thất bại — trạng thái "đang online" có thể sai`, {
+      userId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  /**
+   * Dọn nhịp tim presence. `OnModuleDestroy` là chỗ DUY NHẤT gỡ được timer này — thiếu nó, mỗi lần dựng
+   * app trong test để lại một interval sống, và một tick sau teardown chạm vào Valkey/DB đã đóng.
+   */
+  onModuleDestroy(): void {
+    if (this.heartbeat) {
+      clearInterval(this.heartbeat);
+      this.heartbeat = null;
+    }
   }
 
   // ─── helpers ─────────────────────────────────────────────────────────────────
