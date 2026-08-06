@@ -105,12 +105,20 @@ Dừng dịch vụ trước khi copy `fbpost.db`, hoặc dùng `sqlite3 .backup`
 - [x] **`SOCIAL_COMPANY_ID`** = `257e5de2-d1e6-4b81-87d9-944b2d9d006c` (Funtime Media Corp).
 - [x] **Chạy thử ĐÚNG lệnh NSSM sẽ dùng, với CHÍNH cấu hình production**: smoke đầu-cuối **8/8** — 401 khi không phiên · SSO cấp cookie HttpOnly+Lax · phát lại bị từ chối · sai chữ ký bị từ chối.
 
-### 7.2 CÒN LẠI — cần quyền Administrator hoặc tài khoản ngoài
+Bổ sung đã làm thêm (vẫn không cần Administrator): 3 biến `SOCIAL_*` đã nạp vào `apps/api/.env` (backup ở scratchpad `api.env.bak`), hai secret đã đối chiếu **khớp nhau**; `contracts` + `api` đã build (dist có `integrations/social/*.js`) và **đã đóng gói release** `20260806-065135__1.0.0-rc.1__8faaa68c` — nhưng **chưa activate**, `current` vẫn trỏ bản cũ (an toàn: service đang chạy không bị đụng).
 
-- [ ] **Cài dịch vụ + nạp env API.** Có sẵn script làm trọn gói, chạy trong cửa sổ **PowerShell Administrator**:
-      `powershell -ExecutionPolicy Bypass -File "<scratchpad>\install-social-service.ps1"`
-      Script tự: nạp 3 biến `SOCIAL_*` vào `apps/api/.env` (bỏ qua biến đã có) → cài/cập nhật NSSM `MediaOS-Social` cổng 3500 → khởi động → **kiểm `GET /api/pages` phải trả 401** và DỪNG nếu không (cổng phiên hỏng thì tuyệt đối không mở ra ngoài).
-- [ ] **Restart API PROD** để nạp 3 biến mới: `m prod-update api` (cũng cần Administrator; nó build lại + migrate fail-closed + activate release + restart).
+### 7.2 CÒN LẠI — gom về ĐÚNG MỘT lệnh cần Administrator
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "C:\Users\fmcai\install-social.ps1"
+```
+
+Chạy từ **PowerShell bất kỳ** (không cần mở sẵn cửa sổ admin) — script **tự xin quyền**, hiện hộp thoại UAC, bấm *Yes*. Nhật ký đầy đủ ghi ra `C:\Users\fmcai\install-social.log`.
+
+Script làm 5 bước, dừng ngay khi có bước hỏng: kiểm điều kiện → `activate --latest` + `verify` rồi restart API PROD (**bắt buộc `sso-link` khác 404 — vẫn 404 nghĩa là đang chạy dist cũ ⇒ dừng**) → cài/cập nhật NSSM `MediaOS-Social` cổng 3500 → khởi động, chờ `/login` = 200 → **kiểm `GET /api/pages` phải 401** và DỪNG nếu không (cổng phiên hỏng thì tuyệt đối không mở ra Internet).
+
+> ⚠️ Bản script đầu (ở scratchpad) **không chạy được** vì có dòng `#requires -RunAsAdministrator`: PowerShell từ chối nạp file ngay từ đầu khi cửa sổ chưa elevated, kèm lỗi *"cannot be run because it contains a #requires statement"*. Bản hiện tại bỏ dòng đó và tự `Start-Process -Verb RunAs`. Đã xoá bản cũ để không chạy nhầm.
+
 - [ ] **Tunnel/domain public** trỏ tới `localhost:3500`, rồi sửa `SOCIAL_BASE_URL` trong `apps/api/.env` cho khớp (hiện để `http://localhost:3500`).
 - [ ] Đường sao lưu riêng cho `data/` + `.secrets/` — **tách nhau**.
 - [ ] Cảnh báo token Facebook sắp hết hạn (`accounts.token_expires_at` có sẵn, chưa ai đọc) — ngoài phạm vi wave S9.
