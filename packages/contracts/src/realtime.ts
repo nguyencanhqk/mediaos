@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { chatMessageSchema, chatRoomSchema } from "./chat";
+import { chatMessageReactionSchema, chatMessageSchema, chatRoomSchema } from "./chat";
 import { notificationSchema } from "./notification";
 
 /**
@@ -41,6 +41,8 @@ export const WS_EVENTS = {
   // bởi event từ client.
   CHAT_TYPING: "chat:typing",
   CHAT_PRESENCE: "chat:presence",
+  // S8-CHAT-UX-BE-3 (additive) — phát SAU commit của PUT/DELETE reactions (REST), không phải event từ client.
+  CHAT_REACTION: "chat:reaction",
   NOTIFICATION_NEW: "notification:new",
   // S4-NOTI-BE-1 (additive): phát sau mark-read/mark-all-read/xoá mềm — payload CHỈ unread_count (không
   // row) để DASH/header badge invalidate mà không rò nội dung thông báo qua kênh phụ.
@@ -182,6 +184,28 @@ export const wsChatPresenceEventSchema = z.object({
   status: wsChatPresenceStatusSchema,
 });
 export type WsChatPresenceEvent = z.infer<typeof wsChatPresenceEventSchema>;
+
+/**
+ * chat:reaction (S8 · CHAT-FUNC-019 · CHAT-DEC-018) — tổng hợp cảm xúc MỚI của một tin.
+ *
+ * ⚠️ **HẸP HƠN DTO REST — `mine` bị STRIP.** Sự kiện này phát tới **cả phòng**, mà `mine` chỉ đúng với
+ * MỘT người; giữ nó lại là gửi trạng thái của người vừa bấm cho tất cả những người khác, và mỗi client
+ * nhận được sẽ render một dấu tích sai. Đây đúng khuôn `wsChatRoomEventSchema` strip `unreadCount`
+ * (per-member) — cùng một lớp lỗi, cùng một cách chặn (memory `ws-payload-narrower-than-rest-dto`).
+ * Client nhận sự kiện này phải GIỮ NGUYÊN `mine` nó đang có, chỉ thay `count`.
+ *
+ * ⚠️ **KHÔNG có `actorUserId`.** Ai vừa thả/bỏ thả không phục vụ màn hình nào (thanh cảm xúc chỉ hiện
+ * số), mà thêm vào là phát "ai phản ứng gì với tin nào" theo thời gian thực cho cả phòng — rộng hơn
+ * hẳn thứ chính DTO REST cố ý không trả (`chatMessageReactionSchema` không có `userIds`).
+ *
+ * `reactions` RỖNG là hợp lệ và có nghĩa: người cuối cùng vừa bỏ thả ⇒ client xoá sạch thanh cảm xúc.
+ */
+export const wsChatReactionEventSchema = z.object({
+  roomId: z.string().uuid(),
+  messageId: z.string().uuid(),
+  reactions: z.array(chatMessageReactionSchema.omit({ mine: true })),
+});
+export type WsChatReactionEvent = z.infer<typeof wsChatReactionEventSchema>;
 
 /** notification:new — đúng DTO REST (notificationSchema). */
 export const wsNotificationEventSchema = notificationSchema;

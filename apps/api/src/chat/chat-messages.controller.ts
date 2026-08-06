@@ -7,6 +7,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -19,6 +20,7 @@ import { RequirePermission } from "../permission/require-permission.decorator";
 import { ChatMessagesService } from "./chat-messages.service";
 import { ChatMessageModerationService } from "./chat-message-moderation.service";
 import { ChatAttachmentPresignService } from "./chat-attachments.service";
+import { ChatReactionsService } from "./chat-reactions.service";
 import {
   ChatMarkReadDto,
   ListChatMessagesQueryDto,
@@ -34,10 +36,16 @@ interface AuthenticatedRequest extends Request {
  * S7-CHAT-BE-2 — `ChatMessagesController` (CHAT-API-009..014, 016). Prefix `/chat`, cùng prefix với
  * `ChatRoomsController` — Nest gộp được, và tách file giữ mỗi controller ở kích thước đọc được.
  *
- * ⚠️ KHÔNG CÓ `@Patch`/`@Put` NÀO Ở ĐÂY — CÓ CHỦ ĐÍCH. Sửa nội dung tin nhắn KHÔNG hỗ trợ ở v1
- * (SPEC-15 §3.4 · CHAT-ERR-007), và điều đó được ép ở tận DB: `mediaos_app` KHÔNG có UPDATE cấp bảng
+ * ⚠️ KHÔNG ROUTE NÀO GHI VÀO `chat_messages.body` — CÓ CHỦ ĐÍCH. Sửa nội dung tin nhắn KHÔNG hỗ trợ ở
+ * v1 (SPEC-15 §3.4 · CHAT-ERR-007), và điều đó được ép ở tận DB: `mediaos_app` KHÔNG có UPDATE cấp bảng
  * trên `chat_messages`, chỉ 4 cột `pinned_at`/`pinned_by`/`recalled_at`/`recalled_by`. Thêm route sửa
  * `body` sẽ 42501 lúc chạy chứ không âm thầm sửa — nhưng đừng thêm.
+ *
+ * ⚠️ Dòng trên TRƯỚC 2026-08-06 phát biểu là "KHÔNG CÓ `@Patch`/`@Put` NÀO Ở ĐÂY". `S8-CHAT-UX-BE-3`
+ * thêm `PUT /chat/messages/:id/reactions/:emoji` nên câu chữ đó đã sai, **nhưng luật thì không đổi**:
+ * ràng buộc thật là "không đường nào ghi `body`", không phải "không có động từ PUT". Cảm xúc sống ở
+ * BẢNG RIÊNG `chat_message_reactions` và không chạm một cột nào của `chat_messages`. Phát biểu lại theo
+ * đúng thứ cần giữ, thay vì giữ một mệnh đề dễ kiểm mà nói sai điều muốn nói.
  *
  * ⚠️ THỨ TỰ ROUTE: `GET /chat/unread-count` khai TRƯỚC mọi route có tham số để chắc chắn không bị route
  * nào nuốt nếu sau này có ai thêm `/chat/:something`.
@@ -53,6 +61,8 @@ export class ChatMessagesController {
     private readonly moderation: ChatMessageModerationService,
     // S7-CHAT-BE-3 (additive) — CHAT-API-017.
     private readonly attachments: ChatAttachmentPresignService,
+    // S8-CHAT-UX-BE-3 (additive) — CHAT-API-022a/022b.
+    private readonly reactions: ChatReactionsService,
   ) {}
 
   /** GET /chat/unread-count — CHAT-API-016. Tự-bound theo actor, không nhận roomId. */
@@ -162,5 +172,49 @@ export class ChatMessagesController {
   @RequirePermission("pin", "chat-message")
   unpin(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.moderation.unpin(req.user, id);
+  }
+
+  /**
+   * ═══════ S8-CHAT-UX-BE-3 — thả cảm xúc (CHAT-API-022a/022b · CHAT-FUNC-019) ═══════
+   *
+   * Cặp **`('send','chat-message')`** — cùng cặp với gửi tin, KHÔNG phải `pin`/`recall`: thả cảm xúc là
+   * một lối GHI vào phòng ở mức năng lực của người tham gia bình thường, còn `pin`/`recall` tác động
+   * lên nội dung của NGƯỜI KHÁC (xem ghi chú ba-cặp-khác-nhau ở docblock đầu file).
+   *
+   * `:emoji` **không** `ParseUUIDPipe` — nó là mã trong bộ ĐÓNG 6 phần tử. Kiểm ở service
+   * (`chatReactionEmojiSchema`) chứ không bằng một pipe riêng: `ZodValidationPipe` của nestjs-zod gác
+   * `@Body`/`@Query`, không gác `@Param` lẻ, nên đặt luật ở service là chỗ DUY NHẤT mọi đường gọi
+   * (kể cả job/bridge sau này) đều đi qua.
+   */
+
+  /** PUT /chat/messages/:id/reactions/:emoji — CHAT-API-022a. Idempotent; trả tổng hợp MỚI của tin. */
+  @Put("messages/:id/reactions/:emoji")
+  @HttpCode(200)
+  @UseGuards(PermissionGuard)
+  @RequirePermission("send", "chat-message")
+  react(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("emoji") emoji: string,
+  ) {
+    return this.reactions.react(req.user, id, emoji);
+  }
+
+  /**
+   * DELETE /chat/messages/:id/reactions/:emoji — CHAT-API-022b.
+   *
+   * `204` kể cả khi chưa từng thả — KHÔNG 404. Bỏ một thứ vốn không có là kết quả mong muốn đã đạt,
+   * và 404 ở đây biến hai thiết bị của cùng một người thành hai nguồn sự thật cãi nhau.
+   */
+  @Delete("messages/:id/reactions/:emoji")
+  @HttpCode(204)
+  @UseGuards(PermissionGuard)
+  @RequirePermission("send", "chat-message")
+  unreact(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("emoji") emoji: string,
+  ) {
+    return this.reactions.unreact(req.user, id, emoji);
   }
 }

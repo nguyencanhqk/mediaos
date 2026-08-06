@@ -115,6 +115,34 @@ export const chatAttachmentSchema = z.object({
 });
 export type ChatAttachmentDto = z.infer<typeof chatAttachmentSchema>;
 
+// ═══════════════ S8-CHAT-UX-BE-3 — thả cảm xúc (CHAT-DEC-018) ═══════════════
+
+/**
+ * Bộ emoji **ĐÓNG**, 6 mã. Chuỗi tự do là bề mặt lưu trữ vô hạn + rủi ro render.
+ *
+ * ⚠️ Bộ này sống ở **BA** chỗ và cả ba phải khớp: `chat_message_reactions_emoji_chk` (CHECK cấp DB,
+ * mig `0543`) · `CHAT_REACTION_EMOJIS` (hằng drizzle, `communication.ts`) · enum này. Thêm emoji thứ 7
+ * mà quên một chỗ ⇒ hoặc `23514` lúc chạy, hoặc một giá trị hợp lệ ở DB mà API từ chối. Spec
+ * `chat-reactions.emoji-set.spec.ts` đối chiếu hai vế TS; migration VERIFY canh vế DB.
+ */
+export const chatReactionEmojiSchema = z.enum(["like", "love", "haha", "wow", "sad", "angry"]);
+export type ChatReactionEmoji = z.infer<typeof chatReactionEmojiSchema>;
+
+/**
+ * Tổng hợp cảm xúc của MỘT emoji trên MỘT tin.
+ *
+ * ⚠️ **KHÔNG có `userIds`.** Trả danh sách ai-thả-gì cho mọi thành viên phòng là một quyết định về
+ * quyền riêng tư — nó có thể đúng, nhưng phải được chốt tường minh chứ không rơi ra như tác dụng phụ
+ * của một tính năng UI. `count` + `mine` đủ để vẽ đúng thanh cảm xúc.
+ */
+export const chatMessageReactionSchema = z.object({
+  emoji: chatReactionEmojiSchema,
+  count: z.number().int().positive(),
+  /** Người GỌI có đang thả emoji này không. PER-USER ⇒ bị strip khỏi payload WS (xem `realtime.ts`). */
+  mine: z.boolean(),
+});
+export type ChatMessageReactionDto = z.infer<typeof chatMessageReactionSchema>;
+
 /**
  * chatMessageSchema — DTO chung REST + WS (realtime.ts re-export làm payload `chat:message`).
  * BẤT BIẾN masking (CLAUDE.md §5): server PHẢI `.parse()` row qua schema này trước khi trả/emit —
@@ -159,6 +187,19 @@ export const chatMessageSchema = z.object({
    * `attachments: []`. Đọc `attachments` để render, `attachmentCount` chỉ là số liệu lịch sử.
    */
   attachments: z.array(chatAttachmentSchema),
+  /**
+   * S8-CHAT-UX-BE-3 — tổng hợp cảm xúc (CHAT-FUNC-019). Chỉ emoji CÓ ÍT NHẤT một lượt thả xuất hiện;
+   * emoji chưa ai thả **không** trả về `count: 0` (nhiễu 6 phần tử rỗng trên mỗi tin của mỗi trang).
+   *
+   * `.optional()` — KHÁC `attachments` ngay trên, và khác có chủ ý: `attachments` có từ S7 nên mọi
+   * consumer đang chạy đều đã nhận nó, còn khoá này là MỚI. Thêm một khoá **required** vào một
+   * read-schema đã có người dùng làm mọi consumer ăn ZodError ngay khi FE lên trước BE (bài học bàn
+   * giao `S7-SEC-ROLE2FA-UI-1`). FE đọc `reactions ?? []`.
+   *
+   * Tin ĐÃ THU HỒI luôn `[]` — cùng lớp che với `body: null`/`attachments` (§13.6): giữ lại cảm xúc
+   * của một nội dung đã rút là để lại phản ứng về thứ không ai còn đọc được.
+   */
+  reactions: z.array(chatMessageReactionSchema).optional(),
   /**
    * Số thứ tự **PER-ROOM**, liên tục từ 1 (mig `0539`). Đây là con trỏ dùng cho `beforeSeq`/`afterSeq`,
    * cho đếm chưa đọc và cho "đã xem bởi".

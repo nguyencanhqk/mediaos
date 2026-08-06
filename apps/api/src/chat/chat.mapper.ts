@@ -1,6 +1,7 @@
 import type {
   ChatAttachmentDto,
   ChatMessageDto,
+  ChatMessageReactionDto,
   ChatRoomDetailDto,
   ChatRoomDto,
   ChatRoomMemberDto,
@@ -113,6 +114,11 @@ export function toChatMessageDto(
    * Mapper KHÔNG tự đi lấy tệp: lấy tệp cần ký, ký cần transaction riêng, và mapper là hàm thuần.
    */
   attachments: ChatAttachmentDto[],
+  /**
+   * S8-CHAT-UX-BE-3 — tổng hợp cảm xúc của tin này. **THAM SỐ BẮT BUỘC**, cùng lý do với `attachments`:
+   * caller mới quên truyền sẽ vỡ typecheck thay vì âm thầm trả tin "không ai thả cảm xúc".
+   */
+  reactions: ChatMessageReactionDto[],
 ): ChatMessageDto {
   const recalled = row.recalledAt !== null;
   return {
@@ -136,6 +142,10 @@ export function toChatMessageDto(
     // che kia để không ai tách chúng ra. `attachmentCount` CỐ Ý giữ số cũ (cột không có GRANT UPDATE) —
     // nó là số liệu lịch sử, không phải nguồn để render.
     attachments: recalled ? [] : attachments,
+    // Tin đã thu hồi: cảm xúc biến mất khỏi DTO — CÙNG lớp che với `body`/`mentions`/`attachments`
+    // (SPEC-15 §13.6). Hàng vẫn nằm trong `chat_message_reactions` (không xoá dữ liệu vì một thao tác
+    // hiển thị), nhưng để lại phản ứng dưới một nội dung đã rút là hiện đúng thứ người gửi vừa gỡ.
+    reactions: recalled ? [] : reactions,
     roomSeq: row.roomSeq,
     createdAt: toIso(row.createdAt) ?? EPOCH,
   };

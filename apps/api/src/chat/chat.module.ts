@@ -8,6 +8,8 @@ import { RealtimeEmitterModule } from "../realtime/realtime-emitter.module";
 import { ChatRoomsController } from "./chat-rooms.controller";
 import { ChatMessagesController } from "./chat-messages.controller";
 import { ChatAccessService } from "./chat-access.service";
+import { ChatReactionsRepository } from "./chat-reactions.repository";
+import { ChatReactionsService } from "./chat-reactions.service";
 import { ChatRoomPrefsService } from "./chat-room-prefs.service";
 import { ChatRoomsService } from "./chat-rooms.service";
 import { ChatMembersService } from "./chat-members.service";
@@ -127,6 +129,11 @@ import { ChatOversightRepository } from "./chat-oversight.repository";
     // + `ChatRoomsRepository` (đã ở trên). CỐ Ý KHÔNG export: ba tuỳ chọn này ghi lên hàng membership
     // CỦA CHÍNH actor — module khác gọi được là mở đường đặt tuỳ chọn hộ người khác.
     ChatRoomPrefsService,
+    // ── S8-CHAT-UX-BE-3 ── CHAT-API-022a/022b. `ChatReactionsService` CÓ export: nó là phụ thuộc của
+    // `ChatAttachmentPresignService.decorate` (cùng module) — nhưng đường vào từ ngoài vẫn chỉ có 2
+    // route đã gate `send:chat-message`.
+    ChatReactionsService,
+    ChatReactionsRepository,
   ],
   // `ChatDerivedRoomsSyncService` export cho 5 module writer (org · employees · tasks · recycle-bin).
   // Job handler CỐ Ý KHÔNG export: nó được SchedulerModule gom qua DiscoveryService bằng metadata, không

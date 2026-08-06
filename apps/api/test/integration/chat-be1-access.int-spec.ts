@@ -526,28 +526,69 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-1 — membership deny-path (DB cô lập
     it("MỌI method PUBLIC của service nhận `roomId` đều gọi assertMember (trực tiếp hoặc qua cổng ghi)", () => {
       const gaps: string[] = [];
       const publicMethods: string[] = [];
+
+      /** Gọi THẲNG một trong hai cửa vào membership. */
+      const assertsDirectly = (body: string): boolean =>
+        body.includes("assertMember(") || body.includes("assertMessageAccess(");
+
       for (const { file, src } of readAll()) {
         if (!file.endsWith(".service.ts") || file === "chat-access.service.ts") continue;
         if (MEMBERSHIP_EXEMPT_SERVICES.includes(file)) continue;
-        // Cắt thân từng method PUBLIC: `\n  async ` (thụt lề 2 dấu cách). `private async` không khớp vì
-        // sau 2 dấu cách là chữ `private` — helper nội bộ chạy SAU cổng nên không phải chủ thể của luật.
-        const methods = stripComments(src)
-          .split(/\n {2}async /)
-          .slice(1);
-        for (const body of methods) {
+        const clean = stripComments(src);
+
+        // ─────────────────────────────────────────────────────────────────────────────────────────
+        // S8-CHAT-UX-BE-3 — LẦN THEO MỘT CẤP GIÁN TIẾP thay vì tin vào một danh sách tên hard-code.
+        //
+        // Bản trước chỉ nhận `assertMember(` · `assertMessageAccess(` · `assertRoomAdminForWrite(`,
+        // trong đó tên thứ ba là một cổng ghi CÓ THẬT nhưng được ghi cứng. Hệ quả: mọi service sau này
+        // gói ba cổng của mình vào một helper riêng (đúng thực hành) sẽ ĐỎ, và cách sửa rẻ nhất lúc đó
+        // là **thêm tên vào danh sách** — tức mỗi WO tự cấp cho mình một ô miễn trừ mới, và cái lưới
+        // mục ruỗng dần đúng theo cách `MEMBERSHIP_EXEMPT_SERVICES` cảnh báo ở trên.
+        //
+        // Thay vào đó: thu thập MỌI helper trong CÙNG FILE có gọi cửa vào membership, rồi coi một
+        // method public là hợp lệ nếu nó gọi một trong các helper đó. Luật giữ nguyên ("phải đi qua
+        // điểm khẳng định"), chỉ bỏ đi giả định sai rằng lời gọi luôn nằm ngay trong thân method.
+        // Đúng MỘT cấp: helper-của-helper-của-helper thì lưới không đọc nổi, và một chuỗi gián tiếp
+        // dài như thế đáng bị viết lại chứ không đáng được lưới nới cho.
+        // ─────────────────────────────────────────────────────────────────────────────────────────
+        // ⚠️ Cắt theo VỊ TRÍ khai báo, KHÔNG bằng `split` với hai nhóm optional: `\n {2}(private )?(async )?`
+        // khớp cả một dòng thụt 2 dấu cách bất kỳ, nên mọi "thân method" thu được chỉ còn ĐÚNG MỘT DÒNG
+        // và không helper nào bị nhận là có gọi cửa vào. Bản đầu của khối này mắc đúng lỗi đó — lưới
+        // trông vẫn chạy, chỉ là nó không thấy gì.
+        // ⚠️ Thân method cắt theo VỊ TRÍ KHAI BÁO KẾ TIẾP, cho CẢ hai vế.
+        //
+        // Bản trước cắt bằng `clean.split(/\n {2}async /)` — chỉ tách ở method PUBLIC, nên thân của
+        // method public CUỐI CÙNG nuốt trọn mọi helper `private` nằm dưới nó. Hệ quả đo được
+        // (06/08/2026, khi cấy thử một method public không gác gì): nó "thấy" lời gọi
+        // `assertMessageAccess` nằm trong thân một helper KHÁC và được coi là hợp lệ — lưới PASS OAN.
+        // Lỗi này có sẵn từ trước và bị che vì chuỗi kiểm khi đó hẹp hơn; nó chỉ lộ khi thêm method.
+        const decls = [
+          ...clean.matchAll(/\n {2}(private\s+)?(?:async\s+)?([A-Za-z_$][\w$]*)\s*\(/g),
+        ];
+        const bodyOf = (i: number): string =>
+          clean.slice(decls[i].index ?? 0, decls[i + 1]?.index ?? clean.length);
+
+        const gateHelpers = new Set<string>(["assertRoomAdminForWrite"]);
+        decls.forEach((d, i) => {
+          if (assertsDirectly(bodyOf(i))) gateHelpers.add(d[2]);
+        });
+
+        decls.forEach((d, i) => {
+          // `private` KHÔNG phải chủ thể của luật: helper nội bộ chạy SAU cổng.
+          if (d[1]) return;
+          const body = bodyOf(i);
           const head = body.split("\n")[0];
           const signature = body.slice(0, body.indexOf("{"));
           const takesRoom = /roomId\s*:\s*string/.test(signature);
           const takesMessage = /messageId\s*:\s*string/.test(signature);
-          if (!takesRoom && !takesMessage) continue;
+          if (!takesRoom && !takesMessage) return;
           publicMethods.push(`${file} › ${head.trim()}`);
-          // `assertRoomAdminForWrite` là cổng ghi của ChatMembersService — bên trong nó gọi assertMember.
+          // Chỉ nhận `this.<gate>(` — `<gate>(` trần sẽ khớp cả một lời gọi trùng tên trên đối tượng
+          // khác (vd `this.repo.aggregateForMessages(`), tức lại nới lưới bằng một trùng hợp chuỗi.
           const asserts =
-            body.includes("assertMember(") ||
-            body.includes("assertRoomAdminForWrite(") ||
-            body.includes("assertMessageAccess(");
+            assertsDirectly(body) || [...gateHelpers].some((h) => body.includes(`this.${h}(`));
           if (!asserts) gaps.push(`${file} › ${head.trim()}`);
-        }
+        });
       }
       // Chống test rỗng-nên-xanh: cách cắt method hỏng (đổi khuôn class/thụt lề) thì danh sách rỗng và
       // `toEqual([])` PASS oan. Neo bằng SÀN đã đếm tay: BE-1 có 8 (4 phòng + 4 thành viên), BE-2 thêm 7

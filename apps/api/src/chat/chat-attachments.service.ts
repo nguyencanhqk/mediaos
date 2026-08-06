@@ -25,6 +25,7 @@ import {
   isImageMimeType,
   trimToMessageBoundary,
 } from "./chat-file.constants";
+import { ChatReactionsService } from "./chat-reactions.service";
 import { CHAT_MODULE_CODE } from "./chat.errors";
 import { toChatMessageDto } from "./chat.mapper";
 import type { ChatActor } from "./chat-rooms.service";
@@ -66,6 +67,10 @@ export class ChatAttachmentPresignService {
     private readonly policy: FilePolicyService,
     private readonly accessLog: FileAccessLogService,
     @Inject(STORAGE_ADAPTER) private readonly storage: StorageAdapter,
+    // S8-CHAT-UX-BE-3 (additive) — `decorate` là đường dựng `ChatMessageDto` DUY NHẤT, nên tổng hợp
+    // cảm xúc phải vào ở đây; nếu không mỗi caller lại tự ghép một kiểu và trang tin/tin vừa gửi/tin
+    // đã ghim sẽ nói ba chuyện khác nhau.
+    private readonly reactions: ChatReactionsService,
   ) {}
 
   /**
@@ -96,8 +101,18 @@ export class ChatAttachmentPresignService {
     // và vẫn ký URL — hai đường đọc nói hai chuyện khác nhau, không có đường sửa qua API. Chi phí của việc
     // bỏ vế này là đúng MỘT truy vấn lô vốn đã chạy.
     const ids = rows.filter((r) => r.recalledAt === null).map((r) => r.id);
-    const byMessage = await this.attachmentsByMessage(actor, ids);
-    return rows.map((row) => toChatMessageDto(row, byMessage.get(row.id) ?? []));
+    // S8-CHAT-UX-BE-3 — cảm xúc đi CÙNG LÔ với tệp: hai truy vấn cho cả trang, KHÔNG phải hai truy vấn
+    // mỗi tin. Song song vì chúng độc lập; `aggregateForMessages` tự mở `withTenant` riêng đúng như
+    // `attachmentsByMessage`, và cùng lý do (xem cảnh báo ở đầu hàm về `withTenant` lồng nhau).
+    //
+    // Logic reaction KHÔNG chui vào file này: `decorate` là điểm LẮP RÁP DTO, nó chỉ gọi service kia.
+    const [byMessage, reactionsByMessage] = await Promise.all([
+      this.attachmentsByMessage(actor, ids),
+      this.reactions.aggregateForMessages(actor, ids),
+    ]);
+    return rows.map((row) =>
+      toChatMessageDto(row, byMessage.get(row.id) ?? [], reactionsByMessage.get(row.id) ?? []),
+    );
   }
 
   /** Một tin — `decorate` cho trường hợp một row (đường ghi trả lại tin vừa tạo/sửa). */
