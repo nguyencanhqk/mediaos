@@ -107,6 +107,21 @@ Dừng dịch vụ trước khi copy `fbpost.db`, hoặc dùng `sqlite3 .backup`
 
 Bổ sung đã làm thêm (vẫn không cần Administrator): 3 biến `SOCIAL_*` đã nạp vào `apps/api/.env` (backup ở scratchpad `api.env.bak`), hai secret đã đối chiếu **khớp nhau**; `contracts` + `api` đã build (dist có `integrations/social/*.js`) và **đã đóng gói release** `20260806-065135__1.0.0-rc.1__8faaa68c` — nhưng **chưa activate**, `current` vẫn trỏ bản cũ (an toàn: service đang chạy không bị đụng).
 
+### 7.1b ĐÃ LIVE — chạy 06/08/2026, đo được
+
+| Kiểm | Kết quả |
+| --- | --- |
+| Dịch vụ `MediaOS-Social` | `Running`, `StartType=Automatic`, cổng **3500** mở |
+| API PROD `/api/v1/health` `.data.build` | `1.0.0-rc.1` · commit **`8faaa68c`** · head **`0545_s9socialdb1_audit_social`** |
+| `/api/v1/integrations/social/sso-link` | **401** (trước khi deploy là 404) ⇒ route đã sống |
+| fbpost `/login` · `/compose` · `/api/pages` | `200` · `307→/login` · **`401`** |
+| Smoke đầu-cuối trên cổng 3500 thật | **8/8** — SSO cấp cookie HttpOnly+Lax, phát lại bị từ chối, sai chữ ký bị từ chối, response không có `accessToken` |
+| LMS (3400) sau khi restart API | `200` — không ảnh hưởng |
+
+⇒ **Cửa sổ "tile chết" ở §7.3 đã đóng.** Company-admin bấm ô "Đăng bài" giờ vào được thật.
+
+> ⚠️ **Lỗi script lần chạy đầu (đã vá).** Bước 4 dùng `& $nssm restart $svc 2>$null`. Trong PowerShell 5.1, chuyển hướng stderr của native exe bọc mỗi dòng thành `ErrorRecord`; với `$ErrorActionPreference='Stop'` là **ném lỗi ngay** — dù `nssm` chỉ in `"STOP: The service has not been started."` (thông báo bình thường khi dịch vụ đang dừng) và nhánh `start` **đã khởi động xong, cổng 3500 đã mở**. Nhìn màn hình tưởng hỏng, thực tế đã thành công; script chỉ bỏ qua 2 bước verify. Bản hiện tại hỏi `Get-Service` rồi chọn `Start-Service`/`Restart-Service`, **không đọc exit-code của nssm**.
+
 ### 7.2 CÒN LẠI — gom về ĐÚNG MỘT lệnh cần Administrator
 
 ```powershell
