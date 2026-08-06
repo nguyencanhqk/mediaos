@@ -104,6 +104,20 @@ export const CHAT_ERR = {
   PIN_LIMIT: (max: number): string =>
     `CHAT-ERR-008: mỗi phòng chỉ ghim tối đa ${max} tin — bỏ ghim bớt trước.`,
 
+  /**
+   * CHAT-ERR-021 *(S8)* — vượt trần GHIM HỘI THOẠI (409, SPEC-15 §12).
+   *
+   * ⚠️ KHÔNG nhầm với `PIN_LIMIT` ngay trên: đó là CHAT-ERR-008, ghim **TIN** trong một phòng, trần
+   * 20/phòng, mọi thành viên cùng thấy. Cái này ghim **HỘI THOẠI** lên đầu danh sách, trần 10/NGƯỜI,
+   * chỉ mình thấy — khác bảng (`chat_room_members.pinned_at`), khác trần, khác phạm vi nhìn thấy.
+   * SPEC-15 §12 có hẳn một ghi chú cảnh báo cặp trùng chữ "ghim" này.
+   *
+   * 409 (không phải 400/422) là ĐÚNG theo SPEC-15 §12: vượt hạn mức là xung đột TRẠNG THÁI — cùng dữ
+   * liệu gửi lên sẽ thành công sau khi người dùng bỏ ghim bớt, nên nó không phải lỗi đầu vào.
+   */
+  ROOM_PIN_LIMIT: (max: number): string =>
+    `CHAT-ERR-021: chỉ ghim được tối đa ${max} hội thoại — bỏ ghim bớt trước.`,
+
   /** CHAT-ERR-009 — trả lời tin không cùng phòng, hoặc tin đã thu hồi. */
   REPLY_INVALID:
     "CHAT-ERR-009: không trả lời được tin này — tin phải thuộc cùng phòng và chưa bị thu hồi.",

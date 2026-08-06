@@ -34,6 +34,7 @@ import {
   type ChatUnreadCountDto,
   type AddChatMemberRequest,
   type ChatMarkReadRequest,
+  type ChatMuteRoomRequest,
   type CreateChatRoomRequest,
   type ListChatMessagesQuery,
   type ListChatRoomFilesQuery,
@@ -120,6 +121,53 @@ export const chatApi = {
    */
   leaveRoom: (roomId: string): Promise<ChatLeaveRoomResultDto> =>
     apiFetch(`/chat/rooms/${roomId}/leave`, chatLeaveRoomResultSchema, { method: "POST" }),
+
+  // ── CHAT-API-024a/b · 025 · 020 (S8-CHAT-UX-BE-1) — tuỳ chọn per-phòng CỦA CHÍNH MÌNH ──────────
+  //
+  // Cả bốn trả về `ChatRoomDto` ĐẦY ĐỦ (không phải `{ok:true}`): call-site thay nguyên phòng trong
+  // cache React Query bằng phản hồi, khỏi phải tự vá từng khoá — và khỏi lệch khi server chuẩn hoá giá
+  // trị khác với thứ vừa gửi lên (xem `muteRoom`).
+  //
+  // ⚠️ Cả bốn dùng cặp `('view','chat-room')` ở server: đây là TUỲ CHỌN CÁ NHÂN, không phải quản trị
+  // phòng. FE **không** được bọc chúng trong `<PermissionGate action="update">`.
+
+  /**
+   * PUT /chat/rooms/:id/pin (CHAT-API-024a) — ghim hội thoại, trần **10/người**.
+   *
+   * Vượt trần ⇒ **409** `CHAT-ERR-021`; UI phải nêu rõ con số trần, không nuốt thành lỗi chung chung.
+   * Ghim lại phòng đang ghim ⇒ 200, không tiêu thêm suất.
+   */
+  pinRoom: (roomId: string): Promise<ChatRoomDto> =>
+    apiFetch(`/chat/rooms/${roomId}/pin`, chatRoomSchema, { method: "PUT" }),
+
+  /** DELETE /chat/rooms/:id/pin (CHAT-API-024b) — bỏ ghim. Phòng chưa ghim vẫn 200 (idempotent). */
+  unpinRoom: (roomId: string): Promise<ChatRoomDto> =>
+    apiFetch(`/chat/rooms/${roomId}/pin`, chatRoomSchema, { method: "DELETE" }),
+
+  /**
+   * PUT /chat/rooms/:id/mute (CHAT-API-025) — tắt thông báo tới `mutedUntil`; `null` = **bật lại**.
+   *
+   * ⚠️ HAI điều FE phải biết, cả hai đều làm hỏng biểu tượng chuông-gạch nếu bỏ qua:
+   *  1. Server **chuẩn hoá mốc đã qua về `null`** ⇒ phản hồi có thể khác thứ vừa gửi. Dùng phòng trả về
+   *     làm nguồn sự thật, đừng ghi lại giá trị local.
+   *  2. "Đang tắt" = `mutedUntil !== null` **VÀ** `mutedUntil > now`. Chỉ kiểm khác-null là vẽ
+   *     chuông-gạch cho một phòng đã hết hạn tắt trong lúc dữ liệu nằm trong cache.
+   */
+  muteRoom: (roomId: string, body: ChatMuteRoomRequest): Promise<ChatRoomDto> =>
+    apiFetch(`/chat/rooms/${roomId}/mute`, chatRoomSchema, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * POST /chat/rooms/:id/unread (CHAT-API-020) — đánh dấu chưa đọc thủ công.
+   *
+   * ⚠️ `unreadCount` trong phản hồi **KHÔNG đổi** — đúng thiết kế: con trỏ `last_read_seq` là chỉ-tiến
+   * (SPEC-15 §13.2) và không bị lùi để làm tính năng này. Dòng phòng hiện đậm theo `markedUnreadAt`,
+   * KHÔNG theo badge. Cờ tự tắt ở lần `markRead` kế tiếp (mở phòng).
+   */
+  markRoomUnread: (roomId: string): Promise<ChatRoomDto> =>
+    apiFetch(`/chat/rooms/${roomId}/unread`, chatRoomSchema, { method: "POST" }),
 
   /** GET /chat/rooms/:id/members (CHAT-API-007a) — kèm `userName` + `lastReadSeq` (dựng "đã xem bởi"). */
   listMembers: (roomId: string): Promise<ChatRoomMemberDto[]> =>

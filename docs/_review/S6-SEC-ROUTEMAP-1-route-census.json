@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 484,
+    "routes": 488,
     "controllers": 85,
-    "gated": 432,
+    "gated": 436,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 40,
@@ -1674,11 +1674,59 @@
       "verdictWo": null
     },
     {
+      "key": "ChatRoomsController#markRoomUnread",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/rooms/:id/unread",
+      "hasPermission": true,
+      "permission": "view:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#muteRoom",
+      "httpMethod": "PUT",
+      "path": "/api/v1/chat/rooms/:id/mute",
+      "hasPermission": true,
+      "permission": "view:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "ChatRoomsController#openDirect",
       "httpMethod": "POST",
       "path": "/api/v1/chat/rooms/direct",
       "hasPermission": true,
       "permission": "create:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#pinRoom",
+      "httpMethod": "PUT",
+      "path": "/api/v1/chat/rooms/:id/pin",
+      "hasPermission": true,
+      "permission": "view:chat-room",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],
@@ -1711,6 +1759,22 @@
       "path": "/api/v1/chat/rooms/:id/typing",
       "hasPermission": true,
       "permission": "send:chat-message",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#unpinRoom",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/chat/rooms/:id/pin",
+      "hasPermission": true,
+      "permission": "view:chat-room",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],

@@ -29,6 +29,21 @@ export interface ChatRoomProjection {
 }
 
 /**
+ * S8-CHAT-UX-BE-1 — ba tuỳ chọn PER-USER đi kèm một phòng, lấy từ hàng `chat_room_members` CỦA CHÍNH
+ * người gọi (`assertMember().membership` hoặc cột join sẵn của `listRoomsForUser`).
+ *
+ * THAM SỐ RIÊNG, không nhét vào `ChatRoomProjection`: projection là hình dạng của PHÒNG (dùng chung cho
+ * mọi người nhìn), ba cột này là của MỘT NGƯỜI. Trộn hai thứ vào một kiểu là mở đường cho một caller
+ * tương lai lấy `pinnedAt` của người khác rồi phát cho cả phòng — đúng loại lỗi mà `broadcastRoom` đã
+ * phải chặn bằng `wsChatRoomEventSchema` cho `unreadCount`.
+ */
+export interface ChatRoomMemberPrefs {
+  pinnedAt: Date | null;
+  mutedUntil: Date | null;
+  markedUnreadAt: Date | null;
+}
+
+/**
  * S7-CHAT-BE-1 — projection row Drizzle → DTO contracts. CẤM controller/service trả row thô.
  *
  * Vì sao có lớp này dù row trông đã "gần đúng": row còn cả cột KHÔNG được ra ngoài (`directKey` — ghép
@@ -44,9 +59,16 @@ const toIso = (v: Date | string | null): string | null => {
 const EPOCH = new Date(0).toISOString();
 
 export function toChatRoomDto(
-  row: ChatRoomProjection & { unreadCount?: number },
+  row: ChatRoomProjection & { unreadCount?: number } & Partial<ChatRoomMemberPrefs>,
   unreadCount?: number,
+  /**
+   * S8-CHAT-UX-BE-1 — tuỳ chọn per-user. OPTIONAL vì hai đường nạp khác nhau, không phải vì "được
+   * phép quên": đường DANH SÁCH (`listRoomsForUser`) đã có sẵn ba cột TRÊN `row` (join membership),
+   * đường MỘT PHÒNG truyền chúng vào đây từ `assertMember().membership`. Tham số thắng `row`.
+   */
+  prefs?: ChatRoomMemberPrefs,
 ): ChatRoomDto {
+  const p = prefs ?? row;
   return {
     id: row.id,
     companyId: row.companyId,
@@ -65,6 +87,11 @@ export function toChatRoomDto(
     // Giữ lưới vì `unreadCount: null` làm FE ăn ZodError = TRẮNG TRANG, tệ hơn hẳn một badge sai.
     unreadCount: unreadCount ?? row.unreadCount ?? 0,
     createdAt: toIso(row.createdAt) ?? EPOCH,
+    // `?? null` chứ KHÔNG bỏ khoá khi thiếu: `undefined` biến mất khỏi JSON ⇒ FE không phân biệt được
+    // "server chưa có tính năng" với "chưa ghim". `null` nói đúng một điều: chưa đặt.
+    pinnedAt: toIso(p.pinnedAt ?? null),
+    mutedUntil: toIso(p.mutedUntil ?? null),
+    markedUnreadAt: toIso(p.markedUnreadAt ?? null),
   };
 }
 
@@ -131,9 +158,11 @@ export function toChatRoomDetailDto(
   members: ChatMemberListRow[],
   myRole: ChatMemberRole,
   unreadCount: number,
+  /** S8-CHAT-UX-BE-1 — BẮT BUỘC: caller luôn có `assertMember().membership` trong tay ở đường này. */
+  prefs: ChatRoomMemberPrefs,
 ): ChatRoomDetailDto {
   return {
-    ...toChatRoomDto(room, unreadCount),
+    ...toChatRoomDto(room, unreadCount, prefs),
     members: members.map(toChatMemberDto),
     myRole,
   };

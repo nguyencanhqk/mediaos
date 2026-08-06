@@ -125,6 +125,7 @@ export class ChatRoomsService {
         members,
         acc.membership.role,
         unreadOf(acc.room.lastMessageSeq, acc.membership.lastReadSeq),
+        acc.membership,
       );
     });
   }
@@ -316,7 +317,14 @@ export class ChatRoomsService {
         oldValues: { name: acc.room.name, description: acc.room.description },
         newValues: { name: updated.name, description: updated.description },
       });
-      return toChatRoomDto(updated, unreadOf(updated.lastMessageSeq, acc.membership.lastReadSeq));
+      // `acc.membership` làm nguồn tuỳ chọn per-user: `updated` là hàng PHÒNG, không mang ba cột đó.
+      // Thiếu tham số này thì mọi phản hồi PATCH báo "chưa ghim / chưa tắt" cho một phòng ĐANG ghim —
+      // và FE cập-nhật-lạc-quan sẽ ghi đè trạng thái đúng bằng trạng thái sai.
+      return toChatRoomDto(
+        updated,
+        unreadOf(updated.lastMessageSeq, acc.membership.lastReadSeq),
+        acc.membership,
+      );
     });
 
     // SAU commit. `affectedUserIds` rỗng: thành viên hiện có đã ở trong `chatRoomName` từ trước.
@@ -345,7 +353,11 @@ export class ChatRoomsService {
         oldValues: { isArchived: false },
         newValues: { isArchived: true },
       });
-      return toChatRoomDto(updated, unreadOf(updated.lastMessageSeq, acc.membership.lastReadSeq));
+      return toChatRoomDto(
+        updated,
+        unreadOf(updated.lastMessageSeq, acc.membership.lastReadSeq),
+        acc.membership,
+      );
     });
 
     // SAU commit. KHÔNG `syncRoomMembership`: lưu trữ ĐÓNG BĂNG danh sách thành viên (họ vẫn đọc lại
@@ -400,7 +412,11 @@ export class ChatRoomsService {
   private async readOwnRoom(actor: ChatActor, roomId: string): Promise<ChatRoomDto> {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
-      return toChatRoomDto(acc.room, unreadOf(acc.room.lastMessageSeq, acc.membership.lastReadSeq));
+      return toChatRoomDto(
+        acc.room,
+        unreadOf(acc.room.lastMessageSeq, acc.membership.lastReadSeq),
+        acc.membership,
+      );
     });
   }
 

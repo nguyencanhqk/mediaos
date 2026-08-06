@@ -25,8 +25,39 @@ export const chatRoomSchema = z.object({
    */
   unreadCount: z.number().int().nonnegative().optional(),
   createdAt: z.string().datetime(),
+  // ── S8-CHAT-UX-BE-1 — tuỳ chọn PER-USER trên hàng membership của chính người gọi (mig 0543) ──
+  // CẢ BA đều `.nullable().optional()`, KHÔNG required: `/chat/rooms` có 7 consumer đang chạy và một
+  // khoá required mới làm TẤT CẢ ăn ZodError ngay khi FE lên trước BE (bài học S7-SEC-ROLE2FA-UI-1 +
+  // memory `server-masking-needs-optional-fe-schema`). `null` = không đặt, `undefined` = server cũ.
+  /**
+   * Ghim hội thoại — **PER-USER** (`chat_room_members.pinned_at`, CHAT-DEC-015), trần 10/người.
+   * ⚠️ KHÔNG phải `chat_messages.pinned_at` (ghim TIN, trần 20/phòng, cả phòng cùng thấy) — SPEC-15 §12.
+   */
+  pinnedAt: z.string().datetime().nullable().optional(),
+  /** Tắt thông báo tới mốc này (CHAT-FUNC-015). Quá mốc ⇒ tự nhận lại; `null` = đang bật thông báo. */
+  mutedUntil: z.string().datetime().nullable().optional(),
+  /**
+   * Đánh dấu chưa đọc THỦ CÔNG (CHAT-FUNC-017). Cột RIÊNG — `unreadCount` KHÔNG đổi theo nó, vì
+   * `last_read_seq` là con trỏ chỉ-tiến (SPEC-15 §13.2) và không được lùi để làm tính năng tiện.
+   * FE hiện đậm dòng phòng khi `markedUnreadAt !== null` DÙ `unreadCount === 0`.
+   */
+  markedUnreadAt: z.string().datetime().nullable().optional(),
 });
 export type ChatRoomDto = z.infer<typeof chatRoomSchema>;
+
+/**
+ * PUT /chat/rooms/:id/mute (CHAT-API-025) — tắt/bật thông báo phòng.
+ *
+ * ⚠️ Mã là **025**, KHÔNG phải 019: `CHAT-API-019` đã thuộc `GET /chat/oversight/audit` từ wave S7 và
+ * literal `'019'` đang nằm trong `audit_logs.metadata.endpoint` trên PROD (xem `docs/plans/S8-CHAT-UX-BE-1.md` §0).
+ *
+ * `null` = BẬT lại thông báo — đó là lý do trường này `nullable` chứ không `optional`: body `{}` sẽ không
+ * phân biệt được với "bật lại", và một API tắt-được-mà-không-bật-lại-được là lỗ một chiều.
+ */
+export const chatMuteRoomSchema = z.object({
+  mutedUntil: z.string().datetime().nullable(),
+});
+export type ChatMuteRoomRequest = z.infer<typeof chatMuteRoomSchema>;
 
 // Chỉ tạo được phòng NHÓM qua đường này: `direct` mở bằng POST /chat/rooms/direct (idempotent theo
 // direct_key), `department`/`project` do hệ thống tự dựng (thành viên dẫn xuất — CHAT-DEC-003).

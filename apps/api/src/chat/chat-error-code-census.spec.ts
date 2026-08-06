@@ -22,13 +22,36 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CHAT_ERR } from "./chat.errors";
 
-/** SPEC-15 §12 chốt ĐÚNG 20 mã. Đổi số này = đổi spec ⇒ phải sửa cả bảng §12 lẫn bộ test. */
-const SPEC_ERROR_CODE_COUNT = 20;
+/**
+ * SPEC-15 §12 chốt ĐÚNG 25 mã sau wave S8 (`S8-CHAT-UX-DOC-1` thêm 021…025).
+ * Đổi số này = đổi spec ⇒ phải sửa cả bảng §12 lẫn bộ test.
+ */
+const SPEC_ERROR_CODE_COUNT = 25;
 
 const ALL_CODES: readonly string[] = Array.from(
   { length: SPEC_ERROR_CODE_COUNT },
   (_, i) => `CHAT-ERR-${String(i + 1).padStart(3, "0")}`,
 );
+
+/**
+ * Mã ĐÃ CÓ TRONG SPEC nhưng CHƯA có đường code nào sinh ra — mỗi mã kèm WO đang nợ nó.
+ *
+ * ┌─ VÌ SAO DANH SÁCH NÀY TỒN TẠI THAY VÌ HẠ `SPEC_ERROR_CODE_COUNT` ─────────────────────────────┐
+ * │ Hạ số đếm xuống "số mã đã hiện thực" là cách rẻ để test xanh, và nó **giết** vế census còn lại: │
+ * │ một mã nằm trong spec mà không ai làm sẽ biến mất khỏi tầm nhìn thay vì được đếm là NỢ.         │
+ * │ Danh sách tường minh giữ cả hai vế: mã chưa làm vẫn hiện diện, có tên WO, và ca "nợ đã tiêu     │
+ * │ hết" dưới đây bắt buộc phải rút ngắn nó khi WO tương ứng land — quên rút = ĐỎ.                  │
+ * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+ */
+const PENDING_CODES: ReadonlyMap<string, string> = new Map([
+  ["CHAT-ERR-022", "S8-CHAT-UX-BE-2 (đặt avatar cho phòng direct → 422)"],
+  ["CHAT-ERR-023", "S8-CHAT-UX-BE-2 (không đủ tư cách đặt avatar theo loại phòng → 403)"],
+  ["CHAT-ERR-024", "S8-CHAT-UX-BE-3 (thả cảm xúc vào tin đã thu hồi → 422)"],
+  ["CHAT-ERR-025", "S8-CHAT-UX-BE-3 (emoji ngoài bộ đóng → 422)"],
+]);
+
+/** Mã BẮT BUỘC đã có ca int-spec = mã trong sổ TRỪ phần đang nợ. */
+const IMPLEMENTED_CODES: readonly string[] = ALL_CODES.filter((c) => !PENDING_CODES.has(c));
 
 const INTEGRATION_DIR = join(__dirname, "..", "..", "test", "integration");
 
@@ -50,7 +73,7 @@ describe("S7-CHAT-QA-1 — census mã lỗi CHAT (SPEC-15 §12 · §21 nhóm Val
     );
   });
 
-  it.each(ALL_CODES)("%s có ít nhất 1 ca trong bộ int-spec CHAT", (code) => {
+  it.each(IMPLEMENTED_CODES)("%s có ít nhất 1 ca trong bộ int-spec CHAT", (code) => {
     const hits = files.filter((f) => f.source.includes(code)).map((f) => f.name);
     expect(
       hits.length,
@@ -65,6 +88,19 @@ describe("S7-CHAT-QA-1 — census mã lỗi CHAT (SPEC-15 §12 · §21 nhóm Val
     const used = new Set(errorsSource.match(/CHAT-ERR-\d{3}/g) ?? []);
     const outOfBook = [...used].filter((c) => !ALL_CODES.includes(c)).sort();
     expect(outOfBook, "mã lỗi có trong code nhưng KHÔNG có trong bảng SPEC-15 §12").toEqual([]);
+  });
+
+  it("danh sách NỢ đúng hiện trạng: mã đã hiện thực thì PHẢI rời PENDING_CODES", () => {
+    // Chiều thứ ba của census — chống chính danh sách nợ mục ruỗng. WO sau hiện thực CHAT-ERR-022 mà
+    // quên gỡ nó khỏi `PENDING_CODES` sẽ làm mã đó VĨNH VIỄN không bị đòi ca int-spec: nợ được xoá
+    // trong im lặng thay vì được trả. Ca này bắt đúng lúc đó.
+    const errorsSource = readFileSync(join(__dirname, "chat.errors.ts"), "utf8");
+    const used = new Set(errorsSource.match(/CHAT-ERR-\d{3}/g) ?? []);
+    const paidButStillListed = [...PENDING_CODES.keys()].filter((c) => used.has(c)).sort();
+    expect(
+      paidButStillListed,
+      "mã đã có đường code sinh ra nhưng vẫn nằm trong PENDING_CODES — gỡ nó ra để census đòi ca int-spec",
+    ).toEqual([]);
   });
 
   /**

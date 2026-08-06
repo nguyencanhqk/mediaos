@@ -161,9 +161,9 @@ Cột **Membership** ghi rõ endpoint có phải chạy `ChatAccessService.asser
 
 | Mã | Method | Path | Chức năng | Permission | Membership | Audit |
 | --- | --- | --- | --- | --- | --- | --- |
-| CHAT-API-018a | PUT | `/chat/rooms/{room_id}/pin` | Ghim hội thoại (per-user). Vượt **10** → 409 CHAT-ERR-021 | `('view','chat-room')` | ✅ | — |
-| CHAT-API-018b | DELETE | `/chat/rooms/{room_id}/pin` | Bỏ ghim | `('view','chat-room')` | ✅ | — |
-| CHAT-API-019 | PUT | `/chat/rooms/{room_id}/mute` | `{ mutedUntil \| null }` — tắt/bật thông báo phòng. **Đóng lỗ v1**: cột có từ `0538` mà chưa từng có đường ghi | `('view','chat-room')` | ✅ | — |
+| CHAT-API-024a | PUT | `/chat/rooms/{room_id}/pin` | Ghim hội thoại (per-user). Vượt **10** → 409 CHAT-ERR-021 | `('view','chat-room')` | ✅ | — |
+| CHAT-API-024b | DELETE | `/chat/rooms/{room_id}/pin` | Bỏ ghim | `('view','chat-room')` | ✅ | — |
+| CHAT-API-025 | PUT | `/chat/rooms/{room_id}/mute` | `{ mutedUntil \| null }` — tắt/bật thông báo phòng. **Đóng lỗ v1**: cột có từ `0538` mà chưa từng có đường ghi. Mốc **đã qua** được chuẩn hoá về `null` (xem ghi chú dưới bảng) | `('view','chat-room')` | ✅ | — |
 | CHAT-API-020 | POST | `/chat/rooms/{room_id}/unread` | Đánh dấu chưa đọc thủ công (`marked_unread_at`). **KHÔNG** lùi `last_read_seq` | `('view','chat-room')` | ✅ | — |
 | CHAT-API-021a | POST | `/chat/rooms/{room_id}/avatar` | Đặt ảnh đại diện phòng từ `fileId` đã upload+confirm. `direct` → 422 CHAT-ERR-022; không đủ tư cách → 403 CHAT-ERR-023 | `('update','chat-room')` | ✅ + tư cách theo **SPEC-15 §11b** | ✅ |
 | CHAT-API-021b | DELETE | `/chat/rooms/{room_id}/avatar` | Gỡ ảnh đại diện | `('update','chat-room')` | ✅ + §11b | ✅ |
@@ -171,6 +171,10 @@ Cột **Membership** ghi rõ endpoint có phải chạy `ChatAccessService.asser
 | CHAT-API-022a | PUT | `/chat/messages/{message_id}/reactions/{emoji}` | Thả cảm xúc. Idempotent (thả 2 lần = 1 hàng). Tin đã thu hồi → 422 CHAT-ERR-024; emoji ngoài bộ đóng → 422 CHAT-ERR-025 | `('send','chat-message')` | ✅ (phòng chứa tin) | — |
 | CHAT-API-022b | DELETE | `/chat/messages/{message_id}/reactions/{emoji}` | Bỏ thả. Chưa thả → **204**, không 404 | `('send','chat-message')` | ✅ | — |
 | CHAT-API-023 | POST | `/chat/rooms/{room_id}/typing` | Báo "đang gõ" → fan-out WS. **204**, 0 ghi DB, 0 audit | `('send','chat-message')` | ✅ | — |
+
+⛔ **ĐÍNH CHÍNH ĐÁNH SỐ (S8-CHAT-UX-BE-1, 06/08/2026).** Bản seed đầu của bảng này cấp `CHAT-API-018a/018b/019` cho ghim/tắt-thông-báo — nhưng **ba mã đó đã thuộc `/chat/oversight/*` từ wave S7** (§5.3 dưới đây), và literal `'018a'|'018b'|'018c'|'019'` là giá trị của `CHAT_OVERSIGHT_ENDPOINT` (`chat-oversight.audit.ts:25-28`) đang nằm trong `audit_logs.metadata.endpoint` **trên PROD** — không viết lại được. Vì vậy **bên S8 dời**: ghim → `024a/024b`, tắt thông báo → `025`. `020` · `021a-c` · `022a/b` · `023` không va, giữ nguyên. Đo lại dải rỗng bằng grep trước khi cấp mã mới — đừng tin con số của một bảng seed.
+
+⚠️ **`CHAT-API-025` chuẩn hoá mốc đã qua về `null` thay vì báo lỗi.** Đường đọc (`ChatAudienceReader.stillReceiving`) coi `muted_until <= now()` là **không tắt**; lưu nguyên một mốc quá khứ nghĩa là DB giữ giá trị mà chính hệ thống đọc ngược lại, và client nào kiểm `mutedUntil !== null` sẽ vẽ biểu tượng chuông-gạch cho một phòng vẫn gửi thông báo bình thường. **Client PHẢI so với thời điểm hiện tại** (`mutedUntil > now`) — mốc còn hết hạn được trong lúc dữ liệu nằm trong cache. (Không chọn 422 vì lệch đồng hồ client vài giây sẽ biến thao tác hợp lệ thành lỗi.)
 
 ⚠️ **Vì sao ghim/tắt/đánh-dấu gate bằng `('view','chat-room')` chứ không phải một cặp mạnh hơn:** ba thứ đó là **tuỳ chọn cá nhân trên hàng membership của chính mình**. Gate mạnh hơn tạo ra role "đọc được phòng mà không tắt nổi thông báo của chính mình" — đúng họ lỗi `read-path-gate-pair-must-match-download-pair`.
 
