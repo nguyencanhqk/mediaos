@@ -33,7 +33,8 @@ $LmsPort = 3400                   # LMS PROD — tunnel train.<domain> → local
 # S9-SOCIAL — app vệ tinh fbpost (đăng bài Facebook Page), DECISIONS-08. Cùng khuôn LMS: workspace
 # RIÊNG ngoài turbo, build tại chỗ bằng `npm run build` (fbpost dùng npm, KHÔNG pnpm — R3 của ADR).
 $ProdSocialService = "MediaOS-Social"
-$SocialPort = 3500                # fbpost PROD — chưa có tunnel, hiện chỉ localhost
+$SocialPort = 3500                # fbpost PROD — tunnel dangfb.<domain> → localhost:3500
+$SocialSubdomain = "dangfb"       # https://dangfb.<domain> (owner chốt 06/08/2026)
 
 # ── Log helpers ─────────────────────────────────────────────────────────────
 function Write-Step([string]$m) { Write-Host "`n=== $m ===" -ForegroundColor Cyan }
@@ -810,6 +811,17 @@ function Invoke-ProdStatus {
     $r = Invoke-WebRequest -Uri "http://localhost:$SocialPort/login" -UseBasicParsing -TimeoutSec 4
     Write-Ok ("health SOCIAL local http://localhost:$SocialPort/login (HTTP " + $r.StatusCode + ")")
   } catch { Write-Err "health SOCIAL local KHÔNG phản hồi — service MediaOS-Social dừng hoặc lỗi" }
+  # 404 ở đây có nghĩa RẤT CỤ THỂ: DNS + tunnel tới được, nhưng config.yml của cloudflared chưa có
+  # ingress rule cho hostname này (rơi vào quy tắc bắt-tất-cả http_status:404). Phân biệt được với
+  # "không phản hồi" (DNS/tunnel chết) giúp khỏi đi mò nhầm chỗ.
+  try {
+    $r = Invoke-WebRequest -Uri "https://$SocialSubdomain.$DefaultDomain/login" -UseBasicParsing -TimeoutSec 8
+    Write-Ok ("health SOCIAL online https://$SocialSubdomain.$DefaultDomain/login (HTTP " + $r.StatusCode + ")")
+  } catch {
+    $sc = try { $_.Exception.Response.StatusCode.value__ } catch { 0 }
+    if ($sc -eq 404) { Write-Err "SOCIAL online 404 — cloudflared THIẾU ingress rule cho $SocialSubdomain.$DefaultDomain (DNS/tunnel vẫn OK)" }
+    else { Write-Err "health SOCIAL online KHÔNG phản hồi — kiểm tra cloudflared / DNS" }
+  }
   # Đo luôn cổng phiên trong `prod-status`: một fbpost "chạy tốt" mà cổng phiên chết là tình huống
   # nguy hiểm NHÌN KHÔNG RA — health 200 vẫn xanh trong khi token Facebook mở toang.
   try {
@@ -1193,7 +1205,7 @@ function Show-Menu {
     Write-Host "  [15] Dev-online: ingress tunnel          (1 lần, Administrator)"
     Write-Host "  [18] Dev-online: xem log tiến trình ẩn   (dev\logs\)"
     Write-Host ""
-    Write-Host "  --- PROD ($DefaultDomain — Pages + API :$ApiPort + LMS train. :$LmsPort + SOCIAL :$SocialPort + tunnel) ---" -ForegroundColor DarkCyan
+    Write-Host "  --- PROD ($DefaultDomain — Pages + API :$ApiPort + LMS train. :$LmsPort + SOCIAL $SocialSubdomain. :$SocialPort + tunnel) ---" -ForegroundColor DarkCyan
     Write-Host "  [21] PROD UPDATE tất cả    re-build + deploy Pages + rebuild API/LMS/SOCIAL + MIGRATE + restart"
     Write-Host "  [22] PROD update chỉ FE    (build + deploy 3 SPA lên Cloudflare Pages)"
     Write-Host "  [23] PROD update chỉ API   (rebuild dist -> MIGRATE -> restart service — UAC nếu cần)" -ForegroundColor Green
