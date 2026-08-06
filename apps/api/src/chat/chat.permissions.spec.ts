@@ -100,6 +100,10 @@ const ROUTE_GATES: readonly RouteGate[] = [
   { controller: ChatRoomsController, handlerName: "addMember", action: "manage", resourceType: "chat-member" },
   { controller: ChatRoomsController, handlerName: "updateMember", action: "manage", resourceType: "chat-member" },
   { controller: ChatRoomsController, handlerName: "removeMember", action: "manage", resourceType: "chat-member" },
+  // CHAT-API-023 (S8-CHAT-UX-RT-1) — "đang gõ". Cặp GHI `send:chat-message`, KHÔNG phải `view:chat-room`:
+  // "đang gõ" là lời hứa sắp GỬI. Ai chỉ đọc được mà báo được đang gõ thì màn hình hiện một tin nhắn sẽ
+  // không bao giờ tới. Cặp này TRÙNG `sendMessage` có chủ đích — cùng một năng lực.
+  { controller: ChatRoomsController, handlerName: "typing", action: "send", resourceType: "chat-message" },
 
   // ── ChatMessagesController (CHAT-API-009..014, 016) ──
   { controller: ChatMessagesController, handlerName: "unreadCount", action: "view", resourceType: "chat-room" },

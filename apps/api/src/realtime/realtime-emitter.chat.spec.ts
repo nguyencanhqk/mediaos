@@ -255,6 +255,115 @@ describe("RealtimeEmitterService — cụm CHAT (S7-CHAT-RT-1)", () => {
     }).not.toThrow();
   });
 
+  // ─── S8-CHAT-UX-RT-1 — chat:typing ─────────────────────────────────────────────
+  describe("emitChatTyping (CHAT-API-023)", () => {
+    it("phát vào ĐÚNG phòng, đúng tên sự kiện", () => {
+      const { svc, emit, toTargets } = makeEmitter();
+
+      svc.emitChatTyping(COMPANY, ROOM, { roomId: ROOM, userId: USER_A });
+
+      expect(toTargets).toEqual([chatRoomName(COMPANY, ROOM)]);
+      expect(emit).toHaveBeenCalledWith(WS_EVENTS.CHAT_TYPING, { roomId: ROOM, userId: USER_A });
+    });
+
+    it("🔒 `.parse()` STRIP mọi khoá thừa — nội dung đang gõ KHÔNG lọt ra kênh", () => {
+      const { svc, emit } = makeEmitter();
+
+      // Gieo đúng thứ một lần sửa cẩu thả sẽ nhét vào: bản nháp chưa gửi.
+      svc.emitChatTyping(COMPANY, ROOM, {
+        roomId: ROOM,
+        userId: USER_A,
+        body: "bản nháp bí mật chưa gửi",
+        preview: "abc",
+      } as never);
+
+      const payload = emit.mock.calls[0][1] as Record<string, unknown>;
+      expect(Object.keys(payload).sort()).toEqual(["roomId", "userId"]);
+      expect(payload).not.toHaveProperty("body");
+      expect(payload).not.toHaveProperty("preview");
+    });
+
+    it("payload sai hình dạng ⇒ nuốt-có-log, KHÔNG ném lên caller", () => {
+      const { svc, emit } = makeEmitter();
+
+      expect(() =>
+        svc.emitChatTyping(COMPANY, ROOM, { roomId: "not-a-uuid" } as never),
+      ).not.toThrow();
+      expect(emit).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── S8-CHAT-UX-RT-1 — chat:presence ───────────────────────────────────────────
+  describe("emitChatPresence (CHAT-FUNC-021)", () => {
+    it("🔒 đích là chat-user-room của peer — KHÔNG phải user-room (cổng quyền WS)", () => {
+      const { svc, emit, toTargets } = makeEmitter();
+
+      svc.emitChatPresence(COMPANY, { userId: USER_A, status: "online" }, [USER_B]);
+
+      // `userRoomName` chứa MỌI socket đã xác thực, kể cả người đã bị thu hồi `view:chat-room`.
+      expect(toTargets).toEqual([[chatUserRoomName(COMPANY, USER_B)]]);
+      expect(toTargets[0]).not.toContain(userRoomName(COMPANY, USER_B));
+      expect(emit).toHaveBeenCalledWith(WS_EVENTS.CHAT_PRESENCE, {
+        userId: USER_A,
+        status: "online",
+      });
+    });
+
+    it("🔒 danh sách peer RỖNG ⇒ KHÔNG gọi `.to([])` (mảng rỗng = phát cả namespace = rò xuyên tenant)", () => {
+      const { svc, emit, server } = makeEmitter();
+
+      svc.emitChatPresence(COMPANY, { userId: USER_A, status: "online" }, []);
+
+      expect(server.to).not.toHaveBeenCalled();
+      expect(emit).not.toHaveBeenCalled();
+    });
+
+    it("`.parse()` strip khoá thừa — không rò lastSeenAt/deviceCount qua kênh phụ", () => {
+      const { svc, emit } = makeEmitter();
+
+      svc.emitChatPresence(
+        COMPANY,
+        {
+          userId: USER_A,
+          status: "offline",
+          lastSeenAt: "2026-08-06T00:00:00.000Z",
+          deviceCount: 3,
+        } as never,
+        [USER_B],
+      );
+
+      const payload = emit.mock.calls[0][1] as Record<string, unknown>;
+      expect(Object.keys(payload).sort()).toEqual(["status", "userId"]);
+    });
+
+    it("status ngoài bộ đóng ⇒ nuốt-có-log, KHÔNG ném", () => {
+      const { svc, emit } = makeEmitter();
+
+      expect(() =>
+        svc.emitChatPresence(COMPANY, { userId: USER_A, status: "away" } as never, [USER_B]),
+      ).not.toThrow();
+      expect(emit).not.toHaveBeenCalled();
+    });
+
+    it("chưa có server ⇒ no-op (REALTIME_ENABLED=false)", () => {
+      const svc = new RealtimeEmitterService();
+
+      expect(() =>
+        svc.emitChatPresence(COMPANY, { userId: USER_A, status: "online" }, [USER_B]),
+      ).not.toThrow();
+    });
+
+    it("nhiều peer ⇒ mỗi người MỘT room, Socket.IO tự union (không phát trùng)", () => {
+      const { svc, toTargets } = makeEmitter();
+
+      svc.emitChatPresence(COMPANY, { userId: USER_A, status: "online" }, [USER_B, USER_A]);
+
+      expect(toTargets).toEqual([
+        [chatUserRoomName(COMPANY, USER_B), chatUserRoomName(COMPANY, USER_A)],
+      ]);
+    });
+  });
+
   // ─── cô lập tenant ở tầng room ─────────────────────────────────────────────────
   it("hai công ty KHÔNG BAO GIỜ chung tên room dù trùng roomId/userId", () => {
     const other = "c0000000-0000-0000-0000-00000000000b";

@@ -52,6 +52,12 @@ describe("RealtimeGateway (socket.io integration)", () => {
       { can: async () => ({ allow: true, reason: "ok", auditRequired: false }) } as never,
       { listRoomsForUser: async () => [] } as never,
       { withTenant: async (_c: string, fn: (tx: unknown) => Promise<unknown>) => fn({}) } as never,
+      // S8-CHAT-UX-RT-1: presence no-op — spec này đo handshake/room, không đo presence.
+      {
+        markOnline: async () => {},
+        markOffline: async () => {},
+        refreshLocal: async () => {},
+      } as never,
     );
 
     httpServer = createServer();

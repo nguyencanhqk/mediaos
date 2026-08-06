@@ -4,15 +4,19 @@ import {
   WS_EVENTS,
   wsChatMessageEventSchema,
   wsChatMessageRecalledEventSchema,
+  wsChatPresenceEventSchema,
   wsChatReadEventSchema,
   wsChatRoomEventSchema,
+  wsChatTypingEventSchema,
   wsNotificationEventSchema,
   wsNotificationReadEventSchema,
   type ChatMessageDto,
   type NotificationDto,
   type WsChatMessageRecalledEvent,
+  type WsChatPresenceEvent,
   type WsChatReadEvent,
   type WsChatRoomEvent,
+  type WsChatTypingEvent,
 } from "@mediaos/contracts";
 import { chatRoomName, chatUserRoomName, userRoomName } from "./rooms";
 
@@ -141,6 +145,53 @@ export class RealtimeEmitterService {
     } catch (err) {
       this.logger.warn("emitChatRoom failed", {
         roomId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /**
+   * `chat:typing` (S8 · CHAT-API-023) — "đang gõ" tới cả phòng.
+   *
+   * KHÁC ba emit trên ở đúng một điểm: KHÔNG có transaction nào để "gọi sau commit", vì CHAT-API-023 **không
+   * ghi gì cả** (0 DB, 0 audit). Tiết lưu nằm ở `ChatTypingService` — emitter vẫn là cổng câm, chỉ parse rồi
+   * phát; nhét throttle vào đây sẽ khiến mọi caller tương lai chịu chung một cửa sổ mà không ai thấy.
+   */
+  emitChatTyping(companyId: string, roomId: string, payload: WsChatTypingEvent): void {
+    this.emitToRoom(
+      companyId,
+      roomId,
+      WS_EVENTS.CHAT_TYPING,
+      () => wsChatTypingEventSchema.parse(payload),
+      "emitChatTyping",
+    );
+  }
+
+  /**
+   * `chat:presence` (S8 · CHAT-FUNC-021) — một người vừa online/offline, báo cho các peer DM của họ.
+   *
+   * ⚠️ Đích là `chatUserRoomName` của TỪNG peer — **KHÔNG** `userRoomName`. Cùng lập luận với `emitChatRoom`
+   * và jsdoc `rooms.ts`: `userRoomName` chứa mọi socket đã xác thực, kể cả của người đã bị **thu hồi** cặp
+   * `view:chat-room`; bắn vào đó là đi vòng qua cổng quyền WS. Bảng API-13 §7 ghi lỏng `co:{co}:user:{uid}`
+   * cho cả sự kiện này lẫn `chat:room` — code (đã qua FULL gate S7) là bản đúng, doc đã sửa theo ở RT-1.
+   *
+   * `peerUserIds` rỗng ⇒ KHÔNG gọi `.to([])`: Socket.IO coi danh sách room rỗng là **phát cho cả namespace**,
+   * tức là mọi socket của MỌI công ty. Đó là rò xuyên tenant chỉ vì một người chưa có cuộc trò chuyện nào.
+   */
+  emitChatPresence(
+    companyId: string,
+    payload: WsChatPresenceEvent,
+    peerUserIds: readonly string[],
+  ): void {
+    if (!this.server) return;
+    if (peerUserIds.length === 0) return;
+    try {
+      const parsed = wsChatPresenceEventSchema.parse(payload);
+      const targets = peerUserIds.map((uid) => chatUserRoomName(companyId, uid));
+      this.server.to(targets).emit(WS_EVENTS.CHAT_PRESENCE, parsed);
+    } catch (err) {
+      this.logger.warn("emitChatPresence failed", {
+        userId: payload.userId,
         error: err instanceof Error ? err.message : String(err),
       });
     }

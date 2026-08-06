@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isOriginAllowed, parseCorsOrigins, resolveValkeyChannelKey } from "./ws-adapter-config";
+import {
+  isOriginAllowed,
+  parseCorsOrigins,
+  resolveEnvScope,
+  resolveValkeyChannelKey,
+} from "./ws-adapter-config";
 
 /** S7-CHAT-RT-0 — suy cấu hình Socket.IO từ env (thuần tuý, không server/ioredis). */
 describe("parseCorsOrigins", () => {
@@ -49,6 +54,46 @@ describe("isOriginAllowed", () => {
 
   it("danh sách RỖNG từ chối mọi origin trình duyệt (fail-closed, không mở toang)", () => {
     expect(isOriginAllowed("http://a.test", [])).toBe(false);
+  });
+});
+
+/**
+ * S8-CHAT-UX-RT-1 — `resolveEnvScope` là danh tính môi trường DÙNG CHUNG cho mọi không gian khoá trên
+ * Valkey (kênh Socket.IO + khoá presence). Bốn môi trường thật của dự án phải phân biệt TỪNG ĐÔI MỘT —
+ * đây là bằng chứng cấp-phép-suy cho `done_when` 3 (bằng chứng cấp-hành-vi ở `chat-presence.service.spec`).
+ */
+describe("resolveEnvScope — bốn môi trường thật phân biệt từng đôi một", () => {
+  // Đo từ ĐÚNG giá trị trong .env.* của repo (06/08/2026), không phải giá trị bịa.
+  const ENVS = {
+    prod: { NODE_ENV: "production", DATABASE_URL: "postgres://u:p@localhost:5432/mediaos" },
+    // .env.dev-online KHÔNG đặt NODE_ENV ⇒ env.schema default 'development'; DB là `mediaos_dev`.
+    devOnline: {
+      NODE_ENV: "development",
+      DATABASE_URL: "postgres://u:p@localhost:5432/mediaos_dev",
+    },
+    devLocal: { NODE_ENV: "development", DATABASE_URL: "postgres://u:p@localhost:6432/mediaos" },
+    test: { NODE_ENV: "test", DATABASE_URL: "postgres://u:p@localhost:5432/mediaos" },
+  } as const;
+
+  it("PROD và dev-online KHÔNG BAO GIỜ chung phạm vi (cùng một Valkey, khác không gian khoá)", () => {
+    // Nếu ca này đỏ: người đang mở dev-online sẽ hiện "đang online" với người dùng PROD.
+    expect(resolveEnvScope(ENVS.prod)).not.toBe(resolveEnvScope(ENVS.devOnline));
+    expect(resolveEnvScope(ENVS.prod)).toBe("production:mediaos");
+    expect(resolveEnvScope(ENVS.devOnline)).toBe("development:mediaos_dev");
+  });
+
+  it("cả bốn phạm vi đôi một khác nhau", () => {
+    const scopes = [
+      resolveEnvScope(ENVS.prod),
+      resolveEnvScope(ENVS.devOnline),
+      resolveEnvScope(ENVS.devLocal),
+      resolveEnvScope(ENVS.test, "mediaos_s8chatuxrt1"),
+    ];
+    expect(new Set(scopes).size).toBe(scopes.length);
+  });
+
+  it("kênh Socket.IO và khoá presence suy từ CÙNG một phép — không có phép thứ hai để trôi", () => {
+    expect(resolveValkeyChannelKey(ENVS.prod)).toBe(`socket.io:${resolveEnvScope(ENVS.prod)}`);
   });
 });
 

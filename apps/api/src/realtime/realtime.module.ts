@@ -3,6 +3,7 @@ import { AuthModule } from "../auth/auth.module";
 import { ChatModule } from "../chat/chat.module";
 import { PermissionModule } from "../permission/permission.module";
 import { RealtimeEmitterModule } from "./realtime-emitter.module";
+import { ChatPresenceService } from "./chat-presence.service";
 import { RealtimeGateway } from "./realtime.gateway";
 
 /**
@@ -12,7 +13,8 @@ import { RealtimeGateway } from "./realtime.gateway";
  *  - AuthModule          → TokenService (verify JWT ở handshake; KHÔNG dùng guard cho WS).
  *  - RealtimeEmitterModule (module lá) → RealtimeEmitterService (cổng emit notification:new tới user-room).
  *  - ChatModule            → ChatRoomsRepository (S7-CHAT-RT-1: tra danh sách phòng lúc handshake).
- *  - PermissionModule      → PermissionService (cổng quyền `view:chat-room` trước khi join phòng chat).
+ *  - PermissionModule      → PermissionService (cổng quyền `view:chat-room` trước khi join phòng chat)
+ *                            + ValkeyService (S8-CHAT-UX-RT-1: kho trạng thái "đang online").
  *
  * ⚠️ Cạnh `RealtimeModule → ChatModule` chỉ đi MỘT HƯỚNG. Chiều ngược lại (`chat/**` cần emit) đi qua
  * `RealtimeEmitterModule` — module LÁ tách riêng đúng để phá vòng `Realtime → Chat → Realtime`. CẤM
@@ -22,6 +24,9 @@ import { RealtimeGateway } from "./realtime.gateway";
  */
 @Module({
   imports: [AuthModule, RealtimeEmitterModule, ChatModule, PermissionModule],
-  providers: [RealtimeGateway],
+  // `ChatPresenceService` sống ở RealtimeModule (KHÔNG ở ChatModule): nó được lái bởi vòng đời kết nối WS,
+  // và đặt nó trong `chat/**` sẽ buộc file đó import ngược `realtime.gateway` — đúng cạnh mà ratchet
+  // `chat-realtime-structure.spec.ts` cấm (vòng Realtime→Chat→Realtime).
+  providers: [RealtimeGateway, ChatPresenceService],
 })
 export class RealtimeModule {}
