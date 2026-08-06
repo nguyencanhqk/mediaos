@@ -1478,6 +1478,20 @@
       "when": 1717587332000,
       "tag": "0543_s8chatuxdb1_pin_avatar_reactions",
       "breakpoints": true
+    },
+    {
+      "idx": 211,
+      "version": "7",
+      "when": 1717587333000,
+      "tag": "0544_s9socialdb1_seed_social_perms",
+      "breakpoints": true
+    },
+    {
+      "idx": 212,
+      "version": "7",
+      "when": 1717587334000,
+      "tag": "0545_s9socialdb1_audit_social",
+      "breakpoints": true
     }
   ]
 }

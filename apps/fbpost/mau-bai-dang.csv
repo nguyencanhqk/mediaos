@@ -1,0 +1,6 @@
+message,type,media,scheduled_at,link,title,page
+"Chào buổi sáng cả nhà! Chúc mọi người một ngày làm việc hiệu quả.",text,,10/08/2026 08:00,,,
+"Bộ sưu tập mới đã về cửa hàng, mời cả nhà ghé xem.",photo,C:\anh\sanpham1.jpg|C:\anh\sanpham2.jpg,10/08/2026 12:00,,,Cửa hàng A|Cửa hàng B
+"Video giới thiệu quy trình sản xuất tại xưởng.",video,C:\video\gioithieu.mp4,11/08/2026 19:30,,Giới thiệu xưởng sản xuất,Cửa hàng A
+"Đọc bài viết đầy đủ tại website của chúng tôi nhé.",text,,12/08/2026 09:00,https://example.com/bai-viet,,Cửa hàng B
+"Hậu trường buổi chụp hình tuần này.",reel,C:\video\hautruong.mp4,13/08/2026 20:00,,Hậu trường,

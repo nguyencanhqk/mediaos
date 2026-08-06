@@ -256,6 +256,19 @@ export const envSchema = z
     // company_id của thông báo lấy từ LMS_COMPANY_ID ở trên — KHÔNG BAO GIỜ từ body request.
     LMS_NOTI_TOKEN: z.string().min(32).optional(),
 
+    // ── S9-SOCIAL-BE-1: app vệ tinh SOCIAL (fbpost — đăng bài Facebook Page), cầu SSO ────────────────
+    // Shared secret HMAC với fbpost (= MEDIAOS_SSO_SECRET phía fbpost). OPTIONAL để API boot khi chưa
+    // cấu hình — endpoint sso-link fail-fast 503 khi dùng (mirror posture LMS). BẤT BIẾN #3.
+    // TÁCH BIỆT khỏi LMS_SSO_SECRET: lộ khoá của một app vệ tinh KHÔNG được kéo theo app còn lại.
+    SOCIAL_SSO_SECRET: z.string().min(32).optional(),
+    // Gốc public của fbpost (vd https://social.example.com) — đích redirect SSO.
+    SOCIAL_BASE_URL: optionalUrl(),
+    // COMPANY GATE (DECISIONS-08 SOCIAL-DEC-002): id công ty DUY NHẤT được dùng fbpost. fbpost chạy
+    // SQLite KHÔNG có company_id ⇒ BẤT BIẾN #1 được giữ Ở CẦU, không ở bảng: SocialSsoService chỉ mint
+    // token khi companyId === SOCIAL_COMPANY_ID. Thiếu biến này → endpoint 503 (fail-closed), KHÔNG
+    // phải "cho mọi công ty" — vắng cấu hình không bao giờ được nới thành cho phép.
+    SOCIAL_COMPANY_ID: z.string().uuid().optional(),
+
     // ⚠️ ALLOW_SUPERUSER_ROTATION (KHÔNG validate qua zod — CỐ Ý): SecretRotationService đọc THẲNG
     // `process.env.ALLOW_SUPERUSER_ROTATION === 'true'` để fail-closed tuyệt đối (mọi giá trị ≠ 'true', kể cả
     // unset → CHẶN rotation bằng role BYPASS RLS). Không dùng z.coerce.boolean() vì nó coi 'false' → true (bẫy).

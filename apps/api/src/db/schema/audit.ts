@@ -362,5 +362,14 @@ export const AUDIT_OBJECT_TYPES = [
   // 0528 UNION ADD-only vào CHECK, NEO 2 TẦNG vào `object_type = ANY(…)` (vá lỗ tầng-1 của 0509 khi clone —
   // memory audit-check-union-parse-anchor-trap), fail-closed + NO-LOSS/NO-GAIN; append-only #2 nguyên vẹn.
   "task_template",
+  // S9-SOCIAL-DB-1 (mig 0545): app vệ tinh SOCIAL (fbpost — đăng bài Facebook Page). 'social_sso' cho
+  // mint link SSO (SocialSsoService, action sso_link_minted, objectId = jti UUID) và 'social_account'
+  // cho hành động QUAN TRỌNG ở fbpost: gỡ một tài khoản Facebook / một Page — tức thu hồi quyền phát
+  // ngôn của công ty trên một kênh (DECISIONS-08 §3 SOCIAL-DEC-004: fbpost KHÔNG soft-delete, nên vết
+  // duy nhất của hành động đó phải nằm ở audit MediaOS). before/after CHỈ metadata (jti / tên Page /
+  // số Page bị gỡ) — TUYỆT ĐỐI KHÔNG App Secret, User Token, Page Access Token hay token SSO
+  // (BẤT BIẾN #3). 0545 UNION ADD-only, NEO 2 TẦNG vào `object_type = ANY(…)` như 0528.
+  "social_sso",
+  "social_account",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

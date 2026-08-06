@@ -31,7 +31,8 @@
 //   id          : mã ngắn ổn định <MODULE>-<LAYER>-<n> (ISSUE-BOARD-01 §8)        — string, bắt buộc
 //   module      : mã module ISSUE-BOARD-01 §8.2 — dashboard nhóm thẻ. Thiếu/sai → suy từ id/title/paths (hay xếp NHẦM).
 //                 MVP:      PROJECT·FOUNDATION·AUTH·HR·ATT·LEAVE·TASK·NOTI·DASH·FRONTEND·BACKEND·INTEGRATION·QA·DEVOPS·RELEASE
-//                 hậu-MVP:  ME·GOAL·LMS·BRAND·CHAT  (mỗi mã có epic riêng — IMPLEMENTATION-02 §8.13–8.17)
+//                 hậu-MVP:  ME·GOAL·LMS·BRAND·CHAT·SOCIAL  (mỗi mã có epic riêng — IMPLEMENTATION-02 §8.13–8.17;
+//                           SOCIAL thêm 06/08/2026 cho app vệ tinh fbpost — docs/plans/S9-SOCIAL-WAVE.md)
 //                 ĐÃ BỎ (2026-08-03, đừng dùng lại): INT→INTEGRATION · FND→FOUNDATION · SYSTEM→BRAND
 //   layer       : mã layer ISSUE-BOARD-01 §8.3 (DOC·DB·API·BE·FE·UI·QA·DEVOPS·SEC·PERF·INT·REL)                                       — dashboard chip lớp. Thiếu → suy từ paths/title.
 //   title       : một câu mô tả                                                   — string, bắt buộc
@@ -11292,6 +11293,243 @@ export const backlog = [
       "Ratchet chat-realtime-structure.spec.ts + s7-chat-db1-invariants.int-spec.ts xanh, và KHÔNG bị nới lỏng assert (diff của chính 2 file này phải được soi riêng)",
       "Coverage ≥80% cho cụm chat mới; bash harness/check.sh --all XANH có bằng chứng LANE_DB",
       "Cập nhật docs/TESTABLE-FEATURES.md + ghi nợ migration 0543 cho PROD vào RELEASE (0542 CŨNG chưa áp PROD)",
+    ],
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────────────────────────
+  // WAVE S9-SOCIAL (seed 06/08/2026) — nhập repo C:\fbpost thành app VỆ TINH "Đăng bài mạng xã hội",
+  // sao khuôn apps/lms (Next.js nhập tại chỗ, workspace RIÊNG, nối hệ bằng cầu SSO + tile app).
+  // Kế hoạch wave + 6 quyết định chờ owner ký: docs/plans/S9-SOCIAL-WAVE.md.
+  // ⚠️ HÀNG RÀO R1: wave này KHÔNG tự khởi động — 3 WO đỏ đang READY (S7-CALL-DOC-1, S8-CHAT-UX-DB-1,
+  //    S8-CHAT-UX-RT-1) giữ ưu tiên cao hơn. DOC-1 chặn toàn bộ WO còn lại.
+  // ───────────────────────────────────────────────────────────────────────────────────────────────
+  {
+    id: "S9-SOCIAL-DOC-1",
+    module: "SOCIAL",
+    layer: "DOC",
+    title:
+      "Owner ký ADR DECISIONS-08 (app vệ tinh SOCIAL): nới giai đoạn Phase 4 → làm ngay có hàng rào R1-R4 + chốt 6 quyết định SOCIAL-DEC-001..006 (SQLite không company_id · token FB mã hoá KEK · không ép soft-delete · code vào git monorepo · ai được cấp quyền)",
+    zone: "red",
+    status: "done",
+    paths: [
+      "docs/DECISIONS/DECISIONS-08_Social_Satellite_App.md",
+      "docs/plans/S9-SOCIAL-WAVE.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S9-SOCIAL-WAVE.md",
+    src: [
+      "docs/plans/S9-SOCIAL-WAVE.md §3 (6 quyết định) + §3.1 (hàng rào R1-R4)",
+      "Tiền lệ khuôn ADR nới phạm vi có hàng rào: docs/DECISIONS/DECISIONS-07_Chat_Call_Signalling.md (CHAT-DEC-005 nới có R1-R4)",
+      "CLAUDE.md §1 — SOCIAL nằm ở Phase 4, KHÔNG thuộc nhóm bị cắt bởi de-media-fy (media/kênh/video/content + tài chính-theo-kênh)",
+    ],
+    done_when: [
+      "DECISIONS-08 tồn tại, có chữ ký owner + ngày, ghi rõ 6 quyết định và 4 hàng rào — KHÔNG để quyết định nào ở trạng thái 'đề xuất'",
+      "Nếu owner BÁC: ghi lý do vào ADR và đổi mọi WO S9-SOCIAL-* sang blocked; wave đóng, KHÔNG code",
+      "Danh mục module trong harness/backlog.mjs có SOCIAL (đã thêm khi seed) và gen-status.mjs xếp đúng nhóm",
+    ],
+  },
+  {
+    id: "S9-SOCIAL-SEC-1",
+    module: "SOCIAL",
+    layer: "SEC",
+    title:
+      "Vá 2 lỗ chặn triển khai TẠI C:\\fbpost trước khi nhập: mã hoá KEK 3 cột credential (accounts.app_secret · accounts.user_token · pages.access_token) + cổng phiên cho 20/21 route API (auth/facebook/callback gate bằng state, KHÔNG bằng phiên)",
+    zone: "red",
+    status: "done",
+    paths: ["apps/fbpost/**", "docs/plans/S9-SOCIAL-SEC-1.md"],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S9-SOCIAL-DOC-1"],
+    plan: "docs/plans/S9-SOCIAL-SEC-1.md",
+    src: [
+      "ĐO 06/08/2026: src/lib/db.ts:26-49 — app_secret/user_token/access_token đều TEXT thô trong SQLite (BẤT BIẾN #3)",
+      "ĐO 06/08/2026: src/app/api/accounts/route.ts + pages/route.ts không kiểm phiên; chỉ nhánh auth/facebook/* có OAuth",
+      "CLAUDE.md §2 bất biến 3 — credential bên thứ ba ⇒ envelope-encryption/KMS",
+      "Cơ chế KEK đang dùng ở apps/api (KMS_PROVIDER + KMS_LOCAL_KEK_PATH trong config/env.schema.ts) — sao khuôn, KHÔNG phát minh lại",
+    ],
+    done_when: [
+      "sqlite3 data/fbpost.db 'SELECT user_token FROM accounts' KHÔNG trả ra token đọc được — RED-proof: chạy câu này TRƯỚC bản vá để có bằng chứng đối chứng",
+      "Script migrate token chạy được HAI LẦN không hỏng dữ liệu (idempotent), và có backup data/fbpost.db trước khi chạy",
+      "20/21 route trả 401 khi không có phiên — liệt kê đủ 21 route trong plan và đánh dấu route nào cố ý mở, vì sao",
+      "Token/secret KHÔNG xuất hiện trong response, log, hay DTO nào — grep chứng minh",
+      "FULL gate PASS (security-reviewer + silent-failure-hunter)",
+    ],
+  },
+  {
+    id: "S9-SOCIAL-APP-1",
+    module: "SOCIAL",
+    layer: "INT",
+    title:
+      "Nhập cây code vào apps/fbpost: git init + copy (BỎ node_modules/.next/data/tsbuildinfo) + thêm '!apps/fbpost' vào pnpm-workspace.yaml (workspace RIÊNG như apps/lms) + CI path-filter + README trỏ wave",
+    zone: "yellow",
+    status: "done",
+    paths: [
+      "apps/fbpost/**",
+      "pnpm-workspace.yaml",
+      ".github/workflows/apps-frontend.yml",
+      "docs/plans/S9-SOCIAL-APP-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S9-SOCIAL-SEC-1"],
+    plan: "docs/plans/S9-SOCIAL-APP-1.md",
+    src: [
+      "Tiền lệ: pnpm-workspace.yaml dòng '!apps/lms' — loại khỏi workspace MediaOS để root install/turbo KHÔNG đụng tới",
+      "Khác LMS ở MỘT điểm (SOCIAL-DEC-005): code fbpost VÀO git monorepo vì repo gốc chưa có .git và chỉ 65 file",
+      "ĐO 06/08/2026: .gitignore của fbpost đã loại data/ + .env — giữ nguyên, KHÔNG nới",
+    ],
+    done_when: [
+      "pnpm install ở root KHÔNG kéo deps của fbpost (kiểm bằng pnpm ls và thời gian install trước/sau)",
+      "pnpm build + pnpm typecheck ở root vẫn XANH và KHÔNG build fbpost",
+      "Trong apps/fbpost: npm run build + npm run typecheck xanh; npm run dev mở được 4 trang chính",
+      "git status KHÔNG thấy data/ hay node_modules/ — token Facebook KHÔNG vào git (grep lịch sử commit mới để chắc)",
+    ],
+  },
+  {
+    id: "S9-SOCIAL-DB-1",
+    module: "SOCIAL",
+    layer: "DB",
+    title:
+      "Migration 0544+: seed cặp quyền ('view','social-post') · ('create','social-post') · ('manage','social-account') + APPEND 'social_sso' vào CHECK union object_types — nhớ CHECK nằm ở HAI bảng",
+    zone: "red",
+    status: "done",
+    paths: ["apps/api/migrations/**", "apps/api/src/db/schema/**", "docs/plans/S9-SOCIAL-DB-1.md"],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S9-SOCIAL-APP-1"],
+    plan: "docs/plans/S9-SOCIAL-DB-1.md",
+    src: [
+      "CLAUDE.md §9.3 hot-file = APPEND, KHÔNG rewrite: audit object_types CHECK = UNION · permission seed ON CONFLICT DO NOTHING",
+      "memory: noti-catalog-check-lives-on-two-tables — mig 0507 quên vế bảng thứ hai, phải vá lại ở 0529",
+      "memory: audit-check-union-parse-anchor-trap — không neo 'object_type = ANY' thì test PASS oan",
+      "memory: s2-13-permission-matrix-per-pair-scope — data_scope là PER-(permission,role), đổi = DELETE+INSERT",
+      "memory: superadmin-not-a-canonical-role — KHÔNG dùng super-admin làm chủ thể test positive (tautology)",
+    ],
+    done_when: [
+      "Migration đánh số tiếp head hiện tại (KHÔNG trùng số với 0543 của wave S8) và CÓ entry trong journal — memory migration-not-in-journal-is-silently-skipped: thiếu entry thì db:migrate vẫn in 'applied' + exit 0",
+      "3 cặp quyền có mặt trong bảng permissions; gán cho role quản trị + marketing, KHÔNG cấp đại trà (SOCIAL-DEC-006)",
+      "CHECK union ở CẢ HAI bảng chấp nhận 'social_sso' — test neo 'object_type = ANY' chứ không grep tên",
+      "Đo lại schema THẬT sau khi chạy migrate, không tin dòng log",
+      "FULL gate PASS (security-reviewer + database-reviewer)",
+    ],
+  },
+  {
+    id: "S9-SOCIAL-BE-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Cầu SSO MediaOS → fbpost: SocialSsoService sao khuôn LmsSsoService (HMAC-SHA256, TTL 60s, jti một-lần, audit ghi TRƯỚC khi trả URL = fail-closed) + GET /integrations/social/sso-link; phía fbpost thêm /api/auth/sso + bảng sso_consumed_tokens",
+    zone: "red",
+    status: "done",
+    paths: [
+      "apps/api/src/integrations/social/**",
+      "apps/api/src/config/env.schema.ts",
+      "apps/fbpost/src/app/api/auth/sso/**",
+      "apps/fbpost/src/lib/**",
+      "docs/plans/S9-SOCIAL-BE-1.md",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S9-SOCIAL-DB-1"],
+    plan: "docs/plans/S9-SOCIAL-BE-1.md",
+    src: [
+      "Khuôn: apps/api/src/integrations/lms/lms-sso.service.ts — token = base64url(JSON{email,iat,exp,jti}) + '.' + base64url(HMAC); audit fail-closed; BẤT BIẾN #3 cấm token/chữ ký/email vào before/after của audit",
+      "Env sao khuôn LMS_*: SOCIAL_SSO_SECRET (min 32, optional → thiếu thì 503 chứ KHÔNG chặn boot) · SOCIAL_BASE_URL · SOCIAL_COMPANY_ID (company gate, LẤY TỪ ENV không bao giờ từ body)",
+      "memory: idempotency-key-must-be-content-derived — jti phải chống replay THẬT, bảng consumed ở phía nhận",
+      "memory: reused-method-must-be-actor-scoped — email lấy từ JWT, KHÔNG nhận từ input",
+    ],
+    done_when: [
+      "Token SSO dùng lần 2 bị TỪ CHỐI (bảng sso_consumed_tokens phía fbpost) — RED-proof trước",
+      "Token quá 60s bị từ chối; token sửa 1 byte payload bị từ chối",
+      "Thiếu env → endpoint trả 503, API vẫn boot bình thường",
+      "Mỗi lần mint thành công có ĐÚNG 1 row audit_logs objectType='social_sso'; audit vỡ → 500 và token KHÔNG rò ra ngoài",
+      "companyId khác SOCIAL_COMPANY_ID → từ chối mint (BẤT BIẾN #1 ở mức cầu nối)",
+      "FULL gate PASS",
+    ],
+  },
+  {
+    id: "S9-SOCIAL-FE-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Tile 'Đăng bài' trong APP_REGISTRY + AppSwitcher, gate bằng quyền SOCIAL.*, mở THẲNG không qua trang trung chuyển (sao khuôn open-lms.ts) + đường lỗi có fallback",
+    zone: "yellow",
+    status: "done",
+    paths: [
+      "packages/web-core/src/lib/registry.ts",
+      "apps/app/src/layouts/home/**",
+      "apps/app/src/routes/social/**",
+      "apps/app/src/i18n/locales/vi/**",
+      "docs/plans/S9-SOCIAL-FE-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S9-SOCIAL-BE-1"],
+    plan: "docs/plans/S9-SOCIAL-FE-1.md",
+    src: [
+      "Khuôn: apps/app/src/routes/lms/open-lms.ts (lấy token SSO NGAY trong lúc bấm rồi assign) + AppSwitcher.tsx getVisibleApps",
+      "registry.ts PERMISSION_CODE_TO_PAIR — FE gate theo code MODULE.RESOURCE.ACTION, phải ánh xạ sang cặp engine (action:resourceType) LẤY TỪ SEED THẬT của DB-1",
+      "memory: capability-allowlist-hides-admin-screens + superadmin-not-a-canonical-role — test hiển thị tile bằng user THƯỜNG có/không quyền, KHÔNG bằng super-admin",
+    ],
+    done_when: [
+      "User CÓ quyền: thấy tile, bấm vào thẳng fbpost đã có phiên (không thấy màn trung chuyển)",
+      "User KHÔNG có quyền: KHÔNG thấy tile — test bằng user thường, không phải super-admin",
+      "Cầu SSO lỗi (503/mạng) → fallback có thông báo, không treo trắng màn",
+      "LIGHT gate PASS",
+    ],
+  },
+  {
+    id: "S9-SOCIAL-DEVOPS-1",
+    module: "SOCIAL",
+    layer: "DEVOPS",
+    title:
+      "Dịch vụ NSSM MediaOS-Social cổng 3500 (LMS đang 3400) + .env.production + quy trình build/restart TÁCH HẲN thư mục build khỏi PROD (hàng rào R4)",
+    zone: "yellow",
+    status: "done",
+    paths: ["apps/fbpost/**", "docs/DEVOPS/**", "docs/plans/S9-SOCIAL-DEVOPS-1.md"],
+    skills: ["code-review"],
+    depends_on: ["S9-SOCIAL-APP-1"],
+    plan: "docs/plans/S9-SOCIAL-DEVOPS-1.md",
+    src: [
+      "Khuôn: docs/plans/S5-LMS-NOTI-2.md §PROD — service MediaOS-LMS, port 3400, env apps/lms/.env.production",
+      "memory: lms-next-build-shares-prod-dist + prod-dist-shared-with-devonline-landmine — next build từng ghi đè dist PROD ⇒ login 500",
+      "memory: prod-restart-does-not-rebuild-dist — verify bằng NỘI DUNG dist + mtime, KHÔNG bằng PID/log mới",
+      "ĐO 06/08/2026: worker in-process setInterval 60s, chốt globalThis + chặn NEXT_PHASE=phase-production-build (src/lib/worker-boot.ts)",
+    ],
+    done_when: [
+      "next build của fbpost KHÔNG ghi vào bất kỳ thư mục nào PROD/dev-online đang phục vụ — chứng minh bằng mtime trước/sau",
+      "Dịch vụ chạy dưới NSSM: worker khởi động ĐÚNG MỘT LẦN (đếm log tick, không nhân đôi)",
+      "Restart dịch vụ → verify bằng nội dung build mới, không bằng PID",
+      "Quy trình build/restart ghi thành checklist trong docs/DEVOPS/",
+    ],
+  },
+  {
+    id: "S9-SOCIAL-QA-1",
+    module: "SOCIAL",
+    layer: "QA",
+    title:
+      "Nghiệm thu wave S9-SOCIAL: deny-path phiên + replay SSO + gate quyền bằng user THƯỜNG + không rò token FB ở bất kỳ response/log nào",
+    zone: "yellow",
+    status: "done",
+    paths: [
+      "apps/api/src/integrations/social/**/*.spec.ts",
+      "apps/fbpost/**/*.spec.ts",
+      "docs/QA/**",
+      "docs/TESTABLE-FEATURES.md",
+      "docs/plans/S9-SOCIAL-QA-1.md",
+    ],
+    skills: ["code-review", "security-review"],
+    depends_on: ["S9-SOCIAL-FE-1", "S9-SOCIAL-DEVOPS-1"],
+    plan: "docs/plans/S9-SOCIAL-QA-1.md",
+    src: [
+      "memory: integration-test-lane-db-gate — chạy bash harness/check.sh --all, thiếu LANE_DB mà int-spec skip vượt ngưỡng thì ĐỎ",
+      "memory: reviewers-pass-real-bugs — FULL-gate PASS ≠ đúng; query DB THẬT và prove RED",
+      "memory: tests-can-pin-a-hole-open — vá xong mà test đỏ thì đọc assert trước khi nghi mình hỏng",
+      "CLAUDE.md §5 Test — fixture giống-secret PHẢI ghép chuỗi, KHÔNG viết literal (gitleaks generic-api-key)",
+    ],
+    done_when: [
+      "Ma trận deny-path đủ và RED-proof trước: 20 route không phiên → 401 · token SSO replay → từ chối · token hết hạn → từ chối · user thường thiếu quyền → không mint được link và không thấy tile",
+      "0 token/secret Facebook trong response, log, audit payload — grep toàn bộ đường ra",
+      "Quan sát được token FB sắp hết hạn (accounts.token_expires_at) — ghi thành mục vận hành, kể cả khi chưa có cảnh báo tự động",
+      "Cập nhật docs/TESTABLE-FEATURES.md + ghi nợ migration mới cho PROD vào RELEASE",
+      "bash harness/check.sh --all XANH có bằng chứng LANE_DB",
     ],
   },
 ];
