@@ -30,6 +30,10 @@ $DefaultDomain = "funtimemediacorp.com"
 $ProdApiService = "MediaOS-API"   # Windows service API PROD (NSSM — 04-build-install-service.ps1)
 $ProdLmsService = "MediaOS-LMS"   # Windows service LMS PROD (apps\lms = fmc-app, node server.mjs)
 $LmsPort = 3400                   # LMS PROD — tunnel train.<domain> → localhost:3400
+# S9-SOCIAL — app vệ tinh fbpost (đăng bài Facebook Page), DECISIONS-08. Cùng khuôn LMS: workspace
+# RIÊNG ngoài turbo, build tại chỗ bằng `npm run build` (fbpost dùng npm, KHÔNG pnpm — R3 của ADR).
+$ProdSocialService = "MediaOS-Social"
+$SocialPort = 3500                # fbpost PROD — chưa có tunnel, hiện chỉ localhost
 
 # ── Log helpers ─────────────────────────────────────────────────────────────
 function Write-Step([string]$m) { Write-Host "`n=== $m ===" -ForegroundColor Cyan }
@@ -430,6 +434,9 @@ function Invoke-Elevated([string]$cmdLine) {
 
 $ApiHealthHint = "xem logs\api.err.log (thường: .env sai / DB thiếu migration / KEK thiếu)."
 $LmsHealthHint = "xem log service MediaOS-LMS (apps\lms — Next.js server.mjs, PORT=3400)."
+# fbpost fail-fast khi thiếu KEK / SOCIAL_SESSION_SECRET — đó là CHỦ Ý (không khởi động im lặng với
+# token nằm thô), nên hai nguyên nhân đó phải nằm ngay trong gợi ý chẩn đoán.
+$SocialHealthHint = "xem apps\fbpost\social.err.log (thường: thiếu .secrets\fbpost-kek.bin hoặc SOCIAL_SESSION_SECRET trong .env.production)."
 
 function Wait-HttpOk([string]$url, [string]$label, [string]$hint) {
   Write-Host "  chờ $label trả HTTP OK ($url, tối đa 60s) ..." -ForegroundColor DarkGray
@@ -454,13 +461,13 @@ function Restart-OneProdService([string]$svcName, [string]$healthUrl, [string]$l
   $null = Wait-HttpOk $healthUrl $label $hint
 }
 
-# Khởi động lại service PROD (KHÔNG rebuild):  m prod-restart [api|lms]  — bỏ trống = CẢ HAI.
+# Khởi động lại service PROD (KHÔNG rebuild):  m prod-restart [api|lms|social]  — bỏ trống = CẢ BA.
 # Cần Administrator — chưa có thì tự mở cửa sổ UAC chạy lại đúng lệnh.
 function Invoke-ProdRestart([string[]]$rArgs) {
   $target = "all"
   if ($rArgs.Count -gt 0 -and $rArgs[0]) { $target = $rArgs[0].ToLower() }
-  if (@("all", "api", "lms") -notcontains $target) {
-    Write-Warn "Cách dùng:  m prod-restart [api|lms]   (bỏ trống = cả hai)"
+  if (@("all", "api", "lms", "social") -notcontains $target) {
+    Write-Warn "Cách dùng:  m prod-restart [api|lms|social]   (bỏ trống = cả ba)"
     return
   }
   Write-Step "PROD — restart service ($target)"
@@ -474,6 +481,11 @@ function Invoke-ProdRestart([string[]]$rArgs) {
   }
   if (@("all", "lms") -contains $target) {
     Restart-OneProdService $ProdLmsService "http://localhost:$LmsPort" "LMS PROD" $LmsHealthHint
+  }
+  if (@("all", "social") -contains $target) {
+    # Đích health là /login: trang DUY NHẤT không cần phiên. Trỏ vào "/" sẽ nhận 307 về /login và
+    # Wait-HttpOk có thể hiểu nhầm là chưa sẵn sàng.
+    Restart-OneProdService $ProdSocialService "http://localhost:$SocialPort/login" "SOCIAL PROD" $SocialHealthHint
   }
 }
 
@@ -573,20 +585,22 @@ function Invoke-ProdMigrateStep {
 function Invoke-ProdUpdate([string[]]$updArgs) {
   $target = "all"
   if ($updArgs.Count -gt 0 -and $updArgs[0]) { $target = $updArgs[0].ToLower() }
-  if (@("all", "fe", "api", "lms", "be") -notcontains $target) {
-    Write-Warn "Cách dùng:  m prod-update [fe|api|lms]   (bỏ trống = FE + API + LMS)"
+  if (@("all", "fe", "api", "lms", "social", "be") -notcontains $target) {
+    Write-Warn "Cách dùng:  m prod-update [fe|api|lms|social]   (bỏ trống = FE + API + LMS + SOCIAL)"
     return
   }
   Write-Step "PROD UPDATE ($target) -> $DefaultDomain"
   if (@("all", "fe") -contains $target) { Invoke-DeployFe @() }
   if ($target -eq "fe") { return }
-  $doApi = @("all", "be", "api") -contains $target
-  $doLms = @("all", "be", "lms") -contains $target
+  $doApi    = @("all", "be", "api") -contains $target
+  $doLms    = @("all", "be", "lms") -contains $target
+  $doSocial = @("all", "be", "social") -contains $target
 
   if (-not (Test-IsAdmin)) {
-    $next = "be"
-    if (-not $doLms) { $next = "api" }
-    if (-not $doApi) { $next = "lms" }
+    # 'all' → 'be' để KHÔNG deploy FE lần thứ hai trong cửa sổ elevated (FE đã chạy ở trên, không cần
+    # quyền admin). Mọi target khác truyền NGUYÊN VẸN — chuỗi if lồng nhau kiểu cũ chỉ suy được api/lms
+    # nên target thứ ba (social) sẽ bị nó đổi thành 'lms' và chạy nhầm hẳn app khác.
+    $next = if ($target -eq "all") { "be" } else { $target }
     Write-Warn "Bước restart service cần Administrator — mở cửa sổ elevated (UAC) chạy tiếp ($next)..."
     Invoke-Elevated "prod-update $next"
     return
@@ -629,6 +643,26 @@ function Invoke-ProdUpdate([string[]]$updArgs) {
     Push-Location (Join-Path $Root "apps\lms")
     try { Exec { pnpm build } "build lms (next build)" } finally { Pop-Location }
     Restart-OneProdService $ProdLmsService "http://localhost:$LmsPort" "LMS PROD" $LmsHealthHint
+  }
+  if ($doSocial) {
+    # apps\fbpost dùng NPM (package-lock.json), KHÔNG pnpm — hàng rào R3 của DECISIONS-08 loại nó khỏi
+    # pnpm workspace. Gọi `pnpm build` ở đây sẽ chạy sai package manager và hỏng lock.
+    Write-Host "  build SOCIAL (apps\fbpost — next build, workspace riêng dùng npm) ..." -ForegroundColor DarkGray
+    Push-Location (Join-Path $Root "apps\fbpost")
+    try { Exec { npm run build } "build social (next build)" } finally { Pop-Location }
+    Restart-OneProdService $ProdSocialService "http://localhost:$SocialPort/login" "SOCIAL PROD" $SocialHealthHint
+
+    # Cổng phiên là thứ DUY NHẤT chắn giữa Internet và toàn bộ token Facebook của công ty. Health 200
+    # ở /login KHÔNG chứng minh nó còn sống (trang đó vốn công khai), nên kiểm thêm một đường phải-401.
+    try {
+      $probe = Invoke-WebRequest -Uri "http://localhost:$SocialPort/api/pages" -UseBasicParsing -TimeoutSec 5
+      Write-Err ("CONG PHIEN HONG: GET /api/pages tra HTTP " + $probe.StatusCode + ", ky vong 401.")
+      Write-Err "KHONG mo fbpost ra ngoai cho toi khi sua xong (xem docs\DEVOPS\DEVOPS-14)."
+    } catch {
+      $sc = try { $_.Exception.Response.StatusCode.value__ } catch { 0 }
+      if ($sc -eq 401) { Write-Ok "cổng phiên OK (GET /api/pages -> 401)" }
+      else { Write-Err ("CONG PHIEN bat thuong: GET /api/pages -> " + $sc + ", ky vong 401.") }
+    }
   }
 }
 
@@ -740,15 +774,16 @@ function Invoke-ProdCutover {
 
 function Invoke-ProdStatus {
   Write-Step "PROD — trạng thái ($DefaultDomain)"
-  foreach ($name in @($ProdApiService, $ProdLmsService, "cloudflared")) {
+  foreach ($name in @($ProdApiService, $ProdLmsService, $ProdSocialService, "cloudflared")) {
     $svc = Get-Service $name -ErrorAction SilentlyContinue
-    if (-not $svc) { Write-Warn ("service {0,-12}: chưa cài" -f $name) }
-    elseif ($svc.Status -eq "Running") { Write-Ok ("service {0,-12}: Running" -f $name) }
-    else { Write-Err ("service {0,-12}: {1}" -f $name, $svc.Status) }
+    if (-not $svc) { Write-Warn ("service {0,-15}: chưa cài" -f $name) }
+    elseif ($svc.Status -eq "Running") { Write-Ok ("service {0,-15}: Running" -f $name) }
+    else { Write-Err ("service {0,-15}: {1}" -f $name, $svc.Status) }
   }
   Write-Host ""
   if (Test-Port $ApiPort) { Write-Ok "cổng :$ApiPort (API PROD) đang mở" } else { Write-Err "cổng :$ApiPort (API PROD) đóng" }
   if (Test-Port $LmsPort) { Write-Ok "cổng :$LmsPort (LMS PROD) đang mở" } else { Write-Err "cổng :$LmsPort (LMS PROD) đóng" }
+  if (Test-Port $SocialPort) { Write-Ok "cổng :$SocialPort (SOCIAL PROD) đang mở" } else { Write-Err "cổng :$SocialPort (SOCIAL PROD) đóng" }
   if (Test-Port 3200)     { Write-Warn "cổng :3200 (dev-online API) CŨNG đang chạy — nhớ landmine dist dùng chung" }
   Write-Host ""
   Show-MigrationStatus
@@ -771,6 +806,32 @@ function Invoke-ProdStatus {
     $r = Invoke-WebRequest -Uri "https://train.$DefaultDomain" -UseBasicParsing -TimeoutSec 8
     Write-Ok ("health LMS online https://train.$DefaultDomain (HTTP " + $r.StatusCode + ")")
   } catch { Write-Err "health LMS online KHÔNG phản hồi — kiểm tra cloudflared / DNS" }
+  try {
+    $r = Invoke-WebRequest -Uri "http://localhost:$SocialPort/login" -UseBasicParsing -TimeoutSec 4
+    Write-Ok ("health SOCIAL local http://localhost:$SocialPort/login (HTTP " + $r.StatusCode + ")")
+  } catch { Write-Err "health SOCIAL local KHÔNG phản hồi — service MediaOS-Social dừng hoặc lỗi" }
+  # Đo luôn cổng phiên trong `prod-status`: một fbpost "chạy tốt" mà cổng phiên chết là tình huống
+  # nguy hiểm NHÌN KHÔNG RA — health 200 vẫn xanh trong khi token Facebook mở toang.
+  try {
+    $probe = Invoke-WebRequest -Uri "http://localhost:$SocialPort/api/pages" -UseBasicParsing -TimeoutSec 4
+    Write-Err ("SOCIAL cổng phiên HỎNG: /api/pages trả HTTP " + $probe.StatusCode + " (kỳ vọng 401)")
+  } catch {
+    $sc = try { $_.Exception.Response.StatusCode.value__ } catch { 0 }
+    if ($sc -eq 401) { Write-Ok "SOCIAL cổng phiên OK (/api/pages -> 401)" }
+    elseif ($sc -eq 0) { Write-Warn "SOCIAL cổng phiên: không đo được (service không phản hồi)" }
+    else { Write-Err ("SOCIAL cổng phiên bất thường: /api/pages -> " + $sc + " (kỳ vọng 401)") }
+  }
+  # Cầu SSO phía API: 404 = dist đang chạy CHƯA có module social (deploy chưa tới nơi), 401 = có route.
+  try {
+    $r = Invoke-WebRequest -Uri "http://localhost:$ApiPort/api/v1/integrations/social/sso-link" -UseBasicParsing -TimeoutSec 4
+    Write-Warn ("cầu SSO social trả HTTP " + $r.StatusCode + " khi CHƯA xác thực — bất thường, kỳ vọng 401")
+  } catch {
+    $sc = try { $_.Exception.Response.StatusCode.value__ } catch { 0 }
+    if ($sc -eq 401) { Write-Ok "cầu SSO social OK (API có route, trả 401 khi chưa xác thực)" }
+    elseif ($sc -eq 404) { Write-Err "cầu SSO social 404 — API PROD đang chạy DIST CŨ, chạy 'm prod-update api'" }
+    elseif ($sc -eq 503) { Write-Err "cầu SSO social 503 — thiếu SOCIAL_SSO_SECRET/BASE_URL/COMPANY_ID trong apps\api\.env" }
+    else { Write-Warn ("cầu SSO social: không đo được (HTTP " + $sc + ")") }
+  }
 }
 
 # ── DEV-ONLINE (lộ dev stack ra cian-dev.* qua cloudflared, song song prod) ──────────────
@@ -1071,10 +1132,10 @@ function Show-Help {
   Write-Host "    prod-env            khôi phục .env.prod -> .env (KHÔNG chạy browser local)"
   Write-Host ""
   Write-Host "  PROD ĐANG CHẠY (re-build · cập nhật · restart app đã deploy online)" -ForegroundColor Yellow
-  Write-Host "    prod-update [fe|api|lms]  re-build + deploy FE Pages + rebuild API/LMS + restart service (UAC khi cần)"
+  Write-Host "    prod-update [fe|api|lms|social]  re-build + deploy FE Pages + rebuild API/LMS/SOCIAL + restart (UAC khi cần)"
   Write-Host "                              API: build -> MIGRATE -> restart. Migrate đỏ/huỷ = KHÔNG restart, exit 1."
   Write-Host "                              Lô tồn đọng có REVOKE/DROP thì HỎI xác nhận (bỏ qua: MEDIAOS_MIGRATE_YES=1)."
-  Write-Host "    prod-restart [api|lms]    chỉ khởi động lại service PROD, KHÔNG rebuild, KHÔNG migrate (bỏ trống = cả hai)"
+  Write-Host "    prod-restart [api|lms|social]    chỉ khởi động lại service PROD, KHÔNG rebuild/migrate (bỏ trống = cả ba)"
   Write-Host "    prod-status               service (API·LMS·cloudflared) · cổng · migration tồn đọng · release · health local + online"
   Write-Host "    prod-rollback [<stamp>]   quay API PROD về bản build TRƯỚC (không đụng DB); bỏ trống = ngay trước"
   Write-Host "    prod-cutover              MỘT LẦN: trỏ service từ apps\api\dist sang releases\current (KI-016)"
@@ -1132,21 +1193,22 @@ function Show-Menu {
     Write-Host "  [15] Dev-online: ingress tunnel          (1 lần, Administrator)"
     Write-Host "  [18] Dev-online: xem log tiến trình ẩn   (dev\logs\)"
     Write-Host ""
-    Write-Host "  --- PROD ($DefaultDomain — Pages + API :3100 + LMS train. :3400 + tunnel) ---" -ForegroundColor DarkCyan
-    Write-Host "  [21] PROD UPDATE tất cả    re-build + deploy Pages + rebuild API/LMS + MIGRATE + restart"
+    Write-Host "  --- PROD ($DefaultDomain — Pages + API :$ApiPort + LMS train. :$LmsPort + SOCIAL :$SocialPort + tunnel) ---" -ForegroundColor DarkCyan
+    Write-Host "  [21] PROD UPDATE tất cả    re-build + deploy Pages + rebuild API/LMS/SOCIAL + MIGRATE + restart"
     Write-Host "  [22] PROD update chỉ FE    (build + deploy 3 SPA lên Cloudflare Pages)"
     Write-Host "  [23] PROD update chỉ API   (rebuild dist -> MIGRATE -> restart service — UAC nếu cần)" -ForegroundColor Green
     Write-Host "       ^ migrate đỏ/huỷ = KHÔNG restart (fail-closed); lô có REVOKE/DROP thì HỎI xác nhận"
     Write-Host "  [26] PROD update chỉ LMS   (next build apps\lms + restart service — UAC nếu cần)"
-    Write-Host "  [24] PROD restart API+LMS  (chỉ khởi động lại service, KHÔNG rebuild, KHÔNG migrate)"
-    Write-Host "  [25] PROD status           (service · cổng · MIGRATION tồn đọng · health local/online)"
+    Write-Host "  [27] PROD update chỉ SOCIAL (npm build apps\fbpost + restart + kiểm CỔNG PHIÊN — UAC nếu cần)"
+    Write-Host "  [24] PROD restart 3 service (chỉ khởi động lại, KHÔNG rebuild, KHÔNG migrate)"
+    Write-Host "  [25] PROD status           (service · cổng · MIGRATION tồn đọng · cổng phiên SOCIAL · health)"
     Write-Host ""
     Write-Host "  --- DASHBOARD tiến độ (chạy ẩn, cổng 5180) ---" -ForegroundColor DarkCyan
     Write-Host "  [16] Bật DASHBOARD (ẩn)    http://localhost:5180"
     Write-Host "  [17] Tắt DASHBOARD"
     Write-Host "   [0] Thoát"
     Write-Host ""
-    $choice = Read-Host "Chọn (0-26)"
+    $choice = Read-Host "Chọn (0-27)"
     switch ($choice) {
       "1"  { Invoke-Dev }
       "2"  { Invoke-Up }
@@ -1172,6 +1234,7 @@ function Show-Menu {
       "22" { Invoke-ProdUpdate @("fe") }
       "23" { Invoke-ProdUpdate @("api") }
       "26" { Invoke-ProdUpdate @("lms") }
+      "27" { Invoke-ProdUpdate @("social") }
       "24" { Invoke-ProdRestart @() }
       "25" { Invoke-ProdStatus }
       "0"  { return }

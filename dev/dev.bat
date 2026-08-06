@@ -2,8 +2,12 @@
 chcp 65001 >nul
 REM dev.bat - shim mo CLI MediaOS (nguon su that: ../mediaos.ps1). Chi ASCII trong file nay:
 REM cmd doc .bat UTF-8 co dau se cat dong REM dai -> chay nham manh vun nhu lenh.
-REM   Double-click -> menu (co muc PROD update/restart [21]-[26]).
-REM   Kem tham so  -> chay thang lenh: dev.bat prod-update [fe^|api^|lms] / prod-restart [api^|lms] / prod-status
+REM   Double-click -> menu (co muc PROD update/restart [21]-[27]).
+REM   Kem tham so  -> chay thang lenh: dev.bat prod-update [fe^|api^|lms^|social] / prod-restart [api^|lms^|social] / prod-status
+REM
+REM   SOCIAL = app ve tinh fbpost (dang bai Facebook Page), cong 3500, service MediaOS-Social.
+REM     [27] hoac: dev.bat prod-update social  -> npm build apps\fbpost -> restart -> KIEM CONG PHIEN.
+REM     Cong phien phai tra 401 o GET /api/pages; khac 401 la bao DO va dung mo ra ngoai (DEVOPS-14).
 REM
 REM   PROD update co API ([21]/[23], hoac: dev.bat prod-update api) chay build -> MIGRATE -> restart.
 REM     Migrate do hoac bi huy = KHONG restart + thoat code 1 (fail-closed). Ly do: "dist moi chay tren
