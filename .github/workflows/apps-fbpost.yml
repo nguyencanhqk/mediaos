@@ -1,0 +1,87 @@
+# CI riêng cho app vệ tinh SOCIAL (`apps/fbpost` — đăng bài Facebook Page).
+#
+# VÌ SAO CẦN FILE RIÊNG: `apps/fbpost` bị loại khỏi pnpm workspace (hàng rào R3 của DECISIONS-08 —
+# nó dùng npm + package-lock.json + Tailwind v4 riêng). Hệ quả: `turbo run build|typecheck|test` ở
+# ci.yml KHÔNG nhìn thấy nó ⇒ lỗi typecheck/build sẽ land im lặng nếu không có job này.
+#
+# KHÁC apps-frontend.yml: file đó build 3 SPA Vite rồi deploy Cloudflare Pages. fbpost là app Node có
+# máy chủ (worker hẹn giờ in-process), triển khai bằng NSSM cổng 3500 — KHÔNG đi qua Pages, nên chỉ
+# verify ở đây, không deploy.
+#
+# LƯU Ý lint: eslint flat config ở ROOT repo ĐÃ phủ apps/fbpost (đã đo — 0 lỗi). Lint chạy trong
+# ci.yml qua `pnpm lint`, không lặp lại ở đây.
+
+name: Apps — fbpost (SOCIAL) CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+concurrency:
+  group: apps-fbpost-${{ github.ref }}
+  # Chỉ cancel trên nhánh PR — cùng lý do đã ghi ở `apps-frontend.yml` (commit STATUS ngay sau merge
+  # giết run của commit merge; `cancelled` + `skipped` đều không báo đỏ nên hỏng mà nhìn như xong).
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Detect fbpost changes
+    runs-on: ubuntu-latest
+    outputs:
+      fbpost: ${{ steps.filter.outputs.fbpost }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            fbpost:
+              - 'apps/fbpost/**'
+              - '.github/workflows/apps-fbpost.yml'
+
+  verify:
+    name: Typecheck + build
+    needs: changes
+    if: needs.changes.outputs.fbpost == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # `node:sqlite` (module built-in fbpost dùng thay better-sqlite3) cần Node ≥22.
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/fbpost/package-lock.json
+
+      - name: Install
+        working-directory: apps/fbpost
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        working-directory: apps/fbpost
+        run: npm run typecheck
+
+      - name: Build
+        working-directory: apps/fbpost
+        run: npm run build
+
+      - name: Test
+        working-directory: apps/fbpost
+        run: npm test
+
+      # Lưới an toàn cho BẤT BIẾN #3: `data/` chứa token Facebook và PHẢI nằm ngoài git vĩnh viễn.
+      # `.gitignore` có thể bị sửa nhầm trong một PR sau; job này bắt ngay tại CI thay vì sau khi
+      # token đã nằm trong lịch sử (lịch sử thì không xoá được, chỉ còn cách thu hồi token).
+      - name: Chặn data/ lọt vào git
+        run: |
+          tracked=$(git ls-files 'apps/fbpost/data' | head -20)
+          if [ -n "$tracked" ]; then
+            echo "::error::apps/fbpost/data/ ĐANG bị git theo dõi — chứa token Facebook. Gỡ khỏi index và thu hồi token."
+            echo "$tracked"
+            exit 1
+          fi
+          echo "OK: apps/fbpost/data/ không bị git theo dõi."

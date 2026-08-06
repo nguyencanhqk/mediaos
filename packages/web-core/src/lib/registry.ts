@@ -669,6 +669,26 @@ export const APP_REGISTRY: readonly AppRegistryItem[] = [
     status: "active",
     order: 80,
   },
+  {
+    // S9-SOCIAL-FE-1 — app vệ tinh fbpost (đăng bài Facebook Page). Giống LMS: KHÔNG phải module nội
+    // bộ MediaOS mà là một ứng dụng riêng, mở qua cầu SSO. `rootPath`/`defaultRoute` trỏ tới route
+    // trung chuyển /social (đường LỖI); đường thường không đi qua đó — xem open-social.ts.
+    appKey: "social",
+    moduleCode: "SOCIAL",
+    nameKey: "app.social",
+    descKey: "appDesc.social",
+    icon: "megaphone",
+    rootPath: "/social",
+    defaultRoute: "/social",
+    category: "collaboration",
+    aliases: ["dang bai", "facebook", "fanpage", "social", "mang xa hoi", "fbpost"],
+    // Dùng THẲNG cặp engine (như "access:lms"), không qua PERMISSION_CODE_TO_PAIR: capabilities từ
+    // /auth/me vốn đã khoá theo cặp. Đây CŨNG là cặp mà endpoint sso-link đòi — ô hiện ra thì bấm
+    // vào phải vào được, không có cửa nào mở ra rồi đá 403.
+    requiredAnyPermissions: ["view:social-post"],
+    status: "active",
+    order: 90,
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------

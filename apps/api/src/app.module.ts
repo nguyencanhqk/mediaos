@@ -29,6 +29,8 @@ import { SchedulerModule } from "./scheduler/scheduler.module";
 import { RecycleBinModule } from "./recycle-bin/recycle-bin.module";
 import { MeModule } from "./me/me.module";
 import { IntegrationsLmsModule } from "./integrations/lms/lms.module";
+// S9-SOCIAL-BE-1 (additive): cầu SSO sang app vệ tinh fbpost (đăng bài Facebook Page) — DECISIONS-08.
+import { IntegrationsSocialModule } from "./integrations/social/social.module";
 // S5-GOAL-BE-1 (additive): GoalsModule — cây mục tiêu 3 cấp + /me/goals (SPEC-10 / DB-11).
 import { GoalsModule } from "./goals/goals.module";
 // S7-CHAT-BE-1 (additive): ChatModule — phòng chat & thành viên (SPEC-15 / DB-12 / API-13).
@@ -86,6 +88,9 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     MeModule,
     // Giai đoạn A tích hợp LMS (fmc-app): cầu SSO — phát token HMAC 60s cho chính user đang đăng nhập.
     IntegrationsLmsModule,
+    // S9-SOCIAL-BE-1: cầu SSO sang fbpost (app vệ tinh đăng bài Facebook Page). Cùng khuôn LMS, thêm
+    // CỔNG CÔNG TY (SOCIAL_COMPANY_ID) vì fbpost chạy SQLite không có company_id — DECISIONS-08 §3.
+    IntegrationsSocialModule,
     // S5-GOAL-BE-1 (additive): module GOAL (SPEC-10) — CRUD cây mục tiêu 3 cấp + GET /goals/tree +
     // GET /me/goals own-scope. Tái dùng ProjectAccessService của TasksModule cho goal cấp dự án.
     GoalsModule,

@@ -207,6 +207,29 @@ Các thành phần sau **tồn tại trong cây code** nhưng thuộc **hướng
 
 ---
 
+## 5b. App vệ tinh SOCIAL — `apps/fbpost` (thêm 06/08/2026, wave S9)
+
+Ứng dụng **Đăng bài Facebook Page** nhập vào hệ theo mô hình vệ tinh (như `apps/lms`) — [DECISIONS-08](DECISIONS/DECISIONS-08_Social_Satellite_App.md). Chạy riêng, cổng 3500, nối bằng cầu SSO.
+
+**Test được ngay (đã có bằng chứng chạy thật):**
+
+| Việc | Cách kiểm | Kỳ vọng |
+| --- | --- | --- |
+| Cổng phiên | `curl http://localhost:3500/api/pages` | **401** — 20/21 route API đòi phiên |
+| Trang không phiên | mở `/compose` | điều hướng `/login` |
+| Cầu SSO | ô "Đăng bài" trong App Switcher (cần cặp `view:social-post`) | vào thẳng fbpost đã có phiên |
+| Chống phát lại | dùng lại cùng link SSO lần hai | bị từ chối, về `/login?error=invalid-token` |
+| Token Facebook mã hoá | `sqlite3 data/fbpost.db "SELECT user_token FROM accounts"` | chuỗi `v1.…`, KHÔNG đọc được |
+| Ô app ẩn đúng | user KHÔNG có `view:social-post` | không thấy ô "Đăng bài" |
+
+Bộ test tự động: 50 test trong `apps/fbpost` (`npm test`) + 10 test `apps/api/src/integrations/social`.
+
+**CHƯA test được (chờ triển khai):** đăng bài thật lên Facebook Page từ môi trường công ty — cần dịch vụ NSSM + domain public + 2 secret, xem [DEVOPS-14 §7](DEVOPS/DEVOPS-14_Social_Satellite_App_Deployment.md).
+
+**Nợ PROD:** migration `0544`/`0545` chưa áp lên DB PROD — **cùng nhóm nợ với `0542`/`0543`**.
+
+---
+
 ## 6. Tham chiếu
 
 - Trạng thái tự sinh: [docs/STATUS.md](STATUS.md) — danh sách WO "Đã xong (v2)".

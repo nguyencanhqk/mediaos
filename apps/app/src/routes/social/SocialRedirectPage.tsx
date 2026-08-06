@@ -1,0 +1,54 @@
+import { useCallback, useEffect, useState } from "react";
+import { z } from "zod";
+import { apiFetch } from "@mediaos/web-core";
+import { Button } from "@mediaos/ui";
+
+const ssoLinkSchema = z.object({ url: z.string().url() });
+
+/**
+ * /social — trang trung chuyển SSO sang ứng dụng Đăng bài (fbpost).
+ *
+ * Đường THƯỜNG không đi qua đây: ô "Đăng bài" gọi `openSocial()` và nhảy thẳng. Trang này là ĐƯỜNG
+ * LỖI — nơi người dùng rơi xuống khi cầu SSO trục trặc, để họ đọc được lý do và bấm thử lại thay vì
+ * nhìn một màn trắng.
+ *
+ * Phân biệt 3 lỗi vì mỗi lỗi cần một hành động khác nhau: 503 = gọi người quản trị cấu hình máy chủ;
+ * 403 = công ty chưa được bật; còn lại = thử lại.
+ */
+export function SocialRedirectPage() {
+  const [error, setError] = useState<string | null>(null);
+
+  const go = useCallback(() => {
+    setError(null);
+    apiFetch("/integrations/social/sso-link", ssoLinkSchema)
+      .then(({ url }) => {
+        window.location.assign(url);
+      })
+      .catch((err: unknown) => {
+        const raw = err instanceof Error ? err.message : "";
+        const message = raw.includes("503")
+          ? "Cầu SSO sang ứng dụng Đăng bài chưa được cấu hình trên máy chủ."
+          : raw.includes("403")
+            ? "Công ty của bạn chưa được bật ứng dụng Đăng bài."
+            : "Không lấy được liên kết mở ứng dụng Đăng bài. Vui lòng thử lại.";
+        setError(message);
+      });
+  }, []);
+
+  useEffect(() => {
+    go();
+  }, [go]);
+
+  return (
+    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 p-8 text-center">
+      {error ? (
+        <>
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <Button onClick={go}>Thử lại</Button>
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">Đang chuyển sang ứng dụng Đăng bài…</p>
+      )}
+    </div>
+  );
+}

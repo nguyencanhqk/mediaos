@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 483,
-    "controllers": 84,
-    "gated": 431,
+    "routes": 484,
+    "controllers": 85,
+    "gated": 432,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 40,
@@ -6219,6 +6219,22 @@
       "routeGuards": [
         "PermissionGuard"
       ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialSsoController#getSsoLink",
+      "httpMethod": "GET",
+      "path": "/api/v1/integrations/social/sso-link",
+      "hasPermission": true,
+      "permission": "view:social-post",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
       "verdict": null,
       "verdictReason": null,
       "verdictWo": null

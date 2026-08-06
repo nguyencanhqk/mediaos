@@ -28,6 +28,7 @@ import { useLayoutStore } from "@/stores/layout.store";
 import { AppCard } from "./AppCard";
 import { DirtyFormConfirmDialog } from "../shared/DirtyFormConfirmDialog";
 import { openLms } from "@/routes/lms/open-lms";
+import { openSocial } from "@/routes/social/open-social";
 
 function buildSession(): SessionContext {
   const state = useAuthStore.getState();
@@ -180,6 +181,11 @@ export function AppSwitcher() {
     // chuyển /lms. Lỗi → rơi về /lms (LmsRedirectPage tự thử lại). Owner 2026-07-25.
     if (app.appKey === "lms") {
       void openLms(() => void navigate({ to: app.defaultRoute as "/" }));
+      return;
+    }
+    // "Đăng bài" (fbpost) cùng loại CROSS-DOMAIN với LMS — S9-SOCIAL-FE-1 / DECISIONS-08.
+    if (app.appKey === "social") {
+      void openSocial(() => void navigate({ to: app.defaultRoute as "/" }));
       return;
     }
     void navigate({ to: app.defaultRoute as "/" });
