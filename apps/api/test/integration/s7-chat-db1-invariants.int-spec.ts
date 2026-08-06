@@ -712,10 +712,22 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
     /** Tập cột UPDATE-được, pin THEO TÊN. "count > 0" hay "≤" đều PASS oan khi ai đó cấp thêm cột. */
     const GRANTED_UPDATE_COLUMNS: Record<string, string[]> = {
       chat_messages: ["pinned_at", "pinned_by", "recalled_at", "recalled_by"],
-      chat_room_members: ["last_read_at", "last_read_seq", "left_at", "muted_until", "role"],
+      // S8-CHAT-UX-DB-1 (mig 0543) THÊM: `marked_unread_at` + `pinned_at` (ghim per-user,
+      // CHAT-DEC-015). 5 → 7. Migration CHỈ GRANT THÊM, không REVOKE câu nào — 5 cột cũ phải còn.
+      chat_room_members: [
+        "last_read_at",
+        "last_read_seq",
+        "left_at",
+        "marked_unread_at",
+        "muted_until",
+        "pinned_at",
+        "role",
+      ],
+      // S8-CHAT-UX-DB-1 (mig 0543) THÊM: `avatar_file_id` (CHAT-DEC-016). 11 → 12.
       chat_rooms: [
         "archived_at",
         "archived_by",
+        "avatar_file_id",
         "deleted_at",
         "deleted_by",
         "description",
@@ -1069,6 +1081,366 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
           "CREATE UNIQUE INDEX chat_rooms_project_uq ON public.chat_rooms USING btree (company_id, ref_id) WHERE (ref_id IS NOT NULL)",
         uq_chat_rooms_company_code:
           "CREATE UNIQUE INDEX uq_chat_rooms_company_code ON public.chat_rooms USING btree (company_id, room_code) WHERE (deleted_at IS NULL)",
+      });
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // I. S8-CHAT-UX-DB-1 (mig 0543) — GHIM per-user · AVATAR phòng · THẢ CẢM XÚC
+  //
+  // Cùng lý do tồn tại như mục H: khối VERIFY của `0543` chỉ chạy ĐÚNG MỘT LẦN lúc migrate. Ba đường
+  // trôi sau đó, cả ba IM LẶNG:
+  //   · một WO sau `REVOKE UPDATE ON chat_rooms` (dù chỉ định nới lại) ⇒ cuốn sạch column-GRANT của
+  //     CẢ 12 cột, bảng không cột nào ghi được VĨNH VIỄN (memory `revoke-table-grant-wipes-column-grants`);
+  //   · ai đó thêm FK MỘT CỘT cho `avatar_file_id`/`message_id`/`user_id` ⇒ mở lại lớp lỗ KI-046;
+  //   · `GRANT UPDATE ON chat_message_reactions` hoặc `GRANT DELETE ON chat_messages` ⇒ đảo đúng vế
+  //     BẤT BIẾN #2 mà CHAT-DEC-018 vừa cẩn thận đứng ngoài.
+  //
+  // Cột được cấp mà KHÔNG ai chứng minh ghi được thì `42501` nổ ở runtime (HTTP 500 trên đường ghi đã
+  // ship) — vì vậy mọi cột GRANT mới đều có ĐỐI CHỨNG DƯƠNG, không chỉ ca âm.
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe("I. ghim · avatar · reaction (mig 0543)", () => {
+    /** Bộ emoji ĐÓNG — phải khớp `chat_message_reactions_emoji_chk` và Zod của BE-3. */
+    const EMOJI = ["like", "love", "haha", "wow", "sad", "angry"] as const;
+
+    /** Thả một reaction bằng ROLE APP (đường ghi thật), trong ngữ cảnh tenant. */
+    const react = (companyId: string, messageId: string, userId: string, emoji: string) =>
+      attempt(
+        companyId,
+        `INSERT INTO chat_message_reactions (company_id, message_id, user_id, emoji)
+         VALUES ($1, $2, $3, $4)`,
+        [companyId, messageId, userId, emoji],
+      );
+
+    it("ĐỐI CHỨNG DƯƠNG: app role ghi được pinned_at · marked_unread_at (GRANT 0543 có tác dụng thật)", async () => {
+      // Không có ca này thì việc GRANT sót một cột chỉ lộ ra khi BE-1 đã ship và người dùng bấm ghim.
+      const pin = await attempt(
+        tenantA.companyId,
+        `UPDATE chat_room_members SET pinned_at = now() WHERE room_id = $1 AND user_id = $2`,
+        [roomA, userA],
+      );
+      expect(pin.code, `ghim phải ghi được, nhận ${pin.code}: ${pin.message}`).toBeNull();
+
+      const unread = await attempt(
+        tenantA.companyId,
+        `UPDATE chat_room_members SET marked_unread_at = now(), pinned_at = NULL
+          WHERE room_id = $1 AND user_id = $2`,
+        [roomA, userA],
+      );
+      expect(unread.code, `đánh dấu chưa đọc phải ghi được, nhận ${unread.code}`).toBeNull();
+    });
+
+    it("ĐỐI CHỨNG DƯƠNG: app role ghi được avatar_file_id (đặt NULL — không cần file thật)", async () => {
+      const r = await attempt(
+        tenantA.companyId,
+        `UPDATE chat_rooms SET avatar_file_id = NULL WHERE id = $1`,
+        [roomA],
+      );
+      expect(r.code, `gỡ avatar phải ghi được, nhận ${r.code}: ${r.message}`).toBeNull();
+    });
+
+    it("app role VẪN KHÔNG sửa được joined_at — GRANT thêm cột không được nới sang cột khác", async () => {
+      // Vế đối của hai ca trên: chứng minh 0543 không lỡ tay cấp UPDATE CẤP BẢNG.
+      const r = await attempt(
+        tenantA.companyId,
+        `UPDATE chat_room_members SET joined_at = now() WHERE room_id = $1`,
+        [roomA],
+      );
+      expect(r.code, `kỳ vọng 42501, nhận ${r.code}`).toBe("42501");
+    });
+
+    it("phòng direct KHÔNG nhận avatar riêng — 23514 chk_chat_rooms_avatar_direct (CHAT-DEC-016)", async () => {
+      // Gieo bằng `direct` (owner) vì app role không đổi được room_type; ca đo CHECK, không đo GRANT.
+      const dm = await direct.query<{ id: string }>(
+        `INSERT INTO chat_rooms (company_id, room_type, sync_source, direct_key, room_code)
+         VALUES ($1, 'direct', 'manual', $2, $3) RETURNING id`,
+        [tenantA.companyId, `${userA}:${userA}`, "CHKA-DM01"],
+      );
+      const dmId = dm.rows[0].id;
+
+      let code: string | null = null;
+      let constraint: string | undefined;
+      try {
+        // Dùng một uuid bất kỳ: CHECK chạy TRƯỚC khi FK kịp kêu, nên ca vẫn đo đúng vật.
+        await direct.query(
+          `UPDATE chat_rooms SET avatar_file_id = gen_random_uuid() WHERE id = $1`,
+          [dmId],
+        );
+      } catch (e) {
+        const err = e as { code?: string; constraint?: string };
+        code = err.code ?? "UNKNOWN";
+        constraint = err.constraint;
+      }
+      expect(code, "đặt avatar cho phòng direct phải bị CHECK chặn").toBe("23514");
+      expect(constraint, "phải ĐÚNG chk_chat_rooms_avatar_direct, không phải CHECK khác").toBe(
+        "chk_chat_rooms_avatar_direct",
+      );
+
+      await direct.query(`DELETE FROM chat_rooms WHERE id = $1`, [dmId]);
+    });
+
+    it("avatar_file_id KHÔNG trỏ được sang file của tenant KHÁC — composite FK (KI-046)", async () => {
+      // Gieo file thật ở tenant B rồi bắt tenant A trỏ vào: FK một-cột sẽ CHO QUA (nó chỉ hỏi "hàng có
+      // tồn tại không"), composite mới chặn. Đây là ca duy nhất phân biệt được hai hình dạng FK.
+      const fileB = await direct.query<{ id: string }>(
+        `INSERT INTO files (company_id, original_name, stored_name, mime_type, file_size_bytes,
+                            storage_provider, storage_path, uploaded_by)
+         VALUES ($1, 'b.png', $2, 'image/png', 1, 'MinIO', $3, $4) RETURNING id`,
+        [tenantB.companyId, `b-${tenantB.slug}.png`, `chat/${tenantB.slug}/b.png`, userB],
+      );
+
+      const r = await attempt(
+        tenantA.companyId,
+        `UPDATE chat_rooms SET avatar_file_id = $2 WHERE id = $1`,
+        [roomA, fileB.rows[0].id],
+      );
+      expect(r.code, `kỳ vọng 23503, nhận ${r.code}: ${r.message}`).toBe("23503");
+      expect(r.constraint).toBe("chat_rooms_avatar_file_id_company_fk");
+
+      await direct.query(`DELETE FROM files WHERE id = $1`, [fileB.rows[0].id]);
+    });
+
+    it("ĐỐI CHỨNG DƯƠNG: thả cảm xúc hợp lệ + cùng người thả emoji KHÁC trên cùng tin", async () => {
+      const first = await react(tenantA.companyId, msgA, userA, "like");
+      expect(first.code, `thả 'like' phải được, nhận ${first.code}: ${first.message}`).toBeNull();
+
+      // Unique là (company, message, user, emoji) — KHÔNG được chặn nhầm emoji thứ hai của cùng người.
+      const second = await asApp(tenantA.companyId, async (c) => {
+        await c.query(
+          `INSERT INTO chat_message_reactions (company_id, message_id, user_id, emoji)
+           VALUES ($1, $2, $3, 'love')`,
+          [tenantA.companyId, msgA, userA],
+        );
+        try {
+          await c.query(
+            `INSERT INTO chat_message_reactions (company_id, message_id, user_id, emoji)
+             VALUES ($1, $2, $3, 'haha')`,
+            [tenantA.companyId, msgA, userA],
+          );
+          return { code: null as string | null };
+        } catch (e) {
+          return { code: (e as { code?: string }).code ?? "UNKNOWN" };
+        }
+      });
+      expect(second.code, "cùng người thả nhiều emoji khác nhau phải được").toBeNull();
+    });
+
+    it("company_id tự điền từ GUC khi INSERT bỏ trống cột — đường ghi THẬT của drizzle", async () => {
+      // `chatMessageReactions` khai `.default(currentCompanyDefault)` ⇒ drizzle KHÔNG đưa company_id
+      // vào câu INSERT khi caller không truyền. Thiếu DEFAULT ở DB thì đó là 23502 lúc chạy, và chỉ lộ
+      // ra khi BE-3 đã ship. Ca này chạy đúng hình dạng câu lệnh đó.
+      const r = await asApp(tenantA.companyId, async (c) => {
+        const ins = await c.query<{ company_id: string }>(
+          `INSERT INTO chat_message_reactions (message_id, user_id, emoji)
+           VALUES ($1, $2, 'wow') RETURNING company_id`,
+          [msgA, userA],
+        );
+        return ins.rows[0].company_id;
+      });
+      expect(r, "company_id phải tự điền = tenant đang đứng, không phải NULL/tenant khác").toBe(
+        tenantA.companyId,
+      );
+    });
+
+    it("emoji ngoài bộ ĐÓNG → 23514 chat_message_reactions_emoji_chk (không phải lỗi khác)", async () => {
+      const r = await react(tenantA.companyId, msgA, userA, "rocket");
+      expect(r.code, `kỳ vọng 23514, nhận ${r.code}: ${r.message}`).toBe("23514");
+      expect(r.constraint, "phải vướng ĐÚNG CHECK emoji").toBe("chat_message_reactions_emoji_chk");
+      // Bộ đóng phải khớp ĐÚNG 6 mã — thêm/bớt ở DB mà quên Zod của BE-3 là 23514 lúc chạy.
+      expect(EMOJI).toHaveLength(6);
+    });
+
+    it("thả TRÙNG (cùng tin + cùng người + cùng emoji) → 23505", async () => {
+      const r = await asApp(tenantA.companyId, async (c) => {
+        const ins = `INSERT INTO chat_message_reactions (company_id, message_id, user_id, emoji)
+                     VALUES ($1, $2, $3, 'wow')`;
+        await c.query(ins, [tenantA.companyId, msgA, userA]);
+        try {
+          await c.query(ins, [tenantA.companyId, msgA, userA]);
+          return { code: null as string | null, constraint: undefined as string | undefined };
+        } catch (e) {
+          const err = e as { code?: string; constraint?: string };
+          return { code: err.code ?? "UNKNOWN", constraint: err.constraint };
+        }
+      });
+      expect(r.code, `kỳ vọng 23505, nhận ${r.code}`).toBe("23505");
+      expect(r.constraint).toBe("chat_message_reactions_uq");
+    });
+
+    it("CROSS-TENANT: tenant A KHÔNG thả được vào tin của tenant B — 23503 (composite FK message)", async () => {
+      const r = await react(tenantA.companyId, msgB, userA, "like");
+      expect(r.code, `kỳ vọng 23503, nhận ${r.code}: ${r.message}`).toBe("23503");
+      expect(r.constraint).toBe("chat_message_reactions_message_id_company_fk");
+    });
+
+    it("CROSS-TENANT: hàng của A KHÔNG mang user_id của B — 23503 (composite FK user)", async () => {
+      const r = await react(tenantA.companyId, msgA, userB, "like");
+      expect(r.code, `kỳ vọng 23503, nhận ${r.code}: ${r.message}`).toBe("23503");
+      expect(r.constraint).toBe("chat_message_reactions_user_id_company_fk");
+    });
+
+    it("RLS: A KHÔNG ĐỌC và KHÔNG XOÁ được reaction của B (đếm 0 / xoá 0 hàng)", async () => {
+      // Gieo bằng owner ở tenant B, rồi đứng trong ngữ cảnh A soi sang. Composite FK chặn đường GHI
+      // chéo; ca này đo vế còn lại — đường ĐỌC/XOÁ, do policy tenant_isolation gác.
+      const seeded = await direct.query<{ id: string }>(
+        `INSERT INTO chat_message_reactions (company_id, message_id, user_id, emoji)
+         VALUES ($1, $2, $3, 'sad') RETURNING id`,
+        [tenantB.companyId, msgB, userB],
+      );
+      const idB = seeded.rows[0].id;
+
+      const seen = await asApp(tenantA.companyId, async (c) => {
+        const r = await c.query<{ n: number }>(
+          `SELECT count(*)::int AS n FROM chat_message_reactions WHERE id = $1`,
+          [idB],
+        );
+        const del = await c.query(`DELETE FROM chat_message_reactions WHERE id = $1`, [idB]);
+        return { n: r.rows[0].n, deleted: del.rowCount ?? 0 };
+      });
+      expect(seen.n, "tenant A đọc thấy reaction của B ⇒ RLS thủng").toBe(0);
+      expect(seen.deleted, "tenant A xoá được reaction của B ⇒ RLS thủng").toBe(0);
+
+      // Hàng của B phải CÒN NGUYÊN — nếu không, phép đếm 0 ở trên là xanh-giả (xoá thành công rồi đếm).
+      const still = await direct.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM chat_message_reactions WHERE id = $1`,
+        [idB],
+      );
+      expect(still.rows[0].n, "reaction của B phải còn nguyên").toBe(1);
+      await direct.query(`DELETE FROM chat_message_reactions WHERE id = $1`, [idB]);
+    });
+
+    it("CHAT-DEC-018: bỏ thả là DELETE THẬT và app role LÀM ĐƯỢC (đúng bảng này, chỉ bảng này)", async () => {
+      const r = await asApp(tenantA.companyId, async (c) => {
+        await c.query(
+          `INSERT INTO chat_message_reactions (company_id, message_id, user_id, emoji)
+           VALUES ($1, $2, $3, 'angry')`,
+          [tenantA.companyId, msgA, userA],
+        );
+        const del = await c.query(
+          `DELETE FROM chat_message_reactions
+            WHERE message_id = $1 AND user_id = $2 AND emoji = 'angry'`,
+          [msgA, userA],
+        );
+        const left = await c.query<{ n: number }>(
+          `SELECT count(*)::int AS n FROM chat_message_reactions
+            WHERE message_id = $1 AND user_id = $2 AND emoji = 'angry'`,
+          [msgA, userA],
+        );
+        return { deleted: del.rowCount ?? 0, left: left.rows[0].n };
+      });
+      expect(r.deleted, "bỏ thả phải xoá đúng 1 hàng").toBe(1);
+      expect(r.left, "hàng phải biến mất thật, không phải soft delete").toBe(0);
+    });
+
+    it("quyền cấp bảng của chat_message_reactions = ĐÚNG {SELECT,INSERT,DELETE} — KHÔNG có UPDATE", async () => {
+      // `=` chứ không `⊇`: đổi cảm xúc = DELETE + INSERT, không cột nào cần sửa tại chỗ. Có UPDATE
+      // nghĩa là ai đó vừa mở một đường ghi không ai thiết kế.
+      const rows = await direct.query<{ p: string }>(
+        `SELECT DISTINCT acl.privilege_type::text AS p
+           FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+           CROSS JOIN LATERAL aclexplode(c.relacl) acl
+          WHERE n.nspname = 'public' AND c.relname = 'chat_message_reactions'
+            AND acl.grantee = 'mediaos_app'::regrole
+          ORDER BY 1`,
+      );
+      expect(rows.rows.map((r) => r.p)).toEqual(["DELETE", "INSERT", "SELECT"]);
+
+      // Và BẤT BIẾN #2 ở vế còn lại: 3 bảng chat cũ vẫn KHÔNG có DELETE cấp bảng. `0543` cấp DELETE
+      // cho ĐÚNG MỘT bảng; ca này là chỗ lộ ra nếu lần sau ai đó cấp rộng tay.
+      const olds = await direct.query<{ relname: string; del: boolean }>(
+        `SELECT c.relname, has_table_privilege('mediaos_app', c.oid, 'DELETE') AS del
+           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public'
+            AND c.relname IN ('chat_messages', 'chat_room_members', 'chat_rooms')
+          ORDER BY 1`,
+      );
+      expect(olds.rows).toHaveLength(3);
+      for (const r of olds.rows) {
+        expect(r.del, `${r.relname} KHÔNG được có DELETE cấp bảng`).toBe(false);
+      }
+    });
+
+    it("chat_message_reactions: RLS + FORCE bật, và policy có ĐỦ CẢ USING lẫn WITH CHECK", async () => {
+      const t = await direct.query<{ rls: boolean; force: boolean }>(
+        `SELECT c.relrowsecurity AS rls, c.relforcerowsecurity AS force
+           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public' AND c.relname = 'chat_message_reactions'`,
+      );
+      expect(t.rows).toHaveLength(1);
+      expect(t.rows[0].rls, "phải ENABLE RLS").toBe(true);
+      expect(t.rows[0].force, "phải FORCE RLS (owner cũng không được vượt)").toBe(true);
+
+      // Thiếu WITH CHECK là lỗ ĐỌC-thì-kín-GHI-thì-hở: trồng được hàng mang company_id của tenant khác.
+      const p = await direct.query<{ policyname: string; hasQual: boolean; hasCheck: boolean }>(
+        `SELECT policyname, (qual IS NOT NULL) AS "hasQual", (with_check IS NOT NULL) AS "hasCheck"
+           FROM pg_policies
+          WHERE schemaname = 'public' AND tablename = 'chat_message_reactions'`,
+      );
+      expect(p.rows.map((r) => r.policyname)).toEqual(["tenant_isolation"]);
+      expect(p.rows[0].hasQual, "policy thiếu vế USING (đọc)").toBe(true);
+      expect(p.rows[0].hasCheck, "policy thiếu vế WITH CHECK (ghi)").toBe(true);
+    });
+
+    it("FK của 0543 đều COMPOSITE 2 cột, và KHÔNG có FK một-cột nào lẻn vào (KI-046)", async () => {
+      // Ghim ĐỊNH NGHĨA chứ không chỉ tên: `pg_get_constraintdef` mang cả tập cột, bảng đích lẫn hành
+      // động ON DELETE — bịt được cả ba đường trôi bằng một phép so sánh.
+      const rows = await direct.query<{ conname: string; def: string }>(
+        `SELECT conname, pg_get_constraintdef(oid) AS def
+           FROM pg_constraint
+          WHERE contype = 'f'
+            AND conrelid IN ('chat_message_reactions'::regclass, 'chat_rooms'::regclass)
+            AND conname IN ('chat_message_reactions_message_id_company_fk',
+                            'chat_message_reactions_user_id_company_fk',
+                            'chat_rooms_avatar_file_id_company_fk')
+          ORDER BY conname`,
+      );
+      expect(Object.fromEntries(rows.rows.map((r) => [r.conname, r.def]))).toEqual({
+        chat_message_reactions_message_id_company_fk:
+          "FOREIGN KEY (company_id, message_id) REFERENCES chat_messages(company_id, id) ON DELETE CASCADE",
+        chat_message_reactions_user_id_company_fk:
+          "FOREIGN KEY (company_id, user_id) REFERENCES users(company_id, id) ON DELETE CASCADE",
+        // ⚠️ `SET NULL` PHẢI có danh sách cột. Dạng trần null LUÔN `company_id` (cột NOT NULL mang
+        // tenant) — 279/446 cặp của 0535 rơi vào bẫy này.
+        chat_rooms_avatar_file_id_company_fk:
+          "FOREIGN KEY (company_id, avatar_file_id) REFERENCES files(company_id, id) ON DELETE SET NULL (avatar_file_id)",
+      });
+
+      // Vế NGƯỢC — KHÔNG được xuất hiện FK MỘT CỘT nào cho 3 cột này. Thêm `.references()` vào
+      // `communication.ts` là đủ để `db:generate` dựng lại FK một-cột ở migration sau, và lớp lỗ
+      // KI-046 mở lại trong im lặng vì composite vẫn còn nên ca trên vẫn xanh.
+      const single = await direct.query<{ conname: string }>(
+        `SELECT con.conname
+           FROM pg_constraint con
+           JOIN pg_class c ON c.oid = con.conrelid
+          WHERE con.contype = 'f' AND array_length(con.conkey, 1) = 1
+            AND ((c.relname = 'chat_message_reactions'
+                  AND con.conkey[1] IN (SELECT attnum FROM pg_attribute
+                                         WHERE attrelid = c.oid AND attname IN ('message_id','user_id')))
+              OR (c.relname = 'chat_rooms'
+                  AND con.conkey[1] = (SELECT attnum FROM pg_attribute
+                                        WHERE attrelid = c.oid AND attname = 'avatar_file_id')))
+          ORDER BY 1`,
+      );
+      expect(
+        single.rows.map((r) => r.conname),
+        "FK MỘT CỘT lẻn vào — mở lại KI-046 (kiểm `.references()` trong communication.ts)",
+      ).toEqual([]);
+    });
+
+    it("index của chat_message_reactions: ĐÚNG 2 (pkey + unique 4 cột), không có index tiền-tố-trùng", async () => {
+      // `0541` vừa đi dọn đúng loại index tiền tố trùng. Bản phác DB-12 §6.7 có thêm
+      // `(company_id, message_id)` — nó là TIỀN TỐ CHẶT của unique 4 cột nên KHÔNG được tạo lại.
+      const rows = await direct.query<{ indexrelname: string; indexdef: string }>(
+        `SELECT i.indexrelname, pg_get_indexdef(i.indexrelid) AS indexdef
+           FROM pg_stat_user_indexes i
+          WHERE i.relname = 'chat_message_reactions' ORDER BY 1`,
+      );
+      expect(Object.fromEntries(rows.rows.map((r) => [r.indexrelname, r.indexdef]))).toEqual({
+        chat_message_reactions_pkey:
+          "CREATE UNIQUE INDEX chat_message_reactions_pkey ON public.chat_message_reactions USING btree (id)",
+        chat_message_reactions_uq:
+          "CREATE UNIQUE INDEX chat_message_reactions_uq ON public.chat_message_reactions USING btree (company_id, message_id, user_id, emoji)",
       });
     });
   });
