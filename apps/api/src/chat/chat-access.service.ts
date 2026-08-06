@@ -33,6 +33,12 @@ export interface ChatRoomAccess {
      */
     visibleFromSeq: number | null;
     joinedAt: Date;
+    // ── S8-CHAT-UX-BE-1 — tuỳ chọn PER-USER (mig 0543 · muted_until có từ 0538) ──
+    // Ở đây chứ không phải `room`: chúng thuộc hàng MEMBERSHIP, hai người cùng phòng có ba giá trị
+    // khác nhau. Đặt nhầm sang `room` là biến tuỳ chọn cá nhân thành thuộc tính dùng chung.
+    pinnedAt: Date | null;
+    mutedUntil: Date | null;
+    markedUnreadAt: Date | null;
   };
 }
 
@@ -117,6 +123,9 @@ export class ChatAccessService {
         lastReadSeq: chatRoomMembers.lastReadSeq,
         visibleFromSeq: chatRoomMembers.visibleFromSeq,
         joinedAt: chatRoomMembers.joinedAt,
+        pinnedAt: chatRoomMembers.pinnedAt,
+        mutedUntil: chatRoomMembers.mutedUntil,
+        markedUnreadAt: chatRoomMembers.markedUnreadAt,
       })
       .from(chatRooms)
       .innerJoin(chatRoomMembers, this.activeMembershipJoin(actorUserId))
@@ -147,6 +156,9 @@ export class ChatAccessService {
         lastReadSeq: row.lastReadSeq,
         visibleFromSeq: row.visibleFromSeq,
         joinedAt: row.joinedAt,
+        pinnedAt: row.pinnedAt,
+        mutedUntil: row.mutedUntil,
+        markedUnreadAt: row.markedUnreadAt,
       },
     };
   }
@@ -235,6 +247,9 @@ export class ChatAccessService {
         lastReadSeq: chatRoomMembers.lastReadSeq,
         visibleFromSeq: chatRoomMembers.visibleFromSeq,
         joinedAt: chatRoomMembers.joinedAt,
+        pinnedAt: chatRoomMembers.pinnedAt,
+        mutedUntil: chatRoomMembers.mutedUntil,
+        markedUnreadAt: chatRoomMembers.markedUnreadAt,
       })
       .from(chatMessages)
       .innerJoin(
@@ -287,6 +302,9 @@ export class ChatAccessService {
         lastReadSeq: row.lastReadSeq,
         visibleFromSeq: row.visibleFromSeq,
         joinedAt: row.joinedAt,
+        pinnedAt: row.pinnedAt,
+        mutedUntil: row.mutedUntil,
+        markedUnreadAt: row.markedUnreadAt,
       },
     };
   }

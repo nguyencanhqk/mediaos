@@ -104,6 +104,15 @@ const ROUTE_GATES: readonly RouteGate[] = [
   // "đang gõ" là lời hứa sắp GỬI. Ai chỉ đọc được mà báo được đang gõ thì màn hình hiện một tin nhắn sẽ
   // không bao giờ tới. Cặp này TRÙNG `sendMessage` có chủ đích — cùng một năng lực.
   { controller: ChatRoomsController, handlerName: "typing", action: "send", resourceType: "chat-message" },
+  // CHAT-API-024a/b · 025 · 020 (S8-CHAT-UX-BE-1) — ghim · tắt thông báo · đánh dấu chưa đọc.
+  // Cặp ĐỌC `view:chat-room`, NGƯỢC với `typing` ngay trên: ba thứ này ghi lên hàng membership CỦA
+  // CHÍNH MÌNH, không phải năng lực gửi. Gắn `update:chat-room` sẽ đẻ ra role "đọc được phòng mà không
+  // tắt nổi thông báo của chính mình" — tuỳ chọn cá nhân KHÔNG được nằm sau cổng quyền quản trị
+  // (memory `personal-prefs-must-not-sit-behind-permission-gate` · API-13 §5.1b ghi chú).
+  { controller: ChatRoomsController, handlerName: "pinRoom", action: "view", resourceType: "chat-room" },
+  { controller: ChatRoomsController, handlerName: "unpinRoom", action: "view", resourceType: "chat-room" },
+  { controller: ChatRoomsController, handlerName: "muteRoom", action: "view", resourceType: "chat-room" },
+  { controller: ChatRoomsController, handlerName: "markRoomUnread", action: "view", resourceType: "chat-room" },
 
   // ── ChatMessagesController (CHAT-API-009..014, 016) ──
   { controller: ChatMessagesController, handlerName: "unreadCount", action: "view", resourceType: "chat-room" },

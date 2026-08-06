@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-06 14:43Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-06 15:11Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -42,6 +42,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `79139885` | 2026-08-06 | chore(docs): regen STATUS sau merge #359 (S10-SOCIAL-LIB-1/2 done) |
 | `03a9173a` | 2026-08-06 | feat(social): kho video đọc từ thư mục có whitelist + vá redirect_uri OAuth sau tunnel (S10-SOCIAL-LIB-1/2) (#359) |
 | `54375a84` | 2026-08-06 | fix(social): SOCIAL_* phải nằm ở .env GỐC + prod-status kiểm được ca thiếu env (#358) |
 | `80aae9e8` | 2026-08-06 | fix(social): route SSO điều hướng bằng Location TƯƠNG ĐỐI — sau tunnel đang đá người dùng về localhost:3500 (#357) |
@@ -53,7 +54,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `98516e01` | 2026-08-06 | feat(social): nhập fbpost thành app vệ tinh SOCIAL — mã hoá token FB, cổng phiên, cầu SSO (wave S9-SOCIAL) (#354) |
 | `46021aa5` | 2026-08-06 | feat(chat): CHAT-API-023 đang gõ (REST-ping) + presence thuần server, khoá Valkey có tiền tố môi trường (S8-CHAT-UX-RT-1) (#352) |
 | `4e407608` | 2026-08-06 | feat(chat): mig 0543 — ghim per-user · avatar phòng (composite tenant FK) · bảng chat_message_reactions (RLS+FORCE) (S8-CHAT-UX-DB-1) (#351) |
-| `5e9700a6` | 2026-08-06 | docs(status): regen sau khi #337 (ADR DECISIONS-07 nới CHAT-DEC-005 + seed wave CALL 7 WO) land — READY = S8-CHAT-UX-DB-1 · S8-CHAT-UX-RT-1 · S7-CALL-DOC-1 (cả ba vùng đỏ) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

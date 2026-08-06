@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
@@ -21,6 +21,11 @@ export interface ChatRoomListRow {
   isArchived: boolean;
   createdAt: Date;
   unreadCount: number;
+  // ── S8-CHAT-UX-BE-1 — tuỳ chọn PER-USER, lấy từ CHÍNH hàng membership đã join sẵn ──
+  // Không thêm truy vấn nào: `listRoomsForUser` vốn đã innerJoin `chat_room_members` của actor.
+  pinnedAt: Date | null;
+  mutedUntil: Date | null;
+  markedUnreadAt: Date | null;
 }
 
 export interface ChatMemberListRow {
@@ -158,6 +163,15 @@ function roomAnchors(values: InsertRoomValues) {
   }
 }
 
+/**
+ * S8-CHAT-UX-BE-1 — `classid` cho `pg_advisory_xact_lock(classid, objid)` của luồng GHIM HỘI THOẠI.
+ *
+ * Không gian khoá advisory là TOÀN CỤC trong một database (không tenant, không schema) ⇒ đặt hằng có
+ * tên thay vì `hashtext('chuỗi nào đó')` tại chỗ, để module sau không va phải. Khuôn + lý do đầy đủ:
+ * `task-file.service.ts:47` (`ADVISORY_CLASS_TASK_COVER = 0x5401`, đã qua FULL gate ở S5-TASK-COVER-1).
+ */
+const ADVISORY_CLASS_CHAT_ROOM_PIN = 0x5801;
+
 const ROOM_COLUMNS = {
   id: chatRooms.id,
   companyId: chatRooms.companyId,
@@ -187,10 +201,15 @@ const ROOM_COLUMNS = {
  *     REVOKE** ⇒ `delete()` = 42501 lúc chạy. ⚠️ Dòng này TRƯỚC 2026-08-05 ghi "UPDATE cấp bảng CÓ" —
  *     đúng tới `0538`, CHẾT từ `0540`; đo lại bằng `has_table_privilege('mediaos_app','chat_rooms',
  *     'UPDATE')` = `f` (FULL gate S7-CHAT-CLEAN-1).
- *   • `chat_room_members` : UPDATE chỉ ĐÚNG 6 cột — `role`, `last_read_at`, `last_read_seq`,
- *     `muted_until`, `left_at`, `visible_from_seq`. **`joined_at` và `added_by` KHÔNG được cấp** ⇒
- *     "vào lại phòng thì làm mới joined_at" là 42501, không phải lựa chọn thiết kế. DELETE cũng đã REVOKE
- *     (rời phòng = `left_at`, giữ hàng — SPEC-15 §13.3).
+ *   • `chat_room_members` : UPDATE chỉ ĐÚNG **7 cột** — `last_read_at`, `last_read_seq`, `left_at`,
+ *     `marked_unread_at`, `muted_until`, `pinned_at`, `role`. **`joined_at` và `added_by` KHÔNG được
+ *     cấp** ⇒ "vào lại phòng thì làm mới joined_at" là 42501, không phải lựa chọn thiết kế. DELETE cũng
+ *     đã REVOKE (rời phòng = `left_at`, giữ hàng — SPEC-15 §13.3).
+ *     ⚠️ Dòng này TRƯỚC 2026-08-06 ghi "6 cột … `visible_from_seq`" — **SAI theo hướng nguy hiểm**: nó
+ *     mời người đọc viết một câu UPDATE ra `42501` lúc chạy. Đo lại bằng `aclexplode` trên DB thật
+ *     (khuôn mà chính khối VERIFY của `0543` mục (E)(1) dùng để pin): tập cột KHÔNG có
+ *     `visible_from_seq`, và có thêm `marked_unread_at`/`pinned_at` từ `0543`. Bài học
+ *     `grant-in-old-migration-is-not-current-state` — GRANT trong migration cũ không phải hiện trạng.
  * TypeScript và unit test đều MÙ với hai ràng buộc trên; chỉ int-spec trên DB thật bắt được.
  */
 @Injectable()
@@ -240,6 +259,11 @@ export class ChatRoomsRepository {
         isArchived: chatRooms.isArchived,
         createdAt: chatRooms.createdAt,
         unreadCount: sql<number>`${unreadSeqExpr()}::int`,
+        // S8-CHAT-UX-BE-1 — ba cột của hàng membership ĐANG join, không phải của phòng: hai người
+        // trong cùng một phòng nhận ba giá trị KHÁC NHAU, đó là toàn bộ ý nghĩa "per-user".
+        pinnedAt: chatRoomMembers.pinnedAt,
+        mutedUntil: chatRoomMembers.mutedUntil,
+        markedUnreadAt: chatRoomMembers.markedUnreadAt,
       })
       .from(chatRooms)
       .innerJoin(
@@ -562,6 +586,113 @@ export class ChatRoomsRepository {
         ),
       );
     return rows[0] ?? { total: 0, admins: 0 };
+  }
+
+  // ─── S8-CHAT-UX-BE-1: tuỳ chọn per-phòng của CHÍNH actor ─────────────────────
+  //
+  // Cả ba cột dưới đây (`pinned_at`, `muted_until`, `marked_unread_at`) NẰM TRONG tập 7 cột được
+  // `GRANT UPDATE` (mig `0543` khối (E)(1) pin bằng `=`). Thêm cột thứ tư vào các câu `.set()` này mà
+  // không có `GRANT UPDATE (cột)` là `42501` LÚC CHẠY — TypeScript và unit test đều mù với nó.
+  //
+  // MỌI hàm nhận `memberRowId` chứ không `(roomId, userId)`: id đó chỉ có được từ `assertMember`, nên
+  // không có đường nào gọi tới đây mà chưa qua điểm khẳng định membership. Vế `company_id` vẫn viết
+  // tường minh bên cạnh RLS (CLAUDE.md §2).
+
+  /**
+   * Tuần-tự-hoá các thao tác GHIM **của cùng một người** trong phạm vi transaction hiện tại.
+   *
+   * ┌─ VÌ SAO CẦN KHOÁ, KHI ĐÃ CÓ `countPinnedRooms` NGAY TRƯỚC ĐÓ ─────────────────────────────────┐
+   * │ Đếm-rồi-ghi là đường đua kinh điển: hai request song song cùng đọc 9, cùng ghi ⇒ 11.           │
+   * │ Và một subquery `count(*) < 10` NHÉT VÀO CHÍNH CÂU UPDATE **cũng không cứu được**: hai          │
+   * │ transaction ghi HAI HÀNG KHÁC NHAU nên không đụng khoá hàng nào của nhau, dưới READ COMMITTED   │
+   * │ cả hai đều thấy đúng ảnh chụp 9 và cả hai đều ghi. `SELECT … FOR UPDATE` trên tập hàng đang     │
+   * │ ghim cũng không đủ: hàng mà bên kia vừa ghim KHÔNG nằm trong tập mình đã chọn để khoá.          │
+   * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * `xact`-level (KHÔNG phải session-level) là **bắt buộc** trên PgBouncer transaction-mode: khoá
+   * session-level sẽ ở lại trên một kết nối gộp và rò sang request khác. Khoá tự nhả lúc commit/rollback.
+   *
+   * Khoá theo `companyId:userId` chứ không riêng `userId`: không gian khoá advisory là TOÀN CỤC trong
+   * một database (không có RLS, không có tenant) — ghép tenant vào khoá cho đúng ngữ nghĩa "hàng đợi
+   * của một người trong một công ty".
+   */
+  async lockUserPrefs(tx: TenantTx, companyId: string, userId: string): Promise<void> {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(${ADVISORY_CLASS_CHAT_ROOM_PIN}, hashtext(${companyId}::text || ':' || ${userId}::text))`,
+    );
+  }
+
+  /**
+   * Số hội thoại actor ĐANG ghim. `left_at IS NULL`: phòng đã rời không chiếm suất — nếu không, người
+   * dùng mất dần suất ghim mà không có cách nào lấy lại (dòng ghim đó không còn hiện trên UI để bỏ).
+   *
+   * ⚠️ KHÔNG lọc `chat_rooms.deleted_at`: hàm chỉ đọc `chat_room_members`, thêm JOIN vào đây là đổi ý
+   * nghĩa của trần theo một thứ actor không nhìn thấy. Phòng xoá mềm là ca hiếm và tự khỏi khi bỏ ghim.
+   */
+  async countPinnedRooms(tx: TenantTx, companyId: string, userId: string): Promise<number> {
+    const rows = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(chatRoomMembers)
+      .where(
+        and(
+          eq(chatRoomMembers.companyId, companyId),
+          eq(chatRoomMembers.userId, userId),
+          isNull(chatRoomMembers.leftAt),
+          isNotNull(chatRoomMembers.pinnedAt),
+        ),
+      );
+    return rows[0]?.n ?? 0;
+  }
+
+  /** Ghim (`pinnedAt = now`) / bỏ ghim (`null`). Trả mốc SAU khi ghi để service khỏi đọc lại. */
+  async setRoomPinned(
+    tx: TenantTx,
+    companyId: string,
+    memberRowId: string,
+    pinnedAt: Date | null,
+  ): Promise<Date | null> {
+    const rows = await tx
+      .update(chatRoomMembers)
+      .set({ pinnedAt })
+      .where(and(eq(chatRoomMembers.companyId, companyId), eq(chatRoomMembers.id, memberRowId)))
+      .returning({ pinnedAt: chatRoomMembers.pinnedAt });
+    return rows[0]?.pinnedAt ?? null;
+  }
+
+  /** Tắt thông báo tới `mutedUntil`, hoặc bật lại (`null`). */
+  async setRoomMuted(
+    tx: TenantTx,
+    companyId: string,
+    memberRowId: string,
+    mutedUntil: Date | null,
+  ): Promise<Date | null> {
+    const rows = await tx
+      .update(chatRoomMembers)
+      .set({ mutedUntil })
+      .where(and(eq(chatRoomMembers.companyId, companyId), eq(chatRoomMembers.id, memberRowId)))
+      .returning({ mutedUntil: chatRoomMembers.mutedUntil });
+    return rows[0]?.mutedUntil ?? null;
+  }
+
+  /**
+   * Đánh dấu chưa đọc thủ công.
+   *
+   * ⚠️ CHỈ ghi `marked_unread_at`. TUYỆT ĐỐI KHÔNG kèm `lastReadSeq` vào câu `.set()` này: con trỏ đọc
+   * là CHỈ-TIẾN (SPEC-15 §13.2 · CHAT-ERR-018) và lùi nó để làm một tính năng tiện sẽ phá phép trừ
+   * `unreadSeqExpr()` cùng mọi thứ dựng trên nó (badge header, chat:read, "đã xem bởi").
+   */
+  async setRoomMarkedUnread(
+    tx: TenantTx,
+    companyId: string,
+    memberRowId: string,
+    markedUnreadAt: Date | null,
+  ): Promise<Date | null> {
+    const rows = await tx
+      .update(chatRoomMembers)
+      .set({ markedUnreadAt })
+      .where(and(eq(chatRoomMembers.companyId, companyId), eq(chatRoomMembers.id, memberRowId)))
+      .returning({ markedUnreadAt: chatRoomMembers.markedUnreadAt });
+    return rows[0]?.markedUnreadAt ?? null;
   }
 
   // ─── kiểm tra người dùng ─────────────────────────────────────────────────────
