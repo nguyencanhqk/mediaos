@@ -339,6 +339,9 @@ export {
 export { putBytesToStorage, DEFAULT_UPLOAD_MIME } from "./lib/storage-upload";
 // S7-CHAT-FE-1 — CHAT API client (SPEC-15 · API-13 §5.1, ChatRooms+ChatMessages controller).
 export { chatApi } from "./lib/chat-api";
+// S8-CHAT-UX-FE-2 — export RIÊNG (không gộp vào `chatApi`): đây là đường GHI TỆP đi qua `FileService`,
+// cùng lý do BE tách `ChatRoomAvatarController` khỏi `ChatRoomsController`.
+export { chatRoomAvatarApi, type SetChatRoomAvatarResult } from "./lib/chat-api";
 // S7-CHAT-FE-5 🔒 — export RIÊNG (không gộp vào `chatApi`): đường đọc-vượt membership phải nhìn thấy
 // được ở tầng import, xem docblock `chatOversightApi`.
 export { chatOversightApi } from "./lib/chat-api";
