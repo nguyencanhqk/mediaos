@@ -350,6 +350,20 @@ lượt chạy tay. ⇒ Phần **"lịch tự động"** của `KI-050` ĐÓNG. 
 lặp liên tục là alert-fatigue — đúng thứ `S6-OPS-LOGWINDOW-1` vừa đi sửa cho một nguyên nhân khác. Hoặc
 deploy PROD lên head (áp migration TRƯỚC), hoặc chấp nhận và ghi rõ, đừng để nó kêu vô chủ.
 
+> ⟲ **CẬP NHẬT 2026-08-07 (`S8-CHAT-UX-QA-1`) — cảnh báo lệch migration đã HẾT LÝ DO.** Đo lại trên
+> `mediaos`: `drizzle.__drizzle_migrations` = **213 hàng** = đúng 213 entry của `migrations/meta/_journal.json`
+> ⇒ PROD ở **head**, gồm cả `0538…0541` của cảnh báo trên **và** `0542` (contract drop cột chết) ·
+> `0543` (ghim · avatar phòng · bảng reaction) · `0544`/`0545` (SOCIAL). **Không còn nợ migration nào.**
+>
+> ⚠️ Kiểm bằng **schema**, không chỉ bằng sổ: `chat_message_reactions` tồn tại · hai cột
+> `chat_room_members.pinned_at`/`marked_unread_at` có · `chat_rooms.avatar_file_id` có ·
+> `chat_messages.file_url`/`file_name` đã DROP.
+> Migration thiếu entry trong `_journal.json` vẫn in "applied" rồi bị bỏ qua trong im lặng — sổ khớp mà
+> schema thiếu là trạng thái ĐÃ xảy ra thật ở dự án này.
+>
+> ⚠️ **Không** đọc dòng này thành "CHAT đã phát hành": module vẫn `is_active = false`, và cờ đó KHÔNG
+> phải cổng chặn — route vẫn gọi được.
+
 **Sau G1…G10:** 15/15 ô §2 ĐẠT hoặc chấp nhận-có-chữ-ký ⇒ phán quyết chuyển **GO**.
 
 **Nếu owner muốn go-live sớm hơn:** con đường ngắn nhất hợp lệ là **CONDITIONAL GO** sau `G1→G4` +

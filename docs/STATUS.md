@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-07 09:21Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-07 09:58Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -37,6 +37,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `3dea862d` | 2026-08-07 | chore(docs): regen STATUS sau khi land #366/#362/#353 (S8-CHAT-UX-FE-3 + S8-CHAT-ENTRY-1 done, QA-1 mở khoá) |
 | `72141105` | 2026-08-07 | feat(chat): thẻ "Tin nhắn" ở Home Portal + App Switcher (S8-CHAT-ENTRY-1) (#353) |
 | `302f4987` | 2026-08-07 | fix(social): kho video — mật khẩu ổ chia sẻ chưa từng tới được Windows (S10-SOCIAL-LIB) (#362) |
 | `477040cb` | 2026-08-07 | feat(chat): avatar người gửi từ roster + gộp tin + thả cảm xúc + đang gõ/đang online (S8-CHAT-UX-FE-3) (CHAT-DEC-017/018/019) (#366) |
@@ -48,7 +49,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `2fc30bf8` | 2026-08-07 | feat(chat): thả cảm xúc — bộ emoji đóng, idempotent, tổng hợp 1-truy-vấn (S8-CHAT-UX-BE-3) (CHAT-API-022a/b) (#361) |
 | `230df311` | 2026-08-07 | feat(chat): tuỳ chọn per-phòng — ghim (trần 10) · tắt thông báo · đánh dấu chưa đọc (S8-CHAT-UX-BE-1) (CHAT-API-024a/b · 025 · 020) (#360) |
 | `79139885` | 2026-08-06 | chore(docs): regen STATUS sau merge #359 (S10-SOCIAL-LIB-1/2 done) |
-| `03a9173a` | 2026-08-06 | feat(social): kho video đọc từ thư mục có whitelist + vá redirect_uri OAuth sau tunnel (S10-SOCIAL-LIB-1/2) (#359) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
