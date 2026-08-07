@@ -118,6 +118,27 @@ export const CHAT_ERR = {
   ROOM_PIN_LIMIT: (max: number): string =>
     `CHAT-ERR-021: chỉ ghim được tối đa ${max} hội thoại — bỏ ghim bớt trước.`,
 
+  /**
+   * CHAT-ERR-024 *(S8)* — thả cảm xúc vào tin ĐÃ THU HỒI (422).
+   *
+   * Cùng lớp che với `body: null` của SPEC-15 §13.6: tin đã rút thì không còn nội dung để phản ứng.
+   * Cho phép thả sẽ đẻ ra một thanh cảm xúc dưới một bong bóng trống — và một lối để người ta tiếp tục
+   * tương tác với thứ người gửi đã chủ động thu hồi.
+   *
+   * 422 (không phải 404): người gọi ĐÃ đọc được tin đó, giấu thêm không che được gì.
+   */
+  REACTION_ON_RECALLED: "CHAT-ERR-024: không thả cảm xúc được vào tin đã thu hồi.",
+
+  /**
+   * CHAT-ERR-025 *(S8)* — emoji ngoài BỘ ĐÓNG (422).
+   *
+   * Hằng này là lưới cho đường gọi service; biên HTTP đã bị `chatReactionEmojiSchema` chặn trước, và
+   * `chat_message_reactions_emoji_chk` ở DB là đai thứ ba. Ba lớp vì bộ emoji đóng là thứ duy nhất giữ
+   * cột `emoji` khỏi trở thành bề mặt lưu trữ tự do.
+   */
+  REACTION_EMOJI_INVALID:
+    "CHAT-ERR-025: cảm xúc không hợp lệ — chỉ dùng được bộ biểu tượng có sẵn.",
+
   /** CHAT-ERR-009 — trả lời tin không cùng phòng, hoặc tin đã thu hồi. */
   REPLY_INVALID:
     "CHAT-ERR-009: không trả lời được tin này — tin phải thuộc cùng phòng và chưa bị thu hồi.",

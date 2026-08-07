@@ -4,8 +4,11 @@ import {
   type ChatLeaveRoomResultDto,
   chatMarkReadResultSchema,
   type ChatMarkReadResultDto,
+  chatMessageReactionSchema,
+  type ChatMessageReactionDto,
   chatMessageSchema,
   type ChatMessageDto,
+  type ChatReactionEmoji,
   chatRemoveMemberResultSchema,
   type ChatRemoveMemberResultDto,
   chatRoomDetailSchema,
@@ -168,6 +171,35 @@ export const chatApi = {
    */
   markRoomUnread: (roomId: string): Promise<ChatRoomDto> =>
     apiFetch(`/chat/rooms/${roomId}/unread`, chatRoomSchema, { method: "POST" }),
+
+  // ── CHAT-API-022a/022b (S8-CHAT-UX-BE-3) — thả cảm xúc ────────────────────────────────────────
+
+  /**
+   * PUT /chat/messages/:id/reactions/:emoji (CHAT-API-022a) — thả cảm xúc. Idempotent.
+   *
+   * Trả **tổng hợp mới của tin** (không phải phòng, không phải tin): dùng nó thay nguyên mảng
+   * `reactions` của tin trong cache, khỏi phải tải lại trang tin để hoà cập-nhật-lạc-quan.
+   *
+   * Lỗi cần hiện thông điệp riêng: **422 `CHAT-ERR-024`** (tin đã thu hồi) · **422 `CHAT-ERR-005`**
+   * (phòng đã lưu trữ). Nuốt cả hai thành "có lỗi xảy ra" là bỏ đúng phần người dùng cần biết.
+   */
+  reactToMessage: (
+    messageId: string,
+    emoji: ChatReactionEmoji,
+  ): Promise<ChatMessageReactionDto[]> =>
+    apiFetch(`/chat/messages/${messageId}/reactions/${emoji}`, z.array(chatMessageReactionSchema), {
+      method: "PUT",
+    }),
+
+  /**
+   * DELETE /chat/messages/:id/reactions/:emoji (CHAT-API-022b) — bỏ thả. **204, không có thân.**
+   *
+   * Chưa từng thả cũng 204 (idempotent) ⇒ client KHÔNG cần kiểm trạng thái trước khi gọi. Và khác
+   * `reactToMessage`, đường này CÒN chạy được cả trên tin đã thu hồi / phòng đã lưu trữ — cố ý, để
+   * một cảm xúc lỡ tay không dính vĩnh viễn.
+   */
+  unreactFromMessage: (messageId: string, emoji: ChatReactionEmoji): Promise<void> =>
+    apiFetch(`/chat/messages/${messageId}/reactions/${emoji}`, z.void(), { method: "DELETE" }),
 
   /** GET /chat/rooms/:id/members (CHAT-API-007a) — kèm `userName` + `lastReadSeq` (dựng "đã xem bởi"). */
   listMembers: (roomId: string): Promise<ChatRoomMemberDto[]> =>

@@ -136,6 +136,12 @@ const ROUTE_GATES: readonly RouteGate[] = [
   { controller: ChatMessagesController, handlerName: "recall", action: "recall", resourceType: "chat-message" },
   { controller: ChatMessagesController, handlerName: "pin", action: "pin", resourceType: "chat-message" },
   { controller: ChatMessagesController, handlerName: "unpin", action: "pin", resourceType: "chat-message" },
+  // CHAT-API-022a/022b (S8-CHAT-UX-BE-3) — thả cảm xúc. Cặp TRÙNG `sendMessage` có chủ đích: cùng một
+  // năng lực "ghi vào phòng ở mức người tham gia". KHÔNG dùng `pin`/`recall` — hai cặp đó dành cho
+  // thao tác lên nội dung của NGƯỜI KHÁC, gắn vào đây sẽ bắt nhân viên thường phải có quyền kiểm duyệt
+  // mới bấm được một biểu tượng cảm xúc.
+  { controller: ChatMessagesController, handlerName: "react", action: "send", resourceType: "chat-message" },
+  { controller: ChatMessagesController, handlerName: "unreact", action: "send", resourceType: "chat-message" },
 
   // ── ChatFilesController (S7-CHAT-BE-8 — SPEC-15 §13.5 bước 1-2) ──
   // Cặp `send:chat-message`, KHÔNG phải `view:chat-room`: đây là hai bước ĐẦU của luồng GỬI tin, người
