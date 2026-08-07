@@ -340,6 +340,7 @@ export class ChatRoomsService {
         updated,
         unreadOf(updated.lastMessageSeq, acc.membership.lastReadSeq),
         acc.membership,
+        await this.avatarUrlOf(actor, roomId, tx),
       );
     });
 
@@ -373,6 +374,7 @@ export class ChatRoomsService {
         updated,
         unreadOf(updated.lastMessageSeq, acc.membership.lastReadSeq),
         acc.membership,
+        await this.avatarUrlOf(actor, roomId, tx),
       );
     });
 
@@ -432,8 +434,30 @@ export class ChatRoomsService {
         acc.room,
         unreadOf(acc.room.lastMessageSeq, acc.membership.lastReadSeq),
         acc.membership,
+        await this.avatarUrlOf(actor, roomId, tx),
       );
     });
+  }
+
+  /**
+   * S8-CHAT-UX-BE-2 — URL avatar đã ký cho MỘT phòng, dùng ở các đường trả `ChatRoomDto` lẻ.
+   *
+   * ⚠️ **VÌ SAO MỌI ĐƯỜNG TRẢ `ChatRoomDto` ĐỀU PHẢI GỌI NÓ.** Tham số `avatarUrl` của mapper mặc
+   * định `null`, nên một caller quên truyền vẫn biên dịch được và vẫn trả HTTP 200 — chỉ là phòng
+   * CÓ ảnh bỗng báo "không ảnh". FE cập-nhật-lạc-quan (đổi tên · ghim · tắt thông báo · đánh dấu
+   * chưa đọc) ghi phản hồi đó đè lên cache ⇒ **ảnh biến mất khỏi giao diện** cho tới lần tải lại.
+   * Đúng lớp hỏng của `apifetch-drops-pagination-bare-array`: hợp lệ về kiểu, sai về dữ liệu, im lặng.
+   *
+   * Caller PHẢI đã `assertMember` (hoặc join membership) trước — đó là nghĩa vụ mà
+   * `ChatRoomAvatarPresignService` đặt lên người gọi, xem jsdoc ở đó.
+   */
+  private async avatarUrlOf(
+    actor: ChatActor,
+    roomId: string,
+    tx: TenantTx,
+  ): Promise<string | null> {
+    const map = await this.avatarPresign.resolveRoomAvatars(actor.companyId, [roomId], tx);
+    return map.get(roomId) ?? null;
   }
 
   /**

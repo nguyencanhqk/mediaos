@@ -322,6 +322,39 @@ describe.skipIf(!hasLaneDb)("S8-CHAT-UX-BE-2 — avatar phòng (DB cô lập, đ
     expect(rooms.find((r) => r.id === directRoomId)?.avatarUrl ?? null).toBeNull();
   });
 
+  it("ca 12b — MỌI phản hồi trả ChatRoomDto đều mang `avatarUrl` (không chỉ hai đường đọc)", async () => {
+    // Tham số `avatarUrl` của mapper mặc định `null` ⇒ caller quên truyền vẫn biên dịch, vẫn HTTP 200,
+    // chỉ là phòng CÓ ảnh bỗng báo "không ảnh". FE cập-nhật-lạc-quan ghi đè cache ⇒ ảnh BIẾN MẤT ngay
+    // khi người dùng bấm ghim/tắt thông báo/đổi tên. Ca này quét đủ 5 đường ghi trả về phòng.
+    const pin = await srv()
+      .put(`/chat/rooms/${roomId}/pin`)
+      .set("Authorization", `Bearer ${tMember}`);
+    expect(pin.status, JSON.stringify(pin.body)).toBe(200);
+    expect(pin.body.data.avatarUrl, "PUT /pin làm mất avatar").toBeTruthy();
+
+    const mute = await srv()
+      .put(`/chat/rooms/${roomId}/mute`)
+      .set("Authorization", `Bearer ${tMember}`)
+      .send({ mutedUntil: null });
+    expect(mute.status, JSON.stringify(mute.body)).toBe(200);
+    expect(mute.body.data.avatarUrl, "PUT /mute làm mất avatar").toBeTruthy();
+
+    const unread = await authPost(tMember, `/chat/rooms/${roomId}/unread`).send({});
+    expect(unread.status, JSON.stringify(unread.body)).toBe(200);
+    expect(unread.body.data.avatarUrl, "POST /unread làm mất avatar").toBeTruthy();
+
+    const unpin = await authDel(tMember, `/chat/rooms/${roomId}/pin`);
+    expect(unpin.status, JSON.stringify(unpin.body)).toBe(200);
+    expect(unpin.body.data.avatarUrl, "DELETE /pin làm mất avatar").toBeTruthy();
+
+    const patched = await srv()
+      .patch(`/chat/rooms/${roomId}`)
+      .set("Authorization", `Bearer ${tAdmin}`)
+      .send({ name: "Phòng có ảnh (đổi tên)" });
+    expect(patched.status, JSON.stringify(patched.body)).toBe(200);
+    expect(patched.body.data.avatarUrl, "PATCH /rooms/:id làm mất avatar").toBeTruthy();
+  });
+
   // ── gỡ ──────────────────────────────────────────────────────────────────────
 
   it("ca 13 — DELETE gỡ cả cột lẫn link; gọi LẦN HAI vẫn 204 (idempotent, không 404)", async () => {

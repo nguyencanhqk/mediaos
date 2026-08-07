@@ -1,7 +1,8 @@
 import { ConflictException, Injectable } from "@nestjs/common";
 import type { ChatMuteRoomRequest, ChatRoomDto } from "@mediaos/contracts";
-import { DatabaseService } from "../db/db.service";
+import { DatabaseService, type TenantTx } from "../db/db.service";
 import { ChatAccessService } from "./chat-access.service";
+import { ChatRoomAvatarPresignService } from "./chat-room-avatar-presign.service";
 import { ChatRoomsRepository } from "./chat-rooms.repository";
 import type { ChatActor } from "./chat-rooms.service";
 import { CHAT_ERR } from "./chat.errors";
@@ -53,6 +54,8 @@ export class ChatRoomPrefsService {
     private readonly db: DatabaseService,
     private readonly repo: ChatRoomsRepository,
     private readonly access: ChatAccessService,
+    // S8-CHAT-UX-BE-2 — ký lại avatar cho phản hồi của 4 route tuỳ chọn; xem jsdoc `dtoOf`.
+    private readonly avatarPresign: ChatRoomAvatarPresignService,
   ) {}
 
   /**
@@ -64,7 +67,8 @@ export class ChatRoomPrefsService {
   async pin(actor: ChatActor, roomId: string): Promise<ChatRoomDto> {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
-      if (acc.membership.pinnedAt) return this.dtoOf(acc, { pinnedAt: acc.membership.pinnedAt });
+      if (acc.membership.pinnedAt)
+        return this.dtoOf(tx, actor.companyId, acc, { pinnedAt: acc.membership.pinnedAt });
 
       // Khoá TRƯỚC khi đếm, và chỉ ở nhánh ghim. Đếm-rồi-ghi không có khoá là đường đua ⇒ 11 phòng;
       // lý do đầy đủ (kể cả vì sao subquery trong UPDATE không cứu được) ở `lockUserPrefs`.
@@ -80,7 +84,7 @@ export class ChatRoomPrefsService {
         acc.membership.id,
         new Date(),
       );
-      return this.dtoOf(acc, { pinnedAt });
+      return this.dtoOf(tx, actor.companyId, acc, { pinnedAt });
     });
   }
 
@@ -89,7 +93,7 @@ export class ChatRoomPrefsService {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
       const pinnedAt = await this.repo.setRoomPinned(tx, actor.companyId, acc.membership.id, null);
-      return this.dtoOf(acc, { pinnedAt });
+      return this.dtoOf(tx, actor.companyId, acc, { pinnedAt });
     });
   }
 
@@ -120,7 +124,7 @@ export class ChatRoomPrefsService {
         acc.membership.id,
         normalized,
       );
-      return this.dtoOf(acc, { mutedUntil });
+      return this.dtoOf(tx, actor.companyId, acc, { mutedUntil });
     });
   }
 
@@ -143,7 +147,7 @@ export class ChatRoomPrefsService {
         acc.membership.id,
         new Date(),
       );
-      return this.dtoOf(acc, { markedUnreadAt });
+      return this.dtoOf(tx, actor.companyId, acc, { markedUnreadAt });
     });
   }
 
@@ -152,18 +156,34 @@ export class ChatRoomPrefsService {
   /**
    * DTO phòng sau khi ghi, dựng từ hàng `assertMember` ĐÃ đọc + đúng một cột vừa đổi.
    *
-   * Không đọc lại DB: `assertMember` chạy trong CÙNG transaction nên hai cột không đổi vẫn là giá trị
-   * mới nhất, và cột vừa ghi lấy thẳng từ `RETURNING`. Đọc lại là một round-trip thừa cho 0 thông tin.
+   * Không đọc lại hàng phòng: `assertMember` chạy trong CÙNG transaction nên hai cột không đổi vẫn là
+   * giá trị mới nhất, và cột vừa ghi lấy thẳng từ `RETURNING`.
+   *
+   * ⚠️ **S8-CHAT-UX-BE-2 — `avatarUrl` thì PHẢI ký lại, không được để mặc định `null`.** Bốn route
+   * này (ghim · bỏ ghim · tắt thông báo · đánh dấu chưa đọc) là đúng những nút mà menu ngữ cảnh của
+   * `CHAT-SCREEN-001` bấm, và FE cập-nhật-lạc-quan ghi phản hồi đè lên cache danh sách phòng. Trả
+   * `null` ở đây làm **ảnh đại diện biến mất** ngay khi người dùng bấm "ghim" — HTTP 200, không lỗi
+   * nào, chỉ là ảnh mất tới lần tải lại (lớp `apifetch-drops-pagination-bare-array`).
+   *
+   * Nghĩa vụ caller của `resolveRoomAvatars` đã thoả: `acc` đến từ `assertMember`.
    */
-  private dtoOf(
+  private async dtoOf(
+    tx: TenantTx,
+    companyId: string,
     acc: Awaited<ReturnType<ChatAccessService["assertMember"]>>,
     patch: Partial<{ pinnedAt: Date | null; mutedUntil: Date | null; markedUnreadAt: Date | null }>,
-  ): ChatRoomDto {
-    return toChatRoomDto(acc.room, unreadOf(acc.room.lastMessageSeq, acc.membership.lastReadSeq), {
-      pinnedAt: acc.membership.pinnedAt,
-      mutedUntil: acc.membership.mutedUntil,
-      markedUnreadAt: acc.membership.markedUnreadAt,
-      ...patch,
-    });
+  ): Promise<ChatRoomDto> {
+    const avatars = await this.avatarPresign.resolveRoomAvatars(companyId, [acc.room.id], tx);
+    return toChatRoomDto(
+      acc.room,
+      unreadOf(acc.room.lastMessageSeq, acc.membership.lastReadSeq),
+      {
+        pinnedAt: acc.membership.pinnedAt,
+        mutedUntil: acc.membership.mutedUntil,
+        markedUnreadAt: acc.membership.markedUnreadAt,
+        ...patch,
+      },
+      avatars.get(acc.room.id) ?? null,
+    );
   }
 }
