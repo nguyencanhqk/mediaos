@@ -1373,4 +1373,86 @@ describe("APP_REGISTRY", () => {
     const orders = APP_REGISTRY.map((a) => a.order);
     expect(orders).toEqual([...orders].sort((a, b) => a - b));
   });
+
+  // Ratchet chống "thẻ hiện ra chuỗi key thô": AppCard render t(nameKey)/t(descKey) trên namespace `nav`.
+  // Thiếu key thì i18next trả về chính cái key ⇒ thẻ ghi "app.chat" giữa lưới, không ai thấy lúc review diff.
+  it("mọi app có nameKey + descKey dịch được trong namespace nav (vi)", () => {
+    const appNames = viNav.app as Record<string, string>;
+    const appDescs = viNav.appDesc as Record<string, string>;
+    for (const app of APP_REGISTRY) {
+      const nameLeaf = app.nameKey.replace(/^app\./, "");
+      const descLeaf = app.descKey.replace(/^appDesc\./, "");
+      expect(appNames[nameLeaf], `thiếu nav.app.${nameLeaf}`).toBeTruthy();
+      expect(appDescs[descLeaf], `thiếu nav.appDesc.${descLeaf}`).toBeTruthy();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S8-CHAT-ENTRY-1 — thẻ CHAT ở Home Portal / App Switcher
+// ---------------------------------------------------------------------------
+//
+// Vì sao có WO này: S7-CHAT-FE-3 ship 3 lối vào (badge header · sidebar ME "Tin nhắn" · URL /chat) nhưng
+// KHÔNG thêm entry vào APP_REGISTRY, mà lưới "Ứng dụng của tôi" dựng 100% từ mảng đó ⇒ Chat không thể
+// xuất hiện ở màn đầu tiên sau đăng nhập dù user có đủ quyền. Owner báo 05/08/2026.
+//
+// Gate = cặp engine LITERAL (mig 0538, non-sensitive, grant Company cho 4 role canonical), KHÔNG qua
+// PERMISSION_CODE_TO_PAIR — cùng kỹ thuật access:me / access:goal / access:lms, tránh pair-drift.
+// Đây CHỈ là visibility của thẻ; cổng thật vẫn là ProtectedRoute /chat + ChatAccessService ở server.
+//
+// PARITY THẺ↔ĐƯỜNG-TẢI (bài học SYSTEM_APP_PERMISSIONS): thẻ đòi ĐỦ CẢ `access:chat` (cổng module, dùng
+// chung với badge/sidebar) LẪN `view:chat-room` (cặp mà CHAT_ROUTE_META thật sự gate). Thiếu vế thứ hai
+// thì thẻ hiện ra rồi bấm vào ăn SHOW_403 — lỗi im lặng, không test nào đỏ.
+describe("APP_REGISTRY — app 'chat' (S8-CHAT-ENTRY-1)", () => {
+  const chatApp = () => APP_REGISTRY.find((a) => a.appKey === "chat");
+  const CHAT_CAPS = ["access:chat", "view:chat-room"];
+
+  it("entry TỒN TẠI, moduleCode=CHAT, mở /chat, gate literal đủ 2 cặp", () => {
+    const app = chatApp();
+    expect(
+      app,
+      "APP_REGISTRY thiếu entry 'chat' — lưới Home Portal không thể hiện thẻ Chat",
+    ).toBeDefined();
+    expect(app?.moduleCode).toBe("CHAT");
+    expect(app?.rootPath).toBe("/chat");
+    expect(app?.defaultRoute).toBe("/chat");
+    expect(app?.status).toBe("active");
+    expect(app?.requiredPermissions).toEqual(CHAT_CAPS);
+  });
+
+  it("allow-path: có đủ 2 cặp → thẻ hiện trong getVisibleApps", () => {
+    const c = createPermissionChecker(makePerms(CHAT_CAPS));
+    const keys = getVisibleApps(APP_REGISTRY, makeSession(), c).map((a) => a.appKey);
+    expect(keys).toContain("chat");
+  });
+
+  it("deny-path: KHÔNG có cặp CHAT nào → thẻ biến mất (admin thu quyền là mất lối vào)", () => {
+    const c = createPermissionChecker(makePerms(["read:dashboard", "read:employee"]));
+    const keys = getVisibleApps(APP_REGISTRY, makeSession(), c).map((a) => a.appKey);
+    expect(keys).not.toContain("chat");
+  });
+
+  // Ca chống-403: đây chính là hình dạng lỗ hổng SYSTEM_APP_PERMISSIONS từng có. Nếu ai đó đổi gate thẻ
+  // về `requiredAnyPermissions: ['access:chat']` cho "gọn", ca này đỏ ngay.
+  it("có access:chat nhưng THIẾU view:chat-room → thẻ ẩn (không dẫn người dùng tới SHOW_403)", () => {
+    const c = createPermissionChecker(makePerms(["access:chat"]));
+    const keys = getVisibleApps(APP_REGISTRY, makeSession(), c).map((a) => a.appKey);
+    expect(keys).not.toContain("chat");
+  });
+
+  // modules.is_active của CHAT hiện là false trên PROD và KHÔNG có ModuleActiveGuard nào đọc nó
+  // (memory `module-is-active-is-not-a-gate`). Nhưng `getVisibleApps` thì CÓ đọc `session.modules` —
+  // nếu /auth/me sau này trả CHAT status khác 'active', thẻ phải đổi trạng thái theo server, không tự
+  // quyết. Ghim cả hai chiều để hành vi đó là chủ ý chứ không phải tình cờ.
+  it("server nói CHAT 'hidden' → thẻ ẩn tuyệt đối, dù có quyền", () => {
+    const c = createPermissionChecker(makePerms(CHAT_CAPS));
+    const session = makeSession({ modules: [{ moduleCode: "CHAT", status: "hidden" }] });
+    expect(getVisibleApps(APP_REGISTRY, session, c).map((a) => a.appKey)).not.toContain("chat");
+  });
+
+  it("server nói CHAT 'maintenance' → thẻ vẫn hiện (disabled), không cần quyền", () => {
+    const c = createPermissionChecker(makePerms([]));
+    const session = makeSession({ modules: [{ moduleCode: "CHAT", status: "maintenance" }] });
+    expect(getVisibleApps(APP_REGISTRY, session, c).map((a) => a.appKey)).toContain("chat");
+  });
 });

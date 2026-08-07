@@ -15,6 +15,9 @@ export default {
     goals: "Mục tiêu",
     // Tích hợp LMS Giai đoạn A — cổng SSO sang hệ Đào tạo.
     lms: "Đào tạo",
+    // S8-CHAT-ENTRY-1 — module CHAT nội bộ (SPEC-15). Nhãn "Tin nhắn" khớp mục sidebar ME đã ship
+    // ở S7-CHAT-FE-3 — cùng một chỗ đến thì phải cùng một tên gọi.
+    chat: "Tin nhắn",
     // S9-SOCIAL-FE-1 — cổng SSO sang app vệ tinh fbpost (DECISIONS-08).
     social: "Đăng bài",
   },
@@ -30,6 +33,7 @@ export default {
     me: "Hồ sơ, tài khoản, bảo mật, công việc và cài đặt của riêng bạn.",
     goals: "Mục tiêu phòng ban, dự án và nhân viên theo kỳ — cây, tiến độ và chốt kỳ.",
     lms: "Khóa học, bài kiểm tra và lộ trình đào tạo (mở hệ LMS).",
+    chat: "Nhắn tin nội bộ theo phòng ban, dự án và hội thoại riêng.",
     social: "Soạn, hẹn giờ và đăng bài lên các trang Facebook của công ty.",
   },
   // Route titles

@@ -11346,6 +11346,43 @@ export const backlog = [
     ],
   },
 
+  // ════════════ S8-CHAT-ENTRY — thẻ CHAT ở lưới "Ứng dụng của tôi" ════════════
+  // Owner báo 05/08/2026 (ảnh màn Home Portal): "chưa thấy module chat trong màn hình". Không phải lỗi
+  // quyền, không phải deploy thiếu — S7-CHAT-FE-3 ship 3 lối vào (badge header · sidebar ME · URL /chat)
+  // và KHÔNG có lối vào nào là thẻ ở Home Portal, trong khi đó là màn đầu tiên sau đăng nhập.
+  {
+    id: "S8-CHAT-ENTRY-1",
+    module: "CHAT",
+    layer: "FE",
+    title:
+      'Thẻ "Tin nhắn" ở Home Portal + App Switcher (APP_REGISTRY) — gate ĐỦ cặp access:chat + view:chat-room để thẻ không dẫn tới 403',
+    zone: "green",
+    status: "todo",
+    paths: [
+      "packages/web-core/src/lib/registry.ts",
+      "packages/web-core/src/lib/registry.spec.ts",
+      "packages/web-core/src/i18n/locales/vi/nav.ts",
+      "apps/app/src/layouts/home/AppCard.tsx",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S7-CHAT-FE-3"],
+    plan: null,
+    src: [
+      "owner-report 2026-08-05 — ảnh Home Portal 10 thẻ, không có Chat; chẩn đoán: APP_REGISTRY không có entry 'chat' (CHAT chỉ tồn tại như ModuleCode)",
+      "registry.ts §SYSTEM_APP_PERMISSIONS — tiền lệ ĐÃ VÁ đúng hình dạng lỗ này: app hiện qua tập quyền A nhưng route landing đòi tập B ⇒ persona thấy thẻ rồi ăn SHOW_403",
+      "CHAT_ROUTE_META (apps/app/src/routes/chat/constants.ts) gate view:chat-room — KHÔNG phải access:chat, nên thẻ phải đòi CẢ HAI",
+      "mig 0538 cấp cả 9 cặp thường cho 4 role canonical ⇒ hôm nay hai vế trùng nhau; ràng buộc chỉ có tác dụng khi admin thu hồi per-role",
+      "memory: ui-promises-backend-never-reads · read-path-gate-pair-must-match-download-pair",
+    ],
+    done_when: [
+      'Thẻ "Tin nhắn" hiện trong lưới Home Portal + App Switcher (tìm được bằng "tin nhan"/"chat"), mở /chat',
+      "Gate = requiredPermissions ĐỦ CẢ access:chat + view:chat-room; RED-proof bằng đột biến về requiredAnyPermissions:['access:chat'] (ca parity phải đỏ)",
+      "Ratchet i18n: mọi app trong APP_REGISTRY có nameKey/descKey dịch được ở namespace nav (chống thẻ hiện chuỗi key thô)",
+      "LIGHT gate PASS — pnpm typecheck + lint + test (web-core 707 · apps/app 1821) xanh",
+      "⚠️ Sau merge PHẢI deploy lại FE PROD: thẻ nằm trong bundle, không phải dữ liệu DB",
+    ],
+  },
+
   // ───────────────────────────────────────────────────────────────────────────────────────────────
   // WAVE S9-SOCIAL (seed 06/08/2026) — nhập repo C:\fbpost thành app VỆ TINH "Đăng bài mạng xã hội",
   // sao khuôn apps/lms (Next.js nhập tại chỗ, workspace RIÊNG, nối hệ bằng cầu SSO + tile app).
