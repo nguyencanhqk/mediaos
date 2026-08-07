@@ -11080,13 +11080,32 @@ export const backlog = [
       "Avatar phòng cho group/department/project — presign wrapper gate ('update','chat-room') sao khuôn ChatFilesService + resolver riêng; direct KHÔNG có avatar riêng (dẫn xuất)",
     zone: "red",
     status: "todo",
+    // ⚠️ NỚI 07/08/2026 (owner chốt) — `apps/api/src/tasks/**` và `foundation/files/**` KHÔNG có trong
+    // bản seed. Lý do bắt buộc, không phải scope creep:
+    //   • `tasks/project-membership.{service,module}.ts` = MODULE LÁ tách ra để phá vòng DI
+    //     `Chat → Tasks → Chat` (`tasks.module.ts` ĐÃ import `ChatModule`). Không tách thì nhánh
+    //     `project` của CHAT-DEC-016 KHÔNG thi công được. Xem plan §2.1.
+    //   • `foundation/files/file.repository.ts` = `findVerifiedRoomAvatarsTx` — đường ĐỌC self-defending
+    //     phải sống cạnh `findVerifiedTaskCoversTx` vì foundation KHÔNG phụ thuộc ngược lên chat.
+    // `wo-paths-drive-gate-and-scheduler`: thiếu khai ở đây là lọt gate + hook `guard-scope` báo động.
     paths: [
       "apps/api/src/chat/chat-room-avatar.service.ts",
       "apps/api/src/chat/chat-room-avatar.controller.ts",
+      "apps/api/src/chat/chat-room-avatar.repository.ts",
       "apps/api/src/chat/chat-room-avatar-file.resolver.ts",
+      "apps/api/src/chat/chat-room-avatar-presign.service.ts",
+      "apps/api/src/chat/chat-file.constants.ts",
+      "apps/api/src/chat/chat-rooms.service.ts",
+      "apps/api/src/chat/chat.errors.ts",
       "apps/api/src/chat/chat.module.ts",
       "apps/api/src/chat/chat.mapper.ts",
       "apps/api/src/chat/**/*.spec.ts",
+      "apps/api/src/foundation/files/file.repository.ts",
+      "apps/api/src/tasks/project-membership.service.ts",
+      "apps/api/src/tasks/project-membership.module.ts",
+      "apps/api/src/tasks/project-access.service.ts",
+      "apps/api/src/tasks/tasks.module.ts",
+      "apps/api/test/integration/chat-s8-be2-room-avatar.int-spec.ts",
       "packages/contracts/src/chat.ts",
       "docs/plans/S8-CHAT-UX-BE-2.md",
     ],
@@ -11239,13 +11258,44 @@ export const backlog = [
       "Khung chat: avatar người gửi + gộp tin liên tiếp cùng người + thanh thả cảm xúc + chỉ báo đang gõ / chấm đang online",
     zone: "yellow",
     status: "todo",
+    // ⚠️ VÁ 07/08/2026 (đo thật khi thi công) — seed gốc thiếu vế BE và ghi sai đường i18n.
+    //  1. WO này KHÔNG thuần FE: `docs/plans/S8-CHAT-UX-WAVE.md:49` khai tầng chạm là "BE (1 route
+    //     roster) + FE", `API-13 §5.1:187` bắt CHAT-API-007a trả `avatarUrl` + `leftAt` (CHAT-DEC-019),
+    //     và `chat-presence.service.ts` để sẵn `getOnlineUserIds()` KHÔNG ai gọi, kèm ghi chú bàn giao
+    //     "WO kế tiếp gắn ảnh chụp vào CHAT-API-007a". Thiếu `paths` BE ⇒ `guard-scope` cảnh báo oan và
+    //     gate/scheduler đọc sai vùng chạm (memory `wo-paths-drive-gate-and-scheduler`).
+    //  2. i18n sống ở `apps/app/src/i18n/locales/**`, KHÔNG phải `apps/app/src/locales/**`.
     paths: [
       "apps/app/src/components/chat/MessageBubble.tsx",
       "apps/app/src/components/chat/MessageList.tsx",
       "apps/app/src/components/chat/ConversationPanel.tsx",
+      "apps/app/src/components/chat/MessageComposer.tsx",
+      "apps/app/src/components/chat/RoomInfoPanel.tsx",
+      "apps/app/src/components/chat/ReactionBar.tsx",
+      "apps/app/src/components/chat/TypingIndicator.tsx",
+      "apps/app/src/components/chat/use-room-roster.ts",
       "apps/app/src/components/chat/**/*.spec.tsx",
+      "apps/app/src/hooks/use-chat-realtime.ts",
+      "apps/app/src/hooks/**/*.spec.tsx",
+      "apps/app/src/routes/chat/constants.ts",
       "apps/app/src/stores/chat.store.ts",
-      "apps/app/src/locales/**",
+      "apps/app/src/stores/**/*.spec.ts",
+      "apps/app/src/i18n/locales/**",
+      // ── vế BE (roster CHAT-API-007a) ──
+      "packages/contracts/src/chat.ts",
+      "packages/web-core/src/lib/chat-api.ts",
+      "apps/api/src/chat/chat-members.service.ts",
+      "apps/api/src/chat/chat-rooms.repository.ts",
+      "apps/api/src/chat/chat.mapper.ts",
+      "apps/api/src/chat/chat.module.ts",
+      "apps/api/src/chat/**/*.spec.ts",
+      "apps/api/test/integration/chat-s8-fe3-roster.int-spec.ts",
+      "apps/api/src/realtime/chat-presence-reader.service.ts",
+      "apps/api/src/realtime/chat-presence-reader.module.ts",
+      "apps/api/src/realtime/chat-presence.service.ts",
+      "apps/api/src/realtime/realtime.module.ts",
+      "apps/api/src/realtime/**/*.spec.ts",
+      "docs/API Design/API-13_CHAT_API_Design.md",
       "docs/plans/S8-CHAT-UX-FE-3.md",
     ],
     skills: ["code-review"],

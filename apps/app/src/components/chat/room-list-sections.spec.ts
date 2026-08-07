@@ -57,10 +57,36 @@ describe("buildRoomSections — CHAT-DEC-013", () => {
     expect(sections[1].rooms.map((r) => r.id)).toEqual(["g2"]);
   });
 
-  it("mặc định KHÔNG có mục ghim — cột pinned_at chưa tồn tại, không được bịa mục ma", () => {
+  it("không phòng nào ghim ⇒ KHÔNG có mục 'Đã ghim' (mục rỗng không được vẽ)", () => {
     const sections = buildRoomSections([room("g1"), room("g2")]);
 
     expect(sections.map((s) => s.key)).not.toContain("pinned");
+  });
+
+  /**
+   * S8-CHAT-UX-FE-2 — vị từ MẶC ĐỊNH đã là vị từ THẬT (`pinnedAt` từ BE-1). Test này đóng đinh chính điều
+   * đó: nếu ai đó trả `buildRoomSections` về `NEVER_PINNED` thì mục "Đã ghim" biến mất trên toàn app mà
+   * không có gì khác đỏ — danh sách vẫn vẽ đủ phòng, chỉ là ghim không còn tác dụng.
+   */
+  it("mặc định đọc `pinnedAt` THẬT — không cần truyền vị từ vẫn ra mục 'Đã ghim'", () => {
+    const rooms = [
+      room("g1", { pinnedAt: "2026-08-07T01:00:00.000Z" }),
+      room("g2"),
+      room("d1", { roomType: "direct", pinnedAt: "2026-08-07T02:00:00.000Z" }),
+    ];
+
+    const sections = buildRoomSections(rooms);
+
+    expect(sections.map((s) => s.key)).toEqual(["pinned", "group"]);
+    // Ghim THẮNG loại phòng: `d1` là `direct` nhưng nằm ở `pinned`, và mục `direct` không được sinh ra.
+    expect(sections[0].rooms.map((r) => r.id)).toEqual(["g1", "d1"]);
+    expect(sections.flatMap((s) => s.rooms.map((r) => r.id))).toHaveLength(3);
+  });
+
+  it("`pinnedAt: null` (đã bỏ ghim) KHÁC `undefined` (server cũ) — cả hai đều KHÔNG ghim", () => {
+    const sections = buildRoomSections([room("g1", { pinnedAt: null }), room("g2")]);
+
+    expect(sections.map((s) => s.key)).toEqual(["group"]);
   });
 
   it("mục RỖNG bị loại khỏi kết quả (không hiện tiêu đề trống)", () => {

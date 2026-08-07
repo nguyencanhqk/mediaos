@@ -125,8 +125,14 @@ export class DataScopeService {
   /**
    * The org_unit ids that bound Department scope: the requester's own unit ∪ every unit they head.
    * Empty → Department fail-closes to 0 rows (never a match-all).
+   *
+   * ⟲ **S8-CHAT-UX-BE-2 — `private` → `public`** (chỉ đổi khả kiến, KHÔNG đổi thân hàm ⇒ 0 thay đổi
+   * hành vi cho caller cũ). Lý do: SPEC-15 §11b đòi "có `('update','org_unit')` **với đơn vị neo của
+   * phòng**", tức một câu hỏi Department-scope trên MỘT org_unit đã biết — không phải một vị từ danh
+   * sách nhân viên, nên `buildEmployeeScopeCondition` không dùng được. Bản sao thứ hai của luật "own ∪
+   * headed" sẽ trôi khỏi bản này ngay lần ai đó thêm nguồn tầm-với thứ ba.
    */
-  private departmentOrgUnitIds(ctx: ScopeContext): string[] {
+  departmentOrgUnitIds(ctx: ScopeContext): string[] {
     const ids = new Set<string>();
     if (ctx.orgUnitId) ids.add(ctx.orgUnitId);
     for (const id of ctx.headedOrgUnitIds ?? []) ids.add(id);

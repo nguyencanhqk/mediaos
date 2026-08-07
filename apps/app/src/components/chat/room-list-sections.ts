@@ -11,6 +11,7 @@
  * §2.2. Đừng "tiện tay" nhét vào đây.
  */
 import type { ChatRoomDto } from "@mediaos/contracts";
+import { isRoomPinned } from "./chat-room-prefs";
 
 /**
  * Thứ tự hiển thị các mục. `pinned` đứng đầu vì đó là lý do người ta ghim.
@@ -38,11 +39,16 @@ export interface RoomSection {
 export type IsRoomPinned = (room: ChatRoomDto) => boolean;
 
 /**
- * `pinned` mặc định LUÔN RỖNG ở WO này: cột `chat_room_members.pinned_at` chưa tồn tại (migration nằm
- * ở `S8-CHAT-UX-DB-1`), nên `ChatRoomDto` chưa có khoá nào để đọc. Truyền vị từ thật ở `FE-2` sau khi
- * `BE-1` land. Cố tình KHÔNG đoán khoá `(room as any).pinnedAt` để tránh mục ma sống bằng dữ liệu bịa.
+ * S8-CHAT-UX-FE-2 — vị từ THẬT đã nối (FE-1 để tạm `NEVER_PINNED` vì cột `pinned_at` chưa tồn tại).
+ *
+ * Mặc định trỏ thẳng `isRoomPinned` (`chat-room-prefs.ts`) chứ không nhân bản phép so sánh ở đây: cùng
+ * một câu hỏi "phòng này có đang được TÔI ghim không" được hỏi ở CẢ mục danh sách LẪN nhãn menu ngữ
+ * cảnh, và hai bản luật lệch nhau sẽ cho ra menu ghi "Bỏ ghim" trên một phòng nằm ngoài mục Đã ghim.
+ *
+ * Tham số `isPinned` GIỮ LẠI (không bỏ) để test chia rổ vẫn tiêm được vị từ giả — luật "ghim thắng loại
+ * phòng" phải kiểm được mà không phải dựng `ChatRoomDto` đủ khoá.
  */
-const NEVER_PINNED: IsRoomPinned = () => false;
+const DEFAULT_IS_PINNED: IsRoomPinned = isRoomPinned;
 
 /**
  * Gom phòng vào mục, GIỮ NGUYÊN thứ tự đầu vào bên trong mỗi mục.
@@ -52,7 +58,7 @@ const NEVER_PINNED: IsRoomPinned = () => false;
  */
 export function buildRoomSections(
   rooms: readonly ChatRoomDto[],
-  isPinned: IsRoomPinned = NEVER_PINNED,
+  isPinned: IsRoomPinned = DEFAULT_IS_PINNED,
 ): RoomSection[] {
   const buckets = new Map<string, ChatRoomDto[]>();
 

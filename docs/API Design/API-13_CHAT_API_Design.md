@@ -168,19 +168,29 @@ Cột **Membership** ghi rõ endpoint có phải chạy `ChatAccessService.asser
 | CHAT-API-021a | POST | `/chat/rooms/{room_id}/avatar` | Đặt ảnh đại diện phòng từ `fileId` đã upload+confirm. `direct` → 422 CHAT-ERR-022; không đủ tư cách → 403 CHAT-ERR-023 | `('update','chat-room')` | ✅ + tư cách theo **SPEC-15 §11b** | ✅ |
 | CHAT-API-021b | DELETE | `/chat/rooms/{room_id}/avatar` | Gỡ ảnh đại diện | `('update','chat-room')` | ✅ + §11b | ✅ |
 | CHAT-API-021c | POST | `/chat/rooms/{room_id}/avatar/upload-url` | Presign upload — **wrapper riêng của CHAT**, sao khuôn `ChatFilesService` (S7-CHAT-BE-8) | `('update','chat-room')` | ✅ + §11b | — |
-| CHAT-API-022a | PUT | `/chat/messages/{message_id}/reactions/{emoji}` | Thả cảm xúc. Idempotent (thả 2 lần = 1 hàng). Tin đã thu hồi → 422 CHAT-ERR-024; emoji ngoài bộ đóng → 422 CHAT-ERR-025 | `('send','chat-message')` | ✅ (phòng chứa tin) | — |
-| CHAT-API-022b | DELETE | `/chat/messages/{message_id}/reactions/{emoji}` | Bỏ thả. Chưa thả → **204**, không 404 | `('send','chat-message')` | ✅ | — |
+| CHAT-API-022a | PUT | `/chat/messages/{message_id}/reactions/{emoji}` | Thả cảm xúc. Idempotent (thả 2 lần = 1 hàng). **200** + tổng hợp mới của tin. Tin đã thu hồi → 422 CHAT-ERR-024; phòng đã lưu trữ → 422 CHAT-ERR-005; emoji ngoài bộ đóng → 422 CHAT-ERR-025 | `('send','chat-message')` | ✅ (phòng chứa tin) | — |
+| CHAT-API-022b | DELETE | `/chat/messages/{message_id}/reactions/{emoji}` | Bỏ thả. Chưa thả → **204**, không 404. **Chạy được cả trên tin đã thu hồi / phòng đã lưu trữ** (xem ghi chú dưới bảng) | `('send','chat-message')` | ✅ | — |
 | CHAT-API-023 | POST | `/chat/rooms/{room_id}/typing` | Báo "đang gõ" → fan-out WS. **204**, 0 ghi DB, 0 audit | `('send','chat-message')` | ✅ | — |
 
 ⛔ **ĐÍNH CHÍNH ĐÁNH SỐ (S8-CHAT-UX-BE-1, 06/08/2026).** Bản seed đầu của bảng này cấp `CHAT-API-018a/018b/019` cho ghim/tắt-thông-báo — nhưng **ba mã đó đã thuộc `/chat/oversight/*` từ wave S7** (§5.3 dưới đây), và literal `'018a'|'018b'|'018c'|'019'` là giá trị của `CHAT_OVERSIGHT_ENDPOINT` (`chat-oversight.audit.ts:25-28`) đang nằm trong `audit_logs.metadata.endpoint` **trên PROD** — không viết lại được. Vì vậy **bên S8 dời**: ghim → `024a/024b`, tắt thông báo → `025`. `020` · `021a-c` · `022a/b` · `023` không va, giữ nguyên. Đo lại dải rỗng bằng grep trước khi cấp mã mới — đừng tin con số của một bảng seed.
 
 ⚠️ **`CHAT-API-025` chuẩn hoá mốc đã qua về `null` thay vì báo lỗi.** Đường đọc (`ChatAudienceReader.stillReceiving`) coi `muted_until <= now()` là **không tắt**; lưu nguyên một mốc quá khứ nghĩa là DB giữ giá trị mà chính hệ thống đọc ngược lại, và client nào kiểm `mutedUntil !== null` sẽ vẽ biểu tượng chuông-gạch cho một phòng vẫn gửi thông báo bình thường. **Client PHẢI so với thời điểm hiện tại** (`mutedUntil > now`) — mốc còn hết hạn được trong lúc dữ liệu nằm trong cache. (Không chọn 422 vì lệch đồng hồ client vài giây sẽ biến thao tác hợp lệ thành lỗi.)
 
+⚠️ **`CHAT-API-022b` cố ý KHÔNG chặn ở tin đã thu hồi / phòng đã lưu trữ,** trong khi `022a` thì chặn. Đường **ghi** phải chặt, đường **gỡ** thì không: chặn cả hai nghĩa là một cảm xúc lỡ tay thả vào tin ngay trước khi tin bị thu hồi (hoặc phòng bị đóng) sẽ dính **vĩnh viễn**, không có đường sửa qua API. Ranh giới dữ liệu (`assertMessageAccess` → 404) vẫn áp cho cả hai — nới đúng vế cần nới.
+
+⚠️ **Payload WS `chat:reaction` HẸP HƠN DTO REST:** không có `mine` (per-user — phát cho cả phòng thì mọi client vẽ dấu tích của người vừa bấm), không có `actorUserId`, không có danh sách người thả. Client nhận sự kiện phải **giữ nguyên `mine` nó đang có** và chỉ thay `count`. Cùng khuôn `chat:room` strip `unreadCount`.
+
 ⚠️ **Vì sao ghim/tắt/đánh-dấu gate bằng `('view','chat-room')` chứ không phải một cặp mạnh hơn:** ba thứ đó là **tuỳ chọn cá nhân trên hàng membership của chính mình**. Gate mạnh hơn tạo ra role "đọc được phòng mà không tắt nổi thông báo của chính mình" — đúng họ lỗi `read-path-gate-pair-must-match-download-pair`.
 
 ⚠️ **CHAT-API-021c KHÔNG được thay bằng `POST /foundation/files/upload`.** Cặp `('upload','foundation-file')` chỉ có ở `SA` · `company-admin` · `QUẢN LÝ CẤP CAO` (mig `0435:376`) ⇒ trưởng nhóm thường sẽ không đặt được avatar. Đây đúng là lỗ đã phải vá ở `S7-CHAT-BE-8` cho đính kèm; đừng lặp lại.
 
 ⚠️ **CHAT-API-007a phải trả thêm `avatarUrl` cho từng thành viên** (CHAT-DEC-019) — đó là **nguồn duy nhất** để FE vẽ avatar người gửi trong khung chat. Ký **1 lần/phòng** ở đây, **không** ký theo từng tin. Người đã rời phòng vẫn phải có trong danh sách (kèm `leftAt`), nếu không tin cũ của họ mất cả avatar lẫn tên.
+
+✅ **Đã thi công `S8-CHAT-UX-FE-3` (07/08/2026).** `GET /chat/rooms/:id/members` giờ là **ROSTER**: thành viên đang hoạt động **và người đã rời**, mỗi người kèm `avatarUrl` (ký 1 lô qua `AvatarPresignService`), `isOnline` (ảnh chụp từ `ChatPresenceReaderService`) và `leftAt`. Ba khoá đều `.optional()` trong `chatRoomMemberSchema` — schema này đã có consumer đang chạy, thêm khoá **required** làm mọi consumer ăn ZodError khi FE lên trước BE.
+
+⚠️ **`GET /chat/rooms/:id` (CHAT-API-004) GIỮ NGUYÊN `members` = ACTIVE-ONLY** — hai đường, hai ngữ nghĩa, cố ý. Detail trả lời "ai đang ở trong phòng" và nuôi số đếm ở đầu phòng, danh sách quản trị, cùng bộ lọc "đã ở trong phòng" của hộp thêm thành viên. Nhét người đã rời vào đó làm bộ lọc coi họ là thành viên ⇒ **không thêm lại được vào phòng**, không thông báo, không lý do.
+
+⚠️ **`isOnline` ở CHAT-API-007a là ẢNH CHỤP, không phải luồng sống.** Sự kiện `chat:presence` chỉ fan-out tới peer của phòng `direct` (§7) — cố ý, vì phát trạng thái online của mọi người tới mọi phòng họ tham gia đúng là thứ `CHAT-DEC-017` gọi là rò lịch làm việc. Với phòng nhóm/phòng ban/dự án, giá trị này chỉ mới lại khi client refetch roster. FE phải hiển thị nó như trạng thái tại-thời-điểm-nạp, không được đọc là thời-gian-thực.
 
 ### 5.2 Trạng thái hiện thực (đối chiếu code, 01/08/2026)
 

@@ -1,3 +1,6 @@
+// `reflect-metadata` PHẢI nạp TRƯỚC mọi import có decorator: ratchet cuối file đọc `design:paramtypes`,
+// và không có polyfill này thì `Reflect.getMetadata` không tồn tại ⇒ ratchet mù (ca fail-closed bắt).
+import "reflect-metadata";
 import { ConflictException, NotFoundException } from "@nestjs/common";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CHAT_ROOM_PIN_MAX, ChatRoomPrefsService } from "./chat-room-prefs.service";
@@ -84,7 +87,13 @@ function makeService(prefs: Partial<Prefs> = {}) {
     setRoomMarkedUnread,
   } as unknown as ChatRoomsRepository;
 
-  const svc = new ChatRoomPrefsService(db, repo, access);
+  // S8-CHAT-UX-BE-2 — `ChatRoomAvatarPresignService`. Map RỖNG ⇒ `avatarUrl: null` trong DTO, đúng
+  // hiện trạng của một phòng chưa đặt ảnh. Ca "ký lại avatar" là việc của int-spec (cần storage thật).
+  const avatarPresign = {
+    resolveRoomAvatars: vi.fn(async () => new Map<string, string>()),
+  } as never;
+
+  const svc = new ChatRoomPrefsService(db, repo, access, avatarPresign);
   return {
     svc,
     db,
@@ -244,10 +253,39 @@ describe("CHAT-API-020 — đánh dấu chưa đọc: cột RIÊNG, con trỏ đ
 });
 
 describe("0 audit · 0 emit WS — ép bằng HÌNH DẠNG constructor, không bằng lời hứa", () => {
-  it("constructor nhận ĐÚNG 3 phụ thuộc: db · repo · access", () => {
-    // Thêm `AuditService`/`RealtimeEmitterService` vào service sẽ làm dòng này vỡ typecheck. Đó là
-    // điểm: ba tuỳ chọn CÁ NHÂN không được ghi vào bảng điều tra dùng chung, cũng không được phát cho
-    // cả phòng (rò "ai tắt thông báo của ai"). Xem docblock đầu `chat-room-prefs.service.ts`.
-    expect(ChatRoomPrefsService.length).toBe(3);
+  /**
+   * ⟲ **S8-CHAT-UX-BE-2 — ratchet ĐỔI TỪ ĐẾM SANG DANH SÁCH TÊN.**
+   *
+   * Bản cũ là `ChatRoomPrefsService.length === 3`. Nó đúng ý nhưng ghim SAI THỨ: con số không nói
+   * phụ thuộc nào được phép. Ai thêm `AuditService` rồi sửa `3` → `4` là ratchet **vẫn xanh** trong
+   * khi chính điều nó canh đã bị phá — đúng lớp `index-ratchet-must-pin-definition-not-name`.
+   * (WO này phải nâng lên 4 vì `ChatRoomAvatarPresignService` là phụ thuộc hợp lệ: nó chỉ KÝ URL
+   * đọc, không ghi audit, không phát WS. Chính lúc phải sửa con số là lúc lộ ra nó ghim sai thứ.)
+   *
+   * Bản mới đọc `design:paramtypes` — danh sách kiểu THẬT mà Nest sẽ tiêm — nên nó ĐỎ khi một phụ
+   * thuộc bị cấm xuất hiện, bất kể tổng số là bao nhiêu.
+   */
+  it("KHÔNG tiêm AuditService / RealtimeEmitterService — bất kể có bao nhiêu phụ thuộc", () => {
+    const deps: unknown[] =
+      (Reflect.getMetadata("design:paramtypes", ChatRoomPrefsService) as unknown[]) ?? [];
+    // Rỗng = metadata không được phát ⇒ ratchet mù. Fail-closed thay vì xanh giả.
+    expect(deps.length, "design:paramtypes rỗng — ratchet sẽ không canh được gì").toBeGreaterThan(
+      0,
+    );
+
+    const names = deps.map((d) => (typeof d === "function" ? d.name : String(d)));
+    const BANNED = ["AuditService", "RealtimeEmitterService"];
+    expect(
+      names.filter((n) => BANNED.includes(n)),
+      "ba tuỳ chọn CÁ NHÂN không được ghi vào bảng điều tra dùng chung, cũng không được phát cho cả phòng (rò “ai tắt thông báo của ai”) — xem docblock đầu `chat-room-prefs.service.ts`",
+    ).toEqual([]);
+  });
+
+  it("ĐỐI CHỨNG: ratchet ĐỎ được — danh sách cấm thật sự được so khớp", () => {
+    // Không có ca này thì một `BANNED` gõ sai (hoặc `names` luôn rỗng) sẽ làm ca trên xanh vĩnh viễn.
+    const names = ["DatabaseService", "AuditService"];
+    expect(names.filter((n) => ["AuditService", "RealtimeEmitterService"].includes(n))).toEqual([
+      "AuditService",
+    ]);
   });
 });

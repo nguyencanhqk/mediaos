@@ -11,15 +11,17 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { History, Info, MessageSquare } from "lucide-react";
 import { ApiError, chatApi, chatKeys, useCan } from "@mediaos/web-core";
 import { Button, EmptyState, Skeleton } from "@mediaos/ui";
-import type { ChatRoomDto, ChatRoomMemberDto } from "@mediaos/contracts";
+import type { ChatReactionEmoji, ChatRoomDto, ChatRoomMemberDto } from "@mediaos/contracts";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useChatStore, type PendingChatMessage, type StoredChatMessage } from "@/stores/chat.store";
 import { CHAT_PAIRS } from "@/routes/chat/constants";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { MessageComposer, type ComposerSubmitPayload } from "./MessageComposer";
 import { MessageList } from "./MessageList";
+import { TypingIndicator } from "./TypingIndicator";
 import { roomDisplayName } from "./chat-format";
 import { useChatConversation } from "./use-chat-conversation";
+import { useRoomRoster } from "./use-room-roster";
 
 interface ConversationPanelProps {
   room: ChatRoomDto;
@@ -67,6 +69,13 @@ export function ConversationPanel({
   const exitMessageContext = useChatStore((s) => s.exitMessageContext);
 
   const conversation = useChatConversation(room.id);
+
+  /**
+   * S8-CHAT-UX-FE-3 — ROSTER phòng: nguồn avatar + tên người gửi (CHAT-DEC-019) và ảnh chụp "đang online".
+   * Đây là nguồn KHÁC `members` (prop, từ `getRoom`): roster gồm cả người ĐÃ RỜI. Xem `use-room-roster.ts`.
+   */
+  const roster = useRoomRoster(room.id);
+  const patchMessageReactions = useChatStore((s) => s.patchMessageReactions);
 
   /**
    * Rời chế độ ngữ cảnh về dòng thời gian mới nhất.
@@ -169,8 +178,68 @@ export function ConversationPanel({
     },
   });
 
+  /**
+   * S8-CHAT-UX-FE-3 — bật/tắt một cảm xúc (CHAT-FUNC-019).
+   *
+   * ⚠️ Cập nhật LẠC QUAN + HOÀN NGUYÊN, và bản chụp `previous` phải lấy **trong `onClick`** (tức ở đây,
+   * trước khi gọi API) chứ không đọc store bên trong `mutationFn`: đọc state trong `mutationFn` cho ta
+   * giá trị của lần render lúc mutation được TẠO, không phải lúc nó CHẠY
+   * (memory `react-query-v5-stale-mutationfn-closure`). Sai bản chụp ⇒ "hoàn nguyên" ghi đè bằng một
+   * trạng thái cũ hơn nữa, và người dùng thấy cảm xúc của người khác biến mất.
+   */
+  const toggleReaction = useCallback(
+    (message: StoredChatMessage, emoji: ChatReactionEmoji, currentlyMine: boolean) => {
+      const previous = message.reactions ?? [];
+      const optimistic = currentlyMine
+        ? previous
+            .map((r) => (r.emoji === emoji ? { ...r, count: r.count - 1, mine: false } : r))
+            // `count` chạm 0 ⇒ bỏ hẳn khỏi mảng: `chatMessageReactionSchema.count` là `.positive()`, một
+            // phần tử `count: 0` là hình dạng server KHÔNG BAO GIỜ trả và không có gì để vẽ.
+            .filter((r) => r.count > 0)
+        : previous.some((r) => r.emoji === emoji)
+          ? previous.map((r) => (r.emoji === emoji ? { ...r, count: r.count + 1, mine: true } : r))
+          : [...previous, { emoji, count: 1, mine: true }];
+
+      patchMessageReactions(room.id, message.id, optimistic);
+
+      const request = currentlyMine
+        ? chatApi.unreactFromMessage(message.id, emoji).then(() => null)
+        : chatApi.reactToMessage(message.id, emoji);
+
+      void request
+        .then((fresh) => {
+          // `PUT` trả tổng hợp mới KÈM `mine` ⇒ thay thẳng (chính xác tuyệt đối, kể cả khi người khác vừa
+          // thả cùng lúc). `DELETE` là 204 không thân ⇒ giữ bản lạc quan; sự kiện `chat:reaction` sẽ hoà
+          // con số thật về ngay sau đó.
+          if (fresh !== null) patchMessageReactions(room.id, message.id, fresh);
+        })
+        .catch(() => {
+          // HOÀN NGUYÊN — cùng một hàm, gọi lại với giá trị TRƯỚC. Im lặng ở đây là để lại một con số sai
+          // trên màn hình vĩnh viễn, và người dùng không có cách nào biết thao tác của họ đã trượt.
+          patchMessageReactions(room.id, message.id, previous);
+          setActionError(t("reaction.failed"));
+        });
+    },
+    [patchMessageReactions, room.id, t],
+  );
+
   const title = roomDisplayName(room, members, myUserId, (code) =>
     t("rooms.directFallback", { code }),
+  );
+
+  /**
+   * Chấm "đang online" — CHỈ ở phòng `direct` (`done_when #5`).
+   *
+   * KHÔNG vẽ ở phòng nhóm/phòng ban/dự án: sự kiện `chat:presence` chỉ fan-out tới peer DM (cố ý — phát
+   * trạng thái online của mọi người tới mọi phòng họ tham gia là rò lịch làm việc), nên ở phòng đông
+   * người con số vừa nhiễu vừa CŨ. Danh sách thành viên có chấm riêng (ảnh chụp, `RoomInfoPanel`).
+   */
+  const directPeerId =
+    room.roomType === "direct"
+      ? (roster.members.find((m) => m.userId !== myUserId && !m.leftAt)?.userId ?? null)
+      : null;
+  const isPeerOnline = useChatStore((s) =>
+    directPeerId === null ? false : (s.presenceByUser[directPeerId] ?? false),
   );
 
   return (
@@ -179,10 +248,24 @@ export function ConversationPanel({
         <header className="flex items-center gap-2 border-b border-border px-4 py-3">
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-sm font-semibold">{title}</h2>
-            <p className="truncate text-xs text-muted-foreground">
-              {t(`rooms.types.${room.roomType}`)}
-              {members.length > 0 &&
-                ` · ${t("conversation.membersCount", { count: members.length })}`}
+            <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
+              {directPeerId !== null && isPeerOnline && (
+                <>
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full bg-emerald-500"
+                    aria-hidden="true"
+                    data-testid="chat-peer-online-dot"
+                  />
+                  {/* Chấm màu là tín hiệu THỊ GIÁC — người đọc màn hình cần chữ, không có chữ thì trạng
+                      thái này đơn giản không tồn tại với họ. */}
+                  <span className="sr-only">{t("presence.online")}</span>
+                </>
+              )}
+              <span className="truncate">
+                {t(`rooms.types.${room.roomType}`)}
+                {members.length > 0 &&
+                  ` · ${t("conversation.membersCount", { count: members.length })}`}
+              </span>
             </p>
           </div>
           {onToggleInfo && (
@@ -268,6 +351,8 @@ export function ConversationPanel({
           isLoadingOlder={conversation.isLoadingOlder}
           historyLimitReached={conversation.historyLimitReached}
           highlightMessageId={context?.targetMessageId ?? null}
+          avatarByUser={roster.avatarByUser}
+          nameByUser={roster.nameByUser}
           onLoadOlder={conversation.loadOlder}
           onMarkRead={conversation.markReadUpTo}
           onResendPending={resend}
@@ -277,9 +362,15 @@ export function ConversationPanel({
             onPin: (m) => pinMutation.mutate({ messageId: m.id, pinned: false }),
             onUnpin: (m) => pinMutation.mutate({ messageId: m.id, pinned: true }),
             onRecall: setRecallTarget,
+            onToggleReaction: toggleReaction,
           }}
         />
       )}
+
+      {/* Dải "đang gõ" — GIỮA danh sách và ô soạn, đúng chỗ mắt người tìm nó. Nằm NGOÀI nhánh điều kiện
+          ở trên để nó vẫn hiện khi phòng đang rỗng: người kia gõ tin ĐẦU TIÊN của phòng là lúc chỉ báo
+          có ích nhất. */}
+      <TypingIndicator roomId={room.id} nameByUser={roster.nameByUser} />
 
       <MessageComposer
         roomId={room.id}

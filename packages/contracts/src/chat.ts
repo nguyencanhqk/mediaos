@@ -42,6 +42,22 @@ export const chatRoomSchema = z.object({
    * FE hiện đậm dòng phòng khi `markedUnreadAt !== null` DÙ `unreadCount === 0`.
    */
   markedUnreadAt: z.string().datetime().nullable().optional(),
+  /**
+   * S8-CHAT-UX-BE-2 — URL ẢNH ĐẠI DIỆN PHÒNG, **đã ký TƯƠI** cho mỗi lần trả (CHAT-DEC-016).
+   *
+   * ⚠️ `.nullable().optional()` — cả hai, không phải một:
+   *   • `nullable` = phòng chưa đặt ảnh / ảnh không còn hợp lệ / ký lỗi (fail-soft, FE dựng chữ cái đầu);
+   *   • `optional` = mọi consumer BUILD TRƯỚC WO này vẫn parse được payload cũ. Thiếu nó là ZodError
+   *     runtime DÙ HTTP 200 (`server-masking-needs-optional-fe-schema`) — trắng trang, không phải
+   *     "thiếu một cái ảnh".
+   *
+   * ⚠️ **KHÔNG CACHE / KHÔNG PERSIST giá trị này.** Nó là URL ký TTL-ngắn; lưu lại là dựng một đường
+   * tải sống lâu hơn quyết định quyền đã cấp ra nó.
+   *
+   * Phòng `direct` LUÔN `null` ở đây (CHECK `chk_chat_rooms_direct_no_avatar`, mig `0543`): avatar DM
+   * là dẫn xuất từ người đối thoại, FE tự dựng từ roster.
+   */
+  avatarUrl: z.string().nullable().optional(),
 });
 export type ChatRoomDto = z.infer<typeof chatRoomSchema>;
 
@@ -115,6 +131,34 @@ export const chatAttachmentSchema = z.object({
 });
 export type ChatAttachmentDto = z.infer<typeof chatAttachmentSchema>;
 
+// ═══════════════ S8-CHAT-UX-BE-3 — thả cảm xúc (CHAT-DEC-018) ═══════════════
+
+/**
+ * Bộ emoji **ĐÓNG**, 6 mã. Chuỗi tự do là bề mặt lưu trữ vô hạn + rủi ro render.
+ *
+ * ⚠️ Bộ này sống ở **BA** chỗ và cả ba phải khớp: `chat_message_reactions_emoji_chk` (CHECK cấp DB,
+ * mig `0543`) · `CHAT_REACTION_EMOJIS` (hằng drizzle, `communication.ts`) · enum này. Thêm emoji thứ 7
+ * mà quên một chỗ ⇒ hoặc `23514` lúc chạy, hoặc một giá trị hợp lệ ở DB mà API từ chối. Spec
+ * `chat-reactions.emoji-set.spec.ts` đối chiếu hai vế TS; migration VERIFY canh vế DB.
+ */
+export const chatReactionEmojiSchema = z.enum(["like", "love", "haha", "wow", "sad", "angry"]);
+export type ChatReactionEmoji = z.infer<typeof chatReactionEmojiSchema>;
+
+/**
+ * Tổng hợp cảm xúc của MỘT emoji trên MỘT tin.
+ *
+ * ⚠️ **KHÔNG có `userIds`.** Trả danh sách ai-thả-gì cho mọi thành viên phòng là một quyết định về
+ * quyền riêng tư — nó có thể đúng, nhưng phải được chốt tường minh chứ không rơi ra như tác dụng phụ
+ * của một tính năng UI. `count` + `mine` đủ để vẽ đúng thanh cảm xúc.
+ */
+export const chatMessageReactionSchema = z.object({
+  emoji: chatReactionEmojiSchema,
+  count: z.number().int().positive(),
+  /** Người GỌI có đang thả emoji này không. PER-USER ⇒ bị strip khỏi payload WS (xem `realtime.ts`). */
+  mine: z.boolean(),
+});
+export type ChatMessageReactionDto = z.infer<typeof chatMessageReactionSchema>;
+
 /**
  * chatMessageSchema — DTO chung REST + WS (realtime.ts re-export làm payload `chat:message`).
  * BẤT BIẾN masking (CLAUDE.md §5): server PHẢI `.parse()` row qua schema này trước khi trả/emit —
@@ -159,6 +203,19 @@ export const chatMessageSchema = z.object({
    * `attachments: []`. Đọc `attachments` để render, `attachmentCount` chỉ là số liệu lịch sử.
    */
   attachments: z.array(chatAttachmentSchema),
+  /**
+   * S8-CHAT-UX-BE-3 — tổng hợp cảm xúc (CHAT-FUNC-019). Chỉ emoji CÓ ÍT NHẤT một lượt thả xuất hiện;
+   * emoji chưa ai thả **không** trả về `count: 0` (nhiễu 6 phần tử rỗng trên mỗi tin của mỗi trang).
+   *
+   * `.optional()` — KHÁC `attachments` ngay trên, và khác có chủ ý: `attachments` có từ S7 nên mọi
+   * consumer đang chạy đều đã nhận nó, còn khoá này là MỚI. Thêm một khoá **required** vào một
+   * read-schema đã có người dùng làm mọi consumer ăn ZodError ngay khi FE lên trước BE (bài học bàn
+   * giao `S7-SEC-ROLE2FA-UI-1`). FE đọc `reactions ?? []`.
+   *
+   * Tin ĐÃ THU HỒI luôn `[]` — cùng lớp che với `body: null`/`attachments` (§13.6): giữ lại cảm xúc
+   * của một nội dung đã rút là để lại phản ứng về thứ không ai còn đọc được.
+   */
+  reactions: z.array(chatMessageReactionSchema).optional(),
   /**
    * Số thứ tự **PER-ROOM**, liên tục từ 1 (mig `0539`). Đây là con trỏ dùng cho `beforeSeq`/`afterSeq`,
    * cho đếm chưa đọc và cho "đã xem bởi".
@@ -321,6 +378,40 @@ export const chatRoomMemberSchema = z.object({
   userName: z.string().nullable().optional(),
   /** Con trỏ đã đọc trong hệ `room_seq` — FE dựng "đã xem bởi" (SPEC-15 §13.2), KHÔNG cần bảng riêng. */
   lastReadSeq: z.number().int().nonnegative().optional(),
+
+  // ── S8-CHAT-UX-FE-3 (additive, optional) — ROSTER phòng (CHAT-DEC-019 · API-13 §5.1) ──
+  //
+  // ⚠️ Cả ba khoá `.optional()` CÓ CHỦ ĐÍCH, không phải phòng xa. Schema này đã có consumer đang chạy
+  // (`chatRoomDetailSchema.members`, dựng từ S7); thêm một khoá **required** vào read-schema đã có người
+  // dùng làm MỌI consumer ăn ZodError ngay khi FE lên trước BE — bài học bàn giao `S7-SEC-ROLE2FA-UI-1`
+  // (memory `server-masking-needs-optional-fe-schema`). Chỉ `CHAT-API-007a` cung cấp chúng;
+  // `GET /chat/rooms/:id` cố ý KHÔNG (xem docblock `chatRoomDetailSchema`).
+  /**
+   * URL ký **TTL ngắn** cho ảnh đại diện người này, ký MỘT LẦN cho cả roster (CHAT-DEC-019).
+   *
+   * ⚠️ **KHÔNG ký theo từng tin**: 50 tin = 50 lần ký + 50 hạn lệch nhau. FE tra bản đồ `userId → url`
+   * khi vẽ bong bóng. `null` = chưa có ảnh / ảnh không qua được xác minh ⇒ hiện chữ cái đầu.
+   * KHÔNG cache, KHÔNG đưa vào `localStorage`: giữ nó lâu hơn một lần render là dựng một đường tải sống
+   * lâu hơn quyết định quyền đã cấp ra nó.
+   */
+  avatarUrl: z.string().nullable().optional(),
+  /**
+   * ẢNH CHỤP "đang online" tại thời điểm gọi (CHAT-FUNC-021), KHÔNG phải luồng sống.
+   *
+   * ⚠️ Sự kiện `chat:presence` chỉ fan-out tới peer của phòng **`direct`** (`ChatPresenceService.broadcast`)
+   * — cố ý, vì phát trạng thái online của mọi người tới mọi phòng họ tham gia chính là thứ CHAT-DEC-017
+   * gọi là rò lịch làm việc. Hệ quả: ở phòng nhóm/phòng ban/dự án, giá trị này đúng lúc nạp roster và chỉ
+   * mới lại khi refetch. Vắng khoá (Valkey chưa cấu hình) ⇒ FE coi như `false`, không vẽ chấm.
+   */
+  isOnline: z.boolean().optional(),
+  /**
+   * Mốc rời phòng. `null` = đang là thành viên.
+   *
+   * ⚠️ **Người đã rời VẪN phải có trong roster** (CHAT-DEC-019): thiếu họ thì mọi tin CŨ của họ mất cả
+   * avatar lẫn tên hiển thị — lịch sử phòng tự nhiên khuyết một người. Đường quản trị thành viên đọc
+   * `GET /chat/rooms/:id` (chỉ ACTIVE), nên nó không bị ảnh hưởng.
+   */
+  leftAt: z.string().datetime().nullable().optional(),
 });
 export type ChatRoomMemberDto = z.infer<typeof chatRoomMemberSchema>;
 
@@ -365,6 +456,14 @@ export type UpdateChatMemberRequest = z.infer<typeof updateChatMemberSchema>;
 /**
  * GET /chat/rooms/:id (CHAT-API-004) — phòng + thành viên + vai trò CỦA TÔI.
  * `myRole` để FE khỏi phải tự dò mình trong `members[]` (và khỏi tự suy ra luật admin ở client).
+ *
+ * ⚠️ **`members` ở đây là ACTIVE-ONLY và phải GIỮ NGUYÊN như vậy** (S8-CHAT-UX-FE-3). Đây là câu trả lời
+ * cho "ai đang ở trong phòng": nó nuôi số đếm ở đầu phòng, danh sách quản trị, và bộ lọc "đã ở trong
+ * phòng" của hộp thêm thành viên. Nhét người ĐÃ RỜI vào đây làm bộ lọc đó coi họ là thành viên ⇒
+ * **không thêm lại được vào phòng**, không thông báo, không lý do.
+ *
+ * Roster đầy đủ (kèm người đã rời + `avatarUrl` + `isOnline`) là **`GET /chat/rooms/:id/members`**
+ * (CHAT-API-007a) — hai đường, hai ngữ nghĩa, cố ý.
  */
 export const chatRoomDetailSchema = chatRoomSchema.extend({
   members: z.array(chatRoomMemberSchema),

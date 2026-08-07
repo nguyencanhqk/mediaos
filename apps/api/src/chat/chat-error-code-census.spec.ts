@@ -44,10 +44,10 @@ const ALL_CODES: readonly string[] = Array.from(
  * └────────────────────────────────────────────────────────────────────────────────────────────────┘
  */
 const PENDING_CODES: ReadonlyMap<string, string> = new Map([
-  ["CHAT-ERR-022", "S8-CHAT-UX-BE-2 (đặt avatar cho phòng direct → 422)"],
-  ["CHAT-ERR-023", "S8-CHAT-UX-BE-2 (không đủ tư cách đặt avatar theo loại phòng → 403)"],
-  ["CHAT-ERR-024", "S8-CHAT-UX-BE-3 (thả cảm xúc vào tin đã thu hồi → 422)"],
-  ["CHAT-ERR-025", "S8-CHAT-UX-BE-3 (emoji ngoài bộ đóng → 422)"],
+  // CHAT-ERR-022 · CHAT-ERR-023 đã TRẢ ở `S8-CHAT-UX-BE-2` (07/08/2026 — avatar phòng).
+  // CHAT-ERR-024 · CHAT-ERR-025 đã TRẢ ở `S8-CHAT-UX-BE-3` (06/08/2026).
+  // Gỡ khỏi đây để census quay lại đòi mỗi mã ≥1 ca int-spec. Ca "nợ đã trả" bên dưới ép việc gỡ này,
+  // không phải trí nhớ ai đó. Sổ nợ RỖNG = cả 25 mã §12 đều có đường code sinh ra.
 ]);
 
 /** Mã BẮT BUỘC đã có ca int-spec = mã trong sổ TRỪ phần đang nợ. */

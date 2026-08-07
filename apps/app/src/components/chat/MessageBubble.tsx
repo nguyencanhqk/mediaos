@@ -10,15 +10,27 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CornerUpLeft, Download, FileText, Pin, Undo2 } from "lucide-react";
 import { Avatar, Badge, Button, cn } from "@mediaos/ui";
+import type { ChatReactionEmoji } from "@mediaos/contracts";
 import type { StoredChatAttachment, StoredChatMessage } from "@/stores/chat.store";
 import { attachmentUrl } from "@/stores/chat.store";
 import { formatClock, formatFileSize, splitTextWithLinks } from "./chat-format";
+import { ReactionBar } from "./ReactionBar";
 
 export interface MessageBubbleActions {
   onReply: (message: StoredChatMessage) => void;
   onPin: (message: StoredChatMessage) => void;
   onUnpin: (message: StoredChatMessage) => void;
   onRecall: (message: StoredChatMessage) => void;
+  /**
+   * S8-CHAT-UX-FE-3 — bật/tắt một cảm xúc. `currentlyMine` do bong bóng đọc từ tổng hợp ĐANG HIỂN THỊ và
+   * truyền lên, chứ caller KHÔNG tự tra lại state trong `mutationFn`: đọc state trong `mutationFn` là
+   * đúng cái bẫy closure cũ của react-query v5 (memory `react-query-v5-stale-mutationfn-closure`).
+   */
+  onToggleReaction: (
+    message: StoredChatMessage,
+    emoji: ChatReactionEmoji,
+    currentlyMine: boolean,
+  ) => void;
 }
 
 interface MessageBubbleProps {
@@ -32,6 +44,15 @@ interface MessageBubbleProps {
   canPin: boolean;
   /** Tên những người đã đọc tới tin này (đã trừ chính mình) — dẫn xuất từ `members[].lastReadSeq` (§13.2). */
   seenBy: readonly string[];
+  /**
+   * S8-CHAT-UX-FE-3 — URL ảnh người gửi, tra từ **ROSTER phòng** (CHAT-DEC-019), KHÔNG từ tin.
+   * `null` = chưa có ảnh / roster chưa về ⇒ `<Avatar>` rơi về chữ cái đầu (hành vi cũ, không hồi quy).
+   */
+  senderAvatarUrl: string | null;
+  /** Tên dự phòng từ roster khi `message.senderName` rỗng (tin cũ của người đã rời phòng). */
+  senderNameFallback: string | null;
+  /** Phòng đã lưu trữ ⇒ chỉ đọc: hiện tổng hợp cảm xúc nhưng không cho thả. */
+  isArchived: boolean;
   actions: MessageBubbleActions;
 }
 
@@ -133,11 +154,17 @@ export function MessageBubble({
   canRecall,
   canPin,
   seenBy,
+  senderAvatarUrl,
+  senderNameFallback,
+  isArchived,
   actions,
 }: MessageBubbleProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const isRecalled = message.recalledAt !== null;
   const isPinned = message.pinnedAt !== null;
+  // Roster là nguồn DỰ PHÒNG, không phải nguồn chính: `senderName` đi cùng chính tin nên nó đúng với thời
+  // điểm gửi, còn roster là ảnh chụp hiện tại (người đổi tên thì tin cũ vẫn nên mang tên lúc gửi).
+  const senderName = message.senderName ?? senderNameFallback;
 
   if (message.messageType === "system") {
     // Tin do SERVER sinh (thêm/bớt thành viên, đổi tên phòng) — canh giữa, không avatar, không tác vụ.
@@ -158,15 +185,25 @@ export function MessageBubble({
       data-room-seq={message.roomSeq}
     >
       <div className="w-8 shrink-0">
-        {!isGrouped && <Avatar name={message.senderName} size="sm" />}
+        {/*
+         * CHỈ tin ĐẦU của một cụm mới có avatar — `done_when #1` đo bằng cách ĐẾM NODE này. `data-testid`
+         * nằm trên `<Avatar>` chứ không trên ô bọc: ô bọc luôn tồn tại (nó giữ chỗ thụt lề cho các tin
+         * gộp), nên đếm ô bọc sẽ ra đúng số tin và bài test luôn xanh dù gộp có hỏng.
+         */}
+        {!isGrouped && (
+          <Avatar
+            name={senderName}
+            src={senderAvatarUrl}
+            size="sm"
+            data-testid="chat-sender-avatar"
+          />
+        )}
       </div>
 
       <div className="min-w-0 flex-1">
         {!isGrouped && (
           <div className="flex items-baseline gap-2">
-            <span className="text-sm font-medium">
-              {message.senderName ?? t("message.unknownSender")}
-            </span>
+            <span className="text-sm font-medium">{senderName ?? t("message.unknownSender")}</span>
             <span className="text-xs text-muted-foreground tabular-nums">
               {formatClock(message.createdAt)}
             </span>
@@ -211,6 +248,23 @@ export function MessageBubble({
               </div>
             )}
           </>
+        )}
+
+        {/*
+         * Thanh cảm xúc — dưới nội dung, TRÊN dòng "đã xem bởi".
+         *
+         * Tin ĐÃ THU HỒI: không vẽ gì cả. Server trả `reactions: []` cho tin thu hồi (cùng lớp che với
+         * `body`/`attachments`, SPEC-15 §13.6); vẽ ngược lại từ một bản cache cũ là hiện đúng thứ người
+         * gửi vừa gỡ đi.
+         */}
+        {!isRecalled && (
+          <ReactionBar
+            reactions={message.reactions ?? []}
+            readOnly={isArchived}
+            onToggle={(emoji, currentlyMine) =>
+              actions.onToggleReaction(message, emoji, currentlyMine)
+            }
+          />
         )}
 
         {seenBy.length > 0 && isMine && !isRecalled && (

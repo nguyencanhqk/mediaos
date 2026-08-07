@@ -22,8 +22,11 @@ import {
   WS_EVENTS,
   wsChatMessageEventSchema,
   wsChatMessageRecalledEventSchema,
+  wsChatPresenceEventSchema,
+  wsChatReactionEventSchema,
   wsChatReadEventSchema,
   wsChatRoomEventSchema,
+  wsChatTypingEventSchema,
 } from "@mediaos/contracts";
 import { useChatStore } from "@/stores/chat.store";
 
@@ -134,6 +137,28 @@ export function useChatRealtime(): void {
       store().applyReadEvent(parsed.data);
     };
 
+    /**
+     * S8-CHAT-UX-FE-3 — `chat:reaction`. Payload HẸP HƠN DTO REST (`mine` bị strip vì per-user);
+     * `applyReactionEvent` giữ lại `mine` đang có. Xem docblock của nó trong store.
+     */
+    const onChatReaction = (payload: unknown): void => {
+      const parsed = wsChatReactionEventSchema.safeParse(payload);
+      if (!parsed.success) return void warnBadPayload("chat:reaction", parsed.error);
+      store().applyReactionEvent(parsed.data);
+    };
+
+    const onChatTyping = (payload: unknown): void => {
+      const parsed = wsChatTypingEventSchema.safeParse(payload);
+      if (!parsed.success) return void warnBadPayload("chat:typing", parsed.error);
+      store().applyTypingEvent(parsed.data);
+    };
+
+    const onChatPresence = (payload: unknown): void => {
+      const parsed = wsChatPresenceEventSchema.safeParse(payload);
+      if (!parsed.success) return void warnBadPayload("chat:presence", parsed.error);
+      store().applyPresenceEvent(parsed.data);
+    };
+
     const onChatRoom = (payload: unknown): void => {
       const parsed = wsChatRoomEventSchema.safeParse(payload);
       if (!parsed.success) return void warnBadPayload("chat:room", parsed.error);
@@ -213,6 +238,9 @@ export function useChatRealtime(): void {
     socket.on(WS_EVENTS.CHAT_MESSAGE_RECALLED, onChatMessageRecalled);
     socket.on(WS_EVENTS.CHAT_READ, onChatRead);
     socket.on(WS_EVENTS.CHAT_ROOM, onChatRoom);
+    socket.on(WS_EVENTS.CHAT_REACTION, onChatReaction);
+    socket.on(WS_EVENTS.CHAT_TYPING, onChatTyping);
+    socket.on(WS_EVENTS.CHAT_PRESENCE, onChatPresence);
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("connect_error", onConnectError);
@@ -226,6 +254,9 @@ export function useChatRealtime(): void {
       socket.off(WS_EVENTS.CHAT_MESSAGE_RECALLED, onChatMessageRecalled);
       socket.off(WS_EVENTS.CHAT_READ, onChatRead);
       socket.off(WS_EVENTS.CHAT_ROOM, onChatRoom);
+      socket.off(WS_EVENTS.CHAT_REACTION, onChatReaction);
+      socket.off(WS_EVENTS.CHAT_TYPING, onChatTyping);
+      socket.off(WS_EVENTS.CHAT_PRESENCE, onChatPresence);
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
       socket.off("connect_error", onConnectError);

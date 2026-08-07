@@ -728,16 +728,34 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-2 — tin nhắn (DB cô lập, đườn
   // ── Ca 21: không có đường sửa body ─────────────────────────────────────────
 
   describe("ca 21 — KHÔNG đường nào sửa `body` (CHAT-ERR-007)", () => {
-    it("0 route @Patch/@Put trên tin nhắn trong toàn module CHAT", () => {
+    it("0 route @Patch/@Put nhắm CHÍNH tin nhắn trong toàn module CHAT", () => {
+      // ─────────────────────────────────────────────────────────────────────────────────────────
+      // S8-CHAT-UX-BE-3 — SIẾT ĐÚNG THỨ CẦN GIỮ, thay vì giữ một cái đại diện dễ kiểm mà nói sai.
+      //
+      // Bản trước cấm MỌI `@Put`/`@Patch` có chữ `messages` trong đường dẫn. Cái nó THỰC SỰ canh là
+      // SPEC-15 §3.4/CHAT-ERR-007: "không đường nào sửa nội dung một tin nhắn". Hai mệnh đề đó trùng
+      // nhau đúng tới lúc module có tài nguyên CON nằm dưới `messages/` — `CHAT-API-022a`
+      // (`PUT messages/:id/reactions/:emoji`) ghi vào bảng RIÊNG `chat_message_reactions` và không
+      // chạm một cột nào của `chat_messages`.
+      //
+      // ⇒ Cấm `@Put`/`@Patch` nhắm CHÍNH tin (đường dẫn KẾT THÚC ở `messages/:id`), cho phép tài
+      //   nguyên con. Đây là siết ĐỘ CHÍNH XÁC, không phải nới: `@Put("messages/:id")` — dạng route
+      //   sửa tin duy nhất có thể tồn tại — vẫn ĐỎ. Và ca thứ hai bên dưới mới là bằng chứng CỨNG:
+      //   `mediaos_app` không có UPDATE cấp bảng trên `chat_messages`, column-GRANT đúng 4 cột, nên
+      //   dù ai đó viết được một route như thế thì nó cũng chết bằng `42501` chứ không sửa nổi `body`.
+      //   (memory `index-ratchet-must-pin-definition-not-name`.)
+      // ─────────────────────────────────────────────────────────────────────────────────────────
       const chatDir = join(__dirname, "..", "..", "src", "chat");
       const offenders: string[] = [];
       for (const f of readdirSync(chatDir).filter((x) => x.endsWith(".controller.ts"))) {
         const src = readFileSync(join(chatDir, f), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
         for (const m of src.matchAll(/@(Patch|Put)\(\s*["'`]([^"'`]*)["'`]/g)) {
-          if (/messages/.test(m[2])) offenders.push(`${f} › @${m[1]}("${m[2]}")`);
+          const path = m[2];
+          // "nhắm chính tin" = có đoạn `messages/<tham số>` và KẾT THÚC ngay ở đó.
+          if (/(^|\/)messages\/:[^/]+$/.test(path)) offenders.push(`${f} › @${m[1]}("${path}")`);
         }
       }
-      expect(offenders).toEqual([]);
+      expect(offenders, "route sửa CHÍNH tin nhắn — cấm tuyệt đối (CHAT-ERR-007)").toEqual([]);
     });
 
     it("DB ép bất biến: `mediaos_app` có 0 UPDATE cấp bảng trên chat_messages, column-GRANT ĐÚNG 4 cột", async () => {

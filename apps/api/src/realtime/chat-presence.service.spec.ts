@@ -4,6 +4,7 @@ import {
   PRESENCE_HEARTBEAT_MS,
   PRESENCE_TTL_SEC,
 } from "./chat-presence.service";
+import { ChatPresenceReaderService } from "./chat-presence-reader.service";
 import type { RealtimeEmitterService } from "./realtime-emitter.service";
 import type { ValkeyService } from "../permission/valkey.service";
 import type { DatabaseService } from "../db/db.service";
@@ -63,13 +64,17 @@ function makeService(opts: {
   const listDirectPeerUserIds = vi.fn(opts.peersImpl ?? (async () => opts.peers ?? ["peer-1"]));
   const repo = { listDirectPeerUserIds } as unknown as ChatRoomsRepository;
 
-  const svc = new ChatPresenceService(opts.valkey, emitter, db, repo);
+  // S8-CHAT-UX-FE-3 — `presenceKey` + vế ĐỌC chuyển xuống leaf `ChatPresenceReaderService` (để
+  // `ChatModule` dùng chung không gian khoá mà không tạo vòng module). Test dựng reader THẬT chứ không
+  // giả lập: chính phép suy khoá là thứ ca A/B dưới đây phải chứng minh, giả lập nó là tự huỷ bài test.
+  const reader = new ChatPresenceReaderService(opts.valkey);
   // Ép phạm vi môi trường cho ca A/B — hàm dựng đọc env THẬT của tiến trình test, mà ca này cần dựng HAI
-  // phạm vi khác nhau trong cùng một tiến trình.
+  // phạm vi khác nhau trong cùng một tiến trình. Ép ở READER vì khoá giờ sinh ở đó.
   if (opts.envScope) {
-    (svc as unknown as { envScope: string }).envScope = opts.envScope;
+    (reader as unknown as { envScope: string }).envScope = opts.envScope;
   }
-  return { svc, emitChatPresence, listDirectPeerUserIds };
+  const svc = new ChatPresenceService(opts.valkey, emitter, db, repo, reader);
+  return { svc, emitChatPresence, listDirectPeerUserIds, reader };
 }
 
 const CO = "11111111-1111-4111-8111-111111111111";

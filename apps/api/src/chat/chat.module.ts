@@ -5,9 +5,12 @@ import { FilesModule } from "../foundation/files/files.module";
 import { FilePolicyService } from "../foundation/files/file-policy.service";
 import { StorageModule } from "../storage/storage.module";
 import { RealtimeEmitterModule } from "../realtime/realtime-emitter.module";
+import { ChatPresenceReaderModule } from "../realtime/chat-presence-reader.module";
 import { ChatRoomsController } from "./chat-rooms.controller";
 import { ChatMessagesController } from "./chat-messages.controller";
 import { ChatAccessService } from "./chat-access.service";
+import { ChatReactionsRepository } from "./chat-reactions.repository";
+import { ChatReactionsService } from "./chat-reactions.service";
 import { ChatRoomPrefsService } from "./chat-room-prefs.service";
 import { ChatRoomsService } from "./chat-rooms.service";
 import { ChatMembersService } from "./chat-members.service";
@@ -37,6 +40,14 @@ import { ChatDerivedRoomsReconcileJobHandler } from "./chat-derived-rooms-reconc
 // `('send','chat-message')`. Không cặp quyền mới, không migration.
 import { ChatFilesController } from "./chat-files.controller";
 import { ChatFilesService } from "./chat-files.service";
+// S8-CHAT-UX-BE-2 (additive): avatar phòng — controller/service/repo/resolver RIÊNG, cặp
+// `('update','chat-room')` (đã seed 0538). Không cặp quyền mới, không migration quyền.
+import { ChatRoomAvatarController } from "./chat-room-avatar.controller";
+import { ChatRoomAvatarService } from "./chat-room-avatar.service";
+import { ChatRoomAvatarRepository } from "./chat-room-avatar.repository";
+import { ChatRoomAvatarPresignService } from "./chat-room-avatar-presign.service";
+import { ChatRoomAvatarFileResolver } from "./chat-room-avatar-file.resolver";
+import { ProjectMembershipModule } from "../tasks/project-membership.module";
 import { ChatOversightController } from "./chat-oversight.controller";
 import { ChatOversightAuditGuard } from "./chat-oversight-audit.guard";
 import { ChatOversightService } from "./chat-oversight.service";
@@ -78,11 +89,31 @@ import { ChatOversightRepository } from "./chat-oversight.repository";
   // S7-CHAT-RT-1 (additive): `RealtimeEmitterModule` là module LÁ — chỉ cấp `RealtimeEmitterService`.
   // CẤM đổi thành `RealtimeModule`: đó là vòng `Realtime → Chat → Realtime` mà module lá được tách ra
   // để phá (xem jsdoc `realtime-emitter.module.ts` + `realtime.module.ts`).
-  imports: [PermissionModule, SequenceModule, FilesModule, StorageModule, RealtimeEmitterModule],
+  //
+  // S8-CHAT-UX-BE-2 (additive): `ProjectMembershipModule` là module **LÁ** (0 import) giữ truy vấn
+  // `project_members` — CHAT cần nó để biết ai là Owner/Manager dự án (CHAT-DEC-016).
+  // ⚠️ **CẤM đổi thành `TasksModule`**: `tasks.module.ts` ĐÃ import `ChatModule` (cần
+  // `ChatDerivedRoomsSyncService`), nên cạnh ngược lại là vòng `Chat → Tasks → Chat` ⇒ Nest sập lúc
+  // bootstrap, kéo 100+ int-spec đỏ dây chuyền. Cùng lý do `RealtimeEmitterModule` tồn tại.
+  imports: [
+    PermissionModule,
+    SequenceModule,
+    FilesModule,
+    StorageModule,
+    RealtimeEmitterModule,
+    // S8-CHAT-UX-FE-3 — ảnh chụp "đang online" cho roster (CHAT-API-007a). Module LÁ, KHÔNG phải
+    // `RealtimeModule`: cạnh `Chat → Realtime` là một VÒNG (`RealtimeModule` đã import `ChatModule` để
+    // lấy `ChatRoomsRepository` lúc handshake) và Nest sập lúc bootstrap. Cùng khuôn `RealtimeEmitterModule`.
+    ChatPresenceReaderModule,
+    ProjectMembershipModule,
+  ],
   controllers: [
     ChatRoomsController,
     ChatMessagesController,
     ChatSearchController,
+    // S8-CHAT-UX-BE-2 — `/chat/rooms/:id/avatar*`. Controller RIÊNG vì đây là đường GHI TỆP (gọi
+    // `FileService` bỏ qua gate `upload:foundation-file`), cùng lớp với `ChatFilesController`.
+    ChatRoomAvatarController,
     // S7-CHAT-BE-8 — `/chat/files/*`. Controller RIÊNG chứ không thêm route vào `ChatMessagesController`:
     // hai route này KHÔNG nhận `roomId` và KHÔNG đi qua `assertMember` (tệp chưa thuộc phòng nào), nên
     // đứng chung với các route luôn-assertMember sẽ làm mờ đúng tính chất đó — mirror lý do
@@ -127,6 +158,19 @@ import { ChatOversightRepository } from "./chat-oversight.repository";
     // + `ChatRoomsRepository` (đã ở trên). CỐ Ý KHÔNG export: ba tuỳ chọn này ghi lên hàng membership
     // CỦA CHÍNH actor — module khác gọi được là mở đường đặt tuỳ chọn hộ người khác.
     ChatRoomPrefsService,
+    // ── S8-CHAT-UX-BE-3 ── CHAT-API-022a/022b. `ChatReactionsService` CÓ export: nó là phụ thuộc của
+    // `ChatAttachmentPresignService.decorate` (cùng module) — nhưng đường vào từ ngoài vẫn chỉ có 2
+    // route đã gate `send:chat-message`.
+    ChatReactionsService,
+    ChatReactionsRepository,
+    // ── S8-CHAT-UX-BE-2 ── CHAT-DEC-016. `ChatRoomAvatarPresignService` CÓ mặt trong cùng module vì
+    // `ChatRoomsService` (listRooms/getRoom) phụ thuộc nó. CỐ Ý KHÔNG export cả 4: đường ghi đã gate
+    // `update:chat-room` + luật DEC-016, còn đường ký mang NGHĨA VỤ caller phải tự bảo đảm membership
+    // (xem jsdoc presign) — module khác cầm được là mở đường ký avatar phòng mình không thuộc.
+    ChatRoomAvatarService,
+    ChatRoomAvatarRepository,
+    ChatRoomAvatarPresignService,
+    ChatRoomAvatarFileResolver,
   ],
   // `ChatDerivedRoomsSyncService` export cho 5 module writer (org · employees · tasks · recycle-bin).
   // Job handler CỐ Ý KHÔNG export: nó được SchedulerModule gom qua DiscoveryService bằng metadata, không
@@ -142,6 +186,8 @@ export class ChatModule implements OnModuleInit {
   constructor(
     private readonly filePolicy: FilePolicyService,
     private readonly messageFileResolver: ChatMessageFileResolver,
+    // S8-CHAT-UX-BE-2 — resolver THỨ HAI của module, khoá `(CHAT, chat_room_avatar)`.
+    private readonly roomAvatarFileResolver: ChatRoomAvatarFileResolver,
   ) {}
 
   /**
@@ -158,5 +204,8 @@ export class ChatModule implements OnModuleInit {
    */
   onModuleInit(): void {
     this.filePolicy.registerResolver(this.messageFileResolver);
+    // S8-CHAT-UX-BE-2 — cùng lý do BẮT BUỘC như dòng trên, khoá `(CHAT, chat_room_avatar)`: thiếu nó
+    // thì avatar đặt được mà KHÔNG AI tải được (`deny-no-resolver`, không escalate xuống FOUNDATION).
+    this.filePolicy.registerResolver(this.roomAvatarFileResolver);
   }
 }
