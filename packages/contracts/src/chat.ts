@@ -42,6 +42,22 @@ export const chatRoomSchema = z.object({
    * FE hiện đậm dòng phòng khi `markedUnreadAt !== null` DÙ `unreadCount === 0`.
    */
   markedUnreadAt: z.string().datetime().nullable().optional(),
+  /**
+   * S8-CHAT-UX-BE-2 — URL ẢNH ĐẠI DIỆN PHÒNG, **đã ký TƯƠI** cho mỗi lần trả (CHAT-DEC-016).
+   *
+   * ⚠️ `.nullable().optional()` — cả hai, không phải một:
+   *   • `nullable` = phòng chưa đặt ảnh / ảnh không còn hợp lệ / ký lỗi (fail-soft, FE dựng chữ cái đầu);
+   *   • `optional` = mọi consumer BUILD TRƯỚC WO này vẫn parse được payload cũ. Thiếu nó là ZodError
+   *     runtime DÙ HTTP 200 (`server-masking-needs-optional-fe-schema`) — trắng trang, không phải
+   *     "thiếu một cái ảnh".
+   *
+   * ⚠️ **KHÔNG CACHE / KHÔNG PERSIST giá trị này.** Nó là URL ký TTL-ngắn; lưu lại là dựng một đường
+   * tải sống lâu hơn quyết định quyền đã cấp ra nó.
+   *
+   * Phòng `direct` LUÔN `null` ở đây (CHECK `chk_chat_rooms_direct_no_avatar`, mig `0543`): avatar DM
+   * là dẫn xuất từ người đối thoại, FE tự dựng từ roster.
+   */
+  avatarUrl: z.string().nullable().optional(),
 });
 export type ChatRoomDto = z.infer<typeof chatRoomSchema>;
 

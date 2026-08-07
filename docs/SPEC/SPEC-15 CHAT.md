@@ -372,9 +372,13 @@ Toàn bộ 7 tính năng của §5.1b dùng lại **đúng 10 cặp** ở trên.
 | Loại phòng | Quyền (điều kiện CẦN) | Tư cách (điều kiện ĐỦ) |
 | --- | --- | --- |
 | `group` | `('update','chat-room')` | `chat_room_members.role = 'admin'` |
-| `department` | `('update','chat-room')` | có `('update','org-unit')` với đơn vị neo của phòng |
+| `department` | `('update','chat-room')` | có `('update','org_unit')` với đơn vị neo của phòng |
 | `project` | `('update','chat-room')` | giữ vai trò quản lý dự án của `projects` neo (`projectRole` — DECISIONS-04) |
 | `direct` | — | **không ai**; đặt avatar cho phòng `direct` ⇒ **CHAT-ERR-022** |
+
+> ⚠️ **`org_unit` gạch DƯỚI** (sửa 07/08/2026, `S8-CHAT-UX-BE-2`). Bảng này trước đó ghi `'org-unit'` gạch ngang — cặp đó **không tồn tại** trong catalog (`0030:19` seed `('update','org_unit')`), và `PermissionService` fail-closed ⇒ thi công theo chính tả cũ là **403 vĩnh viễn cho mọi phòng ban**, không lỗi nào nổ lúc build. `docs/plans/S8-CHAT-UX-WAVE.md §3` mang cùng lỗi này.
+>
+> ⚠️ **"với đơn vị neo của phòng" là ràng buộc THẬT, không phải văn phong.** `data_scope` là per-(permission, role): người giữ `update:org_unit@Department` chỉ được đổi avatar phòng chat của đơn vị mình (∪ đơn vị mình làm trưởng); `Company`/`System` mới đi khắp công ty. Bỏ vế này là leo thang im lặng — allow-path test vẫn xanh.
 
 ---
 

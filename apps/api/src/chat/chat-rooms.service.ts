@@ -13,6 +13,7 @@ import { AuditService } from "../events/audit.service";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import type { ChatRoomType } from "../db/schema/communication";
 import { ChatAccessService } from "./chat-access.service";
+import { ChatRoomAvatarPresignService } from "./chat-room-avatar-presign.service";
 import { ChatRoomCodeService } from "./chat-room-code.service";
 import { ChatRoomsRepository, type ChatRoomRow } from "./chat-rooms.repository";
 import { CHAT_AUDIT, CHAT_ERR, CHAT_MODULE_CODE } from "./chat.errors";
@@ -66,6 +67,8 @@ export class ChatRoomsService {
     private readonly audit: AuditService,
     // S7-CHAT-RT-1 (additive) — emit SAU commit, không bao giờ trong tx (xem `broadcastRoom`).
     private readonly realtime: RealtimeEmitterService,
+    // S8-CHAT-UX-BE-2 (additive) — ký avatar phòng theo LÔ ở hai đường đọc (`listRooms`/`getRoom`).
+    private readonly avatarPresign: ChatRoomAvatarPresignService,
   ) {}
 
   /**
@@ -106,13 +109,23 @@ export class ChatRoomsService {
    * lên đầu danh sách mỗi lần có đồng bộ.
    */
   async listRooms(actor: ChatActor, query: ListChatRoomsQuery): Promise<ChatRoomDto[]> {
-    const rows = await this.db.withTenant(actor.companyId, (tx) =>
-      this.repo.listRoomsForUser(tx, actor.companyId, actor.id, {
+    return this.db.withTenant(actor.companyId, async (tx) => {
+      const rows = await this.repo.listRoomsForUser(tx, actor.companyId, actor.id, {
         roomType: query.type as ChatRoomType | undefined,
         archived: query.archived ?? false,
-      }),
-    );
-    return rows.map((r) => toChatRoomDto(r));
+      });
+      // S8-CHAT-UX-BE-2 — ĐÚNG MỘT truy vấn thêm cho CẢ TRANG (không phải một lần ký mỗi phòng). Truyền
+      // `tx` của chính vòng này: mở `withTenant` lồng nhau sẽ TREO trên PgBouncer transaction-mode.
+      //
+      // An toàn theo nghĩa vụ caller (xem jsdoc `ChatRoomAvatarPresignService`): `listRoomsForUser` đã
+      // innerJoin membership của actor, nên mọi `roomId` đưa vào đây đều là phòng actor đang thuộc.
+      const avatars = await this.avatarPresign.resolveRoomAvatars(
+        actor.companyId,
+        rows.map((r) => r.id),
+        tx,
+      );
+      return rows.map((r) => toChatRoomDto(r, undefined, undefined, avatars.get(r.id) ?? null));
+    });
   }
 
   /** CHAT-API-004 — chi tiết phòng + thành viên + vai trò của tôi. */
@@ -120,12 +133,15 @@ export class ChatRoomsService {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
       const members = await this.repo.listActiveMembers(tx, actor.companyId, roomId);
+      // Nghĩa vụ caller đã thoả: `assertMember` ngay trên là điểm khẳng định membership.
+      const avatars = await this.avatarPresign.resolveRoomAvatars(actor.companyId, [roomId], tx);
       return toChatRoomDetailDto(
         acc.room,
         members,
         acc.membership.role,
         unreadOf(acc.room.lastMessageSeq, acc.membership.lastReadSeq),
         acc.membership,
+        avatars.get(roomId) ?? null,
       );
     });
   }

@@ -4,6 +4,7 @@ import type { DataScope } from "@mediaos/contracts";
 import type { TenantTx } from "../db/db.service";
 import { projectMembers } from "../db/schema/media";
 import { DataScopeService } from "../permission/data-scope.service";
+import { ProjectMembershipService } from "./project-membership.service";
 import { TaskCoreRepository, type TaskScopeMode } from "./task-core.repository";
 
 interface RequestUser {
@@ -11,22 +12,18 @@ interface RequestUser {
   companyId: string;
 }
 
-/** Vai trò per-project (CHECK chk_project_members_project_role — mig 0478). */
-export type ProjectRole = "Owner" | "Manager" | "Member" | "Viewer";
-
-/** Membership Active của actor trong 1 dự án (role đã coalesce NULL→Member theo D-24). */
-export interface ProjectMembership {
-  role: ProjectRole;
-  memberId: string;
-}
+/**
+ * S8-CHAT-UX-BE-2 — hai kiểu này ĐÃ CHUYỂN sang `project-membership.service.ts` (module lá) cùng với
+ * truy vấn dùng chúng. Re-export để mọi import sẵn có giữ nguyên đường dẫn — **KHÔNG** khai lại ở đây:
+ * hai định nghĩa cùng tên là hai thứ TypeScript coi là khác nhau ngay khi một bên thêm role mới.
+ */
+import type { ProjectMembership, ProjectRole } from "./project-membership.service";
+export type { ProjectMembership, ProjectRole };
 
 const ERR = {
   PROJECT_FORBIDDEN: "TASK-ERR-PROJECT-FORBIDDEN: không đủ quyền trên dự án này.",
   TASK_NOT_FOUND: "TASK-ERR-TASK-NOT-FOUND: không tìm thấy công việc.",
 } as const;
-
-/** Xếp hạng role MẠNH NHẤT khi actor khớp nhiều hàng member (legacy user_id-only + hàng employee_id). */
-const ROLE_RANK: Record<ProjectRole, number> = { Owner: 0, Manager: 1, Member: 2, Viewer: 3 };
 
 /**
  * S5-TASK-PROJROLE-1 (đợt C — DECISIONS-04 D-23/D-24) — tầng đọc `project_members.project_role` DUY NHẤT.
@@ -46,42 +43,27 @@ export class ProjectAccessService {
   constructor(
     private readonly dataScope: DataScopeService,
     private readonly coreRepo: TaskCoreRepository,
+    private readonly membership: ProjectMembershipService,
   ) {}
 
   /**
    * Membership Active MẠNH NHẤT của actor trong `projectId` (null = không phải member Active).
-   * Predicate identity MIRROR memberPredicate của buildReadScopeExists (employee_id OR user_id) —
-   * hai nơi lệch nhau là hai cửa quyền khác nhau cho cùng một người.
+   *
+   * ⟲ **S8-CHAT-UX-BE-2 — thân hàm ĐÃ CHUYỂN sang `ProjectMembershipService` (module lá).** Hàm này
+   * giữ nguyên chữ ký và trở thành lớp uỷ quyền mỏng: CHAT cần đọc vai trò dự án nhưng không import
+   * được `TasksModule` (vòng `Chat → Tasks → Chat`). Xem jsdoc `ProjectMembershipService`.
+   *
+   * ⚠️ KHÔNG viết lại truy vấn ở đây. Vị từ identity MIRROR `memberPredicate` của
+   * `buildReadScopeExists` — ba bản sao thì cả ba sẽ trôi khỏi nhau.
    */
-  async getMembershipTx(
+  getMembershipTx(
     tx: TenantTx,
     companyId: string,
     projectId: string,
     actorEmployeeId: string | null,
     actorUserId: string,
   ): Promise<ProjectMembership | null> {
-    const identity = actorEmployeeId
-      ? sql`(${projectMembers.employeeId} = ${actorEmployeeId} or ${projectMembers.userId} = ${actorUserId})`
-      : sql`${projectMembers.userId} = ${actorUserId}`;
-    const rows = await tx
-      .select({ id: projectMembers.id, role: projectMembers.projectRole })
-      .from(projectMembers)
-      .where(
-        and(
-          eq(projectMembers.companyId, companyId),
-          eq(projectMembers.projectId, projectId),
-          eq(projectMembers.memberStatus, "Active"),
-          isNull(projectMembers.deletedAt),
-          identity,
-        ),
-      );
-    if (rows.length === 0) return null;
-    let best: ProjectMembership | null = null;
-    for (const r of rows) {
-      const role = this.coalesceRole(r.role);
-      if (!best || ROLE_RANK[role] < ROLE_RANK[best.role]) best = { role, memberId: r.id };
-    }
-    return best;
+    return this.membership.getMembershipTx(tx, companyId, projectId, actorEmployeeId, actorUserId);
   }
 
   /** Dự án còn ≥1 Owner-member Active không? (phân slug OWNER_REQUIRED vs NOT_OWNER — D-25). */
@@ -170,14 +152,5 @@ export class ProjectAccessService {
     );
     const scoped = await this.coreRepo.findScopedByIdTx(tx, user.companyId, taskId, scopeExists);
     return scoped !== undefined;
-  }
-
-  /** NULL→Member (D-24); giá trị ngoài enum (không thể xảy ra nhờ CHECK) fail về Viewer cho an toàn. */
-  private coalesceRole(role: string | null): ProjectRole {
-    if (role === null) return "Member";
-    if (role === "Owner" || role === "Manager" || role === "Member" || role === "Viewer") {
-      return role;
-    }
-    return "Viewer";
   }
 }

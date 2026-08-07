@@ -172,9 +172,24 @@ export class ChatAccessService {
    * không che được gì, mà lại làm người dùng không hiểu vì sao nút bấm không ăn.
    */
   requireRoomAdmin(access: ChatRoomAccess): void {
-    if (access.membership.role !== "admin") {
+    if (!this.isRoomAdmin(access)) {
       throw new ForbiddenException(CHAT_ERR.NOT_ROOM_ADMIN);
     }
+  }
+
+  /**
+   * S8-CHAT-UX-BE-2 — vị từ THUẦN "actor là quản trị viên của phòng này", tách khỏi việc NÉM.
+   *
+   * VÌ SAO tách: SPEC-15 §12 cấp **hai mã khác nhau** cho cùng một vị từ. Đường thao tác phòng/tin
+   * dùng `CHAT-ERR-001` (vế 403); đường avatar (§11b) dùng `CHAT-ERR-023`, vì ở đó "không đủ tư cách"
+   * phải KHÔNG phân biệt được giữa `group` (thiếu vai trò admin phòng), `department` (thiếu
+   * `update:org_unit` hoặc sai đơn vị neo) và `project` (không phải Owner/Manager) — ba lý do một
+   * thông điệp, nếu không thông điệp lỗi lại vẽ ra bản đồ quyền.
+   *
+   * `requireRoomAdmin` gọi CHÍNH hàm này ⇒ vẫn đúng MỘT bản sao của vị từ; chỉ mã lỗi là của caller.
+   */
+  isRoomAdmin(access: ChatRoomAccess): boolean {
+    return access.membership.role === "admin";
   }
 
   /**
