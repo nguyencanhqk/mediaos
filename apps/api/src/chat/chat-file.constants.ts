@@ -22,6 +22,23 @@ import { fileDownloadStateDenyReason } from "../foundation/files/file-download-s
 /** `file_links.entity_type` của mọi đính kèm CHAT. `entity_id` LUÔN là `chat_messages.id`. */
 export const CHAT_MESSAGE_ENTITY_TYPE = "chat_message";
 
+/**
+ * S8-CHAT-UX-BE-2 — `file_links.entity_type` của AVATAR PHÒNG. `entity_id` LUÔN là `chat_rooms.id`.
+ *
+ * ⚠️ **entity_type RIÊNG, không dùng lại `chat_message`.** `FilePolicyService` điều phối theo cặp
+ * `(moduleCode, entityType)`; gộp hai loại vào một khoá là bắt MỘT resolver phải trả lời hai câu hỏi
+ * quyền khác hẳn nhau (`entityId` khi thì là tin, khi thì là phòng) — và nhánh đoán sai kiểu sẽ
+ * **cấp quyền**, không phải từ chối.
+ */
+export const CHAT_ROOM_AVATAR_ENTITY_TYPE = "chat_room_avatar";
+
+/**
+ * `file_links.link_type` của avatar phòng — ∈ CHECK `chk_file_links_link_type` (mig `0433`).
+ * Trùng giá trị `MeAvatarService`/`HrEmployeeAvatarService` dùng cho avatar nhân viên: cùng NGHĨA
+ * ("ảnh đại diện của một thực thể"), khác nhau ở `entity_type` — đó mới là khoá điều phối.
+ */
+export const CHAT_ROOM_AVATAR_LINK_TYPE = "Avatar";
+
 /** `file_links.link_type` — ∈ CHECK `chk_file_links_link_type` (mig `0433`). */
 export const CHAT_ATTACHMENT_LINK_TYPE = "Attachment";
 

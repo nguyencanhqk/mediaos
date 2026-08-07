@@ -4,6 +4,10 @@ packages:
   # apps/lms = LMS nhập tại chỗ, workspace RIÊNG (Next.js+SQLite, pnpm-lock riêng) — loại khỏi
   # workspace MediaOS để root install/turbo KHÔNG đụng tới (tránh xung đột deps + build).
   - "!apps/lms"
+  # apps/fbpost = app vệ tinh SOCIAL (đăng bài Facebook Page). Cùng lý do như apps/lms nhưng nó dùng
+  # NPM (package-lock.json) + Tailwind v4 + node:sqlite — trộn vào workspace pnpm là xung đột deps.
+  # Hàng rào R3 của DECISIONS-08. Khác apps/lms: code fbpost NẰM TRONG git monorepo (SOCIAL-DEC-005).
+  - "!apps/fbpost"
 
 # Pin React TYPES về một phiên bản toàn monorepo — chặn @types/react dedupe skew
 # (ReactNode/ReactPortal mismatch 19.0.14 vs 19.2.16). Khớp peerDeps packages/{ui,web-core}.
@@ -49,7 +53,11 @@ overrides:
   "brace-expansion@<2.1.3": "^2.1.3"
   "brace-expansion@>=3.0.0 <5.0.8": "^5.0.8"
   "fast-uri@>=3.0.0 <=3.1.3": "^3.1.4"
-  "js-yaml@>=4.0.0 <4.3.0": "^4.3.0"
+  # 2026-08-07 — NỚI dải từ `<4.3.0` lên `<4.3.1`: advisory MỚI `GHSA-5p4m-2wfm-xmqj`
+  # (CVE-2026-59870, quadratic CPU trong `!!omap`) phủ CẢ 4.3.0 mà override cũ vừa ép lên.
+  # Đo 07/08: đỏ trên MỌI PR (đã tái hiện ở máy + trên CI của #361/#363), đường tới là
+  # `eslint > @eslint/eslintrc > js-yaml` — dev-tooling, KHÔNG vào runtime bundle của API.
+  "js-yaml@>=4.0.0 <4.3.1": "^4.3.1"
   "shell-quote@<=1.8.4": "^1.8.5"
   # 2026-07-25 — vá advisory HIGH postcss (GHSA source-map path traversal, <8.5.18). Transitive dev-dep
   # qua vitest coverage (apps/api>@vitest/coverage-v8>vitest>…>postcss), KHÔNG vào runtime bundle. Range-
@@ -82,5 +90,5 @@ minimumReleaseAgeExclude:
   - brace-expansion@2.1.3
   - brace-expansion@5.0.8
   - fast-uri@3.1.4
-  - js-yaml@4.3.0
+  - js-yaml@4.3.1
   - shell-quote@1.8.5

@@ -41,6 +41,35 @@ export default {
     },
     /** Phòng `direct` không có `name`; danh sách phòng không kèm thành viên nên nhãn dự phòng là mã phòng. */
     directFallback: "Tin nhắn riêng · {{code}}",
+
+    // ── S8-CHAT-UX-FE-2 ─────────────────────────────────────────────────────────────────────────
+    /** Dấu hiệu NGAY TRÊN DÒNG — không phải chỉ trong menu (mở từng phòng mới biết = không bao giờ biết). */
+    pinnedAria: "Đã ghim hội thoại",
+    mutedAria: "Đang tắt thông báo",
+    menu: {
+      openAria: "Tuỳ chọn cho {{name}}",
+      listAria: "Tuỳ chọn hội thoại {{name}}",
+      pin: "Ghim hội thoại",
+      unpin: "Bỏ ghim hội thoại",
+      muteHeading: "Tắt thông báo",
+      mutePreset: {
+        "1h": "Trong 1 giờ",
+        "8h": "Trong 8 giờ",
+        "1w": "Trong 1 tuần",
+      },
+      unmute: "Bật lại thông báo",
+      markUnread: "Đánh dấu chưa đọc",
+      archive: "Lưu trữ phòng",
+      /**
+       * CHAT-ERR-021 — **nêu rõ con số trần**. "Không ghim được" để người dùng bấm lại vô ích; câu này
+       * nói cho họ biết việc cần làm là bỏ ghim bớt.
+       */
+      pinLimitReached: "Bạn đã ghim tối đa {{count}} hội thoại. Hãy bỏ ghim bớt trước.",
+      pinFailed: "Không đổi được trạng thái ghim. Hội thoại đã trở về như cũ.",
+      muteFailed: "Không đổi được trạng thái thông báo. Hội thoại đã trở về như cũ.",
+      markUnreadFailed: "Không đánh dấu chưa đọc được. Hội thoại đã trở về như cũ.",
+      archiveFailed: "Không lưu trữ được phòng.",
+    },
   },
 
   conversation: {
@@ -98,6 +127,36 @@ export default {
     pinFailed: "Không ghim được tin nhắn.",
   },
 
+  // ── S8-CHAT-UX-FE-3 — thả cảm xúc (CHAT-FUNC-019 · CHAT-DEC-018) ──
+  reaction: {
+    open: "Thả cảm xúc",
+    pickerLabel: "Chọn cảm xúc",
+    // `{{emoji}}` là TÊN đã dịch của cảm xúc, không phải ký tự — nhãn này dành cho trình đọc màn hình.
+    toggle: "{{emoji}} · {{count}} người. Bấm để thả hoặc bỏ thả.",
+    failed: "Không cập nhật được cảm xúc.",
+    names: {
+      like: "Thích",
+      love: "Yêu thích",
+      haha: "Haha",
+      wow: "Ngạc nhiên",
+      sad: "Buồn",
+      angry: "Phẫn nộ",
+    },
+  },
+
+  // ── S8-CHAT-UX-FE-3 — đang gõ (CHAT-DEC-017) ──
+  typing: {
+    names: "{{names}} đang nhập…",
+    many: "{{count}} người đang nhập…",
+    // Có ping nhưng chưa tra được tên (roster chưa về): vẫn phải nói có người đang gõ.
+    someone_one: "Có người đang nhập…",
+    someone_other: "{{count}} người đang nhập…",
+  },
+
+  presence: {
+    online: "Đang hoạt động",
+  },
+
   attachment: {
     unavailable: "Tệp không tải được",
     resolving: "Đang lấy liên kết tải…",
@@ -138,6 +197,23 @@ export default {
       members: "Thành viên",
       files: "Tệp",
       pinned: "Tin ghim",
+    },
+    /** S8-CHAT-UX-FE-2 — ảnh đại diện phòng (CHAT-FUNC-018 · CHAT-DEC-016). */
+    avatar: {
+      set: "Đặt ảnh đại diện",
+      change: "Đổi ảnh đại diện",
+      remove: "Gỡ ảnh",
+      inputAria: "Chọn ảnh đại diện cho phòng",
+      hint: "Ảnh vuông, tối đa 5 MB.",
+      uploading: "Đang tải ảnh lên…",
+      tooLarge: "Ảnh vượt quá {{mb}} MB. Hãy chọn ảnh nhỏ hơn.",
+      // Ba thông điệp dưới đây ứng với ba MÃ LỖI khác nhau và ba việc khác nhau người dùng phải làm —
+      // gộp chúng thành một câu chung là bỏ đúng phần họ cần (SPEC-15 §12 CHAT-ERR-022/023).
+      forbidden: "Bạn không đủ tư cách đổi ảnh đại diện của phòng này.",
+      notSupported: "Loại phòng này không có ảnh đại diện riêng.",
+      archived: "Phòng đã lưu trữ — không đổi được ảnh đại diện.",
+      rejectedFile: "Tệp không hợp lệ: chỉ nhận ảnh, và không vượt quá giới hạn dung lượng.",
+      failed: "Không cập nhật được ảnh đại diện phòng.",
     },
     files: {
       empty: "Phòng chưa có tệp nào được gửi.",

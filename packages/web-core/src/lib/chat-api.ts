@@ -4,8 +4,11 @@ import {
   type ChatLeaveRoomResultDto,
   chatMarkReadResultSchema,
   type ChatMarkReadResultDto,
+  chatMessageReactionSchema,
+  type ChatMessageReactionDto,
   chatMessageSchema,
   type ChatMessageDto,
+  type ChatReactionEmoji,
   chatRemoveMemberResultSchema,
   type ChatRemoveMemberResultDto,
   chatRoomDetailSchema,
@@ -34,6 +37,7 @@ import {
   type ChatUnreadCountDto,
   type AddChatMemberRequest,
   type ChatMarkReadRequest,
+  type ChatMuteRoomRequest,
   type CreateChatRoomRequest,
   type ListChatMessagesQuery,
   type ListChatRoomFilesQuery,
@@ -42,9 +46,15 @@ import {
   type SendMessageRequest,
   type UpdateChatMemberRequest,
   type UpdateChatRoomRequest,
+  // S8-CHAT-UX-FE-2 — avatar phòng dùng LẠI schema của `/me/avatar`: BE
+  // (`ChatRoomAvatarController`) cũng khai `createZodDto` từ đúng hai schema này, nên nhân bản một cặp
+  // schema riêng chỉ để đổi tên là thêm một bản sao sẽ trôi khỏi hợp đồng thật.
+  meAvatarUploadUrlResponseSchema,
+  setMeAvatarInputSchema,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
+import { DEFAULT_UPLOAD_MIME, putBytesToStorage } from "./storage-upload";
 
 /**
  * S7-CHAT-FE-1 — CHAT API client (SPEC-15 · API-13 §5.1). MIRROR BE `ChatRoomsController`
@@ -121,9 +131,109 @@ export const chatApi = {
   leaveRoom: (roomId: string): Promise<ChatLeaveRoomResultDto> =>
     apiFetch(`/chat/rooms/${roomId}/leave`, chatLeaveRoomResultSchema, { method: "POST" }),
 
-  /** GET /chat/rooms/:id/members (CHAT-API-007a) — kèm `userName` + `lastReadSeq` (dựng "đã xem bởi"). */
+  // ── CHAT-API-024a/b · 025 · 020 (S8-CHAT-UX-BE-1) — tuỳ chọn per-phòng CỦA CHÍNH MÌNH ──────────
+  //
+  // Cả bốn trả về `ChatRoomDto` ĐẦY ĐỦ (không phải `{ok:true}`): call-site thay nguyên phòng trong
+  // cache React Query bằng phản hồi, khỏi phải tự vá từng khoá — và khỏi lệch khi server chuẩn hoá giá
+  // trị khác với thứ vừa gửi lên (xem `muteRoom`).
+  //
+  // ⚠️ Cả bốn dùng cặp `('view','chat-room')` ở server: đây là TUỲ CHỌN CÁ NHÂN, không phải quản trị
+  // phòng. FE **không** được bọc chúng trong `<PermissionGate action="update">`.
+
+  /**
+   * PUT /chat/rooms/:id/pin (CHAT-API-024a) — ghim hội thoại, trần **10/người**.
+   *
+   * Vượt trần ⇒ **409** `CHAT-ERR-021`; UI phải nêu rõ con số trần, không nuốt thành lỗi chung chung.
+   * Ghim lại phòng đang ghim ⇒ 200, không tiêu thêm suất.
+   */
+  pinRoom: (roomId: string): Promise<ChatRoomDto> =>
+    apiFetch(`/chat/rooms/${roomId}/pin`, chatRoomSchema, { method: "PUT" }),
+
+  /** DELETE /chat/rooms/:id/pin (CHAT-API-024b) — bỏ ghim. Phòng chưa ghim vẫn 200 (idempotent). */
+  unpinRoom: (roomId: string): Promise<ChatRoomDto> =>
+    apiFetch(`/chat/rooms/${roomId}/pin`, chatRoomSchema, { method: "DELETE" }),
+
+  /**
+   * PUT /chat/rooms/:id/mute (CHAT-API-025) — tắt thông báo tới `mutedUntil`; `null` = **bật lại**.
+   *
+   * ⚠️ HAI điều FE phải biết, cả hai đều làm hỏng biểu tượng chuông-gạch nếu bỏ qua:
+   *  1. Server **chuẩn hoá mốc đã qua về `null`** ⇒ phản hồi có thể khác thứ vừa gửi. Dùng phòng trả về
+   *     làm nguồn sự thật, đừng ghi lại giá trị local.
+   *  2. "Đang tắt" = `mutedUntil !== null` **VÀ** `mutedUntil > now`. Chỉ kiểm khác-null là vẽ
+   *     chuông-gạch cho một phòng đã hết hạn tắt trong lúc dữ liệu nằm trong cache.
+   */
+  muteRoom: (roomId: string, body: ChatMuteRoomRequest): Promise<ChatRoomDto> =>
+    apiFetch(`/chat/rooms/${roomId}/mute`, chatRoomSchema, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * POST /chat/rooms/:id/unread (CHAT-API-020) — đánh dấu chưa đọc thủ công.
+   *
+   * ⚠️ `unreadCount` trong phản hồi **KHÔNG đổi** — đúng thiết kế: con trỏ `last_read_seq` là chỉ-tiến
+   * (SPEC-15 §13.2) và không bị lùi để làm tính năng này. Dòng phòng hiện đậm theo `markedUnreadAt`,
+   * KHÔNG theo badge. Cờ tự tắt ở lần `markRead` kế tiếp (mở phòng).
+   */
+  markRoomUnread: (roomId: string): Promise<ChatRoomDto> =>
+    apiFetch(`/chat/rooms/${roomId}/unread`, chatRoomSchema, { method: "POST" }),
+
+  // ── CHAT-API-022a/022b (S8-CHAT-UX-BE-3) — thả cảm xúc ────────────────────────────────────────
+
+  /**
+   * PUT /chat/messages/:id/reactions/:emoji (CHAT-API-022a) — thả cảm xúc. Idempotent.
+   *
+   * Trả **tổng hợp mới của tin** (không phải phòng, không phải tin): dùng nó thay nguyên mảng
+   * `reactions` của tin trong cache, khỏi phải tải lại trang tin để hoà cập-nhật-lạc-quan.
+   *
+   * Lỗi cần hiện thông điệp riêng: **422 `CHAT-ERR-024`** (tin đã thu hồi) · **422 `CHAT-ERR-005`**
+   * (phòng đã lưu trữ). Nuốt cả hai thành "có lỗi xảy ra" là bỏ đúng phần người dùng cần biết.
+   */
+  reactToMessage: (
+    messageId: string,
+    emoji: ChatReactionEmoji,
+  ): Promise<ChatMessageReactionDto[]> =>
+    apiFetch(`/chat/messages/${messageId}/reactions/${emoji}`, z.array(chatMessageReactionSchema), {
+      method: "PUT",
+    }),
+
+  /**
+   * DELETE /chat/messages/:id/reactions/:emoji (CHAT-API-022b) — bỏ thả. **204, không có thân.**
+   *
+   * Chưa từng thả cũng 204 (idempotent) ⇒ client KHÔNG cần kiểm trạng thái trước khi gọi. Và khác
+   * `reactToMessage`, đường này CÒN chạy được cả trên tin đã thu hồi / phòng đã lưu trữ — cố ý, để
+   * một cảm xúc lỡ tay không dính vĩnh viễn.
+   */
+  unreactFromMessage: (messageId: string, emoji: ChatReactionEmoji): Promise<void> =>
+    apiFetch(`/chat/messages/${messageId}/reactions/${emoji}`, z.void(), { method: "DELETE" }),
+
+  /**
+   * GET /chat/rooms/:id/members (CHAT-API-007a) — **ROSTER** của phòng.
+   *
+   * Kèm `userName` + `lastReadSeq` (dựng "đã xem bởi"), và từ `S8-CHAT-UX-FE-3` kèm thêm `avatarUrl`
+   * (đã ký, CHAT-DEC-019) · `isOnline` (ảnh chụp) · `leftAt`.
+   *
+   * ⚠️ **Roster GỒM CẢ người đã rời phòng** (`leftAt !== null`) — thiếu họ thì tin cũ của họ mất avatar
+   * lẫn tên. Đường này KHÁC `getRoom()`: `getRoom().members` chỉ có người ĐANG ở trong phòng và là thứ
+   * dùng cho quản trị thành viên. Đừng hoán đổi hai nguồn.
+   *
+   * ⚠️ `avatarUrl` là URL ký **TTL ngắn**: render thẳng, KHÔNG cache, KHÔNG đưa vào `localStorage`.
+   */
   listMembers: (roomId: string): Promise<ChatRoomMemberDto[]> =>
     apiFetch(`/chat/rooms/${roomId}/members`, z.array(chatRoomMemberSchema)),
+
+  /**
+   * POST /chat/rooms/:id/typing (CHAT-API-023 · CHAT-DEC-017) — báo "đang gõ". **204, không có thân.**
+   *
+   * ⚠️ Đây là REST chứ không phải WS **có chủ đích**: `CHAT-DEC-005` chốt WS MỘT CHIỀU và ratchet
+   * `chat-realtime-structure.spec.ts` ép 0 `@SubscribeMessage` trong toàn bộ `apps/api/src`. Server nhận
+   * ping rồi tự fan-out `chat:typing`.
+   *
+   * Gọi **TIẾT LƯU** (3 s) — mỗi phím một request là nện API bằng đúng tốc độ gõ của người dùng.
+   * Không ghi DB, không audit ⇒ hỏng cũng không mất gì: caller nuốt lỗi có chủ đích, KHÔNG hiện toast.
+   */
+  pingTyping: (roomId: string): Promise<void> =>
+    apiFetch(`/chat/rooms/${roomId}/typing`, z.void(), { method: "POST" }),
 
   /** POST /chat/rooms/:id/members (CHAT-API-007b) — chặn trên phòng dẫn xuất (CHAT-ERR-012). */
   addMember: (roomId: string, body: AddChatMemberRequest): Promise<ChatRoomMemberDto> =>
@@ -253,6 +363,57 @@ export const chatApi = {
       `/chat/rooms/${roomId}/files${buildQueryString(query ?? {})}`,
       z.array(chatRoomFileSchema),
     ),
+};
+
+// ═══════════ S8-CHAT-UX-FE-2 — ẢNH ĐẠI DIỆN PHÒNG (CHAT-DEC-016, BE `ChatRoomAvatarController`) ═══
+
+/** Phản hồi của `POST /chat/rooms/:id/avatar` — CHỈ `{fileId}`, KHÔNG có URL. Xem docblock dưới. */
+export interface SetChatRoomAvatarResult {
+  fileId: string;
+}
+
+/**
+ * Đặt/gỡ ảnh đại diện phòng — tách khỏi `chatApi` vì đây là đường GHI TỆP, **đúng lý do BE tách
+ * `ChatRoomAvatarController` khỏi `ChatRoomsController`**: nó đi qua `FileService` chứ không phải CRUD phòng.
+ *
+ * Ba pha, sao khuôn `employeeAvatarApi` (`upload-url` → PUT bytes → confirm+gắn). Bất kỳ pha nào lỗi thì
+ * **ném NGAY** — không được âm thầm bỏ pha sau, vì "gắn một fileId chưa có bytes" tạo ra một phòng có ảnh
+ * đại diện tải-không-được và không có gì trên UI nói vì sao (silent-failure).
+ *
+ * ⚠️ Pha (3) trả `{fileId}`, **KHÔNG trả `avatarUrl`** — cố ý ở BE: đường ĐỌC ảnh đi qua
+ * `ChatRoomAvatarPresignService` ký MỘT LÔ cho cả danh sách phòng (CHAT-DEC-019). Caller PHẢI tải lại
+ * phòng/danh sách để lấy URL ký tươi; **tuyệt đối không** tự dựng URL từ `fileId`, và không cache URL
+ * đã nhận (TTL ngắn — cache lại là dựng một đường tải sống lâu hơn quyết định quyền đã cấp ra nó).
+ *
+ * ⚠️ Ai được gọi thì do SERVER quyết theo `room_type` (CHAT-DEC-016, bốn nhánh — SPEC-15 §11b). Client
+ * ẩn nút theo cùng bảng đó để không hứa suông, nhưng cổng THẬT vẫn ở server: `direct` ⇒ 422
+ * (CHAT-ERR-022), thiếu tư cách ⇒ 403 (CHAT-ERR-023), không phải thành viên ⇒ 404 (CHAT-ERR-001).
+ */
+export const chatRoomAvatarApi = {
+  /**
+   * Upload + gắn ảnh cho phòng `roomId`. Whitelist tường minh `{originalName, declaredMimeType, sizeBytes}`
+   * rồi `{fileId}` — chủ sở hữu tệp và phòng đích đều do server suy từ actor + `:id` đã authorize.
+   */
+  uploadRoomAvatar: async (roomId: string, file: File): Promise<SetChatRoomAvatarResult> => {
+    const declaredMimeType = file.type || DEFAULT_UPLOAD_MIME;
+    const reg = await apiFetch(
+      `/chat/rooms/${roomId}/avatar/upload-url`,
+      meAvatarUploadUrlResponseSchema,
+      {
+        method: "POST",
+        body: JSON.stringify({ originalName: file.name, declaredMimeType, sizeBytes: file.size }),
+      },
+    );
+    await putBytesToStorage(reg.uploadUrl, file, declaredMimeType);
+    return apiFetch(`/chat/rooms/${roomId}/avatar`, setMeAvatarInputSchema, {
+      method: "POST",
+      body: JSON.stringify({ fileId: reg.fileId }),
+    });
+  },
+
+  /** DELETE /chat/rooms/:id/avatar — gỡ ảnh (**204**, idempotent: phòng chưa có ảnh vẫn 204). */
+  removeRoomAvatar: (roomId: string): Promise<void> =>
+    apiFetch(`/chat/rooms/${roomId}/avatar`, z.void(), { method: "DELETE" }),
 };
 
 // ═══════════ S7-CHAT-FE-5 🔒 — ĐỌC-VƯỢT MEMBERSHIP (CHAT-API-018a/b/c + 019) ═══════════

@@ -3,6 +3,7 @@ import {
   addChatMemberSchema,
   chatFileUploadUrlInputSchema,
   chatMarkReadSchema,
+  chatMuteRoomSchema,
   chatOversightAuditQuerySchema,
   chatOversightMessagesQuerySchema,
   chatOversightRoomQuerySchema,
@@ -50,6 +51,16 @@ export class SendChatMessageDto extends createZodDto(sendMessageSchema) {}
 
 /** POST /chat/rooms/:id/read (view:chat-room) — con trỏ chỉ tiến. */
 export class ChatMarkReadDto extends createZodDto(chatMarkReadSchema) {}
+
+// ── S8-CHAT-UX-BE-1 — tuỳ chọn per-phòng (CHAT-API-024a/b, 025, 020) ───────────
+
+/**
+ * PUT /chat/rooms/:id/mute (view:chat-room) — `{ mutedUntil }` **nullable, không optional**:
+ * `null` là "bật lại thông báo", nên body rỗng không được phép trượt thành một thao tác hợp lệ.
+ *
+ * Ghim và đánh dấu chưa đọc KHÔNG có DTO — chúng không nhận body (id nằm ở path, giá trị do server đặt).
+ */
+export class ChatMuteRoomDto extends createZodDto(chatMuteRoomSchema) {}
 
 // ── S7-CHAT-BE-3 — đính kèm (CHAT-API-017) ──────────────────────────────────────
 

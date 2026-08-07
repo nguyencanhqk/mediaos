@@ -42,6 +42,23 @@ export interface VerifiedCoverMeta {
 }
 
 /**
+ * S8-CHAT-UX-BE-2 — taxonomy AVATAR PHÒNG CHAT. Hardcode literal Ở ĐÂY vì `foundation/files` KHÔNG phụ
+ * thuộc module `chat` (chiều phụ thuộc: chat → foundation) — mirror lý do của `AVATAR_LINK_*` /
+ * `COVER_LINK_*` ngay trên. Bản gốc của ba hằng này: `chat/chat-file.constants.ts`.
+ */
+const CHAT_ROOM_AVATAR_LINK_MODULE = "CHAT";
+const CHAT_ROOM_AVATAR_LINK_ENTITY = "chat_room_avatar";
+const CHAT_ROOM_AVATAR_LINK_TYPE = "Avatar";
+
+/** 1 avatar phòng ĐÃ XÁC MINH — chỉ field cần để ký. `storagePath` KHÔNG BAO GIỜ rời repo ra DTO. */
+export interface VerifiedRoomAvatarMeta {
+  /** chat_rooms.id (= file_links.entity_id) mà file này là avatar HỢP LỆ của. */
+  roomId: string;
+  fileId: string;
+  storagePath: string;
+}
+
+/**
  * S1-FND-FILE-1 — persistence cho `files` (DB-08 §8.6). MỌI method nhận `companyId` + `tx`: chạy BÊN
  * TRONG transaction `withTenant` của FileService (1 chốt tenant duy nhất, BẤT BIẾN #1). Lọc
  * `eq(company_id)` tường minh (defense-in-depth) DÙ RLS+FORCE (mig 0433) đã ép ở DB.
@@ -183,6 +200,85 @@ export class FileRepository {
                     and(
                       eq(otherLink.moduleCode, COVER_LINK_MODULE),
                       eq(otherLink.entityType, COVER_LINK_ENTITY),
+                      eq(otherLink.entityId, fileLinks.entityId),
+                    )!,
+                  ),
+                ),
+              ),
+          ),
+        ),
+      );
+  }
+
+  /**
+   * S8-CHAT-UX-BE-2 — batch tra AVATAR PHÒNG ĐÃ XÁC MINH theo `roomIds` (cho
+   * `ChatRoomAvatarPresignService` ký). Khuôn `findVerifiedTaskCoversTx`, cùng lý do tồn tại.
+   *
+   * SELF-DEFENDING — KHÔNG tin cột `chat_rooms.avatar_file_id` một mình. Cột đó có thể trôi khỏi
+   * `file_links` bất cứ lúc nào (đua hai người cùng đổi ảnh, một job tương lai, một câu UPDATE tay), và
+   * `ON DELETE SET NULL` của FK chỉ dọn một chiều. Nguồn sự thật ở đường ĐỌC là **link sống**.
+   *
+   * `owner_user_id = created_by` (defense-in-depth): người TẠO link phải sở hữu file — mirror
+   * `findVerifiedAvatarsTx`. `ChatRoomAvatarService` đã ép `owner === actor` ở đường ghi; vế này giữ
+   * bất biến đó kể cả khi một đường ghi thứ hai xuất hiện.
+   *
+   * ⚠️ VỊ TỪ ĐỘC QUYỀN (`NOT EXISTS`) là chốt CHỐNG LEO THANG ĐỌC, không phải tối ưu: đường tải thật đi
+   * qua `FilePolicy.decideForLinkedFile` = **AND khắt-khe-nhất trên MỌI link sống của file**. Một ảnh
+   * link CẢ vào HR/employee CẢ vào phòng chat (ảnh chụp CCCD dạng image/jpeg) hôm nay 403 khi tải vì HR
+   * resolver deny. Không có vị từ này, chính file đó sẽ được ký và render làm bộ mặt phòng cho MỌI
+   * thành viên. Có nó, tập "ai nhận được avatarUrl" ⊆ tập "ai tải được file đó qua phòng".
+   *
+   * ⚠️ **TUYỆT ĐỐI KHÔNG** thêm `fl2.company_id = $companyId` vào `NOT EXISTS`. Nhà này có phản xạ "AND
+   * company_id tường minh dù đã có RLS" (đúng ở mệnh đề thường), nhưng trong một `NOT EXISTS` mỗi điều
+   * kiện thêm vào `fl2` làm ẨN BỚT link nhìn thấy được ⇒ **fail-OPEN** — ngược hẳn ý định. RLS đã lo
+   * phần tenant.
+   *
+   * Ngưỡng scan `Clean|NotRequired` (KHÔNG phải `<> 'Infected'`): khớp `DOWNLOADABLE_SCAN` của đường
+   * tải mà nó thay thế. Biên an toàn không được lỏng hơn.
+   */
+  async findVerifiedRoomAvatarsTx(
+    companyId: string,
+    roomIds: string[],
+    tx: TenantTx,
+  ): Promise<VerifiedRoomAvatarMeta[]> {
+    if (roomIds.length === 0) return [];
+    const otherLink = alias(fileLinks, "fl2");
+    return tx
+      .select({
+        roomId: fileLinks.entityId,
+        fileId: files.id,
+        storagePath: files.storagePath,
+      })
+      .from(fileLinks)
+      .innerJoin(files, eq(files.id, fileLinks.fileId))
+      .where(
+        and(
+          eq(fileLinks.companyId, companyId),
+          eq(fileLinks.moduleCode, CHAT_ROOM_AVATAR_LINK_MODULE),
+          eq(fileLinks.entityType, CHAT_ROOM_AVATAR_LINK_ENTITY),
+          eq(fileLinks.linkType, CHAT_ROOM_AVATAR_LINK_TYPE),
+          eq(fileLinks.isPrimary, true),
+          isNull(fileLinks.deletedAt),
+          inArray(fileLinks.entityId, roomIds),
+          eq(files.companyId, companyId),
+          isNull(files.deletedAt),
+          eq(files.uploadStatus, "Uploaded"),
+          inArray(files.scanStatus, ["Clean", "NotRequired"]),
+          like(files.mimeType, "image/%"),
+          eq(files.ownerUserId, fileLinks.createdBy),
+          // Vị từ độc quyền — xem docblock. KHÔNG thêm điều kiện nào khác vào `otherLink`.
+          notExists(
+            tx
+              .select({ one: sql`1` })
+              .from(otherLink)
+              .where(
+                and(
+                  eq(otherLink.fileId, files.id),
+                  isNull(otherLink.deletedAt),
+                  not(
+                    and(
+                      eq(otherLink.moduleCode, CHAT_ROOM_AVATAR_LINK_MODULE),
+                      eq(otherLink.entityType, CHAT_ROOM_AVATAR_LINK_ENTITY),
                       eq(otherLink.entityId, fileLinks.entityId),
                     )!,
                   ),

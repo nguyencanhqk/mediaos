@@ -8,7 +8,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { z } from "zod";
-import { chatApi } from "./chat-api";
+import { chatApi, chatRoomAvatarApi } from "./chat-api";
 import * as apiClient from "./api-client";
 
 vi.mock("./api-client", async (importOriginal) => {
@@ -401,5 +401,70 @@ describe("chatApi — schema truyền vào apiFetch phải parse ĐƯỢC payloa
     };
     expect(schema.safeParse(detail).success).toBe(true);
     expect(schema.safeParse(ROOM_PAYLOAD).success).toBe(false); // thiếu myRole/members
+  });
+});
+
+/**
+ * S8-CHAT-UX-FE-2 — `chatRoomAvatarApi` (CHAT-DEC-016). Ba pha, và ca đáng tiền là **thứ tự + dừng sớm**:
+ * gắn một `fileId` mà bytes chưa lên storage tạo ra một phòng có ảnh tải-không-được, không lỗi nào nổ.
+ */
+describe("chatRoomAvatarApi — ảnh đại diện phòng", () => {
+  it("upload đi ĐÚNG 3 pha, đúng thứ tự, và Content-Type khớp mime đã khai", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValueOnce({
+      fileId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      uploadUrl: "https://storage.example/put?sig=abc",
+      expiresAt: "2026-08-07T10:05:00.000Z",
+    } as never);
+    vi.mocked(apiClient.apiFetch).mockResolvedValueOnce({
+      fileId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    } as never);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200 }));
+
+    const file = new File(["bytes"], "logo.png", { type: "image/png" });
+    const result = await chatRoomAvatarApi.uploadRoomAvatar(ROOM_ID, file);
+
+    const calls = vi.mocked(apiClient.apiFetch).mock.calls;
+    expect(calls[calls.length - 2][0]).toBe(`/chat/rooms/${ROOM_ID}/avatar/upload-url`);
+    expect(calls[calls.length - 1][0]).toBe(`/chat/rooms/${ROOM_ID}/avatar`);
+    // Bytes phải lên storage TRƯỚC pha gắn — `credentials:'omit'` để không rò cookie sang host storage.
+    const [putUrl, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(putUrl).toBe("https://storage.example/put?sig=abc");
+    expect((init.headers as Record<string, string>)["Content-Type"]).toBe("image/png");
+    expect(init.credentials).toBe("omit");
+    // Response CHỈ có `fileId` — KHÔNG có URL. Suy URL từ fileId ở client là dựng đường tải thứ hai.
+    expect(result).toEqual({ fileId: "ffffffff-ffff-4fff-8fff-ffffffffffff" });
+    expect(Object.keys(result)).toEqual(["fileId"]);
+
+    fetchSpy.mockRestore();
+  });
+
+  it("PUT lên storage lỗi ⇒ NÉM ngay, KHÔNG gọi pha gắn (không gắn file rỗng)", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValueOnce({
+      fileId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      uploadUrl: "https://storage.example/put?sig=abc",
+      expiresAt: "2026-08-07T10:05:00.000Z",
+    } as never);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 500 }));
+    const before = vi.mocked(apiClient.apiFetch).mock.calls.length;
+
+    const file = new File(["bytes"], "logo.png", { type: "image/png" });
+    await expect(chatRoomAvatarApi.uploadRoomAvatar(ROOM_ID, file)).rejects.toThrow();
+
+    // Đúng MỘT lời gọi API sau mốc `before` (pha 1). Pha 3 không được chạy.
+    expect(vi.mocked(apiClient.apiFetch).mock.calls.length).toBe(before + 1);
+
+    fetchSpy.mockRestore();
+  });
+
+  it("removeRoomAvatar: DELETE, parse `void` (204 không có thân)", async () => {
+    await chatRoomAvatarApi.removeRoomAvatar(ROOM_ID);
+    const [url, schema, init] = lastCall();
+    expect(url).toBe(`/chat/rooms/${ROOM_ID}/avatar`);
+    expect(init?.method).toBe("DELETE");
+    expect(schema.safeParse(undefined).success).toBe(true);
   });
 });

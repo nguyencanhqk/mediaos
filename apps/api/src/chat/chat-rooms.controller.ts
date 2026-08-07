@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -18,10 +19,12 @@ import type { Request } from "express";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import { ChatMembersService } from "./chat-members.service";
+import { ChatRoomPrefsService } from "./chat-room-prefs.service";
 import { ChatRoomsService } from "./chat-rooms.service";
 import { ChatTypingService } from "./chat-typing.service";
 import {
   AddChatMemberDto,
+  ChatMuteRoomDto,
   CreateChatRoomDto,
   ListChatRoomsQueryDto,
   OpenDirectRoomDto,
@@ -62,6 +65,8 @@ export class ChatRoomsController {
     private readonly members: ChatMembersService,
     // S8-CHAT-UX-RT-1 (additive) — CHAT-API-023.
     private readonly typingService: ChatTypingService,
+    // S8-CHAT-UX-BE-1 (additive) — CHAT-API-024a/b · 025 · 020.
+    private readonly prefs: ChatRoomPrefsService,
   ) {}
 
   /** GET /chat/rooms — CHAT-API-001. Tự-bound theo actor; 1 truy vấn, unread bằng phép trừ. */
@@ -151,6 +156,61 @@ export class ChatRoomsController {
   @RequirePermission("send", "chat-message")
   typing(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.typingService.ping(req.user, id);
+  }
+
+  /**
+   * ═══════ S8-CHAT-UX-BE-1 — tuỳ chọn per-phòng CỦA CHÍNH NGƯỜI GỌI ═══════
+   *
+   * Cả bốn route dùng cặp **`('view','chat-room')`** — KHÔNG phải `('update','chat-room')`: ghim, tắt
+   * thông báo, đánh dấu chưa đọc ghi lên hàng `chat_room_members` CỦA MÌNH, không sửa gì của phòng.
+   * Gắn cặp quản trị vào đây là giấu tuỳ chọn cá nhân sau cổng quyền quản trị (memory
+   * `personal-prefs-must-not-sit-behind-permission-gate`) và làm nhân viên thường không tắt nổi thông
+   * báo của chính họ. SPEC-15 §11 ghi rõ toàn bộ 7 tính năng S8 dùng lại đúng 10 cặp cũ — 0 cặp mới.
+   *
+   * ⚠️ Mã API: `024a/024b` (ghim) và `025` (tắt thông báo), **KHÔNG** phải `018a/018b/019` như bảng
+   * `API-13 §5.1b` seed lần đầu — dải đó đã thuộc `/chat/oversight/*` từ wave S7 và literal của nó
+   * đang nằm trong `audit_logs.metadata.endpoint` trên PROD. Xem `docs/plans/S8-CHAT-UX-BE-1.md` §0.
+   */
+
+  /** PUT /chat/rooms/:id/pin — CHAT-API-024a. Trần 10/người ⇒ 409 CHAT-ERR-021. Idempotent. */
+  @Put("rooms/:id/pin")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("view", "chat-room")
+  pinRoom(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
+    return this.prefs.pin(req.user, id);
+  }
+
+  /** DELETE /chat/rooms/:id/pin — CHAT-API-024b. Bỏ ghim; phòng chưa ghim vẫn 200 (idempotent). */
+  @Delete("rooms/:id/pin")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("view", "chat-room")
+  unpinRoom(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
+    return this.prefs.unpin(req.user, id);
+  }
+
+  /** PUT /chat/rooms/:id/mute — CHAT-API-025. `{ mutedUntil }`; `null` = bật lại thông báo. */
+  @Put("rooms/:id/mute")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("view", "chat-room")
+  muteRoom(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: ChatMuteRoomDto,
+  ) {
+    return this.prefs.mute(req.user, id, dto);
+  }
+
+  /**
+   * POST /chat/rooms/:id/unread — CHAT-API-020. Đánh dấu chưa đọc thủ công.
+   *
+   * `@HttpCode(200)` (không 201): không tạo tài nguyên nào, chỉ bật một cờ trên hàng đã có.
+   */
+  @Post("rooms/:id/unread")
+  @HttpCode(200)
+  @UseGuards(PermissionGuard)
+  @RequirePermission("view", "chat-room")
+  markRoomUnread(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
+    return this.prefs.markUnread(req.user, id);
   }
 
   /** GET /chat/rooms/:id/members — CHAT-API-007a. */

@@ -1,0 +1,11 @@
+node_modules/
+.next/
+out/
+build/
+next-env.d.ts
+*.tsbuildinfo
+
+# Du lieu cuc bo: CHUA TOKEN FACEBOOK - tuyet doi khong commit
+data/
+.env
+.env.local

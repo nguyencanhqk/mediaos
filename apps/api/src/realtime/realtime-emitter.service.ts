@@ -5,6 +5,7 @@ import {
   wsChatMessageEventSchema,
   wsChatMessageRecalledEventSchema,
   wsChatPresenceEventSchema,
+  wsChatReactionEventSchema,
   wsChatReadEventSchema,
   wsChatRoomEventSchema,
   wsChatTypingEventSchema,
@@ -14,6 +15,7 @@ import {
   type NotificationDto,
   type WsChatMessageRecalledEvent,
   type WsChatPresenceEvent,
+  type WsChatReactionEvent,
   type WsChatReadEvent,
   type WsChatRoomEvent,
   type WsChatTypingEvent,
@@ -164,6 +166,26 @@ export class RealtimeEmitterService {
       WS_EVENTS.CHAT_TYPING,
       () => wsChatTypingEventSchema.parse(payload),
       "emitChatTyping",
+    );
+  }
+
+  /**
+   * `chat:reaction` (S8 · CHAT-API-022a/b) — tổng hợp cảm xúc mới của một tin, phát cho cả phòng.
+   *
+   * Gọi SAU commit (`ChatReactionsService`), và chỉ khi số đếm THỰC SỰ đổi.
+   *
+   * ⚠️ `wsChatReactionEventSchema` **không có `mine`** — đó không phải sơ suất mà là lớp chặn: `mine`
+   * là trạng thái PER-USER, phát nó cho cả phòng làm mọi client vẽ dấu tích của người vừa bấm. Caller
+   * đã bỏ khoá đó tại nguồn; `.parse()` ở đây là đai thứ hai (cùng khuôn `wsChatRoomEventSchema` strip
+   * `unreadCount`).
+   */
+  emitChatReaction(companyId: string, roomId: string, payload: WsChatReactionEvent): void {
+    this.emitToRoom(
+      companyId,
+      roomId,
+      WS_EVENTS.CHAT_REACTION,
+      () => wsChatReactionEventSchema.parse(payload),
+      "emitChatReaction",
     );
   }
 

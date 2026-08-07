@@ -10,8 +10,10 @@ import { ChatAccessService, type ChatRoomAccess } from "./chat-access.service";
 import { ChatRoomsRepository } from "./chat-rooms.repository";
 import { CHAT_AUDIT, CHAT_ERR, CHAT_MODULE_CODE } from "./chat.errors";
 import { assertManualMembership, assertNotArchived } from "./chat-room-rules";
-import { toChatMemberDto } from "./chat.mapper";
+import { toChatMemberDto, toChatRosterMemberDto } from "./chat.mapper";
 import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
+import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
+import { ChatPresenceReaderService } from "../realtime/chat-presence-reader.service";
 import type { ChatActor } from "./chat-rooms.service";
 
 /**
@@ -34,15 +36,60 @@ export class ChatMembersService {
     private readonly audit: AuditService,
     // S7-CHAT-RT-1 (additive) — emit SAU commit; KHÔNG gọi bên trong `withTenant`.
     private readonly realtime: RealtimeEmitterService,
+    // S8-CHAT-UX-FE-3 (additive) — ký avatar người gửi theo LÔ (CHAT-DEC-019) + ảnh chụp "đang online".
+    private readonly avatarPresign: AvatarPresignService,
+    private readonly presence: ChatPresenceReaderService,
   ) {}
 
-  /** CHAT-API-007a — thành viên đang hoạt động + `lastReadSeq` (dựng "đã xem bởi"). */
+  /**
+   * CHAT-API-007a — **ROSTER** của phòng (S8-CHAT-UX-FE-3 · CHAT-DEC-019 · API-13 §5.1).
+   *
+   * Trả về thành viên đang hoạt động **VÀ người đã rời** (kèm `leftAt`), mỗi người kèm `avatarUrl` đã ký
+   * và `isOnline`. Đây là nguồn DUY NHẤT để FE vẽ avatar + tên người gửi trong khung chat.
+   *
+   * ⚠️ **Ký MỘT LÔ cho cả phòng, không ký theo từng tin.** 50 tin = 50 lần ký + 50 hạn lệch nhau
+   * (CHAT-DEC-019) — và mỗi lần ký còn là một lần ghi `file_access_logs` ở những đường có bật.
+   *
+   * Thứ tự các bước KHÔNG tuỳ tiện:
+   *   1. `assertMember` — người ngoài phòng nhận **404** trước khi chạm bất cứ dữ liệu nào (CHAT-ERR-001
+   *      giữ tính không-dò-được: không phân biệt "phòng không tồn tại" với "phòng không thuộc về bạn");
+   *   2. đọc roster + ký avatar **TRONG** `tx` của caller (`resolveEmployeeAvatars` nhận `callerTx` đúng
+   *      để tránh mở `withTenant` LỒNG NHAU — nested-tx treo trên PgBouncer transaction-mode);
+   *   3. presence đọc **NGOÀI** `withTenant`: nó đi Valkey chứ không đi DB, giữ transaction mở trong lúc
+   *      chờ I/O mạng của một hệ khác là cách chiếm kết nối pool vô cớ.
+   */
   async listMembers(actor: ChatActor, roomId: string): Promise<ChatRoomMemberDto[]> {
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const { rows, avatarByEmployee } = await this.db.withTenant(actor.companyId, async (tx) => {
       await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
-      const rows = await this.repo.listActiveMembers(tx, actor.companyId, roomId);
-      return rows.map(toChatMemberDto);
+      const roster = await this.repo.listRosterMembers(tx, actor.companyId, roomId);
+      // Nghĩa vụ caller đã thoả: `assertMember` ngay trên là điểm khẳng định membership. Avatar là
+      // DIRECTORY-CLASS (cùng lớp mà HR read / org-chart / bảng công việc đang dùng): ai đọc được roster
+      // thì thấy ảnh. Roster này VỐN ĐÃ trả `userName` (họ tên đầy đủ) cho mọi thành viên từ S7, nên thêm
+      // ảnh KHÔNG mở rộng tập người được biết — không cặp quyền mới, không đường tải mới.
+      const avatars = await this.avatarPresign.resolveEmployeeAvatars(
+        actor.companyId,
+        roster
+          .filter((r): r is typeof r & { employeeId: string } => r.employeeId !== null)
+          .map((r) => ({ employeeId: r.employeeId, avatarUrl: r.avatarRaw })),
+        tx,
+      );
+      return { rows: roster, avatarByEmployee: avatars };
     });
+
+    const onlineUserIds = new Set(
+      await this.presence.getOnlineUserIds(
+        actor.companyId,
+        rows.map((r) => r.userId),
+      ),
+    );
+
+    return rows.map((row) =>
+      toChatRosterMemberDto(
+        row,
+        row.employeeId === null ? null : (avatarByEmployee.get(row.employeeId) ?? null),
+        onlineUserIds.has(row.userId),
+      ),
+    );
   }
 
   /**

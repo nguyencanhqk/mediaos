@@ -67,11 +67,12 @@ Infra docker: postgres :5432 · pgbouncer :6432 · valkey :6379 · minio :9000/9
 
 | Việc | Lệnh | Menu |
 |------|------|------|
-| **Update tất cả: FE + API + LMS** (re-build → deploy Pages → rebuild API/LMS → **migrate** → restart service) | `m prod-update` | `[21]` |
+| **Update tất cả: FE + API + LMS + SOCIAL** (re-build → deploy Pages → rebuild backend → **migrate** → restart service) | `m prod-update` | `[21]` |
 | Update chỉ FE (3 SPA lên Pages) | `m prod-update fe` | `[22]` |
 | Update chỉ API (rebuild dist → **migrate** → restart service `MediaOS-API`) | `m prod-update api` | `[23]` |
 | Update chỉ LMS (next build `apps/lms` + restart service `MediaOS-LMS`) | `m prod-update lms` | `[26]` |
-| Chỉ restart service, KHÔNG rebuild, KHÔNG migrate (bỏ trống = API + LMS) | `m prod-restart [api\|lms]` | `[24]` |
+| Update chỉ SOCIAL (npm build `apps/fbpost` + restart `MediaOS-Social` + **kiểm cổng phiên**) | `m prod-update social` | `[27]` |
+| Chỉ restart service, KHÔNG rebuild, KHÔNG migrate (bỏ trống = cả ba) | `m prod-restart [api\|lms\|social]` | `[24]` |
 | Trạng thái PROD (service · cổng · **migration tồn đọng** · health local/online) | `m prod-status` | `[25]` |
 
 - Bước đụng service (restart) cần Administrator — thiếu quyền thì lệnh **tự mở cửa sổ UAC** chạy tiếp phần backend; phần FE (Pages) không cần admin.
@@ -81,6 +82,9 @@ Infra docker: postgres :5432 · pgbouncer :6432 · valkey :6379 · minio :9000/9
 - `prod-update` nhẹ hơn `m deploy-api` (không gỡ/cài lại service NSSM). Đổi cấu hình service/node path → vẫn dùng `m deploy-api`.
 - ⚠️ `apps/api/dist` DÙNG CHUNG với dev-online — đang chạy `m dev-online` (watch) thì `m dev-online-stop` trước khi update PROD (lệnh có cảnh báo khi thấy cổng :3200 mở).
 - **LMS** = `apps/lms` (fmc-app, Next.js + SQLite) — workspace RIÊNG ngoài turbo/pnpm-workspace, chạy service NSSM `MediaOS-LMS` cổng :3400, online tại `https://train.funtimemediacorp.com`. Deps LMS đổi thì tự `pnpm install` trong `apps/lms` trước khi `m prod-update lms`.
+- **SOCIAL** = `apps/fbpost` (đăng bài Facebook Page, [DECISIONS-08](../docs/DECISIONS/DECISIONS-08_Social_Satellite_App.md)) — cũng là workspace RIÊNG, nhưng dùng **npm** (`package-lock.json`) chứ không pnpm, nên `m prod-update social` gọi `npm run build`. Service NSSM `MediaOS-Social` cổng :3500, online tại `https://dangfb.funtimemediacorp.com`. Chi tiết vận hành: [DEVOPS-14](../docs/DEVOPS/DEVOPS-14_Social_Satellite_App_Deployment.md).
+- 🔒 **`[27]` và `[25]` đều kiểm CỔNG PHIÊN của fbpost** bằng một đường phải-401 (`GET /api/pages`). Lý do: `/login` trả 200 là chuyện đương nhiên (trang đó vốn công khai), nên health xanh **không** chứng minh cổng phiên còn sống — mà cổng phiên chết nghĩa là toàn bộ token Facebook của công ty mở toang cho bất kỳ ai chạm được cổng 3500. Thấy báo đỏ ở dòng này thì **đừng mở fbpost ra ngoài** cho tới khi sửa xong.
+- `m prod-status` còn kiểm **cầu SSO phía API**: `404` = API PROD đang chạy dist CŨ (chưa có module social, chạy `m prod-update api`) · `503` = thiếu `SOCIAL_SSO_SECRET`/`SOCIAL_BASE_URL`/`SOCIAL_COMPANY_ID` trong `apps/api/.env` · `401` = bình thường (có route, chỉ thiếu xác thực).
 
 ## Dev-online — xem DEV trên domain thật, song song prod
 

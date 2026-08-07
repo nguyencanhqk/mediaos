@@ -557,6 +557,10 @@ const AccountSessionsPage = React.lazy(() =>
 const LmsRedirectPage = React.lazy(() =>
   import("@/routes/lms/LmsRedirectPage").then((m) => ({ default: m.LmsRedirectPage })),
 );
+// S9-SOCIAL-FE-1 — /social trung chuyển SSO sang fbpost (đường lỗi).
+const SocialRedirectPage = React.lazy(() =>
+  import("@/routes/social/SocialRedirectPage").then((m) => ({ default: m.SocialRedirectPage })),
+);
 // Account self-service — S2-FE-AUTH-6: /account/setup-2fa (ép enroll, AUTH-003) + /account/profile (đọc).
 const TwoFactorSetupPage = React.lazy(() =>
   import("@/routes/account/TwoFactorSetupPage").then((m) => ({ default: m.TwoFactorSetupPage })),
@@ -2078,6 +2082,17 @@ const lmsRedirectRoute = createRoute({
   component: () => buildShellRouteContent(<LmsRedirectPage />),
 });
 
+// S9-SOCIAL-FE-1 — /social: ĐƯỜNG LỖI của app vệ tinh fbpost. Đường thường không qua đây (ô "Đăng
+// bài" gọi openSocial() nhảy thẳng); trang này hứng khi cầu SSO trục trặc. `authGuard` thôi, KHÔNG
+// gate permission ở route: cổng quyền thật nằm ở endpoint sso-link (cặp view:social-post) và ở chính
+// ô app. Gate thêm ở đây chỉ đổi một thông báo lỗi đọc được thành một màn 403 cụt.
+const socialRedirectRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/social",
+  beforeLoad: authGuard,
+  component: () => buildShellRouteContent(<SocialRedirectPage />),
+});
+
 // S2-FE-AUTH-6 — /account/setup-2fa. Ép enroll khi `mustSetupTwoFactor` (AUTH-003); ProtectedShell TỰ
 // điều hướng tới đây, route content chỉ cần authGuard (không permission pair — self-service, giống
 // accountSessionsRoute/accountChangePasswordRoute).
@@ -2419,6 +2434,7 @@ const routeTree = rootRoute.addChildren([
   accountSessionsRoute,
   chatRoute,
   lmsRedirectRoute,
+  socialRedirectRoute,
   accountSetupTwoFactorRoute,
   accountProfileRoute,
   systemAuditLogsRoute,

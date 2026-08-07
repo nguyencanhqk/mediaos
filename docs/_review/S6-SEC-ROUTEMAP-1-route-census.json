@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 483,
-    "controllers": 84,
-    "gated": 431,
+    "routes": 493,
+    "controllers": 86,
+    "gated": 441,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 40,
@@ -1430,6 +1430,22 @@
       "verdictWo": null
     },
     {
+      "key": "ChatMessagesController#react",
+      "httpMethod": "PUT",
+      "path": "/api/v1/chat/messages/:id/reactions/:emoji",
+      "hasPermission": true,
+      "permission": "send:chat-message",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "ChatMessagesController#recall",
       "httpMethod": "POST",
       "path": "/api/v1/chat/messages/:id/recall",
@@ -1467,6 +1483,22 @@
       "path": "/api/v1/chat/messages/:id/pin",
       "hasPermission": true,
       "permission": "pin:chat-message",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatMessagesController#unreact",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/chat/messages/:id/reactions/:emoji",
+      "hasPermission": true,
+      "permission": "send:chat-message",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],
@@ -1557,6 +1589,54 @@
         "ChatOversightAuditGuard",
         "PermissionGuard"
       ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomAvatarController#createUploadUrl",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/rooms/:id/avatar/upload-url",
+      "hasPermission": true,
+      "permission": "update:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomAvatarController#removeRoomAvatar",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/chat/rooms/:id/avatar",
+      "hasPermission": true,
+      "permission": "update:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomAvatarController#setRoomAvatar",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/rooms/:id/avatar",
+      "hasPermission": true,
+      "permission": "update:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
       "verdict": null,
       "verdictReason": null,
       "verdictWo": null
@@ -1674,11 +1754,59 @@
       "verdictWo": null
     },
     {
+      "key": "ChatRoomsController#markRoomUnread",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/rooms/:id/unread",
+      "hasPermission": true,
+      "permission": "view:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#muteRoom",
+      "httpMethod": "PUT",
+      "path": "/api/v1/chat/rooms/:id/mute",
+      "hasPermission": true,
+      "permission": "view:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "ChatRoomsController#openDirect",
       "httpMethod": "POST",
       "path": "/api/v1/chat/rooms/direct",
       "hasPermission": true,
       "permission": "create:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#pinRoom",
+      "httpMethod": "PUT",
+      "path": "/api/v1/chat/rooms/:id/pin",
+      "hasPermission": true,
+      "permission": "view:chat-room",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],
@@ -1711,6 +1839,22 @@
       "path": "/api/v1/chat/rooms/:id/typing",
       "hasPermission": true,
       "permission": "send:chat-message",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatRoomsController#unpinRoom",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/chat/rooms/:id/pin",
+      "hasPermission": true,
+      "permission": "view:chat-room",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],
@@ -6219,6 +6363,22 @@
       "routeGuards": [
         "PermissionGuard"
       ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialSsoController#getSsoLink",
+      "httpMethod": "GET",
+      "path": "/api/v1/integrations/social/sso-link",
+      "hasPermission": true,
+      "permission": "view:social-post",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
       "verdict": null,
       "verdictReason": null,
       "verdictWo": null

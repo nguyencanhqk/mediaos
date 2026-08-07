@@ -46,6 +46,7 @@ import { TaskFileService } from "./task-file.service";
 import { TaskFileRepository } from "./task-file.repository";
 import { TaskFileResolver } from "./task-file.resolver";
 import { ProjectAccessService } from "./project-access.service";
+import { ProjectMembershipModule } from "./project-membership.module";
 // S5-GOAL-BE-2 (additive) — engine đo tiến độ mục tiêu (SPEC-10 §13). Đặt trong TasksModule vì nguồn số
 // là `tasks`/`projects`; GoalsModule đã import TasksModule (1 chiều) nên đặt bên goals/ sẽ tạo cycle.
 import { GoalProgressEngineService } from "./goal-progress-engine.service";
@@ -61,6 +62,10 @@ import { GoalProgressEngineRepository } from "./goal-progress-engine.repository"
     SequenceModule,
     // S7-CHAT-BE-5: ChatDerivedRoomsSyncService cho W3-W7 (phòng chat dự án + đồng bộ thành viên).
     ChatModule,
+    // S8-CHAT-UX-BE-2: module LÁ giữ truy vấn `project_members` mà `ProjectAccessService` uỷ quyền
+    // xuống. CHAT cũng import nó — đó là cách cả hai bên dùng CHUNG một vị từ mà KHÔNG tạo cạnh
+    // `Chat → Tasks` (vòng, vì dòng `ChatModule` ngay trên đã là cạnh `Tasks → Chat`).
+    ProjectMembershipModule,
   ],
   controllers: [
     TasksController,

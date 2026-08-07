@@ -13,6 +13,7 @@ import { AuditService } from "../events/audit.service";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import type { ChatRoomType } from "../db/schema/communication";
 import { ChatAccessService } from "./chat-access.service";
+import { ChatRoomAvatarPresignService } from "./chat-room-avatar-presign.service";
 import { ChatRoomCodeService } from "./chat-room-code.service";
 import { ChatRoomsRepository, type ChatRoomRow } from "./chat-rooms.repository";
 import { CHAT_AUDIT, CHAT_ERR, CHAT_MODULE_CODE } from "./chat.errors";
@@ -66,6 +67,8 @@ export class ChatRoomsService {
     private readonly audit: AuditService,
     // S7-CHAT-RT-1 (additive) — emit SAU commit, không bao giờ trong tx (xem `broadcastRoom`).
     private readonly realtime: RealtimeEmitterService,
+    // S8-CHAT-UX-BE-2 (additive) — ký avatar phòng theo LÔ ở hai đường đọc (`listRooms`/`getRoom`).
+    private readonly avatarPresign: ChatRoomAvatarPresignService,
   ) {}
 
   /**
@@ -106,13 +109,23 @@ export class ChatRoomsService {
    * lên đầu danh sách mỗi lần có đồng bộ.
    */
   async listRooms(actor: ChatActor, query: ListChatRoomsQuery): Promise<ChatRoomDto[]> {
-    const rows = await this.db.withTenant(actor.companyId, (tx) =>
-      this.repo.listRoomsForUser(tx, actor.companyId, actor.id, {
+    return this.db.withTenant(actor.companyId, async (tx) => {
+      const rows = await this.repo.listRoomsForUser(tx, actor.companyId, actor.id, {
         roomType: query.type as ChatRoomType | undefined,
         archived: query.archived ?? false,
-      }),
-    );
-    return rows.map((r) => toChatRoomDto(r));
+      });
+      // S8-CHAT-UX-BE-2 — ĐÚNG MỘT truy vấn thêm cho CẢ TRANG (không phải một lần ký mỗi phòng). Truyền
+      // `tx` của chính vòng này: mở `withTenant` lồng nhau sẽ TREO trên PgBouncer transaction-mode.
+      //
+      // An toàn theo nghĩa vụ caller (xem jsdoc `ChatRoomAvatarPresignService`): `listRoomsForUser` đã
+      // innerJoin membership của actor, nên mọi `roomId` đưa vào đây đều là phòng actor đang thuộc.
+      const avatars = await this.avatarPresign.resolveRoomAvatars(
+        actor.companyId,
+        rows.map((r) => r.id),
+        tx,
+      );
+      return rows.map((r) => toChatRoomDto(r, undefined, undefined, avatars.get(r.id) ?? null));
+    });
   }
 
   /** CHAT-API-004 — chi tiết phòng + thành viên + vai trò của tôi. */
@@ -120,11 +133,15 @@ export class ChatRoomsService {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
       const members = await this.repo.listActiveMembers(tx, actor.companyId, roomId);
+      // Nghĩa vụ caller đã thoả: `assertMember` ngay trên là điểm khẳng định membership.
+      const avatars = await this.avatarPresign.resolveRoomAvatars(actor.companyId, [roomId], tx);
       return toChatRoomDetailDto(
         acc.room,
         members,
         acc.membership.role,
         unreadOf(acc.room.lastMessageSeq, acc.membership.lastReadSeq),
+        acc.membership,
+        avatars.get(roomId) ?? null,
       );
     });
   }
@@ -316,7 +333,15 @@ export class ChatRoomsService {
         oldValues: { name: acc.room.name, description: acc.room.description },
         newValues: { name: updated.name, description: updated.description },
       });
-      return toChatRoomDto(updated, unreadOf(updated.lastMessageSeq, acc.membership.lastReadSeq));
+      // `acc.membership` làm nguồn tuỳ chọn per-user: `updated` là hàng PHÒNG, không mang ba cột đó.
+      // Thiếu tham số này thì mọi phản hồi PATCH báo "chưa ghim / chưa tắt" cho một phòng ĐANG ghim —
+      // và FE cập-nhật-lạc-quan sẽ ghi đè trạng thái đúng bằng trạng thái sai.
+      return toChatRoomDto(
+        updated,
+        unreadOf(updated.lastMessageSeq, acc.membership.lastReadSeq),
+        acc.membership,
+        await this.avatarUrlOf(actor, roomId, tx),
+      );
     });
 
     // SAU commit. `affectedUserIds` rỗng: thành viên hiện có đã ở trong `chatRoomName` từ trước.
@@ -345,7 +370,12 @@ export class ChatRoomsService {
         oldValues: { isArchived: false },
         newValues: { isArchived: true },
       });
-      return toChatRoomDto(updated, unreadOf(updated.lastMessageSeq, acc.membership.lastReadSeq));
+      return toChatRoomDto(
+        updated,
+        unreadOf(updated.lastMessageSeq, acc.membership.lastReadSeq),
+        acc.membership,
+        await this.avatarUrlOf(actor, roomId, tx),
+      );
     });
 
     // SAU commit. KHÔNG `syncRoomMembership`: lưu trữ ĐÓNG BĂNG danh sách thành viên (họ vẫn đọc lại
@@ -400,8 +430,34 @@ export class ChatRoomsService {
   private async readOwnRoom(actor: ChatActor, roomId: string): Promise<ChatRoomDto> {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
-      return toChatRoomDto(acc.room, unreadOf(acc.room.lastMessageSeq, acc.membership.lastReadSeq));
+      return toChatRoomDto(
+        acc.room,
+        unreadOf(acc.room.lastMessageSeq, acc.membership.lastReadSeq),
+        acc.membership,
+        await this.avatarUrlOf(actor, roomId, tx),
+      );
     });
+  }
+
+  /**
+   * S8-CHAT-UX-BE-2 — URL avatar đã ký cho MỘT phòng, dùng ở các đường trả `ChatRoomDto` lẻ.
+   *
+   * ⚠️ **VÌ SAO MỌI ĐƯỜNG TRẢ `ChatRoomDto` ĐỀU PHẢI GỌI NÓ.** Tham số `avatarUrl` của mapper mặc
+   * định `null`, nên một caller quên truyền vẫn biên dịch được và vẫn trả HTTP 200 — chỉ là phòng
+   * CÓ ảnh bỗng báo "không ảnh". FE cập-nhật-lạc-quan (đổi tên · ghim · tắt thông báo · đánh dấu
+   * chưa đọc) ghi phản hồi đó đè lên cache ⇒ **ảnh biến mất khỏi giao diện** cho tới lần tải lại.
+   * Đúng lớp hỏng của `apifetch-drops-pagination-bare-array`: hợp lệ về kiểu, sai về dữ liệu, im lặng.
+   *
+   * Caller PHẢI đã `assertMember` (hoặc join membership) trước — đó là nghĩa vụ mà
+   * `ChatRoomAvatarPresignService` đặt lên người gọi, xem jsdoc ở đó.
+   */
+  private async avatarUrlOf(
+    actor: ChatActor,
+    roomId: string,
+    tx: TenantTx,
+  ): Promise<string | null> {
+    const map = await this.avatarPresign.resolveRoomAvatars(actor.companyId, [roomId], tx);
+    return map.get(roomId) ?? null;
   }
 
   /**

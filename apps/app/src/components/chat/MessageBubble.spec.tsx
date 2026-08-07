@@ -19,6 +19,7 @@ const actions: MessageBubbleActions = {
   onPin: vi.fn(),
   onUnpin: vi.fn(),
   onRecall: vi.fn(),
+  onToggleReaction: vi.fn(),
 };
 
 function message(over: Partial<StoredChatMessage> = {}): StoredChatMessage {
@@ -57,6 +58,9 @@ function renderBubble(
         canRecall={false}
         canPin={false}
         seenBy={[]}
+        senderAvatarUrl={null}
+        senderNameFallback={null}
+        isArchived={false}
         actions={actions}
         {...props}
       />
@@ -194,6 +198,9 @@ describe("MessageBubble · phụ trợ", () => {
           canRecall={false}
           canPin={false}
           seenBy={["Trần B"]}
+          senderAvatarUrl={null}
+          senderNameFallback={null}
+          isArchived={false}
           actions={actions}
         />
       </I18nextProvider>,

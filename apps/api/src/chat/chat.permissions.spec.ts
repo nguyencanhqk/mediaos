@@ -104,6 +104,15 @@ const ROUTE_GATES: readonly RouteGate[] = [
   // "đang gõ" là lời hứa sắp GỬI. Ai chỉ đọc được mà báo được đang gõ thì màn hình hiện một tin nhắn sẽ
   // không bao giờ tới. Cặp này TRÙNG `sendMessage` có chủ đích — cùng một năng lực.
   { controller: ChatRoomsController, handlerName: "typing", action: "send", resourceType: "chat-message" },
+  // CHAT-API-024a/b · 025 · 020 (S8-CHAT-UX-BE-1) — ghim · tắt thông báo · đánh dấu chưa đọc.
+  // Cặp ĐỌC `view:chat-room`, NGƯỢC với `typing` ngay trên: ba thứ này ghi lên hàng membership CỦA
+  // CHÍNH MÌNH, không phải năng lực gửi. Gắn `update:chat-room` sẽ đẻ ra role "đọc được phòng mà không
+  // tắt nổi thông báo của chính mình" — tuỳ chọn cá nhân KHÔNG được nằm sau cổng quyền quản trị
+  // (memory `personal-prefs-must-not-sit-behind-permission-gate` · API-13 §5.1b ghi chú).
+  { controller: ChatRoomsController, handlerName: "pinRoom", action: "view", resourceType: "chat-room" },
+  { controller: ChatRoomsController, handlerName: "unpinRoom", action: "view", resourceType: "chat-room" },
+  { controller: ChatRoomsController, handlerName: "muteRoom", action: "view", resourceType: "chat-room" },
+  { controller: ChatRoomsController, handlerName: "markRoomUnread", action: "view", resourceType: "chat-room" },
 
   // ── ChatMessagesController (CHAT-API-009..014, 016) ──
   { controller: ChatMessagesController, handlerName: "unreadCount", action: "view", resourceType: "chat-room" },
@@ -127,6 +136,12 @@ const ROUTE_GATES: readonly RouteGate[] = [
   { controller: ChatMessagesController, handlerName: "recall", action: "recall", resourceType: "chat-message" },
   { controller: ChatMessagesController, handlerName: "pin", action: "pin", resourceType: "chat-message" },
   { controller: ChatMessagesController, handlerName: "unpin", action: "pin", resourceType: "chat-message" },
+  // CHAT-API-022a/022b (S8-CHAT-UX-BE-3) — thả cảm xúc. Cặp TRÙNG `sendMessage` có chủ đích: cùng một
+  // năng lực "ghi vào phòng ở mức người tham gia". KHÔNG dùng `pin`/`recall` — hai cặp đó dành cho
+  // thao tác lên nội dung của NGƯỜI KHÁC, gắn vào đây sẽ bắt nhân viên thường phải có quyền kiểm duyệt
+  // mới bấm được một biểu tượng cảm xúc.
+  { controller: ChatMessagesController, handlerName: "react", action: "send", resourceType: "chat-message" },
+  { controller: ChatMessagesController, handlerName: "unreact", action: "send", resourceType: "chat-message" },
 
   // ── ChatFilesController (S7-CHAT-BE-8 — SPEC-15 §13.5 bước 1-2) ──
   // Cặp `send:chat-message`, KHÔNG phải `view:chat-room`: đây là hai bước ĐẦU của luồng GỬI tin, người

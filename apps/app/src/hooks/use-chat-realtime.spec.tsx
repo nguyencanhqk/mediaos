@@ -38,6 +38,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 });
 
 const ROOM_A = "11111111-1111-4111-8111-111111111111";
+/** S8-CHAT-UX-FE-3 — id tin dùng cho ca payload méo của kênh `chat:reaction`. */
+const MSG_A = "00000001-1111-4111-8111-111111111111";
 const ME = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const COMPANY = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
@@ -126,6 +128,21 @@ function strictWrapper({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Số handler `useChatRealtime` gắn lên socket dùng chung.
+ *
+ * 7 kênh CHAT + 3 sự kiện vòng đời:
+ *   `chat:message` · `chat:message-recalled` · `chat:read` · `chat:room`
+ *   · `chat:reaction` · `chat:typing` · `chat:presence`   (ba cái cuối: S8-CHAT-UX-FE-3)
+ *   · `connect` · `disconnect` · `connect_error`
+ *
+ * ⚠️ Con số này là NỬA của một cặp. Vế kia — `unmount ⇒ totalHandlers() === 0` — mới là thứ bắt lỗi
+ * "thêm `socket.on` mà quên `socket.off`": socket là singleton DÙNG CHUNG với NOTI và sống tới khi đóng
+ * tab, nên một handler sót lại sẽ tích luỹ qua mỗi lần remount shell và xử lý cùng một sự kiện N lần.
+ * Sửa số ở đây mà không kiểm vế `=== 0` là vô hiệu hoá đúng bài test đang bảo vệ mình.
+ */
+const WS_HANDLER_COUNT = 10;
+
 function setCaps(caps: Record<string, boolean>) {
   useAuthStore.setState({
     isAuthenticated: true,
@@ -211,7 +228,7 @@ describe("vòng đời", () => {
   it("<StrictMode> (effect chạy 2 lần) → KHÔNG nhân đôi handler nào", async () => {
     renderHook(() => useChatRealtime(), { wrapper: strictWrapper });
     await waitFor(() => expect(socket.countFor(WS_EVENTS.CHAT_MESSAGE)).toBe(1));
-    expect(socket.totalHandlers()).toBe(7);
+    expect(socket.totalHandlers()).toBe(WS_HANDLER_COUNT);
   });
 
   it("socket ĐÃ connected trước khi hook mount → đồng bộ ngay, KHÔNG kẹt 'connecting'", async () => {
@@ -221,13 +238,13 @@ describe("vòng đời", () => {
     const connectedSocket = { ...makeFakeSocket(), connected: true };
     getAppSocket.mockReturnValue(connectedSocket);
     renderHook(() => useChatRealtime(), { wrapper });
-    await waitFor(() => expect(connectedSocket.totalHandlers()).toBe(7));
+    await waitFor(() => expect(connectedSocket.totalHandlers()).toBe(WS_HANDLER_COUNT));
     expect(s().connectionStatus).toBe("connected");
   });
 
   it("socket CHƯA connected khi mount → giữ 'connecting', chờ sự kiện thật", async () => {
     renderHook(() => useChatRealtime(), { wrapper });
-    await waitFor(() => expect(socket.totalHandlers()).toBe(7));
+    await waitFor(() => expect(socket.totalHandlers()).toBe(WS_HANDLER_COUNT));
     expect(s().connectionStatus).toBe("connecting");
   });
 
@@ -235,16 +252,16 @@ describe("vòng đời", () => {
     // Một lần `realtime_disabled` thoáng qua mà không hoàn nguyên = NOTI realtime chết theo VĨNH VIỄN
     // (tới khi tải lại tab), dù NOTI chưa bao giờ đồng ý và không có cách nào biết vì sao.
     const { unmount } = renderHook(() => useChatRealtime(), { wrapper });
-    await waitFor(() => expect(socket.totalHandlers()).toBe(7));
+    await waitFor(() => expect(socket.totalHandlers()).toBe(WS_HANDLER_COUNT));
     act(() => socket.fire("connect_error", new Error("realtime_disabled")));
     expect(socket.io.reconnection).toHaveBeenCalledWith(false);
     unmount();
     expect(socket.io.reconnection).toHaveBeenLastCalledWith(true);
   });
 
-  it("unmount gỡ SẠCH 7 handler và TUYỆT ĐỐI KHÔNG disconnect (socket dùng chung với NOTI)", async () => {
+  it("unmount gỡ SẠCH mọi handler và TUYỆT ĐỐI KHÔNG disconnect (socket dùng chung với NOTI)", async () => {
     const { unmount } = renderHook(() => useChatRealtime(), { wrapper });
-    await waitFor(() => expect(socket.totalHandlers()).toBe(7));
+    await waitFor(() => expect(socket.totalHandlers()).toBe(WS_HANDLER_COUNT));
     unmount();
     expect(socket.totalHandlers()).toBe(0);
     expect(socket.disconnect).not.toHaveBeenCalled();
@@ -256,7 +273,7 @@ describe("vòng đời", () => {
 describe("máy trạng thái kết nối", () => {
   beforeEach(async () => {
     renderHook(() => useChatRealtime(), { wrapper });
-    await waitFor(() => expect(socket.totalHandlers()).toBe(7));
+    await waitFor(() => expect(socket.totalHandlers()).toBe(WS_HANDLER_COUNT));
   });
 
   it("`realtime_disabled` → polling-fallback VÀ tắt auto-reconnect (server fail-closed có chủ đích)", () => {
@@ -331,7 +348,7 @@ describe("máy trạng thái kết nối", () => {
 describe("kiểm hình dạng payload trước khi merge", () => {
   beforeEach(async () => {
     renderHook(() => useChatRealtime(), { wrapper });
-    await waitFor(() => expect(socket.totalHandlers()).toBe(7));
+    await waitFor(() => expect(socket.totalHandlers()).toBe(WS_HANDLER_COUNT));
     // ⚠️ PHẢI đợi lượt đồng bộ danh sách ĐẦU TIÊN xong trước khi test gieo phòng vào store.
     // `syncRoomList` GỠ phòng vắng mặt trong payload (mock trả `[]`), nên nếu nó chạy sau lúc gieo thì
     // phòng vừa gieo bị dọn — test đỏ vì lý do KHÔNG liên quan tới điều đang kiểm.
@@ -346,6 +363,11 @@ describe("kiểm hình dạng payload trước khi merge", () => {
     [WS_EVENTS.CHAT_MESSAGE_RECALLED, { messageId: 123 }],
     [WS_EVENTS.CHAT_READ, { roomId: ROOM_A, userId: ME, lastReadSeq: "mười" }],
     [WS_EVENTS.CHAT_ROOM, { roomId: ROOM_A, action: "nuked" }],
+    // S8-CHAT-UX-FE-3 — ba kênh mới đi qua ĐÚNG lớp `safeParse` + `warnBadPayload` như bốn kênh cũ.
+    // `emoji` ngoài bộ 6 mã đóng phải bị chặn Ở ĐÂY, không được lọt vào store rồi ra tới render.
+    [WS_EVENTS.CHAT_REACTION, { roomId: ROOM_A, messageId: MSG_A, reactions: [{ emoji: "🔥" }] }],
+    [WS_EVENTS.CHAT_TYPING, { roomId: ROOM_A }],
+    [WS_EVENTS.CHAT_PRESENCE, { userId: ME, status: "bận" }],
   ])("payload méo trên kênh %s → bỏ qua, store KHÔNG đổi, KHÔNG throw", (event, payload) => {
     const before = { rooms: s().roomsById, messages: s().messagesByRoom };
     expect(() => act(() => socket.fire(event, payload))).not.toThrow();

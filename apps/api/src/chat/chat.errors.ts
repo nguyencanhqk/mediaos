@@ -104,6 +104,83 @@ export const CHAT_ERR = {
   PIN_LIMIT: (max: number): string =>
     `CHAT-ERR-008: mỗi phòng chỉ ghim tối đa ${max} tin — bỏ ghim bớt trước.`,
 
+  /**
+   * CHAT-ERR-021 *(S8)* — vượt trần GHIM HỘI THOẠI (409, SPEC-15 §12).
+   *
+   * ⚠️ KHÔNG nhầm với `PIN_LIMIT` ngay trên: đó là CHAT-ERR-008, ghim **TIN** trong một phòng, trần
+   * 20/phòng, mọi thành viên cùng thấy. Cái này ghim **HỘI THOẠI** lên đầu danh sách, trần 10/NGƯỜI,
+   * chỉ mình thấy — khác bảng (`chat_room_members.pinned_at`), khác trần, khác phạm vi nhìn thấy.
+   * SPEC-15 §12 có hẳn một ghi chú cảnh báo cặp trùng chữ "ghim" này.
+   *
+   * 409 (không phải 400/422) là ĐÚNG theo SPEC-15 §12: vượt hạn mức là xung đột TRẠNG THÁI — cùng dữ
+   * liệu gửi lên sẽ thành công sau khi người dùng bỏ ghim bớt, nên nó không phải lỗi đầu vào.
+   */
+  ROOM_PIN_LIMIT: (max: number): string =>
+    `CHAT-ERR-021: chỉ ghim được tối đa ${max} hội thoại — bỏ ghim bớt trước.`,
+
+  /**
+   * CHAT-ERR-024 *(S8)* — thả cảm xúc vào tin ĐÃ THU HỒI (422).
+   *
+   * Cùng lớp che với `body: null` của SPEC-15 §13.6: tin đã rút thì không còn nội dung để phản ứng.
+   * Cho phép thả sẽ đẻ ra một thanh cảm xúc dưới một bong bóng trống — và một lối để người ta tiếp tục
+   * tương tác với thứ người gửi đã chủ động thu hồi.
+   *
+   * 422 (không phải 404): người gọi ĐÃ đọc được tin đó, giấu thêm không che được gì.
+   */
+  REACTION_ON_RECALLED: "CHAT-ERR-024: không thả cảm xúc được vào tin đã thu hồi.",
+
+  /**
+   * CHAT-ERR-025 *(S8)* — emoji ngoài BỘ ĐÓNG (422).
+   *
+   * Hằng này là lưới cho đường gọi service; biên HTTP đã bị `chatReactionEmojiSchema` chặn trước, và
+   * `chat_message_reactions_emoji_chk` ở DB là đai thứ ba. Ba lớp vì bộ emoji đóng là thứ duy nhất giữ
+   * cột `emoji` khỏi trở thành bề mặt lưu trữ tự do.
+   */
+  REACTION_EMOJI_INVALID:
+    "CHAT-ERR-025: cảm xúc không hợp lệ — chỉ dùng được bộ biểu tượng có sẵn.",
+
+  /**
+   * CHAT-ERR-022 *(S8)* — đặt/gỡ avatar cho phòng `direct` (422). SPEC-15 §11b · §12.
+   *
+   * `CHAT-DEC-016`: avatar của phòng chat riêng **dẫn xuất** từ avatar người đối thoại, không có cột để
+   * ghi. `chk_chat_rooms_direct_no_avatar` (`0543:101`) là đai thứ hai ở DB — nếu vế này bị gỡ, đường
+   * ghi sẽ 23514 chứ không âm thầm lưu.
+   *
+   * 422 (không phải 403/404): người gọi ĐÃ là thành viên nên đã biết phòng tồn tại; giấu thêm không che
+   * được gì, mà 403 lại gợi ý sai rằng "xin thêm quyền là làm được".
+   *
+   * ⚠️ Mã **022**, KHÔNG phải một mã mới: SPEC-15 §12 đã cấp sẵn 022/023 cho WO này, và
+   * `chat-error-code-census.spec.ts` liệt chúng trong `PENDING_CODES` kèm tên WO. Đẻ mã ngoài sổ làm
+   * census ĐỎ ở vế "KHÔNG có mã ngoài sổ" — đúng như thiết kế.
+   */
+  ROOM_AVATAR_DIRECT: "CHAT-ERR-022: phòng chat riêng không đặt được ảnh đại diện.",
+
+  /**
+   * CHAT-ERR-023 *(S8)* — CÓ `('update','chat-room')` nhưng **không đủ tư cách** theo loại phòng (403),
+   * theo `CHAT-DEC-016` / SPEC-15 §11b.
+   *
+   * MỘT thông điệp cho CẢ BA loại phòng (`group` thiếu vai trò quản trị phòng · `department` thiếu cặp
+   * `('update','org_unit')` hoặc đúng cặp nhưng SAI đơn vị neo · `project` không phải Owner/Manager).
+   * Tách ra là nói cho người gọi biết "muốn đặt được thì cần đúng thứ gì" trên một phòng họ vốn không
+   * quản — tức là vẽ bản đồ quyền.
+   *
+   * 403 chứ không 404: người gọi ĐÃ qua `assertMember` nên đã biết phòng tồn tại (SPEC-15 §12 nói rõ:
+   * không phải thành viên → 404 theo CHAT-ERR-001; đây là vế còn lại).
+   */
+  ROOM_AVATAR_FORBIDDEN:
+    "CHAT-ERR-023: bạn không có quyền đổi ảnh đại diện của phòng này — hãy liên hệ người quản trị phòng.",
+
+  /**
+   * CHAT-ERR-015 (403) — tệp không dùng được làm avatar phòng.
+   *
+   * HẰNG, một thông điệp cho MỌI lý do (không tồn tại · tenant khác · do người khác tải lên · chưa
+   * `Uploaded` · `Infected` · không phải ảnh) — cùng lớp chống-dò với `ATTACHMENT_INVALID`. Vế "do
+   * CHÍNH MÌNH tải lên" là chốt chống IDOR: thiếu nó, ai đó gắn ảnh CCCD của người khác làm avatar một
+   * phòng rồi cả phòng tải được.
+   */
+  ROOM_AVATAR_FILE_INVALID:
+    "CHAT-ERR-015: ảnh đại diện không hợp lệ — chỉ dùng được ảnh do chính bạn tải lên, đã tải xong và đã qua kiểm virus.",
+
   /** CHAT-ERR-009 — trả lời tin không cùng phòng, hoặc tin đã thu hồi. */
   REPLY_INVALID:
     "CHAT-ERR-009: không trả lời được tin này — tin phải thuộc cùng phòng và chưa bị thu hồi.",
@@ -187,6 +264,14 @@ export const CHAT_AUDIT = {
   ROOM_DIRECT_RESTORED: "chat.room.direct_restored",
   ROOM_UPDATED: "chat.room.updated",
   ROOM_ARCHIVED: "chat.room.archived",
+  /**
+   * S8-CHAT-UX-BE-2 — đặt/gỡ avatar phòng. TÁCH khỏi `ROOM_UPDATED` vì trả lời câu hỏi điều tra khác:
+   * "ai đổi bộ mặt của phòng này" — và vì chủ thể được phép KHÁC NHAU theo loại phòng (CHAT-DEC-016),
+   * nên dòng audit phải nói rõ nhánh nào đã cho qua. `before`/`after` chỉ chứa `avatarFileId` (tham
+   * chiếu UUID — KHÔNG `storage_path`, KHÔNG tên tệp gốc; BẤT BIẾN #3).
+   */
+  ROOM_AVATAR_UPDATED: "chat.room.avatar_updated",
+  ROOM_AVATAR_REMOVED: "chat.room.avatar_removed",
   MEMBER_ADDED: "chat.room.member_added",
   MEMBER_ROLE_CHANGED: "chat.room.member_role_changed",
   MEMBER_REMOVED: "chat.room.member_removed",

@@ -740,18 +740,25 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-6 — thông báo CHAT (DB cô lập, đ
       // đã lệch giữa BE-1 và BE-2 (vá ở GATE-2).
       //
       // ⚠️ GIỚI HẠN ĐÃ BIẾT của phép đếm này (lệch so với plan §4, ghi ra thay vì giấu): discriminator là
-      // `leftAt` + `mutedUntil`, KHÔNG phải `leftAt` + `deletedAt` như plan viết. Đổi theo plan sẽ bắt oan
-      // `chat-messages.repository.ts::unreadTotals` và `chat-rooms.repository.ts` (đo 03/08: cả hai khớp),
-      // buộc phải dựng allowlist 3 file — mà mỗi ô allowlist chính là một chỗ bản sao THẬT có thể nấp.
-      // Cái giá phải trả: một reader audience tương lai quên HẲN `mutedUntil` sẽ KHÔNG bị bắt ở đây. Đó là
-      // đánh đổi có chủ ý — một lỗ hẹp đã biết còn hơn ba lỗ rộng do allowlist mục ruỗng theo thời gian.
+      // `leftAt` + LỌC theo `mutedUntil`, KHÔNG phải `leftAt` + `deletedAt` như plan viết. Đổi theo plan
+      // sẽ bắt oan `chat-messages.repository.ts::unreadTotals` và `chat-rooms.repository.ts` (đo 03/08:
+      // cả hai khớp), buộc phải dựng allowlist 3 file — mà mỗi ô allowlist chính là một chỗ bản sao THẬT
+      // có thể nấp. Cái giá phải trả: một reader audience tương lai quên HẲN `mutedUntil` sẽ KHÔNG bị bắt
+      // ở đây. Đó là đánh đổi có chủ ý — một lỗ hẹp đã biết còn hơn ba lỗ rộng do allowlist mục ruỗng.
+      //
+      // ⚠️ SIẾT 06/08 (S8-CHAT-UX-BE-1) — vế thứ hai đổi từ "CÓ NHẮC TỚI `mutedUntil`" sang "DÙNG
+      // `mutedUntil` TRONG MỘT VỊ TỪ". Lý do: BE-1 mở đường GHI cho cột (CHAT-API-025) và đưa nó lên DTO,
+      // nên `chat-rooms.repository.ts` giờ vừa CHIẾU (`mutedUntil: chatRoomMembers.mutedUntil` trong
+      // select) vừa GHI (`.set({ mutedUntil })`) — cả hai đều KHÔNG phải bản sao của vị từ audience, mà
+      // vế cũ vẫn bắt. Đây là siết ĐỘ CHÍNH XÁC, không phải nới: thứ census canh là một BẢN SAO CỦA LUẬT
+      // LỌC, và mọi bản sao như thế buộc phải bọc cột trong một helper vị từ của drizzle
+      // (`isNull`/`lte`/`gt`/…). Chiếu một cột ra DTO không lọc ai cả.
+      const MUTE_IN_PREDICATE =
+        /\b(isNull|isNotNull|lte|lt|gte|gt|eq|ne)\(\s*chatRoomMembers\.mutedUntil\b/;
       const hits = [...walk("src/chat"), ...walk("src/notifications")]
         .filter((f) => {
           const src = readFileSync(f, "utf8");
-          return (
-            /isNull\(\s*chatRoomMembers\.leftAt\s*\)/.test(src) &&
-            /chatRoomMembers\.mutedUntil/.test(src)
-          );
+          return /isNull\(\s*chatRoomMembers\.leftAt\s*\)/.test(src) && MUTE_IN_PREDICATE.test(src);
         })
         .map((f) => f.replace(/\\/g, "/"))
         .filter((f) => !f.endsWith("chat-access.service.ts"));

@@ -389,6 +389,16 @@ export class ChatMessagesRepository {
         // (cùng lớp `drizzle-array-bind-sql-param`), nên lưới duy nhất là int-spec ca 2^31.
         lastReadSeq: sql`GREATEST(${chatRoomMembers.lastReadSeq}, LEAST(${wanted}::bigint, ${ceiling}::bigint))`,
         lastReadAt: new Date(),
+        // S8-CHAT-UX-BE-1 — "mở phòng ⇒ cờ đánh dấu chưa đọc về NULL" (SPEC-15 §5.1b · CHAT-FUNC-017).
+        //
+        // ⚠️ VÔ ĐIỀU KIỆN, kể cả nhánh con trỏ KHÔNG tiến (`GREATEST` giữ nguyên giá trị cũ). Luật nói
+        // về hành vi MỞ PHÒNG, không về việc có tin mới hay không: người vừa đánh dấu chưa đọc rồi mở
+        // lại ngay (chưa ai gửi gì thêm) vẫn phải thấy cờ tắt. Gắn nó vào `changed` sẽ để lại một dòng
+        // phòng in đậm vĩnh viễn mà không thao tác nào của người dùng gỡ được.
+        //
+        // ⚠️ Đây là ĐIỂM XOÁ CỜ DUY NHẤT. Thêm điểm thứ hai (vd. trong `sendMessage`) là dựng bản sao
+        // của luật — bản sao sẽ trôi.
+        markedUnreadAt: null,
       })
       .where(and(eq(chatRoomMembers.companyId, companyId), eq(chatRoomMembers.id, memberRowId)))
       .returning({ seq: chatRoomMembers.lastReadSeq });

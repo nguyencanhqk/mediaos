@@ -1,12 +1,13 @@
 import type {
   ChatAttachmentDto,
   ChatMessageDto,
+  ChatMessageReactionDto,
   ChatRoomDetailDto,
   ChatRoomDto,
   ChatRoomMemberDto,
 } from "@mediaos/contracts";
 import type { ChatMemberRole } from "../db/schema/communication";
-import type { ChatMemberListRow } from "./chat-rooms.repository";
+import type { ChatMemberListRow, ChatRosterRow } from "./chat-rooms.repository";
 import type { ChatMessageRow } from "./chat-messages.repository";
 
 /**
@@ -29,6 +30,21 @@ export interface ChatRoomProjection {
 }
 
 /**
+ * S8-CHAT-UX-BE-1 — ba tuỳ chọn PER-USER đi kèm một phòng, lấy từ hàng `chat_room_members` CỦA CHÍNH
+ * người gọi (`assertMember().membership` hoặc cột join sẵn của `listRoomsForUser`).
+ *
+ * THAM SỐ RIÊNG, không nhét vào `ChatRoomProjection`: projection là hình dạng của PHÒNG (dùng chung cho
+ * mọi người nhìn), ba cột này là của MỘT NGƯỜI. Trộn hai thứ vào một kiểu là mở đường cho một caller
+ * tương lai lấy `pinnedAt` của người khác rồi phát cho cả phòng — đúng loại lỗi mà `broadcastRoom` đã
+ * phải chặn bằng `wsChatRoomEventSchema` cho `unreadCount`.
+ */
+export interface ChatRoomMemberPrefs {
+  pinnedAt: Date | null;
+  mutedUntil: Date | null;
+  markedUnreadAt: Date | null;
+}
+
+/**
  * S7-CHAT-BE-1 — projection row Drizzle → DTO contracts. CẤM controller/service trả row thô.
  *
  * Vì sao có lớp này dù row trông đã "gần đúng": row còn cả cột KHÔNG được ra ngoài (`directKey` — ghép
@@ -44,10 +60,28 @@ const toIso = (v: Date | string | null): string | null => {
 const EPOCH = new Date(0).toISOString();
 
 export function toChatRoomDto(
-  row: ChatRoomProjection & { unreadCount?: number },
+  row: ChatRoomProjection & { unreadCount?: number } & Partial<ChatRoomMemberPrefs>,
   unreadCount?: number,
+  /**
+   * S8-CHAT-UX-BE-1 — tuỳ chọn per-user. OPTIONAL vì hai đường nạp khác nhau, không phải vì "được
+   * phép quên": đường DANH SÁCH (`listRoomsForUser`) đã có sẵn ba cột TRÊN `row` (join membership),
+   * đường MỘT PHÒNG truyền chúng vào đây từ `assertMember().membership`. Tham số thắng `row`.
+   */
+  prefs?: ChatRoomMemberPrefs,
+  /**
+   * S8-CHAT-UX-BE-2 — URL avatar phòng ĐÃ KÝ, do `ChatRoomAvatarPresignService` cấp theo LÔ.
+   *
+   * Mapper KHÔNG tự đi lấy: lấy cần truy vấn, ký cần storage adapter, còn mapper là hàm THUẦN — cùng
+   * lý do `toChatMessageDto` bắt caller truyền `attachments`/`reactions` vào.
+   *
+   * Mặc định `null` (không phải `undefined`): thiếu khoá thì JSON nuốt mất trường và FE không phân
+   * biệt được "server chưa có tính năng" với "phòng chưa đặt ảnh".
+   */
+  avatarUrl: string | null = null,
 ): ChatRoomDto {
+  const p = prefs ?? row;
   return {
+    avatarUrl,
     id: row.id,
     companyId: row.companyId,
     refId: row.refId,
@@ -65,6 +99,11 @@ export function toChatRoomDto(
     // Giữ lưới vì `unreadCount: null` làm FE ăn ZodError = TRẮNG TRANG, tệ hơn hẳn một badge sai.
     unreadCount: unreadCount ?? row.unreadCount ?? 0,
     createdAt: toIso(row.createdAt) ?? EPOCH,
+    // `?? null` chứ KHÔNG bỏ khoá khi thiếu: `undefined` biến mất khỏi JSON ⇒ FE không phân biệt được
+    // "server chưa có tính năng" với "chưa ghim". `null` nói đúng một điều: chưa đặt.
+    pinnedAt: toIso(p.pinnedAt ?? null),
+    mutedUntil: toIso(p.mutedUntil ?? null),
+    markedUnreadAt: toIso(p.markedUnreadAt ?? null),
   };
 }
 
@@ -86,6 +125,11 @@ export function toChatMessageDto(
    * Mapper KHÔNG tự đi lấy tệp: lấy tệp cần ký, ký cần transaction riêng, và mapper là hàm thuần.
    */
   attachments: ChatAttachmentDto[],
+  /**
+   * S8-CHAT-UX-BE-3 — tổng hợp cảm xúc của tin này. **THAM SỐ BẮT BUỘC**, cùng lý do với `attachments`:
+   * caller mới quên truyền sẽ vỡ typecheck thay vì âm thầm trả tin "không ai thả cảm xúc".
+   */
+  reactions: ChatMessageReactionDto[],
 ): ChatMessageDto {
   const recalled = row.recalledAt !== null;
   return {
@@ -109,6 +153,10 @@ export function toChatMessageDto(
     // che kia để không ai tách chúng ra. `attachmentCount` CỐ Ý giữ số cũ (cột không có GRANT UPDATE) —
     // nó là số liệu lịch sử, không phải nguồn để render.
     attachments: recalled ? [] : attachments,
+    // Tin đã thu hồi: cảm xúc biến mất khỏi DTO — CÙNG lớp che với `body`/`mentions`/`attachments`
+    // (SPEC-15 §13.6). Hàng vẫn nằm trong `chat_message_reactions` (không xoá dữ liệu vì một thao tác
+    // hiển thị), nhưng để lại phản ứng dưới một nội dung đã rút là hiện đúng thứ người gửi vừa gỡ.
+    reactions: recalled ? [] : reactions,
     roomSeq: row.roomSeq,
     createdAt: toIso(row.createdAt) ?? EPOCH,
   };
@@ -126,14 +174,42 @@ export function toChatMemberDto(row: ChatMemberListRow): ChatRoomMemberDto {
   };
 }
 
+/**
+ * S8-CHAT-UX-FE-3 — một hàng **ROSTER** (CHAT-API-007a · CHAT-DEC-019).
+ *
+ * ⚠️ `avatarUrl` nhận URL **ĐÃ KÝ** do caller truyền vào, KHÔNG phải `row.avatarRaw`. Đưa giá trị thô của
+ * `employee_profiles.avatar_url` lên DTO là bỏ qua toàn bộ lớp xác minh cặp `(employeeId, fileId)` mà
+ * `AvatarPresignService` tồn tại để làm — cột đó ĐA-NGƯỜI-GHI và có thể bị đầu độc trỏ tệp bất kỳ trong
+ * tenant. Vì thế hàm này KHÔNG đọc `row.avatarRaw`, và không được sửa để đọc nó.
+ *
+ * `isOnline` LUÔN có mặt (boolean, không `undefined`): "không biết" và "không online" hiển thị giống
+ * nhau, nên gửi một giá trị dứt khoát tránh việc FE phải đoán ý nghĩa của khoá vắng.
+ */
+export function toChatRosterMemberDto(
+  row: ChatRosterRow,
+  signedAvatarUrl: string | null,
+  isOnline: boolean,
+): ChatRoomMemberDto {
+  return {
+    ...toChatMemberDto(row),
+    avatarUrl: signedAvatarUrl,
+    isOnline,
+    leftAt: toIso(row.leftAt),
+  };
+}
+
 export function toChatRoomDetailDto(
   room: ChatRoomProjection,
   members: ChatMemberListRow[],
   myRole: ChatMemberRole,
   unreadCount: number,
+  /** S8-CHAT-UX-BE-1 — BẮT BUỘC: caller luôn có `assertMember().membership` trong tay ở đường này. */
+  prefs: ChatRoomMemberPrefs,
+  /** S8-CHAT-UX-BE-2 — URL avatar đã ký (xem `toChatRoomDto`). `null` = chưa đặt / không hợp lệ. */
+  avatarUrl: string | null = null,
 ): ChatRoomDetailDto {
   return {
-    ...toChatRoomDto(room, unreadCount),
+    ...toChatRoomDto(room, unreadCount, prefs, avatarUrl),
     members: members.map(toChatMemberDto),
     myRole,
   };
