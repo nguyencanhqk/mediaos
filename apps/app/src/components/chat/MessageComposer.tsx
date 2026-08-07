@@ -8,10 +8,10 @@
  *    trùng gì cả** (memory `idempotency-key-must-be-content-derived`).
  * 2. Gửi lỗi **KHÔNG được xoá chữ người dùng đã gõ** (§14). Nháp chỉ bị dọn khi server đã nhận.
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Paperclip, SendHorizontal, X } from "lucide-react";
-import { useCan } from "@mediaos/web-core";
+import { chatApi, useCan } from "@mediaos/web-core";
 import { Button, cn } from "@mediaos/ui";
 import type { StoredChatMessage } from "@/stores/chat.store";
 import { createClientMessageId } from "@/stores/chat.store";
@@ -19,6 +19,7 @@ import {
   CHAT_PAIRS,
   MAX_ATTACHMENTS_PER_MESSAGE,
   MAX_MESSAGE_LENGTH,
+  TYPING_PING_THROTTLE_MS,
 } from "@/routes/chat/constants";
 import { formatFileSize } from "./chat-format";
 import { uploadChatAttachment, type ChatUploadResult } from "./chat-upload";
@@ -80,6 +81,36 @@ export function MessageComposer({
   const disabled = isArchived || !canSend;
   const hasContent = draft.trim().length > 0 || attachments.length > 0;
   const tooLong = draft.length > MAX_MESSAGE_LENGTH;
+
+  /**
+   * S8-CHAT-UX-FE-3 — báo "đang gõ" (CHAT-API-023 · CHAT-DEC-017), **TIẾT LƯU leading-edge**.
+   *
+   * Mốc ping cuối ở `ref` chứ không ở state: nó không được kích hoạt render (một `setState` mỗi phím là
+   * đúng thứ làm ô soạn giật khi gõ nhanh), và nó phải sống qua mọi lần re-render.
+   *
+   * Leading-edge (bắn NGAY phím đầu rồi im 3 s) chứ không trailing: người nhận cần thấy chỉ báo ở đầu
+   * lượt gõ, không phải 3 giây sau khi người kia đã gõ xong nửa câu.
+   *
+   * ⚠️ Lỗi bị NUỐT CÓ CHỦ ĐÍCH — không toast, không banner. Đây là tín hiệu mỹ thuật: không ghi DB, không
+   * audit, mất một ping thì chỉ báo tắt sớm 5 s và tự lành. Chen một thông báo lỗi vào giữa lúc người
+   * dùng đang gõ là đổi một khiếm khuyết vô hình lấy một phiền toái nhìn thấy được.
+   */
+  const lastTypingPingRef = useRef(0);
+  const pingTyping = useCallback(() => {
+    if (disabled) return;
+    const now = Date.now();
+    if (now - lastTypingPingRef.current < TYPING_PING_THROTTLE_MS) return;
+    lastTypingPingRef.current = now;
+    void chatApi.pingTyping(roomId).catch(() => {
+      // Cố ý im lặng — xem docblock trên. Nhả mốc để lần gõ kế tiếp thử lại thay vì im 3 s vô ích.
+      lastTypingPingRef.current = 0;
+    });
+  }, [disabled, roomId]);
+
+  // Đổi phòng ⇒ quên mốc tiết lưu: mốc là của MỘT phòng, giữ lại thì phím đầu tiên ở phòng mới bị nuốt.
+  useEffect(() => {
+    lastTypingPingRef.current = 0;
+  }, [roomId]);
 
   const handlePickFiles = useCallback(
     async (files: FileList | null) => {
@@ -252,7 +283,11 @@ export function MessageComposer({
           value={draft}
           onChange={(e) => {
             setDraft(e.target.value);
-            if (e.target.value.length > 0) ensureClientMessageId();
+            if (e.target.value.length > 0) {
+              ensureClientMessageId();
+              // Chỉ ping khi ô CÓ chữ: xoá sạch nháp rồi bấm backspace tiếp không phải là "đang gõ".
+              pingTyping();
+            }
           }}
           onKeyDown={(e) => {
             // Enter gửi, Shift+Enter xuống dòng — quy ước quen thuộc của mọi công cụ chat nội bộ.

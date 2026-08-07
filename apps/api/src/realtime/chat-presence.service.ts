@@ -1,10 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { loadEnv } from "../config/env.schema";
 import { DatabaseService } from "../db/db.service";
 import { ValkeyService } from "../permission/valkey.service";
 import { ChatRoomsRepository } from "../chat/chat-rooms.repository";
+import { ChatPresenceReaderService } from "./chat-presence-reader.service";
 import { RealtimeEmitterService } from "./realtime-emitter.service";
-import { resolveEnvScope } from "./ws-adapter-config";
 
 /**
  * Hạn sống của một khoá presence. Ngắt BẨN (kill -9, rút mạng, BSOD) không chạy `handleDisconnect`, nên
@@ -54,25 +53,27 @@ interface LocalSocket {
 @Injectable()
 export class ChatPresenceService {
   private readonly logger = new Logger(ChatPresenceService.name);
-  private readonly envScope: string;
   private readonly locals = new Map<string, LocalSocket>();
-  private warnedDisabled = false;
 
   constructor(
     private readonly valkey: ValkeyService,
     private readonly emitter: RealtimeEmitterService,
     private readonly db: DatabaseService,
     private readonly chatRooms: ChatRoomsRepository,
-  ) {
-    this.envScope = resolveEnvScope(loadEnv(), process.env.LANE_DB);
-  }
+    /**
+     * S8-CHAT-UX-FE-3 — vế CHỈ ĐỌC + **định dạng khoá** chuyển hẳn xuống leaf này để `ChatModule` dùng
+     * chung được (roster cần ảnh chụp presence, mà nó không import ngược `RealtimeModule` được).
+     * Hai bản sao của `presenceKey` là hai không gian khoá sẽ trôi khỏi nhau — xem jsdoc của reader.
+     */
+    private readonly reader: ChatPresenceReaderService,
+  ) {}
 
   /**
-   * Khoá presence của một user. Public để test đo được KHÔNG GIAN KHOÁ trực tiếp — đó là thứ chứng minh
-   * hai môi trường không thấy nhau, và nó phải kiểm được mà không cần dựng Valkey thật.
+   * Khoá presence của một user — **uỷ quyền** xuống reader (nguồn duy nhất của định dạng). Giữ method ở
+   * đây vì test hiện có đo qua service này, và vì vế ghi bên dưới cần đúng khoá mà vế đọc dùng.
    */
   presenceKey(companyId: string, userId: string): string {
-    return `chat:presence:${this.envScope}:co:${companyId}:user:${userId}`;
+    return this.reader.presenceKey(companyId, userId);
   }
 
   /**
@@ -149,20 +150,14 @@ export class ChatPresenceService {
   }
 
   /**
-   * Lọc ra những user ĐANG online trong một danh sách.
+   * Lọc ra những user ĐANG online trong một danh sách — **uỷ quyền** xuống reader.
    *
-   * CHƯA có endpoint nào gọi — `API-13 §5.1` không cấp route đọc presence ở wave này. Viết sẵn (và có test)
-   * để WO kế tiếp gắn ảnh chụp lúc mở app vào `CHAT-API-007a`: nếu không, FE chỉ thấy các chuyển trạng
-   * thái SAU khi nối và một người online từ trước sẽ hiện offline tới lần họ đóng/mở lại.
+   * S8-CHAT-UX-FE-3 đã gắn đường gọi thật: `CHAT-API-007a` (roster) dùng nó làm ẢNH CHỤP lúc mở phòng.
+   * Không có ảnh chụp đó thì FE chỉ thấy các chuyển trạng thái SAU khi nối, và một người online từ trước
+   * hiện offline tới lần họ đóng/mở lại.
    */
   async getOnlineUserIds(companyId: string, userIds: readonly string[]): Promise<string[]> {
-    if (!this.ensureEnabled() || userIds.length === 0) return [];
-    const online: string[] = [];
-    for (const userId of userIds) {
-      const size = await this.valkey.sCard(this.presenceKey(companyId, userId));
-      if (size !== null && size > 0) online.push(userId);
-    }
-    return online;
+    return this.reader.getOnlineUserIds(companyId, userIds);
   }
 
   /** Số socket cục bộ đang theo dõi — chỉ để test đóng đinh việc dọn sổ (không rò bộ nhớ). */
@@ -187,17 +182,9 @@ export class ChatPresenceService {
     this.emitter.emitChatPresence(companyId, { userId, status }, peers);
   }
 
-  /** Valkey chưa cấu hình ⇒ presence tắt. WARN ĐÚNG MỘT LẦN — không spam mỗi kết nối. */
+  /** Valkey chưa cấu hình ⇒ presence tắt. WARN ĐÚNG MỘT LẦN — cờ "đã cảnh báo" nằm ở reader. */
   private ensureEnabled(): boolean {
-    if (this.valkey.isEnabled()) return true;
-    if (!this.warnedDisabled) {
-      this.warnedDisabled = true;
-      this.logger.warn(
-        "VALKEY_URL chưa cấu hình — TRẠNG THÁI ĐANG ONLINE TẮT HOÀN TOÀN (không có bản sao in-memory: " +
-          "bản sao chỉ đúng trên 1 instance và sẽ nói dối ngay khi scale)",
-      );
-    }
-    return false;
+    return this.reader.isEnabled();
   }
 
   private warn(op: string, userId: string, err: unknown): void {

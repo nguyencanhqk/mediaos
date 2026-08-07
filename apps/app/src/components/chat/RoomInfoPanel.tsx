@@ -8,7 +8,7 @@
  * nhân sự/dự án (§13.3) — server chặn thêm/bớt tay bằng CHAT-ERR-012, nên FE không hiện nút thay vì
  * hiện rồi để người dùng ăn lỗi.
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LogOut, Pencil, Pin, Shield, Trash2, UserPlus } from "lucide-react";
@@ -78,6 +78,23 @@ export function RoomInfoPanel({
   const queryClient = useQueryClient();
   const myUserId = useChatStore((s) => s.myUserId);
   const removeRoomForSelf = useChatStore((s) => s.removeRoomForSelf);
+  /**
+   * S8-CHAT-UX-FE-3 — ai đang online, đọc TỪ STORE chứ không nhận qua prop.
+   *
+   * `presenceByUser` được `useRoomRoster` (mount trong `ConversationPanel`, cùng phòng, cùng màn hình)
+   * đổ ảnh chụp vào, rồi sự kiện `chat:presence` vá tiếp cho peer DM. Đi qua store là hai nguồn đó hoà
+   * vào MỘT chỗ; kéo prop từ `ChatPage` xuống sẽ tạo nguồn thứ hai và hai chấm sẽ lệch nhau.
+   */
+  const presenceByUser = useChatStore((s) => s.presenceByUser);
+  const onlineUserIds = useMemo(
+    () =>
+      new Set(
+        Object.entries(presenceByUser)
+          .filter(([, on]) => on)
+          .map(([id]) => id),
+      ),
+    [presenceByUser],
+  );
 
   const canManageMember = useCan(
     CHAT_PAIRS.MANAGE_MEMBER.action,
@@ -331,7 +348,28 @@ export function RoomInfoPanel({
                         className="flex items-center gap-2 px-3 py-2"
                         data-testid="chat-member-row"
                       >
-                        <Avatar name={member.userName} size="sm" />
+                        {/*
+                         * S8-CHAT-UX-FE-3 — chấm "đang online" (`done_when #5`: chỉ ở phòng `direct` và
+                         * trong DANH SÁCH THÀNH VIÊN này, không ở bong bóng tin của phòng đông người).
+                         *
+                         * ⚠️ Đây là ẢNH CHỤP lúc nạp roster, KHÔNG phải luồng sống — `chat:presence` chỉ
+                         * fan-out tới peer của phòng `direct` (cố ý, xem `chat.store.ts`). Với phòng
+                         * nhóm/phòng ban/dự án, chấm chỉ mới lại khi roster refetch (đổi phòng, lấy lại
+                         * tiêu điểm cửa sổ). Ghi ra đây để không ai đọc nó như thời-gian-thực.
+                         */}
+                        <span className="relative shrink-0">
+                          <Avatar name={member.userName} size="sm" />
+                          {onlineUserIds.has(member.userId) && (
+                            <>
+                              <span
+                                className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-background"
+                                aria-hidden="true"
+                                data-testid="chat-member-online-dot"
+                              />
+                              <span className="sr-only">{t("presence.online")}</span>
+                            </>
+                          )}
+                        </span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm">
                             {member.userName ?? member.userId}

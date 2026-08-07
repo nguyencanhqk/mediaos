@@ -108,6 +108,19 @@ describe("emit SAU COMMIT — ChatMembersService", () => {
       access() as never,
       audit() as never,
       realtime as unknown as RealtimeEmitterService,
+      // S8-CHAT-UX-FE-3 — hai phụ thuộc CHỈ dùng ở đường ĐỌC roster (`listMembers`). Bài test này đo
+      // đường GHI (thêm/bớt/đổi vai trò) nên chúng không được gọi; stub ném để nếu một ngày đường ghi
+      // lỡ chạm vào chúng thì bài đỏ NGAY, thay vì im lặng ký một URL trong một transaction ghi.
+      {
+        resolveEmployeeAvatars: () => {
+          throw new Error("đường GHI không được ký avatar");
+        },
+      } as never,
+      {
+        getOnlineUserIds: () => {
+          throw new Error("đường GHI không được đọc presence");
+        },
+      } as never,
     );
     return { svc, realtime };
   }

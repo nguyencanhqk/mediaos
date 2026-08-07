@@ -60,6 +60,7 @@ const noopActions = {
   onPin: vi.fn(),
   onUnpin: vi.fn(),
   onRecall: vi.fn(),
+  onToggleReaction: vi.fn(),
 };
 
 interface HarnessProps {

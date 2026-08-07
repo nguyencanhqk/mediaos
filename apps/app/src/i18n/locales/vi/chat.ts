@@ -127,6 +127,36 @@ export default {
     pinFailed: "Không ghim được tin nhắn.",
   },
 
+  // ── S8-CHAT-UX-FE-3 — thả cảm xúc (CHAT-FUNC-019 · CHAT-DEC-018) ──
+  reaction: {
+    open: "Thả cảm xúc",
+    pickerLabel: "Chọn cảm xúc",
+    // `{{emoji}}` là TÊN đã dịch của cảm xúc, không phải ký tự — nhãn này dành cho trình đọc màn hình.
+    toggle: "{{emoji}} · {{count}} người. Bấm để thả hoặc bỏ thả.",
+    failed: "Không cập nhật được cảm xúc.",
+    names: {
+      like: "Thích",
+      love: "Yêu thích",
+      haha: "Haha",
+      wow: "Ngạc nhiên",
+      sad: "Buồn",
+      angry: "Phẫn nộ",
+    },
+  },
+
+  // ── S8-CHAT-UX-FE-3 — đang gõ (CHAT-DEC-017) ──
+  typing: {
+    names: "{{names}} đang nhập…",
+    many: "{{count}} người đang nhập…",
+    // Có ping nhưng chưa tra được tên (roster chưa về): vẫn phải nói có người đang gõ.
+    someone_one: "Có người đang nhập…",
+    someone_other: "{{count}} người đang nhập…",
+  },
+
+  presence: {
+    online: "Đang hoạt động",
+  },
+
   attachment: {
     unavailable: "Tệp không tải được",
     resolving: "Đang lấy liên kết tải…",
