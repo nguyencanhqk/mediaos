@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**361 WO** · có micro-plan: **201/361** · ⬜ 8 chờ · 🔵 0 đang làm · ✅ 352 xong · 🔴 1 chặn
+**361 WO** · có micro-plan: **202/361** · ⬜ 7 chờ · 🔵 0 đang làm · ✅ 353 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -403,7 +403,7 @@
 | `S8-CHAT-UX-RT-1` | 🔴 | ✅ xong | [📄](S8-CHAT-UX-RT-1.md) | ✅S8-CHAT-UX-DOC-1 | Đang gõ (REST-ping → emitter, KHÔNG mở @SubscribeMessage) + đang onlin |
 | `S8-CHAT-UX-FE-2` | 🟡 | ✅ xong | [📄](S8-CHAT-UX-FE-2.md) | ✅S8-CHAT-UX-BE-1 ✅S8-CHAT-UX-BE-2 ✅S8-CHAT-UX-FE-1 | Mục Ghim + menu ngữ cảnh mỗi hội thoại (ghim · tắt thông báo · đánh dấ |
 | `S8-CHAT-UX-FE-3` | 🟡 | ✅ xong | [📄](S8-CHAT-UX-FE-3.md) | ✅S8-CHAT-UX-BE-3 ✅S8-CHAT-UX-RT-1 ✅S8-CHAT-UX-FE-2 | Khung chat: avatar người gửi + gộp tin liên tiếp cùng người + thanh th |
-| `S8-CHAT-UX-QA-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S8-CHAT-UX-FE-3 | Nghiệm thu wave S8-CHAT-UX: deny-path + cross-tenant + coverage ≥80% + |
+| `S8-CHAT-UX-QA-1` | 🟡 | ✅ xong | [📄](S8-CHAT-UX-QA-1.md) | ✅S8-CHAT-UX-FE-3 | Nghiệm thu wave S8-CHAT-UX: deny-path + cross-tenant + coverage ≥80% + |
 | `S8-CHAT-ENTRY-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S7-CHAT-FE-3 | Thẻ "Tin nhắn" ở Home Portal + App Switcher (APP_REGISTRY) — gate ĐỦ c |
 
 ## Sprint 9
