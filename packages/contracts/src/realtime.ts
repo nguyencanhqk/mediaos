@@ -140,11 +140,33 @@ export type WsChatRoomAction = z.infer<typeof wsChatRoomActionSchema>;
  * chung cho cả phòng. `toChatRoomDto` LUÔN gán một số cụ thể (`unreadCount ?? row.unreadCount ?? 0`,
  * `chat.mapper.ts`), nên tái dùng thẳng hàm đó cho payload broadcast sẽ phát "0 chưa đọc" SAI cho mọi
  * người nhận. Zod `.omit()` strip triệt để ở `.parse()` — kể cả khi code dựng payload lỡ set tay.
+ *
+ * ⟲ **S8-CHAT-UX-BE-2 (07/08/2026) — BỔ SUNG 4 field vào danh sách strip. Đây là VÁ RÒ, không phải dọn.**
+ *
+ * `S8-CHAT-UX-BE-1` thêm `pinnedAt`/`mutedUntil`/`markedUnreadAt` vào `chatRoomSchema` nhưng KHÔNG thêm
+ * vào `.omit()` ở đây. Ba cột đó per-member **y hệt** `unreadCount`, và `ChatRoomsService.updateRoom`/
+ * `archiveRoom` dựng payload broadcast bằng `toChatRoomDto(..., acc.membership)` — tức membership của
+ * **ACTOR**. Hệ quả đo được: mỗi lần một quản trị viên đổi tên hoặc lưu trữ phòng, **cả phòng** nhận
+ * `pinnedAt`/`mutedUntil` CỦA RIÊNG NGƯỜI ĐÓ ("người này đã tắt thông báo phòng tới 20:00"). Đúng lớp
+ * `ws-payload-narrower-than-rest-dto` mà chính docblock trên dựng ra để chặn, chỉ khác trục.
+ *
+ * `avatarUrl` cũng bị strip, nhưng vì lý do KHÁC — không phải per-user (mọi thành viên đều được xem):
+ * nó là URL **ký TTL ngắn**, còn sự kiện WS thì client hay giữ lại lâu. Phát nó ra là mời client cache
+ * một đường tải sẽ hết hạn ⇒ ảnh vỡ. Vắng khoá (nhờ `.optional()`) làm phép trộn ở FE **giữ nguyên**
+ * URL đang có thay vì ghi đè bằng `null` — đúng hành vi mong muốn. Ảnh mới lấy ở lần refetch REST.
  */
 export const wsChatRoomEventSchema = z.object({
   roomId: z.string().uuid(),
   action: wsChatRoomActionSchema,
-  room: chatRoomSchema.omit({ unreadCount: true }).optional(),
+  room: chatRoomSchema
+    .omit({
+      unreadCount: true,
+      pinnedAt: true,
+      mutedUntil: true,
+      markedUnreadAt: true,
+      avatarUrl: true,
+    })
+    .optional(),
 });
 export type WsChatRoomEvent = z.infer<typeof wsChatRoomEventSchema>;
 
