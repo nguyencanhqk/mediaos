@@ -155,6 +155,31 @@ export function isInside(root: string, target: string): boolean {
   return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
 }
 
+/**
+ * Hai duong dan co tro CUNG MOT thu muc khong, bo qua dau phan cach o cuoi.
+ *
+ * Vi sao phai co: voi GOC CUA MOT SHARE (`\\MAY\share`) — va gan nhu chi voi no — hai ham chuan cua
+ * Node bat dong y nhau ve dau `\` cuoi. Do duoc 07/08/2026 tren mot share that:
+ *
+ *   fs.realpathSync.native('\\\\MAY\\share\\')  →  '\\\\MAY\\share'     (BO dau cuoi)
+ *   path.resolve('\\\\MAY\\share', '')          →  '\\\\MAY\\share\\'   (THEM dau cuoi)
+ *
+ * Nen phep so sanh `===` cho ra FALSE cho chinh thu muc goc. Va no khong roi vao luoi `isInside`
+ * duoc: `path.relative` giua hai chuoi do ra "" ma `isInside` CO Y coi "" la khong-nam-trong (chinh
+ * goc khong nam trong goc). Ket qua: duyet THU MUC GOC cua moi kho tren o chia se deu bi tu choi
+ * bang "Đường dẫn nằm ngoài phạm vi kho video được phép." — dung buoc dau tien nguoi dung bam, nen
+ * ca tinh nang duyet kho khong dung duoc. Thu muc CON thi khong sao, vi luc do `isInside` that su
+ * co viec de lam.
+ *
+ * Dung `path.relative` de so sanh chu khong `toLowerCase()`: luat hoa-thuong khac nhau theo he dieu
+ * hanh, va `isInside` ngay tren cung dua vao dung ham nay — hai cho phai cung mot luat, khong thi
+ * se co duong dan lot cho nay ma khong lot cho kia.
+ */
+function isSameDir(a: string, b: string): boolean {
+  const stripTrailing = (p: string) => p.replace(/[\\/]+$/, "");
+  return path.relative(stripTrailing(a), stripTrailing(b)) === "";
+}
+
 export interface ResolvedLibraryPath {
   root: LibraryRoot;
   /** Duong dan tuyet doi da qua realpath — dung cai nay de doc file, KHONG dung dau vao goc. */
@@ -219,7 +244,7 @@ export function resolveFromRoot(rootKey: string, relativePath: string): Resolved
 
   // Chan TU VUNG lan hai: sau resolve van phai nam duoi goc. Re, khong cham dia, va la thu duy
   // nhat chay TRUOC realpath. Vong realpath ben duoi VAN GIU — no moi la thu chan junction.
-  if (joined !== realRoot && !isInside(realRoot, joined)) {
+  if (!isSameDir(joined, realRoot) && !isInside(realRoot, joined)) {
     throw new LibraryPathError("Đường dẫn nằm ngoài phạm vi kho video được phép.");
   }
 
@@ -236,7 +261,7 @@ export function resolveFromRoot(rootKey: string, relativePath: string): Resolved
     throw new LibraryPathError(`Không đọc được trong kho: ${relativePath || "(thư mục gốc)"}`);
   }
 
-  if (real !== realRoot && !isInside(realRoot, real)) {
+  if (!isSameDir(real, realRoot) && !isInside(realRoot, real)) {
     throw new LibraryPathError(`Không đọc được trong kho: ${relativePath || "(thư mục gốc)"}`);
   }
 
