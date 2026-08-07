@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import fs, { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -179,3 +179,69 @@ describe("resolveAbsolute (duong file CSV go tay)", () => {
     expect(resolveAbsolute(join(rootA, "Hong", "a.mp4")).relativePath).toBe(join("Hong", "a.mp4"));
   });
 });
+
+/**
+ * Bai KIEM CHUNG THAT — duyet THU MUC GOC cua mot o chia se song.
+ *
+ * Vi sao khong lam duoc bang thu muc tam: cho hong chi lo ra khi goc kho LA GOC CUA MOT SHARE
+ * (`\MAY\share`). Chi voi no thi `path.resolve` moi them dau `\` cuoi trong khi `realpathSync`
+ * bo di — mot thu muc thuong hay ca goc o dia (`D:\`) deu khong tai hien duoc. Do do khong co
+ * bai test thuan-duong-dan nao bat duoc loi nay, va no da di thang len PROD.
+ *
+ * Mac dinh BO QUA. Chay that (dung DIA CHI IP cua may de tranh loi 1219 khi may dang chay da co
+ * credential luu san cho TEN may do):
+ *   SMB_TEST_SHARE='//10.0.0.5/tên-share' SMB_TEST_USER='TÊN-MÁY\tài-khoản' SMB_TEST_PASSWORD='...' \
+ *     pnpm --filter @mediaos/fbpost test -- --no-file-parallelism
+ *
+ * `--no-file-parallelism` la BAT BUOC khi chay that: phien SMB toi mot may la tai nguyen dung
+ * chung CUA CA MAY, khong phai cua tung tien trinh test. File spec nay va `net-connect.spec.ts`
+ * cung noi/ngat mot share; chay song song thi bai nay doi ket noi ma bai kia vua ngat, va that bai
+ * hien ra la HET GIO (~22s, dung bang thoi gian Windows tu choi mot lan dang nhap) chu khong phai
+ * mot loi doc duoc. Timeout 45s duoi day de phan biet duoc hai thu do.
+ */
+const liveShare = process.env.SMB_TEST_SHARE;
+const liveUser = process.env.SMB_TEST_USER;
+const livePassword = process.env.SMB_TEST_PASSWORD;
+
+describe.skipIf(!(liveShare && liveUser && livePassword))(
+  "resolveFromRoot — thư mục gốc của ổ chia sẻ THẬT",
+  () => {
+    it("gốc share KHÔNG bị coi là nằm ngoài phạm vi", { timeout: 45_000 }, async () => {
+      const uncPath = liveShare!.replace(/\//g, "\\");
+      process.env.SOCIAL_MEDIA_LIBRARY_DIRS = uncPath;
+      vi.resetModules();
+
+      const { ensureShareConnection } = await import("./net-connect");
+      ensureShareConnection(uncPath, { username: liveUser!, password: livePassword! }, { force: true });
+
+      const { resolveFromRoot } = await lib();
+      // `relativePath` rong = chinh thu muc goc — dung loi goi ma giao dien phat ra ngay khi mo
+      // "Duyệt kho", tuc ca tinh nang dung hay khong nam o dung mot dong nay.
+      const resolved = resolveFromRoot("env:0", "");
+      expect(resolved.relativePath).toBe("");
+      expect(fs.readdirSync(resolved.absolutePath).length).toBeGreaterThan(0);
+    });
+
+    it("đường dẫn NGOÀI gốc vẫn bị chặn — nới lỏng phép so sánh không mở thêm cửa nào", async () => {
+      // Bai tren mot minh khong du: bo han hai phep kiem tra di cung lam no xanh.
+      const uncPath = liveShare!.replace(/\//g, "\\");
+      process.env.SOCIAL_MEDIA_LIBRARY_DIRS = uncPath;
+      vi.resetModules();
+      const { resolveFromRoot, LibraryPathError } = await lib();
+
+      expect(() => resolveFromRoot("env:0", "C:\\Windows")).toThrow(LibraryPathError);
+      expect(() => resolveFromRoot("env:0", "\\\\MAY-KHAC\\share")).toThrow(LibraryPathError);
+      expect(() => resolveFromRoot("env:0", "//MAY-KHAC/share")).toThrow(LibraryPathError);
+
+      // `..` thi KHONG nem loi — va do la dung. Windows KEP `..` lai tai goc cua share (khong the
+      // di len tren `\\MAY\share`), nen no phan giai ve chinh thu muc goc. Dieu phai chung minh o
+      // day khong phai "co nem loi khong" ma la "co ra khoi kho khong": ket qua tra ve van la
+      // chinh goc chu khong phai mot cho nao ben ngoai.
+      const climbed = resolveFromRoot("env:0", "..");
+      expect(climbed.relativePath).toBe("");
+      expect(climbed.absolutePath.replace(/[\\/]+$/, "").toLowerCase()).toBe(
+        uncPath.replace(/[\\/]+$/, "").toLowerCase(),
+      );
+    });
+  },
+);
