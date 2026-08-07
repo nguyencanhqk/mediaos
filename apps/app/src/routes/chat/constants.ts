@@ -72,6 +72,15 @@ export const MAX_MESSAGE_LENGTH = 4000;
 export const MESSAGE_PAGE_SIZE = 50;
 
 /**
+ * S8-CHAT-UX-FE-3 — khoảng tiết lưu ping "đang gõ" (CHAT-DEC-017).
+ *
+ * ⚠️ PHẢI nhỏ hơn `TYPING_TTL_MS` (5 s, ở `chat.store.ts`) một biên đủ rộng: hai số này là một cặp. Ping
+ * thưa hơn TTL thì chỉ báo tắt rồi bật lại liên tục giữa lúc người ta vẫn đang gõ — nhấp nháy còn khó
+ * chịu hơn không có chỉ báo. 3 s / 5 s cho biên 2 s, chịu được một ping lỡ vì mạng chập.
+ */
+export const TYPING_PING_THROTTLE_MS = 3000;
+
+/**
  * Ngưỡng "đang ở gần đáy" (px). Dưới ngưỡng: tin mới tự cuộn xuống + tự đánh dấu đã đọc. Trên ngưỡng:
  * người dùng đang đọc tin cũ ⇒ TUYỆT ĐỐI không kéo khung nhìn của họ, chỉ hiện nút "có tin mới".
  */

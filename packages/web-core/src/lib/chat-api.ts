@@ -207,9 +207,33 @@ export const chatApi = {
   unreactFromMessage: (messageId: string, emoji: ChatReactionEmoji): Promise<void> =>
     apiFetch(`/chat/messages/${messageId}/reactions/${emoji}`, z.void(), { method: "DELETE" }),
 
-  /** GET /chat/rooms/:id/members (CHAT-API-007a) — kèm `userName` + `lastReadSeq` (dựng "đã xem bởi"). */
+  /**
+   * GET /chat/rooms/:id/members (CHAT-API-007a) — **ROSTER** của phòng.
+   *
+   * Kèm `userName` + `lastReadSeq` (dựng "đã xem bởi"), và từ `S8-CHAT-UX-FE-3` kèm thêm `avatarUrl`
+   * (đã ký, CHAT-DEC-019) · `isOnline` (ảnh chụp) · `leftAt`.
+   *
+   * ⚠️ **Roster GỒM CẢ người đã rời phòng** (`leftAt !== null`) — thiếu họ thì tin cũ của họ mất avatar
+   * lẫn tên. Đường này KHÁC `getRoom()`: `getRoom().members` chỉ có người ĐANG ở trong phòng và là thứ
+   * dùng cho quản trị thành viên. Đừng hoán đổi hai nguồn.
+   *
+   * ⚠️ `avatarUrl` là URL ký **TTL ngắn**: render thẳng, KHÔNG cache, KHÔNG đưa vào `localStorage`.
+   */
   listMembers: (roomId: string): Promise<ChatRoomMemberDto[]> =>
     apiFetch(`/chat/rooms/${roomId}/members`, z.array(chatRoomMemberSchema)),
+
+  /**
+   * POST /chat/rooms/:id/typing (CHAT-API-023 · CHAT-DEC-017) — báo "đang gõ". **204, không có thân.**
+   *
+   * ⚠️ Đây là REST chứ không phải WS **có chủ đích**: `CHAT-DEC-005` chốt WS MỘT CHIỀU và ratchet
+   * `chat-realtime-structure.spec.ts` ép 0 `@SubscribeMessage` trong toàn bộ `apps/api/src`. Server nhận
+   * ping rồi tự fan-out `chat:typing`.
+   *
+   * Gọi **TIẾT LƯU** (3 s) — mỗi phím một request là nện API bằng đúng tốc độ gõ của người dùng.
+   * Không ghi DB, không audit ⇒ hỏng cũng không mất gì: caller nuốt lỗi có chủ đích, KHÔNG hiện toast.
+   */
+  pingTyping: (roomId: string): Promise<void> =>
+    apiFetch(`/chat/rooms/${roomId}/typing`, z.void(), { method: "POST" }),
 
   /** POST /chat/rooms/:id/members (CHAT-API-007b) — chặn trên phòng dẫn xuất (CHAT-ERR-012). */
   addMember: (roomId: string, body: AddChatMemberRequest): Promise<ChatRoomMemberDto> =>

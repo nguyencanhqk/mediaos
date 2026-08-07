@@ -186,6 +186,12 @@ Cột **Membership** ghi rõ endpoint có phải chạy `ChatAccessService.asser
 
 ⚠️ **CHAT-API-007a phải trả thêm `avatarUrl` cho từng thành viên** (CHAT-DEC-019) — đó là **nguồn duy nhất** để FE vẽ avatar người gửi trong khung chat. Ký **1 lần/phòng** ở đây, **không** ký theo từng tin. Người đã rời phòng vẫn phải có trong danh sách (kèm `leftAt`), nếu không tin cũ của họ mất cả avatar lẫn tên.
 
+✅ **Đã thi công `S8-CHAT-UX-FE-3` (07/08/2026).** `GET /chat/rooms/:id/members` giờ là **ROSTER**: thành viên đang hoạt động **và người đã rời**, mỗi người kèm `avatarUrl` (ký 1 lô qua `AvatarPresignService`), `isOnline` (ảnh chụp từ `ChatPresenceReaderService`) và `leftAt`. Ba khoá đều `.optional()` trong `chatRoomMemberSchema` — schema này đã có consumer đang chạy, thêm khoá **required** làm mọi consumer ăn ZodError khi FE lên trước BE.
+
+⚠️ **`GET /chat/rooms/:id` (CHAT-API-004) GIỮ NGUYÊN `members` = ACTIVE-ONLY** — hai đường, hai ngữ nghĩa, cố ý. Detail trả lời "ai đang ở trong phòng" và nuôi số đếm ở đầu phòng, danh sách quản trị, cùng bộ lọc "đã ở trong phòng" của hộp thêm thành viên. Nhét người đã rời vào đó làm bộ lọc coi họ là thành viên ⇒ **không thêm lại được vào phòng**, không thông báo, không lý do.
+
+⚠️ **`isOnline` ở CHAT-API-007a là ẢNH CHỤP, không phải luồng sống.** Sự kiện `chat:presence` chỉ fan-out tới peer của phòng `direct` (§7) — cố ý, vì phát trạng thái online của mọi người tới mọi phòng họ tham gia đúng là thứ `CHAT-DEC-017` gọi là rò lịch làm việc. Với phòng nhóm/phòng ban/dự án, giá trị này chỉ mới lại khi client refetch roster. FE phải hiển thị nó như trạng thái tại-thời-điểm-nạp, không được đọc là thời-gian-thực.
+
 ### 5.2 Trạng thái hiện thực (đối chiếu code, 01/08/2026)
 
 | Nhóm | Trạng thái | Ghi chú |

@@ -44,6 +44,15 @@ interface MessageListProps {
    * thao tác họ vừa làm.
    */
   highlightMessageId?: string | null;
+  /**
+   * S8-CHAT-UX-FE-3 — bản đồ ảnh/tên từ **ROSTER phòng** (CHAT-DEC-019). Tra theo `senderId` khi vẽ.
+   *
+   * Truyền bản đồ chứ không truyền `avatarUrl` sẵn trên từng tin: nguồn ảnh là roster (ký 1 lô/phòng),
+   * còn tin thì không mang ảnh — nhét ảnh vào `StoredChatMessage` sẽ nhân bản một URL ký có hạn lên hàng
+   * trăm bản sao trong RAM và mở đường cho ai đó ký-theo-tin ở lần sửa sau.
+   */
+  avatarByUser?: ReadonlyMap<string, string | null>;
+  nameByUser?: ReadonlyMap<string, string>;
   onLoadOlder: () => Promise<number>;
   onMarkRead: (seq: number) => void;
   onResendPending: (pending: PendingChatMessage) => void;
@@ -64,6 +73,8 @@ export function MessageList({
   isLoadingOlder,
   historyLimitReached,
   highlightMessageId = null,
+  avatarByUser,
+  nameByUser,
   onLoadOlder,
   onMarkRead,
   onResendPending,
@@ -258,6 +269,9 @@ export function MessageList({
                 }
                 canPin={canPinPair && !room.isArchived}
                 seenBy={seenByFor(message.roomSeq)}
+                senderAvatarUrl={avatarByUser?.get(message.senderId) ?? null}
+                senderNameFallback={nameByUser?.get(message.senderId) ?? null}
+                isArchived={room.isArchived ?? false}
                 actions={actions}
               />
             </div>

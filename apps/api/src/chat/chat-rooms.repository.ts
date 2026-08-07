@@ -5,6 +5,10 @@ import type { SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { chatRoomMembers, chatRooms } from "../db/schema/communication";
 import type { ChatMemberRole, ChatRoomType } from "../db/schema/communication";
+// S8-CHAT-UX-FE-3 — chỉ để lấy ỨNG VIÊN ảnh đại diện cho roster (`employee_profiles.avatar_url` thô).
+// CHAT không đọc gì khác của HR ở đây và không được phép: mọi trường hồ sơ khác đi qua module HR với
+// cặp quyền của nó.
+import { employeeProfiles } from "../db/schema/employees";
 import { users } from "../db/schema/users";
 import { unreadSeqExpr } from "./chat-visibility";
 
@@ -36,6 +40,25 @@ export interface ChatMemberListRow {
   role: ChatMemberRole;
   joinedAt: Date;
   lastReadSeq: number;
+}
+
+/**
+ * S8-CHAT-UX-FE-3 — một hàng của **ROSTER** (CHAT-API-007a · CHAT-DEC-019). Khác `ChatMemberListRow` ở
+ * ba cột, và cả ba đều có lý do:
+ *
+ *  - `leftAt` — roster GỒM CẢ người đã rời (thiếu họ thì tin cũ mất avatar lẫn tên);
+ *  - `employeeId` — khoá của `AvatarPresignService` (nó làm việc theo NHÂN VIÊN, không theo user);
+ *  - `avatarRaw` — giá trị **THÔ** của `employee_profiles.avatar_url`.
+ *
+ * ⚠️ Hậu tố `Raw` CỐ Ý (mirror `TaskCoreRow.assigneeAvatarRaw`): cột đó ĐA-NGƯỜI-GHI (yêu-cầu-đổi-hồ-sơ
+ * ghi verbatim, có thể bị đầu độc trỏ tệp bất kỳ trong tenant) nên **KHÔNG được vào DTO**. Nó chỉ là ứng
+ * viên; `resolveEmployeeAvatars` mới là nơi xác minh cặp `(employeeId, fileId)` rồi ký. Đặt tên trùng
+ * `avatarUrl` ở đây là mời gọi đúng cái lỗi đó.
+ */
+export interface ChatRosterRow extends ChatMemberListRow {
+  leftAt: Date | null;
+  employeeId: string | null;
+  avatarRaw: string | null;
 }
 
 /**
@@ -452,6 +475,62 @@ export class ChatRoomsRepository {
   }
 
   // ─── thành viên ──────────────────────────────────────────────────────────────
+
+  /**
+   * S8-CHAT-UX-FE-3 — **ROSTER** của một phòng (CHAT-API-007a · CHAT-DEC-019): thành viên đang hoạt động
+   * **VÀ người đã rời** (kèm `leftAt`), thêm ứng viên ảnh đại diện.
+   *
+   * ⚠️ Đây là hàm DUY NHẤT của repo cố ý KHÔNG lọc `left_at IS NULL`. Mọi vị từ membership khác (cổng
+   * quyền, danh sách phòng, `assertMember`) vẫn đòi `left_at IS NULL` — xem `chat-access.service.ts` §85.
+   * Roster là đường ĐỌC-ĐỂ-VẼ, không phải đường quyết định quyền: nó chạy SAU `assertMember` của người
+   * gọi, và không hàm nào ở đây suy ra membership từ kết quả của nó.
+   *
+   * `leftJoin` `employee_profiles` theo `(company_id, user_id)` — unique index
+   * `employee_profiles_company_user_uq` đảm bảo tối đa một hàng, nên join này KHÔNG nhân bản thành viên.
+   * User chưa có hồ sơ nhân viên ⇒ `employeeId = null` ⇒ không có ứng viên ảnh ⇒ chữ cái đầu.
+   */
+  async listRosterMembers(
+    tx: TenantTx,
+    companyId: string,
+    roomId: string,
+  ): Promise<ChatRosterRow[]> {
+    const rows = await tx
+      .select({
+        id: chatRoomMembers.id,
+        roomId: chatRoomMembers.roomId,
+        userId: chatRoomMembers.userId,
+        userName: users.fullName,
+        role: chatRoomMembers.role,
+        joinedAt: chatRoomMembers.joinedAt,
+        lastReadSeq: chatRoomMembers.lastReadSeq,
+        leftAt: chatRoomMembers.leftAt,
+        employeeId: employeeProfiles.id,
+        avatarRaw: employeeProfiles.avatarUrl,
+      })
+      .from(chatRoomMembers)
+      .leftJoin(
+        users,
+        and(eq(users.id, chatRoomMembers.userId), eq(users.companyId, chatRoomMembers.companyId)),
+      )
+      .leftJoin(
+        employeeProfiles,
+        and(
+          eq(employeeProfiles.userId, chatRoomMembers.userId),
+          eq(employeeProfiles.companyId, chatRoomMembers.companyId),
+          // ⚠️ `isNull(deletedAt)` là BẮT BUỘC, không phải vệ sinh. Unique index
+          // `employee_profiles_company_user_active_uq` là **PARTIAL** (`WHERE deleted_at IS NULL`), nên
+          // một user từng có hồ sơ bị xoá mềm rồi lập lại sẽ có ≥2 hàng khớp ⇒ join NHÂN BẢN thành viên
+          // đó trong roster. Triệu chứng ở UI là một người xuất hiện hai lần trong danh sách và hai
+          // `<li>` cùng `key` (memory `duplicate-sibling-key-leaks-dom-node`).
+          isNull(employeeProfiles.deletedAt),
+        ),
+      )
+      .where(and(eq(chatRoomMembers.companyId, companyId), eq(chatRoomMembers.roomId, roomId)))
+      // Người ĐANG ở trong phòng lên trước (roster cũng là danh sách người đọc được), rồi tới thứ tự vào
+      // phòng. Không sắp thì thứ tự do planner quyết ⇒ danh sách nhảy lung tung giữa hai lần tải.
+      .orderBy(chatRoomMembers.leftAt, chatRoomMembers.joinedAt);
+    return rows.map((r) => ({ ...r, role: r.role as ChatMemberRole }));
+  }
 
   /** CHAT-API-007a — thành viên ĐANG hoạt động + `lastReadSeq` (dựng "đã xem bởi", SPEC-15 §13.2). */
   async listActiveMembers(

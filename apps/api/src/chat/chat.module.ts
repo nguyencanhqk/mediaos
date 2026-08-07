@@ -5,6 +5,7 @@ import { FilesModule } from "../foundation/files/files.module";
 import { FilePolicyService } from "../foundation/files/file-policy.service";
 import { StorageModule } from "../storage/storage.module";
 import { RealtimeEmitterModule } from "../realtime/realtime-emitter.module";
+import { ChatPresenceReaderModule } from "../realtime/chat-presence-reader.module";
 import { ChatRoomsController } from "./chat-rooms.controller";
 import { ChatMessagesController } from "./chat-messages.controller";
 import { ChatAccessService } from "./chat-access.service";
@@ -100,6 +101,10 @@ import { ChatOversightRepository } from "./chat-oversight.repository";
     FilesModule,
     StorageModule,
     RealtimeEmitterModule,
+    // S8-CHAT-UX-FE-3 — ảnh chụp "đang online" cho roster (CHAT-API-007a). Module LÁ, KHÔNG phải
+    // `RealtimeModule`: cạnh `Chat → Realtime` là một VÒNG (`RealtimeModule` đã import `ChatModule` để
+    // lấy `ChatRoomsRepository` lúc handshake) và Nest sập lúc bootstrap. Cùng khuôn `RealtimeEmitterModule`.
+    ChatPresenceReaderModule,
     ProjectMembershipModule,
   ],
   controllers: [

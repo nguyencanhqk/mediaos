@@ -378,6 +378,40 @@ export const chatRoomMemberSchema = z.object({
   userName: z.string().nullable().optional(),
   /** Con trỏ đã đọc trong hệ `room_seq` — FE dựng "đã xem bởi" (SPEC-15 §13.2), KHÔNG cần bảng riêng. */
   lastReadSeq: z.number().int().nonnegative().optional(),
+
+  // ── S8-CHAT-UX-FE-3 (additive, optional) — ROSTER phòng (CHAT-DEC-019 · API-13 §5.1) ──
+  //
+  // ⚠️ Cả ba khoá `.optional()` CÓ CHỦ ĐÍCH, không phải phòng xa. Schema này đã có consumer đang chạy
+  // (`chatRoomDetailSchema.members`, dựng từ S7); thêm một khoá **required** vào read-schema đã có người
+  // dùng làm MỌI consumer ăn ZodError ngay khi FE lên trước BE — bài học bàn giao `S7-SEC-ROLE2FA-UI-1`
+  // (memory `server-masking-needs-optional-fe-schema`). Chỉ `CHAT-API-007a` cung cấp chúng;
+  // `GET /chat/rooms/:id` cố ý KHÔNG (xem docblock `chatRoomDetailSchema`).
+  /**
+   * URL ký **TTL ngắn** cho ảnh đại diện người này, ký MỘT LẦN cho cả roster (CHAT-DEC-019).
+   *
+   * ⚠️ **KHÔNG ký theo từng tin**: 50 tin = 50 lần ký + 50 hạn lệch nhau. FE tra bản đồ `userId → url`
+   * khi vẽ bong bóng. `null` = chưa có ảnh / ảnh không qua được xác minh ⇒ hiện chữ cái đầu.
+   * KHÔNG cache, KHÔNG đưa vào `localStorage`: giữ nó lâu hơn một lần render là dựng một đường tải sống
+   * lâu hơn quyết định quyền đã cấp ra nó.
+   */
+  avatarUrl: z.string().nullable().optional(),
+  /**
+   * ẢNH CHỤP "đang online" tại thời điểm gọi (CHAT-FUNC-021), KHÔNG phải luồng sống.
+   *
+   * ⚠️ Sự kiện `chat:presence` chỉ fan-out tới peer của phòng **`direct`** (`ChatPresenceService.broadcast`)
+   * — cố ý, vì phát trạng thái online của mọi người tới mọi phòng họ tham gia chính là thứ CHAT-DEC-017
+   * gọi là rò lịch làm việc. Hệ quả: ở phòng nhóm/phòng ban/dự án, giá trị này đúng lúc nạp roster và chỉ
+   * mới lại khi refetch. Vắng khoá (Valkey chưa cấu hình) ⇒ FE coi như `false`, không vẽ chấm.
+   */
+  isOnline: z.boolean().optional(),
+  /**
+   * Mốc rời phòng. `null` = đang là thành viên.
+   *
+   * ⚠️ **Người đã rời VẪN phải có trong roster** (CHAT-DEC-019): thiếu họ thì mọi tin CŨ của họ mất cả
+   * avatar lẫn tên hiển thị — lịch sử phòng tự nhiên khuyết một người. Đường quản trị thành viên đọc
+   * `GET /chat/rooms/:id` (chỉ ACTIVE), nên nó không bị ảnh hưởng.
+   */
+  leftAt: z.string().datetime().nullable().optional(),
 });
 export type ChatRoomMemberDto = z.infer<typeof chatRoomMemberSchema>;
 
@@ -422,6 +456,14 @@ export type UpdateChatMemberRequest = z.infer<typeof updateChatMemberSchema>;
 /**
  * GET /chat/rooms/:id (CHAT-API-004) — phòng + thành viên + vai trò CỦA TÔI.
  * `myRole` để FE khỏi phải tự dò mình trong `members[]` (và khỏi tự suy ra luật admin ở client).
+ *
+ * ⚠️ **`members` ở đây là ACTIVE-ONLY và phải GIỮ NGUYÊN như vậy** (S8-CHAT-UX-FE-3). Đây là câu trả lời
+ * cho "ai đang ở trong phòng": nó nuôi số đếm ở đầu phòng, danh sách quản trị, và bộ lọc "đã ở trong
+ * phòng" của hộp thêm thành viên. Nhét người ĐÃ RỜI vào đây làm bộ lọc đó coi họ là thành viên ⇒
+ * **không thêm lại được vào phòng**, không thông báo, không lý do.
+ *
+ * Roster đầy đủ (kèm người đã rời + `avatarUrl` + `isOnline`) là **`GET /chat/rooms/:id/members`**
+ * (CHAT-API-007a) — hai đường, hai ngữ nghĩa, cố ý.
  */
 export const chatRoomDetailSchema = chatRoomSchema.extend({
   members: z.array(chatRoomMemberSchema),

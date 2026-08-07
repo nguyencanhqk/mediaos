@@ -7,7 +7,7 @@ import type {
   ChatRoomMemberDto,
 } from "@mediaos/contracts";
 import type { ChatMemberRole } from "../db/schema/communication";
-import type { ChatMemberListRow } from "./chat-rooms.repository";
+import type { ChatMemberListRow, ChatRosterRow } from "./chat-rooms.repository";
 import type { ChatMessageRow } from "./chat-messages.repository";
 
 /**
@@ -171,6 +171,30 @@ export function toChatMemberDto(row: ChatMemberListRow): ChatRoomMemberDto {
     role: row.role,
     joinedAt: toIso(row.joinedAt) ?? EPOCH,
     lastReadSeq: row.lastReadSeq,
+  };
+}
+
+/**
+ * S8-CHAT-UX-FE-3 — một hàng **ROSTER** (CHAT-API-007a · CHAT-DEC-019).
+ *
+ * ⚠️ `avatarUrl` nhận URL **ĐÃ KÝ** do caller truyền vào, KHÔNG phải `row.avatarRaw`. Đưa giá trị thô của
+ * `employee_profiles.avatar_url` lên DTO là bỏ qua toàn bộ lớp xác minh cặp `(employeeId, fileId)` mà
+ * `AvatarPresignService` tồn tại để làm — cột đó ĐA-NGƯỜI-GHI và có thể bị đầu độc trỏ tệp bất kỳ trong
+ * tenant. Vì thế hàm này KHÔNG đọc `row.avatarRaw`, và không được sửa để đọc nó.
+ *
+ * `isOnline` LUÔN có mặt (boolean, không `undefined`): "không biết" và "không online" hiển thị giống
+ * nhau, nên gửi một giá trị dứt khoát tránh việc FE phải đoán ý nghĩa của khoá vắng.
+ */
+export function toChatRosterMemberDto(
+  row: ChatRosterRow,
+  signedAvatarUrl: string | null,
+  isOnline: boolean,
+): ChatRoomMemberDto {
+  return {
+    ...toChatMemberDto(row),
+    avatarUrl: signedAvatarUrl,
+    isOnline,
+    leftAt: toIso(row.leftAt),
   };
 }
 

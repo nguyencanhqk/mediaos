@@ -16,11 +16,15 @@ import { ApiError, chatApi } from "@mediaos/web-core";
 import type {
   ChatAttachmentDto,
   ChatMessageDto,
+  ChatMessageReactionDto,
   ChatRoomDto,
   WsChatAttachmentDto,
   WsChatMessageRecalledEvent,
+  WsChatPresenceEvent,
+  WsChatReactionEvent,
   WsChatReadEvent,
   WsChatRoomEvent,
+  WsChatTypingEvent,
 } from "@mediaos/contracts";
 
 /**
@@ -79,6 +83,19 @@ export const MAX_HISTORY_PER_ROOM = 1000;
 
 /** Chu kỳ bù tin khi WS KHÔNG ở trạng thái `connected` (SPEC-15 §14 "mất kết nối"). */
 export const CHAT_POLL_INTERVAL_MS = 10_000;
+
+/**
+ * S8-CHAT-UX-FE-3 — chỉ báo "đang gõ" sống bao lâu kể từ ping CUỐI CÙNG (CHAT-DEC-017).
+ *
+ * ⚠️ Đây là cơ chế tắt **DUY NHẤT**. `wsChatTypingEventSchema` CỐ Ý không có `isTyping`/`state` và server
+ * không bao giờ phát "ngừng gõ": một sự kiện "stop" bị mất trên đường là chỉ báo kẹt VĨNH VIỄN, và không
+ * ai đóng được máy trạng thái phân tán đó. Hết hạn thì ngược lại — mất ping chỉ làm chỉ báo tắt SỚM,
+ * một lỗi tự lành.
+ *
+ * 5 s > `TYPING_PING_THROTTLE_MS` (3 s) một biên an toàn đủ để một ping lỡ vì mạng chập không làm chỉ báo
+ * nhấp nháy giữa lúc người ta đang gõ.
+ */
+export const TYPING_TTL_MS = 5_000;
 
 /**
  * Vòng đời kết nối WS.
@@ -156,6 +173,22 @@ interface ChatStoreState {
   subscribedRoomIds: Record<string, SubscribedRoom>;
   /** S7-CHAT-FE-4 — phòng nào đang xem NGỮ CẢNH của một kết quả tìm kiếm. Vắng khoá = dòng thời gian thường. */
   contextByRoom: Record<string, ChatMessageContext>;
+  /**
+   * S8-CHAT-UX-FE-3 — `roomId → (userId → mốc HẾT HẠN ms)`. Vắng khoá = không ai đang gõ.
+   *
+   * Giữ mốc HẾT HẠN chứ không phải mốc NHẬN: hàm dọn chỉ cần so với `Date.now()`, không phải cộng trừ
+   * hằng số ở mỗi lần đọc — và nếu TTL đổi sau này thì các mốc đã ghi vẫn đúng nghĩa của lúc ghi.
+   */
+  typingByRoom: Record<string, Record<string, number>>;
+  /**
+   * S8-CHAT-UX-FE-3 — `userId → đang online`. Nguồn: ẢNH CHỤP từ roster + sự kiện `chat:presence`.
+   *
+   * ⚠️ Chỉ ĐẦY ĐỦ với người trong phòng `direct`: `ChatPresenceService.broadcast` chỉ fan-out tới peer DM
+   * (cố ý — phát trạng thái online của mọi người tới mọi phòng họ tham gia là rò lịch làm việc). Với phòng
+   * nhóm/phòng ban/dự án, giá trị ở đây chỉ mới bằng lần nạp roster gần nhất. Vắng khoá = **chưa biết**,
+   * và UI phải vẽ nó GIỐNG "offline" (không có chấm) — không có trạng thái thứ ba trên màn hình.
+   */
+  presenceByUser: Record<string, boolean>;
 
   setMyUserId: (userId: string | null) => void;
   setConnectionStatus: (status: ChatConnectionStatus) => void;
@@ -213,6 +246,36 @@ interface ChatStoreState {
   exitMessageContext: (roomId: string) => void;
   applyMessageRecalled: (event: WsChatMessageRecalledEvent) => void;
   applyReadEvent: (event: WsChatReadEvent) => void;
+
+  // ── S8-CHAT-UX-FE-3 ───────────────────────────────────────────────────────
+  /**
+   * Đặt THẲNG tổng hợp cảm xúc của một tin — dùng cho cập-nhật-lạc-quan **VÀ** cho hoàn nguyên.
+   *
+   * Cùng một hàm cho cả hai chiều là cố ý (khuôn `patchRoomPrefs` của FE-2): gọi lần hai với giá trị
+   * TRƯỚC là quay lại nguyên trạng, nên đường hoàn nguyên không thể lệch khỏi đường áp dụng.
+   * Cũng dùng cho response của `PUT` (nó trả tổng hợp mới KÈM `mine` — chính xác tuyệt đối).
+   */
+  patchMessageReactions: (
+    roomId: string,
+    messageId: string,
+    reactions: readonly ChatMessageReactionDto[],
+  ) => void;
+  /**
+   * `chat:reaction` — tổng hợp mới của một tin, đến từ WS.
+   *
+   * ⚠️ Payload này **HẸP HƠN** DTO REST: `mine` bị strip vì nó chỉ đúng với MỘT người còn sự kiện phát
+   * cho CẢ phòng (memory `ws-payload-narrower-than-rest-dto`). Vì thế hàm này **GIỮ NGUYÊN `mine`** đang
+   * có của mình và chỉ thay `count`. Đọc thẳng payload vào state là mỗi client vẽ một dấu tích sai.
+   */
+  applyReactionEvent: (event: WsChatReactionEvent) => void;
+  /** `chat:typing` — gia hạn chỉ báo của MỘT người trong MỘT phòng (`TYPING_TTL_MS`). */
+  applyTypingEvent: (event: WsChatTypingEvent) => void;
+  /** Dọn mọi mục "đang gõ" đã hết hạn. Trả state cũ khi không có gì đổi (khỏi re-render vô ích). */
+  pruneTyping: () => void;
+  /** `chat:presence` — chuyển trạng thái online/offline của MỘT người. */
+  applyPresenceEvent: (event: WsChatPresenceEvent) => void;
+  /** ẢNH CHỤP presence từ roster (`CHAT-API-007a`) — vá theo LÔ, không đụng người ngoài danh sách. */
+  hydratePresence: (entries: ReadonlyArray<{ userId: string; isOnline: boolean }>) => void;
   applyOptimisticSend: (clientMessageId: string, roomId: string, body: string) => void;
   resolvePendingSend: (clientMessageId: string, message: StoredChatMessage | null) => void;
   /**
@@ -403,6 +466,8 @@ const createInitialState = () => ({
   connectionStatus: "connecting" as ChatConnectionStatus,
   subscribedRoomIds: {} as Record<string, SubscribedRoom>,
   contextByRoom: {} as Record<string, ChatMessageContext>,
+  typingByRoom: {} as Record<string, Record<string, number>>,
+  presenceByUser: {} as Record<string, boolean>,
   hasLoadedRooms: false,
 });
 
@@ -551,11 +616,16 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // S7-CHAT-FE-4: mỏ neo ngữ cảnh phải đi cùng — bỏ lại là một mỏ neo mồ côi trỏ vào phòng mình
       // không còn quyền đọc, và nó sẽ chặn chèn nếu phòng đó quay lại (được thêm lại vào nhóm).
       const { [roomId]: _ctx, ...contextByRoom } = state.contextByRoom;
+      // S8-CHAT-UX-FE-3: chỉ báo "đang gõ" của phòng vừa mất quyền phải đi cùng. Bỏ lại thì nó tự hết hạn
+      // sau 5 s — nhưng `presenceByUser` thì KHÔNG dọn ở đây có chủ đích: nó theo NGƯỜI, không theo phòng,
+      // và cùng một người có thể còn ở phòng khác của mình.
+      const { [roomId]: _typing, ...typingByRoom } = state.typingByRoom;
       return {
         roomsById,
         messagesByRoom,
         subscribedRoomIds,
         contextByRoom,
+        typingByRoom,
         roomOrder: state.roomOrder.filter((id) => id !== roomId),
       };
     });
@@ -744,6 +814,88 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       const unreadCount = unreadFrom(room, event.lastReadSeq);
       if (room.unreadCount === unreadCount) return state;
       return { roomsById: { ...state.roomsById, [event.roomId]: { ...room, unreadCount } } };
+    }),
+
+  // ── S8-CHAT-UX-FE-3 — cảm xúc · đang gõ · đang online ───────────────────────
+
+  patchMessageReactions: (roomId, messageId, reactions) =>
+    set((state) => {
+      const list = state.messagesByRoom[roomId];
+      const at = list?.findIndex((m) => m.id === messageId) ?? -1;
+      // Tin không (còn) trong danh sách ⇒ bỏ qua. Dựng một tin rỗng chỉ để mang cảm xúc là tạo một bong
+      // bóng ma không có người gửi, không có nội dung, không có `roomSeq` để xếp chỗ.
+      if (!list || at === -1) return state;
+      const next = [...list];
+      next[at] = { ...list[at], reactions: [...reactions] };
+      return { messagesByRoom: { ...state.messagesByRoom, [roomId]: next } };
+    }),
+
+  applyReactionEvent: (event) =>
+    set((state) => {
+      const list = state.messagesByRoom[event.roomId];
+      const at = list?.findIndex((m) => m.id === event.messageId) ?? -1;
+      if (!list || at === -1) return state;
+      const stored = list[at];
+      // ⚠️ VẾ QUYẾT ĐỊNH: `mine` KHÔNG có trong payload (per-user, bị strip). Lấy lại từ bản đang giữ.
+      // Emoji mình chưa từng thả thì `mine` mặc định `false` — đúng, vì nếu mình vừa thả thì response PUT
+      // (đi qua `patchMessageReactions`) đã ghi `true` trước đó rồi.
+      const mineByEmoji = new Map((stored.reactions ?? []).map((r) => [r.emoji, r.mine]));
+      const next = [...list];
+      next[at] = {
+        ...stored,
+        reactions: event.reactions.map((r) => ({ ...r, mine: mineByEmoji.get(r.emoji) ?? false })),
+      };
+      return { messagesByRoom: { ...state.messagesByRoom, [event.roomId]: next } };
+    }),
+
+  applyTypingEvent: (event) =>
+    set((state) => {
+      // Ping của CHÍNH MÌNH: server phát cho cả phòng kể cả người vừa ping (payload không mang thông tin
+      // để nó lọc riêng ai). Lọc ở đây — hiện "bạn đang gõ" cho chính người đang gõ là vô nghĩa.
+      if (state.myUserId !== null && event.userId === state.myUserId) return state;
+      const room = state.typingByRoom[event.roomId] ?? {};
+      return {
+        typingByRoom: {
+          ...state.typingByRoom,
+          [event.roomId]: { ...room, [event.userId]: Date.now() + TYPING_TTL_MS },
+        },
+      };
+    }),
+
+  pruneTyping: () =>
+    set((state) => {
+      const now = Date.now();
+      let changed = false;
+      const typingByRoom: Record<string, Record<string, number>> = {};
+      for (const [roomId, byUser] of Object.entries(state.typingByRoom)) {
+        const kept = Object.entries(byUser).filter(([, expiresAt]) => expiresAt > now);
+        if (kept.length !== Object.keys(byUser).length) changed = true;
+        // Phòng không còn ai gõ ⇒ BỎ HẲN khoá, không giữ object rỗng: `Object.keys(typingByRoom)` là thứ
+        // các component đọc, và một khoá rỗng ở lại mãi làm nó khác `{}` vĩnh viễn.
+        if (kept.length > 0) typingByRoom[roomId] = Object.fromEntries(kept);
+      }
+      // Trả CHÍNH state cũ khi không có gì hết hạn: hàm này chạy mỗi giây, tạo object mới mỗi nhịp sẽ
+      // làm mọi component đọc `typingByRoom` render lại 60 lần/phút dù không có gì đổi.
+      return changed ? { typingByRoom } : state;
+    }),
+
+  applyPresenceEvent: (event) =>
+    set((state) => {
+      const isOnline = event.status === "online";
+      if (state.presenceByUser[event.userId] === isOnline) return state;
+      return { presenceByUser: { ...state.presenceByUser, [event.userId]: isOnline } };
+    }),
+
+  hydratePresence: (entries) =>
+    set((state) => {
+      let changed = false;
+      const presenceByUser = { ...state.presenceByUser };
+      for (const { userId, isOnline } of entries) {
+        if (presenceByUser[userId] === isOnline) continue;
+        presenceByUser[userId] = isOnline;
+        changed = true;
+      }
+      return changed ? { presenceByUser } : state;
     }),
 
   /** Bong bóng tạm. Gọi lại với CÙNG `clientMessageId` (bấm "gửi lại") thì ghi đè, KHÔNG tạo entry thứ hai. */
