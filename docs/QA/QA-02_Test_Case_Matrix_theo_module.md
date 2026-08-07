@@ -75,6 +75,14 @@ Tài liệu này dùng để:
 >
 > ⚠️ Module vẫn `is_active = false` trong `modules` — CHAT chưa bật cho người dùng cuối. "Test xong"
 > ≠ "đã phát hành".
+>
+> ⟲ **Cập nhật 2026-08-07 — wave `S8-CHAT-UX` (nâng cấp giao diện) đã nghiệm thu.** Thêm 82 ca int-spec
+> `chat-s8-*` + 3 suite unit mới; bằng chứng ở
+> [`evidence/S8-CHAT-UX-QA-1-ACCEPTANCE.md`](evidence/S8-CHAT-UX-QA-1-ACCEPTANCE.md) (ma trận deny-path
+> 11 route × 6 lớp chủ thể · cross-tenant 4 trục · 4 đột biến RED-trước-GREEN · coverage 12 file).
+> Đáng nhớ nhất: **hai nhánh tư cách avatar `department`/`project` của `CHAT-DEC-016` trước đó không có
+> một ca nào** — cả deny lẫn allow — nên một lỗi chính tả cặp quyền sẽ làm tính năng chết vĩnh viễn mà
+> toàn bộ suite vẫn xanh.
 
 ---
 

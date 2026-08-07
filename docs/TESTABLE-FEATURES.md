@@ -226,7 +226,33 @@ Bộ test tự động: 50 test trong `apps/fbpost` (`npm test`) + 10 test `apps
 
 **CHƯA test được (chờ triển khai):** đăng bài thật lên Facebook Page từ môi trường công ty — cần dịch vụ NSSM + domain public + 2 secret, xem [DEVOPS-14 §7](DEVOPS/DEVOPS-14_Social_Satellite_App_Deployment.md).
 
-**Nợ PROD:** migration `0544`/`0545` chưa áp lên DB PROD — **cùng nhóm nợ với `0542`/`0543`**.
+**Nợ PROD — ĐÃ TRẢ, đo lại 2026-08-07 (`S8-CHAT-UX-QA-1`):** `mediaos` (DB PROD) có **213/213** migration
+của repo, gồm `0542` · `0543` · `0544` · `0545`; kiểm bằng schema chứ không chỉ bằng sổ migration
+(`chat_message_reactions` tồn tại · `chat_room_members.pinned_at` + `marked_unread_at` · `chat_rooms.avatar_file_id`
+· `chat_messages.file_url`/`file_name` đã DROP) vì migration thiếu entry trong `_journal.json` vẫn in
+"applied" rồi bị bỏ qua trong im lặng. **Không còn nợ migration nào cho PROD.**
+
+---
+
+## 5c. CHAT — nâng cấp giao diện (wave S8-CHAT-UX, nghiệm thu 07/08/2026)
+
+⚠️ Module `CHAT` vẫn `is_active = false` trong `modules`. Đó **không** phải cổng chặn (route vẫn gọi
+được — xem `docs/DECISIONS`), nhưng nghĩa là wave này chưa được tuyên bố phát hành cho người dùng cuối.
+
+| Việc | Cách kiểm | Kỳ vọng |
+| --- | --- | --- |
+| Chia mục hội thoại | mở `/chat` | Ghim · Riêng · Nhóm · Phòng ban · Dự án; mục rỗng ẩn hẳn; thu/mở nhớ theo người dùng |
+| Ghim hội thoại | menu ngữ cảnh mỗi dòng → Ghim | lên mục Ghim; ghim quá 10 ⇒ báo `CHAT-ERR-021` |
+| Tắt thông báo / đánh dấu chưa đọc | menu ngữ cảnh | tắt rồi vẫn tăng số chưa đọc, chỉ không đẩy thông báo |
+| Avatar phòng | phòng **nhóm**: admin phòng đổi được · phòng **phòng ban**: người sửa được đơn vị đó · phòng **dự án**: Owner/Manager · phòng **riêng**: không có | sai tư cách ⇒ `CHAT-ERR-023`; phòng riêng ⇒ `CHAT-ERR-022` |
+| Avatar người gửi + gộp tin | mở một phòng có nhiều tin liên tiếp | chỉ tin đầu của cụm có avatar + tên; tin hệ thống không gộp |
+| Thả cảm xúc | rê chuột lên bong bóng → chọn 1 trong 6 emoji | bấm lại để bỏ; emoji ngoài bộ ⇒ `CHAT-ERR-025` |
+| Đang gõ / đang online | hai tài khoản, hai trình duyệt | "đang gõ" tự tắt sau 5s; chấm online chỉ ở phòng riêng + danh sách thành viên |
+
+Bộ test tự động: **82 ca** int-spec (`chat-s8-*.int-spec.ts`, cần `LANE_DB`) + **515 ca** unit
+`src/chat`+`src/realtime` + **374 ca** FE `apps/app`. Bằng chứng nghiệm thu (ma trận deny-path ·
+RED-trước-GREEN · cross-tenant · coverage):
+[`QA/evidence/S8-CHAT-UX-QA-1-ACCEPTANCE.md`](QA/evidence/S8-CHAT-UX-QA-1-ACCEPTANCE.md).
 
 ---
 

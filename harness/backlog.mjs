@@ -11323,10 +11323,23 @@ export const backlog = [
       "Nghiệm thu wave S8-CHAT-UX: deny-path + cross-tenant + coverage ≥80% + xác minh ratchet không bị nới",
     zone: "yellow",
     status: "todo",
+    // ⚠️ ĐÍNH CHÍNH 07/08 (đo khi thi công) — `paths` seed gốc BỎ SÓT đúng nơi lỗ nằm.
+    //  1. Deny-path của wave sống ở `apps/api/test/integration/**`, KHÔNG ở `src/**/*.spec.ts`: 5 file
+    //     int-spec của BE-1/BE-2/BE-3/RT-1/FE-3 nằm hết ở đó, và ca bổ sung của WO này cũng vậy.
+    //     Thiếu ⇒ `guard-scope` cảnh báo oan và gate đọc sai vùng chạm (memory
+    //     `wo-paths-drive-gate-and-scheduler`).
+    //  2. Ratchet phải soi riêng (`done_when` 3) gồm `chat-realtime-structure.spec.ts` ở
+    //     `apps/api/src/realtime/**` — cũng ngoài hai glob cũ; ca cross-tenant presence bổ sung nằm cạnh nó.
+    //  3. Nợ migration PROD ghi ở `docs/RELEASE/**` + `docs/TESTABLE-FEATURES.md`.
     paths: [
       "apps/api/src/chat/**/*.spec.ts",
+      "apps/api/src/realtime/**/*.spec.ts",
+      "apps/api/test/integration/chat-s8-*.int-spec.ts",
+      "apps/api/test/integration/s7-chat-db1-invariants.int-spec.ts",
       "apps/app/src/components/chat/**/*.spec.tsx",
       "docs/QA/**",
+      "docs/RELEASE/**",
+      "docs/TESTABLE-FEATURES.md",
       "docs/plans/S8-CHAT-UX-QA-1.md",
     ],
     skills: ["code-review", "security-review"],

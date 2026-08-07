@@ -103,6 +103,27 @@ describe("ChatPresenceService — không gian khoá theo MÔI TRƯỜNG (done_wh
     expect([...shared.keys()]).toEqual([prod.svc.presenceKey(CO, USER)]);
   });
 
+  it("🔒 hai CÔNG TY dùng chung một Valkey cũng KHÔNG thấy nhau (S8-CHAT-UX-QA-1 — cross-tenant presence)", async () => {
+    // Vế công ty của cùng phép tách. Ca kề trên chứng minh {envScope} tách được hai MÔI TRƯỜNG; ca này
+    // chứng minh {companyId} tách được hai TENANT — cùng một kho, cùng một userId.
+    //
+    // Vì sao phải có ca riêng: `presenceKey` chứa `companyId`, nhưng `getOnlineUserIds` nhận `companyId`
+    // như một THAM SỐ. Một bản vá "tối ưu" đọc thẳng khoá theo userId (bỏ tenant khỏi khoá, hoặc đọc
+    // SCAN theo hậu tố) sẽ vẫn đúng chính tả khoá ở ca kề trên mà rò chấm-online chéo công ty ở đây.
+    const shared = new Map<string, FakeEntry>();
+    const coA = makeService({ valkey: makeFakeValkey(shared), envScope: "production:mediaos" });
+    const coB = makeService({ valkey: makeFakeValkey(shared), envScope: "production:mediaos" });
+    const CO_B = "33333333-3333-4333-8333-333333333333";
+
+    await coA.svc.markOnline(CO, USER, "socket-a");
+
+    expect(await coA.svc.getOnlineUserIds(CO, [USER]), "đối chứng dương").toEqual([USER]);
+    expect(await coB.svc.getOnlineUserIds(CO_B, [USER]), "công ty B KHÔNG thấy ai online").toEqual(
+      [],
+    );
+    expect(coA.svc.presenceKey(CO, USER)).not.toBe(coB.svc.presenceKey(CO_B, USER));
+  });
+
   it("khoá mang cả phạm vi môi trường lẫn công ty", () => {
     const { svc } = makeService({
       valkey: makeFakeValkey(new Map()),
@@ -302,5 +323,39 @@ describe("ChatPresenceService — getOnlineUserIds (chuẩn bị cho ảnh chụ
 
   it("danh sách rỗng ⇒ rỗng, không đụng Valkey", async () => {
     expect(await svc.getOnlineUserIds(CO, [])).toEqual([]);
+  });
+
+  it("🔒 MỘT khoá lỗi KHÔNG giết cả danh sách — người còn lại vẫn đúng, và lỗi có LOG (S8-CHAT-UX-QA-1)", async () => {
+    // Đo coverage 07/08: nhánh `catch` này (`chat-presence-reader.service.ts:75-81`) chưa từng chạy.
+    // Nó là đường mà cả roster đi qua: nuốt im lặng ⇒ presence chết dần mà không ai biết; ném lên ⇒ cả
+    // danh sách thành viên 500 vì một tính năng mỹ thuật. Cả hai đều sai, nên phải có ca ghim ở giữa.
+    const store = new Map<string, FakeEntry>();
+    const flaky = makeFakeValkey(store);
+    const good = "44444444-4444-4444-8444-444444444444";
+    const bad = "55555555-5555-4555-8555-555555555555";
+    const built = makeService({ valkey: flaky });
+    await built.svc.markOnline(CO, good, "s1");
+    await built.svc.markOnline(CO, bad, "s2");
+
+    const badKey = built.svc.presenceKey(CO, bad);
+    (flaky.sCard as unknown as { mockImplementation: (f: unknown) => void }).mockImplementation(
+      async (key: string) => {
+        if (key === badKey) throw new Error("valkey timeout");
+        return store.get(key)?.members.size ?? 0;
+      },
+    );
+    const warn = vi
+      .spyOn(
+        (built.reader as unknown as { logger: { warn: (m: string, c?: unknown) => void } }).logger,
+        "warn",
+      )
+      .mockImplementation(() => undefined);
+
+    expect(await built.svc.getOnlineUserIds(CO, [good, bad]), "người kia vẫn phải online").toEqual([
+      good,
+    ]);
+    expect(warn, "nuốt im lặng = presence chết dần không ai biết").toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0] as string).toContain(bad);
+    warn.mockRestore();
   });
 });
