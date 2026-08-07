@@ -68,9 +68,20 @@ export function toChatRoomDto(
    * đường MỘT PHÒNG truyền chúng vào đây từ `assertMember().membership`. Tham số thắng `row`.
    */
   prefs?: ChatRoomMemberPrefs,
+  /**
+   * S8-CHAT-UX-BE-2 — URL avatar phòng ĐÃ KÝ, do `ChatRoomAvatarPresignService` cấp theo LÔ.
+   *
+   * Mapper KHÔNG tự đi lấy: lấy cần truy vấn, ký cần storage adapter, còn mapper là hàm THUẦN — cùng
+   * lý do `toChatMessageDto` bắt caller truyền `attachments`/`reactions` vào.
+   *
+   * Mặc định `null` (không phải `undefined`): thiếu khoá thì JSON nuốt mất trường và FE không phân
+   * biệt được "server chưa có tính năng" với "phòng chưa đặt ảnh".
+   */
+  avatarUrl: string | null = null,
 ): ChatRoomDto {
   const p = prefs ?? row;
   return {
+    avatarUrl,
     id: row.id,
     companyId: row.companyId,
     refId: row.refId,
@@ -170,9 +181,11 @@ export function toChatRoomDetailDto(
   unreadCount: number,
   /** S8-CHAT-UX-BE-1 — BẮT BUỘC: caller luôn có `assertMember().membership` trong tay ở đường này. */
   prefs: ChatRoomMemberPrefs,
+  /** S8-CHAT-UX-BE-2 — URL avatar đã ký (xem `toChatRoomDto`). `null` = chưa đặt / không hợp lệ. */
+  avatarUrl: string | null = null,
 ): ChatRoomDetailDto {
   return {
-    ...toChatRoomDto(room, unreadCount, prefs),
+    ...toChatRoomDto(room, unreadCount, prefs, avatarUrl),
     members: members.map(toChatMemberDto),
     myRole,
   };

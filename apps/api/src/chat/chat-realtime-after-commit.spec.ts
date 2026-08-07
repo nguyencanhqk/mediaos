@@ -268,6 +268,10 @@ describe("emit SAU COMMIT — ChatRoomsService.createGroup", () => {
       { allocate: vi.fn(async () => "ROOM-0001") } as never,
       audit() as never,
       realtime as unknown as RealtimeEmitterService,
+      // S8-CHAT-UX-BE-2 — `ChatRoomAvatarPresignService`. Các đường trong file này (createGroup /
+      // updateRoom / archive…) KHÔNG ký avatar (chỉ `listRooms`/`getRoom` ký), nên stub trả map RỖNG
+      // là đủ VÀ đúng: nếu một ngày chúng bắt đầu ký, ca test thấy `avatarUrl: null` — không phải URL giả.
+      { resolveRoomAvatars: vi.fn(async () => new Map<string, string>()) } as never,
     );
     return { svc, realtime };
   }

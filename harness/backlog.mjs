@@ -11080,13 +11080,32 @@ export const backlog = [
       "Avatar phòng cho group/department/project — presign wrapper gate ('update','chat-room') sao khuôn ChatFilesService + resolver riêng; direct KHÔNG có avatar riêng (dẫn xuất)",
     zone: "red",
     status: "todo",
+    // ⚠️ NỚI 07/08/2026 (owner chốt) — `apps/api/src/tasks/**` và `foundation/files/**` KHÔNG có trong
+    // bản seed. Lý do bắt buộc, không phải scope creep:
+    //   • `tasks/project-membership.{service,module}.ts` = MODULE LÁ tách ra để phá vòng DI
+    //     `Chat → Tasks → Chat` (`tasks.module.ts` ĐÃ import `ChatModule`). Không tách thì nhánh
+    //     `project` của CHAT-DEC-016 KHÔNG thi công được. Xem plan §2.1.
+    //   • `foundation/files/file.repository.ts` = `findVerifiedRoomAvatarsTx` — đường ĐỌC self-defending
+    //     phải sống cạnh `findVerifiedTaskCoversTx` vì foundation KHÔNG phụ thuộc ngược lên chat.
+    // `wo-paths-drive-gate-and-scheduler`: thiếu khai ở đây là lọt gate + hook `guard-scope` báo động.
     paths: [
       "apps/api/src/chat/chat-room-avatar.service.ts",
       "apps/api/src/chat/chat-room-avatar.controller.ts",
+      "apps/api/src/chat/chat-room-avatar.repository.ts",
       "apps/api/src/chat/chat-room-avatar-file.resolver.ts",
+      "apps/api/src/chat/chat-room-avatar-presign.service.ts",
+      "apps/api/src/chat/chat-file.constants.ts",
+      "apps/api/src/chat/chat-rooms.service.ts",
+      "apps/api/src/chat/chat.errors.ts",
       "apps/api/src/chat/chat.module.ts",
       "apps/api/src/chat/chat.mapper.ts",
       "apps/api/src/chat/**/*.spec.ts",
+      "apps/api/src/foundation/files/file.repository.ts",
+      "apps/api/src/tasks/project-membership.service.ts",
+      "apps/api/src/tasks/project-membership.module.ts",
+      "apps/api/src/tasks/project-access.service.ts",
+      "apps/api/src/tasks/tasks.module.ts",
+      "apps/api/test/integration/chat-s8-be2-room-avatar.int-spec.ts",
       "packages/contracts/src/chat.ts",
       "docs/plans/S8-CHAT-UX-BE-2.md",
     ],
