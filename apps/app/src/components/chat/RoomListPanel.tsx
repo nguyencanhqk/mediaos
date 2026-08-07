@@ -15,10 +15,12 @@ import { useQuery } from "@tanstack/react-query";
 // tượng kính lúp cạnh nhau là lời mời gõ nhầm ô — chính hiểu nhầm mà docblock `visible` cảnh báo.
 import {
   Archive,
+  BellOff,
   ChevronDown,
   ChevronRight,
   Filter,
   MessageSquarePlus,
+  Pin,
   Search,
 } from "lucide-react";
 import { chatApi, chatKeys, useAuthStore, useCan } from "@mediaos/web-core";
@@ -27,6 +29,15 @@ import type { ChatRoomDto } from "@mediaos/contracts";
 import { useChatStore } from "@/stores/chat.store";
 import { CHAT_PAIRS } from "@/routes/chat/constants";
 import { formatClock } from "./chat-format";
+import { RoomAvatar } from "./RoomAvatar";
+import { RoomRowMenu } from "./RoomRowMenu";
+import {
+  isRoomMuted,
+  isRoomPinned,
+  isRoomUnreadLooking,
+  type MutePresetKey,
+} from "./chat-room-prefs";
+import { useRoomPrefs } from "./use-room-prefs";
 import {
   buildRoomSections,
   collapsedStorageKey,
@@ -55,9 +66,20 @@ export function RoomListPanel({
 }: RoomListPanelProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const canCreate = useCan(CHAT_PAIRS.CREATE_ROOM.action, CHAT_PAIRS.CREATE_ROOM.resourceType);
+  // S8-CHAT-UX-FE-2 — cổng của DUY NHẤT mục "Lưu trữ phòng" trong menu. Ba mục còn lại (ghim · tắt
+  // thông báo · đánh dấu chưa đọc) là tuỳ chọn CÁ NHÂN và không hỏi cặp quản trị nào — xem `useRoomPrefs`.
+  const canArchive = useCan(CHAT_PAIRS.ARCHIVE_ROOM.action, CHAT_PAIRS.ARCHIVE_ROOM.resourceType);
 
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  /** Menu ĐANG mở của phòng nào — một tại một thời điểm (mở cái thứ hai tự đóng cái trước). */
+  const [openMenuRoomId, setOpenMenuRoomId] = useState<string | null>(null);
+  /**
+   * Lỗi của một THAO TÁC trong menu, không phải của khung nhìn — nên nó nằm ở đầu cột dưới dạng dải
+   * `role="alert"`, không thay thế danh sách. Nuốt câm là điều duy nhất không được phép: người dùng vừa
+   * thấy phòng nhảy lên mục "Đã ghim" rồi nhảy về, mà không có chữ nào nói vì sao.
+   */
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const roomsById = useChatStore((s) => s.roomsById);
   const roomOrder = useChatStore((s) => s.roomOrder);
@@ -92,9 +114,58 @@ export function RoomListPanel({
   }, [query, resolvedNames, roomOrder, roomsById, showArchived]);
 
   // ─── S8-CHAT-UX-FE-1: chia mục theo loại phòng (CHAT-DEC-013) ───
-  // KHÔNG truyền vị từ ghim: cột `pinned_at` chưa tồn tại (mig nằm ở S8-CHAT-UX-DB-1) ⇒ mục "Đã ghim"
-  // chưa xuất hiện. Nối vị từ thật ở FE-2, sau khi BE-1 land.
+  // S8-CHAT-UX-FE-2 — vị từ ghim THẬT đã là mặc định của `buildRoomSections` (`pinnedAt` từ BE-1). Mục
+  // "Đã ghim" xuất hiện ngay khi có ít nhất một phòng ghim, và ghim THẮNG loại phòng (mỗi phòng đúng
+  // một node — memory `duplicate-sibling-key-leaks-dom-node`).
   const sections = useMemo(() => buildRoomSections(visible), [visible]);
+
+  // Destructure NGAY: `useRoomPrefs` trả object mới mỗi lần render, còn `mutate` của React Query thì ổn
+  // định. Để `[prefs]` trong dependency của `useCallback` bên dưới là một `useCallback` không bao giờ
+  // ghi nhớ được gì — trông như có tối ưu mà thực ra không.
+  const {
+    pin: pinRoom,
+    mute: muteRoom,
+    markUnread: markRoomUnread,
+    archive: archiveRoom,
+    isBusy,
+  } = useRoomPrefs(setActionError);
+
+  /**
+   * Ảnh chụp giá trị TRƯỚC dựng ngay tại điểm bấm rồi đưa vào `mutate` — KHÔNG đọc lại store trong
+   * `mutationFn`/`onError` (memory `react-query-v5-stale-mutationfn-closure`): closure ở đó giữ ảnh chụp
+   * của lần render tạo ra nó, nên hoàn nguyên sẽ ghi lại một giá trị đã lỗi thời.
+   */
+  const togglePin = useCallback(
+    (room: ChatRoomDto) => {
+      setActionError(null);
+      pinRoom({ roomId: room.id, pin: !isRoomPinned(room), before: { pinnedAt: room.pinnedAt } });
+    },
+    [pinRoom],
+  );
+
+  const mute = useCallback(
+    (room: ChatRoomDto, preset: MutePresetKey | null) => {
+      setActionError(null);
+      muteRoom({ roomId: room.id, preset, before: { mutedUntil: room.mutedUntil } });
+    },
+    [muteRoom],
+  );
+
+  const markUnread = useCallback(
+    (room: ChatRoomDto) => {
+      setActionError(null);
+      markRoomUnread({ roomId: room.id, before: { markedUnreadAt: room.markedUnreadAt } });
+    },
+    [markRoomUnread],
+  );
+
+  const archive = useCallback(
+    (room: ChatRoomDto) => {
+      setActionError(null);
+      archiveRoom({ roomId: room.id });
+    },
+    [archiveRoom],
+  );
 
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const storageKey = useMemo(() => collapsedStorageKey(userId), [userId]);
@@ -124,7 +195,9 @@ export function RoomListPanel({
 
   const sectionLabel = useCallback(
     (key: string): string =>
-      key === "pinned" ? t("rooms.sections.pinned") : t(`rooms.types.${key}`, { defaultValue: key }),
+      key === "pinned"
+        ? t("rooms.sections.pinned")
+        : t(`rooms.types.${key}`, { defaultValue: key }),
     [t],
   );
 
@@ -182,6 +255,22 @@ export function RoomListPanel({
         </Button>
       </div>
 
+      {actionError !== null && (
+        <div
+          className="flex items-start gap-2 border-b border-destructive/40 bg-destructive/10 px-3 py-2"
+          role="alert"
+        >
+          <p className="min-w-0 flex-1 text-xs text-destructive">{actionError}</p>
+          <button
+            type="button"
+            className="shrink-0 text-xs text-muted-foreground underline"
+            onClick={() => setActionError(null)}
+          >
+            {t("search.dismiss")}
+          </button>
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 overflow-y-auto">
         {isBootstrapping || (showArchived && archivedQuery.isLoading) ? (
           <div className="space-y-2 p-3" aria-busy="true" data-testid="chat-rooms-loading">
@@ -235,9 +324,7 @@ export function RoomListPanel({
                         name: label,
                       })}
                     >
-                      {section.unreadTotal > 99
-                        ? t("rooms.unreadOverflow")
-                        : section.unreadTotal}
+                      {section.unreadTotal > 99 ? t("rooms.unreadOverflow") : section.unreadTotal}
                     </Badge>
                   )}
                 </button>
@@ -255,6 +342,14 @@ export function RoomListPanel({
                         }
                         isSelected={room.id === selectedRoomId}
                         onSelect={onSelectRoom}
+                        isMenuOpen={openMenuRoomId === room.id}
+                        onMenuOpenChange={(open) => setOpenMenuRoomId(open ? room.id : null)}
+                        canArchive={canArchive}
+                        isBusy={isBusy}
+                        onTogglePin={togglePin}
+                        onMute={mute}
+                        onMarkUnread={markUnread}
+                        onArchive={archive}
                       />
                     ))}
                   </ul>
@@ -274,54 +369,131 @@ interface RoomRowProps {
   label: string;
   isSelected: boolean;
   onSelect: (roomId: string) => void;
+  // ── S8-CHAT-UX-FE-2 — menu ngữ cảnh. Trạng thái mở nằm ở CẤP TRÊN (một menu tại một thời điểm). ──
+  isMenuOpen: boolean;
+  onMenuOpenChange: (open: boolean) => void;
+  canArchive: boolean;
+  isBusy: boolean;
+  onTogglePin: (room: ChatRoomDto) => void;
+  onMute: (room: ChatRoomDto, preset: MutePresetKey | null) => void;
+  onMarkUnread: (room: ChatRoomDto) => void;
+  onArchive: (room: ChatRoomDto) => void;
 }
 
 /**
  * S8-CHAT-UX-FE-1 — tách khỏi `RoomListPanel` khi thân hàm phình vì vòng lặp lồng (mục → phòng).
- * Nội dung một dòng GIỮ NGUYÊN so với S7-CHAT-FE-2: WO này chỉ đổi cách XẾP các dòng, không đổi dòng.
+ *
+ * S8-CHAT-UX-FE-2 đổi CẤU TRÚC hàng: trước đây cả dòng là MỘT `<button>`. Nút `…` của menu không thể
+ * nằm trong đó (`<button>` lồng `<button>` — HTML không hợp lệ, hành vi bấm/hội tụ không xác định), nên
+ * hàng thành một `<div>` flex với hai anh em: nút chọn phòng (phủ phần còn lại) và nút mở menu.
+ * `data-testid="chat-room-item"` GIỮ NGUYÊN trên nút chọn — nó là thứ mọi test đang bấm để chọn phòng.
  */
-function RoomRow({ room, label, isSelected, onSelect }: RoomRowProps): React.ReactElement {
+function RoomRow({
+  room,
+  label,
+  isSelected,
+  onSelect,
+  isMenuOpen,
+  onMenuOpenChange,
+  canArchive,
+  isBusy,
+  onTogglePin,
+  onMute,
+  onMarkUnread,
+  onArchive,
+}: RoomRowProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const unread = room.unreadCount ?? 0;
+  const muted = isRoomMuted(room);
+  // Đậm khi CÓ tin chưa đọc HOẶC người dùng tự đánh dấu chưa đọc: `markRoomUnread` cố ý KHÔNG đổi
+  // `unreadCount` (con trỏ `last_read_seq` chỉ tiến — SPEC-15 §13.2), nên suy độ đậm từ mỗi badge là bỏ
+  // rơi đúng thao tác người dùng vừa làm.
+  const looksUnread = isRoomUnreadLooking(room);
 
   return (
     <li>
-      <button
-        type="button"
-        onClick={() => onSelect(room.id)}
-        aria-current={isSelected ? "true" : undefined}
-        data-testid="chat-room-item"
+      <div
+        // Chuột phải ở BẤT KỲ đâu trên hàng (kể cả vùng nút menu) đều mở menu — lối tắt của lối bàn
+        // phím ngay bên cạnh, không phải lối duy nhất.
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onMenuOpenChange(true);
+        }}
         className={cn(
-          "flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent",
+          "flex w-full items-center gap-1 pr-1.5 hover:bg-accent",
           isSelected && "bg-accent",
         )}
       >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2">
-            <span className={cn("min-w-0 flex-1 truncate text-sm", unread > 0 && "font-semibold")}>
-              {label}
-            </span>
-            {room.lastMessageAt && (
-              <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
-                {formatClock(room.lastMessageAt)}
+        <button
+          type="button"
+          onClick={() => onSelect(room.id)}
+          aria-current={isSelected ? "true" : undefined}
+          data-testid="chat-room-item"
+          className="flex min-w-0 flex-1 items-center gap-2 py-2 pl-3 text-left"
+        >
+          <RoomAvatar room={room} label={label} size="md" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-2">
+              <span
+                className={cn("min-w-0 flex-1 truncate text-sm", looksUnread && "font-semibold")}
+              >
+                {label}
               </span>
-            )}
+              {room.lastMessageAt && (
+                <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                  {formatClock(room.lastMessageAt)}
+                </span>
+              )}
+            </div>
+            <p className="truncate text-xs text-muted-foreground">
+              {t(`rooms.types.${room.roomType}`)}
+              {room.isArchived ? ` · ${t("rooms.archivedBadge")}` : ""}
+              {!room.lastMessageAt ? ` · ${t("rooms.noMessageYet")}` : ""}
+            </p>
           </div>
-          <p className="truncate text-xs text-muted-foreground">
-            {t(`rooms.types.${room.roomType}`)}
-            {room.isArchived ? ` · ${t("rooms.archivedBadge")}` : ""}
-            {!room.lastMessageAt ? ` · ${t("rooms.noMessageYet")}` : ""}
-          </p>
-        </div>
-        {unread > 0 && (
-          <Badge
-            className="shrink-0 tabular-nums"
-            aria-label={t("rooms.unreadAria", { count: unread })}
-          >
-            {unread > 99 ? t("rooms.unreadOverflow") : unread}
-          </Badge>
-        )}
-      </button>
+          {/* Ghim và tắt thông báo phải thấy được NGAY TRÊN DÒNG. Nằm trong menu thì người dùng phải mở
+              từng phòng mới biết phòng nào đang tắt — tức không bao giờ biết. */}
+          {/* `role="img"` bắt buộc: một `<svg>` mang `aria-label` mà không có role thì trình đọc màn
+              hình bỏ qua nhãn — biểu tượng "đang tắt thông báo" chỉ tồn tại với người nhìn thấy nó. */}
+          {isRoomPinned(room) && (
+            <Pin
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              role="img"
+              aria-label={t("rooms.pinnedAria")}
+              data-testid="chat-room-pinned-icon"
+            />
+          )}
+          {muted && (
+            <BellOff
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              role="img"
+              aria-label={t("rooms.mutedAria")}
+              data-testid="chat-room-muted-icon"
+            />
+          )}
+          {unread > 0 && (
+            <Badge
+              className="shrink-0 tabular-nums"
+              aria-label={t("rooms.unreadAria", { count: unread })}
+            >
+              {unread > 99 ? t("rooms.unreadOverflow") : unread}
+            </Badge>
+          )}
+        </button>
+
+        <RoomRowMenu
+          room={room}
+          label={label}
+          open={isMenuOpen}
+          onOpenChange={onMenuOpenChange}
+          canArchive={canArchive}
+          isBusy={isBusy}
+          onTogglePin={onTogglePin}
+          onMute={onMute}
+          onMarkUnread={onMarkUnread}
+          onArchive={onArchive}
+        />
+      </div>
     </li>
   );
 }

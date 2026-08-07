@@ -46,9 +46,15 @@ import {
   type SendMessageRequest,
   type UpdateChatMemberRequest,
   type UpdateChatRoomRequest,
+  // S8-CHAT-UX-FE-2 — avatar phòng dùng LẠI schema của `/me/avatar`: BE
+  // (`ChatRoomAvatarController`) cũng khai `createZodDto` từ đúng hai schema này, nên nhân bản một cặp
+  // schema riêng chỉ để đổi tên là thêm một bản sao sẽ trôi khỏi hợp đồng thật.
+  meAvatarUploadUrlResponseSchema,
+  setMeAvatarInputSchema,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
+import { DEFAULT_UPLOAD_MIME, putBytesToStorage } from "./storage-upload";
 
 /**
  * S7-CHAT-FE-1 — CHAT API client (SPEC-15 · API-13 §5.1). MIRROR BE `ChatRoomsController`
@@ -333,6 +339,57 @@ export const chatApi = {
       `/chat/rooms/${roomId}/files${buildQueryString(query ?? {})}`,
       z.array(chatRoomFileSchema),
     ),
+};
+
+// ═══════════ S8-CHAT-UX-FE-2 — ẢNH ĐẠI DIỆN PHÒNG (CHAT-DEC-016, BE `ChatRoomAvatarController`) ═══
+
+/** Phản hồi của `POST /chat/rooms/:id/avatar` — CHỈ `{fileId}`, KHÔNG có URL. Xem docblock dưới. */
+export interface SetChatRoomAvatarResult {
+  fileId: string;
+}
+
+/**
+ * Đặt/gỡ ảnh đại diện phòng — tách khỏi `chatApi` vì đây là đường GHI TỆP, **đúng lý do BE tách
+ * `ChatRoomAvatarController` khỏi `ChatRoomsController`**: nó đi qua `FileService` chứ không phải CRUD phòng.
+ *
+ * Ba pha, sao khuôn `employeeAvatarApi` (`upload-url` → PUT bytes → confirm+gắn). Bất kỳ pha nào lỗi thì
+ * **ném NGAY** — không được âm thầm bỏ pha sau, vì "gắn một fileId chưa có bytes" tạo ra một phòng có ảnh
+ * đại diện tải-không-được và không có gì trên UI nói vì sao (silent-failure).
+ *
+ * ⚠️ Pha (3) trả `{fileId}`, **KHÔNG trả `avatarUrl`** — cố ý ở BE: đường ĐỌC ảnh đi qua
+ * `ChatRoomAvatarPresignService` ký MỘT LÔ cho cả danh sách phòng (CHAT-DEC-019). Caller PHẢI tải lại
+ * phòng/danh sách để lấy URL ký tươi; **tuyệt đối không** tự dựng URL từ `fileId`, và không cache URL
+ * đã nhận (TTL ngắn — cache lại là dựng một đường tải sống lâu hơn quyết định quyền đã cấp ra nó).
+ *
+ * ⚠️ Ai được gọi thì do SERVER quyết theo `room_type` (CHAT-DEC-016, bốn nhánh — SPEC-15 §11b). Client
+ * ẩn nút theo cùng bảng đó để không hứa suông, nhưng cổng THẬT vẫn ở server: `direct` ⇒ 422
+ * (CHAT-ERR-022), thiếu tư cách ⇒ 403 (CHAT-ERR-023), không phải thành viên ⇒ 404 (CHAT-ERR-001).
+ */
+export const chatRoomAvatarApi = {
+  /**
+   * Upload + gắn ảnh cho phòng `roomId`. Whitelist tường minh `{originalName, declaredMimeType, sizeBytes}`
+   * rồi `{fileId}` — chủ sở hữu tệp và phòng đích đều do server suy từ actor + `:id` đã authorize.
+   */
+  uploadRoomAvatar: async (roomId: string, file: File): Promise<SetChatRoomAvatarResult> => {
+    const declaredMimeType = file.type || DEFAULT_UPLOAD_MIME;
+    const reg = await apiFetch(
+      `/chat/rooms/${roomId}/avatar/upload-url`,
+      meAvatarUploadUrlResponseSchema,
+      {
+        method: "POST",
+        body: JSON.stringify({ originalName: file.name, declaredMimeType, sizeBytes: file.size }),
+      },
+    );
+    await putBytesToStorage(reg.uploadUrl, file, declaredMimeType);
+    return apiFetch(`/chat/rooms/${roomId}/avatar`, setMeAvatarInputSchema, {
+      method: "POST",
+      body: JSON.stringify({ fileId: reg.fileId }),
+    });
+  },
+
+  /** DELETE /chat/rooms/:id/avatar — gỡ ảnh (**204**, idempotent: phòng chưa có ảnh vẫn 204). */
+  removeRoomAvatar: (roomId: string): Promise<void> =>
+    apiFetch(`/chat/rooms/${roomId}/avatar`, z.void(), { method: "DELETE" }),
 };
 
 // ═══════════ S7-CHAT-FE-5 🔒 — ĐỌC-VƯỢT MEMBERSHIP (CHAT-API-018a/b/c + 019) ═══════════

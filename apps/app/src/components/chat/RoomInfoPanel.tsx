@@ -20,6 +20,7 @@ import { EmployeeMultiPickerDialog } from "@/components/EmployeeMultiPickerDialo
 import { useChatStore } from "@/stores/chat.store";
 import { CHAT_PAIRS } from "@/routes/chat/constants";
 import { formatClock } from "./chat-format";
+import { RoomAvatarEditor } from "./RoomAvatarEditor";
 import { RoomFilesTab } from "./RoomFilesTab";
 
 type RoomInfoTab = "members" | "files" | "pinned";
@@ -181,6 +182,21 @@ export function RoomInfoPanel({
           </p>
         )}
       </header>
+
+      {/*
+       * S8-CHAT-UX-FE-2 — đặt/gỡ ảnh đại diện phòng (CHAT-FUNC-018). Component TỰ trả `null` khi người
+       * xem không đủ tư cách theo CHAT-DEC-016 — cổng nằm trong nó vì luật có BỐN nhánh theo loại phòng
+       * và mỗi nhánh hỏi một nguồn quyền khác; rải bốn điều kiện đó ra đây là chép luật lần thứ hai.
+       *
+       * Nhãn dùng `name ?? roomCode`: phòng `direct` (thứ duy nhất cần nhãn dẫn xuất) không bao giờ
+       * render khối này — DEC-016 nhánh `direct` = **không ai** được đặt.
+       */}
+      <RoomAvatarEditor
+        room={room}
+        label={room.name ?? room.roomCode}
+        myRole={myRole}
+        onChanged={onChanged}
+      />
 
       {error !== null && (
         <p

@@ -172,6 +172,22 @@ interface ChatStoreState {
    */
   hasLoadedRooms: boolean;
   applyRoomEvent: (event: WsChatRoomEvent) => ChatRoomEffect;
+  /**
+   * S8-CHAT-UX-FE-2 — vá 3 TUỲ CHỌN PER-USER của một phòng (ghim · tắt thông báo · đánh dấu chưa đọc).
+   *
+   * Dùng cho cập-nhật-lạc-quan VÀ cho hoàn nguyên khi API lỗi: cùng một hàm, gọi lần hai với giá trị
+   * TRƯỚC là quay lại nguyên trạng.
+   *
+   * Vì sao KHÔNG dùng `hydrateRooms` cho việc này: `hydrateRooms` đi qua `mergeServerRoom`, thứ so mốc
+   * nước `lastMessageSeq` để chống lost-update từ SERVER. Một bản vá cục bộ không có `lastMessageSeq`
+   * (và không được phép có) sẽ bị luật đó xử lý như một ảnh chụp cũ — im lặng không áp dụng.
+   *
+   * Chỉ nhận đúng ba khoá: mọi trường khác của phòng là dữ liệu của server, client không có quyền đoán.
+   */
+  patchRoomPrefs: (
+    roomId: string,
+    patch: Partial<Pick<ChatRoomDto, "pinnedAt" | "mutedUntil" | "markedUnreadAt">>,
+  ) => void;
   removeRoomForSelf: (roomId: string) => void;
   applyIncomingMessage: (message: StoredChatMessage) => void;
   /** S7-CHAT-FE-2 — nạp MỘT TRANG tin CŨ HƠN (cuộn ngược `beforeSeq`). Xem `MAX_HISTORY_PER_ROOM`. */
@@ -500,6 +516,20 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         return { kind: "none" };
     }
   },
+
+  /**
+   * S8-CHAT-UX-FE-2 — xem docblock ở khai báo. KHÔNG đụng `roomOrder`: ba trường này không tham gia
+   * comparator (`sortRoomIds` sắp theo `lastMessageAt`), và mục "Đã ghim" là việc CHIA RỔ ở tầng hiển thị
+   * (`buildRoomSections`), không phải việc sắp xếp lại nguồn.
+   */
+  patchRoomPrefs: (roomId, patch) =>
+    set((state) => {
+      const room = state.roomsById[roomId];
+      // Phòng không còn trong store (vừa bị bớt / vừa rời) ⇒ bỏ qua. Tạo lại một phòng rỗng từ bản vá là
+      // dựng phòng ma không có tên, không có mã, bấm vào ăn 404.
+      if (!room) return state;
+      return { roomsById: { ...state.roomsById, [roomId]: { ...room, ...patch } } };
+    }),
 
   /**
    * Bị bớt khỏi phòng (hoặc tự rời): dọn SẠCH.

@@ -14,16 +14,29 @@ import i18n from "@/i18n";
 import type { ChatRoomDto } from "@mediaos/contracts";
 
 const listRooms = vi.fn();
+const pinRoom = vi.fn();
+const unpinRoom = vi.fn();
+const muteRoom = vi.fn();
+const markRoomUnread = vi.fn();
+const archiveRoom = vi.fn();
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
     ...actual,
     useCan: vi.fn(() => true),
-    chatApi: { ...actual.chatApi, listRooms: (...a: unknown[]) => listRooms(...a) },
+    chatApi: {
+      ...actual.chatApi,
+      listRooms: (...a: unknown[]) => listRooms(...a),
+      pinRoom: (...a: unknown[]) => pinRoom(...a),
+      unpinRoom: (...a: unknown[]) => unpinRoom(...a),
+      muteRoom: (...a: unknown[]) => muteRoom(...a),
+      markRoomUnread: (...a: unknown[]) => markRoomUnread(...a),
+      archiveRoom: (...a: unknown[]) => archiveRoom(...a),
+    },
   };
 });
 
-import { useCan } from "@mediaos/web-core";
+import { ApiError, useCan } from "@mediaos/web-core";
 import { useChatStore } from "@/stores/chat.store";
 import { RoomListPanel } from "./RoomListPanel";
 
@@ -73,6 +86,7 @@ function renderPanel(props: Partial<Parameters<typeof RoomListPanel>[0]> = {}) {
 beforeEach(() => {
   listRooms.mockReset();
   listRooms.mockResolvedValue([]);
+  for (const fn of [pinRoom, unpinRoom, muteRoom, markRoomUnread, archiveRoom]) fn.mockReset();
   mockUseCan.mockReset();
   mockUseCan.mockReturnValue(true);
   useChatStore.getState().resetChatStore();
@@ -298,13 +312,223 @@ describe("RoomListPanel · chia mục theo loại phòng", () => {
     expect(screen.getAllByTestId("chat-room-section")).toHaveLength(1);
   });
 
-  it("chưa có cột pinned_at ⇒ KHÔNG vẽ mục 'Đã ghim' (không bịa mục ma)", () => {
+  it("không phòng nào ghim ⇒ KHÔNG vẽ mục 'Đã ghim' (mục rỗng không có tiêu đề)", () => {
     seedFourTypes();
     renderPanel();
 
     expect(
       screen.getAllByTestId("chat-room-section").map((s) => s.getAttribute("data-section")),
     ).not.toContain("pinned");
+  });
+
+  it("có `pinnedAt` ⇒ mục 'Đã ghim' đứng ĐẦU và phòng đó rời khỏi mục loại của nó", () => {
+    seedFourTypes();
+    useChatStore.getState().patchRoomPrefs("g1", { pinnedAt: "2026-08-07T01:00:00.000Z" });
+    renderPanel();
+
+    const keys = screen
+      .getAllByTestId("chat-room-section")
+      .map((s) => s.getAttribute("data-section"));
+    expect(keys[0]).toBe("pinned");
+    expect(keys).not.toContain("group"); // g1 là phòng `group` DUY NHẤT ⇒ mục group rỗng, bị loại
+    // Vẫn đúng 4 dòng: ghim là CHUYỂN mục, không phải nhân bản (memory duplicate-sibling-key-leaks-dom-node).
+    expect(screen.getAllByTestId("chat-room-item")).toHaveLength(4);
+  });
+});
+
+/**
+ * S8-CHAT-UX-FE-2 — menu ngữ cảnh + dấu hiệu trên dòng.
+ *
+ * Ca đáng tiền ở đây là **hoàn nguyên**: cập nhật lạc quan mà lỗi lại im lặng thì người dùng thấy phòng
+ * nhảy lên mục "Đã ghim" rồi nhảy về, không một chữ giải thích — và không test nào khác bắt được.
+ */
+describe("RoomListPanel · menu ngữ cảnh mỗi hội thoại", () => {
+  function seedOne(over: Partial<ChatRoomDto> = {}) {
+    useChatStore.getState().hydrateRooms([room("a", over)]);
+  }
+
+  it("mở được bằng NÚT `…` — lối bàn phím, không chỉ chuột phải", () => {
+    seedOne();
+    renderPanel();
+
+    fireEvent.click(screen.getByTestId("chat-room-menu-trigger"));
+
+    expect(screen.getByTestId("chat-room-menu-pin")).toBeTruthy();
+    expect(screen.getByTestId("chat-room-menu-unread")).toBeTruthy();
+  });
+
+  it("mở được bằng CHUỘT PHẢI trên hàng (lối tắt, có cả hai)", () => {
+    seedOne();
+    renderPanel();
+
+    fireEvent.contextMenu(screen.getByTestId("chat-room-item"));
+
+    expect(screen.getByTestId("chat-room-menu-pin")).toBeTruthy();
+  });
+
+  it("ghim: cập nhật LẠC QUAN ngay, rồi nhận giá trị server trả", async () => {
+    seedOne();
+    pinRoom.mockResolvedValue(room("a", { pinnedAt: "2026-08-07T03:00:00.000Z" }));
+    renderPanel();
+
+    fireEvent.click(screen.getByTestId("chat-room-menu-trigger"));
+    fireEvent.click(screen.getByTestId("chat-room-menu-pin"));
+
+    // Lạc quan: store có mốc TRƯỚC khi promise resolve.
+    expect(useChatStore.getState().roomsById["a"].pinnedAt).not.toBeNull();
+    await waitFor(() => expect(pinRoom).toHaveBeenCalledWith("a"));
+    await waitFor(() =>
+      expect(useChatStore.getState().roomsById["a"].pinnedAt).toBe("2026-08-07T03:00:00.000Z"),
+    );
+  });
+
+  it("ghim LỖI ⇒ HOÀN NGUYÊN về giá trị trước + báo lỗi (không im lặng)", async () => {
+    seedOne({ pinnedAt: null });
+    pinRoom.mockRejectedValue(new Error("mạng chập"));
+    renderPanel();
+
+    fireEvent.click(screen.getByTestId("chat-room-menu-trigger"));
+    fireEvent.click(screen.getByTestId("chat-room-menu-pin"));
+
+    await waitFor(() => expect(useChatStore.getState().roomsById["a"].pinnedAt).toBeNull());
+    expect(screen.getByRole("alert").textContent).toContain("trở về như cũ");
+  });
+
+  it("vượt trần 10 ghim (409 CHAT-ERR-021) ⇒ thông điệp NÊU RÕ số 10, không phải lỗi chung", async () => {
+    seedOne({ pinnedAt: null });
+    pinRoom.mockRejectedValue(new ApiError(409, "CHAT-ERR-021", "vượt trần ghim"));
+    renderPanel();
+
+    fireEvent.click(screen.getByTestId("chat-room-menu-trigger"));
+    fireEvent.click(screen.getByTestId("chat-room-menu-pin"));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("10");
+    expect(alert.textContent).toContain("bỏ ghim bớt");
+    await waitFor(() => expect(useChatStore.getState().roomsById["a"].pinnedAt).toBeNull());
+  });
+
+  it("phòng ĐANG GHIM ⇒ mục menu là 'Bỏ ghim' và gọi unpinRoom", async () => {
+    seedOne({ pinnedAt: "2026-08-07T01:00:00.000Z" });
+    unpinRoom.mockResolvedValue(room("a", { pinnedAt: null }));
+    renderPanel();
+
+    fireEvent.click(screen.getByTestId("chat-room-menu-trigger"));
+    expect(screen.getByTestId("chat-room-menu-pin").textContent).toContain("Bỏ ghim");
+    fireEvent.click(screen.getByTestId("chat-room-menu-pin"));
+
+    await waitFor(() => expect(unpinRoom).toHaveBeenCalledWith("a"));
+    expect(pinRoom).not.toHaveBeenCalled();
+  });
+
+  it("tắt thông báo: gửi MỐC TƯƠNG LAI (server chuẩn hoá mốc đã qua về null)", async () => {
+    seedOne();
+    muteRoom.mockResolvedValue(room("a", { mutedUntil: "2099-01-01T00:00:00.000Z" }));
+    renderPanel();
+
+    fireEvent.click(screen.getByTestId("chat-room-menu-trigger"));
+    fireEvent.click(screen.getByTestId("chat-room-menu-mute-8h"));
+
+    await waitFor(() => expect(muteRoom).toHaveBeenCalled());
+    const [roomId, body] = muteRoom.mock.calls[0] as [string, { mutedUntil: string }];
+    expect(roomId).toBe("a");
+    expect(Date.parse(body.mutedUntil)).toBeGreaterThan(Date.now());
+  });
+
+  it("phòng ĐANG TẮT ⇒ menu chỉ mời 'Bật lại' và gửi mutedUntil = null", async () => {
+    seedOne({ mutedUntil: "2099-01-01T00:00:00.000Z" });
+    muteRoom.mockResolvedValue(room("a", { mutedUntil: null }));
+    renderPanel();
+
+    fireEvent.click(screen.getByTestId("chat-room-menu-trigger"));
+    expect(screen.queryByTestId("chat-room-menu-mute-1h")).toBeNull();
+    fireEvent.click(screen.getByTestId("chat-room-menu-unmute"));
+
+    await waitFor(() => expect(muteRoom).toHaveBeenCalledWith("a", { mutedUntil: null }));
+  });
+
+  it("đánh dấu chưa đọc: KHÔNG bịa thêm badge — chỉ đặt cờ", async () => {
+    seedOne({ unreadCount: 0 });
+    markRoomUnread.mockResolvedValue(
+      room("a", { unreadCount: 0, markedUnreadAt: "2026-08-07T03:00:00.000Z" }),
+    );
+    renderPanel();
+
+    fireEvent.click(screen.getByTestId("chat-room-menu-trigger"));
+    fireEvent.click(screen.getByTestId("chat-room-menu-unread"));
+
+    await waitFor(() => expect(markRoomUnread).toHaveBeenCalledWith("a"));
+    await waitFor(() =>
+      expect(useChatStore.getState().roomsById["a"].markedUnreadAt).not.toBeNull(),
+    );
+    // Badge KHÔNG được tự tăng: server cố ý giữ nguyên `unreadCount` (con trỏ chỉ-tiến, SPEC-15 §13.2).
+    expect(useChatStore.getState().roomsById["a"].unreadCount).toBe(0);
+    expect(screen.queryByLabelText(/tin chưa đọc$/)).toBeNull();
+  });
+
+  it("mục 'Lưu trữ phòng' chỉ hiện khi có cặp `archive:chat-room`", () => {
+    seedOne();
+    mockUseCan.mockImplementation((action: string) => action !== "archive");
+    renderPanel();
+
+    fireEvent.click(screen.getByTestId("chat-room-menu-trigger"));
+
+    expect(screen.queryByTestId("chat-room-menu-archive")).toBeNull();
+    // Ba mục tuỳ chọn CÁ NHÂN vẫn còn — chúng KHÔNG đứng sau cặp quản trị nào.
+    expect(screen.getByTestId("chat-room-menu-pin")).toBeTruthy();
+    expect(screen.getByTestId("chat-room-menu-unread")).toBeTruthy();
+    expect(screen.getByTestId("chat-room-menu-mute-1h")).toBeTruthy();
+  });
+});
+
+describe("RoomListPanel · avatar + dấu hiệu trên dòng", () => {
+  it("mỗi dòng có ĐÚNG MỘT avatar — đếm NODE, không đếm phần tử React", () => {
+    useChatStore
+      .getState()
+      .hydrateRooms([room("a"), room("b", { lastMessageAt: "2026-08-04T09:00:00.000Z" })]);
+    renderPanel();
+
+    expect(screen.getAllByTestId("chat-room-avatar")).toHaveLength(2);
+  });
+
+  it("có `avatarUrl` ⇒ render ảnh; không có ⇒ chữ cái đầu (không vỡ dòng vì thiếu ảnh)", () => {
+    useChatStore
+      .getState()
+      .hydrateRooms([
+        room("a", { name: "Kế toán", avatarUrl: "https://storage.example/signed/a.png" }),
+        room("b", { name: "Kỹ thuật", avatarUrl: null }),
+      ]);
+    renderPanel();
+
+    const avatars = screen.getAllByTestId("chat-room-avatar");
+    expect(avatars.some((el) => el.querySelector("img") !== null)).toBe(true);
+    expect(avatars.some((el) => el.querySelector("img") === null)).toBe(true);
+  });
+
+  it("đang tắt thông báo ⇒ chuông-gạch NGAY TRÊN DÒNG (không phải chỉ trong menu)", () => {
+    useChatStore.getState().hydrateRooms([room("a", { mutedUntil: "2099-01-01T00:00:00.000Z" })]);
+    renderPanel();
+
+    expect(screen.getByTestId("chat-room-muted-icon")).toBeTruthy();
+    expect(screen.getByLabelText("Đang tắt thông báo")).toBeTruthy();
+  });
+
+  it("mốc tắt ĐÃ QUA (hết hạn trong cache) ⇒ KHÔNG vẽ chuông-gạch", () => {
+    useChatStore.getState().hydrateRooms([room("a", { mutedUntil: "2020-01-01T00:00:00.000Z" })]);
+    renderPanel();
+
+    expect(screen.queryByTestId("chat-room-muted-icon")).toBeNull();
+  });
+
+  it("đánh dấu chưa đọc thủ công ⇒ dòng hiện ĐẬM dù badge = 0", () => {
+    useChatStore
+      .getState()
+      .hydrateRooms([
+        room("a", { name: "Kế toán", unreadCount: 0, markedUnreadAt: "2026-08-07T03:00:00.000Z" }),
+      ]);
+    renderPanel();
+
+    expect(screen.getByText("Kế toán").className).toContain("font-semibold");
   });
 });
 
