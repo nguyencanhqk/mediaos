@@ -136,6 +136,9 @@ export const AUDIT_OBJECT_TYPES = [
   // G10 communication (chat realtime / notification center / meeting)
   "chat_room",
   "chat_message",
+  // S7-CALL (mig 0546) — vòng đời cuộc gọi ghi audit qua REST (DECISIONS-07 hàng rào R4:
+  // mời/nhận/từ chối/huỷ/kết thúc đi controller có PermissionGuard, KHÔNG đi WebSocket).
+  "chat_call",
   "notification",
   "notification_rule",
   "notification_preference",

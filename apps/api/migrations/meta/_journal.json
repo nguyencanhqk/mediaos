@@ -1492,6 +1492,13 @@
       "when": 1717587334000,
       "tag": "0545_s9socialdb1_audit_social",
       "breakpoints": true
+    },
+    {
+      "idx": 213,
+      "version": "7",
+      "when": 1717587335000,
+      "tag": "0546_s7calldb1_chat_calls",
+      "breakpoints": true
     }
   ]
 }
