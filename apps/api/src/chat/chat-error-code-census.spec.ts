@@ -23,10 +23,11 @@ import { describe, expect, it } from "vitest";
 import { CHAT_ERR } from "./chat.errors";
 
 /**
- * SPEC-15 §12 chốt ĐÚNG 25 mã sau wave S8 (`S8-CHAT-UX-DOC-1` thêm 021…025).
+ * SPEC-15 §12 chốt ĐÚNG 30 mã sau wave S7-CALL (`S7-CALL-DOC-1` thêm 026…030, owner ký ADR
+ * `DECISIONS-07` ngày 08/08/2026). Trước đó: 25 mã sau wave S8 (`S8-CHAT-UX-DOC-1` thêm 021…025).
  * Đổi số này = đổi spec ⇒ phải sửa cả bảng §12 lẫn bộ test.
  */
-const SPEC_ERROR_CODE_COUNT = 25;
+const SPEC_ERROR_CODE_COUNT = 30;
 
 const ALL_CODES: readonly string[] = Array.from(
   { length: SPEC_ERROR_CODE_COUNT },
@@ -47,7 +48,17 @@ const PENDING_CODES: ReadonlyMap<string, string> = new Map([
   // CHAT-ERR-022 · CHAT-ERR-023 đã TRẢ ở `S8-CHAT-UX-BE-2` (07/08/2026 — avatar phòng).
   // CHAT-ERR-024 · CHAT-ERR-025 đã TRẢ ở `S8-CHAT-UX-BE-3` (06/08/2026).
   // Gỡ khỏi đây để census quay lại đòi mỗi mã ≥1 ca int-spec. Ca "nợ đã trả" bên dưới ép việc gỡ này,
-  // không phải trí nhớ ai đó. Sổ nợ RỖNG = cả 25 mã §12 đều có đường code sinh ra.
+  // không phải trí nhớ ai đó. Sổ nợ RỖNG = mọi mã §12 đều có đường code sinh ra.
+  //
+  // ── Wave S7-CALL, mở sổ lại 08/08/2026 (`S7-CALL-DOC-1`) ────────────────────────────────────────
+  // 5 mã dưới đây ĐÃ vào SPEC-15 §12 nhưng CHƯA có đường code — wave CALL mới xong tầng tài liệu +
+  // migration (`S7-CALL-DB-1`). Ghi nợ tường minh thay vì để `SPEC_ERROR_CODE_COUNT` ở 25: hạ số đếm
+  // sẽ giấu 5 mã khỏi cả hai chiều census (không ai đòi ca test, cũng không ai thấy chúng đang nợ).
+  ["CHAT-ERR-026", "S7-CALL-BE-1"], // ngoài phòng → 404 (đồng dạng CHAT-ERR-001)
+  ["CHAT-ERR-027", "S7-CALL-BE-1"], // là thành viên nhưng thiếu ('call','chat-room') → 403
+  ["CHAT-ERR-028", "S7-CALL-BE-1"], // phòng đã có cuộc gọi sống → 409 (ép bằng partial unique index)
+  ["CHAT-ERR-029", "S7-CALL-BE-1"], // thao tác lên cuộc gọi đã kết thúc → 422 (FSM một chiều)
+  ["CHAT-ERR-030", "S7-CALL-RT-1"], // sự kiện /ws-call ngoài allowlist 8 → ngắt + user_security_events
 ]);
 
 /** Mã BẮT BUỘC đã có ca int-spec = mã trong sổ TRỪ phần đang nợ. */

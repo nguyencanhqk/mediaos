@@ -113,6 +113,15 @@ Gửi tin đi **REST** (`POST /chat/rooms/:id/messages`), server emit lại qua 
 
 Lý do: mỗi khung tin qua WS sẽ phải tự kiểm token còn hạn + permission + membership; một chỗ quên là lỗ ghi trực tiếp. Đi REST thì tái dùng nguyên `JwtAuthGuard` + `PermissionGuard` + audit + validation Zod đã được kiểm chứng. Với 45 người dùng, độ trễ thêm của một HTTP POST là không đáng kể so với rủi ro.
 
+> ⚠️ **NỚI 08/08/2026 — `CHAT-DEC-020`, đúng MỘT ngoại lệ.** Owner ký [`DECISIONS-07`](../DECISIONS/DECISIONS-07_Chat_Call_Signalling.md) cho phép **tín hiệu bắt tay cuộc gọi (SDP/ICE)** đi client→server, vì nó là **trạng thái vận chuyển tạm thời** — không lưu DB, không lên DTO nào, không sống quá cuộc gọi. Ngoại lệ này bị bó bằng 4 hàng rào (§5.1c):
+>
+> - **R1** — namespace **RIÊNG** `/ws-call`. Gateway `/ws` (CHAT + NOTI) **giữ nguyên 0 `@SubscribeMessage`**, có ratchet `chat-realtime-structure.spec.ts` đóng đinh. Wave CALL nới phạm vi quét thì **vế `/ws` vẫn phải còn khẳng định riêng giữ mức 0**.
+> - **R2** — allowlist **ĐÓNG** đúng 8 sự kiện inbound (`DECISIONS-07 §4`). Ngoài danh sách → ngắt kết nối + `user_security_events` (**CHAT-ERR-030**).
+> - **R3** — SDP/ICE chỉ **RELAY**: không parse, không đọc, không lưu. Ngày nào ta lưu SDP thì ngoại lệ này **hết hiệu lực**.
+> - **R4** — **vòng đời cuộc gọi vẫn đi REST** (mời · nhận · từ chối · huỷ · kết thúc → `chat_calls` + `audit_logs` qua controller có `PermissionGuard`). WS chỉ **thông báo** và **relay tín hiệu**.
+>
+> Mệnh đề gốc **không đổi**: client **không bao giờ** ghi *dữ liệu nghiệp vụ* qua WS. Tin nhắn · thành viên · ghim · thu hồi · con trỏ đã đọc — tất cả đi REST, không có ngoại lệ. `CHAT-DEC-017` ("đang gõ" đi REST-ping) đứng **cùng phía** hàng rào này, không phải lối thoát thứ hai.
+
 ### 3.6 Không sao chép dữ liệu nguồn
 
 CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ module nguồn khi hiển thị. Ảnh đại diện người gửi lấy từ ME/HR. Tệp đính kèm **không** lưu URL trần trên `chat_messages` (cột `file_url`/`file_name` của bản cũ đã **DROP** ở mig `0542`, §5.3) mà đi qua `file_links` của FOUNDATION + URL ký hạn ngắn.
@@ -174,6 +183,22 @@ CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ 
 | Thả cảm xúc | ⬅ **CHUYỂN TỪ §5.2**. Bảng `chat_message_reactions`, bộ emoji **ĐÓNG** (6 mã, ép bằng CHECK) | CHAT-DEC-018 |
 | Avatar người gửi trong khung chat | Lấy từ **roster phòng** (ký 1 lần/phòng), **không** ký theo từng tin | CHAT-DEC-019 |
 
+### 5.1c Bổ sung wave S7-CALL — cuộc gọi thoại/hình (owner ký ADR 08/08/2026)
+
+> ⬅ **CHUYỂN TỪ §5.2.** Dòng "Cuộc gọi thoại/hình — ngoài phạm vi sản phẩm" đã bị **gỡ** khỏi bảng §5.2 bên dưới. Nguồn quyết định: [`DECISIONS-07`](../DECISIONS/DECISIONS-07_Chat_Call_Signalling.md) (đã ký §7) · `CHAT-DEC-020`.
+
+| Nhóm | Nội dung | Quyết định |
+| --- | --- | --- |
+| Vòng đời cuộc gọi | Mời · nhận · từ chối · huỷ · kết thúc — **đi REST** (`CHAT-API-026..028`), ghi `chat_calls` + `chat_call_participants` + `audit_logs`. Lịch sử cuộc gọi **append-only** (BẤT BIẾN #2) | CHAT-DEC-020 (R4) |
+| Bắt tay WebRTC | SDP/ICE đi **`/ws-call`** — namespace RIÊNG, allowlist ĐÓNG 8 sự kiện, **relay không đọc-không lưu** | CHAT-DEC-020 (R1·R2·R3) |
+| Máy chủ TURN/STUN | **Không tự dựng.** `GET /chat/calls/ice-config` (`CHAT-API-029`) sinh credential **phía server** từ tài khoản **Cloudflare TURN** dùng chung với LMS; STUN Google dự phòng. Secret từ **env** — BẤT BIẾN #3 | ADR §5 |
+| Giao diện | `CHAT-SCREEN-009` — chuông đến · khung đang gọi (thu nhỏ/toàn màn) · tắt mic-cam · chia sẻ màn hình. Port từ LMS, **bỏ** phần tự ghi vòng đời qua WS | ADR §6 |
+| Loại cuộc gọi | `audio` · `video`, **1-1 trong mọi loại phòng** người gọi là thành viên. Gọi nhóm nhiều bên: **chừa thiết kế**, không làm đợt này | ADR §3 |
+
+⚠️ **Ranh giới vẫn là membership, KHÔNG phải data_scope** (§3.2): gọi được trong phòng nào ⇔ `assertMember` phòng đó. Handshake `/ws-call` kiểm phiên; **mỗi sự kiện kiểm lại tư cách tham gia cuộc gọi** — **không** tin vào việc socket đang ở trong room (bài học `ws-permission-gate-needs-its-own-room`).
+
+⚠️ **`('view','chat-oversight')` KHÔNG cấp quyền nghe hay tham gia cuộc gọi.** Đọc-vượt (§3.3) là quyền đọc **lịch sử tin nhắn**; nó **không** mở cửa vào một cuộc gọi đang diễn ra, và **không** miễn `assertMember` cho bất kỳ đường CALL nào. Người có cặp đó mà không thuộc phòng gọi vào → **404** như mọi người ngoài (`CHAT-ERR-026`). Ghi tường minh ở đây để **không ai suy diễn từ `CHAT-DEC-004`** rằng quản trị nghe lén được.
+
 ### 5.2 Ngoài v1 (chừa thiết kế, KHÔNG làm đợt này)
 
 | Nhóm | Ghi chú |
@@ -182,7 +207,8 @@ CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ 
 | **Thư mục hội thoại tự đặt** | Owner chốt 05/08/2026 là **mục cố định theo loại phòng** (CHAT-DEC-014). Thư mục tự đặt cần 2 bảng + CRUD + kéo-thả ⇒ wave sau |
 | Chat theo **task** (không phải dự án) | SPEC-01 §12.12 nêu "task"; TASK đã có bình luận riêng (SPEC-06) ⇒ tránh hai kênh trùng. Xem CHAT-DEC-009 |
 | Kiểm duyệt / báo cáo tin nhắn | Thiết kế đề xuất: `chat_message_reports` → người xử lý chỉ thấy **tin bị báo cáo** + ngữ cảnh 5 tin quanh nó, KHÔNG mở khoá đọc cả phòng. Cần owner chốt chính sách trước khi làm |
-| Cuộc gọi thoại/hình | ⚠️ **Dòng này đã LỖI THỜI, đang chờ PR #337.** Owner chốt **phương án C** ngày 04/08/2026 = **làm** cuộc gọi, qua ADR `DECISIONS-07` (nới `CHAT-DEC-005` bằng namespace RIÊNG `/ws-call` + 4 hàng rào). ADR **chưa trên master** nên dòng này giữ nguyên chữ cũ để không khẳng định thứ chưa merge; `S7-CALL-DOC-1` là WO chịu trách nhiệm sửa nó. **Wave S8-CHAT-UX không đụng cuộc gọi** |
+| **Gọi nhóm nhiều bên (≥3)** | Wave S7-CALL làm **1-1** (§5.1c). Nhiều bên cần SFU/MCU hoặc lưới peer bậc hai — hạ tầng khác hẳn, không phải phần mở rộng nhỏ. Cuộc gọi **1-1** đã **VÀO phạm vi** từ 08/08/2026 — xem §5.1c |
+| **Ghi âm / ghi hình cuộc gọi** | Sẽ **phá `R3`** của `CHAT-DEC-020` (relay không đọc-không lưu) và biến tín hiệu thành dữ liệu nghiệp vụ ⇒ ngoại lệ WS hết hiệu lực. Cần ADR mới + chốt chính sách riêng tư trước khi bàn |
 | Chat với người ngoài công ty | Đơn-công-ty, không có khách |
 | Ứng dụng di động | Phase 5 (MOBILE) |
 | Lưu trữ/xoá theo chính sách lưu giữ | Nối vào `retention` của FOUNDATION ở phase sau; v1 không tự xoá tin |
@@ -283,6 +309,8 @@ Chi tiết cột/kiểu/constraint: [DB-12](<../DB/DB-12 CHAT Database Design.md
 | CHAT-SCREEN-007 🔒 | **Quản trị: đọc-vượt membership** (§3.3) | Chỉ hiện với cặp `('view','chat-oversight')`. Tra phòng theo mã/tên → **hộp thoại xác nhận "xem với tư cách quản trị"** → mở phòng ở chế độ **chỉ đọc** (không gửi/ghim/thu hồi được). **Không** trộn vào danh sách phòng của CHAT-SCREEN-001 |
 | CHAT-SCREEN-008 🔒 | **Quản trị: nhật ký đọc-vượt** | Danh sách lần dùng CHAT-SCREEN-007 (ai · phòng nào · lúc nào · thành công/bị từ chối), đọc từ `audit_logs`. Audit không xem được trên UI thì không phải là kiểm soát (§18). **Lọc theo người thực hiện + khoảng ngày chạy ở SERVER** (CHAT-API-019), trên toàn bộ nhật ký — **không** lọc trên các dòng client đã tải: lọc trên một tập con làm người đọc kết luận "không có lần truy cập nào" trong khi bằng chứng nằm ở trang chưa tải. Khoảng ngày là **NGÀY của công ty** (cột `companies.timezone` — đúng nguồn mà màn Cài đặt công ty ghi và DASHBOARD đọc), quy đổi ở server — quy đổi ở client thì hai người ở hai múi giờ nhận hai kết quả khác nhau cho cùng một câu hỏi |
 
+| CHAT-SCREEN-009 *(S7-CALL)* | **Khung cuộc gọi thoại/hình** | Ba trạng thái trên cùng một màn: **chuông đến** (tên + avatar người gọi, nhận/từ chối) · **đang gọi** (video hai bên, tắt/bật mic-cam, chia sẻ màn hình, kết thúc) · **thu nhỏ** (nổi trên mọi màn, bấm để bung toàn màn). Nút gọi đặt trong `CHAT-SCREEN-001`/`002`, **chỉ hiện với thành viên phòng có cặp `('call','chat-room')`** — không hiện rồi để server trả 403. Vòng đời bấm nút đi **REST** (`CHAT-API-026..028`); khung này **chỉ** dùng `/ws-call` cho SDP/ICE (`CHAT-DEC-020` R4). Mất mạng giữa chừng → hiện trạng thái mất kết nối, **không** im lặng đóng khung |
+
 ### 9a. Cột trái CHAT-SCREEN-001 — luật chia mục *(S8, CHAT-DEC-014)*
 
 Mục cố định, đúng thứ tự: **Đã ghim** · **Tin nhắn riêng** · **Nhóm** · **Phòng ban** · **Dự án**.
@@ -342,19 +370,20 @@ Theo chuẩn per-pair `(action, resource)` + data_scope per-(permission, role). 
 | `('send','chat-message')` | gửi tin + đính kèm | có | có | có |
 | `('recall','chat-message')` | thu hồi tin | có (tin của mình) | có | có |
 | `('pin','chat-message')` | ghim/bỏ ghim | có (admin phòng) | có | có |
+| `('call','chat-room')` *(S7-CALL)* | **gọi thoại/hình** trong phòng mình thuộc + lấy `ice-config` (§5.1c) | có (all) | có (all) | có (all) |
 | `('view','chat-oversight')` 🔒 | **đọc-vượt membership** — mở đích danh một phòng với tư cách quản trị, có audit (§3.3) | — | — | **chỉ Super Admin** |
 
 Ghi chú bắt buộc:
 
 - **Cặp gate của tìm kiếm và tải tệp PHẢI trùng cặp của đường đọc** (`view:chat-room`). Dùng cặp khác (ví dụ tách `('search','chat-message')`) sẽ tạo role "tìm được mà đọc không được" hoặc ngược lại — đúng lỗ đã gặp ở `S5-TASK-COVER-1` (bài học `read-path-gate-pair-must-match-download-pair`).
 - Cột "có (admin phòng)" nghĩa là: **quyền là điều kiện cần, `chat_room_members.role='admin'` là điều kiện đủ** — kiểm ở service, không phải ở seed.
-- `is_sensitive` **CHỐT**: `false` cho 9 cặp thường, **`true`** cho riêng `('view','chat-oversight')`. Giá trị này là cuối cùng, không để mở sau seed (bẫy `canonical-seed-pin-regression`: flip `is_sensitive` sau seed làm ĐỎ pin `auth-seed-canonical-roles` và phải sửa đồng thời allowlist sensitive FE). Cặp `chat-oversight` **phải** có mặt trong `SENSITIVE_CAPABILITY_ALLOWLIST` — nằm ở **backend** `apps/api/src/permission/permission.service.ts` (pin bởi `apps/api/src/auth/auth-me-capabilities.int.spec.ts`), **không** phải file phía FE — **cùng commit** với seed; thiếu là màn quản trị ẩn dù DB có quyền (KI-058).
+- `is_sensitive` **CHỐT**: `false` cho **10** cặp thường (9 cặp v1 + `('call','chat-room')` của S7-CALL), **`true`** cho riêng `('view','chat-oversight')`. Giá trị này là cuối cùng, không để mở sau seed (bẫy `canonical-seed-pin-regression`: flip `is_sensitive` sau seed làm ĐỎ pin `auth-seed-canonical-roles` và phải sửa đồng thời allowlist sensitive FE). Cặp `chat-oversight` **phải** có mặt trong `SENSITIVE_CAPABILITY_ALLOWLIST` — nằm ở **backend** `apps/api/src/permission/permission.service.ts` (pin bởi `apps/api/src/auth/auth-me-capabilities.int.spec.ts`), **không** phải file phía FE — **cùng commit** với seed; thiếu là màn quản trị ẩn dù DB có quyền (KI-058).
 - **Đúng một cặp cho phép đọc phòng mình không thuộc:** `('view','chat-oversight')`, chỉ Super Admin, luôn kèm audit, **không** áp cho tìm kiếm (§3.3). Mọi cặp khác — kể cả `('view','chat-room')` — vẫn bị membership chặn tuyệt đối.
 - Nếu về sau owner duyệt cơ chế kiểm duyệt nội dung, cặp mới phải là `('manage','chat-report')` gắn với **tin bị báo cáo**, không phải mở rộng scope của `('view','chat-room')` hay của `('view','chat-oversight')`.
 
 ### 11a. Wave S8-CHAT-UX — **KHÔNG cặp quyền mới** *(chốt 05/08/2026)*
 
-Toàn bộ 7 tính năng của §5.1b dùng lại **đúng 10 cặp** ở trên. Hệ quả: **0 migration seed quyền · 0 thay đổi `SENSITIVE_CAPABILITY_ALLOWLIST` · 0 rủi ro `canonical-seed-pin-regression`.**
+Toàn bộ 7 tính năng của §5.1b dùng lại **đúng 10 cặp CHAT của v1** (bảng §11 trừ dòng `('call','chat-room')`, cặp này do **S7-CALL** thêm sau — 08/08/2026). Hệ quả cho riêng wave S8: **0 migration seed quyền · 0 thay đổi `SENSITIVE_CAPABILITY_ALLOWLIST` · 0 rủi ro `canonical-seed-pin-regression`.**
 
 | Tính năng | Cặp dùng lại | Điều kiện ĐỦ (kiểm ở service) |
 | --- | --- | --- |
@@ -411,6 +440,11 @@ Toàn bộ 7 tính năng của §5.1b dùng lại **đúng 10 cặp** ở trên.
 | CHAT-ERR-023 *(S8)* | Có `('update','chat-room')` nhưng **không đủ tư cách** theo loại phòng (§11b) → **403**. Không phải thành viên phòng → **404** theo CHAT-ERR-001 |
 | CHAT-ERR-024 *(S8)* | Thả cảm xúc vào tin **đã thu hồi** → **422**. Thả vào tin của phòng mình không thuộc → **404** (CHAT-ERR-001) |
 | CHAT-ERR-025 *(S8)* | Emoji ngoài **bộ đóng** → **422**. Bộ emoji ép ở **CHECK cấp DB**, không chỉ ở Zod: chuỗi tự do là bề mặt lưu trữ vô hạn |
+| CHAT-ERR-026 *(S7-CALL)* | Gọi / thao tác cuộc gọi ở phòng người dùng **không thuộc** → **404**, thông điệp **giống hệt** phòng không tồn tại (đồng dạng CHAT-ERR-001, chống dò sự tồn tại của phòng). **Áp cả cho người có `('view','chat-oversight')`**: đọc-vượt **không** miễn `assertMember` cho bất kỳ đường CALL nào (§5.1c) |
+| CHAT-ERR-027 *(S7-CALL)* | **Là** thành viên phòng nhưng **thiếu cặp** `('call','chat-room')` → **403**. Khác 026 ở chỗ người gọi đã chứng minh được tư cách thành viên ⇒ không còn gì để dò, nói thẳng là thiếu quyền |
+| CHAT-ERR-028 *(S7-CALL)* | Mời cuộc gọi khi phòng **đã có cuộc gọi đang sống** (`ringing`/`active`) → **409**. Một phòng tại một thời điểm chỉ có **một** cuộc gọi sống; ép ở **DB bằng partial unique index**, không chỉ ở service — hai lời mời đồng thời lọt qua kiểm-rồi-ghi ở tầng ứng dụng |
+| CHAT-ERR-029 *(S7-CALL)* | Thao tác vòng đời lên cuộc gọi **đã kết thúc** (`ended`/`rejected`/`cancelled`/`missed`) → **422**. FSM cuộc gọi **một chiều**, không hồi sinh: nhận một cuộc gọi đã bị huỷ phải hỏng **rõ ràng**, không im lặng thành công |
+| CHAT-ERR-030 *(S7-CALL)* | Sự kiện inbound `/ws-call` **ngoài allowlist 8** (`CHAT-DEC-020` R2), payload sai Zod, hoặc `sdp`/`candidate` **vượt trần độ dài** → **ngắt kết nối** + ghi `user_security_events`. **Không** trả lỗi nghiệp vụ: đây là tín hiệu dò cửa, không phải sai đầu vào của người dùng hợp lệ |
 
 > ⚠️ **Ghim TIN và ghim HỘI THOẠI là hai thứ khác nhau.** CHAT-FUNC-010 + CHAT-ERR-008 + `chat_messages.pinned_at` = ghim một **tin** trong phòng, mọi thành viên đều thấy. CHAT-FUNC-016 + CHAT-ERR-021 + `chat_room_members.pinned_at` = ghim một **hội thoại** lên đầu danh sách, **chỉ mình thấy**. Trùng chữ "ghim" nhưng khác bảng, khác trần, khác phạm vi nhìn thấy.
 
@@ -588,6 +622,25 @@ Envelope/error/pagination theo API-01. Chi tiết request/response: [API-13](<..
 
 > ⚠️ **Không có `GET /chat/oversight/search`.** Tìm kiếm giữ nguyên vị từ membership cho mọi role, kể cả Super Admin (§3.3) — đây là ràng buộc thiết kế, không phải thiếu sót.
 
+### 15a. Wave S7-CALL — cuộc gọi thoại/hình *(CHAT-DEC-020)*
+
+> ⚠️ **Đánh số bắt đầu từ `026`, KHÔNG phải `024`.** Bản seed Work Order ghi `CHAT-API-024..027`; đo lại trên master ngày 08/08/2026 thì `CHAT-API-024a` · `024b` · `025` **đã bị wave S8-CHAT-UX chiếm** (ghim hội thoại · tắt thông báo — [API-13 §…](<../API Design/API-13_CHAT_API_Design.md>) dòng 164-166). Dải trống thật là **`026..029`**. Đo bằng grep trước khi cấp mã tiếp — dải trong WO đã lỗi thời **hai lần**.
+
+Toàn bộ vòng đời đi **REST** (hàng rào **R4**). `/ws-call` **không** có endpoint nào ở bảng này: nó chỉ relay SDP/ICE và **không** ghi gì.
+
+| Mã | Endpoint | Ghi chú |
+| --- | --- | --- |
+| CHAT-API-026 | `POST /chat/rooms/:id/calls` | **Mời** — tạo cuộc gọi `{ kind: 'audio' \| 'video' }`, trạng thái đầu `ringing`. Gate `('call','chat-room')` + `assertMember`. Phòng đã có cuộc gọi sống → **409** (CHAT-ERR-028). Ghi `audit_logs` |
+| CHAT-API-027 | `POST /chat/calls/:id/accept` · `POST /chat/calls/:id/reject` | **Nhận / từ chối** — chỉ người **được mời**. Cuộc gọi đã kết thúc → **422** (CHAT-ERR-029). Ghi `audit_logs` mỗi thao tác |
+| CHAT-API-028 | `POST /chat/calls/:id/cancel` · `POST /chat/calls/:id/hangup` | **Huỷ** (người gọi rút trước khi được nhận) · **kết thúc** (bên nào cũng gác được sau khi nối). Ghi `audit_logs` |
+| CHAT-API-029 | `GET /chat/calls/ice-config` | Cấu hình ICE: credential TURN **sinh phía server** từ env `CLOUDFLARE_TURN_KEY_ID` + `CLOUDFLARE_TURN_API_TOKEN`, STUN Google dự phòng. Gate `('call','chat-room')`. **KHÔNG log credential**, **không** hard-code secret (BẤT BIẾN #3) |
+
+> ⚠️ **`ringing` quá hạn → `missed` là việc của SERVER**, không phải của client đóng khung. Chuyển trạng thái bằng `@SystemJobHandler` **idempotent** (mẫu `retention-cleanup`), `@Optional()` cho DI — thiếu `@Optional()` sập `AppModule` và kéo đỏ dây chuyền hàng trăm spec (memory `systemjobhandler-optional-dbw-di`). Client tự đóng khung mà server không đổi trạng thái ⇒ phòng kẹt "đang có cuộc gọi sống" và **mọi lời mời sau đó 409 vĩnh viễn**.
+>
+> ⚠️ **Chưa cấp mã cho đường ĐỌC lịch sử cuộc gọi.** `chat_calls` là bảng append-only có dữ liệu, nhưng wave này **không** mở endpoint liệt kê nhật ký cuộc gọi — ADR không đặt phạm vi đó. Ai làm màn "nhật ký cuộc gọi" phải cấp mã mới (`CHAT-API-030`+) và **đo lại dải trống**, không mặc định 030 còn trống.
+>
+> ⚠️ **Nợ tài liệu có sẵn, KHÔNG do wave này gây ra:** `CHAT-API-020..025` (wave S8-CHAT-UX) sống trong `API-13` nhưng **chưa** được thêm vào bảng §15 ở trên. Bảng §15 hiện nhảy `019 → 026`. Không sửa ở đây để giữ diff của `S7-CALL-DOC-1` đúng phạm vi; ghi ra để lần đối chiếu sau không đọc nhầm khoảng trống đó thành dải trống cấp phát được.
+
 ---
 
 ## 16. Dữ liệu và lưu trữ
@@ -736,6 +789,18 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 > **`CHAT-DEC-017` KHÔNG chọi với ADR cuộc gọi đang chờ (PR #337).** `DECISIONS-07` nới `CHAT-DEC-005` cho WebRTC, nhưng hàng rào **R1** của nó ghi rõ: nới bằng **namespace RIÊNG `/ws-call`**, còn `/ws` (CHAT + NOTI) **giữ nguyên 0 `@SubscribeMessage`, có test đóng đinh**. `DEC-017` đứng đúng phía đó — "đang gõ" đi REST-ping trên `/ws` chứ không mở handler inbound. Hai quyết định **củng cố nhau**, không phải hai lối thoát cho cùng một ràng buộc.
 >
 > ⚠️ Ai thi công `S8-CHAT-UX-RT-1` mà thấy `/ws-call` đã có `@SubscribeMessage`: **đó không phải giấy phép** để thêm handler vào `/ws`. Ratchet `chat-realtime-structure.spec.ts` quét **toàn bộ `apps/api/src`**, và nếu wave CALL có nới phạm vi quét thì phần `/ws` vẫn phải còn một khẳng định riêng giữ mức 0.
+
+### 22b. Wave S7-CALL — cuộc gọi thoại/hình, **OWNER KÝ 08/08/2026**
+
+> Nguồn: [`DECISIONS-07`](../DECISIONS/DECISIONS-07_Chat_Call_Signalling.md) §7 đã ký (3/3 ô). Trước ngày này ADR ở trạng thái 🟡 *đề xuất* và **cấm** mọi WO `S7-CALL-*` khởi động.
+
+| Mã | Quyết định | Kết quả owner chốt | Trạng thái |
+| --- | --- | --- | --- |
+| CHAT-DEC-020 | Có làm cuộc gọi thoại/hình không, và nếu có thì `CHAT-DEC-005` xử lý thế nào? | **LÀM** (phương án C, 04/08/2026). `CHAT-DEC-005` được **NỚI, không huỷ**: SDP/ICE đi client→server trên namespace **RIÊNG** `/ws-call`, bó bằng **4 hàng rào R1–R4** (§3.5 · §5.1c). Vòng đời cuộc gọi **vẫn đi REST** + audit (R4). Mệnh đề gốc "client không ghi **dữ liệu nghiệp vụ** qua WS" **giữ nguyên tuyệt đối** | ⚠️ **NỚI §3.5** — ký 08/08/2026 |
+
+> ⚠️ **`CHAT-DEC-020` KHÔNG huỷ `CHAT-DEC-005`, và KHÔNG phải tiền lệ.** Ngoại lệ đứng được **chỉ vì** SDP/ICE không phải dữ liệu nghiệp vụ: không lưu DB, không lên DTO, không sống quá cuộc gọi (R3). **Ngày nào ta lưu SDP hoặc ghi âm cuộc gọi, ngoại lệ này hết hiệu lực** và phải mở ADR mới — đã ghi vào §5.2 để không ai lặng lẽ vượt rào.
+>
+> ⚠️ **`('view','chat-oversight')` KHÔNG mở cửa nghe lén.** `CHAT-DEC-004` cho Super Admin đọc-vượt **lịch sử tin nhắn**; nó **không** cấp quyền tham gia hay nghe một cuộc gọi đang diễn ra, và **không** miễn `assertMember` cho đường CALL nào (§5.1c · CHAT-ERR-026). Ghi tường minh để chặn đúng một suy diễn: "quản trị đọc được mọi phòng ⇒ nghe được mọi cuộc gọi" — **SAI**.
 
 ---
 

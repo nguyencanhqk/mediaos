@@ -529,7 +529,10 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
       expect(ov.rows[0].is_sensitive, "đọc-vượt PHẢI is_sensitive=true").toBe(true);
     });
 
-    it("9 cặp thường grant đúng 36 hàng ALLOW@Company cho 4 role canonical", async () => {
+    // ⚠️ 36 → 40 (S7-CALL-DB-1, mig 0546): cặp thường thứ 10 `('call','chat-room')` — resource_type
+    // `chat-room` nên nó RƠI VÀO chính phép đếm này. Con số vẫn giữ nguyên tác dụng bắt over/under-grant;
+    // hạ vị từ để "khỏi phải sửa" mới là thứ giết ca test.
+    it("10 cặp thường grant đúng 40 hàng ALLOW@Company cho 4 role canonical", async () => {
       const r = await direct.query<{ n: string }>(
         `SELECT count(*) AS n
            FROM role_permissions rp
@@ -539,8 +542,8 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
             AND r.company_id IS NULL AND r.deleted_at IS NULL
             AND rp.effect = 'ALLOW' AND rp.data_scope = 'Company'`,
       );
-      expect(Number(r.rows[0].n), "9 cặp × 4 role canonical = 36; lệch = over/under-grant").toBe(
-        36,
+      expect(Number(r.rows[0].n), "10 cặp × 4 role canonical = 40; lệch = over/under-grant").toBe(
+        40,
       );
     });
 
@@ -570,9 +573,12 @@ describe.skipIf(!hasDb)("S7-CHAT-DB-1 · bất biến nền dữ liệu CHAT (mi
         `[s7-chat-db1] role giữ toàn bộ catalog-ngoài-CHAT: ${rows.rows.length} ` +
           `(0 là hợp lệ trên DB dựng-từ-rỗng)`,
       );
+      // ⚠️ 10 → 11 (S7-CALL-DB-1, mig 0546): thêm `('call','chat-room')`.
+      // Ca này KHÔNG đỏ trên lane dựng-từ-rỗng (0 role giữ-toàn-catalog ⇒ vòng lặp rỗng, xem log ở
+      // trên) nhưng SẼ đỏ trên PROD nơi `SA` tồn tại. Sửa cùng commit với migration, đừng đợi nó nổ.
       for (const r of rows.rows) {
         expect(Number(r.chat_pairs), `role '${r.name}' giữ toàn catalog nhưng thiếu cặp CHAT`).toBe(
-          10,
+          11,
         );
       }
     });

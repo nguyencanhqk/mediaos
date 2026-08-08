@@ -120,6 +120,10 @@ const REQUIRED_CATALOG = [
   // mig 0496 (S5-HR-IMPORT-BE-1): flip is_sensitive false→true — import danh bạ = ghi PII toàn tenant,
   // parity export:employee (fail-closed, wildcard *:* KHÔNG thoả). Loop A đỏ nếu 0496 chưa flip.
   { action: "import", resourceType: "employee", sensitive: true },
+  // mig 0546 (S7-CALL-DB-1) · CHAT-DEC-020: cặp gọi thoại/hình. `is_sensitive=false` là giá trị CUỐI
+  // CÙNG, không để mở sau seed — flip nó sau này làm ĐỎ chính pin này (bẫy `canonical-seed-pin-regression`)
+  // và buộc phải sửa đồng thời allowlist sensitive. Khác wave S8 (0 cặp mới), wave CALL CÓ cặp mới.
+  { action: "call", resourceType: "chat-room", sensitive: false },
 ];
 
 // Cặp TUYỆT ĐỐI KHÔNG được role-grant cho 4 role canonical (assert CHỈ trên role canonical).

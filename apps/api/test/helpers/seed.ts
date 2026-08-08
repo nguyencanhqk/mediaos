@@ -596,6 +596,13 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM device_tokens WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── G4-6 Communication ───────────────────────────────────────────────────
+  // ⚠️ S7-CALL (mig 0546): cuộc gọi xoá TRƯỚC chat_rooms VÀ trước `DELETE FROM users` bên dưới.
+  // Cả 4 FK của hai bảng này là composite `ON DELETE RESTRICT` (KHÔNG cascade — cascade chạy tầng
+  // owner, bỏ qua GRANT, nên nó xoá cứng ledger append-only). Quên hai dòng này ⇒ `cleanupTenants`
+  // ném 23503 và teardown của MỌI int-spec chạm CHAT sẽ đỏ.
+  // participants → calls (FK con→cha), rồi mới tới rooms.
+  await direct.query("DELETE FROM chat_call_participants WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM chat_calls WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM chat_messages WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM chat_room_members WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM chat_rooms WHERE company_id = ANY($1::uuid[])", ids);
