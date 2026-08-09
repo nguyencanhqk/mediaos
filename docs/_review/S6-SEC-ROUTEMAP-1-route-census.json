@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 493,
-    "controllers": 86,
-    "gated": 441,
+    "routes": 499,
+    "controllers": 88,
+    "gated": 447,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 40,
@@ -1307,6 +1307,102 @@
       "path": "/api/v1/auth/users/:id",
       "hasPermission": true,
       "permission": "update:user",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatCallIceController#getIceConfig",
+      "httpMethod": "GET",
+      "path": "/api/v1/chat/calls/ice-config",
+      "hasPermission": true,
+      "permission": "call:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatCallsController#accept",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/calls/:id/accept",
+      "hasPermission": true,
+      "permission": "call:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatCallsController#cancel",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/calls/:id/cancel",
+      "hasPermission": true,
+      "permission": "call:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatCallsController#hangup",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/calls/:id/hangup",
+      "hasPermission": true,
+      "permission": "call:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatCallsController#invite",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/rooms/:id/calls",
+      "hasPermission": true,
+      "permission": "call:chat-room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "ChatCallsController#reject",
+      "httpMethod": "POST",
+      "path": "/api/v1/chat/calls/:id/reject",
+      "hasPermission": true,
+      "permission": "call:chat-room",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [

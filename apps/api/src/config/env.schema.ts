@@ -269,6 +269,19 @@ export const envSchema = z
     // phải "cho mọi công ty" — vắng cấu hình không bao giờ được nới thành cho phép.
     SOCIAL_COMPANY_ID: z.string().uuid().optional(),
 
+    // ── S7-CALL-BE-1: cuộc gọi thoại/hình — máy chủ TURN (CHAT-API-029 · DECISIONS-07 §5) ───────────
+    // Tài khoản **Cloudflare TURN** dùng chung với LMS: MediaOS KHÔNG tự dựng TURN server. Credential
+    // gửi xuống client do SERVER sinh, hạn ngắn, dẫn xuất từ hai biến này — secret gốc KHÔNG BAO GIỜ
+    // rời server, không vào DB, không vào DTO, KHÔNG vào log (BẤT BIẾN #3, xem `ChatCallIceService`).
+    //
+    // OPTIONAL — và đây là lựa chọn, không phải lười: thiếu cấu hình thì `GET /chat/calls/ice-config`
+    // rơi về STUN công cộng chứ KHÔNG chặn boot. Cuộc gọi trong cùng LAN/VPN vẫn chạy; một biến môi
+    // trường chưa đặt không được biến cả API thành không khởi động được.
+    // ⚠️ KHÔNG có `.min(32)` như các shared-secret khác: đây là khoá do Cloudflare cấp, độ dài của họ
+    // quy định — áp trần độ dài của mình lên khoá bên thứ ba là tự chặn một giá trị hợp lệ.
+    CLOUDFLARE_TURN_KEY_ID: z.string().min(1).optional(),
+    CLOUDFLARE_TURN_API_TOKEN: z.string().min(1).optional(),
+
     // ⚠️ ALLOW_SUPERUSER_ROTATION (KHÔNG validate qua zod — CỐ Ý): SecretRotationService đọc THẲNG
     // `process.env.ALLOW_SUPERUSER_ROTATION === 'true'` để fail-closed tuyệt đối (mọi giá trị ≠ 'true', kể cả
     // unset → CHẶN rotation bằng role BYPASS RLS). Không dùng z.coerce.boolean() vì nó coi 'false' → true (bẫy).

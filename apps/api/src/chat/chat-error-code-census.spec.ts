@@ -54,10 +54,12 @@ const PENDING_CODES: ReadonlyMap<string, string> = new Map([
   // 5 mã dưới đây ĐÃ vào SPEC-15 §12 nhưng CHƯA có đường code — wave CALL mới xong tầng tài liệu +
   // migration (`S7-CALL-DB-1`). Ghi nợ tường minh thay vì để `SPEC_ERROR_CODE_COUNT` ở 25: hạ số đếm
   // sẽ giấu 5 mã khỏi cả hai chiều census (không ai đòi ca test, cũng không ai thấy chúng đang nợ).
-  ["CHAT-ERR-026", "S7-CALL-BE-1"], // ngoài phòng → 404 (đồng dạng CHAT-ERR-001)
-  ["CHAT-ERR-027", "S7-CALL-BE-1"], // là thành viên nhưng thiếu ('call','chat-room') → 403
-  ["CHAT-ERR-028", "S7-CALL-BE-1"], // phòng đã có cuộc gọi sống → 409 (ép bằng partial unique index)
-  ["CHAT-ERR-029", "S7-CALL-BE-1"], // thao tác lên cuộc gọi đã kết thúc → 422 (FSM một chiều)
+  // CHAT-ERR-026…029 đã TRẢ ở `S7-CALL-BE-1` (09/08/2026 — vòng đời cuộc gọi qua REST). Gỡ khỏi sổ nợ
+  // để census quay lại đòi mỗi mã ≥1 ca int-spec; ca "nợ đã trả" bên dưới ép việc gỡ này.
+  //
+  // ⚠️ `CHAT-ERR-030` Ở LẠI: nó là mã của **`/ws-call`** (sự kiện ngoài allowlist 8 → ngắt kết nối +
+  // `user_security_events`), thuộc `S7-CALL-RT-1` — BE-1 không mở gateway nào. Gỡ nhầm nó xuống làm
+  // census đòi một ca test cho đường code chưa tồn tại ⇒ ĐỎ, và đỏ ở chỗ không ai đoán ra nguyên nhân.
   ["CHAT-ERR-030", "S7-CALL-RT-1"], // sự kiện /ws-call ngoài allowlist 8 → ngắt + user_security_events
 ]);
 

@@ -10270,13 +10270,30 @@ export const backlog = [
       "Vòng đời cuộc gọi qua REST (mời · nhận · từ chối · huỷ · kết thúc) + GET /chat/calls/ice-config — audit đầy đủ, KHÔNG đi qua WebSocket",
     zone: "red",
     status: "todo",
+    // Mở rộng khi thi công (09/08/2026) — lý do từng mục ở docs/plans/S7-CALL-BE-1.md §2/§3:
+    //  • chat-access.service.ts: `assertCallAccess` PHẢI sống cạnh 2 điểm khẳng định kia (D1). Đặt nó ở
+    //    chat-calls.service là dựng bản sao THỨ HAI của luật membership — bản sao sẽ trôi.
+    //  • chat-call-ice.controller.ts: route ice-config tách controller (không DB, không assertMember, có
+    //    gọi ra Internet) — mirror ChatSearchController/ChatFilesController.
+    //  • chat.errors.ts / chat.mapper.ts: mã lỗi 026..029 + hành động audit + DTO cuộc gọi.
+    //  • config/env.schema.ts + .env.example: 2 biến TURN dạng .optional() (BẤT BIẾN #3).
+    //  • docs/_review/…route-census.json: 6 route mới ⇒ census ĐỎ nếu không regen.
     paths: [
       "apps/api/src/chat/chat-calls.controller.ts",
       "apps/api/src/chat/chat-calls.service.ts",
       "apps/api/src/chat/chat-calls.repository.ts",
+      "apps/api/src/chat/chat-call-ice.controller.ts",
       "apps/api/src/chat/chat-call-ice.service.ts",
+      "apps/api/src/chat/chat-call-ringing-timeout.job-handler.ts",
+      "apps/api/src/chat/chat-access.service.ts",
+      "apps/api/src/chat/chat.errors.ts",
+      "apps/api/src/chat/chat.mapper.ts",
+      "apps/api/src/chat/chat-error-code-census.spec.ts",
       "apps/api/src/chat/chat.module.ts",
+      "apps/api/src/config/env.schema.ts",
+      ".env.example",
       "apps/api/test/integration/**",
+      "docs/_review/S6-SEC-ROUTEMAP-1-route-census.json",
       "docs/plans/S7-CALL-BE-1.md",
     ],
     skills: ["code-review"],
@@ -10288,9 +10305,9 @@ export const backlog = [
       "memory: route-census-runtime-gate · systemjobhandler-optional-dbw-di",
     ],
     done_when: [
-      "CHAT-API-020..023 REST, gate ('call','chat-room') + assertMember phòng; MỖI thao tác vòng đời ghi audit_logs",
+      "CHAT-API-026..029 REST (KHÔNG phải 020..023 như bản seed — DECISIONS-07 §7.1 đo lại 08/08: 020..025 đã bị wave S8 chiếm), gate ('call','chat-room') + assertMember phòng; MỖI thao tác vòng đời ghi audit_logs",
       "ice-config KHÔNG log credential; secret từ env, KHÔNG hard-code (BẤT BIẾN #3)",
-      "Cuộc gọi 'ringing' quá hạn → 'missed' bằng @SystemJobHandler idempotent (mẫu retention-cleanup) + @Optional() cho DI",
+      "Cuộc gọi 'ringing' quá hạn → 'missed' bằng @SystemJobHandler idempotent (mẫu retention-cleanup). KHÔNG @Optional(): handler chỉ nhận Nest provider thật, gắn @Optional() cho provider CÓ THẬT biến lỗi wiring thành undefined im lặng — bằng chứng thay thế là ca int-spec dựng AppModule THẬT + DiscoveryService (plan D7)",
       "Deny-path RED-TRƯỚC: người NGOÀI phòng → 404 giống hệt phòng không tồn tại; người trong phòng thiếu cặp ('call','chat-room') → 403",
       "ROUTE_CENSUS regen; route-guard-coverage xanh",
       "FULL gate PASS",

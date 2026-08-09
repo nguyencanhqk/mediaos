@@ -1,12 +1,14 @@
 import type {
   ChatAttachmentDto,
+  ChatCallDto,
   ChatMessageDto,
   ChatMessageReactionDto,
   ChatRoomDetailDto,
   ChatRoomDto,
   ChatRoomMemberDto,
 } from "@mediaos/contracts";
-import type { ChatMemberRole } from "../db/schema/communication";
+import type { ChatCallKind, ChatCallStatus, ChatMemberRole } from "../db/schema/communication";
+import type { ChatCallParticipantRow } from "./chat-calls.repository";
 import type { ChatMemberListRow, ChatRosterRow } from "./chat-rooms.repository";
 import type { ChatMessageRow } from "./chat-messages.repository";
 
@@ -196,6 +198,52 @@ export function toChatRosterMemberDto(
     isOnline,
     leftAt: toIso(row.leftAt),
   };
+}
+
+/**
+ * Tập cột TỐI THIỂU để dựng `ChatCallDto`. Khai structural — cùng lý do `ChatRoomProjection`: hàng từ
+ * `ChatCallsRepository` (drizzle `$inferSelect`) và hàng từ `ChatAccessService.assertCallAccess` đều
+ * dùng được mà KHÔNG cần `as`.
+ */
+export interface ChatCallProjection {
+  id: string;
+  roomId: string;
+  initiatorUserId: string;
+  kind: ChatCallKind;
+  status: ChatCallStatus;
+  startedAt: Date | string;
+  acceptedAt: Date | string | null;
+  endedAt: Date | string | null;
+}
+
+/**
+ * S7-CALL-BE-1 — `ChatCallDto` (`chatCallSchema`, `packages/contracts/src/chat-call.ts`).
+ *
+ * `participants` LUÔN được truyền (mảng rỗng cũng là mảng): schema để `.optional()` cho đường đọc tương
+ * lai, nhưng mọi phản hồi vòng đời đều vừa ghi xong bảng đó trong CÙNG tx nên bỏ trống chỉ tạo ra một
+ * hình dạng thứ hai mà FE phải phòng thủ.
+ *
+ * ⚠️ KHÔNG có trường nào cho SDP/ICE/nội dung media ở đây, và không được thêm: hàng rào **R3** của
+ * `CHAT-DEC-020` nói server không đọc, không lưu tín hiệu. Đưa chúng lên DTO là lưu, chỉ đổi chỗ.
+ */
+export function toChatCallDto(call: ChatCallProjection, participants: ChatCallParticipantRow[]) {
+  return {
+    id: call.id,
+    roomId: call.roomId,
+    initiatorUserId: call.initiatorUserId,
+    kind: call.kind,
+    status: call.status,
+    startedAt: toIso(call.startedAt) ?? EPOCH,
+    acceptedAt: toIso(call.acceptedAt),
+    endedAt: toIso(call.endedAt),
+    participants: participants.map((p) => ({
+      userId: p.userId,
+      invitedAt: toIso(p.invitedAt) ?? EPOCH,
+      joinedAt: toIso(p.joinedAt),
+      leftAt: toIso(p.leftAt),
+      outcome: p.outcome,
+    })),
+  } satisfies ChatCallDto;
 }
 
 export function toChatRoomDetailDto(

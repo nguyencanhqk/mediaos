@@ -1,8 +1,14 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { and, eq, isNull, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
-import { chatMessages, chatRoomMembers, chatRooms } from "../db/schema/communication";
-import type { ChatMemberRole, ChatMessageType, ChatRoomType } from "../db/schema/communication";
+import { chatCalls, chatMessages, chatRoomMembers, chatRooms } from "../db/schema/communication";
+import type {
+  ChatCallKind,
+  ChatCallStatus,
+  ChatMemberRole,
+  ChatMessageType,
+  ChatRoomType,
+} from "../db/schema/communication";
 import { CHAT_ERR } from "./chat.errors";
 import { visibleFromSeqColumn } from "./chat-visibility";
 
@@ -54,6 +60,21 @@ export interface ChatMessageAccess extends ChatRoomAccess {
     pinnedAt: Date | null;
     recalledAt: Date | null;
     createdAt: Date;
+  };
+}
+
+/** Cuộc gọi + phòng + tư cách thành viên, lấy trong ĐÚNG MỘT truy vấn (S7-CALL-BE-1). */
+export interface ChatCallAccess extends ChatRoomAccess {
+  call: {
+    id: string;
+    companyId: string;
+    roomId: string;
+    initiatorUserId: string;
+    kind: ChatCallKind;
+    status: ChatCallStatus;
+    startedAt: Date;
+    acceptedAt: Date | null;
+    endedAt: Date | null;
   };
 }
 
@@ -296,6 +317,126 @@ export class ChatAccessService {
         pinnedAt: row.messagePinnedAt,
         recalledAt: row.messageRecalledAt,
         createdAt: row.messageCreatedAt,
+      },
+      room: {
+        id: row.roomId,
+        companyId: row.roomCompanyId,
+        refId: row.refId,
+        roomType: row.roomType as ChatRoomType,
+        name: row.name,
+        roomCode: row.roomCode,
+        description: row.description,
+        isArchived: row.isArchived,
+        lastMessageAt: row.lastMessageAt,
+        lastMessageSeq: row.lastMessageSeq,
+        createdAt: row.createdAt,
+      },
+      membership: {
+        id: row.memberId,
+        userId: row.memberUserId,
+        role: row.memberRole as ChatMemberRole,
+        lastReadSeq: row.lastReadSeq,
+        visibleFromSeq: row.visibleFromSeq,
+        joinedAt: row.joinedAt,
+        pinnedAt: row.pinnedAt,
+        mutedUntil: row.mutedUntil,
+        markedUnreadAt: row.markedUnreadAt,
+      },
+    };
+  }
+
+  /**
+   * S7-CALL-BE-1 — cửa vào cho 5 route vòng đời nhận `callId` thay vì `roomId` (nhận · từ chối · huỷ ·
+   * kết thúc). Trục THỨ BA của cùng một luật, sau `roomId` và `messageId`.
+   *
+   * ⚠️ VÌ SAO KHÔNG `findCall()` rồi `assertMember(call.roomId)`: hai bước ⇒ hai thông điệp lỗi khác nhau
+   * ("cuộc gọi không tồn tại" vs "không tìm thấy phòng") ⇒ bắn `callId` ngẫu nhiên là **dò được cuộc gọi
+   * nào có thật** trong toàn công ty, và tệ hơn — dò được phòng nào ĐANG có người gọi nhau. Ở đây: MỘT
+   * truy vấn, MỘT hằng thông điệp cho MỌI lý do.
+   *
+   * ⚠️ **KHÔNG có tham số nào bỏ qua membership**, kể cả cho `('view','chat-oversight')` (SPEC-15 §5.1c):
+   * đọc-vượt không mở cửa nghe cuộc gọi. Không có `/chat/oversight/calls` và không được thêm.
+   *
+   * Vị từ membership tái dùng ĐÚNG hai helper bên dưới — không có bản sao thứ hai của luật.
+   *
+   * ⚠️ **Không** mang vị từ `visibleFromSeqColumn()` (§13.4) — cố ý, và đây là điểm KHÁC
+   * `assertMessageAccess`: §13.4 nói về việc thấy LỊCH SỬ TIN trước mốc mình vào phòng. Một cuộc gọi
+   * `ringing` **đang diễn ra bây giờ** không phải lịch sử; áp vế đó vào đây sẽ khoá người mới vào phòng
+   * khỏi chính cuộc gọi vừa mời họ.
+   *
+   * @throws NotFoundException (404 · `CALL_NOT_FOUND`) khi: cuộc gọi không tồn tại · thuộc tenant khác ·
+   *   phòng chứa nó đã xoá mềm · actor không phải thành viên phòng đó · actor đã rời — tất cả trả về BYTE
+   *   GIỐNG HỆT NHAU.
+   */
+  async assertCallAccess(
+    tx: TenantTx,
+    companyId: string,
+    callId: string,
+    actorUserId: string,
+  ): Promise<ChatCallAccess> {
+    const rows = await tx
+      .select({
+        callId: chatCalls.id,
+        callCompanyId: chatCalls.companyId,
+        callRoomId: chatCalls.roomId,
+        initiatorUserId: chatCalls.initiatorUserId,
+        kind: chatCalls.kind,
+        status: chatCalls.status,
+        startedAt: chatCalls.startedAt,
+        acceptedAt: chatCalls.acceptedAt,
+        endedAt: chatCalls.endedAt,
+        roomId: chatRooms.id,
+        roomCompanyId: chatRooms.companyId,
+        refId: chatRooms.refId,
+        roomType: chatRooms.roomType,
+        name: chatRooms.name,
+        roomCode: chatRooms.roomCode,
+        description: chatRooms.description,
+        isArchived: chatRooms.isArchived,
+        lastMessageAt: chatRooms.lastMessageAt,
+        lastMessageSeq: chatRooms.lastMessageSeq,
+        createdAt: chatRooms.createdAt,
+        memberId: chatRoomMembers.id,
+        memberUserId: chatRoomMembers.userId,
+        memberRole: chatRoomMembers.role,
+        lastReadSeq: chatRoomMembers.lastReadSeq,
+        visibleFromSeq: chatRoomMembers.visibleFromSeq,
+        joinedAt: chatRoomMembers.joinedAt,
+        pinnedAt: chatRoomMembers.pinnedAt,
+        mutedUntil: chatRoomMembers.mutedUntil,
+        markedUnreadAt: chatRoomMembers.markedUnreadAt,
+      })
+      .from(chatCalls)
+      // Vế nối CUỘC GỌI ↔ PHÒNG (id + company_id) — thiếu nó là tích Descartes, cùng bẫy đã ghi ở
+      // `messageReadConditions` mục 1.
+      .innerJoin(
+        chatRooms,
+        and(eq(chatRooms.id, chatCalls.roomId), eq(chatRooms.companyId, chatCalls.companyId)),
+      )
+      .innerJoin(chatRoomMembers, this.activeMembershipJoin(actorUserId))
+      .where(
+        and(
+          eq(chatCalls.id, callId),
+          eq(chatCalls.companyId, companyId),
+          this.visibleRoom(companyId),
+        ),
+      )
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) throw new NotFoundException(CHAT_ERR.CALL_NOT_FOUND);
+
+    return {
+      call: {
+        id: row.callId,
+        companyId: row.callCompanyId,
+        roomId: row.callRoomId,
+        initiatorUserId: row.initiatorUserId,
+        kind: row.kind as ChatCallKind,
+        status: row.status as ChatCallStatus,
+        startedAt: row.startedAt,
+        acceptedAt: row.acceptedAt,
+        endedAt: row.endedAt,
       },
       room: {
         id: row.roomId,

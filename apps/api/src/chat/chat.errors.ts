@@ -243,6 +243,77 @@ export const CHAT_ERR = {
    */
   OVERSIGHT_CURSOR_FILTER_MISMATCH:
     "CHAT-ERR-016: con trỏ phân trang không khớp bộ lọc hiện tại — hãy tải lại từ trang đầu.",
+
+  // ═══════════ S7-CALL-BE-1 — vòng đời cuộc gọi (CHAT-DEC-020 · SPEC-15 §5.1c) ═══════════
+
+  /**
+   * CHAT-ERR-026 (404) — trục CUỘC GỌI. HẰNG, cùng lớp chống-dò với `ROOM_NOT_FOUND`/`MESSAGE_NOT_FOUND`:
+   * "cuộc gọi không tồn tại" · "cuộc gọi của tenant khác" · "cuộc gọi ở phòng mình không thuộc" · "mình đã
+   * rời phòng đó" PHẢI trả về CHUỖI GIỐNG HỆT NHAU. Thiếu tính chất này thì `callId` là trục dò thứ ba bên
+   * cạnh `roomId`/`messageId`.
+   *
+   * ⚠️ **Áp cả cho người có `('view','chat-oversight')`** (SPEC-15 §5.1c): đọc-vượt là quyền đọc LỊCH SỬ
+   * TIN NHẮN, nó KHÔNG miễn `assertMember` cho bất kỳ đường CALL nào. Quản trị không thuộc phòng → 404 như
+   * mọi người ngoài.
+   *
+   * Đường MỜI (`CHAT-API-026`) không dùng hằng này: nó nhận `roomId` nên hỏng ở `assertMember` và trả
+   * `ROOM_NOT_FOUND` (CHAT-ERR-001) — đúng yêu cầu "thông điệp giống hệt phòng không tồn tại" của §12.
+   */
+  CALL_NOT_FOUND: "CHAT-ERR-026: không tìm thấy cuộc gọi.",
+
+  /**
+   * CHAT-ERR-005 (422) — bắt đầu cuộc gọi MỚI trong phòng đã lưu trữ.
+   *
+   * ⚠️ Mã **005 có sẵn**, không phải mã mới: SPEC-15 §3.1 chốt "phòng lưu trữ = CHỈ ĐỌC", và đường gửi
+   * tin đã dùng đúng mã đó (`SEND_ARCHIVED`). Bắt đầu một cuộc gọi tạo hàng `chat_calls` +
+   * `chat_call_participants` ⇒ là GHI, nên cùng luật. Đẻ mã mới cho ca này sẽ làm
+   * `chat-error-code-census` ĐỎ ở vế "không có mã ngoài sổ" — §12 chốt đúng 30 mã.
+   *
+   * Chỉ áp cho `CHAT-API-026`. `accept`/`reject`/`cancel`/`hangup` **vẫn chạy** trên phòng bị lưu trữ
+   * giữa chừng: chặn chúng sẽ nhốt một cuộc gọi ở `ringing` cho tới khi job dọn, và giữ luôn khoá
+   * "một cuộc gọi sống mỗi phòng" trong suốt thời gian đó.
+   */
+  CALL_ROOM_ARCHIVED: "CHAT-ERR-005: phòng đã lưu trữ — không bắt đầu cuộc gọi mới được.",
+
+  /**
+   * CHAT-ERR-027 (403) — ĐÃ qua `assertCallAccess` (nên đã biết cuộc gọi tồn tại) nhưng **không phải chủ
+   * thể hợp lệ của thao tác này**: huỷ một cuộc gọi mình không khởi tạo, hoặc nhận/từ chối chính lời mời
+   * của mình (`CHAT-API-027` — "chỉ người **được mời**").
+   *
+   * 403 chứ không 404: người gọi vốn đã chứng minh được tư cách thành viên phòng ⇒ không còn gì để dò
+   * (§12 nói thẳng điều này ở vế phân biệt 026/027). 403 chứ không 422: đây là câu hỏi "AI được làm", không
+   * phải "trạng thái có cho làm không" — trộn hai loại vào một mã làm FE không phân biệt được "thử lại sau"
+   * với "không bao giờ được".
+   *
+   * MỘT thông điệp cho cả hai vế: tách ra sẽ nói cho người gọi biết họ đang đứng ở vai nào trong một cuộc
+   * gọi mà họ không có quyền điều khiển.
+   */
+  CALL_ACTION_FORBIDDEN:
+    "CHAT-ERR-027: bạn không thực hiện được thao tác này trên cuộc gọi — chỉ người khởi tạo mới huỷ được, và chỉ người được mời mới nhận/từ chối được.",
+
+  /**
+   * CHAT-ERR-028 (409) — phòng ĐÃ có cuộc gọi sống (`ringing`/`active`).
+   *
+   * ⚠️ Sinh ra từ `23505` trên `chat_calls_one_live_per_room_uq`, **KHÔNG** từ một `SELECT` kiểm trước:
+   * hai lời mời đồng thời cùng đọc "chưa có cuộc gọi nào" rồi cùng INSERT — kiểm-rồi-ghi ở tầng ứng dụng
+   * không chặn được đường đua đó (mig `0546` khối A2 ghi rõ lý do chọn ràng buộc DB).
+   */
+  CALL_ALREADY_LIVE:
+    "CHAT-ERR-028: phòng này đang có một cuộc gọi diễn ra — kết thúc cuộc gọi đó trước.",
+
+  /**
+   * CHAT-ERR-029 (422) — thao tác vòng đời lên cuộc gọi **không còn ở trạng thái nhận được thao tác đó**:
+   * đã `ended`/`rejected`/`cancelled`/`missed` (FSM một chiều, không hồi sinh), hoặc sai pha (huỷ một cuộc
+   * gọi đã nối máy, từ chối một cuộc gọi đang diễn ra).
+   *
+   * MỘT thông điệp cho mọi vế — cố ý: nói rõ "đang ở trạng thái X" là kể trạng thái cuộc gọi cho người vừa
+   * thao tác hỏng, mà FE đã có DTO để biết. 422 (không phải 404/409): người gọi đọc được cuộc gọi, dữ liệu
+   * gửi lên hợp lệ, chỉ có trạng thái không cho phép.
+   *
+   * ⚠️ Service kiểm vế này TRƯỚC khi ghi, nhưng trigger `chat_calls_forbid_revive_trg` (23514) là **lưới
+   * cuối** ở DB. Đường ghi phải map 23514 → CHÍNH mã này, nếu không một hàng đua sẽ nổ 500.
+   */
+  CALL_NOT_ACTIONABLE: "CHAT-ERR-029: cuộc gọi không còn ở trạng thái thực hiện được thao tác này.",
 } as const;
 
 /**
@@ -327,6 +398,30 @@ export const CHAT_AUDIT = {
    * khoá. `metadata` của 018a chỉ mang chuỗi người dùng TỰ GÕ (`q`) + `roomType` + số kết quả.
    */
   OVERSIGHT_READ: "chat.oversight.read",
+  // ── S7-CALL-BE-1 — vòng đời cuộc gọi (hàng rào R4 của CHAT-DEC-020) ──
+  /**
+   * SÁU hành động, `object_type = 'chat_call'` (UNION-ADD ở mig `0546` khối E + union TS
+   * `AuditObjectType`), `object_id` = `callId`.
+   *
+   * ⚠️ **Vì sao CALL audit đủ 6 mà tin nhắn chỉ audit 3** (xem docblock ở trên): audit vòng đời cuộc gọi
+   * KHÔNG đe doạ nhấn chìm `audit_logs` như audit từng tin — một cuộc gọi sinh 2-3 dòng, còn một phòng
+   * bận sinh hàng nghìn tin. Và đây là đường ghi đi kèm một ngoại lệ bất biến (`CHAT-DEC-020` nới
+   * `CHAT-DEC-005`): R4 đổi lấy việc nới đó BẰNG CHÍNH cam kết "vòng đời có audit đầy đủ".
+   *
+   * TUYỆT ĐỐI KHÔNG có SDP/ICE/nội dung media trong `metadata` — R3 nói server không đọc, không lưu;
+   * ghi chúng vào audit là lưu, chỉ đổi bảng.
+   */
+  CALL_INVITED: "chat.call.invited",
+  CALL_ACCEPTED: "chat.call.accepted",
+  CALL_REJECTED: "chat.call.rejected",
+  CALL_CANCELLED: "chat.call.cancelled",
+  CALL_ENDED: "chat.call.ended",
+  /**
+   * Job quét `ringing` quá hạn. `actorType:'Job'` + **KHÔNG** `actorUserId`: không người nào đứng sau
+   * (mirror `ROOM_AUTO_*` của BE-5). Gộp vào `CALL_ENDED` sẽ làm mọi cuộc gọi nhỡ trông như có người
+   * chủ động gác máy — đúng loại nhầm lẫn mà sổ audit sinh ra để tránh.
+   */
+  CALL_MISSED: "chat.call.missed",
 } as const;
 
 /** `module_code` cho mọi dòng audit của CHAT — CHAT-API-019 lọc theo cột này. */
