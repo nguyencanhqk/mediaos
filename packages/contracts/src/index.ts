@@ -103,6 +103,10 @@ export * from "./my-notification";
 export * from "./notification-admin";
 export * from "./foundation";
 export * from "./chat";
+// S7-CALL-DB-1 (additive): hợp đồng cuộc gọi thoại/hình (DECISIONS-07 · CHAT-DEC-020) — file RIÊNG,
+// KHÔNG đụng ./chat. Chứa cả bộ giá trị vòng đời (khớp CHECK của mig 0546) lẫn allowlist ĐÓNG 8 sự
+// kiện inbound của namespace /ws-call.
+export * from "./chat-call";
 export * from "./realtime";
 export * from "./settings";
 export * from "./positions";

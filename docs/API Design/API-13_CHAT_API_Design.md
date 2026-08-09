@@ -192,6 +192,31 @@ Cột **Membership** ghi rõ endpoint có phải chạy `ChatAccessService.asser
 
 ⚠️ **`isOnline` ở CHAT-API-007a là ẢNH CHỤP, không phải luồng sống.** Sự kiện `chat:presence` chỉ fan-out tới peer của phòng `direct` (§7) — cố ý, vì phát trạng thái online của mọi người tới mọi phòng họ tham gia đúng là thứ `CHAT-DEC-017` gọi là rò lịch làm việc. Với phòng nhóm/phòng ban/dự án, giá trị này chỉ mới lại khi client refetch roster. FE phải hiển thị nó như trạng thái tại-thời-điểm-nạp, không được đọc là thời-gian-thực.
 
+### 5.1c Wave S7-CALL — cuộc gọi thoại/hình *(CHAT-DEC-020, owner ký ADR 08/08/2026)*
+
+> ⚠️ **Đánh số `026..029`, KHÔNG phải `024..027`** như bản seed Work Order ghi. Đo lại 08/08/2026: `024a`/`024b`/`025` đã bị chính wave S8 ở bảng trên chiếm. Đây là lần **thứ hai** dải trong WO lỗi thời — đọc lại đính chính ⛔ phía trên: **đo bằng grep, đừng tin con số của bảng seed**.
+>
+> **CÓ cặp quyền mới:** `('call','chat-room')`, `is_sensitive=false`, seed ở `S7-CALL-DB-1`. Khác wave S8 (0 cặp mới) ⇒ wave này **CÓ** rủi ro `canonical-seed-pin-regression`: seed phải cùng commit với cập nhật pin canonical.
+
+Toàn bộ vòng đời đi **REST** — hàng rào **R4** của `CHAT-DEC-020`. `/ws-call` chỉ relay SDP/ICE, **không ghi gì** (§7a).
+
+| Mã | Method | Path | Chức năng | Permission | Membership | Audit |
+| --- | --- | --- | --- | --- | --- | --- |
+| CHAT-API-026 | POST | `/chat/rooms/{room_id}/calls` | **Mời** — `{ kind: 'audio' \| 'video' }`, tạo `chat_calls` trạng thái `ringing`. Phòng đã có cuộc gọi sống → 409 CHAT-ERR-028 | `('call','chat-room')` | ✅ | ✅ |
+| CHAT-API-027 | POST | `/chat/calls/{call_id}/accept` · `/reject` | **Nhận / từ chối** — chỉ người được mời. Cuộc gọi đã kết thúc → 422 CHAT-ERR-029 | `('call','chat-room')` | ✅ (phòng chứa cuộc gọi) | ✅ |
+| CHAT-API-028 | POST | `/chat/calls/{call_id}/cancel` · `/hangup` | **Huỷ** (người gọi rút trước khi được nhận) · **kết thúc** (bên nào cũng gác được sau khi nối) | `('call','chat-room')` | ✅ | ✅ |
+| CHAT-API-029 | GET | `/chat/calls/ice-config` | Cấu hình ICE — credential TURN sinh **phía server** từ env, STUN Google dự phòng. **204/200 không thân nhạy cảm ghi log** | `('call','chat-room')` | — | — |
+
+⚠️ **Người ngoài phòng nhận `404`, KHÔNG phải `403`** (CHAT-ERR-026) — đồng dạng CHAT-ERR-001, thông điệp **giống hệt** phòng không tồn tại. Là thành viên nhưng thiếu cặp `('call','chat-room')` mới là `403` (CHAT-ERR-027): lúc đó người gọi đã chứng minh được tư cách thành viên nên không còn gì để dò. Trả `403` cho cả hai biến endpoint gọi thành oracle dò sự tồn tại của phòng.
+
+⚠️ **`('view','chat-oversight')` KHÔNG miễn `assertMember` ở bất kỳ dòng nào trong bảng này.** Đọc-vượt (§5.3) là quyền đọc **lịch sử tin nhắn**, không phải quyền nghe cuộc gọi. Super Admin không thuộc phòng gọi vào → **404** như mọi người ngoài. Không có `/chat/oversight/calls`, và **không** được thêm.
+
+⚠️ **`CHAT-API-029` KHÔNG log credential.** `CLOUDFLARE_TURN_KEY_ID` + `CLOUDFLARE_TURN_API_TOKEN` lấy từ **env** (BẤT BIẾN #3) — không hard-code, không vào DTO, không vào log kể cả ở mức debug. Credential TURN có hạn ngắn nhưng vẫn là bí mật đi được ra ngoài.
+
+⚠️ **`ringing` quá hạn → `missed` do SERVER chuyển**, bằng `@SystemJobHandler` idempotent + `@Optional()` cho DI (memory `systemjobhandler-optional-dbw-di` — thiếu `@Optional()` sập `AppModule`, kéo đỏ dây chuyền hàng trăm spec). Để client tự đóng khung mà server không đổi trạng thái ⇒ phòng kẹt "đang có cuộc gọi sống" và **mọi lời mời sau đó 409 vĩnh viễn**.
+
+⚠️ **Chưa cấp endpoint ĐỌC lịch sử cuộc gọi.** `chat_calls` append-only có dữ liệu nhưng wave này không mở đường liệt kê — ADR không đặt phạm vi đó. Ai làm màn "nhật ký cuộc gọi" phải cấp mã mới và **đo lại dải trống**, đừng mặc định `030` còn trống.
+
 ### 5.2 Trạng thái hiện thực (đối chiếu code, 01/08/2026)
 
 | Nhóm | Trạng thái | Ghi chú |
@@ -313,25 +338,55 @@ Ràng buộc:
 - Mọi payload `.parse()` qua schema contracts trước khi emit (`RealtimeEmitterService`) — cấm `io.emit` row DB thẳng.
 - `REALTIME_ENABLED=false` → gateway từ chối mọi kết nối ở handshake; FE chuyển sang bù bằng `afterSeq` mỗi 10 giây. **Nghiệp vụ vẫn phải đúng hoàn toàn** ở chế độ này.
 
+### 7a. Namespace `/ws-call` — bắt tay WebRTC *(S7-CALL, CHAT-DEC-020)*
+
+> ⚠️ **Namespace RIÊNG (hàng rào R1).** `/ws` ở §7 **giữ nguyên 0 `@SubscribeMessage`** — ratchet `chat-realtime-structure.spec.ts` phải còn một khẳng định **riêng** giữ mức 0 cho `/ws` kể cả sau khi wave CALL nới phạm vi quét. `/ws-call` có handler inbound **không phải giấy phép** thêm handler vào `/ws`.
+
+Đây là **kênh DUY NHẤT** trong toàn hệ thống mà client được ghi lên WS, và chỉ ghi **tín hiệu vận chuyển tạm thời** — không phải dữ liệu nghiệp vụ.
+
+**Allowlist ĐÓNG — đúng 8 sự kiện inbound (hàng rào R2):**
+
+| Sự kiện | Payload | Kiểm trước khi xử lý |
+| --- | --- | --- |
+| `call:join` | `{ callId }` | là người tham gia cuộc gọi **đang sống** |
+| `call:leave` | `{ callId }` | như trên |
+| `call:sdp-offer` | `{ callId, toUserId, sdp }` | người gửi ∈ cuộc gọi · `toUserId` ∈ cuộc gọi |
+| `call:sdp-answer` | `{ callId, toUserId, sdp }` | như trên |
+| `call:ice-candidate` | `{ callId, toUserId, candidate }` | như trên |
+| `call:media-state` | `{ callId, micOn, camOn }` | là người tham gia |
+| `call:ping` | `{ callId }` | là người tham gia (phát hiện rớt) |
+| `call:screen-state` | `{ callId, sharing }` | là người tham gia |
+
+Ràng buộc:
+
+- **Sự kiện ngoài danh sách → NGẮT kết nối + ghi `user_security_events`** (CHAT-ERR-030). Không trả lỗi nghiệp vụ: đây là tín hiệu dò cửa, không phải sai đầu vào của người dùng hợp lệ.
+- **`sdp`/`candidate` là CHUỖI MỜ** (hàng rào R3): có **trần độ dài**, server **không parse**, **không đọc**, **không lưu**, **không** đưa vào bất kỳ DTO nào. Ngày nào ta lưu SDP thì ngoại lệ `CHAT-DEC-020` **hết hiệu lực**.
+- **Mỗi sự kiện kiểm LẠI tư cách tham gia cuộc gọi** — **không** tin vào việc socket đang ở trong room. Cổng quyền WS chỉ chạy một lần lúc `handleConnection`; tư cách có thể mất giữa chừng (memory `ws-permission-gate-needs-its-own-room`).
+- **KHÔNG có trong danh sách, cố ý đi REST** (hàng rào R4): `call:invite` · `call:accept` · `call:reject` · `call:cancel` · `call:hangup` — và mọi thứ thuộc tin nhắn/thành viên/ghim/đã-đọc. Đây là **điểm khác quan trọng nhất so với LMS**, nơi cả vòng đời chạy trong handler socket.
+- Cưỡng chế danh tính ở **`allowRequest`**, không dựa vào `cors` — `engine.io` `cors` **không từ chối ai cả** (memory `engineio-cors-never-rejects`).
+- Mọi payload `.parse()` qua Zod ở biên (`packages/contracts`) trước khi xử lý.
+
 ---
 
 ## 8. Mã lỗi
 
-**25** mã `CHAT-ERR-001..025` (021-025 thêm ở wave S8-CHAT-UX) định nghĩa tại [SPEC-15 §12](<../SPEC/SPEC-15 CHAT.md>). Ánh xạ HTTP:
+**30** mã `CHAT-ERR-001..030` (021-025 thêm ở wave S8-CHAT-UX; **026-030 thêm ở wave S7-CALL**) định nghĩa tại [SPEC-15 §12](<../SPEC/SPEC-15 CHAT.md>). Ánh xạ HTTP:
 
 | HTTP | Dùng cho |
 | --- | --- |
 | `200` | Idempotent trả bản ghi đã có (CHAT-ERR-014, mở DM lần 2) |
-| `400` / `422` | Validate đầu vào: CHAT-ERR-002/003/004/009/016 · *(S8)* đặt avatar cho phòng `direct` (CHAT-ERR-022) · react vào tin đã thu hồi (CHAT-ERR-024) · emoji ngoài bộ đóng (CHAT-ERR-025) |
-| `403` | Đã là thành viên nhưng thiếu quyền/vai trò: CHAT-ERR-006/011/012/013 · tệp CHAT-ERR-015 · *(S8)* không đủ tư cách đặt avatar theo loại phòng (CHAT-ERR-023, SPEC-15 §11b) · **thiếu cặp `('view','chat-oversight')` trên `/chat/oversight/*`: CHAT-ERR-019** (403 chứ không 404 — người gọi biết mình đang dùng chức năng quản trị, không có gì để dò) |
-| `404` | **Không phải thành viên** hoặc phòng/tin không tồn tại: CHAT-ERR-001 · **và CHAT-ERR-017 khi `roomId` chỉ định không thuộc phạm vi người tìm** |
-| `409` | Xung đột trạng thái: gửi vào phòng đã lưu trữ (CHAT-ERR-005), ghim quá hạn mức tin (CHAT-ERR-008) **và ghim quá 10 hội thoại (CHAT-ERR-021)** |
+| `400` / `422` | Validate đầu vào: CHAT-ERR-002/003/004/009/016 · *(S8)* đặt avatar cho phòng `direct` (CHAT-ERR-022) · react vào tin đã thu hồi (CHAT-ERR-024) · emoji ngoài bộ đóng (CHAT-ERR-025) · *(S7-CALL)* **CHAT-ERR-029** — thao tác vòng đời lên cuộc gọi đã kết thúc (FSM một chiều, không hồi sinh) |
+| `403` | Đã là thành viên nhưng thiếu quyền/vai trò: CHAT-ERR-006/011/012/013 · tệp CHAT-ERR-015 · *(S8)* không đủ tư cách đặt avatar theo loại phòng (CHAT-ERR-023, SPEC-15 §11b) · *(S7-CALL)* **CHAT-ERR-027** — là thành viên nhưng thiếu cặp `('call','chat-room')` · **thiếu cặp `('view','chat-oversight')` trên `/chat/oversight/*`: CHAT-ERR-019** (403 chứ không 404 — người gọi biết mình đang dùng chức năng quản trị, không có gì để dò) |
+| `404` | **Không phải thành viên** hoặc phòng/tin không tồn tại: CHAT-ERR-001 · **và CHAT-ERR-017 khi `roomId` chỉ định không thuộc phạm vi người tìm** · *(S7-CALL)* **CHAT-ERR-026** — gọi/thao tác cuộc gọi ở phòng không thuộc, **kể cả người có `('view','chat-oversight')`** |
+| `409` | Xung đột trạng thái: gửi vào phòng đã lưu trữ (CHAT-ERR-005), ghim quá hạn mức tin (CHAT-ERR-008) **và ghim quá 10 hội thoại (CHAT-ERR-021)** · *(S7-CALL)* **CHAT-ERR-028** — phòng đã có cuộc gọi đang sống |
 | `500` | **CHAT-ERR-020** — ghi `audit_logs` của đường đọc-vượt thất bại ⇒ rollback. Trả thân lỗi chuẩn API-01; **tuyệt đối không** trả `200` với thân rỗng (đó là "đọc-vượt không dấu vết" ngụy trang thành kết quả trống) |
 | `501`/`405` | Sửa tin nhắn (CHAT-ERR-007) — không hỗ trợ ở v1 |
 
 > ⚠️ **CHAT-ERR-017 trả `404`, không phải `400`/`422`.** Nếu `roomId` không-thuộc trả `422` còn `roomId` không-tồn-tại trả `404` thì chính ô tìm kiếm thành oracle dò sự tồn tại của phòng — đúng thứ CHAT-ERR-001 dựng `404` để chặn. Hai trường hợp phải trả **cùng một** phản hồi. Truy vấn `q` < 2 ký tự vẫn là `400`/`422` (lỗi validate thuần, không tiết lộ gì).
 
 CHAT-ERR-010 (mention người ngoài phòng) và CHAT-ERR-018 (`last_read_seq` lùi) **không** trả lỗi — bỏ qua im lặng theo thiết kế.
+
+> ⚠️ **CHAT-ERR-030 KHÔNG có mã HTTP** — nó sống trên `/ws-call` (§7a), không phải REST. Sự kiện inbound ngoài allowlist 8, payload sai Zod, hoặc `sdp`/`candidate` vượt trần độ dài ⇒ **ngắt kết nối** + ghi `user_security_events`. Cố ý **không** trả thân lỗi mô tả: phản hồi càng cụ thể thì càng tiện cho việc dò danh sách sự kiện được chấp nhận.
 
 ---
 

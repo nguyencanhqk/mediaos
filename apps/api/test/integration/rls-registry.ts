@@ -1427,6 +1427,56 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  {
+    // S7-CALL-DB-1 (mig 0546) · CHAT-DEC-020 — cuoc goi thoai/hinh.
+    // Thieu entry nay thi rls-guards.int-spec DO ("bang co company_id chua dang ky harness") VA
+    // tenant-isolation bo sot phep do co lap cheo tenant cua chinh bang moi.
+    name: "chat_calls",
+    table: "chat_calls",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `cc-${randomUUID().slice(0, 8)}@x.test`);
+      const roomSuffix = randomUUID().slice(0, 8);
+      const roomRes = await direct.query(
+        `INSERT INTO chat_rooms (company_id, room_type, name, room_code)
+         VALUES ($1, 'group', $2, $3) RETURNING id`,
+        [t.companyId, `rls-room-call-${roomSuffix}`, `RLSCA-${roomSuffix}`],
+      );
+      // kind/status phai nam trong bo DONG (chat_calls_kind_chk / _status_chk) — chuoi tu do se 23514.
+      // De status mac dinh 'ringing': moi phong chi duoc MOT cuoc goi song
+      // (chat_calls_one_live_per_room_uq) va moi seedRow dung mot phong RIENG nen khong dung nhau.
+      const r = await direct.query(
+        `INSERT INTO chat_calls (company_id, room_id, initiator_user_id, kind)
+         VALUES ($1, $2, $3, 'video') RETURNING id`,
+        [t.companyId, roomRes.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    // S7-CALL-DB-1 (mig 0546) — nguoi duoc moi / nguoi da vao cuoc goi.
+    name: "chat_call_participants",
+    table: "chat_call_participants",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `ccp-${randomUUID().slice(0, 8)}@x.test`);
+      const roomSuffix = randomUUID().slice(0, 8);
+      const roomRes = await direct.query(
+        `INSERT INTO chat_rooms (company_id, room_type, name, room_code)
+         VALUES ($1, 'group', $2, $3) RETURNING id`,
+        [t.companyId, `rls-room-callp-${roomSuffix}`, `RLSCP-${roomSuffix}`],
+      );
+      const callRes = await direct.query(
+        `INSERT INTO chat_calls (company_id, room_id, initiator_user_id, kind)
+         VALUES ($1, $2, $3, 'audio') RETURNING id`,
+        [t.companyId, roomRes.rows[0].id, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO chat_call_participants (company_id, call_id, user_id)
+         VALUES ($1, $2, $3) RETURNING id`,
+        [t.companyId, callRes.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 
   // ── G11 HR — Attendance (mig 0061) ───────────────────────────────────────────
   // Chống XANH-GIẢ (rủi ro #1): 6 bảng HR có company_id ⇒ rls-guards.int-spec sẽ ĐỎ

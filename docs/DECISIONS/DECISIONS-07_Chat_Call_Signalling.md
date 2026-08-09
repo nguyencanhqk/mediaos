@@ -2,8 +2,8 @@
 
 | | |
 | --- | --- |
-| **Trạng thái** | 🟡 **Đề xuất — chờ owner ký**. Không code trước khi mục §7 có chữ ký. |
-| **Ngày** | 2026-08-04 |
+| **Trạng thái** | 🟢 **ĐÃ KÝ 2026-08-08** — có hiệu lực. Wave `S7-CALL-*` được phép bắt đầu (§7). |
+| **Ngày** | 2026-08-04 · ký 2026-08-08 |
 | **Bối cảnh** | Owner chốt phương án **C** (làm cuộc gọi ở MediaOS) sau đánh giá `docs/plans/S7-CHAT-LMS-CONSOLIDATION.md` |
 | **Vùng** | 🔴 ĐỎ — sửa một bất biến kiến trúc đang có hiệu lực |
 | **Thay thế** | `CHAT-DEC-005` (SPEC-15 §3.5 · §22) — **nới**, không huỷ |
@@ -125,12 +125,29 @@ phần "kế thừa để làm nhanh" **có giá trị thật** — khác với 
 
 ## 7. Owner ký
 
-- [ ] Tôi chấp nhận **nới `CHAT-DEC-005`** đúng phạm vi §3, với 4 hàng rào R1–R4.
-- [ ] Tôi chấp nhận sửa **SPEC-15 §5.2**: "Cuộc gọi thoại/hình — ngoài phạm vi sản phẩm" → **trong phạm
+- [x] Tôi chấp nhận **nới `CHAT-DEC-005`** đúng phạm vi §3, với 4 hàng rào R1–R4.
+- [x] Tôi chấp nhận sửa **SPEC-15 §5.2**: "Cuộc gọi thoại/hình — ngoài phạm vi sản phẩm" → **trong phạm
       vi**, có mục riêng.
-- [ ] Tôi xác nhận dùng **tài khoản Cloudflare TURN** hiện có của LMS cho MediaOS (hoặc cấp khoá riêng).
+- [x] Tôi xác nhận dùng **tài khoản Cloudflare TURN** hiện có của LMS cho MediaOS (hoặc cấp khoá riêng).
 
-Ký: ................................ Ngày: ....................
+Ký: **Owner (Cian)** Ngày: **2026-08-08**
 
-> Chưa có chữ ký thì `S7-CALL-*` **không được bắt đầu**. `S7-CHAT-FE-3`/`FE-4`/`FE-5` và
+> ✅ Đã ký ⇒ `S7-CALL-*` được phép bắt đầu. `S7-CHAT-FE-3`/`FE-4`/`FE-5` và
 > `S7-CHAT-LMS-1` (phần gỡ chat LMS, giữ nguyên đường gọi cũ tới khi CALL sẵn sàng) **không** chờ mục này.
+
+### 7.1 Mã đã cấp khi ký — đo trên master 2026-08-08
+
+Dải trong bản seed WO **đã lỗi thời lần hai**: wave S8-CHAT-UX chiếm tiếp `CHAT-API-024a/024b/025`
+(`API-13` dòng 164-166) sau khi bản ghi chú 05/08 được viết. Dải thật đo lại lúc ký:
+
+| Loại | Cấp cho CALL | Ghi chú |
+| --- | --- | --- |
+| Quyết định | `CHAT-DEC-020` | trống — max đang là 019 |
+| Màn hình | `CHAT-SCREEN-009` | trống — max đang là 008 |
+| API | **`CHAT-API-026..029`** | ⚠️ **KHÔNG phải 024..027** như WO ghi — 024a/024b/025 đã bị S8 chiếm |
+| Mã lỗi | `CHAT-ERR-026..030` | trống — §12 đang chốt đúng 25 mã |
+
+⚠️ Thêm mã lỗi ⇒ **bắt buộc** sửa `apps/api/src/chat/chat-error-code-census.spec.ts`:
+nâng `SPEC_ERROR_CODE_COUNT` 25 → 30 **và** ghi 5 mã mới vào `PENDING_CODES` kèm tên WO nợ chúng.
+Sổ nợ hiện **RỖNG**; thêm mã vào §12 mà quên hai việc đó ⇒ census **ĐỎ** (đã xảy ra thật với
+`S8-CHAT-UX-BE-2`, xem `docs/plans/S8-CHAT-UX-BE-2.md:54`).

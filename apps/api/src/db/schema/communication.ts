@@ -455,3 +455,118 @@ export const chatMessageReactions = pgTable(
 
 export type ChatMessageReaction = typeof chatMessageReactions.$inferSelect;
 export type NewChatMessageReaction = typeof chatMessageReactions.$inferInsert;
+
+// ─── cuộc gọi thoại/hình (S7-CALL, mig 0546 · CHAT-DEC-020) ───────────────────
+//
+// ⚠️ HAI BẢNG NÀY LÀ LEDGER APPEND-ONLY (BẤT BIẾN #2). App role có SELECT/INSERT + column-GRANT UPDATE
+//    đúng các cột vòng đời; KHÔNG có DELETE, KHÔNG có UPDATE cấp bảng. Một `update()` của drizzle chạm
+//    cột ngoài danh sách sẽ bị Postgres từ chối ở RUNTIME (42501), không phải lúc biên dịch —
+//    danh sách cột nằm ở mig 0546 khối (C).
+//
+// ⚠️ KHÔNG có `deletedAt`: đây là sổ ghi những cuộc gọi ĐÃ XẢY RA, không phải bảng nghiệp vụ
+//    soft-delete. Thêm cột đó tạo ảo giác "xoá được cuộc gọi" trong khi app role không có DELETE.
+
+export const CHAT_CALL_KINDS = ["audio", "video"] as const;
+export type ChatCallKind = (typeof CHAT_CALL_KINDS)[number];
+
+/** FSM MỘT CHIỀU: `ringing` → `active` → kết thúc. Không hồi sinh (SPEC-15 CHAT-ERR-029). */
+export const CHAT_CALL_STATUSES = [
+  "ringing",
+  "active",
+  "ended",
+  "rejected",
+  "cancelled",
+  "missed",
+] as const;
+export type ChatCallStatus = (typeof CHAT_CALL_STATUSES)[number];
+
+export const CHAT_CALL_OUTCOMES = ["accepted", "rejected", "missed", "cancelled", "left"] as const;
+export type ChatCallOutcome = (typeof CHAT_CALL_OUTCOMES)[number];
+
+export const chatCalls = pgTable(
+  "chat_calls",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    /**
+     * ⚠️ KHÔNG khai `.references()` cho `roomId`/`initiatorUserId`: FK ở DB là COMPOSITE
+     * `(company_id, room_id) → chat_rooms(company_id, id)` và `(company_id, initiator_user_id) →
+     * users(company_id, id)`, cả hai `ON DELETE RESTRICT`. FK một-cột giữa hai bảng đều có company_id
+     * là lớp lỗ KI-046 (kiểm tra FK của PG bỏ qua RLS) và làm `xtenant-fk-ratchet` ca (a) ĐỎ trên CI.
+     */
+    roomId: uuid("room_id").notNull(),
+    initiatorUserId: uuid("initiator_user_id").notNull(),
+    kind: varchar("kind", { length: 10 }).$type<ChatCallKind>().notNull(),
+    status: varchar("status", { length: 16 }).$type<ChatCallStatus>().notNull().default("ringing"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+  },
+  (t) => [
+    // ⚠️ `chat_calls_company_id_id_uq` (ĐÍCH cho FK composite của chat_call_participants) CỐ Ý
+    //    KHÔNG khai ở đây. Nó là UNIQUE **cấp bảng** trong mig 0546, tức `pg_constraint`, không phải
+    //    index trần — khai bằng `uniqueIndex()` là hai đối tượng catalog KHÁC NHAU và đẻ diff ma ở
+    //    lần `db:generate` sau. Toàn bộ unique "ống nước FK" cùng loại trong repo
+    //    (`chat_rooms` · `users` · `chat_messages` · `files`) đều chỉ sống ở SQL, không mirror sang TS.
+    /**
+     * MỘT cuộc gọi SỐNG trên mỗi phòng (SPEC-15 CHAT-ERR-028 → 409). Ép ở DB chứ KHÔNG ở service:
+     * hai lời mời đồng thời cùng đọc "chưa có cuộc gọi nào" rồi cùng INSERT — kiểm-rồi-ghi ở tầng
+     * ứng dụng không chặn được đường đua đó.
+     */
+    uniqueIndex("chat_calls_one_live_per_room_uq")
+      .on(t.companyId, t.roomId)
+      .where(sql`status IN ('ringing', 'active')`),
+    index("chat_calls_room_started_idx").on(t.companyId, t.roomId, t.startedAt.desc()),
+    index("chat_calls_status_started_idx").on(t.companyId, t.status, t.startedAt),
+    check("chat_calls_kind_chk", sql`kind IN ('audio', 'video')`),
+    check(
+      "chat_calls_status_chk",
+      sql`status IN ('ringing', 'active', 'ended', 'rejected', 'cancelled', 'missed')`,
+    ),
+    // Mốc thời gian phải khớp trạng thái — chống ghi 'ended' mà không có ended_at.
+    check(
+      "chat_calls_accepted_at_chk",
+      sql`(status = 'active' AND accepted_at IS NOT NULL) OR status <> 'active'`,
+    ),
+    check(
+      "chat_calls_ended_at_chk",
+      sql`(status IN ('ended', 'rejected', 'cancelled', 'missed') AND ended_at IS NOT NULL) OR status NOT IN ('ended', 'rejected', 'cancelled', 'missed')`,
+    ),
+  ],
+);
+
+export type ChatCall = typeof chatCalls.$inferSelect;
+export type NewChatCall = typeof chatCalls.$inferInsert;
+
+export const chatCallParticipants = pgTable(
+  "chat_call_participants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    /** FK composite ở DB — xem ghi chú ở `chatCalls`. */
+    callId: uuid("call_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    invitedAt: timestamp("invited_at", { withTimezone: true }).notNull().defaultNow(),
+    joinedAt: timestamp("joined_at", { withTimezone: true }),
+    leftAt: timestamp("left_at", { withTimezone: true }),
+    /** `null` = còn đang đổ chuông, chưa ngã ngũ. */
+    outcome: varchar("outcome", { length: 16 }).$type<ChatCallOutcome>(),
+  },
+  (t) => [
+    uniqueIndex("chat_call_participants_uq").on(t.companyId, t.callId, t.userId),
+    index("chat_call_participants_user_idx").on(t.companyId, t.userId, t.invitedAt.desc()),
+    check(
+      "chat_call_participants_outcome_chk",
+      sql`outcome IS NULL OR outcome IN ('accepted', 'rejected', 'missed', 'cancelled', 'left')`,
+    ),
+  ],
+);
+
+export type ChatCallParticipant = typeof chatCallParticipants.$inferSelect;
+export type NewChatCallParticipant = typeof chatCallParticipants.$inferInsert;
