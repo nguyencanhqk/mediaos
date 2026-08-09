@@ -59,6 +59,12 @@ overrides:
   # `eslint > @eslint/eslintrc > js-yaml` — dev-tooling, KHÔNG vào runtime bundle của API.
   "js-yaml@>=4.0.0 <4.3.1": "^4.3.1"
   "shell-quote@<=1.8.4": "^1.8.5"
+  # 2026-08-08 — advisory MỚI `GHSA-2v37-7h3g-55p8` (HIGH, `nanoid <3.3.17`: custom generator lặp vô hạn
+  # khi size = 0). Lên registry giữa lần Security chạy cuối trên master (07/08 15:42 XANH) và PR #368
+  # (08/08 03:33 ĐỎ) ⇒ đỏ trên MỌI PR, KHÔNG do PR nào sinh ra. `pnpm why nanoid -r` đo 08/08: cây có
+  # ĐÚNG MỘT bản 3.3.16, đường tới duy nhất là `postcss > vite`, mọi lá đều devDependencies (vitest ·
+  # @vitejs/plugin-react · @tailwindcss/vite) — KHÔNG vào runtime bundle của API.
+  "nanoid@<3.3.17": "^3.3.17"
   # 2026-07-25 — vá advisory HIGH postcss (GHSA source-map path traversal, <8.5.18). Transitive dev-dep
   # qua vitest coverage (apps/api>@vitest/coverage-v8>vitest>…>postcss), KHÔNG vào runtime bundle. Range-
   # scoped để chỉ nâng dải lỗ hổng, không đụng postcss khác. Cổng CI = `pnpm audit --audit-level high`.
@@ -91,4 +97,6 @@ minimumReleaseAgeExclude:
   - brace-expansion@5.0.8
   - fast-uri@3.1.4
   - js-yaml@4.3.1
+  - nanoid@3.3.17
+  - nanoid@3.3.18
   - shell-quote@1.8.5
