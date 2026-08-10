@@ -1,12 +1,12 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-10 13:00Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-10 15:25Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
 ### 🔴 S7-CALL-RT-1 — 🔒 Gateway /ws-call: allowlist ĐÓNG 8 sự kiện inbound, relay SDP/ICE KHÔNG đọc-KHÔNG lưu, /ws giữ nguyên 0 @SubscribeMessage
 - **zone**: red · **skills**: code-review
-- **sửa ở đâu (paths)**: `apps/api/src/realtime/call-signalling.gateway.ts`, `apps/api/src/realtime/realtime.module.ts`, `packages/contracts/src/chat-call.ts`, `apps/api/test/integration/**`, `docs/plans/S7-CALL-RT-1.md`
+- **sửa ở đâu (paths)**: `apps/api/src/realtime/call-signalling.gateway.ts`, `apps/api/src/realtime/call-signalling.filter.ts`, `apps/api/src/realtime/realtime.module.ts`, `apps/api/src/realtime/realtime-emitter.service.ts`, `apps/api/src/realtime/rooms.ts`, `apps/api/src/realtime/chat-realtime-structure.spec.ts`, `apps/api/src/chat/chat-call-signal.service.ts`, `apps/api/src/chat/chat-call-signal-deny.ts`, `apps/api/src/chat/chat-call-signal-deny.spec.ts`, `apps/api/src/chat/chat-calls.service.ts`, `apps/api/src/chat/chat-call-ringing-timeout.job-handler.ts`, `apps/api/src/chat/chat-call-cooldown.service.ts`, `apps/api/src/chat/chat.errors.ts`, `apps/api/src/chat/chat.module.ts`, `apps/api/src/chat/chat-error-code-census.spec.ts`, `apps/api/src/chat/chat-realtime-after-commit.spec.ts`, `packages/contracts/src/chat-call.ts`, `packages/contracts/src/realtime.ts`, `packages/contracts/src/auth.ts`, `apps/api/test/integration/**`, `docs/API Design/API-13_CHAT_API_Design.md`, `docs/plans/S7-CALL-RT-1.md`
 - **phụ thuộc**: S7-CALL-BE-1✓
 - **done_when (đích hội tụ)**:
   - [ ] Namespace RIÊNG /ws-call; realtime.gateway.ts (/ws) VẪN 0 @SubscribeMessage — có test đóng đinh, ĐỎ nếu ai thêm
@@ -14,6 +14,8 @@
   - [ ] MỖI sự kiện kiểm LẠI tư cách tham gia cuộc gọi từ DB — KHÔNG tin việc socket đang ở trong room
   - [ ] SDP/ICE: chuỗi mờ có trần độ dài, Zod ở biên, KHÔNG parse, KHÔNG ghi DB, KHÔNG lên DTO — test chứng minh 0 hàng DB sinh ra từ một phiên signalling
   - [ ] Deny-path RED-TRƯỚC: người ngoài cuộc gọi emit sdp-offer → từ chối + ghi security event; callId cross-tenant → không relay
+  - [ ] Chuông đến: POST …/calls ⇒ người được gọi nhận chat:call{ringing} trên /ws; 6 đường vòng đời + job missed đều emit SAU commit, có ratchet đếm đúng số đường
+  - [ ] /ws-call nằm TRONG đường thu hồi phiên: khoá tài khoản ⇒ socket /ws-call bị đóng (severUserSessions cắt cả hai namespace)
   - [ ] FULL gate PASS — WO nới bất biến, BẮT BUỘC security-reviewer + silent-failure-hunter
 
 ## Hàng đợi
@@ -34,7 +36,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 0
+- **branch**: `s7-call-rt1-signalling` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 213 — `0546_s7calldb1_chat_calls` (214 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -43,6 +45,10 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `535994f4` | 2026-08-10 | fix(chat): đóng lỗ chiều-NHẬN của /ws-call + 3 ca đo hàng rào (FULL gate S7-CALL-RT-1) |
+| `6841987f` | 2026-08-10 | test(chat): unit spec /ws-call — cờ tắt fail-closed + landmine setServer (S7-CALL-RT-1) |
+| `7c0b8651` | 2026-08-10 | refactor(chat): gọn nhánh drop của trần khung — comment vào trong else |
+| `dd79e561` | 2026-08-10 | feat(chat): gateway /ws-call — allowlist ĐÓNG 8 sự kiện, relay SDP/ICE không đọc-không lưu (S7-CALL-RT-1) |
 | `f0e7f795` | 2026-08-10 | chore(docs): regen STATUS sau khi land #370 (S7-CALL-BE-1 done, RT-1 mở khoá) |
 | `34d64803` | 2026-08-10 | feat(chat): vòng đời cuộc gọi qua REST + ice-config + job cuộc-gọi-nhỡ (S7-CALL-BE-1) (#370) |
 | `02d6b7ef` | 2026-08-09 | feat(chat): nền dữ liệu cuộc gọi — owner ký DECISIONS-07 + migration 0546 (S7-CALL-DOC-1 + S7-CALL-DB-1) (#368) |
@@ -51,10 +57,6 @@
 | `b416d57e` | 2026-08-07 | test(chat): nghiệm thu wave S8-CHAT-UX — lấp 2 nhánh tư cách avatar chưa từng chạy + cổng đường tải (S8-CHAT-UX-QA-1) (#367) |
 | `3dea862d` | 2026-08-07 | chore(docs): regen STATUS sau khi land #366/#362/#353 (S8-CHAT-UX-FE-3 + S8-CHAT-ENTRY-1 done, QA-1 mở khoá) |
 | `72141105` | 2026-08-07 | feat(chat): thẻ "Tin nhắn" ở Home Portal + App Switcher (S8-CHAT-ENTRY-1) (#353) |
-| `302f4987` | 2026-08-07 | fix(social): kho video — mật khẩu ổ chia sẻ chưa từng tới được Windows (S10-SOCIAL-LIB) (#362) |
-| `477040cb` | 2026-08-07 | feat(chat): avatar người gửi từ roster + gộp tin + thả cảm xúc + đang gõ/đang online (S8-CHAT-UX-FE-3) (CHAT-DEC-017/018/019) (#366) |
-| `406242ba` | 2026-08-07 | chore(docs): regen STATUS sau khi land #365 (S8-CHAT-UX-FE-2 done, FE-3 mở khoá) |
-| `bb7a3ca4` | 2026-08-07 | feat(chat): mục Ghim + menu ngữ cảnh mỗi hội thoại + avatar phòng trong danh sách và RoomInfoPanel (S8-CHAT-UX-FE-2) (CHAT-DEC-014/015/016) (#365) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
