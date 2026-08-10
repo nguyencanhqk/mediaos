@@ -348,8 +348,17 @@ describe.skipIf(!runIsolatedDb)("S4-DASH-SEED-1 — catalog widget + quyền DAS
     });
 
     it("re-apply grant 3× → grant count + data_scope KHÔNG drift", async () => {
-      const countSql = `SELECT count(*) AS n FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
-                         WHERE p.resource_type IN ('dashboard','dashboard-config','dashboard-audit-log')`;
+      // ⚠️ `r.company_id IS NULL` (sửa 10/08/2026, S7-CALL-RT-1). Bản gốc đếm MỌI vai trò: mỗi công ty
+      // mới do một int-spec khác tạo đều kéo theo `SuperAdminBootstrapService` cấp NGUYÊN catalog cho một
+      // role **company-scoped** (≈394 hàng, gồm cả 3 resource_type dưới đây) ⇒ con số nhích lên giữa
+      // `before`/`after` và ca này đỏ vì việc chẳng liên quan (`super-admin-bootstrap-flaky-count`).
+      // `DASH_GRANT_MATRIX` chỉ thao tác trên vai trò CANONICAL (`company_id IS NULL`), nên đó cũng đúng
+      // là tập mà ca này phải đo — bó lại không làm yếu khẳng định, nó làm khẳng định đúng với ý định.
+      const countSql = `SELECT count(*) AS n FROM role_permissions rp
+                          JOIN permissions p ON p.id = rp.permission_id
+                          JOIN roles r ON r.id = rp.role_id
+                         WHERE p.resource_type IN ('dashboard','dashboard-config','dashboard-audit-log')
+                           AND r.company_id IS NULL`;
       const before = (await direct.query<{ n: string }>(countSql)).rows[0]!.n;
 
       for (let i = 0; i < 3; i++) {

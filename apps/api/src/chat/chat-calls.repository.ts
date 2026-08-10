@@ -20,6 +20,19 @@ export interface ChatCallParticipantRow {
   outcome: ChatCallOutcome | null;
 }
 
+/**
+ * Ảnh chụp một cuộc gọi vừa bị đánh nhỡ — ĐỦ để dựng payload `chat:call{missed}` mà không phải đọc lại.
+ * (S7-CALL-RT-1: người được gọi phải biết cuộc gọi đã chết, nếu không máy họ đổ chuông cho một cuộc gọi
+ * không còn tồn tại.)
+ */
+export interface ChatCallExpiredRow {
+  id: string;
+  roomId: string;
+  kind: ChatCallKind;
+  initiatorUserId: string;
+  startedAt: Date;
+}
+
 /** Trạng thái "cuộc gọi còn sống" — ĐÚNG tập của partial unique index `chat_calls_one_live_per_room_uq`. */
 export const CHAT_CALL_LIVE_STATUSES = ["ringing", "active"] as const;
 
@@ -348,7 +361,7 @@ export class ChatCallsRepository {
     cutoff: Date,
     now: Date,
     roomId?: string,
-  ): Promise<string[]> {
+  ): Promise<ChatCallExpiredRow[]> {
     const expired = await tx
       .update(chatCalls)
       .set({ status: "missed", endedAt: now })
@@ -360,7 +373,17 @@ export class ChatCallsRepository {
           ...(roomId ? [eq(chatCalls.roomId, roomId)] : []),
         ),
       )
-      .returning({ id: chatCalls.id, roomId: chatCalls.roomId });
+      // ⚠️ S7-CALL-RT-1 mở rộng `returning` từ `{id, roomId}` sang cả `kind`/`initiatorUserId`/
+      // `startedAt`: người được gọi phải được BÁO khi cuộc gọi bị đánh nhỡ, và payload `chat:call` cần
+      // đúng các trường đó. Đọc lại bằng một `SELECT` sau `UPDATE` là chấp nhận một cửa sổ mà hàng có
+      // thể đã đổi tiếp — `RETURNING` cho ảnh chụp ĐÚNG lúc ghi.
+      .returning({
+        id: chatCalls.id,
+        roomId: chatCalls.roomId,
+        kind: chatCalls.kind,
+        initiatorUserId: chatCalls.initiatorUserId,
+        startedAt: chatCalls.startedAt,
+      });
 
     if (expired.length === 0) return [];
 
@@ -379,7 +402,7 @@ export class ChatCallsRepository {
         ),
       );
 
-    return expired.map((e) => e.id);
+    return expired;
   }
 }
 

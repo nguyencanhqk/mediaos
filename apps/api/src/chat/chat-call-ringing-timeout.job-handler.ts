@@ -57,9 +57,15 @@ export class ChatCallRingingTimeoutJobHandler implements JobHandler {
    * hỏng liên tục trông y hệt một job không có việc.
    */
   async run(ctx: JobRunContext): Promise<JobRunResult> {
-    const expired = await this.db.withTenant(ctx.companyId, (tx) =>
+    const expiries = await this.db.withTenant(ctx.companyId, (tx) =>
       this.calls.expireStaleTx(tx, ctx.companyId, new Date()),
     );
+    const expired = expiries.length;
+
+    // ⚠️ SAU COMMIT — đường phát THỨ BẢY của vòng đời (S7-CALL-RT-1). Không có "actor" nào ở đây, nên
+    // người được báo lấy từ chính bảng participants của từng cuộc gọi. Bỏ dòng này = máy người được gọi
+    // đổ chuông tới khi họ tự tắt: job là đường DUY NHẤT đóng cuộc gọi ở phòng không ai mời lại.
+    this.calls.emitExpired(ctx.companyId, expiries);
 
     if (expired > 0) {
       this.logger.warn(

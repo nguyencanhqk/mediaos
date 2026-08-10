@@ -7,6 +7,7 @@ import type { ChatAccessService } from "./chat-access.service";
 import type { ChatCallsRepository } from "./chat-calls.repository";
 import type { AuditService } from "../events/audit.service";
 import type { DatabaseService } from "../db/db.service";
+import type { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 
 /**
  * S7-CALL-BE-FIX-1 (MEDIUM-3, vế TẦN SUẤT) — trần lời mời/phút/người trên `CHAT-API-026`.
@@ -35,12 +36,16 @@ const MAX = 3;
 function makeService() {
   // Sentinel: `invite` trả thẳng giá trị này khi qua được cổng ⇒ phân biệt "đi tiếp" với "bị chặn" mà
   // không cần dựng cả đường ghi DB.
-  const passed = { id: "passed-the-gate" } as unknown as ChatCallDto;
-  const withTenant = vi.fn(async () => passed);
+  const passed = { id: "passed-the-gate", participants: [] } as unknown as ChatCallDto;
+  // ⚠️ S7-CALL-RT-1: `invite` giờ lấy CẢ hai vế ra khỏi transaction (`call` để trả về, `expired` để phát
+  // `chat:call{missed}` SAU commit). Mock phải trả đúng hình dạng đó — trả thẳng DTO như trước sẽ ném
+  // `undefined` ở bước destructure, và ca test sẽ "đỏ vì mock", không phải vì cổng cooldown.
+  const withTenant = vi.fn(async () => ({ call: passed, expired: [] }));
   const db = { withTenant } as unknown as DatabaseService;
 
   // Cooldown thật, KHÔNG Valkey ⇒ đếm in-memory, xác định. Chính lớp production, không phải bản mô phỏng.
   const cooldown = new ChatCallCooldownService();
+  const realtime = { emitChatCall: vi.fn() };
 
   const svc = new ChatCallsService(
     db,
@@ -48,8 +53,10 @@ function makeService() {
     {} as unknown as ChatAccessService,
     {} as unknown as AuditService,
     cooldown,
+    // Emitter giả: ca này đo CỔNG, không đo đường phát. Đếm để khẳng định nhánh bị chặn KHÔNG phát gì.
+    realtime as unknown as RealtimeEmitterService,
   );
-  return { svc, withTenant, cooldown, passed };
+  return { svc, withTenant, cooldown, passed, realtime };
 }
 
 describe("ChatCallsService.invite — cooldown tần suất (MEDIUM-3 vế 2)", () => {

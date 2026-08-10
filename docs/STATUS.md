@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-10 11:01Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-10 13:00Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -43,6 +43,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `f0e7f795` | 2026-08-10 | chore(docs): regen STATUS sau khi land #370 (S7-CALL-BE-1 done, RT-1 mở khoá) |
 | `34d64803` | 2026-08-10 | feat(chat): vòng đời cuộc gọi qua REST + ice-config + job cuộc-gọi-nhỡ (S7-CALL-BE-1) (#370) |
 | `02d6b7ef` | 2026-08-09 | feat(chat): nền dữ liệu cuộc gọi — owner ký DECISIONS-07 + migration 0546 (S7-CALL-DOC-1 + S7-CALL-DB-1) (#368) |
 | `6e83d613` | 2026-08-09 | chore(security): override nanoid lên ^3.3.17 — vá GHSA-2v37-7h3g-55p8 (#369) |
@@ -54,7 +55,6 @@
 | `477040cb` | 2026-08-07 | feat(chat): avatar người gửi từ roster + gộp tin + thả cảm xúc + đang gõ/đang online (S8-CHAT-UX-FE-3) (CHAT-DEC-017/018/019) (#366) |
 | `406242ba` | 2026-08-07 | chore(docs): regen STATUS sau khi land #365 (S8-CHAT-UX-FE-2 done, FE-3 mở khoá) |
 | `bb7a3ca4` | 2026-08-07 | feat(chat): mục Ghim + menu ngữ cảnh mỗi hội thoại + avatar phòng trong danh sách và RoomInfoPanel (S8-CHAT-UX-FE-2) (CHAT-DEC-014/015/016) (#365) |
-| `33f91211` | 2026-08-07 | chore(docs): regen STATUS sau khi land #363/#364 (S8-CHAT-UX-BE-2 done, FE-2 mở khoá) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

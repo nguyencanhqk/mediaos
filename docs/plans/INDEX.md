@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**361 WO** · có micro-plan: **202/361** · ⬜ 7 chờ · 🔵 0 đang làm · ✅ 353 xong · 🔴 1 chặn
+**361 WO** · có micro-plan: **203/361** · ⬜ 4 chờ · 🔵 1 đang làm · ✅ 355 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -376,9 +376,9 @@
 | `S7-CHAT-FE-5` | 🟡 | ✅ xong | [📄](S7-CHAT-FE-5.md) | ✅S7-CHAT-BE-7 ✅S7-CHAT-FE-2 | 🔒 Màn quản trị đọc-vượt (CHAT-SCREEN-007) + nhật ký đọc-vượt (CHAT-SC |
 | `S7-CHAT-BE-9` | 🔴 | ✅ xong | [📄](S7-CHAT-BE-9.md) | ✅S7-CHAT-FE-5 | 🔒 CHAT-API-019 nhận bộ lọc actorUserId + from/to (giữ keyset) — để CH |
 | `S7-CALL-DOC-1` | 🔴 | ✅ xong | — *(chưa)* | — | Owner ký DECISIONS-07 (nới CHAT-DEC-005 có hàng rào R1-R4) + sửa SPEC- |
-| `S7-CALL-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S7-CALL-DOC-1 | Migration CALL: chat_calls + chat_call_participants (company_id + RLS  |
-| `S7-CALL-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CALL-DB-1 | Vòng đời cuộc gọi qua REST (mời · nhận · từ chối · huỷ · kết thúc) + G |
-| `S7-CALL-RT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CALL-BE-1 | 🔒 Gateway /ws-call: allowlist ĐÓNG 8 sự kiện inbound, relay SDP/ICE K |
+| `S7-CALL-DB-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S7-CALL-DOC-1 | Migration CALL: chat_calls + chat_call_participants (company_id + RLS  |
+| `S7-CALL-BE-1` | 🔴 | ✅ xong | [📄](S7-CALL-BE-1.md) | ✅S7-CALL-DB-1 | Vòng đời cuộc gọi qua REST (mời · nhận · từ chối · huỷ · kết thúc) + G |
+| `S7-CALL-RT-1` | 🔴 | 🔵 đang làm | — *(chưa)* | ✅S7-CALL-BE-1 | 🔒 Gateway /ws-call: allowlist ĐÓNG 8 sự kiện inbound, relay SDP/ICE K |
 | `S7-CALL-FE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S7-CALL-RT-1 ✅S7-CHAT-FE-3 | UI cuộc gọi: nút gọi trong phòng · chuông đến · khung đang gọi (thu nh |
 | `S7-CHAT-LMS-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S7-CALL-FE-1 | Gỡ chat khỏi LMS (GIỮ trợ lý AI) + trỏ lối vào sidebar sang /chat Medi |
 | `S7-CALL-QA-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S7-CALL-FE-1 | Bộ test CALL: deny-path signalling · cô lập 2-tenant · vòng đời cuộc g |

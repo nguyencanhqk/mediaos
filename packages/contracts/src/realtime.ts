@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { chatMessageReactionSchema, chatMessageSchema, chatRoomSchema } from "./chat";
+import { chatCallKindSchema, chatCallStatusSchema } from "./chat-call";
 import { notificationSchema } from "./notification";
 
 /**
@@ -43,6 +44,11 @@ export const WS_EVENTS = {
   CHAT_PRESENCE: "chat:presence",
   // S8-CHAT-UX-BE-3 (additive) — phát SAU commit của PUT/DELETE reactions (REST), không phải event từ client.
   CHAT_REACTION: "chat:reaction",
+  // S7-CALL-RT-1 (additive) — mốc VÒNG ĐỜI cuộc gọi, phát SAU commit của 6 đường REST + job hết hạn.
+  // ⚠️ Sự kiện này ở `/ws` chứ KHÔNG ở `/ws-call`, và đó là quan hệ nhân quả chứ không phải lựa chọn:
+  // người được gọi chưa biết có cuộc gọi thì chưa nối `/ws-call`. `/ws-call` là kênh của người ĐÃ ở
+  // trong cuộc gọi. Đây vẫn là chiều server→client ⇒ CHAT-DEC-005 nguyên vẹn.
+  CHAT_CALL: "chat:call",
   NOTIFICATION_NEW: "notification:new",
   // S4-NOTI-BE-1 (additive): phát sau mark-read/mark-all-read/xoá mềm — payload CHỈ unread_count (không
   // row) để DASH/header badge invalidate mà không rò nội dung thông báo qua kênh phụ.
@@ -228,6 +234,43 @@ export const wsChatReactionEventSchema = z.object({
   reactions: z.array(chatMessageReactionSchema.omit({ mine: true })),
 });
 export type WsChatReactionEvent = z.infer<typeof wsChatReactionEventSchema>;
+
+/**
+ * chat:call (S7-CALL-RT-1 · CHAT-DEC-020 R4) — một mốc vòng đời cuộc gọi.
+ *
+ * MỘT khoá sự kiện + `action`, mirror `chat:room`: sáu khoá rời là sáu chỗ để quên một chỗ.
+ *
+ * ⚠️ **KHÔNG có `participants[]`** — mảng đó mang `outcome`/`joinedAt`/`leftAt` của NGƯỜI KHÁC, tức trạng
+ * thái per-user phát cho cả nhóm; đúng lớp lỗi đã cắn ở `wsChatRoomEventSchema` (`unreadCount`,
+ * `mutedUntil`) — memory `ws-payload-narrower-than-rest-dto`. Ai vào/rời **phiên signalling** thì đã có
+ * `call:peer-joined`/`call:peer-left` trên `/ws-call` cho đúng người trong cuộc gọi.
+ *
+ * ⚠️ **KHÔNG có `acceptedAt`/`endedAt`**: `status` + `action` đủ để FE dựng màn hình, và mỗi khoá thừa là
+ * một khoá phải bảo vệ ở mọi lần sửa sau.
+ *
+ * `action` KHÔNG suy được từ `status`: `missed` sinh từ HAI đường (job theo nhịp và bước dọn-trước-khi-mời
+ * của `CHAT-API-026`), còn `ringing` là lời mời mới. Giữ cả hai trường để client không phải đoán.
+ */
+export const wsChatCallActionSchema = z.enum([
+  "ringing",
+  "accepted",
+  "rejected",
+  "cancelled",
+  "ended",
+  "missed",
+]);
+export type WsChatCallAction = z.infer<typeof wsChatCallActionSchema>;
+
+export const wsChatCallEventSchema = z.object({
+  callId: z.string().uuid(),
+  roomId: z.string().uuid(),
+  kind: chatCallKindSchema,
+  status: chatCallStatusSchema,
+  initiatorUserId: z.string().uuid(),
+  startedAt: z.string().datetime(),
+  action: wsChatCallActionSchema,
+});
+export type WsChatCallEvent = z.infer<typeof wsChatCallEventSchema>;
 
 /** notification:new — đúng DTO REST (notificationSchema). */
 export const wsNotificationEventSchema = notificationSchema;

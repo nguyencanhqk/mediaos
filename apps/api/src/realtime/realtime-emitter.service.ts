@@ -1,11 +1,12 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { Server } from "socket.io";
+import type { Namespace, Server } from "socket.io";
 import {
   WS_EVENTS,
   wsChatMessageEventSchema,
   wsChatMessageRecalledEventSchema,
   wsChatPresenceEventSchema,
   wsChatReactionEventSchema,
+  wsChatCallEventSchema,
   wsChatReadEventSchema,
   wsChatRoomEventSchema,
   wsChatTypingEventSchema,
@@ -15,12 +16,13 @@ import {
   type NotificationDto,
   type WsChatMessageRecalledEvent,
   type WsChatPresenceEvent,
+  type WsChatCallEvent,
   type WsChatReactionEvent,
   type WsChatReadEvent,
   type WsChatRoomEvent,
   type WsChatTypingEvent,
 } from "@mediaos/contracts";
-import { chatRoomName, chatUserRoomName, userRoomName } from "./rooms";
+import { callUserRoomName, chatRoomName, chatUserRoomName, userRoomName } from "./rooms";
 
 /**
  * RealtimeEmitterService — CỔNG DUY NHẤT để module khác (NotificationsService, …) đẩy sự kiện
@@ -42,10 +44,25 @@ import { chatRoomName, chatUserRoomName, userRoomName } from "./rooms";
 export class RealtimeEmitterService {
   private readonly logger = new Logger(RealtimeEmitterService.name);
   private server: Server | null = null;
+  private callServer: Namespace | null = null;
 
-  /** Gateway gọi 1 lần khi server Socket.IO sẵn sàng. */
+  /** Gateway `/ws` gọi 1 lần khi server Socket.IO sẵn sàng. */
   setServer(server: Server): void {
     this.server = server;
+  }
+
+  /**
+   * S7-CALL-RT-1 — `CallSignallingGateway` (`/ws-call`) gọi 1 lần.
+   *
+   * ⚠️ **TRƯỜNG RIÊNG, KHÔNG dùng chung `setServer`.** Hai namespace là hai đối tượng khác nhau; gateway
+   * `/ws-call` mà gọi `setServer` sẽ ghi đè namespace `/ws` ⇒ `notification:new` + TOÀN BỘ cụm CHAT bắn
+   * vào một namespace không ai ở trong. Hỏng IM LẶNG toàn hệ, và không test nào của CHAT/NOTI bắt được
+   * vì chúng không dựng gateway thứ hai.
+   *
+   * Kênh này KHÔNG có method emit nghiệp vụ nào — nó tồn tại đúng để `severUserSessions` với tới được.
+   */
+  setCallServer(server: Namespace): void {
+    this.callServer = server;
   }
 
   /** Đẩy notification tới room riêng của user (mọi thiết bị). Dùng bởi NotificationsService sau insert. */
@@ -220,6 +237,60 @@ export class RealtimeEmitterService {
   }
 
   /**
+   * `chat:call` (S7-CALL-RT-1 · CHAT-DEC-020 R4) — một mốc vòng đời cuộc gọi. Gọi **SAU commit**.
+   *
+   * ┌─ VÌ SAO SỰ KIỆN NÀY Ở `/ws` CHỨ KHÔNG Ở `/ws-call` ─────────────────────────────────────────────┐
+   * │ Người được gọi chưa biết có cuộc gọi thì chưa nối `/ws-call`. `/ws-call` là kênh của người ĐÃ ở │
+   * │ trong cuộc gọi; chuông phải đi kênh mà mọi người vốn đã nối. Đây là quan hệ nhân quả, không phải │
+   * │ lựa chọn kiến trúc — và nó KHÔNG nới `CHAT-DEC-005`: vẫn là chiều server→client.                │
+   * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * Đích là `chatUserRoomName` của TỪNG người tham gia:
+   *  • KHÔNG `chatRoomName` — thành viên phòng không được mời vào cuộc gọi này không cần biết nó tồn tại;
+   *  • KHÔNG `userRoomName` — room đó chứa cả socket đã bị THU HỒI cặp `view:chat-room` (xem `rooms.ts`),
+   *    bắn vào đó là đi vòng qua cổng quyền WS.
+   *
+   * ⚠️ Hệ quả của việc dùng `chatUserRoomName`: ai có `('call','chat-room')` mà thiếu `('view','chat-room')`
+   * sẽ KHÔNG bao giờ đổ chuông (socket của họ không vào room đó lúc nối `/ws`). Hai cặp luôn được seed
+   * cùng nhau cho 4 role canonical nên không xảy ra trong thực tế — nhưng đó là một RÀNG BUỘC, không
+   * phải một sự trùng hợp may mắn.
+   *
+   * `participantUserIds` rỗng ⇒ KHÔNG gọi `.to([])`: Socket.IO coi danh sách room rỗng là phát cho **cả
+   * namespace**, tức mọi socket của MỌI công ty (cùng bẫy đã ghi ở `emitChatPresence`).
+   */
+  emitChatCall(
+    companyId: string,
+    participantUserIds: readonly string[],
+    payload: WsChatCallEvent,
+  ): void {
+    // ⚠️ **NGOẠI LỆ của "fail-soft, FE còn poll REST" ở docblock class.** Lý do fail-soft đó dựa vào việc
+    // FE có đường REST bù (`afterSeq` cho tin nhắn). CALL **KHÔNG có đường đó**: `chat-calls.controller.ts`
+    // chỉ có 4 route `@Post` vòng đời, không có route ĐỌC nào để poll "có ai đang gọi mình không". Kênh
+    // này là kênh DUY NHẤT báo chuông ⇒ mất một sự kiện = giao dịch REST đã commit nhưng người được gọi
+    // KHÔNG BAO GIỜ đổ chuông. Vì thế ERROR, không phải no-op câm: mất chuông phải để lại dấu vết đủ để
+    // trả lời một khiếu nại "tôi không nhận được cuộc gọi nào".
+    if (!this.server) {
+      this.logger.error(
+        `emitChatCall BỎ QUA — gateway /ws chưa sẵn sàng; KHÔNG có fallback REST cho chuông ` +
+          `(callId=${payload.callId} action=${payload.action})`,
+      );
+      return;
+    }
+    if (participantUserIds.length === 0) return;
+    try {
+      const parsed = wsChatCallEventSchema.parse(payload);
+      const targets = participantUserIds.map((uid) => chatUserRoomName(companyId, uid));
+      this.server.to(targets).emit(WS_EVENTS.CHAT_CALL, parsed);
+    } catch (err) {
+      this.logger.error("emitChatCall failed — người được gọi có thể KHÔNG đổ chuông", {
+        callId: payload.callId,
+        action: payload.action,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /**
    * Ép socket của MỘT user vào/ra phòng chat NGAY khi tư cách thành viên đổi — không đợi kết nối lại.
    * Không phát payload nào (không phải sự kiện, là thao tác room-ops).
    *
@@ -276,14 +347,32 @@ export class RealtimeEmitterService {
    * nhưng socket vẫn đang nhận tin.
    */
   severUserSessions(companyId: string, userId: string): void {
-    if (!this.server) return;
+    // ⚠️ HAI try/catch RIÊNG, không gộp: nếu lệnh cắt `/ws` ném, một khối chung sẽ bỏ qua luôn lệnh cắt
+    // `/ws-call` — đúng kịch bản mà chính chú thích dưới đây cảnh báo (socket gọi của người bị khoá sống
+    // sót). Cắt hai kênh là hai nghĩa vụ độc lập.
     try {
-      this.server.in(userRoomName(companyId, userId)).disconnectSockets(true);
+      this.server?.in(userRoomName(companyId, userId)).disconnectSockets(true);
     } catch (err) {
+      this.logger.error(
+        `severUserSessions(/ws) THẤT BẠI cho user=${userId} — phiên CHAT/NOTI có thể còn sống: ` +
+          (err instanceof Error ? err.message : String(err)),
+        err instanceof Error ? err.stack : undefined,
+      );
+    }
+    try {
+      // ⚠️ S7-CALL-RT-1 — vế `/ws-call` KHÔNG phải "cho đủ bộ". Khoá tài khoản không xoá
+      // `chat_room_members` cũng không xoá `chat_call_participants`, nên một socket `/ws-call` sống sót
+      // tiếp tục relay SDP/ICE **vô thời hạn** — và ở chiều NHẬN nó còn không phát khung nào để bị kiểm
+      // lại. Bỏ dòng này là để `/ws-call` nằm NGOÀI đường thu hồi phiên, tức thụt lùi một tính chất an
+      // ninh mà `/ws` đang có.
+      this.callServer?.in(callUserRoomName(companyId, userId)).disconnectSockets(true);
+    } catch (err) {
+      // Nhánh này nói RÕ namespace nào hỏng — "severUserSessions thất bại" chung chung không cho biết
+      // kênh nào còn sống, mà hai kênh có hậu quả khác nhau (rò tin vs relay media).
       // KHÔNG throw lên caller: thu hồi phiên ở DB là việc chính và đã xong; cắt socket là lớp bồi.
       // Nhưng phải KÊU — im lặng ở đây nghĩa là phiên WS sống sót sau khi tài khoản đã bị khoá.
       this.logger.error(
-        `severUserSessions THẤT BẠI cho user=${userId} — phiên WS có thể còn sống sau khi thu hồi: ` +
+        `severUserSessions(/ws-call) THẤT BẠI cho user=${userId} — phiên GỌI có thể còn relay sau thu hồi: ` +
           (err instanceof Error ? err.message : String(err)),
         err instanceof Error ? err.stack : undefined,
       );

@@ -1,6 +1,9 @@
+import "reflect-metadata";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { CHAT_CALL_INBOUND_EVENTS } from "@mediaos/contracts";
+import { CallSignallingGateway } from "./call-signalling.gateway";
 
 /**
  * S7-CHAT-RT-1 — ràng buộc CẤU TRÚC, không phải hành vi. Ba luật dưới đây không có ca runtime nào bắt
@@ -22,41 +25,163 @@ function sourcesOf(dir: string): { file: string; text: string }[] {
 const stripComments = (text: string): string =>
   text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
-describe("CHAT-DEC-005 — WS MỘT CHIỀU", () => {
-  it("0 `@SubscribeMessage` trong toàn bộ apps/api/src", () => {
+/**
+ * ⚠️ **DANH SÁCH MIỄN TRỪ — ĐÚNG MỘT PHẦN TỬ.**
+ *
+ * `S7-CALL-RT-1` nới `CHAT-DEC-005` thành `CHAT-DEC-020` (owner ký `DECISIONS-07` 08/08/2026): tín hiệu
+ * SDP/ICE được đi client→server, nhưng **CHỈ** trên namespace RIÊNG `/ws-call` (hàng rào R1). SPEC-15
+ * §3.5 ra lệnh trước cho chính file này: *"wave CALL nới phạm vi quét thì vế `/ws` vẫn phải còn khẳng
+ * định riêng giữ mức 0"*.
+ *
+ * Thêm phần tử thứ hai vào đây là **nới bất biến**, không phải sửa test — nó phải đi kèm một ADR có chữ
+ * ký owner. Ca `EXEMPT` bên dưới ép việc đó thành một dòng nhìn thấy được trong diff.
+ */
+const SUBSCRIBE_EXEMPT: readonly string[] = ["realtime/call-signalling.gateway.ts"];
+
+/** Mọi file .ts (bỏ spec) dưới `apps/api/src`, đường dẫn tương đối dùng `/`, đã bỏ comment. */
+function allSources(): { rel: string; text: string }[] {
+  const out: { rel: string; text: string }[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) walk(p);
+      else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".spec.ts")) {
+        out.push({
+          rel: p.slice(SRC.length + 1).replace(/\\/g, "/"),
+          text: stripComments(readFileSync(p, "utf8")),
+        });
+      }
+    }
+  };
+  walk(SRC);
+  return out;
+}
+
+describe("CHAT-DEC-005/020 — WS một chiều, ngoại lệ ĐÓNG ở `/ws-call`", () => {
+  it("EXEMPT đúng MỘT phần tử — nới thêm phải là quyết định nhìn thấy được", () => {
+    expect(SUBSCRIBE_EXEMPT).toEqual(["realtime/call-signalling.gateway.ts"]);
+  });
+
+  it("`/ws` (realtime.gateway.ts) VẪN 0 `@SubscribeMessage`", () => {
+    // Khẳng định RIÊNG cho `/ws`, KHÔNG đi qua allowlist: gateway CHAT+NOTI là thứ `CHAT-DEC-005` bảo
+    // vệ, và `DECISIONS-07` R1 nới một namespace KHÁC chứ không nới file này. Ai thêm handler vào đây
+    // phải làm đỏ một ca gọi đúng tên file mình vừa sửa.
+    const gateway = stripComments(readFileSync(join(REALTIME_DIR, "realtime.gateway.ts"), "utf8"));
+    expect(gateway).not.toContain("@SubscribeMessage");
+  });
+
+  it("0 `@SubscribeMessage` trong toàn bộ apps/api/src — TRỪ đúng file miễn trừ", () => {
     // Không giới hạn ở realtime/**: thêm handler client→server ở BẤT KỲ gateway nào cũng mở lại bề mặt
     // mà CHAT-DEC-005 đã đóng.
-    const offenders: string[] = [];
-    const walk = (dir: string): void => {
-      for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        const p = join(dir, entry.name);
-        if (entry.isDirectory()) walk(p);
-        else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".spec.ts")) {
-          if (stripComments(readFileSync(p, "utf8")).includes("@SubscribeMessage"))
-            offenders.push(p);
-        }
-      }
-    };
-    walk(SRC);
+    const offenders = allSources()
+      .filter(
+        ({ rel, text }) => text.includes("@SubscribeMessage") && !SUBSCRIBE_EXEMPT.includes(rel),
+      )
+      .map(({ rel }) => rel);
     expect(offenders).toEqual([]);
   });
 
-  it("gateway KHÔNG đọc roomId/danh sách phòng từ handshake của client", () => {
-    const gateway = stripComments(readFileSync(join(REALTIME_DIR, "realtime.gateway.ts"), "utf8"));
-
+  it("MỌI gateway đọc handshake CHỈ để rút token — không nhận roomId/callId từ client", () => {
     // Quét TRUY CẬP THUỘC TÍNH `.handshake…` (không phải chữ "handshake" trong chuỗi log). Mỗi lần đọc
     // dữ liệu do client kiểm soát PHẢI là `.handshake.auth` hoặc `.handshake.headers` — hai lối rút
-    // TOKEN. Bất cứ khoá nào khác (roomId, rooms, companyId…) là để client tự khai mình ở phòng nào.
-    const accesses = [...gateway.matchAll(/\.handshake\s*\.\s*([A-Za-z_$][\w$]*)/g)].map(
-      (m) => m[1],
-    );
-    expect(accesses.length).toBeGreaterThan(0); // positive control: có đọc handshake thật
-    for (const key of accesses) {
-      expect(["auth", "headers"]).toContain(key);
+    // TOKEN. Bất cứ khoá nào khác (roomId, rooms, companyId…) là để client tự khai mình ở đâu.
+    //
+    // ⚠️ Quét CẢ HAI gateway: `/ws-call` có bản rút token riêng (CỐ Ý không refactor thành helper dùng
+    // chung — rút hàm ra file khác làm positive control `accesses.length > 0` của ca này RỖNG, tức
+    // ratchet chết im lặng). Bản sao được gác bởi cùng một luật không phải bản sao sẽ trôi.
+    for (const file of ["realtime.gateway.ts", "call-signalling.gateway.ts"]) {
+      const src = stripComments(readFileSync(join(REALTIME_DIR, file), "utf8"));
+      const accesses = [...src.matchAll(/\.handshake\s*\.\s*([A-Za-z_$][\w$]*)/g)].map((m) => m[1]);
+      expect(
+        accesses.length,
+        `${file}: positive control — phải có đọc handshake thật`,
+      ).toBeGreaterThan(0);
+      for (const key of accesses) {
+        expect(["auth", "headers"], `${file} đọc handshake.${key}`).toContain(key);
+      }
     }
 
     // Danh sách phòng phải tới TỪ REPO, không từ socket.
-    expect(gateway).toMatch(/listRoomsForUser\(/);
+    expect(stripComments(readFileSync(join(REALTIME_DIR, "realtime.gateway.ts"), "utf8"))).toMatch(
+      /listRoomsForUser\(/,
+    );
+  });
+});
+
+describe("DECISIONS-07 R2 — allowlist inbound `/ws-call` ĐÓNG đúng 8", () => {
+  /**
+   * Census **RUNTIME**, không grep chuỗi: đọc metadata mà `@SubscribeMessage` ghi lên chính hàm
+   * (`websockets:message_mapping` + `message` — `@nestjs/websockets/decorators/subscribe-message.decorator.js`).
+   *
+   * Grep là tripwire, metadata là BẰNG CHỨNG (memory `route-census-runtime-gate`): một handler khai bằng
+   * `Reflect.defineMetadata` tay, hoặc một decorator bọc lại, đều vô hình với grep nhưng hiện ở đây.
+   *
+   * ⚠️ Đọc trên `prototype`, **KHÔNG instantiate** — `loadEnv()` của gateway nằm ở field initializer nên
+   * chỉ chạy khi `new`. Nhờ vậy ca này sống ở glob `src` (LUÔN chạy) thay vì rơi xuống int-spec, nơi
+   * `skipIf(!LANE_DB)` sẽ cho nó ngủ đúng lúc cần nhất.
+   */
+  function subscribedEvents(): string[] {
+    const proto = CallSignallingGateway.prototype as unknown as Record<string, unknown>;
+    return Object.getOwnPropertyNames(proto)
+      .map((name) => proto[name])
+      .filter((v): v is (...a: unknown[]) => unknown => typeof v === "function")
+      .filter((fn) => Reflect.getMetadata("websockets:message_mapping", fn) === true)
+      .map((fn) => Reflect.getMetadata("message", fn) as string);
+  }
+
+  it("ĐÚNG 8 handler, và tập tên BẰNG ĐÚNG `CHAT_CALL_INBOUND_EVENTS`", () => {
+    const events = subscribedEvents();
+    expect(events).toHaveLength(CHAT_CALL_INBOUND_EVENTS.length);
+    expect([...events].sort()).toEqual([...CHAT_CALL_INBOUND_EVENTS].sort());
+  });
+
+  it("KHÔNG có listener inbound gắn TAY ở bất kỳ đâu ngoài `onAny` của gateway", () => {
+    // ⚠️ Census `@SubscribeMessage` MÙ với `socket.on('call:evil', …)` / `nsp.on('connection', s => s.on(…))`.
+    // Trước RT-1 viết listener tay là bất thường; TỪ RT-1 (`onAny`) nó là chuyện bình thường ⇒ thiếu ca
+    // này là có đường vòng qua cả ba khẳng định ở trên — đúng kiểu "thêm một handler nhỏ" mà R2 sinh ra
+    // để chặn.
+    //
+    // `server.use(...)` (middleware NAMESPACE) KHÔNG bị cấm: đó là cổng auth ở handshake của cả hai
+    // gateway. `socket.use(...)` (middleware GÓI TIN) thì CẤM — `next(err)` của nó đi qua `_onerror` →
+    // `emitReserved('error')`, mà Socket không có listener 'error' ⇒ EventEmitter ném ⇒ SẬP TIẾN TRÌNH.
+    const BIND =
+      /\b(?:client|socket|server|nsp|namespace|io)\s*\.\s*(?:on|once|onAny|prependAny|prependAnyOutgoing|onAnyOutgoing)\s*\(/g;
+    const PACKET_MW = /\b(?:client|socket)\s*\.\s*use\s*\(/g;
+
+    // Chỉ quét file THẬT SỰ chạm Socket.IO. Không phải để nới: một listener socket không thể tồn tại ở
+    // file không có đối tượng socket nào. Nếu không lọc, `valkey.service.ts` (`client.on("error")` của
+    // **ioredis**) đỏ oan — và một ratchet đỏ oan là ratchet sẽ bị ai đó tắt.
+    const touchesSocketIo = ({ text }: { text: string }): boolean =>
+      /from\s+["'](?:socket\.io|@nestjs\/websockets)["']/.test(text);
+
+    const scanned = allSources().filter(touchesSocketIo);
+    expect(scanned.length, "positive control: có file chạm Socket.IO để quét").toBeGreaterThan(0);
+
+    for (const { rel, text } of scanned) {
+      const binds = [...text.matchAll(BIND)].map((m) => m[0]);
+      const packetMw = [...text.matchAll(PACKET_MW)].map((m) => m[0]);
+      if (SUBSCRIBE_EXEMPT.includes(rel)) {
+        // Gateway `/ws-call`: ĐÚNG 1 `onAny(` (cưỡng chế allowlist) và không gì khác.
+        expect(binds, `${rel}: chỉ được có đúng 1 onAny`).toHaveLength(1);
+        expect(binds[0], `${rel}: bind sai loại`).toMatch(/onAny\s*\($/);
+        expect(packetMw, `${rel}: socket.use() làm sập tiến trình khi next(err)`).toEqual([]);
+      } else {
+        expect(binds, `${rel}: bind listener inbound ngoài allowlist`).toEqual([]);
+        expect(packetMw, `${rel}: socket.use() bị cấm`).toEqual([]);
+      }
+    }
+  });
+
+  it("gateway phát ra CHỈ qua MỘT chỗ `.emit(` — masking là cấu trúc, không phải kỷ luật", () => {
+    // Relay là đường emit DUY NHẤT của hệ KHÔNG đi qua `RealtimeEmitterService` (cổng `.parse()` hiện
+    // có). Ép cả 7 sự kiện ra chung một helper làm "quên parse" thành chuyện không thể xảy ra ở call
+    // site — thay vì một luật mà ai cũng phải nhớ.
+    const gateway = stripComments(
+      readFileSync(join(REALTIME_DIR, "call-signalling.gateway.ts"), "utf8"),
+    );
+    const emits = [...gateway.matchAll(/\.emit\s*\(/g)];
+    expect(emits, "đúng 1 call site `.emit(` trong gateway").toHaveLength(1);
+    expect(gateway, "call site đó phải parse trước khi phát").toMatch(/\.parse\(/);
   });
 });
 

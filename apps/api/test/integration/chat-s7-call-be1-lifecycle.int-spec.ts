@@ -383,14 +383,17 @@ describe.skipIf(!hasLaneDb)("S7-CALL-BE-1 — vòng đời cuộc gọi REST (DB
   });
 
   it("ca 5 — deny-path KHÔNG để lại dòng audit nào (không audit thứ chưa xảy ra)", async () => {
-    const before = await direct.query(
-      "SELECT count(*)::int AS n FROM audit_logs WHERE object_type = 'chat_call'",
-    );
+    // ⚠️ BÓ THEO `company_id` (sửa 10/08/2026, S7-CALL-RT-1). Bản gốc đếm `audit_logs` TOÀN DATABASE:
+    // bất kỳ int-spec nào chạy SONG SONG trong cùng chunk mà tạo một cuộc gọi đều làm con số nhích lên,
+    // và ca này đỏ ở chỗ không liên quan gì tới deny-path nó đang đo (đúng lớp
+    // `parallel-int-specs-share-one-outbox`). Đã xảy ra thật khi `chat-s7-call-rt1-signalling.int-spec.ts`
+    // land: `expected 6 to be 5`. Vị từ đúng của ca này vốn dĩ là "tenant NÀY không sinh thêm dòng nào".
+    const countSql = `SELECT count(*)::int AS n FROM audit_logs
+                       WHERE object_type = 'chat_call' AND company_id = $1`;
+    const before = await direct.query(countSql, [A.companyId]);
     await authPost(tOutsider, `/chat/rooms/${roomId}/calls`).send({ kind: "audio" });
     await authPost(tCaller, `/chat/calls/${UNKNOWN_UUID}/accept`);
-    const after = await direct.query(
-      "SELECT count(*)::int AS n FROM audit_logs WHERE object_type = 'chat_call'",
-    );
+    const after = await direct.query(countSql, [A.companyId]);
 
     expect(after.rows[0].n).toBe(before.rows[0].n);
   });
