@@ -29,8 +29,6 @@ import {
 } from "@mediaos/contracts";
 import { loadEnv } from "../config/env.schema";
 import { TokenService } from "../auth/token.service";
-import { SecurityEventWriter } from "../auth/security-event-writer.service";
-import { DatabaseService } from "../db/db.service";
 import { PermissionService } from "../permission/permission.service";
 import {
   CHAT_CALL_CONNECT_MAX_PER_MIN,
@@ -50,18 +48,25 @@ import {
 import { ChatCallSignalService, type ChatCallSignalAccess } from "../chat/chat-call-signal.service";
 import { RealtimeEmitterService } from "./realtime-emitter.service";
 import { CallSignallingExceptionFilter } from "./call-signalling.filter";
+import { CallSignallingViolationWriter } from "./call-signalling-violation.writer";
 import { callRoomName, callUserRoomName } from "./rooms";
 
 /** Cặp quyền cổng module của CALL — CÙNG cặp mà `chat-calls.controller.ts` bắt buộc cho mọi route. */
 const CALL_PAIR = { action: "call", resourceType: "chat-room" } as const;
 
 /**
- * Ảnh chụp cặp quyền có tuổi thọ tối đa 60 s.
+ * Ảnh chụp cặp quyền có tuổi thọ tối đa 60 s — **CHO CHIỀU GỬI**.
  *
  * ⚠️ Đây là cache CÓ CHỦ ĐÍCH và nó KHÔNG mâu thuẫn với luật "mỗi khung kiểm lại từ DB": luật đó nói về
  * **tư cách tham gia cuộc gọi** (vẫn đọc DB mỗi khung, không cache). Còn cặp quyền: kiểm mỗi khung là
  * thêm một round-trip nữa cho mỗi ICE candidate, kiểm một lần duy nhất lúc handshake là để cửa sổ thu
  * hồi quyền **VÔ HẠN** (Socket.IO không tái xác thực kết nối đang mở). 60 s là mức chốt được ghi ra.
+ *
+ * ⚠️⚠️ **PHẢI ĐỌC KÈM `scheduleTokenExpiry`.** Ảnh chụp này nằm trong `accept()`, mà `accept()` chỉ chạy
+ * khi socket **GỬI** một khung. Một socket **im lặng tuyệt đối** không bao giờ đi qua đây — trong khi nó
+ * vẫn NHẬN mọi relay bắn tới `callUserRoomName` của mình. Con số 60 s vì thế **chỉ đúng cho chiều gửi**;
+ * chiều nhận được bó bằng hẹn giờ hết hạn token (phát hiện của FULL gate 10/08/2026 — bản đầu của WO
+ * ghi "≤60 s" cho cả hai chiều, và đó là một khẳng định SAI).
  */
 const PERMISSION_SNAPSHOT_TTL_MS = 60_000;
 
@@ -76,14 +81,22 @@ interface CallSocketUser {
  */
 interface CallSocketState {
   user: CallSocketUser;
-  /** `exp` của access-token (giây, epoch) — ghim lúc handshake, xem `assertFresh`. */
+  /** `exp` của access-token (giây, epoch) — ghim lúc handshake. */
   tokenExpSec: number;
   permissionCheckedAtMs: number;
   budget: FrameBudget;
   /** ĐÃ ghi một hàng `user_security_events` cho kết nối này chưa (trần 1 hàng/kết nối). */
   violated: boolean;
-  /** `callId` mà socket này đã `call:join` — dùng để báo `peer-left` khi rớt. */
-  joinedCallId: string | null;
+  /**
+   * Các `callId` mà socket này đã `call:join` — dùng để báo `peer-left` khi rớt.
+   *
+   * ⚠️ `Set`, KHÔNG phải một giá trị: partial unique index chỉ chặn **một cuộc gọi sống mỗi PHÒNG**, nên
+   * một người ở hai phòng tham gia được hai cuộc gọi cùng lúc. Giữ một giá trị thì khi socket rớt chỉ
+   * cuộc gọi vào sau được báo, cuộc gọi trước treo một người ma trên UI của bên kia — hỏng IM LẶNG.
+   */
+  joinedCallIds: Set<string>;
+  /** Hẹn giờ ngắt đúng lúc access-token hết hạn — xem `scheduleTokenExpiry`. */
+  expiryTimer: ReturnType<typeof setTimeout> | null;
 }
 
 const stateOf = (client: Socket): CallSocketState | undefined =>
@@ -109,9 +122,11 @@ const stateOf = (client: Socket): CallSocketState | undefined =>
  *    chứng chỉ (memory `ws-permission-gate-needs-its-own-room`).
  *  - Đúng **một** call site `.emit(` (helper `relay`), luôn `.parse()` trước — masking là cấu trúc, không
  *    phải kỷ luật. Ratchet `chat-realtime-structure.spec.ts` đếm cả hai điều này.
- *  - 7/8 handler trả `undefined`. Giá trị trả về của handler đi thẳng vào `ack` mà **client tự bật được**
- *    (`@nestjs/platform-socket.io` lấy `ack` từ đối số cuối của khung client gửi) ⇒ nó là một đường emit
- *    KHÔNG qua masking. Chỉ `call:ping` trả dữ liệu, và dữ liệu đó đã `.parse()`.
+ *  - 7/8 handler trả `undefined`. Giá trị trả về của handler là một đường ra THẬT: `io-adapter.js` lọc
+ *    `!isNil(response)` rồi — nếu response có khoá `event` — **`socket.emit(response.event, response.data)`**;
+ *    nếu không, nó gọi `ack` mà **client tự bật được** (adapter lấy `ack` từ đối số cuối của khung client
+ *    gửi). Cả hai nhánh đều KHÔNG đi qua `RealtimeEmitterService`. Chỉ `call:ping` trả dữ liệu, và dữ
+ *    liệu đó đã `.parse()`.
  */
 @UseFilters(CallSignallingExceptionFilter)
 @WebSocketGateway({ namespace: WS_CALL_NAMESPACE })
@@ -127,8 +142,10 @@ export class CallSignallingGateway {
     private readonly permissions: PermissionService,
     private readonly signal: ChatCallSignalService,
     private readonly cooldown: ChatCallCooldownService,
-    private readonly securityEvents: SecurityEventWriter,
-    private readonly db: DatabaseService,
+    // ⚠️ KHÔNG tiêm `DatabaseService` vào đây. Bề mặt ghi của gateway phải là ĐÚNG một phép (một hàng
+    // append-only vào `user_security_events`) — `db.withTenant` cấp quyền ghi mọi bảng, kể cả
+    // `chat_calls`, tức biến hàng rào R4 thành một lời hứa trong docblock. Có ratchet đóng đinh.
+    private readonly violations: CallSignallingViolationWriter,
     private readonly emitter: RealtimeEmitterService,
   ) {}
 
@@ -232,15 +249,59 @@ export class CallSignallingGateway {
       permissionCheckedAtMs: Date.now(),
       budget: newFrameBudget(Date.now()),
       violated: false,
-      joinedCallId: null,
+      joinedCallIds: new Set<string>(),
+      expiryTimer: null,
     };
     (client.data as { state?: CallSocketState }).state = state;
+    // `client.data.user` cũng được đặt: `CallSignallingExceptionFilter` (và mọi công cụ đọc socket sau
+    // này) tìm danh tính ở ĐÚNG chỗ mà `/ws` đặt. Hai gateway cùng hình dạng ⇒ không ai phải nhớ file
+    // nào cất user ở đâu, và dòng log điều tra không bao giờ in `userId=?`.
+    (client.data as { user?: CallSocketUser }).user = user;
+    this.scheduleTokenExpiry(client, state);
 
     // ⚠️ Dòng ĐẦU TIÊN của `onAny` phải là compare-and-set ĐỒNG BỘ, xem `screenFrame`.
     client.onAny((event: string) => this.screenFrame(client, event));
 
     await client.join(callUserRoomName(user.companyId, user.id));
     return undefined;
+  }
+
+  /**
+   * Hẹn giờ NGẮT đúng lúc access-token hết hạn.
+   *
+   * ┌─ VÌ SAO KHÔNG ĐỦ NẾU CHỈ KIỂM `exp` Ở `accept()` ───────────────────────────────────────────────┐
+   * │ `accept()` chỉ chạy khi socket **GỬI** khung. Một socket nối xong rồi **im lặng tuyệt đối** vẫn  │
+   * │ ở trong `callUserRoomName` của mình và tiếp tục **NHẬN** mọi `sdp-offer`/`sdp-answer`/           │
+   * │ `ice-candidate` bắn tới người đó — cho MỌI cuộc gọi tương lai, VÔ THỜI HẠN: sau khi token hết    │
+   * │ hạn, sau khi cặp `('call','chat-room')` bị thu hồi, sau khi bị gỡ khỏi mọi phòng. SDP mang địa   │
+   * │ chỉ IP nội bộ/công khai của bên kia và thời điểm từng cuộc gọi.                                  │
+   * │ Trước bản vá này, đường cắt DUY NHẤT là `severUserSessions` (khoá/xoá tài khoản) — đăng xuất     │
+   * │ thường và token hết hạn KHÔNG cắt được. Phát hiện bởi FULL gate (security-reviewer, 10/08/2026). │
+   * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * ⚠️ `.unref()` BẮT BUỘC: một timer "sống" giữ tiến trình Node không thoát được — với vitest đó là
+   * treo lúc teardown (cùng bài học `realtime.gateway.ts` với nhịp tim presence).
+   *
+   * ⚠️ Dọn timer đi qua `handleDisconnect`, **KHÔNG** qua `client.on("disconnect", …)`: ratchet
+   * `chat-realtime-structure.spec.ts` đòi gateway này có ĐÚNG MỘT bind và nó phải là `onAny(` — thêm
+   * `client.on(` là mở lại đúng bề mặt "listener gắn tay" mà ratchet dựng ra để chặn.
+   *
+   * Hệ quả cho FE-1 (đã ghi ở plan §2b V1): `/ws-call` sẽ rớt khi token hết hạn (~15 phút).
+   * `RTCPeerConnection` đã nối vẫn sống, nhưng FE **BẮT BUỘC** nối lại bằng token mới để còn ICE-restart.
+   */
+  private scheduleTokenExpiry(client: Socket, state: CallSocketState): void {
+    const ttlMs = state.tokenExpSec * 1000 - Date.now();
+    if (ttlMs <= 0) {
+      // Không nên xảy ra (`jwt.verify` đã chặn token hết hạn), nhưng fail-CLOSED nếu đồng hồ lệch.
+      client.disconnect(true);
+      return;
+    }
+    const timer = setTimeout(() => {
+      this.logger.debug(`/ws-call: access-token hết hạn — ngắt. userId=${state.user.id}`);
+      client.disconnect(true);
+    }, ttlMs);
+    timer.unref?.();
+    state.expiryTimer = timer;
   }
 
   /**
@@ -291,7 +352,7 @@ export class CallSignallingGateway {
     if (!ctx) return undefined;
 
     const { state, payload, access } = ctx;
-    state.joinedCallId = access.callId;
+    state.joinedCallIds.add(access.callId);
     await client.join(callRoomName(state.user.companyId, payload.callId));
     this.relay(
       client,
@@ -322,7 +383,7 @@ export class CallSignallingGateway {
       { callId: payload.callId, userId: state.user.id },
     );
     await client.leave(callRoomName(state.user.companyId, payload.callId));
-    state.joinedCallId = null;
+    state.joinedCallIds.delete(payload.callId);
     return undefined;
   }
 
@@ -416,8 +477,11 @@ export class CallSignallingGateway {
    * `call:ping` — phát hiện rớt, phía FE. Server chỉ xác nhận "phiên của bạn còn hợp lệ" và **không ghi
    * gì**: không DB, không presence, không đếm.
    *
-   * Đây là handler DUY NHẤT trả dữ liệu, và nó đi qua `ack` — kênh mà client tự bật. Vì thế payload phải
-   * `.parse()` như mọi đường phát khác, và chỉ mang `callId` (xem `chatCallPongSchema`).
+   * Đây là handler DUY NHẤT trả dữ liệu. Dạng `{event, data}` làm `io-adapter.js` **emit thẳng**
+   * `call:pong` về chính socket (không gọi `ack`) — nhưng điều đó KHÔNG đổi nghĩa vụ: đây vẫn là một
+   * đường ra không đi qua `RealtimeEmitterService`, nên payload phải `.parse()` như mọi đường phát khác
+   * và chỉ mang `callId` (xem `chatCallPongSchema`). Bảy handler còn lại trả `undefined` ⇒ bị
+   * `filter(!isNil)` loại trước khi chạm tới bất kỳ đường ra nào — kể cả `ack` do client tự gắn.
    */
   @SubscribeMessage("call:ping")
   async onPing(
@@ -442,16 +506,28 @@ export class CallSignallingGateway {
    */
   handleDisconnect(client: Socket): void {
     const state = stateOf(client);
-    if (!state?.joinedCallId) return;
-    const callId = state.joinedCallId;
-    state.joinedCallId = null;
-    this.relay(
-      null,
-      callRoomName(state.user.companyId, callId),
-      CHAT_CALL_OUTBOUND_EVENTS.PEER_LEFT,
-      chatCallPeerSchema,
-      { callId, userId: state.user.id },
-    );
+    if (!state) return;
+
+    // Dọn hẹn giờ TRƯỚC mọi việc khác: đây là chỗ DUY NHẤT gỡ được nó (xem `scheduleTokenExpiry` cho lý
+    // do không dùng `client.on("disconnect")`). Thiếu bước này thì mỗi kết nối để lại một timer sống tới
+    // hạn token, và một tick sau teardown chạm vào socket đã đóng.
+    if (state.expiryTimer) {
+      clearTimeout(state.expiryTimer);
+      state.expiryTimer = null;
+    }
+
+    // Báo cho MỌI phiên signalling socket này đang tham gia — không chỉ cái vào sau cùng.
+    const callIds = [...state.joinedCallIds];
+    state.joinedCallIds.clear();
+    for (const callId of callIds) {
+      this.relay(
+        null,
+        callRoomName(state.user.companyId, callId),
+        CHAT_CALL_OUTBOUND_EVENTS.PEER_LEFT,
+        chatCallPeerSchema,
+        { callId, userId: state.user.id },
+      );
+    }
   }
 
   // ─── đường chung ─────────────────────────────────────────────────────────────
@@ -672,13 +748,10 @@ export class CallSignallingGateway {
     );
     try {
       if (await this.cooldown.allow(key, CHAT_CALL_VIOLATION_MAX_PER_MIN, 60)) {
-        await this.db.withTenant(state.user.companyId, (tx) =>
-          this.securityEvents.record(tx, {
-            eventType: "CALL_SIGNALLING_VIOLATION",
-            userId: state.user.id,
-            actorUserId: state.user.id,
-            payload: buildSignalViolationPayload(event, reason),
-          }),
+        await this.violations.record(
+          state.user.companyId,
+          state.user.id,
+          buildSignalViolationPayload(event, reason),
         );
       } else {
         this.logger.warn(

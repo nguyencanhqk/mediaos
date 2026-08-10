@@ -231,8 +231,9 @@ export type ChatCallPeerPayload = z.infer<typeof chatCallPeerSchema>;
  * `call:pong` — trả lời `call:ping`. Chỉ xác nhận "phiên signalling của bạn còn hợp lệ".
  *
  * ⚠️ **KHÔNG** kèm `status` của cuộc gọi, **KHÔNG** kèm danh sách người tham gia: pong là đường ra DUY
- * NHẤT đi qua cơ chế `ack` của Nest (giá trị trả về của handler), và mọi khoá thêm vào đây là dữ liệu
- * chảy qua một kênh mà client tự bật được (xem docblock handler `call:ping`).
+ * NHẤT sinh từ GIÁ TRỊ TRẢ VỀ của một handler — một kênh không đi qua `RealtimeEmitterService`, và (tuỳ
+ * hình dạng response) có thể rơi vào `ack` mà chính client gắn. Mọi khoá thêm vào đây là dữ liệu chảy
+ * qua kênh đó (xem docblock handler `call:ping`).
  */
 export const chatCallPongSchema = z.object({ callId: z.string().uuid() });
 export type ChatCallPongPayload = z.infer<typeof chatCallPongSchema>;

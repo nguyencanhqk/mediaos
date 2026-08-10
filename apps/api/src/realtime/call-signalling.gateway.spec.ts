@@ -13,8 +13,7 @@ interface Deps {
   permissions: { can: ReturnType<typeof vi.fn> };
   signal: { resolveSignalAccess: ReturnType<typeof vi.fn> };
   cooldown: { allow: ReturnType<typeof vi.fn> };
-  securityEvents: { record: ReturnType<typeof vi.fn> };
-  db: { withTenant: ReturnType<typeof vi.fn> };
+  violations: { record: ReturnType<typeof vi.fn> };
   emitter: { setServer: ReturnType<typeof vi.fn>; setCallServer: ReturnType<typeof vi.fn> };
 }
 
@@ -24,8 +23,7 @@ function makeDeps(): Deps {
     permissions: { can: vi.fn(async () => ({ allow: true })) },
     signal: { resolveSignalAccess: vi.fn() },
     cooldown: { allow: vi.fn(async () => true) },
-    securityEvents: { record: vi.fn() },
-    db: { withTenant: vi.fn() },
+    violations: { record: vi.fn() },
     emitter: { setServer: vi.fn(), setCallServer: vi.fn() },
   };
 }
@@ -36,8 +34,7 @@ const makeGateway = (d: Deps): CallSignallingGateway =>
     d.permissions as never,
     d.signal as never,
     d.cooldown as never,
-    d.securityEvents as never,
-    d.db as never,
+    d.violations as never,
     d.emitter as never,
   );
 

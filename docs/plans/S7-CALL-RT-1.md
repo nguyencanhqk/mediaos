@@ -507,6 +507,29 @@ ngắt + ghi, trên chính cuộc gọi đã kết thúc đó.
 
 ---
 
+## 5c. Vòng vá sau FULL gate — và MỘT lỗ CỐ Ý để lại cho WO khác
+
+`security-reviewer` trả **BLOCK**. Ba nhóm đã đóng:
+
+| # | Phát hiện | Vá |
+| --- | --- | --- |
+| HIGH-1 | Hai lớp bù của V1 (hạn `exp` + ảnh chụp cặp quyền) nằm trong `accept()`, mà `accept()` **chỉ chạy khi socket GỬI**. Một socket im lặng tuyệt đối vẫn NHẬN mọi relay — sau khi token hết hạn, sau khi bị thu hồi cặp quyền, sau khi bị gỡ khỏi mọi phòng. Cửa sổ là **VÔ HẠN**, và docblock ghi "≤60 s" là **khẳng định SAI** | `scheduleTokenExpiry` — hẹn giờ ngắt đúng lúc token hết hạn (`.unref()`, dọn ở `handleDisconnect`, KHÔNG dùng `client.on` vì ratchet cấm). Docblock sửa lại: 60 s chỉ đúng cho **chiều gửi** |
+| HIGH-2 | 3 hàng rào không có ca đo | +CA burst (12 khung không await ⇒ đúng 1 hàng) · +CA 10 (7 kết nối ⇒ ≤5 hàng) · +CA V5 (ack không nhận dữ liệu) |
+| MEDIUM | `joinedCallId` một-giá-trị · filter in `userId=?` · gateway cầm `DatabaseService` | `Set<string>` · handshake đặt `client.data.user` cùng hình dạng `/ws` · **`CallSignallingViolationWriter`** — gateway không còn `withTenant`, có ratchet đóng đinh |
+
+### ⚠️ Lỗ CÒN MỞ — thuộc tầng vòng đời, KHÔNG vá ở gateway
+
+Gỡ một người khỏi phòng chat **giữa cuộc gọi** không đóng hàng `chat_call_participants` của họ ⇒ họ mất
+quyền **gửi** (bị xếp lớp B) nhưng vẫn **nhận** relay, và nối lại `/ws-call` được (handshake chỉ kiểm cặp
+quyền mức type).
+
+**Không vá ở gateway** — thêm một kiểm membership cho từng người nhận là thêm truy vấn mỗi khung **và**
+dựng bản sao thứ hai của luật membership, đúng thứ bất biến #3 của `chat-access.service.ts` và D3 cấm.
+Chỗ vá đúng: `ChatMembersService.removeMember` đóng hàng participant của người bị gỡ trong cùng tx. Ghi
+ra đây để nó không rơi vào khoảng không giữa hai WO — **việc của `S7-CALL-QA-1` hoặc một WO BE nhỏ**.
+
+---
+
 ## 6. Nghiệm thu
 
 - `bash harness/check.sh --lane-db=call2` XANH (không phải "XANH KHÔNG ĐỦ BẰNG CHỨNG").

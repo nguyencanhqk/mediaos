@@ -84,11 +84,15 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
   let uLate = "";
   let uNoCall = "";
   let uB = "";
+  let uBurst = "";
+  let uQuota = "";
   let tCaller = "";
   let tCallee = "";
   let tLate = "";
   let tNoCall = "";
   let tB = "";
+  let tBurst = "";
+  let tQuota = "";
 
   const settle = (ms = 250): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -154,6 +158,7 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
       "call:screen-state",
       "call:peer-joined",
       "call:peer-left",
+      "call:pong",
       "exception", // ⚠️ khung của filter mặc định Nest — PHẢI không bao giờ tới (V6)
     ]);
   }
@@ -258,18 +263,26 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
     uCallee = await mk("callee");
     uLate = await mk("late");
     uNoCall = await mk("nocall");
+    // Hai ca hạn mức đốt bucket của chính người thực hiện ⇒ phải có người RIÊNG, nếu không chúng làm
+    // các ca khác đỏ ở chỗ khó đoán (`per-user-rate-limit-throttles-own-int-spec`).
+    uBurst = await mk("burst");
+    uQuota = await mk("quota");
     uB = await seedUser(direct, B.companyId, `bob@${B.slug}.test`, hash);
 
     await grantPairs(A.companyId, uCaller, "caller", CALL_FULL);
     await grantPairs(A.companyId, uCallee, "callee", CALL_FULL);
     await grantPairs(A.companyId, uLate, "late", CALL_FULL);
     await grantPairs(A.companyId, uNoCall, "nocall", NO_CALL_PAIR);
+    await grantPairs(A.companyId, uBurst, "burst", CALL_FULL);
+    await grantPairs(A.companyId, uQuota, "quota", CALL_FULL);
     await grantPairs(B.companyId, uB, "b", CALL_FULL);
 
     tCaller = await login(A.slug, `caller@${A.slug}.test`);
     tCallee = await login(A.slug, `callee@${A.slug}.test`);
     tLate = await login(A.slug, `late@${A.slug}.test`);
     tNoCall = await login(A.slug, `nocall@${A.slug}.test`);
+    tBurst = await login(A.slug, `burst@${A.slug}.test`);
+    tQuota = await login(A.slug, `quota@${A.slug}.test`);
     tB = await login(B.slug, `bob@${B.slug}.test`);
   }, 180_000);
 
@@ -566,6 +579,78 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
     expect((await securityEvents(A.companyId)).filter((e) => e.user_id === uLate).length).toBe(
       beforeLate + 1,
     );
+  });
+
+  // ─── D6 — hai hàng rào chống bơm bảng append-only ────────────────────────────
+
+  it("CA burst (V4) — 12 khung vi phạm KHÔNG await giữa các lần ⇒ ĐÚNG 1 hàng an ninh", async () => {
+    // ⚠️ Ca này đo một bất biến THỨ TỰ ĐỒNG BỘ, không phải một hành vi: `socket.io#onevent` gọi MỌI
+    // listener `onAny` **đồng bộ** cho từng gói trong cùng một lượt đọc. Nếu cờ `violated` được đặt SAU
+    // một `await`, cả 12 khung chạy hết trước khi lần ghi đầu tiên resolve ⇒ 12 hàng append-only từ MỘT
+    // kết nối, và `disconnect()` tới quá muộn.
+    //
+    // Vì thế PHẢI `emit` liên tiếp KHÔNG await giữa các lần — thêm `await` vào vòng lặp là ca test tự
+    // làm mình xanh.
+    const before = (await securityEvents(A.companyId)).filter((e) => e.user_id === uBurst).length;
+    const rec = await connectCall(tBurst);
+    for (let i = 0; i < 12; i += 1) rec.socket.emit(`call:evil-${i}`, { i });
+    await settle(900);
+
+    expect(rec.disconnected).toBe(true);
+    const rows = (await securityEvents(A.companyId)).filter((e) => e.user_id === uBurst);
+    expect(rows.length, "trần 1 hàng/kết nối").toBe(before + 1);
+  });
+
+  it("CA 10 — 7 kết nối liên tiếp cùng vi phạm ⇒ ≤5 hàng (trần theo NGƯỜI)", async () => {
+    // Lớp thứ HAI của D6: cờ 1-hàng/kết-nối không chặn được kẻ nối lại vòng lặp. Không có ca này thì
+    // đường ghi `user_security_events` (append-only, KHÔNG có job dọn) chỉ còn một hàng rào có bằng chứng.
+    const before = (await securityEvents(A.companyId)).filter((e) => e.user_id === uQuota).length;
+
+    for (let i = 0; i < 7; i += 1) {
+      const rec = await connectCall(tQuota);
+      rec.socket.emit("call:evil", { i });
+      await settle(350);
+      expect(rec.disconnected, `lần ${i}: vượt trần vẫn PHẢI ngắt`).toBe(true);
+    }
+
+    const rows = (await securityEvents(A.companyId)).filter((e) => e.user_id === uQuota);
+    const written = rows.length - before;
+    // Ngắt thì lần nào cũng ngắt; GHI thì dừng ở trần. Hai vế phải tách nhau — nếu vượt trần mà cũng
+    // thôi ngắt thì hàng rào tự mở cửa cho kẻ đã chạm trần.
+    expect(written, "ghi tối đa CHAT_CALL_VIOLATION_MAX_PER_MIN = 5").toBeLessThanOrEqual(5);
+    expect(written, "positive control: có ghi thật, không phải 0 vì lý do khác").toBeGreaterThan(0);
+  });
+
+  it("CA V5 — ack do CLIENT gắn không bao giờ nhận dữ liệu; chỉ `call:ping` trả về, đúng 1 khoá", async () => {
+    // ⚠️ Giá trị TRẢ VỀ của handler là một đường ra THẬT: `io-adapter.js` gọi `ack(response)` (ack lấy từ
+    // đối số cuối của khung do CLIENT gửi) hoặc `socket.emit(response.event, response.data)`. Cả hai
+    // KHÔNG đi qua `RealtimeEmitterService`. Một handler lỡ `return access`/`return participants` là rò
+    // thẳng `visibleFromSeq`/`mutedUntil` của actor, hoặc `outcome`/`joinedAt` của NGƯỜI KHÁC.
+    const room = await newRoom(tCaller, "R-ack", [uCallee]);
+    const callId = await invite(tCaller, room);
+    const a = await connectCall(tCaller);
+    a.socket.emit("call:join", { callId });
+    await settle(250);
+
+    const acks: unknown[] = [];
+    const ack = (v: unknown): void => {
+      acks.push(v);
+    };
+    a.socket.emit("call:join", { callId }, ack);
+    a.socket.emit("call:leave", { callId }, ack);
+    a.socket.emit("call:sdp-offer", { callId, toUserId: uCallee, sdp: sdpFixture() }, ack);
+    a.socket.emit("call:sdp-answer", { callId, toUserId: uCallee, sdp: sdpFixture() }, ack);
+    a.socket.emit("call:ice-candidate", { callId, toUserId: uCallee, candidate: "c1" }, ack);
+    a.socket.emit("call:media-state", { callId, micOn: true, camOn: false }, ack);
+    a.socket.emit("call:screen-state", { callId, sharing: false }, ack);
+    await settle(600);
+
+    expect(acks, "7 handler không-ping KHÔNG được trả gì qua ack").toEqual([]);
+
+    a.socket.emit("call:ping", { callId }, ack);
+    const pong = await a.waitFor("call:pong");
+    expect(Object.keys(pong), "pong đúng MỘT khoá").toEqual(["callId"]);
+    expect(pong.callId).toBe(callId);
   });
 
   // ─── vế B — chuông đến trên `/ws` ────────────────────────────────────────────

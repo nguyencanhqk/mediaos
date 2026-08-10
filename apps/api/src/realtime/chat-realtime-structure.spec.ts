@@ -172,6 +172,32 @@ describe("DECISIONS-07 R2 — allowlist inbound `/ws-call` ĐÓNG đúng 8", () 
     }
   });
 
+  it("R4 — gateway KHÔNG có đường ghi DB nào ngoài writer hẹp (cấu trúc, không phải lời hứa)", () => {
+    // ⚠️ Bản đầu của WO tiêm `DatabaseService` vào gateway để ghi `user_security_events`. Nó chạy đúng,
+    // nhưng `db.withTenant` cấp quyền ghi **MỌI bảng** — kể cả `chat_calls`. Khi đó hàng rào R4 ("vòng
+    // đời cuộc gọi chỉ đi REST, qua PermissionGuard + audit") chỉ còn được giữ bởi một dòng docblock, và
+    // một `tx.insert(chatCalls)` viết thêm vào file này sẽ không làm gì đỏ. FULL gate chỉ ra đúng điểm
+    // đó: WO tốn công KHÔNG export `ChatCallsRepository` rồi mở một cửa rộng hơn ngay bên cạnh.
+    const gateway = stripComments(
+      readFileSync(join(REALTIME_DIR, "call-signalling.gateway.ts"), "utf8"),
+    );
+    expect(gateway, "gateway không được mở transaction").not.toMatch(/withTenant\s*\(/);
+    expect(gateway, "gateway không được cầm DatabaseService").not.toMatch(/DatabaseService/);
+    expect(gateway, "gateway không được cầm writer chung của security-event").not.toMatch(
+      /SecurityEventWriter/,
+    );
+
+    // Positive control: đường ghi DUY NHẤT vẫn còn (nếu ai gỡ hẳn, ba khẳng định trên xanh RỖNG).
+    expect(gateway).toMatch(/this\.violations\.record\(/);
+    const writer = stripComments(
+      readFileSync(join(REALTIME_DIR, "call-signalling-violation.writer.ts"), "utf8"),
+    );
+    expect(writer.match(/withTenant\s*\(/g) ?? [], "writer chỉ có ĐÚNG 1 transaction").toHaveLength(
+      1,
+    );
+    expect(writer, "writer chỉ ghi user_security_events").not.toMatch(/chatCalls|chat_calls/);
+  });
+
   it("gateway phát ra CHỈ qua MỘT chỗ `.emit(` — masking là cấu trúc, không phải kỷ luật", () => {
     // Relay là đường emit DUY NHẤT của hệ KHÔNG đi qua `RealtimeEmitterService` (cổng `.parse()` hiện
     // có). Ép cả 7 sự kiện ra chung một helper làm "quên parse" thành chuyện không thể xảy ra ở call

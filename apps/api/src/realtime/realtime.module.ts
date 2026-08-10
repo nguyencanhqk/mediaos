@@ -7,6 +7,7 @@ import { ChatPresenceReaderModule } from "./chat-presence-reader.module";
 import { ChatPresenceService } from "./chat-presence.service";
 import { RealtimeGateway } from "./realtime.gateway";
 import { CallSignallingGateway } from "./call-signalling.gateway";
+import { CallSignallingViolationWriter } from "./call-signalling-violation.writer";
 import { ChatCallCooldownService } from "../chat/chat-call-cooldown.service";
 
 /**
@@ -48,6 +49,9 @@ import { ChatCallCooldownService } from "../chat/chat-call-cooldown.service";
     RealtimeGateway,
     ChatPresenceService,
     CallSignallingGateway,
+    // Bề mặt GHI duy nhất của gateway `/ws-call` — xem docblock của lớp (R4 thành cấu trúc, không phải
+    // kỷ luật). `SecurityEventWriter` tới từ `AuthModule` (đã import), `DatabaseService` là @Global.
+    CallSignallingViolationWriter,
     // S7-CALL-RT-1: instance RIÊNG của bộ đếm cooldown — đúng như `chat.module.ts` đã chỉ định cho
     // trường hợp này ("module khác cần cooldown tự dựng instance của nó"). Hai instance KHÔNG chồng
     // hạn mức lên nhau: mỗi bên dùng `scope` riêng (`call-signal-*` vs `ice-config`/`call-invite`), và
