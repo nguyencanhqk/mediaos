@@ -57,10 +57,9 @@ const PENDING_CODES: ReadonlyMap<string, string> = new Map([
   // CHAT-ERR-026…029 đã TRẢ ở `S7-CALL-BE-1` (09/08/2026 — vòng đời cuộc gọi qua REST). Gỡ khỏi sổ nợ
   // để census quay lại đòi mỗi mã ≥1 ca int-spec; ca "nợ đã trả" bên dưới ép việc gỡ này.
   //
-  // ⚠️ `CHAT-ERR-030` Ở LẠI: nó là mã của **`/ws-call`** (sự kiện ngoài allowlist 8 → ngắt kết nối +
-  // `user_security_events`), thuộc `S7-CALL-RT-1` — BE-1 không mở gateway nào. Gỡ nhầm nó xuống làm
-  // census đòi một ca test cho đường code chưa tồn tại ⇒ ĐỎ, và đỏ ở chỗ không ai đoán ra nguyên nhân.
-  ["CHAT-ERR-030", "S7-CALL-RT-1"], // sự kiện /ws-call ngoài allowlist 8 → ngắt + user_security_events
+  // CHAT-ERR-030 đã TRẢ ở `S7-CALL-RT-1` (10/08/2026 — gateway `/ws-call`): khung ngoài allowlist 8 ·
+  // sai Zod · vượt trần độ dài · relay vào cuộc gọi mình không thuộc ⇒ `user_security_events` + ngắt.
+  // Ca đo: `chat-s7-call-rt1-signalling.int-spec.ts`. Sổ nợ trở lại RỖNG — mọi mã §12 đều có đường code.
 ]);
 
 /** Mã BẮT BUỘC đã có ca int-spec = mã trong sổ TRỪ phần đang nợ. */

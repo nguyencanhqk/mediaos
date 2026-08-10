@@ -229,6 +229,11 @@ export const SECURITY_EVENT_TYPES = [
   "USER_DELETED",
   "USER_RESTORED",
   "PASSWORD_RESET_BY_ADMIN",
+  // S7-CALL-RT-1 (APPEND-only): khung inbound `/ws-call` ngoài allowlist 8 · sai Zod · vượt trần độ dài ·
+  // đẩy tín hiệu vào cuộc gọi mình không thuộc (CHAT-ERR-030 · DECISIONS-07 R2). Forensic: đây là kênh
+  // DUY NHẤT client được ghi lên WS, nên một chuỗi khung bị từ chối ở đây là dấu hiệu DÒ CỬA giao thức —
+  // khác hẳn một request REST 403 (đường đã có guard + audit).
+  "CALL_SIGNALLING_VIOLATION",
 ] as const;
 export type SecurityEventType = (typeof SECURITY_EVENT_TYPES)[number];
 
@@ -267,6 +272,10 @@ export const SECURITY_EVENT_SEVERITY: Record<SecurityEventType, SecurityEventSev
   USER_DELETED: "high",
   USER_RESTORED: "medium",
   PASSWORD_RESET_BY_ADMIN: "high",
+  // S7-CALL-RT-1: "medium" — một khung bị từ chối có thể chỉ là client cũ/lỗi phiên bản, nhưng một CHUỖI
+  // khung như thế là dò cửa. Không đặt "high": mức đó dành cho can thiệp credential/tài khoản, và làm
+  // loãng "high" sẽ làm chính viewer bảo mật mất giá trị.
+  CALL_SIGNALLING_VIOLATION: "medium",
 };
 
 /**

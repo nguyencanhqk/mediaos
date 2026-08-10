@@ -56,6 +56,7 @@ import { ChatCallsRepository } from "./chat-calls.repository";
 import { ChatCallIceService } from "./chat-call-ice.service";
 // S7-CALL-SEC-1 (additive): cooldown per-user dùng chung cho endpoint đúc credential (HIGH-2 vế 2).
 import { ChatCallCooldownService } from "./chat-call-cooldown.service";
+import { ChatCallSignalService } from "./chat-call-signal.service";
 import { ChatCallRingingTimeoutJobHandler } from "./chat-call-ringing-timeout.job-handler";
 import { ProjectMembershipModule } from "../tasks/project-membership.module";
 import { ChatOversightController } from "./chat-oversight.controller";
@@ -204,6 +205,8 @@ import { ChatOversightRepository } from "./chat-oversight.repository";
     // là singleton per-module để bộ đếm in-memory fallback dùng chung giữa các request).
     ChatCallCooldownService,
     ChatCallRingingTimeoutJobHandler,
+    // S7-CALL-RT-1 — bề mặt CHỈ ĐỌC cho `/ws-call` (được export; xem `exports` bên dưới).
+    ChatCallSignalService,
   ],
   // `ChatDerivedRoomsSyncService` export cho 5 module writer (org · employees · tasks · recycle-bin).
   // Job handler CỐ Ý KHÔNG export: nó được SchedulerModule gom qua DiscoveryService bằng metadata, không
@@ -213,6 +216,11 @@ import { ChatOversightRepository } from "./chat-oversight.repository";
     ChatRoomsRepository,
     ChatMessagesRepository,
     ChatDerivedRoomsSyncService,
+    // S7-CALL-RT-1: bề mặt CHỈ ĐỌC cho gateway `/ws-call`. ⚠️ Đây là thứ được export THAY CHO
+    // `ChatCallsRepository` — xem khối "CỐ Ý KHÔNG export" ở trên: repo mang `insertCall`/`transition`/
+    // `closeOpenParticipants`, tức đường ghi vòng đời, và nó phải ở lại sau `PermissionGuard` + audit
+    // (hàng rào R4 của DECISIONS-07).
+    ChatCallSignalService,
   ],
 })
 export class ChatModule implements OnModuleInit {

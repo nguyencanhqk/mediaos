@@ -1,4 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { ChatCallCooldownService } from "./chat-call-cooldown.service";
+import { ChatCallsService } from "./chat-calls.service";
 import { ChatMembersService } from "./chat-members.service";
 import { ChatMessagesService } from "./chat-messages.service";
 import { ChatMessageModerationService } from "./chat-message-moderation.service";
@@ -310,5 +314,156 @@ describe("emit SAU COMMIT — ChatRoomsService.createGroup", () => {
     // phòng vừa tạo chưa socket nào join.
     expect(realtime.emitChatRoom.mock.calls[0]?.[3]).toEqual([ACTOR.id, TARGET]);
     expect(realtime.syncRoomMembership).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────
+/**
+ * S7-CALL-RT-1 — vòng đời CUỘC GỌI. `S7-CALL-BE-1` cố ý để trống đường phát (luật 4 cũ của
+ * `ChatCallsService`); WO này gắn nó, nên bất biến "emit SAU COMMIT" phải phủ luôn 6 lối mới.
+ *
+ * ⚠️ Ca cuối cùng ĐẾM SỐ LỐI. Không phải để làm đẹp: một lối phát mới cắm vào giữa transaction là đúng
+ * lớp lỗi mà cả file này tồn tại để chặn, và nó KHÔNG hiện ra ở bất kỳ ca hành vi nào khác (mỗi ca chỉ
+ * đo đường của chính nó).
+ */
+describe("emit SAU COMMIT — ChatCallsService (S7-CALL-RT-1)", () => {
+  const CALL = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+  const CALL_ROW = {
+    id: CALL,
+    companyId: COMPANY,
+    roomId: ROOM,
+    initiatorUserId: ACTOR.id,
+    kind: "audio" as const,
+    status: "ringing" as const,
+    startedAt: new Date("2026-08-10T10:00:00.000Z"),
+    acceptedAt: null,
+    endedAt: null,
+  };
+
+  /** `expiredRows` mô phỏng bước dọn-trước-khi-mời tìm thấy một cuộc gọi treo. */
+  function build(commitFails: boolean, expiredRows: { id: string }[] = []) {
+    const realtime = { emitChatCall: vi.fn() };
+    const repo = {
+      activeMemberIds: vi.fn(async () => [ACTOR.id, TARGET]),
+      insertCall: vi.fn(async () => CALL_ROW),
+      insertParticipants: vi.fn(),
+      listParticipants: vi.fn(async () => [
+        {
+          userId: ACTOR.id,
+          invitedAt: CALL_ROW.startedAt,
+          joinedAt: null,
+          leftAt: null,
+          outcome: null,
+        },
+        {
+          userId: TARGET,
+          invitedAt: CALL_ROW.startedAt,
+          joinedAt: null,
+          leftAt: null,
+          outcome: null,
+        },
+      ]),
+      expireStaleRinging: vi.fn(async () =>
+        expiredRows.map((r) => ({
+          id: r.id,
+          roomId: ROOM,
+          kind: "audio" as const,
+          initiatorUserId: TARGET,
+          startedAt: CALL_ROW.startedAt,
+        })),
+      ),
+      transition: vi.fn(async () => ({
+        ...CALL_ROW,
+        status: "ended" as const,
+        endedAt: new Date(),
+      })),
+      setParticipantOutcome: vi.fn(async () => true),
+      closeOpenParticipants: vi.fn(async () => 0),
+      findParticipant: vi.fn(async () => ({
+        userId: ACTOR.id,
+        invitedAt: CALL_ROW.startedAt,
+        joinedAt: null,
+        leftAt: null,
+        outcome: null,
+      })),
+    };
+    const callAccess = {
+      assertMember: vi.fn(async () => ACCESS),
+      assertCallAccess: vi.fn(async () => ({ ...ACCESS, call: CALL_ROW })),
+    };
+    const svc = new ChatCallsService(
+      makeDb(commitFails) as never,
+      repo as never,
+      callAccess as never,
+      audit() as never,
+      // Cooldown thật nhưng luôn cho qua trong ca này (ngưỡng mặc định 10/phút, ca chỉ gọi 1-2 lần).
+      new ChatCallCooldownService() as never,
+      realtime as unknown as RealtimeEmitterService,
+    );
+    return { svc, realtime };
+  }
+
+  it("invite: COMMIT hỏng → KHÔNG emit chat:call", async () => {
+    const { svc, realtime } = build(true);
+    await expect(svc.invite(ACTOR, ROOM, { kind: "audio" })).rejects.toThrow(/COMMIT/);
+    expect(realtime.emitChatCall).not.toHaveBeenCalled();
+  });
+
+  it("invite: POSITIVE CONTROL — commit OK thì phát `ringing` tới ĐÚNG người tham gia", async () => {
+    const { svc, realtime } = build(false);
+    await svc.invite(ACTOR, ROOM, { kind: "audio" });
+
+    expect(realtime.emitChatCall).toHaveBeenCalledTimes(1);
+    const [companyId, targets, payload] = realtime.emitChatCall.mock.calls[0] ?? [];
+    expect(companyId).toBe(COMPANY);
+    // Đích là bảng participants, KHÔNG phải danh sách thành viên phòng.
+    expect(targets).toEqual([ACTOR.id, TARGET]);
+    expect(payload).toMatchObject({ callId: CALL, roomId: ROOM, action: "ringing" });
+    // Payload KHÔNG mang `participants[]` (per-user: outcome/joinedAt của người khác).
+    expect(Object.keys(payload as object).sort()).toEqual([
+      "action",
+      "callId",
+      "initiatorUserId",
+      "kind",
+      "roomId",
+      "startedAt",
+      "status",
+    ]);
+  });
+
+  it("invite: cuộc gọi CŨ bị bước dọn đánh nhỡ cũng phải được BÁO (nếu không, máy kia còn đổ chuông)", async () => {
+    const { svc, realtime } = build(false, [{ id: "11111111-1111-4111-8111-111111111111" }]);
+    await svc.invite(ACTOR, ROOM, { kind: "audio" });
+
+    expect(realtime.emitChatCall).toHaveBeenCalledTimes(2);
+    expect(realtime.emitChatCall.mock.calls[0]?.[2]).toMatchObject({ action: "missed" });
+    expect(realtime.emitChatCall.mock.calls[1]?.[2]).toMatchObject({ action: "ringing" });
+  });
+
+  it("hangup: COMMIT hỏng → KHÔNG emit; commit OK → đúng 1 sự kiện `ended`", async () => {
+    const failed = build(true);
+    await expect(failed.svc.hangup(ACTOR, CALL)).rejects.toThrow(/COMMIT/);
+    expect(failed.realtime.emitChatCall).not.toHaveBeenCalled();
+
+    const ok = build(false);
+    await ok.svc.hangup(ACTOR, CALL);
+    expect(ok.realtime.emitChatCall).toHaveBeenCalledTimes(1);
+    expect(ok.realtime.emitChatCall.mock.calls[0]?.[2]).toMatchObject({ action: "ended" });
+  });
+
+  it("ĐẾM LỐI PHÁT: đúng 2 call site trong service (`lifecycleTx` dùng chung cho 4 route) + 1 ở job", () => {
+    // Ratchet cấu trúc — ca hành vi ở trên không thấy được một lối phát thứ ba cắm vào giữa transaction.
+    const src = readFileSync(join(__dirname, "chat-calls.service.ts"), "utf8").replace(
+      /\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm,
+      "$1",
+    );
+    expect(src.match(/this\.realtime\.emitChatCall\(/g) ?? []).toHaveLength(2);
+    // Và cả hai nằm trong hai helper `emitLifecycle`/`emitExpired`, không rải trong thân transaction.
+    expect(src).toMatch(/private emitLifecycle\(/);
+    expect(src).toMatch(/emitExpired\(/);
+
+    const job = readFileSync(join(__dirname, "chat-call-ringing-timeout.job-handler.ts"), "utf8");
+    expect(job.match(/this\.calls\.emitExpired\(/g) ?? []).toHaveLength(1);
   });
 });

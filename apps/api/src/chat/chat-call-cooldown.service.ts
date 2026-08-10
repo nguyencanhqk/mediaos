@@ -21,6 +21,18 @@ export const CHAT_CALL_COOLDOWN_SCOPE = {
   ICE_CONFIG: "ice-config",
   /** `POST /chat/rooms/:id/calls` (CHAT-API-026) — S7-CALL-BE-FIX-1 MEDIUM-3 vế TẦN SUẤT. */
   INVITE: "call-invite",
+  /**
+   * Khung `/ws-call` bị từ chối (S7-CALL-RT-1) — trần cho chính đường GHI `user_security_events`.
+   * Vượt trần ⇒ vẫn ngắt kết nối nhưng KHÔNG ghi: hàng rào chống bơm không được tự trở thành đường bơm
+   * vào một bảng append-only không có job dọn.
+   */
+  SIGNALLING_VIOLATION: "call-signal-violation",
+  /**
+   * Handshake `/ws-call` (S7-CALL-RT-1) — mỗi lần bắt tay tốn một `permissions.can()` (đọc DB), nên
+   * "ngắt khi vi phạm" một mình không đủ: kẻ dò chỉ cần nối lại. Trần rộng (mạng chập chờn làm FE
+   * reconnect thật), nhưng có trần.
+   */
+  SIGNALLING_CONNECT: "call-signal-connect",
 } as const;
 
 /**

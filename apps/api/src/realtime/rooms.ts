@@ -35,3 +35,30 @@ export function chatRoomName(companyId: string, roomId: string): string {
 export function chatUserRoomName(companyId: string, userId: string): string {
   return `co:${companyId}:chatuser:${userId}`;
 }
+
+/**
+ * S7-CALL-RT-1 — room riêng cho 1 user **TRONG NAMESPACE `/ws-call`**: đích của relay SDP/ICE tới đúng
+ * một người (nhiều thiết bị của họ đều nhận).
+ *
+ * ⚠️ Namespace `/ws-call` và `/ws` là hai không gian room TÁCH BIỆT ở tầng Socket.IO — một tên trùng
+ * cũng không đụng nhau. Vẫn đặt tiền tố khác (`calluser` chứ không `user`) để đọc log là biết ngay khung
+ * đang đi kênh nào, và để `severUserSessions` không bao giờ nhắm nhầm room.
+ *
+ * ⚠️ **Ở TRONG ROOM KHÔNG PHẢI LÀ QUYỀN.** Socket join room này ngay sau cổng quyền ở handshake, nhưng
+ * mọi khung vẫn phải kiểm lại tư cách tham gia cuộc gọi từ DB (`ChatCallSignalService`) — room chỉ là
+ * ĐÍCH fan-out (bài học `ws-permission-gate-needs-its-own-room`).
+ */
+export function callUserRoomName(companyId: string, userId: string): string {
+  return `co:${companyId}:calluser:${userId}`;
+}
+
+/**
+ * S7-CALL-RT-1 — phiên signalling của MỘT cuộc gọi (namespace `/ws-call`). Đích của `call:media-state`,
+ * `call:screen-state`, `call:peer-joined/left`.
+ *
+ * Socket chỉ vào đây SAU khi `call:join` đã kiểm DB thành công — nhưng cũng như trên, việc ở trong room
+ * không miễn cho khung kế tiếp một lần kiểm lại.
+ */
+export function callRoomName(companyId: string, callId: string): string {
+  return `co:${companyId}:call:${callId}`;
+}

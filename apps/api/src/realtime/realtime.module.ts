@@ -6,6 +6,9 @@ import { RealtimeEmitterModule } from "./realtime-emitter.module";
 import { ChatPresenceReaderModule } from "./chat-presence-reader.module";
 import { ChatPresenceService } from "./chat-presence.service";
 import { RealtimeGateway } from "./realtime.gateway";
+import { CallSignallingGateway } from "./call-signalling.gateway";
+import { CallSignallingViolationWriter } from "./call-signalling-violation.writer";
+import { ChatCallCooldownService } from "../chat/chat-call-cooldown.service";
 
 /**
  * RealtimeModule (G10-1) — wire WebSocket gateway namespace `/ws`.
@@ -36,6 +39,24 @@ import { RealtimeGateway } from "./realtime.gateway";
   // `ChatPresenceService` sống ở RealtimeModule (KHÔNG ở ChatModule): nó được lái bởi vòng đời kết nối WS,
   // và đặt nó trong `chat/**` sẽ buộc file đó import ngược `realtime.gateway` — đúng cạnh mà ratchet
   // `chat-realtime-structure.spec.ts` cấm (vòng Realtime→Chat→Realtime).
-  providers: [RealtimeGateway, ChatPresenceService],
+  // S7-CALL-RT-1 (additive): gateway `/ws-call`. Không export — gateway là điểm cuối.
+  //
+  // ⚠️ Nó nhận `ChatCallSignalService` (CHỈ ĐỌC, `ChatModule` export) chứ KHÔNG nhận
+  // `ChatCallsRepository`: repo mang toàn bộ bề mặt GHI vòng đời cuộc gọi, và `chat.module.ts` cố ý
+  // không export 4 provider CALL — đưa chúng ra khỏi module là đưa đường ghi ra khỏi `PermissionGuard`
+  // + audit, tức phá hàng rào R4 của `DECISIONS-07`.
+  providers: [
+    RealtimeGateway,
+    ChatPresenceService,
+    CallSignallingGateway,
+    // Bề mặt GHI duy nhất của gateway `/ws-call` — xem docblock của lớp (R4 thành cấu trúc, không phải
+    // kỷ luật). `SecurityEventWriter` tới từ `AuthModule` (đã import), `DatabaseService` là @Global.
+    CallSignallingViolationWriter,
+    // S7-CALL-RT-1: instance RIÊNG của bộ đếm cooldown — đúng như `chat.module.ts` đã chỉ định cho
+    // trường hợp này ("module khác cần cooldown tự dựng instance của nó"). Hai instance KHÔNG chồng
+    // hạn mức lên nhau: mỗi bên dùng `scope` riêng (`call-signal-*` vs `ice-config`/`call-invite`), và
+    // khi có Valkey thì bộ đếm nằm ở Valkey nên vẫn là MỘT sổ cho cả cụm.
+    ChatCallCooldownService,
+  ],
 })
 export class RealtimeModule {}

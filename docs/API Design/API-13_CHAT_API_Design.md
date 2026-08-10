@@ -326,10 +326,13 @@ Namespace `/ws` (Socket.IO), auth ở handshake bằng access token — hạ t�
 | `chat:reaction` *(S8)* | server → client | `{ messageId, roomId, emoji, count, actorUserId }` | `co:{companyId}:chatroom:{roomId}` |
 | `chat:typing` *(S8)* | server → client | `{ roomId, userId }` — **không** nội dung đang gõ | như trên |
 | `chat:presence` *(S8)* | server → client | `{ userId, status }` | `co:{companyId}:chatuser:{userId}` của những người có chung phòng `direct` |
+| `chat:call` *(S7-CALL)* | server → client | `{ callId, roomId, kind, status, initiatorUserId, startedAt, action }` — `action ∈ ringing\|accepted\|rejected\|cancelled\|ended\|missed` | `co:{companyId}:chatuser:{userId}` của **từng người tham gia cuộc gọi** |
 
 Ràng buộc:
 
-- **Không có `@SubscribeMessage` nào** — client không ghi gì qua WS (CHAT-DEC-005). Gửi tin đi REST (CHAT-API-010).
+- **Không có `@SubscribeMessage` nào** — client không ghi gì qua WS (CHAT-DEC-005). Gửi tin đi REST (CHAT-API-010). *(S7-CALL-RT-1: ratchet nay có allowlist đúng **một** phần tử — `realtime/call-signalling.gateway.ts` — và một khẳng định **riêng** giữ `/ws` ở mức 0. Xem `chat-realtime-structure.spec.ts`.)*
+- *(S7-CALL)* **`chat:call` đi `/ws`, KHÔNG đi `/ws-call`** — quan hệ nhân quả, không phải lựa chọn: người được gọi chưa biết có cuộc gọi thì chưa nối `/ws-call`. Đích là `chatuser` của **người tham gia** (bảng `chat_call_participants`), không phải cả phòng: thành viên vào phòng sau khi cuộc gọi bắt đầu không được mời và không cần biết nó tồn tại. Payload **không** mang `participants[]` (mang `outcome`/`joinedAt` của người khác = trạng thái per-user phát cho cả nhóm). Phát **SAU commit** ở 6 đường của `ChatCallsService` + job `CHAT_CALL_RINGING_TIMEOUT`; ratchet `chat-realtime-after-commit.spec.ts` đếm đúng số đường.
+- *(S7-CALL)* ⚠️ Hệ quả của việc dùng `chatuser`: ai có `('call','chat-room')` mà thiếu `('view','chat-room')` **không bao giờ đổ chuông** (socket của họ không vào room đó). Hai cặp luôn seed cùng nhau cho 4 role canonical — đây là một ràng buộc, không phải trùng hợp.
 - *(S8)* **Ba sự kiện mới KHÔNG mở kênh client→server.** `chat:typing` do **REST** `CHAT-API-023` kích hoạt; `chat:presence` do **vòng đời kết nối** (`handleConnection`/`handleDisconnect`) kích hoạt. Ratchet `chat-realtime-structure.spec.ts` (0 `@SubscribeMessage` toàn `apps/api/src`) **phải vẫn xanh** sau wave S8 — xem CHAT-DEC-017.
 - *(S8)* ⚠️ **Đích của `chat:room`/`chat:presence` là `chatuser`, KHÔNG phải `user`** — sửa 06/08/2026 (S8-CHAT-UX-RT-1) cho doc khớp code đã qua FULL gate S7. Room `co:{co}:user:{uid}` chứa **mọi** socket đã xác thực (đích của `notification:new`), kể cả của người đã bị **thu hồi** cặp `view:chat-room`; bắn sự kiện CHAT vào đó là đi vòng qua cổng quyền WS — cổng chỉ chạy một lần lúc `handleConnection`. Room `co:{co}:chatuser:{uid}` chỉ nhận socket **đã qua** cổng đó (`apps/api/src/realtime/rooms.ts`).
 - *(S8)* **Khoá presence trên Valkey BẮT BUỘC mang tiền tố môi trường.** Valkey dùng chung cho cả 4 môi trường và **không** có tiền tố kênh sẵn; thiếu prefix thì người đang mở dev-online hiện "đang online" với người dùng PROD. Khoá phải có **TTL** — ngắt kết nối bẩn (kill process) không được để lại trạng thái online vĩnh viễn, vì `handleDisconnect` không đảm bảo chạy.
@@ -365,6 +368,25 @@ Ràng buộc:
 - **KHÔNG có trong danh sách, cố ý đi REST** (hàng rào R4): `call:invite` · `call:accept` · `call:reject` · `call:cancel` · `call:hangup` — và mọi thứ thuộc tin nhắn/thành viên/ghim/đã-đọc. Đây là **điểm khác quan trọng nhất so với LMS**, nơi cả vòng đời chạy trong handler socket.
 - Cưỡng chế danh tính ở **`allowRequest`**, không dựa vào `cors` — `engine.io` `cors` **không từ chối ai cả** (memory `engineio-cors-never-rejects`).
 - Mọi payload `.parse()` qua Zod ở biên (`packages/contracts`) trước khi xử lý.
+
+**Chiều RA của `/ws-call`** *(S7-CALL-RT-1 — hợp đồng phát, KHÔNG phải allowlist inbound; hai danh sách cố ý tách nhau để thêm một sự kiện phát không tự nới cửa vào)*:
+
+| Sự kiện | Payload | Đích |
+| --- | --- | --- |
+| `call:sdp-offer` · `call:sdp-answer` | `{ callId, fromUserId, sdp }` | `co:{companyId}:calluser:{toUserId}` |
+| `call:ice-candidate` | `{ callId, fromUserId, candidate }` | như trên |
+| `call:media-state` | `{ callId, userId, micOn, camOn }` | `co:{companyId}:call:{callId}` (trừ người gửi) |
+| `call:screen-state` | `{ callId, userId, sharing }` | như trên |
+| `call:peer-joined` · `call:peer-left` | `{ callId, userId }` | như trên |
+| `call:pong` | `{ callId }` | trả qua **ack** của chính khung `call:ping` |
+
+- **`fromUserId`/`userId` do SERVER gán** từ phiên đã xác thực — không bao giờ đọc từ payload client (Zod strip khoá giả mạo).
+- **7/8 handler trả `undefined`.** Giá trị trả về của handler đi vào `ack`, mà **client tự bật được** bằng cách gắn callback ⇒ đó là một đường phát KHÔNG qua masking. Chỉ `call:ping` trả dữ liệu, và dữ liệu đó đã `.parse()`.
+- **Ba lớp từ chối, ba xử lý khác nhau:** (A) khung sai giao thức — ngoài allowlist · sai Zod · vượt trần ⇒ ghi + ngắt; (B) đẩy tín hiệu **relay** vào cuộc gọi mình chưa từng được mời ⇒ ghi + ngắt; (C) **đua vòng đời** — đã từng ở trong cuộc gọi nhưng nó vừa kết thúc, hoặc 5 sự kiện không-relay của người chưa được mời (trần 20 người) ⇒ **bỏ im lặng, không ghi, không ngắt**. Gộp C vào B làm mỗi cuộc gọi kết thúc bình thường đẻ hàng append-only và ngắt kết nối người dùng hợp lệ.
+- **Payload `user_security_events` là bộ ĐÓNG** `{ ns, event, reason, code }`, `event` lọc qua allowlist. Tuyệt đối **không** echo khung: `AuditMaskerService` mask theo tên khoá và `sdp`/`candidate` không nằm trong đó ⇒ lưu SDP vào bảng append-only sẽ **huỷ hiệu lực `CHAT-DEC-020`**.
+- **Trần:** khung/socket (chống khuếch đại DoS lên DB, kiểm TRƯỚC mọi truy vấn) · ghi sự kiện an ninh ≤1/kết nối và có hạn mức/người · số handshake/người.
+- **`/ws-call` nằm TRONG đường thu hồi phiên:** `severUserSessions` ngắt **cả hai** namespace — khoá tài khoản không xoá `chat_room_members`/`chat_call_participants`, nên bỏ vế này là để socket của người đã bị khoá tiếp tục relay vô thời hạn.
+- **`REALTIME_ENABLED=false` ⇒ `/ws-call` từ chối mọi kết nối**, và **không có fallback REST** cho SDP/ICE (bản chất là kênh độ trễ thấp) ⇒ tắt cờ = không gọi được. FE phải hiện lỗi rõ ràng, không treo khung "đang kết nối".
 
 ---
 

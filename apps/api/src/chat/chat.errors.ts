@@ -314,6 +314,21 @@ export const CHAT_ERR = {
    * cuối** ở DB. Đường ghi phải map 23514 → CHÍNH mã này, nếu không một hàng đua sẽ nổ 500.
    */
   CALL_NOT_ACTIONABLE: "CHAT-ERR-029: cuộc gọi không còn ở trạng thái thực hiện được thao tác này.",
+
+  /**
+   * CHAT-ERR-030 — khung inbound `/ws-call` bị TỪ CHỐI ở tầng giao thức (`S7-CALL-RT-1` · `CHAT-DEC-020`
+   * R2): tên sự kiện ngoài allowlist 8 · payload sai Zod · `sdp`/`candidate` vượt trần độ dài · đẩy tín
+   * hiệu relay vào một cuộc gọi mình không thuộc.
+   *
+   * ⚠️ **Mã này KHÔNG BAO GIỜ được gửi về client.** Khác mọi mã `CHAT-ERR-*` còn lại — chúng là câu trả
+   * lời cho một người dùng hợp lệ vừa thao tác sai; mã này là dấu vết của một khung DÒ CỬA. Nói cho
+   * người gửi biết họ vừa sai ở đâu là cấp cho họ một máy dò danh sách sự kiện được chấp nhận. Đường xử
+   * lý duy nhất: ghi `user_security_events` (payload ĐÓNG, xem `chat-call-signal-deny.ts`) + NGẮT.
+   *
+   * ⚠️ Cũng vì thế nó là hằng **chỉ mang MÃ**, không mang câu tiếng Việt hướng dẫn: không có màn hình
+   * nào hiển thị nó.
+   */
+  CALL_SIGNAL_REJECTED: "CHAT-ERR-030: khung tín hiệu cuộc gọi bị từ chối.",
 } as const;
 
 /**

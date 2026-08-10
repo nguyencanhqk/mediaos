@@ -97,10 +97,20 @@ export class TokenService {
    * xác thực CHÍNH CHỦ (không phải ghi dữ liệu tenant), nên operator lẫn tenant đều phải load được /me.
    * Vẫn trả `aud` để caller phân biệt phiên nếu cần. KHÔNG dùng "any" cho route ghi dữ liệu.
    */
+  /**
+   * ⚠️ `exp` nằm ở KIỂU TRẢ VỀ, **không** ở `AccessTokenClaims`: thêm nó vào interface sẽ cho phép
+   * `signAccessToken` nhận `exp` trong payload, mà `jwt.sign` NÉM khi payload đã có `exp` cùng lúc với
+   * option `expiresIn` ("Bad options.expiresIn ... payload already has an exp property"). Đọc ra thì an
+   * toàn, ký vào thì không.
+   *
+   * Ai cần: `CallSignallingGateway` (S7-CALL-RT-1) — Socket.IO KHÔNG tái xác thực một kết nối đang mở,
+   * nên nếu không ghim `exp` thì một tab mở liên tục giữ phiên `/ws-call` sống nhiều ngày sau khi token
+   * hết hạn.
+   */
   verifyAccessToken(
     token: string,
     expectedAudience: TokenAudience | "any" = "tenant",
-  ): AccessTokenClaims & { aud: TokenAudience } {
+  ): AccessTokenClaims & { aud: TokenAudience; exp?: number } {
     const decoded = jwt.verify(token, this.secret(), { algorithms: ["HS256"] });
     if (typeof decoded === "string" || decoded.tfp === true || typeof decoded.email !== "string") {
       throw new Error("token không phải access token hợp lệ");
@@ -123,6 +133,8 @@ export class TokenService {
       email: decoded.email,
       aud,
       jti,
+      // `jwt.verify` đã ép hạn; giá trị này chỉ để caller nào cần BIẾT mốc hết hạn (kết nối dài hạn).
+      exp: typeof decoded.exp === "number" ? decoded.exp : undefined,
     };
   }
 

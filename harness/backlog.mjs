@@ -10330,11 +10330,35 @@ export const backlog = [
       "🔒 Gateway /ws-call: allowlist ĐÓNG 8 sự kiện inbound, relay SDP/ICE KHÔNG đọc-KHÔNG lưu, /ws giữ nguyên 0 @SubscribeMessage",
     zone: "red",
     status: "todo",
+    // ⚠️ MỞ RỘNG 10/08/2026 (bước 0 của `docs/plans/S7-CALL-RT-1.md` §0.2). Bản seed có 5 mục trong khi
+    // WO chạm ~19 tệp. `paths` lái `guard-scope` + chọn gate (memory `wo-paths-drive-gate-and-scheduler`)
+    // ⇒ danh sách thiếu nghĩa là nửa diff của một WO VÙNG ĐỎ đi qua cổng LIGHT mà không ai thấy.
+    // Hai nhóm được thêm, cả hai có lý do ghi trong plan (§0.1 vế B · §2b V1/V2/V10):
+    //   • `src/chat/**` — chuông đến phải emit từ `ChatCallsService` (BE-1 §0 giao lại, D9 cố ý để trống);
+    //     hai file signal MỚI sống ở `chat/` vì census `CHAT_ERR` chỉ quét thư mục đó (V2).
+    //   • `realtime-emitter.service.ts` — `/ws-call` phải nằm trong đường thu hồi phiên (V1).
     paths: [
       "apps/api/src/realtime/call-signalling.gateway.ts",
+      "apps/api/src/realtime/call-signalling.filter.ts",
       "apps/api/src/realtime/realtime.module.ts",
+      "apps/api/src/realtime/realtime-emitter.service.ts",
+      "apps/api/src/realtime/rooms.ts",
+      "apps/api/src/realtime/chat-realtime-structure.spec.ts",
+      "apps/api/src/chat/chat-call-signal.service.ts",
+      "apps/api/src/chat/chat-call-signal-deny.ts",
+      "apps/api/src/chat/chat-call-signal-deny.spec.ts",
+      "apps/api/src/chat/chat-calls.service.ts",
+      "apps/api/src/chat/chat-call-ringing-timeout.job-handler.ts",
+      "apps/api/src/chat/chat-call-cooldown.service.ts",
+      "apps/api/src/chat/chat.errors.ts",
+      "apps/api/src/chat/chat.module.ts",
+      "apps/api/src/chat/chat-error-code-census.spec.ts",
+      "apps/api/src/chat/chat-realtime-after-commit.spec.ts",
       "packages/contracts/src/chat-call.ts",
+      "packages/contracts/src/realtime.ts",
+      "packages/contracts/src/auth.ts",
       "apps/api/test/integration/**",
+      "docs/API Design/API-13_CHAT_API_Design.md",
       "docs/plans/S7-CALL-RT-1.md",
     ],
     skills: ["code-review"],
@@ -10351,6 +10375,10 @@ export const backlog = [
       "MỖI sự kiện kiểm LẠI tư cách tham gia cuộc gọi từ DB — KHÔNG tin việc socket đang ở trong room",
       "SDP/ICE: chuỗi mờ có trần độ dài, Zod ở biên, KHÔNG parse, KHÔNG ghi DB, KHÔNG lên DTO — test chứng minh 0 hàng DB sinh ra từ một phiên signalling",
       "Deny-path RED-TRƯỚC: người ngoài cuộc gọi emit sdp-offer → từ chối + ghi security event; callId cross-tenant → không relay",
+      // ── 2 gạch THÊM 10/08/2026 (plan §0.2). Vế B do `S7-CALL-BE-1` §0 giao lại: BE-1 cố ý KHÔNG nối
+      // emitter (D9), FE-1 là lane FE ⇒ không WO nào khác phát được tín hiệu chuông.
+      "Chuông đến: POST …/calls ⇒ người được gọi nhận chat:call{ringing} trên /ws; 6 đường vòng đời + job missed đều emit SAU commit, có ratchet đếm đúng số đường",
+      "/ws-call nằm TRONG đường thu hồi phiên: khoá tài khoản ⇒ socket /ws-call bị đóng (severUserSessions cắt cả hai namespace)",
       "FULL gate PASS — WO nới bất biến, BẮT BUỘC security-reviewer + silent-failure-hunter",
     ],
   },

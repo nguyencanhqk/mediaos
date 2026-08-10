@@ -7,7 +7,7 @@ import {
   Logger,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import type { ChatCallDto, CreateChatCallInput } from "@mediaos/contracts";
+import type { ChatCallDto, CreateChatCallInput, WsChatCallAction } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { loadEnv } from "../config/env.schema";
@@ -19,9 +19,11 @@ import {
   ChatCallsRepository,
   isCallStateViolation,
   isLiveCallConflict,
+  type ChatCallExpiredRow,
   type ChatCallParticipantRow,
 } from "./chat-calls.repository";
 import type { ChatActor } from "./chat-rooms.service";
+import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 import { CHAT_AUDIT, CHAT_ERR, CHAT_MODULE_CODE } from "./chat.errors";
 import { toChatCallDto, type ChatCallProjection } from "./chat.mapper";
 
@@ -104,8 +106,10 @@ export const CHAT_CALL_INVITE_COOLDOWN_MESSAGE =
  *    không thoả vế hai.
  * 3. **404 cho người ngoài, 403 cho người trong sai vai, 422 cho sai pha.** Trộn ba loại này là hoặc mở
  *    oracle dò (403 ở chỗ đáng 404), hoặc làm FE không phân biệt được "thử lại sau" với "không bao giờ".
- * 4. **Không phát WebSocket ở WO này.** Đường phát là của `S7-CALL-RT-1` và nó gắn SAU commit. Cắm sẵn
- *    một emitter "để đó" là cắm một payload chưa qua DTO/masking (CLAUDE.md §5).
+ * 4. **Phát WebSocket CHỈ SAU COMMIT.** (S7-CALL-RT-1 đã gắn đường phát mà BE-1 cố ý để trống.) Sáu lối
+ *    phát: `invite` → `ringing`, bước dọn trong `invite` → `missed`, và bốn đường vòng đời qua
+ *    `lifecycleTx`. Gọi `emitChatCall` bên trong `withTenant` là phát một sự thật có thể bị rollback —
+ *    ratchet `chat-realtime-after-commit.spec.ts` đếm đúng số lối và đóng đinh vị trí.
  */
 @Injectable()
 export class ChatCallsService {
@@ -120,6 +124,9 @@ export class ChatCallsService {
     private readonly access: ChatAccessService,
     private readonly audit: AuditService,
     private readonly cooldown: ChatCallCooldownService,
+    // S7-CALL-RT-1 (additive) — đường PHÁT vòng đời. `RealtimeEmitterModule` là module LÁ (đã import
+    // sẵn); CẤM đổi thành `RealtimeModule` (vòng Realtime→Chat→Realtime, có ratchet cấm).
+    private readonly realtime: RealtimeEmitterService,
   ) {}
 
   /**
@@ -140,7 +147,7 @@ export class ChatCallsService {
   async invite(actor: ChatActor, roomId: string, dto: CreateChatCallInput): Promise<ChatCallDto> {
     await this.assertInviteCooldown(actor);
 
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const { call, expired } = await this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
 
       // Phòng lưu trữ = CHỈ ĐỌC (SPEC-15 §3.1 · CHAT-ERR-005), cùng luật với `sendMessage`. Chặn ở đây
@@ -151,7 +158,10 @@ export class ChatCallsService {
       }
 
       const now = new Date();
-      await this.expireStaleTx(tx, actor.companyId, now, { roomId, actorUserId: actor.id });
+      const expired = await this.expireStaleTx(tx, actor.companyId, now, {
+        roomId,
+        actorUserId: actor.id,
+      });
 
       const call = await this.insertOrConflict(tx, roomId, actor.id, dto.kind);
 
@@ -179,8 +189,15 @@ export class ChatCallsService {
         },
       });
 
-      return this.dtoOf(tx, actor.companyId, call);
+      return { call: await this.dtoOf(tx, actor.companyId, call), expired };
     });
+
+    // ⚠️ SAU COMMIT — hai đường phát, và đường `missed` KHÔNG được quên: bước dọn-trước-khi-mời ở trên
+    // vừa đánh nhỡ những cuộc gọi treo của phòng này. Không báo ⇒ máy người được gọi cũ **vẫn đổ chuông
+    // cho một cuộc gọi đã chết**, và hai nguồn sự thật (màn hình vs DB) lệch nhau vĩnh viễn.
+    this.emitExpired(actor.companyId, expired);
+    this.emitLifecycle(actor.companyId, call, "ringing");
+    return call;
   }
 
   /**
@@ -198,7 +215,7 @@ export class ChatCallsService {
    * nào trong wave này dựa vào accept-khi-active — nếu cần sau này thì đó là tính năng mới, tự có test).
    */
   async accept(actor: ChatActor, callId: string): Promise<ChatCallDto> {
-    return this.lifecycleTx(actor, callId, async (tx, acc, now) => {
+    return this.lifecycleTx(actor, callId, "accepted", async (tx, acc, now) => {
       if (acc.call.initiatorUserId === actor.id) {
         throw new ForbiddenException(CHAT_ERR.CALL_ACTION_FORBIDDEN);
       }
@@ -224,7 +241,7 @@ export class ChatCallsService {
    * participant của họ, không đóng cuộc gọi.
    */
   async reject(actor: ChatActor, callId: string): Promise<ChatCallDto> {
-    return this.lifecycleTx(actor, callId, async (tx, acc, now) => {
+    return this.lifecycleTx(actor, callId, "rejected", async (tx, acc, now) => {
       if (acc.call.initiatorUserId === actor.id) {
         throw new ForbiddenException(CHAT_ERR.CALL_ACTION_FORBIDDEN);
       }
@@ -249,7 +266,7 @@ export class ChatCallsService {
    * (`fromStatuses` chỉ có `ringing` ⇒ huỷ một cuộc gọi đang diễn ra là 422, không phải im lặng thành công).
    */
   async cancel(actor: ChatActor, callId: string): Promise<ChatCallDto> {
-    return this.lifecycleTx(actor, callId, async (tx, acc, now) => {
+    return this.lifecycleTx(actor, callId, "cancelled", async (tx, acc, now) => {
       if (acc.call.initiatorUserId !== actor.id) {
         throw new ForbiddenException(CHAT_ERR.CALL_ACTION_FORBIDDEN);
       }
@@ -286,7 +303,7 @@ export class ChatCallsService {
    * loạt) sẽ làm CA 11 (test đã có, `uNoCallPair` phải giữ `'missed'`) đỏ.
    */
   async hangup(actor: ChatActor, callId: string): Promise<ChatCallDto> {
-    return this.lifecycleTx(actor, callId, async (tx, acc, now) => {
+    return this.lifecycleTx(actor, callId, "ended", async (tx, acc, now) => {
       const call = await this.mustTransition(tx, actor.companyId, callId, CHAT_CALL_LIVE_STATUSES, {
         status: "ended",
         endedAt: now,
@@ -316,16 +333,21 @@ export class ChatCallsService {
    *
    * Idempotent theo cấu trúc: hàng đã đổi không còn khớp `status='ringing'` ⇒ lần chạy kế tiếp trả rỗng.
    *
-   * @returns số cuộc gọi vừa bị đánh nhỡ.
+   * ⚠️ **Trả DANH SÁCH, không phải số đếm** (S7-CALL-RT-1). Người được gọi phải nhận `chat:call{missed}`
+   * — thiếu nó thì máy họ **vẫn đổ chuông cho một cuộc gọi đã chết**, và không có sự kiện nào đính chính.
+   * Caller phát SAU commit của tx mình sở hữu; hàm này KHÔNG tự phát (nó chạy TRONG tx).
+   *
+   * @returns các cuộc gọi vừa bị đánh nhỡ, kèm danh sách người cần được báo.
    */
   async expireStaleTx(
     tx: TenantTx,
     companyId: string,
     now: Date,
     opts: { roomId?: string; actorUserId?: string } = {},
-  ): Promise<number> {
+  ): Promise<ChatCallExpiry[]> {
     const cutoff = new Date(now.getTime() - CHAT_CALL_RING_TIMEOUT_MS);
-    const expiredIds = await this.repo.expireStaleRinging(tx, companyId, cutoff, now, opts.roomId);
+    const expiredRows = await this.repo.expireStaleRinging(tx, companyId, cutoff, now, opts.roomId);
+    const expiredIds = expiredRows.map((r) => r.id);
 
     for (const callId of expiredIds) {
       await this.audit.record(tx, {
@@ -347,7 +369,14 @@ export class ChatCallsService {
       });
     }
 
-    return expiredIds.length;
+    // Đọc người tham gia TRONG tx: sau commit thì `tx` đã đóng, và mở một transaction thứ hai chỉ để
+    // biết bắn cho ai là mở một cửa sổ mà danh sách có thể đã đổi.
+    const expiries: ChatCallExpiry[] = [];
+    for (const row of expiredRows) {
+      const participants = await this.repo.listParticipants(tx, companyId, row.id);
+      expiries.push({ call: row, participantUserIds: participants.map((p) => p.userId) });
+    }
+    return expiries;
   }
 
   // ─── nội bộ ──────────────────────────────────────────────────────────────────
@@ -399,9 +428,10 @@ export class ChatCallsService {
   private async lifecycleTx(
     actor: ChatActor,
     callId: string,
+    action: WsChatCallAction,
     body: (tx: TenantTx, acc: ChatCallAccess, now: Date) => Promise<ChatCallProjection>,
   ): Promise<ChatCallDto> {
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const dto = await this.db.withTenant(actor.companyId, async (tx) => {
       // Vế 1 — thành viên PHÒNG chứa cuộc gọi. Người ngoài (kể cả người có `view:chat-oversight`) → 404
       // giống hệt cuộc gọi không tồn tại.
       const acc = await this.access.assertCallAccess(tx, actor.companyId, callId, actor.id);
@@ -414,6 +444,13 @@ export class ChatCallsService {
       const call = await body(tx, acc, new Date());
       return this.dtoOf(tx, actor.companyId, call);
     });
+
+    // ⚠️ SAU COMMIT, và ở ĐÂY chứ không trong từng route: bốn đường vòng đời dùng chung khung này, nên
+    // đặt lời gọi phát ở một chỗ duy nhất làm "quên phát ở một route" thành chuyện không thể xảy ra.
+    // Trong `withTenant` thì đó là phát một sự thật có thể bị rollback ngay sau đó — client vẽ một cuộc
+    // gọi đã kết thúc mà không có sự kiện nào đính chính (ratchet `chat-realtime-after-commit.spec.ts`).
+    this.emitLifecycle(actor.companyId, dto, action);
+    return dto;
   }
 
   /** `INSERT` + dịch đúng MỘT loại xung đột thành 409; mọi 23505 khác vẫn nổ ra để điều tra được. */
@@ -520,6 +557,52 @@ export class ChatCallsService {
     );
     return toChatCallDto(call, participants);
   }
+
+  // ─── S7-CALL-RT-1 — đường PHÁT vòng đời (LUÔN gọi SAU commit) ────────────────
+
+  /**
+   * Phát `chat:call` cho ĐÚNG những người tham gia cuộc gọi.
+   *
+   * Đích lấy từ `dto.participants` — tức bảng `chat_call_participants`, KHÔNG phải danh sách thành viên
+   * phòng: người vào phòng sau khi cuộc gọi bắt đầu không có hàng participant và không cần biết cuộc gọi
+   * tồn tại. (Đó cũng chính là tập mà `/ws-call` dùng để quyết ai được relay — một nguồn sự thật.)
+   */
+  private emitLifecycle(companyId: string, dto: ChatCallDto, action: WsChatCallAction): void {
+    this.realtime.emitChatCall(
+      companyId,
+      (dto.participants ?? []).map((p) => p.userId),
+      {
+        callId: dto.id,
+        roomId: dto.roomId,
+        kind: dto.kind,
+        status: dto.status,
+        initiatorUserId: dto.initiatorUserId,
+        startedAt: dto.startedAt,
+        action,
+      },
+    );
+  }
+
+  /** Phát `chat:call{missed}` cho các cuộc gọi vừa bị bước dọn/job đánh nhỡ. Gọi SAU commit. */
+  emitExpired(companyId: string, expiries: readonly ChatCallExpiry[]): void {
+    for (const { call, participantUserIds } of expiries) {
+      this.realtime.emitChatCall(companyId, participantUserIds, {
+        callId: call.id,
+        roomId: call.roomId,
+        kind: call.kind,
+        status: "missed",
+        initiatorUserId: call.initiatorUserId,
+        startedAt: call.startedAt.toISOString(),
+        action: "missed",
+      });
+    }
+  }
+}
+
+/** Một cuộc gọi vừa hết hạn + những người phải được báo (S7-CALL-RT-1). */
+export interface ChatCallExpiry {
+  call: ChatCallExpiredRow;
+  participantUserIds: readonly string[];
 }
 
 /**
