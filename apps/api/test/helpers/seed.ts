@@ -486,13 +486,26 @@ export async function seedTwoFactorEnabled(
  * `audit_logs` mang `actor_user_id`/`company_id` của tenant đang dọn, ngay GIỮA lúc mình quét bảng con và
  * lúc mình xoá bảng cha ⇒ 23503. Cách duy nhất đóng được là quét-lại-rồi-thử-lại, không phải quét một lần.
  *
+ * `childTables` = ĐÚNG tập bảng con mà một writer còn sống có thể chèn lại trong cửa sổ đó, và vòng thử
+ * lại CHỈ hội tụ khi nó dọn đúng bảng đang giữ FK. Quét lại một bảng CỐ ĐỊNH là cái bẫy: nếu bảng gây
+ * 23503 nằm ngoài danh sách thì cả 5 lượt đều xoá nhầm chỗ rồi ném — vòng thử lại thua ĐÚNG lúc nó được
+ * sinh ra để thắng, và triệu chứng là "Failed Suite" dù 0 test nào đỏ. Tên bảng là literal khai trong
+ * chính file này (không bao giờ đến từ input) nên nội suy thẳng vào SQL là an toàn.
+ *
  * Trần 5 lượt + ném lại mọi mã lỗi khác: teardown vẫn ỒN khi hỏng thật, chỉ nuốt đúng lớp đua tạm thời.
  * 40P01 = deadlock_detected (mig 0535 thêm 446 composite FK ⇒ cascade lấy khoá rộng hơn, hai spec song
  * song cùng dọn tenant khoá chéo nhau) — cùng HỌ lỗi tạm thời nên đi chung vòng thử lại.
  */
-async function deleteWithFkRetry(direct: Pool, ids: string[][], deleteSql: string): Promise<void> {
+export async function deleteWithFkRetry(
+  direct: Pool,
+  ids: string[][],
+  deleteSql: string,
+  childTables: readonly string[] = ["audit_logs"],
+): Promise<void> {
   for (let attempt = 1; ; attempt++) {
-    await direct.query("DELETE FROM audit_logs WHERE company_id = ANY($1::uuid[])", ids);
+    for (const child of childTables) {
+      await direct.query(`DELETE FROM ${child} WHERE company_id = ANY($1::uuid[])`, ids);
+    }
     try {
       await direct.query(deleteSql, ids);
       return;
@@ -795,5 +808,17 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   // `DELETE companies` vẫn còn cửa sổ để outbox worker/consumer còn sống ghi thêm audit_logs →
   // `audit_logs_company_id_fkey` làm vỡ `DELETE companies` (đỏ-giả 2026-07-26, goal-tpl1-decompose).
   // Dùng ĐÚNG idiom đã có: quét lại bảng phụ thuộc rồi thử lại parent, lặp có trần khi vẫn vướng FK.
-  await deleteWithFkRetry(direct, ids, "DELETE FROM companies WHERE id = ANY($1::uuid[])");
+  //
+  // S7-CALL: `audit_logs` KHÔNG phải bảng con duy nhất mọc lại được ở nấc này. `DeadLetterAlertMonitor
+  // .checkThresholds()` quét XUYÊN TENANT (GROUP BY company_id, không lọc company — xem docblock của nó)
+  // và được MỌI OutboxWorker còn sống gọi sau `processBatch`. Nó ĐỌC `dead_letter_events` trước lúc ta
+  // xoá bảng đó, rồi CHÈN `dead_letter_alerts` sau lúc ta xoá bảng alerts ⇒ hàng alert mọc lại cho tenant
+  // đang dọn và chặn `DELETE companies` bằng `dead_letter_alerts_company_id_fkey`. Trước đây vòng thử lại
+  // chỉ quét `audit_logs` nên KHÔNG bao giờ gỡ được hàng này (đỏ-giả 2026-08-10, dead-letter-alert-idempotent:
+  // 643/643 test PASS, chết ở afterAll). Đây là bảng con DUY NHẤT khác `audit_logs` sống sót qua cửa sổ đó:
+  // `dead_letter_events` thì không, vì nó FK tới `outbox_events` vốn đã bị xoá ở trên.
+  await deleteWithFkRetry(direct, ids, "DELETE FROM companies WHERE id = ANY($1::uuid[])", [
+    "audit_logs",
+    "dead_letter_alerts",
+  ]);
 }

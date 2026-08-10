@@ -9,6 +9,7 @@
  *      (cặp đó chỉ có ở SA · company-admin · QUẢN LÝ CẤP CAO), mà nút ẩn/hiện thì vẫn "đúng" trong một
  *      test mà `useCan` luôn trả true.
  */
+import { StrictMode } from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
@@ -184,5 +185,48 @@ describe("MessageComposer · nhập liệu", () => {
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit.mock.calls[0][0].replyToMessageId).toBe("00000009-1111-4111-8111-111111111111");
+  });
+});
+
+/**
+ * Ca đối chứng ALLOW của `isMountedRef` (docblock trên khai báo ref trong `MessageComposer.tsx`): "đã
+ * tháo thì không setState" (CI đã bắt gián tiếp) cần một ca "còn gắn thì PHẢI setState" đi kèm, nếu
+ * không nhánh guard là một ca DENY không có ALLOW đối chứng — xanh rỗng, chặn nhầm CẢ đường hợp lệ.
+ *
+ * `<StrictMode>` (bọc toàn app ở `main.tsx`) chạy MỌI effect hai lần lúc dev: mount → cleanup → mount.
+ * Nếu effect chỉ gán `isMountedRef.current = false` ở cleanup mà không gán lại `true` ở thân effect của
+ * lần mount kế tiếp, ref kẹt `false` VĨNH VIỄN dù cây đang gắn bình thường — `handleSubmit` sẽ thoát sớm
+ * ngay sau `await onSubmit(...)` mỗi lần gửi, dù tin ĐÃ gửi thành công: spinner không tắt, nháp không bị
+ * dọn, người dùng gõ tiếp mà nút Gửi không bao giờ bật lại.
+ */
+describe("MessageComposer · StrictMode double-effect KHÔNG được kẹt isMountedRef", () => {
+  it("gửi thành công dưới <StrictMode> ⇒ nháp XOÁ + isSending về false (nút Gửi bật lại khi có chữ mới)", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(true);
+    render(
+      <StrictMode>
+        <I18nextProvider i18n={i18n}>
+          <MessageComposer
+            roomId={ROOM}
+            isArchived={false}
+            replyTo={null}
+            onCancelReply={vi.fn()}
+            onSubmit={onSubmit}
+          />
+        </I18nextProvider>
+      </StrictMode>,
+    );
+
+    fireEvent.change(textbox(), { target: { value: "tin dưới StrictMode" } });
+    fireEvent.click(sendButton());
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+
+    // Nếu `isMountedRef` kẹt `false` (bug bị mở lại), TOÀN BỘ khối sau `await onSubmit(...)` — bao gồm
+    // `setDraft("")` — không bao giờ chạy: nháp vẫn còn nguyên "tin dưới StrictMode".
+    await waitFor(() => expect((textbox() as HTMLTextAreaElement).value).toBe(""));
+
+    // `isSending` phải thật sự về `false`: gõ chữ MỚI thì nút Gửi phải BẬT LẠI. Nếu `isSending` kẹt
+    // `true` vĩnh viễn (cùng nguyên nhân), nút này khoá mãi mãi dù nháp có nội dung hợp lệ.
+    fireEvent.change(textbox(), { target: { value: "tin kế tiếp" } });
+    await waitFor(() => expect((sendButton() as HTMLButtonElement).disabled).toBe(false));
   });
 });

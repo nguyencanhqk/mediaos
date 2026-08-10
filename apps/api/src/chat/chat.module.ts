@@ -47,6 +47,16 @@ import { ChatRoomAvatarService } from "./chat-room-avatar.service";
 import { ChatRoomAvatarRepository } from "./chat-room-avatar.repository";
 import { ChatRoomAvatarPresignService } from "./chat-room-avatar-presign.service";
 import { ChatRoomAvatarFileResolver } from "./chat-room-avatar-file.resolver";
+// S7-CALL-BE-1 🔴 (additive): vòng đời cuộc gọi qua REST — hàng rào R4 của CHAT-DEC-020. Cặp quyền
+// `('call','chat-room')` đã seed ở mig `0546` ⇒ KHÔNG migration quyền ở lane này.
+import { ChatCallsController } from "./chat-calls.controller";
+import { ChatCallIceController } from "./chat-call-ice.controller";
+import { ChatCallsService } from "./chat-calls.service";
+import { ChatCallsRepository } from "./chat-calls.repository";
+import { ChatCallIceService } from "./chat-call-ice.service";
+// S7-CALL-SEC-1 (additive): cooldown per-user dùng chung cho endpoint đúc credential (HIGH-2 vế 2).
+import { ChatCallCooldownService } from "./chat-call-cooldown.service";
+import { ChatCallRingingTimeoutJobHandler } from "./chat-call-ringing-timeout.job-handler";
 import { ProjectMembershipModule } from "../tasks/project-membership.module";
 import { ChatOversightController } from "./chat-oversight.controller";
 import { ChatOversightAuditGuard } from "./chat-oversight-audit.guard";
@@ -120,6 +130,10 @@ import { ChatOversightRepository } from "./chat-oversight.repository";
     // `ChatSearchController` tách ra vì là ngoại lệ membership.
     ChatFilesController,
     ChatOversightController,
+    // S7-CALL-BE-1 — `/chat/rooms/:id/calls` + `/chat/calls/:id/*`. HAI controller, cố ý: `ChatCallIceController`
+    // là route DUY NHẤT không chạm DB, không assertMember, và có gọi ra Internet (xem jsdoc file đó).
+    ChatCallsController,
+    ChatCallIceController,
   ],
   providers: [
     ChatAccessService,
@@ -171,6 +185,25 @@ import { ChatOversightRepository } from "./chat-oversight.repository";
     ChatRoomAvatarRepository,
     ChatRoomAvatarPresignService,
     ChatRoomAvatarFileResolver,
+    // ── S7-CALL-BE-1 🔴 ── CHAT-API-026..029. Chỉ cần `DatabaseService` + `ChatAccessService` +
+    // `AuditService` (@Global EventsModule) — KHÔNG import module mới, KHÔNG `RealtimeEmitterService`
+    // (đường phát là của RT-1, gắn SAU commit; xem luật 4 ở jsdoc `ChatCallsService`).
+    //
+    // CỐ Ý KHÔNG export cả bốn: `ChatCallsService` là đường GHI vòng đời đã gate `('call','chat-room')`
+    // + hai vế membership; module khác cầm được nó là mở đường bắt đầu/kết thúc cuộc gọi hộ người khác,
+    // bỏ qua cả gate lẫn audit (mirror `ChatOversightService`, `ChatFilesService`).
+    //
+    // ⚠️ Job handler PHẢI ở đây (không phải trong SchedulerModule): `SchedulerModule` gom qua
+    // `DiscoveryService` bằng metadata trên provider ĐÃ DỰNG — ChatModule không import SchedulerModule.
+    ChatCallsService,
+    ChatCallsRepository,
+    ChatCallIceService,
+    // S7-CALL-SEC-1 (additive) — cooldown per-user CỦA RIÊNG `ChatCallIceService` (HIGH-2 vế 2). CỐ Ý
+    // KHÔNG export: lối vào duy nhất là `CHAT-API-029`; module khác cần cooldown tự dựng instance của nó
+    // (lớp không giữ trạng thái phụ thuộc CHAT — an toàn để `new` ở nơi khác nếu cần, nhưng DI nội bộ vẫn
+    // là singleton per-module để bộ đếm in-memory fallback dùng chung giữa các request).
+    ChatCallCooldownService,
+    ChatCallRingingTimeoutJobHandler,
   ],
   // `ChatDerivedRoomsSyncService` export cho 5 module writer (org · employees · tasks · recycle-bin).
   // Job handler CỐ Ý KHÔNG export: nó được SchedulerModule gom qua DiscoveryService bằng metadata, không

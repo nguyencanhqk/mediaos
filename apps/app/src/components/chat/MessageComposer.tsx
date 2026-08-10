@@ -67,6 +67,30 @@ export function MessageComposer({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   /**
+   * `handleSubmit` giữ một `await onSubmit(...)` bay ngang qua ranh giới mạng thật (POST gửi tin). Nếu ô
+   * soạn bị THÁO trong lúc đó — đổi phòng, đóng panel nổi, hay (trong test) `cleanup()` unmount sau khi
+   * assertion chính đã qua — thì `await` vẫn tiếp tục chạy và cố gọi `setSending(false)` trên một
+   * component không còn gắn với cây React nào nữa.
+   *
+   * Đây KHÔNG phải chuyện vô hại: `dispatchSetState` tính độ ưu tiên cập nhật (`resolveUpdatePriority`)
+   * TRƯỚC khi kiểm tra fiber còn gắn hay không, và bước đó đọc `window`. Ở app chạy thật, `window` luôn
+   * còn đó nên hậu quả chỉ là một no-op vô hình; ở test, `window` có thể đã bị môi trường jsdom dọn sạch
+   * ngay sau khi file test kết thúc — và lúc đó `setSending(false)` ném `ReferenceError`. Chặn TẠI NGUỒN
+   * bằng cờ mounted, đừng gọi `setState` cho một cây đã tháo, dù nguyên nhân "đã tháo" là gì.
+   */
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    // PHẢI gán `true` ở THÂN effect, không chỉ dựa vào giá trị khởi tạo của `useRef`. `<StrictMode>`
+    // (main.tsx) chạy effect hai lần ở dev: mount → cleanup → mount. Nếu chỉ có cleanup gán `false`,
+    // lần mount thứ hai không khôi phục cờ ⇒ ref kẹt `false` VĨNH VIỄN và `handleSubmit` thoát sớm
+    // mãi mãi: spinner không tắt, nháp không xoá, lỗi không hiện — dù cây vẫn đang gắn bình thường.
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  /**
    * Khoá idempotency của NHÁP hiện tại. `null` = chưa bắt đầu soạn.
    *
    * Ở ref chứ không ở state: nó không được kích hoạt render, và quan trọng hơn — nó phải sống sót qua
@@ -151,6 +175,7 @@ export function MessageComposer({
       fileIds: attachments.map((a) => a.fileId),
       ...(replyTo ? { replyToMessageId: replyTo.id } : {}),
     });
+    if (!isMountedRef.current) return; // xem docblock của `isMountedRef` — cây đã tháo, dừng tại đây
     setSending(false);
 
     if (!ok) {

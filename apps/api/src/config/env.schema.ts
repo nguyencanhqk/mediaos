@@ -269,6 +269,31 @@ export const envSchema = z
     // phải "cho mọi công ty" — vắng cấu hình không bao giờ được nới thành cho phép.
     SOCIAL_COMPANY_ID: z.string().uuid().optional(),
 
+    // ── S7-CALL-BE-1: cuộc gọi thoại/hình — máy chủ TURN (CHAT-API-029 · DECISIONS-07 §5) ───────────
+    // Tài khoản **Cloudflare TURN** dùng chung với LMS: MediaOS KHÔNG tự dựng TURN server. Credential
+    // gửi xuống client do SERVER sinh, hạn ngắn, dẫn xuất từ hai biến này — secret gốc KHÔNG BAO GIỜ
+    // rời server, không vào DB, không vào DTO, KHÔNG vào log (BẤT BIẾN #3, xem `ChatCallIceService`).
+    //
+    // OPTIONAL — và đây là lựa chọn, không phải lười: thiếu cấu hình thì `GET /chat/calls/ice-config`
+    // rơi về STUN công cộng chứ KHÔNG chặn boot. Cuộc gọi trong cùng LAN/VPN vẫn chạy; một biến môi
+    // trường chưa đặt không được biến cả API thành không khởi động được.
+    // ⚠️ KHÔNG có `.min(32)` như các shared-secret khác: đây là khoá do Cloudflare cấp, độ dài của họ
+    // quy định — áp trần độ dài của mình lên khoá bên thứ ba là tự chặn một giá trị hợp lệ.
+    CLOUDFLARE_TURN_KEY_ID: z.string().min(1).optional(),
+    CLOUDFLARE_TURN_API_TOKEN: z.string().min(1).optional(),
+
+    // ── S7-CALL-BE-FIX-1 (MEDIUM-3 vế TẦN SUẤT): trần số LỜI MỜI gọi / phút / người ──────────────────
+    // Mỗi `POST /chat/rooms/:id/calls` ghi `1 + N` hàng APPEND-ONLY vào `chat_call_participants` (N =
+    // thành viên đang hoạt động, đã cắt trần bởi `CHAT_CALL_MAX_INVITEES`) và bảng đó KHÔNG có job dọn.
+    // `CHAT_CALL_MAX_INVITEES` chặn KÍCH THƯỚC một lần ghi; biến này chặn SỐ LẦN ghi. Thiếu vế thứ hai
+    // thì một vòng lặp mời-huỷ-mời vẫn bơm được không giới hạn.
+    //
+    // CÓ env (khác `CHAT_CALL_MAX_INVITEES` là hằng cứng) vì đây là ngưỡng CHỐNG LẠM DỤNG, không phải
+    // rule nghiệp vụ: mặc định phải chặt cho production, còn integration-test cần nới để 20+ lời mời của
+    // một fixture-user không đụng trần (mirror `LOGIN_MAX_ATTEMPTS`). Đổi giá trị KHÔNG đổi hợp đồng API.
+    // Ngưỡng 10 nằm rất trên nhịp thật (gọi lại sau 45s đổ chuông ≈ 1–2 lần/phút) và rất dưới nhịp máy.
+    CHAT_CALL_INVITE_MAX_PER_MIN: z.coerce.number().int().positive().default(10),
+
     // ⚠️ ALLOW_SUPERUSER_ROTATION (KHÔNG validate qua zod — CỐ Ý): SecretRotationService đọc THẲNG
     // `process.env.ALLOW_SUPERUSER_ROTATION === 'true'` để fail-closed tuyệt đối (mọi giá trị ≠ 'true', kể cả
     // unset → CHẶN rotation bằng role BYPASS RLS). Không dùng z.coerce.boolean() vì nó coi 'false' → true (bẫy).
