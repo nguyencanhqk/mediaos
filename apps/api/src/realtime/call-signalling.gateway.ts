@@ -494,11 +494,10 @@ export class CallSignallingGateway {
           `/ws-call: vượt trần khung CỨNG — ngắt. userId=${state.user.id} socket=${client.id}`,
         );
         client.disconnect(true);
-      }
-      // "drop": KHÔNG ghi security event — đây là bó băng thông, không phải cáo buộc dò cửa. NHƯNG
-      // phải để lại dấu vết: không có dòng này thì "hệ thống đang bó băng thông" và "cuộc gọi hỏng"
-      // trông giống hệt nhau (cả hai đều 0 log) khi có khiếu nại "tôi không gọi được".
-      else {
+      } else {
+        // "drop": KHÔNG ghi security event — đây là bó băng thông, không phải cáo buộc dò cửa. NHƯNG
+        // phải để lại dấu vết: thiếu dòng này thì "hệ thống đang bó băng thông" và "cuộc gọi hỏng"
+        // trông giống hệt nhau (cả hai đều 0 log) khi có khiếu nại "tôi không gọi được".
         this.logger.debug(
           `/ws-call: bỏ khung ${event} vì vượt trần mềm (userId=${state.user.id} socket=${client.id})`,
         );
