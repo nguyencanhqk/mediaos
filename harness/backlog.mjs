@@ -10390,10 +10390,21 @@ export const backlog = [
       "UI cuộc gọi: nút gọi trong phòng · chuông đến · khung đang gọi (thu nhỏ/toàn màn) · tắt mic-cam · chia sẻ màn hình — port từ LMS, bỏ phần tự ghi vòng đời qua WS",
     zone: "yellow",
     status: "todo",
+    // ⚠️ MỞ RỘNG 10/08/2026 (`docs/plans/S7-CALL-FE-1.md` §0.2). Bản seed có 4 mục trong khi WO chạm 12
+    // tệp. `paths` lái `guard-scope` + chọn gate (memory `wo-paths-drive-gate-and-scheduler`) ⇒ danh
+    // sách thiếu nghĩa là nửa diff đi qua mà không ai thấy. Lý do từng nhóm ghi ở bảng §0.2 của plan.
     paths: [
       "apps/app/src/components/chat/call/**",
+      "apps/app/src/components/chat/ConversationPanel.tsx",
+      "apps/app/src/layouts/protected/ProtectedShell.tsx",
+      "apps/app/src/routes/chat/constants.ts",
       "apps/app/src/i18n/**",
       "packages/web-core/src/lib/chat-call-api.ts",
+      // `getCallSocket()` PHẢI sống ở đây: ESLint `no-restricted-imports` miễn đúng MỘT tệp cho
+      // `socket.io-client`, và khai ở tệp mới buộc phải nới `ignores` — tức nới chính hàng rào đang
+      // giữ "một kết nối `/ws` duy nhất" (plan §4).
+      "packages/web-core/src/lib/realtime-socket.ts",
+      "packages/web-core/src/index.ts",
       "docs/plans/S7-CALL-FE-1.md",
     ],
     skills: ["frontend-design", "code-review"],

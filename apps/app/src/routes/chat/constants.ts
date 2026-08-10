@@ -25,6 +25,12 @@ export const CHAT_PAIRS = {
   SEND_MESSAGE: { action: "send", resourceType: "chat-message" },
   RECALL_MESSAGE: { action: "recall", resourceType: "chat-message" },
   PIN_MESSAGE: { action: "pin", resourceType: "chat-message" },
+  /**
+   * S7-CALL-FE-1 — cặp thứ 10 KHÔNG nhạy cảm, seed ở mig `0546`. ĐÚNG cặp mà cả năm route vòng đời
+   * (`chat-calls.controller.ts`) lẫn handshake `/ws-call` bắt buộc — lệch một chữ là nút gọi hiện ra
+   * cho người server sẽ trả 403, hoặc biến mất với người có quyền.
+   */
+  CALL: { action: "call", resourceType: "chat-room" },
 } as const;
 
 /*

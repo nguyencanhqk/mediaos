@@ -1,5 +1,5 @@
 import { io, type Socket } from "socket.io-client";
-import { WS_NAMESPACE } from "@mediaos/contracts";
+import { WS_CALL_NAMESPACE, WS_NAMESPACE } from "@mediaos/contracts";
 import { getAccessToken } from "../stores/auth";
 import { getApiBaseUrl } from "./api-client";
 
@@ -69,4 +69,59 @@ export function getAppSocket(): Socket | null {
     },
   });
   return socket;
+}
+
+// ─── S7-CALL-FE-1 — `/ws-call` (tín hiệu WebRTC) ──────────────────────────────
+
+/**
+ * Singleton của namespace tín hiệu. `null` = KHÔNG có cuộc gọi nào đang mở — trạng thái BÌNH THƯỜNG,
+ * khác hẳn `socket` ở trên (mở suốt phiên).
+ */
+let callSocket: Socket | null = null;
+
+/**
+ * Kết nối `/ws-call` — namespace RIÊNG chở SDP/ICE/media-state của cuộc gọi (`DECISIONS-07` R1).
+ *
+ * ══ VÌ SAO Ở CHUNG TỆP VỚI `getAppSocket()` ══
+ * `no-restricted-imports` chặn `socket.io-client` trên toàn `apps/app/src/**` + `packages/web-core/src/**`
+ * và `ignores` đúng MỘT tệp. Khai ở tệp mới buộc phải nới `ignores` — tức nới chính hàng rào đang giữ
+ * "một kết nối `/ws` duy nhất", đổi lấy một thứ không cần đổi. `/ws-call` là namespace KHÁC nên nó
+ * không đụng lý do gốc của luật; chỗ khai vẫn phải là tệp đã được miễn.
+ *
+ * ══ HAI ĐIỂM KHÁC `getAppSocket()`, CẢ HAI CÓ CHỦ ĐÍCH ══
+ *  1. **KHÔNG mở sẵn.** Caller gọi hàm này lúc bắt đầu một cuộc gọi, không phải lúc mount shell. Đây là
+ *     kênh DUY NHẤT trong hệ mà client được GHI lên WS — giữ nó mở suốt phiên cho một tính năng dùng
+ *     vài phút mỗi ngày là để ngỏ một bề mặt tấn công không có ai đang dùng.
+ *  2. **`closeCallSocket()` được phép ngắt thật.** `/ws` không được (dùng chung với NOTI, `<StrictMode>`
+ *     chạy effect hai lần ⇒ ngắt ở cleanup giết kết nối cả app). `/ws-call` không chia sẻ với module nào.
+ *
+ * `auth` là HÀM — cùng lý do như `/ws`: `socket.io-client` gọi lại nó ở MỖI lần thử kết nối, nên sau
+ * `refreshAccessToken()` lần thử kế tiếp tự mang token MỚI. Quan trọng gấp đôi ở đây vì gateway ghim
+ * `exp` của token lúc handshake và **hẹn giờ ngắt** đúng lúc nó hết hạn (`scheduleTokenExpiry`).
+ */
+export function getCallSocket(): Socket | null {
+  if (callSocket) return callSocket;
+  if (getAccessToken() === null) return null;
+
+  callSocket = io(`${wsOrigin()}/${WS_CALL_NAMESPACE}`, {
+    auth: (cb: (data: { token?: string }) => void) => {
+      cb({ token: getAccessToken() ?? undefined });
+    },
+  });
+  return callSocket;
+}
+
+/**
+ * Đóng `/ws-call` và quên singleton — gọi khi cuộc gọi kết thúc.
+ *
+ * ⚠️ PHẢI `callSocket = null` sau `disconnect()`. Giữ lại tham chiếu đã ngắt thì lần gọi kế tiếp
+ * `getCallSocket()` trả về đúng object đó ở trạng thái `disconnected`; `socket.io-client` KHÔNG tự nối
+ * lại sau `disconnect()` chủ động ⇒ cuộc gọi thứ hai của phiên im lặng không có tín hiệu nào, và triệu
+ * chứng ("gọi lần đầu được, lần sau không") không chỉ về đây.
+ */
+export function closeCallSocket(): void {
+  if (!callSocket) return;
+  callSocket.removeAllListeners();
+  callSocket.disconnect();
+  callSocket = null;
 }

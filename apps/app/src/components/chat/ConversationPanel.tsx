@@ -22,6 +22,8 @@ import { TypingIndicator } from "./TypingIndicator";
 import { roomDisplayName } from "./chat-format";
 import { useChatConversation } from "./use-chat-conversation";
 import { useRoomRoster } from "./use-room-roster";
+import { CallButtons } from "./call/CallButtons";
+import { useOptionalCallContext } from "./call/CallProvider";
 
 interface ConversationPanelProps {
   room: ChatRoomDto;
@@ -76,6 +78,9 @@ export function ConversationPanel({
    */
   const roster = useRoomRoster(room.id);
   const patchMessageReactions = useChatStore((s) => s.patchMessageReactions);
+
+  /** S7-CALL-FE-1 — `null` khi cây không có `<CallProvider>` (test lẻ). Xem chỗ dùng ở thanh đầu phòng. */
+  const callContext = useOptionalCallContext();
 
   /**
    * Rời chế độ ngữ cảnh về dòng thời gian mới nhất.
@@ -268,6 +273,19 @@ export function ConversationPanel({
               </span>
             </p>
           </div>
+          {/*
+           * S7-CALL-FE-1 — nút gọi. `callContext === null` (cây không có `<CallProvider>`: test lẻ,
+           * story) ⇒ KHÔNG render: một nút gọi không có máy trạng thái phía sau là nút bấm không có
+           * gì xảy ra. Cổng quyền + cổng 1-1 nằm trong chính `CallButtons`.
+           */}
+          {callContext !== null && (
+            <CallButtons
+              room={room}
+              members={roster.members}
+              isBusy={callContext.phase !== "idle"}
+              onStartCall={(kind) => callContext.startCall(room.id, kind)}
+            />
+          )}
           {onToggleInfo && (
             <Button
               variant="ghost"
