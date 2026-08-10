@@ -28,7 +28,11 @@ import { AppModule } from "../../src/app.module";
 import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
-import { CHAT_CALL_RING_TIMEOUT_MS } from "../../src/chat/chat-calls.service";
+import {
+  CHAT_CALL_MAX_INVITEES,
+  CHAT_CALL_RING_TIMEOUT_MS,
+} from "../../src/chat/chat-calls.service";
+import { isCallStateViolation } from "../../src/chat/chat-calls.repository";
 import { ChatCallRingingTimeoutJobHandler } from "../../src/chat/chat-call-ringing-timeout.job-handler";
 import { directPool, hasDb } from "../helpers/integration-db";
 import {
@@ -44,6 +48,21 @@ import {
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = "Passw0rd!s7call1";
+
+/**
+ * Trần lời mời/phút/người cho CẢ FILE NÀY (MEDIUM-3 vế tần suất) — đặt TRƯỚC khi `AppModule` compile:
+ * `ChatCallsService` đọc env đúng MỘT LẦN lúc dựng provider, sửa sau `app.init()` không có tác dụng.
+ *
+ * ⚠️ **File này tự nó là một kẻ lạm dụng theo định nghĩa của hàng rào đó.** `uCaller` bắn ~25 lời mời
+ * trong vài giây — dưới mặc định production (10/phút) thì quá nửa bộ test sẽ 429 ở những ca chẳng liên
+ * quan gì tới cooldown. Nới lên 40 giữ nguyên ý nghĩa của MỌI ca khác, và ca 11e bên dưới KHÔNG dựa vào
+ * con số này (nó đọc lại biến, và dùng NGƯỜI RIÊNG nên không đụng hạn mức của `uCaller`).
+ *
+ * ⚠️ Thêm ~15 lời mời nữa cho `uCaller` là chạm trần và bộ test sẽ đỏ ở chỗ khó đoán (429 thay vì
+ * 201/409). Gặp hiện tượng đó thì NÂNG SỐ NÀY, đừng đi sửa ca test.
+ */
+const INVITE_MAX_PER_MIN = 40;
+process.env.CHAT_CALL_INVITE_MAX_PER_MIN = String(INVITE_MAX_PER_MIN);
 const UNKNOWN_UUID = "00000000-0000-4000-8000-0000000000fe";
 
 type Scope = "Own" | "Team" | "Department" | "Company";
@@ -91,6 +110,11 @@ describe.skipIf(!hasLaneDb)("S7-CALL-BE-1 — vòng đời cuộc gọi REST (DB
   let uOversight = "";
   /** CÓ đủ cặp kể cả `call`; vào phòng SAU khi cuộc gọi bắt đầu ⇒ 403 vì không ở trong cuộc gọi (ca 4b). */
   let uLateJoiner = "";
+  /**
+   * NGƯỜI RIÊNG cho ca 11e (cooldown tần suất). Bucket cooldown khoá theo (company, user) ⇒ đốt sạch hạn
+   * mức của người này KHÔNG chạm hạn mức `uCaller`; dùng chung `uCaller` sẽ làm mọi ca chạy SAU 11e đỏ.
+   */
+  let uInviteFlood = "";
 
   let tCaller = "";
   let tCallee = "";
@@ -98,6 +122,7 @@ describe.skipIf(!hasLaneDb)("S7-CALL-BE-1 — vòng đời cuộc gọi REST (DB
   let tOutsider = "";
   let tOversight = "";
   let tLateJoiner = "";
+  let tInviteFlood = "";
 
   /** Phòng nhóm chính: caller + callee + uNoCallPair. */
   let roomId = "";
@@ -208,6 +233,7 @@ describe.skipIf(!hasLaneDb)("S7-CALL-BE-1 — vòng đời cuộc gọi REST (DB
     uOutsider = await mk("outsider");
     uOversight = await mk("oversight");
     uLateJoiner = await mk("latejoiner");
+    uInviteFlood = await mk("inviteflood");
 
     await grantPairs(uCaller, "caller", [...PAIRS_BASE, PAIR_CALL]);
     await grantPairs(uCallee, "callee", [...PAIRS_BASE, PAIR_CALL]);
@@ -219,6 +245,8 @@ describe.skipIf(!hasLaneDb)("S7-CALL-BE-1 — vòng đời cuộc gọi REST (DB
     await grantPairs(uOversight, "oversight", [...PAIRS_BASE, PAIR_CALL, PAIR_OVERSIGHT]);
     // ĐỦ quyền — ca 4b phải đo `findParticipant`, không đo `PermissionGuard`.
     await grantPairs(uLateJoiner, "latejoiner", [...PAIRS_BASE, PAIR_CALL]);
+    // ĐỦ quyền + LÀ thành viên phòng riêng của mình — ca 11e phải đo cooldown, không đo guard/membership.
+    await grantPairs(uInviteFlood, "inviteflood", [...PAIRS_BASE, PAIR_CALL]);
 
     tCaller = await login(`caller@${A.slug}.test`);
     tCallee = await login(`callee@${A.slug}.test`);
@@ -226,12 +254,15 @@ describe.skipIf(!hasLaneDb)("S7-CALL-BE-1 — vòng đời cuộc gọi REST (DB
     tOutsider = await login(`outsider@${A.slug}.test`);
     tOversight = await login(`oversight@${A.slug}.test`);
     tLateJoiner = await login(`latejoiner@${A.slug}.test`);
+    tInviteFlood = await login(`inviteflood@${A.slug}.test`);
 
     roomId = await createGroup("Phòng gọi", [uCallee, uNoCallPair]);
     // Mỗi ca cần cuộc gọi SẠCH phải có phòng riêng: partial unique index chỉ cho MỘT cuộc gọi sống mỗi
     // phòng, nên dùng lại phòng của ca trước sẽ đo nhầm 409 thay vì thứ ca đó muốn đo. Dư vài phòng là
     // rẻ; thiếu thì ca CUỐI ném "hết phòng dự phòng" và người đọc tưởng tính năng hỏng.
-    for (let i = 0; i < 18; i += 1) {
+    // VÁ S7-CALL-BE-FIX-1: nâng 18 → 24 — ca mới (HIGH-1 x1, ca đối chứng reject x1, MEDIUM-1 x2, ca
+    // đối chứng của 11e x1) cộng thêm 5 lượt `nextRoom()` vào 14 lượt sẵn có = 19; còn 5 phòng dư.
+    for (let i = 0; i < 24; i += 1) {
       spareRooms.push(await createGroup(`Phòng gọi ${i}`, [uCallee]));
     }
   }, 240_000);
@@ -434,6 +465,19 @@ describe.skipIf(!hasLaneDb)("S7-CALL-BE-1 — vòng đời cuộc gọi REST (DB
     expect(rows.find((r) => r.user_id === uNoCallPair)?.outcome).toBe("missed");
   });
 
+  it("ca 10b — PIN quyết định thiết kế: sau TỪ CHỐI, người khởi tạo vẫn là `missed` (chưa từng `active`)", async () => {
+    // Cuộc gọi CHƯA từng nối máy (reject chỉ chạy khi còn `ringing`) — người khởi tạo có `joined_at` từ
+    // lúc mời (họ "vào" cuộc gọi của chính mình ngay lập tức) nhưng KHÔNG ai từng nói chuyện. Đây LÀ
+    // hành vi ĐÚNG, mirror triết lý của job hết hạn ("mọi người còn treo đều là nhỡ — kể cả người khởi
+    // tạo") — ca này ghim quyết định đó lại, phân biệt với ca 11b (cuộc gọi ĐÃ active thì mới là `left`).
+    const callId = await invite(nextRoom());
+
+    await authPost(tCallee, `/chat/calls/${callId}/reject`);
+
+    const rows = await participantRows(callId);
+    expect(rows.find((r) => r.user_id === uCaller)?.outcome).toBe("missed");
+  });
+
   it("ca 11 — GÁC MÁY sau khi nối: `ended`, actor `left`, người treo `missed`", async () => {
     const callId = await invite(roomId);
     await authPost(tCallee, `/chat/calls/${callId}/accept`);
@@ -447,6 +491,151 @@ describe.skipIf(!hasLaneDb)("S7-CALL-BE-1 — vòng đời cuộc gọi REST (DB
     // Người đã NHẬN giữ nguyên `accepted` — `closeOpenParticipants` chỉ đụng hàng chưa ngã ngũ.
     expect(rows.find((r) => r.user_id === uCallee)?.outcome).toBe("accepted");
     expect(rows.find((r) => r.user_id === uNoCallPair)?.outcome).toBe("missed");
+  });
+
+  it("ca 11b — VÁ HIGH-1: người ĐƯỢC MỜI (đã `accept`) gác máy cuộc gọi `active` ⇒ CẢ HAI `left`, KHÔNG ai bị `missed`", async () => {
+    // Đúng nhánh bug đã báo: actor của `hangup` KHÔNG phải initiator mà là người vừa `accept` — outcome
+    // của họ đã là 'accepted' (không còn NULL) TRƯỚC khi gọi hangup. Bản gốc: `setParticipantOutcome`
+    // khớp 0 hàng (outcome không đổi được sang 'left'), rồi `closeOthers('missed')` quét luôn hàng
+    // `outcome IS NULL` của initiator (đang thật sự active) thành "nhỡ".
+    const callId = await invite(nextRoom());
+    await authPost(tCallee, `/chat/calls/${callId}/accept`);
+
+    const res = await authPost(tCallee, `/chat/calls/${callId}/hangup`);
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.status).toBe("ended");
+    const rows = await participantRows(callId);
+    // Người khởi tạo: cuộc gọi ĐÃ active khi kết thúc ⇒ 'left', KHÔNG PHẢI 'missed' (đây là dòng assert
+    // mà bug HIGH-1 làm sai — hoàn nguyên bản vá thì dòng này đỏ với giá trị 'missed').
+    expect(rows.find((r) => r.user_id === uCaller)?.outcome).toBe("left");
+    // Người vừa accept rồi tự gác máy: outcome phải đổi ĐƯỢC từ 'accepted' sang 'left' — đây là dòng đo
+    // trực tiếp cú `WHERE outcome IS NULL` quá chặt của bản gốc (hoàn nguyên thì actor giữ 'accepted').
+    expect(rows.find((r) => r.user_id === uCallee)?.outcome).toBe("left");
+
+    // `left_at` phải được ghi cho CẢ hàng được "nâng cấp" qua `promoteJoinedTo`, không chỉ hàng actor tự
+    // ghi trực tiếp — một `outcome='left'` với `left_at IS NULL` mãi mãi là dữ liệu không nhất quán.
+    const leftAtRows = await direct.query(
+      "SELECT user_id, left_at FROM chat_call_participants WHERE call_id = $1",
+      [callId],
+    );
+    expect(leftAtRows.rows.every((r: { left_at: Date | null }) => r.left_at !== null)).toBe(true);
+  });
+
+  it("ca 11c — VÁ MEDIUM-4: người thứ ba (đã là participant) `accept` cuộc gọi ĐANG `active` ⇒ 422, không được nhảy vào", async () => {
+    // Phòng 3 người — CẢ BA đều được auto-insert làm participant lúc mời (activeMemberIds đọc mọi thành
+    // viên đang hoạt động của phòng, không chỉ 2). `uLateJoiner` có đủ cặp `call`.
+    const room = await createGroup("Phòng 3 người — MEDIUM-4", [uCallee, uLateJoiner]);
+    const callId = await invite(room);
+    await authPost(tCallee, `/chat/calls/${callId}/accept`);
+
+    const denied = await authPost(tLateJoiner, `/chat/calls/${callId}/accept`);
+
+    expect(denied.status, JSON.stringify(denied.body)).toBe(422);
+    expect(JSON.stringify(denied.body)).toContain("CHAT-ERR-029");
+    const rows = await participantRows(callId);
+    // KHÔNG bị "join" thêm — hàng của họ vẫn treo, không đóng dấu `accepted`.
+    expect(rows.find((r) => r.user_id === uLateJoiner)?.outcome).toBeNull();
+    // Người ĐÃ accept trước đó không bị xáo trộn bởi lần accept-hỏng của người thứ ba.
+    expect(rows.find((r) => r.user_id === uCallee)?.outcome).toBe("accepted");
+  });
+
+  it("ca 11d — VÁ MEDIUM-3: mời trong phòng > trần bị CẮT ở CHAT_CALL_MAX_INVITEES, người khởi tạo luôn có mặt", async () => {
+    const room = await createGroup("Phòng đông người — MEDIUM-3", [uCallee]);
+    // Thêm thành viên "chân" tới khi vượt trần — chỉ cần là room member (không cần login/quyền) vì
+    // `activeMemberIds` chỉ đếm `chat_room_members`, không quan tâm họ có quyền `call` hay không.
+    const extraCount = CHAT_CALL_MAX_INVITEES; // caller + callee + N chân > trần chắc chắn
+    for (let i = 0; i < extraCount; i += 1) {
+      const id = await seedUser(direct, A.companyId, `medium3-${i}@${A.slug}.test`);
+      await direct.query(
+        `INSERT INTO chat_room_members (company_id, room_id, user_id, role)
+         VALUES ($1, $2, $3, 'member') ON CONFLICT DO NOTHING`,
+        [A.companyId, room, id],
+      );
+    }
+
+    const callId = await invite(room);
+
+    const rows = await participantRows(callId);
+    expect(rows).toHaveLength(CHAT_CALL_MAX_INVITEES);
+    expect(rows.map((r) => r.user_id)).toContain(uCaller);
+  });
+
+  it("ca 11e — VÁ MEDIUM-3 vế TẦN SUẤT: vượt trần lời mời/phút ⇒ 429 + SYSTEM-ERR-RATE-LIMIT, KHÔNG ghi thêm hàng", async () => {
+    // Vế KÍCH THƯỚC (ca 11d) chặn một lần ghi phình to; ca này chặn NHIỀU lần ghi nhỏ. Kịch bản thật:
+    // vòng lặp mời liên tục — mỗi lượt là một cơ hội ghi `1 + N` hàng append-only vào bảng KHÔNG có job dọn.
+    const room = await authPost(tInviteFlood, "/chat/rooms")
+      .send({ name: "Phòng bơm lời mời — MEDIUM-3", memberUserIds: [uCallee] })
+      .then((r) => {
+        expect(r.status, JSON.stringify(r.body)).toBe(201);
+        return r.body.data.id as string;
+      });
+
+    const statuses: number[] = [];
+    let rateLimitedBody: unknown = null;
+    // `INVITE_MAX_PER_MIN + 1` lượt: lượt đầu 201, các lượt sau 409 (phòng đã có cuộc gọi sống), lượt
+    // VƯỢT TRẦN phải là 429. Bắn TUẦN TỰ — song song sẽ làm thứ tự đếm không xác định.
+    for (let i = 0; i <= INVITE_MAX_PER_MIN; i += 1) {
+      const res = await authPost(tInviteFlood, `/chat/rooms/${room}/calls`).send({ kind: "audio" });
+      statuses.push(res.status);
+      if (res.status === 429) rateLimitedBody = res.body;
+    }
+
+    expect(statuses[0], JSON.stringify(statuses)).toBe(201);
+    // Ca ĐỐI CHỨNG bắt buộc: nếu mọi lượt sau lượt đầu đều 429 thì cổng đang chặn vô điều kiện, và
+    // assert cuối sẽ xanh một cách rỗng tuếch (memory `deny-cases-vacuous-without-allow-case`). 409 ở
+    // giữa chứng minh request VẪN đi xuyên tới tầng DB khi còn hạn mức.
+    expect(statuses[1]).toBe(409);
+    expect(statuses[INVITE_MAX_PER_MIN - 1]).toBe(409);
+    expect(statuses[INVITE_MAX_PER_MIN]).toBe(429);
+    // Mã lỗi là mã NỀN, KHÔNG phải `CHAT-ERR-xxx`: SPEC-15 §12 chốt đúng 30 mã nghiệp vụ và vượt tần
+    // suất không nằm trong đó (xem `CHAT_CALL_INVITE_COOLDOWN_MESSAGE`).
+    expect((rateLimitedBody as { error?: { code?: string } })?.error?.code).toBe(
+      "SYSTEM-ERR-RATE-LIMIT",
+    );
+    expect(JSON.stringify(rateLimitedBody)).not.toContain("CHAT-ERR-");
+
+    // Điểm CỐT LÕI của MEDIUM-3: sau ~40 lượt bơm, bảng append-only chỉ nhận hàng của ĐÚNG MỘT cuộc gọi.
+    const calls = await direct.query("SELECT id FROM chat_calls WHERE room_id = $1", [room]);
+    expect(calls.rows).toHaveLength(1);
+    const rows = await participantRows(calls.rows[0].id as string);
+    expect(rows).toHaveLength(2); // uInviteFlood + uCallee
+
+    // Hạn mức của NGƯỜI KHÁC không bị đốt lây — nếu bucket dùng chung, mọi ca chạy sau đây sẽ 429.
+    const other = await authPost(tCaller, `/chat/rooms/${nextRoom()}/calls`).send({
+      kind: "audio",
+    });
+    expect(other.status, JSON.stringify(other.body)).toBe(201);
+  });
+
+  it("ca 14b — VÁ MEDIUM-1: isCallStateViolation() phân biệt trigger hồi sinh (không constraint) với CHECK THẬT (có constraint)", async () => {
+    const cancelled = await invite(nextRoom());
+    await authPost(tCaller, `/chat/calls/${cancelled}/cancel`);
+    let reviveErr: unknown;
+    try {
+      await direct.query("UPDATE chat_calls SET status = 'ringing' WHERE id = $1", [cancelled]);
+    } catch (e) {
+      reviveErr = e;
+    }
+    // Trigger `chat_calls_forbid_revive_trg` — RAISE tay bằng ERRCODE, KHÔNG kèm USING CONSTRAINT.
+    expect((reviveErr as { code?: string } | undefined)?.code).toBe("23514");
+    expect(isCallStateViolation(reviveErr)).toBe(true);
+
+    const fresh = await invite(nextRoom());
+    let checkErr: unknown;
+    try {
+      // `chat_calls_accepted_at_chk`: status='active' bắt buộc accepted_at NOT NULL — Postgres TỰ phát
+      // hiện, KHÔNG qua trigger ⇒ PHẢI có `constraint`.
+      await direct.query("UPDATE chat_calls SET status = 'active' WHERE id = $1", [fresh]);
+    } catch (e) {
+      checkErr = e;
+    }
+    const checked = checkErr as { code?: string; constraint?: string } | undefined;
+    expect(checked?.code).toBe("23514");
+    expect(checked?.constraint).toBe("chat_calls_accepted_at_chk");
+    // Đây là điểm MEDIUM-1 vá: CHECK thật KHÔNG được nuốt thành 422 — hàm phải trả false để nó nổ 500 và
+    // còn điều tra được, thay vì biến mất thành "sai pha".
+    expect(isCallStateViolation(checkErr)).toBe(false);
   });
 
   // ═══════════ ràng buộc DB (chỗ code KHÔNG tự chứng minh được) ═══════════

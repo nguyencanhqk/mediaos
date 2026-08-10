@@ -1,15 +1,21 @@
 import {
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
+  Logger,
   UnprocessableEntityException,
 } from "@nestjs/common";
 import type { ChatCallDto, CreateChatCallInput } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
+import { loadEnv } from "../config/env.schema";
 import type { ChatCallOutcome, ChatCallStatus } from "../db/schema/communication";
 import { ChatAccessService, type ChatCallAccess } from "./chat-access.service";
+import { CHAT_CALL_COOLDOWN_SCOPE, ChatCallCooldownService } from "./chat-call-cooldown.service";
 import {
+  CHAT_CALL_LIVE_STATUSES,
   ChatCallsRepository,
   isCallStateViolation,
   isLiveCallConflict,
@@ -28,8 +34,52 @@ import { toChatCallDto, type ChatCallProjection } from "./chat.mapper";
  */
 export const CHAT_CALL_RING_TIMEOUT_MS = 45_000;
 
-/** Trạng thái còn "sống" — ĐÚNG tập của partial unique index (mig `0546` khối A2). */
-const LIVE: readonly ChatCallStatus[] = ["ringing", "active"];
+/**
+ * Trần số người được mời (ghi hàng `chat_call_participants`) cho MỘT lời mời.
+ *
+ * VÁ S7-CALL-BE-FIX-1 (MEDIUM-3, **vế KÍCH THƯỚC**). Mỗi invite ghi `1 + N` hàng append-only (N = thành
+ * viên đang hoạt động của phòng) — phòng phòng-ban/dự án có thể có hàng trăm thành viên, và không có job
+ * dọn cho bảng này. Người khởi tạo LUÔN nằm trong tập được cắt (họ không cần "được mời" — xem
+ * `insertParticipants`).
+ *
+ * ⚠️ Trần này MỘT MÌNH KHÔNG đủ: nó chặn một lần ghi phình to, không chặn `10.000` lần ghi nhỏ. Vế còn
+ * lại là `CHAT_CALL_INVITE_*` ngay bên dưới — hai vế của CÙNG MỘT hàng rào, đừng gỡ vế nào mà giữ vế kia.
+ */
+export const CHAT_CALL_MAX_INVITEES = 20;
+
+/**
+ * VÁ S7-CALL-BE-FIX-1 (MEDIUM-3, **vế TẦN SUẤT**) — trần số LỜI MỜI/phút/người, cộng dồn MỌI phòng.
+ *
+ * ┌─ VÌ SAO KHÔNG DỰNG BỘ ĐẾM RIÊNG Ở ĐÂY ──────────────────────────────────────────────────────────┐
+ * │ Ghi chú cũ của MEDIUM-3 hoãn vế này sang lane RT-1 với lý do "dựng bản thứ hai là lỗi             │
+ * │ duplicate-sibling". Lý do đó vẫn đúng, nhưng tiền đề đã đổi: `ChatCallCooldownService` (S7-CALL-  │
+ * │ SEC-1) nay sống NGAY TRONG module này. Dùng lại nó với `scope` RIÊNG = một hiện thực, hai bucket  │
+ * │ — không phải bản sao. Bucket tách bởi scope là bắt buộc: dùng chung với `ice-config` sẽ khiến ai  │
+ * │ gọi nhiều bị cắt luôn cấu hình TURN (và ngược lại) — xem `CHAT_CALL_COOLDOWN_SCOPE`.              │
+ * └──────────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * Khoá theo **NGƯỜI**, không theo (người, phòng): kẻ lạm dụng có bao nhiêu phòng thì bơm bấy nhiêu lần
+ * hạn mức nếu chia theo phòng — trần per-user chặn tổng lượng ghi bất kể trải trên mấy phòng.
+ *
+ * Trần lấy từ env (`CHAT_CALL_INVITE_MAX_PER_MIN`, mặc định 10) chứ không phải hằng cứng như
+ * `CHAT_CALL_MAX_INVITEES`: xem lý do ở `env.schema.ts` (ngưỡng chống-lạm-dụng ≠ rule nghiệp vụ).
+ */
+const CHAT_CALL_INVITE_COOLDOWN_WINDOW_SEC = 60;
+
+/**
+ * Thông điệp 429 — **KHÔNG mang mã `CHAT-ERR-xxx`**, và đó là chủ ý.
+ *
+ * SPEC-15 §12 chốt ĐÚNG 30 mã nghiệp vụ (census `chat-error-code-census.spec.ts` ép con số đó); vượt
+ * hạn mức tần suất KHÔNG phải một rule nghiệp vụ của CHAT mà là hàng rào hạ tầng, nên nó đi theo mã
+ * CHUNG của nền: `AllExceptionsFilter` ánh xạ 429 → `SYSTEM-ERR-RATE-LIMIT` (`httpStatusToCode`), đúng
+ * thứ `openapi-enrich` đã tài liệu hoá sẵn ("429 — vượt giới hạn tần suất"). Đẻ mã CHAT-ERR-031 ở đây
+ * sẽ làm census ĐỎ và buộc phải sửa spec owner đã ký cho một thứ không thuộc trục nghiệp vụ.
+ *
+ * Thông điệp KHÔNG nêu con số trần: nó là núm vặn theo môi trường, nói ra là hứa một hợp đồng API mà
+ * `.env` có thể đổi bất cứ lúc nào.
+ */
+export const CHAT_CALL_INVITE_COOLDOWN_MESSAGE =
+  "Bạn đang gọi quá nhiều lần — chờ một lát rồi thử lại.";
 
 /**
  * S7-CALL-BE-1 — vòng đời cuộc gọi (`CHAT-API-026..028`), **hàng rào R4** của `CHAT-DEC-020`.
@@ -59,11 +109,17 @@ const LIVE: readonly ChatCallStatus[] = ["ringing", "active"];
  */
 @Injectable()
 export class ChatCallsService {
+  private readonly logger = new Logger(ChatCallsService.name);
+  /** Đọc MỘT LẦN lúc dựng provider — mirror `LoginRateLimiter`. Đọc lại mỗi request sẽ cho phép đổi trần
+   *  giữa chừng bằng cách sửa `process.env`, và biến một ngưỡng an ninh thành trạng thái thay đổi được. */
+  private readonly inviteMaxPerMin = loadEnv().CHAT_CALL_INVITE_MAX_PER_MIN;
+
   constructor(
     private readonly db: DatabaseService,
     private readonly repo: ChatCallsRepository,
     private readonly access: ChatAccessService,
     private readonly audit: AuditService,
+    private readonly cooldown: ChatCallCooldownService,
   ) {}
 
   /**
@@ -76,11 +132,14 @@ export class ChatCallsService {
    * mọi lời mời tiếp theo 409 dù không còn ai đang gọi. Đó chính là "phòng kẹt" mà SPEC-15 §15a cảnh báo,
    * chỉ đổi nguyên nhân. Cùng vị từ, cùng hàm với job — một bản sao duy nhất.
    *
+   * @throws HttpException 429 vượt trần lời mời/phút của NGƯỜI GỌI (MEDIUM-3 vế tần suất).
    * @throws NotFoundException 404 (CHAT-ERR-001) người ngoài phòng — giống hệt phòng không tồn tại.
    * @throws UnprocessableEntityException 422 (CHAT-ERR-005) phòng đã lưu trữ.
    * @throws ConflictException 409 (CHAT-ERR-028) phòng đang có cuộc gọi sống.
    */
   async invite(actor: ChatActor, roomId: string, dto: CreateChatCallInput): Promise<ChatCallDto> {
+    await this.assertInviteCooldown(actor);
+
     return this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
 
@@ -97,9 +156,10 @@ export class ChatCallsService {
       const call = await this.insertOrConflict(tx, roomId, actor.id, dto.kind);
 
       // Đọc thành viên TẠI CHỖ GHI, trong cùng tx — danh sách này quyết định ai đổ chuông và (ở RT-1) ai
-      // được vào relay `/ws-call`.
+      // được vào relay `/ws-call`. Cắt trần TRƯỚC khi ghi (MEDIUM-3) — người khởi tạo luôn được giữ lại.
       const memberIds = await this.repo.activeMemberIds(tx, actor.companyId, roomId);
-      await this.repo.insertParticipants(tx, call.id, memberIds, actor.id, now);
+      const invitees = capInvitees(memberIds, actor.id, CHAT_CALL_MAX_INVITEES);
+      await this.repo.insertParticipants(tx, call.id, invitees, actor.id, now);
 
       await this.audit.record(tx, {
         action: CHAT_AUDIT.CALL_INVITED,
@@ -114,7 +174,8 @@ export class ChatCallsService {
           roomId,
           kind: call.kind,
           status: call.status,
-          invitedCount: memberIds.length,
+          invitedCount: invitees.length,
+          roomMemberCount: memberIds.length,
         },
       });
 
@@ -126,9 +187,15 @@ export class ChatCallsService {
    * `CHAT-API-027` — **nhận**. Chỉ người **được mời** (SPEC-15 §15a); người khởi tạo nhận lời mời của
    * chính mình → 403.
    *
-   * Nhận một cuộc gọi ĐANG `active` (người khác đã nhấc) vẫn hợp lệ: v1 giới hạn 1-1 là ràng buộc
-   * **topology media** do FE/`/ws-call` giữ, không phải bất biến dữ liệu — §12 chốt đúng 30 mã và không
-   * có mã nào cho "cuộc gọi đã đủ người", nên chặn ở đây sẽ phải bịa mã ngoài sổ (xem plan D2).
+   * ⚠️ **VÁ S7-CALL-BE-FIX-1 (MEDIUM-4).** Bản gốc dùng `fromStatuses = LIVE` (gồm cả `active`) — nghĩa là
+   * BẤT KỲ thành viên phòng nào có mặt trong `chat_call_participants` (mọi thành viên phòng đang hoạt
+   * động đều được auto-insert ở `invite`, xem `activeMemberIds`) đều nhảy vào được một cuộc gọi ĐÃ nối
+   * máy và tự đóng dấu `outcome='accepted'` — 1-1 (SPEC-15 §5.1c) lọt thành "ai bấm accept trước cũng vào
+   * được, ai bấm sau cũng vào được luôn". Docblock cũ giải thích lý do KHÔNG chặn là "không có mã lỗi cho
+   * 'cuộc gọi đã đủ người'" — nhưng không cần mã mới: `fromStatuses=["ringing"]` để `mustTransition` tự
+   * trả **422 CALL_NOT_ACTIONABLE** (mã sẵn có, đúng nghĩa "sai pha") cho MỌI accept nhắm vào cuộc gọi
+   * không còn `ringing`, kể cả của chính người đã accept trước đó (không có luồng "bấm lại/kết nối lại"
+   * nào trong wave này dựa vào accept-khi-active — nếu cần sau này thì đó là tính năng mới, tự có test).
    */
   async accept(actor: ChatActor, callId: string): Promise<ChatCallDto> {
     return this.lifecycleTx(actor, callId, async (tx, acc, now) => {
@@ -136,7 +203,7 @@ export class ChatCallsService {
         throw new ForbiddenException(CHAT_ERR.CALL_ACTION_FORBIDDEN);
       }
 
-      const call = await this.mustTransition(tx, actor.companyId, callId, LIVE, {
+      const call = await this.mustTransition(tx, actor.companyId, callId, ["ringing"], {
         status: "active",
         acceptedAtIfNull: now,
       });
@@ -167,7 +234,11 @@ export class ChatCallsService {
         endedAt: now,
       });
       await this.repo.setParticipantOutcome(tx, actor.companyId, callId, actor.id, "rejected");
-      await this.closeOthers(tx, actor.companyId, callId, "missed");
+      // Cuộc gọi CHƯA từng `active` (fromStatuses chỉ `ringing`) ⇒ không ai, kể cả người khởi tạo, từng
+      // thật sự "ở trong" một cuộc gọi sống — `missed` đúng cho MỌI hàng còn treo, mirror job hết hạn
+      // (`expireStaleTx`: "Mọi người còn treo đều là 'nhỡ' — kể cả người khởi tạo"). Khác hẳn `hangup` bên
+      // dưới, nơi cuộc gọi CÓ THỂ đã `active`.
+      await this.closeOthers(tx, actor.companyId, callId, "missed", actor.id);
       await this.recordLifecycle(tx, actor, acc, call, CHAT_AUDIT.CALL_REJECTED);
       return call;
     });
@@ -188,24 +259,51 @@ export class ChatCallsService {
         endedAt: now,
       });
       await this.repo.setParticipantOutcome(tx, actor.companyId, callId, actor.id, "cancelled");
-      await this.closeOthers(tx, actor.companyId, callId, "cancelled");
+      await this.closeOthers(tx, actor.companyId, callId, "cancelled", actor.id);
       await this.recordLifecycle(tx, actor, acc, call, CHAT_AUDIT.CALL_CANCELLED);
       return call;
     });
   }
 
-  /** `CHAT-API-028` — **kết thúc**: bên nào cũng gác được, ở cả `ringing` lẫn `active`. */
+  /**
+   * `CHAT-API-028` — **kết thúc**: bên nào cũng gác được, ở cả `ringing` lẫn `active`.
+   *
+   * ⚠️ **VÁ S7-CALL-BE-FIX-1 (HIGH-1) — bug đã xác minh, hai lớp:**
+   * 1. `setParticipantOutcome(actor.id, "left", …)` bản gốc chỉ ghi khi `outcome IS NULL`. Khi actor CHÍNH
+   *    LÀ người vừa `accept` (outcome đã là `'accepted'`, không còn `NULL`) thì lệnh này khớp **0 hàng**:
+   *    `left_at` không bao giờ được ghi, actor giữ nguyên `'accepted'`. Vá ở tầng repo (xem
+   *    `setParticipantOutcome` — nới `WHERE` cho `'accepted'`, vì nó không phải kết cục ngã ngũ).
+   * 2. `closeOthers` quét MỌI hàng `outcome IS NULL` thành `outcome` truyền vào. Người KHỞI TẠO luôn có
+   *    `outcome IS NULL` cho tới khi tự họ cancel/hangup (xem `insertParticipants`) — kể cả khi cuộc gọi
+   *    đã `active` và họ đang thật sự nói chuyện. Truyền cứng `"missed"` như bản gốc gắn "cuộc gọi nhỡ"
+   *    lên người vừa nói chuyện 5 phút, chỉ vì người KIA là người gác máy.
+   *
+   * Phân biệt **theo TỪNG hàng**, không phải theo cuộc gọi: `call.acceptedAt` cho biết cuộc gọi CÓ TỪNG
+   * `active` không; `promoteJoinedTo` của `closeOpenParticipants` chỉ nâng `'left'` cho hàng nào TỰ NÓ đã
+   * có `joined_at` (người khởi tạo — luôn có, từ lúc mời). Người được mời nhưng CHƯA từng bấm gì (phòng
+   * ≥3, `joined_at IS NULL`) vẫn là `'missed'` dù cuộc gọi đã `active` cho HAI người kia — họ chưa từng ở
+   * trong cuộc gọi để mà "rời". Nhầm sang so-sánh theo TOÀN cuộc gọi (mọi hàng còn treo → `'left'` một
+   * loạt) sẽ làm CA 11 (test đã có, `uNoCallPair` phải giữ `'missed'`) đỏ.
+   */
   async hangup(actor: ChatActor, callId: string): Promise<ChatCallDto> {
     return this.lifecycleTx(actor, callId, async (tx, acc, now) => {
-      const call = await this.mustTransition(tx, actor.companyId, callId, LIVE, {
+      const call = await this.mustTransition(tx, actor.companyId, callId, CHAT_CALL_LIVE_STATUSES, {
         status: "ended",
         endedAt: now,
       });
       await this.repo.setParticipantOutcome(tx, actor.companyId, callId, actor.id, "left", {
         leftAt: now,
       });
-      // Ai chưa kịp bấm gì thì là "nhỡ" — không phải "rời", vì họ chưa từng vào.
-      await this.closeOthers(tx, actor.companyId, callId, "missed");
+      const wasConnected = call.acceptedAt !== null;
+      await this.closeOthers(
+        tx,
+        actor.companyId,
+        callId,
+        "missed",
+        actor.id,
+        wasConnected ? "left" : undefined,
+        wasConnected ? now : undefined,
+      );
       await this.recordLifecycle(tx, actor, acc, call, CHAT_AUDIT.CALL_ENDED);
       return call;
     });
@@ -253,6 +351,44 @@ export class ChatCallsService {
   }
 
   // ─── nội bộ ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Trần lời mời/phút/người (MEDIUM-3 vế tần suất). Vượt ⇒ **429**, KHÔNG tạo cuộc gọi.
+   *
+   * ⚠️ **BA quyết định ở đây, cả ba đều cố ý và cả ba đều dễ bị "sửa cho gọn" theo hướng sai:**
+   *
+   * 1. **Chạy TRƯỚC `withTenant`, tức trước cả `assertMember`.** Đây là điểm của một rate-limit: chặn
+   *    trước khi tiêu tài nguyên. Đặt sau membership thì mỗi lần bị chặn vẫn phải mở transaction +
+   *    query — đúng thứ hàng rào này dựng ra để tránh. Không có rò rỉ: phản hồi 429 giống hệt nhau
+   *    dù phòng có thật hay không, nên nó KHÔNG trở thành oracle dò phòng như 403-thay-404 sẽ là.
+   *    (Khác `LmsServiceIntakeGuard` — ở đó bucket DÙNG CHUNG nên phải xác thực trước, kẻo người lạ
+   *    đốt hạn mức của caller hợp lệ. Ở đây bucket theo TỪNG người và `PermissionGuard` đã chạy xong,
+   *    nên không ai đốt được hạn mức của người khác.)
+   *
+   * 2. **Đếm MỌI lần thử, kể cả lần kết thúc bằng 404/409/422.** Một vòng lặp mời-vào-phòng-đang-bận
+   *    (409) không ghi hàng nào nhưng vẫn đốt CPU/DB round-trip; tha cho nhánh thất bại là để hở đúng
+   *    con đường rẻ nhất của kẻ lạm dụng.
+   *
+   * 3. **KHÔNG ghi `audit_logs`/`user_security_events` ở nhánh bị chặn — chỉ `warn`.** Ghi một hàng
+   *    audit cho mỗi lần bị chặn sẽ biến hàng rào chống-bơm-dữ-liệu thành MỘT ĐƯỜNG BƠM DỮ LIỆU khác:
+   *    kẻ tấn công đổi `chat_call_participants` (có trần, có 429) lấy `audit_logs` (append-only, không
+   *    trần) với chi phí thấp hơn. Nhánh này không có bí mật để che, nên log ứng dụng là đủ dấu vết.
+   */
+  private async assertInviteCooldown(actor: ChatActor): Promise<void> {
+    const allowed = await this.cooldown.allow(
+      ChatCallCooldownService.key(CHAT_CALL_COOLDOWN_SCOPE.INVITE, actor.companyId, actor.id),
+      this.inviteMaxPerMin,
+      CHAT_CALL_INVITE_COOLDOWN_WINDOW_SEC,
+    );
+    if (allowed) return;
+
+    // KHÔNG log `actor.id` — nhánh này lặp nhiều lần liên tiếp khi bị lạm dụng, và ghi định danh người
+    // dùng mỗi lần biến log ứng dụng thành sổ theo dõi hành vi cá nhân (mirror `ChatCallIceService`).
+    this.logger.warn(
+      `CHAT-API-026: vượt trần ${this.inviteMaxPerMin} lời mời/${CHAT_CALL_INVITE_COOLDOWN_WINDOW_SEC}s — trả 429.`,
+    );
+    throw new HttpException(CHAT_CALL_INVITE_COOLDOWN_MESSAGE, HttpStatus.TOO_MANY_REQUESTS);
+  }
 
   /**
    * Khung chung của 4 route nhận `callId`: mở tenant → **hai vế quyền** → thân → DTO.
@@ -324,14 +460,31 @@ export class ChatCallsService {
     return updated;
   }
 
-  /** Đóng sổ những người chưa ngã ngũ (hàng của chính actor đã được ghi ngay trước đó). */
+  /**
+   * Đóng sổ những người chưa ngã ngũ. `exceptUserId` loại trừ TƯỜNG MINH hàng của actor (đã được
+   * `setParticipantOutcome` ghi kết cục riêng ngay trước lệnh gọi này) — không còn dựa vào thứ tự gọi
+   * (VÁ S7-CALL-BE-FIX-1, xem docblock `closeOpenParticipants`).
+   *
+   * `promoteJoinedTo` chỉ `hangup()` truyền — xem cảnh báo ở `closeOpenParticipants`.
+   */
   private async closeOthers(
     tx: TenantTx,
     companyId: string,
     callId: string,
     outcome: ChatCallOutcome,
+    exceptUserId?: string,
+    promoteJoinedTo?: ChatCallOutcome,
+    promoteAt?: Date,
   ): Promise<void> {
-    await this.repo.closeOpenParticipants(tx, companyId, callId, outcome);
+    await this.repo.closeOpenParticipants(
+      tx,
+      companyId,
+      callId,
+      outcome,
+      exceptUserId,
+      promoteJoinedTo,
+      promoteAt,
+    );
   }
 
   private async recordLifecycle(
@@ -367,4 +520,21 @@ export class ChatCallsService {
     );
     return toChatCallDto(call, participants);
   }
+}
+
+/**
+ * Cắt danh sách thành viên-được-mời còn tối đa `max` người, LUÔN giữ người khởi tạo dù họ ở đâu trong
+ * mảng gốc — `activeMemberIds` không cam kết thứ tự, nên `slice` trần không đủ để không rớt initiator ra
+ * ngoài (MEDIUM-3 · `chat-calls.service.ts`).
+ *
+ * Hàm THUẦN, tách khỏi class để test được không cần DB.
+ */
+export function capInvitees(
+  memberIds: readonly string[],
+  initiatorId: string,
+  max: number,
+): string[] {
+  if (memberIds.length <= max) return [...memberIds];
+  const rest = memberIds.filter((id) => id !== initiatorId).slice(0, Math.max(max - 1, 0));
+  return [initiatorId, ...rest];
 }

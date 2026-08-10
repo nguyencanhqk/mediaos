@@ -10284,6 +10284,12 @@ export const backlog = [
       "apps/api/src/chat/chat-calls.repository.ts",
       "apps/api/src/chat/chat-call-ice.controller.ts",
       "apps/api/src/chat/chat-call-ice.service.ts",
+      "apps/api/src/chat/chat-call-ice.service.spec.ts",
+      // Vòng vá S7-CALL-SEC-1 + S7-CALL-BE-FIX-1 (không seed WO riêng — cùng umbrella BE-1):
+      // cooldown DÙNG CHUNG cho ice-config (HIGH-2 vế 2) + invite (MEDIUM-3 vế tần suất), và spec
+      // colocated của vế invite (int-spec SKIP khi thiếu LANE_DB ⇒ bằng chứng phải có bản luôn chạy).
+      "apps/api/src/chat/chat-call-cooldown.service.ts",
+      "apps/api/src/chat/chat-calls.invite-cooldown.spec.ts",
       "apps/api/src/chat/chat-call-ringing-timeout.job-handler.ts",
       "apps/api/src/chat/chat-access.service.ts",
       "apps/api/src/chat/chat.errors.ts",
@@ -10295,6 +10301,9 @@ export const backlog = [
       "apps/api/test/integration/**",
       "docs/_review/S6-SEC-ROUTEMAP-1-route-census.json",
       "docs/plans/S7-CALL-BE-1.md",
+      // Ánh xạ HTTP của module: 429 của `invite` (MEDIUM-3 vế tần suất) KHÔNG có mã CHAT-ERR nên nó
+      // phải được ghi ở bảng §8 — không ghi thì đó là một status không tài liệu hoá (trôi).
+      "docs/API Design/API-13_CHAT_API_Design.md",
     ],
     skills: ["code-review"],
     depends_on: ["S7-CALL-DB-1"],

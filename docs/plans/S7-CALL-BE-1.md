@@ -236,6 +236,60 @@ Mặc định của Nest cho `@Post`. Bốn thao tác đó không tạo tài ngu
   nên `PermissionGuard` chặn TRƯỚC và nhánh `findParticipant` chưa từng chạy — một ca DENY xanh đo nhầm
   hàng rào. Phải gieo người dùng **có đủ quyền** mới đo được vế thứ hai.
 
+## 5c. Vòng vá `S7-CALL-BE-FIX-1` — MEDIUM-3 đóng đủ **HAI vế**
+
+MEDIUM-3 báo: mỗi lời mời ghi `1 + N` hàng **append-only** vào `chat_call_participants` (bảng **không có
+job dọn**), và không có gì chặn việc bơm. Vòng vá đầu chỉ đóng được một nửa:
+
+| Vế | Cơ chế | Chặn cái gì |
+| --- | --- | --- |
+| **Kích thước** (vòng 1) | `CHAT_CALL_MAX_INVITEES = 20` — cắt danh sách người được mời, luôn giữ người khởi tạo | Một lời mời ở phòng phòng-ban 300 người ghi 301 hàng |
+| **Tần suất** (vòng 2, mục này) | `CHAT_CALL_INVITE_MAX_PER_MIN` (env, mặc định **10**) qua `ChatCallCooldownService` | 10.000 lời mời nhỏ — vòng lặp mời/huỷ/mời |
+
+Ghi chú cũ hoãn vế tần suất sang lane RT-1 với lý do "dựng bộ đếm thứ hai = lỗi `duplicate-sibling`". Lý
+do vẫn đúng, **tiền đề đã đổi**: `ChatCallCooldownService` (S7-CALL-SEC-1) nay sống trong chính module
+này ⇒ dùng lại nó với `scope` riêng là **một hiện thực, hai bucket**, không phải bản sao.
+
+**Bốn quyết định của vế tần suất** (chi tiết + lý do ở docblock `assertInviteCooldown`):
+
+1. **Khoá theo NGƯỜI, không theo (người, phòng).** Chia theo phòng thì ai ở nhiều phòng nhân được hạn mức
+   lên bấy nhiêu lần.
+2. **Cổng đứng TRƯỚC `withTenant`**, tức trước cả `assertMember`. Rate-limit đặt sau membership vẫn phải
+   mở transaction cho mỗi lần bị chặn — đúng thứ nó dựng ra để tránh. Không thành oracle dò phòng: 429
+   giống hệt nhau dù phòng có thật hay không.
+3. **Đếm MỌI lần thử**, kể cả lần kết thúc 404/409/422 — tha nhánh thất bại là để hở con đường rẻ nhất.
+4. **KHÔNG ghi `audit_logs` ở nhánh bị chặn, chỉ `warn`.** Ghi audit mỗi lần chặn sẽ đổi
+   `chat_call_participants` (có trần) lấy `audit_logs` (append-only, **không** trần) — biến hàng rào
+   chống bơm thành một đường bơm khác.
+
+**429 KHÔNG mang mã `CHAT-ERR-xxx`, và đó là chủ ý.** SPEC-15 §12 chốt đúng **30** mã nghiệp vụ (census
+`chat-error-code-census.spec.ts` ép con số đó). Vượt tần suất là hàng rào **hạ tầng**, không phải rule
+nghiệp vụ ⇒ đi theo mã nền `SYSTEM-ERR-RATE-LIMIT` mà `httpStatusToCode(429)` đã cấp sẵn, đúng thứ
+`openapi-enrich` tài liệu hoá ("429 — vượt giới hạn tần suất"). Đẻ `CHAT-ERR-031` ở đây sẽ làm census ĐỎ
+và buộc sửa spec owner đã ký cho một thứ không thuộc trục nghiệp vụ. **Ánh xạ HTTP ghi bổ sung ở API-13
+§8** (một dòng, additive).
+
+**Bằng chứng RED-trước-GREEN** (đo bằng cách gỡ đúng một dòng `await this.assertInviteCooldown(actor)`):
+
+- `src/chat/chat-calls.invite-cooldown.spec.ts` — **4/4 ĐỎ** khi gỡ, 4/4 xanh khi khôi phục. Spec này
+  **colocated trong `src/`** chứ không chỉ ở int-spec: int-spec `skipIf(!hasLaneDb)` sẽ SKIP trên CI
+  thường, và một hàng rào chống-lạm-dụng mà bằng chứng duy nhất ngủ là hàng rào không ai biết đã gỡ.
+- `chat-s7-call-be1-lifecycle.int-spec.ts` ca **11e** — ĐỎ (`expected 409 to be 429`) khi gỡ; xanh khi
+  khôi phục. Ca này đo trên đường thật: 41 lượt liên tiếp ⇒ `201 → 409 … 409 → 429`, và sau tất cả bảng
+  append-only chỉ nhận hàng của **đúng một** cuộc gọi.
+- Ca 11e còn có **hai ca đối chứng** chống xanh-rỗng: một lượt giữa phải là **409** (chứng minh cổng
+  không chặn vô điều kiện), và `uCaller` phải vẫn mời được **201** ngay sau đó (chứng minh bucket tách
+  theo người). Tương tự ở unit spec: ca "tách bucket ice-config" assert **bucket invite ĐÃ bị tiêu** trước
+  khi kết luận bucket kia còn nguyên.
+
+⚠️ **Int-spec tự nó là kẻ lạm dụng theo định nghĩa của hàng rào này** — `uCaller` bắn ~26 lời mời trong
+vài giây, quá xa mặc định 10/phút. File đặt `CHAT_CALL_INVITE_MAX_PER_MIN = 40` ở **module scope, trước
+khi `AppModule` compile** (service đọc env một lần lúc dựng provider — sửa sau `app.init()` vô tác dụng).
+Thêm ~15 lời mời nữa cho `uCaller` là chạm trần và bộ test đỏ ở chỗ khó đoán (429 thay vì 201/409): khi
+đó **nâng hằng đó**, đừng đi sửa ca test.
+
+---
+
 ## 6. Nghiệm thu
 
 - `bash harness/check.sh --lane-db=call1` XANH (không phải "XANH KHÔNG ĐỦ BẰNG CHỨNG").

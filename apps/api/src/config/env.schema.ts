@@ -282,6 +282,18 @@ export const envSchema = z
     CLOUDFLARE_TURN_KEY_ID: z.string().min(1).optional(),
     CLOUDFLARE_TURN_API_TOKEN: z.string().min(1).optional(),
 
+    // ── S7-CALL-BE-FIX-1 (MEDIUM-3 vế TẦN SUẤT): trần số LỜI MỜI gọi / phút / người ──────────────────
+    // Mỗi `POST /chat/rooms/:id/calls` ghi `1 + N` hàng APPEND-ONLY vào `chat_call_participants` (N =
+    // thành viên đang hoạt động, đã cắt trần bởi `CHAT_CALL_MAX_INVITEES`) và bảng đó KHÔNG có job dọn.
+    // `CHAT_CALL_MAX_INVITEES` chặn KÍCH THƯỚC một lần ghi; biến này chặn SỐ LẦN ghi. Thiếu vế thứ hai
+    // thì một vòng lặp mời-huỷ-mời vẫn bơm được không giới hạn.
+    //
+    // CÓ env (khác `CHAT_CALL_MAX_INVITEES` là hằng cứng) vì đây là ngưỡng CHỐNG LẠM DỤNG, không phải
+    // rule nghiệp vụ: mặc định phải chặt cho production, còn integration-test cần nới để 20+ lời mời của
+    // một fixture-user không đụng trần (mirror `LOGIN_MAX_ATTEMPTS`). Đổi giá trị KHÔNG đổi hợp đồng API.
+    // Ngưỡng 10 nằm rất trên nhịp thật (gọi lại sau 45s đổ chuông ≈ 1–2 lần/phút) và rất dưới nhịp máy.
+    CHAT_CALL_INVITE_MAX_PER_MIN: z.coerce.number().int().positive().default(10),
+
     // ⚠️ ALLOW_SUPERUSER_ROTATION (KHÔNG validate qua zod — CỐ Ý): SecretRotationService đọc THẲNG
     // `process.env.ALLOW_SUPERUSER_ROTATION === 'true'` để fail-closed tuyệt đối (mọi giá trị ≠ 'true', kể cả
     // unset → CHẶN rotation bằng role BYPASS RLS). Không dùng z.coerce.boolean() vì nó coi 'false' → true (bẫy).

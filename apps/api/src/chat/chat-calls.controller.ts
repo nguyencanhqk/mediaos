@@ -47,7 +47,11 @@ interface AuthenticatedRequest extends Request {
 export class ChatCallsController {
   constructor(private readonly svc: ChatCallsService) {}
 
-  /** `POST /api/v1/chat/rooms/:id/calls` — mời (CHAT-API-026). 409 nếu phòng đang có cuộc gọi sống. */
+  /**
+   * `POST /api/v1/chat/rooms/:id/calls` — mời (CHAT-API-026). 409 nếu phòng đang có cuộc gọi sống;
+   * **429** nếu người gọi vượt trần lời mời/phút (`CHAT_CALL_INVITE_MAX_PER_MIN` — MEDIUM-3 vế tần
+   * suất). 429 mang mã nền `SYSTEM-ERR-RATE-LIMIT`, KHÔNG phải mã `CHAT-ERR-xxx` nào.
+   */
   @Post("rooms/:id/calls")
   @RequirePermission("call", "chat-room")
   invite(

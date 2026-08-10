@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import {
   chatCallParticipants,
@@ -158,9 +158,18 @@ export class ChatCallsRepository {
   /**
    * Ghi kết cục của MỘT người tham gia. Chỉ chạm 3 cột được column-GRANT.
    *
-   * `outcome IS NULL` trong `WHERE` giữ tính **một chiều** ở tầng hàng người-tham-gia: đã ngã ngũ rồi thì
-   * không ghi đè. DB không có trigger cho bảng này (chỉ `chat_calls` có), nên vế này là lớp duy nhất —
-   * thiếu nó, một `hangup` trễ sẽ viết đè `rejected` thành `left` và lịch sử cuộc gọi nói sai.
+   * ⚠️ **VÁ S7-CALL-BE-FIX-1 (HIGH-1).** `WHERE` cho qua khi `outcome IS NULL` **HOẶC** `outcome = 'accepted'`
+   * — KHÔNG chỉ `IS NULL` như bản gốc. Lý do: `'accepted'` KHÔNG phải một kết cục NGÃ NGŨ, nó là "đang
+   * TRONG cuộc gọi" — người vừa nhận máy còn phải đi tiếp tới `'left'` khi họ tự gác máy. Bản gốc chặn
+   * đúng transition đó: actor gọi `hangup` sau khi CHÍNH HỌ đã `accept` thì `outcome` của họ đã là
+   * `'accepted'` (không còn `NULL`) ⇒ `WHERE` khớp **0 hàng**, `left_at` KHÔNG BAO GIỜ được ghi, và
+   * `closeOpenParticipants` sau đó quét mọi hàng `outcome IS NULL` gồm cả người KHỞI TẠO (đang thật sự
+   * `active`) rồi gắn `missed` — người vừa nói chuyện 5 phút bị ghi "cuộc gọi nhỡ". Bốn kết cục còn lại
+   * (`rejected`/`cancelled`/`missed`/`left`) VẪN là hấp thụ — không state nào trong service từng ghi thêm
+   * sau khi actor đã có một trong bốn giá trị đó, và `WHERE` vẫn khoá đường ghi đè chúng.
+   *
+   * DB không có trigger cho bảng này (chỉ `chat_calls` có), nên vế `WHERE` này là lớp duy nhất — thiếu
+   * nó, một `hangup` trễ sẽ viết đè `rejected` thành `left` và lịch sử cuộc gọi nói sai.
    */
   async setParticipantOutcome(
     tx: TenantTx,
@@ -182,7 +191,7 @@ export class ChatCallsRepository {
           eq(chatCallParticipants.companyId, companyId),
           eq(chatCallParticipants.callId, callId),
           eq(chatCallParticipants.userId, userId),
-          isNull(chatCallParticipants.outcome),
+          or(isNull(chatCallParticipants.outcome), eq(chatCallParticipants.outcome, "accepted")),
         ),
       )
       .returning({ id: chatCallParticipants.id });
@@ -192,23 +201,58 @@ export class ChatCallsRepository {
   /**
    * Đóng sổ những người CHƯA ngã ngũ khi cuộc gọi kết thúc (người không kịp bấm gì).
    *
-   * `except` giữ nguyên hàng của chính người vừa thao tác — hàng đó đã được `setParticipantOutcome` ghi
-   * đúng kết cục riêng (`rejected`/`cancelled`/`left`) ngay trước đó trong cùng tx.
+   * ⚠️ **VÁ S7-CALL-BE-FIX-1.** `except` giờ là tham số THẬT (bản gốc chỉ có ở docblock — chữ ký không hề
+   * nhận nó, và việc "giữ nguyên hàng của actor" chỉ đúng NHỜ actor đã được `setParticipantOutcome` ghi
+   * TRƯỚC lệnh gọi này trong cùng tx — một ràng buộc THỨ TỰ ngầm, không phải một ràng buộc SQL. Truyền
+   * `except` tường minh làm bất biến đó độc lập với thứ tự gọi: kể cả nếu `closeOthers` một ngày nào đó bị
+   * gọi TRƯỚC `setParticipantOutcome` (refactor sai), actor vẫn không bị chính lời gọi này quét nhầm.
+   *
+   * `exceptUserId` optional — job hết hạn (`expireStaleRinging`) không có "actor" nào để loại trừ.
+   *
+   * ⚠️ **`promoteJoinedTo` (HIGH-1) — CHỈ dành cho `hangup` trên cuộc gọi ĐÃ `active`.** Khi cuộc gọi đã
+   * từng nối máy, hàng NÀO đã có `joined_at` (đúng nghĩa "đang ở trong cuộc gọi", không chỉ "được mời")
+   * PHẢI đổi thành `promoteJoinedTo` (`'left'`), KHÔNG phải `outcome` nền — nếu không người khởi tạo
+   * (luôn có `joined_at` từ lúc mời, xem `insertParticipants`) bị gắn `missed` dù họ đang thật sự nói
+   * chuyện. Hàng CHƯA có `joined_at` (được mời nhưng chưa từng bấm gì — v.d. `uNoCallPair` trong phòng
+   * ≥3 người) vẫn nhận `outcome` nền như cũ.
+   *
+   * ⚠️ TUYỆT ĐỐI KHÔNG truyền `promoteJoinedTo` cho `reject`/`cancel`: hai đường đó chỉ chạy khi cuộc gọi
+   * CÒN `ringing` (chưa ai từng `active`) — người khởi tạo tuy có `joined_at` (họ tự "vào" cuộc gọi của
+   * chính mình ngay lúc mời) nhưng KHÔNG có cuộc trò chuyện nào từng diễn ra, nên vẫn phải là `missed`/
+   * `cancelled`, mirror đúng triết lý của job hết hạn ("mọi người còn treo đều là nhỡ — kể cả người khởi
+   * tạo"). Trộn nhầm ở đây sẽ làm CA 10 (test đã có) đỏ.
+   *
+   * `promoteAt` đi kèm `promoteJoinedTo`: hàng được nâng lên `'left'` cũng cần `left_at` — thiếu nó thì
+   * một hàng `outcome='left'` mãi mãi `left_at IS NULL`, tự nó là một sự KHÔNG NHẤT QUÁN mới cho người đọc
+   * sổ audit sau này.
    */
   async closeOpenParticipants(
     tx: TenantTx,
     companyId: string,
     callId: string,
     outcome: ChatCallOutcome,
+    exceptUserId?: string,
+    promoteJoinedTo?: ChatCallOutcome,
+    promoteAt?: Date,
   ): Promise<number> {
     const rows = await tx
       .update(chatCallParticipants)
-      .set({ outcome })
+      .set({
+        outcome: promoteJoinedTo
+          ? sql`CASE WHEN ${chatCallParticipants.joinedAt} IS NOT NULL THEN ${promoteJoinedTo} ELSE ${outcome} END`
+          : outcome,
+        ...(promoteJoinedTo && promoteAt
+          ? {
+              leftAt: sql`CASE WHEN ${chatCallParticipants.joinedAt} IS NOT NULL THEN ${promoteAt} ELSE ${chatCallParticipants.leftAt} END`,
+            }
+          : {}),
+      })
       .where(
         and(
           eq(chatCallParticipants.companyId, companyId),
           eq(chatCallParticipants.callId, callId),
           isNull(chatCallParticipants.outcome),
+          ...(exceptUserId ? [ne(chatCallParticipants.userId, exceptUserId)] : []),
         ),
       )
       .returning({ id: chatCallParticipants.id });
@@ -337,24 +381,6 @@ export class ChatCallsRepository {
 
     return expired.map((e) => e.id);
   }
-
-  /**
-   * Số cuộc gọi `ringing` quá hạn của TOÀN tenant — dùng để job biết có việc hay không mà không phải mở
-   * đường ghi. Đọc rẻ nhờ `chat_calls_status_started_idx (company_id, status, started_at)`.
-   */
-  async countStaleRinging(tx: TenantTx, companyId: string, cutoff: Date): Promise<number> {
-    const rows = await tx
-      .select({ n: sql<number>`count(*)::int` })
-      .from(chatCalls)
-      .where(
-        and(
-          eq(chatCalls.companyId, companyId),
-          eq(chatCalls.status, "ringing"),
-          lt(chatCalls.startedAt, cutoff),
-        ),
-      );
-    return rows[0]?.n ?? 0;
-  }
 }
 
 /**
@@ -391,12 +417,24 @@ function pgErrorOf(err: unknown): { code?: unknown; constraint?: unknown } | nul
 }
 
 /**
- * Vi phạm CHECK/trigger của `chat_calls` — lưới cuối cho FSM một chiều
- * (`chat_calls_forbid_revive_trg` ném `23514`, mig `0546` khối A3).
+ * Vi phạm FSM một chiều của `chat_calls` — TRIGGER `chat_calls_forbid_revive_trg` ném `23514` (mig `0546`
+ * khối A3). Service ĐÃ chặn ở `WHERE` của `transition()`; hàm này chỉ để một hàng thua cuộc đua không nổ
+ * **500**. Nếu nó được kích hoạt thường xuyên thì vị từ ở service đang sai — không được coi đây là đường
+ * bình thường.
  *
- * Service ĐÃ chặn ở `WHERE` của `transition()`; hàm này chỉ để một hàng thua cuộc đua không nổ **500**.
- * Nếu nó được kích hoạt thường xuyên thì vị từ ở service đang sai — không được coi đây là đường bình thường.
+ * ⚠️ **VÁ S7-CALL-BE-FIX-1 (MEDIUM-1).** Bản gốc nuốt MỌI `23514` trên bảng này thành 422 —
+ * `chat_calls_kind_chk` · `_status_chk` · `_accepted_at_chk` · `_ended_at_chk` · `_ringing_clean_chk` đều
+ * là `check_violation` với **cùng mã**. Một transition tương lai quên `ended_at` sẽ bị hàm này dịch nhầm
+ * thành "sai pha" (422 CALL_NOT_ACTIONABLE) và biến mất khỏi log điều tra thay vì nổ 500.
+ *
+ * Phân biệt bằng `constraint`: trigger RAISE ở đây dùng `USING ERRCODE = '23514'` **không kèm
+ * `USING CONSTRAINT`**, nên Postgres KHÔNG gắn tên constraint cho lỗi loại này (`err.constraint` rỗng).
+ * Một CHECK constraint vi phạm THẬT (Postgres tự phát hiện, không qua RAISE tay) LUÔN có `err.constraint`
+ * = đúng tên ràng buộc. Xác minh bằng trigger + CHECK THẬT trong int-spec (không suy đoán hành vi PG) —
+ * ca "ràng buộc DB" của `chat-s7-call-be1-lifecycle.int-spec.ts` khẳng định cả hai vế bằng SQL trực tiếp.
  */
 export function isCallStateViolation(err: unknown): boolean {
-  return pgErrorOf(err)?.code === "23514";
+  const e = pgErrorOf(err);
+  if (e?.code !== "23514") return false;
+  return e.constraint == null;
 }

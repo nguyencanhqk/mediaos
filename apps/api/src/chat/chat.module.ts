@@ -54,6 +54,8 @@ import { ChatCallIceController } from "./chat-call-ice.controller";
 import { ChatCallsService } from "./chat-calls.service";
 import { ChatCallsRepository } from "./chat-calls.repository";
 import { ChatCallIceService } from "./chat-call-ice.service";
+// S7-CALL-SEC-1 (additive): cooldown per-user dùng chung cho endpoint đúc credential (HIGH-2 vế 2).
+import { ChatCallCooldownService } from "./chat-call-cooldown.service";
 import { ChatCallRingingTimeoutJobHandler } from "./chat-call-ringing-timeout.job-handler";
 import { ProjectMembershipModule } from "../tasks/project-membership.module";
 import { ChatOversightController } from "./chat-oversight.controller";
@@ -196,6 +198,11 @@ import { ChatOversightRepository } from "./chat-oversight.repository";
     ChatCallsService,
     ChatCallsRepository,
     ChatCallIceService,
+    // S7-CALL-SEC-1 (additive) — cooldown per-user CỦA RIÊNG `ChatCallIceService` (HIGH-2 vế 2). CỐ Ý
+    // KHÔNG export: lối vào duy nhất là `CHAT-API-029`; module khác cần cooldown tự dựng instance của nó
+    // (lớp không giữ trạng thái phụ thuộc CHAT — an toàn để `new` ở nơi khác nếu cần, nhưng DI nội bộ vẫn
+    // là singleton per-module để bộ đếm in-memory fallback dùng chung giữa các request).
+    ChatCallCooldownService,
     ChatCallRingingTimeoutJobHandler,
   ],
   // `ChatDerivedRoomsSyncService` export cho 5 module writer (org · employees · tasks · recycle-bin).
