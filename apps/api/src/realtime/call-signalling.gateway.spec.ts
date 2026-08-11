@@ -300,7 +300,7 @@ describe("CallSignallingGateway — thang TỪ CHỐI handshake (nhóm B)", () =
     expect(socket.data.state, "không được dựng phiên khi cổng vào lỗi").toBeUndefined();
   });
 
-  it("B — thông điệp từ chối KHÔNG phân biệt được nấc nào (`unauthorized` cho cả 3 nấc token)", async () => {
+  it("B — thông điệp từ chối KHÔNG phân biệt được nấc nào (`unauthorized` cho cả 4 nấc token)", async () => {
     // Tính chất này là chủ đích: một chuỗi lỗi riêng cho từng nấc là oracle miễn phí cho người dò cửa.
     // Ghim nó ở đây để không ai "cải thiện DX" bằng cách tách thông điệp ra.
     const noToken = await runHandshake(gw, makeSocket());
@@ -310,8 +310,13 @@ describe("CallSignallingGateway — thang TỪ CHỐI handshake (nhóm B)", () =
     const badToken = await runHandshake(gw, makeSocket({ token: "t" }));
     deps.tokens.verifyAccessToken.mockReturnValueOnce({ ...claims(inFuture()), exp: undefined });
     const noExp = await runHandshake(gw, makeSocket({ token: "t" }));
+    // Nấc thứ 4 (S7-CALL-RT-FIX-1): `exp` đã qua khi tới cổng cuối. Cùng bản chất "token của anh không
+    // dùng được" ⇒ phải cùng chuỗi. `"token_expired"` riêng sẽ nói cho người dò biết token ĐÚNG chữ ký
+    // và chỉ vừa hết hạn — tức xác nhận họ đang cầm token thật.
+    deps.tokens.verifyAccessToken.mockReturnValueOnce(claims(Math.floor(Date.now() / 1000) - 5));
+    const expiredAtGate = await runHandshake(gw, makeSocket({ token: "t", connected: false }));
 
-    for (const err of [noToken, badToken, noExp]) {
+    for (const err of [noToken, badToken, noExp, expiredAtGate]) {
       expect(err).toBeInstanceOf(Error);
       expect((err as Error).message).toBe("unauthorized");
     }
@@ -375,26 +380,29 @@ describe("CallSignallingGateway — vòng đời phiên (nhóm C)", () => {
     expect(stateOf(socket).expiryTimer).toBeNull();
   });
 
-  it("TRIPWIRE S7-CALL-RT-FIX-1 — `ttlMs<=0` hiện KHÔNG bị từ chối (LỖ MỞ; ca này PHẢI đỏ khi bản vá land)", async () => {
-    // ┌─ ĐỌC TRƯỚC KHI XOÁ CA NÀY ────────────────────────────────────────────────────────────────────┐
-    // │ Đây là **characterization test**: nó khẳng định hành vi HIỆN TẠI, và hành vi hiện tại là SAI.  │
-    // │ Docblock `scheduleTokenExpiry` hứa "fail-CLOSED nếu đồng hồ lệch". Thực tế NGƯỢC LẠI, và chuỗi │
-    // │ đã kiểm chứng trên nguồn (plan `S7-CALL-QA-1.md` §1e, 4 mắt xích):                             │
+  it("C2 — `ttlMs<=0` lúc bắt tay ⇒ TỪ CHỐI `unauthorized`, và KHÔNG dựa vào `disconnect()` (S7-CALL-RT-FIX-1)", async () => {
+    // ┌─ HỒ SƠ CỦA LỖ NÀY — GIỮ NGUYÊN KHI SỬA CA ────────────────────────────────────────────────────┐
+    // │ Ca này từng là **tripwire** của `S7-CALL-QA-1`: nó khẳng định hành vi SAI đang có trên master, │
+    // │ để bản vá land thì nó ĐỎ. Bản vá `S7-CALL-RT-FIX-1` đã land ⇒ ca đã được LẬT sang hành vi đúng.│
+    // │ Chuỗi 4 mắt xích, kiểm chứng trên nguồn `socket.io@4.8.3` (KI-061):                            │
     // │   socket.io/dist/socket.js:592-594  `disconnect(close)` → `if (!this.connected) return this;`  │
-    // │   socket.js:90 / :408              `connected=false` lúc khởi tạo, chỉ `true` trong `_onconnect`│
-    // │   namespace.js:221 → :241          middleware `run()` chạy TRƯỚC `_doConnect`→`_onconnect`     │
-    // │   gateway:260                      `scheduleTokenExpiry` gọi TRONG middleware, trước `next()`  │
-    // │ ⇒ `client.disconnect(true)` ở dòng 296 là **no-op**; `handshake()` chạy tiếp tới `return       │
-    // │ undefined` ⇒ kết nối ĐƯỢC CHẤP NHẬN với token đã hết hạn và `expiryTimer = null`. Socket đó    │
-    // │ ngồi trong room của chính người đó và NHẬN mọi SDP/ICE bắn tới họ, VÔ THỜI HẠN.                │
+    // │   socket.js:90 / :406-408          `connected=false` lúc khởi tạo, chỉ `true` trong `_onconnect`│
+    // │   namespace.js:221 → :241/:267     middleware `run()` chạy TRƯỚC `_doConnect`→`_onconnect`     │
+    // │   gateway `handshake()`            `scheduleTokenExpiry` gọi TRONG middleware, trước `next()`  │
+    // │ ⇒ `client.disconnect(true)` ở nhánh này là **no-op**; bản cũ chạy tiếp tới `return undefined`  │
+    // │ ⇒ CHẤP NHẬN socket có token hết hạn, `expiryTimer = null`, đã ở trong room nhận của chính mình │
+    // │ ⇒ nhận mọi SDP/ICE (IP nội bộ + mốc thời gian bên kia) VÔ THỜI HẠN.                            │
     // │                                                                                                │
-    // │ **Vì sao KHÔNG dùng `it.fails`:** `it.fails` xanh khi thân bài ném vì BẤT KỲ lý do gì (typo,   │
-    // │ import sai, fake socket refactor đẻ `TypeError`) ⇒ ca hỏng vì lý do khác vẫn xanh MÃI MÃI kể cả│
-    // │ sau khi bản vá land — tripwire không bao giờ nổ, đúng thứ ta muốn tránh.                       │
-    // │ **CẤM** assert "`disconnect()` được gọi" — đó CHÍNH LÀ assert sai đã che lỗ này suốt.          │
-    // │                                                                                                │
-    // │ Khi `S7-CALL-RT-FIX-1` land: `nextArg` thành `Error` ⇒ ca này ĐỎ ⇒ lật nó thành hành vi đúng   │
-    // │ (từ chối handshake) trong CÙNG PR. KI đăng ký ở plan RT-FIX-1.                                 │
+    // │ 🔴 **Assert cuối đo LỆNH GỌI (`disconnect` chưa từng được gọi), KHÔNG đo hiệu ứng.** Khác biệt │
+    // │ đó là cả ca: `expect(socket.severed).toBe(false)` — bản đầu của ca này — là một **tautology**, │
+    // │ vì mock `disconnect` (`makeSocket`) sao chép `socket.io` nên nó `return` ngay khi              │
+    // │ `connected === false`, tức `severed` KHÔNG BAO GIỜ thành `true` ở ca này dù `disconnect()` có  │
+    // │ được gọi hay không. Nó xanh vô điều kiện ⇒ không ghim được gì. Bắt bởi FULL gate               │
+    // │ (`silent-failure-hunter`, 11/08/2026).                                                         │
+    // │ `not.toHaveBeenCalled()` thì phân biệt được đúng hai khả năng: "chưa từng đụng tới" và "gọi    │
+    // │ nhưng no-op" — nên nó CHẶN được một bản "sửa cho gọn" thêm lại `client.disconnect(true)` vào   │
+    // │ nhánh này (vô hại về hành vi, nhưng tái lập đúng pattern mà KI-061 cấm). **CẤM** thay nó bằng  │
+    // │ assert trên `severed`.                                                                         │
     // └────────────────────────────────────────────────────────────────────────────────────────────────┘
     deps.tokens.verifyAccessToken.mockReturnValue(claims(Math.floor(Date.now() / 1000) - 5));
     // `connected: false` = đúng trạng thái socket trong middleware (xem mắt xích 2/3 ở trên).
@@ -402,12 +410,66 @@ describe("CallSignallingGateway — vòng đời phiên (nhóm C)", () => {
 
     const nextArg = await runHandshake(gw, socket);
 
-    expect(nextArg, "handshake ĐƯỢC CHẤP NHẬN — hành vi HIỆN TẠI, và là lỗ").toBeUndefined();
-    expect(stateOf(socket).expiryTimer, "và không có gì cắt phiên").toBeNull();
-    expect(socket.severed, "`disconnect()` trong middleware là no-op — socket KHÔNG bị cắt").toBe(
-      false,
-    );
-    // Vế đắt nhất: socket đã vào room nhận của chính mình ⇒ nó NHẬN relay từ đây.
+    expect(nextArg, "token hết hạn ⇒ handshake phải BỊ TỪ CHỐI").toBeInstanceOf(Error);
+    expect((nextArg as Error).message).toBe("unauthorized");
+    expect(socket.data.state, "bị từ chối ⇒ KHÔNG dựng phiên").toBeUndefined();
+    // Vế đắt nhất của lỗ cũ: socket đã vào room nhận của chính mình ⇒ nó NHẬN relay từ đó trở đi.
+    expect(socket.join, "bị từ chối ⇒ KHÔNG vào room nhận").not.toHaveBeenCalled();
+    expect(
+      socket.disconnect,
+      "bản vá KHÔNG được dựa vào `disconnect()` — nó là no-op ở giai đoạn middleware",
+    ).not.toHaveBeenCalled();
+  });
+
+  it("C2b — `exp` rơi GIỮA `verify` và cổng cuối (cửa sổ đua 2 round-trip I/O) ⇒ TỪ CHỐI", async () => {
+    // ┌─ CA NÀY ĐO **VỊ TRÍ** CỦA CỔNG, KHÔNG ĐO SỰ TỒN TẠI CỦA NÓ ────────────────────────────────────┐
+    // │ C2 ở trên dùng token hết hạn từ TRƯỚC cả `jwt.verify` — nó xanh kể cả khi ai đó "dọn cho gọn"  │
+    // │ bằng cách kiểm `exp` ngay sau `verify`. Nhưng dời lên đó là ĐÓNG LẠI đúng cửa sổ đang thủng:   │
+    // │ giữa `verify` (:208) và cổng (:293) có HAI round-trip I/O — `cooldown.allow` → Valkey (:232) và│
+    // │ `permissions.can` → Valkey/DB (:239). Hai điểm kiểm dùng CÙNG ngưỡng (`floor(now/1000) >= exp` │
+    // │ ⟺ `now >= exp*1000` với `exp` nguyên) ⇒ cửa sổ đua đúng bằng THỜI GIAN TRÔI giữa chúng, chưa   │
+    // │ kể GC pause. FE `/ws-call` được thiết kế để NỐI LẠI (docblock `scheduleTokenExpiry`), nên      │
+    // │ người cầm token sắp hết hạn trúng cửa sổ này một cách bình thường — không cần kỹ thuật gì.     │
+    // │                                                                                                │
+    // │ **`vi.spyOn(Date,"now")` chứ KHÔNG `vi.useFakeTimers()`:** `runHandshake` dùng `setTimeout`    │
+    // │ 2000 ms làm chốt chống-treo; đóng băng hàng đợi timer là đóng băng luôn chốt đó. `Date.now`    │
+    // │ giả không đụng hàng đợi timer ⇒ chốt vẫn thật. (Bẫy `fake-timers-break-socketio-client-emit`   │
+    // │ KHÔNG áp ở đây — ca này không có `socket.io-client`.)                                          │
+    // └────────────────────────────────────────────────────────────────────────────────────────────────┘
+    const t0 = Date.now();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(t0);
+    // Token CÒN HẠN lúc verify — `verifyAccessToken` thật sẽ cho qua với claims này.
+    deps.tokens.verifyAccessToken.mockReturnValue(claims(Math.floor(t0 / 1000) + 1));
+    // …rồi hai round-trip I/O nuốt mất 2 s. Đẩy đồng hồ TRONG `can()` = dựng lại cửa sổ một cách TẤT ĐỊNH.
+    deps.permissions.can.mockImplementation(async () => {
+      nowSpy.mockReturnValue(t0 + 2_000);
+      return { allow: true };
+    });
+    const socket = makeSocket({ token: "t", connected: false });
+
+    const err = await runHandshake(gw, socket);
+
+    expect(err, "token hết hạn giữa chừng ⇒ phải TỪ CHỐI, không được nhận").toBeInstanceOf(Error);
+    expect((err as Error).message).toBe("unauthorized");
+    // Không có assert này thì ca xanh kể cả khi cổng bị dời lên TRƯỚC I/O — tức xanh mà lỗ vẫn còn.
+    expect(deps.permissions.can, "cổng phải nằm SAU I/O, nếu không ca này rỗng").toHaveBeenCalled();
+    expect(socket.data.state, "bị từ chối ⇒ KHÔNG dựng phiên").toBeUndefined();
+    expect(socket.join, "bị từ chối ⇒ KHÔNG vào room nhận").not.toHaveBeenCalled();
+  });
+
+  it("C2c — ĐỐI CHỨNG: cùng cửa sổ đó, chỉ khác `can()` KHÔNG đẩy đồng hồ ⇒ nối được", async () => {
+    // Cặp-tối-thiểu của C2b: khác ĐÚNG một bit. Không có ca này thì C2b xanh kể cả khi bản vá từ chối
+    // MỌI handshake (`deny-cases-vacuous-without-allow-case`). Ca `C` ở trên không thay thế được: nó
+    // chạy dưới `Date.now` THẬT nên không phải đối chứng của cùng một dàn dựng.
+    const t0 = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(t0);
+    deps.tokens.verifyAccessToken.mockReturnValue(claims(Math.floor(t0 / 1000) + 1));
+    const socket = makeSocket({ token: "t", connected: false });
+
+    const err = await runHandshake(gw, socket);
+
+    expect(err, "token còn hạn khi tới cổng ⇒ phải nối được").toBeUndefined();
+    expect(stateOf(socket).expiryTimer, "…và hẹn giờ ngắt PHẢI được đặt").not.toBeNull();
     expect(socket.join).toHaveBeenCalledWith(callUserRoomName(CO, USER));
   });
 });
