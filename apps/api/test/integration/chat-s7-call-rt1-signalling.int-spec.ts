@@ -22,9 +22,11 @@ import type { AddressInfo } from "node:net";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Pool } from "pg";
+import type { Namespace } from "socket.io";
 import request from "supertest";
 import { io as ioClient, type Socket as ClientSocket } from "socket.io-client";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import jwt from "jsonwebtoken";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CHAT_CALL_SDP_MAX_LENGTH,
   WS_CALL_NAMESPACE,
@@ -38,6 +40,9 @@ import { PasswordService } from "../../src/auth/password.service";
 import { loadEnv } from "../../src/config/env.schema";
 import { setupWebSocketAdapter } from "../../src/realtime/setup-websocket-adapter";
 import { RealtimeEmitterService } from "../../src/realtime/realtime-emitter.service";
+import { CallSignallingGateway } from "../../src/realtime/call-signalling.gateway";
+import { ChatCallSignalService } from "../../src/chat/chat-call-signal.service";
+import { PermissionService } from "../../src/permission/permission.service";
 import { directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -86,6 +91,21 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
   let uB = "";
   let uBurst = "";
   let uQuota = "";
+  // ─── S7-CALL-QA-1 — mỗi NHÓM ca mới một người RIÊNG ────────────────────────
+  // ⚠️ KHÔNG dùng lại `uCaller`/`uCallee`: trần bắt tay là 30/phút/NGƯỜI
+  // (`chat-call-signal-deny.ts:128`) và `uCaller` đã dùng ~8 lần trong <60 s. Thêm ~10 ca nữa lên cùng
+  // người là chạm trần ⇒ **đỏ ngẫu nhiên ở ca KHÁC** (memory `per-user-rate-limit-throttles-own-int-spec`).
+  let uFilter = "";
+  let uLadder = "";
+  let uLife = "";
+  let uClock = "";
+  let uClockPeer = "";
+  let uRemove = "";
+  let uRemovePeer = "";
+  let uLocked = "";
+  let uClassC = "";
+  let uTwo = "";
+  let uTwoPeer = "";
   let tCaller = "";
   let tCallee = "";
   let tLate = "";
@@ -93,6 +113,16 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
   let tB = "";
   let tBurst = "";
   let tQuota = "";
+  let tFilter = "";
+  let tLadder = "";
+  let tClock = "";
+  let tClockPeer = "";
+  let tRemove = "";
+  let tRemovePeer = "";
+  let tLocked = "";
+  let tClassC = "";
+  let tTwo = "";
+  let tTwoPeer = "";
 
   const settle = (ms = 250): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -267,6 +297,17 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
     // các ca khác đỏ ở chỗ khó đoán (`per-user-rate-limit-throttles-own-int-spec`).
     uBurst = await mk("burst");
     uQuota = await mk("quota");
+    uFilter = await mk("filter");
+    uLadder = await mk("ladder");
+    uLife = await mk("life");
+    uClock = await mk("clock");
+    uClockPeer = await mk("clockpeer");
+    uRemove = await mk("remove");
+    uRemovePeer = await mk("removepeer");
+    uLocked = await mk("locked");
+    uClassC = await mk("classc");
+    uTwo = await mk("two");
+    uTwoPeer = await mk("twopeer");
     uB = await seedUser(direct, B.companyId, `bob@${B.slug}.test`, hash);
 
     await grantPairs(A.companyId, uCaller, "caller", CALL_FULL);
@@ -276,6 +317,21 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
     await grantPairs(A.companyId, uBurst, "burst", CALL_FULL);
     await grantPairs(A.companyId, uQuota, "quota", CALL_FULL);
     await grantPairs(B.companyId, uB, "b", CALL_FULL);
+    for (const [id, label] of [
+      [uFilter, "filter"],
+      [uLadder, "ladder"],
+      [uLife, "life"],
+      [uClock, "clock"],
+      [uClockPeer, "clockpeer"],
+      [uRemove, "remove"],
+      [uRemovePeer, "removepeer"],
+      [uLocked, "locked"],
+      [uClassC, "classc"],
+      [uTwo, "two"],
+      [uTwoPeer, "twopeer"],
+    ] as const) {
+      await grantPairs(A.companyId, id, label, CALL_FULL);
+    }
 
     tCaller = await login(A.slug, `caller@${A.slug}.test`);
     tCallee = await login(A.slug, `callee@${A.slug}.test`);
@@ -283,6 +339,16 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
     tNoCall = await login(A.slug, `nocall@${A.slug}.test`);
     tBurst = await login(A.slug, `burst@${A.slug}.test`);
     tQuota = await login(A.slug, `quota@${A.slug}.test`);
+    tFilter = await login(A.slug, `filter@${A.slug}.test`);
+    tLadder = await login(A.slug, `ladder@${A.slug}.test`);
+    tClock = await login(A.slug, `clock@${A.slug}.test`);
+    tClockPeer = await login(A.slug, `clockpeer@${A.slug}.test`);
+    tRemove = await login(A.slug, `remove@${A.slug}.test`);
+    tRemovePeer = await login(A.slug, `removepeer@${A.slug}.test`);
+    tLocked = await login(A.slug, `locked@${A.slug}.test`);
+    tClassC = await login(A.slug, `classc@${A.slug}.test`);
+    tTwo = await login(A.slug, `two@${A.slug}.test`);
+    tTwoPeer = await login(A.slug, `twopeer@${A.slug}.test`);
     tB = await login(B.slug, `bob@${B.slug}.test`);
   }, 180_000);
 
@@ -694,6 +760,507 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
     await settle(400);
 
     expect(rec.disconnected, "socket /ws-call phải bị đóng cùng phiên").toBe(true);
+  });
+
+  // ═══ S7-CALL-QA-1 — nhóm A/B/C/D ═══════════════════════════════════════════════════════════════════
+  //
+  // Đo 11/08/2026: `call-signalling.gateway.ts` branch **68.67%**, `call-signalling.filter.ts` **21.73%
+  // stmts** (thân `catch()` chưa từng chạy) ⇒ vế "gateway signalling CAO HƠN 80" của `done_when` #3 CHƯA
+  // đạt. Các ca dưới đây lấp phần int dựng được; phần int KHÔNG dựng được nằm ở
+  // `src/realtime/call-signalling.{gateway,filter}.spec.ts` (nhóm B4/B5/C2/D1–D4).
+
+  /** Ký token THẬT bằng chính secret của harness — KHÔNG gõ literal (gitleaks). */
+  function signToken(userId: string, email: string, opts: { expiresIn?: number } = {}): string {
+    const payload = { sub: userId, companyId: A.companyId, email, aud: "tenant" };
+    const secret = loadEnv().JWT_SECRET;
+    // Thắt kiểu ở BIÊN, không ép kiểu: `JWT_SECRET` là optional trong env schema. Thiếu nó thì mọi ca
+    // nhóm B/C1 dựng token sai secret ⇒ tất cả trả `"unauthorized"` và **xanh oan** (đúng bẫy mà §2
+    // nhóm B cảnh báo). Dừng ồn ào là cách duy nhất phân biệt "harness hỏng" với "gateway từ chối đúng".
+    if (!secret) throw new Error("harness: thiếu JWT_SECRET — không ký được token, ca sẽ xanh oan");
+    return opts.expiresIn === undefined
+      ? jwt.sign(payload, secret, { algorithm: "HS256" })
+      : jwt.sign(payload, secret, { algorithm: "HS256", expiresIn: opts.expiresIn });
+  }
+
+  /** Nối `/ws-call` ở mức THÔ (tự chọn `auth`/header) — dùng cho thang từ chối nhóm B. */
+  function rawCallSocket(opts: {
+    auth?: Record<string, unknown>;
+    headers?: Record<string, string>;
+  }): ClientSocket {
+    const socket = ioClient(`http://127.0.0.1:${port}/${WS_CALL_NAMESPACE}`, {
+      auth: opts.auth ?? {},
+      extraHeaders: opts.headers,
+      transports: ["websocket"],
+      reconnection: false,
+      forceNew: true,
+    });
+    openClients.push(socket);
+    return socket;
+  }
+
+  async function refusedRaw(opts: {
+    auth?: Record<string, unknown>;
+    headers?: Record<string, string>;
+  }): Promise<string> {
+    const socket = rawCallSocket(opts);
+    return new Promise<string>((resolve, reject) => {
+      socket.on("connect_error", (err: Error) => resolve(err.message));
+      socket.on("connect", () => reject(new Error("handshake ĐÁNG LẼ phải bị từ chối")));
+      setTimeout(() => reject(new Error("hết giờ chờ connect_error")), 3000);
+    });
+  }
+
+  /** Nối và KỲ VỌNG đi qua — trả về chính socket (đã connected). */
+  async function expectRawConnects(opts: {
+    auth?: Record<string, unknown>;
+    headers?: Record<string, string>;
+  }): Promise<ClientSocket> {
+    const socket = rawCallSocket(opts);
+    await new Promise<void>((resolve, reject) => {
+      socket.on("connect", () => resolve());
+      socket.on("connect_error", (e: Error) =>
+        reject(new Error(`ĐÁNG LẼ phải nối được, lại bị từ chối: ${e.message}`)),
+      );
+      setTimeout(() => reject(new Error("hết giờ chờ connect")), 3000);
+    });
+    return socket;
+  }
+
+  /**
+   * Làm CŨ trạng thái phiên phía SERVER của một user — thay cho việc dịch đồng hồ.
+   *
+   * ┌─ VÌ SAO KHÔNG DÙNG `vi.setSystemTime` NHƯ PLAN §3.2 ĐỀ RA ──────────────────────────────────────┐
+   * │ Đo được 11/08/2026, có nguồn: `socket.io-client@4.8.3/build/cjs/socket.js:271` tính             │
+   * │   `isConnected = this.connected && !this.io.engine._hasPingExpired()`                            │
+   * │ và `engine.io-client@6.6.5/build/cjs/socket.js:393-404` `_hasPingExpired()` so **`Date.now() >   │
+   * │ _pingTimeoutTime`** (mốc dựng từ `pingInterval + pingTimeout`, mặc định 45 s).                    │
+   * │                                                                                                  │
+   * │ ⇒ Mọi `emit()` SAU một cú nhảy `Date` lớn hơn 45 s: gói bị đẩy vào `sendBuffer` và **KHÔNG BAO   │
+   * │ GIỜ RỜI MÁY**, còn client tự đóng với lý do `"ping timeout"`. Tức ca "dịch đồng hồ rồi gửi khung"│
+   * │ đo TRANSPORT CỦA CHÍNH NÓ, không đo `accept()` — bản đầu của C3 XANH OAN đúng như thế, và C4 thì │
+   * │ đỏ với `can()` **chưa từng được gọi**. Oracle thứ hai của C4 (plan §2) là thứ bắt được.          │
+   * │                                                                                                  │
+   * │ Dịch đồng hồ vẫn dùng được cho hẹn giờ THUẦN SERVER; nó chỉ hỏng khi client phải GỬI. Ở đây làm  │
+   * │ cũ đúng hai trường mà bước (2)/(3) của `accept()` đọc — cùng hiệu ứng "thời gian đã trôi", không │
+   * │ đụng vào đồng hồ của socket.io.                                                                  │
+   * └──────────────────────────────────────────────────────────────────────────────────────────────────┘
+   */
+  function ageServerState(
+    rec: Recorder,
+    mutate: (state: { tokenExpSec: number; permissionCheckedAtMs: number }) => void,
+  ): void {
+    // ⚠️ Khoá theo **socket id**, KHÔNG theo userId: một người có thể có NHIỀU socket còn sống trong file
+    // này (vd `uClassC` giữ socket của D5, vì D5 chứng minh nó KHÔNG bị ngắt). `find()` theo userId trả
+    // socket ĐẦU TIÊN ⇒ làm cũ NHẦM phiên, khung của phiên đang đo không bao giờ chạm nhánh cần đo, và
+    // ca đỏ ở một chỗ không liên quan. (Đã cắn đúng một lần ở C4b, 11/08.)
+    const ns = (app.get(CallSignallingGateway) as unknown as { server: Namespace }).server;
+    const target = [...ns.sockets.values()].find((s) => s.id === rec.socket.id);
+    expect(target, `không tìm thấy socket server-side id=${rec.socket.id}`).toBeTruthy();
+    const state = (
+      target!.data as { state: { tokenExpSec: number; permissionCheckedAtMs: number } }
+    ).state;
+    expect(state, "socket phải có state do middleware dựng").toBeTruthy();
+    mutate(state);
+  }
+
+  // ─── nhóm A — filter CÂM ─────────────────────────────────────────────────────
+
+  it("A1 — handler NÉM ⇒ client nhận **0 khung** (kể cả `exception`) và socket bị NGẮT", async () => {
+    // ⚠️ Tính chất cần chứng minh là "**KHÔNG có** khung nào", nên phải bắt bằng `onAny` chứ KHÔNG dùng
+    // `wrap()` (nó chỉ `on()` ~9 tên cố định) — danh sách đóng làm ca xanh oan với mọi tên khung tương
+    // lai (`error`, `call:error`, …).
+    //
+    // ⚠️ `vi.spyOn(instance)` chứ KHÔNG `overrideProvider`: int-spec này dựng MỘT app cho cả file
+    // (`beforeAll`), nên override là toàn-file ⇒ giết 17 ca đang có.
+    //
+    // Vì sao đáng đo: `BaseWsExceptionFilter` mặc định `includeCause: true` sẽ echo lại tên sự kiện +
+    // CHÍNH payload client vừa gửi và GIỮ socket sống — (1) oracle phân biệt "handler ném" với "bỏ im
+    // lặng", (2) khung echo mang chính `sdp`/`candidate` = vi phạm R3. Gỡ `@UseFilters` hôm nay không
+    // làm đỏ bài nào TRƯỚC ca này.
+    const spy = vi
+      .spyOn(app.get(ChatCallSignalService), "resolveSignalAccess")
+      .mockRejectedValueOnce(new Error("bơm lỗi hạ tầng vào handler"));
+    try {
+      const rec = await connectCall(tFilter);
+      const seen: string[] = [];
+      rec.socket.onAny((name: string) => seen.push(name));
+
+      rec.socket.emit("call:ping", { callId: randomUUID() });
+      await settle(700);
+
+      expect(seen, "0 khung — không `exception`, không gì cả").toEqual([]);
+      expect(rec.disconnected, "handler ném ⇒ NGẮT, không giữ phiên không mô tả được").toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  // ─── nhóm B — thang TỪ CHỐI handshake ────────────────────────────────────────
+  //
+  // 🔴 B1/B2/B3 đều trả CÙNG chuỗi `"unauthorized"` (gateway `:202`/`:214`/`:222`) và `connect_error`
+  // chỉ mang `err.message` ⇒ **thông điệp KHÔNG phân biệt nổi các nấc**. Bằng chứng nghiệm thu của nhóm
+  // này vì thế là **delta coverage theo DÒNG** (200-203 · 212-215 · 218-223 đi từ 0 → >0), cộng với ca
+  // ĐỐI CHỨNG "khác đúng một bit" ở B2b. Không có hai thứ đó thì cả ba ca xanh rỗng.
+
+  it("B1 — KHÔNG có token ⇒ `unauthorized`", async () => {
+    expect(await refusedRaw({ auth: {} })).toBe("unauthorized");
+  });
+
+  it("B2 — token hợp lệ nhưng THIẾU `exp` ⇒ `unauthorized` (fail-CLOSED)", async () => {
+    // `jwt.verify` cho qua một token KHÔNG có `exp` — và ở kênh này "vô hạn" nghĩa là một phiên
+    // signalling không bao giờ phải xác thực lại. Token ký bằng ĐÚNG secret + đủ `email`/`companyId`,
+    // nên nấc duy nhất nó có thể trượt là `typeof claims.exp !== "number"`.
+    const noExp = signToken(uLadder, `ladder@${A.slug}.test`);
+    expect(await refusedRaw({ auth: { token: noExp } })).toBe("unauthorized");
+  });
+
+  it("B2b — ĐỐI CHỨNG khác ĐÚNG một bit: cùng payload + `expiresIn` ⇒ NỐI ĐƯỢC", async () => {
+    // Cặp tối thiểu (plan §2 nhóm B). Không có ca này, một token B2 dựng sai (sai secret, thiếu `email`
+    // — `token.service.ts:115` bắt buộc `typeof decoded.email === "string"`) vẫn cho `"unauthorized"` ⇒
+    // B2 xanh trong khi dòng 212-215 CHƯA TỪNG chạy. CA 13b không dùng lại được: khác fixture.
+    const withExp = signToken(uLadder, `ladder@${A.slug}.test`, { expiresIn: 900 });
+    const socket = await expectRawConnects({ auth: { token: withExp } });
+    expect(socket.connected).toBe(true);
+    socket.disconnect();
+  });
+
+  it("B3 — token rác / sai chữ ký ⇒ `unauthorized`", async () => {
+    expect(await refusedRaw({ auth: { token: "khong-phai-jwt" } })).toBe("unauthorized");
+    const wrongSecret = jwt.sign(
+      { sub: uLadder, companyId: A.companyId, email: `ladder@${A.slug}.test`, aud: "tenant" },
+      ["secret", "sai", "hoan", "toan", "khong-phai-cua-he"].join("-"),
+      { algorithm: "HS256", expiresIn: 900 },
+    );
+    expect(await refusedRaw({ auth: { token: wrongSecret } })).toBe("unauthorized");
+  });
+
+  it("B6 — token rút qua header `Authorization: Bearer` (đường thứ HAI) cũng nối được", async () => {
+    // `extraHeaders` được engine.io-client đổ vào options của `ws` ở Node. Ca kỳ vọng NỐI ĐƯỢC nên
+    // không có rủi ro xanh-oan: dựng sai thì đỏ ngay.
+    const socket = await expectRawConnects({ headers: { Authorization: `Bearer ${tLadder}` } });
+    expect(socket.connected).toBe(true);
+    socket.disconnect();
+  });
+
+  // ─── nhóm C1 — hẹn giờ hết hạn token ─────────────────────────────────────────
+
+  it("C1 — token tới hạn giữa phiên IM LẶNG ⇒ socket bị NGẮT (bản vá HIGH của FULL gate RT-1)", async () => {
+    // Đây là bản vá mà security-reviewer yêu cầu 10/08: một socket nối xong rồi im lặng tuyệt đối
+    // KHÔNG bao giờ đi qua `accept()`, nhưng vẫn NHẬN mọi SDP/ICE bắn tới `callUserRoomName` của mình.
+    // Trước bản vá, đường cắt DUY NHẤT là `severUserSessions` (khoá/xoá tài khoản). Bản vá có **0 test**
+    // trước ca này.
+    //
+    // ⚠️ Ca này chờ THẬT (~4 s) chứ không dịch đồng hồ: `setTimeout` là đường đang đo, fake nó đi thì
+    // ca rỗng. Vẫn dưới `testTimeout`.
+    const shortLived = signToken(uLife, `life@${A.slug}.test`, { expiresIn: 3 });
+    const rec = await connectCall(shortLived);
+    expect(rec.socket.connected, "nối được trước đã — nếu không, ca dưới rỗng").toBe(true);
+
+    await settle(4000);
+
+    expect(rec.disconnected, "hết hạn token ⇒ hẹn giờ phải CẮT phiên im lặng").toBe(true);
+  }, 15_000);
+
+  // ─── nhóm D5/D6 ──────────────────────────────────────────────────────────────
+
+  it("D5 — LỚP C: 5 sự kiện không-relay từ người KHÔNG có hàng participant ⇒ im lặng, socket SỐNG", async () => {
+    // `classifyMissingParticipant` xếp `join/leave/ping/media-state/screen-state` vào `race` (KHÔNG phải
+    // `probe`) vì hai ca THẬT xảy ra hằng ngày: (1) người được mời thứ 21 trở đi bị `CHAT_CALL_MAX_INVITEES`
+    // cắt — họ là thành viên phòng hợp lệ, FE của họ vẫn thử `call:join`; (2) khung tới sau khi cuộc gọi
+    // vừa kết thúc. Xếp chúng vào `probe` là mỗi cuộc gọi bình thường ghi thêm vài hàng vào một bảng
+    // append-only KHÔNG có job dọn, và ngắt một người dùng hợp lệ.
+    const room = await newRoom(tCaller, "R-classc", [uCallee]);
+    const callId = await invite(tCaller, room);
+    await authPost(tCaller, `/chat/rooms/${room}/members`).send({
+      userId: uClassC,
+      role: "member",
+    });
+
+    const victim = await connectCall(tCallee);
+    victim.socket.emit("call:join", { callId });
+    await settle(200);
+    victim.clear();
+
+    const before = (await securityEvents(A.companyId)).filter((e) => e.user_id === uClassC).length;
+    const outsider = await connectCall(tClassC);
+    outsider.socket.emit("call:join", { callId });
+    outsider.socket.emit("call:leave", { callId });
+    outsider.socket.emit("call:ping", { callId });
+    outsider.socket.emit("call:media-state", { callId, micOn: true, camOn: true });
+    outsider.socket.emit("call:screen-state", { callId, sharing: true });
+    await settle(700);
+
+    expect(outsider.disconnected, "lớp C KHÔNG ngắt người dùng hợp lệ").toBe(false);
+    expect(outsider.events, "và KHÔNG trả gì — kể cả `call:pong`").toEqual([]);
+    expect(victim.events, "không relay sang người trong cuộc gọi").toEqual([]);
+    expect((await securityEvents(A.companyId)).filter((e) => e.user_id === uClassC).length).toBe(
+      before,
+    );
+  });
+
+  it("D6 — socket ở HAI cuộc gọi rớt ⇒ **CẢ HAI** phòng nhận `peer-left`", async () => {
+    // Bất biến `joinedCallIds` là `Set` (gateway `:92-96`) hiện chỉ sống trong docblock: partial unique
+    // index chỉ chặn MỘT cuộc gọi sống mỗi PHÒNG, nên một người ở hai phòng tham gia được hai cuộc gọi
+    // cùng lúc. Đổi `Set` → biến đơn hôm nay không làm đỏ bài nào, và hỏng IM LẶNG: người ma treo trong
+    // cuộc gọi VÀO TRƯỚC trên UI của bên kia.
+    const room1 = await newRoom(tTwo, "R-two-1", [uTwoPeer]);
+    const room2 = await newRoom(tTwo, "R-two-2", [uTwoPeer]);
+    const call1 = await invite(tTwo, room1);
+    const call2 = await invite(tTwo, room2);
+
+    const two = await connectCall(tTwo);
+    const peer = await connectCall(tTwoPeer);
+    for (const id of [call1, call2]) {
+      two.socket.emit("call:join", { callId: id });
+      peer.socket.emit("call:join", { callId: id });
+    }
+    await settle(500);
+    peer.clear();
+
+    two.socket.disconnect();
+    await settle(700);
+
+    const left = peer.events
+      .filter((e) => e.name === "call:peer-left" && e.payload.userId === uTwo)
+      .map((e) => e.payload.callId as string);
+    expect([...left].sort(), "thiếu MỘT trong hai = người ma treo trong cuộc gọi kia").toEqual(
+      [call1, call2].sort(),
+    );
+  });
+
+  // ─── C5/C6 — hai lỗ chưa ai canh (ĐO trước, kết luận sau — owner chốt 11/08) ──
+
+  it("C5 — gỡ thành viên khỏi phòng GIỮA cuộc gọi: đo CẢ HAI chiều", async () => {
+    // `chat-call-signal.service.ts:87-91` suy `activeUserIds`/`participantUserIds` **chỉ từ
+    // `chat_call_participants.outcome`** — không từ membership phòng hiện tại, không từ cặp quyền. Hai
+    // chiều đều đáng đo, và ca này KHÔNG phán quyết: kết luận ghi ở plan §5 (owner chốt).
+    const room = await newRoom(tRemovePeer, "R-remove", [uRemove]);
+    const callId = await invite(tRemovePeer, room);
+
+    const victim = await connectCall(tRemove);
+    const peer = await connectCall(tRemovePeer);
+    victim.socket.emit("call:join", { callId });
+    peer.socket.emit("call:join", { callId });
+    await settle(400);
+    victim.clear();
+
+    // Gỡ khỏi phòng = `SET left_at` (CHAT-API-007d), KHÔNG xoá hàng participant của cuộc gọi.
+    const del = await request(app.getHttpServer())
+      .delete(`/chat/rooms/${room}/members/${uRemove}`)
+      .set("Authorization", `Bearer ${tRemovePeer}`);
+    expect(del.status, JSON.stringify(del.body)).toBe(200);
+    await settle(200);
+
+    // (1) CHIỀU NHẬN — người đã bị gỡ có còn nhận SDP/ICE không?
+    const beforeVictim = (await securityEvents(A.companyId)).filter(
+      (e) => e.user_id === uRemove,
+    ).length;
+    peer.socket.emit("call:ice-candidate", { callId, toUserId: uRemove, candidate: "sau-khi-go" });
+    await settle(600);
+    const stillReceives = victim.events.some((e) => e.name === "call:ice-candidate");
+
+    // (2) CHIỀU GỬI — FE của họ vẫn trickle ICE (WebRTC tự làm, không cần thao tác người).
+    victim.socket.emit("call:ice-candidate", {
+      callId,
+      toUserId: uRemovePeer,
+      candidate: "trickle",
+    });
+    await settle(600);
+    const punished =
+      (await securityEvents(A.companyId)).filter((e) => e.user_id === uRemove).length >
+      beforeVictim;
+
+    // ┌─ TRIPWIRE `S7-CALL-RT-FIX-2` — hành vi ĐO ĐƯỢC 11/08/2026, và nó SAI cả hai chiều ────────────┐
+    // │ **characterization test**: khẳng định hành vi HIỆN TẠI để nó không trôi tiếp trong im lặng.    │
+    // │ Cơ chế (đã truy tới nguồn, không suy đoán):                                                    │
+    // │   • `resolveSignalAccess` (`chat-call-signal.service.ts:79-84`) gọi `assertCallAccess`, hàm này │
+    // │     ném `NotFoundException` khi actor **không (còn) là thành viên phòng** ⇒ trả `null`.        │
+    // │   • `accept()` thấy `!access` ⇒ `classifyMissingParticipant('call:ice-candidate') = 'probe'` ⇒ │
+    // │     ghi `user_security_events` + NGẮT.                                                         │
+    // │   • Nhưng `activeUserIds` của NGƯỜI CÒN LẠI suy từ `chat_call_participants` — bảng này KHÔNG bị│
+    // │     `left_at` của phòng chạm tới ⇒ `assertPeer` vẫn cho relay SDP/ICE **TỚI** người đã bị gỡ.  │
+    // │                                                                                                │
+    // │ Hệ quả: chiều RÒ (họ vẫn nhận IP nội bộ + mốc thời gian của bên kia) thì MỞ, còn chiều VÔ HẠI  │
+    // │ (browser của họ tự trickle ICE — không cần một thao tác người nào) thì bị đóng dấu "dò cửa" +  │
+    // │ một hàng VĨNH VIỄN trong bảng append-only KHÔNG có job dọn. Đúng lớp lỗi mà CA 9 đã vá cho     │
+    // │ đường `hangup`, nhưng đường "gỡ thành viên" thì chưa ai vá.                                    │
+    // │                                                                                                │
+    // │ Owner chốt 11/08 "đo trước, kết luận sau" ⇒ kết luận: **KHÔNG chấp nhận được, leo owner**.     │
+    // │ WO vá = `S7-CALL-RT-FIX-2` (backlog). Khi bản vá land, 2 assert dưới ĐỎ ⇒ lật thành hành vi    │
+    // │ đúng trong CÙNG PR. Xem plan §5 mục 7.                                                         │
+    // └────────────────────────────────────────────────────────────────────────────────────────────────┘
+    expect(stillReceives, "chiều NHẬN vẫn mở — người đã bị gỡ vẫn nhận SDP/ICE của bên kia").toBe(
+      true,
+    );
+    expect(punished, "TRIPWIRE: chiều GỬI ghi hàng an ninh cho một người HOÀN TOÀN VÔ TỘI").toBe(
+      true,
+    );
+    expect(victim.disconnected, "TRIPWIRE: …và ngắt kết nối của họ").toBe(true);
+  });
+
+  it("C6 — tài khoản bị KHOÁ vẫn mở được phiên `/ws-call` MỚI bằng access-token còn hạn", async () => {
+    // `handshake()` (`gateway:198-244`) chỉ kiểm chữ ký + `exp` + cặp quyền — **không đọc trạng thái
+    // user, không đọc `user_sessions`**. `severUserSessions` chỉ cắt socket ĐANG SỐNG tại thời điểm
+    // khoá (CA 19): người bị khoá lúc offline, hoặc nối lại sau đó, đi lọt. Khoá thường KHÔNG gỡ role
+    // (memory `lock-no-revoke`) ⇒ `permissions.can` vẫn ALLOW.
+    //
+    // ĐO trước, kết luận sau (owner chốt 11/08) — kết luận ở plan §5.
+    await direct.query(`UPDATE users SET status = 'suspended' WHERE id = $1`, [uLocked]);
+    await direct.query(
+      `UPDATE user_sessions SET revoked_at = now(), revoked_reason = 'test-lock'
+        WHERE user_id = $1 AND revoked_at IS NULL`,
+      [uLocked],
+    );
+    app.get(RealtimeEmitterService).severUserSessions(A.companyId, uLocked);
+    await settle(300);
+
+    const socket = await expectRawConnects({ auth: { token: tLocked } });
+    expect(socket.connected, "khoá tài khoản KHÔNG chặn phiên /ws-call MỚI (token ≤900 s)").toBe(
+      true,
+    );
+    socket.disconnect();
+  });
+
+  // ─── C3/C4 — DỊCH ĐỒNG HỒ. BẮT BUỘC ĐẶT CUỐI FILE ────────────────────────────
+  //
+  // ⚠️ Vệ sinh dịch-đồng-hồ (plan §3.2), cả ba đều bắt buộc:
+  //   1. `vi.useRealTimers()` trong `finally`;
+  //   2. **KHÔNG gọi REST nào** khi đồng hồ đang lệch — token ký ra sẽ mang `exp` tương lai, còn `now()`
+  //      của PG thì không lệch;
+  //   3. đặt CUỐI file — socket của các ca trước vẫn nằm trong `openClients`, một khung gửi trên chúng
+  //      trong cửa sổ lệch sẽ bị ngắt ở bước (2) của `accept()` và làm **đỏ ca khác**.
+  // Chỉ fake `Date` (`toFake:['Date']`) — giữ `setTimeout` THẬT cho socket.io và cho hẹn giờ hết hạn.
+
+  it("C3 — token hết hạn phát hiện lại ở `accept()` (bước 2) ⇒ ngắt khi GỬI khung", async () => {
+    // ⚠️ KHÔNG dùng token TTL ngắn ở đây: hẹn giờ `299-302` đặt đúng tại `exp` và sau connect thì
+    // `disconnect(true)` chạy THẬT ⇒ hẹn giờ luôn thắng, socket không còn để gửi khung ⇒ ca bất khả/flaky.
+    // (Đường hẹn-giờ được đo riêng ở C1.)
+    const room = await newRoom(tClock, "R-clock3", [uCallee]);
+    const callId = await invite(tClock, room);
+    const rec = await connectCall(tClock);
+    rec.socket.emit("call:join", { callId });
+    await settle(300);
+
+    // LÀM CŨ trạng thái phía SERVER thay vì dịch đồng hồ — xem docblock `ageServerState`.
+    ageServerState(rec, (s) => {
+      s.tokenExpSec = Math.floor(Date.now() / 1000) - 1;
+    });
+
+    let why = "";
+    rec.socket.on("disconnect", (reason: string) => (why = reason));
+    rec.socket.emit("call:ping", { callId });
+    await settle(700);
+
+    expect(rec.disconnected, "quá `exp` ⇒ bước (2) của accept() phải ngắt").toBe(true);
+    // 🔴 ORACLE THỨ HAI — bắt buộc: "socket chết" một mình KHÔNG chứng minh SERVER cắt nó. Chính assert
+    // thiếu vế này đã làm bản đầu của ca này XANH OAN (client tự chết vì "ping timeout", khung chưa hề
+    // rời máy — xem `ageServerState`).
+    expect(why, "phải là SERVER cắt, không phải transport tự chết").toBe("io server disconnect");
+  });
+
+  it("C4 — THU HỒI cặp quyền giữa cuộc gọi ⇒ hỏi lại DB sau TTL ảnh chụp rồi NGẮT", async () => {
+    const room = await newRoom(tClockPeer, "R-clock4", [uCallee]);
+    const callId = await invite(tClockPeer, room);
+    const rec = await connectCall(tClockPeer);
+    rec.socket.emit("call:join", { callId });
+    await settle(300);
+
+    // (1) Thu hồi ở DB — role riêng của chính user này (`grantPairs` tạo role theo user).
+    await direct.query(
+      `DELETE FROM role_permissions rp
+        USING user_roles ur, permissions p
+        WHERE rp.role_id = ur.role_id AND ur.user_id = $1
+          AND rp.permission_id = p.id AND p.action = 'call' AND p.resource_type = 'chat-room'`,
+      [uClockPeer],
+    );
+    // (2) Invalidation TƯỜNG MINH: `permission.cache.ts:12 CACHE_TTL_SEC = 300` — không gọi thì `can()`
+    // vẫn trả kết quả CŨ tới 5 phút và ca này đo cache chứ không đo thu hồi.
+    // ⚠️ Token DI `"CACHED_PERMISSION_REPO"` là const module-local (`permission.module.ts:35`), không
+    // export — lấy bằng chuỗi là đường DUY NHẤT từ test.
+    await app
+      .get<{ invalidateUser(c: string, u: string): Promise<void> }>("CACHED_PERMISSION_REPO")
+      .invalidateUser(A.companyId, uClockPeer);
+
+    // 🔴 ORACLE THỨ HAI (bắt buộc): "socket bị ngắt" MỘT MÌNH là xanh-vì-nhầm-nấc — `accept()` chạy bước
+    // (2) TRƯỚC bước (3), nên nếu access-token của actor còn dưới 61 s thì 585-589 ngắt và ca vẫn xanh
+    // trong khi 592-604 CHƯA TỪNG chạy. Điều kiện tiên quyết: token của actor còn > 61 s (login ở
+    // `beforeAll`, TTL 900 s ⇒ thoả).
+    // (3) Làm CŨ ảnh chụp quyền — `PERMISSION_SNAPSHOT_TTL_MS = 60_000` (`gateway:71`) là hằng CỨNG,
+    // không env; chờ thật thì vượt `testTimeout`, còn dịch đồng hồ thì khung không rời máy
+    // (xem `ageServerState`).
+    ageServerState(rec, (s) => {
+      s.permissionCheckedAtMs = Date.now() - 61_000;
+    });
+
+    // 🔴 ORACLE THỨ HAI (bắt buộc): "socket bị ngắt" MỘT MÌNH là xanh-vì-nhầm-nấc — `accept()` chạy bước
+    // (2) TRƯỚC bước (3), nên một ca ngắt vì token hết hạn (585-589) vẫn xanh trong khi 592-604 CHƯA
+    // TỪNG chạy. Ở đây ta chỉ làm cũ ĐÚNG `permissionCheckedAtMs`, và còn đếm `can()` theo ĐỐI SỐ.
+    const canSpy = vi.spyOn(PermissionService.prototype, "can");
+    let reChecks: unknown[] = [];
+    let why = "";
+    rec.socket.on("disconnect", (reason: string) => (why = reason));
+    try {
+      rec.socket.emit("call:ping", { callId });
+      await settle(800);
+
+      // ⚠️ ĐỌC `mock.calls` **TRƯỚC** `mockRestore()`: `mockRestore` = `mockReset` + khôi phục bản gốc,
+      // mà `mockReset` **XOÁ SẠCH `mock.calls`**. Đọc sau khi restore luôn cho mảng RỖNG ⇒ ca đỏ oan
+      // (đã cắn đúng một lần ở lượt chạy đầu 11/08) — hoặc tệ hơn, xanh oan nếu assert là `toBe(0)`.
+      // Đếm theo ĐỐI SỐ, không đếm tổng: mọi request REST trong ca cũng gọi `can()`.
+      reChecks = canSpy.mock.calls.filter(([arg]) => {
+        const a = arg as { action?: string; resourceType?: string; userId?: string };
+        return a.action === "call" && a.resourceType === "chat-room" && a.userId === uClockPeer;
+      });
+    } finally {
+      canSpy.mockRestore();
+    }
+
+    expect(reChecks.length, "ảnh chụp quá TTL ⇒ PHẢI hỏi lại DB (nhánh 592-604)").toBeGreaterThan(
+      0,
+    );
+    expect(rec.disconnected, "…và cặp quyền đã bị thu hồi ⇒ NGẮT").toBe(true);
+    expect(why, "phải là SERVER cắt, không phải transport tự chết").toBe("io server disconnect");
+  });
+
+  it("C4b — ĐỐI CHỨNG: ảnh chụp quá TTL nhưng quyền CÒN ⇒ hỏi lại, socket SỐNG, ảnh chụp được LÀM MỚI", async () => {
+    // Cặp tối thiểu của C4: khác đúng một bit (không thu hồi gì). Thiếu ca này thì C4 xanh kể cả với một
+    // bản "hết TTL ⇒ ngắt luôn, khỏi hỏi" — tức mọi cuộc gọi dài hơn 60 s đều rụng, và không test nào
+    // bắt được. Nó cũng là ca DUY NHẤT chạy dòng 603-604 (làm mới ảnh chụp sau khi hỏi lại).
+    const countPair = (spy: { mock: { calls: unknown[][] } }): number =>
+      spy.mock.calls.filter(([arg]) => {
+        const a = arg as { action?: string; resourceType?: string; userId?: string };
+        return a.action === "call" && a.resourceType === "chat-room" && a.userId === uClassC;
+      }).length;
+
+    const room = await newRoom(tClassC, "R-snap", [uCallee]);
+    const callId = await invite(tClassC, room);
+    const rec = await connectCall(tClassC);
+    rec.socket.emit("call:join", { callId });
+    await settle(300);
+
+    ageServerState(rec, (s) => {
+      s.permissionCheckedAtMs = Date.now() - 61_000;
+    });
+
+    const canSpy = vi.spyOn(PermissionService.prototype, "can");
+    try {
+      rec.socket.emit("call:ping", { callId });
+      const pong = await rec.waitFor("call:pong");
+      expect(pong.callId, "quyền còn ⇒ khung được xử lý bình thường").toBe(callId);
+
+      const afterFirst = countPair(canSpy);
+      expect(afterFirst, "ảnh chụp quá TTL ⇒ PHẢI hỏi lại DB").toBeGreaterThan(0);
+      expect(rec.disconnected, "…nhưng quyền CÒN ⇒ KHÔNG ngắt").toBe(false);
+
+      // Ảnh chụp đã được làm mới (603-604) ⇒ khung kế tiếp KHÔNG được hỏi lại DB. Thiếu vế này thì một
+      // bản "quên gán `permissionCheckedAtMs`" sẽ hỏi DB ở MỌI khung — 2 round-trip mỗi ICE candidate,
+      // đúng thứ ảnh chụp sinh ra để tránh — mà vẫn xanh.
+      rec.socket.emit("call:ping", { callId });
+      await settle(500);
+      expect(countPair(canSpy), "trong TTL mới ⇒ KHÔNG hỏi lại").toBe(afterFirst);
+    } finally {
+      canSpy.mockRestore();
+    }
   });
 });
 

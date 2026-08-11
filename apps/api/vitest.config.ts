@@ -206,6 +206,36 @@ export default defineConfig({
           branches: 80,
           statements: 80,
         },
+        // S7-CALL-QA-1 (cùng mô hình cưỡng chế như S2-QA-1-FIX-B ở trên): ngưỡng per-file chỉ CẮN khi file
+        // xuất hiện trong report, nên hai khối này **inert** ở lần chạy unit mặc định (`pnpm test`, không
+        // LANE_DB ⇒ int-spec skipIf) và được CƯỠNG CHẾ bởi `test:cov:call` — script đó `--coverage.include`
+        // đúng 3 file `call-signalling*` + cụm `chat-call*`, và chạy luồng của chúng dưới LANE_DB cô lập.
+        //
+        // 🔴 ĐIỀU KIỆN để hai khối này không cắn NHẦM: **không job nào được chạy `--coverage` mà thiếu
+        // `--coverage.include`**. Đó là kịch bản duy nhất kéo `call-signalling.gateway.ts` vào report ở một
+        // lần chạy KHÔNG có LANE_DB (int-spec skip) ⇒ branch tụt dưới 80 ⇒ ĐỎ OAN. Đã kiểm 11/08/2026:
+        // `grep -rn coverage .github/workflows/` = 0 hit và `test:cov*` không được gọi ở CI ⇒ hiện an toàn.
+        // Ai thêm job coverage sau này PHẢI đọc mục này (plan `S7-CALL-QA-1.md` §3.3).
+        //
+        // ⚠️ Và nói thẳng giới hạn: vì CI KHÔNG chạy coverage ở bất kỳ job nào, đây là **ratchet chạy TAY**
+        // — nó chặn được người cố ý đo, KHÔNG chặn được PR của người không đo.
+        //
+        // Đo 11/08/2026 sau nhóm A–D: gateway 100 lines/stmts/funcs · branch 92.74 (trước WO: 82.34 / 68.67);
+        // filter 100 cả bốn trục (trước WO: 21.73 stmts / 50 funcs — thân `catch()` chưa từng chạy).
+        // Ngưỡng đặt DƯỚI số đo một quãng để không đỏ vì nhiễu, nhưng đủ chặt để một bản gỡ test là ĐỎ.
+        "src/realtime/call-signalling.gateway.ts": {
+          lines: 90,
+          functions: 90,
+          branches: 80,
+          statements: 90,
+        },
+        // Filter là 47 dòng, không có nhánh khó — giữ đúng 100 để mọi bản "gỡ `@UseFilters` cho gọn" đỏ ngay.
+        "src/realtime/call-signalling.filter.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
       },
     },
   },
