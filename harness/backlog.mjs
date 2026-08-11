@@ -10461,18 +10461,99 @@ export const backlog = [
       "Bộ test CALL: deny-path signalling · cô lập 2-tenant · vòng đời cuộc gọi trên LANE_DB · E2E gọi 1-1 hai trình duyệt",
     zone: "red",
     status: "todo",
-    paths: ["apps/api/test/**", "apps/app/src/**", "docs/plans/S7-CALL-QA-1.md"],
+    // ⚠️ MỞ RỘNG 11/08/2026 (`docs/plans/S7-CALL-QA-1.md` §3.4, sau vòng plan-reviewer). Bản seed
+    // thiếu NƠI SPEC UNIT BẮT BUỘC PHẢI SỐNG: `vitest.config.ts:45-50` chỉ nhận `src/**/*.spec.ts`,
+    // mà 6/17 ca của plan (A2·B4·B5·C2·D1·D2·D3·D4) KHÔNG dựng được ở int-spec. Mở HẸP theo từng
+    // glob spec — cố ý KHÔNG mở `apps/api/src/**` để `guard-scope` còn kêu khi đụng code sản xuất.
+    // `apps/app/src/**` chuyển sang S7-CALL-QA-2 (nhóm E tách ra, owner chốt 11/08).
+    // memory `wo-paths-drive-gate-and-scheduler`.
+    paths: [
+      "apps/api/test/**",
+      "apps/api/src/realtime/call-signalling*.spec.ts",
+      "apps/api/src/chat/chat-call*.spec.ts",
+      "apps/api/vitest.config.ts",
+      "apps/api/package.json",
+      "docs/QA/evidence/**",
+      "docs/plans/S7-CALL-QA-1.md",
+    ],
     skills: ["code-review"],
     depends_on: ["S7-CALL-FE-1"],
     plan: "docs/plans/S7-CALL-QA-1.md",
     src: [
       "memory: integration-test-lane-db-gate (LANE_DB bắt buộc để deny-path chạy THẬT) · src-green-is-not-integration-green",
+      "memory: deny-cases-vacuous-without-allow-case — 4/6 nấc từ chối handshake trả CÙNG chuỗi 'unauthorized' ⇒ ca DENY xanh rỗng nếu không có cặp-tối-thiểu + delta coverage theo dòng",
+      "memory: per-user-rate-limit-throttles-own-int-spec — trần bắt tay 30/phút/người; mỗi nhóm ca mới phải dùng user RIÊNG",
     ],
     done_when: [
       "Chạy như CI: bash harness/check.sh --lane-db — deny-path signalling THỰC THI, không skip",
-      "Cô lập tenant: callId của công ty khác → không relay, không lộ tồn tại",
-      "Coverage ≥80% vùng CALL (gateway signalling cao hơn)",
-      "E2E gọi 1-1 hai trình duyệt có bằng chứng chạy được",
+      "Cô lập tenant: callId của công ty khác → không relay, không lộ tồn tại (ĐÃ ĐẠT SẴN qua ca 3/3b + CA 4 — chỉ cần chạy như CI)",
+      "Coverage ≥80% vùng CALL, gateway branch ≥80 + filter 100, CƯỠNG CHẾ bằng script test:cov:call + threshold per-file (harness/check.sh KHÔNG chạy coverage)",
+      "E2E gọi 1-1 hai trình duyệt (đường F-b: chạy TAY) có bằng chứng — ⚠️ trên DB CÔ LẬP mediaos_s7callqa1, KHÔNG chạm `mediaos` (= PROD)",
+      "C5 đo xong hành vi 'gỡ thành viên giữa cuộc gọi' và ghi kết luận vào plan §5 (hoặc leo owner nếu không chấp nhận được)",
+    ],
+  },
+  {
+    // Tách 11/08/2026 từ vòng plan-reviewer của S7-CALL-QA-1 (owner chốt). Lỗ THẬT, đã kiểm chứng
+    // trên nguồn socket.io — không phải suy đoán. Chi tiết + 4 mắt xích bằng chứng: plan QA-1 §1e.
+    id: "S7-CALL-RT-FIX-1",
+    module: "CHAT",
+    layer: "RT",
+    title:
+      "Vá fail-OPEN /ws-call: `disconnect()` trong middleware handshake là no-op ⇒ token hết hạn ngay lúc bắt tay vẫn ĐƯỢC NHẬN và nhận relay vô thời hạn",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/realtime/call-signalling.gateway.ts",
+      "apps/api/src/realtime/call-signalling.gateway.spec.ts",
+      "apps/api/test/integration/chat-s7-call-rt1-signalling.int-spec.ts",
+      "docs/plans/S7-CALL-RT-FIX-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S7-CALL-QA-1"],
+    plan: "docs/plans/S7-CALL-RT-FIX-1.md",
+    src: [
+      "docs/plans/S7-CALL-QA-1.md §1e — 4 mắt xích: socket.js:592-594 (`if (!this.connected) return this`) · socket.js:90/:408 · namespace.js:221/:241 (middleware TRƯỚC _doConnect) · gateway:260 (scheduleTokenExpiry gọi TRONG middleware)",
+      "Hệ quả: gateway:296 no-op ⇒ handshake() chạy tiếp tới `return undefined` (266) ⇒ nhận kết nối với token hết hạn + expiryTimer=null ⇒ socket NHẬN mọi SDP/ICE vô thời hạn. Chiều GỬI vẫn kín (accept() 585-589).",
+      "Cửa sổ chạm: giữa jwt.verify (208) và dòng 293 có 2 round-trip I/O (cooldown.allow → Valkey, permissions.can → Valkey/DB); người cầm token sắp hết hạn nối lại lặp là trúng.",
+      "Tripwire sẵn có: ca C2 `it.fails` trong QA-1 sẽ ĐỎ ngay khi bản vá land ⇒ BẮT BUỘC lật thành `it()` trong cùng PR.",
+    ],
+    done_when: [
+      "`scheduleTokenExpiry` không còn dựa vào `disconnect()` trong middleware — trả tín hiệu để `handshake()` TỪ CHỐI (next(Error)), hoặc dùng `client.conn.close()`",
+      "Ca C2 của QA-1 lật từ `it.fails` sang `it()` và XANH trong cùng PR — không được để lại tripwire chết",
+      "Có ca đo đúng cửa sổ đua: token exp rơi giữa verify và scheduleTokenExpiry ⇒ handshake BỊ TỪ CHỐI",
+      "Ca ALLOW đối chứng: token còn hạn bình thường vẫn nối được + expiryTimer được đặt",
+      "FULL gate PASS (chạm src/realtime/** = crown-jewel: security-reviewer + silent-failure-hunter)",
+    ],
+  },
+  {
+    // Tách 11/08/2026 từ S7-CALL-QA-1 (owner chốt phạm vi A–D chỉ API). Nội dung = nhóm E của plan QA-1.
+    id: "S7-CALL-QA-2",
+    module: "CHAT",
+    layer: "QA",
+    title:
+      "Test FE cuộc gọi: bật đo coverage cho apps/app + phủ 1.241 dòng đang là điểm mù (use-chat-call 676 · CallExperience 307 · CallProvider 143 · call-ringtone 115)",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/components/chat/call/**",
+      "apps/app/package.json",
+      "apps/app/vitest.config.ts",
+      "docs/plans/S7-CALL-QA-2.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S7-CALL-QA-1"],
+    plan: "docs/plans/S7-CALL-QA-2.md",
+    src: [
+      "docs/plans/S7-CALL-QA-1.md §0.3 + §2 nhóm E — đo 11/08: grep use-chat-call|CallExperience|CallProvider|call-ringtone trong *.spec.ts{,x} = 0 hit",
+      "E0 BẮT BUỘC TRƯỚC: `@vitest/coverage-v8` chỉ khai ở apps/api/package.json:62 ⇒ hiện KHÔNG đo được coverage FE, không biết đã phủ gì",
+      "memory: ismounted-ref-stuck-false-under-strictmode · duplicate-sibling-key-leaks-dom-node · react-query-v5-stale-mutationfn-closure",
+    ],
+    done_when: [
+      "E0: `pnpm --filter @mediaos/app exec vitest --coverage` CHẠY ĐƯỢC (hiện ERR_MODULE_NOT_FOUND)",
+      "use-chat-call.ts: luật 'ai gửi offer = bên NHẬN call:peer-joined' (không glare ở MỌI thứ tự vào phòng) có test",
+      "Trần 64KB/4KB được kiểm TRƯỚC khi gửi — vượt trần thì gateway NGẮT, nên đây là hàng rào của FE",
+      "Mất mạng giữa cuộc gọi ⇒ dọn RTCPeerConnection, KHÔNG treo camera đang bật (= done_when #3 của S7-CALL-FE-1, hiện KHÔNG có gì canh)",
+      "CallProvider/CallExperience mount-unmount không rò listener; coverage FE vùng call ≥80%",
     ],
   },
   {
