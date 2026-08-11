@@ -1,16 +1,24 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-11 14:49Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-11 18:14Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🔴 S7-CALL-RT-FIX-2 — Vá 'gỡ thành viên giữa cuộc gọi': VẪN relay SDP/ICE tới người đã bị gỡ, đồng thời ghi user_security_events + NGẮT họ vì trickle ICE mà browser tự gửi
+- **zone**: red · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/api/src/chat/chat-call-signal.service.ts`, `apps/api/src/chat/chat-call-signal-deny.ts`, `apps/api/src/realtime/call-signalling.gateway.ts`, `apps/api/test/integration/chat-s7-call-rt1-signalling.int-spec.ts`, `docs/plans/S7-CALL-RT-FIX-2.md`
+- **phụ thuộc**: S7-CALL-QA-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] Gỡ thành viên giữa cuộc gọi ⇒ người bị gỡ KHÔNG còn nhận relay SDP/ICE (đóng chiều rò)
+  - [ ] …và KHÔNG bị ghi user_security_events / KHÔNG bị ngắt vì trickle ICE (họ không phải người dò cửa) — nhiều nhất là lớp C: bỏ im lặng
+  - [ ] Ca ĐỐI CHỨNG giữ nguyên: người CHƯA TỪNG được mời vẫn là lớp B (ghi + ngắt) — cấm nới thành 'ai cũng bỏ qua'
+  - [ ] Ca C5 của QA-1 lật từ tripwire sang hành vi đúng trong CÙNG PR — không để lại tripwire chết
+  - [ ] FULL gate PASS (chạm src/realtime/** + luật từ chối = crown-jewel: security-reviewer + silent-failure-hunter)
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🟡 `S7-CHAT-LMS-1` Gỡ chat khỏi LMS (GIỮ trợ lý AI) + trỏ lối vào sidebar sang /chat MediaOS + xuất 84 tin lịch sử ra tệp lưu trữ
-- 🔴 `S7-CALL-RT-FIX-2` Vá 'gỡ thành viên giữa cuộc gọi': VẪN relay SDP/ICE tới người đã bị gỡ, đồng thời ghi user_security_events + NGẮT họ vì trickle ICE mà browser tự gửi
 - 🟡 `S7-CALL-QA-2` Test FE cuộc gọi: bật đo coverage cho apps/app + phủ 1.241 dòng đang là điểm mù (use-chat-call 676 · CallExperience 307 · CallProvider 143 · call-ringtone 115)
 - 🔴 `S10-SOCIAL-OPS-1` Đưa kho sang ổ D: (SOCIAL_DATA_DIR) + đổi dịch vụ MediaOS-Social từ LocalSystem sang tài khoản Windows có quyền trên share LAN + sao lưu data/ và .secrets/ TÁCH nhau
 
@@ -34,6 +42,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `a56e0c3d` | 2026-08-12 | fix(chat): vá fail-OPEN /ws-call — token hết hạn lúc bắt tay nay BỊ TỪ CHỐI, không còn nhận relay vô thời hạn (S7-CALL-RT-FIX-1) (#375) |
+| `b608bf78` | 2026-08-11 | chore(docs): regen STATUS sau khi land #374 (S7-CALL-QA-1 done, mở khoá RT-FIX-2 + QA-2) |
 | `e2b9c237` | 2026-08-11 | test(chat): nghiệm thu vùng CALL — 25 ca lấp lỗ signalling, gateway branch 68.67→92.74, filter 21.73→100 (S7-CALL-QA-1) (#374) |
 | `3159573f` | 2026-08-11 | chore(docs): regen STATUS sau khi land #372 (S7-CALL-FE-1 done, QA-1 mở khoá) |
 | `fc23ddd4` | 2026-08-11 | feat(chat): UI cuộc gọi 1-1 — nút gọi · chuông đến · khung gọi · chia sẻ màn hình (S7-CALL-FE-1) (#372) |
@@ -44,8 +54,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `6e83d613` | 2026-08-09 | chore(security): override nanoid lên ^3.3.17 — vá GHSA-2v37-7h3g-55p8 (#369) |
 | `8eee3005` | 2026-08-07 | chore(docs): regen STATUS sau khi land #367 (S8-CHAT-UX-QA-1 done — wave S8-CHAT-UX ĐÓNG 10/10) |
 | `b416d57e` | 2026-08-07 | test(chat): nghiệm thu wave S8-CHAT-UX — lấp 2 nhánh tư cách avatar chưa từng chạy + cổng đường tải (S8-CHAT-UX-QA-1) (#367) |
-| `3dea862d` | 2026-08-07 | chore(docs): regen STATUS sau khi land #366/#362/#353 (S8-CHAT-UX-FE-3 + S8-CHAT-ENTRY-1 done, QA-1 mở khoá) |
-| `72141105` | 2026-08-07 | feat(chat): thẻ "Tin nhắn" ở Home Portal + App Switcher (S8-CHAT-ENTRY-1) (#353) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
