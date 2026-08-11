@@ -345,6 +345,11 @@ export { chatRoomAvatarApi, type SetChatRoomAvatarResult } from "./lib/chat-api"
 // S7-CHAT-FE-5 🔒 — export RIÊNG (không gộp vào `chatApi`): đường đọc-vượt membership phải nhìn thấy
 // được ở tầng import, xem docblock `chatOversightApi`.
 export { chatOversightApi } from "./lib/chat-api";
+// S7-CALL-FE-1 — vòng đời cuộc gọi qua REST (hàng rào R4 của CHAT-DEC-020). Export RIÊNG khỏi `chatApi`
+// đúng như BE tách `ChatCallsController` khỏi `ChatRoomsController`.
+export { chatCallApi } from "./lib/chat-call-api";
 // S7-CHAT-FE-1 — kết nối Socket.IO DUY NHẤT của app shell (`/ws`), dùng chung CHAT + NOTI.
 // Trả `null` khi chưa có phiên — caller PHẢI xử lý nhánh đó, KHÔNG `!`-assert.
 export { getAppSocket } from "./lib/realtime-socket";
+// S7-CALL-FE-1 — `/ws-call`: namespace RIÊNG chở SDP/ICE, CHỈ mở khi đang có cuộc gọi (xem docblock).
+export { closeCallSocket, getCallSocket } from "./lib/realtime-socket";

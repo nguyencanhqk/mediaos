@@ -360,6 +360,35 @@ export default {
     dismiss: "Đóng",
   },
 
+  /** S7-CALL-FE-1 — cuộc gọi thoại/hình 1-1 (CHAT-SCREEN-006 · DECISIONS-07). */
+  call: {
+    startAudio: "Gọi thoại",
+    startVideo: "Gọi video",
+    incomingTitle: "{{name}} đang gọi",
+    incomingAudio: "Cuộc gọi thoại đến",
+    incomingVideo: "Cuộc gọi video đến",
+    ringing: "Đang đổ chuông…",
+    accept: "Nhận",
+    reject: "Từ chối",
+    calling: "Đang gọi…",
+    connecting: "Đang kết nối…",
+    inCall: "Đang trong cuộc gọi",
+    frameLabel: "Cuộc gọi với {{name}}",
+    hangup: "Kết thúc cuộc gọi",
+    muteMic: "Tắt mic",
+    unmuteMic: "Bật mic",
+    cameraOn: "Bật camera",
+    cameraOff: "Tắt camera",
+    shareScreen: "Chia sẻ màn hình",
+    stopSharing: "Dừng chia sẻ màn hình",
+    peerSharingScreen: "Người kia đang chia sẻ màn hình",
+    peerMuted: "Người kia đã tắt mic",
+    minimize: "Thu nhỏ cuộc gọi",
+    expand: "Mở toàn màn hình",
+    // Roster chưa về (phòng chưa mở lần nào) — overlay vẫn phải bắt máy được, không đợi tên.
+    unknownPeer: "Người dùng",
+  },
+
   time: {
     today: "Hôm nay",
     yesterday: "Hôm qua",
