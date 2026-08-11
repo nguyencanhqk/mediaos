@@ -10502,11 +10502,18 @@ export const backlog = [
       "Vá fail-OPEN /ws-call: `disconnect()` trong middleware handshake là no-op ⇒ token hết hạn ngay lúc bắt tay vẫn ĐƯỢC NHẬN và nhận relay vô thời hạn",
     zone: "red",
     status: "todo",
+    // ⚠️ MỞ RỘNG 11/08/2026 (`docs/plans/S7-CALL-RT-FIX-1.md` §6): bản seed thiếu HAI nơi bản vá
+    // bắt buộc phải chạm — sổ KI (lỗ sống trên master từ lúc QA-1 merge tới lúc WO này merge ⇒ phải
+    // có số hiệu, theo luật đã áp cho KI-057/059/060) và tệp bằng chứng RED/GREEN. Thiếu chúng thì
+    // `guard-scope` kêu đúng lúc đang mở PR. memory `wo-paths-drive-gate-and-scheduler`.
     paths: [
       "apps/api/src/realtime/call-signalling.gateway.ts",
       "apps/api/src/realtime/call-signalling.gateway.spec.ts",
       "apps/api/test/integration/chat-s7-call-rt1-signalling.int-spec.ts",
       "docs/plans/S7-CALL-RT-FIX-1.md",
+      "docs/QA/evidence/S7-CALL-RT-FIX-1.md",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "harness/backlog.mjs",
     ],
     skills: ["code-review"],
     depends_on: ["S7-CALL-QA-1"],
