@@ -209,8 +209,8 @@ Secret lấy từ `loadEnv().JWT_SECRET` (`vitest.config.ts:22`), **không** gõ
 | --- | --- | --- |
 | **C1** token TTL ngắn ⇒ tới hạn, socket **bị ngắt** dù im lặng | int | ký token `expiresIn: 3s`, chờ ~3.5 s (dưới `testTimeout: 20000`). Giữ bản vá HIGH của RT-1 |
 | **C2** `ttlMs <= 0` ⇒ handshake phải **BỊ TỪ CHỐI** | unit | **characterization test**, xem dưới — hiện production **chấp nhận** (§1e) |
-| **C3** hết hạn phát hiện ở `accept()` (585-589) | int | **KHÔNG** dùng token TTL ngắn: timer `299-302` đặt đúng tại `exp` và sau connect thì `disconnect(true)` chạy THẬT ⇒ timer luôn thắng, socket không còn để gửi khung ⇒ ca bất khả/flaky. Dùng **cùng cơ chế C4**: `vi.useFakeTimers({toFake:['Date']})` + `setSystemTime(exp+1s)`. Fake **chỉ `Date`** ⇒ `setTimeout` thật KHÔNG fire, chỉ `accept()` bước (2) thấy quá hạn |
-| **C4** **thu hồi cặp quyền giữa cuộc gọi** ⇒ ngắt | int | 3 bước + **oracle thứ hai** bắt buộc, xem dưới |
+| **C3** hết hạn phát hiện ở `accept()` (585-589) | int | **KHÔNG** dùng token TTL ngắn: timer `299-302` đặt đúng tại `exp` và sau connect thì `disconnect(true)` chạy THẬT ⇒ timer luôn thắng, socket không còn để gửi khung ⇒ ca bất khả/flaky. ~~Dùng cùng cơ chế C4: `vi.useFakeTimers` + `setSystemTime`~~ — **SAI, xem §6.3(1)**; dùng `ageServerState()` |
+| **C4** **thu hồi cặp quyền giữa cuộc gọi** ⇒ ngắt | int | 3 bước + **oracle thứ hai** bắt buộc, xem dưới. Bước (3) ~~dịch đồng hồ~~ → `ageServerState()`, xem §6.3(1) |
 
 **C2 — characterization test, KHÔNG dùng `it.fails`.** `it.fails` xanh khi thân bài ném vì **bất kỳ
 lý do gì** (typo, import sai, fake socket refactor đẻ `TypeError`) ⇒ nếu ca hỏng vì lý do khác thì nó
@@ -239,9 +239,10 @@ trở thành đúng loại xanh-giả mà C2 đang cảnh báo.
 2. **Gọi invalidation tường minh** `app.get(CACHED_REPO).invalidateUser(companyId,userId)`
    (`permission.module.ts:118-121`) — `permission.cache.ts:12 CACHE_TTL_SEC = 300` nghĩa là không gọi
    thì `can()` vẫn trả kết quả cũ tới 5 phút.
-3. **Dịch đồng hồ, đừng ngủ**: `PERMISSION_SNAPSHOT_TTL_MS = 60_000` (`gateway:71`) là **hằng cứng,
-   không env** — chờ thật thì vượt `testTimeout: 20000`. Dùng `vi.useFakeTimers({toFake:['Date']})` +
-   `vi.setSystemTime(Date.now()+61_000)`; **chỉ** fake `Date`, giữ `setTimeout` thật cho socket.io.
+3. **Làm cũ ảnh chụp, đừng ngủ và cũng đừng dịch đồng hồ**: `PERMISSION_SNAPSHOT_TTL_MS = 60_000`
+   (`gateway:71`) là **hằng cứng, không env** — chờ thật thì vượt `testTimeout: 20000`, còn dịch đồng hồ
+   thì khung không rời máy (§6.3(1)). Dùng `ageServerState(rec, s => { s.permissionCheckedAtMs =
+   Date.now() - 61_000; })`.
 
 🔴 **C4 cần ORACLE THỨ HAI — "socket bị ngắt" một mình là xanh-vì-nhầm-nấc.** `accept()` chạy bước (2)
 *trước* bước (3): sau khi dịch `+61_000`, nếu access-token của actor còn dưới 61 s thì **585-589** ngắt
@@ -331,13 +332,19 @@ minh bằng **delta theo dòng** (§2 nhóm B).
 2. Ca dựa trên timer: C1 chờ thật 3.5 s (chấp nhận được); C3/C4 **dịch đồng hồ**, không ngủ.
 3. Không thêm ca đua nào ngoài ca đã có (ca 12 của BE-1).
 
-**Vệ sinh dịch-đồng-hồ** — C3/C4 fake `Date` trong một tiến trình đang chạy Nest + socket.io + PG:
+**~~Vệ sinh dịch-đồng-hồ~~ — MỤC NÀY ĐÃ BỊ BÁC BỎ khi thi công (11/08). Xem §6.3(1).**
 
-- `vi.useRealTimers()` trong `finally` — **bắt buộc**;
-- **không gọi REST nào** khi đồng hồ đang lệch: token ký ra sẽ mang `exp` tương lai, còn `now()` của PG
-  thì không lệch;
-- đặt C3/C4 ở **CUỐI file**: socket của các ca trước vẫn nằm trong `openClients`, một khung gửi trên
-  chúng trong cửa sổ lệch sẽ bị ngắt ở bước (2) của `accept()` và làm **đỏ ca khác**.
+Toàn bộ cách tiếp cận "dịch đồng hồ rồi gửi khung" **không dùng được**: `socket.io-client:271` +
+`engine.io-client:393-404` làm mọi `emit()` sau một cú nhảy `Date` > 45 s bị đẩy vào `sendBuffer` và
+**không bao giờ rời máy**, còn client tự đóng với lý do `"ping timeout"`. Ca như thế đo transport của
+chính nó — bản đầu của C3 **xanh oan** đúng như vậy.
+
+Thay bằng helper `ageServerState(rec, mutate)` trong int-spec: lấy socket **server-side** theo
+`rec.socket.id` rồi làm cũ đúng `tokenExpSec`/`permissionCheckedAtMs`. Không đụng đồng hồ ⇒ không còn
+ràng buộc "đặt cuối file", không cần `useRealTimers`, không có cửa sổ lệch làm đỏ ca khác.
+
+Kèm theo **bắt buộc**: oracle `reason === "io server disconnect"` (`socket.on("disconnect", reason)`) —
+đó là vế DUY NHẤT phân biệt "SERVER cắt" với "transport tự chết".
 
 ### 3.3 Cưỡng chế ngưỡng — `harness/check.sh` KHÔNG chạy coverage
 
@@ -431,11 +438,91 @@ Bằng chứng lưu ở **`docs/QA/evidence/S7-CALL-QA-1-*`** (quy ước đang 
    ⚠️ Và con số đó chỉ đúng cho **chiều GỬI**. **Chiều NHẬN không có bất kỳ lần kiểm lại nào** — trần
    duy nhất là hạn access-token (≤900 s). Đọc mục này như thể áp cho cả hai chiều chính là kiểu hiểu
    nhầm mà docblock `gateway:57-71` đã mắc một lần.
-7. **Hai hành vi C5/C6 chỉ được ĐO, chưa được phán quyết** ở WO này (owner chốt: đo trước, kết luận
-   sau). Tới khi có kết luận, cả hai vẫn là lỗ mở trên master, không phải "đã canh".
+7. **C5 — ĐÃ PHÁN QUYẾT 11/08: KHÔNG chấp nhận được, đã leo owner ⇒ `S7-CALL-RT-FIX-2`.** Gỡ thành viên
+   khỏi phòng giữa cuộc gọi hiện (a) VẪN relay SDP/ICE tới họ, và (b) ghi `user_security_events` + ngắt
+   họ khi FE của họ trickle ICE. Lỗ còn MỞ trên master tới khi FIX-2 land; QA-1 chỉ đặt tripwire. Số đo
+   + cơ chế: §6.4.
+8. **C6 — ĐÃ PHÁN QUYẾT 11/08: hành vi ĐƯỢC BIẾT, không mở WO riêng.** Tài khoản bị khoá vẫn mở được
+   phiên `/ws-call` MỚI bằng access-token còn hạn (≤900 s). Đây là hệ quả của "access-token stateless"
+   toàn hệ, không phải lỗ riêng của kênh gọi — nhưng hệ quả riêng của kênh này là 15 phút vẫn nhận được
+   SDP/ICE của người khác. Xem §6.5.
+9. **Ngưỡng coverage là ratchet chạy TAY** (`test:cov:call`), KHÔNG phải cổng CI — CI không chạy
+   coverage ở bất kỳ job nào (§3.3). Đã kiểm 11/08 là gate CẮN THẬT (nâng ngưỡng lên 99 ⇒ exit 1).
 
 ---
 
-## 6. Kết quả đo (điền khi thi công xong)
+## 6. Kết quả đo (thi công 11/08/2026)
 
-_Chờ A–D + C5 + F-b._
+### 6.1 Coverage — trước ⇄ sau
+
+Chạy `pnpm --filter @mediaos/api test:cov:call` trên lane `mediaos_s7callqa1`. **131/131 pass**, 7 tệp.
+
+| File | Stmts | Branch | Funcs | |
+| --- | --- | --- | --- | --- |
+| `call-signalling.filter.ts` | 21.73 → **100** | — → **100** | 50 → **100** | thân `catch()` từ CHƯA CHẠY → kín |
+| `call-signalling.gateway.ts` | 82.34 → **100** | **68.67 → 92.74** | 100 → 100 | vế "gateway cao hơn" của `done_when` #3 |
+| `realtime/` (3 tệp) | 80.49 → **100** | 70.11 → **93.47** | 96.15 → **100** | |
+| **Toàn cụm CALL/API** | 92.3 → **99.13** | 87.7 → **94.31** | 98.85 → **100** | |
+
+Còn hở ở gateway: 4 dòng lẻ trong nhánh log/`finally` phòng thủ (`713-715`, `733`, `766`, `777`).
+
+### 6.2 Ca đã thêm — 25 ca
+
+- **int** (`chat-s7-call-rt1-signalling.int-spec.ts`, 18 → 31 ca): A1 · B1 · B2 · B2b · B3 · B6 · C1 · C3 ·
+  C4 · C4b · C5 · C6 · D5 · D6.
+- **unit** colocated: `call-signalling.filter.spec.ts` (MỚI, 6 ca) · `call-signalling.gateway.spec.ts`
+  (3 → 22 ca): B4 · B4b · B5 · B6-unit · C2 · D1×3 · D2 · D3 · D4 · D4b · D4c · D4d · D6-unit.
+
+### 6.3 🔴 Ba phát hiện khi thi công — hai trong số đó là bẫy XANH OAN
+
+**(1) `vi.setSystemTime` KHÔNG dùng được cho ca "dịch đồng hồ rồi GỬI khung" — §2 C3/C4 và §3.2 của
+plan này SAI ở điểm đó.** Nguồn: `socket.io-client@4.8.3/build/cjs/socket.js:271` tính
+`isConnected = this.connected && !this.io.engine._hasPingExpired()`, còn
+`engine.io-client@6.6.5/build/cjs/socket.js:393-404` so **`Date.now() > _pingTimeoutTime`**
+(mốc = `pingInterval + pingTimeout`, mặc định 45 s). ⇒ mọi `emit()` sau một cú nhảy `Date` > 45 s bị đẩy
+vào `sendBuffer` và **KHÔNG BAO GIỜ RỜI MÁY**, client tự đóng với lý do `"ping timeout"`.
+
+Hệ quả đã đo: bản đầu của **C3 XANH OAN** (socket chết vì transport, khung chưa hề tới server), và **C4
+ĐỎ với `can()` chưa từng được gọi**. Thứ bắt được là **oracle thứ hai mà §2 bắt buộc cho C4** — không có
+nó thì C3+C4 cùng "xanh" và cả hai đều rỗng. Bản thay thế: helper `ageServerState()` làm cũ đúng
+`tokenExpSec`/`permissionCheckedAtMs` trên state phía server, **không đụng đồng hồ**; cộng oracle
+`reason === "io server disconnect"` để phân biệt SERVER cắt với transport tự chết.
+
+**(2) `ageServerState` phải khoá theo SOCKET ID, không theo userId** — một người có nhiều socket còn sống
+trong cùng file (`uClassC` giữ socket của D5 vì D5 chứng minh nó KHÔNG bị ngắt). `find()` theo userId làm
+cũ nhầm phiên ⇒ C4b đỏ ở một chỗ không liên quan.
+
+**(3) `mockRestore()` = `mockReset()` + khôi phục ⇒ XOÁ SẠCH `mock.calls`.** Đọc `mock.calls` trong
+`finally` sau khi restore luôn cho mảng RỖNG. Ở C4 nó làm ca đỏ oan; với assert ngược (`toBe(0)`) thì nó
+sẽ là **xanh oan vĩnh viễn**.
+
+### 6.4 C5 — ĐO XONG, và kết luận là **KHÔNG chấp nhận được ⇒ đã leo owner**
+
+Gỡ một người khỏi phòng GIỮA cuộc gọi (`DELETE /chat/rooms/:id/members/:userId` → `left_at`):
+
+| Chiều | Đo được | Đánh giá |
+| --- | --- | --- |
+| **NHẬN** | vẫn relay SDP/ICE tới người đã bị gỡ | ❌ chiều RÒ vẫn MỞ (IP nội bộ + mốc thời gian bên kia) |
+| **GỬI** | `user_security_events` + **NGẮT** | ❌ đóng dấu "dò cửa" một người HOÀN TOÀN VÔ TỘI |
+
+Cơ chế: `assertCallAccess` ném `NotFoundException` khi actor không còn là thành viên phòng ⇒
+`resolveSignalAccess` trả `null` ⇒ `classifyMissingParticipant('call:ice-candidate') = 'probe'`. Nhưng
+`activeUserIds` của NGƯỜI CÒN LẠI suy từ `chat_call_participants` — bảng KHÔNG bị `left_at` chạm tới ⇒
+`assertPeer` vẫn cho relay TỚI họ. Trickle ICE là do **WebRTC tự làm**, không cần một thao tác người nào.
+
+Đúng lớp lỗi mà **CA 9 đã vá cho đường `hangup`**, nhưng đường "gỡ thành viên" thì chưa. ⇒ WO
+**`S7-CALL-RT-FIX-2`** (đã seed vào `harness/backlog.mjs`). QA-1 đặt **tripwire**: 3 assert trong ca C5
+khẳng định hành vi HIỆN TẠI, sẽ ĐỎ khi bản vá land ⇒ lật thành hành vi đúng trong cùng PR.
+
+### 6.5 C6 — ĐO XONG: khoá tài khoản KHÔNG chặn phiên `/ws-call` MỚI
+
+Token ký TRƯỚC khi khoá vẫn mở được phiên mới (≤900 s). `handshake()` chỉ kiểm chữ ký + `exp` + cặp
+quyền — không đọc `users.status`, không đọc `user_sessions`; `severUserSessions` (CA 19) chỉ cắt socket
+**đang sống tại thời điểm khoá**. Đây **không phải lỗ riêng của kênh gọi** (access-token là stateless
+toàn hệ theo thiết kế), nên ghi vào §5 thành hành vi ĐƯỢC BIẾT thay vì mở WO vá riêng cho `/ws-call`.
+Hệ quả riêng của kênh này vẫn phải nói ra: 15 phút vẫn nhận được SDP/ICE.
+
+### 6.6 Còn nợ
+
+`done_when` #4 (E2E 2 trình duyệt, đường F-b) **CHƯA chạy** — cần camera/mic thật + hai trình duyệt
+người thật bấm; xem §4. Đây là phần duy nhất của WO không tự động hoá được.

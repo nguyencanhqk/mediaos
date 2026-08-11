@@ -10526,6 +10526,41 @@ export const backlog = [
     ],
   },
   {
+    // ĐO ĐƯỢC 11/08/2026 khi thi công S7-CALL-QA-1 ca C5 (không phải suy đoán — có ca int đang XANH
+    // khẳng định hành vi hiện tại). Owner chốt "đo trước, kết luận sau" ⇒ kết luận: KHÔNG chấp nhận được.
+    id: "S7-CALL-RT-FIX-2",
+    module: "CHAT",
+    layer: "RT",
+    title:
+      "Vá 'gỡ thành viên giữa cuộc gọi': VẪN relay SDP/ICE tới người đã bị gỡ, đồng thời ghi user_security_events + NGẮT họ vì trickle ICE mà browser tự gửi",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/chat/chat-call-signal.service.ts",
+      "apps/api/src/chat/chat-call-signal-deny.ts",
+      "apps/api/src/realtime/call-signalling.gateway.ts",
+      "apps/api/test/integration/chat-s7-call-rt1-signalling.int-spec.ts",
+      "docs/plans/S7-CALL-RT-FIX-2.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S7-CALL-QA-1"],
+    plan: "docs/plans/S7-CALL-RT-FIX-2.md",
+    src: [
+      "docs/plans/S7-CALL-QA-1.md §6.4 — số đo + cơ chế đầy đủ",
+      "Cơ chế: assertCallAccess ném NotFoundException khi actor không CÒN là thành viên phòng ⇒ resolveSignalAccess trả null ⇒ classifyMissingParticipant('call:ice-candidate')='probe' ⇒ ghi + ngắt. Nhưng activeUserIds của NGƯỜI CÒN LẠI suy từ chat_call_participants — bảng KHÔNG bị left_at của phòng chạm tới ⇒ assertPeer vẫn cho relay TỚI người đã bị gỡ.",
+      "Đối xứng SAI: chiều RÒ (họ vẫn nhận IP nội bộ + mốc thời gian bên kia) thì MỞ, chiều VÔ HẠI (browser tự trickle ICE, không cần thao tác người) thì bị đóng dấu dò cửa + 1 hàng VĨNH VIỄN trong bảng append-only KHÔNG có job dọn.",
+      "Cùng lớp lỗi CA 9 đã vá cho đường `hangup` (actorIsParticipant vs actorIsActive) — đường 'gỡ thành viên' chưa ai vá.",
+      "Tripwire sẵn có: ca C5 của QA-1 có 3 assert khẳng định hành vi HIỆN TẠI ⇒ ĐỎ ngay khi bản vá land; BẮT BUỘC lật thành hành vi đúng trong CÙNG PR.",
+    ],
+    done_when: [
+      "Gỡ thành viên giữa cuộc gọi ⇒ người bị gỡ KHÔNG còn nhận relay SDP/ICE (đóng chiều rò)",
+      "…và KHÔNG bị ghi user_security_events / KHÔNG bị ngắt vì trickle ICE (họ không phải người dò cửa) — nhiều nhất là lớp C: bỏ im lặng",
+      "Ca ĐỐI CHỨNG giữ nguyên: người CHƯA TỪNG được mời vẫn là lớp B (ghi + ngắt) — cấm nới thành 'ai cũng bỏ qua'",
+      "Ca C5 của QA-1 lật từ tripwire sang hành vi đúng trong CÙNG PR — không để lại tripwire chết",
+      "FULL gate PASS (chạm src/realtime/** + luật từ chối = crown-jewel: security-reviewer + silent-failure-hunter)",
+    ],
+  },
+  {
     // Tách 11/08/2026 từ S7-CALL-QA-1 (owner chốt phạm vi A–D chỉ API). Nội dung = nhóm E của plan QA-1.
     id: "S7-CALL-QA-2",
     module: "CHAT",
