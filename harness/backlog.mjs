@@ -10574,6 +10574,12 @@ export const backlog = [
       "apps/api/src/realtime/call-signalling.gateway.spec.ts",
       "apps/api/src/realtime/realtime-emitter.service.ts",
       "apps/api/test/integration/chat-s7-call-rt1-signalling.int-spec.ts",
+      // PHÁT HIỆN LÚC THI CÔNG (không có trong plan): lưới "MỌI method public của service nhận `roomId`
+      // phải qua `assertMember`" bắt `closeCallParticipationOnRoomExit`. Không nới được bằng rổ miễn trừ
+      // (rổ đó là DANH SÁCH ĐÓNG đúng 1 file, và chính nó gọi việc thêm file thứ hai là "mở cửa sau")
+      // ⇒ carve-out theo CHỮ KÝ (`tx: TenantTx` = cộng tác viên trong-tx, không tới được từ ngoài) + ca
+      // bù "không được export khỏi ChatModule". Đồng thời vá một PASS-OAN có sẵn của bộ tách comment.
+      "apps/api/test/integration/chat-be1-access.int-spec.ts",
       "docs/plans/S7-CALL-RT-FIX-2.md",
       "docs/QA/evidence/S7-CALL-RT-FIX-2.md",
     ],
