@@ -196,7 +196,7 @@ lưu biên bản; viết runbook rollback có thời gian mục tiêu.
 | Canary sau deploy | ✅ `scripts/canary-watch.sh` |
 | Job nền quan sát được | ✅ `/system/jobs` + `system_job_runs` |
 | Log có cấu trúc (JSON) | ❌ **chưa** — còn `Logger` text (khuyến nghị R1) |
-| Cảnh báo tự động (5xx-rate, disk, backup-fail, SSL) | ✅ **CÓ (2026-07-30, `S6-REL-1`)** — `scripts/ops-alert-check.mjs` 8 nhóm + 44 test đã gắn cổng; thiếu dữ liệu ⇒ `unknown` chứ không báo xanh. ⚠️ owner còn phải ĐẶT LỊCH (`RELEASE-09` §4) |
+| Cảnh báo tự động (5xx-rate, disk, backup-fail, SSL) | ✅ **CÓ (2026-07-30, `S6-REL-1`)** — `scripts/ops-alert-check.mjs` 8 nhóm + 44 test đã gắn cổng; thiếu dữ liệu ⇒ `unknown` chứ không báo xanh. Đã đặt lịch (`MediaOS-OpsAlert`, 10 phút/lần). **Mở rộng 2026-08-12 → 11 nhóm + 63 test** (KI-062): thêm dò `fbpost` :3500 · LMS :3400 + phát hiện bundle `next dev` đè bản PROD — trước đó mọi mặt PROD ngoài API :3100 **không có phép đo nào** |
 | Kênh hỗ trợ + hypercare | ✅ **CÓ quy trình (2026-07-30, `S6-REL-1`)** — kênh · mẫu incident · escalation · hypercare + điều kiện thoát: `RELEASE-09` §6. *(Bộ guide nội dung thuộc `S6-GOLIVE-1`)* |
 
 ---

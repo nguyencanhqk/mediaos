@@ -17,8 +17,8 @@
 
 | | Trước WO này | Sau WO này |
 | --- | --- | --- |
-| Alert rule §18.3 | 9 dòng trong tài liệu, 0 dòng chạy được | **8 nhóm ĐO THẬT** qua `scripts/ops-alert-check.mjs` |
-| Logic quyết định | — | `scripts/lib/ops-alert-rules.mjs` — **44 test** (`node --test`) |
+| Alert rule §18.3 | 9 dòng trong tài liệu, 0 dòng chạy được | **8 nhóm ĐO THẬT** qua `scripts/ops-alert-check.mjs` — **→ 11 nhóm từ 2026-08-12** (thêm #9–#11, xem §3) |
+| Logic quyết định | — | `scripts/lib/ops-alert-rules.mjs` — **44 test** (`node --test`) — **→ 63 test từ 2026-08-12** |
 | Test có được chạy không | — | CÓ: step `tooling-tests` trong `harness/check.sh` + job trong `.github/workflows/api.yml` |
 | Thiếu dữ liệu | — | `unknown` ⇒ exit 1 (KHÔNG gộp vào xanh) |
 
@@ -29,6 +29,7 @@
 | Nhóm | Có gì hôm nay | Đo bằng |
 | --- | --- | --- |
 | Availability | ✅ liveness + readiness tách bạch | `/health` · `/health/db` · `canary-watch.sh` · `ops-alert-check` |
+| **Mặt PROD ngoài API** (fbpost :3500 · LMS :3400) | ✅ **MỚI (2026-08-12)** — dò trang công khai thật + soi bản build Next | `ops-alert-check` rule #9–#11 |
 | **Định danh bản đang chạy** | ✅ **MỚI (S6-REL-1)** — version · commit · builtAt · migrationHead | `/health` → `data.build` |
 | Database | ✅ readiness + latency + **lệch migration** | `ops-alert-check` |
 | API latency P95/P99 theo endpoint | ⚠️ **chỉ baseline thủ công**, không liên tục | `scripts/perf-smoke.mjs` |
@@ -58,6 +59,9 @@ unknown) / `2` (crit).
 | 6 | Disk | dung lượng trống ổ chứa repo/pgdata | ≤ 10 GB | ≤ 2 GB | DevOps |
 | 7 | Backup fail | tuổi bản backup mới nhất | > 26h | > 50h | DevOps |
 | 8 | SSL expiry | hạn cert của domain API | ≤ 14 ngày | ≤ 3 ngày | DevOps |
+| 9 | *(thêm)* fbpost đăng bài :3500 | GET `http://localhost:3500/login` — **không đi theo redirect** | 3xx/4xx · 200 mất dấu nhận dạng | ≥ 500 · không ai trả lời | DevOps |
+| 10 | *(thêm)* LMS đào tạo :3400 | GET `http://localhost:3400/login` — như trên | như trên | như trên | DevOps |
+| 11 | *(thêm)* Bản build Next đang phục vụ | `.next/static/development\|webpack` + đếm `eval(` trong bundle middleware (đường dẫn lấy từ `middleware-manifest.json`) | — | có bundle DEV | DevOps |
 
 **Chưa nhận (nói rõ để không ai tưởng đã có):** *Login fail spike* · *Permission denied (403) spike* ·
 *Slow query* — cần tổng hợp theo chuỗi thời gian mà dự án chưa có hạ tầng. Ghi vào post-MVP.
@@ -70,6 +74,28 @@ Rule #3 và #5 không nằm trong §18.3 gốc — thêm vì **sự cố PROD Đ
 > trả **1787 "lỗi trong 60 phút"** trong khi dòng lỗi mới nhất là của **30/07** (CRIT giả nổ mỗi 10
 > phút); và ở chiều ngược lại, một lỗi ghi ở phút 59 rồi im 61 phút sẽ bị báo **XANH**. Logic + lý do
 > đầy đủ: `scripts/lib/ops-log-window.mjs`, spec `scripts/lib/ops-log-window.test.mjs`.
+
+### Rule #9–#11 — mở phạm vi ra ngoài API (2026-08-12)
+
+Rule #9–#11 cũng sinh ra từ **sự cố PROD ĐÃ xảy ra**, ngày 11–12/08: `next dev` chạy trong
+`apps/fbpost` ghi đè chính `.next` mà NSSM `MediaOS-Social` (`next start`) đang phục vụ ⇒ bundle
+`devtool:'eval'` ⇒ edge runtime **cấm sinh mã từ chuỗi** ⇒ `EvalError` ở middleware ⇒ **500 MỌI đường
+dẫn suốt ~15 tiếng**, qua cả `localhost:3500` lẫn domain.
+
+Không một chỉ báo nào bắt được. `Get-Service` = `Running`; `social.out.log` in `▲ Next.js 15.5.22` +
+`✓ Ready in 717ms` mỗi lần boot; và `ops-alert-check` **chỉ dò API :3100** nên 8/8 nhóm vẫn xanh/warn.
+Bài học: **một dịch vụ không nằm trong danh sách đo là một dịch vụ không có ai canh** — `Running` +
+`Ready` không chứng minh gì, chỉ HÀNH VI HTTP mới chứng minh.
+
+Vì vậy #9/#10 đo **hiện tượng** (trang có sống không) còn #11 đo **nguyên nhân** (bản build có phải
+dev không) — #11 bắt được TRƯỚC khi nó thành 500 và chỉ thẳng thủ phạm thay vì "trang chết, không rõ
+vì sao". #9/#10 cố tình **không đi theo redirect**: để `fetch` tự follow thì một trang công khai bị
+cổng phiên đá về `/login` vẫn hiện ra "200 ok" — đúng chế độ hỏng đã cắn ngày 12/08 với hai trang
+chính sách Meta.
+
+> 🔴 **Thêm một mặt PROD mới (app/cổng/dịch vụ) ⇒ PHẢI thêm vào `DEFAULT_SITES` trong
+> `scripts/ops-alert-check.mjs`**, nếu không nó sẽ sập âm y hệt. Danh sách trang dò RỖNG ⇒ `unknown`,
+> không bao giờ ra xanh. Ghi đè tại chỗ khi cần: `OPS_SITES` (JSON) · `OPS_SITE_TIMEOUT_MS`.
 
 ### Kết quả chạy thật — 2026-07-30 trên PROD
 
@@ -119,6 +145,43 @@ nhóm đổi kết luận**, 7 nhóm còn lại giữ nguyên:
 | Lỗi ứng dụng trong log | `crit` — *1787 dòng lỗi trong cửa sổ* | `ok` — *0 dòng lỗi trong cửa sổ* |
 | 7 nhóm còn lại | `ok` | `ok` (KI-050 đã đóng: backup 2.8 giờ) |
 
+### Kết quả chạy thật — 2026-08-12 trên PROD (sau khi thêm rule #9–#11)
+
+```text
+OPS ALERT CHECK (IMPL-09 §18.3) — http://localhost:3100/api/v1 · cửa sổ 60 phút
+
+  ✓ ok      Backend down                       /health 200 status=ok
+  ✓ ok      DB connection/readiness            latency 7ms
+  ! warn    Lệch migration (schema ↔ journal)  1 migration chưa áp — build mới đang ngồi trên schema cũ
+  ✓ ok      Job nền thất bại                   0 lần chạy Failed trong cửa sổ
+  ✓ ok      Lỗi ứng dụng trong log             0 dòng lỗi trong cửa sổ
+  ✓ ok      Dung lượng trống                   còn 366.4 GB
+  ✓ ok      Tuổi bản backup mới nhất           7.2 giờ kể từ bản gần nhất
+  ✓ ok      Hạn chứng chỉ TLS                  còn 35 ngày
+  ✓ ok      fbpost đăng bài (:3500)            HTTP 200 + dấu nhận dạng khớp
+  ✓ ok      LMS đào tạo (:3400)                HTTP 200 + dấu nhận dạng khớp
+  ✓ ok      Bản build Next đang phục vụ        2 app đều chạy bundle PROD
+
+  Tổng thể: WARN   (exit 1)
+```
+
+`warn` lệch migration là **tồn đọng có sẵn từ trước** WO này (1 migration chưa áp trên PROD), không
+phải do rule mới — cần owner xử lý riêng.
+
+**Nghiệm thu bằng cách BẺ HỎNG chứ không bằng cách nhìn xanh** (chạy 12/08, ghi đè `OPS_SITES` để
+dựng lại đúng từng chế độ hỏng — không chờ sự cố thật):
+
+| Ca dựng lại | Kết quả | Exit |
+| --- | --- | --- |
+| Trang trả **500 mọi đường dẫn** (đúng sự cố fbpost 11–12/08) | `crit` — *HTTP 500 — trang chết* | 2 |
+| Cổng đóng (dịch vụ dừng hẳn) | `crit` — *không ai trả lời (ECONNREFUSED) — dịch vụ dừng/treo* | 2 |
+| HTTP 200 nhưng thân trang mất dấu nhận dạng (trang trắng) | `warn` | 1 |
+| Trang công khai bị cổng phiên đá ra (307, **không follow**) | `warn` — *HTTP 307 — không phải 2xx* | 1 |
+| `.next/static/development` + `webpack` (dấu `next dev`) | `crit` — *bundle DEV đang được next start phục vụ* | 2 |
+| Bundle middleware đầy `eval(` (đúng nguyên nhân `EvalError`) | `crit` — như trên | 2 |
+| App chưa build ⇒ không đọc được `.next` | `unknown` — KHÔNG ra xanh | 1 |
+| `OPS_SITES=[]` hoặc JSON rác ⇒ không dò trang nào | `unknown` — *mù mà im lặng chính là lỗi đang vá* | 1 |
+
 ---
 
 ## 4. Đặt lịch chạy (owner — cần làm trước go-live)
@@ -148,6 +211,17 @@ một dòng JSON vào `logs/ops-alerts.log`. Muốn đẩy ra kênh chat: đặt
 env của máy, **không commit**).
 
 **Kiểm tra lịch đã chạy chưa:** `Get-ScheduledTask -TaskName MediaOS-*` + xem `logs/ops-alerts.log`.
+Đo 2026-08-12: `MediaOS-OpsAlert` = `Ready`, chu kỳ 10 phút, `LastTaskResult` = 1 (warn) — **lịch CHẠY
+THẬT**, không phải chỉ đăng ký.
+
+> 🔴 **LỖ CÒN LẠI — PHÁT HIỆN ≠ BÁO ĐỘNG (đo 2026-08-12, owner cần chốt).** `OPS_ALERT_WEBHOOK`
+> **chưa được đặt** trên máy PROD. Nghĩa là hôm nay cảnh báo chạy mỗi 10 phút, phán quyết đúng, rồi
+> **ghi vào một file mà không ai mở**: `logs/ops-alerts.log`. Sự cố 11–12/08 có hai nửa — (a) không đo
+> fbpost, (b) không có đường báo ra ngoài. Rule #9–#11 đóng nửa (a); **nửa (b) vẫn mở**: nếu hôm nay
+> `fbpost` chết lại, `ops-alert-check` SẼ ra `crit` exit 2 và **vẫn không ai biết trong 15 tiếng**, vì
+> tri thức đó nằm im trong log. Đóng nửa (b) = đặt `OPS_ALERT_WEBHOOK` (Slack/Telegram/Google Chat)
+> vào env của máy — **URL là secret, KHÔNG commit** (BẤT BIẾN #3). Đây là việc của owner: cần chọn
+> kênh + tài khoản, không phải việc code.
 
 ---
 

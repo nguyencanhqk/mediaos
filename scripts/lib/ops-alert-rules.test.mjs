@@ -19,7 +19,24 @@ const HEALTHY = {
   diskFreeGb: 120,
   backupAgeHours: 3,
   certExpiryDays: 60,
+  sites: [
+    {
+      id: "SOCIAL",
+      title: "fbpost",
+      url: "http://localhost:3500/login",
+      status: 200,
+      bodyOk: true,
+    },
+    { id: "LMS", title: "LMS", url: "http://localhost:3400/login", status: 200, bodyOk: true },
+  ],
+  nextBuilds: [
+    { id: "SOCIAL", dir: "apps/fbpost", mode: "prod" },
+    { id: "LMS", dir: "apps/lms", mode: "prod" },
+  ],
 };
+
+/** Số hàng khi đủ tín hiệu: 8 nhóm nền + 1 hàng/trang dò + 1 hàng bản build Next. */
+const HEALTHY_ROWS = 8 + HEALTHY.sites.length + 1;
 
 const find = (rows, id) => rows.find((r) => r.id === id);
 const sev = (signals, id) => find(evaluate(signals), id).severity;
@@ -45,7 +62,7 @@ describe("worstSeverity", () => {
 describe("evaluate — trạng thái bình thường", () => {
   it("tín hiệu đủ và tốt ⇒ tất cả ok", () => {
     const rows = evaluate(HEALTHY);
-    assert.equal(rows.length, 8, "phải phán xét đủ 8 nhóm");
+    assert.equal(rows.length, HEALTHY_ROWS, "phải phán xét đủ mọi nhóm");
     assert.equal(worstSeverity(rows.map((r) => r.severity)), "ok");
   });
 });
@@ -60,6 +77,8 @@ describe("evaluate — THIẾU DỮ LIỆU phải ra unknown, KHÔNG phải ok",
     ["diskFreeGb", "DISK_FREE"],
     ["backupAgeHours", "BACKUP_AGE"],
     ["certExpiryDays", "CERT_EXPIRY"],
+    ["sites", "SITE_PROBES"],
+    ["nextBuilds", "NEXT_DEV_BUILD"],
   ];
 
   for (const [field, id] of cases) {
@@ -73,9 +92,9 @@ describe("evaluate — THIẾU DỮ LIỆU phải ra unknown, KHÔNG phải ok",
     });
   }
 
-  it("không có tín hiệu nào ⇒ 8/8 unknown, tổng thể unknown (KHÔNG ok)", () => {
+  it("không có tín hiệu nào ⇒ 10/10 unknown, tổng thể unknown (KHÔNG ok)", () => {
     const rows = evaluate({});
-    assert.equal(rows.filter((r) => r.severity === "unknown").length, 8);
+    assert.equal(rows.filter((r) => r.severity === "unknown").length, 10);
     assert.equal(worstSeverity(rows.map((r) => r.severity)), "unknown");
   });
 
@@ -196,6 +215,142 @@ describe("ngưỡng ghi đè được", () => {
     const signals = { ...HEALTHY, diskFreeGb: 8 };
     assert.equal(find(evaluate(signals), "DISK_FREE").severity, "warn");
     assert.equal(find(evaluate(signals, { diskFreeWarnGb: 5 }), "DISK_FREE").severity, "ok");
+  });
+});
+
+// ── Sự cố THẬT 11–12/08: fbpost :3500 trả 500 MỌI đường dẫn suốt ~15 tiếng mà không rule nào kêu,
+// vì `ops-alert-check` chỉ dò API :3100. Nhóm test dưới ghim luật: mọi trang PROD đều phải có
+// người canh, và "không dò trang nào" KHÔNG được ra xanh.
+describe("SITE_* — trang PROD ngoài API (fbpost :3500 · LMS :3400)", () => {
+  const withSites = (sites) => evaluate({ ...HEALTHY, sites });
+
+  it("một trang 500 ⇒ CRIT (chính xác sự cố fbpost 11–12/08)", () => {
+    const rows = withSites([{ id: "SOCIAL", title: "fbpost", status: 500 }]);
+    assert.equal(find(rows, "SITE_SOCIAL").severity, "crit");
+    assert.equal(worstSeverity(rows.map((r) => r.severity)), "crit");
+  });
+
+  it("503 cũng crit", () => {
+    assert.equal(
+      find(withSites([{ id: "LMS", title: "LMS", status: 503 }]), "SITE_LMS").severity,
+      "crit",
+    );
+  });
+
+  it("không ai trả lời (ECONNREFUSED) ⇒ crit — đó là PHÉP ĐO, không phải thiếu dữ liệu", () => {
+    const rows = withSites([
+      { id: "SOCIAL", title: "fbpost", status: null, transport: "ECONNREFUSED" },
+    ]);
+    assert.equal(find(rows, "SITE_SOCIAL").severity, "crit");
+  });
+
+  it("treo không trả lời (timeout) ⇒ crit — người dùng cũng chỉ thấy trang không lên", () => {
+    assert.equal(
+      find(withSites([{ id: "LMS", title: "LMS", status: null, transport: "timeout" }]), "SITE_LMS")
+        .severity,
+      "crit",
+    );
+  });
+
+  it("lỗi lạ không rõ nghĩa ⇒ unknown, KHÔNG đoán bừa thành crit", () => {
+    assert.equal(
+      find(withSites([{ id: "LMS", title: "LMS", status: null, transport: "EPROTO" }]), "SITE_LMS")
+        .severity,
+      "unknown",
+    );
+  });
+
+  it("200 nhưng thân trang mất dấu nhận dạng ⇒ warn (trang trắng/nội dung sai)", () => {
+    assert.equal(
+      find(
+        withSites([
+          { id: "SOCIAL", title: "fbpost", status: 200, bodyOk: false, expect: "MediaOS" },
+        ]),
+        "SITE_SOCIAL",
+      ).severity,
+      "warn",
+    );
+  });
+
+  it("307 ⇒ warn — cổng phiên đá trang công khai ra, đường dò đã đổi", () => {
+    assert.equal(
+      find(withSites([{ id: "SOCIAL", title: "fbpost", status: 307 }]), "SITE_SOCIAL").severity,
+      "warn",
+    );
+  });
+
+  it("404 ⇒ warn — route biến mất là tín hiệu, không phải bình thường", () => {
+    assert.equal(
+      find(withSites([{ id: "LMS", title: "LMS", status: 404 }]), "SITE_LMS").severity,
+      "warn",
+    );
+  });
+
+  it("danh sách trang RỖNG ⇒ unknown — mù mà im lặng chính là lỗi đang vá", () => {
+    const rows = evaluate({ ...HEALTHY, sites: [] });
+    assert.equal(find(rows, "SITE_PROBES").severity, "unknown");
+    assert.notEqual(worstSeverity(rows.map((r) => r.severity)), "ok");
+  });
+
+  it("mỗi trang là MỘT hàng riêng — một trang chết không bị trang khoẻ che", () => {
+    const rows = withSites([
+      { id: "SOCIAL", title: "fbpost", status: 500 },
+      { id: "LMS", title: "LMS", status: 200, bodyOk: true },
+    ]);
+    assert.equal(find(rows, "SITE_SOCIAL").severity, "crit");
+    assert.equal(find(rows, "SITE_LMS").severity, "ok");
+  });
+});
+
+// ── Cùng sự cố, nhìn từ phía NGUYÊN NHÂN: `next dev` ghi đè `.next` mà `next start` đang phục vụ ⇒
+// bundle devtool:'eval' ⇒ edge runtime ném EvalError ⇒ 500 mọi request. Bắt được TRƯỚC khi chết.
+describe("NEXT_DEV_BUILD — bản dev đè lên bản PROD", () => {
+  const withBuilds = (nextBuilds) => evaluate({ ...HEALTHY, nextBuilds });
+
+  it("một app đang chạy bundle dev ⇒ crit", () => {
+    const rows = withBuilds([
+      { id: "SOCIAL", dir: "apps/fbpost", mode: "dev" },
+      { id: "LMS", dir: "apps/lms", mode: "prod" },
+    ]);
+    assert.equal(find(rows, "NEXT_DEV_BUILD").severity, "crit");
+    assert.match(find(rows, "NEXT_DEV_BUILD").detail, /apps[/\\]fbpost/);
+  });
+
+  it("tất cả prod ⇒ ok", () => {
+    assert.equal(find(withBuilds(HEALTHY.nextBuilds), "NEXT_DEV_BUILD").severity, "ok");
+  });
+
+  it("không đọc được .next của một app ⇒ unknown, KHÔNG ok", () => {
+    assert.equal(
+      find(
+        withBuilds([
+          { id: "SOCIAL", dir: "apps/fbpost", mode: "prod" },
+          { id: "LMS", dir: "apps/lms", mode: "missing" },
+        ]),
+        "NEXT_DEV_BUILD",
+      ).severity,
+      "unknown",
+    );
+  });
+
+  it("dev THẮNG missing — có bằng chứng hỏng thì không hạ xuống unknown", () => {
+    assert.equal(
+      find(
+        withBuilds([
+          { id: "SOCIAL", dir: "apps/fbpost", mode: "dev" },
+          { id: "LMS", dir: "apps/lms", mode: "missing" },
+        ]),
+        "NEXT_DEV_BUILD",
+      ).severity,
+      "crit",
+    );
+  });
+
+  it("danh sách rỗng ⇒ unknown", () => {
+    assert.equal(
+      find(evaluate({ ...HEALTHY, nextBuilds: [] }), "NEXT_DEV_BUILD").severity,
+      "unknown",
+    );
   });
 });
 
