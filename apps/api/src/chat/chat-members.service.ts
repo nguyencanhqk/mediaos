@@ -14,6 +14,7 @@ import { toChatMemberDto, toChatRosterMemberDto } from "./chat.mapper";
 import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
 import { ChatPresenceReaderService } from "../realtime/chat-presence-reader.service";
+import { ChatCallRoomExitService } from "./chat-call-room-exit.service";
 import type { ChatActor } from "./chat-rooms.service";
 
 /**
@@ -39,6 +40,10 @@ export class ChatMembersService {
     // S8-CHAT-UX-FE-3 (additive) — ký avatar người gửi theo LÔ (CHAT-DEC-019) + ảnh chụp "đang online".
     private readonly avatarPresign: AvatarPresignService,
     private readonly presence: ChatPresenceReaderService,
+    // ⚠️ S7-CALL-RT-FIX-2 (additive) — **PHẢI Ở CUỐI**. Ba spec dựng service này bằng THỨ TỰ THAM SỐ
+    // (`chat-realtime-after-commit.spec.ts`, `chat-roster.service.spec.ts`); chèn vào giữa làm chúng đỏ
+    // với thông báo khó hiểu ở một file cách xa chỗ sửa.
+    private readonly callExit: ChatCallRoomExitService,
   ) {}
 
   /**
@@ -222,7 +227,24 @@ export class ChatMembersService {
         resultStatus: "Success",
         oldValues: { userId: targetUserId, role: target.role },
       });
-      return { removed: true as const };
+
+      // S7-CALL-RT-FIX-2 — TRONG tx: gỡ khỏi phòng phải đóng luôn phần tham gia cuộc gọi đang sống của
+      // họ, nếu không họ VẪN nhận relay SDP/ICE (chiều rò). Cùng tx ⇒ rollback thì không có trạng thái
+      // "đã đóng cuộc gọi nhưng vẫn là thành viên phòng".
+      const closed = await this.callExit.closeCallParticipationOnRoomExit(
+        tx,
+        actor.companyId,
+        roomId,
+        targetUserId,
+        actor.id,
+        new Date(),
+      );
+      // Evict cũng TRONG tx (vế AN NINH — xem docblock `evictFromCallRoom`): đặt sau commit là để hở
+      // đúng cửa sổ `media-state`/`screen-state` mà bản vá dựng ra để đóng.
+      for (const { callId } of closed) {
+        this.realtime.evictFromCallRoom(actor.companyId, callId, targetUserId);
+      }
+      return { removed: true as const, closedCallIds: closed.map((c) => c.callId) };
     });
 
     // SAU commit. Người bị gỡ nhận `chat:room{member_removed}` qua `chatUserRoomName` của họ (đích
@@ -232,7 +254,12 @@ export class ChatMembersService {
       userId: targetUserId,
       action: "leave",
     });
-    return result;
+    // SAU commit — ngược chiều với `evictFromCallRoom` ở trên, CÓ CHỦ ĐÍCH: phát `peer-left` trước commit
+    // rồi rollback là nói dối với người còn lại (họ phá `RTCPeerConnection` cho một người chưa hề rời).
+    for (const callId of result.closedCallIds) {
+      this.realtime.emitCallPeerLeft(actor.companyId, callId, targetUserId);
+    }
+    return { removed: true };
   }
 
   // ─── nội bộ ──────────────────────────────────────────────────────────────────

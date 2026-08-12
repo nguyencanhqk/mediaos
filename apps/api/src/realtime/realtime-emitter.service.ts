@@ -1,6 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { Namespace, Server } from "socket.io";
 import {
+  CHAT_CALL_OUTBOUND_EVENTS,
+  chatCallPeerSchema,
   WS_EVENTS,
   wsChatMessageEventSchema,
   wsChatMessageRecalledEventSchema,
@@ -22,7 +24,13 @@ import {
   type WsChatRoomEvent,
   type WsChatTypingEvent,
 } from "@mediaos/contracts";
-import { callUserRoomName, chatRoomName, chatUserRoomName, userRoomName } from "./rooms";
+import {
+  callRoomName,
+  callUserRoomName,
+  chatRoomName,
+  chatUserRoomName,
+  userRoomName,
+} from "./rooms";
 
 /**
  * RealtimeEmitterService — CỔNG DUY NHẤT để module khác (NotificationsService, …) đẩy sự kiện
@@ -373,6 +381,100 @@ export class RealtimeEmitterService {
       // Nhưng phải KÊU — im lặng ở đây nghĩa là phiên WS sống sót sau khi tài khoản đã bị khoá.
       this.logger.error(
         `severUserSessions(/ws-call) THẤT BẠI cho user=${userId} — phiên GỌI có thể còn relay sau thu hồi: ` +
+          (err instanceof Error ? err.message : String(err)),
+        err instanceof Error ? err.stack : undefined,
+      );
+    }
+  }
+
+  /**
+   * S7-CALL-RT-FIX-2 (B4 vế AN NINH) — kéo mọi socket `/ws-call` của một người RA KHỎI room chung của
+   * một cuộc gọi. Room-ops, KHÔNG phát payload nào.
+   *
+   * ⚠️ **GỌI TRONG TRANSACTION của caller** — đây là ngoại lệ của luật "mọi method ở service này gọi sau
+   * commit", và nó CÙNG LẬP LUẬN với `severUserSessions` ngay trên: đặt sau commit là để hở đúng cửa sổ
+   * mà bản vá dựng ra để đóng. Rollback sau khi đã evict là chiều FAIL-SAFE (suy giảm UX), sót một socket
+   * là RÒ.
+   *
+   * ┌─ VÌ SAO KHÔNG ĐỦ NẾU CHỈ ĐÓNG `chat_call_participants` ────────────────────────────────────────┐
+   * │ Đóng participant làm người bị gỡ rơi khỏi `activeUserIds` ⇒ `assertPeer` chặn được SDP/ICE (ba  │
+   * │ sự kiện đi qua `callUserRoomName` của người NHẬN). Nhưng `call:media-state` và                  │
+   * │ `call:screen-state` **broadcast thẳng vào `callRoomName`** và KHÔNG đi qua `assertPeer` — socket│
+   * │ họ vẫn còn trong room chung ⇒ họ tiếp tục biết bên kia bật/tắt mic, cam, và đang chia sẻ màn    │
+   * │ hình hay không. Ít hơn IP nội bộ, nhưng vẫn là "đã bị gỡ khỏi phòng mà vẫn theo dõi cuộc gọi    │
+   * │ theo thời gian thực".                                                                          │
+   * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * ⚠️ **Hậu quả rollback ĐẦY ĐỦ** (ghi ra để `S7-CALL-QA-2` biết mà đo): rời `callRoomName` mất KHÔNG
+   * CHỈ chỉ báo mic/cam mà mất cả `call:peer-left`. Nếu tx rollback, nạn nhân vẫn là thành viên hợp lệ
+   * nhưng UI của họ sẽ **treo một peer ma khi bên kia gác máy**, và FE không có lệnh `call:join` lần hai
+   * để tự sửa.
+   *
+   * ⚠️ `callServer === null` (REALTIME_ENABLED=false / gateway chưa init) **KHÔNG được im lặng.** Khuôn
+   * `?.` câm của `severUserSessions` không áp được: đây là vế AN NINH, và trạng thái hậu quả là *"DB nói
+   * đã rời, socket VẪN trong `callRoomName`"* = RÒ, không phải suy biến chấp nhận được. `logger.error`
+   * theo đúng precedent `emitChatCall`.
+   *
+   * ⚠️ `try/catch` CHỈ phủ nhánh ném ĐỒNG BỘ. `socketsLeave` với adapter Valkey publish trong một promise
+   * nội bộ; reject ở đó KHÔNG rơi vào `catch` mà thành `unhandledRejection`. Rủi ro này ĐÃ CÓ SẴN ở
+   * `severUserSessions` — ghi ra để không ai đọc khối dưới thành "đã bọc kín".
+   */
+  evictFromCallRoom(companyId: string, callId: string, userId: string): void {
+    if (!this.callServer) {
+      this.logger.error(
+        `evictFromCallRoom BỎ QUA — gateway /ws-call chưa sẵn sàng; socket của người vừa rời phòng có ` +
+          `thể VẪN nhận media-state/screen-state của cuộc gọi (callId=${callId} userId=${userId})`,
+      );
+      return;
+    }
+    try {
+      this.callServer
+        .in(callUserRoomName(companyId, userId))
+        .socketsLeave(callRoomName(companyId, callId));
+    } catch (err) {
+      // KHÔNG throw lên caller: ném ở đây sẽ ROLLBACK cả thao tác gỡ thành viên — lấy một sự cố realtime
+      // đổi lấy một thao tác quản trị thất bại là sai chiều đánh đổi. Nhưng phải KÊU: im lặng nghĩa là
+      // một người đã bị gỡ khỏi phòng vẫn đang theo dõi cuộc gọi.
+      this.logger.error(
+        `evictFromCallRoom THẤT BẠI (callId=${callId} userId=${userId}) — socket có thể còn trong room ` +
+          `cuộc gọi: ` +
+          (err instanceof Error ? err.message : String(err)),
+        err instanceof Error ? err.stack : undefined,
+      );
+    }
+  }
+
+  /**
+   * S7-CALL-RT-FIX-2 (B4 vế THÔNG BÁO) — `call:peer-left` cho người CÒN LẠI khi một người bị gỡ/tự rời
+   * khỏi phòng giữa cuộc gọi. **Gọi SAU COMMIT.**
+   *
+   * ⚠️ Ngược hoàn toàn với `evictFromCallRoom` ở trên, và sự bất đối xứng đó là CÓ CHỦ ĐÍCH: phát trước
+   * commit rồi rollback là **nói dối** — FE người còn lại phá `RTCPeerConnection` cho một người chưa hề
+   * rời, và không có sự kiện nào đính chính. Đây là dữ liệu nghiệp vụ, không phải hàng rào.
+   *
+   * Phát cho CẢ room, KHÔNG `.except()` — y hệt `handleDisconnect` của gateway. Một khuôn, một ngữ nghĩa;
+   * FE lọc theo `callId` sẵn. (Nạn nhân vừa bị `socketsLeave` nên trên thực tế không nhận được.)
+   *
+   * ⚠️ Đây là **người phát THỨ HAI** vào namespace `/ws-call` — người thứ nhất là helper `relay` của
+   * `CallSignallingGateway`. Nghĩa vụ `.parse()` trước `.emit(` áp y nguyên (masking là cấu trúc, không
+   * phải kỷ luật); ratchet `chat-realtime-structure.spec.ts` đo cả call site này.
+   */
+  emitCallPeerLeft(companyId: string, callId: string, userId: string): void {
+    if (!this.callServer) {
+      this.logger.error(
+        `emitCallPeerLeft BỎ QUA — gateway /ws-call chưa sẵn sàng; người còn lại có thể treo một peer ma ` +
+          `(callId=${callId} userId=${userId})`,
+      );
+      return;
+    }
+    try {
+      this.callServer
+        .to(callRoomName(companyId, callId))
+        .emit(CHAT_CALL_OUTBOUND_EVENTS.PEER_LEFT, chatCallPeerSchema.parse({ callId, userId }));
+    } catch (err) {
+      this.logger.error(
+        `emitCallPeerLeft THẤT BẠI (callId=${callId} userId=${userId}) — người còn lại có thể treo một ` +
+          `peer ma: ` +
           (err instanceof Error ? err.message : String(err)),
         err instanceof Error ? err.stack : undefined,
       );

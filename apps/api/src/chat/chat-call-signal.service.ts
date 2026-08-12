@@ -2,7 +2,11 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import type { ChatCallStatus } from "../db/schema/communication";
 import { DatabaseService } from "../db/db.service";
 import { ChatAccessService } from "./chat-access.service";
-import { CHAT_CALL_LIVE_STATUSES, ChatCallsRepository } from "./chat-calls.repository";
+import {
+  CHAT_CALL_LIVE_STATUSES,
+  ChatCallsRepository,
+  isActiveCallOutcome,
+} from "./chat-calls.repository";
 
 /** Ảnh chụp tư cách của MỘT actor trong MỘT cuộc gọi, tại đúng thời điểm một khung tín hiệu tới. */
 export interface ChatCallSignalAccess {
@@ -42,14 +46,23 @@ export interface ChatCallSignalAccess {
  * │ `insertCall` · `transition` · `setParticipantOutcome` · `closeOpenParticipants`, tức TOÀN BỘ bề   │
  * │ mặt GHI vòng đời. Đưa nó ra ngoài module là đưa đường bắt đầu/kết thúc cuộc gọi ra khỏi cổng      │
  * │ `PermissionGuard` + audit — đúng hàng rào **R4** mà chữ ký owner ở `DECISIONS-07` đổi lấy.        │
- * │ Service này export ĐÚNG một phép đọc, không có method ghi nào, và không được thêm.                │
+ * │ Service này export **HAI phép ĐỌC, 0 phép GHI** (S7-CALL-RT-FIX-2 thêm `wasCallParticipant`).     │
+ * │ Phép thứ hai bị khoá cứng vào hàng của **CHÍNH actor** (`user_id = actor`) nên nó không mở thêm   │
+ * │ bề mặt quan sát nào; thêm phép đọc thứ BA phải qua cùng lập luận đó, không phải một dòng tiện tay.│
  * └──────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
- * Hai truy vấn, KHÔNG cache (`DECISIONS-07` §3.2: *"mỗi sự kiện kiểm lại tư cách tham gia cuộc gọi —
- * không tin vào việc socket đang ở trong room"*, memory `ws-permission-gate-needs-its-own-room`).
- * Cái giá là ~2 truy vấn điểm mỗi khung tín hiệu; đó là đánh đổi CÓ CHỦ ĐÍCH đổi lấy việc **không có bản
- * sao thứ hai của luật membership** — `assertCallAccess` vẫn là điểm khẳng định duy nhất (bất biến #3 của
- * `chat-access.service.ts`, có grep test đóng đinh).
+ * KHÔNG cache (`DECISIONS-07` §3.2: *"mỗi sự kiện kiểm lại tư cách tham gia cuộc gọi — không tin vào
+ * việc socket đang ở trong room"*, memory `ws-permission-gate-needs-its-own-room`). Đó là đánh đổi CÓ
+ * CHỦ ĐÍCH đổi lấy việc **không có bản sao thứ hai của luật membership** — `assertCallAccess` vẫn là
+ * điểm khẳng định duy nhất (bất biến #3 của `chat-access.service.ts`, có grep test đóng đinh).
+ *
+ * **Chi phí, theo NHÁNH** (S7-CALL-RT-FIX-2 — con số, không phải lời trấn an):
+ *  • đường THÀNH CÔNG: 2 truy vấn điểm mỗi khung (`assertCallAccess` + `listParticipants`) — không đổi;
+ *  • nhánh TỪ CHỐI (`assertCallAccess` ném ⇒ `resolveSignalAccess` trả `null`): 1 → **2**, vì gateway
+ *    gọi thêm `wasCallParticipant`. Trần thực tế: `chargeFrame` cho 360 khung/socket/10 s và
+ *    `CHAT_CALL_CONNECT_MAX_PER_MIN = 30` socket/người/phút ⇒ xấu nhất 30 × 360 = **10.800 truy vấn
+ *    phụ/người/phút**. Chấp nhận được ở một truy vấn điểm theo khoá chính, nhưng ai nới hai trần đó
+ *    phải tính lại con số này.
  */
 @Injectable()
 export class ChatCallSignalService {
@@ -84,8 +97,10 @@ export class ChatCallSignalService {
       }
 
       const participants = await this.calls.listParticipants(tx, companyId, callId);
+      // `isActiveCallOutcome` — MỘT bản sao của vị từ, dùng chung với `WHERE` của
+      // `setParticipantOutcome` và của `findOpenParticipantCallsInRoom` (xem docblock của hằng).
       const activeUserIds = participants
-        .filter((p) => p.outcome === null || p.outcome === "accepted")
+        .filter((p) => isActiveCallOutcome(p.outcome))
         .map((p) => p.userId);
 
       const participantUserIds = participants.map((p) => p.userId);
@@ -101,5 +116,40 @@ export class ChatCallSignalService {
         participantUserIds,
       };
     });
+  }
+
+  /**
+   * S7-CALL-RT-FIX-2 (A2) — actor **đã từng** được mời vào cuộc gọi này chưa?
+   *
+   * ┌─ VÌ SAO CẦN MỘT PHÉP ĐỌC RIÊNG, KHÔNG SUY RA TỪ `resolveSignalAccess` ──────────────────────────┐
+   * │ `resolveSignalAccess` trả `null` cho BỐN lý do gộp lại, trong đó có "actor không CÒN là thành    │
+   * │ viên phòng". Người vừa bị gỡ khỏi phòng GIỮA cuộc gọi rơi đúng vào đó ⇒ mọi thông tin về việc họ │
+   * │ từng là người tham gia bị xoá sạch trước khi gateway kịp phân lớp. Browser của họ **tự** trickle │
+   * │ ICE (WebRTC làm, không cần thao tác người nào) ⇒ mỗi khung đó bị xếp `probe` ⇒ ghi               │
+   * │ `user_security_events` + NGẮT một người hoàn toàn vô tội. Bảng đó **append-only, không job dọn** │
+   * │ (bất biến #2) ⇒ hàng ghi sai là VĨNH VIỄN.                                                      │
+   * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * ⚠️ **KHÔNG mở oracle nào.** Vị từ khoá cứng `user_id = actorUserId`: actor chỉ biết được về CHÍNH
+   * MÌNH. Người chưa từng được mời không có hàng ⇒ luôn `false` ⇒ vẫn là lớp B (ghi + ngắt), tức ranh
+   * giới chống dò cửa **giữ nguyên**. Khác biệt hành vi duy nhất mà actor quan sát được là "tôi từng
+   * được mời vào cuộc gọi này" — điều họ **đã biết** từ lúc nhận `chat:call{ringing}`.
+   *
+   * ⚠️ **TÁI DÙNG `findParticipant`, không viết `SELECT` thứ ba.** Repo đã có đúng phép đọc
+   * `company_id + call_id + user_id LIMIT 1`. Một bản sao viết tay ở đây là đường trôi thứ ba của cùng
+   * một luật — đúng thứ mà `activeParticipantOutcomeSql` vừa được rút ra để chấm dứt.
+   *
+   * `withTenant` bắt buộc (bất biến #1): đây là một phép đọc dữ liệu nghiệp vụ, RLS phải được nạp
+   * `app.current_company_id` — không có lối tắt "chỉ đọc nên thôi".
+   */
+  async wasCallParticipant(
+    companyId: string,
+    callId: string,
+    actorUserId: string,
+  ): Promise<boolean> {
+    const row = await this.db.withTenant(companyId, (tx) =>
+      this.calls.findParticipant(tx, companyId, callId, actorUserId),
+    );
+    return row !== null;
   }
 }

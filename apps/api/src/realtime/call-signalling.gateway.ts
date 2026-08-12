@@ -120,8 +120,13 @@ const stateOf = (client: Socket): CallSocketState | undefined =>
  *  - `companyId`/`userId` LUÔN lấy từ `socket.data` (đặt lúc handshake), **không bao giờ** từ payload.
  *  - MỖI khung kiểm lại tư cách tham gia cuộc gọi **từ DB** — việc socket đang ở trong room KHÔNG phải
  *    chứng chỉ (memory `ws-permission-gate-needs-its-own-room`).
- *  - Đúng **một** call site `.emit(` (helper `relay`), luôn `.parse()` trước — masking là cấu trúc, không
- *    phải kỷ luật. Ratchet `chat-realtime-structure.spec.ts` đếm cả hai điều này.
+ *  - Đúng **một** call site `.emit(` TRONG FILE NÀY (helper `relay`), luôn `.parse()` trước — masking là
+ *    cấu trúc, không phải kỷ luật. Ratchet `chat-realtime-structure.spec.ts` đếm cả hai điều này.
+ *    ⚠️ **S7-CALL-RT-FIX-2: namespace `/ws-call` có NGƯỜI PHÁT THỨ HAI** —
+ *    `RealtimeEmitterService.emitCallPeerLeft` (báo `peer-left` khi một người bị gỡ/tự rời khỏi PHÒNG
+ *    giữa cuộc gọi; nó không thể sống ở đây vì nguyên nhân đến từ đường REST thành viên, không từ một
+ *    khung WS). Nó chịu CÙNG nghĩa vụ `.parse()` trước `.emit(`, và ratchet trên đo cả call site đó —
+ *    lời hứa "đúng một call site trong toàn namespace" đã HẾT ĐÚNG, đừng đọc dòng trên theo nghĩa cũ.
  *  - 7/8 handler trả `undefined`. Giá trị trả về của handler là một đường ra THẬT: `io-adapter.js` lọc
  *    `!isNil(response)` rồi — nếu response có khoá `event` — **`socket.emit(response.event, response.data)`**;
  *    nếu không, nó gọi `ack` mà **client tự bật được** (adapter lấy `ack` từ đối số cuối của khung client
@@ -662,16 +667,40 @@ export class CallSignallingGateway {
       // ICE candidate còn trên đường bay sẽ ngắt kết nối họ và ghi một hàng an ninh sai. Bộ int-spec
       // (CA 9) bắt đúng ca đó; đừng "gọn hoá" hai vị từ này thành một.
       //
-      // Ranh giới vì thế ĐỒNG NHẤT cho người ngoài: chưa từng được mời ⇒ luôn lớp B, dù cuộc gọi còn
-      // sống hay đã kết thúc — không có oracle "cuộc gọi này còn sống không" ở đây.
-      if (classifyMissingParticipant(event) === "probe") {
+      // 🔴 **S7-CALL-RT-FIX-2.** Vế `actorIsParticipant` ở trên KHÔNG cứu được người bị GỠ KHỎI PHÒNG
+      // giữa cuộc gọi: với họ `assertCallAccess` ném 404 ⇒ `access` đã là `null` ⇒ vế đó không bao giờ
+      // chạy tới. Browser của họ **tự** trickle ICE (WebRTC làm, không cần thao tác người nào) ⇒ mỗi
+      // khung bị xếp `probe` ⇒ ghi `user_security_events` + NGẮT một người hoàn toàn vô tội, vào một
+      // bảng append-only KHÔNG có job dọn. `wasCallParticipant` là thứ DUY NHẤT khôi phục được thông
+      // tin đó: ở thời điểm khung tới, dấu vết "người này từng ở trong cuộc gọi" chỉ còn ở
+      // `chat_call_participants`.
+      //
+      // Ranh giới lớp B GIỮ NGUYÊN, và nó do vị từ `user_id = actor` bên trong `wasCallParticipant`
+      // giữ — KHÔNG phải do ternary dưới đây: người CHƯA TỪNG được mời không có hàng ⇒ luôn `false` ⇒
+      // luôn lớp B, dù cuộc gọi còn sống hay đã kết thúc. Ternary chỉ là bộ lọc CHI PHÍ (khi
+      // `access ≠ null` thì `!actorIsParticipant` đã kéo theo `wasCallParticipant = false` — cùng bảng,
+      // cùng khoá), nên bỏ nó đi hành vi không đổi. Chỗ ĐO ranh giới là ca đối chứng 1b của int-spec.
+      const wasFormerParticipant = access
+        ? false
+        : await this.signal.wasCallParticipant(
+            state.user.companyId,
+            (parsed.data as { callId: string }).callId,
+            state.user.id,
+          );
+
+      if (!wasFormerParticipant && classifyMissingParticipant(event) === "probe") {
         await this.deny(client, state, event, "not_participant");
       } else {
-        // Lớp C của nhánh "chưa từng được mời" (join/leave/ping/media/screen). Im lặng với CLIENT là
-        // đúng, im lặng với NGƯỜI VẬN HÀNH thì không: đây là một trong hai lý do khiến FE "bấm gọi mà
-        // không thấy gì", và nó phải tra được khi bật debug.
+        // Lớp C. HAI nguồn khác nhau, và dòng log phải phân biệt được chúng: (1) sự kiện không-relay của
+        // người chưa từng được mời; (2) BẤT KỲ sự kiện nào của người TỪNG là participant nhưng vừa bị gỡ
+        // khỏi phòng. Im lặng với CLIENT là đúng, im lặng với NGƯỜI VẬN HÀNH thì không — đây là một
+        // trong hai lý do khiến FE "bấm gọi mà không thấy gì", và nó phải tra được khi bật debug.
         this.logger.debug(
-          `/ws-call: bỏ ${event} — không có hàng participant (userId=${state.user.id})`,
+          `/ws-call: bỏ ${event} — ` +
+            (wasFormerParticipant
+              ? "actor TỪNG là người tham gia nhưng không còn thuộc phòng (đua vòng đời, KHÔNG phạt)"
+              : "không có hàng participant") +
+            ` (userId=${state.user.id})`,
         );
       }
       return null;

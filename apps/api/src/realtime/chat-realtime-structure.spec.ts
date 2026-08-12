@@ -209,6 +209,33 @@ describe("DECISIONS-07 R2 — allowlist inbound `/ws-call` ĐÓNG đúng 8", () 
     expect(emits, "đúng 1 call site `.emit(` trong gateway").toHaveLength(1);
     expect(gateway, "call site đó phải parse trước khi phát").toMatch(/\.parse\(/);
   });
+
+  /**
+   * 🔴 S7-CALL-RT-FIX-2 — ca TRÊN đếm `.emit(` **chỉ trong file gateway**, nên nó vẫn XANH sau khi
+   * `RealtimeEmitterService` trở thành người phát THỨ HAI vào namespace `/ws-call`. Ratchet xanh + lời
+   * hứa "đúng một call site trong toàn namespace" = một lời hứa không còn ai canh.
+   *
+   * Ca này phủ nốt: mọi `.emit(` trên `this.callServer` phải `.parse()` **ngay tại call site**. Đó là
+   * cùng một hợp đồng mà helper `relay` của gateway đang giữ — masking là cấu trúc, không phải kỷ luật.
+   */
+  it("người phát THỨ HAI vào /ws-call (`RealtimeEmitterService`) cũng `.parse()` tại call site", () => {
+    const emitter = stripComments(
+      readFileSync(join(REALTIME_DIR, "realtime-emitter.service.ts"), "utf8"),
+    );
+
+    // Mọi câu lệnh chạm `callServer` rồi `.emit(` — tách theo `;` để mỗi call site là một chuỗi riêng.
+    const callServerEmits = emitter
+      .split(";")
+      .filter((stmt) => /this\.callServer/.test(stmt) && /\.emit\s*\(/.test(stmt));
+
+    // Positive control: nếu ai xoá hẳn `emitCallPeerLeft`, khẳng định dưới sẽ xanh RỖNG.
+    expect(callServerEmits, "phải CÓ ít nhất một call site phát vào /ws-call").not.toHaveLength(0);
+    for (const stmt of callServerEmits) {
+      expect(stmt, `call site /ws-call thiếu .parse(): ${stmt.trim().slice(0, 120)}`).toMatch(
+        /\.parse\(/,
+      );
+    }
+  });
 });
 
 describe("Đồ thị module — không dựng lại vòng Realtime→Chat→Realtime", () => {

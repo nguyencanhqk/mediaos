@@ -56,6 +56,7 @@ import { ChatCallsRepository } from "./chat-calls.repository";
 import { ChatCallIceService } from "./chat-call-ice.service";
 // S7-CALL-SEC-1 (additive): cooldown per-user dùng chung cho endpoint đúc credential (HIGH-2 vế 2).
 import { ChatCallCooldownService } from "./chat-call-cooldown.service";
+import { ChatCallRoomExitService } from "./chat-call-room-exit.service";
 import { ChatCallSignalService } from "./chat-call-signal.service";
 import { ChatCallRingingTimeoutJobHandler } from "./chat-call-ringing-timeout.job-handler";
 import { ProjectMembershipModule } from "../tasks/project-membership.module";
@@ -207,6 +208,11 @@ import { ChatOversightRepository } from "./chat-oversight.repository";
     ChatCallRingingTimeoutJobHandler,
     // S7-CALL-RT-1 — bề mặt CHỈ ĐỌC cho `/ws-call` (được export; xem `exports` bên dưới).
     ChatCallSignalService,
+    // S7-CALL-RT-FIX-2 — đóng phần tham gia cuộc gọi khi rời/bị gỡ khỏi PHÒNG. CỐ Ý KHÔNG export: nó
+    // cầm `ChatCallsRepository` (đường ghi `chat_call_participants`), nên đưa ra ngoài module là đi vòng
+    // qua đúng khối "CỐ Ý KHÔNG export" ở trên. Hai caller duy nhất — `ChatMembersService` và
+    // `ChatRoomsService` — đều nằm trong module này.
+    ChatCallRoomExitService,
   ],
   // `ChatDerivedRoomsSyncService` export cho 5 module writer (org · employees · tasks · recycle-bin).
   // Job handler CỐ Ý KHÔNG export: nó được SchedulerModule gom qua DiscoveryService bằng metadata, không

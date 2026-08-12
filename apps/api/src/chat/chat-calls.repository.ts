@@ -37,6 +37,28 @@ export interface ChatCallExpiredRow {
 export const CHAT_CALL_LIVE_STATUSES = ["ringing", "active"] as const;
 
 /**
+ * S7-CALL-RT-FIX-2 — **MỘT bản sao duy nhất** của vị từ "hàng participant còn CHƯA NGÃ NGŨ".
+ *
+ * `outcome IS NULL` (đang đổ chuông) **HOẶC** `'accepted'` (đang nói chuyện). Bốn kết cục còn lại
+ * (`rejected`/`cancelled`/`missed`/`left`) là HẤP THỤ.
+ *
+ * ⚠️ Trước bản vá này, cùng một vị từ được viết tay ở BA chỗ: `WHERE` của `setParticipantOutcome`,
+ * bộ lọc `activeUserIds` ở `ChatCallSignalService` (JS), và — nếu không rút ra — cả
+ * `findOpenParticipantCallsInRoom` dưới đây. Ba bản sao là ba đường trôi độc lập: nới một chỗ mà quên
+ * hai chỗ kia thì "còn trong cuộc gọi" mang hai nghĩa khác nhau tuỳ đường đi tới, và không test nào
+ * bắt được vì mỗi đường vẫn tự nhất quán với chính nó.
+ *
+ * Có phiên bản JS thuần (`isActiveCallOutcome`) cho các bộ lọc trong bộ nhớ — cùng một luật, hai biểu
+ * diễn, và đó là lý do chúng nằm CẠNH NHAU ở đây thay vì mỗi cái một file.
+ */
+export const activeParticipantOutcomeSql = () =>
+  or(isNull(chatCallParticipants.outcome), eq(chatCallParticipants.outcome, "accepted"));
+
+/** Vế JS của `activeParticipantOutcomeSql` — dùng khi hàng đã ở trong bộ nhớ. */
+export const isActiveCallOutcome = (outcome: ChatCallOutcome | null): boolean =>
+  outcome === null || outcome === "accepted";
+
+/**
  * S7-CALL-BE-1 — data-access `chat_calls` + `chat_call_participants` (mig `0546`).
  *
  * ⚠️ QUYỀN GHI Ở DB — đọc trước khi thêm câu lệnh nào (khối C + VERIFY (4) của `0546` pin bằng `=`):
@@ -204,7 +226,7 @@ export class ChatCallsRepository {
           eq(chatCallParticipants.companyId, companyId),
           eq(chatCallParticipants.callId, callId),
           eq(chatCallParticipants.userId, userId),
-          or(isNull(chatCallParticipants.outcome), eq(chatCallParticipants.outcome, "accepted")),
+          activeParticipantOutcomeSql(),
         ),
       )
       .returning({ id: chatCallParticipants.id });
@@ -312,6 +334,68 @@ export class ChatCallsRepository {
       leftAt: r.leftAt,
       outcome: (r.outcome as ChatCallOutcome | null) ?? null,
     };
+  }
+
+  /**
+   * S7-CALL-RT-FIX-2 (B1) — các cuộc gọi **CÒN SỐNG** của một PHÒNG mà `userId` còn hàng participant
+   * **chưa ngã ngũ**. Phép ĐỌC, không ghi.
+   *
+   * Dùng bởi ĐÚNG một đường: đóng phần tham gia của người vừa rời/bị gỡ khỏi phòng
+   * (`ChatCallRoomExitService`). Trước bản vá, gỡ một người khỏi phòng KHÔNG chạm
+   * `chat_call_participants` ⇒ họ vẫn nằm trong `activeUserIds` của người còn lại ⇒ gateway vẫn relay
+   * SDP/ICE **tới** họ (chiều RÒ).
+   *
+   * ⚠️ **`companyId` ở CẢ HAI vế của JOIN** (bất biến #1). RLS đã bó mỗi bảng theo tenant, nhưng điều
+   * kiện JOIN thiếu `company_id` là một tích Descartes trong phạm vi đã bó — đúng nghĩa vẫn sai, và sai
+   * theo kiểu chỉ lộ ra khi có ≥2 công ty.
+   *
+   * ⚠️ **Vế `c.status IN CHAT_CALL_LIVE_STATUSES` là hàng rào, không phải tối ưu.** Thiếu nó, thao tác
+   * gỡ thành viên sẽ đóng lại hàng của những cuộc gọi đã KẾT THÚC từ lâu — ghi đè lịch sử (và sinh một
+   * dòng audit cho mỗi cuộc gọi cũ). Đóng đinh bởi ca "gỡ người sau khi cuộc gọi đã kết thúc ⇒ 0 hàng
+   * audit" (§5.4 đột biến `i`).
+   *
+   * ⚠️ `joinedAt` PHẢI có trong kết quả: nó là thứ DUY NHẤT quyết định kết cục ở bước sau
+   * (`left` cho người đã vào, `missed` cho người chưa nhấc máy) — và ghi sai ở đó là VĨNH VIỄN, vì kết
+   * cục hấp thụ + bảng không có DELETE.
+   *
+   * `SELECT` trần (KHÔNG `FOR UPDATE`): đường này và `hangup` chỉ giao nhau ở MỘT tài nguyên
+   * (`chat_call_participants`) nên là CHỜ, không phải ôm chéo. Hệ quả: hàng có thể bị đóng bởi một tx
+   * khác giữa `SELECT` và `UPDATE` — xử lý ở `ChatCallRoomExitService` bằng giá trị trả về của
+   * `setParticipantOutcome`, không phải bằng khoá.
+   */
+  async findOpenParticipantCallsInRoom(
+    tx: TenantTx,
+    companyId: string,
+    roomId: string,
+    userId: string,
+  ): Promise<{ callId: string; joinedAt: Date | null }[]> {
+    const rows = await tx
+      .select({
+        callId: chatCallParticipants.callId,
+        joinedAt: chatCallParticipants.joinedAt,
+      })
+      .from(chatCallParticipants)
+      .innerJoin(
+        chatCalls,
+        and(
+          eq(chatCalls.id, chatCallParticipants.callId),
+          eq(chatCalls.companyId, chatCallParticipants.companyId),
+        ),
+      )
+      .where(
+        and(
+          eq(chatCallParticipants.companyId, companyId),
+          eq(chatCalls.roomId, roomId),
+          inArray(chatCalls.status, [...CHAT_CALL_LIVE_STATUSES]),
+          eq(chatCallParticipants.userId, userId),
+          activeParticipantOutcomeSql(),
+        ),
+      )
+      // Thứ tự ỔN ĐỊNH: danh sách này lái thứ tự phát `peer-left` và thứ tự hàng audit — không có
+      // `orderBy` thì hai lần chạy cùng dữ liệu cho hai thứ tự khác nhau, và ca test thành xác suất.
+      .orderBy(chatCallParticipants.callId);
+
+    return rows.map((r) => ({ callId: r.callId, joinedAt: r.joinedAt }));
   }
 
   /** Người tham gia của một cuộc gọi, thứ tự ỔN ĐỊNH theo lúc được mời (DTO không nhảy chỗ giữa các lần đọc). */
