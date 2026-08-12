@@ -1381,9 +1381,20 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
     const room = await newRoom(tExitPeer, "R-ended", [uExit]);
     const callId = await invite(tExitPeer, room);
 
-    const cancel = await authPost(tExitPeer, `/chat/calls/${callId}/cancel`).send({});
-    expect(cancel.status, JSON.stringify(cancel.body)).toBe(200);
+    // ⚠️ **DỰNG ĐÚNG trạng thái "hàng CÒN MỞ trên cuộc gọi ĐÃ KẾT THÚC"** — nếu không ca này xanh-rỗng.
+    // Dựng bằng `cancel` là SAI: nó đóng mọi hàng `outcome IS NULL` ⇒ vế lọc `outcome` của B1 một mình
+    // đã trả 0 hàng, và ca sẽ XANH kể cả khi vế `status IN LIVE` bị gỡ (đã ĐO: đột biến `i` không bị bắt).
+    // Đường tới được: `accept` ⇒ `outcome='accepted'`, mà `closeOpenParticipants` chỉ quét
+    // `outcome IS NULL` ⇒ sau khi bên kia `hangup`, hàng của người đã nhận máy VẪN là `'accepted'`
+    // (tức vẫn nằm trong tập "chưa ngã ngũ") trong khi cuộc gọi đã `ended`. Chỉ vế `status` chặn được nó.
+    const acc = await authPost(tExit, `/chat/calls/${callId}/accept`).send({});
+    expect(acc.status, JSON.stringify(acc.body)).toBe(200);
+    const hang = await authPost(tExitPeer, `/chat/calls/${callId}/hangup`).send({});
+    expect(hang.status, JSON.stringify(hang.body)).toBe(200);
+    expect(await callStatus(callId), "tiền đề: cuộc gọi đã kết thúc").toBe("ended");
+
     const outcomeBefore = (await participantsOf(callId)).find((r) => r.user_id === uExit)?.outcome;
+    expect(outcomeBefore, "tiền đề: hàng của người đã nhận máy VẪN chưa ngã ngũ").toBe("accepted");
 
     const before = (await participantClosedAudit(A.companyId)).length;
     expect(await removeMember(tExitPeer, room, uExit)).toMatchObject({ status: 200 });
