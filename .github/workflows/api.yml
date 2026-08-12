@@ -131,7 +131,7 @@ jobs:
       # `pnpm test` không bao giờ chạm tới. Không gắn vào cổng thì chúng là test mồ côi —
       # `harness/lane-db-guard.test.mjs` đã ở trạng thái đó từ S5. Rẻ, không cần DB.
       - name: Tooling tests (node --test)
-        run: node --test scripts/lib/ops-alert-rules.test.mjs scripts/lib/ops-log-window.test.mjs scripts/lib/backup-db-resolve.test.mjs harness/lane-db-guard.test.mjs harness/reconcile-merged.test.mjs
+        run: node --test scripts/lib/ops-alert-rules.test.mjs scripts/lib/ops-alert-notify.test.mjs scripts/lib/ops-log-window.test.mjs scripts/lib/backup-db-resolve.test.mjs harness/lane-db-guard.test.mjs harness/reconcile-merged.test.mjs
 
       # Migration TRƯỚC test: tạo bảng + RLS policy + FORCE (policy+FORCE cùng CREATE).
       - name: Apply migrations (ephemeral Postgres)

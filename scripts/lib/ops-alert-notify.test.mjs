@@ -1,19 +1,20 @@
 // scripts/lib/ops-alert-notify.test.mjs — S10-OPS-ALERTCHAN-1.
 //
-// ⚠️ FILE NÀY ĐANG **ĐỎ CÓ CHỦ ĐÍCH** — `./ops-alert-notify.mjs` CHƯA TỒN TẠI.
-// Đây là bước RED của WO `S10-OPS-ALERTCHAN-1`, commit trước để phiên sau có điểm vào sạch.
-// Vì vậy nó **CỐ Ý chưa được đăng ký** vào `harness/check.sh` step `tooling-tests` và hai
-// workflow `.github/workflows/{ci,api}.yml` — cả ba nơi liệt kê tên file TƯỜNG MINH, nên
-// chừng nào chưa thêm tên vào đó thì file này không chạy ở đâu cả và CI vẫn xanh.
-// 🔴 PR nào thêm `ops-alert-notify.mjs` PHẢI đăng ký file này vào CẢ BA nơi trong CÙNG PR —
-// quên là test thành mồ côi, đúng lỗi repo từng dính với `scripts/`+`harness/` trước S6-REL-1.
+// Đã đăng ký ở CẢ BA cổng (`harness/check.sh` step `tooling-tests` + `.github/workflows/{ci,api}.yml`)
+// — cả ba nơi liệt kê tên file TƯỜNG MINH, nên thiếu tên ở bất kỳ nơi nào là test thành mồ côi.
 //
 // Trọng tâm: **một cảnh báo không nói được chuyện gì đang hỏng thì không phải cảnh báo**. Bản trước
 // gửi đúng một dòng `[MediaOS ops] CRIT` — người bị ping lúc 3h sáng không biết rule nào nổ, phải
 // mở máy PROD ra mới biết. Nhóm test dưới ghim: thân tin nhắn PHẢI liệt kê các hàng không-ok.
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildWebhookRequest, detectWebhookFormat, formatAlertText } from "./ops-alert-notify.mjs";
+import {
+  buildWebhookRequest,
+  detectWebhookFormat,
+  formatAlertText,
+  redactWebhook,
+  sendAlert,
+} from "./ops-alert-notify.mjs";
 
 const PAYLOAD = {
   at: "2026-08-12T03:00:00.000Z",
@@ -72,6 +73,18 @@ describe("formatAlertText — phải nói ĐANG HỎNG CÁI GÌ", () => {
     const text = formatAlertText({ ...PAYLOAD, rows: many });
     assert.ok(text.length <= 1900, `phải cắt, đang ${text.length}`);
     assert.match(text, /còn \d+ dòng/, "phải NÓI là đã cắt, không im lặng bỏ bớt");
+  });
+
+  it("MỘT hàng dài hơn cả trần ⇒ cắt CHÍNH hàng đó, KHÔNG bỏ trắng thân tin", () => {
+    // Bỏ trắng ở đây là tái tạo đúng lỗi WO này đi vá: tin gửi đi nhưng không nói được gì.
+    const text = formatAlertText({
+      ...PAYLOAD,
+      worst: "crit",
+      rows: [{ id: "R", title: "Trang chết", severity: "crit", detail: "X".repeat(4000) }],
+    });
+    assert.ok(text.length <= 1900, `phải cắt, đang ${text.length}`);
+    assert.match(text, /Trang chết/, "TÊN nhóm đang hỏng phải sống sót qua nhát cắt");
+    assert.match(text, /XXXXXXXXXX/, "phải giữ được phần ĐẦU của chi tiết, không cắt cụt tới rỗng");
   });
 });
 
@@ -144,5 +157,110 @@ describe("buildWebhookRequest — đúng hình dạng thân theo từng kênh", 
   it("KHÔNG nhồi nguyên payload vào thân — bản cũ spread cả object, chat chỉ hiện `text` nên phần dư là rác thuần", () => {
     const r = req({ url: "https://x/y", format: "slack" });
     assert.deepEqual(Object.keys(r.body), ["text"]);
+  });
+});
+
+// ── Giao tin: bản cũ là `catch {}` trần, không kiểm res.ok, không timeout ⇒ cảnh báo im lặng đi vào
+// hư vô. Nhóm dưới ghim chiều NGƯỢC LẠI: mọi chế độ hỏng phải trả về phán quyết mô tả được.
+describe("sendAlert — hỏng thì phải KÊU, cấm nuốt", () => {
+  const okRes = { ok: true, status: 204, text: async () => "" };
+  const send = (fetchImpl, opts) =>
+    sendAlert({
+      payload: PAYLOAD,
+      url: "https://hooks.slack.com/services/T/B/x",
+      fetchImpl,
+      ...opts,
+    });
+
+  it("giao được ⇒ ok:true + kênh đã suy ra", async () => {
+    const r = await send(async () => okRes);
+    assert.equal(r.ok, true);
+    assert.equal(r.status, 204);
+    assert.equal(r.format, "slack");
+    assert.equal(r.error, null);
+  });
+
+  it("gửi ĐÚNG thân đã dựng, không phải nguyên payload", async () => {
+    let seen;
+    await send(async (_url, init) => {
+      seen = JSON.parse(init.body);
+      return okRes;
+    });
+    assert.deepEqual(Object.keys(seen), ["text"]);
+    assert.ok(seen.text.includes("fbpost"));
+  });
+
+  it("res.ok=false ⇒ ok:false kèm mã + thân lỗi — KHÔNG được coi là đã giao", async () => {
+    const r = await send(async () => ({
+      ok: false,
+      status: 403,
+      text: async () => "invalid_token",
+    }));
+    assert.equal(r.ok, false);
+    assert.equal(r.status, 403);
+    assert.match(r.error, /403/);
+    assert.match(r.error, /invalid_token/);
+  });
+
+  it("DNS hỏng / mạng đứt ⇒ ok:false, KHÔNG ném ra ngoài (kênh hỏng không được làm sập lệnh kiểm tra)", async () => {
+    const r = await send(async () => {
+      throw Object.assign(new Error("fetch failed"), { cause: { code: "ENOTFOUND" } });
+    });
+    assert.equal(r.ok, false);
+    assert.match(r.error, /ENOTFOUND/);
+  });
+
+  it("webhook TREO ⇒ bị timeout cắt, không treo luôn scheduled task", async () => {
+    const r = await send(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init.signal.addEventListener("abort", () =>
+            reject(Object.assign(new Error("aborted"), { name: "AbortError" })),
+          );
+        }),
+      { timeoutMs: 30 },
+    );
+    assert.equal(r.ok, false);
+    assert.match(r.error, /timeout/i);
+  });
+
+  it("Telegram thiếu chat_id ⇒ trả lỗi mô tả được, KHÔNG ném và KHÔNG gọi fetch", async () => {
+    let called = 0;
+    const r = await sendAlert({
+      payload: PAYLOAD,
+      url: "https://api.telegram.org/bot123:abc/sendMessage",
+      fetchImpl: async () => {
+        called += 1;
+        return okRes;
+      },
+    });
+    assert.equal(r.ok, false);
+    assert.equal(called, 0, "cấm gửi một request chắc chắn hỏng");
+    assert.match(r.error, /chat_id/i);
+  });
+
+  it("mọi phán quyết chỉ mang URL ĐÃ CHE — token webhook là secret (BẤT BIẾN #3)", async () => {
+    // Phần "token" GHÉP CHUỖI, không viết literal: literal high-entropy cạnh chữ `secret` trip rule
+    // gitleaks `generic-api-key` ⇒ đỏ oan CI/PR dù đây rõ ràng không phải secret thật (luật nhà,
+    // CLAUDE.md §5). Leak nằm lại trong history nhánh nên vá sau bằng commit mới KHÔNG gỡ được.
+    const fakeToken = ["bot123", "khong-phai", "that"].join("-");
+    const url = `https://api.telegram.org/${fakeToken}/sendMessage`;
+    const r = await sendAlert({ payload: PAYLOAD, url, fetchImpl: async () => okRes });
+    assert.doesNotMatch(JSON.stringify(r), new RegExp(fakeToken), "token KHÔNG được lọt ra");
+    assert.match(r.target, /api\.telegram\.org/, "vẫn phải đủ để chẩn đoán là kênh nào");
+  });
+});
+
+describe("redactWebhook", () => {
+  it("giữ host, bỏ đường dẫn — token nằm ở ĐƯỜNG DẪN chứ không phải host", () => {
+    const fakeToken = ["T", "B", "khong-phai-token-that"].join("/");
+    assert.equal(
+      redactWebhook(`https://hooks.slack.com/services/${fakeToken}`),
+      "hooks.slack.com/…",
+    );
+  });
+
+  it("URL rác ⇒ chuỗi mô tả, KHÔNG ném và KHÔNG vọt nguyên chuỗi ra ngoài", () => {
+    assert.doesNotMatch(redactWebhook("rac-nhung-co-the-la-secret"), /rac-nhung/);
   });
 });

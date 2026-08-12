@@ -12035,5 +12035,10 @@ export const backlog = [
       "ops-alert-notify.test.mjs được đăng ký vào harness/check.sh + ci.yml + api.yml trong CÙNG PR (bỏ dòng cảnh báo ĐỎ-có-chủ-đích ở header file khi đã xanh)",
       "RELEASE-09 §4 gỡ khối 🔴 'LỖ CÒN LẠI' khi owner đã đặt webhook thật và chạy --test-alert thành công",
     ],
+    notes: [
+      "GREEN 12/08: `scripts/lib/ops-alert-notify.mjs` (formatAlertText · detectWebhookFormat · buildWebhookRequest · sendAlert · redactWebhook) + `--test-alert` ở ops-alert-check.mjs. Test 24/24, ĐÃ đăng ký ở CẢ BA cổng (check.sh · ci.yml · api.yml).",
+      "Nghiệm thu bằng cách BẺ HỎNG (webhook giả localhost:4599), KHÔNG bằng việc nhìn nó xanh: giao được ⇒ exit 0 + thân tin nêu ĐÍCH DANH rule đang nổ · HTTP 403 ⇒ exit 2 in 'HTTP 403 — invalid_token' · webhook TREO ⇒ exit 2 'timeout sau 1500ms' (không treo scheduled task) · DNS hỏng ⇒ exit 2 'ENOTFOUND' · chưa đặt webhook ⇒ exit 3. Đường thường (không --test-alert) giữ nguyên exit 1 = warn: kênh chat hỏng KHÔNG được đổi phán quyết sức khoẻ hệ.",
+      "⚠️ CÒN CHỜ OWNER — KHÔNG code thay được: đặt `OPS_ALERT_WEBHOOK` lên máy PROD (chọn kênh + tài khoản). Chừng nào chưa đặt, nửa (b) VẪN MỞ và khối 🔴 ở RELEASE-09 §4b GIỮ NGUYÊN. Nghiệm thu: `node scripts/ops-alert-check.mjs --test-alert` trả exit 0 VÀ nhìn thấy tin trong kênh — HTTP 2xx chỉ chứng minh kênh nhận, sai phòng/sai chat_id vẫn trả 2xx.",
+    ],
   },
 ];
