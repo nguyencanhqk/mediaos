@@ -64,3 +64,17 @@ backups/
 *.dump
 *.dump.age
 *.dump.gpg
+
+# Artefact phiên Playwright MCP (a11y snapshot `page-*.yml` + `console-*.log`) — ghi vào gốc repo
+# mỗi lần agent mở trình duyệt. Là ẢNH CHỤP MÀN HÌNH LÚC ĐÓ, không phải nguồn; snapshot của trang
+# ĐÃ đăng nhập có thể chứa dữ liệu thật (repo PUBLIC). Console log đã dính `*.log` ở trên, nhưng
+# `*.yml` thì không ⇒ phải ignore cả thư mục.
+.playwright-mcp/
+
+# Ảnh rời rơi ở GỐC repo (screenshot QA tay: `reel-logged-out.jpeg`…). Neo `/` nên CHỈ gốc —
+# ảnh trong `apps/**/public/`, `docs/**` vẫn track bình thường.
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+/*.webp
