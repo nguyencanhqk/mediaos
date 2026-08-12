@@ -207,21 +207,59 @@ Register-ScheduledTask -TaskName "MediaOS-BackupDaily" -Action $bAction -Trigger
 ```
 
 `--quiet` chỉ in khi có `warn`/`crit`/`unknown`. Mọi lần khác `ok` đều im lặng; mỗi lần không-ok ghi
-một dòng JSON vào `logs/ops-alerts.log`. Muốn đẩy ra kênh chat: đặt `OPS_ALERT_WEBHOOK` (URL nằm trong
-env của máy, **không commit**).
+một dòng JSON vào `logs/ops-alerts.log` **và** đẩy ra kênh chat nếu đã đặt `OPS_ALERT_WEBHOOK`.
 
 **Kiểm tra lịch đã chạy chưa:** `Get-ScheduledTask -TaskName MediaOS-*` + xem `logs/ops-alerts.log`.
 Đo 2026-08-12: `MediaOS-OpsAlert` = `Ready`, chu kỳ 10 phút, `LastTaskResult` = 1 (warn) — **lịch CHẠY
 THẬT**, không phải chỉ đăng ký.
 
-> 🔴 **LỖ CÒN LẠI — PHÁT HIỆN ≠ BÁO ĐỘNG (đo 2026-08-12, owner cần chốt).** `OPS_ALERT_WEBHOOK`
-> **chưa được đặt** trên máy PROD. Nghĩa là hôm nay cảnh báo chạy mỗi 10 phút, phán quyết đúng, rồi
-> **ghi vào một file mà không ai mở**: `logs/ops-alerts.log`. Sự cố 11–12/08 có hai nửa — (a) không đo
-> fbpost, (b) không có đường báo ra ngoài. Rule #9–#11 đóng nửa (a); **nửa (b) vẫn mở**: nếu hôm nay
-> `fbpost` chết lại, `ops-alert-check` SẼ ra `crit` exit 2 và **vẫn không ai biết trong 15 tiếng**, vì
-> tri thức đó nằm im trong log. Đóng nửa (b) = đặt `OPS_ALERT_WEBHOOK` (Slack/Telegram/Google Chat)
-> vào env của máy — **URL là secret, KHÔNG commit** (BẤT BIẾN #3). Đây là việc của owner: cần chọn
-> kênh + tài khoản, không phải việc code.
+---
+
+## 4b. Đường BÁO ĐỘNG ra ngoài (S10-OPS-ALERTCHAN-1)
+
+Sự cố 11–12/08 có **hai nửa**: (a) không đo `fbpost` — đóng bởi rule #9–#11 ở §3; (b) không có đường
+báo ra ngoài. `logs/ops-alerts.log` là **bằng chứng, không phải kênh báo** — không ai mở nó lúc 3h
+sáng. Nửa (b) đóng ở đây.
+
+**Biến môi trường** (đặt vào env của **MÁY**, không phải `.env` theo git — URL webhook là SECRET,
+BẤT BIẾN #3):
+
+| Biến | Bắt buộc | Ý nghĩa |
+| --- | --- | --- |
+| `OPS_ALERT_WEBHOOK` | để bật kênh | URL webhook. Trống ⇒ không gửi đi đâu (chỉ ghi sổ) |
+| `OPS_ALERT_WEBHOOK_FORMAT` | không | Ghi đè suy đoán kênh: `slack`·`google-chat`·`discord`·`telegram`·`generic`. Giá trị lạ ⇒ kêu ra stderr rồi suy theo host |
+| `OPS_ALERT_TELEGRAM_CHAT_ID` | **có, nếu dùng Telegram** | Thiếu ⇒ báo lỗi ngay lúc dựng, KHÔNG gửi một request chắc chắn hỏng |
+| `OPS_ALERT_TIMEOUT_MS` | không | Trần thời gian giao (mặc định 8000). Webhook treo **không** được treo scheduled task |
+
+**Hình dạng thân khác nhau theo kênh** — gửi sai khoá thì tin bay mất mà phía ta không thấy lỗi:
+Slack · Google Chat · kênh lạ dùng `{text}` · Discord dùng `{content}` · Telegram dùng
+`{chat_id,text}`. Suy tự động từ host; xem `scripts/lib/ops-alert-notify.mjs`.
+
+**Nghiệm thu kênh — KHÔNG chờ sự cố thật:**
+
+```powershell
+node scripts/ops-alert-check.mjs --test-alert
+```
+
+Gửi một tin thử **bất kể** hệ thống đang ok hay không, rồi in kết quả giao. Mã thoát của riêng cờ này
+nói về KẾT QUẢ GIAO: `0` giao được · `2` giao hỏng (in mã HTTP + thân lỗi) · `3` chưa đặt webhook.
+Đây là hàng rào chống bài học **KI-050** (`backup-db.sh` tồn tại từ G1-8 mà **chưa từng chạy** trên
+PROD): script tồn tại ≠ script chạy được.
+
+> HTTP 2xx chỉ chứng minh **kênh nhận**, chưa chứng minh **người thấy** — sai phòng hoặc sai
+> `chat_id` vẫn trả 2xx. Nghiệm thu phải kèm nhìn mắt vào kênh chat.
+
+**Giao hỏng thì KÊU TO.** Bản trước là `catch {}` trần, không kiểm `res.ok`, không timeout — URL sai
+hoặc hết hạn ⇒ cảnh báo im lặng đi vào hư vô, đúng lớp lỗi mà cả WO này sinh ra để đóng. Nay mọi thất
+bại giao để lại dấu ở **hai** nơi: `stderr` (Task Scheduler giữ) và một dòng
+`{"kind":"alert-delivery-failed"}` trong `logs/ops-alerts.log`, kèm URL **đã che** (chỉ còn host).
+Mã thoát của lệnh kiểm tra **không** đổi theo kênh chat: nó nói về sức khoẻ hệ thống.
+
+> 🔴 **CÒN CHỜ OWNER (đo 2026-08-12).** Phần code đã xong: tin nhắn nói rõ đang hỏng cái gì, lỗi giao
+> kêu to, có `--test-alert` để nghiệm thu. **Chưa làm được thay owner:** chọn kênh + tài khoản và đặt
+> `OPS_ALERT_WEBHOOK` lên máy PROD. Chừng nào chưa đặt, nửa (b) **vẫn mở** — `fbpost` chết lại thì
+> `ops-alert-check` SẼ ra `crit` exit 2 đúng lúc và **vẫn không ai biết**. Gỡ khối 🔴 này khi đã đặt
+> webhook thật và `--test-alert` trả exit 0 + nhìn thấy tin trong kênh.
 
 ---
 

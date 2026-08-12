@@ -19,7 +19,16 @@
  *   node scripts/ops-alert-check.mjs                # bảng người đọc
  *   node scripts/ops-alert-check.mjs --json         # máy đọc (đưa vào monitor/cron)
  *   node scripts/ops-alert-check.mjs --quiet        # chỉ in khi có warn/crit/unknown
+ *   node scripts/ops-alert-check.mjs --test-alert   # GỬI THẬT một tin thử rồi in kết quả giao
  * Lịch chạy (Windows Task Scheduler) — xem docs/RELEASE/RELEASE-09.
+ *
+ * ═══ PHÁT HIỆN ≠ BÁO ĐỘNG (bổ sung 2026-08-12, S10-OPS-ALERTCHAN-1) ═══
+ * Phán quyết đúng mà không ai được báo thì kết cục y hệt như không đo: ngày 11–12/08 `fbpost` chết
+ * 15 tiếng. `logs/ops-alerts.log` là một file KHÔNG AI MỞ — nó là bằng chứng, không phải kênh báo.
+ * Đường báo ra ngoài nằm ở `lib/ops-alert-notify.mjs`; ở đây chỉ còn hai luật:
+ *   1. Giao hỏng phải KÊU TO (stderr + ghi sổ) — `catch {}` trần chính là lớp lỗi ta vừa đi vá.
+ *   2. `--test-alert` chứng minh kênh chạy được **mà không phải chờ sự cố thật** (bài học KI-050:
+ *      `backup-db.sh` tồn tại từ G1-8 nhưng CHƯA TỪNG chạy trên PROD — script tồn tại ≠ chạy được).
  *
  * ═══ MỘT DỊCH VỤ KHÔNG ĐO = MỘT DỊCH VỤ KHÔNG CÓ AI CANH (bổ sung 2026-08-12) ═══
  * Bản đầu chỉ dò API :3100. Ngày 11–12/08, `fbpost` :3500 trả **500 mọi đường dẫn suốt ~15 tiếng**
@@ -28,17 +37,23 @@
  * Thêm một mặt PROD mới ⇒ THÊM VÀO `DEFAULT_SITES`, nếu không nó lại sập âm y hệt.
  *
  * ENV: OPS_BASE_URL (mặc định http://localhost:3100/api/v1) · OPS_DOMAIN (cert) · OPS_WINDOW_MIN
- *      OPS_BACKUP_DIR · OPS_LOG_FILE · OPS_LOG_TAIL_BYTES · OPS_ALERT_LOG · OPS_ALERT_WEBHOOK (tuỳ chọn)
+ *      OPS_BACKUP_DIR · OPS_LOG_FILE · OPS_LOG_TAIL_BYTES · OPS_ALERT_LOG
+ *      OPS_ALERT_WEBHOOK (tuỳ chọn — **SECRET, chỉ đặt vào env máy PROD, KHÔNG commit**)
+ *      OPS_ALERT_WEBHOOK_FORMAT (ghi đè suy đoán kênh: slack·google-chat·discord·telegram·generic)
+ *      OPS_ALERT_TELEGRAM_CHAT_ID (BẮT BUỘC nếu webhook là Telegram) · OPS_ALERT_TIMEOUT_MS
  *      OPS_SITES (JSON ghi đè danh sách trang dò) · OPS_SITE_TIMEOUT_MS
  *      DATABASE_DIRECT_URL (đọc migration + system_job_runs; thiếu ⇒ 2 rule đó `unknown`)
  *
  * Exit: 0 tất cả ok · 1 có warn hoặc unknown · 2 có crit · 3 lỗi cấu hình.
+ *       Riêng `--test-alert`: mã thoát nói về KẾT QUẢ GIAO (0 giao được · 2 giao hỏng · 3 chưa cấu
+ *       hình webhook), vì mục đích của cờ đó là nghiệm thu KÊNH, không phải nghiệm thu sức khoẻ hệ.
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluate, exitCodeFor, worstSeverity } from "./lib/ops-alert-rules.mjs";
+import { WEBHOOK_FORMATS, redactWebhook, sendAlert } from "./lib/ops-alert-notify.mjs";
 import { DEFAULT_TAIL_BYTES, countErrorLinesInFile } from "./lib/ops-log-window.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -74,6 +89,8 @@ loadDotEnv();
 const ARGV = process.argv.slice(2);
 const JSON_OUT = ARGV.includes("--json");
 const QUIET = ARGV.includes("--quiet");
+/** Gửi THẬT một tin ngay cả khi mọi thứ đang ok — nghiệm thu kênh mà không phải chờ sự cố. */
+const TEST_ALERT = ARGV.includes("--test-alert");
 
 const BASE_URL = (process.env.OPS_BASE_URL ?? "http://localhost:3100/api/v1").replace(/\/$/, "");
 const DOMAIN = process.env.OPS_DOMAIN ?? "api.funtimemediacorp.com";
@@ -89,8 +106,26 @@ const LOG_TAIL_BYTES = (() => {
   return Number.isNaN(n) || n <= 0 ? DEFAULT_TAIL_BYTES : n;
 })();
 const ALERT_LOG = process.env.OPS_ALERT_LOG ?? path.join(REPO_ROOT, "logs", "ops-alerts.log");
-const WEBHOOK = process.env.OPS_ALERT_WEBHOOK ?? "";
+const WEBHOOK = (process.env.OPS_ALERT_WEBHOOK ?? "").trim();
 const TIMEOUT_MS = 8000;
+
+/**
+ * Kênh khai tường minh. Giá trị lạ ⇒ KÊU ngay lúc nạp cấu hình rồi quay về suy đoán theo host —
+ * gõ nhầm `slak` mà im lặng gửi sai hình dạng thân thì tin bay mất đúng lúc cần nó nhất.
+ */
+const WEBHOOK_FORMAT = (() => {
+  const raw = (process.env.OPS_ALERT_WEBHOOK_FORMAT ?? "").trim().toLowerCase();
+  if (raw === "" || WEBHOOK_FORMATS.includes(raw)) return raw || undefined;
+  process.stderr.write(
+    `[ops-alert] OPS_ALERT_WEBHOOK_FORMAT="${raw}" không hợp lệ (hợp lệ: ${WEBHOOK_FORMATS.join(" · ")}) — suy kênh từ host thay thế\n`,
+  );
+  return undefined;
+})();
+const TELEGRAM_CHAT_ID = (process.env.OPS_ALERT_TELEGRAM_CHAT_ID ?? "").trim();
+const ALERT_TIMEOUT_MS = (() => {
+  const n = Number.parseInt(process.env.OPS_ALERT_TIMEOUT_MS ?? "", 10);
+  return Number.isNaN(n) || n <= 0 ? TIMEOUT_MS : n;
+})();
 
 /**
  * Các mặt PROD KHÁC ngoài API — mỗi cái là một dịch vụ NSSM riêng, chết độc lập với :3100.
@@ -436,17 +471,99 @@ function appendAlertLog(payload) {
   }
 }
 
+/**
+ * Giao cảnh báo ra ngoài — và KÊU TO khi không giao được.
+ *
+ * Bản trước nuốt mọi lỗi bằng `catch {}` trần: URL sai hoặc hết hạn ⇒ cảnh báo im lặng đi vào hư vô,
+ * và ta sẽ đứng tin rằng "đã có báo động" trong khi không có gì tới. Đó CHÍNH LÀ chế độ hỏng mà cả
+ * WO này sinh ra để đóng, nên thất bại giao phải để lại dấu vết ở HAI nơi: stderr (Task Scheduler
+ * ghi lại) và sổ `ops-alerts.log` (đọc được sau, kèm mốc thời gian).
+ *
+ * KHÔNG đổi mã thoát của lệnh kiểm tra: mã thoát nói về SỨC KHOẺ HỆ, không phải về kênh chat. Ai
+ * muốn nghiệm thu kênh thì chạy `--test-alert`.
+ *
+ * @returns {Promise<{ok:boolean,status:number|null,error:string|null,target:string}|null>}
+ *          `null` = chưa cấu hình webhook (không phải lỗi giao).
+ */
 async function notifyWebhook(payload) {
-  if (!WEBHOOK) return;
-  try {
-    await fetch(WEBHOOK, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: `[MediaOS ops] ${payload.worst.toUpperCase()}`, ...payload }),
+  if (!WEBHOOK) return null;
+  const result = await sendAlert({
+    payload,
+    url: WEBHOOK,
+    format: WEBHOOK_FORMAT,
+    telegramChatId: TELEGRAM_CHAT_ID,
+    timeoutMs: ALERT_TIMEOUT_MS,
+  });
+  if (!result.ok) {
+    process.stderr.write(
+      `[ops-alert] KHÔNG GIAO ĐƯỢC cảnh báo tới ${result.target}: ${result.error}\n` +
+        `[ops-alert] ⇒ phán quyết "${payload.worst}" lúc này CHỈ nằm trong ${path.relative(REPO_ROOT, ALERT_LOG)} — không ai được báo.\n`,
+    );
+    appendAlertLog({
+      at: new Date().toISOString(),
+      kind: "alert-delivery-failed",
+      target: result.target, // ĐÃ CHE — URL webhook là secret (BẤT BIẾN #3)
+      error: result.error,
+      status: result.status,
+      forWorst: payload.worst,
     });
-  } catch {
-    /* webhook hỏng không được làm hỏng kết quả kiểm tra */
   }
+  return result;
+}
+
+/**
+ * `--test-alert` — nghiệm thu KÊNH, không nghiệm thu sức khoẻ hệ.
+ *
+ * In ra đủ để trả lời "tin có tới không, nếu không thì vì sao", rồi thoát theo KẾT QUẢ GIAO. Chưa
+ * đặt webhook ⇒ exit 3 (lỗi cấu hình): im lặng trả 0 ở đây sẽ dựng lên đúng ảo giác "đã có báo động"
+ * mà WO này sinh ra để phá.
+ */
+async function testAlert(payload) {
+  if (!WEBHOOK) {
+    process.stderr.write(
+      `\n[ops-alert] CHƯA CÓ ĐƯỜNG BÁO ĐỘNG: OPS_ALERT_WEBHOOK chưa đặt.\n` +
+        `  ⇒ Cảnh báo vẫn chạy và vẫn phán quyết đúng, nhưng chỉ ghi vào ${path.relative(REPO_ROOT, ALERT_LOG)}\n` +
+        `    — một file không ai mở. Đó chính là cách fbpost chết 15 tiếng ngày 11–12/08 mà không ai biết.\n` +
+        `  ⇒ Đặt OPS_ALERT_WEBHOOK vào env của MÁY (Slack/Google Chat/Discord/Telegram).\n` +
+        `    URL là SECRET — KHÔNG commit, KHÔNG đưa vào .env theo git (BẤT BIẾN #3).\n\n`,
+    );
+    process.exit(3);
+  }
+
+  process.stdout.write(
+    `\n[ops-alert] GỬI TIN THỬ → ${redactWebhook(WEBHOOK)} (kênh: ${WEBHOOK_FORMAT ?? "suy từ host"})\n` +
+      `  Mức hệ thống lúc này: ${payload.worst.toUpperCase()} — tin thử gửi bất kể mức, đây là phép thử KÊNH.\n`,
+  );
+
+  const result = await sendAlert({
+    payload,
+    url: WEBHOOK,
+    format: WEBHOOK_FORMAT,
+    telegramChatId: TELEGRAM_CHAT_ID,
+    timeoutMs: ALERT_TIMEOUT_MS,
+  });
+
+  if (result.ok) {
+    process.stdout.write(
+      `  ✓ GIAO ĐƯỢC (HTTP ${result.status}, hình dạng thân: ${result.format}).\n` +
+        `    Kiểm mắt: mở kênh chat và xác nhận tin ĐÃ hiện — HTTP 2xx nghĩa là kênh nhận, chưa\n` +
+        `    chứng minh người nhận thấy nó (sai phòng/sai chat_id vẫn trả 2xx).\n\n`,
+    );
+    process.exit(0);
+  }
+
+  process.stderr.write(
+    `  ✗ KHÔNG GIAO ĐƯỢC: ${result.error}\n` +
+      `    ⇒ Đường báo động ĐANG HỎNG. Sự cố tiếp theo sẽ im lặng y như 11–12/08.\n\n`,
+  );
+  appendAlertLog({
+    at: new Date().toISOString(),
+    kind: "test-alert-failed",
+    target: result.target, // ĐÃ CHE (BẤT BIẾN #3)
+    error: result.error,
+    status: result.status,
+  });
+  process.exit(2);
 }
 
 async function main() {
@@ -472,6 +589,11 @@ async function main() {
     worst,
     rows,
   };
+
+  // `--test-alert` gửi BẤT KỂ mức hiện tại — cả khi mọi thứ đang ok. Đó là toàn bộ giá trị của nó:
+  // chứng minh kênh chạy được mà KHÔNG phải chờ sự cố thật (KI-050 — `backup-db.sh` "có sẵn" suốt
+  // nhiều tháng nhưng chưa từng chạy trên PROD, và chỉ phát hiện khi cần tới nó).
+  if (TEST_ALERT) return testAlert(payload);
 
   if (worst !== "ok") {
     appendAlertLog(payload);
