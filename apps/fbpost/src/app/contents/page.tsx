@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { BulkEditPanel } from "@/components/bulk-edit-panel";
 import { MediaInput } from "@/components/media-input";
 import { Alert, Section, Spinner } from "@/components/ui";
 import { apiGet, apiSend } from "@/lib/client-api";
@@ -300,6 +301,17 @@ export default function ContentsPage() {
         </div>
       </Section>
 
+      {selected.length > 0 && (
+        <BulkEditPanel
+          contentIds={selected}
+          onApplied={(message) => {
+            setNotice(message);
+            setError(null);
+            void load();
+          }}
+        />
+      )}
+
       {data.contents.length === 0 ? (
         <Section title="Thư viện đang trống">
           <p className="hint">
@@ -313,7 +325,7 @@ export default function ContentsPage() {
       ) : (
         <Section
           title={`Danh sách nội dung (${data.contents.length})`}
-          description="Tick chọn các nội dung muốn rải lên Page rồi bấm Lên lịch đăng."
+          description="Tick chọn các nội dung để rải lên Page theo lịch, hoặc để sửa hàng loạt cùng một đoạn chữ."
         >
           <div className="mb-3">
             <button

@@ -237,6 +237,59 @@ export function updatePost(
 }
 
 /**
+ * Cac trang thai ma van ban cua bai VAN con do phan mem giu: sua bay gio thi Facebook se nhan
+ * ban moi.
+ *
+ * `failed` va `cancelled` nam trong danh sach vi chung chua bao gio len Facebook va van co nut
+ * "Thử lại"/"Gửi đi" o hang doi - sua van ban roi gui lai la dung viec nguoi dung muon lam.
+ * `scheduled` da nam tren Facebook kem gio dang, `publishing` dang tren duong di, `published`
+ * thi da len Page - sua trong CSDL khong doi duoc gi tren Facebook nen KHONG dung o day.
+ */
+export const LOCAL_EDITABLE_STATUSES: PostStatus[] = ["draft", "queued", "failed", "cancelled"];
+
+/**
+ * Sua van ban cua mot bai CHUA duoc Facebook nhan.
+ *
+ * Hai dieu kien nam trong chinh cau UPDATE (compare-and-set) chu khong kiem tra truoc roi ghi
+ * sau: worker co the gianh lay bai dung giua hai buoc do, va ket qua se la sua van ban cua mot
+ * bai dang tren duong len Facebook.
+ *
+ * `fb_post_id IS NULL` la dieu kien THAT: no dung ca cho ca hiem - bai bao `failed` nhung
+ * Facebook da kip tao bai (loi xay ra o buoc lay permalink). Trang thai mot minh khong bat duoc
+ * ca do.
+ *
+ * Tra ve true khi that su sua duoc.
+ */
+export function updatePendingPostText(
+  id: number,
+  patch: { message?: string; title?: string | null; link?: string | null },
+): boolean {
+  const columns: Record<string, string> = { message: "message", title: "title", link: "link" };
+
+  const sets: string[] = [];
+  const values: (string | null)[] = [];
+
+  for (const [key, column] of Object.entries(columns)) {
+    const value = patch[key as keyof typeof patch];
+    if (value === undefined) continue;
+    sets.push(`${column} = ?`);
+    values.push(value);
+  }
+
+  if (sets.length === 0) return false;
+
+  const placeholders = LOCAL_EDITABLE_STATUSES.map(() => "?").join(",");
+  const result = getDb()
+    .prepare(
+      `UPDATE posts SET ${sets.join(", ")}, updated_at = ?
+       WHERE id = ? AND fb_post_id IS NULL AND status IN (${placeholders})`,
+    )
+    .run(...values, nowSeconds(), id, ...LOCAL_EDITABLE_STATUSES);
+
+  return toNumber(result.changes) > 0;
+}
+
+/**
  * Danh dau bai "dang gui" theo kieu compare-and-set.
  * Tra ve true neu gianh duoc quyen xu ly - ngan worker va thao tac tay
  * cung dang mot bai hai lan.
