@@ -252,12 +252,22 @@ export class CallSignallingGateway {
       joinedCallIds: new Set<string>(),
       expiryTimer: null,
     };
+    // ⚠️ **CỔNG CUỐI — VỊ TRÍ LÀ MỘT PHẦN CỦA BẢN VÁ, KHÔNG PHẢI CHI TIẾT SẮP XẾP.**
+    // Nó PHẢI nằm SAU `cooldown.allow` (:232) và `permissions.can` (:239). `jwt.verify` và cổng này
+    // dùng **cùng một ngưỡng** (`Math.floor(now/1000) >= exp` ⟺ `now >= exp*1000` với `exp` nguyên),
+    // nên cửa sổ đua đúng bằng **thời gian trôi giữa hai điểm** — ở đây là HAI round-trip I/O
+    // (Valkey, rồi Valkey/DB), chưa kể GC pause. Dời cổng lên ngay sau `verify` "cho gọn" = đóng lại
+    // đúng cửa sổ đó ⇒ vá xong mà lỗ vẫn còn. Ghim bởi ca C2b.
+    const expiryError = this.scheduleTokenExpiry(client, state);
+    if (expiryError) return expiryError;
+
+    // Chỉ dựng phiên SAU khi đã qua mọi cổng: bị từ chối ⇒ không `state`, không `join` — cùng bất biến
+    // với 3 nấc từ chối token ở trên (ghim bởi nhóm B + C2).
     (client.data as { state?: CallSocketState }).state = state;
     // `client.data.user` cũng được đặt: `CallSignallingExceptionFilter` (và mọi công cụ đọc socket sau
     // này) tìm danh tính ở ĐÚNG chỗ mà `/ws` đặt. Hai gateway cùng hình dạng ⇒ không ai phải nhớ file
     // nào cất user ở đâu, và dòng log điều tra không bao giờ in `userId=?`.
     (client.data as { user?: CallSocketUser }).user = user;
-    this.scheduleTokenExpiry(client, state);
 
     // ⚠️ Dòng ĐẦU TIÊN của `onAny` phải là compare-and-set ĐỒNG BỘ, xem `screenFrame`.
     client.onAny((event: string) => this.screenFrame(client, event));
@@ -288,13 +298,34 @@ export class CallSignallingGateway {
    *
    * Hệ quả cho FE-1 (đã ghi ở plan §2b V1): `/ws-call` sẽ rớt khi token hết hạn (~15 phút).
    * `RTCPeerConnection` đã nối vẫn sống, nhưng FE **BẮT BUỘC** nối lại bằng token mới để còn ICE-restart.
+   *
+   * @returns `Error` = TỪ CHỐI handshake (gọi ở giai đoạn middleware), `undefined` = đã đặt hẹn giờ.
    */
-  private scheduleTokenExpiry(client: Socket, state: CallSocketState): void {
+  private scheduleTokenExpiry(client: Socket, state: CallSocketState): Error | undefined {
     const ttlMs = state.tokenExpSec * 1000 - Date.now();
     if (ttlMs <= 0) {
-      // Không nên xảy ra (`jwt.verify` đã chặn token hết hạn), nhưng fail-CLOSED nếu đồng hồ lệch.
-      client.disconnect(true);
-      return;
+      // ┌─ S7-CALL-RT-FIX-1 — TUYỆT ĐỐI KHÔNG `client.disconnect()` Ở ĐÂY ──────────────────────────┐
+      // │ Hàm này chạy TRONG middleware handshake, tức socket chưa `connected`:                     │
+      // │   socket.io@4.8.3/dist/socket.js:592-594  `disconnect(close) { if (!this.connected) …`    │
+      // │   socket.js:90 / :406-408                 `connected=false`, chỉ `true` ở `_onconnect`    │
+      // │   namespace.js:221 → :241/:267            middleware `run()` chạy TRƯỚC `_doConnect`      │
+      // │ ⇒ `disconnect()` là **no-op**, `handshake()` chạy tiếp tới `return undefined` = CHẤP NHẬN │
+      // │ một socket có token hết hạn và `expiryTimer = null`. Nó ngồi trong room nhận của chính    │
+      // │ mình và nhận mọi SDP/ICE (IP nội bộ + mốc thời gian bên kia) VÔ THỜI HẠN — `accept()` chỉ │
+      // │ gác chiều GỬI. Bản cũ ghi "fail-CLOSED nếu đồng hồ lệch" và làm ĐÚNG NGƯỢC LẠI.           │
+      // │ Đường ra DUY NHẤT ở giai đoạn này là trả `Error` cho `next()` (KI-061).                   │
+      // └───────────────────────────────────────────────────────────────────────────────────────────┘
+      // `"unauthorized"` — CÙNG chuỗi với 3 nấc token còn lại, có chủ đích: một chuỗi riêng
+      // (`"token_expired"`) là oracle miễn phí, nó nói cho người dò cửa biết token đúng chữ ký và chỉ
+      // vừa hết hạn. Ghim bởi ca `B` (4 nấc).
+      // WARN chứ không DEBUG như 3 nấc token kia: nấc này chỉ tới được khi đồng hồ lệch hoặc token hết
+      // hạn ĐÚNG trong cửa sổ đua — bất thường thật, đáng nhìn. Kèm `userId` để dòng log dùng được lúc
+      // điều tra (cùng mức chi tiết với nhánh `too_many_connections`); trần bắt tay 30/phút/người đã bó
+      // lượng ghi nên nó không thành đường bơm log.
+      this.logger.warn(
+        `/ws-call: token hết hạn trong lúc bắt tay → từ chối (fail-closed). userId=${state.user.id}`,
+      );
+      return new Error("unauthorized");
     }
     const timer = setTimeout(() => {
       this.logger.debug(`/ws-call: access-token hết hạn — ngắt. userId=${state.user.id}`);
@@ -302,6 +333,7 @@ export class CallSignallingGateway {
     }, ttlMs);
     timer.unref?.();
     state.expiryTimer = timer;
+    return undefined;
   }
 
   /**
