@@ -20,6 +20,15 @@ const PUBLIC_PATHS = [
   "/api/auth/sso",
   // Trang giai thich "hay vao tu MediaOS" — khong doc du lieu gi.
   "/login",
+  // Hai trang Meta BAT BUOC doc duoc khi CHUA dang nhap thi moi cho app sang che do Live
+  // (App Dashboard > Cai dat > Co ban). Ca hai la trang TINH: khong doc CSDL, khong nhan tham so,
+  // khong dung `verifySession` — mo ra khong lo them gi. Do that tren PROD 12/08: truoc muc nay
+  // ca hai tra 307 → /login, tuc dung viec chung sinh ra de lam thi lai khong lam duoc.
+  //
+  // ⚠️ `isPublic` khop ca CAY CON theo tien to, nen them route ben duoi hai thu muc nay la am
+  // tham mo cong. `middleware.spec.ts` gac dieu do bang mot bai DO khi thu muc co them file.
+  "/chinh-sach-quyen-rieng-tu",
+  "/xoa-du-lieu",
 ];
 
 function isPublic(pathname: string): boolean {
