@@ -10552,6 +10552,12 @@ export const backlog = [
       "apps/api/src/chat/chat-call-signal.service.ts",
       "apps/api/src/chat/chat-call-signal-deny.ts",
       "apps/api/src/chat/chat-call-room-exit.service.ts",
+      // Detector TẤT ĐỊNH của "setParticipantOutcome khớp 0 hàng ⇒ KHÔNG audit, KHÔNG phát"
+      // (plan §5.3 ca 6). Ca đua ở int-spec KHÔNG dựng được tất định — xem BLOCK-2 vòng review 2.
+      "apps/api/src/chat/chat-call-room-exit.service.spec.ts",
+      // Call site THỨ BA dựng ChatMembersService bằng 7 tham số VỊ TRÍ ⇒ dependency mới PHẢI
+      // append CUỐI constructor, nếu không file này đỏ với thông báo khó hiểu (ngoài paths cũ).
+      "apps/api/src/chat/chat-roster.service.spec.ts",
       "apps/api/src/chat/chat-calls.repository.ts",
       "apps/api/src/chat/chat-members.service.ts",
       "apps/api/src/chat/chat-rooms.service.ts",

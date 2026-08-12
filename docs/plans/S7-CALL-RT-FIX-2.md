@@ -34,7 +34,39 @@
 > **Lập luận bị bác:** *"vế `access ? false : …` là chỗ ép ranh giới lớp B"* — SAI, nó chỉ là bộ lọc
 > chi phí (H1). Ranh giới do vị từ `user_id = actor` giữ, và chỗ ĐO nó là ca 1b (§5.2).
 >
-> **Vòng 2: chưa chạy** — phải **PASS** trước khi viết dòng code đầu tiên.
+> **Vòng 2 (12/08) — BLOCK, nhưng chỉ còn 2 điểm, và cả hai do chính bản vá vòng 1 đẻ ra**
+> (bài học `plan-review-rounds-inject-new-holes`). Reviewer xác minh C1/C2/C3/H1–H7 đều RESOLVED và
+> mọi claim thêm ở vòng 2 đối chiếu code đều ĐÚNG. Hai điểm chặn — **đã vá trong commit này**:
+>
+> - **BLOCK-1** — §3.2 R-a tự mâu thuẫn: vừa stub `ChatCallRoomExitService`, vừa gọi
+>   `evictFromCallRoom` từ TRONG nó, vừa đòi assert evict 1 lần ⇒ mutation `h` mất sạch detector.
+>   → chốt call site của evict là **CALLER** (`chat-members`/`chat-rooms`), vẫn trong tx.
+> - **BLOCK-2** — §5.3 ca 6 (ca ĐUA) không dựng được tất định: `hangup` đóng participant VÀ chuyển
+>   `status` trong cùng tx, mà B1 lọc `status IN LIVE` ⇒ chạy tuần tự thì B1 trả 0 hàng và ca XANH
+>   kể cả khi mutation `f` đang bật. → detector đổi thành **unit spec colocated** cho exit-service.
+>
+> Ngoài ra đã vá: hậu quả rollback của evict mô tả thiếu (mất cả `peer-left`, không chỉ mic/cam) ·
+> `try/catch` không bắt được reject bất đồng bộ của adapter Valkey · call site THỨ BA
+> (`chat-roster.service.spec.ts`) ⇒ dependency mới phải **append CUỐI** constructor · hàng M5 sửa
+> thành "đã đo, là CHỜ chứ không phải deadlock hai chiều" · audit thêm `moduleCode`/`resultStatus` ·
+> §5.4 thêm mutation `i` cho vế lọc `status IN LIVE`.
+>
+> **Reviewer chốt: KHÔNG cần vòng 3 đầy đủ** — hai điểm trên là sửa plan cỡ chục dòng. ✅ Đã sửa.
+>
+> ---
+>
+> ## 🟢 BÀN GIAO — phiên sau bắt đầu TỪ ĐÂY
+>
+> Plan đã **ĐỦ để thi công**; chưa có dòng code nào. Nhánh `s7-call-rtfix2-roomexit` (cắt sạch từ
+> `origin/master`), lane DB `mediaos_s7callrtfix2` đã dựng xong (chain 0000→latest sạch).
+>
+> ```bash
+> export LANE_DB=mediaos_s7callrtfix2
+> ```
+>
+> Thứ tự: §6. Hình dạng bản vá: §3.1. Ratchet phải mở: §3.2. Test: §5 (bảng mutation §5.4 là hợp
+> đồng — mỗi đột biến phải làm ĐỎ đúng một ca). Đừng đọc lướt §3.1 tiểu mục "🔴 C1" và §5.3 ca 1:
+> đó là chỗ dễ ghi dữ liệu sai VĨNH VIỄN nhất, và nó KHÔNG có đường lùi (§4 M7).
 
 ---
 
@@ -219,6 +251,7 @@ closeCallParticipationOnRoomExit(tx, companyId, roomId, userId, now) -> { callId
         KHÔNG audit, KHÔNG đưa vào danh sách phát.                       ← xem H4
   4. audit.record({ action: CALL_PARTICIPANT_CLOSED, objectType: 'chat_call', objectId: callId,
                     actorUserId: <người BẤM gỡ/rời>, actorType: 'User',
+                    moduleCode: CHAT_MODULE_CODE, resultStatus: 'Success',   ← MỌI audit CHAT khác đều có
                     newValues: { userId: <người bị đóng>, roomId, outcome, reason } })   ← H6
   5. trả `callId[]` để caller phát `peer-left` SAU commit
 ```
@@ -274,7 +307,7 @@ tin."* ⇒ **tách đôi**, mỗi vế theo đúng bản chất của nó:
 
 | Vế | Method | Gọi ở đâu | Vì sao |
 | --- | --- | --- | --- |
-| **AN NINH** — kéo socket khỏi `callRoomName` | `evictFromCallRoom(co, callId, userId)` | **TRONG tx**, ngay sau `setParticipantOutcome` | Fail-safe: tx rollback ⇒ nạn nhân chỉ mất chỉ báo mic/cam tới lần `call:join` kế. Đặt sau commit là để hở đúng cửa sổ `media-state`/`screen-state` mà §0.2 dựng ra để đóng. Cùng lập luận `severUserSessions`. |
+| **AN NINH** — kéo socket khỏi `callRoomName` | `evictFromCallRoom(co, callId, userId)` | **TRONG tx, gọi từ CALLER** (`chat-members`/`chat-rooms`), ngay sau khi `closeCallParticipationOnRoomExit` trả `callId[]` | Fail-safe (hậu quả rollback: xem dưới). Đặt sau commit là để hở đúng cửa sổ `media-state`/`screen-state` mà §0.2 dựng ra để đóng. Cùng lập luận `severUserSessions`. |
 | **THÔNG BÁO** — `call:peer-left` cho người còn lại | `emitCallPeerLeft(co, callId, userId)` | **SAU commit** | Ngược lại hoàn toàn: phát trước commit rồi rollback là **nói dối** — FE người còn lại phá `RTCPeerConnection` cho một người chưa hề rời. Đây là dữ liệu nghiệp vụ, không phải hàng rào. |
 
 Chi tiết mỗi vế:
@@ -295,6 +328,17 @@ chấp nhận được. ⇒ `logger.error` (không `debug`, không im lặng), t
 `try/catch` **RIÊNG cho từng vế** + `logger.error` — gộp một khối thì vế này ném sẽ nuốt vế kia. Cả
 hai KHÔNG throw lên caller: vế 1 nằm trong tx nhưng ném ra sẽ **rollback cả thao tác gỡ thành viên**,
 tức lấy một sự cố realtime đổi lấy một thao tác quản trị thất bại — sai chiều đánh đổi.
+
+⚠️ **`try/catch` CHỈ phủ nhánh ném ĐỒNG BỘ.** `socketsLeave` với adapter Valkey publish trong một
+promise nội bộ; reject ở đó KHÔNG rơi vào `catch` mà thành `unhandledRejection` (memory
+`vitest-unhandled-rejection-after-teardown`). Đây là rủi ro **đã có sẵn** ở `severUserSessions` —
+ghi ra để không ai đọc khối `try/catch` này thành "đã bọc kín".
+
+⚠️ **Hậu quả rollback ĐẦY ĐỦ (không được mô tả nhẹ đi).** Rời `callRoomName` mất KHÔNG CHỈ chỉ báo
+mic/cam: mất cả `call:peer-left` (`gateway:412`, `:557`). Nếu tx rollback, nạn nhân **vẫn là thành
+viên hợp lệ** nhưng UI của họ sẽ **treo một peer ma khi bên kia gác máy**, và FE không có lệnh
+`call:join` lần hai để tự sửa. Vẫn là chiều fail-safe (suy giảm UX ≪ rò dữ liệu), nhưng phải ghi
+đúng để `S7-CALL-QA-2` biết mà đo.
 
 ### A2 — thôi đóng dấu người vô tội
 
@@ -381,14 +425,46 @@ và `POSITIVE CONTROL` ĐỎ.
 Nhưng nặng hơn TypeError: ratchet này **chính là** thứ gác bất biến *"emit SAU COMMIT"*, và WO đang
 thêm một lối phát mới vào đúng hai method nó đo. Land mà không mở rộng nó = lối mới không có ai canh.
 
-**Bắt buộc làm:** thêm `emitCallPeerLeft` vào `makeRealtime()` (thành 6 lối) · thêm stub
-`ChatCallRoomExitService` vào `build()` · ca `removeMember`/`leaveRoom`: COMMIT hỏng → **0/6 lối** ·
-positive control `emitCallPeerLeft(COMPANY, callId, TARGET)` gọi đúng 1 lần khi commit OK.
+**🔴 BLOCK-1 của vòng 2 — bản nháp R-a TỰ MÂU THUẪN.** Nó vừa bảo stub `ChatCallRoomExitService`,
+vừa bảo `evictFromCallRoom` gọi từ TRONG exit-service, vừa đòi assert `evictFromCallRoom` 1 lần. Ba
+điều đó không đồng thời đúng: exit-service bị stub ⇒ call site nằm trong stub ⇒ evict **không bao giờ
+được gọi** ⇒ assert xanh-rỗng hoặc đỏ vĩnh viễn, và mutation `h` (§5.4) mất sạch detector.
 
-⚠️ `evictFromCallRoom` **KHÔNG** vào `makeRealtime()`: nó cố ý chạy TRONG tx (B4/H3), nên gộp vào bộ
-đếm "0 lối khi commit hỏng" sẽ làm ratchet khẳng định điều NGƯỢC LẠI với thiết kế. Nó cần assert
-RIÊNG: *"commit hỏng ⇒ `emitCallPeerLeft` 0 lần NHƯNG `evictFromCallRoom` 1 lần"* — chính bất đối
-xứng đó là thứ đáng đóng đinh.
+**Chốt lại — call site của `evictFromCallRoom` là CALLER, không phải exit-service:**
+
+```text
+// chat-members.service.ts / chat-rooms.service.ts, TRONG callback withTenant:
+await this.repo.setMemberLeft(tx, …);
+const closed = await this.callExit.closeCallParticipationOnRoomExit(tx, co, roomId, userId, now);
+for (const { callId } of closed) this.realtime.evictFromCallRoom(co, callId, userId);  ← TRONG tx
+… commit …
+for (const { callId } of closed) this.realtime.emitCallPeerLeft(co, callId, userId);   ← SAU commit
+```
+
+Vẫn thoả H3 (evict vẫn nằm trong tx), **và** là cách DUY NHẤT ratchet đo được nó khi exit-service bị
+stub.
+
+**Bắt buộc làm, chính xác:**
+
+1. `makeRealtime()` → thêm **`emitCallPeerLeft`** (thành 6 lối). `evictFromCallRoom` **KHÔNG** vào đó.
+2. Spy cho evict đặt NGOÀI bộ đếm: `const realtime = { ...makeRealtime(), evictFromCallRoom: vi.fn() }`,
+   và `totalCalls()` phải cộng **đúng 6 khoá của `makeRealtime()`**. ⚠️ `totalCalls` hiện là
+   `Object.values(rt)` (`:45-46`) — trải phẳng cả object mở rộng vào đó là hỏng NGAY: evict lọt vào
+   bộ đếm "0 lối khi commit hỏng" và ratchet sẽ khẳng định điều NGƯỢC LẠI với thiết kế.
+3. Stub `ChatCallRoomExitService.closeCallParticipationOnRoomExit` trả `[{ callId: CALL }]` — nếu trả
+   rỗng thì ca POSITIVE CONTROL không có gì để phát và xanh rỗng.
+4. Ca cần thêm, **ở CẢ HAI `build()`** — `:93` (`ChatMembersService`) và `:276` (`ChatRoomsService`):
+   - COMMIT hỏng ⇒ `totalCalls === 0` (**0/6 lối**) **NHƯNG** `evictFromCallRoom` **1 lần**. Chính
+     bất đối xứng này là thứ đáng đóng đinh, và là detector của mutation `h`.
+   - POSITIVE CONTROL: commit OK ⇒ `emitCallPeerLeft(COMPANY, CALL, TARGET)` đúng 1 lần.
+   ⚠️ `describe` của `ChatRoomsService` hiện **chưa có ca `leaveRoom` nào** — phải thêm mới, không
+   phải sửa ca có sẵn.
+
+**⚠️ Ràng buộc "APPEND LAST" — có call site THỨ BA ngoài `paths` ban đầu.**
+`chat-roster.service.spec.ts:94-102` cũng dựng `ChatMembersService` bằng **7 tham số vị trí**.
+⇒ dependency mới (`ChatCallRoomExitService`) **PHẢI thêm vào CUỐI** danh sách tham số của constructor.
+Chèn vào giữa làm file đó đỏ với thông báo khó hiểu, và nó nằm ngoài `paths` nên `guard-scope` sẽ kêu
+trước khi ta hiểu vì sao. File đã được thêm vào `paths`.
 
 ### R-b · `apps/api/src/realtime/chat-realtime-structure.spec.ts` — vẫn XANH nhưng lời hứa HẾT ĐÚNG
 
@@ -416,7 +492,7 @@ lời hứa không được canh lấy một lời hứa khác không được c
 | Nới điều kiện từ chối = leo thang | memory `reviewer-proposed-fix-can-open-holes` | §1 bảng ranh giới |
 | `drizzle` sql`` cột không kèm tên bảng ⇒ subquery tự tham chiếu LUÔN 0 | memory `drizzle-sql-template-renders-columns-unqualified` | JOIN ở B1 |
 | Chi phí: docblock hứa "~2 truy vấn điểm mỗi khung" | `chat-call-signal.service.ts:47-53` | thêm truy vấn thứ 3 phải khai + cập nhật docblock |
-| **M5 · Thứ tự khoá bảng NGƯỢC nhau giữa hai đường ghi ⇒ deadlock** | đo vòng review 1 | `removeMember` khoá `chat_room_members` → `chat_calls`(đọc) → `chat_call_participants`; `hangup` khoá `chat_calls` → `chat_call_participants`. Hai tx đồng thời có thể ôm chéo. Ca đua bắt buộc ở §5.3 ca 6 |
+| **M5 · Thứ tự khoá bảng khác nhau giữa hai đường ghi** | nêu vòng 1, **ĐO LẠI ở vòng 2** | ⚠️ **KHÔNG phải deadlock hai chiều** — đừng chép cảnh báo vòng 1. `removeMember` khoá `chat_room_members` → `chat_call_participants`; `hangup` khoá `chat_calls` → `chat_call_participants`. Hai đường chỉ giao nhau ở **MỘT** tài nguyên, và B1 dùng `SELECT` trần (KHÔNG `FOR UPDATE`) ⇒ là **CHỜ**, không phải ôm chéo. Không có ca test nào cho hàng này; ghi ra để người sau khỏi đi tìm một ca không tồn tại |
 | **M6 · `state.joinedCallIds` của nạn nhân KHÔNG được dọn** | `gateway:551-562` | Sau `socketsLeave`, socket vẫn giữ `callId` trong state ⇒ lúc họ rớt, `handleDisconnect` phát **`peer-left` lần hai**. Vô hại (idempotent theo docblock `:532-538`) nhưng plan **không được** nói trạng thái sau vá "giống hệt khi socket rớt" — nó KHÁC ở đúng điểm này |
 | **M7 · Bản vá KHÔNG có đường lùi dữ liệu** | bất biến #2 | Revert PR hoàn nguyên CODE, **không** hoàn nguyên các hàng `chat_call_participants` đã đóng (kết cục hấp thụ, bảng không có DELETE). ⇒ **C1 phải đúng ngay lần đầu**, không có vòng hai |
 | **L3 · `socketsLeave` xuyên instance trên `/ws-call` chưa ai đo** | — | Precedent chỉ có ở `/ws` (`syncRoomMembership:306-328`). Ghi là **giả định**; ca §5.3 ca 2 đo nó trên một instance |
@@ -488,9 +564,25 @@ một** đi qua code mới — gộp chúng là để hở đúng nhánh mà A2 
    route trả 200" **không** chứng minh được gì về tính nguyên tử. Bằng chứng duy nhất là ca
    **rollback**: ép tx hỏng sau `setMemberLeft`, assert hàng `chat_call_participants` **KHÔNG đổi** —
    đúng khuôn `makeDb(commitFails)` đã có ở `chat-realtime-after-commit.spec.ts:48-57`.
-6. 🔴 **H4 — ca ĐUA:** nạn nhân `hangup` (hoặc job `expireStaleRinging`) **trước** khi transaction gỡ
-   chạy tới `setParticipantOutcome` ⇒ khớp 0 hàng ⇒ **0 hàng audit mới** và **KHÔNG** phát `peer-left`.
-   Thiếu ca này, sổ audit append-only ghi một sự kiện chưa từng xảy ra.
+6. 🔴 **H4 — detector phải là UNIT SPEC TẤT ĐỊNH, không phải ca đua (BLOCK-2 của vòng 2).**
+
+   Bản nháp đòi một ca int "nạn nhân `hangup` trước khi tx gỡ chạy tới `setParticipantOutcome`".
+   **Đo lại: trạng thái đó không tới được bằng kịch bản tuần tự.** `hangup`/`reject`/`cancel`/
+   `expireStaleRinging` đều đóng hàng participant **VÀ** chuyển `chat_calls.status` sang trạng thái
+   kết thúc trong CÙNG tx (`chat-calls.service.ts:249-261`, `:274-282`, `:305-327`;
+   `chat-calls.repository.ts:365-405`). Mà B1 lọc `c.status IN CHAT_CALL_LIVE_STATUSES` ⇒ chạy tuần
+   tự "hangup rồi gỡ" thì **B1 trả 0 hàng**, `setParticipantOutcome` không hề được gọi ⇒ ca XANH
+   **kể cả khi mutation `f` đang bật**. Ca chỉ đo vế lọc trạng thái của B1, không đo `if (!ok) continue`.
+
+   Trạng thái thật ("hàng còn mở lúc SELECT, đã đóng lúc UPDATE, cuộc gọi VẪN sống") chỉ tới được
+   bằng giao thoa hai transaction commit đúng khe giữa hai câu lệnh — không có seam nào để ghim, và
+   một ca bắn song song sẽ là ca XÁC SUẤT (memory `parallel-int-specs-share-one-outbox`).
+
+   ⇒ **Detector = unit spec colocated `apps/api/src/chat/chat-call-room-exit.service.spec.ts`**
+   (memory `vitest-unit-specs-must-be-colocated`): stub `findOpenParticipantCallsInRoom` →
+   `[{ callId, joinedAt: null }]`, stub `setParticipantOutcome` → **`false`** ⇒ assert
+   `audit.record` **0 lần** và mảng trả về **RỖNG** (không có `callId` nào để phát `peer-left`).
+   Ca đua ở int-spec: **tuỳ chọn**, và tuyệt đối **không được là detector duy nhất**.
 
 ### 5.4 Mutation check — danh sách ĐÓNG, mỗi đột biến phải làm ĐỎ đúng một ca
 
@@ -505,7 +597,8 @@ Không đỏ = ca rỗng. Liệt kê tường minh để người sau đo lại 
 | e | ghi cứng `outcome='left'` cho mọi hàng | §5.3 ca 1 vế `joined_at IS NULL` |
 | f | bỏ vế `if (!ok) continue` | §5.3 ca 6 (đua) |
 | g | chuyển `emitCallPeerLeft` vào TRONG tx | R-a: ca "COMMIT hỏng → 0/6 lối" |
-| h | chuyển `evictFromCallRoom` ra SAU commit | R-a: assert bất đối xứng của `evictFromCallRoom` |
+| h | chuyển `evictFromCallRoom` ra SAU commit | R-a: assert bất đối xứng "0/6 lối NHƯNG evict 1 lần" |
+| i | bỏ vế `c.status IN CHAT_CALL_LIVE_STATUSES` khỏi B1 | ca mới: **gỡ người sau khi cuộc gọi ĐÃ kết thúc ⇒ 0 hàng audit**. Vế lọc này là thứ DUY NHẤT chặn việc đóng lại hàng của một cuộc gọi đã xong, và trước vòng 2 **không mutation nào chạm tới nó** |
 
 ⚠️ **KHÔNG** liệt "bỏ ternary `access ? false : …`" vào danh sách — theo H1 nó **không** làm đỏ ca nào
 (nó là bộ lọc chi phí, không phải hàng rào). Ghi một đột biến không đỏ được vào danh sách là dạy người
