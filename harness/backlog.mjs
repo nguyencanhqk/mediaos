@@ -11954,4 +11954,43 @@ export const backlog = [
       "Sao lưu định kỳ data/ (ổ D:) và .secrets/ (KEK) TÁCH nhau — ghi đè KEK = mọi token FB thành rác vĩnh viễn",
     ],
   },
+  {
+    // Mở 12/08/2026 sau sự cố ~15 tiếng của fbpost (11–12/08) — KI-062.
+    id: "S10-OPS-SITEWATCH-1",
+    module: "OPS",
+    layer: "DEVOPS",
+    title:
+      "ops-alert-check mù với mọi mặt PROD ngoài API :3100 — thêm dò fbpost :3500 · LMS :3400 + phát hiện bundle `next dev` đè bản PROD",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "scripts/ops-alert-check.mjs",
+      "scripts/lib/ops-alert-rules.mjs",
+      "scripts/lib/ops-alert-rules.test.mjs",
+      "docs/RELEASE/RELEASE-01_MVP_Release_Readiness_Checklist.md",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "docs/RELEASE/RELEASE-09_Monitoring_Alerting_Support_Readiness.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Sự cố ĐO ĐƯỢC 11–12/08: `next dev` trong apps/fbpost ghi đè `.next` mà NSSM MediaOS-Social (next start) đang phục vụ ⇒ bundle devtool:'eval' ⇒ edge runtime cấm eval ⇒ EvalError ⇒ 500 MỌI đường dẫn suốt ~15 tiếng, cả localhost:3500 lẫn domain.",
+      "Vì sao KHÔNG ai biết: ops-alert-check chỉ dò OPS_BASE_URL = API :3100. fbpost :3500 và LMS :3400 là 2 dịch vụ NSSM RIÊNG, chết độc lập, chưa từng có phép đo nào ⇒ 8/8 nhóm vẫn xanh/warn.",
+      "Ba chỉ báo còn lại đều nói dối: Get-Service = Running (tiến trình sống, phục vụ bundle hỏng) · social.out.log in '✓ Ready in 717ms' mỗi lần boot (Ready in TRƯỚC khi có request chạm middleware) · ops-alert-check im lặng vì KHÔNG ĐO, không phải vì đo thấy tốt.",
+      "ĐO 12/08: đường dẫn bundle middleware KHÁC NHAU theo vị trí file nguồn — fbpost `.next/server/src/middleware.js` (nguồn ở src/), LMS `.next/server/middleware.js`. Phải lấy từ middleware-manifest.json, đoán mò là sai một trong hai.",
+      "memory: next-dev-clobbers-prod-next-evalerror · prod-restart-does-not-rebuild-dist · gate-indicator-can-read-wrong-source",
+    ],
+    done_when: [
+      "Mỗi mặt PROD ngoài API là MỘT hàng phán quyết riêng — một trang chết không bị trang khoẻ che",
+      "Dò bằng HÀNH VI HTTP thật trên trang công khai, KHÔNG follow redirect (follow ⇒ trang bị cổng phiên đá về /login vẫn hiện '200 ok')",
+      "Có rule đo NGUYÊN NHÂN (bundle dev đè bản prod), không chỉ đo hiện tượng — bắt được TRƯỚC khi thành 500",
+      "Danh sách trang dò RỖNG hoặc cấu hình rác ⇒ `unknown`, KHÔNG BAO GIỜ ra xanh (đó chính là hình dạng của lỗi này)",
+      "Nghiệm thu bằng cách BẺ HỎNG: dựng lại từng chế độ hỏng rồi đo severity + exit code, KHÔNG nghiệm thu bằng việc nhìn nó xanh trên hệ đang khoẻ",
+      "KI-062 ghi số hiệu ở RELEASE-02 + RELEASE-09 §3 cập nhật bảng rule",
+    ],
+    notes: [
+      "⚠️ NGOÀI PHẠM VI WO NÀY, CẦN OWNER: `OPS_ALERT_WEBHOOK` chưa đặt trên máy PROD (đo 12/08) ⇒ cảnh báo chạy đúng nhưng chỉ ghi vào logs/ops-alerts.log — không ai được báo. Sự cố 11–12/08 có HAI nửa: (a) không đo fbpost — WO này đóng; (b) không có đường báo ra ngoài — VẪN MỞ. Cần owner chọn kênh + tài khoản; URL là secret, KHÔNG commit.",
+    ],
+  },
 ];

@@ -9,6 +9,17 @@
  * Một hệ cảnh báo báo "xanh" vì nó không đo được gì chính là chế độ hỏng tệ nhất: người trực tin là
  * không có sự cố, trong khi thật ra là không có tín hiệu. Vì vậy `worstSeverity` xếp `unknown` TRÊN
  * `ok`, và `ops-alert-check.mjs` trả exit code khác 0 khi có `unknown`.
+ *
+ * ═══ MỞ RỘNG 2026-08-12: KHÔNG ĐO CÁI GÌ THÌ KHÔNG THẤY CÁI ĐÓ ═══
+ * Luật nền trên chỉ bảo vệ những gì ĐÃ nằm trong danh sách đo. Ngày 11–12/08, `fbpost` (:3500) trả
+ * **500 mọi đường dẫn suốt ~15 tiếng** mà 8/8 nhóm vẫn xanh/warn — vì cả bộ chỉ dò API :3100.
+ * `Get-Service` = `Running`, log in `✓ Ready`; không một chỉ báo nào chạm tới sự thật. Nên thêm:
+ *
+ *   - `SITE_*` — mỗi trang PROD (fbpost :3500 · LMS :3400) là MỘT hàng, phán từ HÀNH VI HTTP thật.
+ *     Danh sách RỖNG ⇒ `unknown`, vì "không dò trang nào" chính là hình dạng của lỗi vừa vá.
+ *   - `NEXT_DEV_BUILD` — cùng sự cố nhìn từ NGUYÊN NHÂN: `next dev` ghi đè `.next` mà `next start`
+ *     đang phục vụ ⇒ bundle `devtool:'eval'` ⇒ edge runtime cấm sinh mã từ chuỗi ⇒ `EvalError`.
+ *     Bắt được TRƯỚC khi nó thành 500, và chỉ thẳng thủ phạm thay vì "trang chết, không rõ vì sao".
  */
 
 /** Thứ tự nghiêm trọng — `unknown` nằm TRÊN `ok` (xem luật nền ở đầu file). */
@@ -203,7 +214,128 @@ export function evaluate(s = {}, t = DEFAULT_THRESHOLDS) {
     ),
   );
 
+  // ── Trang PROD ngoài API — fbpost :3500 · LMS :3400 (sự cố 11–12/08, xem đầu file) ──────
+  if (!Array.isArray(s.sites) || s.sites.length === 0) {
+    out.push(
+      missing(
+        "SITE_PROBES",
+        "Trang PROD ngoài API",
+        "danh sách trang dò RỖNG — mù mà im lặng chính là lỗi đang vá",
+      ),
+    );
+  } else {
+    for (const site of s.sites) out.push(evaluateSite(site));
+  }
+
+  // ── Bản build Next đang được phục vụ ───────────────────────────────────────────────────
+  out.push(evaluateNextBuilds(s.nextBuilds));
+
   return out;
+}
+
+/**
+ * Mã lỗi mạng có nghĩa "KHÔNG AI TRẢ LỜI".
+ *
+ * Đây là chỗ dễ nhầm: một kết nối bị từ chối KHÔNG phải "thiếu dữ liệu" — nó là một PHÉP ĐO đã
+ * hoàn thành, và kết quả là dịch vụ không có ở đó. Hạ nó xuống `unknown` sẽ biến "trang chết" thành
+ * cùng một mức với "hôm nay không chạy được phép đo", tức là đúng cái nhầm lẫn mà cả file này chống.
+ * Mã lạ ngoài danh sách thì mới là `unknown` — không đoán bừa.
+ */
+const NO_ANSWER = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ENOTFOUND",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "ETIMEDOUT",
+  "EPIPE",
+  "UND_ERR_SOCKET",
+  "timeout",
+]);
+
+/**
+ * Phán một trang PROD từ hành vi HTTP thật.
+ *
+ * @param {{id:string,title?:string,url?:string,status?:number|null,bodyOk?:boolean|null,
+ *          transport?:string}} site
+ */
+function evaluateSite(site) {
+  const id = `SITE_${site.id}`;
+  const title = site.title ?? site.id;
+  const where = site.url ? ` — ${site.url}` : "";
+
+  if (typeof site.status === "number") {
+    if (site.status >= 500) {
+      return verdict(id, title, "crit", `HTTP ${site.status}${where} — trang chết`);
+    }
+    if (site.status >= 200 && site.status < 300) {
+      // 200 vẫn có thể là trang trắng / bản dựng sai. Dấu nhận dạng là lớp chắn thứ hai; không
+      // khai `expect` thì `bodyOk` = null và ta KHÔNG phạt (đo được tới đâu phán tới đó).
+      if (site.bodyOk === false) {
+        const mark = site.expect ? ` "${site.expect}"` : "";
+        return verdict(
+          id,
+          title,
+          "warn",
+          `HTTP ${site.status} nhưng thân trang thiếu dấu nhận dạng${mark}${where}`,
+        );
+      }
+      return verdict(
+        id,
+        title,
+        "ok",
+        `HTTP ${site.status}${site.bodyOk === true ? " + dấu nhận dạng khớp" : ""}`,
+      );
+    }
+    // 3xx/4xx: KHÔNG dò bằng redirect tự động, nên 307 nghĩa là đường dò công khai đã bị đóng lại
+    // (đúng thứ đã xảy ra với 2 trang chính sách Meta ngày 12/08) — tín hiệu thật, phải kêu.
+    return verdict(id, title, "warn", `HTTP ${site.status}${where} — không phải 2xx`);
+  }
+
+  const transport = site.transport;
+  if (typeof transport === "string" && NO_ANSWER.has(transport)) {
+    return verdict(
+      id,
+      title,
+      "crit",
+      `không ai trả lời (${transport})${where} — dịch vụ dừng/treo`,
+    );
+  }
+  return missing(id, title, `không dò được${where}${transport ? ` — ${transport}` : ""}`);
+}
+
+/**
+ * Phán bản build Next đang nằm trong `.next` của từng app.
+ *
+ * `dev` THẮNG `missing`: đã có bằng chứng hỏng thì không được hạ xuống "không rõ".
+ *
+ * @param {Array<{id:string,dir:string,mode:'prod'|'dev'|'missing'}>|null|undefined} builds
+ */
+function evaluateNextBuilds(builds) {
+  const ID = "NEXT_DEV_BUILD";
+  const TITLE = "Bản build Next đang phục vụ";
+  if (!Array.isArray(builds) || builds.length === 0) {
+    return missing(ID, TITLE, "không đọc được thư mục .next nào");
+  }
+  const dev = builds.filter((b) => b.mode === "dev");
+  if (dev.length > 0) {
+    return verdict(
+      ID,
+      TITLE,
+      "crit",
+      `bundle DEV đang được next start phục vụ: ${dev.map((b) => b.dir ?? b.id).join(", ")} — ` +
+        "edge runtime sẽ ném EvalError ⇒ 500 MỌI request. Chạy lại `next build` rồi restart service",
+    );
+  }
+  const blind = builds.filter((b) => b.mode !== "prod");
+  if (blind.length > 0) {
+    return missing(
+      ID,
+      TITLE,
+      `không đọc được bản build: ${blind.map((b) => b.dir ?? b.id).join(", ")}`,
+    );
+  }
+  return verdict(ID, TITLE, "ok", `${builds.length} app đều chạy bundle PROD`);
 }
 
 /** Luật "càng LỚN càng nặng" (job failed · error lines · backup age). */
