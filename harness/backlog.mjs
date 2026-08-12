@@ -11990,7 +11990,50 @@ export const backlog = [
       "KI-062 ghi số hiệu ở RELEASE-02 + RELEASE-09 §3 cập nhật bảng rule",
     ],
     notes: [
-      "⚠️ NGOÀI PHẠM VI WO NÀY, CẦN OWNER: `OPS_ALERT_WEBHOOK` chưa đặt trên máy PROD (đo 12/08) ⇒ cảnh báo chạy đúng nhưng chỉ ghi vào logs/ops-alerts.log — không ai được báo. Sự cố 11–12/08 có HAI nửa: (a) không đo fbpost — WO này đóng; (b) không có đường báo ra ngoài — VẪN MỞ. Cần owner chọn kênh + tài khoản; URL là secret, KHÔNG commit.",
+      "⚠️ NGOÀI PHẠM VI WO NÀY, CẦN OWNER: `OPS_ALERT_WEBHOOK` chưa đặt trên máy PROD (đo 12/08) ⇒ cảnh báo chạy đúng nhưng chỉ ghi vào logs/ops-alerts.log — không ai được báo. Sự cố 11–12/08 có HAI nửa: (a) không đo fbpost — WO này đóng; (b) không có đường báo ra ngoài — tách thành S10-OPS-ALERTCHAN-1.",
+    ],
+  },
+  {
+    // Tách 12/08/2026 từ S10-OPS-SITEWATCH-1 = nửa (b) của sự cố 11–12/08.
+    // Bước RED đã commit sẵn: scripts/lib/ops-alert-notify.test.mjs (ĐỎ có chủ đích, chưa gắn CI).
+    id: "S10-OPS-ALERTCHAN-1",
+    module: "OPS",
+    layer: "DEVOPS",
+    title:
+      "Đường BÁO ĐỘNG ra ngoài: tin nhắn phải nói ĐANG HỎNG CÁI GÌ (nay chỉ có chữ 'CRIT') + lỗi giao webhook phải KÊU TO (nay nuốt sạch) + cờ --test-alert chứng minh kênh chạy được",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "scripts/ops-alert-check.mjs",
+      "scripts/lib/ops-alert-notify.mjs",
+      "scripts/lib/ops-alert-notify.test.mjs",
+      "harness/check.sh",
+      ".github/workflows/ci.yml",
+      ".github/workflows/api.yml",
+      "docs/RELEASE/RELEASE-09_Monitoring_Alerting_Support_Readiness.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S10-OPS-SITEWATCH-1"],
+    src: [
+      "S10-OPS-SITEWATCH-1 đóng nửa (a) = PHÁT HIỆN. WO này đóng nửa (b) = BÁO ĐỘNG. Không có (b) thì hôm nay fbpost chết lại, ops-alert-check ra crit exit 2 đúng lúc rồi ghi vào logs/ops-alerts.log — một file không ai mở, và vẫn không ai biết trong 15 tiếng.",
+      "KHIẾM KHUYẾT 1 — tin nhắn vô dụng: notifyWebhook gửi `{ text: '[MediaOS ops] CRIT', ...payload }`. Slack/Google Chat CHỈ render `text` ⇒ người bị ping lúc 3h sáng chỉ thấy đúng chữ 'CRIT', không biết rule nào nổ. Phần spread payload là rác thuần (chat không hiện).",
+      "KHIẾM KHUYẾT 2 — lỗi giao nuốt sạch: `catch {}` + KHÔNG kiểm res.ok + KHÔNG timeout. URL sai/hết hạn ⇒ cảnh báo im lặng đi vào hư vô, ĐÚNG lớp lỗi mà cả S10-OPS-SITEWATCH-1 vừa vá. Webhook treo còn có thể treo luôn scheduled task.",
+      "KHIẾM KHUYẾT 3 — không có cách chứng minh kênh chạy được nếu không chờ sự cố thật. Bài học của chính repo: script tồn tại ≠ script chạy được (KI-050: backup-db.sh có từ G1-8 nhưng CHƯA TỪNG chạy trên PROD).",
+      "Hình dạng thân KHÁC NHAU theo kênh — sai khoá là tin bay mất: Slack/Google Chat `{text}` · Discord `{content}` (KHÔNG phải text) · Telegram `{chat_id,text}` trên .../sendMessage. Trần độ dài: Telegram 4096, Discord 2000 ⇒ phải cắt và NÓI là đã cắt.",
+      "Bước RED đã có sẵn: scripts/lib/ops-alert-notify.test.mjs — 17 ca, cần `buildWebhookRequest` · `detectWebhookFormat` · `formatAlertText`. Đọc header file đó trước khi code.",
+      "🔴 harness/check.sh + .github/workflows/{ci,api}.yml liệt kê tên file test TƯỜNG MINH ⇒ PHẢI thêm ops-alert-notify.test.mjs vào CẢ BA trong CÙNG PR, nếu không test thành mồ côi.",
+      "URL webhook là SECRET (BẤT BIẾN #3) — chỉ đặt vào env của máy PROD, KHÔNG commit, KHÔNG log. Việc chọn kênh + tài khoản là của owner.",
+    ],
+    done_when: [
+      "Tin nhắn báo động liệt kê TỪNG hàng không-ok kèm chi tiết + mốc thời gian + máy đang đo — đọc tin là biết phải làm gì, không phải mở máy PROD ra mới biết",
+      "Hàng `ok` KHÔNG vào tin nhắn (rác hoá tin báo động là cách nhanh nhất để người ta ngừng đọc nó)",
+      "Giao webhook thất bại (res.ok=false, timeout, DNS hỏng) ⇒ KÊU TO ra stderr + ghi sổ ops-alerts.log — CẤM nuốt im lặng",
+      "fetch webhook có timeout — webhook treo KHÔNG được treo scheduled task",
+      "`--test-alert` gửi được một tin thử ngay cả khi mọi thứ đang ok, và in KẾT QUẢ GIAO rõ ràng ⇒ chứng minh kênh chạy được mà không phải chờ sự cố",
+      "Đúng hình dạng thân cho Slack · Google Chat · Discord · Telegram; kênh lạ rơi về `{text}` chứ không ném",
+      "ops-alert-notify.test.mjs được đăng ký vào harness/check.sh + ci.yml + api.yml trong CÙNG PR (bỏ dòng cảnh báo ĐỎ-có-chủ-đích ở header file khi đã xanh)",
+      "RELEASE-09 §4 gỡ khối 🔴 'LỖ CÒN LẠI' khi owner đã đặt webhook thật và chạy --test-alert thành công",
     ],
   },
 ];
