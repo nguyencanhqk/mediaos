@@ -12139,7 +12139,7 @@ export const backlog = [
     title:
       "Nhiễu log `OutboxNotificationBridge … intake THẤT BẠI` khi chạy test — truy GỐC rồi mới dập; CẤM bịt miệng logger",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/notifications/outbox-notification-bridge.service.ts",
       "apps/api/src/notifications/outbox-notification-bridge.service.spec.ts",
@@ -12163,6 +12163,8 @@ export const backlog = [
     ],
     notes: [
       "Bài học sẵn có trong repo: 11 int-spec dùng CHUNG một outbox (KI-059) ⇒ nhiễu có thể là hiệu ứng chạy song song chứ không phải lỗi của bridge. Kiểm giả thuyết đó trước khi sửa bridge.",
+      "ĐÓNG 2026-08-13. Đo thật (29 file *noti* int-spec, LANE_DB cô lập, TURBO_FORCE=1): nguồn DUY NHẤT là `chat-noti-e2e.int-spec.ts` ca 14 (S7-CHAT-BE-6) — spec CỐ Ý gieo payload lỗi + ĐÃ tự assert dead-letter ⇒ hành vi ĐÚNG-nhưng-ồn, KHÔNG PHẢI lỗi. 5 dòng ERROR = MAX_ATTEMPTS(5) của CÙNG 1 event, dồn <1s vì outbox-drain.ts bỏ backoff thật. Giả thuyết FK cũ đúng-tại-thời-điểm (2026-07-26) do cross-spec outbox race KI-059, đã đóng bởi mutex outbox-worker-lock.ts (2026-08-03) — outbox-worker-lock.unit-spec.ts 2/2 PASS hôm nay xác nhận không còn spec bỏ khoá. Đã thêm docblock ghi bằng chứng + outbox-notification-bridge.service.spec.ts (7 test, unit, chống hồi quy: intake()/resolveRecipients() ném lỗi thật → bridge vẫn log+re-throw). Chi tiết đầy đủ: RELEASE-02 KI-015.",
+      "CÒN NỢ (cosmetic, KHÔNG chặn): muốn màn hình CI hết in 5 dòng ERROR của ca 14 (mà VẪN giữ assertion), cần vi.spyOn(Logger.prototype,'error') NGAY TRONG chat-noti-e2e.int-spec.ts — file đó ngoài `paths` của WO này (test/integration/** không thuộc phạm vi), chưa chạm. Lane sau muốn dứt điểm phần cosmetic thì seed WO riêng phạm vi đúng file đó.",
     ],
   },
 
