@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**366 WO** · có micro-plan: **207/366** · ⬜ 3 chờ · 🔵 1 đang làm · ✅ 361 xong · 🔴 1 chặn
+**372 WO** · có micro-plan: **208/372** · ⬜ 7 chờ · 🔵 1 đang làm · ✅ 363 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -383,7 +383,7 @@
 | `S7-CHAT-LMS-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S7-CALL-FE-1 | Gỡ chat khỏi LMS (GIỮ trợ lý AI) + trỏ lối vào sidebar sang /chat Medi |
 | `S7-CALL-QA-1` | 🔴 | ✅ xong | [📄](S7-CALL-QA-1.md) | ✅S7-CALL-FE-1 | Bộ test CALL: deny-path signalling · cô lập 2-tenant · vòng đời cuộc g |
 | `S7-CALL-RT-FIX-1` | 🔴 | ✅ xong | [📄](S7-CALL-RT-FIX-1.md) | ✅S7-CALL-QA-1 | Vá fail-OPEN /ws-call: `disconnect()` trong middleware handshake là no |
-| `S7-CALL-RT-FIX-2` | 🔴 | 🔵 đang làm | — *(chưa)* | ✅S7-CALL-QA-1 | Vá 'gỡ thành viên giữa cuộc gọi': VẪN relay SDP/ICE tới người đã bị gỡ |
+| `S7-CALL-RT-FIX-2` | 🔴 | ✅ xong | [📄](S7-CALL-RT-FIX-2.md) | ✅S7-CALL-QA-1 | Vá 'gỡ thành viên giữa cuộc gọi': VẪN relay SDP/ICE tới người đã bị gỡ |
 | `S7-CALL-QA-2` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S7-CALL-QA-1 | Test FE cuộc gọi: bật đo coverage cho apps/app + phủ 1.241 dòng đang l |
 | `S7-CHAT-QA-1` | 🔴 | ✅ xong | [📄](S7-CHAT-QA-1.md) | ✅S7-CHAT-FE-3 ✅S7-CHAT-BE-5 ✅S7-CHAT-BE-6 ✅S7-CHAT-FE-4 ✅S7-CHAT-FE-5 | Bộ test trọn vẹn CHAT: 12 nhóm scenario SPEC-15 §21 trên LANE_DB + E2E |
 | `S7-CHAT-CLEAN-1` | 🔴 | ✅ xong | [📄](S7-CHAT-CLEAN-1.md) | ✅S7-CHAT-QA-1 | Contract (release SAU): drop chat_rooms.channel_id + chat_messages.fil |
@@ -428,9 +428,15 @@
 | --- | --- | --- | --- | --- | --- |
 | `S10-SOCIAL-LIB-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S9-SOCIAL-QA-1 | Kho video đọc từ thư mục có WHITELIST: SOCIAL_MEDIA_LIBRARY_DIRS + GET |
 | `S10-SOCIAL-LIB-2` | 🔴 | ✅ xong | — *(chưa)* | ✅S10-SOCIAL-LIB-1 | Màn 'Kho video': cấu hình thư mục gốc từ giao diện (lưu ở settings, kh |
-| `S10-SOCIAL-OPS-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S10-SOCIAL-LIB-1 | Đưa kho sang ổ D: (SOCIAL_DATA_DIR) + đổi dịch vụ MediaOS-Social từ Lo |
+| `S10-SOCIAL-OPS-1` | 🔴 | 🔵 đang làm | — *(chưa)* | ✅S10-SOCIAL-LIB-1 | Đưa kho sang ổ D: (SOCIAL_DATA_DIR) + đổi dịch vụ MediaOS-Social từ Lo |
 | `S10-OPS-SITEWATCH-1` | 🟡 | ✅ xong | — *(chưa)* | — | ops-alert-check mù với mọi mặt PROD ngoài API :3100 — thêm dò fbpost : |
 | `S10-OPS-ALERTCHAN-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S10-OPS-SITEWATCH-1 | Đường BÁO ĐỘNG ra ngoài: tin nhắn phải nói ĐANG HỎNG CÁI GÌ (nay chỉ c |
+| `S10-FND-ENVKEY-1` | 🟡 | ✅ xong | — *(chưa)* | — | `INTERNAL_API_KEY` là secret ĐANG DÙNG THẬT nhưng vắng mặt ở env.schem |
+| `S10-QA-LOGNOISE-1` | 🟢 | ⬜ chờ | — *(chưa)* | — | Nhiễu log `OutboxNotificationBridge … intake THẤT BẠI` khi chạy test — |
+| `S10-ATT-NOTIPROD-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | 3 sự kiện ATT bật trong danh mục nhưng KHÔNG AI PHÁT (`ATT_MISSING_CHE |
+| `S10-QA-ROUTEHTTP-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | Một mảng lớn đường dẫn API không có test HTTP nào chạm — guard/DTO/env |
+| `S10-FND-JSONLOG-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | Log chưa có cấu trúc JSON — và bất kỳ ai đổi định dạng log đều PHẢI sử |
+| `S10-DASH-MVREFRESH-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | Materialized view dashboard KHÔNG CÓ LỊCH CHẠY — chỉ làm mới khi có ng |
 
 ---
 

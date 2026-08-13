@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-13 09:13Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-13 09:25Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -46,6 +46,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `11df9320` | 2026-08-13 | chore(docs): regen STATUS sau khi land #380 (S10-FND-ENVKEY-1 done) |
 | `badcb5e0` | 2026-08-13 | fix(config): khai INTERNAL_API_KEY vào env.schema + .env.example (S10-FND-ENVKEY-1 · KI-031) (#380) |
 | `823a60ce` | 2026-08-13 | chore(harness): seed 6 Work Order từ KI đang mở ở RELEASE-02 — backlog cạn còn 3 READY, nay 8 |
 | `116b4c86` | 2026-08-13 | feat(ops): trình cài Cloudflare Tunnel cho máy mới — giao diện điền tên miền/cổng + chốt an toàn (#379) |
@@ -57,7 +58,6 @@
 | `aa7edc1e` | 2026-08-12 | fix(social): mở cổng phiên cho 2 trang Meta BẮT BUỘC — trước đó chúng bị đá về /login, tức không làm nổi đúng việc chúng sinh ra |
 | `1d6dd393` | 2026-08-12 | feat(fbpost): sửa nội dung hàng loạt — thay cùng một đoạn chữ trong nhiều nội dung (#373) |
 | `ec468651` | 2026-08-12 | chore(repo): đưa vào git 3 file ĐANG CHẠY THẬT mà git chưa từng biết + ignore artefact rơi ở gốc |
-| `cdecbbcb` | 2026-08-12 | chore(docs): regen STATUS sau khi land #375 (S7-CALL-RT-FIX-1 done, KI-061 đóng; tiêu điểm chuyển sang RT-FIX-2) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
