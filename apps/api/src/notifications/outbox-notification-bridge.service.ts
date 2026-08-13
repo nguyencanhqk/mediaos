@@ -74,9 +74,16 @@ export interface NotiEventMapping {
  *
  * KHÔNG hạ log level / bọc `catch {}` ở đây: bridge hỏng THẬT trên PROD phải kêu to giống hệt. Xem
  * `outbox-notification-bridge.service.spec.ts` cho ca chống-hồi-quy (mock `intake()` ném lỗi thật → vẫn
- * log + re-throw). Dập noise triệt để ở `chat-noti-e2e.int-spec.ts` ca 14 (spy `Logger.prototype.error`
- * TRONG chính ca đó để biến print thành assert) là việc CÒN NỢ — file đó ngoài phạm vi đường dẫn của WO
- * này. Theo dõi: `docs/RELEASE/RELEASE-02_Known_Issues_MVP.md` KI-015.
+ * log + re-throw).
+ *
+ * S10-QA-LOGNOISE-1-FIX-A (2026-08-13, vòng 2) — vòng 1 chỉ ghi bằng chứng vào docblock này mà KHÔNG
+ * chạm nơi phát ⇒ đo lại được: 6 dòng ERROR (5× bridge "intake THẤT BẠI" + 1× `LoggerAlertSink`
+ * "DEAD-LETTER") VẪN in ra console mỗi lần chạy `chat-noti-e2e.int-spec.ts` ca 14. Vòng này DẬP TRIỆT ĐỂ
+ * tại đúng nơi phát bằng `test/helpers/expect-logged-errors.ts` (`withExpectedLoggerErrors`) bọc quanh
+ * `drain()` trong chính ca 14: dòng khớp mẫu kỳ vọng (đúng payload/eventType của ca đó) bị nuốt-có-assert
+ * — SAI số lần (kể cả 0) làm spec ĐỎ; dòng lạ vẫn forward nguyên vẹn ra console. Đo lại: 30 file/495 test
+ * `*noti*` trên LANE_DB cô lập, 0 dòng "intake THẤT BẠI"/"DEAD-LETTER" — PASS. Theo dõi:
+ * `docs/RELEASE/RELEASE-02_Known_Issues_MVP.md` KI-015.
  */
 @Injectable()
 export class OutboxNotificationBridge {
