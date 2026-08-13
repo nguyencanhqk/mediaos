@@ -1320,6 +1320,51 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
     expect(ringing?.joined_at, "…và họ chưa từng vào").toBe(null);
   });
 
+  /**
+   * 🔴 **Đột biến `j` của §5.4 — vế `accepted_at` của vị từ KÉP.** Lỗ này ĐÃ XẢY RA THẬT: bản đầu chỉ
+   * xét `joined_at !== null`, và `security-reviewer` (13/08) bắt được ở vòng FULL gate.
+   *
+   * `insertParticipants` đặt `joined_at = now` cho **NGƯỜI KHỞI TẠO ngay lúc MỜI** (họ "tự vào cuộc gọi
+   * của chính mình"), nên MỌI cuộc gọi còn `ringing` đã sẵn có một hàng `joined_at` khác NULL trong khi
+   * **chưa ai nói chuyện với ai**. Chỉ xét `joined_at` ⇒ người khởi tạo bị đóng dấu `'left'` + `left_at`
+   * — kết cục HẤP THỤ, bảng không có DELETE ⇒ **SAI VĨNH VIỄN**, đúng thứ §0.3 dựng cả WO này để tránh.
+   *
+   * ⚠️ Ca này là detector ở tầng INT; trước đó nó chỉ có ở tầng unit (stub repo), tức vế "`joined_at`
+   * thật sự được đặt lúc mời" — tiền đề khiến lỗ tồn tại — chưa từng được đo trên DB thật.
+   *
+   * Ba assert TIỀN ĐỀ ở dưới không phải trang trí: thiếu chúng, một ngày `insertParticipants` thôi đặt
+   * `joined_at` lúc mời thì ca vẫn XANH trong khi nó đã hết đo cái gì cả.
+   */
+  it("FIX2/§5.4-j — NGƯỜI KHỞI TẠO rời phòng lúc cuộc gọi còn `ringing` ⇒ `missed`, KHÔNG phải `left`", async () => {
+    const room = await newRoom(tExitPeer, "R-initiator-ringing", [uExit, uExitThird]);
+    // `uExit` là người KHỞI TẠO (không phải admin phòng — để `removeMember` của admin đi được).
+    const callId = await invite(tExit, room);
+
+    // ── TIỀN ĐỀ: đúng ô `joined_at NOT NULL` + `accepted_at NULL` mà đột biến `j` nhắm tới ──
+    const beforeRow = (await participantsOf(callId)).find((r) => r.user_id === uExit);
+    expect(
+      beforeRow?.joined_at,
+      "tiền đề: `insertParticipants` đặt `joined_at` cho NGƯỜI KHỞI TẠO ngay lúc mời",
+    ).not.toBe(null);
+    const acceptedAt = (
+      await direct.query(`SELECT accepted_at FROM chat_calls WHERE id = $1`, [callId])
+    ).rows[0]?.accepted_at;
+    expect(acceptedAt, "tiền đề: chưa ai nhấc máy ⇒ `chat_calls.accepted_at` VẪN NULL").toBe(null);
+    expect(await callStatus(callId), "tiền đề: cuộc gọi còn SỐNG").toBe("ringing");
+
+    expect(await removeMember(tExitPeer, room, uExit)).toMatchObject({ status: 200 });
+
+    const row = (await participantsOf(callId)).find((r) => r.user_id === uExit);
+    expect(
+      row?.outcome,
+      "người khởi tạo CHƯA nói chuyện với ai — `left` là đóng dấu 'đã vào rồi rời' lên họ, VĨNH VIỄN",
+    ).toBe("missed");
+    expect(row?.left_at, "cuộc gọi NHỠ không có mốc rời").toBe(null);
+    // `joined_at` VẪN còn — chứng minh ca đi qua đúng nhánh KÉP (nếu vị từ chỉ xét `joined_at` thì với
+    // cùng dữ liệu này kết cục đã là `left`), chứ không phải qua nhánh "chưa từng vào" của §5.3-1.
+    expect(row?.joined_at, "…và hàng vẫn giữ `joined_at` của lúc mời").not.toBe(null);
+  });
+
   it("FIX2/§5.3-3 — gỡ người KHÔNG ở trong cuộc gọi nào ⇒ 0 hàng audit `participant_closed`", async () => {
     const room = await newRoom(tExitPeer, "R-nocallmember", [uExit]);
     const callId = await invite(tExitPeer, room);

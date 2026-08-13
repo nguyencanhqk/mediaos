@@ -599,6 +599,9 @@ Không đỏ = ca rỗng. Liệt kê tường minh để người sau đo lại 
 | g | chuyển `emitCallPeerLeft` vào TRONG tx | R-a: ca "COMMIT hỏng → 0/6 lối" |
 | h | chuyển `evictFromCallRoom` ra SAU commit | R-a: assert bất đối xứng "0/6 lối NHƯNG evict 1 lần" |
 | i | bỏ vế `c.status IN CHAT_CALL_LIVE_STATUSES` khỏi B1 | ca mới: **gỡ người sau khi cuộc gọi ĐÃ kết thúc ⇒ 0 hàng audit**. Vế lọc này là thứ DUY NHẤT chặn việc đóng lại hàng của một cuộc gọi đã xong, và trước vòng 2 **không mutation nào chạm tới nó** |
+| **j** | bỏ vế `accepted_at` khỏi vị từ KÉP (chỉ xét `joined_at !== null`) | unit spec + `FIX2/§5.4-j`. **Đây là lỗi ĐÃ XẢY RA**, `security-reviewer` bắt ở FULL gate 13/08: `insertParticipants` đặt `joined_at` cho NGƯỜI KHỞI TẠO ngay lúc MỜI ⇒ mọi cuộc gọi `ringing` đã có sẵn một hàng `joined_at` khác NULL ⇒ người khởi tạo tự rời phòng bị đóng dấu `'left'` VĨNH VIỄN |
+| **k** | chuyển lần `evictFromCallRoom` **SAU commit** đi (giữ mỗi vế trong-tx) | R-a: ca "POSITIVE CONTROL — evict ĐÚNG **2** lần". Đo thật 13/08: đúng 1 ca đỏ, phần còn lại xanh. Vế sau-commit đóng **cửa sổ rejoin** (join ở tx khác đọc READ COMMITTED chưa thấy `left_at` mới ⇒ `socketsJoin` đưa nạn nhân trở lại room). ⚠️ Chỉ `toHaveBeenCalled()` thì đột biến này **không** đỏ — phải là CẶP SỐ 1 (commit hỏng) / 2 (commit OK) |
+| **l** | bỏ neo tên method ở `takesCallerTx` (quay lại khớp `(` bất kỳ) | `chat-be1-access.int-spec.ts` ca "carve-out neo vào `(` của CHÍNH method". Không neo ⇒ `foo(roomId: string, run: (tx: TenantTx) => …)` — controller GỌI ĐƯỢC — được miễn `assertMember` oan, và khuôn đó **đã có trong repo** |
 
 ⚠️ **KHÔNG** liệt "bỏ ternary `access ? false : …`" vào danh sách — theo H1 nó **không** làm đỏ ca nào
 (nó là bộ lọc chi phí, không phải hàng rào). Ghi một đột biến không đỏ được vào danh sách là dạy người
