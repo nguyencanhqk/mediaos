@@ -33,7 +33,7 @@
 | ~~KI-014~~ | **ĐÃ ĐÓNG 2026-07-27** (`S6-QA-CHUNK-1`) — truy được gốc: **bug ngược dòng `tinypool@1.1.1`**, `ProcessWorker.send()` chỉ chặn `isTerminating` chứ không kiểm tra kênh IPC đã đóng. **Ba đính chính so với mô tả cũ:** (1) KHÔNG phải "máy bất ổn ngẫu nhiên" — `pnpm test` đỏ **5/5**, tái hiện 100%; (2) KHÔNG phải file/suite thủ phạm — package nạn nhân đổi mỗi lần chạy (kể cả `console` 23 file, `web-core` 39 file); (3) KHÔNG phải lệch Node 24-local vs 22-CI — **Node 22 vẫn crash**; CI xanh vì runner chỉ 2–4 nhân ⇒ 1–3 worker, còn máy này 32 nhân ⇒ 31 worker/package. Vá = `harness/chunk-test.mjs` (chia chunk + hạ trần worker + chạy lại **chỉ** chunk chết vì hạ tầng), `check.sh` dùng trên Windows, CI giữ đường một-lần. Verify: `LANE_DB=mediaos_qachunk bash harness/check.sh --all` → **XANH** (lint+typecheck+test+build), **761/761 file spec** đối chiếu `vitest list`. Số đo đầy đủ: `docs/QA/evidence/S6-QA-CHUNK-1-KI-014-ROOT-CAUSE.md` | S2 | Hạ tầng test (local) | — | — | ✔ xong |
 | KI-015 | Nhiễu log `OutboxNotificationBridge … intake THẤT BẠI` khi chạy test | S3 | Vệ sinh test | ❌ | ❌ | Sprint 6 |
 | ~~KI-016~~ | **ĐÓNG 2026-07-30** — `S6-REL-1`. Mỗi build nay đóng băng thành `apps/api/releases/<stamp>` (BẤT BIẾN), service trỏ junction `releases/current`; `m dev-online` biên dịch lại `dist` KHÔNG còn chạm được bản PROD đang chạy. Kèm theo là **đường rollback ứng dụng đầu tiên** của dự án (`m prod-rollback`) — trước đây `dist` bị ghi đè mỗi lần build nên không có bản trước để quay về. Vị trí thư mục là RÀNG BUỘC KỸ THUẬT: phải nằm TRONG `apps/api` để `node_modules` phân giải đi lên trúng `apps/api/node_modules` (pnpm isolated, KHÔNG hoist) — đã chứng minh bằng resolver thật + boot artifact trên DB lane, không bằng lý luận. ⚠️ **cần deploy**: `m prod-cutover` (Administrator) MỘT LẦN; `m prod-status` cảnh báo LOUD khi service còn trỏ `dist` | S2 | Hạ tầng | — | ⚠️ cần cutover | **ĐÓNG** — `S6-REL-1` |
-| KI-017 | Refresh materialized view dashboard qua `workerDb` hỏng từ G14 ("must be owner") | S3 | Sản phẩm (ngủ) | ❌ | ⚠️ | Sprint 6 |
+| ~~KI-017~~ | ~~Refresh materialized view dashboard qua `workerDb` hỏng từ G14 ("must be owner")~~ — **ĐÃ ĐÓNG** (2 nửa, 2 WO): privilege ở `S6-SEC-MV-1` (mig 0534, 29/07/2026), lịch chạy ở `S10-DASH-MVREFRESH-1` (2026-08-13) | S3 | Sản phẩm (ngủ) | — | — | **ĐÓNG 2026-08-13** — `S10-DASH-MVREFRESH-1` |
 | KI-018 | Dữ liệu demo có trạng thái đơn nghỉ lẫn hoa/thường | S3 | Dữ liệu | ❌ | ❌ | Sprint 6 |
 | KI-019 | Chỉ 1 ca làm việc + 1 quy tắc chấm công + 0 phân ca trong DB UAT | S3 | Dữ liệu | ❌ | ❌ | Owner/HR |
 | KI-020 | Chưa có dữ liệu GOAL để nghiệm thu | S3 | Dữ liệu | ❌ | ❌ | Owner |
@@ -392,13 +392,28 @@ Service PROD `MediaOS-API` chạy thẳng `apps/api/dist/main` của repo dev. C
 trong khi DB PROD chưa áp migration tương ứng (đã từng gây PROD login 500 ngày 2026-07-08).
 **Việc (go-live blocker):** cấp thư mục build riêng cho PROD.
 
-### KI-017 — Refresh MV dashboard qua workerDb hỏng từ G14 · S3
+### ~~KI-017~~ — Refresh MV dashboard qua workerDb hỏng từ G14 · S3 · **ĐÃ ĐÓNG 2026-08-13 (2 nửa, 2 WO)**
 
 `dashboard-refresh.service.ts:19-22` ghi rõ: REFRESH đòi role **owner** của materialized view (=`mediaos`),
 nhưng `refreshDb` ưu tiên `workerDb` (`mediaos_worker`) ⇒ đường refresh runtime fail "must be owner" ở
-mọi môi trường có `DATABASE_WORKER_URL`. Hiện **chưa consumer nào gọi tới** nên không lộ ra người dùng.
-**Cấm sửa nhanh bằng `ALTER OWNER` cho worker** — worker không BYPASSRLS + `tasks` FORCE RLS ⇒ MV sẽ
-**rỗng lặng lẽ**, tệ hơn lỗi hiện tại.
+mọi môi trường có `DATABASE_WORKER_URL`. Trước khi đóng, **chưa consumer nào gọi tới** nên không lộ ra
+người dùng. **Cấm sửa nhanh bằng `ALTER OWNER` cho worker** — worker không BYPASSRLS + `tasks` FORCE RLS
+⇒ MV sẽ **rỗng lặng lẽ**, tệ hơn lỗi hiện tại (giữ nguyên, chưa ai làm vậy).
+
+**Nửa 1 — privilege, ĐÓNG `S6-SEC-MV-1` (mig 0534, 29/07/2026):** hàm `refresh_dashboard_mvs()`
+SECURITY DEFINER (owner `mediaos`, BYPASSRLS) — worker chỉ cần EXECUTE, không còn cần là owner MV. Xem
+docblock `mig 0534` + `dashboard-refresh.service.ts:19-35`.
+
+**Nửa 2 — lịch chạy, ĐÓNG `S10-DASH-MVREFRESH-1` (2026-08-13):** trước WO này KHÔNG có gì tự gọi
+`DashboardRefreshService.refresh()` định kỳ — đường DUY NHẤT là bấm tay `POST /dashboard/refresh`
+(vẫn GIỮ NGUYÊN, không thay thế). Nay có `DashboardMvRefreshJobHandler` (`@SystemJobHandler()`, khai
+trong `providers` của `DashboardModule`, `SchedulerModule` tự gom qua `DiscoveryService`) chạy theo nhịp
+`system-jobs` (mặc định 60s), tự throttle nội bộ theo `DASHBOARD_MV_REFRESH_INTERVAL_MS` (mặc định 5
+phút, hằng số có tên + cấu hình qua env, clamp [30s, 1h]) để không refresh trùng nhiều lần trong CÙNG
+một tick khi có nhiều tenant. Lỗi refresh KHÔNG bị nuốt (không `.catch` — mirror bài học KI-034): propagate
+cho `JobRunner` finalize run-row `system_job_runs` = `Failed` + log ERROR. Chứng minh job THẬT SỰ làm mới
+dữ liệu (không chỉ "chạy không lỗi") bằng đo hàng trước/sau qua HTTP thật:
+`apps/api/src/dashboard/dashboard-mv-refresh.int.spec.ts` (Postgres thật, DB cô lập).
 
 ### KI-018 / KI-019 / KI-020 — 3 khoảng trống dữ liệu demo · S3
 
