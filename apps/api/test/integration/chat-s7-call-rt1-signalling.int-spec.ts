@@ -106,6 +106,17 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
   let uClassC = "";
   let uTwo = "";
   let uTwoPeer = "";
+  // ─── S7-CALL-RT-FIX-2 ───────────────────────────────────────────────────────
+  // Người NGOÀI phòng, chưa từng được mời — ca ĐỐI CHỨNG 1b (§5.2), thứ DUY NHẤT ép được ranh giới
+  // lớp B ở nhánh mà `wasCallParticipant` vừa sửa.
+  let uOutsider = "";
+  let uMedia = "";
+  let uMediaPeer = "";
+  // Ba người dùng cho các ca CHỈ-REST (trạng thái DB sau khi rời/bị gỡ). Không nối socket ⇒ không tiêu
+  // trần bắt tay 30/phút ⇒ dùng lại được cho NHIỀU ca, mỗi ca một PHÒNG riêng.
+  let uExit = "";
+  let uExitPeer = "";
+  let uExitThird = "";
   let tCaller = "";
   let tCallee = "";
   let tLate = "";
@@ -123,6 +134,12 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
   let tClassC = "";
   let tTwo = "";
   let tTwoPeer = "";
+  let tOutsider = "";
+  let tMedia = "";
+  let tMediaPeer = "";
+  let tExit = "";
+  let tExitPeer = "";
+  let tExitThird = "";
 
   const settle = (ms = 250): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -273,6 +290,50 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
     return res.rows;
   }
 
+  // ─── S7-CALL-RT-FIX-2 — đọc TRẠNG THÁI DB sau khi rời/bị gỡ khỏi phòng ──────
+
+  /** Hàng participant của MỘT cuộc gọi, đủ để phân biệt `left` (có `left_at`) với `missed` (không). */
+  async function participantsOf(
+    callId: string,
+  ): Promise<
+    { user_id: string; outcome: string | null; joined_at: Date | null; left_at: Date | null }[]
+  > {
+    const res = await direct.query(
+      `SELECT user_id, outcome, joined_at, left_at FROM chat_call_participants
+        WHERE call_id = $1 ORDER BY user_id`,
+      [callId],
+    );
+    return res.rows;
+  }
+
+  /** Dòng audit `chat.call.participant_closed` của một tenant (append-only ⇒ chỉ tăng). */
+  async function participantClosedAudit(companyId: string): Promise<
+    {
+      object_id: string;
+      actor_user_id: string | null;
+      new_values: Record<string, unknown> | null;
+    }[]
+  > {
+    // ⚠️ Cột là `new_values` (đường v2 của `AuditService.record`), KHÔNG phải `after` (đường v1 mà vài
+    // int-spec AUTH đang đọc). Đọc nhầm cột trả `null` ⇒ một assert nội dung XANH-RỖNG.
+    const res = await direct.query(
+      `SELECT object_id, actor_user_id, new_values FROM audit_logs
+        WHERE company_id = $1 AND action = 'chat.call.participant_closed' ORDER BY created_at`,
+      [companyId],
+    );
+    return res.rows;
+  }
+
+  async function callStatus(callId: string): Promise<string> {
+    const res = await direct.query(`SELECT status FROM chat_calls WHERE id = $1`, [callId]);
+    return res.rows[0]?.status as string;
+  }
+
+  const removeMember = (token: string, roomId: string, userId: string) =>
+    request(app.getHttpServer())
+      .delete(`/chat/rooms/${roomId}/members/${userId}`)
+      .set("Authorization", `Bearer ${token}`);
+
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
@@ -308,6 +369,12 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
     uClassC = await mk("classc");
     uTwo = await mk("two");
     uTwoPeer = await mk("twopeer");
+    uOutsider = await mk("outsider");
+    uMedia = await mk("media");
+    uMediaPeer = await mk("mediapeer");
+    uExit = await mk("exit");
+    uExitPeer = await mk("exitpeer");
+    uExitThird = await mk("exitthird");
     uB = await seedUser(direct, B.companyId, `bob@${B.slug}.test`, hash);
 
     await grantPairs(A.companyId, uCaller, "caller", CALL_FULL);
@@ -329,6 +396,12 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
       [uClassC, "classc"],
       [uTwo, "two"],
       [uTwoPeer, "twopeer"],
+      [uOutsider, "outsider"],
+      [uMedia, "media"],
+      [uMediaPeer, "mediapeer"],
+      [uExit, "exit"],
+      [uExitPeer, "exitpeer"],
+      [uExitThird, "exitthird"],
     ] as const) {
       await grantPairs(A.companyId, id, label, CALL_FULL);
     }
@@ -349,6 +422,12 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
     tClassC = await login(A.slug, `classc@${A.slug}.test`);
     tTwo = await login(A.slug, `two@${A.slug}.test`);
     tTwoPeer = await login(A.slug, `twopeer@${A.slug}.test`);
+    tOutsider = await login(A.slug, `outsider@${A.slug}.test`);
+    tMedia = await login(A.slug, `media@${A.slug}.test`);
+    tMediaPeer = await login(A.slug, `mediapeer@${A.slug}.test`);
+    tExit = await login(A.slug, `exit@${A.slug}.test`);
+    tExitPeer = await login(A.slug, `exitpeer@${A.slug}.test`);
+    tExitThird = await login(A.slug, `exitthird@${A.slug}.test`);
     tB = await login(B.slug, `bob@${B.slug}.test`);
   }, 180_000);
 
@@ -1044,16 +1123,18 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
     await settle(400);
     victim.clear();
 
-    // Gỡ khỏi phòng = `SET left_at` (CHAT-API-007d), KHÔNG xoá hàng participant của cuộc gọi.
-    const del = await request(app.getHttpServer())
-      .delete(`/chat/rooms/${room}/members/${uRemove}`)
-      .set("Authorization", `Bearer ${tRemovePeer}`);
+    // Gỡ khỏi phòng = `SET left_at` (CHAT-API-007d). S7-CALL-RT-FIX-2: nay nó đóng LUÔN hàng
+    // participant của cuộc gọi đang sống, trong CÙNG transaction.
+    const del = await removeMember(tRemovePeer, room, uRemove);
     expect(del.status, JSON.stringify(del.body)).toBe(200);
     await settle(200);
 
     // (1) CHIỀU NHẬN — người đã bị gỡ có còn nhận SDP/ICE không?
     const beforeVictim = (await securityEvents(A.companyId)).filter(
       (e) => e.user_id === uRemove,
+    ).length;
+    const beforePeer = (await securityEvents(A.companyId)).filter(
+      (e) => e.user_id === uRemovePeer,
     ).length;
     peer.socket.emit("call:ice-candidate", { callId, toUserId: uRemove, candidate: "sau-khi-go" });
     await settle(600);
@@ -1089,13 +1170,316 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
     // │ WO vá = `S7-CALL-RT-FIX-2` (backlog). Khi bản vá land, 2 assert dưới ĐỎ ⇒ lật thành hành vi    │
     // │ đúng trong CÙNG PR. Xem plan §5 mục 7.                                                         │
     // └────────────────────────────────────────────────────────────────────────────────────────────────┘
-    expect(stillReceives, "chiều NHẬN vẫn mở — người đã bị gỡ vẫn nhận SDP/ICE của bên kia").toBe(
-      true,
+    //
+    // ✅ **ĐÃ LẬT — `S7-CALL-RT-FIX-2` đã land.** Docblock cơ chế ở trên GIỮ NGUYÊN: nó là hồ sơ vì sao
+    // ca này tồn tại. Ba khẳng định dưới nay đo HÀNH VI ĐÚNG, không còn là tripwire.
+    expect(
+      stillReceives,
+      "chiều RÒ phải ĐÓNG: người đã bị gỡ KHÔNG được nhận SDP/ICE của bên kia nữa",
+    ).toBe(false);
+    expect(
+      punished,
+      "KHÔNG được ghi hàng an ninh: trickle ICE là do WebRTC tự làm, họ không phải người dò cửa",
+    ).toBe(false);
+    expect(victim.disconnected, "…và KHÔNG được ngắt kết nối của họ").toBe(false);
+
+    // ┌─ C2 (BLOCK vòng review 1) — hai assert dưới NGĂN một bản vá SAI vẫn xanh ──────────────────────┐
+    // │ Ba assert trên đều đo NẠN NHÂN. Một hiện thực sai kiểu "lọc người bị gỡ khỏi CẢ                │
+    // │ `activeUserIds` LẪN `participantUserIds`" làm cả ba XANH — trong khi `assertPeer` rơi xuống    │
+    // │ `deny()` và ghi hàng an ninh + NGẮT **NGƯỜI Ở LẠI**. Nạn nhân bị CHUYỂN chứ không bị xoá, và   │
+    // │ không assert nào ở trên nhìn thấy điều đó.                                                      │
+    // │ ⇒ Người bị gỡ phải rơi khỏi `activeUserIds` NHƯNG Ở LẠI `participantUserIds` — đúng hình dạng  │
+    // │ mà người vừa gác máy đang có (lớp C ở `assertPeer:699`).                                        │
+    // └────────────────────────────────────────────────────────────────────────────────────────────────┘
+    const afterPeer = (await securityEvents(A.companyId)).filter(
+      (e) => e.user_id === uRemovePeer,
+    ).length;
+    expect(
+      afterPeer - beforePeer,
+      "NGƯỜI Ở LẠI không được bị phạt — họ chỉ bắn ICE cho một peer vừa biến mất",
+    ).toBe(0);
+    expect(peer.disconnected, "…và người ở lại KHÔNG được bị ngắt").toBe(false);
+  });
+
+  // ─── S7-CALL-RT-FIX-2 — ca ĐỐI CHỨNG + trạng thái DB ────────────────────────
+
+  /**
+   * 🔴 Ca **1b** của §5.2 — thứ DUY NHẤT ép được ranh giới lớp B ở nhánh mà `wasCallParticipant` sửa.
+   *
+   * Ca 1a ("CÒN là thành viên phòng, chưa từng được mời") đã có: **CA 3** ở trên — ở đó `access ≠ null`
+   * nên `wasCallParticipant` KHÔNG chạy. Chỉ ca này (`access === null` VÀ không có hàng participant) đi
+   * qua đúng dòng code mới. Thiếu nó, đột biến *"`wasCallParticipant` luôn trả `true`"* — tức mở toang
+   * lớp B thành lớp C cho MỌI người ngoài — vẫn xanh toàn bộ (`deny-cases-vacuous-without-allow-case`).
+   */
+  it("FIX2/1b — người NGOÀI phòng, CHƯA TỪNG được mời ⇒ VẪN lớp B (ghi + ngắt)", async () => {
+    const room = await newRoom(tRemovePeer, "R-outsider", [uCallee]);
+    const callId = await invite(tRemovePeer, room);
+
+    const outsider = await connectCall(tOutsider);
+    const before = (await securityEvents(A.companyId)).filter(
+      (e) => e.user_id === uOutsider,
+    ).length;
+
+    outsider.socket.emit("call:ice-candidate", { callId, toUserId: uCallee, candidate: "probe" });
+    await settle(600);
+
+    const after = (await securityEvents(A.companyId)).filter((e) => e.user_id === uOutsider).length;
+    expect(after - before, "người ngoài đẩy ICE vào cuộc gọi người khác VẪN phải bị ghi").toBe(1);
+    expect(outsider.disconnected, "…và VẪN phải bị ngắt").toBe(true);
+  });
+
+  /**
+   * 🔴 Ca **4** của §5.2 — `evictFromCallRoom`.
+   *
+   * `call:media-state`/`call:screen-state` broadcast thẳng vào `callRoomName` và **KHÔNG** đi qua
+   * `assertPeer`, nên đóng `chat_call_participants` một mình KHÔNG chặn được chúng: socket nạn nhân vẫn
+   * ở trong room chung. C5 (chỉ đo `ice-candidate`) sẽ XANH trong khi lỗ này còn mở — đây là ca duy nhất
+   * canh vế `socketsLeave`.
+   */
+  it("FIX2/4 — sau khi bị gỡ, nạn nhân KHÔNG còn nhận `call:media-state` (socket bị kéo khỏi room cuộc gọi)", async () => {
+    const room = await newRoom(tMediaPeer, "R-media", [uMedia]);
+    const callId = await invite(tMediaPeer, room);
+
+    const victim = await connectCall(tMedia);
+    const peer = await connectCall(tMediaPeer);
+    victim.socket.emit("call:join", { callId });
+    peer.socket.emit("call:join", { callId });
+    await settle(400);
+
+    // POSITIVE CONTROL: TRƯỚC khi gỡ, media-state PHẢI tới — nếu không, ca dưới xanh RỖNG.
+    victim.clear();
+    peer.socket.emit("call:media-state", { callId, micOn: false, camOn: true });
+    await settle(500);
+    expect(
+      victim.events.some((e) => e.name === "call:media-state"),
+      "ĐỐI CHỨNG: khi còn trong phòng thì media-state phải tới",
+    ).toBe(true);
+
+    const del = await removeMember(tMediaPeer, room, uMedia);
+    expect(del.status, JSON.stringify(del.body)).toBe(200);
+    await settle(300);
+
+    victim.clear();
+    peer.socket.emit("call:media-state", { callId, micOn: true, camOn: false });
+    peer.socket.emit("call:screen-state", { callId, sharing: true });
+    await settle(600);
+
+    expect(
+      victim.events.some((e) => e.name === "call:media-state" || e.name === "call:screen-state"),
+      "đã bị gỡ khỏi phòng mà vẫn theo dõi được mic/cam/chia-sẻ-màn-hình theo thời gian thực",
+    ).toBe(false);
+  });
+
+  it("FIX2 — người CÒN LẠI nhận `call:peer-left` đúng `callId` khi peer bị gỡ khỏi phòng", async () => {
+    const room = await newRoom(tMediaPeer, "R-peerleft", [uMedia]);
+    const callId = await invite(tMediaPeer, room);
+
+    const victim = await connectCall(tMedia);
+    const peer = await connectCall(tMediaPeer);
+    victim.socket.emit("call:join", { callId });
+    peer.socket.emit("call:join", { callId });
+    await settle(400);
+    peer.clear();
+
+    const del = await removeMember(tMediaPeer, room, uMedia);
+    expect(del.status, JSON.stringify(del.body)).toBe(200);
+
+    const payload = await peer.waitFor("call:peer-left", 3000);
+    expect(payload).toEqual({ callId, userId: uMedia });
+  });
+
+  /**
+   * 🔴 §5.3 ca 1 — **ca quan trọng nhất của cả WO.** Kết cục phải theo TỪNG HÀNG.
+   *
+   * `'left'` = "đã VÀO rồi rời". Gán nó cho người chưa bấm nhận (`joined_at IS NULL`) là đóng dấu "đã
+   * nghe máy rồi cúp" lên người CHƯA BAO GIỜ nhấc máy — và **không sửa lại được**: bốn kết cục là HẤP
+   * THỤ, bảng không có DELETE (mig `0546` khối C). Ghi cứng `'left'` cho cả lô làm ca này ĐỎ.
+   */
+  it("FIX2/§5.3-1 — kết cục theo TỪNG HÀNG: đã accept ⇒ `left`+`left_at`; đang đổ chuông ⇒ `missed`, `left_at` NULL", async () => {
+    const room = await newRoom(tExitPeer, "R-outcome", [uExit, uExitThird]);
+    const callId = await invite(tExitPeer, room);
+
+    // `uExit` NHẬN máy (⇒ `joined_at` có); `uExitThird` để nguyên đang đổ chuông (`joined_at IS NULL`).
+    const acc = await authPost(tExit, `/chat/calls/${callId}/accept`).send({});
+    expect(acc.status, JSON.stringify(acc.body)).toBe(200);
+
+    expect(await removeMember(tExitPeer, room, uExit)).toMatchObject({ status: 200 });
+    expect(await removeMember(tExitPeer, room, uExitThird)).toMatchObject({ status: 200 });
+
+    const rows = await participantsOf(callId);
+    const joined = rows.find((r) => r.user_id === uExit);
+    const ringing = rows.find((r) => r.user_id === uExitThird);
+
+    expect(joined?.outcome, "người đã nhấc máy rồi bị gỡ = đã VÀO rồi rời").toBe("left");
+    expect(joined?.left_at, "`left` mà `left_at IS NULL` tự nó là một sự KHÔNG NHẤT QUÁN").not.toBe(
+      null,
     );
-    expect(punished, "TRIPWIRE: chiều GỬI ghi hàng an ninh cho một người HOÀN TOÀN VÔ TỘI").toBe(
-      true,
+
+    expect(ringing?.outcome, "người CHƯA nhấc máy KHÔNG được đóng dấu `left`").toBe("missed");
+    expect(ringing?.left_at, "cuộc gọi NHỠ không có mốc rời").toBe(null);
+    expect(ringing?.joined_at, "…và họ chưa từng vào").toBe(null);
+  });
+
+  /**
+   * 🔴 **Đột biến `j` của §5.4 — vế `accepted_at` của vị từ KÉP.** Lỗ này ĐÃ XẢY RA THẬT: bản đầu chỉ
+   * xét `joined_at !== null`, và `security-reviewer` (13/08) bắt được ở vòng FULL gate.
+   *
+   * `insertParticipants` đặt `joined_at = now` cho **NGƯỜI KHỞI TẠO ngay lúc MỜI** (họ "tự vào cuộc gọi
+   * của chính mình"), nên MỌI cuộc gọi còn `ringing` đã sẵn có một hàng `joined_at` khác NULL trong khi
+   * **chưa ai nói chuyện với ai**. Chỉ xét `joined_at` ⇒ người khởi tạo bị đóng dấu `'left'` + `left_at`
+   * — kết cục HẤP THỤ, bảng không có DELETE ⇒ **SAI VĨNH VIỄN**, đúng thứ §0.3 dựng cả WO này để tránh.
+   *
+   * ⚠️ Ca này là detector ở tầng INT; trước đó nó chỉ có ở tầng unit (stub repo), tức vế "`joined_at`
+   * thật sự được đặt lúc mời" — tiền đề khiến lỗ tồn tại — chưa từng được đo trên DB thật.
+   *
+   * Ba assert TIỀN ĐỀ ở dưới không phải trang trí: thiếu chúng, một ngày `insertParticipants` thôi đặt
+   * `joined_at` lúc mời thì ca vẫn XANH trong khi nó đã hết đo cái gì cả.
+   */
+  it("FIX2/§5.4-j — NGƯỜI KHỞI TẠO rời phòng lúc cuộc gọi còn `ringing` ⇒ `missed`, KHÔNG phải `left`", async () => {
+    const room = await newRoom(tExitPeer, "R-initiator-ringing", [uExit, uExitThird]);
+    // `uExit` là người KHỞI TẠO (không phải admin phòng — để `removeMember` của admin đi được).
+    const callId = await invite(tExit, room);
+
+    // ── TIỀN ĐỀ: đúng ô `joined_at NOT NULL` + `accepted_at NULL` mà đột biến `j` nhắm tới ──
+    const beforeRow = (await participantsOf(callId)).find((r) => r.user_id === uExit);
+    expect(
+      beforeRow?.joined_at,
+      "tiền đề: `insertParticipants` đặt `joined_at` cho NGƯỜI KHỞI TẠO ngay lúc mời",
+    ).not.toBe(null);
+    const acceptedAt = (
+      await direct.query(`SELECT accepted_at FROM chat_calls WHERE id = $1`, [callId])
+    ).rows[0]?.accepted_at;
+    expect(acceptedAt, "tiền đề: chưa ai nhấc máy ⇒ `chat_calls.accepted_at` VẪN NULL").toBe(null);
+    expect(await callStatus(callId), "tiền đề: cuộc gọi còn SỐNG").toBe("ringing");
+
+    expect(await removeMember(tExitPeer, room, uExit)).toMatchObject({ status: 200 });
+
+    const row = (await participantsOf(callId)).find((r) => r.user_id === uExit);
+    expect(
+      row?.outcome,
+      "người khởi tạo CHƯA nói chuyện với ai — `left` là đóng dấu 'đã vào rồi rời' lên họ, VĨNH VIỄN",
+    ).toBe("missed");
+    expect(row?.left_at, "cuộc gọi NHỠ không có mốc rời").toBe(null);
+    // `joined_at` VẪN còn — chứng minh ca đi qua đúng nhánh KÉP (nếu vị từ chỉ xét `joined_at` thì với
+    // cùng dữ liệu này kết cục đã là `left`), chứ không phải qua nhánh "chưa từng vào" của §5.3-1.
+    expect(row?.joined_at, "…và hàng vẫn giữ `joined_at` của lúc mời").not.toBe(null);
+  });
+
+  it("FIX2/§5.3-3 — gỡ người KHÔNG ở trong cuộc gọi nào ⇒ 0 hàng audit `participant_closed`", async () => {
+    const room = await newRoom(tExitPeer, "R-nocallmember", [uExit]);
+    const callId = await invite(tExitPeer, room);
+
+    // `uExitThird` vào phòng SAU khi cuộc gọi bắt đầu ⇒ thành viên hợp lệ, KHÔNG có hàng participant.
+    const add = await authPost(tExitPeer, `/chat/rooms/${room}/members`).send({
+      userId: uExitThird,
+      role: "member",
+    });
+    expect(add.status, JSON.stringify(add.body)).toBe(200);
+
+    const before = (await participantClosedAudit(A.companyId)).length;
+    expect(await removeMember(tExitPeer, room, uExitThird)).toMatchObject({ status: 200 });
+
+    expect(
+      (await participantClosedAudit(A.companyId)).length - before,
+      "không có gì để đóng thì không được ghi audit",
+    ).toBe(0);
+    expect(
+      (await participantsOf(callId)).some((r) => r.user_id === uExitThird),
+      "…và tuyệt đối không được CHÈN một hàng participant mới",
+    ).toBe(false);
+  });
+
+  /**
+   * 🔴 §5.3 ca 4 — cửa vào THỨ HAI. `POST /chat/rooms/:id/leave` đi qua cùng `setMemberLeft`, nên một
+   * bản vá chỉ chạm `removeMember` để hở đúng một nửa lỗ.
+   */
+  it("FIX2/§5.3-4 — cửa `POST /rooms/:id/leave` (rời TỰ NGUYỆN) đóng phần tham gia y hệt", async () => {
+    const room = await newRoom(tExitPeer, "R-leave", [uExit]);
+    const callId = await invite(tExitPeer, room);
+    const acc = await authPost(tExit, `/chat/calls/${callId}/accept`).send({});
+    expect(acc.status, JSON.stringify(acc.body)).toBe(200);
+
+    const before = (await participantClosedAudit(A.companyId)).length;
+    const left = await authPost(tExit, `/chat/rooms/${room}/leave`).send({});
+    expect(left.status, JSON.stringify(left.body)).toBe(200);
+
+    const row = (await participantsOf(callId)).find((r) => r.user_id === uExit);
+    expect(row?.outcome).toBe("left");
+    expect(row?.left_at).not.toBe(null);
+
+    const audits = await participantClosedAudit(A.companyId);
+    expect(audits.length - before, "cửa `leave` cũng phải để lại dấu vết").toBe(1);
+    const last = audits[audits.length - 1];
+    expect(last?.object_id).toBe(callId);
+    // Ở cửa này người BẤM và người BỊ ĐÓNG là MỘT — khác `removeMember`, nơi đó là hai người.
+    expect(last?.actor_user_id).toBe(uExit);
+    expect(last?.new_values).toMatchObject({ userId: uExit, roomId: room, reason: "room_exit" });
+  });
+
+  /**
+   * 🔴 Đột biến `i` của §5.4 — vế `c.status IN CHAT_CALL_LIVE_STATUSES` của `findOpenParticipantCallsInRoom`.
+   *
+   * Đó là thứ DUY NHẤT chặn việc đóng lại hàng của một cuộc gọi ĐÃ XONG (ghi đè lịch sử + một dòng audit
+   * cho mỗi cuộc gọi cũ). Bỏ vế lọc ⇒ ca này ĐỎ.
+   */
+  it("FIX2/§5.4-i — gỡ người SAU KHI cuộc gọi đã kết thúc ⇒ 0 hàng audit, kết cục cũ KHÔNG bị ghi đè", async () => {
+    const room = await newRoom(tExitPeer, "R-ended", [uExit]);
+    const callId = await invite(tExitPeer, room);
+
+    // ⚠️ **DỰNG ĐÚNG trạng thái "hàng CÒN MỞ trên cuộc gọi ĐÃ KẾT THÚC"** — nếu không ca này xanh-rỗng.
+    // Dựng bằng `cancel` là SAI: nó đóng mọi hàng `outcome IS NULL` ⇒ vế lọc `outcome` của B1 một mình
+    // đã trả 0 hàng, và ca sẽ XANH kể cả khi vế `status IN LIVE` bị gỡ (đã ĐO: đột biến `i` không bị bắt).
+    // Đường tới được: `accept` ⇒ `outcome='accepted'`, mà `closeOpenParticipants` chỉ quét
+    // `outcome IS NULL` ⇒ sau khi bên kia `hangup`, hàng của người đã nhận máy VẪN là `'accepted'`
+    // (tức vẫn nằm trong tập "chưa ngã ngũ") trong khi cuộc gọi đã `ended`. Chỉ vế `status` chặn được nó.
+    const acc = await authPost(tExit, `/chat/calls/${callId}/accept`).send({});
+    expect(acc.status, JSON.stringify(acc.body)).toBe(200);
+    const hang = await authPost(tExitPeer, `/chat/calls/${callId}/hangup`).send({});
+    expect(hang.status, JSON.stringify(hang.body)).toBe(200);
+    expect(await callStatus(callId), "tiền đề: cuộc gọi đã kết thúc").toBe("ended");
+
+    const outcomeBefore = (await participantsOf(callId)).find((r) => r.user_id === uExit)?.outcome;
+    expect(outcomeBefore, "tiền đề: hàng của người đã nhận máy VẪN chưa ngã ngũ").toBe("accepted");
+
+    const before = (await participantClosedAudit(A.companyId)).length;
+    expect(await removeMember(tExitPeer, room, uExit)).toMatchObject({ status: 200 });
+
+    expect(
+      (await participantClosedAudit(A.companyId)).length - before,
+      "cuộc gọi đã xong thì không có gì để đóng",
+    ).toBe(0);
+    expect(
+      (await participantsOf(callId)).find((r) => r.user_id === uExit)?.outcome,
+      "kết cục của một cuộc gọi đã kết thúc là LỊCH SỬ — không được ghi đè",
+    ).toBe(outcomeBefore);
+  });
+
+  /**
+   * 🔴 **H7 — cuộc gọi MA khoá phòng. LỖ CÓ SẴN TỪ TRƯỚC, CỐ Ý KHÔNG vá ở WO này** (plan §7 mục 4).
+   *
+   * Bản vá đóng phần THAM GIA nhưng KHÔNG kết thúc cuộc gọi: ghi `chat_calls.status` từ đường THÀNH VIÊN
+   * là kéo bề mặt ghi vòng đời ra ngoài `ChatCallsService` — đúng hàng rào R4 của `DECISIONS-07`, cần
+   * chữ ký owner chứ không phải một quyết định lẻ trong lúc vá.
+   *
+   * Đã đo: lỗ KHÔNG do bản vá đẻ ra — hôm nay gỡ người đang gọi cũng làm họ hết `hangup` nổi (404 vì hết
+   * là thành viên) và cuộc gọi kẹt y hệt. Ca này ĐÓNG ĐINH hành vi hiện tại để nó không trôi trong im
+   * lặng. Có KI riêng trỏ tới đây.
+   */
+  it("FIX2/H7 — gỡ người khỏi phòng KHÔNG kết thúc cuộc gọi: status vẫn `active` và phòng bị khoá (409)", async () => {
+    const room = await newRoom(tExitPeer, "R-ghost", [uExit]);
+    const callId = await invite(tExitPeer, room);
+    const acc = await authPost(tExit, `/chat/calls/${callId}/accept`).send({});
+    expect(acc.status, JSON.stringify(acc.body)).toBe(200);
+    expect(await callStatus(callId)).toBe("active");
+
+    expect(await removeMember(tExitPeer, room, uExit)).toMatchObject({ status: 200 });
+
+    expect(await callStatus(callId), "HÀNH VI HIỆN TẠI (KI): cuộc gọi KHÔNG tự kết thúc").toBe(
+      "active",
     );
-    expect(victim.disconnected, "TRIPWIRE: …và ngắt kết nối của họ").toBe(true);
+    // …và partial unique `chat_calls_one_live_per_room_uq` khoá phòng: mọi `invite` sau là 409.
+    const again = await authPost(tExitPeer, `/chat/rooms/${room}/calls`).send({ kind: "audio" });
+    expect(again.status, JSON.stringify(again.body)).toBe(409);
   });
 
   it("C6 — tài khoản bị KHOÁ vẫn mở được phiên `/ws-call` MỚI bằng access-token còn hạn", async () => {

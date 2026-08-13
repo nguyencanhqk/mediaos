@@ -30,8 +30,16 @@ const ACTOR = { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", companyId: COMPANY }
 const TARGET = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 const ROOM = "11111111-1111-4111-8111-111111111111";
 const MESSAGE = "99999999-9999-4999-8999-999999999999";
+const CALL = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
-/** Bộ đếm mọi lối phát sự kiện realtime — 5 method, không sót lối nào. */
+/**
+ * Bộ đếm mọi lối phát **SAU COMMIT** — 6 method, không sót lối nào.
+ *
+ * ⚠️ **`evictFromCallRoom` CỐ Ý KHÔNG ở đây** (S7-CALL-RT-FIX-2). Nó là lối duy nhất được gọi **TRONG
+ * tx** — vế AN NINH, cùng lập luận với `severUserSessions`: đặt sau commit là để hở đúng cửa sổ mà bản
+ * vá dựng ra để đóng. Đưa nó vào bộ đếm này sẽ làm ca "COMMIT hỏng ⇒ 0 lối" khẳng định điều NGƯỢC LẠI
+ * với thiết kế. Nó được spy RIÊNG ở từng `build()`, và ca test đo đúng sự BẤT ĐỐI XỨNG đó.
+ */
 function makeRealtime() {
   return {
     emitChatMessage: vi.fn(),
@@ -39,11 +47,38 @@ function makeRealtime() {
     emitChatRead: vi.fn(),
     emitChatRoom: vi.fn(),
     syncRoomMembership: vi.fn(),
+    // S7-CALL-RT-FIX-2 — `call:peer-left` khi một người bị gỡ/tự rời khỏi PHÒNG giữa cuộc gọi.
+    emitCallPeerLeft: vi.fn(),
   };
 }
 
-const totalCalls = (rt: ReturnType<typeof makeRealtime>): number =>
-  Object.values(rt).reduce((n, spy) => n + spy.mock.calls.length, 0);
+/**
+ * Tập khoá được đếm là **do `makeRealtime()` định nghĩa**, không phải một danh sách gõ tay song song.
+ * Nhờ vậy: thêm một lối phát vào `makeRealtime` là nó tự vào bộ đếm (không có lối nào lọt lưới), còn
+ * khoá THÊM trên object mở rộng (`evictFromCallRoom`) thì bị bỏ qua đúng như thiết kế — thay vì
+ * `Object.values(rt)` vốn trải phẳng cả khoá mở rộng vào bộ đếm.
+ */
+const EMIT_KEYS = Object.keys(makeRealtime());
+
+const totalCalls = (rt: Record<string, unknown>): number =>
+  EMIT_KEYS.reduce((n, key) => {
+    const spy = rt[key] as { mock?: { calls: unknown[] } } | undefined;
+    return n + (spy?.mock?.calls.length ?? 0);
+  }, 0);
+
+/** Stub exit-service: "có ĐÚNG một cuộc gọi vừa bị đóng" — trả rỗng thì POSITIVE CONTROL xanh RỖNG. */
+const callExit = () => ({
+  closeCallParticipationOnRoomExit: vi.fn(async () => [{ callId: CALL }]),
+});
+
+describe("ratchet của chính bộ đếm", () => {
+  it("đếm ĐÚNG 6 lối phát sau-commit, và `evictFromCallRoom` KHÔNG nằm trong đó", () => {
+    // Thêm/bớt lối phát mà không cập nhật bài này = ĐỎ có chủ đích: bất biến "emit SAU COMMIT" chỉ có
+    // giá trị khi bộ đếm biết hết các lối.
+    expect(EMIT_KEYS).toHaveLength(6);
+    expect(EMIT_KEYS).not.toContain("evictFromCallRoom");
+  });
+});
 
 /** `commitFails=true` ⇒ chạy HẾT thân tx rồi mới ném (mô phỏng COMMIT hỏng). */
 function makeDb(commitFails: boolean) {
@@ -91,7 +126,8 @@ const access = () => ({
 describe("emit SAU COMMIT — ChatMembersService", () => {
   /** `memberExists=false` cho đường `addMember` (người chưa từng ở trong phòng). */
   function build(commitFails: boolean, memberExists = true) {
-    const realtime = makeRealtime();
+    // `evictFromCallRoom` NGOÀI `makeRealtime()` — xem docblock của bộ đếm.
+    const realtime = { ...makeRealtime(), evictFromCallRoom: vi.fn() };
     const repo = {
       findUsableUserIds: vi.fn(async () => new Set([TARGET])),
       findMemberRow: vi.fn(async () =>
@@ -125,14 +161,31 @@ describe("emit SAU COMMIT — ChatMembersService", () => {
           throw new Error("đường GHI không được đọc presence");
         },
       } as never,
+      callExit() as never,
     );
     return { svc, realtime };
   }
 
-  it("removeMember: COMMIT hỏng → KHÔNG emit gì (0/5 lối)", async () => {
+  it("removeMember: COMMIT hỏng → KHÔNG emit gì (0/6 lối)", async () => {
     const { svc, realtime } = build(true);
     await expect(svc.removeMember(ACTOR, ROOM, TARGET)).rejects.toThrow(/COMMIT/);
     expect(totalCalls(realtime)).toBe(0);
+  });
+
+  /**
+   * 🔴 S7-CALL-RT-FIX-2 — BẤT ĐỐI XỨNG là thứ đáng đóng đinh, không phải "0 lối".
+   *
+   * `evictFromCallRoom` (kéo socket nạn nhân khỏi room cuộc gọi) là vế AN NINH và PHẢI chạy TRONG tx —
+   * nên nó vẫn được gọi kể cả khi COMMIT hỏng sau đó (rollback ⇒ nạn nhân chỉ mất realtime tới lần
+   * reconnect: chiều fail-safe). `emitCallPeerLeft` thì ngược lại: phát trước commit rồi rollback là NÓI
+   * DỐI với người còn lại. Chuyển `evictFromCallRoom` ra sau commit làm ca này ĐỎ.
+   */
+  it("removeMember: COMMIT hỏng → 0/6 lối phát NHƯNG evictFromCallRoom VẪN chạy 1 lần (trong tx)", async () => {
+    const { svc, realtime } = build(true);
+    await expect(svc.removeMember(ACTOR, ROOM, TARGET)).rejects.toThrow(/COMMIT/);
+    expect(totalCalls(realtime)).toBe(0);
+    expect(realtime.evictFromCallRoom).toHaveBeenCalledTimes(1);
+    expect(realtime.evictFromCallRoom).toHaveBeenCalledWith(COMPANY, CALL, TARGET);
   });
 
   it("removeMember: POSITIVE CONTROL — commit OK thì PHẢI emit + đá khỏi room", async () => {
@@ -140,6 +193,33 @@ describe("emit SAU COMMIT — ChatMembersService", () => {
     await svc.removeMember(ACTOR, ROOM, TARGET);
     expect(realtime.emitChatRoom).toHaveBeenCalledTimes(1);
     expect(realtime.syncRoomMembership).toHaveBeenCalledWith(COMPANY, ROOM, TARGET, "leave");
+  });
+
+  it("removeMember: POSITIVE CONTROL — commit OK thì phát `call:peer-left` đúng 1 lần", async () => {
+    const { svc, realtime } = build(false);
+    await svc.removeMember(ACTOR, ROOM, TARGET);
+    expect(realtime.emitCallPeerLeft).toHaveBeenCalledTimes(1);
+    expect(realtime.emitCallPeerLeft).toHaveBeenCalledWith(COMPANY, CALL, TARGET);
+  });
+
+  /**
+   * 🔴 S7-CALL-RT-FIX-2 — CỬA SỔ REJOIN. `evictFromCallRoom` phải chạy **HAI** lần trên đường thành
+   * công: một trong tx (đóng ngay, fail-safe nếu rollback) và một SAU commit.
+   *
+   * Vế thứ hai không phải phòng xa: giữa evict-trong-tx và COMMIT, một tx khác (gateway xử `call:join`)
+   * đọc READ COMMITTED nên chưa thấy `left_at`/`outcome` mới ⇒ nó chấp nhận join và `socketsJoin` đưa
+   * nạn nhân TRỞ LẠI `callRoomName`; không có lần evict thứ hai thì `media-state`/`screen-state` mở lại
+   * tới khi socket rớt. Gỡ lần evict sau-commit làm ca này ĐỎ (2 → 1) — đó là toàn bộ lý do nó tồn tại.
+   *
+   * Cặp với ca "COMMIT hỏng → 1 lần" ở trên: chính CẶP SỐ (1 khi hỏng, 2 khi OK) mới đóng đinh được cả
+   * hai vế. Một mình `toHaveBeenCalled()` thì dời evict đi đâu cũng xanh.
+   */
+  it("removeMember: POSITIVE CONTROL — commit OK thì evictFromCallRoom chạy ĐÚNG 2 lần (trong tx + sau commit)", async () => {
+    const { svc, realtime } = build(false);
+    await svc.removeMember(ACTOR, ROOM, TARGET);
+    expect(realtime.evictFromCallRoom).toHaveBeenCalledTimes(2);
+    expect(realtime.evictFromCallRoom).toHaveBeenNthCalledWith(1, COMPANY, CALL, TARGET);
+    expect(realtime.evictFromCallRoom).toHaveBeenNthCalledWith(2, COMPANY, CALL, TARGET);
   });
 
   it("addMember: COMMIT hỏng → KHÔNG emit gì", async () => {
@@ -272,11 +352,15 @@ describe("emit SAU COMMIT — ChatMessageModerationService.recall", () => {
 // ─────────────────────────────────────────────────────────────────────────────────
 describe("emit SAU COMMIT — ChatRoomsService.createGroup", () => {
   function build(commitFails: boolean) {
-    const realtime = makeRealtime();
+    const realtime = { ...makeRealtime(), evictFromCallRoom: vi.fn() };
     const repo = {
       findUsableUserIds: vi.fn(async (_tx: unknown, _c: string, ids: string[]) => new Set(ids)),
       insertRoom: vi.fn(async () => ROOM_ROW),
       insertMember: vi.fn(),
+      // S7-CALL-RT-FIX-2 — cần cho `leaveRoom` (describe dưới dùng lại `build` này).
+      // `admins: 2` ⇒ không chạm luật admin CUỐI CÙNG (CHAT-ERR-011).
+      countActiveMembers: vi.fn(async () => ({ admins: 2, total: 3 })),
+      setMemberLeft: vi.fn(),
     };
     const svc = new ChatRoomsService(
       makeDb(commitFails) as never,
@@ -289,6 +373,7 @@ describe("emit SAU COMMIT — ChatRoomsService.createGroup", () => {
       // updateRoom / archive…) KHÔNG ký avatar (chỉ `listRooms`/`getRoom` ký), nên stub trả map RỖNG
       // là đủ VÀ đúng: nếu một ngày chúng bắt đầu ký, ca test thấy `avatarUrl: null` — không phải URL giả.
       { resolveRoomAvatars: vi.fn(async () => new Map<string, string>()) } as never,
+      callExit() as never,
     );
     return { svc, realtime };
   }
@@ -315,6 +400,39 @@ describe("emit SAU COMMIT — ChatRoomsService.createGroup", () => {
     expect(realtime.emitChatRoom.mock.calls[0]?.[3]).toEqual([ACTOR.id, TARGET]);
     expect(realtime.syncRoomMembership).toHaveBeenCalledTimes(2);
   });
+
+  /**
+   * 🔴 S7-CALL-RT-FIX-2 — cửa vào THỨ HAI của cùng một lỗ.
+   *
+   * `leaveRoom` (rời TỰ NGUYỆN) và `removeMember` (bị gỡ) đi qua cùng `setMemberLeft`, nên vá một cửa
+   * là vá được một nửa. `describe` này trước đây KHÔNG có ca `leaveRoom` nào — đó chính là lý do nửa
+   * còn lại của lỗ có thể land mà không ai thấy.
+   */
+  it("leaveRoom: COMMIT hỏng → 0/6 lối phát NHƯNG evictFromCallRoom VẪN chạy 1 lần (trong tx)", async () => {
+    const { svc, realtime } = build(true);
+    await expect(svc.leaveRoom(ACTOR, ROOM)).rejects.toThrow(/COMMIT/);
+    expect(totalCalls(realtime)).toBe(0);
+    // SỐ LẦN, không chỉ đối số: thiếu nó thì dời vế sau-commit lên trước commit vẫn xanh ở ca này.
+    expect(realtime.evictFromCallRoom).toHaveBeenCalledTimes(1);
+    expect(realtime.evictFromCallRoom).toHaveBeenCalledWith(COMPANY, CALL, ACTOR.id);
+  });
+
+  it("leaveRoom: POSITIVE CONTROL — commit OK thì phát `call:peer-left` đúng 1 lần cho CHÍNH actor", async () => {
+    const { svc, realtime } = build(false);
+    await svc.leaveRoom(ACTOR, ROOM);
+    expect(realtime.emitCallPeerLeft).toHaveBeenCalledTimes(1);
+    // Người bị đóng ở cửa này là CHÍNH actor (khác `removeMember`, nơi đó là người thứ ba).
+    expect(realtime.emitCallPeerLeft).toHaveBeenCalledWith(COMPANY, CALL, ACTOR.id);
+  });
+
+  /** Cửa sổ REJOIN ở cửa vào THỨ HAI — lập luận đầy đủ ở ca cùng tên của `ChatMembersService`. */
+  it("leaveRoom: POSITIVE CONTROL — commit OK thì evictFromCallRoom chạy ĐÚNG 2 lần (trong tx + sau commit)", async () => {
+    const { svc, realtime } = build(false);
+    await svc.leaveRoom(ACTOR, ROOM);
+    expect(realtime.evictFromCallRoom).toHaveBeenCalledTimes(2);
+    expect(realtime.evictFromCallRoom).toHaveBeenNthCalledWith(1, COMPANY, CALL, ACTOR.id);
+    expect(realtime.evictFromCallRoom).toHaveBeenNthCalledWith(2, COMPANY, CALL, ACTOR.id);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────
@@ -327,8 +445,6 @@ describe("emit SAU COMMIT — ChatRoomsService.createGroup", () => {
  * đo đường của chính nó).
  */
 describe("emit SAU COMMIT — ChatCallsService (S7-CALL-RT-1)", () => {
-  const CALL = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-
   const CALL_ROW = {
     id: CALL,
     companyId: COMPANY,

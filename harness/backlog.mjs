@@ -10541,13 +10541,47 @@ export const backlog = [
     title:
       "Vá 'gỡ thành viên giữa cuộc gọi': VẪN relay SDP/ICE tới người đã bị gỡ, đồng thời ghi user_security_events + NGẮT họ vì trickle ICE mà browser tự gửi",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
+    // Mở rộng 12/08 theo §3.1 của plan (owner chốt B + vế 2 của A). `paths` KHÔNG chỉ là tài liệu: nó
+    // lái guard-scope + bộ định tuyến gate (memory `wo-paths-drive-gate-and-scheduler`). Vá ở GỐC nghĩa
+    // là chạm đường GHI vòng đời cuộc gọi từ `chat-rooms`/`chat-members` ⇒ phải khai ra, nếu không nửa
+    // sau của WO nằm ngoài tầm nhìn của gate.
+    // ⚠️ KHÔNG có `migrations/**`: đã ĐO trên lane DB — `chat_call` sẵn có trong CHECK `object_type` của
+    // `audit_logs`, và cột `action` là text tự do. Không migration nào cần cho WO này.
     paths: [
       "apps/api/src/chat/chat-call-signal.service.ts",
       "apps/api/src/chat/chat-call-signal-deny.ts",
+      "apps/api/src/chat/chat-call-room-exit.service.ts",
+      // Detector TẤT ĐỊNH của "setParticipantOutcome khớp 0 hàng ⇒ KHÔNG audit, KHÔNG phát"
+      // (plan §5.3 ca 6). Ca đua ở int-spec KHÔNG dựng được tất định — xem BLOCK-2 vòng review 2.
+      "apps/api/src/chat/chat-call-room-exit.service.spec.ts",
+      // Call site THỨ BA dựng ChatMembersService bằng 7 tham số VỊ TRÍ ⇒ dependency mới PHẢI
+      // append CUỐI constructor, nếu không file này đỏ với thông báo khó hiểu (ngoài paths cũ).
+      "apps/api/src/chat/chat-roster.service.spec.ts",
+      "apps/api/src/chat/chat-calls.repository.ts",
+      "apps/api/src/chat/chat-members.service.ts",
+      "apps/api/src/chat/chat-rooms.service.ts",
+      "apps/api/src/chat/chat.module.ts",
+      "apps/api/src/chat/chat.errors.ts",
+      // Hai RATCHET mà bản vá làm đỏ / làm hết đúng (plan §3.2, phát hiện ở plan-reviewer vòng 1):
+      //  • after-commit: đếm ĐÚNG 5 lối phát + dựng ChatMembersService theo THỨ TỰ THAM SỐ ⇒ thêm
+      //    dependency/lối phát mới là ĐỎ. Nó gác đúng bất biến "emit SAU COMMIT" mà WO này chạm.
+      //  • structure: đếm `.emit(` CHỈ trong file gateway ⇒ vẫn XANH, nhưng docblock gateway hứa
+      //    "đúng MỘT call site" sẽ hết đúng khi emitter thành người phát thứ hai vào /ws-call.
+      "apps/api/src/chat/chat-realtime-after-commit.spec.ts",
+      "apps/api/src/realtime/chat-realtime-structure.spec.ts",
       "apps/api/src/realtime/call-signalling.gateway.ts",
+      "apps/api/src/realtime/call-signalling.gateway.spec.ts",
+      "apps/api/src/realtime/realtime-emitter.service.ts",
       "apps/api/test/integration/chat-s7-call-rt1-signalling.int-spec.ts",
+      // PHÁT HIỆN LÚC THI CÔNG (không có trong plan): lưới "MỌI method public của service nhận `roomId`
+      // phải qua `assertMember`" bắt `closeCallParticipationOnRoomExit`. Không nới được bằng rổ miễn trừ
+      // (rổ đó là DANH SÁCH ĐÓNG đúng 1 file, và chính nó gọi việc thêm file thứ hai là "mở cửa sau")
+      // ⇒ carve-out theo CHỮ KÝ (`tx: TenantTx` = cộng tác viên trong-tx, không tới được từ ngoài) + ca
+      // bù "không được export khỏi ChatModule". Đồng thời vá một PASS-OAN có sẵn của bộ tách comment.
+      "apps/api/test/integration/chat-be1-access.int-spec.ts",
       "docs/plans/S7-CALL-RT-FIX-2.md",
+      "docs/QA/evidence/S7-CALL-RT-FIX-2.md",
     ],
     skills: ["code-review"],
     depends_on: ["S7-CALL-QA-1"],
@@ -10561,6 +10595,12 @@ export const backlog = [
     ],
     done_when: [
       "Gỡ thành viên giữa cuộc gọi ⇒ người bị gỡ KHÔNG còn nhận relay SDP/ICE (đóng chiều rò)",
+      // ĐO THÊM 12/08 (plan §0.2): `call:media-state`/`call:screen-state` broadcast thẳng vào
+      // `callRoomName`, KHÔNG đi qua `assertPeer` ⇒ đóng `activeUserIds` một mình KHÔNG chặn được chúng.
+      // Thiếu vế này thì C5 (chỉ đo `ice-candidate`) XANH trong khi người bị gỡ vẫn theo dõi được
+      // mic/cam/chia-sẻ-màn-hình của bên kia theo thời gian thực.
+      "…và KHÔNG còn nhận `call:media-state`/`call:screen-state`: socket họ bị kéo khỏi `callRoomName`",
+      "Cùng lỗ, HAI cửa vào: `DELETE /rooms/:id/members/:userId` VÀ `POST /rooms/:id/leave` (rời tự nguyện) — bản vá phải phủ cả hai, mỗi cửa có ca test riêng",
       "…và KHÔNG bị ghi user_security_events / KHÔNG bị ngắt vì trickle ICE (họ không phải người dò cửa) — nhiều nhất là lớp C: bỏ im lặng",
       "Ca ĐỐI CHỨNG giữ nguyên: người CHƯA TỪNG được mời vẫn là lớp B (ghi + ngắt) — cấm nới thành 'ai cũng bỏ qua'",
       "Ca C5 của QA-1 lật từ tripwire sang hành vi đúng trong CÙNG PR — không để lại tripwire chết",

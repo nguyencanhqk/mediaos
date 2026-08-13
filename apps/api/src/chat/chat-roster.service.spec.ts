@@ -99,6 +99,14 @@ function build(
     {} as never,
     { resolveEmployeeAvatars } as never,
     { getOnlineUserIds } as never,
+    // S7-CALL-RT-FIX-2 — `ChatCallRoomExitService`, tham số CUỐI. File này đo đường ĐỌC roster; stub ném
+    // để nếu một ngày đường đọc lỡ chạm vào nó thì bài đỏ NGAY, thay vì im lặng ghi
+    // `chat_call_participants` từ một phép đọc.
+    {
+      closeCallParticipationOnRoomExit: () => {
+        throw new Error("đường ĐỌC roster không được đóng phần tham gia cuộc gọi");
+      },
+    } as never,
   );
   return { svc, calls, listRosterMembers, resolveEmployeeAvatars, getOnlineUserIds, db };
 }

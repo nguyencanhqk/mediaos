@@ -523,6 +523,114 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-1 — membership deny-path (DB cô lập
       expect(gaps, "method đọc-vượt nhận roomId mà KHÔNG ghi audit").toEqual([]);
     });
 
+    /**
+     * S7-CALL-RT-FIX-2 — **CỘNG TÁC VIÊN TRONG-TX, không phải điểm vào.**
+     *
+     * Một method nhận `tx: TenantTx` **làm tham số ĐẦU** không thể là điểm vào: controller không bao giờ
+     * cầm `tx`, và chỉ code đã ở TRONG `db.withTenant` mới gọi được nó — tức một service đã đi qua cổng
+     * membership của chính nó. Bắt nó tự gọi `assertMember` lần nữa là dựng **bản sao thứ hai** của luật
+     * truy cập, đúng thứ ca "KHÔNG file nào ngoài chat-access.service.ts dựng lại BỘ ĐIỀU KIỆN" cấm.
+     *
+     * ⚠️ Đây là carve-out theo **CHỮ KÝ**, KHÔNG phải theo TÊN FILE — hẹp hơn `MEMBERSHIP_EXEMPT_SERVICES`
+     * hẳn một bậc: nó không miễn cả file, chỉ miễn đúng những method mà kiểu tham số chứng minh là không
+     * tới được từ ngoài. Và nó có GIÁ, ép ở ca ngay dưới: service chứa method như thế **không được
+     * export khỏi `ChatModule`** — export là đưa nó ra cho module chưa qua cổng nào, lúc đó lập luận
+     * "chỉ caller đã gate mới gọi được" hết đúng.
+     */
+    /**
+     * 🔴 Neo vào `(` MỞ CỦA CHÍNH METHOD — không phải một `(` bất kỳ trong chữ ký.
+     *
+     * Bản đầu dùng `/\(\s*(?:\r?\n\s*)?tx\s*:\s*TenantTx\b/`, khớp **mọi** dấu `(`, nên một method hoàn
+     * toàn TỚI ĐƯỢC TỪ NGOÀI như `foo(roomId: string, run: (tx: TenantTx) => …)` được miễn `assertMember`
+     * **OAN** — đúng ngược với hợp đồng mà docblock ngay trên vừa hứa ("tham số ĐẦU"). Khuôn
+     * `body: (tx: TenantTx, …) => …` **đã có trong repo** (`chat-calls.service.ts`), nên đây là lỗ THẬT,
+     * không phải rủi ro giả định. Ca "chữ ký callback KHÔNG được miễn" ngay dưới đóng đinh điều này.
+     */
+    const takesCallerTx = (signature: string, methodName: string): boolean =>
+      new RegExp(
+        String.raw`\b${methodName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\s*\(\s*(?:\r?\n\s*)?tx\s*:\s*TenantTx\b`,
+      ).test(signature);
+
+    it("carve-out neo vào `(` của CHÍNH method: callback nhận `tx` KHÔNG được miễn", () => {
+      // Tới được từ ngoài — controller cầm `roomId`, `tx` chỉ xuất hiện bên trong một callback.
+      const callbackShaped =
+        "\n  async runInRoom(roomId: string, body: (tx: TenantTx) => Promise<void>): Promise<void> ";
+      expect(
+        takesCallerTx(callbackShaped, "runInRoom"),
+        "callback nhận `tx` KHÔNG phải cộng tác viên trong-tx — nó vẫn là điểm vào",
+      ).toBe(false);
+
+      // Cộng tác viên thật — `tx` là THAM SỐ ĐẦU của chính method, controller không cầm được.
+      const collaboratorShaped =
+        "\n  async closeSomething(\n    tx: TenantTx,\n    roomId: string,\n  ): Promise<void> ";
+      expect(
+        takesCallerTx(collaboratorShaped, "closeSomething"),
+        "tham số ĐẦU là `tx: TenantTx` ⇒ được miễn",
+      ).toBe(true);
+    });
+
+    it("cộng tác viên trong-tx (nhận `tx: TenantTx`) KHÔNG được export khỏi ChatModule (giá của carve-out)", () => {
+      const collaborators = new Set<string>();
+      for (const { file, src } of readAll()) {
+        if (!file.endsWith(".service.ts")) continue;
+        // `chat-access.service.ts` nằm ngoài luật — nó CHÍNH LÀ điểm khẳng định (`assertMember` cũng
+        // nhận `tx`), và nó PHẢI được export. Cùng ngoại lệ mà vòng lặp chính ở dưới đang dùng.
+        if (file === "chat-access.service.ts") continue;
+        const clean = stripComments(src);
+        const decls = [
+          ...clean.matchAll(/\n {2}(private\s+)?(?:async\s+)?([A-Za-z_$][\w$]*)\s*\(/g),
+        ];
+        decls.forEach((d, i) => {
+          if (d[1]) return;
+          const body = clean.slice(d.index ?? 0, decls[i + 1]?.index ?? clean.length);
+          const signature = body.slice(0, body.indexOf("{"));
+          // ⚠️ Vị từ phải TRÙNG với lưới chính (`takesRoom || takesMessage`). Bản đầu chỉ gom `roomId`,
+          // nên một cộng tác viên nhận `messageId` được lưới chính MIỄN mà ca GIÁ này không thấy —
+          // thoát cả hai lưới. Miễn ở đâu thì trả giá ở đó.
+          const takesRoom = /roomId\s*:\s*string/.test(signature);
+          const takesMessage = /messageId\s*:\s*string/.test(signature);
+          if ((takesRoom || takesMessage) && takesCallerTx(signature, d[2])) {
+            collaborators.add(file);
+          }
+        });
+      }
+
+      // Positive control: nếu một ngày không còn method nào như thế, carve-out là hư vô — và ca chính ở
+      // dưới sẽ lặng lẽ mất một nhánh. Đỏ ở đây buộc người sau gỡ luôn carve-out.
+      expect(
+        [...collaborators],
+        "carve-out `tx: TenantTx` phải có ÍT NHẤT một chủ thể, nếu không hãy gỡ nó",
+      ).not.toEqual([]);
+
+      // `exports:` của ChatModule — service nào lọt vào đó thì module khác inject được, và lập luận
+      // "chỉ caller đã gate mới gọi được" sụp đổ.
+      // ⚠️ **KHÔNG dùng `stripComments` ở trên cho file NÀY.** Nó gỡ khối `/* */` TRƯỚC rồi mới gỡ dòng
+      // `//`, nên một dòng `//` có chứa chuỗi `/*` (chat.module.ts có 3 dòng như thế: "path
+      // `/chat/oversight/*`", "`/chat/files/*`") mở một khối giả và nuốt tới `*/` thật kế tiếp —
+      // ĐO ĐƯỢC: 16.193 ký tự còn 2.639, mất sạch cả `providers:` lẫn `exports:`. Ca này khi đó
+      // `indexOf("exports: [")` ra `-1` ⇒ `leaked` LUÔN rỗng ⇒ **PASS OAN**, đúng thứ nó sinh ra để chặn.
+      // Gỡ dòng `//` TRƯỚC làm `/*` trong đó biến mất trước khi khối được ghép cặp.
+      const stripCommentsSafe = (src: string): string =>
+        src.replace(/(^|[^:])\/\/.*$/gm, "$1").replace(/\/\*[\s\S]*?\*\//g, "");
+      const moduleSrc = stripCommentsSafe(readFileSync(join(chatDir, "chat.module.ts"), "utf8"));
+      expect(
+        moduleSrc.indexOf("exports: ["),
+        "không tìm thấy khối `exports:` — cách tách comment hỏng, ca này sẽ PASS OAN",
+      ).toBeGreaterThan(-1);
+      const exportsBlock = moduleSrc.slice(moduleSrc.indexOf("exports: ["));
+      const classOf = (file: string): string =>
+        file
+          .replace(/\.service\.ts$/, "")
+          .split("-")
+          .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+          .join("") + "Service";
+
+      const leaked = [...collaborators].filter((f) => exportsBlock.includes(classOf(f)));
+      expect(leaked, "service có method trong-tx nhận roomId/messageId mà VẪN được export").toEqual(
+        [],
+      );
+    });
+
     it("MỌI method PUBLIC của service nhận `roomId` đều gọi assertMember (trực tiếp hoặc qua cổng ghi)", () => {
       const gaps: string[] = [];
       const publicMethods: string[] = [];
@@ -582,6 +690,11 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-1 — membership deny-path (DB cô lập
           const takesRoom = /roomId\s*:\s*string/.test(signature);
           const takesMessage = /messageId\s*:\s*string/.test(signature);
           if (!takesRoom && !takesMessage) return;
+          // S7-CALL-RT-FIX-2 — cộng tác viên TRONG-TX: không tới được từ ngoài (xem carve-out ở trên).
+          // Giá của nó được ép ở ca "không được export khỏi ChatModule" ngay phía trên.
+          // `d[2]` = TÊN method: carve-out neo vào `(` của chính nó, nếu không một `(` của callback
+          // trong chữ ký cũng miễn được — xem docblock của `takesCallerTx`.
+          if (takesCallerTx(signature, d[2])) return;
           publicMethods.push(`${file} › ${head.trim()}`);
           // Chỉ nhận `this.<gate>(` — `<gate>(` trần sẽ khớp cả một lời gọi trùng tên trên đối tượng
           // khác (vd `this.repo.aggregateForMessages(`), tức lại nới lưới bằng một trùng hợp chuỗi.

@@ -13,6 +13,7 @@ import { AuditService } from "../events/audit.service";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import type { ChatRoomType } from "../db/schema/communication";
 import { ChatAccessService } from "./chat-access.service";
+import { ChatCallRoomExitService } from "./chat-call-room-exit.service";
 import { ChatRoomAvatarPresignService } from "./chat-room-avatar-presign.service";
 import { ChatRoomCodeService } from "./chat-room-code.service";
 import { ChatRoomsRepository, type ChatRoomRow } from "./chat-rooms.repository";
@@ -69,6 +70,9 @@ export class ChatRoomsService {
     private readonly realtime: RealtimeEmitterService,
     // S8-CHAT-UX-BE-2 (additive) — ký avatar phòng theo LÔ ở hai đường đọc (`listRooms`/`getRoom`).
     private readonly avatarPresign: ChatRoomAvatarPresignService,
+    // ⚠️ S7-CALL-RT-FIX-2 (additive) — **PHẢI Ở CUỐI**: `chat-realtime-after-commit.spec.ts` dựng
+    // service này bằng THỨ TỰ THAM SỐ.
+    private readonly callExit: ChatCallRoomExitService,
   ) {}
 
   /**
@@ -413,7 +417,21 @@ export class ChatRoomsService {
         resultStatus: "Success",
         newValues: { userId: actor.id },
       });
-      return { left: true as const };
+
+      // S7-CALL-RT-FIX-2 — CÙNG một lỗ, cửa vào THỨ HAI. `leaveRoom` và `removeMember` đi qua cùng
+      // `setMemberLeft`, nên vá một cửa là vá được một nửa. Ở đây người bị đóng CHÍNH LÀ actor.
+      const closed = await this.callExit.closeCallParticipationOnRoomExit(
+        tx,
+        actor.companyId,
+        roomId,
+        actor.id,
+        actor.id,
+        new Date(),
+      );
+      for (const { callId } of closed) {
+        this.realtime.evictFromCallRoom(actor.companyId, callId, actor.id);
+      }
+      return { left: true as const, closedCallIds: closed.map((c) => c.callId) };
     });
 
     // SAU commit. `affectedUserIds = [actor.id]` để CÁC THIẾT BỊ KHÁC của chính actor cùng cập nhật UI —
@@ -421,7 +439,14 @@ export class ChatRoomsService {
     this.broadcastRoom(actor, roomId, "left", [actor.id], {
       membership: [{ userId: actor.id, action: "leave" }],
     });
-    return result;
+    for (const callId of result.closedCallIds) {
+      // Evict LẦN HAI — đóng cửa sổ REJOIN (một `call:join` chạy trong khe giữa evict-trong-tx và COMMIT
+      // vẫn đọc được trạng thái CŨ và tự đưa mình trở lại `callRoomName`). Lập luận đầy đủ + phần dư
+      // chưa đóng: docblock cùng vị trí ở `chat-members.service.ts`. Idempotent; đặt TRƯỚC `peer-left`.
+      this.realtime.evictFromCallRoom(actor.companyId, callId, actor.id);
+      this.realtime.emitCallPeerLeft(actor.companyId, callId, actor.id);
+    }
+    return { left: true };
   }
 
   // ─── nội bộ ──────────────────────────────────────────────────────────────────

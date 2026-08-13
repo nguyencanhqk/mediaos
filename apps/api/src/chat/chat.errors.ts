@@ -437,6 +437,22 @@ export const CHAT_AUDIT = {
    * chủ động gác máy — đúng loại nhầm lẫn mà sổ audit sinh ra để tránh.
    */
   CALL_MISSED: "chat.call.missed",
+  /**
+   * S7-CALL-RT-FIX-2 — phần tham gia của MỘT người bị đóng vì họ rời/bị gỡ khỏi PHÒNG giữa cuộc gọi.
+   *
+   * ⚠️ **TÁCH khỏi `CALL_ENDED`, và không gộp được.** Câu hỏi điều tra khác hẳn: `CALL_ENDED` trả lời
+   * "ai gác máy cuộc gọi này", còn dòng này trả lời *"vì sao người X biến mất khỏi cuộc gọi trong khi
+   * họ không hề bấm gì"* — đáp án là "một admin gỡ họ khỏi phòng", tức một hành động của NGƯỜI KHÁC lên
+   * phần tham gia của họ. Cuộc gọi **KHÔNG** kết thúc ở đây (`chat_calls.status` giữ nguyên).
+   *
+   * `actorUserId` = người BẤM gỡ/rời (không phải người bị đóng — hai người khác nhau ở cửa `removeMember`),
+   * `newValues.userId` = người bị đóng. Thiếu vế thứ hai thì dòng audit không nói được nó nói VỀ AI.
+   *
+   * `object_type` tái dùng `'chat_call'` (đã có trong CHECK từ mig `0546` khối E) — cột `action` là text
+   * tự do ⇒ **không cần migration**, đã đo lại bằng `pg_get_constraintdef` trên lane DB chứ không suy
+   * từ comment.
+   */
+  CALL_PARTICIPANT_CLOSED: "chat.call.participant_closed",
 } as const;
 
 /** `module_code` cho mọi dòng audit của CHAT — CHAT-API-019 lọc theo cột này. */
