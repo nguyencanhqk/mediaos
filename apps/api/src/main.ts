@@ -8,6 +8,7 @@ import { ZodValidationPipe } from "nestjs-zod";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { ResponseEnvelopeInterceptor } from "./common/interceptors/response-envelope.interceptor";
+import { JsonConsoleLogger } from "./common/logger/json-console-logger";
 import { requestIdMiddleware } from "./common/middleware/request-id.middleware";
 import { loadEnv } from "./config/env.schema";
 import { SWAGGER_PATH, setupSwagger } from "./config/swagger";
@@ -27,7 +28,10 @@ function parseTrustProxy(raw: string): boolean | number | string {
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv();
-  const app = await NestFactory.create(AppModule);
+  // S10-FND-JSONLOG-1 (KI-009): `logger` ở đây override `Logger.staticInstanceRef` TOÀN CỤC (Nest
+  // gọi `Logger.overrideLogger` bên trong `NestFactory.create`) — mọi `new Logger(context)` rải khắp
+  // service/repository tự động in JSON có cấu trúc + redaction, KHÔNG cần sửa từng file gọi log.
+  const app = await NestFactory.create(AppModule, { logger: new JsonConsoleLogger() });
 
   // SỚM NHẤT: gán req.requestId (Express middleware chạy trước routing/guard) để interceptor + filter
   // luôn có request_id cho meta — kể cả request bị guard từ chối sớm. KHÔNG dùng class middleware qua app.use.

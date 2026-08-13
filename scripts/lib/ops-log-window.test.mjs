@@ -17,8 +17,10 @@ import {
   DEFAULT_TAIL_BYTES,
   countErrorLinesInFile,
   countErrorLinesInWindow,
+  parseJsonLogLine,
   parseLogTimestamp,
 } from "./ops-log-window.mjs";
+import { DEFAULT_THRESHOLDS, evaluate, exitCodeFor } from "./ops-alert-rules.mjs";
 
 /** Mốc "bây giờ" cố định cho mọi ca — 15/07/2026 14:30:00 giờ địa phương. */
 const NOW = new Date(2026, 6, 15, 14, 30, 0).getTime();
@@ -247,5 +249,118 @@ describe("countErrorLinesInFile", () => {
 
   it("đuôi mặc định 8MB (bản cũ 2MB — quá ngắn khi log phun mạnh)", () => {
     assert.equal(DEFAULT_TAIL_BYTES, 8 * 1024 * 1024);
+  });
+});
+
+// ── S10-FND-JSONLOG-1 (KI-009) — API đổi log sang JSON có cấu trúc ─────────────────────────────
+// Trọng tâm: đúng cái mà seed WO cảnh báo — "đổi format mà không sửa bộ đếm ⇒ rule đếm 0 mãi mãi ⇒
+// cảnh báo vận hành mù trở lại". Ba lớp chứng minh dưới đây, từ trong ra ngoài:
+//   1. `parseJsonLogLine` đọc đúng MỘT dòng JSON (đơn vị nhỏ nhất).
+//   2. `countErrorLinesInWindow` đếm đúng khi log là JSON — VÀ khi tail lẫn cả JSON lẫn Nest văn
+//      xuôi cũ (cửa sổ ngay sau lúc restart/deploy đổi format, log cũ chưa xoay hết).
+//   3. BẺ HỎNG toàn tuyến: bơm số lượng dòng lỗi JSON giả khác nhau, đẩy qua `evaluate()` +
+//      `exitCodeFor()` thật của `ops-alert-rules.mjs` — đo SEVERITY và EXIT CODE đổi đúng ngưỡng,
+//      KHÔNG chỉ nhìn "đang chạy trên hệ khoẻ thấy xanh".
+function jsonLine(ms, level, message, context = "TestService") {
+  return JSON.stringify({ level, pid: 4242, timestamp: ms, message, context });
+}
+
+describe("parseJsonLogLine — đọc MỘT dòng log JSON có cấu trúc", () => {
+  it("đọc đúng dòng error hợp lệ", () => {
+    const line = jsonLine(NOW - MIN, "error", "Nhịp worker 'outbox' THẤT BẠI");
+    assert.deepEqual(parseJsonLogLine(line), { ts: NOW - MIN, isError: true });
+  });
+
+  it("level khác 'error' (log/warn/debug/fatal) ⇒ isError=false", () => {
+    for (const level of ["log", "warn", "debug", "verbose", "fatal"]) {
+      const { isError } = parseJsonLogLine(jsonLine(NOW, level, "x"));
+      assert.equal(isError, false, `level=${level}`);
+    }
+  });
+
+  it("dòng không phải JSON (định dạng Nest cũ) ⇒ null", () => {
+    assert.equal(parseJsonLogLine(nestLine(NOW, "ERROR", "cũ")), null);
+  });
+
+  it("JSON hợp lệ nhưng thiếu 'timestamp' hoặc 'level' ⇒ null, KHÔNG suy đoán", () => {
+    assert.equal(parseJsonLogLine(JSON.stringify({ level: "error", message: "x" })), null);
+    assert.equal(parseJsonLogLine(JSON.stringify({ timestamp: NOW, message: "x" })), null);
+  });
+
+  it("JSON hỏng cú pháp (bắt đầu bằng '{' nhưng parse lỗi) ⇒ null", () => {
+    assert.equal(parseJsonLogLine('{"level":"error", "timestamp":'), null);
+  });
+
+  it("chuỗi rỗng / không phải string ⇒ null", () => {
+    assert.equal(parseJsonLogLine(""), null);
+    assert.equal(parseJsonLogLine(undefined), null);
+  });
+});
+
+describe("countErrorLinesInWindow — định dạng JSON mới", () => {
+  it("đếm dòng level=error trong cửa sổ, bỏ dòng ngoài cửa sổ", () => {
+    const text = [
+      jsonLine(NOW - 10 * MIN, "error", "trong cửa sổ 1"),
+      jsonLine(NOW - 59 * MIN, "error", "trong cửa sổ 2"),
+      jsonLine(NOW - 61 * MIN, "error", "ngoài cửa sổ"),
+    ].join("\n");
+    assert.equal(countErrorLinesInWindow(text, { nowMs: NOW, windowMin: 60 }), 2);
+  });
+
+  it("chỉ đếm level=error — log/warn/debug JSON trong cùng cửa sổ bị bỏ qua", () => {
+    const text = [
+      jsonLine(NOW - MIN, "log", "RetentionCleanupJob.run"),
+      jsonLine(NOW - MIN, "warn", "thiếu MODULE_APP_METADATA"),
+      jsonLine(NOW - MIN, "debug", "RETENTION_CLEANUP"),
+      jsonLine(NOW - MIN, "error", "cái duy nhất được đếm"),
+    ].join("\n");
+    assert.equal(countErrorLinesInWindow(text, { nowMs: NOW, windowMin: 60 }), 1);
+  });
+
+  it("tail LẪN định dạng cũ (Nest văn xuôi) VÀ định dạng mới (JSON) — cả hai vẫn được đếm cộng dồn (cửa sổ chuyển tiếp ngay sau restart đổi format)", () => {
+    const text = [
+      nestLine(NOW - 30 * MIN, "ERROR", "dòng cũ trước lúc restart"),
+      jsonLine(NOW - 5 * MIN, "error", "dòng mới sau lúc restart"),
+    ].join("\n");
+    assert.equal(countErrorLinesInWindow(text, { nowMs: NOW, windowMin: 60 }), 2);
+  });
+});
+
+describe("BẺ HỎNG toàn tuyến — ERROR_SPIKE vẫn nổ đúng đọc log JSON (KHÔNG chỉ nhìn hệ đang khoẻ)", () => {
+  /** Dựng N dòng lỗi JSON trong cửa sổ rồi chạy trọn pipeline: đếm → evaluate() → exitCodeFor(). */
+  function pipelineFor(errorCount) {
+    const text = Array.from({ length: errorCount }, (_, i) =>
+      jsonLine(NOW - MIN, "error", `lỗi bơm giả #${i}`),
+    ).join("\n");
+    const errorLines = countErrorLinesInWindow(text, { nowMs: NOW, windowMin: 60 });
+    const verdicts = evaluate({ errorLines });
+    const spike = verdicts.find((v) => v.id === "ERROR_SPIKE");
+    return { errorLines, severity: spike.severity, exitCode: exitCodeFor(spike.severity) };
+  }
+
+  it("dưới ngưỡng warn ⇒ ok, exit 0", () => {
+    const { errorLines, severity, exitCode } = pipelineFor(DEFAULT_THRESHOLDS.errorLogWarn - 1);
+    assert.equal(errorLines, DEFAULT_THRESHOLDS.errorLogWarn - 1);
+    assert.equal(severity, "ok");
+    assert.equal(exitCode, 0);
+  });
+
+  it("đúng ngưỡng warn ⇒ warn, exit 1", () => {
+    const { severity, exitCode } = pipelineFor(DEFAULT_THRESHOLDS.errorLogWarn);
+    assert.equal(severity, "warn");
+    assert.equal(exitCode, 1);
+  });
+
+  it("đúng ngưỡng crit ⇒ crit, exit 2 — chứng minh bằng BƠM 200 dòng lỗi JSON giả thật sự", () => {
+    const { errorLines, severity, exitCode } = pipelineFor(DEFAULT_THRESHOLDS.errorLogCrit);
+    assert.equal(errorLines, DEFAULT_THRESHOLDS.errorLogCrit);
+    assert.equal(severity, "crit");
+    assert.equal(exitCode, 2);
+  });
+
+  it("0 dòng lỗi (hệ khoẻ thật) ⇒ ok, exit 0 — đối chứng, KHÔNG phải bằng chứng chính", () => {
+    const { severity, exitCode } = pipelineFor(0);
+    assert.equal(severity, "ok");
+    assert.equal(exitCode, 0);
   });
 });

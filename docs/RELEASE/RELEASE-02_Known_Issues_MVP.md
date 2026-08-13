@@ -25,7 +25,7 @@
 | KI-006 | LMS→NOTI chưa hoạt động — **migration `0529` ĐÃ áp cho cả PROD+UAT 2026-07-26**; còn thiếu `LMS_NOTI_TOKEN` + deploy | S2→S3 | Vận hành | ❌ | ✅ | Owner/DevOps |
 | KI-007 | CI `Security / Dependency scan` đỏ do lỗi công cụ | S3 | CI | ❌ | ⚠️ | Owner/DevOps |
 | ~~KI-008~~ | **ĐÓNG 2026-07-29** — `S6-PERF-DB-1` (#307). Drill KHÔNG chạy được kể từ khi Postgres vào container (thiếu pg client trên PATH host); đã vá bằng fallback `DRILL_PSQL`/`DRILL_PG_DUMP`/`DRILL_PG_RESTORE` qua `docker exec`, rồi chạy THẬT: dump → restore DB tạm → verify chuỗi migration + schema/RLS/index → tự dọn = **PASS** (`DEVOPS-13` §3.1). ⚠️ **KHÔNG kéo theo "đã có backup"** — drill tự `pg_dump` tại chỗ; chuyện chưa hề có bản backup định kỳ nào là **KI-050** riêng | S2 | Vận hành | — | — | ✔ xong |
-| KI-009 | Log chưa có cấu trúc JSON | S3 | Quan sát | ❌ | ❌ | Sprint 6 |
+| ~~KI-009~~ | ~~Log chưa có cấu trúc JSON~~ — **ĐÓNG 2026-08-13** (`S10-FND-JSONLOG-1`) | S3 | Quan sát | — | — | ✔ xong |
 | KI-010 | Endpoint cũ `GET /employees` chưa phân trang thật (mới chặn bằng cap 2000) | S3 | Sản phẩm | ❌ | ❌ | Sprint 6 |
 | ~~KI-011~~ | **ĐÓNG 2026-07-30** — `S6-REL-1`. `scripts/ops-alert-check.mjs` đo THẬT 8 nhóm (backend down · DB readiness đọc BODY vì /health/db fail-soft · **lệch migration** · job Failed · dòng lỗi log · đĩa · tuổi backup · hạn TLS), quyết định ở `scripts/lib/ops-alert-rules.mjs` — **44 test**, và test ĐƯỢC CHẠY (step `tooling-tests` trong `harness/check.sh` + job trong `api.yml`; trước đó test của `scripts/`+`harness/` nằm ngoài vitest workspace nên mồ côi). Luật nền: **thiếu dữ liệu ⇒ `unknown`, KHÔNG phải `ok`** ⇒ exit ≠ 0 — chính luật này bắt ra KI-050 ngay lần chạy đầu. Rule KHÔNG đo được (5xx theo module · login-fail spike · 403 spike · slow query) ghi thẳng "KHÔNG ĐO ĐƯỢC" ở `RELEASE-09` §2, không tick khống. ⚠️ **cần deploy**: owner phải đăng ký scheduled task (`RELEASE-09` §4) thì cảnh báo mới tự chạy | S2 | Vận hành | — | ⚠️ cần đặt lịch | **ĐÓNG** — `S6-REL-1` |
 | KI-012 | Accepted-risk **D3**: widget headcount count-only xuyên phòng ban cho HR scope Department | S3 | Bảo mật (đã chấp nhận) | ❌ | ⚠️ cần chữ ký | Owner |
@@ -308,6 +308,30 @@ backup định kỳ nào trên máy PROD là vấn đề RIÊNG — **KI-050** (
 Nguyên văn `DEVOPS-10_Performance_Smoke_Observability_Baseline_Report.md` §4.2: R1 log JSON có cấu trúc ·
 R2 phân trang thật cho `GET /employees` (hiện chặn bằng cap **2000 dòng**, có warn-log khi chạm cap —
 không cắt câm) · R3 cảnh báo tự động. **KI-011 là điều kiện go-live**, hai cái kia không.
+
+**KI-009 — ĐÓNG 2026-08-13 (`S10-FND-JSONLOG-1`).** `apps/api/src/common/logger/json-console-logger.ts`
+thay `Logger` văn xuôi mặc định của Nest bằng `JsonConsoleLogger` (kế thừa `ConsoleLogger` built-in của
+Nest 11, bật `json:true`) — đăng ký MỘT LẦN ở `main.ts` (`NestFactory.create(AppModule, { logger })`)
+là đủ cho MỌI `new Logger(context)` rải khắp 100+ service/repository, vì Nest override
+`Logger.staticInstanceRef` toàn cục, không cần sửa từng file gọi log. Mỗi dòng log là JSON phẳng:
+`timestamp` (epoch ms) · `level` · `context` · `request_id` (gắn qua `AsyncLocalStorage` mở ở
+`requestIdMiddleware`, `apps/api/src/common/logger/request-context.ts`) · `message`.
+
+**Khớp nối ẩn đã xử lý cùng lúc (đúng lý do WO tồn tại):** `scripts/lib/ops-log-window.mjs` đọc file
+log để nuôi `ERROR_SPIKE` (`ops-alert-rules.mjs`) — đổi format mà không sửa bộ đếm sẽ làm rule đếm 0
+mãi mãi. Đã vá `parseJsonLogLine` đọc `{timestamp,level}` JSON, **giữ song song** nhánh Nest văn xuôi
+cũ (`parseLogTimestamp`/`ERROR_MARK_RE`) để tail log lẫn cả hai định dạng ngay sau lúc restart/deploy
+vẫn đếm đúng — không có cửa sổ mù nào giữa lúc đổi format. **Bằng chứng BẺ HỎNG** (không chỉ nhìn hệ
+đang khoẻ): bơm 19/20/200 dòng lỗi JSON giả qua trọn pipeline `countErrorLinesInWindow → evaluate() →
+exitCodeFor()` thật của `ops-alert-rules.mjs`, đo severity/exit code đổi đúng ngưỡng (`ok`/0 ·
+`warn`/1 · `crit`/2) — `scripts/lib/ops-log-window.test.mjs`, 34/34 test (`node --test`).
+
+**BẤT BIẾN #3:** `log-redaction.ts` che secret theo HAI lớp — tên field nhạy cảm
+(`password`/`token`/`x-internal-key`/`dsn`/…) bị thay `[REDACTED]` bất kể giá trị, VÀ mẫu trong chuỗi
+tự do (connection-string `scheme://user:pass@host`, `Authorization: Bearer <token>`, JWT, `key=value`
+nhạy cảm nằm rời trong message) bị quét-thay. An toàn với object vòng (circular). 26 test đơn vị
+(`apps/api/src/common/logger/{log-redaction,json-console-logger,request-context}.spec.ts`), gồm ca
+redact secret trong `message` VÀ trong `error.stack`.
 
 ### KI-012 / KI-013 — 2 quyết định bảo mật cần đóng sổ
 

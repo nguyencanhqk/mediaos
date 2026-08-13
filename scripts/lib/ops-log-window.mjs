@@ -82,11 +82,45 @@ export function parseLogTimestamp(line) {
 }
 
 /**
+ * Đọc MỘT dòng log JSON có cấu trúc (S10-FND-JSONLOG-1, `JsonConsoleLogger` ở `apps/api`) — mỗi dòng
+ * là MỘT object phẳng `{level, pid, timestamp, message, context?, request_id?}`, `timestamp` là
+ * epoch-ms nên đọc thẳng được, không cần regex ngày-giờ như định dạng Nest văn xuôi cũ.
+ *
+ * Dòng không bắt đầu bằng `{`, không parse được, hoặc thiếu field bắt buộc (`timestamp` số +
+ * `level` chuỗi) ⇒ `null` — KHÔNG SUY ĐOÁN. `countErrorLinesInWindow` rơi về nhánh định dạng cũ khi
+ * gặp `null`, để tail đọc lẫn dòng cũ (trước lúc đổi format) + dòng mới (sau restart/deploy) trong
+ * cùng cửa sổ vẫn đếm đúng thay vì mất trắng — đúng luật nền "không đọc được ⇒ không suy đoán, KHÔNG
+ * phải bỏ qua cả file".
+ *
+ * @param {string} line
+ * @returns {{ts:number, isError:boolean}|null}
+ */
+export function parseJsonLogLine(line) {
+  const trimmed = typeof line === "string" ? line.trim() : "";
+  if (!trimmed.startsWith("{")) return null;
+  let obj;
+  try {
+    obj = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+  if (obj === null || typeof obj !== "object") return null;
+  if (typeof obj.timestamp !== "number" || typeof obj.level !== "string") return null;
+  // Khớp ĐÚNG hành vi cũ (đếm nhãn ERROR, không đếm FATAL) — xem ERROR_MARK_RE ở trên: bản Nest
+  // text chỉ in "ERROR" cho `.error()`, `.fatal()` in "FATAL" và KHÔNG khớp `\bERROR\b`.
+  return { ts: obj.timestamp, isError: obj.level === "error" };
+}
+
+/**
  * Đếm dòng lỗi nằm trong cửa sổ quan sát.
  *
  * Một dòng được tính khi thoả CẢ HAI: mang nhãn `ERROR` **và** có timestamp ≥ mốc cắt. Không có chặn
  * TRÊN: dòng có giờ ở tương lai (đồng hồ lệch) vẫn được tính — với công cụ giám sát, bỏ sót lỗi thật
  * nguy hiểm hơn một cảnh báo thừa.
+ *
+ * Đọc được CẢ HAI định dạng — JSON có cấu trúc (mới, `parseJsonLogLine`) VÀ Nest văn xuôi (cũ,
+ * `ERROR_MARK_RE` + `parseLogTimestamp`) — để đổi định dạng log không làm rớt phép đếm trong cửa sổ
+ * chuyển tiếp (xem docblock `parseJsonLogLine`).
  *
  * @param {string} text nội dung log (có thể là phần đuôi của file).
  * @param {object} [opts]
@@ -105,6 +139,13 @@ export function countErrorLinesInWindow(text, opts = {}) {
 
   for (let i = dropFirstLine ? 1 : 0; i < lines.length; i++) {
     const line = lines[i];
+
+    const jsonLine = parseJsonLogLine(line);
+    if (jsonLine !== null) {
+      if (jsonLine.isError && jsonLine.ts >= cutoffMs) count++;
+      continue;
+    }
+
     if (!ERROR_MARK_RE.test(line)) continue;
     const ts = parseLogTimestamp(line);
     if (ts === null) continue; // không đọc được giờ ⇒ KHÔNG suy đoán là mới

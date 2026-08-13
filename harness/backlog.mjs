@@ -12259,7 +12259,7 @@ export const backlog = [
     title:
       "Log chưa có cấu trúc JSON — và bất kỳ ai đổi định dạng log đều PHẢI sửa cùng lúc bộ đếm ERROR của ops-alert, nếu không cảnh báo vận hành mù trở lại",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/common/**",
       "apps/api/src/main.ts",
@@ -12284,6 +12284,8 @@ export const backlog = [
     ],
     notes: [
       "Cân nhắc phạm vi trong plan: đổi logger là việc chạm ĐƯỜNG BOOT. Nếu thấy rủi ro lan, tách làm 2 nhịp (nhịp 1: format + redaction; nhịp 2: đấu lại ops-log-window) — nhưng KHÔNG được merge nhịp 1 mà bỏ nhịp 2, vì đó chính là lúc cảnh báo mù.",
+      "GREEN 13/08/2026: `JsonConsoleLogger` (kế thừa `ConsoleLogger` built-in Nest 11, `json:true`) đăng ký MỘT LẦN ở `main.ts` — Nest override `Logger.staticInstanceRef` toàn cục nên KHÔNG cần sửa từng file gọi log. `ops-log-window.mjs` đọc SONG SONG cả JSON mới lẫn Nest văn xuôi cũ (tail log lẫn hai định dạng ngay sau restart vẫn đếm đúng). Bằng chứng BẺ HỎNG: bơm 19/20/200 dòng lỗi JSON giả qua evaluate()+exitCodeFor() thật — severity/exit code đổi đúng ngưỡng. 34/34 test `ops-log-window.test.mjs` (node --test) + 100/100 test `src/common` (vitest) + typecheck sạch. RELEASE-09 KHÔNG cần cập nhật vì bảng rule/ngưỡng ERROR_SPIKE không đổi — chỉ format nguồn đổi (nợ 2 dòng tham chiếu KI-009 còn 'CHƯA' ở đó, để lane docs khác dọn).",
+      "ĐÓNG 13/08/2026 sau 3 vòng vá do review chỉ ra: **D1** — `errorStack` không-phải-chuỗi (Error/object mang connection-string, `x-internal-key`) lọt thẳng ra log vì code cũ lọc `typeof === 'string'` TRƯỚC khi redact; nay gọi `redactValue` VÔ ĐIỀU KIỆN. **D2** — hợp đồng một-dòng bẻ được từ phía caller (`compact:false` ⇒ `util.inspect` in 7 dòng ⇒ `ops-log-window.mjs` parse hỏng ⇒ đếm 0 lỗi VĨNH VIỄN = cảnh báo mù); nay `colors:false` + `compact:true` là HẰNG SỐ của lớp, không còn là tuỳ chọn. **D3** — hai suite cũ không buộc được hợp đồng THẬT giữa emitter và counter (spec logger đo object phát ra, test counter đọc fixture `timestamp` viết tay) nên đổi tên field vẫn giữ cả hai xanh trong khi production mù; nay `log-format-contract.spec.ts` stub `process.stdout/stderr.write` bắt BYTE THẬT rồi nạp thẳng vào `countErrorLinesInWindow` thật — đã nghiệm bằng BẺ HỎNG (đổi `timestamp`→`time` ⇒ 2/4 test ĐỎ, revert ⇒ XANH). Verify chốt lane: 97/97 node --test (ops-log-window + ops-alert-rules) · 107/107 vitest `src/common` · typecheck sạch · `check-no-secret-literals.mjs` 0 vi phạm.",
     ],
   },
 
