@@ -55,18 +55,28 @@
 >
 > ---
 >
-> ## 🟢 BÀN GIAO — phiên sau bắt đầu TỪ ĐÂY
+> ## ✅ ĐÃ THI CÔNG XONG — plan này giờ là HỒ SƠ, không phải việc cần làm
 >
-> Plan đã **ĐỦ để thi công**; chưa có dòng code nào. Nhánh `s7-call-rtfix2-roomexit` (cắt sạch từ
-> `origin/master`), lane DB `mediaos_s7callrtfix2` đã dựng xong (chain 0000→latest sạch).
+> Toàn bộ §3.1 · §3.2 · §5 đã hiện thực trên nhánh `s7-call-rtfix2-roomexit`. FULL gate đã chạy:
+> HIGH-1 và cả 3 MEDIUM đều đã vá, 2 LOW cố ý để lại. **Số đo, phát hiện lúc thi công và các đột biến
+> đã đo thật nằm ở `docs/QA/evidence/S7-CALL-RT-FIX-2.md`** — đọc file đó trước, plan này chỉ còn giá
+> trị giải thích VÌ SAO từng lựa chọn được chốt.
+>
+> Ba thứ trong plan đã bị THỰC TẾ sửa lại, đừng đọc plan mà bỏ qua evidence:
+>
+> - **§3.1 B2 vị từ kết cục** — plan viết `joined_at IS NULL ⇒ missed`. **Chưa đủ.** `insertParticipants`
+>   đặt `joined_at` cho NGƯỜI KHỞI TẠO ngay lúc MỜI ⇒ phải là vị từ **KÉP** `joined_at` + `accepted_at`
+>   (HIGH-1 của FULL gate, đột biến `j`).
+> - **§3.2 R-a / B4** — `evictFromCallRoom` chạy **HAI** lần (trong tx **và** sau commit), không phải một:
+>   vế trong-tx một mình để hở **cửa sổ rejoin** (đột biến `k`).
+> - **§3.1 A2 con số chi phí** — "10.800 truy vấn phụ/người/phút" trong plan là **SAI**; xem evidence
+>   §2.3 cho cách tính đúng.
 >
 > ```bash
+> eval "$(grep -E '^(APP|WORKER|SUPERUSER)_DB_PASSWORD=' .env | sed 's/^/export /')"
 > export LANE_DB=mediaos_s7callrtfix2
+> unset DATABASE_URL DATABASE_DIRECT_URL DATABASE_WORKER_URL
 > ```
->
-> Thứ tự: §6. Hình dạng bản vá: §3.1. Ratchet phải mở: §3.2. Test: §5 (bảng mutation §5.4 là hợp
-> đồng — mỗi đột biến phải làm ĐỎ đúng một ca). Đừng đọc lướt §3.1 tiểu mục "🔴 C1" và §5.3 ca 1:
-> đó là chỗ dễ ghi dữ liệu sai VĨNH VIỄN nhất, và nó KHÔNG có đường lùi (§4 M7).
 
 ---
 
