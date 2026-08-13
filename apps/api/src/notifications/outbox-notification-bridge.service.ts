@@ -50,6 +50,40 @@ export interface NotiEventMapping {
  *
  * Handler KHÔNG NUỐT LỖI: log rồi RE-THROW (mirror `attendance.module.ts` LeaveApprovedSyncRegistrar:70) —
  * OutboxWorker tự retry/dead-letter theo MAX_ATTEMPTS, không silent-fail.
+ *
+ * S10-QA-LOGNOISE-1 (2026-08-13) — TRUY GỐC nhiễu log "intake THẤT BẠI" khi chạy test (KI-015), ĐO chứ
+ * không đoán: chạy 29 file `*noti*` int-spec (488 test, LANE_DB cô lập) + 1 lượt broader — nguồn DUY NHẤT
+ * hôm nay là `test/integration/chat-noti-e2e.int-spec.ts` ca 14 (S7-CHAT-BE-6). Spec đó CỐ Ý gieo payload
+ * `chat.message.direct_sent` thiếu `recipientUserId` để chứng minh bridge KHÔNG được im lặng nuốt hợp
+ * đồng lệch (nếu im lặng thì một đổi tên khoá tương lai sẽ tắt TOÀN BỘ noti CHAT mà CI vẫn xanh, log vẫn
+ * sạch — đúng nguyên văn comment của ca đó). 5 dòng ERROR quan sát được = `OutboxWorker.MAX_ATTEMPTS` (5)
+ * lần retry của CÙNG MỘT event dồn vào <1s (test/helpers/outbox-drain.ts kéo `available_at` về `now()` để
+ * không đợi backoff 30s thật) — KHÔNG PHẢI 5 lỗi khác nhau. Test đó ĐÃ tự khẳng định bằng assert
+ * (dead_letter_events có 1 dòng + outbox_events.status != 'done') ⇒ đây là hành vi ĐÚNG-nhưng-ồn, KHÔNG
+ * PHẢI lỗi — KHÔNG có gì để "vá" ở nhánh này ngoài việc ghi lại bằng chứng.
+ *
+ * Giả thuyết CŨ trong KI-015 (nhánh `no_recipient` → `recordSkip` → vỡ FK `audit_logs_actor_user_id_fkey`
+ * vì outbox drain chạy SAU khi spec đã dọn user của mình) ĐÚNG tại thời điểm viết (2026-07-26) nhưng do
+ * MỘT NGUYÊN NHÂN KHÁC, đã đóng: `outbox_events` là bảng CHUNG, `OutboxWorker.claim()` không lọc tenant,
+ * 11 int-spec cùng lái worker trên 1 lane DB ⇒ worker của spec A có thể claim+xử lý event của spec B SAU
+ * KHI B đã teardown (KI-059 / S7-QA-OUTBOXPROBE-1). Khoá tư vấn toàn cục
+ * `test/helpers/outbox-worker-lock.ts` (2026-08-03) đã đóng đường đó — mọi spec lái worker giờ xếp hàng,
+ * không còn xử lý CHÉO. Xác minh lại 2026-08-13: `outbox-worker-lock.unit-spec.ts` (điểm danh MỌI spec
+ * gọi `processBatch`/`drainOutboxUntilSettled` phải giữ khoá) 2/2 PASS ⇒ không còn spec nào bỏ sót khoá,
+ * đường FK-vỡ-chéo-spec không còn tái lập được hôm nay.
+ *
+ * KHÔNG hạ log level / bọc `catch {}` ở đây: bridge hỏng THẬT trên PROD phải kêu to giống hệt. Xem
+ * `outbox-notification-bridge.service.spec.ts` cho ca chống-hồi-quy (mock `intake()` ném lỗi thật → vẫn
+ * log + re-throw).
+ *
+ * S10-QA-LOGNOISE-1-FIX-A (2026-08-13, vòng 2) — vòng 1 chỉ ghi bằng chứng vào docblock này mà KHÔNG
+ * chạm nơi phát ⇒ đo lại được: 6 dòng ERROR (5× bridge "intake THẤT BẠI" + 1× `LoggerAlertSink`
+ * "DEAD-LETTER") VẪN in ra console mỗi lần chạy `chat-noti-e2e.int-spec.ts` ca 14. Vòng này DẬP TRIỆT ĐỂ
+ * tại đúng nơi phát bằng `test/helpers/expect-logged-errors.ts` (`withExpectedLoggerErrors`) bọc quanh
+ * `drain()` trong chính ca 14: dòng khớp mẫu kỳ vọng (đúng payload/eventType của ca đó) bị nuốt-có-assert
+ * — SAI số lần (kể cả 0) làm spec ĐỎ; dòng lạ vẫn forward nguyên vẹn ra console. Đo lại: 30 file/495 test
+ * `*noti*` trên LANE_DB cô lập, 0 dòng "intake THẤT BẠI"/"DEAD-LETTER" — PASS. Theo dõi:
+ * `docs/RELEASE/RELEASE-02_Known_Issues_MVP.md` KI-015.
  */
 @Injectable()
 export class OutboxNotificationBridge {
