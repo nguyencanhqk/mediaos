@@ -1,5 +1,69 @@
 # Bằng chứng nghiệm thu — S7-CALL-RT-FIX-2
 
+> ## 🟠 BÀN GIAO 13/08 — CHƯA XONG, phiên sau bắt đầu TỪ ĐÂY
+>
+> Phiên dừng vì **chi phí** (hook báo CRITICAL ở $749 — con số nhảy bất thường so với khối lượng thật,
+> cả hai reviewer cũng tự nghi sổ chi phí của harness; **đáng kiểm riêng trước khi đổ lỗi cho WO**).
+>
+> **Trạng thái:** nhánh `s7-call-rtfix2-roomexit`, **5 commit, cây SẠCH, typecheck XANH**, chưa push,
+> chưa có PR. Commit cuối `020efd6d`.
+>
+> **FULL gate đã chạy:** `silent-failure-hunter` **PASS** (1 MEDIUM + 1 LOW — **đã vá cả hai**) ·
+> `security-reviewer` **BLOCK** (1 HIGH + 4 MEDIUM/LOW).
+>
+> ### Đã vá trong commit `020efd6d`
+>
+> | Điểm | Nội dung |
+> | --- | --- |
+> | **HIGH-1** ✅ | Vị từ **KÉP** `joined_at` + `accepted_at`. Lỗi thật: `insertParticipants` đặt `joined_at` cho **người khởi tạo ngay lúc MỜI**, nên A mời rồi tự `leave` khi call còn `ringing` bị ghi `'left'` — SAI VĨNH VIỄN (kết cục hấp thụ, bảng không DELETE). Đã thêm `acceptedAt` vào projection B1 + ca unit detector + xác minh **đột biến `j` làm ĐỎ đúng 1 ca** |
+> | silent-failure MEDIUM ✅ | Nhánh `if (!ok) continue` nâng `debug` → **`warn`** (nó là detector duy nhất của "gỡ mà không đóng được participation") |
+> | silent-failure LOW ✅ | Log lớp-C ở gateway thêm `callId` |
+>
+> ### 🔴 CÒN LẠI để gỡ BLOCK — 4 việc
+>
+> 1. **MEDIUM · cửa sổ rejoin.** `evictFromCallRoom` chạy TRONG tx ⇒ trong khe giữa evict và COMMIT, tx
+>    khác (gateway) đọc READ COMMITTED **chưa thấy** `left_at`/`outcome` mới ⇒ `call:join` của nạn nhân
+>    được chấp nhận và `socketsJoin` đưa họ **trở lại `callRoomName`**, sau commit **không ai evict lần
+>    hai** ⇒ kênh `media-state`/`screen-state` mở lại tới khi socket rớt.
+>    **Vá:** gọi `evictFromCallRoom` **thêm một lần SAU commit**, cạnh `emitCallPeerLeft`, ở **cả hai**
+>    cửa (`chat-members.service.ts` · `chat-rooms.service.ts`). Idempotent, giữ nguyên vế trong-tx.
+>    **Kèm:** ratchet R-a đổi assert — ca commit-hỏng `evictFromCallRoom` **1 lần**, POSITIVE CONTROL
+>    **2 lần**.
+> 2. **MEDIUM · carve-out regex không cài đúng hợp đồng docblock của chính nó**
+>    (`chat-be1-access.int-spec.ts`). `takesCallerTx` khớp **bất kỳ `(`** trong chữ ký, không neo vào
+>    tham số ĐẦU như docblock hứa. Khuôn `body: (tx: TenantTx, …) => …` **đã có trong repo**
+>    (`chat-calls.service.ts`), nên một method tương lai `foo(roomId: string, run: (tx: TenantTx) => …)`
+>    — controller gọi được — sẽ được **miễn `assertMember` oan**.
+>    **Vá:** neo vào `(` mở của CHÍNH method (dựng regex từ tên method), **và** cho ca "giá" dùng cùng vị
+>    từ `takesRoom || takesMessage` như lưới chính (hiện chỉ gom `roomId` ⇒ collaborator nhận `messageId`
+>    thoát cả hai lưới).
+> 3. **MEDIUM · docblock chi phí sai** (`chat-call-signal.service.ts`). Đang khai nhánh từ chối "1 → 2
+>    truy vấn". Sai vế quan trọng: trước bản vá người bị gỡ **bị NGẮT** ở khung đầu (1 socket = 1 khung);
+>    sau bản vá họ **không bị ngắt nữa** nên đi hết trần `chargeFrame` 360 khung × 2 truy vấn ⇒ thực tế
+>    **~30× số khung** (30 socket/phút × 360 × 2 ≈ 21.600 truy vấn/người/phút). Hệ quả ĐÚNG của thiết
+>    kế, nhưng phải khai đúng số. **Chỉ sửa docblock, không sửa code.**
+> 4. **Chạy lại + đóng:** `bash harness/check.sh --lane-db=s7callrtfix2` · thêm ca int "khởi tạo rời
+>    phòng khi call còn `ringing` ⇒ `missed`, `left_at` NULL" (hiện detector HIGH-1 **chỉ có ở tầng
+>    unit**) · thêm dòng `j` vào bảng mutation §5.4 · cập nhật §3 của file này · mở PR **KHÔNG gắn
+>    auto-merge** (vùng đỏ, người chốt).
+>
+> **Hai LOW của `security-reviewer`, không chặn:** ratchet mã-nguồn thuần nằm sau
+> `describe.skipIf(!hasLaneDb)` (máy không Postgres thì cả cái MIỄN lẫn cái GIÁ cùng im lặng — vấn đề có
+> sẵn của ca 14) · ca R-b chỉ đọc `realtime-emitter.service.ts` nên người phát THỨ BA đặt ở file khác
+> trong `src/realtime/` vẫn không ai canh (nên quét cả thư mục).
+>
+> ⚠️ **Bài học đắt của phiên:** đã chạy mutation-test bằng `git checkout -- <file>` trên một file có
+> **sửa CHƯA COMMIT** ⇒ mất trắng 2 bản vá, phải làm lại. Mutation-test **luôn commit trước**.
+>
+> **Chạy test cần 3 biến** (mật khẩu không còn literal trong repo):
+> ```bash
+> export APP_DB_PASSWORD=... WORKER_DB_PASSWORD=... SUPERUSER_DB_PASSWORD=...   # từ .env
+> export LANE_DB=mediaos_s7callrtfix2
+> unset DATABASE_URL DATABASE_DIRECT_URL DATABASE_WORKER_URL   # URL tường minh THẮNG LANE_DB
+> ```
+>
+> ---
+
 > Gỡ thành viên giữa cuộc gọi: đóng chiều RÒ, thôi đóng dấu người vô tội.
 > Vùng **ĐỎ (crown-jewel)** — chạm `src/realtime/**` + luật từ chối signalling ⇒ FULL gate, người chốt merge.
 > Plan: `docs/plans/S7-CALL-RT-FIX-2.md` · Lane DB: `mediaos_s7callrtfix2` · Nhánh: `s7-call-rtfix2-roomexit`
