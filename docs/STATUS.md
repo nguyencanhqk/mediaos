@@ -1,17 +1,31 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-13 06:32Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-13 06:51Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🔴 S10-SOCIAL-OPS-1 — Đưa kho sang ổ D: (SOCIAL_DATA_DIR) + đổi dịch vụ MediaOS-Social từ LocalSystem sang tài khoản Windows có quyền trên share LAN + sao lưu data/ và .secrets/ TÁCH nhau
+- **zone**: red · **skills**: security-review
+- **sửa ở đâu (paths)**: `.env`, `scripts/windows/**`, `docs/DEVOPS/DEVOPS-14_Social_Satellite_App_Deployment.md`, `docs/plans/S10-SOCIAL-OPS-1.md`
+- **phụ thuộc**: S10-SOCIAL-LIB-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] SOCIAL_DATA_DIR trỏ ổ D:, dịch vụ khởi động lại và ĐỌC ĐÚNG kho mới — chứng minh bằng việc thêm 1 media rồi thấy file xuất hiện dưới D:, KHÔNG phải chỉ đọc log
+  - [ ] Tài khoản dịch vụ đọc được share LAN — chứng minh bằng lệnh chạy DƯỚI CHÍNH tài khoản đó (không phải test bằng phiên đăng nhập của owner, sẽ đỏ oan/xanh oan)
+  - [ ] Mật khẩu tài khoản dịch vụ KHÔNG vào git, KHÔNG vào log (BẤT BIẾN #3)
+  - [ ] DEVOPS-14 thêm mục: đường nạp video nặng, trần 100MB của Cloudflare, và vì sao KHÔNG dùng LocalSystem
+  - [ ] Sao lưu định kỳ data/ (ổ D:) và .secrets/ (KEK) TÁCH nhau — ghi đè KEK = mọi token FB thành rác vĩnh viễn
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🟡 `S7-CHAT-LMS-1` Gỡ chat khỏi LMS (GIỮ trợ lý AI) + trỏ lối vào sidebar sang /chat MediaOS + xuất 84 tin lịch sử ra tệp lưu trữ
 - 🟡 `S7-CALL-QA-2` Test FE cuộc gọi: bật đo coverage cho apps/app + phủ 1.241 dòng đang là điểm mù (use-chat-call 676 · CallExperience 307 · CallProvider 143 · call-ringtone 115)
-- 🔴 `S10-SOCIAL-OPS-1` Đưa kho sang ổ D: (SOCIAL_DATA_DIR) + đổi dịch vụ MediaOS-Social từ LocalSystem sang tài khoản Windows có quyền trên share LAN + sao lưu data/ và .secrets/ TÁCH nhau
+- 🟡 `S10-FND-ENVKEY-1` `INTERNAL_API_KEY` là secret ĐANG DÙNG THẬT nhưng vắng mặt ở env.schema + .env.example — quên đặt thì mất tính năng trong IM LẶNG, không lỗi boot nào
+- 🟢 `S10-QA-LOGNOISE-1` Nhiễu log `OutboxNotificationBridge … intake THẤT BẠI` khi chạy test — truy GỐC rồi mới dập; CẤM bịt miệng logger
+- 🟡 `S10-ATT-NOTIPROD-1` 3 sự kiện ATT bật trong danh mục nhưng KHÔNG AI PHÁT (`ATT_MISSING_CHECKOUT` · `ATT_LATE_DETECTED` · `ATT_ABSENT_DETECTED`) — danh mục hứa, hệ thống không giao
+- 🟡 `S10-QA-ROUTEHTTP-1` Một mảng lớn đường dẫn API không có test HTTP nào chạm — guard/DTO/envelope của route CHƯA TỪNG chạy, phủ ở tầng service không chứng minh được cổng
+- 🟡 `S10-FND-JSONLOG-1` Log chưa có cấu trúc JSON — và bất kỳ ai đổi định dạng log đều PHẢI sửa cùng lúc bộ đếm ERROR của ops-alert, nếu không cảnh báo vận hành mù trở lại
+- 🟡 `S10-DASH-MVREFRESH-1` Materialized view dashboard KHÔNG CÓ LỊCH CHẠY — chỉ làm mới khi có người bấm tay vào endpoint; nửa 'must be owner' của KI-017 thì đã vá rồi
 
 **CHỜ (kẹt phụ thuộc):**
 - _(trống)_
@@ -24,7 +38,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 0
+- **branch**: `master` · **file đang đổi (dirty)**: 3
 - **migration head**: idx 213 — `0546_s7calldb1_chat_calls` (214 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -33,6 +47,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `2b03863c` | 2026-08-13 | chore(docs): regen STATUS sau khi land #378 (S7-CALL-RT-FIX-2 done, 0 in_progress) |
 | `bf37510c` | 2026-08-13 | fix(chat): gỡ thành viên giữa cuộc gọi — đóng chiều RÒ, thôi đóng dấu người vô tội (S7-CALL-RT-FIX-2) (#378) |
 | `43353ecf` | 2026-08-13 | chore(docs): regen STATUS + INDEX khớp master — bổ sung S10-OPS-SITEWATCH-1 + S10-OPS-ALERTCHAN-1 (đã land #376/#377) |
 | `d0c957a7` | 2026-08-12 | fix(ops): đường BÁO ĐỘNG ra ngoài — tin nhắn nói được đang hỏng cái gì + lỗi giao hết bị nuốt + cờ --test-alert (S10-OPS-ALERTCHAN-1) (#377) |
@@ -44,7 +59,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `a56e0c3d` | 2026-08-12 | fix(chat): vá fail-OPEN /ws-call — token hết hạn lúc bắt tay nay BỊ TỪ CHỐI, không còn nhận relay vô thời hạn (S7-CALL-RT-FIX-1) (#375) |
 | `b608bf78` | 2026-08-11 | chore(docs): regen STATUS sau khi land #374 (S7-CALL-QA-1 done, mở khoá RT-FIX-2 + QA-2) |
 | `e2b9c237` | 2026-08-11 | test(chat): nghiệm thu vùng CALL — 25 ca lấp lỗ signalling, gateway branch 68.67→92.74, filter 21.73→100 (S7-CALL-QA-1) (#374) |
-| `3159573f` | 2026-08-11 | chore(docs): regen STATUS sau khi land #372 (S7-CALL-FE-1 done, QA-1 mở khoá) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

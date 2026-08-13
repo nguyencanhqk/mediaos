@@ -12081,4 +12081,231 @@ export const backlog = [
       "⚠️ CÒN CHỜ OWNER — KHÔNG code thay được: đặt `OPS_ALERT_WEBHOOK` lên máy PROD (chọn kênh + tài khoản). Chừng nào chưa đặt, nửa (b) VẪN MỞ và khối 🔴 ở RELEASE-09 §4b GIỮ NGUYÊN. Nghiệm thu: `node scripts/ops-alert-check.mjs --test-alert` trả exit 0 VÀ nhìn thấy tin trong kênh — HTTP 2xx chỉ chứng minh kênh nhận, sai phòng/sai chat_id vẫn trả 2xx.",
     ],
   },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // WAVE S10-DEBT (seed 13/08/2026) — rút 6 KI ĐANG MỞ ở RELEASE-02 thành Work Order.
+  //
+  // Lý do seed: ledger đo 13/08 ⇒ 362/366 WO done, chỉ còn 3 item READY. Backlog cạn
+  // trước khi vòng lặp kịp chạy. Mỗi item dưới đây đã ĐO LẠI tiền đề KI hôm nay
+  // (không chép số cũ của RELEASE-02 — bài học "WO plans built on code comments").
+  //
+  // ĐÃ ĐO: KHÔNG item nào cần migration ⇒ cả 6 chạy SONG SONG được, không cần làn nối tiếp.
+  // Va chạm duy nhất giữa chúng: `docs/RELEASE/RELEASE-02_Known_Issues_MVP.md` (file xung đột
+  // đa-PR quen thuộc) + `harness/backlog.mjs`. Cho MỘT PR trong wave sửa RELEASE-02, phần còn
+  // lại đóng dấu KI sau khi merge — hoặc chấp nhận rebase tay.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  {
+    // Seed 13/08/2026 từ KI-031. Tiền đề ĐO LẠI hôm nay: vẫn đúng nguyên.
+    id: "S10-FND-ENVKEY-1",
+    module: "FOUNDATION",
+    layer: "DEVOPS",
+    title:
+      "`INTERNAL_API_KEY` là secret ĐANG DÙNG THẬT nhưng vắng mặt ở env.schema + .env.example — quên đặt thì mất tính năng trong IM LẶNG, không lỗi boot nào",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/config/env.schema.ts",
+      "apps/api/src/config/env.schema.spec.ts",
+      ".env.example",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: [],
+    src: [
+      "KI-031 (RELEASE-02). ĐO LẠI 13/08/2026: grep `INTERNAL_API_KEY` trong `apps/api/src/config/env.schema.ts` + `.env.example` ⇒ **0 hit ở CẢ HAI**. Tiền đề còn nguyên.",
+      "Nơi đọc THẬT: `apps/api/src/permission/guards/internal.guard.ts:22` — `process.env['INTERNAL_API_KEY']`. Vắng/sai ⇒ fail-CLOSED 403 mọi `/internal/**` (chính guard ghi chú ở dòng 25).",
+      "Hai controller sống sau guard: `dashboard/internal-dashboard-cache.controller.ts` + `notifications/internal-notifications.controller.ts`. Quên đặt env ⇒ hai đường đó 403 vĩnh viễn mà KHÔNG có lỗi boot — mất tính năng im lặng, đúng lớp lỗi repo này đã cắn nhiều lần.",
+      "BẤT BIẾN #3: đây là secret hệ thống ⇒ `.env.example` chỉ được chứa PLACEHOLDER, tuyệt đối không giá trị thật.",
+    ],
+    done_when: [
+      "`INTERNAL_API_KEY` có mặt trong env.schema với ngữ nghĩa ĐÚNG hành vi hiện tại — xem note về bẫy `required`",
+      "`.env.example` có dòng `INTERNAL_API_KEY=` kèm chú thích ngắn: dùng cho `/internal/**`, thiếu ⇒ 403 fail-closed",
+      "env.schema.spec.ts có ca khoá đóng đinh CHIỀU ĐÃ CHỌN (vắng key ⇒ ném hay không ném), để lần sau không ai lật ngược mà không thấy test đỏ",
+      "Placeholder trong .env.example KHÔNG high-entropy (bài học gitleaks `generic-api-key`: literal ngẫu nhiên ⇒ đỏ oan secret-scan full-history, kể cả khi commit sau đã sửa)",
+      "KI-031 đóng ở RELEASE-02",
+    ],
+    notes: [
+      "⚠️ BẪY QUYẾT ĐỊNH — đọc trước khi code: chọn `required` KHÔNG phải 'schema chặt hơn thì tốt hơn'. Nó ĐỔI HÀNH VI: mọi env chưa đặt (máy dev lẻ, CI, lane DB) chuyển từ 'mất một tính năng' sang 'SẬP BOOT'. Cân trong plan, chọn có chủ đích, và ghi lý do vào docblock.",
+    ],
+  },
+
+  {
+    // Seed 13/08/2026 từ KI-015.
+    id: "S10-QA-LOGNOISE-1",
+    module: "NOTI",
+    layer: "QA",
+    title:
+      "Nhiễu log `OutboxNotificationBridge … intake THẤT BẠI` khi chạy test — truy GỐC rồi mới dập; CẤM bịt miệng logger",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/api/src/notifications/outbox-notification-bridge.service.ts",
+      "apps/api/src/notifications/outbox-notification-bridge.service.spec.ts",
+      "apps/api/test/helpers/**",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "KI-015 (RELEASE-02). Dòng log ĐO ĐƯỢC 13/08/2026: `apps/api/src/notifications/outbox-notification-bridge.service.ts:103` — `OutboxNotificationBridge[${mapping.eventType}] intake THẤT BẠI (event ${ctx.eventId}, …`.",
+      "Đây là WO 🟢 về VỆ SINH TEST, nhưng nó nằm ngay cạnh một lớp lỗi 🔴: log nhiễu và lỗi thật trông giống hệt nhau. Nếu dập bằng cách hạ log level / bọc `catch {}` thì lần sau bridge hỏng THẬT trên PROD sẽ không ai biết — đúng bài học KI-034 và của `S10-OPS-ALERTCHAN-1` (nuốt lỗi giao webhook).",
+      "Vì vậy thứ tự BẮT BUỘC: (1) tái hiện, (2) trả lời được 'intake thất bại vì cái gì', (3) MỚI quyết định vá ở đâu.",
+    ],
+    done_when: [
+      "Viết ra được NGUYÊN NHÂN thật của dòng log khi chạy test (fixture thiếu? event không có mapping? bridge chạy sau teardown?) — ghi vào docblock, không đoán",
+      "Nếu là LỖI THẬT: vá lỗi, không vá log",
+      "Nếu là hành vi ĐÚNG-nhưng-ồn trong test: test phải KHẲNG ĐỊNH nó (assert) thay vì để nó in ra — biến nhiễu thành bằng chứng",
+      "Còn nguyên một ca chứng minh bridge VẪN KÊU TO khi intake hỏng thật ở đường chạy production (chống hồi quy 'dập nhiễu xong dập luôn cảnh báo')",
+      "Chạy suite notifications không còn dòng nhiễu; KI-015 đóng ở RELEASE-02",
+    ],
+    notes: [
+      "Bài học sẵn có trong repo: 11 int-spec dùng CHUNG một outbox (KI-059) ⇒ nhiễu có thể là hiệu ứng chạy song song chứ không phải lỗi của bridge. Kiểm giả thuyết đó trước khi sửa bridge.",
+    ],
+  },
+
+  {
+    // Seed 13/08/2026 từ KI-021. ĐÃ ĐO: template có sẵn ⇒ KHÔNG cần migration.
+    id: "S10-ATT-NOTIPROD-1",
+    module: "ATT",
+    layer: "BE",
+    title:
+      "3 sự kiện ATT bật trong danh mục nhưng KHÔNG AI PHÁT (`ATT_MISSING_CHECKOUT` · `ATT_LATE_DETECTED` · `ATT_ABSENT_DETECTED`) — danh mục hứa, hệ thống không giao",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/attendance/**",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "KI-021 (RELEASE-02). ĐO LẠI 13/08/2026: 3 mã sự kiện chỉ xuất hiện ở `foundation/seed/notification-event-catalog.const.ts:84-86` (`isEnabled: true`) + `dashboard/dashboard-cache-invalidation.const.ts` — **0 producer** trong `apps/api/src/attendance/**`.",
+      "ĐO THÊM (quyết định tính song song): template ĐÃ CÓ SẴN ở `apps/api/migrations/0481_s4_notiseed1_event_template_perms.sql:59-61` (catalog) + `:153-157` (template `*__IN_APP__vi-VN`) ⇒ WO này **KHÔNG đẻ migration**, chạy song song lane khác được.",
+      "Đây đúng lớp lỗi 'UI hứa, backend không đọc' đã ghi trong memory dự án — chỉ khác là ở đây DANH MỤC hứa: người dùng thấy 3 loại thông báo bật trong màn cấu hình, và không bao giờ nhận được cái nào.",
+      "Khuôn có sẵn để bắt chước — KHÔNG tự nghĩ kiểu mới: `foundation/retention/retention-cleanup.job-handler.ts` · `foundation/files/temp-file-cleanup.job-handler.ts` · `chat/chat-call-ringing-timeout.job-handler.ts` (đều `@SystemJobHandler()` + khai trong `providers`, SchedulerModule gom qua DiscoveryService).",
+    ],
+    done_when: [
+      "Có producer thật cho cả 3 sự kiện, phát qua ĐÚNG đường outbox/NOTI hiện hành (không emit thẳng, không đường tắt)",
+      "Quy tắc phát hiện (thế nào là 'thiếu check-out' / 'đi muộn' / 'vắng mặt') bám SPEC-04 + cấu hình ca làm việc trong DB — KHÔNG hard-code ngưỡng",
+      "Idempotent theo KỲ: chạy lại cùng một ngày KHÔNG được đẻ thông báo trùng (bài học 'khoá theo KỲ cần nguồn ĐÓNG BĂNG')",
+      "Notification sinh ra có deep-link đi đúng chỗ (`target_url_template` — bài học S5-NOTI-FIX-1: 39 template từng câm)",
+      "Test: có ca ALLOW (đủ điều kiện ⇒ phát) TRƯỚC, rồi mới đếm ca DENY — nhánh thiếu ca ALLOW làm ca DENY xanh RỖNG",
+      "KI-021 đóng ở RELEASE-02",
+    ],
+    notes: [
+      "🔴 BẪY DI TRUYỀN: `@SystemJobHandler()` là plain-class provider gom qua DiscoveryService ⇒ tham số DI phải `@Optional()`. Thiếu nó thì **sập cả AppModule** và kéo theo 100+ spec đỏ dây chuyền (đã cắn một lần — xem `system-job-runs-retention.job-handler.ts:86`).",
+      "Ba sự kiện này `isSystemEvent: false` trong catalog — kiểm nghĩa của cờ đó trước khi chọn chỗ đặt producer.",
+    ],
+  },
+
+  {
+    // Seed 13/08/2026 từ KI-025. Số 98/346 của KI ĐÃ CŨ — bước 1 là ĐO LẠI.
+    id: "S10-QA-ROUTEHTTP-1",
+    module: "QA",
+    layer: "QA",
+    title:
+      "Một mảng lớn đường dẫn API không có test HTTP nào chạm — guard/DTO/envelope của route CHƯA TỪNG chạy, phủ ở tầng service không chứng minh được cổng",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/test/**",
+      "apps/api/src/**/*.int.spec.ts",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "KI-025 (RELEASE-02) ghi **98/346 (28%)** đường dẫn không có test HTTP. Con số đó ĐÃ CŨ: census đo 13/08/2026 (`docs/_review/S6-SEC-ROUTEMAP-1-route-census.json`) có **499 route**, không phải 346.",
+      "⚠️ Census đó đo METADATA QUYỀN (`hasPermission`/`classGuards`), KHÔNG đo độ phủ test ⇒ nó KHÔNG trả lời được câu hỏi của WO này. Phải dựng phép đo riêng.",
+      "Vì sao phủ tầng service không đủ: guard · DTO validate · response envelope chỉ chạy khi đi qua HTTP thật. Repo đã có bằng chứng lớp lỗi này (route census runtime phải là CỔNG, và `apiFetch` từng nuốt pagination vì không ai đi đường thật).",
+      "Bước 1 BẮT BUỘC là ĐO LẠI rồi mới xếp việc — WO này khởi đầu bằng phép đo, không bằng việc viết test.",
+    ],
+    done_when: [
+      "Có phép đo LẶP LẠI ĐƯỢC (script/lệnh, không phải đếm tay) trả lời: route nào chưa có test HTTP nào chạm — số mới thay số 98/346 trong RELEASE-02",
+      "Xếp hạng theo RỦI RO chứ không theo thứ tự bảng chữ cái: route ghi dữ liệu · route nhạy cảm (quyền/secret/audit) lên trước route đọc",
+      "Phủ test HTTP thật cho nhóm rủi ro cao nhất trong đợt này; nhóm còn lại ghi rõ CÒN NỢ bao nhiêu (cấm im lặng cắt scope — 'no silent caps')",
+      "Test chạy được ở chế độ CI thật (`LANE_DB` — src xanh KHÔNG bằng integration xanh)",
+      "KI-025 cập nhật số đo mới ở RELEASE-02 (đóng hay hạ severity là kết luận của số, không phải mong muốn)",
+    ],
+    notes: [
+      "Đây là WO có nguy cơ PHÌNH nhất trong wave. Ranh giới: đợt này đóng NHÓM RỦI RO CAO + để lại phép đo tái dùng. Không đặt mục tiêu 100%.",
+    ],
+  },
+
+  {
+    // Seed 13/08/2026 từ KI-009.
+    id: "S10-FND-JSONLOG-1",
+    module: "FOUNDATION",
+    layer: "DEVOPS",
+    title:
+      "Log chưa có cấu trúc JSON — và bất kỳ ai đổi định dạng log đều PHẢI sửa cùng lúc bộ đếm ERROR của ops-alert, nếu không cảnh báo vận hành mù trở lại",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/common/**",
+      "apps/api/src/main.ts",
+      "scripts/lib/ops-log-window.mjs",
+      "scripts/lib/ops-log-window.test.mjs",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: [],
+    src: [
+      "KI-009 (RELEASE-02). ĐO LẠI 13/08/2026: `apps/api/package.json` **không có** pino/winston/nestjs-pino ⇒ vẫn đang dùng Logger mặc định của Nest, log là văn xuôi.",
+      "🔴 KHỚP NỐI ẨN, đo được 13/08: `scripts/lib/ops-log-window.mjs` ĐỌC file log của API và ĐẾM dòng `ERROR` để nuôi rule `ERROR_SPIKE` trong `scripts/lib/ops-alert-rules.mjs:168`. Đổi log sang JSON mà không sửa bộ đếm ⇒ rule đếm 0 mãi mãi ⇒ **cảnh báo vận hành mù trở lại**, đúng sự cố 11–12/08 mà `S10-OPS-SITEWATCH-1` vừa vá xong.",
+      "BẤT BIẾN #3: log có cấu trúc làm việc rò secret DỄ HƠN (serializer bê nguyên object chứa token/mật khẩu/header). Phải có redaction, và phải có test chứng minh nó.",
+    ],
+    done_when: [
+      "Log ra JSON có cấu trúc, tối thiểu: mốc thời gian · level · context · request-id (nếu có) · thông điệp",
+      "`ops-log-window.mjs` đọc được ĐỊNH DẠNG MỚI và `ERROR_SPIKE` vẫn nổ đúng — chứng minh bằng cách BẺ HỎNG (bơm log lỗi giả rồi đo severity + exit code), KHÔNG bằng việc nhìn nó xanh trên hệ đang khoẻ",
+      "Có test redaction: token · mật khẩu · header `x-internal-key` · connection string KHÔNG bao giờ lọt vào log",
+      "Fixture giống-secret trong test phải GHÉP CHUỖI hoặc lấy từ env (literal high-entropy ⇒ đỏ oan gitleaks full-history)",
+      "KI-009 đóng ở RELEASE-02; RELEASE-09 cập nhật nếu bảng rule đổi",
+    ],
+    notes: [
+      "Cân nhắc phạm vi trong plan: đổi logger là việc chạm ĐƯỜNG BOOT. Nếu thấy rủi ro lan, tách làm 2 nhịp (nhịp 1: format + redaction; nhịp 2: đấu lại ops-log-window) — nhưng KHÔNG được merge nhịp 1 mà bỏ nhịp 2, vì đó chính là lúc cảnh báo mù.",
+    ],
+  },
+
+  {
+    // Seed 13/08/2026 từ KI-017 — NHƯNG phạm vi đã ĐO LẠI và HẸP HƠN mô tả KI.
+    id: "S10-DASH-MVREFRESH-1",
+    module: "DASH",
+    layer: "BE",
+    title:
+      "Materialized view dashboard KHÔNG CÓ LỊCH CHẠY — chỉ làm mới khi có người bấm tay vào endpoint; nửa 'must be owner' của KI-017 thì đã vá rồi",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/dashboard/**",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "KI-017 ghi 'refresh MV qua workerDb hỏng từ G14 (must be owner)'. ĐO LẠI 13/08/2026: **nửa đó ĐÃ VÁ** — `dashboard-refresh.service.ts:68,79` nay gọi `SELECT refresh_dashboard_mvs()` (SECURITY DEFINER, owner `mediaos`, mig 0534), không REFRESH thẳng nữa.",
+      "PHẦN CÒN LẠI mới là vấn đề, và nó KHÔNG nằm trong chữ của KI: caller duy nhất của `refresh()` là `dashboard.controller.ts:142` — một endpoint HTTP thủ công. `grep @SystemJobHandler` ⇒ có handler cho CHAT · files · retention, **KHÔNG có cái nào cho dashboard** ⇒ MV chỉ mới khi ai đó bấm tay.",
+      "Hệ quả thật: dashboard hiển thị số CŨ mà không có dấu hiệu gì. Lần đo trước từng thấy lệch 56→54 hàng / 38→37 tenant.",
+      "Khuôn bắt chước: `foundation/retention/retention-cleanup.job-handler.ts` + `foundation/files/temp-file-cleanup.job-handler.ts`. KHÔNG cần migration (hàm SQL đã có từ 0534) ⇒ WO này chạy song song được.",
+    ],
+    done_when: [
+      "Có `@SystemJobHandler()` làm mới MV theo lịch, đăng ký đúng khuôn hiện hành (khai trong `providers`, SchedulerModule tự gom)",
+      "Chu kỳ chạy là hằng số có tên + cấu hình được, không phải số ma rải trong code",
+      "Refresh hỏng phải NỔI LÊN (log lỗi + ghi `system_job_runs`) — cấm nuốt: service hiện tại cố tình KHÔNG bọc `.catch` (docblock dòng 66, bài học KI-034), giữ nguyên tinh thần đó",
+      "Endpoint bấm tay vẫn chạy được (không thay thế, chỉ thôi là đường DUY NHẤT)",
+      "Có ca chứng minh job thật sự làm dữ liệu mới đi (đo hàng trước/sau), không chỉ chứng minh 'job có chạy'",
+      "KI-017 cập nhật ở RELEASE-02: ghi rõ nửa privilege đã đóng từ mig 0534, nửa lịch chạy đóng ở WO này",
+    ],
+    notes: [
+      "🔴 CÙNG BẪY với S10-ATT-NOTIPROD-1: `@SystemJobHandler()` cần `@Optional()` ở tham số DI, thiếu ⇒ sập AppModule + 100+ spec đỏ dây chuyền.",
+      "Nếu chạy CÙNG WAVE với S10-ATT-NOTIPROD-1 thì hai WO đều thêm job handler: KHÁC file, KHÁC module ⇒ không xung đột, nhưng cả hai cùng chạm SchedulerModule về mặt hành vi — chạy check cuối cùng sau khi cả hai land.",
+    ],
+  },
 ];
