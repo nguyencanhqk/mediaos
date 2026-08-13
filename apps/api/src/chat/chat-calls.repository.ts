@@ -354,9 +354,15 @@ export class ChatCallsRepository {
    * dòng audit cho mỗi cuộc gọi cũ). Đóng đinh bởi ca "gỡ người sau khi cuộc gọi đã kết thúc ⇒ 0 hàng
    * audit" (§5.4 đột biến `i`).
    *
-   * ⚠️ `joinedAt` PHẢI có trong kết quả: nó là thứ DUY NHẤT quyết định kết cục ở bước sau
-   * (`left` cho người đã vào, `missed` cho người chưa nhấc máy) — và ghi sai ở đó là VĨNH VIỄN, vì kết
-   * cục hấp thụ + bảng không có DELETE.
+   * ⚠️ **PHẢI trả CẢ `joinedAt` LẪN `acceptedAt`** — kết cục ở bước sau là vị từ **KÉP**, không phải
+   * một vế. `joinedAt` một mình là SAI: `insertParticipants` đặt `joined_at = now` cho **người khởi tạo
+   * ngay lúc MỜI** (chưa ai nhấc máy), nên một cuộc gọi còn `ringing` đã có sẵn một hàng `joined_at`
+   * khác NULL. Lấy đó làm "đã vào rồi rời" là đóng dấu `'left'` lên người chưa hề nói chuyện với ai —
+   * ghi sai VĨNH VIỄN (kết cục hấp thụ + bảng không có DELETE).
+   *
+   * `acceptedAt` là vế "cuộc gọi có TỪNG nối máy không", CÙNG vị từ mà `hangup` dùng
+   * (`chat-calls.service.ts`: `wasConnected = call.acceptedAt !== null`) và cùng luật mà docblock
+   * `closeOpenParticipants` viết ra cho `reject`/`cancel`. Ba đường phải nói cùng một thứ.
    *
    * `SELECT` trần (KHÔNG `FOR UPDATE`): đường này và `hangup` chỉ giao nhau ở MỘT tài nguyên
    * (`chat_call_participants`) nên là CHỜ, không phải ôm chéo. Hệ quả: hàng có thể bị đóng bởi một tx
@@ -368,11 +374,13 @@ export class ChatCallsRepository {
     companyId: string,
     roomId: string,
     userId: string,
-  ): Promise<{ callId: string; joinedAt: Date | null }[]> {
+  ): Promise<{ callId: string; joinedAt: Date | null; acceptedAt: Date | null }[]> {
     const rows = await tx
       .select({
         callId: chatCallParticipants.callId,
         joinedAt: chatCallParticipants.joinedAt,
+        // Cột của `chat_calls` — JOIN đã có sẵn nên vế này tốn 0 đồng.
+        acceptedAt: chatCalls.acceptedAt,
       })
       .from(chatCallParticipants)
       .innerJoin(
@@ -395,7 +403,11 @@ export class ChatCallsRepository {
       // `orderBy` thì hai lần chạy cùng dữ liệu cho hai thứ tự khác nhau, và ca test thành xác suất.
       .orderBy(chatCallParticipants.callId);
 
-    return rows.map((r) => ({ callId: r.callId, joinedAt: r.joinedAt }));
+    return rows.map((r) => ({
+      callId: r.callId,
+      joinedAt: r.joinedAt,
+      acceptedAt: r.acceptedAt,
+    }));
   }
 
   /** Người tham gia của một cuộc gọi, thứ tự ỔN ĐỊNH theo lúc được mời (DTO không nhảy chỗ giữa các lần đọc). */

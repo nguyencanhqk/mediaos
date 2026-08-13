@@ -81,7 +81,18 @@ export class ChatCallRoomExitService {
       // ⚠️ Ghi sai ở đây là VĨNH VIỄN: bốn kết cục là HẤP THỤ (`WHERE` của `setParticipantOutcome` chỉ
       // cho ghi tiếp khi `outcome IS NULL OR 'accepted'`) và bảng KHÔNG có DELETE (mig `0546` khối C chỉ
       // `GRANT SELECT, INSERT` + column-GRANT). Không có vòng hai, không có đường lùi bằng revert code.
-      const joined = row.joinedAt !== null;
+      // ⚠️ **Vị từ KÉP — bỏ vế thứ hai là lỗi ĐÃ XẢY RA ở vòng gate (security-reviewer, 13/08).**
+      // `insertParticipants` đặt `joined_at = now` cho **người khởi tạo ngay lúc MỜI** (họ "tự vào cuộc
+      // gọi của chính mình"), nên một cuộc gọi còn `ringing` LUÔN đã có sẵn một hàng `joined_at` khác
+      // NULL. Lấy đó làm "đã vào rồi rời" là đóng dấu `'left'` + `left_at` lên người **chưa hề nói
+      // chuyện với ai** — ca tới được không cần quyền gì: A mời → `ringing` → A tự bấm
+      // `POST /rooms/:id/leave`.
+      //
+      // Vế `accepted_at` là CÙNG vị từ mà `hangup` dùng (`wasConnected = call.acceptedAt !== null`) và
+      // cùng luật mà docblock `closeOpenParticipants` viết ra cho `reject`/`cancel`. Ba đường phải nói
+      // cùng một thứ. Detector: ca "NGƯỜI KHỞI TẠO trên cuộc gọi còn ringing ⇒ missed" (đột biến `j`).
+      const wasConnected = row.acceptedAt !== null;
+      const joined = row.joinedAt !== null && wasConnected;
       const outcome = joined ? "left" : "missed";
 
       const ok = await this.calls.setParticipantOutcome(
@@ -99,9 +110,16 @@ export class ChatCallRoomExitService {
       // KHÔNG audit (không có gì xảy ra để mà ghi) và KHÔNG đưa vào danh sách phát: một `peer-left` cho
       // một phần tham gia mà tx này không hề đóng là nói dối về nguyên nhân.
       if (!ok) {
-        this.logger.debug(
-          `closeCallParticipationOnRoomExit: hàng participant đã đóng trước đó — bỏ qua ` +
-            `(callId=${row.callId} userId=${userId})`,
+        // ⚠️ **`warn`, KHÔNG phải `debug`** (FULL gate `silent-failure-hunter`, 13/08). Đây là nhánh
+        // DUY NHẤT phát hiện "một lần gỡ thành viên KHÔNG đóng được phần tham gia" — và khi nó chạy thì
+        // `closed` rỗng ⇒ KHÔNG evict, KHÔNG `peer-left`, tức **đúng cái lỗ WO này vá đang tái mở** cho
+        // lần đó. Thiết kế giả định nó HIẾM (đua với `hangup` của chính nạn nhân); nếu giả định đó sai —
+        // predicate hỏng, hai request trùng, admin bấm hai lần — thì ở mức `debug` (không thu ở
+        // production) sẽ KHÔNG AI BIẾT. `warn` chứ không `error`: fail-safe theo thiết kế, nhưng phải
+        // đếm được.
+        this.logger.warn(
+          `closeCallParticipationOnRoomExit: hàng participant đã đóng bởi tx khác — KHÔNG evict, ` +
+            `KHÔNG phát peer-left cho lần này (callId=${row.callId} userId=${userId} roomId=${roomId})`,
         );
         continue;
       }

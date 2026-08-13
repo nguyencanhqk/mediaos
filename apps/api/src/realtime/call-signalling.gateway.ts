@@ -680,13 +680,10 @@ export class CallSignallingGateway {
       // luôn lớp B, dù cuộc gọi còn sống hay đã kết thúc. Ternary chỉ là bộ lọc CHI PHÍ (khi
       // `access ≠ null` thì `!actorIsParticipant` đã kéo theo `wasCallParticipant = false` — cùng bảng,
       // cùng khoá), nên bỏ nó đi hành vi không đổi. Chỗ ĐO ranh giới là ca đối chứng 1b của int-spec.
+      const frameCallId = (parsed.data as { callId: string }).callId;
       const wasFormerParticipant = access
         ? false
-        : await this.signal.wasCallParticipant(
-            state.user.companyId,
-            (parsed.data as { callId: string }).callId,
-            state.user.id,
-          );
+        : await this.signal.wasCallParticipant(state.user.companyId, frameCallId, state.user.id);
 
       if (!wasFormerParticipant && classifyMissingParticipant(event) === "probe") {
         await this.deny(client, state, event, "not_participant");
@@ -695,12 +692,14 @@ export class CallSignallingGateway {
         // người chưa từng được mời; (2) BẤT KỲ sự kiện nào của người TỪNG là participant nhưng vừa bị gỡ
         // khỏi phòng. Im lặng với CLIENT là đúng, im lặng với NGƯỜI VẬN HÀNH thì không — đây là một
         // trong hai lý do khiến FE "bấm gọi mà không thấy gì", và nó phải tra được khi bật debug.
+        // `callId` BẮT BUỘC trong dòng log: một người có thể ở nhiều cuộc gọi gần nhau, và khiếu nại
+        // luôn ở dạng "tín hiệu của tôi rớt ở CUỘC GỌI NÀY" — thiếu nó thì dòng log không tự đủ để tra.
         this.logger.debug(
           `/ws-call: bỏ ${event} — ` +
             (wasFormerParticipant
               ? "actor TỪNG là người tham gia nhưng không còn thuộc phòng (đua vòng đời, KHÔNG phạt)"
               : "không có hàng participant") +
-            ` (userId=${state.user.id})`,
+            ` (userId=${state.user.id} callId=${frameCallId})`,
         );
       }
       return null;

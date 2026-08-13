@@ -30,8 +30,12 @@ const ACTOR = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const CALL = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const NOW = new Date("2026-08-13T03:00:00.000Z");
 
+/** Cuộc gọi ĐÃ TỪNG nối máy — vế thứ hai của vị từ kép (`chat_calls.accepted_at`). */
+const ACCEPTED_AT = new Date("2026-08-13T02:58:00.000Z");
+const JOINED_AT = new Date("2026-08-13T02:59:00.000Z");
+
 function build(opts: {
-  open?: { callId: string; joinedAt: Date | null }[];
+  open?: { callId: string; joinedAt: Date | null; acceptedAt: Date | null }[];
   outcomeWritten?: boolean;
 }) {
   const calls = {
@@ -47,7 +51,7 @@ function build(opts: {
 
 describe("closeCallParticipationOnRoomExit — kết cục theo TỪNG HÀNG", () => {
   it("người ĐÃ vào cuộc gọi (`joined_at` có) ⇒ `left` + `left_at` được đặt", async () => {
-    const t = build({ open: [{ callId: CALL, joinedAt: new Date("2026-08-13T02:59:00.000Z") }] });
+    const t = build({ open: [{ callId: CALL, joinedAt: JOINED_AT, acceptedAt: ACCEPTED_AT }] });
     await t.run();
 
     expect(t.calls.setParticipantOutcome).toHaveBeenCalledTimes(1);
@@ -62,7 +66,7 @@ describe("closeCallParticipationOnRoomExit — kết cục theo TỪNG HÀNG", (
    * KHÔNG SỬA LẠI ĐƯỢC (bảng không có DELETE). Ghi cứng `'left'` cho mọi hàng làm ca này ĐỎ.
    */
   it("người ĐANG ĐỔ CHUÔNG (`joined_at IS NULL`) ⇒ `missed`, và `left_at` KHÔNG được đặt", async () => {
-    const t = build({ open: [{ callId: CALL, joinedAt: null }] });
+    const t = build({ open: [{ callId: CALL, joinedAt: null, acceptedAt: null }] });
     await t.run();
 
     const args = t.calls.setParticipantOutcome.mock.calls[0] as unknown[];
@@ -72,12 +76,34 @@ describe("closeCallParticipationOnRoomExit — kết cục theo TỪNG HÀNG", (
     expect(args[5]).toEqual({});
   });
 
+  /**
+   * 🔴 **Detector của HIGH-1 (FULL gate `security-reviewer`, 13/08).**
+   *
+   * `insertParticipants` đặt `joined_at = now` cho **NGƯỜI KHỞI TẠO ngay lúc MỜI** — họ "tự vào cuộc gọi
+   * của chính mình" trước khi ai kịp nhấc máy. Nên trên một cuộc gọi còn `ringing` LUÔN có sẵn một hàng
+   * `joined_at` khác NULL.
+   *
+   * Ca tới được, không cần quyền gì: A mời → `ringing` → A bấm `POST /rooms/:id/leave` (tự phục vụ).
+   * Với vị từ MỘT VẾ (`joinedAt !== null`), hàng A bị ghi `'left'` + `left_at` — đóng dấu "đã nghe máy
+   * rồi cúp" lên người **chưa hề nói chuyện với ai**, và kết cục là HẤP THỤ nên SAI VĨNH VIỄN.
+   *
+   * Bỏ vế `row.acceptedAt !== null` làm ca này ĐỎ. Đây là **đột biến `j`** của bảng §5.4.
+   */
+  it("NGƯỜI KHỞI TẠO trên cuộc gọi còn `ringing` (`joined_at` có, `accepted_at` NULL) ⇒ `missed`", async () => {
+    const t = build({ open: [{ callId: CALL, joinedAt: JOINED_AT, acceptedAt: null }] });
+    await t.run();
+
+    const args = t.calls.setParticipantOutcome.mock.calls[0] as unknown[];
+    expect(args[4], "chưa ai nhấc máy thì KHÔNG có ai 'đã vào rồi rời'").toBe("missed");
+    expect(args[5], "…và không có mốc rời").toEqual({});
+  });
+
   it("hai cuộc gọi, hai kết cục KHÁC nhau — không có một hằng nào cho cả lô", async () => {
     const CALL_2 = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
     const t = build({
       open: [
-        { callId: CALL, joinedAt: new Date("2026-08-13T02:59:00.000Z") },
-        { callId: CALL_2, joinedAt: null },
+        { callId: CALL, joinedAt: JOINED_AT, acceptedAt: ACCEPTED_AT },
+        { callId: CALL_2, joinedAt: null, acceptedAt: null },
       ],
     });
     const closed = await t.run();
@@ -97,7 +123,10 @@ describe("closeCallParticipationOnRoomExit — hàng đã bị đóng bởi tx k
    * (nói dối về một hành động không diễn ra) và không được phát `peer-left` (nói dối về nguyên nhân).
    */
   it("`setParticipantOutcome` trả FALSE ⇒ 0 hàng audit VÀ mảng trả về RỖNG", async () => {
-    const t = build({ open: [{ callId: CALL, joinedAt: null }], outcomeWritten: false });
+    const t = build({
+      open: [{ callId: CALL, joinedAt: null, acceptedAt: null }],
+      outcomeWritten: false,
+    });
     const closed = await t.run();
 
     expect(t.audit.record).not.toHaveBeenCalled();
@@ -108,8 +137,8 @@ describe("closeCallParticipationOnRoomExit — hàng đã bị đóng bởi tx k
     const CALL_2 = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
     const calls = {
       findOpenParticipantCallsInRoom: vi.fn(async () => [
-        { callId: CALL, joinedAt: null },
-        { callId: CALL_2, joinedAt: null },
+        { callId: CALL, joinedAt: null, acceptedAt: null },
+        { callId: CALL_2, joinedAt: null, acceptedAt: null },
       ]),
       // Hàng đầu thua đua, hàng sau ghi được.
       setParticipantOutcome: vi
@@ -147,7 +176,7 @@ describe("closeCallParticipationOnRoomExit — không có cuộc gọi nào", ()
 
 describe("closeCallParticipationOnRoomExit — hàng audit", () => {
   it("nói rõ AI làm (`actorUserId`) và LÀM LÊN AI (`newValues.userId`) — hai vai khác nhau", async () => {
-    const t = build({ open: [{ callId: CALL, joinedAt: null }] });
+    const t = build({ open: [{ callId: CALL, joinedAt: null, acceptedAt: null }] });
     await t.run();
 
     expect(t.audit.record).toHaveBeenCalledTimes(1);
