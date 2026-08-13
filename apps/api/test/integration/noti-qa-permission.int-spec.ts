@@ -45,6 +45,7 @@ import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.fil
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { internalKeyFixture } from "../helpers/fixture-secrets";
 import {
   cleanupTenants,
   seedCompany,
@@ -59,9 +60,7 @@ process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-".padEnd(40, "0"
 
 const runDb = hasDb && Boolean(process.env.LANE_DB);
 const PASSWORD = "Passw0rd!test99";
-// Ghép chuỗi để KHÔNG lọt secret-scan (gitleaks generic-api-key) — đây là internal-key test ephemeral,
-// KHÔNG phải secret thật (chỉ dùng trong int-spec để giả header x-internal-key).
-const INTERNAL_KEY = ["test-internal-key", "noti-qa-1"].join("-");
+const INTERNAL_KEY = internalKeyFixture("noti-qa-1");
 const COMPANY_ADMIN_ROLE = "00000000-0000-0000-0000-000000000001";
 const EMPLOYEE_ROLE = "00000000-0000-0000-0000-000000000008";
 const NOT_FOUND_CODE = "NOTI-ERR-NOTIFICATION-NOT-FOUND";

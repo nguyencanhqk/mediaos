@@ -44,10 +44,11 @@ import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.fil
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { internalKeyFixture } from "../helpers/fixture-secrets";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-".padEnd(40, "0");
-const INTERNAL_KEY = "test-internal-key-noti-be-2";
+const INTERNAL_KEY = internalKeyFixture("noti-be-2");
 const PASSWORD = "Passw0rd!test99";
 const runDb = hasDb && Boolean(process.env.LANE_DB);
 

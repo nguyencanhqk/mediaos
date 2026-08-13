@@ -50,6 +50,7 @@ import {
   type OutboxWorkerLock,
 } from "../helpers/outbox-worker-lock";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { internalKeyFixture } from "../helpers/fixture-secrets";
 import {
   cleanupTenants,
   seedCompany,
@@ -63,7 +64,7 @@ import {
 } from "../helpers/seed";
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-".padEnd(40, "0");
-const INTERNAL_KEY = "test-internal-key-int-2";
+const INTERNAL_KEY = internalKeyFixture("int-2");
 const PASSWORD = "Passw0rd!test99";
 const runDb = hasDb && Boolean(process.env.LANE_DB);
 

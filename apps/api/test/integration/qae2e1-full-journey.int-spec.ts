@@ -39,6 +39,7 @@ import {
   type OutboxWorkerLock,
 } from "../helpers/outbox-worker-lock";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
+import { internalKeyFixture } from "../helpers/fixture-secrets";
 import {
   cleanupTenants,
   seedCompany,
@@ -55,7 +56,7 @@ process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-".padEnd(40, "0"
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 // Ghép chuỗi để KHÔNG lọt secret-scan gitleaks (mật khẩu/khoá test ephemeral, không phải secret thật).
 const PASSWORD = ["Passw0rd", "qae2e1full"].join("!");
-const INTERNAL_KEY = ["test-internal-key", "qae2e1"].join("-");
+const INTERNAL_KEY = internalKeyFixture("qae2e1");
 
 type Scope = "Own" | "Team" | "Company";
 type Pair = [action: string, resourceType: string, scope: Scope, isSensitive?: boolean];

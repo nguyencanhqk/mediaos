@@ -43,6 +43,7 @@ import { MasterDataSeederRegistry } from "../foundation/seed/master-data-seeder.
 import { SeedTrackingService } from "../foundation/seed/seed-tracking.service";
 import { AttMasterDataSeeder } from "./att-master-data.seeder";
 import { directPool, hasDb } from "../../test/helpers/integration-db";
+import { internalKeyFixture } from "../../test/helpers/fixture-secrets";
 import {
   cleanupTenants,
   seedCompany,
@@ -56,7 +57,7 @@ import {
 
 const runDb = hasDb && Boolean(process.env.LANE_DB);
 const LOGIN_PW = "Passw0rd!test99";
-const INTERNAL_KEY = "s3-int-1-test-internal-key";
+const INTERNAL_KEY = internalKeyFixture("s3-int-1");
 
 type Scope = "Own" | "Team" | "Company";
 type Pair = [action: string, resource: string, scope: Scope, sensitive?: boolean];

@@ -28,13 +28,14 @@ import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.fil
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { internalKeyFixture } from "../helpers/fixture-secrets";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-".padEnd(40, "0");
 
 // Fixture giống-secret: GHÉP CHUỖI, không literal high-entropy (CLAUDE.md §5 — gitleaks generic-api-key).
 const NOTI_TOKEN = ["test", "lms", "noti", "token"].join("-").padEnd(48, "z");
-const INTERNAL_KEY = ["test", "internal", "key", "lmsnoti1"].join("-");
+const INTERNAL_KEY = internalKeyFixture("lmsnoti1");
 const PASSWORD = "Passw0rd!test99";
 const runDb = hasDb && Boolean(process.env.LANE_DB);
 
