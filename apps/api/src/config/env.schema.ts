@@ -228,6 +228,26 @@ export const envSchema = z
     // claude-sonnet-4-6 = lựa chọn rẻ/nhanh hơn. Giá trị ngoài enum bị reject ở boundary (fail-fast cấu hình).
     AI_MODEL: z.enum(["claude-opus-4-8", "claude-sonnet-4-6"]).default("claude-opus-4-8"),
 
+    // ── Route nội bộ máy-gọi-máy `/internal/v1/**` (InternalGuard) — KI-031 ──────────────────────────
+    // Khoá mà bên gọi trình qua header `x-internal-key`. Ba nhóm route sống sau nó: recalculate chấm
+    // công thủ công/retry (`attendance-internal.controller`), nạp lại cache dashboard
+    // (`internal-dashboard-cache.controller`), và intake sự kiện NOTI (`internal-notifications.controller`).
+    // Cả ba ĐÃ đứng sau chuỗi JwtAuthGuard→CompanyGuard→PermissionGuard; khoá này là lớp thứ hai.
+    //
+    // OPTIONAL là LỰA CHỌN, không phải bỏ sót — đừng "siết cho chặt" thành required: `InternalGuard` đã
+    // fail-CLOSED khi biến vắng (403 mọi route `/internal/**`, xem `internal.guard.ts:23`). Ép required
+    // chỉ đổi "mất một tính năng" thành "SẬP BOOT cả API" trên mọi máy dev/CI/lane chưa đặt biến — đắt
+    // hơn hẳn thứ nó mua được. Cùng posture với LMS_NOTI_TOKEN / ANTHROPIC_API_KEY ngay dưới đây.
+    //
+    // ⚠️ Cái giá của posture đó: thiếu biến ⇒ 3 nhóm route trên chết 403 mà tín hiệu duy nhất là một dòng
+    // warn lúc có request đầu tiên. Đo 13/08/2026: KHÔNG file .env nào trong repo đặt nó ⇒ ba nhóm route
+    // đó đang tắt trên chính máy này. Khai ở đây để nó CÓ MẶT trong hồ sơ cấu hình — đúng lý do KI-029
+    // buộc phải khai PERMISSION_GUARD_ENABLED: một biến không nằm trong hồ sơ nào là một biến không ai biết.
+    //
+    // `.min(32)`: khoá do CHÍNH TA sinh (khác CLOUDFLARE_TURN_* — khoá bên thứ ba, độ dài do họ quy định)
+    // nên áp được sàn độ dài. An toàn với deployment hiện có vì chưa nơi nào đặt giá trị (đã đo).
+    INTERNAL_API_KEY: z.string().min(32).optional(),
+
     // ── Tích hợp LMS (fmc-app) — cầu SSO Giai đoạn A ─────────────────────────────────────────────────
     // Shared secret HMAC với LMS (MEDIAOS_SSO_SECRET phía LMS). OPTIONAL để API boot khi chưa cấu hình —
     // endpoint sso-link fail-fast 503 khi dùng (mirror ANTHROPIC_API_KEY). BẤT BIẾN #3: không hardcode/log.
