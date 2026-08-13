@@ -440,6 +440,10 @@ export class ChatRoomsService {
       membership: [{ userId: actor.id, action: "leave" }],
     });
     for (const callId of result.closedCallIds) {
+      // Evict LẦN HAI — đóng cửa sổ REJOIN (một `call:join` chạy trong khe giữa evict-trong-tx và COMMIT
+      // vẫn đọc được trạng thái CŨ và tự đưa mình trở lại `callRoomName`). Lập luận đầy đủ + phần dư
+      // chưa đóng: docblock cùng vị trí ở `chat-members.service.ts`. Idempotent; đặt TRƯỚC `peer-left`.
+      this.realtime.evictFromCallRoom(actor.companyId, callId, actor.id);
       this.realtime.emitCallPeerLeft(actor.companyId, callId, actor.id);
     }
     return { left: true };

@@ -391,10 +391,23 @@ export class RealtimeEmitterService {
    * S7-CALL-RT-FIX-2 (B4 vế AN NINH) — kéo mọi socket `/ws-call` của một người RA KHỎI room chung của
    * một cuộc gọi. Room-ops, KHÔNG phát payload nào.
    *
-   * ⚠️ **GỌI TRONG TRANSACTION của caller** — đây là ngoại lệ của luật "mọi method ở service này gọi sau
-   * commit", và nó CÙNG LẬP LUẬN với `severUserSessions` ngay trên: đặt sau commit là để hở đúng cửa sổ
-   * mà bản vá dựng ra để đóng. Rollback sau khi đã evict là chiều FAIL-SAFE (suy giảm UX), sót một socket
-   * là RÒ.
+   * ⚠️ **GỌI HAI LẦN mỗi thao tác rời phòng: một TRONG TRANSACTION của caller, một SAU COMMIT.** Đây là
+   * ngoại lệ của luật "mọi method ở service này gọi sau commit" — và là ngoại lệ ở CẢ HAI đầu, nên đừng
+   * "gọn hoá" xuống một lần:
+   *
+   *  • **trong tx** — cùng lập luận với `severUserSessions` ngay trên: đặt SAU commit thì để hở đúng cửa
+   *    sổ `media-state`/`screen-state` mà bản vá dựng ra để đóng. Rollback sau khi đã evict là chiều
+   *    FAIL-SAFE (suy giảm UX), còn sót một socket là RÒ.
+   *  • **sau commit** — đóng CỬA SỔ REJOIN: trong khe giữa lần evict thứ nhất và COMMIT, gateway xử một
+   *    `call:join` ở tx khác đọc READ COMMITTED nên CHƯA thấy `left_at`/`outcome` mới ⇒ nó chấp nhận
+   *    join và `socketsJoin` đưa socket đó TRỞ LẠI room chung. Không có lần thứ hai thì kênh mở lại tới
+   *    khi socket rớt. Room-ops idempotent nên lần thừa vô hại.
+   *
+   * Cặp số (1 lần khi commit hỏng · 2 lần khi commit OK) được đóng đinh ở
+   * `chat-realtime-after-commit.spec.ts` — dời một trong hai vế đi là ĐỎ.
+   *
+   * ⚠️ Phần dư CHƯA đóng: một `call:join` đọc DB trước commit nhưng chạy `socketsJoin` sau lần evict thứ
+   * hai thì vẫn lọt. Đóng hẳn phải khoá hàng participant ở đường join — ngoài phạm vi S7-CALL-RT-FIX-2.
    *
    * ┌─ VÌ SAO KHÔNG ĐỦ NẾU CHỈ ĐÓNG `chat_call_participants` ────────────────────────────────────────┐
    * │ Đóng participant làm người bị gỡ rơi khỏi `activeUserIds` ⇒ `assertPeer` chặn được SDP/ICE (ba  │

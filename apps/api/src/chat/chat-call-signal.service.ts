@@ -58,11 +58,22 @@ export interface ChatCallSignalAccess {
  *
  * **Chi phí, theo NHÁNH** (S7-CALL-RT-FIX-2 — con số, không phải lời trấn an):
  *  • đường THÀNH CÔNG: 2 truy vấn điểm mỗi khung (`assertCallAccess` + `listParticipants`) — không đổi;
- *  • nhánh TỪ CHỐI (`assertCallAccess` ném ⇒ `resolveSignalAccess` trả `null`): 1 → **2**, vì gateway
- *    gọi thêm `wasCallParticipant`. Trần thực tế: `chargeFrame` cho 360 khung/socket/10 s và
- *    `CHAT_CALL_CONNECT_MAX_PER_MIN = 30` socket/người/phút ⇒ xấu nhất 30 × 360 = **10.800 truy vấn
- *    phụ/người/phút**. Chấp nhận được ở một truy vấn điểm theo khoá chính, nhưng ai nới hai trần đó
- *    phải tính lại con số này.
+ *  • nhánh TỪ CHỐI: 🔴 **KHÔNG được đọc thành "1 → 2 mỗi khung"**. Thứ đổi nhiều nhất là SỐ KHUNG chạm
+ *    DB, không phải số truy vấn trên mỗi khung. TRƯỚC bản vá, người bị gỡ rơi vào lớp B ngay khung ĐẦU:
+ *    `deny()` đặt `state.violated = true` rồi NGẮT, và mọi khung sau ngắn mạch ở `handleFrame`
+ *    (`if (state.violated) return null`) với **0** truy vấn ⇒ **1 truy vấn cho cả đời một socket**;
+ *    với `CHAT_CALL_CONNECT_MAX_PER_MIN = 30` socket/người/phút ⇒ **~30 truy vấn/người/phút**.
+ *    SAU bản vá họ là lớp C: **không** `violated`, **không** bị ngắt ⇒ socket SỐNG, và mỗi khung tới
+ *    được DB tốn 2 truy vấn.
+ *    ⚠️ Trần đúng là `CALL_SIGNAL_FRAMES_PER_WINDOW` = **120 khung/socket/10 s, KHÔNG phải 360**: khung
+ *    121–360 nhận verdict `"drop"` và `handleFrame` `return null` ngay ở bước (1) — **trước** bước (5)
+ *    đọc DB; 360 (`× CALL_SIGNAL_HARD_MULTIPLIER`) chỉ là ngưỡng NGẮT, không phải trần truy vấn.
+ *    ⇒ 120 × 6 cửa sổ × 2 = **1.440 truy vấn/socket/phút**, DUY TRÌ ĐƯỢC (không tự tắt như trước), và
+ *    socket còn CỘNG DỒN ở 30 socket mới/người/phút — chặn trên là TTL của access-token, vì sau bản vá
+ *    `scheduleTokenExpiry` mới là thứ đóng một socket lớp C.
+ *    Đây là cái GIÁ CÓ CHỦ ĐÍCH của việc thôi đóng dấu người vô tội (bảng append-only, không job dọn —
+ *    xem `S7-CALL-RT-FIX-2` §0.3). Ai nới `CALL_SIGNAL_*` hoặc `CHAT_CALL_CONNECT_MAX_PER_MIN` phải
+ *    tính lại con số này.
  */
 @Injectable()
 export class ChatCallSignalService {

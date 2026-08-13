@@ -202,6 +202,26 @@ describe("emit SAU COMMIT — ChatMembersService", () => {
     expect(realtime.emitCallPeerLeft).toHaveBeenCalledWith(COMPANY, CALL, TARGET);
   });
 
+  /**
+   * 🔴 S7-CALL-RT-FIX-2 — CỬA SỔ REJOIN. `evictFromCallRoom` phải chạy **HAI** lần trên đường thành
+   * công: một trong tx (đóng ngay, fail-safe nếu rollback) và một SAU commit.
+   *
+   * Vế thứ hai không phải phòng xa: giữa evict-trong-tx và COMMIT, một tx khác (gateway xử `call:join`)
+   * đọc READ COMMITTED nên chưa thấy `left_at`/`outcome` mới ⇒ nó chấp nhận join và `socketsJoin` đưa
+   * nạn nhân TRỞ LẠI `callRoomName`; không có lần evict thứ hai thì `media-state`/`screen-state` mở lại
+   * tới khi socket rớt. Gỡ lần evict sau-commit làm ca này ĐỎ (2 → 1) — đó là toàn bộ lý do nó tồn tại.
+   *
+   * Cặp với ca "COMMIT hỏng → 1 lần" ở trên: chính CẶP SỐ (1 khi hỏng, 2 khi OK) mới đóng đinh được cả
+   * hai vế. Một mình `toHaveBeenCalled()` thì dời evict đi đâu cũng xanh.
+   */
+  it("removeMember: POSITIVE CONTROL — commit OK thì evictFromCallRoom chạy ĐÚNG 2 lần (trong tx + sau commit)", async () => {
+    const { svc, realtime } = build(false);
+    await svc.removeMember(ACTOR, ROOM, TARGET);
+    expect(realtime.evictFromCallRoom).toHaveBeenCalledTimes(2);
+    expect(realtime.evictFromCallRoom).toHaveBeenNthCalledWith(1, COMPANY, CALL, TARGET);
+    expect(realtime.evictFromCallRoom).toHaveBeenNthCalledWith(2, COMPANY, CALL, TARGET);
+  });
+
   it("addMember: COMMIT hỏng → KHÔNG emit gì", async () => {
     const { svc, realtime } = build(true, false);
     await expect(
@@ -392,6 +412,8 @@ describe("emit SAU COMMIT — ChatRoomsService.createGroup", () => {
     const { svc, realtime } = build(true);
     await expect(svc.leaveRoom(ACTOR, ROOM)).rejects.toThrow(/COMMIT/);
     expect(totalCalls(realtime)).toBe(0);
+    // SỐ LẦN, không chỉ đối số: thiếu nó thì dời vế sau-commit lên trước commit vẫn xanh ở ca này.
+    expect(realtime.evictFromCallRoom).toHaveBeenCalledTimes(1);
     expect(realtime.evictFromCallRoom).toHaveBeenCalledWith(COMPANY, CALL, ACTOR.id);
   });
 
@@ -401,6 +423,15 @@ describe("emit SAU COMMIT — ChatRoomsService.createGroup", () => {
     expect(realtime.emitCallPeerLeft).toHaveBeenCalledTimes(1);
     // Người bị đóng ở cửa này là CHÍNH actor (khác `removeMember`, nơi đó là người thứ ba).
     expect(realtime.emitCallPeerLeft).toHaveBeenCalledWith(COMPANY, CALL, ACTOR.id);
+  });
+
+  /** Cửa sổ REJOIN ở cửa vào THỨ HAI — lập luận đầy đủ ở ca cùng tên của `ChatMembersService`. */
+  it("leaveRoom: POSITIVE CONTROL — commit OK thì evictFromCallRoom chạy ĐÚNG 2 lần (trong tx + sau commit)", async () => {
+    const { svc, realtime } = build(false);
+    await svc.leaveRoom(ACTOR, ROOM);
+    expect(realtime.evictFromCallRoom).toHaveBeenCalledTimes(2);
+    expect(realtime.evictFromCallRoom).toHaveBeenNthCalledWith(1, COMPANY, CALL, ACTOR.id);
+    expect(realtime.evictFromCallRoom).toHaveBeenNthCalledWith(2, COMPANY, CALL, ACTOR.id);
   });
 });
 

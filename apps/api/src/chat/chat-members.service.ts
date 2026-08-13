@@ -257,6 +257,18 @@ export class ChatMembersService {
     // SAU commit — ngược chiều với `evictFromCallRoom` ở trên, CÓ CHỦ ĐÍCH: phát `peer-left` trước commit
     // rồi rollback là nói dối với người còn lại (họ phá `RTCPeerConnection` cho một người chưa hề rời).
     for (const callId of result.closedCallIds) {
+      // 🔴 Evict LẦN HAI — đóng CỬA SỔ REJOIN. Vế trong-tx ở trên một mình là CHƯA ĐỦ: giữa lúc nó chạy
+      // và lúc COMMIT, một tx khác (gateway xử `call:join`) đọc ở READ COMMITTED nên CHƯA thấy `left_at`
+      // / `outcome` mới ⇒ join được chấp nhận và `socketsJoin` đưa socket nạn nhân TRỞ LẠI
+      // `callRoomName`. Không có lần evict thứ hai thì kênh `media-state`/`screen-state` mở lại và ở
+      // nguyên đó tới khi socket rớt — đúng chiều rò mà WO này dựng ra để đóng.
+      // `socketsLeave` idempotent nên gọi thừa là vô hại. Chạy TRƯỚC `emitCallPeerLeft` để một socket
+      // vừa lọt vào không kịp nhận thêm khung nào.
+      //
+      // ⚠️ KHÔNG bằng 0: một `call:join` đọc DB TRƯỚC commit nhưng chạy `socketsJoin` SAU lần evict này
+      // thì vẫn lọt. Cửa sổ hẹp hơn hẳn (chỉ còn phần giao của hai thao tác realtime, thay vì cả đoạn
+      // tx), nhưng đóng HẲN thì phải khoá hàng participant ở đường join — ngoài phạm vi WO này.
+      this.realtime.evictFromCallRoom(actor.companyId, callId, targetUserId);
       this.realtime.emitCallPeerLeft(actor.companyId, callId, targetUserId);
     }
     return { removed: true };
