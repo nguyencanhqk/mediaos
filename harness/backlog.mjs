@@ -12191,6 +12191,7 @@ export const backlog = [
     status: "todo",
     paths: [
       "apps/api/src/attendance/**",
+      "apps/api/src/notifications/notification-dedupe.const.ts",
       "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
       "harness/backlog.mjs",
     ],
