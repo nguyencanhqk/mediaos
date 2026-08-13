@@ -34,6 +34,7 @@ import { ChatAudienceReader } from "../../src/notifications/chat-audience.reader
 import { ChatMessagesRepository } from "../../src/chat/chat-messages.repository";
 import { directPool, hasDb } from "../helpers/integration-db";
 import { drainOutboxUntilSettled } from "../helpers/outbox-drain";
+import { withExpectedLoggerErrors } from "../helpers/expect-logged-errors";
 import {
   acquireOutboxWorkerLock,
   OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS,
@@ -570,7 +571,35 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-6 — thông báo CHAT (DB cô lập, đ
         actor_name: "Kẻ Gieo",
         unread_count: 1,
       });
-      await drain();
+
+      // S10-QA-LOGNOISE-1-FIX-A (KI-015, vòng 2) — ca này CỐ Ý gieo payload lệch để canh dead-letter LOUD
+      // (docblock trên). HỆ QUẢ TRỰC TIẾP của việc "kêu to" đó: `OutboxWorker.MAX_ATTEMPTS` (5) dòng ERROR
+      // "OutboxNotificationBridge […] intake THẤT BẠI" (bridge, mỗi lần retry) + đúng 1 dòng ERROR
+      // "DEAD-LETTER …" (LoggerAlertSink, khi hết lượt — xem outbox-worker.ts:deadLetter/alert.service.ts)
+      // — ĐÚNG-nhưng-ồn, không phải lỗi. Vòng 1 của WO này chỉ ghi bằng chứng vào docblock của bridge mà
+      // KHÔNG chạm tới nơi phát ⇒ 6 dòng đó vẫn in ra console mỗi lần chạy suite (đo lại 13/08/2026, đúng
+      // như review chỉ ra). `withExpectedLoggerErrors` biến CHÚNG thành ASSERT tại đúng nơi phát: khớp
+      // ĐÚNG số lần kỳ vọng thì nuốt (không in), KHÔNG khớp thì FORWARD nguyên vẹn — một lỗi THẬT khác
+      // xảy ra trong đúng cửa sổ `drain()` này (kể cả từ nhánh dead-letter-alert.service khi vượt
+      // ngưỡng) vẫn kêu to bình thường, không bị helper này che.
+      await withExpectedLoggerErrors(
+        [
+          {
+            label: "bridge intake THẤT BẠI × MAX_ATTEMPTS (ca 14, payload thiếu recipientUserId)",
+            match:
+              /^OutboxNotificationBridge\[chat\.message\.direct_sent\] intake THẤT BẠI \(event [^,]+, company [^)]+\): chat\.message\.direct_sent: payload THIẾU trường bắt buộc 'recipientUserId'/,
+            min: OutboxWorker.MAX_ATTEMPTS,
+            max: OutboxWorker.MAX_ATTEMPTS,
+          },
+          {
+            label: "DEAD-LETTER alert sau khi hết lượt (ca 14)",
+            match: /^DEAD-LETTER event=\S+ type=chat\.message\.direct_sent .*recipientUserId/,
+            min: 1,
+            max: 1,
+          },
+        ],
+        () => drain(),
+      );
 
       const dead = await direct.query(
         `SELECT d.error FROM dead_letter_events d JOIN outbox_events o ON o.id = d.event_id

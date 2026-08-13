@@ -31,7 +31,7 @@
 | KI-012 | Accepted-risk **D3**: widget headcount count-only xuyên phòng ban cho HR scope Department | S3 | Bảo mật (đã chấp nhận) | ❌ | ⚠️ cần chữ ký | Owner |
 | KI-013 | `refresh` / `resetPassword` không throttle (theo thiết kế, có mitigation) | S3 | Bảo mật (theo thiết kế) | ❌ | ❌ | — |
 | ~~KI-014~~ | **ĐÃ ĐÓNG 2026-07-27** (`S6-QA-CHUNK-1`) — truy được gốc: **bug ngược dòng `tinypool@1.1.1`**, `ProcessWorker.send()` chỉ chặn `isTerminating` chứ không kiểm tra kênh IPC đã đóng. **Ba đính chính so với mô tả cũ:** (1) KHÔNG phải "máy bất ổn ngẫu nhiên" — `pnpm test` đỏ **5/5**, tái hiện 100%; (2) KHÔNG phải file/suite thủ phạm — package nạn nhân đổi mỗi lần chạy (kể cả `console` 23 file, `web-core` 39 file); (3) KHÔNG phải lệch Node 24-local vs 22-CI — **Node 22 vẫn crash**; CI xanh vì runner chỉ 2–4 nhân ⇒ 1–3 worker, còn máy này 32 nhân ⇒ 31 worker/package. Vá = `harness/chunk-test.mjs` (chia chunk + hạ trần worker + chạy lại **chỉ** chunk chết vì hạ tầng), `check.sh` dùng trên Windows, CI giữ đường một-lần. Verify: `LANE_DB=mediaos_qachunk bash harness/check.sh --all` → **XANH** (lint+typecheck+test+build), **761/761 file spec** đối chiếu `vitest list`. Số đo đầy đủ: `docs/QA/evidence/S6-QA-CHUNK-1-KI-014-ROOT-CAUSE.md` | S2 | Hạ tầng test (local) | — | — | ✔ xong |
-| KI-015 | Nhiễu log `OutboxNotificationBridge … intake THẤT BẠI` khi chạy test | S3 | Vệ sinh test | ❌ | ❌ | Sprint 6 |
+| ~~KI-015~~ | **ĐÓNG 2026-08-13** (`S10-QA-LOGNOISE-1`, qua 3 vòng — lần đóng đầu bị Đội 3 bác vì màn hình vẫn in nhiễu) — truy GỐC bằng đo thật: nguồn DUY NHẤT là `chat-noti-e2e.int-spec.ts` ca 14 — spec CỐ Ý gieo payload lỗi để chứng minh bridge KHÔNG được im lặng nuốt hợp đồng lệch, ĐÃ tự assert dead-letter ⇒ hành vi ĐÚNG-nhưng-ồn, không phải lỗi; nay ĐÃ vá TẠI NƠI PHÁT bằng `withExpectedLoggerErrors` (assert đúng số dòng, không bịt miệng toàn cục) ⇒ đo lại (LANE_DB cô lập riêng, 20 file/381 test `*noti*int-spec.ts`) = **0 dòng nhiễu**, không còn nợ cosmetic. Chi tiết ở mục dưới | S3 | Vệ sinh test | ❌ | — | **ĐÓNG** — `S10-QA-LOGNOISE-1` |
 | ~~KI-016~~ | **ĐÓNG 2026-07-30** — `S6-REL-1`. Mỗi build nay đóng băng thành `apps/api/releases/<stamp>` (BẤT BIẾN), service trỏ junction `releases/current`; `m dev-online` biên dịch lại `dist` KHÔNG còn chạm được bản PROD đang chạy. Kèm theo là **đường rollback ứng dụng đầu tiên** của dự án (`m prod-rollback`) — trước đây `dist` bị ghi đè mỗi lần build nên không có bản trước để quay về. Vị trí thư mục là RÀNG BUỘC KỸ THUẬT: phải nằm TRONG `apps/api` để `node_modules` phân giải đi lên trúng `apps/api/node_modules` (pnpm isolated, KHÔNG hoist) — đã chứng minh bằng resolver thật + boot artifact trên DB lane, không bằng lý luận. ⚠️ **cần deploy**: `m prod-cutover` (Administrator) MỘT LẦN; `m prod-status` cảnh báo LOUD khi service còn trỏ `dist` | S2 | Hạ tầng | — | ⚠️ cần cutover | **ĐÓNG** — `S6-REL-1` |
 | ~~KI-017~~ | ~~Refresh materialized view dashboard qua `workerDb` hỏng từ G14 ("must be owner")~~ — **ĐÃ ĐÓNG** (2 nửa, 2 WO): privilege ở `S6-SEC-MV-1` (mig 0534, 29/07/2026), lịch chạy ở `S10-DASH-MVREFRESH-1` (2026-08-13) | S3 | Sản phẩm (ngủ) | — | — | **ĐÓNG 2026-08-13** — `S10-DASH-MVREFRESH-1` |
 | KI-018 | Dữ liệu demo có trạng thái đơn nghỉ lẫn hoa/thường | S3 | Dữ liệu | ❌ | ❌ | Sprint 6 |
@@ -378,12 +378,68 @@ Phủ **761/761 file spec** toàn workspace (api 448 · app 199 · console 23 ·
 ui 16 · auth 4). `lane-db-guard` vẫn bắt được thiếu `LANE_DB` qua runner mới (184 file skip → `red` ở
 tier `--all`); `harness/lane-db-guard.test.mjs` 14/14.
 
-### KI-015 — Nhiễu log outbox bridge trong test · S3
+### KI-015 — Nhiễu log outbox bridge trong test · S3 — ✔ ĐÃ ĐÓNG 2026-08-13
+
+> **ĐÓNG bởi `S10-QA-LOGNOISE-1`.** Phần mô tả gốc bên dưới giữ nguyên làm lịch sử; giả thuyết root-cause
+> của nó **ĐÚNG tại thời điểm viết** nhưng **không còn tái lập được hôm nay** — xem khối *Kết quả truy
+> gốc* ngay sau đó.
 
 `OutboxNotificationBridge … intake THẤT BẠI` (6 lần trên lane sạch). Truy tới gốc: nhánh `no_recipient`
 → `recordSkip` → INSERT `audit_logs` vỡ **FK `audit_logs_actor_user_id_fkey`** vì outbox drain chạy sau
 khi spec đã dọn user của mình. **Production không dính** (user là xoá mềm — BẤT BIẾN #2).
 **Việc:** đợi outbox drain xong trước teardown, hoặc bỏ `actorUserId` khỏi audit skip.
+
+**Kết quả truy gốc (`S10-QA-LOGNOISE-1`, 2026-08-13, đo thật KHÔNG đoán):**
+
+1. **Đo lại bằng thực nghiệm.** Chạy 29 file khớp `*noti*` (task/leave/att/auth-hr/chat-noti-e2e +
+   qa2-e2e-task-noti-dash — 488 test) trên `LANE_DB` cô lập, `TURBO_FORCE=1` (chống cache xanh-giả):
+   **đúng 1 nguồn** phát dòng `intake THẤT BẠI` — `chat-noti-e2e.int-spec.ts` ca 14 (`S7-CHAT-BE-6`),
+   phát ra **5** dòng (không phải 6 như số đo cũ — lệch vì môi trường khác nhau, không lệch về bản chất).
+2. **Ca 14 CỐ Ý gieo lỗi.** Test tự comment rõ: *"payload THIẾU trường bắt buộc ⇒ dead-letter LOUD,
+   KHÔNG 'done' im lặng"* — gieo thẳng `chat.message.direct_sent` thiếu `recipientUserId` vào outbox để
+   khoá đúng chỗ dễ trôi: nếu bridge lỡ nuốt lỗi này, một đổi tên khoá tương lai (`roomId`→`room_id`) sẽ
+   tắt TOÀN BỘ thông báo CHAT mà CI vẫn xanh, log vẫn sạch. Test ĐÃ tự `expect()` trên
+   `dead_letter_events` (1 dòng) + `outbox_events.status != 'done'` — tức đã tự "biến nhiễu thành bằng
+   chứng" từ trước, đúng tinh thần WO này.
+3. **5 dòng = 1 lỗi, KHÔNG PHẢI 5 lỗi khác nhau.** `OutboxWorker.MAX_ATTEMPTS = 5`; mỗi lần retry, bridge
+   log ĐÚNG MỘT LẦN trước khi re-throw cho worker. Cả 5 lần dồn vào < 1 giây vì
+   `test/helpers/outbox-drain.ts` (`drainOutboxUntilSettled`) chủ động kéo `available_at` về `now()` để
+   khỏi đợi backoff 30s thật giữa các lần retry (mục đích: test nhanh) — production cùng một lỗi cũng ra
+   đúng 5 dòng log, chỉ trải trên ~150 giây thay vì <1 giây.
+4. **Giả thuyết FK gốc ĐÚNG-tại-thời-điểm, do MỘT NGUYÊN NHÂN KHÁC, đã đóng.** Khi KI-015 được viết
+   (2026-07-26), `outbox_events` là bảng CHUNG và `OutboxWorker.claim()` không lọc tenant; 11 int-spec
+   cùng lái worker trên 1 lane DB có thể khiến worker của spec A claim+xử lý event của spec B SAU KHI B
+   đã teardown (dọn user) — đúng hình dạng "outbox drain chạy sau khi spec đã dọn user của mình" mà ghi
+   chú gốc mô tả (KI-059). Mutex toàn cục `test/helpers/outbox-worker-lock.ts`
+   (`S7-QA-OUTBOXPROBE-1`, 2026-08-03) đã khoá đường chéo-spec đó — mọi spec lái worker giờ xếp hàng.
+   Xác minh lại hôm nay: `outbox-worker-lock.unit-spec.ts` (điểm danh MỌI spec gọi
+   `processBatch`/`drainOutboxUntilSettled`, bắt phải giữ khoá) **2/2 PASS** ⇒ không còn spec nào bỏ sót
+   khoá, đường FK-vỡ-chéo-spec không còn tái lập được.
+5. **Kết luận:** hành vi ĐÚNG-nhưng-ồn (không phải lỗi) — KHÔNG hạ log level / bọc `catch {}`.
+   `apps/api/src/notifications/outbox-notification-bridge.service.ts` được bổ sung docblock ghi lại
+   nguyên văn kết quả này; `outbox-notification-bridge.service.spec.ts` (mới, 7 test, unit — không cần
+   DB) khoá chiều NGƯỢC LẠI: `intake()`/`resolveRecipients()` ném lỗi THẬT (đường production) → bridge
+   VẪN log + re-throw NGUYÊN error — chống hồi quy "vá nốt nhiễu" bằng cách nuốt lỗi.
+6. **Vòng 1 bị Đội 3 bác — nhiễu VẪN in ra.** Bản đóng đầu (khối 1–5 ở trên) chỉ ghi bằng chứng vào
+   docblock của bridge, KHÔNG chạm nơi PHÁT (`chat-noti-e2e.int-spec.ts` ca 14) — done_when #3 ("test
+   phải KHẲNG ĐỊNH nó thay vì để nó in ra") và #5 ("suite không còn dòng nhiễu") CHƯA đạt. Đo lại độc
+   lập trên DB cô lập mới vẫn thấy đúng 5 dòng bridge + 1 dòng DEAD-LETTER — repo `paths` hẹp của WO gốc
+   không phải lý do hợp lệ để hoãn: `done_when` có hiệu lực cao hơn danh sách `paths` khai lúc seed
+   (CLAUDE.md §9 — guard-scope chỉ CẢNH BÁO khi sửa ngoài `paths`, không chặn).
+7. **Vòng 2 (`S10-QA-LOGNOISE-1-FIX-A`) — vá TẠI ĐÚNG NƠI PHÁT.** Thêm
+   `apps/api/test/helpers/expect-logged-errors.ts` (`withExpectedLoggerErrors`): spy
+   `Logger.prototype.error` PHẠM VI HẸP quanh đúng 1 lệnh gọi (`patch`/`un-patch` quanh `drain()`), chỉ
+   NUỐT dòng khớp mẫu đã khai kèm đếm `[min..max]` bắt buộc (lệch — kể cả 0 lần — làm spec ĐỎ), dòng
+   KHÔNG khớp FORWARD nguyên vẹn ra logger thật (lỗi thật khác trong cùng cửa sổ vẫn kêu to). Gắn vào ca
+   14, khớp đúng `OutboxWorker.MAX_ATTEMPTS` (5) dòng bridge + 1 dòng DEAD-LETTER, cả hai neo theo
+   `recipientUserId` (payload cố ý gieo lỗi của đúng ca này — không nuốt nhầm lỗi khác).
+8. **Vòng 3 (`S10-QA-LOGNOISE-1-FIX-B`, 2026-08-13) — ĐO LẠI ĐỘC LẬP, đóng sổ theo bằng chứng mới.**
+   Tạo LANE_DB mới hoàn toàn (`mediaos_s10qalogfixb`, tách khỏi mọi lần đo trước), `TURBO_FORCE=1`:
+   `chat-noti-e2e.int-spec.ts` riêng lẻ **22/22 test PASS, 0 dòng** `intake THẤT BẠI`/`DEAD-LETTER`; cả
+   **20 file khớp `*noti*int-spec.ts` (381 test) chạy chung — 20/20 file PASS, grep toàn bộ output ra 0
+   dòng nhiễu đó** (2 dòng ERROR còn lại là `AllExceptionsFilter` của ca 11 — lỗi 500 CỐ Ý gieo cho kịch
+   bản rollback-transaction khác, ngoài phạm vi KI-015, không đổi). done_when #3 và #5 nay ĐẠT bằng đo
+   thật của chính lần chạy này — không còn việc "còn nợ cosmetic" nào bị đẩy sang WO khác.
 
 ### KI-016 — PROD dùng chung `dist` với dev-online · S2
 
