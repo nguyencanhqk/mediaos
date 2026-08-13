@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**372 WO** · có micro-plan: **208/372** · ⬜ 7 chờ · 🔵 1 đang làm · ✅ 363 xong · 🔴 1 chặn
+**372 WO** · có micro-plan: **208/372** · ⬜ 4 chờ · 🔵 1 đang làm · ✅ 366 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -432,11 +432,11 @@
 | `S10-OPS-SITEWATCH-1` | 🟡 | ✅ xong | — *(chưa)* | — | ops-alert-check mù với mọi mặt PROD ngoài API :3100 — thêm dò fbpost : |
 | `S10-OPS-ALERTCHAN-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S10-OPS-SITEWATCH-1 | Đường BÁO ĐỘNG ra ngoài: tin nhắn phải nói ĐANG HỎNG CÁI GÌ (nay chỉ c |
 | `S10-FND-ENVKEY-1` | 🟡 | ✅ xong | — *(chưa)* | — | `INTERNAL_API_KEY` là secret ĐANG DÙNG THẬT nhưng vắng mặt ở env.schem |
-| `S10-QA-LOGNOISE-1` | 🟢 | ⬜ chờ | — *(chưa)* | — | Nhiễu log `OutboxNotificationBridge … intake THẤT BẠI` khi chạy test — |
+| `S10-QA-LOGNOISE-1` | 🟢 | ✅ xong | — *(chưa)* | — | Nhiễu log `OutboxNotificationBridge … intake THẤT BẠI` khi chạy test — |
 | `S10-ATT-NOTIPROD-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | 3 sự kiện ATT bật trong danh mục nhưng KHÔNG AI PHÁT (`ATT_MISSING_CHE |
 | `S10-QA-ROUTEHTTP-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | Một mảng lớn đường dẫn API không có test HTTP nào chạm — guard/DTO/env |
-| `S10-FND-JSONLOG-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | Log chưa có cấu trúc JSON — và bất kỳ ai đổi định dạng log đều PHẢI sử |
-| `S10-DASH-MVREFRESH-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | Materialized view dashboard KHÔNG CÓ LỊCH CHẠY — chỉ làm mới khi có ng |
+| `S10-FND-JSONLOG-1` | 🟡 | ✅ xong | — *(chưa)* | — | Log chưa có cấu trúc JSON — và bất kỳ ai đổi định dạng log đều PHẢI sử |
+| `S10-DASH-MVREFRESH-1` | 🟡 | ✅ xong | — *(chưa)* | — | Materialized view dashboard KHÔNG CÓ LỊCH CHẠY — chỉ làm mới khi có ng |
 
 ---
 

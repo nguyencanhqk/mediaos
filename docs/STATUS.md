@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-13 14:59Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-13 17:50Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -43,6 +43,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `975d7484` | 2026-08-13 | chore(docs): regen STATUS sau khi land #383 (S10-FND-JSONLOG-1 done) |
 | `f4d262e9` | 2026-08-13 | fix(ops): log API ra JSON có cấu trúc + đấu lại bộ đếm ERROR của ops-alert (S10-FND-JSONLOG-1 · KI-009) (#383) |
 | `e8ab653e` | 2026-08-13 | wip(S10-DASH-MVREFRESH-1): job lịch chạy refresh MV dashboard (đóng nửa 2 KI-017) (#382) |
 | `09384d68` | 2026-08-13 | fix(noti): dập nhiễu log outbox bridge tại đúng nơi phát (S10-QA-LOGNOISE-1, KI-015) (#381) |
@@ -54,7 +55,6 @@
 | `2b03863c` | 2026-08-13 | chore(docs): regen STATUS sau khi land #378 (S7-CALL-RT-FIX-2 done, 0 in_progress) |
 | `bf37510c` | 2026-08-13 | fix(chat): gỡ thành viên giữa cuộc gọi — đóng chiều RÒ, thôi đóng dấu người vô tội (S7-CALL-RT-FIX-2) (#378) |
 | `43353ecf` | 2026-08-13 | chore(docs): regen STATUS + INDEX khớp master — bổ sung S10-OPS-SITEWATCH-1 + S10-OPS-ALERTCHAN-1 (đã land #376/#377) |
-| `d0c957a7` | 2026-08-12 | fix(ops): đường BÁO ĐỘNG ra ngoài — tin nhắn nói được đang hỏng cái gì + lỗi giao hết bị nuốt + cờ --test-alert (S10-OPS-ALERTCHAN-1) (#377) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
