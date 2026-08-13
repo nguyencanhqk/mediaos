@@ -27,6 +27,34 @@ const optionalUrl = () =>
   );
 
 /**
+ * Secret TUỲ CHỌN có sàn độ dài, với cùng luật "**biến RỖNG = CHƯA SET**" của `optionalUrl()`.
+ *
+ * Vì sao cần (S10-FND-ENVKEY-1 — đo 13/08/2026, lỗi CÓ THẬT trên master trước WO này):
+ * `load-env.ts` gán `process.env[key] = ""` cho một dòng `KEY=` bỏ trống (nó KHÔNG lọc rỗng). Mà
+ * `.env.example` CỐ Ý ship giá trị rỗng cho mọi secret tắt-mềm. Ghép hai điều đó với
+ * `z.string().min(32).optional()` thì `""` KHÔNG phải `undefined` ⇒ trượt `.min(32)` ⇒ `loadEnv()` NÉM
+ * ⇒ **API không boot**. Nghĩa là `cp .env.example .env` — bước cài đặt lần đầu ghi ở CLAUDE.md §7 —
+ * làm hỏng chính cái nó dựng lên. Đo bằng cách chạy `.env.example` qua `loadEnv`: ném ở
+ * `LMS_SYNC_TOKEN` · `LMS_PROGRESS_TOKEN` · `LMS_NOTI_TOKEN`.
+ *
+ * Đây đúng lớp bẫy mà `optionalUrl()` phía trên được viết ra để chống — chỉ khác là nó chưa từng được
+ * áp cho nhóm secret. `env-example-boots.spec.ts` khoá lại để không tái diễn.
+ */
+const optionalSecret = (minLength: number) =>
+  z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().min(minLength).optional(),
+  );
+
+/** UUID tuỳ chọn, cùng luật "RỖNG = CHƯA SET" (xem `optionalSecret`). `LMS_COMPANY_ID=` bỏ trống
+ *  trong `.env.example` cũng nằm trong nhóm làm sập boot: `""` không phải uuid hợp lệ. */
+const optionalUuid = () =>
+  z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().uuid().optional(),
+  );
+
+/**
  * Validate biến môi trường tại biên hệ thống (coding-style: fail-fast, không tin dữ liệu ngoài).
  * DB URL để OPTIONAL → API vẫn boot khi DB chưa lên (health/db báo "down"), giúp `pnpm dev` chạy không cần docker.
  */
@@ -228,46 +256,68 @@ export const envSchema = z
     // claude-sonnet-4-6 = lựa chọn rẻ/nhanh hơn. Giá trị ngoài enum bị reject ở boundary (fail-fast cấu hình).
     AI_MODEL: z.enum(["claude-opus-4-8", "claude-sonnet-4-6"]).default("claude-opus-4-8"),
 
+    // ── Route nội bộ máy-gọi-máy `/internal/v1/**` (InternalGuard) — KI-031 ──────────────────────────
+    // Khoá mà bên gọi trình qua header `x-internal-key`. Ba nhóm route sống sau nó: recalculate chấm
+    // công thủ công/retry (`attendance-internal.controller`), nạp lại cache dashboard
+    // (`internal-dashboard-cache.controller`), và intake sự kiện NOTI (`internal-notifications.controller`).
+    // Cả ba ĐÃ đứng sau chuỗi JwtAuthGuard→CompanyGuard→PermissionGuard; khoá này là lớp thứ hai.
+    //
+    // OPTIONAL là LỰA CHỌN, không phải bỏ sót — đừng "siết cho chặt" thành required: `InternalGuard` đã
+    // fail-CLOSED khi biến vắng (403 mọi route `/internal/**`, xem `internal.guard.ts:23`). Ép required
+    // chỉ đổi "mất một tính năng" thành "SẬP BOOT cả API" trên mọi máy dev/CI/lane chưa đặt biến — đắt
+    // hơn hẳn thứ nó mua được. Cùng posture với LMS_NOTI_TOKEN / ANTHROPIC_API_KEY ngay dưới đây.
+    //
+    // ⚠️ Cái giá của posture đó: thiếu biến ⇒ 3 nhóm route trên chết 403 mà tín hiệu duy nhất là một dòng
+    // warn lúc có request đầu tiên. Đo 13/08/2026: KHÔNG file .env nào trong repo đặt nó ⇒ ba nhóm route
+    // đó đang tắt trên chính máy này. Khai ở đây để nó CÓ MẶT trong hồ sơ cấu hình — đúng lý do KI-029
+    // buộc phải khai PERMISSION_GUARD_ENABLED: một biến không nằm trong hồ sơ nào là một biến không ai biết.
+    //
+    // `.min(32)`: khoá do CHÍNH TA sinh (khác CLOUDFLARE_TURN_* — khoá bên thứ ba, độ dài do họ quy định)
+    // nên áp được sàn độ dài. An toàn với deployment hiện có vì chưa nơi nào đặt giá trị (đã đo).
+    // `optionalSecret(32)` chứ không `z.string().min(32).optional()`: xem docblock helper — dòng
+    // `INTERNAL_API_KEY=` bỏ trống trong `.env` phải đọc là CHƯA SET, không phải "khoá dài 0 ký tự".
+    INTERNAL_API_KEY: optionalSecret(32),
+
     // ── Tích hợp LMS (fmc-app) — cầu SSO Giai đoạn A ─────────────────────────────────────────────────
     // Shared secret HMAC với LMS (MEDIAOS_SSO_SECRET phía LMS). OPTIONAL để API boot khi chưa cấu hình —
     // endpoint sso-link fail-fast 503 khi dùng (mirror ANTHROPIC_API_KEY). BẤT BIẾN #3: không hardcode/log.
-    LMS_SSO_SECRET: z.string().min(32).optional(),
+    LMS_SSO_SECRET: optionalSecret(32),
     // Gốc public của LMS (vd https://lms.example.com) — đích redirect SSO.
     LMS_BASE_URL: optionalUrl(),
     // ── S5-LMS-BE-1: auto-sync tài khoản MediaOS→LMS (Giai đoạn B) ──
     // Bearer token server-to-server tới LMS POST /api/admin/sync-users (= MEDIAOS_SYNC_TOKEN phía LMS).
     // OPTIONAL: thiếu → bridge/job auto-sync TẮT (warn 1 lần, KHÔNG chặn boot; mirror posture SSO). BẤT BIẾN #3.
-    LMS_SYNC_TOKEN: z.string().min(32).optional(),
+    LMS_SYNC_TOKEN: optionalSecret(32),
     // ── S5-LMS-BE-3: đọc tiến độ học MediaOS←LMS (GET /me/training) ──
     // Bearer token CHỈ-ĐỌC tới LMS GET /api/mediaos/progress (= MEDIAOS_PROGRESS_TOKEN phía LMS, xem
     // docs/plans/S5-LMS-APP-3.md §7.1). TÁCH BIỆT khỏi LMS_SYNC_TOKEN (quyền GHI: tạo/khoá tài khoản LMS) —
     // security review APP-3 HIGH-2: đường ĐỌC mở ra internet KHÔNG được mang quyền GHI, KHÔNG fallback.
     // OPTIONAL: thiếu → /me/training trả 503 (tắt mềm, không chặn boot). BẤT BIẾN #3: không hardcode/log.
-    LMS_PROGRESS_TOKEN: z.string().min(32).optional(),
+    LMS_PROGRESS_TOKEN: optionalSecret(32),
     // COMPANY GATE: id công ty DUY NHẤT được sync sang LMS (LMS là hệ 1-công-ty = funtime; endpoint LMS
     // khoá thuần theo email, KHÔNG company-scope). Thiếu → auto-sync TẮT (fail-closed isolation). Producer/
     // bridge/job CHỈ sync khi companyId === LMS_COMPANY_ID ⇒ tenant khác KHÔNG rò email sang LMS (BẤT BIẾN #1).
-    LMS_COMPANY_ID: z.string().uuid().optional(),
+    LMS_COMPANY_ID: optionalUuid(),
     // ── S5-LMS-NOTI-1: LMS→MediaOS đẩy thông báo học tập vào module NOTI (chiều NGƯỢC 3 token trên) ──
     // Bearer token mà LMS trình khi gọi POST /internal/v1/notifications/lms-events (= MEDIAOS_NOTI_TOKEN
     // phía LMS). TÁCH BIỆT khỏi LMS_SYNC_TOKEN/LMS_PROGRESS_TOKEN (đó là token MediaOS dùng để GỌI SANG
     // LMS; cái này là token LMS dùng để GỌI VÀO MediaOS — lộ một cái không được kéo theo cái kia).
     // OPTIONAL: thiếu → LmsServiceIntakeGuard trả 403 fail-closed (kênh TẮT, không chặn boot). BẤT BIẾN #3.
     // company_id của thông báo lấy từ LMS_COMPANY_ID ở trên — KHÔNG BAO GIỜ từ body request.
-    LMS_NOTI_TOKEN: z.string().min(32).optional(),
+    LMS_NOTI_TOKEN: optionalSecret(32),
 
     // ── S9-SOCIAL-BE-1: app vệ tinh SOCIAL (fbpost — đăng bài Facebook Page), cầu SSO ────────────────
     // Shared secret HMAC với fbpost (= MEDIAOS_SSO_SECRET phía fbpost). OPTIONAL để API boot khi chưa
     // cấu hình — endpoint sso-link fail-fast 503 khi dùng (mirror posture LMS). BẤT BIẾN #3.
     // TÁCH BIỆT khỏi LMS_SSO_SECRET: lộ khoá của một app vệ tinh KHÔNG được kéo theo app còn lại.
-    SOCIAL_SSO_SECRET: z.string().min(32).optional(),
+    SOCIAL_SSO_SECRET: optionalSecret(32),
     // Gốc public của fbpost (vd https://social.example.com) — đích redirect SSO.
     SOCIAL_BASE_URL: optionalUrl(),
     // COMPANY GATE (DECISIONS-08 SOCIAL-DEC-002): id công ty DUY NHẤT được dùng fbpost. fbpost chạy
     // SQLite KHÔNG có company_id ⇒ BẤT BIẾN #1 được giữ Ở CẦU, không ở bảng: SocialSsoService chỉ mint
     // token khi companyId === SOCIAL_COMPANY_ID. Thiếu biến này → endpoint 503 (fail-closed), KHÔNG
     // phải "cho mọi công ty" — vắng cấu hình không bao giờ được nới thành cho phép.
-    SOCIAL_COMPANY_ID: z.string().uuid().optional(),
+    SOCIAL_COMPANY_ID: optionalUuid(),
 
     // ── S7-CALL-BE-1: cuộc gọi thoại/hình — máy chủ TURN (CHAT-API-029 · DECISIONS-07 §5) ───────────
     // Tài khoản **Cloudflare TURN** dùng chung với LMS: MediaOS KHÔNG tự dựng TURN server. Credential
@@ -279,8 +329,8 @@ export const envSchema = z
     // trường chưa đặt không được biến cả API thành không khởi động được.
     // ⚠️ KHÔNG có `.min(32)` như các shared-secret khác: đây là khoá do Cloudflare cấp, độ dài của họ
     // quy định — áp trần độ dài của mình lên khoá bên thứ ba là tự chặn một giá trị hợp lệ.
-    CLOUDFLARE_TURN_KEY_ID: z.string().min(1).optional(),
-    CLOUDFLARE_TURN_API_TOKEN: z.string().min(1).optional(),
+    CLOUDFLARE_TURN_KEY_ID: optionalSecret(1),
+    CLOUDFLARE_TURN_API_TOKEN: optionalSecret(1),
 
     // ── S7-CALL-BE-FIX-1 (MEDIUM-3 vế TẦN SUẤT): trần số LỜI MỜI gọi / phút / người ──────────────────
     // Mỗi `POST /chat/rooms/:id/calls` ghi `1 + N` hàng APPEND-ONLY vào `chat_call_participants` (N =

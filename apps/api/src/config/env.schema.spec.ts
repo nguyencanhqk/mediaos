@@ -204,4 +204,25 @@ describe("loadEnv", () => {
       );
     }
   });
+
+  // ── KI-031 / S10-FND-ENVKEY-1 — INTERNAL_API_KEY ───────────────────────────────────────────────
+  // Ba ca dưới đây ĐÓNG ĐINH CHIỀU ĐÃ CHỌN, không phải mô tả lại schema. WO này có đúng một quyết
+  // định đáng cãi (optional hay required) và ca đầu tiên là thứ giữ nó: ai đó "siết cho chặt" thành
+  // required sẽ thấy test đỏ kèm lý do, thay vì thấy CI xanh rồi làm sập boot mọi máy chưa đặt biến.
+  it("vắng INTERNAL_API_KEY KHÔNG chặn boot — fail-closed nằm ở InternalGuard, không ở schema", () => {
+    const env = loadEnv({});
+    expect(env.INTERNAL_API_KEY).toBeUndefined();
+  });
+
+  it("có khoá nhưng NGẮN hơn 32 ký tự thì ĐỎ ngay ở biên, không để khoá yếu vào chạy thật", () => {
+    expect(() => loadEnv({ INTERNAL_API_KEY: "x".repeat(31) } as NodeJS.ProcessEnv)).toThrow(
+      /Invalid environment variables/,
+    );
+  });
+
+  it("nhận khoá đủ dài", () => {
+    const key = "y".repeat(32);
+    const env = loadEnv({ INTERNAL_API_KEY: key } as NodeJS.ProcessEnv);
+    expect(env.INTERNAL_API_KEY).toBe(key);
+  });
 });

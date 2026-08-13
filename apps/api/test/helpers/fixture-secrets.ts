@@ -15,3 +15,25 @@
 
 /** Secret S3/MinIO giả cho presign HMAC offline. Ghép chuỗi có chủ ý (CLAUDE.md §5). */
 export const FALLBACK_S3_SECRET = ["fixture", "s3", "secret", "not-a-credential"].join("-");
+
+/** Sàn độ dài `INTERNAL_API_KEY` do `env.schema` áp (S10-FND-ENVKEY-1) — xem `internalKeyFixture`. */
+const INTERNAL_KEY_MIN_LENGTH = 32;
+
+/**
+ * Khoá `x-internal-key` giả cho int-spec chạm `/internal/v1/**`.
+ *
+ * ĐỘ DÀI Ở ĐÂY KHÔNG PHẢI THẨM MỸ. `env.schema` áp sàn `.min(32)` lên `INTERNAL_API_KEY`
+ * (S10-FND-ENVKEY-1). Spec nào gán `process.env.INTERNAL_API_KEY` một chuỗi ngắn hơn sẽ làm
+ * `loadEnv()` NÉM lúc Nest dựng testing module ⇒ ĐỎ CẢ FILE — và lỗi nổi ra ở
+ * `master-data-seed.config.ts`, cách dòng gán rất xa, nên tốn cả một vòng CI mới lần ra. Đo 13/08/2026:
+ * đúng sáu spec đã dính bẫy này (PR #380). Helper đệm cho đủ sàn nên nó không tái diễn.
+ *
+ * Máy dev KHÔNG bắt được: cả sáu file đều `skipIf(!LANE_DB)` ⇒ không có Postgres thì chúng SKIP, suite
+ * xanh, chỉ CI đỏ. Đây đúng thứ "XANH KHÔNG ĐỦ BẰNG CHỨNG" ở CLAUDE.md §9 nói tới.
+ *
+ * `tag` giữ khoá của mỗi spec KHÁC nhau: hai file chạy chung một worker không được vô tình nhận khoá
+ * của nhau, nếu không ca "khoá sai → 403" sẽ xanh-giả. Ghép chuỗi + đệm (không literal high-entropy)
+ * theo luật fixture-giống-secret CLAUDE.md §5.
+ */
+export const internalKeyFixture = (tag: string): string =>
+  ["test-internal-key", tag].join("-").padEnd(INTERNAL_KEY_MIN_LENGTH, "0");
