@@ -49,6 +49,10 @@ import { DashboardCacheInvalidationService } from "./dashboard-cache-invalidatio
 // THẬT) → DashboardCacheInvalidationService.invalidate() in-process (mirror S4-INT-1 TaskNotiBridgeRegistrar).
 // EventBus đến từ EventsModule (@Global — KHÔNG cần import module) — registrar chỉ cần khai provider.
 import { DashboardCacheInvalidationRegistrar } from "./dashboard-cache-invalidation.registrar";
+// S10-DASH-MVREFRESH-1 (additive): job lịch chạy refresh MV — đóng nửa "lịch chạy" của KI-017 (nửa
+// privilege đã đóng ở mig 0534). @SystemJobHandler() — SchedulerModule (DiscoveryService) tự gom qua
+// metadata, DashboardModule KHÔNG import SchedulerModule. Endpoint POST /dashboard/refresh giữ nguyên.
+import { DashboardMvRefreshJobHandler } from "./dashboard-mv-refresh.job-handler";
 
 /**
  * S4-DASH-SEED-1 (additive): import SeedModule (exports MasterDataSeederRegistry) → DashSeedRegistrar
@@ -106,6 +110,8 @@ import { DashboardCacheInvalidationRegistrar } from "./dashboard-cache-invalidat
     // S4-INT-2-FIX-1 (additive): registrar OnModuleInit — wire outbox eventType TASK/LEAVE THẬT vào cache
     // invalidation (trước lane này endpoint mồ côi, xem doc-block registrar).
     DashboardCacheInvalidationRegistrar,
+    // S10-DASH-MVREFRESH-1 (additive): job lịch chạy refresh MV dashboard.
+    DashboardMvRefreshJobHandler,
   ],
 })
 export class DashboardModule {}
