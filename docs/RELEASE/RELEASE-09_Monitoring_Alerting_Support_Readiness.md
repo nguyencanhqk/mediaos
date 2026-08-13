@@ -276,7 +276,7 @@ Mã thoát của lệnh kiểm tra **không** đổi theo kênh chat: nó nói v
 | Migration/deployment log được lưu | ✅ | `drizzle.__drizzle_migrations` · `logs/api.*.log` · **MỚI**: định danh build ở `/health` |
 | Export/file access log | ✅ | `file_access_logs` (append-only) |
 | **Xoay log (chống phình đĩa)** | ✅ **ĐÃ BẬT trên PROD 2026-08-01** | NSSM xoay khi > 32 MB hoặc quá 1 ngày, xoay được cả khi đang chạy. Dọn: `scripts\windows\08-log-rotate.ps1`. Cài mới tự bật qua `04-build-install-service.ps1` |
-| **Log có cấu trúc JSON** | ❌ **CHƯA** | Nest `Logger` dạng text — **KI-009** (`S3`, không chặn go-live) |
+| **Log có cấu trúc JSON** | ✅ **ĐÃ XONG 2026-08-13** | `JsonConsoleLogger` (kế thừa `ConsoleLogger` built-in Nest 11, `json:true`) đăng ký một lần ở `main.ts` — đóng **KI-009** (`S10-FND-JSONLOG-1`) |
 
 > 🔴 **Đo 2026-08-01 TRƯỚC khi vá — service `MediaOS-API` TẮT hoàn toàn xoay log:** `AppRotateFiles` ·
 > `AppRotateOnline` · `AppRotateBytes` · `AppRotateSeconds` đều `= 0` ⇒ hai file log **chưa từng được
@@ -355,6 +355,6 @@ Có lặp lại không:     <có/không>
 | --- | --- | --- |
 | §18.2 Monitoring checklist | một phần | ✅ có đo + ghi rõ 4 nhóm KHÔNG ĐO ĐƯỢC |
 | §18.3 Alert rule | ❌ 0 rule chạy | ✅ 8 nhóm chạy được, 44 test, đã gắn cổng |
-| §18.4 Logging | 8/9 | 8/9 (JSON log = KI-009, `S3`) |
+| §18.4 Logging | 8/9 | 9/9 (JSON log đã xong — `S10-FND-JSONLOG-1`, đóng KI-009 2026-08-13) |
 | §18.5 Support readiness | ❌ | ✅ quy trình xong; **guide nội dung → `S6-GOLIVE-1`** |
 | §18.6 Hypercare | ❌ | ✅ có kế hoạch + điều kiện thoát |
