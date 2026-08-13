@@ -12132,7 +12132,11 @@ export const backlog = [
   },
 
   {
-    // Seed 13/08/2026 từ KI-015.
+    // Seed 13/08/2026 từ KI-015. Mở lại + đóng lần 2 bởi S10-QA-LOGNOISE-1-FIX-B (13/08/2026) sau khi
+    // Đội 3 bác bỏ lần đóng đầu (đo thực nghiệm trên DB cô lập vẫn thấy đủ 5+1 dòng nhiễu — assert
+    // done_when #3/#5 chưa đạt tại thời điểm review). `-FIX-A` (commit 56634b46) đã vá TẠI NƠI PHÁT
+    // (gắn `withExpectedLoggerErrors` quanh `drain()` ở ca 14); `-FIX-B` (WO này) mới là lần đo LẠI +
+    // cập nhật sổ sách cho khớp bằng chứng mới.
     id: "S10-QA-LOGNOISE-1",
     module: "NOTI",
     layer: "QA",
@@ -12144,6 +12148,13 @@ export const backlog = [
       "apps/api/src/notifications/outbox-notification-bridge.service.ts",
       "apps/api/src/notifications/outbox-notification-bridge.service.spec.ts",
       "apps/api/test/helpers/**",
+      // Bổ sung bởi -FIX-B: nơi PHÁT nhiễu thật (ca 14, S7-CHAT-BE-6) nằm ở file này, không phải ở
+      // bridge/helpers. done_when của WO gốc ("Chạy suite notifications không còn dòng nhiễu") có
+      // hiệu lực CAO HƠN danh sách paths ban đầu — không đạt được done_when nếu không chạm đúng nơi
+      // phát. guard-scope chỉ CẢNH BÁO khi sửa ngoài paths (CLAUDE.md §9), không chặn; -FIX-A đã sửa
+      // file này (gắn withExpectedLoggerErrors quanh drain() ca 14) nên khai bổ sung vào đây cho khớp
+      // sự thật, không giấu điểm chạm.
+      "apps/api/test/integration/chat-noti-e2e.int-spec.ts",
       "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
       "harness/backlog.mjs",
     ],
@@ -12163,8 +12174,9 @@ export const backlog = [
     ],
     notes: [
       "Bài học sẵn có trong repo: 11 int-spec dùng CHUNG một outbox (KI-059) ⇒ nhiễu có thể là hiệu ứng chạy song song chứ không phải lỗi của bridge. Kiểm giả thuyết đó trước khi sửa bridge.",
-      "ĐÓNG 2026-08-13. Đo thật (29 file *noti* int-spec, LANE_DB cô lập, TURBO_FORCE=1): nguồn DUY NHẤT là `chat-noti-e2e.int-spec.ts` ca 14 (S7-CHAT-BE-6) — spec CỐ Ý gieo payload lỗi + ĐÃ tự assert dead-letter ⇒ hành vi ĐÚNG-nhưng-ồn, KHÔNG PHẢI lỗi. 5 dòng ERROR = MAX_ATTEMPTS(5) của CÙNG 1 event, dồn <1s vì outbox-drain.ts bỏ backoff thật. Giả thuyết FK cũ đúng-tại-thời-điểm (2026-07-26) do cross-spec outbox race KI-059, đã đóng bởi mutex outbox-worker-lock.ts (2026-08-03) — outbox-worker-lock.unit-spec.ts 2/2 PASS hôm nay xác nhận không còn spec bỏ khoá. Đã thêm docblock ghi bằng chứng + outbox-notification-bridge.service.spec.ts (7 test, unit, chống hồi quy: intake()/resolveRecipients() ném lỗi thật → bridge vẫn log+re-throw). Chi tiết đầy đủ: RELEASE-02 KI-015.",
-      "CÒN NỢ (cosmetic, KHÔNG chặn): muốn màn hình CI hết in 5 dòng ERROR của ca 14 (mà VẪN giữ assertion), cần vi.spyOn(Logger.prototype,'error') NGAY TRONG chat-noti-e2e.int-spec.ts — file đó ngoài `paths` của WO này (test/integration/** không thuộc phạm vi), chưa chạm. Lane sau muốn dứt điểm phần cosmetic thì seed WO riêng phạm vi đúng file đó.",
+      "Vòng 1 (2026-07-26→08-13, f13ccc32): truy gốc đúng nguồn (ca 14, chat-noti-e2e.int-spec.ts) nhưng CHỈ ghi bằng chứng vào docblock của bridge, KHÔNG chạm nơi phát ⇒ done_when #3/#5 CHƯA đạt — Đội 3 bác bỏ lần đóng đầu (đo lại thấy nguyên 5 dòng bridge + 1 dòng DEAD-LETTER).",
+      "Vòng 2 (-FIX-A, 56634b46): thêm `apps/api/test/helpers/expect-logged-errors.ts` (`withExpectedLoggerErrors` — spy `Logger.prototype.error` PHẠM VI HẸP quanh đúng 1 lệnh gọi, chỉ nuốt dòng KHỚP mẫu đã khai kèm đếm min/max, dòng lạ FORWARD nguyên vẹn) và gắn vào ca 14 (`chat-noti-e2e.int-spec.ts`), khớp đúng `OutboxWorker.MAX_ATTEMPTS` (5) dòng bridge + 1 dòng DEAD-LETTER, cả hai neo theo payload cố ý gieo lỗi của ca này.",
+      "Vòng 3 (-FIX-B, 13/08/2026, WO này): ĐO LẠI ĐỘC LẬP trên LANE_DB mới tạo (`mediaos_s10qalogfixb`, TURBO_FORCE=1, tách khỏi mọi lần đo trước): `chat-noti-e2e.int-spec.ts` riêng lẻ 22/22 test PASS, 0 dòng 'intake THẤT BẠI'/'DEAD-LETTER'; cả 20 file khớp `*noti*int-spec.ts` (381 test) chạy chung 20/20 file PASS, grep toàn bộ output = 0 dòng nhiễu đó. done_when #3 (assert tại nơi phát) và #5 (suite sạch, đo được) nay ĐẠT bằng bằng chứng thực nghiệm của chính lần chạy này, không phải suy đoán lại từ vòng trước. Xoá ghi chú 'CÒN NỢ cosmetic' — không còn nợ, đã đóng ngay trong WO gốc, không đẩy sang WO mới.",
     ],
   },
 

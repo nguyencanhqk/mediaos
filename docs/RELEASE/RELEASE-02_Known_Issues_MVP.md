@@ -31,7 +31,7 @@
 | KI-012 | Accepted-risk **D3**: widget headcount count-only xuyên phòng ban cho HR scope Department | S3 | Bảo mật (đã chấp nhận) | ❌ | ⚠️ cần chữ ký | Owner |
 | KI-013 | `refresh` / `resetPassword` không throttle (theo thiết kế, có mitigation) | S3 | Bảo mật (theo thiết kế) | ❌ | ❌ | — |
 | ~~KI-014~~ | **ĐÃ ĐÓNG 2026-07-27** (`S6-QA-CHUNK-1`) — truy được gốc: **bug ngược dòng `tinypool@1.1.1`**, `ProcessWorker.send()` chỉ chặn `isTerminating` chứ không kiểm tra kênh IPC đã đóng. **Ba đính chính so với mô tả cũ:** (1) KHÔNG phải "máy bất ổn ngẫu nhiên" — `pnpm test` đỏ **5/5**, tái hiện 100%; (2) KHÔNG phải file/suite thủ phạm — package nạn nhân đổi mỗi lần chạy (kể cả `console` 23 file, `web-core` 39 file); (3) KHÔNG phải lệch Node 24-local vs 22-CI — **Node 22 vẫn crash**; CI xanh vì runner chỉ 2–4 nhân ⇒ 1–3 worker, còn máy này 32 nhân ⇒ 31 worker/package. Vá = `harness/chunk-test.mjs` (chia chunk + hạ trần worker + chạy lại **chỉ** chunk chết vì hạ tầng), `check.sh` dùng trên Windows, CI giữ đường một-lần. Verify: `LANE_DB=mediaos_qachunk bash harness/check.sh --all` → **XANH** (lint+typecheck+test+build), **761/761 file spec** đối chiếu `vitest list`. Số đo đầy đủ: `docs/QA/evidence/S6-QA-CHUNK-1-KI-014-ROOT-CAUSE.md` | S2 | Hạ tầng test (local) | — | — | ✔ xong |
-| ~~KI-015~~ | **ĐÓNG 2026-08-13** (`S10-QA-LOGNOISE-1`) — truy GỐC bằng đo thật (29 file `*noti*` int-spec, LANE_DB cô lập): nguồn DUY NHẤT hôm nay là `chat-noti-e2e.int-spec.ts` ca 14 — spec CỐ Ý gieo payload lỗi để chứng minh bridge KHÔNG được im lặng nuốt hợp đồng lệch, và ĐÃ tự assert dead-letter ⇒ hành vi ĐÚNG-nhưng-ồn, không phải lỗi. Chi tiết + ⚠️ 1 việc còn nợ (cosmetic) ở mục dưới | S3 | Vệ sinh test | ❌ | — | **ĐÓNG** — `S10-QA-LOGNOISE-1` |
+| ~~KI-015~~ | **ĐÓNG 2026-08-13** (`S10-QA-LOGNOISE-1`, qua 3 vòng — lần đóng đầu bị Đội 3 bác vì màn hình vẫn in nhiễu) — truy GỐC bằng đo thật: nguồn DUY NHẤT là `chat-noti-e2e.int-spec.ts` ca 14 — spec CỐ Ý gieo payload lỗi để chứng minh bridge KHÔNG được im lặng nuốt hợp đồng lệch, ĐÃ tự assert dead-letter ⇒ hành vi ĐÚNG-nhưng-ồn, không phải lỗi; nay ĐÃ vá TẠI NƠI PHÁT bằng `withExpectedLoggerErrors` (assert đúng số dòng, không bịt miệng toàn cục) ⇒ đo lại (LANE_DB cô lập riêng, 20 file/381 test `*noti*int-spec.ts`) = **0 dòng nhiễu**, không còn nợ cosmetic. Chi tiết ở mục dưới | S3 | Vệ sinh test | ❌ | — | **ĐÓNG** — `S10-QA-LOGNOISE-1` |
 | ~~KI-016~~ | **ĐÓNG 2026-07-30** — `S6-REL-1`. Mỗi build nay đóng băng thành `apps/api/releases/<stamp>` (BẤT BIẾN), service trỏ junction `releases/current`; `m dev-online` biên dịch lại `dist` KHÔNG còn chạm được bản PROD đang chạy. Kèm theo là **đường rollback ứng dụng đầu tiên** của dự án (`m prod-rollback`) — trước đây `dist` bị ghi đè mỗi lần build nên không có bản trước để quay về. Vị trí thư mục là RÀNG BUỘC KỸ THUẬT: phải nằm TRONG `apps/api` để `node_modules` phân giải đi lên trúng `apps/api/node_modules` (pnpm isolated, KHÔNG hoist) — đã chứng minh bằng resolver thật + boot artifact trên DB lane, không bằng lý luận. ⚠️ **cần deploy**: `m prod-cutover` (Administrator) MỘT LẦN; `m prod-status` cảnh báo LOUD khi service còn trỏ `dist` | S2 | Hạ tầng | — | ⚠️ cần cutover | **ĐÓNG** — `S6-REL-1` |
 | KI-017 | Refresh materialized view dashboard qua `workerDb` hỏng từ G14 ("must be owner") | S3 | Sản phẩm (ngủ) | ❌ | ⚠️ | Sprint 6 |
 | KI-018 | Dữ liệu demo có trạng thái đơn nghỉ lẫn hoa/thường | S3 | Dữ liệu | ❌ | ❌ | Sprint 6 |
@@ -420,11 +420,26 @@ khi spec đã dọn user của mình. **Production không dính** (user là xoá
    nguyên văn kết quả này; `outbox-notification-bridge.service.spec.ts` (mới, 7 test, unit — không cần
    DB) khoá chiều NGƯỢC LẠI: `intake()`/`resolveRecipients()` ném lỗi THẬT (đường production) → bridge
    VẪN log + re-throw NGUYÊN error — chống hồi quy "vá nốt nhiễu" bằng cách nuốt lỗi.
-6. ⚠️ **Còn nợ (cosmetic, KHÔNG chặn đóng KI):** muốn `chat-noti-e2e.int-spec.ts` ca 14 hết in dòng ERROR
-   ra console (mà VẪN giữ nguyên assertion), cần `vi.spyOn(Logger.prototype, "error")` NGAY TRONG file đó
-   — file này nằm ngoài `paths` của `S10-QA-LOGNOISE-1` (chỉ có `src/notifications/**` +
-   `test/helpers/**`), nên chưa chạm. Không ảnh hưởng tính đúng đắn/độ phủ, chỉ ảnh hưởng độ sạch màn
-   hình khi đọc log CI.
+6. **Vòng 1 bị Đội 3 bác — nhiễu VẪN in ra.** Bản đóng đầu (khối 1–5 ở trên) chỉ ghi bằng chứng vào
+   docblock của bridge, KHÔNG chạm nơi PHÁT (`chat-noti-e2e.int-spec.ts` ca 14) — done_when #3 ("test
+   phải KHẲNG ĐỊNH nó thay vì để nó in ra") và #5 ("suite không còn dòng nhiễu") CHƯA đạt. Đo lại độc
+   lập trên DB cô lập mới vẫn thấy đúng 5 dòng bridge + 1 dòng DEAD-LETTER — repo `paths` hẹp của WO gốc
+   không phải lý do hợp lệ để hoãn: `done_when` có hiệu lực cao hơn danh sách `paths` khai lúc seed
+   (CLAUDE.md §9 — guard-scope chỉ CẢNH BÁO khi sửa ngoài `paths`, không chặn).
+7. **Vòng 2 (`S10-QA-LOGNOISE-1-FIX-A`) — vá TẠI ĐÚNG NƠI PHÁT.** Thêm
+   `apps/api/test/helpers/expect-logged-errors.ts` (`withExpectedLoggerErrors`): spy
+   `Logger.prototype.error` PHẠM VI HẸP quanh đúng 1 lệnh gọi (`patch`/`un-patch` quanh `drain()`), chỉ
+   NUỐT dòng khớp mẫu đã khai kèm đếm `[min..max]` bắt buộc (lệch — kể cả 0 lần — làm spec ĐỎ), dòng
+   KHÔNG khớp FORWARD nguyên vẹn ra logger thật (lỗi thật khác trong cùng cửa sổ vẫn kêu to). Gắn vào ca
+   14, khớp đúng `OutboxWorker.MAX_ATTEMPTS` (5) dòng bridge + 1 dòng DEAD-LETTER, cả hai neo theo
+   `recipientUserId` (payload cố ý gieo lỗi của đúng ca này — không nuốt nhầm lỗi khác).
+8. **Vòng 3 (`S10-QA-LOGNOISE-1-FIX-B`, 2026-08-13) — ĐO LẠI ĐỘC LẬP, đóng sổ theo bằng chứng mới.**
+   Tạo LANE_DB mới hoàn toàn (`mediaos_s10qalogfixb`, tách khỏi mọi lần đo trước), `TURBO_FORCE=1`:
+   `chat-noti-e2e.int-spec.ts` riêng lẻ **22/22 test PASS, 0 dòng** `intake THẤT BẠI`/`DEAD-LETTER`; cả
+   **20 file khớp `*noti*int-spec.ts` (381 test) chạy chung — 20/20 file PASS, grep toàn bộ output ra 0
+   dòng nhiễu đó** (2 dòng ERROR còn lại là `AllExceptionsFilter` của ca 11 — lỗi 500 CỐ Ý gieo cho kịch
+   bản rollback-transaction khác, ngoài phạm vi KI-015, không đổi). done_when #3 và #5 nay ĐẠT bằng đo
+   thật của chính lần chạy này — không còn việc "còn nợ cosmetic" nào bị đẩy sang WO khác.
 
 ### KI-016 — PROD dùng chung `dist` với dev-online · S2
 
