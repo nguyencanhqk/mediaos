@@ -4,7 +4,13 @@
  * (`security-policy-crud.int-spec.ts` gọi thẳng `service.updatePolicy(...)`, KHÔNG qua HTTP):
  *   GET/PATCH /settings/security-policy · GET/PUT/POST(test) /settings/mail-config.
  *
- * 🔴 PHÁT HIỆN THẬT (không phải test hỏng — hành vi hiện tại của code):
+ * ĐẾM ĐÚNG ĐỘ PHỦ (đừng thổi số): file này phủ THẬT 4 route — PUT /settings/mail-config (risk 5) ·
+ * POST /settings/mail-config/test (risk 5) · GET /settings/security-policy (risk 3) ·
+ * GET /settings/mail-config (risk 3). `PATCH /settings/security-policy` (risk 5) **KHÔNG tính là đã
+ * phủ**: nó chỉ có ca GHIM BUG 403, không có và không thể có ca ALLOW 2xx cho tới khi KI-065 được sửa.
+ *
+ * 🔴 PHÁT HIỆN THẬT (không phải test hỏng — hành vi hiện tại của code) — KI-065 (RELEASE-02),
+ * sửa ở WO kế thừa S10-QA-ROUTEHTTP-2:
  * `PATCH /settings/security-policy` khai `@RequirePermission(..., { isSensitive: true, requiresReauth:
  * true })`. `PermissionGuard` coi route có cả hai cờ đó là "reveal-secret class" và ép
  * `needsObjectGrant = isSensitive && requiresReauth` (permission.decide.ts:93) — tức bắt buộc một
@@ -16,6 +22,7 @@
  * kể cả nếu object-tier có chạy, `isReauthValid` cũng luôn false. Route này hiện KHÔNG THỂ gọi thành công
  * qua bất kỳ đường nào. Test dưới đây GHIM đúng hành vi hiện tại (403 `deny-object-required` dù actor có
  * đủ quyền company-level) — KHÔNG tự nới guard hay tự thêm reauth wiring (ngoài phạm vi lane QA).
+ * Ca ghim assert cả LÝ DO deny, không chỉ status: xem khối comment ngay trên ca đó.
  *
  * GATE CỨNG `hasDb && LANE_DB` — DB cô lập (S10-QA-ROUTEHTTP-1 cần Postgres thật cho withTenant/RLS).
  */
@@ -31,6 +38,7 @@ import { AppModule } from "../../src/app.module";
 import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
+import { loginPasswordFixture, smtpPasswordFixture } from "../helpers/fixture-secrets";
 import { directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -44,10 +52,16 @@ import {
 } from "../helpers/seed";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
-const LOGIN_PW = "Passw0rd!s10qarh1";
+
+// Fixture giống-secret PHẢI ghép chuỗi qua helper dùng chung (CLAUDE.md §5) — không literal trong spec.
+// SMTP_PW_STORED / SMTP_PW_PROBE cố ý dùng hai tag KHÔNG lồng nhau: assert "không lộ password" dùng
+// `not.toContain`, tag này là tiền tố của tag kia thì hai ca sẽ kiểm chéo nhau và mất nghĩa.
+const LOGIN_PW = loginPasswordFixture("s10qarh1");
+const SMTP_PW_STORED = smtpPasswordFixture("s10qarh1-store");
+const SMTP_PW_PROBE = smtpPasswordFixture("s10qarh1-probe");
 
 describe.skipIf(!hasLaneDb)(
-  "S10-QA-ROUTEHTTP-1 — HTTP thật: security-policy + mail-config (5 route top-risk)",
+  "S10-QA-ROUTEHTTP-1 — HTTP thật: security-policy + mail-config (4 route phủ thật + 1 ghim bug KI-065)",
   () => {
     let app: INestApplication;
     let direct: Pool;
@@ -135,18 +149,33 @@ describe.skipIf(!hasLaneDb)(
     });
 
     // ── PATCH /settings/security-policy — GHIM phát hiện thật (xem docblock đầu file) ──────────────
-    it("🔴 PHÁT HIỆN: PATCH /settings/security-policy → 403 deny-object-required NGAY CẢ VỚI actor có ALLOW company-level đầy đủ (route hiện không thể gọi thành công qua HTTP)", async () => {
+    //
+    // 🔴 ĐÂY LÀ TEST GHIM BUG, KHÔNG PHẢI TEST HÀNH VI MONG MUỐN. Bug: KI-065 (RELEASE-02) —
+    // "PATCH /settings/security-policy không thể gọi thành công qua HTTP với bất kỳ actor nào".
+    // Sửa bug là việc của WO kế thừa **S10-QA-ROUTEHTTP-2** (mang theo danh sách route risk≥5 còn nợ),
+    // KHÔNG phải của lane QA này.
+    //
+    // KHI AI ĐÓ VÁ GUARD/REAUTH-WIRING: test này sẽ ĐỎ. Đó là tín hiệu ĐÚNG — hãy XOÁ ca ghim này và
+    // thay bằng cặp ALLOW (actor đủ quyền ⇒ 2xx + envelope) / DENY (actor thiếu quyền ⇒ 403
+    // `deny-default`), rồi đóng KI-065. TUYỆT ĐỐI KHÔNG "sửa cho khớp" bằng cách nới assert.
+    //
+    // VÌ SAO ASSERT LÝ DO CHỨ KHÔNG CHỈ STATUS: route này 403 với MỌI actor, nên một assert chỉ đo
+    // `status === 403` sẽ vẫn xanh sau khi guard được vá một nửa (vd đổi sang `deny-reauth-required`
+    // hay `deny-default`) ⇒ ghim hỏng, bug lặng lẽ đổi hình. Ghim đúng lý do `deny-object-required`
+    // (`PermissionGuard` ném `Permission denied: ${decision.reason}`) mới bắt được thay đổi.
+    //
+    // KHÔNG có ca "DENY: actor không quyền → 403" cho route này: vì actor ĐỦ quyền cũng nhận 403,
+    // ca đó XANH RỖNG — nó không phân biệt được guard đang chặn vì thiếu quyền hay vì route chết
+    // (bẫy "deny-cases-vacuous-without-allow-case"). Route này KHÔNG được tính là "đã phủ" cho tới
+    // khi có ca ALLOW 2xx thật.
+    it("🔴 GHIM BUG (KI-065): PATCH /settings/security-policy → 403 deny-object-required NGAY CẢ VỚI actor có ALLOW company-level đầy đủ", async () => {
       const res = await authPatch(tAdmin, "/settings/security-policy").send({
         ipRestrictionEnabled: true,
       });
       expect(res.status, JSON.stringify(res.body)).toBe(403);
-    });
-
-    it("DENY: PATCH /settings/security-policy không quyền → 403", async () => {
-      const res = await authPatch(tNoPerm, "/settings/security-policy").send({
-        ipRestrictionEnabled: true,
-      });
-      expect(res.status).toBe(403);
+      // Lý do deny PHẢI là deny-object-required — xem giải thích ngay trên.
+      expect(res.body.message, JSON.stringify(res.body)).toContain("deny-object-required");
+      expect(res.body.error?.message, JSON.stringify(res.body)).toContain("deny-object-required");
     });
 
     // ── PUT /settings/mail-config ─────────────────────────────────────────
@@ -156,12 +185,13 @@ describe.skipIf(!hasLaneDb)(
         port: 587,
         username: "smtp-user",
         fromEmail: "noreply@s10qarh1.invalid",
-        password: "smtp-secret-pw-1",
+        password: SMTP_PW_STORED,
       });
       expect(res.status, JSON.stringify(res.body)).toBeLessThan(300);
       expect(res.body.data.hasPassword).toBe(true);
       expect(res.body.data.password).toBeUndefined();
-      expect(JSON.stringify(res.body)).not.toContain("smtp-secret-pw-1");
+      // So với CHÍNH giá trị vừa gửi (không so literal chép tay) — đổi fixture thì assert vẫn còn nghĩa.
+      expect(JSON.stringify(res.body)).not.toContain(SMTP_PW_STORED);
     });
 
     it("DENY: PUT /settings/mail-config không quyền → 403", async () => {
@@ -170,7 +200,7 @@ describe.skipIf(!hasLaneDb)(
         port: 587,
         username: "smtp-user",
         fromEmail: "noreply@s10qarh1.invalid",
-        password: "smtp-secret-pw-1",
+        password: SMTP_PW_STORED,
       });
       expect(res.status).toBe(403);
     });
@@ -181,7 +211,7 @@ describe.skipIf(!hasLaneDb)(
         port: 0,
         username: "smtp-user",
         fromEmail: "noreply@s10qarh1.invalid",
-        password: "smtp-secret-pw-1",
+        password: SMTP_PW_STORED,
       });
       expect(res.status).toBe(400);
     });
@@ -192,7 +222,7 @@ describe.skipIf(!hasLaneDb)(
       expect(res.status, JSON.stringify(res.body)).toBe(200);
       expect(Array.isArray(res.body.data.configs)).toBe(true);
       expect(res.body.data.configs.length).toBeGreaterThan(0);
-      expect(JSON.stringify(res.body)).not.toContain("smtp-secret-pw-1");
+      expect(JSON.stringify(res.body)).not.toContain(SMTP_PW_STORED);
     });
 
     it("DENY: GET /settings/mail-config không quyền → 403", async () => {
@@ -206,11 +236,11 @@ describe.skipIf(!hasLaneDb)(
         host: "127.0.0.1",
         port: 65500,
         username: "smtp-user",
-        password: "smtp-secret-pw-probe",
+        password: SMTP_PW_PROBE,
       });
       expect(res.status, JSON.stringify(res.body)).toBe(201);
       expect(res.body.data.ok).toBe(false);
-      expect(JSON.stringify(res.body)).not.toContain("smtp-secret-pw-probe");
+      expect(JSON.stringify(res.body)).not.toContain(SMTP_PW_PROBE);
     });
 
     it("DENY: POST /settings/mail-config/test không quyền → 403", async () => {
@@ -218,7 +248,7 @@ describe.skipIf(!hasLaneDb)(
         host: "127.0.0.1",
         port: 65500,
         username: "smtp-user",
-        password: "smtp-secret-pw-probe",
+        password: SMTP_PW_PROBE,
       });
       expect(res.status).toBe(403);
     });
