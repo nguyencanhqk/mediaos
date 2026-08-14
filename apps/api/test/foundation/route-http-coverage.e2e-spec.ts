@@ -14,15 +14,19 @@
  * một path-literal khớp segment-by-segment với route (`:param` ở route và `${expr}` ở literal đều coi
  * là khớp bất kỳ).
  *
- * GIỚI HẠN CỐ Ý (ghi rõ để không ai hiểu nhầm đây là bằng chứng runtime):
+ * GIỚI HẠN CỐ Ý — SAI CHIỀU NGUY HIỂM, đọc kỹ trước khi dùng số này (ghi rõ để không ai hiểu nhầm
+ * đây là bằng chứng runtime hay trần đo được):
  *   - Không xác nhận verb và path THỰC SỰ được gọi CÙNG NHAU trên cùng một dòng — nhiều file dùng biến
  *     trung gian (`const u = ...; request(app.getHttpServer()).get(u)`); scan gom verb-set và path-set
- *     ở CẤP FILE, không cấp câu lệnh. Rủi ro: false-positive khi file có nhiều verb + nhiều path không
- *     liên quan tới nhau. Rủi ro NGƯỢC (false-negative — báo "chưa phủ" một route THỰC RA có test) thấp
- *     hơn nhiều và an toàn hơn cho mục đích của phép đo này (tìm khoảng trống).
+ *     ở CẤP FILE, không cấp câu lệnh. Hệ quả: một file chỉ cần có `.post(` ở đâu đó TRONG FILE và một
+ *     chuỗi path khớp ở đâu đó KHÁC trong CÙNG FILE (không liên quan gì tới nhau) là route đã bị tính
+ *     "covered". Đây là RỦI RO CHÍNH của phép đo và là chiều NGUY HIỂM cho mục đích tìm lỗ: số
+ *     "covered" có thể CAO HƠN thực tế (false-positive), tức GIẤU khoảng trống thật thay vì lộ nó ra.
  *   - KHÔNG chứng minh test đó có ca ALLOW (2xx) hay chỉ ca DENY — chỉ chứng minh route bị "chạm".
- *   - Đây là SÀN đo được, không phải trần: dùng để XẾP HẠNG rủi ro rồi viết test thật cho nhóm cao nhất,
- *     KHÔNG dùng để tuyên bố "route X đã kiểm đủ".
+ *   - Vì vậy: số "covered" / % ở đây là CẬN TRÊN (upper bound) của độ phủ thật, KHÔNG phải cận dưới —
+ *     độ phủ THẬT chắc chắn ≤ số đo được ở đây. Dùng để XẾP HẠNG rủi ro rồi viết test HTTP thật cho
+ *     nhóm cao nhất; TUYỆT ĐỐI KHÔNG tuyên bố "route X đã kiểm đủ" chỉ vì `covered === true` — phải mở
+ *     `evidenceFiles` ra đọc thật để biết có ca ALLOW hay chỉ trùng verb/path ngẫu nhiên trong file.
  *
  * KHÔNG cần Postgres: `collectRoutes` chỉ đọc metadata app đã boot (giống openapi-docs.e2e-spec), scan
  * file chỉ đọc filesystem. Vì vậy KHÔNG skipIf(!hasDb) — chạy trong `pnpm test` mặc định.
@@ -43,6 +47,14 @@ type HttpVerb = "get" | "post" | "put" | "patch" | "delete";
 
 /** Route bị coi là "ghi/nhạy cảm" ⇒ xếp hạng rủi ro cao hơn route chỉ đọc. */
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * Ngưỡng riskScore dùng để định nghĩa "route rủi ro cao" cho RATCHET ở cuối file. Dùng CHUNG với
+ * `riskScoreOf()` — cổng lọc theo GIÁ TRỊ SCORE (>= ngưỡng), KHÔNG ghim theo tên/path route cụ thể,
+ * để route đổi tên hay route mới thêm vào vẫn được xét đúng theo định nghĩa rủi ro thay vì bị bỏ sót
+ * vì không khớp một danh sách cứng.
+ */
+const RISK_GATE_THRESHOLD = 5;
 
 /**
  * Từ khoá miền nhạy cảm (khớp trên `path + controller + permission`, lowercase, substring).
@@ -211,6 +223,19 @@ export function measureRouteHttpCoverage(
   });
 }
 
+/**
+ * RATCHET — đo THẬT ngày 14/08/2026, sau khi lane FIX-ROUTEHTTP-A-TOPRISK land (route risk 7/7/6
+ * được phủ): coveredCount=370/499 (74.1%), uncovered route risk>=RISK_GATE_THRESHOLD=12.
+ * Nguồn: `npx vitest run test/foundation/route-http-coverage.e2e-spec.ts` (console log của test
+ * "IN BẢNG" bên dưới) — KHÔNG ước lượng.
+ *
+ * Ratchet CHỈ được SIẾT xuống (MAX giảm / MIN tăng) khi lane sau land thêm test HTTP thật làm độ
+ * phủ tăng thật. NỚI ngưỡng lên (MAX tăng / MIN giảm) PHẢI có WO + lý do bằng văn bản kèm theo commit
+ * sửa hằng số này — KHÔNG tự nới cho xanh khi có route mới xuất hiện hoặc test HTTP bị xoá.
+ */
+const MAX_UNCOVERED_HIGH_RISK = 12;
+const MIN_COVERED_COUNT = 370;
+
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;
   let routes: RouteInfo[];
@@ -265,5 +290,34 @@ describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp l�
     // Sanity: phép đo phải khác rỗng theo cả hai chiều (nếu 0 covered hoặc 0 uncovered thì cơ chế hỏng).
     expect(coveredCount).toBeGreaterThan(0);
     expect(total).toBeGreaterThan(0);
+  });
+
+  it("RATCHET (CỔNG, không chỉ báo cáo): route rủi ro cao chưa phủ không được TĂNG, tổng đã phủ không được GIẢM", () => {
+    const uncoveredHighRisk = coverage.filter(
+      (c) => !c.covered && c.riskScore >= RISK_GATE_THRESHOLD,
+    );
+    const coveredCount = coverage.filter((c) => c.covered).length;
+
+    expect(
+      uncoveredHighRisk.length,
+      `route rủi ro cao (risk>=${RISK_GATE_THRESHOLD}) chưa phủ = ${uncoveredHighRisk.length}, vượt ngưỡng ratchet ${MAX_UNCOVERED_HIGH_RISK}. Xem bảng xếp hạng ở test "IN BẢNG" phía trên. Nếu route mới vừa thêm vào thì đây là nợ THẬT — viết test HTTP thật rồi SIẾT hằng số MAX_UNCOVERED_HIGH_RISK xuống; TUYỆT ĐỐI không nới hằng số lên mà không có WO + lý do.`,
+    ).toBeLessThanOrEqual(MAX_UNCOVERED_HIGH_RISK);
+
+    expect(
+      coveredCount,
+      `tổng route đã phủ = ${coveredCount}, tụt xuống dưới sàn ratchet ${MIN_COVERED_COUNT} — có test HTTP đã bị xoá/đổi tên khiến scan không còn khớp verb/path?`,
+    ).toBeGreaterThanOrEqual(MIN_COVERED_COUNT);
+  });
+
+  it("non-vacuous: ratchet trên không được tự xanh khi phép đo hỏng và trả mảng rỗng", () => {
+    // Nếu measureRouteHttpCoverage() hỏng (vd routes=[] hoặc coverage=[]), uncoveredHighRisk sẽ là
+    // mảng rỗng và assert "<=" ở test RATCHET phía trên xanh giả (0 <= MAX luôn đúng). Ràng buộc này
+    // đòi coverage[] phải khác rỗng VÀ phải có ít nhất một route rủi ro cao thật sự chưa phủ — khớp
+    // đúng thực trạng đo được — để cổng phía trên có ý nghĩa, không phải tautology.
+    expect(coverage.length).toBeGreaterThan(0);
+    const uncoveredHighRisk = coverage.filter(
+      (c) => !c.covered && c.riskScore >= RISK_GATE_THRESHOLD,
+    );
+    expect(uncoveredHighRisk.length).toBeGreaterThan(0);
   });
 });
