@@ -12,5 +12,14 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
     include: ["src/**/*.spec.{ts,tsx}"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "text-summary"],
+      include: ["src/components/chat/call/**/*.{ts,tsx}"],
+      exclude: [
+        "src/components/chat/call/**/*.spec.{ts,tsx}",
+        "src/components/chat/call/call-test-doubles.ts",
+      ],
+    },
   },
 });
