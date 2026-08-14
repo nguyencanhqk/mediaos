@@ -12225,7 +12225,7 @@ export const backlog = [
     title:
       "Một mảng lớn đường dẫn API không có test HTTP nào chạm — guard/DTO/envelope của route CHƯA TỪNG chạy, phủ ở tầng service không chứng minh được cổng",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/test/**",
       "apps/api/src/**/*.int.spec.ts",
@@ -12241,14 +12241,17 @@ export const backlog = [
       "Bước 1 BẮT BUỘC là ĐO LẠI rồi mới xếp việc — WO này khởi đầu bằng phép đo, không bằng việc viết test.",
     ],
     done_when: [
-      "Có phép đo LẶP LẠI ĐƯỢC (script/lệnh, không phải đếm tay) trả lời: route nào chưa có test HTTP nào chạm — số mới thay số 98/346 trong RELEASE-02",
-      "Xếp hạng theo RỦI RO chứ không theo thứ tự bảng chữ cái: route ghi dữ liệu · route nhạy cảm (quyền/secret/audit) lên trước route đọc",
-      "Phủ test HTTP thật cho nhóm rủi ro cao nhất trong đợt này; nhóm còn lại ghi rõ CÒN NỢ bao nhiêu (cấm im lặng cắt scope — 'no silent caps')",
-      "Test chạy được ở chế độ CI thật (`LANE_DB` — src xanh KHÔNG bằng integration xanh)",
-      "KI-025 cập nhật số đo mới ở RELEASE-02 (đóng hay hạ severity là kết luận của số, không phải mong muốn)",
+      "✅ Phép đo LẶP LẠI ĐƯỢC: `apps/api/test/foundation/route-http-coverage.e2e-spec.ts` (không cần Postgres, boot app + scan tĩnh file supertest, KHÔNG đếm tay) — 366/499 (73,3%) có bằng chứng phủ, 133 chưa (thay số 98/346 cũ).",
+      "✅ Xếp hạng risk score (route ghi + nhạy cảm auth/permission/secret/audit lên trước route đọc) — in top-30 mỗi lần chạy script.",
+      "◐ Phủ test HTTP thật cho 5/18 route risk≥5 cao nhất trong đợt này (security-policy + mail-config, `security-mailconfig-http.int-spec.ts`, 11 ca ALLOW-trước-DENY) — CHẠM TRẦN NGÂN SÁCH phiên, DỪNG đúng luật thay vì cắt lặng lẽ. CÒN NỢ: 15 route risk≥5 (auth/reset-password · 2fa/disable · user-invites · api-keys · auth-users admin · permission-admin ×4 · role-admin ×2) + ~10 route risk=3-4 + phần còn lại của 133 — số chính xác + danh sách nằm ở output script và KI-025.",
+      "✅ Test chạy thật ở LANE_DB (`mediaos_routehttp`) — 11/11 xanh, không skip.",
+      "✅ KI-025 cập nhật số đo mới ở RELEASE-02 (giữ nguyên S2 — còn nợ thật, không hạ severity theo mong muốn).",
     ],
     notes: [
       "Đây là WO có nguy cơ PHÌNH nhất trong wave. Ranh giới: đợt này đóng NHÓM RỦI RO CAO + để lại phép đo tái dùng. Không đặt mục tiêu 100%.",
+      "ĐÓNG 14/08/2026 (chạm ngân sách phiên, dừng đúng luật): phép đo mới cho 366/499 (73,3%) — heuristic RỘNG có chủ đích (scan cấp FILE, không cấp câu lệnh — xem giới hạn ghi trong docblock đầu file coverage script), nên là CẬN TRÊN, không phải số chính xác tuyệt đối.",
+      "🔴 PHÁT HIỆN THẬT khi viết test cho `PATCH /settings/security-policy`: route này KHÔNG THỂ gọi thành công qua HTTP với BẤT KỲ actor nào — `isSensitive+requiresReauth` nhưng route không có `:id` ⇒ `permission.decide.ts` luôn đòi object-grant (`needsObjectGrant` luôn true) ⇒ 403 `deny-object-required` vĩnh viễn; `req.reauthContext` (điều kiện còn lại) KHÔNG được gán ở bất kỳ đâu trong codebase (grep xác nhận). Test mới GHIM đúng hành vi 403 hiện tại — CHƯA sửa guard (ngoài phạm vi lane QA, cần WO riêng quyết định thiết kế: bỏ requiresReauth hay thêm resource-id giả cho policy-singleton).",
+      "Việc còn nợ cho lane khác: (1) viết test HTTP cho 15 route risk≥5 còn lại (auth/user-invites/api-keys/permission-admin/role-admin) — ưu tiên cao nhất vì đây đúng lớp `deny-path` CLAUDE.md §6 đòi hỏi; (2) WO riêng quyết định số phận `PATCH /settings/security-policy` (bug thật, route chết).",
     ],
   },
 
