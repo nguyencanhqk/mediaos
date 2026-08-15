@@ -29,6 +29,21 @@ test("B1 — chore(harness|docs|gov) là bookkeeping ⇒ bị loại khỏi ngu�
   }
 });
 
+// ── B1b: docs(plan) + docs(status) cũng là bookkeeping (thủng lần 3 — 15/08/2026) ────────────
+// Khác B1 ở chỗ đây là type `docs`, mà `docs(<scope>)` là đường ship THẬT của WO tài liệu (xem B2).
+// Hai scope này là ngoại lệ vì nội dung của chúng nói việc CHƯA làm:
+//   - `plan`   = kế hoạch thi công ⇒ theo định nghĩa WO chưa ship (ad2325f6 đóng dấu oan S10-ATT-NOTIPROD-1);
+//   - `status` = regen STATUS, subject liệt kê chính các WO đang trong hàng đợi READY (5e9700a6).
+test("B1b — docs(plan|status) là bookkeeping ⇒ bị loại khỏi nguồn stamp", () => {
+  const cases = [
+    "docs(plan): kế hoạch thi công S10-ATT-NOTIPROD-1 sau 2 vòng plan-review (29 chốt) + sửa paths WO",
+    "docs(status): regen sau khi #337 land — READY = S8-CHAT-UX-DB-1 · S8-CHAT-UX-RT-1 · S7-CALL-DOC-1",
+  ];
+  for (const s of cases) {
+    assert.ok(isBookkeeping(s), `phải nhận là bookkeeping: ${s}`);
+  }
+});
+
 // ── B2: commit SHIP THẬT vẫn phải lọt qua (không được vá quá tay) ───────────────────────────
 // Nếu luật lọc nới rộng tới mức nuốt cả commit ship, board sẽ kẹt ready dù việc đã vào master —
 // đúng bẫy ngược mà chính reconcile sinh ra để chữa (S2-INT-1 · S2-INT-2).
@@ -37,6 +52,7 @@ test("B2 — commit ship thật KHÔNG bị coi là bookkeeping", () => {
     "feat(release): S6-GOLIVE-1 — WS10: biên bản Go/No-go + bộ bàn giao 10/10, vá lỗ backup chặn go-live (#315)",
     'fix(sec): S6-SEC-XTENANTFK-1 — KI-046: bịt LỚP lỗ "FK một-cột nối hai bảng tenant" (#313)',
     "docs(spec): S5-ME-DOC-1 — bộ spec ME", // WO tài liệu ship bằng docs(...), KHÔNG phải chore(docs)
+    "docs(devops): S9-SOCIAL-DEVOPS-1 — DEVOPS-14 quy trình triển khai", // docs scope KHÁC plan/status ⇒ vẫn ship
     "chore(release): S6-REL-1 — hồ sơ phát hành", // chore scope KHÁC ⇒ vẫn là ship
   ];
   for (const s of cases) {
