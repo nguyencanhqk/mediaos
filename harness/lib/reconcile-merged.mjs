@@ -71,7 +71,20 @@ const tokenRe = (id) => new RegExp(`(^|[^\\w-])${esc(id)}([^\\w-]|$)`);
 //   là commit HOÃN — nội dung của nó nói WO này KHÔNG thi công — nhưng scope `gov` không có trong danh
 //   sách trên ⇒ reconcile đọc thành "WO đã ship" và đóng dấu 'finished' cho một WO chưa hề có dòng code
 //   nào (KI-053 + KI-054 vẫn MỞ). Commit quản trị (`gov`) mô tả QUYẾT ĐỊNH về WO, không phải việc ship WO.
-const BOOKKEEPING_RE = /^chore\((harness|docs|gov)\)/i;
+//
+// Vì sao `docs(plan)` + `docs(status)` cũng phải nằm đây (thêm 2026-08-15 — false-positive ĐÃ XẢY RA LẦN 3):
+//   `docs(plan): kế hoạch thi công S10-ATT-NOTIPROD-1 sau 2 vòng plan-review (29 chốt) + sửa paths WO`
+//   (ad2325f6) là commit KẾ HOẠCH — theo định nghĩa nó nói việc CHƯA làm — nhưng scope `plan` nằm dưới
+//   type `docs`, mà `docs(<scope>)` được cố ý coi là đường ship của WO tài liệu (xem đoạn trên) ⇒ reconcile
+//   đóng dấu 'finished' cho WO có 0 dòng code, 0 nhánh, 0 PR. Tệ hơn dấu sai thường: commit nằm vĩnh viễn
+//   trong lịch sử master nên dấu TÁI PHÁT mỗi lần regen, nuốt cả `ledger.mjs event <WO> reopened` của người
+//   (đo 15/08: reopen xong chạy gen-status là bị stamp lại ngay trong cùng một lệnh).
+//   `docs(status)` vào cùng luật vì subject của nó LIỆT KÊ WO đang trong hàng đợi READY — vd 5e9700a6
+//   `docs(status): regen … READY = S8-CHAT-UX-DB-1 · S8-CHAT-UX-RT-1 · S7-CALL-DOC-1` — tức nêu tên đúng
+//   những WO CHƯA ship. Lỗ này mở sẵn nhưng chưa lộ vì cả ba WO đó về sau đều ship thật.
+//   Đo trước khi vá: `docs(plan)` xuất hiện ĐÚNG 1 lần trong 400 commit đầu master (chính commit hỏng),
+//   `docs(status)` toàn bộ là regen STATUS ⇒ KHÔNG WO nào từng ship qua hai scope này ⇒ vá không mất dấu ai.
+const BOOKKEEPING_RE = /^(chore\((harness|docs|gov)\)|docs\((plan|status)\))/i;
 
 // Subject có phải commit ghi sổ/quản trị (KHÔNG BAO GIỜ là "WO này đã ship") không?
 // Tách riêng để test soi được — đây là lớp chắn đã thủng 2 lần (S6-SEC-MV-1 · S6-SEC-IDENTITY-PROJ-1).
