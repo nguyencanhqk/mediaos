@@ -12188,7 +12188,7 @@ export const backlog = [
     title:
       "3 sự kiện ATT bật trong danh mục nhưng KHÔNG AI PHÁT (`ATT_MISSING_CHECKOUT` · `ATT_LATE_DETECTED` · `ATT_ABSENT_DETECTED`) — danh mục hứa, hệ thống không giao",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/attendance/**",
       "apps/api/src/notifications/notification-dedupe.const.ts",

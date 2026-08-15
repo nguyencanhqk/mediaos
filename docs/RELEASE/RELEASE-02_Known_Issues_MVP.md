@@ -38,7 +38,7 @@
 | KI-018 | Dữ liệu demo có trạng thái đơn nghỉ lẫn hoa/thường | S3 | Dữ liệu | ❌ | ❌ | Sprint 6 |
 | KI-019 | Chỉ 1 ca làm việc + 1 quy tắc chấm công + 0 phân ca trong DB UAT | S3 | Dữ liệu | ❌ | ❌ | Owner/HR |
 | KI-020 | Chưa có dữ liệu GOAL để nghiệm thu | S3 | Dữ liệu | ❌ | ❌ | Owner |
-| KI-021 | 3 sự kiện NOTI của ATT bật trong danh mục nhưng **không có producer** (`ATT_MISSING_CHECKOUT` · `ATT_LATE_DETECTED` · `ATT_ABSENT_DETECTED`) | S2 | Sản phẩm | ❌ | ❌ | Sau MVP |
+| KI-021 | 3 sự kiện NOTI của ATT bật trong danh mục nhưng **không có producer** (`ATT_MISSING_CHECKOUT` · `ATT_LATE_DETECTED` · `ATT_ABSENT_DETECTED`) | S2 | Sản phẩm | ✅ | ✅ | ĐÓNG `S10-ATT-NOTIPROD-1` 2026-08-15 |
 | ~~KI-022~~ | ~~`outboxOf` trong `goal-be2-link.int-spec` không lọc `company_id` ⇒ đỏ-giả ngẫu nhiên~~ — **ĐÃ ĐÓNG 2026-07-26** (`S6-STAB-1`) | S1 | Hạ tầng test | — | — | ✔ xong |
 | ~~KI-023~~ | ~~Đua teardown `audit_logs → companies` trong `cleanupTenants` ⇒ đỏ-giả ngẫu nhiên~~ — **ĐÃ ĐÓNG 2026-07-26** (`S6-STAB-1`) | S1 | Hạ tầng test | — | — | ✔ xong |
 | ~~KI-024~~ | ~~`foundation-audit.e2e-spec` dùng `action` cố định + đếm tuyệt đối ở System scope ⇒ đỏ-giả **vĩnh viễn** sau một lần chạy bị ngắt~~ — **ĐÃ ĐÓNG 2026-07-26** (`S6-QA-FINAL-1`) | S1 | Hạ tầng test | — | — | ✔ xong |
@@ -501,7 +501,7 @@ dữ liệu (không chỉ "chạy không lỗi") bằng đo hàng trước/sau q
 Trạng thái đơn nghỉ lẫn hoa/thường (`Pending` 1 · `pending` 2 · `approved` 1 · `Draft` 1) · chỉ 1 ca +
 1 quy tắc chấm công + 0 phân ca (có fallback nên không chặn) · `goals` = 0.
 
-### KI-021 — 3 sự kiện NOTI của ATT không có producer · S2 · phát hiện 2026-07-26 (`S6-STAB-1`)
+### KI-021 — 3 sự kiện NOTI của ATT không có producer · S2 · ✅ ĐÓNG 2026-08-15 (`S10-ATT-NOTIPROD-1`)
 
 `ATT_MISSING_CHECKOUT` · `ATT_LATE_DETECTED` · `ATT_ABSENT_DETECTED` được seed `isEnabled: true` trong
 `notification-event-catalog.const.ts:82-84`, nhưng **không có nơi nào phát chúng** — toàn hệ chỉ đăng ký
@@ -509,14 +509,49 @@ Trạng thái đơn nghỉ lẫn hoa/thường (`Pending` 1 · `pending` 2 · `a
 có job ATT cuối ngày**. Chính code cũng ghi nhận: `dashboard-cache-invalidation.const.ts:43` — *"KHÔNG
 có producer nào"*.
 
-**Hệ quả:** người dùng bật/tắt được 3 loại thông báo không bao giờ tới; admin thấy chúng trong danh mục
-sự kiện. **KHÔNG sai dữ liệu** — cờ `is_missing_check_out` đặt **đồng bộ** ngay lúc check-in/check-out
-(`attendance.builders.ts:63,104`), không chờ job. **Workaround:** đơn điều chỉnh công
+**Hệ quả (khi mở):** người dùng bật/tắt được 3 loại thông báo không bao giờ tới; admin thấy chúng trong
+danh mục sự kiện. **KHÔNG sai dữ liệu** — cờ `is_missing_check_out` đặt **đồng bộ** ngay lúc check-in/
+check-out (`attendance.builders.ts:63,104`), không chờ job. **Workaround (khi mở):** đơn điều chỉnh công
 (`MISSING_CHECK_OUT`) đã chạy được.
 
-**Defer** vì làm job mới là **tính năng**, bị `RELEASE-05` §4.2 từ chối sau freeze. Sau MVP chọn một
-trong hai: build job ATT cuối ngày, **hoặc** đặt `isEnabled: false` cho 3 mã để UI không hứa cái không
-có — đúng mẫu `ATT_CHECKIN_REMINDER`/`ATT_CHECKOUT_REMINDER` đang dùng. Chi tiết: `RELEASE-06` §4.1.
+**ĐÓNG `S10-ATT-NOTIPROD-1` (2026-08-15):** producer THẬT — `AttendanceAlertNotiJobHandler`
+(`apps/api/src/attendance/attendance-alert-noti.job-handler.ts`, `jobCode='ATT_ALERT_DETECT'`, đăng ký
+qua `@SystemJobHandler()` trong `providers` của `AttendanceModule`) quét `attendance_records` (missing
+check-out/đi muộn) + `employee_profiles` (vắng mặt, anti-join có trần) TRONG CỬA SỔ NGÀY-ĐÃ-ĐÓNG theo
+CA CỦA CHÍNH NHÂN VIÊN (đọc cột `shifts.cross_day`, `shifts.work_days`), rồi phát qua
+`NotificationEngineService.intake()` in-process — **KHÔNG migration mới** (catalog/template/deep-link đã
+seed sẵn ở mig `0481`/`0497`). Logic thuần: `attendance-alert-noti.logic.ts` (+ spec 23 ca). Repository
+chỉ-đọc, tenant-scoped: `attendance-alert-noti.repository.ts` (+ int-spec 9 ca ALLOW→DENY thật trên
+Postgres cô lập: missing-checkout, late, absent, khoá sổ (`locked_at`), soft-delete fail-closed, nghỉ
+phép chữ thường, ngày lễ GLOBAL, bán kính-có-trần 30 ngày, cô lập tenant). Idempotent theo KỲ đo được:
+chạy lại cùng ngày không tạo trùng; phát → soft-delete → chạy lại KHÔNG hồi sinh (dedupe khớp đúng khoá
+`NotificationDedupeService.computeKey`, APPEND 3 dòng `notification-dedupe.const.ts`). Unit-spec riêng
+(`attendance-alert-noti.job-handler.spec.ts`, 6 ca) ghim: materialize ĐÓNG tx trước khi gọi `intake()`
+(chống tx lồng), throttle khoá THEO `companyId` (Map, không field cấp-instance), KHÔNG gán `actorUserId`
+(3 mã `isSystemEvent=false` — gán sẽ khiến chính người bị nhắc bị lọc khỏi recipient), lỗi 1 ứng viên
+KHÔNG chặn ứng viên còn lại. Kill-switch = `notification_events.is_enabled` (đã có sẵn, engine tự tôn
+trọng — KHÔNG cần env mới).
+
+**Nợ có địa chỉ (ghi rõ, KHÔNG hạ KI-021 xuống "đóng một phần"):**
+1. Template `ATT_ABSENT_DETECTED` (`migration 0481:161-164`) viết theo giọng gửi HR/quản lý ("cần được
+   kiểm tra") trong khi v1 gửi cho **CHÍNH nhân viên** (recipient thật = self, fan-out Manager/HR chưa có
+   bề mặt cấu hình) — câu chữ lệch đối tượng nhận; sửa cần **migration** nên ngoài phạm vi WO này.
+2. Fan-out Manager/HR cho `ATT_LATE_DETECTED`/`ATT_ABSENT_DETECTED` ("nếu cấu hình", SPEC-04 §2067-2069)
+   **chưa có bề mặt cấu hình nào** trong hệ — HOÃN tới khi có WO cấu hình notification theo role.
+3. `ATT_LATE_DETECTED` phát **SAU biên ngày-đã-đóng** (job theo lô cuối ngày, không realtime lúc
+   check-in) — **CỐ Ý**, không phải lỗi; QA đối chiếu SPEC-04 test case đi-muộn cần biết trước.
+4. **Bán kính PROD chưa đo trước khi bật**: PROD funtime có ~45 nhân viên đã import — nếu phần lớn không
+   check-in thực tế thì lượt quét đầu tiên có thể bắn `ATT_ABSENT_DETECTED` cho gần hết nhân sự. Trước khi
+   bật job này ở PROD: chạy đo khô số recipient của 1 ngày đã đóng trên PROD-clone; kill-switch sẵn có =
+   `notification_events.is_enabled=false` cho 3 mã.
+5. Worker chết đúng lúc biên ngày đóng (in-memory throttle reset khi restart) có thể làm MẤT vĩnh viễn
+   thông báo của ngày đó — gợi ý WO sau: quét N-ngày-gần-nhất có trần thay vì chỉ [hôm qua, hôm nay].
+6. Người nghỉ NỬA NGÀY đã duyệt mà không check-in nửa còn lại VẪN nhận `ATT_ABSENT_DETECTED` (đúng hành
+   vi hiện hành của `findApprovedFullDayLeaveTx`, dễ bị hiểu nhầm là báo sai).
+7. `ATT_ALERT_DETECT_INTERVAL_MS` (throttle nhịp quét) chưa khai vào `config/env.schema.ts` (ngoài paths
+   lane này) — vẫn parse-an-toàn + clamp mức NGÀY nếu ai đó set tay.
+8. `ATT_AUTO_ATTENDANCE_CREATED` (auto-checkout/auto-attendance job) và wiring widget
+   `ATTENDANCE_ALERTS` ở `dashboard-cache-invalidation.const.ts:43-48` VẪN chưa có — ngoài phạm vi WO.
 
 ### KI-022 / KI-023 — 2 nguồn ĐỎ-GIẢ trong suite · S1 · ✅ ĐÃ ĐÓNG 2026-07-26 (`S6-STAB-1`)
 
@@ -884,6 +919,9 @@ nhau, cần cả hai** — #9/#10 bắt "trang chết" (đúng nhưng muộn và
 "bundle dev đang được phục vụ" (sớm hơn, và chỉ thẳng việc phải làm). (3) **Nghiệm thu giám sát phải
 BẺ HỎNG**: một hệ cảnh báo chỉ được chứng minh bằng việc dựng lại chế độ hỏng rồi xem nó có kêu không —
 nhìn nó xanh trên hệ đang khoẻ chính là cách sự cố 11–12/08 lọt qua.
+
+**Cập nhật 2026-08-15 (`S10-ATT-NOTIPROD-1`):** `S2` **→ 4** — KI-021 ĐÓNG (producer thật cho 3 sự kiện
+NOTI ATT, xem §KI-021 chi tiết bên trên), còn lại KI-025 · KI-050 · KI-056 · KI-065.
 
 **Cập nhật 2026-08-14 (`S10-QA-ROUTEHTTP-1`, vòng sửa sau nghiệm thu):** `S2` **4 → 5** (KI-021 · KI-025 ·
 KI-050 · KI-056 · **KI-065 mở**). KI-065 là bug thật **do việc viết test HTTP đào ra**, không phải khuyết tật
