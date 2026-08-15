@@ -5,8 +5,10 @@
  * nhánh chặn (chốt #2 tx lồng, chốt #16 throttle theo company, actor-exclusion, lỗi không nuốt câm).
  */
 
+import "reflect-metadata";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InternalEventIntakeDto } from "@mediaos/contracts";
+import { SYSTEM_JOB_HANDLER } from "../scheduler/job-handler";
 import { AttendanceAlertNotiJobHandler } from "./attendance-alert-noti.job-handler";
 import type {
   AttAlertCandidateBundle,
@@ -14,7 +16,10 @@ import type {
 } from "./attendance-alert-noti.repository";
 import type { DatabaseService, TenantTx } from "../db/db.service";
 import type { NotificationEngineService } from "../notifications/notification-engine.service";
-import { ATT_MISSING_CHECKOUT_EVENT } from "./attendance-alert-noti.logic";
+import {
+  ATT_ALERT_DETECT_JOB_CODE,
+  ATT_MISSING_CHECKOUT_EVENT,
+} from "./attendance-alert-noti.logic";
 
 const FAKE_TX = {} as TenantTx;
 const COMPANY_A = "11111111-1111-1111-1111-111111111111";
@@ -97,6 +102,23 @@ describe("AttendanceAlertNotiJobHandler", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  /**
+   * [CHỐT #9 — nửa unit, KHÔNG cần DB] Mirror `dashboard-mv-refresh.job-handler.spec.ts:27-37` + đóng
+   * gói vá cho `attendance-alert-noti-producer.int.spec.ts:495` (đúng ca nhưng DB-gated, `skipIf(!hasDb)`
+   * ⇒ CI thiếu `LANE_DB` là suite này không chạy — bài học "XANH KHÔNG ĐỦ BẰNG CHỨNG", CLAUDE.md §9).
+   * Ghim GIÁ TRỊ chuỗi job code, KHÔNG chỉ ghim TÊN hằng (bài học index-ratchet-must-pin-definition-not-name):
+   * `@SystemJobHandler()` gắn metadata `SYSTEM_JOB_HANDLER=true` lên class — `WorkerSchedulerService`
+   * (`discoverJobHandlers()`, worker-scheduler.service.ts:107) CHỈ gom provider có đúng metadata này. Rớt
+   * decorator (vô tình xoá `@SystemJobHandler()` khi refactor) ⇒ producer NGỪNG CHẠY VĨNH VIỄN, KHÔNG lỗi
+   * nào nổi lên, và 0 test khác trong file này bắt được (chúng `new` thẳng handler, bỏ qua discovery).
+   */
+  it("[CHỐT #9] jobCode + @SystemJobHandler() metadata đăng ký đúng khuôn (DiscoveryService gom qua metadata)", () => {
+    expect(ATT_ALERT_DETECT_JOB_CODE).toBe("ATT_ALERT_DETECT");
+    const { handler } = buildHarness(EMPTY_BUNDLE);
+    expect(handler.jobCode).toBe(ATT_ALERT_DETECT_JOB_CODE);
+    expect(Reflect.getMetadata(SYSTEM_JOB_HANDLER, AttendanceAlertNotiJobHandler)).toBe(true);
   });
 
   it("ALLOW: ứng viên hợp lệ ⇒ intake() ĐÚNG 1 lần, KHÔNG actorUserId, recipient = chính nhân viên", async () => {
