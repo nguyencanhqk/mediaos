@@ -16,9 +16,12 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module";
 import { directPool, hasDb } from "../../test/helpers/integration-db";
-import { seedCompany, seedUser, type SeededTenant } from "../../test/helpers/seed";
+import { seedCompany, seedUser } from "../../test/helpers/seed";
 import { addDaysToLocalDate, localDateOf } from "../common/tz.util";
 import { AttendanceAlertNotiJobHandler } from "./attendance-alert-noti.job-handler";
+import { ATT_ALERT_DETECT_JOB_CODE } from "./attendance-alert-noti.logic";
+import { SYSTEM_JOB_HANDLER } from "../scheduler/job-handler";
+import { WorkerSchedulerService } from "../scheduler/worker-scheduler.service";
 
 const runDb = hasDb && Boolean(process.env.LANE_DB);
 
@@ -47,10 +50,19 @@ describe.skipIf(!runDb)(
       );
     }
 
-    async function seedActiveEmployee(companyId: string, userId: string): Promise<string> {
+    /**
+     * [CHỐT #6] `opts.startDate`/`opts.endDate` THUẦN ADDITIVE (mặc định NULL) — 8 ca cũ gọi hàm này
+     * KHÔNG truyền tham số thứ 3 nên hành vi giữ nguyên. Dùng để dựng ca "cửa sổ hợp đồng" trên nhánh absent.
+     */
+    async function seedActiveEmployee(
+      companyId: string,
+      userId: string,
+      opts?: { startDate?: string; endDate?: string },
+    ): Promise<string> {
       const r = await direct.query(
-        `INSERT INTO employee_profiles (company_id, user_id, status) VALUES ($1, $2, 'active') RETURNING id`,
-        [companyId, userId],
+        `INSERT INTO employee_profiles (company_id, user_id, status, start_date, end_date)
+       VALUES ($1, $2, 'active', $3, $4) RETURNING id`,
+        [companyId, userId, opts?.startDate ?? null, opts?.endDate ?? null],
       );
       return r.rows[0].id as string;
     }
@@ -198,6 +210,107 @@ describe.skipIf(!runDb)(
       expect(await notificationsFor(t.companyId, "ATT_LATE_DETECTED")).toHaveLength(0);
     });
 
+    /**
+     * [CHỐT #12 — 3 ca còn thiếu] Mỗi ca clone ĐÚNG khuôn ca 'locked_at' ở trên, chỉ LẬT MỘT trường trên
+     * bản ghi late hợp lệ (vẫn có check_in_at + check_out_at + is_late=true + late_minutes=25 ⇒ KHÔNG rơi
+     * nhầm sang nhánh missing-checkout). Mỗi ca seed THÊM 1 ĐỐI CHỨNG (late record BÌNH THƯỜNG, không bị
+     * lật cờ) trong CÙNG company/CÙNG lượt handler.run() — chống deny-xanh-rỗng (bài học
+     * deny-cases-vacuous-without-allow-case): nếu handler ngừng chạy hoàn toàn thì đối chứng CŨNG 0 dòng,
+     * test sẽ ĐỎ chứ không xanh giả.
+     */
+    it("[CHỐT #12] is_adjusted=true trên bản ghi late hợp lệ ⇒ 0 ATT_LATE_DETECTED cho người đó, ĐỐI CHỨNG vẫn nhận", async () => {
+      const t = await seedCompany(direct, "att-noti-isadj");
+      companyIds.push(t.companyId);
+      const deniedUserId = await seedUser(
+        direct,
+        t.companyId,
+        `emp-${randomUUID().slice(0, 8)}@t.local`,
+      );
+      const controlUserId = await seedUser(
+        direct,
+        t.companyId,
+        `emp-${randomUUID().slice(0, 8)}@t.local`,
+      );
+      await seedActiveEmployee(t.companyId, deniedUserId);
+      await seedActiveEmployee(t.companyId, controlUserId);
+      await seedDefaultShift(t.companyId);
+      await direct.query(
+        `INSERT INTO attendance_records
+         (company_id, user_id, work_date, status, check_in_at, check_out_at, is_late, late_minutes, is_adjusted)
+       VALUES ($1, $2, $3, 'late', $3::date + time '08:30', $3::date + time '17:00', true, 25, true)`,
+        [t.companyId, deniedUserId, yesterday],
+      );
+      await seedLateRecord(t.companyId, controlUserId, yesterday);
+
+      await handler.run({ companyId: t.companyId });
+
+      const rows = await notificationsFor(t.companyId, "ATT_LATE_DETECTED");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].recipient_user_id).toBe(controlUserId);
+    });
+
+    it("[CHỐT #12] status='approved_adjustment' trên bản ghi late hợp lệ ⇒ 0 ATT_LATE_DETECTED cho người đó, ĐỐI CHỨNG vẫn nhận", async () => {
+      const t = await seedCompany(direct, "att-noti-stadj");
+      companyIds.push(t.companyId);
+      const deniedUserId = await seedUser(
+        direct,
+        t.companyId,
+        `emp-${randomUUID().slice(0, 8)}@t.local`,
+      );
+      const controlUserId = await seedUser(
+        direct,
+        t.companyId,
+        `emp-${randomUUID().slice(0, 8)}@t.local`,
+      );
+      await seedActiveEmployee(t.companyId, deniedUserId);
+      await seedActiveEmployee(t.companyId, controlUserId);
+      await seedDefaultShift(t.companyId);
+      await direct.query(
+        `INSERT INTO attendance_records
+         (company_id, user_id, work_date, status, check_in_at, check_out_at, is_late, late_minutes)
+       VALUES ($1, $2, $3, 'approved_adjustment', $3::date + time '08:30', $3::date + time '17:00', true, 25)`,
+        [t.companyId, deniedUserId, yesterday],
+      );
+      await seedLateRecord(t.companyId, controlUserId, yesterday);
+
+      await handler.run({ companyId: t.companyId });
+
+      const rows = await notificationsFor(t.companyId, "ATT_LATE_DETECTED");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].recipient_user_id).toBe(controlUserId);
+    });
+
+    it("[CHỐT #12] attendance_status='Adjusted' trên bản ghi late hợp lệ ⇒ 0 ATT_LATE_DETECTED cho người đó, ĐỐI CHỨNG vẫn nhận", async () => {
+      const t = await seedCompany(direct, "att-noti-stsadj");
+      companyIds.push(t.companyId);
+      const deniedUserId = await seedUser(
+        direct,
+        t.companyId,
+        `emp-${randomUUID().slice(0, 8)}@t.local`,
+      );
+      const controlUserId = await seedUser(
+        direct,
+        t.companyId,
+        `emp-${randomUUID().slice(0, 8)}@t.local`,
+      );
+      await seedActiveEmployee(t.companyId, deniedUserId);
+      await seedActiveEmployee(t.companyId, controlUserId);
+      await seedDefaultShift(t.companyId);
+      await direct.query(
+        `INSERT INTO attendance_records
+         (company_id, user_id, work_date, status, check_in_at, check_out_at, is_late, late_minutes, attendance_status)
+       VALUES ($1, $2, $3, 'late', $3::date + time '08:30', $3::date + time '17:00', true, 25, 'Adjusted')`,
+        [t.companyId, deniedUserId, yesterday],
+      );
+      await seedLateRecord(t.companyId, controlUserId, yesterday);
+
+      await handler.run({ companyId: t.companyId });
+
+      const rows = await notificationsFor(t.companyId, "ATT_LATE_DETECTED");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].recipient_user_id).toBe(controlUserId);
+    });
+
     it("ALLOW: nhân viên active có ca, không bản ghi cho ngày ĐÃ ĐÓNG ⇒ ATT_ABSENT_DETECTED", async () => {
       const t = await seedCompany(direct, "att-noti-absent");
       companyIds.push(t.companyId);
@@ -310,6 +423,87 @@ describe.skipIf(!runDb)(
 
       expect(await notificationsFor(a.companyId, "ATT_ABSENT_DETECTED")).toHaveLength(1);
       expect(await notificationsFor(b.companyId, "ATT_ABSENT_DETECTED")).toHaveLength(0);
+    });
+
+    /**
+     * [CHỐT #6 — 2 ca cửa sổ hợp đồng] `employee_profiles.start_date/end_date` so sánh CHUỖI với
+     * `yesterday` (repository.ts:307-308). Mỗi ca seed THÊM 1 ĐỐI CHỨNG (employee active KHÔNG bị giới
+     * hạn hợp đồng) trong CÙNG company/CÙNG lượt handler.run() — chống deny-xanh-rỗng: nếu handler ngừng
+     * quét hoàn toàn thì đối chứng CŨNG 0 dòng, test ĐỎ chứ không xanh giả.
+     */
+    it("[CHỐT #6] employee start_date > ngày quét ⇒ 0 ATT_ABSENT_DETECTED cho người đó, ĐỐI CHỨNG vẫn nhận", async () => {
+      const t = await seedCompany(direct, "att-noti-startdate");
+      companyIds.push(t.companyId);
+      const deniedUserId = await seedUser(
+        direct,
+        t.companyId,
+        `emp-${randomUUID().slice(0, 8)}@t.local`,
+      );
+      const controlUserId = await seedUser(
+        direct,
+        t.companyId,
+        `emp-${randomUUID().slice(0, 8)}@t.local`,
+      );
+      // start_date = hôm nay (> yesterday, ngày quét) ⇒ chưa vào làm khi ngày quét đóng sổ.
+      await seedActiveEmployee(t.companyId, deniedUserId, { startDate: today });
+      const controlEmployeeId = await seedActiveEmployee(t.companyId, controlUserId);
+      await seedDefaultShift(t.companyId);
+
+      await handler.run({ companyId: t.companyId });
+
+      const rows = await notificationsFor(t.companyId, "ATT_ABSENT_DETECTED");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].recipient_user_id).toBe(controlUserId);
+      expect(rows[0].dedupe_key).toBe(`ATT_ABSENT_DETECTED:${controlEmployeeId}:${yesterday}`);
+    });
+
+    it("[CHỐT #6] employee end_date < ngày quét ⇒ 0 ATT_ABSENT_DETECTED cho người đó, ĐỐI CHỨNG vẫn nhận", async () => {
+      const t = await seedCompany(direct, "att-noti-enddate");
+      companyIds.push(t.companyId);
+      const deniedUserId = await seedUser(
+        direct,
+        t.companyId,
+        `emp-${randomUUID().slice(0, 8)}@t.local`,
+      );
+      const controlUserId = await seedUser(
+        direct,
+        t.companyId,
+        `emp-${randomUUID().slice(0, 8)}@t.local`,
+      );
+      // end_date = hôm-kia (< yesterday, ngày quét) ⇒ đã nghỉ việc trước khi ngày quét đóng sổ.
+      const dayBeforeYesterday = addDaysToLocalDate(yesterday, -1);
+      await seedActiveEmployee(t.companyId, deniedUserId, { endDate: dayBeforeYesterday });
+      const controlEmployeeId = await seedActiveEmployee(t.companyId, controlUserId);
+      await seedDefaultShift(t.companyId);
+
+      await handler.run({ companyId: t.companyId });
+
+      const rows = await notificationsFor(t.companyId, "ATT_ABSENT_DETECTED");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].recipient_user_id).toBe(controlUserId);
+      expect(rows[0].dedupe_key).toBe(`ATT_ABSENT_DETECTED:${controlEmployeeId}:${yesterday}`);
+    });
+
+    /**
+     * [CHỐT #9 — nửa-container] Chứng minh handler THỰC SỰ được `WorkerSchedulerService` nhìn thấy, KHÔNG
+     * chỉ tồn tại như 1 provider mồ côi (2 nửa hợp đồng đăng ký — thiếu nửa đầu ⇒ DiscoveryService không
+     * gom ⇒ job KHÔNG BAO GIỜ chạy mà cũng không lỗi nào, giống hệt bài học ở leave-accrual.int.spec.ts:560).
+     * `discoverJobHandlers()` là `private` (TS-only) NHƯNG thuần gom provider qua `DiscoveryService.getProviders()`
+     * — KHÔNG đăng ký `setInterval`/side-effect nào (đối chiếu worker-scheduler.service.ts:100-115) — an toàn
+     * gọi trực tiếp qua ép kiểu trong test, KHÔNG hạ xuống khuôn mock-only.
+     */
+    it("[CHỐT #9] handler ĐƯỢC scheduler nhìn thấy: metadata SYSTEM_JOB_HANDLER + discoverJobHandlers() chứa ATT_ALERT_DETECT", () => {
+      expect(Reflect.getMetadata(SYSTEM_JOB_HANDLER, AttendanceAlertNotiJobHandler)).toBe(true);
+      expect(typeof handler.run).toBe("function");
+
+      const scheduler = app.get(WorkerSchedulerService);
+      const handlers = (
+        scheduler as unknown as { discoverJobHandlers(): Array<{ jobCode: string }> }
+      ).discoverJobHandlers();
+      const codes = handlers.map((h) => h.jobCode);
+
+      expect(codes).toContain(ATT_ALERT_DETECT_JOB_CODE);
+      expect(new Set(codes).size).toBe(codes.length);
     });
   },
 );
