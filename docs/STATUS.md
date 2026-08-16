@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-16 02:30Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-16 02:38Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -13,6 +13,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 - 🔴 `S10-SOCIAL-OPS-1` Đưa kho sang ổ D: (SOCIAL_DATA_DIR) + đổi dịch vụ MediaOS-Social từ LocalSystem sang tài khoản Windows có quyền trên share LAN + sao lưu data/ và .secrets/ TÁCH nhau
 - 🔴 `S10-QA-ROUTEHTTP-2` 12 route risk≥5 còn lại chưa có test HTTP nào chạm — guard/DTO/envelope của nhóm quản trị quyền, khoá tài khoản, api-key CHƯA TỪNG chạy qua đường HTTP thật
 - 🔴 `S10-QA-SECPOLICY-GATE-1` KI-065 — quyết định số phận `PATCH /settings/security-policy`: route cấu hình chính sách bảo mật CHẾT (403 deny-object-required với MỌI actor)
+- 🔴 `S10-HR-STATUSUI-1` HR-FUNC-006 — FE không có nút 'Đổi trạng thái nhân viên'; và sửa `end_date` KHÔNG lật `status` ⇒ người đã nghỉ việc vẫn hiển thị 'Đang làm việc'
 
 **CHỜ (kẹt phụ thuộc):**
 - _(trống)_
@@ -34,6 +35,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `479b6e64` | 2026-08-16 | chore(docs): regen STATUS sau khi land #387 + gỡ dấu start OAN của S10-SOCIAL-OPS-1 |
 | `00d09f05` | 2026-08-16 | feat(att): producer thật cho 3 sự kiện ATT — MISSING_CHECKOUT · LATE_DETECTED · ABSENT_DETECTED (S10-ATT-NOTIPROD-1 · KI-021) (#387) |
 | `f6e6f1fa` | 2026-08-15 | fix(harness): reconcile không được đọc docs(plan)/docs(status) thành "WO đã ship" (#386) |
 | `dd829b7f` | 2026-08-14 | chore(docs): regen STATUS sau khi land #385 + #384 (S10-QA-ROUTEHTTP-1, S7-CALL-QA-2 done) |
@@ -45,7 +47,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `975d7484` | 2026-08-13 | chore(docs): regen STATUS sau khi land #383 (S10-FND-JSONLOG-1 done) |
 | `f4d262e9` | 2026-08-13 | fix(ops): log API ra JSON có cấu trúc + đấu lại bộ đếm ERROR của ops-alert (S10-FND-JSONLOG-1 · KI-009) (#383) |
 | `e8ab653e` | 2026-08-13 | wip(S10-DASH-MVREFRESH-1): job lịch chạy refresh MV dashboard (đóng nửa 2 KI-017) (#382) |
-| `09384d68` | 2026-08-13 | fix(noti): dập nhiễu log outbox bridge tại đúng nơi phát (S10-QA-LOGNOISE-1, KI-015) (#381) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

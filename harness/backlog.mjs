@@ -12421,4 +12421,59 @@ export const backlog = [
       "Nếu chạy CÙNG WAVE với S10-ATT-NOTIPROD-1 thì hai WO đều thêm job handler: KHÁC file, KHÁC module ⇒ không xung đột, nhưng cả hai cùng chạm SchedulerModule về mặt hành vi — chạy check cuối cùng sau khi cả hai land.",
     ],
   },
+
+  {
+    // Seed 16/08/2026 từ báo cáo VẬN HÀNH THẬT của owner: một hồ sơ nhân viên trên PROD đã được sửa
+    // "ngày kết thúc làm việc" sang 08/08/2026 nhưng danh sách/chi tiết VẪN hiện "Đang làm việc" — và
+    // trên màn Quản lý nhân sự KHÔNG có nút nào để đổi trạng thái. Đây là lỗi NGƯỜI DÙNG CUỐI gặp,
+    // không phải nợ kỹ thuật suy đoán.
+    id: "S10-HR-STATUSUI-1",
+    module: "HR",
+    // ⚠️ CỐ Ý KHÔNG ghi "FE" (bài học wo-layer-field-can-understate-scope): phần lớn việc là FE, nhưng
+    // ngày hiệu lực nghỉ việc PHẢI ghi CÙNG TX với status ⇒ có vế BE (contract + hr-write.service).
+    layer: "FULL",
+    title:
+      "HR-FUNC-006 — FE không có nút 'Đổi trạng thái nhân viên'; và sửa `end_date` KHÔNG lật `status` ⇒ người đã nghỉ việc vẫn hiển thị 'Đang làm việc'",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/hr/**",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/**",
+      "packages/contracts/src/hr/**",
+      "apps/api/src/employees/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S10-HR-STATUSUI-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: [],
+    src: [
+      "SPEC-03 §14.6 (HR-FUNC-006 — luồng 11 bước: chọn trạng thái → ngày hiệu lực → lý do → ngày nghỉ việc nếu Resigned/Terminated → chọn khóa tài khoản → audit) + §18.3 rule 5-6 + §8 (HR.EMPLOYEE.CHANGE_STATUS) + §9.5 EMPLOYEE_STATUS_CHANGED.",
+      "SPEC-03 §17 dòng 1024 nói THẲNG: 'Không cho cập nhật trạng thái nhân viên bằng cách sửa trực tiếp field... nên dùng chức năng Đổi trạng thái' ⇒ vá bằng NÚT, TUYỆT ĐỐI KHÔNG bằng trigger/cron suy diễn status từ `end_date`.",
+      "ĐO 16/08/2026 — BE ĐÃ SHIP ĐỦ từ S2-HR-BE-2: `hr-write.controller.ts:67` POST /hr/employees/:id/change-status gate ('change-status','employee'); FSM `hr-write.service.ts:73-78` (active→inactive/resigned/terminated · inactive→active/resigned/terminated · resigned→terminated · terminated=CUỐI); ghi `employee_status_histories` + audit 'change-status' + tùy chọn khóa user + thu hồi phòng chat dẫn xuất, tất cả trong CÙNG tx `withTenant`.",
+      "ĐO 16/08/2026 — FE CHƯA BAO GIỜ NỐI: `grep -rn 'change-status' apps/**` chỉ trúng module TASK; `apps/app/src/routes/hr/constants.ts` HR_ENGINE_PAIRS KHÔNG có cặp change-status:employee; `EmployeeDetailPage.tsx:222-261` chỉ có 3 nút (Quay lại · Hợp đồng · Sửa); `packages/web-core/src/lib/hr-api.ts` có linkUser/unlinkUser nhưng KHÔNG có changeStatus. Cặp quyền thì ĐÃ seed thật cho role hr + company-admin (auth-seed-canonical-roles.int-spec.ts:66-68, is_sensitive=false) ⇒ quyền có, API có, chỉ THIẾU UI.",
+      "ĐO 16/08/2026 — vì sao sửa ngày không lật trạng thái: `packages/contracts/src/hr/employee-write.ts:80-82` ghi rõ PATCH /hr/employees/:id là 'structural fields only — NOT status (use change-status)'; và quét toàn `apps/api/src` KHÔNG có job/cron nào đọc `employee_profiles.end_date` để đổi status (end_date chỉ dùng cho accrual/carryover phép + cảnh báo chấm công). Hành vi hiện tại ĐÚNG THIẾT KẾ, cái thiếu là đường đi hợp lệ cho người dùng.",
+      "🔴 LỖ HỔNG HỢP ĐỒNG (gốc rễ của triệu chứng): SPEC đòi ngày hiệu lực khi nghỉ việc, nhưng `changeEmployeeStatusSchema` (`employee-write.ts:154-161`) CHỈ có { newStatus, reason?, lockUser } và `employee_status_histories` (`db/schema/employees.ts:172-190`) cũng KHÔNG có cột ngày hiệu lực — chỉ `changed_at`. ⇒ Không mở rộng contract thì FE buộc phải gọi HAI lượt (PATCH endDate rồi POST change-status), và lượt hai hỏng sẽ để lại ĐÚNG trạng thái sai lệch mà owner đang gặp.",
+      "Khuôn bắt chước SÁT NHẤT: `AccountLinkSection.tsx` (S5-HR-LINKUI-1) — cùng mô-típ 'BE ship trước ở S2-HR-BE-2, FE nối sau', cùng đặt trên trang chi tiết nhân viên, đã có sẵn mẫu PermissionGate + ConfirmDialog + invalidate query.",
+    ],
+    done_when: [
+      "Nút 'Đổi trạng thái' + dialog trên trang chi tiết nhân viên (apps/app HR detail): danh sách trạng thái mới CHỈ gồm tập FSM hợp lệ của trạng thái hiện tại — `terminated` ⇒ không còn lựa chọn nào, nút disabled + tooltip giải thích (KHÔNG để người dùng bấm rồi ăn 422)",
+      "Ngày hiệu lực ghi CÙNG MỘT TRANSACTION với trạng thái: mở rộng `changeEmployeeStatusSchema` thêm `effectiveDate` (isoDate) và `HrWriteService.changeStatusCore` ghi `employee_profiles.end_date` trong CÙNG `withTenant` tx với setStatus + insertStatusHistory + audit. BẮT BUỘC có khi newStatus ∈ {resigned, terminated} (SPEC-03 §18.3 rule 5). **CẤM phương án FE gọi 2 lượt PATCH + POST** — đó chính là lỗ đang vá",
+      "Ô lý do (≤500 ký tự, khớp schema) + checkbox 'Khóa tài khoản đăng nhập' CHỈ hiện khi sang resigned/terminated (BE `LOCKING_STATUSES` chỉ có tác dụng ở 2 trạng thái này — hiện ở chỗ khác là UI hứa suông)",
+      "Gate bằng useCan/PermissionGate cặp ('change-status','employee') đã seed thật — KHÔNG bịa cặp mới, KHÔNG hard-code role; có ca FE chứng minh useCan=false ⇒ KHÔNG thấy nút (server vẫn enforce lại)",
+      "Chống tự khóa mình: BE đã chặn actor khóa tài khoản của CHÍNH mình (`hr-write.service.ts:510` — `row.userId !== user.id`); FE phải phản ánh (ẩn/disable checkbox khi hồ sơ đang xem là của chính người bấm) VÀ có ca test chứng minh chặn ở BE VẪN CÒN sau khi sửa service",
+      "Int-spec RED-trước, chạy THẬT ở LANE_DB (`bash scripts/lane-db-setup.sh hrstatus` → `export LANE_DB=mediaos_hrstatus`; thiếu LANE_DB ⇒ SKIP = xanh-giả): (a) thiếu `effectiveDate` khi sang resigned ⇒ 4xx VÀ status không đổi VÀ 0 hàng history VÀ 0 audit; (b) đổi thành công ⇒ `status` + `end_date` + 1 hàng `employee_status_histories` + 1 audit 'change-status' trong MỘT lượt gọi; (c) transition sai (terminated→active) ⇒ 422 + 0 ghi; (d) thiếu quyền ⇒ 403 + 0 audit; (e) 2-tenant không đổi chéo",
+      "FE spec: dialog lọc đúng theo FSM cho cả 4 trạng thái nguồn · deny-path · loading/error; invalidate `hrKeys.employees` (list + detail) sau mutate để badge đổi ngay; i18n vi TÁI DÙNG `hr.status.*` đã có (KHÔNG đẻ nhãn mới lệch chữ với bảng danh sách)",
+      "Thêm client vào `@mediaos/web-core` ⇒ REBUILD dist trước khi verify FE (bài học web-core-stale-dist: dist không tự build, triệu chứng là trang trắng chứ không phải lỗi biên dịch)",
+      "FULL gate PASS (security-reviewer + silent-failure-hunter) vì chạm `hr-write.service` crown-jewel: FSM + audit + khóa tài khoản + thu hồi phòng chat; `bash harness/check.sh --lane-db` xanh",
+    ],
+    notes: [
+      "✅ KHÔNG CẦN MIGRATION ⇒ WO này CHẠY SONG SONG ĐƯỢC, không chiếm lane migration tuần tự: cột `employee_profiles.end_date` đã tồn tại, cặp quyền change-status:employee đã seed từ mig 0444. Nếu trong lúc làm thấy 'cần cột ngày hiệu lực RIÊNG cho mọi transition' thì đó là WO KHÁC (đụng migration + DB-03) — KHÔNG mở rộng tại chỗ.",
+      "⚠️ GIỮ NGUYÊN lệch tên trạng thái, KHÔNG sửa trong WO này: SPEC-03 §14.6 kê 5 tên (Probation/Official/Temporarily Suspended/Resigned/Terminated) còn DB CHECK + contracts chỉ có 4 (active/inactive/resigned/terminated). `employee-write.ts:18-19` ghi rõ đây là quyết định CÓ CHỦ Ý (đổi = migration + phá read core đã ship). FE dùng đúng 4 giá trị DB, dịch qua `hr.status.*`.",
+      "⚠️ `resigned`/`terminated` là MỘT CHIỀU và `terminated` là trạng thái CUỐI (`STATUS_TRANSITIONS.terminated = []`) — qua API không có đường lùi. Dialog PHẢI cảnh báo rõ trước bước xác nhận; bấm nhầm chỉ sửa được bằng tay ở DB.",
+      "⚠️ Đổi sang trạng thái khác `active` sẽ THU HỒI người khỏi MỌI phòng chat dẫn xuất trong cùng tx (`hr-write.service.ts:531-537`, ném `ChatSyncRevokeError` chứ KHÔNG nuốt). FE không được biến lỗi này thành toast 'thành công' — trạng thái lúc đó CHƯA đổi.",
+      "Việc vận hành đi kèm, làm NGAY SAU khi nút land (không nằm trong Definition of Done của code): bấm đổi trạng thái thật cho hồ sơ đang sai trên PROD (ngày kết thúc 08/08/2026). PROD bật 2FA nên phải người bấm — không automation headless.",
+    ],
+  },
 ];
