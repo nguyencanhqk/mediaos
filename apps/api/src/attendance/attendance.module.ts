@@ -39,6 +39,13 @@ import { AttendanceReportRepository } from "./attendance-report.repository";
 import { AttendanceReportService } from "./attendance-report.service";
 import { AttendanceAuditController } from "./attendance-audit.controller";
 import { AttendanceAuditService } from "./attendance-audit.service";
+// S10-ATT-NOTIPROD-1 (additive) — producer THẬT cho ATT_MISSING_CHECKOUT/ATT_LATE_DETECTED/
+// ATT_ABSENT_DETECTED (RELEASE-02 §KI-021, catalog/template/deep-link đã seed 0481/0497, KHÔNG migration
+// mới). NotificationsModule import THÊM để lấy NotificationEngineService (đã verify KHÔNG chu trình —
+// notifications.module.ts chỉ import Database/Events/Realtime/Permission).
+import { NotificationsModule } from "../notifications/notifications.module";
+import { AttendanceAlertNotiRepository } from "./attendance-alert-noti.repository";
+import { AttendanceAlertNotiJobHandler } from "./attendance-alert-noti.job-handler";
 
 /**
  * S3-INT-1 — binds AttendanceLeaveSyncService.onLeaveApproved as an EventBus consumer of
@@ -88,7 +95,15 @@ class LeaveApprovedSyncRegistrar implements OnModuleInit {
   // S5-TASK-HRCODE-1 (additive): + SequenceModule (exports SequenceService) → HrTasksService (provided
   // locally below) resolves SequenceService để cấp task_code THẬT cho task HR sinh từ đơn điều chỉnh công.
   // Optional-DI ở HrTasksService trở thành no-op vô hại khi module này đã import SequenceModule.
-  imports: [DatabaseModule, EventsModule, PermissionModule, SeedModule, SequenceModule],
+  imports: [
+    DatabaseModule,
+    EventsModule,
+    PermissionModule,
+    SeedModule,
+    SequenceModule,
+    // S10-ATT-NOTIPROD-1 (additive): NotificationEngineService cho AttendanceAlertNotiJobHandler.intake().
+    NotificationsModule,
+  ],
   controllers: [
     AttendanceController,
     AttendanceAdjustmentController,
@@ -137,6 +152,10 @@ class LeaveApprovedSyncRegistrar implements OnModuleInit {
     AttendanceReportRepository,
     AttendanceAuditService,
     AuditRepository,
+    // S10-ATT-NOTIPROD-1 (additive): producer 3 sự kiện cảnh báo chấm công (@SystemJobHandler, gom bởi
+    // SchedulerModule qua DiscoveryService — KHÔNG cần SchedulerModule import module này).
+    AttendanceAlertNotiRepository,
+    AttendanceAlertNotiJobHandler,
   ],
   exports: [
     AttendanceService,

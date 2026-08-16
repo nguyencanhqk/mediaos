@@ -25,6 +25,10 @@ const SHIFT_FIELDS = {
   crossDay: shifts.crossDay,
   isDefault: shifts.isDefault,
   metadata: shifts.metadata,
+  // S10-ATT-NOTIPROD-1 (additive — KHÔNG đổi/xoá cột nào ở trên): AttendanceAlertNotiRepository cần
+  // `work_days` để quyết định "ngày làm việc" khi quét vắng mặt (chốt #18 — NULL ⇒ fail-closed, KHÔNG
+  // xét absent). ShiftRow (attendance.types.ts) suy TỰ ĐỘNG từ SHIFT_FIELDS nên không cần sửa file khác.
+  workDays: shifts.workDays,
 } as const;
 
 /** Cột rule cần cho resolve hiệu lực (rút gọn từ attendance_rules). */

@@ -96,4 +96,16 @@ export const DEFAULT_DEDUPE: Readonly<Record<string, DedupeDefaultConfig>> = {
   // được nhắc tên nhận thông báo trùng. Đừng nhầm "không gộp lô" với "không cần idempotent" — hai chuyện
   // khác nhau, và chỉ chuyện thứ hai được quyết ở đây.
   CHAT_MENTIONED: { strategy: "DedupeKey", windowSeconds: null },
+  // S10-ATT-NOTIPROD-1 (additive) — AttendanceAlertNotiJobHandler (attendance-alert-noti.job-handler.ts):
+  // 3 mã cảnh báo chấm công phát qua NotificationEngineService.intake() in-process (KHÔNG outbox — mirror
+  // TaskReminderJobHandler). dedupeKey job tự tính LUÔN từ nguồn ĐÓNG BĂNG (record.workDate cột DB, hoặc
+  // employeeId+closedWorkDate suy từ biên đóng — attendance-alert-noti.logic.ts buildRecordDedupeKey/
+  // buildAbsentDedupeKey), KHÔNG BAO GIỜ từ new Date()/Date.now() tại điểm phát. Catalog seed 0481 để 3 mã
+  // ở dedupe_strategy='None' ⇒ cần 'DedupeKey' fallback (KHÔNG 'None') để computeKey THỰC SỰ set
+  // dedupe_key ⇒ partial-unique `uq_notifications_dedupe_active` chặn chạy job 2 lần/ngày cùng bản ghi gửi
+  // trùng (KI-021 — "khoá theo KỲ cần nguồn ĐÓNG BĂNG", ngược lại 'None' ⇒ dedupe_key NULL ⇒ mỗi nhịp
+  // scheduler đẻ 1 thông báo trùng).
+  ATT_MISSING_CHECKOUT: { strategy: "DedupeKey", windowSeconds: null },
+  ATT_LATE_DETECTED: { strategy: "DedupeKey", windowSeconds: null },
+  ATT_ABSENT_DETECTED: { strategy: "DedupeKey", windowSeconds: null },
 };
