@@ -77,8 +77,25 @@ const workTypeEnum = z.enum(HR_WORK_TYPES);
 const employmentTypeEnum = z.enum(HR_EMPLOYMENT_TYPES);
 const salaryTypeEnum = z.enum(HR_SALARY_TYPES);
 
-/** ISO date `YYYY-MM-DD` (matches Postgres `date` columns). */
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected date YYYY-MM-DD");
+/**
+ * ISO date `YYYY-MM-DD` — HÌNH DẠNG lẫn NGÀY CÓ THẬT.
+ *
+ * S10-HR-STATUSUI-1: regex đơn thuần cho `"2026-13-45"` đi lọt tới Postgres ⇒ `date/time field value
+ * out of range` ⇒ 500 thay vì 400 (rollback đúng, không rò chi tiết, nhưng biến lỗi-người-dùng thành
+ * lỗi-hệ-thống + nhiễu alert). KHÔNG dùng `Date.parse` (quá dễ dãi: nó nuốt `2026-02-30` thành 02-03).
+ */
+export function isValidIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day
+  );
+}
+
+const isoDate = z.string().refine(isValidIsoDate, "Expected a real calendar date YYYY-MM-DD");
 
 // ── Create ───────────────────────────────────────────────────────────────────────
 /**

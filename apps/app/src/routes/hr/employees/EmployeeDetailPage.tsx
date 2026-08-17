@@ -1,7 +1,16 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { Users, RefreshCw, ArrowLeft, Pencil, FileText, Camera, Trash2 } from "lucide-react";
+import {
+  Users,
+  RefreshCw,
+  ArrowLeft,
+  Pencil,
+  FileText,
+  Camera,
+  Trash2,
+  UserCog,
+} from "lucide-react";
 import { hrApi, hrKeys, useCan, useCanExact, PermissionGate } from "@mediaos/web-core";
 import {
   PageHeader,
@@ -22,6 +31,9 @@ import "../contracts/contracts-i18n";
 // S2-FE-HR-9 — Tab "File hồ sơ" (UI-HR-SCREEN-015), chỉ hiển thị nếu có file-view:employee.
 import { EMPLOYEE_FILE_ENGINE_PAIRS } from "./employee-file-constants";
 import { EmployeeFilesTab } from "./EmployeeFilesTab";
+// S10-HR-STATUSUI-1 — HR-FUNC-006. Đường đi HỢP LỆ duy nhất để đổi trạng thái; sửa "Ngày kết thúc" ở
+// form Sửa KHÔNG lật status (đúng thiết kế) nên trước WO này hồ sơ đã nghỉ vẫn hiện "Đang làm việc".
+import { ChangeStatusDialog, allowedTransitions } from "./ChangeStatusDialog";
 // HR-PROFILE-UI-1 — section dùng chung với split view.
 import {
   BasicInfoSection,
@@ -58,6 +70,8 @@ export function EmployeeDetailPage({
   const { t } = useTranslation("hr");
   const { t: tc } = useTranslation("common");
   const [activeTab, setActiveTab] = useState<Tab>("basic");
+  // S10-HR-STATUSUI-1 — dialog đổi trạng thái (HR-FUNC-006).
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
 
   const canView = useCan(
     HR_ENGINE_PAIRS.READ_EMPLOYEE.action,
@@ -248,6 +262,29 @@ export function EmployeeDetailPage({
                 </Button>
               </PermissionGate>
             )}
+            {/* S10-HR-STATUSUI-1 — `terminated` là trạng thái CUỐI ⇒ 0 lựa chọn ⇒ disabled + title giải
+                thích, KHÔNG để người dùng bấm rồi ăn 422. Server vẫn enforce lại cặp quyền. */}
+            <PermissionGate
+              action={HR_ENGINE_PAIRS.CHANGE_STATUS_EMPLOYEE.action}
+              resourceType={HR_ENGINE_PAIRS.CHANGE_STATUS_EMPLOYEE.resourceType}
+            >
+              <Button
+                variant="outline"
+                size="sm"
+                className={COVER_ACTION_BUTTON_CLASS}
+                onClick={() => setStatusDialogOpen(true)}
+                disabled={allowedTransitions(data.status).length === 0}
+                title={
+                  allowedTransitions(data.status).length === 0
+                    ? t("employees.changeStatus.terminalTooltip")
+                    : undefined
+                }
+                data-testid="change-status-open"
+              >
+                <UserCog className="mr-2 h-4 w-4" />
+                {t("employees.actions.changeStatus")}
+              </Button>
+            </PermissionGate>
             {onEdit && (
               <PermissionGate
                 action={HR_ENGINE_PAIRS.UPDATE_EMPLOYEE.action}
@@ -262,6 +299,16 @@ export function EmployeeDetailPage({
           </>
         }
       />
+
+      {statusDialogOpen && (
+        <ChangeStatusDialog
+          employeeId={employeeId}
+          currentStatus={data.status}
+          currentEndDate={data.endDate ?? null}
+          employeeUserId={data.userId ?? null}
+          onClose={() => setStatusDialogOpen(false)}
+        />
+      )}
 
       {/* S5-HR-AVATAR-1 — lỗi validate/upload/remove avatar (KHÔNG nuốt — silent-failure). */}
       {canManageAvatar && avatarErrorMessage && (

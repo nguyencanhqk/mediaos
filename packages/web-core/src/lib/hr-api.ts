@@ -23,6 +23,7 @@ import {
   type HrPositionLookup,
   type HrJobLevelLookup,
   type HrContractTypeLookup,
+  type ChangeEmployeeStatusRequest,
   type CreateHrEmployeeRequest,
   type CreateHrEmployeeResponse,
   type UpdateHrEmployeeRequest,
@@ -48,6 +49,13 @@ import { buildQueryString } from "./api-params";
 const hrLinkUserResponseSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid().nullable(),
+});
+
+// S10-HR-STATUSUI-1 — response POST /hr/employees/:id/change-status (HrWriteService.changeStatus trả
+// { id, status }). Cùng lý do như trên: object nhỏ khai TẠI ĐÂY thay vì mở thêm export ở contracts.
+const hrChangeStatusResponseSchema = z.object({
+  id: z.string().uuid(),
+  status: z.string(),
 });
 
 /**
@@ -140,6 +148,26 @@ export const hrApi = {
   updateEmployee: (id: string, body: UpdateHrEmployeeRequest): Promise<UpdateHrEmployeeResponse> =>
     apiFetch(`/hr/employees/${id}`, updateHrEmployeeResponseSchema, {
       method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * POST /hr/employees/:id/change-status — S10-HR-STATUSUI-1 (HR-FUNC-006). Server gate
+   * `change-status:employee` (cặp seed mig 0444, is_sensitive=false).
+   *
+   * `endDate` (ngày nghỉ việc) đi CÙNG lượt gọi này và được ghi trong CÙNG transaction với `status` —
+   * TUYỆT ĐỐI không tách thành `updateEmployee({endDate})` rồi `changeEmployeeStatus()`: lượt hai hỏng
+   * để lại hồ sơ có ngày kết thúc nhưng vẫn "Đang làm việc", đúng lỗi WO này vá.
+   *
+   * Server ép HAI CHIỀU (400 ở biên): resigned/terminated PHẢI có endDate; active/inactive CẤM gửi.
+   * FSM hợp lệ tra ở `HR_EMPLOYEE_STATUS_TRANSITIONS` (@mediaos/contracts) — transition sai ⇒ 422.
+   */
+  changeEmployeeStatus: (
+    id: string,
+    body: ChangeEmployeeStatusRequest,
+  ): Promise<{ id: string; status: string }> =>
+    apiFetch(`/hr/employees/${id}/change-status`, hrChangeStatusResponseSchema, {
+      method: "POST",
       body: JSON.stringify(body),
     }),
 
