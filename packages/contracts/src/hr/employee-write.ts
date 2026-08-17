@@ -23,6 +23,42 @@ export const HR_EMPLOYEE_STATUSES = ["active", "inactive", "resigned", "terminat
 export type HrEmployeeStatus = (typeof HR_EMPLOYEE_STATUSES)[number];
 
 /**
+ * S10-HR-STATUSUI-1 — FSM đổi trạng thái nhân viên (SPEC-03 §14.6 HR-FUNC-006).
+ *
+ * Ở ĐÂY chứ không phải trong service vì FE PHẢI lọc danh sách lựa chọn theo đúng tập này — để nó
+ * module-private trong `hr-write.service.ts` buộc dialog viết lại literal ⇒ drift BE↔FE ⇒ người dùng bấm
+ * rồi ăn 422. `HrWriteService` TIÊU THỤ hằng này (không chép).
+ *
+ * `resigned`/`terminated` là MỘT CHIỀU và `terminated` là trạng thái CUỐI (mảng rỗng) — qua API không có
+ * đường lùi; bấm nhầm chỉ sửa được bằng tay ở DB.
+ */
+export const HR_EMPLOYEE_STATUS_TRANSITIONS: Readonly<
+  Record<HrEmployeeStatus, readonly HrEmployeeStatus[]>
+> = {
+  active: ["inactive", "resigned", "terminated"],
+  inactive: ["active", "resigned", "terminated"],
+  resigned: ["terminated"],
+  terminated: [],
+} as const;
+
+/**
+ * Trạng thái "rời công ty" — chuyển sang đây BẮT BUỘC có `endDate` (ngày nghỉ việc, SPEC-03 §11.5 /
+ * §18.3 rule 5), ghi vào `employee_profiles.end_date`.
+ *
+ * ⚠️ KHÔNG dùng hằng này làm nguồn cho `LOCKING_STATUSES` (khoá tài khoản) trong `hr-write.service.ts`:
+ * hai khái niệm ĐỘC LẬP, hôm nay trùng giá trị. Gộp lại nghĩa là ai đó thêm một trạng thái vào đây (vì
+ * muốn bắt buộc ngày nghỉ) sẽ LẶNG LẼ cho `lockUser:true` có hiệu lực trên một transition CÓ ĐƯỜNG LÙI.
+ * Quan hệ giữa hai tập được ghim bằng spec, không bằng alias.
+ */
+export const HR_EMPLOYEE_EXIT_STATUSES = ["resigned", "terminated"] as const;
+export type HrEmployeeExitStatus = (typeof HR_EMPLOYEE_EXIT_STATUSES)[number];
+
+/** `newStatus` có thuộc tập rời công ty không (⇒ đòi `endDate`). */
+export function isHrEmployeeExitStatus(status: HrEmployeeStatus): status is HrEmployeeExitStatus {
+  return (HR_EMPLOYEE_EXIT_STATUSES as readonly string[]).includes(status);
+}
+
+/**
  * Structural enum value tuples — the SINGLE source of truth reused by the create/update DTOs here and
  * by the bulk-import row DTO (employee-import.ts). Exporting the arrays (not just the z.enum) lets the
  * import schema reuse the exact accepted values without re-declaring literals (drift-guarded by spec).
@@ -150,15 +186,38 @@ export const updateHrEmployeeResponseSchema = z.object({
 export type UpdateHrEmployeeResponse = z.infer<typeof updateHrEmployeeResponseSchema>;
 
 // ── Change status ──────────────────────────────────────────────────────────────────
-/** POST /hr/employees/:id/change-status. `lockUser` only takes effect for resigned/terminated. */
+/**
+ * POST /hr/employees/:id/change-status. `lockUser` only takes effect for resigned/terminated.
+ *
+ * S10-HR-STATUSUI-1 — `endDate` (ngày nghỉ việc) đi CÙNG lượt gọi này, KHÔNG tách thành
+ * `PATCH endDate` + `POST change-status`: lượt hai hỏng để lại đúng trạng thái sai lệch (status còn
+ * "Đang làm việc" trong khi đã có ngày kết thúc) mà WO này sinh ra để vá.
+ *
+ * Bắt buộc HAI CHIỀU:
+ *   - `newStatus ∈ {resigned, terminated}` ⇒ PHẢI có `endDate` (SPEC-03 §18.3 rule 5) → ghi `end_date`.
+ *   - `newStatus ∈ {active, inactive}`     ⇒ CẤM gửi `endDate`. Không có chỗ lưu (bảng
+ *     `employee_status_histories` chỉ có `changed_at`, không có cột ngày hiệu lực) ⇒ nhận rồi bỏ đi là
+ *     "UI hứa, backend không đọc". Vế "ngày hiệu lực cho MỌI transition" (SPEC-03 §14.6 bước 4 / §11.4)
+ *     cần cột mới ⇒ HOÃN sang WO có migration; tên `effectiveDate` để dành cho WO đó.
+ */
 export const changeEmployeeStatusSchema = z
   .object({
     newStatus: z.enum(HR_EMPLOYEE_STATUSES),
+    /** Ngày nghỉ việc (`employee_profiles.end_date`) — CHỈ hợp lệ khi newStatus ∈ resigned/terminated. */
+    endDate: isoDate.optional(),
     reason: z.string().max(500).optional(),
     /** Lock the linked user (status=inactive) when moving to resigned/terminated. */
     lockUser: z.boolean().default(false),
   })
-  .strict();
+  .strict()
+  .refine((v) => !isHrEmployeeExitStatus(v.newStatus) || Boolean(v.endDate), {
+    message: "endDate is required when moving to resigned/terminated",
+    path: ["endDate"],
+  })
+  .refine((v) => isHrEmployeeExitStatus(v.newStatus) || !v.endDate, {
+    message: "endDate is only accepted when moving to resigned/terminated",
+    path: ["endDate"],
+  });
 export type ChangeEmployeeStatusRequest = z.infer<typeof changeEmployeeStatusSchema>;
 
 // ── Link / unlink user ───────────────────────────────────────────────────────────
