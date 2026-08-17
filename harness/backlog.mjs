@@ -12478,4 +12478,111 @@ export const backlog = [
       "Việc vận hành đi kèm, làm NGAY SAU khi nút land (không nằm trong Definition of Done của code): bấm đổi trạng thái thật cho hồ sơ đang sai trên PROD (ngày kết thúc 08/08/2026). PROD bật 2FA nên phải người bấm — không automation headless. ⚠️ Hồ sơ đó ĐÃ có `end_date`; bấm `resigned` sẽ GHI ĐÈ ⇒ nhập lại ĐÚNG 08/08/2026.",
     ],
   },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // WAVE S10-IDENTITY-IP (seed 17/08/2026) — đào ra từ MỘT SỰ CỐ THẬT của owner, không phải nợ suy đoán:
+  // 15:08→15:11 ngày 17/08 một tài khoản nhân viên sai mật khẩu 5 lần trên PROD ⇒ khoá 15 phút;
+  // 15:20 owner xoá + tạo lại tài khoản để chữa, VẪN 429 (khoá gắn theo EMAIL, không theo user id).
+  // Khi truy nguyên khoá đó mới lộ HAI khiếm khuyết hạ tầng bên dưới — hai WO dưới đây.
+  //
+  // ĐÃ ĐO: KHÔNG WO nào cần migration ⇒ chạy SONG SONG được. Va chạm giữa hai WO: chỉ
+  // `docs/RELEASE/RELEASE-02_Known_Issues_MVP.md` + `harness/backlog.mjs` (file xung đột đa-PR quen thuộc).
+  // ───────────────────────────────────────────────────────────────────────────
+
+  {
+    // Seed 17/08/2026 từ sự cố khoá đăng nhập của owner (xem block wave ở trên).
+    id: "S10-AUTH-IPTRUST-1",
+    module: "AUTH",
+    // KHÔNG ghi "DEVOPS": đổi env chỉ là NỬA việc; nửa còn lại là chọn nguồn IP chống giả mạo + test đóng
+    // đinh trong code (bài học wo-layer-field-can-understate-scope).
+    layer: "SEC",
+    title:
+      "PROD chạy sau `cloudflared` cùng máy nhưng `TRUST_PROXY` không đặt ⇒ MỌI request = ::1: nhật ký đăng nhập mù, bucket rate-limit per-IP thoái hoá thành khoá-tài-khoản 5 lần đoán, và IP-allowlist (đang bật enforcement) sẽ vô nghĩa ngay khi ai đó cấu hình nó",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/main.ts",
+      "apps/api/src/config/env.schema.ts",
+      "apps/api/src/config/env.schema.spec.ts",
+      "apps/api/src/auth/**",
+      "apps/api/test/**",
+      ".env.example",
+      "docs/DEVOPS/**",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: [],
+    src: [
+      "SỰ CỐ GỐC (đo trên PROD 17/08/2026, bảng `login_logs` DB `mediaos`): 5 hàng `failed/WrongPassword` 15:08:10→15:11:13 rồi 8 hàng `blocked/TooManyAttempts` 15:11:20→15:18:08 — TẤT CẢ `ip_address='::1'`.",
+      "ĐO 17/08/2026 — proxy CÓ THẬT và ở CÙNG MÁY: tiến trình `cloudflared` (PID 14248) đang chạy; `.env.prod` `CORS_ORIGIN=https://funtimemediacorp.com,https://auth…,https://console…` ⇒ người dùng vào từ Internet qua tunnel ⇒ peer socket của API luôn là loopback.",
+      'ĐO 17/08/2026 — `TRUST_PROXY` VẮNG MẶT trong `.env.prod` (grep 0 hit) ⇒ nhận default `"false"` (`env.schema.ts:72`) ⇒ `main.ts:43` set Express `trust proxy=false` ⇒ `req.ip` = socket peer = `::1`. Phân bố IP 30 ngày trong `login_logs`: `127.0.0.1`=91, `::1`=80, `198.51.100.21`=38 (fixture test), `1.2.3.4`=6 (fixture) ⇒ KHÔNG có lấy MỘT IP người dùng thật nào.',
+      "HỆ QUẢ 1 — rate-limit thoái hoá: khoá per-IP là `rl:ip:{slug}|{email}|{ip}` (`login-rate-limiter.ts:32-34`). Mọi người dùng cùng `ip=::1` ⇒ bucket per-IP thực chất là bucket per-account, nên trần thực tế là `LOGIN_MAX_ATTEMPTS=5` chứ KHÔNG phải `LOGIN_ACCOUNT_MAX_ATTEMPTS=20` (`env.schema.ts:115-119`, PROD không override). Bucket per-account (20) do đó KHÔNG BAO GIỜ có tác dụng, và trần thấp áp cho mọi nguồn gộp lại — lớp lỗi account-lockout DoS trên endpoint công khai (chi tiết mức phơi nhiễm: hỏi owner, KHÔNG chép vào repo public).",
+      "HỆ QUẢ 2 — điều tra mù: `login_logs.ip_address` vô dụng cho forensics. Đúng lớp lỗi mà S6-SEC-LOGINLOG-2/KI-044 vừa vá ở CHIỀU KHÁC (gắn đúng tenant cho hàng bị chặn): vá xong chủ sở hữu nhưng nội dung IP vẫn rỗng nghĩa.",
+      'HỆ QUẢ 3 — BẪY ĐÃ LÊN NÒNG, CHƯA NỔ: `SECURITY_POLICY_ENFORCEMENT_ENABLED` default `"true"` và `.env.prod` không override ⇒ enforcement ĐANG BẬT; `company_security_policies` hiện **0 hàng** nên chưa ai bật `ip_restriction_enabled`. Ngày đầu tiên admin bật allowlist trong Cài đặt bảo mật, `evaluateAccessTx` sẽ so `::1` với CIDR văn phòng ⇒ khoá TOÀN BỘ công ty ra ngoài (hoặc, nếu ai đó nhét `::1` vào cho chạy được, allowlist thành trang trí).',
+      "Docblock `env.schema.ts:68-71` đã CẢNH BÁO đúng tình huống này từ CS-9 ('Sau reverse proxy/LB, ops PHẢI đặt số hop tin cậy…') — nghĩa là thiết kế không sai, chỉ là bước vận hành chưa từng chạy. Xem bài học known-issue-workaround-may-never-have-run.",
+    ],
+    done_when: [
+      "ĐO THẬT trước khi chọn: gửi một request qua `https://…funtimemediacorp.com` và ghi lại chính xác cloudflared đặt header nào (`X-Forwarded-For` gồm mấy phần tử, có `CF-Connecting-IP` không) — ghi số đo vào docblock, TUYỆT ĐỐI không suy từ tài liệu Cloudflare",
+      "Chọn nguồn IP có chủ đích và CHỐNG GIẢ MẠO: client tự gửi `X-Forwarded-For`/`CF-Connecting-IP` KHÔNG được leo lên `req.ip`. Có ca test giả mạo chứng minh điều đó (đây là điều kiện chặn — không có ca này thì bản vá biến 'IP mù' thành 'IP giả mạo được', tức LEO THANG chứ không phải sửa)",
+      "Ca test đóng đinh CẢ HAI CHIỀU của `parseTrustProxy` (`main.ts:21`): `false` ⇒ `req.ip` = socket peer (giữ nguyên hành vi dev/no-proxy, chống spoof); giá trị PROD ⇒ ra đúng IP client thật",
+      "`.env.example` có dòng `TRUST_PROXY=` kèm chú thích ngắn nêu HỆ QUẢ khi để false sau proxy (mù forensics + thoái hoá rate-limit + vỡ IP-allowlist), không chỉ mô tả cú pháp",
+      "Việc VẬN HÀNH (ngoài code, người làm): đặt `TRUST_PROXY` trong `.env.prod` + restart API PROD, rồi NGHIỆM THU BẰNG HÀNH VI — đăng nhập một lượt từ Internet và đọc `login_logs` thấy IP công cộng thật, KHÔNG phải `::1`. Chưa thấy IP thật thì WO CHƯA đóng (bài học prod-restart-does-not-rebuild-dist: PID/log mới ≠ cấu hình mới)",
+      "Sau khi có IP thật: xác nhận hai bucket tách vai đúng thiết kế (per-IP 5 / per-account 20) bằng một ca test, và ghi vào docblock rằng trần khoá tài khoản của một email từ MỘT nguồn giờ mới thực sự là 5",
+      "KI-066 ghi vào RELEASE-02 (mở + đóng cùng PR)",
+    ],
+    notes: [
+      "⚠️ BẪY LỚN NHẤT: `trust proxy` đặt quá rộng (`true`, hoặc số hop lớn hơn thực tế) = tin XFF do client bịa ⇒ kẻ tấn công tự chọn IP ⇒ vượt IP-allowlist và né rate-limit bằng cách xoay IP giả. Trạng thái hiện tại là MÙ; đặt sai biến nó thành GIẢ MẠO ĐƯỢC — tệ hơn. Vì vậy ca test giả mạo là bắt buộc, không phải tuỳ chọn.",
+      "⚠️ Sau khi có IP thật, nhân viên cùng văn phòng sẽ chia nhau MỘT IP công cộng (NAT). Khoá per-IP vẫn gồm email trong key nên không ai khoá chéo ai — nhưng đừng 'tối ưu' key bỏ email đi.",
+      "📌 Sự cố 17/08 tự nó KHÔNG phải lỗi hệ thống (owner gõ sai mật khẩu 5 lần). Cái WO này vá là thứ lộ ra khi truy nguyên. Đừng viết lại logic rate-limit — nó chạy đúng thiết kế; thứ sai là đầu vào `req.ip` của nó.",
+      "📌 Đường thoát khi có người bị khoá oan trong lúc chờ WO này: xoá khoá trong Valkey — `docker exec mediaos-valkey valkey-cli DEL 'rl:ip:{slug}|{email}|{ip}:lock' 'rl:acct:{slug}|{email}:cnt'` (đã dùng thật 17/08 để mở khoá cho tài khoản bị kẹt). Tạo lại tài khoản KHÔNG gỡ được khoá — khoá theo email.",
+    ],
+  },
+
+  {
+    // Seed 17/08/2026 — lộ ra khi truy nguyên khoá đăng nhập ở S10-AUTH-IPTRUST-1.
+    id: "S10-FND-VALKEYSCOPE-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "4 môi trường dùng CHUNG một Valkey db0 nhưng chỉ `chat:presence` + kênh socket.io có `envScope`: `rl:*`, `perm:cap/obj`, `idem:*`, `replay:2fa-jti`, `2fa-disable|*` KHÔNG có ⇒ khoá đăng nhập, CACHE QUYỀN và idempotency rò chéo môi trường",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/auth/login-rate-limiter.ts",
+      "apps/api/src/auth/login-rate-limiter.spec.ts",
+      "apps/api/src/auth/auth.service.ts",
+      "apps/api/src/auth/two-factor.service.ts",
+      "apps/api/src/permission/permission.cache.ts",
+      "apps/api/src/permission/valkey.service.ts",
+      "apps/api/src/common/idempotency/**",
+      "apps/api/src/realtime/ws-adapter-config.ts",
+      "apps/api/test/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: [],
+    src: [
+      "ĐO 17/08/2026 trên máy PROD — `docker exec mediaos-valkey valkey-cli INFO keyspace` ⇒ **db0 duy nhất, 288 khoá**. `VALKEY_URL=redis://localhost:6379` GIỐNG HỆT nhau trong `.env`, `.env.dev`, `.env.prod`, `.env.dev-online` (không khác cả số db).",
+      "ĐO 17/08/2026 — không gian khoá thực tế đang sống, đếm theo tiền tố: `perm:cap`=253 · `perm:obj`=18 · `rl:forgot`=7 · `rl:ip`=3 · `rl:acct`=3 · `chat:presence`=3 · `replay:2fa-jti`=1 · `idem:<sha256>`=1 · `2fa-disable|…`=1.",
+      "ĐÚNG MỘT không gian khoá đã được vá: `chat:presence:production:mediaos:co:…:user:…` — đọc thẳng từ Valkey, thấy rõ `{NODE_ENV}:{db}` ở giữa. Hàm dựng đã CÓ SẴN: `resolveEnvScope(env, laneDb)` tại `apps/api/src/realtime/ws-adapter-config.ts:69-75` (S8-CHAT-UX-RT-1), nhận cả `LANE_DB` nên lane test cũng tách nhau. Chỉ có ĐÚNG 2 nơi gọi: `chat-presence-reader.service.ts:34` và `resolveValkeyChannelKey` (adapter socket.io).",
+      "Mọi không gian khoá còn lại dựng khoá TẠI CHỖ, không qua hàm nào: `login-rate-limiter.ts:32-53` (`rl:ip:`/`rl:acct:`/`rl:forgot:*`) · `permission.cache.ts:36,45` (`perm:cap:`/`perm:obj:`) · `auth.service.ts:590` (`2fa-disable|{companyId}|{userId}` — không cả tiền tố `rl:`) · `idempotency.interceptor.ts` (`idem:<sha256>`) · `two-factor.service.ts` (`replay:2fa-jti`).",
+      "MỨC ĐỘ: `perm:cap:{companyId}:{userId}` là 253/288 khoá đang sống. dev-online là BẢN CLONE của PROD (cùng company `funtime`, cùng userId) ⇒ khoá TRÙNG BIT-BY-BIT giữa hai môi trường. Một lượt nạp cache ở dev-online phục vụ được cho PROD và ngược lại — đây là cache QUYẾT ĐỊNH QUYỀN, không phải cache hiển thị.",
+      "Bằng chứng hành vi đã quan sát cùng ngày: khoá `rl:ip:funtime|…|::1:lock` chặn đăng nhập PROD; cùng công thức khoá đó, một lượt gõ sai ở dev-online/máy dev cũng đẩy cùng bộ đếm ⇒ khoá luôn người dùng PROD. Khớp memory valkey-shared-across-all-envs-no-channel-prefix.",
+      "Hiện `mediaos_dev` KHÔNG tồn tại trên Postgres máy này (đo 17/08) ⇒ dev-online đang không chạy, nên rủi ro hôm nay là TIỀM ẨN. Nó nổ lại đúng lúc dev-online được dựng lại — tức là đúng lúc không ai nhớ tới nó.",
+    ],
+    done_when: [
+      "MỌI không gian khoá Valkey đi qua MỘT chỗ dựng khoá có `envScope` (tái dùng `resolveEnvScope` đã có — KHÔNG viết hàm thứ hai). Danh sách phải phủ hết: `rl:ip`/`rl:acct`/`rl:forgot:*` · `perm:cap`/`perm:obj` · `idem:*` · `replay:2fa-jti` · `2fa-disable|*`",
+      "Test đóng đinh: với hai bộ env khác nhau (production:mediaos vs development:mediaos_dev vs LANE_DB), MỌI hàm dựng khoá cho ra chuỗi KHÁC NHAU từng đôi một — mở rộng đúng khuôn `ws-adapter-config.spec.ts:65-87` đã có sẵn, không bịa khuôn mới",
+      "🔴 Đường INVALIDATE dùng CÙNG hàm dựng khoá với đường GHI: `permission.cache.ts:164` (`invalidateUser` → `del(capKey(...))`) phải đổi ĐỒNG THỜI với `capKey`. Có ca test ghi-rồi-invalidate chứng minh xoá TRÚNG khoá vừa ghi (lệch một chữ = quyền cũ sống tới hết TTL = leo thang quyền im lặng)",
+      "Quét lại: `grep` toàn `apps/api/src` không còn literal khoá Valkey nào dựng tại chỗ ngoài các hàm đã khai (chống sót — bài học identity-projection-census-misses-alias: literal có thể nằm trong template lồng nhau)",
+      "Ghi rõ trong docblock điều gì xảy ra lúc DEPLOY: đổi tiền tố = mọi khoá cũ thành MỒ CÔI. `perm:*`/`idem:*` tự lành (cache nạp lại, TTL hết). Nhưng khoá `rl:*:lock` cũ sẽ treo tới hết 900s và KHÔNG còn hàm nào xoá được ⇒ kèm một lượt dọn tay `DEL` sau deploy (viết sẵn lệnh vào phần vận hành, đừng để người deploy tự nghĩ ra)",
+      "KI-067 ghi vào RELEASE-02 (mở + đóng cùng PR)",
+    ],
+    notes: [
+      "⚠️ Đừng 'sửa' bằng cách đổi số db Valkey theo môi trường (`redis://…/1`): BullMQ + `@socket.io/redis-adapter` + presence đã gắn với db0 và đã có `envScope` riêng; tách bằng db index sẽ tạo HAI cơ chế cô lập song song, cái nào đúng thì không ai biết. Một cơ chế duy nhất = `envScope` trong tên khoá.",
+      "⚠️ Cân nhắc `keyPrefix` của ioredis thay vì sửa từng hàm: nó ĐẸP hơn nhưng áp toàn cục và `ValkeyService.del(...keys)` cùng mọi lệnh raw sẽ bị prefix hai lần / lệch nhau tuỳ lệnh. Nếu chọn hướng đó, phải chứng minh bằng test cho CẢ `del` nhiều khoá lẫn `setNx`, không chỉ `get/set`.",
+      "📌 WO này và `S10-AUTH-IPTRUST-1` cùng sinh ra từ một lần truy nguyên nhưng ĐỘC LẬP file — chạy song song được. Chỉ đừng để cả hai PR cùng sửa `RELEASE-02` (file xung đột đa-PR): PR nào land trước ghi KI của mình, PR sau rebase.",
+    ],
+  },
 ];
