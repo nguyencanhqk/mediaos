@@ -384,3 +384,33 @@ describe("EmployeeDetailPage", () => {
     expect(employeeAvatarApi.uploadEmployeeAvatar).not.toHaveBeenCalled();
   });
 });
+
+// ─── S10-HR-STATUSUI-1 — nút "Đổi trạng thái" (HR-FUNC-006) ────────────────────────
+
+describe("EmployeeDetailPage — nút Đổi trạng thái", () => {
+  it("có change-status:employee → thấy nút, bấm mở dialog", async () => {
+    setCapabilities({ "read:employee": true, "change-status:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    const btn = await screen.findByTestId("change-status-open");
+    expect((btn as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(btn);
+    expect(await screen.findByTestId("change-status-select")).toBeTruthy();
+  });
+
+  it("KHÔNG có cặp quyền → KHÔNG thấy nút (server vẫn enforce lại)", async () => {
+    setCapabilities({ "read:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    expect(screen.queryByTestId("change-status-open")).toBeNull();
+  });
+
+  it("hồ sơ đã terminated → nút disabled (0 transition), không để bấm rồi ăn 422", async () => {
+    setCapabilities({ "read:employee": true, "change-status:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue({ ...MOCK_DETAIL, status: "terminated" });
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    const btn = await screen.findByTestId("change-status-open");
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
+  });
+});

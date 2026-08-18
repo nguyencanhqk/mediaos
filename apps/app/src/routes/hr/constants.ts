@@ -99,4 +99,8 @@ export const HR_ENGINE_PAIRS = {
   // hr + company-admin) + SENSITIVE_CAPABILITY_ALLOWLIST (permission.service.ts). PHẢI dùng useCanExact
   // (không useCan) — pair nhạy cảm, tránh wildcard '*:*' fall-through permit trong khi BE vẫn 403.
   IMPORT_EMPLOYEE: { action: "import", resourceType: "employee" },
+  // S10-HR-STATUSUI-1 — nút "Đổi trạng thái" trên trang chi tiết (HR-FUNC-006). Cặp seed THẬT mig 0444,
+  // grant Company cho hr + company-admin, `is_sensitive=false` (auth-seed-canonical-roles.int-spec.ts:117)
+  // và KHÔNG nằm trong SENSITIVE_CAPABILITY_ALLOWLIST ⇒ dùng useCan/PermissionGate thường, KHÔNG useCanExact.
+  CHANGE_STATUS_EMPLOYEE: { action: "change-status", resourceType: "employee" },
 } as const;

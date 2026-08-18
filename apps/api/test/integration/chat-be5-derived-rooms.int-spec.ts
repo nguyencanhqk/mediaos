@@ -381,7 +381,7 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-5 — phòng dẫn xuất (DB cô lập,
       await runJob(A.companyId);
       expect(await activeRoomCountOf(uid)).toBe(3);
 
-      await hrWrite.changeStatus(actor, empId, { newStatus: "resigned", lockUser: false });
+      await hrWrite.changeStatus(actor, empId, { newStatus: "resigned", endDate: "2026-08-08", lockUser: false });
 
       expect(await isActiveMember(roomD, uid)).toBe(false);
       expect(await isActiveMember(room1, uid)).toBe(false);
@@ -669,7 +669,7 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-5 — phòng dẫn xuất (DB cô lập,
       };
       try {
         await expect(
-          hrWrite.changeStatus(actor, empId, { newStatus: "resigned", lockUser: false }),
+          hrWrite.changeStatus(actor, empId, { newStatus: "resigned", endDate: "2026-08-08", lockUser: false }),
         ).rejects.toBeInstanceOf(ChatSyncRevokeError);
       } finally {
         proto.applyLeavesTx = original;
@@ -794,7 +794,7 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-5 — phòng dẫn xuất (DB cô lập,
       // Rồi một người NGHỈ VIỆC. Đây là chuỗi mà bản đầu để hở: `applyLeavesTx` bỏ qua phòng đã lưu trữ,
       // `assertMember` không có vế `is_archived`, `listRooms(archived=true)` vẫn trả phòng, và đăng nhập
       // chỉ gate `users.status` — người đã nghỉ đọc được toàn bộ lịch sử dự án đã đóng, vĩnh viễn.
-      await hrWrite.changeStatus(actor, empLeaver, { newStatus: "resigned", lockUser: false });
+      await hrWrite.changeStatus(actor, empLeaver, { newStatus: "resigned", endDate: "2026-08-08", lockUser: false });
 
       expect(await isActiveMember(roomId, uLeaver), "đã nghỉ việc ⇒ phải rời phòng lưu trữ").toBe(
         false,
@@ -888,7 +888,7 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-5 — phòng dẫn xuất (DB cô lập,
       };
       try {
         await expect(
-          hrWrite.changeStatus(actor, empId, { newStatus: "resigned", lockUser: false }),
+          hrWrite.changeStatus(actor, empId, { newStatus: "resigned", endDate: "2026-08-08", lockUser: false }),
         ).rejects.toBeInstanceOf(ChatSyncRevokeError);
       } finally {
         proto.applyLeavesTx = original;

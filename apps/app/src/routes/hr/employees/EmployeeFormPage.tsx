@@ -461,12 +461,18 @@ function ScheduleSection({
             <Input id="startDate" type="date" {...register("startDate")} />
           </Field>
 
+          {/* S10-HR-STATUSUI-1 — ĐÂY là cửa đã đẻ ra bug: PATCH end_date KHÔNG lật `status` (cố ý,
+              employee-write.ts:80-82) nên điền ngày ở đây rồi tưởng nhân viên đã "nghỉ" là hiểu nhầm.
+              Nói thẳng ra thay vì để người dùng tự suy. */}
           <Field
             id="endDate"
             label={t("form.fields.endDate")}
             error={fieldError(errors.endDate, t)}
           >
             <Input id="endDate" type="date" {...register("endDate")} />
+            <p className="mt-1 text-xs text-muted-foreground" data-testid="end-date-status-hint">
+              {t("form.hints.endDateDoesNotChangeStatus")}
+            </p>
           </Field>
 
           <Field

@@ -65,12 +65,20 @@ export type EmployeeUpdateData = Partial<Omit<EmployeeWriteData, "userId">> &
   EmployeeDirectoryPatch &
   EmployeePersonalPatch;
 
-/** Minimal row the service needs to gate status/link transitions (read under FOR UPDATE). */
+/**
+ * Minimal row the service needs to gate status/link transitions (read under FOR UPDATE).
+ *
+ * S10-HR-STATUSUI-1 — `endDate` được thêm vì `changeStatusCore` phải ghi `before.endDate` vào audit
+ * append-only; không có giá trị CŨ thì audit ghi lệch vế và sai VĨNH VIỄN. Đây là mặt cắt DÙNG CHUNG với
+ * linkUser/unlinkUser — chỉ NỚI (thêm field), không đổi kiểu field cũ; hai đường kia dựng payload audit
+ * TƯỜNG MINH nên field mới không rò sang audit của chúng.
+ */
 export interface EmployeeStateRow {
   id: string;
   companyId: string;
   userId: string | null;
   status: string;
+  endDate: string | null;
 }
 
 @Injectable()
@@ -87,6 +95,7 @@ export class HrWriteRepository {
         companyId: employeeProfiles.companyId,
         userId: employeeProfiles.userId,
         status: employeeProfiles.status,
+        endDate: employeeProfiles.endDate,
       })
       .from(employeeProfiles)
       .where(
@@ -212,10 +221,16 @@ export class HrWriteRepository {
     return row;
   }
 
-  async setStatusTx(tx: TenantTx, companyId: string, id: string, status: string) {
+  /**
+   * S10-HR-STATUSUI-1 — `endDate` (ngày nghỉ việc) ghi trong CÙNG một UPDATE với `status`, không phải
+   * lượt PATCH thứ hai. `undefined` ⇒ cột `end_date` KHÔNG bị chạm (giữ nguyên giá trị cũ); service đã
+   * ép luật "chỉ exit-status mới được gửi endDate" nên ở đây không cần biết trạng thái.
+   */
+  async setStatusTx(tx: TenantTx, companyId: string, id: string, status: string, endDate?: string) {
+    const patch = endDate === undefined ? { status } : { status, endDate };
     await tx
       .update(employeeProfiles)
-      .set({ status, updatedAt: new Date() })
+      .set({ ...patch, updatedAt: new Date() })
       .where(and(eq(employeeProfiles.companyId, companyId), eq(employeeProfiles.id, id)));
   }
 

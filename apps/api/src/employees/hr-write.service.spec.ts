@@ -11,12 +11,14 @@
 
 import { describe, expect, it, vi } from "vitest";
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { HrWriteService } from "./hr-write.service";
+import { HR_EMPLOYEE_EXIT_STATUSES, HR_EMPLOYEE_STATUS_TRANSITIONS } from "@mediaos/contracts";
+import { HrWriteService, LOCKING_STATUSES } from "./hr-write.service";
 import {
   SequenceInactiveError,
   SequenceNotFoundError,
@@ -55,13 +57,21 @@ const FORBIDDEN_AUDIT_KEYS = [
   "personalExtra",
 ];
 
+/** Ngày nghỉ việc gieo sẵn trên hồ sơ mock — ca audit so ĐÚNG giá trị này, không so undefined. */
+const SEEDED_END_DATE = "2026-01-31";
+const NEW_END_DATE = "2026-08-08";
+
 function makeRepo(overrides: Record<string, unknown> = {}) {
   return {
+    // S10-HR-STATUSUI-1 — `endDate` PHẢI có giá trị THẬT ở fixture mặc định. Mock ép `as never` nên thiếu
+    // field không đỏ typecheck; để undefined thì ca "audit ghi cả before.endDate lẫn after.endDate" so
+    // undefined với undefined và PASS RỖNG.
     findForUpdateTx: vi.fn().mockResolvedValue({
       id: EMP_ID,
       companyId: COMPANY_A,
       userId: OTHER_USER,
       status: "active",
+      endDate: SEEDED_END_DATE,
     }),
     findStructuralByIdTx: vi.fn().mockResolvedValue({ status: "active", orgUnitId: null }),
     getActiveEmployeeCodeConfigTx: vi.fn().mockResolvedValue(null),
@@ -116,6 +126,8 @@ function makeService(opts: { repo?: ReturnType<typeof makeRepo>; sequence?: unkn
   const outbox = { enqueue: vi.fn().mockResolvedValue("evt-id") };
   // S5-LMS-BE-1 — LMS auto-sync producer (wire-in assertion: changeStatus phải gọi enqueueSync).
   const lmsSync = { enqueueSync: vi.fn().mockResolvedValue(undefined) };
+  // S10-HR-STATUSUI-1: giữ tham chiếu để ca "ném TRƯỚC khi mở tx" assert được là chatSync KHÔNG bị gọi.
+  const chatSync = makeChatSync();
   const svc = new HrWriteService(
     repo as never,
     db as never,
@@ -127,9 +139,9 @@ function makeService(opts: { repo?: ReturnType<typeof makeRepo>; sequence?: unkn
     permissions as never,
     outbox as never,
     lmsSync as never,
-    makeChatSync() as never,
+    chatSync as never,
   );
-  return { svc, repo, db, audit, sequence, dataScope, permissions, outbox, lmsSync };
+  return { svc, repo, db, audit, sequence, dataScope, permissions, outbox, lmsSync, chatSync };
 }
 
 function assertNoSensitiveAuditKeys(audit: { record: ReturnType<typeof vi.fn> }) {
@@ -162,13 +174,16 @@ function makeChatSync() {
   };
 }
 
-
 describe("HrWriteService.changeStatus — FSM", () => {
   it("404 when the employee does not exist (no audit, no history)", async () => {
     const repo = makeRepo({ findForUpdateTx: vi.fn().mockResolvedValue(undefined) });
     const { svc, audit } = makeService({ repo });
     await expect(
-      svc.changeStatus(actorA, EMP_ID, { newStatus: "resigned", lockUser: false }),
+      svc.changeStatus(actorA, EMP_ID, {
+        newStatus: "resigned",
+        endDate: NEW_END_DATE,
+        lockUser: false,
+      }),
     ).rejects.toThrow(NotFoundException);
     expect(repo.insertStatusHistoryTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
@@ -201,11 +216,19 @@ describe("HrWriteService.changeStatus — FSM", () => {
     const { svc, repo, audit, lmsSync } = makeService();
     const res = await svc.changeStatus(actorA, EMP_ID, {
       newStatus: "resigned",
+      endDate: NEW_END_DATE,
       reason: "left",
       lockUser: true,
     });
     expect(res).toEqual({ id: EMP_ID, status: "resigned" });
-    expect(repo.setStatusTx).toHaveBeenCalledWith(FAKE_TX, COMPANY_A, EMP_ID, "resigned");
+    // S10-HR-STATUSUI-1: status + end_date đi trong CÙNG một lệnh ghi, không phải PATCH lượt hai.
+    expect(repo.setStatusTx).toHaveBeenCalledWith(
+      FAKE_TX,
+      COMPANY_A,
+      EMP_ID,
+      "resigned",
+      NEW_END_DATE,
+    );
     expect(repo.insertStatusHistoryTx).toHaveBeenCalledWith(
       FAKE_TX,
       COMPANY_A,
@@ -225,6 +248,96 @@ describe("HrWriteService.changeStatus — FSM", () => {
     const { svc, repo } = makeService();
     await svc.changeStatus(actorA, EMP_ID, { newStatus: "inactive", lockUser: true });
     expect(repo.lockUserTx).not.toHaveBeenCalled();
+  });
+
+  // ── S10-HR-STATUSUI-1 — luật `endDate` + audit không nói dối ─────────────────────────────────────
+
+  it("ném TRƯỚC KHI MỞ TX khi thiếu endDate lúc → resigned (Zod chỉ chạy trên đường HTTP)", async () => {
+    const { svc, repo, audit, lmsSync, chatSync } = makeService();
+    await expect(
+      svc.changeStatus(actorA, EMP_ID, { newStatus: "resigned", lockUser: false }),
+    ).rejects.toThrow(BadRequestException);
+    // "Ném TRƯỚC khi mở tx" phải đo bằng việc KHÔNG cái nào trong tx được chạm — không chỉ "throws".
+    expect(repo.findForUpdateTx).not.toHaveBeenCalled();
+    expect(repo.setStatusTx).not.toHaveBeenCalled();
+    expect(repo.insertStatusHistoryTx).not.toHaveBeenCalled();
+    expect(repo.lockUserTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+    expect(lmsSync.enqueueSync).not.toHaveBeenCalled();
+    expect(chatSync.syncUserDerivedMembershipTx).not.toHaveBeenCalled();
+  });
+
+  it("ném khi gửi endDate cho transition KHÔNG rời công ty (không nhận rồi bỏ đi)", async () => {
+    const { svc, repo, audit } = makeService();
+    await expect(
+      svc.changeStatus(actorA, EMP_ID, {
+        newStatus: "inactive",
+        endDate: NEW_END_DATE,
+        lockUser: false,
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(repo.findForUpdateTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("audit mang CẢ before.endDate lẫn after.endDate — giá trị THẬT, không phải null", async () => {
+    const { svc, audit } = makeService();
+    await svc.changeStatus(actorA, EMP_ID, {
+      newStatus: "resigned",
+      endDate: NEW_END_DATE,
+      lockUser: false,
+    });
+    expect(audit.record).toHaveBeenCalledWith(
+      FAKE_TX,
+      expect.objectContaining({
+        before: { status: "active", endDate: SEEDED_END_DATE },
+        after: { status: "resigned", endDate: NEW_END_DATE },
+      }),
+    );
+  });
+
+  it("transition KHÔNG rời công ty: after.endDate GIỮ NGUYÊN giá trị cũ (cấm `?? null`)", async () => {
+    const { svc, repo, audit } = makeService();
+    await svc.changeStatus(actorA, EMP_ID, { newStatus: "inactive", lockUser: false });
+    // `endDate` undefined ⇒ repo KHÔNG được chạm cột end_date...
+    expect(repo.setStatusTx).toHaveBeenCalledWith(
+      FAKE_TX,
+      COMPANY_A,
+      EMP_ID,
+      "inactive",
+      undefined,
+    );
+    // ...nên audit append-only PHẢI phản ánh "không đổi", không phải "đổi thành null".
+    expect(audit.record).toHaveBeenCalledWith(
+      FAKE_TX,
+      expect.objectContaining({
+        before: { status: "active", endDate: SEEDED_END_DATE },
+        after: { status: "inactive", endDate: SEEDED_END_DATE },
+      }),
+    );
+  });
+});
+
+// ─── S10-HR-STATUSUI-1 — ghim hằng dùng chung BE↔FE ────────────────────────────────
+
+describe("HR status constants (nguồn sự thật dùng chung)", () => {
+  it("FSM sống ở @mediaos/contracts và terminated là trạng thái CUỐI", () => {
+    // FE lọc lựa chọn theo đúng bảng này; hai bản sao = drift = người dùng bấm rồi ăn 422.
+    expect(Object.keys(HR_EMPLOYEE_STATUS_TRANSITIONS).sort()).toEqual([
+      "active",
+      "inactive",
+      "resigned",
+      "terminated",
+    ]);
+    expect(HR_EMPLOYEE_STATUS_TRANSITIONS.terminated).toEqual([]);
+    expect(HR_EMPLOYEE_STATUS_TRANSITIONS.resigned).toEqual(["terminated"]);
+  });
+
+  it("LOCKING_STATUSES trùng HR_EMPLOYEE_EXIT_STATUSES — nhưng là HAI hằng độc lập", () => {
+    // Ghim quan hệ, KHÔNG alias: gộp lại thì thêm một trạng thái vào tập "đòi ngày nghỉ" sẽ lặng lẽ cho
+    // phép khoá tài khoản qua transition CÓ ĐƯỜNG LÙI. Ca này đỏ = buộc người sửa quyết định lại cả hai.
+    // (import LOCKING_STATUSES, KHÔNG khai lại literal — khai lại thì pin thành tautology.)
+    expect(LOCKING_STATUSES).toEqual(new Set(HR_EMPLOYEE_EXIT_STATUSES));
   });
 });
 

@@ -15,7 +15,11 @@ import type {
   UnlinkUserRequest,
   UpdateHrEmployeeRequest,
 } from "@mediaos/contracts";
-import { HR_EMPLOYEE_PII_WRITE_FIELDS } from "@mediaos/contracts";
+import {
+  HR_EMPLOYEE_PII_WRITE_FIELDS,
+  HR_EMPLOYEE_STATUS_TRANSITIONS,
+  isHrEmployeeExitStatus,
+} from "@mediaos/contracts";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { LmsSyncProducer } from "../integrations/lms/lms-sync-producer.service";
@@ -69,15 +73,25 @@ const GENERATED_PASSWORD_BYTES = 18;
 /**
  * Status FSM (app-enforced — the DB CHECK validates the value set, not the transition). Resigned can
  * only escalate to Terminated; Terminated is terminal. Same→same is rejected as a no-op.
+ *
+ * S10-HR-STATUSUI-1 — bảng chuyển TIÊU THỤ từ `@mediaos/contracts` (KHÔNG chép literal): FE phải lọc
+ * lựa chọn theo đúng tập này, hai bản sao = drift = người dùng bấm rồi ăn 422.
  */
-const STATUS_TRANSITIONS: Record<HrEmployeeStatus, readonly HrEmployeeStatus[]> = {
-  active: ["inactive", "resigned", "terminated"],
-  inactive: ["active", "resigned", "terminated"],
-  resigned: ["terminated"],
-  terminated: [],
-};
+const STATUS_TRANSITIONS: Readonly<Record<HrEmployeeStatus, readonly HrEmployeeStatus[]>> =
+  HR_EMPLOYEE_STATUS_TRANSITIONS;
 
-const LOCKING_STATUSES: ReadonlySet<HrEmployeeStatus> = new Set(["resigned", "terminated"]);
+/**
+ * Trạng thái mà `lockUser` CÓ HIỆU LỰC.
+ *
+ * ⚠️ CỐ Ý là literal RIÊNG, KHÔNG alias `HR_EMPLOYEE_EXIT_STATUSES` (tập đòi ngày nghỉ việc): hai khái
+ * niệm độc lập, hôm nay trùng giá trị. Dựng cái này TỪ cái kia nghĩa là ai đó thêm trạng thái vào tập
+ * "đòi ngày nghỉ" sẽ LẶNG LẼ cho phép khoá tài khoản qua một transition CÓ ĐƯỜNG LÙI — leo thang sinh ra
+ * từ một sửa đổi trông như sửa hằng số. Quan hệ hai tập được ghim bằng spec (hr-write.service.spec.ts);
+ * đổi một cái buộc phải quyết định lại cái kia.
+ *
+ * Export để spec import — spec KHÔNG được khai lại literal (pin thành tautology).
+ */
+export const LOCKING_STATUSES: ReadonlySet<HrEmployeeStatus> = new Set(["resigned", "terminated"]);
 
 /** Employee writes are company-wide operations — only a Company/System data_scope may perform them. */
 const WRITE_SCOPES: ReadonlySet<string> = new Set(["Company", "System"]);
@@ -480,6 +494,21 @@ export class HrWriteService {
 
   private async changeStatusCore(user: RequestUser, id: string, dto: ChangeEmployeeStatusRequest) {
     await this.assertWriteScope(user, "change-status");
+
+    // S10-HR-STATUSUI-1 — ép lại luật `endDate` Ở TẦNG SERVICE, không chỉ ở Zod. Lý do: Zod chỉ chạy trên
+    // đường HTTP; caller gọi thẳng service (chat-sync, seeder, spec) sẽ lách được và ghi trạng thái "đã
+    // nghỉ" mà KHÔNG có ngày nghỉ — đúng cái lỗ WO này vá.
+    //
+    // Vị trí CỐ Ý: SAU `assertWriteScope`, TRƯỚC `withTenant`. Đặt trước sẽ trả lời về hợp-lệ-payload
+    // TRƯỚC khi trả lời về quyền (403 thành 400); đặt trong tx thì đã mở tx vô ích.
+    const isExit = isHrEmployeeExitStatus(dto.newStatus);
+    if (isExit && !dto.endDate) {
+      throw new BadRequestException("endDate is required when moving to resigned/terminated");
+    }
+    if (!isExit && dto.endDate) {
+      throw new BadRequestException("endDate is only accepted when moving to resigned/terminated");
+    }
+
     return this.db.withTenant(user.companyId, async (tx) => {
       const row = await this.repo.findForUpdateTx(tx, user.companyId, id);
       if (!row) throw new NotFoundException("Employee not found");
@@ -496,7 +525,9 @@ export class HrWriteService {
         );
       }
 
-      await this.repo.setStatusTx(tx, user.companyId, id, newStatus);
+      // S10-HR-STATUSUI-1 — status + end_date ghi trong CÙNG một UPDATE, cùng tx với history/audit/lock.
+      // Không có cửa sổ "đã đổi trạng thái nhưng chưa có ngày nghỉ" cho retry/crash rơi vào.
+      await this.repo.setStatusTx(tx, user.companyId, id, newStatus, dto.endDate);
       await this.repo.insertStatusHistoryTx(tx, user.companyId, {
         employeeId: id,
         oldStatus,
@@ -516,13 +547,17 @@ export class HrWriteService {
         );
       }
 
+      // `audit_logs` là APPEND-ONLY (BẤT BIẾN #2) ⇒ ghi sai là sai VĨNH VIỄN. `after.endDate` phải là giá
+      // trị THỰC SỰ tồn tại sau lệnh ghi: `dto.endDate` khi có, ngược lại GIỮ NGUYÊN `row.endDate`.
+      // CẤM `dto.endDate ?? null` — với active→inactive (không được gửi endDate) nó sẽ ghi "end_date → null"
+      // trong khi cột không hề bị chạm.
       await this.audit.record(tx, {
         action: "change-status",
         objectType: "employee",
         objectId: id,
         actorUserId: user.id,
-        before: { status: oldStatus },
-        after: { status: newStatus },
+        before: { status: oldStatus, endDate: row.endDate },
+        after: { status: newStatus, endDate: dto.endDate ?? row.endDate },
       });
       // S5-LMS-BE-1: enqueue LMS auto-sync CÙNG tx SAU mutation (đọc state post-change). Employee có linked
       // user (row.userId) → producer resolve {email,active} + enqueue; userId null / ngoài LMS-company → no-op.

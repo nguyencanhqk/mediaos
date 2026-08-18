@@ -84,6 +84,25 @@ export default {
       edit: "Chỉnh sửa",
       changeStatus: "Đổi trạng thái",
     },
+    // S10-HR-STATUSUI-1 (HR-FUNC-006) — nhãn trạng thái TÁI DÙNG `status.*` bên dưới, KHÔNG đẻ bộ thứ hai.
+    changeStatus: {
+      title: "Đổi trạng thái nhân viên",
+      description: "Chỉ hiển thị các trạng thái chuyển được từ trạng thái hiện tại.",
+      newStatusLabel: "Trạng thái mới",
+      newStatusPlaceholder: "— Chọn trạng thái —",
+      endDateLabel: "Ngày nghỉ việc",
+      endDateOverwrite: "Sẽ thay ngày nghỉ hiện tại: {{date}}",
+      reasonLabel: "Lý do",
+      reasonPlaceholder: "Không bắt buộc (tối đa 500 ký tự)",
+      lockUser: "Khóa tài khoản đăng nhập của nhân viên này",
+      oneWayWarning:
+        "“Đã nghỉ việc” và “Chấm dứt HĐ” là MỘT CHIỀU — không thể quay lại qua ứng dụng.",
+      terminalTooltip: "Hồ sơ đã chấm dứt hợp đồng — không còn trạng thái nào chuyển được.",
+      submit: "Đổi trạng thái",
+      submitting: "Đang lưu…",
+      cancel: "Hủy",
+      error: "Không đổi được trạng thái. Trạng thái nhân viên giữ nguyên — vui lòng thử lại.",
+    },
     empty: {
       title: "Không có nhân viên",
       description: "Chưa có hồ sơ nhân viên nào phù hợp với bộ lọc.",
@@ -352,6 +371,10 @@ export default {
       initialPassword: "Để trống để hệ thống tự tạo / gửi lời mời.",
       employeeCode: "Để trống để hệ thống tự sinh mã.",
       masterDataLocked: "Cần quyền quản lý dữ liệu nền để chọn.",
+      // S10-HR-STATUSUI-1 — điền ngày ở đây KHÔNG lật status (đúng thiết kế). Không nói ra thì người
+      // dùng lại rơi vào đúng hiểu nhầm "đã nhập ngày nghỉ mà vẫn hiện Đang làm việc".
+      endDateDoesNotChangeStatus:
+        "Điền ngày ở đây KHÔNG đổi trạng thái nhân viên — dùng nút “Đổi trạng thái” ở trang chi tiết.",
     },
     placeholders: {
       select: "— Chọn —",
