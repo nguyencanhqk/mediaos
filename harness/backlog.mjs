@@ -12506,6 +12506,11 @@ export const backlog = [
       "apps/api/src/config/env.schema.spec.ts",
       "apps/api/src/auth/**",
       "apps/api/test/**",
+      // Bổ sung 18/08: bước đo THẬT header cloudflared (done_when #1) cần một probe chạy trên
+      // máy PROD. KHÔNG đo được bằng code app: thêm route debug vào dev-online cũng nguy hiểm
+      // vì apps/api `dist/` dùng CHUNG với PROD (recompile ⇒ nguy cơ login PROD 500).
+      "scripts/windows/10-trust-proxy-probe.ps1",
+      "docs/DEVOPS/evidence/**",
       ".env.example",
       "docs/DEVOPS/**",
       "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
