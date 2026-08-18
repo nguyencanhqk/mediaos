@@ -12506,6 +12506,17 @@ export const backlog = [
       "apps/api/src/config/env.schema.spec.ts",
       "apps/api/src/auth/**",
       "apps/api/test/**",
+      // Bổ sung 18/08: bước đo THẬT header cloudflared (done_when #1) cần một probe chạy trên
+      // máy PROD. KHÔNG đo được bằng code app: thêm route debug vào dev-online cũng nguy hiểm
+      // vì apps/api `dist/` dùng CHUNG với PROD (recompile ⇒ nguy cơ login PROD 500).
+      "scripts/windows/10-trust-proxy-probe.ps1",
+      // Bổ sung 18/08 (vòng đo 2): probe RẺ hơn — không sửa config.yml, không restart cloudflared
+      // (mượn hostname dev đã trỏ sẵn vào cổng đang trống). Đo ca client TỰ gửi XFF, tức ca kẻ tấn công.
+      "scripts/windows/11-trust-proxy-spoof-probe.ps1",
+      "apps/api/src/config/trust-proxy.ts",
+      "apps/api/src/config/trust-proxy.spec.ts",
+      "apps/api/src/auth/login-rate-limiter.spec.ts",
+      "docs/DEVOPS/evidence/**",
       ".env.example",
       "docs/DEVOPS/**",
       "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
@@ -12535,6 +12546,7 @@ export const backlog = [
       "⚠️ BẪY LỚN NHẤT: `trust proxy` đặt quá rộng (`true`, hoặc số hop lớn hơn thực tế) = tin XFF do client bịa ⇒ kẻ tấn công tự chọn IP ⇒ vượt IP-allowlist và né rate-limit bằng cách xoay IP giả. Trạng thái hiện tại là MÙ; đặt sai biến nó thành GIẢ MẠO ĐƯỢC — tệ hơn. Vì vậy ca test giả mạo là bắt buộc, không phải tuỳ chọn.",
       "⚠️ Sau khi có IP thật, nhân viên cùng văn phòng sẽ chia nhau MỘT IP công cộng (NAT). Khoá per-IP vẫn gồm email trong key nên không ai khoá chéo ai — nhưng đừng 'tối ưu' key bỏ email đi.",
       "📌 Sự cố 17/08 tự nó KHÔNG phải lỗi hệ thống (owner gõ sai mật khẩu 5 lần). Cái WO này vá là thứ lộ ra khi truy nguyên. Đừng viết lại logic rate-limit — nó chạy đúng thiết kế; thứ sai là đầu vào `req.ip` của nó.",
+      "🩸 SỰ THẬT ĐO ĐƯỢC 18/08 — done_when #5 của chính WO này ghi SAI FILE: nó bảo đặt `TRUST_PROXY` trong `.env.prod`, nhưng API đọc `ENV_FILE_PATHS = ['.env','../../.env']` (env.schema.ts:8) và dịch vụ `MediaOS-API` chạy với AppDirectory = gốc repo ⇒ nó nạp `<repo>/.env`. KHÔNG script nào copy `.env.prod`→`.env`. Làm đúng như WO viết thì service restart OK, /health 200, log sạch — và `req.ip` VẪN `::1` (đã đo: hàng login_logs 05:09:19Z ip=::1). Chỉ sau khi đặt vào `.env` mới ra IP công cộng thật (05:12:31Z). Bài học: nghiệm thu bằng HÀNH VI, không bằng 'đã restart'.",
       "📌 Đường thoát khi có người bị khoá oan trong lúc chờ WO này: xoá khoá trong Valkey — `docker exec mediaos-valkey valkey-cli DEL 'rl:ip:{slug}|{email}|{ip}:lock' 'rl:acct:{slug}|{email}:cnt'` (đã dùng thật 17/08 để mở khoá cho tài khoản bị kẹt). Tạo lại tài khoản KHÔNG gỡ được khoá — khoá theo email.",
     ],
   },

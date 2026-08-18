@@ -1,0 +1,62 @@
+﻿S10-AUTH-IPTRUST-1 - THU TU X-Forwarded-For khi client TU GUI header
+Do luc: 20260818-120031
+Hostname: cian-dev-console.funtimemediacorp.com -> http://localhost:5278 (KHONG sua config.yml, KHONG restart cloudflared)
+IP bia ma client tu khai: 203.0.113.9
+IP that cua client da thay bang placeholder <REAL-CLIENT-IP> (repo PUBLIC) - THU TU giu nguyen.
+
+Doc gi o duoi (lan 'spoof-xff'):
+  x-forwarded-for = "203.0.113.9, <REAL-CLIENT-IP>"  => NOI VAO CUOI  => TRUST_PROXY=loopback AN TOAN
+  x-forwarded-for = "<REAL-CLIENT-IP>, 203.0.113.9"  => CHEN TRUOC    => loopback GIA MAO DUOC, phai doi cach
+  x-forwarded-for = "<REAL-CLIENT-IP>"            => XOA/GHI DE    => AN TOAN
+{
+  "label": "control",
+  "headers": {
+    "host": "cian-dev-console.funtimemediacorp.com",
+    "user-agent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.26100.9168",
+    "accept-encoding": "gzip, br",
+    "cdn-loop": "cloudflare; loops=1",
+    "cf-connecting-ip": "<REAL-CLIENT-IP>",
+    "cf-ipcountry": "VN",
+    "cf-ray": "<REDACTED>",
+    "cf-visitor": "{\"scheme\":\"https\"}",
+    "cf-warp-tag-id": "<REDACTED>",
+    "connection": "keep-alive",
+    "x-forwarded-for": "<REAL-CLIENT-IP>",
+    "x-forwarded-proto": "https"
+  },
+  "socketRemoteAddress": "127.0.0.1"
+}
+{
+  "label": "spoof-xff",
+  "headers": {
+    "host": "cian-dev-console.funtimemediacorp.com",
+    "user-agent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.26100.9168",
+    "accept-encoding": "gzip, br",
+    "cdn-loop": "cloudflare; loops=1",
+    "cf-connecting-ip": "<REAL-CLIENT-IP>",
+    "cf-ipcountry": "VN",
+    "cf-ray": "<REDACTED>",
+    "cf-visitor": "{\"scheme\":\"https\"}",
+    "cf-warp-tag-id": "<REDACTED>",
+    "connection": "keep-alive",
+    "x-forwarded-for": "203.0.113.9,<REAL-CLIENT-IP>",
+    "x-forwarded-proto": "https"
+  },
+  "socketRemoteAddress": "127.0.0.1"
+}
+
+
+KET QUA TUNG LAN GOI (chep tay tu console CUNG lan chay 12:00:31 - luc do script chua ghi muc nay;
+da va script 11-* de lan sau tu ghi):
+  control    -> HTTP 200 (toi duoc origin)
+  spoof-xff  -> HTTP 200 (toi duoc origin)
+  spoof-cf   -> HTTP 403 CHAN O EDGE Cloudflare (KHONG toi origin - vi vay khong co muc 'spoof-cf'
+                trong phan header o tren; day la SO DO, khong phai loi chay)
+
+KET LUAN DOC TRUC TIEP TU SO DO TREN (khong suy tu tai lieu):
+1. cloudflared NOI IP that vao CUOI X-Forwarded-For do client gui: "203.0.113.9,<REAL-CLIENT-IP>".
+   => Voi TRUST_PROXY=loopback, proxy-addr bo hop loopback (127.0.0.1) roi dung o phan tu phai-nhat
+      KHONG tin cay = <REAL-CLIENT-IP>. IP bia nam BEN TRAI nen khong bao gio duoc chon. AN TOAN.
+2. cf-connecting-ip o lan 'spoof-xff' van la <REAL-CLIENT-IP> => Cloudflare GHI DE header nay.
+3. Client TU GUI cf-connecting-ip bi Cloudflare tu choi 403 NGAY O EDGE, khong toi duoc origin.
+   => Ca hai header deu khong phai duong de client tu chon IP cua minh.

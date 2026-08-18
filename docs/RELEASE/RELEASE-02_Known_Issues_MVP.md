@@ -14,6 +14,7 @@
 
 | ID | Vấn đề | Mức | Loại | Chặn UAT | Chặn go-live | Chủ |
 | --- | --- | --- | --- | --- | --- | --- |
+| ~~**KI-066**~~ | **MỞ VÀ ĐÓNG CÙNG PR 2026-08-18** (`S10-AUTH-IPTRUST-1`). **PROD chạy sau `cloudflared` cùng máy nhưng `TRUST_PROXY` không đặt ⇒ MỌI `req.ip` = `::1`** — đo trên `login_logs` PROD: phân bố IP 30 ngày chỉ có `127.0.0.1`/`::1` + IP fixture, KHÔNG một IP người dùng thật nào. Ba hệ quả cùng lúc, im lặng, không log lỗi: (1) **điều tra mù** — `login_logs.ip_address` vô nghĩa cho forensics; (2) **rate-limit thoái hoá** — khoá per-IP `rl:ip:{slug}|{email}|{ip}` có `ip` là hằng ⇒ biến thành bucket per-account ngưỡng THẤP, nên trần khoá một tài khoản là `LOGIN_MAX_ATTEMPTS=5` chứ không phải `LOGIN_ACCOUNT_MAX_ATTEMPTS=20`, và bucket 20 KHÔNG BAO GIỜ chạm ⇒ khoá được tài khoản bất kỳ bằng 5 lần đoán từ endpoint công khai; (3) **bẫy lên nòng** — `SECURITY_POLICY_ENFORCEMENT_ENABLED` đang bật, ngày đầu admin bật IP-allowlist thì `::1` bị so với CIDR văn phòng ⇒ khoá cả công ty ra ngoài. **Đã đóng:** `TRUST_PROXY=loopback` (chọn từ SỐ ĐO header, không suy từ tài liệu) + nghiệm thu BẰNG HÀNH VI trên PROD. ⚠️ **Bẫy phụ đào được khi vá — xem §KI-066:** đặt biến vào `.env.prod` **KHÔNG có tác dụng gì**, API đọc `.env` | S1 | An ninh / vận hành | ❌ | ❌ | WO `S10-AUTH-IPTRUST-1` ✅ |
 | **KI-065** | **`PATCH /api/v1/settings/security-policy` KHÔNG THỂ gọi thành công qua HTTP với BẤT KỲ actor nào — route cấu hình chính sách bảo mật công ty là route CHẾT.** Cơ chế (đọc thẳng code + đo bằng HTTP thật, không suy đoán): `security-policy.controller.ts:34-38` khai `@RequirePermission("configure-security-policy", "company", { isSensitive: true, requiresReauth: true })`, nhưng route **không có `:id` param** ⇒ `resourceId` luôn `null` ⇒ `permission.decide.ts` tính `needsObjectGrant = true` VĨNH VIỄN (không tồn tại object nào để cấp grant) ⇒ **403 `deny-object-required` cho MỌI actor**, kể cả actor có ALLOW company-level đầy đủ trên đúng cặp `configure-security-policy:company`. Điều kiện thoát còn lại — `req.reauthContext` — **không được gán ở BẤT KỲ đâu trong codebase** (grep xác nhận: chỉ có nơi ĐỌC, không có nơi GHI) ⇒ không còn đường nào qua. **Hỏng đúng chiều an toàn (fail-CLOSED)** nên KHÔNG phải lỗ bảo mật; hậu quả là **tính năng cấu hình chính sách bảo mật (ép 2FA · chính sách mật khẩu · phiên) không dùng được qua API** — mọi thay đổi phải sửa thẳng DB `company_security_policies`, đúng cách đã phải làm ở KI-027. **Bằng chứng:** ca `🔴 GHIM BUG (KI-065)` — `apps/api/test/integration/security-mailconfig-http.int-spec.ts:171` — actor có quyền đầy đủ vẫn nhận 403 `deny-object-required`. ⚠️ **Ca đó GHIM hành vi SAI CÓ CHỦ Ý:** người vá bug này sẽ thấy nó **ĐỎ** — đó là dấu hiệu vá ĐÚNG, phải **LẬT** ca sang ALLOW 2xx (+ thêm ca DENY thật cho actor thiếu quyền) rồi mới đóng KI này; **TUYỆT ĐỐI không "sửa test cho khớp" bằng cách nới assert** (bài học `tests-can-pin-a-hole-open`). Cùng lý do đó, `PATCH /settings/security-policy` **không được tính là "đã phủ"** ở KI-025: ca DENY hiện tại là **xanh-RỖNG** — actor đủ quyền và actor không quyền đều nhận 403 nên nó không chứng minh được gì về guard. **Hai hướng vá (là quyết định thiết kế, không phải một dòng sửa):** (a) bỏ `requiresReauth` nếu chưa có step-up thật; (b) định nghĩa resource-id cho singleton (lấy `companyId` làm `resourceId`) **và** gán `req.reauthContext` ở một guard step-up có thật | S2 | Phân quyền / cấu hình bảo mật | ❌ | ❌ (workaround: sửa DB `company_security_policies`) | WO `S10-QA-SECPOLICY-GATE-1` |
 | ~~**KI-064**~~ | **MỞ VÀ ĐÓNG CÙNG NGÀY 2026-08-13** (`S10-FND-ENVKEY-1`). **`cp .env.example .env` — bước cài đặt lần đầu ghi ở CLAUDE.md §7 — làm API KHÔNG BOOT ĐƯỢC, và đã như vậy từ trước WO này.** Cơ chế ba mảnh, mảnh nào cũng đúng khi đứng một mình: (1) `.env.example` CỐ Ý ship giá trị RỖNG cho secret tắt-mềm (12 khoá) — đúng, vì để rỗng nghĩa là "tính năng tắt"; (2) `load-env.ts:38` gán thẳng `process.env[key] = ""` cho dòng `KEY=` bỏ trống, nó KHÔNG lọc rỗng — đúng, precedence phải giữ nguyên raw; (3) schema đòi `z.string().min(32).optional()` — đúng, secret phải có sàn độ dài. Ghép lại: `""` **không phải** `undefined` ⇒ trượt `.min(32)` ⇒ `loadEnv()` NÉM ⇒ API chết lúc boot. **Đo bằng cách chạy chính `.env.example` qua `loadEnv` sau khi đã điền hết `__SET_ME__`** (mô phỏng người cài đã làm xong phần bắt buộc): ném **7 khoá** — `LMS_SSO_SECRET` · `LMS_SYNC_TOKEN` · `LMS_PROGRESS_TOKEN` · `LMS_NOTI_TOKEN` · `LMS_COMPANY_ID` (uuid, `""` cũng không hợp lệ) · `CLOUDFLARE_TURN_KEY_ID` · `CLOUDFLARE_TURN_API_TOKEN`. Người cài làm ĐÚNG hướng dẫn vẫn nhận "Invalid environment variables" về những token họ chưa từng nghe tên và không hề định bật. **Phân biệt với fail-closed đúng thiết kế:** `__SET_ME__` (S6-SEC-ROTATE-1/KI-043) CỐ Ý không hợp lệ để quên điền thì sập — giữ nguyên, KHÔNG đụng. Lỗi ở đây là nhóm **tắt-mềm**: để rỗng là ý muốn hợp lệ, không phải quên. **Vá:** hai helper `optionalSecret(min)` + `optionalUuid()` áp cùng luật "RỖNG = CHƯA SET" mà `optionalUrl()` đã dùng từ KI-028 — lớp bẫy y hệt, chỉ là chưa ai áp cho nhóm secret; phủ 9 field (7 field trên + `INTERNAL_API_KEY` của chính WO + `SOCIAL_SSO_SECRET`/`SOCIAL_COMPANY_ID` cho đối xứng, tuy chúng chưa có mặt trong `.env.example`). **Sàn độ dài KHÔNG bị nới**: có giá trị thật mà ngắn hơn sàn vẫn ĐỎ ở biên (ca test riêng). **RED-proof:** `env-example-boots.spec.ts` viết TRƯỚC bản vá và ĐỎ đúng 7 khoá đó, xanh sau vá. 94/94 spec `src/config` · 157/157 spec vùng LMS/SOCIAL/CHAT-ICE/ME · typecheck sạch | S2 | Cấu hình / onboarding | ❌ | ❌ | **ĐÓNG 2026-08-13** — `S10-FND-ENVKEY-1` |
 | **KI-063** | **Cuộc gọi MA khoá phòng vĩnh viễn: một cuộc gọi `active` không còn ai hoạt động thì KHÔNG BAO GIỜ thành `ended`, và phòng đó không mời được cuộc gọi nào nữa (409 CHAT-ERR-028).** Cơ chế: `expireStaleRinging` (`chat-calls.repository.ts`) chỉ quét `status='ringing'` — không có job nào chạm cuộc gọi đã `active`. Mà partial unique `chat_calls_one_live_per_room_uq` chỉ cho MỘT cuộc gọi sống/phòng ⇒ mọi `invite` sau đó là 409, không đường sửa qua API. **LỖ CÓ SẴN TỪ TRƯỚC `S7-CALL-RT-FIX-2`, đã đo:** hôm nay gỡ cả hai người đang gọi khỏi phòng làm họ hết `hangup` nổi (`assertCallAccess` ném 404 vì hết là thành viên) ⇒ cuộc gọi cũng kẹt `active` y hệt. `S7-CALL-RT-FIX-2` đổi **hình dạng** trạng thái kẹt (0 participant hoạt động thay vì 2 participant không thao tác được) chứ **không mở rộng tập ca tới được**. **Vì sao CỐ Ý không vá kèm:** đóng cuộc gọi đòi ghi `chat_calls.status` từ đường THÀNH VIÊN — tức kéo bề mặt ghi vòng đời (`transition` · `ended_at` · phát `chat:call{ended}`) ra khỏi `ChatCallsService`, đúng **hàng rào R4** của `DECISIONS-07` mà chữ ký owner đổi lấy ngoại lệ `CHAT-DEC-020`. Đó là quyết định cần chữ ký owner, không phải một dòng thêm vào trong lúc vá một lỗ an ninh. **Đóng đinh bằng test, không để trôi im lặng:** ca `FIX2/H7` ở `chat-s7-call-rt1-signalling.int-spec.ts` khẳng định hành vi HIỆN TẠI (gỡ thành viên ⇒ `status` VẪN `active` ⇒ `invite` kế tiếp 409) — đổi hành vi mà không đọc KI này sẽ làm nó ĐỎ. **Phạm vi thật: CHỈ phòng `group`** — `leaveRoom` gác bằng `assertLeavable`, `removeMember` bằng `assertManualMembership`, nên phòng `direct` không có đường rời nào. **Điều kiện mở lại:** khi owner ký cho phép đóng vòng đời cuộc gọi từ đường thành viên, HOẶC khi thêm job quét `active` quá hạn (mirror `expireStaleRinging`) — job là hướng rẻ hơn và không chạm R4 | S3 | Realtime (vòng đời cuộc gọi) | ❌ | ❌ (CHAT `is_active=false`) | Owner — cần chữ ký R4 hoặc một job quét `active` quá hạn |
@@ -866,6 +867,85 @@ sao lưu nào là rủi ro mất dữ liệu không chấp nhận được.
 1. Chạy tay một bản ngay: `BACKUP_DIR=./backups bash scripts/backup-db.sh`
 2. Đăng ký task hằng ngày 02:00 — lệnh sẵn ở `RELEASE-09` §4
 3. Verify: `node scripts/ops-alert-check.mjs` phải chuyển luật "tuổi bản backup" từ `unknown` sang `ok`
+
+---
+
+### KI-066 — `TRUST_PROXY` không đặt sau proxy ⇒ mọi `req.ip` = `::1` · **S1** · ✅ MỞ VÀ ĐÓNG CÙNG PR 2026-08-18 (`S10-AUTH-IPTRUST-1`)
+
+> **Đã đóng bằng hành vi, không bằng "đã restart".** Bằng chứng là HAI hàng `login_logs` cách nhau
+> 3 phút trên cùng một PROD, cùng một loại request (đăng nhập sai có chủ đích qua
+> `https://api.funtimemediacorp.com`, tenant bịa nên không chạm tài khoản/bucket của ai):
+>
+> ```text
+> 05:09:19Z  ip=::1                    ← sau khi đặt biến vào .env.prod + restart  (KHÔNG ăn)
+> 05:12:31Z  ip=<IP-CÔNG-CỘNG-THẬT>    ← sau khi đặt biến vào .env       + restart  (ăn)
+> ```
+
+#### Vì sao đáng ghi lại dù bản vá chỉ là MỘT DÒNG env
+
+**1. Chỉ dẫn vận hành trong chính Work Order đã sai file — và sai một cách hoàn toàn im lặng.**
+WO ghi "đặt `TRUST_PROXY` trong `.env.prod` + restart API PROD". Làm đúng y vậy thì: service
+restart thành công, PID mới, `/health` 200, log sạch — **và `req.ip` vẫn là `::1`**. Lý do:
+`ENV_FILE_PATHS = [".env", "../../.env"]` (`apps/api/src/config/env.schema.ts:8`), còn dịch vụ
+`MediaOS-API` chạy với `AppDirectory = C:dev 2MediaOS` ⇒ nó nạp `<repo>/.env`. **Không script
+nào copy `.env.prod` → `.env`** (đã grep). `.env.prod` chỉ được vài script ops đọc để lấy thông tin
+DB. Nếu nghiệm thu bằng "đã restart, service Running" thay vì bằng hành vi thì WO này đã được đóng
+với **đúng nguyên trạng lỗi**, cộng thêm một dòng cấu hình khiến người sau tin rằng nó đã được vá.
+Đây là biến thể của bài học `prod-restart-does-not-rebuild-dist`, nhưng nguy hiểm hơn: ở đó thứ cũ
+là *code*, ở đây thứ cũ là *cấu hình*, và không có dấu hiệu nào để nhìn thấy.
+→ Đã vá bằng chú thích cảnh báo ngay đầu khối trong `.env.prod` (nói thẳng file đó KHÔNG phải file
+runtime), và giữ giá trị ở cả hai file theo quy ước sẵn có của `scripts/rotate-db-roles.mjs`.
+
+**2. `true` là bẫy: nó biến "IP mù" thành "IP GIẢ MẠO ĐƯỢC" — leo thang chứ không phải sửa.**
+Với `trust proxy = true`, Express tin MỌI `X-Forwarded-For`, kể cả header do client tự gửi ⇒ kẻ tấn
+công **tự chọn** `req.ip` ⇒ vượt IP-allowlist và né rate-limit bằng cách xoay IP bịa. Vì vậy WO đặt
+điều kiện chặn: phải có **ca test giả mạo** trước khi được đổi giá trị. Ca đó nằm ở
+`apps/api/src/config/trust-proxy.spec.ts` — dựng Nest app tối giản, set `trust proxy` bằng ĐÚNG dòng
+của `main.ts`, rồi bắn header bịa vào và đọc `req.ip` ra. Kiểm chứng ca test **không xanh-rỗng** bằng
+đột biến thật: đổi `loopback` → `true` làm **3 ca ĐỎ**, trong đó có ca chặn.
+
+**3. Giá trị được chọn từ SỐ ĐO, không từ tài liệu nhà cung cấp.** Tính an toàn của `loopback` treo
+trên đúng một tính chất: proxy **nối** IP thật vào **cuối** `X-Forwarded-For` do client gửi. Nếu nó
+**chèn trước**, `loopback` sẽ trả về IP kẻ tấn công tự chọn — tức cùng lỗ hổng như `true`, nhưng
+trông như đã vá. Vòng đo 1 (`scripts/windows/10-trust-proxy-probe.ps1`) chỉ đo request "sạch" nên
+KHÔNG trả lời được câu này. Vòng đo 2 (`scripts/windows/11-trust-proxy-spoof-probe.ps1`) đo đúng ca
+kẻ tấn công:
+
+| client gửi | origin nhận | kết luận |
+| --- | --- | --- |
+| `X-Forwarded-For: 203.0.113.9` | `"203.0.113.9,<ip thật>"` | **nối vào CUỐI** ⇒ `loopback` an toàn |
+| (không gửi gì) | `"<ip thật>"` | khớp vòng đo 1 |
+| `CF-Connecting-IP: 203.0.113.9` | — | **403 ngay ở edge**, không tới origin |
+
+Bằng chứng thô: `docs/DEVOPS/evidence/S10-AUTH-IPTRUST-1-xff-order-*.txt` (IP thật đã thay bằng
+placeholder tự động trước khi ghi — repo PUBLIC — nhưng **thứ tự giữ nguyên**, vì thứ tự mới là thứ
+cần đọc).
+
+**4. Probe vòng 2 rẻ hơn vòng 1 hai bậc, và đó là cách nên đo lần sau.** Vòng 1 phải sửa
+`C:ProgramDatacloudflaredconfig.yml` (file phục vụ CẢ 8 hostname, gồm `api.` và `dangfb.` PROD)
+rồi `Restart-Service cloudflared` hai lần. Vòng 2 **không sửa config, không restart gì**: hostname dev
+`cian-dev-console` đã trỏ sẵn tới `localhost:5278` và cổng đó đang trống, nên chỉ cần dựng echo
+server đúng lên cổng ấy. Script tự từ chối nếu cổng đang bận hoặc hostname không khớp cổng trong
+`config.yml` ⇒ không bao giờ cướp cổng của tiến trình khác.
+
+#### Vế còn lại đã đóng cùng PR
+
+- `parseTrustProxy` tách khỏi `main.ts` sang `apps/api/src/config/trust-proxy.ts`. Trước đó nó
+  module-private trong `main.ts` nên **không ca test nào chạm tới được** — mà đây là hàm quyết định
+  `req.ip`.
+- `.env.example`: dòng `TRUST_PROXY=` nay nêu **hệ quả** khi để `false` sau proxy (mù forensics +
+  thoái hoá rate-limit + vỡ IP-allowlist) và cảnh báo `true` tệ hơn `false`, thay vì chỉ tả cú pháp.
+- `login-rate-limiter.spec.ts`: 4 ca đóng đinh **tách vai hai bucket** — với IP thật thì 5 lần sai từ
+  một nguồn chỉ khoá nguồn đó (nguồn khác vẫn vào được) và bucket per-account 20 mới thực sự bắt
+  credential-stuffing phân tán; với `::1` thì 5 nguồn khác nhau vẫn khoá ở lần thứ 5. Chênh lệch giữa
+  hai ca chính là thiệt hại của `::1`.
+
+#### Điều kiện an toàn — đổi topology thì phải đo lại
+
+`loopback` an toàn nhờ hai tính chất **đã đo**, không nhờ bản thân preset: (a) proxy nối IP thật vào
+**cuối** XFF; (b) proxy nối tới origin qua **loopback** (cùng máy). Tách `cloudflared` sang máy khác
+⇒ peer không còn loopback ⇒ `req.ip` tụt về IP máy proxy (mù trở lại, không phải giả mạo) ⇒ phải
+đổi sang CIDR của máy proxy và **đo lại**. Ghi rõ trong docblock `config/trust-proxy.ts`.
 
 ---
 

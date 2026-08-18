@@ -13,6 +13,14 @@ interface AttemptState {
  *  - per-account `accountKey(companySlug,email)` — bắt credential-stuffing phân tán nhiều IP lên 1 account
  *    (ngưỡng cao hơn `LOGIN_ACCOUNT_MAX_ATTEMPTS`). Login orchestrate cả hai bucket; reauth chỉ dùng 1 key.
  *
+ * **S10-AUTH-IPTRUST-1 — hai ngưỡng này chỉ có nghĩa khi `req.ip` là IP THẬT.** Khoá per-IP nhúng
+ * `ip` vào key, nên nếu `ip` là hằng số (PROD chạy sau proxy mà `TRUST_PROXY` chưa đặt ⇒ mọi request
+ * = `::1`) thì bucket "per-IP" thoái hoá thành bucket per-account với ngưỡng THẤP: trần khoá một
+ * email trở thành 5 cho MỌI nguồn gộp lại, và bucket per-account 20 KHÔNG BAO GIỜ chạm tới. Sau khi
+ * `TRUST_PROXY=loopback` (18/08/2026), phân vai đúng thiết kế: **trần khoá một email từ MỘT nguồn
+ * giờ mới thực sự là 5** — nguồn khác vẫn đăng nhập được — còn 20 là backstop cho credential-stuffing
+ * rải nhiều nguồn. Đóng đinh bởi 4 ca cuối `login-rate-limiter.spec.ts`; bối cảnh: KI-066.
+ *
  * **Multi-instance:** khi `VALKEY_URL` có → đếm trên Valkey (mọi instance thấy chung). **Fail-soft:** Valkey
  * chưa cấu hình → fallback `Map` in-memory (đúng cho 1 instance + reset khi restart). KHÔNG fail-open: mất
  * Valkey thì hạ về memory chứ không bỏ rate-limit (đây là control chống brute-force, BẤT BIẾN an ninh).
