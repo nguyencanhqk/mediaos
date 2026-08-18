@@ -159,8 +159,8 @@ Ngoài ra bản 06/08 dùng `robocopy /MOVE` (xoá nguồn ngay ⇒ không có �
 | 2 | Trỏ tác vụ sao lưu về **cây chính** rồi mới gỡ worktree | ✅ xem dưới |
 | 3 | Gỡ worktree + nhánh `auto/S10-SOCIAL-OPS-1` | ✅ 5/5 file khớp từng byte với master trước khi gỡ |
 | 4 | Nghiệm thu `done_when` #1 qua giao diện | ⏳ **việc của owner** (PROD bật 2FA) |
-| 5 | Xoá bản lùi 2.8GB trên ổ C: | ⏳ **chờ owner chốt** — xem §7.5 |
-| 6 | Mang KEK + snapshot ra ngoài máy | ⏳ **chờ owner chốt đích** — xem §7.5 |
+| 5 | Xoá bản lùi 2.8GB trên ổ C: | ✅ owner chốt "xoá ngay" 18/08 — đã xoá, ổ C: về 371GB trống |
+| 6 | Mang KEK + snapshot ra ngoài máy | ⏸ owner **hoãn** 18/08 — nợ còn mở, xem §7.5(b) |
 | 7 | FULL gate qua agent | ❌ chưa chạy (phiên bị cấm tự gọi agent); đã soát tay, xem §7.6 |
 
 **Việc #2 là rủi ro PROD sống, không phải việc dọn dẹp.** Tác vụ `MediaOS-SocialBackupDaily` được
@@ -180,7 +180,7 @@ lại = sao lưu chết **câm**: không chạy, không báo. Thứ tự đã l�
 `PRAGMA integrity_check` + đếm `media`/`contents`/`posts` ngay trên bản vừa tạo, hỏng thì `node`
 thoát 1 → `throw` → mã thoát khác 0.
 
-### 7.5 Hai quyết định đang chờ owner — kèm số đo
+### 7.5 Hai quyết định — owner đã chốt 18/08
 
 **(a) Xoá bản lùi `C:\dev 2\fbpost-data.moved-20260818-121244` (2.8GB)?**
 
@@ -194,12 +194,24 @@ Riêng `uploads` — phần **không tái tạo được** — khớp từng byt
 2.985.505.427). Nghĩa là xoá bản lùi không mất dữ liệu.
 
 ⚠️ **Nhưng bản lùi đang là bản DUY NHẤT không nằm trên ổ D:.** Xoá nó xong thì cả live lẫn sao lưu
-đều chung một ổ vật lý — hỏng D: là mất sạch. ⇒ **Làm (b) trước, xoá sau.**
+đều chung một ổ vật lý — hỏng D: là mất sạch. Khuyến nghị của phiên: **làm (b) trước, xoá sau.**
+
+> **Owner chốt 18/08: xoá ngay** (đã nghe rõ đánh đổi ở dòng ⚠️ trên). Đã xoá lúc 13:47; kiểm ngay
+> trước khi xoá thì hai bản còn lại nguyên vẹn và khớp từng byte (14 file / 2.985.505.427 mỗi bản),
+> kiểm lại sau khi xoá vẫn nguyên. Ổ C: về **371GB trống**.
 
 **(b) Mang KEK + một snapshot CSDL ra ngoài máy — đích ở đâu?**
 Phiên này KHÔNG tự chọn đích: KEK là khoá gốc mở mọi token Facebook đã mã hoá, đẩy nó lên một dịch vụ
 ngoài (OneDrive/Drive) là **công bố khoá gốc** ra chỗ owner chưa cho phép. Cần owner chỉ đích cụ thể
 (USB rời? máy khác trong LAN? kho mã hoá?).
+
+> **Owner chốt 18/08: hoãn.** ⇒ **Nợ này còn mở, và sau khi xoá (a) thì nó nặng hơn lúc viết plan:**
+> mọi bản media, mọi snapshot CSDL và mọi bản KEK giờ nằm **trọn trên ổ D:**. Hỏng một ổ vật lý là
+> mất đồng thời cả dữ liệu lẫn khoá giải mã — token Facebook thành rác vĩnh viễn, không có đường
+> khôi phục từ bất kỳ đâu. Việc cần làm khi owner sẵn sàng: chép **một** bản KEK
+> (`D:\backup-social\kek\fbpost-kek-*.bin`, 32 byte) + **một** snapshot CSDL
+> (`D:\backup-social\data\fbpost-*.db`, ~76KB) sang một đích ngoài ổ D:. Tổng chưa tới 1MB —
+> rẻ đến mức không có lý do kỹ thuật nào để hoãn lâu.
 
 ### 7.6 Soát tay thay cho FULL gate
 

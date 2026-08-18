@@ -140,6 +140,15 @@ Từ 18/08/2026 (S10-SOCIAL-OPS-1): tác vụ **`MediaOS-SocialBackupDaily`** 02
 ⚠️ **Cả ba đích đều nằm trên CÙNG một máy.** Hỏng ổ D: là mất cả ba. Định kỳ mang **một** bản KEK +
 **một** snapshot CSDL ra ngoài máy (USB/OneDrive) — việc TAY, chưa tự động hoá.
 
+> **Trạng thái 18/08/2026: nợ này còn MỞ, và vừa nặng thêm.** Bản lùi 2.8GB trên ổ C:
+> (`fbpost-data.moved-20260818-121244`) — bản duy nhất không nằm trên D: — đã được owner cho xoá,
+> nên từ giờ **mọi** thứ (live · media mirror · 7 snapshot CSDL · mọi bản KEK) đều nằm **trọn trên
+> một ổ vật lý**. Hỏng ổ D: là mất đồng thời dữ liệu **và** khoá giải mã: token Facebook thành rác
+> vĩnh viễn, không có đường khôi phục từ bất kỳ đâu.
+>
+> Cái phải mang ra ngoài **rất nhỏ** — 1 bản KEK (32 byte) + 1 snapshot CSDL (~76KB), tổng chưa tới
+> 1MB. Media 2.8GB thì tuỳ khẩu vị rủi ro (mất media = mất video đã đăng, đau nhưng không chết).
+
 ### 6.1 Hai bẫy của chính tác vụ sao lưu (đo 18/08/2026)
 
 **Bẫy 1 — tác vụ trỏ vào worktree tạm thì sao lưu chết CÂM.** Lúc đăng ký, cây chính còn đang ở
