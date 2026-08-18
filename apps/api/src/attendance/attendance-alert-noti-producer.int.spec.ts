@@ -17,7 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module";
 import { directPool, hasDb } from "../../test/helpers/integration-db";
 import { seedCompany, seedUser } from "../../test/helpers/seed";
-import { addDaysToLocalDate, localDateOf } from "../common/tz.util";
+import { addDaysToLocalDate, localDateOf, weekdayOfLocalDate } from "../common/tz.util";
 import { AttendanceAlertNotiJobHandler } from "./attendance-alert-noti.job-handler";
 import { ATT_ALERT_DETECT_JOB_CODE } from "./attendance-alert-noti.logic";
 import { SYSTEM_JOB_HANDLER } from "../scheduler/job-handler";
@@ -25,9 +25,33 @@ import { WorkerSchedulerService } from "../scheduler/worker-scheduler.service";
 
 const runDb = hasDb && Boolean(process.env.LANE_DB);
 
-// Ca 7 ngày/tuần (workDays=[1..7]) — TRÁNH flaky theo thứ chạy CI thật (không phụ thuộc "hôm nay là thứ mấy").
-const ALL_WEEK_DAYS = "[1,2,3,4,5,6,7]";
 const VN_TZ = "Asia/Ho_Chi_Minh";
+
+/** Ngày local (VN) đọc MỘT LẦN — nguồn duy nhất cho cả `work_days` của ca seed lẫn mốc `today` bên dưới. */
+const TODAY_LOCAL = localDateOf(new Date(), VN_TZ);
+
+/** Ca 7 ngày/tuần — chỉ dùng cho ca CỐ Ý đo nhánh hôm-nay ("[cửa sổ quét]"), xem docblock ngay dưới. */
+const ALL_WEEK_DAYS = "[1,2,3,4,5,6,7]";
+
+/**
+ * work_days của ca seed mặc định = mọi thứ trong tuần **TRỪ thứ của HÔM NAY** (vẫn không phụ thuộc
+ * "hôm nay là thứ mấy" — đó là lý do bản đầu dùng [1..7]).
+ *
+ * VÌ SAO PHẢI TRỪ (flake theo GIỜ, đã làm CI ĐỎ THẬT 18/08/2026 — run 32125821794, 8 ca):
+ * cửa sổ quét vắng mặt là `[today-1, today]` (`ATT_ALERT_LOOKBACK_DAYS = 1`, chốt #25 phủ ca đêm), và
+ * NGÀY HÔM NAY trở thành "đã đóng" ngay khi `now >= 17:00` giờ VN = **10:00 UTC** — tức mọi lần chạy CI
+ * buổi chiều/tối VN. Ca 7 ngày/tuần ⇒ hôm nay cũng là ngày làm ⇒ mỗi công ty nhận THÊM 1
+ * `ATT_ABSENT_DETECTED` cho hôm nay, phá mọi assert đếm theo "chỉ hôm qua" (1→2, 0→1, 1→3).
+ * Chạy trước 17:00 VN thì xanh, sau thì đỏ — xanh-giả đúng nửa ngày, KHÔNG phải lỗi sản phẩm.
+ *
+ * Bỏ thứ-của-hôm-nay ⇒ nhánh hôm-nay bị `isShiftWorkingDay` cắt SỚM, độc lập đồng hồ; `yesterday` là
+ * thứ KHÁC (hai ngày liên tiếp không bao giờ cùng thứ) nên mọi ca cũ giữ nguyên ý nghĩa.
+ * Nhánh hôm-nay KHÔNG bị bỏ quên: ca "[cửa sổ quét]" bên dưới đo nó bằng ca đóng lúc `00:00`
+ * (đã đóng ở MỌI thời điểm trong ngày ⇒ deterministic, không lặp lại chính cái bẫy này).
+ */
+const WORK_DAYS_EXCEPT_TODAY = JSON.stringify(
+  [1, 2, 3, 4, 5, 6, 7].filter((d) => d !== weekdayOfLocalDate(TODAY_LOCAL)),
+);
 
 describe.skipIf(!runDb)(
   "S10-ATT-NOTIPROD-1 — AttendanceAlertNotiJobHandler (DB cô lập, producer thật)",
@@ -36,7 +60,7 @@ describe.skipIf(!runDb)(
     let direct: Pool;
     let handler: AttendanceAlertNotiJobHandler;
     const companyIds: string[] = [];
-    const today = localDateOf(new Date(), VN_TZ);
+    const today = TODAY_LOCAL;
     const yesterday = addDaysToLocalDate(today, -1);
     const longAgo = addDaysToLocalDate(today, -30);
 
@@ -46,7 +70,7 @@ describe.skipIf(!runDb)(
          (company_id, shift_code, name, start_time, end_time, break_minutes, required_working_minutes,
           grace_late_minutes, grace_early_leave_minutes, cross_day, work_days, status, is_default)
        VALUES ($1, 'OFFICE_8H', 'Giờ hành chính', '08:00', '17:00', 60, 480, 5, 5, false, $2, 'Active', true)`,
-        [companyId, ALL_WEEK_DAYS],
+        [companyId, WORK_DAYS_EXCEPT_TODAY],
       );
     }
 
@@ -324,6 +348,38 @@ describe.skipIf(!runDb)(
       expect(rows).toHaveLength(1);
       expect(rows[0].recipient_user_id).toBe(userId);
       expect(rows[0].dedupe_key).toBe(`ATT_ABSENT_DETECTED:${employeeId}:${yesterday}`);
+    });
+
+    /**
+     * [cửa sổ quét] Neo nhánh mà `WORK_DAYS_EXCEPT_TODAY` cố ý cắt khỏi các ca khác: cửa sổ là
+     * `[today-1, today]`, nên HÔM NAY cũng ra thông báo NGAY KHI ca của hôm nay đã đóng — đây là hành vi
+     * CÓ CHỦ ĐÍCH (chốt #25 phủ ca đêm), không phải lỗi. Ca seed ở đây kết thúc `00:00` (cross_day=false)
+     * ⇒ `isWorkDateClosed` đúng với MỌI thời điểm trong ngày ⇒ ca này KHÔNG phụ thuộc giờ chạy.
+     * Xoá ca này = mất bằng chứng duy nhất cho nhánh hôm-nay.
+     */
+    it("[cửa sổ quét] ca đã đóng cho cả hôm nay ⇒ ATT_ABSENT_DETECTED cho HAI ngày [today-1, today]", async () => {
+      const t = await seedCompany(direct, "att-noti-window");
+      companyIds.push(t.companyId);
+      const userId = await seedUser(direct, t.companyId, `emp-${randomUUID().slice(0, 8)}@t.local`);
+      const employeeId = await seedActiveEmployee(t.companyId, userId);
+      await direct.query(
+        `INSERT INTO shifts
+         (company_id, shift_code, name, start_time, end_time, break_minutes, required_working_minutes,
+          grace_late_minutes, grace_early_leave_minutes, cross_day, work_days, status, is_default)
+       VALUES ($1, 'ALWAYS_CLOSED', 'Ca đóng sổ lúc 00:00', '08:00', '00:00', 60, 480, 5, 5, false, $2, 'Active', true)`,
+        [t.companyId, ALL_WEEK_DAYS],
+      );
+
+      await handler.run({ companyId: t.companyId });
+
+      const rows = await notificationsFor(t.companyId, "ATT_ABSENT_DETECTED");
+      expect([...rows.map((r) => r.dedupe_key)].sort()).toEqual(
+        [
+          `ATT_ABSENT_DETECTED:${employeeId}:${yesterday}`,
+          `ATT_ABSENT_DETECTED:${employeeId}:${today}`,
+        ].sort(),
+      );
+      expect(rows.every((r) => r.recipient_user_id === userId)).toBe(true);
     });
 
     it("[CHỐT #13] record ĐÃ soft-delete cho ngày đó vẫn tính 'ĐÃ CÓ DỮ LIỆU' ⇒ 0 ATT_ABSENT_DETECTED", async () => {

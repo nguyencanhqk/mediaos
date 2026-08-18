@@ -12677,4 +12677,38 @@ export const backlog = [
       "⚠️ Gỡ SỚM = mở lại đúng cửa sổ mà S10-FND-VALKEYSCOPE-1 đóng: marker single-use của bước-2 2FA claim lại được, và rollback dựng lại grant trước-thu-hồi trong TTL 300s. Điều kiện mở ở done_when #1 là bắt buộc, không phải hình thức.",
     ],
   },
+
+  {
+    // Seed 18/08/2026 khi PR #392 (S10-QA-ROUTEHTTP-2) ĐỎ vì một spec KHÔNG nằm trong diff của nó.
+    // Truy nguyên: flake theo GIỜ TRONG NGÀY, không phải flake ngẫu nhiên — xem `src`.
+    id: "S10-QA-ATTNOTIFLAKE-1",
+    module: "ATT",
+    layer: "QA",
+    title:
+      "attendance-alert-noti-producer.int.spec.ts ĐỎ CHẮC CHẮN mọi lần chạy sau 17:00 giờ VN — spec giả định cửa sổ quét chỉ có `yesterday`, thực tế là [today-1, today]",
+    zone: "yellow",
+    status: "done",
+    paths: [
+      "apps/api/src/attendance/attendance-alert-noti-producer.int.spec.ts",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "SỐ ĐO, không suy đoán: CI run 32125821794 (PR #392, khởi chạy 10:15 UTC = 17:15 VN) — 8 ca ĐỎ ở `src/attendance/attendance-alert-noti-producer.int.spec.ts` (lines 324/343/364/384/408/424/455/482), toàn bộ dạng 'expected 1 got 2', 'expected 0 got 1', 'expected 1 got 3'. Diff của PR #392 KHÔNG chạm file này. Master ở 5edc5228 (09:25 UTC = 16:25 VN) XANH.",
+      "Tái hiện tại máy 18/08 20:01 VN trên LANE_DB=mediaos_attflake, KHÔNG có diff của #392: đúng 8 ca đỏ ấy.",
+      "Cơ chế: `materializeAbsentCandidatesTx` quét `buildCandidateDates(today, ATT_ALERT_LOOKBACK_DAYS=1)` = **[today-1, today]** (chốt #25, cố ý phủ ca đêm). Ca seed của spec là 7 ngày/tuần, end_time 17:00 ⇒ `isWorkDateClosed(now, today, shift)` thành true ngay khi `now >= 17:00` giờ VN ⇒ MỖI công ty nhận thêm 1 `ATT_ABSENT_DETECTED` cho HÔM NAY. Mọi assert đếm theo 'chỉ hôm qua' lệch đúng +1 (ca 3 người lệch +2).",
+      "⇒ LỖI Ở TEST, KHÔNG ở sản phẩm: phát vắng mặt cho hôm nay sau khi ca đóng là hành vi thiết kế. Cửa sổ đỏ là 10:00–17:00 UTC MỖI NGÀY, nên nó chặn MỌI PR mở buổi chiều/tối VN, không riêng #392.",
+    ],
+    done_when: [
+      "Ca seed mặc định của spec dùng work_days = mọi thứ TRỪ thứ của HÔM NAY ⇒ nhánh hôm-nay bị `isShiftWorkingDay` cắt sớm, độc lập đồng hồ; `yesterday` luôn là thứ khác nên ý nghĩa các ca cũ giữ nguyên",
+      "Nhánh hôm-nay KHÔNG bị xoá khỏi phạm vi đo: có ca MỚI '[cửa sổ quét]' dùng ca đóng lúc 00:00 (đóng ở mọi thời điểm trong ngày) chứng minh cửa sổ [today-1, today] phát ĐÚNG 2 thông báo với dedupe_key của hai ngày",
+      "Chạy THẬT ở LANE_DB trong đúng cửa sổ từng đỏ (sau 17:00 VN): file 16/16 xanh; cả thư mục `src/attendance/` 28 file / 555 ca xanh",
+    ],
+    notes: [
+      "ĐÓNG 18/08/2026. Verify lúc 20:03–20:04 VN (tức TRONG cửa sổ trước đây luôn đỏ) trên LANE_DB=mediaos_attflake: spec 16/16, `src/attendance/` 555/555.",
+      "⚠️ Bài học chung: assert 'đếm số notification của công ty' chỉ đúng nếu spec ghim ĐƯỢC toàn bộ cửa sổ quét. Producer nào có lookback > 0 thì fixture phải chặn các ngày ngoài mốc đang đo — bằng cấu hình (work_days/ca), KHÔNG bằng cách hy vọng test chạy trước giờ đóng ca.",
+      "📌 Không mở KI ở RELEASE-02: đây là nợ TEST, không phải hành vi sản phẩm sai; sản phẩm giữ nguyên, không đổi một dòng `src` nào ngoài file spec.",
+    ],
+  },
 ];
