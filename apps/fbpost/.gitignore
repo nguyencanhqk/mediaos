@@ -9,3 +9,8 @@ next-env.d.ts
 data/
 .env
 .env.local
+
+# Kho cu do 09-social-media-library.ps1 do sang ben khi dua data/ sang o D:.
+# Khong ignore thi 2.8GB video hien ra trong `git status` cua MOI nhanh dang checkout —
+# mot `git add -A` cua bat ky phien nao la dua ca kho video vao commit.
+data.moved-*/

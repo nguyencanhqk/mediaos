@@ -56,7 +56,7 @@ Một phép đo là không đủ — đúng bài học chung của DEVOPS-14.
 | `SOCIAL_SESSION_SECRET` | có | Ký cookie phiên, ≥32 ký tự. **Không có giá trị mặc định** — thiếu thì không ai đăng nhập được (cố ý: một giá trị dự phòng sẽ âm thầm biến hệ thành mở toang). |
 | `SOCIAL_BASE_URL` | có (khi chạy sau tunnel) | **Cùng giá trị** với `SOCIAL_BASE_URL` ở `.env` gốc. Đây là gốc công khai dùng để dựng `redirect_uri` gửi cho Facebook. Thiếu ⇒ code lùi về origin của request, mà sau cloudflared origin đó là `https://localhost:3500` ⇒ đăng nhập Facebook xong người dùng nhận `ERR_SSL_PROTOCOL_ERROR` (xem §2.3). |
 | `SOCIAL_KEK_PATH` | không | Mặc định `.secrets/fbpost-kek.bin`. |
-| `SOCIAL_DATA_DIR` | không | Mặc định `<cwd>/data`. Đặt tường minh khi chạy dưới NSSM — thư mục làm việc của dịch vụ không nhất thiết là thư mục mã nguồn. |
+| `SOCIAL_DATA_DIR` | **có trên PROD** | Mặc định `<cwd>/data`, tức ổ **C:** — không dùng được cho video nặng. PROD đặt `D:/MediaOS-Social/data` (18/08/2026, S10-SOCIAL-OPS-1). Viết bằng **gạch xuôi**: `\` trong `.env` đã từng bị nuốt một cái và âm thầm trỏ về ổ C: mà không ai thấy. |
 | `NEXT_PUBLIC_MEDIAOS_URL` | không | Hiện nút "Mở MediaOS" trên trang `/login`. |
 
 ### 2.3 Đăng nhập Facebook sau tunnel — hai loại chuyển hướng, hai luật khác nhau
@@ -116,13 +116,29 @@ Hệ quả phải chấp nhận (đã ghi ở DECISIONS-08 §6): dịch vụ ch�
 
 ## 6. Sao lưu
 
-| Thứ | Ở đâu | Ghi chú |
-| --- | --- | --- |
-| CSDL | `apps/fbpost/data/fbpost.db` (+ `-wal`, `-shm`) | **Không** nằm trong backup Postgres của hệ. Cần đường sao lưu riêng. |
-| Media đã upload | `apps/fbpost/data/uploads/` | Cùng chỗ, cùng vấn đề. |
-| **KEK** | `apps/fbpost/.secrets/fbpost-kek.bin` | **Sao lưu TÁCH KHỎI `data/`.** Để chung một chỗ thì mã hoá vô nghĩa (khoá đi kèm ổ khoá); mất riêng KEK thì mất toàn bộ token đã mã hoá. |
+**Trạng thái trước 18/08/2026: KHÔNG CÓ.** `MediaOS-BackupDaily` (02:00) chỉ chạy `scripts/backup-db.sh`
+cho Postgres. CSDL SQLite, 2.8GB media và KEK của fbpost đều là bản **duy nhất**, không nằm trong bất
+kỳ đường sao lưu nào — suốt 12 ngày kể từ khi app lên PROD.
 
-Dừng dịch vụ trước khi copy `fbpost.db`, hoặc dùng `sqlite3 .backup` — SQLite ở chế độ WAL không an toàn khi copy nóng bằng `cp`.
+Từ 18/08/2026 (S10-SOCIAL-OPS-1): tác vụ **`MediaOS-SocialBackupDaily`** 02:30 chạy
+`scripts/windows/12-social-backup.ps1` (lệch 30 phút với backup Postgres để hai việc không tranh I/O).
+
+| Thứ | Nguồn | Đích | Cách + vì sao |
+| --- | --- | --- | --- |
+| CSDL | `<SOCIAL_DATA_DIR>/fbpost.db` | `D:\backup-social\data\fbpost-<stamp>.db` — giữ **7 bản**, xoay vòng | `VACUUM INTO`, **không** copy file. SQLite ở chế độ WAL không an toàn khi copy nóng: bản chép ra thiếu phần đang nằm trong `-wal` vẫn **mở được**, chỉ thiếu dữ liệu mới nhất — hỏng lặng lẽ. `VACUUM INTO` cho bản nhất quán mà **không cần dừng dịch vụ**. |
+| Media | `<SOCIAL_DATA_DIR>/uploads/` | `D:\backup-social\data\uploads\` — mirror **cộng dồn** | Không nén (video đã nén sẵn; zip lại mỗi ngày chỉ tốn giờ và chỗ). Không dùng `/MIR`: xoá nhầm ở nguồn sẽ lan sang bản sao lưu — đúng thứ mà sao lưu phải chặn. |
+| **KEK** | `apps/fbpost/.secrets/fbpost-kek.bin` | `D:\backup-social\kek\fbpost-kek-<stamp>.bin` — **đánh phiên bản, KHÔNG BAO GIỜ ghi đè** | Ghi đè KEK = mọi token Facebook đã mã hoá thành rác **vĩnh viễn**, không có đường khôi phục. Script từ chối ghi khi trùng tên, và bỏ qua khi nội dung trùng bản mới nhất (KEK gần như không đổi — không việc gì đẻ 365 bản giống hệt nhau mỗi năm). Retention của `data` **không** đụng tới `kek`: hai vòng đời khác hẳn nhau. |
+
+**Kiểm được thì mới là sao lưu.** Snapshot vừa tạo bị `PRAGMA integrity_check` + đếm hàng
+`media`/`contents`/`posts` ngay tại chỗ; không qua thì script thoát khác 0 và **giữ nguyên** các bản cũ.
+
+> `exit 0` tường minh ở cuối script là bắt buộc, không phải thừa: `robocopy` trả mã **1** khi "đã chép
+> file" (tức thành công), và PowerShell lấy `$LASTEXITCODE` của lệnh native cuối cùng làm mã thoát của
+> cả script ⇒ thiếu dòng đó thì Task Scheduler ghi `LastTaskResult=1` **mỗi ngày**. Báo động giả hằng
+> ngày là cách nhanh nhất để người vận hành học cách phớt lờ báo động thật.
+
+⚠️ **Cả ba đích đều nằm trên CÙNG một máy.** Hỏng ổ D: là mất cả ba. Định kỳ mang **một** bản KEK +
+**một** snapshot CSDL ra ngoài máy (USB/OneDrive) — việc TAY, chưa tự động hoá.
 
 ## 7. Trạng thái triển khai (cập nhật 06/08/2026)
 
@@ -187,7 +203,7 @@ Thêm ingress rule vào `C:\ProgramData\cloudflared\config.yml` → `cloudflared
 
 ### 7.2c Còn lại sau khi có domain
 
-- [ ] Đường sao lưu riêng cho `data/` + `.secrets/` — **tách nhau**.
+- [x] Đường sao lưu riêng cho `data/` + `.secrets/` — **tách nhau**. Xong 18/08/2026, xem §6.
 - [ ] Cảnh báo token Facebook sắp hết hạn (`accounts.token_expires_at` có sẵn, chưa ai đọc) — ngoài phạm vi wave S9.
 
 ### 7.3 ⚠️ Cửa sổ "tile chết" — biết trước để không đi tìm bug
@@ -197,3 +213,79 @@ FE tự deploy lên Cloudflare Pages khi merge master (`DEPLOY_FE_ENABLED=true`)
 ⇒ Từ lúc FE lên Pages đến khi xong §7.2, **company-admin bấm ô "Đăng bài" sẽ thấy thông báo lỗi** ("Không lấy được liên kết mở ứng dụng Đăng bài"). Không sập, không rò gì — chỉ là cửa chưa thông.
 
 **CỐ Ý không thu hồi grant để bịt tạm.** Làm vậy tạo lệch giữa "migration đã áp" và "hiện trạng DB" — đúng bẫy `grant-in-old-migration-is-not-current-state`: người đọc `0544` sau này sẽ tin có grant mà thực tế không có. Thà một cửa sổ lỗi đọc được, còn hơn một cái bẫy im lặng.
+
+---
+
+## 8. Video nặng: đường nạp, các trần, và tài khoản chạy dịch vụ
+
+_Thêm 18/08/2026 — S10-SOCIAL-OPS-1._
+
+### 8.1 Kho dữ liệu nằm ở ổ D:
+
+`SOCIAL_DATA_DIR = D:/MediaOS-Social/data`. Trước 18/08 biến này chưa từng được đặt ⇒ `paths.ts`
+rơi về `process.cwd()/data`, mà `AppDirectory` của NSSM là `C:\dev 2\MediaOS\apps\fbpost` ⇒ toàn bộ
+video nằm trên ổ **C:**, chung ổ với Postgres và API PROD. Đo 18/08: kho đã ăn **2.78 GB / 17 file**
+(ổ C: còn 370 GB, giảm 40 GB trong 12 ngày; ổ D: còn 1.29 TB).
+
+Dời bằng `scripts/windows/09-social-media-library.ps1`. Script **copy → đối chiếu số file + tổng
+byte → mới đổi tên nguồn** thành `data.moved-<stamp>`; không dùng `robocopy /MOVE`, vì `/MOVE` xoá
+nguồn ngay khi chép xong từng file — chép sai là không còn gì để lùi về, mà 2.8GB media này là bản
+duy nhất.
+
+**Nghiệm thu không đọc log.** Script khẳng định hai điều quan sát được:
+
+| Bằng chứng | Ý nghĩa |
+| --- | --- |
+| `fbpost.db-shm` dưới kho MỚI có mtime **sau** mốc khởi động | tiến trình đang mở CSDL ở ổ D: |
+| `apps\fbpost\data` **không mọc lại** sau khi khởi động | `getDb()` → `ensureDataDirs()` → `mkdirSync(UPLOADS_DIR)` đã chạy mà không tạo lại thư mục cũ ⇒ `SOCIAL_DATA_DIR` thật sự tới được tiến trình. `media-service.ts` dùng chung đúng hằng `UPLOADS_DIR` đó, nên đường ghi media cũng ở D:. |
+
+Thiếu vế thứ hai là dấu hiệu env chưa vào — và kho cũ sẽ **âm thầm** mọc lại ở ổ C: chứ không báo lỗi.
+
+### 8.2 Ba cái trần, chỉ một cái sửa được bằng code
+
+| Trần | Ở đâu | Sửa được? |
+| --- | --- | --- |
+| 10 MB | mặc định `middlewareClientMaxBodySize` của Next 15.5; middleware app này gác **toàn bộ** đường dẫn kể cả `/api` | có — đã đặt `96mb` trong `apps/fbpost/next.config.ts` |
+| **100 MB** | proxy **Cloudflare** trước `dangfb.funtimemediacorp.com` (gói Free/Pro) | **không** — chặn cứng, không nới được bằng code |
+| — | — | `96mb` cố tình đặt **sát dưới** 100MB để lỗi hiện ra bằng thông báo tiếng Việt của app thay vì trang `413` trần trụi của Cloudflare |
+
+⇒ **Video nặng KHÔNG đi đường HTTP.** Chúng đi qua kho video đọc từ thư mục
+(`/api/library` + `/api/import/commit`, S10-SOCIAL-LIB-1/2) — đọc thẳng từ đĩa hoặc ổ chia sẻ LAN,
+không qua proxy, không có trần nào. Người dùng chọn file trong `LibraryPicker` nhúng ngay trong ô
+chọn media, không phải tải lên.
+
+### 8.3 Vì sao dịch vụ VẪN chạy bằng `LocalSystem`
+
+WO S10-SOCIAL-OPS-1 ban đầu yêu cầu đổi `MediaOS-Social` từ `LocalSystem` sang một tài khoản Windows,
+vì `LocalSystem` không mang danh tính ra mạng nên không đọc nổi `\\MAY\share`. **Owner chốt 18/08:
+KHÔNG đổi** — lý do gốc đã bị code thay thế trong lúc WO nằm chờ:
+
+- `apps/fbpost/src/lib/library/net-connect.ts` (ship ở S10-SOCIAL-LIB-2) gọi thẳng
+  `WNetAddConnection2` với tài khoản người dùng nhập ở giao diện ⇒ tiến trình **tự dựng một phiên
+  SMB có danh tính**, độc lập với danh tính của tài khoản chạy dịch vụ.
+- Đo trên CSDL PROD 18/08 (`settings.mediaLibraryRoots`): đang có **một** gốc kho LAN dùng thật —
+  `\\MINGSEO3\...\output_short`, có `username`, mật khẩu đã seal bằng KEK.
+
+Đổi `ObjectName` lúc này chỉ **thêm** rủi ro mà không giải quyết thêm vấn đề nào: mật khẩu nằm trong
+registry NSSM · phải cấp "Log on as a service" · phải cấp lại ACL cho `data/` · `.secrets/` · `.next/`
+(thiếu một cái thì dịch vụ vẫn chạy nhưng không ghi nổi CSDL, và lỗi hiện ra tận màn đăng bài dưới
+dạng "không lưu được") · hỏng khi mật khẩu tài khoản đổi.
+
+Nhánh `-ServiceAccount` của `09-*.ps1` giữ lại cho tương lai, nhưng **không còn là đường khuyến nghị**.
+
+### 8.4 Bẫy đã đo được ở chính hai script này
+
+`09-*.ps1` viết 06/08/2026 và **nằm im 12 ngày không ai bấm**. Khi chạy lần đầu 18/08 nó lộ ngay một
+lỗi mà `Parser::ParseFile` không thấy được:
+
+```powershell
+} catch [System.Net.WebException] {                              # khớp đúng ở PS 5.1
+} catch [Microsoft.PowerShell.Commands.HttpResponseException] {  # kiểu này chỉ có từ PS 7
+```
+
+Máy PROD chạy **Windows PowerShell 5.1**. Khi PS 5.1 khớp các mệnh đề `catch`, nó không phân giải nổi
+kiểu thứ hai và ném `Unable to find type` — **làm nổ cả khối `try/catch`** dù mệnh đề đầu vốn khớp
+đúng. Hậu quả: bước tự-kiểm của script **không thể chạy được** trên chính cái máy nó phải kiểm, mà
+parse-check tĩnh vẫn báo xanh. Bản vá đọc thẳng mã trạng thái, không bắt theo kiểu ngoại lệ.
+
+Bài học lặp lại: **một script chưa từng chạy thì chưa phải là một quy trình** — nó mới chỉ là ý định.
