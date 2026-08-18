@@ -12265,7 +12265,7 @@ export const backlog = [
     title:
       "12 route risk≥5 còn lại chưa có test HTTP nào chạm — guard/DTO/envelope của nhóm quản trị quyền, khoá tài khoản, api-key CHƯA TỪNG chạy qua đường HTTP thật",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/test/integration/**",
       "apps/api/test/foundation/route-http-coverage.e2e-spec.ts",
@@ -12302,6 +12302,10 @@ export const backlog = [
       "KI-025 (RELEASE-02) cập nhật bằng SỐ ĐO MỚI — đóng hay hạ severity là KẾT LUẬN CỦA SỐ, không phải mong muốn; giữ nguyên cách phát biểu '% là CẬN TRÊN'",
     ],
     notes: [
+      "ĐÓNG 18/08/2026 — 12/12 route risk≥5 có test HTTP thật, 49 ca xanh ở LANE_DB=mediaos_routehttp2 (invite-apikeys-http 14 · authusers-admin-http 15 · permadmin-roles-http 20), không ca nào skip. Census: 370/499 → 383/499 (74,1% → 76,8%); uncovered risk≥5: 12 → 0. Ratchet SIẾT: MAX_UNCOVERED_HIGH_RISK 12 → 0, MIN_COVERED_COUNT 370 → 383.",
+      "🔴 BUG THẬT đào ra → KI-068 (S3, hàng riêng ở RELEASE-02, có ca ghim): POST /api-keys trả 500 ZodError thay vì 400 khi body sai — @Body() nhận TYPE (z.infer) chứ không phải class createZodDto nên ZodValidationPipe KHÔNG có schema để validate; handler tự .parse() ném ZodError THÔ mà AllExceptionsFilter không hiểu. Cùng hình dạng ở 3 route foundation/files (SUY TỪ CODE, chưa đo bằng HTTP). KHÔNG tự vá — đúng luật lane QA.",
+      "Ba sự thật đo được, đã ghi vào docblock + KI-025: (1) không route nào trong 12 route dính bẫy KI-065 (cả 12 chỉ isSensitive, không requiresReauth ⇒ needsObjectGrant=false); (2) NODE_ENV=test TẮT worker-scheduler ⇒ outbox không tick ⇒ permission.changed không giao ⇒ cache quyền không bị xoá trong int-spec ⇒ phải đo bằng CẶP ĐỐI CHỨNG A/B cache-lạnh, cấm đo trước-sau trên cùng user (sẽ ghim hiện vật môi trường test); (3) object-grant KHÔNG lật được route đọc thường vì guard chỉ chuyển resourceId cho lớp reveal-secret.",
+      "Ca non-vacuous của coverage spec phải NEO LẠI: chốt cũ đòi \"còn ít nhất 1 route risk cao chưa phủ\" tự đỏ khi nợ trả hết và sẽ ép người sau NỚI ratchet. Neo mới: dân số route risk cao khác rỗng VÀ ít nhất một trong số đó được nhận là covered.",
       "⚠️ Phát hiện route có lỗi THẬT (guard thiếu, envelope sai, DTO không chặn) thì BÁO + mở KI riêng có mức + chủ — KHÔNG tự nới test cho xanh, KHÔNG tự sửa code sản phẩm ngoài paths (tiền lệ: KI-065 sinh ra đúng từ tình huống này).",
       "⚠️ Bẫy rate-limit per-user đã cắn lane trước: mỗi ca dùng user RIÊNG thay vì nới ngưỡng env (nới = spec đo sai cấu hình PROD).",
       "⚠️ NGÂN SÁCH: chạy SCOPED theo file spec mới, KHÔNG full-suite (`pnpm --filter @mediaos/api test`) — từng ENOBUFS + vitest worker crash.",
