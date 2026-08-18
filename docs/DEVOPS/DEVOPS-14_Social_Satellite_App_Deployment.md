@@ -140,6 +140,44 @@ Từ 18/08/2026 (S10-SOCIAL-OPS-1): tác vụ **`MediaOS-SocialBackupDaily`** 02
 ⚠️ **Cả ba đích đều nằm trên CÙNG một máy.** Hỏng ổ D: là mất cả ba. Định kỳ mang **một** bản KEK +
 **một** snapshot CSDL ra ngoài máy (USB/OneDrive) — việc TAY, chưa tự động hoá.
 
+### 6.1 Hai bẫy của chính tác vụ sao lưu (đo 18/08/2026)
+
+**Bẫy 1 — tác vụ trỏ vào worktree tạm thì sao lưu chết CÂM.** Lúc đăng ký, cây chính còn đang ở
+nhánh của WO khác nên tác vụ được trỏ **tạm** vào `C:\dev 2\mediaos-s10-social-ops-1\scripts\...`.
+Worktree là thứ dùng xong thì xoá; xoá nó đi là tác vụ mất file để chạy — mà Task Scheduler **không
+kêu**: không có bài sao lưu nào chạy, cũng chẳng có báo động nào nói rằng nó đã ngừng chạy. Người
+vận hành chỉ phát hiện vào đúng ngày cần khôi phục.
+
+> **Luật:** `Actions.Arguments` của tác vụ chỉ được trỏ vào **cây chính** `C:\dev 2\MediaOS\scripts\windows\`.
+> Sau khi PR land, phải trỏ lại đường chính thức **rồi mới** `git worktree remove` — làm ngược thứ tự
+> là để lại một khoảng trống không ai nhìn thấy.
+>
+> Kiểm bằng một lệnh:
+> ```powershell
+> (Get-ScheduledTask -TaskName 'MediaOS-SocialBackupDaily').Actions.Arguments
+> ```
+> Thấy bất kỳ đường nào KHÔNG phải `C:\dev 2\MediaOS\` ⇒ sửa ngay.
+>
+> Và **nghiệm thu bằng hành vi**, không bằng việc đọc đường dẫn: `Start-ScheduledTask` rồi đọc
+> `LastTaskResult` phải bằng 0 **sau khi** worktree đã bị gỡ. Đã làm 18/08: chạy 13:33 (trước khi gỡ)
+> và 13:34:45 (sau khi gỡ), cả hai `LastTaskResult=0`, đẻ ra 2 snapshot CSDL thật.
+
+**Bẫy 2 — `LogonType=Interactive`: đăng xuất là ngừng sao lưu.** Cả `MediaOS-SocialBackupDaily` lẫn
+`MediaOS-BackupDaily` đều chạy dưới `fmcai` với `LogonType=Interactive`, tức **chỉ chạy khi người dùng
+còn đăng nhập**. Máy khởi động lại mà chưa ai đăng nhập ⇒ không sao lưu, không báo động. Chấp nhận
+được ở hiện trạng (PROD vốn đã phụ thuộc phiên đăng nhập vì Docker Desktop — xem
+[[prod-api-boots-without-db-until-login]]), nhưng phải biết là mình đang phụ thuộc.
+
+Khác nhau giữa hai tác vụ, đáng lưu ý khi so sánh:
+
+| Thiết lập | `MediaOS-SocialBackupDaily` | `MediaOS-BackupDaily` (Postgres, có từ trước) |
+| --- | --- | --- |
+| `StartWhenAvailable` | **True** — lỡ giờ thì chạy bù | **False** — lỡ giờ là **mất luôn** cữ đó |
+| `DisallowStartIfOnBatteries` | False | **True** — rút điện là không sao lưu |
+
+⇒ Đường sao lưu **Postgres** mới là đường yếu hơn về mặt "có chạy hay không". Chưa sửa ở WO này
+(ngoài phạm vi SOCIAL), ghi lại để không phải đo lại lần sau.
+
 ## 7. Trạng thái triển khai (cập nhật 06/08/2026)
 
 ### 7.1 ĐÃ XONG — có bằng chứng đo được

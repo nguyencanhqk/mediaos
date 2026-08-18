@@ -151,14 +151,69 @@ Ngoài ra bản 06/08 dùng `robocopy /MOVE` (xoá nguồn ngay ⇒ không có �
 | Phiên kia cũng lấy số `11` (`11-trust-proxy-spoof-probe.ps1`) | script này đổi thành **`12-social-backup.ps1`**, tác vụ lịch cập nhật theo |
 | `apps/fbpost/data.moved-<stamp>` (**2.8GB**) hiện ra trong `git status` của MỌI nhánh đang checkout — một `git add -A` của bất kỳ phiên nào là đưa cả kho video vào commit | chuyển bản lùi ra **ngoài repo** (`C:\dev 2\fbpost-data.moved-20260818-121244`) + thêm `data.moved-*/` vào `apps/fbpost/.gitignore` để lần sau không tái diễn |
 
-### 7.4 Còn lại (việc của owner)
+### 7.4 Đóng nốt (phiên 18/08 chiều)
 
-1. **Nghiệm thu cuối cùng của `done_when` #1** — nạp 1 media qua giao diện Đăng bài, thấy file mới nằm
-   dưới `D:\MediaOS-Social\data\uploads`. Cần phiên đăng nhập nên phiên này không tự làm được
-   (PROD bật 2FA). Đường ghi đã được chứng minh gián tiếp: `ensureDataDirs()` đã chạy mà không tạo
-   lại kho cũ, và `media-service.ts` dùng chung đúng hằng `UPLOADS_DIR`.
-2. **Merge PR trước 02:30 ngày 19/08** — tác vụ lịch trỏ tới `C:\dev 2\MediaOS\scripts\windows\12-social-backup.ps1`,
-   đường dẫn đó chỉ tồn tại sau khi land. Chưa merge kịp thì tác vụ hỏng đúng một đêm (đã có 4 bản sao lưu).
-3. **Xoá bản lùi** `C:\dev 2\fbpost-data.moved-20260818-121244` (2.8GB trên ổ C:) sau khi nghiệm thu xong.
-4. **Mang một bản KEK + một snapshot CSDL ra ngoài máy** — cả ba đích sao lưu đang nằm chung ổ D:.
-5. FULL gate (`security-reviewer` + `silent-failure-hunter`) **CHƯA CHẠY** — phiên này bị cấm tự gọi agent.
+| # | Việc | Trạng thái |
+| --- | --- | --- |
+| 1 | Merge PR #389 | ✅ `57d516f9` squash-merge 18/08, CI 8/8 |
+| 2 | Trỏ tác vụ sao lưu về **cây chính** rồi mới gỡ worktree | ✅ xem dưới |
+| 3 | Gỡ worktree + nhánh `auto/S10-SOCIAL-OPS-1` | ✅ 5/5 file khớp từng byte với master trước khi gỡ |
+| 4 | Nghiệm thu `done_when` #1 qua giao diện | ⏳ **việc của owner** (PROD bật 2FA) |
+| 5 | Xoá bản lùi 2.8GB trên ổ C: | ⏳ **chờ owner chốt** — xem §7.5 |
+| 6 | Mang KEK + snapshot ra ngoài máy | ⏳ **chờ owner chốt đích** — xem §7.5 |
+| 7 | FULL gate qua agent | ❌ chưa chạy (phiên bị cấm tự gọi agent); đã soát tay, xem §7.6 |
+
+**Việc #2 là rủi ro PROD sống, không phải việc dọn dẹp.** Tác vụ `MediaOS-SocialBackupDaily` được
+đăng ký lúc cây chính còn kẹt ở nhánh WO khác, nên nó trỏ **tạm** vào
+`C:\dev 2\mediaos-s10-social-ops-1\scripts\windows\12-social-backup.ps1`. Gỡ worktree trước khi trỏ
+lại = sao lưu chết **câm**: không chạy, không báo. Thứ tự đã làm đúng chiều:
+
+1. Đối chiếu bản trong worktree với bản đã land — `12-social-backup.ps1` và `09-social-media-library.ps1`
+   **giống hệt** (không có bản vá nào kẹt lại trong worktree).
+2. Trỏ `Actions.Arguments` về `C:\dev 2\MediaOS\scripts\windows\12-social-backup.ps1`.
+3. `Start-ScheduledTask` → `LastTaskResult=0`, đẻ `fbpost-20260818-133320.db`.
+4. `git worktree remove` + xoá nhánh + `git remote prune`.
+5. **Chạy LẠI sau khi worktree đã biến mất** → `LastTaskResult=0`, đẻ `fbpost-20260818-133445.db`.
+   Bước 5 mới là bằng chứng; bước 3 một mình chỉ chứng minh đường dẫn tồn tại tại thời điểm đó.
+
+`LastTaskResult=0` đồng thời chứng minh snapshot **lành**, không chỉ "có file": script chạy
+`PRAGMA integrity_check` + đếm `media`/`contents`/`posts` ngay trên bản vừa tạo, hỏng thì `node`
+thoát 1 → `throw` → mã thoát khác 0.
+
+### 7.5 Hai quyết định đang chờ owner — kèm số đo
+
+**(a) Xoá bản lùi `C:\dev 2\fbpost-data.moved-20260818-121244` (2.8GB)?**
+
+| Nơi | File | Byte |
+| --- | --- | --- |
+| Bản lùi (ổ **C:**) | 17 | 2.987.223.283 |
+| Live `D:\MediaOS-Social\data` | 17 | 2.987.223.283 |
+| Sao lưu `D:\backup-social\data` | 20 | 2.985.972.371 (chênh vì giữ nhiều snapshot CSDL, `uploads` khớp đúng 2.985.505.427) |
+
+Riêng `uploads` — phần **không tái tạo được** — khớp từng byte ở **cả ba** nơi (14 file /
+2.985.505.427). Nghĩa là xoá bản lùi không mất dữ liệu.
+
+⚠️ **Nhưng bản lùi đang là bản DUY NHẤT không nằm trên ổ D:.** Xoá nó xong thì cả live lẫn sao lưu
+đều chung một ổ vật lý — hỏng D: là mất sạch. ⇒ **Làm (b) trước, xoá sau.**
+
+**(b) Mang KEK + một snapshot CSDL ra ngoài máy — đích ở đâu?**
+Phiên này KHÔNG tự chọn đích: KEK là khoá gốc mở mọi token Facebook đã mã hoá, đẩy nó lên một dịch vụ
+ngoài (OneDrive/Drive) là **công bố khoá gốc** ra chỗ owner chưa cho phép. Cần owner chỉ đích cụ thể
+(USB rời? máy khác trong LAN? kho mã hoá?).
+
+### 7.6 Soát tay thay cho FULL gate
+
+Đọc hết `12-social-backup.ps1` theo hai lăng kính của gate. Không thấy lỗi phải chặn:
+
+- **Bí mật (BẤT BIẾN #3):** KEK chỉ đi qua `Copy-Item` + `Get-FileHash`; không in nội dung, không lên
+  dòng lệnh, không vào log. Bản sao được **đối chiếu hash** với nguồn, lệch thì gỡ bản hỏng rồi
+  `throw`. Từ chối ghi đè khi trùng tên. ✅
+- **Hỏng lặng lẽ:** không có `catch` nuốt lỗi; `$ErrorActionPreference='Stop'`; mọi nhánh hỏng đều
+  `throw`. `exit 0` cuối script chỉ chạm tới khi không có `throw` nào — nó vá đúng cái bẫy mã thoát
+  của `robocopy`, không phải che lỗi. Thiếu KEK ⇒ `throw`, **không** âm thầm bỏ qua. ✅
+- **Xoá nhầm:** retention lọc `-Filter "fbpost-*.db"` (không glob rộng tay ở thư mục sao lưu), và
+  **không** đụng thư mục `kek`. Media dùng `/E /XO`, **không** `/MIR`, **không** `/PURGE` ⇒ xoá ở
+  nguồn không lan sang đích. ✅
+- **Điểm yếu còn lại (không chặn):** kiểm media chỉ so **số file** (`$dstFiles.Count -lt $srcN`),
+  không so tổng byte — một file cụt ở đích vẫn lọt. Rủi ro thấp (robocopy `/XO` đối chiếu cỡ +
+  mốc thời gian khi chép), nhưng nếu siết thì đây là chỗ siết.
