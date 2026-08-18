@@ -9,6 +9,7 @@
  */
 
 import { ME_ERROR_CODES } from "@mediaos/contracts";
+import { meTrainingKey } from "../common/valkey/valkey-key";
 
 /** Cặp quyền cổng ME (mig 0495: ('access','me'), is_sensitive=false). Guard controller dùng cặp NÀY. */
 export const ME_ACCESS_PAIR = { action: "access", resourceType: "me", isSensitive: false } as const;
@@ -148,7 +149,7 @@ export const ME_TRAINING_CACHE_TTL_SEC = 60;
  * Valkey dùng chung + hiện trong log lỗi của ValkeyService).
  */
 export function meTrainingCacheKey(companyId: string, userId: string): string {
-  return `me:training:${companyId}:${userId}`;
+  return meTrainingKey(companyId, userId);
 }
 
 /** Setting key bật/tắt module (mirror module-catalog.service settingKey). */

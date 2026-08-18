@@ -1,6 +1,7 @@
 import { Injectable, Optional } from "@nestjs/common";
 import { loadEnv } from "../config/env.schema";
 import { ValkeyService } from "../permission/valkey.service";
+import { rlKey } from "../common/valkey/valkey-key";
 
 interface AttemptState {
   count: number;
@@ -38,12 +39,12 @@ export class LoginRateLimiter {
   }
 
   static key(companySlug: string, email: string, ip: string): string {
-    return `rl:ip:${companySlug}|${email.toLowerCase()}|${ip}`;
+    return rlKey("ip", `${companySlug}|${email.toLowerCase()}|${ip}`);
   }
 
-  /** Bucket theo tài khoản (mọi IP). Prefix `rl:acct:` tách biệt với per-IP key. */
+  /** Bucket theo tài khoản (mọi IP). Bucket `acct` tách biệt với per-IP key. */
   static accountKey(companySlug: string, email: string): string {
-    return `rl:acct:${companySlug}|${email.toLowerCase()}`;
+    return rlKey("acct", `${companySlug}|${email.toLowerCase()}`);
   }
 
   /**
@@ -53,11 +54,11 @@ export class LoginRateLimiter {
    * Giữ NGUYÊN cơ chế/ngưỡng kép (per-IP `LOGIN_MAX_ATTEMPTS` + per-account `accountMaxAttempts`).
    */
   static forgotKey(companySlug: string, email: string, ip: string): string {
-    return `rl:forgot:ip:${companySlug}|${email.toLowerCase()}|${ip}`;
+    return rlKey("forgot:ip", `${companySlug}|${email.toLowerCase()}|${ip}`);
   }
 
   static forgotAccountKey(companySlug: string, email: string): string {
-    return `rl:forgot:acct:${companySlug}|${email.toLowerCase()}`;
+    return rlKey("forgot:acct", `${companySlug}|${email.toLowerCase()}`);
   }
 
   async isLocked(key: string, nowMs: number = Date.now()): Promise<boolean> {

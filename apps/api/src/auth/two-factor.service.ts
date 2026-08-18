@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { rlKey as rateLimitKey } from "../common/valkey/valkey-key";
 import {
   ConflictException,
   HttpException,
@@ -180,7 +181,7 @@ export class TwoFactorService {
 
   /** Xác nhận bật: verify mã TOTP với secret đã enroll → set enabled_at. Mã sai → 401 (deny-path), rate-limit. */
   async confirmEnable(userId: string, companyId: string, token: string): Promise<void> {
-    const rlKey = `2fa-enable|${companyId}|${userId}`;
+    const rlKey = rateLimitKey("2fa-enable", `${companyId}|${userId}`);
     if (await this.rateLimiter.isLocked(rlKey)) {
       throw new HttpException(
         "Quá nhiều lần thử. Vui lòng thử lại sau.",
@@ -271,7 +272,8 @@ export class TwoFactorService {
         // (userId, step) single-use để CÙNG mã KHÔNG verify lại được trong cùng step (chống dùng lại mã
         // bị nghe lén/replay). Fail-closed (ReplayGuard hạ memory khi Valkey rớt). Đã giữ → coi như SAI mã.
         const firstUse = await this.replayGuard.claim(
-          `totp-step:${userId}:${this.totp.currentStep()}`,
+          "totp-step",
+          `${userId}:${this.totp.currentStep()}`,
           90, // ~3 step (dung sai window:1) — đủ phủ cửa sổ mã còn hiệu lực.
         );
         if (!firstUse) {

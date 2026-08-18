@@ -6,6 +6,7 @@ import type { DatabaseService } from "../db/db.service";
 import type { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 import type { ValkeyService } from "../permission/valkey.service";
 import { CHAT_ERR } from "./chat.errors";
+import { chatKey } from "../common/valkey/valkey-key";
 
 /**
  * S8-CHAT-UX-RT-1 — CHAT-API-023 "đang gõ" (CHAT-DEC-017).
@@ -19,7 +20,9 @@ const ROOM = "33333333-3333-4333-8333-333333333333";
 const USER = "22222222-2222-4222-8222-222222222222";
 const ACTOR = { id: USER, companyId: CO };
 
-function makeService(over: { isArchived?: boolean; setNx?: (typeof vi)["fn"] extends never ? never : unknown } = {}) {
+function makeService(
+  over: { isArchived?: boolean; setNx?: (typeof vi)["fn"] extends never ? never : unknown } = {},
+) {
   const assertMember = vi.fn(async () => ({
     room: { id: ROOM, roomType: "group", isArchived: over.isArchived ?? false },
     membership: { role: "member" },
@@ -100,7 +103,7 @@ describe("CHAT-API-023 — tiết lưu server", () => {
     await svc.ping(ACTOR, ROOM);
 
     expect(setNx).toHaveBeenCalledWith(
-      `chat:typing:co:${CO}:room:${ROOM}:user:${USER}`,
+      chatKey("typing", `co:${CO}:room:${ROOM}:user:${USER}`),
       "1",
       TYPING_THROTTLE_SEC,
     );

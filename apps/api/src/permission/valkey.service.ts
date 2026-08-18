@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import Redis from "ioredis";
 import { loadEnv } from "../config/env.schema";
+import { assertKeysScoped } from "../common/valkey/valkey-key";
 
 /**
  * ValkeyService — thin wrapper around ioredis for Valkey/Redis.
@@ -8,6 +9,14 @@ import { loadEnv } from "../config/env.schema";
  * Design: all methods are safe to call when Valkey is unavailable — they return null/undefined
  * and log WARN. The cache is best-effort; DB is always the source of truth.
  * Errors are never propagated to callers (fail-open for cache, never fail-closed).
+ *
+ * ⚠️ NGOẠI LỆ DUY NHẤT của hợp đồng "never throws" (S10-FND-VALKEYSCOPE-1): `assertKeysScoped` ném
+ * `ValkeyKeyScopeError` khi một khoá thiếu `envScope` — nhưng CHỈ khi `NODE_ENV === 'test'`. Đó là lỗi
+ * LẬP TRÌNH (quên đi qua `common/valkey/valkey-key.ts`), KHÔNG phải lỗi runtime của Valkey, và nó không
+ * tồn tại ở development/production nên KHÔNG đảo chiều fail-soft ở bất kỳ call site nào (nhiều call site
+ * — `login-rate-limiter`, `permission.cache.invalidateUser`, `replay-guard` — gọi KHÔNG bọc `try`).
+ * Hệ quả phải nói ra: production KHÔNG được cổng này bảo vệ; cưỡng chế thật nằm ở test/CI (cổng này +
+ * census tĩnh `valkey-key-census.spec.ts`). Xem KI-067.
  */
 @Injectable()
 export class ValkeyService implements OnModuleInit, OnModuleDestroy {
@@ -54,6 +63,9 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
    * mới, hoặc `null` khi Valkey chưa cấu hình / lỗi (caller fail-soft). Never throws.
    */
   async incr(key: string, ttlSec: number): Promise<number | null> {
+    // Cổng đứng TRƯỚC nhánh `!this.client`: `VALKEY_URL` thường VẮNG trong test, nếu kiểm sau thì mọi
+    // lượt test thoát sớm và cổng không bao giờ đo được gì.
+    assertKeysScoped("incr", [key]);
     if (!this.client) return null;
     try {
       const n = await this.client.incr(key);
@@ -67,6 +79,7 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
 
   /** Returns null if Valkey is unavailable or key missing. Never throws. */
   async get(key: string): Promise<string | null> {
+    assertKeysScoped("get", [key]);
     if (!this.client) return null;
     try {
       return await this.client.get(key);
@@ -82,6 +95,7 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
    * surface the failure instead of assuming success. Never throws.
    */
   async set(key: string, value: string, ttlSec: number): Promise<boolean> {
+    assertKeysScoped("set", [key]);
     if (!this.client) return true;
     try {
       await this.client.set(key, value, "EX", ttlSec);
@@ -101,6 +115,7 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
    * Dùng cho single-use jti (challenge 2FA) + TOTP step-replay (chống dùng lại cùng mã/step). Never throws.
    */
   async setNx(key: string, value: string, ttlSec: number): Promise<boolean | null> {
+    assertKeysScoped("setNx", [key]);
     if (!this.client) return null;
     try {
       const res = await this.client.set(key, value, "EX", ttlSec, "NX");
@@ -128,6 +143,7 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
    * kiện (thà không biết còn hơn nói sai). Never throws.
    */
   async sAddWithTtl(key: string, member: string, ttlSec: number): Promise<number | null> {
+    assertKeysScoped("sAddWithTtl", [key]);
     if (!this.client) return null;
     try {
       const res = await this.client
@@ -154,6 +170,7 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
    * Trả `null` khi Valkey chưa cấu hình / lỗi. Never throws.
    */
   async sRemCount(key: string, member: string): Promise<number | null> {
+    assertKeysScoped("sRemCount", [key]);
     if (!this.client) return null;
     try {
       const res = await this.client.pipeline().srem(key, member).scard(key).exec();
@@ -168,6 +185,7 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
 
   /** S8-CHAT-UX-RT-1 — số phần tử của SET (0 khi khoá vắng). `null` khi Valkey tắt/lỗi. Never throws. */
   async sCard(key: string): Promise<number | null> {
+    assertKeysScoped("sCard", [key]);
     if (!this.client) return null;
     try {
       return await this.client.scard(key);
@@ -183,6 +201,9 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
    * Never throws.
    */
   async del(...keys: string[]): Promise<boolean> {
+    // Phủ CẢ đường nhiều khoá: `invalidateUser` xoá (khoá mới + khoá legacy) trong một lời gọi, và đây
+    // đúng là chỗ một khoá sót sẽ để grant cũ sống tới hết TTL.
+    assertKeysScoped("del", keys);
     if (!this.client) return true;
     try {
       if (keys.length > 0) await this.client.del(...keys);

@@ -3,6 +3,7 @@ import { DatabaseService } from "../db/db.service";
 import { ValkeyService } from "../permission/valkey.service";
 import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 import { ChatAccessService } from "./chat-access.service";
+import { chatKey } from "../common/valkey/valkey-key";
 
 interface Actor {
   id: string;
@@ -79,7 +80,7 @@ export class ChatTypingService {
    * thuộc tính an toàn. Lệch giữa các instance chỉ làm phát dư vài sự kiện mỹ thuật; không có gì để đi vòng.
    */
   private async throttled(actor: Actor, roomId: string): Promise<boolean> {
-    const key = `chat:typing:co:${actor.companyId}:room:${roomId}:user:${actor.id}`;
+    const key = chatKey("typing", `co:${actor.companyId}:room:${roomId}:user:${actor.id}`);
     const first = await this.valkey.setNx(key, "1", TYPING_THROTTLE_SEC);
     if (first !== null) return !first;
 

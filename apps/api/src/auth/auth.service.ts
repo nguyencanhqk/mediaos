@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { rlKey as rateLimitKey } from "../common/valkey/valkey-key";
 import {
   BadRequestException,
   ConflictException,
@@ -462,11 +463,11 @@ export class AuthService {
     // Defense-in-depth (G16-1b): challengeToken là SINGLE-USE. Claim jti TRƯỚC khi verify mã — challengeToken
     // dùng lại (replay, kể cả khi mã đúng) → claim trả false → 401 đồng nhất. Fail-closed (ReplayGuard hạ
     // memory khi Valkey rớt, KHÔNG fail-open). TTL phủ trọn cửa sổ challenge (5').
-    const firstUse = await this.replayGuard.claim(`2fa-jti:${claims.jti}`, 600);
+    const firstUse = await this.replayGuard.claim("2fa-jti", claims.jti, 600);
     if (!firstUse) {
       throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
     }
-    const rlKey = `2fa|${claims.companyId}|${claims.sub}`;
+    const rlKey = rateLimitKey("2fa", `${claims.companyId}|${claims.sub}`);
     if (await this.rateLimiter.isLocked(rlKey)) {
       throw new HttpException(
         "Quá nhiều lần thử. Vui lòng thử lại sau.",
@@ -587,7 +588,7 @@ export class AuthService {
         message: "Tài khoản của bạn bị bắt buộc bật xác thực 2 bước (2FA) — không thể tắt.",
       });
     }
-    const rlKey = `2fa-disable|${user.companyId}|${user.id}`;
+    const rlKey = rateLimitKey("2fa-disable", `${user.companyId}|${user.id}`);
     if (await this.rateLimiter.isLocked(rlKey)) {
       throw new HttpException(
         "Quá nhiều lần thử. Vui lòng thử lại sau.",
@@ -622,7 +623,7 @@ export class AuthService {
     currentPassword: string,
     newPassword: string,
   ): Promise<void> {
-    const rlKey = `change-pw|${user.companyId}|${user.id}`;
+    const rlKey = rateLimitKey("change-pw", `${user.companyId}|${user.id}`);
     if (await this.rateLimiter.isLocked(rlKey)) {
       throw new HttpException(
         "Quá nhiều lần thử. Vui lòng thử lại sau.",
