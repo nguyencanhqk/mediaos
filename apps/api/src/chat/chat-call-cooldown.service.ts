@@ -1,5 +1,6 @@
 import { Injectable, Optional } from "@nestjs/common";
 import { ValkeyService } from "../permission/valkey.service";
+import { chatKey } from "../common/valkey/valkey-key";
 
 interface MemoryWindow {
   count: number;
@@ -61,7 +62,7 @@ export class ChatCallCooldownService {
 
   /** Khoá theo (scope, company, user) — `scope` tách namespace giữa các endpoint dùng chung service này. */
   static key(scope: string, companyId: string, userId: string): string {
-    return `chat:cooldown:${scope}:co:${companyId}:user:${userId}`;
+    return chatKey("cooldown", `${scope}:co:${companyId}:user:${userId}`);
   }
 
   /** `true` = còn hạn mức trong cửa sổ (được phép thực hiện). `false` = đã chạm ngưỡng (phải chặn/thoái lui). */

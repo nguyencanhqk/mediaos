@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { legacyPermCapKey, permCapKey, permObjKey } from "../common/valkey/valkey-key";
 import type {
   CompanyRoleGrant,
   CompanyRoleGrantWithScope,
@@ -16,9 +17,12 @@ type SerializedGrant = Omit<CompanyRoleGrant, "expiresAt"> & { expiresAt: string
 /**
  * CachedPermissionRepository — transparent Valkey cache layer over IPermissionRepository.
  *
- * Cache keys (plan §7 permission-matrix-spec.md):
- *   perm:cap:{companyId}:{userId}        → CompanyRoleGrant[] (with expiresAt serialized as ISO)
- *   perm:obj:{companyId}:{userId}:{type}:{id} → ObjectGrant[]
+ * Cache keys (plan §7 permission-matrix-spec.md) — dựng qua `common/valkey/valkey-key.ts`, KHÔNG tại chỗ:
+ *   permCapKey → perm:{envScope}:cap:{companyId}:{userId}        → CompanyRoleGrant[] (expiresAt ISO)
+ *   permObjKey → perm:{envScope}:obj:{companyId}:{userId}:{type}:{id} → ObjectGrant[]
+ * `envScope` (S10-FND-VALKEYSCOPE-1) tách PROD khỏi dev-online: hai môi trường dùng chung một Valkey và
+ * dev-online là bản clone CÙNG companyId/userId, nên khoá không mang môi trường sẽ trùng bit-by-bit —
+ * đây là cache QUYẾT ĐỊNH QUYỀN, không phải cache hiển thị.
  *
  * The service still re-checks expiresAt per can() call — cache just avoids repeated DB queries.
  * Invalidation via invalidateUser() is called when permission.changed event fires (<100ms target).
@@ -33,7 +37,7 @@ export class CachedPermissionRepository implements IPermissionRepository {
   ) {}
 
   private capKey(companyId: string, userId: string): string {
-    return `perm:cap:${companyId}:${userId}`;
+    return permCapKey(companyId, userId);
   }
 
   private objKey(
@@ -42,7 +46,7 @@ export class CachedPermissionRepository implements IPermissionRepository {
     resourceType: string,
     resourceId: string,
   ): string {
-    return `perm:obj:${companyId}:${userId}:${resourceType}:${resourceId}`;
+    return permObjKey(companyId, userId, resourceType, resourceId);
   }
 
   async getCompanyRoleGrants(userId: string, companyId: string): Promise<CompanyRoleGrant[]> {
@@ -160,9 +164,20 @@ export class CachedPermissionRepository implements IPermissionRepository {
   /**
    * Called when permission.changed event fires — DEL cap key (object grants expire via TTL).
    * Throws if Valkey DEL fails so the event handler can dead-letter / alert.
+   *
+   * ⚠️ DEL đi qua ĐÚNG `this.capKey()` mà đường GHI (`getCompanyRoleGrants`) dùng — lệch một chữ giữa hai
+   * đường là grant CŨ sống tới hết TTL 300s, im lặng (không log, không exception) = leo thang quyền.
+   *
+   * S10-FND-VALKEYSCOPE-1 — DEL KÈM hình dạng khoá CŨ đúng một chu kỳ deploy: sau khi đổi tiền tố, 253
+   * khoá `perm:cap:{co}:{uid}` cũ vẫn sống hết TTL. Thu hồi quyền trong cửa sổ đó KHÔNG chạm khoá cũ, nên
+   * một lần ROLLBACK trong cửa sổ sẽ dựng lại grant TRƯỚC-thu-hồi. Xoá cả hai là cách rẻ nhất để cửa sổ
+   * đó không tồn tại. Gỡ ở `S10-FND-VALKEYSCOPE-2`.
    */
   async invalidateUser(companyId: string, userId: string): Promise<void> {
-    const ok = await this.valkey.del(this.capKey(companyId, userId));
+    const ok = await this.valkey.del(
+      this.capKey(companyId, userId),
+      legacyPermCapKey(companyId, userId),
+    );
     if (!ok) {
       throw new Error(
         `Valkey DEL failed for permission cache key — stale cache possible for up to ${300}s`,

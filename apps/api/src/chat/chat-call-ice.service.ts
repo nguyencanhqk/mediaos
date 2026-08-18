@@ -4,6 +4,7 @@ import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { ValkeyService } from "../permission/valkey.service";
 import { CHAT_CALL_COOLDOWN_SCOPE, ChatCallCooldownService } from "./chat-call-cooldown.service";
+import { chatKey } from "../common/valkey/valkey-key";
 
 interface Actor {
   id: string;
@@ -214,7 +215,7 @@ export class ChatCallIceService {
   }
 
   private rejectionKey(companyId: string): string {
-    return `chat:ice-turn-reject:co:${companyId}`;
+    return chatKey("ice-turn-reject", `co:${companyId}`);
   }
 
   /**

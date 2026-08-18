@@ -14,6 +14,7 @@
 
 | ID | Vấn đề | Mức | Loại | Chặn UAT | Chặn go-live | Chủ |
 | --- | --- | --- | --- | --- | --- | --- |
+| ~~**KI-067**~~ | **MỞ VÀ ĐÓNG CÙNG PR 2026-08-18** (`S10-FND-VALKEYSCOPE-1`). **Bốn môi trường (PROD · dev-online · dev local · test) dùng CHUNG một Valkey `redis://localhost:6379` db0, nhưng chỉ `chat:presence` + kênh socket.io mang danh tính môi trường — 16 họ khoá còn lại KHÔNG.** Đo 17/08 trên máy PROD (`valkey-cli INFO keyspace`): **db0 duy nhất, 288 khoá**, phân bố `perm:cap`=253 · `perm:obj`=18 · `rl:forgot`=7 · `rl:ip`=3 · `rl:acct`=3 · `chat:presence`=3 · `replay:2fa-jti`=1 · `idem:`=1 · `2fa-disable|`=1. **dev-online là bản CLONE của PROD** (cùng company `funtime`, cùng userId) ⇒ khoá trùng **bit-by-bit** giữa hai môi trường. Ba hệ quả, im lặng: (1) `perm:cap` là cache **QUYẾT ĐỊNH QUYỀN** đứng TRƯỚC RLS — một lượt nạp ở dev-online phục vụ luôn cho PROD và ngược lại; (2) khoá đăng nhập `rl:ip:*:lock` — đã quan sát thật: gõ sai ở môi trường khác khoá được người dùng PROD; (3) `idem:*` — retry của môi trường này phát lại kết quả của môi trường kia. **Đã đóng:** một chỗ dựng khoá duy nhất `apps/api/src/common/valkey/valkey-key.ts` tái dùng `resolveEnvScope` (S8-CHAT-UX-RT-1, KHÔNG viết phép suy thứ hai) + cổng runtime chỉ-ở-test + census tĩnh. ⚠️ **Cổng runtime KHÔNG bảo vệ production** (chi tiết + lệnh vận hành: §KI-067) | S1 | An ninh / phân quyền / vận hành | ❌ | ❌ | WO `S10-FND-VALKEYSCOPE-1` ✅ |
 | ~~**KI-066**~~ | **MỞ VÀ ĐÓNG CÙNG PR 2026-08-18** (`S10-AUTH-IPTRUST-1`). **PROD chạy sau `cloudflared` cùng máy nhưng `TRUST_PROXY` không đặt ⇒ MỌI `req.ip` = `::1`** — đo trên `login_logs` PROD: phân bố IP 30 ngày chỉ có `127.0.0.1`/`::1` + IP fixture, KHÔNG một IP người dùng thật nào. Ba hệ quả cùng lúc, im lặng, không log lỗi: (1) **điều tra mù** — `login_logs.ip_address` vô nghĩa cho forensics; (2) **rate-limit thoái hoá** — khoá per-IP `rl:ip:{slug}|{email}|{ip}` có `ip` là hằng ⇒ biến thành bucket per-account ngưỡng THẤP, nên trần khoá một tài khoản là `LOGIN_MAX_ATTEMPTS=5` chứ không phải `LOGIN_ACCOUNT_MAX_ATTEMPTS=20`, và bucket 20 KHÔNG BAO GIỜ chạm ⇒ khoá được tài khoản bất kỳ bằng 5 lần đoán từ endpoint công khai; (3) **bẫy lên nòng** — `SECURITY_POLICY_ENFORCEMENT_ENABLED` đang bật, ngày đầu admin bật IP-allowlist thì `::1` bị so với CIDR văn phòng ⇒ khoá cả công ty ra ngoài. **Đã đóng:** `TRUST_PROXY=loopback` (chọn từ SỐ ĐO header, không suy từ tài liệu) + nghiệm thu BẰNG HÀNH VI trên PROD. ⚠️ **Bẫy phụ đào được khi vá — xem §KI-066:** đặt biến vào `.env.prod` **KHÔNG có tác dụng gì**, API đọc `.env` | S1 | An ninh / vận hành | ❌ | ❌ | WO `S10-AUTH-IPTRUST-1` ✅ |
 | **KI-065** | **`PATCH /api/v1/settings/security-policy` KHÔNG THỂ gọi thành công qua HTTP với BẤT KỲ actor nào — route cấu hình chính sách bảo mật công ty là route CHẾT.** Cơ chế (đọc thẳng code + đo bằng HTTP thật, không suy đoán): `security-policy.controller.ts:34-38` khai `@RequirePermission("configure-security-policy", "company", { isSensitive: true, requiresReauth: true })`, nhưng route **không có `:id` param** ⇒ `resourceId` luôn `null` ⇒ `permission.decide.ts` tính `needsObjectGrant = true` VĨNH VIỄN (không tồn tại object nào để cấp grant) ⇒ **403 `deny-object-required` cho MỌI actor**, kể cả actor có ALLOW company-level đầy đủ trên đúng cặp `configure-security-policy:company`. Điều kiện thoát còn lại — `req.reauthContext` — **không được gán ở BẤT KỲ đâu trong codebase** (grep xác nhận: chỉ có nơi ĐỌC, không có nơi GHI) ⇒ không còn đường nào qua. **Hỏng đúng chiều an toàn (fail-CLOSED)** nên KHÔNG phải lỗ bảo mật; hậu quả là **tính năng cấu hình chính sách bảo mật (ép 2FA · chính sách mật khẩu · phiên) không dùng được qua API** — mọi thay đổi phải sửa thẳng DB `company_security_policies`, đúng cách đã phải làm ở KI-027. **Bằng chứng:** ca `🔴 GHIM BUG (KI-065)` — `apps/api/test/integration/security-mailconfig-http.int-spec.ts:171` — actor có quyền đầy đủ vẫn nhận 403 `deny-object-required`. ⚠️ **Ca đó GHIM hành vi SAI CÓ CHỦ Ý:** người vá bug này sẽ thấy nó **ĐỎ** — đó là dấu hiệu vá ĐÚNG, phải **LẬT** ca sang ALLOW 2xx (+ thêm ca DENY thật cho actor thiếu quyền) rồi mới đóng KI này; **TUYỆT ĐỐI không "sửa test cho khớp" bằng cách nới assert** (bài học `tests-can-pin-a-hole-open`). Cùng lý do đó, `PATCH /settings/security-policy` **không được tính là "đã phủ"** ở KI-025: ca DENY hiện tại là **xanh-RỖNG** — actor đủ quyền và actor không quyền đều nhận 403 nên nó không chứng minh được gì về guard. **Hai hướng vá (là quyết định thiết kế, không phải một dòng sửa):** (a) bỏ `requiresReauth` nếu chưa có step-up thật; (b) định nghĩa resource-id cho singleton (lấy `companyId` làm `resourceId`) **và** gán `req.reauthContext` ở một guard step-up có thật | S2 | Phân quyền / cấu hình bảo mật | ❌ | ❌ (workaround: sửa DB `company_security_policies`) | WO `S10-QA-SECPOLICY-GATE-1` |
 | ~~**KI-064**~~ | **MỞ VÀ ĐÓNG CÙNG NGÀY 2026-08-13** (`S10-FND-ENVKEY-1`). **`cp .env.example .env` — bước cài đặt lần đầu ghi ở CLAUDE.md §7 — làm API KHÔNG BOOT ĐƯỢC, và đã như vậy từ trước WO này.** Cơ chế ba mảnh, mảnh nào cũng đúng khi đứng một mình: (1) `.env.example` CỐ Ý ship giá trị RỖNG cho secret tắt-mềm (12 khoá) — đúng, vì để rỗng nghĩa là "tính năng tắt"; (2) `load-env.ts:38` gán thẳng `process.env[key] = ""` cho dòng `KEY=` bỏ trống, nó KHÔNG lọc rỗng — đúng, precedence phải giữ nguyên raw; (3) schema đòi `z.string().min(32).optional()` — đúng, secret phải có sàn độ dài. Ghép lại: `""` **không phải** `undefined` ⇒ trượt `.min(32)` ⇒ `loadEnv()` NÉM ⇒ API chết lúc boot. **Đo bằng cách chạy chính `.env.example` qua `loadEnv` sau khi đã điền hết `__SET_ME__`** (mô phỏng người cài đã làm xong phần bắt buộc): ném **7 khoá** — `LMS_SSO_SECRET` · `LMS_SYNC_TOKEN` · `LMS_PROGRESS_TOKEN` · `LMS_NOTI_TOKEN` · `LMS_COMPANY_ID` (uuid, `""` cũng không hợp lệ) · `CLOUDFLARE_TURN_KEY_ID` · `CLOUDFLARE_TURN_API_TOKEN`. Người cài làm ĐÚNG hướng dẫn vẫn nhận "Invalid environment variables" về những token họ chưa từng nghe tên và không hề định bật. **Phân biệt với fail-closed đúng thiết kế:** `__SET_ME__` (S6-SEC-ROTATE-1/KI-043) CỐ Ý không hợp lệ để quên điền thì sập — giữ nguyên, KHÔNG đụng. Lỗi ở đây là nhóm **tắt-mềm**: để rỗng là ý muốn hợp lệ, không phải quên. **Vá:** hai helper `optionalSecret(min)` + `optionalUuid()` áp cùng luật "RỖNG = CHƯA SET" mà `optionalUrl()` đã dùng từ KI-028 — lớp bẫy y hệt, chỉ là chưa ai áp cho nhóm secret; phủ 9 field (7 field trên + `INTERNAL_API_KEY` của chính WO + `SOCIAL_SSO_SECRET`/`SOCIAL_COMPANY_ID` cho đối xứng, tuy chúng chưa có mặt trong `.env.example`). **Sàn độ dài KHÔNG bị nới**: có giá trị thật mà ngắn hơn sàn vẫn ĐỎ ở biên (ca test riêng). **RED-proof:** `env-example-boots.spec.ts` viết TRƯỚC bản vá và ĐỎ đúng 7 khoá đó, xanh sau vá. 94/94 spec `src/config` · 157/157 spec vùng LMS/SOCIAL/CHAT-ICE/ME · typecheck sạch | S2 | Cấu hình / onboarding | ❌ | ❌ | **ĐÓNG 2026-08-13** — `S10-FND-ENVKEY-1` |
@@ -867,6 +868,73 @@ sao lưu nào là rủi ro mất dữ liệu không chấp nhận được.
 1. Chạy tay một bản ngay: `BACKUP_DIR=./backups bash scripts/backup-db.sh`
 2. Đăng ký task hằng ngày 02:00 — lệnh sẵn ở `RELEASE-09` §4
 3. Verify: `node scripts/ops-alert-check.mjs` phải chuyển luật "tuổi bản backup" từ `unknown` sang `ok`
+
+---
+
+### KI-067 — 4 môi trường chung một Valkey db0, 16 họ khoá không mang danh tính môi trường · **S1** · ✅ MỞ VÀ ĐÓNG CÙNG PR 2026-08-18 (`S10-FND-VALKEYSCOPE-1`)
+
+**Phạm vi đã chuyển (16 họ khoá).** `rl:ip` · `rl:acct` · `rl:forgot:ip` · `rl:forgot:acct` · `2fa|` ·
+`2fa-enable|` · `2fa-disable|` · `change-pw|` · `replay:*` · `perm:cap` · `perm:obj` · `idem:*` ·
+`chat:typing` · `chat:cooldown` · `chat:ice-turn-reject` · `me:training`. Bốn khoá dạng ống trước đây
+nằm ở **namespace GỐC** của Valkey (không cả tiền tố `rl:`) — nay gom về họ `rl:`. `chat:presence` và
+kênh `socket.io` đã đúng từ S8-CHAT-UX-RT-1, giữ nguyên.
+
+Hình dạng mới: `{namespace}:{envScope}:{subtype}:{phần còn lại}`, với `envScope = {NODE_ENV}:{db}`
+(`LANE_DB` thắng khi có). PROD = `production:mediaos` · dev-online = `development:mediaos_dev` ·
+dev local = `development:mediaos` · lane test = `test:mediaos_<lane>`.
+
+**⚠️ Cưỡng chế nằm ở test/CI, KHÔNG ở production.** Cổng runtime trong `ValkeyService` chỉ ném khi
+`NODE_ENV === 'test'`. Lý do: hợp đồng của lớp đó là *never throws* và có ít nhất 6 call site gọi
+KHÔNG bọc `try` (`login-rate-limiter` · `permission.cache.invalidateUser` · `replay-guard`), nên bật
+cổng ở dev-online — môi trường **có người dùng thật** — sẽ biến một khoá sót thành **login 500** thay vì
+fail-soft. Đừng đọc mục này thành "PROD đang được cổng bảo vệ": ở PROD không có cơ chế nào chặn một khoá
+sót; thứ chặn là `valkey-key-census.spec.ts` (census tĩnh) + cổng test, cả hai chạy trước khi merge.
+
+#### Điều gì xảy ra lúc DEPLOY
+
+| Họ khoá | TTL | Sau deploy |
+| --- | --- | --- |
+| `perm:cap` · `perm:obj` | 300s | Mồ côi. **KHÔNG tự lành hoàn toàn:** `invalidateUser` DEL **kèm hình dạng cũ** đúng một chu kỳ, nếu không thì thu hồi quyền trong cửa sổ 300s không chạm khoá cũ ⇒ rollback dựng lại grant trước-thu-hồi |
+| `idem:*` | 900s | Mồ côi. **Không phải "tự lành"**: client retry vắt qua mốc deploy sẽ **CHẠY THẬT lần hai** (đẻ bản ghi trùng), không phải phát lại |
+| `replay:*` | 600s | Mồ côi ⇒ marker single-use của 2FA sống lại. Vì thế `ReplayGuard` **đọc kép + ghi kép** đúng một chu kỳ |
+| `rl:*:lock` | `LOGIN_LOCKOUT_SEC` | Mồ côi và **không hàm nào xoá được** ⇒ **mọi lockout đang có bị VÔ HIỆU ngay lúc deploy**. Nới lỏng an ninh trong một cửa sổ ngắn, CÓ CHỦ Ý |
+| `me:training:*` | 60s | Tự lành |
+
+#### Lệnh vận hành (chạy sau deploy — đừng để người deploy tự nghĩ ra)
+
+```bash
+# ĐẾM TRƯỚC, XOÁ SAU. Pattern NEO SLUG nên chỉ khớp hình dạng CŨ (hình dạng mới có 'production:mediaos'
+# ngay sau namespace). Thay 'funtime' bằng slug thật nếu có công ty khác.
+for P in 'rl:ip:funtime|*' 'rl:acct:funtime|*' 'rl:forgot:ip:funtime|*' 'rl:forgot:acct:funtime|*' \
+         '2fa|*' '2fa-enable|*' '2fa-disable|*' 'change-pw|*'; do
+  echo -n "$P => "; docker exec mediaos-valkey valkey-cli --scan --pattern "$P" | wc -l
+done
+# rồi mới xoá từng pattern đã đếm được > 0:
+docker exec mediaos-valkey valkey-cli --scan --pattern 'rl:ip:funtime|*' \
+  | xargs -r docker exec -i mediaos-valkey valkey-cli DEL
+
+# NGHIỆM THU: không còn dòng nào THIẾU chuỗi 'production:mediaos'
+docker exec mediaos-valkey valkey-cli --scan --pattern 'rl:*' | grep -v 'production:mediaos' || echo SACH
+```
+
+> ⛔ **CẤM `FLUSHDB`** — nó giết luôn `chat:presence` và trạng thái adapter socket.io đang chạy.
+> ⛔ **`DEL` trả `0` KHÔNG có nghĩa "đã sạch"** — nó cũng là hình dạng của "pattern SAI". Luôn `--scan`
+> đếm trước; đây đúng là cách một thủ tục mở khoá khẩn cấp chết im lặng.
+
+#### Rollback
+
+Lùi về bản cũ an toàn về DỮ LIỆU nhưng: (a) khoá **mới** thành mồ côi và lockout bị reset **LẦN HAI**;
+(b) marker 2FA vẫn an toàn nhờ **ghi kép** (bản cũ đọc được khoá cũ đã ghi). Dọn chiều ngược bằng đúng
+các lệnh trên với pattern `'rl:production:mediaos:*'`.
+
+#### Thủ tục MỞ KHOÁ KHẨN CẤP (thay bản cũ trong notes `S10-AUTH-IPTRUST-1`)
+
+```bash
+docker exec mediaos-valkey valkey-cli --scan --pattern 'rl:production:mediaos:*{email}*'   # ĐẾM TRƯỚC
+docker exec mediaos-valkey valkey-cli DEL \
+  'rl:production:mediaos:ip:{slug}|{email}|{ip}:lock' \
+  'rl:production:mediaos:acct:{slug}|{email}:cnt'
+```
 
 ---
 

@@ -5,6 +5,7 @@ import { ChatCallCooldownService } from "./chat-call-cooldown.service";
 import type { DatabaseService } from "../db/db.service";
 import type { AuditService } from "../events/audit.service";
 import type { ValkeyService } from "../permission/valkey.service";
+import { chatKey } from "../common/valkey/valkey-key";
 
 /**
  * S7-CALL-SEC-1 — lưới an toàn cho `ChatCallIceService`: đường code DUY NHẤT trong toàn dự án chạm secret
@@ -404,7 +405,7 @@ describe("ChatCallIceService", () => {
 
       await svc.getIceConfig(ACTOR);
 
-      expect(valkeyIncr).toHaveBeenCalledWith(`chat:ice-turn-reject:co:${CO}`, 300);
+      expect(valkeyIncr).toHaveBeenCalledWith(chatKey("ice-turn-reject", `co:${CO}`), 300);
       expect(auditRecord).toHaveBeenCalledTimes(1);
       const entry = auditRecord.mock.calls[0][1] as Record<string, unknown>;
       expect(entry.metadata).toEqual({ httpStatus: 500, consecutiveRejections: 3 });
