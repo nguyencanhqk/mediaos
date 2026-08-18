@@ -12,19 +12,8 @@ import { JsonConsoleLogger } from "./common/logger/json-console-logger";
 import { requestIdMiddleware } from "./common/middleware/request-id.middleware";
 import { loadEnv } from "./config/env.schema";
 import { SWAGGER_PATH, setupSwagger } from "./config/swagger";
+import { parseTrustProxy } from "./config/trust-proxy";
 import { setupWebSocketAdapter } from "./realtime/setup-websocket-adapter";
-
-/**
- * CS-9: diễn giải env TRUST_PROXY sang giá trị Express `trust proxy`.
- * "false"→false (tắt, req.ip=peer); chuỗi toàn số→số hop; còn lại→giữ nguyên (preset "loopback" / CIDR proxy).
- */
-function parseTrustProxy(raw: string): boolean | number | string {
-  const v = raw.trim();
-  if (v === "" || v.toLowerCase() === "false") return false;
-  if (v.toLowerCase() === "true") return true;
-  if (/^\d+$/.test(v)) return Number(v);
-  return v;
-}
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv();
@@ -37,9 +26,11 @@ async function bootstrap(): Promise<void> {
   // luôn có request_id cho meta — kể cả request bị guard từ chối sớm. KHÔNG dùng class middleware qua app.use.
   app.use(requestIdMiddleware);
 
-  // CS-9: thiết lập biên tin cậy cho `req.ip` (IP-allowlist của security policy đọc giá trị này).
-  // Mặc định "false" ⇒ KHÔNG tin X-Forwarded-For (req.ip = socket peer, chống spoof ở dev/no-proxy).
-  // Sau proxy/LB, ops đặt TRUST_PROXY = số hop tin cậy (vd "1") hoặc CIDR proxy. KHÔNG đoán topology ở đây.
+  // CS-9: thiết lập biên tin cậy cho `req.ip` — giá trị này quyết định NỘI DUNG `login_logs.ip_address`,
+  // khoá bucket rate-limit per-IP, và vế so sánh của IP-allowlist. Mặc định "false" ⇒ KHÔNG tin
+  // X-Forwarded-For (req.ip = socket peer, chống spoof ở dev/no-proxy). Sau proxy, ops PHẢI đặt giá trị
+  // khớp topology THẬT — S10-AUTH-IPTRUST-1: PROD (cloudflared cùng máy) dùng "loopback", chọn dựa trên
+  // số đo header chứ không suy từ tài liệu. Lý do đầy đủ + điều kiện an toàn: config/trust-proxy.ts.
   app.getHttpAdapter().getInstance().set("trust proxy", parseTrustProxy(env.TRUST_PROXY));
 
   app.setGlobalPrefix(`${env.API_PREFIX}/${env.API_VERSION}`);

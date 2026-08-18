@@ -1,0 +1,30 @@
+﻿S10-AUTH-IPTRUST-1 - so do THAT header cloudflared dat
+Do luc: 20260818-105920
+Hostname dung de do: cian-dev-console.funtimemediacorp.com (tam tro -> http://localhost:39997, da khoi phuc -> http://localhost:5278)
+Cach do: request tu Internet qua cloudflared -> echo server localhost.
+
+Doc gi o duoi:
+- headers['x-forwarded-for'] co MAY phan tu (tach bang dau phay) => so hop TRUST_PROXY.
+- co headers['cf-connecting-ip'] khong.
+- socketRemoteAddress = dia chi ma Express thay khi TRUST_PROXY=false (hien trang: ::1).
+{
+  "url": "/iptrust-probe",
+  "httpVersion": "1.1",
+  "headers": {
+    "host": "cian-dev-console.funtimemediacorp.com",
+    "user-agent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.26100.9168",
+    "accept-encoding": "gzip, br",
+    "cdn-loop": "cloudflare; loops=1",
+    "cf-connecting-ip": "<REDACTED-CLIENT-IP>",
+    "cf-ipcountry": "VN",
+    "cf-ray": "<REDACTED>",
+    "cf-visitor": "{\"scheme\":\"https\"}",
+    "cf-warp-tag-id": "<REDACTED>",
+    "connection": "keep-alive",
+    "x-forwarded-for": "<REDACTED-CLIENT-IP>",
+    "x-forwarded-proto": "https"
+  },
+  "socketRemoteAddress": "127.0.0.1",
+  "socketRemoteFamily": "IPv4"
+}
+

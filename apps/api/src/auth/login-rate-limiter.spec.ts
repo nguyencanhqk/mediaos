@@ -123,3 +123,74 @@ describe("LoginRateLimiter (brute-force)", () => {
     });
   });
 });
+
+/**
+ * S10-AUTH-IPTRUST-1 — hai bucket chỉ TÁCH VAI được khi `req.ip` là IP THẬT.
+ *
+ * Trước WO này PROD chạy sau `cloudflared` cùng máy mà `TRUST_PROXY` không đặt ⇒ mọi request mang
+ * `ip = "::1"`. Khoá per-IP là `rl:ip:{slug}|{email}|{ip}`, nên khi `ip` là hằng số thì bucket
+ * "per-IP" thoái hoá thành bucket per-account với ngưỡng THẤP (5) — và bucket per-account thật
+ * (20) không bao giờ chạm tới. Nhóm ca dưới đây đóng đinh cả hai phía của ranh giới đó, mô phỏng
+ * đúng điều phối của `AuthService.recordLoginFailure`/`isLoginLocked` (ghi CẢ HAI bucket, per-account
+ * dùng ngưỡng `accountMaxAttempts`).
+ */
+describe("tách vai per-IP (5) vs per-account (20) — chỉ đúng khi req.ip là IP THẬT", () => {
+  const SLUG = "acme";
+  const EMAIL = "victim@acme.test";
+
+  /** Bản sao điều phối của AuthService: ghi 1 lần sai vào CẢ HAI bucket. */
+  async function recordLoginFailure(rl: LoginRateLimiter, ip: string, now: number): Promise<void> {
+    await rl.recordFailure(LoginRateLimiter.key(SLUG, EMAIL, ip), undefined, now);
+    await rl.recordFailure(
+      LoginRateLimiter.accountKey(SLUG, EMAIL),
+      rl.accountMaxAttempts,
+      now,
+    );
+  }
+
+  /** Bản sao điều phối của AuthService: khoá nếu MỘT TRONG HAI bucket khoá. */
+  async function isLoginLocked(rl: LoginRateLimiter, ip: string, now: number): Promise<boolean> {
+    return (
+      (await rl.isLocked(LoginRateLimiter.key(SLUG, EMAIL, ip), now)) ||
+      (await rl.isLocked(LoginRateLimiter.accountKey(SLUG, EMAIL), now))
+    );
+  }
+
+  it("IP THẬT: 5 nguồn khác nhau mỗi nguồn sai 1 lần ⇒ KHÔNG khoá (bucket per-IP tách theo nguồn)", async () => {
+    const rl = new LoginRateLimiter();
+    const now = 1_000_000;
+    for (let i = 1; i <= 5; i++) await recordLoginFailure(rl, `198.51.100.${i}`, now);
+    // 5 lần sai TỔNG nhưng rải 5 nguồn ⇒ không nguồn nào chạm 5, account mới 5/20.
+    expect(await isLoginLocked(rl, "198.51.100.6", now)).toBe(false);
+  });
+
+  it("IP THẬT: 5 lần sai từ CÙNG một nguồn ⇒ khoá ĐÚNG nguồn đó, nguồn khác vẫn vào được", async () => {
+    const rl = new LoginRateLimiter();
+    const now = 1_000_000;
+    for (let i = 0; i < 5; i++) await recordLoginFailure(rl, "198.51.100.7", now);
+    expect(await isLoginLocked(rl, "198.51.100.7", now)).toBe(true);
+    // Đây là điều KHÔNG THỂ có khi mọi IP đều là "::1": chủ tài khoản thật ở nguồn khác vẫn đăng nhập được.
+    expect(await isLoginLocked(rl, "198.51.100.8", now)).toBe(false);
+  });
+
+  it("IP THẬT: bucket per-account (20) MỚI thực sự có tác dụng — 20 lần sai rải 5 nguồn (mỗi nguồn 4, dưới ngưỡng per-IP) ⇒ khoá", async () => {
+    const rl = new LoginRateLimiter();
+    const now = 1_000_000;
+    expect(rl.accountMaxAttempts).toBe(20);
+    for (let src = 1; src <= 5; src++) {
+      for (let n = 0; n < 4; n++) await recordLoginFailure(rl, `203.0.113.${src}`, now);
+    }
+    // Không nguồn nào chạm 5, nhưng tổng 20 ⇒ backstop credential-stuffing phân tán mới nổ.
+    expect(await isLoginLocked(rl, "203.0.113.99", now)).toBe(true);
+  });
+
+  it("HIỆN TRẠNG TRƯỚC VÁ (mọi request = '::1'): 5 nguồn khác nhau vẫn khoá ở lần thứ 5 ⇒ trần thực tế là 5, bucket 20 không bao giờ chạm", async () => {
+    const rl = new LoginRateLimiter();
+    const now = 1_000_000;
+    const BLIND = "::1"; // TRUST_PROXY=false sau proxy ⇒ mọi nguồn gộp thành một
+    for (let i = 0; i < 5; i++) await recordLoginFailure(rl, BLIND, now);
+    expect(await isLoginLocked(rl, BLIND, now)).toBe(true);
+    // ĐỐI CHỨNG: cùng số lần sai đó, nếu IP thật thì KHÔNG khoá (ca đầu nhóm này) — chênh lệch
+    // chính là thiệt hại của `::1`: account-lockout DoS chỉ tốn 5 lần đoán trên endpoint công khai.
+  });
+});
