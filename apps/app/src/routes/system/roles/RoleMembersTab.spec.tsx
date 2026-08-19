@@ -211,7 +211,10 @@ describe("RoleMembersTab", () => {
     } as unknown as Awaited<ReturnType<typeof roleAdminApi.getMembers>>);
     setCaps({ "view:user": true });
     renderWithQuery(<RoleMembersTab roleId="role-1" />);
-    expect(await screen.findByText("u-200")).toBeInTheDocument();
+    // Nhãn phải NÓI RA LÝ DO. Rơi về UUID cũng "không vỡ trang" nhưng đọc thành lỗi join —
+    // ca này khoá đúng vế đó: KHÔNG được hiển thị userId thô ở ô tên.
+    expect(await screen.findByText("(không có quyền xem danh tính)")).toBeInTheDocument();
+    expect(screen.queryByText("u-200")).not.toBeInTheDocument();
     expect(screen.getByText("—")).toBeInTheDocument();
   });
 });

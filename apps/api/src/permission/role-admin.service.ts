@@ -111,6 +111,17 @@ export class RoleAdminService {
    */
   async listMembers(actor: RequestUser, roleId: string): Promise<RoleMemberListDto> {
     await this.assertCan(actor, "view", "user", false);
+    // ⚠️ `try` bọc CẢ phần phân giải scope, không chỉ phần truy vấn: nếu `resolveOrNull` ném (vd
+    // timeout khi đọc `data_scope`) mà nằm ngoài try thì lỗi vẫn nổi thành 500 nhưng MẤT ngữ cảnh
+    // `mapError` dựng ra (`roleId` + context + mã lỗi PG) — đúng route mà WO này đang gia cố.
+    try {
+      return await this.listMembersInner(actor, roleId);
+    } catch (err) {
+      throw this.mapError(err, "Failed to list role members");
+    }
+  }
+
+  private async listMembersInner(actor: RequestUser, roleId: string): Promise<RoleMemberListDto> {
     // S6-SEC-IDENTITY-PROJ-1 (KI-053) — `assertCan` ở trên chỉ trả lời CÓ/KHÔNG có cặp `view:user`;
     // nó KHÔNG đọc `data_scope`. Trước bản vá, một vai giữ `view:user@Own` qua được assert rồi nhận
     // TRỌN email + họ tên của mọi thành viên role. Đây là gốc chung của N-1/N-1c/N-1d/N-1e.
@@ -137,22 +148,18 @@ export class RoleAdminService {
       "identity-gated",
       "GET /auth/roles/:id/members — cột danh tính đi theo data_scope của cặp danh bạ view:user (KI-053)",
     );
-    try {
-      return await this.db.withTenant(actor.companyId, async (tx) => {
-        if (!(await this.repo.findRoleByIdTx(tx, roleId))) {
-          throw new NotFoundException("Role not found");
-        }
-        const rows = await this.repo.listRoleMembersTx(tx, actor.companyId, roleId, identity);
-        // BỎ HẲN khoá khi ngoài scope — `roleMemberSchema.email` khai `.optional()`, KHÔNG `.nullable()`.
-        // Và `identityInScope` là siêu dữ liệu phân quyền của repo: KHÔNG được lọt ra response.
-        const members = rows.map(({ identityInScope, email, fullName, ...rest }) =>
-          identityInScope ? { ...rest, email: email ?? undefined, fullName } : rest,
-        );
-        return { members };
-      });
-    } catch (err) {
-      throw this.mapError(err, "Failed to list role members");
-    }
+    return this.db.withTenant(actor.companyId, async (tx) => {
+      if (!(await this.repo.findRoleByIdTx(tx, roleId))) {
+        throw new NotFoundException("Role not found");
+      }
+      const rows = await this.repo.listRoleMembersTx(tx, actor.companyId, roleId, identity);
+      // BỎ HẲN khoá khi ngoài scope — `roleMemberSchema.email` khai `.optional()`, KHÔNG `.nullable()`.
+      // Và `identityInScope` là siêu dữ liệu phân quyền của repo: KHÔNG được lọt ra response.
+      const members = rows.map(({ identityInScope, email, fullName, ...rest }) =>
+        identityInScope ? { ...rest, email: email ?? undefined, fullName } : rest,
+      );
+      return { members };
+    });
   }
 
   /**

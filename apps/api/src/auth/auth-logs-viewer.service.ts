@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import type {
   AuthLogUserRef,
   LoginLogListItem,
@@ -39,6 +39,8 @@ export interface AuthLogPage<T> {
  */
 @Injectable()
 export class AuthLogsViewerService {
+  private readonly logger = new Logger(AuthLogsViewerService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly loginLogs: LoginLogRepository,
@@ -63,6 +65,17 @@ export class AuthLogsViewerService {
     why: string,
   ): Promise<IdentityGrant> {
     const scope = await this.dataScope.resolveOrNull(actor.id, actor.companyId, "view", "user");
+    if (scope === null) {
+      // Nhánh fail-closed PHẢI để lại vết. Không có dòng này thì vận hành không phân biệt được
+      // "actor thật sự ngoài scope danh bạ" với "trình phân giải scope đang gãy" — cả hai đều ra một
+      // bảng nhật ký mất sạch email/tên. `why` đi kèm để biết đang ở đường login-log hay
+      // security-event, và với vai nào (hàm này được gọi 3 lần cho mỗi request security-events).
+      this.logger.warn("auth-logs: không phân giải được data_scope cặp danh bạ → BỎ cột danh tính", {
+        userId: actor.id,
+        companyId: actor.companyId,
+        where: why,
+      });
+    }
     return fromScope(
       scope === null
         ? null

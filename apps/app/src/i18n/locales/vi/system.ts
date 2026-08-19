@@ -358,6 +358,12 @@ export default {
   // S2-AUTH-ROLEMEM-1 — tab Thành viên trên trang chi tiết vai trò.
   roleMembers: {
     count: "{{count}} thành viên đang giữ vai trò này",
+    /**
+     * S6-SEC-IDENTITY-PROJ-1 (KI-053): server BỎ HẲN KHOÁ email/họ tên khi người xem ở ngoài
+     * `data_scope` của cặp danh bạ. Nhãn này phải nói ra LÝ DO — rơi về UUID thì người dùng (và cả
+     * support) đọc thành "lỗi hiển thị/join hỏng" chứ không thành "phân quyền đang làm đúng việc".
+     */
+    identityHidden: "(không có quyền xem danh tính)",
     expiresAt: "hết hạn {{date}}",
     forbidden: {
       title: "Không có quyền xem",

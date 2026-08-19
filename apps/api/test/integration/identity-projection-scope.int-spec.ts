@@ -254,6 +254,10 @@ describe.skipIf(!hasLaneDb)(
 
     it("A3 — cột `identityInScope` của repo KHÔNG được rò ra response", async () => {
       const { rows } = await roleMembers(tokOwn);
+      // Chống xanh-RỖNG: `withKey([], …) === 0` cũng đúng. A2 đã ràng `rows.length === 3` nhưng đó là
+      // một `it()` KHÁC — vitest không hứa thứ tự, và ai chạy `.only` ca này là assertion mất hiệu lực
+      // trong im lặng. Mỗi ca phải tự đứng được.
+      expect(rows.length).toBe(3);
       expect(withKey(rows, "identityInScope")).toBe(0);
     });
 

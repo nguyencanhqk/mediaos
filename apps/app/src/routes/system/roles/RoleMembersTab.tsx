@@ -167,12 +167,18 @@ export function RoleMembersTab({ roleId }: RoleMembersTabProps) {
                 <div className="min-w-0">
                   {/*
                     S6-SEC-IDENTITY-PROJ-1 (KI-053): `email`/`fullName` nay `.optional()` — server BỎ
-                    HẲN KHOÁ khi actor ngoài `data_scope` của cặp danh bạ `view:user`. Không có
-                    fallback thì hàng ngoài scope render rỗng và trông như dữ liệu hỏng. `userId` là
-                    thứ LUÔN có, cùng khuôn `apps/console/src/routes/recycle-bin.tsx:71`.
+                    HẲN KHOÁ khi actor ngoài `data_scope` của cặp danh bạ `view:user`.
+
+                    Fallback phải NÓI RA LÝ DO, không phải rơi về `userId`: một UUID đứng ở ô "tên
+                    nhân viên" đọc thành lỗi join/hiển thị chứ không thành "phân quyền đang làm đúng
+                    việc" — trống và-khó-hiểu cũng tệ ngang nhau khi đi chẩn.
                   */}
                   <p className="truncate text-sm font-medium text-foreground">
-                    {m.fullName ?? m.email ?? m.userId}
+                    {m.fullName ?? m.email ?? (
+                      <span className="italic text-muted-foreground">
+                        {t("roleMembers.identityHidden")}
+                      </span>
+                    )}
                   </p>
                   <p className="truncate text-xs text-muted-foreground">{m.email ?? "—"}</p>
                 </div>
