@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { legacyPermCapKey, permCapKey, permObjKey } from "../common/valkey/valkey-key";
+import { permCapKey, permObjKey } from "../common/valkey/valkey-key";
 import type {
   CompanyRoleGrant,
   CompanyRoleGrantWithScope,
@@ -168,16 +168,12 @@ export class CachedPermissionRepository implements IPermissionRepository {
    * ⚠️ DEL đi qua ĐÚNG `this.capKey()` mà đường GHI (`getCompanyRoleGrants`) dùng — lệch một chữ giữa hai
    * đường là grant CŨ sống tới hết TTL 300s, im lặng (không log, không exception) = leo thang quyền.
    *
-   * S10-FND-VALKEYSCOPE-1 — DEL KÈM hình dạng khoá CŨ đúng một chu kỳ deploy: sau khi đổi tiền tố, 253
-   * khoá `perm:cap:{co}:{uid}` cũ vẫn sống hết TTL. Thu hồi quyền trong cửa sổ đó KHÔNG chạm khoá cũ, nên
-   * một lần ROLLBACK trong cửa sổ sẽ dựng lại grant TRƯỚC-thu-hồi. Xoá cả hai là cách rẻ nhất để cửa sổ
-   * đó không tồn tại. Gỡ ở `S10-FND-VALKEYSCOPE-2`.
+   * S10-FND-VALKEYSCOPE-2 (19/08/2026) — vế DEL kèm hình dạng khoá CŨ đã GỠ: nó chỉ đóng cửa sổ quanh
+   * mốc deploy 18/08 (rollback trong TTL 300s dựng lại grant trước-thu-hồi), và số đo trên Valkey PROD
+   * `--scan --pattern 'perm:cap:*'` = 0 dòng cho thấy cửa sổ đó đã qua. Còn đúng MỘT khoá.
    */
   async invalidateUser(companyId: string, userId: string): Promise<void> {
-    const ok = await this.valkey.del(
-      this.capKey(companyId, userId),
-      legacyPermCapKey(companyId, userId),
-    );
+    const ok = await this.valkey.del(this.capKey(companyId, userId));
     if (!ok) {
       throw new Error(
         `Valkey DEL failed for permission cache key — stale cache possible for up to ${300}s`,

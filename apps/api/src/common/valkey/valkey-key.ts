@@ -28,17 +28,21 @@ import { resolveEnvScope } from "../../realtime/ws-adapter-config";
  * NGOẠI LỆ đã đúng sẵn và KHÔNG đụng: `chat:presence:{envScope}:…` (scope ở đoạn 2) và
  * `socket.io:{envScope}` — cổng `isKeyScoped` neo theo SEGMENT nên nhận cả hai vị trí.
  *
- * ─── ĐIỀU GÌ XẢY RA LÚC DEPLOY ──────────────────────────────────────────────────────────────────
- * Đổi hình dạng khoá ⇒ MỌI khoá cũ thành MỒ CÔI (không hàm nào trong code còn dựng ra chúng):
- *   · `perm:*` (TTL 300s) · `idem:*` (900s) · `me:training:*` (60s) — hết hạn rồi biến mất, NHƯNG xem
- *     `legacyPermCapKey` bên dưới: đường INVALIDATE phải dọn thêm khoá cũ, nếu không thu hồi quyền
- *     trong cửa sổ 300s sẽ KHÔNG chạm khoá cũ (rollback trong cửa sổ = grant trước-thu-hồi sống lại).
- *   · `rl:*:lock` — treo tới hết `LOGIN_LOCKOUT_SEC` và KHÔNG còn hàm nào xoá được ⇒ mọi lockout đang
- *     có bị VÔ HIỆU ngay lúc deploy (người đang bị brute-force chặn được cấp lại budget đầy). Đây là
- *     nới lỏng an ninh trong một cửa sổ ngắn — CÓ CHỦ Ý, đã ghi ở KI-067 kèm lệnh dọn tay.
- *   · `replay:*` — xem `legacyReplayKey`: marker single-use mồ côi = challenge 2FA đã tiêu thụ có thể
- *     claim LẠI. Vì thế có đường ĐỌC KÉP + GHI KÉP đúng một chu kỳ deploy.
- * Lệnh dọn tay + lệnh nghiệm thu: `docs/RELEASE/RELEASE-02_Known_Issues_MVP.md` (KI-067). CẤM FLUSHDB.
+ * ─── CHU KỲ CHUYỂN TIẾP — ĐÃ ĐÓNG 19/08/2026 (S10-FND-VALKEYSCOPE-2) ────────────────────────────
+ * Lúc đổi hình dạng khoá, MỌI khoá cũ thành mồ côi. Phần lớn chỉ là cache và tự hết hạn (`idem:` 900s,
+ * `me:training:` 60s), nhưng HAI họ thì KHÔNG vô hại: marker single-use `replay:*` (challenge bước-2
+ * 2FA đã tiêu thụ claim LẠI được) và `perm:cap:*` (đường invalidate không chạm khoá cũ ⇒ rollback
+ * trong TTL 300s dựng lại grant TRƯỚC-thu-hồi). Vì thế đã có đọc-kép/ghi-kép + miễn trừ cổng, đúng
+ * MỘT chu kỳ deploy.
+ *
+ * SỐ ĐO TRƯỚC KHI GỠ (19/08/2026, Valkey của máy PROD, sau khi bản mang S10-FND-VALKEYSCOPE-1 chạy hết
+ * một chu kỳ deploy): `--scan --pattern 'replay:2fa-jti:*'` → **0 dòng**; `'perm:cap:*'` → **0 dòng**
+ * (hình dạng CŨ, không envScope). ⇒ ba hàm dựng khoá cũ, bảng mẫu miễn trừ và nhánh miễn trừ trong
+ * `assertKeysScoped` ĐÃ XOÁ; khoá `replay:`/`perm:` chưa scoped giờ BỊ NÉM như mọi họ khác — không còn
+ * cửa hẹp nào.
+ *
+ * ⛔ CẤM dựng lại danh sách miễn trừ để "sửa đỏ": khoá thiếu scope là LỖI LẬP TRÌNH, sửa ở chỗ dựng khoá.
+ * Lịch sử + lệnh dọn tay: `docs/RELEASE/RELEASE-02_Known_Issues_MVP.md` (KI-067). CẤM FLUSHDB.
  */
 
 /** Bucket rate-limit. Bốn cái sau vốn nằm ở namespace GỐC (`2fa|…`, không cả tiền tố `rl:`) — gom về đây. */
@@ -137,54 +141,6 @@ export function meTrainingKey(
   return `me:${envScope}:training:${companyId}:${userId}`;
 }
 
-/* ─────────────────────────── HÌNH DẠNG CŨ (chuyển tiếp MỘT chu kỳ deploy) ───────────────────────
- * Ba hàm dưới dựng ĐÚNG hình dạng TRƯỚC S10-FND-VALKEYSCOPE-1. Chúng tồn tại để đóng hai cửa sổ mà
- * việc đổi tiền tố mở ra:
- *   1. `legacyReplayKey` — ReplayGuard ĐỌC KÉP (chiều tiến: marker tiêu thụ trước deploy vẫn chặn
- *      được) và GHI KÉP (chiều lùi: rollback không làm marker tiêu thụ sau deploy sống lại).
- *   2. `legacyPermCapKey`/`legacyPermObjKey` — `invalidateUser` DEL kèm khoá cũ, nếu không thì thu hồi
- *      quyền trong cửa sổ TTL 300s sau deploy KHÔNG chạm khoá cũ ⇒ rollback = grant trước-thu-hồi
- *      sống lại, IM LẶNG (không log, không exception).
- *
- * ⛔ HẠN GỠ: sau ≥1 chu kỳ deploy ổn định. Việc gỡ ĐÃ được seed thành Work Order riêng trong
- * `harness/backlog.mjs` (S10-FND-VALKEYSCOPE-2) — docblock "sẽ gỡ sau" một mình KHÔNG đủ, bài học
- * known-issue-workaround-may-never-have-run.
- * ⛔ CẤM thêm mục mới vào miễn trừ này để "sửa đỏ": mọi mục mới phải do người chốt vùng đỏ duyệt.
- */
-
-export function legacyReplayKey(marker: ReplayMarker, rest: string): string {
-  return `replay:${marker}:${rest}`;
-}
-
-export function legacyPermCapKey(companyId: string, userId: string): string {
-  return `perm:cap:${companyId}:${userId}`;
-}
-
-export function legacyPermObjKey(
-  companyId: string,
-  userId: string,
-  resourceType: string,
-  resourceId: string,
-): string {
-  return `perm:obj:${companyId}:${userId}:${resourceType}:${resourceId}`;
-}
-
-/**
- * Hai họ khoá CŨ được phép đi qua cổng runtime trong chu kỳ chuyển tiếp.
- *
- * Neo `^` + tên marker/subtype NGAY SAU namespace: hình dạng MỚI luôn có `{envScope}` ở vị trí đó
- * (`replay:production:mediaos:2fa-jti:…`) nên KHÔNG khớp. Nếu regex này lỡ nuốt cả khoá mới thì toàn
- * bộ họ đó vĩnh viễn nằm ngoài cổng = cổng XANH RỖNG — có ca test đóng đinh điều đó.
- */
-const LEGACY_UNSCOPED_PATTERNS: readonly RegExp[] = [
-  /^replay:(2fa-jti|totp-step):/,
-  /^perm:(cap|obj):/,
-];
-
-export function isLegacyUnscopedExempt(key: string): boolean {
-  return LEGACY_UNSCOPED_PATTERNS.some((re) => re.test(key));
-}
-
 /**
  * Khoá có mang phạm vi môi trường không — NEO THEO SEGMENT.
  *
@@ -224,7 +180,7 @@ export class ValkeyKeyScopeError extends Error {
 export function assertKeysScoped(op: string, keys: readonly string[]): void {
   if (process.env.NODE_ENV !== "test") return;
   for (const key of keys) {
-    if (isKeyScoped(key) || isLegacyUnscopedExempt(key)) continue;
+    if (isKeyScoped(key)) continue;
     throw new ValkeyKeyScopeError(op, key);
   }
 }

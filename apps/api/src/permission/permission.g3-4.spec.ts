@@ -15,7 +15,7 @@ import { ExecutionContext, ForbiddenException, UnauthorizedException } from "@ne
 import { Reflector } from "@nestjs/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PermissionDecision } from "./permission.types";
-import { legacyPermCapKey, permCapKey } from "../common/valkey/valkey-key";
+import { permCapKey } from "../common/valkey/valkey-key";
 
 // ─── Minimal mocks ────────────────────────────────────────────────────────────
 
@@ -327,11 +327,8 @@ describe("CachedPermissionRepository", () => {
     const repo = await makeRepo();
     await repo.invalidateUser("co1", "u1");
 
-    // Chuỗi THẬT của cả hai hình dạng (mới + legacy của chu kỳ chuyển tiếp), đúng thứ tự.
-    expect(mockValkey.del).toHaveBeenCalledWith(
-      permCapKey("co1", "u1"),
-      legacyPermCapKey("co1", "u1"),
-    );
+    // Chuỗi THẬT của hình dạng DUY NHẤT còn lại — chu kỳ chuyển tiếp legacy gỡ ở S10-FND-VALKEYSCOPE-2.
+    expect(mockValkey.del).toHaveBeenCalledWith(permCapKey("co1", "u1"));
   });
 
   it("(19) Valkey get throws: falls back to DB (no error propagated)", async () => {

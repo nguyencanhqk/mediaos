@@ -5,16 +5,14 @@ import {
   chatKey,
   currentEnvScope,
   idemKey,
+  assertKeysScoped,
   isKeyScoped,
-  isLegacyUnscopedExempt,
-  legacyPermCapKey,
-  legacyPermObjKey,
-  legacyReplayKey,
   meTrainingKey,
   permCapKey,
   permObjKey,
   replayKey,
   rlKey,
+  ValkeyKeyScopeError,
 } from "./valkey-key";
 
 /**
@@ -198,25 +196,66 @@ describe("cổng: isKeyScoped NEO SEGMENT, không dùng includes() trần", () =
   });
 });
 
-describe("miễn trừ legacy: hẹp đúng hai họ, KHÔNG nuốt khoá mới", () => {
-  it("chỉ đúng hình dạng CŨ được miễn trừ", () => {
-    expect(isLegacyUnscopedExempt(legacyReplayKey("2fa-jti", "jti-1"))).toBe(true);
-    expect(isLegacyUnscopedExempt(legacyReplayKey("totp-step", `${U_A}:12345`))).toBe(true);
-    expect(isLegacyUnscopedExempt(legacyPermCapKey(CO_A, U_A))).toBe(true);
-    expect(isLegacyUnscopedExempt(legacyPermObjKey(CO_A, U_A, "task", "r1"))).toBe(true);
+/**
+ * S10-FND-VALKEYSCOPE-2 — chu kỳ chuyển tiếp ĐÃ ĐÓNG. Bộ ca dưới là NGHỊCH ĐẢO của bộ ca "miễn trừ
+ * legacy" cũ: hai họ `replay:`/`perm:` chưa scoped trước đây được cho đi qua cổng, giờ PHẢI bị ném.
+ *
+ * Đo THẲNG trên `assertKeysScoped` — đúng hàm mà `ValkeyService` gọi ở 8 chỗ — chứ không qua một vị từ
+ * trung gian: thứ cần chứng minh là "cửa hẹp đã đóng", không phải "một hàm trả false".
+ */
+describe("cổng runtime: cửa hẹp legacy đã ĐÓNG", () => {
+  const UNSCOPED_LEGACY = [
+    "replay:2fa-jti:jti-1",
+    `replay:totp-step:${U_A}:12345`,
+    `perm:cap:${CO_A}:${U_A}`,
+    `perm:obj:${CO_A}:${U_A}:task:r1`,
+  ];
+
+  it("🔴 khoá legacy chưa scoped giờ BỊ NÉM (trước WO này là miễn trừ tường minh)", () => {
+    for (const key of UNSCOPED_LEGACY) {
+      expect(() => assertKeysScoped("get", [key]), key).toThrow(ValkeyKeyScopeError);
+    }
   });
 
-  it("🔴 KHÔNG nuốt khoá MỚI — nếu nuốt, cả họ nằm ngoài cổng và cổng xanh RỖNG", () => {
-    expect(isLegacyUnscopedExempt(replayKey("2fa-jti", "jti-1", SCOPES.prod))).toBe(false);
-    expect(isLegacyUnscopedExempt(replayKey("totp-step", "u:1", SCOPES.prod))).toBe(false);
-    expect(isLegacyUnscopedExempt(permCapKey(CO_A, U_A, SCOPES.prod))).toBe(false);
-    expect(isLegacyUnscopedExempt(permObjKey(CO_A, U_A, "task", "r1", SCOPES.prod))).toBe(false);
+  it("KHÔNG siết nhầm chiều kia: khoá MỚI của chính hai họ đó vẫn đi qua", () => {
+    expect(() =>
+      assertKeysScoped("get", [
+        replayKey("2fa-jti", "jti-1"),
+        replayKey("totp-step", `${U_A}:12345`),
+        permCapKey(CO_A, U_A),
+        permObjKey(CO_A, U_A, "task", "r1"),
+      ]),
+    ).not.toThrow();
   });
 
-  it("khoá `replay:` chưa scoped mà KHÔNG đúng hai hình dạng legacy thì VẪN trượt (không có cửa sau)", () => {
-    expect(isLegacyUnscopedExempt("replay:something-else:x")).toBe(false);
-    expect(isLegacyUnscopedExempt("rl:ip:funtime|a@x.test|1.2.3.4")).toBe(false);
-    expect(isLegacyUnscopedExempt("idem:deadbeef")).toBe(false);
+  it("một khoá sai trong LÔ nhiều khoá vẫn ném (`del` nhận nhiều khoá cùng lúc)", () => {
+    expect(() =>
+      assertKeysScoped("del", [permCapKey(CO_A, U_A), `perm:cap:${CO_B}:${U_B}`]),
+    ).toThrow(ValkeyKeyScopeError);
+  });
+
+  it("thông điệp lỗi KHÔNG rò định danh nhúng trong khoá (khoá `rl:` chứa email)", () => {
+    const email = "nguoi-that@x.test";
+    let message = "";
+    try {
+      assertKeysScoped("incr", [`rl:ip:funtime|${email}|1.2.3.4`]);
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toContain("namespace='rl'");
+    expect(message).not.toContain(email);
+    expect(message).not.toContain("funtime");
+  });
+
+  it("cổng CHỈ sống ở NODE_ENV='test' — production KHÔNG được bảo vệ (hệ quả đã ghi ở KI-067)", () => {
+    const prev = process.env.NODE_ENV;
+    try {
+      process.env.NODE_ENV = "production";
+      expect(() => assertKeysScoped("get", ["perm:cap:co-x:user-x"])).not.toThrow();
+    } finally {
+      if (prev === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = prev;
+    }
   });
 });
 

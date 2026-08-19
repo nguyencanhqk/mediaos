@@ -1,6 +1,6 @@
 import { Injectable, Optional } from "@nestjs/common";
 import { ValkeyService } from "../permission/valkey.service";
-import { legacyReplayKey, replayKey, type ReplayMarker } from "../common/valkey/valkey-key";
+import { replayKey, type ReplayMarker } from "../common/valkey/valkey-key";
 
 interface MemEntry {
   expiresAtMs: number;
@@ -20,18 +20,12 @@ const DEFAULT_TTL_SEC = 600;
  *   - Valkey TẮT (no URL) → `setNx` null → fallback `Map` in-memory (single-instance, reset khi restart).
  * KHÔNG fail-open: mất Valkey thì hạ về memory chứ KHÔNG bỏ qua replay-guard (đây là control an ninh, BẤT BIẾN).
  *
- * ══ ĐỌC KÉP + GHI KÉP — ĐÚNG MỘT CHU KỲ DEPLOY (S10-FND-VALKEYSCOPE-1) ══════════════════════════════
- * Việc thêm `envScope` vào tên khoá làm MỌI marker cũ thành mồ côi. Với marker single-use, "mồ côi"
- * KHÔNG vô hại như cache:
- *   · CHIỀU TIẾN — một challenge JWT đã tiêu thụ TRƯỚC deploy sẽ claim LẠI được sau deploy (khoá mới
- *     chưa từng được ghi) trong phần đời còn lại của token ⇒ hở tính single-use của bước-2 2FA.
- *   · CHIỀU LÙI — nếu chỉ ghi khoá MỚI thì sau khi rollback, mọi marker tiêu thụ trong cửa sổ chạy bản
- *     mới cũng sống lại y hệt (bản cũ chỉ đọc khoá cũ).
- * Vì thế ở chu kỳ này `claim()` ĐỌC và GHI cả hai hình dạng. Cả hai đường đi qua `valkey-key.ts` (khoá
- * cũ nằm trong miễn trừ tường minh của cổng runtime, KHÔNG phải một literal dựng tại chỗ).
- *
- * ⛔ Giá phải trả: mỗi lần claim tốn 2 round-trip Valkey trên đường 2FA. Chấp nhận có chủ ý — không phải
- * lỗi hiệu năng để ai đó "tối ưu" bằng cách bỏ một vế đi. Việc gỡ đã seed thành `S10-FND-VALKEYSCOPE-2`.
+ * ══ CHU KỲ CHUYỂN TIẾP ĐÃ GỠ 19/08/2026 (S10-FND-VALKEYSCOPE-2) ═════════════════════════════════════
+ * Từ 18/08 tới 19/08, `claim()` ĐỌC + GHI cả hình dạng khoá cũ (không envScope) để marker tiêu thụ
+ * quanh mốc deploy không sống lại theo cả hai chiều. Sau khi đo trên Valkey PROD `--scan --pattern
+ * 'replay:2fa-jti:*'` = 0 dòng, vế legacy ĐÃ XOÁ: còn đúng MỘT `setNx` trên khoá đã scoped.
+ * ⛔ ĐỪNG thêm lại một vế ghi thứ hai không mang envScope — bốn môi trường dùng chung một Valkey db0
+ * (KI-067), khoá không scoped là đường để môi trường này tiêu marker của môi trường kia.
  *
  * Mirror LoginRateLimiter (Valkey-first, memory-fallback) để hành vi nhất quán + test không cần Valkey.
  */
@@ -56,18 +50,10 @@ export class ReplayGuardService {
     const key = replayKey(marker, rest);
 
     if (this.valkey?.isEnabled() === true) {
-      // Thứ tự mới-trước-legacy-sau là CỐ Ý: khoá mới là nguồn sự thật của chu kỳ hiện tại.
-      const newRes = await this.valkey.setNx(key, "1", ttlSec);
-      const legacyRes = await this.valkey.setNx(legacyReplayKey(marker, rest), "1", ttlSec);
-
-      // BẢNG CHÂN TRỊ (ba giá trị — `null` nghĩa là Valkey rớt giữa chừng, KHÔNG phải "chưa ai giữ"):
-      //   true  + true  → lần đầu ở CẢ HAI hình dạng           ⇒ cho phép
-      //   false ở BẤT KỲ vế nào → đã bị giữ (trước hoặc sau deploy) ⇒ REPLAY, từ chối
-      //   còn lại (có null) → không kết luận được ⇒ fail-soft xuống memory, TUYỆT ĐỐI không trả true
-      // ⚠️ Nếu viết `if (newRes !== null) return newRes` như bản một-khoá trước đây thì tổ hợp
-      //    (true, null) sẽ cho qua một jti có thể đã tiêu ở khoá cũ = FAIL-OPEN.
-      if (newRes === true && legacyRes === true) return true;
-      if (newRes === false || legacyRes === false) return false;
+      const res = await this.valkey.setNx(key, "1", ttlSec);
+      // BA giá trị, không hai: `null` nghĩa là Valkey rớt giữa chừng — KHÔNG phải "chưa ai giữ". Chỉ
+      // `true`/`false` mới là kết luận; `null` rơi xuống memory bên dưới (fail-soft, KHÔNG fail-open).
+      if (res !== null) return res;
     }
 
     // Memory fallback khoá theo chuỗi ĐÃ scoped: hai môi trường chạy trên cùng một máy không được dùng

@@ -2,12 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { CachedPermissionRepository } from "./permission.cache";
 import type { CompanyRoleGrant, IPermissionRepository } from "./permission.types";
 import type { ValkeyService } from "./valkey.service";
-import {
-  currentEnvScope,
-  legacyPermCapKey,
-  permCapKey,
-  permObjKey,
-} from "../common/valkey/valkey-key";
+import { currentEnvScope, permCapKey, permObjKey } from "../common/valkey/valkey-key";
 
 /**
  * S10-FND-VALKEYSCOPE-1 — `perm:cap` là 253/288 khoá đang sống trên Valkey PROD và là cache QUYẾT ĐỊNH
@@ -65,11 +60,12 @@ describe("CachedPermissionRepository — khoá scoped + invalidate trúng đích
     expect(v.store.size).toBe(0);
   });
 
-  it("DEL kèm hình dạng khoá CŨ (chu kỳ chuyển tiếp) — rollback trong 300s không dựng lại grant trước-thu-hồi", async () => {
+  it("DEL đúng MỘT khoá — chu kỳ chuyển tiếp legacy đã gỡ (S10-FND-VALKEYSCOPE-2)", async () => {
     const v = fakeValkey();
     const repo = new CachedPermissionRepository(fakeInner(), v);
     await repo.invalidateUser(CO, U);
-    expect(v.deleted[0]).toEqual([permCapKey(CO, U), legacyPermCapKey(CO, U)]);
+    // So chuỗi THẬT chứ không `toContain`: `toContain` vẫn xanh khi vế legacy còn sót lại.
+    expect(v.deleted[0]).toEqual([permCapKey(CO, U)]);
   });
 
   it("khoá GHI mang envScope của tiến trình", async () => {
