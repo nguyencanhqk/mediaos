@@ -182,6 +182,18 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   // quyền (KI-058, lớp lỗi đã lặp 8+ lần). Thêm NGAY dù màn chưa dựng: đây chỉ là cờ HIỂN THỊ,
   // enforcement vẫn là PermissionGuard per-resource. FE gate bằng useCanExact (useCan rơi *:*).
   "view:chat-oversight",
+  // S10-QA-SECPOLICY-GATE-1 (KI-065, nửa thứ hai) — APPEND-only. `configure-security-policy:company`
+  // là is_sensitive=true (đo trên DB: catalog `permissions` cờ `t`), grant Company CHỈ company-admin
+  // (đo: `roles ⋈ role_permissions ⋈ permissions` chỉ trả đúng một hàng company-admin/ALLOW). Không có
+  // hàng wildcard `*:*` nào trong catalog ⇒ ngay cả fallback của `useCan` cũng không cứu được. Thiếu
+  // allowlist ⇒ `/auth/me` KHÔNG BAO GIỜ trả cặp này ⇒ `console/routes/settings/security-policy.tsx`
+  // LUÔN render EmptyState "không có quyền" với CHÍNH company-admin — tức sau khi vá route chết ở BE
+  // (KI-065) tính năng VẪN không dùng được từ UI. Đây là lần lặp thứ 9+ của
+  // CAP-2/USEROPS-1/EXPORT-1/NOTI-BE-3/DASH-3/IDENTITY-READ-1/IMPORT-FE-1/LEAVE-CAPALLOW-1.
+  // Enforcement KHÔNG đổi — @RequirePermission('configure-security-policy','company',{isSensitive:true})
+  // + PermissionGuard + RLS company_id vẫn là cổng THẬT; wildcard KHÔNG thuộc allowlist ⇒ KHÔNG kế thừa.
+  // Chỉ mở CỜ HIỂN THỊ.
+  "configure-security-policy:company",
 ]);
 
 /**
@@ -218,6 +230,9 @@ export const SENSITIVE_SCREEN_GATE_PAIRS: readonly string[] = [
   "import:employee",
   // CHAT — CHAT-SCREEN-007 (quản trị đọc-vượt) + 008 (nhật ký), S7-CHAT-FE-5
   "view:chat-oversight",
+  // CS-9 — console `/settings/security-policy` (S10-QA-SECPOLICY-GATE-1): cặp này gác CẢ MÀN
+  // (không có quyền ⇒ EmptyState), nên nó phải surface được qua /auth/me.
+  "configure-security-policy:company",
 ];
 
 /** Chỉ dùng cho test khoá — KHÔNG export ra ngoài module permission. */

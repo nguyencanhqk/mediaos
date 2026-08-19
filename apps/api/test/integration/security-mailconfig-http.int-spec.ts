@@ -4,25 +4,24 @@
  * (`security-policy-crud.int-spec.ts` gọi thẳng `service.updatePolicy(...)`, KHÔNG qua HTTP):
  *   GET/PATCH /settings/security-policy · GET/PUT/POST(test) /settings/mail-config.
  *
- * ĐẾM ĐÚNG ĐỘ PHỦ (đừng thổi số): file này phủ THẬT 4 route — PUT /settings/mail-config (risk 5) ·
- * POST /settings/mail-config/test (risk 5) · GET /settings/security-policy (risk 3) ·
- * GET /settings/mail-config (risk 3). `PATCH /settings/security-policy` (risk 5) **KHÔNG tính là đã
- * phủ**: nó chỉ có ca GHIM BUG 403, không có và không thể có ca ALLOW 2xx cho tới khi KI-065 được sửa.
+ * ĐẾM ĐÚNG ĐỘ PHỦ (đừng thổi số): file này phủ THẬT 5 route — `PATCH /settings/security-policy`
+ * (risk 5 — có ALLOW 2xx THẬT từ 19/08/2026, khi `S10-QA-SECPOLICY-GATE-1` đóng KI-065) ·
+ * `PUT /settings/mail-config` (risk 5) · `POST /settings/mail-config/test` (risk 5) ·
+ * `GET /settings/security-policy` (risk 3) · `GET /settings/mail-config` (risk 3).
  *
- * 🔴 PHÁT HIỆN THẬT (không phải test hỏng — hành vi hiện tại của code) — KI-065 (RELEASE-02),
- * sửa ở WO kế thừa S10-QA-ROUTEHTTP-2:
- * `PATCH /settings/security-policy` khai `@RequirePermission(..., { isSensitive: true, requiresReauth:
- * true })`. `PermissionGuard` coi route có cả hai cờ đó là "reveal-secret class" và ép
- * `needsObjectGrant = isSensitive && requiresReauth` (permission.decide.ts:93) — tức bắt buộc một
- * OBJECT-LEVEL ALLOW gắn với `resourceId` cụ thể. Nhưng route này KHÔNG có `:id` param (chính sách bảo
- * mật là 1-hàng/công ty, không phải object có id) nên `resourceId` LUÔN LÀ `null`
- * (permission.guard.ts:122) ⇒ object-tier bị bỏ qua ⇒ `needsObjectGrant` luôn true ⇒ **deny-object-required
- * VĨNH VIỄN cho MỌI actor, kể cả actor có ALLOW company-level đầy đủ**. Toàn bộ codebase KHÔNG có nơi nào
- * gán `req.reauthContext` (grep xác nhận chỉ xuất hiện ở `permission.guard.ts` + spec của chính nó) — nên
- * kể cả nếu object-tier có chạy, `isReauthValid` cũng luôn false. Route này hiện KHÔNG THỂ gọi thành công
- * qua bất kỳ đường nào. Test dưới đây GHIM đúng hành vi hiện tại (403 `deny-object-required` dù actor có
- * đủ quyền company-level) — KHÔNG tự nới guard hay tự thêm reauth wiring (ngoài phạm vi lane QA).
- * Ca ghim assert cả LÝ DO deny, không chỉ status: xem khối comment ngay trên ca đó.
+ * KI-065 ĐÃ ĐÓNG — giữ LỊCH SỬ ở đây để không ai vô tình dựng lại đúng cái bẫy đó:
+ * `PATCH /settings/security-policy` từng khai `@RequirePermission(..., { isSensitive: true,
+ * requiresReauth: true })`. `permission.decide.ts:93` tính `needsObjectGrant = isSensitive &&
+ * requiresReauth`, mà route này KHÔNG có `:id` ⇒ `resourceId` luôn `null` ⇒ object-tier bị bỏ qua ⇒
+ * **403 `deny-object-required` VĨNH VIỄN cho MỌI actor**, kể cả actor có ALLOW company-level đúng cặp.
+ * Lối thoát còn lại (cửa sổ re-auth) cũng bất khả thi: KHÔNG nơi nào trong `apps/api/src` GHI
+ * `req.reauthContext`. Bản vá = hướng (a) của KI-065 (ADR `DECISIONS-09`): **bỏ `requiresReauth` khỏi
+ * decorator, GIỮ `isSensitive`** (wildcard `*:*` vẫn KHÔNG đủ), và **không chạm một dòng nào** của
+ * permission engine ⇒ route nhạy cảm khác không hề bị nới. Ca ghim 403 cũ đã được **LẬT** sang ALLOW
+ * 2xx + DENY thật — KHÔNG nới assert, KHÔNG xoá-cho-xanh. Cổng chống tái diễn:
+ * `test/foundation/reauth-reachability.e2e-spec.ts` (route khai `requiresReauth` mà không có step-up
+ * thật ⇒ ĐỎ) + `src/security-policy/security-policy.permission-contract.spec.ts` (metadata THẬT của
+ * decorator nạp thẳng vào `decideCan`).
  *
  * GATE CỨNG `hasDb && LANE_DB` — DB cô lập (S10-QA-ROUTEHTTP-1 cần Postgres thật cho withTenant/RLS).
  */
@@ -61,14 +60,19 @@ const SMTP_PW_STORED = smtpPasswordFixture("s10qarh1-store");
 const SMTP_PW_PROBE = smtpPasswordFixture("s10qarh1-probe");
 
 describe.skipIf(!hasLaneDb)(
-  "S10-QA-ROUTEHTTP-1 — HTTP thật: security-policy + mail-config (4 route phủ thật + 1 ghim bug KI-065)",
+  "S10-QA-ROUTEHTTP-1 + S10-QA-SECPOLICY-GATE-1 — HTTP thật: security-policy + mail-config (5 route phủ thật, KI-065 đã đóng)",
   () => {
     let app: INestApplication;
     let direct: Pool;
     let A: SeededTenant;
+    // Công ty THỨ HAI — chỉ dùng cho ca cross-tenant của PATCH /settings/security-policy.
+    let B: SeededTenant;
     const companyIds: string[] = [];
     let tAdmin = "";
     let tNoPerm = "";
+    let tBAdmin = "";
+    /** id actor gọi PATCH — ca BẤT BIẾN #4 assert chính id này nằm trong exemptUserIds. */
+    let adminUserId = "";
 
     async function login(slug: string, email: string): Promise<string> {
       const res = await request(app.getHttpServer())
@@ -103,6 +107,7 @@ describe.skipIf(!hasLaneDb)(
       const emailNoPerm = `noperm-${randomUUID().slice(0, 8)}@s10qarh1.local`;
       const uAdmin = await seedUser(direct, A.companyId, emailAdmin, hash);
       const uNoPerm = await seedUser(direct, A.companyId, emailNoPerm, hash);
+      adminUserId = uAdmin;
 
       const roleAdmin = await seedRole(direct, A.companyId, `s10qarh1-admin-${uAdmin.slice(0, 8)}`);
       for (const [action, resource] of [
@@ -122,8 +127,30 @@ describe.skipIf(!hasLaneDb)(
       );
       await seedUserRole(direct, uNoPerm, roleEmpty, A.companyId);
 
+      // Công ty B (cross-tenant): admin RIÊNG, quyền RIÊNG, chỉ đủ đổi policy của CHÍNH B.
+      B = await seedCompany(direct, "s10qarh1b");
+      companyIds.push(B.companyId);
+      const emailBAdmin = `admin-${randomUUID().slice(0, 8)}@s10qarh1b.local`;
+      const uBAdmin = await seedUser(direct, B.companyId, emailBAdmin, hash);
+      const roleBAdmin = await seedRole(
+        direct,
+        B.companyId,
+        `s10qarh1b-admin-${uBAdmin.slice(0, 8)}`,
+      );
+      // Cặp đã có trong catalog TOÀN CỤC với is_sensitive=true — truyền ĐÚNG giá trị đó (helper NÉM
+      // nếu fixture đòi đổi cờ: test-fixture-stamps-global-permission-catalog).
+      const permSecPolicy = await seedPermissionCatalog(
+        direct,
+        "configure-security-policy",
+        "company",
+        true,
+      );
+      await seedRolePermission(direct, roleBAdmin, permSecPolicy, "ALLOW", "Company");
+      await seedUserRole(direct, uBAdmin, roleBAdmin, B.companyId);
+
       tAdmin = await login(A.slug, emailAdmin);
       tNoPerm = await login(A.slug, emailNoPerm);
+      tBAdmin = await login(B.slug, emailBAdmin);
     });
 
     afterAll(async () => {
@@ -148,34 +175,112 @@ describe.skipIf(!hasLaneDb)(
       expect(res.status).toBe(403);
     });
 
-    // ── PATCH /settings/security-policy — GHIM phát hiện thật (xem docblock đầu file) ──────────────
+    // ── PATCH /settings/security-policy — ĐÃ LẬT khỏi ca ghim bug (KI-065 ĐÓNG 19/08/2026) ────────
     //
-    // 🔴 ĐÂY LÀ TEST GHIM BUG, KHÔNG PHẢI TEST HÀNH VI MONG MUỐN. Bug: KI-065 (RELEASE-02) —
-    // "PATCH /settings/security-policy không thể gọi thành công qua HTTP với bất kỳ actor nào".
-    // Sửa bug là việc của WO kế thừa **S10-QA-ROUTEHTTP-2** (mang theo danh sách route risk≥5 còn nợ),
-    // KHÔNG phải của lane QA này.
+    // Bản trước của file này có ca "🔴 GHIM BUG (KI-065)" assert 403 `deny-object-required` cho MỌI
+    // actor. `S10-QA-SECPOLICY-GATE-1` vá theo hướng (a) — xem docblock đầu file + ADR `DECISIONS-09`.
+    // Ca ghim đó bị **XOÁ và thay bằng ALLOW 2xx thật**, KHÔNG phải nới assert cho khớp code
+    // (`tests-can-pin-a-hole-open`). Ca DENY dưới đây chỉ CÓ NGHĨA vì đã có ca ALLOW đứng cạnh — trước
+    // bản vá nó là xanh-RỖNG (`deny-cases-vacuous-without-allow-case`).
     //
-    // KHI AI ĐÓ VÁ GUARD/REAUTH-WIRING: test này sẽ ĐỎ. Đó là tín hiệu ĐÚNG — hãy XOÁ ca ghim này và
-    // thay bằng cặp ALLOW (actor đủ quyền ⇒ 2xx + envelope) / DENY (actor thiếu quyền ⇒ 403
-    // `deny-default`), rồi đóng KI-065. TUYỆT ĐỐI KHÔNG "sửa cho khớp" bằng cách nới assert.
-    //
-    // VÌ SAO ASSERT LÝ DO CHỨ KHÔNG CHỈ STATUS: route này 403 với MỌI actor, nên một assert chỉ đo
-    // `status === 403` sẽ vẫn xanh sau khi guard được vá một nửa (vd đổi sang `deny-reauth-required`
-    // hay `deny-default`) ⇒ ghim hỏng, bug lặng lẽ đổi hình. Ghim đúng lý do `deny-object-required`
-    // (`PermissionGuard` ném `Permission denied: ${decision.reason}`) mới bắt được thay đổi.
-    //
-    // KHÔNG có ca "DENY: actor không quyền → 403" cho route này: vì actor ĐỦ quyền cũng nhận 403,
-    // ca đó XANH RỖNG — nó không phân biệt được guard đang chặn vì thiếu quyền hay vì route chết
-    // (bẫy "deny-cases-vacuous-without-allow-case"). Route này KHÔNG được tính là "đã phủ" cho tới
-    // khi có ca ALLOW 2xx thật.
-    it("🔴 GHIM BUG (KI-065): PATCH /settings/security-policy → 403 deny-object-required NGAY CẢ VỚI actor có ALLOW company-level đầy đủ", async () => {
+    // ASSERT LÝ DO, KHÔNG CHỈ STATUS: `deny-sensitive` (thiếu grant) khác hẳn `deny-object-required`
+    // (route chết). Gắn lại `requiresReauth` ⇒ ca ALLOW ĐỎ và ca DENY đổi lý do: hai tín hiệu.
+
+    it("ALLOW: PATCH /settings/security-policy → 2xx và GHI THẬT (đọc lại bằng GET thấy giá trị mới)", async () => {
       const res = await authPatch(tAdmin, "/settings/security-policy").send({
         ipRestrictionEnabled: true,
+        allowlistCidrs: ["10.11.12.0/24"],
+      });
+      expect(res.status, JSON.stringify(res.body)).toBeLessThan(300);
+      expect(res.body.data.ipRestrictionEnabled).toBe(true);
+      expect(res.body.data.allowlistCidrs).toContain("10.11.12.0/24");
+
+      // Đọc lại qua HTTP: chứng minh đã ghi xuống DB, không phải echo body.
+      const after = await authGet(tAdmin, "/settings/security-policy");
+      expect(after.status, JSON.stringify(after.body)).toBe(200);
+      expect(after.body.data.ipRestrictionEnabled).toBe(true);
+      expect(after.body.data.allowlistCidrs).toContain("10.11.12.0/24");
+    });
+
+    it("BẤT BIẾN #4 (chống tự-khoá): actor gọi PATCH LUÔN có mặt trong exemptUserIds dù body không gửi", async () => {
+      const res = await authPatch(tAdmin, "/settings/security-policy").send({
+        timeRestrictionEnabled: true,
+      });
+      expect(res.status, JSON.stringify(res.body)).toBeLessThan(300);
+      expect(res.body.data.exemptUserIds, JSON.stringify(res.body)).toContain(adminUserId);
+    });
+
+    it("AUDIT: PATCH ghi `security_policy.updated` vào audit_logs (append-only) đúng actor + after", async () => {
+      const res = await authPatch(tAdmin, "/settings/security-policy").send({
+        autoLogoutMinutes: 45,
+      });
+      expect(res.status, JSON.stringify(res.body)).toBeLessThan(300);
+
+      const rows = await direct.query(
+        `SELECT actor_user_id, before, after FROM audit_logs
+          WHERE company_id = $1 AND action = 'security_policy.updated'
+          ORDER BY created_at DESC LIMIT 1`,
+        [A.companyId],
+      );
+      expect(rows.rows.length, "KHÔNG có hàng audit nào cho security_policy.updated").toBe(1);
+      expect(rows.rows[0].actor_user_id).toBe(adminUserId);
+      expect(rows.rows[0].after).toMatchObject({ autoLogoutMinutes: 45 });
+    });
+
+    it("DENY: PATCH /settings/security-policy thiếu quyền → 403 `deny-sensitive` (assert LÝ DO, không chỉ status)", async () => {
+      const res = await authPatch(tNoPerm, "/settings/security-policy").send({
+        ipRestrictionEnabled: false,
       });
       expect(res.status, JSON.stringify(res.body)).toBe(403);
-      // Lý do deny PHẢI là deny-object-required — xem giải thích ngay trên.
-      expect(res.body.message, JSON.stringify(res.body)).toContain("deny-object-required");
-      expect(res.body.error?.message, JSON.stringify(res.body)).toContain("deny-object-required");
+      expect(res.body.message, JSON.stringify(res.body)).toContain("deny-sensitive");
+      // Chốt ngược: KHÔNG được là `deny-object-required` — lý do đó nghĩa là route chết trở lại.
+      expect(res.body.message, JSON.stringify(res.body)).not.toContain("deny-object-required");
+    });
+
+    it("CỜ HIỂN THỊ (nửa thứ hai của KI-065): /auth/me trả `configure-security-policy:company` cho actor có grant", async () => {
+      // Vá route ở BE mà quên allowlist thì màn console `settings/security-policy` VẪN render EmptyState
+      // "không có quyền" với chính company-admin — cặp is_sensitive bị `getCapabilities()` lọc sạch, chỉ
+      // `SENSITIVE_CAPABILITY_ALLOWLIST` mới surface (lớp lỗi capability-allowlist-hides-admin-screens,
+      // đã lặp 9+ lần). Đo ở đây bằng CHÍNH /auth/me thay vì tin vào hằng số trong mã.
+      const me = await authGet(tAdmin, "/auth/me");
+      expect(me.status, JSON.stringify(me.body)).toBe(200);
+      const caps = me.body.data.capabilities as Record<string, boolean>;
+      expect(caps["configure-security-policy:company"], JSON.stringify(caps)).toBe(true);
+
+      // Actor KHÔNG có grant thì cặp phải VẮNG (allowlist là cờ hiển thị grant-bound, không phải cờ bật-cho-mọi-người).
+      const meNoPerm = await authGet(tNoPerm, "/auth/me");
+      expect(meNoPerm.status).toBe(200);
+      expect(
+        (meNoPerm.body.data.capabilities as Record<string, boolean>)[
+          "configure-security-policy:company"
+        ],
+      ).toBeUndefined();
+    });
+
+    it("CROSS-TENANT: admin công ty B PATCH → chỉ policy B đổi, policy A KHÔNG suy suyển (companyId từ JWT)", async () => {
+      // NEO TUYỆT ĐỐI trước khi so trước/sau: nếu `getPolicy` thoái hoá thành "luôn trả DEFAULT" thì
+      // `toEqual` vẫn xanh mà không chứng minh được gì (ca này phải tự đủ, không dựa vào ca chạy trước).
+      const anchor = await authPatch(tAdmin, "/settings/security-policy").send({
+        autoLogoutMinutes: 33,
+      });
+      expect(anchor.status, JSON.stringify(anchor.body)).toBeLessThan(300);
+
+      const beforeA = await authGet(tAdmin, "/settings/security-policy");
+      expect(beforeA.status, JSON.stringify(beforeA.body)).toBe(200);
+      expect(beforeA.body.data.autoLogoutMinutes, "neo hỏng ⇒ phép so trước/sau vô nghĩa").toBe(33);
+
+      const patchB = await authPatch(tBAdmin, "/settings/security-policy").send({
+        autoLogoutMinutes: 7,
+        ipRestrictionEnabled: false,
+      });
+      expect(patchB.status, JSON.stringify(patchB.body)).toBeLessThan(300);
+      expect(patchB.body.data.autoLogoutMinutes).toBe(7);
+
+      // So TOÀN BỘ DTO của A trước/sau — mạnh hơn so từng field (bắt cả rò field không ai nghĩ tới).
+      const afterA = await authGet(tAdmin, "/settings/security-policy");
+      expect(afterA.status, JSON.stringify(afterA.body)).toBe(200);
+      expect(afterA.body.data.autoLogoutMinutes).toBe(33); // KHÔNG bị ghi đè bởi giá trị 7 của B
+      expect(afterA.body.data).toEqual(beforeA.body.data);
     });
 
     // ── PUT /settings/mail-config ─────────────────────────────────────────

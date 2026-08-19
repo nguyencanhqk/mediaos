@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ShieldCheck } from "lucide-react";
 import { Button, EmptyState, Input } from "@mediaos/ui";
-import { useCan } from "@mediaos/web-core";
+import { useCanExact } from "@mediaos/web-core";
 import { securityPolicyApi } from "@/lib/security-policy-api";
 import type {
   SecurityPolicyDto,
@@ -30,7 +30,10 @@ function serverStateKey(p: SecurityPolicyDto): string {
 export function SecurityPolicyPage() {
   const { t } = useTranslation("security-policy");
   const qc = useQueryClient();
-  const canConfigure = useCan("configure-security-policy", "company");
+  // useCanExact (KHÔNG phải useCan): cặp `configure-security-policy:company` là is_sensitive ⇒ backend
+  // KHÔNG bao giờ thoả nó bằng grant wildcard. `useCan` rơi xuống `*:*` nên sẽ MỞ màn cho một actor mà
+  // BE chắc chắn trả 403 `deny-sensitive` — FE-permit/BE-403, lỗi khó hiểu hơn là bị chặn thẳng.
+  const canConfigure = useCanExact("configure-security-policy", "company");
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["settings", "security-policy"],
