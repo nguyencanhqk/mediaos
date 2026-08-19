@@ -12724,7 +12724,7 @@ export const backlog = [
     title:
       "Gỡ chu kỳ chuyển tiếp của S10-FND-VALKEYSCOPE-1: đọc/ghi kép `replay:*`, DEL khoá `perm:*` legacy, và miễn trừ legacy của cổng runtime",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/common/valkey/valkey-key.ts",
       "apps/api/src/common/valkey/valkey-key.spec.ts",
@@ -12752,6 +12752,11 @@ export const backlog = [
     ],
     notes: [
       "⚠️ Gỡ SỚM = mở lại đúng cửa sổ mà S10-FND-VALKEYSCOPE-1 đóng: marker single-use của bước-2 2FA claim lại được, và rollback dựng lại grant trước-thu-hồi trong TTL 300s. Điều kiện mở ở done_when #1 là bắt buộc, không phải hình thức.",
+      "ĐÓNG 19/08/2026. SỐ ĐO MỞ CỔNG (07:35Z, Valkey máy PROD, sau khi bản mang S10-FND-VALKEYSCOPE-1 chạy trọn một chu kỳ deploy — API PROD build `209a3954` lúc 06:57Z): `--scan --pattern 'replay:2fa-jti:*'` = 0 dòng · `--scan --pattern 'perm:cap:*'` = 0 dòng · `INFO keyspace` = db0 keys=1 (khoá còn lại là `rl:forgot:…:cnt` rác của một lượt test cũ, hình dạng CŨ, TTL=-1).",
+      "⚠️ ĐỌC SỐ ĐO CHO ĐÚNG (đã ghi cả vào KI-067): db0 gần như RỖNG lúc đo, nên '0 dòng legacy' chứng minh KHÔNG CÒN khoá cũ nào đang sống, chứ không chứng minh 'lưu lượng đã chuyển hết sang khoá scoped'. Với `replay:` (TTL 600s) và `perm:cap:` (TTL 300s) hai điều đó tương đương — mọi khoá cũ đã hết hạn từ lâu. Với họ TTL dài hơn thì lập luận này KHÔNG dùng lại được.",
+      "GIÁ ĐÃ TRẢ XONG: `ReplayGuard.claim` còn ĐÚNG 1 lượt `setNx` (hết 2 round-trip trên đường bước-2 2FA); `invalidateUser` DEL đúng 1 khoá; `assertKeysScoped` không còn nhánh miễn trừ nào.",
+      "🔴 HỆ QUẢ ROLLBACK từ 19/08: lùi về bản ≥18/08 vẫn an toàn (bản đó đọc khoá scoped TRƯỚC). Lùi về bản TRƯỚC 18/08 thì không còn vế ghi-kép che ⇒ marker 2FA tiêu thụ sau 19/08 SỐNG LẠI ở bản cũ. Đã ghi thành thủ tục ở KI-067 §Chu kỳ chuyển tiếp.",
+      "Ca test chứng minh cửa hẹp đã đóng là NGHỊCH ĐẢO của bộ ca cũ: `valkey-key.spec.ts` › 'cổng runtime: cửa hẹp legacy đã ĐÓNG' đo THẲNG trên `assertKeysScoped` (hàm ValkeyService gọi ở 8 chỗ), gồm cả ca lô-nhiều-khoá của `del`, ca thông điệp lỗi KHÔNG rò email nhúng trong khoá `rl:`, và ca ghim rằng cổng CHỈ sống ở NODE_ENV=test (production vẫn KHÔNG được bảo vệ — KI-067).",
     ],
   },
 

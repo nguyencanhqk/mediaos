@@ -1,30 +1,29 @@
 import { describe, expect, it } from "vitest";
 import { ReplayGuardService } from "./replay-guard.service";
 import type { ValkeyService } from "../permission/valkey.service";
-import { currentEnvScope, legacyReplayKey, replayKey } from "../common/valkey/valkey-key";
+import { currentEnvScope, replayKey } from "../common/valkey/valkey-key";
 
 /**
  * Fake Valkey với `setNx` nguyên tử mô phỏng (Map). `enabled` bật/tắt; `outage` ép setNx trả null (rớt
- * giữa chừng) để test fallback memory KHÔNG fail-open. `outageFor` ép null CHỈ cho những khoá khớp —
- * dùng để dựng đúng tổ hợp (mới=true, legacy=null) của bảng chân trị ghi-kép.
+ * giữa chừng) để test fallback memory KHÔNG fail-open. `setNxCalls` ghi lại TỪNG lượt gọi — sau
+ * S10-FND-VALKEYSCOPE-2, số lượt chính là bằng chứng "một khoá, một round-trip".
  */
-function fakeValkey(
-  opts: { enabled?: boolean; outage?: boolean; outageFor?: RegExp; seed?: string[] } = {},
-) {
+function fakeValkey(opts: { enabled?: boolean; outage?: boolean } = {}) {
   const enabled = opts.enabled ?? true;
   const store = new Map<string, string>();
-  for (const k of opts.seed ?? []) store.set(k, "1");
+  const setNxCalls: string[] = [];
   return {
     store,
+    setNxCalls,
     isEnabled: () => enabled,
     async setNx(key: string, val: string): Promise<boolean | null> {
+      setNxCalls.push(key);
       if (!enabled || opts.outage) return null;
-      if (opts.outageFor?.test(key)) return null;
       if (store.has(key)) return false; // đã giữ → replay
       store.set(key, val);
       return true;
     },
-  } as unknown as ValkeyService & { store: Map<string, string> };
+  } as unknown as ValkeyService & { store: Map<string, string>; setNxCalls: string[] };
 }
 
 describe("ReplayGuardService (single-use fail-closed)", () => {
@@ -72,39 +71,28 @@ describe("ReplayGuardService (single-use fail-closed)", () => {
   });
 
   /**
-   * S10-FND-VALKEYSCOPE-1 — chu kỳ chuyển tiếp. Ba ca dưới là lý do đường đọc-kép/ghi-kép tồn tại; xoá
-   * một trong ba là mở lại đúng cửa sổ mà nó đóng.
+   * S10-FND-VALKEYSCOPE-2 — chu kỳ chuyển tiếp đọc-kép/ghi-kép ĐÃ GỠ. Ba ca dưới đóng đinh chiều NGƯỢC
+   * với bộ ca của S10-FND-VALKEYSCOPE-1: còn ĐÚNG MỘT khoá, khoá đó mang envScope, và mỗi claim chỉ tốn
+   * MỘT round-trip.
    */
-  describe("đọc kép + ghi kép (một chu kỳ deploy)", () => {
-    it("khoá MỚI mang envScope, và mỗi lần claim ghi CẢ hai hình dạng (rollback đối xứng)", async () => {
+  describe("sau khi gỡ chu kỳ chuyển tiếp: đúng MỘT khoá scoped", () => {
+    it("claim ghi ĐÚNG MỘT khoá, và đó là khoá mang envScope", async () => {
       const v = fakeValkey({ enabled: true });
       const g = new ReplayGuardService(v);
       expect(await g.claim("2fa-jti", "j1", 600)).toBe(true);
 
       const scoped = replayKey("2fa-jti", "j1");
       expect(scoped).toContain(currentEnvScope());
-      expect(v.store.has(scoped)).toBe(true);
-      // Vế legacy: thiếu nó thì rollback làm mọi marker tiêu thụ sau deploy sống lại.
-      expect(v.store.has(legacyReplayKey("2fa-jti", "j1"))).toBe(true);
+      // Đỏ với 2 phần tử = vế ghi-kép legacy còn sống ⇒ khoá KHÔNG scoped vẫn bơm vào Valkey dùng
+      // chung của bốn môi trường, đúng cái lỗ KI-067 đã bịt.
+      expect([...v.store.keys()]).toEqual([scoped]);
     });
 
-    it("CHIỀU TIẾN: jti đã tiêu ở hình dạng CŨ (trước deploy) vẫn bị chặn sau deploy", async () => {
-      const v = fakeValkey({ enabled: true, seed: [legacyReplayKey("2fa-jti", "pre")] });
+    it("mỗi claim tốn ĐÚNG MỘT lượt setNx (hết 2 round-trip trên đường bước-2 2FA)", async () => {
+      const v = fakeValkey({ enabled: true });
       const g = new ReplayGuardService(v);
-      // Khoá mới còn trống, nhưng legacy đã bị giữ ⇒ replay. Nếu ca này đỏ: một challenge JWT đã dùng
-      // trước deploy verify được lần thứ hai trong phần đời còn lại của token.
-      expect(await g.claim("2fa-jti", "pre", 600)).toBe(false);
-    });
-
-    it("BẢNG CHÂN TRỊ: (mới=true, legacy=null) KHÔNG được trả true thẳng — phải hạ về memory", async () => {
-      const v = fakeValkey({ enabled: true, outageFor: /^replay:(2fa-jti|totp-step):/ });
-      const g = new ReplayGuardService(v);
-      const now = 3_000_000;
-      // Lần đầu: memory chưa có → true (fail-soft, giống mọi outage khác).
-      expect(await g.claim("2fa-jti", "half", 600, now)).toBe(true);
-      // Lần hai: nếu code trả thẳng `newRes` thì đây sẽ là… true lần nữa? Không — khoá mới đã bị giữ nên
-      // newRes=false ⇒ false. Ca thật sự đóng đinh nằm ở memory: cùng marker, cùng ms, phải là false.
-      expect(await g.claim("2fa-jti", "half", 600, now)).toBe(false);
+      await g.claim("2fa-jti", "j2", 600);
+      expect(v.setNxCalls).toEqual([replayKey("2fa-jti", "j2")]);
     });
 
     it("memory fallback khoá theo chuỗi ĐÃ scoped (hai môi trường chung máy không dùng chung ô nhớ)", async () => {

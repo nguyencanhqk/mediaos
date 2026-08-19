@@ -939,11 +939,36 @@ sót; thứ chặn là `valkey-key-census.spec.ts` (census tĩnh) + cổng test,
 
 | Họ khoá | TTL | Sau deploy |
 | --- | --- | --- |
-| `perm:cap` · `perm:obj` | 300s | Mồ côi. **KHÔNG tự lành hoàn toàn:** `invalidateUser` DEL **kèm hình dạng cũ** đúng một chu kỳ, nếu không thì thu hồi quyền trong cửa sổ 300s không chạm khoá cũ ⇒ rollback dựng lại grant trước-thu-hồi |
+| `perm:cap` · `perm:obj` | 300s | Mồ côi. **KHÔNG tự lành hoàn toàn:** `invalidateUser` DEL **kèm hình dạng cũ** đúng một chu kỳ, nếu không thì thu hồi quyền trong cửa sổ 300s không chạm khoá cũ ⇒ rollback dựng lại grant trước-thu-hồi. **Vế legacy đã GỠ 19/08/2026** — xem *Chu kỳ chuyển tiếp* bên dưới |
 | `idem:*` | 900s | Mồ côi. **Không phải "tự lành"**: client retry vắt qua mốc deploy sẽ **CHẠY THẬT lần hai** (đẻ bản ghi trùng), không phải phát lại |
-| `replay:*` | 600s | Mồ côi ⇒ marker single-use của 2FA sống lại. Vì thế `ReplayGuard` **đọc kép + ghi kép** đúng một chu kỳ |
+| `replay:*` | 600s | Mồ côi ⇒ marker single-use của 2FA sống lại. Vì thế `ReplayGuard` **đọc kép + ghi kép** đúng một chu kỳ. **Đã GỠ 19/08/2026** — xem *Chu kỳ chuyển tiếp* bên dưới |
 | `rl:*:lock` | `LOGIN_LOCKOUT_SEC` | Mồ côi và **không hàm nào xoá được** ⇒ **mọi lockout đang có bị VÔ HIỆU ngay lúc deploy**. Nới lỏng an ninh trong một cửa sổ ngắn, CÓ CHỦ Ý |
 | `me:training:*` | 60s | Tự lành |
+
+#### Chu kỳ chuyển tiếp — **ĐÃ KẾT THÚC 2026-08-19** (`S10-FND-VALKEYSCOPE-2`)
+
+Ba workaround land cùng `S10-FND-VALKEYSCOPE-1` chỉ có nghĩa quanh mốc deploy 18/08; nay đã gỡ hết:
+`ReplayGuard.claim` ghi kép `replay:*`, `invalidateUser` DEL kèm `perm:cap:*` cũ, và miễn trừ legacy
+của cổng runtime. **Số đo mở cổng** (19/08/2026 07:35Z, Valkey của máy PROD, sau khi bản mang
+`S10-FND-VALKEYSCOPE-1` đã chạy trọn một chu kỳ deploy — API PROD build `209a3954` lúc 06:57Z):
+
+```text
+--scan --pattern 'replay:2fa-jti:*'  => 0 dòng     (hình dạng CŨ, không envScope)
+--scan --pattern 'perm:cap:*'        => 0 dòng     (hình dạng CŨ, không envScope)
+INFO keyspace                        => db0: keys=1   ← chỉ còn 1 khoá `rl:forgot:…:cnt` rác của test
+```
+
+⚠️ **Đọc số đo cho đúng:** db0 gần như RỖNG lúc đo, nên "0 dòng legacy" chứng minh *không còn khoá cũ
+nào đang sống*, KHÔNG chứng minh "lưu lượng đã chuyển hết sang khoá scoped". Với `replay:` (TTL 600s)
+và `perm:cap:` (TTL 300s) thì hai điều đó tương đương — mọi khoá cũ đã hết hạn từ lâu.
+
+**Hệ quả cho ROLLBACK kể từ 19/08:** lùi về bản **≥ 18/08** vẫn an toàn (bản đó đọc khoá scoped trước).
+Lùi về bản **trước 18/08** thì không còn vế ghi-kép che nữa: marker 2FA tiêu thụ sau 19/08 sẽ **sống
+lại** ở bản cũ. Nếu buộc phải lùi xa như vậy, coi mọi challenge token đang lưu hành là **đã hở** và
+hạ `LOGIN_LOCKOUT_SEC`/thu hồi phiên theo thủ tục sự cố.
+
+Từ đây khoá `replay:`/`perm:` **chưa scoped bị NÉM** ở cổng runtime như mọi họ khác — không còn cửa
+hẹp nào (ca test: `apps/api/src/common/valkey/valkey-key.spec.ts` › *cổng runtime: cửa hẹp legacy đã ĐÓNG*).
 
 #### Lệnh vận hành (chạy sau deploy — đừng để người deploy tự nghĩ ra)
 
@@ -969,7 +994,8 @@ docker exec mediaos-valkey valkey-cli --scan --pattern 'rl:*' | grep -v 'product
 #### Rollback
 
 Lùi về bản cũ an toàn về DỮ LIỆU nhưng: (a) khoá **mới** thành mồ côi và lockout bị reset **LẦN HAI**;
-(b) marker 2FA vẫn an toàn nhờ **ghi kép** (bản cũ đọc được khoá cũ đã ghi). Dọn chiều ngược bằng đúng
+(b) marker 2FA vẫn an toàn nhờ **ghi kép** (bản cũ đọc được khoá cũ đã ghi) — **chỉ đúng cho bản lùi
+≥ 18/08; từ 19/08 vế ghi kép đã gỡ**, xem *Chu kỳ chuyển tiếp* ở trên. Dọn chiều ngược bằng đúng
 các lệnh trên với pattern `'rl:production:mediaos:*'`.
 
 #### Thủ tục MỞ KHOÁ KHẨN CẤP (thay bản cũ trong notes `S10-AUTH-IPTRUST-1`)
