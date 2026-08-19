@@ -224,17 +224,19 @@ export function measureRouteHttpCoverage(
 }
 
 /**
- * RATCHET — đo THẬT ngày 14/08/2026, sau khi lane FIX-ROUTEHTTP-A-TOPRISK land (route risk 7/7/6
- * được phủ): coveredCount=370/499 (74.1%), uncovered route risk>=RISK_GATE_THRESHOLD=12.
+ * RATCHET — đo THẬT ngày 18/08/2026, sau khi **S10-QA-ROUTEHTTP-2** land (12 route risk=5 còn nợ đều
+ * có test HTTP thật): coveredCount=383/499 (76.8%), uncovered route risk>=RISK_GATE_THRESHOLD = **0**.
+ * Mốc trước: 370/499 (74.1%) với 12 route risk cao chưa phủ (S10-QA-ROUTEHTTP-1, 14/08/2026).
  * Nguồn: `npx vitest run test/foundation/route-http-coverage.e2e-spec.ts` (console log của test
  * "IN BẢNG" bên dưới) — KHÔNG ước lượng.
  *
+ * MAX = 0 nghĩa là: thêm BẤT KỲ route risk>=5 nào mà không có test HTTP thật ⇒ CI ĐỎ ngay ở PR đó.
  * Ratchet CHỈ được SIẾT xuống (MAX giảm / MIN tăng) khi lane sau land thêm test HTTP thật làm độ
  * phủ tăng thật. NỚI ngưỡng lên (MAX tăng / MIN giảm) PHẢI có WO + lý do bằng văn bản kèm theo commit
  * sửa hằng số này — KHÔNG tự nới cho xanh khi có route mới xuất hiện hoặc test HTTP bị xoá.
  */
-const MAX_UNCOVERED_HIGH_RISK = 12;
-const MIN_COVERED_COUNT = 370;
+const MAX_UNCOVERED_HIGH_RISK = 0;
+const MIN_COVERED_COUNT = 383;
 
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;
@@ -311,13 +313,22 @@ describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp l�
 
   it("non-vacuous: ratchet trên không được tự xanh khi phép đo hỏng và trả mảng rỗng", () => {
     // Nếu measureRouteHttpCoverage() hỏng (vd routes=[] hoặc coverage=[]), uncoveredHighRisk sẽ là
-    // mảng rỗng và assert "<=" ở test RATCHET phía trên xanh giả (0 <= MAX luôn đúng). Ràng buộc này
-    // đòi coverage[] phải khác rỗng VÀ phải có ít nhất một route rủi ro cao thật sự chưa phủ — khớp
-    // đúng thực trạng đo được — để cổng phía trên có ý nghĩa, không phải tautology.
+    // mảng rỗng và assert "<=" ở test RATCHET phía trên xanh giả (0 <= MAX luôn đúng).
+    //
+    // ⚠️ MỐC 18/08/2026 (S10-QA-ROUTEHTTP-2): chốt chặn CŨ là "phải còn ÍT NHẤT một route rủi ro cao
+    // CHƯA phủ". Nó đúng khi còn nợ, nhưng nợ đã trả hết (uncovered risk>=5 = 0) nên chốt đó tự đỏ và
+    // sẽ ép người sau NỚI ratchet để làm nó xanh — hỏng đúng thứ nó định bảo vệ. Neo lại vào thứ KHÔNG
+    // phụ thuộc độ phủ: DÂN SỐ route rủi ro cao phải khác rỗng, và ít nhất một trong số đó phải được
+    // NHẬN là covered. Census hỏng (rỗng/không khớp bằng chứng nào) ⇒ cả hai vế sập ⇒ ĐỎ.
     expect(coverage.length).toBeGreaterThan(0);
-    const uncoveredHighRisk = coverage.filter(
-      (c) => !c.covered && c.riskScore >= RISK_GATE_THRESHOLD,
-    );
-    expect(uncoveredHighRisk.length).toBeGreaterThan(0);
+    const highRisk = coverage.filter((c) => c.riskScore >= RISK_GATE_THRESHOLD);
+    expect(
+      highRisk.length,
+      "census không thấy route rủi ro cao nào — phép đo hỏng",
+    ).toBeGreaterThan(0);
+    expect(
+      highRisk.some((c) => c.covered),
+      "không route rủi ro cao nào được nhận là covered — cơ chế khớp bằng chứng hỏng",
+    ).toBe(true);
   });
 });
