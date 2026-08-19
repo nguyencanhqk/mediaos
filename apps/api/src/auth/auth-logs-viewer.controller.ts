@@ -32,7 +32,7 @@ export class AuthLogsViewerController {
   @Get("login-logs")
   @RequirePermission("view", "audit-log", { isSensitive: true })
   async listLoginLogs(@Req() req: AuthenticatedRequest, @Query() query: LoginLogListQueryDto) {
-    const { data, total } = await this.viewer.listLoginLogs(req.user.companyId, query);
+    const { data, total } = await this.viewer.listLoginLogs(req.user, query);
     return paginated(data, toPagination(total, query.page, query.per_page));
   }
 
@@ -42,7 +42,7 @@ export class AuthLogsViewerController {
     @Req() req: AuthenticatedRequest,
     @Query() query: SecurityEventListQueryDto,
   ) {
-    const { data, total } = await this.viewer.listSecurityEvents(req.user.companyId, query);
+    const { data, total } = await this.viewer.listSecurityEvents(req.user, query);
     return paginated(data, toPagination(total, query.page, query.per_page));
   }
 }

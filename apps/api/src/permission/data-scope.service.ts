@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, Logger } from "@nestjs/common";
 import { and, eq, inArray, or, sql, type SQL } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import type { DataScope } from "@mediaos/contracts";
 import { employeeProfiles, users } from "../db/schema";
 import { PermissionService } from "./permission.service";
@@ -217,16 +218,43 @@ export class DataScopeService {
     // TYPECHECK at every call-site instead — loud beats silent.
     ctx: Pick<ScopeContext, "userId" | "companyId">,
   ): SQL {
+    return this.buildUserScopeConditionOn(scope, ctx, {
+      idCol: users.id,
+      companyIdCol: users.companyId,
+    });
+  }
+
+  /**
+   * S6-SEC-IDENTITY-PROJ-1 — như `buildUserScopeCondition` nhưng nhận CỘT ĐÍCH thay vì giả định bảng
+   * `users` gốc.
+   *
+   * VÌ SAO cần (plan-review vòng 1, B1): một truy vấn có thể join `users` HAI LẦN cho hai vai khác
+   * nhau. `security-event.repository.ts:74` dựng `const actor = alias(users, "sec_event_actor")` rồi
+   * chiếu `userEmail` (chủ thể sự kiện) CẠNH `actorEmail` (người gây ra sự kiện). Bản gốc hard-code
+   * `users.id`/`users.companyId`, nên vị từ nó sinh ra **chỉ nói về chủ thể**. Dùng chung MỘT vị từ
+   * cho cả hai vai thì:
+   *   • hàng có chủ thể = tôi (scope `Own`) ⇒ điều kiện đúng ⇒ **lộ email của người GÂY RA sự kiện**;
+   *   • hàng có tôi là người gây ra, chủ thể là người khác ⇒ giấu mất email của chính tôi.
+   * Cái đầu là lỗ MỚI do bản vá đẻ ra; cái sau là hồi quy allow-path. Mỗi vai một vị từ.
+   *
+   * Bản không-tham-số ở trên giữ NGUYÊN chữ ký và uỷ quyền xuống đây (expand, không sửa call-site
+   * đang chạy) — mọi ngữ nghĩa Own/Team/Department/Company/System bên dưới là MỘT bản duy nhất.
+   */
+  buildUserScopeConditionOn(
+    scope: DataScope | null,
+    ctx: Pick<ScopeContext, "userId" | "companyId">,
+    target: { idCol: PgColumn; companyIdCol: PgColumn },
+  ): SQL {
     // Tenant ALWAYS carried, exactly as buildEmployeeScopeCondition does: never a bare predicate that
     // could match-all if RLS were ever bypassed.
-    const tenant = eq(users.companyId, ctx.companyId);
+    const tenant = eq(target.companyIdCol, ctx.companyId);
     switch (scope) {
       // N=1 single-tenant MVP: System stays bounded to the current tenant.
       case "System":
       case "Company":
         return tenant;
       case "Own":
-        return and(tenant, eq(users.id, ctx.userId)) ?? sql`false`;
+        return and(tenant, eq(target.idCol, ctx.userId)) ?? sql`false`;
       default:
         // 0 rows over HTTP 200 is indistinguishable from "tenant has no users" at every layer above:
         // `getCapabilities` publishes {pair: true} WITHOUT data_scope, so `useCan()` is true and the

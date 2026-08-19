@@ -7,6 +7,8 @@ import { PermissionService } from "../../src/permission/permission.service";
 import { PermissionRepository } from "../../src/permission/permission.repository";
 import { RoleAdminService } from "../../src/permission/role-admin.service";
 import { RoleAdminRepository } from "../../src/permission/role-admin.repository";
+import { DataScopeService } from "../../src/permission/data-scope.service";
+import { DataScopeRepository } from "../../src/permission/data-scope.repository";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -84,11 +86,16 @@ describe.skipIf(!runDb)("S6-SEC-1 S0-B — role hệ thống toàn cục bất k
     // mọi test dưới đây sẽ "đỏ vì sai lý do" (Forbidden ở cổng assertCan, chứ không phải vì guard
     // system-role) — tức xanh-giả ngược: ta tưởng đã chặn, thật ra chưa chạm tới chỗ cần kiểm.
     const dbsvc = new DatabaseService();
+    const permissionService = new PermissionService(new PermissionRepository(dbsvc));
     svc = new RoleAdminService(
       dbsvc,
-      new PermissionService(new PermissionRepository(dbsvc)),
+      permissionService,
       new AuditService(),
       new RoleAdminRepository(),
+      // S6-SEC-IDENTITY-PROJ-1 (KI-053): `dataScope` là tham số BẮT BUỘC, không optional-với-default —
+      // spec dựng service bằng tay phải truyền instance THẬT, nếu không nó chạy với resolver rỗng và
+      // xanh trên đúng nhánh mà bản vá bảo vệ.
+      new DataScopeService(permissionService, new DataScopeRepository(dbsvc)),
     );
   });
 

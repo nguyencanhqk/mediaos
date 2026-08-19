@@ -20,12 +20,14 @@ import type {
   RoleWriteResultDto,
   UpdateRoleRequest,
 } from "@mediaos/contracts";
-import type { Role } from "../db/schema";
+import { users, type Role } from "../db/schema";
 import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { PermissionService } from "./permission.service";
 import { PermissionAdminRepository } from "./permission-admin.repository";
 import { RoleAdminRepository } from "./role-admin.repository";
+import { DataScopeService } from "./data-scope.service";
+import { fromScope } from "./identity-projection";
 import {
   pgErrorCode,
   pgErrorField,
@@ -91,6 +93,10 @@ export class RoleAdminService {
     private readonly permissionService: PermissionService,
     private readonly audit: AuditService,
     private readonly repo: RoleAdminRepository,
+    // S6-SEC-IDENTITY-PROJ-1 (KI-053): BẮT BUỘC, KHÔNG optional-với-default như `permissionCatalog`
+    // bên dưới. Một default ở đây nghĩa là spec nào dựng service bằng tay sẽ lặng lẽ chạy với một
+    // resolver rỗng — tức test xanh trên đúng nhánh mà bản vá bảo vệ. Vỡ TYPECHECK ồn ào hơn.
+    private readonly dataScope: DataScopeService,
     // S2-AUTH-PERMRULE-1: đọc catalog permission (bung luật). Cùng PermissionModule → acyclic. Optional-với-
     // default để int-spec cũ dựng RoleAdminService bằng tay (4 arg) KHÔNG vỡ; DI luôn truyền instance thật.
     private readonly permissionCatalog: PermissionAdminRepository = new PermissionAdminRepository(),
@@ -105,12 +111,43 @@ export class RoleAdminService {
    */
   async listMembers(actor: RequestUser, roleId: string): Promise<RoleMemberListDto> {
     await this.assertCan(actor, "view", "user", false);
+    // S6-SEC-IDENTITY-PROJ-1 (KI-053) — `assertCan` ở trên chỉ trả lời CÓ/KHÔNG có cặp `view:user`;
+    // nó KHÔNG đọc `data_scope`. Trước bản vá, một vai giữ `view:user@Own` qua được assert rồi nhận
+    // TRỌN email + họ tên của mọi thành viên role. Đây là gốc chung của N-1/N-1c/N-1d/N-1e.
+    //
+    // `resolveOrNull` chứ không `resolveAndAssert`: cặp đã được assert ngay trên, nên `null` ở đây
+    // KHÔNG có nghĩa "không được vào route" mà là "trình phân giải scope không đồng ý với `can()`"
+    // (vd chỉ có wildcard). Biến việc đó thành 403 cả route là siết quá tay và làm hỏng đường ALLOW;
+    // fail-closed ĐÚNG mức là bỏ cột danh tính, và để lại vết để còn chẩn được.
+    const scope = await this.dataScope.resolveOrNull(actor.id, actor.companyId, "view", "user");
+    if (scope === null) {
+      this.logger.warn(
+        "role members: có cặp view:user nhưng không phân giải được data_scope → BỎ cột danh tính mọi hàng",
+        { userId: actor.id, companyId: actor.companyId, roleId },
+      );
+    }
+    const identity = fromScope(
+      scope === null
+        ? null
+        : this.dataScope.buildUserScopeConditionOn(
+            scope,
+            { userId: actor.id, companyId: actor.companyId },
+            { idCol: users.id, companyIdCol: users.companyId },
+          ),
+      "identity-gated",
+      "GET /auth/roles/:id/members — cột danh tính đi theo data_scope của cặp danh bạ view:user (KI-053)",
+    );
     try {
       return await this.db.withTenant(actor.companyId, async (tx) => {
         if (!(await this.repo.findRoleByIdTx(tx, roleId))) {
           throw new NotFoundException("Role not found");
         }
-        const members = await this.repo.listRoleMembersTx(tx, actor.companyId, roleId);
+        const rows = await this.repo.listRoleMembersTx(tx, actor.companyId, roleId, identity);
+        // BỎ HẲN khoá khi ngoài scope — `roleMemberSchema.email` khai `.optional()`, KHÔNG `.nullable()`.
+        // Và `identityInScope` là siêu dữ liệu phân quyền của repo: KHÔNG được lọt ra response.
+        const members = rows.map(({ identityInScope, email, fullName, ...rest }) =>
+          identityInScope ? { ...rest, email: email ?? undefined, fullName } : rest,
+        );
         return { members };
       });
     } catch (err) {

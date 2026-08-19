@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { type TenantTx } from "../db/db.service";
+import { identityColumns, type IdentityGrant } from "./identity-projection";
 import {
   permissions,
   roles,
@@ -142,21 +143,29 @@ export class RoleAdminRepository {
     tx: TenantTx,
     companyId: string,
     roleId: string,
+    // S6-SEC-IDENTITY-PROJ-1 (KI-053) — BẮT BUỘC, không giá trị mặc định. Một tham số optional ở đây
+    // nghĩa là caller quên truyền thì lặng lẽ quay về hành vi rò cũ (cùng lý do đã ghi ở
+    // `org.repository.listEmployees`). Kiểu có brand ⇒ không dựng được bằng object literal.
+    identity: IdentityGrant,
   ): Promise<
     Array<{
       userId: string;
-      email: string;
+      identityInScope: boolean;
+      email: string | null;
       fullName: string | null;
       status: string;
       expiresAt: Date | null;
       grantedAt: Date;
     }>
   > {
+    const identityCols = identityColumns(identity, {
+      email: users.email,
+      fullName: users.fullName,
+    });
     return tx
       .select({
         userId: users.id,
-        email: sql<string>`${users.email}::text`,
-        fullName: users.fullName,
+        ...identityCols,
         status: users.status,
         expiresAt: userRoles.expiresAt,
         grantedAt: userRoles.createdAt,
@@ -172,7 +181,12 @@ export class RoleAdminRepository {
           isNull(users.deletedAt),
         ),
       )
-      .orderBy(users.email);
+      // ⚠️ SẮP theo CỘT ĐÃ CHE, không theo `users.email` gốc. Che giá trị mà vẫn ORDER BY cột gốc thì
+      // THỨ TỰ HÀNG tiết lộ thứ tự alphabet của thứ vừa che — bản vá tự biến mình thành oracle.
+      // Với actor Company-scope (mọi vai giữ `view:user` hôm nay) biểu thức này bằng đúng cột gốc nên
+      // thứ tự hiển thị KHÔNG đổi; ngoài scope thì mọi hàng bằng null và gom về một chỗ.
+      // `users.id` là khoá phá hoà, giữ phân trang tất định.
+      .orderBy(identityCols.email, users.id);
   }
 
   /**
@@ -267,9 +281,7 @@ export class RoleAdminRepository {
     const [row] = await tx
       .update(roles)
       .set({ deletedAt: new Date() })
-      .where(
-        and(eq(roles.id, roleId), eq(roles.companyId, companyId), isNull(roles.deletedAt)),
-      )
+      .where(and(eq(roles.id, roleId), eq(roles.companyId, companyId), isNull(roles.deletedAt)))
       .returning();
     return row;
   }

@@ -296,9 +296,20 @@ export type AuthLogSortOrder = (typeof AUTH_LOG_SORT_ORDERS)[number];
  * Tham chiếu user RÚT GỌN nhúng trong log-item (login-log.user · security-event.user/actor).
  * display_name lấy từ users.full_name (nullable). KHÔNG kèm field nhạy cảm.
  */
+/**
+ * S6-SEC-IDENTITY-PROJ-1 (KI-054) — `email` là `.optional()`, KHÔNG `.nullable()`.
+ *
+ * Server BỎ HẲN KHOÁ khi actor ở ngoài `data_scope` của cặp danh bạ `view:user`. Không thể dùng
+ * `null` để mang tin đó: object này VỐN đã `.nullable()` ở tầng trên với nghĩa "log không gắn user /
+ * user đã bị xoá", nên một `null` thứ hai mang nghĩa "ngoài scope" là lẫn nghĩa — đúng bẫy KI-052.
+ * Tín hiệu "ngoài scope" nằm ở chỗ KHÔNG lẫn với dữ liệu: khoá `email` VẮNG MẶT.
+ *
+ * ⚠️ FE khai theo, nếu không server bỏ khoá = ZodError runtime dù HTTP 200 (memory
+ * `server-masking-needs-optional-fe-schema`).
+ */
 export const authLogUserRefSchema = z.object({
   id: z.string().uuid(),
-  email: z.string().email(),
+  email: z.string().email().optional(),
   display_name: z.string().nullable(),
 });
 export type AuthLogUserRef = z.infer<typeof authLogUserRefSchema>;
