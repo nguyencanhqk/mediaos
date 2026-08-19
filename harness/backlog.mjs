@@ -12321,11 +12321,16 @@ export const backlog = [
     title:
       "KI-065 — quyết định số phận `PATCH /settings/security-policy`: route cấu hình chính sách bảo mật CHẾT (403 deny-object-required với MỌI actor)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/security-policy/**",
       "apps/api/src/permission/**",
+      "apps/console/src/routes/settings/security-policy.tsx",
+      "apps/api/test/foundation/route-census.ts",
+      "apps/api/test/foundation/reauth-reachability.e2e-spec.ts",
       "apps/api/test/integration/security-mailconfig-http.int-spec.ts",
+      "docs/DECISIONS/DECISIONS-09_Security_Policy_Reauth_And_Object_Grant.md",
+      "docs/plans/S10-QA-SECPOLICY-GATE-1.md",
       "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
       "harness/backlog.mjs",
     ],
@@ -12348,6 +12353,50 @@ export const backlog = [
     notes: [
       "⚠️ Đây là route cấu hình BẢO MẬT: gate FULL (security-reviewer + silent-failure-hunter), model crown.",
       "Không đóng KI-065 bằng cách xoá test ghim — đóng bằng cách LẬT nó.",
+      "ĐÓNG 19/08/2026 — chọn hướng (a), ghi ở ADR `docs/DECISIONS/DECISIONS-09_Security_Policy_Reauth_And_Object_Grant.md`: bỏ `requiresReauth` khỏi decorator PATCH (giữ `isSensitive`), KHÔNG sửa MỘT DÒNG NÀO của permission.decide.ts/permission.guard.ts ⇒ ngữ nghĩa needsObjectGrant không đổi, không route nhạy cảm nào bị nới. Lý do loại (b): grep 19/08 cho 0 nơi GHI `req.reauthContext` ⇒ (b) phải xây MỚI cả cơ chế step-up; gán reauthContext 'cho đủ điều kiện' = cửa sau giả.",
+      "RED→GREEN đo thật ở LANE_DB=mediaos_secpolicy: trước vá 5/14 ca ĐỎ (tất cả `deny-object-required`), sau vá 14/14 XANH. Ca ghim 403 bị XOÁ và thay bằng: ALLOW 2xx + đọc lại bằng GET · BẤT BIẾN #4 (actor luôn trong exemptUserIds) · audit `security_policy.updated` đúng actor/after · DENY `deny-sensitive` (+ assert NGƯỢC: không được là `deny-object-required`) · cross-tenant so TOÀN BỘ DTO của công ty A trước/sau.",
+      "Hai cổng chống tái sinh: (1) `test/foundation/reauth-reachability.e2e-spec.ts` — route khai `requiresReauth` mà thiếu `:param` HOẶC src/** chưa có nơi GHI `reauthContext` ⇒ ĐỎ; tự nhả khi có step-up thật, KHÔNG allowlist tên route; kèm 2 ca thử-ngược chứng minh cổng không rỗng; ĐÃ NGHIỆM bằng vi phạm THẬT (gắn lại cờ ⇒ đỏ đúng 2 lý do rồi revert). (2) `src/security-policy/security-policy.permission-contract.spec.ts` — nạp metadata THẬT của decorator vào `decideCan`, chạy trong `pnpm test` mặc định (int-spec HTTP skip khi không có DB ⇒ không thể là lưới duy nhất).",
+      "`RouteInfo` (test/foundation/route-census.ts) thêm 2 trường `isSensitive`/`requiresReauth`; artifact census KHÔNG đổi hình (writer map trường tường minh) — route-guard-coverage + route-http-coverage + openapi-contract/docs đều còn xanh.",
+      "NỬA THỨ HAI đào ra khi vá (vá luôn, cùng tính năng): cặp `configure-security-policy:company` là is_sensitive nhưng KHÔNG có trong SENSITIVE_CAPABILITY_ALLOWLIST ⇒ /auth/me không trả ⇒ màn console settings/security-policy render EmptyState 'không có quyền' với CHÍNH company-admin (đo DB: chỉ company-admin có grant; catalog KHÔNG có hàng wildcard nào ⇒ fallback của useCan cũng vô hiệu). Vá: APPEND cặp vào SENSITIVE_CAPABILITY_ALLOWLIST + SENSITIVE_SCREEN_GATE_PAIRS (cờ HIỂN THỊ, enforcement không đổi) + màn đổi useCan → useCanExact (chống FE-permit/BE-403) + ca đo bằng chính /auth/me (có grant ⇒ true, không grant ⇒ VẮNG). Lần lặp thứ 9+ của capability-allowlist-hides-admin-screens.",
+      "Nợ chuyển tiếp: `S10-AUTH-STEPUP-1` (xây step-up thật rồi mới gắn lại cờ) — đây là HẠN GỠ tường minh của workaround, không phải TODO trong comment.",
+    ],
+  },
+
+  {
+    // Seed 19/08/2026 từ S10-QA-SECPOLICY-GATE-1 (ADR DECISIONS-09 §5) — giữ Ý ĐỊNH "đổi chính sách
+    // bảo mật cần xác thực lại" sống dưới dạng việc có chủ, thay vì một cờ chết trong decorator.
+    id: "S10-AUTH-STEPUP-1",
+    module: "AUTH",
+    layer: "BACKEND",
+    title:
+      "Chưa có step-up (xác thực lại) THẬT: cờ `requiresReauth` của permission engine không có nơi nào GHI `req.reauthContext` ⇒ mọi route dám khai cờ này đều CHẾT",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/auth/**",
+      "apps/api/src/permission/guards/**",
+      "apps/api/test/foundation/reauth-reachability.e2e-spec.ts",
+      "docs/DECISIONS/DECISIONS-09_Security_Policy_Reauth_And_Object_Grant.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S10-QA-SECPOLICY-GATE-1"],
+    src: [
+      "Đo 19/08/2026 (không suy đoán): `grep -rn \"reauthContext\" apps/api/src` chỉ có nơi ĐỌC (`permission.guard.ts:21,124`) — KHÔNG dòng nào GÁN. `decideCan` đọc `ctx.reauthValidUntil` (permission.decide.ts:72,109,122) nên `isReauthValid()` LUÔN false ⇒ `deny-reauth-required` vĩnh viễn cho bất kỳ route nào khai `requiresReauth`.",
+      "Hệ quả đã xảy ra một lần: KI-065 (`PATCH /settings/security-policy` chết 403 im lặng ~1 tháng). Bản vá 19/08 gỡ cờ khỏi route đó và cắm cổng `test/foundation/reauth-reachability.e2e-spec.ts` — nhưng NĂNG LỰC step-up vẫn chưa tồn tại.",
+      "Lớp reveal-secret (`isSensitive && requiresReauth` ⇒ object-grant bắt buộc) vẫn còn nguyên trong engine và có test (`module-registry.deny.int-spec.ts:137`, `platform-entitlements.deny.int-spec.ts:116`) — tức đường CHẾT vẫn mở sẵn cho người sau vô tình bước vào ở một route khác.",
+    ],
+    done_when: [
+      "Có cơ chế step-up THẬT: endpoint/guard xác thực lại (mật khẩu hoặc TOTP) GHI `req.reauthContext = { reauthValidUntil }` với TTL ngắn, khoá theo (userId + hành động/đối tượng) — KHÔNG phải cờ session toàn cục",
+      "Test RED trước: cửa sổ hết hạn ⇒ `deny-reauth-required`; cửa sổ của user A KHÔNG dùng được cho user B; cửa sổ cấp cho đối tượng X không mở được đối tượng Y",
+      "Ghi audit khi cấp cửa sổ step-up (append-only) — cấp quyền tạm thời là hành động nhạy cảm",
+      "Cập nhật `reauth-reachability.e2e-spec.ts`: ca 'chưa có step-up nào trong src/**' LẬT sang có (ca đó cố ý sẽ đỏ đúng lúc này), cổng chính tự nhả",
+      "Quyết định (ADR mới) route nào ĐƯỢC gắn lại `requiresReauth` — chỉ route có `resourceId` hợp lệ, hoặc sau khi engine có khái niệm 'singleton resource' tường minh; ADR DECISIONS-09 §5 là đầu vào",
+    ],
+    notes: [
+      "⚠️ Crown-jewel (auth + permission engine): FULL gate, model crown, plan qua plan-reviewer trước khi code.",
+      "CẤM đường tắt 'gán reauthContext ở interceptor cho đủ điều kiện' — đó là cửa sau giả, hệ thống tuyên bố đã xác thực lại trong khi không ai xác thực lại.",
+      "Chưa có nhu cầu nghiệp vụ ép ngày nào: WO này tồn tại để cờ trong engine có chủ, không phải để bắt buộc làm ngay.",
     ],
   },
 

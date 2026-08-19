@@ -15,9 +15,18 @@ interface AuthenticatedRequest extends Request {
  * CS-9 — GET/PATCH chính sách bảo mật của CÔNG TY HIỆN TẠI (companyId LẤY TỪ JWT, KHÔNG body/param).
  *
  * Guard: configure-security-policy:company. is_sensitive=TRUE (khai ở CẢ seed lẫn decorator — chống
- * *:* wildcard bypass cổng nhạy cảm). requiresReauth=TRUE: thao tác đổi chính sách bảo mật là sensitive →
- * yêu cầu cửa sổ step-up (reuse console step-up; mirror reveal-secret). Người gọi PATCH luôn được service
- * tự thêm vào exempt-list (chống tự-khoá — BẤT BIẾN #4).
+ * *:* wildcard bypass cổng nhạy cảm). Người gọi PATCH luôn được service tự thêm vào exempt-list
+ * (chống tự-khoá — BẤT BIẾN #4).
+ *
+ * ⛔ KHÔNG THÊM `requiresReauth: true` VÀO ĐÂY (KI-065, S10-QA-SECPOLICY-GATE-1 — ADR DECISIONS-09).
+ * `permission.decide.ts` tính `needsObjectGrant = objectGrantRequired ?? (isSensitive && requiresReauth)`.
+ * Route này là SINGLETON (1 hàng/công ty) nên KHÔNG có `:id` ⇒ `PermissionGuard` truyền `resourceId`
+ * null ⇒ object-tier bị bỏ qua ⇒ `deny-object-required` VĨNH VIỄN cho MỌI actor. Đường thoát còn lại —
+ * cửa sổ re-auth — cũng bất khả thi: KHÔNG chỗ nào trong `apps/api/src` GHI `req.reauthContext` (chưa
+ * có step-up thật). Bản khai cũ (2026-07 → 14/08/2026) đã làm route CHẾT 403 im lặng, màn hình console
+ * `settings/security-policy` không lưu được gì. Muốn ép xác thực lại: xây step-up THẬT trước
+ * (WO `S10-AUTH-STEPUP-1`), rồi mới gắn cờ — cổng `test/foundation/reauth-reachability.e2e-spec.ts`
+ * sẽ ĐỎ nếu cờ quay lại trước khi có step-up.
  */
 @Controller("settings/security-policy")
 @UseGuards(PermissionGuard)
@@ -32,10 +41,7 @@ export class SecurityPolicyController {
   }
 
   @Patch()
-  @RequirePermission("configure-security-policy", "company", {
-    isSensitive: true,
-    requiresReauth: true,
-  })
+  @RequirePermission("configure-security-policy", "company", { isSensitive: true })
   updatePolicy(
     @Req() req: AuthenticatedRequest,
     @Body() dto: UpdateSecurityPolicyDto,

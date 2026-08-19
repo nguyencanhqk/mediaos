@@ -61,6 +61,16 @@ export interface RouteInfo {
   permission: string | null;
   /** Cấp mà `@RequirePermission` được khai — bẫy #1 của §0.4 là bỏ quên vế "class". */
   permissionLevel: "handler" | "class" | null;
+  /** Cờ `isSensitive` của `@RequirePermission` (undefined khi route không gate). */
+  isSensitive: boolean | undefined;
+  /**
+   * Cờ `requiresReauth` của `@RequirePermission` (undefined khi route không gate).
+   *
+   * KHÔNG phải trang trí: `permission.decide.ts` tính `needsObjectGrant = isSensitive && requiresReauth`,
+   * nên cờ này là thứ biến một route thành "reveal-class" — và làm route CHẾT nếu route không có `:id`
+   * hoặc chưa có step-up thật (KI-065). Cổng đọc trường này: `reauth-reachability.e2e-spec.ts`.
+   */
+  requiresReauth: boolean | undefined;
   /** Có `@Public()` ở handler hoặc class ⇒ MỌI guard (JWT/Company/Permission) bỏ qua. */
   isPublic: boolean;
   /** Tên guard khai bằng `@UseGuards` ở CẤP CLASS (vd InternalGuard) — vế "OTHER_GUARD" của Phụ lục A. */
@@ -170,6 +180,8 @@ export function collectRoutes(app: INestApplication): RouteInfo[] {
             : classPermission !== undefined
               ? "class"
               : null,
+        isSensitive: effectivePermission?.isSensitive,
+        requiresReauth: effectivePermission?.requiresReauth,
         isPublic: Reflect.getMetadata(IS_PUBLIC, handler) === true || classPublic,
         classGuards,
         routeGuards: guardNames(handler),
