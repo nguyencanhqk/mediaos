@@ -147,6 +147,7 @@ export class RoleAdminService {
           ),
       "identity-gated",
       "GET /auth/roles/:id/members — cột danh tính đi theo data_scope của cặp danh bạ view:user (KI-053)",
+      users.id,
     );
     return this.db.withTenant(actor.companyId, async (tx) => {
       if (!(await this.repo.findRoleByIdTx(tx, roleId))) {

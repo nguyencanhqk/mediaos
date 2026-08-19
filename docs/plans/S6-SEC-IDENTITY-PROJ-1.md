@@ -508,3 +508,42 @@ ngoài phòng mình.
   (§2.3) chỉ áp cho 4 module đã vá, không áp cho 8 module kia — census tĩnh vẫn là bằng chứng duy nhất
   ở đó. Ai muốn đóng nốt thì đó là một WO nhỏ, không phải một dòng verdict.
 - **KI-070 mở, không đóng** — ranh giới bound-CỘT/bound-HÀNG (§3.4).
+
+### B.4 FULL gate — verdict và cái nó đổi
+
+| Gate | Verdict | Kết quả |
+| --- | --- | --- |
+| `silent-failure-hunter` | 4 finding (1 HIGH · 1 MEDIUM · 2 LOW) | **vá hết** |
+| `security-reviewer` | **PASS** — 0 CRITICAL · 0 HIGH · 7 MEDIUM · 4 LOW | **vá 10/11**; 1 mục đổi thành đính chính tài liệu |
+
+**Ba finding đổi THIẾT KẾ, không chỉ đổi chữ:**
+
+1. **`IdentityGrant` không bị buộc vào bảng nó bảo vệ (F1).** `buildUserScopeConditionOn` nhận cột bất
+   kỳ và `identityColumns` bọc cột bất kỳ ⇒ dựng vị từ trên `users` rồi đem bọc
+   `SECURITY_EVENT_ACTOR.email` là **hợp kiểu và chạy được** — đúng lỗ B1 mà WO này tồn tại để đóng.
+   Cái giữ 4 call-site đúng hôm nay là hai ca int-spec, **không phải cơ chế**. Nay grant mang `table`
+   và `identityColumns` **ném** khi lệch: lỗi im lặng thành lỗi ồn ào, ngay lần chạy đầu tiên.
+
+2. **Nhánh thứ ba của `userRef()` CHẾT (F2), và câu tôi viết vào `RELEASE-02` là overclaim (F4).**
+   `users.email` NOT NULL ⇒ join trúng thì luôn có email; join TRƯỢT thì mọi cột NULL ⇒ vị từ cho
+   `NULL` ⇒ hàng rơi vào nhánh "ngoài scope". Tức "user đã xoá cứng" và "ngoài scope" **chia chung
+   hình dạng**. Đã bỏ nhánh chết, `coalesce((cond), false)` để cờ đúng kiểu (`boolean`, không phải
+   `boolean | null` nói dối), và **ghi thẳng ranh giới** thay vì giữ một lời hứa test không kiểm được
+   — đúng lỗi mà chính KI-054 tố cáo, suýt tái phạm ở sổ KI. Hệ quả: hai ca "user đã xoá vs ngoài
+   scope" mà plan §4 hứa **không còn nghĩa** ⇒ gỡ khỏi §4/§7 thay vì viết một ca không phân biệt được gì.
+
+3. **Trần đếm chỉ phủ 4/9 basis (F5) ⇒ đường né rẻ nhất vẫn mở.** Lý lẽ "ba căn cứ còn lại mang vị từ
+   SQL thật nên tự nó là bằng chứng" **sai ở tầng sổ**: sổ chỉ chứa CHUỖI, ratchet không bao giờ nhìn
+   thấy vị từ. Một điểm mới không bound chỉ cần dán `basis:"scoped-predicate"` hoặc `"order-only"` là
+   ratchet xanh. Nay MỌI basis có trần + một assert bắt basis nào chưa có trần.
+
+**Bốn finding còn lại đã vá:** `asIdentityGrant` bỏ sót `<IdentityGrant>x` và dạng hợp (F6, + hạ giọng
+docblock: `any` vẫn xuyên qua brand — bộ đếm thu hẹp bề mặt, không đóng kín); FE hai trang auth-log
+render ô RỖNG cho hàng ngoài scope (F7); `identityGrant()` gọi DB **bên trong** transaction ở
+`adjustBalance` ⇒ dưới PgBouncer transaction-mode có thể ăn hết pool (F10); UUID fixture
+`…-00000000log1` không phải hex ⇒ spec xanh vì đi vào **nhánh lỗi hạ tầng** chứ không phải nhánh deny
+(F11); vùng mù `import` xuyên file nay pin thành số `exportedUserAliases` (F12); `ORDER BY` đổi từ
+`citext` sang `text` nên comment "thứ tự không đổi" là sai — nay `lower()` (F8).
+
+**Mục KHÔNG vá:** F3 (thiếu 2 ca "user đã xoá vs ngoài scope") — vì F2 chứng minh hai ca đó không phân
+biệt được gì; sửa plan cho khớp sự thật là đúng hơn viết một ca tautology.

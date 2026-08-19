@@ -571,6 +571,13 @@ export default {
     page: "Trang {{page}}",
   },
 
+  /**
+   * S6-SEC-IDENTITY-PROJ-1 (KI-054) — dùng chung cho LoginLogsPage + SecurityEventsPage: server BỎ
+   * KHOÁ email/họ tên khi người xem ngoài `data_scope` danh bạ. Ô rỗng đọc thành lỗi dữ liệu; nhãn
+   * này nói ra rằng phân quyền đang làm đúng việc.
+   */
+  authLogsIdentityHidden: "(không có quyền xem danh tính)",
+
   loginLogs: {
     title: "Nhật ký đăng nhập",
     description: "Lịch sử các lần đăng nhập (thành công, thất bại, bị chặn) — chỉ đọc",

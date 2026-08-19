@@ -540,6 +540,7 @@ export class LeaveAdminService {
           ),
       "identity-gated",
       `${where} — cột danh tính đi theo data_scope của cặp danh bạ view:user (KI-069)`,
+      users.id,
     );
   }
 
@@ -601,6 +602,14 @@ export class LeaveAdminService {
     await this.dataScope.resolveAndAssert(actor.id, actor.companyId, "adjust", "leave-balance", {
       isSensitive: true,
     });
+    // ⚠️ Phân giải scope TRƯỚC khi mở transaction, không phải bên trong (security-reviewer 2026-08-19).
+    // `resolveOrNull` đi qua một connection KHÁC; gọi nó khi tx đang giữ một connection thì dưới
+    // PgBouncer transaction-mode N request đồng thời có thể ăn hết pool, đồng thời kéo dài thời gian
+    // giữ lock ghi trên hàng số dư. `listBalances` vốn đã làm đúng — chỗ này lệch khuôn.
+    const adjustIdentity = await this.identityGrant(
+      actor,
+      "PATCH /leave/admin/balances/:id — đọc lại hàng vừa điều chỉnh",
+    );
     return this.db
       .withTenant(actor.companyId, async (tx) => {
         const [balance] = await this.repo.findBalanceForUpdateTx(actor.companyId, balanceId, tx);
@@ -682,7 +691,7 @@ export class LeaveAdminService {
           actor.companyId,
           { id: balanceId },
           tx,
-          await this.identityGrant(actor, "PATCH /leave/balances/:id — đọc lại hàng vừa điều chỉnh"),
+          adjustIdentity,
         );
         if (!full) throw new InternalServerErrorException("Failed to reload adjusted balance");
         return toBalanceAdminView(full);

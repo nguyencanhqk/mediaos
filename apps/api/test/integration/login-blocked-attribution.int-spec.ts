@@ -7,7 +7,10 @@ import { DataScopeService } from "../../src/permission/data-scope.service";
 import { DataScopeRepository } from "../../src/permission/data-scope.repository";
 
 /** Actor đọc log — không giữ grant danh bạ nào; spec này không khẳng định gì về cột danh tính. */
-const LOG_READER_ACTOR = "00000000-0000-0000-0000-00000000log1";
+// UUID HỢP LỆ (hex). Bản đầu dùng "…-00000000log1" — `l`,`o`,`g` không phải hex ⇒ Postgres 22P02,
+// `resolveStrongestScope` nuốt vào try/catch rồi fail-closed `null`. Spec vẫn xanh nhưng xanh vì đi
+// vào NHÁNH LỖI HẠ TẦNG, không phải nhánh deny, và bơm error-log rác mỗi lần gọi.
+const LOG_READER_ACTOR = "00000000-0000-0000-0000-0000000010c1";
 import { LoginLogRepository } from "../../src/auth/login-log.repository";
 import { SecurityEventRepository } from "../../src/auth/security-event.repository";
 import { LoginRateLimiter } from "../../src/auth/login-rate-limiter";

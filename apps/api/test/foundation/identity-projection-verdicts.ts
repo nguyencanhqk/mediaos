@@ -519,21 +519,30 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
 ];
 
 /**
- * TRẦN ĐẾM cho bốn căn cứ KHÔNG đo được bằng máy.
+ * TRẦN ĐẾM cho **MỌI** căn cứ.
  *
- * Vì sao cần: `waiver` / `no-actor` / `second-assert` / `self-bound-route` đều không mang vị từ SQL nào
- * để kiểm — chúng là câu người viết. Không có trần thì đường né rẻ nhất là dán một trong bốn nhãn ấy
- * lên điểm mới, và ratchet vẫn xanh. Có trần thì thêm một điểm là ĐỎ, và người thêm phải sửa con số ở
- * đây — một thao tác CÓ CHỦ ĐÍCH, đi qua FULL gate.
+ * ⚠️ ĐÍNH CHÍNH (security-reviewer 2026-08-19, F5): bản đầu chỉ đặt trần cho bốn căn cứ "không đo
+ * được bằng máy", với lý lẽ "ba căn cứ còn lại mang vị từ SQL thật nên tự nó là bằng chứng". Lý lẽ đó
+ * **sai ở tầng sổ này**: sổ chỉ chứa CHUỖI, ratchet không bao giờ nhìn thấy vị từ. Hệ quả là đường né
+ * rẻ nhất vẫn mở toang — một điểm chiếu MỚI không bound chỉ cần một dòng `basis:"scoped-predicate"`
+ * (21 dòng, không trần, không kiểm) hoặc `basis:"order-only"` (một lời khai thuần tuý) là ratchet
+ * XANH.
  *
- * Ba căn cứ còn lại (`scoped-predicate` · `identity-gated` · `self-bound-row` · `membership`) mang vị
- * từ thật nên không cần trần — siết chúng chỉ làm khó việc vá đúng.
+ * Nay MỌI basis có trần. Thêm một điểm chiếu ⇒ ĐỎ ⇒ người thêm phải sửa con số ở đây, tức một thao
+ * tác CÓ CHỦ ĐÍCH đi qua FULL gate. Đó chính là thứ ratchet dùng để đổi lấy sự bất tiện.
  */
 export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
+  // Không đo được bằng máy — chúng là câu người viết.
   waiver: 7,
   "no-actor": 7,
   "second-assert": 3,
   "self-bound-route": 7,
+  "order-only": 1,
+  // Có vị từ SQL thật, nhưng SỔ này không nhìn thấy vị từ ⇒ vẫn phải có trần.
+  "scoped-predicate": 21,
+  membership: 8,
+  "self-bound-row": 3,
+  "identity-gated": 14,
 };
 
 /**
@@ -550,6 +559,8 @@ export const BLIND_SPOT_PINS = {
   bareSelect: 6,
   /** Template `sql` ghép `email`/`full_name` bằng chuỗi thô — đo 2026-08-19. */
   rawSqlIdentity: 13,
-  /** Ép kiểu sang `IdentityGrant` — phải LUÔN bằng 0. */
+  /** Ép kiểu TƯỜNG MINH sang `IdentityGrant` ngoài điểm đúc — phải LUÔN bằng 0. */
   asIdentityGrant: 0,
+  /** File export `alias(users,…)` — mỗi cái là một đường mà scanner một-file không lần được (F12). */
+  exportedUserAliases: 1,
 } as const;

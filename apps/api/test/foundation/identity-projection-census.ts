@@ -287,6 +287,12 @@ export function projectionPoints(): IdentityPoint[] {
 
 export interface BlindSpots {
   /**
+   * Số file EXPORT một `alias(users, …)` ra ngoài. Scanner lần alias trong MỘT file; một alias được
+   * export rồi import ở file khác là vùng mù — đúng thứ đã cắn khi WO này nâng `SECURITY_EVENT_ACTOR`
+   * lên cấp module. Pin thành số để nó không nới ra trong im lặng (F12).
+   */
+  readonly exportedUserAliases: number;
+  /**
    * `.select()` KHÔNG tham số **trên bảng `users`** — chiếu TOÀN BỘ cột (kể cả `email`/`full_name`)
    * mà scanner không thấy tên cột nào.
    *
@@ -298,9 +304,12 @@ export interface BlindSpots {
   /** Template `sql` ghép tên cột danh tính bằng CHUỖI THÔ — ngoài tầm phân tích identifier. */
   readonly rawSqlIdentity: number;
   /**
-   * Ép kiểu sang `IdentityGrant` **NGOÀI** điểm đúc `permission/identity-projection.ts`.
-   * Brand `unique symbol` chặn object literal thuần nhưng KHÔNG chặn toán tử ép kiểu ⇒ đây là đường
-   * duy nhất forge được một căn cứ giả, và nó phải LUÔN bằng 0.
+   * Ép kiểu TƯỜNG MINH sang `IdentityGrant` **NGOÀI** điểm đúc `permission/identity-projection.ts`.
+   * Brand `unique symbol` chặn object literal thuần nhưng không chặn ép kiểu ⇒ đây là đường forge dễ
+   * nhất, và nó phải LUÔN bằng 0.
+   *
+   * ⚠️ KHÔNG phải đường DUY NHẤT (security-reviewer 2026-08-19, F6): một giá trị `any` gán vào biến
+   * kiểu `IdentityGrant` không cần lời ép nào. Bộ đếm này thu hẹp bề mặt, không đóng kín nó.
    */
   readonly asIdentityGrant: number;
 }
@@ -321,6 +330,7 @@ export function blindSpots(): BlindSpots {
   let bareSelect = 0;
   let rawSqlIdentity = 0;
   let asIdentityGrant = 0;
+  let exportedUserAliases = 0;
 
   for (const file of sourceFiles()) {
     const text = fs.readFileSync(file, "utf8");
@@ -365,16 +375,22 @@ export function blindSpots(): BlindSpots {
       // Điểm đúc DUY NHẤT được miễn: `permission/identity-projection.ts` bắt buộc phải ép kiểu một
       // lần để gắn brand (brand là kiểu-thời-biên-dịch, không có giá trị runtime). Mọi nơi khác ép
       // kiểu sang `IdentityGrant` là FORGE một căn cứ — đường duy nhất qua mặt được tầng type.
+      // Bắt CẢ `x as IdentityGrant` lẫn `<IdentityGrant>x`, và cả dạng hợp (`as IdentityGrant | null`).
+      // ⚠️ VẪN KHÔNG bắt được: một giá trị `any` gán thẳng vào biến kiểu `IdentityGrant` — `any` xuyên
+      // qua brand mà không cần lời ép nào. Đó là lý do docblock của L1 nói "chặn được đường ép kiểu
+      // TƯỜNG MINH", không nói "đường duy nhất".
       if (
         !isGrantFactory &&
-        ts.isAsExpression(node) &&
-        node.type.getText(sf).trim() === "IdentityGrant"
+        (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node)) &&
+        /\bIdentityGrant\b/.test(node.type.getText(sf))
       ) {
         asIdentityGrant++;
       }
       ts.forEachChild(node, visit);
     };
     visit(sf);
+
+    if (/export\s+const\s+\w+\s*=\s*alias\(\s*users\s*,/.test(text)) exportedUserAliases++;
   }
-  return { bareSelect, rawSqlIdentity, asIdentityGrant };
+  return { bareSelect, rawSqlIdentity, asIdentityGrant, exportedUserAliases };
 }

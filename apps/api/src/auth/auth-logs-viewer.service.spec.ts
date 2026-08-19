@@ -112,15 +112,25 @@ describe("AuthLogsViewerService.listLoginLogs (mapping)", () => {
         failureReason: "Locked",
         createdAt: new Date("2026-06-03T00:00:00.000Z"),
         userId: U2,
-        identityInScope: true,
-        userEmail: null, // user bị soft-delete → leftJoin trả null
+        // S6-SEC-IDENTITY-PROJ-1 — SUA FIXTURE, khong phai sua assert. Ban cu ghim
+        // `identityInScope: true` + `userEmail: null`, mot trang thai KHONG THE XAY RA tren SQL that:
+        // `users.email` la NOT NULL, nen join TRUNG thi luon co email; join TRUOT thi moi cot NULL
+        // ⇒ vi tu cho NULL ⇒ co (sau `coalesce`) la `false`. Ghim mot trang thai bat kha thi nghia la
+        // ca test khong khang dinh gi ve he thong that (memory `tests-can-pin-a-hole-open`).
+        identityInScope: false,
+        userEmail: null,
         userFullName: null,
       },
     ];
     const svc = makeService(rows, []);
     const { data } = await svc.listLoginLogs(ACTOR, baseLoginQuery);
+    // Hang KHONG gan user ⇒ `null` (nghia CU, giu nguyen).
     expect(data[0].user).toBeNull();
-    expect(data[1].user).toBeNull();
+    // Hang co user nhung khong lay duoc danh tinh (user da xoa cung HOAC ngoai scope — hai ca chia
+    // chung hinh dang, xem docblock `userRef`) ⇒ con `id`, MAT khoa `email`. Nhieu thong tin hon ban
+    // goc (ban goc tra `null` ca object), va van fail-closed ve danh tinh.
+    expect(data[1].user).toEqual({ id: U2, display_name: null });
+    expect("email" in (data[1].user as object)).toBe(false);
   });
 });
 

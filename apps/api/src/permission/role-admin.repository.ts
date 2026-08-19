@@ -183,10 +183,12 @@ export class RoleAdminRepository {
       )
       // ⚠️ SẮP theo CỘT ĐÃ CHE, không theo `users.email` gốc. Che giá trị mà vẫn ORDER BY cột gốc thì
       // THỨ TỰ HÀNG tiết lộ thứ tự alphabet của thứ vừa che — bản vá tự biến mình thành oracle.
-      // Với actor Company-scope (mọi vai giữ `view:user` hôm nay) biểu thức này bằng đúng cột gốc nên
-      // thứ tự hiển thị KHÔNG đổi; ngoài scope thì mọi hàng bằng null và gom về một chỗ.
+      // ⚠️ Đính chính (security-reviewer 2026-08-19): `users.email` ở DB là `citext` (so sánh KHÔNG
+      // phân biệt hoa/thường) còn biểu thức này sắp theo collation của `text`, nên với actor
+      // Company-scope thứ tự CÓ THỂ đổi khi email lẫn hoa/thường — dùng `lower()` để giữ nguyên
+      // ngữ nghĩa cũ. Ngoài scope thì mọi hàng bằng null và gom về một chỗ.
       // `users.id` là khoá phá hoà, giữ phân trang tất định.
-      .orderBy(identityCols.email, users.id);
+      .orderBy(sql`lower(${identityCols.email})`, users.id);
   }
 
   /**

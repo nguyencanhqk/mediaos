@@ -115,7 +115,7 @@ function useSecurityEventColumns(
       cell: ({ row }) => {
         const u = row.original.user;
         return u ? (
-          <span className="text-sm text-foreground">{u.display_name ?? u.email}</span>
+          <span className="text-sm text-foreground">{u.display_name ?? u.email ?? t("authLogsIdentityHidden")}</span>
         ) : (
           <span className="text-sm text-muted-foreground">—</span>
         );
@@ -127,7 +127,7 @@ function useSecurityEventColumns(
       cell: ({ row }) => {
         const a = row.original.actor;
         return a ? (
-          <span className="text-sm text-muted-foreground">{a.display_name ?? a.email}</span>
+          <span className="text-sm text-muted-foreground">{a.display_name ?? a.email ?? t("authLogsIdentityHidden")}</span>
         ) : (
           <span className="text-sm text-muted-foreground">—</span>
         );

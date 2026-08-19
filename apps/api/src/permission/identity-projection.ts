@@ -1,4 +1,4 @@
-import { eq, sql, type SQL } from "drizzle-orm";
+import { eq, getTableName, sql, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 
 /**
@@ -75,6 +75,15 @@ export type IdentityBasis =
  */
 interface IdentityGrantFields {
   readonly basis: IdentityBasis;
+  /**
+   * Bảng/alias mà vị từ này NÓI VỀ. `null` = vị từ vô điều kiện (`unconditional`), không ràng bảng nào.
+   *
+   * ⚠️ VÌ SAO CẦN (security-reviewer 2026-08-19): thiếu trường này thì `buildUserScopeConditionOn`
+   * nhận cột bất kỳ và `identityColumns` bọc cột bất kỳ, nên dựng vị từ trên `users` rồi đem bọc
+   * `SECURITY_EVENT_ACTOR.email` là **hợp kiểu và chạy được** — đúng lỗ B1 mà WO này tồn tại để đóng.
+   * Hôm nay 4 call-site đều đúng, nhưng cái giữ chúng đúng là hai ca int-spec C2/C3, không phải cơ chế.
+   */
+  readonly table: string | null;
   /** Vị từ quyết định cột danh tính có hiện hay không. */
   readonly cond: SQL;
   /** Câu cho người đọc — đi vào log ở nhánh fail-closed, nên viết như viết cho người trực ca. */
@@ -89,8 +98,18 @@ export type IdentityGrant = IdentityGrantFields & { readonly [IDENTITY_BASIS]: t
  * lời ép sang `IdentityGrant` NGOÀI file này và bắt buộc bằng 0. Không có ngoại lệ ngầm — nếu bạn đang
  * định thêm một lời ép ở nơi khác thì thứ bạn cần là một constructor mới ở đây, có tên và có docblock.
  */
-function grant(basis: IdentityBasis, cond: SQL, why: string): IdentityGrant {
-  return { basis, cond, why } as IdentityGrant;
+function grant(
+  basis: IdentityBasis,
+  cond: SQL,
+  why: string,
+  table: string | null,
+): IdentityGrant {
+  return { basis, cond, why, table } as IdentityGrant;
+}
+
+/** Tên bảng/alias mà một cột drizzle thuộc về. */
+function tableOf(col: PgColumn): string {
+  return getTableName(col.table);
 }
 
 /**
@@ -107,18 +126,20 @@ export function fromScope(
   cond: SQL | null,
   basis: Extract<IdentityBasis, "scoped-predicate" | "identity-gated">,
   why: string,
+  /** Bảng/alias mà `cond` nói về — lấy từ chính cột đã truyền cho `buildUserScopeConditionOn`. */
+  target?: PgColumn,
 ): IdentityGrant {
-  return grant(basis, cond ?? sql`false`, why);
+  return grant(basis, cond ?? sql`false`, why, target ? tableOf(target) : null);
 }
 
 /** Căn cứ = tập hàng ghim vào chính actor. `idCol` là cột mang `users.id` của hàng. */
 export function selfBound(actorUserId: string, idCol: PgColumn, why: string): IdentityGrant {
-  return grant("self-bound-row", eq(idCol, actorUserId), why);
+  return grant("self-bound-row", eq(idCol, actorUserId), why, tableOf(idCol));
 }
 
 /** Căn cứ = tư cách thành viên tài nguyên (phòng chat, dự án) — vị từ do caller dựng. */
-export function byMembership(cond: SQL, why: string): IdentityGrant {
-  return grant("membership", cond, why);
+export function byMembership(cond: SQL, why: string, target?: PgColumn): IdentityGrant {
+  return grant("membership", cond, why, target ? tableOf(target) : null);
 }
 
 /**
@@ -133,7 +154,8 @@ export function unconditional(
   basis: Extract<IdentityBasis, "no-actor" | "waiver" | "self-bound-route">,
   why: string,
 ): IdentityGrant {
-  return grant(basis, sql`true`, why);
+  // Vô điều kiện ⇒ không ràng bảng nào; `identityColumns` bỏ qua bước đối chiếu bảng cho nhóm này.
+  return grant(basis, sql`true`, why, null);
 }
 
 /** Đọc basis của một grant — cho log/test; không có đường GHI ngược lại. */
@@ -179,6 +201,22 @@ export function identityColumns<T extends IdentityColumnSpec, F extends string =
   flagKey: F = "identityInScope" as F,
 ): IdentityProjection<T, F> {
   const cond = grantArg.cond;
+
+  // ĐỐI CHIẾU BẢNG — biến lỗi im lặng thành lỗi ồn ào (security-reviewer 2026-08-19, F1).
+  // Vị từ dựng trên `users` mà đem bọc cột của `alias(users,"sec_event_actor")` là **hợp kiểu**, chạy
+  // được, và cho ra đúng hai chiều sai của lỗ B1: lộ danh tính vai kia, hoặc giấu danh tính chính chủ.
+  // Ném ở đây thì nó vỡ ngay lần chạy đầu tiên của truy vấn, thay vì đợi một ca test tồn tại.
+  if (grantArg.table !== null) {
+    const mismatched = Object.entries(spec).filter(([, col]) => tableOf(col) !== grantArg.table);
+    if (mismatched.length > 0) {
+      throw new Error(
+        `identityColumns: vị từ nói về bảng "${grantArg.table}" nhưng đang bọc cột của ` +
+          `${mismatched.map(([k, col]) => `${k}@${tableOf(col)}`).join(", ")}. ` +
+          "Mỗi VAI trong truy vấn cần MỘT grant dựng trên cột của chính vai đó (KI-054 / B1).",
+      );
+    }
+  }
+
   const wrapped = Object.fromEntries(
     Object.entries(spec).map(([key, col]) => [
       key,
@@ -188,5 +226,13 @@ export function identityColumns<T extends IdentityColumnSpec, F extends string =
     ]),
   ) as { [K in keyof T]: SQL<string | null> };
 
-  return { [flagKey]: sql<boolean>`(${cond})`, ...wrapped } as IdentityProjection<T, F>;
+  // ⚠️ `coalesce(…, false)` chứ không `(${cond})` trần (security-reviewer 2026-08-19, F2): khi
+  // `leftJoin` TRƯỢT (hàng trỏ tới user đã bị xoá cứng) thì mọi cột của bảng là NULL, nên một vị từ
+  // dạng `users.company_id = $1` cho ra **NULL**, không phải `false`. Cờ khi đó là `null` trong khi
+  // kiểu khai là `boolean` — kiểu NÓI DỐI, và mọi nhánh `if (flag)` phía service im lặng đi vào
+  // đường "ngoài scope". `coalesce` làm kiểu thành sự thật; ngữ nghĩa vẫn fail-closed.
+  return { [flagKey]: sql<boolean>`coalesce((${cond}), false)`, ...wrapped } as IdentityProjection<
+    T,
+    F
+  >;
 }

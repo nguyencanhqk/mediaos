@@ -86,6 +86,8 @@ export class AuthLogsViewerService {
           ),
       "identity-gated",
       why,
+      // Buộc grant vào ĐÚNG vai: `identityColumns` sẽ ném nếu ai đó đem grant này bọc cột vai kia.
+      target.idCol,
     );
   }
 
@@ -179,14 +181,22 @@ export class AuthLogsViewerService {
    * khác**: "log không gắn user" hoặc "user đã bị xoá". Sau bản vá `null` sẽ mang hai nghĩa và không
    * ai phân biệt được nữa — đúng thứ WO này tồn tại để chống.
    *
-   *   • `!id`                      → `null`  : log không gắn user (đăng nhập fail trước khi resolve).
-   *   • `id` + NGOÀI scope         → `{ id, display_name: null }`, KHÔNG có khoá `email`.
-   *   • `id` + trong scope + !email→ `null`  : join trượt (user đã bị xoá cứng). NGHĨA CŨ, giữ nguyên.
-   *   • còn lại                    → đủ ba trường.
+   *   • `!id`               → `null`                        : log không gắn user (đăng nhập fail
+   *                                                            trước khi resolve được ai).
+   *   • `id` + ngoài scope  → `{ id, display_name: null }`  : KHÔNG có khoá `email`.
+   *   • còn lại             → đủ ba trường.
    *
-   * `display_name: null` ở nhánh ngoài-scope KHÔNG lẫn nghĩa: hợp đồng đã cho phép `null` (user chưa
-   * đặt họ tên), và khoá `email` VẮNG MẶT mới là tín hiệu phân biệt — nên tín hiệu nằm ở chỗ không
-   * lẫn với dữ liệu.
+   * ⚠️ **ĐÍNH CHÍNH (security-reviewer 2026-08-19, F2) — hai ca CHIA CHUNG hình dạng, và đó là điều
+   * đã cân nhắc chứ không phải sót.** Bản đầu của hàm này có nhánh thứ tư "trong scope nhưng thiếu
+   * email ⇒ user đã bị xoá cứng ⇒ `null`". Nhánh đó **KHÔNG THỂ CHẠM TỚI**: `users.email` là NOT
+   * NULL, nên join trúng thì luôn có email; còn join TRƯỢT thì mọi cột NULL ⇒ vị từ cho `NULL` ⇒ cờ
+   * (sau `coalesce`) là `false` ⇒ hàng rơi vào nhánh "ngoài scope". Tức "user đã xoá cứng" và "ngoài
+   * scope danh bạ" cho ra CÙNG `{ id, display_name: null }`.
+   *
+   * Chấp nhận được, và nói ra lý do thay vì để nó thành khoảng trống: cả hai đều nghĩa là "không có
+   * danh tính để hiện", và `id` VẪN CÒN nên hàng vẫn truy được — nhiều thông tin hơn bản gốc (bản gốc
+   * trả `null` cho cả object ở ca user-đã-xoá). Cái KHÔNG được phép là dùng `null` để mang thêm một
+   * nghĩa thứ hai (bẫy KI-052); ở đây `null` giữ đúng một nghĩa: "không có user để hiện".
    */
   private userRef(
     id: string | null,
@@ -196,8 +206,11 @@ export class AuthLogsViewerService {
   ): AuthLogUserRef | null {
     if (!id) return null;
     if (!identityInScope) return { id, display_name: null };
-    if (!email) return null;
-    return { id, email, display_name: fullName };
+    // KHÔNG có nhánh `if (!email) return null` — nó chết (xem docblock). Thêm lại là code không bao
+    // giờ chạy, tức một lời hứa mà test không kiểm được.
+    // BỎ HẲN KHOÁ, không đặt `email: undefined` — khoá tồn tại với giá trị undefined vẫn lọt vào
+    // `"email" in obj`, tức mọi assert "đã bỏ khoá" của int-spec sẽ xanh-giả.
+    return email === null ? { id, display_name: fullName } : { id, email, display_name: fullName };
   }
 
   private toLoginLogItem(row: LoginLogRow): LoginLogListItem {

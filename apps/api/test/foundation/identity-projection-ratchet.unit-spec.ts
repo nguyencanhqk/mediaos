@@ -104,8 +104,13 @@ describe("identity-projection ratchet (S6-SEC-IDENTITY-PROJ-1)", () => {
   });
 
   it("chiều 4 — TRẦN ĐẾM cho bốn căn cứ không đo được bằng máy", () => {
-    // waiver · no-actor · second-assert · self-bound-route đều KHÔNG mang vị từ SQL nào để kiểm —
-    // chúng là câu người viết. Không trần thì đường né rẻ nhất là dán một trong bốn nhãn ấy lên điểm mới.
+    // MỌI basis có trần, không chỉ bốn cái "không đo được" (security-reviewer F5): sổ phán quyết chỉ
+    // chứa CHUỖI, ratchet không bao giờ nhìn thấy vị từ SQL — nên `scoped-predicate` cũng chỉ là một
+    // lời khai, y hệt `waiver`. Không trần thì đường né rẻ nhất là dán nhãn "đo được" lên điểm mới.
+    const uncovered = [...new Set(IDENTITY_VERDICTS.map((v) => v.basis))].filter(
+      (b) => !(b in BASIS_CEILINGS),
+    );
+    expect(uncovered, "basis đang dùng mà KHÔNG có trần đếm — đường né im lặng").toEqual([]);
     for (const [basis, ceiling] of Object.entries(BASIS_CEILINGS)) {
       const n = IDENTITY_VERDICTS.filter((v) => v.basis === basis).length;
       expect(
@@ -146,5 +151,11 @@ describe("identity-projection ratchet (S6-SEC-IDENTITY-PROJ-1)", () => {
       blind.rawSqlIdentity,
       "số template `sql` ghép email/full_name bằng chuỗi thô đã tăng — ngoài tầm phân tích identifier.",
     ).toBeLessThanOrEqual(BLIND_SPOT_PINS.rawSqlIdentity);
+    expect(
+      blind.exportedUserAliases,
+      "có thêm file EXPORT một `alias(users,…)`. Scanner lần alias trong MỘT file, nên một alias dùng " +
+        "xuyên file là điểm chiếu VÔ HÌNH — đúng cách WO này suýt tự làm mù census khi nâng " +
+        "`SECURITY_EVENT_ACTOR` lên cấp module.",
+    ).toBeLessThanOrEqual(BLIND_SPOT_PINS.exportedUserAliases);
   });
 });
