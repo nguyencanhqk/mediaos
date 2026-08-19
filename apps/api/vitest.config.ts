@@ -144,6 +144,16 @@ export default defineConfig({
         // cảm) → ≥80% on all axes. Fully unit-tested in the no-DB run via data-scope.service.spec.ts +
         // data-scope.service.coverage.spec.ts (measured 98.83% stmts / 88% branches) so a per-file gate is
         // safe here. Exact path = per-file semantics.
+        // S6-SEC-IDENTITY-PROJ-1: `identity-projection.ts` là crown-jewel THUẦN (dựng vị từ quyết định
+        // cột danh tính có hiện hay không) và unit-test được toàn bộ KHÔNG cần DB ⇒ bar cao như
+        // `dag-validator.service.ts`, không phải 80. Nó cũng KHÔNG rơi vào bẫy "inert vì int-spec skip"
+        // mà các khối dưới đây phải né: `identity-projection.spec.ts` chạy ở lần `pnpm test` mặc định.
+        "src/permission/identity-projection.ts": {
+          lines: 90,
+          functions: 90,
+          branches: 90,
+          statements: 90,
+        },
         "src/permission/data-scope.service.ts": {
           lines: 80,
           functions: 80,

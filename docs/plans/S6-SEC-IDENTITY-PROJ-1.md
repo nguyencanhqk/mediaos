@@ -467,3 +467,44 @@ ngoài phòng mình.
 | `recycle-bin` (2) | `S6-SEC-IDENTITYBOUND-1` |
 | `users` (1) | `auth-users.repository.ts:111` nhận sẵn vị từ scope |
 | `permission` (2) | **UNBOUND** — KI-053 |
+
+---
+
+## Phụ lục B — KẾT QUẢ THI CÔNG (2026-08-19)
+
+### B.1 Những gì bản vá thật sự đã dạy, mà plan không đoán trước
+
+| # | Phát hiện | Vì sao đáng giữ |
+| --- | --- | --- |
+| B-1 | **`ORDER BY` trên chính cột sắp bị che là một oracle** — và nó có ở HAI chỗ (`role-admin.repository` `orderBy(users.email)`, `leave-admin.repository` `orderBy(asc(users.fullName))`), không chỉ chỗ mà plan-review W1 chỉ ra | Che giá trị mà giữ nguyên thứ tự sắp = thứ tự hàng tiết lộ alphabet của thứ vừa che. Khó thấy hơn cột bị rò vì nó không nằm trong body response |
+| B-2 | **Gọi `identityColumns` hai lần trong một `select` thì cờ sau ĐÈ cờ trước** — hai nhóm danh tính dùng chung một cờ ⇒ nhóm chủ thể bị quyết định bởi vị từ của nhóm actor, im lặng | Không có test nào bắt được cái này; nó chỉ lộ khi viết ca C2/C3. Đã vá bằng tham số `flagKey` + ca unit riêng |
+| B-3 | **Chính bản vá làm CENSUS BỊ MÙ**: nâng `alias(users,…)` từ biến cục bộ lên hằng cấp module (việc bắt buộc để service dựng được vị từ trên cột của vai actor) làm scanner mất dấu 2 điểm NGAY LẬP TỨC — ratchet báo "verdict mồ côi" thay vì "điểm mồ côi" | Một thao tác refactor tầm thường đủ để thu hẹp census. Đã vá: scanner lần theo gán-lại tới điểm bất động. Ghi rõ vùng mù còn lại: import **xuyên file** vẫn chưa lần được |
+| B-4 | **KI-053 mô tả SAI cặp gate.** `RELEASE-02` ghi gate là `read:role`/`view:role`; đo lại thì route gate `view:user` và service còn `assertCan(view,user)` nữa | Khuyết tật vẫn thật nhưng khác hình dạng: cặp gate ĐÚNG mà `data_scope` không bao giờ được đọc. Bài học: số đo trong sổ KI cũng phải đo lại, không chỉ số đo trong `src[]` |
+| B-5 | **Ca DENY `D2` xanh cả khi bản vá bị vô hiệu hoàn toàn** — chưa seed số dư phép nào ⇒ "0 hàng mang khoá danh tính" đúng một cách RỖNG | Chỉ phát hiện được bằng cách CỐ Ý neutralise `fromScope` rồi chạy lại. 4 ca đỏ, 1 ca xanh — và cái xanh mới là cái nguy hiểm |
+
+### B.2 Nghiệm thu đã chạy
+
+| Hạng mục | Kết quả |
+| --- | --- |
+| Ratchet L2 | 7/7 xanh. **RED trước** đã ghi: verdicts rỗng ⇒ ĐỎ, gọi tên đúng **9 điểm** không có căn cứ |
+| L1 unit (`identity-projection.spec.ts`) | 11/11 xanh · coverage **100% cả 4 trục** (ngưỡng per-file đặt 90 ở `vitest.config.ts`) |
+| int-spec `identity-projection-scope` | 11/11 xanh dưới `LANE_DB=mediaos_identityproj` |
+| **RED-proof #1** (thay hai grant bằng một) | **C2 + C3 ĐỎ** đúng hai chiều: "LỘ email người gây ra" + "GIẤU email của chính actor" |
+| **RED-proof #2** (neutralise `fromScope` ⇒ luôn `true`) | **A2 · B2 · C2 · C3 · D2 ĐỎ** (D2 chỉ đỏ SAU khi seed số dư thật — xem B-5) |
+| api unit (`src` + `test/foundation`) | 3666 xanh / 1062 skip |
+| Hồi quy vùng chạm (auth·permission·role·leave·org·recycle·security·login) | **67/67 file xanh** dưới `LANE_DB` |
+| `test/foundation` + e2e | 25/25 file xanh |
+| FE | `apps/app` + `apps/console` + `apps/auth` typecheck sạch; `RoleMembersTab.spec.tsx` 8/8 (thêm ca hàng ngoài scope) |
+| lint toàn workspace | xanh |
+| Full-suite một lượt | **crash KI-014** (tinypool `ERR_IPC_CHANNEL_CLOSED` sau `chat-qa1-scale.int-spec.ts`) — hạ tầng test, KHÔNG phải bài đỏ; chạy theo chunk là cách đã biết |
+
+### B.3 Sai khác so với plan — nói thẳng
+
+- **P3b không dựng 16 ca ALLOW cho 8 module còn lại.** Bốn module vá trong WO này có đủ cặp DENY+ALLOW
+  (11 ca). Tám module còn lại được **ghi phán quyết có ký** (Phụ lục A) + ratchet giữ, chứ không có ca
+  runtime mới. Lý do: chúng đã có spec riêng ở tầng của mình (`employees-rbac-scope`, `org-directory-scope`,
+  `identity-bound-scope`, chat/tasks suite), và dựng thêm 16 ca chỉ để chạm lại cùng đường là chi phí
+  không đổi lấy bằng chứng mới. **Cái mất:** chiều đo runtime "PIN số cột danh tính trong response"
+  (§2.3) chỉ áp cho 4 module đã vá, không áp cho 8 module kia — census tĩnh vẫn là bằng chứng duy nhất
+  ở đó. Ai muốn đóng nốt thì đó là một WO nhỏ, không phải một dòng verdict.
+- **KI-070 mở, không đóng** — ranh giới bound-CỘT/bound-HÀNG (§3.4).
