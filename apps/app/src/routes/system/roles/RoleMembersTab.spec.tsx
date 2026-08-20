@@ -190,4 +190,31 @@ describe("RoleMembersTab", () => {
       expect(authUsersApi.revokeRole).toHaveBeenCalledWith("u-100", "role-1");
     });
   });
+  // ── S6-SEC-IDENTITY-PROJ-1 (KI-053): hàng NGOÀI scope danh bạ ────────────────
+  //
+  // Server BỎ HẲN KHOÁ `email`/`fullName` khi actor ngoài `data_scope` của `view:user` (contract nay
+  // `.optional()`). Ca này khoá hai thứ mà bản vá BE một mình không khoá được:
+  //   1. FE không vỡ TRẮNG — bẫy đã cắn thật ở KI-051, nơi schema console khai hai khoá BẮT BUỘC nên
+  //      server bỏ khoá = ZodError runtime dù HTTP 200, vỡ trang cho ĐÚNG vai mà bản vá bảo vệ.
+  //   2. Hàng ngoài scope vẫn NHẬN DIỆN được (rơi về `userId`), không render rỗng trông như hỏng dữ liệu.
+  it("hàng ngoài scope danh bạ (thiếu khoá email/fullName) vẫn render, rơi về userId", async () => {
+    vi.mocked(roleAdminApi.getMembers).mockResolvedValue({
+      members: [
+        {
+          userId: "u-200",
+          // KHÔNG có `email`, KHÔNG có `fullName` — đúng hình dạng server trả khi ngoài scope.
+          status: "active",
+          expiresAt: null,
+          grantedAt: new Date("2026-07-01T00:00:00Z"),
+        },
+      ],
+    } as unknown as Awaited<ReturnType<typeof roleAdminApi.getMembers>>);
+    setCaps({ "view:user": true });
+    renderWithQuery(<RoleMembersTab roleId="role-1" />);
+    // Nhãn phải NÓI RA LÝ DO. Rơi về UUID cũng "không vỡ trang" nhưng đọc thành lỗi join —
+    // ca này khoá đúng vế đó: KHÔNG được hiển thị userId thô ở ô tên.
+    expect(await screen.findByText("(không có quyền xem danh tính)")).toBeInTheDocument();
+    expect(screen.queryByText("u-200")).not.toBeInTheDocument();
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
 });

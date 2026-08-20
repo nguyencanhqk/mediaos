@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import type {
   AuthLogUserRef,
   LoginLogListItem,
@@ -9,9 +9,14 @@ import type {
   SecurityEventSeverity,
 } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
+import type { PgColumn } from "drizzle-orm/pg-core";
+import { DataScopeService } from "../permission/data-scope.service";
+import { fromScope, type IdentityGrant } from "../permission/identity-projection";
+import { users } from "../db/schema/users";
 import { LoginLogRepository, type LoginLogFilter, type LoginLogRow } from "./login-log.repository";
 import {
   SecurityEventRepository,
+  SECURITY_EVENT_ACTOR,
   type SecurityEventFilter,
   type SecurityEventRow,
 } from "./security-event.repository";
@@ -34,17 +39,69 @@ export interface AuthLogPage<T> {
  */
 @Injectable()
 export class AuthLogsViewerService {
+  private readonly logger = new Logger(AuthLogsViewerService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly loginLogs: LoginLogRepository,
     private readonly securityEvents: SecurityEventRepository,
+    // S6-SEC-IDENTITY-PROJ-1 (KI-054) — BẮT BUỘC. Docstring của lớp này từng ghi "Company-scope" như
+    // một sự thật; nó là ý định. Không có gì trong đường đọc resolve `data_scope`, nên một vai giữ
+    // `view:audit-log@Own` vẫn nhận email + họ tên của MỌI người trong 364 dòng login_logs.
+    private readonly dataScope: DataScopeService,
   ) {}
+
+  /**
+   * Vị từ scope cho cặp danh bạ `view:user`, dựng trên CỘT ĐÍCH được chỉ định.
+   *
+   * `resolveOrNull` chứ không `resolveAndAssert`: cặp GATE của hai route này là `view:audit-log`, còn
+   * cặp BOUND cột danh tính là `view:user` — HAI cặp khác nhau (khuôn N-1c). Một vai hoàn toàn có thể
+   * đọc được nhật ký mà không được xem danh bạ; biến việc đó thành 403 cả route là siết quá tay và
+   * làm mất một quyền đang có. Fail-closed ĐÚNG mức là bỏ cột danh tính.
+   */
+  private async identityGrantFor(
+    actor: { id: string; companyId: string },
+    target: { idCol: PgColumn; companyIdCol: PgColumn },
+    why: string,
+  ): Promise<IdentityGrant> {
+    const scope = await this.dataScope.resolveOrNull(actor.id, actor.companyId, "view", "user");
+    if (scope === null) {
+      // Nhánh fail-closed PHẢI để lại vết. Không có dòng này thì vận hành không phân biệt được
+      // "actor thật sự ngoài scope danh bạ" với "trình phân giải scope đang gãy" — cả hai đều ra một
+      // bảng nhật ký mất sạch email/tên. `why` đi kèm để biết đang ở đường login-log hay
+      // security-event, và với vai nào (hàm này được gọi 3 lần cho mỗi request security-events).
+      this.logger.warn("auth-logs: không phân giải được data_scope cặp danh bạ → BỎ cột danh tính", {
+        userId: actor.id,
+        companyId: actor.companyId,
+        where: why,
+      });
+    }
+    return fromScope(
+      scope === null
+        ? null
+        : this.dataScope.buildUserScopeConditionOn(
+            scope,
+            { userId: actor.id, companyId: actor.companyId },
+            target,
+          ),
+      "identity-gated",
+      why,
+      // Buộc grant vào ĐÚNG vai: `identityColumns` sẽ ném nếu ai đó đem grant này bọc cột vai kia.
+      target.idCol,
+    );
+  }
 
   /** AUTH-API-401 — list login-log của tenant hiện tại (RLS ép qua withTenant). */
   async listLoginLogs(
-    companyId: string,
+    actor: { id: string; companyId: string },
     query: LoginLogListQuery,
   ): Promise<AuthLogPage<LoginLogListItem>> {
+    const companyId = actor.companyId;
+    const identity = await this.identityGrantFor(
+      actor,
+      { idCol: users.id, companyIdCol: users.companyId },
+      "GET /auth/login-logs — cột danh tính đi theo data_scope của cặp danh bạ view:user (KI-054)",
+    );
     const offset = (query.page - 1) * query.per_page;
     const filter: LoginLogFilter = {
       userId: query.user_id,
@@ -54,7 +111,15 @@ export class AuthLogsViewerService {
     };
     return this.db.withTenant(companyId, async (tx) => {
       const [rows, total] = await Promise.all([
-        this.loginLogs.findManyTx(tx, filter, query.sort, query.order, query.per_page, offset),
+        this.loginLogs.findManyTx(
+          tx,
+          filter,
+          query.sort,
+          query.order,
+          query.per_page,
+          offset,
+          identity,
+        ),
         this.loginLogs.countTx(tx, filter),
       ]);
       return { data: rows.map((row) => this.toLoginLogItem(row)), total };
@@ -63,9 +128,24 @@ export class AuthLogsViewerService {
 
   /** AUTH-API-402 — list security-event của tenant hiện tại (RLS ép qua withTenant). */
   async listSecurityEvents(
-    companyId: string,
+    actor: { id: string; companyId: string },
     query: SecurityEventListQuery,
   ): Promise<AuthLogPage<SecurityEventListItem>> {
+    const companyId = actor.companyId;
+    // HAI grant cho HAI vai. Xem chú thích trong `security-event.repository.findManyTx` — tái dùng
+    // một grant cho cả hai vừa đẻ lỗ mới vừa hồi quy đường ALLOW.
+    const [identitySubject, identityActor] = await Promise.all([
+      this.identityGrantFor(
+        actor,
+        { idCol: users.id, companyIdCol: users.companyId },
+        "GET /auth/security-events — cột danh tính CHỦ THỂ theo data_scope của view:user (KI-054)",
+      ),
+      this.identityGrantFor(
+        actor,
+        { idCol: SECURITY_EVENT_ACTOR.id, companyIdCol: SECURITY_EVENT_ACTOR.companyId },
+        "GET /auth/security-events — cột danh tính NGƯỜI GÂY RA theo data_scope của view:user (KI-054)",
+      ),
+    ]);
     const offset = (query.page - 1) * query.per_page;
     const filter: SecurityEventFilter = {
       userId: query.user_id,
@@ -76,27 +156,67 @@ export class AuthLogsViewerService {
     };
     return this.db.withTenant(companyId, async (tx) => {
       const [rows, total] = await Promise.all([
-        this.securityEvents.findManyTx(tx, filter, query.sort, query.order, query.per_page, offset),
+        this.securityEvents.findManyTx(
+          tx,
+          filter,
+          query.sort,
+          query.order,
+          query.per_page,
+          offset,
+          identitySubject,
+          identityActor,
+        ),
         this.securityEvents.countTx(tx, filter),
       ]);
       return { data: rows.map((row) => this.toSecurityEventItem(row)), total };
     });
   }
 
-  /** Ref user rút gọn — chỉ khi có CẢ id lẫn email (user soft-delete/UserNotFound ⇒ null). */
+  /**
+   * Ref user rút gọn — BA nhánh, và ba nhánh phải phân biệt được với nhau.
+   *
+   * ⚠️ Đây là chỗ dễ đẻ bẫy KI-052 nhất trong cả bản vá (plan-review vòng 1, B2). `AuthLogUserRef` là
+   * object LỒNG, không phải khoá phẳng — nên không có khoá nào để "bỏ hẳn". Bản gốc trả `null` khi
+   * thiếu email; nếu cứ thế che email thì cả object thành `null`, mà `null` **đã mang sẵn một nghĩa
+   * khác**: "log không gắn user" hoặc "user đã bị xoá". Sau bản vá `null` sẽ mang hai nghĩa và không
+   * ai phân biệt được nữa — đúng thứ WO này tồn tại để chống.
+   *
+   *   • `!id`               → `null`                        : log không gắn user (đăng nhập fail
+   *                                                            trước khi resolve được ai).
+   *   • `id` + ngoài scope  → `{ id, display_name: null }`  : KHÔNG có khoá `email`.
+   *   • còn lại             → đủ ba trường.
+   *
+   * ⚠️ **ĐÍNH CHÍNH (security-reviewer 2026-08-19, F2) — hai ca CHIA CHUNG hình dạng, và đó là điều
+   * đã cân nhắc chứ không phải sót.** Bản đầu của hàm này có nhánh thứ tư "trong scope nhưng thiếu
+   * email ⇒ user đã bị xoá cứng ⇒ `null`". Nhánh đó **KHÔNG THỂ CHẠM TỚI**: `users.email` là NOT
+   * NULL, nên join trúng thì luôn có email; còn join TRƯỢT thì mọi cột NULL ⇒ vị từ cho `NULL` ⇒ cờ
+   * (sau `coalesce`) là `false` ⇒ hàng rơi vào nhánh "ngoài scope". Tức "user đã xoá cứng" và "ngoài
+   * scope danh bạ" cho ra CÙNG `{ id, display_name: null }`.
+   *
+   * Chấp nhận được, và nói ra lý do thay vì để nó thành khoảng trống: cả hai đều nghĩa là "không có
+   * danh tính để hiện", và `id` VẪN CÒN nên hàng vẫn truy được — nhiều thông tin hơn bản gốc (bản gốc
+   * trả `null` cho cả object ở ca user-đã-xoá). Cái KHÔNG được phép là dùng `null` để mang thêm một
+   * nghĩa thứ hai (bẫy KI-052); ở đây `null` giữ đúng một nghĩa: "không có user để hiện".
+   */
   private userRef(
     id: string | null,
     email: string | null,
     fullName: string | null,
+    identityInScope: boolean,
   ): AuthLogUserRef | null {
-    if (!id || !email) return null;
-    return { id, email, display_name: fullName };
+    if (!id) return null;
+    if (!identityInScope) return { id, display_name: null };
+    // KHÔNG có nhánh `if (!email) return null` — nó chết (xem docblock). Thêm lại là code không bao
+    // giờ chạy, tức một lời hứa mà test không kiểm được.
+    // BỎ HẲN KHOÁ, không đặt `email: undefined` — khoá tồn tại với giá trị undefined vẫn lọt vào
+    // `"email" in obj`, tức mọi assert "đã bỏ khoá" của int-spec sẽ xanh-giả.
+    return email === null ? { id, display_name: fullName } : { id, email, display_name: fullName };
   }
 
   private toLoginLogItem(row: LoginLogRow): LoginLogListItem {
     return {
       id: row.id,
-      user: this.userRef(row.userId, row.userEmail, row.userFullName),
+      user: this.userRef(row.userId, row.userEmail, row.userFullName, row.identityInScope),
       status: row.loginStatus as LoginLogStatus,
       ip_address: row.ipAddress,
       user_agent: row.userAgent,
@@ -108,10 +228,17 @@ export class AuthLogsViewerService {
   private toSecurityEventItem(row: SecurityEventRow): SecurityEventListItem {
     return {
       id: row.id,
-      user: this.userRef(row.userId, row.userEmail, row.userFullName),
+      user: this.userRef(row.userId, row.userEmail, row.userFullName, row.identityInScope),
       event_type: row.eventType,
       severity: row.severity as SecurityEventSeverity,
-      actor: this.userRef(row.actorUserId, row.actorEmail, row.actorFullName),
+      // Cờ RIÊNG cho vai actor — `identityColumns` gọi hai lần nên trả hai cờ; drizzle đặt cờ sau đè
+      // cờ trước nếu trùng tên, vì thế repo đổi tên cờ thứ hai thành `actorIdentityInScope`.
+      actor: this.userRef(
+        row.actorUserId,
+        row.actorEmail,
+        row.actorFullName,
+        row.actorIdentityInScope,
+      ),
       ip_address: row.ipAddress,
       user_agent: row.userAgent,
       created_at: row.createdAt.toISOString(),

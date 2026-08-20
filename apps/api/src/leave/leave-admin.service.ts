@@ -28,6 +28,8 @@ import {
 } from "@mediaos/contracts";
 import { isUniqueViolation } from "../common/db-error";
 import { DatabaseService } from "../db/db.service";
+import { users } from "../db/schema/users";
+import { fromScope } from "../permission/identity-projection";
 import { AuditService } from "../events/audit.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { LeaveAdminRepository } from "./leave-admin.repository";
@@ -509,6 +511,39 @@ export class LeaveAdminService {
 
   // ─── leave_balances (view/view-transaction/adjust:leave-balance) ─────────────
 
+  /**
+   * S6-SEC-IDENTITY-PROJ-1 (KI-069) — vị từ cho cột `userFullName` của bảng số dư phép.
+   *
+   * Cặp GATE của route là `view:leave-balance` (nhạy cảm); cặp BOUND cột danh tính là `view:user`.
+   * HAI cặp khác nhau ⇒ `resolveOrNull`, không `resolveAndAssert`: một vai có quyền xem số dư phép mà
+   * không có quyền xem danh bạ là hình dạng hợp lệ (đúng khuôn N-1c), biến nó thành 403 cả route là
+   * siết quá tay. Fail-closed đúng mức là bỏ cột tên, giữ nguyên phần số liệu.
+   */
+  private async identityGrant(
+    actor: Actor,
+    where: string,
+  ): Promise<ReturnType<typeof fromScope>> {
+    const scope = await this.dataScope.resolveOrNull(actor.id, actor.companyId, "view", "user");
+    if (scope === null) {
+      this.logger.warn(`${where}: actor không có grant cặp danh bạ → BỎ cột tên của mọi hàng`, {
+        userId: actor.id,
+        companyId: actor.companyId,
+      });
+    }
+    return fromScope(
+      scope === null
+        ? null
+        : this.dataScope.buildUserScopeConditionOn(
+            scope,
+            { userId: actor.id, companyId: actor.companyId },
+            { idCol: users.id, companyIdCol: users.companyId },
+          ),
+      "identity-gated",
+      `${where} — cột danh tính đi theo data_scope của cặp danh bạ view:user (KI-069)`,
+      users.id,
+    );
+  }
+
   async listBalances(
     actor: Actor,
     query: LeaveBalanceAdminListQuery,
@@ -516,11 +551,13 @@ export class LeaveAdminService {
     await this.dataScope.resolveAndAssert(actor.id, actor.companyId, "view", "leave-balance", {
       isSensitive: true,
     });
+    const identity = await this.identityGrant(actor, "GET /leave/balances (admin)");
     return this.db.withTenant(actor.companyId, async (tx) => {
       const rows = await this.repo.listBalancesTx(
         actor.companyId,
         { employeeId: query.employeeId, leaveTypeId: query.leaveTypeId, year: query.year },
         tx,
+        identity,
       );
       return rows.map(toBalanceAdminView);
     });
@@ -565,6 +602,14 @@ export class LeaveAdminService {
     await this.dataScope.resolveAndAssert(actor.id, actor.companyId, "adjust", "leave-balance", {
       isSensitive: true,
     });
+    // ⚠️ Phân giải scope TRƯỚC khi mở transaction, không phải bên trong (security-reviewer 2026-08-19).
+    // `resolveOrNull` đi qua một connection KHÁC; gọi nó khi tx đang giữ một connection thì dưới
+    // PgBouncer transaction-mode N request đồng thời có thể ăn hết pool, đồng thời kéo dài thời gian
+    // giữ lock ghi trên hàng số dư. `listBalances` vốn đã làm đúng — chỗ này lệch khuôn.
+    const adjustIdentity = await this.identityGrant(
+      actor,
+      "PATCH /leave/admin/balances/:id — đọc lại hàng vừa điều chỉnh",
+    );
     return this.db
       .withTenant(actor.companyId, async (tx) => {
         const [balance] = await this.repo.findBalanceForUpdateTx(actor.companyId, balanceId, tx);
@@ -642,7 +687,12 @@ export class LeaveAdminService {
 
         // Re-read WITH the type/user joins for the response view (applyAdjustmentTx's .returning() only
         // has raw leave_balances columns — no leaveTypeCode/userFullName).
-        const [full] = await this.repo.listBalancesTx(actor.companyId, { id: balanceId }, tx);
+        const [full] = await this.repo.listBalancesTx(
+          actor.companyId,
+          { id: balanceId },
+          tx,
+          adjustIdentity,
+        );
         if (!full) throw new InternalServerErrorException("Failed to reload adjusted balance");
         return toBalanceAdminView(full);
       })
@@ -782,6 +832,7 @@ interface BalanceRow {
   leaveTypeId: string;
   leaveTypeCode: string | null;
   leaveTypeName: string | null;
+  identityInScope: boolean;
   year: number;
   totalDays: string;
   usedDays: string;
@@ -791,6 +842,13 @@ interface BalanceRow {
   allowNegativeBalance: boolean | null;
 }
 
+/**
+ * S6-SEC-IDENTITY-PROJ-1 (KI-069) — BỎ HẲN KHOÁ `userFullName` khi ngoài scope.
+ *
+ * Không giữ `null`: hợp đồng cho phép `userFullName` là `null` với nghĩa "user chưa đặt họ tên", nên
+ * `null` thứ hai mang nghĩa "ngoài scope" là lẫn nghĩa — đúng bẫy KI-052 (`leaderUserName`). Và cờ
+ * `identityInScope` là siêu dữ liệu phân quyền của repo: KHÔNG được lọt ra DTO.
+ */
 function toBalanceAdminView(row: BalanceRow): LeaveBalanceAdminView {
   const total = Number(row.totalDays);
   const used = Number(row.usedDays);
@@ -800,7 +858,7 @@ function toBalanceAdminView(row: BalanceRow): LeaveBalanceAdminView {
     id: row.id,
     employeeId: row.employeeId,
     userId: row.userId,
-    userFullName: row.userFullName,
+    ...(row.identityInScope ? { userFullName: row.userFullName } : {}),
     leaveTypeId: row.leaveTypeId,
     leaveTypeCode: row.leaveTypeCode,
     leaveTypeName: row.leaveTypeName,

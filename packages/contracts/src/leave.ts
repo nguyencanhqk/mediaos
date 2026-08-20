@@ -1045,7 +1045,13 @@ export const leaveBalanceAdminViewSchema = z.object({
   id: z.string().uuid(),
   employeeId: z.string().uuid().nullable(),
   userId: z.string().uuid(),
-  userFullName: z.string().nullable(),
+  /**
+   * S6-SEC-IDENTITY-PROJ-1 (KI-069) — `.optional()` chồng lên `.nullable()`: server BỎ HẲN KHOÁ khi
+   * actor ngoài `data_scope` của cặp danh bạ `view:user`. `null` giữ nguyên nghĩa CŨ ("user chưa đặt
+   * họ tên"); dùng nó để mang thêm nghĩa "ngoài scope" là lẫn nghĩa — bẫy KI-052.
+   * ⚠️ FE khai theo, thiếu là ZodError runtime dù HTTP 200.
+   */
+  userFullName: z.string().nullable().optional(),
   leaveTypeId: z.string().uuid(),
   leaveTypeCode: z.string().nullable(),
   leaveTypeName: z.string().nullable(),

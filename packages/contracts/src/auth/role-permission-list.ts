@@ -56,8 +56,16 @@ export type PermissionListDto = z.infer<typeof permissionListSchema>;
  */
 export const roleMemberSchema = z.object({
   userId: z.string().uuid(),
-  email: z.string(),
-  fullName: z.string().nullable(),
+  /**
+   * S6-SEC-IDENTITY-PROJ-1 (KI-053) — `.optional()`, KHÔNG `.nullable()`: server BỎ HẲN KHOÁ khi actor
+   * ở ngoài `data_scope` của cặp danh bạ `view:user`. Dùng `null` để mang tin "ngoài scope" là lẫn
+   * nghĩa với "không có giá trị" — đúng bẫy KI-052 (`leaderUserName`).
+   *
+   * ⚠️ FE PHẢI khai `.optional()` theo, nếu không server bỏ khoá = ZodError runtime dù HTTP 200, tức
+   * vỡ TRẮNG màn hình cho đúng vai mà bản vá bảo vệ (memory `server-masking-needs-optional-fe-schema`).
+   */
+  email: z.string().optional(),
+  fullName: z.string().nullable().optional(),
   status: z.string(),
   /** Hết hạn grant (null = vô hạn). Hàng đã hết hạn KHÔNG xuất hiện trong list. */
   expiresAt: z.coerce.date().nullable(),

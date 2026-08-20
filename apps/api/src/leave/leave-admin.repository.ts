@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
+import { identityColumns, type IdentityGrant } from "../permission/identity-projection";
 import { employeeProfiles } from "../db/schema/employees";
 import { leaveBalances, leaveTypes } from "../db/schema/hr";
 import { leaveBalanceTransactions, leavePolicies } from "../db/schema/leave";
@@ -205,18 +206,23 @@ export class LeaveAdminRepository {
     companyId: string,
     filters: { id?: string; employeeId?: string; leaveTypeId?: string; year?: number },
     tx: TenantTx,
+    // S6-SEC-IDENTITY-PROJ-1 (KI-069) — BẮT BUỘC. Trước bản vá, `leave-admin.service.listBalances`
+    // gọi `resolveAndAssert('view','leave-balance')` rồi **VỨT** giá trị scope trả về: gate đúng, tập
+    // hàng vẫn là toàn công ty, và `userFullName` đi kèm. Cùng lớp lỗ KI-053.
+    identity: IdentityGrant,
   ) {
     const conds = [eq(leaveBalances.companyId, companyId), isNull(leaveBalances.deletedAt)];
     if (filters.id) conds.push(eq(leaveBalances.id, filters.id));
     if (filters.employeeId) conds.push(eq(leaveBalances.employeeId, filters.employeeId));
     if (filters.leaveTypeId) conds.push(eq(leaveBalances.leaveTypeId, filters.leaveTypeId));
     if (filters.year) conds.push(eq(leaveBalances.year, filters.year));
+    const identityCols = identityColumns(identity, { userFullName: users.fullName });
     return tx
       .select({
         id: leaveBalances.id,
         employeeId: leaveBalances.employeeId,
         userId: leaveBalances.userId,
-        userFullName: users.fullName,
+        ...identityCols,
         leaveTypeId: leaveBalances.leaveTypeId,
         leaveTypeCode: leaveTypes.code,
         leaveTypeName: leaveTypes.name,
@@ -232,7 +238,12 @@ export class LeaveAdminRepository {
       .innerJoin(users, eq(leaveBalances.userId, users.id))
       .innerJoin(leaveTypes, eq(leaveBalances.leaveTypeId, leaveTypes.id))
       .where(and(...conds))
-      .orderBy(desc(leaveBalances.year), asc(users.fullName));
+      // ⚠️ SẮP theo CỘT ĐÃ CHE, không theo `users.fullName` gốc (plan-review vòng 1, W1). Che giá trị
+      // mà vẫn ORDER BY cột gốc thì THỨ TỰ HÀNG tiết lộ thứ tự alphabet của thứ vừa che — bản vá tự
+      // biến mình thành oracle, và cái oracle đó còn khó thấy hơn cột bị rò vì nó không nằm trong body.
+      // Actor trong scope: biểu thức bằng đúng cột gốc ⇒ thứ tự hiển thị KHÔNG đổi.
+      // `leaveBalances.id` là khoá phá hoà, giữ phân trang tất định khi mọi tên đều bị che (cùng null).
+      .orderBy(desc(leaveBalances.year), asc(identityCols.userFullName), asc(leaveBalances.id));
   }
 
   /** Plain existence check (no lock) — used by read-only endpoints (view-transaction). */

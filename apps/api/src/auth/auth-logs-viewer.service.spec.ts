@@ -20,7 +20,28 @@ function stubDb(): unknown {
   };
 }
 
-function makeService(loginRows: LoginLogRow[], secRows: SecurityEventRow[]): AuthLogsViewerService {
+/**
+ * Stub DataScopeService — S6-SEC-IDENTITY-PROJ-1 (KI-054).
+ *
+ * `scope` là thứ ca test điều khiển. Trả `null` = actor KHÔNG có grant nào cho cặp danh bạ
+ * `view:user` ⇒ `fromScope` fail-closed về `sql\`false\`` ⇒ mọi cột danh tính bị bỏ. Ở tầng unit
+ * (không DB) vị từ không được THỰC THI, nên ca ở đây kiểm ĐƯỜNG MAP (userRef ba nhánh); việc vị từ có
+ * lọc đúng hàng hay không thuộc int-spec chạy trên Postgres thật.
+ */
+function stubDataScope(scope: string | null): unknown {
+  return {
+    resolveOrNull: async () => scope,
+    buildUserScopeConditionOn: () => ({ queryChunks: [] }),
+  };
+}
+
+const ACTOR = { id: U2, companyId: COMPANY };
+
+function makeService(
+  loginRows: LoginLogRow[],
+  secRows: SecurityEventRow[],
+  scope: string | null = "Company",
+): AuthLogsViewerService {
   const loginRepo = {
     findManyTx: async () => loginRows,
     countTx: async () => loginRows.length,
@@ -29,7 +50,12 @@ function makeService(loginRows: LoginLogRow[], secRows: SecurityEventRow[]): Aut
     findManyTx: async () => secRows,
     countTx: async () => secRows.length,
   };
-  return new AuthLogsViewerService(stubDb() as never, loginRepo as never, secRepo as never);
+  return new AuthLogsViewerService(
+    stubDb() as never,
+    loginRepo as never,
+    secRepo as never,
+    stubDataScope(scope) as never,
+  );
 }
 
 const baseLoginQuery = loginLogListQuerySchema.parse({});
@@ -45,11 +71,12 @@ describe("AuthLogsViewerService.listLoginLogs (mapping)", () => {
       failureReason: "WrongPassword",
       createdAt: new Date("2026-06-01T08:30:00.000Z"),
       userId: U1,
+      identityInScope: true,
       userEmail: "u1@a.test",
       userFullName: "User One",
     };
     const svc = makeService([row], []);
-    const { data, total } = await svc.listLoginLogs(COMPANY, baseLoginQuery);
+    const { data, total } = await svc.listLoginLogs(ACTOR, baseLoginQuery);
     expect(total).toBe(1);
     expect(data[0]).toEqual({
       id: row.id,
@@ -73,6 +100,7 @@ describe("AuthLogsViewerService.listLoginLogs (mapping)", () => {
         failureReason: "UserNotFound",
         createdAt: new Date("2026-06-02T00:00:00.000Z"),
         userId: null,
+        identityInScope: true,
         userEmail: null,
         userFullName: null,
       },
@@ -84,14 +112,25 @@ describe("AuthLogsViewerService.listLoginLogs (mapping)", () => {
         failureReason: "Locked",
         createdAt: new Date("2026-06-03T00:00:00.000Z"),
         userId: U2,
-        userEmail: null, // user bị soft-delete → leftJoin trả null
+        // S6-SEC-IDENTITY-PROJ-1 — SUA FIXTURE, khong phai sua assert. Ban cu ghim
+        // `identityInScope: true` + `userEmail: null`, mot trang thai KHONG THE XAY RA tren SQL that:
+        // `users.email` la NOT NULL, nen join TRUNG thi luon co email; join TRUOT thi moi cot NULL
+        // ⇒ vi tu cho NULL ⇒ co (sau `coalesce`) la `false`. Ghim mot trang thai bat kha thi nghia la
+        // ca test khong khang dinh gi ve he thong that (memory `tests-can-pin-a-hole-open`).
+        identityInScope: false,
+        userEmail: null,
         userFullName: null,
       },
     ];
     const svc = makeService(rows, []);
-    const { data } = await svc.listLoginLogs(COMPANY, baseLoginQuery);
+    const { data } = await svc.listLoginLogs(ACTOR, baseLoginQuery);
+    // Hang KHONG gan user ⇒ `null` (nghia CU, giu nguyen).
     expect(data[0].user).toBeNull();
-    expect(data[1].user).toBeNull();
+    // Hang co user nhung khong lay duoc danh tinh (user da xoa cung HOAC ngoai scope — hai ca chia
+    // chung hinh dang, xem docblock `userRef`) ⇒ con `id`, MAT khoa `email`. Nhieu thong tin hon ban
+    // goc (ban goc tra `null` ca object), va van fail-closed ve danh tinh.
+    expect(data[1].user).toEqual({ id: U2, display_name: null });
+    expect("email" in (data[1].user as object)).toBe(false);
   });
 });
 
@@ -105,14 +144,16 @@ describe("AuthLogsViewerService.listSecurityEvents (mapping)", () => {
       userAgent: "ua",
       createdAt: new Date("2026-06-04T10:00:00.000Z"),
       userId: U1,
+      identityInScope: true,
       userEmail: "u1@a.test",
       userFullName: "User One",
       actorUserId: U2,
+      actorIdentityInScope: true,
       actorEmail: "u2@a.test",
       actorFullName: "Admin Two",
     };
     const svc = makeService([], [row]);
-    const { data } = await svc.listSecurityEvents(COMPANY, baseSecQuery);
+    const { data } = await svc.listSecurityEvents(ACTOR, baseSecQuery);
     expect(data[0]).toEqual({
       id: row.id,
       user: { id: U1, email: "u1@a.test", display_name: "User One" },
@@ -135,14 +176,16 @@ describe("AuthLogsViewerService.listSecurityEvents (mapping)", () => {
       userAgent: null,
       createdAt: new Date("2026-06-05T00:00:00.000Z"),
       userId: U1,
+      identityInScope: true,
       userEmail: "u1@a.test",
       userFullName: null,
       actorUserId: null,
+      actorIdentityInScope: true,
       actorEmail: null,
       actorFullName: null,
     };
     const svc = makeService([], [row]);
-    const { data } = await svc.listSecurityEvents(COMPANY, baseSecQuery);
+    const { data } = await svc.listSecurityEvents(ACTOR, baseSecQuery);
     expect(data[0].actor).toBeNull();
     expect(data[0].user).toMatchObject({ id: U1, display_name: null });
   });

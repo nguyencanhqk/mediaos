@@ -89,7 +89,7 @@ function useLoginLogColumns(
       cell: ({ row }) => {
         const u = row.original.user;
         return u ? (
-          <span className="text-sm font-medium text-foreground">{u.display_name ?? u.email}</span>
+          <span className="text-sm font-medium text-foreground">{u.display_name ?? u.email ?? t("authLogsIdentityHidden")}</span>
         ) : (
           <span className="text-sm text-muted-foreground">—</span>
         );

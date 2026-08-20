@@ -4,6 +4,7 @@ import type { LoginLogSortField, AuthLogSortOrder } from "@mediaos/contracts";
 import type { TenantTx } from "../db/db.service";
 import { loginLogs } from "../db/schema/auth-logs";
 import { users } from "../db/schema/users";
+import { identityColumns, type IdentityGrant } from "../permission/identity-projection";
 
 /**
  * Bộ lọc login-log (mọi field optional). KHÔNG nhận company_id — đường đọc đi qua withTenant + RLS ép
@@ -25,6 +26,7 @@ export interface LoginLogRow {
   failureReason: string | null;
   createdAt: Date;
   userId: string | null;
+  identityInScope: boolean;
   userEmail: string | null;
   userFullName: string | null;
 }
@@ -59,6 +61,10 @@ export class LoginLogRepository {
     order: AuthLogSortOrder,
     limit: number,
     offset: number,
+    // S6-SEC-IDENTITY-PROJ-1 (KI-054) — BẮT BUỘC. Trước bản vá, docstring của `AuthLogsViewerService`
+    // ghi "Company-scope" nhưng KHÔNG có gì resolve `data_scope`: "Company" là mô tả ý định, không
+    // phải thứ được ép. `buildWhere` bên trên chỉ nhận filter TỪ QUERY PARAM của caller.
+    identity: IdentityGrant,
   ): Promise<LoginLogRow[]> {
     return tx
       .select({
@@ -69,8 +75,7 @@ export class LoginLogRepository {
         failureReason: loginLogs.failureReason,
         createdAt: loginLogs.createdAt,
         userId: loginLogs.userId,
-        userEmail: users.email,
-        userFullName: users.fullName,
+        ...identityColumns(identity, { userEmail: users.email, userFullName: users.fullName }),
       })
       .from(loginLogs)
       .leftJoin(users, eq(users.id, loginLogs.userId))

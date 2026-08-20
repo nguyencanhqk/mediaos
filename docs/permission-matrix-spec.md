@@ -106,12 +106,37 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > **KI-052 `GET /org/teams`** nằm ở **phương thức bên cạnh trong chính file mà N-1c vừa vá** ⇒ bằng
 > chứng cụ thể rằng vá-theo-route không quét hết file; lần sau vá lớp lỗi này thì quét CẢ FILE.
 >
-> ⚠️ **Gốc rễ chung VẪN CÒN, đừng đọc khối này là "/org đã chốt toàn bộ":** `PermissionGuard` không đọc
-> `data_scope`, nên MỌI route chỉ dựa vào guard đều thừa hưởng khoảng hở này. N-1 · N-2 · N-1c là **ba
-> lần vá cùng một lớp lỗi ở ba route khác nhau**. Hướng gốc đề xuất (`S6-SEC-IDENTITY-PROJ-1`, `S3`,
-> không chặn RC): buộc **tầng chiếu** — mọi truy vấn chiếu `users.email`/`users.fullName` phải nhận
-> một vị từ scope, thiếu thì **vỡ typecheck** thay vì trả 0 hàng im lặng. Census 2026-07-29: 40+ điểm
-> chiếu ở 7 module.
+> ⚠️ **Gốc rễ chung:** `PermissionGuard` KHÔNG đọc `data_scope` (verify 2026-07-30: 0 hit `dataScope`
+> trong `permission.guard.ts`), nên MỌI route chỉ dựa vào guard đều thừa hưởng khoảng hở. N-1 · N-2 ·
+> N-1c · N-1d · N-1e là **năm lần vá cùng một lớp lỗi ở năm đường khác nhau**.
+>
+> ✅ **ĐÃ CÓ CƠ CHẾ 2026-08-19 — `S6-SEC-IDENTITY-PROJ-1`** (đóng KI-053 · KI-054, mở+đóng KI-069):
+>
+> - **L1 tầng type** — `apps/api/src/permission/identity-projection.ts`: `IdentityGrant` có brand,
+>   dựng được bằng ĐÚNG 4 constructor; hàm chiếu `identityColumns()` **bắt buộc** nhận nó. Không có
+>   đường "tạm thời chưa bound".
+> - **L2 ratchet** — `test/foundation/identity-projection-{census,verdicts,ratchet}`: MỌI điểm chiếu
+>   `users.email`/`users.fullName` phải có một dòng phán quyết đã ký, với một trong **8 căn cứ**
+>   (`scoped-predicate` · `identity-gated` · `self-bound-row` · `self-bound-route` · `second-assert` ·
+>   `membership` · `no-actor` · `waiver`). Điểm mới không có dòng ⇒ **ĐỎ**.
+>
+> ⚠️ **VÌ SAO 8 căn cứ chứ không phải "mọi điểm PHẢI nhận vị từ scope"** như `done_when` gốc phát biểu:
+> đo lại cho thấy hàng loạt call-site đã an toàn nhưng **không phải bằng vị từ scope** — chúng kín bằng
+> assert thứ hai trong service (`leave.service` `assertCan('manage','leave')`), bằng tự-bound theo
+> `actor.id` (`attendance.listMonthly`), bằng membership (`chat` `assertMember`), hoặc là job máy
+> không có actor HTTP. Một cơ chế chỉ nhận một dạng căn cứ sẽ bắt SAI hàng loạt chỗ đúng, và cái giá
+> của việc bắt sai là người ta gỡ cơ chế.
+>
+> **Census đo lại 2026-08-19 (con số 2026-07-29 "40+ điểm / 7 module" ĐÃ BỊ BÁC BỎ):** **92 điểm chạm /
+> 37 file / 13 module**, trong đó **71 PROJECTION / 34 file / 12 module** — 13 PREDICATE (lớp *oracle*
+> RIÊNG, không cùng lớp lỗ), 6 ORDER BY, 2 GROUP BY. Grep thẳng trượt ba dạng: `alias(users,…)`,
+> `getTableColumns(users)`, và bản đồ cột hằng ở cấp module. **71 là CẬN DƯỚI** — nguồn census là parse
+> TĨNH, tức lớp bằng chứng yếu hơn `fk-tenant-census`/`route-census` (hai file đó có bất biến "0 regex
+> trên mã nguồn"); ba vùng mù còn lại được PIN thành số trong sổ phán quyết.
+>
+> ⚠️ **RANH GIỚI:** cơ chế bound **CỘT danh tính**, KHÔNG bound **TẬP HÀNG**. Vai giữ
+> `view:audit-log@Own` vẫn đọc trọn nhật ký đăng nhập của tenant (UUID · IP · thời điểm), chỉ mất
+> email/tên. Vế đó là **KI-070**, chưa giao.
 >
 > Trước 2026-07-27 cả bảy route đều Authenticated theo quy ước cũ "READ mở trong tenant" — đó chính là
 > KI-030: mọi user đã đăng nhập đọc được trọn danh bạ kèm email, trong khi `/hr/employees` cùng lớp dữ

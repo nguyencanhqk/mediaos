@@ -5630,9 +5630,19 @@ export const backlog = [
     paths: [
       "apps/api/src/permission/**",
       "apps/api/src/**/*.repository.ts",
+      // P0b (plan-review vong 1, B8) — `paths` CU khong phu chinh bo file plan bat buoc sua:
+      // hai service (auth-logs-viewer + leave-admin) va contract deu NGOAI glob repository.ts.
+      // memory `wo-paths-drive-gate-and-scheduler`: paths lai ca review gate lan scheduler ⇒ thieu
+      // duong dan = diff cham vung do van lot LIGHT gate.
+      "apps/api/src/auth/auth-logs-viewer.service.ts",
+      "apps/api/src/leave/**",
+      "packages/contracts/**",
+      "apps/console/**",
       "apps/api/test/**",
+      "apps/api/vitest.config.ts",
       "docs/permission-matrix-spec.md",
       "docs/RELEASE/**",
+      "docs/_review/S6-SEC-IDENTITY-PROJ-1-prod-grants.json",
       "docs/plans/S6-SEC-IDENTITY-PROJ-1.md",
     ],
     skills: ["code-review"],

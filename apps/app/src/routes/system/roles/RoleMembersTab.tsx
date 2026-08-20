@@ -165,10 +165,22 @@ export function RoleMembersTab({ roleId }: RoleMembersTabProps) {
             {members.map((m) => (
               <div key={m.userId} className="flex items-center justify-between gap-4 py-3">
                 <div className="min-w-0">
+                  {/*
+                    S6-SEC-IDENTITY-PROJ-1 (KI-053): `email`/`fullName` nay `.optional()` — server BỎ
+                    HẲN KHOÁ khi actor ngoài `data_scope` của cặp danh bạ `view:user`.
+
+                    Fallback phải NÓI RA LÝ DO, không phải rơi về `userId`: một UUID đứng ở ô "tên
+                    nhân viên" đọc thành lỗi join/hiển thị chứ không thành "phân quyền đang làm đúng
+                    việc" — trống và-khó-hiểu cũng tệ ngang nhau khi đi chẩn.
+                  */}
                   <p className="truncate text-sm font-medium text-foreground">
-                    {m.fullName ?? m.email}
+                    {m.fullName ?? m.email ?? (
+                      <span className="italic text-muted-foreground">
+                        {t("roleMembers.identityHidden")}
+                      </span>
+                    )}
                   </p>
-                  <p className="truncate text-xs text-muted-foreground">{m.email}</p>
+                  <p className="truncate text-xs text-muted-foreground">{m.email ?? "—"}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <Badge variant={m.status === "active" ? "success" : "warning"}>{m.status}</Badge>
@@ -186,7 +198,7 @@ export function RoleMembersTab({ roleId }: RoleMembersTabProps) {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setConfirmRemove({ userId: m.userId, email: m.email })}
+                      onClick={() => setConfirmRemove({ userId: m.userId, email: m.email ?? m.userId })}
                     >
                       {t("roleMembers.actions.remove")}
                     </Button>

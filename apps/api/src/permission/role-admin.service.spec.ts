@@ -46,6 +46,7 @@ describe("RoleAdminService", () => {
   let db: { withTenant: ReturnType<typeof vi.fn> };
   let permissionService: { can: ReturnType<typeof vi.fn> };
   let permissionCatalog: { listPermissionsTx: ReturnType<typeof vi.fn> };
+  let dataScope: { resolveOrNull: ReturnType<typeof vi.fn>; buildUserScopeConditionOn: ReturnType<typeof vi.fn> };
   let service: RoleAdminService;
   const TX = Symbol("tx");
 
@@ -100,11 +101,19 @@ describe("RoleAdminService", () => {
     } as unknown as RoleAdminRepository;
     // S2-AUTH-PERMRULE-1 — catalog permission (bung luật).
     permissionCatalog = { listPermissionsTx: vi.fn(async () => RULE_CATALOG) };
+    // S6-SEC-IDENTITY-PROJ-1 (KI-053): `dataScope` là tham số thứ 5 và BẮT BUỘC — nó nằm TRƯỚC
+    // `permissionCatalog` vì tham số có giá trị mặc định phải đứng cuối. Truyền thiếu ở đây là
+    // `permissionCatalog` rơi vào ô `dataScope`, và mọi ca dùng catalog sẽ đỏ vì sai lý do.
+    dataScope = {
+      resolveOrNull: vi.fn(async () => "Company"),
+      buildUserScopeConditionOn: vi.fn(() => ({ queryChunks: [] })),
+    };
     service = new RoleAdminService(
       db as never,
       permissionService as never,
       audit as never,
       repo,
+      dataScope as never,
       permissionCatalog as never,
     );
   });

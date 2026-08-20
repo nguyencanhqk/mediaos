@@ -5,6 +5,16 @@ import type { SecurityEventSortField, AuthLogSortOrder } from "@mediaos/contract
 import type { TenantTx } from "../db/db.service";
 import { userSecurityEvents } from "../db/schema/auth-logs";
 import { users } from "../db/schema/users";
+import { identityColumns, type IdentityGrant } from "../permission/identity-projection";
+
+/**
+ * S6-SEC-IDENTITY-PROJ-1 (KI-054) — alias `users` cho vai NGƯỜI GÂY RA sự kiện, nâng lên cấp module.
+ *
+ * Trước bản vá nó là biến cục bộ trong `findManyTx`. Phải export vì `AuthLogsViewerService` cần chính
+ * hai cột `id`/`company_id` CỦA ALIAS NÀY để dựng vị từ scope cho vai actor — nếu service dựng vị từ
+ * trên `users` gốc thì nó đang nói về CHỦ THỂ, và cả hai chiều đều sai (xem chú thích trong findManyTx).
+ */
+export const SECURITY_EVENT_ACTOR = alias(users, "sec_event_actor");
 
 /**
  * Bộ lọc security-event (mọi field optional). KHÔNG nhận company_id — withTenant + RLS ép Company-scope
@@ -27,9 +37,13 @@ export interface SecurityEventRow {
   userAgent: string | null;
   createdAt: Date;
   userId: string | null;
+  /** Cờ scope của vai CHỦ THỂ. Repo trả, service tiêu thụ — KHÔNG được lọt ra DTO. */
+  identityInScope: boolean;
   userEmail: string | null;
   userFullName: string | null;
   actorUserId: string | null;
+  /** Cờ scope của vai NGƯỜI GÂY RA — tên RIÊNG, nếu trùng `identityInScope` thì nó đè cờ trên. */
+  actorIdentityInScope: boolean;
   actorEmail: string | null;
   actorFullName: string | null;
 }
@@ -70,8 +84,12 @@ export class SecurityEventRepository {
     order: AuthLogSortOrder,
     limit: number,
     offset: number,
+    // S6-SEC-IDENTITY-PROJ-1 (KI-054) — HAI grant, BẮT BUỘC cả hai. Truy vấn này join `users` hai lần
+    // cho hai vai khác nhau (chủ thể sự kiện / người gây ra), nên nó cần hai vị từ khác nhau.
+    identitySubject: IdentityGrant,
+    identityActor: IdentityGrant,
   ): Promise<SecurityEventRow[]> {
-    const actor = alias(users, "sec_event_actor");
+    const actor = SECURITY_EVENT_ACTOR;
     return tx
       .select({
         id: userSecurityEvents.id,
@@ -81,11 +99,24 @@ export class SecurityEventRepository {
         userAgent: userSecurityEvents.userAgent,
         createdAt: userSecurityEvents.createdAt,
         userId: userSecurityEvents.userId,
-        userEmail: users.email,
-        userFullName: users.fullName,
+        ...identityColumns(identitySubject, {
+          userEmail: users.email,
+          userFullName: users.fullName,
+        }),
         actorUserId: userSecurityEvents.actorUserId,
-        actorEmail: actor.email,
-        actorFullName: actor.fullName,
+        // ⚠️ NHÓM THỨ HAI, GRANT RIÊNG — không tái dùng `identitySubject` (plan-review vòng 1, B1).
+        // `buildUserScopeCondition` dựng vị từ trên `users` gốc, tức nó chỉ nói về CHỦ THỂ sự kiện.
+        // Dùng chung một vị từ cho cả hai vai thì hàng có chủ thể = tôi (scope Own) sẽ cho `true` và
+        // **lộ email của NGƯỜI GÂY RA sự kiện** — một lỗ MỚI do chính bản vá đẻ ra; chiều ngược lại
+        // (tôi là người gây ra, chủ thể là người khác) thì giấu mất email của chính tôi = hồi quy
+        // đường ALLOW. Mỗi vai một vị từ, dựng bằng `buildUserScopeConditionOn` với cột của vai đó.
+        ...identityColumns(
+          identityActor,
+          { actorEmail: actor.email, actorFullName: actor.fullName },
+          // Tên cờ RIÊNG: mặc định `identityInScope` sẽ ĐÈ cờ của nhóm chủ thể ở trên — hai nhóm dùng
+          // chung một cờ nghĩa là nhóm chủ thể bị quyết định bởi vị từ của nhóm actor, im lặng.
+          "actorIdentityInScope",
+        ),
       })
       .from(userSecurityEvents)
       .leftJoin(users, eq(users.id, userSecurityEvents.userId))

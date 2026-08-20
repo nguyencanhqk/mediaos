@@ -3,6 +3,14 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { DatabaseService } from "../../src/db/db.service";
 import { AuthService } from "../../src/auth/auth.service";
 import { AuthLogsViewerService } from "../../src/auth/auth-logs-viewer.service";
+import { DataScopeService } from "../../src/permission/data-scope.service";
+import { DataScopeRepository } from "../../src/permission/data-scope.repository";
+
+/** Actor đọc log — không giữ grant danh bạ nào; spec này không khẳng định gì về cột danh tính. */
+// UUID HỢP LỆ (hex). Bản đầu dùng "…-00000000log1" — `l`,`o`,`g` không phải hex ⇒ Postgres 22P02,
+// `resolveStrongestScope` nuốt vào try/catch rồi fail-closed `null`. Spec vẫn xanh nhưng xanh vì đi
+// vào NHÁNH LỖI HẠ TẦNG, không phải nhánh deny, và bơm error-log rác mỗi lần gọi.
+const LOG_READER_ACTOR = "00000000-0000-0000-0000-0000000010c1";
 import { LoginLogRepository } from "../../src/auth/login-log.repository";
 import { SecurityEventRepository } from "../../src/auth/security-event.repository";
 import { LoginRateLimiter } from "../../src/auth/login-rate-limiter";
@@ -71,6 +79,13 @@ describe.skipIf(!hasDb)("S6-SEC-LOGINLOG-2 login blocked → gắn đúng compan
       dbsvc,
       new LoginLogRepository(),
       new SecurityEventRepository(),
+      // S6-SEC-IDENTITY-PROJ-1 (KI-054): instance THẬT. Actor của spec này không giữ grant `view:user`
+      // nào ⇒ cột danh tính bị bỏ — không sao, spec này khẳng định về GẮN TENANT + ip/status, không
+      // về danh tính. Nếu sau này nó bắt đầu assert email thì nó phải seed grant, và đó là điều đúng.
+      new DataScopeService(
+        new PermissionService(new PermissionRepository(dbsvc)),
+        new DataScopeRepository(dbsvc),
+      ),
     );
   });
 
@@ -175,7 +190,7 @@ describe.skipIf(!hasDb)("S6-SEC-LOGINLOG-2 login blocked → gắn đúng compan
   }
 
   const listBlocked = (companyId: string) =>
-    viewer.listLoginLogs(companyId, {
+    viewer.listLoginLogs({ id: LOG_READER_ACTOR, companyId }, {
       page: 1,
       per_page: 100,
       status: "blocked",

@@ -210,12 +210,12 @@ describe.skipIf(!runDb)(
       });
 
       // Dưới tenant B (RLS ép Company-scope) → KHÔNG thấy event của A.
-      const underB = await viewer.listSecurityEvents(B.companyId, eventQuery(subject));
+      const underB = await viewer.listSecurityEvents({ id: subject, companyId: B.companyId }, eventQuery(subject));
       expect(underB.data.length).toBe(0);
       expect(underB.total).toBe(0);
 
       // Dưới tenant A (chủ sở hữu) → thấy ≥1.
-      const underA = await viewer.listSecurityEvents(A.companyId, eventQuery(subject));
+      const underA = await viewer.listSecurityEvents({ id: subject, companyId: A.companyId }, eventQuery(subject));
       expect(underA.data.length).toBeGreaterThanOrEqual(1);
       expect(underA.data.some((e) => e.event_type === "SESSION_REVOKED")).toBe(true);
     });
