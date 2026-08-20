@@ -1,6 +1,6 @@
 import type { BreakGlassGrantDto } from "@mediaos/contracts";
 import { useTranslation } from "react-i18next";
-import { SecretField } from "@/components/platform-accounts/secret-field";
+import { SecretField } from "@/components/secret-field";
 
 interface BreakGlassGrantTableProps {
   grants: BreakGlassGrantDto[];

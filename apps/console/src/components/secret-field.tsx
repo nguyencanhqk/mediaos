@@ -28,7 +28,7 @@ interface SecretFieldProps {
  */
 export function SecretField({ onRequestReveal, label, autoHideMs }: SecretFieldProps) {
   const { t } = useTranslation("settings");
-  const resolvedLabel = label ?? t("platformAccounts.secretField.defaultLabel");
+  const resolvedLabel = label ?? t("secretField.defaultLabel");
   const [secret, setSecret] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +60,7 @@ export function SecretField({ onRequestReveal, label, autoHideMs }: SecretFieldP
       if (plaintext !== null) setSecret(plaintext);
     } catch (err) {
       if (!mountedRef.current) return;
-      setError(err instanceof Error ? err.message : t("platformAccounts.secretField.revealError"));
+      setError(err instanceof Error ? err.message : t("secretField.revealError"));
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -102,10 +102,10 @@ export function SecretField({ onRequestReveal, label, autoHideMs }: SecretFieldP
             size="sm"
             onClick={handleReveal}
             disabled={loading}
-            aria-label={t("platformAccounts.secretField.revealAriaLabel", { label: resolvedLabel })}
+            aria-label={t("secretField.revealAriaLabel", { label: resolvedLabel })}
           >
             <Eye className="size-4" />
-            {loading ? t("platformAccounts.secretField.verifying") : t("platformAccounts.secretField.revealButton")}
+            {loading ? t("secretField.verifying") : t("secretField.revealButton")}
           </Button>
         ) : (
           <Button
@@ -113,10 +113,10 @@ export function SecretField({ onRequestReveal, label, autoHideMs }: SecretFieldP
             variant="ghost"
             size="sm"
             onClick={hide}
-            aria-label={t("platformAccounts.secretField.hideAriaLabel", { label: resolvedLabel })}
+            aria-label={t("secretField.hideAriaLabel", { label: resolvedLabel })}
           >
             <EyeOff className="size-4" />
-            {t("platformAccounts.secretField.hideButton")}
+            {t("secretField.hideButton")}
           </Button>
         )}
       </div>

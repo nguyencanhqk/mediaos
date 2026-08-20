@@ -5626,7 +5626,7 @@ export const backlog = [
     title:
       "Gốc rễ của N-1/N-2/N-1c — buộc TẦNG CHIẾU `users.email`/`users.fullName` phải nhận vị từ scope, thiếu thì VỠ TYPECHECK (không phải trả 0 hàng im lặng)",
     zone: "red",
-    status: "in_progress",
+    status: "done",
     paths: [
       "apps/api/src/permission/**",
       "apps/api/src/**/*.repository.ts",
@@ -12315,7 +12315,7 @@ export const backlog = [
       "ĐÓNG 18/08/2026 — 12/12 route risk≥5 có test HTTP thật, 49 ca xanh ở LANE_DB=mediaos_routehttp2 (invite-apikeys-http 14 · authusers-admin-http 15 · permadmin-roles-http 20), không ca nào skip. Census: 370/499 → 383/499 (74,1% → 76,8%); uncovered risk≥5: 12 → 0. Ratchet SIẾT: MAX_UNCOVERED_HIGH_RISK 12 → 0, MIN_COVERED_COUNT 370 → 383.",
       "🔴 BUG THẬT đào ra → KI-068 (S3, hàng riêng ở RELEASE-02, có ca ghim): POST /api-keys trả 500 ZodError thay vì 400 khi body sai — @Body() nhận TYPE (z.infer) chứ không phải class createZodDto nên ZodValidationPipe KHÔNG có schema để validate; handler tự .parse() ném ZodError THÔ mà AllExceptionsFilter không hiểu. Cùng hình dạng ở 3 route foundation/files (SUY TỪ CODE, chưa đo bằng HTTP). KHÔNG tự vá — đúng luật lane QA.",
       "Ba sự thật đo được, đã ghi vào docblock + KI-025: (1) không route nào trong 12 route dính bẫy KI-065 (cả 12 chỉ isSensitive, không requiresReauth ⇒ needsObjectGrant=false); (2) NODE_ENV=test TẮT worker-scheduler ⇒ outbox không tick ⇒ permission.changed không giao ⇒ cache quyền không bị xoá trong int-spec ⇒ phải đo bằng CẶP ĐỐI CHỨNG A/B cache-lạnh, cấm đo trước-sau trên cùng user (sẽ ghim hiện vật môi trường test); (3) object-grant KHÔNG lật được route đọc thường vì guard chỉ chuyển resourceId cho lớp reveal-secret.",
-      "Ca non-vacuous của coverage spec phải NEO LẠI: chốt cũ đòi \"còn ít nhất 1 route risk cao chưa phủ\" tự đỏ khi nợ trả hết và sẽ ép người sau NỚI ratchet. Neo mới: dân số route risk cao khác rỗng VÀ ít nhất một trong số đó được nhận là covered.",
+      'Ca non-vacuous của coverage spec phải NEO LẠI: chốt cũ đòi "còn ít nhất 1 route risk cao chưa phủ" tự đỏ khi nợ trả hết và sẽ ép người sau NỚI ratchet. Neo mới: dân số route risk cao khác rỗng VÀ ít nhất một trong số đó được nhận là covered.',
       "⚠️ Phát hiện route có lỗi THẬT (guard thiếu, envelope sai, DTO không chặn) thì BÁO + mở KI riêng có mức + chủ — KHÔNG tự nới test cho xanh, KHÔNG tự sửa code sản phẩm ngoài paths (tiền lệ: KI-065 sinh ra đúng từ tình huống này).",
       "⚠️ Bẫy rate-limit per-user đã cắn lane trước: mỗi ca dùng user RIÊNG thay vì nới ngưỡng env (nới = spec đo sai cấu hình PROD).",
       "⚠️ NGÂN SÁCH: chạy SCOPED theo file spec mới, KHÔNG full-suite (`pnpm --filter @mediaos/api test`) — từng ENOBUFS + vitest worker crash.",
@@ -12403,7 +12403,7 @@ export const backlog = [
     skills: ["security-review"],
     depends_on: ["S10-QA-SECPOLICY-GATE-1"],
     src: [
-      "Đo 19/08/2026 (không suy đoán): `grep -rn \"reauthContext\" apps/api/src` chỉ có nơi ĐỌC (`permission.guard.ts:21,124`) — KHÔNG dòng nào GÁN. `decideCan` đọc `ctx.reauthValidUntil` (permission.decide.ts:72,109,122) nên `isReauthValid()` LUÔN false ⇒ `deny-reauth-required` vĩnh viễn cho bất kỳ route nào khai `requiresReauth`.",
+      'Đo 19/08/2026 (không suy đoán): `grep -rn "reauthContext" apps/api/src` chỉ có nơi ĐỌC (`permission.guard.ts:21,124`) — KHÔNG dòng nào GÁN. `decideCan` đọc `ctx.reauthValidUntil` (permission.decide.ts:72,109,122) nên `isReauthValid()` LUÔN false ⇒ `deny-reauth-required` vĩnh viễn cho bất kỳ route nào khai `requiresReauth`.',
       "Hệ quả đã xảy ra một lần: KI-065 (`PATCH /settings/security-policy` chết 403 im lặng ~1 tháng). Bản vá 19/08 gỡ cờ khỏi route đó và cắm cổng `test/foundation/reauth-reachability.e2e-spec.ts` — nhưng NĂNG LỰC step-up vẫn chưa tồn tại.",
       "Lớp reveal-secret (`isSensitive && requiresReauth` ⇒ object-grant bắt buộc) vẫn còn nguyên trong engine và có test (`module-registry.deny.int-spec.ts:137`, `platform-entitlements.deny.int-spec.ts:116`) — tức đường CHẾT vẫn mở sẵn cho người sau vô tình bước vào ở một route khác.",
     ],
@@ -12834,7 +12834,7 @@ export const backlog = [
     title:
       "`harness/chunk-test.mjs` loại `apps/lms` nhưng KHÔNG loại `apps/fbpost` ⇒ `check.sh` ĐỎ GIẢ trong mọi worktree sạch (đỏ vì thiếu node_modules, không vì có bài đỏ)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["harness/chunk-test.mjs", "harness/backlog.mjs"],
     skills: ["code-review"],
     depends_on: [],
@@ -12864,8 +12864,22 @@ export const backlog = [
     title:
       "Đường FE CHẾT: console gọi `POST /platform-accounts/reauth` và `POST /platform-accounts/:id/reveal` trong khi backend KHÔNG có controller nào phục vụ hai route đó",
     zone: "green",
-    status: "todo",
-    paths: ["apps/console/src/lib/platform-accounts-api.ts", "harness/backlog.mjs"],
+    status: "done",
+    // APPEND 20/08/2026 — paths gốc HIỂU HỤT phạm vi. Đo lại tay: backend KHÔNG có controller
+    // platform-accounts NÀO (list/get/create/secret cũng 404, không riêng reauth/reveal) ⇒ chủ dự án
+    // chốt phương án (a) mức MÀN HÌNH, không mức 2-hàm. Xem [[wo-layer-field-can-understate-scope]].
+    paths: [
+      "apps/console/src/lib/platform-accounts-api.ts",
+      "apps/console/src/components/platform-accounts/**",
+      "apps/console/src/components/secret-field.tsx",
+      "apps/console/src/components/secret-field.spec.tsx",
+      "apps/console/src/components/break-glass/break-glass-grant-table.tsx",
+      "apps/console/src/routes/settings/platform-accounts.tsx",
+      "apps/console/src/router.tsx",
+      "apps/console/src/lib/nav.ts",
+      "apps/console/src/i18n/locales/vi/settings.json",
+      "harness/backlog.mjs",
+    ],
     skills: ["code-review"],
     depends_on: [],
     src: [
@@ -12882,6 +12896,126 @@ export const backlog = [
       "🚫 CẤM dùng đường này làm LỐI TẮT vào step-up: không được gán `req.reauthContext` từ FE-driven endpoint, không được dựng endpoint `/platform-accounts/reauth` song song với `POST /auth/step-up`. Một writer duy nhất = `ReauthGuard` (bất biến đã nghiệm thu của S10-AUTH-STEPUP-1).",
       "Việc thêm cặp vào `REVEAL_CLASS_PAIRS` là QUYẾT ĐỊNH RIÊNG có chủ (WO gắn cờ `requiresReauth`), không phải phụ phẩm của việc dọn đường chết này.",
       "Trước khi gỡ: xác nhận không màn hình nào của console đang import `reauth`/`reveal` — nếu CÓ thì màn đó cũng đang chết (gọi ra 404), phải xử lý cùng lượt chứ không để lại nửa vời.",
+    ],
+  },
+
+  {
+    // Seed 20/08/2026 từ KI-070 (RELEASE-02) — chủ dự án duyệt cùng lượt với 2 WO xanh S10.
+    id: "S10-SEC-AUDITLOGROW-1",
+    module: "AUTH",
+    layer: "BACKEND",
+    title:
+      "KI-070 — bản vá KI-053/054/069 bound CỘT chứ KHÔNG bound HÀNG: `view:audit-log@Own` vẫn đọc trọn 364 `login_logs` + 65 `user_security_events`, và `LoginLogFilter.userId` lấy THẲNG từ query param của caller",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/auth/auth-logs-viewer.service.ts",
+      "apps/api/src/auth/**/login-log.repository.ts",
+      "apps/api/src/permission/**",
+      "apps/api/test/**",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "docs/permission-matrix-spec.md",
+      "docs/plans/S10-SEC-AUDITLOGROW-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "KI-070 (RELEASE-02, mở 2026-08-19 bởi chính `S6-SEC-IDENTITY-PROJ-1`, cột WO ghi *(chưa giao)*): sau bản vá, một vai giữ `view:audit-log@Own` VẪN đọc được toàn bộ `login_logs` + `user_security_events` của tenant — `user_id`/`actor_user_id` (UUID), IP, user-agent, mốc thời gian, `failure_reason`. Chỉ mất email/họ tên.",
+      "Tức là bản vá trước bound CHIẾU CỘT (che danh tính) chứ không bound TẬP HÀNG (lọc theo scope). Ranh giới này được PHÁT BIỂU trong KI thay vì để thành khoảng trống im lặng.",
+      "Nặng hơn: `LoginLogFilter.userId` đi thẳng từ query param của caller qua `auth-logs-viewer.service.ts` → `login-log.repository.ts` `buildWhere` — KHÔNG đối chiếu với scope đã resolve ⇒ dò được lịch sử đăng nhập của một UUID bất kỳ.",
+      "Cùng lớp lỗi KI-053 (gate đúng / `data_scope` không được dùng). Xem [[s2-13-permission-matrix-per-pair-scope]].",
+    ],
+    done_when: [
+      "RED TRƯỚC: ca chứng minh hôm nay vai `view:audit-log@Own` đọc được hàng NGOÀI scope, VÀ ca chứng minh dò được UUID người khác qua query param `userId`",
+      "Bắt buộc có ca đối chứng ALLOW (scope rộng vẫn thấy đủ) — thiếu nó thì '0 hàng' không phân biệt được với 'route hỏng'. Xem [[deny-cases-vacuous-without-allow-case]]",
+      "`userId` từ caller phải được ĐỐI CHIẾU với vị từ scope đã resolve, không được dùng trực tiếp làm điều kiện WHERE",
+      "Kiểm cả ORDER BY: sắp theo cột đã che vẫn là oracle (đúng bẫy đã mắc ở KI-069)",
+      "FULL gate security-reviewer PASS; RELEASE-02 đóng KI-070 kèm số đo PROD (role nào giữ cặp nào ở scope nào)",
+    ],
+    notes: [
+      "🔴 Vùng đỏ (phân quyền + đọc dữ liệu audit): cần planner Sonnet 5 effort xhigh → plan-reviewer → IMPLEMENT/REVIEW Opus theo CLAUDE.md §6.",
+      "⚠️ ĐO LẠI PROD trước khi thi công — số đo 2026-07-30/08-19 có thể đã cũ nếu seed/role đổi. Đừng tin lại số cũ ([[wo-seed-hand-measurements-can-be-incomplete]]).",
+      "Bảng append-only: `login_logs` + `user_security_events` — KHÔNG được UPDATE/DELETE, chỉ đổi đường ĐỌC.",
+    ],
+  },
+
+  {
+    // Seed 20/08/2026 — chủ dự án KÝ R4 cho KI-063 trong phiên này.
+    id: "S10-CHAT-CALLSWEEP-1",
+    module: "CHAT",
+    layer: "BACKEND",
+    title:
+      "KI-063 (R4 ĐÃ KÝ 20/08) — cuộc gọi `active` không ai quét ⇒ phòng khoá VĨNH VIỄN 409 CHAT-ERR-028, không đường sửa qua API",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/chat/**/chat-calls.repository.ts",
+      "apps/api/src/chat/**",
+      "apps/api/test/**",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "docs/plans/S10-CHAT-CALLSWEEP-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "KI-063 (RELEASE-02): `expireStaleRinging` (`chat-calls.repository.ts`) CHỈ quét `status='ringing'` — không job nào chạm cuộc gọi đã `active`.",
+      "Partial unique `chat_calls_one_live_per_room_uq` chỉ cho MỘT cuộc gọi sống mỗi phòng ⇒ mọi `invite` sau đó là 409 CHAT-ERR-028, không đường sửa qua API.",
+      "LỖ CÓ SẴN TỪ TRƯỚC `S7-CALL-RT-FIX-2` (đã đo): gỡ cả hai người đang gọi khỏi phòng làm họ hết `hangup` được ⇒ cuộc gọi kẹt `active` vĩnh viễn.",
+      "Cột WO của KI ghi 'Owner — cần chữ ký R4 hoặc một job quét `active` quá hạn'. CHỮ KÝ R4 ĐÃ CÓ 2026-08-20 — chọn phương án JOB QUÉT.",
+    ],
+    done_when: [
+      "RED TRƯỚC: ca dựng lại đúng kịch bản KI — cuộc gọi `active` không còn ai hoạt động ⇒ phòng bị 409 vĩnh viễn; sau bản vá phòng phải mời được lại",
+      "Mở rộng đường quét sang `status='active'` quá hạn (không chỉ `ringing`), FSM chuyển sang `ended` đúng trạng thái chuẩn",
+      "Ngưỡng hết hạn là BIẾN ENV có default VÀ max (không hard-code magic number)",
+      "Kiểm cả hồi sinh: hàng `ended` không được chiếm lại chỗ partial unique. Xem [[check-cannot-enforce-fsm-transitions]]",
+      "Chạy trên DB cô lập (`LANE_DB`) — int-spec phải THỰC SỰ chạy, không được skip. Xem [[integration-test-lane-db-gate]]",
+      "RELEASE-02 đóng KI-063 kèm chữ ký R4 + số đo",
+    ],
+    notes: [
+      "🔴 Vùng đỏ (FSM vòng đời cuộc gọi): theo CLAUDE.md §6 cần planner trước, IMPLEMENT/REVIEW Opus.",
+      "⚠️ Mã lỗi của module CHAT đặt trong dải 026..029 — đừng tự ý cấp mã mới.",
+      "Ghi chú: module chat hiện `is_active=false`, nhưng [[module-is-active-is-not-a-gate]] — vẫn gọi được, nên đây KHÔNG phải lý do hoãn.",
+    ],
+  },
+
+  {
+    // Seed 20/08/2026 — PHÁT HIỆN MỚI trong lúc thi công S10-FE-PLATFORMACCOUNTS-DEADPATH-1.
+    id: "S10-FE-BREAKGLASS-DEADPATH-1",
+    module: "FOUNDATION",
+    layer: "FRONTEND",
+    title:
+      "Đường FE CHẾT (cùng lớp platform-accounts): màn `/settings/break-glass` + mục nav sống trong console, nhưng `apps/api` chỉ có `db/schema/break-glass.ts` — KHÔNG module, KHÔNG service, KHÔNG controller",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/console/src/lib/break-glass-api.ts",
+      "apps/console/src/components/break-glass/**",
+      "apps/console/src/components/secret-field.tsx",
+      "apps/console/src/routes/settings/break-glass.tsx",
+      "apps/console/src/router.tsx",
+      "apps/console/src/lib/nav.ts",
+      "apps/console/src/i18n/locales/vi/settings.json",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "ĐO 20/08/2026 trong lúc gỡ màn platform-accounts: `apps/console/src/lib/break-glass-api.ts:23` gọi `POST /platform-accounts/:id/break-glass-reveal`.",
+      "`grep -rn 'break-glass-reveal|breakGlassReveal' apps/api/src --include=*.controller.ts` = RỖNG. `grep -rln 'breakGlass|break_glass' apps/api/src` chỉ trả `db/schema/audit.ts` + `db/schema/break-glass.ts` — tức CHỈ có bảng, KHÔNG có tầng phục vụ nào.",
+      "Console vẫn đăng ký route `/settings/break-glass` (`router.tsx`) + mục nav `breakGlass` (`nav.ts`) ⇒ người dùng thấy mục menu dẫn tới màn 404 toàn phần, đúng khuôn [[ui-promises-backend-never-reads]].",
+      "Đây là LÝ DO DUY NHẤT `SecretField` còn sống sau khi gỡ platform-accounts (đã chuyển về `components/secret-field.tsx` trong WO đó).",
+    ],
+    done_when: [
+      "CHỦ DỰ ÁN CHỐT phương án trước khi code: (a) gỡ cả màn break-glass khỏi console — thì `SecretField` cũng thành chết, phải gỡ luôn; hoặc (b) dựng backend break-glass THẬT",
+      "Nếu (a): grep sạch, typecheck + test `apps/console` xanh, không màn nào mất chức năng đang dùng",
+      "Nếu (b): có controller + service + repo `withTenant`, permission `reveal-break-glass` (đã khai ở `packages/contracts/src/crypto.ts`), deny-path test RED trước, audit từng lần reveal",
+    ],
+    notes: [
+      "🟢 Nếu chọn (a) — chỉ gỡ FE, không chạm backend/migration/permission.",
+      "🔴 Nếu chọn (b) — VÙNG ĐỎ: reveal plaintext + SoD 2-người duyệt, bắt buộc planner + FULL gate.",
+      "Giữ nguyên `packages/contracts/src/{platform-accounts,crypto}.ts`: theo CLAUDE.md, code hướng cũ được PARK — không phát triển tiếp, KHÔNG xoá ở đợt này.",
     ],
   },
 ];
