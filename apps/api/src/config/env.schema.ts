@@ -117,6 +117,20 @@ export const envSchema = z
     // Bucket THEO TÀI KHOẢN (company|email, mọi IP) — bắt credential-stuffing phân tán nhiều IP lên 1 account.
     // Ngưỡng cao hơn per-IP (mặc định 20) để giảm rủi ro account-lockout DoS; vẫn là backstop, không thay per-IP.
     LOGIN_ACCOUNT_MAX_ATTEMPTS: z.coerce.number().int().positive().default(20),
+    // ── S10-AUTH-STEPUP-1: xác thực lại (step-up) — DECISIONS-09 §6 điểm (1) và (9) ────────────
+    // CẢ HAI biến đều có `.default()` LẪN `.max()`, cố ý:
+    //  · `.default()` vì biến MỚI không mặc định từng giết fixture int-spec — lỗi nổi ở file KHÁC hẳn
+    //    dòng khai (env-schema-floor-breaks-test-fixtures), rất tốn giờ để lần ra;
+    //  · `.max()` vì mặc định an toàn KHÔNG chặn được cấu hình sai: `.positive()` một mình cho phép
+    //    STEP_UP_TTL_SEC=86400 (cửa sổ xác thực lại sống cả ngày = xoá sạch ý nghĩa của step-up) và
+    //    STEP_UP_MAX_ATTEMPTS=10000 (biến chính endpoint này thành oracle brute-force TOTP 6 số).
+    // TTL 300s = 5 phút: đủ cho một thao tác đọc/ghi dữ liệu nhạy cảm, ngắn hơn nhiều so với phiên.
+    // Cửa sổ DÙNG LẠI ĐƯỢC trong TTL nhưng TTL TUYỆT ĐỐI — đường ĐỌC không gia hạn (§6 điểm 6).
+    STEP_UP_TTL_SEC: z.coerce.number().int().positive().max(1800).default(300),
+    // Số lần gõ sai TOTP trước khi khoá bucket `rl:{envScope}:stepup:{companyId}|{userId}`. Thời gian
+    // khoá dùng lại `LOGIN_LOCKOUT_SEC` (LoginRateLimiter nhận `maxAttempts` theo tham số, lockout lấy
+    // từ env chung) ⇒ KHÔNG đẻ thêm biến thứ ba cho cùng một khái niệm.
+    STEP_UP_MAX_ATTEMPTS: z.coerce.number().int().positive().max(20).default(5),
 
     // ── FS-1a Session / SSO cookie (frontend-split plan §7) ───────────────────
     // AUTH_COOKIE_DOMAIN: domain cho refresh/CSRF cookie. Prod = `.<domain>` (vd `.mediaos.example`) để cookie

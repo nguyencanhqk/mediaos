@@ -54,10 +54,21 @@ export type RlBucket =
   | "2fa"
   | "2fa-enable"
   | "2fa-disable"
-  | "change-pw";
+  | "change-pw"
+  // S10-AUTH-STEPUP-1 (APPEND — DECISIONS-09 §6 điểm 9): bucket của `POST /auth/step-up`, khoá
+  // `{companyId}|{userId}` lấy TỪ JWT. TÁCH HẲN `ip`/`acct` của login: gõ sai TOTP lúc xác thực lại
+  // KHÔNG được khoá đường đăng nhập, và ngược lại. CẤM nhúng `req.ip` (sau cloudflared mọi IP = `::1`,
+  // KI-066 ⇒ "per-IP" thoái hoá thành bucket toàn công ty) hoặc email (mở đường quấy rối victim).
+  | "stepup";
 
 /** Marker single-use của ReplayGuard. */
-export type ReplayMarker = "2fa-jti" | "totp-step";
+export type ReplayMarker =
+  | "2fa-jti"
+  | "totp-step"
+  // S10-AUTH-STEPUP-1 (APPEND — DECISIONS-09 §6 điểm 2): marker RIÊNG của step-up. KHÔNG dùng lại
+  // `totp-step` (marker của bước-2 LOGIN): một mã TOTP hợp lệ trong cùng time-step 30s sẽ bị luồng kia
+  // coi là đã tiêu ⇒ đăng nhập xong xác thực lại lập tức là "sai mã", và ngược lại.
+  | "stepup-totp";
 
 /** Không gian khoá chat KHÔNG phải presence (presence đã scoped sẵn từ S8-CHAT-UX-RT-1). */
 export type ChatKeySubtype = "typing" | "cooldown" | "ice-turn-reject";
@@ -139,6 +150,37 @@ export function meTrainingKey(
   envScope: string = currentEnvScope(),
 ): string {
   return `me:${envScope}:training:${companyId}:${userId}`;
+}
+
+/**
+ * S10-AUTH-STEPUP-1 — cửa sổ xác thực lại (step-up) lưu PHÍA SERVER, khoá bằng BỘ-5
+ * `(companyId, userId, action, resourceType, resourceId)`:
+ *   `stepup:{envScope}:{companyId}:{userId}:{action}:{resourceType}:{resourceId}`
+ *
+ * Ba hệ quả an toàn — cửa sổ của user A không mở cho user B · cửa sổ cấp cho object X không mở object Y ·
+ * cross-tenant bất khả — là THÀNH PHẦN của chuỗi khoá, KHÔNG phải ba phép so sánh thêm ở service (quên
+ * được, và không ai đo được là đã quên). Vì thế mọi tham số đều đứng trong khoá, không cái nào "suy ra"
+ * từ ngữ cảnh request.
+ *
+ * `envScope` bắt buộc như mọi builder khác (KI-067): bốn môi trường dùng CHUNG một Valkey db0 và
+ * dev-online là bản clone CÙNG companyId/userId ⇒ thiếu scope là cửa sổ cấp ở máy dev mở khoá dữ liệu
+ * PROD. Hợp đồng ngữ nghĩa của cửa sổ (dùng-lại-được trong TTL, TTL TUYỆT ĐỐI — đường ĐỌC KHÔNG gia hạn)
+ * ở DECISIONS-09 §6 điểm (6); file này chỉ dựng CHUỖI, không giữ trạng thái.
+ *
+ * ⚠️ TIỀN ĐIỀU KIỆN của caller: `action`/`resourceType` KHÔNG được chứa `:` — đó là dấu phân đoạn, nên
+ * `("a", "b:c")` và `("a:b", "c")` cho CÙNG một khoá. Ranh giới đã chặn bằng `STEP_UP_PAIR_SEGMENT_RE`
+ * (`packages/contracts/src/auth.ts`) và cặp còn phải ∈ `REVEAL_CLASS_PAIRS`; builder cố ý KHÔNG kiểm lại
+ * để không có hai nguồn sự thật về hình dạng cặp.
+ */
+export function stepUpKey(
+  companyId: string,
+  userId: string,
+  action: string,
+  resourceType: string,
+  resourceId: string,
+  envScope: string = currentEnvScope(),
+): string {
+  return `stepup:${envScope}:${companyId}:${userId}:${action}:${resourceType}:${resourceId}`;
 }
 
 /**

@@ -217,3 +217,161 @@ describe("TWO_FACTOR_ENFORCED constant", () => {
     expect(TWO_FACTOR_ENFORCED).toBe("TWO_FACTOR_ENFORCED");
   });
 });
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+ * S10-AUTH-STEPUP-1 (APPEND-only) — hai đường TOTP phải TÁCH HẲN nhau.
+ *
+ * `verifyChallenge` (bước 2 LOGIN) làm hai việc mà đường step-up TUYỆT ĐỐI không được làm
+ * (DECISIONS-09 §6 điểm 2, D1/D2):
+ *   · claim replay bằng marker `totp-step` — dùng chung marker ⇒ mã vừa đăng nhập bị coi là SAI khi
+ *     step-up trong cùng time-step 30s (và ngược lại): nguồn flake chắc chắn;
+ *   · mã TOTP sai thì rơi xuống `UPDATE user_recovery_codes SET used_at` — nghĩa là một lượt step-up
+ *     gõ sai có thể ĐỐT mã khôi phục của người dùng.
+ * Khối dưới đóng đinh CẢ HAI vế: hành vi cũ giữ nguyên từng bước, method mới không chạm cái nào.
+ * ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+interface VerifyTxCalls {
+  recoveryUpdates: number;
+}
+
+/** tx giả cho ĐƯỜNG VERIFY: select user_totp + update user_recovery_codes (đếm để chứng minh D2). */
+function makeVerifyTx(opts: {
+  totpRow?: Record<string, unknown> | null;
+  consumed?: { id: string }[];
+}): {
+  tx: unknown;
+  calls: VerifyTxCalls;
+} {
+  const calls: VerifyTxCalls = { recoveryUpdates: 0 };
+  const row =
+    opts.totpRow === undefined ? { enabledAt: new Date(), secretCiphertext: "c" } : opts.totpRow;
+  const tx = {
+    select: () => ({
+      from: (table: unknown) => ({
+        where: () => ({
+          limit: () => Promise.resolve(table === userTotp && row ? [row] : []),
+        }),
+      }),
+    }),
+    update: (table: unknown) => ({
+      set: () => ({
+        where: () => ({
+          returning: () => {
+            if (table === userRecoveryCodes) calls.recoveryUpdates += 1;
+            return Promise.resolve(opts.consumed ?? []);
+          },
+        }),
+      }),
+    }),
+  };
+  return { tx, calls };
+}
+
+function makeVerifySvc(tx: unknown, opts: { totpOk?: boolean; firstUse?: boolean }) {
+  const dbsvc = {
+    withTenant: vi.fn(async (_cid: string, fn: (t: unknown) => Promise<unknown>) => fn(tx)),
+  };
+  const secrets = { decryptSecret: vi.fn(async () => "PLAIN-SECRET-NOT-LOGGED") };
+  const totp = { verify: vi.fn(() => opts.totpOk ?? true), currentStep: vi.fn(() => 1_800_000) };
+  const tokens = { hashToken: vi.fn(() => "hash-of-code") };
+  const audit = { record: vi.fn(async (_tx: unknown, _entry: unknown) => undefined) };
+  const rateLimiter = {};
+  const replayGuard = {
+    claim: vi.fn(async (_marker: string, _rest: string, _ttlSec?: number) => opts.firstUse ?? true),
+  };
+  const securityEvents = { record: vi.fn(async () => undefined) };
+  const svc = new TwoFactorService(
+    dbsvc as never,
+    secrets as never,
+    totp as never,
+    tokens as never,
+    audit as never,
+    rateLimiter as never,
+    replayGuard as never,
+    securityEvents as never,
+  );
+  return { svc, audit, replayGuard, totp, dbsvc };
+}
+
+describe("TwoFactorService.verifyChallenge — HỒI QUY: giữ nguyên từng hành vi (spec 2FA cũ)", () => {
+  it("TOTP đúng ⇒ true, claim marker LOGIN 'totp-step', audit 'auth.2fa_verified'", async () => {
+    const { tx, calls } = makeVerifyTx({});
+    const { svc, audit, replayGuard } = makeVerifySvc(tx, { totpOk: true });
+    expect(await svc.verifyChallenge(USER_ID, COMPANY_ID, "123456")).toBe(true);
+    expect(replayGuard.claim.mock.calls[0]?.[0]).toBe("totp-step");
+    expect(audit.record).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ action: "auth.2fa_verified" }),
+    );
+    expect(calls.recoveryUpdates).toBe(0); // TOTP đúng thì không chạm recovery
+  });
+
+  it("TOTP sai + recovery code khớp ⇒ true, CÓ tiêu recovery code (hành vi cũ, KHÔNG đổi)", async () => {
+    const { tx, calls } = makeVerifyTx({ consumed: [{ id: "r1" }] });
+    const { svc, audit } = makeVerifySvc(tx, { totpOk: false });
+    expect(await svc.verifyChallenge(USER_ID, COMPANY_ID, "recovery-code")).toBe(true);
+    expect(calls.recoveryUpdates).toBe(1);
+    expect(audit.record).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ action: "auth.2fa_recovery_used" }),
+    );
+  });
+
+  it("TOTP đúng nhưng marker ĐÃ tiêu ⇒ false + audit 'auth.2fa_step_replay_rejected'", async () => {
+    const { tx } = makeVerifyTx({});
+    const { svc, audit } = makeVerifySvc(tx, { totpOk: true, firstUse: false });
+    expect(await svc.verifyChallenge(USER_ID, COMPANY_ID, "123456")).toBe(false);
+    expect(audit.record).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ action: "auth.2fa_step_replay_rejected" }),
+    );
+  });
+});
+
+describe("TwoFactorService.verifyTotpForStepUp — D1/D2: TOTP THUẦN, marker RIÊNG, 0 recovery", () => {
+  it("mã đúng ⇒ 'ok' và claim marker 'stepup-totp' (KHÁC 'totp-step' của login)", async () => {
+    const { tx, calls } = makeVerifyTx({});
+    const { svc, replayGuard } = makeVerifySvc(tx, { totpOk: true });
+    expect(await svc.verifyTotpForStepUp(USER_ID, COMPANY_ID, "123456")).toBe("ok");
+    expect(replayGuard.claim).toHaveBeenCalledTimes(1);
+    expect(replayGuard.claim.mock.calls[0]?.[0]).toBe("stepup-totp");
+    expect(replayGuard.claim.mock.calls[0]?.[0]).not.toBe("totp-step");
+    expect(calls.recoveryUpdates).toBe(0);
+  });
+
+  it("D2: mã SAI ⇒ 'invalid-code' và KHÔNG chạm user_recovery_codes (0 update)", async () => {
+    const { tx, calls } = makeVerifyTx({ consumed: [{ id: "r1" }] });
+    const { svc } = makeVerifySvc(tx, { totpOk: false });
+    expect(await svc.verifyTotpForStepUp(USER_ID, COMPANY_ID, "000000")).toBe("invalid-code");
+    // Cùng fixture đó, verifyChallenge SẼ tiêu một mã (ca ở khối trên) — đây là điểm khác biệt.
+    expect(calls.recoveryUpdates).toBe(0);
+  });
+
+  it("chưa enroll (không có hàng user_totp) ⇒ 'not-enrolled', KHÔNG verify, KHÔNG claim", async () => {
+    const { tx } = makeVerifyTx({ totpRow: null });
+    const { svc, replayGuard, totp } = makeVerifySvc(tx, { totpOk: true });
+    expect(await svc.verifyTotpForStepUp(USER_ID, COMPANY_ID, "123456")).toBe("not-enrolled");
+    expect(totp.verify).not.toHaveBeenCalled();
+    expect(replayGuard.claim).not.toHaveBeenCalled();
+  });
+
+  it("có hàng nhưng enabled_at NULL (enroll dở) ⇒ 'not-enrolled'", async () => {
+    const { tx } = makeVerifyTx({ totpRow: { enabledAt: null } });
+    const { svc } = makeVerifySvc(tx, { totpOk: true });
+    expect(await svc.verifyTotpForStepUp(USER_ID, COMPANY_ID, "123456")).toBe("not-enrolled");
+  });
+
+  it("mã đúng nhưng marker step-up ĐÃ tiêu ⇒ 'invalid-code' (không có oracle riêng cho replay)", async () => {
+    const { tx, calls } = makeVerifyTx({});
+    const { svc } = makeVerifySvc(tx, { totpOk: true, firstUse: false });
+    expect(await svc.verifyTotpForStepUp(USER_ID, COMPANY_ID, "123456")).toBe("invalid-code");
+    expect(calls.recoveryUpdates).toBe(0);
+  });
+
+  it("BẤT BIẾN #1: đọc user_totp trong withTenant với companyId truyền vào", async () => {
+    const { tx } = makeVerifyTx({});
+    const { svc, dbsvc } = makeVerifySvc(tx, { totpOk: true });
+    await svc.verifyTotpForStepUp(USER_ID, COMPANY_ID, "123456");
+    expect(dbsvc.withTenant.mock.calls[0]?.[0]).toBe(COMPANY_ID);
+  });
+});

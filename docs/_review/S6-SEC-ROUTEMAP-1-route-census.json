@@ -4,16 +4,16 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 499,
+    "routes": 500,
     "controllers": 88,
     "gated": 447,
     "gatedAtClassLevel": 8,
     "public": 12,
-    "ungated": 40,
-    "needVerdict": 52
+    "ungated": 41,
+    "needVerdict": 53
   },
   "verdictCounts": {
-    "SELF": 15,
+    "SELF": 16,
     "PUBLIC": 11,
     "OTHER_GUARD": 3,
     "TENANT_READ": 6,
@@ -1063,6 +1063,20 @@
       "routeGuards": [],
       "verdict": "SELF",
       "verdictReason": "Thu hồi MỘT phiên của chính mình; :id được đối chiếu với user trong token trước khi thu hồi.",
+      "verdictWo": null
+    },
+    {
+      "key": "AuthController#stepUp",
+      "httpMethod": "POST",
+      "path": "/api/v1/auth/step-up",
+      "hasPermission": false,
+      "permission": null,
+      "permissionLevel": null,
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [],
+      "verdict": "SELF",
+      "verdictReason": "Xác thực lại bằng TOTP của CHÍNH mình: service nhận { id, companyId } TỪ req.user (token), KHÔNG nhận userId/companyId từ body (auth.controller.ts:308-311) — không có tham số nào trỏ sang chủ thể khác. KHÔNG @RequirePermission có chủ đích: quyền để LÀM gì đó vẫn do PermissionGuard của route tiêu thụ quyết định; endpoint này chỉ mở một CỬA SỔ khoá theo bộ-5 (companyId,userId,action,resourceType,resourceId) — cửa sổ mint được KHÔNG cấp thêm quyền nào (permission.decide.ts vẫn đòi object grant), và cặp phải nằm trong REVEAL_CLASS_PAIRS (hôm nay RỖNG).",
       "verdictWo": null
     },
     {

@@ -234,6 +234,14 @@ export const SECURITY_EVENT_TYPES = [
   // DUY NHẤT client được ghi lên WS, nên một chuỗi khung bị từ chối ở đây là dấu hiệu DÒ CỬA giao thức —
   // khác hẳn một request REST 403 (đường đã có guard + audit).
   "CALL_SIGNALLING_VIOLATION",
+  // S10-AUTH-STEPUP-1 (APPEND-only): hai nhánh của `POST /auth/step-up` (DECISIONS-09 §6 điểm 10).
+  // `user_security_events.event_type` là cột `text` KHÔNG CHECK (mig 0443) ⇒ hai mã này KHÔNG cần
+  // migration; cưỡng chế nằm ở writer + `SECURITY_EVENT_SEVERITY` bên dưới.
+  // STEP_UP_FAILED bao trùm MỌI nhánh không cấp cửa sổ (mã sai · cặp ngoài registry · bucket đang khoá):
+  // phân biệt chi tiết đã nằm ở `audit_logs.action` (`auth.step_up_failed` / `auth.step_up_denied`), và
+  // đẻ thêm mã sự kiện cho từng lý do chỉ làm loãng bộ lọc của viewer bảo mật.
+  "STEP_UP_GRANTED",
+  "STEP_UP_FAILED",
 ] as const;
 export type SecurityEventType = (typeof SECURITY_EVENT_TYPES)[number];
 
@@ -276,6 +284,14 @@ export const SECURITY_EVENT_SEVERITY: Record<SecurityEventType, SecurityEventSev
   // khung như thế là dò cửa. Không đặt "high": mức đó dành cho can thiệp credential/tài khoản, và làm
   // loãng "high" sẽ làm chính viewer bảo mật mất giá trị.
   CALL_SIGNALLING_VIOLATION: "medium",
+  // S10-AUTH-STEPUP-1: cấp cửa sổ THÀNH CÔNG = "low" — đây là thao tác hợp lệ của chính chủ (mirror
+  // TOTP_ENABLED). Giá trị forensic của nó là MỐC THỜI GIAN để đối chiếu với lượt đọc dữ liệu nhạy cảm
+  // ngay sau, không phải một cảnh báo.
+  STEP_UP_GRANTED: "low",
+  // Thất bại = "medium": một lượt gõ sai có thể là nhầm, nhưng một CHUỖI lượt sai ở đây là dò mã trên
+  // đúng oracle TOTP. Không đặt "high" — mức đó dành cho can thiệp credential/tài khoản (USER_LOCKED,
+  // TOTP_RESET); làm loãng "high" là làm hỏng chính viewer bảo mật.
+  STEP_UP_FAILED: "medium",
 };
 
 /**
@@ -456,3 +472,54 @@ export const sessionRevokeResponseSchema = z.object({
   revoked_count: z.number().int().nonnegative(),
 });
 export type SessionRevokeResponse = z.infer<typeof sessionRevokeResponseSchema>;
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * S10-AUTH-STEPUP-1 — Step-up (xác thực lại) DTO.
+ *
+ * NGUỒN SỰ THẬT: `docs/DECISIONS/DECISIONS-09_Security_Policy_Reauth_And_Object_Grant.md` §6.
+ *
+ * `POST /api/v1/auth/step-up` KHÔNG cấp token cho client giữ: nó ghi một CỬA SỔ phía server khoá bằng
+ * bộ-5 `(companyId, userId, action, resourceType, resourceId)` (builder `stepUpKey()` ở
+ * `apps/api/src/common/valkey/valkey-key.ts`), và `ReauthGuard` chỉ ĐỌC cửa sổ đó. Body phản hồi chỉ mang
+ * MỐC HẾT HẠN để FE biết khi nào phải hỏi lại — nó KHÔNG phải chứng chỉ: sửa/bịa giá trị này ở client
+ * không mở được gì (§6 điểm 1).
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Yêu cầu step-up. Bốn trường, KHÔNG có `password`/`recoveryCode` — D1 chốt chỉ TOTP (§6 điểm 2).
+ *
+ * - `code`: mã TOTP 6 số. Biên `.min(6).max(10)` bám đúng `twoFactorEnableRequestSchema` (KHÔNG siết
+ *   thành regex 6-số) để mã sai ĐỊNH DẠNG và mã sai GIÁ TRỊ đi CÙNG một đường: cùng tiêu một lượt
+ *   rate-limit, cùng sinh một hàng audit. Siết ở ranh giới sẽ đẻ một nhánh 400 KHÔNG audit, KHÔNG tính
+ *   lượt — tức một đường dò rẻ hơn nằm ngay cạnh oracle TOTP.
+ * - `action` / `resourceType`: `.min(1).max(100)` theo đúng tiền lệ `permission.ts` (cột DB là `text`;
+ *   trần ở đây là chống payload rác, không phải chống tràn cột) + `.regex()` KHÔNG cho dấu `:`. Lý do
+ *   là ĐO ĐƯỢC, không phải khẩu vị: `:` là dấu phân đoạn của khoá cửa sổ
+ *   `stepup:{env}:{co}:{user}:{action}:{resourceType}:{id}` ⇒ cặp `("a", "b:c")` và `("a:b", "c")` dựng
+ *   ra CÙNG một chuỗi. Cổng registry ở endpoint đã chặn mọi cặp lạ, nhưng chặn thêm ở ranh giới thì
+ *   nhập nhằng không tồn tại NGAY CẢ KHI ai đó nới registry sau này. Lớp ký tự bám đúng dữ liệu thật
+ *   của repo (`employee_salary` · `chat-room` · `*`).
+ * - `resourceId`: **BẮT BUỘC `.uuid()`**. `audit_logs.object_id` là cột **uuid** ⇒ một chuỗi không phải
+ *   UUID sẽ nổ 22P02 tận DB, và drizzle bọc mã lỗi PG trong `cause` ⇒ ra **500** thay vì 400. Chặn ở
+ *   ranh giới là cách duy nhất giữ đúng mã lỗi (§6 điểm 10).
+ */
+export const STEP_UP_PAIR_SEGMENT_RE = /^[A-Za-z0-9_.*-]+$/;
+
+export const stepUpRequestSchema = z.object({
+  code: z.string().trim().min(6).max(10),
+  action: z.string().min(1).max(100).regex(STEP_UP_PAIR_SEGMENT_RE),
+  resourceType: z.string().min(1).max(100).regex(STEP_UP_PAIR_SEGMENT_RE),
+  resourceId: z.string().uuid(),
+});
+export type StepUpRequest = z.infer<typeof stepUpRequestSchema>;
+
+/**
+ * Phản hồi step-up thành công — ISO-8601 có offset (quy ước wire của repo).
+ *
+ * Ở phía server, cửa sổ được lưu thành CHUỖI trong Valkey rồi giải mã lại thành `Date`; đừng nhầm hai
+ * lớp đó với nhau: DTO này là lớp WIRE, `reauthContext.reauthValidUntil` mà `ReauthGuard` gán là `Date`.
+ */
+export const stepUpResponseSchema = z.object({
+  reauthValidUntil: z.string().datetime({ offset: true }),
+});
+export type StepUpResponse = z.infer<typeof stepUpResponseSchema>;

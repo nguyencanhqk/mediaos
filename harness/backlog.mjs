@@ -2619,7 +2619,7 @@ export const backlog = [
     title:
       "QA ATT: today/check-in/out rule + blocked-leave-day + records scope Own/Team/Company + permission/data-scope cross-team/cross-company + 0-dup + server-time + regression Auth/HR",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/attendance/**/*.spec.ts", "apps/api/test/**", "apps/app/**"],
     skills: ["code-review"],
     depends_on: ["S3-ATT-BE-2", "S3-INT-1"],
@@ -2642,7 +2642,7 @@ export const backlog = [
     title:
       "QA LEAVE + integration: balance + request draft/submit/cancel/validation/overlap + approval approve/reject scope + LEAVE→ATT (Approved full-day→Leave record + check-in block + cancel/revoke recalc+balance restore) + regression",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/leave/**/*.spec.ts", "apps/api/test/**", "apps/app/**"],
     skills: ["code-review"],
     depends_on: ["S3-LEAVE-BE-3", "S3-INT-1"],
@@ -2920,7 +2920,7 @@ export const backlog = [
     title:
       "FE LEAVE admin: /leave/types + /leave/policies + /leave/balances (HR) + /leave/balances/:id/transactions",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S3-LEAVE-BE-4", "S3-LEAVE-BE-6", "S3-FE-LEAVE-1"],
@@ -2941,7 +2941,7 @@ export const backlog = [
     layer: "FE",
     title: "FE LEAVE Reports (/leave/reports) + Audit logs (/leave/audit-logs)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S3-LEAVE-BE-6", "S3-FE-LEAVE-1"],
@@ -2976,7 +2976,7 @@ export const backlog = [
     //   insert(userSecurityEvents) nào → màn Security events trống vĩnh viễn trong prod. Sự kiện hiện rải ở
     //   audit_logs (auth.password_changed/token_reuse_detected/session_revoked/user.locked…) + security_alerts.
     //   GIỮ audit_logs như cũ (append-only, không di trú lịch sử) — WO này THÊM writer song song, không thay thế.
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/auth/**",
       "apps/api/src/users/**",
@@ -3011,7 +3011,7 @@ export const backlog = [
     //   user_sessions/refresh_tokens; user bị khóa vẫn dùng API bằng access token còn hạn, chỉ bị chặn ở refresh kế.
     //   BACKEND-03 §10.4 + API-02 §18.8 yêu cầu revoke ngay khi lock. ⚠️ HAI surface song song cùng chức năng
     //   (bẫy S2-INT-1): /auth/users/:id/lock (locked) VÀ /users/admin/:id/suspend (suspended) — vá CẢ HAI.
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/users/**", "apps/api/src/auth/**", "apps/api/test/**"],
     skills: ["code-review"],
     depends_on: [],
@@ -3038,7 +3038,7 @@ export const backlog = [
     // AUDIT 2026-07-02 (MEDIUM-HIGH): refresh() check user active nhưng KHÔNG đọc companies.status — company bị
     //   suspend thì user còn refresh token vẫn xin token mới tới hết TTL 30d. BACKEND-03 §14.2 bước 6. Login đã
     //   check qua resolveCompanyId (mig 0430 allow-list 'active') — tái dùng cùng semantics, đừng chế mới.
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/auth/**", "apps/api/test/**"],
     skills: ["code-review"],
     depends_on: [],
@@ -3065,7 +3065,7 @@ export const backlog = [
     //   is_sensitive không nằm trong allowlist → FE front-gate (useCanExact) chết cho MỌI user ở prod dù
     //   unit test xanh (setCaps() không đi qua allowlist thật). Đây là phơi CỜ hiển thị — server vẫn tự
     //   check permission ở mọi API, KHÔNG nới quyền thực tế.
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/permission/**", "apps/api/src/auth/**"],
     skills: ["code-review"],
     depends_on: [],
@@ -3086,7 +3086,7 @@ export const backlog = [
     zone: "red",
     // OWNER CHỐT 2026-07-03 (Cian): ép 2FA = role (hiện có) + ĐÍCH DANH tài khoản (cờ mới, OR);
     //   admin được reset 2FA cho user (mất điện thoại) qua pair riêng reset-2fa:user (is_sensitive).
-    status: "todo",
+    status: "done",
     paths: ["apps/api/migrations/**", "apps/api/src/db/schema/**"],
     skills: ["code-review"],
     depends_on: [],
@@ -3105,7 +3105,7 @@ export const backlog = [
     title:
       "2FA self-service hardening + role-write cờ ép: status trả required · disable chặn khi bị ép (409) · POST/PATCH /auth/roles nhận requiresTwoFactor",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/auth/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-DB-4"],
@@ -3124,7 +3124,7 @@ export const backlog = [
     title:
       "Admin 2FA controls: PATCH user requireTwoFactor + detail DTO twoFactor{enabled,requiredByRole,requiredByUser} + POST /auth/users/:id/2fa/reset (revoke sessions + audit + security event)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/users/**",
       "apps/api/src/auth/**",
@@ -3271,7 +3271,7 @@ export const backlog = [
     //   màn enroll (chỉ console có TwoFactorSettings) → user kẹt không lối ra. /account/profile: ROUTE_REGISTRY có
     //   meta account.profile nhưng router chưa đăng ký; AvatarMenu "Tài khoản của tôi" đang trỏ /home.
     //   Self-EDIT hồ sơ vẫn = change-request workflow (S2-FE-HR-4) — màn này CHỈ read + link.
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**", "packages/ui/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-FE-AUTH-1"],
@@ -3295,7 +3295,7 @@ export const backlog = [
     title:
       "Pin lệch-có-chủ-đích vào docs AUTH (DB-02 · BACKEND-03 · API-02 · FRONTEND-06): code thắng ở các điểm đã chốt — chặn audit sau báo 'lệch' giả",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["docs/DB/**", "docs/BACKEND/**", "docs/API Design/**", "docs/FRONTEND/**"],
     skills: [],
     depends_on: [],
@@ -3334,7 +3334,7 @@ export const backlog = [
     //   scan_status/upload_status (files.service.ts:231-263) — file Infected/Pending vẫn presign; chỉ luồng link
     //   chặn Infected. Upload hiện chưa E2E (file không lên được 'Uploaded') → siết fail-closed KHÔNG phá luồng
     //   thật nào — verify bằng grep usage trước khi siết.
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/foundation/files/**", "apps/api/test/**"],
     skills: ["code-review"],
     depends_on: [],
@@ -3480,7 +3480,7 @@ export const backlog = [
     //   throw trên DB sạch — smoke DB-10 §19.3 FAIL. HR master (job_levels/contract_types/employee_code_config) =
     //   0 seed (mig 0445:12-17 chủ đích dời runtime nhưng lane chưa làm). Mẫu sẵn: att/leave-master-data.seeder +
     //   registrar + SeedTracking checksum idempotent.
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/employees/**",
       "apps/api/src/foundation/sequences/**",
@@ -3603,7 +3603,7 @@ export const backlog = [
     //   audit, không lặp lại shortcut). (4) 'đủ 14 key canonical Active' = 4 key §11.1 sẵn có + 10 key mới;
     //   file.allowed_mime_types (đã seed 0435) là key DÔI, KHÔNG tính vào 14 và KHÔNG bị xoá — presence-test
     //   không được assert 'CHỈ đúng 14 rows Active'.
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/foundation/settings/setting-defaults.ts",
@@ -3630,7 +3630,7 @@ export const backlog = [
     // AUDIT 2026-07-02: leave-master-data.seeder.ts:55-99 seed 4/8 loại, mã KHÁC doc (ANNUAL vs ANNUAL_LEAVE...);
     //   ANNUAL allowHourly:false vs doc policy allow_hourly:true. Mã đã có dữ liệu tham chiếu (leave_requests) →
     //   ĐỔI MÃ = migration data, tránh nếu được. Pin mã TRƯỚC khi FE bind constants.
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/leave/**", "packages/contracts/src/**", "apps/api/test/**", "docs/DB/**"],
     skills: ["code-review"],
     depends_on: ["S3-LEAVE-SEED-1"],
@@ -3668,7 +3668,7 @@ export const backlog = [
     //   TRONG module-catalog/** (KHÔNG gọi SettingService.updateCompanySetting của lane settings — tránh đụng
     //   file chéo lane + tránh mislabel object_type). (6) barrel packages/contracts/src/foundation/index.ts: SERIALIZE
     //   (1 lane cuối cùng append, không chạy 4 lane song song rồi merge tay) để tránh ghi đè export lẫn nhau.
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/foundation/settings/**",
       "apps/api/src/foundation/module-catalog/**",
@@ -3707,7 +3707,7 @@ export const backlog = [
     //   (dry-run default TRUE) nhưng CHƯA schedule (retention.module.ts:13 'wire ở BE-9'). TEMP_FILE_CLEANUP: cột
     //   is_temporary/expires_at + index CÓ SẴN (schema/files.ts:65-66,84-86) nhưng không job đọc; file 'Pending'
     //   mồ côi không ai dọn. API /system-jobs (view/run:foundation-job đã seed) = OPTIONAL đợt này — chốt khi làm.
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/db/schema/**",
@@ -3744,7 +3744,7 @@ export const backlog = [
     //   Pending vĩnh viễn; checksum_sha256/content_hash (schema/files.ts:52-53) không bao giờ tính;
     //   download_count/last_accessed_at không bao giờ ghi; extension↔MIME không đối chiếu; blocked_extensions
     //   setting không tồn tại (§11.6.4/6.6/6.7). Sau WO này download-guard (S2-FND-BE-4) có dữ liệu Uploaded thật.
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/foundation/files/**",
       "apps/api/src/storage/**",
@@ -3779,7 +3779,7 @@ export const backlog = [
     //   File Access Logs (chỉ vào được qua quick-link Overview); entry System Settings THÊM SAU S2-FND-BE-8 (đừng
     //   trỏ placeholder). GROUP_LABELS thiếu 'master-data' → HR hiện label thô (ModuleSidebar.tsx:32-39).
     //   AuditLogsPage thiếu default date-range 7/30 ngày (FRONTEND-13 §21.2).
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["code-review"],
     depends_on: [],
@@ -3853,7 +3853,7 @@ export const backlog = [
     //   FOUNDATION-ERR-* 0/18 dùng (error-codes.ts:10-20 chỉ generic); pagination request lệch chuẩn §15.1
     //   (code page+limit, audit limit+offset vs doc page+per_page); DTO settings/holidays/company-patch còn Zod
     //   cục bộ apps/api (contracts/src/foundation/index.ts:4-6 tự nhận nợ).
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/main.ts",
       "apps/api/src/common/**",
@@ -3884,7 +3884,7 @@ export const backlog = [
     title:
       "Pin lệch-có-chủ-đích Foundation vào docs (DB-08/09/10 · BACKEND-04/11/12 · API-09/10 · FRONTEND-13): code thắng ở các điểm đã chốt — chặn audit sau báo 'lệch' giả",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "docs/DB/**",
       "docs/BACKEND/**",
@@ -4014,7 +4014,7 @@ export const backlog = [
     title:
       "Schema + migration TASK core (projects·project_members·tasks·task_assignees·task_watchers·task_comments·task_checklists·task_checklist_items·task_activity_logs) theo DB-06 — RLS+FORCE, soft-delete, index, check-constraint",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
@@ -4045,7 +4045,7 @@ export const backlog = [
     title:
       "Đối soát pair-drift + grant tồn dư TASK: ánh xạ cặp legacy đang enforce → canonical DB-06 §12.1, gỡ grant ngoài ma trận §6 (chạy TRƯỚC S4-TASK-SEED-1)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/tasks/**",
       "apps/api/src/foundation/seed/**",
@@ -4078,7 +4078,7 @@ export const backlog = [
     title:
       "CONTRACT pair-drift TASK: gỡ grant legacy ('comment','comment') khỏi employee + company-admin — chạy ở RELEASE SAU khi code gate ('comment','task') đã chạy ổn định",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "apps/api/test/integration/**",
@@ -4108,7 +4108,7 @@ export const backlog = [
     title:
       "Seed permission TASK (23 mã canonical DB-06 §12.1) + role-permission mapping (Employee/Manager/HR/Admin/Super Admin) idempotent",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/foundation/seed/**",
       "apps/api/migrations/**",
@@ -4201,7 +4201,7 @@ export const backlog = [
     title:
       "BE Task assignment + status workflow FSM (assign/đổi assignee, add/remove watcher, POST /:id/status transition hợp lệ, priority/deadline) — crown FSM, activity log, phát event NOTI",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/tasks/**",
       "apps/api/test/integration/**",
@@ -4233,7 +4233,7 @@ export const backlog = [
     title:
       "BE Kanban (board + move) + comment/mention + checklist + activity log (GET /projects/:id/kanban, POST /:id/move, comments CRUD, checklists/items, GET /:id/activity) — P1",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/tasks/**", "apps/api/test/integration/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S4-TASK-BE-3"],
@@ -4257,7 +4257,7 @@ export const backlog = [
     title:
       "Schema + migration NOTI (notification_events·notification_templates·notifications·notification_delivery_logs) theo DB-07 — RLS+FORCE, partial index unread, delivery status",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
@@ -4283,7 +4283,7 @@ export const backlog = [
     title:
       "Seed notification event catalog (Event code registry §9.5 canonical) + template IN_APP tiếng Việt + permission NOTI + role mapping idempotent",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/foundation/seed/**",
       "apps/api/migrations/**",
@@ -4321,7 +4321,7 @@ export const backlog = [
     title:
       "Vá catalog notification_events khớp registry §9.5 cho event TASK (BE-3): thêm TASK_PRIORITY_CHANGED · đổi TASK_DEADLINE_CHANGED→TASK_DUE_DATE_CHANGED · template + enable TASK_ASSIGNEE_CHANGED — BẮT BUỘC TRƯỚC S4-INT-1",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "docs/plans/S4-NOTI-SEED-2.md",
@@ -4354,7 +4354,7 @@ export const backlog = [
     // Own-scope (expand cho employee/manager/hr, contract cho company-admin vốn có @Company từ bulk-grant
     // 0005:310-313). Khai yellow + paths thiếu migrations/** đã khiến auto-loop route nó vào LIGHT gate.
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/notifications/**",
       "apps/api/src/realtime/**",
@@ -4384,7 +4384,7 @@ export const backlog = [
     title:
       "BE Event intake + notification engine (POST /internal/v1/notifications/events + /send) — recipient resolver, template renderer, delivery log, dedupe, actor-exclusion — crown trust boundary",
     zone: "red",
-    status: "todo",
+    status: "done",
     // paths hẹp có chủ đích: conflict() của auto-loop so prefix tĩnh của glob, nên "test/integration/**"
     // sẽ bị coi là đụng int-spec của WO khác ⇒ mất song song. WO này chỉ viết đúng 1 int-spec.
     paths: [
@@ -4424,7 +4424,7 @@ export const backlog = [
     title:
       "BE Notification admin config (GET events/templates/delivery-logs, PATCH bật/tắt event, cập nhật template) + reminder job TASK_DUE_SOON/TASK_OVERDUE — P1/P2",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/notifications/**",
       "apps/api/src/scheduler/**",
@@ -4517,7 +4517,7 @@ export const backlog = [
     title:
       "Schema + migration DASH (dashboard_widgets·dashboard_widget_configs·dashboard_widget_cache) theo DB-07 — RLS+FORCE, cache không lưu dữ liệu nhạy cảm chưa mask",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
@@ -4544,7 +4544,7 @@ export const backlog = [
     title:
       "Seed widget catalog 7 In-sprint (§11.3) + permission DASH + default config theo Employee/Manager/HR/Admin idempotent",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/dashboard/**",
       "apps/api/migrations/**",
@@ -4584,7 +4584,7 @@ export const backlog = [
     title:
       "Bù đủ catalog widget DASH (11 widget còn lại của DB-07 §14.3) + reconcile mâu thuẫn nội bộ DB-07 §8.5 ↔ §14.3 + cặp refresh:dashboard-cache",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/dashboard/**",
       "apps/api/migrations/**",
@@ -4614,7 +4614,7 @@ export const backlog = [
     title:
       "BE Dashboard resolver (GET /dashboard/me, /types, /:type) + widget registry + permission/scope gate — crown data-scope",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/dashboard/**",
       "apps/api/test/integration/**",
@@ -4651,7 +4651,7 @@ export const backlog = [
     title:
       "Backfill grant read:dashboard cho role manager + hr (role sinh ở 0444 lỡ blanket 0100) — mở khóa GET /dashboard/me|/types cho 2/4 persona, blocker của S4-DASH-BE-1",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/migrations/**", "apps/api/test/integration/**"],
     skills: ["code-review"],
     depends_on: [],
@@ -4707,7 +4707,7 @@ export const backlog = [
     title:
       "Tích hợp TASK → NOTI: wiring event producer (outbox) → consumer intake, tạo notification đúng recipient cho mọi event TASK/PROJECT — E2E task→noti — crown",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/tasks/**",
       "apps/api/src/notifications/**",
@@ -4738,7 +4738,7 @@ export const backlog = [
     title:
       "Tích hợp DASH cache invalidation từ event TASK/NOTI/ATT/LEAVE (POST /internal/v1/dashboard/cache/invalidate) — chỉ mã do producer thật phát (§11.5 reconcile)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/dashboard/**",
       "apps/api/src/events/**",
@@ -4762,7 +4762,7 @@ export const backlog = [
     title:
       "FE đăng ký module TASK·NOTI·DASH vào route/sidebar/action registry + query layer wiring (PermissionGate, i18n vi) — nền cho màn Sprint 4",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/**",
       "apps/app/src/layouts/**",
@@ -4821,7 +4821,7 @@ export const backlog = [
     title:
       "Gỡ/chuyển tasksApi legacy (web-core tasks-api.ts) — code chết gọi GET /tasks shape cũ sau BREAKING PR #145 (my-tasks → /tasks/my)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["packages/web-core/src/lib/**", "packages/web-core/src/index.ts"],
     skills: ["code-review"],
     depends_on: [],
@@ -4842,7 +4842,7 @@ export const backlog = [
     title:
       "FE Task screens: TaskListPage · MyTasksPage · TaskDetailPage · TaskFormDrawer · TaskAssignControl · TaskStatusSelect (P0)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/src/routes/**", "apps/app/src/i18n/**", "packages/web-core/src/lib/**"],
     skills: ["code-review"],
     depends_on: ["S4-TASK-BE-3", "S4-FE-REGISTRY-1"],
@@ -4867,7 +4867,7 @@ export const backlog = [
     title:
       "FE Task collaboration: TaskKanbanPage (drag-drop) · TaskCommentThread (mention) · TaskChecklistPanel · TaskActivityTimeline (P1)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/src/routes/**", "apps/app/src/i18n/**", "packages/web-core/src/lib/**"],
     skills: ["code-review"],
     depends_on: ["S4-TASK-BE-4", "S4-FE-TASK-2"],
@@ -4892,7 +4892,7 @@ export const backlog = [
     title:
       "FE Notification: NotificationBadge · NotificationDropdown · NotificationListPage · NotificationDetailPage · MarkRead/MarkAllRead · deep link an toàn (P0/P1)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/**",
       "apps/app/src/components/**",
@@ -4922,7 +4922,7 @@ export const backlog = [
     title:
       "Gỡ dứt điểm NotificationBell (@mediaos/ui) + notification-api legacy (web-core) — code chết gọi route BE đã xoá ở PR #133",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["packages/ui/src/components/**", "packages/web-core/src/lib/**", "apps/console/src/**"],
     skills: ["code-review"],
     depends_on: ["S4-FE-NOTI-1"],
@@ -4946,7 +4946,7 @@ export const backlog = [
     title:
       "FE Dashboard shell + P0 widgets: DashboardMePage · DashboardWidgetGrid · WidgetCard · MyTasksWidget · TaskAlertsWidget · NotificationsWidget (P0)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/**",
       "apps/app/src/components/**",
@@ -4976,7 +4976,7 @@ export const backlog = [
     title:
       "FE Dashboard widget mở rộng: AttendanceTodayWidget · PendingLeaveWidget · ProjectProgressWidget · HrOverviewWidget + DashboardTypeSwitcher (P1)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/**",
       "apps/app/src/components/**",
@@ -5037,7 +5037,7 @@ export const backlog = [
     title:
       "QA Sprint 4 E2E + regression sign-off: flow task→noti→dash (§15.1) + notification deep link + dashboard degraded + regression S0–S3",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/test/**", "apps/app/src/**", "docs/plans/S4-QA-2.md"],
     skills: ["code-review"],
     depends_on: ["S4-INT-2", "S4-FE-DASH-2", "S4-QA-1"],
@@ -5068,7 +5068,7 @@ export const backlog = [
     title:
       "Staging/UAT readiness: env + deploy pipeline + migration/seed chạy từ DB trống + test account đủ role (Employee/Manager/HR/Admin/Super Admin) — đối chiếu topology PROD/DEV-ONLINE đang chạy",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       ".github/workflows/**",
       "docker-compose.yml",
@@ -5099,7 +5099,7 @@ export const backlog = [
     title:
       "Integration freeze + system smoke P0 + cross-module E2E: login→Home Portal→module workspace→check-in→nghỉ phép→task→notification→dashboard (WS-B/C)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/test/**", "apps/app/src/**", "docs/plans/S5-QA-E2E-1.md"],
     skills: ["code-review"],
     depends_on: ["S4-QA-2"],
@@ -5142,7 +5142,7 @@ export const backlog = [
     title:
       "Permission & data-scope hardening + field-level/export permission + security testing (IDOR, file access, sensitive fields, rate-limit auth) — WS-E, crown",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/**", "apps/api/test/**", "docs/_review/**", "docs/plans/S5-SEC-1.md"],
     skills: ["code-review"],
     depends_on: ["S4-QA-2"],
@@ -5167,7 +5167,7 @@ export const backlog = [
     title:
       "QA regression suite MVP (test-case matrix theo module × role) + UI state hardening + responsive/accessibility smoke — WS-F",
     zone: "yellow",
-    status: "in_progress",
+    status: "done",
     paths: [
       "apps/api/test/**",
       "apps/app/src/**",
@@ -5192,7 +5192,7 @@ export const backlog = [
     title:
       "Dashboard & Notification hardening: widget degraded/cache đúng, unread count chính xác, deep link an toàn, invalidation theo event — WS-G",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/dashboard/**",
       "apps/api/src/notifications/**",
@@ -5239,7 +5239,7 @@ export const backlog = [
     title:
       "UAT prep + run (script theo role · test data · sign-off) + release readiness checklist + known issues/release notes nội bộ — gate vào Sprint 6",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["docs/QA/**", "docs/RELEASE/**", "docs/plans/S5-UAT-1.md"],
     skills: [],
     depends_on: ["S5-QA-E2E-1", "S5-QA-REG-1", "S5-SEC-1"],
@@ -5262,7 +5262,7 @@ export const backlog = [
     title:
       "Scope Freeze & Release Governance: đóng băng scope MVP, quy tắc thay đổi sau freeze, RC governance (WS1)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["docs/RELEASE/**", "docs/plans/S6-GOV-1.md"],
     skills: [],
     depends_on: ["S5-UAT-1"],
@@ -5281,7 +5281,7 @@ export const backlog = [
     title:
       "Stabilization & Bug Triage: module stabilization checklist (AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH/Foundation) + fix P0/P1 + daily triage (WS2)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     // paths mở rộng thêm apps/api/test/** (2026-07-26): 2 lỗi S1 tìm được ở WS2 nằm ở TẦNG TEST và
     // đều sinh ĐỎ-GIẢ ngẫu nhiên (RELEASE-06 §4.2/§4.3) — để nguyên thì mọi kết luận "xanh" của
     // S6-QA-FINAL-1/S6-SEC-1/S6-PERF-DB-1 sau này đều không đáng tin. Khai tường minh thay vì sửa
@@ -5310,7 +5310,7 @@ export const backlog = [
     title:
       "QA final pass: regression + E2E + API contract + regression-theo-role + UAT final + điều kiện sign-off (WS3)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     // paths mở rộng thêm apps/api/src/**/*.spec.ts (2026-07-26, cùng lý do S6-STAB-1 ở trên): bộ spec
     // tích hợp của ATT/LEAVE/HR nằm COLOCATED dưới src/ (memory vitest-unit-specs-must-be-colocated),
     // nên "chỉ apps/api/test/**" không phủ nổi phần regression phải chạm. Khai HẸP tới *.spec.ts —
@@ -5339,7 +5339,7 @@ export const backlog = [
     title:
       "Security / RBAC / Data-Protection final hardening: auth/session · RBAC · field masking · file access · audit · secret/config review (WS4) — crown",
     zone: "red",
-    status: "todo",
+    status: "done",
     // paths bổ sung docs/RELEASE/** + harness/backlog.mjs (2026-07-26, plan-reviewer vòng 1 chặn):
     // DoD của WS4 buộc cập nhật RELEASE-02 (sổ known-issue) và RELEASE-01 §5 (security readiness) khi
     // trạng thái đổi, cộng backlog theo CLAUDE §8 — khai thiếu thì WO tự đẩy mình ra ngoài phạm vi ở
@@ -5375,7 +5375,7 @@ export const backlog = [
     title:
       "Performance/Query/Cache hardening + DB Migration/Seed/Backup/Rollback verification (index, query perf, backup/restore rehearsal) — WS5/WS6",
     zone: "red",
-    status: "todo",
+    status: "done",
     // paths bổ sung `mediaos.ps1` + `harness/check.sh` (2026-07-29, khai TRƯỚC khi sửa — paths lái
     // review gate + scheduler): WO này cắm 2 chốt hồi quy vào check.sh và thêm wrapper `m backup-drill`
     // cùng khuôn `m migrate-verify`. Khai thiếu thì WO tự đẩy mình ra ngoài phạm vi ở đúng bước cuối.
@@ -5434,7 +5434,7 @@ export const backlog = [
     title:
       "KI-014 — truy gốc crash ERR_IPC_CHANNEL_CLOSED rồi chuẩn hoá chạy test chia chunk vào check.sh: mở lại cổng verify local (chạm CẢ @mediaos/api và @mediaos/app)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     // KHÔNG mở apps/*/src/**: WO này sửa HẠ TẦNG chạy test, không sửa test lẫn code sản phẩm.
     paths: [
       "harness/**",
@@ -5473,7 +5473,7 @@ export const backlog = [
     title:
       "Dựng lại Phụ lục A bằng QUÉT RUNTIME (boot AppModule, đọc metadata thật) thay parse tĩnh — census 100% route + phán quyết gate có chữ ký; đóng vế GET của route-guard sweep",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/test/foundation/**",
       "harness/**",
@@ -5543,7 +5543,7 @@ export const backlog = [
     title:
       "N-1 (hậu FULL gate S6-SEC-ORG-1) — ép data_scope trong OrgRepository.listEmployees: gate cặp-quyền đã có nhưng role scope Own/Team/Department vẫn nhận TRỌN danh bạ tenant kèm email",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/org/**",
       // Mở rộng khi thi công (memory wo-paths-drive-gate-and-scheduler — khai thiếu ⇒ lọt LIGHT gate):
@@ -5589,7 +5589,7 @@ export const backlog = [
     title:
       "N-1c (FULL gate S6-SEC-ORGSCOPE-1 phát hiện) — GET /org/teams/:id/members trả userEmail+userFullName mà KHÔNG ép data_scope: lấy lại đúng danh bạ mà N-1 vừa khoá, chỉ qua cặp quyền khác",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/org/**",
       "apps/api/src/permission/**",
@@ -5626,7 +5626,7 @@ export const backlog = [
     title:
       "Gốc rễ của N-1/N-2/N-1c — buộc TẦNG CHIẾU `users.email`/`users.fullName` phải nhận vị từ scope, thiếu thì VỠ TYPECHECK (không phải trả 0 hàng im lặng)",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/permission/**",
       "apps/api/src/**/*.repository.ts",
@@ -5713,7 +5713,7 @@ export const backlog = [
     title:
       "N-2 (hậu FULL gate S6-SEC-ORG-1) — chốt MỘT động từ giữa `read:user` (legacy) và `view:user` (canonical mig 0444) rồi backfill PER-PAIR; nay hr/manager/hr-manager đều lệch cặp",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/**",
@@ -5757,7 +5757,7 @@ export const backlog = [
     title:
       "KI-034 — gộp insert notification + outbox + audit vào MỘT transaction (repo.create nhận tx), bỏ đường .catch nuốt lỗi làm mất audit + sự kiện chỉ với một dòng warn",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/notifications/**",
       "apps/api/src/events/**",
@@ -5792,7 +5792,7 @@ export const backlog = [
       "KI-042 — login_logs: hàng company_id IS NULL (thử đăng nhập pre-auth, có email + IP) ĐỌC ĐƯỢC CHÉO TENANT; siết vế USING của policy tenant_isolation (migration 0532)",
     zone: "red",
     // Thi công XONG (mig 0532 + RED-proof + hồi quy + FULL gate) nhưng CHƯA merge ⇒ chưa phải "done".
-    status: "in_progress",
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/auth/**",
@@ -5832,7 +5832,7 @@ export const backlog = [
     title:
       "KI-044 — hàng blocked/TooManyAttempts ghi company_id NULL kể cả khi slug HỢP LỆ (rate-limit chạy trước resolveCompanyId) ⇒ admin mất quan sát brute-force nhắm vào chính công ty mình sau 0532",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/auth/**",
       // S6-SEC-LOGINLOG-2 khi thi công: docstring ở me-security-activity.repository.ts liệt kê "mọi
@@ -5915,7 +5915,7 @@ export const backlog = [
     title:
       "KI-041 — 2 matview dashboard nằm NGOÀI RLS (Postgres không hỗ trợ): dựng ranh giới thật ở tầng DB thay vì chỉ WHERE company_id trong service, hoặc rút bề mặt / ký waiver có bằng chứng (migration nối tiếp head THẬT)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/dashboard/**",
@@ -5955,7 +5955,7 @@ export const backlog = [
     title:
       "KI-028 MỞ LẠI — test ghi thẳng vào DB PROD: bịt nguồn rò (vitest.config LANE_DB ?? 'mediaos') TRƯỚC, rồi purge 74 tenant test / 226 user (18 user vừa đăng nhập được vừa giữ role toàn cục)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/vitest.config.ts",
       "apps/api/test/**",
@@ -6004,7 +6004,7 @@ export const backlog = [
     title:
       "KI-043 (S0, CHẶN GO-LIVE) — mật khẩu Postgres PROD chính là literal trong repo PUBLIC: rotate 5 role, gỡ nguồn tái nhiễm mediaos.ps1, bind 127.0.0.1, cắm chốt chống tái diễn",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "mediaos.ps1",
       "docker-compose.yml",
@@ -6051,7 +6051,7 @@ export const backlog = [
     title:
       "KI-037 — lưới tenant-isolation (156 bảng × 3 ca) CHỈ SELECT: không có một ca deny GHI chéo tenant nào; bổ sung vế INSERT/UPDATE/DELETE vào chính harness data-driven",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/test/**",
       "apps/api/src/**",
@@ -6138,7 +6138,7 @@ export const backlog = [
     title:
       "Final Sign-off · Go/No-go · Go-live execution · Handoff (admin/user/support guide · known issues · post-go-live backlog) — WS10",
     zone: "red",
-    status: "todo",
+    status: "done",
     // paths MỞ RỘNG ngoài docs/** có chủ đích (S6-GOLIVE-1 §2.1): WO này phán quyết go-live THEO
     // runbook, mà bước T-0 #3 của runbook (backup DB) KHÔNG chạy được trên máy PROD — `backup-db.sh`
     // chặn cứng ở `command -v pg_dump` trong khi host Windows chỉ có pg client TRONG container.
@@ -6178,7 +6178,7 @@ export const backlog = [
     title:
       "FE LeaveOverviewPage (/leave) — màn tổng quan nghỉ phép: balance summary + quick actions + recent requests + pending approvals + upcoming leave + warning cards (UI-LEAVE-SCREEN-001, P0)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/leave/**",
       "apps/app/src/router.tsx",
@@ -6205,7 +6205,7 @@ export const backlog = [
     title:
       "BE Employee File: upload/list/download/soft-delete file hồ sơ nhân viên qua Foundation FileService + file_links (gate HR.EMPLOYEE.FILE_*, data-scope, scan_status, access log) — enabler cho UI-HR-SCREEN-015",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/employees/**",
       "apps/api/migrations/**",
@@ -6237,7 +6237,7 @@ export const backlog = [
     title:
       "FE Employee Files tab trong EmployeeDetailPage: danh sách + upload (progress) + download + xóa mềm theo quyền (UI-HR-SCREEN-015)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/hr/employees/**",
       "apps/app/src/i18n/**",
@@ -6260,7 +6260,7 @@ export const backlog = [
     title:
       "BE System Settings: GET (+PATCH) /foundation/system-settings + quyền manage:system-settings, mask secret — reconcile SettingService/system_settings sẵn có — enabler cho UI-SYSTEM-SCREEN-004",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/foundation/**",
       "apps/api/src/settings/**",
@@ -6292,7 +6292,7 @@ export const backlog = [
     title:
       "FE hoàn thiện SystemSettingsPage (/system/settings) thay placeholder: nhóm setting theo category, mask sensitive, edit gate manage:system-settings (UI-SYSTEM-SCREEN-004)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/system/**",
       "apps/app/src/i18n/**",
@@ -6319,7 +6319,7 @@ export const backlog = [
     title:
       "BE TASK file (project/task) qua FileService + file_links + Project progress report (GET /projects/:id/report) — P1/P2 (IMP02-STORY-075/076)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/tasks/**",
       "apps/api/migrations/**",
@@ -6354,7 +6354,7 @@ export const backlog = [
     title:
       "FE TaskFilePanel (upload/list/download/delete theo quyền) + ProjectProgressCard (summary tiến độ) — P1/P2 (IMP02-STORY-075/076)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/src/routes/**", "apps/app/src/i18n/**", "packages/web-core/src/lib/**"],
     skills: ["code-review"],
     depends_on: ["S4-TASK-BE-5", "S4-FE-TASK-2"],
@@ -6409,7 +6409,7 @@ export const backlog = [
     title:
       "FE DashboardConfigPage (cấu hình widget theo role/user/dashboard-type: sort/enable/size) — P1/P2 (IMP02-STORY-091)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/src/routes/**", "apps/app/src/i18n/**", "packages/web-core/src/lib/**"],
     skills: ["code-review"],
     depends_on: ["S4-DASH-BE-3", "S4-FE-DASH-1"],
@@ -6433,7 +6433,7 @@ export const backlog = [
     title:
       "ATT export bảng công theo quyền (GET /attendance/records/export CSV, gate export:attendance theo data-scope) + nút Export trên FE reports — P2 (IMP02-STORY-051)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/attendance/**",
       "apps/api/test/integration/**",
@@ -6467,7 +6467,7 @@ export const backlog = [
     title:
       "Nâng cấp màn Hồ sơ nhân sự: dải tổng quan (headcount+donut giới tính+4 thẻ) · 2 chế độ xem bảng⇄chi tiết (split) · tùy chỉnh cột · detail tabs + form anchor-nav — kèm BE mở read-DTO personal-info (PII gate view-sensitive) + GET /hr/employees/summary",
     zone: "red", // chạm masking/PII projection — FULL gate
-    status: "todo",
+    status: "done",
     paths: [
       "packages/contracts/src/hr/**",
       "packages/web-core/src/lib/**",
@@ -6507,7 +6507,7 @@ export const backlog = [
     title:
       "Hồ sơ nhân sự phần 2: gom nhóm bảng 1/2 cấp (Tùy chỉnh cột) + export danh sách theo quyền export:employee + sort server-side cho cột mới (allowlist HR_EMPLOYEE_SORT_FIELDS)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "packages/contracts/src/hr/**",
       "packages/ui/src/**",
@@ -6530,7 +6530,7 @@ export const backlog = [
     title:
       "Tối ưu hiệu năng nền tảng: (a) code-split router theo module (bundle apps/app 1.55MB→lazy route) · (b) batch permission list HR (2 can()/row → canBatch preload company-grants + getObjectGrantsForMany, GIỮ NGUYÊN ngữ nghĩa object-DENY priority-1) · (c) pg_trgm GIN index search nhân sự khi headcount >1–2k — crown ở (b)",
     zone: "red", // (b) chạm permission engine — plan-review TRƯỚC khi code
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/router.tsx",
       "apps/api/src/permission/**",
@@ -6558,7 +6558,7 @@ export const backlog = [
     title:
       "Lộ identity_number/issue_date/issue_place (CCCD §14.18) qua read surface — OWNER CHỐT LẦN 2 2026-07-13: cặp MỚI view-identity:employee (is_sensitive) + inline detail + audit-on-reveal mirror salary + GRANT KÈM per-role tường minh (hr/company-admin/employee mirror view-sensitive 0444, KHÔNG CROSS JOIN) + flip gate duyệt view-sensitive→view-identity",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "packages/contracts/src/hr/**",
       "apps/api/src/employees/**",
@@ -6602,7 +6602,7 @@ export const backlog = [
     title:
       "FE Notification Events admin (UI-NOTI-SCREEN-004): bảng event catalog (search/filter module·status) + toggle bật/tắt event (confirm) — gate view/update:notification-config (đã allowlisted)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/notifications/**",
       "apps/app/src/router.tsx",
@@ -6631,7 +6631,7 @@ export const backlog = [
     title:
       "FE Notification Delivery Logs read-only (UI-NOTI-SCREEN-006): bảng append-only + filter channel/status/recipient/time — gate view:notification-delivery-log (đã allowlisted)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/notifications/**",
       "apps/app/src/router.tsx",
@@ -6666,7 +6666,7 @@ export const backlog = [
     title:
       "NOTI admin templates LIST: GET /notifications/templates (filter event/channel/locale, company override ∪ global) — mở lại scope gốc NOTI-API-303 đã 'thu hẹp', mở đường FE NOTI-SCREEN-006",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/notifications/**",
       "packages/contracts/src/notification-admin.ts",
@@ -6696,7 +6696,7 @@ export const backlog = [
     title:
       "FE Notification Templates admin (NOTI-SCREEN-006 / UI-NOTI-SCREEN-005): bảng template theo event + editor title/body — gate view/update:notification-template (đã allowlisted); kèm mở đường vào sidebar cho templates + delivery-logs",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/notifications/**",
       "apps/app/src/router.tsx",
@@ -6728,7 +6728,7 @@ export const backlog = [
     title:
       "QA TASK permission/data-scope + deny-path (tách khỏi S4-QA-1 để chạy ngay): CRUD/assign/status-FSM/kanban/comment/checklist — coverage ≥80%",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/test/integration/**", "apps/api/src/tasks/**"],
     skills: ["code-review"],
     depends_on: ["S4-TASK-BE-4"],
@@ -6752,7 +6752,7 @@ export const backlog = [
     title:
       "QA NOTI permission/own-scope + deny-path (tách khỏi S4-QA-1): own-scope/mark-read idempotent · intake dedupe/actor-exclusion · admin-config deny — coverage ≥80%",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/test/integration/**", "apps/api/src/notifications/**"],
     skills: ["code-review"],
     depends_on: ["S4-NOTI-BE-4"],
@@ -6778,7 +6778,7 @@ export const backlog = [
     title:
       "Vá false-green cổng local: harness/check.sh chạy `pnpm test` KHÔNG set LANE_DB ⇒ ~70 int-spec deny-path/IDOR bị skip im lặng — làm cổng LOUD (đếm+in N spec SKIPPED, cảnh báo khi vượt ngưỡng) hoặc tự trỏ lane-DB khớp CI",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "harness/check.sh",
       "harness/**",
@@ -6807,7 +6807,7 @@ export const backlog = [
     title:
       "System Jobs observability: GET /foundation/system-jobs đọc lịch sử system_job_runs (retention/temp-cleanup: last-run/status/duration/error) + màn FE read-only — khớp cặp seed orphan view:foundation-job (hiện 0 endpoint)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/foundation/**",
       "apps/api/src/scheduler/**",
@@ -6842,7 +6842,7 @@ export const backlog = [
     title:
       "Tích hợp LEAVE → NOTI qua OutboxNotificationBridge (INT-1): event-type leave.request.{submitted,approved,rejected,cancelled,revoked} → NOTI intake, recipient theo SPEC-05 §19.1/§14.19 — hiện event LEAVE rơi im lặng, requester không được báo",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/leave/**",
       "apps/api/src/notifications/**",
@@ -6879,7 +6879,7 @@ export const backlog = [
     title:
       "Tích hợp ATT → NOTI: bổ sung producer outbox trong ATT (adjustment submit/approve/reject · remote-work submit/approve/reject/cancel) + đăng ký event-type + recipient-resolver vào OutboxNotificationBridge — ATT hiện CHƯA phát event nào",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/attendance/**",
       "apps/api/src/notifications/**",
@@ -6910,7 +6910,7 @@ export const backlog = [
     title:
       "Tích hợp HR/AUTH → NOTI: HR tạo employee → activation/welcome notification (mảnh thiếu STORY-098) + AUTH password-reset-requested/account-locked → notify chủ tài khoản — producer HR/AUTH + đăng ký vào OutboxNotificationBridge",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/employees/**",
       "apps/api/src/auth/**",
@@ -6957,7 +6957,7 @@ export const backlog = [
     title:
       "Docs sync SPEC-09 ME: cập nhật SPEC-01/PRD-00/DB-01·08·09·10/README §8 + API-10 ME stub + chốt ME-DEC-001..010 theo đề xuất §21",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "docs/SPEC/**",
       "docs/PRD/**",
@@ -6985,7 +6985,7 @@ export const backlog = [
     title:
       "Schema + migration user_preferences (SPEC-09 §15.2) — RLS+FORCE, unique(company_id,user_id) + seed module ME + cặp permission user-preference grant mọi role Own",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
@@ -7017,7 +7017,7 @@ export const backlog = [
     title:
       "BE MeModule aggregation: GET /me + /me/overview + attendance/leave/task/notification-summary — compose service nguồn own-scope, fail-soft per-section, resolve từ token",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/me/**",
       "apps/api/src/app.module.ts",
@@ -7049,7 +7049,7 @@ export const backlog = [
     title:
       "BE preferences + avatar: GET/PATCH /me/preferences (+appearance) upsert user_preferences own-scope + POST/DELETE /me/avatar qua foundation files → employee_profiles.avatar_url",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/me/**",
       "apps/api/src/employees/**",
@@ -7081,7 +7081,7 @@ export const backlog = [
     title:
       "BE Hoạt động bảo mật own-scope: GET /me/security/activity đọc login_logs + user_security_events CỦA CHÍNH user (mask IP, không lộ nhạy cảm) — sessions TÁI DÙNG /auth/sessions sẵn có",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/auth/**",
       "apps/api/src/me/**",
@@ -7113,7 +7113,7 @@ export const backlog = [
     title:
       "FE registry + shell + Tổng quan ME (ME-SCREEN-001): ModuleCode/APP_REGISTRY card 'Cá nhân' + ROUTE_REGISTRY /me/* + SIDEBAR_REGISTRY.ME (§8.1) + MODULE_APP_METADATA + trang /me overview",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "packages/web-core/src/**",
       "apps/app/src/layouts/**",
@@ -7148,7 +7148,7 @@ export const backlog = [
     title:
       "FE Hồ sơ của tôi + Tài khoản & bảo mật dưới /me/*: TÁI DÙNG MyProfilePage/PCR/ChangePassword/Sessions/2FA + màn Hoạt động bảo mật mới (BE-3)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/me/**",
       "apps/app/src/routes/account/**",
@@ -7181,7 +7181,7 @@ export const backlog = [
     title:
       "FE Công việc của tôi (ATT/LEAVE/TASK summary + deep-link) + Thông báo & Tùy chọn thông báo (FE mới trên BE sẵn) + Cài đặt cá nhân (theme sync server↔localStorage)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/me/**",
       "apps/app/src/i18n/**",
@@ -7212,7 +7212,7 @@ export const backlog = [
     title:
       "QA ME: IDOR sweep mọi endpoint /me/* + cross-user/cross-tenant + aggregation degraded + preference policy — theo SPEC-09 §20, coverage ≥80% apps/api/src/me",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/test/integration/**", "apps/api/src/me/**", "docs/plans/S5-ME-QA-1.md"],
     skills: ["code-review"],
     depends_on: ["S5-ME-BE-2", "S5-ME-BE-3"],
@@ -7246,7 +7246,7 @@ export const backlog = [
     title:
       "FE liên kết/hủy liên kết hồ sơ nhân viên ↔ tài khoản có sẵn trên trang chi tiết (HR-FUNC-011 — BE link/unlink ĐÃ ship S2-HR-BE-2, chỉ thiếu UI)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/src/routes/hr/**", "apps/app/src/i18n/**", "packages/web-core/src/**"],
     skills: ["code-review"],
     depends_on: [],
@@ -7270,7 +7270,7 @@ export const backlog = [
     title:
       "BE import nhân viên hàng loạt: seed cặp permission ('import','employee') + POST /hr/employees/import (XLSX/CSV, validate từng dòng, dry-run preview, apply tái dùng HrWriteService.create + SequenceService, audit phiên import)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/employees/**",
       "apps/api/src/db/schema/**",
@@ -7305,7 +7305,7 @@ export const backlog = [
     title:
       "FE import nhân viên hàng loạt: màn upload file + tải template + preview lỗi từng dòng (dry-run) + áp dụng + màn kết quả — gate cặp ('import','employee')",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/src/routes/hr/**", "apps/app/src/i18n/**", "packages/web-core/src/**"],
     skills: ["code-review"],
     depends_on: ["S5-HR-IMPORT-BE-1"],
@@ -7337,7 +7337,7 @@ export const backlog = [
     title:
       "BE sơ đồ tổ chức: GET /hr/org-chart/employees (cây nhân sự theo quản lý trực tiếp, directory-class, theo data-scope, chống cycle/orphan) + headcount additive vào /org/units/tree",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/employees/**",
       "apps/api/src/org/**",
@@ -7369,7 +7369,7 @@ export const backlog = [
     title:
       "FE sơ đồ tổ chức trực quan /hr/org-chart: tab Phòng ban (node-chart + trưởng đơn vị + headcount) + tab Nhân sự (reporting-line card avatar·tên·chức danh) + toggle giữ dạng danh sách cũ",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/src/routes/hr/**", "apps/app/src/i18n/**", "packages/web-core/src/**"],
     skills: ["code-review"],
     depends_on: ["S5-HR-ORGCHART-BE-1"],
@@ -7393,7 +7393,7 @@ export const backlog = [
     title:
       "Hoàn thiện khối Thông tin công việc (chi tiết nhân viên + hồ sơ của tôi): BE thêm jobLevelName·contractTypeName·tên quản lý trực tiếp/gián tiếp (additive) + FE thêm dòng tương ứng + khối Thông tin nghỉ việc",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/employees/**",
       "apps/api/test/integration/**",
@@ -7440,7 +7440,7 @@ export const backlog = [
     title:
       "Sidebar TASK mở đường: thêm mục 'Dự án' (/tasks/projects) + đổi label task.overview 'Tổng quan'→'Danh sách công việc' (SCREEN-001 hiện không có menu nào dẫn tới)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/src/layouts/workspace/**"],
     skills: ["code-review"],
     depends_on: [],
@@ -7463,7 +7463,7 @@ export const backlog = [
     title:
       "Kanban counts (trả nợ SPEC-06 §13.8): GET /projects/:id/kanban bổ sung commentCount·attachmentCount·checklistDone/checklistTotal per-card (additive, không N+1)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/tasks/**", "apps/api/test/integration/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: [],
@@ -7487,7 +7487,7 @@ export const backlog = [
     title:
       "GET /tasks bổ sung filter departmentId + search (trả nợ #272): gỡ ràng buộc picker gắn việc cấp phòng phải chọn dự án trước",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/tasks/**",
       "apps/api/test/integration/**",
@@ -7517,7 +7517,7 @@ export const backlog = [
     title:
       "Kanban card giàu tín hiệu (benchmark): badge comment/attachment/checklist + avatar-initials assignee + style Done/Cancelled + lọc theo assignee/'Chưa giao' trên board",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/src/routes/tasks/**", "apps/app/src/i18n/**", "docs/SPEC/SPEC-06 TASK.md"],
     skills: ["code-review"],
     depends_on: ["S5-TASK-BE-6"],
@@ -7540,7 +7540,7 @@ export const backlog = [
     title:
       "TASK-SCREEN-010 Task quá hạn (/tasks/overdue) + TASK-SCREEN-011 Báo cáo tiến độ dự án — FE-only trên BE sẵn có (query overdue + PROJECT_PROGRESS), layout KPI tiles theo benchmark",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/tasks/**",
       "apps/app/src/router.tsx",
@@ -7579,7 +7579,7 @@ export const backlog = [
     title:
       "Chuyển màn Ngày nghỉ lễ /system/public-holidays → /leave/public-holidays (re-home FE-only: route + sidebar LEAVE group admin + redirect path cũ; gate & BE giữ nguyên)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/system/foundation/**",
       "apps/app/src/routes/leave/**",
@@ -7618,7 +7618,7 @@ export const backlog = [
     title:
       "Backfill target_url_template cho 39 template notification global (QA2-CRIT-001 — deep-link đang NULL toàn hệ thống): migration seed-update theo event type + int-spec assert mọi template global có target_url_template và target_url render đúng cho các event P0",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/notifications/**",
@@ -7646,7 +7646,7 @@ export const backlog = [
     title:
       "Vá 3 event render placeholder câm TASK_COMMENT_CREATED · TASK_MENTIONED · PROJECT_MEMBER_ADDED (QA2-CRIT-002): producer bổ sung field payload còn thiếu (task_code/actor_name/project_name…) additive — mirror cách 5 event đã vá ở 0490",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/tasks/**",
       "apps/api/src/notifications/**",
@@ -7675,7 +7675,7 @@ export const backlog = [
     title:
       "Cấp task_code cho task HR (createApprovalTaskTx ← leave/attendance-adjustment) — gỡ nốt đường NULL cuối sau cut-over 0498; kèm residual FULL-gate S5-NOTI-FIX-2: map SequenceInactiveError → 4xx TASK-ERR + cap độ dài users.fullName ở contracts (chống dead-letter payload quá dài)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/tasks/**",
       // apps/api/src/leave/** GỠ khỏi paths 2026-07-18: LeaveService.createRequest/approve/reject/cancel
@@ -7714,7 +7714,7 @@ export const backlog = [
     title:
       "Dọn khối LeaveService chết (createRequest/approveRequest/rejectRequest/cancelRequest + CreateLeaveRequestDto/createLeaveRequestSchema) — di sản G11 còn sót sau rebuild SPEC-05 Sprint 3, không route HTTP nào tới được",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/leave/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S5-TASK-HRCODE-1"],
@@ -7741,7 +7741,7 @@ export const backlog = [
     title:
       "Gia cố cấp mã tuần tự: SAVEPOINT cho recovery 23505 (ensure-on-miss race hiện trả 500 do 25P02), allocate sau authz tầng-service (chống đốt counter), phân biệt constraint khi map unique-violation",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/foundation/sequences/**",
       "apps/api/src/attendance/**",
@@ -7776,7 +7776,7 @@ export const backlog = [
     title:
       "Đợt A — Kanban cột pipeline tuỳ biến theo dự án (project_states) thay 5 cột FSM cố định; nới FSM cho phép mở lại + auto-map state_group→status qua changeStatus; backfill state_id từ task_status",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "docs/DECISIONS/**",
       "docs/SPEC/SPEC-06 TASK.md",
@@ -7821,7 +7821,7 @@ export const backlog = [
     title:
       "Đợt B — Sidebar cây phòng ban: dự án lồng dưới phòng ban + menu ⋯ mỗi phòng ban (xem báo cáo · thêm dự án · sắp xếp); ModuleSidebar dựng cây đệ quy",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/layouts/workspace/**",
       "apps/app/src/routes/tasks/**",
@@ -7856,7 +7856,7 @@ export const backlog = [
     title:
       "Đợt D1 — Vỏ workspace dự án: tab bar (Bảng·Danh sách·Báo cáo·Hoạt động) + toolbar (tìm·lọc·sắp xếp·tuỳ chỉnh hiển thị·xuất khẩu) + rail avatar lọc theo người thực hiện",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/tasks/**",
       "apps/app/src/router.tsx",
@@ -7889,7 +7889,7 @@ export const backlog = [
     title:
       "Màn chi tiết task — vá 4 gap TRONG SPEC chưa làm: timeline hiện dữ liệu cũ→mới (§13.12) + nới gate cho người liên quan · hiện người giao việc (reporter) · GET watchers · subtask thật (parent_task_id)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/tasks/**",
       "apps/api/src/tasks/**",
@@ -7967,7 +7967,7 @@ export const backlog = [
     title:
       "Dashboard đếm SAI cột trạng thái: mv_dashboard_task_status GROUP BY `status` legacy mà task core không bao giờ ghi ⇒ mọi task văn phòng hiện là 'not_started' vĩnh viễn",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/migrations/**", "apps/api/src/dashboard/**", "apps/api/test/integration/**"],
     skills: ["code-review"],
     depends_on: [],
@@ -8240,7 +8240,7 @@ export const backlog = [
     title:
       "Docs sync SPEC-10 GOAL: SPEC-01/PRD-00/DB-01·09·10 ghi nhận GOAL + API-12 GOAL stub + permission-matrix 8 cặp + nav header 9 SPEC cũ + ghi chú DB-06 (tasks.goal_id, task_templates kích hoạt)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "docs/SPEC/**",
       "docs/PRD/**",
@@ -8303,7 +8303,7 @@ export const backlog = [
     title:
       "BE GoalsModule: CRUD 3 cấp + cây theo kỳ + data-scope service-layer (own/department/all) + validate level↔neo↔parent + goal_code qua sequence_counters",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/goals/**",
       "apps/api/src/app.module.ts",
@@ -8335,7 +8335,7 @@ export const backlog = [
     title:
       "BE progress engine 4 mode + rollup bubble + job đối soát đêm (system-jobs) + check-in/finalize/reopen (ledger goal_updates) + link/unlink task↔goal + NOTI GOAL_ASSIGNED/GOAL_FINALIZED qua bridge đã ship",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/goals/**",
       "apps/api/src/tasks/**",
@@ -8372,7 +8372,7 @@ export const backlog = [
     title:
       "FE trang Mục tiêu: menu sidebar riêng + danh sách/cây theo kỳ·phòng ban + form tạo/sửa (chọn cấp → đúng field neo, chọn mode đo) + màn chi tiết 4 tab — PermissionGate GOAL.*, i18n vi",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/goals/**",
       "apps/app/src/router.tsx",
@@ -8402,7 +8402,7 @@ export const backlog = [
     title:
       "FE vòng đo: check-in modal + lịch sử + nút chốt kỳ/mở lại + gắn goal từ panel task + tab Công việc trong goal (bulk link) + khối 'Mục tiêu của tôi' trong /me",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/goals/**",
       "apps/app/src/routes/tasks/**",
@@ -8431,7 +8431,7 @@ export const backlog = [
     title:
       "Đợt D — Schema + migration task_templates + task_template_items + RLS FORCE + seed cặp ('manage','task-template') + UNION-ADD 'task_template' audit CHECK (số cũ 0508 ĐÃ BỊ CHIẾM bởi lms_access; 0509 dự kiến cho S5-LMS-DB-1 — kiểm _journal lấy số kế lúc chạy, DO-block cộng dồn KHÔNG rewrite CHECK từ snapshot cũ)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
@@ -8457,7 +8457,7 @@ export const backlog = [
     title:
       "Đợt D — Phân rã mục tiêu từ template: CRUD template (BE+FE, GOAL-SCREEN-006) + wizard preview sửa/xóa/thêm/gán người/cột board + POST /goals/:id/decompose tạo bulk task 1 transaction",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/goals/**",
       "apps/api/src/tasks/**",
@@ -8492,7 +8492,7 @@ export const backlog = [
     title:
       "Nợ di sản G-era (finding MEDIUM gate S5-GOAL-DB-1): REVOKE DELETE org_units + projects khỏi app role — chặn cửa cascade-xoá goals/goal_updates vòng qua soft-delete (expand-contract 2 release nếu còn caller)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/**",
@@ -8517,7 +8517,7 @@ export const backlog = [
     title:
       "Đợt E — Widget dashboard 'Mục tiêu kỳ này' (progress theo phòng ban, đọc cache) + hàng mục tiêu trong trang phòng ban",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/dashboard/**",
       "apps/api/src/goals/**",
@@ -8549,7 +8549,7 @@ export const backlog = [
     title:
       "Mig 0509 (kiểm _journal trước khi đánh số): UNION-ADD audit object_type 'lms_sso' + 'lms_sync' vào CHECK audit_logs + cập nhật AUDIT_OBJECT_TYPES union TS cùng commit",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/db/schema/**",
@@ -8577,7 +8577,7 @@ export const backlog = [
     title:
       "Auto-sync tài khoản MediaOS→LMS: outbox event RIÊNG hr.employee_status_changed dùng CHUNG cho cả HrWriteService.changeStatus LẪN đường admin khoá/mở user (CẤM re-emit auth.user_locked — đã có consumer notification + sẽ lan auto-lock tạm thời sang LMS) + LmsUserSyncBridge (EventBus, KHÔNG qua OutboxNotificationBridge) + job đối soát @SystemJobHandler LMS_USER_SYNC + env LMS_SYNC_TOKEN + audit 'lms_sync'",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/integrations/lms/**",
       "apps/api/src/employees/**",
@@ -8614,7 +8614,7 @@ export const backlog = [
     title:
       "Trả nợ audit #253: ghi audit_logs objectType 'lms_sso' action sso_link_minted tại GET /integrations/lms/sso-link (objectId=jti, KHÔNG log token/secret)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/integrations/lms/**",
       "apps/api/test/integration/**",
@@ -8639,7 +8639,7 @@ export const backlog = [
     title:
       "LOCAL apps/lms — chuẩn hoá UI: '/' hết landing (có phiên → /course, chưa → /login), /course = giao diện chính (SSO next + sau-login đều về /course), /dashboard relabel 'Khoá học của tôi', sidebar sắp lại (Course đầu, ẨN khu HR placeholder employee/salary/benefits/uniform/assets), admin giữ nguyên theo permission",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/lms/**", "docs/plans/S5-LMS-APP-1.md"],
     skills: ["code-review"],
     depends_on: [],
@@ -8660,7 +8660,7 @@ export const backlog = [
     title:
       "LOCAL apps/lms — SSO-only: cờ env SSO_ONLY=true → đóng register/forgot/reset/resend-otp (route redirect + API 403), /login chỉ còn nút 'Đăng nhập qua MediaOS' ({MEDIAOS_APP_URL}/lms), break-glass ADMIN_EMAILS vẫn login mật khẩu; audit consume SSO → admin_audit_log. LÀM CUỐI WAVE",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/lms/**", "docs/plans/S5-LMS-APP-2.md"],
     skills: ["code-review"],
     depends_on: ["S5-LMS-BE-1", "S5-LMS-APP-3"],
@@ -8687,7 +8687,7 @@ export const backlog = [
     title:
       "LOCAL apps/lms — API export tiến độ: GET /api/mediaos/progress?email= Bearer MEDIAOS_SYNC_TOKEN (tái dùng bearerMatches sync-users) → enrollment + % hoàn thành/course + learning time + điểm quiz/exam; cap kích thước + không lộ dữ liệu user khác",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/lms/**", "docs/plans/S5-LMS-APP-3.md"],
     skills: ["code-review"],
     depends_on: ["S5-LMS-APP-1"],
@@ -8710,7 +8710,7 @@ export const backlog = [
     title:
       "Proxy tiến độ đào tạo vào MediaOS: GET /me/training (email resolve TỪ TOKEN — không nhận param, mirror SPEC-09 §14.4) gọi LMS /api/mediaos/progress, cache ngắn ~60s, gate access:lms, contracts Zod",
     zone: "red",
-    status: "in_progress",
+    status: "done",
     paths: [
       "apps/api/src/integrations/lms/**",
       "apps/api/src/me/**",
@@ -8743,7 +8743,7 @@ export const backlog = [
     title:
       "FE /me: card 'Đào tạo' trong MeOverviewPage (fail-soft như 5 section hiện có) + trang /me/training (danh sách khoá + % + thời lượng + nút 'Mở LMS' → /lms) + sidebar entry, gate access:lms, i18n vi",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/me/**",
       "apps/app/src/routes/lms/**",
@@ -8777,7 +8777,7 @@ export const backlog = [
     title:
       "Job đối soát LMS chỉ ghi audit khi CÓ THAY ĐỔI THẬT: LmsHttpClient.syncUsers trả summary (whitelist 6 counter gồm alreadyDisabled, kiểu number|boolean, chỉ đọc body ở success path) + job cộng dồn theo lô; audit MỖI LẦN khi changed>0, còn failed>0/unknown audit theo CHUYỂN TRẠNG THÁI + trần ≤1 dòng/giờ/company (fail-safe CÓ TRẦN)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/integrations/lms/**",
       "apps/api/test/integration/**",
@@ -8822,7 +8822,7 @@ export const backlog = [
     title:
       "LOCAL apps/lms — đồng bộ TOKEN màu với MediaOS: port giá trị :root/.dark của packages/ui theme.css sang apps/lms/app/globals.css (giữ nguyên cơ chế @custom-variant dark + @theme inline của LMS), chrome (sidebar + site-header) về navy hằng số ở CẢ hai chế độ",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["apps/lms/**", "docs/plans/S5-LMS-UI-1.md"],
     skills: ["code-review"],
     depends_on: [],
@@ -8850,7 +8850,7 @@ export const backlog = [
     title:
       "LOCAL apps/lms — đồng bộ COMPONENT LÕI với MediaOS: button/badge/card/table/input/select/dialog dùng đúng biến thể + radius + focus-ring + token trạng thái (success/warning/danger) của packages/ui; khung sidebar + site-header khớp workspace shell của apps/app",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["apps/lms/**", "docs/plans/S5-LMS-UI-2.md"],
     skills: ["code-review"],
     depends_on: ["S5-LMS-UI-1", "S5-FND-UI-GEN-1"],
@@ -8884,7 +8884,7 @@ export const backlog = [
     title:
       "LOCAL apps/lms — port CẤU TRÚC SHELL về khung MediaOS: topbar full-width ở trên + sidebar nằm dưới topbar (thay variant=inset full-height), brand chuyển lên topbar, bỏ lớp sticky/backdrop chồng, anatomy topbar khớp GlobalTopbar (switcher sang cụm phải + divider), sidebar 15rem + nhãn nhóm + collapsible=icon, bỏ đổi màu sidebar theo khu",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["apps/lms/**", "docs/plans/S5-LMS-UI-3.md"],
     skills: ["code-review"],
     depends_on: [],
@@ -8918,7 +8918,7 @@ export const backlog = [
     title:
       "LOCAL apps/lms — hòa chrome vào MediaOS: App Switcher thành launcher toàn hệ (10 app khớp APP_REGISTRY, 9 app nhảy cross-origin {MEDIAOS_APP_URL}/{path} cùng tab, Đào tạo nội bộ /course, bỏ recent), logo → {MEDIAOS_APP_URL}/home, menu avatar Cá nhân/Tài khoản/Đổi MK → MediaOS (/me·/me/account·/me/security/password) + gỡ dialog nội bộ, chuyển Trò chuyện + Hệ thống khỏi switcher xuống sidebar",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["apps/lms/**", "docs/plans/S5-LMS-UI-4.md"],
     skills: ["code-review"],
     depends_on: ["S5-LMS-UI-3"],
@@ -8949,7 +8949,7 @@ export const backlog = [
     title:
       "MediaOS apps/app — mở LMS 'vào thẳng': tile Đào tạo (App Switcher) + nút 'Mở LMS' (/me/training) lấy token SSO NGAY rồi assign sang LMS, KHÔNG điều hướng tới trang trung chuyển /lms; lỗi → fallback /lms (LmsRedirectPage giữ nguyên làm trang báo lỗi + thử lại)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/lms/**",
       "apps/app/src/layouts/home/AppSwitcher.tsx",
@@ -9026,7 +9026,7 @@ export const backlog = [
     // 2026-07-26: phần MediaOS (mang mediaosUserId qua sync-users + sub SSO) ĐÃ merge trong PR #291.
     // Phần apps/lms (9 file, track LOCAL) đã code + tsc/eslint xanh nhưng CHƯA deploy: còn chờ đặt cặp
     // env LMS_NOTI_TOKEN ↔ MEDIAOS_NOTI_TOKEN + MEDIAOS_API_URL, rồi `m prod-update lms` + backup app.db.
-    status: "in_progress",
+    status: "done",
     paths: [
       "apps/lms/**",
       // ĐO 2026-07-26: WO seed giả định chỉ chạm apps/lms, nhưng lối (a) đòi LMS BIẾT mediaosUserId — mà
@@ -9069,7 +9069,7 @@ export const backlog = [
     title:
       "packages/ui theme.css — kéo 4 cặp token trượt AA ở chế độ LIGHT lên ≥4.5 (--brand · --info · --danger · --destructive), rồi port giá trị mới sang apps/lms/app/globals.css để hai bên không lệch",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["packages/ui/src/styles/theme.css", "apps/lms/**", "docs/plans/S5-FND-THEME-AA-1.md"],
     skills: ["code-review"],
     depends_on: [],
@@ -9103,7 +9103,7 @@ export const backlog = [
     title:
       "packages/ui — nâng primitive lên thế hệ shadcn mới (button/badge/input/select/card/table): thêm biến thể + cỡ icon, đổi ngôn ngữ focus-ring sang border-ring + ring/50 + ring-3px, data-slot/aria-invalid; GIỮ NGUYÊN các API riêng của MediaOS",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["packages/ui/**", "docs/plans/S5-FND-UI-GEN-1.md"],
     skills: ["code-review"],
     depends_on: [],
@@ -9137,7 +9137,7 @@ export const backlog = [
     title:
       "Retention cho system_job_runs (47.126 dòng/18 MB, tăng mỗi nhịp scheduler): thêm vào RetentionCleanupJob với NGƯỠNG CÓ ĐIỀU KIỆN — giữ ≥90 ngày cho LMS_USER_SYNC, giữ VĨNH VIỄN mọi row Failed/Partial",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/foundation/**",
       "apps/api/src/scheduler/**",
@@ -9179,7 +9179,7 @@ export const backlog = [
     title:
       "m prod-update: chèn bước MIGRATE trước RESTART (fail-closed — migrate đỏ thì KHÔNG restart, thoát khác 0) + m prod-status báo số migration tồn đọng (file journal ↔ drizzle.__drizzle_migrations)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     // m.cmd thêm lúc triển khai: wrapper `m` CHẾT ở console codepage 65001 vì 2 dòng REM tiếng Việt
     // (cmd.exe parse sai DÒNG KẾ TIẾP → "'ediaos.ps1.' is not recognized") ⇒ chính 2 lệnh trong done_when
     // không gọi được bằng `m`. Vá về ASCII, đúng luật memory powershell-utf8-bom-required (.cmd = ASCII).
@@ -9218,7 +9218,7 @@ export const backlog = [
     title:
       "BE Thương hiệu công ty: wrapper presign logo + favicon trên FileService (pattern ME avatar) — /foundation/company/branding, logo→companies.logo_url (fileId), favicon→company_settings key, KHÔNG migration, KHÔNG quyền mới",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/foundation/company/**",
       "apps/api/src/foundation/settings/**",
@@ -9252,7 +9252,7 @@ export const backlog = [
     title:
       "FE khối 'Thương hiệu' trong /system/company: upload/preview/gỡ logo + favicon qua wrapper BE-1 (pattern AvatarUploadCard 4 pha), gate update:foundation-company + dọn ô URL thô ở console",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/system/foundation/**",
       "apps/console/src/routes/settings/**",
@@ -9285,7 +9285,7 @@ export const backlog = [
     title:
       "FE áp thương hiệu ra vỏ app: GlobalTopbar hiện logo công ty (fallback wordmark) + hook useFavicon set favicon động sau đăng nhập + sửa favicon tĩnh vỡ /vite.svg ở cả 3 app",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/layouts/**",
       "apps/app/index.html",
@@ -9325,7 +9325,7 @@ export const backlog = [
     title:
       "Tab 'Mục tiêu' trong trang dự án: mục tiêu của dự án + phủ mục tiêu của việc thực tế (gồm việc CHƯA gắn) + gắn việc tại chỗ — thêm endpoint đếm ở BE vì GET /tasks cap 200 và không trả tổng",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/tasks/**",
       "apps/app/src/routes/goals/**",
@@ -9379,7 +9379,7 @@ export const backlog = [
     title:
       "Bộ tài liệu CHAT: SPEC-15 + DB-12 + API-13 + ma trận phân quyền §9c + đồng bộ SPEC-01/README/DB-01·09·10/erd-current/RELEASE-14 — và owner chốt 12 quyết định §22",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "docs/SPEC/**",
       "docs/DB/**",
@@ -9418,7 +9418,7 @@ export const backlog = [
     title:
       "Hoà CHAT-DEC-004 (owner lật: SA đọc được mọi phòng, có audit) vào bộ docs — cặp quyền RIÊNG ('view','chat-oversight') + audit trong cùng transaction + KHÔNG mở tìm kiếm + lối vào UI tường minh",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "docs/SPEC/SPEC-15 CHAT.md",
       "docs/DB/DB-12 CHAT Database Design.md",
@@ -9453,7 +9453,7 @@ export const backlog = [
     title:
       "Migration CHAT: ALTER 3 bảng đã có (cột v1 + backfill TRƯỚC CHECK + column-GRANT thu hồi) + hạ tầng tìm kiếm tiếng Việt (unaccent + f_unaccent IMMUTABLE + search_vector generated + GIN) + seed module/10 cặp quyền (cặp thứ 10 KHÔNG grant role canonical nào)/counter/NOTI 2 bảng CHECK + allowlist cặp nhạy cảm ở BE",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/db/schema/communication.ts",
@@ -9509,7 +9509,7 @@ export const backlog = [
     title:
       "Migration 0539: chat_messages.room_seq PER-ROOM (sửa công thức đếm chưa đọc SAI + bịt rò lưu lượng qua con trỏ phân trang toàn cục)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/db/schema/communication.ts",
@@ -9547,7 +9547,7 @@ export const backlog = [
     title:
       "ChatAccessService — ĐIỂM KHẲNG ĐỊNH MEMBERSHIP DUY NHẤT (fail-closed, 404 không phải 403) + phòng: danh sách/tạo nhóm/mở DM idempotent/chi tiết/sửa/lưu trữ/rời + thành viên",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/chat/**",
       "apps/api/src/app.module.ts",
@@ -9585,7 +9585,7 @@ export const backlog = [
     title:
       "Tin nhắn: đọc theo con trỏ seq (cấm offset) · gửi idempotent theo clientMessageId · trả lời · thu hồi (15 phút / admin phòng) · ghim ≤20 · đánh dấu đã đọc chỉ-tiến + tổng chưa đọc",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/chat/**",
       "packages/contracts/src/chat.ts",
@@ -9621,7 +9621,7 @@ export const backlog = [
     title:
       "Đính kèm tệp/ảnh qua FOUNDATION Files + ChatMessageFileResolver (BẮT BUỘC — FilePolicy fail-closed, thiếu resolver là tính năng chết trong im lặng)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/chat/**",
       "apps/api/src/foundation/files/**",
@@ -9696,7 +9696,7 @@ export const backlog = [
     title:
       "Tìm kiếm toàn văn tiếng Việt (có dấu/không dấu) — LUÔN giới hạn theo phòng người tìm là thành viên; đây là đường đọc RỘNG NHẤT của module",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/chat/**",
       "apps/api/test/integration/**",
@@ -9735,7 +9735,7 @@ export const backlog = [
     title:
       "Phòng tự động theo phòng ban + dự án: tạo/đóng phòng, đồng bộ thành viên tại sự kiện HR/TASK (thu hồi chạy TRONG tx nguồn), job đối soát định kỳ idempotent sửa lệch",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/chat/**",
       "apps/api/src/employees/**",
@@ -9773,7 +9773,7 @@ export const backlog = [
     title:
       "Thông báo CHAT qua OutboxNotificationBridge: mention gửi ngay + DM gộp lô 15 phút khi vắng mặt; tôn trọng muted_until; payload KHÔNG chứa nội dung tin",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/chat/**",
       "apps/api/src/notifications/**",
@@ -9943,7 +9943,7 @@ export const backlog = [
     title:
       "Presign upload own-scope cho CHAT — nhân viên thường gửi được tệp/ảnh (hiện chỉ company-admin gửi được vì đường upload gate upload:foundation-file)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/chat/chat-files.controller.ts",
       "apps/api/src/chat/chat-files.service.ts",
@@ -9977,7 +9977,7 @@ export const backlog = [
     title:
       "Trang /chat full-screen: 3 cột (danh sách phòng · hội thoại · thông tin phòng) + tạo nhóm/mở DM + gửi tin/tệp/ảnh + trả lời/ghim/thu hồi + đã xem",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/chat/**",
       "apps/app/src/components/chat/**",
@@ -10012,7 +10012,7 @@ export const backlog = [
     title:
       "Panel chat nổi toàn hệ thống (tối đa 3 hội thoại) + badge tổng chưa đọc trên header + lối vào sidebar, thay lối vào /chat tạm của LMS",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/layouts/**",
       "apps/app/src/components/chat/**",
@@ -10051,7 +10051,7 @@ export const backlog = [
     title:
       "Màn hình tìm kiếm tin nhắn (nhảy tới tin trong ngữ cảnh) + tab tệp/tin ghim/thành viên trong bảng thông tin phòng",
     zone: "green",
-    status: "in_progress",
+    status: "done",
     // ⚠️ `paths` mở rộng 04/08 (memory `wo-paths-drive-gate-and-scheduler`): bản seed CHỈ liệt kê
     // `routes/chat` + `components/chat`, nhưng chính docblock FE-1 hẹn "FE-4 append thẳng vào file này"
     // cho `chat-api.ts` (CHAT-API-015/017 cố ý chưa mirror) — và không có key react-query, không có
@@ -10089,7 +10089,7 @@ export const backlog = [
     title:
       "🔒 Đường đọc-vượt membership (CHAT-DEC-004): controller+service RIÊNG /chat/oversight/*, chỉ đọc, cặp ('view','chat-oversight'), audit trong CÙNG transaction trước khi trả dữ liệu",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/chat/**",
       "packages/contracts/src/chat.ts",
@@ -10132,7 +10132,7 @@ export const backlog = [
     title:
       "🔒 Màn quản trị đọc-vượt (CHAT-SCREEN-007) + nhật ký đọc-vượt (CHAT-SCREEN-008) — lối vào tường minh, có bước xác nhận, chế độ chỉ đọc",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/console/src/**",
       "apps/app/src/components/chat/**",
@@ -10171,7 +10171,7 @@ export const backlog = [
     title:
       "🔒 CHAT-API-019 nhận bộ lọc actorUserId + from/to (giữ keyset) — để CHAT-SCREEN-008 lọc ở SERVER thay vì trên các dòng đã tải",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/chat/**",
       "packages/contracts/src/chat.ts",
@@ -10218,7 +10218,7 @@ export const backlog = [
     title:
       "Owner ký DECISIONS-07 (nới CHAT-DEC-005 có hàng rào R1-R4) + sửa SPEC-15 §5.2 đưa cuộc gọi VÀO phạm vi + bổ sung màn/API/quyền/mã lỗi CALL",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "docs/DECISIONS/DECISIONS-07_Chat_Call_Signalling.md",
       "docs/SPEC/SPEC-15 CHAT.md",
@@ -10247,7 +10247,7 @@ export const backlog = [
     title:
       "Migration CALL: chat_calls + chat_call_participants (company_id + RLS FORCE + append-only) + seed cặp ('call','chat-room')",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/db/schema/communication.ts",
@@ -10279,7 +10279,7 @@ export const backlog = [
     title:
       "Vòng đời cuộc gọi qua REST (mời · nhận · từ chối · huỷ · kết thúc) + GET /chat/calls/ice-config — audit đầy đủ, KHÔNG đi qua WebSocket",
     zone: "red",
-    status: "todo",
+    status: "done",
     // Mở rộng khi thi công (09/08/2026) — lý do từng mục ở docs/plans/S7-CALL-BE-1.md §2/§3:
     //  • chat-access.service.ts: `assertCallAccess` PHẢI sống cạnh 2 điểm khẳng định kia (D1). Đặt nó ở
     //    chat-calls.service là dựng bản sao THỨ HAI của luật membership — bản sao sẽ trôi.
@@ -10339,7 +10339,7 @@ export const backlog = [
     title:
       "🔒 Gateway /ws-call: allowlist ĐÓNG 8 sự kiện inbound, relay SDP/ICE KHÔNG đọc-KHÔNG lưu, /ws giữ nguyên 0 @SubscribeMessage",
     zone: "red",
-    status: "todo",
+    status: "done",
     // ⚠️ MỞ RỘNG 10/08/2026 (bước 0 của `docs/plans/S7-CALL-RT-1.md` §0.2). Bản seed có 5 mục trong khi
     // WO chạm ~19 tệp. `paths` lái `guard-scope` + chọn gate (memory `wo-paths-drive-gate-and-scheduler`)
     // ⇒ danh sách thiếu nghĩa là nửa diff của một WO VÙNG ĐỎ đi qua cổng LIGHT mà không ai thấy.
@@ -10399,7 +10399,7 @@ export const backlog = [
     title:
       "UI cuộc gọi: nút gọi trong phòng · chuông đến · khung đang gọi (thu nhỏ/toàn màn) · tắt mic-cam · chia sẻ màn hình — port từ LMS, bỏ phần tự ghi vòng đời qua WS",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     // ⚠️ MỞ RỘNG 10/08/2026 (`docs/plans/S7-CALL-FE-1.md` §0.2). Bản seed có 4 mục trong khi WO chạm 12
     // tệp. `paths` lái `guard-scope` + chọn gate (memory `wo-paths-drive-gate-and-scheduler`) ⇒ danh
     // sách thiếu nghĩa là nửa diff đi qua mà không ai thấy. Lý do từng nhóm ghi ở bảng §0.2 của plan.
@@ -10441,7 +10441,7 @@ export const backlog = [
     title:
       "Gỡ chat khỏi LMS (GIỮ trợ lý AI) + trỏ lối vào sidebar sang /chat MediaOS + xuất 84 tin lịch sử ra tệp lưu trữ",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/lms/**", "docs/plans/S7-CHAT-LMS-1.md"],
     skills: ["code-review"],
     // ⚠️ PHỤ THUỘC S7-CALL-FE-1 CÓ CHỦ ĐÍCH: owner chốt C (làm cuộc gọi ở MediaOS). Gỡ chat LMS TRƯỚC
@@ -10470,7 +10470,7 @@ export const backlog = [
     title:
       "Bộ test CALL: deny-path signalling · cô lập 2-tenant · vòng đời cuộc gọi trên LANE_DB · E2E gọi 1-1 hai trình duyệt",
     zone: "red",
-    status: "todo",
+    status: "done",
     // ⚠️ MỞ RỘNG 11/08/2026 (`docs/plans/S7-CALL-QA-1.md` §3.4, sau vòng plan-reviewer). Bản seed
     // thiếu NƠI SPEC UNIT BẮT BUỘC PHẢI SỐNG: `vitest.config.ts:45-50` chỉ nhận `src/**/*.spec.ts`,
     // mà 6/17 ca của plan (A2·B4·B5·C2·D1·D2·D3·D4) KHÔNG dựng được ở int-spec. Mở HẸP theo từng
@@ -10511,7 +10511,7 @@ export const backlog = [
     title:
       "Vá fail-OPEN /ws-call: `disconnect()` trong middleware handshake là no-op ⇒ token hết hạn ngay lúc bắt tay vẫn ĐƯỢC NHẬN và nhận relay vô thời hạn",
     zone: "red",
-    status: "todo",
+    status: "done",
     // ⚠️ MỞ RỘNG 11/08/2026 (`docs/plans/S7-CALL-RT-FIX-1.md` §6): bản seed thiếu HAI nơi bản vá
     // bắt buộc phải chạm — sổ KI (lỗ sống trên master từ lúc QA-1 merge tới lúc WO này merge ⇒ phải
     // có số hiệu, theo luật đã áp cho KI-057/059/060) và tệp bằng chứng RED/GREEN. Thiếu chúng thì
@@ -10551,7 +10551,7 @@ export const backlog = [
     title:
       "Vá 'gỡ thành viên giữa cuộc gọi': VẪN relay SDP/ICE tới người đã bị gỡ, đồng thời ghi user_security_events + NGẮT họ vì trickle ICE mà browser tự gửi",
     zone: "red",
-    status: "in_progress",
+    status: "done",
     // Mở rộng 12/08 theo §3.1 của plan (owner chốt B + vế 2 của A). `paths` KHÔNG chỉ là tài liệu: nó
     // lái guard-scope + bộ định tuyến gate (memory `wo-paths-drive-gate-and-scheduler`). Vá ở GỐC nghĩa
     // là chạm đường GHI vòng đời cuộc gọi từ `chat-rooms`/`chat-members` ⇒ phải khai ra, nếu không nửa
@@ -10625,7 +10625,7 @@ export const backlog = [
     title:
       "Test FE cuộc gọi: bật đo coverage cho apps/app + phủ 1.241 dòng đang là điểm mù (use-chat-call 676 · CallExperience 307 · CallProvider 143 · call-ringtone 115)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/components/chat/call/**",
       "apps/app/package.json",
@@ -10655,7 +10655,7 @@ export const backlog = [
     title:
       "Bộ test trọn vẹn CHAT: 12 nhóm scenario SPEC-15 §21 trên LANE_DB + E2E luồng tới hạn + coverage ≥80% (vùng membership/tìm kiếm cao hơn)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/test/integration/**",
       "apps/api/src/chat/**",
@@ -10760,7 +10760,7 @@ export const backlog = [
     title:
       "Fixture test KHÔNG được đổi `permissions.is_sensitive` của cặp CHÍNH TẮC — bảng toàn cục, không company_id, không ai dọn ⇒ một spec lật cờ là đổi hành vi phân quyền của MỌI spec dùng chung DB (gồm CI)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/test/helpers/**",
       "apps/api/test/integration/**",
@@ -10834,7 +10834,7 @@ export const backlog = [
     title:
       "Expand-contract least-privilege: REVOKE UPDATE(visible_from_seq) + UPDATE cấp bảng chat_rooms + đổi FK cascade users→chat_messages (đang xoá CỨNG bảng append-only) + siết khối VERIFY của 0539",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/migrations/**", "apps/api/test/integration/**", "docs/plans/S7-CHAT-DB-3.md"],
     skills: ["code-review"],
     depends_on: [],
@@ -10908,7 +10908,7 @@ export const backlog = [
     title:
       'Màn "Sửa vai trò" hiển thị SAI cờ Bắt buộc 2FA (luôn chưa-tick) và KHÔNG TẮT được từ UI — BE thiếu cờ ở list/detail',
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/permission/**",
       "packages/contracts/src/auth.ts",
@@ -11007,7 +11007,7 @@ export const backlog = [
     title:
       "Engine cộng dồn phép theo chính sách (accrual_method) — cấp vào NGÀY CUỐI THÁNG, tự bù mọi kỳ đã qua theo ngày vào làm; đóng lỗ 'UI hứa Monthly mà backend không có engine'",
     zone: "red",
-    status: "in_progress",
+    status: "done",
     // ĐỎ: ghi vào leave_balances + sổ cái leave_balance_transactions (append-only) = cấp quyền lợi có
     // giá trị tiền. FULL gate bắt buộc. Khai migrations/** dù DỰ KIẾN không cần migration — nếu phát
     // sinh cột mốc idempotency thì vẫn nằm trong scope, KHÔNG lọt LIGHT gate (bài học wo-paths).
@@ -11090,7 +11090,7 @@ export const backlog = [
     title:
       "Ép trần số ngày âm (max_negative_days) ở đường quyết định đơn nghỉ — hiện bật allow_negative = âm VÔ HẠN dù form vẫn cho nhập trần",
     zone: "red",
-    status: "todo",
+    status: "done",
     // ĐỎ: chạm đúng vị từ chặn của đơn nghỉ (cấp quyền lợi có giá trị tiền). KHÔNG cần migration —
     // cột leave_policies.max_negative_days ĐÃ tồn tại, chỉ chưa ai đọc nó ở đường quyết định.
     paths: [
@@ -11124,7 +11124,7 @@ export const backlog = [
     title:
       "Màn Loại nghỉ là CỬA MỘT CHIỀU — đặt 'Ngưng áp dụng' xong không bật lại được vì màn quản trị đọc route active-only; thêm GET /leave/admin/types trả cả inactive",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     // Không chạm permission mới/RLS/secret/audit/migration ⇒ LIGHT gate. Cổng dùng LẠI đúng cặp
     // view:leave-type mà màn hình đang gate — không tạo cặp mới, không nới scope.
     paths: [
@@ -11168,7 +11168,7 @@ export const backlog = [
     title:
       "Owner chốt CHAT-DEC-014…018 rồi hoà vào bộ docs CHAT — HAI quyết định ĐẢO SPEC-15 §5.2 (typing/presence + reaction đang là 'ngoài v1')",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "docs/SPEC/SPEC-15 CHAT.md",
       "docs/DB/DB-12 CHAT Database Design.md",
@@ -11199,7 +11199,7 @@ export const backlog = [
     title:
       "Danh sách hội thoại CHIA MỤC theo loại phòng (Ghim · Riêng · Nhóm · Phòng ban · Dự án) + thu/mở từng mục, nhớ trạng thái per-user",
     zone: "yellow",
-    status: "in_progress",
+    status: "done",
     // KHÔNG phụ thuộc DOC-1: thuần trình bày `roomType` ĐÃ có trong ChatRoomDto. Không API mới,
     // không cột mới, không cặp quyền mới ⇒ LIGHT gate.
     paths: [
@@ -11234,7 +11234,7 @@ export const backlog = [
     title:
       "Mig 0543: chat_room_members.pinned_at (ghim per-user) + chat_rooms.avatar_file_id (composite tenant FK) + bảng chat_message_reactions (RLS+FORCE) — GRANT THÊM CỘT, cấm REVOKE cấp bảng",
     zone: "red",
-    status: "in_progress",
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/db/schema/communication.ts",
@@ -11278,7 +11278,7 @@ export const backlog = [
     title:
       "Tuỳ chọn per-phòng: ghim/bỏ ghim (trần 10) · tắt thông báo (muted_until — CÓ CỘT TỪ 0538 mà 0 đường ghi) · đánh dấu chưa đọc",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/chat/chat-rooms.controller.ts",
       "apps/api/src/chat/chat-rooms.service.ts",
@@ -11317,7 +11317,7 @@ export const backlog = [
     title:
       "Avatar phòng cho group/department/project — presign wrapper gate ('update','chat-room') sao khuôn ChatFilesService + resolver riêng; direct KHÔNG có avatar riêng (dẫn xuất)",
     zone: "red",
-    status: "todo",
+    status: "done",
     // ⚠️ NỚI 07/08/2026 (owner chốt) — `apps/api/src/tasks/**` và `foundation/files/**` KHÔNG có trong
     // bản seed. Lý do bắt buộc, không phải scope creep:
     //   • `tasks/project-membership.{service,module}.ts` = MODULE LÁ tách ra để phá vòng DI
@@ -11372,7 +11372,7 @@ export const backlog = [
     title:
       "Thả cảm xúc: PUT/DELETE /chat/messages/:id/reactions/:emoji + tổng hợp vào DTO tin + phát chat:reaction",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/chat/chat-reactions.service.ts",
       "apps/api/src/chat/chat-reactions.repository.ts",
@@ -11407,7 +11407,7 @@ export const backlog = [
     title:
       "Đang gõ (REST-ping → emitter, KHÔNG mở @SubscribeMessage) + đang online (presence thuần server, khoá Valkey CÓ TIỀN TỐ MÔI TRƯỜNG)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/realtime/realtime.gateway.ts",
       "apps/api/src/realtime/realtime-emitter.service.ts",
@@ -11459,7 +11459,7 @@ export const backlog = [
     title:
       "Mục Ghim + menu ngữ cảnh mỗi hội thoại (ghim · tắt thông báo · đánh dấu chưa đọc · lưu trữ) + avatar trong danh sách + màn đặt avatar ở RoomInfoPanel",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/components/chat/RoomListPanel.tsx",
       "apps/app/src/components/chat/RoomInfoPanel.tsx",
@@ -11495,7 +11495,7 @@ export const backlog = [
     title:
       "Khung chat: avatar người gửi + gộp tin liên tiếp cùng người + thanh thả cảm xúc + chỉ báo đang gõ / chấm đang online",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     // ⚠️ VÁ 07/08/2026 (đo thật khi thi công) — seed gốc thiếu vế BE và ghi sai đường i18n.
     //  1. WO này KHÔNG thuần FE: `docs/plans/S8-CHAT-UX-WAVE.md:49` khai tầng chạm là "BE (1 route
     //     roster) + FE", `API-13 §5.1:187` bắt CHAT-API-007a trả `avatarUrl` + `leftAt` (CHAT-DEC-019),
@@ -11560,7 +11560,7 @@ export const backlog = [
     title:
       "Nghiệm thu wave S8-CHAT-UX: deny-path + cross-tenant + coverage ≥80% + xác minh ratchet không bị nới",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     // ⚠️ ĐÍNH CHÍNH 07/08 (đo khi thi công) — `paths` seed gốc BỎ SÓT đúng nơi lỗ nằm.
     //  1. Deny-path của wave sống ở `apps/api/test/integration/**`, KHÔNG ở `src/**/*.spec.ts`: 5 file
     //     int-spec của BE-1/BE-2/BE-3/RT-1/FE-3 nằm hết ở đó, và ca bổ sung của WO này cũng vậy.
@@ -11608,7 +11608,7 @@ export const backlog = [
     title:
       'Thẻ "Tin nhắn" ở Home Portal + App Switcher (APP_REGISTRY) — gate ĐỦ cặp access:chat + view:chat-room để thẻ không dẫn tới 403',
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "packages/web-core/src/lib/registry.ts",
       "packages/web-core/src/lib/registry.spec.ts",
@@ -11893,7 +11893,7 @@ export const backlog = [
     title:
       "Kho video đọc từ thư mục có WHITELIST: SOCIAL_MEDIA_LIBRARY_DIRS + GET /api/library duyệt cây (chặn traversal) + nạp bằng copy/hardlink KHÔNG qua RAM + tab 'Kho video' — vá luôn lỗ đọc-file-tuỳ-ý ở /api/import/commit",
     zone: "red",
-    status: "in_progress",
+    status: "done",
     paths: [
       "apps/fbpost/src/lib/media-service.ts",
       "apps/fbpost/src/lib/library/**",
@@ -11936,7 +11936,7 @@ export const backlog = [
     title:
       "Màn 'Kho video': cấu hình thư mục gốc từ giao diện (lưu ở settings, không cần restart) + duyệt kho + tạo nội dung hàng loạt — cổng GHI theo SOCIAL_ADMIN_EMAILS",
     zone: "red",
-    status: "in_progress",
+    status: "done",
     paths: [
       "apps/fbpost/src/lib/library/**",
       "apps/fbpost/src/lib/auth/admin.ts",
@@ -11977,7 +11977,7 @@ export const backlog = [
     title:
       "Đưa kho sang ổ D: (SOCIAL_DATA_DIR) + đổi dịch vụ MediaOS-Social từ LocalSystem sang tài khoản Windows có quyền trên share LAN + sao lưu data/ và .secrets/ TÁCH nhau",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       ".env",
       "scripts/windows/**",
@@ -12012,7 +12012,7 @@ export const backlog = [
     title:
       "ops-alert-check mù với mọi mặt PROD ngoài API :3100 — thêm dò fbpost :3500 · LMS :3400 + phát hiện bundle `next dev` đè bản PROD",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "scripts/ops-alert-check.mjs",
       "scripts/lib/ops-alert-rules.mjs",
@@ -12052,7 +12052,7 @@ export const backlog = [
     title:
       "Đường BÁO ĐỘNG ra ngoài: tin nhắn phải nói ĐANG HỎNG CÁI GÌ (nay chỉ có chữ 'CRIT') + lỗi giao webhook phải KÊU TO (nay nuốt sạch) + cờ --test-alert chứng minh kênh chạy được",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "scripts/ops-alert-check.mjs",
       "scripts/lib/ops-alert-notify.mjs",
@@ -12113,7 +12113,7 @@ export const backlog = [
     title:
       "`INTERNAL_API_KEY` là secret ĐANG DÙNG THẬT nhưng vắng mặt ở env.schema + .env.example — quên đặt thì mất tính năng trong IM LẶNG, không lỗi boot nào",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/config/env.schema.ts",
       "apps/api/src/config/env.schema.spec.ts",
@@ -12381,13 +12381,24 @@ export const backlog = [
     title:
       "Chưa có step-up (xác thực lại) THẬT: cờ `requiresReauth` của permission engine không có nơi nào GHI `req.reauthContext` ⇒ mọi route dám khai cờ này đều CHẾT",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/auth/**",
       "apps/api/src/permission/guards/**",
       "apps/api/test/foundation/reauth-reachability.e2e-spec.ts",
       "docs/DECISIONS/DECISIONS-09_Security_Policy_Reauth_And_Object_Grant.md",
       "harness/backlog.mjs",
+      // APPEND 20/08/2026 (L0-ADR-SCOPE, DECISIONS-09 §6): 8 đường THẬT SỰ bị chạm mà seed gốc bỏ sót.
+      // `paths` lái CẢ tầng review (gate) LẪN scheduler ([[wo-paths-drive-gate-and-scheduler]]) — thiếu
+      // thì guard-scope cảnh báo và diff chạm contracts/env/census lọt xuống LIGHT gate.
+      "packages/contracts/src/auth.ts",
+      "apps/api/src/common/valkey/**",
+      "apps/api/src/config/env.schema.ts",
+      ".env.example",
+      "apps/api/test/integration/**",
+      "apps/api/test/foundation/route-verdicts.ts",
+      "apps/api/src/permission/permission.module.ts",
+      "docs/_review/S6-SEC-ROUTEMAP-1-route-census.json",
     ],
     skills: ["security-review"],
     depends_on: ["S10-QA-SECPOLICY-GATE-1"],
@@ -12431,6 +12442,16 @@ export const backlog = [
       "🚩V2-BLOCK#6 — ca ALLOW (trụ chống deny-xanh-rỗng) chưa có đường dựng: step-up TOTP-only cần `user_totp` có secret mã hoá bằng KEK + mã hợp lệ tại thời điểm chạy. Thiếu ⇒ mọi ca deny xanh RỖNG, hoặc spec skipIf âm thầm ở máy thiếu KEK. Phải provision qua luồng bật-2FA thật, ĐỎ TO khi thiếu KEK, không skip.",
       "⚠V2-WARN — `RlBucket` (valkey-key.ts:45-53) và `ReplayMarker` (dòng 56) đều là union ĐÓNG, KHÔNG có stepup. Không APPEND thì `rlKey(stepup,…)` không compile (hot-file = append).",
       "📌 KẾT LUẬN SAU 2 VÒNG (19/08) — DỪNG vòng plan, KHÔNG chạy vòng 3. V2-BLOCK#2 cho thấy nên làm S10-FND-VALKEYSCOPE-2 TRƯỚC: gỡ chu kỳ ghi kép legacy sẽ xoá luôn cái bẫy marker-mới-ghi-khoá-unscoped, làm WO này đơn giản hẳn. Thứ tự đề xuất: VALKEYSCOPE-2 (khi cổng deploy mở) → STEPUP-1 code THẲNG theo 15 ràng buộc đã ghim ở trên.",
+      // ── L0-ADR-SCOPE (20/08/2026): ADR đã CHỐT. Từ đây DECISIONS-09 §6 là hợp đồng, không phải gợi ý.
+      "✅ ADR CHỐT 20/08/2026 — `docs/DECISIONS/DECISIONS-09` **§6 (11 điểm)** là HỢP ĐỒNG THI CÔNG của WO này; L1..L4 KHÔNG được chọn khác. Ba chỗ từng bỏ ngỏ nay ĐÓNG: (6) cửa sổ **DÙNG-LẠI-ĐƯỢC trong TTL + TTL TUYỆT ĐỐI** — đường ĐỌC là đọc THUẦN, CẤM set/expire/touch/getex trong `getValidWindow()` ⇒ nghiệm thu BẮT BUỘC có ca 'đọc 2 lần trong TTL, lần 2 vẫn hợp lệ' VÀ ca 'đường đọc KHÔNG gia hạn TTL'; (7) đường GHI rẽ theo `valkey.isEnabled()`: bật + `set()` trả false ⇒ **503 tường minh** (KHÔNG rơi memory, vì nhiều instance sẽ thành 200-nhưng-403-vĩnh-viễn), tắt ⇒ fallback memory per-process, đường ĐỌC rẽ CÙNG nhánh, PROD/dev-online BẮT BUỘC có VALKEY_URL; (8) `@UseGuards(ReauthGuard, PermissionGuard)` **CÙNG MỘT TẦNG**.",
+      "🚩V2-BLOCK#4 ĐÃ CÓ BẰNG CHỨNG NGUỒN (đo 20/08 trên `@nestjs/core@11.1.24`, `helpers/context-creator.js`): `createContext()` trả `[...global, ...class, ...method]` và GuardsConsumer duyệt theo thứ tự mảng ⇒ **PermissionGuard cấp CLASS + ReauthGuard cấp ROUTE là SAI** (class luôn chạy trước route), và `@UseGuards(PermissionGuard, ReauthGuard)` cùng cấp cũng SAI. Cổng `no-reauth-guard` phải đo VỊ TRÍ trong `[...classGuards, ...routeGuards]` (route-census.ts:151,186-187), ghim `ReauthGuard.name`, và có ca thử-ngược ĐỎ cho CẢ HAI cấu hình sai.",
+      "✅ MÃ LỖI CHỐT (DECISIONS-09 §6 điểm 3): chưa bật TOTP ⇒ **409 `AUTH-ERR-STEP-UP-2FA-REQUIRED`** (đo: `docs/spec/**` + `docs/API Design/**` KHÔNG có slug `AUTH-ERR-*` nào cho 'chưa bật 2FA'; `TWO_FACTOR_SETUP_REQUIRED` mang nghĩa KHÁC = bị ÉP enroll ⇒ dùng lại là nói dối FE). Mã TOTP sai ⇒ **400 `AUTH-ERR-STEP-UP-INVALID-CODE`**, TUYỆT ĐỐI KHÔNG 401: `packages/web-core/src/lib/api-client.ts:405` bắt 401 của request authed → refresh single-flight → **REPLAY 1 lần** ⇒ một lần gõ sai tự động tiêu HAI lượt rate-limit + HAI hàng audit. Cặp ngoài registry ⇒ **400 `AUTH-ERR-STEP-UP-PAIR-NOT-ALLOWED`**. Bị khoá ⇒ **429** mã nền `SYSTEM-ERR-RATE-LIMIT` (không đẻ mã mới cho 429).",
+      "✅ V2-BLOCK#2 TỰ TIÊU sau `a38036b1` — đo lại 20/08 TRÊN CÂY NÀY: `ReplayGuardService.claim()` chỉ còn MỘT `setNx` (replay-guard.service.ts:52-57), `grep -rn LEGACY_UNSCOPED apps/api/src` = 0 ⇒ marker mới `stepup-totp` KHÔNG còn nguy cơ ghi khoá unscoped, và `ValkeyService.set()` vẫn `if (!this.client) return true` (permission/valkey.service.ts:99) nên V2-BLOCK#1 CÒN NGUYÊN. CẤM dựng lại đường ghi kép legacy (DECISIONS-09 §6 điểm 11.5).",
+      "✅ paths APPEND 8 đường (20/08, L0): `packages/contracts/src/auth.ts` · `apps/api/src/common/valkey/**` · `config/env.schema.ts` · `.env.example` · `test/integration/**` · `test/foundation/route-verdicts.ts` · `permission/permission.module.ts` · `docs/_review/S6-SEC-ROUTEMAP-1-route-census.json`. Seed gốc chỉ khai 5 đường ⇒ diff chạm contracts/env/census sẽ lọt LIGHT gate và guard-scope cảnh báo oan ([[wo-paths-drive-gate-and-scheduler]]).",
+      // ── FIX-3-GOV-STATUS-LEDGER (20/08/2026): 3 điểm BÀN GIAO đã ĐO (không suy đoán). APPEND, không sửa note cũ.
+      "🔻 LOW · VẬN HÀNH (nợ cho WO deploy) — chạy >1 instance API mà THIẾU `VALKEY_URL` ⇒ cửa sổ mint ở instance A VÔ HÌNH với instance B ⇒ deny VĨNH VIỄN. Fail đúng chiều an toàn (không mở nhầm ai), nhưng WO này KHÔNG thêm khẳng định lúc boot rằng PROD/dev-online BẮT BUỘC có `VALKEY_URL` — đã nói thẳng trong docblock `apps/api/src/auth/step-up/step-up-window.service.ts:42-44` và ADR DECISIONS-09 §6 điểm (7). PHẢI chốt TRƯỚC khi cặp ĐẦU TIÊN được duyệt vào `REVEAL_CLASS_PAIRS`; registry còn RỖNG nên hôm nay lỗ này chưa chạm ai.",
+      "🔻 LOW · secret-scan (ghi để KHÔNG ai hoảng) — hằng DI `REVEAL_CLASS_PAIRS_TOKEN` trong `apps/api/src/auth/step-up/reveal-class-pairs.ts` (giá trị là chuỗi hằng 26 ký tự) khớp HÌNH DẠNG rule gitleaks `generic-api-key`, nhưng entropy Shannon ĐO ĐƯỢC = 3.383 < ngưỡng mặc định 3.7 ⇒ KHÔNG trip. Đây là false-positive ĐÃ BIẾT nếu secret-scan full-history hạ ngưỡng — KHÔNG phải secret, không cần xoay vòng.",
+      "➡️ FOLLOW-UP tách thành 2 WO 🟢 (seed cùng lượt 20/08, CẤM sửa ké trong WO đỏ này): `S10-QA-CHUNKTEST-FBPOST-1` — `harness/chunk-test.mjs` không loại `apps/fbpost` như `apps/lms` ⇒ worktree sạch thiếu `apps/fbpost/node_modules` làm `check.sh` ĐỎ GIẢ; `S10-FE-PLATFORMACCOUNTS-DEADPATH-1` — đường FE CHẾT gọi 2 endpoint backend KHÔNG tồn tại, và CẤM dùng nó làm lối tắt vào step-up.",
     ],
   },
 
@@ -12481,7 +12502,7 @@ export const backlog = [
     title:
       "Materialized view dashboard KHÔNG CÓ LỊCH CHẠY — chỉ làm mới khi có người bấm tay vào endpoint; nửa 'must be owner' của KI-017 thì đã vá rồi",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/dashboard/**",
       "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
@@ -12522,7 +12543,7 @@ export const backlog = [
     title:
       "HR-FUNC-006 — FE không có nút 'Đổi trạng thái nhân viên'; và sửa `end_date` KHÔNG lật `status` ⇒ người đã nghỉ việc vẫn hiển thị 'Đang làm việc'",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/hr/**",
       "apps/app/src/i18n/**",
@@ -12586,7 +12607,7 @@ export const backlog = [
     title:
       "PROD chạy sau `cloudflared` cùng máy nhưng `TRUST_PROXY` không đặt ⇒ MỌI request = ::1: nhật ký đăng nhập mù, bucket rate-limit per-IP thoái hoá thành khoá-tài-khoản 5 lần đoán, và IP-allowlist (đang bật enforcement) sẽ vô nghĩa ngay khi ai đó cấu hình nó",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/main.ts",
       "apps/api/src/config/env.schema.ts",
@@ -12646,7 +12667,7 @@ export const backlog = [
     title:
       "4 môi trường dùng CHUNG một Valkey db0 nhưng chỉ `chat:presence` + kênh socket.io có `envScope`: `rl:*`, `perm:cap/obj`, `idem:*`, `replay:2fa-jti`, `2fa-disable|*` KHÔNG có ⇒ khoá đăng nhập, CACHE QUYỀN và idempotency rò chéo môi trường",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/common/valkey/**",
       "apps/api/src/auth/login-rate-limiter.ts",
@@ -12801,6 +12822,66 @@ export const backlog = [
       "ĐÓNG 18/08/2026. Verify lúc 20:03–20:04 VN (tức TRONG cửa sổ trước đây luôn đỏ) trên LANE_DB=mediaos_attflake: spec 16/16, `src/attendance/` 555/555.",
       "⚠️ Bài học chung: assert 'đếm số notification của công ty' chỉ đúng nếu spec ghim ĐƯỢC toàn bộ cửa sổ quét. Producer nào có lookback > 0 thì fixture phải chặn các ngày ngoài mốc đang đo — bằng cấu hình (work_days/ca), KHÔNG bằng cách hy vọng test chạy trước giờ đóng ca.",
       "📌 Không mở KI ở RELEASE-02: đây là nợ TEST, không phải hành vi sản phẩm sai; sản phẩm giữ nguyên, không đổi một dòng `src` nào ngoài file spec.",
+    ],
+  },
+
+  {
+    // Seed 20/08/2026 từ S10-AUTH-STEPUP-1 (lane FIX-3). Đội 3 đo được cổng ĐỎ mà diff của WO KHÔNG
+    // chạm fbpost ⇒ tách ra WO 🟢 riêng thay vì sửa ké trong WO đỏ (quy tắc: không vá công cụ trong WO nhạy cảm).
+    id: "S10-QA-CHUNKTEST-FBPOST-1",
+    module: "FOUNDATION",
+    layer: "DEVOPS",
+    title:
+      "`harness/chunk-test.mjs` loại `apps/lms` nhưng KHÔNG loại `apps/fbpost` ⇒ `check.sh` ĐỎ GIẢ trong mọi worktree sạch (đỏ vì thiếu node_modules, không vì có bài đỏ)",
+    zone: "green",
+    status: "todo",
+    paths: ["harness/chunk-test.mjs", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "ĐO 20/08/2026 (không suy đoán): `harness/chunk-test.mjs` `discoverTargets()` duyệt `apps/*` + `packages/*` và chỉ có ĐÚNG MỘT dòng loại trừ — `if (group === 'apps' && name === 'lms') continue;`. `apps/fbpost` KHÔNG được loại.",
+      "Nhưng `pnpm-workspace.yaml` loại CẢ HAI: `- '!apps/lms'` VÀ `- '!apps/fbpost'` (fbpost dùng npm + `package-lock.json` riêng, Tailwind v4 + node:sqlite — hàng rào R3 của DECISIONS-08). ⇒ `pnpm install` ở gốc KHÔNG cài deps cho fbpost.",
+      "Hệ quả đã xảy ra thật trong `S10-AUTH-STEPUP-1`: worktree sạch không có `apps/fbpost/node_modules` ⇒ chunk-test ném `Cannot find module 'vitest/package.json'` ⇒ `check.sh` kết luận ĐỎ ở step `test` DÙ KHÔNG có bài test nào đỏ. Repo gốc CÓ thư mục đó nên lỗi VÔ HÌNH ở cây chính — chỉ lộ ở worktree, tức đúng nơi auto-loop chạy.",
+      "Chi phí đã trả: 3 lần chạy lại `check.sh --all` (mỗi lần ~15 phút) + một vòng nghiệm thu FAIL oan, trước khi truy ra root-cause.",
+    ],
+    done_when: [
+      "`check.sh` chạy được ĐẾN KẾT LUẬN trong một worktree SẠCH (chỉ `pnpm install` ở gốc) mà KHÔNG cần `npm ci` trong `apps/fbpost`",
+      "Danh sách target sau khi sửa được ĐỐI CHIẾU với `vitest list` (hoặc `turbo run test --dry`) để chứng minh KHÔNG giảm phạm vi lén: mọi package còn lại vẫn được thu thập đủ số file như trước",
+      "Cách loại trừ đọc TỪ `pnpm-workspace.yaml` (hoặc ít nhất bình luận trỏ về nó) thay vì đóng đinh thêm một tên app nữa — app vệ tinh thứ ba sẽ tái diễn lỗ này",
+    ],
+    notes: [
+      "🟢 Việc công cụ, không chạm sản phẩm: KHÔNG đụng `apps/**`, không đụng migration, không đụng permission.",
+      "⚠️ CẤM 'sửa' bằng cách cài deps fbpost vào workspace pnpm — đó là phá hàng rào R3 (DECISIONS-08), đúng thứ `pnpm-workspace.yaml` cố ý chặn.",
+      "Bẫy cần tránh khi vá: loại fbpost khỏi chunk-test làm 19 file test của fbpost KHÔNG còn chạy ở cổng chung. Nếu muốn giữ chúng trong phạm vi đo thì phải có đường chạy RIÊNG (npm ci + vitest trong `apps/fbpost`) và nói rõ ai chạy nó — đừng im lặng đánh rơi 19 file rồi gọi là XANH ([[src-green-is-not-integration-green]]).",
+    ],
+  },
+
+  {
+    // Seed 20/08/2026 từ S10-AUTH-STEPUP-1 (lane FIX-3). Phát hiện khi chạy suite, KHÔNG do WO đó gây ra.
+    id: "S10-FE-PLATFORMACCOUNTS-DEADPATH-1",
+    module: "FOUNDATION",
+    layer: "FRONTEND",
+    title:
+      "Đường FE CHẾT: console gọi `POST /platform-accounts/reauth` và `POST /platform-accounts/:id/reveal` trong khi backend KHÔNG có controller nào phục vụ hai route đó",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/console/src/lib/platform-accounts-api.ts", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "ĐO 20/08/2026: `apps/console/src/lib/platform-accounts-api.ts:62-72` khai `reauth()` gọi `POST /platform-accounts/reauth` và `reveal()` gọi `POST /platform-accounts/:id/reveal`.",
+      "`grep -rn 'platform-accounts' apps/api/src --include=*.ts` trả ĐÚNG 2 dòng, CẢ HAI là BÌNH LUẬN trong `apps/api/src/employees/employees.service.ts:139,208` (nhắc 'mirrors platform-accounts reveal' như một khuôn mẫu). KHÔNG controller, KHÔNG route, KHÔNG handler. `grep -rln 'platform-account' apps/api/src --include=*.controller.ts` = rỗng.",
+      "Đúng khuôn [[ui-promises-backend-never-reads]]: UI hứa một năng lực mà backend chưa từng đọc. Bình luận trong service còn làm nó trông như đường đã tồn tại ([[wo-plans-built-on-code-comments]]).",
+    ],
+    done_when: [
+      "CHỌN MỘT và làm dứt điểm: (a) GỠ hai hàm chết + kiểu/schema chỉ phục vụ chúng, hoặc (b) NỐI đúng vào `POST /api/v1/auth/step-up` — nhưng (b) CHỈ hợp lệ SAU khi cặp (action, resourceType) tương ứng được DUYỆT vào `REVEAL_CLASS_PAIRS` (registry hiện RỖNG theo D3 của S10-AUTH-STEPUP-1)",
+      "Nếu chọn (a): không còn tham chiếu chết nào (`grep` sạch), typecheck + `apps/console` test xanh, không màn hình nào mất chức năng đang dùng",
+      "Nếu chọn (b): có route backend THẬT + int-spec deny-path, KHÔNG tự ý thêm cặp vào registry trong WO này",
+    ],
+    notes: [
+      "🚫 CẤM dùng đường này làm LỐI TẮT vào step-up: không được gán `req.reauthContext` từ FE-driven endpoint, không được dựng endpoint `/platform-accounts/reauth` song song với `POST /auth/step-up`. Một writer duy nhất = `ReauthGuard` (bất biến đã nghiệm thu của S10-AUTH-STEPUP-1).",
+      "Việc thêm cặp vào `REVEAL_CLASS_PAIRS` là QUYẾT ĐỊNH RIÊNG có chủ (WO gắn cờ `requiresReauth`), không phải phụ phẩm của việc dọn đường chết này.",
+      "Trước khi gỡ: xác nhận không màn hình nào của console đang import `reauth`/`reveal` — nếu CÓ thì màn đó cũng đang chết (gọi ra 404), phải xử lý cùng lượt chứ không để lại nửa vời.",
     ],
   },
 ];

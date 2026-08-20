@@ -7,6 +7,7 @@ import type {
   RedirectAllowedResponse,
   SessionListItem,
   SessionRevokeResponse,
+  StepUpResponse,
   TwoFactorEnrollResponse,
   TwoFactorStatus,
 } from "@mediaos/contracts";
@@ -40,8 +41,10 @@ import {
   TwoFactorDisableDto,
   TwoFactorEnableDto,
   TwoFactorVerifyDto,
+  StepUpDto,
 } from "./auth.dto";
 import { TwoFactorService } from "./two-factor.service";
+import { StepUpService } from "./step-up/step-up.service";
 import { Public } from "../permission/public.decorator";
 import { AllowWithoutTwoFactor } from "./two-factor-enforcement.decorator";
 
@@ -61,6 +64,9 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly twoFactor: TwoFactorService,
     private readonly cookies: SessionCookieService,
+    // S10-AUTH-STEPUP-1 (APPEND): lõi step-up. Controller KHÔNG chứa nghiệp vụ — thứ tự registry →
+    // rate-limit → verify → audit nằm trọn trong service (CLAUDE.md §5).
+    private readonly stepUpService: StepUpService,
   ) {}
 
   @Public()
@@ -284,6 +290,25 @@ export class AuthController {
       req.user.sessionId,
     );
     return { ok: true, revoked_count: revokedCount };
+  }
+
+  // ── S10-AUTH-STEPUP-1: xác thực lại (step-up) ─────────────────────────────────
+
+  /**
+   * Xác thực lại bằng TOTP để mở một CỬA SỔ ngắn cho đúng MỘT `(action, resourceType, resourceId)`.
+   *
+   * KHÔNG `@Public` — đi qua `JwtAuthGuard` + `CompanyGuard` toàn cục, `companyId`/`userId` lấy TỪ JWT
+   * (BẤT BIẾN #1). Phản hồi CHỈ mang mốc hết hạn để FE biết khi nào phải hỏi lại; nó KHÔNG phải chứng
+   * chỉ — cửa sổ nằm phía server, sửa giá trị này ở client không mở được gì (DECISIONS-09 §6 điểm 1).
+   *
+   * HÔM NAY `REVEAL_CLASS_PAIRS` RỖNG ⇒ endpoint luôn trả 400 `AUTH-ERR-STEP-UP-PAIR-NOT-ALLOWED`. Đó là
+   * trạng thái ĐÚNG (D3), không phải lỗi: chưa cặp nào được duyệt thì chưa route nào được khai
+   * `requiresReauth`. Chưa bật 2FA ⇒ 409 `AUTH-ERR-STEP-UP-2FA-REQUIRED` (không 403 câm, không 500).
+   */
+  @Post("step-up")
+  @HttpCode(200)
+  stepUp(@Req() req: AuthenticatedRequest, @Body() dto: StepUpDto): Promise<StepUpResponse> {
+    return this.stepUpService.stepUp({ id: req.user.id, companyId: req.user.companyId }, dto);
   }
 
   private meta(req: Request): RequestMeta {
