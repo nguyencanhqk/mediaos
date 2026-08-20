@@ -34,6 +34,13 @@ const MIN_BUDGET = 60_000; // còn dưới mức này → dừng-có-trạng-th�
 // shape mỗi item: { id, title, zone, paths, done_when }. KHÔNG truyền → Đội 1 tự tìm (fallback hành vi cũ).
 const providedWOs = Array.isArray(A.workOrders) ? A.workOrders : null;
 const GATE = A.gate || 'red'; // 'red' = chỉ WO đỏ tốn Đội 1 · 'red+yellow' = cả vàng
+// ── skipPlan: BỎ cổng plan-reviewer (opt-in TƯỜNG MINH, mặc định TẮT) ──
+// Dùng khi CHỦ DỰ ÁN đã chốt "code thẳng, dừng vòng plan" cho một WO mà plan-reviewer đã BLOCK nhiều
+// vòng và các ràng buộc đã được ghim tay vào WO (notes/done_when). Không hội tụ thì thêm vòng plan chỉ
+// đốt token và làm planner rơi ràng buộc đã chốt (đo 19/08: S10-AUTH-STEPUP-1 V2-BLOCK#3).
+// ⚠ CHỈ bỏ cổng KẾ HOẠCH. Đội 3 (completion-evaluator + qa + security-reviewer FULL gate) VẪN chạy đủ,
+//   model crown VẪN Opus, hook bất biến CLAUDE.md §2 VẪN ép. Không phải đường tắt bỏ review.
+const SKIP_PLAN = A.skipPlan === true;
 
 // Nhận diện việc NHẠY CẢM (thay cho "màu"): quyết model (Opus) + reviewer (security FULL gate) — KHÔNG còn để GATE người.
 // Mọi việc đều qua Đội 3; "nhạy cảm" chỉ làm review SÂU hơn + model mạnh hơn, không chặn loop.
@@ -514,7 +521,12 @@ async function executeWO(plan, wt) {
   await stamp(wo.id, 'milestone', `${lanes.length} lane (${lanes.map((l) => l.builder).join(',')})${sensitive ? ' · nhạy cảm' : ''}${wt ? ' · wt' : ''}`);
 
   // ── plan-reviewer (chỉ lane nhạy cảm — gác deny-path + nghiệm thu đo được) ──
-  if (sensitive) {
+  // skipPlan=true → bỏ cổng KẾ HOẠCH (chủ dự án đã chốt code-thẳng); Đội 3 vẫn gác đủ.
+  if (sensitive && SKIP_PLAN) {
+    await stamp(wo.id, 'milestone', 'skipPlan: bỏ cổng plan-reviewer theo chốt chủ dự án — Đội 3 vẫn gác đủ');
+    log(`⏭️  ${wo.id} bỏ cổng plan-reviewer (skipPlan) — code thẳng theo ràng buộc đã ghim ở WO.`);
+  }
+  if (sensitive && !SKIP_PLAN) {
     phase('PlanReview');
     const pr = await agent(planReviewPrompt(wo, lanes, steps, accept, tests), { agentType: 'plan-reviewer', schema: PLAN_REVIEW_SCHEMA, label: `planreview:${wo.id}`, phase: 'PlanReview' });
     if (pr && pr.verdict === 'BLOCK') {

@@ -85,6 +85,7 @@ Workflow{ scriptPath:'.claude/workflows/auto-loop.mjs', args:{ dryRun:false, aut
 | `only` | — | regex lọc id WO (vd `^FOUNDATION-BE`) — **ép bằng code** (không chỉ prompt) ở queue + preview + fallback |
 | `workOrders` | — | mảng WO `{id,title,zone,paths,done_when}` tính sẵn — **BẮT BUỘC để bật worktree-isolation**; thiếu → Đội 1 tự tìm = sequential cây-gốc |
 | `maxConcurrent` | `1` | `≥2` + có `workOrders` + live ⇒ **worktree-isolation** (mỗi WO 1 worktree `../mediaos-<id>` off `mergeBase`); `1` = tuần tự cây-gốc |
+| `skipPlan` | `false` | **BỎ cổng `plan-reviewer`** (chỉ cổng KẾ HOẠCH — Đội 3 + FULL gate + model crown + hook bất biến VẪN nguyên). Opt-in tường minh, dùng khi CHỦ DỰ ÁN đã chốt "code thẳng, dừng vòng plan" cho WO mà plan-reviewer BLOCK nhiều vòng KHÔNG hội tụ và ràng buộc đã ghim tay vào `notes`/`done_when` của WO |
 | `keepWorktree` | `false` | giữ lại worktree sau merge (mặc định tự gỡ) — bật khi cần khám nghiệm |
 
 ## ⭐ LUẬT chạy AN TOÀN — sequential mặc định · worktree-isolation cho parallel rời rạc
