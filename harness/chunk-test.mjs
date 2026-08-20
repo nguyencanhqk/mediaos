@@ -137,15 +137,35 @@ function toPosix(p) {
   return p.split(path.sep).join("/");
 }
 
+/**
+ * Package bị `pnpm-workspace.yaml` LOẠI TRỪ (dòng `- "!apps/x"`) — workspace RIÊNG, không thuộc
+ * `turbo run test`, không có node_modules sau `pnpm install` ở gốc.
+ *
+ * ĐỌC TỪ pnpm-workspace.yaml thay vì hard-code tên: hard-code `lms` là lý do `fbpost` (loại trừ từ
+ * S9-SOCIAL-APP-1) lọt lưới suốt — chunk-test cố chạy vitest ở đó và ĐỎ vì THIẾU node_modules, không
+ * vì có bài đỏ. Suy từ nguồn sự thật ⇒ app vệ tinh thứ ba không tái diễn lỗi này.
+ */
+function workspaceExcluded() {
+  const ws = path.join(REPO_ROOT, "pnpm-workspace.yaml");
+  if (!fs.existsSync(ws)) return new Set();
+  // Chỉ nhận mục phủ định của khối `packages:` — `- "!apps/lms"` / `- '!apps/fbpost'` / - !apps/x
+  const out = new Set();
+  for (const line of fs.readFileSync(ws, "utf8").split(/\r?\n/)) {
+    const m = /^\s*-\s*["']?!([^"'#\s]+)["']?\s*(?:#.*)?$/.exec(line);
+    if (m) out.add(m[1].replace(/\/+$/, ""));
+  }
+  return out;
+}
+
 /** Mọi package trong workspace có script `test` chạy vitest. */
 function discoverTargets() {
   const targets = [];
+  const excluded = workspaceExcluded();
   for (const group of ["apps", "packages"]) {
     const dir = path.join(REPO_ROOT, group);
     if (!fs.existsSync(dir)) continue;
     for (const name of fs.readdirSync(dir).sort()) {
-      // apps/lms = workspace RIÊNG (pnpm-workspace.yaml loại trừ) — không thuộc turbo run test.
-      if (group === "apps" && name === "lms") continue;
+      if (excluded.has(`${group}/${name}`)) continue;
       const pkgDir = path.join(dir, name);
       const pkgJson = path.join(pkgDir, "package.json");
       if (!fs.existsSync(pkgJson)) continue;

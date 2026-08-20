@@ -5,7 +5,6 @@ import {
   Building2,
   ClipboardList,
   Eye,
-  KeyRound,
   Mail,
   ScrollText,
   Settings,
@@ -42,14 +41,6 @@ export {
 // Mục trung tính (slate/zinc) đổi hẳn sang token bg-muted/text-muted-foreground.
 export const NAV_ITEMS: readonly NavItem[] = [
   // — Hệ thống —
-  {
-    id: "platformAccounts",
-    labelKey: "platformAccounts",
-    to: "/settings/platform-accounts",
-    icon: KeyRound,
-    tile: "bg-muted text-muted-foreground",
-    category: "system",
-  },
   {
     id: "breakGlass",
     labelKey: "breakGlass",

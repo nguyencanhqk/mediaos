@@ -3,7 +3,6 @@ import { HomePage } from "@/routes/home";
 import { RootLayout } from "@/routes/root-layout";
 import { CompanySettingsPage } from "@/routes/settings/company";
 import { MailConfigPage } from "@/routes/settings/mail-config";
-import { PlatformAccountsPage } from "@/routes/settings/platform-accounts";
 import { BreakGlassPage } from "@/routes/settings/break-glass";
 import { SecuritySettingsPage } from "@/routes/settings/security";
 import { AccountSettingsPage } from "@/routes/settings/account";
@@ -49,13 +48,6 @@ const companySettingsRoute = createRoute({
   path: "/settings/company",
   beforeLoad: authGuard,
   component: CompanySettingsPage,
-});
-
-const platformAccountsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/settings/platform-accounts",
-  beforeLoad: authGuard,
-  component: PlatformAccountsPage,
 });
 
 // CS-8: Cấu hình mail server SMTP — authGuard; gate quyền configure-mail:company xử lý trong component (PermissionGate).
@@ -214,7 +206,6 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   adminUsersRoute,
   companySettingsRoute,
-  platformAccountsRoute,
   mailConfigRoute,
   breakGlassRoute,
   securityRoute,
