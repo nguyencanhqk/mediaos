@@ -12378,6 +12378,17 @@ export const backlog = [
       "apps/api/test/foundation/reauth-reachability.e2e-spec.ts",
       "docs/DECISIONS/DECISIONS-09_Security_Policy_Reauth_And_Object_Grant.md",
       "harness/backlog.mjs",
+      // APPEND 20/08/2026 (L0-ADR-SCOPE, DECISIONS-09 §6): 8 đường THẬT SỰ bị chạm mà seed gốc bỏ sót.
+      // `paths` lái CẢ tầng review (gate) LẪN scheduler ([[wo-paths-drive-gate-and-scheduler]]) — thiếu
+      // thì guard-scope cảnh báo và diff chạm contracts/env/census lọt xuống LIGHT gate.
+      "packages/contracts/src/auth.ts",
+      "apps/api/src/common/valkey/**",
+      "apps/api/src/config/env.schema.ts",
+      ".env.example",
+      "apps/api/test/integration/**",
+      "apps/api/test/foundation/route-verdicts.ts",
+      "apps/api/src/permission/permission.module.ts",
+      "docs/_review/S6-SEC-ROUTEMAP-1-route-census.json",
     ],
     skills: ["security-review"],
     depends_on: ["S10-QA-SECPOLICY-GATE-1"],
@@ -12421,6 +12432,12 @@ export const backlog = [
       "🚩V2-BLOCK#6 — ca ALLOW (trụ chống deny-xanh-rỗng) chưa có đường dựng: step-up TOTP-only cần `user_totp` có secret mã hoá bằng KEK + mã hợp lệ tại thời điểm chạy. Thiếu ⇒ mọi ca deny xanh RỖNG, hoặc spec skipIf âm thầm ở máy thiếu KEK. Phải provision qua luồng bật-2FA thật, ĐỎ TO khi thiếu KEK, không skip.",
       "⚠V2-WARN — `RlBucket` (valkey-key.ts:45-53) và `ReplayMarker` (dòng 56) đều là union ĐÓNG, KHÔNG có stepup. Không APPEND thì `rlKey(stepup,…)` không compile (hot-file = append).",
       "📌 KẾT LUẬN SAU 2 VÒNG (19/08) — DỪNG vòng plan, KHÔNG chạy vòng 3. V2-BLOCK#2 cho thấy nên làm S10-FND-VALKEYSCOPE-2 TRƯỚC: gỡ chu kỳ ghi kép legacy sẽ xoá luôn cái bẫy marker-mới-ghi-khoá-unscoped, làm WO này đơn giản hẳn. Thứ tự đề xuất: VALKEYSCOPE-2 (khi cổng deploy mở) → STEPUP-1 code THẲNG theo 15 ràng buộc đã ghim ở trên.",
+      // ── L0-ADR-SCOPE (20/08/2026): ADR đã CHỐT. Từ đây DECISIONS-09 §6 là hợp đồng, không phải gợi ý.
+      "✅ ADR CHỐT 20/08/2026 — `docs/DECISIONS/DECISIONS-09` **§6 (11 điểm)** là HỢP ĐỒNG THI CÔNG của WO này; L1..L4 KHÔNG được chọn khác. Ba chỗ từng bỏ ngỏ nay ĐÓNG: (6) cửa sổ **DÙNG-LẠI-ĐƯỢC trong TTL + TTL TUYỆT ĐỐI** — đường ĐỌC là đọc THUẦN, CẤM set/expire/touch/getex trong `getValidWindow()` ⇒ nghiệm thu BẮT BUỘC có ca 'đọc 2 lần trong TTL, lần 2 vẫn hợp lệ' VÀ ca 'đường đọc KHÔNG gia hạn TTL'; (7) đường GHI rẽ theo `valkey.isEnabled()`: bật + `set()` trả false ⇒ **503 tường minh** (KHÔNG rơi memory, vì nhiều instance sẽ thành 200-nhưng-403-vĩnh-viễn), tắt ⇒ fallback memory per-process, đường ĐỌC rẽ CÙNG nhánh, PROD/dev-online BẮT BUỘC có VALKEY_URL; (8) `@UseGuards(ReauthGuard, PermissionGuard)` **CÙNG MỘT TẦNG**.",
+      "🚩V2-BLOCK#4 ĐÃ CÓ BẰNG CHỨNG NGUỒN (đo 20/08 trên `@nestjs/core@11.1.24`, `helpers/context-creator.js`): `createContext()` trả `[...global, ...class, ...method]` và GuardsConsumer duyệt theo thứ tự mảng ⇒ **PermissionGuard cấp CLASS + ReauthGuard cấp ROUTE là SAI** (class luôn chạy trước route), và `@UseGuards(PermissionGuard, ReauthGuard)` cùng cấp cũng SAI. Cổng `no-reauth-guard` phải đo VỊ TRÍ trong `[...classGuards, ...routeGuards]` (route-census.ts:151,186-187), ghim `ReauthGuard.name`, và có ca thử-ngược ĐỎ cho CẢ HAI cấu hình sai.",
+      "✅ MÃ LỖI CHỐT (DECISIONS-09 §6 điểm 3): chưa bật TOTP ⇒ **409 `AUTH-ERR-STEP-UP-2FA-REQUIRED`** (đo: `docs/spec/**` + `docs/API Design/**` KHÔNG có slug `AUTH-ERR-*` nào cho 'chưa bật 2FA'; `TWO_FACTOR_SETUP_REQUIRED` mang nghĩa KHÁC = bị ÉP enroll ⇒ dùng lại là nói dối FE). Mã TOTP sai ⇒ **400 `AUTH-ERR-STEP-UP-INVALID-CODE`**, TUYỆT ĐỐI KHÔNG 401: `packages/web-core/src/lib/api-client.ts:405` bắt 401 của request authed → refresh single-flight → **REPLAY 1 lần** ⇒ một lần gõ sai tự động tiêu HAI lượt rate-limit + HAI hàng audit. Cặp ngoài registry ⇒ **400 `AUTH-ERR-STEP-UP-PAIR-NOT-ALLOWED`**. Bị khoá ⇒ **429** mã nền `SYSTEM-ERR-RATE-LIMIT` (không đẻ mã mới cho 429).",
+      "✅ V2-BLOCK#2 TỰ TIÊU sau `a38036b1` — đo lại 20/08 TRÊN CÂY NÀY: `ReplayGuardService.claim()` chỉ còn MỘT `setNx` (replay-guard.service.ts:52-57), `grep -rn LEGACY_UNSCOPED apps/api/src` = 0 ⇒ marker mới `stepup-totp` KHÔNG còn nguy cơ ghi khoá unscoped, và `ValkeyService.set()` vẫn `if (!this.client) return true` (permission/valkey.service.ts:99) nên V2-BLOCK#1 CÒN NGUYÊN. CẤM dựng lại đường ghi kép legacy (DECISIONS-09 §6 điểm 11.5).",
+      "✅ paths APPEND 8 đường (20/08, L0): `packages/contracts/src/auth.ts` · `apps/api/src/common/valkey/**` · `config/env.schema.ts` · `.env.example` · `test/integration/**` · `test/foundation/route-verdicts.ts` · `permission/permission.module.ts` · `docs/_review/S6-SEC-ROUTEMAP-1-route-census.json`. Seed gốc chỉ khai 5 đường ⇒ diff chạm contracts/env/census sẽ lọt LIGHT gate và guard-scope cảnh báo oan ([[wo-paths-drive-gate-and-scheduler]]).",
     ],
   },
 
