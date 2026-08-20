@@ -41,12 +41,26 @@ interface StepUpMetadata {
  *
  * ─── THỨ TỰ LÀ HỢP ĐỒNG (§6.9) ──────────────────────────────────────────────────────────────────
  *   Zod (ở ranh giới, `ZodValidationPipe` của controller)
- *     → cặp ∈ `REVEAL_CLASS_PAIRS`
- *     → `isLocked()` **TRƯỚC** verify  (đang khoá ⇒ từ chối, verify gọi 0 lần)
+ *     → `isLocked()` **ĐẦU TIÊN**  (đang khoá ⇒ 429 NGAY, KHÔNG ghi hàng nào, verify gọi 0 lần)
+ *     → cặp ∈ `REVEAL_CLASS_PAIRS`  (ngoài registry ⇒ `recordFailure` + audit `Denied`)
  *     → verify TOTP THUẦN
  *     → SAI: `recordFailure` + audit `Failure` + `STEP_UP_FAILED`, KHÔNG cấp cửa sổ
  *     → ĐÚNG: `reset(key)` + cấp cửa sổ + audit `Success` + `STEP_UP_GRANTED`.
- * Đảo hai bước đầu là biến rate-limit thành trang trí trên đúng một oracle TOTP 6 số.
+ * `isLocked()` vẫn nằm TRƯỚC verify — đảo hai bước đó là biến rate-limit thành trang trí trên đúng một
+ * oracle TOTP 6 số. Vòng sửa `FIX-1-BE-STEPUP-FLOOD` siết thêm một nấc: khoá đứng trước CẢ cổng registry.
+ *
+ * ─── VÌ SAO KHOÁ PHẢI ĐỨNG TRƯỚC REGISTRY (A09 — bồi hàng append-only) ─────────────────────────
+ * Registry hôm nay RỖNG có chủ đích (D3) ⇒ **mọi** lời gọi dừng ở cổng registry. Bản đầu đặt cổng đó
+ * TRƯỚC `isLocked()` và nhánh đó ghi 1 hàng `audit_logs` + 1 hàng `user_security_events` rồi ném, mà
+ * KHÔNG bồi bucket; `app.module.ts` cũng không có throttler toàn cục. Hệ quả đo được: một tài khoản đã
+ * đăng nhập bất kỳ lặp `POST /auth/step-up` là bồi được VÔ HẠN hàng vào hai bảng KHÔNG XOÁ ĐƯỢC, vừa
+ * phình lưu trữ vừa chôn tín hiệu `STEP_UP_FAILED` thật dưới nhiễu. Hai nửa của bản vá:
+ *   (a) `isLocked()` lên đầu ⇒ khi đã khoá, request thứ N+1 trở đi ném 429 mà KHÔNG chạm DB;
+ *   (b) MỌI nhánh từ chối CÓ GHI VẾT đều gọi `recordFailure(bucketKey, STEP_UP_MAX_ATTEMPTS)` ⇒ trần
+ *       lưu trữ mỗi cửa sổ khoá là `STEP_UP_MAX_ATTEMPTS` hàng, không phải vô hạn.
+ * Nhánh khoá ghi 0 hàng KHÔNG làm mất vết: chính `STEP_UP_MAX_ATTEMPTS` lượt dựng nên cái khoá đó đều đã
+ * có hàng audit + security-event. Bucket khoá theo `(companyId|userId)` lấy từ JWT ⇒ kẻ bồi chỉ tự khoá
+ * CHÍNH MÌNH, không quấy rối được ai (§6.9).
  *
  * ─── D1/D2 (§6.2) ───────────────────────────────────────────────────────────────────────────────
  * Đường verify là `TwoFactorService.verifyTotpForStepUp` — TOTP THUẦN, marker replay RIÊNG
@@ -99,18 +113,9 @@ export class StepUpService {
       resourceId: input.resourceId,
     };
 
-    // (1) Cặp ∈ registry. Hôm nay registry RỖNG ⇒ mọi cặp dừng ở đây — trạng thái ĐÚNG, xem D3.
-    if (!isRevealClassPair(this.pairs, input.action, input.resourceType)) {
-      await this.writeOutcome(actor, STEP_UP_AUDIT_ACTIONS.DENIED, "Denied", metadata);
-      throw new BadRequestException({
-        code: STEP_UP_ERROR_CODES.PAIR_NOT_ALLOWED,
-        message: "Hành động này không hỗ trợ xác thực lại.",
-      });
-    }
-
-    // (2) Bucket đang khoá ⇒ TỪ CHỐI, KHÔNG gọi verify (không cho brute-force chạy tiếp dưới khoá).
+    // (1) Bucket đang khoá ⇒ TỪ CHỐI NGAY: không verify (không cho brute-force chạy tiếp dưới khoá) và
+    //     KHÔNG ghi hàng append-only nào (không cho lời gọi lặp bồi lưu trữ — A09, xem docblock).
     if (await this.rateLimiter.isLocked(bucketKey)) {
-      await this.writeOutcome(actor, STEP_UP_AUDIT_ACTIONS.DENIED, "Denied", metadata);
       // 429 dùng mã nền `SYSTEM-ERR-RATE-LIMIT` (httpStatusToCode) — KHÔNG đẻ mã mới cho 429.
       throw new HttpException(
         "Bạn đã thử quá nhiều lần. Vui lòng đợi rồi thử lại.",
@@ -118,11 +123,20 @@ export class StepUpService {
       );
     }
 
+    // (2) Cặp ∈ registry. Hôm nay registry RỖNG ⇒ mọi cặp dừng ở đây — trạng thái ĐÚNG, xem D3.
+    if (!isRevealClassPair(this.pairs, input.action, input.resourceType)) {
+      await this.denyAndCount(actor, bucketKey, metadata);
+      throw new BadRequestException({
+        code: STEP_UP_ERROR_CODES.PAIR_NOT_ALLOWED,
+        message: "Hành động này không hỗ trợ xác thực lại.",
+      });
+    }
+
     // (3) Verify TOTP thuần.
     const outcome = await this.twoFactor.verifyTotpForStepUp(actor.id, actor.companyId, input.code);
 
     if (outcome === "not-enrolled") {
-      await this.writeOutcome(actor, STEP_UP_AUDIT_ACTIONS.DENIED, "Denied", metadata);
+      await this.denyAndCount(actor, bucketKey, metadata);
       throw new ConflictException({
         code: STEP_UP_ERROR_CODES.TWO_FACTOR_REQUIRED,
         message: "Bạn cần bật xác thực 2 bước (2FA) trước khi xác thực lại.",
@@ -151,6 +165,22 @@ export class StepUpService {
     });
 
     return { reauthValidUntil: reauthValidUntil.toISOString() };
+  }
+
+  /**
+   * Nhánh TỪ CHỐI có ghi vết (`registry` và `not-enrolled`): bồi bucket TRƯỚC rồi mới ghi.
+   *
+   * Bồi trước có chủ đích — nếu `writeOutcome` ném (DB rớt) thì bộ đếm ĐÃ tăng, nên một kẻ lặp lời gọi
+   * không tận dụng được lỗi hạ tầng để chạy vô hạn. Đây là nửa (b) của bản vá A09: nhánh nào ghi hàng
+   * append-only thì nhánh đó PHẢI trả giá bằng một lần bồi bucket.
+   */
+  private async denyAndCount(
+    actor: StepUpActor,
+    bucketKey: string,
+    metadata: StepUpMetadata,
+  ): Promise<void> {
+    await this.rateLimiter.recordFailure(bucketKey, this.env.STEP_UP_MAX_ATTEMPTS);
+    await this.writeOutcome(actor, STEP_UP_AUDIT_ACTIONS.DENIED, "Denied", metadata);
   }
 
   /** Nhánh TỪ CHỐI/THẤT BẠI: ghi vết rồi TRẢ VỀ — caller ném NGOÀI tx (ném trong tx sẽ rollback vết). */

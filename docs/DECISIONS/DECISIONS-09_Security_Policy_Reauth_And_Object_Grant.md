@@ -300,6 +300,77 @@ tử MỚI của union đóng `RlBucket` (valkey-key.ts:49-57), **tách hẳn** 
 - `STEP_UP_MAX_ATTEMPTS` và `STEP_UP_TTL_SEC` đều có `.default()` **và** `.max()` trong `env.schema.ts`
   (`env-schema-floor-breaks-test-fixtures`: biến mới không default từng giết fixture int-spec).
 
+### (9b) AMENDMENT 2026-08-20 (`FIX-1-BE-STEPUP-FLOOD`) — khoá đứng ĐẦU TIÊN, và mọi nhánh ghi vết phải bồi bucket
+
+> **APPEND, không viết lại (9).** Câu "Thứ tự bắt buộc trong service" ở điểm (9) được **SIẾT** bởi mục
+> này; khi hai chỗ khác nhau, **(9b) là thứ tự hiện hành**. (9) vẫn đúng ở phần nó nói: `isLocked()`
+> đứng **trước** verify — (9b) chỉ đẩy nó lên thêm một nấc.
+
+**Lỗ đã đo (A09 — Logging Failures, MEDIUM).** Bản đầu đặt cổng registry **trước** `isLocked()`, và
+nhánh registry (`step-up.service.ts` cũ :103-109) cùng nhánh `not-enrolled` (:124-130) mỗi lượt ghi
+1 hàng `audit_logs` + 1 hàng `user_security_events` rồi ném, **không** gọi `recordFailure()`. Vì registry
+hôm nay **RỖNG** theo D3, **mọi** lời gọi đi đúng đường đó; `app.module.ts` không có throttler toàn cục
+(chỉ `JwtAuthGuard` · `CompanyGuard` · `TwoFactorEnforcementGuard`). Hệ quả: một tài khoản **đã đăng
+nhập bất kỳ** bồi được **vô hạn** hàng vào hai bảng **append-only không xoá được** — vừa phình lưu trữ,
+vừa chôn tín hiệu `STEP_UP_FAILED` thật dưới nhiễu.
+
+**Thứ tự HIỆN HÀNH (thay cho dòng thứ-tự ở (9)):**
+
+```text
+Zod (ranh giới)
+  → isLocked(bucketKey)          ← ĐẦU TIÊN. Đang khoá ⇒ 429 NGAY, KHÔNG chạm DB, verify gọi 0 lần.
+  → cặp ∈ REVEAL_CLASS_PAIRS     ← ngoài registry ⇒ recordFailure + audit `Denied` + STEP_UP_FAILED
+  → verify TOTP THUẦN
+      · not-enrolled ⇒ recordFailure + audit `Denied` + 409 AUTH-ERR-STEP-UP-2FA-REQUIRED
+      · sai          ⇒ recordFailure + audit `Failure` + 400 AUTH-ERR-STEP-UP-INVALID-CODE
+      · đúng         ⇒ reset(key) + cấp cửa sổ + audit `Success` + STEP_UP_GRANTED
+```
+
+**Hai nửa của bản vá, và vì sao cần CẢ HAI:**
+
+1. **`isLocked()` lên đầu.** Chỉ bồi bucket thôi thì chưa đủ: khi đã khoá, nhánh khoá cũ vẫn ghi 1 hàng
+   cho **mỗi** request ⇒ đường bồi chỉ đổi nhãn (`PAIR_NOT_ALLOWED` → `429`) chứ không đóng. Nay nhánh
+   khoá ghi **0 hàng**.
+2. **`recordFailure(bucketKey, STEP_UP_MAX_ATTEMPTS)` ở CẢ nhánh registry-denied LẪN not-enrolled.** Chỉ
+   đẩy `isLocked()` lên đầu thôi cũng chưa đủ: không nhánh nào bồi bucket thì khoá **không bao giờ**
+   đóng. Quy tắc rút ra, áp cho mọi nhánh tương lai: **nhánh nào ghi hàng append-only, nhánh đó phải trả
+   giá bằng một lần bồi bucket.** `recordFailure` gọi **TRƯỚC** khi ghi, để lỗi hạ tầng ở đường ghi
+   không biến thành đường chạy vô hạn.
+
+**Trần lưu trữ sau vá:** `STEP_UP_MAX_ATTEMPTS` hàng (mặc định 5) mỗi cửa sổ khoá `LOGIN_LOCKOUT_SEC`
+(mặc định 900s) mỗi `(companyId,userId)` — thay cho vô hạn.
+
+**Nhánh khoá ghi 0 hàng KHÔNG phải là mất vết** (nếu không thì đây lại là A09 theo chiều ngược): chính
+`STEP_UP_MAX_ATTEMPTS` lượt dựng nên cái khoá đó đều **đã** có hàng `audit_logs` + `user_security_events`.
+Hàng thứ N+1, N+2, … không mang thêm thông tin nào, chỉ mang thêm dung lượng.
+
+**Không mở đường quấy rối:** bucket khoá theo `(companyId|userId)` lấy **từ JWT** (giữ nguyên (9) và
+BLOCK#6) ⇒ kẻ bồi chỉ tự khoá **chính mình**; không có tham số nào của request chọn được nạn nhân khác.
+Có ca đo: actor thứ hai cùng công ty vẫn step-up bình thường trong lúc bucket kia đang khoá.
+
+**Đo bởi (RED trước):** `step-up.service.spec.ts` — khoá THẮNG registry (429 chứ không 400, verify 0
+lần) · nhánh khoá gọi 0 lần `audit.record`/`securityEvents.record`/`withTenant` · registry-denied và
+not-enrolled đều `recordFailure(bucket, STEP_UP_MAX_ATTEMPTS)` · bucket **có trạng thái** lặp N+2 lượt ⇒
+đúng N hàng rồi dừng. `step-up-reauth.int-spec.ts` (HTTP thật, DB cô lập) — lặp cặp-ngoài-registry N lượt
+⇒ N hàng, lượt N+1/N+2 ⇒ 429 và `count(*)` **trước/sau bằng nhau**.
+
+**Ca cũ đổi CÓ CHỦ ĐÍCH (không xoá):** ca "bucket ĐANG KHOÁ" trước đây assert nhánh khoá **có** ghi
+audit; nay assert nó **không** ghi. Đây là mặt lật của cùng phép đo, ghi lại ở đây để người sau không
+"sửa lại cho giống ADR cũ".
+
+### (9c) Ghi nhận: `audit_logs.object_id` của hàng step-up là UUID do CALLER chọn
+
+`object_id` = `resourceId` lấy thẳng từ body (`step-up.service.ts`), **không** kiểm quan hệ sở hữu.
+**Đúng thiết kế** — cửa sổ tự nó KHÔNG cấp quyền gì; `permission.decide.ts` vẫn đòi object grant ở
+Tier-3 (ca `uNoObject` của int-spec chứng minh: có cửa sổ hợp lệ + ALLOW cấp công ty vẫn ra
+`deny-object-required`). Hệ quả cần biết: một hàng audit step-up **có thể** trỏ tới đối tượng mà actor
+không có liên hệ nào — hàng đó nói "ai đó đã xác thực lại và tự khai một UUID", không nói "ai đó chạm
+được đối tượng đó".
+
+⚠️ **Khi duyệt CẶP ĐẦU TIÊN vào `REVEAL_CLASS_PAIRS`** (điều kiện ở điểm (5)): cân nhắc ghi kèm vào
+metadata một cờ **"đã/chưa có object grant"** tại thời điểm step-up, để hàng audit tự nói được điều đó
+mà người đọc log không phải tự join sang `object_permissions`.
+
 ### (10) Audit CẢ HAI nhánh + dual-write `user_security_events` — KHÔNG migration
 
 **Quyết định:** mọi lượt step-up (đúng **và** sai) ghi một hàng `audit_logs` + một hàng

@@ -198,6 +198,11 @@ describe.skipIf(!hasLaneDb)(
     let uNo2fa: Actor;
     /** Actor của công ty B, có object grant trên CÙNG resourceId — ca cross-tenant. */
     let uCross: Actor;
+    /**
+     * Actor DÙNG MỘT LẦN cho ca A09 (trần lưu trữ): ca đó cố ý KHOÁ bucket của chính actor này trong
+     * `LOGIN_LOCKOUT_SEC` giây. Dùng chung với actor khác là biến mọi ca sau nó thành 429 xanh-rỗng.
+     */
+    let uFlood: Actor;
 
     const OBJECT_X = randomUUID();
     const OBJECT_Y = randomUUID();
@@ -363,6 +368,7 @@ describe.skipIf(!hasLaneDb)(
       uAudit = await newActor(A, "audit", { twoFactor: true });
       uNo2fa = await newActor(A, "no2fa", { twoFactor: false });
       uCross = await newActor(B, "cross", { twoFactor: true });
+      uFlood = await newActor(A, "flood", { twoFactor: false });
 
       // Object grant THẬT (bảng `object_permissions`) — vế Tier-3 mà hạng reveal-class bắt buộc.
       await seedObjectGrant(
@@ -695,6 +701,60 @@ describe.skipIf(!hasLaneDb)(
       });
       expect(res.status, JSON.stringify(res.body)).toBe(400);
       expect(res.body.error?.code).toBe(STEP_UP_ERROR_CODES.PAIR_NOT_ALLOWED);
+    });
+
+    // ══ 6. A09 — TRẦN LƯU TRỮ CỦA HAI BẢNG APPEND-ONLY (vòng sửa FIX-1-BE-STEPUP-FLOOD) ═════════
+    //
+    // Cổng registry ghi hàng vào `audit_logs` + `user_security_events` rồi ném. Vì registry sản phẩm
+    // RỖNG (D3) nên đó là đường mà MỌI lời gọi đi qua, và `app.module.ts` không có throttler toàn cục.
+    // Nếu nhánh đó không bồi bucket — hoặc nếu cổng khoá đứng SAU nó — thì một tài khoản đã đăng nhập
+    // bất kỳ bồi được vô hạn hàng vào hai bảng KHÔNG XOÁ ĐƯỢC. Ca dưới đo TRẦN, không đo một nhánh rời.
+
+    it("🚩A09: lặp cặp-ngoài-registry ⇒ lượt N+1 trả 429 và số hàng audit/security-event ĐẾM TRƯỚC/SAU KHÔNG tăng", async () => {
+      const maxAttempts = loadEnv().STEP_UP_MAX_ATTEMPTS;
+      const outOfRegistry = { action: "configure", resourceType: "company", code: "123456" };
+
+      const auditAtStart = await countAudit(uFlood.id);
+      const eventsAtStart = await countSecurityEvents(uFlood.id);
+
+      // N lượt đầu: 400 PAIR-NOT-ALLOWED và MỖI lượt vẫn để lại đúng 1 hàng mỗi bảng — đường bồi bị
+      // CHẶN chứ không bị bịt miệng (mất vết hoàn toàn cũng là A09, chỉ theo chiều ngược lại).
+      for (let i = 0; i < maxAttempts; i += 1) {
+        const res = await stepUp(uFlood, outOfRegistry);
+        expect(res.status, `lượt ${i + 1}: ${JSON.stringify(res.body)}`).toBe(400);
+        expect(res.body.error?.code).toBe(STEP_UP_ERROR_CODES.PAIR_NOT_ALLOWED);
+      }
+      const auditBefore = await countAudit(uFlood.id);
+      const eventsBefore = await countSecurityEvents(uFlood.id);
+      expect(auditBefore).toBe(auditAtStart + maxAttempts);
+      expect(eventsBefore).toBe(eventsAtStart + maxAttempts);
+
+      // Lượt N+1 và N+2: 429, và ĐẾM SAU bằng ĐẾM TRƯỚC — trần lưu thực sự đóng lại.
+      for (const nth of [maxAttempts + 1, maxAttempts + 2]) {
+        const res = await stepUp(uFlood, outOfRegistry);
+        expect(res.status, `lượt ${nth}: ${JSON.stringify(res.body)}`).toBe(429);
+      }
+      expect(await countAudit(uFlood.id)).toBe(auditBefore);
+      expect(await countSecurityEvents(uFlood.id)).toBe(eventsBefore);
+    });
+
+    it("🚩A09: bucket đang khoá ⇒ KHOÁ THẮNG REGISTRY (cặp trong registry cũng 429, không phải 400/409)", async () => {
+      // Chạy NGAY SAU ca trên nên bucket của `uFlood` còn khoá (`LOGIN_LOCKOUT_SEC` = 900s).
+      // `uFlood` CHƯA bật 2FA: nếu khoá đứng sau verify thì đây sẽ là 409 TWO-FACTOR-REQUIRED; nếu khoá
+      // đứng sau registry thì cặp hợp lệ này lọt xuống verify. 429 là bằng chứng khoá đứng ĐẦU TIÊN.
+      const auditBefore = await countAudit(uFlood.id);
+      const res = await stepUp(uFlood, { code: "123456" });
+      expect(res.status, JSON.stringify(res.body)).toBe(429);
+      expect(res.status).not.toBe(409);
+      expect(await countAudit(uFlood.id)).toBe(auditBefore);
+    });
+
+    it("🚩A09: khoá là CỦA RIÊNG kẻ bồi — actor khác cùng công ty vẫn step-up được bình thường", async () => {
+      // Bucket khoá theo `(companyId|userId)` từ JWT ⇒ bồi vô hạn chỉ tự khoá chính mình, KHÔNG mở
+      // đường quấy rối người khác (§6.9 / BLOCK#6). Không có ca này thì bản vá có thể là một DoS mới.
+      const res = await stepUp(uNo2fa, { code: "123456" });
+      expect(res.status, JSON.stringify(res.body)).not.toBe(429);
+      expect(res.status).toBe(409); // uNo2fa chưa bật 2FA ⇒ mã tường minh, không phải khoá lây
     });
 
     it("KHÔNG token ⇒ 401: `POST /auth/step-up` KHÔNG phải route @Public", async () => {
