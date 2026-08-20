@@ -31,6 +31,11 @@ import { DataScopeRepository } from "./data-scope.repository";
 // PermissionAdminService. Đăng ký LÀM PROVIDER cục bộ (KHÔNG import AuthModule export) — writer stateless,
 // chỉ phụ thuộc AuditMaskerService (@Global từ EventsModule đã import) → tránh import-cycle Auth↔Permission.
 import { SecurityEventWriter } from "../auth/security-event-writer.service";
+// S10-AUTH-STEPUP-1 (APPEND): ReauthGuard = WRITER DUY NHẤT của `req.reauthContext` (DECISIONS-09 §6.11.2).
+// Guard sống ở ĐÂY (cạnh PermissionGuard, cùng pipeline) nhưng ĐỌC cửa sổ qua StepUpWindowService của
+// AuthModule — vòng module Auth↔Permission đã có sẵn `forwardRef` cả hai chiều, không mở cạnh mới.
+import { ReauthGuard } from "./guards/reauth.guard";
+import { StepUpWindowService } from "../auth/step-up/step-up-window.service";
 
 const CACHED_REPO = "CACHED_PERMISSION_REPO";
 
@@ -142,6 +147,10 @@ class PermissionCacheInvalidator implements OnModuleInit {
     DataScopeService,
     // S2-AUTH-BE-8 (additive): local provider cho PermissionAdminService dual-write security-event.
     SecurityEventWriter,
+    // S10-AUTH-STEPUP-1 (APPEND): ReauthGuard. KHÔNG đăng ký APP_GUARD toàn cục — guard chỉ có nghĩa ở
+    // route reveal-class và phải đứng ĐÚNG TRƯỚC PermissionGuard cùng tầng (§6.8); một guard toàn cục
+    // sẽ nằm ở tầng `global` (chạy trước cả class guard) và làm THỨ TỰ khai ở route mất ý nghĩa.
+    ReauthGuard,
   ],
   exports: [
     PermissionService,
@@ -150,6 +159,8 @@ class PermissionCacheInvalidator implements OnModuleInit {
     CompanyGuard,
     PermissionGuard,
     DataScopeService,
+    // S10-AUTH-STEPUP-1 (APPEND): export để module nghiệp vụ khai `@UseGuards(ReauthGuard, PermissionGuard)`.
+    ReauthGuard,
   ],
 })
 export class PermissionModule implements OnModuleInit {
@@ -171,6 +182,26 @@ export class PermissionModule implements OnModuleInit {
         "PermissionModule: SecurityEventWriter provider không resolve được lúc boot — dual-write " +
           "user_security_events (ROLE_ASSIGNED/ROLE_REMOVED) sẽ degrade âm thầm. Đăng ký lại provider trong " +
           `PermissionModule.providers. (cause: ${err instanceof Error ? err.message : String(err)})`,
+      );
+    }
+
+    // ── S10-AUTH-STEPUP-1 (APPEND) · 🚩PLAN-BLOCK#4 — fail-fast cho đường step-up ─────────────────
+    // Cùng lý do như khối trên, nhưng hậu quả nặng hơn: `ReauthGuard` là WRITER DUY NHẤT của
+    // `req.reauthContext`. Nếu nó (hoặc `StepUpWindowService` mà nó đọc) không resolve được, guard sẽ
+    // KHÔNG ghi được cửa sổ nào ⇒ mọi route reveal-class 403 **im lặng, vĩnh viễn** — đúng KI-065, thứ
+    // đã sống 1 tháng vì không ai ném lỗi. Khẳng định NGAY lúc boot ⇒ app chết to, có thông điệp.
+    //   · `ReauthGuard` — `strict: true`: provider của CHÍNH module này.
+    //   · `StepUpWindowService` — `strict: false`: sống ở AuthModule, chỉ tới được qua `exports` của nó;
+    //     ai lỡ gỡ nó khỏi `AuthModule.exports` sẽ bị bắt ở đây thay vì ở một 403 câm trên production.
+    try {
+      this.moduleRef.get(ReauthGuard, { strict: true });
+      this.moduleRef.get(StepUpWindowService, { strict: false });
+    } catch (err) {
+      throw new Error(
+        "PermissionModule: đường step-up không resolve được lúc boot (ReauthGuard trong " +
+          "PermissionModule.providers · StepUpWindowService trong AuthModule.exports). ReauthGuard là " +
+          "writer DUY NHẤT của req.reauthContext ⇒ thiếu nó thì mọi route reveal-class deny im lặng " +
+          `(KI-065). (cause: ${err instanceof Error ? err.message : String(err)})`,
       );
     }
   }

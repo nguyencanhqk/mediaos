@@ -4,6 +4,7 @@ import {
   loginRequestSchema,
   refreshRequestSchema,
   resetPasswordRequestSchema,
+  stepUpRequestSchema,
   twoFactorDisableRequestSchema,
   twoFactorEnableRequestSchema,
   twoFactorVerifyRequestSchema,
@@ -19,3 +20,6 @@ export class ChangePasswordDto extends createZodDto(changePasswordRequestSchema)
 export class TwoFactorEnableDto extends createZodDto(twoFactorEnableRequestSchema) {}
 export class TwoFactorVerifyDto extends createZodDto(twoFactorVerifyRequestSchema) {}
 export class TwoFactorDisableDto extends createZodDto(twoFactorDisableRequestSchema) {}
+// S10-AUTH-STEPUP-1 (APPEND): body của `POST /auth/step-up` — `resourceId` BẮT BUỘC `.uuid()` ở contracts
+// (audit_logs.object_id là cột uuid; chuỗi khác sẽ nổ 22P02 tận DB và ra 500 thay vì 400).
+export class StepUpDto extends createZodDto(stepUpRequestSchema) {}

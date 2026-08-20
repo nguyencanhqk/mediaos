@@ -12371,13 +12371,24 @@ export const backlog = [
     title:
       "Chưa có step-up (xác thực lại) THẬT: cờ `requiresReauth` của permission engine không có nơi nào GHI `req.reauthContext` ⇒ mọi route dám khai cờ này đều CHẾT",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/auth/**",
       "apps/api/src/permission/guards/**",
       "apps/api/test/foundation/reauth-reachability.e2e-spec.ts",
       "docs/DECISIONS/DECISIONS-09_Security_Policy_Reauth_And_Object_Grant.md",
       "harness/backlog.mjs",
+      // APPEND 20/08/2026 (L0-ADR-SCOPE, DECISIONS-09 §6): 8 đường THẬT SỰ bị chạm mà seed gốc bỏ sót.
+      // `paths` lái CẢ tầng review (gate) LẪN scheduler ([[wo-paths-drive-gate-and-scheduler]]) — thiếu
+      // thì guard-scope cảnh báo và diff chạm contracts/env/census lọt xuống LIGHT gate.
+      "packages/contracts/src/auth.ts",
+      "apps/api/src/common/valkey/**",
+      "apps/api/src/config/env.schema.ts",
+      ".env.example",
+      "apps/api/test/integration/**",
+      "apps/api/test/foundation/route-verdicts.ts",
+      "apps/api/src/permission/permission.module.ts",
+      "docs/_review/S6-SEC-ROUTEMAP-1-route-census.json",
     ],
     skills: ["security-review"],
     depends_on: ["S10-QA-SECPOLICY-GATE-1"],
@@ -12421,6 +12432,16 @@ export const backlog = [
       "🚩V2-BLOCK#6 — ca ALLOW (trụ chống deny-xanh-rỗng) chưa có đường dựng: step-up TOTP-only cần `user_totp` có secret mã hoá bằng KEK + mã hợp lệ tại thời điểm chạy. Thiếu ⇒ mọi ca deny xanh RỖNG, hoặc spec skipIf âm thầm ở máy thiếu KEK. Phải provision qua luồng bật-2FA thật, ĐỎ TO khi thiếu KEK, không skip.",
       "⚠V2-WARN — `RlBucket` (valkey-key.ts:45-53) và `ReplayMarker` (dòng 56) đều là union ĐÓNG, KHÔNG có stepup. Không APPEND thì `rlKey(stepup,…)` không compile (hot-file = append).",
       "📌 KẾT LUẬN SAU 2 VÒNG (19/08) — DỪNG vòng plan, KHÔNG chạy vòng 3. V2-BLOCK#2 cho thấy nên làm S10-FND-VALKEYSCOPE-2 TRƯỚC: gỡ chu kỳ ghi kép legacy sẽ xoá luôn cái bẫy marker-mới-ghi-khoá-unscoped, làm WO này đơn giản hẳn. Thứ tự đề xuất: VALKEYSCOPE-2 (khi cổng deploy mở) → STEPUP-1 code THẲNG theo 15 ràng buộc đã ghim ở trên.",
+      // ── L0-ADR-SCOPE (20/08/2026): ADR đã CHỐT. Từ đây DECISIONS-09 §6 là hợp đồng, không phải gợi ý.
+      "✅ ADR CHỐT 20/08/2026 — `docs/DECISIONS/DECISIONS-09` **§6 (11 điểm)** là HỢP ĐỒNG THI CÔNG của WO này; L1..L4 KHÔNG được chọn khác. Ba chỗ từng bỏ ngỏ nay ĐÓNG: (6) cửa sổ **DÙNG-LẠI-ĐƯỢC trong TTL + TTL TUYỆT ĐỐI** — đường ĐỌC là đọc THUẦN, CẤM set/expire/touch/getex trong `getValidWindow()` ⇒ nghiệm thu BẮT BUỘC có ca 'đọc 2 lần trong TTL, lần 2 vẫn hợp lệ' VÀ ca 'đường đọc KHÔNG gia hạn TTL'; (7) đường GHI rẽ theo `valkey.isEnabled()`: bật + `set()` trả false ⇒ **503 tường minh** (KHÔNG rơi memory, vì nhiều instance sẽ thành 200-nhưng-403-vĩnh-viễn), tắt ⇒ fallback memory per-process, đường ĐỌC rẽ CÙNG nhánh, PROD/dev-online BẮT BUỘC có VALKEY_URL; (8) `@UseGuards(ReauthGuard, PermissionGuard)` **CÙNG MỘT TẦNG**.",
+      "🚩V2-BLOCK#4 ĐÃ CÓ BẰNG CHỨNG NGUỒN (đo 20/08 trên `@nestjs/core@11.1.24`, `helpers/context-creator.js`): `createContext()` trả `[...global, ...class, ...method]` và GuardsConsumer duyệt theo thứ tự mảng ⇒ **PermissionGuard cấp CLASS + ReauthGuard cấp ROUTE là SAI** (class luôn chạy trước route), và `@UseGuards(PermissionGuard, ReauthGuard)` cùng cấp cũng SAI. Cổng `no-reauth-guard` phải đo VỊ TRÍ trong `[...classGuards, ...routeGuards]` (route-census.ts:151,186-187), ghim `ReauthGuard.name`, và có ca thử-ngược ĐỎ cho CẢ HAI cấu hình sai.",
+      "✅ MÃ LỖI CHỐT (DECISIONS-09 §6 điểm 3): chưa bật TOTP ⇒ **409 `AUTH-ERR-STEP-UP-2FA-REQUIRED`** (đo: `docs/spec/**` + `docs/API Design/**` KHÔNG có slug `AUTH-ERR-*` nào cho 'chưa bật 2FA'; `TWO_FACTOR_SETUP_REQUIRED` mang nghĩa KHÁC = bị ÉP enroll ⇒ dùng lại là nói dối FE). Mã TOTP sai ⇒ **400 `AUTH-ERR-STEP-UP-INVALID-CODE`**, TUYỆT ĐỐI KHÔNG 401: `packages/web-core/src/lib/api-client.ts:405` bắt 401 của request authed → refresh single-flight → **REPLAY 1 lần** ⇒ một lần gõ sai tự động tiêu HAI lượt rate-limit + HAI hàng audit. Cặp ngoài registry ⇒ **400 `AUTH-ERR-STEP-UP-PAIR-NOT-ALLOWED`**. Bị khoá ⇒ **429** mã nền `SYSTEM-ERR-RATE-LIMIT` (không đẻ mã mới cho 429).",
+      "✅ V2-BLOCK#2 TỰ TIÊU sau `a38036b1` — đo lại 20/08 TRÊN CÂY NÀY: `ReplayGuardService.claim()` chỉ còn MỘT `setNx` (replay-guard.service.ts:52-57), `grep -rn LEGACY_UNSCOPED apps/api/src` = 0 ⇒ marker mới `stepup-totp` KHÔNG còn nguy cơ ghi khoá unscoped, và `ValkeyService.set()` vẫn `if (!this.client) return true` (permission/valkey.service.ts:99) nên V2-BLOCK#1 CÒN NGUYÊN. CẤM dựng lại đường ghi kép legacy (DECISIONS-09 §6 điểm 11.5).",
+      "✅ paths APPEND 8 đường (20/08, L0): `packages/contracts/src/auth.ts` · `apps/api/src/common/valkey/**` · `config/env.schema.ts` · `.env.example` · `test/integration/**` · `test/foundation/route-verdicts.ts` · `permission/permission.module.ts` · `docs/_review/S6-SEC-ROUTEMAP-1-route-census.json`. Seed gốc chỉ khai 5 đường ⇒ diff chạm contracts/env/census sẽ lọt LIGHT gate và guard-scope cảnh báo oan ([[wo-paths-drive-gate-and-scheduler]]).",
+      // ── FIX-3-GOV-STATUS-LEDGER (20/08/2026): 3 điểm BÀN GIAO đã ĐO (không suy đoán). APPEND, không sửa note cũ.
+      "🔻 LOW · VẬN HÀNH (nợ cho WO deploy) — chạy >1 instance API mà THIẾU `VALKEY_URL` ⇒ cửa sổ mint ở instance A VÔ HÌNH với instance B ⇒ deny VĨNH VIỄN. Fail đúng chiều an toàn (không mở nhầm ai), nhưng WO này KHÔNG thêm khẳng định lúc boot rằng PROD/dev-online BẮT BUỘC có `VALKEY_URL` — đã nói thẳng trong docblock `apps/api/src/auth/step-up/step-up-window.service.ts:42-44` và ADR DECISIONS-09 §6 điểm (7). PHẢI chốt TRƯỚC khi cặp ĐẦU TIÊN được duyệt vào `REVEAL_CLASS_PAIRS`; registry còn RỖNG nên hôm nay lỗ này chưa chạm ai.",
+      "🔻 LOW · secret-scan (ghi để KHÔNG ai hoảng) — hằng DI `REVEAL_CLASS_PAIRS_TOKEN` trong `apps/api/src/auth/step-up/reveal-class-pairs.ts` (giá trị là chuỗi hằng 26 ký tự) khớp HÌNH DẠNG rule gitleaks `generic-api-key`, nhưng entropy Shannon ĐO ĐƯỢC = 3.383 < ngưỡng mặc định 3.7 ⇒ KHÔNG trip. Đây là false-positive ĐÃ BIẾT nếu secret-scan full-history hạ ngưỡng — KHÔNG phải secret, không cần xoay vòng.",
+      "➡️ FOLLOW-UP tách thành 2 WO 🟢 (seed cùng lượt 20/08, CẤM sửa ké trong WO đỏ này): `S10-QA-CHUNKTEST-FBPOST-1` — `harness/chunk-test.mjs` không loại `apps/fbpost` như `apps/lms` ⇒ worktree sạch thiếu `apps/fbpost/node_modules` làm `check.sh` ĐỎ GIẢ; `S10-FE-PLATFORMACCOUNTS-DEADPATH-1` — đường FE CHẾT gọi 2 endpoint backend KHÔNG tồn tại, và CẤM dùng nó làm lối tắt vào step-up.",
     ],
   },
 
@@ -12791,6 +12812,66 @@ export const backlog = [
       "ĐÓNG 18/08/2026. Verify lúc 20:03–20:04 VN (tức TRONG cửa sổ trước đây luôn đỏ) trên LANE_DB=mediaos_attflake: spec 16/16, `src/attendance/` 555/555.",
       "⚠️ Bài học chung: assert 'đếm số notification của công ty' chỉ đúng nếu spec ghim ĐƯỢC toàn bộ cửa sổ quét. Producer nào có lookback > 0 thì fixture phải chặn các ngày ngoài mốc đang đo — bằng cấu hình (work_days/ca), KHÔNG bằng cách hy vọng test chạy trước giờ đóng ca.",
       "📌 Không mở KI ở RELEASE-02: đây là nợ TEST, không phải hành vi sản phẩm sai; sản phẩm giữ nguyên, không đổi một dòng `src` nào ngoài file spec.",
+    ],
+  },
+
+  {
+    // Seed 20/08/2026 từ S10-AUTH-STEPUP-1 (lane FIX-3). Đội 3 đo được cổng ĐỎ mà diff của WO KHÔNG
+    // chạm fbpost ⇒ tách ra WO 🟢 riêng thay vì sửa ké trong WO đỏ (quy tắc: không vá công cụ trong WO nhạy cảm).
+    id: "S10-QA-CHUNKTEST-FBPOST-1",
+    module: "FOUNDATION",
+    layer: "DEVOPS",
+    title:
+      "`harness/chunk-test.mjs` loại `apps/lms` nhưng KHÔNG loại `apps/fbpost` ⇒ `check.sh` ĐỎ GIẢ trong mọi worktree sạch (đỏ vì thiếu node_modules, không vì có bài đỏ)",
+    zone: "green",
+    status: "todo",
+    paths: ["harness/chunk-test.mjs", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "ĐO 20/08/2026 (không suy đoán): `harness/chunk-test.mjs` `discoverTargets()` duyệt `apps/*` + `packages/*` và chỉ có ĐÚNG MỘT dòng loại trừ — `if (group === 'apps' && name === 'lms') continue;`. `apps/fbpost` KHÔNG được loại.",
+      "Nhưng `pnpm-workspace.yaml` loại CẢ HAI: `- '!apps/lms'` VÀ `- '!apps/fbpost'` (fbpost dùng npm + `package-lock.json` riêng, Tailwind v4 + node:sqlite — hàng rào R3 của DECISIONS-08). ⇒ `pnpm install` ở gốc KHÔNG cài deps cho fbpost.",
+      "Hệ quả đã xảy ra thật trong `S10-AUTH-STEPUP-1`: worktree sạch không có `apps/fbpost/node_modules` ⇒ chunk-test ném `Cannot find module 'vitest/package.json'` ⇒ `check.sh` kết luận ĐỎ ở step `test` DÙ KHÔNG có bài test nào đỏ. Repo gốc CÓ thư mục đó nên lỗi VÔ HÌNH ở cây chính — chỉ lộ ở worktree, tức đúng nơi auto-loop chạy.",
+      "Chi phí đã trả: 3 lần chạy lại `check.sh --all` (mỗi lần ~15 phút) + một vòng nghiệm thu FAIL oan, trước khi truy ra root-cause.",
+    ],
+    done_when: [
+      "`check.sh` chạy được ĐẾN KẾT LUẬN trong một worktree SẠCH (chỉ `pnpm install` ở gốc) mà KHÔNG cần `npm ci` trong `apps/fbpost`",
+      "Danh sách target sau khi sửa được ĐỐI CHIẾU với `vitest list` (hoặc `turbo run test --dry`) để chứng minh KHÔNG giảm phạm vi lén: mọi package còn lại vẫn được thu thập đủ số file như trước",
+      "Cách loại trừ đọc TỪ `pnpm-workspace.yaml` (hoặc ít nhất bình luận trỏ về nó) thay vì đóng đinh thêm một tên app nữa — app vệ tinh thứ ba sẽ tái diễn lỗ này",
+    ],
+    notes: [
+      "🟢 Việc công cụ, không chạm sản phẩm: KHÔNG đụng `apps/**`, không đụng migration, không đụng permission.",
+      "⚠️ CẤM 'sửa' bằng cách cài deps fbpost vào workspace pnpm — đó là phá hàng rào R3 (DECISIONS-08), đúng thứ `pnpm-workspace.yaml` cố ý chặn.",
+      "Bẫy cần tránh khi vá: loại fbpost khỏi chunk-test làm 19 file test của fbpost KHÔNG còn chạy ở cổng chung. Nếu muốn giữ chúng trong phạm vi đo thì phải có đường chạy RIÊNG (npm ci + vitest trong `apps/fbpost`) và nói rõ ai chạy nó — đừng im lặng đánh rơi 19 file rồi gọi là XANH ([[src-green-is-not-integration-green]]).",
+    ],
+  },
+
+  {
+    // Seed 20/08/2026 từ S10-AUTH-STEPUP-1 (lane FIX-3). Phát hiện khi chạy suite, KHÔNG do WO đó gây ra.
+    id: "S10-FE-PLATFORMACCOUNTS-DEADPATH-1",
+    module: "FOUNDATION",
+    layer: "FRONTEND",
+    title:
+      "Đường FE CHẾT: console gọi `POST /platform-accounts/reauth` và `POST /platform-accounts/:id/reveal` trong khi backend KHÔNG có controller nào phục vụ hai route đó",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/console/src/lib/platform-accounts-api.ts", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "ĐO 20/08/2026: `apps/console/src/lib/platform-accounts-api.ts:62-72` khai `reauth()` gọi `POST /platform-accounts/reauth` và `reveal()` gọi `POST /platform-accounts/:id/reveal`.",
+      "`grep -rn 'platform-accounts' apps/api/src --include=*.ts` trả ĐÚNG 2 dòng, CẢ HAI là BÌNH LUẬN trong `apps/api/src/employees/employees.service.ts:139,208` (nhắc 'mirrors platform-accounts reveal' như một khuôn mẫu). KHÔNG controller, KHÔNG route, KHÔNG handler. `grep -rln 'platform-account' apps/api/src --include=*.controller.ts` = rỗng.",
+      "Đúng khuôn [[ui-promises-backend-never-reads]]: UI hứa một năng lực mà backend chưa từng đọc. Bình luận trong service còn làm nó trông như đường đã tồn tại ([[wo-plans-built-on-code-comments]]).",
+    ],
+    done_when: [
+      "CHỌN MỘT và làm dứt điểm: (a) GỠ hai hàm chết + kiểu/schema chỉ phục vụ chúng, hoặc (b) NỐI đúng vào `POST /api/v1/auth/step-up` — nhưng (b) CHỈ hợp lệ SAU khi cặp (action, resourceType) tương ứng được DUYỆT vào `REVEAL_CLASS_PAIRS` (registry hiện RỖNG theo D3 của S10-AUTH-STEPUP-1)",
+      "Nếu chọn (a): không còn tham chiếu chết nào (`grep` sạch), typecheck + `apps/console` test xanh, không màn hình nào mất chức năng đang dùng",
+      "Nếu chọn (b): có route backend THẬT + int-spec deny-path, KHÔNG tự ý thêm cặp vào registry trong WO này",
+    ],
+    notes: [
+      "🚫 CẤM dùng đường này làm LỐI TẮT vào step-up: không được gán `req.reauthContext` từ FE-driven endpoint, không được dựng endpoint `/platform-accounts/reauth` song song với `POST /auth/step-up`. Một writer duy nhất = `ReauthGuard` (bất biến đã nghiệm thu của S10-AUTH-STEPUP-1).",
+      "Việc thêm cặp vào `REVEAL_CLASS_PAIRS` là QUYẾT ĐỊNH RIÊNG có chủ (WO gắn cờ `requiresReauth`), không phải phụ phẩm của việc dọn đường chết này.",
+      "Trước khi gỡ: xác nhận không màn hình nào của console đang import `reauth`/`reveal` — nếu CÓ thì màn đó cũng đang chết (gọi ra 404), phải xử lý cùng lượt chứ không để lại nửa vời.",
     ],
   },
 ];

@@ -22,6 +22,10 @@ import { TokenService } from "./token.service";
 import { TotpService } from "./totp.service";
 import { TwoFactorService } from "./two-factor.service";
 import { TwoFactorEnforcementGuard } from "./two-factor-enforcement.guard";
+// S10-AUTH-STEPUP-1 (APPEND): lõi step-up — registry cặp (DI token, default RỖNG) + cửa sổ + service.
+import { revealClassPairsProvider } from "./step-up/reveal-class-pairs";
+import { StepUpWindowService } from "./step-up/step-up-window.service";
+import { StepUpService } from "./step-up/step-up.service";
 
 /**
  * AuthModule (G2-6) — login/refresh/me/forgot/reset + 2FA TOTP (G16-1) + 2FA defense-in-depth (G16-1b:
@@ -67,6 +71,12 @@ import { TwoFactorEnforcementGuard } from "./two-factor-enforcement.guard";
     SecurityAlertService,
     SessionCookieService,
     TwoFactorEnforcementGuard,
+    // S10-AUTH-STEPUP-1 (APPEND). `revealClassPairsProvider.useValue` LÀ CHÍNH `REVEAL_CLASS_PAIRS`
+    // (identity, không phải bản sao) ⇒ endpoint và cổng test đọc CÙNG một nguồn; int-spec mint cửa sổ
+    // bằng `overrideProvider(REVEAL_CLASS_PAIRS_TOKEN)` mà KHÔNG nới const thật.
+    revealClassPairsProvider,
+    StepUpWindowService,
+    StepUpService,
   ],
   exports: [
     AuthService,
@@ -78,6 +88,9 @@ import { TwoFactorEnforcementGuard } from "./two-factor-enforcement.guard";
     SecurityAlertService,
     SecurityEventWriter,
     TwoFactorEnforcementGuard,
+    // S10-AUTH-STEPUP-1 (APPEND): `ReauthGuard` (PermissionModule) ĐỌC cửa sổ qua service này — một
+    // đường ghi, một đường đọc, cùng một nhánh lưu (§6.7).
+    StepUpWindowService,
   ],
 })
 export class AuthModule {}
