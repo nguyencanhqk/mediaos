@@ -31,6 +31,12 @@ const TOTP_PURPOSE = "totp_secret" as const;
  */
 export const TWO_FACTOR_ENFORCED = "TWO_FACTOR_ENFORCED";
 
+/**
+ * S10-AUTH-STEPUP-1 — kết quả của `verifyTotpForStepUp`. Union ĐÓNG: thêm trạng thái mà quên ánh xạ mã
+ * lỗi ở `StepUpService` ⇒ typecheck ĐỎ, không phải một nhánh 500 phát hiện ở PROD.
+ */
+export type StepUpTotpOutcome = "ok" | "invalid-code" | "not-enrolled";
+
 export interface EnrollResult {
   /** otpauth:// URI để FE render QR. Chứa secret — trả 1 lần cho chính user, KHÔNG log/lưu plaintext. */
   otpauthUri: string;
@@ -324,6 +330,50 @@ export class TwoFactorService {
         objectId: userId,
       });
       return false;
+    });
+  }
+
+  /**
+   * S10-AUTH-STEPUP-1 (APPEND — DECISIONS-09 §6 điểm 2, D1/D2) — verify TOTP **THUẦN** cho step-up.
+   *
+   * ⚠️ ĐÂY LÀ METHOD MỚI, KHÔNG PHẢI BIẾN THỂ CỦA `verifyChallenge`. Nó đặt ở file này CHỈ để dùng lại
+   * `loadTotp`/`decryptSecret` (một đường giải mã secret, không hai). `verifyChallenge` ở trên GIỮ NGUYÊN
+   * TỪNG DÒNG — spec 2FA cũ phải xanh mà không sửa.
+   *
+   * BA KHÁC BIỆT, mỗi cái đóng một lỗ đo được:
+   *   1. **Marker replay RIÊNG `stepup-totp`.** `verifyChallenge` claim `totp-step` — marker của bước-2
+   *      LOGIN. Dùng chung ⇒ mã vừa dùng đăng nhập bị coi là SAI khi step-up trong cùng time-step 30s
+   *      (và ngược lại): nguồn flake chắc chắn, lại còn giống hệt "gõ sai mã" khi đi tìm nguyên nhân.
+   *   2. **KHÔNG chạm `user_recovery_codes`.** Ở `verifyChallenge`, mã TOTP sai rơi thẳng xuống
+   *      `UPDATE user_recovery_codes SET used_at` ⇒ một lượt step-up gõ sai có thể ĐỐT mã khôi phục.
+   *      Step-up chỉ nhận TOTP; recovery code là đường CỨU HỘ đăng nhập, không phải đường xác thực lại.
+   *   3. **Không tự audit.** Ghi vết là việc của `StepUpService`, nơi biết cả `resourceId` lẫn kết quả
+   *      cuối, và ghi audit + `user_security_events` trong CÙNG một tx (§6.10).
+   *
+   * Trả 3 trạng thái để caller ánh xạ đúng mã lỗi (§6.3): `not-enrolled` ⇒ 409 (nói rõ "bật 2FA trước",
+   * KHÔNG 403 câm), `invalid-code` ⇒ 400. Replay marker cũng trả `invalid-code`: không đẻ nhánh riêng
+   * cho replay ở lớp HTTP — đó sẽ là một oracle phân biệt "mã đúng đã dùng" với "mã sai".
+   */
+  async verifyTotpForStepUp(
+    userId: string,
+    companyId: string,
+    code: string,
+  ): Promise<StepUpTotpOutcome> {
+    return this.dbsvc.withTenant(companyId, async (tx) => {
+      const row = await this.loadTotp(tx, userId);
+      if (!row || row.enabledAt == null) return "not-enrolled";
+
+      const secret = await this.decryptSecret(row, companyId, userId);
+      if (!this.totp.verify(code, secret)) return "invalid-code";
+
+      // Single-use theo (user, time-step): cùng một mã không xác thực lại được hai lần trong cùng step.
+      // 90s ≈ 3 step (dung sai window:1) — đủ phủ cửa sổ mã còn hiệu lực, giống hằng số của login.
+      const firstUse = await this.replayGuard.claim(
+        "stepup-totp",
+        `${userId}:${this.totp.currentStep()}`,
+        90,
+      );
+      return firstUse ? "ok" : "invalid-code";
     });
   }
 
