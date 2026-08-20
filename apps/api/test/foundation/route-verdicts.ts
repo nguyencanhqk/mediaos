@@ -45,16 +45,17 @@ export interface RouteVerdict {
 }
 
 /**
- * PHỤ LỤC A — 52 route (40 không gate + 12 `@Public`), sinh từ census runtime ngày 2026-07-27.
+ * PHỤ LỤC A — 53 route (41 không gate + 12 `@Public`), sinh từ census runtime ngày 2026-08-20.
  * Đối chiếu tổng số với artifact `docs/_review/S6-SEC-ROUTEMAP-1-route-census.json`.
  *
  * Lịch sử con số: bản đầu (S6-SEC-ROUTEMAP-1) là **55** = 43 không gate + 12 `@Public`.
  * S6-SEC-ORG-1 gate 3 route `/org` (KI-030) ⇒ chúng rời tập này ⇒ **52** = 40 + 12.
- * Phân bố ô hiện tại: SELF 15 · PUBLIC 11 · OTHER_GUARD 3 · TENANT_READ 6 · DEAD-410 4 · PARKED 13 ·
+ * S10-AUTH-STEPUP-1 thêm `POST /auth/step-up` (SELF, không `@RequirePermission`) ⇒ **53** = 41 + 12.
+ * Phân bố ô hiện tại: SELF 16 · PUBLIC 11 · OTHER_GUARD 3 · TENANT_READ 6 · DEAD-410 4 · PARKED 13 ·
  * **GAP 0**.
  */
 export const ROUTE_VERDICTS: Readonly<Record<string, RouteVerdict>> = {
-  // ── AuthController — SELF (8): chuỗi guard toàn cục đã ép đăng nhập; service lấy chủ thể từ token ──
+  // ── AuthController — SELF (9): chuỗi guard toàn cục đã ép đăng nhập; service lấy chủ thể từ token ──
   "AuthController#changePassword": {
     verdict: "SELF",
     reason:
@@ -89,6 +90,17 @@ export const ROUTE_VERDICTS: Readonly<Record<string, RouteVerdict>> = {
   "AuthController#revokeOtherSessions": {
     verdict: "SELF",
     reason: "Thu hồi mọi phiên KHÁC của chính mình; phạm vi suy ra hoàn toàn từ token.",
+  },
+  // S10-AUTH-STEPUP-1 (APPEND — 20/08/2026): xác thực lại bằng TOTP để mở cửa sổ re-auth.
+  "AuthController#stepUp": {
+    verdict: "SELF",
+    reason:
+      "Xác thực lại bằng TOTP của CHÍNH mình: service nhận { id, companyId } TỪ req.user (token), " +
+      "KHÔNG nhận userId/companyId từ body (auth.controller.ts:308-311) — không có tham số nào trỏ " +
+      "sang chủ thể khác. KHÔNG @RequirePermission có chủ đích: quyền để LÀM gì đó vẫn do PermissionGuard " +
+      "của route tiêu thụ quyết định; endpoint này chỉ mở một CỬA SỔ khoá theo bộ-5 " +
+      "(companyId,userId,action,resourceType,resourceId) — cửa sổ mint được KHÔNG cấp thêm quyền nào " +
+      "(permission.decide.ts vẫn đòi object grant), và cặp phải nằm trong REVEAL_CLASS_PAIRS (hôm nay RỖNG).",
   },
 
   // ── AuthController — PUBLIC (8): pre-auth hoặc tự chứng thực trong handler ──────────────────────
