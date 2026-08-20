@@ -138,7 +138,8 @@ sau khi engine có khái niệm "singleton resource" được thiết kế tư�
 
 | | |
 | --- | --- |
-| **Trạng thái** | 🟡 **CHỐT THIẾT KẾ 2026-08-20** — lane L1..L4 chỉ được chạy SAU khi người chốt vùng đỏ duyệt §6 |
+| **Trạng thái** | 🟢 **ĐÃ DUYỆT 2026-08-20** bởi người chốt vùng đỏ — nguyên trạng, cả 11 quyết định + amendment (9b) |
+| **Ghi nhận quy trình** | Duyệt **HỒI TỐ**. Dòng trạng thái cũ ghi "lane L1..L4 chỉ được chạy SAU khi duyệt §6", nhưng auto-loop đã chạy L1→L4 + FIX-1 **trước** khi có chữ ký. Cổng do chính lane L0 dựng rồi lane sau bước qua. Ghi lại để người sau không đọc §6 như bằng chứng quy trình đã được tôn trọng — nó không được tôn trọng ở lần này; code khi đó chưa push nên vẫn đảo ngược được. Lần sau: ADR vùng đỏ phải là WO/commit RIÊNG, merge trước, rồi mới mở lane code. |
 | **Vùng** | 🔴 ĐỎ / crown-jewel — auth + permission engine. FULL gate (security + database + silent-failure + santa-method + quality-gate) |
 | **Phạm vi** | Xây NĂNG LỰC step-up + cổng chống tái diễn. **KHÔNG** gắn `requiresReauth` lên route sản phẩm nào; **KHÔNG** migration (head giữ `0546_s7calldb1_chat_calls.sql`) |
 | **Đo trên** | worktree `auto/S10-AUTH-STEPUP-1`, gốc master `4f1c2ed2` (sau `a38036b1` = S10-FND-VALKEYSCOPE-2) |
