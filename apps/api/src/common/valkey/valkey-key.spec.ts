@@ -12,6 +12,7 @@ import {
   permObjKey,
   replayKey,
   rlKey,
+  stepUpKey,
   ValkeyKeyScopeError,
 } from "./valkey-key";
 
@@ -118,6 +119,24 @@ const BUILDERS: Array<{
     carriesIdentity: false,
   },
   { name: "meTrainingKey", build: (s, co, u) => meTrainingKey(co, u, s), carriesIdentity: true },
+  // ── S10-AUTH-STEPUP-1 (APPEND) — ba không gian khoá của step-up đi CHUNG ma trận này, không có bảng
+  // riêng: bốn ca dưới (env × company × user × ALLOW đối chứng) là chỗ bắt "quên envScope"/"mất tenant"
+  // rẻ nhất, và một họ khoá mới lọt ra ngoài ma trận là đúng cách KI-067 tái diễn.
+  {
+    name: "rlKey(stepup)",
+    build: (s, co, u) => rlKey("stepup", `${co}|${u}`, s),
+    carriesIdentity: true,
+  },
+  {
+    name: "replayKey(stepup-totp)",
+    build: (s, co, u, r) => replayKey("stepup-totp", `${u}:${r}`, s),
+    carriesIdentity: false,
+  },
+  {
+    name: "stepUpKey",
+    build: (s, co, u, r) => stepUpKey(co, u, "reveal", "employee_salary", r, s),
+    carriesIdentity: true,
+  },
 ];
 
 describe("valkey-key — ma trận (env × company × user × resource)", () => {
@@ -278,5 +297,90 @@ describe("currentEnvScope — memo LAZY có đường reset (vitest chỉ làm m
 
   it("builder mặc định dùng đúng currentEnvScope()", () => {
     expect(permCapKey(CO_A, U_A)).toBe(permCapKey(CO_A, U_A, currentEnvScope()));
+  });
+});
+
+/**
+ * S10-AUTH-STEPUP-1 (DECISIONS-09 §6 điểm 1) — cửa sổ step-up khoá bằng BỘ-5
+ * `(companyId, userId, action, resourceType, resourceId)`. Ba hệ quả an toàn của thiết kế — "cửa sổ của
+ * user A không mở cho user B", "cửa sổ cấp cho object X không mở object Y", "cross-tenant bất khả" —
+ * KHÔNG phải ba phép kiểm tra thêm ở service (quên được) mà là THÀNH PHẦN của chính chuỗi khoá.
+ *
+ * ⚠️ Bảng dưới đổi ĐÚNG MỘT thành phần mỗi hàng, và tự kiểm điều đó. Đổi kèm hai thành phần (vd
+ * companyId + userId cùng lúc) cho bằng chứng YẾU: khoá vẫn khác nhau kể cả khi builder QUÊN một trong
+ * hai — đúng chế độ hỏng mà bộ ca này sinh ra để bắt.
+ */
+describe("stepUpKey — bộ-5 nằm TRONG khoá, không phải một phép kiểm tra thêm", () => {
+  const BASE = {
+    companyId: CO_A,
+    userId: U_A,
+    action: "reveal",
+    resourceType: "employee_salary",
+    resourceId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+  };
+
+  const build = (o: typeof BASE, scope: string = SCOPES.prod): string =>
+    stepUpKey(o.companyId, o.userId, o.action, o.resourceType, o.resourceId, scope);
+
+  it("hình dạng ĐÚNG hợp đồng ADR: stepup:{envScope}:{co}:{user}:{action}:{resourceType}:{resourceId}", () => {
+    expect(build(BASE)).toBe(
+      `stepup:${SCOPES.prod}:${CO_A}:${U_A}:reveal:employee_salary:${BASE.resourceId}`,
+    );
+  });
+
+  it("ca ALLOW đối chứng ĐI TRƯỚC: cùng bộ-5 + cùng scope ⇒ CÙNG chuỗi (không có ca này, 5 hàng DENY dưới xanh rỗng)", () => {
+    expect(build(BASE)).toBe(build({ ...BASE }));
+  });
+
+  it.each([
+    ["companyId", { ...BASE, companyId: CO_B }],
+    ["userId", { ...BASE, userId: U_B }],
+    ["action", { ...BASE, action: "export" }],
+    ["resourceType", { ...BASE, resourceType: "employee_bank_account" }],
+    ["resourceId", { ...BASE, resourceId: "dddddddd-dddd-dddd-dddd-dddddddddddd" }],
+  ])("đổi ĐÚNG MỘT thành phần (%s) ⇒ khoá KHÁC", (component, mutated) => {
+    const differing = (Object.keys(BASE) as Array<keyof typeof BASE>).filter(
+      (k) => BASE[k] !== (mutated as typeof BASE)[k],
+    );
+    expect(differing, `hàng '${component}' phải lệch ĐÚNG 1 thành phần`).toEqual([component]);
+    expect(build(mutated as typeof BASE)).not.toBe(build(BASE));
+  });
+
+  it("envScope BẮT BUỘC (KI-067): khoá của builder qua cổng, khoá dựng TAY thiếu scope thì BỊ NÉM", () => {
+    const viaBuilder = stepUpKey(CO_A, U_A, "reveal", "employee_salary", BASE.resourceId);
+    expect(() => assertKeysScoped("set", [viaBuilder])).not.toThrow();
+    expect(() =>
+      assertKeysScoped("set", [`stepup:${CO_A}:${U_A}:reveal:employee_salary:${BASE.resourceId}`]),
+    ).toThrow(ValkeyKeyScopeError);
+  });
+
+  it("PROD và dev-online (clone CÙNG companyId/userId) KHÔNG dùng chung một cửa sổ", () => {
+    expect(build(BASE, SCOPES.prod)).not.toBe(build(BASE, SCOPES.devOnline));
+  });
+});
+
+/**
+ * DECISIONS-09 §6 điểm (2) + (9): step-up KHÔNG mượn không gian khoá của LOGIN.
+ * - bucket rate-limit riêng ⇒ gõ sai step-up không khoá đường đăng nhập (và ngược lại);
+ * - marker replay riêng ⇒ mã TOTP vừa dùng đăng nhập trong cùng time-step 30s KHÔNG bị coi là đã tiêu
+ *   ở step-up (nguồn flake chắc chắn nếu dùng lại `totp-step`).
+ */
+describe("step-up KHÔNG dùng chung không gian khoá với LOGIN", () => {
+  it("bucket `stepup` tách hẳn `ip`/`acct`: CÙNG phần đuôi vẫn cho ba khoá khác nhau", () => {
+    const rest = `${CO_A}|${U_A}`;
+    const keys = [
+      rlKey("stepup", rest, SCOPES.prod),
+      rlKey("ip", rest, SCOPES.prod),
+      rlKey("acct", rest, SCOPES.prod),
+    ];
+    expect(new Set(keys).size).toBe(3);
+    expect(keys[0]).toBe(`rl:${SCOPES.prod}:stepup:${rest}`);
+  });
+
+  it("marker `stepup-totp` KHÁC `totp-step` (mã đăng nhập không bị coi là đã tiêu ở step-up)", () => {
+    const rest = `${U_A}:12345`;
+    expect(replayKey("stepup-totp", rest, SCOPES.prod)).not.toBe(
+      replayKey("totp-step", rest, SCOPES.prod),
+    );
   });
 });

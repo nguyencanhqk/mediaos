@@ -51,6 +51,9 @@ const KEY_PREFIXES = [
   "chat:presence:",
   "me:training:",
   "socket.io:",
+  // S10-AUTH-STEPUP-1 (APPEND): cửa sổ step-up `stepup:{envScope}:{co}:{user}:{action}:{type}:{id}`.
+  // Không có tên sự kiện socket.io nào mang tiền tố này ⇒ quét được ở dạng thô, không cần thu hẹp.
+  "stepup:",
 ];
 
 const LITERAL_AT_START = new RegExp(
@@ -141,6 +144,9 @@ describe("census: 0 literal khoá Valkey dựng tại chỗ", () => {
     expect(violationsIn("const k = `rl:ip:${slug}|${email}`;")).toHaveLength(1);
     expect(violationsIn('const k = "perm:cap:" + companyId;')).toHaveLength(1);
     expect(violationsIn("const k = 'idem:' + hash;")).toHaveLength(1);
+    // S10-AUTH-STEPUP-1: tiền tố mới cũng phải bị BẮT khi ai đó dựng khoá cửa sổ step-up tại chỗ —
+    // thêm một dòng vào KEY_PREFIXES mà không đo là cách mọi bảng allowlist mục ruỗng.
+    expect(violationsIn("const k = `stepup:${co}:${userId}`;")).toHaveLength(1);
   });
 
   it("KHÔNG khớp văn xuôi trong comment (nguồn đỏ-oan đã đo thật)", () => {
