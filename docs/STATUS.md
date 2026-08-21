@@ -1,17 +1,22 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-20 14:26Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-21 01:30Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🟢 S10-FE-BREAKGLASS-DEADPATH-1 — Đường FE CHẾT (cùng lớp platform-accounts): màn `/settings/break-glass` + mục nav sống trong console, nhưng `apps/api` chỉ có `db/schema/break-glass.ts` — KHÔNG module, KHÔNG service, KHÔNG controller
+- **zone**: green · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/console/src/lib/break-glass-api.ts`, `apps/console/src/components/break-glass/**`, `apps/console/src/components/secret-field.tsx`, `apps/console/src/components/secret-field.spec.tsx`, `apps/console/src/routes/settings/break-glass.tsx`, `apps/console/src/router.tsx`, `apps/console/src/lib/nav.ts`, `apps/console/src/i18n/index.ts`, `apps/console/src/i18n/locales/vi/break-glass.json`, `apps/console/src/i18n/locales/vi/settings.json`, `packages/web-core/src/i18n/locales/vi/nav.ts`, `docs/RELEASE/RELEASE-11_Admin_Guide.md`, `harness/backlog.mjs`
+- **done_when (đích hội tụ)**:
+  - [ ] CHỦ DỰ ÁN CHỐT phương án trước khi code: (a) gỡ cả màn break-glass khỏi console — thì `SecretField` cũng thành chết, phải gỡ luôn; hoặc (b) dựng backend break-glass THẬT
+  - [ ] Nếu (a): grep sạch, typecheck + test `apps/console` xanh, không màn nào mất chức năng đang dùng
+  - [ ] Nếu (b): có controller + service + repo `withTenant`, permission `reveal-break-glass` (đã khai ở `packages/contracts/src/crypto.ts`), deny-path test RED trước, audit từng lần reveal
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🔴 `S10-SEC-AUDITLOGROW-1` KI-070 — bản vá KI-053/054/069 bound CỘT chứ KHÔNG bound HÀNG: `view:audit-log@Own` vẫn đọc trọn 364 `login_logs` + 65 `user_security_events`, và `LoginLogFilter.userId` lấy THẲNG từ query param của caller
 - 🔴 `S10-CHAT-CALLSWEEP-1` KI-063 (R4 ĐÃ KÝ 20/08) — cuộc gọi `active` không ai quét ⇒ phòng khoá VĨNH VIỄN 409 CHAT-ERR-028, không đường sửa qua API
-- 🟢 `S10-FE-BREAKGLASS-DEADPATH-1` Đường FE CHẾT (cùng lớp platform-accounts): màn `/settings/break-glass` + mục nav sống trong console, nhưng `apps/api` chỉ có `db/schema/break-glass.ts` — KHÔNG module, KHÔNG service, KHÔNG controller
 
 **CHỜ (kẹt phụ thuộc):**
 - _(trống)_
@@ -20,7 +25,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 21
+- **branch**: `s10-fe-breakglass-deadpath-1` · **file đang đổi (dirty)**: 14
 - **migration head**: idx 213 — `0546_s7calldb1_chat_calls` (214 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -29,6 +34,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `7e4f4acd` | 2026-08-20 | chore(fnd): gỡ đường FE chết platform-accounts + chunk-test suy loại trừ từ workspace (S10-QA-CHUNKTEST-FBPOST-1 · S10-FE-PLATFORMACCOUNTS-DEADPATH-1) (#398) |
 | `17d2df28` | 2026-08-20 | feat(sec): cơ chế căn cứ cho tầng chiếu danh tính + đóng KI-053/054/069 (S6-SEC-IDENTITY-PROJ-1) (#396) |
 | `1ff6f586` | 2026-08-20 | feat(auth): step-up (xác thực lại) THẬT — cửa sổ server khoá bộ-5 + cổng 4 lý do chống tái diễn KI-065 (S10-AUTH-STEPUP-1) (#397) |
 | `4f1c2ed2` | 2026-08-20 | chore(harness): auto-loop nhận arg skipPlan — bỏ cổng plan-reviewer khi chủ dự án đã chốt code-thẳng |
@@ -40,7 +46,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `1092e06d` | 2026-08-19 | chore(gov): S10-AUTH-STEPUP-1 chuyển BLOCKED — ghim 8 lỗ plan-review đã đo lại tay |
 | `b9a6d160` | 2026-08-19 | fix(auth): PATCH /settings/security-policy hết chết 403 — bỏ requiresReauth khỏi route singleton (S10-QA-SECPOLICY-GATE-1 · KI-065) (#394) |
 | `7cefe4dd` | 2026-08-19 | chore(docs): regen STATUS sau khi land #392 + #393 (S10-QA-ROUTEHTTP-2 · S10-QA-ATTNOTIFLAKE-1 done) |
-| `28066e38` | 2026-08-19 | test(qa): 12 route risk≥5 cuối có test HTTP thật — ratchet siết 12→0 (S10-QA-ROUTEHTTP-2 · KI-025) (#392) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

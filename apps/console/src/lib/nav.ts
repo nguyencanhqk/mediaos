@@ -9,7 +9,6 @@ import {
   ScrollText,
   Settings,
   Shield,
-  ShieldAlert,
   ShieldCheck,
   Terminal,
   Trash2,
@@ -41,14 +40,6 @@ export {
 // Mục trung tính (slate/zinc) đổi hẳn sang token bg-muted/text-muted-foreground.
 export const NAV_ITEMS: readonly NavItem[] = [
   // — Hệ thống —
-  {
-    id: "breakGlass",
-    labelKey: "breakGlass",
-    to: "/settings/break-glass",
-    icon: ShieldAlert,
-    tile: "bg-red-500/15 text-red-700 dark:text-red-400",
-    category: "system",
-  },
   // Self-service — authGuard only, KHÔNG permission-gate (mỗi user tự quản tài khoản của mình).
   // ACCT-1 (Module 2a): Tài khoản của tôi — hồ sơ + đổi mật khẩu. Bảo mật (2FA) tách riêng bên dưới.
   {

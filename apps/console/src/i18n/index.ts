@@ -3,7 +3,7 @@ import { i18n, registerI18nResources } from "@mediaos/web-core";
 /**
  * App-level i18n — dùng lại instance dùng chung của @mediaos/web-core (đã init đồng bộ với
  * 3 namespace `common`/`nav`/`auth`) và đăng ký thêm namespace FEATURE của riêng app Hệ thống
- * (`settings` / `break-glass` / `home`).
+ * (`settings` / `home`).
  *
  * Namespace feature tự khám phá qua `import.meta.glob` (eager) → mỗi feature sở hữu 1 file
  * catalog độc lập, không có registry tập trung. `common`/`nav`/`auth` không nằm ở đây (đã ở
