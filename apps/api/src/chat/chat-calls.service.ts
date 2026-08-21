@@ -431,7 +431,7 @@ export class ChatCallsService {
           // đây để không phát ra một phép ghi vô nghĩa cho mỗi hàng lịch sử.
           if (!isActiveCallOutcome(p.outcome)) continue;
           const joined = p.joinedAt !== null;
-          await this.repo.setParticipantOutcome(
+          const ok = await this.repo.setParticipantOutcome(
             tx,
             companyId,
             row.id,
@@ -439,6 +439,28 @@ export class ChatCallsService {
             joined ? "left" : "missed",
             joined ? { leftAt: now } : {},
           );
+
+          // ⚠️ **`warn`, KHÔNG `debug`** — cùng chuẩn mà FULL gate `silent-failure-hunter` (13/08) ép ra
+          // cho CÙNG primitive ở `ChatCallRoomExitService.closeCallParticipationOnRoomExit`. Bỏ trống
+          // giá trị trả về là biến một `UPDATE` khớp 0 hàng thành im lặng tuyệt đối.
+          //
+          // Ca `false` tới được theo ĐÚNG MỘT đường lành: `listParticipants` đọc trước, rồi một tx khác
+          // (`hangup`/`reject` của chính người đó) hấp thụ hàng giữa chừng. Nó KHÔNG phải lỗ dữ liệu —
+          // `WHERE` của `setParticipantOutcome` khoá đường ghi đè ở tầng SQL, nên không có ghi kép,
+          // không có ghi đè. Nhưng nếu giả định "hiếm" đó sai (vị từ hỏng, hàng bị khoá ở tx khác) thì
+          // ở mức không thu ở production sẽ KHÔNG AI BIẾT. `warn` chứ không `error`: fail-safe theo
+          // thiết kế, nhưng phải đếm được.
+          //
+          // ⚠️ KHÔNG loại người này khỏi `participantUserIds` (khác room-exit, nơi `closed` lái
+          // `peer-left`): ở đây hàng `chat_calls` ĐÃ chuyển `ended` thật, nên `call:auto-ended` là sự
+          // thật cho MỌI người trong cuộc gọi. Giấu nó đi = máy họ giữ khung gọi của một cuộc gọi chết.
+          if (!ok) {
+            this.logger.warn(
+              `expireStaleActiveTx: hàng participant đã đóng bởi tx khác — KHÔNG ghi kết cục cho lần ` +
+                `này (callId=${row.id} userId=${p.userId} reason=${reason})`,
+            );
+            continue;
+          }
         }
 
         await this.audit.record(tx, {

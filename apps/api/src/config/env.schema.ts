@@ -360,8 +360,14 @@ export const envSchema = z
 
     // ── S10-CHAT-CALLSWEEP-1 (KI-063): ngưỡng gặt cuộc gọi `active` mồ côi ───────────────────────────
     // HAI nhánh, HAI ngưỡng — cố ý không gộp (docs/plans/S10-CHAT-CALLSWEEP-1.md §2):
-    //  · ORPHAN_GRACE: mọi hàng participant đã mang kết cục HẤP THỤ ⇒ không ai còn trong cuộc gọi. Ân hạn
-    //    chỉ để một tx đang bay không bị gặt giữa chừng — KHÔNG phải "thời lượng cuộc gọi".
+    //  · ORPHAN_GRACE: gặt khi mọi hàng participant đã mang kết cục HẤP THỤ (⇒ không ai còn trong cuộc
+    //    gọi) **VÀ** cuộc gọi đã bắt đầu quá ngưỡng này.
+    //    ⚠️ Neo là `chat_calls.started_at` — **TUỔI CUỘC GỌI**, KHÔNG phải "thời gian kể từ khi người
+    //    cuối cùng ngã ngũ". Với một cuộc gọi đã nói chuyện lâu hơn ngưỡng, ân hạn thực tế bằng **0**:
+    //    nhịp scheduler kế tiếp sau khi người cuối cùng ngã ngũ là gặt. Vô hại theo thiết kế hiện tại
+    //    (bốn kết cục hấp thụ là CHUNG CUỘC, không có đường quay lại), nhưng đừng đọc biến này như một
+    //    cửa sổ chờ-người-quay-lại. Muốn đúng nghĩa đó thì phải neo vào
+    //    `MAX(coalesce(left_at, invited_at))` của bảng participants — thay đổi vị từ, không phải đổi số.
     //  · ACTIVE_MAX: trần thọ tuyệt đối. Lưới an toàn cho hình dạng KHÔNG đoán trước (nhánh `!ok` của
     //    closeCallParticipationOnRoomExit để lại một hàng "còn treo" vĩnh viễn ⇒ vị từ mồ côi im lặng).
     //
@@ -369,8 +375,20 @@ export const envSchema = z
     //  · `.default()` — biến MỚI không mặc định giết fixture int-spec ở một file KHÁC hẳn chỗ gán.
     //  · `.max()` — `.positive()` một mình cho phép `CHAT_CALL_ACTIVE_MAX_MS=999999999999`, tức TẮT LẶNG LẼ
     //    chính lưới an toàn này mà không có gì đỏ. Trần an toàn phải là thứ ép được, không phải quy ước.
-    CHAT_CALL_ORPHAN_GRACE_MS: z.coerce.number().int().positive().max(3_600_000).default(120_000),
-    CHAT_CALL_ACTIVE_MAX_MS: z.coerce.number().int().positive().max(86_400_000).default(43_200_000),
+    //
+    // ⚠️ **CẢ HAI cũng có `.min()`, và đó là vế NGUY HIỂM HƠN `.max()`.** `.positive()` nhận `=1`:
+    // `CHAT_CALL_ACTIVE_MAX_MS=1` cho một nhịp sau gặt **MỌI cuộc gọi đang nói chuyện** và ghi kết cục
+    // HẤP THỤ vào `chat_call_participants` — bảng KHÔNG có `DELETE` grant (BẤT BIẾN #2) ⇒ **không hoàn
+    // tác được**. `.max()` chỉ tắt lưới an toàn; `.min()` chặn một cấu hình rác PHÁ DỮ LIỆU.
+    // Sàn cố ý nằm DƯỚI mọi giá trị fixture đang dùng (int-spec sweep: 60_000 / 3_600_000;
+    // env.schema.spec: 45_000) — memory `env-schema-floor-breaks-test-fixtures`.
+    CHAT_CALL_ORPHAN_GRACE_MS: z.coerce.number().int().min(30_000).max(3_600_000).default(120_000),
+    CHAT_CALL_ACTIVE_MAX_MS: z.coerce
+      .number()
+      .int()
+      .min(600_000)
+      .max(86_400_000)
+      .default(43_200_000),
 
     // ⚠️ ALLOW_SUPERUSER_ROTATION (KHÔNG validate qua zod — CỐ Ý): SecretRotationService đọc THẲNG
     // `process.env.ALLOW_SUPERUSER_ROTATION === 'true'` để fail-closed tuyệt đối (mọi giá trị ≠ 'true', kể cả

@@ -249,4 +249,35 @@ describe("loadEnv", () => {
     const env = loadEnv({ CHAT_CALL_ORPHAN_GRACE_MS: "45000" } as NodeJS.ProcessEnv);
     expect(env.CHAT_CALL_ORPHAN_GRACE_MS).toBe(45_000);
   });
+
+  // ── SÀN (vế nguy hiểm hơn TRẦN) ───────────────────────────────────────────────────────────────────
+  // Trần chỉ tắt lặng lẽ lưới an toàn. SÀN chặn một cấu hình rác PHÁ DỮ LIỆU: `=1` cho một nhịp sau gặt
+  // MỌI cuộc gọi đang nói chuyện và ghi kết cục HẤP THỤ vào `chat_call_participants` — bảng KHÔNG có
+  // `DELETE` grant (BẤT BIẾN #2) ⇒ **không hoàn tác được**.
+  it.each([
+    ["CHAT_CALL_ACTIVE_MAX_MS", "1"],
+    ["CHAT_CALL_ACTIVE_MAX_MS", String(599_999)],
+    ["CHAT_CALL_ORPHAN_GRACE_MS", "1"],
+    ["CHAT_CALL_ORPHAN_GRACE_MS", String(29_999)],
+  ])("%s=%s dưới sàn ⇒ CHẶN BOOT (gặt-sạch-không-hoàn-tác)", (key, value) => {
+    expect(() => loadEnv({ [key]: value } as NodeJS.ProcessEnv)).toThrow(
+      /Invalid environment variables/,
+    );
+  });
+
+  it("sàn nằm DƯỚI mọi giá trị fixture đang dùng — đổi sàn mà quên chỗ này là đỏ ở file KHÁC hẳn", () => {
+    // Ba số này là fixture THẬT: int-spec `chat-call-stale-active-sweep` đặt 60_000 / 3_600_000, và ca
+    // "coerce từ chuỗi" ngay bên trên đặt 45_000. Nâng sàn vượt bất kỳ số nào ở đây sẽ giết chúng ở một
+    // file cách xa chỗ gán (memory `env-schema-floor-breaks-test-fixtures`) — ca này bắt ngay tại nguồn.
+    const env = loadEnv({
+      CHAT_CALL_ORPHAN_GRACE_MS: String(60_000),
+      CHAT_CALL_ACTIVE_MAX_MS: String(3_600_000),
+    } as NodeJS.ProcessEnv);
+    expect(env.CHAT_CALL_ORPHAN_GRACE_MS).toBe(60_000);
+    expect(env.CHAT_CALL_ACTIVE_MAX_MS).toBe(3_600_000);
+    expect(
+      loadEnv({ CHAT_CALL_ORPHAN_GRACE_MS: "45000" } as NodeJS.ProcessEnv)
+        .CHAT_CALL_ORPHAN_GRACE_MS,
+    ).toBe(45_000);
+  });
 });

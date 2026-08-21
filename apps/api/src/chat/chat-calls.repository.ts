@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import {
   chatCallParticipants,
@@ -540,15 +540,7 @@ export class ChatCallsRepository {
     const expired = await tx
       .update(chatCalls)
       .set({ status: "ended", endedAt: now })
-      .where(
-        and(
-          eq(chatCalls.companyId, companyId),
-          eq(chatCalls.status, "active"),
-          lt(chatCalls.startedAt, cutoff),
-          ...(reason === "orphan" ? [noLiveParticipantSql()] : []),
-          ...(roomId ? [eq(chatCalls.roomId, roomId)] : []),
-        ),
-      )
+      .where(staleActiveWhereSql(companyId, cutoff, reason, roomId))
       .returning({
         id: chatCalls.id,
         roomId: chatCalls.roomId,
@@ -560,6 +552,30 @@ export class ChatCallsRepository {
     return expired;
   }
 }
+
+/**
+ * TOÀN BỘ vị từ `WHERE` của `expireStaleActive` — **tách khỏi thân hàm cố ý**, để ghim được ở tầng LUÔN
+ * chạy. Hành vi của nó trước đây chỉ được int-spec đóng đinh, mà int-spec `skipIf(!LANE_DB)` **NGỦ** trên
+ * máy không có Postgres (memory `src-green-is-not-integration-green`). Đảo `lt` thành `gt` ở đây làm job
+ * **im lặng không bao giờ khớp hàng nào** — `callsAutoEnded: 0` trông y hệt một hệ thống khoẻ mạnh, và
+ * KI-063 lặng lẽ tái mở. Ca colocated `chat-call-stale-active-predicate.spec.ts` render chuỗi SQL của
+ * đúng hàm này để chiều so sánh không trôi được.
+ *
+ * Trả `SQL | undefined` vì đó là kiểu của `and()`; `.where()` nhận cả hai. Thực tế LUÔN có ≥3 vế.
+ */
+export const staleActiveWhereSql = (
+  companyId: string,
+  cutoff: Date,
+  reason: "orphan" | "max_duration",
+  roomId?: string,
+): SQL | undefined =>
+  and(
+    eq(chatCalls.companyId, companyId),
+    eq(chatCalls.status, "active"),
+    lt(chatCalls.startedAt, cutoff),
+    ...(reason === "orphan" ? [noLiveParticipantSql()] : []),
+    ...(roomId ? [eq(chatCalls.roomId, roomId)] : []),
+  );
 
 /**
  * "Cuộc gọi này KHÔNG còn ai ở trong" — vị từ tương quan dùng bởi nhánh `orphan` của `expireStaleActive`.
@@ -574,6 +590,14 @@ export class ChatCallsRepository {
  *
  * Vế "chưa ngã ngũ" KHÔNG viết lại ở đây: nó lấy từ `activeParticipantOutcomeSql()` — bản sao DUY NHẤT.
  * Cột `outcome` trần resolve đúng về `chat_call_participants` vì `chat_calls` không có cột cùng tên.
+ *
+ * ⚠️ **ĐIỀU KIỆN TỒN TẠI của vị từ này: `chat_calls` phải xuất hiện trong câu lệnh dưới ĐÚNG TÊN THẬT.**
+ * Tương quan neo bằng tên bảng LITERAL, không bằng đối tượng bảng của drizzle — nên nó **fail-OPEN**, im
+ * lặng, nếu ai đó về sau viết `.as("c")` (drizzle `buildUpdateQuery` CHỈ phát alias khi có `.as()` —
+ * verify trên `drizzle-orm@0.45.2`) hoặc thêm `.from()`/join đưa vào câu lệnh một bảng thứ hai cũng có
+ * `id`/`company_id`. Alias ⇒ `chat_calls.id` không còn tồn tại ⇒ `42P01` lúc chạy (ồn ào, chấp nhận
+ * được). Join ⇒ tên vẫn phân giải nhưng có thể trỏ SAI hàng ⇒ `NOT EXISTS` đúng oan và job gặt sạch.
+ * Đổi hình dạng câu lệnh thì PHẢI đọc lại hàm này và cập nhật ca `chat-call-stale-active-predicate.spec.ts`.
  */
 export const noLiveParticipantSql = () =>
   sql`NOT EXISTS (

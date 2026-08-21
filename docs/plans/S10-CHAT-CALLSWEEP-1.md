@@ -39,20 +39,32 @@ nhau, và chúng cần **hai nhánh riêng** — gộp thành một ngưỡng l�
 bắt máy" cho một cuộc gọi có người đã nói chuyện. Đó đúng lớp lỗi mà docblock `CALL_MISSED` đã tách khỏi
 `CALL_ENDED` để tránh.
 
-## §3 — Ngưỡng: BIẾN ENV có `.default()` LẪN `.max()`
+## §3 — Ngưỡng: BIẾN ENV có `.default()` LẪN `.min()`/`.max()`
 
 Khuôn đã có tiền lệ trong `env.schema.ts:121-133` (`STEP_UP_TTL_SEC`/`STEP_UP_MAX_ATTEMPTS`) và lý do
 được viết sẵn ở đó — chép đúng cả hai vế:
 
-| Biến | default | max | Nhánh |
-| --- | --- | --- | --- |
-| `CHAT_CALL_ORPHAN_GRACE_MS` | `120_000` (2 phút) | `3_600_000` | (O) |
-| `CHAT_CALL_ACTIVE_MAX_MS` | `43_200_000` (12 giờ) | `86_400_000` (24 giờ) | (D) |
+| Biến | default | min | max | Nhánh |
+| --- | --- | --- | --- | --- |
+| `CHAT_CALL_ORPHAN_GRACE_MS` | `120_000` (2 phút) | `30_000` (30 giây) | `3_600_000` | (O) |
+| `CHAT_CALL_ACTIVE_MAX_MS` | `43_200_000` (12 giờ) | `600_000` (10 phút) | `86_400_000` (24 giờ) | (D) |
 
 - `.default()` vì biến MỚI không mặc định **từng giết fixture int-spec** ([[env-schema-floor-breaks-test-fixtures]]) —
   lỗi nổi ở file KHÁC hẳn chỗ gán.
 - `.max()` vì mặc định an toàn KHÔNG chặn được cấu hình sai: `.positive()` một mình cho phép đặt
   `CHAT_CALL_ACTIVE_MAX_MS=999999999999` — tức **tắt lặng lẽ** chính lưới an toàn này mà không ai đỏ.
+- `.min()` (bổ sung sau FULL gate 21/08) vì đó là **vế nguy hiểm hơn**: `.positive()` cũng nhận `=1`, và
+  `CHAT_CALL_ACTIVE_MAX_MS=1` cho một nhịp sau gặt **MỌI cuộc gọi đang nói chuyện**, ghi kết cục HẤP THỤ
+  vào `chat_call_participants` — bảng KHÔNG có `DELETE` grant (BẤT BIẾN #2) ⇒ **không hoàn tác được**.
+  Sàn cố ý nằm DƯỚI mọi fixture đang dùng (int-spec sweep `60_000`/`3_600_000`; `env.schema.spec` `45_000`).
+
+⚠️ **Đính chính ngữ nghĩa `ORPHAN_GRACE_MS` (FULL gate 21/08).** Vị từ neo vào `chat_calls.started_at`, tức
+**TUỔI CUỘC GỌI** — KHÔNG phải "ân hạn tính từ lúc người cuối cùng ngã ngũ" như bản comment đầu tiên viết.
+Với một cuộc gọi đã nói chuyện lâu hơn ngưỡng, ân hạn thực tế bằng **0**. Vô hại theo thiết kế hiện tại
+(bốn kết cục hấp thụ là CHUNG CUỘC, không có đường quay lại) nhưng là đúng lớp lỗi KI-054 nếu để nguyên
+chữ. Muốn đúng nghĩa "chờ người quay lại" thì phải neo vào `MAX(coalesce(left_at, invited_at))` của bảng
+participants — **đổi vị từ**, không phải đổi số. Chọn đính chính chữ; ghi lại đây để lần sau không phải
+đo lại.
 
 ## §4 — Điểm chèn (KHÔNG viết lại file nào, chỉ append)
 
