@@ -574,12 +574,25 @@ describe("emit SAU COMMIT — ChatCallsService (S7-CALL-RT-1)", () => {
       /\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm,
       "$1",
     );
-    expect(src.match(/this\.realtime\.emitChatCall\(/g) ?? []).toHaveLength(2);
-    // Và cả hai nằm trong hai helper `emitLifecycle`/`emitExpired`, không rải trong thân transaction.
+    // 2 → 3 ở S10-CHAT-CALLSWEEP-1 (KI-063): lối thứ BA là `emitAutoEnded`, cho job gặt cuộc gọi
+    // `active` mồ côi. Con số này chỉ được nâng KÈM một helper mới có tên — nâng trần để "cho qua" một
+    // `emitChatCall` rải giữa thân transaction là gỡ đúng thứ ratchet này canh.
+    expect(src.match(/this\.realtime\.emitChatCall\(/g) ?? []).toHaveLength(3);
+    // Và cả ba nằm trong ba helper, không rải trong thân transaction.
     expect(src).toMatch(/private emitLifecycle\(/);
     expect(src).toMatch(/emitExpired\(/);
+    expect(src).toMatch(/emitAutoEnded\(/);
 
     const job = readFileSync(join(__dirname, "chat-call-ringing-timeout.job-handler.ts"), "utf8");
     expect(job.match(/this\.calls\.emitExpired\(/g) ?? []).toHaveLength(1);
+
+    // Job gặt: đúng MỘT lối phát, và nó nằm NGOÀI `withTenant` — phát trong tx là phát một sự thật có
+    // thể bị rollback (đúng luật 4 của `ChatCallsService`).
+    const sweep = readFileSync(
+      join(__dirname, "chat-call-stale-active-sweep.job-handler.ts"),
+      "utf8",
+    );
+    expect(sweep.match(/this\.calls\.emitAutoEnded\(/g) ?? []).toHaveLength(1);
+    expect(sweep.indexOf("emitAutoEnded(")).toBeGreaterThan(sweep.indexOf("withTenant("));
   });
 });

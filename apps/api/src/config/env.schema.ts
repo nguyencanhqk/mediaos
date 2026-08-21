@@ -358,6 +358,20 @@ export const envSchema = z
     // Ngưỡng 10 nằm rất trên nhịp thật (gọi lại sau 45s đổ chuông ≈ 1–2 lần/phút) và rất dưới nhịp máy.
     CHAT_CALL_INVITE_MAX_PER_MIN: z.coerce.number().int().positive().default(10),
 
+    // ── S10-CHAT-CALLSWEEP-1 (KI-063): ngưỡng gặt cuộc gọi `active` mồ côi ───────────────────────────
+    // HAI nhánh, HAI ngưỡng — cố ý không gộp (docs/plans/S10-CHAT-CALLSWEEP-1.md §2):
+    //  · ORPHAN_GRACE: mọi hàng participant đã mang kết cục HẤP THỤ ⇒ không ai còn trong cuộc gọi. Ân hạn
+    //    chỉ để một tx đang bay không bị gặt giữa chừng — KHÔNG phải "thời lượng cuộc gọi".
+    //  · ACTIVE_MAX: trần thọ tuyệt đối. Lưới an toàn cho hình dạng KHÔNG đoán trước (nhánh `!ok` của
+    //    closeCallParticipationOnRoomExit để lại một hàng "còn treo" vĩnh viễn ⇒ vị từ mồ côi im lặng).
+    //
+    // CẢ HAI có `.default()` LẪN `.max()`, cùng lý do đã viết ở khối STEP_UP_* bên trên:
+    //  · `.default()` — biến MỚI không mặc định giết fixture int-spec ở một file KHÁC hẳn chỗ gán.
+    //  · `.max()` — `.positive()` một mình cho phép `CHAT_CALL_ACTIVE_MAX_MS=999999999999`, tức TẮT LẶNG LẼ
+    //    chính lưới an toàn này mà không có gì đỏ. Trần an toàn phải là thứ ép được, không phải quy ước.
+    CHAT_CALL_ORPHAN_GRACE_MS: z.coerce.number().int().positive().max(3_600_000).default(120_000),
+    CHAT_CALL_ACTIVE_MAX_MS: z.coerce.number().int().positive().max(86_400_000).default(43_200_000),
+
     // ⚠️ ALLOW_SUPERUSER_ROTATION (KHÔNG validate qua zod — CỐ Ý): SecretRotationService đọc THẲNG
     // `process.env.ALLOW_SUPERUSER_ROTATION === 'true'` để fail-closed tuyệt đối (mọi giá trị ≠ 'true', kể cả
     // unset → CHẶN rotation bằng role BYPASS RLS). Không dùng z.coerce.boolean() vì nó coi 'false' → true (bẫy).

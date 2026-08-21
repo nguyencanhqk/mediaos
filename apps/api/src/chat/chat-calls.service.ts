@@ -17,6 +17,7 @@ import { CHAT_CALL_COOLDOWN_SCOPE, ChatCallCooldownService } from "./chat-call-c
 import {
   CHAT_CALL_LIVE_STATUSES,
   ChatCallsRepository,
+  isActiveCallOutcome,
   isCallStateViolation,
   isLiveCallConflict,
   type ChatCallExpiredRow,
@@ -117,6 +118,9 @@ export class ChatCallsService {
   /** Đọc MỘT LẦN lúc dựng provider — mirror `LoginRateLimiter`. Đọc lại mỗi request sẽ cho phép đổi trần
    *  giữa chừng bằng cách sửa `process.env`, và biến một ngưỡng an ninh thành trạng thái thay đổi được. */
   private readonly inviteMaxPerMin = loadEnv().CHAT_CALL_INVITE_MAX_PER_MIN;
+  /** S10-CHAT-CALLSWEEP-1 (KI-063) — hai ngưỡng gặt cuộc gọi `active`. Đọc MỘT LẦN, cùng lý do trên. */
+  private readonly orphanGraceMs = loadEnv().CHAT_CALL_ORPHAN_GRACE_MS;
+  private readonly activeMaxMs = loadEnv().CHAT_CALL_ACTIVE_MAX_MS;
 
   constructor(
     private readonly db: DatabaseService,
@@ -379,6 +383,86 @@ export class ChatCallsService {
     return expiries;
   }
 
+  /**
+   * S10-CHAT-CALLSWEEP-1 (KI-063) — gặt cuộc gọi `active` mồ côi/quá thọ → `ended`, kèm audit MỖI cuộc
+   * gọi và đóng nốt phần tham gia còn treo. Gọi TRONG tx của caller; caller phát WS SAU commit.
+   *
+   * HAI nhánh chạy TUẦN TỰ và `max_duration` đi TRƯỚC — xem `expireStaleActive` cho lý do (một hàng thoả
+   * cả hai chỉ bị gặt một lần, và được quy cho nguyên nhân mạnh hơn).
+   *
+   * ⚠️ **Kết cục participant tính THEO TỪNG HÀNG, không một hằng cho cả lô** — cùng luật mà
+   * `ChatCallRoomExitService` đã viết ra và `closeOpenParticipants` mirror: `'left'` nghĩa là "đã VÀO rồi
+   * rời", nên nó CHỈ dành cho hàng tự nó có `joined_at`. Người được mời mà chưa bấm nhận chưa từng ở
+   * trong cuộc gọi để mà rời ⇒ `'missed'`, và **KHÔNG** kèm `left_at` (một "cuộc gọi nhỡ" có mốc rời tự
+   * nó là một sự không nhất quán). Vế `wasConnected` của ba đường kia ở đây LUÔN đúng: một hàng `active`
+   * kéo theo `accepted_at IS NOT NULL` (`chat_calls_accepted_at_chk`).
+   *
+   * ⚠️ Dùng `setParticipantOutcome` từng hàng chứ KHÔNG `closeOpenParticipants`: `WHERE` của hàm đó chỉ
+   * nhận `outcome IS NULL`, nên nó **bỏ sót đúng người đang nói chuyện** (`'accepted'`) — tức người duy
+   * nhất chắc chắn có mặt trong một cuộc gọi `active` quá thọ. Số hàng mỗi cuộc gọi là vài đơn vị.
+   */
+  async expireStaleActiveTx(
+    tx: TenantTx,
+    companyId: string,
+    now: Date,
+    opts: { roomId?: string } = {},
+  ): Promise<ChatCallExpiry[]> {
+    const branches = [
+      { reason: "max_duration" as const, cutoff: new Date(now.getTime() - this.activeMaxMs) },
+      { reason: "orphan" as const, cutoff: new Date(now.getTime() - this.orphanGraceMs) },
+    ];
+
+    const expiries: ChatCallExpiry[] = [];
+    for (const { reason, cutoff } of branches) {
+      const rows = await this.repo.expireStaleActive(
+        tx,
+        companyId,
+        cutoff,
+        now,
+        reason,
+        opts.roomId,
+      );
+
+      for (const row of rows) {
+        const participants = await this.repo.listParticipants(tx, companyId, row.id);
+        for (const p of participants) {
+          // Hàng đã hấp thụ (`rejected`/`cancelled`/`missed`/`left`) KHÔNG được ghi đè — bốn kết cục đó
+          // là chung cuộc, và `WHERE` của `setParticipantOutcome` cũng khoá đường đó ở tầng SQL. Kiểm ở
+          // đây để không phát ra một phép ghi vô nghĩa cho mỗi hàng lịch sử.
+          if (!isActiveCallOutcome(p.outcome)) continue;
+          const joined = p.joinedAt !== null;
+          await this.repo.setParticipantOutcome(
+            tx,
+            companyId,
+            row.id,
+            p.userId,
+            joined ? "left" : "missed",
+            joined ? { leftAt: now } : {},
+          );
+        }
+
+        await this.audit.record(tx, {
+          action: CHAT_AUDIT.CALL_AUTO_ENDED,
+          objectType: "chat_call",
+          objectId: row.id,
+          // KHÔNG `actorUserId`: không người nào đứng sau (mirror `CALL_MISSED` của job ring-timeout).
+          moduleCode: CHAT_MODULE_CODE,
+          actorType: "Job",
+          resultStatus: "Success",
+          newValues: {
+            status: "ended",
+            reason,
+            thresholdMs: reason === "orphan" ? this.orphanGraceMs : this.activeMaxMs,
+          },
+        });
+
+        expiries.push({ call: row, participantUserIds: participants.map((p) => p.userId) });
+      }
+    }
+
+    return expiries;
+  }
+
   // ─── nội bộ ──────────────────────────────────────────────────────────────────
 
   /**
@@ -594,6 +678,27 @@ export class ChatCallsService {
         initiatorUserId: call.initiatorUserId,
         startedAt: call.startedAt.toISOString(),
         action: "missed",
+      });
+    }
+  }
+
+  /**
+   * S10-CHAT-CALLSWEEP-1 — phát `chat:call{ended}` cho các cuộc gọi vừa bị job gặt. Gọi SAU commit.
+   *
+   * Bỏ dòng này = máy người dùng giữ khung cuộc gọi của một cuộc gọi ĐÃ CHẾT, và không sự kiện nào đính
+   * chính — đúng lỗ mà `emitExpired` được thêm để vá ở S7-CALL-RT-1. `action:"ended"` (không phải
+   * `"missed"`) vì cuộc gọi này đã từng được nhận; client phân biệt hai màn hình theo trường đó.
+   */
+  emitAutoEnded(companyId: string, expiries: readonly ChatCallExpiry[]): void {
+    for (const { call, participantUserIds } of expiries) {
+      this.realtime.emitChatCall(companyId, participantUserIds, {
+        callId: call.id,
+        roomId: call.roomId,
+        kind: call.kind,
+        status: "ended",
+        initiatorUserId: call.initiatorUserId,
+        startedAt: call.startedAt.toISOString(),
+        action: "ended",
       });
     }
   }
