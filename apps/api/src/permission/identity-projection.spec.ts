@@ -1,12 +1,13 @@
 import { inspect } from "node:util";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { users } from "../db/schema";
+import { employeeProfiles, users } from "../db/schema";
 import {
   basisOf,
   byMembership,
   fromScope,
   identityColumns,
+  rowScopeSql,
   selfBound,
   unconditional,
   type IdentityGrant,
@@ -22,6 +23,9 @@ import {
  *   3. `identityColumns` khử ở SQL, và cờ đặt tên được (hai nhóm trong một truy vấn thì cờ trùng tên
  *      sẽ ĐÈ nhau — bẫy đã cắn thật ở `security-event.repository`).
  *   4. Ranh giới của brand, phát biểu ĐÚNG: nó chặn object literal, KHÔNG chặn ép kiểu.
+ *   5. (S10-SEC-AUDITLOGROW-1) `rowScopeSql` — cổng của vị từ chặn TẬP HÀNG: hai assert, và cả hai
+ *      phải NÉM, không phải trả một vị từ "an toàn". Ném là chọn chế độ hỏng ỒN ÀO có chủ đích: một
+ *      grant sai basis/sai bảng lọt vào `WHERE` sẽ cho ra tập hàng sai một cách IM LẶNG.
  */
 
 /**
@@ -131,5 +135,41 @@ describe("identity-projection — ranh giới của brand", () => {
     // L1. Ai xoá chiều ratchet đó rồi tin vào tầng type là đang tin một thứ không đúng.
     const forged = { basis: "waiver", cond: sql`true`, why: "giả" } as unknown as IdentityGrant;
     expect(basisOf(forged)).toBe("waiver");
+  });
+});
+
+describe("identity-projection — rowScopeSql (cổng vị từ chặn TẬP HÀNG, KI-070)", () => {
+  it("nhả `cond` khi basis + bảng đều khớp", () => {
+    const g = fromScope(sql`true`, "scoped-predicate", "hàng theo view:audit-log", users.id);
+    expect(rendered(rowScopeSql(g, users.id))).toContain("true");
+  });
+
+  it("NÉM khi basis không phải `scoped-predicate` — kể cả grant hợp lệ cho tầng CỘT", () => {
+    // `identity-gated` là basis của tầng CỘT. Vị từ của nó nói về "ai được XEM danh tính", không nói
+    // gì về "hàng nào được TRẢ"; đem nó chặn hàng là trộn hai câu hỏi khác nhau.
+    const colGrant = fromScope(sql`true`, "identity-gated", "cột theo view:user", users.id);
+    expect(() => rowScopeSql(colGrant, users.id)).toThrow(/scoped-predicate/);
+  });
+
+  it("NÉM với `unconditional()` — đây là ca nguy hiểm nhất vì `cond` của nó là `true`", () => {
+    // Không có assert basis thì một grant `waiver`/`no-actor`/`self-bound-route` biến `WHERE` thành
+    // no-op: truy vấn trả TRỌN bảng và mọi test khác vẫn xanh. Đó đúng là hình dạng của KI-070.
+    const waived = unconditional("waiver", "đã ký");
+    expect(() => rowScopeSql(waived, users.id)).toThrow(/scoped-predicate/);
+  });
+
+  it("NÉM khi vị từ nói về bảng KHÁC với bảng đang bị chặn hàng", () => {
+    // Soi gương bước đối chiếu bảng của `identityColumns` (lỗ B1, KI-054). Ở tầng hàng, hậu quả là
+    // `WHERE` luôn-đúng hoặc luôn-sai tuỳ join — im lặng cả hai chiều.
+    const g = fromScope(sql`true`, "scoped-predicate", "vị từ trên users", users.id);
+    expect(() => rowScopeSql(g, employeeProfiles.userId)).toThrow(/employee_profiles/);
+  });
+
+  it("NÉM khi grant KHÔNG mang bảng (`fromScope` thiếu tham số thứ tư)", () => {
+    // Ranh giới đã ghi trong docblock: cái bắt ca `table === null` là assert BẢNG, không phải assert
+    // basis — `fromScope(..., "scoped-predicate", why)` vẫn đúc ra đúng basis đó.
+    const noTable = fromScope(sql`true`, "scoped-predicate", "quên truyền cột đích");
+    expect(basisOf(noTable)).toBe("scoped-predicate");
+    expect(() => rowScopeSql(noTable, users.id)).toThrow(/null/);
   });
 });

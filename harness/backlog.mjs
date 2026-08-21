@@ -12907,10 +12907,13 @@ export const backlog = [
     title:
       "KI-070 — bản vá KI-053/054/069 bound CỘT chứ KHÔNG bound HÀNG: `view:audit-log@Own` vẫn đọc trọn 364 `login_logs` + 65 `user_security_events`, và `LoginLogFilter.userId` lấy THẲNG từ query param của caller",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
-      "apps/api/src/auth/auth-logs-viewer.service.ts",
-      "apps/api/src/auth/**/login-log.repository.ts",
+      // ⟲ MỞ RỘNG 21/08 (plan-review vòng 1, phát hiện #4): bản liệt kê đầu CHỈ có
+      // `auth-logs-viewer.service.ts` + `login-log.repository.ts` — thiếu `security-event.repository.ts`
+      // (vế thứ hai của chính khuyết tật) và spec ratchet mới. `paths` lái CẢ `guard-scope` LẪN gate
+      // routing (memory `wo-paths-drive-gate-and-scheduler`) ⇒ thiếu đường nào là đường đó lọt gate.
+      "apps/api/src/auth/**",
       "apps/api/src/permission/**",
       "apps/api/test/**",
       "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
@@ -12937,6 +12940,7 @@ export const backlog = [
       "🔴 Vùng đỏ (phân quyền + đọc dữ liệu audit): cần planner Sonnet 5 effort xhigh → plan-reviewer → IMPLEMENT/REVIEW Opus theo CLAUDE.md §6.",
       "⚠️ ĐO LẠI PROD trước khi thi công — số đo 2026-07-30/08-19 có thể đã cũ nếu seed/role đổi. Đừng tin lại số cũ ([[wo-seed-hand-measurements-can-be-incomplete]]).",
       "Bảng append-only: `login_logs` + `user_security_events` — KHÔNG được UPDATE/DELETE, chỉ đổi đường ĐỌC.",
+      "⟲ ĐÓNG 21/08 với phạm vi GHI RÕ = HAI BẢNG NHẬT KÝ. Hai vế tách số hiệu riêng, KHÔNG chìm theo dấu gạch trên KI-070: **KI-071** (`/auth/roles/:id/members`, cặp `view:user`) và **KI-072** (`/foundation/audit-logs` + `/:id` — CÙNG cặp `view:audit-log`, bảng `audit_logs` 13.146 hàng, không bound). Bản đồ 4-route/3-bảng: `docs/permission-matrix-spec.md`.",
     ],
   },
 

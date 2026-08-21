@@ -98,12 +98,7 @@ export type IdentityGrant = IdentityGrantFields & { readonly [IDENTITY_BASIS]: t
  * lời ép sang `IdentityGrant` NGOÀI file này và bắt buộc bằng 0. Không có ngoại lệ ngầm — nếu bạn đang
  * định thêm một lời ép ở nơi khác thì thứ bạn cần là một constructor mới ở đây, có tên và có docblock.
  */
-function grant(
-  basis: IdentityBasis,
-  cond: SQL,
-  why: string,
-  table: string | null,
-): IdentityGrant {
+function grant(basis: IdentityBasis, cond: SQL, why: string, table: string | null): IdentityGrant {
   return { basis, cond, why, table } as IdentityGrant;
 }
 
@@ -161,6 +156,56 @@ export function unconditional(
 /** Đọc basis của một grant — cho log/test; không có đường GHI ngược lại. */
 export function basisOf(g: IdentityGrant): IdentityBasis {
   return g.basis;
+}
+
+/**
+ * S10-SEC-AUDITLOGROW-1 (KI-070) — lấy vị từ của một grant để AND vào `WHERE`, tức chặn **TẬP HÀNG**
+ * chứ không chỉ che CỘT.
+ *
+ * VÌ SAO nó ở đây chứ không phải một `SQL` trần truyền tay: `identityColumns` bên dưới ép mọi điểm
+ * chiếu CỘT phải mang căn cứ, nhưng bound HÀNG thì trước WO này không có gì ép cả — `login_logs` và
+ * `user_security_events` đọc trọn tenant cho mọi scope vì `buildWhere` chỉ nhận filter TỪ QUERY PARAM
+ * của caller. Cho vị từ hàng đi qua CÙNG một brand nghĩa là nó cũng chỉ đúc được bằng bốn constructor
+ * ở trên, và cũng mang theo `table` + `why`.
+ *
+ * Hai assert, cả hai đều SIẾT MỘT CHIỀU:
+ *
+ *   1. `basis === "scoped-predicate"` — nhánh basis này vốn được định nghĩa là "vị từ `data_scope`
+ *      chặn TẬP HÀNG" (xem `IdentityBasis`), nên đem một grant `self-bound-route`/`waiver`
+ *      (`cond = true`, ba căn cứ KHÔNG đo được bằng máy) vào `WHERE` là biến `WHERE` thành no-op mà
+ *      typecheck vẫn xanh. ⚠️ TUYỆT ĐỐI KHÔNG thêm assert đối xứng vào `identityColumns`: sổ phán
+ *      quyết có 21 điểm chiếu CỘT hợp lệ mang chính basis này, siết ở đó sẽ ĐỎ oan cả 21.
+ *
+ *   2. `table` khớp bảng của `target` — soi gương bước đối chiếu bảng trong `identityColumns`. Vị từ
+ *      dựng trên `login_logs` đem AND vào truy vấn `user_security_events` là **hợp kiểu** với một
+ *      `SQL` trần và cho ra `WHERE` luôn-sai hoặc luôn-đúng tuỳ join — im lặng cả hai chiều.
+ *
+ * ⚠️ RANH GIỚI THẬT của assert #2 — đừng đọc nó mạnh hơn thực tế (plan-review vòng 1): ở cả hai
+ * repository nhật ký, nơi ĐÚC (service) và nơi TIÊU THỤ (repo) đều hard-code CÙNG một hằng cột, nên
+ * assert này chỉ bắt được ca "đem grant của bảng KIA sang", KHÔNG bắt được ca "cả hai cùng trỏ sai
+ * một bảng". Cái bắt ca đó là int-spec `audit-log-row-scope.int-spec.ts`, không phải hàm này.
+ *
+ * `table === null` bị chặn ở **assert #2**, không phải #1 (plan-review vòng 2 — đừng tin assert #1
+ * mạnh hơn thực tế): `unconditional()` quả thật không đúc ra basis này, NHƯNG `fromScope(cond,
+ * "scoped-predicate", why)` thiếu tham số thứ tư vẫn cho `table = null`, và cái bắt nó là phép so
+ * `null !== "<tên bảng>"` ở dưới.
+ */
+export function rowScopeSql(grantArg: IdentityGrant, target: PgColumn): SQL {
+  if (grantArg.basis !== "scoped-predicate") {
+    throw new Error(
+      `rowScopeSql: vị từ chặn TẬP HÀNG phải mang basis "scoped-predicate", nhận "${grantArg.basis}". ` +
+        "Các basis khác không hứa gì về tập hàng — `unconditional()` còn cho `cond = true` " +
+        '(WHERE thành no-op). Dựng bằng `fromScope(cond, "scoped-predicate", why, targetCol)`.',
+    );
+  }
+  const want = tableOf(target);
+  if (grantArg.table !== want) {
+    throw new Error(
+      `rowScopeSql: vị từ nói về bảng "${grantArg.table}" nhưng đang chặn hàng của "${want}". ` +
+        "Mỗi BẢNG cần MỘT grant dựng trên cột của chính bảng đó (KI-070).",
+    );
+  }
+  return grantArg.cond;
 }
 
 export type IdentityColumnSpec = Readonly<Record<string, PgColumn>>;

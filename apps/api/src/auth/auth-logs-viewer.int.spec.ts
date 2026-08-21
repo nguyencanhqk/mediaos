@@ -493,7 +493,10 @@ describe.skipIf(!runDb)("S2-AUTH-BE-5 auth-logs viewer deny/scope/mask/append-on
     const statuses = (sorted.body.data as Array<{ status: string }>).map((r) => r.status);
     expect(statuses).toEqual([...statuses].sort());
 
-    // No-filter list (KHÔNG user_id/status/date) → buildWhere trả undefined (phủ nhánh no-conds repo).
+    // No-filter list (KHÔNG user_id/status/date). ⟲ S10-SEC-AUDITLOGROW-1: `buildWhere` KHÔNG còn
+    // trả `undefined` — vị từ scope (`view:audit-log`) luôn là điều kiện đầu tiên, nên "no-conds" giờ
+    // nghĩa là "chỉ còn vị từ scope". Vẫn giữ ca: nó phủ nhánh filter-rỗng và là ĐỐI CHỨNG ALLOW cho
+    // `@Company` (admin thấy đủ hàng, không bị vị từ mới chặn oan).
     const noFilter = await api(app)
       .get(`/auth/login-logs`)
       .set("Authorization", `Bearer ${adminToken}`);
@@ -565,7 +568,8 @@ describe.skipIf(!runDb)("S2-AUTH-BE-5 auth-logs viewer deny/scope/mask/append-on
     expect(past.status, JSON.stringify(past.body)).toBe(200);
     expect(past.body.pagination.total).toBe(0);
 
-    // No-filter list → buildWhere trả undefined (phủ nhánh no-conds repo).
+    // No-filter list. ⟲ S10-SEC-AUDITLOGROW-1: `buildWhere` KHÔNG còn trả `undefined` — vị từ scope
+    // luôn có mặt; ca này nay là đối chứng ALLOW cho `@Company` (không bị vị từ mới chặn oan).
     const noFilter = await api(app)
       .get(`/auth/security-events`)
       .set("Authorization", `Bearer ${adminToken}`);

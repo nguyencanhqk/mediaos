@@ -1,11 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { blindSpots, pointKey, projectionPoints } from "./identity-projection-census";
+import {
+  blindSpots,
+  pointKey,
+  projectionPoints,
+  rowScopePredicateMints,
+} from "./identity-projection-census";
 import {
   BASIS_CEILINGS,
   BLIND_SPOT_PINS,
   IDENTITY_VERDICTS,
+  ROW_SCOPE_MINT_PINS,
   type IdentityVerdict,
 } from "./identity-projection-verdicts";
 
@@ -157,5 +163,35 @@ describe("identity-projection ratchet (S6-SEC-IDENTITY-PROJ-1)", () => {
         "xuyên file là điểm chiếu VÔ HÌNH — đúng cách WO này suýt tự làm mù census khi nâng " +
         "`SECURITY_EVENT_ACTOR` lên cấp module.",
     ).toBeLessThanOrEqual(BLIND_SPOT_PINS.exportedUserAliases);
+  });
+
+  it("chiều 7 — ĐIỂM ĐÚC vị từ chặn TẬP HÀNG đúng bằng danh sách đã ký (S10-SEC-AUDITLOGROW-1)", () => {
+    // `rowScopeSql()` gác đường TIÊU THỤ (assert basis + assert BẢNG). Nó KHÔNG gác đường ĐÚC: một
+    // grant `scoped-predicate` đúc ở module mới rồi `and(grant.cond, …)` thẳng vào WHERE là hợp kiểu
+    // và im lặng. Nên bề mặt đúc bị pin thành DANH SÁCH — không phải trần `<= n`, vì trần cho phép
+    // đổi chỗ (gỡ một điểm, thêm một điểm khác) mà số không đổi.
+    const mints = rowScopePredicateMints();
+
+    // Chốt chặn xanh-RỖNG, cùng lý do với ca "census còn sống" ở trên: scanner hỏng ⇒ trả [] ⇒ phép
+    // so bên dưới vẫn có thể xanh nếu ai đó cũng làm rỗng pin. Bắt buộc phải có ÍT NHẤT một điểm.
+    expect(
+      mints.length,
+      "scanner điểm đúc trả rỗng — nó hỏng, không phải bề mặt biến mất",
+    ).toBeGreaterThan(0);
+
+    const signed: readonly string[] = ROW_SCOPE_MINT_PINS;
+    const added = mints.filter((m) => !signed.includes(m));
+    const removed = ROW_SCOPE_MINT_PINS.filter((m) => !mints.includes(m));
+    expect(
+      added,
+      "điểm ĐÚC vị từ chặn TẬP HÀNG MỚI, chưa ký. Mỗi điểm mở một bề mặt bound-HÀNG mới ⇒ phải qua " +
+        "FULL gate, ký vào ROW_SCOPE_MINT_PINS, và có int-spec deny/allow của CHÍNH bảng đó (assert " +
+        "BẢNG trong rowScopeSql KHÔNG bắt được ca nơi-đúc-lẫn-nơi-tiêu-thụ cùng trỏ sai một bảng).",
+    ).toEqual([]);
+    expect(
+      removed,
+      "điểm đúc đã ký nhưng KHÔNG còn trong cây code — memory `review-gate-blind-to-deletions`: gỡ vị " +
+        "từ chặn hàng là gỡ một lớp kiểm soát, phải nói ra chứ không để sổ giữ một bản đồ sai.",
+    ).toEqual([]);
   });
 });

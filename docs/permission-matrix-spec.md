@@ -134,9 +134,61 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > TĨNH, tức lớp bằng chứng yếu hơn `fk-tenant-census`/`route-census` (hai file đó có bất biến "0 regex
 > trên mã nguồn"); ba vùng mù còn lại được PIN thành số trong sổ phán quyết.
 >
-> ⚠️ **RANH GIỚI:** cơ chế bound **CỘT danh tính**, KHÔNG bound **TẬP HÀNG**. Vai giữ
-> `view:audit-log@Own` vẫn đọc trọn nhật ký đăng nhập của tenant (UUID · IP · thời điểm), chỉ mất
-> email/tên. Vế đó là **KI-070**, chưa giao.
+> ⚠️ **RANH GIỚI — BẢN ĐỒ ĐỌC DÙNG CHUNG (đo lại 2026-08-21):** cơ chế `identityColumns` bound **CỘT
+> danh tính**, nó KHÔNG bound **TẬP HÀNG**. Đó là hai tầng độc lập, mỗi tầng đi theo **cặp quyền của
+> riêng nó**, và một route có thể kín tầng này mà hở tầng kia.
+>
+> **Vì sao bản đồ này tồn tại ở dạng BẢNG chứ không phải vài câu:** cặp `view:audit-log` gác **4
+> route trên 3 bảng**, và `S10-SEC-AUDITLOGROW-1` chỉ bound HÀNG cho **2** trong số đó. Đọc một câu
+> "audit-log đã bound hàng" rồi suy ra cả cặp là kín — đó đúng là cách KI-054 sinh ra ("Company-scope"
+> viết trong docstring như một sự thật). Ai cấp `view:audit-log` ở scope hẹp phải đọc HÀNG của mình
+> trong bảng, không đọc tiêu đề.
+>
+> | route | cặp GATE | TẬP HÀNG bound? | CỘT danh tính bound? | trạng thái |
+> | --- | --- | --- | --- | --- |
+> | `GET /auth/login-logs` | `view:audit-log` | ✔ `login_logs.user_id` | ✔ `view:user` | KI-070 **ĐÓNG** |
+> | `GET /auth/security-events` | `view:audit-log` | ✔ `user_security_events.user_id` | ✔ `view:user` ×2 grant | KI-070 **ĐÓNG** |
+> | `GET /foundation/audit-logs` | `view:audit-log` | ✘ **KHÔNG** — 13.146 hàng | — (không chiếu email/tên) | **KI-072 MỞ** |
+> | `GET /foundation/audit-logs/:id` | `view:audit-log` | ✘ **KHÔNG** — dò theo `id` | — | **KI-072 MỞ** |
+> | `GET /auth/roles/:id/members` | `view:user` | ✘ **KHÔNG** | ✔ `view:user` | **KI-071 MỞ** |
+>
+> • **Hai bảng nhật ký — ĐÃ ĐÓNG** (`S10-SEC-AUDITLOGROW-1`, KI-070). Chặn TẬP HÀNG theo `data_scope`
+>   của **chính cặp gate** `view:audit-log`: `Company`/`System` = cả tenant · `Own` = hàng có
+>   `user_id = actor` · `Team`/`Department` = **0 hàng** (lattice chưa định nghĩa membership trên bảng
+>   nhật ký). `?user_id=` của caller bị **GIAO** với vị từ scope, không được dùng trần. Cơ chế: brand
+>   `IdentityGrant` với `basis:"scoped-predicate"` + hàm cổng `rowScopeSql()` (assert `basis` +
+>   assert BẢNG); bề mặt ĐÚC vị từ bị pin thành danh sách (`ROW_SCOPE_MINT_PINS`) ⇒ mở một điểm đúc
+>   mới là ĐỎ. Cột danh tính trên hai route đó VẪN đi theo cặp danh bạ `view:user` — không gộp.
+>
+> • **`/foundation/audit-logs` (+ `/:id`) — CÙNG CẶP `view:audit-log`, KHÔNG bound hàng → `KI-072`.**
+>   `AuditQueryService.listCompany(companyId, query)` **không nhận `userId` của actor** ⇒ nó không
+>   resolve `data_scope` được, kể cả nếu muốn. Vai `view:audit-log@Own` đọc trọn **13.146** hàng
+>   `audit_logs` của tenant (đo 2026-08-21; so với 366 + 65 của hai bảng vừa đóng — bề mặt CÒN MỞ lớn
+>   gấp ~30 lần bề mặt đã đóng), và `?actorUserId=` là đúng hình dạng V2 của KI-070: dò được lịch sử
+>   hành động của một UUID bất kỳ trong tenant. Che before/after (`AuditMaskerService`) là lớp KHÁC —
+>   nó che GIÁ TRỊ trong hàng, không quyết định hàng nào được trả.
+>
+> • **`GET /auth/roles/:id/members` — CÒN MỞ → `KI-071`.** Vai giữ `view:user@Own` vẫn nhận trọn
+>   `userId` + `status` + `expiresAt` của MỌI thành viên role (chỉ mất email/tên). Workaround:
+>   không cấp **`view:user`** ở scope hẹp hơn Company — ⚠️ KHÔNG phải `view:role`; route này gate
+>   `view:user` (đính chính đã ghi ở KI-053 ngày 2026-08-19).
+>
+> ⚠️ **Cặp KHÁC, đừng đọc lây sang:** `/foundation/audit-logs/all` gate `view:platform-audit`
+> (operator-only, chéo tenant) · `/attendance/audit-logs` gate `view:attendance-audit-log` ·
+> `/leave/audit-logs` gate `view:leave-audit-log` · audit của TASK gate `view:task-audit-log`. Bốn
+> đường này **chưa được đo** ở vế bound-HÀNG — "chưa đo" KHÔNG phải "đã kín", và cũng không phải
+> "đang hở"; ai chạm tới chúng thì đo trước.
+>
+> ⚠️ **Workaround đang hiệu lực cho CẢ ba dòng MỞ:** không cấp `view:audit-log` (KI-072) hoặc
+> `view:user` (KI-071) ở scope hẹp hơn `Company` cho vai nào. Đo 2026-08-21: `view:audit-log` có
+> **3 vai giữ** (`SA` 10 người · `QUẢN LÝ CẤP CAO` 4 · `company-admin` 2) và `view:user` có **4 vai**
+> (ba vai trên + `hr`, 0 người giữ) — **tất cả đều `@Company`**, 0 hàng `DENY` ⇒ hôm nay chưa ai chạm
+> được lớp này. Đó là lý do cả ba là lỗ TIỀM TÀNG, không phải sự cố đang chảy.
+>
+> ⚠️ Lưới scope KHÔNG đơn điệu ở mọi chỗ dùng lattice này: `Team`/`Department` fail-closed 0 hàng nên
+> **hẹp hơn** `Own`, và `resolveStrongestScope` lấy scope MẠNH nhất ⇒ thêm một role có thể LÀM MẤT
+> hàng. Sai về phía hẹp (không bao giờ về phía rò); sàn hoá là nợ **N-1b** và phải làm cho cả ba
+> đường cùng lúc.
 >
 > Trước 2026-07-27 cả bảy route đều Authenticated theo quy ước cũ "READ mở trong tenant" — đó chính là
 > KI-030: mọi user đã đăng nhập đọc được trọn danh bạ kèm email, trong khi `/hr/employees` cùng lớp dữ

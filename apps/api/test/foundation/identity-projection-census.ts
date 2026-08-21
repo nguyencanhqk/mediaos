@@ -285,6 +285,49 @@ export function projectionPoints(): IdentityPoint[] {
   return collectIdentityPoints().filter((p) => p.kind === "PROJECTION");
 }
 
+/**
+ * S10-SEC-AUDITLOGROW-1 (KI-070) — ĐIỂM ĐÚC vị từ chặn **TẬP HÀNG**, tức mọi call-site
+ * `fromScope(…, "scoped-predicate", …)` trong `apps/api/src`.
+ *
+ * VÌ SAO đếm ĐÚC chứ không đếm TIÊU THỤ: `rowScopeSql()` (cổng tiêu thụ) đã assert `basis` + BẢNG,
+ * nên một vị từ SAI không đi qua nó được. Cái nó KHÔNG bắt được là một grant `scoped-predicate` được
+ * đúc ở nơi mới rồi đem AND thẳng vào `WHERE` **không qua cổng** — hoàn toàn hợp kiểu (`grant.cond`
+ * là một `SQL` như mọi `SQL` khác), và im lặng theo đúng chiều nguy hiểm: `WHERE` trông như đã bound
+ * trong khi bảng có thể lệch.
+ *
+ * Đây là bộ đếm CHỦ ĐÍCH-hẹp, khác ba chiều `blindSpots()` ở chỗ nó KHÔNG đo một vùng mù — nó đo một
+ * bề mặt NHÌN THẤY ĐƯỢC và pin nó lại, để mở rộng bề mặt là một hành vi phải KÝ chứ không phải một
+ * dòng diff lọt qua LIGHT gate. Trả về khoá `file#hàm` (đã sắp) chứ không chỉ số đếm: khi ĐỎ, người
+ * sửa cần biết điểm MỚI nằm ở đâu, không phải một con số lệch.
+ *
+ * ⚠️ Trần của nó: `fromScope` có thể được gọi với basis là một BIẾN thay vì literal — dạng đó scanner
+ * này KHÔNG thấy (và cũng không ai viết hôm nay). Cùng lớp cận-dưới với cả file, nói ra ở đây để nó
+ * không được đọc mạnh hơn thực tế.
+ */
+export function rowScopePredicateMints(): string[] {
+  const sites: string[] = [];
+  for (const file of sourceFiles()) {
+    const text = fs.readFileSync(file, "utf8");
+    if (!text.includes("scoped-predicate")) continue;
+    const sf = ts.createSourceFile(file, text, ts.ScriptTarget.ES2022, true);
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "fromScope"
+      ) {
+        const basis = node.arguments[1];
+        if (basis && ts.isStringLiteral(basis) && basis.text === "scoped-predicate") {
+          sites.push(`${rel(file)}#${enclosing(node, sf)}`);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+  }
+  return sites.sort();
+}
+
 export interface BlindSpots {
   /**
    * Số file EXPORT một `alias(users, …)` ra ngoài. Scanner lần alias trong MỘT file; một alias được

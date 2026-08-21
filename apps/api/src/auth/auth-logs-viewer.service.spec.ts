@@ -4,6 +4,7 @@
  * ở tầng map: metadata/payload KHÔNG BAO GIỜ xuất hiện trong DTO (repo không select → service không map).
  */
 import { describe, expect, it } from "vitest";
+import { ForbiddenException } from "@nestjs/common";
 import { loginLogListQuerySchema, securityEventListQuerySchema } from "@mediaos/contracts";
 import { AuthLogsViewerService } from "./auth-logs-viewer.service";
 import type { LoginLogRow } from "./login-log.repository";
@@ -21,16 +22,25 @@ function stubDb(): unknown {
 }
 
 /**
- * Stub DataScopeService — S6-SEC-IDENTITY-PROJ-1 (KI-054).
+ * Stub DataScopeService — S6-SEC-IDENTITY-PROJ-1 (KI-054) + S10-SEC-AUDITLOGROW-1 (KI-070).
  *
- * `scope` là thứ ca test điều khiển. Trả `null` = actor KHÔNG có grant nào cho cặp danh bạ
- * `view:user` ⇒ `fromScope` fail-closed về `sql\`false\`` ⇒ mọi cột danh tính bị bỏ. Ở tầng unit
- * (không DB) vị từ không được THỰC THI, nên ca ở đây kiểm ĐƯỜNG MAP (userRef ba nhánh); việc vị từ có
- * lọc đúng hàng hay không thuộc int-spec chạy trên Postgres thật.
+ * ⚠️ PHẢI phân biệt CẶP QUYỀN. Bản trước trả cùng một `scope` cho MỌI cặp; từ KI-070 service hỏi HAI
+ * cặp khác nhau với hai luật fail-closed NGƯỢC nhau — `view:audit-log` (`null` ⇒ **403**) và
+ * `view:user` (`null` ⇒ bỏ cột danh tính, KHÔNG 403). Một stub trả chung sẽ làm ca "không có cặp danh
+ * bạ" bật sang nhánh 403 và ta mất luôn phép kiểm đường map.
+ *
+ * Ở tầng unit (không DB) vị từ không được THỰC THI, nên ca ở đây kiểm ĐƯỜNG MAP (userRef ba nhánh) +
+ * nhánh 403; việc vị từ có lọc đúng HÀNG hay không thuộc int-spec chạy trên Postgres thật
+ * (`test/integration/audit-log-row-scope.int-spec.ts`).
  */
-function stubDataScope(scope: string | null): unknown {
+function stubDataScope(dirScope: string | null, auditScope: string | null): unknown {
   return {
-    resolveOrNull: async () => scope,
+    resolveOrNull: async (
+      _userId: string,
+      _companyId: string,
+      _action: string,
+      resourceType: string,
+    ) => (resourceType === "audit-log" ? auditScope : dirScope),
     buildUserScopeConditionOn: () => ({ queryChunks: [] }),
   };
 }
@@ -41,6 +51,7 @@ function makeService(
   loginRows: LoginLogRow[],
   secRows: SecurityEventRow[],
   scope: string | null = "Company",
+  auditScope: string | null = "Company",
 ): AuthLogsViewerService {
   const loginRepo = {
     findManyTx: async () => loginRows,
@@ -54,7 +65,7 @@ function makeService(
     stubDb() as never,
     loginRepo as never,
     secRepo as never,
-    stubDataScope(scope) as never,
+    stubDataScope(scope, auditScope) as never,
   );
 }
 
@@ -188,6 +199,55 @@ describe("AuthLogsViewerService.listSecurityEvents (mapping)", () => {
     const { data } = await svc.listSecurityEvents(ACTOR, baseSecQuery);
     expect(data[0].actor).toBeNull();
     expect(data[0].user).toMatchObject({ id: U1, display_name: null });
+  });
+});
+
+/**
+ * S10-SEC-AUDITLOGROW-1 (KI-070) — nhánh fail-closed của vị từ chặn TẬP HÀNG.
+ *
+ * VÌ SAO Ở TẦNG UNIT: nhánh này chỉ chạy khi guard cho qua NHƯNG `resolveStrongestScope` trả `null`
+ * — một BẤT ĐỒNG giữa hai tầng (hình dạng thật: cửa sổ cache 300s của guard sau khi role vừa bị gỡ,
+ * vì `getCompanyRoleGrantsWithScope` cố ý KHÔNG cache). Không int-spec nào dựng lại được trạng thái
+ * đó mà không phải giả lập chính cache, nên nếu không có ca ở đây thì nhánh 403 là code CHƯA TỪNG
+ * CHẠY — đúng thứ WO này tồn tại để chống ("mô tả phạm vi mà không có gì ép nó").
+ */
+describe("AuthLogsViewerService — fail-closed khi scope cặp gate không phân giải được (KI-070)", () => {
+  it("listLoginLogs: view:audit-log → null ⇒ NÉM ForbiddenException, KHÔNG trả 0 hàng lặng lẽ", async () => {
+    const svc = makeService([], [], "Company", null);
+    await expect(svc.listLoginLogs(ACTOR, baseLoginQuery)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it("listSecurityEvents: view:audit-log → null ⇒ NÉM ForbiddenException", async () => {
+    const svc = makeService([], [], "Company", null);
+    await expect(svc.listSecurityEvents(ACTOR, baseSecQuery)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it("message GIỮ NGUYÊN VĂN của resolveAndAssert — 403 này không được phân biệt với 403 của guard", async () => {
+    const svc = makeService([], [], "Company", null);
+    // Ca ĐỐI KHÁNG, không phải ca trang trí: nếu ai đó "làm rõ" thông điệp thành
+    // "scope resolution failed" thì response trở thành oracle — client phân biệt được "thiếu cặp
+    // quyền" với "có cặp quyền nhưng scope hỏng". Chuỗi phải khớp `data-scope.service.resolveAndAssert`.
+    await expect(svc.listLoginLogs(ACTOR, baseLoginQuery)).rejects.toThrow(
+      "AUTH-ERR-FORBIDDEN: out of permission scope",
+    );
+  });
+
+  it("ĐỐI CHỨNG ALLOW — cặp gate có scope thì hai route KHÔNG ném (nhánh 403 không bắt oan)", async () => {
+    const svc = makeService([], [], "Company", "Own");
+    await expect(svc.listLoginLogs(ACTOR, baseLoginQuery)).resolves.toMatchObject({ total: 0 });
+    await expect(svc.listSecurityEvents(ACTOR, baseSecQuery)).resolves.toMatchObject({ total: 0 });
+  });
+
+  it("thiếu cặp DANH BẠ (view:user → null) KHÔNG được biến thành 403 — chỉ bỏ cột danh tính", async () => {
+    // Hai luật fail-closed NGƯỢC nhau ở hai cặp; gộp chúng là siết quá tay và làm mất một quyền
+    // đang có (khuôn N-1c). Đây là ca chống chính bản vá này siết nhầm.
+    const svc = makeService([], [], null, "Company");
+    await expect(svc.listLoginLogs(ACTOR, baseLoginQuery)).resolves.toMatchObject({ total: 0 });
+    await expect(svc.listSecurityEvents(ACTOR, baseSecQuery)).resolves.toMatchObject({ total: 0 });
   });
 });
 

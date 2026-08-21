@@ -472,41 +472,41 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
     point: "auth/login-log.repository.ts#findManyTx:users.email",
     basis: "identity-gated",
     reason:
-      "KI-054 — auth-logs-viewer.service.ts `identityGrantFor()`: cặp GATE là `view:audit-log`, cặp BOUND là `view:user` ⇒ `resolveOrNull` (khuôn N-1c). Trước bản vá docstring ghi 'Company-scope' nhưng không có gì resolve data_scope.",
+      "KI-054 — auth-logs-viewer.service.ts `identityGrantFrom()`: cặp GATE là `view:audit-log`, cặp BOUND là `view:user` ⇒ `resolveOrNull` (khuôn N-1c). Trước bản vá docstring ghi 'Company-scope' nhưng không có gì resolve data_scope. ⟲ S10-SEC-AUDITLOGROW-1 (KI-070): dòng này vẫn chỉ nói về CỘT — vế TẬP HÀNG nay do một grant RIÊNG `basis:'scoped-predicate'` dựng trên `login_logs.user_id` theo cặp `view:audit-log` đảm nhận, đi qua `rowScopeSql` chứ không qua `identityColumns` (nên nó KHÔNG phải một điểm chiếu và không có dòng ở sổ này).",
     signedBy: WO,
   },
   {
     point: "auth/login-log.repository.ts#findManyTx:users.fullName",
     basis: "identity-gated",
     reason:
-      "KI-054 — cùng cụm `case when` với cột email; `userRef()` ba nhánh phân biệt 'không gắn user' / 'ngoài scope' / 'user đã xoá'.",
+      "KI-054 — cùng cụm `case when` với cột email; `userRef()` ba nhánh phân biệt 'không gắn user' / 'ngoài scope' / 'user đã xoá'. ⟲ S10-SEC-AUDITLOGROW-1: tập hàng nay bị chặn riêng theo `view:audit-log` (KI-070) — hai tầng độc lập, đừng gộp.",
     signedBy: WO,
   },
   {
     point: "auth/security-event.repository.ts#findManyTx:users.email",
     basis: "identity-gated",
     reason:
-      "KI-054 — nhóm CHỦ THỂ, vị từ dựng trên `users.id`/`users.company_id`, cờ `identityInScope`.",
+      "KI-054 — nhóm CHỦ THỂ, vị từ dựng trên `users.id`/`users.company_id`, cờ `identityInScope`. ⟲ S10-SEC-AUDITLOGROW-1 (KI-070): truy vấn này nay mang BA vị từ trên BA bảng — hàng (`user_security_events.user_id`), chủ thể (`users.id`), tác nhân (`sec_event_actor.id`) — nên grants truyền bằng OBJECT CÓ TÊN: ba giá trị cùng kiểu `IdentityGrant` phân biệt bằng vị trí thì hoán vị là hợp kiểu.",
     signedBy: WO,
   },
   {
     point: "auth/security-event.repository.ts#findManyTx:users.fullName",
     basis: "identity-gated",
-    reason: "KI-054 — cùng nhóm CHỦ THỂ, cùng cụm `case when`, cùng cờ `identityInScope`.",
+    reason: "KI-054 — cùng nhóm CHỦ THỂ, cùng cụm `case when`, cùng cờ `identityInScope`. ⟲ S10-SEC-AUDITLOGROW-1: `Own` trên vị từ HÀNG bám CHỦ THỂ (`user_id`), CỐ Ý không `OR actor_user_id` — xem `security-event.repository.buildWhere`.",
     signedBy: WO,
   },
   {
     point: "auth/security-event.repository.ts#findManyTx:actor.email",
     basis: "identity-gated",
     reason:
-      "KI-054 — nhóm NGƯỜI GÂY RA, GRANT RIÊNG dựng trên `SECURITY_EVENT_ACTOR.id`/`.company_id`. Tái dùng vị từ của chủ thể vừa lộ actorEmail của người khác (hàng có chủ thể = tôi) vừa giấu email của chính tôi (hàng tôi là actor) — hai chiều đều sai. Cờ riêng `actorIdentityInScope` vì cờ trùng tên sẽ ĐÈ nhau trong `select`.",
+      "KI-054 — nhóm NGƯỜI GÂY RA, GRANT RIÊNG dựng trên `SECURITY_EVENT_ACTOR.id`/`.company_id`. Tái dùng vị từ của chủ thể vừa lộ actorEmail của người khác (hàng có chủ thể = tôi) vừa giấu email của chính tôi (hàng tôi là actor) — hai chiều đều sai. Cờ riêng `actorIdentityInScope` vì cờ trùng tên sẽ ĐÈ nhau trong `select`. ⟲ S10-SEC-AUDITLOGROW-1 (KI-070) — ĐỌC KỸ CHỖ NÀY TRƯỚC KHI 'SỬA CHO NHẤT QUÁN': vị từ HÀNG mới bám CHỦ THỂ (`user_security_events.user_id`), CỐ Ý **không** `OR actor_user_id`, nên hàng mà tôi là người gây ra KHÔNG lọt vào tập hàng của tôi ở scope `Own` — cột này vì thế chỉ còn nói về actor của những hàng VỀ tôi. Nới vế actor để 'thấy việc mình đã làm' biến tập hàng thành hàm của LỊCH SỬ HÀNH VI, không luật nào kiểm được. Đây là BA vị từ trên BA bảng, không phải một vị từ dùng ba lần.",
     signedBy: WO,
   },
   {
     point: "auth/security-event.repository.ts#findManyTx:actor.fullName",
     basis: "identity-gated",
     reason:
-      "KI-054 — cùng nhóm NGƯỜI GÂY RA, cùng grant riêng và cùng cờ `actorIdentityInScope`.",
+      "KI-054 — cùng nhóm NGƯỜI GÂY RA, cùng grant riêng và cùng cờ `actorIdentityInScope`. ⟲ S10-SEC-AUDITLOGROW-1: cùng ranh giới D7 với cột email ở dòng trên — tập hàng bám chủ thể, không bám người gây ra.",
     signedBy: WO,
   },
   {
@@ -564,3 +564,21 @@ export const BLIND_SPOT_PINS = {
   /** File export `alias(users,…)` — mỗi cái là một đường mà scanner một-file không lần được (F12). */
   exportedUserAliases: 1,
 } as const;
+
+/**
+ * S10-SEC-AUDITLOGROW-1 (KI-070) — ĐIỂM ĐÚC vị từ chặn TẬP HÀNG, pin thành DANH SÁCH chứ không thành
+ * số đếm (xem `rowScopePredicateMints()`).
+ *
+ * Vì sao là danh sách: một trần dạng `<= n` cho phép ĐỔI CHỖ trong im lặng — gỡ điểm đúc ở
+ * `auth-logs-viewer` và thêm một điểm ở module khác thì số không đổi, trong khi bề mặt đã đổi hoàn
+ * toàn. Danh sách bắt cả hai chiều (thêm MỚI và mất CŨ), đúng khuôn "chiều 2" của sổ phán quyết.
+ *
+ * Vì sao pin bề mặt này chứ không để nó tự do: `rowScopeSql()` chỉ gác đường TIÊU THỤ. Một grant
+ * `scoped-predicate` đúc ở nơi mới rồi AND thẳng vào `WHERE` **không qua cổng** là hợp kiểu và im
+ * lặng. Thêm một điểm đúc = mở một bề mặt bound-HÀNG mới ⇒ phải đi qua FULL gate và ký lại ở đây,
+ * kèm int-spec deny/allow của CHÍNH bảng đó (assert BẢNG trong `rowScopeSql` không bắt được ca "cả
+ * nơi đúc lẫn nơi tiêu thụ cùng trỏ sai một bảng").
+ *
+ * Đo 2026-08-21: ĐÚNG MỘT điểm — hai route nhật ký dùng chung `rowScopeFor()`.
+ */
+export const ROW_SCOPE_MINT_PINS = ["auth/auth-logs-viewer.service.ts#rowScopeFor"] as const;

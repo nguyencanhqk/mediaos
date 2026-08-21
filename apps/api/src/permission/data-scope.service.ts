@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, Logger } from "@nestjs/common";
-import { and, eq, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, eq, getTableName, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import type { DataScope } from "@mediaos/contracts";
 import { employeeProfiles, users } from "../db/schema";
@@ -260,9 +260,21 @@ export class DataScopeService {
         // `getCapabilities` publishes {pair: true} WITHOUT data_scope, so `useCan()` is true and the
         // console renders its plain "no users" empty state to an admin whose tenant has dozens. Log it
         // so the deny path leaves a trace an operator can actually find (nợ N-5, S6-SEC-ORG-1 §7).
+        //
+        // ⟲ S10-SEC-AUDITLOGROW-1: CÂU log đổi cho TRUNG LẬP theo bảng, `table` vào payload. Từ WO
+        // này hàm KHÔNG còn chỉ phục vụ danh bạ tài khoản — `login_logs` và `user_security_events`
+        // dùng chung đúng lattice này để chặn TẬP HÀNG (KI-070). Câu cũ ("account-directory read …
+        // on `users`") nay SAI hai lần cho hai đường mới: sai route lẫn sai bảng, và nó sai đúng lúc
+        // người trực ca tin nó nhất. Thêm `table` mà giữ nguyên câu thì payload nói một đằng, câu nói
+        // một nẻo — người đọc log tin CÂU. CHỈ chuỗi + payload — vị từ không đổi một ký tự.
         this.logger.warn(
-          "account-directory read resolved to a scope with no defined membership on `users` → 0 rows",
-          { userId: ctx.userId, companyId: ctx.companyId, scope },
+          "scoped read resolved to a scope with no defined membership on the target table → 0 rows",
+          {
+            userId: ctx.userId,
+            companyId: ctx.companyId,
+            scope,
+            table: getTableName(target.idCol.table),
+          },
         );
         return sql`false`;
     }
