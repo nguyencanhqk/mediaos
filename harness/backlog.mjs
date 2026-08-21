@@ -12988,15 +12988,34 @@ export const backlog = [
     title:
       "Đường FE CHẾT (cùng lớp platform-accounts): màn `/settings/break-glass` + mục nav sống trong console, nhưng `apps/api` chỉ có `db/schema/break-glass.ts` — KHÔNG module, KHÔNG service, KHÔNG controller",
     zone: "green",
-    status: "todo",
+    status: "done",
+    // APPEND 21/08/2026 — chủ dự án chốt (a). ĐO THÊM 2 điều paths gốc bỏ sót:
+    //  (1) `break_glass_grants.platform_account_id` là FK **NOT NULL** tới `platform_accounts` ⇒ break-glass
+    //      CHỈ phục vụ việc lộ secret platform-account — đúng nhánh media đã de-media-fy và vừa gỡ FE ở #398.
+    //      Phương án (b) sẽ phải hồi sinh CẢ tầng platform-accounts, tức đi ngược CLAUDE.md §1.
+    //  (2) Mục nav `breakGlass` KHÔNG khai `permission` ⇒ `useConsoleNavItems` cho qua
+    //      (`item.permission === undefined`) ⇒ MỌI user console đều thấy ô đỏ dẫn tới màn 404, không phải
+    //      chỉ người có quyền. Xem [[console-nav-permission-gate-is-a-hook]].
+    //  (3) FE gọi HAI endpoint chết, không phải một: `GET /break-glass/grants` (listMyGrants) lẫn
+    //      `POST /platform-accounts/:id/break-glass-reveal` (reveal) — cả hai 404.
     paths: [
       "apps/console/src/lib/break-glass-api.ts",
       "apps/console/src/components/break-glass/**",
       "apps/console/src/components/secret-field.tsx",
+      "apps/console/src/components/secret-field.spec.tsx",
       "apps/console/src/routes/settings/break-glass.tsx",
       "apps/console/src/router.tsx",
       "apps/console/src/lib/nav.ts",
+      "apps/console/src/i18n/index.ts",
+      "apps/console/src/i18n/locales/vi/break-glass.json",
       "apps/console/src/i18n/locales/vi/settings.json",
+      // MỞ RỘNG so với seed: nhãn `nav:breakGlass` sống ở web-core (dùng chung), console là hộ
+      // tiêu thụ DUY NHẤT (đã grep apps/app · apps/auth · apps/admin = rỗng) ⇒ gỡ cùng lượt,
+      // không để lại khoá i18n mồ côi.
+      "packages/web-core/src/i18n/locales/vi/nav.ts",
+      // MỞ RỘNG so với seed: RELEASE-11 §3.2 chỉ admin tới `/settings/break-glass` như một màn ĐANG
+      // CHẠY. Gỡ màn mà để nguyên dòng đó là chuyển lời hứa chết từ UI sang TÀI LIỆU.
+      "docs/RELEASE/RELEASE-11_Admin_Guide.md",
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],

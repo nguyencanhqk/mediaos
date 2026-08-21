@@ -86,7 +86,12 @@ bật xác thực 2 bước**. Đây là `KI-056` (`RELEASE-10` §4) và là m�
 | Xem/thu hồi phiên đăng nhập của mình | App `/account/sessions` |
 | Chính sách bảo mật công ty (độ mạnh mật khẩu, khoá tài khoản…) | Console `/settings/security-policy` |
 | Nhật ký đăng nhập · sự kiện bảo mật · truy cập tệp | App `/system/login-logs` · `/system/security-events` · `/system/file-access-logs` |
-| Break-glass (mở khoá khẩn cấp theo từng đối tượng) | Console `/settings/break-glass` |
+
+> **Break-glass (mở khoá khẩn cấp): CHƯA CÓ.** Màn `/settings/break-glass` đã được **gỡ khỏi console**
+> 21/08/2026 (`S10-FE-BREAKGLASS-DEADPATH-1`) vì backend chưa từng có controller/service phục vụ nó —
+> mục nav dẫn thẳng tới màn 404. Bảng `break_glass_grants`/`break_glass_approvals` (migration 0200/0201)
+> vẫn còn trong DB nhưng KHÔNG có đường dùng. Grant gắn FK **NOT NULL** tới `platform_accounts` — nhánh
+> media đã descope — nên tính năng này sẽ phải được thiết kế lại nếu công ty cần, KHÔNG phải bật lại màn cũ.
 
 ---
 

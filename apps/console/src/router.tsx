@@ -3,7 +3,6 @@ import { HomePage } from "@/routes/home";
 import { RootLayout } from "@/routes/root-layout";
 import { CompanySettingsPage } from "@/routes/settings/company";
 import { MailConfigPage } from "@/routes/settings/mail-config";
-import { BreakGlassPage } from "@/routes/settings/break-glass";
 import { SecuritySettingsPage } from "@/routes/settings/security";
 import { AccountSettingsPage } from "@/routes/settings/account";
 import { SecurityPolicyPage } from "@/routes/settings/security-policy";
@@ -56,14 +55,6 @@ const mailConfigRoute = createRoute({
   path: "/settings/mail-config",
   beforeLoad: authGuard,
   component: MailConfigPage,
-});
-
-// G6-2 PR-B ROUND 2: "My break-glass grants" — list + JIT reveal (active grants only, ephemeral plaintext).
-const breakGlassRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/settings/break-glass",
-  beforeLoad: authGuard,
-  component: BreakGlassPage,
 });
 
 // Self-service "Bảo mật tài khoản" — user tự quản 2FA của mình. Chỉ authGuard (không permission-gate,
@@ -207,7 +198,6 @@ const routeTree = rootRoute.addChildren([
   adminUsersRoute,
   companySettingsRoute,
   mailConfigRoute,
-  breakGlassRoute,
   securityRoute,
   accountRoute,
   securityPolicyRoute,

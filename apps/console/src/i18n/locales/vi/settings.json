@@ -48,15 +48,6 @@
     "saveSuccess": "Đã lưu thành công.",
     "saveError": "Lưu thất bại."
   },
-  "secretField": {
-    "revealAriaLabel": "Hiện {{label}}",
-    "hideAriaLabel": "Ẩn {{label}}",
-    "verifying": "Đang xác minh…",
-    "revealButton": "Hiện",
-    "hideButton": "Ẩn",
-    "revealError": "Hiện secret thất bại.",
-    "defaultLabel": "mật khẩu"
-  },
   "mailConfig": {
     "pageTitle": "Cấu hình mail server",
     "pageDesc": "Thiết lập SMTP gửi email của công ty (mặc định hoặc theo từng ứng dụng). Mật khẩu được mã hoá và không bao giờ hiển thị lại.",
