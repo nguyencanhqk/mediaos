@@ -6,11 +6,25 @@ import { AuthLogsViewerService } from "../../src/auth/auth-logs-viewer.service";
 import { DataScopeService } from "../../src/permission/data-scope.service";
 import { DataScopeRepository } from "../../src/permission/data-scope.repository";
 
-/** Actor đọc log — không giữ grant danh bạ nào; spec này không khẳng định gì về cột danh tính. */
-// UUID HỢP LỆ (hex). Bản đầu dùng "…-00000000log1" — `l`,`o`,`g` không phải hex ⇒ Postgres 22P02,
-// `resolveStrongestScope` nuốt vào try/catch rồi fail-closed `null`. Spec vẫn xanh nhưng xanh vì đi
-// vào NHÁNH LỖI HẠ TẦNG, không phải nhánh deny, và bơm error-log rác mỗi lần gọi.
-const LOG_READER_ACTOR = "00000000-0000-0000-0000-0000000010c1";
+/**
+ * Actor đọc log — MỘT NGƯỜI THẬT MỖI TENANT, giữ `view:audit-log@Company` thật.
+ *
+ * ⟲ S10-SEC-AUDITLOGROW-1 (KI-070) — ĐỔI, và lý do đáng giữ lại: bản trước dùng MỘT UUID tổng hợp
+ * `00000000-…-10c1` **không tồn tại trong `users`, không giữ grant nào**, rồi gọi thẳng
+ * `viewer.listLoginLogs()` (bỏ qua controller/guard). Nó đọc được mọi hàng của tenant — không phải vì
+ * spec seed đúng, mà vì **đường đọc chưa có vị từ scope nào**, tức chính lỗ KI-070. Sau bản vá, actor
+ * đó nhận 403 và 4 ca ở đây ĐỎ. Đó là bản vá làm đúng việc của nó, không phải hồi quy.
+ *
+ * Sửa đúng = seed grant THẬT cho mỗi tenant (đúng điều docblock dựng `DataScopeService` bên dưới đã
+ * đoán trước: *"nếu sau này nó bắt đầu assert … thì nó phải seed grant, và đó là điều đúng"*). Kèm
+ * theo, ca R3 mạnh hơn hẳn: "tenant B không đọc được hàng của A" nay nói về một admin B **có quyền
+ * đọc thật**, chứ không phải một UUID vốn dĩ chẳng đọc được gì.
+ *
+ * Bài học cũ giữ nguyên vì nó vẫn đúng cho mọi UUID viết tay: `resolveStrongestScope` NUỐT lỗi
+ * Postgres vào try/catch rồi fail-closed `null` — một UUID sai hex (`…log1`) làm spec xanh vì đi vào
+ * NHÁNH LỖI HẠ TẦNG chứ không phải nhánh deny.
+ */
+const AUDIT_LOG_PAIR = ["view", "audit-log"] as const;
 import { LoginLogRepository } from "../../src/auth/login-log.repository";
 import { SecurityEventRepository } from "../../src/auth/security-event.repository";
 import { LoginRateLimiter } from "../../src/auth/login-rate-limiter";
@@ -31,7 +45,16 @@ import { AuditService } from "../../src/events/audit.service";
 import { OutboxService } from "../../src/events/outbox.service";
 import { loadEnv } from "../../src/config/env.schema";
 import { directPool, hasDb } from "../helpers/integration-db";
-import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
+import {
+  cleanupTenants,
+  seedCompany,
+  seedPermissionCatalog,
+  seedRole,
+  seedRolePermission,
+  seedUser,
+  seedUserRole,
+  type SeededTenant,
+} from "../helpers/seed";
 import { makeSecurityPolicyService } from "../helpers/security-policy";
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-".padEnd(40, "0");
@@ -67,11 +90,16 @@ describe.skipIf(!hasDb)("S6-SEC-LOGINLOG-2 login blocked → gắn đúng compan
   let auth: AuthService;
   let limiter: LoginRateLimiter;
   let viewer: AuthLogsViewerService;
+  /** companyId → user THẬT của tenant đó, giữ `view:audit-log@Company`. */
+  const logReader = new Map<string, string>();
 
   beforeAll(async () => {
     A = await seedCompany(direct, "lgl2A");
     B = await seedCompany(direct, "lgl2B");
     await seedUser(direct, A.companyId, `owner-${MARKER}@a.test`, await password.hash(PASSWORD));
+
+    await seedLogReader(A, "a");
+    await seedLogReader(B, "b");
     const dbsvc = new DatabaseService();
     limiter = new LoginRateLimiter();
     auth = newAuth(dbsvc, limiter);
@@ -79,15 +107,40 @@ describe.skipIf(!hasDb)("S6-SEC-LOGINLOG-2 login blocked → gắn đúng compan
       dbsvc,
       new LoginLogRepository(),
       new SecurityEventRepository(),
-      // S6-SEC-IDENTITY-PROJ-1 (KI-054): instance THẬT. Actor của spec này không giữ grant `view:user`
-      // nào ⇒ cột danh tính bị bỏ — không sao, spec này khẳng định về GẮN TENANT + ip/status, không
-      // về danh tính. Nếu sau này nó bắt đầu assert email thì nó phải seed grant, và đó là điều đúng.
+      // S6-SEC-IDENTITY-PROJ-1 (KI-054): instance THẬT. Người đọc của spec này CỐ Ý không giữ grant
+      // `view:user` ⇒ cột danh tính bị bỏ — không sao, spec khẳng định về GẮN TENANT + ip/status,
+      // không về danh tính. (Câu "nếu sau này nó assert … thì phải seed grant" đã thành hiện thực ở
+      // S10-SEC-AUDITLOGROW-1 cho cặp `view:audit-log` — xem `logReader` bên trên.)
       new DataScopeService(
         new PermissionService(new PermissionRepository(dbsvc)),
         new DataScopeRepository(dbsvc),
       ),
     );
   });
+
+  /**
+   * Một người đọc log THẬT cho một tenant: user + role + `view:audit-log@Company`.
+   *
+   * PHẢI gọi cho MỌI tenant mà ca sẽ đọc qua `visibleTo`/`listBlocked` — kể cả tenant dựng giữa chừng
+   * (R7). Thiếu ⇒ `listBlocked` fail LOUD, chứ KHÔNG trả 0 hàng: một ca cô lập tenant xanh vì
+   * "không có quyền đọc" thay vì vì "RLS che" là ca xanh-RỖNG.
+   *
+   * `view:audit-log` là `is_sensitive=true` trong catalog — khai sai cờ thì `seedPermissionCatalog`
+   * NÉM (đó là chủ đích của nó).
+   */
+  async function seedLogReader(tenant: SeededTenant, tag: string): Promise<void> {
+    const reader = await seedUser(
+      direct,
+      tenant.companyId,
+      `logreader-${MARKER}@${tag}.test`,
+      await password.hash(PASSWORD),
+    );
+    const roleId = await seedRole(direct, tenant.companyId, `lgl2-logreader-${tag}`);
+    const permId = await seedPermissionCatalog(direct, AUDIT_LOG_PAIR[0], AUDIT_LOG_PAIR[1], true);
+    await seedRolePermission(direct, roleId, permId, "ALLOW", "Company");
+    await seedUserRole(direct, reader, roleId, tenant.companyId);
+    logReader.set(tenant.companyId, reader);
+  }
 
   afterAll(async () => {
     await direct
@@ -189,14 +242,19 @@ describe.skipIf(!hasDb)("S6-SEC-LOGINLOG-2 login blocked → gắn đúng compan
       | undefined;
   }
 
-  const listBlocked = (companyId: string) =>
-    viewer.listLoginLogs({ id: LOG_READER_ACTOR, companyId }, {
+  const listBlocked = (companyId: string) => {
+    const actorId = logReader.get(companyId);
+    // Fail LOUD: một `undefined` lọt xuống sẽ thành 403 và ca đọc thành "không thấy hàng" — tức một
+    // ca cô lập tenant XANH vì lý do sai hoàn toàn.
+    expect(actorId, `chưa seed người đọc log cho company ${companyId}`).toBeDefined();
+    return viewer.listLoginLogs({ id: actorId as string, companyId }, {
       page: 1,
       per_page: 100,
       status: "blocked",
       sort: "created_at",
       order: "desc",
     } as Parameters<AuthLogsViewerService["listLoginLogs"]>[1]);
+  };
 
   // ─────────────────────────── R1/R2: chốt VÁ (ĐỎ trước khi sửa) ───────────────────────────
 
@@ -300,6 +358,10 @@ describe.skipIf(!hasDb)("S6-SEC-LOGINLOG-2 login blocked → gắn đúng compan
     // done_when #4 nói "slug sai/inactive"; R4 mới phủ vế "sai". Vế "inactive" đi qua nhánh khác của
     // resolveCompanyId (`status !== 'active'`) nên phải có ca riêng — đúng ca mà FULL gate chỉ ra là thiếu.
     const C = await seedCompany(direct, "lgl2C");
+    // Người đọc của C phải seed TRƯỚC khi đình chỉ: sau `status='suspended'` các đường seed/đọc của
+    // tenant đó không còn đảm bảo chạy được, và ca này cần C đọc bằng QUYỀN THẬT thì "không thấy" mới
+    // chứng minh được cô lập (S10-SEC-AUDITLOGROW-1).
+    await seedLogReader(C, "c");
     await direct.query("UPDATE companies SET status = 'suspended' WHERE id = $1", [C.companyId]);
     const email = `r7-${MARKER}@c.test`;
     await lockBucket(C.slug, email);

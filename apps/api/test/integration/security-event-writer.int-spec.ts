@@ -43,7 +43,16 @@ import { PasswordService } from "../../src/auth/password.service";
 import { SecurityEventWriter } from "../../src/auth/security-event-writer.service";
 import { DatabaseService } from "../../src/db/db.service";
 import { directPool, hasDb } from "../helpers/integration-db";
-import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
+import {
+  cleanupTenants,
+  seedCompany,
+  seedPermissionCatalog,
+  seedRole,
+  seedRolePermission,
+  seedUser,
+  seedUserRole,
+  type SeededTenant,
+} from "../helpers/seed";
 
 /** Gate cứng: Postgres THẬT VÀ DB cô lập lane (KHÔNG phải DB dev chung). */
 const runDb = hasDb && Boolean(process.env.LANE_DB);
@@ -91,6 +100,37 @@ describe.skipIf(!runDb)(
     let B: SeededTenant;
     const companyIds: string[] = [];
 
+    /**
+     * companyId → người đọc nhật ký THẬT của tenant đó (`view:audit-log@Company`).
+     *
+     * ⟲ S10-SEC-AUDITLOGROW-1 (KI-070): trước WO này ca X4 đọc bằng chính `subject` — một user seed
+     * trần KHÔNG giữ grant nào — và nó đọc được vì **đường đọc chưa có vị từ scope nào**, tức chính
+     * lỗ KI-070. Sau bản vá `AuthLogsViewerService` phân giải `data_scope` của cặp gate
+     * `view:audit-log` và ném 403 khi actor không có grant ⇒ ca X4 ĐỎ.
+     *
+     * Sửa đúng là seed grant THẬT cho MỖI tenant, không phải nới bản vá: X4 khẳng định về **cô lập
+     * tenant (RLS)**, và khẳng định đó chỉ có nghĩa khi người đọc ở tenant B **thật sự có quyền đọc**
+     * — nếu không thì "0 hàng" chứng minh nhầm thứ (thiếu quyền), và ca xanh vì lý do sai.
+     */
+    const logReader = new Map<string, string>();
+
+    /** user + role + `view:audit-log@Company` cho một tenant. `view:audit-log` là cặp NHẠY CẢM. */
+    async function seedLogReader(tenant: SeededTenant, tag: string): Promise<void> {
+      const reader = await seedUser(direct, tenant.companyId, `sew-reader-${tag}-${TAG}@x.test`);
+      const roleId = await seedRole(direct, tenant.companyId, `sew-reader-${tag}-${TAG}`);
+      const permId = await seedPermissionCatalog(direct, "view", "audit-log", true);
+      await seedRolePermission(direct, roleId, permId, "ALLOW", "Company");
+      await seedUserRole(direct, reader, roleId, tenant.companyId);
+      logReader.set(tenant.companyId, reader);
+    }
+
+    /** Người đọc của tenant — fail LOUD nếu quên seed (im lặng ⇒ 403 ⇒ "0 hàng" xanh vì lý do sai). */
+    function readerOf(companyId: string): string {
+      const id = logReader.get(companyId);
+      expect(id, `chưa seed người đọc nhật ký cho company ${companyId}`).toBeDefined();
+      return id as string;
+    }
+
     /** Ghi 1 event qua writer TRONG withTenant (company_id = tenant qua DB DEFAULT current_setting). */
     async function recordUnder(
       companyId: string,
@@ -114,6 +154,8 @@ describe.skipIf(!runDb)(
       A = await seedCompany(direct, "sew-a");
       B = await seedCompany(direct, "sew-b");
       companyIds.push(A.companyId, B.companyId);
+      await seedLogReader(A, "a");
+      await seedLogReader(B, "b");
     });
 
     afterAll(async () => {
@@ -210,12 +252,22 @@ describe.skipIf(!runDb)(
       });
 
       // Dưới tenant B (RLS ép Company-scope) → KHÔNG thấy event của A.
-      const underB = await viewer.listSecurityEvents({ id: subject, companyId: B.companyId }, eventQuery(subject));
+      // ⚠️ Đọc bằng NGƯỜI ĐỌC CỦA B, không bằng `subject`: `subject` không giữ `view:audit-log` nên
+      // sau S10-SEC-AUDITLOGROW-1 nó chỉ nhận 403, và "0 hàng" sẽ chứng minh nhầm thứ (thiếu quyền
+      // chứ không phải RLS che). Với người đọc CÓ QUYỀN ở B mà vẫn 0 hàng thì mới là cô lập tenant.
+      const underB = await viewer.listSecurityEvents(
+        { id: readerOf(B.companyId), companyId: B.companyId },
+        eventQuery(subject),
+      );
       expect(underB.data.length).toBe(0);
       expect(underB.total).toBe(0);
 
-      // Dưới tenant A (chủ sở hữu) → thấy ≥1.
-      const underA = await viewer.listSecurityEvents({ id: subject, companyId: A.companyId }, eventQuery(subject));
+      // Dưới tenant A (chủ sở hữu) → thấy ≥1. Đây là ĐỐI CHỨNG DƯƠNG: không có nó thì "0 hàng ở B"
+      // vẫn xanh khi đường đọc chết hoàn toàn.
+      const underA = await viewer.listSecurityEvents(
+        { id: readerOf(A.companyId), companyId: A.companyId },
+        eventQuery(subject),
+      );
       expect(underA.data.length).toBeGreaterThanOrEqual(1);
       expect(underA.data.some((e) => e.event_type === "SESSION_REVOKED")).toBe(true);
     });
