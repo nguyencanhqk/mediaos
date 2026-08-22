@@ -13050,4 +13050,108 @@ export const backlog = [
       "Giữ nguyên `packages/contracts/src/{platform-accounts,crypto}.ts`: theo CLAUDE.md, code hướng cũ được PARK — không phát triển tiếp, KHÔNG xoá ở đợt này.",
     ],
   },
+
+  {
+    // Seed 22/08/2026 từ KI-072 (RELEASE-02). KI-072 được TÁCH RA 21/08 khi `S10-SEC-AUDITLOGROW-1`
+    // đóng KI-070 với phạm vi GHI RÕ = HAI bảng nhật ký. Đây là bảng thứ BA của CÙNG cặp gate
+    // `view:audit-log` — chỗ dấu gạch ngang trên KI-070 nguy hiểm nhất: người đọc thấy "cặp này đã
+    // chặn tập hàng" rồi cấp nó ở scope hẹp.
+    id: "S10-SEC-AUDITLOGROW-2",
+    module: "FOUNDATION",
+    layer: "BACKEND",
+    title:
+      "KI-072 — `GET /foundation/audit-logs` (+ `/:id`) KHÔNG bound HÀNG: cùng cặp `view:audit-log` mà AUDITLOGROW-1 vừa chặn, nhưng trên `audit_logs` (13.146 hàng — gấp ~30 lần bề mặt đã đóng)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      // `apps/api/src/auth/**` CÓ trong danh sách dù khuyết tật nằm ở `foundation/audit`: điểm đúc vị từ
+      // tham chiếu (`auth-logs-viewer.service.ts#rowScopeFor`) sống ở đó, và thêm điểm đúc THỨ HAI sẽ đẻ
+      // áp lực trích helper dùng chung. Thiếu đường nào là đường đó lọt `guard-scope`
+      // ([[wo-paths-drive-gate-and-scheduler]]).
+      "apps/api/src/foundation/audit/**",
+      "apps/api/src/permission/**",
+      "apps/api/src/auth/**",
+      "apps/api/test/**",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "docs/permission-matrix-spec.md",
+      "docs/plans/S10-SEC-AUDITLOGROW-2.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "ĐO LẠI trên cây 2026-08-22 (không chép lại từ sổ KI): `AuditQueryService.listCompany(companyId, query)` — `foundation/audit/audit.service.ts:35`. Chữ ký KHÔNG có `userId` của actor ⇒ **không resolve `data_scope` được kể cả nếu muốn**. `withTenant` + RLS chặn CHÉO TENANT, không chặn TRONG tenant.",
+      "`getCompanyDetail(companyId, id)` — `audit.service.ts:50`: trả trọn MỘT hàng theo id, 0 vị từ scope. Đây là chiều thứ HAI, không phải hệ quả của đường list.",
+      "`query.actorUserId` — `audit.service.ts:94` — đi THẲNG vào `where`. Đúng hình dạng vế **V2** của KI-070: oracle CÓ ĐIỀU KHIỂN, dò được lịch sử hành động của một UUID bất kỳ trong tenant.",
+      "Gate = `@RequirePermission('view','audit-log',{isSensitive:true})` — `audit.controller.ts:44` (list) + `:69` (detail). CÙNG cặp mà `S10-SEC-AUDITLOGROW-1` vừa bound hàng trên `login_logs`/`user_security_events`.",
+      "Số đo PROD 2026-08-21: `audit_logs` **13.146 hàng** (12.786 có `actor_user_id`, 13 actor phân biệt). 3 vai giữ `view:audit-log` — SA (10 người) · QUẢN LÝ CẤP CAO (4) · company-admin (2) — **cả ba @Company**, 0 hàng DENY ⇒ chưa vai nào chạm được; bản vá chặn lỗ TIỀM TÀNG.",
+      "KHÔNG có lớp giảm nhẹ nào ngoài workaround: `AuditMaskerService` redact `before`/`after` = che GIÁ TRỊ trong hàng, KHÔNG quyết định hàng nào được trả; và route này không chiếu email/họ tên nên tầng bound-CỘT của KI-053/054 không áp dụng.",
+      "Workaround đang hiệu lực (lớp kiểm soát DUY NHẤT): không cấp `view:audit-log` ở scope hẹp hơn `Company` cho vai nào.",
+    ],
+    done_when: [
+      "RED TRƯỚC: ca chứng minh vai `view:audit-log@Own` đọc được hàng NGOÀI scope trên `audit_logs`, VÀ ca dò được qua `?actorUserId=<UUID người khác>`",
+      "Bắt buộc ca đối chứng ALLOW (scope rộng vẫn thấy đủ) — thiếu nó thì '0 hàng' không phân biệt được với 'route hỏng'. Xem [[deny-cases-vacuous-without-allow-case]]",
+      "Vế `/:id` có ca RIÊNG: `getCompanyDetail` là chiều thứ hai, ca list xanh KHÔNG chứng minh gì cho nó",
+      "`pagination.total` đi qua CÙNG vị từ (vế `countTx`) — AUDITLOGROW-1 tự tìm ra vế này: `data` sạch mà `total` vẫn phát số hàng ngoài scope là oracle ĐẾM ĐƯỢC và im lặng",
+      "PHÁT BIỂU ngữ nghĩa `Own` ra plan TRƯỚC khi dựng vị từ (xem notes) — không lén chọn trong lúc code",
+      "`ROW_SCOPE_MINT_PINS` (`apps/api/test/foundation/identity-projection-verdicts.ts:584`) ký lại cho điểm đúc THỨ HAI, kèm int-spec deny/allow của CHÍNH bảng `audit_logs` — ratchet ĐỎ ở đây là thiết kế, không phải phiền toái",
+      "FULL gate security-reviewer PASS; RELEASE-02 đóng KI-072 kèm số đo PROD ĐO LẠI (role nào giữ cặp nào ở scope nào)",
+    ],
+    notes: [
+      "🔴 Vùng đỏ (phân quyền + đọc dữ liệu audit): planner Sonnet 5 effort xhigh → plan-reviewer → IMPLEMENT/REVIEW Opus theo CLAUDE.md §6.",
+      "⚠️ QUYẾT ĐỊNH PHẢI CHỐT TRƯỚC KHI CODE: `audit_logs` chỉ có MỘT cột người (`actor_user_id`) ⇒ `Own` = *hàng do TÔI gây ra*, một ngữ nghĩa KHÁC `login_logs` (`Own` = hàng VỀ tôi). Soi ranh giới D7 của `docs/plans/S10-SEC-AUDITLOGROW-1.md`.",
+      "⚠️ RANH GIỚI CÓ TÊN — NGOÀI phạm vi: `GET /foundation/audit-logs/all` + `/all/:id` là mặt phẳng OPERATOR (`@OperatorOnly` + `view:platform-audit` + `withPlatformReadContext`, chéo tenant CÓ CHỦ Ý — `audit.controller.ts:51-62`). Vá lan sang đó là đổi biên audience operator, không phải đóng KI-072.",
+      "⚠️ Cặp bound TRÙNG cặp gate (như hai bảng nhật ký) ⇒ dùng luật fail-closed của `rowScopeFor` (null ⇒ 403 + log), KHÔNG dùng `resolveOrNull` của tầng CỘT.",
+      "⚠️ ĐO LẠI PROD trước khi thi công — số 21/08 có thể đã cũ nếu seed/role đổi ([[wo-seed-hand-measurements-can-be-incomplete]]).",
+      "`audit_logs` là bảng append-only (BẤT BIẾN #2) — WO này chỉ đổi đường ĐỌC, không đụng đường ghi.",
+      "Nếu chọn trích `rowScopeFor` thành helper dùng chung với `auth-logs-viewer.service.ts` thì đó là refactor CROWN chạm đường đã nghiệm thu — ghi vào plan, không lén làm kèm.",
+    ],
+  },
+
+  {
+    // Seed 22/08/2026 từ KI-071 (RELEASE-02) — vế bound-HÀNG còn lại của KI-070, tách số hiệu riêng
+    // 21/08 để nó không chìm theo dấu gạch ngang (gạch KI-070 mà không tách = xoá mất dòng workaround
+    // DUY NHẤT đang bảo vệ route này; đúng bẫy đã mắc với KI-049).
+    id: "S10-SEC-ROLEMEMBERROW-1",
+    module: "AUTH",
+    layer: "BACKEND",
+    title:
+      "KI-071 — `GET /auth/roles/:id/members` bound CỘT chứ KHÔNG bound HÀNG: vai `view:user@Own` vẫn nhận trọn `userId` + `status` + `expiresAt` của MỌI thành viên role",
+    zone: "red",
+    status: "todo",
+    // Xếp SAU AUDITLOGROW-2: cả hai thêm một điểm đúc vào CÙNG mảng `ROW_SCOPE_MINT_PINS`, chạy song
+    // song là xung đột trên chính cái ratchet đang bảo vệ. AUDITLOGROW-2 đi trước còn vì nó lập tiền lệ
+    // ngữ nghĩa `Own` cho tầng hàng.
+    depends_on: ["S10-SEC-AUDITLOGROW-2"],
+    paths: [
+      "apps/api/src/permission/**",
+      "apps/api/src/auth/**",
+      "apps/api/test/**",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "docs/permission-matrix-spec.md",
+      "docs/plans/S10-SEC-ROLEMEMBERROW-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    src: [
+      "ĐO LẠI trên cây 2026-08-22: `PermissionAdminRepository.listRoleMembersTx` — `permission/role-admin.repository.ts:142`. Nhận `identity: IdentityGrant` BẮT BUỘC (tầng bound-CỘT, KI-053 đóng 19/08) và trả `userId · identityInScope · email · fullName · status · expiresAt · grantedAt`; `where` = `roleId` + `companyId` + notDeleted + chưa-hết-hạn — **0 vị từ scope**.",
+      "Hệ quả: vai giữ `view:user@Own` mất email/họ tên nhưng VẪN biết **ai thuộc role nào** (`userId` + `status` + `expiresAt` của mọi thành viên).",
+      "⚠️ ĐÍNH CHÍNH workaround gốc của KI-070, đã verify lại: KI-070 ghi *'không cấp view:audit-log/**view:role** ở scope hẹp hơn Company'* — vế `view:role` **SAI**. Route gate `@RequirePermission('view','user')` (`role-admin.controller.ts:52`), service còn `assertCan(view,user)` nữa. Chép nguyên văn sẽ đẻ một workaround trỏ vào cặp KHÔNG PHẢI cổng.",
+      "Workaround ĐÚNG (đang là lớp kiểm soát duy nhất): không cấp **`view:user`** ở scope hẹp hơn `Company` cho vai nào.",
+      "Số đo PROD 2026-08-21: 4 vai giữ `view:user`, **cả 4 @Company** — SA (10 người) · QUẢN LÝ CẤP CAO (4) · company-admin (2) · hr (0 người giữ) ⇒ chưa ai chạm được.",
+    ],
+    done_when: [
+      "RED TRƯỚC: ca chứng minh vai `view:user@Own` hôm nay nhận trọn danh sách thành viên; sau bản vá chỉ còn hàng trong scope",
+      "Bắt buộc ca đối chứng ALLOW (scope Company vẫn thấy đủ thành viên) — thiếu nó thì '0 hàng' không phân biệt được với 'route hỏng'. Xem [[deny-cases-vacuous-without-allow-case]]",
+      "KHÔNG hồi quy tầng CỘT của KI-053: ca cũ về `identityInScope`/`email`/`fullName` phải còn xanh nguyên",
+      "`ROW_SCOPE_MINT_PINS` ký lại cho điểm đúc mới + int-spec deny/allow của CHÍNH bảng",
+      "FULL gate security-reviewer PASS; RELEASE-02 đóng KI-071 kèm số đo PROD ĐO LẠI",
+    ],
+    notes: [
+      "🔴 Vùng đỏ (phân quyền): planner Sonnet 5 effort xhigh → plan-reviewer → IMPLEMENT/REVIEW Opus theo CLAUDE.md §6.",
+      "⚠️ NGHỊCH LÝ KẾ THỪA — đọc `docs/plans/S10-SEC-AUDITLOGROW-1.md` §7 TRƯỚC khi code: lưới scope trên `users` KHÔNG đơn điệu (`Team`/`Department` fail-closed 0 hàng, tức HẸP HƠN `Own`; giữ đồng thời `@Own` + `@Team` ⇒ resolve ra `Team` ⇒ **MẤT** hàng). Bound hàng ở đây KẾ THỪA nghịch lý đó. Sàn hoá phải làm cho CẢ BA đường dùng chung lattice (nợ N-1b) — không lén vá riêng đường này.",
+      "⚠️ Cặp bound (`view:user`) TRÙNG cặp gate ⇒ dùng luật fail-closed của `rowScopeFor` (null ⇒ 403 + log), KHÔNG dùng `resolveOrNull` của tầng CỘT.",
+      "⚠️ ĐO LẠI PROD trước khi thi công ([[wo-seed-hand-measurements-can-be-incomplete]]).",
+    ],
+  },
 ];
