@@ -43,7 +43,7 @@ export class AuditController {
   @Get()
   @RequirePermission("view", "audit-log", { isSensitive: true })
   async listCompany(@Req() req: AuthenticatedRequest, @Query() query: AuditLogQueryDto) {
-    const { data, meta } = await this.audit.listCompany(req.user.companyId, query);
+    const { data, meta } = await this.audit.listCompany(req.user, query);
     return paginated(data, toPaginationFromOffset(meta.total, meta.offset, meta.limit));
   }
 
@@ -68,6 +68,6 @@ export class AuditController {
   @Get(":id")
   @RequirePermission("view", "audit-log", { isSensitive: true })
   getCompanyDetail(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
-    return this.audit.getCompanyDetail(req.user.companyId, id);
+    return this.audit.getCompanyDetail(req.user, id);
   }
 }

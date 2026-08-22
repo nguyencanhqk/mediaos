@@ -77,8 +77,8 @@ export class AttendanceAuditService {
 
     return this.db.withTenant(user.companyId, async (tx) => {
       const [rows, total] = await Promise.all([
-        this.repo.findManyTx(tx, filter, query.limit, query.offset),
-        this.repo.countTx(tx, filter),
+        this.repo.findManyUnscopedTx(tx, filter, query.limit, query.offset),
+        this.repo.countUnscopedTx(tx, filter),
       ]);
       return {
         data: rows.map((row) => this.toDto(row)),

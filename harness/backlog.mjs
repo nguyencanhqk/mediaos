@@ -13062,13 +13062,23 @@ export const backlog = [
     title:
       "KI-072 — `GET /foundation/audit-logs` (+ `/:id`) KHÔNG bound HÀNG: cùng cặp `view:audit-log` mà AUDITLOGROW-1 vừa chặn, nhưng trên `audit_logs` (13.146 hàng — gấp ~30 lần bề mặt đã đóng)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       // `apps/api/src/auth/**` CÓ trong danh sách dù khuyết tật nằm ở `foundation/audit`: điểm đúc vị từ
       // tham chiếu (`auth-logs-viewer.service.ts#rowScopeFor`) sống ở đó, và thêm điểm đúc THỨ HAI sẽ đẻ
       // áp lực trích helper dùng chung. Thiếu đường nào là đường đó lọt `guard-scope`
       // ([[wo-paths-drive-gate-and-scheduler]]).
       "apps/api/src/foundation/audit/**",
+      // ⟲ plan §5 bước 1 (D8): `AuditQueryService.listCompany` có call-site THỨ BA/TƯ ở widget
+      // SYSTEM_LOGS (`dashboard-widget-handlers.service.ts:555,560`). Đổi chữ ký sang `actor`
+      // chạm file đó; thiếu đường này là nó lọt `guard-scope` ([[wo-paths-drive-gate-and-scheduler]]).
+      "apps/api/src/dashboard/**",
+      // ⟲R1-B3 (plan-review vòng 1): họ `findManyTx`/`countTx`/`findByIdTx` của `AuditRepository` ĐỔI TÊN
+      // thành `*UnscopedTx` để đường Company mới không gọi nhầm được biến thể không-bound. Hai file dưới
+      // là hộ TIÊU THỤ, diff ở đó là RENAME THUẦN — KHÔNG bound thêm gì (D9 giữ nguyên: hai module đó
+      // gate bằng cặp quyền riêng, đóng ở WO khác).
+      "apps/api/src/attendance/attendance-audit.service.ts",
+      "apps/api/src/leave/leave-audit.service.ts",
       "apps/api/src/permission/**",
       "apps/api/src/auth/**",
       "apps/api/test/**",

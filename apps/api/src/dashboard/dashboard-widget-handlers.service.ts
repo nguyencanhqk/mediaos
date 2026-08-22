@@ -552,12 +552,12 @@ export class DashboardWidgetHandlersService {
     const now = Date.now();
     const isoAgo = (ms: number): string => new Date(now - ms).toISOString();
     const [last24h, last7d] = await Promise.all([
-      this.auditQuery.listCompany(ctx.user.companyId, {
+      this.auditQuery.listCompany(ctx.user, {
         limit: 1,
         offset: 0,
         dateFrom: isoAgo(AUDIT_WINDOW_24H_MS),
       }),
-      this.auditQuery.listCompany(ctx.user.companyId, {
+      this.auditQuery.listCompany(ctx.user, {
         limit: 1,
         offset: 0,
         dateFrom: isoAgo(AUDIT_WINDOW_7D_MS),
