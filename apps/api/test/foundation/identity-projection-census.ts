@@ -328,6 +328,42 @@ export function rowScopePredicateMints(): string[] {
   return sites.sort();
 }
 
+/**
+ * S10-SEC-AUDITLOGROW-2 (KI-072) — file chạm họ `*UnscopedTx` của `AuditRepository`, tức đường đọc
+ * `audit_logs` **KHÔNG bound HÀNG**.
+ *
+ * VÌ SAO cần một bộ đếm RIÊNG, không gộp vào `rowScopePredicateMints()`: hàm kia đếm điểm **ĐÚC** vị
+ * từ. Chiều còn lại — **TIÊU THỤ sai đường** — nó không thấy. Sau WO này `AuditRepository` có HAI họ
+ * phương thức, và họ không-bound vẫn public: một đường đọc COMPANY mới viết
+ * `this.repo.findManyUnscopedTx(tx, filter, limit, offset)` là **hợp kiểu và XANH tuyệt đối**, tái
+ * sinh KI-072 ở bề mặt thứ hai mà cả typecheck lẫn ratchet đúc đều mù.
+ *
+ * Pin thành DANH SÁCH (không phải trần đếm) vì cùng lý do với `ROW_SCOPE_MINT_PINS`: trần cho phép
+ * ĐỔI CHỖ trong im lặng.
+ *
+ * Khoá là `file#<số lời gọi>`, KHÔNG phải `file` trần (⟲FULL gate, security-reviewer). Bản đầu pin
+ * theo FILE và vì thế **hụt đúng chỗ nguy hiểm nhất**: `foundation/audit/audit.service.ts` ĐÃ nằm
+ * trong danh sách (cho đường operator `/all`), nên một đường đọc COMPANY mới viết NGAY TRONG file đó
+ * mà gọi `findManyUnscopedTx` sẽ cho ratchet XANH — mà đó chính là file có xác suất mọc thêm đường
+ * đọc audit cao nhất. Cùng vấn đề với `attendance-audit`/`leave-audit`. Đếm lời gọi đóng nhánh đó.
+ *
+ * ⚠️ Bằng chứng YẾU có chủ đích — parse chuỗi, không phải call-graph. Phát biểu ĐÚNG mức của nó:
+ * *"thêm một LỜI GỌI họ `*UnscopedTx` ở bất kỳ file nào trong `apps/api/src` là ĐỎ"*. Nó KHÔNG thấy:
+ * (a) lời gọi gián tiếp qua biến/alias (`const fn = repo.findManyUnscopedTx`) hoặc index động;
+ * (b) đường đọc `audit_logs` KHÔNG qua họ phương thức nào — `tx.select().from(auditLogs)` trực tiếp,
+ *     đúng cách `chat/chat-oversight.repository.ts` đang đọc bảng này hôm nay.
+ * Nó là PIN, không phải census. Đừng viết vào docblock nào rằng nó ép được nhiều hơn thế.
+ */
+export function unscopedAuditConsumers(): string[] {
+  const hits: string[] = [];
+  const re = /\b(?:findManyUnscopedTx|countUnscopedTx|findByIdUnscopedTx)\b/g;
+  for (const file of sourceFiles()) {
+    const n = (fs.readFileSync(file, "utf8").match(re) ?? []).length;
+    if (n > 0) hits.push(`${rel(file)}#${n}`);
+  }
+  return hits.sort();
+}
+
 export interface BlindSpots {
   /**
    * Số file EXPORT một `alias(users, …)` ra ngoài. Scanner lần alias trong MỘT file; một alias được

@@ -148,8 +148,8 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > | --- | --- | --- | --- | --- |
 > | `GET /auth/login-logs` | `view:audit-log` | ✔ `login_logs.user_id` | ✔ `view:user` | KI-070 **ĐÓNG** |
 > | `GET /auth/security-events` | `view:audit-log` | ✔ `user_security_events.user_id` | ✔ `view:user` ×2 grant | KI-070 **ĐÓNG** |
-> | `GET /foundation/audit-logs` | `view:audit-log` | ✘ **KHÔNG** — 13.146 hàng | — (không chiếu email/tên) | **KI-072 MỞ** |
-> | `GET /foundation/audit-logs/:id` | `view:audit-log` | ✘ **KHÔNG** — dò theo `id` | — | **KI-072 MỞ** |
+> | `GET /foundation/audit-logs` | `view:audit-log` | ✔ `audit_logs.actor_user_id` | — (không chiếu email/tên) | KI-072 **ĐÓNG** |
+> | `GET /foundation/audit-logs/:id` | `view:audit-log` | ✔ `audit_logs.actor_user_id` | — | KI-072 **ĐÓNG** |
 > | `GET /auth/roles/:id/members` | `view:user` | ✘ **KHÔNG** | ✔ `view:user` | **KI-071 MỞ** |
 >
 > • **Hai bảng nhật ký — ĐÃ ĐÓNG** (`S10-SEC-AUDITLOGROW-1`, KI-070). Chặn TẬP HÀNG theo `data_scope`
@@ -160,7 +160,18 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 >   assert BẢNG); bề mặt ĐÚC vị từ bị pin thành danh sách (`ROW_SCOPE_MINT_PINS`) ⇒ mở một điểm đúc
 >   mới là ĐỎ. Cột danh tính trên hai route đó VẪN đi theo cặp danh bạ `view:user` — không gộp.
 >
-> • **`/foundation/audit-logs` (+ `/:id`) — CÙNG CẶP `view:audit-log`, KHÔNG bound hàng → `KI-072`.**
+> • **`/foundation/audit-logs` (+ `/:id`) — ĐÃ ĐÓNG 2026-08-22** (`S10-SEC-AUDITLOGROW-2`, KI-072).
+>   Cùng cơ chế: `AuditQueryService.rowScopeFor()` (điểm đúc THỨ HAI trong `ROW_SCOPE_MINT_PINS`) +
+>   họ `AuditRepository.*ForActorTx` nhận `rowScope` BẮT BUỘC ở CẢ `data` lẫn `count(*)`.
+>   ⚠️ **`Own` ở bảng này = "hàng do TÔI GÂY RA"** (`actor_user_id`) — ngữ nghĩa KHÁC hai bảng nhật ký
+>   (`Own` = hàng VỀ tôi). `audit_logs` chỉ có MỘT cột người. Hệ quả có chủ đích: **360 hàng
+>   `actor_user_id IS NULL`** (job máy) không thuộc scope `Own` của ai. `/:id` ngoài scope trả **404**
+>   `AUDIT_NOT_FOUND` — cùng mã với cross-tenant miss, để mã lỗi không thành oracle tồn-tại.
+>   ⚠️ **PHẠM VI ĐÓNG = ĐÚNG HAI route COMPANY này**, KHÔNG phải "bảng `audit_logs` đã bound": đường
+>   operator `/all` và `ChatOversightRepository.listOversightAudit` (CHAT-API-019, cặp CHAT) vẫn đọc
+>   `audit_logs` không bound hàng. Xem gạch đầu dòng "Cặp KHÁC" bên dưới.
+>
+> • *(Bản mô tả khuyết tật gốc, giữ để đọc lịch sử)* — CÙNG CẶP `view:audit-log`, KHÔNG bound hàng:
 >   `AuditQueryService.listCompany(companyId, query)` **không nhận `userId` của actor** ⇒ nó không
 >   resolve `data_scope` được, kể cả nếu muốn. Vai `view:audit-log@Own` đọc trọn **13.146** hàng
 >   `audit_logs` của tenant (đo 2026-08-21; so với 366 + 65 của hai bảng vừa đóng — bề mặt CÒN MỞ lớn
@@ -179,11 +190,21 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > đường này **chưa được đo** ở vế bound-HÀNG — "chưa đo" KHÔNG phải "đã kín", và cũng không phải
 > "đang hở"; ai chạm tới chúng thì đo trước.
 >
-> ⚠️ **Workaround đang hiệu lực cho CẢ ba dòng MỞ:** không cấp `view:audit-log` (KI-072) hoặc
-> `view:user` (KI-071) ở scope hẹp hơn `Company` cho vai nào. Đo 2026-08-21: `view:audit-log` có
-> **3 vai giữ** (`SA` 10 người · `QUẢN LÝ CẤP CAO` 4 · `company-admin` 2) và `view:user` có **4 vai**
+> ⚠️ **ĐƯỜNG ĐỌC `audit_logs` THỨ NĂM, đo 2026-08-22 (census của `S10-SEC-AUDITLOGROW-2`):**
+> `ChatOversightRepository.listOversightAudit` (`chat-oversight.repository.ts:335-399`,
+> `CHAT-API-019`, gate cặp CHAT + `ChatOversightAuditGuard`) đọc thẳng `audit_logs` với **đúng hình
+> dạng V2**: `opts.actorUserId` từ caller đi THẲNG vào `WHERE` (`:352-354`), **0 vị từ row-scope**,
+> chiếu `users.fullName` bằng `leftJoin` trần (`:386-389`, không qua `identityColumns`) và trả
+> `auditLogs.metadata` **THÔ** (`:381`) trong khi đường foundation coi `metadata` là phải
+> `masker.mask()`. **Chưa có WO/KI** — cặp quyền khác, cần số hiệu riêng.
+>
+> ⚠️ **Workaround đang hiệu lực cho dòng CÒN MỞ (`KI-071`):** không cấp `view:user` ở scope hẹp hơn
+> `Company` cho vai nào. Đo 2026-08-22: `view:audit-log` có **3 vai giữ** (`SA` 2 người sống ·
+> `QUẢN LÝ CẤP CAO` 4 hàng `user_roles`/3 active · `company-admin` 2) và `view:user` có **4 vai**
 > (ba vai trên + `hr`, 0 người giữ) — **tất cả đều `@Company`**, 0 hàng `DENY` ⇒ hôm nay chưa ai chạm
-> được lớp này. Đó là lý do cả ba là lỗ TIỀM TÀNG, không phải sự cố đang chảy.
+> được lớp này. Đó là lý do KI-071 là lỗ TIỀM TÀNG, không phải sự cố đang chảy.
+> *(Đính chính số 21/08 "SA 10 người": con số đó đếm cả hàng `user_roles` đã soft-delete; đếm sống ra
+> 2. Kết luận không đổi — cả ba vẫn `@Company`.)*
 >
 > ⚠️ Lưới scope KHÔNG đơn điệu ở mọi chỗ dùng lattice này: `Team`/`Department` fail-closed 0 hàng nên
 > **hẹp hơn** `Own`, và `resolveStrongestScope` lấy scope MẠNH nhất ⇒ thêm một role có thể LÀM MẤT

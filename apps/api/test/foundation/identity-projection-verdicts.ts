@@ -580,5 +580,42 @@ export const BLIND_SPOT_PINS = {
  * nơi đúc lẫn nơi tiêu thụ cùng trỏ sai một bảng").
  *
  * Đo 2026-08-21: ĐÚNG MỘT điểm — hai route nhật ký dùng chung `rowScopeFor()`.
+ * Đo 2026-08-22 (S10-SEC-AUDITLOGROW-2 / KI-072): HAI điểm — thêm bề mặt `audit_logs`.
+ *
+ * ⚠️ Điểm thứ hai CỐ Ý là một bản sao gần giống điểm thứ nhất, KHÔNG phải một helper dùng chung
+ * (plan D7): gộp hai bề mặt vào một lời gọi `fromScope` làm census chỉ thấy MỘT điểm ⇒ việc
+ * `audit_logs` được bound trở nên VÔ HÌNH với chính cái ratchet dựng ra để bắt "mở rộng bề mặt mà
+ * không ký". Khi KI-071 thêm điểm THỨ BA thì đó mới là lúc cân nhắc lại, ở một WO riêng.
  */
-export const ROW_SCOPE_MINT_PINS = ["auth/auth-logs-viewer.service.ts#rowScopeFor"] as const;
+export const ROW_SCOPE_MINT_PINS = [
+  /** `login_logs` + `user_security_events` — S10-SEC-AUDITLOGROW-1 (KI-070). */
+  "auth/auth-logs-viewer.service.ts#rowScopeFor",
+  /**
+   * `audit_logs`, đường COMPANY (`GET /foundation/audit-logs` + `/:id`) — S10-SEC-AUDITLOGROW-2
+   * (KI-072). Bằng chứng deny/allow của CHÍNH bảng này:
+   * `test/foundation/foundation-audit-row-scope.int-spec.ts` (R1·R2·R3·N1·T1 / A1-A4·C1·C2·G1).
+   */
+  "foundation/audit/audit.service.ts#rowScopeFor",
+] as const;
+
+/**
+ * S10-SEC-AUDITLOGROW-2 (KI-072) — hộ TIÊU THỤ họ `*UnscopedTx` của `AuditRepository` (đường đọc
+ * `audit_logs` KHÔNG bound hàng). Xem `unscopedAuditConsumers()` cho lý do bộ đếm này tồn tại tách
+ * khỏi `ROW_SCOPE_MINT_PINS`: hàm kia đếm điểm ĐÚC vị từ, chiều TIÊU THỤ SAI nó không thấy.
+ *
+ * Khoá là `file#<số lời gọi>` — pin theo FILE trần (bản đầu) hụt đúng chỗ nguy hiểm nhất: ba file
+ * dưới ĐÃ được ký, nên một đường đọc COMPANY mới viết NGAY TRONG chúng sẽ cho ratchet XANH. Đổi số
+ * lời gọi là ĐỎ, kể cả trong file đã ký.
+ *
+ * Bốn mục, mỗi mục một lý do KHÁC NHAU — thêm mục thứ năm phải nói ra mình thuộc lý do nào:
+ */
+export const UNSCOPED_AUDIT_CONSUMER_PINS = [
+  /** ATT viewer: cặp quyền RIÊNG `view:attendance-audit-log` + allowlist `objectTypes` của module. */
+  "attendance/attendance-audit.service.ts#2",
+  /** Nơi ĐỊNH NGHĨA họ phương thức — không phải hộ tiêu thụ, nhưng chuỗi có mặt trong file. */
+  "foundation/audit/audit.repository.ts#3",
+  /** Đường operator `/all` (+ `/all/:id`): cặp `view:platform-audit`, chéo tenant CÓ CHỦ Ý (mig 0340). */
+  "foundation/audit/audit.service.ts#3",
+  /** LEAVE viewer: cặp quyền RIÊNG `view:leave-audit-log` + allowlist `objectTypes` của module. */
+  "leave/leave-audit.service.ts#2",
+] as const;

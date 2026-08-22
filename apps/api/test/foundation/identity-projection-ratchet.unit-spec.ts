@@ -6,12 +6,14 @@ import {
   pointKey,
   projectionPoints,
   rowScopePredicateMints,
+  unscopedAuditConsumers,
 } from "./identity-projection-census";
 import {
   BASIS_CEILINGS,
   BLIND_SPOT_PINS,
   IDENTITY_VERDICTS,
   ROW_SCOPE_MINT_PINS,
+  UNSCOPED_AUDIT_CONSUMER_PINS,
   type IdentityVerdict,
 } from "./identity-projection-verdicts";
 
@@ -67,7 +69,9 @@ function renameHint(missing: readonly string[], added: readonly string[]): strin
 describe("identity-projection ratchet (S6-SEC-IDENTITY-PROJ-1)", () => {
   const points = projectionPoints();
   const pointKeys = points.map(pointKey);
-  const verdictByPoint = new Map<string, IdentityVerdict>(IDENTITY_VERDICTS.map((v) => [v.point, v]));
+  const verdictByPoint = new Map<string, IdentityVerdict>(
+    IDENTITY_VERDICTS.map((v) => [v.point, v]),
+  );
 
   it("census tìm được điểm chiếu — bản thân scanner còn sống", () => {
     // Chốt chặn xanh-RỖNG: nếu scanner hỏng (đổi cây thư mục, đổi cách import schema) nó trả 0 điểm
@@ -95,7 +99,10 @@ describe("identity-projection ratchet (S6-SEC-IDENTITY-PROJ-1)", () => {
     expect(
       stale,
       `${stale.length} dòng phán quyết không khớp điểm nào trong cây code.` +
-        renameHint(stale, pointKeys.filter((k) => !verdictByPoint.has(k))),
+        renameHint(
+          stale,
+          pointKeys.filter((k) => !verdictByPoint.has(k)),
+        ),
     ).toEqual([]);
   });
 
@@ -192,6 +199,35 @@ describe("identity-projection ratchet (S6-SEC-IDENTITY-PROJ-1)", () => {
       removed,
       "điểm đúc đã ký nhưng KHÔNG còn trong cây code — memory `review-gate-blind-to-deletions`: gỡ vị " +
         "từ chặn hàng là gỡ một lớp kiểm soát, phải nói ra chứ không để sổ giữ một bản đồ sai.",
+    ).toEqual([]);
+  });
+
+  it("chiều 8 — hộ TIÊU THỤ họ `*UnscopedTx` của AuditRepository đúng bằng danh sách đã ký (S10-SEC-AUDITLOGROW-2)", () => {
+    // Chiều 7 gác đường ĐÚC vị từ. Chiều NÀY gác đường TIÊU THỤ SAI — thứ chiều 7 không thấy.
+    // Sau KI-072, `AuditRepository` có HAI họ: `*ForActorTx` (bound HÀNG) và `*UnscopedTx` (không
+    // bound, hợp lệ đúng 3 hộ). Họ không-bound vẫn PUBLIC, nên một đường đọc COMPANY mới gọi nhầm nó
+    // là hợp kiểu, XANH typecheck, và tái sinh KI-072 ở bề mặt thứ hai trong im lặng.
+    const consumers = unscopedAuditConsumers();
+
+    // Chốt chặn xanh-RỖNG (cùng khuôn chiều 7): scanner hỏng ⇒ [] ⇒ phép so vẫn xanh nếu pin cũng rỗng.
+    expect(
+      consumers.length,
+      "scanner hộ tiêu thụ trả rỗng — nó hỏng, không phải bề mặt biến mất (họ `*UnscopedTx` ít nhất " +
+        "phải xuất hiện ở chính nơi định nghĩa)",
+    ).toBeGreaterThan(0);
+
+    const signed: readonly string[] = UNSCOPED_AUDIT_CONSUMER_PINS;
+    expect(
+      consumers.filter((c) => !signed.includes(c)),
+      "hộ TIÊU THỤ MỚI của đường đọc `audit_logs` KHÔNG bound HÀNG. Nếu đây là một đường đọc COMPANY " +
+        "(có actor HTTP) thì nó PHẢI dùng họ `*ForActorTx` — đó chính là KI-072. Nếu nó thật sự thuộc " +
+        "một trong ba lý do hợp lệ (operator chéo tenant / module viewer có cặp quyền riêng + allowlist " +
+        "objectTypes), hãy ký vào UNSCOPED_AUDIT_CONSUMER_PINS kèm lý do, qua FULL gate.",
+    ).toEqual([]);
+    expect(
+      UNSCOPED_AUDIT_CONSUMER_PINS.filter((c) => !consumers.includes(c)),
+      "hộ đã ký nhưng KHÔNG còn chạm họ `*UnscopedTx` — hoặc nó đã được bound (tin tốt: cập nhật sổ), " +
+        "hoặc file đã đổi tên/biến mất. Cả hai đều phải nói ra (`review-gate-blind-to-deletions`).",
     ).toEqual([]);
   });
 });
