@@ -19,6 +19,7 @@ import type {
   RolePermissionGrantsDto,
   RoleWriteResultDto,
   UpdateRoleRequest,
+  DataScope,
 } from "@mediaos/contracts";
 import { users, type Role } from "../db/schema";
 import { DatabaseService } from "../db/db.service";
@@ -27,7 +28,7 @@ import { PermissionService } from "./permission.service";
 import { PermissionAdminRepository } from "./permission-admin.repository";
 import { RoleAdminRepository } from "./role-admin.repository";
 import { DataScopeService } from "./data-scope.service";
-import { fromScope } from "./identity-projection";
+import { fromScope, type IdentityGrant } from "./identity-projection";
 import {
   pgErrorCode,
   pgErrorField,
@@ -121,30 +122,109 @@ export class RoleAdminService {
     }
   }
 
+  /**
+   * S10-SEC-ROLEMEMBERROW-1 (KI-071) — ĐIỂM ĐÚC vị từ chặn TẬP HÀNG cho `GET /auth/roles/:id/members`.
+   * Điểm đúc THỨ BA của cơ chế (sau `auth-logs-viewer` và `foundation/audit`) ⇒ phải ký lại ở
+   * `ROW_SCOPE_MINT_PINS`. Bằng chứng deny/allow của chính bảng: `identity-projection-scope.int-spec.ts`
+   * — DENY `A2·A3·R-D2·R-D3·R-T1·R-T2·R-G1·R-X1` / ALLOW `A1·R-A3`; cộng tầng KHÔNG-cần-DB
+   * `role-admin.row-scope.spec.ts` (U1·U1b·U1c·U2·U3·U4).
+   *
+   * **Ngữ nghĩa `Own` ở route này — phát biểu TRƯỚC khi đọc vị từ (plan D2):** hàng là một TƯ CÁCH
+   * THÀNH VIÊN (`user_roles`), cột NGƯỜI của hàng là THÀNH VIÊN (`users.id` qua inner join) ⇒
+   * `Own` = **"hàng NÓI VỀ tôi"**, tức tư cách thành viên của chính tôi trong role này. Cùng họ với
+   * `login_logs` (KI-070), KHÁC `audit_logs` (KI-072, `Own` = hàng do tôi GÂY RA). Hệ quả CÓ CHỦ Ý:
+   * `@Own` gọi role mình không có chân ⇒ 0 hàng + HTTP 200, KHÔNG 404 — 404 ở đó là oracle
+   * "role này có/không có bạn trong đó".
+   *
+   * ⚠️ CỐ Ý KHÔNG trích dùng chung với `AuthLogsViewerService.rowScopeFor` /
+   * `AuditQueryService.rowScopeFor` (khuôn gần như giống hệt): trích là refactor CROWN chạm hai đường
+   * đã nghiệm thu, VÀ nó gộp ba bề mặt bound-HÀNG thành MỘT điểm đúc ⇒ `ROW_SCOPE_MINT_PINS` (pin theo
+   * DANH SÁCH, không theo số đếm) mất khả năng nhìn thấy từng bề mặt. Docblock của pin đó đã đăng ký
+   * trước điều kiện gộp: "khi KI-071 thêm điểm THỨ BA thì đó mới là lúc cân nhắc lại, ở một WO riêng"
+   * — WO này thêm điểm thứ ba và GHI NỢ, không gộp.
+   *
+   * ⚠️ KHAI BẰNG CÚ PHÁP METHOD, không phải property arrow: census `enclosing()` của
+   * `identity-projection-census.ts` chỉ nhận `MethodDeclaration`/`FunctionDeclaration`; arrow property
+   * trả `"?"` ⇒ `ROW_SCOPE_MINT_PINS` ĐỎ dù đã ký đúng chuỗi.
+   *
+   * ⚠️ Nhận `scope` ĐÃ phân giải thay vì tự resolve (khác hình dạng của hai tiền lệ): route này bound
+   * cả HÀNG lẫn CỘT bằng CÙNG một cặp, và luật "phân giải mỗi cặp ĐÚNG MỘT LẦN/request" (KI-070 D11)
+   * đòi một lời gọi duy nhất. Cú ném 403 vì thế nằm ở `listMembersInner` (nơi resolve), không nằm
+   * trong hàm này — xem docblock ở đó.
+   */
+  private rowScopeFor(scope: DataScope, actor: RequestUser): IdentityGrant {
+    return fromScope(
+      this.dataScope.buildUserScopeConditionOn(
+        scope,
+        { userId: actor.id, companyId: actor.companyId },
+        // `idCol` = cột NGƯỜI của hàng. Ở đây là THÀNH VIÊN (`users.id`) — KHÔNG phải `companyId`.
+        // `rowScopeSql` chỉ assert TÊN BẢNG, mà hai cột cùng thuộc `users`, nên nhầm ở đây đi LỌT
+        // cổng đó và biến vị từ `Own` thành `company_id = <uuid người dùng>` (0 hàng, im lặng).
+        { idCol: users.id, companyIdCol: users.companyId },
+      ),
+      "scoped-predicate",
+      "GET /auth/roles/:id/members — TẬP HÀNG đi theo data_scope của cặp gate view:user (KI-071)",
+      // Buộc vị từ vào ĐÚNG bảng: `rowScopeSql` ném nếu ai đem grant này AND vào truy vấn bảng kia.
+      users.id,
+    );
+  }
+
   private async listMembersInner(actor: RequestUser, roleId: string): Promise<RoleMemberListDto> {
     // S6-SEC-IDENTITY-PROJ-1 (KI-053) — `assertCan` ở trên chỉ trả lời CÓ/KHÔNG có cặp `view:user`;
     // nó KHÔNG đọc `data_scope`. Trước bản vá, một vai giữ `view:user@Own` qua được assert rồi nhận
     // TRỌN email + họ tên của mọi thành viên role. Đây là gốc chung của N-1/N-1c/N-1d/N-1e.
     //
-    // `resolveOrNull` chứ không `resolveAndAssert`: cặp đã được assert ngay trên, nên `null` ở đây
-    // KHÔNG có nghĩa "không được vào route" mà là "trình phân giải scope không đồng ý với `can()`"
-    // (vd chỉ có wildcard). Biến việc đó thành 403 cả route là siết quá tay và làm hỏng đường ALLOW;
-    // fail-closed ĐÚNG mức là bỏ cột danh tính, và để lại vết để còn chẩn được.
+    // MỘT lời gọi resolve cho CẢ HAI tầng (KI-070 D11 — phân giải mỗi cặp ĐÚNG MỘT LẦN/request).
+    //
+    // ⚠️ KHÔNG truyền `opts`: cặp này `is_sensitive = false` (đo PROD 22/08) và route gate bằng
+    // `@RequirePermission("view","user")` không cờ + `assertCan(…, false)`. Thêm `{ isSensitive: true }`
+    // theo khuôn `foundation/audit` sẽ lọc EXACT non-wildcard ⇒ **403 mọi vai chỉ giữ `*:*` trong im
+    // lặng**. Đây là dòng dễ copy sai nhất của cả bản vá.
     const scope = await this.dataScope.resolveOrNull(actor.id, actor.companyId, "view", "user");
+
+    // ⟲ S10-SEC-ROLEMEMBERROW-1 (KI-071) — FAIL-CLOSED, đổi từ fail-soft của KI-053.
+    //
+    // Vì sao đổi: docstring của chính `resolveOrNull` viết "đừng dùng hàm này cho route mà cặp gate =
+    // cặp bound (ở đó `resolveAndAssert` mới đúng, vì `null` nghĩa là guard đã hỏng)". Route này ĐÚNG
+    // hình dạng đó — cặp bound (`view:user`) TRÙNG cặp gate. Nhánh cũ ("BỎ cột danh tính, vẫn trả
+    // hàng") nay KHÔNG THỂ VỚI TỚI vì tầng HÀNG ném trước, nên nó bị gỡ thay vì để lại code chết.
+    // Đây là SIẾT, không phải nới: không ai được thêm quyền, và chỉ với tới được ở ba cửa sổ dưới.
+    //
+    // BA nguyên nhân phải phân biệt khi trực ca (KHÔNG có K1 ở route này — kill-switch
+    // `PERMISSION_GUARD_ENABLED=false` chỉ fail-open `PermissionGuard`, còn `assertCan` ở trên gọi
+    // thẳng `permissionService.can()` và KHÔNG đọc cờ đó, nên vai thiếu grant vẫn dừng ở 403 CŨ):
+    //   K2 — cửa sổ cache guard 300s: grant/role vừa bị GỠ, hoặc một hàng DENY vừa được THÊM, trong
+    //        khi `can()` còn phục vụ tập allow cũ. Quyền đã đổi THẬT ⇒ 403 là ĐÚNG.
+    //   K3 — `data_scope` trong DB không chuẩn hoá được ⇒ fail-closed VĨNH VIỄN (không phải cửa sổ).
+    //        ⚠️ Hôm nay K3 KHÔNG với tới được: `role_permissions_data_scope_chk` CHECK ép
+    //        `data_scope IN (Own,Team,Department,Company,System)` (đo 2026-08-22) ⇒ muốn chạm K3
+    //        phải DROP constraint đó trước. GIỮ nhánh phòng thủ, nhưng đừng để người trực ca
+    //        đuổi theo một ngõ cụt: kiểm K2/K4 trước.
+    //   K4 — lỗi HẠ TẦNG ở câu scope: `resolveStrongestScope` bắt MỌI exception rồi trả `null`, trong
+    //        khi `can()` có thể phục vụ hoàn toàn từ cache (`getCompanyRoleGrantsWithScope` là
+    //        passthrough KHÔNG cache) ⇒ một timeout riêng ở câu scope biến "200 + che cột" thành 403.
+    // Log CỐ Ý không chẩn đoán hộ một nguyên nhân — đối chiếu dòng
+    // `resolveStrongestScope() infrastructure error` cùng request trước khi kết luận.
     if (scope === null) {
-      this.logger.warn(
-        "role members: có cặp view:user nhưng không phân giải được data_scope → BỎ cột danh tính mọi hàng",
+      this.logger.error(
+        "role members: guard + assertCan cho qua nhưng resolveStrongestScope trả null — grant vừa bị " +
+          "gỡ/DENY vừa thêm trong cửa sổ cache 300s (K2), data_scope trong DB không chuẩn hoá được " +
+          "(K3, vĩnh viễn), HOẶC lỗi hạ tầng ở câu scope trong khi can() phục vụ từ cache (K4)",
         { userId: actor.id, companyId: actor.companyId, roleId },
       );
+      // Chuỗi giữ NGUYÊN VĂN của `resolveAndAssert`: trùng `status`/`code`/`type` với 403 của guard,
+      // chỉ khác `message`. Cấm làm message giàu thông tin hơn ("scope resolution failed", tên cặp,
+      // tên bảng) — đó mới là oracle.
+      throw new ForbiddenException("AUTH-ERR-FORBIDDEN: out of permission scope");
     }
+
+    const rowScope = this.rowScopeFor(scope, actor);
     const identity = fromScope(
-      scope === null
-        ? null
-        : this.dataScope.buildUserScopeConditionOn(
-            scope,
-            { userId: actor.id, companyId: actor.companyId },
-            { idCol: users.id, companyIdCol: users.companyId },
-          ),
+      this.dataScope.buildUserScopeConditionOn(
+        scope,
+        { userId: actor.id, companyId: actor.companyId },
+        { idCol: users.id, companyIdCol: users.companyId },
+      ),
       "identity-gated",
       "GET /auth/roles/:id/members — cột danh tính đi theo data_scope của cặp danh bạ view:user (KI-053)",
       users.id,
@@ -153,7 +233,10 @@ export class RoleAdminService {
       if (!(await this.repo.findRoleByIdTx(tx, roleId))) {
         throw new NotFoundException("Role not found");
       }
-      const rows = await this.repo.listRoleMembersTx(tx, actor.companyId, roleId, identity);
+      const rows = await this.repo.listRoleMembersTx(tx, actor.companyId, roleId, {
+        rowScope,
+        identity,
+      });
       // BỎ HẲN khoá khi ngoài scope — `roleMemberSchema.email` khai `.optional()`, KHÔNG `.nullable()`.
       // Và `identityInScope` là siêu dữ liệu phân quyền của repo: KHÔNG được lọt ra response.
       const members = rows.map(({ identityInScope, email, fullName, ...rest }) =>
