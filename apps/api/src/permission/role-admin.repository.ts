@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { type TenantTx } from "../db/db.service";
-import { identityColumns, type IdentityGrant } from "./identity-projection";
+import { identityColumns, rowScopeSql, type IdentityGrant } from "./identity-projection";
 import {
   permissions,
   roles,
@@ -143,10 +143,25 @@ export class RoleAdminRepository {
     tx: TenantTx,
     companyId: string,
     roleId: string,
-    // S6-SEC-IDENTITY-PROJ-1 (KI-053) — BẮT BUỘC, không giá trị mặc định. Một tham số optional ở đây
-    // nghĩa là caller quên truyền thì lặng lẽ quay về hành vi rò cũ (cùng lý do đã ghi ở
-    // `org.repository.listEmployees`). Kiểu có brand ⇒ không dựng được bằng object literal.
-    identity: IdentityGrant,
+    // S6-SEC-IDENTITY-PROJ-1 (KI-053) + S10-SEC-ROLEMEMBERROW-1 (KI-071) — HAI căn cứ, BẮT BUỘC cả hai,
+    // không giá trị mặc định. Một tham số optional ở đây nghĩa là caller quên truyền thì lặng lẽ quay
+    // về hành vi rò cũ (cùng lý do đã ghi ở `org.repository.listEmployees`). Kiểu có brand ⇒ không
+    // dựng được bằng object literal.
+    //
+    // ⚠️ OBJECT CÓ TÊN, không phải hai tham số vị trí (plan D5): hai grant CÙNG kiểu `IdentityGrant`
+    // đứng cạnh nhau thì hoán đổi được mà typecheck vẫn xanh. `rowScopeSql` bắt được cú hoán đổi
+    // (basis `identity-gated` ≠ `scoped-predicate`) nhưng đó là hàng rào THỨ HAI; hàng rào thứ nhất
+    // là không viết ra được chỗ để nhầm.
+    //
+    // ⚠️ HAI TẦNG, ĐỌC ĐÚNG MỨC (plan D7): `rowScope` quyết định hàng nào TỒN TẠI trong kết quả;
+    // `identity` quyết định hàng đã tồn tại có được chiếu email/họ tên hay không. Trên route này hai
+    // vị từ dựng từ CÙNG scope, CÙNG builder, CÙNG cặp cột ⇒ sau KI-071 mọi hàng trả về đều trong
+    // scope ⇒ `identityInScope` LUÔN true và nhánh `else null` không bao giờ rẽ. Đây KHÔNG phải "hai
+    // lớp độc lập" — nó là một lớp + một lớp dự phòng bị BAO TRÙM. Giữ tầng cột vì (a) gỡ là chạm bề
+    // mặt KI-053 đã nghiệm thu, (b) nợ N-1b (sàn hoá Team/Department) có thể nới vị từ HÀNG mà không
+    // nới vị từ CỘT, lúc đó hai tầng tách ra lại. Bằng chứng ĐỘC LẬP của cơ chế CỘT sống ở
+    // `login-logs`/`security-events`, nơi hai vai có vị từ THẬT SỰ khác nhau.
+    grants: { rowScope: IdentityGrant; identity: IdentityGrant },
   ): Promise<
     Array<{
       userId: string;
@@ -158,37 +173,51 @@ export class RoleAdminRepository {
       grantedAt: Date;
     }>
   > {
-    const identityCols = identityColumns(identity, {
+    const identityCols = identityColumns(grants.identity, {
       email: users.email,
       fullName: users.fullName,
     });
-    return tx
-      .select({
-        userId: users.id,
-        ...identityCols,
-        status: users.status,
-        expiresAt: userRoles.expiresAt,
-        grantedAt: userRoles.createdAt,
-      })
-      .from(userRoles)
-      .innerJoin(users, eq(users.id, userRoles.userId))
-      .where(
-        and(
-          eq(userRoles.roleId, roleId),
-          eq(userRoles.companyId, companyId),
-          isNull(userRoles.deletedAt),
-          or(isNull(userRoles.expiresAt), gt(userRoles.expiresAt, sql`now()`)),
-          isNull(users.deletedAt),
-        ),
-      )
-      // ⚠️ SẮP theo CỘT ĐÃ CHE, không theo `users.email` gốc. Che giá trị mà vẫn ORDER BY cột gốc thì
-      // THỨ TỰ HÀNG tiết lộ thứ tự alphabet của thứ vừa che — bản vá tự biến mình thành oracle.
-      // ⚠️ Đính chính (security-reviewer 2026-08-19): `users.email` ở DB là `citext` (so sánh KHÔNG
-      // phân biệt hoa/thường) còn biểu thức này sắp theo collation của `text`, nên với actor
-      // Company-scope thứ tự CÓ THỂ đổi khi email lẫn hoa/thường — dùng `lower()` để giữ nguyên
-      // ngữ nghĩa cũ. Ngoài scope thì mọi hàng bằng null và gom về một chỗ.
-      // `users.id` là khoá phá hoà, giữ phân trang tất định.
-      .orderBy(sql`lower(${identityCols.email})`, users.id);
+    return (
+      tx
+        .select({
+          userId: users.id,
+          ...identityCols,
+          status: users.status,
+          expiresAt: userRoles.expiresAt,
+          grantedAt: userRoles.createdAt,
+        })
+        .from(userRoles)
+        .innerJoin(users, eq(users.id, userRoles.userId))
+        .where(
+          and(
+            eq(userRoles.roleId, roleId),
+            eq(userRoles.companyId, companyId),
+            isNull(userRoles.deletedAt),
+            or(isNull(userRoles.expiresAt), gt(userRoles.expiresAt, sql`now()`)),
+            isNull(users.deletedAt),
+            // S10-SEC-ROLEMEMBERROW-1 (KI-071) — TẬP HÀNG đi theo `data_scope` của cặp GATE `view:user`.
+            // Trước WO này `where` chỉ có bốn điều kiện trên = 0 vị từ scope, nên vai `view:user@Own`
+            // mất email/tên (KI-053) nhưng VẪN biết ai thuộc role nào (`userId` + `status` +
+            // `expiresAt` của MỌI thành viên).
+            //
+            // `rowScopeSql` assert cả `basis` lẫn TÊN BẢNG trước khi nhả vị từ. ⚠️ Ranh giới THẬT của
+            // nó — đừng đọc mạnh hơn: `users.id` và `users.companyId` CÙNG thuộc `users`, nên nhầm
+            // `idCol → companyId` ở nơi ĐÚC đi LỌT cổng này và biến `Own` thành
+            // `company_id = <uuid người dùng>` (0 hàng, im lặng). Cái bắt ca đó là ca ALLOW `Own` của
+            // `identity-projection-scope.int-spec.ts` + `role-admin.row-scope.spec.ts` (U1), không
+            // phải hàm này.
+            rowScopeSql(grants.rowScope, users.id),
+          ),
+        )
+        // ⚠️ SẮP theo CỘT ĐÃ CHE, không theo `users.email` gốc. Che giá trị mà vẫn ORDER BY cột gốc thì
+        // THỨ TỰ HÀNG tiết lộ thứ tự alphabet của thứ vừa che — bản vá tự biến mình thành oracle.
+        // ⚠️ Đính chính (security-reviewer 2026-08-19): `users.email` ở DB là `citext` (so sánh KHÔNG
+        // phân biệt hoa/thường) còn biểu thức này sắp theo collation của `text`, nên với actor
+        // Company-scope thứ tự CÓ THỂ đổi khi email lẫn hoa/thường — dùng `lower()` để giữ nguyên
+        // ngữ nghĩa cũ. Ngoài scope thì mọi hàng bằng null và gom về một chỗ.
+        // `users.id` là khoá phá hoà, giữ phân trang tất định.
+        .orderBy(sql`lower(${identityCols.email})`, users.id)
+    );
   }
 
   /**
