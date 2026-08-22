@@ -453,6 +453,21 @@ export const CHAT_AUDIT = {
    * từ comment.
    */
   CALL_PARTICIPANT_CLOSED: "chat.call.participant_closed",
+  /**
+   * S10-CHAT-CALLSWEEP-1 (KI-063) — job gặt một cuộc gọi `active` **mồ côi** hoặc **quá thọ**.
+   *
+   * ⚠️ **TÁCH khỏi `CALL_ENDED`, cùng lý do đã viết cho `CALL_MISSED` ngay trên.** `CALL_ENDED` trả lời
+   * "AI gác máy"; dòng này trả lời *"vì sao cuộc gọi tự tắt trong khi không ai bấm gì"* — và câu trả lời
+   * còn phải phân biệt tiếp HAI nguyên nhân, nên `newValues.reason` bắt buộc mang `'orphan'` hoặc
+   * `'max_duration'`. Gộp cả ba vào một action là xoá đúng thông tin cần để biết lưới an toàn (nhánh
+   * `max_duration`) có đang phải làm việc của nhánh chính hay không — tức mất luôn tín hiệu "còn một
+   * đường rò participant chưa vá".
+   *
+   * `actorType:'Job'`, **KHÔNG** `actorUserId`: không người nào đứng sau (mirror `CALL_MISSED`).
+   * `object_type` tái dùng `'chat_call'` (CHECK mig `0546` khối E); cột `action` là text tự do ⇒ KHÔNG
+   * cần migration.
+   */
+  CALL_AUTO_ENDED: "chat.call.auto_ended",
 } as const;
 
 /** `module_code` cho mọi dòng audit của CHAT — CHAT-API-019 lọc theo cột này. */

@@ -12952,11 +12952,20 @@ export const backlog = [
     title:
       "KI-063 (R4 ĐÃ KÝ 20/08) — cuộc gọi `active` không ai quét ⇒ phòng khoá VĨNH VIỄN 409 CHAT-ERR-028, không đường sửa qua API",
     zone: "red",
-    status: "todo",
+    status: "done",
+    // MỞ RỘNG 21/08 khi thi công: seed thiếu vế ENV, mà `done_when` #3 lại BẮT BUỘC ngưỡng phải là biến
+    // môi trường ⇒ `env.schema.ts` + spec của nó + `.env.example` nằm trong phạm vi theo chính điều kiện
+    // đóng của WO này. Ghi ra thay vì im lặng sửa ngoài `paths`: `paths` lái cả review gate lẫn
+    // `guard-scope` ([[wo-paths-drive-gate-and-scheduler]] · [[wo-seed-hand-measurements-can-be-incomplete]]).
+    // KHÔNG thêm `drizzle/**`: bản vá không sinh migration (`action` audit là text tự do, `object_type`
+    // đã có trong CHECK mig 0546, job tự được DiscoveryService gom) — xem plan §5.
     paths: [
       "apps/api/src/chat/**/chat-calls.repository.ts",
       "apps/api/src/chat/**",
       "apps/api/test/**",
+      "apps/api/src/config/env.schema.ts",
+      "apps/api/src/config/env.schema.spec.ts",
+      ".env.example",
       "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
       "docs/plans/S10-CHAT-CALLSWEEP-1.md",
       "harness/backlog.mjs",
