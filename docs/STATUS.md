@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-22 01:59Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-22 02:34Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -18,7 +18,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `s10-gov-seed-ki071-072` · **file đang đổi (dirty)**: 2
+- **branch**: `master` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 213 — `0546_s7calldb1_chat_calls` (214 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -27,6 +27,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `ad35bba9` | 2026-08-22 | chore(gov): seed WO cho KI-071 + KI-072 vào hàng đợi (S10-SEC-AUDITLOGROW-2 · S10-SEC-ROLEMEMBERROW-1) (#402) |
+| `69c355ae` | 2026-08-22 | feat(chat): job gặt cuộc gọi `active` mồ côi — đóng KI-063 (S10-CHAT-CALLSWEEP-1) (#401) |
 | `c31edd1b` | 2026-08-21 | feat(sec): data_scope chặn TẬP HÀNG hai bảng nhật ký — đóng KI-070, tách KI-071/KI-072 (S10-SEC-AUDITLOGROW-1) (#400) |
 | `23d619c5` | 2026-08-21 | chore(gov): regen STATUS sau khi S10-FE-BREAKGLASS-DEADPATH-1 đóng (#399) |
 | `6fd15db8` | 2026-08-21 | chore(fnd): gỡ đường FE chết break-glass khỏi console (S10-FE-BREAKGLASS-DEADPATH-1) (#399) |
@@ -37,8 +39,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `5c929616` | 2026-08-20 | chore(gov): đồng bộ literal status backlog theo overlay ledger — gỡ mìn 83 WO "READY" giả |
 | `a38036b1` | 2026-08-19 | refactor(sec): gỡ chu kỳ chuyển tiếp khoá Valkey legacy — 1 setNx, 1 DEL, cổng hết miễn trừ (S10-FND-VALKEYSCOPE-2 · KI-067) (#395) |
 | `209a3954` | 2026-08-19 | chore(gov): bổ sung 8 finding vòng plan 2 vào S10-AUTH-STEPUP-1 |
-| `dbbe18c3` | 2026-08-19 | chore(gov): S10-AUTH-STEPUP-1 dừng vòng plan sau lần BLOCK thứ hai |
-| `657984ee` | 2026-08-19 | chore(gov): chốt 4 quyết định mở khoá S10-AUTH-STEPUP-1 cho vòng plan 2 |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
