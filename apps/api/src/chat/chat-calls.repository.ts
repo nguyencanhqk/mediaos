@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import {
   chatCallParticipants,
@@ -500,7 +500,112 @@ export class ChatCallsRepository {
 
     return expired;
   }
+
+  /**
+   * S10-CHAT-CALLSWEEP-1 (KI-063) — gặt cuộc gọi **`active` mồ côi** → `ended`.
+   *
+   * ┌─ VÌ SAO HÀM NÀY TỒN TẠI ────────────────────────────────────────────────────────────────────────┐
+   * │ `expireStaleRinging` chỉ quét `ringing`. Một hàng `active` KHÔNG có đường nào rời khỏi tập        │
+   * │ `('ringing','active')` của partial unique `chat_calls_one_live_per_room_uq` ngoài hành động của   │
+   * │ người còn sống trong phòng. Gỡ cả hai người khỏi phòng ⇒ họ hết `hangup` nổi (404) và             │
+   * │ `ChatCallRoomExitService` cố ý KHÔNG chạm `chat_calls` (hàng rào R4 `DECISIONS-07`) ⇒ hàng đó     │
+   * │ khoá phòng **VĨNH VIỄN**: mọi lời mời sau đó 409 `CHAT-ERR-028`, không đường sửa qua API.         │
+   * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * ⚠️ **`ended`, KHÔNG phải `missed`.** `active` kéo theo `accepted_at IS NOT NULL`
+   * (`chat_calls_accepted_at_chk`) — cuộc gọi ĐÃ được nhận. `missed` sẽ nói "không ai bắt máy" về một
+   * cuộc gọi có người đã nói chuyện; đó đúng lớp lỗi mà docblock `CALL_MISSED` tách khỏi `CALL_ENDED`.
+   *
+   * `reason` quyết định vị từ, và HAI vị từ là hai câu hỏi khác nhau (plan §2) — gọi RIÊNG từng nhánh
+   * chứ không `OR` chung, vì dòng audit phải trả lời được "gặt vì nhánh nào":
+   *   • `"max_duration"` — trần thọ tuyệt đối. Lưới an toàn cho hình dạng KHÔNG đoán trước, ví dụ nhánh
+   *     `!ok` của `closeCallParticipationOnRoomExit` để lại một hàng participant "còn treo" vĩnh viễn ⇒
+   *     vị từ mồ côi không bao giờ khớp và lỗ chỉ đổi hình dạng.
+   *   • `"orphan"` — KHÔNG còn hàng participant nào chưa ngã ngũ. Bốn kết cục `left/missed/rejected/
+   *     cancelled` là HẤP THỤ (`WHERE` của `setParticipantOutcome`) ⇒ trạng thái này KHÔNG có đường quay
+   *     lại, cuộc gọi đã kết thúc thật.
+   *
+   * Idempotent theo cấu trúc: hàng vừa đổi không còn `status='active'` ⇒ lần chạy kế tiếp khớp 0 hàng.
+   * Gọi `"max_duration"` TRƯỚC `"orphan"` cũng vì thế — một hàng thoả cả hai chỉ bị gặt MỘT lần, và được
+   * quy cho nguyên nhân mạnh hơn.
+   */
+  async expireStaleActive(
+    tx: TenantTx,
+    companyId: string,
+    cutoff: Date,
+    now: Date,
+    reason: "orphan" | "max_duration",
+    roomId?: string,
+  ): Promise<ChatCallExpiredRow[]> {
+    const expired = await tx
+      .update(chatCalls)
+      .set({ status: "ended", endedAt: now })
+      .where(staleActiveWhereSql(companyId, cutoff, reason, roomId))
+      .returning({
+        id: chatCalls.id,
+        roomId: chatCalls.roomId,
+        kind: chatCalls.kind,
+        initiatorUserId: chatCalls.initiatorUserId,
+        startedAt: chatCalls.startedAt,
+      });
+
+    return expired;
+  }
 }
+
+/**
+ * TOÀN BỘ vị từ `WHERE` của `expireStaleActive` — **tách khỏi thân hàm cố ý**, để ghim được ở tầng LUÔN
+ * chạy. Hành vi của nó trước đây chỉ được int-spec đóng đinh, mà int-spec `skipIf(!LANE_DB)` **NGỦ** trên
+ * máy không có Postgres (memory `src-green-is-not-integration-green`). Đảo `lt` thành `gt` ở đây làm job
+ * **im lặng không bao giờ khớp hàng nào** — `callsAutoEnded: 0` trông y hệt một hệ thống khoẻ mạnh, và
+ * KI-063 lặng lẽ tái mở. Ca colocated `chat-call-stale-active-predicate.spec.ts` render chuỗi SQL của
+ * đúng hàm này để chiều so sánh không trôi được.
+ *
+ * Trả `SQL | undefined` vì đó là kiểu của `and()`; `.where()` nhận cả hai. Thực tế LUÔN có ≥3 vế.
+ */
+export const staleActiveWhereSql = (
+  companyId: string,
+  cutoff: Date,
+  reason: "orphan" | "max_duration",
+  roomId?: string,
+): SQL | undefined =>
+  and(
+    eq(chatCalls.companyId, companyId),
+    eq(chatCalls.status, "active"),
+    lt(chatCalls.startedAt, cutoff),
+    ...(reason === "orphan" ? [noLiveParticipantSql()] : []),
+    ...(roomId ? [eq(chatCalls.roomId, roomId)] : []),
+  );
+
+/**
+ * "Cuộc gọi này KHÔNG còn ai ở trong" — vị từ tương quan dùng bởi nhánh `orphan` của `expireStaleActive`.
+ *
+ * ⚠️ **Viết bằng `sql` thô với TÊN BẢNG ĐẦY ĐỦ, cố ý — đây là chỗ hỏng theo kiểu tệ nhất nếu làm tắt.**
+ * Drizzle render cột trong `sql``` KHÔNG kèm tên bảng (memory `drizzle-sql-template-renders-columns-unqualified`).
+ * Dựng subquery tương quan bằng `${chatCalls.id}` sẽ ra một `id` trần, và bên trong `SELECT ... FROM
+ * chat_call_participants` thì `id` đó resolve về **bảng bên trong** ⇒ tương quan đứt ⇒ `NOT EXISTS` LUÔN
+ * đúng ⇒ job gặt **MỌI cuộc gọi `active`, kể cả cuộc đang nói chuyện**. Hỏng đó trông y hệt thành công
+ * (job chạy, phòng mở khoá, không lỗi nào) — nên nó được pin bằng ca test đọc CHUỖI SQL sinh ra, không
+ * chỉ bằng hành vi.
+ *
+ * Vế "chưa ngã ngũ" KHÔNG viết lại ở đây: nó lấy từ `activeParticipantOutcomeSql()` — bản sao DUY NHẤT.
+ * Cột `outcome` trần resolve đúng về `chat_call_participants` vì `chat_calls` không có cột cùng tên.
+ *
+ * ⚠️ **ĐIỀU KIỆN TỒN TẠI của vị từ này: `chat_calls` phải xuất hiện trong câu lệnh dưới ĐÚNG TÊN THẬT.**
+ * Tương quan neo bằng tên bảng LITERAL, không bằng đối tượng bảng của drizzle — nên nó **fail-OPEN**, im
+ * lặng, nếu ai đó về sau viết `.as("c")` (drizzle `buildUpdateQuery` CHỈ phát alias khi có `.as()` —
+ * verify trên `drizzle-orm@0.45.2`) hoặc thêm `.from()`/join đưa vào câu lệnh một bảng thứ hai cũng có
+ * `id`/`company_id`. Alias ⇒ `chat_calls.id` không còn tồn tại ⇒ `42P01` lúc chạy (ồn ào, chấp nhận
+ * được). Join ⇒ tên vẫn phân giải nhưng có thể trỏ SAI hàng ⇒ `NOT EXISTS` đúng oan và job gặt sạch.
+ * Đổi hình dạng câu lệnh thì PHẢI đọc lại hàm này và cập nhật ca `chat-call-stale-active-predicate.spec.ts`.
+ */
+export const noLiveParticipantSql = () =>
+  sql`NOT EXISTS (
+    SELECT 1 FROM chat_call_participants
+    WHERE chat_call_participants.company_id = chat_calls.company_id
+      AND chat_call_participants.call_id = chat_calls.id
+      AND ${activeParticipantOutcomeSql()}
+  )`;
 
 /**
  * Xung đột "phòng đã có cuộc gọi sống" — neo theo **TÊN CONSTRAINT**, không theo mã `23505` trần.

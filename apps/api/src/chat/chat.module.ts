@@ -59,6 +59,7 @@ import { ChatCallCooldownService } from "./chat-call-cooldown.service";
 import { ChatCallRoomExitService } from "./chat-call-room-exit.service";
 import { ChatCallSignalService } from "./chat-call-signal.service";
 import { ChatCallRingingTimeoutJobHandler } from "./chat-call-ringing-timeout.job-handler";
+import { ChatCallStaleActiveSweepJobHandler } from "./chat-call-stale-active-sweep.job-handler";
 import { ProjectMembershipModule } from "../tasks/project-membership.module";
 import { ChatOversightController } from "./chat-oversight.controller";
 import { ChatOversightAuditGuard } from "./chat-oversight-audit.guard";
@@ -206,6 +207,8 @@ import { ChatOversightRepository } from "./chat-oversight.repository";
     // là singleton per-module để bộ đếm in-memory fallback dùng chung giữa các request).
     ChatCallCooldownService,
     ChatCallRingingTimeoutJobHandler,
+    // S10-CHAT-CALLSWEEP-1 (KI-063) — job thứ HAI của vòng đời cuộc gọi: gặt hàng `active` mồ côi/quá thọ.
+    ChatCallStaleActiveSweepJobHandler,
     // S7-CALL-RT-1 — bề mặt CHỈ ĐỌC cho `/ws-call` (được export; xem `exports` bên dưới).
     ChatCallSignalService,
     // S7-CALL-RT-FIX-2 — đóng phần tham gia cuộc gọi khi rời/bị gỡ khỏi PHÒNG. CỐ Ý KHÔNG export: nó
