@@ -13128,7 +13128,7 @@ export const backlog = [
     title:
       "KI-071 — `GET /auth/roles/:id/members` bound CỘT chứ KHÔNG bound HÀNG: vai `view:user@Own` vẫn nhận trọn `userId` + `status` + `expiresAt` của MỌI thành viên role",
     zone: "red",
-    status: "todo",
+    status: "done",
     // Xếp SAU AUDITLOGROW-2: cả hai thêm một điểm đúc vào CÙNG mảng `ROW_SCOPE_MINT_PINS`, chạy song
     // song là xung đột trên chính cái ratchet đang bảo vệ. AUDITLOGROW-2 đi trước còn vì nó lập tiền lệ
     // ngữ nghĩa `Own` cho tầng hàng.
@@ -13153,7 +13153,10 @@ export const backlog = [
     done_when: [
       "RED TRƯỚC: ca chứng minh vai `view:user@Own` hôm nay nhận trọn danh sách thành viên; sau bản vá chỉ còn hàng trong scope",
       "Bắt buộc ca đối chứng ALLOW (scope Company vẫn thấy đủ thành viên) — thiếu nó thì '0 hàng' không phân biệt được với 'route hỏng'. Xem [[deny-cases-vacuous-without-allow-case]]",
-      "KHÔNG hồi quy tầng CỘT của KI-053: ca cũ về `identityInScope`/`email`/`fullName` phải còn xanh nguyên",
+      // ⟲ SỬA khi đóng WO (2026-08-22): câu cũ đòi ca cũ "còn xanh NGUYÊN", nhưng A2 cũ CHÍNH LÀ ca
+      // ghim lỗ mở (`rows.length === 3` + "tập HÀNG không đổi") nên nó BẮT BUỘC phải đổi — giữ nguyên
+      // câu cũ là để `done_when` tự mâu thuẫn với bản vá. Xem [[tests-can-pin-a-hole-open]].
+      "KHÔNG gỡ cơ chế bound-CỘT của KI-053; ca A2/A3 VIẾT LẠI theo ngữ nghĩa HÀNG mới (tầng cột trên route này bị BAO TRÙM — hai vị từ dựng từ cùng scope/builder/cặp cột), bằng chứng ĐỘC LẬP của tầng cột giữ ở ca B*/C* của `login-logs`/`security-events`",
       "`ROW_SCOPE_MINT_PINS` ký lại cho điểm đúc mới + int-spec deny/allow của CHÍNH bảng",
       "FULL gate security-reviewer PASS; RELEASE-02 đóng KI-071 kèm số đo PROD ĐO LẠI",
     ],
@@ -13162,6 +13165,50 @@ export const backlog = [
       "⚠️ NGHỊCH LÝ KẾ THỪA — đọc `docs/plans/S10-SEC-AUDITLOGROW-1.md` §7 TRƯỚC khi code: lưới scope trên `users` KHÔNG đơn điệu (`Team`/`Department` fail-closed 0 hàng, tức HẸP HƠN `Own`; giữ đồng thời `@Own` + `@Team` ⇒ resolve ra `Team` ⇒ **MẤT** hàng). Bound hàng ở đây KẾ THỪA nghịch lý đó. Sàn hoá phải làm cho CẢ BA đường dùng chung lattice (nợ N-1b) — không lén vá riêng đường này.",
       "⚠️ Cặp bound (`view:user`) TRÙNG cặp gate ⇒ dùng luật fail-closed của `rowScopeFor` (null ⇒ 403 + log), KHÔNG dùng `resolveOrNull` của tầng CỘT.",
       "⚠️ ĐO LẠI PROD trước khi thi công ([[wo-seed-hand-measurements-can-be-incomplete]]).",
+    ],
+  },
+
+  {
+    // Seed 22/08/2026 khi đóng KI-071 (S10-SEC-ROLEMEMBERROW-1). FULL gate (security-reviewer) bắt
+    // đúng chỗ: phần DUY NHẤT còn sống sau bản vá lại chỉ nằm dưới dạng văn xuôi TRONG một hàng đã bị
+    // gạch (`~~KI-071~~`) — tức vô hình với bug scrub. Cấp số hiệu TRƯỚC khi dấu gạch ngang land.
+    id: "S10-SEC-ROLEMEMBERFE-1",
+    module: "AUTH",
+    layer: "FE+BACKEND",
+    title:
+      "KI-073 — tab Thành viên role: `memberIds` lấy từ danh sách ĐÃ BỊ SCOPE rồi nuôi dedup của hai dialog GHI hàng loạt ⇒ mã 409 dựng lại được tập thành viên mà KI-071 vừa giấu",
+    zone: "red",
+    status: "todo",
+    // Xếp SAU ROLEMEMBERROW-1: WO này chỉ tồn tại vì tập hàng đường ĐỌC đã bị bound.
+    depends_on: ["S10-SEC-ROLEMEMBERROW-1"],
+    paths: [
+      "apps/app/src/routes/system/roles/**",
+      // Vế oracle nằm ở MÃ TRẢ VỀ của đường ghi — không đóng được từ FE. Thiếu đường này là vế đó lọt
+      // `guard-scope` ([[wo-paths-drive-gate-and-scheduler]]).
+      "apps/api/src/permission/**",
+      "apps/api/test/**",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "docs/permission-matrix-spec.md",
+      "docs/plans/S10-SEC-ROLEMEMBERFE-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    src: [
+      "`RoleMembersTab.tsx:91` — `memberIds = new Set(members.map(m => m.userId))` dựng từ response ĐÃ bound hàng (KI-071).",
+      "Hộ tiêu thụ: bộ đếm `:117` · khoá hàng 'đã là thành viên' `:339-345` · `toAssign`/`alreadyMembers` của AddOrgUnitDialog `:383-384` và AddPositionDialog `:489-490`.",
+      "Cặp GHI là cặp RIÊNG: `assign-role:user` (is_sensitive=true), gate BE `POST /permissions/users/:userId/roles` + gate FE `PermissionGate ASSIGN_ROLE` (`:124-127`) ⇒ KHÔNG leo thang quyền.",
+      "Đo PROD 2026-08-22: 0 vai giữ `view:user` ở scope hẹp hơn Company ⇒ chưa ai chạm được. Lỗ TIỀM TÀNG.",
+    ],
+    done_when: [
+      "PHÁT BIỂU TRƯỚC: vế nào đóng ở FE (bộ đếm + 409 ồn ào) và vế nào BẮT BUỘC đóng ở BE (mã trả về không phân biệt 'đã là thành viên' với 'gán thành công' cho actor ngoài scope đọc) — vá FE một mình KHÔNG đóng oracle",
+      "RED TRƯỚC: ca chứng minh vai `assign-role:user@Company` + `view:user@Own` dựng lại được tập thành viên qua mã trả về của batch",
+      "Bắt buộc ca đối chứng ALLOW: vai `@Company` vẫn dedup đúng, KHÔNG đẻ 409 oan. Xem [[deny-cases-vacuous-without-allow-case]]",
+      "FULL gate security-reviewer PASS; RELEASE-02 đóng KI-073 kèm số đo PROD ĐO LẠI",
+    ],
+    notes: [
+      "🔴 Vùng đỏ (phân quyền + kênh phụ): planner Sonnet 5 effort xhigh → plan-reviewer → IMPLEMENT/REVIEW Opus theo CLAUDE.md §6.",
+      "⚠️ Đọc `docs/plans/S10-SEC-ROLEMEMBERROW-1.md` D12 trước khi thi công — quyết định 'KHÔNG sửa FE trong WO đó' là CÓ CHỦ Ý (paths không có `apps/app/**`), không phải bỏ sót.",
+      "⚠️ `RoleMembersTab.spec.tsx:201` ghim một hình dạng response mà server nay KHÔNG phát ra được nữa (hàng thiếu `email`/`fullName`). GIỮ ca (phòng thủ + bẫy [[server-masking-needs-optional-fe-schema]]) nhưng đừng nghiệm thu tầng CỘT qua nó.",
     ],
   },
 ];

@@ -150,7 +150,7 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > | `GET /auth/security-events` | `view:audit-log` | ✔ `user_security_events.user_id` | ✔ `view:user` ×2 grant | KI-070 **ĐÓNG** |
 > | `GET /foundation/audit-logs` | `view:audit-log` | ✔ `audit_logs.actor_user_id` | — (không chiếu email/tên) | KI-072 **ĐÓNG** |
 > | `GET /foundation/audit-logs/:id` | `view:audit-log` | ✔ `audit_logs.actor_user_id` | — | KI-072 **ĐÓNG** |
-> | `GET /auth/roles/:id/members` | `view:user` | ✘ **KHÔNG** | ✔ `view:user` | **KI-071 MỞ** |
+> | `GET /auth/roles/:id/members` | `view:user` | ✔ `users.id` (qua `user_roles`) | ✔ `view:user` | KI-071 **ĐÓNG** |
 >
 > • **Hai bảng nhật ký — ĐÃ ĐÓNG** (`S10-SEC-AUDITLOGROW-1`, KI-070). Chặn TẬP HÀNG theo `data_scope`
 >   của **chính cặp gate** `view:audit-log`: `Company`/`System` = cả tenant · `Own` = hàng có
@@ -179,10 +179,15 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 >   hành động của một UUID bất kỳ trong tenant. Che before/after (`AuditMaskerService`) là lớp KHÁC —
 >   nó che GIÁ TRỊ trong hàng, không quyết định hàng nào được trả.
 >
-> • **`GET /auth/roles/:id/members` — CÒN MỞ → `KI-071`.** Vai giữ `view:user@Own` vẫn nhận trọn
->   `userId` + `status` + `expiresAt` của MỌI thành viên role (chỉ mất email/tên). Workaround:
->   không cấp **`view:user`** ở scope hẹp hơn Company — ⚠️ KHÔNG phải `view:role`; route này gate
->   `view:user` (đính chính đã ghi ở KI-053 ngày 2026-08-19).
+> • **`GET /auth/roles/:id/members` — ĐÓNG 2026-08-22 (`S10-SEC-ROLEMEMBERROW-1`, KI-071).** Trước đó
+>   vai giữ `view:user@Own` mất email/tên nhưng vẫn nhận trọn `userId` + `status` + `expiresAt` của
+>   MỌI thành viên role. Nay tập hàng đi theo `data_scope` của **chính cặp gate** `view:user`, vị từ
+>   dựng trên `users.id`/`users.company_id` (điểm đúc thứ BA của cơ chế KI-070).
+>   **`Own` ở route này = "hàng NÓI VỀ tôi"** — tư cách thành viên của chính tôi; cùng họ `login_logs`,
+>   KHÁC `audit_logs` (`Own` = hàng do tôi GÂY RA). `@Own` gọi role mình không có chân ⇒ **0 hàng +
+>   200**, KHÔNG 404 (404 ở đó là oracle tồn-tại).
+>   ⚠️ Cặp gate = cặp bound ⇒ **fail-closed**: `data_scope` không phân giải được ⇒ **403**, không còn
+>   nhánh fail-soft "bỏ cột danh tính, vẫn trả hàng" của KI-053.
 >
 > ⚠️ **Cặp KHÁC, đừng đọc lây sang:** `/foundation/audit-logs/all` gate `view:platform-audit`
 > (operator-only, chéo tenant) · `/attendance/audit-logs` gate `view:attendance-audit-log` ·
@@ -198,8 +203,15 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > `auditLogs.metadata` **THÔ** (`:381`) trong khi đường foundation coi `metadata` là phải
 > `masker.mask()`. **Chưa có WO/KI** — cặp quyền khác, cần số hiệu riêng.
 >
-> ⚠️ **Workaround đang hiệu lực cho dòng CÒN MỞ (`KI-071`):** không cấp `view:user` ở scope hẹp hơn
-> `Company` cho vai nào. Đo 2026-08-22: `view:audit-log` có **3 vai giữ** (`SA` 2 người sống ·
+> ⚠️ **LUẬT VẬN HÀNH SAU KHI KI-071 ĐÓNG (2026-08-22) — thay cho workaround cũ.** Workaround cũ
+> (*"không cấp `view:user` ở scope hẹp hơn `Company` cho vai nào"*) **đã hết hiệu lực và không được
+> chép lại**: nó mâu thuẫn trực tiếp với mục đích bản vá, vốn làm `@Own` thành cấu hình **cấp được
+> và CÓ HIỆU LỰC ở tầng HÀNG**. Ba điều người cấp quyền phải biết:
+> (1) `@Own` nay cắt TẬP HÀNG chứ không chỉ cột — vai đó chỉ còn thấy tư cách thành viên của chính mình;
+> (2) `@Team`/`@Department` = **0 hàng** (fail-closed) và lưới **KHÔNG đơn điệu** — giữ đồng thời
+> `@Own` + `@Team` resolve ra `Team` ⇒ **MẤT** hàng, tức thêm một role có thể LÀM MẤT quyền xem;
+> (3) cặp này `is_sensitive = false` nên `exact` **THẮNG** `wildcard` — cấp `view:user@Own` cho vai
+> đang giữ `*:*@Company` là **HẠ** vai đó xuống `Own` trên cả hai tầng. Đo 2026-08-22: `view:audit-log` có **3 vai giữ** (`SA` 2 người sống ·
 > `QUẢN LÝ CẤP CAO` 4 hàng `user_roles`/3 active · `company-admin` 2) và `view:user` có **4 vai**
 > (ba vai trên + `hr`, 0 người giữ) — **tất cả đều `@Company`**, 0 hàng `DENY` ⇒ hôm nay chưa ai chạm
 > được lớp này. Đó là lý do KI-071 là lỗ TIỀM TÀNG, không phải sự cố đang chảy.

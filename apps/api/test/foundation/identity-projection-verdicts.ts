@@ -458,14 +458,14 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
     point: "permission/role-admin.repository.ts#listRoleMembersTx:users.email",
     basis: "identity-gated",
     reason:
-      "KI-053 — role-admin.service.ts:113-140: `assertCan(view,user)` chỉ trả lời CÓ/KHÔNG, không đọc data_scope. Nay `resolveOrNull` + `buildUserScopeConditionOn(users)` dựng vị từ, `identityColumns` khử ở SQL, service BỎ HẲN khoá (contract `.optional()`). ORDER BY cũng đổi sang cột đã che để thứ tự không rò alphabet.",
+      "KI-053 — role-admin.service.ts:113-140: `assertCan(view,user)` chỉ trả lời CÓ/KHÔNG, không đọc data_scope. Nay `resolveOrNull` + `buildUserScopeConditionOn(users)` dựng vị từ, `identityColumns` khử ở SQL, service BỎ HẲN khoá (contract `.optional()`). ORDER BY cũng đổi sang cột đã che để thứ tự không rò alphabet. ⟲ S10-SEC-ROLEMEMBERROW-1 (KI-071): route này nay bound CẢ TẬP HÀNG bằng CÙNG cặp `view:user` và CÙNG cặp cột (`users.id`/`users.companyId`) ⇒ mọi hàng trả về đều trong scope ⇒ cờ `identityInScope` LUÔN true và nhánh `else null` KHÔNG BAO GIỜ RẼ trên route này. Tầng cột được GIỮ (phòng thủ + nợ N-1b có thể nới vị từ HÀNG mà không nới vị từ CỘT) nhưng khả-quan-sát của nó ở đây bị BAO TRÙM — đừng đọc dòng này thành 'route còn hai lớp độc lập', và đừng nghiệm thu cơ chế bound-CỘT qua nó: bằng chứng độc lập sống ở `login_logs`/`user_security_events`.",
     signedBy: WO,
   },
   {
     point: "permission/role-admin.repository.ts#listRoleMembersTx:users.fullName",
     basis: "identity-gated",
     reason:
-      "KI-053 — cùng cụm `case when` với cột email; `fullName` cũng bị BỎ KHOÁ (không giữ `null`) vì `null` đã mang nghĩa 'user chưa đặt họ tên'.",
+      "KI-053 — cùng cụm `case when` với cột email; `fullName` cũng bị BỎ KHOÁ (không giữ `null`) vì `null` đã mang nghĩa 'user chưa đặt họ tên'. ⟲ S10-SEC-ROLEMEMBERROW-1 (KI-071): route này nay bound CẢ TẬP HÀNG bằng CÙNG cặp `view:user` và CÙNG cặp cột (`users.id`/`users.companyId`) ⇒ mọi hàng trả về đều trong scope ⇒ cờ `identityInScope` LUÔN true và nhánh `else null` KHÔNG BAO GIỜ RẼ trên route này. Tầng cột được GIỮ (phòng thủ + nợ N-1b có thể nới vị từ HÀNG mà không nới vị từ CỘT) nhưng khả-quan-sát của nó ở đây bị BAO TRÙM — đừng đọc dòng này thành 'route còn hai lớp độc lập', và đừng nghiệm thu cơ chế bound-CỘT qua nó: bằng chứng độc lập sống ở `login_logs`/`user_security_events`.",
     signedBy: WO,
   },
   {
@@ -581,11 +581,18 @@ export const BLIND_SPOT_PINS = {
  *
  * Đo 2026-08-21: ĐÚNG MỘT điểm — hai route nhật ký dùng chung `rowScopeFor()`.
  * Đo 2026-08-22 (S10-SEC-AUDITLOGROW-2 / KI-072): HAI điểm — thêm bề mặt `audit_logs`.
+ * Đo 2026-08-22 (S10-SEC-ROLEMEMBERROW-1 / KI-071): BA điểm — thêm bề mặt `user_roles ⋈ users`.
  *
  * ⚠️ Điểm thứ hai CỐ Ý là một bản sao gần giống điểm thứ nhất, KHÔNG phải một helper dùng chung
  * (plan D7): gộp hai bề mặt vào một lời gọi `fromScope` làm census chỉ thấy MỘT điểm ⇒ việc
  * `audit_logs` được bound trở nên VÔ HÌNH với chính cái ratchet dựng ra để bắt "mở rộng bề mặt mà
- * không ký". Khi KI-071 thêm điểm THỨ BA thì đó mới là lúc cân nhắc lại, ở một WO riêng.
+ * không ký".
+ *
+ * ⟲ S10-SEC-ROLEMEMBERROW-1 (KI-071) — điều kiện gộp đã ĐĂNG KÝ TRƯỚC ở dòng này ("khi KI-071 thêm
+ * điểm THỨ BA thì đó mới là lúc cân nhắc lại, ở một WO riêng") NAY ĐÃ THOẢ: có BA bản sao gần giống
+ * nhau. WO KI-071 CỐ Ý không gộp — gộp là refactor CROWN chạm hai đường đã nghiệm thu, và nó phải
+ * giải bài toán "gộp mà ratchet vẫn thấy TỪNG bề mặt" TRƯỚC khi gộp. Đây là **nợ CÓ TÊN**, chờ WO
+ * riêng; đừng gộp nhân tiện trong một WO khác.
  */
 export const ROW_SCOPE_MINT_PINS = [
   /** `login_logs` + `user_security_events` — S10-SEC-AUDITLOGROW-1 (KI-070). */
@@ -596,6 +603,19 @@ export const ROW_SCOPE_MINT_PINS = [
    * `test/foundation/foundation-audit-row-scope.int-spec.ts` (R1·R2·R3·N1·T1 / A1-A4·C1·C2·G1).
    */
   "foundation/audit/audit.service.ts#rowScopeFor",
+  /**
+   * `user_roles` ⋈ `users` (`GET /auth/roles/:id/members`) — S10-SEC-ROLEMEMBERROW-1 (KI-071).
+   * Bằng chứng deny/allow của CHÍNH bảng này: `test/integration/identity-projection-scope.int-spec.ts`
+   * (A2·A3·R-D2·R-D3·R-T1·R-T2·R-G1·R-X1 / A1·R-A3) + tầng KHÔNG-cần-DB
+   * `src/permission/role-admin.row-scope.spec.ts` (U1·U1b·U1c·U2·U3·U4).
+   *
+   * ⚠️ ĐIỂM KHÁC BIỆT với hai điểm trên, phải đọc trước khi so sánh: ở đây cặp bound TRÙNG cặp gate
+   * VÀ trùng luôn cặp cột của tầng CỘT ⇒ tầng cột của route này bị BAO TRÙM (xem hai dòng verdict
+   * `listRoleMembersTx:*`). Cú ném 403 fail-closed nằm ở `listMembersInner` (nơi resolve), KHÔNG nằm
+   * trong `rowScopeFor` — vì luật "phân giải mỗi cặp ĐÚNG MỘT LẦN/request" đòi một lời gọi duy nhất
+   * nuôi cả hai tầng.
+   */
+  "permission/role-admin.service.ts#rowScopeFor",
 ] as const;
 
 /**
