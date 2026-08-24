@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**390 WO** · có micro-plan: **222/390** · ⬜ 1 chờ · 🔵 0 đang làm · ✅ 389 xong · 🔴 0 chặn
+**391 WO** · có micro-plan: **222/391** · ⬜ 2 chờ · 🔵 0 đang làm · ✅ 389 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -455,6 +455,7 @@
 | `S10-SEC-ROLEMEMBERFE-1` | 🔴 | ✅ xong | [📄](S10-SEC-ROLEMEMBERFE-1.md) | ✅S10-SEC-ROLEMEMBERROW-1 | KI-073 — tab Thành viên role: THÂN 201 của POST /permissions/users/:us |
 | `S10-SEC-ROLEMEMBERDEL-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S10-SEC-ROLEMEMBERFE-1 | KI-074 — oracle thứ HAI của tab Thành viên role: DELETE /permissions/u |
 | `S10-CHAT-EMITGUARD-1` | 🟡 | ✅ xong | [📄](S10-CHAT-EMITGUARD-1.md) | — | KI-075 — hai job CHAT (`emitExpired` :68 · `emitAutoEnded` :72) gọi đư |
+| `S10-CHAT-EMITGUARD-2` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S10-CHAT-EMITGUARD-1 | KI-076 — NĂM route REST của CALL phát realtime SAU COMMIT không bọc (` |
 
 ---
 

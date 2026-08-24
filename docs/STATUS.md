@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-24 09:58Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-24 11:49Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -10,6 +10,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🔴 `S10-SEC-ROLEMEMBERDEL-1` KI-074 — oracle thứ HAI của tab Thành viên role: DELETE /permissions/users/:userId/roles/:roleId phân biệt 404 'User does not have this role' với 204 ⇒ câu trả lời ÂM ('x KHÔNG phải thành viên') để lại 0 hàng forensic, 0 thiệt hại — gương của V1 đã đóng ở KI-073
+- 🟡 `S10-CHAT-EMITGUARD-2` KI-076 — NĂM route REST của CALL phát realtime SAU COMMIT không bọc (`emitLifecycle` :203 invite · :558 dùng chung 4 route vòng đời); 3/5 rơi vào trạng thái CUỐI mà KHÔNG job nào quét ⇒ peer mất sự kiện VĨNH VIỄN
 
 **CHỜ (kẹt phụ thuộc):**
 - _(trống)_
@@ -18,7 +19,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 11
+- **branch**: `master` · **file đang đổi (dirty)**: 2
 - **migration head**: idx 213 — `0546_s7calldb1_chat_calls` (214 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -27,6 +28,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `acc11874` | 2026-08-24 | feat(chat): ghim hợp đồng biên "emit không ném" cho HAI job CHAT — đóng KI-075 (S10-CHAT-EMITGUARD-1) (#408) |
 | `8ca57385` | 2026-08-24 | chore(gov): KI-074 — chủ trương hướng (b) ĐÃ KÝ 24/08, gỡ chặn S10-SEC-ROLEMEMBERDEL-1 (#407) |
 | `4955bfe2` | 2026-08-24 | chore(gov): Đợt 2 — cấp số hiệu cho nợ vô hình: KI-075 + seed WO cho KI-074/KI-075 (#406) |
 | `f93fd3d8` | 2026-08-24 | feat(sec): thân 201 của POST /permissions/users/:userId/roles không còn phân biệt 'đã là thành viên' — đóng KI-073 (S10-SEC-ROLEMEMBERFE-1) (#405) |
@@ -38,7 +40,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `b3907cf6` | 2026-08-22 | chore(gov): regen STATUS sau khi merge #401 + #402 |
 | `ad35bba9` | 2026-08-22 | chore(gov): seed WO cho KI-071 + KI-072 vào hàng đợi (S10-SEC-AUDITLOGROW-2 · S10-SEC-ROLEMEMBERROW-1) (#402) |
 | `69c355ae` | 2026-08-22 | feat(chat): job gặt cuộc gọi `active` mồ côi — đóng KI-063 (S10-CHAT-CALLSWEEP-1) (#401) |
-| `c31edd1b` | 2026-08-21 | feat(sec): data_scope chặn TẬP HÀNG hai bảng nhật ký — đóng KI-070, tách KI-071/KI-072 (S10-SEC-AUDITLOGROW-1) (#400) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

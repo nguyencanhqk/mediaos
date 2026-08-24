@@ -13338,4 +13338,48 @@ export const backlog = [
       "⚠️ int-spec CHAT ngủ khi thiếu `LANE_DB` ⇒ verify phải chạy `bash scripts/lane-db-setup.sh emitguard` + export LANE_DB, KHÔNG `source .env` ([[sourcing-dotenv-poisons-test-run-node-env]]).",
     ],
   },
+
+  {
+    // Seed 24/08/2026 khi thi công S10-CHAT-EMITGUARD-1: món này bị để NGOÀI phạm vi WO đó, và đánh giá
+    // ban đầu ("nhẹ hơn đường job") đã bị BÁC khi đo lại — 3/5 route rơi vào trạng thái CUỐI mà KHÔNG job
+    // nào quét. Cấp KI-076 + WO để nó có chỗ đứng trong sổ thay vì sống trong một dòng ghi chú PR.
+    id: "S10-CHAT-EMITGUARD-2",
+    module: "CHAT",
+    layer: "BE",
+    title:
+      "KI-076 — NĂM route REST của CALL phát realtime SAU COMMIT không bọc (`emitLifecycle` :203 invite · :558 dùng chung 4 route vòng đời); 3/5 rơi vào trạng thái CUỐI mà KHÔNG job nào quét ⇒ peer mất sự kiện VĨNH VIỄN",
+    zone: "yellow",
+    status: "todo",
+    depends_on: ["S10-CHAT-EMITGUARD-1"],
+    paths: [
+      "apps/api/src/chat/**",
+      "apps/api/src/realtime/**",
+      "apps/api/test/**",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "docs/plans/S10-CHAT-EMITGUARD-2.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    src: [
+      "`chat-calls.service.ts:203` — `this.emitLifecycle(actor.companyId, call, \"ringing\")` trong `invite` (CHAT-API-026), NGOÀI `withTenant`, KHÔNG bọc.",
+      "`chat-calls.service.ts:558` — `this.emitLifecycle(actor.companyId, dto, action)` trong `lifecycleTx`, dùng CHUNG cho BỐN route `accept`/`reject`/`cancel`/`hangup` (action `accepted`/`rejected`/`cancelled`/`ended`). Một điểm sửa phủ cả bốn.",
+      "HỒI PHỤC — vế quyết định mức độ: `ringing` có job ring-timeout 45s + dọn-trước-khi-mời ⇒ tự lành; `active` có stale-active-sweep (grace 2 phút / quá thọ 12h) ⇒ tự lành CHẬM; `rejected`·`cancelled`·`ended` là trạng thái CUỐI ⇒ KHÔNG job nào khớp, KHÔNG route ĐỌC để poll ⇒ peer giữ khung gọi chết tới khi reload/reconnect.",
+      "`realtime-emitter.service.ts:269-299` — `emitChatCall` vẫn tự nuốt mọi lỗi ⇒ HÔM NAY không ném được. Bất biến đó ĐÃ ĐƯỢC GHIM ở `realtime/realtime-emitter.call.spec.ts` (S10-CHAT-EMITGUARD-1, có kiểm chứng đột biến) ⇒ rủi ro tồn dư THẤP HƠN KI-075 lúc mở.",
+      "`chat-calls.service.ts:202` — `emitExpired` nay TRẢ số đếm nhưng đường REST VỨT giá trị. Đường job đưa nó vào `JobRunResult.failed` + `metadata.emitFailed`; REST không có run-row để chứa ⇒ kênh duy nhất là `logger.error` kèm callId trong helper.",
+    ],
+    done_when: [
+      "PHÁT BIỂU TRƯỚC mức độ: nợ PHÒNG THỦ THEO CHIỀU SÂU, KHÔNG phải lỗ đang chảy máu — `emitChatCall` vẫn nuốt mọi lỗi VÀ bất biến đó đã có ca ghim. Đừng chép giọng KI-075 lúc mở sang đây",
+      "Bọc CẢ HAI điểm phát (`:203` + `:558`) — `:558` phủ bốn route vòng đời, đừng vá lẻ trong từng route (đó chính là thứ `lifecycleTx` được dựng để chống)",
+      "Quyết TƯỜNG MINH chuyện đường REST không có chỗ chứa số đếm emit hỏng: chấp nhận log-only thì KHAI RA trong docblock, đừng để nó trông như sơ suất",
+      "RED TRƯỚC: ca chứng minh route vẫn trả 2xx + DTO khi emit ném — hôm nay nó trả 500 cho một giao dịch ĐÃ commit, và actor thử lại sẽ ăn 422 CALL_NOT_ACTIONABLE",
+      "Ca đối chứng ALLOW: đường xanh vẫn phát ĐỦ sự kiện cho cả 5 route và DTO trả về không đổi. Xem [[deny-cases-vacuous-without-allow-case]]",
+      "RELEASE-02 đóng KI-076 kèm bảng HỒI PHỤC theo từng trạng thái (`ringing`/`active` tự lành vs 3 trạng thái CUỐI thì không) — đó là vế mà đánh giá ban đầu đã đọc sai",
+    ],
+    notes: [
+      "🟡 LIGHT gate (typescript-reviewer + quality-gate) + silent-failure-hunter.",
+      "⚠️ ĐÁNH GIÁ BAN ĐẦU ĐÃ BỊ BÁC: PR #408 ghi 'client thấy được trạng thái qua chính response POST, không mất vĩnh viễn như đường job'. Câu đó chỉ đúng cho ACTOR và chỉ ở 2/5 hình dạng — PEER không có response POST nào để đọc. Đừng chép mô tả cũ sang plan.",
+      "⚠️ Khuôn tham chiếu đã có sẵn: đọc `docs/plans/S10-CHAT-EMITGUARD-1.md` §3 (vì sao guard đặt ở helper, vì sao KHÔNG gộp vòng lặp) và §4 (kế toán JobRunResult). Đường REST khác ở chỗ KHÔNG có run-row — đó là điểm phải nghĩ mới, phần còn lại chép được.",
+      "⚠️ Ratchet `chat-realtime-after-commit.spec.ts` đếm `this.realtime.emitChatCall(` phải ĐÚNG 3 và đang gác thứ tự emit-sau-`withTenant`. Bọc try/catch KHÔNG được làm tụt con số đó ([[index-ratchet-must-pin-definition-not-name]]).",
+    ],
+  },
 ];
