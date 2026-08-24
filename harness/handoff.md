@@ -42,10 +42,13 @@ cuối `ĐÓNG 2026-08-24`); `backlog.status → "done"`; ledger 2 dấu `gate`;
 nhánh reassign và **bị san thành vĩnh viễn**. Vế service (bỏ qua reassign khi request không khai
 `expiresAt` mà hàng active có) = **đổi ngữ nghĩa API GHI** ⇒ cố ý để nợ N-6, cần WO riêng + plan-review.
 
-### 🔴 Còn lại: commit + PR (vùng đỏ ⇒ NGƯỜI CHỐT, KHÔNG gắn nhãn auto-merge)
+### 🟡 Còn lại: CI + NGƯỜI CHỐT duyệt PR #405
 
-Cây vẫn **CHƯA COMMIT trên `master`** (22 file + 1 untracked — đừng discard). Bước tiếp: branch
-`wo/s10-sec-rolememberfe-1` → commit → push → `gh pr create` **không** nhãn auto-merge.
+`check.sh --lane-db=rolememberfe` **XANH đầy đủ** (api 563/563 · app 232/232 · console 22 · contracts
+32 · ui 16 · web-core 43 · auth 4; cả 6 gate: secret-literals · lint · typecheck · migration-no-drop ·
+tooling-tests · test). Commit `4662c7bb` trên `wo/s10-sec-rolememberfe-1` → **PR #405** (base `master`).
+**Nhãn = rỗng, CỐ Ý** — vùng đỏ, người chốt merge ([[automerge-label-is-dead-end-on-master]]).
+Ledger đã đóng dấu `finished`.
 
 **Friction:** (1) subagent chết 529 vẫn ĐỐT trọn token đọc-diff mỗi lần — phiên trước 4 xác = phần lớn
 của cú nhảy $107→$299; cap 2 lần thử rồi CHUYỂN PHIÊN, đừng đợi-và-thử trong phiên đắt. _(Phiên 24/08
