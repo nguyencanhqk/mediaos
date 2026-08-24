@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**372 WO** · có micro-plan: **208/372** · ⬜ 4 chờ · 🔵 1 đang làm · ✅ 366 xong · 🔴 1 chặn
+**388 WO** · có micro-plan: **221/388** · ⬜ 0 chờ · 🔵 1 đang làm · ✅ 387 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -320,7 +320,7 @@
 | `S6-SEC-ORG-1` | 🔴 | ✅ xong | [📄](S6-SEC-ORG-1.md) | ✅S6-SEC-ROUTEMAP-1 | KI-030 — gate 3 route đọc /org đang lộ danh bạ toàn tenant cho MỌI use |
 | `S6-SEC-ORGSCOPE-1` | 🔴 | ✅ xong | [📄](S6-SEC-ORGSCOPE-1.md) | ✅S6-SEC-ORG-1 | N-1 (hậu FULL gate S6-SEC-ORG-1) — ép data_scope trong OrgRepository.l |
 | `S6-SEC-ORGTEAMSCOPE-1` | 🔴 | ✅ xong | [📄](S6-SEC-ORGTEAMSCOPE-1.md) | ✅S6-SEC-ORGSCOPE-1 | N-1c (FULL gate S6-SEC-ORGSCOPE-1 phát hiện) — GET /org/teams/:id/memb |
-| `S6-SEC-IDENTITY-PROJ-1` | 🔴 | 🔴 chặn | — *(chưa)* | ✅S6-SEC-ORGTEAMSCOPE-1 | Gốc rễ của N-1/N-2/N-1c — buộc TẦNG CHIẾU `users.email`/`users.fullNam |
+| `S6-SEC-IDENTITY-PROJ-1` | 🔴 | ✅ xong | [📄](S6-SEC-IDENTITY-PROJ-1.md) | ✅S6-SEC-ORGTEAMSCOPE-1 | Gốc rễ của N-1/N-2/N-1c — buộc TẦNG CHIẾU `users.email`/`users.fullNam |
 | `S6-SEC-IDENTITYBOUND-1` | 🔴 | ✅ xong | [📄](S6-SEC-IDENTITYBOUND-1.md) | ✅S6-SEC-ORGTEAMSCOPE-1 | N-1d/N-1e (KI-051 · KI-052) — bound hai đường chiếu danh tính còn hở:  |
 | `S6-SEC-PERMVERB-1` | 🔴 | ✅ xong | [📄](S6-SEC-PERMVERB-1.md) | ✅S6-SEC-ORG-1 | N-2 (hậu FULL gate S6-SEC-ORG-1) — chốt MỘT động từ giữa `read:user` ( |
 | `S6-SEC-NOTITX-1` | 🔴 | ✅ xong | [📄](S6-SEC-NOTITX-1.md) | — | KI-034 — gộp insert notification + outbox + audit vào MỘT transaction  |
@@ -380,11 +380,11 @@
 | `S7-CALL-BE-1` | 🔴 | ✅ xong | [📄](S7-CALL-BE-1.md) | ✅S7-CALL-DB-1 | Vòng đời cuộc gọi qua REST (mời · nhận · từ chối · huỷ · kết thúc) + G |
 | `S7-CALL-RT-1` | 🔴 | ✅ xong | [📄](S7-CALL-RT-1.md) | ✅S7-CALL-BE-1 | 🔒 Gateway /ws-call: allowlist ĐÓNG 8 sự kiện inbound, relay SDP/ICE K |
 | `S7-CALL-FE-1` | 🟡 | ✅ xong | [📄](S7-CALL-FE-1.md) | ✅S7-CALL-RT-1 ✅S7-CHAT-FE-3 | UI cuộc gọi: nút gọi trong phòng · chuông đến · khung đang gọi (thu nh |
-| `S7-CHAT-LMS-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S7-CALL-FE-1 | Gỡ chat khỏi LMS (GIỮ trợ lý AI) + trỏ lối vào sidebar sang /chat Medi |
+| `S7-CHAT-LMS-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S7-CALL-FE-1 | Gỡ chat khỏi LMS (GIỮ trợ lý AI) + trỏ lối vào sidebar sang /chat Medi |
 | `S7-CALL-QA-1` | 🔴 | ✅ xong | [📄](S7-CALL-QA-1.md) | ✅S7-CALL-FE-1 | Bộ test CALL: deny-path signalling · cô lập 2-tenant · vòng đời cuộc g |
 | `S7-CALL-RT-FIX-1` | 🔴 | ✅ xong | [📄](S7-CALL-RT-FIX-1.md) | ✅S7-CALL-QA-1 | Vá fail-OPEN /ws-call: `disconnect()` trong middleware handshake là no |
 | `S7-CALL-RT-FIX-2` | 🔴 | ✅ xong | [📄](S7-CALL-RT-FIX-2.md) | ✅S7-CALL-QA-1 | Vá 'gỡ thành viên giữa cuộc gọi': VẪN relay SDP/ICE tới người đã bị gỡ |
-| `S7-CALL-QA-2` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S7-CALL-QA-1 | Test FE cuộc gọi: bật đo coverage cho apps/app + phủ 1.241 dòng đang l |
+| `S7-CALL-QA-2` | 🟡 | ✅ xong | — *(chưa)* | ✅S7-CALL-QA-1 | Test FE cuộc gọi: bật đo coverage cho apps/app + phủ 1.241 dòng đang l |
 | `S7-CHAT-QA-1` | 🔴 | ✅ xong | [📄](S7-CHAT-QA-1.md) | ✅S7-CHAT-FE-3 ✅S7-CHAT-BE-5 ✅S7-CHAT-BE-6 ✅S7-CHAT-FE-4 ✅S7-CHAT-FE-5 | Bộ test trọn vẹn CHAT: 12 nhóm scenario SPEC-15 §21 trên LANE_DB + E2E |
 | `S7-CHAT-CLEAN-1` | 🔴 | ✅ xong | [📄](S7-CHAT-CLEAN-1.md) | ✅S7-CHAT-QA-1 | Contract (release SAU): drop chat_rooms.channel_id + chat_messages.fil |
 | `S7-QA-CATALOGFIXTURE-1` | 🔴 | ✅ xong | [📄](S7-QA-CATALOGFIXTURE-1.md) | — | Fixture test KHÔNG được đổi `permissions.is_sensitive` của cặp CHÍNH T |
@@ -428,15 +428,31 @@
 | --- | --- | --- | --- | --- | --- |
 | `S10-SOCIAL-LIB-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S9-SOCIAL-QA-1 | Kho video đọc từ thư mục có WHITELIST: SOCIAL_MEDIA_LIBRARY_DIRS + GET |
 | `S10-SOCIAL-LIB-2` | 🔴 | ✅ xong | — *(chưa)* | ✅S10-SOCIAL-LIB-1 | Màn 'Kho video': cấu hình thư mục gốc từ giao diện (lưu ở settings, kh |
-| `S10-SOCIAL-OPS-1` | 🔴 | 🔵 đang làm | — *(chưa)* | ✅S10-SOCIAL-LIB-1 | Đưa kho sang ổ D: (SOCIAL_DATA_DIR) + đổi dịch vụ MediaOS-Social từ Lo |
+| `S10-SOCIAL-OPS-1` | 🔴 | ✅ xong | [📄](S10-SOCIAL-OPS-1.md) | ✅S10-SOCIAL-LIB-1 | Đưa kho sang ổ D: (SOCIAL_DATA_DIR) + đổi dịch vụ MediaOS-Social từ Lo |
 | `S10-OPS-SITEWATCH-1` | 🟡 | ✅ xong | — *(chưa)* | — | ops-alert-check mù với mọi mặt PROD ngoài API :3100 — thêm dò fbpost : |
 | `S10-OPS-ALERTCHAN-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S10-OPS-SITEWATCH-1 | Đường BÁO ĐỘNG ra ngoài: tin nhắn phải nói ĐANG HỎNG CÁI GÌ (nay chỉ c |
 | `S10-FND-ENVKEY-1` | 🟡 | ✅ xong | — *(chưa)* | — | `INTERNAL_API_KEY` là secret ĐANG DÙNG THẬT nhưng vắng mặt ở env.schem |
 | `S10-QA-LOGNOISE-1` | 🟢 | ✅ xong | — *(chưa)* | — | Nhiễu log `OutboxNotificationBridge … intake THẤT BẠI` khi chạy test — |
-| `S10-ATT-NOTIPROD-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | 3 sự kiện ATT bật trong danh mục nhưng KHÔNG AI PHÁT (`ATT_MISSING_CHE |
-| `S10-QA-ROUTEHTTP-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | Một mảng lớn đường dẫn API không có test HTTP nào chạm — guard/DTO/env |
+| `S10-ATT-NOTIPROD-1` | 🟡 | ✅ xong | [📄](S10-ATT-NOTIPROD-1.md) | — | 3 sự kiện ATT bật trong danh mục nhưng KHÔNG AI PHÁT (`ATT_MISSING_CHE |
+| `S10-QA-ROUTEHTTP-1` | 🟡 | ✅ xong | — *(chưa)* | — | Một mảng lớn đường dẫn API không có test HTTP nào chạm — guard/DTO/env |
+| `S10-QA-ROUTEHTTP-2` | 🔴 | ✅ xong | [📄](S10-QA-ROUTEHTTP-2.md) | ✅S10-QA-ROUTEHTTP-1 | 12 route risk≥5 còn lại chưa có test HTTP nào chạm — guard/DTO/envelop |
+| `S10-QA-SECPOLICY-GATE-1` | 🔴 | ✅ xong | [📄](S10-QA-SECPOLICY-GATE-1.md) | — | KI-065 — quyết định số phận `PATCH /settings/security-policy`: route c |
+| `S10-AUTH-STEPUP-1` | 🔴 | ✅ xong | [📄](S10-AUTH-STEPUP-1.md) | ✅S10-QA-SECPOLICY-GATE-1 | Chưa có step-up (xác thực lại) THẬT: cờ `requiresReauth` của permissio |
 | `S10-FND-JSONLOG-1` | 🟡 | ✅ xong | — *(chưa)* | — | Log chưa có cấu trúc JSON — và bất kỳ ai đổi định dạng log đều PHẢI sử |
 | `S10-DASH-MVREFRESH-1` | 🟡 | ✅ xong | — *(chưa)* | — | Materialized view dashboard KHÔNG CÓ LỊCH CHẠY — chỉ làm mới khi có ng |
+| `S10-HR-STATUSUI-1` | 🔴 | ✅ xong | [📄](S10-HR-STATUSUI-1.md) | — | HR-FUNC-006 — FE không có nút 'Đổi trạng thái nhân viên'; và sửa `end_ |
+| `S10-AUTH-IPTRUST-1` | 🔴 | ✅ xong | — *(chưa)* | — | PROD chạy sau `cloudflared` cùng máy nhưng `TRUST_PROXY` không đặt ⇒ M |
+| `S10-FND-VALKEYSCOPE-1` | 🔴 | ✅ xong | [📄](S10-FND-VALKEYSCOPE-1.md) | — | 4 môi trường dùng CHUNG một Valkey db0 nhưng chỉ `chat:presence` + kên |
+| `S10-FND-VALKEYSCOPE-2` | 🔴 | ✅ xong | — *(chưa)* | ✅S10-FND-VALKEYSCOPE-1 | Gỡ chu kỳ chuyển tiếp của S10-FND-VALKEYSCOPE-1: đọc/ghi kép `replay:* |
+| `S10-QA-ATTNOTIFLAKE-1` | 🟡 | ✅ xong | — *(chưa)* | — | attendance-alert-noti-producer.int.spec.ts ĐỎ CHẮC CHẮN mọi lần chạy s |
+| `S10-QA-CHUNKTEST-FBPOST-1` | 🟢 | ✅ xong | — *(chưa)* | — | `harness/chunk-test.mjs` loại `apps/lms` nhưng KHÔNG loại `apps/fbpost |
+| `S10-FE-PLATFORMACCOUNTS-DEADPATH-1` | 🟢 | ✅ xong | — *(chưa)* | — | Đường FE CHẾT: console gọi `POST /platform-accounts/reauth` và `POST / |
+| `S10-SEC-AUDITLOGROW-1` | 🔴 | ✅ xong | [📄](S10-SEC-AUDITLOGROW-1.md) | — | KI-070 — bản vá KI-053/054/069 bound CỘT chứ KHÔNG bound HÀNG: `view:a |
+| `S10-CHAT-CALLSWEEP-1` | 🔴 | ✅ xong | [📄](S10-CHAT-CALLSWEEP-1.md) | — | KI-063 (R4 ĐÃ KÝ 20/08) — cuộc gọi `active` không ai quét ⇒ phòng khoá |
+| `S10-FE-BREAKGLASS-DEADPATH-1` | 🟢 | ✅ xong | — *(chưa)* | — | Đường FE CHẾT (cùng lớp platform-accounts): màn `/settings/break-glass |
+| `S10-SEC-AUDITLOGROW-2` | 🔴 | ✅ xong | [📄](S10-SEC-AUDITLOGROW-2.md) | — | KI-072 — `GET /foundation/audit-logs` (+ `/:id`) KHÔNG bound HÀNG: cùn |
+| `S10-SEC-ROLEMEMBERROW-1` | 🔴 | ✅ xong | [📄](S10-SEC-ROLEMEMBERROW-1.md) | ✅S10-SEC-AUDITLOGROW-2 | KI-071 — `GET /auth/roles/:id/members` bound CỘT chứ KHÔNG bound HÀNG: |
+| `S10-SEC-ROLEMEMBERFE-1` | 🔴 | 🔵 đang làm | [📄](S10-SEC-ROLEMEMBERFE-1.md) | ✅S10-SEC-ROLEMEMBERROW-1 | KI-073 — tab Thành viên role: `memberIds` lấy từ danh sách ĐÃ BỊ SCOPE |
 
 ---
 
