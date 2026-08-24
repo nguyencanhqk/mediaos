@@ -4,6 +4,46 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
+## Phiên 2026-08-24 (b) — **Đợt 3**: seed 5 WO + thi công 3.1 (KI-068) → PR #409 ⊂ #410
+
+**Hai PR XẾP CHỒNG, chưa merge — #409 là base của #410. Merge #409 TRƯỚC.**
+
+### #409 `gov/dot3-seed-wo` — seed (CI xanh toàn bộ)
+6/8 món của bảng Đợt 3 có số hiệu KI nhưng KHÔNG có WO ⇒ vô hình với auto-loop. Seed 5 WO
+(backlog 391 → 396): `S10-FND-BODYVALIDATE-1` (KI-068) · `S10-SEC-LOGINLOG429-1` (KI-047+KI-048,
+**gộp** vì cùng `auth.service.ts` + cùng bảng `login_logs`) · `S10-HR-EMPPAGE-1` (KI-010) ·
+`S10-SEC-FKCATALOG-1` (KI-055, **CROWN**) · `S10-QA-ROUTEHTTP-2` (KI-025, đã trỏ sẵn từ trước).
+3.2 (KI-075) đã đóng ở #408 rồi; 3.5 (KI-074) đã có WO từ Đợt 2.
+
+**KI-047 ĐÃ TRÔI — đã sửa trong sổ:** nay **6** điểm ném `TOO_MANY_REQUESTS` trong `auth/**` (không
+phải 5) ⇒ **5 đường không ghi `login_logs`** (không phải 4). Điểm mọc thêm: `step-up.service.ts`.
+**`verifyTwoFactorLogin` KHÔNG tồn tại** — hàm thật `completeTwoFactorLogin` (`auth.service.ts:452`).
+
+### #410 `wo/s10-fnd-bodyvalidate-1` — thi công 3.1, `check.sh --lane-db` XANH (api 566/566)
+KI-068 **ĐÓNG**. Vá hướng (a): `api-keys.dto.ts` + `files.dto.ts` (`createZodDto`). 3/4 route trước
+chỉ là SUY LUẬN, nay đã **ĐO bằng HTTP** — cả ba 500 + `ZodError` → 400
+(`test/integration/files-http-validate.int-spec.ts`, spec `files` đầu tiên dùng supertest).
+
+**Census: dùng bản AST, ĐỪNG dùng số regex.** trước 193/189/**4** → sau **193/193/0**. Bản seed ghi
+`177/173/4`: số 4 + danh sách route ĐÚNG, **mẫu số sai** (regex bỏ sót 16 handler). Đã comment đính
+chính lên #409, cố ý KHÔNG sửa lịch sử để giữ dấu vết "số nào đo bằng công cụ nào".
+
+**Phát sinh → KI-077 + WO `S10-FND-PARAMUUID-1`:** đọc lại diff thấy bản sao CÙNG cơ chế cách bản vá
+**một dòng**, kênh PARAM. 2 route GHI đã đo + vá kèm (`ParseUUIDPipe`); **5 tham số READ/DELETE
+CHƯA ĐO** ⇒ cấp số thay vì vá mù. Hàng KI-068 ghi rõ dấu gạch chỉ phủ **kênh BODY**.
+
+### Còn lại của Đợt 3 (theo thứ tự đã xếp)
+`S10-SEC-LOGINLOG429-1` (🔴 3.3+3.4) → `S10-SEC-ROLEMEMBERDEL-1` (🔴 3.5) → `S10-HR-EMPPAGE-1` (3.6)
+→ `S10-SEC-FKCATALOG-1` (🔴 CROWN 3.7) → `S10-QA-ROUTEHTTP-2` (3.8, chạy CUỐI để đo mẫu số đã ổn định).
+
+**Friction:** (1) heredoc bash >200 dòng vỡ parse — file seed lớn phải ghi bằng Write rồi chèn bằng
+node, đừng nhồi vào `cat <<EOF`. (2) `python -c` in tiếng Việt ra stdout **chết cp1252** dù đã ghi file
+xong — đừng `print()` tiếng Việt. (3) Chạy vitest với `LANE_DB` cần 3 biến mật khẩu; **KHÔNG**
+`source .env` (`NODE_ENV=production` trong đó); dùng
+`eval "$(grep -E '^(APP|WORKER|SUPERUSER)_DB_PASSWORD=' .env)"`. (4) Census decorator bằng regex sai
+**ba lần** — chuyển sang TypeScript compiler API là đúng thuốc, xem
+[[nestjs-zod-class-level-pipe-does-nothing]].
+
 ## Phiên 2026-08-24 — `S10-SEC-ROLEMEMBERFE-1` (KI-073) — 4/4 `done_when` ĐÓNG, CHƯA COMMIT
 
 **Đã làm (tất cả nằm ở WORKING TREE CHƯA COMMIT trên `master` — 21 file, đừng discard):**
