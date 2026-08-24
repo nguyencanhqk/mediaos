@@ -13298,7 +13298,13 @@ export const backlog = [
     title:
       "KI-075 — hai job CHAT (`emitExpired` :68 · `emitAutoEnded` :72) gọi đường phát realtime SAU COMMIT mà không bọc try/catch; bất biến 'emit không ném' sống ở module realtime/ và KHÔNG có ca nào ghim",
     zone: "yellow",
-    status: "todo",
+    // 24/08: cả 6 `done_when` đóng. Vá CẢ HAI job cùng lúc (per-item try/catch trong
+    // `emitExpired`/`emitAutoEnded` + trả SỐ đếm; hai job TIÊU THỤ vào `failed` + `metadata.emitFailed`).
+    // Bất biến biên ghim MỚI ở `realtime/realtime-emitter.call.spec.ts` (trước đó `emitChatCall` có 0 ca)
+    // và đã KIỂM CHỨNG ĐỘT BIẾN: chuyển `.parse()` ra ngoài `try` ⇒ ca DENY-2 ĐỎ. Ratchet đối xứng hai
+    // job nằm ở `chat-realtime-after-commit.spec.ts`. KI-075 đóng trong RELEASE-02 kèm ĐÍNH CHÍNH
+    // `emitExpired` vs `emitAutoEnded`.
+    status: "done",
     depends_on: [],
     paths: [
       "apps/api/src/chat/**",
