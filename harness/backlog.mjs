@@ -13232,4 +13232,98 @@ export const backlog = [
       "⚠️ `RoleMembersTab.spec.tsx:201` ghim một hình dạng response mà server nay KHÔNG phát ra được nữa (hàng thiếu `email`/`fullName`). GIỮ ca (phòng thủ + bẫy [[server-masking-needs-optional-fe-schema]]) nhưng đừng nghiệm thu tầng CỘT qua nó.",
     ],
   },
+  {
+    // Seed 24/08/2026 khi đóng KI-073 (S10-SEC-ROLEMEMBERFE-1). Số hiệu KI-074 đã cấp TRƯỚC khi dấu
+    // gạch ngang của KI-073 land (tiền lệ KI-071/072/073); WO này là "Đợt 2 — cấp số hiệu cho nợ vô
+    // hình": nợ nằm dạng văn xuôi trong một hàng ĐÃ GẠCH thì vô hình với bug-scrub trước RC (bài học
+    // đã trả học phí ở KI-049 và KI-065).
+    id: "S10-SEC-ROLEMEMBERDEL-1",
+    module: "AUTH",
+    layer: "SEC",
+    title:
+      "KI-074 — oracle thứ HAI của tab Thành viên role: DELETE /permissions/users/:userId/roles/:roleId phân biệt 404 'User does not have this role' với 204 ⇒ câu trả lời ÂM ('x KHÔNG phải thành viên') để lại 0 hàng forensic, 0 thiệt hại — gương của V1 đã đóng ở KI-073",
+    zone: "red",
+    // CHỜ CHỦ TRƯƠNG: đây KHÔNG phải WO chạy được ngay. Ngữ nghĩa 404 hiện tại là quyết định CÓ CHỦ Ý
+    // (`web-core/auth-users-api.ts:136`); đổi nó = đổi HỢP ĐỒNG API, phải có chữ ký owner TRƯỚC.
+    // ⚠️ `blocked` chứ KHÔNG `todo`: `todo` + deps done ⇒ gen-status xếp vào READY ("làm được ngay")
+    // và auto-loop nhặt được. Chặn phải MÁY ĐỌC ĐƯỢC, không nằm trong notes cho người đọc.
+    status: "blocked",
+    depends_on: ["S10-SEC-ROLEMEMBERFE-1"],
+    paths: [
+      "apps/api/src/permission/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "packages/web-core/**",
+      "apps/app/src/routes/system/roles/**",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "docs/plans/S10-SEC-ROLEMEMBERDEL-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    src: [
+      '`permission-admin.service.ts:186-223` — `revokeRole`: `findUserRole` rỗng ⇒ ném `NotFoundException` ("User does not have this role") ở :192-194, TRƯỚC mọi ghi (soft-delete + audit RoleRevoked + user_security_events ROLE_REMOVED + emitPermissionChangedForUser).',
+      "⇒ Chiều ÂM: 0 ghi, 0 audit, 0 security-event ⇒ probe KHÔNG để lại dấu vết. Chiều DƯƠNG: ồn (2 bản ghi) NHƯNG gỡ vai THẬT của nạn nhân, và actor giữ `assign-role:user` vá lại được ngay bằng POST ⇒ cặp RoleRevoked+RoleAssigned sát nhau lẫn vào nhiễu cấp phát bình thường.",
+      '`web-core/auth-users-api.ts:136` — chú thích khai rõ 404 là quyết định CÓ CHỦ Ý ("caller xử lý như lỗi rõ ràng, KHÔNG no-op ngầm"). Đảo thành 204-mù là LẤY MẤT một tín hiệu vận hành đúng ⇒ phải có chủ trương, không phải bug fix.',
+      "Ranh phân biệt đã chọn ở KI-073: 'đóng kênh IM LẶNG, chấp nhận kênh CÓ-DẤU-VẾT' ⇒ tính chất S10-SEC-ROLEMEMBERFE-1 đạt được là 'không enumerate IM LẶNG theo chiều DƯƠNG', KHÔNG phải 'không enumerate im lặng'.",
+      "Đo PROD 2026-08-24 (script `logs/measure-ki073.mjs`, 4 hình dạng wildcard × 2 cặp riêng): 0 vai giữ `view:user` hẹp hơn Company ⇒ chưa ai chạm được. Lỗ TIỀM TÀNG, không phải đang chảy máu.",
+    ],
+    done_when: [
+      "CHỐT CHỦ TRƯƠNG TRƯỚC KHI CODE: owner ký một trong ba hướng — (a) 204 đồng nhất cho cả hai nhánh (đóng oracle, MẤT tín hiệu 404 mà web-core đang cố ý dựa vào ⇒ phải rà mọi caller), (b) giữ 404 nhưng CHỈ cho actor có `view:user` ở scope Company/System, 204 cho phần còn lại (đối xứng với cờ `complete` của KI-073, KHÔNG mất tín hiệu cho người vận hành), (c) chấp nhận rủi ro + đóng KI bằng chữ ký. Không ký = không code",
+      "RED TRƯỚC: ca chứng minh vai `assign-role:user@Company` + `view:user@Own` phân biệt được 404 với 204 trên một target NGOÀI scope đọc ⇒ dựng lại tư cách thành viên mà KI-071 đã giấu, với 0 hàng forensic",
+      "Bắt buộc ca đối chứng ALLOW: actor `@Company` vẫn GỠ ĐƯỢC THẬT (hàng user_roles soft-deleted + audit RoleRevoked trỏ id hàng thật + user_security_events ROLE_REMOVED) và vẫn nhận đúng tín hiệu mà hướng đã ký hứa. Xem [[deny-cases-vacuous-without-allow-case]]",
+      "Nếu chọn (a)/(b): rà HẾT caller của 404 (packages/web-core + apps/app + apps/console) TRƯỚC khi đổi — đổi mã trả về mà quên caller là biến một lỗi rõ ràng thành no-op ngầm, đúng thứ chú thích :136 chặn",
+      "FULL gate security-reviewer PASS; RELEASE-02 đóng KI-074 kèm số đo PROD ĐO LẠI (4 hình dạng wildcard × cặp `assign-role:user`) — và ghi RÕ rằng kênh THỜI GIAN (no-op 0 ghi vs fresh 4 ghi của POST) KHÔNG đóng theo, nó ở lại dạng ghi nhận",
+    ],
+    notes: [
+      "🔴 Vùng đỏ (phân quyền + kênh phụ): planner Sonnet 5 effort xhigh → plan-reviewer → IMPLEMENT/REVIEW Opus theo CLAUDE.md §6.",
+      "⚠️ CHỜ CHỦ TRƯƠNG — KHÔNG cho auto-loop nhặt. Đây là đổi HỢP ĐỒNG API, không phải vá lỗi: 404 hiện tại có chú thích khai là chủ ý. Bắt đầu code trước khi owner ký là tự cấp cho mình quyền đổi hợp đồng.",
+      "⚠️ Đọc `docs/plans/S10-SEC-ROLEMEMBERFE-1.md` §N-2 + hàng KI-073 trong RELEASE-02 trước khi thi công: cơ chế '409' của bản seed KI-073 ĐÃ BỊ BÁC (no-op trả 201 + hàng gốc). Đừng chép mô tả cũ sang đây.",
+      "⚠️ Workaround của KI-073 (không cấp `view:user` hẹp hơn Company cho vai đồng thời giữ `assign-role:user`) VẪN hiệu lực đúng vì WO này chưa làm — đừng gỡ khỏi tài liệu vận hành.",
+    ],
+  },
+
+  {
+    // Seed 24/08/2026 — "Đợt 2, cấp số hiệu cho nợ vô hình". Món này HOÃN CÓ CHỦ Ý ở
+    // S10-CHAT-CALLSWEEP-1 (KI-063) và tới giờ chỉ sống trong memory bàn giao + một dòng ghi chú —
+    // tức vô hình với bug-scrub trước RC. Cấp KI-075 + WO để nó có chỗ đứng trong sổ.
+    id: "S10-CHAT-EMITGUARD-1",
+    module: "CHAT",
+    layer: "BE",
+    title:
+      "KI-075 — hai job CHAT (`emitExpired` :68 · `emitAutoEnded` :72) gọi đường phát realtime SAU COMMIT mà không bọc try/catch; bất biến 'emit không ném' sống ở module realtime/ và KHÔNG có ca nào ghim",
+    zone: "yellow",
+    status: "todo",
+    depends_on: [],
+    paths: [
+      "apps/api/src/chat/**",
+      "apps/api/src/realtime/**",
+      "apps/api/test/**",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "docs/plans/S10-CHAT-EMITGUARD-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    src: [
+      '`chat-call-ringing-timeout.job-handler.ts:68` — `this.calls.emitExpired(ctx.companyId, expiries)` (action "missed"), NGOÀI `withTenant`, không bọc. ĐANG CHẠY PROD từ S7-CALL-BE-1.',
+      "`chat-call-stale-active-sweep.job-handler.ts:72` — `this.calls.emitAutoEnded(ctx.companyId, swept)` (action \"ended\"), cùng KHUÔN. HOÃN CÓ CHỦ Ý ở S10-CHAT-CALLSWEEP-1: 'vá một mình job mới sẽ làm hai job lệch chuẩn nhau; muốn vá thì vá CẢ HAI ở một WO riêng'.",
+      "`realtime-emitter.service.ts:269-299` — `emitChatCall` TỰ bọc try/catch quanh `wsChatCallEventSchema.parse` + `server.to().emit()`; nhánh `!this.server` là logger.error + return ⇒ HÔM NAY per-call KHÔNG ném. Bất biến này là thứ hai job đang dựa vào mà không khai.",
+      "`chat_calls.started_at` khai `notNull` (`db/schema/communication.ts:504`) ⇒ `call.startedAt.toISOString()` trong vòng lặp cũng không ném. ⇒ Nợ là HỢP ĐỒNG BIÊN, không phải bug đang chảy máu.",
+      "`job-runner.ts:117-133` — try/catch PER-TENANT ⇒ bán kính nếu vỡ = một tenant một nhịp, tenant kế vẫn chạy; nhưng run-row bị finalize 'Failed' cho một tx ĐÃ commit.",
+    ],
+    done_when: [
+      "PHÁT BIỂU TRƯỚC mức độ: đây là nợ ĐỘ BỀN, KHÔNG phải lỗ đang chảy máu — `emitChatCall` hiện đã nuốt mọi lỗi bên trong. Nghiệm thu là 'bất biến được GHIM + hai job đối xứng', không phải 'sửa một crash'",
+      "Bọc CẢ HAI job cùng lúc (đối xứng là ĐIỀU KIỆN, không phải phong cách) — vá một mình là tái lập đúng lý do S10-CHAT-CALLSWEEP-1 hoãn món này",
+      "Quyết TƯỜNG MINH `JobRunResult` khi phát hỏng: `failed > 0` + `metadata.emitFailed`, KHÔNG nuốt thành success trọn vẹn — nuốt là lấy mất tín hiệu duy nhất còn lại sau khi try/catch đã che run-row",
+      "RED TRƯỚC: ca ghim bất biến ở BIÊN `realtime/` (emitChatCall KHÔNG ném với payload sai schema / server chưa sẵn sàng) + ca cho MỖI job chứng minh emit ném không làm mất lô còn lại và không để run-row nói dối",
+      "Ca đối chứng ALLOW: đường xanh vẫn phát đủ sự kiện cho MỌI cuộc gọi trong lô và `JobRunResult` giữ nguyên hình dạng cũ (`callsMissed`/`callsAutoEnded`). Xem [[deny-cases-vacuous-without-allow-case]]",
+      "RELEASE-02 đóng KI-075 kèm mô tả CHÍNH XÁC hai tên hàm (`emitExpired` vs `emitAutoEnded`) — đính chính này là một nửa giá trị của số hiệu",
+    ],
+    notes: [
+      "🟡 LIGHT gate (typescript-reviewer + quality-gate) + silent-failure-hunter — món này ĐÚNG địa hạt của silent-failure-hunter: nuốt lỗi sai cách ở đây biến 'mất chuông' thành im lặng.",
+      "⚠️ ĐÍNH CHÍNH tên hàm: ghi chú bàn giao S10-CHAT-CALLSWEEP-1 viết 'emitAutoEnded ở cả hai job' — SAI. Job ring-timeout gọi `emitExpired`. Grep một tên rồi tưởng đã phủ cả hai là đúng bẫy này.",
+      "⚠️ Hậu quả nếu bất biến emitter vỡ: emit nằm SAU commit + cả hai job IDEMPOTENT ⇒ nhịp kế khớp 0 hàng ⇒ sự kiện mất VĨNH VIỄN, chạy lại job không sửa được. CALL không có đường REST bù (docblock emitter khai).",
+      "⚠️ Đừng 'tiện tay' làm luôn 3 món hoãn còn lại của S10-CHAT-CALLSWEEP-1 (audit closedUserIds vào newValues · ca chéo tenant int-spec · gom lô N+1 — reviewer DB khuyên ĐỪNG làm sớm). Chúng chưa có số hiệu và chưa có WO.",
+      "⚠️ int-spec CHAT ngủ khi thiếu `LANE_DB` ⇒ verify phải chạy `bash scripts/lane-db-setup.sh emitguard` + export LANE_DB, KHÔNG `source .env` ([[sourcing-dotenv-poisons-test-run-node-env]]).",
+    ],
+  },
 ];
