@@ -13243,11 +13243,12 @@ export const backlog = [
     title:
       "KI-074 — oracle thứ HAI của tab Thành viên role: DELETE /permissions/users/:userId/roles/:roleId phân biệt 404 'User does not have this role' với 204 ⇒ câu trả lời ÂM ('x KHÔNG phải thành viên') để lại 0 hàng forensic, 0 thiệt hại — gương của V1 đã đóng ở KI-073",
     zone: "red",
-    // CHỜ CHỦ TRƯƠNG: đây KHÔNG phải WO chạy được ngay. Ngữ nghĩa 404 hiện tại là quyết định CÓ CHỦ Ý
-    // (`web-core/auth-users-api.ts:136`); đổi nó = đổi HỢP ĐỒNG API, phải có chữ ký owner TRƯỚC.
-    // ⚠️ `blocked` chứ KHÔNG `todo`: `todo` + deps done ⇒ gen-status xếp vào READY ("làm được ngay")
-    // và auto-loop nhặt được. Chặn phải MÁY ĐỌC ĐƯỢC, không nằm trong notes cho người đọc.
-    status: "blocked",
+    // ✅ CHỦ TRƯƠNG ĐÃ KÝ 2026-08-24 — owner chọn **hướng (b)**: GIỮ 404 cho actor có `view:user` ở
+    // scope `Company`/`System`; 204 cho phần còn lại. Chặn `blocked` (seed cùng ngày) gỡ ⇒ `todo`.
+    // Lý do hướng này thắng: KHÔNG mất tín hiệu vận hành mà `web-core/auth-users-api.ts:136` cố ý
+    // dựa vào (người trực ca luôn ở Company), lại đối xứng với cờ `complete` của KI-073 — cùng một
+    // ý: "bit CÓ THẨM QUYỀN về scope `view:user` của CHÍNH actor" lái hình dạng câu trả lời.
+    status: "todo",
     depends_on: ["S10-SEC-ROLEMEMBERFE-1"],
     paths: [
       "apps/api/src/permission/**",
@@ -13268,15 +13269,20 @@ export const backlog = [
       "Đo PROD 2026-08-24 (script `logs/measure-ki073.mjs`, 4 hình dạng wildcard × 2 cặp riêng): 0 vai giữ `view:user` hẹp hơn Company ⇒ chưa ai chạm được. Lỗ TIỀM TÀNG, không phải đang chảy máu.",
     ],
     done_when: [
-      "CHỐT CHỦ TRƯƠNG TRƯỚC KHI CODE: owner ký một trong ba hướng — (a) 204 đồng nhất cho cả hai nhánh (đóng oracle, MẤT tín hiệu 404 mà web-core đang cố ý dựa vào ⇒ phải rà mọi caller), (b) giữ 404 nhưng CHỈ cho actor có `view:user` ở scope Company/System, 204 cho phần còn lại (đối xứng với cờ `complete` của KI-073, KHÔNG mất tín hiệu cho người vận hành), (c) chấp nhận rủi ro + đóng KI bằng chữ ký. Không ký = không code",
+      "CHỦ TRƯƠNG ĐÃ KÝ 2026-08-24 — **hướng (b)**: GIỮ 404 cho actor có `view:user` ở scope Company/System, 204 cho phần còn lại. Thi công ĐÚNG hướng này; (a)/(c) đã bị loại, đừng mở lại giữa chừng",
+      "PHÁT BIỂU TRƯỚC ba ranh giới của (b), vì mỗi cái là một chỗ trượt: (1) `resolveStrongestScope` trả **null** (0 grant `view:user`, hoặc scope không chuẩn hoá được) phải rơi về **204** — null là 'KHÔNG có thẩm quyền', không phải Company; (2) chỉ nhánh TRONG-tenant 'user không giữ role này' được đổi sang 204 — nhánh role thuộc tenant khác GIỮ 404 và phải có ca ghim (BẤT BIẾN #1, xem R-X1 của S10-SEC-ROLEMEMBERROW-1); (3) 204 ở nhánh ÂM vẫn là **0 ghi** — KHÔNG được ghi audit/security-event giả để 'làm cho giống', đó là biến oracle ĐỌC thành ghi giả (cùng luật no-op của KI-073 ca O4)",
+      "Đo scope `view:user` phải phủ **4 hình dạng wildcard** — `action IN ('view','*') AND resource_type IN ('user','*')`, hai vế ĐỘC LẬP ([[permission-grant-census-must-cover-four-wildcard-shapes]]); và `view:user` là `is_sensitive=false` ⇒ **exact THẮNG wildcard** ⇒ một vai giữ `*:*@Company` mà được cấp thêm `view:user@Own` sẽ TỤT xuống nhánh 204",
       "RED TRƯỚC: ca chứng minh vai `assign-role:user@Company` + `view:user@Own` phân biệt được 404 với 204 trên một target NGOÀI scope đọc ⇒ dựng lại tư cách thành viên mà KI-071 đã giấu, với 0 hàng forensic",
       "Bắt buộc ca đối chứng ALLOW: actor `@Company` vẫn GỠ ĐƯỢC THẬT (hàng user_roles soft-deleted + audit RoleRevoked trỏ id hàng thật + user_security_events ROLE_REMOVED) và vẫn nhận đúng tín hiệu mà hướng đã ký hứa. Xem [[deny-cases-vacuous-without-allow-case]]",
-      "Nếu chọn (a)/(b): rà HẾT caller của 404 (packages/web-core + apps/app + apps/console) TRƯỚC khi đổi — đổi mã trả về mà quên caller là biến một lỗi rõ ràng thành no-op ngầm, đúng thứ chú thích :136 chặn",
+      "Rà HẾT caller của 404 (packages/web-core + apps/app + apps/console) TRƯỚC khi đổi — đổi mã trả về mà quên caller là biến một lỗi rõ ràng thành no-op ngầm, đúng thứ chú thích :136 chặn. Dưới (b) người trực ca (Company) VẪN nhận 404 nên caller hiện tại không phải sửa hành vi, nhưng phải CHỨNG MINH điều đó chứ không giả định",
+      "ADR trong `docs/DECISIONS/` ghi chữ ký hướng (b) + hai hướng bị loại và VÌ SAO — đổi hợp đồng API mà chỉ để lại một dòng trong backlog là tái lập đúng lỗ 'nợ nằm trong văn xuôi' mà KI-074 sinh ra để chống (tiền lệ: KI-065 đóng kèm `DECISIONS-09`)",
       "FULL gate security-reviewer PASS; RELEASE-02 đóng KI-074 kèm số đo PROD ĐO LẠI (4 hình dạng wildcard × cặp `assign-role:user`) — và ghi RÕ rằng kênh THỜI GIAN (no-op 0 ghi vs fresh 4 ghi của POST) KHÔNG đóng theo, nó ở lại dạng ghi nhận",
     ],
     notes: [
       "🔴 Vùng đỏ (phân quyền + kênh phụ): planner Sonnet 5 effort xhigh → plan-reviewer → IMPLEMENT/REVIEW Opus theo CLAUDE.md §6.",
-      "⚠️ CHỜ CHỦ TRƯƠNG — KHÔNG cho auto-loop nhặt. Đây là đổi HỢP ĐỒNG API, không phải vá lỗi: 404 hiện tại có chú thích khai là chủ ý. Bắt đầu code trước khi owner ký là tự cấp cho mình quyền đổi hợp đồng.",
+      "✅ Chủ trương ĐÃ KÝ 24/08 (hướng b) ⇒ gỡ `blocked`. Vẫn là vùng ĐỎ: đổi HỢP ĐỒNG API + phân quyền, người chốt trước khi merge.",
+      "⚠️ Đo PROD 24/08 nói **0 vai** giữ `view:user` hẹp hơn Company ⇒ hôm nay (b) là **no-op trên thực địa**: không ai rơi vào nhánh 204. Đó là ĐIỂM MẠNH của hướng này (đóng lỗ tiềm tàng, 0 hồi quy) nhưng cũng là bẫy nghiệm thu — ca DENY phải TỰ GIEO vai `view:user@Own`, không thể nghiệm thu bằng dữ liệu PROD. Và ĐỪNG test bằng super-admin ([[superadmin-not-a-canonical-role]]).",
+      "⚠️ Kênh THỜI GIAN không đóng theo: nhánh ÂM 0 ghi vs nhánh DƯƠNG 4 ghi vẫn phân biệt được bằng độ trễ ([[attribution-patch-creates-timing-oracle]]). Ghi nhận trong ADR, KHÔNG hứa đóng.",
       "⚠️ Đọc `docs/plans/S10-SEC-ROLEMEMBERFE-1.md` §N-2 + hàng KI-073 trong RELEASE-02 trước khi thi công: cơ chế '409' của bản seed KI-073 ĐÃ BỊ BÁC (no-op trả 201 + hàng gốc). Đừng chép mô tả cũ sang đây.",
       "⚠️ Workaround của KI-073 (không cấp `view:user` hẹp hơn Company cho vai đồng thời giữ `assign-role:user`) VẪN hiệu lực đúng vì WO này chưa làm — đừng gỡ khỏi tài liệu vận hành.",
     ],
