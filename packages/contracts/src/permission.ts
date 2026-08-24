@@ -24,15 +24,24 @@ export const assignRoleSchema = z.object({
 });
 export type AssignRoleRequest = z.infer<typeof assignRoleSchema>;
 
-/** DTO 1 user_role grant trả về sau khi gán. */
+/**
+ * DTO trả về sau khi gán role — S10-SEC-ROLEMEMBERFE-1 (KI-073, D2): THU HẸP còn đúng BỐN khoá mà
+ * caller tự cung cấp hoặc suy ra được ⇒ 0 bit thông tin, ĐỒNG NHẤT cho cả ba nhánh (no-op / fresh /
+ * reassign) và MỌI actor.
+ *
+ * `id`/`grantedBy`/`createdAt` bị GỠ HẲN (không `.optional()`): ba khoá đó phân biệt được "đã là
+ * thành viên" (id/grantedBy gốc, createdAt quá khứ) với "vừa gán" ⇒ 1 request/người dựng lại được
+ * tập thành viên mà KI-071 vừa giấu, im lặng ở mọi câu trả lời dương. Khoá không tồn tại thì không
+ * rò được — và server (cũ) còn gửi thì zod STRIP (ca KI-073 trong auth-users-api.spec.ts ghim).
+ * Audit/forensic KHÔNG mất gì: audit_logs vẫn ghi id hàng thật ở server (chỉ đổi hình chiếu HTTP).
+ *
+ * `expiresAt` echo INSTANT của request (ISO) — an toàn vì `sameExpiry` là bằng-tuyệt-đối.
+ */
 export const userRoleSchema = z.object({
-  id: z.string().uuid(),
   userId: z.string().uuid(),
   roleId: z.string().uuid(),
   companyId: z.string().uuid(),
-  grantedBy: z.string().uuid().nullable(),
   expiresAt: z.string().datetime().nullable(),
-  createdAt: z.string().datetime(),
 });
 export type UserRoleDto = z.infer<typeof userRoleSchema>;
 

@@ -13,6 +13,7 @@ import type {
   ObjectSubjectType,
   RemoveObjectPermissionRequest,
   SetObjectPermissionRequest,
+  UserRoleDto,
 } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
@@ -76,7 +77,14 @@ export class PermissionAdminService {
 
   // ── (A) gán / thu role cho user (user_roles) ─────────────────────────────────
 
-  async assignRole(actor: RequestUser, targetUserId: string, dto: AssignRoleRequest) {
+  // S10-SEC-ROLEMEMBERFE-1 (KI-073): annotation là RATCHET, không phải trang trí — `return existing`/
+  // `return inserted` (hàng drizzle, `expiresAt: Date`) sẽ ĐỎ typecheck với `expiresAt: string|null`
+  // của UserRoleDto ⇒ đột biến "trả nguyên hàng ở một nhánh" bị compiler bắt trước khi test chạy.
+  async assignRole(
+    actor: RequestUser,
+    targetUserId: string,
+    dto: AssignRoleRequest,
+  ): Promise<UserRoleDto> {
     // Gate read-only ⇒ NGOÀI write-tx (tránh nested withTenant → connection lồng nhau).
     await this.assertCan(actor, "assign-role", "user", targetUserId);
     // SoD: chống tự leo thang đặc quyền (nếu assign-role:user về sau cấp cho role không-admin).
@@ -102,8 +110,11 @@ export class PermissionAdminService {
         );
 
         // Đã gán + cùng expiry ⇒ no-op idempotent (cache đã nhất quán, không audit/emit lại).
+        // KI-073: GIỮ nhánh no-op (D3) — "vá" bằng cách luôn ghi lại là biến oracle ĐỌC thành khuếch
+        // đại GHI (tombstone rác + RoleReassigned giả + permission.changed đập cache toàn hệ). Ca O4
+        // ghim: sau POST no-op, cả user_roles/audit/outbox/security-events đều đứng yên.
         if (existing && sameExpiry(existing.expiresAt, expiresAt)) {
-          return existing;
+          return this.projectAssignResult(actor.companyId, targetUserId, dto.roleId, expiresAt);
         }
         // Đổi expiry: SOFT-DELETE hàng active (deleted_by=actor) + INSERT hàng mới (mig 0471; partial-unique
         // chỉ chặn active nên INSERT sau soft-delete không vỡ). KHÔNG hard-delete → giữ tombstone forensic.
@@ -145,11 +156,31 @@ export class PermissionAdminService {
         });
         await this.emitPermissionChangedForUser(tx, actor.companyId, targetUserId);
 
-        return inserted;
+        return this.projectAssignResult(actor.companyId, targetUserId, dto.roleId, expiresAt);
       });
     } catch (err) {
       throw this.mapError(err, "Failed to assign role");
     }
+  }
+
+  /**
+   * S10-SEC-ROLEMEMBERFE-1 (KI-073, D2/D7) — bộ chiếu DUY NHẤT cho thân trả về của `assignRole`,
+   * dùng chung CẢ BA nhánh (no-op / fresh / reassign): đúng bốn khoá caller cung cấp hoặc suy ra
+   * được ⇒ 0 bit. KHÔNG trả hàng DB (`existing`/`inserted`): `id`/`grantedBy`/`createdAt` phân biệt
+   * được "đã là thành viên" với "vừa gán" — oracle dựng lại tập thành viên mà KI-071 vừa giấu, im
+   * lặng ở mọi câu trả lời dương (nhánh no-op không ghi gì).
+   *
+   * ⚠️ audit/security-event Ở TRÊN vẫn PHẢI ăn `inserted.id`/hàng thật (bất biến #2 — đột biến M-F);
+   * bộ chiếu này chỉ dành cho THÂN HTTP. `expiresAt` echo INSTANT của request dạng ISO — an toàn ở
+   * cả ba nhánh vì `sameExpiry` là bằng-tuyệt-đối (no-op ⇒ bằng request theo định nghĩa).
+   */
+  private projectAssignResult(
+    companyId: string,
+    userId: string,
+    roleId: string,
+    expiresAt: Date | null,
+  ): UserRoleDto {
+    return { userId, roleId, companyId, expiresAt: expiresAt?.toISOString() ?? null };
   }
 
   async revokeRole(actor: RequestUser, targetUserId: string, roleId: string) {

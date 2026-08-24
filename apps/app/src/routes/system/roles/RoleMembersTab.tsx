@@ -23,6 +23,7 @@ import {
   hrApi,
   orgApi,
   roleAdminApi,
+  useAuthStore,
   useCan,
   ApiError,
   PermissionGate,
@@ -88,6 +89,15 @@ export function RoleMembersTab({ roleId }: RoleMembersTabProps) {
     staleTime: 15_000,
   });
   const members = membersQuery.data?.members ?? [];
+  /**
+   * S10-SEC-ROLEMEMBERFE-1 (KI-073, D4/D5): `complete` do SERVER phát — "danh sách trên là TOÀN BỘ
+   * thành viên hay chỉ phần trong scope của tôi". `complete === false` ⇒ `memberIds` là TẬP CON
+   * không biết thiếu bao nhiêu ⇒ mọi khẳng định dựng trên nó (bộ đếm · badge "đã là thành viên" ·
+   * dedup preview · empty-state) phải đổi sang câu KHÔNG nói dối. Đọc qua ĐÚNG MỘT chỗ này; khi chưa
+   * có data (loading) giữ true để không nháy nhãn partial oan.
+   */
+  const complete = membersQuery.data ? membersQuery.data.complete : true;
+  const myUserId = useAuthStore((s) => s.user?.id);
   const memberIds = useMemo(() => new Set(members.map((m) => m.userId)), [members]);
 
   const invalidateMembers = () =>
@@ -114,7 +124,11 @@ export function RoleMembersTab({ roleId }: RoleMembersTabProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
-          {t("roleMembers.count", { count: members.length })}
+          {/* KI-073 D5: ngoài scope Company thì "N thành viên đang giữ vai trò này" là lời nói dối
+              theo chiều thiếu — nhãn partial nói đúng điều FE biết. */}
+          {complete
+            ? t("roleMembers.count", { count: members.length })
+            : t("roleMembers.countPartial", { count: members.length })}
         </p>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => void membersQuery.refetch()}>
@@ -155,10 +169,19 @@ export function RoleMembersTab({ roleId }: RoleMembersTabProps) {
           }
         />
       ) : members.length === 0 ? (
-        <EmptyState
-          title={t("roleMembers.empty.title")}
-          description={t("roleMembers.empty.description")}
-        />
+        // KI-073 D5 (hàng 5): với `view:user@Own` không có chân trong role, 0 hàng là trạng thái
+        // MẶC ĐỊNH (ngữ nghĩa KI-071) — "Chưa có thành viên" ở đó là khẳng định sai về CẢ role.
+        complete ? (
+          <EmptyState
+            title={t("roleMembers.empty.title")}
+            description={t("roleMembers.empty.description")}
+          />
+        ) : (
+          <EmptyState
+            title={t("roleMembers.emptyPartial.title")}
+            description={t("roleMembers.emptyPartial.description")}
+          />
+        )
       ) : (
         <Card>
           <CardContent className="divide-y divide-border pt-4">
@@ -198,7 +221,9 @@ export function RoleMembersTab({ roleId }: RoleMembersTabProps) {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setConfirmRemove({ userId: m.userId, email: m.email ?? m.userId })}
+                      onClick={() =>
+                        setConfirmRemove({ userId: m.userId, email: m.email ?? m.userId })
+                      }
                     >
                       {t("roleMembers.actions.remove")}
                     </Button>
@@ -243,6 +268,8 @@ export function RoleMembersTab({ roleId }: RoleMembersTabProps) {
           onClose={() => setAddPersonOpen(false)}
           roleId={roleId}
           memberIds={memberIds}
+          complete={complete}
+          myUserId={myUserId}
           onDone={() => void invalidateMembers()}
         />
       )}
@@ -251,6 +278,8 @@ export function RoleMembersTab({ roleId }: RoleMembersTabProps) {
         onClose={() => setAddOrgOpen(false)}
         roleId={roleId}
         memberIds={memberIds}
+        complete={complete}
+        myUserId={myUserId}
         onDone={() => void invalidateMembers()}
       />
       <AddPositionDialog
@@ -258,6 +287,8 @@ export function RoleMembersTab({ roleId }: RoleMembersTabProps) {
         onClose={() => setAddPositionOpen(false)}
         roleId={roleId}
         memberIds={memberIds}
+        complete={complete}
+        myUserId={myUserId}
         onDone={() => void invalidateMembers()}
       />
     </div>
@@ -326,23 +357,37 @@ interface AddDialogProps {
   onClose: () => void;
   roleId: string;
   memberIds: ReadonlySet<string>;
+  /** KI-073 D4: `memberIds` có phải TOÀN BỘ thành viên không — false ⇒ tắt mọi dedup dựa trên nó. */
+  complete: boolean;
+  /** KI-073 D5: dedup CHÍNH MÌNH không cần scope (SoD — server chặn self-assign 403 từng dòng). */
+  myUserId: string | undefined;
   onDone: () => void;
 }
 
-function AddPersonDialog({ onClose, roleId, memberIds, onDone }: Omit<AddDialogProps, "open">) {
+function AddPersonDialog({
+  onClose,
+  roleId,
+  memberIds,
+  complete,
+  onDone,
+}: Omit<AddDialogProps, "open">) {
   const { t } = useTranslation("system");
 
   return (
     <EmployeeMultiPickerDialog
       title={t("roleMembers.addPerson.title")}
       description={t("roleMembers.addPerson.description")}
-      isRowDisabled={(e) => e.userId === null || memberIds.has(e.userId)}
+      // KI-073 D5: `complete === false` ⇒ CHỈ tắt vế dedup theo `memberIds` (tập con — khoá theo nó
+      // là khoá NHẦM hướng), GIỮ NGUYÊN vế `userId === null` + badge noAccount: gỡ cả cụm thì
+      // onAddOne reject "employee-not-linked" từng dòng, lỗi không giải thích được. Server no-op
+      // xử lý đúng người đã là thành viên (D2 — thân không phân biệt).
+      isRowDisabled={(e) => e.userId === null || (complete && memberIds.has(e.userId))}
       disabledBadge={(e) =>
         e.userId === null
           ? t("roleMembers.addPerson.noAccount")
           : t("roleMembers.addPerson.alreadyMember")
       }
-      disabledRowChecked={(e) => e.userId !== null && memberIds.has(e.userId)}
+      disabledRowChecked={(e) => complete && e.userId !== null && memberIds.has(e.userId)}
       onAddOne={(e) => {
         // Hàng chưa link tài khoản đã bị khóa chọn — guard giữ type an toàn.
         if (e.userId === null) return Promise.reject(new Error("employee-not-linked"));
@@ -358,7 +403,15 @@ function AddPersonDialog({ onClose, roleId, memberIds, onDone }: Omit<AddDialogP
 // ---------------------------------------------------------------------------
 // Dialog "Thêm theo phòng ban" — org tree → nhân viên có tài khoản, chưa là member.
 // ---------------------------------------------------------------------------
-function AddOrgUnitDialog({ open, onClose, roleId, memberIds, onDone }: AddDialogProps) {
+function AddOrgUnitDialog({
+  open,
+  onClose,
+  roleId,
+  memberIds,
+  complete,
+  myUserId,
+  onDone,
+}: AddDialogProps) {
   const { t } = useTranslation("system");
   const { t: tc } = useTranslation("common");
   const [orgUnitId, setOrgUnitId] = useState("");
@@ -380,8 +433,13 @@ function AddOrgUnitDialog({ open, onClose, roleId, memberIds, onDone }: AddDialo
   });
   const employees = employeesQuery.data?.items ?? [];
   const linked = employees.filter((e) => e.userId !== null);
-  const toAssign = linked.filter((e) => !memberIds.has(e.userId as string));
-  const alreadyMembers = linked.length - toAssign.length;
+  // KI-073 D5: `complete === false` ⇒ dedup theo `memberIds` TẮT (nó là tập con — lọc theo nó là
+  // POST THIẾU người), server no-op xử lý đúng người đã là thành viên (D2). Vẫn TRỪ CHÍNH MÌNH:
+  // self-assign nổ SoD 403 từng dòng thành dòng đỏ khó hiểu, và `myUserId` là bit FE luôn biết.
+  const toAssign = complete
+    ? linked.filter((e) => !memberIds.has(e.userId as string))
+    : linked.filter((e) => e.userId !== myUserId);
+  const alreadyMembers = complete ? linked.length - toAssign.length : 0;
   const unlinked = employees.length - linked.length;
 
   const close = () => {
@@ -444,8 +502,17 @@ function AddOrgUnitDialog({ open, onClose, roleId, memberIds, onDone }: AddDialo
         ) : (
           <div className="space-y-1 text-sm text-muted-foreground">
             <p>{t("roleMembers.addOrgUnit.preview.toAssign", { count: toAssign.length })}</p>
-            {alreadyMembers > 0 && (
-              <p>{t("roleMembers.addOrgUnit.preview.alreadyMembers", { count: alreadyMembers })}</p>
+            {/* KI-073 D5: dòng "Bỏ qua (đã là thành viên)" là khẳng định FE không đủ dữ liệu để đưa
+                ra khi complete=false — thay bằng dòng nói rõ giới hạn phạm vi (khoá dùng chung cho
+                CẢ dialog phòng ban lẫn chức vụ). */}
+            {complete ? (
+              alreadyMembers > 0 && (
+                <p>
+                  {t("roleMembers.addOrgUnit.preview.alreadyMembers", { count: alreadyMembers })}
+                </p>
+              )
+            ) : (
+              <p>{t("roleMembers.addOrgUnit.preview.dedupUnavailable")}</p>
             )}
             {unlinked > 0 && (
               <p>{t("roleMembers.addOrgUnit.preview.unlinked", { count: unlinked })}</p>
@@ -464,7 +531,15 @@ function AddOrgUnitDialog({ open, onClose, roleId, memberIds, onDone }: AddDialo
 // Dialog "Thêm theo chức vụ" — chọn position → nhân viên giữ chức vụ, có tài khoản, chưa là member.
 // BE lọc GET /hr/employees?positionId (employees.repository conditions). Mirror AddOrgUnitDialog.
 // ---------------------------------------------------------------------------
-function AddPositionDialog({ open, onClose, roleId, memberIds, onDone }: AddDialogProps) {
+function AddPositionDialog({
+  open,
+  onClose,
+  roleId,
+  memberIds,
+  complete,
+  myUserId,
+  onDone,
+}: AddDialogProps) {
   const { t } = useTranslation("system");
   const { t: tc } = useTranslation("common");
   const [positionId, setPositionId] = useState("");
@@ -486,8 +561,13 @@ function AddPositionDialog({ open, onClose, roleId, memberIds, onDone }: AddDial
   });
   const employees = employeesQuery.data?.items ?? [];
   const linked = employees.filter((e) => e.userId !== null);
-  const toAssign = linked.filter((e) => !memberIds.has(e.userId as string));
-  const alreadyMembers = linked.length - toAssign.length;
+  // KI-073 D5: `complete === false` ⇒ dedup theo `memberIds` TẮT (nó là tập con — lọc theo nó là
+  // POST THIẾU người), server no-op xử lý đúng người đã là thành viên (D2). Vẫn TRỪ CHÍNH MÌNH:
+  // self-assign nổ SoD 403 từng dòng thành dòng đỏ khó hiểu, và `myUserId` là bit FE luôn biết.
+  const toAssign = complete
+    ? linked.filter((e) => !memberIds.has(e.userId as string))
+    : linked.filter((e) => e.userId !== myUserId);
+  const alreadyMembers = complete ? linked.length - toAssign.length : 0;
   const unlinked = employees.length - linked.length;
 
   const close = () => {
@@ -550,8 +630,17 @@ function AddPositionDialog({ open, onClose, roleId, memberIds, onDone }: AddDial
         ) : (
           <div className="space-y-1 text-sm text-muted-foreground">
             <p>{t("roleMembers.addOrgUnit.preview.toAssign", { count: toAssign.length })}</p>
-            {alreadyMembers > 0 && (
-              <p>{t("roleMembers.addOrgUnit.preview.alreadyMembers", { count: alreadyMembers })}</p>
+            {/* KI-073 D5: dòng "Bỏ qua (đã là thành viên)" là khẳng định FE không đủ dữ liệu để đưa
+                ra khi complete=false — thay bằng dòng nói rõ giới hạn phạm vi (khoá dùng chung cho
+                CẢ dialog phòng ban lẫn chức vụ). */}
+            {complete ? (
+              alreadyMembers > 0 && (
+                <p>
+                  {t("roleMembers.addOrgUnit.preview.alreadyMembers", { count: alreadyMembers })}
+                </p>
+              )
+            ) : (
+              <p>{t("roleMembers.addOrgUnit.preview.dedupUnavailable")}</p>
             )}
             {unlinked > 0 && (
               <p>{t("roleMembers.addOrgUnit.preview.unlinked", { count: unlinked })}</p>

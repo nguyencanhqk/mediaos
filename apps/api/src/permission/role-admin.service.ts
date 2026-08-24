@@ -242,7 +242,13 @@ export class RoleAdminService {
       const members = rows.map(({ identityInScope, email, fullName, ...rest }) =>
         identityInScope ? { ...rest, email: email ?? undefined, fullName } : rest,
       );
-      return { members };
+      // S10-SEC-ROLEMEMBERFE-1 (KI-073, D4): cờ `complete` = "tập hàng trên là TOÀN BỘ thành viên
+      // hay chỉ phần trong scope của actor" — dùng LẠI chính biến `scope` đã resolve ở trên (KI-070
+      // D11: mỗi cặp resolve ĐÚNG MỘT LẦN/request, 0 lần resolve thêm). `System` map về cùng vị từ
+      // tenant với `Company` (data-scope.service.ts:153-155) nên công thức không nói dối ở nhánh đó.
+      // Chỉ nói về scope của CHÍNH actor — không rò gì về người khác. FE ăn cờ này thay vì tự suy
+      // từ me.scopes (bộ phân giải thứ hai, bất đồng được — plan D4).
+      return { members, complete: scope === "Company" || scope === "System" };
     });
   }
 

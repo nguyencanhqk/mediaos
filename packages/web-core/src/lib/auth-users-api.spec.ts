@@ -10,6 +10,7 @@ import {
   authUserDetailSchema,
   authUserPasswordResetResultSchema,
   authUserTwoFactorResetSchema,
+  userRoleSchema,
   type AuthUserDto,
   type AuthUserDetailDto,
   type AuthUserListDto,
@@ -63,14 +64,13 @@ const ROLE_LIST: RoleListDto = {
     { id: "role-001", name: "HR", description: null, isSystem: false, requiresTwoFactor: false },
   ],
 };
+// KI-073 (S10-SEC-ROLEMEMBERFE-1, D2): userRoleSchema thu hẹp còn 4 khoá caller tự biết —
+// id/grantedBy/createdAt bị GỠ HẲN (oracle "đã là thành viên" vs "vừa gán").
 const USER_ROLE: UserRoleDto = {
-  id: "ur-1",
   userId: USER.id,
   roleId: "role-001",
   companyId: "co-001",
-  grantedBy: "admin-001",
   expiresAt: null,
-  createdAt: "2024-01-01T00:00:00.000Z",
 };
 
 function firstCallUrl(): string {
@@ -226,5 +226,26 @@ describe("authUsersApi — contract/URL boundary", () => {
     await authUsersApi.revokeRole(USER.id, "role-001");
     expect(firstCallUrl()).toBe(`/permissions/users/${USER.id}/roles/role-001`);
     expect(firstCallInit()?.method).toBe("DELETE");
+  });
+
+  // ── KI-073 (S10-SEC-ROLEMEMBERFE-1) · D2 — userRoleSchema thu hẹp còn 4 khoá ─────────────────
+  //
+  // Server (cũ / rollback) còn gửi id/grantedBy/createdAt thì zod phải STRIP — ba khoá bị GỠ HẲN
+  // khỏi contract (không `.optional()`: khoá không tồn tại thì không rò được, ratchet mạnh hơn).
+  // Đẳng thức TẬP KHOÁ, không phủ định "không chứa" (plan §3.4 ⟲R1 #4).
+  it("KI-073 — parse body 7 khoá của server CŨ ⇒ strip còn đúng {companyId,expiresAt,roleId,userId}", () => {
+    const legacyBody = {
+      id: "11111111-1111-4111-8111-111111111111",
+      userId: "22222222-2222-4222-8222-222222222222",
+      roleId: "33333333-3333-4333-8333-333333333333",
+      companyId: "44444444-4444-4444-8444-444444444444",
+      grantedBy: "55555555-5555-4555-8555-555555555555",
+      expiresAt: null,
+      createdAt: "2024-01-01T00:00:00.000Z",
+    };
+    const parsed = userRoleSchema.parse(legacyBody) as Record<string, unknown>;
+    expect(Object.keys(parsed).sort()).toEqual(["companyId", "expiresAt", "roleId", "userId"]);
+    expect(parsed.userId).toBe(legacyBody.userId);
+    expect(parsed.expiresAt).toBeNull();
   });
 });

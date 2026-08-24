@@ -1,18 +1,18 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-24 03:27Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-24 07:33Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-### 🔴 S10-SEC-ROLEMEMBERFE-1 — KI-073 — tab Thành viên role: `memberIds` lấy từ danh sách ĐÃ BỊ SCOPE rồi nuôi dedup của hai dialog GHI hàng loạt ⇒ mã 409 dựng lại được tập thành viên mà KI-071 vừa giấu
+### 🔴 S10-SEC-ROLEMEMBERFE-1 — KI-073 — tab Thành viên role: THÂN 201 của POST /permissions/users/:userId/roles (id/grantedBy/createdAt) phân biệt 'đã là thành viên' với 'vừa gán' ⇒ dựng lại được tập thành viên mà KI-071 vừa giấu; FE `memberIds` đã-scope nuôi dedup hai dialog GHI hàng loạt nói dối theo chiều thiếu
 - **zone**: red · **skills**: code-review
-- **sửa ở đâu (paths)**: `apps/app/src/routes/system/roles/**`, `apps/api/src/permission/**`, `apps/api/test/**`, `docs/RELEASE/RELEASE-02_Known_Issues_MVP.md`, `docs/permission-matrix-spec.md`, `docs/plans/S10-SEC-ROLEMEMBERFE-1.md`, `harness/backlog.mjs`
+- **sửa ở đâu (paths)**: `apps/app/src/routes/system/roles/**`, `apps/api/src/permission/**`, `apps/api/test/**`, `packages/contracts/**`, `packages/web-core/**`, `apps/app/src/i18n/**`, `apps/app/src/routes/system/users/**`, `apps/console/**`, `docs/RELEASE/RELEASE-02_Known_Issues_MVP.md`, `docs/permission-matrix-spec.md`, `docs/plans/S10-SEC-ROLEMEMBERFE-1.md`, `harness/backlog.mjs`
 - **phụ thuộc**: S10-SEC-ROLEMEMBERROW-1✓
 - **done_when (đích hội tụ)**:
-  - [ ] PHÁT BIỂU TRƯỚC: vế nào đóng ở FE (bộ đếm + 409 ồn ào) và vế nào BẮT BUỘC đóng ở BE (mã trả về không phân biệt 'đã là thành viên' với 'gán thành công' cho actor ngoài scope đọc) — vá FE một mình KHÔNG đóng oracle
-  - [ ] RED TRƯỚC: ca chứng minh vai `assign-role:user@Company` + `view:user@Own` dựng lại được tập thành viên qua mã trả về của batch
-  - [ ] Bắt buộc ca đối chứng ALLOW: vai `@Company` vẫn dedup đúng, KHÔNG đẻ 409 oan. Xem [[deny-cases-vacuous-without-allow-case]]
-  - [ ] FULL gate security-reviewer PASS; RELEASE-02 đóng KI-073 kèm số đo PROD ĐO LẠI
+  - [ ] PHÁT BIỂU TRƯỚC: vế nào đóng ở FE (bộ đếm/dedup trung thực theo cờ `complete`) và vế nào BẮT BUỘC đóng ở BE (THÂN 201 của POST /permissions/users/:userId/roles không còn phân biệt 'đã là thành viên' với 'vừa gán' — gỡ hẳn id/grantedBy/createdAt, đồng nhất 4 khoá cho MỌI actor) — vá FE một mình KHÔNG đóng oracle
+  - [ ] RED TRƯỚC: ca chứng minh vai `assign-role:user@Company` + `view:user@Own` dựng lại được tư cách thành viên qua THÂN 201 (createdAt quá khứ / grantedBy gốc / id hàng gốc) của đường ghi
+  - [ ] Bắt buộc ca đối chứng ALLOW: actor `@Company` vẫn GÁN ĐƯỢC THẬT (hàng user_roles + audit RoleAssigned trỏ id hàng thật) và FE `complete=true` dedup đúng như cũ. Xem [[deny-cases-vacuous-without-allow-case]]
+  - [ ] FULL gate security-reviewer PASS; RELEASE-02 đóng KI-073 kèm số đo PROD ĐO LẠI (phủ 4 hình dạng wildcard × 2 cặp riêng) + cấp số KI MỚI cho V2 (DELETE 404-oracle) TRƯỚC khi gạch
 
 ## Hàng đợi
 
@@ -26,7 +26,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 0
+- **branch**: `master` · **file đang đổi (dirty)**: 22
 - **migration head**: idx 213 — `0546_s7calldb1_chat_calls` (214 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -35,6 +35,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `15eaa7e1` | 2026-08-24 | chore(gov): dọn tín hiệu — regen STATUS/INDEX + gạch KI-021 trong bảng RELEASE-02 |
 | `57ef38b4` | 2026-08-23 | docs(plan): S10-SEC-ROLEMEMBERFE-1 — kế hoạch đóng KI-073 |
 | `81c8ddd4` | 2026-08-23 | feat(sec): data_scope chặn TẬP HÀNG `GET /auth/roles/:id/members` — đóng KI-071 (S10-SEC-ROLEMEMBERROW-1) (#404) |
 | `a94133a2` | 2026-08-22 | chore(gov): regen STATUS sau khi S10-SEC-AUDITLOGROW-2 đóng (#403) |
@@ -46,7 +47,6 @@
 | `23d619c5` | 2026-08-21 | chore(gov): regen STATUS sau khi S10-FE-BREAKGLASS-DEADPATH-1 đóng (#399) |
 | `6fd15db8` | 2026-08-21 | chore(fnd): gỡ đường FE chết break-glass khỏi console (S10-FE-BREAKGLASS-DEADPATH-1) (#399) |
 | `7e4f4acd` | 2026-08-20 | chore(fnd): gỡ đường FE chết platform-accounts + chunk-test suy loại trừ từ workspace (S10-QA-CHUNKTEST-FBPOST-1 · S10-FE-PLATFORMACCOUNTS-DEADPATH-1) (#398) |
-| `17d2df28` | 2026-08-20 | feat(sec): cơ chế căn cứ cho tầng chiếu danh tính + đóng KI-053/054/069 (S6-SEC-IDENTITY-PROJ-1) (#396) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

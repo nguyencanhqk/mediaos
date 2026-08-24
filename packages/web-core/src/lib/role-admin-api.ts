@@ -47,9 +47,18 @@ export const roleAdminApi = {
   /**
    * S2-AUTH-ROLEMEM-1 — GET /auth/roles/:id/members: thành viên ACTIVE của role trong tenant
    * (tab Thành viên). Gate BE view:user. Thêm/gỡ member dùng authUsersApi.assignRole/revokeRole.
+   *
+   * KI-073 (D4): `complete: z.boolean().catch(false)` làm Input của schema (wire, trước parse) lệch
+   * Output (`complete?: unknown` vs `complete: boolean`), mà `apiFetch<T>` khai `z.ZodType<T>` =
+   * Input≡Output ⇒ cần assertion KIỂU dưới đây. Chỉ là type-level: runtime vẫn `.parse` đúng schema
+   * này (`.catch` degrade BE-cũ → `false` được ghim bằng 2 ca F4-schema trong role-admin-api.spec.ts);
+   * Input thật apiFetch feed vào parse luôn là `unknown` json nên tham số Input không mang nghĩa runtime.
    */
   getMembers: (roleId: string): Promise<RoleMemberListDto> =>
-    apiFetch(`/auth/roles/${roleId}/members`, roleMemberListSchema),
+    apiFetch(
+      `/auth/roles/${roleId}/members`,
+      roleMemberListSchema as unknown as z.ZodType<RoleMemberListDto>,
+    ),
 
   /**
    * S2-AUTH-PERMUX-1 — GET /auth/roles/:id/permissions: grants ĐÃ GÁN của role (ALLOW + DENY).

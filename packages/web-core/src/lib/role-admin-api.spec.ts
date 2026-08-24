@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   roleListSchema,
   permissionListSchema,
+  roleMemberListSchema,
   roleWriteResultSchema,
   rolePermissionGrantSchema,
 } from "@mediaos/contracts";
@@ -129,5 +130,43 @@ describe("roleAdminApi — assign/revoke permission (POST/DELETE /auth/roles/:id
     expect(url).toBe("/auth/roles/role-1/permissions");
     expect(opts?.method).toBe("DELETE");
     expect(JSON.parse(opts?.body ?? "{}")).toEqual({ action: "view", resourceType: "department" });
+  });
+});
+
+// ── KI-073 (S10-SEC-ROLEMEMBERFE-1) · F4 tầng SCHEMA — đường degrade `.catch(false)` ─────────────
+//
+// PROD deploy FE tự động / API tay ⇒ cửa sổ "FE mới + BE cũ" là MẶC ĐỊNH sau merge. Contract phải
+// nuốt response THIẾU `complete` (server cũ) bằng cách rơi về `false` (partial-mode, fail-safe) chứ
+// KHÔNG ném ZodError (= vỡ trắng tab cho mọi actor). Ca này parse SCHEMA THẬT — mock roleAdminApi
+// thì `.catch` không được thực thi và ca xanh-rỗng (plan §3.3 F4).
+describe("KI-073 · roleMemberListSchema — vắng `complete` rơi về false, không throw", () => {
+  const LEGACY_MEMBER_LIST = {
+    members: [
+      {
+        userId: "11111111-1111-4111-8111-111111111111",
+        email: "m@demo.local",
+        fullName: "M",
+        status: "active",
+        expiresAt: null,
+        grantedAt: "2026-07-01T00:00:00.000Z",
+      },
+    ],
+  };
+
+  it("F4-schema — parse body của SERVER CŨ (không có khoá `complete`) ⇒ complete === false", () => {
+    const parsed = roleMemberListSchema.parse(LEGACY_MEMBER_LIST) as Record<string, unknown>;
+    expect(parsed.complete).toBe(false);
+    // Và members vẫn nguyên — degrade không được ăn mất dữ liệu.
+    expect(Array.isArray(parsed.members)).toBe(true);
+    expect((parsed.members as unknown[]).length).toBe(1);
+  });
+
+  it("F4-schema — giá trị KHÔNG-boolean từ server lỗi cũng rơi về false (không throw)", () => {
+    const parsed = roleMemberListSchema.parse({
+      ...LEGACY_MEMBER_LIST,
+      complete: "true",
+    }) as Record<string, unknown>;
+    // `.catch` nuốt cả kiểu sai — chỉ được trượt về phía BI QUAN (false), không bao giờ thành true.
+    expect(parsed.complete).toBe(false);
   });
 });

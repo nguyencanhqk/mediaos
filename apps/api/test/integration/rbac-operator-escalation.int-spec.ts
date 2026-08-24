@@ -108,10 +108,13 @@ describe.skipIf(!hasDb)("CS-2 RBAC operator-role escalation guard", () => {
 
   it("tenant role + legitimate system role (company-admin) remain assignable/listed", async () => {
     // tenant role gán được
-    const row = await svc.assignRole({ id: adminUser, companyId: A.companyId }, targetUser, {
+    // KI-073 (§0.3b): thân assignRole thu hẹp còn 4 khoá echo request — assert echo thay cho `.id`;
+    // "gán thật" đã có countUserRoles === 1 ngay dưới gánh.
+    const result = await svc.assignRole({ id: adminUser, companyId: A.companyId }, targetUser, {
       roleId: tenantRole,
     });
-    expect(row?.id).toBeDefined();
+    expect(result.userId).toBe(targetUser);
+    expect(result.roleId).toBe(tenantRole);
     expect(await countUserRoles(targetUser, tenantRole)).toBe(1);
 
     // danh mục vẫn chứa tenant role + system role hợp lệ, không chứa operator role

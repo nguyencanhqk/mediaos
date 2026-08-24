@@ -12,7 +12,7 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore, roleAdminApi, authUsersApi, hrApi } from "@mediaos/web-core";
+import { useAuthStore, roleAdminApi, authUsersApi, hrApi, orgApi } from "@mediaos/web-core";
 import { RoleMembersTab } from "./RoleMembersTab";
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
@@ -32,6 +32,11 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       ...actual.hrApi,
       listEmployees: vi.fn().mockResolvedValue({ items: [], meta: {} }),
       listDepartments: vi.fn().mockResolvedValue([]),
+    },
+    // KI-073 (S10-SEC-ROLEMEMBERFE-1): ca F1/F2 đi qua AddOrgUnitDialog → cần org tree.
+    orgApi: {
+      ...actual.orgApi,
+      getTree: vi.fn().mockResolvedValue([]),
     },
   };
 });
@@ -60,6 +65,8 @@ const MEMBERS = {
       grantedAt: new Date("2026-07-01T00:00:00Z"),
     },
   ],
+  // KI-073 (D4): fixture mặc định giữ NGUYÊN ý nghĩa cũ — actor thấy đủ (complete=true).
+  complete: true,
 };
 
 describe("RoleMembersTab", () => {
@@ -96,7 +103,9 @@ describe("RoleMembersTab", () => {
   });
 
   it("members rỗng → empty state", async () => {
-    vi.mocked(roleAdminApi.getMembers).mockResolvedValue({ members: [] });
+    // KI-073: complete:true để ca này GIỮ ý nghĩa cũ ("role thật sự chưa có ai") — nhánh
+    // complete:false + 0 hàng có empty-state RIÊNG, ghim ở F3.
+    vi.mocked(roleAdminApi.getMembers).mockResolvedValue({ members: [], complete: true });
     setCaps({ "view:user": true });
     renderWithQuery(<RoleMembersTab roleId="role-1" />);
     expect(await screen.findByText("Chưa có thành viên")).toBeInTheDocument();
@@ -208,6 +217,7 @@ describe("RoleMembersTab", () => {
           grantedAt: new Date("2026-07-01T00:00:00Z"),
         },
       ],
+      complete: true,
     } as unknown as Awaited<ReturnType<typeof roleAdminApi.getMembers>>);
     setCaps({ "view:user": true });
     renderWithQuery(<RoleMembersTab roleId="role-1" />);
@@ -216,5 +226,129 @@ describe("RoleMembersTab", () => {
     expect(await screen.findByText("(không có quyền xem danh tính)")).toBeInTheDocument();
     expect(screen.queryByText("u-200")).not.toBeInTheDocument();
     expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  // ── KI-073 (S10-SEC-ROLEMEMBERFE-1) · cờ `complete` — FE thôi khẳng định điều nó không biết ────
+  //
+  // Server phát `complete = scope ∈ {Company, System}` (D4). `complete === false` ⇒ `memberIds` là
+  // TẬP CON không biết thiếu bao nhiêu ⇒ mọi lời khẳng định dựng trên nó (bộ đếm, badge "đã là thành
+  // viên", preview dedup, empty-state) phải đổi sang câu KHÔNG nói dối (D5). Mock `getMembers` cast
+  // qua `as unknown as` vì contract HIỆN TẠI chưa có khoá `complete` — đúng hình dạng RED-trước.
+  describe("KI-073 — complete=false: FE thôi khẳng định điều nó không biết", () => {
+    const membersWith = (complete: boolean) =>
+      ({ ...MEMBERS, complete }) as unknown as Awaited<ReturnType<typeof roleAdminApi.getMembers>>;
+
+    const ORG_TREE = [{ id: "org-1", name: "Nội dung", children: [] }];
+    /**
+     * u-100 ĐÃ là member (MEMBERS) · u-200 chưa · emp-self là CHÍNH ACTOR (me.userId = "u1",
+     * setCaps) · emp-nolink chưa link tài khoản. Partial-mode: dedup theo memberIds TẮT nhưng
+     * (1) vẫn TRỪ chính mình (SoD — self-assign nổ 403 từng dòng) và (2) vẫn loại người chưa link.
+     */
+    const KI073_EMPLOYEES = {
+      items: [
+        {
+          id: "emp-a",
+          userId: "u-100",
+          fullName: "Bùi Mỹ Linh",
+          email: "linh.bui@demo.local",
+          positionName: "Nhân viên đăng tải",
+          orgUnitName: "Nội dung",
+          avatarUrl: null,
+          employeeCode: "EMP0001",
+        },
+        {
+          id: "emp-b",
+          userId: "u-200",
+          fullName: "Trần Thị B",
+          email: "b@demo.local",
+          positionName: "Designer",
+          orgUnitName: "Nội dung",
+          avatarUrl: null,
+          employeeCode: "EMP0002",
+        },
+        {
+          id: "emp-self",
+          userId: "u1",
+          fullName: "T (chính mình)",
+          email: "t@demo.local",
+          positionName: "Admin",
+          orgUnitName: "Nội dung",
+          avatarUrl: null,
+          employeeCode: "EMP0009",
+        },
+        {
+          id: "emp-nolink",
+          userId: null,
+          fullName: "Lê Văn C",
+          email: "c@demo.local",
+          positionName: "QA",
+          orgUnitName: "Kỹ thuật",
+          avatarUrl: null,
+          employeeCode: "EMP0003",
+        },
+      ],
+      meta: { page: 1, pageSize: 10, total: 4, totalPages: 1, hasNext: false, hasPrev: false },
+    };
+
+    async function openOrgDialogAndPick() {
+      fireEvent.click(await screen.findByText("Thêm theo phòng ban"));
+      fireEvent.change(await screen.findByLabelText("Phòng ban"), {
+        target: { value: "org-1" },
+      });
+    }
+
+    it("F1 — complete:false ⇒ nhãn đếm partial, KHÔNG alreadyMembers, CÓ dòng 'phạm vi hạn chế', toAssign = linked trừ mình", async () => {
+      vi.mocked(roleAdminApi.getMembers).mockResolvedValue(membersWith(false));
+      vi.mocked(orgApi.getTree).mockResolvedValue(ORG_TREE as never);
+      vi.mocked(hrApi.listEmployees).mockResolvedValue(KI073_EMPLOYEES as never);
+      setCaps({ "view:user": true, "assign-role:user": true });
+      renderWithQuery(<RoleMembersTab roleId="role-1" />);
+
+      // Bộ đếm KHÔNG được nói "1 thành viên đang giữ vai trò này" — nó không biết điều đó.
+      expect(await screen.findByText("1 thành viên bạn xem được")).toBeInTheDocument();
+
+      await openOrgDialogAndPick();
+      // toAssign = linked (u-100 + u-200 + self) TRỪ chính mình = 2 — dedup theo memberIds TẮT.
+      await waitFor(() => expect(screen.getByText("Sẽ gán: 2 tài khoản")).toBeInTheDocument());
+      // Dòng khẳng định sai bị ẨN, thay bằng dòng nói rõ giới hạn phạm vi.
+      expect(screen.queryByText(/Bỏ qua \(đã là thành viên\)/)).not.toBeInTheDocument();
+      expect(screen.getByText(/không xác định được ai đã là thành viên/i)).toBeInTheDocument();
+    });
+
+    it("F2 (neo ALLOW) — complete:true ⇒ hành vi cũ NGUYÊN VẸN: dedup đúng, alreadyMembers hiện", async () => {
+      vi.mocked(roleAdminApi.getMembers).mockResolvedValue(membersWith(true));
+      vi.mocked(orgApi.getTree).mockResolvedValue(ORG_TREE as never);
+      // KHÔNG có hàng self trong fixture này — F2 ghim đường CŨ, không ghim luật trừ-mình mới.
+      vi.mocked(hrApi.listEmployees).mockResolvedValue({
+        ...KI073_EMPLOYEES,
+        items: KI073_EMPLOYEES.items.filter((e) => e.id !== "emp-self"),
+      } as never);
+      setCaps({ "view:user": true, "assign-role:user": true });
+      renderWithQuery(<RoleMembersTab roleId="role-1" />);
+
+      expect(await screen.findByText("1 thành viên đang giữ vai trò này")).toBeInTheDocument();
+
+      await openOrgDialogAndPick();
+      // linked = u-100 + u-200; u-100 đã là member ⇒ toAssign = 1, alreadyMembers = 1.
+      await waitFor(() => expect(screen.getByText("Sẽ gán: 1 tài khoản")).toBeInTheDocument());
+      expect(screen.getByText("Bỏ qua (đã là thành viên): 1")).toBeInTheDocument();
+      expect(
+        screen.queryByText(/không xác định được ai đã là thành viên/i),
+      ).not.toBeInTheDocument();
+    });
+
+    it("F3 — complete:false + 0 hàng ⇒ empty-state RIÊNG, không phải 'Chưa có thành viên'", async () => {
+      // 0 hàng là trạng thái MẶC ĐỊNH của @Own không có chân trong role (ngữ nghĩa KI-071) —
+      // "Chưa có thành viên" ở đó là lời khẳng định sai về CẢ role.
+      vi.mocked(roleAdminApi.getMembers).mockResolvedValue({
+        members: [],
+        complete: false,
+      } as unknown as Awaited<ReturnType<typeof roleAdminApi.getMembers>>);
+      setCaps({ "view:user": true });
+      renderWithQuery(<RoleMembersTab roleId="role-1" />);
+
+      expect(await screen.findByText(/trong phạm vi bạn xem được/i)).toBeInTheDocument();
+      expect(screen.queryByText("Chưa có thành viên")).not.toBeInTheDocument();
+    });
   });
 });
