@@ -594,5 +594,39 @@ describe("emit SAU COMMIT — ChatCallsService (S7-CALL-RT-1)", () => {
     );
     expect(sweep.match(/this\.calls\.emitAutoEnded\(/g) ?? []).toHaveLength(1);
     expect(sweep.indexOf("emitAutoEnded(")).toBeGreaterThan(sweep.indexOf("withTenant("));
+
+    // Cùng vế cho job ring-timeout — nó vốn thiếu, và "hai job đối xứng" không thể chỉ đúng một nửa.
+    expect(job.indexOf("emitExpired(")).toBeGreaterThan(job.indexOf("withTenant("));
+  });
+
+  it("ĐỐI XỨNG HAI JOB (KI-075): cả hai TIÊU THỤ số đếm emit hỏng, không job nào bỏ tín hiệu", () => {
+    // S10-CHAT-CALLSWEEP-1 hoãn KI-075 với đúng lý do "vá một mình job mới sẽ làm hai job lệch chuẩn
+    // nhau". Ratchet này là thứ biến việc tái diễn đó thành ĐỎ: sau khi `emitExpired`/`emitAutoEnded`
+    // nuốt lỗi per-item, giá trị trả về là tín hiệu DUY NHẤT còn lại (`JobRunResult.failed` +
+    // `metadata.emitFailed`) — một job bỏ nó đi là mất chuông trở thành im lặng tuyệt đối.
+    const job = readFileSync(join(__dirname, "chat-call-ringing-timeout.job-handler.ts"), "utf8");
+    const sweep = readFileSync(
+      join(__dirname, "chat-call-stale-active-sweep.job-handler.ts"),
+      "utf8",
+    );
+
+    expect(job).toMatch(/const emitFailed = this\.calls\.emitExpired\(/);
+    expect(sweep).toMatch(/const emitFailed = this\.calls\.emitAutoEnded\(/);
+
+    // Và tiêu thụ THẬT vào kết quả — gán rồi bỏ đó thì `failed` vẫn là hằng 0.
+    for (const src of [job, sweep]) {
+      expect(src).toMatch(/failed: emitFailed/);
+      expect(src).toMatch(/emitFailed > 0 \? \{ emitFailed \} : \{\}/);
+    }
+
+    // Helper phải KHAI kiểu trả về `number` — đổi ngược về `void` làm hai dòng trên không compile,
+    // nhưng ratchet nói thẳng ra thì người sửa biết mình đang tháo cái gì.
+    const svc = readFileSync(join(__dirname, "chat-calls.service.ts"), "utf8");
+    expect(svc).toMatch(
+      /emitExpired\(companyId: string, expiries: readonly ChatCallExpiry\[\]\): number/,
+    );
+    expect(svc).toMatch(
+      /emitAutoEnded\(companyId: string, expiries: readonly ChatCallExpiry\[\]\): number/,
+    );
   });
 });

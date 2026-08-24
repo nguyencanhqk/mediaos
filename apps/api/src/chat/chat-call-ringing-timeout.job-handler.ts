@@ -53,8 +53,15 @@ export class ChatCallRingingTimeoutJobHandler implements JobHandler {
    * MỘT transaction cho cả tenant: cập nhật `chat_calls` + `chat_call_participants` + `audit_logs` phải
    * cùng commit/rollback. Ghi audit ngoài tx nghiệp vụ là đường im lặng (lỗi audit vẫn commit thay đổi).
    *
-   * KHÔNG catch: lỗi propagate cho `JobRunner` finalize run-row `'Failed'` — nuốt lỗi ở đây làm một job
-   * hỏng liên tục trông y hệt một job không có việc.
+   * KHÔNG catch **phần DB**: lỗi trong `withTenant` propagate cho `JobRunner` finalize run-row `'Failed'`
+   * — nuốt lỗi ở đó làm một job hỏng liên tục trông y hệt một job không có việc.
+   *
+   * ⚠️ **Phần SAU COMMIT thì NGƯỢC LẠI, và đây là ranh giới phải đọc kỹ (S10-CHAT-EMITGUARD-1 · KI-075).**
+   * Lời gọi phát nằm sau khi tx đã commit, còn job này **idempotent theo thiết kế** — hàng vừa chuyển
+   * `missed` không còn khớp `status='ringing'` ⇒ nhịp kế khớp **0 hàng**. Nên để lỗi phát propagate là
+   * cách TỆ NHẤT: run-row bị đóng `'Failed'` cho một thay đổi ĐÃ commit, mà chạy lại job **không sửa
+   * được gì** — sự kiện mất vĩnh viễn (CALL không có route ĐỌC nào để FE poll bù). Vì thế `emitExpired`
+   * nuốt lỗi **per-item** và trả về SỐ đếm; con số đó đi thẳng vào `failed` + `metadata.emitFailed`.
    */
   async run(ctx: JobRunContext): Promise<JobRunResult> {
     const expiries = await this.db.withTenant(ctx.companyId, (tx) =>
@@ -65,7 +72,20 @@ export class ChatCallRingingTimeoutJobHandler implements JobHandler {
     // ⚠️ SAU COMMIT — đường phát THỨ BẢY của vòng đời (S7-CALL-RT-1). Không có "actor" nào ở đây, nên
     // người được báo lấy từ chính bảng participants của từng cuộc gọi. Bỏ dòng này = máy người được gọi
     // đổ chuông tới khi họ tự tắt: job là đường DUY NHẤT đóng cuộc gọi ở phòng không ai mời lại.
-    this.calls.emitExpired(ctx.companyId, expiries);
+    //
+    // S10-CHAT-EMITGUARD-1 (KI-075): giá trị trả về PHẢI được tiêu thụ — nó là tín hiệu DUY NHẤT còn lại
+    // sau khi `emitExpired` nuốt lỗi per-item. Bỏ nó đi = mất chuông trở thành im lặng tuyệt đối. Job
+    // gặt (`chat-call-stale-active-sweep`) mang khuôn Y HỆT: sửa một cái mà quên cái kia là lý do
+    // S10-CHAT-CALLSWEEP-1 đã hoãn cả hai lại thành MỘT món.
+    const emitFailed = this.calls.emitExpired(ctx.companyId, expiries);
+
+    if (emitFailed > 0) {
+      this.logger.error(
+        `${this.jobCode} tenant=${ctx.companyId}: ${emitFailed}/${expired} cuộc gọi KHÔNG phát được ` +
+          `chat:call{missed} — hàng DB ĐÃ 'missed' và job IDEMPOTENT (nhịp kế khớp 0 hàng) ⇒ sự kiện ` +
+          `mất VĨNH VIỄN, CALL không có đường REST để poll bù.`,
+      );
+    }
 
     if (expired > 0) {
       this.logger.warn(
@@ -76,11 +96,20 @@ export class ChatCallRingingTimeoutJobHandler implements JobHandler {
       this.logger.debug(`${this.jobCode} tenant=${ctx.companyId}: không có cuộc gọi quá hạn.`);
     }
 
+    // `total` = số hàng DB ĐÃ đổi trạng thái (sự thật nghiệp vụ — KHÔNG đổi vì chuông hỏng).
+    // `success + failed === total` theo quy ước nhà (`attendance-alert-noti.job-handler.ts`) ⇒
+    // `JobRunner.deriveStatus` cho 'Partial' khi mất một phần, 'Failed' khi mất cả lô. `callsMissed`
+    // giữ nguyên đếm DB ở CẢ HAI nhánh, nên run-row đọc được nguyên vẹn "DB xong, chuông mất bao nhiêu".
+    // `emitFailed` CHỈ có mặt khi > 0 — đường xanh phải giữ ĐÚNG hình dạng cũ của `JobRunResult`.
     return {
       total: expired,
-      success: expired,
-      failed: 0,
-      metadata: { callsMissed: expired, ringTimeoutMs: CHAT_CALL_RING_TIMEOUT_MS },
+      success: expired - emitFailed,
+      failed: emitFailed,
+      metadata: {
+        callsMissed: expired,
+        ringTimeoutMs: CHAT_CALL_RING_TIMEOUT_MS,
+        ...(emitFailed > 0 ? { emitFailed } : {}),
+      },
     };
   }
 }

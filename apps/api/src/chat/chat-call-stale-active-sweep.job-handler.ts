@@ -58,8 +58,14 @@ export class ChatCallStaleActiveSweepJobHandler implements JobHandler {
    * MỘT transaction cho cả tenant: `chat_calls` + `chat_call_participants` + `audit_logs` phải cùng
    * commit/rollback. Ghi audit ngoài tx nghiệp vụ là đường im lặng (lỗi audit vẫn commit thay đổi).
    *
-   * KHÔNG catch: lỗi propagate cho `JobRunner` finalize run-row `'Failed'` — nuốt lỗi ở đây làm một job
-   * hỏng liên tục trông y hệt một job không có việc.
+   * KHÔNG catch **phần DB**: lỗi trong `withTenant` propagate cho `JobRunner` finalize run-row `'Failed'`
+   * — nuốt lỗi ở đó làm một job hỏng liên tục trông y hệt một job không có việc.
+   *
+   * ⚠️ **Phần SAU COMMIT thì NGƯỢC LẠI** (S10-CHAT-EMITGUARD-1 · KI-075) — ranh giới ĐỐI XỨNG với
+   * `chat-call-ringing-timeout.job-handler.ts`, lý lẽ đầy đủ ở đó. Tóm tắt: emit nằm sau commit + job
+   * idempotent (hàng vừa `ended` không còn khớp `status='active'`) ⇒ để lỗi phát propagate thì run-row
+   * nói dối `'Failed'` cho một thay đổi ĐÃ commit **và** chạy lại không sửa được gì. Nên `emitAutoEnded`
+   * nuốt lỗi **per-item** và trả SỐ đếm; con số đó đi thẳng vào `failed` + `metadata.emitFailed`.
    */
   async run(ctx: JobRunContext): Promise<JobRunResult> {
     const swept = await this.db.withTenant(ctx.companyId, (tx) =>
@@ -69,7 +75,20 @@ export class ChatCallStaleActiveSweepJobHandler implements JobHandler {
 
     // ⚠️ SAU COMMIT. Không có "actor" nào ở đây, nên người được báo lấy từ chính bảng participants của
     // từng cuộc gọi. Bỏ dòng này = máy người dùng giữ khung gọi của một cuộc gọi đã chết.
-    this.calls.emitAutoEnded(ctx.companyId, swept);
+    //
+    // S10-CHAT-EMITGUARD-1 (KI-075): giá trị trả về PHẢI được tiêu thụ — nó là tín hiệu DUY NHẤT còn lại
+    // sau khi `emitAutoEnded` nuốt lỗi per-item. Bỏ nó đi = mất sự kiện trở thành im lặng tuyệt đối. Job
+    // ring-timeout (`chat-call-ringing-timeout`) mang khuôn Y HỆT với `emitExpired`: sửa một cái mà quên
+    // cái kia là lý do S10-CHAT-CALLSWEEP-1 đã hoãn cả hai lại thành MỘT món.
+    const emitFailed = this.calls.emitAutoEnded(ctx.companyId, swept);
+
+    if (emitFailed > 0) {
+      this.logger.error(
+        `${this.jobCode} tenant=${ctx.companyId}: ${emitFailed}/${total} cuộc gọi KHÔNG phát được ` +
+          `chat:call{ended} — hàng DB ĐÃ 'ended' và job IDEMPOTENT (nhịp kế khớp 0 hàng) ⇒ sự kiện mất ` +
+          `VĨNH VIỄN, CALL không có đường REST để poll bù.`,
+      );
+    }
 
     if (total > 0) {
       // `warn`, KHÔNG `debug`: mỗi hàng gặt được là bằng chứng một phòng ĐÃ từng bị khoá. Ở mức không thu
@@ -84,11 +103,14 @@ export class ChatCallStaleActiveSweepJobHandler implements JobHandler {
       );
     }
 
+    // Kế toán ĐỐI XỨNG với `chat-call-ringing-timeout.job-handler.ts` (lý lẽ đầy đủ ở đó):
+    // `total` = đếm DB, `success + failed === total`, `callsAutoEnded` giữ đếm DB ở CẢ HAI nhánh, và
+    // `emitFailed` CHỈ có mặt khi > 0 để đường xanh giữ ĐÚNG hình dạng cũ của `JobRunResult`.
     return {
       total,
-      success: total,
-      failed: 0,
-      metadata: { callsAutoEnded: total },
+      success: total - emitFailed,
+      failed: emitFailed,
+      metadata: { callsAutoEnded: total, ...(emitFailed > 0 ? { emitFailed } : {}) },
     };
   }
 }

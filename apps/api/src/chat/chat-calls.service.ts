@@ -689,19 +689,35 @@ export class ChatCallsService {
     );
   }
 
-  /** Phát `chat:call{missed}` cho các cuộc gọi vừa bị bước dọn/job đánh nhỡ. Gọi SAU commit. */
-  emitExpired(companyId: string, expiries: readonly ChatCallExpiry[]): void {
+  /**
+   * Phát `chat:call{missed}` cho các cuộc gọi vừa bị bước dọn/job đánh nhỡ. Gọi SAU commit.
+   *
+   * **Trả về SỐ cuộc gọi KHÔNG phát được** (S10-CHAT-EMITGUARD-1 · KI-075) — caller là job PHẢI tiêu thụ
+   * con số này, xem docblock `emitAutoEnded` cho toàn bộ lý lẽ (hai hàm là MỘT hợp đồng, đối xứng).
+   */
+  emitExpired(companyId: string, expiries: readonly ChatCallExpiry[]): number {
+    let emitFailed = 0;
     for (const { call, participantUserIds } of expiries) {
-      this.realtime.emitChatCall(companyId, participantUserIds, {
-        callId: call.id,
-        roomId: call.roomId,
-        kind: call.kind,
-        status: "missed",
-        initiatorUserId: call.initiatorUserId,
-        startedAt: call.startedAt.toISOString(),
-        action: "missed",
-      });
+      try {
+        this.realtime.emitChatCall(companyId, participantUserIds, {
+          callId: call.id,
+          roomId: call.roomId,
+          kind: call.kind,
+          status: "missed",
+          initiatorUserId: call.initiatorUserId,
+          startedAt: call.startedAt.toISOString(),
+          action: "missed",
+        });
+      } catch (err) {
+        emitFailed++;
+        this.logger.error(
+          `emitExpired: KHÔNG phát được chat:call{missed} callId=${call.id} — ` +
+            `cuộc gọi ĐÃ 'missed' trong DB, người được gọi có thể vẫn nghe chuông: ` +
+            (err instanceof Error ? err.message : String(err)),
+        );
+      }
     }
+    return emitFailed;
   }
 
   /**
@@ -710,19 +726,47 @@ export class ChatCallsService {
    * Bỏ dòng này = máy người dùng giữ khung cuộc gọi của một cuộc gọi ĐÃ CHẾT, và không sự kiện nào đính
    * chính — đúng lỗ mà `emitExpired` được thêm để vá ở S7-CALL-RT-1. `action:"ended"` (không phải
    * `"missed"`) vì cuộc gọi này đã từng được nhận; client phân biệt hai màn hình theo trường đó.
+   *
+   * ┌─ S10-CHAT-EMITGUARD-1 (KI-075) — VÌ SAO `try/catch` PER-ITEM, VÀ VÌ SAO TRẢ VỀ SỐ ĐẾM ─────────┐
+   * │ `RealtimeEmitterService.emitChatCall` **hôm nay** tự nuốt mọi lỗi ⇒ nhánh `catch` dưới đây là   │
+   * │ đường CHẾT. Nó tồn tại vì bất biến đó sống ở module KHÁC (`realtime/`) và caller ở đây không    │
+   * │ có gì ép nó: ai chuyển `.parse()` ra ngoài `try` của emitter, hay cắm một emitter rethrow, đổi  │
+   * │ hành vi của HAI job cách đó hai thư mục mà typecheck vẫn xanh. Bất biến ấy nay được ghim ở      │
+   * │ `realtime/realtime-emitter.call.spec.ts`; đây là vế phòng thủ bên này của cùng hợp đồng.        │
+   * │                                                                                                 │
+   * │ • **PER-ITEM, không bọc cả vòng lặp:** một cuộc gọi ném mà cắt vòng lặp thì N-1 cuộc gọi còn    │
+   * │   lại trong lô mất sự kiện VĨNH VIỄN — cả hai job idempotent, nhịp kế khớp 0 hàng, và CALL      │
+   * │   không có đường REST bù để poll.                                                               │
+   * │ • **TRẢ SỐ ĐẾM, không nuốt câm:** nuốt trọn là lấy mất tín hiệu CUỐI CÙNG — `try/catch` đã che  │
+   * │   run-row khỏi trạng thái `'Failed'`, nên `JobRunResult.failed` + `metadata.emitFailed` là thứ  │
+   * │   duy nhất còn nói được "việc DB xong, chuông mất". Job PHẢI tiêu thụ (ratchet gác điều đó).    │
+   * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * @returns số cuộc gọi trong lô KHÔNG phát được sự kiện (0 = đường xanh).
    */
-  emitAutoEnded(companyId: string, expiries: readonly ChatCallExpiry[]): void {
+  emitAutoEnded(companyId: string, expiries: readonly ChatCallExpiry[]): number {
+    let emitFailed = 0;
     for (const { call, participantUserIds } of expiries) {
-      this.realtime.emitChatCall(companyId, participantUserIds, {
-        callId: call.id,
-        roomId: call.roomId,
-        kind: call.kind,
-        status: "ended",
-        initiatorUserId: call.initiatorUserId,
-        startedAt: call.startedAt.toISOString(),
-        action: "ended",
-      });
+      try {
+        this.realtime.emitChatCall(companyId, participantUserIds, {
+          callId: call.id,
+          roomId: call.roomId,
+          kind: call.kind,
+          status: "ended",
+          initiatorUserId: call.initiatorUserId,
+          startedAt: call.startedAt.toISOString(),
+          action: "ended",
+        });
+      } catch (err) {
+        emitFailed++;
+        this.logger.error(
+          `emitAutoEnded: KHÔNG phát được chat:call{ended} callId=${call.id} — ` +
+            `cuộc gọi ĐÃ 'ended' trong DB, máy người dùng có thể giữ khung gọi đã chết: ` +
+            (err instanceof Error ? err.message : String(err)),
+        );
+      }
     }
+    return emitFailed;
   }
 }
 
