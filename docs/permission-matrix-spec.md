@@ -189,6 +189,20 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 >   ⚠️ Cặp gate = cặp bound ⇒ **fail-closed**: `data_scope` không phân giải được ⇒ **403**, không còn
 >   nhánh fail-soft "bỏ cột danh tính, vẫn trả hàng" của KI-053.
 >
+> • **Đường GHI cạnh route trên — ĐÓNG 2026-08-24 (`S10-SEC-ROLEMEMBERFE-1`, KI-073).** Thân **201**
+>   của `POST /permissions/users/:userId/roles` trước đó trả NGUYÊN HÀNG `user_roles` — nhánh no-op
+>   (đã là thành viên, cùng expiry) trả **hàng GỐC** với `id`/`grantedBy`/`createdAt` gốc ⇒ 1 request
+>   /người dựng lại được tư cách thành viên mà KI-071 vừa giấu, **im lặng** (no-op không ghi gì).
+>   Nay thân đồng nhất đúng **4 khoá** `{userId, roleId, companyId, expiresAt}` echo request cho MỌI
+>   actor, CẢ BA nhánh (no-op/fresh/reassign) — audit/`user_security_events` vẫn ghi id hàng THẬT
+>   (chỉ đổi hình chiếu HTTP). `GET /auth/roles/:id/members` phát thêm cờ **`complete`**
+>   (= scope ∈ {Company, System} của CHÍNH actor) để FE thôi khẳng định điều nó không biết (bộ đếm ·
+>   dedup batch · empty-state); contract FE parse `complete` bằng `.catch(false)` — thiếu khoá/sai
+>   kiểu rơi về partial-mode CÓ NHÃN, không ZodError. ⚠️ Còn sống: **KI-074** — `DELETE
+>   /permissions/users/:userId/roles/:roleId` 404-vs-204 vẫn phân biệt được tư cách thành viên (chiều
+>   dương ồn + có giá; xem RELEASE-02). Tính chất đạt được là "không enumerate IM LẶNG theo chiều
+>   DƯƠNG", không phải "không enumerate".
+>
 > ⚠️ **Cặp KHÁC, đừng đọc lây sang:** `/foundation/audit-logs/all` gate `view:platform-audit`
 > (operator-only, chéo tenant) · `/attendance/audit-logs` gate `view:attendance-audit-log` ·
 > `/leave/audit-logs` gate `view:leave-audit-log` · audit của TASK gate `view:task-audit-log`. Bốn

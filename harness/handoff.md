@@ -4,6 +4,60 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
+## Phiên 2026-08-24 — `S10-SEC-ROLEMEMBERFE-1` (KI-073) — 4/4 `done_when` ĐÓNG, CHƯA COMMIT
+
+**Đã làm (tất cả nằm ở WORKING TREE CHƯA COMMIT trên `master` — 21 file, đừng discard):**
+plan qua 2 vòng plan-reviewer (9 blocker đã vá — trong đó ĐÍNH CHÍNH lớn: oracle là THÂN **201**
+của `POST /permissions/users/:userId/roles`, KHÔNG phải "loạt 409"; route trả 201 chứ không 200) →
+RED 10 ca đỏ đúng chỗ → implement: `userRoleSchema` còn 4 khoá + `projectAssignResult` (ratchet
+`Promise<UserRoleDto>`) + `complete: z.boolean().catch(false)` (deploy 2 chiều tự lành) + FE D5
+5 hàng (partial-label · dedup-off-trừ-mình · dòng phạm-vi · empty-state riêng) + 5 hộ tiêu thụ test
+sửa theo đơn plan §0.3b → đột biến **M-A…M-F 6/6 ĐỎ đúng ca** (bảng §3.5 đã điền) →
+`check.sh --lane-db=rolememberfe` **XANH đầy đủ** (563/563 api) → gate: **database-reviewer PASS +
+silent-failure-hunter PASS** (1 MEDIUM = nợ N-5 telemetry). RELEASE-02: **KI-074 đã cấp**
+(DELETE 404-oracle) TRƯỚC dấu gạch; permission-matrix-spec đã thêm bullet KI-073.
+
+### ✅ HAI cổng cuối đã đóng (phiên tiếp 24/08)
+
+1. **security-reviewer — verdict `PASS`** (chạy 1 lần trên Opus, không chết 529). Reviewer **tự chạy
+   lại bằng chứng chứ không tin lời khai**: deny-path O1·O2·O3·O4·S1a·S1b dưới `LANE_DB=mediaos_rolememberfe`
+   **24/24 CHẠY-không-SKIP**, 3 hộ tiêu thụ + HTTP 41/41, `test/foundation` + `src/permission` 501/501,
+   `TURBO_FORCE=1 typecheck` 10/10 (0 cached). Xác nhận cả 6 câu hỏi cổng: bộ chiếu là **một object
+   literal DUY NHẤT** dùng chung 3 nhánh ⇒ thứ tự field + độ dài thân giống hệt; `expiresAt` là **thuần
+   hàm của request** (không bao giờ đọc `existing.expiresAt`) ⇒ 0 bit; **409 nằm cùng phía TIẾNG ỒN**
+   (chỉ tới được khi target CHƯA là thành viên) nên không phân biệt được với 201 no-op; `audit` vẫn ăn
+   `inserted.id`; `.catch(false)` không gate hành vi an ninh nào. Findings: **1 MEDIUM + 3 LOW** →
+   plan **§N-6…N-9**.
+2. **Số đo PROD §0.4 — ĐÃ ĐO 24/08**, chỉ-SELECT, `default_transaction_read_only = on`, đích
+   `localhost:5432/mediaos`: **(2b) = 0 vai** ✅ · **(3) = 0 hàng DENY** ✅ (⇒ 0 lượt 403 mới) ·
+   **(5) = 0 vai**, khớp số 22/08 ✅ · **(4)** `assign-role:user`=sensitive, `*:*`=không ⇒ 0 nhiễu
+   `effectivelySensitive`. Kết quả phụ: **`QUẢN LÝ CẤP CAO` chỉ có `*:*`, KHÔNG có exact
+   `assign-role:user`** ⇒ nhánh lọc EXACT khiến vai này **không gọi nổi** đường GHI; tập vai chạm được
+   thật sự = {`SA`, `company-admin`}, cả hai `@Company`. ⇒ lỗ **TIỀM TÀNG**, 0 hồi quy.
+
+**Đã áp:** plan §0.4 điền số thật + §N-6…N-9; RELEASE-02 **KI-073 đã gạch** (`~~**KI-073**~~`, cột
+cuối `ĐÓNG 2026-08-24`); `backlog.status → "done"`; ledger 2 dấu `gate`; STATUS regen.
+**Vế i18n của MEDIUM đã VÁ trong PR** — dòng `dedupUnavailable` do chính WO này viết ra mà hứa sai
+"hệ thống tự bỏ qua", trong khi batch POST `{roleId}` không kèm `expiresAt` ⇒ thành viên **có hạn** rơi
+nhánh reassign và **bị san thành vĩnh viễn**. Vế service (bỏ qua reassign khi request không khai
+`expiresAt` mà hàng active có) = **đổi ngữ nghĩa API GHI** ⇒ cố ý để nợ N-6, cần WO riêng + plan-review.
+
+### 🔴 Còn lại: commit + PR (vùng đỏ ⇒ NGƯỜI CHỐT, KHÔNG gắn nhãn auto-merge)
+
+Cây vẫn **CHƯA COMMIT trên `master`** (22 file + 1 untracked — đừng discard). Bước tiếp: branch
+`wo/s10-sec-rolememberfe-1` → commit → push → `gh pr create` **không** nhãn auto-merge.
+
+**Friction:** (1) subagent chết 529 vẫn ĐỐT trọn token đọc-diff mỗi lần — phiên trước 4 xác = phần lớn
+của cú nhảy $107→$299; cap 2 lần thử rồi CHUYỂN PHIÊN, đừng đợi-và-thử trong phiên đắt. _(Phiên 24/08
+chạy 1 lần là xong — đổi phiên là đúng thuốc.)_
+(2) `.catch(false)` trong contract làm Input≠Output ⇒ `apiFetch<T>(z.ZodType<T>)` đỏ typecheck —
+fix chuẩn là type-assertion TẠI call-site kèm comment (role-admin-api.ts), đừng đổi apiFetch.
+(3) 🆕 **Classifier chặn số đo PROD 5 lần — nguyên nhân KHÔNG phải "đụng DB PROD"** mà là **chuỗi kết
+nối đi qua DÒNG LỆNH** (`PROD_DATABASE_URL="$(node -e '…đọc .env.prod…')" node script.mjs`). Chạy được
+ngay khi bọc wrapper **tự đọc `.env.prod` TRONG tiến trình** rồi `await import()` bộ đo. Ghi lần 2 (phiên
+trước đã chặn 3 lần rồi bỏ cuộc) ⇒ **ứng viên `skill-smith`**. Bẫy phụ: script ở `c:\tmp\` không resolve
+được `import pg` — phải đặt trong cây repo (dùng `logs/`, đã gitignore) để với tới `node_modules` gốc.
+
 ## Phiên 2026-08-05 (session b74ca3cc) — `S7-SEC-ROLE2FA-UI-1` → PR #345
 
 **Đã làm:** vá màn "Sửa vai trò" đọc sai + không tắt được cờ `requires_two_factor`. `roleSchema`

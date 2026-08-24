@@ -64,7 +64,13 @@ const ROLES: RoleListDto = {
       isSystem: false,
       requiresTwoFactor: false,
     },
-    { id: "role-002", name: "Employee", description: null, isSystem: true, requiresTwoFactor: true },
+    {
+      id: "role-002",
+      name: "Employee",
+      description: null,
+      isSystem: true,
+      requiresTwoFactor: true,
+    },
   ],
 };
 
@@ -112,14 +118,13 @@ describe("UserRolesPage", () => {
   it("renders the role catalog and logs a successful assign", async () => {
     setCapabilities({ "assign-role:user": true });
     vi.mocked(authUsersApi.listRoles).mockResolvedValue(ROLES);
+    // KI-073 (S10-SEC-ROLEMEMBERFE-1, D2): thân assignRole còn đúng 4 khoá — page vốn không đọc
+    // field nào của kết quả nên đây là thay fixture thuần theo contract mới.
     vi.mocked(authUsersApi.assignRole).mockResolvedValue({
-      id: "ur-1",
       userId: TARGET_USER_ID,
       roleId: "role-001",
       companyId: "co-001",
-      grantedBy: "u1",
       expiresAt: null,
-      createdAt: "2024-01-01T00:00:00.000Z",
     });
     renderWithQuery(<UserRolesPage userId={TARGET_USER_ID} />);
 

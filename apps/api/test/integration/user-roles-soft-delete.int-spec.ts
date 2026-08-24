@@ -204,6 +204,18 @@ describe.skipIf(!runDb)(
       return r.rows[0].n as number;
     }
 
+    // S10-SEC-ROLEMEMBERFE-1 (KI-073, §0.3b): thân assignRole thu hẹp còn 4 khoá — id hàng thật nay
+    // đọc từ DB. Trả undefined khi 0 hàng active để caller BẮT BUỘC assert toBeDefined() trước khi so
+    // (dưới đột biến no-op-giả, secondId === undefined làm riêng bất-đẳng-thức đúng RỖNG).
+    async function activeUserRoleIdOf(userId: string, roleId: string): Promise<string | undefined> {
+      const r = await direct.query(
+        `SELECT id FROM user_roles
+       WHERE company_id=$1 AND user_id=$2 AND role_id=$3 AND deleted_at IS NULL`,
+        [A.companyId, userId, roleId],
+      );
+      return r.rows[0]?.id as string | undefined;
+    }
+
     async function countAuditForObject(objectId: string): Promise<number> {
       const r = await direct.query(
         `SELECT count(*)::int AS n FROM audit_logs
@@ -286,8 +298,9 @@ describe.skipIf(!runDb)(
     // ── (QA-05) revokeRole → mất quyền NGAY qua can()/getCapabilities + tombstone + cache-invalidate ──
     it("(QA-05) revokeRole (SERVICE): tombstone giữ + user MẤT quyền NGAY (can()=false, getCapabilities loại) + outbox", async () => {
       const actor = { id: adminA, companyId: A.companyId };
-      const assigned = await adminSvc.assignRole(actor, targetA, { roleId: capRole });
-      expect(assigned?.id).toBeTruthy();
+      await adminSvc.assignRole(actor, targetA, { roleId: capRole });
+      // KI-073 (§0.3b): thân response còn 4 khoá — "gán thật" chứng minh bằng hàng active trong DB.
+      expect(await countActiveUserRoles(targetA, capRole)).toBe(1);
 
       // TRƯỚC: quyền hiệu lực qua PermissionService (không chỉ repo).
       const canBefore = await permService.can({
@@ -337,8 +350,8 @@ describe.skipIf(!runDb)(
       await adminSvc.revokeRole(actor, targetA, capRole); // tombstone
 
       // Re-assign phải thành công (partial-unique chỉ chặn active — tombstone không tính).
-      const reassigned = await adminSvc.assignRole(actor, targetA, { roleId: capRole });
-      expect(reassigned?.id).toBeTruthy();
+      // KI-073 (§0.3b): bỏ assert `.id` trên thân — hàng active dưới DB là bằng chứng.
+      await adminSvc.assignRole(actor, targetA, { roleId: capRole });
       expect(await countActiveUserRoles(targetA, capRole)).toBe(1);
 
       const canBack = await permService.can({
@@ -382,23 +395,28 @@ describe.skipIf(!runDb)(
     // ── (QA-02) idempotency round-3 #9: re-grant CÙNG expiry SAU soft-delete KHÔNG no-op-giả ─────────
     it("(QA-02) re-grant CÙNG expiry null SAU soft-delete → hàng active MỚI + audit + cache-invalidate (KHÔNG no-op-giả)", async () => {
       const actor = { id: adminA, companyId: A.companyId };
-      const first = await adminSvc.assignRole(actor, targetA, { roleId: capRole }); // expiresAt null
-      expect(first?.id).toBeTruthy();
+      await adminSvc.assignRole(actor, targetA, { roleId: capRole }); // expiresAt null
+      // KI-073 (§0.3b): id đọc từ DB, KHÔNG từ thân response. toBeDefined() BẮT BUỘC đứng trước
+      // bất-đẳng-thức: dưới đúng đột biến ca này sinh ra để bắt (findUserRole không lọc tombstone ⇒
+      // no-op-GIẢ ⇒ 0 hàng active mới) secondId === undefined làm riêng `not.toBe` đúng RỖNG.
+      const firstId = await activeUserRoleIdOf(targetA, capRole);
+      expect(firstId).toBeDefined();
       await adminSvc.revokeRole(actor, targetA, capRole); // soft-delete → findUserRole thấy undefined
 
       const outboxBefore = await countOutboxForUser(targetA);
 
       // Re-grant CÙNG expiry (null cả hai). Nếu findUserRole KHÔNG lọc tombstone → sameExpiry no-op-GIẢ (0 ghi).
-      const second = await adminSvc.assignRole(actor, targetA, { roleId: capRole });
-      expect(second?.id).toBeTruthy();
+      await adminSvc.assignRole(actor, targetA, { roleId: capRole });
+      const secondId = await activeUserRoleIdOf(targetA, capRole);
+      expect(secondId).toBeDefined();
       // Hàng active MỚI (id khác first) — bằng chứng KHÔNG no-op.
-      expect(second!.id).not.toBe(first!.id);
+      expect(secondId).not.toBe(firstId);
       expect(await countActiveUserRoles(targetA, capRole)).toBe(1);
       // Audit cho hàng mới (RoleAssigned vì findUserRole=undefined sau soft-delete) + cache-invalidate.
-      expect(await countAuditForObject(second!.id)).toBe(1);
+      expect(await countAuditForObject(secondId!)).toBe(1);
       const auditRow = await direct.query(
         `SELECT action FROM audit_logs WHERE company_id=$1 AND object_type='user_role' AND object_id=$2 LIMIT 1`,
-        [A.companyId, second!.id],
+        [A.companyId, secondId],
       );
       expect(["RoleAssigned", "RoleReassigned"]).toContain(auditRow.rows[0].action);
       expect(await countOutboxForUser(targetA)).toBe(outboxBefore + 1);

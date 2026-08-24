@@ -359,6 +359,12 @@ export default {
   roleMembers: {
     count: "{{count}} thành viên đang giữ vai trò này",
     /**
+     * S10-SEC-ROLEMEMBERFE-1 (KI-073, D5): khi server báo `complete=false` (scope xem hẹp hơn
+     * Company) thì danh sách là TẬP CON — "N thành viên đang giữ vai trò này" là lời nói dối theo
+     * chiều thiếu. Nhãn này nói đúng điều FE biết.
+     */
+    countPartial: "{{count}} thành viên bạn xem được",
+    /**
      * S6-SEC-IDENTITY-PROJ-1 (KI-053): server BỎ HẲN KHOÁ email/họ tên khi người xem ở ngoài
      * `data_scope` của cặp danh bạ. Nhãn này phải nói ra LÝ DO — rơi về UUID thì người dùng (và cả
      * support) đọc thành "lỗi hiển thị/join hỏng" chứ không thành "phân quyền đang làm đúng việc".
@@ -376,6 +382,16 @@ export default {
     empty: {
       title: "Chưa có thành viên",
       description: "Chưa có tài khoản nào được gán vai trò này.",
+    },
+    /**
+     * KI-073 (D5 hàng 5): với scope xem hẹp, 0 hàng là trạng thái MẶC ĐỊNH (người không có chân
+     * trong role thấy 0 hàng theo thiết kế KI-071) — "Chưa có thành viên" ở đó là khẳng định sai
+     * về CẢ vai trò.
+     */
+    emptyPartial: {
+      title: "Không có thành viên nào trong phạm vi bạn xem được",
+      description:
+        "Vai trò này vẫn có thể có thành viên — phạm vi xem của bạn không đủ để liệt kê họ.",
     },
     actions: {
       addPerson: "Thêm người",
@@ -403,6 +419,18 @@ export default {
       preview: {
         toAssign: "Sẽ gán: {{count}} tài khoản",
         alreadyMembers: "Bỏ qua (đã là thành viên): {{count}}",
+        /**
+         * KI-073 (D5): thay dòng alreadyMembers khi `complete=false`. Khoá nằm trong nhóm
+         * `addOrgUnit.preview.*` dùng chung nên áp cho CẢ dialog phòng ban lẫn chức vụ.
+         *
+         * ⚠️ Câu chữ KHÔNG được hứa "hệ thống tự bỏ qua" (bản đầu 24/08 hứa vậy, security-reviewer
+         * bắt): batch POST `{roleId}` KHÔNG kèm `expiresAt` ⇒ với người đang giữ vai trò CÓ HẠN,
+         * `sameExpiry(Date, null) === false` ⇒ rơi vào nhánh REASSIGN (soft-delete + INSERT
+         * `expiresAt: null`) ⇒ hạn bị ghi đè thành vĩnh viễn. Chỉ người giữ VĨNH VIỄN mới thật sự
+         * no-op. Nợ vế service: plan §N-6.
+         */
+        dedupUnavailable:
+          "Không xác định được ai đã là thành viên (phạm vi xem của bạn hạn chế) — người đã giữ vai trò sẽ được gán lại; ai đang giữ CÓ THỜI HẠN sẽ bị ghi đè thành vĩnh viễn.",
         unlinked: "Không gán được (nhân viên chưa liên kết tài khoản): {{count}}",
         pageCap:
           "Phòng ban có ≥100 nhân viên — chỉ xử lý 100 người đầu, chạy lại để gán phần còn lại.",

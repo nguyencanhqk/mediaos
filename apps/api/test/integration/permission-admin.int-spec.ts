@@ -57,6 +57,22 @@ describe.skipIf(!hasDb)("G3 permission mutation-path", () => {
     return r.rows[0].n as number;
   }
 
+  // S10-SEC-ROLEMEMBERFE-1 (KI-073, §0.3b): thân assignRole thu hẹp còn 4 khoá — id hàng thật nay
+  // đọc từ DB, KHÔNG từ giá trị trả về. Liên kết audit↔hàng thật của các ca dưới GIỮ NGUYÊN sức nặng.
+  async function activeUserRoleId(
+    companyId: string,
+    userId: string,
+    roleId: string,
+  ): Promise<string> {
+    const r = await direct.query(
+      `SELECT id FROM user_roles
+       WHERE company_id=$1 AND user_id=$2 AND role_id=$3 AND deleted_at IS NULL`,
+      [companyId, userId, roleId],
+    );
+    expect(r.rows, "không có hàng user_role active — mutation không ghi gì").toHaveLength(1);
+    return r.rows[0].id as string;
+  }
+
   async function countAudit(
     companyId: string,
     objectType: string,
@@ -224,24 +240,26 @@ describe.skipIf(!hasDb)("G3 permission mutation-path", () => {
 
   it("assignRole writes user_role + audit (RoleAssigned) + outbox permission.changed", async () => {
     const oBefore = await countOutboxForUser(A.companyId, targetUser);
-    const row = await svc.assignRole({ id: adminUser, companyId: A.companyId }, targetUser, {
+    await svc.assignRole({ id: adminUser, companyId: A.companyId }, targetUser, {
       roleId: assignableRole,
     });
-    expect(row?.id).toBeDefined();
     expect(await countUserRoles(A.companyId, targetUser, assignableRole)).toBe(1);
-    expect(await countAudit(A.companyId, "user_role", row!.id)).toBe(1);
+    // KI-073: id THẬT từ DB (thân response không còn `id`) — audit PHẢI trỏ đúng hàng (bất biến #2).
+    const realId = await activeUserRoleId(A.companyId, targetUser, assignableRole);
+    expect(await countAudit(A.companyId, "user_role", realId)).toBe(1);
     expect(await countOutboxForUser(A.companyId, targetUser)).toBe(oBefore + 1);
   });
 
   it("assignRole is idempotent (same role+expiry) — no duplicate row / audit / outbox", async () => {
     const oBefore = await countOutboxForUser(A.companyId, targetUser);
-    const row = await svc.assignRole({ id: adminUser, companyId: A.companyId }, targetUser, {
+    await svc.assignRole({ id: adminUser, companyId: A.companyId }, targetUser, {
       roleId: assignableRole,
     });
     expect(await countUserRoles(A.companyId, targetUser, assignableRole)).toBe(1);
     // no-op: không emit thêm event.
     expect(await countOutboxForUser(A.companyId, targetUser)).toBe(oBefore);
-    expect(await countAudit(A.companyId, "user_role", row!.id)).toBe(1);
+    const realId = await activeUserRoleId(A.companyId, targetUser, assignableRole);
+    expect(await countAudit(A.companyId, "user_role", realId)).toBe(1);
   });
 
   it("revokeRole soft-deletes user_role (tombstone giữ deleted_by=actor) + audit (RoleRevoked) + outbox; unknown role → NotFound", async () => {

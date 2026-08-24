@@ -13175,10 +13175,16 @@ export const backlog = [
     id: "S10-SEC-ROLEMEMBERFE-1",
     module: "AUTH",
     layer: "FE+BACKEND",
+    // ⟲R2 plan-review 24/08: title viết lại theo kênh THẬT (plan §0) — cơ chế "mã 409" của bản seed
+    // KHÔNG tồn tại (no-op trả 201 + HÀNG GỐC; 409 chỉ ở nhánh thua-race). Title là thứ gen-status/
+    // RELEASE-02 render — giữ title cũ là đóng dấu một cơ chế đã bác.
     title:
-      "KI-073 — tab Thành viên role: `memberIds` lấy từ danh sách ĐÃ BỊ SCOPE rồi nuôi dedup của hai dialog GHI hàng loạt ⇒ mã 409 dựng lại được tập thành viên mà KI-071 vừa giấu",
+      "KI-073 — tab Thành viên role: THÂN 201 của POST /permissions/users/:userId/roles (id/grantedBy/createdAt) phân biệt 'đã là thành viên' với 'vừa gán' ⇒ dựng lại được tập thành viên mà KI-071 vừa giấu; FE `memberIds` đã-scope nuôi dedup hai dialog GHI hàng loạt nói dối theo chiều thiếu",
     zone: "red",
-    status: "todo",
+    // 24/08: cả 4 `done_when` đóng — FULL gate 3/3 PASS (security-reviewer + database-reviewer +
+    // silent-failure-hunter) và số đo PROD §0.4 đã ĐO LẠI (2b=0 · 3=0 · 5=0). Nợ còn lại ghi ở
+    // plan §N-5…N-9, KI-074 đã cấp số cho vế DELETE.
+    status: "done",
     // Xếp SAU ROLEMEMBERROW-1: WO này chỉ tồn tại vì tập hàng đường ĐỌC đã bị bound.
     depends_on: ["S10-SEC-ROLEMEMBERROW-1"],
     paths: [
@@ -13187,6 +13193,18 @@ export const backlog = [
       // `guard-scope` ([[wo-paths-drive-gate-and-scheduler]]).
       "apps/api/src/permission/**",
       "apps/api/test/**",
+      // Mở rộng theo plan D6 (24/08): D2 thu hẹp `userRoleSchema` + D4 thêm `complete` vào
+      // `roleMemberListSchema` BẮT BUỘC đụng contract — không sửa contract thì apiFetch ZodError
+      // ([[server-masking-needs-optional-fe-schema]]). Chuỗi `roleMembers.*` nằm ở i18n, NGOÀI
+      // `routes/system/roles/**`.
+      "packages/contracts/**",
+      "packages/web-core/**",
+      "apps/app/src/i18n/**",
+      // ⟲R1 plan-review 24/08 (§0.3b): fixture `UserRolesPage.spec.tsx` typed Promise<UserRoleDto>
+      // vỡ typecheck khi thu hẹp; console rbac-api trả Promise<UserRoleDto> — cho phép TRƯỚC, khỏi
+      // quyết giữa chừng dưới guard-scope.
+      "apps/app/src/routes/system/users/**",
+      "apps/console/**",
       "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
       "docs/permission-matrix-spec.md",
       "docs/plans/S10-SEC-ROLEMEMBERFE-1.md",
@@ -13200,10 +13218,13 @@ export const backlog = [
       "Đo PROD 2026-08-22: 0 vai giữ `view:user` ở scope hẹp hơn Company ⇒ chưa ai chạm được. Lỗ TIỀM TÀNG.",
     ],
     done_when: [
-      "PHÁT BIỂU TRƯỚC: vế nào đóng ở FE (bộ đếm + 409 ồn ào) và vế nào BẮT BUỘC đóng ở BE (mã trả về không phân biệt 'đã là thành viên' với 'gán thành công' cho actor ngoài scope đọc) — vá FE một mình KHÔNG đóng oracle",
-      "RED TRƯỚC: ca chứng minh vai `assign-role:user@Company` + `view:user@Own` dựng lại được tập thành viên qua mã trả về của batch",
-      "Bắt buộc ca đối chứng ALLOW: vai `@Company` vẫn dedup đúng, KHÔNG đẻ 409 oan. Xem [[deny-cases-vacuous-without-allow-case]]",
-      "FULL gate security-reviewer PASS; RELEASE-02 đóng KI-073 kèm số đo PROD ĐO LẠI",
+      // ⟲R1 plan 24/08 §0: cơ chế "loạt 409" trong bản seed KHÔNG TỒN TẠI (no-op trả 200 + hàng gốc;
+      // 409 chỉ ở nhánh thua-race). #1-#3 viết lại theo kênh THẬT — nghiệm thu đọc từ đây, để nguyên
+      // là nghiệm thu một cơ chế đã bị bác.
+      "PHÁT BIỂU TRƯỚC: vế nào đóng ở FE (bộ đếm/dedup trung thực theo cờ `complete`) và vế nào BẮT BUỘC đóng ở BE (THÂN 201 của POST /permissions/users/:userId/roles không còn phân biệt 'đã là thành viên' với 'vừa gán' — gỡ hẳn id/grantedBy/createdAt, đồng nhất 4 khoá cho MỌI actor) — vá FE một mình KHÔNG đóng oracle",
+      "RED TRƯỚC: ca chứng minh vai `assign-role:user@Company` + `view:user@Own` dựng lại được tư cách thành viên qua THÂN 201 (createdAt quá khứ / grantedBy gốc / id hàng gốc) của đường ghi",
+      "Bắt buộc ca đối chứng ALLOW: actor `@Company` vẫn GÁN ĐƯỢC THẬT (hàng user_roles + audit RoleAssigned trỏ id hàng thật) và FE `complete=true` dedup đúng như cũ. Xem [[deny-cases-vacuous-without-allow-case]]",
+      "FULL gate security-reviewer PASS; RELEASE-02 đóng KI-073 kèm số đo PROD ĐO LẠI (phủ 4 hình dạng wildcard × 2 cặp riêng) + cấp số KI MỚI cho V2 (DELETE 404-oracle) TRƯỚC khi gạch",
     ],
     notes: [
       "🔴 Vùng đỏ (phân quyền + kênh phụ): planner Sonnet 5 effort xhigh → plan-reviewer → IMPLEMENT/REVIEW Opus theo CLAUDE.md §6.",

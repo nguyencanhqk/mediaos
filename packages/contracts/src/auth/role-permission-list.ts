@@ -75,6 +75,20 @@ export type RoleMemberDto = z.infer<typeof roleMemberSchema>;
 
 export const roleMemberListSchema = z.object({
   members: z.array(roleMemberSchema),
+  /**
+   * S10-SEC-ROLEMEMBERFE-1 (KI-073, D4) — server phát `complete = scope ∈ {Company, System}`: bit
+   * CÓ THẨM QUYỀN về scope `view:user` của CHÍNH actor (FE không tự suy từ `me.scopes` — đó là bộ
+   * phân giải thứ hai, bất đồng được với `resolveStrongestScope`). `complete=false` ⇒ `members` là
+   * TẬP CON không biết thiếu bao nhiêu ⇒ FE tắt mọi khẳng định dựng trên nó (dedup/badge/bộ đếm).
+   *
+   * `.catch(false)` chứ KHÔNG `.optional()`: PROD deploy FE tự động còn API bằng tay ⇒ cửa sổ
+   * "FE mới + BE cũ" là MẶC ĐỊNH sau merge — thiếu khoá (hoặc giá trị sai kiểu) phải rơi về `false`
+   * (partial-mode có nhãn, fail-safe) thay vì ZodError vỡ trắng tab. Với kiểu OUTPUT (z.infer)
+   * `complete` vẫn BẮT BUỘC ⇒ server quên phát là lỗi typecheck, không cần test gánh. ⚠️ Hệ quả:
+   * `complete === true` ở FE không phải tín hiệu "có thẩm quyền tuyệt đối" — server lỗi kiểu dữ
+   * liệu thì FE chỉ thấy `false` (trượt về phía bi quan).
+   */
+  complete: z.boolean().catch(false),
 });
 export type RoleMemberListDto = z.infer<typeof roleMemberListSchema>;
 

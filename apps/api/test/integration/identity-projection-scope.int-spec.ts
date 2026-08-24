@@ -444,5 +444,175 @@ describe.skipIf(!hasLaneDb)(
       expect(rows.length).toBe(3);
       expect(withKey(rows, "userFullName")).toBe(3);
     });
+
+    // ── KI-073 · POST /permissions/users/:userId/roles — oracle THÂN 201 (S10-SEC-ROLEMEMBERFE-1) ──
+    //
+    // Plan §0: nhánh no-op trả 201 + HÀNG GỐC (`existing`) ⇒ `id`/`grantedBy`/`createdAt` phân biệt
+    // được "đã là thành viên" (createdAt quá khứ, grantedBy gốc) với "vừa gán". D2: thân đồng nhất
+    // đúng 4 khoá `{userId, roleId, companyId, expiresAt}` cho MỌI actor, CẢ BA nhánh.
+    //
+    // ⚠️ VỊ TRÍ CỐ Ý Ở CUỐI FILE (plan §3.1 ⟲R2): beforeAll ở đây đăng nhập thêm 2 user (⇒ ghi
+    // `login_logs`) và O2/O3 ghi `user_security_events ROLE_ASSIGNED` trong tenant A — đúng hai bảng
+    // mà B1/B2/C1/C2/C3 đọc với per_page=100. Đặt sau chúng để không xê dịch dữ liệu các ca đó nhìn.
+    //
+    // ⚠️ KHÔNG đụng `roleUnderTest`/`roleOther` (bị A1/R-A1/R-A3/R-T1/R-T2 ghim theo TẬP THÀNH VIÊN)
+    // — mọi ca O sống trên role THỨ BA `roleKN` + user riêng.
+    describe("KI-073 — thân 201 của đường ghi không được phân biệt 'đã là thành viên' với 'vừa gán'", () => {
+      const ASSIGN_PAIR = ["assign-role", "user"] as const;
+      const FOUR_KEYS = ["companyId", "expiresAt", "roleId", "userId"];
+
+      let roleKN = "";
+      let uGrantor = "";
+      let uMemberM = "";
+      let uFreshN = "";
+      let uFreshN2 = "";
+      let tokProv = "";
+      let tokProvCo = "";
+
+      async function assign(token: string, targetUserId: string) {
+        const res = await api(app)
+          .post(`/permissions/users/${targetUserId}/roles`)
+          .set(bearer(token))
+          .send({ roleId: roleKN });
+        return {
+          status: res.status,
+          body: (res.body?.data ?? {}) as Record<string, unknown>,
+        };
+      }
+
+      beforeAll(async () => {
+        const hash = await new PasswordService().hash(PASSWORD);
+        const uProv = await seedUser(direct, A.companyId, "prov@idproj.test", hash);
+        const uProvCo = await seedUser(direct, A.companyId, "provco@idproj.test", hash);
+        uGrantor = await seedUser(direct, A.companyId, "grantor@idproj.test", hash);
+        uMemberM = await seedUser(direct, A.companyId, "memberm@idproj.test", hash);
+        uFreshN = await seedUser(direct, A.companyId, "freshn@idproj.test", hash);
+        uFreshN2 = await seedUser(direct, A.companyId, "freshn2@idproj.test", hash);
+
+        // Hình dạng "người vận hành cấp phát" (plan §1): GHI toàn công ty + ĐỌC danh bạ hẹp.
+        // `isSensitive: true` cho cặp GHI khớp PROD (seedPermissionCatalog là INSERT-only —
+        // cờ bị bỏ qua nếu cặp đã có, nhưng KHÔNG được khai sai trong fixture).
+        await grant(uProv, ASSIGN_PAIR, "Company", true, "ki073-prov-assign");
+        await grant(uProv, DIRECTORY_PAIR, "Own", false, "ki073-prov-dir");
+        // O3: actor đối chứng — cả hai cặp @Company.
+        await grant(uProvCo, ASSIGN_PAIR, "Company", true, "ki073-provco-assign");
+        await grant(uProvCo, DIRECTORY_PAIR, "Company", false, "ki073-provco-dir");
+
+        roleKN = await seedRole(direct, A.companyId, "idproj-ki073-target");
+        // `M` — ĐÃ là thành viên: granted_by = NGƯỜI KHÁC actor + created_at LÙI VỀ QUÁ KHỨ.
+        // Gieo granted_by = actor là O1/O2 xanh-RỖNG với bản vá chỉ che createdAt (plan §3.1).
+        await direct.query(
+          `INSERT INTO user_roles (user_id, role_id, company_id, granted_by, created_at)
+           VALUES ($1, $2, $3, $4, '2026-01-05T07:00:00Z')`,
+          [uMemberM, roleKN, A.companyId, uGrantor],
+        );
+
+        tokProv = await login("prov@idproj.test");
+        tokProvCo = await login("provco@idproj.test");
+      });
+
+      it("O1 DENY — POST cho người ĐÃ là thành viên: đúng 4 khoá, không id/grantedBy/createdAt", async () => {
+        const { status, body } = await assign(tokProv, uMemberM);
+        // 201 đã đo sẵn tại permadmin-roles-http.int-spec.ts:218 — cả ba nhánh cùng status.
+        expect(status).toBe(201);
+        // Neo giá trị TRƯỚC đẳng thức tập khoá — chống thân rỗng/route hỏng (plan §3.1 ⟲R1 #4).
+        expect(body.userId).toBe(uMemberM);
+        expect(body.roleId).toBe(roleKN);
+        // Đẳng thức tập khoá (KHÔNG phủ định "không chứa"): hôm nay thân = HÀNG GỐC ⇒ ĐỎ.
+        expect(Object.keys(body).sort()).toEqual(FOUR_KEYS);
+      });
+
+      it("O2 DENY (cốt lõi) — thân 'đã là thành viên' và 'vừa gán' BẰNG NHAU modulo userId", async () => {
+        const m = await assign(tokProv, uMemberM); // no-op (M vĩnh viễn, request không expiresAt)
+        const n = await assign(tokProv, uFreshN); // fresh — người này ĐƯỢC GÁN THẬT
+        // (a) hai status bằng nhau — status không được mang bit.
+        expect(m.status).toBe(n.status);
+        // (b) mỗi thân đúng bốn khoá — "hai thân bằng nhau" cũng đúng khi cả hai là {} (bẫy xanh-RỖNG).
+        expect(Object.keys(m.body).sort()).toEqual(FOUR_KEYS);
+        expect(Object.keys(n.body).sort()).toEqual(FOUR_KEYS);
+        // (c) bằng nhau modulo userId.
+        const { userId: mUser, ...mRest } = m.body;
+        const { userId: nUser, ...nRest } = n.body;
+        expect(mUser).toBe(uMemberM);
+        expect(nUser).toBe(uFreshN);
+        expect(mRest).toEqual(nRest);
+      });
+
+      it("O3 ALLOW (neo) — mutation vẫn sống: hàng user_roles THẬT + audit RoleAssigned trỏ id THẬT", async () => {
+        const { status } = await assign(tokProvCo, uFreshN2);
+        expect(status).toBe(201);
+        // id đọc từ DB, KHÔNG từ thân response (thân sẽ không còn `id` sau D2).
+        const ur = await direct.query<{ id: string }>(
+          `SELECT id FROM user_roles
+           WHERE company_id=$1 AND user_id=$2 AND role_id=$3 AND deleted_at IS NULL`,
+          [A.companyId, uFreshN2, roleKN],
+        );
+        expect(ur.rows).toHaveLength(1);
+        // Bất biến #2: audit trỏ hàng thật — đột biến M-F (audit ăn bộ chiếu thay vì inserted.id) ĐỎ ở đây.
+        const audit = await direct.query<{ n: number }>(
+          `SELECT count(*)::int AS n FROM audit_logs
+           WHERE company_id=$1 AND object_type='user_role' AND object_id=$2 AND action='RoleAssigned'`,
+          [A.companyId, ur.rows[0]!.id],
+        );
+        expect(audit.rows[0]!.n).toBe(1);
+      });
+
+      it("O4 — no-op KHÔNG ghi gì (ghim D3): user_roles · audit · outbox · security-event đều đứng yên", async () => {
+        // TỰ CHỨA + đếm CÓ ĐIỀU KIỆN theo (company, uMemberM, roleKN) — O2/O3 cùng file làm bẩn số toàn cục.
+        const counts = async () => {
+          const ur = await direct.query<{ ids: string[] | null }>(
+            `SELECT array_agg(id) AS ids FROM user_roles
+             WHERE company_id=$1 AND user_id=$2 AND role_id=$3`,
+            [A.companyId, uMemberM, roleKN],
+          );
+          const ids = ur.rows[0]!.ids ?? [];
+          expect(ids.length, "fixture hỏng: M không có hàng user_roles nào").toBeGreaterThan(0);
+          const audit = await direct.query<{ n: number }>(
+            `SELECT count(*)::int AS n FROM audit_logs
+             WHERE company_id=$1 AND object_type='user_role' AND object_id = ANY($2::uuid[])`,
+            [A.companyId, ids],
+          );
+          const outbox = await direct.query<{ n: number }>(
+            `SELECT count(*)::int AS n FROM outbox_events
+             WHERE event_type='permission.changed' AND payload->>'companyId'=$1 AND payload->>'userId'=$2`,
+            [A.companyId, uMemberM],
+          );
+          const secEvents = await direct.query<{ n: number }>(
+            `SELECT count(*)::int AS n FROM user_security_events
+             WHERE company_id=$1 AND user_id=$2 AND event_type='ROLE_ASSIGNED'`,
+            [A.companyId, uMemberM],
+          );
+          return {
+            userRoles: ids.length,
+            audit: audit.rows[0]!.n,
+            outbox: outbox.rows[0]!.n,
+            secEvents: secEvents.rows[0]!.n,
+          };
+        };
+        const before = await counts();
+        const { status } = await assign(tokProv, uMemberM);
+        expect(status).toBe(201);
+        // D3: nhánh no-op GIỮ NGUYÊN — không tombstone rác, không audit giả, không permission.changed
+        // bắn thừa, không ROLE_ASSIGNED giả (M-E: luôn delete+insert ⇒ ĐỎ cả bốn bộ đếm).
+        expect(await counts()).toEqual(before);
+      });
+
+      // S1 — cờ `complete` (D4). ⚠️ KHÔNG dùng helper roleMembers() — nó VỨT `complete` (chỉ trả
+      // {status, rows}), dùng nó là ca xanh-rỗng kiểu "undefined === false" không bao giờ xanh nổi
+      // sau vá / hoặc đỏ vì sai lý do. Gọi thẳng route.
+      it("S1a — `view:user@Own` ⇒ complete === false", async () => {
+        const res = await api(app).get(`/auth/roles/${roleUnderTest}/members`).set(bearer(tokOwn));
+        expect(res.status).toBe(200);
+        expect(res.body.data.complete).toBe(false);
+      });
+
+      it("S1b — `view:user@Company` ⇒ complete === true", async () => {
+        const res = await api(app)
+          .get(`/auth/roles/${roleUnderTest}/members`)
+          .set(bearer(tokCompany));
+        expect(res.status).toBe(200);
+        expect(res.body.data.complete).toBe(true);
+      });
+    });
   },
 );
