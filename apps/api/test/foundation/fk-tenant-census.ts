@@ -81,6 +81,16 @@ export interface CatalogFkGuard {
   tgname: string;
   /** `O` = enabled (origin) · `D` = disabled · `R`/`A` = replica-only. Chỉ `O` mới tính là đang chặn. */
   tgenabled: string;
+  /**
+   * Bitmask `pg_trigger.tgtype`: bit0=ROW(1) · bit1=BEFORE(2) · bit2=INSERT(4) · bit3=DELETE(8) ·
+   * bit4=UPDATE(16).
+   *
+   * PHẢI đọc, không được bỏ: `tgenabled='O'` chỉ nói trigger đang BẬT, KHÔNG nói nó phủ sự kiện nào.
+   * Một `CREATE TRIGGER … BEFORE INSERT` rớt mất `OR UPDATE` vẫn cho đủ 11 trigger ACTIVE với `argv`
+   * khớp cả bảng cha lẫn cột ⇒ ratchet (l)(m)(n) và tự-kiểm (1) của `0547` đều xanh, trong khi đường
+   * re-point-bằng-UPDATE mở lại trong im lặng. Đó là đúng khuôn "test ghim một lỗ ở trạng thái mở".
+   */
+  tgtype: number;
   /** `TG_ARGV`: `[<bảng cha>, <cột FK>]`. */
   argv: [string, string];
 }
@@ -223,6 +233,7 @@ export async function collectCatalogFkGuards(direct: Pool): Promise<CatalogFkGua
     `SELECT c.relname          AS "childTable",
             t.tgname           AS "tgname",
             t.tgenabled::text  AS "tgenabled",
+            t.tgtype::int      AS "tgtype",
             (SELECT array_agg(u.a ORDER BY u.ord)
                FROM unnest(string_to_array(encode(t.tgargs, 'escape'), '\\000'))
                     WITH ORDINALITY AS u(a, ord)
@@ -303,9 +314,9 @@ export async function collectCatalogGuardFunction(direct: Pool): Promise<{
 }
 
 /** Trigger bất biến `company_id` (hàm `enforce_company_id_immutable` của mig `0436`) đang gắn ở đâu. */
-export async function collectCompanyImmutableTriggers(direct: Pool): Promise<
-  { table: string; tgname: string; tgenabled: string }[]
-> {
+export async function collectCompanyImmutableTriggers(
+  direct: Pool,
+): Promise<{ table: string; tgname: string; tgenabled: string }[]> {
   const { rows } = await direct.query<{ table: string; tgname: string; tgenabled: string }>(
     `SELECT c.relname AS "table", t.tgname AS "tgname", t.tgenabled::text AS "tgenabled"
        FROM pg_trigger t

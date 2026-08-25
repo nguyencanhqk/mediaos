@@ -54,7 +54,9 @@ const rid = (): string => randomUUID().slice(0, 8);
  * vì 11 cặp chạy trong MỘT `it` (danh sách cặp chỉ có sau khi query catalog, tức sau lúc Vitest thu
  * thập test) — mỗi cặp vẫn phải nói được nó hỏng kiểu gì.
  */
-type WriteResult = { ok: true } | { ok: false; code: string | undefined; message: string };
+type WriteResult =
+  | { ok: true; rowCount: number }
+  | { ok: false; code: string | undefined; message: string };
 
 interface ChildCtx {
   direct: Pool;
@@ -275,9 +277,9 @@ describe.skipIf(!hasDb)("S10-SEC-FKCATALOG-1 · guard FK catalog toàn cục (l�
     try {
       await c.query("BEGIN");
       await c.query("SELECT set_config('app.current_company_id', $1, true)", [companyId]);
-      await c.query(sql, values);
+      const r = await c.query(sql, values);
       await c.query("ROLLBACK");
-      return { ok: true };
+      return { ok: true, rowCount: r.rowCount ?? 0 };
     } catch (e) {
       try {
         await c.query("ROLLBACK");
@@ -296,9 +298,9 @@ describe.skipIf(!hasDb)("S10-SEC-FKCATALOG-1 · guard FK catalog toàn cục (l�
     const c = await direct.connect();
     try {
       await c.query("BEGIN");
-      await c.query(sql, values);
+      const r = await c.query(sql, values);
       await c.query("ROLLBACK");
-      return { ok: true };
+      return { ok: true, rowCount: r.rowCount ?? 0 };
     } catch (e) {
       try {
         await c.query("ROLLBACK");
@@ -454,7 +456,61 @@ describe.skipIf(!hasDb)("S10-SEC-FKCATALOG-1 · guard FK catalog toàn cục (l�
       `INSERT INTO user_roles (user_id, role_id, company_id) VALUES ($1, $2, $3)`,
       [userA, roleGlobal, A.companyId],
     );
-    expect(res).toEqual({ ok: true });
+    expect(res).toEqual({ ok: true, rowCount: 1 });
+  });
+
+  /**
+   * CỨNG(3)/(4) — ĐƯỜNG **UPDATE**. Trigger là `BEFORE INSERT OR UPDATE`; 8 ca ở trên chỉ phát INSERT,
+   * nên nửa mặt phẳng UPDATE trước đây KHÔNG có phép đo nào.
+   *
+   * Đây không phải ca cho đủ bộ: UPDATE là đường đổi/gỡ role **được thiết kế** của codebase này —
+   * `0471` `REVOKE DELETE ON user_roles FROM mediaos_app` + GRANT UPDATE, ghi rõ "gỡ role đi qua UPDATE
+   * (soft-delete)". Kịch bản re-point: hàng `user_roles` hợp lệ của tenant A đổi `role_id` sang role
+   * của tenant B. RLS cho qua (`company_id` KHÔNG đổi, vẫn = A) ⇒ guard `0547` là thứ DUY NHẤT chặn.
+   *
+   * Ca ALLOW (4) là bắt buộc, không phải trang trí: thiếu nó thì (3) xanh cả khi trigger chặn MỌI
+   * UPDATE. Và cả hai đều assert `rowCount: 1` — một UPDATE khớp 0 hàng cũng trả "thành công", tức
+   * (4) sẽ xanh-RỖNG nếu mệnh đề WHERE trượt hoặc RLS che mất hàng.
+   */
+  async function seedCommittedUserRole(): Promise<{ rowId: string; userId: string }> {
+    const roleGlobal = await globalParent("roles");
+    const userId = await seedUser(direct, A.companyId, `fkg-upd-${rid()}@a.test`);
+    const r = await direct.query<{ id: string }>(
+      `INSERT INTO user_roles (user_id, role_id, company_id) VALUES ($1, $2, $3) RETURNING id`,
+      [userId, roleGlobal, A.companyId],
+    );
+    return { rowId: r.rows[0].id, userId };
+  }
+
+  it("CỨNG(3) user_roles UPDATE: re-point role_id sang role của tenant B ⇒ 23503 catalog_fk_tenant_mismatch", async () => {
+    const { rowId } = await seedCommittedUserRole();
+    const roleB = await PARENT_SEEDERS.roles(direct, B.companyId);
+    const res = await writeAsApp(A.companyId, `UPDATE user_roles SET role_id = $1 WHERE id = $2`, [
+      roleB,
+      rowId,
+    ]);
+    expect(res).toMatchObject({ ok: false, code: "23503" });
+    expect(
+      isGuardRejection(res),
+      `UPDATE là đường đổi role CHÍNH (0471 REVOKE DELETE ⇒ ép qua UPDATE). Guard phải chặn ` +
+        `re-point sang tenant khác y như INSERT. Nhận: ${JSON.stringify(res)}`,
+    ).toBe(true);
+  });
+
+  it("CỨNG(4) user_roles UPDATE: re-point sang role TOÀN CỤC khác ⇒ THÀNH CÔNG (1 hàng)", async () => {
+    const { rowId } = await seedCommittedUserRole();
+    // Role toàn cục THỨ HAI (khác cái đã gán ở seed) — re-point tới chính nó thì UPDATE không đổi gì
+    // và ca này không chứng minh được guard cho qua đường UPDATE.
+    const otherGlobalRole = await PARENT_SEEDERS.roles(direct, null);
+    globalRowsToClean.push({ table: "roles", id: otherGlobalRole });
+    const res = await writeAsApp(A.companyId, `UPDATE user_roles SET role_id = $1 WHERE id = $2`, [
+      otherGlobalRole,
+      rowId,
+    ]);
+    expect(
+      res,
+      `Guard chặn UPDATE hợp lệ = lặp lại thất bại của composite FK, chỉ khác đường vào.`,
+    ).toEqual({ ok: true, rowCount: 1 });
   });
 
   /**

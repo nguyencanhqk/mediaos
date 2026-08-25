@@ -276,6 +276,24 @@ describe.skipIf(!hasDb)("S6-SEC-XTENANTFK-1 · chốt FK chéo tenant", () => {
           `${key}: trigger ${guard.tgname} tgenabled='${guard.tgenabled}' (≠ 'O') — đang BỊ TẮT`,
         );
       }
+      // Trigger phải phủ CẢ INSERT LẪN UPDATE, và phải là BEFORE … FOR EACH ROW. `tgenabled` KHÔNG nói
+      // gì về việc đó — xem chú thích `tgtype` ở `CatalogFkGuard`. Đường re-point-bằng-UPDATE là đường
+      // gỡ/đổi role CHÍNH của codebase (`0471` REVOKE DELETE ON user_roles ⇒ ép qua UPDATE), nên một
+      // trigger INSERT-only để lỗ KI-055 mở lại đúng ở cặp crown-jewel mà mọi lưới khác vẫn xanh.
+      if (guard) {
+        const missing = [
+          (guard.tgtype & 1) === 0 ? "FOR EACH ROW" : null,
+          (guard.tgtype & 2) === 0 ? "BEFORE" : null,
+          (guard.tgtype & 4) === 0 ? "INSERT" : null,
+          (guard.tgtype & 16) === 0 ? "UPDATE" : null,
+        ].filter((x): x is string => x !== null);
+        if (missing.length > 0) {
+          bad.push(
+            `${key}: trigger ${guard.tgname} KHÔNG phủ ${missing.join(" + ")} ` +
+              `(tgtype=${guard.tgtype}) — phải là BEFORE INSERT OR UPDATE … FOR EACH ROW`,
+          );
+        }
+      }
       if (guardActive && waiver) {
         bad.push(`${key}: vừa có guard ACTIVE vừa còn waiver — gỡ waiver (đã vá thì đừng ký thêm)`);
       }

@@ -75,6 +75,16 @@
 -- ĐƯỜNG LÙI (Down thủ công) ở CUỐI FILE — liệt kê ĐÍCH DANH từng trigger, KHÔNG dùng `LIKE` quét rộng
 -- (bài học R10 của `0535`: bản lọc `LIKE '%_company_fk'` gỡ nhầm constraint của `0503`).
 
+-- ── KHOÁ ────────────────────────────────────────────────────────────────────────────────────────────
+-- File này lấy ACCESS EXCLUSIVE trên 9 bảng (`dashboard_widgets` + 8 bảng con, trong đó có `notifications`
+-- và `user_roles` — ghi liên tục) và GIỮ tới lúc commit, vì drizzle bọc TOÀN BỘ lượt migrate trong MỘT
+-- transaction. Không có `lock_timeout`, một transaction dài đang giữ khoá trên bảng nóng sẽ làm
+-- `CREATE TRIGGER` xếp hàng, và MỌI câu tới sau xếp hàng phía sau nó ⇒ đóng băng hàng đợi khoá của cả DB
+-- giữa lúc deploy. Fail-fast thay vì treo: `0535` đã đặt đúng khuôn này (do security-reviewer FULL gate
+-- 2026-07-31 yêu cầu) và `0546` theo; `0547` bỏ sót — vá ở đây (FULL gate 2026-08-25).
+SET LOCAL lock_timeout = '5s';
+--> statement-breakpoint
+
 -- ── (0) TIỀN KIỂM — 13 câu đo, RAISE EXCEPTION nếu có hàng lệch. KHÔNG tự dọn. ────────────────────────
 DO $precheck$
 DECLARE
@@ -175,15 +185,22 @@ DECLARE
   v_fk_value       uuid;
   v_parent_company uuid;
   v_found          boolean;   -- cờ SENTINEL — KHÔNG thay bằng `FOUND`, xem khối chú thích dưới
+  v_row            jsonb;
 BEGIN
+  -- `to_jsonb(NEW)` serialize TOÀN BỘ hàng (kể cả cột payload jsonb của `dashboard_widget_cache` /
+  -- `notifications`) ⇒ dựng ĐÚNG MỘT LẦN rồi dùng lại cho cả `?` lẫn `->>`. Gọi hai lần thì
+  -- `notifications` (2 trigger guard: `event_id` + `template_id`) tốn 4 lượt serialize toàn-hàng cho
+  -- mỗi notification, nhân với fan-out N người nhận.
+  v_row := to_jsonb(NEW);
+
   -- `->>` với khoá KHÔNG tồn tại trả NULL chứ không lỗi ⇒ một ký tự gõ nhầm trong `TG_ARGV[1]` của một
   -- trong 11 `CREATE TRIGGER` sẽ làm bảng đó KHÔNG được bảo vệ mà không có gì kêu. Chặn tại gốc:
-  IF NOT (to_jsonb(NEW) ? v_fk_col) THEN
+  IF NOT (v_row ? v_fk_col) THEN
     RAISE EXCEPTION 'catalog_fk_guard: cột % không tồn tại trên %', v_fk_col, TG_TABLE_NAME
       USING ERRCODE = 'internal_error';
   END IF;
 
-  v_fk_value := (to_jsonb(NEW) ->> v_fk_col)::uuid;
+  v_fk_value := (v_row ->> v_fk_col)::uuid;
   IF v_fk_value IS NULL THEN
     RETURN NEW;   -- cột FK tự nó NULL: không phải việc của guard này (mệnh đề WHEN đã cắt phần lớn)
   END IF;
@@ -322,6 +339,12 @@ CREATE TRIGGER trg_seed_items_seed_batch_id_catalog_fk
   EXECUTE FUNCTION enforce_company_id_catalog_fk('seed_batches', 'seed_batch_id');
 --> statement-breakpoint
 
+-- TRẢ `lock_timeout` VỀ MẶC ĐỊNH. `SET LOCAL` sống tới hết TRANSACTION, mà drizzle bọc TẤT CẢ migration
+-- đang chờ trong MỘT transaction ⇒ không trả lại thì mọi migration áp SAU `0547` trong cùng lượt chạy
+-- cũng thừa hưởng timeout 5s và có thể chết oan vì một khoá chậm không liên quan (bước (3) của `0535`).
+SET LOCAL lock_timeout = DEFAULT;
+--> statement-breakpoint
+
 -- ── (4) TỰ-KIỂM — "migration chạy xong" KHÔNG chứng minh "guard sống" ────────────────────────────────
 -- Đặt CUỐI file: điều kiện nào sai thì migration abort và transaction cuốn lại toàn bộ (drizzle bọc cả
 -- lượt migrate trong MỘT transaction) — không để lại trạng thái nửa vời.
@@ -337,7 +360,9 @@ BEGIN
   -- (1) đủ 11 trigger guard + trigger bất biến của `dashboard_widgets`.
   SELECT count(*) INTO v_triggers
     FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
-   WHERE p.proname = 'enforce_company_id_catalog_fk' AND NOT t.tgisinternal;
+   WHERE p.proname = 'enforce_company_id_catalog_fk'
+     AND p.pronamespace = 'public'::regnamespace   -- đồng bộ với các câu (2)-(5) dưới; đừng đếm hàm trùng tên ở schema khác
+     AND NOT t.tgisinternal;
   IF v_triggers <> 11 THEN
     RAISE EXCEPTION '[0547] tự-kiểm (1): có % trigger guard, cần đúng 11', v_triggers;
   END IF;
