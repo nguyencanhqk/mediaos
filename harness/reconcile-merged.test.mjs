@@ -44,6 +44,33 @@ test("B1b — docs(plan|status) là bookkeeping ⇒ bị loại khỏi nguồn s
   }
 });
 
+// ── B1c: THÂN "plan …"/"kế hoạch …" là bookkeeping dù SCOPE là domain (thủng lần 4 — 25/08/2026) ─
+// B1b chắn theo SCOPE (`docs(plan)`), mà scope chỉ là QUY ƯỚC ĐẶT TÊN — không có gì ép. Commit
+// `docs(sec): plan S10-SEC-FKCATALOG-1 …` (273a980e) đặt scope theo domain nên trượt lớp chắn đó,
+// và reconcile đóng dấu 'finished' cho WO mà PR thi công (#416) VẪN ĐANG MỞ. Chắn theo THÂN.
+test("B1c — docs(<domain>): plan|kế hoạch … là bookkeeping ⇒ bị loại khỏi nguồn stamp", () => {
+  const cases = [
+    "docs(sec): plan S10-SEC-FKCATALOG-1 qua cổng plan-review + vá lỗ scope paths (KI-055) (#415)",
+    "docs(lms): plan hồi cố S5-LMS-UI-2 (đóng WO) + micro-plan S5-LMS-UI-3",
+    "docs(task): kế hoạch đợt A pipeline + seed 4 WO redesign TASK (benchmark MISA AMIS) (#232)",
+  ];
+  for (const s of cases) {
+    assert.ok(isBookkeeping(s), `phải nhận là bookkeeping: ${s}`);
+  }
+});
+
+// Vá lần 4 KHÔNG được nuốt commit ship chỉ vì subject có chữ "plan" ở GIỮA (vd "plan-review",
+// "sau plan"): luật neo ngay SAU dấu hai chấm, nên các ca dưới phải vẫn là ship.
+test("B1c-đối chứng — chữ 'plan' KHÔNG ở đầu thân ⇒ vẫn là commit ship", () => {
+  const cases = [
+    "docs(sec): KI-055 — 13 câu đo trên BẢN SAO PROD giữ quyền = 0/0 (S10-SEC-FKCATALOG-1)",
+    "feat(att): S10-ATT-NOTIPROD-1 — thi công theo plan đã duyệt",
+  ];
+  for (const s of cases) {
+    assert.ok(!isBookkeeping(s), `KHÔNG được coi là bookkeeping: ${s}`);
+  }
+});
+
 // ── B2: commit SHIP THẬT vẫn phải lọt qua (không được vá quá tay) ───────────────────────────
 // Nếu luật lọc nới rộng tới mức nuốt cả commit ship, board sẽ kẹt ready dù việc đã vào master —
 // đúng bẫy ngược mà chính reconcile sinh ra để chữa (S2-INT-1 · S2-INT-2).

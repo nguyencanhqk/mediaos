@@ -84,7 +84,22 @@ const tokenRe = (id) => new RegExp(`(^|[^\\w-])${esc(id)}([^\\w-]|$)`);
 //   những WO CHƯA ship. Lỗ này mở sẵn nhưng chưa lộ vì cả ba WO đó về sau đều ship thật.
 //   Đo trước khi vá: `docs(plan)` xuất hiện ĐÚNG 1 lần trong 400 commit đầu master (chính commit hỏng),
 //   `docs(status)` toàn bộ là regen STATUS ⇒ KHÔNG WO nào từng ship qua hai scope này ⇒ vá không mất dấu ai.
-const BOOKKEEPING_RE = /^(chore\((harness|docs|gov)\)|docs\((plan|status)\))/i;
+//
+// Vì sao khớp cả THÂN subject "plan …"/"kế hoạch …" chứ không chỉ SCOPE (thêm 2026-08-25 —
+// false-positive ĐÃ XẢY RA LẦN 4):
+//   `docs(sec): plan S10-SEC-FKCATALOG-1 qua cổng plan-review + vá lỗ scope paths (KI-055) (#415)`
+//   (273a980e) là commit KẾ HOẠCH — nhưng người viết đặt scope theo DOMAIN (`sec`) chứ không phải
+//   `plan`, nên lớp chắn lần 3 (`docs\((plan|status)\)`) trượt ⇒ reconcile đóng dấu 'finished' cho một
+//   WO mà PR thi công (#416) VẪN ĐANG MỞ. Lỗ CÙNG LOẠI mở lại qua kênh khác: chắn theo scope là chắn
+//   theo QUY ƯỚC ĐẶT TÊN, mà không có gì ép quy ước đó. Sửa: nhận diện theo THÂN —
+//   `docs(<scope bất kỳ>): plan|kế hoạch …` = commit kế hoạch, theo định nghĩa nói việc CHƯA làm.
+//   Đo trước khi vá (400 commit đầu origin/master): luật mới bắt ĐÚNG 6 commit — 273a980e, b6186ed1,
+//   ad2325f6 (hai cái sau đã thuộc `docs(plan)` cũ), 1bc40e4b, 674cc0d7, 731072e6. Mọi WO được nhắc
+//   trong 5 commit ngoài 273a980e (S5-LMS-UI-2/UI-3 · S5-LMS-APP-2 · S10-HR-STATUSUI-1 ·
+//   S10-ATT-NOTIPROD-1) đều đã `status: "done"` LITERAL trong backlog ⇒ shouldAutoStamp bỏ qua ⇒
+//   nới luật KHÔNG làm WO nào mất dấu.
+const BOOKKEEPING_RE =
+  /^(chore\((harness|docs|gov)\)|docs\((plan|status)\)|docs\([^)]+\):\s*(plan|kế hoạch)\b)/i;
 
 // Subject có phải commit ghi sổ/quản trị (KHÔNG BAO GIỜ là "WO này đã ship") không?
 // Tách riêng để test soi được — đây là lớp chắn đã thủng 2 lần (S6-SEC-MV-1 · S6-SEC-IDENTITY-PROJ-1).
