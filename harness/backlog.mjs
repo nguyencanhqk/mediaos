@@ -13595,6 +13595,10 @@ export const backlog = [
   {
     // Seed 24/08/2026 — "Đợt 3". Kế thừa S10-QA-ROUTEHTTP-1: đợt đó phủ 12 route risk>=5 và để lại
     // phần đuôi risk<=3. Xếp CUỐI vì rủi ro cao đã dọn; đây là việc chạy NỀN, không tranh chỗ với WO khác.
+    // ⚠️ 25/08/2026 — ĐỔI MÃ: khối này bị seed TRÙNG mã với `S10-QA-ROUTEHTTP-2` đã ship 18/08
+    // (12 route risk>=5). Trùng mã ⇒ overlay ledger khoá theo id sẽ áp dấu 'done' của WO cũ lên CẢ
+    // khối này ⇒ việc KI-025 hiện "Đã xong" trên board và KHÔNG BAO GIỜ được xếp READY. Đổi khối MỚI
+    // (không phải khối cũ) vì mã cũ đã nằm trong ledger, 4 file test, docs/plans/INDEX.md và plan file.
     id: "S10-QA-ROUTEHTTP-3",
     module: "QA",
     layer: "QA",
