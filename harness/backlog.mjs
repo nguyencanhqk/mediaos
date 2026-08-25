@@ -13677,4 +13677,50 @@ export const backlog = [
       "⚠️ int-spec ngủ khi thiếu `LANE_DB` ⇒ verify bằng `bash scripts/lane-db-setup.sh paramuuid` + export, KHÔNG `source .env` ([[sourcing-dotenv-poisons-test-run-node-env]]).",
     ],
   },
+  {
+    // Seed 25/08/2026 sau khi CHÍNH phiên đó vấp CẢ HAI ca bệnh trong một buổi:
+    //   (1) `S10-QA-ROUTEHTTP-2` bị seed trùng mã cho hai WO khác nhau ⇒ dấu 'done' của WO cũ áp lên
+    //       khối mới ⇒ KI-025 hiện "Đã xong" và KHÔNG BAO GIỜ được xếp READY (vá tay ở #417);
+    //   (2) #414 và #416 cùng THÊM MỚI một `DECISIONS-10` khác tên file ⇒ git merge SẠCH cả hai ⇒
+    //       repo im lặng có HAI ADR số 10 (vá tay lúc merge, đổi #414 thành DECISIONS-11).
+    // Cả hai đã chữa CA BỆNH, CHƯA chặn LỚP. Không có cổng nào bắt được lần thứ ba.
+    id: "S10-GOV-IDUNIQUE-1",
+    module: "GOV",
+    layer: "QA",
+    title:
+      "KI-079 — danh tính TRÙNG lọt qua mọi lưới: mã WO trong `backlog.mjs` và số ADR trong `docs/DECISIONS/` đều KHÔNG có cổng ép duy nhất; hai file khác TÊN mang cùng SỐ thì git merge sạch, không ai thấy",
+    zone: "yellow",
+    status: "todo",
+    depends_on: [],
+    paths: [
+      "harness/id-uniqueness.test.mjs",
+      "harness/backlog.mjs",
+      ".github/workflows/ci.yml",
+      ".github/workflows/api.yml",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "docs/plans/S10-GOV-IDUNIQUE-1.md",
+    ],
+    skills: ["code-review"],
+    src: [
+      "**Ca bệnh 1 (mã WO), ĐÃ ĐO 25/08:** `harness/backlog.mjs` có ĐÚNG hai khối `id: \"S10-QA-ROUTEHTTP-2\"` — khối ship 18/08 (12 route risk>=5) và khối KI-025 seed 24/08. `harness/lib/wo-state.mjs` `statusOverlay()` trả `Map<woId, bucket>` ⇒ khoá theo id ⇒ dấu của khối này áp lên khối kia. Hệ quả ĐO ĐƯỢC: khối KI-025 hiện trong danh sách 'Đã xong' của STATUS và KHÔNG lọt `isReady`.",
+      "**Ca bệnh 2 (số ADR), ĐÃ ĐO 25/08:** master trước khi merge có cao nhất `DECISIONS-09`. PR #414 thêm `DECISIONS-10_Role_Membership_Absence_Signal.md`, PR #416 thêm `DECISIONS-10_Catalog_FK_Company_Guard_Trigger.md`. Khác tên file ⇒ **git KHÔNG báo xung đột** ⇒ cả hai vào master im lặng. Đã vá tay lúc merge (#414 → DECISIONS-11) nhưng KHÔNG có cổng.",
+      "Cổng ĐÃ CÓ để bắt chước khuôn: `harness/reconcile-merged.test.mjs` + `harness/lane-db-guard.test.mjs` — chạy bằng `node --test`, không cần DB, không cần build.",
+      "⚠️ **Job CI liệt kê file test TƯỜNG MINH, không glob:** `.github/workflows/ci.yml` job `tooling` và `.github/workflows/api.yml` bước 'Tooling tests (node --test)' đều liệt kê từng đường dẫn. Viết test mà quên thêm vào CẢ HAI ⇒ spec tồn tại mà KHÔNG BAO GIỜ chạy — đúng lỗ mà chú thích ngay trên job `tooling` nói nó sinh ra để đóng.",
+    ],
+    done_when: [
+      "PHÁT BIỂU TRƯỚC mức độ: đây là nợ **SỔ SÁCH**, KHÔNG phải lỗ bảo mật — không rò dữ liệu, không hỏng runtime. Giá trị là chặn việc BIẾN MẤT ÂM THẦM (một WO không bao giờ được làm; hai ADR cùng số khiến người đọc trích dẫn nhầm quyết định)",
+      "Cổng 1 — mã WO: ca chứng minh mọi `id` trong `backlog.mjs` là DUY NHẤT. Ca thử-ngược BẮT BUỘC: gieo mảng có 2 id trùng ⇒ cổng phải ĐỎ. Không có ca thử-ngược thì cổng xanh-rỗng ([[deny-cases-vacuous-without-allow-case]])",
+      "Cổng 2 — số ADR: ca chứng minh không hai file nào trong `docs/DECISIONS/` mang cùng tiền tố `DECISIONS-NN`. Ca thử-ngược tương tự (danh sách tên file giả có 2 số 10 ⇒ ĐỎ). Tách hàm thuần nhận DANH SÁCH TÊN FILE để test soi được, đừng đọc thẳng đĩa trong ca thử-ngược",
+      "**THÊM file test vào CẢ HAI workflow** (`ci.yml` job `tooling` + `api.yml` bước 'Tooling tests'). Bước này mà quên thì WO coi như CHƯA làm — verify bằng cách xem log job trên PR có in tên file mới",
+      "Chạy cổng trên master HIỆN TẠI và ghi số: kỳ vọng XANH (cả hai ca bệnh đã vá tay ở #417 và lúc merge #414). Nếu ĐỎ ⇒ còn ca trùng chưa ai thấy, ghi ra chứ đừng sửa lặng",
+      "Cân nhắc mở rộng sang `docs/plans/INDEX.md` và số hiệu `KI-0NN` trong RELEASE-02 (cùng LỚP danh tính trùng). Nếu quyết KHÔNG làm trong WO này thì KHAI RÕ vì sao, đừng bỏ lửng",
+      "RELEASE-02 mở rồi ĐÓNG KI-079 trong cùng WO, kèm dẫn chiếu hai ca bệnh gốc (#417 và lượt merge #414) làm bằng chứng lớp lỗi có thật, không phải giả định",
+    ],
+    notes: [
+      "🟡 LIGHT gate (typescript-reviewer + quality-gate). Chỉ chạm harness + workflow + docs, KHÔNG đụng code sản phẩm, KHÔNG migration.",
+      "⚠️ Cổng phải ghim ĐỊNH NGHĨA chứ không phải TÊN: đếm số ADR bằng tiền tố `DECISIONS-NN` trích từ tên file, đừng hard-code danh sách số đang có — hard-code thì thêm ADR mới là đỏ oan ([[index-ratchet-must-pin-definition-not-name]]).",
+      "⚠️ Đừng chỉ ghim `backlog.mjs`: overlay ledger cũng khoá theo id, nên trùng id là lỗi HAI TẦNG. Test nên nêu rõ hệ quả tầng ledger trong docblock để người sau không nới luật.",
+      "⚠️ `node --test` không cần DB/Docker ⇒ cổng này phải chạy được TRÊN MỌI PR, kể cả PR docs-only. Đó là lý do đặt ở `harness/` chứ không phải `apps/api/test/foundation/`.",
+    ],
+  },
 ];

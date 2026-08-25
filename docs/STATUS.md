@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-25 07:24Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-25 07:45Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -11,6 +11,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🟡 `S10-CHAT-EMITGUARD-2` KI-076 — NĂM route REST của CALL phát realtime SAU COMMIT không bọc (`emitLifecycle` :203 invite · :558 dùng chung 4 route vòng đời); 3/5 rơi vào trạng thái CUỐI mà KHÔNG job nào quét ⇒ peer mất sự kiện VĨNH VIỄN
 - 🟡 `S10-QA-ROUTEHTTP-3` KI-025 — nốt phần đuôi độ phủ HTTP: sau S10-QA-ROUTEHTTP-1 (370/499 phủ, 129 chưa, 12 route risk>=5 đã dọn) còn lại nhóm risk<=3 chưa có ca HTTP nào chạm
+- 🟡 `S10-GOV-IDUNIQUE-1` KI-079 — danh tính TRÙNG lọt qua mọi lưới: mã WO trong `backlog.mjs` và số ADR trong `docs/DECISIONS/` đều KHÔNG có cổng ép duy nhất; hai file khác TÊN mang cùng SỐ thì git merge sạch, không ai thấy
 
 **CHỜ (kẹt phụ thuộc):**
 - _(trống)_
@@ -19,7 +20,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 0
+- **branch**: `master` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 214 — `0547_s10secfkcatalog1_catalog_fk_tenant_guard` (215 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -28,6 +29,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `81b3c26c` | 2026-08-25 | chore(gov): regen STATUS sau khi 6 PR land (#411 #412 #413 #414 #416 #417) — 0 in_progress, READY = S10-CHAT-EMITGUARD-2 · S10-QA-ROUTEHTTP-3 |
 | `46ba882a` | 2026-08-25 | fix(harness): reconcile đóng dấu OAN theo THÂN commit kế hoạch + gỡ trùng mã WO (#417) |
 | `63950c35` | 2026-08-25 | fix(sec): DELETE role-member trả 404 CÓ ĐIỀU KIỆN — đóng KI-074 (S10-SEC-ROLEMEMBERDEL-1) (#414) |
 | `0794b50d` | 2026-08-25 | fix(sec): 4 đường 429/từ-chối để lại vết + gộp hàng blocked — đóng KI-047 + KI-048 (S10-SEC-LOGINLOG429-1) (#411) |
@@ -39,7 +41,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `726f3c37` | 2026-08-25 | fix(fnd): 4 route GHI validate ở BIÊN — đóng KI-068 (S10-FND-BODYVALIDATE-1) (#410) |
 | `b23a0ba6` | 2026-08-24 | chore(gov): Đợt 3 — seed 5 WO kỹ thuật + đính chính số đo đã trôi của KI-047 (#409) |
 | `138d78d1` | 2026-08-24 | chore(gov): cấp số cho nợ vô hình đường REST — KI-076 + seed WO S10-CHAT-EMITGUARD-2 |
-| `acc11874` | 2026-08-24 | feat(chat): ghim hợp đồng biên "emit không ném" cho HAI job CHAT — đóng KI-075 (S10-CHAT-EMITGUARD-1) (#408) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
