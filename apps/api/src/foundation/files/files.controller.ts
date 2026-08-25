@@ -87,7 +87,7 @@ export class FilesController {
   /** GET /foundation/files/:id — metadata 1 file (FilePolicy.canView là chốt). Gate view:foundation-file. */
   @Get(":id")
   @RequirePermission("view", "foundation-file")
-  getOne(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getOne(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.files.getMetadata(req.user, id);
   }
 
@@ -97,7 +97,7 @@ export class FilesController {
    */
   @Get(":id/download-url")
   @RequirePermission("download", "foundation-file")
-  downloadUrl(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  downloadUrl(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.files.getDownloadUrl(req.user, id);
   }
 
@@ -110,7 +110,7 @@ export class FilesController {
   @RequirePermission("download", "foundation-file")
   async download(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Res() res: Response,
   ): Promise<void> {
     const { url } = await this.files.getDownloadUrl(req.user, id);
@@ -136,13 +136,24 @@ export class FilesController {
   }
 
   /**
-   * DELETE /foundation/files/:id/links/:link_id — gỡ link (soft-delete, FilePolicy.canUnlink là chốt). Gate
-   * unlink:foundation-file. 204 No Content. :id (file) khoanh phạm vi; service kiểm link thuộc cùng tenant.
+   * DELETE /foundation/files/:id/links/:linkId — gỡ link (soft-delete, FilePolicy.canUnlink là chốt).
+   * Gate unlink:foundation-file. 204 No Content.
+   *
+   * ⚠️ ĐÍNH CHÍNH (S10-FND-PARAMUUID-1, 25/08/2026). Bản trước của docblock này viết ":id (file)
+   * khoanh phạm vi" — **KHÔNG ĐÚNG**: handler không đọc `:id` và không truyền nó đi đâu; `unlink` ở
+   * service nhận đúng `linkId` (`files.service.ts`). Cô lập tenant vẫn được giữ, nhưng bởi
+   * `linkRepo.findByIdTx(user.companyId, linkId, tx)` — tức bởi ngữ cảnh tenant, KHÔNG phải bởi `:id`.
+   * Câu cũ sai theo hướng làm người đọc YÊN TÂM HƠN thực tế, nên phải sửa chứ không để nguyên.
+   *
+   * ⚠️ Vì thế `:id` CỐ Ý không có `ParseUUIDPipe`: dựng lớp validate cho một tham số không ai đọc là
+   * validate dữ liệu không tồn tại. Ghim bằng ca ":id rác KHÔNG bị chặn" trong
+   * `test/integration/files-param-uuid.int-spec.ts` — nếu sau này `:id` được dùng thật thì ca đó ĐỎ
+   * và buộc người sửa đọc lại đoạn này.
    */
   @Delete(":id/links/:linkId")
   @HttpCode(204)
   @RequirePermission("unlink", "foundation-file")
-  async unlink(@Req() req: AuthenticatedRequest, @Param("linkId") linkId: string) {
+  async unlink(@Req() req: AuthenticatedRequest, @Param("linkId", ParseUUIDPipe) linkId: string) {
     await this.files.unlink(req.user, linkId);
   }
 
@@ -150,7 +161,7 @@ export class FilesController {
   @Delete(":id")
   @HttpCode(204)
   @RequirePermission("delete", "foundation-file")
-  async remove(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  async remove(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     await this.files.deleteFile(req.user, id);
   }
 }

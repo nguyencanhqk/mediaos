@@ -13629,7 +13629,7 @@ export const backlog = [
     title:
       "KI-077 — NĂM tham số `:id`/`:linkId` READ/DELETE còn lại của `foundation/files` vẫn nhận chuỗi tự do (cùng cơ chế KI-068, khác KÊNH); CHƯA ĐO bằng HTTP",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     depends_on: ["S10-FND-BODYVALIDATE-1"],
     paths: [
       "apps/api/src/foundation/files/**",
