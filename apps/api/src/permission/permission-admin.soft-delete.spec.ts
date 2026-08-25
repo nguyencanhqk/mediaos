@@ -39,6 +39,11 @@ function build() {
   const securityEvents = { record: vi.fn().mockResolvedValue(undefined) };
   const permissionService = {
     can: vi.fn().mockResolvedValue({ allow: true, reason: "allow", auditRequired: false }),
+    // S10-SEC-ROLEMEMBERDEL-1 (KI-074): `revokeRole` nay đọc scope `view:user` của CHÍNH actor để
+    // quyết định nhánh ÂM trả 404 hay 204 (DECISIONS-11, hướng b). `"Company"` = hình dạng PROD của
+    // người trực ca (đo 24/08: 0 vai hẹp hơn Company) ⇒ mệnh đề 404 của ca (2) GIỮ NGUYÊN sức nặng.
+    // Thiếu mock này thì resolver là `undefined` ⇒ TypeError ⇒ mapError ⇒ 500, không phải 404.
+    resolveStrongestScope: vi.fn().mockResolvedValue("Company"),
   };
   const db = {
     // withTenant chỉ chuyển tiếp callback với 1 tx giả (không chạm DB).

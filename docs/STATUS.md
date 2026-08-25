@@ -1,15 +1,26 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-24 14:22Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-25 03:52Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🔴 S10-SEC-ROLEMEMBERDEL-1 — KI-074 — oracle thứ HAI của tab Thành viên role: DELETE /permissions/users/:userId/roles/:roleId phân biệt 404 'User does not have this role' với 204 ⇒ câu trả lời ÂM ('x KHÔNG phải thành viên') để lại 0 hàng forensic, 0 thiệt hại — gương của V1 đã đóng ở KI-073
+- **zone**: red · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/api/src/permission/**`, `apps/api/test/**`, `packages/contracts/**`, `packages/web-core/**`, `apps/app/src/routes/system/roles/**`, `docs/RELEASE/RELEASE-02_Known_Issues_MVP.md`, `docs/plans/S10-SEC-ROLEMEMBERDEL-1.md`, `harness/backlog.mjs`
+- **phụ thuộc**: S10-SEC-ROLEMEMBERFE-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] CHỦ TRƯƠNG ĐÃ KÝ 2026-08-24 — **hướng (b)**: GIỮ 404 cho actor có `view:user` ở scope Company/System, 204 cho phần còn lại. Thi công ĐÚNG hướng này; (a)/(c) đã bị loại, đừng mở lại giữa chừng
+  - [ ] PHÁT BIỂU TRƯỚC ba ranh giới của (b), vì mỗi cái là một chỗ trượt: (1) `resolveStrongestScope` trả **null** (0 grant `view:user`, hoặc scope không chuẩn hoá được) phải rơi về **204** — null là 'KHÔNG có thẩm quyền', không phải Company; (2) chỉ nhánh TRONG-tenant 'user không giữ role này' được đổi sang 204 — nhánh role thuộc tenant khác GIỮ 404 và phải có ca ghim (BẤT BIẾN #1, xem R-X1 của S10-SEC-ROLEMEMBERROW-1); (3) 204 ở nhánh ÂM vẫn là **0 ghi** — KHÔNG được ghi audit/security-event giả để 'làm cho giống', đó là biến oracle ĐỌC thành ghi giả (cùng luật no-op của KI-073 ca O4)
+  - [ ] Đo scope `view:user` phải phủ **4 hình dạng wildcard** — `action IN ('view','*') AND resource_type IN ('user','*')`, hai vế ĐỘC LẬP ([[permission-grant-census-must-cover-four-wildcard-shapes]]); và `view:user` là `is_sensitive=false` ⇒ **exact THẮNG wildcard** ⇒ một vai giữ `*:*@Company` mà được cấp thêm `view:user@Own` sẽ TỤT xuống nhánh 204
+  - [ ] RED TRƯỚC: ca chứng minh vai `assign-role:user@Company` + `view:user@Own` phân biệt được 404 với 204 trên một target NGOÀI scope đọc ⇒ dựng lại tư cách thành viên mà KI-071 đã giấu, với 0 hàng forensic
+  - [ ] Bắt buộc ca đối chứng ALLOW: actor `@Company` vẫn GỠ ĐƯỢC THẬT (hàng user_roles soft-deleted + audit RoleRevoked trỏ id hàng thật + user_security_events ROLE_REMOVED) và vẫn nhận đúng tín hiệu mà hướng đã ký hứa. Xem [[deny-cases-vacuous-without-allow-case]]
+  - [ ] Rà HẾT caller của 404 (packages/web-core + apps/app + apps/console) TRƯỚC khi đổi — đổi mã trả về mà quên caller là biến một lỗi rõ ràng thành no-op ngầm, đúng thứ chú thích :136 chặn. Dưới (b) người trực ca (Company) VẪN nhận 404 nên caller hiện tại không phải sửa hành vi, nhưng phải CHỨNG MINH điều đó chứ không giả định
+  - [ ] ADR trong `docs/DECISIONS/` ghi chữ ký hướng (b) + hai hướng bị loại và VÌ SAO — đổi hợp đồng API mà chỉ để lại một dòng trong backlog là tái lập đúng lỗ 'nợ nằm trong văn xuôi' mà KI-074 sinh ra để chống (tiền lệ: KI-065 đóng kèm `DECISIONS-09`)
+  - [ ] FULL gate security-reviewer PASS; RELEASE-02 đóng KI-074 kèm số đo PROD ĐO LẠI (4 hình dạng wildcard × cặp `assign-role:user`) — và ghi RÕ rằng kênh THỜI GIAN (no-op 0 ghi vs fresh 4 ghi của POST) KHÔNG đóng theo, nó ở lại dạng ghi nhận
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
-- 🔴 `S10-SEC-ROLEMEMBERDEL-1` KI-074 — oracle thứ HAI của tab Thành viên role: DELETE /permissions/users/:userId/roles/:roleId phân biệt 404 'User does not have this role' với 204 ⇒ câu trả lời ÂM ('x KHÔNG phải thành viên') để lại 0 hàng forensic, 0 thiệt hại — gương của V1 đã đóng ở KI-073
 - 🟡 `S10-CHAT-EMITGUARD-2` KI-076 — NĂM route REST của CALL phát realtime SAU COMMIT không bọc (`emitLifecycle` :203 invite · :558 dùng chung 4 route vòng đời); 3/5 rơi vào trạng thái CUỐI mà KHÔNG job nào quét ⇒ peer mất sự kiện VĨNH VIỄN
 - 🔴 `S10-SEC-LOGINLOG429-1` KI-047 + KI-048 — NĂM đường 429 (KHÔNG phải bốn) không ghi một dòng `login_logs` nào; và hàng `blocked` hiện trong màn admin với tốc độ sinh do KẺ TẤN CÔNG điều khiển, trong khi `loginLogListQuerySchema` KHÔNG có filter `failure_reason` để lọc nhiễu ra
 - 🟡 `S10-HR-EMPPAGE-1` KI-010 — `GET /employees` KHÔNG có phân trang: handler nhận đúng 4 query filter, 0 tham số `page`/`per_page`; chặn duy nhất là `EMPLOYEE_LIST_MAX_ROWS = 2000` cắt câm ở tầng repository
@@ -23,7 +34,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `wo/s10-fnd-bodyvalidate-1` · **file đang đổi (dirty)**: 11
+- **branch**: `s10-sec-rolememberdel-1` · **file đang đổi (dirty)**: 3
 - **migration head**: idx 213 — `0546_s7calldb1_chat_calls` (214 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -32,7 +43,10 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
-| `c4ad8c6b` | 2026-08-24 | chore(gov): Đợt 3 — seed 5 WO kỹ thuật + đính chính số đo đã trôi của KI-047 |
+| `7a4316cb` | 2026-08-25 | fix(sec): DELETE role-member trả 404 CÓ ĐIỀU KIỆN — đóng KI-074 (S10-SEC-ROLEMEMBERDEL-1) |
+| `5f055eb2` | 2026-08-25 | docs(harness): bàn giao phiên 25/08 — 3 WO đóng (KI-047·048·077·010), KI-078 mở, cảnh báo chi phí vùng đỏ |
+| `726f3c37` | 2026-08-25 | fix(fnd): 4 route GHI validate ở BIÊN — đóng KI-068 (S10-FND-BODYVALIDATE-1) (#410) |
+| `b23a0ba6` | 2026-08-24 | chore(gov): Đợt 3 — seed 5 WO kỹ thuật + đính chính số đo đã trôi của KI-047 (#409) |
 | `138d78d1` | 2026-08-24 | chore(gov): cấp số cho nợ vô hình đường REST — KI-076 + seed WO S10-CHAT-EMITGUARD-2 |
 | `acc11874` | 2026-08-24 | feat(chat): ghim hợp đồng biên "emit không ném" cho HAI job CHAT — đóng KI-075 (S10-CHAT-EMITGUARD-1) (#408) |
 | `8ca57385` | 2026-08-24 | chore(gov): KI-074 — chủ trương hướng (b) ĐÃ KÝ 24/08, gỡ chặn S10-SEC-ROLEMEMBERDEL-1 (#407) |
@@ -41,9 +55,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `15eaa7e1` | 2026-08-24 | chore(gov): dọn tín hiệu — regen STATUS/INDEX + gạch KI-021 trong bảng RELEASE-02 |
 | `57ef38b4` | 2026-08-23 | docs(plan): S10-SEC-ROLEMEMBERFE-1 — kế hoạch đóng KI-073 |
 | `81c8ddd4` | 2026-08-23 | feat(sec): data_scope chặn TẬP HÀNG `GET /auth/roles/:id/members` — đóng KI-071 (S10-SEC-ROLEMEMBERROW-1) (#404) |
-| `a94133a2` | 2026-08-22 | chore(gov): regen STATUS sau khi S10-SEC-AUDITLOGROW-2 đóng (#403) |
-| `7646b91f` | 2026-08-22 | feat(sec): data_scope chặn TẬP HÀNG `audit_logs` đường COMPANY — đóng KI-072 (S10-SEC-AUDITLOGROW-2) (#403) |
-| `b3907cf6` | 2026-08-22 | chore(gov): regen STATUS sau khi merge #401 + #402 |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

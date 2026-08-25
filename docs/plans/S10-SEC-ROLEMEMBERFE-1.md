@@ -186,6 +186,10 @@ KI-074 (DELETE 404-oracle) còn sống.
 **V2 (BE — oracle THỨ HAI, KHÔNG đóng ở WO này).** `DELETE /permissions/users/:userId/roles/:roleId`
 trả **404 "User does not have this role"** vs **204**. Xem N-1.
 
+> ⟲ **ĐÃ ĐÓNG 2026-08-25** bởi `S10-SEC-ROLEMEMBERDEL-1` (KI-074), ADR
+> `docs/DECISIONS/DECISIONS-11_Role_Membership_Absence_Signal.md` — hướng (b): GIỮ 404 cho actor có
+> `view:user@Company`/`@System`, **204 + 0 ghi** cho phần còn lại. Kênh THỜI GIAN **không** đóng theo.
+
 **V3 (FE — không phải rò rỉ, là bug trung thực).** Bộ đếm `:117`, khoá hàng `:339-345`,
 `toAssign`/`alreadyMembers` `:383-384`/`:489-490` đều dựng trên `memberIds` đã-scope ⇒ **nói dối theo
 chiều thiếu** (§0.2).

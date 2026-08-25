@@ -183,14 +183,90 @@ export class PermissionAdminService {
     return { userId, roleId, companyId, expiresAt: expiresAt?.toISOString() ?? null };
   }
 
+  /**
+   * S10-SEC-ROLEMEMBERDEL-1 (KI-074) — bit CÓ THẨM QUYỀN của CHÍNH actor trên cặp DANH BẠ `view:user`,
+   * thứ lái hình dạng câu trả lời ÂM của `revokeRole`. ADR `DECISIONS-11`.
+   *
+   * ⚠️ KHÔNG truyền `opts` — đây là dòng dễ copy sai nhất của cả bản vá. `view:user` là
+   * `is_sensitive = false` (mig 0444:39); thêm `{ isSensitive: true }` theo khuôn `foundation/audit`
+   * sẽ ép nhánh exact-only (`permission.service.ts:602-604`) ⇒ mọi vai chỉ giữ `*:*` tụt về `null`
+   * ⇒ 204 ⇒ MẤT tín hiệu 404 trong im lặng, đúng hồi quy mà hướng (a) bị loại vì gây ra.
+   * Ghim: `permission-admin.ki074.spec.ts` U5 (1 lời gọi, ĐÚNG 4 đối số).
+   *
+   * ⚠️ `null` ⇒ `false` (tức 204), KHÔNG phải `Company`. `null` nghĩa "KHÔNG có thẩm quyền" — 0 grant,
+   * một DENY khớp, `data_scope` không chuẩn hoá được, hoặc lỗi hạ tầng (resolver tự nuốt, fail-closed).
+   * Fail-closed ở ĐÂY = im lặng; ở `listMembersInner` = 403. Không mâu thuẫn: cả hai đều là
+   * "nghi ngờ ⇒ lộ ít hơn". Hệ quả vận hành: sự cố hạ tầng ở câu scope biến 404 thành 204 cho cả
+   * actor Company — MẤT TÍN HIỆU tạm thời, không phải mất quyền; đối chiếu log
+   * `resolveStrongestScope() infrastructure error` cùng request.
+   */
+  private async hasCompanyWideDirectory(actor: RequestUser): Promise<boolean> {
+    const scope = await this.permissionService.resolveStrongestScope(
+      actor.id,
+      actor.companyId,
+      "view",
+      "user",
+    );
+    if (scope === null) {
+      // Dòng log RIÊNG của route này, có `roleId`-free nhưng ĐỦ định danh call-site. Vì sao cần:
+      // `resolveStrongestScope` nuốt MỌI lỗi rồi trả `null` và chỉ log một dòng chung keyed theo
+      // (userId, companyId, "view", "user") — mà cặp đó còn nhiều người tiêu thụ khác
+      // (`auth-users.service`, `role-admin.service`, …). Không có dòng này thì người trực ca KHÔNG
+      // phân biệt được "actor hẹp thật" (204 đúng thiết kế) với "câu scope vừa hỏng" (204 sai, actor
+      // đáng lẽ nhận 404) — đúng khoảng mù mà FULL gate silent-failure-hunter chỉ ra.
+      //
+      // ⚠️ Log SERVER-SIDE, KHÔNG đổi một byte nào của response ⇒ KHÔNG tái tạo oracle.
+      this.logger.warn(
+        "revokeRole: resolveStrongestScope(view:user) trả null → nhánh 204 im lặng. HAI nguyên " +
+          "nhân, đừng quy tội một chiều: (a) actor thật sự không có grant `view:user` (đúng thiết " +
+          "kế, DECISIONS-11 §R1); (b) câu scope vừa LỖI và resolver fail-closed — đối chiếu dòng " +
+          "`resolveStrongestScope() infrastructure error` CÙNG request trước khi kết luận.",
+        { actorUserId: actor.id, companyId: actor.companyId },
+      );
+    }
+    return scope === "Company" || scope === "System";
+  }
+
   async revokeRole(actor: RequestUser, targetUserId: string, roleId: string) {
     await this.assertCan(actor, "assign-role", "user", targetUserId);
     try {
+      // KI-074: lấy bit thẩm quyền NGOÀI write-tx. `resolveStrongestScope` tự mở `withTenant`
+      // (permission.repository.ts:70) ⇒ gọi trong tx là withTenant LỒNG NHAU: xin connection thứ hai
+      // trong khi đang giữ một connection (PgBouncer transaction-mode), + một transaction TÁCH RỜI
+      // không thấy ghi chưa commit. Đúng bẫy mà `assignRole` ở trên đã ghi cho `assertCan`.
+      // TRONG `try` có chủ ý: resolver hôm nay tự nuốt mọi lỗi, nhưng đó là hợp đồng KHÔNG được
+      // compiler ép — ném ra ngoài `try` sẽ bỏ qua `mapError` và rò stack ra 500.
+      // Giá: nay THÊM 1 transaction — tổng **3** cho mỗi DELETE (`assertCan` · `hasCompanyWideDirectory`
+      // · write-tx), kể cả nhánh dương. Ba cái TUẦN TỰ và await đủ ⇒ đỉnh connection đồng thời vẫn là
+      // 1 ⇒ không có rủi ro cạn pool PgBouncer. Nó KHÔNG làm phẳng kênh thời gian (chỉ cộng hằng số
+      // vào cả hai nhánh) — kênh đó ở lại dạng ghi nhận, xem DECISIONS-11 §4.
+      const directoryWide = await this.hasCompanyWideDirectory(actor);
       await this.db.withTenant(actor.companyId, async (tx) => {
         // Đọc TRƯỚC khi xoá → audit `before` đủ (grantedBy/expiresAt) + objectId = id hàng thật.
         const existing = await this.repo.findUserRole(tx, actor.companyId, targetUserId, roleId);
         if (!existing) {
-          throw new NotFoundException("User does not have this role");
+          // ⚠️ HAI lệnh dưới đây, ĐÚNG thứ tự này. Đảo lại thì actor Company vẫn ra 404 (test của họ
+          // KHÔNG phát hiện) nhưng actor hẹp nhận 204 cho role của TENANT KHÁC ⇒ mất BẤT BIẾN #1
+          // trong im lặng. Ca ghim: int `D-X1`.
+
+          // (2) Role không assignable TRONG TENANT NÀY → 404 cho MỌI actor. RLS `roles_tenant_isolation`
+          // (mig 0005:37-44) giấu role company-scoped của tenant khác; `notOperatorRole()` loại role
+          // aud='operator'. Role SYSTEM (company_id IS NULL) THẤY ĐƯỢC ở mọi tenant ⇒ rơi xuống nhánh
+          // dưới ⇒ actor hẹp nhận 204 — hành vi ĐÃ KÝ (DECISIONS-11 §R2, bảng ba lớp role).
+          //
+          // ⚠️ Lệnh này PHẢI ở trong `if (!existing)`, KHÔNG được nâng lên đầu hàm: nó lọc
+          // `deleted_at IS NULL`, nên nâng lên sẽ KHOÁ VĨNH VIỄN việc gỡ vai của một role vừa bị
+          // soft-delete (user giữ quyền tồn đọng mà không gỡ được). Ghim: unit U9.
+          if (!(await this.repo.findAssignableRole(tx, roleId))) {
+            throw new NotFoundException("User does not have this role");
+          }
+          // (1)+(3) Trong-tenant "user không giữ role này": 404 CHỈ cho actor thấy được toàn danh bạ.
+          // Còn lại → 204 với ĐÚNG 0 ghi. KHÔNG audit/security-event giả "cho giống nhánh dương" —
+          // đó là biến oracle ĐỌC thành GHI giả (cùng luật no-op của KI-073 ca O4).
+          if (directoryWide) {
+            throw new NotFoundException("User does not have this role");
+          }
+          return;
         }
         // Gỡ role = SOFT-DELETE (UPDATE set deleted_at/deleted_by=actor, mig 0471) — KHÔNG hard-delete.
         await this.repo.deleteUserRole(tx, actor.companyId, targetUserId, roleId, actor.id);

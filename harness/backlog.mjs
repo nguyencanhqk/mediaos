@@ -13248,7 +13248,7 @@ export const backlog = [
     // Lý do hướng này thắng: KHÔNG mất tín hiệu vận hành mà `web-core/auth-users-api.ts:136` cố ý
     // dựa vào (người trực ca luôn ở Company), lại đối xứng với cờ `complete` của KI-073 — cùng một
     // ý: "bit CÓ THẨM QUYỀN về scope `view:user` của CHÍNH actor" lái hình dạng câu trả lời.
-    status: "todo",
+    status: "done",
     depends_on: ["S10-SEC-ROLEMEMBERFE-1"],
     paths: [
       "apps/api/src/permission/**",
@@ -13284,6 +13284,9 @@ export const backlog = [
       "⚠️ Đo PROD 24/08 nói **0 vai** giữ `view:user` hẹp hơn Company ⇒ hôm nay (b) là **no-op trên thực địa**: không ai rơi vào nhánh 204. Đó là ĐIỂM MẠNH của hướng này (đóng lỗ tiềm tàng, 0 hồi quy) nhưng cũng là bẫy nghiệm thu — ca DENY phải TỰ GIEO vai `view:user@Own`, không thể nghiệm thu bằng dữ liệu PROD. Và ĐỪNG test bằng super-admin ([[superadmin-not-a-canonical-role]]).",
       "⚠️ Kênh THỜI GIAN không đóng theo: nhánh ÂM 0 ghi vs nhánh DƯƠNG 4 ghi vẫn phân biệt được bằng độ trễ ([[attribution-patch-creates-timing-oracle]]). Ghi nhận trong ADR, KHÔNG hứa đóng.",
       "⚠️ Đọc `docs/plans/S10-SEC-ROLEMEMBERFE-1.md` §N-2 + hàng KI-073 trong RELEASE-02 trước khi thi công: cơ chế '409' của bản seed KI-073 ĐÃ BỊ BÁC (no-op trả 201 + hàng gốc). Đừng chép mô tả cũ sang đây.",
+      "📌 ĐÓNG 25/08 — hướng (b) thi công đủ 3 ranh giới; unit 8 ca + int 13 ca xanh trên LANE_DB; 5 suite cũ chạm `revokeRole` xanh (2 sửa bằng GRANT THẬT, không nới assert); FULL gate `security-reviewer` + `database-reviewer` + `silent-failure-hunter` đều PASS (0 CRITICAL/0 HIGH), security-reviewer tự dựng RED bằng cách revert service về HEAD → unit 4/9 + int 4/13 ĐỎ.",
+      "📊 Số đo PROD 25/08 (`scripts/measure-ki074-role-member-del.sql`): 6 người giữ `assign-role:user`, CẢ 6 có `view:user@Company` ⇒ cả 6 GIỮ 404; 0 người rơi vào nhánh 204 mới ⇒ (b) là no-op trên thực địa, 0 hồi quy. ⚠️ `QUẢN LÝ CẤP CAO`/`SA` chạm cặp gate QUA `*:*@Company` — cấp thêm `view:user@Own` cho họ sẽ khiến exact THẮNG wildcard ⇒ tụt xuống nhánh 204. Cấu hình cần canh.",
+      "⚠️ Nợ mang sang (KHÔNG chặn): (1) kênh THỜI GIAN không đóng — ghi nhận ở ADR §4, đóng đòi ghi audit giả; (2) cờ `is_sensitive` của catalog nay là CỔNG của route — lật `('view','user')` sang true biến route thành 204-mù im lặng (canh bằng ca `D-S1`); (3) `hasCompanyWideDirectory` là điểm đọc scope `view:user` thứ **4** — nợ gộp đã ghi ở S10-SEC-ROLEMEMBERROW-1, nay cộng thêm một.",
       "⚠️ Workaround của KI-073 (không cấp `view:user` hẹp hơn Company cho vai đồng thời giữ `assign-role:user`) VẪN hiệu lực đúng vì WO này chưa làm — đừng gỡ khỏi tài liệu vận hành.",
     ],
   },

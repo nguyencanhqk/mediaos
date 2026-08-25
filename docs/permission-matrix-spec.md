@@ -198,10 +198,24 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 >   (chỉ đổi hình chiếu HTTP). `GET /auth/roles/:id/members` phát thêm cờ **`complete`**
 >   (= scope ∈ {Company, System} của CHÍNH actor) để FE thôi khẳng định điều nó không biết (bộ đếm ·
 >   dedup batch · empty-state); contract FE parse `complete` bằng `.catch(false)` — thiếu khoá/sai
->   kiểu rơi về partial-mode CÓ NHÃN, không ZodError. ⚠️ Còn sống: **KI-074** — `DELETE
->   /permissions/users/:userId/roles/:roleId` 404-vs-204 vẫn phân biệt được tư cách thành viên (chiều
->   dương ồn + có giá; xem RELEASE-02). Tính chất đạt được là "không enumerate IM LẶNG theo chiều
->   DƯƠNG", không phải "không enumerate".
+>   kiểu rơi về partial-mode CÓ NHÃN, không ZodError.
+>
+> • **Đường GHI thứ HAI — ĐÓNG 2026-08-25 (`S10-SEC-ROLEMEMBERDEL-1`, KI-074, ADR `DECISIONS-11`).**
+>   `DELETE /permissions/users/:userId/roles/:roleId` trước đó phân biệt **404** ("không phải thành
+>   viên" — ném TRƯỚC mọi ghi ⇒ **0 hàng forensic, 0 thiệt hại**) với **204** ⇒ câu trả lời ÂM MIỄN
+>   PHÍ. Nay theo **hướng (b)**: GIỮ **404** cho actor có `view:user` ở scope `Company`/`System`;
+>   **204 + 0 ghi** cho phần còn lại (kể cả scope `null` — "KHÔNG có thẩm quyền" ≠ `Company`). Cùng
+>   một cơ chế với cờ `complete` ở trên: **bit CÓ THẨM QUYỀN về scope `view:user` của CHÍNH actor**
+>   lái hình dạng câu trả lời. Ba lớp role tách nhau ở nhánh ÂM: company-scoped của tenant KHÁC →
+>   **404** (BẤT BIẾN #1, RLS ép) · **system** role (`company_id IS NULL`) → **204** ·
+>   operator-audience → **404**. ⚠️ Kênh THỜI GIAN (nhánh ÂM 0 ghi vs nhánh DƯƠNG 4 ghi) **KHÔNG
+>   đóng theo** — ghi nhận trong ADR; đóng nó đòi ghi audit giả. ⚠️ Cờ `is_sensitive` của catalog nay
+>   là một **CỔNG** của route: lật `('view','user')` sang `true` sẽ ép nhánh exact-only ⇒ mọi actor
+>   wildcard-only tụt `null` ⇒ **204-mù trong im lặng** (DECISIONS-11 §6).
+>
+>   ⇒ Tính chất đạt được sau KI-073 **và** KI-074: *"không enumerate thành viên IM LẶNG theo CẢ HAI
+>   chiều"*. Chiều CÓ-DẤU-VẾT vẫn mở **có chủ ý** — mỗi câu hỏi dương trúng đều gỡ vai THẬT và để lại
+>   4 vết.
 >
 > ⚠️ **Cặp KHÁC, đừng đọc lây sang:** `/foundation/audit-logs/all` gate `view:platform-audit`
 > (operator-only, chéo tenant) · `/attendance/audit-logs` gate `view:attendance-audit-log` ·
