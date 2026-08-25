@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   reauthFailedContexts,
   silentTooManyRequestsSites,
+  reauthFailedWriterCount,
   stepUpAntiAmplificationAnchors,
   tooManyRequestsThrowSites,
 } from "./login-log-429-census";
@@ -101,6 +102,13 @@ describe("S10-SEC-LOGINLOG429-1 — ratchet: điểm ném 429 phải để lại
     // Waiver của disableTwoFactor/changePassword/confirmEnable đứng được CHỈ KHI nhánh sai còn ghi.
     // Xoá một lời ghi ⇒ mất một context ⇒ ca này ĐỎ ⇒ waiver mất cơ sở.
     expect([...reauthFailedContexts()].sort()).toEqual(REQUIRED_REAUTH_CONTEXTS);
+
+    // Vế THỨ HAI của neo: chứng minh `recordReauthFailure` thật sự ghi `REAUTH_FAILED`, không phải
+    // một hàm cùng tên làm việc khác. Hai writer (auth.service + two-factor.service) ⇒ ≥2.
+    expect(
+      reauthFailedWriterCount(),
+      "không có lời gọi securityEvents.record nào mang eventType REAUTH_FAILED",
+    ).toBeGreaterThanOrEqual(2);
   });
 
   it("(4) NEO DƯƠNG cho waiver stepUp: nửa (b) của A09 còn nguyên", () => {

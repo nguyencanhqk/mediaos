@@ -140,6 +140,11 @@ tức **một lượt argon2 verify** đầy đủ. Hệ số khuếch đại �
 `DEFAULT_TTL_SEC` của `ReplayGuard`) ⇒ trần **1 hàng / token bị đánh cắp**. Đó chính là hạt thông
 tin muốn có ("token này đã bị dùng lại"), lặp thêm không thêm bit nào.
 
+**Tổn thất phải NÊU TÊN** (như §3.2 đã làm với `suppressed_count`): gộp theo `jti` che mất tín hiệu
+"**cùng một token bị replay từ NHIỀU IP**" — dấu hiệu token bị chia sẻ/bán. Vẫn chọn `jti`: khoá theo
+`jti|ip` cho kẻ tấn công quyền bơm hàng vô hạn bằng cách đổi IP (replay là free). Viết ra để người
+sau không tưởng tín hiệu đó quan sát được.
+
 ---
 
 ## §2 — KI-047: THIẾT KẾ VÁ
@@ -154,22 +159,33 @@ Ba nhánh, ba mã `failure_reason` (cột `text`, **không CHECK** ⇒ không mi
 | bucket khoá → 429 (:474) | `blocked` | `TooManyAttempts` (mã CŨ) | bucket `2fa`, TTL `LOGIN_LOCKOUT_SEC` |
 | mã sai (:490) | `failed` | **`TwoFactorInvalid`** | **KHÔNG gộp** — đây là đường dựng khoá, trần đã là `LOGIN_MAX_ATTEMPTS` |
 
-**Vấn đề `email` — 1 TX CHO 1 HÀNG (vá B1).**
+**Vấn đề `email` — 1 TX CHO 1 HÀNG (vá B1) + TRẠNG THÁI SAI PHẢI BẤT KHẢ BIỂU DIỄN (vá B4-r2).**
 `recordLoginAttempt` cần `email` (cột `normalized_email` NOT NULL). Ở cả ba nhánh ta **chỉ có
-`claims.sub`**, chưa đọc user. ⛔ v1 viết "đọc trong `withTenant` đã có ở nhánh mã-sai" — **SAI**:
-`withTenant` duy nhất của hàm ở `:499` và chỉ chạy khi `ok === true`; `verifyChallenge` mở-đóng tx
-riêng (`two-factor.service.ts:271`). Làm theo v1 tốn **2 tx/hàng**.
+`claims.sub`**. ⛔ v1 viết "đọc trong `withTenant` đã có ở nhánh mã-sai" — **SAI**: `withTenant` duy
+nhất của hàm ở `:499` và chỉ chạy khi `ok === true`; `verifyChallenge` mở-đóng tx riêng
+(`two-factor.service.ts:271`). Làm theo v1 tốn **2 tx/hàng**.
 
-⇒ **Mở rộng `recordLoginAttempt` bằng một nhánh "email chưa biết":**
+⛔ Và **KHÔNG** nới `args.email` thành union `string | {fromUserId}` trên chữ ký phẳng hiện có: kiểu
+đó cho phép tổ hợp thứ tư `{companyId: null, email: {fromUserId}}`, khi đó object rơi vào cột `text`
+NOT NULL ⇒ ném ⇒ **bị nuốt bởi `catch` best-effort** (`auth.service.ts:1687-1691`) ⇒ mất log **IM
+LẶNG**, đúng lớp KI-035 mà chính `:1664-1676` đã trả giá một lần.
+
+⇒ **HAI method, không một union** — trạng thái sai không biểu diễn được bằng KIỂU, không bằng kỷ luật:
 
 ```text
-args.email: string | { fromUserId: string }
+// giữ NGUYÊN, 5 call-site hiện có không đổi một byte
+private recordLoginAttempt(args: { companyId: string | null; userId: string | null;
+                                   email: string; status; reason?; meta })
+
+// MỚI — companyId/userId NOT NULL Ở KIỂU ⇒ không có nhánh pre-auth để rơi vào
+private recordLoginAttemptForUser(args: { companyId: string; userId: string;
+                                          status; reason?; meta })
 ```
 
-Khi là `{ fromUserId }` **và** có `companyId`: SELECT `users.email` **BÊN TRONG chính `withTenant`
-sắp INSERT**, rồi INSERT. ⇒ **1 tx / 1 hàng**, không round-trip thừa.
-Giữ nguyên: `try/catch` best-effort, `logger.error`, ⛔ **cấm `.returning()`** ở nhánh NULL.
-`!user` (user vừa bị xoá) → **bỏ ghi + `logger.error`** (§8 câu hỏi mở đã chốt).
+`recordLoginAttemptForUser` mở **một** `withTenant`, SELECT `users.email` rồi INSERT **trong chính tx
+đó** ⇒ **1 tx / 1 hàng**. Giữ nguyên `try/catch` best-effort + `logger.error`; ⛔ **cấm `.returning()`**.
+`!user` (user vừa bị xoá) → **bỏ ghi + `logger.error`** (§8).
+Cả hai gọi chung một hàm dựng `row` để không đẻ hai nguồn sự thật về hình dạng hàng.
 
 **GIỮ bất biến `company_id IS NULL ⟹ user_id IS NULL`:** cả ba nhánh có `claims.companyId` đã verify
 ⇒ luôn ghi cặp đầy đủ, không bao giờ chạm nhánh NULL.
@@ -289,6 +305,12 @@ lời "**bao nhiêu** lần"; số đếm sống ở bucket rate-limit (Valkey),
 **Hệ quả phải nói ra:** hàng ĐẦU mỗi cửa sổ VẪN ghi ⇒ tín hiệu "có brute-force" còn nguyên; hàng
 2..N trong cùng cửa sổ biến mất. Trần: **1 hàng/bucket/15'** thay vì vô hạn.
 
+⚠️ **`reset()` KHÔNG xoá khoá gộp.** Hôm nay không tới được (mọi đường `reset` — `auth.service.ts:421,425,494`
+— chỉ chạy khi bucket **chưa** khoá). Nếu sau này có đường admin-unlock thì cửa sổ mới sẽ mất **hàng
+đầu tiên**. Ghi nhận, không vá ở WO này.
+⚠️ **Map gộp in-memory PHẢI prune** như `ReplayGuardService.pruneExpired` (`replay-guard.service.ts:72-77`):
+nhánh replay khoá theo `jti` ⇒ số khoá phân biệt tăng theo số token, không bị chặn bởi số bucket.
+
 ⚠️ Khoá gộp **nhúng EMAIL**, và mọi đường lỗi Valkey log NGUYÊN khoá (`valkey.service.ts:75,104,125`).
 Đã có tiền lệ với `rl:*` (cùng hình dạng, cùng file) ⇒ **ghi nhận có chủ đích**, không đổi hành vi
 log ở WO này (đổi nó là WO riêng chạm mọi bucket).
@@ -335,18 +357,33 @@ Kiểm trên hai hình dạng có thật, cả hai phải XANH:
 — đường DUY NHẤT đang ĐÚNG — sẽ bị báo vi phạm oan. Đó là lý do phải neo theo **hậu duệ của block
 trong cùng nhất**, không theo quan hệ anh-em.
 
-**Waiver — chỉ CÒN MỘT dòng.** `disableTwoFactor`/`changePassword`/`confirmEnable` **đã bỏ khỏi
-waiver**: sau bản vá chúng qua bằng điều kiện dương ở nhánh sai. Giữ chúng trong waiver là để dây
-thừa cho người sau xoá lời ghi mà ratchet vẫn xanh.
+**Waiver — BỐN dòng, mỗi dòng có NEO DƯƠNG.**
 
-| Waiver | Lý do | **Neo DƯƠNG bắt buộc kèm theo** |
+⚠️ Vòng review 1 (B6) đề nghị **xoá** waiver của `disableTwoFactor`/`changePassword`/`confirmEnable`
+vì "chúng qua bằng điều kiện dương". Đề nghị đó **tự mâu thuẫn với chính luật mức-NHÁNH mà nó vừa
+đòi**: ba đường này ghi vết ở nhánh **SAI**, còn `throw` 429 nằm trong block `if (isLocked) { throw }`
+**không chứa lời ghi nào** ⇒ dưới luật mức-nhánh chúng KHÔNG thể qua. Bỏ waiver ⇒ ratchet đỏ ngay lúc
+merge ⇒ áp lực đẩy người thi công nới luật về mức HÀM, đúng thứ B6 vừa bỏ. ⇒ **GIỮ waiver, thay bằng
+neo mạnh hơn cả hai phương án.**
+
+| Waiver | Lý do (§1.1/§1.2) | **NEO DƯƠNG** |
 | --- | --- | --- |
-| `step-up.service.ts` `stepUp` | A09 anti-amplification (§1.2) | mọi nhánh từ chối của `stepUp` còn gọi `recordFailure` **và** `writeOutcome` (`step-up.service.ts:146-153`, `:177-184`). Xoá nửa (b) ⇒ ratchet **ĐỎ**. |
+| `StepUpService#stepUp` | A09 anti-amplification, nửa (a) | `stepUpAntiAmplificationAnchors()` — `recordFailure` ≥1 **và** `writeOutcome` ≥1 trong `step-up.service.ts`. Xoá nửa (b) ⇒ **ĐỎ**. |
+| `AuthService#disableTwoFactor` | ghi ở nhánh SAI MẬT KHẨU | `reauthFailedContexts()` ∋ `"2fa_disable"` |
+| `AuthService#changePassword` | ghi ở nhánh SAI MẬT KHẨU | `reauthFailedContexts()` ∋ `"change_password"` |
+| `TwoFactorService#confirmEnable` | ghi ở nhánh MÃ SAI | `reauthFailedContexts()` ∋ `"2fa_enable"` |
+
+**Vì sao neo bằng `payload.context` chứ không bằng "hàm có `securityEvents.record`"** (mạnh hơn đề
+nghị của reviewer): `changePassword` **đã có** `securityEvents.record` (`PASSWORD_CHANGED`) ở nhánh
+THÀNH CÔNG từ trước (`auth.service.ts:669`) ⇒ mọi phép đếm ở mức HÀM **xanh sẵn** và không chứng minh
+được gì. Tập `payload.context` của `eventType: "REAUTH_FAILED"` chỉ tồn tại nhờ đúng ba lời ghi ở
+nhánh sai ⇒ neo theo ĐỊNH NGHĨA ([[index-ratchet-must-pin-definition-not-name]]).
 
 ⇒ điểm ném **thứ 7** mọc lên không khai ⇒ ĐỎ. Đúng thứ đã thiếu khi `step-up` mọc thêm.
 ⚠️ Census bằng **AST**, KHÔNG regex ([[nestjs-zod-class-level-pipe-does-nothing]]).
-⚠️ Ca chống xanh-RỖNG bắt buộc (khuôn ca (2) của ratchet cũ): scanner phải thấy **đúng 6** điểm ném
-và **≥1** waiver-neo, nếu không ca chính xanh vì *không tìm thấy gì*.
+⚠️ Ca chống xanh-RỖNG: scanner phải thấy **≥6** điểm ném, **4 waiver + 4 neo dương** đều đạt, **và**
+`AuthService#login` phải cho `logsInBranch === true` — neo dương cho chính BỘ DÒ (nếu luật bị viết
+lỏng thành "cùng `try`"/"anh em trực tiếp" thì đường DUY NHẤT đang đúng sẽ bị báo oan).
 
 ---
 
@@ -358,8 +395,8 @@ và **≥1** waiver-neo, nếu không ca chính xanh vì *không tìm thấy gì
 | R1a | **ALLOW** bước-2 mã ĐÚNG | +1 `success`, **0** hàng `failed` thừa |
 | R2 | bước-2, bucket khoá → 429 lần 1 | tổng = **1** hàng `blocked`/`TooManyAttempts` |
 | R2a | 429 lần 2, 3 **cùng bucket** (tuần tự, cùng kịch bản R2) | tổng **vẫn = 1** |
-| R2b | xoá/hết hạn khoá gộp rồi 429 lần nữa | tổng = **2** — chứng minh gộp bị chặn bởi TTL, không phải "thôi ghi vĩnh viễn" |
-| R2c | 429 bị gộp ⇒ **0 lời gọi DB** (spy trên `dbsvc`) | §1.3a điều kiện 1 |
+| R2b | **UNIT** (`login-rate-limiter.spec.ts`) `claimFirstOfWindow` với tham số `nowMs`: `t=0`→`true`; `t=ttl*1000-1`→`false`; `t=ttl*1000`→`true` | gộp bị chặn bởi TTL, KHÔNG phải "thôi ghi vĩnh viễn". ⚠️ **không làm được ở int-spec**: `LOGIN_LOCKOUT_SEC`=900 (`env.schema.ts:116`) không chờ được, và `reset()` (`login-rate-limiter.ts:99-104`) KHÔNG chạm khoá gộp |
+| R2c | 429 bị gộp ⇒ spy `DatabaseService.withTenant`: lần 2 gọi **ÍT HƠN** lần 1, và 0 lời gọi `resolveBlockedLogOwner`/`recordLoginAttempt` | §1.3a điều kiện 1. Đo **DELTA**, không đo số 0 tuyệt đối — một interceptor tương lai sẽ làm ngưỡng tuyệt đối đỏ oan |
 | R3 | bước-2, **replay jti** | +1 `failed`/`TwoFactorChallengeReplay`; gửi lại lần 2,3 ⇒ tổng vẫn 1 |
 | R4 | `changePassword` sai mật khẩu | +1 `REAUTH_FAILED` ctx `change_password` |
 | R4a | **ALLOW** `changePassword` đúng | +1 `PASSWORD_CHANGED`, **0** `REAUTH_FAILED` |
@@ -372,9 +409,10 @@ và **≥1** waiver-neo, nếu không ca chính xanh vì *không tìm thấy gì
 | R8 | **credential-stuffing**: khoá bucket `acct`, 3 IP KHÁC NHAU cùng 429 | tổng = **1** hàng (vá B3) |
 | R9 | filter `?failure_reason=TooManyAttempts` / `=WrongPassword` | chỉ trả hàng đúng mã, không lẫn |
 | R10 | `/me/security/activity` sau R1 | hàng mới hiện đúng nhãn; int-spec ĐẾM DÒNG của ME cập nhật theo (§2.3) |
-| R11 | **thời gian**: 429 bị gộp vs 429 đầu cửa sổ (`login`) | bị gộp **KHÔNG nhanh hơn** (vá B5) |
-| R12 | ghi nhật ký NÉM (mock lỗi DB) | HTTP outcome KHÔNG đổi (401/429 y nguyên) + có `logger.error` |
-| R13 | census ratchet | 6 điểm ném, 0 điểm không-khai, ca chống-rỗng xanh |
+| R11 | **thời gian**: CẢ HAI request 429 (đầu cửa sổ và bị gộp) | mỗi cái ≥ `BLOCKED_LOGIN_FLOOR_MS` (dung sai timer ~10ms). ⚠️ **ngưỡng TUYỆT ĐỐI**, KHÔNG so sánh tương đối hai số gần bằng nhau — cả hai đều bị sàn kẹp nên hiệu số ≈ nhiễu lịch CPU ⇒ cổng vùng đỏ đỏ ngẫu nhiên sẽ bị nới trong một tuần |
+| R12 | ghi nhật ký NÉM — **HAI mock riêng**: (a) đường `login_logs` (`recordLoginAttempt`), (b) đường `SecurityEventWriter.record` | outcome KHÔNG đổi ở CẢ HAI (401 và 429) + có `logger.error`. Hai writer khác nhau ⇒ một mock không phủ được cả hai |
+| R12b | **RUNTIME** cho quyết định §1.1: `changePassword` khi bucket ĐÃ khoá → 429 | **+0** `REAUTH_FAILED`. Ratchet tĩnh không giữ được điều này; thiếu ca ⇒ người sau "vá cho đủ" |
+| R13 | census ratchet | ≥6 điểm ném, 0 điểm không-khai, 4 waiver + 4 neo dương, `login` cho `logsInBranch=true` |
 | R14 | **FE** `LoginLogsPage` | ô lọc `failure_reason` + loading/error/empty (DoD §8) |
 
 ⚠️ `step-up.service.spec.ts:224,237,292,307` đã assert 429 — R7a khoá hành vi "0 hàng"; **KHÔNG nới

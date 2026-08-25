@@ -59,19 +59,24 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "attendance/attendance-alert-noti.repository.ts#fetchLateRowsTx:users.fullName",
     basis: "no-actor",
-    reason: "Job cảnh báo chấm công (scheduler) — không có actor HTTP nào để resolve scope. Tên đi vào payload NOTI của chính người bị cảnh báo.",
+    reason:
+      "Job cảnh báo chấm công (scheduler) — không có actor HTTP nào để resolve scope. Tên đi vào payload NOTI của chính người bị cảnh báo.",
     signedBy: WO,
   },
   {
-    point: "attendance/attendance-alert-noti.repository.ts#fetchMissingCheckoutRowsTx:users.fullName",
+    point:
+      "attendance/attendance-alert-noti.repository.ts#fetchMissingCheckoutRowsTx:users.fullName",
     basis: "no-actor",
-    reason: "Job quét thiếu check-out (scheduler, attendance-alert-noti.repository.ts:193) — không có actor HTTP để resolve scope. Tên đi vào payload NOTI gửi cho chính người bị nhắc.",
+    reason:
+      "Job quét thiếu check-out (scheduler, attendance-alert-noti.repository.ts:193) — không có actor HTTP để resolve scope. Tên đi vào payload NOTI gửi cho chính người bị nhắc.",
     signedBy: WO,
   },
   {
-    point: "attendance/attendance-alert-noti.repository.ts#materializeAbsentCandidatesTx:users.fullName",
+    point:
+      "attendance/attendance-alert-noti.repository.ts#materializeAbsentCandidatesTx:users.fullName",
     basis: "no-actor",
-    reason: "Job dựng danh sách vắng (attendance-alert-noti.repository.ts:282) — không có actor HTTP. Tên đi vào payload NOTI của chính người vắng, không phải một danh bạ trả cho ai đọc.",
+    reason:
+      "Job dựng danh sách vắng (attendance-alert-noti.repository.ts:282) — không có actor HTTP. Tên đi vào payload NOTI của chính người vắng, không phải một danh bạ trả cho ai đọc.",
     signedBy: WO,
   },
   {
@@ -84,7 +89,8 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "attendance/attendance-report.repository.ts#listReportTx:users.fullName",
     basis: "scoped-predicate",
-    reason: "attendance-report.service.ts:40-62 — resolveAndAssert(isSensitive) + buildEmployeeScopeCondition, `scopeCond` là tham số BẮT BUỘC của listReportTx.",
+    reason:
+      "attendance-report.service.ts:40-62 — resolveAndAssert(isSensitive) + buildEmployeeScopeCondition, `scopeCond` là tham số BẮT BUỘC của listReportTx.",
     signedBy: WO,
   },
   {
@@ -97,7 +103,8 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "attendance/remote-work-request.repository.ts#REQUEST_COLUMNS:users.fullName",
     basis: "scoped-predicate",
-    reason: "remote-work-request.service.ts:288-298 — resolveAndAssert + buildEmployeeScopeCondition; luồng 'của tôi' dùng `ownScopeCond` (:256).",
+    reason:
+      "remote-work-request.service.ts:288-298 — resolveAndAssert + buildEmployeeScopeCondition; luồng 'của tôi' dùng `ownScopeCond` (:256).",
     signedBy: WO,
   },
 
@@ -105,25 +112,41 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "auth/auth.service.ts#completeTwoFactorLogin:users.email",
     basis: "self-bound-route",
-    reason: "auth.service.ts:503 `eq(users.id, claims.sub)` — bước 2 của đăng nhập, chủ thể là chính người đang đăng nhập. Không có đường truyền id của người khác.",
+    reason:
+      "auth.service.ts:503 `eq(users.id, claims.sub)` — bước 2 của đăng nhập, chủ thể là chính người đang đăng nhập. Không có đường truyền id của người khác.",
     signedBy: WO,
+  },
+  {
+    point: "auth/auth.service.ts#recordLoginAttemptForUser:users.email",
+    basis: "self-bound-route",
+    reason:
+      "S10-SEC-LOGINLOG429-1 (KI-047). `eq(users.id, args.userId)` — CÙNG hình dạng và cùng nguồn " +
+      "với dòng `completeTwoFactorLogin:users.email` ngay trên: cả BA lời gọi đều truyền `claims.sub` " +
+      "lấy từ challengeToken ĐÃ verify (auth.service.ts nhánh replay · nhánh 429 · nhánh mã sai), " +
+      "không có đường nào truyền id của người khác vào. Email đọc ra KHÔNG đi tới caller: nó chỉ rơi " +
+      "vào `login_logs.email` — cột vốn đã chứa email do client tự khai — và bề mặt ĐỌC lại của cột " +
+      "đó (AUTH-API-401) gác danh tính riêng qua `LoginLogGrants.identity`, không qua điểm này.",
+    signedBy: "S10-SEC-LOGINLOG429-1",
   },
   {
     point: "auth/auth.service.ts#me:users.email",
     basis: "self-bound-route",
-    reason: "auth.service.ts:1096-1110 bootstrap `/auth/me` — `eq(users.id, claims.sub)` từ token, không nhận tham số.",
+    reason:
+      "auth.service.ts:1096-1110 bootstrap `/auth/me` — `eq(users.id, claims.sub)` từ token, không nhận tham số.",
     signedBy: WO,
   },
   {
     point: "auth/auth.service.ts#me:users.fullName",
     basis: "self-bound-route",
-    reason: "auth.service.ts:1105 — cùng truy vấn bootstrap `/auth/me` với cột email ở dòng trên: `eq(users.id, claims.sub)` lấy từ token, route không nhận tham số id nào.",
+    reason:
+      "auth.service.ts:1105 — cùng truy vấn bootstrap `/auth/me` với cột email ở dòng trên: `eq(users.id, claims.sub)` lấy từ token, route không nhận tham số id nào.",
     signedBy: WO,
   },
   {
     point: "auth/two-factor.service.ts#enroll:users.email",
     basis: "self-bound-route",
-    reason: "two-factor.service.ts:166 `eq(users.id, userId)` với `userId` = actor đang enroll TOTP cho chính mình. Email dùng dựng nhãn otpauth.",
+    reason:
+      "two-factor.service.ts:166 `eq(users.id, userId)` với `userId` = actor đang enroll TOTP cho chính mình. Email dùng dựng nhãn otpauth.",
     signedBy: WO,
   },
 
@@ -131,25 +154,29 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "chat/chat-attachments.repository.ts#listRoomFiles:users.fullName",
     basis: "membership",
-    reason: "chat-attachments.service.ts:158 — `assertMember` TRƯỚC mọi thứ (404 chung). Người ngoài phòng không chạm được hàng nào.",
+    reason:
+      "chat-attachments.service.ts:158 — `assertMember` TRƯỚC mọi thứ (404 chung). Người ngoài phòng không chạm được hàng nào.",
     signedBy: WO,
   },
   {
     point: "chat/chat-messages.repository.ts#findSenderDisplayName:users.email",
     basis: "self-bound-row",
-    reason: "chat-messages.service.ts:277 truyền `actor.id` — lấy tên hiển thị của CHÍNH người gửi để dựng payload NOTI.",
+    reason:
+      "chat-messages.service.ts:277 truyền `actor.id` — lấy tên hiển thị của CHÍNH người gửi để dựng payload NOTI.",
     signedBy: WO,
   },
   {
     point: "chat/chat-messages.repository.ts#findSenderDisplayName:users.fullName",
     basis: "self-bound-row",
-    reason: "chat-messages.repository.ts:518 — cùng truy vấn với cột email: chat-messages.service.ts:277 truyền `actor.id`, lấy tên hiển thị của CHÍNH người gửi để dựng payload NOTI.",
+    reason:
+      "chat-messages.repository.ts:518 — cùng truy vấn với cột email: chat-messages.service.ts:277 truyền `actor.id`, lấy tên hiển thị của CHÍNH người gửi để dựng payload NOTI.",
     signedBy: WO,
   },
   {
     point: "chat/chat-messages.repository.ts#MESSAGE_COLUMNS:users.fullName",
     basis: "membership",
-    reason: "Mọi đường đọc tin đi qua `ChatAccessService.assertMember`/`assertMessageAccess` (chat-access.service.ts:122,235) — điểm khẳng định membership DUY NHẤT của module.",
+    reason:
+      "Mọi đường đọc tin đi qua `ChatAccessService.assertMember`/`assertMessageAccess` (chat-access.service.ts:122,235) — điểm khẳng định membership DUY NHẤT của module.",
     signedBy: WO,
   },
   {
@@ -162,7 +189,8 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "chat/chat-oversight.repository.ts#listOversightAudit:users.fullName",
     basis: "waiver",
-    reason: "Như trên — nhật ký ai đã dùng quyền giám sát; tên người giám sát là nội dung của chính bản ghi.",
+    reason:
+      "Như trên — nhật ký ai đã dùng quyền giám sát; tên người giám sát là nội dung của chính bản ghi.",
     signedBy: WO,
   },
   {
@@ -174,7 +202,8 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "chat/chat-rooms.repository.ts#listActiveMembers:users.fullName",
     basis: "membership",
-    reason: "chat-rooms.service.ts:138 + chat-members.service.ts:341 — cả hai sau `assertMember` (đường thứ hai là đọc-lại-sau-ghi, thao tác ghi đã gate).",
+    reason:
+      "chat-rooms.service.ts:138 + chat-members.service.ts:341 — cả hai sau `assertMember` (đường thứ hai là đọc-lại-sau-ghi, thao tác ghi đã gate).",
     signedBy: WO,
   },
   {
@@ -195,37 +224,43 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "employees/employees.repository.ts#DETAIL_COLUMNS:users.email",
     basis: "scoped-predicate",
-    reason: "employees.service.ts:130-150 — resolveAndAssert rồi `isEmployeeInScope` cho hàng đơn; list đi qua :95-108 với `scopeCond`.",
+    reason:
+      "employees.service.ts:130-150 — resolveAndAssert rồi `isEmployeeInScope` cho hàng đơn; list đi qua :95-108 với `scopeCond`.",
     signedBy: WO,
   },
   {
     point: "employees/employees.repository.ts#DETAIL_COLUMNS:users.fullName",
     basis: "scoped-predicate",
-    reason: "Cùng bản đồ cột DETAIL_COLUMNS với cột email: employees.service.ts:130-150 resolveAndAssert rồi `isEmployeeInScope` cho hàng đơn — hồ sơ ngoài scope không tới được lời chiếu.",
+    reason:
+      "Cùng bản đồ cột DETAIL_COLUMNS với cột email: employees.service.ts:130-150 resolveAndAssert rồi `isEmployeeInScope` cho hàng đơn — hồ sơ ngoài scope không tới được lời chiếu.",
     signedBy: WO,
   },
   {
     point: "employees/employees.repository.ts#LIST_COLUMNS:users.email",
     basis: "scoped-predicate",
-    reason: "employees.service.ts:95-108 — resolveAndAssert + buildEmployeeScopeCondition; `listEmployeesTx` nhận `scopeCond`.",
+    reason:
+      "employees.service.ts:95-108 — resolveAndAssert + buildEmployeeScopeCondition; `listEmployeesTx` nhận `scopeCond`.",
     signedBy: WO,
   },
   {
     point: "employees/employees.repository.ts#LIST_COLUMNS:users.fullName",
     basis: "scoped-predicate",
-    reason: "Cùng bản đồ cột LIST_COLUMNS với cột email: employees.service.ts:95-108 resolveAndAssert + buildEmployeeScopeCondition, `listEmployeesTx` nhận `scopeCond`.",
+    reason:
+      "Cùng bản đồ cột LIST_COLUMNS với cột email: employees.service.ts:95-108 resolveAndAssert + buildEmployeeScopeCondition, `listEmployeesTx` nhận `scopeCond`.",
     signedBy: WO,
   },
   {
     point: "employees/hr-org-chart.repository.ts#listScopedActiveTx:users.fullName",
     basis: "scoped-predicate",
-    reason: "hr-org-chart.service.ts:47-58 — resolveAndAssert + buildEmployeeScopeCondition, `scopeCond` là tham số BẮT BUỘC.",
+    reason:
+      "hr-org-chart.service.ts:47-58 — resolveAndAssert + buildEmployeeScopeCondition, `scopeCond` là tham số BẮT BUỘC.",
     signedBy: WO,
   },
   {
     point: "employees/hr-read.repository.ts#DETAIL_COLUMNS:directManagerUsers.fullName",
     basis: "scoped-predicate",
-    reason: "alias(users,'direct_manager_users') — tên quản lý trực tiếp của CHÍNH hồ sơ đã lọc theo scope (hr-read.service.ts:186 resolveAndAssert). Đường quan hệ, không phải danh bạ độc lập.",
+    reason:
+      "alias(users,'direct_manager_users') — tên quản lý trực tiếp của CHÍNH hồ sơ đã lọc theo scope (hr-read.service.ts:186 resolveAndAssert). Đường quan hệ, không phải danh bạ độc lập.",
     signedBy: WO,
   },
   {
@@ -237,25 +272,29 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "employees/hr-read.repository.ts#DETAIL_COLUMNS:users.email",
     basis: "scoped-predicate",
-    reason: "hr-read.service.ts:186 — resolveAndAssert trước khi đọc chi tiết; hàng ngoài scope không tới được.",
+    reason:
+      "hr-read.service.ts:186 — resolveAndAssert trước khi đọc chi tiết; hàng ngoài scope không tới được.",
     signedBy: WO,
   },
   {
     point: "employees/hr-read.repository.ts#DETAIL_COLUMNS:users.fullName",
     basis: "scoped-predicate",
-    reason: "Cùng bản đồ cột DETAIL_COLUMNS với cột email: hr-read.service.ts:186 resolveAndAssert trước khi đọc chi tiết; hàng ngoài scope không tới được.",
+    reason:
+      "Cùng bản đồ cột DETAIL_COLUMNS với cột email: hr-read.service.ts:186 resolveAndAssert trước khi đọc chi tiết; hàng ngoài scope không tới được.",
     signedBy: WO,
   },
   {
     point: "employees/hr-read.repository.ts#LIST_COLUMNS:users.email",
     basis: "scoped-predicate",
-    reason: "hr-read.service.ts:93-104 — resolveAndAssert + buildEmployeeScopeCondition; `listScopedTx(tx, companyId, scopeCond, …)`.",
+    reason:
+      "hr-read.service.ts:93-104 — resolveAndAssert + buildEmployeeScopeCondition; `listScopedTx(tx, companyId, scopeCond, …)`.",
     signedBy: WO,
   },
   {
     point: "employees/hr-read.repository.ts#LIST_COLUMNS:users.fullName",
     basis: "scoped-predicate",
-    reason: "Cùng bản đồ cột LIST_COLUMNS với cột email: hr-read.service.ts:93-104 resolveAndAssert + buildEmployeeScopeCondition, `listScopedTx` nhận `scopeCond`.",
+    reason:
+      "Cùng bản đồ cột LIST_COLUMNS với cột email: hr-read.service.ts:93-104 resolveAndAssert + buildEmployeeScopeCondition, `listScopedTx` nhận `scopeCond`.",
     signedBy: WO,
   },
   {
@@ -277,13 +316,15 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "integrations/lms/lms-sync-producer.service.ts#enqueueSync:users.email",
     basis: "no-actor",
-    reason: "Producer outbox đồng bộ tài khoản sang LMS — chạy trong tx nghiệp vụ, không có actor HTTP. Đích đến là hệ LMS nội bộ đã ký SSO.",
+    reason:
+      "Producer outbox đồng bộ tài khoản sang LMS — chạy trong tx nghiệp vụ, không có actor HTTP. Đích đến là hệ LMS nội bộ đã ký SSO.",
     signedBy: WO,
   },
   {
     point: "integrations/lms/lms-sync-producer.service.ts#enqueueSync:users.fullName",
     basis: "no-actor",
-    reason: "Cùng truy vấn producer outbox với cột email (lms-sync-producer.service.ts:49) — chạy trong tx nghiệp vụ, không actor HTTP; đích là hệ LMS nội bộ đã ký SSO.",
+    reason:
+      "Cùng truy vấn producer outbox với cột email (lms-sync-producer.service.ts:49) — chạy trong tx nghiệp vụ, không actor HTTP; đích là hệ LMS nội bộ đã ký SSO.",
     signedBy: WO,
   },
   {
@@ -295,7 +336,8 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "integrations/lms/lms-user-sync.job-handler.ts#run:users.fullName",
     basis: "no-actor",
-    reason: "Cùng truy vấn job handler với cột email (lms-user-sync.job-handler.ts:96) — chạy ở worker, không actor HTTP.",
+    reason:
+      "Cùng truy vấn job handler với cột email (lms-user-sync.job-handler.ts:96) — chạy ở worker, không actor HTTP.",
     signedBy: WO,
   },
 
@@ -303,7 +345,8 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "leave/leave-approval.repository.ts#listPendingScopedTx:users.fullName",
     basis: "scoped-predicate",
-    reason: "leave-approval.service.ts:104-116 — `scopeCond` là tham số BẮT BUỘC của cả `countPendingScopedTx` lẫn `listPendingScopedTx`.",
+    reason:
+      "leave-approval.service.ts:104-116 — `scopeCond` là tham số BẮT BUỘC của cả `countPendingScopedTx` lẫn `listPendingScopedTx`.",
     signedBy: WO,
   },
   {
@@ -315,7 +358,8 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "leave/leave-report.repository.ts#listReportTx:users.fullName",
     basis: "scoped-predicate",
-    reason: "leave-report.service.ts:34-46 — resolveAndAssert('export', leave, isSensitive) + buildEmployeeScopeCondition; kèm audit-on-read trong cùng tx.",
+    reason:
+      "leave-report.service.ts:34-46 — resolveAndAssert('export', leave, isSensitive) + buildEmployeeScopeCondition; kèm audit-on-read trong cùng tx.",
     signedBy: WO,
   },
   {
@@ -328,7 +372,8 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "leave/leave.repository.ts#findRequests:users.fullName",
     basis: "second-assert",
-    reason: "leave.service.ts:163-182 — `scope=all` phải qua `assertCan('approve','leave')`; vai `employee` KHÔNG có cặp này.",
+    reason:
+      "leave.service.ts:163-182 — `scope=all` phải qua `assertCan('approve','leave')`; vai `employee` KHÔNG có cặp này.",
     signedBy: WO,
   },
 
@@ -336,13 +381,15 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "me/me.repository.ts#findAccountByUserIdTx:users.email",
     basis: "self-bound-route",
-    reason: "me.repository.ts:78-85 `eq(users.id, userId)` với userId resolve từ token. `/me/*` theo định nghĩa chỉ phục vụ chính chủ.",
+    reason:
+      "me.repository.ts:78-85 `eq(users.id, userId)` với userId resolve từ token. `/me/*` theo định nghĩa chỉ phục vụ chính chủ.",
     signedBy: WO,
   },
   {
     point: "me/me.repository.ts#findAccountByUserIdTx:users.fullName",
     basis: "self-bound-route",
-    reason: "me.repository.ts:80 — cùng truy vấn với cột email: `eq(users.id, userId)` token-resolved, `/me/*` theo định nghĩa chỉ phục vụ chính chủ.",
+    reason:
+      "me.repository.ts:80 — cùng truy vấn với cột email: `eq(users.id, userId)` token-resolved, `/me/*` theo định nghĩa chỉ phục vụ chính chủ.",
     signedBy: WO,
   },
   {
@@ -369,31 +416,36 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "org/org.repository.ts#listEmployees:users.email",
     basis: "scoped-predicate",
-    reason: "org.repository.ts:360 — `scopeCond: SQL` BẮT BUỘC, không giá trị mặc định (S6-SEC-ORGSCOPE-1/N-1: optional ở đây nghĩa là quên truyền thì lặng lẽ quay về hành vi rò cũ).",
+    reason:
+      "org.repository.ts:360 — `scopeCond: SQL` BẮT BUỘC, không giá trị mặc định (S6-SEC-ORGSCOPE-1/N-1: optional ở đây nghĩa là quên truyền thì lặng lẽ quay về hành vi rò cũ).",
     signedBy: "S6-SEC-ORGSCOPE-1",
   },
   {
     point: "org/org.repository.ts#listEmployees:users.fullName",
     basis: "scoped-predicate",
-    reason: "org.repository.ts:366 — cùng truy vấn với cột email: `scopeCond: SQL` là tham số BẮT BUỘC, không có giá trị mặc định (N-1).",
+    reason:
+      "org.repository.ts:366 — cùng truy vấn với cột email: `scopeCond: SQL` là tham số BẮT BUỘC, không có giá trị mặc định (N-1).",
     signedBy: "S6-SEC-ORGSCOPE-1",
   },
   {
     point: "org/org.repository.ts#listTeamMembers:users.email",
     basis: "identity-gated",
-    reason: "org.repository.ts:285-291 — `case when (showIdentity)` với vị từ của cặp danh bạ `view:user`; org.service.ts:260-262 bỏ HẲN khoá khi ngoài scope (N-1c, KI-049).",
+    reason:
+      "org.repository.ts:285-291 — `case when (showIdentity)` với vị từ của cặp danh bạ `view:user`; org.service.ts:260-262 bỏ HẲN khoá khi ngoài scope (N-1c, KI-049).",
     signedBy: "S6-SEC-ORGTEAMSCOPE-1",
   },
   {
     point: "org/org.repository.ts#listTeamMembers:users.fullName",
     basis: "identity-gated",
-    reason: "org.repository.ts:288 — cùng cụm `case when (showIdentity)` với cột email; org.service.ts:260-262 bỏ HẲN khoá khi ngoài scope vì contract khai `.optional()` (N-1c, KI-049).",
+    reason:
+      "org.repository.ts:288 — cùng cụm `case when (showIdentity)` với cột email; org.service.ts:260-262 bỏ HẲN khoá khi ngoài scope vì contract khai `.optional()` (N-1c, KI-049).",
     signedBy: "S6-SEC-ORGTEAMSCOPE-1",
   },
   {
     point: "org/org.repository.ts#listTeams:users.fullName",
     basis: "identity-gated",
-    reason: "org.repository.ts:183-186 `leaderUserName` — N-1e/KI-052. `null` KHÔNG dùng để mang tin (contract nullable hợp lệ vì team có thể chưa có trưởng nhóm) nên phải bỏ khoá qua `identityInScope`.",
+    reason:
+      "org.repository.ts:183-186 `leaderUserName` — N-1e/KI-052. `null` KHÔNG dùng để mang tin (contract nullable hợp lệ vì team có thể chưa có trưởng nhóm) nên phải bỏ khoá qua `identityInScope`.",
     signedBy: "S6-SEC-IDENTITYBOUND-1",
   },
 
@@ -401,13 +453,15 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "recycle-bin/recycle-bin.repository.ts#deletedColumns:users.email",
     basis: "identity-gated",
-    reason: "recycle-bin.repository.ts:22-27 — `case when (showIdentity)`; `identityCond` là tham số BẮT BUỘC, `null` ⇒ `false` (N-1d, KI-051).",
+    reason:
+      "recycle-bin.repository.ts:22-27 — `case when (showIdentity)`; `identityCond` là tham số BẮT BUỘC, `null` ⇒ `false` (N-1d, KI-051).",
     signedBy: "S6-SEC-IDENTITYBOUND-1",
   },
   {
     point: "recycle-bin/recycle-bin.repository.ts#deletedColumns:users.fullName",
     basis: "identity-gated",
-    reason: "recycle-bin.repository.ts:25 — cùng cụm `case when (showIdentity)` với cột email; `identityCond` BẮT BUỘC, `null` ⇒ `false` fail-closed (N-1d, KI-051).",
+    reason:
+      "recycle-bin.repository.ts:25 — cùng cụm `case when (showIdentity)` với cột email; `identityCond` BẮT BUỘC, `null` ⇒ `false` fail-closed (N-1d, KI-051).",
     signedBy: "S6-SEC-IDENTITYBOUND-1",
   },
 
@@ -415,13 +469,15 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "tasks/projects.repository.ts#findDetailByIdTx:ownerUser.fullName",
     basis: "membership",
-    reason: "projects.service.ts:148,164,181 truyền `scopeExists` — vị từ tồn-tại-thành-viên của dự án. Đường đọc-lại-sau-ghi (:1005) đi sau thao tác ghi đã gate.",
+    reason:
+      "projects.service.ts:148,164,181 truyền `scopeExists` — vị từ tồn-tại-thành-viên của dự án. Đường đọc-lại-sau-ghi (:1005) đi sau thao tác ghi đã gate.",
     signedBy: WO,
   },
   {
     point: "tasks/projects.repository.ts#listMembersTx:memberUser.fullName",
     basis: "membership",
-    reason: "projects.service.ts:166 — gọi SAU `findDetailByIdTx(tx, …, scopeExists)`; không truy cập được dự án thì không tới được danh sách thành viên.",
+    reason:
+      "projects.service.ts:166 — gọi SAU `findDetailByIdTx(tx, …, scopeExists)`; không truy cập được dự án thì không tới được danh sách thành viên.",
     signedBy: WO,
   },
   {
@@ -492,7 +548,8 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
   {
     point: "auth/security-event.repository.ts#findManyTx:users.fullName",
     basis: "identity-gated",
-    reason: "KI-054 — cùng nhóm CHỦ THỂ, cùng cụm `case when`, cùng cờ `identityInScope`. ⟲ S10-SEC-AUDITLOGROW-1: `Own` trên vị từ HÀNG bám CHỦ THỂ (`user_id`), CỐ Ý không `OR actor_user_id` — xem `security-event.repository.buildWhere`.",
+    reason:
+      "KI-054 — cùng nhóm CHỦ THỂ, cùng cụm `case when`, cùng cờ `identityInScope`. ⟲ S10-SEC-AUDITLOGROW-1: `Own` trên vị từ HÀNG bám CHỦ THỂ (`user_id`), CỐ Ý không `OR actor_user_id` — xem `security-event.repository.buildWhere`.",
     signedBy: WO,
   },
   {
@@ -536,7 +593,11 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   waiver: 7,
   "no-actor": 7,
   "second-assert": 3,
-  "self-bound-route": 7,
+  // 7 → 8 (S10-SEC-LOGINLOG429-1, 25/08/2026): `recordLoginAttemptForUser:users.email`. Nới CÓ CHỦ
+  // ĐÍCH và đi qua FULL gate đúng như dòng cảnh báo của cổng này đòi. Điểm mới KHÔNG mở bề mặt đọc
+  // nào: email đọc ra chỉ rơi vào `login_logs.email` (cột vốn đã chứa email client tự khai), và bề
+  // mặt đọc lại của cột đó gác danh tính riêng qua `LoginLogGrants.identity`.
+  "self-bound-route": 8,
   "order-only": 1,
   // Có vị từ SQL thật, nhưng SỔ này không nhìn thấy vị từ ⇒ vẫn phải có trần.
   "scoped-predicate": 21,

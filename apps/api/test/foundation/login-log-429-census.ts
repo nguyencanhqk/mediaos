@@ -35,8 +35,14 @@ import ts from "typescript";
 // tsconfig module=commonjs → `__dirname`, không `import.meta` (mẫu body-validation-census).
 const AUTH_SRC = path.join(__dirname, "..", "..", "src", "auth");
 
-/** Lời gọi được tính là "để lại vết". Tên method, khớp ở đuôi property-access. */
-const WRITE_CALLS = new Set(["recordLoginAttempt", "record"]);
+/**
+ * Lời gọi được tính là "để lại vết". Tên method, khớp ở đuôi property-access.
+ *
+ * `recordLoginAttemptForUser` là biến thể "đã biết tenant+user, chưa biết email" (tự SELECT email
+ * trong CHÍNH tx sắp INSERT). Phải liệt kê TƯỜNG MINH: quên nó thì ba nhánh vừa vá của bước-2 2FA
+ * bị báo vi phạm OAN, và áp lực sẽ là nới luật — chứ không phải sửa danh sách.
+ */
+const WRITE_CALLS = new Set(["recordLoginAttempt", "recordLoginAttemptForUser", "record"]);
 
 /** Với `record` phải thêm điều kiện object — `audit.record` KHÔNG tính (xem `isWriteCall`). */
 const SECURITY_EVENT_RECEIVERS = new Set(["securityEvents"]);
@@ -218,16 +224,21 @@ export function stepUpAntiAmplificationAnchors(): { recordFailure: number; write
 
 /**
  * NEO DƯƠNG cho waiver của BA đường post-auth (`disableTwoFactor` · `changePassword` ·
- * `confirmEnable`) — §1.1 của plan.
+ * `confirmEnable`) — §1.1 của plan. Trả tập ngữ cảnh xác thực-lại-thất-bại ĐANG ĐƯỢC GHI.
  *
  * ⚠️ VÌ SAO KHÔNG NEO Ở MỨC HÀM. Ba đường này được waiver ở nhánh 429 vì chúng ghi vết ở nhánh
  * **SAI** (đường DỰNG NÊN khoá), không ở nhánh **ĐÃ KHOÁ**. Nếu neo bằng "hàm có lời gọi ghi" thì
- * `changePassword` qua cổng SẴN nhờ `PASSWORD_CHANGED` ở nhánh THÀNH CÔNG (`auth.service.ts:669`)
- * — waiver thành dây thừa, xoá lời ghi ở nhánh sai vẫn XANH. Đúng cái bẫy [[tests-can-pin-a-hole-open]].
+ * `changePassword` qua cổng SẴN nhờ `PASSWORD_CHANGED` ở nhánh THÀNH CÔNG (`auth.service.ts`)
+ * — waiver thành dây thừa, xoá lời ghi ở nhánh sai vẫn XANH ([[tests-can-pin-a-hole-open]]).
  *
- * ⇒ Neo theo ĐỊNH NGHĨA: tập `payload.context` của các lời gọi `securityEvents.record` mang
- * `eventType: "REAUTH_FAILED"`. Mã đó CHỈ được ghi ở nhánh sai; mất một context = mất một bản vá.
- * ([[index-ratchet-must-pin-definition-not-name]])
+ * ⚠️ VÀ KHÔNG NEO Ở `payload` CỦA WRITER. Writer nhận ngữ cảnh qua THAM SỐ và ghi
+ * `payload: { context }` dạng shorthand ⇒ trong writer KHÔNG có literal nào để đọc. Ngữ cảnh thật
+ * nằm ở **LỜI GỌI** `recordReauthFailure(..., "<context>")` — tức đúng ba nhánh sai. Đó là chỗ neo.
+ * (Bản đầu của census này neo nhầm vào `payload` và trả về TẬP RỖNG — ca ratchet đỏ đúng lúc, chứ
+ * nếu điều kiện viết ngược chiều thì nó đã xanh-RỖNG và không ai biết.)
+ *
+ * Cặp với `reauthFailedWriterCount()`: một cái chứng minh CÓ writer ghi đúng `event_type`, cái kia
+ * chứng minh writer đó được gọi từ đủ ba nhánh. Thiếu vế nào cũng là neo hở.
  */
 export function reauthFailedContexts(): ReadonlySet<string> {
   const found = new Set<string>();
@@ -235,14 +246,16 @@ export function reauthFailedContexts(): ReadonlySet<string> {
   for (const f of walk(AUTH_SRC, [], (n) => n.endsWith(".ts") && !n.endsWith(".spec.ts"))) {
     const sf = parse(f);
     const visit = (n: ts.Node): void => {
-      if (isWriteCall(n) && ts.isCallExpression(n)) {
-        for (const arg of n.arguments) {
-          if (!ts.isObjectLiteralExpression(arg)) continue;
-          if (!hasStringProp(arg, "eventType", "REAUTH_FAILED")) continue;
-          const payload = propValue(arg, "payload");
-          if (payload && ts.isObjectLiteralExpression(payload)) {
-            const ctx = propValue(payload, "context");
-            if (ctx && ts.isStringLiteralLike(ctx)) found.add(ctx.text);
+      if (ts.isCallExpression(n)) {
+        const callee = n.expression;
+        const name = ts.isPropertyAccessExpression(callee)
+          ? callee.name.text
+          : ts.isIdentifier(callee)
+            ? callee.text
+            : "";
+        if (name === "recordReauthFailure") {
+          for (const arg of n.arguments) {
+            if (ts.isStringLiteralLike(arg)) found.add(arg.text);
           }
         }
       }
@@ -251,6 +264,32 @@ export function reauthFailedContexts(): ReadonlySet<string> {
     visit(sf);
   }
   return found;
+}
+
+/**
+ * Số lời gọi `securityEvents.record` mang `eventType: "REAUTH_FAILED"`. Vế thứ hai của neo dương:
+ * chứng minh `recordReauthFailure` THẬT SỰ ghi mã đó, chứ không phải một hàm cùng tên làm việc khác.
+ */
+export function reauthFailedWriterCount(): number {
+  let count = 0;
+  for (const f of walk(AUTH_SRC, [], (n) => n.endsWith(".ts") && !n.endsWith(".spec.ts"))) {
+    const sf = parse(f);
+    const visit = (n: ts.Node): void => {
+      if (isWriteCall(n) && ts.isCallExpression(n)) {
+        for (const arg of n.arguments) {
+          if (
+            ts.isObjectLiteralExpression(arg) &&
+            hasStringProp(arg, "eventType", "REAUTH_FAILED")
+          ) {
+            count += 1;
+          }
+        }
+      }
+      ts.forEachChild(n, visit);
+    };
+    visit(sf);
+  }
+  return count;
 }
 
 function propValue(obj: ts.ObjectLiteralExpression, name: string): ts.Expression | null {
