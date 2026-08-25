@@ -4,6 +4,87 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
+## Phiên 2026-08-25 — **Đợt 3 tiếp**: 3 WO đóng (KI-047·048·077·010 + KI-078 mới) → PR #411 #412 #413
+
+**BA PR ĐỘC LẬP, chưa merge, base `master`, KHÔNG xếp chồng.** Merge thứ tự nào cũng được.
+`#411` vùng ĐỎ ⇒ **người chốt**, không nhãn auto-merge. `#412`/`#413` vùng vàng.
+
+Trước đó đã merge `#409` + `#410` của phiên trước. ⚠️ Squash-merge `#409` làm `#410` **CONFLICTING**
+ngay lập tức — phải `git rebase --onto origin/master <sha-cũ-của-base>` rồi force-push, CI chạy lại
+14'. Đó là [[squash-merge-breaks-stacked-prs]] xảy ra đúng như sổ ghi; **đừng xếp chồng PR nữa**.
+
+### #411 `wo/s10-sec-loginlog429-1` — KI-047 + KI-048 (🔴)
+
+Vá theo **LUẬT**, không vá từng chỗ:
+> Đường DỰNG NÊN cái khoá phải để lại vết; đường ĐANG BỊ KHOÁ ghi 0 hàng.
+
+Luật này đóng CẢ HAI KI thay vì để chúng đánh nhau (KI-047 đòi ghi thêm, KI-048 kêu ghi quá nhiều).
+
+**`stepUp` KHÔNG phải lỗ** — nhánh khoá ghi 0 hàng là *nửa (a)* của bản vá A09 chống bồi hàng
+append-only, có docblock ký sẵn (`step-up.service.ts:52-63`). Ghi vào đó là **hoàn tác** nó. Sổ
+KI-047 đếm nó là "đường thứ 5 không ghi" — đếm đúng, kết luận sai.
+
+**Phát hiện ngoài khung KI-047:** `completeTwoFactorLogin` ghi `login_logs` **CHỈ khi thành công** —
+challenge hỏng · replay · 429 · mã sai · công ty ngừng đều 0 dòng; cộng bước-1 nhánh cấp challenge
+cũng 0 dòng ⇒ **tài khoản bật 2FA chỉ để lại vết THÀNH CÔNG** ở AUTH-API-401.
+
+**Hai cổng CÓ SẴN bắt được thay đổi này** và bắt đúng: ratchet điểm-chiếu-danh-tính chặn `users.email`
+mới cho tới khi có verdict; rồi `BASIS_CEILINGS` chặn tiếp buộc nới 7→8 phải có chữ ký WO.
+
+### #412 `wo/s10-fnd-paramuuid-1` — KI-077 (🟡) + **KI-078 mới**
+
+ĐO TRƯỚC KHI VÁ: cả 5 tham số trả **500 `SYSTEM-ERR-001` + `error.type='Error'`** ⇒ giả thuyết
+"đường DB `22P02`" xác nhận. Sau vá 400 ở biên, mỗi ca deny có ca ALLOW đối chứng.
+
+**Số đo đáng nhớ:** census AST toàn API ra **312 `@Param` / 298 id-like / 77 có pipe ⇒ 221 chưa có**.
+KI-077 kê 5 chỗ trong MỘT module; hình dạng đó tồn tại 221 lần ⇒ cấp **KI-078**. Ratchet là **TRẦN**
+(chặn mọc thêm) chứ không phải "=0", vì chỉ 5 chỗ từng được ĐO — 216 chỗ còn lại chưa ai chạm.
+
+**Đính chính docblock sai:** route `unlink` ghi ":id khoanh phạm vi" — handler KHÔNG khai
+`@Param("id")`; cô lập tenant giữ bởi `findByIdTx(user.companyId, linkId, tx)`. Câu cũ sai theo hướng
+làm người đọc **yên tâm hơn thực tế**.
+
+### #413 `wo/s10-hr-emppage-1` — KI-010 (🟡)
+
+`employeeListQuerySchema` **đã tồn tại từ trước** nhưng controller chưa hề dùng (4 `@Query()` rời).
+`LIMIT/OFFSET` ở SQL; `total` = `count(*)` cùng `where` (sau filter + sau scope).
+
+**Vế FE là phần đắt nhất, đúng như notes WO cảnh báo.** `apiFetch` bóc `.data` và **vứt**
+`pagination` ⇒ thêm **`apiFetchPaginated`** vào `web-core` (đường song song, opt-in). Hộ tiêu thụ
+`/employees` **duy nhất** là `apps/console` — `apps/app` dùng `/hr/employees` (đã phân trang sẵn).
+
+⚠️ **Hai quy ước phân trang tồn tại song song TRƯỚC WO này:** `/employees` nay `per_page`,
+`/hr/employees` là `pageSize`. Không phải bỏ sót; hợp nhất là việc của WO gộp hai đường.
+
+Đối chiếu cả cụm: KI-009 · KI-011 · KI-010 ⇒ **cả ba khuyến nghị của `S5-PERF-1` đã đóng**.
+
+### CÒN LẠI của Đợt 3 — 3 WO đỏ/crown
+
+`S10-SEC-ROLEMEMBERDEL-1` (🔴, chủ trương hướng (b) ĐÃ KÝ, cần ADR) → `S10-SEC-FKCATALOG-1`
+(🔴 **CROWN**) → `S10-QA-ROUTEHTTP-3` (🟡, chạy CUỐI để đo mẫu số đã ổn định).
+
+⚠️ **`S10-QA-ROUTEHTTP-2` đã ĐỔI TÊN thành `S10-QA-ROUTEHTTP-3`**: entry seed Đợt 3 **trùng id** với
+một WO đã `done` (PR #392). Trùng id làm ledger overlay + gen-status + guard-scope đọc nhầm entry.
+
+### Friction — CHI PHÍ, đọc trước khi mở phiên đỏ
+
+**Phiên này $102 → ~$300. WO ĐỎ đầu tiên một mình tốn ~$136.** Phần đắt KHÔNG phải code mà là
+subagent đọc lại code từ đầu: 2 vòng `plan-reviewer` (354k token) + 1 `security-reviewer` (143k) =
+gần nửa chi phí WO đó. Ước lượng ban đầu của tôi ($150–250 cho CẢ 5 WO còn lại) **sai một bậc**.
+
+⇒ Với 3 WO đỏ/crown còn lại: **mở phiên MỚI, context sạch**, và cân nhắc **1 vòng plan-review** thay
+vì 2. Vòng 2 ở WO này chỉ ra 4 blocker, trong đó 1 cái đã tự vá trước và 1 cái (B6) **tự mâu thuẫn**
+— lợi tức giảm rõ rệt. Vòng 1 thì đáng tiền: B3 và B4 là lỗi thật sẽ làm bản vá KI-048 vô tác dụng.
+
+**Bài học review:** `security-reviewer` cho verdict BLOCK với **0 lỗ hổng sống** — chặn vì các hợp
+đồng plan đã ký chỉ được giữ bằng ĐỌC CODE, không bằng cổng. Đó là BLOCK rẻ (3 ca test, 2 file,
+không đụng code sản phẩm) và đúng. Đừng đọc "BLOCK" thành "có lỗ hổng".
+
+**Bẫy đã gặp lại:** (1) `contracts` dist cũ ⇒ typecheck đỏ oan, phải
+`pnpm --filter @mediaos/contracts build` ([[stale-contracts-dist-typecheck-false-red]]). (2)
+`Unhandled Rejection: Channel closed` sau teardown làm `check.sh` đỏ MỘT lần rồi xanh lần sau
+([[vitest-unhandled-rejection-after-teardown]]) — chạy lại trước khi đi truy root-cause.
+
 ## Phiên 2026-08-24 (b) — **Đợt 3**: seed 5 WO + thi công 3.1 (KI-068) → PR #409 ⊂ #410
 
 **Hai PR XẾP CHỒNG, chưa merge — #409 là base của #410. Merge #409 TRƯỚC.**
