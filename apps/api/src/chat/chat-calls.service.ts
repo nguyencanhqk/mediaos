@@ -199,7 +199,13 @@ export class ChatCallsService {
     // ⚠️ SAU COMMIT — hai đường phát, và đường `missed` KHÔNG được quên: bước dọn-trước-khi-mời ở trên
     // vừa đánh nhỡ những cuộc gọi treo của phòng này. Không báo ⇒ máy người được gọi cũ **vẫn đổ chuông
     // cho một cuộc gọi đã chết**, và hai nguồn sự thật (màn hình vs DB) lệch nhau vĩnh viễn.
-    this.emitExpired(actor.companyId, expired);
+    //
+    // ⚠️ `void` CÓ CHỦ Ý (S10-CHAT-EMITGUARD-2 · KI-076): `emitExpired` trả về SỐ cuộc gọi không phát
+    // được, nhưng đường REST **không có run-row** để chứa con số đó — ở đường job nó đi vào
+    // `JobRunResult.failed` + `metadata.emitFailed`, ở đây thì không có gì tương đương. Helper đã
+    // `logger.error` **per-item kèm callId**, nên một dòng tổng ở tầng này chỉ nhân đôi cùng thông tin.
+    // Viết `void` để chỗ vứt là TƯỜNG MINH và grep được (xem docblock `emitLifecycle`).
+    void this.emitExpired(actor.companyId, expired);
     this.emitLifecycle(actor.companyId, call, "ringing");
     return call;
   }
@@ -672,21 +678,49 @@ export class ChatCallsService {
    * Đích lấy từ `dto.participants` — tức bảng `chat_call_participants`, KHÔNG phải danh sách thành viên
    * phòng: người vào phòng sau khi cuộc gọi bắt đầu không có hàng participant và không cần biết cuộc gọi
    * tồn tại. (Đó cũng chính là tập mà `/ws-call` dùng để quyết ai được relay — một nguồn sự thật.)
+   *
+   * ┌─ S10-CHAT-EMITGUARD-2 (KI-076) — VÌ SAO GUARD Ở ĐÂY, VÀ VÌ SAO KHÔNG TRẢ SỐ ĐẾM ──────────────┐
+   * │ Helper này là điểm phát của **CẢ NĂM** route REST: `invite` gọi thẳng (`ringing`), còn         │
+   * │ `accept`/`reject`/`cancel`/`hangup` đi chung qua `lifecycleTx`. Đặt `try/catch` ở ĐÂY là MỘT   │
+   * │ điểm sửa phủ cả năm; nhân bản nó ra từng route là đi ngược đúng lý do `lifecycleTx` tồn tại.   │
+   * │                                                                                                │
+   * │ • **Vì sao cần guard dù `emitChatCall` hôm nay không ném:** bất biến đó sống ở module KHÁC     │
+   * │   (`realtime/`, ghim ở `realtime-emitter.call.spec.ts`) — đây là vế phòng thủ bên này của cùng │
+   * │   hợp đồng, y hệt `emitExpired`/`emitAutoEnded`. Lời gọi nằm SAU commit: một exception thoát   │
+   * │   ra ⇒ route trả **500 cho một giao dịch ĐÃ commit**, actor thử lại và ăn 422                  │
+   * │   `CALL_NOT_ACTIONABLE`. Và với PEER, WS là kênh DUY NHẤT — `rejected`/`cancelled`/`ended` là  │
+   * │   trạng thái CUỐI: KHÔNG job nào quét, KHÔNG route ĐỌC để poll bù ⇒ mất sự kiện là VĨNH VIỄN.  │
+   * │ • **Vì sao trả `void`, KHÔNG trả số đếm như hai helper của job:** đường REST **không có        │
+   * │   run-row** nào để chứa con số đó (`JobRunResult.failed` + `metadata.emitFailed` là của tầng   │
+   * │   job), và hợp đồng HTTP của 5 route là `ChatCallDto` — nhét "emit hỏng" vào DTO là rò chi     │
+   * │   tiết vận chuyển vào hợp đồng nghiệp vụ. Trả một con số mà KHÔNG caller nào tiêu thụ là **kế  │
+   * │   toán giả**: nó trông như có tín hiệu trong khi tín hiệu duy nhất là dòng `logger.error`      │
+   * │   dưới đây. Quyết log-only là CÓ CHỦ Ý — không phải sơ suất.                                   │
+   * └────────────────────────────────────────────────────────────────────────────────────────────────┘
    */
   private emitLifecycle(companyId: string, dto: ChatCallDto, action: WsChatCallAction): void {
-    this.realtime.emitChatCall(
-      companyId,
-      (dto.participants ?? []).map((p) => p.userId),
-      {
-        callId: dto.id,
-        roomId: dto.roomId,
-        kind: dto.kind,
-        status: dto.status,
-        initiatorUserId: dto.initiatorUserId,
-        startedAt: dto.startedAt,
-        action,
-      },
-    );
+    try {
+      this.realtime.emitChatCall(
+        companyId,
+        (dto.participants ?? []).map((p) => p.userId),
+        {
+          callId: dto.id,
+          roomId: dto.roomId,
+          kind: dto.kind,
+          status: dto.status,
+          initiatorUserId: dto.initiatorUserId,
+          startedAt: dto.startedAt,
+          action,
+        },
+      );
+    } catch (err) {
+      this.logger.error(
+        `emitLifecycle: KHÔNG phát được chat:call{${action}} callId=${dto.id} roomId=${dto.roomId} — ` +
+          `cuộc gọi ĐÃ ở trạng thái '${dto.status}' trong DB, người tham gia khác có thể giữ khung gọi ` +
+          `lệch với sự thật: ` +
+          (err instanceof Error ? err.message : String(err)),
+      );
+    }
   }
 
   /**
