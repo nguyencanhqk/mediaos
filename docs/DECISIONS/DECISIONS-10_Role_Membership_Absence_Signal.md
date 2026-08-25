@@ -162,13 +162,30 @@ wildcard) — vì chỉ họ gọi được route — rồi đo `resolveStronges
 | ngày | đo gì | kết quả |
 | --- | --- | --- |
 | 2026-08-24 | vai giữ `view:user` hẹp hơn `Company` (4 hình dạng wildcard × 2 cặp) | **0** |
+| **2026-08-25** | **đo lại khi thi công** — `scripts/measure-ki074-role-member-del.sql` trên DB PROD | **0 / 6 actor rơi vào nhánh 204 mới** |
 
-Nguồn của "0" — hai đường, cả hai đều rơi vào nhánh 404:
+**Số đo 25/08 (đầy đủ, để lần sau đối chiếu chứ không phải đo lại từ đầu):**
 
-- `assign-role:user` chỉ được grant cho **company-admin** (mig `0140:10-11`); vai đó có
-  `view:user@Company` (mig `0444:88-89`).
-- **super-admin** không đi qua seed vai: `SuperAdminBootstrapRepository.grantPermissionWithScope`
-  cấp **toàn catalog ở `data_scope = 'System'`** ⇒ `view:user` = `System` ⇒ 404.
+- **6 người** giữ `assign-role:user`; **cả 6** có `view:user` scope mạnh nhất = `Company`
+  ⇒ **cả 6 GIỮ 404**. `actors_falling_into_new_204_branch = 0`.
+- Bốn grant chạm `assign-role:user`, qua **HAI hình dạng khác nhau** — đây là lý do câu đo phải phủ
+  đủ 4 hình dạng wildcard, không chỉ cặp exact:
+
+  | vai | cách chạm `assign-role:user` | `view:user` |
+  | --- | --- | --- |
+  | `QUẢN LÝ CẤP CAO` | **`*:*@Company`** (wildcard) | exact `view:user@Company` |
+  | `SA` | `*:*@Company` **và** exact `assign-role:user@Company` | exact `view:user@Company` |
+  | `company-admin` (system role) | exact `assign-role:user@Company` | exact `view:user@Company` |
+  | `hr` (system role) | — (không gọi được route) | exact `view:user@Company` |
+
+- **`('view','user').is_sensitive = false`** — xác nhận lại trên PROD. Cổng ở ADR §6 còn nguyên.
+- Catalog PROD **không có** hàng `('view','*')` hay `('*','user')`; chỉ có `('*','*')`,
+  `('view','user')`, `('assign-role','user')`. Hai hình dạng kia được câu đo phủ và trả 0 hàng —
+  *"đã đo, không có"*, khác với *"chưa đo"*.
+- ⚠️ Điểm mong manh phải nói ra: `QUẢN LÝ CẤP CAO` và `SA` chạm cặp gate **qua `*:*`**. Hôm nay cả
+  hai vẫn ở nhánh 404 vì có **thêm** grant exact `view:user@Company`. Gỡ grant exact đó (để lại mỗi
+  `*:*`) thì họ **vẫn** ở 404 — `*:*@Company` khớp `view:user` và cho `Company`. Nhưng nếu ai cấp cho
+  họ `view:user@Own`, **exact THẮNG wildcard** ⇒ tụt thẳng xuống nhánh 204. Đó là cấu hình cần canh.
 
 ⇒ Hôm nay (b) là **no-op trên thực địa**: không ai rơi vào nhánh 204. Đó là **điểm mạnh** (đóng một
 lỗ tiềm tàng với 0 hồi quy) nhưng cũng là **bẫy nghiệm thu** — ca DENY phải **TỰ GIEO** vai
