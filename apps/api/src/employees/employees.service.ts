@@ -105,12 +105,19 @@ export class EmployeesService {
     // a failed audit INSERT rolls back and no salary is revealed. Salary scope can be per-employee
     // (object_permissions), so each row is decided/masked individually — no all-or-nothing shortcut.
     return this.db.withTenant(user.companyId, async (tx) => {
-      const rows = await this.repo.listEmployeesTx(tx, user.companyId, filters, scopeCond);
-      // S5-PERF-1: the repo bounds the scan at EMPLOYEE_LIST_MAX_ROWS. Hitting the cap means the
-      // result is truncated → surface it (never silent) so ops know real pagination is now needed.
-      if (rows.length === EMPLOYEE_LIST_MAX_ROWS) {
+      const { rows, total, page, limit } = await this.repo.listEmployeesTx(
+        tx,
+        user.companyId,
+        { ...filters, page: filters.page, perPage: filters.per_page },
+        scopeCond,
+      );
+      // ⟲ S10-HR-EMPPAGE-1 (KI-010): cảnh báo CŨ đã hết lý do tồn tại — nó tồn tại vì client KHÔNG
+      // có cách nào biết kết quả bị cắt. Nay `total` nói thẳng điều đó, nên "cắt" không còn là sự
+      // cố im lặng mà là hành vi có hợp đồng. Giữ cảnh báo cho ca thật sự bất thường: một TRANG
+      // chạm trần tuyệt đối (client tự xin `per_page` = MAX), thứ đáng nhìn về mặt vận hành.
+      if (limit === EMPLOYEE_LIST_MAX_ROWS && rows.length === EMPLOYEE_LIST_MAX_ROWS) {
         this.logger.warn(
-          `employee list hit safety cap (${EMPLOYEE_LIST_MAX_ROWS}) for company=${user.companyId} — result truncated; add real pagination`,
+          `employee list served a MAX-sized page (${EMPLOYEE_LIST_MAX_ROWS}) for company=${user.companyId} — total=${total}`,
         );
       }
       // Sequential (not Promise.all): audit INSERTs share the tx connection and must not interleave.
@@ -119,7 +126,10 @@ export class EmployeesService {
         reveals.push(await this.revealSalary(tx, user, row.id));
       }
       // List projection carries no salaryType/PII (LIST_COLUMNS) — only baseSalary needs masking here.
-      return rows.map((row, i) => maskSalary(row, reveals[i]));
+      return {
+        data: rows.map((row, i) => maskSalary(row, reveals[i])),
+        meta: { total, page, limit },
+      };
     });
   }
 

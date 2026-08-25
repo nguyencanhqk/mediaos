@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Pagination as ApiPagination } from "@mediaos/contracts";
 import { CSRF_COOKIE_NAME, CSRF_HEADER_NAME, authRefreshResponseSchema } from "@mediaos/contracts";
 import { getAccessToken, useAuthStore } from "../stores/auth";
 import { type ApiErrorKind, mapStatusToErrorKind } from "./api-error-kind";
@@ -370,15 +371,27 @@ function rawFetch(
   });
 }
 
-/** Parse 1 Response (đã !401-handled) → T qua Zod schema. Ném ApiError nếu !ok. */
-async function finishResponse<T>(res: Response, schema: z.ZodType<T>, path: string): Promise<T> {
+/**
+ * Parse 1 Response (đã !401-handled) → T qua Zod schema. Ném ApiError nếu !ok.
+ *
+ * ⟲ S10-HR-EMPPAGE-1 (KI-010) — `keepEnvelope` giữ NGUYÊN body thay vì bóc `.data`. Cần vì
+ * `unwrapEnvelope` vứt luôn block `pagination`, nên mọi caller đi qua đường mặc định đều KHÔNG với
+ * tới `total` được ([[apifetch-drops-pagination-bare-array]]). Mặc định `false` ⇒ hành vi cũ không
+ * đổi một byte cho hàng chục call-site hiện có.
+ */
+async function finishResponse<T>(
+  res: Response,
+  schema: z.ZodType<T>,
+  path: string,
+  keepEnvelope = false,
+): Promise<T> {
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw toApiError(res.status, path, body);
   }
   if (res.status === 204) return undefined as T;
   const json: unknown = await res.json();
-  return schema.parse(unwrapEnvelope(json));
+  return schema.parse(keepEnvelope ? json : unwrapEnvelope(json));
 }
 
 /**
@@ -395,7 +408,7 @@ export async function apiFetch<T>(
   path: string,
   schema: z.ZodType<T>,
   init?: RequestInit,
-  opts?: ApiFetchOpts,
+  opts?: ApiFetchOpts & { keepEnvelope?: boolean },
 ): Promise<T> {
   // Endpoint công khai (login / 2FA verify / redirect-allowed) PHẢI opt-out: không rò Bearer phiên cũ lên route
   // chưa xác thực, và 401 của chúng KHÔNG kích hoạt refresh (không có phiên để refresh).
@@ -415,11 +428,54 @@ export async function apiFetch<T>(
     }
     // REPLAY 1 LẦN với access token mới. Kết quả (kể cả 401 lần nữa) đi thẳng tới finishResponse — KHÔNG refresh lại.
     const replay = await rawFetch(path, init, getAccessToken(), opts);
-    return finishResponse(replay, schema, path);
+    return finishResponse(replay, schema, path, opts?.keepEnvelope);
   }
 
-  return finishResponse(res, schema, path);
+  return finishResponse(res, schema, path, opts?.keepEnvelope);
 }
+
+/**
+ * S10-HR-EMPPAGE-1 (KI-010) — `apiFetch` GIỮ LẠI block `pagination` của envelope.
+ *
+ * ⚠️ VÌ SAO PHẢI CÓ ĐƯỜNG THỨ HAI. `unwrapEnvelope` trích ĐÚNG `.data` và **vứt** `pagination`. Hệ
+ * quả đã có thật, không phải giả định: `contracts-api.ts` phải suy prev/next bằng heuristic
+ * `items.length === limit` vì không với tới được `total`; các viewer auth-log mất `pagination` y hệt.
+ * ⇒ Thêm phân trang ở BE mà client vẫn đi qua `apiFetch` là làm NỬA VỜI: `total` có trên dây nhưng
+ * không ai đọc được.
+ *
+ * KHÔNG đổi `apiFetch`: hàng chục call-site trông vào chữ ký trả `.data`. Đây là đường SONG SONG,
+ * opt-in, dùng chung TRỌN vòng đời SSO (Bearer · credentials · refresh-on-401 single-flight · replay).
+ *
+ * `pagination` là `undefined` khi response không mang block đó (endpoint chưa phân trang) — caller
+ * xử lý được cả hai hình dạng, KHÔNG ném.
+ */
+export interface PaginatedResult<T> {
+  data: T;
+  pagination?: ApiPagination;
+}
+
+export async function apiFetchPaginated<T>(
+  path: string,
+  schema: z.ZodType<T>,
+  init?: RequestInit,
+  opts?: ApiFetchOpts,
+): Promise<PaginatedResult<T>> {
+  const envelope = await apiFetch(path, envelopePassthroughSchema, init, {
+    ...opts,
+    keepEnvelope: true,
+  });
+  return { data: schema.parse(envelope.data), pagination: envelope.pagination };
+}
+
+/**
+ * Schema "đi qua" cho `apiFetchPaginated`: KHÔNG validate `data` (caller làm việc đó bằng schema
+ * thật của mình ngay sau), chỉ giữ envelope đủ để đọc `pagination`. Body không phải envelope (endpoint
+ * trả mảng trần) ⇒ `data`/`pagination` cùng `undefined`, caller vẫn parse được nếu schema cho phép.
+ */
+const envelopePassthroughSchema = z.object({
+  data: z.unknown(),
+  pagination: z.custom<ApiPagination>().optional(),
+});
 
 // ── apiFetchMultipart (S5-HR-IMPORT-FE-1) ─────────────────────────────────────
 //
