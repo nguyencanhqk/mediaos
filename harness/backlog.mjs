@@ -13582,7 +13582,7 @@ export const backlog = [
   {
     // Seed 24/08/2026 — "Đợt 3". Kế thừa S10-QA-ROUTEHTTP-1: đợt đó phủ 12 route risk>=5 và để lại
     // phần đuôi risk<=3. Xếp CUỐI vì rủi ro cao đã dọn; đây là việc chạy NỀN, không tranh chỗ với WO khác.
-    id: "S10-QA-ROUTEHTTP-2",
+    id: "S10-QA-ROUTEHTTP-3",
     module: "QA",
     layer: "QA",
     title:
@@ -13594,7 +13594,7 @@ export const backlog = [
       "apps/api/test/**",
       "docs/_review/**",
       "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
-      "docs/plans/S10-QA-ROUTEHTTP-2.md",
+      "docs/plans/S10-QA-ROUTEHTTP-3.md",
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],
