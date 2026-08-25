@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**398 WO** · có micro-plan: **227/398** · ⬜ 2 chờ · 🔵 0 đang làm · ✅ 396 xong · 🔴 0 chặn
+**398 WO** · có micro-plan: **228/398** · ⬜ 1 chờ · 🔵 0 đang làm · ✅ 397 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -455,7 +455,7 @@
 | `S10-SEC-ROLEMEMBERFE-1` | 🔴 | ✅ xong | [📄](S10-SEC-ROLEMEMBERFE-1.md) | ✅S10-SEC-ROLEMEMBERROW-1 | KI-073 — tab Thành viên role: THÂN 201 của POST /permissions/users/:us |
 | `S10-SEC-ROLEMEMBERDEL-1` | 🔴 | ✅ xong | [📄](S10-SEC-ROLEMEMBERDEL-1.md) | ✅S10-SEC-ROLEMEMBERFE-1 | KI-074 — oracle thứ HAI của tab Thành viên role: DELETE /permissions/u |
 | `S10-CHAT-EMITGUARD-1` | 🟡 | ✅ xong | [📄](S10-CHAT-EMITGUARD-1.md) | — | KI-075 — hai job CHAT (`emitExpired` :68 · `emitAutoEnded` :72) gọi đư |
-| `S10-CHAT-EMITGUARD-2` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S10-CHAT-EMITGUARD-1 | KI-076 — NĂM route REST của CALL phát realtime SAU COMMIT không bọc (` |
+| `S10-CHAT-EMITGUARD-2` | 🟡 | ✅ xong | [📄](S10-CHAT-EMITGUARD-2.md) | ✅S10-CHAT-EMITGUARD-1 | KI-076 — NĂM route REST của CALL phát realtime SAU COMMIT không bọc (` |
 | `S10-FND-BODYVALIDATE-1` | 🟡 | ✅ xong | [📄](S10-FND-BODYVALIDATE-1.md) | — | KI-068 — 4 route GHI trả 500 `SYSTEM-ERR-001` thay vì 400 khi body sai |
 | `S10-SEC-LOGINLOG429-1` | 🔴 | ✅ xong | [📄](S10-SEC-LOGINLOG429-1.md) | — | KI-047 + KI-048 — NĂM đường 429 (KHÔNG phải bốn) không ghi một dòng `l |
 | `S10-HR-EMPPAGE-1` | 🟡 | ✅ xong | — *(chưa)* | — | KI-010 — `GET /employees` KHÔNG có phân trang: handler nhận đúng 4 que |
