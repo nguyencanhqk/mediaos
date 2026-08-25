@@ -83,8 +83,11 @@ export function ObjectsPage() {
 
   // ── Data fetching ────────────────────────────────────────────────────────
 
+  // ⟲ S10-HR-EMPPAGE-1 (KI-010): `GET /employees` nay trả envelope phân trang. `employeePage.data` là
+  // TRANG hiện tại, `employeePage.pagination.total` là SỐ THẬT sau filter+scope — trước WO này client
+  // nhận tối đa 2000 hàng mà KHÔNG có cách nào biết còn hàng phía sau (cắt CÂM).
   const {
-    data: employees = [],
+    data: employeePage,
     isLoading,
     isError,
   } = useQuery({
@@ -93,6 +96,8 @@ export function ObjectsPage() {
       consoleEmployeesApi.listEmployees(statusFilter ? { status: statusFilter } : undefined),
     enabled: canRead,
   });
+  const employees = employeePage?.data ?? [];
+  const employeeTotal = employeePage?.pagination?.total;
 
   // ── Mutations ────────────────────────────────────────────────────────────
 
@@ -286,7 +291,17 @@ export function ObjectsPage() {
       {/* Header */}
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">{t("title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+        <p className="text-sm text-muted-foreground">
+          {t("subtitle")}
+          {/* ⟲ S10-HR-EMPPAGE-1 (KI-010): hiện SỐ THẬT sau filter+scope. Đây là cả nội dung của bản
+              vá ở phía người dùng — trước đó trang này im lặng cắt ở 2000 hàng và không có gì cho
+              biết còn hàng phía sau. `employees.length` KHÔNG thay được: nó chỉ đếm TRANG. */}
+          {employeeTotal !== undefined && employeeTotal > employees.length ? (
+            <span className="ml-1">
+              ({employees.length}/{employeeTotal})
+            </span>
+          ) : null}
+        </p>
       </header>
 
       {/* Tabs */}

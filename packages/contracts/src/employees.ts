@@ -51,6 +51,19 @@ export const employeeListItemSchema = z.object({
 export type EmployeeListItemDto = z.infer<typeof employeeListItemSchema>;
 
 /**
+ * S10-HR-EMPPAGE-1 (KI-010) — TRẦN `per_page` của `GET /employees`.
+ *
+ * ⚠️ ĐÂY LÀ CHÍNH CON SỐ `EMPLOYEE_LIST_MAX_ROWS` cũ (`employees.repository.ts`), chuyển về contracts
+ * để BIÊN và SQL dùng CHUNG một nguồn. Trước WO này nó là một **CẮT CÂM**: repo `.limit(2000)` và
+ * client nhận 2000 hàng mà KHÔNG có cách nào biết còn hàng phía sau (không `total`, không `has_more`).
+ *
+ * ⛔ KHÔNG XOÁ, KHÔNG NỚI. Cái cap này là thứ đang chặn rủi ro quét bảng; WO này thay cắt-CÂM bằng
+ * cắt-CÓ-BÁO (`total` + `pagination`), KHÔNG thay cái trần.
+ */
+export const EMPLOYEE_LIST_PAGE_SIZE_MAX = 2000;
+export const EMPLOYEE_LIST_PAGE_SIZE_DEFAULT = 50;
+
+/**
  * Create employee profile.
  * EMP-001: either link an existing `userId`, OR create a new login account by supplying
  * `email` + `fullName` (server hashes `password`, or generates a temporary one). The
@@ -130,8 +143,31 @@ export const importEmployeeConfirmSchema = z.object({
 });
 export type ImportEmployeeConfirmRequest = z.infer<typeof importEmployeeConfirmSchema>;
 
-/** GET /employees query filters (F8: free-text `search` over name/email/employee_code). */
+/**
+ * GET /employees query filters (F8: free-text `search` over name/email/employee_code) + PHÂN TRANG.
+ *
+ * ⟲ S10-HR-EMPPAGE-1 (KI-010) — schema NÀY đã tồn tại từ trước nhưng **controller chưa hề dùng**:
+ * `EmployeesController.listEmployees` nhận 4 `@Query("...")` RỜI, không đi qua Zod nào. Đó chính là
+ * cách file đó trôi tới hiện trạng, nên WO này NỐI schema có sẵn vào biên thay vì thêm tham số rời
+ * thứ năm.
+ *
+ * ⚠️ ĐỘ LỆCH TÊN THAM SỐ — nói ra để không ai tưởng là bỏ sót: đường này dùng `per_page` (khớp
+ * `paginated()`/`ResponseEnvelopeInterceptor` và các viewer `auth-logs`/`files`), trong khi
+ * `hrEmployeeListQuerySchema` của `/hr/employees` dùng `pageSize`. Hai quy ước tồn tại song song
+ * TRƯỚC WO này. Chọn `per_page` vì đây là đường LEGACY có đúng MỘT hộ tiêu thụ (`apps/console`) và
+ * envelope phân trang là quy ước rộng hơn; hợp nhất hai tên là việc của WO gộp hai đường.
+ *
+ * Query-string là chuỗi ⇒ `z.coerce`. `per_page` kẹp `[1..MAX]`; ngoài dải ⇒ VALIDATION-ERR
+ * field-level ở BIÊN, KHÔNG phải 500.
+ */
 export const employeeListQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  per_page: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(EMPLOYEE_LIST_PAGE_SIZE_MAX)
+    .default(EMPLOYEE_LIST_PAGE_SIZE_DEFAULT),
   orgUnitId: z.string().uuid().optional(),
   positionId: z.string().uuid().optional(),
   status: z.string().optional(),

@@ -352,6 +352,72 @@ describe.skipIf(!hasLaneDb)(
         expect(res.body.success).toBe(false);
       });
 
+      // ── S10-HR-EMPPAGE-1 (KI-010) — phân trang ────────────────────────────────────────────
+      //
+      // Trước WO này handler nhận 4 `@Query()` RỜI (không schema Zod nào) và repo `.limit(2000)` là
+      // một CẮT CÂM: client nhận tối đa 2000 hàng mà KHÔNG có cách nào biết còn hàng phía sau.
+      // Nghiệm thu là "client BIẾT được còn bao nhiêu", không phải "sửa một crash".
+
+      it("KI-010 · envelope mang pagination.total = SỐ THẬT sau scope+filter, KHÔNG phải độ dài trang", async () => {
+        const token = await login(app, A.slug, `hr@${A.slug}.test`);
+
+        // Trang 1 hàng: `data` có ĐÚNG 1, nhưng `total` phải nói con số đầy đủ.
+        const one = await api(app).get("/employees?per_page=1").set(bearer(token));
+        expect(one.status, JSON.stringify(one.body)).toBe(200);
+        expect(one.body.data.length).toBe(1);
+        const total = one.body.pagination?.total as number;
+        expect(typeof total, JSON.stringify(one.body)).toBe("number");
+
+        // ĐỐI CHỨNG: lấy hết trong cùng scope ⇒ số hàng thật phải KHỚP `total`. Không có vế này thì
+        // ca trên xanh cả khi `total` được gán bừa bằng `rows.length` — đúng thứ KI-010 nói là thiếu.
+        const all = await api(app).get("/employees?per_page=2000").set(bearer(token));
+        expect(all.status, JSON.stringify(all.body)).toBe(200);
+        expect(all.body.data.length).toBe(total);
+        expect(all.body.pagination.total).toBe(total);
+
+        // Và `total` KHÔNG được đổi theo kích cỡ trang — nó là thuộc tính của TẬP, không của TRANG.
+        expect(one.body.pagination.total).toBe(all.body.pagination.total);
+      });
+
+      it("KI-010 · page=2 trả TRANG KHÁC, và total giữ nguyên", async () => {
+        const token = await login(app, A.slug, `hr@${A.slug}.test`);
+        const p1 = await api(app).get("/employees?per_page=1&page=1").set(bearer(token));
+        const p2 = await api(app).get("/employees?per_page=1&page=2").set(bearer(token));
+        expect(p1.status).toBe(200);
+        expect(p2.status).toBe(200);
+        // NEO CHỐNG XANH-RỖNG: nếu scope chỉ có 1 hồ sơ thì `p2.data[0]` là undefined và phép so
+        // sánh "khác nhau" dưới đây đúng một cách VÔ NGHĨA. Ca này chỉ có giá trị khi có >= 2 hàng.
+        expect(
+          p1.body.pagination.total,
+          "fixture cần >=2 hồ sơ trong scope HR",
+        ).toBeGreaterThanOrEqual(2);
+        expect(p2.body.data.length).toBe(1);
+        // OFFSET chạy thật: id của hai trang phải khác nhau.
+        expect(p1.body.data[0]?.id).not.toBe(p2.body.data[0]?.id);
+        expect(p2.body.pagination.total).toBe(p1.body.pagination.total);
+      });
+
+      it("KI-010 · per_page VƯỢT TRẦN → 400 ở BIÊN, KHÔNG phải 500 và KHÔNG phải im lặng phục vụ", async () => {
+        // QUYẾT ĐỊNH có chủ ý: trần cưỡng chế ở BIÊN bằng `.max()` (400 field-level, khuôn
+        // `loginLogListQuerySchema`) chứ không kẹp im lặng. Client xin 99999 mà nhận 2000 không lời
+        // giải thích là một dạng cắt CÂM khác — đúng thứ WO này đang gỡ bỏ. `LIMIT` ở SQL vẫn kẹp
+        // thêm một lần nữa (phòng thủ theo chiều sâu), nên không đường nào quét quá trần.
+        const token = await login(app, A.slug, `hr@${A.slug}.test`);
+        const res = await api(app).get("/employees?per_page=99999").set(bearer(token));
+        expect(res.status, JSON.stringify(res.body)).toBe(400);
+        expect(res.body.error?.type, JSON.stringify(res.body)).not.toBe("ZodError");
+      });
+
+      it("KI-010 · ALLOW đối chứng: KHÔNG truyền page/per_page vẫn chạy (default ở biên)", async () => {
+        // Bản vá không được biến một request vốn hợp lệ thành 400 — hộ tiêu thụ hiện có không gửi
+        // tham số phân trang nào ([[deny-cases-vacuous-without-allow-case]]).
+        const token = await login(app, A.slug, `hr@${A.slug}.test`);
+        const res = await api(app).get("/employees").set(bearer(token));
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        expect(Array.isArray(res.body.data)).toBe(true);
+        expect(res.body.pagination.total).toBeGreaterThanOrEqual(res.body.data.length);
+      });
+
       it("list scoped: rep (Own) GET /employees → CHỈ thấy hồ sơ chính mình (IDOR list đóng)", async () => {
         const token = await login(app, A.slug, `rep@${A.slug}.test`);
         const res = await api(app).get("/employees").set(bearer(token));

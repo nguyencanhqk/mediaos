@@ -21,6 +21,17 @@ import {
 import { EmployeesService } from "./employees.service";
 import { EMPLOYEE_LIST_MAX_ROWS } from "./employees.repository";
 
+/**
+ * ⟲ S10-HR-EMPPAGE-1 (KI-010) — `listEmployees` nay nhận query ĐÃ QUA Zod (page/per_page bắt buộc,
+ * có default ở biên) và repo trả `{rows,total,page,limit}` thay vì mảng trần. Hai helper dưới giữ
+ * các ca cũ đo ĐÚNG thứ chúng vốn đo (scope · mask · audit · cảnh báo), không đo lại phân trang.
+ */
+const QUERY = { page: 1, per_page: 50 } as const;
+
+function pageOf<T>(rows: T[], limit = 50) {
+  return { rows, total: rows.length, page: 1, limit };
+}
+
 // ─── Fixtures ──────────────────────────────────────────────────────────────────
 
 const COMPANY_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc";
@@ -73,7 +84,7 @@ function makeRow(overrides: Record<string, unknown> = {}) {
 
 function makeRepo(overrides: Record<string, unknown> = {}) {
   return {
-    listEmployeesTx: vi.fn().mockResolvedValue([makeRow()]),
+    listEmployeesTx: vi.fn().mockResolvedValue(pageOf([makeRow()])),
     findByIdTx: vi.fn().mockResolvedValue(makeRow()),
     createEmployeeTx: vi.fn().mockResolvedValue([makeRow()]),
     updateEmployeeTx: vi.fn().mockResolvedValue([makeRow()]),
@@ -334,10 +345,10 @@ describe("EmployeesService — F1 salary mask + audit", () => {
 
   describe("listEmployees — data-scope filter (legacy lock)", () => {
     it("passes the resolved scope predicate into the repo query (Own/Team/Dept funnel here)", async () => {
-      const repo = makeRepo({ listEmployeesTx: vi.fn().mockResolvedValue([]) });
+      const repo = makeRepo({ listEmployeesTx: vi.fn().mockResolvedValue(pageOf([])) });
       const dataScope = makeDataScope({ scope: "Own" });
       const { svc } = makeService({ repo, dataScope, perms: { "view-salary": DENY() } });
-      await svc.listEmployees(actor, {});
+      await svc.listEmployees(actor, QUERY);
       expect(dataScope.buildEmployeeScopeCondition).toHaveBeenCalledWith(
         "Own",
         expect.objectContaining({ userId: ACTOR_ID, companyId: COMPANY_ID }),
@@ -354,7 +365,7 @@ describe("EmployeesService — F1 salary mask + audit", () => {
       const repo = makeRepo();
       const dataScope = makeDataScope({ throwOnAssert: true });
       const { svc } = makeService({ repo, dataScope });
-      await expect(svc.listEmployees(actor, {})).rejects.toThrow(ForbiddenException);
+      await expect(svc.listEmployees(actor, QUERY)).rejects.toThrow(ForbiddenException);
       expect(repo.listEmployeesTx).not.toHaveBeenCalled();
     });
   });
@@ -364,12 +375,12 @@ describe("EmployeesService — F1 salary mask + audit", () => {
       const repo = makeRepo({
         listEmployeesTx: vi
           .fn()
-          .mockResolvedValue([makeRow(), makeRow({ id: EMP2_ID, userId: EMP2_USER_ID })]),
+          .mockResolvedValue(pageOf([makeRow(), makeRow({ id: EMP2_ID, userId: EMP2_USER_ID })])),
       });
       const { svc, audit } = makeService({ perms: { "view-salary": DENY() }, repo });
-      const res = await svc.listEmployees(actor, {});
-      expect(res).toHaveLength(2);
-      expect(res.every((r) => r.baseSalary === null)).toBe(true);
+      const res = await svc.listEmployees(actor, QUERY);
+      expect(res.data).toHaveLength(2);
+      expect(res.data.every((r) => r.baseSalary === null)).toBe(true);
       expect(audit.record).not.toHaveBeenCalled();
     });
 
@@ -377,11 +388,11 @@ describe("EmployeesService — F1 salary mask + audit", () => {
       const repo = makeRepo({
         listEmployeesTx: vi
           .fn()
-          .mockResolvedValue([makeRow(), makeRow({ id: EMP2_ID, userId: EMP2_USER_ID })]),
+          .mockResolvedValue(pageOf([makeRow(), makeRow({ id: EMP2_ID, userId: EMP2_USER_ID })])),
       });
       const { svc, audit } = makeService({ perms: { "view-salary": ALLOW() }, repo });
-      const res = await svc.listEmployees(actor, {});
-      expect(res.map((r) => r.baseSalary)).toEqual([5000, 5000]);
+      const res = await svc.listEmployees(actor, QUERY);
+      expect(res.data.map((r) => r.baseSalary)).toEqual([5000, 5000]);
       expect(audit.record).toHaveBeenCalledTimes(2);
     });
   });
@@ -394,22 +405,24 @@ describe("EmployeesService — F1 salary mask + audit", () => {
       const capped = Array.from({ length: EMPLOYEE_LIST_MAX_ROWS }, (_, i) =>
         makeRow({ id: `emp-${i}` }),
       );
-      const repo = makeRepo({ listEmployeesTx: vi.fn().mockResolvedValue(capped) });
+      const repo = makeRepo({
+        listEmployeesTx: vi.fn().mockResolvedValue(pageOf(capped, EMPLOYEE_LIST_MAX_ROWS)),
+      });
       const { svc } = makeService({ perms: { "view-salary": DENY() }, repo });
 
-      const res = await svc.listEmployees(actor, {});
+      const res = await svc.listEmployees(actor, QUERY);
 
-      expect(res).toHaveLength(EMPLOYEE_LIST_MAX_ROWS);
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining("safety cap"));
+      expect(res.data).toHaveLength(EMPLOYEE_LIST_MAX_ROWS);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("MAX-sized page"));
       warn.mockRestore();
     });
 
     it("stays silent when the result is under the cap", async () => {
       const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
-      const repo = makeRepo({ listEmployeesTx: vi.fn().mockResolvedValue([makeRow()]) });
+      const repo = makeRepo({ listEmployeesTx: vi.fn().mockResolvedValue(pageOf([makeRow()])) });
       const { svc } = makeService({ perms: { "view-salary": DENY() }, repo });
 
-      await svc.listEmployees(actor, {});
+      await svc.listEmployees(actor, QUERY);
 
       expect(warn).not.toHaveBeenCalled();
       warn.mockRestore();
@@ -815,9 +828,9 @@ describe("EmployeesService — F7 login-account creation", () => {
 
 describe("EmployeesService — F8 search filter", () => {
   it("forwards the search term to the repository", async () => {
-    const repo = makeRepo({ listEmployeesTx: vi.fn().mockResolvedValue([]) });
+    const repo = makeRepo({ listEmployeesTx: vi.fn().mockResolvedValue(pageOf([])) });
     const { svc } = makeService({ repo });
-    await svc.listEmployees(actor, { search: "alice" });
+    await svc.listEmployees(actor, { ...QUERY, search: "alice" });
     expect(repo.listEmployeesTx).toHaveBeenCalledWith(
       expect.anything(),
       COMPANY_ID,

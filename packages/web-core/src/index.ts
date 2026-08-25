@@ -11,6 +11,10 @@ export { useAuthStore, getAccessToken } from "./stores/auth";
 // API client (Bearer + envelope + cấu hình base URL) + SSO session lifecycle (FS-1b)
 export {
   apiFetch,
+  // apiFetchPaginated (S10-HR-EMPPAGE-1 · KI-010): như apiFetch nhưng GIỮ block `pagination` của
+  // envelope — apiFetch bóc `.data` và vứt nó, nên `total` không với tới được từ client.
+  apiFetchPaginated,
+  type PaginatedResult,
   // apiFetchBlob (S3-ATT-EXPORT-1): tải nhị phân (export CSV) — cùng vòng đời SSO như apiFetch nhưng
   // KHÔNG Zod-parse; trả { blob, filename }. Lỗi HTTP vẫn ném ApiError. HR-PROFILE-UI-2: dùng cho export.
   apiFetchBlob,

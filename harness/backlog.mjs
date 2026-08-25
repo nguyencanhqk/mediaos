@@ -13491,7 +13491,7 @@ export const backlog = [
     title:
       "KI-010 — `GET /employees` KHÔNG có phân trang: handler nhận đúng 4 query filter, 0 tham số `page`/`per_page`; chặn duy nhất là `EMPLOYEE_LIST_MAX_ROWS = 2000` cắt câm ở tầng repository",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     depends_on: [],
     paths: [
       "apps/api/src/employees/**",
