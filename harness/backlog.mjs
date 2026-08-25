@@ -13441,7 +13441,7 @@ export const backlog = [
     title:
       "KI-047 + KI-048 — NĂM đường 429 (KHÔNG phải bốn) không ghi một dòng `login_logs` nào; và hàng `blocked` hiện trong màn admin với tốc độ sinh do KẺ TẤN CÔNG điều khiển, trong khi `loginLogListQuerySchema` KHÔNG có filter `failure_reason` để lọc nhiễu ra",
     zone: "red",
-    status: "todo",
+    status: "done",
     depends_on: [],
     paths: [
       "apps/api/src/auth/**",
