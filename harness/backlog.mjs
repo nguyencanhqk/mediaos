@@ -13605,7 +13605,7 @@ export const backlog = [
     title:
       "KI-025 — nốt phần đuôi độ phủ HTTP: sau S10-QA-ROUTEHTTP-1 (370/499 phủ, 129 chưa, 12 route risk>=5 đã dọn) còn lại nhóm risk<=3 chưa có ca HTTP nào chạm",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     depends_on: [],
     paths: [
       "apps/api/test/**",
@@ -13634,6 +13634,83 @@ export const backlog = [
       "⚠️ `TURBO_FORCE=1` khi chạy — turbo cache trả log CŨ là xanh-giả ([[turbo-cache-false-green]]); và thiếu `LANE_DB` thì phần lớn int-spec SKIP chứ không FAIL ([[integration-test-lane-db-gate]]).",
       "⚠️ Route census runtime là CỔNG ([[route-census-runtime-gate]]) — thêm route ⇒ ĐỎ, regen bằng `ROUTE_CENSUS_WRITE=1`.",
       "⚠️ Full-suite dễ ENOBUFS ([[fullsuite-enobufs-and-unrescued-chunk]]) ⇒ chạy theo chunk.",
+    ],
+  },
+  {
+    // Seed 25/08/2026 từ S10-QA-ROUTEHTTP-3. Lane QA đào ra BUG THẬT khi viết ca ALLOW cho
+    // POST /attendance/shift-assignments và KHÔNG tự vá (luật đã cho ra KI-068) — cấp số + WO riêng.
+    id: "S10-ATT-SHIFTASSIGNSCOPE-1",
+    module: "ATT",
+    layer: "BE",
+    title:
+      "KI-080 — `POST /attendance/shift-assignments` trả 500 khi client gửi `employeeId` mà không gửi `assignmentScope` (payload tự nhiên nhất); đáng lẽ 400 ở biên",
+    zone: "yellow",
+    status: "todo",
+    depends_on: [],
+    paths: [
+      "packages/contracts/src/attendance.ts",
+      "apps/api/src/attendance/**",
+      "apps/api/test/**",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "docs/plans/S10-ATT-SHIFTASSIGNSCOPE-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    src: [
+      "**ĐÃ ĐO bằng HTTP thật 25/08** (không suy đoán): `POST /attendance/shift-assignments` với body `{shiftId, employeeId, effectiveFrom}` ⇒ **500 SYSTEM-ERR-001**, `error.type='InternalServerErrorException'`. Ca ghim: `apps/api/test/integration/routehttp3-attendance-leave.int-spec.ts` (`🔴 GHIM BUG (KI-080)`).",
+      "Cơ chế: `createShiftAssignmentSchema` (`packages/contracts/src/attendance.ts:822`) để `assignmentScope` MẶC ĐỊNH `'Company'`, `.refine()` chỉ kiểm chiều THUẬN ('scope Department/Employee phải có đúng id'). Chiều NGƯỢC (scope Company ⇒ cả hai id phải VẮNG) không ai kiểm ⇒ payload xuống DB vỡ CHECK `chk_shift_assignments_target`.",
+      "CHECK thật (đo trên lane DB): `(scope='Company' AND department_id IS NULL AND employee_id IS NULL) OR (scope='Department' AND department_id IS NOT NULL AND employee_id IS NULL) OR (scope='Employee' AND employee_id IS NOT NULL)`.",
+      "Cùng LỚP với KI-068 (payload rác tới DB rồi nổ 500 thay vì bị chặn ở biên) — khác chỗ: đây không phải chuỗi rác mà là TỔ HỢP FIELD hợp lệ từng cái nhưng mâu thuẫn với nhau.",
+    ],
+    done_when: [
+      "PHÁT BIỂU TRƯỚC mức độ: hỏng ĐÚNG CHIỀU AN TOÀN (0 hàng được ghi — đã chứng minh bằng SELECT) ⇒ **KHÔNG phải lỗ bảo mật**. Giá trị là hợp đồng API + chấm dứt 500 GIẢ bơm vào giám sát",
+      "Vá ở CONTRACT (`.refine()` chiều ngược) chứ không vá riêng ở service — FE dùng chung schema nên vá ở service là để FE tiếp tục gửi sai",
+      "**LẬT ca ghim** `🔴 GHIM BUG (KI-080)` sang 400 + kiểm mã lỗi validation. TUYỆT ĐỐI không nới assert thành `>=400` để nó xanh với cả hai ([[tests-can-pin-a-hole-open]])",
+      "Giữ ca ALLOW hiện có (`assignmentScope:'Employee'` + `employeeId`) — không có nó thì ca 400 là xanh-rỗng ([[deny-cases-vacuous-without-allow-case]])",
+      "Rà CÙNG LỚP: schema nào khác trong `packages/contracts` cũng chỉ `.refine()` một chiều trong khi DB có CHECK hai chiều? Tìm được thì cấp số, đừng vá mù",
+      "RELEASE-02 đóng KI-080 kèm số đo trước/sau",
+    ],
+    notes: [
+      "🟡 LIGHT gate. Không chạm permission/RLS/secret/migration.",
+      "⚠️ Đổi 500 → 400 là ĐỔI HÀNH VI QUAN SÁT ĐƯỢC — census hộ tiêu thụ (FE + test) trước khi sửa.",
+      "⚠️ int-spec ngủ khi thiếu `LANE_DB` ([[integration-test-lane-db-gate]]).",
+    ],
+  },
+  {
+    // Seed 25/08/2026 từ S10-QA-ROUTEHTTP-3 — bug thứ hai lane QA đào ra, ghim chứ không vá.
+    id: "S10-LEAVE-TYPEQUOTA-1",
+    module: "LEAVE",
+    layer: "BE",
+    title:
+      "KI-081 — `GET /leave/types` bỏ sót `annualQuota` dù contract khai bắt buộc và PATCH ghi được: giá trị ghi xong KHÔNG đọc lại được qua route đọc chính tắc",
+    zone: "yellow",
+    status: "todo",
+    depends_on: [],
+    paths: [
+      "apps/api/src/leave/**",
+      "packages/contracts/src/leave.ts",
+      "apps/api/test/**",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "docs/plans/S10-LEAVE-TYPEQUOTA-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    src: [
+      "**ĐÃ ĐO bằng HTTP thật 25/08:** `PATCH /leave/types/:id {annualQuota:15}` ⇒ 200 và phản hồi PATCH TRẢ `annualQuota:15`; cột DB `leave_types.annual_quota = 15`. Nhưng `GET /leave/types` trả hàng đó KHÔNG có trường `annualQuota`. Ca ghim: `routehttp3-attendance-leave.int-spec.ts` (`🔴 GHIM BUG (KI-081)`).",
+      "Cơ chế: `leaveTypeSchema` (`packages/contracts/src/leave.ts:58`) khai `annualQuota: z.number().nullable()` BẮT BUỘC. Đường GHI map đúng (`leave.service.ts:232`). Đường ĐỌC đi qua `LeaveReadService.toLeaveTypeView()` (`leave-read.service.ts:206`) — view RỘNG HƠN (description · deductBalance · balanceUnit · allowHalfDay · maxDaysPerRequest…) nhưng bỏ sót đúng `annualQuota`.",
+      "Có HAI route đọc cùng gate `view:leave-type`: `GET /leave/types` (LeaveReadService) và `GET /leave/admin/types` (LeaveAdminService). Kiểm CẢ HAI trước khi kết luận — chúng có thể trả hai hình dạng khác nhau.",
+    ],
+    done_when: [
+      "PHÁT BIỂU TRƯỚC mức độ: trôi hợp đồng đọc/ghi, KHÔNG rò dữ liệu (chỉ THIẾU dữ liệu) ⇒ không phải lỗ bảo mật",
+      "ĐO trước khi vá: liệt kê CHÊNH LỆCH TRƯỜNG giữa `leaveTypeSchema` (contract) và `toLeaveTypeView()` (đường đọc thật) — `annualQuota` có thể không phải trường DUY NHẤT bị bỏ",
+      "Quyết định có ý thức: BỔ SUNG trường vào view, hay SỬA contract cho khớp thực tế. Chọn đường nào cũng phải khai lý do — im lặng đồng bộ một chiều là cách trôi tiếp",
+      "**LẬT ca ghim** `🔴 GHIM BUG (KI-081)` từ `toBeUndefined()` sang `toBe(<giá trị>)`, đừng xoá ca",
+      "Kiểm hộ tiêu thụ FE: màn cấu hình loại nghỉ có đang đọc `annualQuota` từ route nào không — nếu có thì đây là lỗi NHÌN THẤY ĐƯỢC, hạ/nâng mức cho đúng",
+      "RELEASE-02 đóng KI-081 kèm bảng chênh lệch trường",
+    ],
+    notes: [
+      "🟡 LIGHT gate. Mức S4 — làm khi rảnh, đừng chen trước việc có mức cao hơn.",
+      "⚠️ `GET /leave/types` là route ĐỌC dùng chung — thêm trường là ĐỔI PAYLOAD, kiểm FE trước.",
     ],
   },
   {

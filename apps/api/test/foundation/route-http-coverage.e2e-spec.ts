@@ -122,10 +122,47 @@ function listTsFiles(root: string): string[] {
   return out;
 }
 
-/** File test HTTP = có `.spec.ts`/`-spec.ts` trong tên VÀ import `supertest`. */
+/**
+ * Spec bị `vitest.config.ts` EXCLUDE — vitest KHÔNG BAO GIỜ chạy chúng.
+ *
+ * ⚠️ DƯƠNG-TÍNH-GIẢ NẶNG NHẤT của phép đo này, đo được ngày 25/08/2026 (S10-QA-ROUTEHTTP-3):
+ * census quét file trên ĐĨA, còn vitest chạy theo DANH SÁCH của nó. Sáu file dưới đây nằm trên đĩa
+ * nhưng bị loại khỏi lượt chạy (module park / hoãn theo Phase), nên literal path trong chúng từng
+ * đóng dấu "covered" cho **7 route của `WorkflowController`** bằng những lượt HTTP CHƯA TỪNG XẢY RA.
+ * Đó là sai đúng chiều NGUY HIỂM: giấu khoảng trống thay vì lộ ra.
+ *
+ * Giữ ĐỒNG BỘ với mảng `test.exclude` của `apps/api/vitest.config.ts` — có ca ở cuối file ĐỌC file
+ * config thật rồi so hai danh sách, nên lệch là ĐỎ chứ không trôi im lặng. Khi một module được
+ * un-exclude ở vitest.config, xoá tên khỏi đây trong CÙNG commit.
+ */
+const VITEST_EXCLUDED_SPECS = [
+  "test/workflow-lifecycle.e2e-spec.ts",
+  "test/integration/finance-cost-controller-deny.int-spec.ts",
+  "test/integration/finance-cost-allocation-controller-deny.int-spec.ts",
+  "test/integration/finance-revenue-controller-deny.int-spec.ts",
+  "test/integration/webhooks-deny.int-spec.ts",
+  "test/integration/ui-config-deny.int-spec.ts",
+] as const;
+
+/** Đường dẫn hệ thống → dạng posix, để so đuôi với danh sách exclude bất kể Windows/Linux. */
+function toPosix(p: string): string {
+  return p.split(SEP_BACKSLASH).join("/");
+}
+const SEP_BACKSLASH = String.fromCharCode(92);
+
+/** File nằm trong danh sách EXCLUDE của vitest ⇒ nó KHÔNG chạy ⇒ không phải bằng chứng. */
+function isVitestExcluded(path: string): boolean {
+  const posix = toPosix(path);
+  return VITEST_EXCLUDED_SPECS.some((e) => posix.endsWith(`/${e}`) || posix.endsWith(e));
+}
+
+/**
+ * File test HTTP = có `.spec.ts`/`-spec.ts` trong tên VÀ import `supertest` VÀ **thật sự được vitest
+ * chạy**. Vế thứ ba là bản vá dương-tính-giả nói ở `VITEST_EXCLUDED_SPECS`.
+ */
 function isHttpTestFile(path: string, content: string): boolean {
   const isSpec = path.endsWith(".spec.ts") || path.endsWith("-spec.ts");
-  return isSpec && content.includes('from "supertest"');
+  return isSpec && !isVitestExcluded(path) && content.includes('from "supertest"');
 }
 
 function segmentsOf(path: string): string[] {
@@ -149,7 +186,30 @@ function segmentsMatch(routeSegs: string[], litSegs: string[]): boolean {
   return routeSegs.every((rs, i) => rs === "*" || litSegs[i] === "*" || rs === litSegs[i]);
 }
 
-const PATH_LITERAL_RE = /(["'`])(\/[\w\-./:${}]+)\1/g;
+/**
+ * Literal trông giống PATH trong file test.
+ *
+ * ⚠️ HAI LỚP ÂM-TÍNH-GIẢ đã đo được (S10-QA-ROUTEHTTP-3, 25/08/2026) và bản vá của chúng — đọc trước
+ * khi siết lại lớp ký tự này, vì cả hai đều làm route CÓ test HTTP thật bị đếm là "chưa phủ":
+ *
+ *   (1) BIỂU THỨC TRONG `${...}`. Bản cũ gộp `$`/`{`/`}` vào CÙNG lớp ký tự với phần path, nên literal
+ *       chỉ khớp khi mọi ký tự trong `${...}` cũng thuộc lớp đó. Một dấu `!` (non-null assertion,
+ *       `${pending!.id}`), `[`/`]`, `(`/`)`, dấu phẩy hay khoảng trắng là ĐỦ để cả literal KHÔNG khớp
+ *       gì cả. Đo thật: `workflow-lifecycle.e2e-spec.ts` gọi
+ *       `.post(`/workflow/approval-requests/${pending!.id}/request-revision`)` mà route đó vẫn bị đếm
+ *       "chưa phủ". Vá: tách `\$\{[^{}]*\}` thành một nhánh RIÊNG — trong ngoặc cho phép mọi ký tự.
+ *
+ *   (2) QUERY-STRING. Bản cũ không có `?` trong lớp ký tự, nên MỌI literal dạng
+ *       `` `/attendance/reports/team?${q}` `` đều không khớp — và hệ quả kín tiếng hơn: dòng
+ *       `literal.split("?")[0]` ở `normalizeLiteralPath` là CODE CHẾT, vì regex không bao giờ giao cho
+ *       nó một literal có `?`. Vá: cho `?=&%+,` vào lớp ký tự; việc cắt query vẫn do
+ *       `normalizeLiteralPath` làm (giờ mới thật sự chạy).
+ *
+ * Cả hai bản vá đều NỚI phạm vi khớp ⇒ đẩy số đo về phía "covered" nhiều hơn, tức CÙNG CHIỀU với sai
+ * số đã khai ở đầu file (số covered là CẬN TRÊN). Chúng sửa âm-tính-giả, KHÔNG làm phép đo chặt hơn.
+ * Ca tự-kiểm ở cuối file ghim CẢ HAI hình dạng — sửa regex mà làm hỏng chúng thì ĐỎ ngay.
+ */
+const PATH_LITERAL_RE = /(["'`])(\/(?:\$\{[^{}]*\}|[\w\-./:?=&%+,])+)\1/g;
 const VERB_CALL_RE = /\.(get|post|put|patch|delete)\(/g;
 
 function extractEvidence(file: string, content: string): FileEvidence {
@@ -224,19 +284,31 @@ export function measureRouteHttpCoverage(
 }
 
 /**
- * RATCHET — đo THẬT ngày 18/08/2026, sau khi **S10-QA-ROUTEHTTP-2** land (12 route risk=5 còn nợ đều
- * có test HTTP thật): coveredCount=383/499 (76.8%), uncovered route risk>=RISK_GATE_THRESHOLD = **0**.
- * Mốc trước: 370/499 (74.1%) với 12 route risk cao chưa phủ (S10-QA-ROUTEHTTP-1, 14/08/2026).
- * Nguồn: `npx vitest run test/foundation/route-http-coverage.e2e-spec.ts` (console log của test
- * "IN BẢNG" bên dưới) — KHÔNG ước lượng.
+ * RATCHET — mốc mới đo THẬT ngày **25/08/2026** sau khi `S10-QA-ROUTEHTTP-3` land:
+ * **coveredCount = 500/500 (100%), uncovered = 0 ở MỌI mức risk.**
  *
- * MAX = 0 nghĩa là: thêm BẤT KỲ route risk>=5 nào mà không có test HTTP thật ⇒ CI ĐỎ ngay ở PR đó.
- * Ratchet CHỈ được SIẾT xuống (MAX giảm / MIN tăng) khi lane sau land thêm test HTTP thật làm độ
- * phủ tăng thật. NỚI ngưỡng lên (MAX tăng / MIN giảm) PHẢI có WO + lý do bằng văn bản kèm theo commit
- * sửa hằng số này — KHÔNG tự nới cho xanh khi có route mới xuất hiện hoặc test HTTP bị xoá.
+ * Các mốc trước (giữ để thấy đường đi): 370/499 (14/08, 12 route risk≥5 chưa phủ) → 383/499 (18/08,
+ * risk≥5 về 0) → 500/500 (25/08, phần đuôi risk≤3 đóng nốt).
+ *
+ * ⚠️ CON SỐ 25/08 KHÔNG SO SÁNH TRỰC TIẾP ĐƯỢC với 383/499 của 18/08: phép đo đã được VÁ trong cùng
+ * WO đó (ba lớp lỗi — xem docstring của `PATH_LITERAL_RE` và `VITEST_EXCLUDED_SPECS`). Đo lại master
+ * `90d26aee` bằng phiên bản CŨ cho 386/500; bằng phiên bản đã vá và chỉ tính file vitest THẬT chạy cho
+ * **382/500**. Đó mới là điểm xuất phát đúng của đợt này.
+ *
+ * `MAX_UNCOVERED_TOTAL = 0` giờ là CỔNG CHÍNH: thêm BẤT KỲ route nào — mức risk nào cũng vậy — mà
+ * không có test HTTP thật ⇒ CI ĐỎ ngay tại PR đó. `MAX_UNCOVERED_HIGH_RISK` giữ lại làm thông điệp
+ * lỗi RIÊNG cho nhóm nguy hiểm (đọc log biết ngay là nợ loại nào), không phải thừa.
+ *
+ * Ratchet CHỈ được SIẾT xuống (MAX giảm / MIN tăng). NỚI ngưỡng lên PHẢI có WO + lý do bằng văn bản
+ * kèm commit sửa hằng số này — KHÔNG tự nới cho xanh khi có route mới hoặc khi test HTTP bị xoá.
+ *
+ * ⚠️ 100% Ở ĐÂY LÀ 100% CỦA "ĐÃ BỊ CHẠM", KHÔNG PHẢI 100% ĐỘ PHỦ HÀNH VI. Giới hạn cố ý ghi ở đầu
+ * file vẫn nguyên giá trị: khớp verb×path ở CẤP FILE ⇒ số này là CẬN TRÊN. Đừng đọc nó thành "API đã
+ * được kiểm đủ".
  */
 const MAX_UNCOVERED_HIGH_RISK = 0;
-const MIN_COVERED_COUNT = 383;
+const MAX_UNCOVERED_TOTAL = 0;
+const MIN_COVERED_COUNT = 500;
 
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;
@@ -309,6 +381,21 @@ describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp l�
       coveredCount,
       `tổng route đã phủ = ${coveredCount}, tụt xuống dưới sàn ratchet ${MIN_COVERED_COUNT} — có test HTTP đã bị xoá/đổi tên khiến scan không còn khớp verb/path?`,
     ).toBeGreaterThanOrEqual(MIN_COVERED_COUNT);
+
+    // CỔNG CHÍNH từ 25/08/2026: nợ về 0 ở MỌI mức risk ⇒ mọi route MỚI phải mang theo test HTTP thật.
+    const uncoveredAll = coverage.filter((c) => !c.covered);
+    expect(
+      uncoveredAll.length,
+      `route CHƯA có bằng chứng test HTTP = ${uncoveredAll.length}, vượt ngưỡng ratchet ${MAX_UNCOVERED_TOTAL}.\n` +
+        uncoveredAll
+          .slice(0, 20)
+          .map(
+            (c) =>
+              `  risk=${c.riskScore} ${c.route.httpMethod} ${c.route.path} [${c.route.controller}#${c.route.method}]`,
+          )
+          .join("\n") +
+        `\nViết test HTTP THẬT cho chúng (khuôn: test/integration/routehttp3-*.int-spec.ts). TUYỆT ĐỐI không nới hằng số này để lấy màu xanh.`,
+    ).toBeLessThanOrEqual(MAX_UNCOVERED_TOTAL);
   });
 
   it("non-vacuous: ratchet trên không được tự xanh khi phép đo hỏng và trả mảng rỗng", () => {
@@ -329,6 +416,77 @@ describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp l�
     expect(
       highRisk.some((c) => c.covered),
       "không route rủi ro cao nào được nhận là covered — cơ chế khớp bằng chứng hỏng",
+    ).toBe(true);
+  });
+
+  /**
+   * TỰ-KIỂM BỘ RÚT LITERAL — ghim BA lớp lỗi đã đo được ngày 25/08/2026 (S10-QA-ROUTEHTTP-3).
+   *
+   * Không ca nào ở trên phát hiện được chúng: cả ba đều làm `pathLiterals` THIẾU phần tử, mà thiếu thì
+   * route chỉ bị đếm "chưa phủ" — im lặng, không có assert nào sập. Ba ca dưới đây gọi thẳng
+   * `extractEvidence` trên chuỗi dựng sẵn nên chúng ĐỎ ngay khi ai đó siết lại regex.
+   */
+  it("tự-kiểm regex: literal có `${expr}` chứa ký tự lạ (`!`, `[`, gọi hàm) VẪN được rút", () => {
+    const sample = [
+      "await request(app).post(`/workflow/approval-requests/${pending!.id}/request-revision`);",
+      "await request(app).get(`/hr/employees/${rows[0].id}/contracts`);",
+      "await request(app).delete(`/labels/${makeId()}`);",
+    ].join("\n");
+    const ev = extractEvidence("sample-spec.ts", sample);
+    const asPaths = ev.pathLiterals.map((segs) => segs.join("/"));
+    expect(asPaths, "`${pending!.id}` không được làm hỏng cả literal").toContain(
+      "workflow/approval-requests/*/request-revision",
+    );
+    expect(asPaths, "`${rows[0].id}` — chỉ số mảng trong biểu thức").toContain(
+      "hr/employees/*/contracts",
+    );
+    expect(asPaths, "`${makeId()}` — lời gọi hàm trong biểu thức").toContain("labels/*");
+  });
+
+  it("tự-kiểm regex: literal có QUERY-STRING được rút, và query bị cắt đúng", () => {
+    const sample = [
+      "await request(app).get(`/attendance/reports/team?fromDate=${a}&toDate=${b}`);",
+      'await request(app).get("/leave/reports?page=1&pageSize=50");',
+    ].join("\n");
+    const ev = extractEvidence("sample-spec.ts", sample);
+    const asPaths = ev.pathLiterals.map((segs) => segs.join("/"));
+    expect(asPaths, "query-string không được làm literal biến mất").toContain(
+      "attendance/reports/team",
+    );
+    expect(asPaths).toContain("leave/reports");
+    expect(
+      asPaths.some((p) => p.includes("?")),
+      "phần query PHẢI bị cắt trước khi tách segment",
+    ).toBe(false);
+  });
+
+  it("tự-kiểm exclude: danh sách VITEST_EXCLUDED_SPECS phải KHỚP `test.exclude` của vitest.config.ts", () => {
+    // Ghim ĐỊNH NGHĨA chứ không ghim tên: đọc file config THẬT rồi so hai tập. Un-exclude một module ở
+    // vitest.config mà quên xoá ở đây ⇒ census tiếp tục bỏ qua bằng chứng THẬT (âm-tính-giả); thêm
+    // exclude mới mà quên khai ở đây ⇒ census tính bằng chứng của file KHÔNG CHẠY (dương-tính-giả).
+    const configPath = join(__dirname, "..", "..", "vitest.config.ts");
+    const config = readFileSync(configPath, "utf8");
+    const excludeBlock = config.slice(config.indexOf("exclude: ["));
+    const inConfig = [...excludeBlock.slice(0, excludeBlock.indexOf("]")).matchAll(/"([^"]+)"/g)]
+      .map((m) => m[1])
+      .filter((p) => p.startsWith("test/"));
+
+    expect(inConfig.length, "không đọc được mảng exclude của vitest.config.ts").toBeGreaterThan(0);
+    expect([...inConfig].sort()).toEqual([...VITEST_EXCLUDED_SPECS].sort());
+  });
+
+  it("tự-kiểm exclude: file bị vitest EXCLUDE KHÔNG được tính là bằng chứng", () => {
+    const content = 'import request from "supertest";\nrequest(app).post("/workflow/start");';
+    expect(
+      isHttpTestFile("C:/repo/apps/api/test/workflow-lifecycle.e2e-spec.ts", content),
+      "spec nằm trong vitest exclude ⇒ vitest KHÔNG chạy ⇒ không phải bằng chứng",
+    ).toBe(false);
+    expect(
+      isHttpTestFile(
+        "C:/repo/apps/api/test/integration/routehttp3-workflow-instance.int-spec.ts",
+        content,
+      ),
+      "spec CHẠY THẬT phải vẫn được tính (chống ca trên xanh vì `isHttpTestFile` hỏng hẳn)",
     ).toBe(true);
   });
 });
