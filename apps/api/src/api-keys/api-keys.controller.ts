@@ -12,7 +12,7 @@ import {
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
-import { createApiKeyRequestSchema, type CreateApiKeyRequest } from "@mediaos/contracts";
+import { CreateApiKeyDto } from "./api-keys.dto";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import { ApiKeysService } from "./api-keys.service";
@@ -41,10 +41,13 @@ export class ApiKeysController {
   /** Tạo PAT mới — trả { token, apiKey }. token chỉ hiển thị 1 lần (client tự lưu). */
   @Post()
   @RequirePermission(ACTION, RESOURCE, { isSensitive: true })
-  create(@Req() req: AuthenticatedRequest, @Body() dto: CreateApiKeyRequest) {
-    // Defense-in-depth: validate lại bằng schema (ZodValidationPipe đã chạy, nhưng giữ rõ ràng).
-    const body = createApiKeyRequestSchema.parse(dto);
-    return this.apiKeys.createKey(req.user, body);
+  create(@Req() req: AuthenticatedRequest, @Body() dto: CreateApiKeyDto) {
+    // S10-FND-BODYVALIDATE-1 (KI-068): `CreateApiKeyDto` là CLASS `createZodDto` ⇒ metatype tồn tại lúc
+    // chạy ⇒ `ZodValidationPipe` chiếu được schema và chặn ở BIÊN (400). Trước đây chỗ này khai TYPE
+    // `CreateApiKeyRequest` (`z.infer`) kèm comment khẳng định "ZodValidationPipe đã chạy" — SAI: pipe
+    // KHÔNG có gì để chiếu, và `.parse()` thủ công ở đây ném `ZodError` THÔ mà AllExceptionsFilter
+    // không hiểu ⇒ 500. Đã bỏ `.parse()`: validate giờ là việc của biên, một lớp một trách nhiệm.
+    return this.apiKeys.createKey(req.user, dto);
   }
 
   /** Danh sách PAT của tenant (DTO an toàn — KHÔNG token material). */

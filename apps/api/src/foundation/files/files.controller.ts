@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Req,
@@ -14,19 +15,11 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { ZodValidationPipe } from "nestjs-zod";
-import {
-  confirmUploadInputSchema,
-  linkFileInputSchema,
-  listFilesQuerySchema,
-  uploadFileInputSchema,
-  type ConfirmUploadInput,
-  type LinkFileInput,
-  type ListFilesQuery,
-  type UploadFileInput,
-} from "@mediaos/contracts";
+import { linkFileInputSchema, listFilesQuerySchema, type ListFilesQuery } from "@mediaos/contracts";
 import { PermissionGuard } from "../../permission/guards/permission.guard";
 import { RequirePermission } from "../../permission/require-permission.decorator";
 import { paginated, toPagination } from "../../common/pagination";
+import { ConfirmUploadDto, LinkFileDto, UploadFileDto } from "./files.dto";
 import { FileService } from "./files.service";
 
 interface AuthenticatedRequest extends Request {
@@ -55,9 +48,10 @@ export class FilesController {
    */
   @Post("upload")
   @RequirePermission("upload", "foundation-file")
-  upload(@Req() req: AuthenticatedRequest, @Body() body: UploadFileInput) {
-    const input = uploadFileInputSchema.parse(body);
-    return this.files.upload(req.user, input);
+  upload(@Req() req: AuthenticatedRequest, @Body() body: UploadFileDto) {
+    // S10-FND-BODYVALIDATE-1 (KI-068): DTO class ⇒ ZodValidationPipe chặn ở BIÊN (400). Bỏ `.parse()`
+    // thủ công — nó ném `ZodError` THÔ mà AllExceptionsFilter không hiểu ⇒ 500 cho input sai.
+    return this.files.upload(req.user, body);
   }
 
   /**
@@ -70,11 +64,15 @@ export class FilesController {
   @RequirePermission("upload", "foundation-file")
   confirm(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
-    @Body() body: ConfirmUploadInput,
+    // S10-FND-BODYVALIDATE-1: `:id` rác đi thẳng tới cột `uuid` của DB rồi nổ 22P02 ⇒ 500. Cùng lớp
+    // KI-068 (input sai → 500 thay vì 400), chỉ khác KÊNH: param chứ không phải body. Khuôn có sẵn ở
+    // `api-keys.controller.ts:71`.
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: ConfirmUploadDto,
   ) {
-    const input = confirmUploadInputSchema.parse(body ?? {});
-    return this.files.confirmUpload(req.user, id, input);
+    // S10-FND-BODYVALIDATE-1 (KI-068): DTO class chặn ở BIÊN. Body RỖNG vẫn HỢP LỆ
+    // (`checksumSha256` optional) — ca ALLOW ghim điều đó.
+    return this.files.confirmUpload(req.user, id, body ?? {});
   }
 
   /** GET /foundation/files — liệt kê metadata file của tenant (pagination block). Gate view:foundation-file. */
@@ -122,8 +120,17 @@ export class FilesController {
   /** POST /foundation/files/:id/links — gắn file vào entity (FilePolicy.canLink là chốt). Gate link:foundation-file. */
   @Post(":id/links")
   @RequirePermission("link", "foundation-file")
-  link(@Req() req: AuthenticatedRequest, @Param("id") id: string, @Body() body: LinkFileInput) {
-    // fileId trong body PHẢI khớp :id route (chống nhầm/lừa fileId khác). Ép từ route.
+  link(
+    @Req() req: AuthenticatedRequest,
+    // S10-FND-BODYVALIDATE-1: KHÔNG có pipe này thì `.parse()` ngay dưới ném `ZodError` THÔ khi `:id`
+    // không phải UUID ⇒ 500 — bản sao của KI-068 nằm cách bản vá đúng một dòng (ĐO: 500 + ZodError).
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: LinkFileDto,
+  ) {
+    // S10-FND-BODYVALIDATE-1 (KI-068): `LinkFileDto` bỏ `fileId` ra khỏi hợp đồng BIÊN vì client hợp lệ
+    // KHÔNG gửi nó — validate body thô theo schema đầy đủ sẽ 400 mọi request đúng (plan §6).
+    // `.parse()` dưới đây KHÔNG phải validate trùng lặp: nó chốt bất biến "fileId = :id của route"
+    // (chống nhầm/lừa fileId khác), thứ không lớp nào ở biên thay được.
     const input = linkFileInputSchema.parse({ ...body, fileId: id });
     return this.files.link(req.user, input);
   }

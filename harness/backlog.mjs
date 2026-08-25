@@ -13392,7 +13392,7 @@ export const backlog = [
     title:
       "KI-068 — 4 route GHI trả 500 `SYSTEM-ERR-001` thay vì 400 khi body sai hợp đồng: `@Body()` nhận TYPE (`z.infer`) nên `ZodValidationPipe` không có schema để chiếu, handler tự `.parse()` ném `ZodError` THÔ mà `AllExceptionsFilter` không hiểu",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     depends_on: [],
     paths: [
       "apps/api/src/api-keys/**",
@@ -13405,7 +13405,7 @@ export const backlog = [
     ],
     skills: ["code-review"],
     src: [
-      "**CENSUS ĐO LẠI 24/08/2026** (không chép số cũ): quét mọi `*.controller.ts` của `apps/api/src`, đối chiếu type của `@Body()` với tập 233 class `createZodDto` — **177 handler GHI có `@Body()`** · **173 validate Ở BIÊN** (class DTO runtime | pipe tại chỗ | `@UsePipes` cấp method) · **4 KHÔNG**. Con số 4 của KI-068 VẪN ĐÚNG, không trôi.",
+      "**CENSUS — số dùng được là bản AST, KHÔNG phải bản regex.** ĐO LẠI 24/08/2026 bằng TypeScript compiler API (`test/foundation/body-validation-census.ts`): **trước vá 193 handler GHI có `@Body()` / 189 validate ở biên / **4** KHÔNG** → **sau vá 193 / 193 / 0**. ⟲ ĐÍNH CHÍNH: bản seed của WO này ghi `177/173/4` — số 4 và danh sách 4 route ĐÚNG, nhưng mẫu số sai vì census seed viết bằng **regex** và bỏ sót 16 handler; regex còn đếm sai 4→2 (nhầm `@UsePipes` cấp CLASS thành pipe của method) rồi 4→5 (bỏ sót `@UsePipes` đặt DƯỚI `@Post()`) trước khi ra được 4. Đúng lớp bài học đã ghi ở `identity-projection-census.ts` (regex cho 49→38→114→40).",
       "`api-keys.controller.ts:42` — `POST /api-keys`, `@Body() dto: CreateApiKeyRequest`. `contracts/src/api-key.ts:47` khai `export type CreateApiKeyRequest = z.infer<...>` ⇒ TYPE, bị xoá lúc chạy ⇒ `ZodValidationPipe` không chiếu được. **Đây là route DUY NHẤT trong 4 route đã ĐO BẰNG HTTP THẬT** (500 + `error.type='ZodError'`).",
       "`files.controller.ts:56` `POST /foundation/files/upload` (`UploadFileInput`) · `:68` `POST /foundation/files/:id/confirm` (`ConfirmUploadInput`) · `:123` `POST /foundation/files/:id/links` (`LinkFileInput`) — CÙNG hình dạng, **suy từ census, CHƯA đo bằng HTTP**. Giữ nguyên phân biệt đo/đoán này trong plan.",
       "CẢ HAI controller ĐỀU có `@UsePipes(ZodValidationPipe)` **cấp class** (`api-keys.controller.ts:37` · `files.controller.ts:48`) — và đó CHÍNH LÀ thứ không cứu được gì. Ai đọc lướt sẽ thấy 'đã có pipe' rồi kết luận sai; census tự động cũng đếm nhầm nếu không phân biệt decorator cột-0 với decorator thụt lề.",
@@ -13617,6 +13617,47 @@ export const backlog = [
       "⚠️ `TURBO_FORCE=1` khi chạy — turbo cache trả log CŨ là xanh-giả ([[turbo-cache-false-green]]); và thiếu `LANE_DB` thì phần lớn int-spec SKIP chứ không FAIL ([[integration-test-lane-db-gate]]).",
       "⚠️ Route census runtime là CỔNG ([[route-census-runtime-gate]]) — thêm route ⇒ ĐỎ, regen bằng `ROUTE_CENSUS_WRITE=1`.",
       "⚠️ Full-suite dễ ENOBUFS ([[fullsuite-enobufs-and-unrescued-chunk]]) ⇒ chạy theo chunk.",
+    ],
+  },
+  {
+    // Seed 24/08/2026 khi thi công S10-FND-BODYVALIDATE-1. Món này KHÔNG đến từ KI-068 mà từ việc tự
+    // đọc lại diff của chính bản vá: bản sao cùng cơ chế nằm cách bản vá MỘT DÒNG, chỉ đổi kênh đầu
+    // vào từ body sang param. Hai route GHI đã đo + vá kèm; phần CHƯA ĐO cấp số KI-077 thay vì vá mù.
+    id: "S10-FND-PARAMUUID-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "KI-077 — NĂM tham số `:id`/`:linkId` READ/DELETE còn lại của `foundation/files` vẫn nhận chuỗi tự do (cùng cơ chế KI-068, khác KÊNH); CHƯA ĐO bằng HTTP",
+    zone: "yellow",
+    status: "todo",
+    depends_on: ["S10-FND-BODYVALIDATE-1"],
+    paths: [
+      "apps/api/src/foundation/files/**",
+      "apps/api/test/**",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "docs/plans/S10-FND-PARAMUUID-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    src: [
+      "**ĐÃ ĐO + ĐÃ VÁ ở `S10-FND-BODYVALIDATE-1`** (hai route GHI, để đối chiếu khi làm phần còn lại): `POST /foundation/files/:id/links` — `:id` rác làm `linkFileInputSchema.parse({...body, fileId: id})` ném `ZodError` THÔ ⇒ **500 + `error.type='ZodError'`**; `POST /foundation/files/:id/confirm` — `:id` rác đi tới cột `uuid` của DB rồi nổ `22P02` ⇒ **500 + `error.type='Error'`**. HAI hình dạng lỗi KHÁC nhau, cùng hậu quả ⇒ đừng suy từ một route ra route kia.",
+      "**PHẦN CỦA WO NÀY — NĂM tham số, CHƯA ĐO** (`files.controller.ts`): `getOne` :90 · `downloadUrl` :100 · `download` :113 · `unlink` :145 (`:linkId`) · `remove` :153. Suy từ hình dạng code thì cùng đường DB `22P02`, nhưng **chưa có một lượt HTTP nào chứng minh**.",
+      'Khuôn vá đã có sẵn CÙNG CÂY: `api-keys.controller.ts:71` dùng `@Param("id", ParseUUIDPipe)` từ trước. `foundation/files` lại là chỗ bỏ sót — y hệt kiểu nó là module duy nhất từng thiếu `*.dto.ts`.',
+      "Ratchet kênh BODY đã có: `test/foundation/body-validation-ratchet.unit-spec.ts` + census AST `body-validation-census.ts`. Kênh PARAM thì CHƯA có ratchet nào.",
+      "Guard chạy TRƯỚC pipe ⇒ probe không kèm token chỉ ra 401, không đo được gì. Ca đo phải có actor đã đăng nhập + đúng cặp quyền (khuôn: `test/integration/files-http-validate.int-spec.ts`).",
+    ],
+    done_when: [
+      "PHÁT BIỂU TRƯỚC mức độ: hỏng ĐÚNG CHIỀU AN TOÀN (request vẫn bị từ chối) ⇒ **KHÔNG phải lỗ bảo mật**. Giá trị là hợp đồng API + chấm dứt payload rác bơm 500 GIẢ vào giám sát — y như KI-068",
+      "**ĐO 5 route bằng HTTP TRƯỚC KHI VÁ.** Chúng đang là SUY LUẬN. Route nào hoá ra KHÔNG trả 500 thì ghi lại sự thật đó — đừng ép số cho khớp mô tả KI-077",
+      "Vá bằng `@Param(..., ParseUUIDPipe)` theo khuôn `api-keys.controller.ts:71`; ca ALLOW chứng minh `:id` UUID hợp lệ vẫn đi qua ([[deny-cases-vacuous-without-allow-case]])",
+      "Cân nhắc RATCHET cho kênh PARAM song song với ratchet kênh BODY — không có nó thì tham số thứ sáu sẽ mọc lại y như route thứ năm đã mọc ở KI-047. Nếu quyết KHÔNG làm ratchet thì KHAI RÕ vì sao",
+      "RELEASE-02 đóng KI-077 kèm số đo 5 route (trước/sau) — và giữ nguyên cảnh báo ở hàng KI-068 rằng dấu gạch của nó chỉ phủ kênh BODY",
+    ],
+    notes: [
+      "🟡 LIGHT gate (typescript-reviewer + quality-gate). Không chạm permission/RLS/secret/migration.",
+      "⚠️ `ParseUUIDPipe` trên route ĐỌC đổi mã trả về từ 500 sang 400 cho input rác — đó là ĐỔI HÀNH VI QUAN SÁT ĐƯỢC. Census hộ tiêu thụ (FE + test) trước khi sửa, đừng cho là vô hại chỉ vì nó 'chặt hơn'.",
+      '⚠️ `unlink` nhận `:linkId` chứ không phải `:id` — grep theo `@Param("id")` sẽ TRƯỢT nó ([[identity-projection-census-misses-alias]]).',
+      "⚠️ int-spec ngủ khi thiếu `LANE_DB` ⇒ verify bằng `bash scripts/lane-db-setup.sh paramuuid` + export, KHÔNG `source .env` ([[sourcing-dotenv-poisons-test-run-node-env]]).",
     ],
   },
 ];

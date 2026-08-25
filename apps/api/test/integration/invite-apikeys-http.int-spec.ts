@@ -264,36 +264,31 @@ describe.skipIf(!hasLaneDb)(
     });
 
     /**
-     * 🔴 GHIM BUG (KI-068) — KHÔNG PHẢI HÀNH VI MONG MUỐN.
+     * ✅ ĐÃ VÁ — S10-FND-BODYVALIDATE-1 đóng KI-068 (24/08/2026). Ca này TỪNG là ghim bug và đã được
+     * LẬT từ `expect(500)` sang `expect(400)` đúng như docblock cũ dặn.
      *
-     * Body sai hợp đồng ⇒ route trả **500 SYSTEM-ERR-001** thay vì 400. Cơ chế (đo bằng HTTP thật,
-     * không suy đoán):
-     *   1. `api-keys.controller.ts:44` khai `@Body() dto: CreateApiKeyRequest` — đó là **TYPE**
-     *      (`z.infer`), KHÔNG phải class `createZodDto` ⇒ `ZodValidationPipe` không có schema để
-     *      chiếu vào ⇒ body ĐI THẲNG vào handler, KHÔNG được validate ở biên.
-     *   2. Handler tự `createApiKeyRequestSchema.parse(dto)` và ném **ZodError THÔ**.
-     *   3. `AllExceptionsFilter` chỉ hiểu `ZodValidationException` của nestjs-zod (qua
-     *      `getZodError()`), không hiểu `ZodError` thô ⇒ rơi vào nhánh 500 mặc định.
-     * Comment ngay tại `api-keys.controller.ts:45` KHẲNG ĐỊNH "ZodValidationPipe đã chạy" — điều đó
-     * SAI, và đây đúng lớp bẫy "UI hứa, backend không đọc": đọc comment sẽ tin nhầm là có validate.
+     * Bug cũ, giữ lại vì nó giải thích vì sao ca này tồn tại: `@Body() dto: CreateApiKeyRequest` là
+     * **TYPE** (`z.infer`), không phải class `createZodDto` ⇒ metatype lúc chạy là `Object` ⇒
+     * `ZodValidationPipe` (kể cả bản `@UsePipes` CẤP CLASS) không có schema để chiếu ⇒ body đi thẳng
+     * vào handler ⇒ handler tự `.parse()` ném `ZodError` THÔ ⇒ `AllExceptionsFilter` chỉ hiểu
+     * `ZodValidationException` của nestjs-zod ⇒ rơi nhánh **500**.
      *
-     * Hỏng đúng chiều an toàn (request VẪN bị từ chối, fail-closed) ⇒ không phải lỗ bảo mật; hậu quả
-     * là client không phân biệt được "payload của tôi sai" với "server hỏng", và mọi payload sai đều
-     * bơm 500 giả vào giám sát.
+     * Bản vá: `CreateApiKeyDto extends createZodDto(createApiKeyRequestSchema)` (`api-keys.dto.ts`) —
+     * class THẬT ⇒ metatype tồn tại ⇒ pipe chặn ở BIÊN. `.parse()` thủ công trong handler đã bỏ.
      *
-     * KHI AI ĐÓ VÁ (đổi `@Body()` sang class `createZodDto`, hoặc `@UsePipes(new ZodValidationPipe(
-     * schema))` như `profile-change-request.controller.ts:58`, hoặc dạy filter hiểu `ZodError` thô):
-     * ca này sẽ ĐỎ. Đó là tín hiệu ĐÚNG — LẬT nó sang `expect(400)` rồi đóng KI-068.
-     * TUYỆT ĐỐI KHÔNG nới assert thành `expect([400, 500]).toContain(...)`.
+     * ⚠️ NGƯỠNG CHỐNG NỚI: assert PHẢI ở lại `400` đơn trị. Nếu ai đó gặp ca này đỏ và sửa thành
+     * `expect([400, 500]).toContain(...)` thì lỗ KI-068 mở lại mà sổ vẫn ghi ĐÓNG
+     * ([[tests-can-pin-a-hole-open]]).
      */
-    it("🔴 GHIM BUG (KI-068): POST /api-keys scopePermissionIds RỖNG → 500 ZodError, KHÔNG phải 400", async () => {
+    it("KI-068 ĐÃ ĐÓNG: POST /api-keys scopePermissionIds RỖNG → 400 ở BIÊN, KHÔNG phải 500", async () => {
       const res = await authPost(tAdminA, "/api-keys").send({
         name: "pat-empty-scope",
         scopePermissionIds: [],
       });
-      expect(res.status, JSON.stringify(res.body)).toBe(500);
-      // Ghim CẢ lý do: chỉ đo status thì bản vá nửa vời (500 vì lý do khác) vẫn xanh ⇒ ghim hỏng.
-      expect(res.body.error?.type, JSON.stringify(res.body)).toBe("ZodError");
+      expect(res.status, JSON.stringify(res.body)).toBe(400);
+      // Ghim CẢ hình dạng lỗi: `ZodError` THÔ là hiện vật của đường 500 cũ. Nếu nó quay lại thì bản vá
+      // đã tuột dù status tình cờ vẫn 400.
+      expect(res.body.error?.type, JSON.stringify(res.body)).not.toBe("ZodError");
     });
 
     it("400: scope VƯỢT quyền actor → 400 (chặn PAT leo thang, nhánh service đi qua HTTP)", async () => {
