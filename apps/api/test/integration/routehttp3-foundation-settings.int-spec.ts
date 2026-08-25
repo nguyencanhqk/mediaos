@@ -148,6 +148,9 @@ describe.skipIf(!hasLaneDb)(
       app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
       app.useGlobalFilters(new AllExceptionsFilter());
       await app.init();
+      // Phải listen THẬT: supertest tự listen(0) rồi close() server dùng chung ngay khi request ĐẦU kết thúc
+      // ⇒ các request anh em trong Promise.all bị reset socket (ECONNRESET). Server đang listen thì supertest không sở hữu nó.
+      await app.listen(0);
 
       direct = directPool();
       A = await seedCompany(direct, "s10rh3fsa");
@@ -334,12 +337,17 @@ describe.skipIf(!hasLaneDb)(
     // ─── 8. Liên kết SSO sang hệ ngoài ──────────────────────────────────────────
 
     it("integrations: GET /lms/sso-link + GET /social/sso-link — trả mã có nghĩa, KHÔNG 500", async () => {
+      // CI không cấu hình LMS_BASE_URL/SOCIAL_SSO_* ⇒ service fail-fast 503 (mã CÓ NGHĨA, chủ ý).
+      // 500 mới là vỡ: đó là điều test này canh. So `< 500` loại nhầm chính 503 hợp lệ.
+      const MEANINGFUL = [200, 403, 503];
       const lms = await authGet(tAdminA, "/integrations/lms/sso-link");
-      expect(lms.status, `lms sso-link: ${JSON.stringify(lms.body)}`).toBeLessThan(500);
+      expect(MEANINGFUL, `lms sso-link: ${JSON.stringify(lms.body)}`).toContain(lms.status);
       expect(lms.body.success !== undefined, "phải đi qua envelope interceptor").toBe(true);
 
       const social = await authGet(tAdminA, "/integrations/social/sso-link");
-      expect(social.status, `social sso-link: ${JSON.stringify(social.body)}`).toBeLessThan(500);
+      expect(MEANINGFUL, `social sso-link: ${JSON.stringify(social.body)}`).toContain(
+        social.status,
+      );
       expect(social.body.success !== undefined, "phải đi qua envelope interceptor").toBe(true);
     });
 

@@ -219,6 +219,9 @@ describe.skipIf(!hasLaneDb)(
       app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
       app.useGlobalFilters(new AllExceptionsFilter());
       await app.init();
+      // Phải listen THẬT: supertest tự listen(0) rồi close() server dùng chung ngay khi request ĐẦU kết thúc
+      // ⇒ các request anh em trong Promise.all bị reset socket (ECONNRESET). Server đang listen thì supertest không sở hữu nó.
+      await app.listen(0);
 
       direct = directPool();
       A = await seedCompany(direct, "s10rh3hra");
