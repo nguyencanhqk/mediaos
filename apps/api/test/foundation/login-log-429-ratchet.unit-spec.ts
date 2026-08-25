@@ -76,6 +76,23 @@ describe("S10-SEC-LOGINLOG429-1 — ratchet: điểm ném 429 phải để lại
     ).toBe(0);
   });
 
+  it("(1b) CHIỀU NGƯỢC LẠI: mọi waiver phải CÒN im lặng — chống 'vá cho đủ'", () => {
+    // Ca (1) chỉ ghim MỘT CHIỀU. Nếu ai đó THÊM lời ghi vào nhánh 429 của changePassword/
+    // disableTwoFactor/confirmEnable ("vá cho đủ cho đẹp"), site đó biến khỏi
+    // silentTooManyRequestsSites() ⇒ offenders vẫn rỗng ⇒ ca (1) XANH, trong khi quyết định
+    // CHỐNG KHUẾCH ĐẠI (§1.1: đường đang bị khoá ghi 0 hàng) vừa bị đảo trong im lặng.
+    //
+    // Đó không phải chuyện thẩm mỹ: ba đường này post-auth, lặp MIỄN PHÍ bằng access token ⇒ ghi ở
+    // nhánh đã-khoá là cho phép bồi vô hạn hàng vào bảng append-only — đúng KI-048 ở dạng mới.
+    const silent = new Set(silentTooManyRequestsSites().map((s) => s.key));
+    const noLongerSilent = [...WAIVERS.keys()].filter((k) => !silent.has(k));
+    expect(
+      noLongerSilent,
+      "waiver này nay ĐÃ ghi ở nhánh khoá — hoặc gỡ nó khỏi WAIVERS (nếu ghi là có chủ ý và có mô " +
+        "hình chi phí như §1.3a), hoặc bỏ lời ghi đi. Đừng để bảng waiver nói một đằng, code một nẻo.",
+    ).toEqual([]);
+  });
+
   it("(2) census KHÔNG rỗng và bộ dò nhánh CHẠY THẬT — chống xanh-rỗng", () => {
     // Nếu scanner hỏng (đổi cây thư mục, đổi tên `HttpStatus`, parse lỗi) thì ca (1) xanh vì KHÔNG
     // TÌM THẤY GÌ, không phải vì sạch. Hai neo dưới là điều kiện để tin ca (1)

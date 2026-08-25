@@ -1,4 +1,4 @@
-import { BadRequestException, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, HttpException, UnauthorizedException } from "@nestjs/common";
 import type { AuthTokens, LoginResponse } from "@mediaos/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DatabaseService } from "../../src/db/db.service";
@@ -131,6 +131,31 @@ describe.skipIf(!hasDb)("Module 2a self-service account", () => {
       ),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(await countReauthFailed("change_password")).toBe(before + 1);
+  });
+
+  it("R12b · changePassword khi bucket ĐÃ KHOÁ (429) ⇒ +0 REAUTH_FAILED — chống bồi hàng", async () => {
+    // Ghim quyết định §1.1 ở RUNTIME: đường DỰNG NÊN khoá ghi vết (ca trên), đường ĐANG BỊ KHOÁ
+    // ghi 0 hàng. Ratchet tĩnh giữ được "waiver còn im lặng" nhưng không chứng minh được hành vi
+    // chạy thật. Không có ca này thì người sau rất dễ "vá cho đủ" và mở lại đúng lỗ khuếch đại:
+    // đường này post-auth, lặp MIỄN PHÍ bằng access token ⇒ bồi vô hạn vào bảng append-only.
+    const auth = newAuth();
+    // Dựng khoá bằng chính đường sai mật khẩu (mỗi lượt cũng ghi 1 hàng — đó là trần N/cửa sổ).
+    for (let i = 0; i < 5; i += 1) {
+      await auth
+        .changePassword({ id: userId, companyId: A.companyId }, `nope-${i}`, "Zz!9aaaa")
+        .catch(() => undefined);
+    }
+    const before = await countReauthFailed("change_password");
+
+    // Ba lượt nữa: nay bucket đã khoá ⇒ 429, và KHÔNG hàng nào được ghi thêm.
+    for (let i = 0; i < 3; i += 1) {
+      const err = await auth
+        .changePassword({ id: userId, companyId: A.companyId }, "still-wrong", "Zz!9bbbb")
+        .then(() => null)
+        .catch((e: unknown) => e);
+      expect((err as HttpException)?.getStatus?.()).toBe(429);
+    }
+    expect(await countReauthFailed("change_password")).toBe(before);
   });
 
   it("ĐỐI CHỨNG ALLOW · changePassword ĐÚNG ⇒ +1 PASSWORD_CHANGED và KHÔNG REAUTH_FAILED thừa", async () => {

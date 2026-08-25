@@ -457,6 +457,60 @@ describe.skipIf(!runDb)("S2-AUTH-BE-5 auth-logs viewer deny/scope/mask/append-on
   // KHÔNG đụng userA1 (giữ P3 = 2). status=success → CHỈ success. Kèm sort=status&order=asc +
   // no-filter để phủ orderBy(status-col/asc) + buildWhere(no-conds) login-log.repository cho coverage
   // gate ≥80% (HARD — KHÔNG hạ ngưỡng, KHÔNG tắt type-check).
+  it("R9 (S10-SEC-LOGINLOG429-1 · KI-048) — login-logs?failure_reason=X → CHỈ hàng đúng mã, và vị từ mới KHÔNG vượt rowScope", async () => {
+    // KI-048: hàng `blocked`/`TooManyAttempts` có tốc độ sinh do KẺ TẤN CÔNG điều khiển và
+    // `login_logs` không bao giờ được thu hồi ⇒ không có bộ lọc này thì mọi tín hiệu khác của
+    // AUTH-API-401 bị chôn dưới nhiễu. Đây là ca chứng minh vế LỌC thật sự thu hẹp.
+    const email = `subjReason-${TAG}@a.test`;
+    const subj = await seedUser(direct, A.companyId, email);
+    for (const reason of ["TooManyAttempts", "WrongPassword", "TwoFactorInvalid"]) {
+      await direct.query(
+        `INSERT INTO login_logs (company_id, user_id, email, normalized_email, login_status, failure_reason, ip_address, user_agent, metadata)
+         VALUES ($1,$2,$3,$4,'failed',$5,$6,$7,'{}'::jsonb)`,
+        [A.companyId, subj, email, email.toLowerCase(), reason, SEED_IP, SEED_UA],
+      );
+    }
+
+    // Sanity: không lọc ⇒ cả 3 (chứng minh bộ lọc thực sự thu hẹp 3→1, không phải mẫu vốn đã 1).
+    const all = await api(app)
+      .get(`/auth/login-logs?user_id=${subj}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(all.status, JSON.stringify(all.body)).toBe(200);
+    expect(all.body.pagination.total).toBe(3);
+
+    const filtered = await api(app)
+      .get(`/auth/login-logs?user_id=${subj}&failure_reason=TooManyAttempts`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(filtered.status, JSON.stringify(filtered.body)).toBe(200);
+    expect(filtered.body.pagination.total).toBe(1);
+    for (const row of filtered.body.data as Array<Record<string, unknown>>) {
+      expect(row.failure_reason).toBe("TooManyAttempts");
+    }
+
+    // Mã MỚI của WO này cũng lọc được — `z.string()` chứ không `z.enum` chính là để mã thêm sau
+    // vẫn lọc được mà không phải sửa contract.
+    const tfa = await api(app)
+      .get(`/auth/login-logs?user_id=${subj}&failure_reason=TwoFactorInvalid`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(tfa.body.pagination.total).toBe(1);
+
+    // ⚠️ VỊ TỪ MỚI KHÔNG ĐƯỢC VƯỢT rowScope/tenant: admin của A lọc trên user của B ⇒ 0 hàng, dù
+    // mã lý do khớp. Không có vế này thì ca trên chỉ chứng minh "lọc chạy", không chứng minh "lọc
+    // chạy TRONG hàng rào".
+    const emailB = `subjReasonB-${TAG}@b.test`;
+    const subjB = await seedUser(direct, B.companyId, emailB);
+    await direct.query(
+      `INSERT INTO login_logs (company_id, user_id, email, normalized_email, login_status, failure_reason, ip_address, user_agent, metadata)
+       VALUES ($1,$2,$3,$4,'failed','TooManyAttempts',$5,$6,'{}'::jsonb)`,
+      [B.companyId, subjB, emailB, emailB.toLowerCase(), SEED_IP, SEED_UA],
+    );
+    const cross = await api(app)
+      .get(`/auth/login-logs?user_id=${subjB}&failure_reason=TooManyAttempts`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(cross.status).toBe(200);
+    expect(cross.body.pagination.total).toBe(0);
+  });
+
   it("S10 — login-logs status=success → CHỈ success-rows + sort=status asc (phủ branch repo)", async () => {
     const email = `subjStatus-${TAG}@a.test`;
     const subj = await seedUser(direct, A.companyId, email);

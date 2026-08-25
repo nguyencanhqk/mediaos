@@ -350,9 +350,13 @@ describe.skipIf(!hasDb)("G16-1 login 2FA flow", () => {
         meta,
       );
       if (!isChallenge(r)) throw new Error("mong đợi challenge");
-      await expect(
-        freshAuth.completeTwoFactorLogin(r.challengeToken, "000000", meta),
-      ).rejects.toBeInstanceOf(HttpException);
+      // Phải khẳng định ĐÚNG 429 — `UnauthorizedException` cũng là `HttpException`, nên
+      // `toBeInstanceOf(HttpException)` không phân biệt được "đã khoá" với "mã sai".
+      const err = await freshAuth
+        .completeTwoFactorLogin(r.challengeToken, "000000", meta)
+        .then(() => null)
+        .catch((e: unknown) => e);
+      expect((err as HttpException)?.getStatus?.()).toBe(429);
     }
 
     // GỘP: +1, không phải +3. Tốc độ sinh hàng ở nhánh đã-khoá do KẺ TẤN CÔNG điều khiển, mà
