@@ -113,6 +113,16 @@ describe.skipIf(!hasDb)("G3 permission mutation-path", () => {
     const adminRole = await seedRole(direct, A.companyId, `padm-role-${randomUUID().slice(0, 8)}`);
     await seedRolePermission(direct, adminRole, assignPerm, "ALLOW");
     await seedRolePermission(direct, adminRole, grantObjPerm, "ALLOW");
+    // S10-SEC-ROLEMEMBERDEL-1 (KI-074): `revokeRole` nay trả 404 ở nhánh ÂM CHỈ cho actor có
+    // `view:user` ở scope Company/System (DECISIONS-10, hướng b). `adminRole` trước đây KHÔNG mang
+    // cặp này ⇒ resolver trả `null` ⇒ nhánh 204 ⇒ ca "unknown role → NotFound" dưới sẽ đỏ.
+    // Vá bằng GRANT THẬT (không phải nới assert): `view:user@Company` đúng hình dạng PROD của mọi
+    // vai quản trị được phép gọi route này (mig 0444:88-89 — hr + company-admin). Giữ nguyên sức
+    // nặng của pin 404, thay vì xoá nó đi.
+    // ⚠️ `isSensitive: false` là BẮT BUỘC — cặp chính tắc là false (mig 0444:39); truyền `true` sẽ bị
+    // hàng rào của `seedPermissionCatalog` NÉM ("fixture đóng dấu catalog toàn cục").
+    const viewUserPerm = await seedPermissionCatalog(direct, "view", "user", false);
+    await seedRolePermission(direct, adminRole, viewUserPerm, "ALLOW", "Company");
     await seedUserRole(direct, adminUser, adminRole, A.companyId);
 
     // noPerm A: role rỗng.
@@ -279,6 +289,46 @@ describe.skipIf(!hasDb)("G3 permission mutation-path", () => {
     await expect(
       svc.revokeRole({ id: adminUser, companyId: A.companyId }, targetUser, assignableRole),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  // S10-SEC-ROLEMEMBERDEL-1 (KI-074) — mặt kia của pin ngay trên. Ca kia chứng minh actor CÓ danh bạ
+  // toàn công ty vẫn nhận 404; ca này chứng minh actor KHÔNG có nhận 204 IM LẶNG với 0 ghi, trên
+  // engine quyền THẬT (không mock resolver — khác tầng unit `permission-admin.ki074.spec.ts`).
+  it("KI-074: actor có assign-role:user nhưng KHÔNG có view:user → revoke người không giữ role = 204 im lặng, 0 ghi", async () => {
+    const noDirUser = await seedUser(direct, A.companyId, `pnd-${randomUUID().slice(0, 8)}@a.test`);
+    const noDirRole = await seedRole(direct, A.companyId, `pnd-role-${randomUUID().slice(0, 8)}`);
+    const assignPermId = await seedPermissionCatalog(direct, "assign-role", "user", true);
+    await seedRolePermission(direct, noDirRole, assignPermId, "ALLOW", "Company");
+    await seedUserRole(direct, noDirUser, noDirRole, A.companyId);
+
+    // ⚠️ Đếm audit theo ACTOR, KHÔNG theo `countAudit(..., "user_role", assignableRole)`: audit của
+    // revoke ghi `object_id = user_roles.id`, KHÔNG phải role id ⇒ đếm theo role id luôn trả 0 ở CẢ
+    // HAI vế và assert thành tautology không bao giờ đỏ được (FULL gate security-reviewer bắt).
+    const auditByActor = async (actorId: string): Promise<number> => {
+      const r = await direct.query(
+        `SELECT count(*)::int AS n FROM audit_logs WHERE company_id=$1 AND actor_user_id=$2`,
+        [A.companyId, actorId],
+      );
+      return r.rows[0].n as number;
+    };
+
+    // `targetUser` KHÔNG giữ `assignableRole` ở thời điểm này (ca revoke ngay trên đã gỡ).
+    const auditBefore = await auditByActor(noDirUser);
+    const outboxBefore = await countOutboxForUser(A.companyId, targetUser);
+
+    await expect(
+      svc.revokeRole({ id: noDirUser, companyId: A.companyId }, targetUser, assignableRole),
+    ).resolves.toBeUndefined();
+
+    // Ranh (3): nhánh ÂM là 0 ghi — KHÔNG audit/security-event giả "cho giống nhánh dương".
+    expect(await auditByActor(noDirUser)).toBe(auditBefore);
+    expect(await countOutboxForUser(A.companyId, targetUser)).toBe(outboxBefore);
+    const sec = await direct.query(
+      `SELECT count(*)::int AS n FROM user_security_events
+        WHERE company_id=$1 AND user_id=$2 AND actor_user_id=$3 AND event_type='ROLE_REMOVED'`,
+      [A.companyId, targetUser, noDirUser],
+    );
+    expect(sec.rows[0].n).toBe(0);
   });
 
   it("setObjectPermission inserts → flips effect (DELETE+INSERT) → remove; each audits + emits", async () => {

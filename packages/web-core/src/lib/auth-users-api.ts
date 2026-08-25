@@ -133,7 +133,17 @@ export const authUsersApi = {
 
   /**
    * DELETE /permissions/users/:userId/roles/:roleId — thu role khỏi user (G3-4 mutation-path).
+   *
    * Server trả 404 nếu user KHÔNG đang giữ role này — caller xử lý như lỗi rõ ràng (KHÔNG no-op ngầm).
+   *
+   * ⚠️ S10-SEC-ROLEMEMBERDEL-1 (KI-074, ADR `DECISIONS-10`): từ 2026-08-25, 404 đó là **CÓ ĐIỀU KIỆN**
+   * — nó chỉ phát cho actor có `view:user` ở scope `Company`/`System`. Actor có danh bạ HẸP HƠN (hoặc
+   * không có) nhận **204** ở CẢ hai nhánh, để mã trả về thôi làm oracle "x có phải thành viên của
+   * role r không" (câu trả lời ÂM trước đây MIỄN PHÍ: 0 hàng forensic, 0 thiệt hại).
+   *
+   * Hành vi của BA caller hiện tại KHÔNG đổi: người trực ca luôn ở `Company` (đo PROD 24/08: 0 vai
+   * hẹp hơn) nên vẫn nhận 404 như cũ. Nhưng ĐỪNG viết caller mới với giả định "204 ⇒ chắc chắn vừa
+   * gỡ được một hàng" — dưới danh bạ hẹp, 204 KHÔNG mang thông tin đó.
    */
   revokeRole: (userId: string, roleId: string): Promise<void> =>
     apiFetch(`/permissions/users/${userId}/roles/${roleId}`, authUserVoidSchema, {

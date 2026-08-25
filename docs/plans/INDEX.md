@@ -453,7 +453,7 @@
 | `S10-SEC-AUDITLOGROW-2` | 🔴 | ✅ xong | [📄](S10-SEC-AUDITLOGROW-2.md) | — | KI-072 — `GET /foundation/audit-logs` (+ `/:id`) KHÔNG bound HÀNG: cùn |
 | `S10-SEC-ROLEMEMBERROW-1` | 🔴 | ✅ xong | [📄](S10-SEC-ROLEMEMBERROW-1.md) | ✅S10-SEC-AUDITLOGROW-2 | KI-071 — `GET /auth/roles/:id/members` bound CỘT chứ KHÔNG bound HÀNG: |
 | `S10-SEC-ROLEMEMBERFE-1` | 🔴 | ✅ xong | [📄](S10-SEC-ROLEMEMBERFE-1.md) | ✅S10-SEC-ROLEMEMBERROW-1 | KI-073 — tab Thành viên role: THÂN 201 của POST /permissions/users/:us |
-| `S10-SEC-ROLEMEMBERDEL-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S10-SEC-ROLEMEMBERFE-1 | KI-074 — oracle thứ HAI của tab Thành viên role: DELETE /permissions/u |
+| `S10-SEC-ROLEMEMBERDEL-1` | 🔴 | ✅ xong | [📄](S10-SEC-ROLEMEMBERDEL-1.md) | ✅S10-SEC-ROLEMEMBERFE-1 | KI-074 — oracle thứ HAI của tab Thành viên role: DELETE /permissions/u |
 | `S10-CHAT-EMITGUARD-1` | 🟡 | ✅ xong | [📄](S10-CHAT-EMITGUARD-1.md) | — | KI-075 — hai job CHAT (`emitExpired` :68 · `emitAutoEnded` :72) gọi đư |
 | `S10-CHAT-EMITGUARD-2` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S10-CHAT-EMITGUARD-1 | KI-076 — NĂM route REST của CALL phát realtime SAU COMMIT không bọc (` |
 
