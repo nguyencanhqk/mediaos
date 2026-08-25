@@ -13352,7 +13352,7 @@ export const backlog = [
     title:
       "KI-076 — NĂM route REST của CALL phát realtime SAU COMMIT không bọc (`emitLifecycle` :203 invite · :558 dùng chung 4 route vòng đời); 3/5 rơi vào trạng thái CUỐI mà KHÔNG job nào quét ⇒ peer mất sự kiện VĨNH VIỄN",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     depends_on: ["S10-CHAT-EMITGUARD-1"],
     paths: [
       "apps/api/src/chat/**",
