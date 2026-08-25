@@ -94,6 +94,20 @@ const FORGOT_PW_JITTER_MS = 80;
  */
 const BLOCKED_LOGIN_FLOOR_MS = 250;
 
+/**
+ * S10-SEC-LOGINLOG429-1 — bucket rate-limit NÀO đang khoá một lượt login. Không phải trang trí:
+ * khoá GỘP hàng nhật ký phải soi gương đúng bucket này, vì `acct` và `ip` có hình dạng khoá KHÁC
+ * nhau (`acct` không chứa ip). Xem `isLoginRateLimited`.
+ */
+type LockedLoginBucket = "acct" | "ip";
+
+/**
+ * S10-SEC-LOGINLOG429-1 — TTL khoá gộp hàng nhật ký của nhánh REPLAY challengeToken.
+ * Bằng TTL marker single-use của `ReplayGuard` (`claim("2fa-jti", …, 600)` ngay trong hàm này) ⇒
+ * đúng một hàng cho mỗi token trong suốt thời gian token đó còn bị coi là "đã tiêu".
+ */
+const TWO_FACTOR_CHALLENGE_REPLAY_TTL_SEC = 600;
+
 /** Hình dạng envelope reset-token lưu trong outbox payload (Buffer → base64 để truyền JSON). */
 const resetEnvelopeSchema = z.object({
   secretCiphertext: z.string(),
@@ -238,7 +252,8 @@ export class AuthService {
 
   async login(req: LoginRequest, meta: RequestMeta): Promise<AuthTokens | TwoFactorChallenge> {
     const ip = meta.ip ?? "unknown";
-    if (await this.isLoginRateLimited(req.companySlug, req.email, ip)) {
+    const lockedBucket = await this.isLoginRateLimited(req.companySlug, req.email, ip);
+    if (lockedBucket) {
       // ⟲ S6-SEC-LOGINLOG-2 · KI-044 — GẮN ĐÚNG CHỦ cho hàng bị chặn.
       // Trước: luôn ghi company_id NULL vì bộ chặn tần suất chạy TRƯỚC resolveCompanyId(). Sau mig 0532
       // (USING chỉ còn tenant hiện tại) hàng NULL KHÔNG tenant nào đọc được ⇒ company-admin mất hẳn quan
@@ -247,17 +262,42 @@ export class AuthService {
       // không tốn thêm một lượt tra DB nào. Slug sai/inactive vẫn ra NULL (hàng thực sự vô chủ).
       const startedAt = Date.now();
       try {
-        const ownerCompanyId = await this.resolveBlockedLogOwner(req.companySlug);
-        await this.recordLoginAttempt({
-          companyId: ownerCompanyId,
-          // GIỮ NGUYÊN: bất biến `company_id IS NULL ⟹ user_id IS NULL` (ghim bởi auth-me-bootstrap
-          // int-spec). Ta chỉ nâng companyId từ NULL lên chủ thật, KHÔNG gắn user cho hàng pre-auth.
-          userId: null,
-          email: req.email,
-          status: "blocked",
-          reason: "TooManyAttempts",
-          meta,
-        });
+        // ⟲ S10-SEC-LOGINLOG429-1 · KI-048 — GỘP: ghi ĐÚNG MỘT hàng cho mỗi cửa sổ khoá.
+        //
+        // VÌ SAO. Nhánh này không có `password.hash` burn, nên chi phí server mỗi hàng gần bằng 0 ⇒
+        // tốc độ sinh hàng do KẺ TẤN CÔNG điều khiển, đổ vào `login_logs` — bảng ∈ PROTECTED_TABLES,
+        // KHÔNG BAO GIỜ thu hồi. Chính bản vá KI-044 (gắn đúng chủ) làm những hàng đó HIỆN LÊN màn
+        // admin, nên nó vừa phình lưu trữ vừa chôn mọi tín hiệu khác dưới nhiễu. Đó là KI-048.
+        //
+        // ⚠️ GỘP = KHÔNG GHI THÊM. Tuyệt đối KHÔNG phải UPDATE hàng cũ: `login_logs` bị REVOKE
+        // UPDATE/DELETE (mig 0443, BẤT BIẾN #2).
+        //
+        // ⚠️ VỊ TRÍ LÀ HỢP ĐỒNG: kiểm gộp nằm TRONG `try` và SAU `startedAt` ⇒ `finally` bên dưới
+        // vẫn áp sàn thời gian cho CẢ lượt bị gộp. Nhấc nó ra ngoài/lên trên là trả về gần-tức-thì
+        // ⇒ phân biệt được lần-đầu-cửa-sổ với lần-sau, và đẻ lại đúng oracle mà sàn sinh ra để che.
+        //
+        // Mất mát ĐÃ CÂN NHẮC: sổ trả lời "CÓ bị chặn trong cửa sổ này", không trả lời "BAO NHIÊU
+        // lần". Ghi được số đếm cần UPDATE ⇒ cấm; đẻ hàng tổng kết lại là hàng do kẻ tấn công điều
+        // khiển. Số đếm sống ở bucket rate-limit, không phải ở forensics.
+        const firstOfWindow = await this.claimBlockedLogSlot(
+          lockedBucket,
+          req.companySlug,
+          req.email,
+          ip,
+        );
+        if (firstOfWindow) {
+          const ownerCompanyId = await this.resolveBlockedLogOwner(req.companySlug);
+          await this.recordLoginAttempt({
+            companyId: ownerCompanyId,
+            // GIỮ NGUYÊN: bất biến `company_id IS NULL ⟹ user_id IS NULL` (ghim bởi auth-me-bootstrap
+            // int-spec). Ta chỉ nâng companyId từ NULL lên chủ thật, KHÔNG gắn user cho hàng pre-auth.
+            userId: null,
+            email: req.email,
+            status: "blocked",
+            reason: "TooManyAttempts",
+            meta,
+          });
+        }
       } finally {
         // SÀN THỜI GIAN — bắt buộc, không phải tô điểm. Hai nhánh trên ghi log bằng HAI hình dạng khác
         // nhau (withTenant 4 round-trip vs insert trần 1 round-trip) và nhánh 429 không có password.hash
@@ -465,10 +505,59 @@ export class AuthService {
     // memory khi Valkey rớt, KHÔNG fail-open). TTL phủ trọn cửa sổ challenge (5').
     const firstUse = await this.replayGuard.claim("2fa-jti", claims.jti, 600);
     if (!firstUse) {
+      // ⟲ S10-SEC-LOGINLOG429-1 · KI-047 — challengeToken DÙNG LẠI là tín hiệu token bị đánh cắp/chia
+      // sẻ, không phải "gõ sai". Trước WO này nhánh này ghi 0 dòng.
+      //
+      // GỘP theo `jti` (TTL = TTL của challenge): replay KHÔNG tốn argon2 — cùng một token cũ gửi lại
+      // N lần là MIỄN PHÍ ⇒ ghi trần là bồi hàng vô hạn vào bảng không thu hồi được. Trần đúng ở đây là
+      // 1 hàng / 1 token bị lộ, và đó CHÍNH LÀ hạt thông tin muốn có; lặp thêm không thêm bit nào.
+      //
+      // ⚠️ TỔN THẤT ĐÃ CÂN NHẮC: gộp theo `jti` che mất "cùng token bị replay từ NHIỀU IP" — dấu hiệu
+      // token bị chia sẻ/bán. Vẫn chọn `jti`: khoá `jti|ip` cho kẻ tấn công quyền bơm hàng vô hạn chỉ
+      // bằng cách đổi IP. Đừng "cải tiến" theo hướng đó.
+      if (
+        await this.rateLimiter.claimFirstOfWindow(
+          rateLimitKey("logdedup", `2fa-replay:${claims.jti}`),
+          TWO_FACTOR_CHALLENGE_REPLAY_TTL_SEC,
+        )
+      ) {
+        await this.recordLoginAttemptForUser({
+          companyId: claims.companyId,
+          userId: claims.sub,
+          status: "failed",
+          reason: "TwoFactorChallengeReplay",
+          meta,
+        });
+      }
       throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
     }
     const rlKey = rateLimitKey("2fa", `${claims.companyId}|${claims.sub}`);
     if (await this.rateLimiter.isLocked(rlKey)) {
+      // ⟲ S10-SEC-LOGINLOG429-1 · KI-047 — đây là NGOẠI LỆ CÓ CHỦ Ý của luật "đường đang bị khoá ghi
+      // 0 hàng" (luật đó giữ nguyên cho `disableTwoFactor`/`changePassword`/`confirmEnable`/`stepUp`).
+      //
+      // MÔ HÌNH CHI PHÍ ký cho ngoại lệ này: `replayGuard.claim` ở ngay TRÊN đứng TRƯỚC `isLocked`, nên
+      // mỗi lần chạm được nhánh này kẻ tấn công phải TIÊU một challengeToken MỚI — mà token chỉ cấp
+      // sau một lượt bước-1 ĐÚNG MẬT KHẨU, tức một lượt argon2 đầy đủ. Hệ số ≈ 1 hàng : 1 argon2,
+      // khác hẳn `stepUp`/`change-pw` (lặp miễn phí bằng access token). `signTwoFactorChallenge` có
+      // ĐÚNG MỘT call-site production nên không có đường vòng nào lấy token mà không trả giá đó.
+      //
+      // ⚠️ ĐIỀU KIỆN CỨNG: kiểm khoá gộp đứng TRƯỚC mọi lời gọi DB ⇒ lượt bị gộp không chạm DB một
+      // round-trip nào, giữ nguyên đặc tính "đường đã khoá thì rẻ" của hiện trạng.
+      if (
+        await this.rateLimiter.claimFirstOfWindow(
+          rateLimitKey("logdedup", `2fa:${claims.companyId}|${claims.sub}`),
+          this.rateLimiter.lockoutSec,
+        )
+      ) {
+        await this.recordLoginAttemptForUser({
+          companyId: claims.companyId,
+          userId: claims.sub,
+          status: "blocked",
+          reason: "TooManyAttempts",
+          meta,
+        });
+      }
       throw new HttpException(
         "Quá nhiều lần thử. Vui lòng thử lại sau.",
         HttpStatus.TOO_MANY_REQUESTS,
@@ -489,6 +578,21 @@ export class AuthService {
           detail: { context: "2fa_challenge", ip: meta.ip },
         });
       }
+      // ⟲ S10-SEC-LOGINLOG429-1 · KI-047 — ĐÂY là đường DỰNG NÊN cái khoá, và trước WO này nó ghi
+      // 0 dòng. Hệ quả đo được: với tài khoản BẬT 2FA, `login_logs` (AUTH-API-401) chỉ chứa THÀNH
+      // CÔNG — toàn bộ chiến dịch dò mã 6 số vô hình với admin, kể cả khi chưa chạm ngưỡng khoá.
+      // Vá riêng nhánh 429 mà bỏ nhánh này là để lại lỗ LỚN HƠN cái vừa vá: 429 chỉ xuất hiện SAU
+      // `LOGIN_MAX_ATTEMPTS` lần sai mà không lần nào để lại vết.
+      //
+      // KHÔNG gộp ở đây: trần đã là `LOGIN_MAX_ATTEMPTS` hàng/cửa sổ (lần sai thứ N+1 bị chặn ở
+      // nhánh 429 bên trên), và mỗi lần còn tốn một argon2 của bước-1. Đây là dữ liệu, không phải nhiễu.
+      await this.recordLoginAttemptForUser({
+        companyId: claims.companyId,
+        userId: claims.sub,
+        status: "failed",
+        reason: "TwoFactorInvalid",
+        meta,
+      });
       throw new UnauthorizedException("Mã xác thực không đúng.");
     }
     await this.rateLimiter.reset(rlKey);
@@ -606,6 +710,7 @@ export class AuthService {
     });
     if (!ok) {
       await this.rateLimiter.recordFailure(rlKey);
+      await this.recordReauthFailure(user.companyId, user.id, "2fa_disable");
       throw new UnauthorizedException("Mật khẩu không đúng.");
     }
     await this.rateLimiter.reset(rlKey);
@@ -676,20 +781,54 @@ export class AuthService {
 
     if (!ok) {
       await this.rateLimiter.recordFailure(rlKey);
+      await this.recordReauthFailure(user.companyId, user.id, "change_password");
       throw new UnauthorizedException("Mật khẩu hiện tại không đúng.");
     }
     await this.rateLimiter.reset(rlKey);
   }
 
-  /** Khoá login khi BẤT KỲ bucket nào (per-IP HOẶC per-account) đã chạm ngưỡng. */
+  /**
+   * Khoá login khi BẤT KỲ bucket nào (per-IP HOẶC per-account) đã chạm ngưỡng.
+   *
+   * ⟲ S10-SEC-LOGINLOG429-1 (KI-048) — trả **BUCKET NÀO** đang khoá thay vì `boolean`. Khoá gộp hàng
+   * nhật ký phải SOI GƯƠNG đúng bucket đó: `accountKey` KHÔNG chứa `ip`
+   * (`login-rate-limiter.ts:46-48`), nên nếu gộp theo `{slug}|{email}|{ip}` trong khi cái đang khoá
+   * là bucket `acct` thì credential-stuffing rải nhiều nguồn vẫn bồi **mỗi IP một hàng** — đúng ca
+   * nặng nhất của KI-048, và là ca `TRUST_PROXY=loopback` (18/08) làm cho có thật vì `ip` giờ là IP
+   * THẬT chứ không còn là `::1` đồng loạt.
+   *
+   * Khoá CẢ HAI ⇒ trả `"acct"`: dạng THÔ hơn thắng (1 hàng/tài khoản/cửa sổ, không phải 1 hàng/IP).
+   */
   private async isLoginRateLimited(
     companySlug: string,
     email: string,
     ip: string,
-  ): Promise<boolean> {
-    const ipKey = LoginRateLimiter.key(companySlug, email, ip);
+  ): Promise<LockedLoginBucket | null> {
     const acctKey = LoginRateLimiter.accountKey(companySlug, email);
-    return (await this.rateLimiter.isLocked(ipKey)) || (await this.rateLimiter.isLocked(acctKey));
+    if (await this.rateLimiter.isLocked(acctKey)) return "acct";
+    const ipKey = LoginRateLimiter.key(companySlug, email, ip);
+    if (await this.rateLimiter.isLocked(ipKey)) return "ip";
+    return null;
+  }
+
+  /**
+   * Khoá GỘP hàng `login_logs` "blocked" của một cửa sổ khoá — `rest` soi gương bucket đang khoá.
+   * Trả `true` nếu ĐÂY là request đầu tiên của cửa sổ (⇒ được ghi hàng), `false` nếu đã có hàng rồi.
+   */
+  private async claimBlockedLogSlot(
+    bucket: LockedLoginBucket,
+    companySlug: string,
+    email: string,
+    ip: string,
+  ): Promise<boolean> {
+    const rest =
+      bucket === "acct"
+        ? `${companySlug}|${email.toLowerCase()}`
+        : `${companySlug}|${email.toLowerCase()}|${ip}`;
+    return this.rateLimiter.claimFirstOfWindow(
+      rateLimitKey("logdedup", `login:${bucket}:${rest}`),
+      this.rateLimiter.lockoutSec,
+    );
   }
 
   /** Ghi 1 lần sai vào CẢ HAI bucket: per-IP (ngưỡng mặc định) + per-account (ngưỡng cao hơn). */
@@ -1636,6 +1775,122 @@ export class AuthService {
    * pre-auth (companyId null) → module `db` KHÔNG GUC → company_id NULL (WITH CHECK nhánh NULL, mig 0443).
    * KHÔNG bao giờ ghi password/token (BẤT BIẾN #3).
    */
+  /**
+   * S10-SEC-LOGINLOG429-1 (KI-047) — ghi `REAUTH_FAILED` cho một lượt xác thực lại THẤT BẠI trên
+   * đường POST-AUTH self-service (`disableTwoFactor` · `changePassword`).
+   *
+   * ĐÂY là đường DỰNG NÊN cái khoá, và trước WO này nó ghi 0 hàng: chuỗi thử dựng nên khoá tạm hoàn
+   * toàn vô hình với cả chủ tài khoản lẫn admin, còn 429 chỉ xuất hiện SAU khi khoá đã dựng xong.
+   *
+   * ⚠️ VÁ Ở NHÁNH SAI, KHÔNG Ở NHÁNH ĐÃ-KHOÁ. Hai đường này post-auth, bucket theo `(companyId|userId)`
+   * lấy từ JWT ⇒ lời gọi lặp là MIỄN PHÍ (chỉ cần access token). Ghi ở nhánh đã-khoá cho kẻ bồi quyền
+   * đẩy vô hạn hàng vào bảng append-only — đúng cái `step-up.service.ts` đã phải vá bằng A09. Ở nhánh
+   * SAI thì trần là `LOGIN_MAX_ATTEMPTS` hàng/cửa sổ, và `N` lần đó đã đủ để suy ra cái khoá.
+   *
+   * ⚠️ TX RIÊNG, KHÔNG ghi trong tx nghiệp vụ. `SecurityEventWriter.record` NÉM khi `event_type` sai,
+   * và lỗi trong tx sẽ rollback rồi nổi lên thành **500** — nhánh này PHẢI trả 401. Biến nhật ký thành
+   * đường ném là biến mất-tầm-nhìn thành mất-đăng-nhập. Tiền lệ cùng cây: `StepUpService.writeOutcome`.
+   * Không có thay đổi nghiệp vụ nào để rollback cùng ⇒ không có orphan.
+   */
+  private async recordReauthFailure(
+    companyId: string,
+    userId: string,
+    context: "2fa_disable" | "change_password",
+  ): Promise<void> {
+    try {
+      await this.dbsvc.withTenant(companyId, async (tx) => {
+        await this.securityEvents.record(tx, {
+          eventType: "REAUTH_FAILED",
+          userId,
+          actorUserId: userId,
+          // CHỈ ngữ cảnh — KHÔNG mật khẩu, KHÔNG mã (BẤT BIẾN #3): không truyền vào thì không có gì để lộ.
+          payload: { context },
+        });
+      });
+    } catch (err) {
+      this.logger.error(
+        `recordReauthFailure thất bại (best-effort, KHÔNG đổi outcome 401): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * S10-SEC-LOGINLOG429-1 (KI-047) — ghi `login_logs` cho một lượt mà ta ĐÃ BIẾT tenant + user nhưng
+   * CHƯA có email (ba nhánh từ chối của bước-2 2FA: `claims` đã verify nên có `companyId`+`sub`,
+   * nhưng chưa đọc hàng `users` lần nào).
+   *
+   * ⚠️ VÌ SAO LÀ METHOD RIÊNG chứ không nới `args.email` của `recordLoginAttempt` thành
+   * `string | { fromUserId }`. Union trên chữ ký phẳng cho phép tổ hợp thứ tư
+   * `{ companyId: null, email: { fromUserId } }`; khi đó một object rơi vào cột `text` NOT NULL ⇒
+   * INSERT ném ⇒ **bị nuốt bởi `catch` best-effort** bên dưới ⇒ mất log trong IM LẶNG. Đó đúng là
+   * lớp KI-035 mà chính docblock của nhánh pre-auth đã trả giá một lần. Ở đây `companyId`/`userId`
+   * là NOT NULL **trong KIỂU** ⇒ tổ hợp sai không biểu diễn được, không cần ai nhớ kỷ luật.
+   *
+   * MỘT TX CHO MỘT HÀNG: SELECT email và INSERT nằm trong CÙNG `withTenant`. (Không mở tx đọc riêng
+   * rồi gọi `recordLoginAttempt` — thế là 2 tx cho 1 dòng nhật ký, trên đúng đường đang muốn giữ rẻ.)
+   *
+   * BẤT BIẾN giữ nguyên: BEST-EFFORT (không ném, không đổi outcome HTTP); user không còn (vừa bị
+   * xoá) ⇒ bỏ ghi + `logger.error`, KHÔNG bịa email; ⛔ KHÔNG `.returning()`.
+   */
+  private async recordLoginAttemptForUser(args: {
+    companyId: string;
+    userId: string;
+    status: "success" | "failed" | "blocked";
+    reason?: string;
+    meta: RequestMeta;
+  }): Promise<void> {
+    try {
+      await this.dbsvc.withTenant(args.companyId, async (tx) => {
+        const [user] = await tx
+          .select({ email: users.email })
+          .from(users)
+          .where(eq(users.id, args.userId))
+          .limit(1);
+        if (!user) {
+          this.logger.error(
+            `recordLoginAttemptForUser: bỏ ghi login_logs (status=${args.status}, reason=${args.reason ?? "-"}) ` +
+              `vì không đọc được email của user ${args.userId} — mất dấu vết lần thử này`,
+          );
+          return;
+        }
+        await tx.insert(loginLogs).values({
+          companyId: args.companyId,
+          ...this.buildLoginLogRow({
+            userId: args.userId,
+            email: user.email,
+            status: args.status,
+            reason: args.reason,
+            meta: args.meta,
+          }),
+        });
+      });
+    } catch (err) {
+      this.logger.error(
+        `recordLoginAttemptForUser thất bại (best-effort, KHÔNG đổi outcome): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /** Hình dạng hàng `login_logs` — MỘT nguồn sự thật dùng chung cho cả hai đường ghi. */
+  private buildLoginLogRow(args: {
+    userId: string | null;
+    email: string;
+    status: "success" | "failed" | "blocked";
+    reason?: string;
+    meta: RequestMeta;
+  }) {
+    return {
+      userId: args.userId ?? undefined,
+      email: args.email,
+      // normalized_email NOT NULL & KHÔNG generated → tính lower(email) ở app.
+      normalizedEmail: args.email.toLowerCase(),
+      loginStatus: args.status,
+      failureReason: args.reason,
+      ipAddress: args.meta.ip,
+      userAgent: args.meta.userAgent,
+    };
+  }
+
   private async recordLoginAttempt(args: {
     companyId: string | null;
     userId: string | null;
@@ -1644,15 +1899,13 @@ export class AuthService {
     reason?: string;
     meta: RequestMeta;
   }): Promise<void> {
-    const row = {
-      userId: args.userId ?? undefined,
+    const row = this.buildLoginLogRow({
+      userId: args.userId,
       email: args.email,
-      normalizedEmail: args.email.toLowerCase(),
-      loginStatus: args.status,
-      failureReason: args.reason,
-      ipAddress: args.meta.ip,
-      userAgent: args.meta.userAgent,
-    };
+      status: args.status,
+      reason: args.reason,
+      meta: args.meta,
+    });
     try {
       if (args.companyId) {
         const companyId = args.companyId;

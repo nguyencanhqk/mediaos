@@ -164,11 +164,14 @@ export class AuthLogsViewerService {
       // Nhánh fail-closed PHẢI để lại vết. Không có dòng này thì vận hành không phân biệt được
       // "actor thật sự ngoài scope danh bạ" với "trình phân giải scope đang gãy" — cả hai đều ra một
       // bảng nhật ký mất sạch email/tên.
-      this.logger.warn("auth-logs: không phân giải được data_scope cặp danh bạ → BỎ cột danh tính", {
-        userId: actor.id,
-        companyId: actor.companyId,
-        where: why,
-      });
+      this.logger.warn(
+        "auth-logs: không phân giải được data_scope cặp danh bạ → BỎ cột danh tính",
+        {
+          userId: actor.id,
+          companyId: actor.companyId,
+          where: why,
+        },
+      );
     }
     return scope;
   }
@@ -231,6 +234,9 @@ export class AuthLogsViewerService {
     const filter: LoginLogFilter = {
       userId: query.user_id,
       status: query.status,
+      // S10-SEC-LOGINLOG429-1 (KI-048): không có vị từ này thì hàng `blocked` — thứ có tốc độ sinh
+      // do kẻ tấn công điều khiển — chôn mọi tín hiệu khác của AUTH-API-401 dưới nhiễu.
+      failureReason: query.failure_reason,
       dateFrom: query.from_date,
       dateTo: query.to_date,
     };

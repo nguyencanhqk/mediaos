@@ -22,6 +22,16 @@ import {
 export interface LoginLogFilter {
   userId?: string;
   status?: "success" | "failed" | "blocked";
+  /**
+   * S10-SEC-LOGINLOG429-1 (KI-048) — lọc theo MÃ LÝ DO. `string` chứ không union đóng: đây là dữ
+   * liệu append-only LỊCH SỬ, đóng union lại sẽ làm hàng mang mã cũ (hoặc mã thêm sau) không lọc
+   * được. Ranh giới đã kẹp độ dài ở `loginLogListQuerySchema`; ở đây tham số hoá nên không có bề
+   * mặt injection.
+   *
+   * ⚠️ `failure_reason` KHÔNG có index (`auth-logs.ts`) ⇒ vị từ này quét tuần tự. Chấp nhận ở quy
+   * mô hiện tại; đừng đọc nhầm là có index.
+   */
+  failureReason?: string;
   dateFrom?: Date;
   dateTo?: Date;
 }
@@ -107,6 +117,7 @@ export class LoginLogRepository {
     const conds: SQL[] = [rowScopeSql(rowScope, loginLogs.userId)];
     if (filter.userId) conds.push(eq(loginLogs.userId, filter.userId));
     if (filter.status) conds.push(eq(loginLogs.loginStatus, filter.status));
+    if (filter.failureReason) conds.push(eq(loginLogs.failureReason, filter.failureReason));
     if (filter.dateFrom) conds.push(gte(loginLogs.createdAt, filter.dateFrom));
     if (filter.dateTo) conds.push(lte(loginLogs.createdAt, filter.dateTo));
     // Luôn ≥1 điều kiện (vị từ scope) ⇒ `and()` không bao giờ trả `undefined`; ép kiểu bằng `?? sql`

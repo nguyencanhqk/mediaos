@@ -242,6 +242,15 @@ export const SECURITY_EVENT_TYPES = [
   // đẻ thêm mã sự kiện cho từng lý do chỉ làm loãng bộ lọc của viewer bảo mật.
   "STEP_UP_GRANTED",
   "STEP_UP_FAILED",
+  // S10-SEC-LOGINLOG429-1 (APPEND — KI-047): một lượt XÁC THỰC LẠI THẤT BẠI trên đường POST-AUTH
+  // self-service — sai mật khẩu ở `disableTwoFactor`/`changePassword`, sai mã TOTP ở `confirmEnable`.
+  // Trước WO này cả ba nhánh ghi 0 hàng ⇒ chuỗi thử dựng nên khoá tạm hoàn toàn vô hình với chủ tài
+  // khoản lẫn admin; 429 chỉ xuất hiện SAU khi khoá đã dựng xong.
+  //
+  // MỘT mã, không ba — đúng tiền lệ STEP_UP_FAILED ngay trên: phân biệt chi tiết nằm ở
+  // `payload.context` (`2fa_disable` | `change_password` | `2fa_enable`), đẻ thêm mã cho từng lý do
+  // chỉ làm loãng bộ lọc của viewer bảo mật.
+  "REAUTH_FAILED",
 ] as const;
 export type SecurityEventType = (typeof SECURITY_EVENT_TYPES)[number];
 
@@ -292,6 +301,11 @@ export const SECURITY_EVENT_SEVERITY: Record<SecurityEventType, SecurityEventSev
   // đúng oracle TOTP. Không đặt "high" — mức đó dành cho can thiệp credential/tài khoản (USER_LOCKED,
   // TOTP_RESET); làm loãng "high" là làm hỏng chính viewer bảo mật.
   STEP_UP_FAILED: "medium",
+  // S10-SEC-LOGINLOG429-1: "medium" — mirror PASSWORD_CHANGED. Một lần gõ sai là chuyện thường ngày
+  // (không phải "high", mức đó dành cho khoá tài khoản / can thiệp credential của NGƯỜI KHÁC), nhưng
+  // nó chạm credential nên không phải "low": giá trị forensic là MẬT ĐỘ — một chuỗi hàng REAUTH_FAILED
+  // sát nhau trên cùng một user là hình dạng của phiên bị chiếm đang dò mật khẩu để gỡ 2FA.
+  REAUTH_FAILED: "medium",
 };
 
 /**
@@ -346,6 +360,14 @@ export const loginLogListQuerySchema = z
       .default(AUTH_LOG_PAGE_SIZE_DEFAULT),
     user_id: z.string().uuid().optional(),
     status: z.enum(LOGIN_LOG_STATUSES).optional(),
+    // S10-SEC-LOGINLOG429-1 (KI-048): lọc theo MÃ LÝ DO. Không có nó thì hàng `blocked`
+    // (`TooManyAttempts`) — thứ có tốc độ sinh do KẺ TẤN CÔNG điều khiển — chôn mọi tín hiệu khác
+    // trong cùng màn, và admin không có cách nào lọc nhiễu ra.
+    //
+    // `z.string()` chứ KHÔNG `z.enum` — mirror `securityEventListQuerySchema.event_type` bên dưới.
+    // `failure_reason` là dữ liệu APPEND-ONLY LỊCH SỬ: enum hoá làm hàng mang mã cũ (hoặc mã mới
+    // thêm sau) không lọc được, và mỗi lần đổi danh mục là một lần mồ côi lịch sử.
+    failure_reason: z.string().min(1).max(64).optional(),
     from_date: z.coerce.date().optional(),
     to_date: z.coerce.date().optional(),
     sort: z.enum(LOGIN_LOG_SORT_FIELDS).default("created_at"),

@@ -272,6 +272,72 @@ describe.skipIf(!hasDb)("S6-SEC-LOGINLOG-2 login blocked → gắn đúng compan
     expect(elapsedMs).toBeGreaterThanOrEqual(FLOOR_PIN_MS);
   });
 
+  // ── S10-SEC-LOGINLOG429-1 (KI-048) — GỘP hàng blocked ────────────────────────────────────────
+  //
+  // Hai ca dưới ghim HAI HỢP ĐỒNG mà bản vá KI-048 đã ký. Trước khi có chúng, cả hai chỉ được giữ
+  // bằng "đọc code thấy đúng" — mà FULL gate của chính WO này đã chỉ ra là không đủ.
+
+  /** Đếm hàng blocked/TooManyAttempts của một email (pool direct — không phụ thuộc lớp đang kiểm). */
+  async function countBlocked(email: string): Promise<number> {
+    const { rows } = await direct.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM login_logs
+        WHERE normalized_email = $1 AND failure_reason = 'TooManyAttempts'`,
+      [email.toLowerCase()],
+    );
+    return Number(rows[0]?.n ?? "0");
+  }
+
+  it("R8 — bucket ACCT khoá + 429 từ BA IP khác nhau ⇒ ĐÚNG MỘT hàng (khoá gộp soi gương bucket acct)", async () => {
+    // ĐÂY là ca nặng nhất của KI-048 và là toàn bộ lý do `isLoginRateLimited` phải trả về BUCKET
+    // thay vì boolean. `LoginRateLimiter.accountKey` KHÔNG chứa ip; nếu khoá gộp cứ dựng theo
+    // `{slug|email|ip}` thì credential-stuffing rải nhiều nguồn vẫn bồi MỖI IP MỘT HÀNG vào bảng
+    // không thu hồi được — tức KI-048 còn nguyên ở dạng nặng nhất. Sau `TRUST_PROXY=loopback`
+    // (18/08) `ip` là IP THẬT nên ca này có thật, không phải giả định.
+    //
+    // ⚠️ Không có ca này thì một refactor đảo thứ tự hai lượt `isLocked` trong `isLoginRateLimited`
+    // (ip kiểm trước acct) sẽ XANH TOÀN TẬP mà vẫn mở lại lỗ.
+    const email = `r8-${MARKER}@a.test`;
+    const acctKey = LoginRateLimiter.accountKey(A.slug, email);
+    for (let i = 0; i < limiter.accountMaxAttempts; i += 1)
+      await limiter.recordFailure(acctKey, limiter.accountMaxAttempts);
+    expect(await limiter.isLocked(acctKey)).toBe(true);
+
+    const before = await countBlocked(email);
+    for (const ip of ["198.51.100.11", "198.51.100.12", "198.51.100.13"]) {
+      const t0 = Date.now();
+      const err = await auth
+        .login({ companySlug: A.slug, email, password: PASSWORD }, { ip, userAgent: "vitest-r8" })
+        .then(() => null)
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(HttpException);
+      expect((err as HttpException).getStatus()).toBe(429);
+      // Sàn phải phủ CẢ ba lượt, kể cả hai lượt bị gộp (xem R11).
+      expect(Date.now() - t0).toBeGreaterThanOrEqual(FLOOR_PIN_MS);
+    }
+    // +1, KHÔNG phải +3.
+    expect(await countBlocked(email)).toBe(before + 1);
+  });
+
+  it("R11 — sàn thời gian phủ CẢ lượt BỊ GỘP, không riêng lượt đầu cửa sổ", async () => {
+    // Hợp đồng vị trí của bản vá: kiểm khoá gộp nằm TRONG `try` và SAU `startedAt`, để `finally`
+    // áp `applyUniformResponseFloor` cho cả nhánh gộp. Nhấc nó lên trên/ra ngoài thì lượt bị gộp
+    // trả về gần-tức-thì ⇒ phân biệt được "lần đầu cửa sổ" với "lần sau".
+    //
+    // Ca R1 chỉ đo lượt ĐẦU — chính docblock của FLOOR_PIN_MS đã cảnh báo lớp lỗi này ("xoá
+    // `finally` đi bộ test vẫn xanh"), và hợp đồng MỚI rơi đúng vào lỗ đó cho tới ca này.
+    const email = `r11-${MARKER}@a.test`;
+    await lockBucket(A.slug, email);
+
+    const first = await expect429(A.slug, email); // ghi hàng
+    const coalesced = await expect429(A.slug, email); // BỊ GỘP — không ghi, không chạm DB
+
+    expect(first.elapsedMs).toBeGreaterThanOrEqual(FLOOR_PIN_MS);
+    // NGƯỠNG TUYỆT ĐỐI, không so sánh tương đối hai số gần bằng nhau: cả hai đều bị sàn kẹp nên
+    // hiệu số chỉ là nhiễu lịch CPU, một cổng so-sánh-tương-đối sẽ đỏ ngẫu nhiên rồi bị nới.
+    expect(coalesced.elapsedMs).toBeGreaterThanOrEqual(FLOOR_PIN_MS);
+    expect(await countBlocked(email)).toBe(1);
+  });
+
   it("R2 — hàng đó HIỆN RA ở đường đọc THẬT AUTH-API-401 của tenant A (user = null)", async () => {
     const email = `r2-${MARKER}@a.test`;
     await lockBucket(A.slug, email);

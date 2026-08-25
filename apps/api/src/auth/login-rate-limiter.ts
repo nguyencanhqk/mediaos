@@ -31,11 +31,30 @@ export class LoginRateLimiter {
   private readonly env = loadEnv();
   private readonly attempts = new Map<string, AttemptState>();
 
+  /**
+   * S10-SEC-LOGINLOG429-1 — fallback in-memory của `claimFirstOfWindow`: `key → mốc hết hạn (ms)`.
+   * TÁCH HẲN `attempts`: `reset()` xoá `attempts` sau mỗi lần đăng nhập thành công, còn cửa sổ gộp
+   * phải sống trọn TTL của nó (gộp mà bị reset theo login thành công thì mỗi lượt sai lại ghi lại
+   * từ đầu). Dọn hết hạn bằng `pruneDedupWindows`.
+   */
+  private readonly dedupWindows = new Map<string, number>();
+
   constructor(@Optional() private readonly valkey?: ValkeyService) {}
 
   /** Ngưỡng bucket tài khoản — login truyền vào `recordFailure(accountKey, …)`. */
   get accountMaxAttempts(): number {
     return this.env.LOGIN_ACCOUNT_MAX_ATTEMPTS;
+  }
+
+  /**
+   * Độ dài cửa sổ khoá (giây) — nguồn sự thật DUY NHẤT cho TTL của khoá gộp nhật ký.
+   *
+   * ⚠️ Cửa sổ này KHÔNG được gia hạn: `recordFailure` set `:lock` ĐÚNG MỘT LẦN lúc chạm ngưỡng rồi
+   * xoá counter, và đường đã-khoá `return` TRƯỚC `recordFailure` ⇒ khoá sống đúng `LOGIN_LOCKOUT_SEC`.
+   * Nhờ vậy TTL khoá gộp bằng đúng giá trị này là khớp pha, không phải xấp xỉ.
+   */
+  get lockoutSec(): number {
+    return this.env.LOGIN_LOCKOUT_SEC;
   }
 
   static key(companySlug: string, email: string, ip: string): string {
@@ -100,6 +119,58 @@ export class LoginRateLimiter {
     this.attempts.delete(key);
     if (this.useValkey()) {
       await this.valkey!.del(this.countKey(key), this.lockKey(key));
+    }
+  }
+
+  /**
+   * S10-SEC-LOGINLOG429-1 (KI-048) — "tôi có phải NGƯỜI ĐẦU TIÊN của cửa sổ này không?"
+   *
+   * Trả `true` ĐÚNG MỘT LẦN cho mỗi `key` trong mỗi `ttlSec`; các lượt sau trả `false`. Người gọi
+   * dùng nó để ghi hàng nhật ký ĐẦU cửa sổ rồi thôi — thay vì bồi một hàng cho MỖI request bị chặn
+   * vào bảng append-only KHÔNG THU HỒI ĐƯỢC (`login_logs` ∈ PROTECTED_TABLES).
+   *
+   * ⚠️ GỘP = KHÔNG GHI THÊM, tuyệt đối KHÔNG phải UPDATE hàng cũ: `login_logs` bị REVOKE
+   * UPDATE/DELETE ở DB (mig 0443, BẤT BIẾN #2). Thiết kế nào cần UPDATE là đã phá bất biến.
+   *
+   * ⚠️ FAIL-**OPEN**, NGƯỢC CHIỀU `ReplayGuardService`. Đó là control an ninh nên nghi ngờ ⇒ TỪ CHỐI;
+   * đây là nhật ký nên nghi ngờ ⇒ **GHI**. Mất một chút gộp còn hơn mất dấu vết. Vì thế KHÔNG tái
+   * dùng `ReplayGuardService` cho việc này dù hình dạng `setNx` giống hệt.
+   *
+   * ⚠️ VÌ SAO PHẢI CÓ FALLBACK MEMORY, không phải "fail-open thuần trên setNx". `ValkeyService.setNx`
+   * trả `null` khi Valkey **CHƯA CẤU HÌNH**, không chỉ khi rớt — và `VALKEY_URL` thường VẮNG trong
+   * test. Fail-open thuần ⇒ trong mọi int-spec khoá gộp không bao giờ giữ ⇒ cơ chế gộp lên PROD mà
+   * chưa từng có một ca nào chứng minh nó chạy. Memory-fallback (mirror `recordFailureMem` ngay dưới)
+   * làm nó ĐO ĐƯỢC; fail-open thật chỉ còn khi cả hai đường hỏng.
+   */
+  async claimFirstOfWindow(
+    key: string,
+    ttlSec: number,
+    nowMs: number = Date.now(),
+  ): Promise<boolean> {
+    if (this.useValkey()) {
+      const res = await this.valkey!.setNx(key, "1", ttlSec);
+      // BA giá trị, không hai: `null` = chưa cấu hình HOẶC rớt ⇒ KHÔNG kết luận, rơi xuống memory.
+      if (res !== null) return res;
+    }
+    return this.claimFirstOfWindowMem(key, ttlSec, nowMs);
+  }
+
+  private claimFirstOfWindowMem(key: string, ttlSec: number, nowMs: number): boolean {
+    const expiresAtMs = this.dedupWindows.get(key);
+    if (expiresAtMs !== undefined && expiresAtMs > nowMs) return false;
+    this.dedupWindows.set(key, nowMs + ttlSec * 1000);
+    this.pruneDedupWindows(nowMs);
+    return true;
+  }
+
+  /**
+   * Dọn marker hết hạn — BẮT BUỘC, không phải tối ưu. Khoá gộp của nhánh replay-jti mang chính `jti`
+   * ⇒ số khoá phân biệt tăng theo số TOKEN đã thấy, không bị chặn bởi số bucket như `attempts`.
+   * Không dọn thì đây là chỗ rò bộ nhớ tuyến tính theo lưu lượng. Mirror `ReplayGuardService.pruneExpired`.
+   */
+  private pruneDedupWindows(nowMs: number): void {
+    for (const [k, expiresAtMs] of this.dedupWindows) {
+      if (expiresAtMs <= nowMs) this.dedupWindows.delete(k);
     }
   }
 

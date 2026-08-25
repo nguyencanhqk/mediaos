@@ -5,6 +5,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from "@nestjs/common";
 import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
@@ -54,6 +55,8 @@ export interface EnrollResult {
  */
 @Injectable()
 export class TwoFactorService {
+  private readonly logger = new Logger(TwoFactorService.name);
+
   // S2-AUTH-BE-8: writer timeline user_security_events (dual-write cạnh audit) cho TOTP enable/disable.
   private readonly securityEvents: SecurityEventWriter;
 
@@ -219,9 +222,46 @@ export class TwoFactorService {
     });
     if (!verified) {
       await this.rateLimiter.recordFailure(rlKey);
+      await this.recordReauthFailure(companyId, userId, "2fa_enable");
       throw new UnauthorizedException("Mã xác thực không đúng.");
     }
     await this.rateLimiter.reset(rlKey);
+  }
+
+  /**
+   * S10-SEC-LOGINLOG429-1 (KI-047) — ghi `REAUTH_FAILED` cho một lượt xác thực lại THẤT BẠI.
+   *
+   * ĐÂY là đường DỰNG NÊN cái khoá, và trước WO này nó ghi 0 hàng: chuỗi thử dựng nên khoá tạm hoàn
+   * toàn vô hình, còn 429 chỉ xuất hiện SAU khi khoá đã dựng xong. Vá ở nhánh SAI (trần =
+   * `LOGIN_MAX_ATTEMPTS` hàng/cửa sổ) chứ KHÔNG ở nhánh đã-khoá: ghi ở nhánh đã-khoá cho lời gọi lặp
+   * quyền bồi vô hạn vào bảng append-only, đúng bản vá A09 mà `step-up.service.ts` đã phải làm.
+   *
+   * ⚠️ TX RIÊNG, KHÔNG ghi trong tx nghiệp vụ. `SecurityEventWriter.record` NÉM khi `event_type` sai,
+   * và một lỗi trong tx sẽ rollback rồi nổi lên thành **500** — nhánh này PHẢI trả 401. Biến nhật ký
+   * thành đường ném là biến mất-tầm-nhìn thành mất-đăng-nhập. Tiền lệ: `StepUpService.writeOutcome`
+   * cũng mở tx riêng vì đúng lý do này. Không có thay đổi nghiệp vụ nào để rollback cùng ⇒ không có
+   * orphan, tức không vi phạm luật "record trong cùng tx nghiệp vụ".
+   */
+  private async recordReauthFailure(
+    companyId: string,
+    userId: string,
+    context: "2fa_enable",
+  ): Promise<void> {
+    try {
+      await this.dbsvc.withTenant(companyId, async (tx) => {
+        await this.securityEvents.record(tx, {
+          eventType: "REAUTH_FAILED",
+          userId,
+          actorUserId: userId,
+          // CHỈ ngữ cảnh — KHÔNG mã, KHÔNG secret (BẤT BIẾN #3). Không truyền vào thì không có gì để mask.
+          payload: { context },
+        });
+      });
+    } catch (err) {
+      this.logger.error(
+        `recordReauthFailure thất bại (best-effort, KHÔNG đổi outcome 401): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   /**
