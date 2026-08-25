@@ -21,7 +21,7 @@
 --   docker exec -i <pg> psql -U <user> -d <db> -f - < scripts/measure-ki074-role-member-del.sql
 --   (hoặc: psql "$DATABASE_DIRECT_URL" -f scripts/measure-ki074-role-member-del.sql)
 
-\echo '== 1. Cờ is_sensitive của các cặp liên quan (CỔNG của route — xem DECISIONS-10 §6)'
+\echo '== 1. Cờ is_sensitive của các cặp liên quan (CỔNG của route — xem DECISIONS-11 §6)'
 SELECT action, resource_type, is_sensitive
   FROM permissions
  WHERE action IN ('view', 'assign-role', '*')

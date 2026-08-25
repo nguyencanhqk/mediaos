@@ -200,7 +200,7 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 >   dedup batch · empty-state); contract FE parse `complete` bằng `.catch(false)` — thiếu khoá/sai
 >   kiểu rơi về partial-mode CÓ NHÃN, không ZodError.
 >
-> • **Đường GHI thứ HAI — ĐÓNG 2026-08-25 (`S10-SEC-ROLEMEMBERDEL-1`, KI-074, ADR `DECISIONS-10`).**
+> • **Đường GHI thứ HAI — ĐÓNG 2026-08-25 (`S10-SEC-ROLEMEMBERDEL-1`, KI-074, ADR `DECISIONS-11`).**
 >   `DELETE /permissions/users/:userId/roles/:roleId` trước đó phân biệt **404** ("không phải thành
 >   viên" — ném TRƯỚC mọi ghi ⇒ **0 hàng forensic, 0 thiệt hại**) với **204** ⇒ câu trả lời ÂM MIỄN
 >   PHÍ. Nay theo **hướng (b)**: GIỮ **404** cho actor có `view:user` ở scope `Company`/`System`;
@@ -211,7 +211,7 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 >   operator-audience → **404**. ⚠️ Kênh THỜI GIAN (nhánh ÂM 0 ghi vs nhánh DƯƠNG 4 ghi) **KHÔNG
 >   đóng theo** — ghi nhận trong ADR; đóng nó đòi ghi audit giả. ⚠️ Cờ `is_sensitive` của catalog nay
 >   là một **CỔNG** của route: lật `('view','user')` sang `true` sẽ ép nhánh exact-only ⇒ mọi actor
->   wildcard-only tụt `null` ⇒ **204-mù trong im lặng** (DECISIONS-10 §6).
+>   wildcard-only tụt `null` ⇒ **204-mù trong im lặng** (DECISIONS-11 §6).
 >
 >   ⇒ Tính chất đạt được sau KI-073 **và** KI-074: *"không enumerate thành viên IM LẶNG theo CẢ HAI
 >   chiều"*. Chiều CÓ-DẤU-VẾT vẫn mở **có chủ ý** — mỗi câu hỏi dương trúng đều gỡ vai THẬT và để lại

@@ -185,7 +185,7 @@ export class PermissionAdminService {
 
   /**
    * S10-SEC-ROLEMEMBERDEL-1 (KI-074) — bit CÓ THẨM QUYỀN của CHÍNH actor trên cặp DANH BẠ `view:user`,
-   * thứ lái hình dạng câu trả lời ÂM của `revokeRole`. ADR `DECISIONS-10`.
+   * thứ lái hình dạng câu trả lời ÂM của `revokeRole`. ADR `DECISIONS-11`.
    *
    * ⚠️ KHÔNG truyền `opts` — đây là dòng dễ copy sai nhất của cả bản vá. `view:user` là
    * `is_sensitive = false` (mig 0444:39); thêm `{ isSensitive: true }` theo khuôn `foundation/audit`
@@ -219,7 +219,7 @@ export class PermissionAdminService {
       this.logger.warn(
         "revokeRole: resolveStrongestScope(view:user) trả null → nhánh 204 im lặng. HAI nguyên " +
           "nhân, đừng quy tội một chiều: (a) actor thật sự không có grant `view:user` (đúng thiết " +
-          "kế, DECISIONS-10 §R1); (b) câu scope vừa LỖI và resolver fail-closed — đối chiếu dòng " +
+          "kế, DECISIONS-11 §R1); (b) câu scope vừa LỖI và resolver fail-closed — đối chiếu dòng " +
           "`resolveStrongestScope() infrastructure error` CÙNG request trước khi kết luận.",
         { actorUserId: actor.id, companyId: actor.companyId },
       );
@@ -239,7 +239,7 @@ export class PermissionAdminService {
       // Giá: nay THÊM 1 transaction — tổng **3** cho mỗi DELETE (`assertCan` · `hasCompanyWideDirectory`
       // · write-tx), kể cả nhánh dương. Ba cái TUẦN TỰ và await đủ ⇒ đỉnh connection đồng thời vẫn là
       // 1 ⇒ không có rủi ro cạn pool PgBouncer. Nó KHÔNG làm phẳng kênh thời gian (chỉ cộng hằng số
-      // vào cả hai nhánh) — kênh đó ở lại dạng ghi nhận, xem DECISIONS-10 §4.
+      // vào cả hai nhánh) — kênh đó ở lại dạng ghi nhận, xem DECISIONS-11 §4.
       const directoryWide = await this.hasCompanyWideDirectory(actor);
       await this.db.withTenant(actor.companyId, async (tx) => {
         // Đọc TRƯỚC khi xoá → audit `before` đủ (grantedBy/expiresAt) + objectId = id hàng thật.
@@ -252,7 +252,7 @@ export class PermissionAdminService {
           // (2) Role không assignable TRONG TENANT NÀY → 404 cho MỌI actor. RLS `roles_tenant_isolation`
           // (mig 0005:37-44) giấu role company-scoped của tenant khác; `notOperatorRole()` loại role
           // aud='operator'. Role SYSTEM (company_id IS NULL) THẤY ĐƯỢC ở mọi tenant ⇒ rơi xuống nhánh
-          // dưới ⇒ actor hẹp nhận 204 — hành vi ĐÃ KÝ (DECISIONS-10 §R2, bảng ba lớp role).
+          // dưới ⇒ actor hẹp nhận 204 — hành vi ĐÃ KÝ (DECISIONS-11 §R2, bảng ba lớp role).
           //
           // ⚠️ Lệnh này PHẢI ở trong `if (!existing)`, KHÔNG được nâng lên đầu hàm: nó lọc
           // `deleted_at IS NULL`, nên nâng lên sẽ KHOÁ VĨNH VIỄN việc gỡ vai của một role vừa bị

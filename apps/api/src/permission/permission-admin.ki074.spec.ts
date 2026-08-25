@@ -1,7 +1,7 @@
 /**
  * S10-SEC-ROLEMEMBERDEL-1 (KI-074) — RED-before-GREEN cho hướng (b) trên `revokeRole`.
  *
- * CHỦ TRƯƠNG ĐÃ KÝ 2026-08-24 (`docs/DECISIONS/DECISIONS-10_Role_Membership_Absence_Signal.md`):
+ * CHỦ TRƯƠNG ĐÃ KÝ 2026-08-24 (`docs/DECISIONS/DECISIONS-11_Role_Membership_Absence_Signal.md`):
  * `DELETE /permissions/users/:userId/roles/:roleId` GIỮ **404** cho actor có `view:user` ở scope
  * `Company`/`System`; **204** (im lặng, 0 ghi) cho phần còn lại. Đóng câu trả lời ÂM MIỄN PHÍ
  * ("x KHÔNG phải thành viên của role r" với 0 hàng forensic) — gương của KI-073 ở chiều `POST`.

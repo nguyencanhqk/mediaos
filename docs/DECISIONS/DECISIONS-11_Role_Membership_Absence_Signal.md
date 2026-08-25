@@ -1,4 +1,4 @@
-# DECISIONS-10 — Tín hiệu VẮNG MẶT của tư cách thành viên role: 404 có điều kiện, không phải 204 mù (KI-074)
+# DECISIONS-11 — Tín hiệu VẮNG MẶT của tư cách thành viên role: 404 có điều kiện, không phải 204 mù (KI-074)
 
 | | |
 | --- | --- |

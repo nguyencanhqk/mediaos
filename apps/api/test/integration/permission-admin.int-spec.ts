@@ -114,7 +114,7 @@ describe.skipIf(!hasDb)("G3 permission mutation-path", () => {
     await seedRolePermission(direct, adminRole, assignPerm, "ALLOW");
     await seedRolePermission(direct, adminRole, grantObjPerm, "ALLOW");
     // S10-SEC-ROLEMEMBERDEL-1 (KI-074): `revokeRole` nay trả 404 ở nhánh ÂM CHỈ cho actor có
-    // `view:user` ở scope Company/System (DECISIONS-10, hướng b). `adminRole` trước đây KHÔNG mang
+    // `view:user` ở scope Company/System (DECISIONS-11, hướng b). `adminRole` trước đây KHÔNG mang
     // cặp này ⇒ resolver trả `null` ⇒ nhánh 204 ⇒ ca "unknown role → NotFound" dưới sẽ đỏ.
     // Vá bằng GRANT THẬT (không phải nới assert): `view:user@Company` đúng hình dạng PROD của mọi
     // vai quản trị được phép gọi route này (mig 0444:88-89 — hr + company-admin). Giữ nguyên sức

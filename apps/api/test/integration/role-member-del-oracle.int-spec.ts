@@ -2,7 +2,7 @@
  * S10-SEC-ROLEMEMBERDEL-1 (KI-074) — CROWN-JEWEL. Tín hiệu VẮNG MẶT của tư cách thành viên role trên
  * `DELETE /permissions/users/:userId/roles/:roleId`, đo ở tầng HTTP THẬT.
  *
- * CHỦ TRƯƠNG ĐÃ KÝ 2026-08-24 — hướng (b), `docs/DECISIONS/DECISIONS-10_Role_Membership_Absence_Signal.md`:
+ * CHỦ TRƯƠNG ĐÃ KÝ 2026-08-24 — hướng (b), `docs/DECISIONS/DECISIONS-11_Role_Membership_Absence_Signal.md`:
  * GIỮ **404** cho actor có `view:user` ở scope `Company`/`System`; **204** cho phần còn lại.
  *
  * VÌ SAO FILE RIÊNG (không nhét vào `identity-projection-scope.int-spec.ts`): ca ALLOW ở đây **gỡ vai
@@ -279,7 +279,7 @@ describe.skipIf(!hasLaneDb)(
       // ('view','user') — kể cả hàng ('*','*') — có is_sensitive=true là toàn bộ resolution rơi về
       // nhánh exact-only ⇒ mọi actor wildcard-only tụt `null` ⇒ 204 ⇒ MẤT tín hiệu 404.
       // ⇒ Bản vá KI-074 đúng nhờ DỮ LIỆU này, không nhờ code. Migration nào định lật nó phải đọc
-      // DECISIONS-10 §6 trước.
+      // DECISIONS-11 §6 trước.
       const r = await direct.query<{ action: string; is_sensitive: boolean }>(
         `SELECT action, is_sensitive FROM permissions
           WHERE (action, resource_type) IN (('view','user'), ('*','*'))`,
@@ -336,7 +336,7 @@ describe.skipIf(!hasLaneDb)(
     it("D-X2 — role SYSTEM (`company_id IS NULL`) ⇒ 204 với actor hẹp — hành vi ĐƯỢC KÝ, không phải rò", async () => {
       // RLS `roles_tenant_isolation` USING có vế `OR company_id IS NULL` ⇒ system role THẤY ĐƯỢC ở
       // mọi tenant ⇒ `findAssignableRole` trả hàng ⇒ rơi xuống nhánh scope. Không phá ranh (2):
-      // system role không thuộc tenant nào. DECISIONS-10 §R2 bảng ba lớp role.
+      // system role không thuộc tenant nào. DECISIONS-11 §R2 bảng ba lớp role.
       const res = await authDelete(aOwn.token, delUrl(stranger.id, roleSystem));
       expect(res.status, JSON.stringify(res.body)).toBe(204);
     });
@@ -398,7 +398,7 @@ describe.skipIf(!hasLaneDb)(
     it("D-W4 — `*:*@Company` + `view:user@Own` ⇒ **204**: exact THẮNG wildcard, TỤT scope (siết có chủ ý)", async () => {
       // Cặp non-sensitive ⇒ `eligible = exact.length > 0 ? exact : allowMatches`
       // (permission.service.ts:606-607). Một vai rộng được cấp THÊM một grant hẹp exact sẽ NGHÈO ĐI
-      // ở cặp đó. Hành vi đã ký (DECISIONS-10 §5) — và là thứ mà tầng unit U4 KHÔNG chứng minh được.
+      // ở cặp đó. Hành vi đã ký (DECISIONS-11 §5) — và là thứ mà tầng unit U4 KHÔNG chứng minh được.
       const a = await actorWith(A, "w-exact-wins", [
         assignAtCompany,
         { action: "*", resource: "*", sensitive: false, scope: "Company" },

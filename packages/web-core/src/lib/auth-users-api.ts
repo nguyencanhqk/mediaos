@@ -136,7 +136,7 @@ export const authUsersApi = {
    *
    * Server trả 404 nếu user KHÔNG đang giữ role này — caller xử lý như lỗi rõ ràng (KHÔNG no-op ngầm).
    *
-   * ⚠️ S10-SEC-ROLEMEMBERDEL-1 (KI-074, ADR `DECISIONS-10`): từ 2026-08-25, 404 đó là **CÓ ĐIỀU KIỆN**
+   * ⚠️ S10-SEC-ROLEMEMBERDEL-1 (KI-074, ADR `DECISIONS-11`): từ 2026-08-25, 404 đó là **CÓ ĐIỀU KIỆN**
    * — nó chỉ phát cho actor có `view:user` ở scope `Company`/`System`. Actor có danh bạ HẸP HƠN (hoặc
    * không có) nhận **204** ở CẢ hai nhánh, để mã trả về thôi làm oracle "x có phải thành viên của
    * role r không" (câu trả lời ÂM trước đây MIỄN PHÍ: 0 hàng forensic, 0 thiệt hại).

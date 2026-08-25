@@ -189,7 +189,7 @@ Dưới (b) người trực ca ở `Company` **VẪN nhận 404** ⇒ **0 dòng 
 định: ca int `D-A2` gọi bằng actor `Company` và pin `404`. Chú thích `auth-users-api.ts:136` được
 **cập nhật** để nói rõ 404 nay là *có điều kiện* (không đổi hành vi, chỉ hết nói dối).
 
-### D10 — ADR `docs/DECISIONS/DECISIONS-10_Role_Membership_Absence_Signal.md` — **ĐÃ LAND**
+### D10 — ADR `docs/DECISIONS/DECISIONS-11_Role_Membership_Absence_Signal.md` — **ĐÃ LAND**
 
 Đổi HỢP ĐỒNG API mà chỉ để lại một dòng backlog là tái lập đúng lỗ mà KI-074 sinh ra để chống
 (tiền lệ: KI-065 đóng kèm `DECISIONS-09`). ADR ghi: chữ ký (b) · (a)/(c) và vì sao loại · ba ranh
@@ -379,10 +379,10 @@ không dính bẫy này, nhưng `assertCan` thì có.
 - [ ] Int D-S1 · D-A0/A1/A2/A3 · D-N1/N2/N3 · D-X1/X2/X3/X4 · D-W1..W4 xanh dưới `LANE_DB`
 - [ ] 5 suite cũ: 2 sửa bằng grant thật (không nới assert), 3 xác nhận không đỏ
 - [ ] `bash harness/check.sh --lane-db` xanh (int-spec THỰC SỰ chạy, không SKIP)
-- [ ] ADR `DECISIONS-10`: §R2 trích đủ predicate RLS (3 lớp role) + §5 số đo đo lại
+- [ ] ADR `DECISIONS-11`: §R2 trích đủ predicate RLS (3 lớp role) + §5 số đo đo lại
 - [ ] Chú thích `auth-users-api.ts:136` cập nhật
 - [ ] `docs/permission-matrix-spec.md:201-204` gỡ dòng *"Còn sống: KI-074"*; `docs/plans/INDEX.md`;
-      `docs/plans/S10-SEC-ROLEMEMBERFE-1.md:175`; `docs/README.md` thêm hàng `DECISIONS-10`
+      `docs/plans/S10-SEC-ROLEMEMBERFE-1.md:175`; `docs/README.md` thêm hàng `DECISIONS-11`
 - [ ] **FULL gate** (CLAUDE.md §6): `security-reviewer` + `database-reviewer` + `silent-failure-hunter`
       (+ `santa-method` nếu chạm logic crown) — PASS
 - [ ] RELEASE-02 đóng KI-074 kèm **số đo PROD ĐO LẠI**: lấy tập actor giữ `assign-role:user`
