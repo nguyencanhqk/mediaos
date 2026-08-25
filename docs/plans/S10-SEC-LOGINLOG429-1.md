@@ -317,9 +317,23 @@ Ratchet: `apps/api/test/foundation/login-log-429-ratchet.unit-spec.ts`
 
 **Điều kiện ở mức NHÁNH, KHÔNG mức HÀM.** v1 tính "hàm có lời gọi ghi" ⇒ với
 `completeTwoFactorLogin` (5 nhánh) một refactor bỏ ghi ở nhánh 429 vẫn xanh nhờ `recordLoginAttempt`
-ở nhánh success (`:570`). ⇒ Điều kiện đúng: **lời gọi ghi (`recordLoginAttempt` /
-`securityEvents.record`) phải nằm trong block AST BAO QUANH chính `throw`** (hoặc trong `try`/`finally`
-bọc nó).
+ở nhánh success (`:570`).
+
+**Phát biểu CHÍNH XÁC** (đã đối chiếu với code thật, không phải mô tả gần đúng):
+
+> Gọi `B` = **`Block` trong cùng nhất** chứa nút `throw`. Điểm ném ĐẠT khi có ít nhất một lời gọi
+> `recordLoginAttempt` / `securityEvents.record` là **hậu duệ của `B`**.
+
+Kiểm trên hai hình dạng có thật, cả hai phải XANH:
+
+| Đường | Hình dạng | `B` | Lời gọi ghi | Kết luận |
+| --- | --- | --- | --- | --- |
+| `login` 429 (`:241-273`) | `if { startedAt; try{ ghi } finally{ sàn }; throw }` | thân `if` | `:251`, nằm trong `try` — `try` là con TRỰC TIẾP của `B` ⇒ vẫn là **hậu duệ** | ✅ ĐẠT |
+| `completeTwoFactorLogin` 429 (`:472-476`) sau khi vá | `if { ghi; throw }` | thân `if` | cùng block | ✅ ĐẠT |
+
+⚠️ Nếu dùng phát biểu lỏng hơn ("cùng `try`" hoặc "câu lệnh anh em trực tiếp") thì đường `login`
+— đường DUY NHẤT đang ĐÚNG — sẽ bị báo vi phạm oan. Đó là lý do phải neo theo **hậu duệ của block
+trong cùng nhất**, không theo quan hệ anh-em.
 
 **Waiver — chỉ CÒN MỘT dòng.** `disableTwoFactor`/`changePassword`/`confirmEnable` **đã bỏ khỏi
 waiver**: sau bản vá chúng qua bằng điều kiện dương ở nhánh sai. Giữ chúng trong waiver là để dây
