@@ -54,7 +54,10 @@ describe.skipIf(!hasDb)("Module 2a self-service account", () => {
   /** AuthService thật với deps thật + PermissionService mock (mỗi test instance riêng → rate-limiter sạch). */
   function newAuth(): AuthService {
     const dbsvc = new DatabaseService();
-    const mockPermissions = { getCapabilities: async () => ({}), getCapabilityScopes: async () => ({}) } as unknown as PermissionService;
+    const mockPermissions = {
+      getCapabilities: async () => ({}),
+      getCapabilityScopes: async () => ({}),
+    } as unknown as PermissionService;
     const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
     const replayGuard = new ReplayGuardService(new ValkeyService());
     const securityAlerts = new SecurityAlertService(dbsvc, new AuditService());
@@ -91,6 +94,20 @@ describe.skipIf(!hasDb)("Module 2a self-service account", () => {
     return r;
   }
 
+  /**
+   * S10-SEC-LOGINLOG429-1 (KI-047) — đếm hàng `user_security_events` REAUTH_FAILED theo ngữ cảnh.
+   * Đọc bằng pool direct (bỏ qua RLS) để phép đo không phụ thuộc chính lớp đang kiểm.
+   */
+  async function countReauthFailed(context: string): Promise<number> {
+    const { rows } = await direct.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM user_security_events
+        WHERE company_id = $1 AND user_id = $2 AND event_type = 'REAUTH_FAILED'
+          AND payload->>'context' = $3`,
+      [A.companyId, userId, context],
+    );
+    return Number(rows[0]?.n ?? "0");
+  }
+
   it("changePassword: sai mật khẩu hiện tại → 401 (re-auth fail, không đổi)", async () => {
     await expect(
       newAuth().changePassword(
@@ -99,6 +116,51 @@ describe.skipIf(!hasDb)("Module 2a self-service account", () => {
         "BrandNewPw!1",
       ),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it("KI-047 · changePassword sai mật khẩu ⇒ +1 REAUTH_FAILED ctx change_password", async () => {
+    // ĐÂY là đường DỰNG NÊN cái khoá tạm, và trước WO này nó ghi 0 hàng: chuỗi thử vô hình với cả
+    // chủ tài khoản lẫn admin, còn 429 chỉ xuất hiện SAU khi khoá đã dựng xong. Vá ở nhánh SAI (trần
+    // = LOGIN_MAX_ATTEMPTS hàng/cửa sổ) chứ KHÔNG ở nhánh đã-khoá (lặp miễn phí ⇒ bồi vô hạn).
+    const before = await countReauthFailed("change_password");
+    await expect(
+      newAuth().changePassword(
+        { id: userId, companyId: A.companyId },
+        "wrong-current-2",
+        "Xy!9zzzz",
+      ),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(await countReauthFailed("change_password")).toBe(before + 1);
+  });
+
+  it("ĐỐI CHỨNG ALLOW · changePassword ĐÚNG ⇒ +1 PASSWORD_CHANGED và KHÔNG REAUTH_FAILED thừa", async () => {
+    // Không có vế này thì ca trên xanh RỖNG: một bản vá ghi REAUTH_FAILED ở MỌI nhánh cũng làm nó xanh.
+    const auth = newAuth();
+    const beforeBad = await countReauthFailed("change_password");
+    const beforeOk = await direct
+      .query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM user_security_events
+          WHERE company_id = $1 AND user_id = $2 AND event_type = 'PASSWORD_CHANGED'`,
+        [A.companyId, userId],
+      )
+      .then((r) => Number(r.rows[0]?.n ?? "0"));
+
+    const NEXT_PW = "Allow-Case-Pw!2026";
+    await expect(
+      auth.changePassword({ id: userId, companyId: A.companyId }, PASSWORD, NEXT_PW),
+    ).resolves.toBeUndefined();
+    // trả mật khẩu về giá trị cũ để không ảnh hưởng ca sau trong cùng file
+    await auth.changePassword({ id: userId, companyId: A.companyId }, NEXT_PW, PASSWORD);
+
+    expect(await countReauthFailed("change_password")).toBe(beforeBad);
+    const afterOk = await direct
+      .query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM user_security_events
+          WHERE company_id = $1 AND user_id = $2 AND event_type = 'PASSWORD_CHANGED'`,
+        [A.companyId, userId],
+      )
+      .then((r) => Number(r.rows[0]?.n ?? "0"));
+    expect(afterOk).toBe(beforeOk + 2);
   });
 
   it("changePassword: mật khẩu mới TRÙNG mật khẩu cũ → 400", async () => {

@@ -235,4 +235,129 @@ describe.skipIf(!hasDb)("G16-1 login 2FA flow", () => {
       freshAuth.completeTwoFactorLogin(res.challengeToken, totp.generate(enrolledSecret), meta),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
+
+  // ── S10-SEC-LOGINLOG429-1 (KI-047 + KI-048) ───────────────────────────────────────────────────
+  //
+  // TRƯỚC WO NÀY: `completeTwoFactorLogin` ghi `login_logs` CHỈ khi thành công. Challenge hỏng ·
+  // replay · 429 · MÃ SAI · công ty ngừng — cả năm nhánh ghi 0 dòng. Cộng với bước-1 nhánh cấp
+  // challenge cũng không ghi ⇒ với tài khoản BẬT 2FA, AUTH-API-401 **chỉ chứa THÀNH CÔNG**: toàn bộ
+  // chiến dịch dò mã 6 số vô hình với admin. Bốn ca dưới đây khoá lại điều đó.
+
+  /** Đếm hàng `login_logs` của user hiện tại theo mã lý do — đọc bằng pool direct (bỏ qua RLS). */
+  async function countLoginLogs(email: string, reason: string): Promise<number> {
+    const { rows } = await direct.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM login_logs
+        WHERE company_id = $1 AND normalized_email = $2 AND failure_reason = $3`,
+      [A.companyId, email.toLowerCase(), reason],
+    );
+    return Number(rows[0]?.n ?? "0");
+  }
+
+  it("KI-047 · mã TOTP SAI ⇒ +1 hàng login_logs failed/TwoFactorInvalid CÓ company_id + user_id thật", async () => {
+    const { auth: freshAuth } = make();
+    const before = await countLoginLogs(userEmail, "TwoFactorInvalid");
+
+    const res = await freshAuth.login(
+      { companySlug: A.slug, email: userEmail, password: PASSWORD },
+      meta,
+    );
+    if (!isChallenge(res)) throw new Error("mong đợi challenge");
+    await expect(
+      freshAuth.completeTwoFactorLogin(res.challengeToken, "000000", meta),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(await countLoginLogs(userEmail, "TwoFactorInvalid")).toBe(before + 1);
+
+    // Hàng phải GẮN ĐÚNG CHỦ — nếu `user_id` NULL thì admin của tenant không lần được về tài khoản
+    // nào đang bị dò; nếu `company_id` NULL thì sau mig 0532 KHÔNG tenant nào đọc được hàng đó.
+    const { rows } = await direct.query<{ user_id: string | null; login_status: string }>(
+      `SELECT user_id, login_status FROM login_logs
+        WHERE company_id = $1 AND normalized_email = $2 AND failure_reason = 'TwoFactorInvalid'
+        ORDER BY created_at DESC LIMIT 1`,
+      [A.companyId, userEmail.toLowerCase()],
+    );
+    expect(rows[0]?.user_id).toBeTruthy();
+    expect(rows[0]?.login_status).toBe("failed");
+  });
+
+  it("ĐỐI CHỨNG ALLOW · mã ĐÚNG ⇒ +1 hàng success và KHÔNG hàng TwoFactorInvalid thừa", async () => {
+    // Không có vế này thì ca trên xanh RỖNG: một bản vá ghi hàng ở MỌI nhánh cũng làm nó xanh.
+    const { auth: freshAuth } = make();
+    const beforeBad = await countLoginLogs(userEmail, "TwoFactorInvalid");
+
+    const res = await freshAuth.login(
+      { companySlug: A.slug, email: userEmail, password: PASSWORD },
+      meta,
+    );
+    if (!isChallenge(res)) throw new Error("mong đợi challenge");
+    const tokens = await freshAuth.completeTwoFactorLogin(
+      res.challengeToken,
+      totp.generate(enrolledSecret),
+      meta,
+    );
+    expect(tokens.accessToken).toBeTruthy();
+    expect(await countLoginLogs(userEmail, "TwoFactorInvalid")).toBe(beforeBad);
+  });
+
+  it("KI-047 · REPLAY challengeToken ⇒ +1 hàng TwoFactorChallengeReplay; replay tiếp KHÔNG bồi thêm (gộp theo jti)", async () => {
+    const { auth: freshAuth } = make();
+    const before = await countLoginLogs(userEmail, "TwoFactorChallengeReplay");
+
+    const res = await freshAuth.login(
+      { companySlug: A.slug, email: userEmail, password: PASSWORD },
+      meta,
+    );
+    if (!isChallenge(res)) throw new Error("mong đợi challenge");
+    // Tiêu jti một lần cho hợp lệ.
+    await freshAuth.completeTwoFactorLogin(res.challengeToken, totp.generate(enrolledSecret), meta);
+
+    // Replay lần 1 ⇒ ghi 1 hàng: "token này đã bị dùng lại" là tín hiệu token bị đánh cắp/chia sẻ.
+    await expect(
+      freshAuth.completeTwoFactorLogin(res.challengeToken, totp.generate(enrolledSecret), meta),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(await countLoginLogs(userEmail, "TwoFactorChallengeReplay")).toBe(before + 1);
+
+    // Replay lần 2, 3 ⇒ KHÔNG bồi thêm. Replay không tốn argon2 nên ghi trần là bồi VÔ HẠN vào bảng
+    // append-only; trần đúng là 1 hàng/token, và đó chính là toàn bộ hạt thông tin muốn có.
+    for (let i = 0; i < 2; i++) {
+      await expect(
+        freshAuth.completeTwoFactorLogin(res.challengeToken, totp.generate(enrolledSecret), meta),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    }
+    expect(await countLoginLogs(userEmail, "TwoFactorChallengeReplay")).toBe(before + 1);
+  });
+
+  it("KI-047+KI-048 · bucket 2FA đã khoá ⇒ ĐÚNG MỘT hàng blocked/TooManyAttempts cho cả cửa sổ", async () => {
+    const { auth: freshAuth } = make();
+    const before = await countLoginLogs(userEmail, "TooManyAttempts");
+
+    // 5 lần mã sai dựng nên khoá (mỗi lần cần challenge MỚI vì jti single-use).
+    for (let i = 0; i < 5; i++) {
+      const r = await freshAuth.login(
+        { companySlug: A.slug, email: userEmail, password: PASSWORD },
+        meta,
+      );
+      if (!isChallenge(r)) throw new Error("mong đợi challenge");
+      await expect(
+        freshAuth.completeTwoFactorLogin(r.challengeToken, "000000", meta),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    }
+
+    // Ba lượt 429 liên tiếp trong CÙNG cửa sổ khoá.
+    for (let i = 0; i < 3; i++) {
+      const r = await freshAuth.login(
+        { companySlug: A.slug, email: userEmail, password: PASSWORD },
+        meta,
+      );
+      if (!isChallenge(r)) throw new Error("mong đợi challenge");
+      await expect(
+        freshAuth.completeTwoFactorLogin(r.challengeToken, "000000", meta),
+      ).rejects.toBeInstanceOf(HttpException);
+    }
+
+    // GỘP: +1, không phải +3. Tốc độ sinh hàng ở nhánh đã-khoá do KẺ TẤN CÔNG điều khiển, mà
+    // `login_logs` ∈ PROTECTED_TABLES (không bao giờ thu hồi) ⇒ ghi trần là để nó phình vô hạn và
+    // chôn mọi tín hiệu khác. Gộp = KHÔNG GHI THÊM (không UPDATE — bảng bị REVOKE UPDATE/DELETE).
+    expect(await countLoginLogs(userEmail, "TooManyAttempts")).toBe(before + 1);
+  });
 });

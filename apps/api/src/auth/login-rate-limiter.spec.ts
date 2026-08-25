@@ -141,11 +141,7 @@ describe("tách vai per-IP (5) vs per-account (20) — chỉ đúng khi req.ip l
   /** Bản sao điều phối của AuthService: ghi 1 lần sai vào CẢ HAI bucket. */
   async function recordLoginFailure(rl: LoginRateLimiter, ip: string, now: number): Promise<void> {
     await rl.recordFailure(LoginRateLimiter.key(SLUG, EMAIL, ip), undefined, now);
-    await rl.recordFailure(
-      LoginRateLimiter.accountKey(SLUG, EMAIL),
-      rl.accountMaxAttempts,
-      now,
-    );
+    await rl.recordFailure(LoginRateLimiter.accountKey(SLUG, EMAIL), rl.accountMaxAttempts, now);
   }
 
   /** Bản sao điều phối của AuthService: khoá nếu MỘT TRONG HAI bucket khoá. */
@@ -192,5 +188,50 @@ describe("tách vai per-IP (5) vs per-account (20) — chỉ đúng khi req.ip l
     expect(await isLoginLocked(rl, BLIND, now)).toBe(true);
     // ĐỐI CHỨNG: cùng số lần sai đó, nếu IP thật thì KHÔNG khoá (ca đầu nhóm này) — chênh lệch
     // chính là thiệt hại của `::1`: account-lockout DoS chỉ tốn 5 lần đoán trên endpoint công khai.
+  });
+});
+
+describe("S10-SEC-LOGINLOG429-1 (KI-048) — claimFirstOfWindow: gộp hàng nhật ký theo CỬA SỔ", () => {
+  // ⚠️ VÌ SAO LÀ UNIT CHỨ KHÔNG INT-SPEC. Cửa sổ thật là `LOGIN_LOCKOUT_SEC` = 900s — không chờ
+  // được; `reset()` cố ý KHÔNG chạm khoá gộp (gộp phải sống trọn TTL, không bị xoá theo mỗi lần đăng
+  // nhập thành công); và qua HTTP thì không truyền được `nowMs`. Ba lý do đó khiến ca "hết hạn ⇒ ghi
+  // lại" chỉ đo được ở đây. Không có ca này thì "gộp" không phân biệt nổi với "thôi ghi vĩnh viễn".
+  const KEY = ["rl", "test", "logdedup", "login:acct:acme|a@b.c"].join(":");
+  const TTL = 900;
+
+  it("người ĐẦU TIÊN của cửa sổ được ghi; các lượt sau trong cùng cửa sổ thì KHÔNG", async () => {
+    const rl = new LoginRateLimiter();
+    const t0 = 5_000_000;
+    expect(await rl.claimFirstOfWindow(KEY, TTL, t0)).toBe(true);
+    expect(await rl.claimFirstOfWindow(KEY, TTL, t0 + 1)).toBe(false);
+    expect(await rl.claimFirstOfWindow(KEY, TTL, t0 + 60_000)).toBe(false);
+  });
+
+  it("HẾT cửa sổ ⇒ ghi LẠI — gộp bị chặn bởi TTL, KHÔNG phải 'thôi ghi vĩnh viễn'", async () => {
+    const rl = new LoginRateLimiter();
+    const t0 = 5_000_000;
+    expect(await rl.claimFirstOfWindow(KEY, TTL, t0)).toBe(true);
+    // Biên: mốc CUỐI còn trong cửa sổ vẫn bị gộp...
+    expect(await rl.claimFirstOfWindow(KEY, TTL, t0 + TTL * 1000 - 1)).toBe(false);
+    // ...và đúng mốc hết hạn thì mở lại. Cửa sổ kế có hàng đầu của riêng nó.
+    expect(await rl.claimFirstOfWindow(KEY, TTL, t0 + TTL * 1000)).toBe(true);
+  });
+
+  it("hai khoá KHÁC nhau độc lập — gộp của tài khoản này không nuốt hàng của tài khoản kia", async () => {
+    const rl = new LoginRateLimiter();
+    const t0 = 5_000_000;
+    const other = ["rl", "test", "logdedup", "login:acct:acme|x@y.z"].join(":");
+    expect(await rl.claimFirstOfWindow(KEY, TTL, t0)).toBe(true);
+    expect(await rl.claimFirstOfWindow(other, TTL, t0)).toBe(true);
+  });
+
+  it("`reset()` KHÔNG mở lại cửa sổ gộp — đăng nhập thành công không được xoá dấu vết đã ghi", async () => {
+    // Nếu `reset()` xoá khoá gộp thì mỗi lượt đăng nhập thành công xen giữa sẽ mở lại cửa sổ ⇒ kẻ
+    // tấn công biết mật khẩu một tài khoản khác có thể ép ghi lại liên tục. Ghim hành vi hiện tại.
+    const rl = new LoginRateLimiter();
+    const t0 = 5_000_000;
+    expect(await rl.claimFirstOfWindow(KEY, TTL, t0)).toBe(true);
+    await rl.reset(KEY);
+    expect(await rl.claimFirstOfWindow(KEY, TTL, t0 + 1)).toBe(false);
   });
 });

@@ -596,6 +596,10 @@ export default {
     allSeverities: "Mọi mức độ",
     eventType: "Loại sự kiện",
     eventTypePlaceholder: "VD: PASSWORD_CHANGED",
+    // S10-SEC-LOGINLOG429-1 (KI-048). Gợi ý đúng mã ồn nhất — hàng `blocked` có tốc độ sinh do kẻ
+    // tấn công điều khiển nên nó chính là thứ admin cần lọc RA để thấy tín hiệu khác.
+    failureReason: "Mã lý do",
+    failureReasonPlaceholder: "VD: TooManyAttempts",
     page: "Trang {{page}}",
   },
 
