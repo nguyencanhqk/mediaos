@@ -13535,7 +13535,7 @@ export const backlog = [
     title:
       "KI-055 — 11 cặp FK lớp G trỏ tới bảng catalog toàn cục (`company_id` NULLABLE) không vá được bằng composite FK; nặng nhất `user_roles.role_id → roles` ⇒ tenant A gán được role của B, rồi B xoá role của B làm bay hàng `user_roles` mang `company_id = A`",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     depends_on: [],
     paths: [
       // 25/08: THÊM `apps/api/migrations/**` — plan-reviewer bắt được lỗ scope. WO này LÀ một lane
@@ -13577,6 +13577,9 @@ export const backlog = [
       "RELEASE-02 đóng (hoặc hạ) KI-055 kèm số TRƯỚC/SAU đo trên lane đã áp migration — đóng hay hạ severity là KẾT LUẬN CỦA SỐ, không phải mong muốn",
     ],
     notes: [
+      "📐 SỐ ĐO 25/08 (lane `mediaos_fkcatalog`, chain 0000→0547): hành vi TRƯỚC vá = **11/11 cặp GHI THÀNH CÔNG** hàng lệch tenant dưới `mediaos_app`+GUC (lỗ khai thác được, không phải lý thuyết) · SAU vá = **11/11 chặn 23503 `catalog_fk_tenant_mismatch`**; tổ hợp #4 2/2 lọt → 2/2 chặn; ca ALLOW (role hệ thống + widget/template toàn cục) VẪN ghi được. 13 câu đo drift = 0/0 TRƯỚC và SAU. 4 script seed (seed-admin·seed-operator·demo-seed-base·demo-seed-full) PASS.",
+      "⚠️ HỆ QUẢ ĐO ĐƯỢC ngoài phạm vi dự kiến: `tenant-isolation.int-spec` PIN `PROVEN_WITH_CHECK_FLOOR` hạ 148→147. A/B trên CÙNG lane: guard BẬT 147/156 · 12 trigger DISABLE 151/156 ⇒ nguyên nhân là 0547, không phải policy bị nới. 4 bảng (notification_templates·seed_items·dashboard_widget_configs·dashboard_widget_cache) nay bị guard chặn TRƯỚC khi WITH CHECK lên tiếng — CHE, không phải MẤT. Reviewer phải xem điểm này tường minh.",
+      "⏭️ CÒN LẠI trước khi ĐÓNG KI-055: 13 câu đo trên BẢN SAO PROD **giữ quyền** (pg_dump thường không mang RLS/GRANT ⇒ phép đo giả) + FULL gate + NGƯỜI CHỐT merge. RELEASE-02 hiện ghi 'vá, chờ xác nhận PROD', KHÔNG phải đóng.",
       "🔴 CROWN + FULL gate (security-reviewer + database-reviewer + silent-failure-hunter + santa-method). Model: PLAN = Sonnet 5 `xhigh`, IMPLEMENT/REVIEW = Opus. NGƯỜI CHỐT merge.",
       "⚠️ LANE MIGRATION NỐI TIẾP: KHÔNG chạy song song với WO migration khác. Nếu WO khác đang mở có migration ⇒ xếp hàng, đừng fan-out.",
       "⚠️ Cột FK mới cần composite tenant FK ([[new-fk-column-needs-composite-tenant-fk]]) · expand-contract bắt buộc ([[migration-expand-contract-required]]) · `GRANT` trong migration cũ KHÔNG phải hiện trạng ([[grant-in-old-migration-is-not-current-state]]) · `REVOKE` bảng xoá luôn column-GRANT ([[revoke-table-grant-wipes-column-grants]]).",

@@ -63,6 +63,36 @@ export interface FkPair {
   coveringSetNullHasColumnList: boolean;
   /** Composite FK có trỏ đúng `(company_id, id)` của bảng cha không. */
   coveringTargetsCompanyAndId: boolean;
+  /**
+   * S10-SEC-FKCATALOG-1 (KI-055) — guard trigger lớp G đang phủ cặp này, nếu có.
+   *
+   * KHÔNG do `CENSUS_SQL` sinh ra (query đó chốt trên `pg_constraint`; trigger sống ở `pg_trigger`).
+   * Field này được `attachCatalogGuards()` gắn thêm — vì thế nó OPTIONAL: một `FkPair` lấy thẳng từ
+   * `collectFkPairs()` mà chưa qua bước ghép sẽ có `undefined`, và **`undefined` KHÔNG có nghĩa
+   * "không có guard"**. Nơi nào đọc field này phải chắc chắn đã ghép trước.
+   */
+  catalogGuard?: CatalogFkGuard | null;
+}
+
+/** Một trigger `enforce_company_id_catalog_fk` đang gắn trên một bảng con. */
+export interface CatalogFkGuard {
+  /** Bảng CON mang trigger. */
+  childTable: string;
+  tgname: string;
+  /** `O` = enabled (origin) · `D` = disabled · `R`/`A` = replica-only. Chỉ `O` mới tính là đang chặn. */
+  tgenabled: string;
+  /**
+   * Bitmask `pg_trigger.tgtype`: bit0=ROW(1) · bit1=BEFORE(2) · bit2=INSERT(4) · bit3=DELETE(8) ·
+   * bit4=UPDATE(16).
+   *
+   * PHẢI đọc, không được bỏ: `tgenabled='O'` chỉ nói trigger đang BẬT, KHÔNG nói nó phủ sự kiện nào.
+   * Một `CREATE TRIGGER … BEFORE INSERT` rớt mất `OR UPDATE` vẫn cho đủ 11 trigger ACTIVE với `argv`
+   * khớp cả bảng cha lẫn cột ⇒ ratchet (l)(m)(n) và tự-kiểm (1) của `0547` đều xanh, trong khi đường
+   * re-point-bằng-UPDATE mở lại trong im lặng. Đó là đúng khuôn "test ghim một lỗ ở trạng thái mở".
+   */
+  tgtype: number;
+  /** `TG_ARGV`: `[<bảng cha>, <cột FK>]`. */
+  argv: [string, string];
 }
 
 /** Khoá ổn định của một cặp — dùng cho sổ phán quyết và thông điệp lỗi. */
@@ -179,6 +209,125 @@ SELECT w.conname          AS "constraintName",
 /** Đọc catalog FK giữa các bảng tenant. Cần một pool DIRECT (chỉ đọc `pg_catalog`). */
 export async function collectFkPairs(direct: Pool): Promise<FkPair[]> {
   const { rows } = await direct.query<FkPair>(CENSUS_SQL);
+  return rows;
+}
+
+/**
+ * S10-SEC-FKCATALOG-1 (KI-055) — QUÉT GUARD LỚP G từ `pg_trigger`.
+ *
+ * Bịt 11 cặp lớp G không dùng composite FK (composite FK phá tham chiếu toàn cục — xem
+ * `fk-tenant-verdicts.ts`), mà dùng trigger `enforce_company_id_catalog_fk` do mig `0547` tạo. Vì thế
+ * `covered` của census (đọc `pg_constraint`) **vĩnh viễn FALSE** cho 11 cặp đó, và lưới ratchet cần
+ * nguồn thứ hai này để biết chúng đã được vá.
+ *
+ * GIỮ ĐÚNG BẤT BIẾN CỦA FILE: đọc thẳng `pg_trigger`/`pg_proc`/`pg_class` — **0 regex trên mã nguồn,
+ * 0 danh sách bảng viết tay**. `tgargs` là bytea các tham số ngăn cách bằng NUL ⇒ decode `escape` rồi
+ * tách theo `\000` (giữ THỨ TỰ bằng `WITH ORDINALITY`; `argv[0]` = bảng cha, `argv[1]` = cột FK).
+ *
+ * ⛔ TUYỆT ĐỐI KHÔNG dùng hàm này làm nguồn sinh ca test HÀNH VI: nó đọc `pg_trigger` nên **trước khi
+ * áp `0547` nó trả 0 hàng** ⇒ bước RED sẽ sinh 0 ca và cả bộ test hành vi thành xanh-rỗng. Nguồn sinh
+ * ca hành vi phải là `collectFkPairs` (đọc `pg_constraint`, có đủ 11 cặp ở CẢ HAI phía migration).
+ */
+export async function collectCatalogFkGuards(direct: Pool): Promise<CatalogFkGuard[]> {
+  const { rows } = await direct.query<CatalogFkGuard>(
+    `SELECT c.relname          AS "childTable",
+            t.tgname           AS "tgname",
+            t.tgenabled::text  AS "tgenabled",
+            t.tgtype::int      AS "tgtype",
+            (SELECT array_agg(u.a ORDER BY u.ord)
+               FROM unnest(string_to_array(encode(t.tgargs, 'escape'), '\\000'))
+                    WITH ORDINALITY AS u(a, ord)
+              WHERE u.a <> '') AS "argv"
+       FROM pg_trigger t
+       JOIN pg_proc p ON p.oid = t.tgfoid
+       JOIN pg_class c ON c.oid = t.tgrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE p.proname = 'enforce_company_id_catalog_fk'
+        AND n.nspname = 'public'
+        AND NOT t.tgisinternal
+      ORDER BY c.relname, t.tgname`,
+  );
+  return rows;
+}
+
+/**
+ * Ghép guard vào từng cặp. So khớp bằng **CẢ `argv[0]` (bảng cha) LẪN `argv[1]` (cột FK)** — chỉ so
+ * bảng cha thì một ký tự gõ nhầm trong tên cột ở `CREATE TRIGGER` sẽ vẫn "khớp" và lọt lưới, đúng lớp
+ * hỏng-im-lặng mà chính hàm guard phải `RAISE` để chặn.
+ *
+ * Trả về MẢNG MỚI (không mutate đầu vào — bất biến immutability của dự án).
+ */
+export function attachCatalogGuards(
+  pairs: readonly FkPair[],
+  guards: readonly CatalogFkGuard[],
+): FkPair[] {
+  const byPair = new Map<string, CatalogFkGuard>();
+  for (const g of guards) {
+    byPair.set(`${g.childTable}.${g.argv?.[1]} -> ${g.argv?.[0]}`, g);
+  }
+  return pairs.map((p) => ({ ...p, catalogGuard: byPair.get(pairKey(p)) ?? null }));
+}
+
+/**
+ * Hàm `enforce_company_id_catalog_fk` có còn giữ đúng tư thế bảo mật không.
+ *
+ * `ownerBypassesRls` là vế SỐNG-CÒN: cả 8 bảng con đều `relforcerowsecurity = on`, mà **FORCE RLS áp
+ * cả lên CHỦ BẢNG**. Hàm `SECURITY DEFINER` thuộc một role KHÔNG BYPASSRLS (kịch bản thật:
+ * `pg_restore --no-owner` khi clone PROD, hoặc migration chạy bằng `mediaos_owner`) sẽ bị RLS che hàng
+ * cha của tenant khác ⇒ guard rơi vào nhánh "cha không tồn tại" ⇒ `RETURN NEW` ⇒ **fail-open IM LẶNG**,
+ * trong khi trigger vẫn tồn tại và ACTIVE nên mọi lưới khác vẫn xanh.
+ */
+export async function collectCatalogGuardFunction(direct: Pool): Promise<{
+  exists: boolean;
+  securityDefiner: boolean;
+  searchPathLocked: boolean;
+  ownerBypassesRls: boolean;
+  owner: string | null;
+}> {
+  const { rows } = await direct.query<{
+    securityDefiner: boolean;
+    searchPathLocked: boolean;
+    ownerBypassesRls: boolean;
+    owner: string;
+  }>(
+    `SELECT p.prosecdef AS "securityDefiner",
+            COALESCE((SELECT bool_or(c LIKE 'search_path=%') FROM unnest(p.proconfig) c), false)
+                       AS "searchPathLocked",
+            (r.rolsuper OR r.rolbypassrls) AS "ownerBypassesRls",
+            r.rolname  AS "owner"
+       FROM pg_proc p
+       JOIN pg_roles r ON r.oid = p.proowner
+      WHERE p.proname = 'enforce_company_id_catalog_fk'
+        AND p.pronamespace = 'public'::regnamespace`,
+  );
+  const row = rows[0];
+  if (!row) {
+    return {
+      exists: false,
+      securityDefiner: false,
+      searchPathLocked: false,
+      ownerBypassesRls: false,
+      owner: null,
+    };
+  }
+  return { exists: true, ...row };
+}
+
+/** Trigger bất biến `company_id` (hàm `enforce_company_id_immutable` của mig `0436`) đang gắn ở đâu. */
+export async function collectCompanyImmutableTriggers(
+  direct: Pool,
+): Promise<{ table: string; tgname: string; tgenabled: string }[]> {
+  const { rows } = await direct.query<{ table: string; tgname: string; tgenabled: string }>(
+    `SELECT c.relname AS "table", t.tgname AS "tgname", t.tgenabled::text AS "tgenabled"
+       FROM pg_trigger t
+       JOIN pg_proc p ON p.oid = t.tgfoid
+       JOIN pg_class c ON c.oid = t.tgrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE p.proname = 'enforce_company_id_immutable'
+        AND n.nspname = 'public'
+        AND NOT t.tgisinternal
+      ORDER BY c.relname`,
+  );
   return rows;
 }
 

@@ -1499,6 +1499,13 @@
       "when": 1717587335000,
       "tag": "0546_s7calldb1_chat_calls",
       "breakpoints": true
+    },
+    {
+      "idx": 214,
+      "version": "7",
+      "when": 1717587336000,
+      "tag": "0547_s10secfkcatalog1_catalog_fk_tenant_guard",
+      "breakpoints": true
     }
   ]
 }

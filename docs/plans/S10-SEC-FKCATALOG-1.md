@@ -17,7 +17,9 @@
 | Vòng `plan-reviewer` đối kháng (1 vòng) | ✅ chạy 2026-08-25 → **BLOCK**, 5 HIGH + 8 MEDIUM |
 | Áp phát hiện vào plan | ✅ xong — toàn bộ HIGH + MEDIUM đã ghi vào đúng §, đánh dấu ⛔ |
 | **Vòng plan-review thứ hai** | ❌ **KHÔNG chạy — cố ý.** Reviewer kết luận các sửa đều là chỉnh sửa văn bản, không đổi thiết kế, và dự án đã đo được rằng thêm vòng plan-review **đẻ ra lỗ mới** (`plan-review-rounds-inject-new-holes`) |
-| Thi công (migration/test/docs) | ⛔ **CHƯA BẮT ĐẦU** |
+| Thi công (migration/test/docs) | ✅ **XONG 2026-08-25** — mig `0547` (journal idx 214) · `catalog-fk-tenant-guard.int-spec.ts` (RED 4 ca đỏ vì INSERT LỌT → GREEN 8/8) · waiver 11→0 · ratchet (b) ba trạng thái + (l)(m)(n) · `DECISIONS-10` · `erd-current` §9.1 · RELEASE-02 KI-055 hạ "vá, chờ xác nhận PROD" |
+| 13 câu đo trên BẢN SAO PROD giữ quyền | ✅ **xong 2026-08-25** — clone `mediaos_prodclone` khớp PROD (158 RLS/158 FORCE/175 policy/466 grant), **0/0** trước-sau, chủ hàm BYPASSRLS=true trên chính clone |
+| Còn lại | ⛔ FULL gate + CI xanh + **NGƯỜI CHỐT merge** (PR #416) |
 
 **Bốn dữ kiện được xác lập bằng THỰC NGHIỆM trong phiên plan** (không phải suy luận, không phải lời của
 agent) — chúng là thứ đã cứu bản vá này khỏi ba cách hỏng im lặng:
