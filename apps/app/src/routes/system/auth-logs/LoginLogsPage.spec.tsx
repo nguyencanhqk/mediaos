@@ -196,6 +196,33 @@ describe("LoginLogsPage", () => {
     );
   });
 
+  // S10-SEC-LOGINLOG429-1 (KI-048) — vế FE của bộ lọc mã lý do.
+  //
+  // Vá BE mà FE không dùng được là làm nửa vời: KI-048 nói admin KHÔNG lọc nhiễu `TooManyAttempts`
+  // ra được, và cái thiếu là một ô nhập + một tham số truy vấn. Ca này khoá cả hai đầu dây.
+  it("KI-048 · gõ mã lý do rồi Lọc ⇒ failure_reason ĐI VÀO query string của AUTH-API-401", async () => {
+    hydrateWithAuditView();
+    vi.mocked(apiFetch).mockResolvedValue(MOCK_ROWS);
+    renderWithQuery(<LoginLogsPage />);
+    await waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    // ĐỐI CHỨNG (chống xanh-rỗng): trước khi lọc, query KHÔNG mang tham số này. Không có vế này thì
+    // ca dưới xanh cả khi FE gắn cứng `failure_reason` vào mọi request.
+    expect(vi.mocked(apiFetch).mock.calls.at(-1)?.[0]).not.toContain("failure_reason");
+
+    vi.mocked(apiFetch).mockClear();
+    fireEvent.change(screen.getByPlaceholderText("VD: TooManyAttempts"), {
+      target: { value: "TooManyAttempts" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Lọc" }));
+
+    await waitFor(() =>
+      expect(vi.mocked(apiFetch).mock.calls.at(-1)?.[0]).toContain(
+        "failure_reason=TooManyAttempts",
+      ),
+    );
+  });
+
   // ── DISCRIMINATE allow≠deny — cùng page, cùng đường hydrate, CHỈ khác cap ───
   it("discriminates allow vs deny purely from the hydrated /auth/me capability", async () => {
     // ALLOW: /auth/me chứa view:audit-log → render list + gọi API.

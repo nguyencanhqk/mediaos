@@ -13444,7 +13444,7 @@ export const backlog = [
     title:
       "KI-047 + KI-048 — NĂM đường 429 (KHÔNG phải bốn) không ghi một dòng `login_logs` nào; và hàng `blocked` hiện trong màn admin với tốc độ sinh do KẺ TẤN CÔNG điều khiển, trong khi `loginLogListQuerySchema` KHÔNG có filter `failure_reason` để lọc nhiễu ra",
     zone: "red",
-    status: "todo",
+    status: "done",
     depends_on: [],
     paths: [
       "apps/api/src/auth/**",
@@ -13494,7 +13494,7 @@ export const backlog = [
     title:
       "KI-010 — `GET /employees` KHÔNG có phân trang: handler nhận đúng 4 query filter, 0 tham số `page`/`per_page`; chặn duy nhất là `EMPLOYEE_LIST_MAX_ROWS = 2000` cắt câm ở tầng repository",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     depends_on: [],
     paths: [
       "apps/api/src/employees/**",
@@ -13538,15 +13538,22 @@ export const backlog = [
     title:
       "KI-055 — 11 cặp FK lớp G trỏ tới bảng catalog toàn cục (`company_id` NULLABLE) không vá được bằng composite FK; nặng nhất `user_roles.role_id → roles` ⇒ tenant A gán được role của B, rồi B xoá role của B làm bay hàng `user_roles` mang `company_id = A`",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     depends_on: [],
     paths: [
+      // 25/08: THÊM `apps/api/migrations/**` — plan-reviewer bắt được lỗ scope. WO này LÀ một lane
+      // migration, nhưng `paths` cũ chỉ có `apps/api/src/db/**` nên artifact quan trọng nhất của nó
+      // (`0547_*.sql` + `meta/_journal.json`, đều nằm ở `apps/api/migrations/`) lại NGOÀI scope ⇒
+      // hook `guard-scope` cảnh báo mỗi lần ghi, và `paths` còn lái gate + scheduler ⇒ diff chạm
+      // migration có thể bị định tuyến sai tầng review, đúng lúc cần FULL gate nhất.
+      "apps/api/migrations/**",
       "apps/api/src/db/**",
       "apps/api/test/foundation/**",
       "apps/api/test/**",
       "docs/DB/**",
       "docs/erd-current.md",
       "docs/DECISIONS/**",
+      "docs/_review/**",
       "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
       "docs/plans/S10-SEC-FKCATALOG-1.md",
       "harness/backlog.mjs",
@@ -13573,6 +13580,9 @@ export const backlog = [
       "RELEASE-02 đóng (hoặc hạ) KI-055 kèm số TRƯỚC/SAU đo trên lane đã áp migration — đóng hay hạ severity là KẾT LUẬN CỦA SỐ, không phải mong muốn",
     ],
     notes: [
+      "📐 SỐ ĐO 25/08 (lane `mediaos_fkcatalog`, chain 0000→0547): hành vi TRƯỚC vá = **11/11 cặp GHI THÀNH CÔNG** hàng lệch tenant dưới `mediaos_app`+GUC (lỗ khai thác được, không phải lý thuyết) · SAU vá = **11/11 chặn 23503 `catalog_fk_tenant_mismatch`**; tổ hợp #4 2/2 lọt → 2/2 chặn; ca ALLOW (role hệ thống + widget/template toàn cục) VẪN ghi được. 13 câu đo drift = 0/0 TRƯỚC và SAU. 4 script seed (seed-admin·seed-operator·demo-seed-base·demo-seed-full) PASS.",
+      "⚠️ HỆ QUẢ ĐO ĐƯỢC ngoài phạm vi dự kiến: `tenant-isolation.int-spec` PIN `PROVEN_WITH_CHECK_FLOOR` hạ 148→147. A/B trên CÙNG lane: guard BẬT 147/156 · 12 trigger DISABLE 151/156 ⇒ nguyên nhân là 0547, không phải policy bị nới. 4 bảng (notification_templates·seed_items·dashboard_widget_configs·dashboard_widget_cache) nay bị guard chặn TRƯỚC khi WITH CHECK lên tiếng — CHE, không phải MẤT. Reviewer phải xem điểm này tường minh.",
+      "⏭️ CÒN LẠI trước khi ĐÓNG KI-055: 13 câu đo trên BẢN SAO PROD **giữ quyền** (pg_dump thường không mang RLS/GRANT ⇒ phép đo giả) + FULL gate + NGƯỜI CHỐT merge. RELEASE-02 hiện ghi 'vá, chờ xác nhận PROD', KHÔNG phải đóng.",
       "🔴 CROWN + FULL gate (security-reviewer + database-reviewer + silent-failure-hunter + santa-method). Model: PLAN = Sonnet 5 `xhigh`, IMPLEMENT/REVIEW = Opus. NGƯỜI CHỐT merge.",
       "⚠️ LANE MIGRATION NỐI TIẾP: KHÔNG chạy song song với WO migration khác. Nếu WO khác đang mở có migration ⇒ xếp hàng, đừng fan-out.",
       "⚠️ Cột FK mới cần composite tenant FK ([[new-fk-column-needs-composite-tenant-fk]]) · expand-contract bắt buộc ([[migration-expand-contract-required]]) · `GRANT` trong migration cũ KHÔNG phải hiện trạng ([[grant-in-old-migration-is-not-current-state]]) · `REVOKE` bảng xoá luôn column-GRANT ([[revoke-table-grant-wipes-column-grants]]).",
@@ -13585,7 +13595,7 @@ export const backlog = [
   {
     // Seed 24/08/2026 — "Đợt 3". Kế thừa S10-QA-ROUTEHTTP-1: đợt đó phủ 12 route risk>=5 và để lại
     // phần đuôi risk<=3. Xếp CUỐI vì rủi ro cao đã dọn; đây là việc chạy NỀN, không tranh chỗ với WO khác.
-    id: "S10-QA-ROUTEHTTP-2",
+    id: "S10-QA-ROUTEHTTP-3",
     module: "QA",
     layer: "QA",
     title:
@@ -13597,7 +13607,7 @@ export const backlog = [
       "apps/api/test/**",
       "docs/_review/**",
       "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
-      "docs/plans/S10-QA-ROUTEHTTP-2.md",
+      "docs/plans/S10-QA-ROUTEHTTP-3.md",
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],
@@ -13632,7 +13642,7 @@ export const backlog = [
     title:
       "KI-077 — NĂM tham số `:id`/`:linkId` READ/DELETE còn lại của `foundation/files` vẫn nhận chuỗi tự do (cùng cơ chế KI-068, khác KÊNH); CHƯA ĐO bằng HTTP",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     depends_on: ["S10-FND-BODYVALIDATE-1"],
     paths: [
       "apps/api/src/foundation/files/**",

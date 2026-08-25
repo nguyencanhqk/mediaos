@@ -4,7 +4,7 @@ import type {
   UpdateEmployeeProfileRequest,
 } from "@mediaos/contracts";
 import { employeeListItemSchema } from "@mediaos/contracts";
-import { apiFetch } from "@mediaos/web-core";
+import { apiFetch, apiFetchPaginated, type PaginatedResult } from "@mediaos/web-core";
 
 /**
  * Employees API client cho apps/console (Hệ thống — tenant plane).
@@ -17,29 +17,42 @@ import { apiFetch } from "@mediaos/web-core";
  * Import mới thuộc S5-HR-IMPORT-FE-1 ở apps/app, gọi POST /hr/employees/import.
  */
 
-function buildEmployeeQuery(params?: {
+export interface ConsoleEmployeeListParams {
   orgUnitId?: string;
   positionId?: string;
   status?: string;
   search?: string;
-}): string {
+  /** S10-HR-EMPPAGE-1 (KI-010). Bỏ trống ⇒ BE dùng default của schema, KHÔNG phải "lấy hết". */
+  page?: number;
+  perPage?: number;
+}
+
+function buildEmployeeQuery(params?: ConsoleEmployeeListParams): string {
   const qs = new URLSearchParams();
   if (params?.orgUnitId) qs.set("orgUnitId", params.orgUnitId);
   if (params?.positionId) qs.set("positionId", params.positionId);
   if (params?.status) qs.set("status", params.status);
   if (params?.search) qs.set("search", params.search);
+  if (params?.page) qs.set("page", String(params.page));
+  // ⚠️ Tên tham số là `per_page` (khớp `paginated()`/envelope), KHÔNG phải `pageSize` như
+  // `/hr/employees`. Hai quy ước tồn tại song song — xem docblock `employeeListQuerySchema`.
+  if (params?.perPage) qs.set("per_page", String(params.perPage));
   const s = qs.toString();
   return s ? `?${s}` : "";
 }
 
 export const consoleEmployeesApi = {
-  /** Danh sách nhân viên (read:employee — server ép RLS + withTenant(JWT.companyId)). */
-  listEmployees: (params?: {
-    orgUnitId?: string;
-    positionId?: string;
-    status?: string;
-    search?: string;
-  }) => apiFetch(`/employees${buildEmployeeQuery(params)}`, z.array(employeeListItemSchema)),
+  /**
+   * Danh sách nhân viên (read:employee — server ép RLS + withTenant(JWT.companyId)).
+   *
+   * ⟲ S10-HR-EMPPAGE-1 (KI-010) — dùng `apiFetchPaginated` để ĐỌC ĐƯỢC `pagination.total`.
+   * `apiFetch` thường bóc `.data` và VỨT block đó, nên nếu giữ nguyên thì BE có `total` mà client
+   * vẫn mù đúng như trước — làm nửa vời ([[apifetch-drops-pagination-bare-array]]).
+   */
+  listEmployees: (
+    params?: ConsoleEmployeeListParams,
+  ): Promise<PaginatedResult<z.infer<typeof employeeListItemSchema>[]>> =>
+    apiFetchPaginated(`/employees${buildEmployeeQuery(params)}`, z.array(employeeListItemSchema)),
 
   /** Tạo nhân viên mới (create:employee). */
   createEmployee: (data: CreateEmployeeProfileRequest) =>

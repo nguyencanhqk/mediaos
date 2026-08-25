@@ -59,7 +59,17 @@ export type RlBucket =
   // `{companyId}|{userId}` lấy TỪ JWT. TÁCH HẲN `ip`/`acct` của login: gõ sai TOTP lúc xác thực lại
   // KHÔNG được khoá đường đăng nhập, và ngược lại. CẤM nhúng `req.ip` (sau cloudflared mọi IP = `::1`,
   // KI-066 ⇒ "per-IP" thoái hoá thành bucket toàn công ty) hoặc email (mở đường quấy rối victim).
-  | "stepup";
+  | "stepup"
+  // S10-SEC-LOGINLOG429-1 (APPEND — KI-048): KHÔNG phải bucket đếm. Đây là marker "cửa sổ khoá này
+  // ĐÃ ghi một hàng nhật ký rồi", TTL = `LOGIN_LOCKOUT_SEC` ⇒ trần 1 hàng/bucket/cửa sổ thay vì vô
+  // hạn. `rest` SOI GƯƠNG đúng bucket đang khoá (`acct` → `{slug}|{email}`; `ip` → thêm `|{ip}`),
+  // vì `accountKey` KHÔNG chứa ip: khoá gộp theo bộ ba sẽ đổi theo từng IP ⇒ credential-stuffing
+  // rải nhiều nguồn vẫn bồi mỗi IP một hàng, đúng ca nặng nhất của KI-048.
+  //
+  // ⚠️ CỐ Ý nằm trong họ `rl:` chứ không đẻ namespace mới: tiền tố `rl:` ĐÃ có trong `KEY_PREFIXES`
+  // của `valkey-key-census.spec.ts` ⇒ cổng envScope phủ ngay, không cần ai nhớ thêm một dòng. Namespace
+  // mới là namespace không ai canh.
+  | "logdedup";
 
 /** Marker single-use của ReplayGuard. */
 export type ReplayMarker =

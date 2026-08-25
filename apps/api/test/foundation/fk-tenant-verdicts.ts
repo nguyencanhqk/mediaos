@@ -2,8 +2,13 @@
  * S6-SEC-XTENANTFK-1 (KI-046) — SỔ PHÁN QUYẾT cho khoá ngoại một-cột nối hai bảng tenant.
  *
  * LUẬT: sau mig `0535`, **mọi** cặp FK một-cột giữa hai bảng tenant phải hoặc (a) đã có composite FK
- * `(company_id, col)` phủ lên, hoặc (b) có MỘT DÒNG Ở ĐÂY với lý do. Không có ô thứ ba. Cặp mới xuất
- * hiện mà không thuộc hai nhóm đó ⇒ `xtenant-fk-ratchet.int-spec.ts` ĐỎ.
+ * `(company_id, col)` phủ lên, hoặc (b) có MỘT DÒNG Ở ĐÂY với lý do. Cặp mới xuất hiện mà không thuộc
+ * hai nhóm đó ⇒ `xtenant-fk-ratchet.int-spec.ts` ĐỎ.
+ *
+ * ⟲ S10-SEC-FKCATALOG-1 (KI-055) — luật nay có **BA** ô hợp lệ, không phải hai: thêm (c) **guard
+ * trigger `enforce_company_id_catalog_fk` đang ACTIVE** khớp cặp (mig `0547`, dành cho lớp G nơi
+ * composite FK phá tham chiếu toàn cục). Vẫn **KHÔNG có ô thứ TƯ**, và (b)+(c) cùng lúc cũng ĐỎ
+ * (đã vá rồi mà vẫn để waiver "cho chắc" là cách sổ này mục ruỗng).
  *
  * Vì sao cần sổ này thay vì chỉ đếm số: lớp lỗi KI-036/KI-028 cho thấy con số baseline một mình chỉ
  * chặn được "nhiều hơn", không chặn được "đổi cặp này lấy cặp kia". Khoá theo TÊN CẶP thì không.
@@ -15,7 +20,15 @@
 export interface FkWaiver {
   /** Khoá `src.col -> tgt` — khớp `pairKey()` của census. */
   pair: string;
-  /** Vì sao KHÔNG vá được cặp này. Câu này là thứ người sau đọc, viết cho người đọc. */
+  /**
+   * Vì sao KHÔNG vá được cặp này. Câu này là thứ người sau đọc, viết cho người đọc.
+   *
+   * ⚠️ S10-SEC-FKCATALOG-1: lý do CŨ ("composite FK sẽ phá tham chiếu toàn cục") **không còn đủ** —
+   * WO đó chứng minh có cách vá KHÁC composite FK (trigger `enforce_company_id_catalog_fk`, mig
+   * `0547`). Waiver lớp G mới vì thế BẮT BUỘC có dạng "…, due date YYYY-MM-DD, theo dõi ở WO <mã>";
+   * ratchet (l) **parse ngày đó** và ĐỎ khi quá hạn (khớp regex thôi thì `due date 2020-01-01` sẽ
+   * xanh vĩnh viễn và van an toàn thành cửa mở).
+   */
   reason: string;
   /** Ai/việc nào ký. */
   signedBy: string;
@@ -23,83 +36,40 @@ export interface FkWaiver {
 
 /**
  * LỚP G — bảng ĐÍCH là catalog TOÀN CỤC (`company_id` NULLABLE, hàng `company_id IS NULL` dùng chung
- * cho mọi tenant). Composite FK `(company_id, col) → parent(company_id, id)` ở đây sẽ **PHÁ tham
- * chiếu hợp lệ**: hàng con mang `company_id = A` trỏ tới hàng cha `company_id = NULL` sẽ bị từ chối
- * ⇒ không gán được role hệ thống, không cấu hình được widget/notification template dùng chung.
+ * cho mọi tenant). Composite FK `(company_id, col) → parent(company_id, id)` ở đây **PHÁ tham chiếu
+ * hợp lệ**: hàng con mang `company_id = A` trỏ tới hàng cha `company_id = NULL` bị từ chối ⇒ không gán
+ * được role hệ thống, không cấu hình được widget/notification template dùng chung.
  *
- * Tác hại còn lại của việc để hở: đúng lớp lỗ KI-046 nhưng **chỉ trong phạm vi hàng catalog THUỘC
- * TENANT KHÁC** (vd `roles` của tenant B). Đường phòng thủ hiện tại là RLS ở tầng đọc + kiểm tra ở
- * service. Vá đúng cần một cơ chế khác (CHECK/trigger "cha phải cùng tenant HOẶC là hàng toàn cục")
- * — việc riêng, không thuộc WO này.
+ * ⟲ S10-SEC-FKCATALOG-1 (KI-055) — **SỔ NÀY NAY RỖNG: 11 → 0.** 11 cặp lớp G từng ký waiver ở
+ * `S6-SEC-XTENANTFK-1` đã được vá bằng cơ chế KHÁC composite FK: trigger
+ * `enforce_company_id_catalog_fk` (mig `0547`) — "cha phải CÙNG TENANT **HOẶC** là hàng toàn cục
+ * (`company_id IS NULL`)". Đo trước khi vá: **11/11 cặp GHI THÀNH CÔNG** hàng lệch tenant dưới
+ * `mediaos_app` + GUC; sau khi vá: 11/11 bị chặn `23503 catalog_fk_tenant_mismatch`, và tham chiếu
+ * tới hàng toàn cục vẫn ghi được (ca ALLOW). Cơ chế + 2 hướng bị loại: `DECISIONS-10`.
+ *
+ * ⚠️ GIỮ mảng (rỗng) + kiểu `FkWaiver` làm VAN AN TOÀN cho cặp lớp G MỚI trong tương lai — nhưng lý do
+ * ký nay phải KHÁC lý do cũ (xem doc-comment của `FkWaiver.reason`): mặc định của một cặp lớp G mới là
+ * **thêm trigger guard** (chi phí biên = 1 dòng `CREATE TRIGGER`, hàm đã có sẵn), không phải xin miễn.
+ *
+ * Ratchet ép ba trạng thái hợp lệ cho một cặp còn hở, KHÔNG có ô thứ tư: `covered` (composite FK)
+ * **HOẶC** guard `*_catalog_fk` đang ACTIVE khớp cả bảng cha lẫn cột FK **HOẶC** waiver CÒN HẠN.
  */
-export const FK_TENANT_WAIVERS: readonly FkWaiver[] = [
-  {
-    pair: "user_roles.role_id -> roles",
-    reason:
-      "`roles` là catalog toàn cục: 13/17 hàng có company_id IS NULL (role hệ thống). Composite FK sẽ chặn gán role hệ thống cho user — phá luồng phân quyền chính.",
-    signedBy: "S6-SEC-XTENANTFK-1",
-  },
-  {
-    pair: "positions.default_role_id -> roles",
-    reason: "Cùng lý do `roles` toàn cục: position mặc định trỏ được tới role hệ thống.",
-    signedBy: "S6-SEC-XTENANTFK-1",
-  },
-  {
-    pair: "dashboard_widget_cache.role_id -> roles",
-    reason: "Cùng lý do `roles` toàn cục: cache widget khoá theo role hệ thống.",
-    signedBy: "S6-SEC-XTENANTFK-1",
-  },
-  {
-    pair: "dashboard_widget_configs.role_id -> roles",
-    reason: "Cùng lý do `roles` toàn cục: cấu hình widget theo role hệ thống.",
-    signedBy: "S6-SEC-XTENANTFK-1",
-  },
-  {
-    pair: "dashboard_widget_cache.widget_id -> dashboard_widgets",
-    reason:
-      "`dashboard_widgets` là catalog toàn cục thuần: 17/17 hàng company_id IS NULL. Composite FK sẽ chặn MỌI cache widget.",
-    signedBy: "S6-SEC-XTENANTFK-1",
-  },
-  {
-    pair: "dashboard_widget_configs.widget_id -> dashboard_widgets",
-    reason:
-      "Cùng lý do `dashboard_widgets` toàn cục: cấu hình widget của tenant trỏ tới widget dùng chung.",
-    signedBy: "S6-SEC-XTENANTFK-1",
-  },
-  {
-    pair: "notification_templates.event_id -> notification_events",
-    reason:
-      "`notification_events` là catalog toàn cục thuần: 59/59 hàng company_id IS NULL (NOTI-EVENT-XXX seed hệ thống).",
-    signedBy: "S6-SEC-XTENANTFK-1",
-  },
-  {
-    pair: "notifications.event_id -> notification_events",
-    reason: "Cùng lý do `notification_events` toàn cục.",
-    signedBy: "S6-SEC-XTENANTFK-1",
-  },
-  {
-    pair: "notifications.template_id -> notification_templates",
-    reason:
-      "`notification_templates` là catalog toàn cục: 45/45 hàng company_id IS NULL (template mặc định dùng chung).",
-    signedBy: "S6-SEC-XTENANTFK-1",
-  },
-  {
-    pair: "leave_request_days.public_holiday_id -> public_holidays",
-    reason:
-      "`public_holidays` cho phép company_id IS NULL = lịch nghỉ lễ quốc gia dùng chung (thiết kế DB-05).",
-    signedBy: "S6-SEC-XTENANTFK-1",
-  },
-  {
-    pair: "seed_items.seed_batch_id -> seed_batches",
-    reason:
-      "`seed_batches` cho phép company_id IS NULL = mẻ seed hệ thống chạy trước khi có công ty nào.",
-    signedBy: "S6-SEC-XTENANTFK-1",
-  },
-];
+export const FK_TENANT_WAIVERS: readonly FkWaiver[] = [];
 
 /**
- * MỐC SÀN đo được sau mig `0535` trên lane sạch + PROD (2026-07-31):
- * 460 FK một-cột giữa hai bảng tenant · 449 đã có composite phủ · **11 còn hở = đúng danh sách trên**.
+ * S10-SEC-FKCATALOG-1 — SÀN GUARD LỚP G, đo trên lane `mediaos_fkcatalog` sau mig `0547` (2026-08-25):
+ * **11 cặp lớp G, 11 trigger guard ACTIVE, 0 waiver**.
+ *
+ * Pin để lưới không âm thầm co về rỗng: nếu ai DROP trigger (hoặc `ALTER TABLE … DISABLE TRIGGER`) thì
+ * số cặp "đã có guard" tụt xuống và ratchet (l) ĐỎ, thay vì cả bộ assert xanh vì không còn gì để kiểm.
+ */
+export const FK_LAYER_G_GUARD_FLOOR = 11;
+
+/**
+ * MỐC SÀN. Đo lại 2026-08-25 trên lane `mediaos_fkcatalog` (head 0546) VÀ PROD `mediaos`:
+ * **459** FK một-cột giữa hai bảng tenant · **448** đã có composite phủ · **11 còn hở** (đúng 11 cặp
+ * lớp G, nay đã có guard trigger thay vì waiver).
+ * ⚠️ Số cũ ghi ở đây và ở header `0535` là **460/449** — đo ở head 0534, trước `0536`–`0546`.
  * Pin để lưới không âm thầm co về rỗng (bộ lọc sai ⇒ 0 cặp ⇒ mọi assert xanh vô nghĩa).
  */
 export const FK_SINGLE_COL_PAIRS_FLOOR = 440;

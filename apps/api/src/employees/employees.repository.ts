@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, ilike, isNull, ne, or, type SQL } from "drizzle-orm";
+import { EMPLOYEE_LIST_PAGE_SIZE_MAX } from "@mediaos/contracts";
+import { and, eq, ilike, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import {
   employeeManagerRelations,
@@ -18,7 +19,13 @@ import {
  * single-company MVP headcount so it never truncates real data; when it IS hit the service logs a
  * warning (§17.3 observability) — the cap is a rail against runaway scans, never a silent truncation.
  */
-export const EMPLOYEE_LIST_MAX_ROWS = 2000;
+/**
+ * ⟲ S10-HR-EMPPAGE-1 (KI-010): giá trị chuyển về `@mediaos/contracts` để BIÊN (`per_page` max) và
+ * SQL (`LIMIT`) dùng CHUNG một nguồn. Giữ tên export cũ — 3 hộ tiêu thụ hiện có không phải đổi, và
+ * quan trọng hơn: hai con số rời nhau thì một ngày nào đó biên cho qua `per_page` lớn hơn cái SQL
+ * chịu được, và không ai đo được là đã lệch.
+ */
+export const EMPLOYEE_LIST_MAX_ROWS = EMPLOYEE_LIST_PAGE_SIZE_MAX;
 
 /** Columns returned by the flat list projection. */
 const LIST_COLUMNS = {
@@ -70,6 +77,9 @@ export interface EmployeeListFilters {
   positionId?: string;
   status?: string;
   search?: string;
+  /** S10-HR-EMPPAGE-1 — BẮT BUỘC, không optional: một trang "quên được" là quay lại cắt câm. */
+  page: number;
+  perPage: number;
 }
 
 export interface EmployeeInsertData {
@@ -153,15 +163,36 @@ export class EmployeesRepository {
       if (fuzzy) conditions.push(fuzzy);
     }
 
-    return await tx
-      .select(LIST_COLUMNS)
-      .from(employeeProfiles)
-      .innerJoin(users, eq(employeeProfiles.userId, users.id))
-      .leftJoin(orgUnits, eq(employeeProfiles.orgUnitId, orgUnits.id))
-      .leftJoin(positions, eq(employeeProfiles.positionId, positions.id))
-      .where(and(...(conditions as [(typeof conditions)[0], ...typeof conditions])))
-      .orderBy(users.fullName)
-      .limit(EMPLOYEE_LIST_MAX_ROWS);
+    const where = and(...(conditions as [(typeof conditions)[0], ...typeof conditions]));
+
+    // ⟲ S10-HR-EMPPAGE-1 (KI-010) — CLAMP Ở SQL, không cắt mảng trong JS.
+    // Cắt trong JS nghĩa là DB vẫn trả đủ hàng về ứng dụng rồi mới bỏ đi: mất trọn phần "bound cái
+    // scan" mà cái cap này sinh ra, và `total` vẫn phải đếm riêng. `LIMIT`/`OFFSET` là chỗ duy nhất
+    // ép được cả hai ([[clamp-must-be-sql-not-js]]).
+    const limit = Math.min(Math.max(1, filters.perPage), EMPLOYEE_LIST_MAX_ROWS);
+    const offset = (Math.max(1, filters.page) - 1) * limit;
+
+    // `total` là SỐ THẬT SAU FILTER + SAU SCOPE (cùng `where`), KHÔNG phải `rows.length`.
+    // `rows.length` chỉ nói được "trang này có bao nhiêu" — đúng cái client đang mù, tức KI-010.
+    const [rows, totalRow] = await Promise.all([
+      tx
+        .select(LIST_COLUMNS)
+        .from(employeeProfiles)
+        .innerJoin(users, eq(employeeProfiles.userId, users.id))
+        .leftJoin(orgUnits, eq(employeeProfiles.orgUnitId, orgUnits.id))
+        .leftJoin(positions, eq(employeeProfiles.positionId, positions.id))
+        .where(where)
+        .orderBy(users.fullName)
+        .limit(limit)
+        .offset(offset),
+      tx
+        .select({ total: sql<number>`count(*)::int` })
+        .from(employeeProfiles)
+        .innerJoin(users, eq(employeeProfiles.userId, users.id))
+        .where(where),
+    ]);
+
+    return { rows, total: totalRow[0]?.total ?? 0, page: Math.max(1, filters.page), limit };
   }
 
   // ── Detail (tx core — read inside the caller's tenant tx for atomic audit) ─────

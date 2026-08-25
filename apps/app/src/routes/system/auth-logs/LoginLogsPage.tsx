@@ -43,12 +43,26 @@ import { emptyToUndefined, useAuthLogFilters } from "./use-auth-log-filters";
 // type (KHÔNG interface) để thỏa ràng buộc Record<string, unknown> của useAuthLogFilters.
 type LoginLogFilters = {
   status: string; // "" = mọi trạng thái
+  /**
+   * S10-SEC-LOGINLOG429-1 (KI-048) — MÃ LÝ DO. Ô nhập TỰ DO chứ không phải danh sách chọn: mã lý do
+   * là dữ liệu append-only LỊCH SỬ (`TooManyAttempts` · `WrongPassword` · `UserNotFound` ·
+   * `CompanyInactive` · `Inactive` · `TwoFactorInvalid` · `TwoFactorChallengeReplay` …). Đóng thành
+   * danh sách ở FE là dựng NGUỒN SỰ THẬT THỨ HAI cho một danh mục chỉ có thể dài thêm — mã ghi sau
+   * ngày dựng danh sách sẽ không lọc được, đúng lý do contract dùng `z.string()` chứ không `z.enum`.
+   */
+  failureReason: string;
   userId: string;
   fromDate: string;
   toDate: string;
 };
 
-const INITIAL_FILTERS: LoginLogFilters = { status: "", userId: "", fromDate: "", toDate: "" };
+const INITIAL_FILTERS: LoginLogFilters = {
+  status: "",
+  failureReason: "",
+  userId: "",
+  fromDate: "",
+  toDate: "",
+};
 
 // Response sau unwrapEnvelope = mảng item (pagination/meta bị tách ở apiFetch).
 const loginLogListSchema = z.array(loginLogListItemSchema);
@@ -89,7 +103,9 @@ function useLoginLogColumns(
       cell: ({ row }) => {
         const u = row.original.user;
         return u ? (
-          <span className="text-sm font-medium text-foreground">{u.display_name ?? u.email ?? t("authLogsIdentityHidden")}</span>
+          <span className="text-sm font-medium text-foreground">
+            {u.display_name ?? u.email ?? t("authLogsIdentityHidden")}
+          </span>
         ) : (
           <span className="text-sm text-muted-foreground">—</span>
         );
@@ -137,6 +153,7 @@ export function LoginLogsPage() {
         page,
         per_page: AUTH_LOG_PAGE_SIZE,
         status: emptyToUndefined(applied.status),
+        failure_reason: emptyToUndefined(applied.failureReason),
         user_id: emptyToUndefined(applied.userId),
         from_date: emptyToUndefined(applied.fromDate),
         to_date: emptyToUndefined(applied.toDate),
@@ -207,6 +224,12 @@ export function LoginLogsPage() {
             ))}
           </Select>
         </LabeledField>
+        <TextField
+          label={t("authLogFilters.failureReason")}
+          value={draft.failureReason}
+          placeholder={t("authLogFilters.failureReasonPlaceholder")}
+          onChange={(v) => setDraftField("failureReason", v)}
+        />
         <TextField
           label={t("authLogFilters.userId")}
           value={draft.userId}
