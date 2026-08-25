@@ -389,6 +389,33 @@ erDiagram
 **Bảng append-only 🔁:** `audit_logs` · `login_logs` · `attendance_logs` · `leave_balance_transactions` · `employee_status_histories` · `task_activity_logs` · `notification_delivery_logs`.
 **Không cascade-delete** dữ liệu nghiệp vụ (DB-01 §22.4) — dùng soft-delete giữ lịch sử.
 
+### 9.1 Cô lập tenant ở tầng FK — hai cơ chế, đừng nhầm (mig `0535` + `0547`)
+
+Kiểm tra khoá ngoại của Postgres **bỏ qua RLS theo thiết kế**, nên một FK một-cột giữa hai bảng đều có
+`company_id` là một đường ghi chéo tenant (KI-046). Hai cơ chế phủ nó, chọn theo **bảng ĐÍCH**:
+
+| lớp | bảng đích | cơ chế | ở đâu |
+| --- | --- | --- | --- |
+| **T** — `parent.company_id NOT NULL` | 448 cặp | **composite FK** `(company_id, x) → parent(company_id, id)` | mig `0535` |
+| **G** — `parent.company_id` NULLABLE (catalog TOÀN CỤC) | 11 cặp | **trigger** `enforce_company_id_catalog_fk` — cha phải CÙNG TENANT **HOẶC** toàn cục (`company_id IS NULL`) | mig `0547` · `DECISIONS-10` |
+
+Composite FK **KHÔNG dùng được** cho lớp G: nó đòi khớp đúng `company_id` nên chặn luôn tham chiếu hợp
+lệ tới hàng toàn cục (đã chứng minh: gán role hệ thống nổ 23503). Đừng thử lại hướng đó.
+
+**8 bảng CON mang guard lớp G** (11 trigger `trg_<bảng>_<cột>_catalog_fk`; 3 bảng có 2 cột FK):
+`user_roles` · `positions` · `dashboard_widget_cache` · `dashboard_widget_configs` ·
+`notification_templates` · `notifications` · `leave_request_days` · `seed_items`.
+**6 bảng ĐÍCH (catalog toàn cục):** `roles` · `dashboard_widgets` · `notification_events` ·
+`notification_templates` · `public_holidays` · `seed_batches`.
+Giới hạn: **FORWARD-ONLY** (không hồi tố hàng cũ) và guard KHÔNG chạm chiều `ON DELETE CASCADE` của
+bảng cha — nó chặn việc TẠO hàng lệch, nên chuỗi CASCADE xuyên tenant đứt ở mắt đầu tiên.
+
+**Bất biến `company_id` (trigger `enforce_company_id_immutable`, mig `0436` + `0531` + `0547`) — 9 bảng:**
+`data_retention_policies` · `notification_events` · `notification_templates` · `public_holidays` ·
+`roles` · `seed_batches` · `seed_items` · `sequence_counters` · **`dashboard_widgets`** (thêm ở `0547` —
+**dư nợ vá kèm của `0531`**, không cấp số hiệu KI riêng: guard lớp G kiểm quan hệ con→cha lúc ghi hàng
+CON, nên nếu cha còn "re-home" được thì hàng con của tenant khác thành vi phạm SAU khi đã ghi).
+
 ---
 
 ## Phụ lục A — Trạng thái hiện thực hoá (code ↔ thiết kế)

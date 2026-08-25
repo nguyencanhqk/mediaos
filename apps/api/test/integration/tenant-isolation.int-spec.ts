@@ -194,8 +194,24 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
   /**
    * Mốc sàn cho số bảng CHỨNG MINH được `WITH CHECK` chạy (đo 2026-07-29 = 148/153).
    * Hạ mốc này = tuyên bố có chủ đích, phải kèm lý do trong commit. Nâng lên khi phủ thêm.
+   *
+   * ⟲ S10-SEC-FKCATALOG-1 (KI-055) — HẠ 148 → 147, có chủ đích, đo A/B trên CÙNG một lane
+   * (`mediaos_fkcatalog`, 2026-08-25) để không đoán nguyên nhân:
+   *   • guard của mig `0547` BẬT  → 147/156 chứng minh được (chưa: +notification_templates,
+   *     +seed_items, +dashboard_widget_configs, +dashboard_widget_cache)
+   *   • đúng 12 trigger đó DISABLE → 151/156 (bốn bảng trên quay lại "đã chứng minh")
+   * ⇒ Nguyên nhân là mig `0547`, KHÔNG phải "policy vừa bị nới".
+   *
+   * VÌ SAO CHẤP NHẬN. Ca W3 đẩy hàng sang tenant khác bằng `UPDATE company_id = B`. Hàng seed của 4
+   * bảng trên trỏ tới hàng CHA thuộc tenant A, nên sau khi đổi chủ, con (B) ≠ cha (A) ⇒ guard lớp G
+   * từ chối **TRƯỚC** khi `WITH CHECK` kịp lên tiếng. Đây là **CHE**, không phải MẤT: policy
+   * `WITH CHECK` của 4 bảng đó không bị đụng tới, và chúng nay có HAI tuyến (trigger tầng DB + RLS)
+   * thay vì một. Khác hẳn nhóm "chưa chứng minh vì thiếu grant" — nhóm đó chỉ an toàn nhờ chưa được
+   * cấp quyền, tức tuyến phòng thủ nằm sai tầng.
+   *
+   * ⚠️ Chỉ hạ ĐÚNG 1 (147 = số đo hiện tại, không cộng biên): tụt thêm nữa vẫn phải ĐỎ và phải điều tra.
    */
-  const PROVEN_WITH_CHECK_FLOOR = 148;
+  const PROVEN_WITH_CHECK_FLOOR = 147;
 
   /**
    * Mốc sàn cho ca W4 (S6-SEC-XTENANTFK-1): số cặp bị chặn ĐÚNG bằng FK chéo tenant (SQLSTATE 23503).
