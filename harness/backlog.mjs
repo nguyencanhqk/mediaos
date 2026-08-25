@@ -13538,12 +13538,19 @@ export const backlog = [
     status: "todo",
     depends_on: [],
     paths: [
+      // 25/08: THÊM `apps/api/migrations/**` — plan-reviewer bắt được lỗ scope. WO này LÀ một lane
+      // migration, nhưng `paths` cũ chỉ có `apps/api/src/db/**` nên artifact quan trọng nhất của nó
+      // (`0547_*.sql` + `meta/_journal.json`, đều nằm ở `apps/api/migrations/`) lại NGOÀI scope ⇒
+      // hook `guard-scope` cảnh báo mỗi lần ghi, và `paths` còn lái gate + scheduler ⇒ diff chạm
+      // migration có thể bị định tuyến sai tầng review, đúng lúc cần FULL gate nhất.
+      "apps/api/migrations/**",
       "apps/api/src/db/**",
       "apps/api/test/foundation/**",
       "apps/api/test/**",
       "docs/DB/**",
       "docs/erd-current.md",
       "docs/DECISIONS/**",
+      "docs/_review/**",
       "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
       "docs/plans/S10-SEC-FKCATALOG-1.md",
       "harness/backlog.mjs",
