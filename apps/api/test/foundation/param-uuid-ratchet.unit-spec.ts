@@ -28,7 +28,7 @@ import {
  *              vá ⇒ 221 − 31 = 190, KHÔNG phải 189.
  *
  * ⚠️ ĐÂY LÀ TRẦN, KHÔNG PHẢI MỤC TIÊU. Nó KHÔNG nói "190 chỗ này an toàn" — mới **36** chỗ từng được
- * đo bằng HTTP thật. 189 chỗ còn lại (tasks 71 · workflow 36 · goals 21 · employees 21 · org 18 ·
+ * đo bằng HTTP thật. 189 chỗ còn lại (tasks 75 · workflow 36 · goals 21 · employees 21 · org 18 ·
  * foundation-ngoài-files 8 · notifications 6 · positions 3 · recycle-bin 1) chưa ai chạm; đoán chúng
  * cũng 500 là đúng thứ `done_when` của WO cấm ("đừng ép số cho khớp mô tả") — và giả thuyết đó ĐÃ
  * SAI một lần ngay trong nhóm đợt-1 (auth-session = 404).
