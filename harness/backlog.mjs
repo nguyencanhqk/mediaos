@@ -13645,10 +13645,11 @@ export const backlog = [
     title:
       "KI-080 — `POST /attendance/shift-assignments` trả 500 khi client gửi `employeeId` mà không gửi `assignmentScope` (payload tự nhiên nhất); đáng lẽ 400 ở biên",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     depends_on: [],
     paths: [
       "packages/contracts/src/attendance.ts",
+      "packages/contracts/src/attendance-scope-target.spec.ts",
       "apps/api/src/attendance/**",
       "apps/api/test/**",
       "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
@@ -13671,6 +13672,9 @@ export const backlog = [
       "RELEASE-02 đóng KI-080 kèm số đo trước/sau",
     ],
     notes: [
+      "✅ ĐÓNG 2026-08-26. PHẠM VI ĐÓNG RỘNG HƠN LÚC MỞ: rà cùng-lớp đào ra `createRuleSchema` có ĐÚNG CÙNG MỘT `.refine()` một-chiều, cách bản vá 60 dòng trong cùng file; đo HTTP thật: `POST /attendance/rules` khuyết `ruleScope` + `employeeId` cũng 500 (`chk_attendance_rules_target`). Vá cả HAI bằng helper chung `scopeTargetMatches()` mirror CHECK 1:1.",
+      "RÀ CÙNG LỚP ĐÃ ĐO XONG ⇒ KHÔNG cấp số KI mới: `chk_goals_level_anchor` sạch (GoalsValidationService kiểm cả hai chiều, 422); `chk_dashboard_widget_configs_role_user_scope` không với tới được từ client (không có route tạo, PATCH `.strict()` không chứa cột neo); finance park.",
+      "SỐ ĐO TRƯỚC/SAU: cả hai route 500 SYSTEM-ERR-001 → 400 VALIDATION-ERR-001; hệ quả ghi KHÔNG đổi (0 hàng trước và sau).",
       "🟡 LIGHT gate. Không chạm permission/RLS/secret/migration.",
       "⚠️ Đổi 500 → 400 là ĐỔI HÀNH VI QUAN SÁT ĐƯỢC — census hộ tiêu thụ (FE + test) trước khi sửa.",
       "⚠️ int-spec ngủ khi thiếu `LANE_DB` ([[integration-test-lane-db-gate]]).",

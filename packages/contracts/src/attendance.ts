@@ -688,6 +688,50 @@ export type UpdateShiftRequest = z.infer<typeof updateShiftSchema>;
 
 // ─── attendance_rules (DB-04 §7.3) ────────────────────────────────────────────
 
+// ─── scope ↔ cột neo: MIRROR 1:1 CHECK của DB (S10-ATT-SHIFTASSIGNSCOPE-1 / KI-080) ─────────
+//
+// `shift_assignments` và `attendance_rules` đều có CHECK **HAI CHIỀU** buộc scope khớp cột neo
+// (`chk_shift_assignments_target` · `chk_attendance_rules_target`, DB-04 §7.2/§7.3):
+//
+//   (scope = 'Company'    AND department_id IS NULL     AND employee_id IS NULL)
+//   OR (scope = 'Department' AND department_id IS NOT NULL AND employee_id IS NULL)
+//   OR (scope = 'Employee'   AND employee_id   IS NOT NULL)
+//
+// (`attendance_rules` ghép thêm `'System'` vào nhánh đầu — cùng luật "không neo".)
+//
+// Cả hai `.refine()` trước đây chỉ kiểm chiều THUẬN ("Department/Employee phải có đúng id"), bỏ trống
+// chiều NGƯỢC ("Company/System thì cả hai id phải VẮNG"; "Department thì employeeId phải VẮNG").
+// Vì `scope` có `.default(...)`, payload TỰ NHIÊN NHẤT — `{shiftId, employeeId, effectiveFrom}` — được
+// điền scope `'Company'` rồi đi thẳng xuống DB, vỡ CHECK và trả **500 SYSTEM-ERR-001** thay vì 400 ở biên
+// (KI-080, cùng LỚP với KI-068). Hỏng đúng chiều an toàn (0 hàng được ghi) nhưng hợp đồng API sai
+// và bơm 500 GIẢ vào giám sát.
+//
+// ⚠️ Luật: hàm này mirror CHECK **ĐÚNG BẰNG**, không chặt hơn. Nhánh `'Employee'` của CHECK KHÔNG cấm
+// `department_id` ⇒ ở đây cũng không cấm. Chặt hơn CHECK = từ chối payload mà DB chấp nhận ⇒ trôi
+// theo chiều ngược lại. Muốn siết thì siết CHECK trước bằng migration, rồi mới siết ở đây.
+export const SCOPE_TARGET_MESSAGE =
+  "scope phải khớp cột neo: Company/System ⇒ không kèm departmentId/employeeId; " +
+  "Department ⇒ có departmentId và KHÔNG kèm employeeId; Employee ⇒ có employeeId";
+
+/** True khi bộ ba (scope, departmentId, employeeId) thoả CHECK scope↔neo của DB. */
+export function scopeTargetMatches(
+  scope: "System" | "Company" | "Department" | "Employee",
+  departmentId: string | null | undefined,
+  employeeId: string | null | undefined,
+): boolean {
+  const hasDept = departmentId != null;
+  const hasEmp = employeeId != null;
+  switch (scope) {
+    case "System":
+    case "Company":
+      return !hasDept && !hasEmp;
+    case "Department":
+      return hasDept && !hasEmp;
+    case "Employee":
+      return hasEmp;
+  }
+}
+
 export const ruleScopeSchema = z.enum(["System", "Company", "Department", "Employee"]);
 export type RuleScopeDto = z.infer<typeof ruleScopeSchema>;
 
@@ -759,12 +803,10 @@ export const createRuleSchema = z
     autoCheckOutEnabled: z.boolean().default(false),
     autoAttendanceWorkingMinutes: z.number().int().min(0).optional(),
   })
-  .refine(
-    (v) =>
-      (v.ruleScope !== "Department" && v.ruleScope !== "Employee") ||
-      (v.ruleScope === "Department" ? Boolean(v.departmentId) : Boolean(v.employeeId)),
-    { message: "Department/Employee scope cần đúng departmentId/employeeId" },
-  );
+  .refine((v) => scopeTargetMatches(v.ruleScope, v.departmentId, v.employeeId), {
+    message: SCOPE_TARGET_MESSAGE,
+    path: ["ruleScope"],
+  });
 export type CreateRuleRequest = z.infer<typeof createRuleSchema>;
 
 /** PUT /attendance/rules/{id} (ATT.RULE.CONFIG) — partial patch (KHÔNG đổi ruleScope/target — tạo rule mới thay vì đổi phạm vi). */
@@ -830,12 +872,10 @@ export const createShiftAssignmentSchema = z
     priority: z.number().int().default(0),
     note: z.string().max(500).optional(),
   })
-  .refine(
-    (v) =>
-      (v.assignmentScope !== "Department" && v.assignmentScope !== "Employee") ||
-      (v.assignmentScope === "Department" ? Boolean(v.departmentId) : Boolean(v.employeeId)),
-    { message: "Department/Employee scope cần đúng departmentId/employeeId" },
-  );
+  .refine((v) => scopeTargetMatches(v.assignmentScope, v.departmentId, v.employeeId), {
+    message: SCOPE_TARGET_MESSAGE,
+    path: ["assignmentScope"],
+  });
 export type CreateShiftAssignmentRequest = z.infer<typeof createShiftAssignmentSchema>;
 
 // ─── GET /attendance/rules/effective — resolve-effective (dùng chung resolve-effective của S3-ATT-BE-1) ──
