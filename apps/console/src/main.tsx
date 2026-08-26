@@ -42,6 +42,26 @@ if (!rootElement) {
 const root = rootElement;
 
 /**
+ * Gỡ splash khởi động (khai báo nội tuyến trong index.html) sau khi React đã commit lần đầu.
+ *
+ * Double-rAF: callback rAF thứ nhất chạy TRƯỚC lần vẽ kế tiếp, callback thứ hai chạy SAU nó — tức là
+ * sau khi cây React đầu tiên thật sự lên màn. Gỡ sớm hơn thì lộ ra một khung hình nền trống.
+ * Fade 180ms (khớp `transition` trong index.html) rồi mới `remove()` để không nháy giữa hai lớp.
+ *
+ * Không có phần tử (HTML cũ đang được phục vụ từ cache, hoặc đã gỡ rồi) → no-op, KHÔNG ném.
+ */
+function dismissBootSplash(): void {
+  const splash = document.getElementById("boot-splash");
+  if (!splash) return;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      splash.classList.add("is-done");
+      window.setTimeout(() => splash.remove(), 220);
+    });
+  });
+}
+
+/**
  * FS-4 SSO: silent-refresh KHI LOAD (giống apps/web). Có phiên (refresh cookie hợp lệ) → nạp access token +
  * /me vào store → mount app Hệ thống (tenant). Không có phiên → điều hướng về app đăng nhập trung tâm
  * (apps/auth) kèm `?redirect=<đích>`. KHÔNG render UI khi chưa có phiên. Hết phiên giữa chừng do api-client
@@ -62,6 +82,8 @@ async function boot(): Promise<void> {
       </I18nextProvider>
     </StrictMode>,
   );
+  // Splash đã làm xong việc: từ đây React chịu trách nhiệm vẽ.
+  dismissBootSplash();
 }
 
 // `boot()` không NÊN ném (bootstrapSession nuốt lỗi mạng → trả false), nhưng nếu có lỗi bất ngờ

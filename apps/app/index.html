@@ -5,9 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FUNTIME MEDIA · Ứng dụng</title>
+    <!-- data-cfasync="false" — Rocket Loader (bật ở zone Cloudflare) VIẾT LẠI thuộc tính `type` của
+         MỌI script. Đo trên PROD 2026-08-26, cả ba host: `type="module"` → `type="<hash>-module"`,
+         `type="text/javascript"` → `type="<hash>-text/javascript"`. Hai hậu quả: (1) preload scanner
+         không còn thấy entry module để nạp sớm — nó phải chờ rocket-loader.min.js tải+chạy rồi mới
+         tiêm lại; (2) script chống-FOUC ngay dưới bị hoãn theo, nên `html.dark` đặt MUỘN.
+         Attribute này là cổng thoát CHÍNH THỨC của Cloudflare: Rocket Loader bỏ qua script mang nó.
+         Vá ở CODE thay vì chờ tắt Rocket Loader trên dashboard, để deploy không phụ thuộc thao tác tay. -->
     <!-- Chống FOUC: đặt class theme TRƯỚC khi CSS vẽ. Mặc định dark (Control Room);
          localStorage "mediaos-theme"="light" → chế độ sáng (ThemeToggle ghi key này). -->
-    <script>
+    <script data-cfasync="false">
       try {
         if (localStorage.getItem("mediaos-theme") !== "light")
           document.documentElement.classList.add("dark");
@@ -15,9 +22,74 @@
         document.documentElement.classList.add("dark");
       }
     </script>
+    <!-- Splash khởi động (S10-PERF-LOADPATH-1). `main.tsx` chỉ gọi createRoot() SAU khi
+         bootstrapSession() xong (refresh → /me). Qua cloudflared mỗi round-trip đo được 0.5-3.5s,
+         nên trước đây người dùng nhìn NỀN TRẮNG CÂM suốt quãng đó. Splash nội tuyến (không thêm
+         request nào) vẽ ngay từ HTML; main.tsx gỡ nó khi React đã commit lần đầu. -->
+    <style>
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: #ffffff;
+        color: #0f172a;
+        font: 500 12px/1.4 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+        letter-spacing: 0.18em;
+        transition: opacity 180ms ease-out;
+      }
+      html.dark #boot-splash {
+        background: #0b0f19;
+        color: #e2e8f0;
+      }
+      #boot-splash.is-done {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #boot-splash .boot-bar {
+        position: relative;
+        width: 132px;
+        height: 2px;
+        overflow: hidden;
+        border-radius: 2px;
+        background: currentColor;
+        opacity: 0.16;
+      }
+      #boot-splash .boot-bar::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        width: 40%;
+        border-radius: 2px;
+        background: currentColor;
+        animation: boot-slide 1.05s ease-in-out infinite;
+      }
+      @keyframes boot-slide {
+        from {
+          transform: translateX(-100%);
+        }
+        to {
+          transform: translateX(250%);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot-splash .boot-bar::after {
+          width: 100%;
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="boot-splash" role="status" aria-live="polite" aria-label="Đang tải">
+      <div>FUNTIME MEDIA</div>
+      <div class="boot-bar"></div>
+    </div>
+    <script type="module" data-cfasync="false" src="/src/main.tsx"></script>
   </body>
 </html>

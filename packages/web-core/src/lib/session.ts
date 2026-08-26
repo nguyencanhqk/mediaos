@@ -17,8 +17,27 @@ import { useAuthStore } from "../stores/auth";
  * có giá trị. FAIL-SOFT TUYỆT ĐỐI: lỗi/không có preference (chưa liên kết, network tạm, 403…) → GIỮ
  * NGUYÊN theme local đã lưu (localStorage qua app bootstrap script) — KHÔNG đổi giá trị trả về của
  * `bootstrapSession` (vẫn true khi /me OK), KHÔNG chặn render app vì 1 nguồn phụ (preferences) lỗi.
+ *
+ * S10-PERF-LOADPATH-1 — theme-sync KHÔNG còn được `await` trong `doBootstrap`. Fail-soft trước đây chỉ
+ * chặn theo LỖI; theo ĐỘ TRỄ thì nó vẫn chặn: `main.tsx` của cả ba SPA chỉ gọi `createRoot()` SAU khi
+ * `bootstrapSession()` resolve, nên preferences là round-trip thứ BA nối tiếp (refresh → /me →
+ * preferences) nằm trên đường render. Qua cloudflared mỗi call đo được 0.5–3.5s ⇒ nguồn PHỤ chỉ để đổi
+ * theme kéo dài màn hình trắng thêm chừng ấy. Nay chạy nền: theme local (đã áp bởi bootstrap script
+ * trong index.html) hiển thị ngay, giá trị server ghi đè khi về. Test/caller cần điểm đồng bộ thì dùng
+ * `whenThemeSynced()` — KHÔNG đưa promise này vào đường render.
  */
 let bootstrapInFlight: Promise<boolean> | null = null;
+
+/** Promise của lần theme-sync gần nhất. Chỉ để test/caller chờ ĐIỂM ĐỒNG BỘ — không nằm trên đường render. */
+let themeSyncInFlight: Promise<void> = Promise.resolve();
+
+/**
+ * Chờ lần theme-sync nền gần nhất xong. `syncThemeFromServer` nuốt mọi lỗi nên promise này KHÔNG BAO GIỜ
+ * reject. Dùng trong test (và chỗ nào thật sự cần biết theme server đã áp xong), KHÔNG dùng khi mount app.
+ */
+export function whenThemeSynced(): Promise<void> {
+  return themeSyncInFlight;
+}
 
 /** Đồng bộ theme từ server (best-effort) — KHÔNG BAO GIỜ throw ra ngoài, KHÔNG ảnh hưởng bootstrap. */
 async function syncThemeFromServer(): Promise<void> {
@@ -38,7 +57,10 @@ async function doBootstrap(): Promise<boolean> {
     useAuthStore.getState().setUser(me, me.capabilities);
     // Cờ ép-enroll-2FA (AUTH-003) — set RIÊNG (setUser giữ nguyên chữ ký cho các call site khác không đổi).
     useAuthStore.getState().setMustSetupTwoFactor(me.mustSetupTwoFactor);
-    await syncThemeFromServer();
+    // KHÔNG await — xem ghi chú S10-PERF-LOADPATH-1 ở đầu file. Gán vào `themeSyncInFlight` (thay vì thả
+    // trôi) để `whenThemeSynced()` còn chỗ bám; `syncThemeFromServer` không bao giờ throw nên promise này
+    // không thể thành unhandled rejection.
+    themeSyncInFlight = syncThemeFromServer();
     return true;
   } catch (err) {
     // Refresh OK nhưng /me lỗi → xoá access token mồ côi (chỉ store action, không chạm mạng). Caller redirect.

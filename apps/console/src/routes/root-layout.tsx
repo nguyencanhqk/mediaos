@@ -1,5 +1,6 @@
+import React from "react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { AppShell } from "@mediaos/ui";
+import { AppShell, Skeleton } from "@mediaos/ui";
 import { useFavicon } from "@mediaos/web-core";
 import { useConsoleBranding } from "@/lib/use-console-branding";
 import { useConsoleNavItems } from "@/lib/nav";
@@ -16,6 +17,22 @@ const brand = (
   </Link>
 );
 
+/**
+ * Ranh giới Suspense DUY NHẤT cho 17 trang lazy của console (S10-PERF-LOADPATH-1).
+ *
+ * Đặt ở đây thay vì bọc từng route: router console gắn thẳng `component: XPage` nên không có chỗ chung
+ * nào khác, và một boundary trên `<Outlet/>` phủ hết — kể cả route thêm sau này. Thiếu nó thì trang lazy
+ * đầu tiên ném thẳng "A component suspended while responding to synchronous input".
+ */
+function RouteSuspenseFallback(): React.ReactElement {
+  return (
+    <div className="space-y-4 p-2" aria-busy="true" data-testid="route-loading">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-64 w-full" />
+    </div>
+  );
+}
+
 export function RootLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
@@ -29,14 +46,20 @@ export function RootLayout() {
   useFavicon(useConsoleBranding().data?.favicon?.url ?? null);
 
   if (BARE_ROUTES.has(pathname)) {
-    return <Outlet />;
+    return (
+      <React.Suspense fallback={<RouteSuspenseFallback />}>
+        <Outlet />
+      </React.Suspense>
+    );
   }
 
   // Slot `notifications` bỏ trống — console không có chuông NOTI; SPEC-08/FRONTEND-12 chỉ định NOTI
   // cho apps/app (owner chốt 2026-07-10).
   return (
     <AppShell navItems={navItems} brand={brand}>
-      <Outlet />
+      <React.Suspense fallback={<RouteSuspenseFallback />}>
+        <Outlet />
+      </React.Suspense>
     </AppShell>
   );
 }
