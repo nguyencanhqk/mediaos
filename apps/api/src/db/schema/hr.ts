@@ -333,7 +333,13 @@ export const leaveTypes = pgTable(
     name: text("name").notNull(),
     code: text("code").notNull(),
     paid: boolean("paid").notNull().default(true),
-    /** Hạn mức năm (ngày). NULL = không giới hạn (vd nghỉ không lương). */
+    /**
+     * ⛔ DI SẢN — KHÔNG DÙNG. Không có trong `docs/DB/DB-05 §7.1` (thiết kế chuẩn của `leave_types`).
+     *
+     * Hạn mức năm sống ở `leave_policies.yearly_quota_days` — scope được và là thứ engine cộng dồn thực sự
+     * đọc. Đường ghi xuống cột này đã ĐÓNG ở S10-LEAVE-TYPEQUOTA-1 (KI-081): không service nào ghi, không
+     * ai đọc. Cột giữ lại để dữ liệu cũ không mất; gỡ cột là việc migration của WO riêng.
+     */
     annualQuota: numeric("annual_quota", { precision: 5, scale: 1 }),
     status: text("status").notNull().default("active"),
     // ─── S3-LEAVE-DB-1 (mig 0453): DB-05 §7.1 cột MỚI NULLABLE additive. Cột cũ ở trên GIỮ NGUYÊN ───
