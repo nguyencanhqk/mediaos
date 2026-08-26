@@ -344,3 +344,111 @@ chạy và số khớp THẬT (26/08/2026, từ gốc repo):
 FE (`GoalFormPage.tsx:480`) thuộc `goals/` — nằm trong **189 tham số CÒN NỢ**, không bị WO này chạm;
 ghi ra đây để đợt 2 (goals 21 tham số) biết trước là có một hộ tiêu thụ ĐANG đọc status 500 và phải
 được xử lý cùng lúc với bản vá, chứ không phát hiện sau.
+
+### L4.10 Kết quả verify TRÊN NHÁNH PR (nghiệm thu #15) — 26/08/2026
+
+Bốn vòng trước chạy trên `master` LOCAL. Vòng này chạy lại **trên đúng nhánh sẽ được merge**
+(`fix/s10-fnd-paramuuid-2`, base `origin/master` = `9452197e`, đã `git fetch` + `git rebase
+origin/master` → "up to date", tức KHÔNG có PR nào chen vào giữa).
+
+#### (a) Census ĐO LẠI ngay trước commit cuối — ca (3) là đẳng thức trên census SỐNG
+
+```
+ID_LIKE=298 PIPED=108 UNPIPED=190
+tasks/=75 workflow/=36 employees/=21 goals/=21 org/=18 foundation/=8 notifications/=6 positions/=3 auth/=1 recycle-bin/=1
+```
+
+Tổng còn nợ: `75+36+21+21+18+8+6+3+1+1 = 190` (trong đó `auth/=1` là tham số CỐ Ý bỏ qua ⇒ **189**
+chưa ai đo). Số KHỚP `UNPIPED_CEILING = 190` ⇒ **trần không phải hạ thêm, cũng không được nâng**.
+
+#### (b) `bash harness/check.sh --lane-db=paramuuid2` — XANH ✅, KHÔNG rơi vào "XANH KHÔNG ĐỦ BẰNG CHỨNG"
+
+```
+[check.sh] LANE_DB=mediaos_paramuuid2 sẵn sàng — step test chạy NHƯ CI (deny-path/IDOR/cross-tenant KHÔNG bị skip).
+═══════════ KẾT QUẢ CHUNK-TEST ═══════════
+  ✅ @mediaos/api: 581/581 file chạy · 3 lần chạy lại (crash hạ tầng)
+      ℹ️  6 file tên-spec không thu thập theo BASELINE đã ký (module park / exclude cố ý)
+  ✅ @mediaos/app: 232/232 file chạy
+  ✅ @mediaos/auth: 4/4 file chạy
+  ✅ @mediaos/console: 22/22 file chạy
+  ✅ @mediaos/contracts: 33/33 file chạy
+  ✅ @mediaos/ui: 16/16 file chạy
+  ✅ @mediaos/web-core: 43/43 file chạy
+═════════════ XANH ✅ (mọi chunk) ════════════
+
+═══════════ KẾT QUẢ CHECK ═══════════
+  ✅ secret-literals
+  ✅ lint
+  ✅ typecheck
+  ✅ migration-no-drop
+  ✅ tooling-tests (node --test)
+  ✅ test (LANE_DB=mediaos_paramuuid2) [chunked]
+═════════════ XANH ✅ ════════════════
+```
+
+Bằng chứng là **dòng có SỐ**, không phải `exit 0` ([[vitest-globalsetup-teardown-exits-zero]]). Bốn
+spec của kênh PARAM trong lần chạy đó (trích log, ANSI đã lọc):
+
+```
+ ✓ test/integration/leave-param-uuid.int-spec.ts (50 tests) 2895ms
+ ✓ test/integration/attendance-param-uuid.int-spec.ts (49 tests) 2266ms
+ ✓ test/integration/approval-param-uuid.int-spec.ts (7 tests) 875ms
+ ✓ test/integration/files-param-uuid.int-spec.ts (11 tests) 752ms
+```
+
+Lần này ca DENY `PATCH /leave/types/:id` **KHÔNG tái hiện 500 cold-start** (50/50 xanh) — lần thứ **năm**
+liên tiếp xanh sau đúng một lần đỏ ở §L4.8; kết luận ở đó giữ nguyên: flake của tầng TRƯỚC pipe.
+
+#### (c) ⚠️ PHÁT HIỆN KÈM: `harness/chunk-test.mjs` KHÔNG thu thập `*.unit-spec.ts`
+
+`SPEC_FILE_RE = /\.(spec|e2e-spec|int-spec)\.(ts|tsx)$/` (chunk-test.mjs:79) **không khớp** đuôi
+`.unit-spec.ts` ⇒ 7 file của `apps/api` vô hình với `check.sh`: 4 ratchet
+(`param-uuid` · `body-validation` · `identity-projection` · `login-log-429`) + 3 helper spec.
+Grep log: `unit-spec.ts` xuất hiện **0 lần** trong toàn bộ 581 file "đã chạy".
+
+Nghĩa là **chính cái thước của WO này không nằm trong con số 581** — phải đo riêng, và đã đo:
+
+```
+ ✓ test/foundation/param-uuid-ratchet.unit-spec.ts (5 tests) 295ms
+ ✓ test/foundation/body-validation-ratchet.unit-spec.ts (3 tests) 3458ms
+ Test Files  2 passed (2)
+      Tests  8 passed (8)
+```
+
+Không phải lỗ của CI: `.github/workflows/ci.yml:160` chạy `pnpm test` → vitest với `include` có
+`"test/**/*.unit-spec.ts"` (vitest.config.ts:49) ⇒ **CI CÓ chạy ratchet**. Đây là lỗ của công cụ
+kiểm-tại-chỗ, đúng lớp bẫy [[vitest-unit-specs-must-be-colocated]] ở một tầng khác. Sửa nằm NGOÀI
+`paths` của WO này (chạm `harness/chunk-test.mjs` + BASELINE của nó) ⇒ ghi ra đây làm việc còn nợ,
+KHÔNG vá lén trong PR này.
+
+#### (d) Hình dạng diff của PR (nghiệm thu #12 · #17)
+
+`git diff --name-only origin/master...HEAD` = **15 file**, và **KHÔNG chứa
+`apps/api/src/auth/auth.controller.ts`** (`grep -c` = 0). Toàn bộ diff `apps/api/src` chỉ gồm hai
+loại dòng — kiểm bằng `git diff … | grep -E '^[+-][^+-]' | sort | uniq -c`:
+
+| dòng | số lần |
+| --- | --- |
+| `@Param("id", ParseUUIDPipe) id: string,` (thêm) | 23 + 3 dạng một-dòng |
+| `ParseUUIDPipe,` trong import `@nestjs/common` (thêm) | 6 |
+
+Không migration · không chạm permission/RLS/secret/audit · không `@ts-ignore`/`eslint-disable` mới
+⇒ gate PR giữ **🟡 LIGHT** (`typescript-reviewer` + `quality-gate`).
+
+#### (e) CI THẬT trên PR — mọi cổng XANH (PR #425)
+
+`gh pr checks 425` sau khi mở PR (base `master`, head `fix/s10-fnd-paramuuid-2`):
+
+```
+Build · Typecheck · Migrate · Test        pass  12m22s
+Lint · Typecheck · Migrate · RLS Test     pass  13m56s
+Secret scan (gitleaks)                    pass    35s
+Dependency scan (pnpm audit)              pass    33s
+Tooling tests (node --test)               pass     8s
+Detect API changes / changed apps / fbpost pass
+```
+
+Đây là chỗ **bù đúng lỗ hổng của (c)**: job `Lint · Typecheck · Migrate · RLS Test` chạy `pnpm test`
+(ci.yml:160) ⇒ vitest thu thập `test/**/*.unit-spec.ts` ⇒ **`param-uuid-ratchet.unit-spec.ts` ĐÃ chạy
+trong CI thật và XANH**, không chỉ chạy tay ở máy. Ba commit RED giữa dải KHÔNG bị CI đụng tới vì CI
+chỉ chạy trên head của `pull_request` + `push` master (ci.yml:3-6), đúng như dự đoán.
