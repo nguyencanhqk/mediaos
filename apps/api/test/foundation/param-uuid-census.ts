@@ -45,10 +45,40 @@ export interface ParamSite {
   /** Đường dẫn tương đối từ `apps/api/src`, dấu `/`. */
   readonly file: string;
   readonly line: number;
+  /**
+   * Tên method (handler) chứa `@Param` — `""` nếu tham số không nằm trong một method có tên.
+   *
+   * ⚠️ TỒN TẠI ĐỂ LÀM KHOÁ, không phải để hiển thị. Khoá `file#handler:name` là thứ DUY NHẤT ổn
+   * định qua chính commit vá: thêm một dòng `@Param("id", ParseUUIDPipe)` làm MỌI số dòng phía sau
+   * trong file trôi, nên sổ phán quyết khoá theo `line` sẽ trỏ sai ngay ở commit đầu tiên
+   * ([[index-ratchet-must-pin-definition-not-name]]). `line` giữ lại CHỈ để in thông báo lỗi.
+   */
+  readonly handler: string;
   /** Tên tham số trong `@Param("...")`. */
   readonly name: string;
   /** `@Param("x", SomePipe)` — có đối số thứ hai trở đi. */
   readonly hasPipe: boolean;
+}
+
+/** Khoá ỔN ĐỊNH của một site: `file#handler:param`. Dùng cho `param-uuid-verdicts.ts`. */
+export function siteKey(s: Pick<ParamSite, "file" | "handler" | "name">): string {
+  return `${s.file}#${s.handler}:${s.name}`;
+}
+
+/**
+ * Tên method bao ngoài tham số. Đi lên `parent` thay vì bắt cứng một hình dạng vì `@Param` chỉ hợp
+ * lệ trên tham số của method, nhưng cây AST ở giữa có thể còn node khác khi code đổi.
+ */
+function enclosingHandlerName(n: ts.Node, sf: ts.SourceFile): string {
+  for (let cur: ts.Node | undefined = n; cur; cur = cur.parent) {
+    if (ts.isMethodDeclaration(cur) || ts.isMethodSignature(cur)) {
+      return ts.isIdentifier(cur.name) || ts.isStringLiteralLike(cur.name)
+        ? cur.name.text
+        : cur.name.getText(sf);
+    }
+    if (ts.isConstructorDeclaration(cur)) return "constructor";
+  }
+  return "";
 }
 
 function walk(dir: string, out: string[]): string[] {
@@ -92,6 +122,7 @@ export function idLikeParamSites(): readonly ParamSite[] {
           out.push({
             file: rel,
             line: sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1,
+            handler: enclosingHandlerName(n, sf),
             name: first.text,
             hasPipe: call.arguments.length > 1,
           });

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { idLikeParamSites, unpipedIdParamSites } from "./param-uuid-census";
+import { idLikeParamSites, siteKey, unpipedIdParamSites } from "./param-uuid-census";
+import {
+  PARAM_UUID_VERDICTS,
+  PARAM_UUID_WAVE1_FILES,
+  PARAM_UUID_WAVE1_SIZE,
+} from "./param-uuid-verdicts";
 
 /**
  * S10-FND-PARAMUUID-1 (KI-077) — RATCHET kênh PARAM: **không mọc thêm** tham số `:id` bỏ validate.
@@ -12,28 +17,72 @@ import { idLikeParamSites, unpipedIdParamSites } from "./param-uuid-census";
  */
 
 /**
- * TRẦN đóng băng theo SỐ ĐO 25/08/2026 — **SAU** bản vá của WO này: `ID_LIKE=298` · `PIPED=77` ·
- * `UNPIPED=221`. Trước vá là **226** (WO này vá 5 tham số của `foundation/files`).
+ * TRẦN đóng băng theo SỐ ĐO **26/08/2026** — SAU bản vá của S10-FND-PARAMUUID-2:
+ * `ID_LIKE=298` · `PIPED=108` · `UNPIPED=190`.
  *
- * ⚠️ ĐÂY LÀ TRẦN, KHÔNG PHẢI MỤC TIÊU. Nó KHÔNG nói "221 chỗ này an toàn" — chỉ **5** chỗ từng được
- * đo bằng HTTP thật (5 route `foundation/files`, cả 5 trả 500 trước vá). 216 chỗ còn lại chưa ai
- * chạm; đoán chúng cũng 500 là đúng thứ `done_when` của WO cấm ("đừng ép số cho khớp mô tả").
+ * LỊCH SỬ (mỗi mốc là một WO đã ĐO bằng HTTP, không phải đếm tĩnh):
+ *   226 → 221  S10-FND-PARAMUUID-1 (KI-077) — 5 tham số `foundation/files`, cả 5 đo được 500.
+ *   221 → 190  S10-FND-PARAMUUID-2 (KI-078) — **31** tham số của nhóm đợt-1 (leave 15 · attendance
+ *              14 · approval 2), cả 31 đo được 500 trước vá. Nhóm đợt-1 gồm **32** tham số nhưng
+ *              tham số thứ 32 (`auth.controller.ts#revokeSession:id`) đo được **404** ⇒ CỐ Ý không
+ *              vá ⇒ 221 − 31 = 190, KHÔNG phải 189.
+ *
+ * ⚠️ ĐÂY LÀ TRẦN, KHÔNG PHẢI MỤC TIÊU. Nó KHÔNG nói "190 chỗ này an toàn" — mới **36** chỗ từng được
+ * đo bằng HTTP thật. 189 chỗ còn lại (tasks 71 · workflow 36 · goals 21 · employees 21 · org 18 ·
+ * foundation-ngoài-files 8 · notifications 6 · positions 3 · recycle-bin 1) chưa ai chạm; đoán chúng
+ * cũng 500 là đúng thứ `done_when` của WO cấm ("đừng ép số cho khớp mô tả") — và giả thuyết đó ĐÃ
+ * SAI một lần ngay trong nhóm đợt-1 (auth-session = 404).
  *
  * ⚠️ HẠ TRẦN LÀ HÀNH VI ĐÚNG. Vá một chỗ ⇒ số giảm ⇒ hạ hằng này xuống theo. Ca (3) ép điều đó:
  * để trần cao hơn thực tế là để lại chỗ trống cho nợ mới lẻn vào mà không ai thấy.
  *
+ * ⚠️ Ca (3) là ĐẲNG THỨC trên census SỐNG ⇒ một PR khác thêm/bớt `@Param` id-like sẽ làm nó đỏ ở PR
+ * này. Đó là TÍNH NĂNG (hai PR cùng chạm nợ phải gặp nhau), cách xử lý là rebase + chạy lại census
+ * ngay trước commit cuối, KHÔNG phải nới ca (3) thành `toBeLessThanOrEqual`.
+ *
  * ⛔ NÂNG TRẦN là tuyên bố thêm nợ, phải giải trình trong PR.
  */
-const UNPIPED_CEILING = 221;
+const UNPIPED_CEILING = 190;
 
 /**
- * Module ĐÃ VÁ ⇒ đòi bằng 0, không đòi "không tăng". Đây là chỗ KI-077 sinh ra và là chỗ duy nhất có
- * số đo HTTP; để nó chỉ chịu trần chung nghĩa là tham số thứ sáu của chính module này lẻn vào được.
+ * Module ĐÃ VÁ ⇒ đòi bằng 0, không đòi "không tăng". Để một module đã sạch chỉ chịu trần chung nghĩa
+ * là tham số kế tiếp của chính nó lẻn vào được mà ca (2) vẫn xanh.
+ *
+ * ⟲ S10-FND-PARAMUUID-2 (KI-078) — danh sách nới từ 1 lên 10 prefix. **Chỉ prefix mà census ĐO ĐƯỢC
+ * bằng 0 mới vào**, không prefix nào vào theo kỳ vọng. Đo 26/08/2026 sau bản vá:
+ *
+ *   ĐO BẰNG HTTP Ở WO NÀY (3 int-spec RED→GREEN):  leave/ 15→0 · attendance/ 14→0 · approval/ 2→0
+ *   ĐÃ SẠCH SẴN, ghim để khỏi tụt lại:             api-keys/ · chat/ · dashboard/ · permission/ ·
+ *                                                  user-invites/ · users/ (+ foundation/files/)
+ *
+ * Phân biệt hai nhóm là CÓ CHỦ Ý: nhóm dưới sạch nhưng CHƯA ai đo bằng HTTP, nên việc ghim chúng chỉ
+ * là "không cho tụt lại", KHÔNG phải tuyên bố "đã kiểm chứng từng route".
+ *
+ * ⛔ `auth/` KHÔNG BAO GIỜ được vào danh sách này. Nó còn ĐÚNG MỘT tham số unpiped
+ * (`auth.controller.ts#revokeSession:id`) và đó là quyết định CÓ Ý THỨC, không phải nợ: route đó đo
+ * được **404** chứ không 500, và gắn pipe sẽ tách 400 khỏi 404 ⇒ đẻ oracle liệt kê session id. Lý do
+ * đầy đủ nằm ở dòng verdict `skipped` trong `param-uuid-verdicts.ts`.
+ *
+ * ⛔ Module CÒN tham số bỏ qua có ý thức cũng KHÔNG được vào — prefix ở đây nghĩa là "bằng 0", không
+ * phải "đã xem qua".
  */
-const CLEAN_PREFIXES = ["foundation/files/"];
+const CLEAN_PREFIXES = [
+  // Đo bằng HTTP ở KI-077 / KI-078:
+  "foundation/files/",
+  "leave/",
+  "attendance/",
+  "approval/",
+  // Sạch sẵn, ghim để không tụt lại:
+  "api-keys/",
+  "chat/",
+  "dashboard/",
+  "permission/",
+  "user-invites/",
+  "users/",
+];
 
 describe("S10-FND-PARAMUUID-1 — ratchet: tham số :id phải validate ở BIÊN", () => {
-  it("(1) module ĐÃ VÁ (foundation/files) KHÔNG còn tham số id-like nào thiếu pipe", () => {
+  it("(1) module ĐÃ SẠCH KHÔNG còn tham số id-like nào thiếu pipe", () => {
     const offenders = unpipedIdParamSites().filter((s) =>
       CLEAN_PREFIXES.some((p) => s.file.startsWith(p)),
     );
@@ -100,5 +149,114 @@ describe("S10-FND-PARAMUUID-1 — ratchet: tham số :id phải validate ở BI�
       sites.some((s) => s.name.endsWith("Id") && s.name !== "id"),
       "census chỉ thấy tham số tên đúng `id` — nó đang trượt các alias `*Id`",
     ).toBe(true);
+  });
+
+  /**
+   * (5) SỔ PHÁN QUYẾT — S10-FND-PARAMUUID-2 (KI-078).
+   *
+   * Vì sao ca (2)/(3) KHÔNG đủ: chúng đếm TỔNG. Gỡ một pipe ở `leave` rồi thêm một pipe ở `tasks`
+   * giữ nguyên tổng ⇒ cả hai ca xanh trong khi nhóm đã-đo vừa thủng. Ca này khoá theo TỪNG SITE.
+   *
+   * ⚠️ Assert HAI CHIỀU, cố ý:
+   *   · `decision === 'piped'`  ⟹ `hasPipe === true`   (gỡ pipe ⇒ ĐỎ)
+   *   · `decision === 'skipped'` ⟹ `hasPipe === false` (âm thầm gắn pipe vào chỗ đã ký "không vá"
+   *     cũng ĐỎ — auth-session là quyết định, không phải nợ chờ ai đó tiện tay vá)
+   * Chỉ kiểm "có tồn tại dòng verdict" là ca xanh cả sau khi gỡ pipe — đúng lớp "test ghim lỗ MỞ"
+   * ([[tests-can-pin-a-hole-open]]).
+   *
+   * ⚠️ Ánh xạ site ↔ dòng verdict phải là SONG ÁNH: site thiếu dòng ⇒ ĐỎ (quên ký), dòng thừa/mồ côi
+   * ⇒ ĐỎ (đổi tên handler làm khoá trỏ vào hư không mà sổ vẫn trông đầy đủ).
+   */
+  it("(5) sổ phán quyết nhóm đợt-1 KHỚP census theo TỪNG SITE, hai chiều", () => {
+    const wave1 = idLikeParamSites().filter((s) => PARAM_UUID_WAVE1_FILES.includes(s.file));
+
+    // Neo chống-xanh-rỗng: nếu bộ lọc trượt (đổi tên file, census hỏng) thì mọi assert dưới đây
+    // xanh vì KHÔNG CÓ GÌ để so, không phải vì đúng.
+    expect(
+      wave1.length,
+      `Census chỉ thấy ${wave1.length} site trong 7 controller nhóm đợt-1, chờ ${PARAM_UUID_WAVE1_SIZE}.\n` +
+        "Hoặc controller vừa đổi tên/đường dẫn (cập nhật PARAM_UUID_WAVE1_FILES), hoặc có `@Param`\n" +
+        "id-like vừa được THÊM/XOÁ ở nhóm đã đo — cả hai đều cần một dòng verdict, không phải sửa số.",
+    ).toBe(PARAM_UUID_WAVE1_SIZE);
+    expect(
+      PARAM_UUID_VERDICTS.length,
+      "sổ phán quyết phải có ĐÚNG một dòng cho mỗi site nhóm đợt-1",
+    ).toBe(PARAM_UUID_WAVE1_SIZE);
+
+    // Khoá trùng ⇒ hai dòng cùng trỏ một site, và một site khác mất dòng mà tổng vẫn khớp.
+    const byKey = new Map<string, (typeof PARAM_UUID_VERDICTS)[number]>();
+    for (const v of PARAM_UUID_VERDICTS) {
+      expect(byKey.has(v.key), `dòng verdict TRÙNG KHOÁ: ${v.key}`).toBe(false);
+      byKey.set(v.key, v);
+    }
+
+    const missing: string[] = [];
+    const mismatched: string[] = [];
+    for (const s of wave1) {
+      const key = siteKey(s);
+      const v = byKey.get(key);
+      if (!v) {
+        missing.push(`  ${key}  (${s.file}:${s.line})`);
+        continue;
+      }
+      byKey.delete(key);
+      const wantPipe = v.decision === "piped";
+      if (s.hasPipe !== wantPipe) {
+        mismatched.push(
+          `  ${key}  (${s.file}:${s.line})  sổ ghi '${v.decision}' nhưng code ` +
+            `${s.hasPipe ? "CÓ" : "KHÔNG có"} pipe`,
+        );
+      }
+    }
+
+    expect(
+      missing,
+      missing.length === 0
+        ? ""
+        : [
+            "",
+            "Site nhóm đợt-1 KHÔNG có dòng trong `param-uuid-verdicts.ts`:",
+            ...missing,
+            "",
+            "Thêm `@Param` id-like vào một trong 7 controller đã đo = tuyên bố mở rộng nhóm ⇒ phải",
+            "ĐO bằng HTTP rồi ký một dòng verdict (`piped` hoặc `skipped` + số đo + lý do).",
+            "Khoá là `file#handler:param` — đổi TÊN METHOD cũng làm dòng cũ mồ côi, hãy sửa khoá.",
+          ].join("\n"),
+    ).toEqual([]);
+
+    expect(
+      mismatched,
+      mismatched.length === 0
+        ? ""
+        : [
+            "",
+            "Sổ phán quyết LỆCH với code — sửa MỘT trong hai, và sửa có chủ đích:",
+            ...mismatched,
+            "",
+            "· sổ ghi 'piped' mà code hết pipe ⇒ ai đó vừa GỠ `ParseUUIDPipe`: route quay lại trả",
+            "  500 SYSTEM-ERR-001 cho `:id` rác. Khôi phục pipe.",
+            "· sổ ghi 'skipped' mà code CÓ pipe ⇒ ai đó vừa vá một chỗ đã ký 'không vá'. Với",
+            "  `auth.controller.ts#revokeSession:id` việc này ĐỔI 404 thành 400 ⇒ tách được 'phiên",
+            "  không tồn tại' khỏi 'id sai dạng' ⇒ đẻ oracle liệt kê session id. Đọc dòng verdict",
+            "  trước khi 'sửa lint'.",
+          ].join("\n"),
+    ).toEqual([]);
+
+    expect(
+      [...byKey.keys()],
+      "dòng verdict MỒ CÔI — census không còn site nào mang khoá này (đổi tên handler? xoá route?)",
+    ).toEqual([]);
+
+    // Neo DƯƠNG cuối: sổ phải thấy CẢ HAI quyết định. Nếu một ngày toàn bộ sổ hoá 'piped' thì
+    // nhánh 'skipped' của assert trên KHÔNG BAO GIỜ chạy và ca này mất một nửa giá trị
+    // ([[deny-cases-vacuous-without-allow-case]]).
+    expect(
+      PARAM_UUID_VERDICTS.filter((v) => v.decision === "piped").length,
+      "sổ không có dòng 'piped' nào — nhánh đó của assert đang chạy rỗng",
+    ).toBe(31);
+    expect(
+      PARAM_UUID_VERDICTS.filter((v) => v.decision === "skipped").length,
+      "sổ không có dòng 'skipped' nào — nhánh đó của assert đang chạy rỗng",
+    ).toBe(1);
   });
 });
