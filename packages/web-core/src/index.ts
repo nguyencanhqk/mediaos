@@ -124,7 +124,9 @@ export {
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
 export { shouldRetryQuery } from "./lib/query-retry";
-export { bootstrapSession } from "./lib/session";
+// `whenThemeSynced` = điểm đồng bộ của theme-sync NỀN (S10-PERF-LOADPATH-1). KHÔNG await khi mount app —
+// đưa nó lại vào đường render là dựng lại đúng round-trip thứ ba đã gỡ.
+export { bootstrapSession, whenThemeSynced } from "./lib/session";
 export { getHealth, type Health, getHealthDb, type HealthDb } from "./lib/api";
 export { authApi } from "./lib/auth-api";
 // S2-FE-AUTH-4 (lane FE batch C) — role & permission admin (create/update role, assign/revoke permission).

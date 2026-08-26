@@ -144,6 +144,8 @@ describe("bootstrapSession — theme-sync (S5-ME-FE-3)", () => {
     const { session } = await loadSession(me, { getPreferences, applyTheme });
 
     await expect(session.bootstrapSession()).resolves.toBe(true);
+    // theme-sync chạy NỀN (S10-PERF-LOADPATH-1) → chờ điểm đồng bộ trước khi soi applyTheme.
+    await session.whenThemeSynced();
     expect(getPreferences).toHaveBeenCalledTimes(1);
     expect(applyTheme).toHaveBeenCalledWith("light");
   });
@@ -157,6 +159,7 @@ describe("bootstrapSession — theme-sync (S5-ME-FE-3)", () => {
     const { session } = await loadSession(me, { getPreferences, applyTheme });
 
     await expect(session.bootstrapSession()).resolves.toBe(true);
+    await session.whenThemeSynced();
     expect(applyTheme).not.toHaveBeenCalled();
   });
 
@@ -169,8 +172,38 @@ describe("bootstrapSession — theme-sync (S5-ME-FE-3)", () => {
     const { session, store } = await loadSession(me, { getPreferences, applyTheme });
 
     await expect(session.bootstrapSession()).resolves.toBe(true);
+    await session.whenThemeSynced();
     expect(applyTheme).not.toHaveBeenCalled();
     // /me vẫn thành công bình thường — theme-sync lỗi KHÔNG kéo theo đăng xuất oan.
     expect(store.useAuthStore.getState().isAuthenticated).toBe(true);
+  });
+
+  /**
+   * NEO CHỐNG HỒI QUY (S10-PERF-LOADPATH-1). Ba ca trên chỉ chứng minh fail-soft theo LỖI — chúng vẫn
+   * XANH nguyên vẹn nếu ai đó `await syncThemeFromServer()` trở lại, vì mock resolve ngay. Ca này bắt
+   * đúng chiều ĐỘ TRỄ: preferences TREO vô hạn. Còn `await` ⇒ `bootstrapSession()` không bao giờ resolve
+   * ⇒ test chết vì timeout (đỏ thật, không xanh-rỗng). Vế sau thả cho preferences về để chứng minh
+   * đường nền vẫn áp theme — thiếu vế này thì ca trên thành "không chờ vì chẳng làm gì".
+   */
+  it("getPreferences TREO → bootstrapSession KHÔNG chờ, resolve true ngay; theme áp sau khi về", async () => {
+    stubBrowser();
+    fetchMock.mockResolvedValue(refreshOk());
+    const me = vi.fn().mockResolvedValue(ME);
+    let releasePrefs: (prefs: unknown) => void = () => {};
+    const getPreferences = vi.fn().mockReturnValue(
+      new Promise((resolve) => {
+        releasePrefs = resolve;
+      }),
+    );
+    const applyTheme = vi.fn();
+    const { session } = await loadSession(me, { getPreferences, applyTheme });
+
+    await expect(session.bootstrapSession()).resolves.toBe(true);
+    expect(getPreferences).toHaveBeenCalledTimes(1);
+    expect(applyTheme).not.toHaveBeenCalled();
+
+    releasePrefs({ ...EMPTY_PREFS, theme: "dark" });
+    await session.whenThemeSynced();
+    expect(applyTheme).toHaveBeenCalledWith("dark");
   });
 });
