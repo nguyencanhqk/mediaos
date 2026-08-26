@@ -1,10 +1,38 @@
 import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
+
+/**
+ * S10-PERF-LOADPATH-1 — ép `data-cfasync="false"` lên MỌI thẻ <script> của HTML xuất ra.
+ *
+ * Rocket Loader (bật ở zone Cloudflare) viết lại thuộc tính `type`: đo trên PROD 2026-08-26 thấy
+ * `type="module"` → `type="<hash>-module"` trên cả ba host ⇒ preload scanner của trình duyệt không
+ * còn nhận ra entry là module để nạp sớm, phải chờ rocket-loader.min.js tải+chạy rồi mới tiêm lại.
+ * `data-cfasync="false"` là cổng thoát CHÍNH THỨC của Cloudflare — Rocket Loader bỏ qua thẻ mang nó.
+ *
+ * Vì sao là PLUGIN chứ không đặt tay trong index.html: Vite SINH LẠI thẻ entry lúc build
+ * (`<script type="module" crossorigin src="/assets/…">`) nên attribute viết tay BỊ RƠI — đã kiểm
+ * bằng build thật, dist/index.html chỉ còn nó ở script nội tuyến. Attribute trong index.html vẫn giữ
+ * để đường `vite dev` (không qua plugin build) cũng được che.
+ *
+ * `order: "post"` là BẮT BUỘC: chạy trước thì thẻ entry chưa được tiêm, không có gì để sửa.
+ */
+function cfNoRocketLoader(): Plugin {
+  return {
+    name: "cf-no-rocket-loader",
+    transformIndexHtml: {
+      order: "post",
+      // Lookahead bị chặn trong PHẠM VI THẺ bởi `[^>]*` (không vượt qua `>`), nên thẻ đã có
+      // attribute thì bỏ qua — hàm idempotent, chạy lại không nhân đôi.
+      handler: (html: string) =>
+        html.replace(/<script(?![^>]*\bdata-cfasync=)/g, '<script data-cfasync="false"'),
+    },
+  };
+}
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), cfNoRocketLoader()],
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },
   },

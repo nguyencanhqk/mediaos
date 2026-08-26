@@ -5,9 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FUNTIME MEDIA · Hệ thống</title>
+    <!-- data-cfasync="false" — Rocket Loader (bật ở zone Cloudflare) VIẾT LẠI thuộc tính `type` của
+         MỌI script. Đo trên PROD 2026-08-26, cả ba host: `type="module"` → `type="<hash>-module"`,
+         `type="text/javascript"` → `type="<hash>-text/javascript"`. Hai hậu quả: (1) preload scanner
+         không còn thấy entry module để nạp sớm — nó phải chờ rocket-loader.min.js tải+chạy rồi mới
+         tiêm lại; (2) script chống-FOUC ngay dưới bị hoãn theo, nên `html.dark` đặt MUỘN.
+         Attribute này là cổng thoát CHÍNH THỨC của Cloudflare: Rocket Loader bỏ qua script mang nó.
+         Vá ở CODE thay vì chờ tắt Rocket Loader trên dashboard, để deploy không phụ thuộc thao tác tay. -->
     <!-- Chống FOUC: đặt class theme TRƯỚC khi CSS vẽ. Mặc định dark (Control Room);
          localStorage "mediaos-theme"="light" → chế độ sáng (ThemeToggle ghi key này). -->
-    <script>
+    <script data-cfasync="false">
       try {
         if (localStorage.getItem("mediaos-theme") !== "light")
           document.documentElement.classList.add("dark");
@@ -83,6 +90,6 @@
       <div>FUNTIME MEDIA</div>
       <div class="boot-bar"></div>
     </div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" data-cfasync="false" src="/src/main.tsx"></script>
   </body>
 </html>
