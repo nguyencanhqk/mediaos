@@ -314,45 +314,73 @@ describe.skipIf(!hasLaneDb)(
     });
 
     /**
-     * 🔴 GHIM BUG (KI-080) — CA NÀY GHIM HÀNH VI SAI CÓ CHỦ Ý.
+     * ĐÃ LẬT (S10-ATT-SHIFTASSIGNSCOPE-1, 26/08) — trước đó ca này GHIM hành vi SAI của KI-080.
      *
-     * `createShiftAssignmentSchema` để `assignmentScope` MẶC ĐỊNH `"Company"`, và `.refine()` chỉ kiểm
-     * chiều THUẬN ("scope Department/Employee phải có đúng id tương ứng"). Nó KHÔNG kiểm chiều NGƯỢC:
-     * scope `Company` mà vẫn kèm `departmentId`/`employeeId` thì Zod cho qua, payload đi thẳng xuống DB
-     * và nổ ở CHECK `chk_shift_assignments_target` ⇒ **500 SYSTEM-ERR-001**, đúng lớp lỗi KI-068.
+     * `createShiftAssignmentSchema` để `assignmentScope` MẶC ĐẮNH `"Company"`, và `.refine()` cũ chỉ kiểm
+     * chiều THUẬN ("scope Department/Employee phải có id tương ứng"). Chiều NGƯỢC ("Company ⇒ cả hai id
+     * phải VẮNG") không ai kiểm ⇒ payload xuống thẳng DB, vỡ CHECK `chk_shift_assignments_target` ⇒
+     * **500 SYSTEM-ERR-001**. Đo được 25/08; vá 26/08 bằng `.refine()` mirror CHECK 1:1 ở CONTRACT.
      *
-     * Payload gây lỗi là payload TỰ NHIÊN NHẤT mà client viết ra ("gán ca này cho nhân viên này" —
-     * quên `assignmentScope`), không phải payload rác cố tình.
+     * Payload này là payload TỰ NHIÊN NHẤT mà client viết ra ("gán ca này cho nhân viên này" — quên
+     * `assignmentScope`), không phải payload rác cố tình ⇒ phải chết ở BIÊN với 400, không phải ở DB với 500.
      *
-     * MỨC ĐỘ: hỏng ĐÚNG CHIỀU AN TOÀN (bản ghi KHÔNG được tạo) ⇒ **KHÔNG phải lỗ bảo mật**. Thiệt hại
-     * là hợp đồng API sai (đáng lẽ 400 ở biên) + bơm 500 GIẢ vào giám sát.
-     *
-     * ⚠️ Người vá KI-080 sẽ thấy ca này ĐỎ — đó là dấu hiệu vá ĐÚNG. Khi đó hãy LẬT ca sang `400` và
-     * kiểm mã lỗi validation; TUYỆT ĐỐI KHÔNG nới assert thành `>=400` để nó xanh với cả hai
-     * ([[tests-can-pin-a-hole-open]]).
+     * ⚠️ `toBe(400)` chứ KHÔNG `toBeGreaterThanOrEqual(400)` — assert nới sẽ xanh với CẢ hai hành vi
+     * (500 cũ lẫn 400 mới) tức là ghim lỗ hổng MỞ ([[tests-can-pin-a-hole-open]]).
      */
-    it("🔴 GHIM BUG (KI-080): shift-assignment thiếu `assignmentScope` + có `employeeId` ⇒ 500 (đáng lẽ 400)", async () => {
+    it("shift-assignment thiếu `assignmentScope` + có `employeeId` ⇒ 400 ở biên (KI-080 ĐÃ VÁ)", async () => {
       const shift = await authPost(tAdminA, "/attendance/shifts").send({
         shiftCode: `CA-${uniq()}`,
-        name: "Ca cho ca ghim",
+        name: "Ca cho ca lật KI-080",
         requiredWorkingMinutes: 480,
       });
       expect(shift.status, JSON.stringify(shift.body)).toBe(201);
 
       const res = await authPost(tAdminA, "/attendance/shift-assignments").send({
         shiftId: shift.body.data.id,
-        employeeId: empIdA, // assignmentScope BỎ TRỐNG ⇒ default "Company" ⇒ vỡ CHECK
+        employeeId: empIdA, // assignmentScope BỬ TRỐNG ⇒ default "Company" ⇒ mâu thuẫn scope↔neo
         effectiveFrom: dayShift(-1),
       });
-      expect(res.status, `hành vi hiện tại (SAI) là 500: ${JSON.stringify(res.body)}`).toBe(500);
-      expect(res.body.error?.code).toBe("SYSTEM-ERR-001");
+      expect(res.status, `phải chặn ở BIÊN: ${JSON.stringify(res.body)}`).toBe(400);
+      expect(res.body.error?.code).toBe("VALIDATION-ERR-001");
 
-      // KHÔNG có hàng nào được ghi ⇒ hỏng đúng chiều an toàn (chứng minh, không suy luận).
+      // Vẫn KHÔNG có hàng nào — 400 thay 500 là đổi HỢP ĐỒNG, không được phép đổi HỆ QUẢ ghi.
       const rows = await direct.query(
         `SELECT id FROM shift_assignments WHERE company_id = $1 AND shift_id = $2`,
         [A.companyId, shift.body.data.id],
       );
       expect(rows.rowCount, "request hỏng KHÔNG được để lại hàng nào").toBe(0);
+    });
+
+    /**
+     * Biến thể TƯỜNG MINH của cùng chiều NGƯỢC: không dựa vào `.default()` nữa mà gửi hẳn
+     * `assignmentScope:'Company'` kèm `employeeId`. Tách ra riêng vì ca trên còn có thể xanh nhờ ai đó gỡ
+     * `.default("Company")` (đổi default = đổi hợp đồng của mọi client đang gửi ĐÚNG) thay vì vá refine.
+     *
+     * `empIdA` là employee CÓ THẬT ⇒ 400 không thể bị nhầm là lỗi FK/không-tồn-tại; nó là 400 vì
+     * scope MÂU THUẪN với cột neo.
+     */
+    it("shift-assignment `assignmentScope:'Company'` TƯỜNG MINH + `employeeId` thật ⇒ 400", async () => {
+      const shift = await authPost(tAdminA, "/attendance/shifts").send({
+        shiftCode: `CA-${uniq()}`,
+        name: "Ca cho ca Company+employeeId",
+        requiredWorkingMinutes: 480,
+      });
+      expect(shift.status, JSON.stringify(shift.body)).toBe(201);
+
+      const res = await authPost(tAdminA, "/attendance/shift-assignments").send({
+        shiftId: shift.body.data.id,
+        assignmentScope: "Company",
+        employeeId: empIdA,
+        effectiveFrom: dayShift(-1),
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(400);
+      expect(res.body.error?.code).toBe("VALIDATION-ERR-001");
+
+      const rows = await direct.query(
+        `SELECT id FROM shift_assignments WHERE company_id = $1 AND shift_id = $2`,
+        [A.companyId, shift.body.data.id],
+      );
+      expect(rows.rowCount).toBe(0);
     });
 
     // ─── 6. Quy tắc chấm công ───────────────────────────────────────────────────
@@ -388,6 +416,37 @@ describe.skipIf(!hasLaneDb)(
       );
       expect(effective.status, JSON.stringify(effective.body)).toBe(200);
       expect(effective.body.data.employeeId).toBe(empIdA);
+    });
+
+    /**
+     * ANH EM CÙNG LỚP của KI-080, tìm ra khi rà điều kiện nghiệm thu #5 của S10-ATT-SHIFTASSIGNSCOPE-1:
+     * `createRuleSchema` có ĐÚNG CÙNG MỘT `.refine()` một-chiều (chép nguyên văn, chỉ đổi tên trường), cách
+     * bản vá 60 dòng trong CÙNG MỘT FILE, và `attendance_rules` cũng có CHECK hai chiều
+     * (`chk_attendance_rules_target`). Vá một cái mà bỏ cái kia chính là bẫy "bản sao cách bản vá MỘT DÒNG".
+     *
+     * CẶP ALLOW + DENY đi liền nhau có chủ ý: không có vế ALLOW thì 400 có thể đang đến từ một lý do
+     * KHÁC hẳn (thiếu quyền, `ruleCode` trùng…) và ca DENY thành xanh-RỖNG
+     * ([[deny-cases-vacuous-without-allow-case]]).
+     */
+    it("attendance/rules: ALLOW `ruleScope:'Employee'` + employeeId ⇒ 201; DENY thiếu `ruleScope` + employeeId ⇒ 400", async () => {
+      const allowed = await authPost(tAdminA, "/attendance/rules").send({
+        ruleCode: `QT-${uniq()}`,
+        name: "Quy tắc theo nhân viên",
+        ruleScope: "Employee",
+        employeeId: empIdA,
+        effectiveFrom: dayShift(-30),
+      });
+      expect(allowed.status, JSON.stringify(allowed.body)).toBe(201);
+      expect(allowed.body.data.ruleScope).toBe("Employee");
+
+      const denied = await authPost(tAdminA, "/attendance/rules").send({
+        ruleCode: `QT-${uniq()}`,
+        name: "Quy tắc quên ruleScope",
+        employeeId: empIdA, // ruleScope BỬ TRỐNG ⇒ default "Company" ⇒ mâu thuẫn scope↔neo
+        effectiveFrom: dayShift(-30),
+      });
+      expect(denied.status, `phải chặn ở BIÊN: ${JSON.stringify(denied.body)}`).toBe(400);
+      expect(denied.body.error?.code).toBe("VALIDATION-ERR-001");
     });
 
     // ─── 7. LEAVE ───────────────────────────────────────────────────────────────

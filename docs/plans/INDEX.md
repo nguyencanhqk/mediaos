@@ -461,7 +461,7 @@
 | `S10-HR-EMPPAGE-1` | 🟡 | ✅ xong | — *(chưa)* | — | KI-010 — `GET /employees` KHÔNG có phân trang: handler nhận đúng 4 que |
 | `S10-SEC-FKCATALOG-1` | 🔴 | ✅ xong | [📄](S10-SEC-FKCATALOG-1.md) | — | KI-055 — 11 cặp FK lớp G trỏ tới bảng catalog toàn cục (`company_id` N |
 | `S10-QA-ROUTEHTTP-3` | 🟡 | ✅ xong | [📄](S10-QA-ROUTEHTTP-3.md) | — | KI-025 — nốt phần đuôi độ phủ HTTP: sau S10-QA-ROUTEHTTP-1 (370/499 ph |
-| `S10-ATT-SHIFTASSIGNSCOPE-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | KI-080 — `POST /attendance/shift-assignments` trả 500 khi client gửi ` |
+| `S10-ATT-SHIFTASSIGNSCOPE-1` | 🟡 | ✅ xong | [📄](S10-ATT-SHIFTASSIGNSCOPE-1.md) | — | KI-080 — `POST /attendance/shift-assignments` trả 500 khi client gửi ` |
 | `S10-LEAVE-TYPEQUOTA-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | KI-081 — `GET /leave/types` bỏ sót `annualQuota` dù contract khai bắt  |
 | `S10-FND-PARAMUUID-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S10-FND-BODYVALIDATE-1 | KI-077 — NĂM tham số `:id`/`:linkId` READ/DELETE còn lại của `foundati |
 | `S10-GOV-IDUNIQUE-1` | 🟡 | ✅ xong | [📄](S10-GOV-IDUNIQUE-1.md) | — | KI-079 — danh tính TRÙNG lọt qua mọi lưới: mã WO trong `backlog.mjs` v |
