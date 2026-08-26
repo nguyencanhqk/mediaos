@@ -4,6 +4,7 @@ import {
   Get,
   Header,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -163,7 +164,7 @@ export class AttendanceController {
   @RequirePermission(VIEW_DETAIL.action, VIEW_DETAIL.resourceType, {
     isSensitive: VIEW_DETAIL.sensitive,
   })
-  getRecordLogs(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getRecordLogs(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.attendanceRead.getRecordLogs(req.user, id);
   }
 
@@ -171,7 +172,7 @@ export class AttendanceController {
   @RequirePermission(VIEW_DETAIL.action, VIEW_DETAIL.resourceType, {
     isSensitive: VIEW_DETAIL.sensitive,
   })
-  getRecordDetail(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getRecordDetail(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.attendanceRead.getRecordDetail(req.user, id);
   }
 
@@ -193,7 +194,7 @@ export class AttendanceController {
   @RequirePermission("manage", "attendance")
   updateSchedule(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateWorkScheduleDto,
   ) {
     return this.attendance.updateSchedule(req.user, id, dto);

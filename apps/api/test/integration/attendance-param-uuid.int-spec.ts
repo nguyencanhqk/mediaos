@@ -323,21 +323,24 @@ describe.skipIf(!hasLaneDb)(
         label: "GET adjustment-requests/:id",
         method: "get",
         path: (id) => `/attendance/adjustment-requests/${id}`,
-        measuredBefore: "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='Error'",
+        measuredBefore:
+          "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='Error'",
       },
       {
         label: "POST adjustment-requests/:id/approve",
         method: "post",
         path: (id) => `/attendance/adjustment-requests/${id}/approve`,
         body: { note: "Duyệt" },
-        measuredBefore: "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
+        measuredBefore:
+          "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
       },
       {
         label: "POST adjustment-requests/:id/reject",
         method: "post",
         path: (id) => `/attendance/adjustment-requests/${id}/reject`,
         body: { reason: "Không đủ căn cứ" },
-        measuredBefore: "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
+        measuredBefore:
+          "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
       },
       {
         label: "POST records/:id/adjust-direct",
@@ -350,73 +353,84 @@ describe.skipIf(!hasLaneDb)(
           items: [{ fieldName: "note", newValue: "sửa ghi chú" }],
           reason: "Sửa trực tiếp",
         },
-        measuredBefore: "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
+        measuredBefore:
+          "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
       },
       {
         label: "POST remote-work-requests/:id/submit",
         method: "post",
         path: (id) => `/attendance/remote-work-requests/${id}/submit`,
         body: { currentApproverUserId: "00000000-0000-4000-8000-000000000002" },
-        measuredBefore: "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
+        measuredBefore:
+          "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
       },
       {
         label: "GET remote-work-requests/:id",
         method: "get",
         path: (id) => `/attendance/remote-work-requests/${id}`,
-        measuredBefore: "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='Error'",
+        measuredBefore:
+          "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='Error'",
       },
       {
         label: "POST remote-work-requests/:id/approve",
         method: "post",
         path: (id) => `/attendance/remote-work-requests/${id}/approve`,
         body: { note: "Duyệt" },
-        measuredBefore: "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
+        measuredBefore:
+          "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
       },
       {
         label: "POST remote-work-requests/:id/reject",
         method: "post",
         path: (id) => `/attendance/remote-work-requests/${id}/reject`,
         body: { rejectReason: "Không duyệt" },
-        measuredBefore: "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
+        measuredBefore:
+          "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
       },
       {
         label: "POST remote-work-requests/:id/cancel",
         method: "post",
         path: (id) => `/attendance/remote-work-requests/${id}/cancel`,
-        measuredBefore: "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
+        measuredBefore:
+          "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
       },
       {
         label: "GET records/:id/logs",
         method: "get",
         path: (id) => `/attendance/records/${id}/logs`,
-        measuredBefore: "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='Error'",
+        measuredBefore:
+          "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='Error'",
       },
       {
         label: "GET records/:id",
         method: "get",
         path: (id) => `/attendance/records/${id}`,
-        measuredBefore: "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='Error'",
+        measuredBefore:
+          "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='Error'",
       },
       {
         label: "PATCH schedules/:id",
         method: "patch",
         path: (id) => `/attendance/schedules/${id}`,
         body: { graceMinutes: 25 },
-        measuredBefore: "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
+        measuredBefore:
+          "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
       },
       {
         label: "PATCH shifts/:id",
         method: "patch",
         path: (id) => `/attendance/shifts/${id}`,
         body: { name: "Ca sáng (đã sửa)" },
-        measuredBefore: "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
+        measuredBefore:
+          "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
       },
       {
         label: "PATCH rules/:id",
         method: "patch",
         path: (id) => `/attendance/rules/${id}`,
         body: { name: "Quy tắc công ty (đã sửa)" },
-        measuredBefore: "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
+        measuredBefore:
+          "ĐO 26/08/2026 (RED, mediaos_paramuuid2b): 500 SYSTEM-ERR-001 · error.type='InternalServerErrorException'",
       },
     ];
 

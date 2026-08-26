@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -89,7 +90,7 @@ export class AttendanceShiftController {
   })
   updateShift(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateShiftDto,
   ) {
     return this.shiftService.updateShift(req.user, id, dto);
@@ -142,7 +143,7 @@ export class AttendanceShiftController {
   })
   updateRule(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateRuleDto,
   ) {
     return this.shiftService.updateRule(req.user, id, dto);

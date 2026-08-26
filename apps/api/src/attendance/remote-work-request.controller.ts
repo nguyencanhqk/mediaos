@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Req,
@@ -78,7 +79,7 @@ export class RemoteWorkRequestController {
   })
   submit(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: SubmitRemoteWorkRequestDto,
   ) {
     return this.service.submit(req.user, id, dto);
@@ -106,7 +107,7 @@ export class RemoteWorkRequestController {
 
   @Get(":id")
   @RequirePermission(VIEW_OWN.action, VIEW_OWN.resourceType, { isSensitive: VIEW_OWN.sensitive })
-  getDetail(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getDetail(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.service.getDetail(req.user, id);
   }
 
@@ -115,7 +116,7 @@ export class RemoteWorkRequestController {
   @RequirePermission(APPROVE.action, APPROVE.resourceType, { isSensitive: APPROVE.sensitive })
   approve(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: ApproveRemoteWorkRequestDto,
   ) {
     return this.service.approve(req.user, id, dto);
@@ -126,7 +127,7 @@ export class RemoteWorkRequestController {
   @RequirePermission(REJECT.action, REJECT.resourceType, { isSensitive: REJECT.sensitive })
   reject(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: RejectRemoteWorkRequestDto,
   ) {
     return this.service.reject(req.user, id, dto);
@@ -137,7 +138,7 @@ export class RemoteWorkRequestController {
   @RequirePermission(CANCEL_OWN.action, CANCEL_OWN.resourceType, {
     isSensitive: CANCEL_OWN.sensitive,
   })
-  cancelOwn(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  cancelOwn(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.service.cancelOwn(req.user, id);
   }
 }
