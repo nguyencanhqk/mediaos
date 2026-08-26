@@ -55,13 +55,31 @@ export const leaveTypeCodeInputSchema = z
 
 // ─── leave_types ──────────────────────────────────────────────────────────────
 
+/**
+ * HẠN MỨC NĂM **KHÔNG** THUỘC MẶT `leave_type` — S10-LEAVE-TYPEQUOTA-1 / KI-081.
+ *
+ * Ba schema dưới đây TỪNG có `annualQuota` (map xuống cột di sản `leave_types.annual_quota`, `hr.ts:337`).
+ * Đã gỡ 2026-08-26 sau khi đo bằng HTTP thật:
+ *
+ *   · `docs/DB/DB-05 §7.1` liệt kê đủ 26 cột của `leave_types` — **KHÔNG có `annual_quota`**. Cột này là
+ *     di sản G11, chưa bao giờ nằm trong thiết kế chuẩn (CLAUDE.md: mâu thuẫn code↔thiết kế ⇒ docs/DB thắng).
+ *   · Hạn mức THẬT sống ở `leave_policies.yearly_quota_days` — scope được theo Company/Department/Employee/
+ *     JobLevel/ContractType, và là thứ engine cộng dồn thực sự đọc (`leave-accrual.repository.ts` →
+ *     `leave-accrual.logic.ts`). Seeder cũng đã ghi rõ: "KHÔNG set annual_quota (đặt ở policy)".
+ *   · Census toàn app: `annual_quota` có NGƯỜI GHI (`leave.service.ts`) nhưng **KHÔNG có một người đọc nào**
+ *     — không engine, không route đọc, không FE. Ghi vào đó là ghi vào hư không.
+ *
+ * ⚠️ ĐỪNG "vá" KI-081 bằng cách thêm `annualQuota` vào `leaveTypeViewSchema`/`toLeaveTypeView()`. Làm vậy chỉ
+ * khiến một con số CHẾT trông như đang sống: admin đặt 15 ở màn loại nghỉ, engine vẫn chạy theo policy.
+ * Cần hạn mức thì sửa CHÍNH SÁCH (`/leave/admin/policies`, `yearlyQuotaDays`) — xem `docs/plans/S10-LEAVE-TYPEQUOTA-1.md`.
+ *
+ * Cột DB giữ nguyên (nullable, dữ liệu cũ đóng băng) — gỡ cột là việc migration của WO riêng.
+ */
 export const leaveTypeSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   code: z.string(),
   paid: z.boolean(),
-  /** Hạn mức năm (ngày). null = không giới hạn. */
-  annualQuota: z.number().nullable(),
   status: z.enum(["active", "inactive"]),
 });
 export type LeaveTypeDto = z.infer<typeof leaveTypeSchema>;
@@ -70,14 +88,12 @@ export const createLeaveTypeSchema = z.object({
   name: z.string().min(1).max(200),
   code: leaveTypeCodeInputSchema,
   paid: z.boolean().default(true),
-  annualQuota: z.number().min(0).max(366).nullable().optional(),
 });
 export type CreateLeaveTypeRequest = z.infer<typeof createLeaveTypeSchema>;
 
 export const updateLeaveTypeSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   paid: z.boolean().optional(),
-  annualQuota: z.number().min(0).max(366).nullable().optional(),
   status: z.enum(["active", "inactive"]).optional(),
 });
 export type UpdateLeaveTypeRequest = z.infer<typeof updateLeaveTypeSchema>;

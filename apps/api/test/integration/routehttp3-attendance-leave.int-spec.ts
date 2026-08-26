@@ -456,48 +456,64 @@ describe.skipIf(!hasLaneDb)(
         name: `Nghỉ thử ${uniq()}`,
         code: `NT${uniq().slice(0, 4).toUpperCase()}`,
         paid: true,
-        annualQuota: 12,
       });
       expect(created.status, JSON.stringify(created.body)).toBe(201);
       const typeId = created.body.data.id as string;
 
-      const patched = await authPatch(tAdminA, `/leave/types/${typeId}`).send({ annualQuota: 15 });
+      // Vế ALLOW đo trên trường CÓ THẬT ở cả hai mặt (ghi + đọc). Trước S10-LEAVE-TYPEQUOTA-1 ca này đo
+      // bằng `annualQuota` — một trường chỉ tồn tại ở mặt GHI, nên nó chứng minh được đúng nửa vòng.
+      const newName = `Nghỉ đã sửa ${uniq()}`;
+      const patched = await authPatch(tAdminA, `/leave/types/${typeId}`).send({
+        name: newName,
+        paid: false,
+      });
       expect(patched.status, JSON.stringify(patched.body)).toBe(200);
-      expect(patched.body.data.annualQuota, "phản hồi của PATCH phải trả giá trị mới").toBe(15);
+      expect(patched.body.data.name, "phản hồi của PATCH phải trả giá trị mới").toBe(newName);
+      expect(patched.body.data.paid).toBe(false);
 
       // HỆ QUẢ ở tầng dữ liệu — độc lập với hình dạng của route đọc.
-      const row = await direct.query<{ annual_quota: string | null }>(
-        `SELECT annual_quota FROM leave_types WHERE company_id = $1 AND id = $2`,
+      const row = await direct.query<{ name: string; paid: boolean }>(
+        `SELECT name, paid FROM leave_types WHERE company_id = $1 AND id = $2`,
         [A.companyId, typeId],
       );
-      expect(Number(row.rows[0].annual_quota)).toBe(15);
+      expect(row.rows[0].name).toBe(newName);
+      expect(row.rows[0].paid).toBe(false);
 
-      // Route đọc chính tắc VẪN thấy loại nghỉ này (chứng minh nó không biến mất).
+      // HỆ QUẢ đọc lại qua route đọc chính tắc — VÒNG ĐẦY ĐỦ ghi→đọc, không chỉ "vẫn còn trong danh sách".
       const list = await authGet(tAdminA, "/leave/types");
       expect(list.status).toBe(200);
-      expect((list.body.data as Array<{ id: string }>).map((t) => t.id)).toContain(typeId);
+      const readBack = (list.body.data as Array<{ id: string; name: string; paid: boolean }>).find(
+        (t) => t.id === typeId,
+      );
+      expect(readBack, "loại nghỉ vừa sửa PHẢI có trong danh sách").toBeDefined();
+      expect(readBack?.name, "giá trị GHI phải ĐỌC LẠI được qua route đọc chính tắc").toBe(newName);
+      expect(readBack?.paid).toBe(false);
     });
 
     /**
-     * 🔴 GHIM BUG (KI-081) — CA NÀY GHIM HÀNH VI SAI CÓ CHỦ Ý.
+     * ✅ KHẲNG ĐỊNH HỢP ĐỒNG (KI-081 đã đóng — S10-LEAVE-TYPEQUOTA-1). ĐỌC TRƯỚC KHI "SỬA".
      *
-     * `leaveTypeSchema` (packages/contracts, `leave.ts:58`) khai `annualQuota: z.number().nullable()`
-     * là trường BẮT BUỘC của DTO loại nghỉ, và `POST`/`PATCH /leave/types` đều nhận + trả nó. Nhưng
-     * route ĐỌC chính tắc `GET /leave/types` đi qua `LeaveReadService.toLeaveTypeView()` — một view
-     * RỘNG HƠN (description · deductBalance · balanceUnit · allowHalfDay…) nhưng lại **BỎ SÓT
-     * `annualQuota`**. Hệ quả: giá trị ghi được bằng PATCH KHÔNG đọc lại được qua route đọc chính tắc.
+     * Ca này TỪNG là ca `🔴 GHIM BUG` ghim hành vi sai: contract khai `annualQuota` mà `GET /leave/types`
+     * không trả. Điều tra 26/08 lật ngược chẩn đoán — lỗi KHÔNG ở route đọc:
      *
-     * MỨC ĐỘ: trôi hợp đồng đọc/ghi, KHÔNG phải lỗ bảo mật (không rò dữ liệu, chỉ THIẾU dữ liệu).
+     *   · `docs/DB/DB-05 §7.1` liệt kê đủ 26 cột `leave_types` — KHÔNG có `annual_quota`. Cột này là di
+     *     sản G11, chưa bao giờ nằm trong thiết kế chuẩn.
+     *   · Hạn mức năm THẬT sống ở `leave_policies.yearly_quota_days` — và đó mới là thứ engine cộng dồn
+     *     đọc (`leave-accrual.repository.ts` → `leave-accrual.logic.ts`).
+     *   · Census toàn app: `annual_quota` có người GHI nhưng **KHÔNG có một người ĐỌC nào**.
      *
-     * ⚠️ Người vá KI-081 sẽ thấy ca này ĐỎ — đó là dấu hiệu vá ĐÚNG. Khi đó LẬT `toBeUndefined()`
-     * thành `toBe(15)`; đừng xoá ca ([[tests-can-pin-a-hole-open]]).
+     * ⇒ Vá đúng là GỠ `annualQuota` khỏi hợp đồng + đường ghi, KHÔNG phải thêm nó vào view đọc. Thêm vào
+     * view chỉ khiến một con số CHẾT trông như đang sống ([[ui-promises-backend-never-reads]]).
+     *
+     * ⚠️ `toBeUndefined()` dưới đây là hành vi ĐÚNG và VĨNH VIỄN, không phải nợ. Ai muốn hạn mức năm thì
+     * sửa CHÍNH SÁCH (`/leave/admin/policies`, `yearlyQuotaDays`), đừng động vào `toLeaveTypeView()`.
+     * Đo cả HAI route đọc — chúng phải nhất quán, không route nào lẻ loi mọc lại trường này.
      */
-    it("🔴 GHIM BUG (KI-081): GET /leave/types KHÔNG trả `annualQuota` dù contract khai bắt buộc", async () => {
+    it("KHẲNG ĐỊNH (KI-081): hạn mức năm KHÔNG thuộc mặt `leave_type` — cả hai route đọc đều không trả", async () => {
       const created = await authPost(tAdminA, "/leave/types").send({
         name: `Nghỉ quota ${uniq()}`,
         code: `NQ${uniq().slice(0, 4).toUpperCase()}`,
         paid: true,
-        annualQuota: 7,
       });
       expect(created.status, JSON.stringify(created.body)).toBe(201);
       const typeId = created.body.data.id as string;
@@ -511,8 +527,50 @@ describe.skipIf(!hasLaneDb)(
       expect(row?.name, "hàng đọc được phải mang tên thật, không phải object rỗng").toBeTruthy();
       expect(
         row?.annualQuota,
-        "hành vi hiện tại (SAI): route đọc chính tắc bỏ sót annualQuota",
+        "hạn mức KHÔNG thuộc mặt leave_type — nó sống ở leave_policies.yearly_quota_days",
       ).toBeUndefined();
+
+      // Route đọc THỨ HAI cùng gate `view:leave-type` — kiểm cả hai, đừng suy từ một route ra route kia.
+      const adminList = await authGet(tAdminA, "/leave/admin/types");
+      expect(adminList.status).toBe(200);
+      const adminRow = (
+        adminList.body.data as Array<{ id: string; name?: string; annualQuota?: number }>
+      ).find((t) => t.id === typeId);
+      expect(adminRow, "mặt quản trị PHẢI thấy loại nghỉ vừa tạo").toBeDefined();
+      expect(adminRow?.annualQuota, "mặt quản trị cũng KHÔNG mang hạn mức").toBeUndefined();
+    });
+
+    /**
+     * Chứng minh đường GHI đã ĐÓNG THẬT, không phải chỉ giấu trường khỏi phản hồi.
+     *
+     * Không có ca này thì "đã gỡ annualQuota" là SUY LUẬN: hoàn toàn có thể xảy ra chuyện service vẫn ghi
+     * xuống `annual_quota` còn mapper chỉ thôi không trả ra — đúng dạng trôi CÂM đã đẻ ra KI-081 lần đầu.
+     * Đo tận cột DB (`direct`, ngoài mọi mapper) mới bịt được khả năng đó.
+     */
+    it("KHẲNG ĐỊNH (KI-081): POST/PATCH /leave/types kèm `annualQuota` KHÔNG ghi được xuống cột di sản", async () => {
+      const created = await authPost(tAdminA, "/leave/types").send({
+        name: `Nghỉ bỏ quota ${uniq()}`,
+        code: `NB${uniq().slice(0, 4).toUpperCase()}`,
+        paid: true,
+        annualQuota: 9, // khoá LẠ với hợp đồng ⇒ Zod lược, KHÔNG đổi mã trả về
+      });
+      expect(created.status, JSON.stringify(created.body)).toBe(201);
+      expect(created.body.data.annualQuota, "phản hồi POST không mang hạn mức").toBeUndefined();
+      const typeId = created.body.data.id as string;
+
+      const patched = await authPatch(tAdminA, `/leave/types/${typeId}`).send({ annualQuota: 15 });
+      expect(patched.status, JSON.stringify(patched.body)).toBe(200);
+      expect(patched.body.data.annualQuota, "phản hồi PATCH không mang hạn mức").toBeUndefined();
+
+      const row = await direct.query<{ annual_quota: string | null }>(
+        `SELECT annual_quota FROM leave_types WHERE company_id = $1 AND id = $2`,
+        [A.companyId, typeId],
+      );
+      expect(row.rows, "hàng vừa tạo phải tồn tại (chống ca xanh-rỗng)").toHaveLength(1);
+      expect(
+        row.rows[0].annual_quota,
+        "cột di sản PHẢI còn NULL — đường ghi đã đóng, không chỉ ẩn khỏi phản hồi",
+      ).toBeNull();
     });
 
     it("GET /leave/admin/balances/:id/transactions — 200 trên quỹ THẬT (không phải id bịa)", async () => {
@@ -520,7 +578,6 @@ describe.skipIf(!hasLaneDb)(
         name: `Nghỉ quỹ ${uniq()}`,
         code: `NQ${uniq().slice(0, 4).toUpperCase()}`,
         paid: true,
-        annualQuota: 12,
       });
       expect(type.status, JSON.stringify(type.body)).toBe(201);
 
@@ -588,7 +645,7 @@ describe.skipIf(!hasLaneDb)(
         authGet(tEmptyA, "/attendance/shifts"),
         authPatch(tEmptyA, `/attendance/shifts/${fake}`).send({ name: "x" }),
         authGet(tEmptyA, "/attendance/shift-assignments"),
-        authPatch(tEmptyA, `/leave/types/${fake}`).send({ annualQuota: 1 }),
+        authPatch(tEmptyA, `/leave/types/${fake}`).send({ name: "x" }),
         authGet(tEmptyA, `/leave/admin/balances/${fake}/transactions`),
         authGet(tEmptyA, `/leave/calendar?scope=own&from=${dayShift(-1)}&to=${dayShift(1)}`),
         authGet(tEmptyA, `/leave/reports?${dates}`),

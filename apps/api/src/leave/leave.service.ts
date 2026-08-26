@@ -58,7 +58,8 @@ export class LeaveService {
             name: dto.name,
             code: dto.code,
             paid: dto.paid,
-            annualQuota: dto.annualQuota != null ? String(dto.annualQuota) : null,
+            // KHÔNG ghi `annualQuota` (cột di sản `annual_quota`) — S10-LEAVE-TYPEQUOTA-1 / KI-081.
+            // Hạn mức năm sống ở `leave_policies.yearly_quota_days`; xem chú thích ở `contracts/leave.ts`.
           },
           tx,
         );
@@ -91,12 +92,7 @@ export class LeaveService {
           {
             name: dto.name,
             paid: dto.paid,
-            annualQuota:
-              dto.annualQuota === undefined
-                ? undefined
-                : dto.annualQuota === null
-                  ? null
-                  : String(dto.annualQuota),
+            // KHÔNG ghi `annualQuota` — xem createType ở trên (S10-LEAVE-TYPEQUOTA-1 / KI-081).
             status: dto.status,
           },
           tx,
@@ -216,20 +212,19 @@ export class LeaveService {
 
 // ─── DTO mappers ───────────────────────────────────────────────────────────────
 
-function toTypeDto(row: {
-  id: string;
-  name: string;
-  code: string;
-  paid: boolean;
-  annualQuota: string | null;
-  status: string;
-}) {
+/**
+ * Hình dạng phản hồi của đường GHI di sản (`POST`/`PATCH /leave/types`).
+ *
+ * `annualQuota` đã bị gỡ (S10-LEAVE-TYPEQUOTA-1 / KI-081): nó là trường DUY NHẤT đường ghi trả mà hai route
+ * ĐỌC (`GET /leave/types` · `GET /leave/admin/types`) không trả — và nó map xuống một cột không ai đọc.
+ * Sau khi gỡ, 5 trường ở đây là TẬP CON đúng của cả hai view đọc: ghi xong đọc lại được, không sót trường nào.
+ */
+function toTypeDto(row: { id: string; name: string; code: string; paid: boolean; status: string }) {
   return {
     id: row.id,
     name: row.name,
     code: row.code,
     paid: row.paid,
-    annualQuota: row.annualQuota != null ? Number(row.annualQuota) : null,
     status: row.status,
   };
 }

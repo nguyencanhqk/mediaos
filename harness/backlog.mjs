@@ -13688,10 +13688,13 @@ export const backlog = [
     title:
       "KI-081 — `GET /leave/types` bỏ sót `annualQuota` dù contract khai bắt buộc và PATCH ghi được: giá trị ghi xong KHÔNG đọc lại được qua route đọc chính tắc",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     depends_on: [],
     paths: [
       "apps/api/src/leave/**",
+      // Thêm khi thi công: chú thích khai tử cột di sản `leave_types.annual_quota` phải nằm ĐÚNG chỗ khai
+      // cột, không thì người sau đọc schema vẫn thấy nó như một trường bình thường. Sửa CHỈ là comment.
+      "apps/api/src/db/schema/hr.ts",
       "packages/contracts/src/leave.ts",
       "apps/api/test/**",
       "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
@@ -13715,6 +13718,13 @@ export const backlog = [
     notes: [
       "🟡 LIGHT gate. Mức S4 — làm khi rảnh, đừng chen trước việc có mức cao hơn.",
       "⚠️ `GET /leave/types` là route ĐỌC dùng chung — thêm trường là ĐỔI PAYLOAD, kiểm FE trước.",
+      "✅ ĐÓNG 26/08 theo **nhánh B (gỡ)**, NGƯỢC với chẩn đoán của KI-081. Đo được: `leave_types.annual_quota` " +
+        "KHÔNG có trong `docs/DB/DB-05 §7.1`, hạn mức thật ở `leave_policies.yearly_quota_days`, và cột này " +
+        "có người GHI nhưng KHÔNG có một người ĐỌC nào. Thêm nó vào view chỉ làm một con số chết trông như " +
+        "đang sống ⇒ gỡ khỏi hợp đồng + đường ghi thay vì bổ sung vào `toLeaveTypeView()`.",
+      "⚠️ LỆCH CÓ CHỦ Ý với done_when #4: KHÔNG lật ca ghim sang `toBe(15)` — câu đó giả định nhánh A. " +
+        "`toBeUndefined()` nay là khẳng định ĐÚNG VĨNH VIỄN; ca được giữ nhưng đổi vai (`🔴 GHIM BUG` → " +
+        "`KHẲNG ĐỊNH`) + thêm ca chứng minh cột DB = NULL. Lý do đầy đủ ở plan §5 và RELEASE-02.",
     ],
   },
   {
