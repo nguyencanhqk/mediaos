@@ -1,0 +1,21 @@
+# Cloudflare Pages — chính sách cache tĩnh (S10-PERF-LOADPATH-1).
+#
+# TRƯỚC: không có file này ⇒ mọi asset ăn Browser Cache TTL mặc định của zone,
+# đo được `Cache-Control: public, max-age=14400, must-revalidate` kèm
+# `cf-cache-status: REVALIDATED` ở MỌI lượt — kể cả file tên đã có content-hash.
+#
+# LƯU Ý VẬN HÀNH: file này chỉ tới được trình duyệt khi zone đặt
+# Cloudflare › Caching › Configuration › Browser Cache TTL = "Respect Existing Headers".
+# Để nguyên mặc định 4 giờ thì zone vẫn ghi đè và bản vá này vô hiệu.
+
+# Vite băm nội dung vào TÊN FILE (index-wwV-btSH.js). Nội dung đổi ⇒ tên đổi ⇒
+# không đời nào cần revalidate. `immutable` cắt luôn cả lượt điều kiện 304.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# index.html KHÔNG băm tên — phải hỏi lại mỗi lượt, nếu không người dùng kẹt ở
+# bản HTML cũ trỏ vào chunk đã bị xoá khỏi deploy mới (màn trắng + 404 chunk).
+/
+  Cache-Control: public, max-age=0, must-revalidate
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate

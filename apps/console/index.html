@@ -15,9 +15,74 @@
         document.documentElement.classList.add("dark");
       }
     </script>
+    <!-- Splash khởi động (S10-PERF-LOADPATH-1). `main.tsx` chỉ gọi createRoot() SAU khi
+         bootstrapSession() xong (refresh → /me). Qua cloudflared mỗi round-trip đo được 0.5-3.5s,
+         nên trước đây người dùng nhìn NỀN TRẮNG CÂM suốt quãng đó. Splash nội tuyến (không thêm
+         request nào) vẽ ngay từ HTML; main.tsx gỡ nó khi React đã commit lần đầu. -->
+    <style>
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: #ffffff;
+        color: #0f172a;
+        font: 500 12px/1.4 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+        letter-spacing: 0.18em;
+        transition: opacity 180ms ease-out;
+      }
+      html.dark #boot-splash {
+        background: #0b0f19;
+        color: #e2e8f0;
+      }
+      #boot-splash.is-done {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #boot-splash .boot-bar {
+        position: relative;
+        width: 132px;
+        height: 2px;
+        overflow: hidden;
+        border-radius: 2px;
+        background: currentColor;
+        opacity: 0.16;
+      }
+      #boot-splash .boot-bar::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        width: 40%;
+        border-radius: 2px;
+        background: currentColor;
+        animation: boot-slide 1.05s ease-in-out infinite;
+      }
+      @keyframes boot-slide {
+        from {
+          transform: translateX(-100%);
+        }
+        to {
+          transform: translateX(250%);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot-splash .boot-bar::after {
+          width: 100%;
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="boot-splash" role="status" aria-live="polite" aria-label="Đang tải">
+      <div>FUNTIME MEDIA</div>
+      <div class="boot-bar"></div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
