@@ -13759,6 +13759,52 @@ export const backlog = [
     ],
   },
   {
+    // Seed 26/08/2026 khi soát nợ tồn cuối S10. KI-078 được CẤP SỐ (không vá) lúc thi công
+    // S10-FND-PARAMUUID-1: census AST cho thấy cùng hình dạng của KI-077 tồn tại 221 lần, nhưng chỉ 5
+    // chỗ từng được đo bằng HTTP thật. WO này là chỗ để LÀM TỪNG NHÓM — KHÔNG phải để vá một phát 221.
+    id: "S10-FND-PARAMUUID-2",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "KI-078 — 221 tham số `:id`/`*Id` toàn API còn thiếu validate ở biên: vá THEO NHÓM RỦI RO, đo HTTP trước mỗi nhóm rồi HẠ TRẦN ratchet",
+    zone: "yellow",
+    status: "todo",
+    depends_on: ["S10-FND-PARAMUUID-1"],
+    paths: [
+      "apps/api/src/**/*.controller.ts",
+      "apps/api/test/foundation/param-uuid-ratchet.unit-spec.ts",
+      "apps/api/test/foundation/param-uuid-census.ts",
+      "apps/api/test/**",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "docs/plans/S10-FND-PARAMUUID-2.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    src: [
+      "**SỐ ĐO 25/08/2026** (AST, `test/foundation/param-uuid-census.ts`, quét `apps/api/src/**/*.controller.ts`): **312** `@Param` tổng · **298** id-like · **77** đã có pipe ⇒ **221 CHƯA CÓ** (226 trước bản vá của `S10-FND-PARAMUUID-1` — WO đó vá 5 tham số của `foundation/files`). ⚠️ Số này TRÔI theo mỗi route mới — **đo lại bằng chính census AST trước khi lập kế hoạch**, đừng chép số ở đây ([[wo-seed-hand-measurements-can-be-incomplete]]).",
+      "**⚠️ 221 KHÔNG có nghĩa là 221 BUG.** Chỉ **5** chỗ từng được đo bằng HTTP thật (ở `S10-FND-PARAMUUID-1`). 216 chỗ còn lại **chưa ai chạm** — suy chúng cũng trả 500 chính là thứ `done_when` của WO trước ĐÃ CẤM. Mỗi nhóm phải tự đo.",
+      "**⚠️ Lọc theo TÊN sai CẢ HAI CHIỀU.** Không phải mọi id-like đều cần `ParseUUIDPipe`: một `:key` chứa UUID sẽ **lọt** khỏi census; một `:tenantId` dạng slug bị **đếm oan**. Danh sách census là điểm khởi đầu để ĐỌC, không phải danh sách việc để vá máy móc ([[identity-projection-census-misses-alias]]).",
+      "**Ratchet ĐÃ SỐNG** — `test/foundation/param-uuid-ratchet.unit-spec.ts`: `UNPIPED_CEILING = 221`; ca (2) chặn MỌC THÊM, ca (3) ép **hạ trần** khi vá bớt (để trần cao hơn thực tế = chừa chỗ cho nợ mới lẻn vào). ⛔ NÂNG trần là tuyên bố thêm nợ, phải giải trình trong PR.",
+      'Khuôn vá + khuôn ĐO đã có sẵn cùng cây: `@Param("id", ParseUUIDPipe)` ở `api-keys.controller.ts:71`; ca đo HTTP ở `test/integration/files-param-uuid.int-spec.ts`. Guard chạy TRƯỚC pipe ⇒ probe không kèm token chỉ ra 401, không đo được gì — ca đo PHẢI có actor đã đăng nhập + đúng cặp quyền.',
+    ],
+    done_when: [
+      "PHÁT BIỂU TRƯỚC mức độ: hỏng ĐÚNG CHIỀU AN TOÀN (request vẫn bị từ chối) ⇒ **KHÔNG phải lỗ bảo mật**. Giá trị = hợp đồng API + chấm dứt payload rác bơm 500 GIẢ vào giám sát — y như KI-068/KI-077",
+      "**CHỌN NHÓM, KHÔNG VÁ TẤT.** Khai rõ trong plan: nhóm route nào, chọn theo rủi ro nào (bề mặt công khai · route ghi · module nhạy cảm), bao nhiêu tham số. Một WO vá cả 221 là WO sai hình dạng — tách đợt",
+      "**ĐO BẰNG HTTP TRƯỚC KHI VÁ** cho MỌI tham số trong nhóm đã chọn. Route nào hoá ra KHÔNG trả 500 thì **ghi lại sự thật đó** — đừng ép số cho khớp mô tả KI-078",
+      "Với mỗi tham số: quyết định có ý thức **cần** `ParseUUIDPipe` hay **không** (`:key`/slug/mã nghiệp vụ thì KHÔNG). Khai lý do cho các chỗ CỐ Ý bỏ qua — im lặng bỏ qua là cách census mất giá trị",
+      "Ca ALLOW chứng minh `:id` UUID hợp lệ VẪN đi qua, kèm ca DENY ([[deny-cases-vacuous-without-allow-case]])",
+      "**HẠ `UNPIPED_CEILING`** xuống đúng số đo mới — ca (3) của ratchet sẽ ĐỎ nếu quên. Không nâng trần",
+      "RELEASE-02 cập nhật KI-078 kèm số trước/sau + danh sách nhóm đã vá; **KHÔNG đóng KI** chừng nào còn tham số chưa xử — hạ số, giữ KI mở",
+    ],
+    notes: [
+      "🟡 LIGHT gate (`typescript-reviewer` + `quality-gate`). Không chạm permission/RLS/secret/migration.",
+      "⚠️ `ParseUUIDPipe` trên route ĐỌC đổi mã trả về từ 500 sang **400** cho input rác — ĐỔI HÀNH VI QUAN SÁT ĐƯỢC. Census hộ tiêu thụ (FE + test) trước khi sửa, đừng cho là vô hại chỉ vì nó 'chặt hơn'.",
+      '⚠️ Tham số không tên `id`: `:linkId` · `:roleId` · `:userId`… — grep theo `@Param("id")` sẽ TRƯỢT. Dùng census AST, không dùng grep ([[identity-projection-census-misses-alias]]).',
+      "⚠️ int-spec ngủ khi thiếu `LANE_DB` ⇒ verify bằng `bash scripts/lane-db-setup.sh <lane>` + export, KHÔNG `source .env` ([[sourcing-dotenv-poisons-test-run-node-env]]).",
+      "Mức S4 — không chặn UAT, không chặn go-live. Làm khi rảnh, đừng chen trước việc mức cao hơn.",
+    ],
+  },
+  {
     // Seed 25/08/2026 sau khi CHÍNH phiên đó vấp CẢ HAI ca bệnh trong một buổi:
     //   (1) `S10-QA-ROUTEHTTP-2` bị seed trùng mã cho hai WO khác nhau ⇒ dấu 'done' của WO cũ áp lên
     //       khối mới ⇒ KI-025 hiện "Đã xong" và KHÔNG BAO GIỜ được xếp READY (vá tay ở #417);
