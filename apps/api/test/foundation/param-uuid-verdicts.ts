@@ -994,10 +994,548 @@ export const PARAM_UUID_VERDICTS: readonly ParamVerdict[] = [
       `Route GHI, gate restore:employee (is_sensitive). ALLOW-200 trên \`employee_profiles\` ĐÃ xoá ` +
       `mềm (@HttpCode(200)). ${PIPED_500}`,
   },
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // ĐỢT 4 — S10-FND-PARAMUUID-5 (KI-078, đợt CUỐI trong phạm vi): **75 site / 5 controller** của
+  // module `tasks/` (SPEC-06) — phần nợ THẬT cuối cùng. Đo 27/08/2026 trên `LANE_DB=mediaos_paramuuid5`
+  // bằng ba int-spec RED→GREEN:
+  //   · `test/integration/tasks-core-param-uuid.int-spec.ts`   (43 site, tasks.controller.ts)
+  //   · `test/integration/projects-param-uuid.int-spec.ts`     (21 site, projects · labels · project-states)
+  //   · `test/integration/task-files-param-uuid.int-spec.ts`   (11 site, task-files.controller.ts)
+  // **75/75 đo được 500 SYSTEM-ERR-001 · error.type='Error'. KHÔNG có phản-ví-dụ** (đợt 1 có một:
+  // `auth-session` = 404). Mỗi vế của route nhiều tham số được đo RIÊNG — rác ở vế đang đo, hàng
+  // THẬT ở các vế còn lại; ký cả hai dòng từ MỘT lượt đo là ký cho chỗ chưa đo.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+
+  {
+    key: "tasks/tasks.controller.ts#getProjectTasks:projectId",
+    route: "GET /tasks/by-project/:projectId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đọc task theo DỰ ÁN. ALLOW-200 trên dự án THẬT ⇒ \`:projectId\` là uuid. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#getTeamTasks:teamId",
+    route: "GET /tasks/by-team/:teamId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đọc task theo TEAM. ALLOW-200 trên team THẬT (có thành viên — \`teamExistsTx\` tra \`team_members\`, KHÔNG tra \`teams\`). ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#getTask:taskId",
+    route: "GET /tasks/:taskId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Chi tiết task. ALLOW-200 trên task THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#listSubtasks:taskId",
+    route: "GET /tasks/:taskId/subtasks",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Danh sách việc con. ALLOW-200 trên task THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#reorderSubtasks:taskId",
+    route: "PATCH /tasks/:taskId/subtasks/reorder",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI. ALLOW-200 trên CÂY THẬT (cha + 1 con). ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#updateStatus:taskId",
+    route: "PATCH /tasks/:taskId/status",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI legacy (@deprecated, cột \`status\` lowercase). ALLOW-200 trên task THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#updateTask:taskId",
+    route: "PATCH /tasks/:taskId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI. ALLOW-200 trên task THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#deleteTask:taskId",
+    route: "DELETE /tasks/:taskId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (xoá MỀM — BẤT BIẾN #2). ALLOW-204 trên task THẬT (@HttpCode(204)). ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#addLabel:taskId",
+    route: "POST /tasks/:taskId/labels/:labelId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-2xx gắn nhãn THẬT vào task THẬT. (vế \`taskId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#addLabel:labelId",
+    route: "POST /tasks/:taskId/labels/:labelId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-2xx gắn nhãn THẬT vào task THẬT. (vế \`labelId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#removeLabel:taskId",
+    route: "DELETE /tasks/:taskId/labels/:labelId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-204 gỡ nhãn THẬT ĐÃ gắn (@HttpCode(204)). (vế \`taskId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#removeLabel:labelId",
+    route: "DELETE /tasks/:taskId/labels/:labelId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-204 gỡ nhãn THẬT ĐÃ gắn (@HttpCode(204)). (vế \`labelId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#getComments:taskId",
+    route: "GET /tasks/:taskId/comments",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đọc bình luận. ALLOW-200 trên task THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#addComment:taskId",
+    route: "POST /tasks/:taskId/comments",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI. ALLOW-201 trên task THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#updateComment:taskId",
+    route: "PATCH /tasks/:taskId/comments/:commentId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-200 trên bình luận THẬT (self-only). (vế \`taskId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#updateComment:commentId",
+    route: "PATCH /tasks/:taskId/comments/:commentId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-200 trên bình luận THẬT (self-only). (vế \`commentId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#deleteComment:taskId",
+    route: "DELETE /tasks/:taskId/comments/:commentId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-204 xoá MỀM bình luận THẬT (@HttpCode(204)). (vế \`taskId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#deleteComment:commentId",
+    route: "DELETE /tasks/:taskId/comments/:commentId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-204 xoá MỀM bình luận THẬT (@HttpCode(204)). (vế \`commentId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#assignTask:taskId",
+    route: "POST /tasks/:taskId/assign",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI crown-FSM. ALLOW-200 trên task THẬT (@HttpCode(200)). ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#changeTaskStatus:taskId",
+    route: "POST /tasks/:taskId/change-status",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI crown-FSM. ALLOW-200 Todo→In Progress trên task THẬT (@HttpCode(200)). ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#moveTask:taskId",
+    route: "POST /tasks/:taskId/move",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route sugar Kanban (@deprecated) — gọi CHÍNH changeStatus. ALLOW-200 trên task THẬT (@HttpCode(200)). ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#moveTaskState:taskId",
+    route: "POST /tasks/:taskId/move-state",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI cột pipeline. ALLOW-200 trên task THẬT + cột THẬT của cùng dự án (@HttpCode(200)). ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#changeTaskPriority:taskId",
+    route: "POST /tasks/:taskId/change-priority",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI. ALLOW-200 trên task THẬT (@HttpCode(200)). ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#changeTaskDeadline:taskId",
+    route: "POST /tasks/:taskId/change-deadline",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI. ALLOW-200 trên task THẬT (@HttpCode(200)). ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#listWatchers:taskId",
+    route: "GET /tasks/:taskId/watchers",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đọc người theo dõi. ALLOW-200 trên task THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#addWatcher:taskId",
+    route: "POST /tasks/:taskId/watchers",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (self-only MVP, body rỗng hợp lệ). ALLOW-2xx trên task THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#removeWatcher:taskId",
+    route: "DELETE /tasks/:taskId/watchers/:watcherId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-204 trên watcher THẬT của chính actor (@HttpCode(204)). (vế \`taskId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#removeWatcher:watcherId",
+    route: "DELETE /tasks/:taskId/watchers/:watcherId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-204 trên watcher THẬT của chính actor (@HttpCode(204)). (vế \`watcherId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#listChecklists:taskId",
+    route: "GET /tasks/:taskId/checklists",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đọc checklist. ALLOW-200 trên task THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#createChecklist:taskId",
+    route: "POST /tasks/:taskId/checklists",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI. ALLOW-201 trên task THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#updateChecklist:taskId",
+    route: "PATCH /tasks/:taskId/checklists/:checklistId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-200 trên checklist THẬT. (vế \`taskId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#updateChecklist:checklistId",
+    route: "PATCH /tasks/:taskId/checklists/:checklistId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-200 trên checklist THẬT. (vế \`checklistId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#deleteChecklist:taskId",
+    route: "DELETE /tasks/:taskId/checklists/:checklistId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-204 xoá MỀM cascade xuống item (@HttpCode(204)). (vế \`taskId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#deleteChecklist:checklistId",
+    route: "DELETE /tasks/:taskId/checklists/:checklistId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-204 xoá MỀM cascade xuống item (@HttpCode(204)). (vế \`checklistId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#addChecklistItem:taskId",
+    route: "POST /tasks/:taskId/checklists/:checklistId/items",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-201 trên checklist THẬT. (vế \`taskId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#addChecklistItem:checklistId",
+    route: "POST /tasks/:taskId/checklists/:checklistId/items",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-201 trên checklist THẬT. (vế \`checklistId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#updateChecklistItem:taskId",
+    route: "PATCH /tasks/:taskId/checklists/:checklistId/items/:itemId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI BA tham số — mỗi vế đo RIÊNG (rác ở vế đang đo, hàng THẬT ở hai vế kia). ALLOW-200 tick item THẬT. (vế \`taskId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#updateChecklistItem:checklistId",
+    route: "PATCH /tasks/:taskId/checklists/:checklistId/items/:itemId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI BA tham số — mỗi vế đo RIÊNG (rác ở vế đang đo, hàng THẬT ở hai vế kia). ALLOW-200 tick item THẬT. (vế \`checklistId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#updateChecklistItem:itemId",
+    route: "PATCH /tasks/:taskId/checklists/:checklistId/items/:itemId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI BA tham số — mỗi vế đo RIÊNG (rác ở vế đang đo, hàng THẬT ở hai vế kia). ALLOW-200 tick item THẬT. (vế \`itemId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#deleteChecklistItem:taskId",
+    route: "DELETE /tasks/:taskId/checklists/:checklistId/items/:itemId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI BA tham số — mỗi vế đo RIÊNG. ALLOW-204 xoá MỀM item THẬT (@HttpCode(204)). (vế \`taskId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#deleteChecklistItem:checklistId",
+    route: "DELETE /tasks/:taskId/checklists/:checklistId/items/:itemId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI BA tham số — mỗi vế đo RIÊNG. ALLOW-204 xoá MỀM item THẬT (@HttpCode(204)). (vế \`checklistId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#deleteChecklistItem:itemId",
+    route: "DELETE /tasks/:taskId/checklists/:checklistId/items/:itemId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI BA tham số — mỗi vế đo RIÊNG. ALLOW-204 xoá MỀM item THẬT (@HttpCode(204)). (vế \`itemId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/tasks.controller.ts#listActivity:taskId",
+    route: "GET /tasks/:taskId/activity",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đọc feed hoạt động (task_activity_logs, append-only). ALLOW-200 trên task THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/projects.controller.ts#getOne:id",
+    route: "GET /projects/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Chi tiết dự án. \`projects\` MANG \`project_code\` ⇒ ứng viên "\`:id\` là MÃ"; ALLOW-200 trên dự án THẬT CHỨNG MINH \`:id\` là uuid. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/projects.controller.ts#update:id",
+    route: "PATCH /projects/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI. ALLOW-200 trên dự án THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/projects.controller.ts#close:id",
+    route: "POST /projects/:id/close",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI verb, gate close:project (is_sensitive). ALLOW-200 trên dự án THẬT (@HttpCode(200)). ${PIPED_500}`,
+  },
+  {
+    key: "tasks/projects.controller.ts#remove:id",
+    route: "DELETE /projects/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (xoá MỀM), gate delete:project (is_sensitive). ALLOW-204 trên dự án THẬT (@HttpCode(204)). ${PIPED_500}`,
+  },
+  {
+    key: "tasks/projects.controller.ts#listMembers:id",
+    route: "GET /projects/:id/members",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đọc thành viên. ALLOW-200 trên dự án THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/projects.controller.ts#addMember:id",
+    route: "POST /projects/:id/members",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI, gate manage-member:project (is_sensitive). ALLOW-201 với nhân viên THẬT có tài khoản + status active. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/projects.controller.ts#updateMember:id",
+    route: "PATCH /projects/:id/members/:memberId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-200 trên thành viên THẬT. (vế \`id\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/projects.controller.ts#updateMember:memberId",
+    route: "PATCH /projects/:id/members/:memberId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-200 trên thành viên THẬT. (vế \`memberId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/projects.controller.ts#removeMember:id",
+    route: "DELETE /projects/:id/members/:memberId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-204 soft-remove thành viên THẬT (@HttpCode(204)). (vế \`id\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/projects.controller.ts#removeMember:memberId",
+    route: "DELETE /projects/:id/members/:memberId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI hai tham số — mỗi vế đo RIÊNG. ALLOW-204 soft-remove thành viên THẬT (@HttpCode(204)). (vế \`memberId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/projects.controller.ts#getKanban:id",
+    route: "GET /projects/:id/kanban",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đọc board, gate view-kanban:task (resource \`task\`, KHÔNG phải \`project\`). ALLOW-200 trên dự án THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/projects.controller.ts#getReport:id",
+    route: "GET /projects/:id/report",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đọc báo cáo, gate view-report:project (is_sensitive). ALLOW-200 trên dự án THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/projects.controller.ts#listActivity:id",
+    route: "GET /projects/:id/activity",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đọc feed dự án, gate view:task-audit-log (is_sensitive). ALLOW-200 trên dự án THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/task-files.controller.ts#list:taskId",
+    route: "GET /tasks/:taskId/files",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đọc đính kèm. ALLOW-200 trên task THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/task-files.controller.ts#getOne:taskId",
+    route: "GET /tasks/:taskId/files/:fileId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đọc metadata, hai tham số — mỗi vế đo RIÊNG. ALLOW-200 trên tệp THẬT ĐÃ đính kèm. (vế \`taskId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/task-files.controller.ts#getOne:fileId",
+    route: "GET /tasks/:taskId/files/:fileId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đọc metadata, hai tham số — mỗi vế đo RIÊNG. ALLOW-200 trên tệp THẬT ĐÃ đính kèm. (vế \`fileId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/task-files.controller.ts#download:taskId",
+    route: "GET /tasks/:taskId/files/:fileId/download",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đường TẢI (302 signed-url, scan-guard STRICT), hai tham số — mỗi vế đo RIÊNG. ALLOW-302 trên tệp THẬT Uploaded+Clean. (vế \`taskId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/task-files.controller.ts#download:fileId",
+    route: "GET /tasks/:taskId/files/:fileId/download",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đường TẢI (302 signed-url, scan-guard STRICT), hai tham số — mỗi vế đo RIÊNG. ALLOW-302 trên tệp THẬT Uploaded+Clean. (vế \`fileId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/task-files.controller.ts#linkFile:taskId",
+    route: "POST /tasks/:taskId/files",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (gắn tệp đã upload). ALLOW-201 trên task THẬT + tệp THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/task-files.controller.ts#setCover:taskId",
+    route: "POST /tasks/:taskId/files/:fileId/cover",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (bật \`is_primary\` trên CHÍNH dòng đính kèm), hai tham số — mỗi vế đo RIÊNG. ALLOW-201 trên tệp ẢNH THẬT. (vế \`taskId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/task-files.controller.ts#setCover:fileId",
+    route: "POST /tasks/:taskId/files/:fileId/cover",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (bật \`is_primary\` trên CHÍNH dòng đính kèm), hai tham số — mỗi vế đo RIÊNG. ALLOW-201 trên tệp ẢNH THẬT. (vế \`fileId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/task-files.controller.ts#clearCover:taskId",
+    route: "DELETE /tasks/:taskId/files/cover",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI idempotent. \`cover\` là ANH EM LITERAL của \`:fileId\` (khai TRƯỚC) ⇒ ca định tuyến riêng đo 204 trên task THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/task-files.controller.ts#remove:taskId",
+    route: "DELETE /tasks/:taskId/files/:fileId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (xoá MỀM), hai tham số — mỗi vế đo RIÊNG. ALLOW-204 trên tệp THẬT (@HttpCode(204)). (vế \`taskId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/task-files.controller.ts#remove:fileId",
+    route: "DELETE /tasks/:taskId/files/:fileId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (xoá MỀM), hai tham số — mỗi vế đo RIÊNG. ALLOW-204 trên tệp THẬT (@HttpCode(204)). (vế \`fileId\`) ${PIPED_500}`,
+  },
+  {
+    key: "tasks/labels.controller.ts#listLabels:projectId",
+    route: "GET /projects/:projectId/labels",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đọc nhãn của dự án. ALLOW-200 trên dự án THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/labels.controller.ts#createLabel:projectId",
+    route: "POST /projects/:projectId/labels",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI. ALLOW-201 trên dự án THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/labels.controller.ts#updateLabel:labelId",
+    route: "PATCH /labels/:labelId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI. ALLOW-200 trên nhãn THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/labels.controller.ts#deleteLabel:labelId",
+    route: "DELETE /labels/:labelId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (xoá MỀM). ALLOW-204 trên nhãn THẬT (@HttpCode(204)). ${PIPED_500}`,
+  },
+  {
+    key: "tasks/project-states.controller.ts#listStates:projectId",
+    route: "GET /projects/:projectId/states",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Đọc cột pipeline của dự án. ALLOW-200 trên dự án THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/project-states.controller.ts#createState:projectId",
+    route: "POST /projects/:projectId/states",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI. ALLOW-201 trên dự án THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/project-states.controller.ts#updateState:stateId",
+    route: "PATCH /states/:stateId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI. ALLOW-200 trên cột THẬT. ${PIPED_500}`,
+  },
+  {
+    key: "tasks/project-states.controller.ts#deleteState:stateId",
+    route: "DELETE /states/:stateId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (xoá MỀM, chặn nếu còn task tham chiếu). ALLOW-204 trên cột THẬT (@HttpCode(204)). ${PIPED_500}`,
+  },
 ];
 
 /**
- * **24 controller** mà sổ này TUYÊN BỐ PHỦ ĐỦ. Ratchet ca (5) dùng đúng danh sách này để chọn tập
+ * **29 controller** mà sổ này TUYÊN BỐ PHỦ ĐỦ. Ratchet ca (5) dùng đúng danh sách này để chọn tập
  * site cần đối chiếu — nhờ đó "quên một dòng verdict" là ĐỎ, không phải im lặng.
  *
  * ⚠️ Thêm file vào đây = tuyên bố **"tôi đã ĐO bằng HTTP mọi `:id` của file này"**, KHÔNG phải "tôi
@@ -1013,10 +1551,15 @@ export const PARAM_UUID_VERDICTS: readonly ParamVerdict[] = [
  * `tổng id-like == số site đã đo` (2·2·2·2·12·9·3·3·1) ⇒ KHÔNG file nào mang site đã-có-pipe mà chưa
  * đo, nên tuyên bố "phủ đủ" ở đây là đúng nghĩa đen chứ không phải xấp xỉ.
  *
- * CÒN NỢ (chưa file nào vào được vì chưa ai đo): `tasks/` **75** — nợ THẬT DUY NHẤT còn lại trong
- * phạm vi (`tasks.controller.ts` 43 · `projects` 13 · `task-files` 11 · `labels` 4 ·
- * `project-states` 4). Cộng `workflow/` 36 (code PARK, xem khối đợt-2 ở trên) = 111, cộng `auth/` 1
- * đã ký `skipped` = **112**.
+ * ⟲ S10-FND-PARAMUUID-5 (đợt 4, CUỐI trong phạm vi) thêm **5 controller / 75 site** — trọn module
+ * `tasks/`. Cả 5 file đều có `tổng id-like == số site đã đo` (43·13·11·4·4 = 75) ⇒ KHÔNG file nào
+ * mang site đã-có-pipe mà chưa đo. Và `tasks/` KHÔNG còn controller nào khác mang `@Param` id-like
+ * (`task-attachments.controller.ts` có 0 site) ⇒ prefix `tasks/` vừa SẠCH vừa ĐO ĐỦ.
+ *
+ * CÒN NỢ sau đợt 4: **0 trong phạm vi.** Phần chưa vào danh sách này KHÔNG phải nợ:
+ *   · `workflow/` **36** — code PARK chờ DỌN (`S10-CLEAN-WORKFLOWPARK-1`), CỐ Ý không đo, không vá;
+ *   · `auth/` **1** — đã ký `skipped` ở đợt 1 (`revokeSession` đo được 404, vá sẽ đẻ oracle).
+ * ⇒ trần ratchet còn **37 = 36 + 1**, KHÔNG phải 37 lỗi chờ vá.
  */
 export const PARAM_UUID_MEASURED_FILES: readonly string[] = [
   // ── Đợt 1 — S10-FND-PARAMUUID-2 (32 site) ────────────────────────────────────────────────────
@@ -1047,11 +1590,17 @@ export const PARAM_UUID_MEASURED_FILES: readonly string[] = [
   "notifications/my-notifications.controller.ts",
   "notifications/notification-admin.controller.ts",
   "recycle-bin/recycle-bin.controller.ts",
+  // ── Đợt 4 — S10-FND-PARAMUUID-5 (75 site) ────────────────────────────────────────────────────
+  "tasks/tasks.controller.ts",
+  "tasks/projects.controller.ts",
+  "tasks/task-files.controller.ts",
+  "tasks/labels.controller.ts",
+  "tasks/project-states.controller.ts",
 ];
 
 /**
- * SÀN chống sổ co về rỗng: **110** tham số đã đo — 32 của đợt 1 (31 `piped` + 1 `skipped`) + 42 của
- * đợt 2 + 36 của đợt 3 (cả hai đợt sau đều 100% `piped`: mọi site đo được 500, KHÔNG phản-ví-dụ).
- * Xoá bớt dòng để "cho lưới xanh" sẽ ĐỎ ở đây trước khi kịp làm hỏng ca (5).
+ * SÀN chống sổ co về rỗng: **185** tham số đã đo — 32 của đợt 1 (31 `piped` + 1 `skipped`) + 42 của
+ * đợt 2 + 36 của đợt 3 + 75 của đợt 4 (cả ba đợt sau đều 100% `piped`: mọi site đo được 500, KHÔNG
+ * phản-ví-dụ). Xoá bớt dòng để "cho lưới xanh" sẽ ĐỎ ở đây trước khi kịp làm hỏng ca (5).
  */
-export const PARAM_UUID_MEASURED_SIZE = 110;
+export const PARAM_UUID_MEASURED_SIZE = 185;

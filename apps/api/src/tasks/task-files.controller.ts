@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  ParseUUIDPipe,
   Param,
   Post,
   Query,
@@ -47,7 +48,7 @@ export class TaskFilesController {
   @RequirePermission("read", "task")
   list(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
     @Query() query: ListTaskFilesQueryDto,
   ) {
     return this.svc.list(req.user, taskId, query);
@@ -58,8 +59,8 @@ export class TaskFilesController {
   @RequirePermission("read", "task")
   getOne(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Param("fileId") fileId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+    @Param("fileId", ParseUUIDPipe) fileId: string,
   ) {
     return this.svc.getMetadata(req.user, taskId, fileId);
   }
@@ -72,8 +73,8 @@ export class TaskFilesController {
   @RequirePermission("read", "task")
   async download(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Param("fileId") fileId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+    @Param("fileId", ParseUUIDPipe) fileId: string,
     @Res() res: Response,
   ): Promise<void> {
     const { url } = await this.svc.getDownloadUrl(req.user, taskId, fileId);
@@ -85,7 +86,7 @@ export class TaskFilesController {
   @RequirePermission("file-upload", "task")
   linkFile(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
     @Body() dto: LinkTaskFileDto,
   ) {
     return this.svc.link(req.user, taskId, dto.fileId, dto.category);
@@ -107,8 +108,8 @@ export class TaskFilesController {
   @RequirePermission("file-upload", "task")
   setCover(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Param("fileId") fileId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+    @Param("fileId", ParseUUIDPipe) fileId: string,
   ) {
     return this.svc.setCover(req.user, taskId, fileId);
   }
@@ -121,7 +122,7 @@ export class TaskFilesController {
   @Delete("cover")
   @HttpCode(204)
   @RequirePermission("file-upload", "task")
-  clearCover(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
+  clearCover(@Req() req: AuthenticatedRequest, @Param("taskId", ParseUUIDPipe) taskId: string) {
     return this.svc.clearCover(req.user, taskId);
   }
 
@@ -131,8 +132,8 @@ export class TaskFilesController {
   @RequirePermission("file-delete", "task")
   remove(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Param("fileId") fileId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+    @Param("fileId", ParseUUIDPipe) fileId: string,
   ) {
     return this.svc.delete(req.user, taskId, fileId);
   }

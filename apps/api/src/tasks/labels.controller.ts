@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  ParseUUIDPipe,
   Param,
   Patch,
   Post,
@@ -38,7 +39,10 @@ export class LabelsController {
   /** GET /projects/:projectId/labels — danh sách nhãn của project. */
   @Get("projects/:projectId/labels")
   @RequirePermission("read", "label")
-  listLabels(@Req() req: AuthenticatedRequest, @Param("projectId") projectId: string) {
+  listLabels(
+    @Req() req: AuthenticatedRequest,
+    @Param("projectId", ParseUUIDPipe) projectId: string,
+  ) {
     return this.labels.listLabels(req.user.companyId, projectId);
   }
 
@@ -47,7 +51,7 @@ export class LabelsController {
   @RequirePermission("create", "label")
   createLabel(
     @Req() req: AuthenticatedRequest,
-    @Param("projectId") projectId: string,
+    @Param("projectId", ParseUUIDPipe) projectId: string,
     @Body() dto: CreateLabelDto,
   ) {
     return this.labels.createLabel(req.user, projectId, dto);
@@ -58,7 +62,7 @@ export class LabelsController {
   @RequirePermission("update", "label")
   updateLabel(
     @Req() req: AuthenticatedRequest,
-    @Param("labelId") labelId: string,
+    @Param("labelId", ParseUUIDPipe) labelId: string,
     @Body() dto: UpdateLabelDto,
   ) {
     return this.labels.updateLabel(req.user, labelId, dto);
@@ -68,7 +72,10 @@ export class LabelsController {
   @Delete("labels/:labelId")
   @HttpCode(204)
   @RequirePermission("delete", "label")
-  async deleteLabel(@Req() req: AuthenticatedRequest, @Param("labelId") labelId: string) {
+  async deleteLabel(
+    @Req() req: AuthenticatedRequest,
+    @Param("labelId", ParseUUIDPipe) labelId: string,
+  ) {
     await this.labels.deleteLabel(req.user, labelId);
   }
 }

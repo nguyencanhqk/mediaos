@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  ParseUUIDPipe,
   Param,
   Patch,
   Post,
@@ -128,7 +129,7 @@ export class TasksController {
   @RequirePermission("read", "task")
   getProjectTasks(
     @Req() req: AuthenticatedRequest,
-    @Param("projectId") projectId: string,
+    @Param("projectId", ParseUUIDPipe) projectId: string,
     @Query() query: PageQueryDto,
   ) {
     const page =
@@ -149,7 +150,7 @@ export class TasksController {
   @RequirePermission("read", "task")
   getTeamTasks(
     @Req() req: AuthenticatedRequest,
-    @Param("teamId") teamId: string,
+    @Param("teamId", ParseUUIDPipe) teamId: string,
     @Query() query: PageQueryDto,
   ) {
     const page =
@@ -166,7 +167,7 @@ export class TasksController {
   @Get(":taskId")
   @UseGuards(PermissionGuard)
   @RequirePermission("read", "task")
-  getTask(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
+  getTask(@Req() req: AuthenticatedRequest, @Param("taskId", ParseUUIDPipe) taskId: string) {
     return this.taskCore.getTask(req.user, taskId);
   }
 
@@ -180,7 +181,7 @@ export class TasksController {
   @Get(":taskId/subtasks")
   @UseGuards(PermissionGuard)
   @RequirePermission("read", "task")
-  listSubtasks(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
+  listSubtasks(@Req() req: AuthenticatedRequest, @Param("taskId", ParseUUIDPipe) taskId: string) {
     return this.taskCore.listSubtasks(req.user, taskId);
   }
 
@@ -195,7 +196,7 @@ export class TasksController {
   @RequirePermission("update", "task")
   reorderSubtasks(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
     @Body() dto: ReorderSubtasksDto,
   ) {
     return this.taskCore.reorderSubtasks(req.user, taskId, dto.subtaskIds);
@@ -226,7 +227,7 @@ export class TasksController {
   @RequirePermission("update", "task")
   updateStatus(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
     @Body() dto: UpdateTaskStatusDto,
   ) {
     return this.tasks.updateStatus(
@@ -246,7 +247,7 @@ export class TasksController {
   @RequirePermission("update", "task")
   updateTask(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
     @Body() dto: UpdateTaskCoreDto,
   ) {
     return this.taskCore.updateTask(req.user, taskId, dto);
@@ -260,7 +261,10 @@ export class TasksController {
   @HttpCode(204)
   @UseGuards(PermissionGuard)
   @RequirePermission("delete", "task", { isSensitive: true })
-  async deleteTask(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
+  async deleteTask(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+  ) {
     await this.taskCore.deleteTask(req.user, taskId);
   }
 
@@ -270,8 +274,8 @@ export class TasksController {
   @RequirePermission("update", "task")
   async addLabel(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Param("labelId") labelId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+    @Param("labelId", ParseUUIDPipe) labelId: string,
   ) {
     await this.tasks.addLabelToTask(
       { id: req.user.id, companyId: req.user.companyId },
@@ -287,8 +291,8 @@ export class TasksController {
   @RequirePermission("update", "task")
   async removeLabel(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Param("labelId") labelId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+    @Param("labelId", ParseUUIDPipe) labelId: string,
   ) {
     await this.tasks.removeLabelFromTask(
       { id: req.user.id, companyId: req.user.companyId },
@@ -306,7 +310,7 @@ export class TasksController {
   @Get(":taskId/comments")
   @UseGuards(PermissionGuard)
   @RequirePermission("read", "task")
-  getComments(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
+  getComments(@Req() req: AuthenticatedRequest, @Param("taskId", ParseUUIDPipe) taskId: string) {
     return this.taskComments.list(req.user, taskId);
   }
 
@@ -319,7 +323,7 @@ export class TasksController {
   @RequirePermission("comment", "task")
   addComment(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
     @Body() dto: CreateTaskCommentDto,
   ) {
     return this.taskComments.create(req.user, taskId, dto);
@@ -331,8 +335,8 @@ export class TasksController {
   @RequirePermission("comment", "task")
   updateComment(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Param("commentId") commentId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+    @Param("commentId", ParseUUIDPipe) commentId: string,
     @Body() dto: UpdateTaskCommentDto,
   ) {
     return this.taskComments.update(req.user, taskId, commentId, dto);
@@ -345,8 +349,8 @@ export class TasksController {
   @RequirePermission("comment", "task")
   async deleteComment(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Param("commentId") commentId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+    @Param("commentId", ParseUUIDPipe) commentId: string,
   ) {
     await this.taskComments.remove(req.user, taskId, commentId);
   }
@@ -364,7 +368,7 @@ export class TasksController {
   @RequirePermission("assign", "task")
   assignTask(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
     @Body() dto: AssignTaskDto,
   ) {
     return this.taskActions.assign(req.user, taskId, dto);
@@ -377,7 +381,7 @@ export class TasksController {
   @RequirePermission("update-status", "task")
   changeTaskStatus(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
     @Body() dto: ChangeTaskStatusDto,
   ) {
     return this.taskActions.changeStatus(req.user, taskId, dto);
@@ -400,7 +404,7 @@ export class TasksController {
   @RequirePermission("update-status", "task")
   moveTask(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
     @Body() dto: ChangeTaskStatusDto,
   ) {
     return this.taskActions.changeStatus(req.user, taskId, dto);
@@ -420,7 +424,7 @@ export class TasksController {
   @RequirePermission("update-state", "task")
   moveTaskState(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
     @Body() dto: MoveTaskStateDto,
   ) {
     return this.taskCore.moveState(req.user, taskId, dto);
@@ -433,7 +437,7 @@ export class TasksController {
   @RequirePermission("update-priority", "task")
   changeTaskPriority(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
     @Body() dto: ChangeTaskPriorityDto,
   ) {
     return this.taskActions.changePriority(req.user, taskId, dto);
@@ -446,7 +450,7 @@ export class TasksController {
   @RequirePermission("update-deadline", "task")
   changeTaskDeadline(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
     @Body() dto: ChangeTaskDeadlineDto,
   ) {
     return this.taskActions.changeDeadline(req.user, taskId, dto);
@@ -459,7 +463,7 @@ export class TasksController {
   @Get(":taskId/watchers")
   @UseGuards(PermissionGuard)
   @RequirePermission("watch", "task")
-  listWatchers(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
+  listWatchers(@Req() req: AuthenticatedRequest, @Param("taskId", ParseUUIDPipe) taskId: string) {
     return this.taskWatchers.listWatchers(req.user, taskId);
   }
 
@@ -469,7 +473,7 @@ export class TasksController {
   @RequirePermission("watch", "task")
   addWatcher(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
     @Body() _dto: AddWatcherDto,
   ) {
     void _dto;
@@ -483,8 +487,8 @@ export class TasksController {
   @RequirePermission("watch", "task")
   async removeWatcher(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Param("watcherId") watcherId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+    @Param("watcherId", ParseUUIDPipe) watcherId: string,
   ) {
     await this.taskActions.removeWatcher(req.user, taskId, watcherId);
   }
@@ -497,7 +501,7 @@ export class TasksController {
   @Get(":taskId/checklists")
   @UseGuards(PermissionGuard)
   @RequirePermission("read", "task")
-  listChecklists(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
+  listChecklists(@Req() req: AuthenticatedRequest, @Param("taskId", ParseUUIDPipe) taskId: string) {
     return this.taskChecklists.list(req.user, taskId);
   }
 
@@ -507,7 +511,7 @@ export class TasksController {
   @RequirePermission("update", "task")
   createChecklist(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
     @Body() dto: CreateTaskChecklistDto,
   ) {
     return this.taskChecklists.create(req.user, taskId, dto);
@@ -519,8 +523,8 @@ export class TasksController {
   @RequirePermission("update", "task")
   updateChecklist(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Param("checklistId") checklistId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+    @Param("checklistId", ParseUUIDPipe) checklistId: string,
     @Body() dto: UpdateTaskChecklistDto,
   ) {
     return this.taskChecklists.update(req.user, taskId, checklistId, dto);
@@ -533,8 +537,8 @@ export class TasksController {
   @RequirePermission("update", "task")
   async deleteChecklist(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Param("checklistId") checklistId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+    @Param("checklistId", ParseUUIDPipe) checklistId: string,
   ) {
     await this.taskChecklists.remove(req.user, taskId, checklistId);
   }
@@ -545,8 +549,8 @@ export class TasksController {
   @RequirePermission("update", "task")
   addChecklistItem(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Param("checklistId") checklistId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+    @Param("checklistId", ParseUUIDPipe) checklistId: string,
     @Body() dto: CreateTaskChecklistItemDto,
   ) {
     return this.taskChecklists.addItem(req.user, taskId, checklistId, dto);
@@ -558,9 +562,9 @@ export class TasksController {
   @RequirePermission("update", "task")
   updateChecklistItem(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Param("checklistId") checklistId: string,
-    @Param("itemId") itemId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+    @Param("checklistId", ParseUUIDPipe) checklistId: string,
+    @Param("itemId", ParseUUIDPipe) itemId: string,
     @Body() dto: UpdateTaskChecklistItemDto,
   ) {
     return this.taskChecklists.updateItem(req.user, taskId, checklistId, itemId, dto);
@@ -573,9 +577,9 @@ export class TasksController {
   @RequirePermission("update", "task")
   async deleteChecklistItem(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Param("checklistId") checklistId: string,
-    @Param("itemId") itemId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+    @Param("checklistId", ParseUUIDPipe) checklistId: string,
+    @Param("itemId", ParseUUIDPipe) itemId: string,
   ) {
     await this.taskChecklists.removeItem(req.user, taskId, checklistId, itemId);
   }
@@ -594,7 +598,7 @@ export class TasksController {
   @RequirePermission("read", "task")
   listActivity(
     @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
     @Query() query: ListTaskActivityQueryDto,
   ) {
     return this.taskActivityFeed.list(req.user, taskId, query);

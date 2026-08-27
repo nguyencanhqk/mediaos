@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  ParseUUIDPipe,
   Param,
   Patch,
   Post,
@@ -38,7 +39,10 @@ export class ProjectStatesController {
   /** GET /projects/:projectId/states — danh sách trạng thái của project (order theo sort_order). */
   @Get("projects/:projectId/states")
   @RequirePermission("read", "project_state")
-  listStates(@Req() req: AuthenticatedRequest, @Param("projectId") projectId: string) {
+  listStates(
+    @Req() req: AuthenticatedRequest,
+    @Param("projectId", ParseUUIDPipe) projectId: string,
+  ) {
     return this.states.listStates(req.user.companyId, projectId);
   }
 
@@ -47,7 +51,7 @@ export class ProjectStatesController {
   @RequirePermission("create", "project_state")
   createState(
     @Req() req: AuthenticatedRequest,
-    @Param("projectId") projectId: string,
+    @Param("projectId", ParseUUIDPipe) projectId: string,
     @Body() dto: CreateProjectStateDto,
   ) {
     return this.states.createState(req.user, projectId, dto);
@@ -58,7 +62,7 @@ export class ProjectStatesController {
   @RequirePermission("update", "project_state")
   updateState(
     @Req() req: AuthenticatedRequest,
-    @Param("stateId") stateId: string,
+    @Param("stateId", ParseUUIDPipe) stateId: string,
     @Body() dto: UpdateProjectStateDto,
   ) {
     return this.states.updateState(req.user, stateId, dto);
@@ -68,7 +72,10 @@ export class ProjectStatesController {
   @Delete("states/:stateId")
   @HttpCode(204)
   @RequirePermission("delete", "project_state")
-  async deleteState(@Req() req: AuthenticatedRequest, @Param("stateId") stateId: string) {
+  async deleteState(
+    @Req() req: AuthenticatedRequest,
+    @Param("stateId", ParseUUIDPipe) stateId: string,
+  ) {
     await this.states.deleteState(req.user, stateId);
   }
 }
