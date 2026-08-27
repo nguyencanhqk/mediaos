@@ -17,8 +17,8 @@ import {
  */
 
 /**
- * TRẦN đóng băng theo SỐ ĐO **27/08/2026** — SAU bản vá của S10-FND-PARAMUUID-4:
- * `ID_LIKE=298` · `PIPED=186` · `UNPIPED=112`.
+ * TRẦN đóng băng theo SỐ ĐO **27/08/2026** — SAU bản vá của S10-FND-PARAMUUID-5:
+ * `ID_LIKE=298` · `PIPED=261` · `UNPIPED=37`.
  *
  * LỊCH SỬ (mỗi mốc là một WO đã ĐO bằng HTTP, không phải đếm tĩnh):
  *   226 → 221  S10-FND-PARAMUUID-1 (KI-077) — 5 tham số `foundation/files`, cả 5 đo được 500.
@@ -32,22 +32,22 @@ import {
  *              8 · notifications 6 · recycle-bin 1. Cả 36 đo được 500 trước vá, KHÔNG phản-ví-dụ.
  *              Tiêu chí là CẤU TRÚC ("khép mọi module trong phạm vi TRỪ `tasks/`"), không phải rủi ro
  *              nghiệp vụ như hai đợt trước — xem `docs/plans/S10-FND-PARAMUUID-4.md` §2.
+ *   112 → 37   S10-FND-PARAMUUID-5 (KI-078 đợt 4, **CUỐI trong phạm vi**) — **75** tham số của trọn
+ *              module `tasks/`: tasks 43 · projects 13 · task-files 11 · labels 4 · project-states 4.
+ *              Cả 75 đo được 500 trước vá, KHÔNG phản-ví-dụ. **KI-078 ĐÓNG tại đây.**
  *
- * ⚠️ ĐÂY LÀ TRẦN, KHÔNG PHẢI MỤC TIÊU. Nó KHÔNG nói "112 chỗ này an toàn" — mới **114** chỗ từng được
- * đo bằng HTTP thật (78 sau đợt 2, cộng 36 của đợt 3). 112 chỗ còn lại chưa ai chạm; đoán chúng cũng
- * 500 là đúng thứ `done_when` của WO cấm ("đừng ép số cho khớp mô tả") — và giả thuyết đó ĐÃ SAI một
- * lần (auth-session = 404).
+ * ⚠️ ĐÂY LÀ TRẦN, KHÔNG PHẢI MỤC TIÊU — và từ đợt 4 nó KHÔNG còn là "nợ chưa đo" nữa.
  *
- * ⚠️ **112 KHÔNG PHẢI 112 MÓN NỢ.** Phân rã 27/08/2026 sau đợt 3:
- *     TRONG PHẠM VI, chưa đo (**75**): `tasks/` — và đó là nợ THẬT DUY NHẤT còn lại
- *       (`tasks.controller.ts` 43 · `projects` 13 · `task-files` 11 · `labels` 4 · `project-states` 4).
+ * ⚠️ **37 KHÔNG PHẢI 37 MÓN NỢ — nó là 37 chỗ đã có QUYẾT ĐỊNH.** Phân rã 27/08/2026 sau đợt 4:
+ *     TRONG PHẠM VI, chưa đo: **0**. Mọi module nghiệp vụ trong phạm vi đã ĐO bằng HTTP và đã vá;
+ *       tổng **185** site nằm trong `PARAM_UUID_MEASURED_FILES` với một dòng verdict mỗi site.
  *     NGOÀI PHẠM VI (**36**): `workflow/` — code hướng cũ đang chờ DỌN (`erd-current.md` §A5 ·
  *       `backlog.mjs:26` de-media-fy), join thẳng bảng media `content_items`, 0 hộ tiêu thụ FE.
  *       Vá nó là đổ công vào code sắp xoá ⇒ CỐ Ý không đụng, và cũng KHÔNG ký verdict `skipped`
  *       (ký vẫn buộc dựng fixture media để đo 36 route sắp xoá). Xem `docs/plans/S10-FND-PARAMUUID-3.md` §2.
  *     ĐÃ KÝ `skipped` (**1**): `auth/` — quyết định có ý thức, không phải nợ.
- *   ⇒ Trần này sẽ tụt về **36 + 1 = 37** khi `tasks/` được xử xong, và chỉ về 1 khi module
- *     `workflow/` bị DỌN. Đừng đọc "112" thành "112 lỗi chờ vá".
+ *   ⇒ Trần chỉ tụt tiếp khi module `workflow/` bị DỌN (`S10-CLEAN-WORKFLOWPARK-1`), lúc đó về **1**.
+ *     ⛔ Đừng đọc "37" thành "37 lỗi chờ vá" — đó chính là câu hiểu nhầm mà đợt 4 phải viết ra để chặn.
  *
  * ⚠️ HẠ TRẦN LÀ HÀNH VI ĐÚNG. Vá một chỗ ⇒ số giảm ⇒ hạ hằng này xuống theo. Ca (3) ép điều đó:
  * để trần cao hơn thực tế là để lại chỗ trống cho nợ mới lẻn vào mà không ai thấy.
@@ -58,7 +58,7 @@ import {
  *
  * ⛔ NÂNG TRẦN là tuyên bố thêm nợ, phải giải trình trong PR.
  */
-const UNPIPED_CEILING = 112;
+const UNPIPED_CEILING = 37;
 
 /**
  * Module ĐÃ VÁ ⇒ đòi bằng 0, không đòi "không tăng". Để một module đã sạch chỉ chịu trần chung nghĩa
@@ -79,6 +79,14 @@ const UNPIPED_CEILING = 112;
  *
  *   ĐO BẰNG HTTP Ở WO NÀY (3 int-spec RED→GREEN):  goals/ 21→0 · notifications/ 6→0 ·
  *                                                  recycle-bin/ 1→0
+ *
+ * ⟲ S10-FND-PARAMUUID-5 (KI-078 đợt 4, CUỐI trong phạm vi) — thêm 1 prefix, đo 27/08/2026 sau bản vá:
+ *
+ *   ĐO BẰNG HTTP Ở WO NÀY (3 int-spec RED→GREEN):  tasks/ 75→0
+ *
+ *   `tasks/` là prefix HIẾM ở chỗ hai tập trùng khít: cả 5 controller mang `@Param` id-like đều được
+ *   ĐO (75/75 site) và `task-attachments.controller.ts` có 0 site ⇒ prefix vừa SẠCH vừa ĐO ĐỦ. Đó là
+ *   TRÙNG HỢP của module này, KHÔNG phải luật — xem cảnh báo `employees/` ngay trên.
  *
  *   Và NỚI `foundation/files/` → `foundation/`: đợt 3 đo + vá 8 site còn lại của `foundation/`
  *   (audit 2 · holidays 2 · retention 2 · sequences 2) nên CẢ prefix `foundation/` giờ ĐO ĐƯỢC bằng 0.
@@ -121,6 +129,8 @@ const CLEAN_PREFIXES = [
   "goals/",
   "notifications/",
   "recycle-bin/",
+  // Đo bằng HTTP ở KI-078 đợt 4 (S10-FND-PARAMUUID-5) — nợ THẬT cuối cùng trong phạm vi:
+  "tasks/",
   // Sạch sẵn, ghim để không tụt lại:
   "api-keys/",
   "chat/",
@@ -264,10 +274,10 @@ describe("S10-FND-PARAMUUID-1 — ratchet: tham số :id phải validate ở BI�
         ? ""
         : [
             "",
-            "Site nhóm đợt-1 KHÔNG có dòng trong `param-uuid-verdicts.ts`:",
+            "Site trong nhóm ĐÃ ĐO mà KHÔNG có dòng trong `param-uuid-verdicts.ts`:",
             ...missing,
             "",
-            "Thêm `@Param` id-like vào một trong 7 controller đã đo = tuyên bố mở rộng nhóm ⇒ phải",
+            "Thêm `@Param` id-like vào một trong 29 controller đã đo = tuyên bố mở rộng nhóm ⇒ phải",
             "ĐO bằng HTTP rồi ký một dòng verdict (`piped` hoặc `skipped` + số đo + lý do).",
             "Khoá là `file#handler:param` — đổi TÊN METHOD cũng làm dòng cũ mồ côi, hãy sửa khoá.",
           ].join("\n"),
@@ -302,7 +312,7 @@ describe("S10-FND-PARAMUUID-1 — ratchet: tham số :id phải validate ở BI�
     expect(
       PARAM_UUID_VERDICTS.filter((v) => v.decision === "piped").length,
       "sổ không có dòng 'piped' nào — nhánh đó của assert đang chạy rỗng",
-    ).toBe(109);
+    ).toBe(184);
     expect(
       PARAM_UUID_VERDICTS.filter((v) => v.decision === "skipped").length,
       "sổ không có dòng 'skipped' nào — nhánh đó của assert đang chạy rỗng",

@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  ParseUUIDPipe,
   Param,
   Patch,
   Post,
@@ -79,7 +80,7 @@ export class ProjectsController {
   @Get(":id")
   @UseGuards(PermissionGuard)
   @RequirePermission("read", "project")
-  getOne(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getOne(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.projects.getProject(req.user, id);
   }
 
@@ -89,7 +90,7 @@ export class ProjectsController {
   @RequirePermission("update", "project")
   update(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateTaskProjectDto,
   ) {
     return this.projects.updateProject(req.user, id, dto);
@@ -106,7 +107,7 @@ export class ProjectsController {
   @RequirePermission("close", "project", { isSensitive: true })
   close(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: CloseTaskProjectDto,
   ) {
     return this.projects.closeProject(req.user, id, dto);
@@ -117,7 +118,7 @@ export class ProjectsController {
   @HttpCode(204)
   @UseGuards(PermissionGuard)
   @RequirePermission("delete", "project", { isSensitive: true })
-  async remove(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  async remove(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     await this.projects.deleteProject(req.user, id);
   }
 
@@ -125,7 +126,7 @@ export class ProjectsController {
   @Get(":id/members")
   @UseGuards(PermissionGuard)
   @RequirePermission("read", "project")
-  listMembers(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  listMembers(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.projects.getMembers(req.user, id);
   }
 
@@ -133,7 +134,11 @@ export class ProjectsController {
   @Post(":id/members")
   @UseGuards(PermissionGuard)
   @RequirePermission("manage-member", "project", { isSensitive: true })
-  addMember(@Req() req: AuthenticatedRequest, @Param("id") id: string, @Body() dto: AddMemberDto) {
+  addMember(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: AddMemberDto,
+  ) {
     return this.projects.addMember(req.user, id, dto);
   }
 
@@ -143,8 +148,8 @@ export class ProjectsController {
   @RequirePermission("manage-member", "project", { isSensitive: true })
   updateMember(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
-    @Param("memberId") memberId: string,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("memberId", ParseUUIDPipe) memberId: string,
     @Body() dto: UpdateMemberRoleDto,
   ) {
     return this.projects.updateMemberRole(req.user, id, memberId, dto);
@@ -157,8 +162,8 @@ export class ProjectsController {
   @RequirePermission("manage-member", "project", { isSensitive: true })
   async removeMember(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
-    @Param("memberId") memberId: string,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("memberId", ParseUUIDPipe) memberId: string,
   ) {
     await this.projects.removeMember(req.user, id, memberId);
   }
@@ -171,7 +176,7 @@ export class ProjectsController {
   @Get(":id/kanban")
   @UseGuards(PermissionGuard)
   @RequirePermission("view-kanban", "task")
-  getKanban(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getKanban(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.kanban.getBoard(req.user, id);
   }
 
@@ -184,7 +189,7 @@ export class ProjectsController {
   @Get(":id/report")
   @UseGuards(PermissionGuard)
   @RequirePermission("view-report", "project", { isSensitive: true })
-  getReport(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getReport(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.projects.getReport(req.user, id);
   }
 
@@ -200,7 +205,7 @@ export class ProjectsController {
   @RequirePermission("view", "task-audit-log", { isSensitive: true })
   listActivity(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Query() query: ListTaskActivityQueryDto,
   ) {
     return this.activityFeed.listByProject(req.user, id, query);
