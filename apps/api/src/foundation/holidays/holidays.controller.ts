@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  ParseUUIDPipe,
   Param,
   Patch,
   Post,
@@ -61,7 +62,7 @@ export class HolidaysController {
   @RequirePermission("manage", "foundation-holiday")
   update(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateHolidayDto,
   ) {
     return this.holidays.updateHoliday(req.user, id, dto);
@@ -70,7 +71,7 @@ export class HolidaysController {
   @Delete(":id")
   @HttpCode(200)
   @RequirePermission("manage", "foundation-holiday")
-  remove(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  remove(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.holidays.deleteHoliday(req.user, id);
   }
 }

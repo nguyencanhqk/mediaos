@@ -17,8 +17,8 @@ import {
  */
 
 /**
- * TRẦN đóng băng theo SỐ ĐO **27/08/2026** — SAU bản vá của S10-FND-PARAMUUID-3:
- * `ID_LIKE=298` · `PIPED=150` · `UNPIPED=148`.
+ * TRẦN đóng băng theo SỐ ĐO **27/08/2026** — SAU bản vá của S10-FND-PARAMUUID-4:
+ * `ID_LIKE=298` · `PIPED=186` · `UNPIPED=112`.
  *
  * LỊCH SỬ (mỗi mốc là một WO đã ĐO bằng HTTP, không phải đếm tĩnh):
  *   226 → 221  S10-FND-PARAMUUID-1 (KI-077) — 5 tham số `foundation/files`, cả 5 đo được 500.
@@ -28,21 +28,26 @@ import {
  *              vá ⇒ 221 − 31 = 190, KHÔNG phải 189.
  *   190 → 148  S10-FND-PARAMUUID-3 (KI-078 đợt 2) — **42** tham số mảng HR/tổ chức (employees 21 ·
  *              org 18 · positions 3), cả 42 đo được 500 trước vá, KHÔNG có phản-ví-dụ nào.
+ *   148 → 112  S10-FND-PARAMUUID-4 (KI-078 đợt 3) — **36** tham số: goals 21 · foundation-ngoài-files
+ *              8 · notifications 6 · recycle-bin 1. Cả 36 đo được 500 trước vá, KHÔNG phản-ví-dụ.
+ *              Tiêu chí là CẤU TRÚC ("khép mọi module trong phạm vi TRỪ `tasks/`"), không phải rủi ro
+ *              nghiệp vụ như hai đợt trước — xem `docs/plans/S10-FND-PARAMUUID-4.md` §2.
  *
- * ⚠️ ĐÂY LÀ TRẦN, KHÔNG PHẢI MỤC TIÊU. Nó KHÔNG nói "148 chỗ này an toàn" — mới **78** chỗ từng được
- * đo bằng HTTP thật. 148 chỗ còn lại chưa ai chạm; đoán chúng cũng 500 là đúng thứ `done_when` của WO
- * cấm ("đừng ép số cho khớp mô tả") — và giả thuyết đó ĐÃ SAI một lần (auth-session = 404).
+ * ⚠️ ĐÂY LÀ TRẦN, KHÔNG PHẢI MỤC TIÊU. Nó KHÔNG nói "112 chỗ này an toàn" — mới **114** chỗ từng được
+ * đo bằng HTTP thật (78 sau đợt 2, cộng 36 của đợt 3). 112 chỗ còn lại chưa ai chạm; đoán chúng cũng
+ * 500 là đúng thứ `done_when` của WO cấm ("đừng ép số cho khớp mô tả") — và giả thuyết đó ĐÃ SAI một
+ * lần (auth-session = 404).
  *
- * ⚠️ **148 KHÔNG PHẢI 148 MÓN NỢ.** Phân rã 27/08/2026:
- *     TRONG PHẠM VI, chưa đo (**111**): tasks 75 · goals 21 · foundation-ngoài-files 8 ·
- *       notifications 6 · recycle-bin 1.
+ * ⚠️ **112 KHÔNG PHẢI 112 MÓN NỢ.** Phân rã 27/08/2026 sau đợt 3:
+ *     TRONG PHẠM VI, chưa đo (**75**): `tasks/` — và đó là nợ THẬT DUY NHẤT còn lại
+ *       (`tasks.controller.ts` 43 · `projects` 13 · `task-files` 11 · `labels` 4 · `project-states` 4).
  *     NGOÀI PHẠM VI (**36**): `workflow/` — code hướng cũ đang chờ DỌN (`erd-current.md` §A5 ·
  *       `backlog.mjs:26` de-media-fy), join thẳng bảng media `content_items`, 0 hộ tiêu thụ FE.
  *       Vá nó là đổ công vào code sắp xoá ⇒ CỐ Ý không đụng, và cũng KHÔNG ký verdict `skipped`
  *       (ký vẫn buộc dựng fixture media để đo 36 route sắp xoá). Xem `docs/plans/S10-FND-PARAMUUID-3.md` §2.
  *     ĐÃ KÝ `skipped` (**1**): `auth/` — quyết định có ý thức, không phải nợ.
- *   ⇒ Trần này sẽ tụt về **36 + 1 = 37** khi 111 chỗ trong phạm vi được xử xong, và chỉ về 1 khi
- *     module `workflow/` bị DỌN. Đừng đọc "148" thành "148 lỗi chờ vá".
+ *   ⇒ Trần này sẽ tụt về **36 + 1 = 37** khi `tasks/` được xử xong, và chỉ về 1 khi module
+ *     `workflow/` bị DỌN. Đừng đọc "112" thành "112 lỗi chờ vá".
  *
  * ⚠️ HẠ TRẦN LÀ HÀNH VI ĐÚNG. Vá một chỗ ⇒ số giảm ⇒ hạ hằng này xuống theo. Ca (3) ép điều đó:
  * để trần cao hơn thực tế là để lại chỗ trống cho nợ mới lẻn vào mà không ai thấy.
@@ -53,7 +58,7 @@ import {
  *
  * ⛔ NÂNG TRẦN là tuyên bố thêm nợ, phải giải trình trong PR.
  */
-const UNPIPED_CEILING = 148;
+const UNPIPED_CEILING = 112;
 
 /**
  * Module ĐÃ VÁ ⇒ đòi bằng 0, không đòi "không tăng". Để một module đã sạch chỉ chịu trần chung nghĩa
@@ -69,6 +74,15 @@ const UNPIPED_CEILING = 148;
  * ⟲ S10-FND-PARAMUUID-3 (KI-078 đợt 2) — thêm 3 prefix, đo 27/08/2026 sau bản vá:
  *
  *   ĐO BẰNG HTTP Ở WO NÀY (3 int-spec RED→GREEN):  employees/ 21→0 · org/ 18→0 · positions/ 3→0
+ *
+ * ⟲ S10-FND-PARAMUUID-4 (KI-078 đợt 3) — thêm 3 prefix, đo 27/08/2026 sau bản vá:
+ *
+ *   ĐO BẰNG HTTP Ở WO NÀY (3 int-spec RED→GREEN):  goals/ 21→0 · notifications/ 6→0 ·
+ *                                                  recycle-bin/ 1→0
+ *
+ *   Và NỚI `foundation/files/` → `foundation/`: đợt 3 đo + vá 8 site còn lại của `foundation/`
+ *   (audit 2 · holidays 2 · retention 2 · sequences 2) nên CẢ prefix `foundation/` giờ ĐO ĐƯỢC bằng 0.
+ *   Prefix hẹp cũ trở thành thừa — và để nó lại là để `foundation/<module mới>` lọt qua ca (1).
  *
  *   ⚠️ Prefix `employees/` bằng 0 nhờ CẢ HAI nguồn, và hai nguồn đó KHÔNG tương đương:
  *     · 21 site được ĐO + vá ở WO này (5 controller);
@@ -94,7 +108,6 @@ const UNPIPED_CEILING = 148;
  */
 const CLEAN_PREFIXES = [
   // Đo bằng HTTP ở KI-077 / KI-078 đợt 1:
-  "foundation/files/",
   "leave/",
   "attendance/",
   "approval/",
@@ -102,6 +115,12 @@ const CLEAN_PREFIXES = [
   "employees/",
   "org/",
   "positions/",
+  // Đo bằng HTTP ở KI-078 đợt 3 (S10-FND-PARAMUUID-4). `foundation/` THAY THẾ `foundation/files/`
+  // của KI-077: đợt 3 vá nốt 8 site còn lại nên cả prefix rộng ĐO ĐƯỢC bằng 0.
+  "foundation/",
+  "goals/",
+  "notifications/",
+  "recycle-bin/",
   // Sạch sẵn, ghim để không tụt lại:
   "api-keys/",
   "chat/",
@@ -283,7 +302,7 @@ describe("S10-FND-PARAMUUID-1 — ratchet: tham số :id phải validate ở BI�
     expect(
       PARAM_UUID_VERDICTS.filter((v) => v.decision === "piped").length,
       "sổ không có dòng 'piped' nào — nhánh đó của assert đang chạy rỗng",
-    ).toBe(73);
+    ).toBe(109);
     expect(
       PARAM_UUID_VERDICTS.filter((v) => v.decision === "skipped").length,
       "sổ không có dòng 'skipped' nào — nhánh đó của assert đang chạy rỗng",

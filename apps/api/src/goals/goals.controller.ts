@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  ParseUUIDPipe,
   Param,
   Patch,
   Post,
@@ -87,7 +88,7 @@ export class GoalsController {
   @Get(":id")
   @UseGuards(PermissionGuard)
   @RequirePermission("view", "goal")
-  getOne(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getOne(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.goals.getGoal(req.user, id);
   }
 
@@ -95,7 +96,11 @@ export class GoalsController {
   @Patch(":id")
   @UseGuards(PermissionGuard)
   @RequirePermission("update", "goal")
-  update(@Req() req: AuthenticatedRequest, @Param("id") id: string, @Body() dto: UpdateGoalDto) {
+  update(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateGoalDto,
+  ) {
     return this.goals.updateGoal(req.user, id, dto);
   }
 
@@ -104,7 +109,7 @@ export class GoalsController {
   @HttpCode(204)
   @UseGuards(PermissionGuard)
   @RequirePermission("delete", "goal")
-  async remove(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  async remove(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     await this.goals.deleteGoal(req.user, id);
   }
 
@@ -119,7 +124,11 @@ export class GoalsController {
   @Post(":id/check-in")
   @UseGuards(PermissionGuard)
   @RequirePermission("checkin", "goal")
-  checkIn(@Req() req: AuthenticatedRequest, @Param("id") id: string, @Body() dto: CheckinGoalDto) {
+  checkIn(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: CheckinGoalDto,
+  ) {
     return this.checkin.checkIn(req.user, id, dto);
   }
 
@@ -129,7 +138,7 @@ export class GoalsController {
   @RequirePermission("view", "goal")
   updates(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Query() query: ListGoalUpdatesQueryDto,
   ) {
     return this.checkin.listUpdates(req.user, id, query);
@@ -141,7 +150,7 @@ export class GoalsController {
   @RequirePermission("finalize", "goal")
   finalize(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: FinalizeGoalDto,
   ) {
     return this.checkin.finalize(req.user, id, dto);
@@ -151,7 +160,11 @@ export class GoalsController {
   @Post(":id/reopen")
   @UseGuards(PermissionGuard)
   @RequirePermission("finalize", "goal")
-  reopen(@Req() req: AuthenticatedRequest, @Param("id") id: string, @Body() dto: FinalizeGoalDto) {
+  reopen(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: FinalizeGoalDto,
+  ) {
     return this.checkin.reopen(req.user, id, dto);
   }
 
@@ -159,7 +172,7 @@ export class GoalsController {
   @Get(":id/tasks")
   @UseGuards(PermissionGuard)
   @RequirePermission("view", "goal")
-  linkedTasks(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  linkedTasks(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.links.listLinkedTasks(req.user, id);
   }
 
@@ -169,7 +182,7 @@ export class GoalsController {
   @RequirePermission("update", "goal")
   linkTasks(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: LinkGoalTasksDto,
   ) {
     return this.links.linkTasks(req.user, id, dto);
@@ -181,8 +194,8 @@ export class GoalsController {
   @RequirePermission("update", "goal")
   unlinkTask(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
-    @Param("taskId") taskId: string,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
   ) {
     return this.links.unlinkTask(req.user, id, taskId);
   }
@@ -206,7 +219,7 @@ export class GoalsController {
   @RequirePermission("update", "goal")
   decompose(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: DecomposeGoalDto,
   ) {
     return this.decomposeService.decompose(req.user, id, dto);

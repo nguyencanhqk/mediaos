@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  ParseUUIDPipe,
   Param,
   Patch,
   Post,
@@ -59,7 +60,7 @@ export class TaskTemplatesController {
   @Get(":id")
   @UseGuards(PermissionGuard)
   @RequirePermission("manage", "task-template")
-  getOne(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getOne(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.templates.getTemplate(req.user, id);
   }
 
@@ -77,7 +78,7 @@ export class TaskTemplatesController {
   @RequirePermission("manage", "task-template")
   update(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateTaskTemplateDto,
   ) {
     return this.templates.updateTemplate(req.user, id, dto);
@@ -88,7 +89,7 @@ export class TaskTemplatesController {
   @HttpCode(204)
   @UseGuards(PermissionGuard)
   @RequirePermission("manage", "task-template")
-  async remove(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  async remove(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     await this.templates.deleteTemplate(req.user, id);
   }
 
@@ -99,7 +100,10 @@ export class TaskTemplatesController {
   @Get(":templateId/items")
   @UseGuards(PermissionGuard)
   @RequirePermission("manage", "task-template")
-  listItems(@Req() req: AuthenticatedRequest, @Param("templateId") templateId: string) {
+  listItems(
+    @Req() req: AuthenticatedRequest,
+    @Param("templateId", ParseUUIDPipe) templateId: string,
+  ) {
     return this.templates.listItems(req.user, templateId);
   }
 
@@ -108,7 +112,7 @@ export class TaskTemplatesController {
   @RequirePermission("manage", "task-template")
   createItem(
     @Req() req: AuthenticatedRequest,
-    @Param("templateId") templateId: string,
+    @Param("templateId", ParseUUIDPipe) templateId: string,
     @Body() dto: CreateTaskTemplateItemDto,
   ) {
     return this.templates.createItem(req.user, templateId, dto);
@@ -119,8 +123,8 @@ export class TaskTemplatesController {
   @RequirePermission("manage", "task-template")
   updateItem(
     @Req() req: AuthenticatedRequest,
-    @Param("templateId") templateId: string,
-    @Param("itemId") itemId: string,
+    @Param("templateId", ParseUUIDPipe) templateId: string,
+    @Param("itemId", ParseUUIDPipe) itemId: string,
     @Body() dto: UpdateTaskTemplateItemDto,
   ) {
     return this.templates.updateItem(req.user, templateId, itemId, dto);
@@ -132,8 +136,8 @@ export class TaskTemplatesController {
   @RequirePermission("manage", "task-template")
   async removeItem(
     @Req() req: AuthenticatedRequest,
-    @Param("templateId") templateId: string,
-    @Param("itemId") itemId: string,
+    @Param("templateId", ParseUUIDPipe) templateId: string,
+    @Param("itemId", ParseUUIDPipe) itemId: string,
   ) {
     await this.templates.deleteItem(req.user, templateId, itemId);
   }

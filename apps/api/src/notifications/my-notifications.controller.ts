@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  ParseUUIDPipe,
   Param,
   Post,
   Query,
@@ -101,7 +102,7 @@ export class MyNotificationsController {
   })
   detail(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Query() query: MyNotificationDetailQueryDto,
   ) {
     return this.service.detail(req.user.companyId, req.user.id, id, query.auto_mark_read ?? false);
@@ -113,7 +114,7 @@ export class MyNotificationsController {
   @RequirePermission(MARK_READ_NOTIFICATION.action, MARK_READ_NOTIFICATION.resourceType, {
     isSensitive: MARK_READ_NOTIFICATION.sensitive,
   })
-  markRead(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  markRead(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.service.markRead(req.user.companyId, req.user.id, id);
   }
 
@@ -133,7 +134,10 @@ export class MyNotificationsController {
   @RequirePermission(DELETE_NOTIFICATION.action, DELETE_NOTIFICATION.resourceType, {
     isSensitive: DELETE_NOTIFICATION.sensitive,
   })
-  async remove(@Req() req: AuthenticatedRequest, @Param("id") id: string): Promise<void> {
+  async remove(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+  ): Promise<void> {
     await this.service.remove(req.user.companyId, req.user.id, id);
   }
 }

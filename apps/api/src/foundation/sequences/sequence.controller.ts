@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Patch, Req, UseGuards, UsePipes } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Req,
+  UseGuards,
+  UsePipes,
+} from "@nestjs/common";
 import type { Request } from "express";
 import { ZodValidationPipe } from "nestjs-zod";
 import { PermissionGuard } from "../../permission/guards/permission.guard";
@@ -47,7 +57,7 @@ export class SequenceController {
    */
   @Get("sequences/:id/preview")
   @RequirePermission("view", "foundation-sequence")
-  preview(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  preview(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.sequences.previewNextCodeById(req.user.companyId, id);
   }
 
@@ -57,7 +67,11 @@ export class SequenceController {
    */
   @Patch("sequences/:id")
   @RequirePermission("update", "foundation-sequence")
-  update(@Req() req: AuthenticatedRequest, @Param("id") id: string, @Body() dto: PatchSequenceDto) {
+  update(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: PatchSequenceDto,
+  ) {
     return this.sequences.updateSequenceById(req.user, id, dto);
   }
 }
