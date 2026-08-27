@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Req,
@@ -93,7 +94,7 @@ export class AttendanceAdjustmentController {
 
   @Get("adjustment-requests/:id")
   @RequirePermission(VIEW_OWN.action, VIEW_OWN.resourceType, { isSensitive: VIEW_OWN.sensitive })
-  getDetail(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getDetail(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.service.getDetail(req.user, id);
   }
 
@@ -102,7 +103,7 @@ export class AttendanceAdjustmentController {
   @RequirePermission(APPROVE.action, APPROVE.resourceType, { isSensitive: APPROVE.sensitive })
   approve(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: ApproveAdjustmentDto,
   ) {
     return this.service.approve(req.user, id, dto);
@@ -113,7 +114,7 @@ export class AttendanceAdjustmentController {
   @RequirePermission(REJECT.action, REJECT.resourceType, { isSensitive: REJECT.sensitive })
   reject(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: RejectAdjustmentDto,
   ) {
     return this.service.reject(req.user, id, dto);
@@ -126,7 +127,7 @@ export class AttendanceAdjustmentController {
   })
   adjustDirect(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: DirectAdjustDto,
   ) {
     return this.service.adjustDirect(req.user, id, dto);

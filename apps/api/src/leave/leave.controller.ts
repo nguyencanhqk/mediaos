@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -159,7 +160,7 @@ export class LeaveController {
   @RequirePermission("manage", "leave")
   updateType(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateLeaveTypeDto,
   ) {
     return this.leave.updateType(req.user, id, dto);
@@ -208,7 +209,7 @@ export class LeaveController {
   @RequirePermission(VIEW_OWN_LEAVE.action, VIEW_OWN_LEAVE.resourceType, {
     isSensitive: VIEW_OWN_LEAVE.sensitive,
   })
-  getMyRequest(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getMyRequest(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.leaveRequest.getMineDetail(req.user, id);
   }
 
@@ -235,7 +236,10 @@ export class LeaveController {
     VIEW_TRANSACTION_LEAVE_BALANCE.resourceType,
     { isSensitive: VIEW_TRANSACTION_LEAVE_BALANCE.sensitive },
   )
-  listBalanceTransactionsCanonical(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  listBalanceTransactionsCanonical(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
     return this.leaveAdmin.listBalanceTransactions(req.user, id);
   }
 
@@ -284,7 +288,7 @@ export class LeaveController {
   })
   updateRequestDraft(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateLeaveRequestDraftDto,
   ) {
     return this.leaveRequest.updateDraft(req.user, id, dto);
@@ -298,7 +302,7 @@ export class LeaveController {
   })
   submitRequest(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: SubmitLeaveRequestDto,
   ) {
     return this.leaveRequest.submit(req.user, id, dto.note);
@@ -314,7 +318,7 @@ export class LeaveController {
   })
   approveRequest(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: ApproveLeaveRequestDto,
   ) {
     return this.leaveApproval.approve(req.user, id, dto.note);
@@ -331,7 +335,7 @@ export class LeaveController {
   })
   rejectRequest(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: RejectLeaveRequestDto,
   ) {
     return this.leaveApproval.reject(req.user, id, dto.reason);
@@ -346,7 +350,7 @@ export class LeaveController {
   })
   cancelRequest(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: CancelLeaveRequestDto,
   ) {
     return this.leaveRequest.cancel(req.user, id, dto.cancelReason);
@@ -361,7 +365,7 @@ export class LeaveController {
   })
   revokeRequest(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: RevokeLeaveRequestDto,
   ) {
     return this.leaveRevoke.revoke(req.user, id, dto.revokeReason);
@@ -416,7 +420,7 @@ export class LeaveController {
   })
   updateTypeAdmin(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateLeaveTypeAdminDto,
   ) {
     return this.leaveAdmin.updateType(req.user, id, dto);
@@ -427,7 +431,7 @@ export class LeaveController {
   @RequirePermission(DELETE_LEAVE_TYPE.action, DELETE_LEAVE_TYPE.resourceType, {
     isSensitive: DELETE_LEAVE_TYPE.sensitive,
   })
-  deleteTypeAdmin(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  deleteTypeAdmin(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.leaveAdmin.deleteType(req.user, id);
   }
 
@@ -455,7 +459,7 @@ export class LeaveController {
   })
   updatePolicy(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateLeavePolicyDto,
   ) {
     return this.leaveAdmin.updatePolicy(req.user, id, dto);
@@ -466,7 +470,7 @@ export class LeaveController {
   @RequirePermission(DELETE_LEAVE_POLICY.action, DELETE_LEAVE_POLICY.resourceType, {
     isSensitive: DELETE_LEAVE_POLICY.sensitive,
   })
-  deletePolicy(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  deletePolicy(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.leaveAdmin.deletePolicy(req.user, id);
   }
 
@@ -491,7 +495,10 @@ export class LeaveController {
       isSensitive: VIEW_TRANSACTION_LEAVE_BALANCE.sensitive,
     },
   )
-  listBalanceTransactions(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  listBalanceTransactions(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
     return this.leaveAdmin.listBalanceTransactions(req.user, id);
   }
 
@@ -502,7 +509,7 @@ export class LeaveController {
   })
   adjustBalance(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: AdjustLeaveBalanceDto,
   ) {
     return this.leaveAdmin.adjustBalance(req.user, id, dto);

@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards, UsePipes } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  UseGuards,
+  UsePipes,
+} from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
 import { ApprovalMultilevelService } from "./approval-multilevel.service";
@@ -35,7 +45,7 @@ export class ApprovalInboxController {
   @RequirePermission("approve", "approval-request")
   approve(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: ApproveLevelDto,
   ) {
     return this.approval.approveLevel(req.user.companyId, id, req.user.id, dto.comment ?? undefined);
@@ -47,7 +57,7 @@ export class ApprovalInboxController {
   @RequirePermission("reject", "approval-request")
   reject(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: RejectLevelDto,
   ) {
     return this.approval.rejectLevel(
