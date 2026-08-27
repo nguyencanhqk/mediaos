@@ -699,10 +699,305 @@ export const PARAM_UUID_VERDICTS: readonly ParamVerdict[] = [
     before: BEFORE_500,
     reason: `Route GHI. ALLOW-204 trên hàng thật (@HttpCode(204)). ${PIPED_500}`,
   },
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // ĐỢT 3 — S10-FND-PARAMUUID-4 (KI-078): 36 tham số, "khép mọi module TRONG PHẠM VI trừ `tasks/`".
+  //
+  // Tiêu chí đợt này là CẤU TRÚC, không phải rủi ro nghiệp vụ (hai đợt trước): nhận trọn phần trong
+  // phạm vi TRỪ `tasks/` để `CLEAN_PREFIXES` khép được 4 prefix về 0 — vá 36/75 chỗ của `tasks/`
+  // KHÔNG nới được prefix nào, và tham số `tasks/` thứ 76 vẫn lẻn vào được dưới trần chung.
+  // Lý lẽ + cái giá phải trả: docs/plans/S10-FND-PARAMUUID-4.md §2.
+  //
+  // **36/36 đo được 500 — KHÔNG có phản-ví-dụ nào** (đợt 1 có một: `auth-session` = 404).
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+
+  // ══ GOALS (SPEC-10) — mục tiêu/OKR. BẢNG CÓ `goal_code` ═════════════════════════════════════
+  {
+    key: "goals/goals.controller.ts#getOne:id",
+    route: "GET /goals/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `ALLOW-200 trên hàng thật ⇒ \`:id\` là \`goals.id\` (uuid), KHÔNG phải \`goal_code\`. ${PIPED_500}`,
+  },
+  {
+    key: "goals/goals.controller.ts#update:id",
+    route: "PATCH /goals/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI. ALLOW-200 trên hàng thật (mục tiêu cấp PHÒNG BAN — cấp company bị chặn ở MVP, GOAL-ERR-004). ${PIPED_500}`,
+  },
+  {
+    key: "goals/goals.controller.ts#remove:id",
+    route: "DELETE /goals/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (xoá MỀM). ALLOW-204 trên hàng thật (@HttpCode(204)). ${PIPED_500}`,
+  },
+  {
+    key: "goals/goals.controller.ts#checkIn:id",
+    route: "POST /goals/:id/check-in",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI. ALLOW-201 trên hàng thật status='Active' (FSM đòi Active — goal-checkin.service.ts:74). ${PIPED_500}`,
+  },
+  {
+    key: "goals/goals.controller.ts#updates:id",
+    route: "GET /goals/:id/updates",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Sổ append-only. ALLOW-200 trên hàng thật. ${PIPED_500}`,
+  },
+  {
+    key: "goals/goals.controller.ts#finalize:id",
+    route: "POST /goals/:id/finalize",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (chốt kỳ). ALLOW-201 trên hàng thật Active + CHƯA chốt (goal-checkin.service.ts:158,168). ${PIPED_500}`,
+  },
+  {
+    key: "goals/goals.controller.ts#reopen:id",
+    route: "POST /goals/:id/reopen",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (mở lại). ALLOW-201 trên hàng thật ĐÃ chốt \`finalized_at\` (goal-checkin.service.ts:210). ${PIPED_500}`,
+  },
+  {
+    key: "goals/goals.controller.ts#linkedTasks:id",
+    route: "GET /goals/:id/tasks",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Hai cổng (view:goal + read:task ở service). ALLOW-200 trên hàng thật. ${PIPED_500}`,
+  },
+  {
+    key: "goals/goals.controller.ts#linkTasks:id",
+    route: "POST /goals/:id/tasks",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (gắn BULK). ALLOW-201 trên hàng thật; ca DENY gửi \`taskIds\` UUID THẬT ⇒ 400 không thể đến từ body-pipe. ${PIPED_500}`,
+  },
+  {
+    key: "goals/goals.controller.ts#unlinkTask:id",
+    route: "DELETE /goals/:id/tasks/:taskId — VẾ :id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `HAI tham số id-like: đo RIÊNG vế này (\`:taskId\` HỢP LỆ). ALLOW-200 trên hàng thật. ${PIPED_500}`,
+  },
+  {
+    key: "goals/goals.controller.ts#unlinkTask:taskId",
+    route: "DELETE /goals/:id/tasks/:taskId — VẾ :taskId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `HAI tham số id-like: đo RIÊNG vế này (\`:id\` HỢP LỆ) ⇒ loại khoá \`tasks.id\`. ALLOW-200 trên task ĐANG gắn. ${PIPED_500}`,
+  },
+  {
+    key: "goals/goals.controller.ts#decompose:id",
+    route: "POST /goals/:id/decompose",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI BULK trong 1 tx. ALLOW-201 trên hàng thật; ca DENY gửi \`templateId\` UUID THẬT + \`items\` hợp lệ. ${PIPED_500}`,
+  },
+
+  // ══ TASK TEMPLATES (SPEC-10 §15) — danh mục mẫu công việc ═══════════════════════════════════
+  {
+    key: "goals/task-templates.controller.ts#getOne:id",
+    route: "GET /task-templates/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `ALLOW-200 trên hàng thật ⇒ loại khoá \`task_templates.id\`. ${PIPED_500}`,
+  },
+  {
+    key: "goals/task-templates.controller.ts#update:id",
+    route: "PATCH /task-templates/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (chỉ HEADER). ALLOW-200 trên hàng thật. ${PIPED_500}`,
+  },
+  {
+    key: "goals/task-templates.controller.ts#remove:id",
+    route: "DELETE /task-templates/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (xoá MỀM + cascade mềm xuống items). ALLOW-204 trên hàng thật (@HttpCode(204)). ${PIPED_500}`,
+  },
+  {
+    key: "goals/task-templates.controller.ts#listItems:templateId",
+    route: "GET /task-templates/:templateId/items",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Alias \`*Id\` — census theo \`@Param("id")\` sẽ TRƯỢT nó. ALLOW-200 trên hàng thật. ${PIPED_500}`,
+  },
+  {
+    key: "goals/task-templates.controller.ts#createItem:templateId",
+    route: "POST /task-templates/:templateId/items",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI. ALLOW-201 trên hàng thật (@Post không khai @HttpCode ⇒ 201). ${PIPED_500}`,
+  },
+  {
+    key: "goals/task-templates.controller.ts#updateItem:templateId",
+    route: "PATCH /task-templates/:templateId/items/:itemId — VẾ :templateId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `HAI tham số id-like: đo RIÊNG vế này (\`:itemId\` HỢP LỆ). ALLOW-200 trên hàng thật. ${PIPED_500}`,
+  },
+  {
+    key: "goals/task-templates.controller.ts#updateItem:itemId",
+    route: "PATCH /task-templates/:templateId/items/:itemId — VẾ :itemId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `HAI tham số id-like: đo RIÊNG vế này (\`:templateId\` HỢP LỆ) ⇒ loại khoá \`task_template_items.id\`. ${PIPED_500}`,
+  },
+  {
+    key: "goals/task-templates.controller.ts#removeItem:templateId",
+    route: "DELETE /task-templates/:templateId/items/:itemId — VẾ :templateId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `HAI tham số id-like: đo RIÊNG vế này (\`:itemId\` HỢP LỆ). ALLOW-204 trên hàng thật. ${PIPED_500}`,
+  },
+  {
+    key: "goals/task-templates.controller.ts#removeItem:itemId",
+    route: "DELETE /task-templates/:templateId/items/:itemId — VẾ :itemId",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `HAI tham số id-like: đo RIÊNG vế này (\`:templateId\` HỢP LỆ). ALLOW-204 trên hàng thật. ${PIPED_500}`,
+  },
+
+  // ══ FOUNDATION — audit viewer. ⚠️ /all/:id là @OperatorOnly ═════════════════════════════════
+  {
+    key: "foundation/audit/audit.controller.ts#getSystemDetail:id",
+    route: "GET /foundation/audit-logs/all/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason:
+      `@OperatorOnly ⇒ ĐO BẰNG TOKEN audience='operator' (PLATFORM_ADMIN_ROLE); actor tenant ăn 401 ` +
+      `TRƯỚC pipe nên KHÔNG đo được gì. Spec có hai ca NEO cho cả hai chiều. ALLOW-200 trên hàng thật. ${PIPED_500}`,
+  },
+  {
+    key: "foundation/audit/audit.controller.ts#getCompanyDetail:id",
+    route: "GET /foundation/audit-logs/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason:
+      `COMPANY scope (view:audit-log, is_sensitive). ALLOW-200 trên hàng thật. Ca ĐỊNH TUYẾN ghim ` +
+      `\`/audit-logs/all\` — literal MỘT segment nên nó KHỚP \`:id\`, chỉ THỨ TỰ KHAI BÁO cứu nó. ${PIPED_500}`,
+  },
+
+  // ══ FOUNDATION — ngày nghỉ. BẢNG CÓ `holiday_code` ══════════════════════════════════════════
+  {
+    key: "foundation/holidays/holidays.controller.ts#update:id",
+    route: "PATCH /foundation/public-holidays/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI. ALLOW-200 trên hàng thật ⇒ \`:id\` là uuid, KHÔNG phải \`holiday_code\`. ${PIPED_500}`,
+  },
+  {
+    key: "foundation/holidays/holidays.controller.ts#remove:id",
+    route: "DELETE /foundation/public-holidays/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI. ALLOW-**200** trên hàng thật — @HttpCode(200), KHÔNG phải 204 mặc định. ${PIPED_500}`,
+  },
+
+  // ══ FOUNDATION — retention governance ═══════════════════════════════════════════════════════
+  {
+    key: "foundation/retention/retention.controller.ts#simulate:id",
+    route: "POST /foundation/retention-policies/:id/simulate",
+    decision: "piped",
+    before: BEFORE_500,
+    reason:
+      `READ-ONLY preview, gate manage:foundation-retention (is_sensitive ⇒ wildcard KHÔNG kế thừa). ` +
+      `ALLOW-200 trên hàng thật (@HttpCode(200)). ${PIPED_500}`,
+  },
+  {
+    key: "foundation/retention/retention.controller.ts#update:id",
+    route: "PATCH /foundation/retention-policies/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (is_sensitive, System-scope). ALLOW-200 trên hàng thật. ${PIPED_500}`,
+  },
+
+  // ══ FOUNDATION — sequence. BẢNG CẤP MÃ, có `sequence_key` ═══════════════════════════════════
+  {
+    key: "foundation/sequences/sequence.controller.ts#preview:id",
+    route: "GET /foundation/sequences/:id/preview",
+    decision: "piped",
+    before: BEFORE_500,
+    reason:
+      `Bảng CẤP MÃ ⇒ ứng viên "\`:id\` thực ra là khoá nghiệp vụ" nặng nhất của đợt 3. ALLOW-200 trên ` +
+      `hàng thật CHỨNG MINH \`:id\` là uuid, KHÔNG phải \`sequence_key\`. ${PIPED_500}`,
+  },
+  {
+    key: "foundation/sequences/sequence.controller.ts#update:id",
+    route: "PATCH /foundation/sequences/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (cấu hình mutable + audit-in-tx). ALLOW-200 trên hàng thật. ${PIPED_500}`,
+  },
+
+  // ══ NOTIFICATIONS (SPEC-08) — của TÔI, own-scope tuyệt đối ══════════════════════════════════
+  {
+    key: "notifications/my-notifications.controller.ts#detail:id",
+    route: "GET /notifications/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Own-scope theo \`recipient_user_id\`. ALLOW-200 trên hàng thật + ALLOW-404 trên uuid không tồn tại. ${PIPED_500}`,
+  },
+  {
+    key: "notifications/my-notifications.controller.ts#markRead:id",
+    route: "POST /notifications/:id/mark-read",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (idempotent). ALLOW-200 trên hàng thật (@HttpCode(200)). ${PIPED_500}`,
+  },
+  {
+    key: "notifications/my-notifications.controller.ts#remove:id",
+    route: "DELETE /notifications/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `Route GHI (xoá MỀM — BẤT BIẾN #2). ALLOW-204 trên hàng thật (@HttpCode(204)). ${PIPED_500}`,
+  },
+
+  // ══ NOTIFICATIONS — quản trị catalog. BẢNG CÓ `event_code`/`template_code` ══════════════════
+  {
+    key: "notifications/notification-admin.controller.ts#patchEvent:id",
+    route: "PATCH /notifications/events/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason:
+      `Catalog mang \`event_code\` (NOTI-EVENT-XXX) ⇒ ứng viên "\`:id\` là MÃ". ALLOW-200 trên hàng ` +
+      `THẬT CỦA TENANT (không mượn hàng global — ghi lên hàng global là đổi dữ liệu dùng chung). ${PIPED_500}`,
+  },
+  {
+    key: "notifications/notification-admin.controller.ts#getTemplate:id",
+    route: "GET /notifications/templates/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason: `ALLOW-200 trên hàng thật ⇒ \`:id\` là uuid, KHÔNG phải \`template_code\`. ${PIPED_500}`,
+  },
+  {
+    key: "notifications/notification-admin.controller.ts#patchTemplate:id",
+    route: "PATCH /notifications/templates/:id",
+    decision: "piped",
+    before: BEFORE_500,
+    reason:
+      `Route GHI (company-override). ALLOW-200 trên hàng thật; ca DENY gửi \`title_template\` KHÔNG ` +
+      `chứa biến ⇒ 400 không thể đến từ assertTemplateVariablesSafe (422). ${PIPED_500}`,
+  },
+
+  // ══ RECYCLE BIN — khôi phục hồ sơ đã xoá mềm ════════════════════════════════════════════════
+  {
+    key: "recycle-bin/recycle-bin.controller.ts#restoreEmployee:id",
+    route: "POST /recycle-bin/employees/:id/restore",
+    decision: "piped",
+    before: BEFORE_500,
+    reason:
+      `Route GHI, gate restore:employee (is_sensitive). ALLOW-200 trên \`employee_profiles\` ĐÃ xoá ` +
+      `mềm (@HttpCode(200)). ${PIPED_500}`,
+  },
 ];
 
 /**
- * **16 controller** mà sổ này TUYÊN BỐ PHỦ ĐỦ. Ratchet ca (5) dùng đúng danh sách này để chọn tập
+ * **24 controller** mà sổ này TUYÊN BỐ PHỦ ĐỦ. Ratchet ca (5) dùng đúng danh sách này để chọn tập
  * site cần đối chiếu — nhờ đó "quên một dòng verdict" là ĐỎ, không phải im lặng.
  *
  * ⚠️ Thêm file vào đây = tuyên bố **"tôi đã ĐO bằng HTTP mọi `:id` của file này"**, KHÔNG phải "tôi
@@ -714,9 +1009,14 @@ export const PARAM_UUID_VERDICTS: readonly ParamVerdict[] = [
  * cái tên cũ ngụ ý "một đợt", mà bất biến thật là "mọi site trong các file này đều có một dòng
  * verdict tựa trên số đo". Đặt tên theo bất biến thì đợt 3 chỉ việc thêm file, không phải đổi tên lại.
  *
- * CÒN NỢ (chưa file nào vào được vì chưa ai đo): `tasks/` 75 · `goals/` 21 ·
- * `foundation/`-ngoài-`files/` 8 · `notifications/` 6 · `recycle-bin/` 1 = **111 trong phạm vi**;
- * cộng `workflow/` 36 (code PARK, xem khối đợt-2 ở trên) = 147, cộng `auth/` 1 đã ký `skipped` = 148.
+ * ⟲ S10-FND-PARAMUUID-4 (đợt 3) thêm **8 controller / 36 site**. Cả 8 file đều có
+ * `tổng id-like == số site đã đo` (2·2·2·2·12·9·3·3·1) ⇒ KHÔNG file nào mang site đã-có-pipe mà chưa
+ * đo, nên tuyên bố "phủ đủ" ở đây là đúng nghĩa đen chứ không phải xấp xỉ.
+ *
+ * CÒN NỢ (chưa file nào vào được vì chưa ai đo): `tasks/` **75** — nợ THẬT DUY NHẤT còn lại trong
+ * phạm vi (`tasks.controller.ts` 43 · `projects` 13 · `task-files` 11 · `labels` 4 ·
+ * `project-states` 4). Cộng `workflow/` 36 (code PARK, xem khối đợt-2 ở trên) = 111, cộng `auth/` 1
+ * đã ký `skipped` = **112**.
  */
 export const PARAM_UUID_MEASURED_FILES: readonly string[] = [
   // ── Đợt 1 — S10-FND-PARAMUUID-2 (32 site) ────────────────────────────────────────────────────
@@ -737,11 +1037,21 @@ export const PARAM_UUID_MEASURED_FILES: readonly string[] = [
   "org/hr-department.controller.ts",
   "org/hr-master-data.controller.ts",
   "positions/positions.controller.ts",
+  // ── Đợt 3 — S10-FND-PARAMUUID-4 (36 site) ────────────────────────────────────────────────────
+  "goals/goals.controller.ts",
+  "goals/task-templates.controller.ts",
+  "foundation/audit/audit.controller.ts",
+  "foundation/holidays/holidays.controller.ts",
+  "foundation/retention/retention.controller.ts",
+  "foundation/sequences/sequence.controller.ts",
+  "notifications/my-notifications.controller.ts",
+  "notifications/notification-admin.controller.ts",
+  "recycle-bin/recycle-bin.controller.ts",
 ];
 
 /**
- * SÀN chống sổ co về rỗng: **74** tham số đã đo — 32 của đợt 1 (31 `piped` + 1 `skipped`) + 42 của
- * đợt 2 (42 `piped`, KHÔNG có `skipped` nào: cả 42 đều đo được 500).
+ * SÀN chống sổ co về rỗng: **110** tham số đã đo — 32 của đợt 1 (31 `piped` + 1 `skipped`) + 42 của
+ * đợt 2 + 36 của đợt 3 (cả hai đợt sau đều 100% `piped`: mọi site đo được 500, KHÔNG phản-ví-dụ).
  * Xoá bớt dòng để "cho lưới xanh" sẽ ĐỎ ở đây trước khi kịp làm hỏng ca (5).
  */
-export const PARAM_UUID_MEASURED_SIZE = 74;
+export const PARAM_UUID_MEASURED_SIZE = 110;

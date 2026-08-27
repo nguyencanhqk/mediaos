@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   NotFoundException,
+  ParseUUIDPipe,
   Param,
   Patch,
   Query,
@@ -124,7 +125,7 @@ export class NotificationAdminController {
   })
   async patchEvent(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() body: NotificationEventAdminPatchDto,
   ) {
     const override = await this.adminService.toggleEvent(
@@ -176,7 +177,7 @@ export class NotificationAdminController {
   @RequirePermission(VIEW_NOTIFICATION_TEMPLATE.action, VIEW_NOTIFICATION_TEMPLATE.resourceType, {
     isSensitive: true,
   })
-  async getTemplate(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  async getTemplate(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     const companyId = req.user.companyId;
     const row = await this.db.withTenant(companyId, (tx) =>
       this.templateRepo.findByIdForCompany(tx, companyId, id),
@@ -205,7 +206,7 @@ export class NotificationAdminController {
   )
   async patchTemplate(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() body: NotificationTemplateAdminPatchDto,
   ) {
     const override = await this.adminService.patchTemplate(

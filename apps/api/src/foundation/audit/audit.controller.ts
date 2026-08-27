@@ -1,4 +1,13 @@
-import { Controller, Get, Param, Query, Req, UseGuards, UsePipes } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Query,
+  Req,
+  UseGuards,
+  UsePipes,
+} from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
 import { OperatorOnly } from "../../auth/operator-only.decorator";
@@ -60,14 +69,14 @@ export class AuditController {
   @Get("all/:id")
   @OperatorOnly()
   @RequirePermission("view", "platform-audit", { isSensitive: true })
-  getSystemDetail(@Param("id") id: string) {
+  getSystemDetail(@Param("id", ParseUUIDPipe) id: string) {
     return this.audit.getSystemDetail(id);
   }
 
   /** COMPANY — chi tiết 1 audit của tenant hiện tại. KHAI BÁO CUỐI (':id' bắt phần còn lại). */
   @Get(":id")
   @RequirePermission("view", "audit-log", { isSensitive: true })
-  getCompanyDetail(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getCompanyDetail(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.audit.getCompanyDetail(req.user, id);
   }
 }

@@ -337,6 +337,27 @@ describe.skipIf(!hasLaneDb)(
       expect(res.status, JSON.stringify(res.body)).toBe(200);
     });
 
+    /**
+     * Ca ALLOW dạng thứ hai: UUID HỢP LỆ nhưng không tồn tại. Nó tách "400 vì SAI DẠNG" khỏi "404 vì
+     * KHÔNG CÓ HÀNG" — nếu pipe chặn oan cả uuid hợp lệ thì ca này ĐỎ trong khi mọi ca DENY vẫn xanh.
+     */
+    it("ALLOW · GET /foundation/sequences/:id/preview UUID hợp lệ (không tồn tại) → 404 đơn trị", async () => {
+      expectPassedBoundary(
+        await http().get(`/foundation/sequences/${randomUUID()}/preview`).set(auth()),
+        404,
+      );
+    });
+
+    it("ALLOW · PATCH /foundation/retention-policies/:id UUID hợp lệ (không tồn tại) → 404 đơn trị", async () => {
+      expectPassedBoundary(
+        await http()
+          .patch(`/foundation/retention-policies/${randomUUID()}`)
+          .set(auth())
+          .send({ retentionDays: 400 }),
+        404,
+      );
+    });
+
     it("PARAM · PATCH /foundation/sequences/:id với :id rác → 400 ở BIÊN", async () => {
       expectRejectedAtBoundary(
         await http().patch(`/foundation/sequences/${JUNK}`).set(auth()).send({ paddingLength: 6 }),

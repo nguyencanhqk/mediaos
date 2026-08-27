@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  ParseUUIDPipe,
   Param,
   Patch,
   Post,
@@ -77,7 +78,7 @@ export class RetentionController {
   @Post("retention-policies/:id/simulate")
   @HttpCode(200)
   @RequirePermission("manage", "foundation-retention", { isSensitive: true })
-  async simulate(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  async simulate(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     const result = await this.retention.simulate(req.user.companyId, id);
     return toSimulateResultView(result);
   }
@@ -90,7 +91,7 @@ export class RetentionController {
   @RequirePermission("manage", "foundation-retention", { isSensitive: true })
   async update(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: PatchRetentionPolicyDto,
   ) {
     const updated = await this.retention.updatePolicy(req.user.companyId, id, dto, {
