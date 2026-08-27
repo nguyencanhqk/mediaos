@@ -17,8 +17,8 @@ import {
  */
 
 /**
- * TRẦN đóng băng theo SỐ ĐO **27/08/2026** — SAU bản vá của S10-FND-PARAMUUID-5:
- * `ID_LIKE=298` · `PIPED=261` · `UNPIPED=37`.
+ * TRẦN đóng băng theo SỐ ĐO **27/08/2026** — SAU khi `S10-CLEAN-WORKFLOWPARK-1` DỌN module
+ * `workflow/`: `UNPIPED=1`.
  *
  * LỊCH SỬ (mỗi mốc là một WO đã ĐO bằng HTTP, không phải đếm tĩnh):
  *   226 → 221  S10-FND-PARAMUUID-1 (KI-077) — 5 tham số `foundation/files`, cả 5 đo được 500.
@@ -35,19 +35,23 @@ import {
  *   112 → 37   S10-FND-PARAMUUID-5 (KI-078 đợt 4, **CUỐI trong phạm vi**) — **75** tham số của trọn
  *              module `tasks/`: tasks 43 · projects 13 · task-files 11 · labels 4 · project-states 4.
  *              Cả 75 đo được 500 trước vá, KHÔNG phản-ví-dụ. **KI-078 ĐÓNG tại đây.**
+ *   37  → 1    S10-CLEAN-WORKFLOWPARK-1 — **KHÔNG PHẢI MỘT BẢN VÁ.** 36 tham số còn lại biến mất vì
+ *              hai controller mang chúng bị **GỠ** (`workflow.controller.ts` 12 ·
+ *              `workflow-templates.controller.ts` 24), không phải vì ai đó gắn pipe cho chúng.
+ *              ⛔ Đừng đọc mốc này thành "đã đo + vá 36 route": 36 route đó CHƯA BAO GIỜ được đo
+ *              bằng HTTP và giờ thì không còn tồn tại để đo. Xem `docs/plans/S10-CLEAN-WORKFLOWPARK-1.md`.
  *
  * ⚠️ ĐÂY LÀ TRẦN, KHÔNG PHẢI MỤC TIÊU — và từ đợt 4 nó KHÔNG còn là "nợ chưa đo" nữa.
  *
- * ⚠️ **37 KHÔNG PHẢI 37 MÓN NỢ — nó là 37 chỗ đã có QUYẾT ĐỊNH.** Phân rã 27/08/2026 sau đợt 4:
+ * ⚠️ **1 KHÔNG PHẢI MỘT MÓN NỢ — nó là chỗ DUY NHẤT còn lại và đã có QUYẾT ĐỊNH.** Phân rã 27/08/2026
+ * sau khi dọn `workflow/`:
  *     TRONG PHẠM VI, chưa đo: **0**. Mọi module nghiệp vụ trong phạm vi đã ĐO bằng HTTP và đã vá;
  *       tổng **185** site nằm trong `PARAM_UUID_MEASURED_FILES` với một dòng verdict mỗi site.
- *     NGOÀI PHẠM VI (**36**): `workflow/` — code hướng cũ đang chờ DỌN (`erd-current.md` §A5 ·
- *       `backlog.mjs:26` de-media-fy), join thẳng bảng media `content_items`, 0 hộ tiêu thụ FE.
- *       Vá nó là đổ công vào code sắp xoá ⇒ CỐ Ý không đụng, và cũng KHÔNG ký verdict `skipped`
- *       (ký vẫn buộc dựng fixture media để đo 36 route sắp xoá). Xem `docs/plans/S10-FND-PARAMUUID-3.md` §2.
+ *     NGOÀI PHẠM VI: **0** — vế 36 tham số của `workflow/` đã hết vì code mang chúng bị GỠ.
  *     ĐÃ KÝ `skipped` (**1**): `auth/` — quyết định có ý thức, không phải nợ.
- *   ⇒ Trần chỉ tụt tiếp khi module `workflow/` bị DỌN (`S10-CLEAN-WORKFLOWPARK-1`), lúc đó về **1**.
- *     ⛔ Đừng đọc "37" thành "37 lỗi chờ vá" — đó chính là câu hiểu nhầm mà đợt 4 phải viết ra để chặn.
+ *   ⇒ Trần này giờ là SÀN: nó chỉ tụt tiếp nếu `auth.controller.ts#revokeSession:id` đổi quyết định,
+ *     mà quyết định đó là CỐ Ý (gắn pipe sẽ tách 400 khỏi 404 ⇒ đẻ oracle liệt kê session id).
+ *     ⛔ Mọi con số > 1 từ giờ là nợ MỚI lẻn vào, không phải tàn dư.
  *
  * ⚠️ HẠ TRẦN LÀ HÀNH VI ĐÚNG. Vá một chỗ ⇒ số giảm ⇒ hạ hằng này xuống theo. Ca (3) ép điều đó:
  * để trần cao hơn thực tế là để lại chỗ trống cho nợ mới lẻn vào mà không ai thấy.
@@ -58,7 +62,7 @@ import {
  *
  * ⛔ NÂNG TRẦN là tuyên bố thêm nợ, phải giải trình trong PR.
  */
-const UNPIPED_CEILING = 37;
+const UNPIPED_CEILING = 1;
 
 /**
  * Module ĐÃ VÁ ⇒ đòi bằng 0, không đòi "không tăng". Để một module đã sạch chỉ chịu trần chung nghĩa
@@ -102,9 +106,9 @@ const UNPIPED_CEILING = 37;
  * Phân biệt hai nhóm là CÓ CHỦ Ý: nhóm "sạch sẵn" CHƯA ai đo bằng HTTP, nên việc ghim chúng chỉ là
  * "không cho tụt lại", KHÔNG phải tuyên bố "đã kiểm chứng từng route".
  *
- * ⛔ `workflow/` KHÔNG được vào danh sách này: nó còn **36** tham số unpiped. Prefix ở đây nghĩa là
- * "bằng 0", KHÔNG phải "đã quyết định bỏ qua" — mà `workflow/` đúng là đã bị quyết định bỏ qua (code
- * PARK chờ dọn). Hai chuyện khác nhau; chỗ ghi quyết định đó là docblock của `UNPIPED_CEILING`.
+ * ⓘ `workflow/` KHÔNG còn trong census: `S10-CLEAN-WORKFLOWPARK-1` đã GỠ hai controller của nó.
+ * Cũng KHÔNG thêm nó vào danh sách này — một prefix không còn file nào thì ca (1) lọc ra tập rỗng và
+ * xanh vĩnh viễn, tức là ghim một lời hứa không ai đo. Prefix ở đây phải trỏ tới code ĐANG SỐNG.
  *
  * ⛔ `auth/` KHÔNG BAO GIỜ được vào danh sách này. Nó còn ĐÚNG MỘT tham số unpiped
  * (`auth.controller.ts#revokeSession:id`) và đó là quyết định CÓ Ý THỨC, không phải nợ: route đó đo

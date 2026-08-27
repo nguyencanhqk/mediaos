@@ -269,64 +269,14 @@ export const ROUTE_VERDICTS: Readonly<Record<string, RouteVerdict>> = {
     reason: "Luôn 410 — không ghi bảng nào.",
   },
 
-  // ── PARKED (13): module CONTENT/media đã park theo de-media-fy ──────────────────────────────────
-  // ⚠ Vẫn MOUNTED ở PROD: user đã đăng nhập gọi được. Rủi ro thực tế thấp (content_items không có dữ
-  // liệu nghiệp vụ MVP) nhưng đây là bề mặt tấn công không cần thiết — đề xuất owner gỡ mount hoặc
-  // gate cấp class trước RC (giữ nguyên khuyến nghị của báo cáo S6-SEC-1 §7).
-  "WorkflowController#startWorkflow": {
-    verdict: "PARKED",
-    reason: "workflow của content_items (quyền update:content) — module CONTENT đã park.",
-  },
-  "WorkflowController#getWorkflow": {
-    verdict: "PARKED",
-    reason: "Đọc workflow instance của content_items — module CONTENT đã park.",
-  },
-  "WorkflowController#getWorkflowByContent": {
-    verdict: "PARKED",
-    reason: "Tra workflow theo contentItemId — module CONTENT đã park.",
-  },
-  "WorkflowController#startStep": {
-    verdict: "PARKED",
-    reason: "Bước workflow content — module CONTENT đã park.",
-  },
-  "WorkflowController#submitStep": {
-    verdict: "PARKED",
-    reason: "Bước workflow content — module CONTENT đã park.",
-  },
-  "WorkflowController#getStepChecklist": {
-    verdict: "PARKED",
-    reason: "Checklist bước workflow content — module CONTENT đã park.",
-  },
-  "WorkflowController#checkItem": {
-    verdict: "PARKED",
-    reason: "Tick checklist content — module CONTENT đã park.",
-  },
-  "WorkflowController#uncheckItem": {
-    verdict: "PARKED",
-    reason: "Bỏ tick checklist content — module CONTENT đã park.",
-  },
-  "WorkflowController#listApprovalRequests": {
-    verdict: "PARKED",
-    reason:
-      "Duyệt content (KHÔNG phải FSM nghỉ phép/chấm công — cái đó ở ApprovalInboxController) — module CONTENT đã park.",
-  },
-  "WorkflowController#approve": {
-    verdict: "PARKED",
-    reason: "Duyệt content — module CONTENT đã park.",
-  },
-  "WorkflowController#requestRevision": {
-    verdict: "PARKED",
-    reason: "Trả lại content để sửa — module CONTENT đã park.",
-  },
-  "WorkflowTemplatesController#list": {
-    verdict: "PARKED",
-    reason:
-      "Mẫu workflow-DAG của content — module CONTENT đã park (mutation của controller này VẪN gate workflow-template).",
-  },
-  "WorkflowTemplatesController#detail": {
-    verdict: "PARKED",
-    reason: "Chi tiết mẫu workflow-DAG của content — module CONTENT đã park.",
-  },
+  // ── PARKED (0): khối 13 route `workflow/` ĐÃ BIẾN MẤT khỏi census ────────────────────────────
+  // `S10-CLEAN-WORKFLOWPARK-1` (27/08/2026) GỠ HẲN `WorkflowController` + `WorkflowTemplatesController`
+  // khỏi `AppModule` — đúng khuyến nghị "gỡ mount trước RC" mà báo cáo `S6-SEC-1` §7 để lại và khối
+  // này từng ghi. Không còn route ⇒ không còn gì để phán quyết: giữ lại 13 dòng sẽ làm ca "sổ trỏ
+  // route CÓ THẬT" đỏ, và tệ hơn là khiến người đọc sau tưởng bề mặt đó vẫn sống ở PROD.
+  //
+  // ⛔ Đừng thêm lại ô PARKED cho `workflow/`. Bề mặt HTTP của nó = 0, có ca đo riêng khẳng định
+  // điều đó: `test/foundation/workflow-surface-removed.unit-spec.ts`.
 };
 
 /**

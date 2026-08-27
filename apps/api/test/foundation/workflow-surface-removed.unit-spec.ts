@@ -56,10 +56,10 @@ describe("S10-CLEAN-WORKFLOWPARK-1 — bề mặt HTTP của module `workflow/` 
   });
 
   it("(1) AppModule ĐÃ BOOT không còn route nào thuộc `/workflow` hay `/workflow-templates`", () => {
-    const survivors = routes.filter((r) =>
-      REMOVED_CONTROLLER_PATHS.includes(basePath(r) as never),
-    );
-    const detail = survivors.map((r) => `  ${r.httpMethod} /${r.path}  (${r.controller})`).join("\n");
+    const survivors = routes.filter((r) => REMOVED_CONTROLLER_PATHS.includes(basePath(r) as never));
+    const detail = survivors
+      .map((r) => `  ${r.httpMethod} /${r.path}  (${r.controller})`)
+      .join("\n");
     expect(
       survivors.length,
       `Còn ${survivors.length} route của module PARK workflow/ sống ở runtime:\n${detail}`,
