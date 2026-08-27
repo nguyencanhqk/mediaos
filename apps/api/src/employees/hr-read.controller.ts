@@ -3,6 +3,7 @@ import {
   Get,
   Header,
   Param,
+  ParseUUIDPipe,
   Query,
   Req,
   Res,
@@ -84,7 +85,7 @@ export class HrReadController {
 
   @Get("employees/:id")
   @RequirePermission("read", "employee")
-  getEmployee(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getEmployee(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.hr.getHrEmployee(req.user, id);
   }
 

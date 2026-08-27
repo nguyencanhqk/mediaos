@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -47,7 +48,7 @@ export class HrDepartmentController {
 
   @Get(":id")
   @RequirePermission("read", "department")
-  getDepartment(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getDepartment(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.svc.getDepartment(req.user.companyId, id);
   }
 
@@ -61,7 +62,7 @@ export class HrDepartmentController {
   @RequirePermission("update", "department")
   updateDepartment(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateDepartmentDto,
   ) {
     return this.svc.updateDepartment(req.user.companyId, req.user.id, id, dto);
@@ -70,7 +71,7 @@ export class HrDepartmentController {
   @Delete(":id")
   @HttpCode(204)
   @RequirePermission("delete", "department")
-  deleteDepartment(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  deleteDepartment(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.svc.deleteDepartment(req.user.companyId, req.user.id, id);
   }
 }

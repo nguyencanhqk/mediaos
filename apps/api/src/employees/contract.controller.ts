@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -57,7 +58,7 @@ export class ContractController {
   @RequirePermission("view", "contract")
   async listForEmployee(
     @Req() req: AuthenticatedRequest,
-    @Param("id") employeeId: string,
+    @Param("id", ParseUUIDPipe) employeeId: string,
     @Query() query: ListContractsQueryDto,
   ) {
     const { data, meta } = await this.svc.listForEmployee(req.user, employeeId, query);
@@ -66,7 +67,7 @@ export class ContractController {
 
   @Get("contracts/:id")
   @RequirePermission("view", "contract")
-  getById(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getById(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.svc.getById(req.user, id);
   }
 
@@ -80,7 +81,7 @@ export class ContractController {
   @RequirePermission("manage", "contract")
   update(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateContractDto,
   ) {
     return this.svc.update(req.user, id, dto);
@@ -90,7 +91,7 @@ export class ContractController {
   @RequirePermission("manage", "contract")
   linkFile(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: LinkContractFileDto,
   ) {
     return this.svc.linkFile(req.user, id, dto.fileId);
@@ -99,7 +100,7 @@ export class ContractController {
   @Delete("contracts/:id")
   @HttpCode(204)
   @RequirePermission("manage", "contract")
-  delete(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  delete(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.svc.delete(req.user, id);
   }
 }

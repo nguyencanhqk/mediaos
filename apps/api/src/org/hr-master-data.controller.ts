@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -55,7 +56,7 @@ export class HrMasterDataController {
 
   @Get("job-levels/:id")
   @RequirePermission("manage", "master-data")
-  getJobLevel(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getJobLevel(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.svc.getJobLevel(req.user.companyId, id);
   }
 
@@ -69,7 +70,7 @@ export class HrMasterDataController {
   @RequirePermission("manage", "master-data")
   updateJobLevel(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateJobLevelDto,
   ) {
     return this.svc.updateJobLevel(req.user.companyId, req.user.id, id, dto);
@@ -78,7 +79,7 @@ export class HrMasterDataController {
   @Delete("job-levels/:id")
   @HttpCode(204)
   @RequirePermission("manage", "master-data")
-  deleteJobLevel(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  deleteJobLevel(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.svc.deleteJobLevel(req.user.companyId, req.user.id, id);
   }
 
@@ -92,7 +93,7 @@ export class HrMasterDataController {
 
   @Get("contract-types/:id")
   @RequirePermission("manage", "master-data")
-  getContractType(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getContractType(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.svc.getContractType(req.user.companyId, id);
   }
 
@@ -106,7 +107,7 @@ export class HrMasterDataController {
   @RequirePermission("manage", "master-data")
   updateContractType(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateContractTypeDto,
   ) {
     return this.svc.updateContractType(req.user.companyId, req.user.id, id, dto);
@@ -115,7 +116,7 @@ export class HrMasterDataController {
   @Delete("contract-types/:id")
   @HttpCode(204)
   @RequirePermission("manage", "master-data")
-  deleteContractType(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  deleteContractType(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.svc.deleteContractType(req.user.companyId, req.user.id, id);
   }
 }

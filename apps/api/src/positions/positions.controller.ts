@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -37,7 +38,7 @@ export class PositionsController {
 
   @Get(':id')
   @RequirePermission('read', 'position')
-  getPosition(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+  getPosition(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.positions.getPosition(req.user.companyId, id);
   }
 
@@ -51,7 +52,7 @@ export class PositionsController {
   @RequirePermission('update', 'position')
   updatePosition(
     @Req() req: AuthenticatedRequest,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdatePositionDto,
   ) {
     return this.positions.updatePosition(req.user.companyId, req.user.id, id, dto);
@@ -60,7 +61,7 @@ export class PositionsController {
   @Delete(':id')
   @HttpCode(204)
   @RequirePermission('delete', 'position')
-  deletePosition(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+  deletePosition(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.positions.deletePosition(req.user.companyId, id);
   }
 }

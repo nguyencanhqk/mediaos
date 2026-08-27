@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { idLikeParamSites, siteKey, unpipedIdParamSites } from "./param-uuid-census";
 import {
   PARAM_UUID_VERDICTS,
-  PARAM_UUID_WAVE1_FILES,
-  PARAM_UUID_WAVE1_SIZE,
+  PARAM_UUID_MEASURED_FILES,
+  PARAM_UUID_MEASURED_SIZE,
 } from "./param-uuid-verdicts";
 
 /**
@@ -17,8 +17,8 @@ import {
  */
 
 /**
- * TRẦN đóng băng theo SỐ ĐO **26/08/2026** — SAU bản vá của S10-FND-PARAMUUID-2:
- * `ID_LIKE=298` · `PIPED=108` · `UNPIPED=190`.
+ * TRẦN đóng băng theo SỐ ĐO **27/08/2026** — SAU bản vá của S10-FND-PARAMUUID-3:
+ * `ID_LIKE=298` · `PIPED=150` · `UNPIPED=148`.
  *
  * LỊCH SỬ (mỗi mốc là một WO đã ĐO bằng HTTP, không phải đếm tĩnh):
  *   226 → 221  S10-FND-PARAMUUID-1 (KI-077) — 5 tham số `foundation/files`, cả 5 đo được 500.
@@ -26,12 +26,23 @@ import {
  *              14 · approval 2), cả 31 đo được 500 trước vá. Nhóm đợt-1 gồm **32** tham số nhưng
  *              tham số thứ 32 (`auth.controller.ts#revokeSession:id`) đo được **404** ⇒ CỐ Ý không
  *              vá ⇒ 221 − 31 = 190, KHÔNG phải 189.
+ *   190 → 148  S10-FND-PARAMUUID-3 (KI-078 đợt 2) — **42** tham số mảng HR/tổ chức (employees 21 ·
+ *              org 18 · positions 3), cả 42 đo được 500 trước vá, KHÔNG có phản-ví-dụ nào.
  *
- * ⚠️ ĐÂY LÀ TRẦN, KHÔNG PHẢI MỤC TIÊU. Nó KHÔNG nói "190 chỗ này an toàn" — mới **36** chỗ từng được
- * đo bằng HTTP thật. 189 chỗ còn lại (tasks 75 · workflow 36 · goals 21 · employees 21 · org 18 ·
- * foundation-ngoài-files 8 · notifications 6 · positions 3 · recycle-bin 1) chưa ai chạm; đoán chúng
- * cũng 500 là đúng thứ `done_when` của WO cấm ("đừng ép số cho khớp mô tả") — và giả thuyết đó ĐÃ
- * SAI một lần ngay trong nhóm đợt-1 (auth-session = 404).
+ * ⚠️ ĐÂY LÀ TRẦN, KHÔNG PHẢI MỤC TIÊU. Nó KHÔNG nói "148 chỗ này an toàn" — mới **78** chỗ từng được
+ * đo bằng HTTP thật. 148 chỗ còn lại chưa ai chạm; đoán chúng cũng 500 là đúng thứ `done_when` của WO
+ * cấm ("đừng ép số cho khớp mô tả") — và giả thuyết đó ĐÃ SAI một lần (auth-session = 404).
+ *
+ * ⚠️ **148 KHÔNG PHẢI 148 MÓN NỢ.** Phân rã 27/08/2026:
+ *     TRONG PHẠM VI, chưa đo (**111**): tasks 75 · goals 21 · foundation-ngoài-files 8 ·
+ *       notifications 6 · recycle-bin 1.
+ *     NGOÀI PHẠM VI (**36**): `workflow/` — code hướng cũ đang chờ DỌN (`erd-current.md` §A5 ·
+ *       `backlog.mjs:26` de-media-fy), join thẳng bảng media `content_items`, 0 hộ tiêu thụ FE.
+ *       Vá nó là đổ công vào code sắp xoá ⇒ CỐ Ý không đụng, và cũng KHÔNG ký verdict `skipped`
+ *       (ký vẫn buộc dựng fixture media để đo 36 route sắp xoá). Xem `docs/plans/S10-FND-PARAMUUID-3.md` §2.
+ *     ĐÃ KÝ `skipped` (**1**): `auth/` — quyết định có ý thức, không phải nợ.
+ *   ⇒ Trần này sẽ tụt về **36 + 1 = 37** khi 111 chỗ trong phạm vi được xử xong, và chỉ về 1 khi
+ *     module `workflow/` bị DỌN. Đừng đọc "148" thành "148 lỗi chờ vá".
  *
  * ⚠️ HẠ TRẦN LÀ HÀNH VI ĐÚNG. Vá một chỗ ⇒ số giảm ⇒ hạ hằng này xuống theo. Ca (3) ép điều đó:
  * để trần cao hơn thực tế là để lại chỗ trống cho nợ mới lẻn vào mà không ai thấy.
@@ -42,7 +53,7 @@ import {
  *
  * ⛔ NÂNG TRẦN là tuyên bố thêm nợ, phải giải trình trong PR.
  */
-const UNPIPED_CEILING = 190;
+const UNPIPED_CEILING = 148;
 
 /**
  * Module ĐÃ VÁ ⇒ đòi bằng 0, không đòi "không tăng". Để một module đã sạch chỉ chịu trần chung nghĩa
@@ -51,12 +62,27 @@ const UNPIPED_CEILING = 190;
  * ⟲ S10-FND-PARAMUUID-2 (KI-078) — danh sách nới từ 1 lên 10 prefix. **Chỉ prefix mà census ĐO ĐƯỢC
  * bằng 0 mới vào**, không prefix nào vào theo kỳ vọng. Đo 26/08/2026 sau bản vá:
  *
- *   ĐO BẰNG HTTP Ở WO NÀY (3 int-spec RED→GREEN):  leave/ 15→0 · attendance/ 14→0 · approval/ 2→0
+ *   ĐO BẰNG HTTP Ở WO ĐÓ (3 int-spec RED→GREEN):   leave/ 15→0 · attendance/ 14→0 · approval/ 2→0
  *   ĐÃ SẠCH SẴN, ghim để khỏi tụt lại:             api-keys/ · chat/ · dashboard/ · permission/ ·
  *                                                  user-invites/ · users/ (+ foundation/files/)
  *
- * Phân biệt hai nhóm là CÓ CHỦ Ý: nhóm dưới sạch nhưng CHƯA ai đo bằng HTTP, nên việc ghim chúng chỉ
- * là "không cho tụt lại", KHÔNG phải tuyên bố "đã kiểm chứng từng route".
+ * ⟲ S10-FND-PARAMUUID-3 (KI-078 đợt 2) — thêm 3 prefix, đo 27/08/2026 sau bản vá:
+ *
+ *   ĐO BẰNG HTTP Ở WO NÀY (3 int-spec RED→GREEN):  employees/ 21→0 · org/ 18→0 · positions/ 3→0
+ *
+ *   ⚠️ Prefix `employees/` bằng 0 nhờ CẢ HAI nguồn, và hai nguồn đó KHÔNG tương đương:
+ *     · 21 site được ĐO + vá ở WO này (5 controller);
+ *     · 7 site của `hr-write.controller.ts` + `hr-employee-avatar.controller.ts` ĐÃ CÓ pipe từ trước
+ *       và **CHƯA ai đo bằng HTTP** ⇒ chúng KHÔNG nằm trong `PARAM_UUID_MEASURED_FILES`.
+ *   Vì thế `CLEAN_PREFIXES` ("prefix này bằng 0") và `PARAM_UUID_MEASURED_FILES` ("mọi site trong file
+ *   này đã được đo") là HAI tập KHÁC NHAU — đừng đồng bộ chúng cho "gọn".
+ *
+ * Phân biệt hai nhóm là CÓ CHỦ Ý: nhóm "sạch sẵn" CHƯA ai đo bằng HTTP, nên việc ghim chúng chỉ là
+ * "không cho tụt lại", KHÔNG phải tuyên bố "đã kiểm chứng từng route".
+ *
+ * ⛔ `workflow/` KHÔNG được vào danh sách này: nó còn **36** tham số unpiped. Prefix ở đây nghĩa là
+ * "bằng 0", KHÔNG phải "đã quyết định bỏ qua" — mà `workflow/` đúng là đã bị quyết định bỏ qua (code
+ * PARK chờ dọn). Hai chuyện khác nhau; chỗ ghi quyết định đó là docblock của `UNPIPED_CEILING`.
  *
  * ⛔ `auth/` KHÔNG BAO GIỜ được vào danh sách này. Nó còn ĐÚNG MỘT tham số unpiped
  * (`auth.controller.ts#revokeSession:id`) và đó là quyết định CÓ Ý THỨC, không phải nợ: route đó đo
@@ -67,11 +93,15 @@ const UNPIPED_CEILING = 190;
  * phải "đã xem qua".
  */
 const CLEAN_PREFIXES = [
-  // Đo bằng HTTP ở KI-077 / KI-078:
+  // Đo bằng HTTP ở KI-077 / KI-078 đợt 1:
   "foundation/files/",
   "leave/",
   "attendance/",
   "approval/",
+  // Đo bằng HTTP ở KI-078 đợt 2 (S10-FND-PARAMUUID-3):
+  "employees/",
+  "org/",
+  "positions/",
   // Sạch sẵn, ghim để không tụt lại:
   "api-keys/",
   "chat/",
@@ -167,21 +197,21 @@ describe("S10-FND-PARAMUUID-1 — ratchet: tham số :id phải validate ở BI�
    * ⚠️ Ánh xạ site ↔ dòng verdict phải là SONG ÁNH: site thiếu dòng ⇒ ĐỎ (quên ký), dòng thừa/mồ côi
    * ⇒ ĐỎ (đổi tên handler làm khoá trỏ vào hư không mà sổ vẫn trông đầy đủ).
    */
-  it("(5) sổ phán quyết nhóm đợt-1 KHỚP census theo TỪNG SITE, hai chiều", () => {
-    const wave1 = idLikeParamSites().filter((s) => PARAM_UUID_WAVE1_FILES.includes(s.file));
+  it("(5) sổ phán quyết KHỚP census theo TỪNG SITE, hai chiều", () => {
+    const measured = idLikeParamSites().filter((s) => PARAM_UUID_MEASURED_FILES.includes(s.file));
 
     // Neo chống-xanh-rỗng: nếu bộ lọc trượt (đổi tên file, census hỏng) thì mọi assert dưới đây
     // xanh vì KHÔNG CÓ GÌ để so, không phải vì đúng.
     expect(
-      wave1.length,
-      `Census chỉ thấy ${wave1.length} site trong 7 controller nhóm đợt-1, chờ ${PARAM_UUID_WAVE1_SIZE}.\n` +
-        "Hoặc controller vừa đổi tên/đường dẫn (cập nhật PARAM_UUID_WAVE1_FILES), hoặc có `@Param`\n" +
+      measured.length,
+      `Census chỉ thấy ${measured.length} site trong ${PARAM_UUID_MEASURED_FILES.length} controller ĐÃ ĐO, chờ ${PARAM_UUID_MEASURED_SIZE}.\n` +
+        "Hoặc controller vừa đổi tên/đường dẫn (cập nhật PARAM_UUID_MEASURED_FILES), hoặc có `@Param`\n" +
         "id-like vừa được THÊM/XOÁ ở nhóm đã đo — cả hai đều cần một dòng verdict, không phải sửa số.",
-    ).toBe(PARAM_UUID_WAVE1_SIZE);
+    ).toBe(PARAM_UUID_MEASURED_SIZE);
     expect(
       PARAM_UUID_VERDICTS.length,
-      "sổ phán quyết phải có ĐÚNG một dòng cho mỗi site nhóm đợt-1",
-    ).toBe(PARAM_UUID_WAVE1_SIZE);
+      "sổ phán quyết phải có ĐÚNG một dòng cho mỗi site trong các controller ĐÃ ĐO",
+    ).toBe(PARAM_UUID_MEASURED_SIZE);
 
     // Khoá trùng ⇒ hai dòng cùng trỏ một site, và một site khác mất dòng mà tổng vẫn khớp.
     const byKey = new Map<string, (typeof PARAM_UUID_VERDICTS)[number]>();
@@ -192,7 +222,7 @@ describe("S10-FND-PARAMUUID-1 — ratchet: tham số :id phải validate ở BI�
 
     const missing: string[] = [];
     const mismatched: string[] = [];
-    for (const s of wave1) {
+    for (const s of measured) {
       const key = siteKey(s);
       const v = byKey.get(key);
       if (!v) {
@@ -253,7 +283,7 @@ describe("S10-FND-PARAMUUID-1 — ratchet: tham số :id phải validate ở BI�
     expect(
       PARAM_UUID_VERDICTS.filter((v) => v.decision === "piped").length,
       "sổ không có dòng 'piped' nào — nhánh đó của assert đang chạy rỗng",
-    ).toBe(31);
+    ).toBe(73);
     expect(
       PARAM_UUID_VERDICTS.filter((v) => v.decision === "skipped").length,
       "sổ không có dòng 'skipped' nào — nhánh đó của assert đang chạy rỗng",
