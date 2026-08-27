@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -66,7 +67,7 @@ export class EmployeesController {
 
   @Get(":id")
   @RequirePermission("read", "employee")
-  getEmployee(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getEmployee(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.employees.getEmployee(req.user, id);
   }
 
@@ -74,7 +75,7 @@ export class EmployeesController {
   @RequirePermission("update", "employee")
   updateEmployee(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateEmployeeProfileDto,
   ) {
     return this.employees.updateEmployee(req.user, id, dto);
@@ -83,7 +84,7 @@ export class EmployeesController {
   @Delete(":id")
   @HttpCode(204)
   @RequirePermission("delete", "employee")
-  deleteEmployee(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  deleteEmployee(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     // S7-CHAT-BE-5 (W14): truyền actor để dòng audit "rời phòng vì hồ sơ bị xoá" nói được AI đã xoá.
     return this.employees.deleteEmployee(req.user.companyId, id, req.user.id);
   }

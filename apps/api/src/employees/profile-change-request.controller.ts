@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Req,
@@ -82,7 +83,7 @@ export class ProfileChangeRequestController {
 
   @Get(":id")
   @RequirePermission("create", "profile-change-request")
-  getDetail(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  getDetail(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.svc.getRequestDetail(req.user, id);
   }
 
@@ -98,7 +99,7 @@ export class ProfileChangeRequestController {
   @RequirePermission("approve", "profile-change-request")
   approveRequest(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(approveProfileChangeRequestSchema))
     dto: ApproveProfileChangeRequest,
   ) {
@@ -113,7 +114,7 @@ export class ProfileChangeRequestController {
   @RequirePermission("approve", "profile-change-request")
   rejectRequest(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(rejectProfileChangeRequestSchema))
     dto: RejectProfileChangeRequest,
   ) {
@@ -125,7 +126,7 @@ export class ProfileChangeRequestController {
   @Post(":id/cancel")
   @HttpCode(200)
   @RequirePermission("create", "profile-change-request")
-  cancelRequest(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  cancelRequest(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.svc.cancelRequest(req.user, id);
   }
 }

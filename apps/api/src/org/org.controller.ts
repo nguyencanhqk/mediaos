@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -100,7 +101,7 @@ export class OrgController {
   @RequirePermission("update", "org_unit")
   updateOrgUnit(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateOrgUnitDto,
   ) {
     return this.org.updateOrgUnit(req.user.companyId, id, dto);
@@ -110,7 +111,7 @@ export class OrgController {
   @HttpCode(204)
   @UseGuards(PermissionGuard)
   @RequirePermission("delete", "org_unit")
-  deleteOrgUnit(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  deleteOrgUnit(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.org.deleteOrgUnit(req.user.companyId, id);
   }
 
@@ -150,7 +151,7 @@ export class OrgController {
   @RequirePermission("update", "team")
   updateTeam(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateTeamDto,
   ) {
     return this.org.updateTeam(req.user.companyId, id, dto);
@@ -161,7 +162,7 @@ export class OrgController {
   @RequirePermission("update", "team")
   assignTeamLeader(
     @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: AssignTeamLeaderDto,
   ) {
     return this.org.assignTeamLeader(req.user.companyId, id, dto);
@@ -171,7 +172,7 @@ export class OrgController {
   @HttpCode(204)
   @UseGuards(PermissionGuard)
   @RequirePermission("delete", "team")
-  deleteTeam(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+  deleteTeam(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.org.deleteTeam(req.user.companyId, id);
   }
 
@@ -182,7 +183,7 @@ export class OrgController {
   @Get("teams/:id/members")
   @UseGuards(PermissionGuard)
   @RequirePermission("read", "team")
-  listTeamMembers(@Req() req: AuthenticatedRequest, @Param("id") teamId: string) {
+  listTeamMembers(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) teamId: string) {
     return this.org.listTeamMembers(req.user, teamId);
   }
 
@@ -191,7 +192,7 @@ export class OrgController {
   @RequirePermission("update", "team")
   addTeamMember(
     @Req() req: AuthenticatedRequest,
-    @Param("id") teamId: string,
+    @Param("id", ParseUUIDPipe) teamId: string,
     @Body() dto: AddTeamMemberDto,
   ) {
     return this.org.addTeamMember(req.user.companyId, teamId, dto);
@@ -203,8 +204,8 @@ export class OrgController {
   @RequirePermission("update", "team")
   removeTeamMember(
     @Req() req: AuthenticatedRequest,
-    @Param("id") teamId: string,
-    @Param("userId") userId: string,
+    @Param("id", ParseUUIDPipe) teamId: string,
+    @Param("userId", ParseUUIDPipe) userId: string,
   ) {
     return this.org.removeTeamMember(req.user.companyId, teamId, userId);
   }

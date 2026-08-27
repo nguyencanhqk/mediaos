@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Req,
@@ -46,7 +47,7 @@ export class EmployeeFileController {
   @RequirePermission("file-view", "employee")
   list(
     @Req() req: AuthenticatedRequest,
-    @Param("id") employeeId: string,
+    @Param("id", ParseUUIDPipe) employeeId: string,
     @Query() query: ListEmployeeFilesQueryDto,
   ) {
     return this.svc.list(req.user, employeeId, query);
@@ -57,8 +58,8 @@ export class EmployeeFileController {
   @RequirePermission("file-view", "employee")
   getOne(
     @Req() req: AuthenticatedRequest,
-    @Param("id") employeeId: string,
-    @Param("fileId") fileId: string,
+    @Param("id", ParseUUIDPipe) employeeId: string,
+    @Param("fileId", ParseUUIDPipe) fileId: string,
   ) {
     return this.svc.getMetadata(req.user, employeeId, fileId);
   }
@@ -71,8 +72,8 @@ export class EmployeeFileController {
   @RequirePermission("file-view", "employee")
   async download(
     @Req() req: AuthenticatedRequest,
-    @Param("id") employeeId: string,
-    @Param("fileId") fileId: string,
+    @Param("id", ParseUUIDPipe) employeeId: string,
+    @Param("fileId", ParseUUIDPipe) fileId: string,
     @Res() res: Response,
   ): Promise<void> {
     const { url } = await this.svc.getDownloadUrl(req.user, employeeId, fileId);
@@ -84,7 +85,7 @@ export class EmployeeFileController {
   @RequirePermission("file-upload", "employee")
   link(
     @Req() req: AuthenticatedRequest,
-    @Param("id") employeeId: string,
+    @Param("id", ParseUUIDPipe) employeeId: string,
     @Body() dto: LinkEmployeeFileDto,
   ) {
     return this.svc.link(req.user, employeeId, dto.fileId, dto.category);
@@ -96,8 +97,8 @@ export class EmployeeFileController {
   @RequirePermission("file-delete", "employee")
   remove(
     @Req() req: AuthenticatedRequest,
-    @Param("id") employeeId: string,
-    @Param("fileId") fileId: string,
+    @Param("id", ParseUUIDPipe) employeeId: string,
+    @Param("fileId", ParseUUIDPipe) fileId: string,
   ) {
     return this.svc.delete(req.user, employeeId, fileId);
   }
