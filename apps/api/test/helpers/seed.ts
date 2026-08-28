@@ -86,80 +86,9 @@ export async function seedUser(
   return res.rows[0].id as string;
 }
 
-/**
- * Seed workflow definition MVP-0 cho một company.
- * Dùng trực tiếp trong integration / E2E test (không qua API).
- * Idempotent: ON CONFLICT DO NOTHING; trả về definitionId.
- */
-export async function seedWorkflowDefinition(direct: Pool, companyId: string): Promise<string> {
-  const code = `video_standard_v0`;
-
-  const res = await direct.query(
-    `INSERT INTO workflow_definitions
-       (company_id, code, name, applies_to, max_approval_level, allow_parallel_steps)
-     VALUES ($1, $2, 'Video chuẩn MVP-0', 'content_item', 1, false)
-     ON CONFLICT DO NOTHING RETURNING id`,
-    [companyId, code],
-  );
-
-  let definitionId: string;
-  if (res.rows.length > 0) {
-    definitionId = res.rows[0].id as string;
-  } else {
-    const existing = await direct.query(
-      `SELECT id FROM workflow_definitions WHERE company_id = $1 AND code = $2 AND deleted_at IS NULL`,
-      [companyId, code],
-    );
-    definitionId = existing.rows[0].id as string;
-  }
-
-  for (const [stepOrder, code2, name, assigneeRoleCode, reviewerRoleCode, defaultTaskTitle] of [
-    [1, "script", "Viết kịch bản", "script_writer", "project_manager", "Viết kịch bản"],
-    [2, "edit", "Dựng video", "video_editor", "project_manager", "Dựng video"],
-    [3, "qa", "Kiểm tra chất lượng", "qa_reviewer", "project_manager", "QA nội dung"],
-    [4, "upload", "Upload lên kênh", "uploader", "project_manager", "Upload video"],
-  ]) {
-    // node_key NOT NULL since 0032 (G7-1a). Seed it = step code (unique per definition → satisfies
-    // the (def, node_key) unique index). Keeps the G4-3 lifecycle e2e green against the G7 schema.
-    await direct.query(
-      `INSERT INTO workflow_definition_steps
-         (company_id, workflow_definition_id, step_order, code, name, assignee_role_code, reviewer_role_code, default_task_title, node_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       ON CONFLICT DO NOTHING`,
-      [
-        companyId,
-        definitionId,
-        stepOrder,
-        code2,
-        name,
-        assigneeRoleCode,
-        reviewerRoleCode,
-        defaultTaskTitle,
-        code2,
-      ],
-    );
-  }
-
-  for (const [fromState, event, toState, appliesToStepCode, writtenBy] of [
-    ["not_started", "start", "in_progress", null, "service"],
-    ["in_progress", "submit", "waiting_review", null, "service"],
-    ["waiting_review", "approve", "approved", null, "consumer"],
-    ["waiting_review", "request_revision", "revision", null, "consumer"],
-    ["revision", "start", "in_progress", null, "service"],
-    ["approved", "open_next", "in_progress", null, "consumer"],
-    ["approved", "complete_workflow", "completed", "upload", "consumer"],
-  ]) {
-    await direct.query(
-      `INSERT INTO step_transitions
-         (company_id, workflow_definition_id, from_state, event, to_state, applies_to_step_code, written_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT DO NOTHING`,
-      [companyId, definitionId, fromState, event, toState, appliesToStepCode, writtenBy],
-    );
-  }
-
-  return definitionId;
-}
+// ⓘ `seedWorkflowDefinition()` ĐÃ GỠ ở S10-CLEAN-WORKFLOWCLUSTER-2 — `workflow_definitions` ·
+// `workflow_definition_steps` · `step_transitions` DROP ở migration 0548. Hộ tiêu thụ duy nhất
+// (`workflow-lifecycle.e2e-spec` · `workflow-instance-target.int-spec`) đã xoá cùng lượt.
 
 // ─── G6-2b seed helpers ────────────────────────────────────────────────────────
 
@@ -556,7 +485,8 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
 
   // ── G12-3 Bonus/Penalty ─────────────────────────────────────────────────────
   // bonus_penalties.task_id/defect_id/kpi_result_id ON DELETE RESTRICT + user_id/created_by (NO ACTION)
-  // → PHẢI xoá TRƯỚC tasks/defects/kpi_results/users. payroll_period_id ON DELETE SET NULL (an toàn).
+  // → PHẢI xoá TRƯỚC tasks/kpi_results/users (vế `defects` bỏ — bảng DROP ở migration 0548).
+  // payroll_period_id ON DELETE SET NULL (an toàn).
   await direct.query("DELETE FROM bonus_penalties WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── G12-2/G12-4 Payroll (period + payslip snapshot + ack, append-only) ──────
@@ -661,14 +591,11 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM kpi_results WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM kpi_definitions WHERE company_id = ANY($1::uuid[])", ids);
 
-  // ── G4-5 Approval / Defect ───────────────────────────────────────────────
-  await direct.query("DELETE FROM defects WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query("DELETE FROM approval_steps WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query("DELETE FROM approval_requests WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query(
-    "DELETE FROM workflow_step_instance_locks WHERE company_id = ANY($1::uuid[])",
-    ids,
-  );
+  // ── G4-5 Approval / Defect — 4 lệnh DELETE ĐÃ GỠ (S10-CLEAN-WORKFLOWCLUSTER-2) ────────────
+  // defects · approval_steps · approval_requests · workflow_step_instance_locks DROP ở migration 0548.
+  // ⚠️ Đây chính là chỗ làm 364 test ĐỎ khi bản vá quên gỡ: `cleanupTenants` chạy trong afterAll của
+  // GẦN NHƯ MỌI int-spec, nên một `DELETE FROM <bảng đã DROP>` sót lại không đỏ ở một ca — nó đỏ ở
+  // TOÀN BỘ suite tích hợp. Dọn bảng thì phải dọn cả đường DỌN DẸP của test.
 
   // ── B4 Task attachments ──────────────────────────────────────────────────
   // task_attachments.task_id REFERENCES tasks(id) (ON DELETE CASCADE) — xoá TRƯỚC tasks cho rõ ràng
@@ -689,20 +616,9 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   // trước projects (FK projects CASCADE phủ, xoá tường minh cho thứ tự rõ ràng + tránh phụ thuộc CASCADE).
   await direct.query("DELETE FROM project_states WHERE company_id = ANY($1::uuid[])", ids);
 
-  // ── G4-3 Workflow ─────────────────────────────────────────────────────────
-  // G7-3: instance checklist tick-state (FK → workflow_steps + checklist_items) — xoá trước workflow_steps.
-  await direct.query(
-    "DELETE FROM workflow_step_checklist_states WHERE company_id = ANY($1::uuid[])",
-    ids,
-  );
-  await direct.query("DELETE FROM workflow_steps WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query("DELETE FROM workflow_instances WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query("DELETE FROM step_transitions WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query(
-    "DELETE FROM workflow_definition_steps WHERE company_id = ANY($1::uuid[])",
-    ids,
-  );
-  await direct.query("DELETE FROM workflow_definitions WHERE company_id = ANY($1::uuid[])", ids);
+  // ── G4-3 Workflow — 6 lệnh DELETE ĐÃ GỠ (S10-CLEAN-WORKFLOWCLUSTER-2, migration 0548) ─────
+  // workflow_step_checklist_states · workflow_steps · workflow_instances · step_transitions ·
+  // workflow_definition_steps · workflow_definitions.
 
   // ── G4-2 Media ────────────────────────────────────────────────────────────
   await direct.query("DELETE FROM content_items WHERE company_id = ANY($1::uuid[])", ids);
@@ -802,6 +718,25 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   // vitest tính là "Failed Suite" dù 0 test nào đỏ (CI lại đỏ 2026-08-03, cùng `attendance-leave-sync`).
   // `DELETE companies` bên dưới đã có vòng thử lại có trần cho ĐÚNG lớp đua này; ở đây thiếu — bất đối
   // xứng đó chính là chỗ hở. Dùng CHUNG idiom, không đẻ cơ chế mới.
+  // S10-CLEAN-WORKFLOWCLUSTER-2 — HỆ QUẢ TRỰC TIẾP của mig `0548`, KHÔNG phải lỗi có sẵn.
+  // Trước `0548`, hàng `evaluation_results`/`evaluation_scores` được dọn GIÁN TIẾP: chúng có
+  // `workflow_step_id` REFERENCES workflow_steps ON DELETE CASCADE, nên xoá chuỗi workflow là chúng
+  // rơi theo. `0548` gỡ cột đó ⇒ hàng ở lại và chặn `DELETE users` bằng
+  // `evaluation_results_evaluator_user_id_fkey`. Dọn tường minh, đúng thứ tự con→cha.
+  await direct.query("DELETE FROM evaluation_scores WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM evaluation_results WHERE company_id = ANY($1::uuid[])", ids);
+  // ⚠️ LỖI CÓ SẴN, ĐO ĐƯỢC 2026-08-28 (không do WO nào ở trên gây ra — chứng minh bằng đối chứng:
+  // lane MỚI TINH chain-migrate tới head 0547, tức KHÔNG có migration 0548, cũng ĐỎ y hệt).
+  // `DELETE users` phát ra ĐỒNG THỜI hai luồng RI trên `employee_contracts`:
+  //   · CASCADE   users → employee_profiles → employee_contracts (xoá hàng), và
+  //   · SET NULL  employee_contracts.created_by/updated_by/deleted_by (UPDATE hàng).
+  // Khi vế UPDATE chạy SAU khi hàng cha `employee_profiles` đã biến mất, composite FK
+  // `employee_contracts_employee_id_company_fk` được kiểm lại trên chính hàng đó và ném 23503
+  // "violates foreign key constraint employee_contracts_employee_id_fkey". Thứ tự hai luồng phụ thuộc
+  // thứ tự trigger RI ⇒ trên lane DB đã dùng lâu thì thường không lộ, trên lane VỪA chain-migrate thì
+  // lộ đều. Triệu chứng: "Failed Suite" trong khi 24/24 test XANH — không lưới nào khác bắt được.
+  // Cách đóng: xoá tường minh bảng con TRƯỚC, để `DELETE users` không còn hai luồng chạy đua trên nó.
+  await direct.query("DELETE FROM employee_contracts WHERE company_id = ANY($1::uuid[])", ids);
   await deleteWithFkRetry(direct, ids, "DELETE FROM users WHERE company_id = ANY($1::uuid[])");
   // S6-STAB-1 (STAB-F03): cùng lớp đua với processed_events/outbox_events ở trên, nhưng ở NẤC CUỐI.
   // Lần quét audit_logs ngay trên chỉ che được `DELETE users` (FK actor_user_id); giữa nó và

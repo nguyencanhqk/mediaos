@@ -563,7 +563,11 @@ export class TaskActionsService {
   ): Promise<ActionTaskRaw> {
     const raw = await this.repo.findActionRawTx(tx, user.companyId, taskId);
     if (!raw) throw new NotFoundException(ERR.NOT_FOUND);
-    if (raw.workflowStepId !== null || WORKFLOW_TASK_TYPES.has(raw.taskType)) {
+    // ⓘ Vế `workflowStepId !== null` ĐÃ GỠ (S10-CLEAN-WORKFLOWCLUSTER-2): cột `tasks.workflow_step_id`
+    // bị DROP cùng cụm workflow/approval. Đo trước khi gỡ: 0/12 hàng có cột này NOT NULL và 0 hộ
+    // code còn sinh ra chúng ⇒ vế đó là hằng-sai. Vế `WORKFLOW_TASK_TYPES` GIỮ NGUYÊN — nó mới là
+    // vế đang gác thật (task_type ∈ workflow_step/production/review/revision vẫn hợp lệ ở CHECK).
+    if (WORKFLOW_TASK_TYPES.has(raw.taskType)) {
       throw new BadRequestException(this.msg("TASK-ERR-TASK-WORKFLOW", ERR.WORKFLOW_LOCKED));
     }
     return raw;

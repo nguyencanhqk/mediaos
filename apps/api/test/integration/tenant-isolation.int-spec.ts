@@ -210,8 +210,17 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
    * cấp quyền, tức tuyến phòng thủ nằm sai tầng.
    *
    * ⚠️ Chỉ hạ ĐÚNG 1 (147 = số đo hiện tại, không cộng biên): tụt thêm nữa vẫn phải ĐỎ và phải điều tra.
+   *
+   * ⟲ S10-CLEAN-WORKFLOWCLUSTER-2 (KI-082) — HẠ **147 → 133**, có chủ đích. Đo trên lane
+   * `mediaos_wfcluster2` (head `0548`, 2026-08-28): 133 bảng chứng minh được WITH CHECK.
+   * **147 − 133 = 14 = ĐÚNG số bảng bị DROP** ở mig `0548` (workflow_definitions ·
+   * workflow_definition_steps · workflow_instances · workflow_steps · workflow_step_dependencies ·
+   * workflow_step_checklist_states · workflow_step_instance_locks · step_transitions · checklists ·
+   * checklist_items · approval_requests · approval_steps · approval_rules · defects) — mỗi bảng vốn là
+   * một mục registry tự chứng minh được WITH CHECK. Khớp 1–1, KHÔNG có bảng nào "rơi" ngoài dự kiến.
+   * ⇒ Đây là MẤT ĐỐI TƯỢNG ĐO, không phải policy bị nới. Vẫn giữ nguyên luật: hạ ĐÚNG số đo, 0 biên.
    */
-  const PROVEN_WITH_CHECK_FLOOR = 147;
+  const PROVEN_WITH_CHECK_FLOOR = 133;
 
   /**
    * Mốc sàn cho ca W4 (S6-SEC-XTENANTFK-1): số cặp bị chặn ĐÚNG bằng FK chéo tenant (SQLSTATE 23503).
@@ -240,10 +249,25 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
    * cột mang neo unique/CHECK khi nhân bản hàng (sinh lại `room_code`, đặt nhất quán các cột neo của
    * CHECK anchor) để cặp quay về chứng minh bằng 23503.
    *
-   * Sàn giữ 260: tụt sâu = composite FK bị gỡ hoặc bộ lọc co lưới. Việc bắt CHÍNH XÁC từng constraint
+   * ⟲ S10-CLEAN-WORKFLOWCLUSTER-2 (KI-082) — HẠ **260 → 241**, có chủ đích. Đo trên lane
+   * `mediaos_wfcluster2` (head `0548`, 2026-08-28): **412 cặp thử · 241 chứng minh bằng 23503**
+   * (trước: 448 · 263). Hai độ lệch khớp nhau và khớp phần bị DROP:
+   *   · 448 − 412 = **36 cặp FK biến mất** — cùng con số mà `FK_SINGLE_COL_PAIRS_FLOOR` đo được
+   *     (459 → 423), do 14 bảng DROP + 4 cột FK gỡ (`tasks.workflow_step_id` ·
+   *     `tasks.workflow_instance_id` · `evaluation_results.workflow_step_id` · `bonus_penalties.defect_id`).
+   *   · 263 − 241 = **22** trong 36 cặp đó vốn thuộc nhóm "chứng minh bằng composite FK"; 14 cặp còn
+   *     lại vốn nằm ở nhóm "chặn bằng cơ chế khác" nên không rút khỏi con số này.
+   * ⇒ MẤT ĐỐI TƯỢNG ĐO, không phải mất hàng rào. Đối chứng: lane `mediaos_wfbase547` (mới tinh, head
+   * `0547`, KHÔNG có `0548`) vẫn đo 459 cặp FK — chênh lệch giải thích được trọn vẹn.
+   *
+   * ⚠️ ĐỆM NAY = 0 (241 vs sàn 241), theo đúng luật của `PROVEN_WITH_CHECK_FLOOR` ở trên: hạ ĐÚNG số
+   * đo, không cộng biên. Tụt thêm một cặp là ĐỎ và phải điều tra — **không được hạ sàn lần nữa** trước
+   * khi chứng minh được từng cặp biến mất, bằng đo A/B hai lane như lần này.
+   *
+   * Sàn: tụt sâu = composite FK bị gỡ hoặc bộ lọc co lưới. Việc bắt CHÍNH XÁC từng constraint
    * bị gỡ là của `xtenant-fk-ratchet.int-spec.ts` (a) — ca này là lưới thứ hai.
    */
-  const W4_FK_BLOCKED_FLOOR = 260;
+  const W4_FK_BLOCKED_FLOOR = 241;
 
   /** Cơ chế chặn quan sát được cho từng (bảng, ca) — in ra cuối suite làm tài liệu sống. */
   const blockedBy: { table: string; testCase: string; how: string }[] = [];

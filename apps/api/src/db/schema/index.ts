@@ -33,8 +33,8 @@ export * from "./attendance";
 // leave_types/leave_requests/leave_balances (mig 0062) reconcile ở ./hr (ALTER-ADD additive nullable).
 export * from "./leave";
 export * from "./finance";
-// G8 approval (multi-level rules — approval_requests/_steps live in ./workflow)
-export * from "./approval";
+// ⓘ `./approval` (approval_rules) ĐÃ XOÁ ở S10-CLEAN-WORKFLOWCLUSTER-2 — bảng DROP ở migration 0548
+// cùng approval_requests/_steps/defects và cả cụm workflow_*.
 // G8-3 evaluation (template + criteria + results + scores)
 export * from "./evaluation";
 // G8-4 KPI (kpi_definitions mutable + kpi_results SNAPSHOT APPEND-ONLY)

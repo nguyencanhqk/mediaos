@@ -1,5 +1,5 @@
 /**
- * S10-CLEAN-WORKFLOWPARK-1 — KHẲNG ĐỊNH PHẦN BỊ XOÁ.
+ * S10-CLEAN-WORKFLOWPARK-1 (đợt 1) + S10-CLEAN-WORKFLOWCLUSTER-2 (đợt 2) — KHẲNG ĐỊNH PHẦN BỊ XOÁ.
  *
  * VÌ SAO CÓ FILE NÀY. Gỡ code chạm bề mặt API là loại thay đổi mà review gate MÙ: reviewer được hỏi
  * "code này có đúng không" nên chỉ soi thứ CÒN đó; thứ biến mất chỉ hiện ra dưới dạng dấu `-` trong
@@ -32,15 +32,20 @@ import { collectRoutes, type RouteInfo } from "./route-census";
  *
  * So BẰNG NHAU cũng để `workflow` không nuốt `workflow-templates`: hai base path khác nhau phải
  * được liệt kê riêng, ngày mai có `workflows-v2` sống lại thì nó là route KHÁC, không im lặng gộp.
+ *
+ * ⓘ ĐỢT 2 (`S10-CLEAN-WORKFLOWCLUSTER-2`) thêm `approval`. Ở đợt 1 nó là ca ĐỐI CHỨNG (module sống);
+ * đợt 2 đo lại được **0 hộ gọi** `createInstance`/`createInstanceForTemplate`/`createApprovalRequest`
+ * trong toàn `src/` ⇒ `ApprovalInboxController` chỉ thao tác được trên hàng mà KHÔNG đường code nào
+ * còn sinh ra. Nó chuyển từ "đang sống" sang "chết theo dữ liệu" và bị gỡ cùng cụm.
  */
-const REMOVED_CONTROLLER_PATHS = ["workflow", "workflow-templates"] as const;
+const REMOVED_CONTROLLER_PATHS = ["workflow", "workflow-templates", "approval"] as const;
 
 /** `controllerPath` do Nest trả về CÓ dấu `/` đầu (`"/approval"`). Chuẩn hoá để so bằng nhau. */
 function basePath(route: { controllerPath: string }): string {
   return route.controllerPath.replace(/^\/+/, "");
 }
 
-describe("S10-CLEAN-WORKFLOWPARK-1 — bề mặt HTTP của module `workflow/` đã bị GỠ", () => {
+describe("S10-CLEAN-WORKFLOWPARK-1 + CLUSTER-2 — bề mặt HTTP của cụm `workflow/`+`approval/` đã bị GỠ", () => {
   let app: INestApplication;
   let routes: RouteInfo[];
 
@@ -70,16 +75,22 @@ describe("S10-CLEAN-WORKFLOWPARK-1 — bề mặt HTTP của module `workflow/` 
     const controllers = [...new Set(routes.map((r) => r.controller))];
     expect(controllers).not.toContain("WorkflowController");
     expect(controllers).not.toContain("WorkflowTemplatesController");
+    // Đợt 2 — cụm `approval/` gỡ theo (0 hộ sinh dữ liệu, xem docblock REMOVED_CONTROLLER_PATHS).
+    expect(controllers).not.toContain("ApprovalInboxController");
   });
 
   /**
-   * ĐỐI CHỨNG — không có ca này thì ca (1) xanh cả khi bản vá lỡ tay gỡ nhầm nửa app. `approval/`
-   * là module ĐANG SỐNG và nó phụ thuộc `ApprovalService` NẰM TRONG `workflow/`; đường ranh của bản
-   * vá đi giữa hai thứ đó, nên nó phải được đo chứ không được tin.
+   * ĐỐI CHỨNG — không có ca này thì ca (1) xanh cả khi bản vá lỡ tay gỡ nhầm nửa app.
+   *
+   * ⚠️ ĐỢT 2 PHẢI ĐỔI NEO. Đợt 1 dùng `approval/` làm đối chứng vì đường ranh của bản vá đi giữa
+   * "bề mặt API `workflow/`" và "engine mà `approval/` còn dùng". Đợt 2 gỡ chính `approval/` ⇒ giữ
+   * nguyên ca cũ thì nó MÂU THUẪN với ca (1) (cùng một base path vừa phải còn vừa phải mất) và spec
+   * không thể xanh. Neo mới là `leave/` — module MVP lõi (SPEC-05), KHÔNG dính cụm workflow, nên nó
+   * đo đúng thứ ca này tồn tại để đo: "bản vá không cắt lẹm sang app đang sống".
    */
-  it("(3) đối chứng: module `approval/` ĐANG SỐNG vẫn còn nguyên bề mặt", () => {
-    const approvalRoutes = routes.filter((r) => basePath(r) === "approval");
-    expect(approvalRoutes.length).toBeGreaterThan(0);
-    expect([...new Set(routes.map((r) => r.controller))]).toContain("ApprovalInboxController");
+  it("(3) đối chứng: module `leave/` ĐANG SỐNG vẫn còn nguyên bề mặt", () => {
+    const leaveRoutes = routes.filter((r) => basePath(r) === "leave");
+    expect(leaveRoutes.length).toBeGreaterThan(0);
+    expect([...new Set(routes.map((r) => r.controller))]).toContain("LeaveController");
   });
 });

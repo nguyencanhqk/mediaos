@@ -3,7 +3,8 @@
  *
  * Hành vi MONG MUỐN:
  *  - updateTaskFields đặt priority/state/description → repo.updateTaskFieldsTx nhận đúng patch + audit TaskUpdated.
- *  - REJECT task workflow-driven (workflowStepId set HOẶC task_type ∈ FSM) — KHÔNG update, KHÔNG audit.
+ *  - REJECT task workflow-driven (task_type ∈ FSM) — KHÔNG update, KHÔNG audit.
+ *    ⓘ Vế `workflowStepId set` ĐÃ GỠ ở S10-CLEAN-WORKFLOWCLUSTER-2 cùng cột `tasks.workflow_step_id`.
  *  - stateId mới PHẢI thuộc ĐÚNG project của task (guard stateInProjectTx) — state lệch project → BadRequest.
  *  - task chưa gắn project mà set stateId → BadRequest.
  *  - addLabelToTask: nhãn + task khác project → BadRequest; idempotent (đã gán) → no-op không audit.
@@ -26,7 +27,7 @@ const USER = { id: ACTOR_ID, companyId: COMPANY_ID };
 function makeRepo() {
   return {
     findRawByIdTx: vi.fn().mockResolvedValue([
-      { id: TASK_ID, taskType: "office", workflowStepId: null, status: "not_started", projectId: PROJECT_ID },
+      { id: TASK_ID, taskType: "office", status: "not_started", projectId: PROJECT_ID },
     ]),
     assigneeActiveTx: vi.fn().mockResolvedValue(true),
     stateInProjectTx: vi.fn().mockResolvedValue(true),
@@ -101,10 +102,10 @@ describe("TasksService.updateTaskFields — PM-1 field update", () => {
     expect(result).toMatchObject({ displayId: "WEB-12" });
   });
 
-  it("REJECT workflow-driven task (workflowStepId set) → BadRequest, no update/audit", async () => {
+  it("REJECT workflow-driven task (task_type=workflow_step) → BadRequest, no update/audit", async () => {
     const repo = makeRepo();
     repo.findRawByIdTx.mockResolvedValueOnce([
-      { id: TASK_ID, taskType: "workflow_step", workflowStepId: "step-1", status: "in_progress", projectId: PROJECT_ID },
+      { id: TASK_ID, taskType: "workflow_step", status: "in_progress", projectId: PROJECT_ID },
     ]);
     const { service, audit } = makeService(repo);
     await expect(
@@ -117,7 +118,7 @@ describe("TasksService.updateTaskFields — PM-1 field update", () => {
   it("REJECT FSM task_type (production) even when step is null", async () => {
     const repo = makeRepo();
     repo.findRawByIdTx.mockResolvedValueOnce([
-      { id: TASK_ID, taskType: "production", workflowStepId: null, status: "in_progress", projectId: PROJECT_ID },
+      { id: TASK_ID, taskType: "production", status: "in_progress", projectId: PROJECT_ID },
     ]);
     const { service } = makeService(repo);
     await expect(
@@ -139,7 +140,7 @@ describe("TasksService.updateTaskFields — PM-1 field update", () => {
   it("set stateId on a project-less task → BadRequest", async () => {
     const repo = makeRepo();
     repo.findRawByIdTx.mockResolvedValueOnce([
-      { id: TASK_ID, taskType: "office", workflowStepId: null, status: "not_started", projectId: null },
+      { id: TASK_ID, taskType: "office", status: "not_started", projectId: null },
     ]);
     const { service } = makeService(repo);
     await expect(

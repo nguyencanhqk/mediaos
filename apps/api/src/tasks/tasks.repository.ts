@@ -13,7 +13,6 @@ import {
   taskComments,
   taskLabels,
   tasks,
-  workflowSteps,
 } from "../db/schema/workflow";
 
 // ─── Pagination (G9-2 DB-8/SF-2) ──────────────────────────────────────────────
@@ -57,14 +56,10 @@ const TASK_COLUMNS = {
   createdAt: tasks.createdAt,
   updatedAt: tasks.updatedAt,
   assigneeUserId: tasks.assigneeUserId,
-  // workflow context (null cho task không thuộc workflow)
-  stepId: workflowSteps.id,
-  stepCode: workflowSteps.stepCode,
-  stepName: workflowSteps.stepName,
-  stepStatus: workflowSteps.status,
-  submissionUrl: workflowSteps.submissionUrl,
-  submissionNote: workflowSteps.submissionNote,
-  workflowInstanceId: tasks.workflowInstanceId,
+  // ⓘ 7 cột projection workflow (stepId · stepCode · stepName · stepStatus · submissionUrl ·
+  // submissionNote · workflowInstanceId) ĐÃ GỠ ở S10-CLEAN-WORKFLOWCLUSTER-2 cùng bảng
+  // `workflow_steps`. Đo trước khi gỡ: 0 hộ tiêu thụ FE (app · console · auth · lms) và 0 hàng
+  // `tasks` có `workflow_step_id`/`workflow_instance_id` NOT NULL ⇒ mọi cột này luôn NULL.
   // content context (null cho task non-video)
   contentItemId: tasks.contentItemId,
   contentTitle: contentItems.title,
@@ -132,13 +127,12 @@ export interface CreateTaskData {
 export class TasksRepository {
   constructor(private readonly db: DatabaseService) {}
 
-  /** Query nền dùng chung: SELECT + 4 LEFT JOIN (workflow_steps/content_items/projects/project_states). */
+  /** Query nền dùng chung: SELECT + 3 LEFT JOIN (content_items/projects/project_states). */
   private baseQuery(tx: TenantTx) {
     return (
       tx
         .select(TASK_COLUMNS)
         .from(tasks)
-        .leftJoin(workflowSteps, eq(tasks.workflowStepId, workflowSteps.id))
         .leftJoin(contentItems, eq(tasks.contentItemId, contentItems.id))
         .leftJoin(projects, eq(tasks.projectId, projects.id))
         // PM-1: state tùy biến — LEFT JOIN cùng tenant (eq(company_id) defense-in-depth ngoài RLS).
@@ -364,7 +358,6 @@ export class TasksRepository {
       .select({
         id: tasks.id,
         taskType: tasks.taskType,
-        workflowStepId: tasks.workflowStepId,
         status: tasks.status,
         projectId: tasks.projectId,
       })

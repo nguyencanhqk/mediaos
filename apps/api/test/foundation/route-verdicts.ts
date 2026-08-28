@@ -183,10 +183,6 @@ export const ROUTE_VERDICTS: Readonly<Record<string, RouteVerdict>> = {
     reason:
       "PATCH hồ sơ của chính mình — repository ép WHERE id = req.user.id (users.controller.ts:27).",
   },
-  "ApprovalInboxController#inbox": {
-    verdict: "SELF",
-    reason: "Hộp thư phê duyệt own-scope: chỉ trả yêu cầu mà chính người gọi là người duyệt.",
-  },
   "ModuleCatalogController#myApps": {
     verdict: "SELF",
     reason:

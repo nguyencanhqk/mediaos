@@ -136,7 +136,6 @@ function listTsFiles(root: string): string[] {
  * un-exclude ở vitest.config, xoá tên khỏi đây trong CÙNG commit.
  */
 const VITEST_EXCLUDED_SPECS = [
-  "test/workflow-lifecycle.e2e-spec.ts",
   "test/integration/finance-cost-controller-deny.int-spec.ts",
   "test/integration/finance-cost-allocation-controller-deny.int-spec.ts",
   "test/integration/finance-revenue-controller-deny.int-spec.ts",
@@ -284,8 +283,16 @@ export function measureRouteHttpCoverage(
 }
 
 /**
- * RATCHET — mốc mới đo THẬT ngày **27/08/2026** sau khi `S10-CLEAN-WORKFLOWPARK-1` land:
- * **coveredCount = 471/471 (100%), uncovered = 0 ở MỌI mức risk.**
+ * RATCHET — mốc mới đo THẬT ngày **28/08/2026** sau khi `S10-CLEAN-WORKFLOWCLUSTER-2` land:
+ * **coveredCount = 468/468 (100%), uncovered = 0 ở MỌI mức risk.**
+ *
+ * ⚠️ **471 → 468 CŨNG LÀ NỚI SÀN, VÀ ĐÂY LÀ LÝ DO BẰNG VĂN BẢN.** Sàn tụt 3 vì 3 ROUTE bị xoá:
+ * `S10-CLEAN-WORKFLOWCLUSTER-2` gỡ `ApprovalInboxController` (`GET /approval/inbox` ·
+ * `POST /approval/requests/:id/approve` · `POST /approval/requests/:id/reject`) cùng cả cụm
+ * workflow/approval. TỬ SỐ và MẪU SỐ tụt CÙNG 3, tỉ lệ vẫn 100%, `MAX_UNCOVERED_TOTAL = 0` KHÔNG
+ * bị nới. Số 3 là số đo RUNTIME lúc RED — `src` của WO ghi 5, KHÔNG tái hiện được.
+ *
+ * Mốc trước đó (27/08, `S10-CLEAN-WORKFLOWPARK-1`) — cũng tụt do GỠ ROUTE, không do vá:
  *
  * ⚠️ **500 → 471 LÀ NỚI SÀN, VÀ ĐÂY LÀ LÝ DO BẰNG VĂN BẢN mà quy tắc dưới đòi.** Sàn tụt 29 KHÔNG
  * phải vì test HTTP nào bị xoá — mà vì 29 ROUTE bị xoá: `S10-CLEAN-WORKFLOWPARK-1` gỡ hai controller
@@ -315,7 +322,7 @@ export function measureRouteHttpCoverage(
  */
 const MAX_UNCOVERED_HIGH_RISK = 0;
 const MAX_UNCOVERED_TOTAL = 0;
-const MIN_COVERED_COUNT = 471;
+const MIN_COVERED_COUNT = 468;
 
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;
@@ -483,9 +490,13 @@ describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp l�
   });
 
   it("tự-kiểm exclude: file bị vitest EXCLUDE KHÔNG được tính là bằng chứng", () => {
-    const content = 'import request from "supertest";\nrequest(app).post("/workflow/start");';
+    // ⚠️ Ví dụ CŨ trỏ `test/workflow-lifecycle.e2e-spec.ts`; file đó ĐÃ XOÁ ở
+    // S10-CLEAN-WORKFLOWCLUSTER-2 nên nó cũng rời `VITEST_EXCLUDED_SPECS`. Ví dụ PHẢI trỏ một mục
+    // CÒN trong danh sách — giữ tên cũ thì ca này xanh vì lý do SAI (`isVitestExcluded` trả false
+    // do tên không còn trong danh sách, chứ không phải vì hàm chạy đúng).
+    const content = 'import request from "supertest";\nrequest(app).post("/webhooks/x");';
     expect(
-      isHttpTestFile("C:/repo/apps/api/test/workflow-lifecycle.e2e-spec.ts", content),
+      isHttpTestFile("C:/repo/apps/api/test/integration/webhooks-deny.int-spec.ts", content),
       "spec nằm trong vitest exclude ⇒ vitest KHÔNG chạy ⇒ không phải bằng chứng",
     ).toBe(false);
     expect(

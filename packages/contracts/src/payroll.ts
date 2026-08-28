@@ -235,7 +235,7 @@ export type PayslipSummaryDto = z.infer<typeof payslipSummarySchema>;
 // G12-3 — Bonus/Penalty (thưởng/phạt thủ công + sinh từ KPI/lỗi, có duyệt, chảy vào payroll)
 //   - bonus_penalties: MUTABLE draft→approved/rejected (đề xuất chờ duyệt). KHÁC payslip snapshot
 //     (append-only). Soft-delete deleted_at. Sửa field tiền CHỈ khi draft (trigger DB freeze sau duyệt).
-//   - reference (task/defect/kpi_result) là NULLABLE typed-FK; CHECK ép đúng-một-hoặc-không theo
+//   - reference (task/kpi_result) là NULLABLE typed-FK; CHECK ép đúng-một-hoặc-không theo
 //     reference_type. Self-approve BỊ CHẶN (segregation of duties) ở service.
 //   - kind tách bonus/penalty + amount > 0 (KHÔNG dùng số âm — tránh lỗi dấu khi cộng/trừ vào payslip).
 //   - Approved + cùng period_month + chưa consume → runPayroll gộp vào payslip.bonus/penaltyAmount,
@@ -248,10 +248,14 @@ export type BonusKind = z.infer<typeof bonusKindEnum>;
 export const bonusPenaltyStatusEnum = z.enum(["draft", "approved", "rejected"]);
 export type BonusPenaltyStatus = z.infer<typeof bonusPenaltyStatusEnum>;
 
-export const bonusSourceEnum = z.enum(["manual", "kpi", "defect"]);
+// ⓘ "defect" ĐÃ RỜI cả hai enum ở S10-CLEAN-WORKFLOWCLUSTER-2: bảng `defects` DROP ở migration 0548.
+// ⛔ Hai enum này PHẢI mirror ĐÚNG BẰNG hai CHECK `bonus_penalties_source_check` /
+// `bonus_penalties_reference_check` trong 0548 — lỏng hơn ⇒ payload hợp lệ với Zod nổ 500 ở DB;
+// chặt hơn ⇒ chặn oan hàng DB vẫn nhận. Đổi một bên mà quên bên kia là đúng lớp lỗi đó.
+export const bonusSourceEnum = z.enum(["manual", "kpi"]);
 export type BonusSource = z.infer<typeof bonusSourceEnum>;
 
-export const bonusReferenceTypeEnum = z.enum(["task", "defect", "kpi_result"]);
+export const bonusReferenceTypeEnum = z.enum(["task", "kpi_result"]);
 export type BonusReferenceType = z.infer<typeof bonusReferenceTypeEnum>;
 
 /** DTO bonus/penalty trả về client. amount là số tiền per-person (nhạy cảm — gate ở server). */
@@ -267,7 +271,6 @@ export const bonusPenaltySchema = z.object({
   source: bonusSourceEnum,
   referenceType: bonusReferenceTypeEnum.nullable(),
   taskId: z.string().uuid().nullable(),
-  defectId: z.string().uuid().nullable(),
   kpiResultId: z.string().uuid().nullable(),
   status: bonusPenaltyStatusEnum,
   approvedBy: z.string().uuid().nullable(),
@@ -282,23 +285,21 @@ export type BonusPenaltyDto = z.infer<typeof bonusPenaltySchema>;
 
 /**
  * Đúng-một-hoặc-không reference: reference_type phải khớp đúng cột FK tương ứng được set,
- * các cột còn lại NULL. Parity với CHECK `bonus_penalties_reference_check` (mig 0098).
+ * các cột còn lại NULL. Parity với CHECK `bonus_penalties_reference_check` (mig 0098, dựng lại ở 0548).
  */
 function refineReference(
   v: {
     referenceType?: BonusReferenceType;
     taskId?: string;
-    defectId?: string;
     kpiResultId?: string;
   },
   ctx: z.RefinementCtx,
 ): void {
   const map: Record<BonusReferenceType, string | undefined> = {
     task: v.taskId,
-    defect: v.defectId,
     kpi_result: v.kpiResultId,
   };
-  const setIds = [v.taskId, v.defectId, v.kpiResultId].filter((x) => x != null);
+  const setIds = [v.taskId, v.kpiResultId].filter((x) => x != null);
   if (v.referenceType == null) {
     if (setIds.length > 0) {
       ctx.addIssue({
@@ -335,7 +336,6 @@ export const createBonusPenaltySchema = z
     source: bonusSourceEnum.default("manual"),
     referenceType: bonusReferenceTypeEnum.optional(),
     taskId: z.string().uuid().optional(),
-    defectId: z.string().uuid().optional(),
     kpiResultId: z.string().uuid().optional(),
   })
   .superRefine(refineReference);

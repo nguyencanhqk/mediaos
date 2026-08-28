@@ -39,7 +39,7 @@ function makeRepo() {
     findRawByIdTx: vi
       .fn()
       .mockResolvedValue([
-        { id: TASK_ID, taskType: "office", workflowStepId: null, status: "not_started" },
+        { id: TASK_ID, taskType: "office", status: "not_started" },
       ]),
     // tenant-FK guards (SEC-1) — mặc định hợp lệ
     assigneeActiveTx: vi.fn().mockResolvedValue(true),
@@ -244,10 +244,10 @@ describe("TasksService.updateStatus — FSM office rút gọn (D3)", () => {
     );
   });
 
-  it("task workflow-driven (workflowStepId set) → reject, KHÔNG update, KHÔNG audit", async () => {
+  it("task workflow-driven (task_type=workflow_step) → reject, KHÔNG update, KHÔNG audit", async () => {
     const repo = makeRepo();
     repo.findRawByIdTx.mockResolvedValueOnce([
-      { id: TASK_ID, taskType: "workflow_step", workflowStepId: "step-1", status: "in_progress" },
+      { id: TASK_ID, taskType: "workflow_step", status: "in_progress" },
     ]);
     const { service, audit } = makeService({ repo });
 
@@ -258,10 +258,10 @@ describe("TasksService.updateStatus — FSM office rút gọn (D3)", () => {
     expect(audit.record).not.toHaveBeenCalled();
   });
 
-  it("task type production (workflow-driven) → reject dù step NULL", async () => {
+  it("task type production (workflow-driven) → reject theo task_type", async () => {
     const repo = makeRepo();
     repo.findRawByIdTx.mockResolvedValueOnce([
-      { id: TASK_ID, taskType: "production", workflowStepId: null, status: "in_progress" },
+      { id: TASK_ID, taskType: "production", status: "in_progress" },
     ]);
     const { service } = makeService({ repo });
 
@@ -299,7 +299,7 @@ describe("TasksService.deleteTask — soft-delete (CT11) + reject workflow", () 
   it("task workflow-driven → reject, KHÔNG softDelete", async () => {
     const repo = makeRepo();
     repo.findRawByIdTx.mockResolvedValueOnce([
-      { id: TASK_ID, taskType: "review", workflowStepId: "step-1", status: "waiting_review" },
+      { id: TASK_ID, taskType: "review", status: "waiting_review" },
     ]);
     const { service, audit } = makeService({ repo });
 

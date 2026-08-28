@@ -39,9 +39,10 @@ describe("createTaskSchema (G9-2 manual office task)", () => {
     const parsed = createTaskSchema.parse({ title: "Đặt vé công tác Đà Nẵng" });
     expect(parsed.title).toBe("Đặt vé công tác Đà Nẵng");
     expect(parsed.taskType).toBe("office"); // default — manual tasks are office
-    // Crucially: no contentItemId / workflowInstanceId required.
+    // Crucially: no contentItemId required. (`workflowInstanceId` không còn nằm trong hợp đồng —
+    // S10-CLEAN-WORKFLOWCLUSTER-2 gỡ cả cụm; assert "không có trường đó" giờ đúng một cách TẦM
+    // THƯỜNG nên bỏ, giữ lại chỉ làm người đọc sau tưởng nó vẫn là một khả năng.)
     expect("contentItemId" in parsed).toBe(false);
-    expect("workflowInstanceId" in parsed).toBe(false);
   });
 
   it("accepts optional assignee / project / due date", () => {
@@ -92,14 +93,6 @@ describe("taskSchema (DTO shape for a non-video office task)", () => {
       createdAt: "2026-06-12T00:00:00.000Z",
       updatedAt: "2026-06-12T00:00:00.000Z",
       assigneeUserId: null,
-      // Workflow context — all null for an office task
-      stepId: null,
-      stepCode: null,
-      stepName: null,
-      stepStatus: null,
-      submissionUrl: null,
-      submissionNote: null,
-      workflowInstanceId: null,
       // Content / project context — all null for an office task
       contentItemId: null,
       contentTitle: null,
@@ -120,7 +113,6 @@ describe("taskSchema (DTO shape for a non-video office task)", () => {
     const parsed = taskSchema.parse(officeTask);
     expect(parsed.taskType).toBe("office");
     expect(parsed.contentItemId).toBeNull();
-    expect(parsed.workflowInstanceId).toBeNull();
     expect(parsed.priority).toBe("none");
     expect(parsed.stateId).toBeNull();
   });
@@ -138,13 +130,6 @@ describe("taskSchema (DTO shape for a non-video office task)", () => {
       createdAt: "2026-06-12T00:00:00.000Z",
       updatedAt: "2026-06-12T00:00:00.000Z",
       assigneeUserId: null,
-      stepId: null,
-      stepCode: null,
-      stepName: null,
-      stepStatus: null,
-      submissionUrl: null,
-      submissionNote: null,
-      workflowInstanceId: null,
       contentItemId: null,
       contentTitle: null,
       projectId: "55555555-5555-5555-5555-555555555555",

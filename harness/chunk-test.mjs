@@ -91,8 +91,11 @@ const SPEC_FILE_RE = /\.(spec|e2e-spec|int-spec)\.(ts|tsx)$/;
  * quyết định (module park / exclude cố ý), phải sửa chính file này.
  * Dòng thừa (đã xoá hoặc nay chạy được) chỉ CẢNH BÁO — nó không giấu được test nào.
  *
- * 6 dòng hiện tại đều là module đã PARK theo de-media-fy (CLAUDE.md §1): finance · ui-config ·
- * webhooks · workflow-DAG.
+ * 5 dòng hiện tại đều là module đã PARK theo de-media-fy (CLAUDE.md §1): finance · ui-config ·
+ * webhooks.
+ *
+ * ⓘ Dòng `test/workflow-lifecycle.e2e-spec.ts` ĐÃ GỠ ở `S10-CLEAN-WORKFLOWCLUSTER-2`: file bị XOÁ
+ * hẳn cùng cụm workflow, nên nó không còn là "spec park không thu thập" mà là dòng baseline mồ côi.
  */
 const UNCOLLECTED_BASELINE = {
   "@mediaos/api": [
@@ -101,7 +104,6 @@ const UNCOLLECTED_BASELINE = {
     "test/integration/finance-revenue-controller-deny.int-spec.ts",
     "test/integration/ui-config-deny.int-spec.ts",
     "test/integration/webhooks-deny.int-spec.ts",
-    "test/workflow-lifecycle.e2e-spec.ts",
   ],
 };
 
