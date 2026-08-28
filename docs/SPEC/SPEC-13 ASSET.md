@@ -266,7 +266,7 @@ Theo chuẩn per-pair `(action, resource)` + data_scope per-(permission, role). 
 
 Ghi chú bắt buộc:
 
-- **Đúng 11 cặp, `is_sensitive = false` cho cả 11** — chốt cùng seed, không để mở sau (bẫy `canonical-seed-pin-regression`: flip sau seed làm đỏ pin `auth-seed-canonical-roles` và phải sửa allowlist sensitive cùng lúc). Dữ liệu tài sản **không** thuộc danh sách nhạy cảm SPEC-01 §11.3; riêng trường **tài chính** che ở đường Own bằng masking server (§18), không bằng cặp nhạy cảm.
+- **Đúng 11 cặp, `is_sensitive = false` cho cả 11** — chốt cùng seed, không để mở sau (bẫy `canonical-seed-pin-regression`: flip sau seed làm đỏ pin `auth-seed-canonical-roles` và phải sửa allowlist sensitive cùng lúc). Dữ liệu tài sản **không** thuộc danh sách nhạy cảm SPEC-01 §11.3; riêng trường **tài chính** chỉ trả ở scope Company (che ở Own **và** Department bằng masking server, §18), không bằng cặp nhạy cảm.
 - **Đường «tài sản của tôi» dùng CHÍNH cặp đọc `('view','asset')` ở scope Own** — không tách cặp `ASSET.ASSIGNMENT.VIEW` riêng như bản dự kiến trong hồ sơ duyệt HTML. Tách cặp đọc thành hai sẽ đẻ ra role "thấy danh sách của mình mà không mở được chi tiết" — đúng họ lỗi `read-path-gate-pair-must-match-download-pair` (S5-TASK-COVER-1). Đây là **tinh chỉnh cách thi công**, không đổi phạm vi đã duyệt.
 - **Đọc loại tài sản** (dropdown trong form, bộ lọc) đi theo `('view','asset')`; `('manage','asset-category')` chỉ gate **ghi**.
 - **Role `asset-manager` là role hệ thống MỚI** (`roles.company_id IS NULL`, `is_system = true`, tiền lệ `hr-manager` mig `0019` · `guest`), giữ **cả 11 cặp** scope Company. Nó **không** phải role canonical — 4 role canonical vẫn là `employee` · `manager` · `hr` · `company-admin` (`DashCanonicalRole`); WO DB **không** được thêm nó vào các enumerate canonical, và pin `auth-seed-canonical-roles` chỉ kiểm 4 role kia.
@@ -280,16 +280,16 @@ Ghi chú bắt buộc:
 | Mã lỗi | HTTP | Quy tắc |
 | --- | --- | --- |
 | ASSET-ERR-001 | 409 | Chuyển trạng thái **không hợp lệ theo FSM §13.1** (ví dụ cấp phát tài sản đang `Assigned`, thanh lý tài sản đang `Assigned`, tìm-thấy-lại tài sản không `Lost`). Thông điệp nêu trạng thái hiện tại + hành động bị chặn |
-| ASSET-ERR-002 | 404 / 422 | Cấp phát cho nhân viên **không tồn tại trong company** → **404** (giống hệt không tồn tại — không thành oracle dò nhân sự tenant khác); nhân viên tồn tại nhưng **không `active`** (nghỉ việc/tạm ngưng) → **422** |
+| ASSET-ERR-002 | 404 / 422 | Cấp phát cho nhân viên **không tồn tại trong company** → **404** (giống hệt không tồn tại — không thành oracle dò nhân sự tenant khác); nhân viên tồn tại nhưng **không `active`** (nghỉ việc/tạm ngưng) → **422**. `error.details.kind` = `employee-not-found` / `employee-inactive` (test neo theo `kind`, không theo HTTP) |
 | ASSET-ERR-003 | 409 | Thu hồi khi tài sản **không có** lượt cấp phát `Active` |
 | ASSET-ERR-004 | 409 | Mở lượt bảo trì khi đã có lượt `Open` (chốt cuối: partial unique) |
-| ASSET-ERR-005 | 409 | Đóng lượt bảo trì đã `Closed`; lượt không thuộc tài sản trong path → **404** |
+| ASSET-ERR-005 | 409 / 404 | Đóng lượt bảo trì đã `Closed` → **409** (`details.kind = already-closed`); lượt không thuộc tài sản trong path → **404** (`details.kind = maintenance-not-found`) |
 | ASSET-ERR-006 | 409 | Mở đợt kiểm kê khi company đã có đợt `Open` (chốt cuối: partial unique) |
 | ASSET-ERR-007 | 409 | Đánh dấu dòng / đóng đợt trên đợt đã `Closed` |
-| ASSET-ERR-008 | 409 | Thanh lý (`Disposed`) khi còn lượt cấp phát `Active` — **phải thu hồi trước**; ghi nhận `Lost` thì **được** (tự đóng lượt với `return_condition='Lost'`) |
+| ASSET-ERR-008 | 409 | Thanh lý (`Disposed`) khi **tồn tại lượt cấp phát `Active`** — bất kể `status` hiện tại là `Assigned` **hay `Under Maintenance`** (tài sản đang bảo trì vẫn có thể còn người giữ, §13.1) — **phải thu hồi trước**. Điều kiện kiểm theo **sự tồn tại hàng Active**, không theo `status`. Ghi nhận `Lost` thì **được** (tự đóng lượt với `return_condition='Lost'`) |
 | ASSET-ERR-009 | 422 | Thanh lý / ghi nhận mất / tìm thấy lại **thiếu `reason`** (tối thiểu 3 ký tự) |
-| ASSET-ERR-010 | 409 | Loại tài sản: `code` hoặc `code_prefix` trùng trong company; xoá/vô hiệu loại còn tài sản chưa `Disposed`/`Lost`; đổi `code_prefix` khi loại đã sinh mã |
-| ASSET-ERR-011 | 409 / 422 | `serial_number` trùng trong company → **409**; gửi `assetCode`/`status` trong body PATCH → **422** (không có đường ghi) |
+| ASSET-ERR-010 | 409 | Loại tài sản: `code` trùng trong company (kể cả loại đã xoá mềm — `code_prefix` **unique trên mọi hàng, không loại trừ `deleted_at`**: prefix đã từng dùng thì mã `TS-<PREFIX>-0001` đã tồn tại, cấp lại prefix là đụng mã cũ); xoá/vô hiệu loại còn tài sản chưa `Disposed`/`Lost`; đổi `code_prefix` khi loại đã sinh mã. `details.kind` = `code-taken` / `prefix-taken` / `has-assets` / `prefix-locked` |
+| ASSET-ERR-011 | 409 / 422 | `serial_number` trùng trong company → **409** (`details.kind = serial-taken`); gửi `assetCode`/`status` trong body PATCH → **422** (`details.kind = readonly-field`) |
 | ASSET-ERR-012 | 404 | Sentinel `ASSET-ERR-NOT-FOUND`: tài sản/loại/lượt/đợt **không thuộc company** hoặc không tồn tại — **cùng một phản hồi** cho cả hai (chống dò chéo tenant) |
 | ASSET-ERR-013 | 404 | Own-scope: nhân viên mở tài sản mình **không** giữ → **404**, giống hệt ASSET-ERR-012 (không 403 — 403 xác nhận tài sản tồn tại) |
 | ASSET-ERR-014 | 422 | Ngày: `purchase_date` > hôm nay · `warranty_end_date` < `purchase_date` · `expected_return_date` < ngày cấp · `next_due_date` ≤ ngày đóng bảo trì |
@@ -299,7 +299,7 @@ Ghi chú bắt buộc:
 Quy tắc bổ sung (không cần mã riêng):
 
 - `/me/assets` **không nhận tham số nhân viên** — employee resolve từ token; không có employee profile → danh sách rỗng (không lỗi).
-- Cấp phát nhận `Idempotency-Key` **suy từ payload** (`asset:assign:{assetId}:{employeeId}:{assignedAt-date}`) — không sinh ngẫu nhiên trong thân hàm (`idempotency-key-must-be-content-derived`).
+- Cấp phát nhận header `Idempotency-Key` **do client sinh một lần khi mở form** (chuẩn API-01 §21, cùng cách `clientMessageId` của CHAT) — server **không** tự suy khoá từ payload (ngày cấp không nằm trong body ⇒ mọi khoá "suy từ payload" đều phải lấy đồng hồ server, vi phạm `period-key-idempotency-needs-frozen-source`; và nó chặn nhầm ca "thu hồi rồi cấp lại cùng người trong ngày"). Khoá scope theo `company_id + user_id + method + path + key`, TTL 24h; replay trả cùng lượt + `meta.idempotent_replay=true`. Chống trùng **nghiệp vụ** (hai lượt Active) là việc của partial unique, không phải của idempotency.
 - Nhân viên **nghỉ việc** (HR đổi `status` ≠ `active`) **không** tự thu hồi tài sản — HR/Asset Manager thu hồi tay; ASSET chỉ cung cấp bộ lọc `holderEmployeeId` cho màn offboarding. Tự động hoá là việc Phase sau.
 - Mọi mutation trạng thái (cấp phát · thu hồi · mở/đóng bảo trì · mở/đóng kiểm kê · thanh lý/mất/tìm thấy lại · xoá mềm) ghi `audit_logs`; **giá mua/chi phí không vào payload audit** (chỉ id + hành động + trạng thái trước/sau).
 
@@ -313,18 +313,20 @@ Quy tắc bổ sung (không cần mã riêng):
 | --- | --- | --- | --- | --- | --- |
 | **`In Stock`** | — | cấp phát (FUNC-004) | mở bảo trì (FUNC-006) | thanh lý (FUNC-011) | ghi nhận mất (FUNC-011) |
 | **`Assigned`** | thu hồi `Good`/`Damaged` (FUNC-005) | — | mở bảo trì — lượt cấp phát **vẫn Active** | ✗ ASSET-ERR-008 | thu hồi `Lost` **hoặc** ghi nhận mất — tự đóng lượt với `return_condition='Lost'` |
-| **`Under Maintenance`** | đóng bảo trì, **không** còn lượt Active (FUNC-007) | đóng bảo trì, **còn** lượt Active | — | thanh lý — tự đóng lượt bảo trì `Closed` (`result_note` = lý do) | ghi nhận mất — tự đóng lượt bảo trì + lượt cấp phát Active (nếu có) |
+| **`Under Maintenance`** | đóng bảo trì, **không** còn lượt Active (FUNC-007) | đóng bảo trì, **còn** lượt Active | — | thanh lý **chỉ khi KHÔNG còn lượt Active** (còn ⇒ ✗ ASSET-ERR-008) — tự đóng lượt bảo trì `Closed` (`result_note` = lý do) | ghi nhận mất — tự đóng lượt bảo trì + lượt cấp phát Active (nếu có) |
 | **`Disposed`** | ✗ | ✗ | ✗ | — | ✗ |
 | **`Lost`** | tìm thấy lại (FUNC-012) | ✗ | ✗ | ✗ | — |
 
 - Mọi ô ✗ ⇒ **ASSET-ERR-001** (409). Bảng này là **hợp đồng**, service viết đúng một hàm `assertTransition(from, to, action)`; không controller nào tự kiểm.
+- **`assertTransition` chỉ nhìn `status` — CHƯA ĐỦ.** Trạng thái `Under Maintenance` có thể mang lượt cấp phát Active (ô `Assigned → Under Maintenance`), nên mọi hành động kết thúc vòng đời (`Disposed`) và mọi hành động đổi người giữ phải đi qua guard thứ hai **`assertNoActiveAssignment(assetId)`** / đọc lượt Active **trong cùng transaction** (`SELECT … FOR UPDATE` trên hàng `assets`). Thiếu guard này là thanh lý được tài sản nhân viên đang giữ mà mọi CHECK vẫn xanh.
+- **`revoke` khi `status = 'Under Maintenance'` — ĐƯỢC PHÉP** (nhân viên nghỉ việc trong lúc tài sản ở tiệm sửa vẫn phải thu hồi được): lượt Active → `Returned`; `return_condition` `Good`/`Damaged` ⇒ **`status` tài sản KHÔNG đổi** (vẫn `Under Maintenance`; khi đóng bảo trì sẽ về `In Stock` vì không còn lượt Active); `return_condition='Lost'` ⇒ tài sản sang `Lost` **và** tự đóng lượt bảo trì Open. Không có lượt Active ⇒ ASSET-ERR-003 như thường.
 - "Trạng thái sau khi đóng bảo trì" là **dẫn xuất** từ việc còn lượt cấp phát Active hay không — **không** lưu cột "trạng thái trước bảo trì" (cột ghi-rồi-bỏ là thứ để gỡ, không phải để nối dây).
 - Mọi bước "tự đóng kèm theo" (lượt bảo trì / lượt cấp phát) chạy **trong cùng transaction** với đổi trạng thái; rollback là rollback tất cả.
 
 ### 13.2 Cấp phát và thu hồi
 
 - Cấp phát: kiểm nhân viên thuộc company + `active` (ASSET-ERR-002) → kiểm FSM → INSERT lượt `Active` (partial unique là chốt cuối; vi phạm unique ⇒ map về ASSET-ERR-001, **không** 500 — drizzle giấu mã PG trong `cause`, phải bóc) → UPDATE `assets.status='Assigned'` → audit → outbox `ASSET_ASSIGNED`. Tất cả một transaction.
-- Thu hồi: UPDATE lượt Active → `Returned` + `return_condition` + `returned_at/by`; `Good`/`Damaged` ⇒ `In Stock` (ghi `condition_note` nếu `Damaged`); `Lost` ⇒ tài sản `Lost` + `status_reason` = ghi chú thu hồi. Audit + outbox `ASSET_REVOKED` (kể cả trường hợp Lost — người giữ vẫn cần biết hồ sơ mình đã đóng).
+- Thu hồi: UPDATE lượt Active → `Returned` + `return_condition` + `returned_at/by`; `Good`/`Damaged` ⇒ `In Stock` (ghi `condition_note` nếu `Damaged`) — **trừ khi** tài sản đang `Under Maintenance`: giữ nguyên `status` (§13.1); `Lost` ⇒ tài sản `Lost` + `status_reason` = ghi chú thu hồi (+ đóng lượt bảo trì Open nếu có). Audit + outbox `ASSET_REVOKED` (kể cả trường hợp Lost — người giữ vẫn cần biết hồ sơ mình đã đóng).
 - **Biên bản**: FE render từ DTO lượt cấp phát (mã · tên tài sản · serial · người giao · người nhận · ngày · tình trạng · ghi chú); server **không** sinh và không lưu PDF.
 
 ### 13.3 Bảo trì
@@ -345,6 +347,7 @@ Quy tắc bổ sung (không cần mã riêng):
 - Counter: `sequence_counters` với `module_code='ASSET'`, `sequence_key='asset_code'`, `scope_type='Custom'`, `scope_reference_id = asset_categories.id`, `prefix = 'TS-' || code_prefix || '-'`, `padding_length = 4`, `reset_policy='Never'` ⇒ `TS-LT-0001`, `TS-LT-0002`…
 - Counter được **tạo cùng transaction với loại tài sản** (FUNC-001). Sinh mã đi qua `SequenceService` (`SELECT … FOR UPDATE`, **không** `MAX(code)+1`); thiếu counter ⇒ `SequenceNotFoundError` fail-loud, không tự tạo lúc sinh mã (bug `QA2-CRIT-002` của `task_code`).
 - `code_prefix` **khoá** sau khi loại đã sinh mã đầu tiên (ASSET-ERR-010) — đổi prefix làm mã cũ/mới lệch họ.
+- `code_prefix` **không bao giờ được cấp lại**, kể cả sau khi loại bị xoá mềm: unique index trên `(company_id, code_prefix)` **không** có vế `deleted_at IS NULL` (DB-15 §6.1). Nếu cho phép, loại mới cùng prefix nhận counter mới `current_value=0` ⇒ `TS-LT-0001` đụng mã của tài sản `Disposed` cũ ⇒ 500 unique-violation không có mã lỗi. Muốn dùng lại loại ⇒ **khôi phục** loại đã xoá mềm (`is_active=true`, cùng counter), không tạo loại mới.
 - QR = ảnh của chuỗi `asset_code` do FE render (`ASSET-SCREEN-002`), có nút in nhãn; **không** có endpoint/ảnh QR ở server (ASSET-DEC-001).
 
 ### 13.6 Data scope
@@ -355,7 +358,9 @@ Quy tắc bổ sung (không cần mã riêng):
 | Department | tài sản có lượt **Active** mà `employee_id` thuộc đơn vị của tôi ∪ đơn vị tôi làm trưởng |
 | Company | toàn bộ |
 
-Loại tài sản, đợt kiểm kê, thống kê: đọc theo cùng scope (Own/Department chỉ thấy đếm trên tập của mình; đợt kiểm kê chỉ hiện với Company — Own/Department trả rỗng, không 403).
+Loại tài sản, đợt kiểm kê, thống kê: đọc theo cùng scope (Own/Department chỉ thấy đếm trên tập của mình). Đợt kiểm kê chỉ thuộc Company: **danh sách** (`ASSET-API-018`) trả rỗng ở Own/Department (không 403); **chi tiết** (`ASSET-API-020`) trả **404 ASSET-ERR-012** — giống hệt đợt không tồn tại.
+
+**Che danh tính theo scope (bắt buộc, không chỉ che tiền):** scope Own bám theo *lịch sử của tôi*, nên **người giữ cũ vẫn ở trong scope Own của tài sản đó vĩnh viễn**. Vì vậy ở scope hiệu dụng **Own**: `currentHolder` chỉ được trả khi người giữ hiện tại **chính là caller** (ngược lại **vắng khoá**, không `null`); `GET /assets/:id/assignments` chỉ trả các hàng có `employee_id` = employee của caller; `counts.assignments` đếm trên tập đã lọc. Ở scope **Department**: chỉ trả `currentHolder`/hàng lịch sử của nhân viên **trong đơn vị** (∪ đơn vị mình làm trưởng); hàng của người ngoài đơn vị **không** trả. Company: đầy đủ. Đây là masking **ở server** (SPEC-01 §11.3) — FE không được tự lọc.
 
 ---
 
@@ -409,9 +414,10 @@ Nguồn chuẩn: [DB-15](<../DB/DB-15 ASSET Database Design.md>). Tóm tắt:
   1. module `ASSET` vào `modules` (`ON CONFLICT DO NOTHING`);
   2. role hệ thống `asset-manager` (tiền lệ `hr-manager` `0019`), `ON CONFLICT DO NOTHING`;
   3. **11 cặp permission** §11, `is_sensitive=false`, grant per-pair data_scope (DELETE-wrong-scope + INSERT ON CONFLICT, verify fail-loud) cho 4 role canonical + `asset-manager`;
-  4. `audit_logs.object_type` **UNION-ADD** 5 giá trị `asset` · `asset_category` · `asset_assignment` · `asset_maintenance` · `asset_inventory` (DO-block neo `object_type = ANY (`, `audit-check-union-parse-anchor-trap`) + `AUDIT_OBJECT_TYPES` cùng commit;
-  5. catalog + template **3 event NOTI** §17 và **nới CHECK trên CẢ HAI bảng** `notification_events` **lẫn** `notifications` (`module_code += 'ASSET'`, `notification_type += 'Asset'`) — quên vế `notifications` là lỗi đã ship thật ở `0507` (`noti-catalog-check-lives-on-two-tables`).
+  4. `audit_logs.object_type` **UNION-ADD** 5 giá trị `asset` · `asset_category` · `asset_assignment` · `asset_maintenance` · `asset_inventory` — **clone nguyên khối UNION-ADD của `0506`** (parse `{…}::text[]` + verify regex biên **từng** giá trị; `audit-check-union-parse-anchor-trap`) + `AUDIT_OBJECT_TYPES` cùng commit. **Dòng kiểm kê KHÔNG có `object_type` riêng**: đánh dấu dòng (kể cả bulk) audit dưới aggregate `asset_inventory` với `object_id = inventory_id`, payload liệt kê `itemIds` + `result` (tiền lệ `workflow_template` gói item);
+  5. catalog + template **3 event NOTI** §17 với **`dedupe_strategy = 'DedupeKey'`** (mặc định `'None'` của `0479` làm `dedupeKey` thành chuỗi trang trí — job nhắc bảo trì sẽ nhân đôi thông báo mỗi ngày; sửa sau = migration thứ hai như `0507`) và **nới CHECK trên CẢ HAI bảng** `notification_events` **lẫn** `notifications` (`module_code += 'ASSET'`, `notification_type += 'Asset'`) — quên vế `notifications` là lỗi đã ship thật ở `0507` (`noti-catalog-check-lives-on-two-tables`).
 - **Không seed `sequence_counters`** ở migration: counter sinh theo loại **lúc tạo loại** (§13.5); DB chưa có loại nào.
+- **Teardown test:** `apps/api/test/helpers/seed.ts` `cleanupTenants()` xoá **tường minh** từng bảng con ⇒ WO DB thêm 6 bảng theo thứ tự con→cha (`asset_inventory_items` → `asset_inventories` → `asset_maintenances` → `asset_assignments` → `assets` → `asset_categories`) **cùng commit** với migration (quên là đỏ hàng loạt ở `afterAll` — bài học `drop-table-must-clean-test-teardown`). FK nội bộ dùng `ON DELETE NO ACTION` (kiểm cuối câu lệnh), **không** `RESTRICT` (kiểm ngay — nổ khi cascade từ `companies` xoá hai bảng anh em theo thứ tự bất định) — DB-15 §4.
 - Migration nối tiếp head **THẬT** lúc chạy (`migrations/meta/_journal.json`; head lúc viết = idx 215 / `0548` ⇒ dự kiến `0549+`).
 
 ---
@@ -422,9 +428,10 @@ Nguồn chuẩn: [DB-15](<../DB/DB-15 ASSET Database Design.md>). Tóm tắt:
 | --- | --- | --- | --- | --- |
 | `ASSET_ASSIGNED` | NOTI-EVENT-010 | lượt cấp phát tạo xong (commit) | user của nhân viên được cấp | không gộp; `dedupeKey = asset:assigned:{assignmentId}` |
 | `ASSET_REVOKED` | NOTI-EVENT-011 | lượt cấp phát đóng (`Returned`, kể cả `Lost`) | user của nhân viên bị thu hồi | `dedupeKey = asset:revoked:{assignmentId}` |
-| `ASSET_MAINTENANCE_DUE` | NOTI-EVENT-012 | job hằng ngày: `next_maintenance_due ≤ hôm nay + 7` và tài sản không `Disposed`/`Lost` | mọi user trong company giữ `('manage','asset-maintenance')` (resolve qua PermissionService — cùng cách `HR_CONTRACT_EXPIRING` tới HR/Admin) | `dedupeKey = asset:maint-due:{assetId}:{dueDate}` — cùng hạn không nhắc lại; đổi hạn ⇒ khoá mới |
+| `ASSET_MAINTENANCE_DUE` | NOTI-EVENT-012 | job hằng ngày: `next_maintenance_due ≤ hôm nay + 7` và tài sản không `Disposed`/`Lost` | **user đang giữ role `asset-manager` hoặc `company-admin`** trong company (tra `user_roles`, phát với `recipient.mode='UserIds'`) — xem ghi chú | `dedupeKey = asset:maint-due:{assetId}:{dueDate}` — cùng hạn không nhắc lại; đổi hạn ⇒ khoá mới |
 
-- `notification_type = 'Asset'`, `module_code = 'ASSET'`, `priority` Normal (010/011) · High (012), `isEnabled=true`, `isSystemEvent=false`.
+- **Người nhận của 012 resolve theo ROLE, không theo cặp quyền** (đo 28/08/2026): `NotificationRecipientResolverService` chỉ có `mode: 'UserIds' | 'EmployeeIds'`, và `PermissionService` **không có** tra ngược "user nào giữ cặp X" (mọi hàm đều tra theo một user). Dựng tra-ngược permission engine là việc vùng đỏ ngoài phạm vi wave ⇒ v1 liệt kê user qua `user_roles` của hai role trên. Nếu Phase sau có tra-ngược, đổi sang cặp `('manage','asset-maintenance')` và ghi lại đây. *(Không có tiền lệ `HR_CONTRACT_EXPIRING` để noi theo — mã đó chỉ nằm trong catalog, chưa có producer.)*
+- `notification_type = 'Asset'`, `module_code = 'ASSET'`, `priority` Normal (010/011) · High (012), `isEnabled=true`, `isSystemEvent=false`, **`dedupe_strategy='DedupeKey'`** (catalog thắng `DEFAULT_DEDUPE` — không thêm entry vào `notification-dedupe.const.ts`, tránh hai nguồn sự thật).
 - Payload chỉ chứa **mã + tên tài sản + tên người liên quan + liên kết** (`/me/assets` hoặc `/assets/:id`); **không** giá mua/chi phí.
 - Phát qua **OutboxNotificationBridge** (enqueue trong transaction, map `eventCode` verbatim). **Bẫy boot:** `registerSource()` fail-loud lúc boot nếu `eventCode` chưa có trong catalog `isEnabled=true` ⇒ seed (DB-15 §9 bước C) phải xong **trước** khi WO backend đăng ký registrar.
 - Đo dải mã chuẩn ngày 28/08/2026: SPEC-01 §20.2 dừng ở **NOTI-EVENT-009**; GOAL/CHAT/LMS **không** cấp mã chuẩn (chỉ là mở rộng §15.1–15.6). ASSET là module đầu tiên cấp tiếp: **010–012**. ROOM (SPEC-14) lấy **013+** — đo lại bằng grep trước khi cấp.
@@ -435,7 +442,8 @@ Nguồn chuẩn: [DB-15](<../DB/DB-15 ASSET Database Design.md>). Tóm tắt:
 
 - **RLS + FORCE** theo `company_id` trên cả 6 bảng, tạo policy **trước** mọi INSERT; mọi repository qua `withTenant`.
 - **Sổ không xoá**: `asset_assignments` · `asset_maintenances` · `asset_inventories` · `asset_inventory_items` — app role **không có DELETE**; UPDATE chỉ **cấp cột** (các cột "đóng"/"kết quả"). Hồ sơ có lịch sử thì thanh lý, không xoá (ASSET-ERR-015).
-- **Che ở server**: trường tài chính (`assets.purchase_price`, `assets.supplier`, `asset_maintenances.cost`) **không trả** khi scope hiệu dụng của người gọi là **Own** (mọi đường `/me/assets` và `/assets/*` khi actor chỉ có Own). Payload WS (nếu có sau) đi cùng DTO — cấm emit thẳng row.
+- **Che ở server — tiền:** trường tài chính (`assets.purchase_price`, `assets.supplier`, `asset_maintenances.cost`) **chỉ trả khi scope hiệu dụng là Company**; ở **Own và Department** đều vắng khoá (trưởng đơn vị không có nhu cầu biết giá mua thiết bị của nhân viên — chốt tường minh, không để "cố ý không che" thành mặc định ngầm). Payload WS (nếu có sau) đi cùng DTO — cấm emit thẳng row.
+- **Che ở server — danh tính:** `currentHolder` và lịch sử cấp phát lọc theo scope (§13.6): Own chỉ thấy hàng của chính mình, Department chỉ thấy nhân viên trong đơn vị. Người giữ **cũ** không được thấy ai đang giữ hiện tại.
 - **404 chứ không 403** cho tài sản ngoài scope/tenant (ASSET-ERR-012/013) — chống dò sự tồn tại; **403** chỉ khi thiếu cặp quyền.
 - **Audit** mọi mutation trạng thái + danh mục (§12); payload audit không chứa số tiền.
 - `/me/assets` **không nhận** `employeeId` — chống IDOR (chuẩn SPEC-09 §14.4).
@@ -459,7 +467,8 @@ Nguồn chuẩn: [DB-15](<../DB/DB-15 ASSET Database Design.md>). Tóm tắt:
 2. Cấp phát `TS-LT-0001` cho nhân viên A → A nhận `ASSET_ASSIGNED`, `/me/assets` của A thấy tài sản, **không** thấy giá mua; B (cùng phòng, không giữ) mở `/assets/:id` → **404**.
 3. Cấp phát lần 2 khi đang `Assigned` → **409 ASSET-ERR-001**; hai request cấp phát **song song** trên cùng tài sản → đúng **một** lượt Active (int-spec race, partial unique là chốt cuối).
 4. Mở bảo trì khi A đang giữ → `Under Maintenance`, lượt của A vẫn Active; đóng bảo trì → về `Assigned` (không phải `In Stock`).
-5. Thu hồi với `Lost` → tài sản `Lost`, lượt `Returned`; tìm thấy lại (lý do bắt buộc) → `In Stock`; thanh lý khi đang `Assigned` → **409 ASSET-ERR-008**.
+5. Thu hồi với `Lost` → tài sản `Lost`, lượt `Returned`; tìm thấy lại (lý do bắt buộc) → `In Stock`; thanh lý khi đang `Assigned` → **409 ASSET-ERR-008**; **mở bảo trì khi A đang giữ rồi thanh lý ngay (đang `Under Maintenance`, còn lượt Active)** → **409 ASSET-ERR-008** (không phải 200); thu hồi khi đang `Under Maintenance` → lượt `Returned`, tài sản **vẫn** `Under Maintenance`, đóng bảo trì sau đó → `In Stock`.
+5b. A đã trả laptop, B đang giữ: A mở `/assets/:id` → 200 nhưng **không có khoá `currentHolder`**; `/assets/:id/assignments` của A chỉ có lượt của A. Trưởng đơn vị của B thấy B nhưng **không** thấy `purchasePrice`.
 6. Mở đợt kiểm kê toàn bộ → số dòng = số tài sản không `Disposed`/`Lost`; tài sản tạo sau đó **không** vào đợt; đánh dấu 1 `Missing`, đóng đợt → tổng kết đúng, tài sản `Missing` **vẫn** giữ trạng thái cũ.
 7. Trưởng đơn vị X chỉ thấy tài sản nhân viên đơn vị X đang giữ; tài sản `In Stock` không hiện với X; HR thấy toàn bộ nhưng **không** cấp phát được (403).
 8. Cross-tenant: mọi endpoint deny dữ liệu company khác bằng **404** (int-spec bắt buộc, `LANE_DB`).
@@ -474,13 +483,15 @@ Nguồn chuẩn: [DB-15](<../DB/DB-15 ASSET Database Design.md>). Tóm tắt:
 | Nhóm | Scenario |
 | --- | --- |
 | Deny-path (RED trước) | thiếu từng cặp trong 11 cặp → 403 trên endpoint tương ứng; employee gọi `/assets/:id` của tài sản không giữ → 404; cross-tenant mọi endpoint → 404; `/me/assets?employeeId=` bị bỏ qua/400. Chủ thể = role dựng trong test, **không** SA |
-| FSM | mọi ô ✗ ở §13.1 → ASSET-ERR-001; mọi ô hợp lệ → đúng trạng thái sau; đóng bảo trì về `Assigned`/`In Stock` theo lượt Active; ghi nhận mất từ `Assigned` tự đóng lượt `Lost` |
+| FSM | mọi ô ✗ ở §13.1 → ASSET-ERR-001; mọi ô hợp lệ → đúng trạng thái sau; đóng bảo trì về `Assigned`/`In Stock` theo lượt Active; ghi nhận mất từ `Assigned` tự đóng lượt `Lost`; **dispose `Disposed` từ `Under Maintenance` khi còn lượt Active → 409 ERR-008** (guard `assertNoActiveAssignment`, không chỉ `assertTransition`); **revoke khi `Under Maintenance`** → lượt `Returned`, status giữ nguyên (`Good`/`Damaged`) hoặc `Lost` + đóng bảo trì |
+| Masking danh tính | người giữ cũ (Own) mở tài sản → không có `currentHolder`, lịch sử chỉ có hàng của mình; Department → chỉ hàng nhân viên trong đơn vị; Company → đầy đủ. Ca đối chứng ALLOW cho từng scope để ca DENY không xanh rỗng |
 | Race | 2 assign song song → 1 Active; 2 mở bảo trì song song → 1 Open; 2 mở đợt kiểm kê song song → 1 Open (đều map về 409, không 500 — bóc mã PG từ `cause`) |
 | Validate | **16** mã lỗi §12, mỗi mã ≥ 1 ca; CHECK DB `return_condition`/`result`/`status` mirror Zod **hai chiều, đúng bằng** |
 | Idempotent | assign lặp cùng `Idempotency-Key` → 1 lượt, replay `meta.idempotent_replay=true` |
 | Mã & counter | tạo loại ⇒ counter tồn tại; xoá counter rồi tạo tài sản ⇒ `SequenceNotFoundError` fail-loud, không tự tạo |
 | Kiểm kê | snapshot đúng phạm vi (loại / toàn bộ), loại trừ Disposed/Lost; đánh dấu sau khi đóng → 409; tổng kết = đếm thật |
-| Masking | Own không có `purchasePrice`/`supplier`/`cost`; Company có; FE schema `.optional()` |
+| Masking tiền | Own **và Department** không có `purchasePrice`/`supplier`/`cost`; Company có; FE schema `.optional()` — đo cả ba scope, không chỉ Own vs Company |
+| Mã & prefix | tạo loại prefix `LT` → xoá mềm (sau khi thanh lý hết) → tạo loại mới prefix `LT` → **409 ERR-010 `prefix-taken`**, không 500 |
 | Sổ không xoá | app role `DELETE` trên 4 bảng sổ bị từ chối ở **DB**; UPDATE cột ngoài allowlist bị từ chối |
 | Tenant | `rls-tenant-isolation-tester` xanh cho 6 bảng trên `LANE_DB` |
 | NOTI | 3 event seed đúng; CHECK `module_code`/`notification_type` nới **cả hai bảng**; job nhắc idempotent theo `(asset, hạn)` |
@@ -533,4 +544,4 @@ Nguồn chuẩn: [DB-15](<../DB/DB-15 ASSET Database Design.md>). Tóm tắt:
 
 ## 25. Kết luận
 
-ASSET là module Phase 3 đầu tiên: gọn về nghiệp vụ nhưng là nơi thử luật FSM-ép-ở-service + chốt-cuối-ở-DB một cách sạch nhất trong hệ thống. Ba lựa chọn cứng — **một tài sản một lượt cấp phát đang sống (partial unique)**, **cấp phát một bước có biên bản in từ FE**, **thanh lý là trạng thái chứ không phải quy trình** — giữ v1 nằm ngoài vùng crown-jewel trong khi vẫn để dấu vết đầy đủ (4 bảng sổ không xoá + audit). Phần thật sự mới chỉ là 6 bảng, 11 cặp quyền, 24 endpoint và 7 màn hình; mọi thứ còn lại tái dùng nền đã có.
+ASSET là module Phase 3 đầu tiên: gọn về nghiệp vụ nhưng là nơi thử luật FSM-ép-ở-service + chốt-cuối-ở-DB một cách sạch nhất trong hệ thống. Ba lựa chọn cứng — **một tài sản một lượt cấp phát đang sống (partial unique)**, **cấp phát một bước có biên bản in từ FE**, **thanh lý là trạng thái chứ không phải quy trình** — giữ v1 nằm ngoài vùng crown-jewel trong khi vẫn để dấu vết đầy đủ (4 bảng sổ không xoá + audit). Phần thật sự mới chỉ là 6 bảng, 11 cặp quyền, 24 mã API (26 route HTTP — route-census đếm route) và 7 màn hình; mọi thứ còn lại tái dùng nền đã có.

@@ -112,6 +112,8 @@ POST   /api/v1/asset-inventories/{inventory_id}/close
 GET    /api/v1/me/assets
 ```
 
+> **24 mã ASSET-API = 26 route HTTP** (020 và 021 mỗi mã gói 2 route). Route-census đếm **route** — WO BE regen census với 26, không phải 24.
+
 ### 5.1 Bảng endpoint (stub — chi tiết DTO ở WO backend)
 
 | Mã | Method | Path | Chức năng | Cặp quyền (SPEC-13 §11) | Audit | NOTI |
@@ -122,21 +124,21 @@ GET    /api/v1/me/assets
 | ASSET-API-004 | DELETE | `/asset-categories/{id}` | Xoá mềm; chặn khi còn tài sản chưa Disposed/Lost (ASSET-ERR-010) | `('manage','asset-category')` | ✅ | — |
 | ASSET-API-005 | GET | `/assets` | Danh sách — filter `categoryId` · `status[]` · `holderEmployeeId` · `q` · `maintenanceDueBefore`; sort `assetCode`/`createdAt`; pagination; data scope SPEC-13 §13.6 | `('view','asset')` | — | — |
 | ASSET-API-006 | POST | `/assets` | Tạo hồ sơ `{ categoryId, name, serialNumber?, brand?, model?, purchaseDate?, purchasePrice?, supplier?, warrantyEndDate?, location?, description? }` → `assetCode` sinh ở server | `('create','asset')` | ✅ | — |
-| ASSET-API-007 | GET | `/assets/{id}` | Chi tiết + `currentHolder` (JOIN HR) + `openMaintenance?` + đếm lượt cấp phát/bảo trì; ngoài scope → 404 | `('view','asset')` | — | — |
+| ASSET-API-007 | GET | `/assets/{id}` | Chi tiết + `currentHolder` (JOIN HR) + `openMaintenance?` + đếm lượt cấp phát/bảo trì; ngoài scope → 404. **`currentHolder` lọc theo scope** (Own: chỉ khi là caller; Department: chỉ nhân viên trong đơn vị; ngược lại vắng khoá) — §6.4 | `('view','asset')` | — | — |
 | ASSET-API-008 | PATCH | `/assets/{id}` | Sửa mô tả; body **không** có `assetCode`/`status` (ASSET-ERR-011) | `('update','asset')` | ✅ | — |
 | ASSET-API-009 | DELETE | `/assets/{id}` | Xoá mềm khi `In Stock` + 0 lịch sử (ASSET-ERR-015) | `('delete','asset')` | ✅ | — |
-| ASSET-API-010 | POST | `/assets/{id}/assign` | Cấp phát `{ employeeId, issueCondition?, issueNote?, expectedReturnDate? }`; `In Stock → Assigned`; `Idempotency-Key` suy từ payload | `('assign','asset')` | ✅ | `ASSET_ASSIGNED` |
-| ASSET-API-011 | POST | `/assets/{id}/revoke` | Thu hồi `{ returnCondition: 'Good'\|'Damaged'\|'Lost', returnNote? }`; `Assigned → In Stock` (hoặc `Lost`) | `('revoke','asset')` | ✅ | `ASSET_REVOKED` |
-| ASSET-API-012 | GET | `/assets/{id}/assignments` | Lịch sử cấp phát, pagination, mới nhất trước | `('view','asset')` | — | — |
+| ASSET-API-010 | POST | `/assets/{id}/assign` | Cấp phát `{ employeeId, issueCondition?, issueNote?, expectedReturnDate? }`; `In Stock → Assigned`; header `Idempotency-Key` **do client sinh** khi mở form (§6.10) | `('assign','asset')` | ✅ | `ASSET_ASSIGNED` |
+| ASSET-API-011 | POST | `/assets/{id}/revoke` | Thu hồi `{ returnCondition: 'Good'\|'Damaged'\|'Lost', returnNote? }`; `Assigned → In Stock` (hoặc `Lost`). **Được phép khi đang `Under Maintenance`**: lượt → `Returned`, `status` giữ nguyên (`Good`/`Damaged`) hoặc → `Lost` + đóng bảo trì (SPEC-13 §13.1) | `('revoke','asset')` | ✅ | `ASSET_REVOKED` |
+| ASSET-API-012 | GET | `/assets/{id}/assignments` | Lịch sử cấp phát, pagination, mới nhất trước. **Lọc theo scope**: Own chỉ hàng của caller; Department chỉ hàng nhân viên trong đơn vị; Company đầy đủ (§6.4) | `('view','asset')` | — | — |
 | ASSET-API-013 | POST | `/assets/{id}/maintenances` | Mở lượt `{ reason, vendor? }`; → `Under Maintenance` | `('manage','asset-maintenance')` | ✅ | — |
 | ASSET-API-014 | POST | `/assets/{id}/maintenances/{maintenanceId}/close` | Đóng `{ resultNote?, cost?, nextDueDate? }`; trạng thái sau = dẫn xuất (SPEC-13 §13.1) | `('manage','asset-maintenance')` | ✅ | — |
 | ASSET-API-015 | GET | `/assets/{id}/maintenances` | Lịch sử bảo trì | `('view','asset')` | — | — |
-| ASSET-API-016 | POST | `/assets/{id}/dispose` | `{ kind: 'Disposed'\|'Lost', reason }`; tự đóng lượt bảo trì Open / lượt cấp phát Active theo §13.1; `Disposed` khi còn Active → ASSET-ERR-008 | `('dispose','asset')` | ✅ | `ASSET_REVOKED` nếu có lượt Active bị đóng |
+| ASSET-API-016 | POST | `/assets/{id}/dispose` | `{ kind: 'Disposed'\|'Lost', reason }`; tự đóng lượt bảo trì Open / lượt cấp phát Active theo §13.1; `Disposed` khi **tồn tại lượt Active** (kể cả đang `Under Maintenance`) → ASSET-ERR-008 — guard `assertNoActiveAssignment` ngoài `assertTransition` | `('dispose','asset')` | ✅ | `ASSET_REVOKED` nếu có lượt Active bị đóng |
 | ASSET-API-017 | POST | `/assets/{id}/recover` | `Lost → In Stock` `{ reason }` | `('dispose','asset')` | ✅ | — |
 | ASSET-API-018 | GET | `/asset-inventories` | Danh sách đợt (Company scope; scope khác trả rỗng) | `('view','asset')` | — | — |
 | ASSET-API-019 | POST | `/asset-inventories` | Mở đợt `{ name, categoryId?, note? }` + snapshot dòng (1 tx) | `('manage','asset-inventory')` | ✅ | — |
-| ASSET-API-020 | GET | `/asset-inventories/{id}` · `/asset-inventories/{id}/items` | Chi tiết đợt + dòng (filter `result`, pagination) | `('view','asset')` | — | — |
-| ASSET-API-021 | PATCH · POST | `/asset-inventories/{id}/items/{itemId}` · `/asset-inventories/{id}/items/bulk-mark` | Đánh dấu `{ result: 'Found'\|'Missing', note? }` (bulk: `{ itemIds[], result, note? }`, tối đa 200/lần); đợt Closed → ASSET-ERR-007 | `('manage','asset-inventory')` | ✅ (bulk: 1 hàng audit kèm số dòng) | — |
+| ASSET-API-020 | GET | `/asset-inventories/{id}` · `/asset-inventories/{id}/items` | Chi tiết đợt + dòng (filter `result`, pagination). Scope Own/Department → **404 ASSET-ERR-012** (chi tiết không có khái niệm "rỗng"; danh sách 018 mới trả rỗng) | `('view','asset')` | — | — |
+| ASSET-API-021 | PATCH · POST | `/asset-inventories/{id}/items/{itemId}` · `/asset-inventories/{id}/items/bulk-mark` | Đánh dấu `{ result: 'Found'\|'Missing', note? }` (bulk: `{ itemIds[], result, note? }`, tối đa 200/lần); đợt Closed → ASSET-ERR-007 | `('manage','asset-inventory')` | ✅ `object_type='asset_inventory'`, `object_id=inventory_id`, payload `itemIds`+`result` (không có object_type riêng cho dòng) | — |
 | ASSET-API-022 | POST | `/asset-inventories/{id}/close` | Đóng đợt + ghi 4 số tổng kết; **không** đổi trạng thái tài sản | `('manage','asset-inventory')` | ✅ | — |
 | ASSET-API-023 | GET | `/me/assets` | Tài sản của tôi — employee từ token; `?includeReturned=true`; **không** trường tài chính | `('view','asset')` scope Own | — | — |
 | ASSET-API-024 | GET | `/assets/summary` | Đếm theo `status` × `categoryId` trong scope người gọi — nguồn widget DASH. **Khai route TRƯỚC `/assets/{id}`** (kẻo `summary` bị bắt làm id — bài học `goals/tree`) | `('view','asset')` | — | — |
@@ -160,13 +162,13 @@ GET    /api/v1/me/assets
 1. **FSM ép ở service qua đúng một hàm** `assertTransition(from, to, action)` theo ma trận SPEC-13 §13.1; chuyển tiếp sai → **409 ASSET-ERR-001**. Không controller nào tự kiểm trạng thái.
 2. **Chốt cuối ở DB, map về 4xx**: vi phạm `uq_asset_assignments_active` / `uq_asset_maintenances_open` / `uq_asset_inventories_open` (race) → **409** đúng mã ASSET-ERR-001/004/006 — bóc mã PG `23505` từ `error.cause` (drizzle bọc lỗi), **không** để lọt thành 500.
 3. **"Ai đang giữ" là dẫn xuất** — DTO `currentHolder` JOIN từ lượt Active + HR; không có trường ghi `holderEmployeeId` ở bất kỳ body nào.
-4. **Data scope ép ở service**, không phải RLS: Own = lượt của employee tôi; Department = lượt Active của nhân viên đơn vị tôi (∪ đơn vị tôi làm trưởng); Company = tất cả. Ngoài scope → **404** (ASSET-ERR-012/013), **không** 403.
+4. **Data scope ép ở service**, không phải RLS: Own = lượt của employee tôi; Department = lượt Active của nhân viên đơn vị tôi (∪ đơn vị tôi làm trưởng); Company = tất cả. Ngoài scope → **404** (ASSET-ERR-012/013), **không** 403. **Scope cũng lọc BÊN TRONG payload**: người giữ cũ vẫn ở scope Own của tài sản đó mãi mãi, nên `currentHolder` chỉ trả khi người giữ hiện tại là caller (Own) / trong đơn vị (Department), `assignments[]` chỉ trả hàng của caller (Own) / của nhân viên trong đơn vị (Department). Vắng khoá, không `null`.
 5. **`/me/assets` resolve employee từ token** — không có tham số nào cho phép truyền `employeeId` (chống IDOR, mirror ME/GOAL-API-013).
-6. **Che ở server**: `purchasePrice` · `supplier` · `maintenances[].cost` **vắng mặt** trong payload khi scope hiệu dụng là Own (mọi response `/me/assets`; `/assets/*` khi actor chỉ có Own). FE schema Zod khai `.optional()` — thiếu là `ZodError` trắng trang.
+6. **Che ở server**: `purchasePrice` · `supplier` · `maintenances[].cost` **chỉ có mặt khi scope hiệu dụng là Company**; vắng ở cả Own lẫn Department (chốt tường minh SPEC-13 §18). FE schema Zod khai `.optional()` — thiếu là `ZodError` trắng trang.
 7. **Mọi mutation trạng thái ghi audit** trong cùng transaction (cấp phát · thu hồi · mở/đóng bảo trì · mở/đánh dấu/đóng kiểm kê · dispose/recover · CRUD loại · xoá mềm); payload audit **không** chứa số tiền.
 8. **`company_id` ở mọi query** — mọi truy vấn qua `withTenant(companyId, fn)`.
 9. **NOTI qua OutboxNotificationBridge** — enqueue trong transaction, `dedupeKey` suy từ nội dung (SPEC-13 §17); payload chỉ mã/tên tài sản + tên người + link.
-10. **`Idempotency-Key` của cấp phát suy từ payload** (`asset:assign:{assetId}:{employeeId}:{yyyy-mm-dd}`) — replay trả `meta.idempotent_replay=true` với cùng lượt; không sinh khoá ngẫu nhiên trong thân hàm.
+10. **`Idempotency-Key` của cấp phát do CLIENT sinh** (một lần khi mở form cấp phát — chuẩn API-01 §21, như `clientMessageId` của CHAT), server scope theo `company_id + user_id + method + path + key`; replay trả `meta.idempotent_replay=true` với cùng lượt. Server **không** tự suy khoá từ payload: ngày cấp không có trong body ⇒ mọi khoá "suy từ payload" đều phải lấy đồng hồ server (khoá theo kỳ không có nguồn đóng băng) và còn chặn nhầm ca "thu hồi rồi cấp lại cùng người trong ngày". Chống hai lượt Active là việc của partial unique, không phải của idempotency.
 11. **Khai `API_MODULE_TAGS` cho `ASSET`** (`apps/api/src/config/openapi-modules.ts`) và regen route-census có chủ đích (`ROUTE_CENSUS_WRITE=1`) — route mới không khai ⇒ census ĐỎ.
 
 ---
@@ -195,7 +197,7 @@ GET    /api/v1/me/assets
 }
 ```
 
-> Cùng tài sản đọc bằng scope **Own**: `purchasePrice`/`supplier` **không có khoá** trong `data` (không phải `null`).
+> Cùng tài sản đọc bằng scope **Own** hoặc **Department**: `purchasePrice`/`supplier` **không có khoá** trong `data` (không phải `null`). Ở Own, nếu caller không phải người giữ hiện tại thì `currentHolder` cũng **vắng khoá** và `counts.assignments` chỉ đếm lượt của caller.
 
 ### 7.2 Envelope list + pagination (`GET /assets`, `/assets/{id}/assignments`, `/asset-inventories/{id}/items`, `/me/assets`)
 
@@ -258,7 +260,7 @@ Dùng lại nhóm lỗi chung API-01: `AUTH-ERR-UNAUTHENTICATED` 401 · `AUTH-ER
 
 ### 7.5 Idempotency
 
-`POST /assets/{id}/assign` **bắt buộc** nhận `Idempotency-Key` suy từ payload (§6.10); `POST /asset-inventories` và `POST /asset-inventories/{id}/close` **nên** nhận. Khoá scope theo `company_id + user_id + method + path + idempotency_key`, TTL 24 giờ; replay trả `meta.idempotent_replay: true`.
+`POST /assets/{id}/assign` **bắt buộc** nhận header `Idempotency-Key` **do client sinh** (§6.10; thiếu header → 400 `VALIDATION-ERR-001`); `POST /asset-inventories` và `POST /asset-inventories/{id}/close` **nên** nhận. Khoá scope theo `company_id + user_id + method + path + idempotency_key`, TTL 24 giờ; replay trả `meta.idempotent_replay: true`.
 
 ---
 

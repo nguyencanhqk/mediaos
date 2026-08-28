@@ -512,7 +512,7 @@ ASSET đứng riêng, **11 cặp** quyền per-(action, resource) theo SPEC-13 �
 
 Ghi chú:
 
-- **`is_sensitive` chốt `false` cho cả 11 cặp.** Dữ liệu tài sản không thuộc danh sách nhạy cảm §10; trường **tài chính** (`purchase_price` · `supplier` · `asset_maintenances.cost`) che ở **server** khi scope hiệu dụng là Own (SPEC-13 §18), không dựng cặp nhạy cảm riêng.
+- **`is_sensitive` chốt `false` cho cả 11 cặp.** Dữ liệu tài sản không thuộc danh sách nhạy cảm §10; trường **tài chính** (`purchase_price` · `supplier` · `asset_maintenances.cost`) chỉ trả ở scope **Company** — che ở **server** cho cả Own lẫn Department (SPEC-13 §18), không dựng cặp nhạy cảm riêng. **Danh tính người giữ** cũng lọc theo scope (người giữ cũ ở Own không thấy ai đang giữ; Department chỉ thấy nhân viên trong đơn vị — SPEC-13 §13.6).
 - **Cặp gate của `/me/assets` PHẢI là chính cặp đọc `('view','asset')`** (scope Own) — không tách `ASSET.ASSIGNMENT.VIEW` như bản dự kiến của hồ sơ duyệt HTML. Tách cặp đọc thành hai sẽ đẻ ra role "thấy danh sách của mình mà không mở được chi tiết" — bài học `read-path-gate-pair-must-match-download-pair` (S5-TASK-COVER-1).
 - Cột **department** là ràng buộc thật: chỉ tài sản có lượt cấp phát `Active` mà người giữ thuộc đơn vị mình (∪ đơn vị mình làm trưởng). Tài sản `In Stock` (không ai giữ) **chỉ** hiện ở scope Company. `access` seed scope Own cho mọi role (mẫu 0506).
 - **Ma trận seed = 28 hàng** `role_permissions`: `employee` 2 · `manager` 2 · `hr` 2 · `company-admin` 11 · `asset-manager` 11 (`access`@Own, 10 cặp còn lại @Company). Migration verify fail-loud đúng số; `super-admin` không enumerate (nhận qua `SuperAdminBootstrapService`).
