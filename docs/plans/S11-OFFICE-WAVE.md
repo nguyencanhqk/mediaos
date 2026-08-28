@@ -1,8 +1,8 @@
 # Kế hoạch wave S11-OFFICE — Phase 3 «Quản trị văn phòng»: ASSET (tài sản) + ROOM (phòng họp)
 
-> Seed 2026-08-28. Trạng thái: **CHỜ OWNER DUYỆT** — 2 WO gốc (`S11-ASSET-DOC-1`, `S11-ROOM-DOC-1`)
-> để `blocked` cho tới khi owner duyệt tài liệu định hướng (hồ sơ duyệt HTML kèm wireframe UI:
-> **`docs/plans/S11-OFFICE-WAVE-review.html`** — mở bằng trình duyệt) và ký các quyết định §3. Nguồn phạm vi: SPEC-01 §12.10–12.11 · §7 (Phase 3) ·
+> Seed 2026-08-28. Trạng thái: **ĐÃ DUYỆT 2026-08-28** — owner duyệt nguyên gói hồ sơ
+> **`docs/plans/S11-OFFICE-WAVE-review.html`** (kèm wireframe UI) và ký 9/9 quyết định §3 theo cột
+> «Đề xuất». 2 WO gốc (`S11-ASSET-DOC-1`, `S11-ROOM-DOC-1`) đã mở khoá `blocked → todo` cùng ngày. Nguồn phạm vi: SPEC-01 §12.10–12.11 · §7 (Phase 3) ·
 > §10.8 (Asset Manager) · §10.9 (Office Admin) · IMPLEMENTATION-10 §22 (PARK-ASSET/ROOM) ·
 > RELEASE-14 §5.
 
@@ -26,7 +26,7 @@
   thuộc cụm media đã park) — không đụng độ.
 - **Điểm nối đã có khuôn từ các wave trước:** seed `modules` (mẫu 0506 GOAL) · nới CHECK
   `module_code` trên **CẢ HAI bảng** `notification_events` + `notifications` (mẫu 0538 CHAT §642/§684)
-  + union type `notification-event-catalog.const.ts` · UNION-ADD `audit_logs.object_types` ·
+  và union type `notification-event-catalog.const.ts` · UNION-ADD `audit_logs.object_types` ·
   `sequence_counters` cho mã tài sản · permission seed `ON CONFLICT DO NOTHING`.
 - **Harness:** enum module hợp lệ ở `harness/backlog.mjs` header (đã thêm ASSET·ROOM cùng commit
   seed này); `harness/lib/stories.mjs` (`EPIC_MODULE`) và `harness/dashboard/server.mjs`
@@ -44,9 +44,14 @@ Hai track độc lập, chung một cửa duyệt:
 Vai trò: **Asset Manager** (SPEC-01 §10.8) và **Office Admin** (§10.9) — seed role + gán cặp quyền
 theo ma trận per-(perm,role) data_scope.
 
-## 3. Quyết định cần owner ký (trước khi mở WO DB)
+## 3. Quyết định owner — ĐÃ KÝ 2026-08-28
 
-| Mã | Câu hỏi | Đề xuất (khuyến nghị) |
+> Owner duyệt nguyên gói («ok tôi duyệt») ⇒ **9/9 mã dưới đây chốt ĐÚNG cột «Đề xuất»**. WO DOC chỉ
+> việc chép kết luận vào bảng quyết định của SPEC-13/SPEC-14 (khuôn SPEC-15 §22), không hỏi lại.
+> Riêng ROOM-DEC-001 còn một nhánh mở có chủ đích: `meetings`/`meeting_attendees` tái dụng hay thay
+> bằng `room_bookings` — chốt trong `S11-ROOM-DOC-1` sau khi ĐO cột thật, ghi vào DB-16.
+
+| Mã | Câu hỏi | Đề xuất — **đã chốt** |
 | --- | --- | --- |
 | OFFICE-DEC-001 | Đánh số tài liệu khi DB-13/14 đã bị PAYROLL/RECRUIT đặt trước | **DB-15 ASSET · DB-16 ROOM** · API-14 ASSET · API-15 ROOM · permission-matrix **§9d/§9e** · IMPLEMENTATION-02 **EPIC-17 (§8.18) / EPIC-18 (§8.19)**; giữ nguyên chỗ đặt của IMP-10 |
 | ASSET-DEC-001 | Phạm vi v1: thanh lý & QR làm tới đâu | Thanh lý = chuyển trạng thái `Disposed` + lý do (không workflow phê duyệt riêng); QR = render từ `asset_code` ở FE, không service sinh ảnh riêng |

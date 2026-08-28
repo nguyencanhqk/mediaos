@@ -14246,7 +14246,8 @@ export const backlog = [
   // Tài liệu duyệt (kế hoạch · story · spec phác thảo · wireframe UI) đã publish dạng HTML Artifact.
   //
   // CHỐT VẬN HÀNH:
-  //   • 2 WO gốc (DOC-1 mỗi track) để `blocked` — CHỜ owner duyệt tài liệu + ký DEC. Duyệt xong: đổi todo.
+  //   • OWNER ĐÃ DUYỆT NGUYÊN GÓI 2026-08-28 («ok tôi duyệt» — 9/9 DEC chốt theo cột Đề xuất, xem
+  //     docs/plans/S11-OFFICE-WAVE.md §3). 2 WO gốc DOC-1 đã mở khoá blocked → todo cùng ngày.
   //   • ĐO THẬT 28/08: ASSET/ROOM = 0 SPEC/DB/API/story/permission-matrix; SPEC-01 đã khoá SPEC-13/14.
   //     DB-13/14 đã bị IMPLEMENTATION-10 đặt cho PAYROLL/RECRUIT ⇒ đề xuất DB-15/16, API-14/15 (OFFICE-DEC-001).
   //   • DI SẢN meeting_* (mig 0052, sống trong DB thật, chết-code, meetings có sẵn EXCLUDE GIST chống
@@ -14260,7 +14261,7 @@ export const backlog = [
     title:
       "Bộ tài liệu ASSET: SPEC-13 + DB-15 + API-14 + permission-matrix §9d + hợp thức trạng thái vào SPEC-01 §17 + đồng bộ README/DB-01·09·10/erd-current/RELEASE-14/IMPLEMENTATION-02 (EPIC-17) — owner chốt ASSET-DEC-001..004",
     zone: "green",
-    status: "blocked",
+    status: "todo",
     paths: [
       "docs/SPEC/**",
       "docs/DB/**",
@@ -14294,7 +14295,7 @@ export const backlog = [
       "plan-reviewer đối kháng PASS trên SPEC-13 + DB-15 trước khi mở S11-ASSET-DB-1",
     ],
     notes: [
-      "⛔ BLOCKED: chờ owner duyệt tài liệu wave (HTML Artifact) + ký DEC ở docs/plans/S11-OFFICE-WAVE.md §3. Duyệt xong đổi status → todo.",
+      "✅ OWNER ĐÃ DUYỆT 2026-08-28 nguyên gói hồ sơ docs/plans/S11-OFFICE-WAVE-review.html — OFFICE-DEC-001 + ASSET-DEC-001..004 chốt ĐÚNG cột Đề xuất ở wave plan §3. WO này chỉ còn việc GHI kết luận đó vào SPEC-13 (bảng quyết định) rồi viết bộ tài liệu — không hỏi lại owner các DEC đã ký.",
       "🟢 LIGHT gate (docs-only). Số hiệu DB-15/API-14 là ĐỀ XUẤT — chỉ chốt khi OFFICE-DEC-001 ký; nếu owner chốt khác, sửa lại toàn bộ tham chiếu trong wave này.",
     ],
   },
@@ -14422,7 +14423,7 @@ export const backlog = [
     title:
       "Bộ tài liệu ROOM: SPEC-14 + DB-16 + API-15 + permission-matrix §9e + hợp thức trạng thái booking vào SPEC-01 §17 + QUYẾT ĐỊNH số phận 5 bảng meeting_* di sản (ROOM-DEC-001) + đồng bộ README/DB-01·09·10/erd-current/RELEASE-14/IMPLEMENTATION-02 (EPIC-18)",
     zone: "green",
-    status: "blocked",
+    status: "todo",
     paths: [
       "docs/SPEC/**",
       "docs/DB/**",
@@ -14456,7 +14457,7 @@ export const backlog = [
       "plan-reviewer đối kháng PASS trên SPEC-14 + DB-16 (đặc biệt phương án xử lý meeting_*) trước khi mở S11-ROOM-DB-1",
     ],
     notes: [
-      "⛔ BLOCKED: chờ owner duyệt tài liệu wave (HTML Artifact) + ký DEC. Duyệt xong đổi status → todo.",
+      "✅ OWNER ĐÃ DUYỆT 2026-08-28 nguyên gói hồ sơ docs/plans/S11-OFFICE-WAVE-review.html — OFFICE-DEC-001 + ROOM-DEC-001..004 chốt ĐÚNG cột Đề xuất ở wave plan §3 (ROOM-DEC-001 = tái dụng meeting_rooms; meetings/meeting_attendees ĐO cột thật rồi chốt trong WO này; meeting_notes/meeting_tasks DROP). Chỉ còn GHI kết luận vào SPEC-14 rồi viết bộ tài liệu — không hỏi lại các DEC đã ký.",
       "🟢 LIGHT gate (docs-only) nhưng ROOM-DEC-001 là quyết định KIẾN TRÚC — sai ở đây trả giá ở DB WO.",
     ],
   },

@@ -25,8 +25,7 @@
     --green: #256c2f;
     --green-soft: #e3f0e1;
     --code-bg: #ecf0ee;
-    --shadow:
-      0 1px 2px rgba(29, 37, 35, 0.05), 0 4px 16px rgba(29, 37, 35, 0.05);
+    --shadow: 0 1px 2px rgba(29, 37, 35, 0.05), 0 4px 16px rgba(29, 37, 35, 0.05);
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -807,65 +806,54 @@
     </div>
     <h1>Wave S11-OFFICE</h1>
     <p class="lede">
-      Phase 3 «Quản trị văn phòng» — hai module <b>ASSET</b> (quản lý tài sản,
-      SPEC-13) và <b>ROOM</b> (quản lý phòng họp, SPEC-14). Tài liệu này gom mọi
-      thứ cần anh duyệt <em>trước khi thi công</em>: 9 quyết định, 18 story, mô
-      hình dữ liệu, bề mặt API, phân quyền và wireframe giao diện dự định.
+      Phase 3 «Quản trị văn phòng» — hai module <b>ASSET</b> (quản lý tài sản, SPEC-13) và
+      <b>ROOM</b> (quản lý phòng họp, SPEC-14). Tài liệu này gom mọi thứ cần anh duyệt
+      <em>trước khi thi công</em>: 9 quyết định, 18 story, mô hình dữ liệu, bề mặt API, phân quyền
+      và wireframe giao diện dự định.
     </p>
     <div class="head-meta">
-      <span class="badge badge-amber">⏳ Chờ owner duyệt</span>
+      <span class="badge badge-green">✅ Owner đã duyệt 28/08/2026</span>
       <span class="badge badge-asset">ASSET — Asset Manager</span>
       <span class="badge badge-room">ROOM — Office Admin</span>
-      <span class="badge badge-green">Đã seed 11 WO · 2 WO gốc blocked</span>
+      <span class="badge badge-asset">11 WO đã seed · 2 WO DOC đã mở khoá</span>
     </div>
   </header>
 
   <section>
-    <div class="eyebrow">
-      <span class="no">01</span> ĐIỂM XUẤT PHÁT — ĐO THẬT 28/08
-    </div>
+    <div class="eyebrow"><span class="no">01</span> ĐIỂM XUẤT PHÁT — ĐO THẬT 28/08</div>
     <h2>Hai module chưa có gì ngoài chỗ đặt trước — và một bãi mìn di sản</h2>
     <p>
-      ASSET/ROOM hiện tồn tại ở mức <em>«đã đặt chỗ, chưa xây»</em>: 0 SPEC · 0
-      DB doc · 0 API doc · 0 story · 0 mục permission-matrix. SPEC-01 đã khoá số
-      <code>SPEC-13</code>/<code>SPEC-14</code>. Khảo sát code và tài liệu phát
-      hiện 2 điểm phải quyết trước:
+      ASSET/ROOM hiện tồn tại ở mức <em>«đã đặt chỗ, chưa xây»</em>: 0 SPEC · 0 DB doc · 0 API doc ·
+      0 story · 0 mục permission-matrix. SPEC-01 đã khoá số
+      <code>SPEC-13</code>/<code>SPEC-14</code>. Khảo sát code và tài liệu phát hiện 2 điểm phải
+      quyết trước:
     </p>
 
     <div class="callout red-edge">
       <b>Di sản <code>meeting_*</code> (ROOM).</b> 5 bảng
-      <code
-        >meeting_rooms · meetings · meeting_attendees · meeting_notes ·
-        meeting_tasks</code
-      >
-      từ migration <code>0052</code> vẫn <b>sống trong DB thật</b> (có RLS +
-      FORCE, soft-delete, composite tenant-FK từ 0535) nhưng <b>chết-code</b> —
-      không service/controller/test nào dùng. Đáng chú ý:
-      <code>meetings</code> đã cài sẵn <b>EXCLUDE GIST chống trùng lịch</b> —
-      đúng lõi nghiệp vụ SPEC-14. Dựng bảng mới song song mà không xử lý bảng cũ
-      = hai «phòng họp» cùng tồn tại (lớp lỗi KI-079). → <b>ROOM-DEC-001</b>.
+      <code>meeting_rooms · meetings · meeting_attendees · meeting_notes · meeting_tasks</code>
+      từ migration <code>0052</code> vẫn <b>sống trong DB thật</b> (có RLS + FORCE, soft-delete,
+      composite tenant-FK từ 0535) nhưng <b>chết-code</b> — không service/controller/test nào dùng.
+      Đáng chú ý: <code>meetings</code> đã cài sẵn <b>EXCLUDE GIST chống trùng lịch</b> — đúng lõi
+      nghiệp vụ SPEC-14. Dựng bảng mới song song mà không xử lý bảng cũ = hai «phòng họp» cùng tồn
+      tại (lớp lỗi KI-079). → <b>ROOM-DEC-001</b>.
     </div>
     <div class="callout">
-      <b>Xung đột đánh số tài liệu.</b> <code>docs/DB/</code> đang ở đầu DB-12
-      (CHAT), nhưng IMPLEMENTATION-10 đã
-      <b>đặt trước DB-13 = PAYROLL, DB-14 = RECRUIT</b>.
-      <code>docs/API Design/</code> đang ở đầu API-13 (CHAT). →
-      <b>OFFICE-DEC-001</b> đề xuất DB-15/DB-16 · API-14/API-15.
+      <b>Xung đột đánh số tài liệu.</b> <code>docs/DB/</code> đang ở đầu DB-12 (CHAT), nhưng
+      IMPLEMENTATION-10 đã <b>đặt trước DB-13 = PAYROLL, DB-14 = RECRUIT</b>.
+      <code>docs/API Design/</code> đang ở đầu API-13 (CHAT). → <b>OFFICE-DEC-001</b> đề xuất
+      DB-15/DB-16 · API-14/API-15.
     </div>
     <p>
-      Đường tên cho ASSET sạch hoàn toàn: không có bảng <code>assets</code> nào
-      trong DB (chỉ <code>content_assets</code> thuộc cụm media đã park, không
-      đụng độ).
+      Đường tên cho ASSET sạch hoàn toàn: không có bảng <code>assets</code> nào trong DB (chỉ
+      <code>content_assets</code> thuộc cụm media đã park, không đụng độ).
     </p>
   </section>
 
   <section>
     <div class="eyebrow"><span class="no">02</span> QUYẾT ĐỊNH CẦN KÝ</div>
     <h2>9 quyết định — mỗi dòng đã kèm đề xuất</h2>
-    <p class="lede">
-      Duyệt nguyên gói là chốt theo cột «Đề xuất». Muốn chỉnh, chỉ cần nêu mã
-      DEC.
-    </p>
+    <p class="lede">Duyệt nguyên gói là chốt theo cột «Đề xuất». Muốn chỉnh, chỉ cần nêu mã DEC.</p>
     <div class="table-wrap" style="margin-top: 12px">
       <table class="doc">
         <tr>
@@ -877,33 +865,29 @@
           <td class="mono">OFFICE-DEC-001</td>
           <td>Đánh số tài liệu khi DB-13/14 đã bị PAYROLL/RECRUIT đặt trước</td>
           <td>
-            <b>DB-15 ASSET · DB-16 ROOM</b> · API-14/API-15 · permission-matrix
-            §9d/§9e · EPIC-17/EPIC-18. Giữ nguyên chỗ đặt của IMPLEMENTATION-10.
+            <b>DB-15 ASSET · DB-16 ROOM</b> · API-14/API-15 · permission-matrix §9d/§9e ·
+            EPIC-17/EPIC-18. Giữ nguyên chỗ đặt của IMPLEMENTATION-10.
           </td>
         </tr>
         <tr>
           <td class="mono">ASSET-DEC-001</td>
           <td>Thanh lý &amp; QR làm tới đâu ở v1</td>
           <td>
-            Thanh lý = chuyển trạng thái <code>Disposed</code> + lý do, không
-            workflow phê duyệt riêng. QR render từ <code>asset_code</code> ở FE.
+            Thanh lý = chuyển trạng thái <code>Disposed</code> + lý do, không workflow phê duyệt
+            riêng. QR render từ <code>asset_code</code> ở FE.
           </td>
         </tr>
         <tr>
           <td class="mono">ASSET-DEC-002</td>
           <td>Cấp phát 1 bước hay 2 bước (nhân viên xác nhận)</td>
-          <td>
-            <b>1 bước</b> do Asset Manager ghi nhận, in biên bản từ FE. 2 bước
-            để phase sau.
-          </td>
+          <td><b>1 bước</b> do Asset Manager ghi nhận, in biên bản từ FE. 2 bước để phase sau.</td>
         </tr>
         <tr>
           <td class="mono">ASSET-DEC-003</td>
           <td>Bộ trạng thái tài sản (hợp thức vào SPEC-01 §17)</td>
           <td>
-            <code
-              >In Stock · Assigned · Under Maintenance · Disposed · Lost</code
-            >; assignment: <code>Active · Returned</code>.
+            <code>In Stock · Assigned · Under Maintenance · Disposed · Lost</code>; assignment:
+            <code>Active · Returned</code>.
           </td>
         </tr>
         <tr>
@@ -921,10 +905,9 @@
           </td>
           <td>
             <b>Tái dụng <code>meeting_rooms</code></b> (khớp ~1:1 SPEC-14).
-            <code>meetings</code>/<code>meeting_attendees</code>: WO DOC đo cột
-            thật rồi chốt tái-dụng hay thay bằng <code>room_bookings</code> qua
-            expand-contract. <code>meeting_notes</code> +
-            <code>meeting_tasks</code> → DROP (đếm hàng PROD trước).
+            <code>meetings</code>/<code>meeting_attendees</code>: WO DOC đo cột thật rồi chốt
+            tái-dụng hay thay bằng <code>room_bookings</code> qua expand-contract.
+            <code>meeting_notes</code> + <code>meeting_tasks</code> → DROP (đếm hàng PROD trước).
           </td>
         </tr>
         <tr>
@@ -932,24 +915,20 @@
           <td>Có luồng duyệt đặt phòng không</td>
           <td>
             <b>v1 không duyệt</b> — đặt là giữ chỗ ngay nếu không trùng. Cột
-            <code>requires_approval</code> trên phòng để mở sau, tránh thêm một
-            FSM phê duyệt crown ở v1.
+            <code>requires_approval</code> trên phòng để mở sau, tránh thêm một FSM phê duyệt crown
+            ở v1.
           </td>
         </tr>
         <tr>
           <td class="mono">ROOM-DEC-003</td>
           <td>Recurring booking / múi giờ</td>
-          <td>
-            v1 không recurring. UTC-at-rest + hiển thị Asia/Ho_Chi_Minh (chuẩn
-            hệ thống).
-          </td>
+          <td>v1 không recurring. UTC-at-rest + hiển thị Asia/Ho_Chi_Minh (chuẩn hệ thống).</td>
         </tr>
         <tr>
           <td class="mono">ROOM-DEC-004</td>
           <td>Nhắc lịch họp</td>
           <td>
-            Có — NOTI nhắc trước 15 phút, system job quét + outbox, dedupeKey
-            chống bắn trùng.
+            Có — NOTI nhắc trước 15 phút, system job quét + outbox, dedupeKey chống bắn trùng.
           </td>
         </tr>
       </table>
@@ -960,55 +939,37 @@
     <div class="eyebrow"><span class="no">03</span> STORY</div>
     <h2>18 story cấp wave</h2>
     <p class="lede">
-      Bản nghiệp vụ đầy đủ (AC + point) sẽ viết vào IMPLEMENTATION-02 EPIC-17/18
-      trong WO tài liệu. Đây là khung để anh soát phạm vi.
+      Bản nghiệp vụ đầy đủ (AC + point) sẽ viết vào IMPLEMENTATION-02 EPIC-17/18 trong WO tài liệu.
+      Đây là khung để anh soát phạm vi.
     </p>
     <div class="cols-2" style="margin-top: 14px">
       <div class="story-card m-asset">
         <div class="story-head">ASSET — Quản lý tài sản</div>
         <ul>
-          <li>
-            <span class="sid">AS-01</span
-            ><span>Quản lý danh mục loại tài sản</span>
-          </li>
-          <li>
-            <span class="sid">AS-02</span
-            ><span>CRUD hồ sơ tài sản — mã tự sinh + QR</span>
-          </li>
+          <li><span class="sid">AS-01</span><span>Quản lý danh mục loại tài sản</span></li>
+          <li><span class="sid">AS-02</span><span>CRUD hồ sơ tài sản — mã tự sinh + QR</span></li>
           <li>
             <span class="sid">AS-03</span
             ><span>Cấp phát cho nhân viên (liên kết HR, có audit)</span>
           </li>
-          <li>
-            <span class="sid">AS-04</span
-            ><span>Thu hồi — ghi tình trạng lúc thu</span>
-          </li>
+          <li><span class="sid">AS-04</span><span>Thu hồi — ghi tình trạng lúc thu</span></li>
           <li>
             <span class="sid">AS-05</span
-            ><span
-              >Bảo trì: mở/đóng lượt, tài sản sang
-              <i>Under Maintenance</i></span
-            >
+            ><span>Bảo trì: mở/đóng lượt, tài sản sang <i>Under Maintenance</i></span>
           </li>
           <li>
-            <span class="sid">AS-06</span
-            ><span>Kiểm kê theo đợt — đánh dấu thấy/không thấy</span>
+            <span class="sid">AS-06</span><span>Kiểm kê theo đợt — đánh dấu thấy/không thấy</span>
           </li>
           <li>
             <span class="sid">AS-07</span
             ><span>Thanh lý / báo mất (<i>Disposed</i>, <i>Lost</i>)</span>
           </li>
+          <li><span class="sid">AS-08</span><span>Nhân viên xem «tài sản của tôi»</span></li>
           <li>
-            <span class="sid">AS-08</span
-            ><span>Nhân viên xem «tài sản của tôi»</span>
+            <span class="sid">AS-09</span><span>NOTI: cấp phát · thu hồi · bảo trì đến hạn</span>
           </li>
           <li>
-            <span class="sid">AS-09</span
-            ><span>NOTI: cấp phát · thu hồi · bảo trì đến hạn</span>
-          </li>
-          <li>
-            <span class="sid">AS-10</span
-            ><span>Widget DASH thống kê theo trạng thái/loại</span>
+            <span class="sid">AS-10</span><span>Widget DASH thống kê theo trạng thái/loại</span>
           </li>
         </ul>
       </div>
@@ -1017,64 +978,41 @@
         <ul>
           <li>
             <span class="sid">RM-01</span
-            ><span
-              >Office Admin quản trị phòng (sức chứa · thiết bị · vị trí)</span
-            >
+            ><span>Office Admin quản trị phòng (sức chứa · thiết bị · vị trí)</span>
           </li>
           <li>
             <span class="sid">RM-02</span
-            ><span
-              >Đặt phòng theo khung giờ — trùng lịch bị chặn, lỗi 409 kèm khung
-              giờ bận</span
-            >
+            ><span>Đặt phòng theo khung giờ — trùng lịch bị chặn, lỗi 409 kèm khung giờ bận</span>
           </li>
           <li>
             <span class="sid">RM-03</span
-            ><span
-              >Hủy lịch của mình / Office Admin hủy mọi lịch (audit + NOTI người
-              tham dự)</span
-            >
+            ><span>Hủy lịch của mình / Office Admin hủy mọi lịch (audit + NOTI người tham dự)</span>
           </li>
           <li>
-            <span class="sid">RM-04</span
-            ><span>Lịch phòng dạng ngày/tuần theo từng phòng</span>
+            <span class="sid">RM-04</span><span>Lịch phòng dạng ngày/tuần theo từng phòng</span>
           </li>
-          <li>
-            <span class="sid">RM-05</span><span>«Đặt phòng của tôi»</span>
-          </li>
-          <li>
-            <span class="sid">RM-06</span><span>Nhắc lịch trước 15 phút</span>
-          </li>
-          <li>
-            <span class="sid">RM-07</span><span>Lịch sử sử dụng phòng</span>
-          </li>
-          <li>
-            <span class="sid">RM-08</span
-            ><span>Widget DASH «lịch họp hôm nay»</span>
-          </li>
+          <li><span class="sid">RM-05</span><span>«Đặt phòng của tôi»</span></li>
+          <li><span class="sid">RM-06</span><span>Nhắc lịch trước 15 phút</span></li>
+          <li><span class="sid">RM-07</span><span>Lịch sử sử dụng phòng</span></li>
+          <li><span class="sid">RM-08</span><span>Widget DASH «lịch họp hôm nay»</span></li>
         </ul>
       </div>
     </div>
   </section>
 
   <section>
-    <div class="eyebrow">
-      <span class="no">04</span> DỮ LIỆU &amp; TRẠNG THÁI
-    </div>
+    <div class="eyebrow"><span class="no">04</span> DỮ LIỆU &amp; TRẠNG THÁI</div>
     <h2>Mô hình dữ liệu dự kiến</h2>
     <p class="lede">
       Mọi bảng: UUID PK · <code>company_id</code> + RLS FORCE · soft-delete
-      <code>deleted_at</code> · composite tenant-FK. Chi tiết cột chốt ở
-      DB-15/DB-16.
+      <code>deleted_at</code> · composite tenant-FK. Chi tiết cột chốt ở DB-15/DB-16.
     </p>
 
     <div class="cols-2" style="margin-top: 14px">
       <div class="table-wrap">
         <table class="doc">
           <tr>
-            <th colspan="2" style="color: var(--asset-ink)">
-              ASSET — 6 bảng mới
-            </th>
+            <th colspan="2" style="color: var(--asset-ink)">ASSET — 6 bảng mới</th>
           </tr>
           <tr>
             <td class="mono">asset_categories</td>
@@ -1086,9 +1024,7 @@
           </tr>
           <tr>
             <td class="mono">asset_assignments</td>
-            <td>
-              Lượt cấp phát ↔ nhân viên (HR), ngày cấp/thu, tình trạng khi thu
-            </td>
+            <td>Lượt cấp phát ↔ nhân viên (HR), ngày cấp/thu, tình trạng khi thu</td>
           </tr>
           <tr>
             <td class="mono">asset_maintenances</td>
@@ -1114,8 +1050,8 @@
           <tr>
             <td class="mono">meeting_rooms</td>
             <td>
-              <b>Tái dụng</b> — đã có name, location, capacity; bổ sung thiết bị
-              + <code>requires_approval</code>
+              <b>Tái dụng</b> — đã có name, location, capacity; bổ sung thiết bị +
+              <code>requires_approval</code>
             </td>
           </tr>
           <tr>
@@ -1124,8 +1060,8 @@
               <span style="color: var(--muted)">(hoặc meetings)</span>
             </td>
             <td>
-              Lượt đặt: phòng, khung giờ <code>tstzrange</code>, người đặt, chủ
-              đề — <b>EXCLUDE GIST chống trùng</b>
+              Lượt đặt: phòng, khung giờ <code>tstzrange</code>, người đặt, chủ đề —
+              <b>EXCLUDE GIST chống trùng</b>
             </td>
           </tr>
           <tr>
@@ -1134,9 +1070,7 @@
           </tr>
           <tr>
             <td class="mono">meeting_notes · meeting_tasks</td>
-            <td style="color: var(--red)">
-              DROP — ngoài phạm vi SPEC-14 (đếm hàng PROD trước)
-            </td>
+            <td style="color: var(--red)">DROP — ngoài phạm vi SPEC-14 (đếm hàng PROD trước)</td>
           </tr>
         </table>
       </div>
@@ -1146,14 +1080,12 @@
     <div class="fsm">
       <span class="st hi-asset">In Stock</span><span class="arr">⇄</span>
       <span class="st hi-asset">Assigned</span><span class="arr">⇄</span>
-      <span class="st hi-asset">Under Maintenance</span
-      ><span class="arr">→</span> <span class="st terminal">Disposed</span
-      ><span class="arr">·</span>
+      <span class="st hi-asset">Under Maintenance</span><span class="arr">→</span>
+      <span class="st terminal">Disposed</span><span class="arr">·</span>
       <span class="st terminal">Lost</span>
     </div>
     <p class="fsm-note">
-      Tài sản — chuyển tiếp sai trả 4xx đúng mã <code>ASSET-ERR</code>, FSM ép ở
-      service.
+      Tài sản — chuyển tiếp sai trả 4xx đúng mã <code>ASSET-ERR</code>, FSM ép ở service.
     </p>
     <div class="fsm">
       <span class="st hi-room">Confirmed</span><span class="arr">→</span>
@@ -1162,8 +1094,8 @@
       <span class="st terminal">Completed (dẫn xuất)</span>
     </div>
     <p class="fsm-note">
-      Đặt phòng — <i>Completed</i> tính từ giờ kết thúc, không lưu cứng (cùng
-      nguyên tắc <i>Overdue</i> của TASK).
+      Đặt phòng — <i>Completed</i> tính từ giờ kết thúc, không lưu cứng (cùng nguyên tắc
+      <i>Overdue</i> của TASK).
     </p>
   </section>
 
@@ -1179,9 +1111,7 @@
           </tr>
           <tr>
             <td class="mono">GET/POST/PATCH /assets, /asset-categories</td>
-            <td class="mono">
-              ASSET.ASSET.VIEW / CREATE / UPDATE · ASSET.CATEGORY.MANAGE
-            </td>
+            <td class="mono">ASSET.ASSET.VIEW / CREATE / UPDATE · ASSET.CATEGORY.MANAGE</td>
           </tr>
           <tr>
             <td class="mono">POST /assets/:id/assign · /revoke</td>
@@ -1231,18 +1161,15 @@
           </tr>
           <tr>
             <td class="mono">GET /me/room-bookings · /rooms/:id/history</td>
-            <td class="mono">
-              ROOM.BOOKING.VIEW <i>(own/all theo data_scope)</i>
-            </td>
+            <td class="mono">ROOM.BOOKING.VIEW <i>(own/all theo data_scope)</i></td>
           </tr>
         </table>
       </div>
     </div>
     <p style="margin-top: 10px">
-      Vai trò seed: <b>Asset Manager</b> (SPEC-01 §10.8) và
-      <b>Office Admin</b> (§10.9), gán data_scope per-(perm,role). Sự kiện NOTI
-      mới (cấp phát · thu hồi · bảo trì đến hạn · xác nhận đặt phòng · hủy lịch
-      · nhắc lịch) lấy dải mã kế tiếp trong SPEC-08 §15.0 — đo dải hiện có
+      Vai trò seed: <b>Asset Manager</b> (SPEC-01 §10.8) và <b>Office Admin</b> (§10.9), gán
+      data_scope per-(perm,role). Sự kiện NOTI mới (cấp phát · thu hồi · bảo trì đến hạn · xác nhận
+      đặt phòng · hủy lịch · nhắc lịch) lấy dải mã kế tiếp trong SPEC-08 §15.0 — đo dải hiện có
       trước, không hard-code.
     </p>
   </section>
@@ -1251,9 +1178,8 @@
     <div class="eyebrow"><span class="no">06</span> GIAO DIỆN DỰ ĐỊNH</div>
     <h2>Wireframe 8 màn hình chính</h2>
     <p class="lede">
-      Khung ý định để anh duyệt bố cục và luồng — không phải pixel cuối. Mã màn
-      theo SPEC-01 §9.3; mọi màn đi qua <code>&lt;PermissionGate&gt;</code>, đủ
-      loading/error/empty, i18n tiếng Việt.
+      Khung ý định để anh duyệt bố cục và luồng — không phải pixel cuối. Mã màn theo SPEC-01 §9.3;
+      mọi màn đi qua <code>&lt;PermissionGate&gt;</code>, đủ loading/error/empty, i18n tiếng Việt.
     </p>
 
     <div class="wires">
@@ -1261,9 +1187,7 @@
       <figure class="wire m-asset" style="margin: 0">
         <div class="wire-screen">
           <div class="app">
-            <div class="app-top">
-              <span class="crumb">Tài sản</span><span>· 128 mục</span>
-            </div>
+            <div class="app-top"><span class="crumb">Tài sản</span><span>· 128 mục</span></div>
             <div class="app-body">
               <div class="app-nav">
                 <div class="ni"></div>
@@ -1274,18 +1198,15 @@
               </div>
               <div class="app-main">
                 <div class="toolbar">
-                  <span class="inp">🔍 Tìm mã, tên, serial…</span
-                  ><span class="inp">Loại ▾</span
+                  <span class="inp">🔍 Tìm mã, tên, serial…</span><span class="inp">Loại ▾</span
                   ><span class="inp">Trạng thái ▾</span
                   ><span class="btn btn-asset">+ Thêm tài sản</span>
                 </div>
                 <div class="trow hd">
-                  <span>Tài sản</span><span>Người giữ</span
-                  ><span>Trạng thái</span><span></span>
+                  <span>Tài sản</span><span>Người giữ</span><span>Trạng thái</span><span></span>
                 </div>
                 <div class="trow">
-                  <span><b>TS-LAP-0031</b> · MacBook Pro 14</span
-                  ><span>Nguyễn V. An</span
+                  <span><b>TS-LAP-0031</b> · MacBook Pro 14</span><span>Nguyễn V. An</span
                   ><span class="chip c-assigned">Đang cấp phát</span
                   ><span class="btn btn-ghost">Thu hồi</span>
                 </div>
@@ -1301,20 +1222,17 @@
                 </div>
                 <div class="trow">
                   <span><b>TS-PRJ-0002</b> · Máy chiếu Epson</span><span>—</span
-                  ><span class="chip c-lost">Mất</span
-                  ><span class="btn btn-ghost">…</span>
+                  ><span class="chip c-lost">Mất</span><span class="btn btn-ghost">…</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
         <figcaption class="wire-caption">
-          <div class="wc-title">
-            Danh sách tài sản <span class="wc-id">ASSET-SCREEN-001</span>
-          </div>
+          <div class="wc-title">Danh sách tài sản <span class="wc-id">ASSET-SCREEN-001</span></div>
           <p>
-            Table phân trang + filter loại/trạng thái/người giữ; hành động nhanh
-            theo quyền từng dòng.
+            Table phân trang + filter loại/trạng thái/người giữ; hành động nhanh theo quyền từng
+            dòng.
           </p>
         </figcaption>
       </figure>
@@ -1323,9 +1241,7 @@
       <figure class="wire m-asset" style="margin: 0">
         <div class="wire-screen">
           <div class="app">
-            <div class="app-top">
-              <span>Tài sản /</span><span class="crumb">TS-LAP-0031</span>
-            </div>
+            <div class="app-top"><span>Tài sản /</span><span class="crumb">TS-LAP-0031</span></div>
             <div class="app-body">
               <div class="app-nav">
                 <div class="ni"></div>
@@ -1335,31 +1251,17 @@
                 <div class="ni"></div>
               </div>
               <div class="app-main">
-                <div
-                  style="
-                    display: flex;
-                    gap: 10px;
-                    align-items: flex-start;
-                    margin-bottom: 8px;
-                  "
-                >
+                <div style="display: flex; gap: 10px; align-items: flex-start; margin-bottom: 8px">
                   <div class="qr"></div>
                   <div style="flex: 1">
-                    <div style="font-weight: 700">
-                      MacBook Pro 14 — TS-LAP-0031
-                    </div>
-                    <div style="color: var(--muted)">
-                      Laptop · Serial C02XL0… · Mua 03/2026
-                    </div>
-                    <span class="chip c-assigned"
-                      >Đang cấp phát · Nguyễn V. An</span
-                    >
+                    <div style="font-weight: 700">MacBook Pro 14 — TS-LAP-0031</div>
+                    <div style="color: var(--muted)">Laptop · Serial C02XL0… · Mua 03/2026</div>
+                    <span class="chip c-assigned">Đang cấp phát · Nguyễn V. An</span>
                   </div>
                   <span class="btn btn-ghost">Sửa</span>
                 </div>
                 <div class="tabs">
-                  <span class="on">Thông tin</span><span>Lịch sử cấp phát</span
-                  ><span>Bảo trì</span>
+                  <span class="on">Thông tin</span><span>Lịch sử cấp phát</span><span>Bảo trì</span>
                 </div>
                 <div class="ph" style="width: 88%; margin-bottom: 6px"></div>
                 <div class="ph" style="width: 70%; margin-bottom: 6px"></div>
@@ -1369,12 +1271,9 @@
           </div>
         </div>
         <figcaption class="wire-caption">
-          <div class="wc-title">
-            Chi tiết tài sản <span class="wc-id">ASSET-SCREEN-002</span>
-          </div>
+          <div class="wc-title">Chi tiết tài sản <span class="wc-id">ASSET-SCREEN-002</span></div>
           <p>
-            QR render từ mã tài sản; 3 tab: thông tin · lịch sử cấp phát · bảo
-            trì. Nút theo quyền.
+            QR render từ mã tài sản; 3 tab: thông tin · lịch sử cấp phát · bảo trì. Nút theo quyền.
           </p>
         </figcaption>
       </figure>
@@ -1383,9 +1282,7 @@
       <figure class="wire m-asset" style="margin: 0">
         <div class="wire-screen">
           <div class="app">
-            <div class="app-top">
-              <span>Tài sản /</span><span class="crumb">Cấp phát</span>
-            </div>
+            <div class="app-top"><span>Tài sản /</span><span class="crumb">Cấp phát</span></div>
             <div class="app-body">
               <div class="app-nav">
                 <div class="ni"></div>
@@ -1409,9 +1306,7 @@
                 </div>
                 <div class="field">
                   <div class="lb">Ghi chú tình trạng</div>
-                  <div class="bx" style="color: var(--muted)">
-                    Máy mới 100%, kèm sạc…
-                  </div>
+                  <div class="bx" style="color: var(--muted)">Máy mới 100%, kèm sạc…</div>
                 </div>
                 <div style="display: flex; gap: 6px; margin-top: 8px">
                   <span class="btn btn-asset">Cấp phát</span
@@ -1422,12 +1317,10 @@
           </div>
         </div>
         <figcaption class="wire-caption">
-          <div class="wc-title">
-            Cấp phát tài sản <span class="wc-id">ASSET-SCREEN-004</span>
-          </div>
+          <div class="wc-title">Cấp phát tài sản <span class="wc-id">ASSET-SCREEN-004</span></div>
           <p>
-            1 bước theo ASSET-DEC-002: ghi nhận + in biên bản. Thu hồi dùng cùng
-            khuôn, thêm tình trạng khi thu.
+            1 bước theo ASSET-DEC-002: ghi nhận + in biên bản. Thu hồi dùng cùng khuôn, thêm tình
+            trạng khi thu.
           </p>
         </figcaption>
       </figure>
@@ -1438,9 +1331,7 @@
           <div class="app">
             <div class="app-top">
               <span>Tài sản /</span><span class="crumb">Kiểm kê Q3-2026</span
-              ><span class="chip c-maint" style="margin-left: auto"
-                >Đang mở</span
-              >
+              ><span class="chip c-maint" style="margin-left: auto">Đang mở</span>
             </div>
             <div class="app-body">
               <div class="app-nav">
@@ -1451,13 +1342,7 @@
                 <div class="ni"></div>
               </div>
               <div class="app-main">
-                <div
-                  style="
-                    display: flex;
-                    justify-content: space-between;
-                    margin-bottom: 6px;
-                  "
-                >
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px">
                   <span>Tiến độ: <b>96 / 128</b></span
                   ><span class="btn btn-ghost">Đóng đợt</span>
                 </div>
@@ -1470,22 +1355,15 @@
                   "
                 >
                   <div
-                    style="
-                      height: 6px;
-                      width: 75%;
-                      border-radius: 3px;
-                      background: var(--asset);
-                    "
+                    style="height: 6px; width: 75%; border-radius: 3px; background: var(--asset)"
                   ></div>
                 </div>
                 <div class="trow" style="grid-template-columns: 2fr 1fr 1fr">
-                  <span>TS-LAP-0031 · MacBook Pro 14</span
-                  ><span class="chip c-ok">✓ Thấy</span
+                  <span>TS-LAP-0031 · MacBook Pro 14</span><span class="chip c-ok">✓ Thấy</span
                   ><span class="btn btn-ghost">Ghi chú</span>
                 </div>
                 <div class="trow" style="grid-template-columns: 2fr 1fr 1fr">
-                  <span>TS-MON-0104 · Màn LG 27"</span
-                  ><span class="chip c-ok">✓ Thấy</span
+                  <span>TS-MON-0104 · Màn LG 27"</span><span class="chip c-ok">✓ Thấy</span
                   ><span class="btn btn-ghost">Ghi chú</span>
                 </div>
                 <div class="trow" style="grid-template-columns: 2fr 1fr 1fr">
@@ -1498,9 +1376,7 @@
           </div>
         </div>
         <figcaption class="wire-caption">
-          <div class="wc-title">
-            Kiểm kê theo đợt <span class="wc-id">ASSET-SCREEN-005</span>
-          </div>
+          <div class="wc-title">Kiểm kê theo đợt <span class="wc-id">ASSET-SCREEN-005</span></div>
           <p>
             Mở đợt → đánh dấu từng tài sản → đóng đợt; «không thấy» gợi ý chuyển
             <i>Lost</i> khi đóng.
@@ -1527,17 +1403,13 @@
               <div class="app-main">
                 <div class="cal">
                   <span></span><span class="cl-h">Mercury · 6</span
-                  ><span class="cl-h">Venus · 10</span
-                  ><span class="cl-h">Mars · 16</span>
+                  ><span class="cl-h">Venus · 10</span><span class="cl-h">Mars · 16</span>
                   <span class="cl-t">09:00</span
-                  ><span class="bk bk-a">Họp sprint · 09:00–10:30</span
-                  ><span class="cl-cell"></span
-                  ><span class="bk bk-busy">Review thiết kế</span>
-                  <span class="cl-t">10:00</span
-                  ><span class="bk bk-x">✗ Trùng lịch</span
-                  ><span class="cl-cell"></span><span class="cl-cell"></span>
-                  <span class="cl-t">11:00</span><span class="cl-cell"></span
-                  ><span class="bk bk-a">1-1 · 11:00–11:30</span
+                  ><span class="bk bk-a">Họp sprint · 09:00–10:30</span><span class="cl-cell"></span
+                  ><span class="bk bk-busy">Review thiết kế</span> <span class="cl-t">10:00</span
+                  ><span class="bk bk-x">✗ Trùng lịch</span><span class="cl-cell"></span
+                  ><span class="cl-cell"></span> <span class="cl-t">11:00</span
+                  ><span class="cl-cell"></span><span class="bk bk-a">1-1 · 11:00–11:30</span
                   ><span class="cl-cell"></span> <span class="cl-t">14:00</span
                   ><span class="cl-cell"></span><span class="cl-cell"></span
                   ><span class="bk bk-busy">Phỏng vấn</span>
@@ -1554,8 +1426,8 @@
             Lịch phòng theo ngày <span class="wc-id">ROOM-SCREEN-001</span>
           </div>
           <p>
-            Cột = phòng (kèm sức chứa), hàng = giờ; kéo chọn khung trống để đặt.
-            Khung trùng hiển thị rõ vì sao bị chặn.
+            Cột = phòng (kèm sức chứa), hàng = giờ; kéo chọn khung trống để đặt. Khung trùng hiển
+            thị rõ vì sao bị chặn.
           </p>
         </figcaption>
       </figure>
@@ -1564,9 +1436,7 @@
       <figure class="wire m-room" style="margin: 0">
         <div class="wire-screen">
           <div class="app">
-            <div class="app-top">
-              <span>Phòng họp /</span><span class="crumb">Đặt phòng</span>
-            </div>
+            <div class="app-top"><span>Phòng họp /</span><span class="crumb">Đặt phòng</span></div>
             <div class="app-body">
               <div class="app-nav">
                 <div class="ni"></div>
@@ -1593,13 +1463,10 @@
                 </div>
                 <div class="field">
                   <div class="lb">Người tham dự</div>
-                  <div class="bx" style="color: var(--muted)">
-                    + Thêm từ danh bạ HR…
-                  </div>
+                  <div class="bx" style="color: var(--muted)">+ Thêm từ danh bạ HR…</div>
                 </div>
                 <div style="display: flex; gap: 6px; margin-top: 8px">
-                  <span class="btn btn-room">Đặt phòng</span
-                  ><span class="btn btn-ghost">Hủy</span>
+                  <span class="btn btn-room">Đặt phòng</span><span class="btn btn-ghost">Hủy</span>
                 </div>
               </div>
             </div>
@@ -1611,8 +1478,8 @@
             <span class="wc-id">ROOM-SCREEN-002</span>
           </div>
           <p>
-            Chặn sớm ở client + xử lý 409 server (chốt cuối là EXCLUDE GIST ở
-            DB). Lỗi nói rõ khung bận và gợi ý giờ trống.
+            Chặn sớm ở client + xử lý 409 server (chốt cuối là EXCLUDE GIST ở DB). Lỗi nói rõ khung
+            bận và gợi ý giờ trống.
           </p>
         </figcaption>
       </figure>
@@ -1633,31 +1500,20 @@
                 <div class="ni"></div>
               </div>
               <div class="app-main">
-                <div
-                  class="trow"
-                  style="grid-template-columns: 1.6fr 1.4fr 1fr 0.8fr"
-                >
+                <div class="trow" style="grid-template-columns: 1.6fr 1.4fr 1fr 0.8fr">
                   <span><b>Kickoff dự án Q4</b></span
-                  ><span>Mercury · 02/09 10:30</span
-                  ><span class="chip c-ok">Đã xác nhận</span
+                  ><span>Mercury · 02/09 10:30</span><span class="chip c-ok">Đã xác nhận</span
                   ><span class="btn btn-danger">Hủy</span>
                 </div>
-                <div
-                  class="trow"
-                  style="grid-template-columns: 1.6fr 1.4fr 1fr 0.8fr"
-                >
+                <div class="trow" style="grid-template-columns: 1.6fr 1.4fr 1fr 0.8fr">
                   <span><b>Họp sprint</b></span
-                  ><span>Mercury · 02/09 09:00</span
-                  ><span class="chip c-ok">Đã xác nhận</span
+                  ><span>Mercury · 02/09 09:00</span><span class="chip c-ok">Đã xác nhận</span
                   ><span class="btn btn-danger">Hủy</span>
                 </div>
-                <div
-                  class="trow"
-                  style="grid-template-columns: 1.6fr 1.4fr 1fr 0.8fr"
-                >
+                <div class="trow" style="grid-template-columns: 1.6fr 1.4fr 1fr 0.8fr">
                   <span><b>Demo khách</b></span
-                  ><span>Venus · 28/08 15:00</span
-                  ><span class="chip c-cancel">Đã hủy</span><span></span>
+                  ><span>Venus · 28/08 15:00</span><span class="chip c-cancel">Đã hủy</span
+                  ><span></span>
                 </div>
                 <div style="margin-top: 6px; color: var(--muted)">
                   🔔 Nhắc trước 15 phút qua thông báo hệ thống
@@ -1667,14 +1523,11 @@
           </div>
         </div>
         <figcaption class="wire-caption">
-          <div class="wc-title">
-            Đặt phòng của tôi <span class="wc-id">ROOM-SCREEN-003</span>
-          </div>
+          <div class="wc-title">Đặt phòng của tôi <span class="wc-id">ROOM-SCREEN-003</span></div>
           <p>
-            Own-scope mặc định; Office Admin thấy mọi lịch và hủy được
-            (ROOM.BOOKING.MANAGE, có audit + NOTI). Quản trị phòng
-            (ROOM-SCREEN-004) dùng khuôn table chuẩn: tên · sức chứa · thiết bị
-            · trạng thái.
+            Own-scope mặc định; Office Admin thấy mọi lịch và hủy được (ROOM.BOOKING.MANAGE, có
+            audit + NOTI). Quản trị phòng (ROOM-SCREEN-004) dùng khuôn table chuẩn: tên · sức chứa ·
+            thiết bị · trạng thái.
           </p>
         </figcaption>
       </figure>
@@ -1695,9 +1548,7 @@
               <div class="app-main">
                 <div class="widget-grid">
                   <div class="widget">
-                    <div class="w-t" style="color: var(--asset-ink)">
-                      Tài sản theo trạng thái
-                    </div>
+                    <div class="w-t" style="color: var(--asset-ink)">Tài sản theo trạng thái</div>
                     <div>Kho 41 · Cấp phát 72 · Bảo trì 9</div>
                     <div class="stat-row">
                       <i style="height: 60%"></i><i style="height: 100%"></i
@@ -1705,24 +1556,14 @@
                     </div>
                   </div>
                   <div class="widget">
-                    <div class="w-t" style="color: var(--room-ink)">
-                      Lịch họp hôm nay
-                    </div>
-                    <div
-                      class="bk bk-a"
-                      style="display: block; margin-bottom: 4px"
-                    >
+                    <div class="w-t" style="color: var(--room-ink)">Lịch họp hôm nay</div>
+                    <div class="bk bk-a" style="display: block; margin-bottom: 4px">
                       09:00 Mercury · Họp sprint
                     </div>
-                    <div
-                      class="bk bk-busy"
-                      style="display: block; margin-bottom: 4px"
-                    >
+                    <div class="bk bk-busy" style="display: block; margin-bottom: 4px">
                       11:00 Venus · 1-1
                     </div>
-                    <div class="bk bk-busy" style="display: block">
-                      14:00 Mars · Phỏng vấn
-                    </div>
+                    <div class="bk bk-busy" style="display: block">14:00 Mars · Phỏng vấn</div>
                   </div>
                 </div>
               </div>
@@ -1733,10 +1574,7 @@
           <div class="wc-title">
             Widget DASH của wave <span class="wc-id">S11-OFFICE-DASH-1</span>
           </div>
-          <p>
-            Chỉ render khi có quyền ASSET/ROOM tương ứng — không quyền thì không
-            gọi API.
-          </p>
+          <p>Chỉ render khi có quyền ASSET/ROOM tương ứng — không quyền thì không gọi API.</p>
         </figcaption>
       </figure>
     </div>
@@ -1750,16 +1588,16 @@
         <span class="lbl" style="color: var(--asset-ink)">ASSET</span>
         <span class="wo blocked">DOC-1 ⏳</span><span class="arr">→</span>
         <span class="wo z-red">DB-1 🔴</span><span class="arr">→</span>
-        <span class="wo z-yellow">BE-1</span><span class="arr">→</span>
-        <span class="wo">FE-1</span><span class="arr">→</span>
+        <span class="wo z-yellow">BE-1</span><span class="arr">→</span> <span class="wo">FE-1</span
+        ><span class="arr">→</span>
         <span class="wo z-yellow">QA-1</span>
       </div>
       <div class="pipe-track">
         <span class="lbl" style="color: var(--room-ink)">ROOM</span>
         <span class="wo blocked">DOC-1 ⏳</span><span class="arr">→</span>
         <span class="wo z-red">DB-1 🔴</span><span class="arr">→</span>
-        <span class="wo z-yellow">BE-1</span><span class="arr">→</span>
-        <span class="wo">FE-1</span><span class="arr">→</span>
+        <span class="wo z-yellow">BE-1</span><span class="arr">→</span> <span class="wo">FE-1</span
+        ><span class="arr">→</span>
         <span class="wo z-yellow">QA-1</span>
       </div>
       <div class="pipe-track">
@@ -1770,17 +1608,15 @@
     </div>
     <ul style="margin: 6px 0 0; padding-left: 20px; font-size: 0.9rem">
       <li>
-        Hai WO <b>DB là lane migration nối tiếp</b>:
-        <code>S11-ROOM-DB-1</code> đã khoá <code>depends_on</code> chạy sau
-        <code>S11-ASSET-DB-1</code> để không giẫm số migration.
+        Hai WO <b>DB là lane migration nối tiếp</b>: <code>S11-ROOM-DB-1</code> đã khoá
+        <code>depends_on</code> chạy sau <code>S11-ASSET-DB-1</code> để không giẫm số migration.
       </li>
       <li>
-        DOC → DB có chốt <b>plan-reviewer đối kháng PASS</b> trên SPEC + DB doc
-        (khuôn wave CHAT).
+        DOC → DB có chốt <b>plan-reviewer đối kháng PASS</b> trên SPEC + DB doc (khuôn wave CHAT).
       </li>
       <li>
-        Hai WO DOC đang <code>blocked</code> — máy (auto-loop/gen-status) không
-        nhặt được cho tới khi anh duyệt.
+        Hai WO DOC đang <code>blocked</code> — máy (auto-loop/gen-status) không nhặt được cho tới
+        khi anh duyệt.
       </li>
     </ul>
   </section>
@@ -1790,17 +1626,18 @@
     <h2>9 bẫy đã biết, viết sẵn vào done_when</h2>
     <ol class="risk-list">
       <li>
-        Di sản <code>meeting_*</code>: dựng tên mới mà không DROP = hai «phòng
-        họp» cùng sống (lớp lỗi KI-079) — ROOM-DEC-001 chặn từ cửa.
+        Di sản <code>meeting_*</code>: dựng tên mới mà không DROP = hai «phòng họp» cùng sống (lớp
+        lỗi KI-079) — ROOM-DEC-001 chặn từ cửa.
       </li>
       <li>
-        CHECK <code>module_code</code> NOTI phải nới trên
-        <b>cả hai bảng</b> (<code>notification_events</code> +
-        <code>notifications</code>) — quên một bảng là 500 lúc chạy.
+        CHECK <code>module_code</code> NOTI phải nới trên <b>cả hai bảng</b> (<code
+          >notification_events</code
+        >
+        + <code>notifications</code>) — quên một bảng là 500 lúc chạy.
       </li>
       <li>
-        Hợp đồng Zod mirror CHECK DB <b>hai chiều, đúng bằng</b> — lệch một phía
-        là payload tự nhiên nhất nổ 500 ở DB.
+        Hợp đồng Zod mirror CHECK DB <b>hai chiều, đúng bằng</b> — lệch một phía là payload tự nhiên
+        nhất nổ 500 ở DB.
       </li>
       <li>Mọi cột FK mới đi kèm composite tenant-FK (khuôn migration 0535).</li>
       <li>
@@ -1808,48 +1645,48 @@
         <code>API_MODULE_TAGS</code>.
       </li>
       <li>
-        <code>:id</code> = UUID ở biên ngay từ đầu — ratchet param-uuid đang
-        siết về 1, không thêm nợ.
+        <code>:id</code> = UUID ở biên ngay từ đầu — ratchet param-uuid đang siết về 1, không thêm
+        nợ.
       </li>
       <li>
-        Đặt phòng: Idempotency-Key <b>suy từ payload</b>; int-spec race 2
-        request song song — đúng 1 thắng, 1 nhận 409 (EXCLUDE GIST là chốt
-        cuối).
+        Đặt phòng: Idempotency-Key <b>suy từ payload</b>; int-spec race 2 request song song — đúng 1
+        thắng, 1 nhận 409 (EXCLUDE GIST là chốt cuối).
       </li>
       <li>
-        Trạng thái mới phải hợp thức vào SPEC-01 §17 trong WO tài liệu — không
-        module nào tự thêm.
+        Trạng thái mới phải hợp thức vào SPEC-01 §17 trong WO tài liệu — không module nào tự thêm.
       </li>
       <li>
-        Test chạy trên LANE_DB như CI; deny-path RED-trước; fixture giả-secret
-        phải ghép chuỗi (gitleaks).
+        Test chạy trên LANE_DB như CI; deny-path RED-trước; fixture giả-secret phải ghép chuỗi
+        (gitleaks).
       </li>
     </ol>
   </section>
 
   <section>
     <div class="eyebrow"><span class="no">09</span> DUYỆT</div>
-    <div class="sign-box">
-      <h3>Cách duyệt wave này</h3>
+    <div class="sign-box" style="border-color: var(--green); background: var(--green-soft)">
+      <h3 style="color: var(--green)">Đã duyệt — 28/08/2026</h3>
       <p style="margin-top: 0">
-        Đã seed và commit trên nhánh
-        <code>fix/s10-qa-coldstart500-1</code> (<code>6a0af3bd</code>): 11 WO
-        trong <code>harness/backlog.mjs</code> + kế hoạch
-        <code>docs/plans/S11-OFFICE-WAVE.md</code>. Chưa push.
+        Owner duyệt <b>nguyên gói</b> («ok tôi duyệt»): 9/9 quyết định ở mục 02 chốt đúng cột «Đề
+        xuất». Kết luận đã ghi vào <code>docs/plans/S11-OFFICE-WAVE.md</code> §3; hai WO tài liệu
+        <code>S11-ASSET-DOC-1</code> · <code>S11-ROOM-DOC-1</code> đã mở khoá (blocked → todo) trong
+        <code>harness/backlog.mjs</code>.
       </p>
       <ol>
         <li>
-          <b>Duyệt nguyên gói</b> — trả lời «Duyệt S11-OFFICE»: tôi mở khoá 2 WO
-          DOC (blocked → todo), ghi kết luận DEC vào wave plan, và wave bắt đầu
-          từ tài liệu (SPEC-13/14, DB-15/16, API-14/15).
+          <b>Bước kế</b> — wave bắt đầu từ tài liệu: SPEC-13/14 · DB-15/16 · API-14/15 ·
+          permission-matrix §9d/§9e; plan-reviewer PASS rồi mới mở WO DB.
         </li>
         <li>
-          <b>Duyệt có chỉnh</b> — nêu mã DEC muốn đổi (vd: «ROOM-DEC-002: có
-          duyệt đặt phòng»): tôi cập nhật wave plan + WO rồi trình lại phần đổi.
+          <b>Nhánh còn mở có chủ đích</b> — ROOM-DEC-001: <code>meetings</code>/<code
+            >meeting_attendees</code
+          >
+          tái dụng hay thay bằng <code>room_bookings</code>, chốt trong S11-ROOM-DOC-1 sau khi đo
+          cột thật.
         </li>
         <li>
-          <b>Chưa duyệt</b> — mọi thứ giữ nguyên trạng thái blocked; không WO
-          nào chạy.
+          <b>Hồ sơ này</b> là bản ghi tại thời điểm duyệt; thay đổi sau đó ghi ở SPEC-13/14 và wave
+          plan, không sửa ngược vào đây.
         </li>
       </ol>
     </div>
