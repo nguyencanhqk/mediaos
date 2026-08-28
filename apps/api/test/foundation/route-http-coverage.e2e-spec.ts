@@ -284,8 +284,15 @@ export function measureRouteHttpCoverage(
 }
 
 /**
- * RATCHET — mốc mới đo THẬT ngày **25/08/2026** sau khi `S10-QA-ROUTEHTTP-3` land:
- * **coveredCount = 500/500 (100%), uncovered = 0 ở MỌI mức risk.**
+ * RATCHET — mốc mới đo THẬT ngày **27/08/2026** sau khi `S10-CLEAN-WORKFLOWPARK-1` land:
+ * **coveredCount = 471/471 (100%), uncovered = 0 ở MỌI mức risk.**
+ *
+ * ⚠️ **500 → 471 LÀ NỚI SÀN, VÀ ĐÂY LÀ LÝ DO BẰNG VĂN BẢN mà quy tắc dưới đòi.** Sàn tụt 29 KHÔNG
+ * phải vì test HTTP nào bị xoá — mà vì 29 ROUTE bị xoá: `S10-CLEAN-WORKFLOWPARK-1` gỡ hai controller
+ * `/workflow` (13) + `/workflow-templates` (16) của module PARK. TỬ SỐ và MẪU SỐ tụt CÙNG một lượng,
+ * tỉ lệ vẫn 100% và `MAX_UNCOVERED_TOTAL = 0` — CỔNG CHÍNH — KHÔNG hề bị nới.
+ *   Cách phân biệt hai chuyện đó nếu ca này lại đỏ: nếu `uncovered > 0` thì là MẤT TEST (nợ thật, cấm
+ *   hạ sàn); nếu `uncovered == 0` mà tổng tụt thì là ROUTE BỊ GỠ — và khi đó vẫn phải khai WO ở đây.
  *
  * Các mốc trước (giữ để thấy đường đi): 370/499 (14/08, 12 route risk≥5 chưa phủ) → 383/499 (18/08,
  * risk≥5 về 0) → 500/500 (25/08, phần đuôi risk≤3 đóng nốt).
@@ -308,7 +315,7 @@ export function measureRouteHttpCoverage(
  */
 const MAX_UNCOVERED_HIGH_RISK = 0;
 const MAX_UNCOVERED_TOTAL = 0;
-const MIN_COVERED_COUNT = 500;
+const MIN_COVERED_COUNT = 471;
 
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;

@@ -14016,9 +14016,9 @@ export const backlog = [
     module: "FOUNDATION",
     layer: "BE",
     title:
-      "DỌN module `workflow/` (workflow-DAG + approval engine hướng cũ) — out-of-scope de-media-fy, 0 hộ tiêu thụ FE, đang giữ 36 tham số nợ giả trong ratchet param-uuid",
+      "DỌN bề mặt API của module `workflow/` (code PARK de-media-fy) — gỡ 29 route + 36 tham số nợ giả, trần ratchet param-uuid 37 → 1",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     depends_on: [],
     paths: [
       "apps/api/src/workflow/**",
@@ -14056,6 +14056,50 @@ export const backlog = [
     // `leave-param-uuid.int-spec.ts` trên lane DB VỪA chain-migrate trả 500 ở ĐÚNG MỘT ca; ba lần
     // chạy sau xanh sạch. Bản vá KHÔNG thủng (ParseUUIDPipe tất định) — thủng là thứ chạy TRƯỚC nó.
     // Ghi thành WO riêng để lần sau không ai đọc nhầm một spec đỏ ngẫu nhiên thành 'pipe không chạy'.
+    id: "S10-CLEAN-WORKFLOWCLUSTER-2",
+    module: "FOUNDATION",
+    layer: "BE+DB",
+    title:
+      "KI-082 — DỌN NỐT cụm workflow/approval: gỡ `approval/` + engine còn lại, DROP bảng `workflow_*`/`approval_*`/`defects`, gỡ seed permission + contracts chết",
+    zone: "red",
+    status: "todo",
+    depends_on: ["S10-CLEAN-WORKFLOWPARK-1"],
+    paths: [
+      "apps/api/src/approval/**",
+      "apps/api/src/workflow/**",
+      "apps/api/src/app.module.ts",
+      "apps/api/src/db/schema/**",
+      "apps/api/drizzle/**",
+      "apps/api/test/**",
+      "packages/contracts/src/**",
+      "packages/web-core/src/i18n/**",
+      "docs/erd-current.md",
+      "docs/RELEASE/RELEASE-02_Known_Issues_MVP.md",
+      "docs/plans/S10-CLEAN-WORKFLOWCLUSTER-2.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    src: [
+      "**BẰNG CHỨNG (đo 27/08/2026 trong `S10-CLEAN-WORKFLOWPARK-1`, ghi ở KI-082):** sau khi `workflow.service.ts` bị gỡ, `insert(workflowInstances)` + `insert(approvalRequests)` chỉ còn ở `workflow.repository.ts` và **0 hộ gọi** `createInstance`/`createInstanceForTemplate`/`createApprovalRequest` trong toàn `src/` ⇒ `ApprovalInboxController` (5 route, vẫn MOUNT, vẫn gate đầy đủ) chỉ thao tác được trên hàng mà không đường code nào sinh ra nữa.",
+      "Phần CÒN LẠI của `workflow/` (`approval.service.ts` · `workflow-fsm` · `workflow.repository.ts` · `lock-propagation` · `workflow-dag`) được GIỮ ở WO trước CHỈ vì `approval/` còn import — gỡ `approval/` thì cả cụm hết hộ tiêu thụ.",
+      "`workflow.repository.ts` còn method join bảng media (`content_items` · `projects`) — chết theo cùng lượt.",
+      "Rơi vãi ngoài `paths` của WO trước: `packages/contracts/src/workflow.ts` (còn export ở `index.ts`) · hai nhãn i18n chết `nav.workflows`/`nav.workflowInstances`.",
+    ],
+    done_when: [
+      "**ĐO LẠI hộ tiêu thụ của `approval/` trước khi gỡ** — đủ tám chỗ kể cả `apps/lms` (git riêng) + `scripts/`; census của WO trước chỉ đo `/workflow`, KHÔNG đo `/approval`",
+      "⛔ **TÁCH ĐÔI:** phần gỡ CODE (LIGHT) và phần MIGRATION (expand-contract, lane `db-migration`, FULL gate). DROP bảng có RLS+FORCE+GRANT KHÔNG gộp chung commit với gỡ code",
+      "Ca khẳng định PHẦN BỊ XOÁ (review gate mù với deletion): mở rộng `workflow-surface-removed.unit-spec.ts` — `approval` vào `REMOVED_CONTROLLER_PATHS`, và ĐỔI ca đối chứng (3) sang một module sống KHÁC, nếu không ca (3) tự mâu thuẫn",
+      "Sổ phán quyết `route-verdicts.ts` + artifact census regen; `MIN_COVERED_COUNT` của `route-http-coverage` hạ theo số route bị gỡ, kèm LÝ DO bằng văn bản (uncovered vẫn phải = 0 — tụt tổng mà uncovered > 0 là MẤT TEST, cấm hạ sàn)",
+      "Gỡ seed permission `workflow.*`/`approval.*` khỏi catalog + kiểm `permission-seed` census không còn cặp mồ côi",
+      "RELEASE-02: ĐÓNG KI-082 kèm số trước/sau; `docs/erd-current.md` §A5 gỡ mục workflow khỏi danh sách 'cần DỌN'",
+    ],
+    notes: [
+      "🔴 red: chạm migration + seed permission ⇒ FULL gate (`security-reviewer` + `database-reviewer` + `silent-failure-hunter`), người chốt.",
+      "⚠️ `approval_steps` có unique `approval_steps_request_level_uq` và cụm bảng nằm trong lưới `fk-tenant-census` — DROP phải gỡ cả dòng census tương ứng, nếu không cổng đó đỏ vì trỏ bảng không tồn tại.",
+      "Mức S4 — không chặn UAT/go-live. Giá trị: bớt một cụm bảng có RLS/GRANT mà 0 người dùng, và bớt 5 route khỏi bề mặt tấn công.",
+    ],
+  },
+  {
     id: "S10-QA-COLDSTART500-1",
     module: "FOUNDATION",
     layer: "BE",

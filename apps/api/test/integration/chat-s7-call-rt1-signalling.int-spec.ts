@@ -479,15 +479,30 @@ describe.skipIf(!hasLaneDb)("S7-CALL-RT-1 — signalling `/ws-call` (WS thật +
 
     const a = await connectCall(tCaller);
     const b = await connectCall(tCallee);
-    a.socket.emit("call:join", { callId });
-    b.socket.emit("call:join", { callId });
-    await settle(300);
 
     // Người vào sau được báo cho người đã ở trong phiên.
-    const joined = a.events.find(
-      (e) => e.name === "call:peer-joined" && e.payload.userId === uCallee,
-    );
-    expect(joined, "A phải thấy B vào phiên").toBeTruthy();
+    //
+    // ⚠️ KHÔNG bắn hai `call:join` back-to-back rồi `settle(300)` — đó là bản cũ và nó ĐỎ NGẪU NHIÊN
+    // trên CI (2026-08-27, PR #429). Lý do KHÔNG phải "sleep hơi ngắn", mà là một CUỘC ĐUA THẬT:
+    // `onJoin` phát `peer-joined` bằng `client.to(room)` — tức loại trừ CHÍNH người gửi — nên khung
+    // đó chỉ tới A NẾU A đã `client.join(room)` xong. Hai handler chạy trên hai socket khác nhau, mỗi
+    // handler `await accept()` (một round-trip DB) trước khi join; socket.io KHÔNG bảo đảm thứ tự
+    // giữa hai socket. B xong trước ⇒ broadcast rơi vào room chưa có A, và Socket.IO **không phát
+    // lại** ⇒ chờ thêm bao lâu cũng không cứu được. Nới `settle` chỉ giảm tần suất, không đóng lỗ.
+    //
+    // Gateway KHÔNG ack `call:join` (`onJoin` trả `undefined` ⇒ Nest không gửi ack), nên test không
+    // có cách nào QUAN SÁT trực tiếp "A đã vào room". Thứ quan sát được duy nhất chính là hệ quả cần
+    // đo: A nhận `peer-joined`. Vậy nên B join LẶP LẠI tới khi A thấy — join là idempotent
+    // (`joinedCallIds` là Set, `client.join` vào room đã ở là no-op) và assert dưới dùng `find` nên
+    // khung trùng vô hại. Vòng lặp có TRẦN: hết trần vẫn không thấy ⇒ ĐỎ THẬT, không nuốt lỗi.
+    a.socket.emit("call:join", { callId });
+    let joined: (typeof a.events)[number] | undefined;
+    for (let attempt = 0; attempt < 10 && !joined; attempt++) {
+      b.socket.emit("call:join", { callId });
+      await settle(200);
+      joined = a.events.find((e) => e.name === "call:peer-joined" && e.payload.userId === uCallee);
+    }
+    expect(joined, "A phải thấy B vào phiên (10 lượt join × 200ms)").toBeTruthy();
 
     const sdp = sdpFixture();
     // Client CỐ Ý nhét `fromUserId` giả — Zod strip, server gán id THẬT.
