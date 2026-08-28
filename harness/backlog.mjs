@@ -14062,7 +14062,7 @@ export const backlog = [
     title:
       "KI-082 — DỌN NỐT cụm workflow/approval: gỡ `approval/` + engine còn lại, DROP bảng `workflow_*`/`approval_*`/`defects`, gỡ seed permission + contracts chết",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     depends_on: ["S10-CLEAN-WORKFLOWPARK-1"],
     paths: [
       "apps/api/src/approval/**",
