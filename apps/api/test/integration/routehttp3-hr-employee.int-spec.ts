@@ -1,7 +1,10 @@
 /**
  * S10-QA-ROUTEHTTP-3 (file 7/7) — test HTTP THẬT cho phần đuôi VÒNG ĐỜI NHÂN SỰ:
  *
- *   ApprovalInboxController         1  POST /approval/requests/:id/reject
+ * ⓘ Mục `ApprovalInboxController 1 POST /approval/requests/:id/reject` ĐÃ GỠ ở
+ * `S10-CLEAN-WORKFLOWCLUSTER-2`: cả module `approval/` + bảng `approval_requests` biến mất.
+ * 11 route → 10.
+ *
  *   EmployeesController             1  DELETE /employees/:id
  *   RecycleBinController            1  POST /recycle-bin/employees/:id/restore
  *   HrWriteController               1  DELETE /hr/employees/:id/link-user
@@ -75,7 +78,7 @@ const ADMIN_PAIRS: ReadonlyArray<readonly [string, string, boolean]> = [
 ];
 
 describe.skipIf(!hasLaneDb)(
-  "S10-QA-ROUTEHTTP-3 — HTTP thật: vòng đời nhân sự · hợp đồng · yêu cầu đổi hồ sơ (11 route)",
+  "S10-QA-ROUTEHTTP-3 — HTTP thật: vòng đời nhân sự · hợp đồng · yêu cầu đổi hồ sơ (10 route)",
   () => {
     let app: INestApplication;
     let direct: Pool;
@@ -171,44 +174,9 @@ describe.skipIf(!hasLaneDb)(
       return fileId;
     }
 
-    /** Chuỗi duyệt 1 cấp gieo thẳng (khuôn `approval-inbox.e2e-spec.ts`) — trả requestId. */
-    async function seedApprovalRequest(companyId: string, approverId: string): Promise<string> {
-      const def = await direct.query<{ id: string }>(
-        `INSERT INTO workflow_definitions (company_id, code, name, applies_to, max_approval_level, allow_parallel_steps)
-         VALUES ($1, $2, 's10rh3hr', 'content_item', 1, false) RETURNING id`,
-        [companyId, `s10rh3hr-${uniq()}`],
-      );
-      const prj = await direct.query<{ id: string }>(
-        `INSERT INTO projects (company_id, name, status) VALUES ($1, $2, 'active') RETURNING id`,
-        [companyId, `s10rh3hr-prj-${uniq()}`],
-      );
-      const ci = await direct.query<{ id: string }>(
-        `INSERT INTO content_items (company_id, project_id, title, status)
-         VALUES ($1, $2, $3, 'draft') RETURNING id`,
-        [companyId, prj.rows[0].id, `s10rh3hr-ci-${uniq()}`],
-      );
-      const inst = await direct.query<{ id: string }>(
-        `INSERT INTO workflow_instances (company_id, workflow_definition_id, content_item_id, current_step_order, status)
-         VALUES ($1, $2, $3, 1, 'active') RETURNING id`,
-        [companyId, def.rows[0].id, ci.rows[0].id],
-      );
-      const step = await direct.query<{ id: string }>(
-        `INSERT INTO workflow_steps (company_id, workflow_instance_id, step_order, step_code, step_name, status, reviewer_user_id)
-         VALUES ($1, $2, 1, 'script', 'Viết kịch bản', 'waiting_review', $3) RETURNING id`,
-        [companyId, inst.rows[0].id, approverId],
-      );
-      const req = await direct.query<{ id: string }>(
-        `INSERT INTO approval_requests (company_id, workflow_step_id, requested_by, status, current_level, max_level)
-         VALUES ($1, $2, $3, 'pending', 1, 1) RETURNING id`,
-        [companyId, step.rows[0].id, approverId],
-      );
-      await direct.query(
-        `INSERT INTO approval_rules (company_id, workflow_step_id, level, approver_user_id)
-         VALUES ($1, $2, 1, $3)`,
-        [companyId, step.rows[0].id, approverId],
-      );
-      return req.rows[0].id;
-    }
+    // ⓘ `seedApprovalRequest()` ĐÃ GỠ (S10-CLEAN-WORKFLOWCLUSTER-2): nó gieo
+    // workflow_definitions → content_items → workflow_instances → workflow_steps →
+    // approval_requests/_rules, cả chuỗi đã DROP ở migration 0548.
 
     beforeAll(async () => {
       const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -439,40 +407,11 @@ describe.skipIf(!hasLaneDb)(
       expect(notAllowed.status, JSON.stringify(notAllowed.body)).toBe(400);
     });
 
-    // ─── 6. Từ chối yêu cầu duyệt ───────────────────────────────────────────────
-
-    // Lưu ý mã trả về: `approve`/`reject` của ApprovalInboxController KHÔNG khai `@HttpCode` ⇒ Nest
-    // dùng mặc định của @Post là **201**, không phải 200 (đo được, không suy từ tên hành động).
-    it("POST /approval/requests/:id/reject — ALLOW 201, HỆ QUẢ: request rời trạng thái pending", async () => {
-      const requestId = await seedApprovalRequest(A.companyId, adminUserIdA);
-
-      const res = await authPost(tAdminA, `/approval/requests/${requestId}/reject`).send({
-        description: "Chưa đạt yêu cầu",
-        comment: "Làm lại phần mở đầu",
-      });
-      expect(res.status, JSON.stringify(res.body)).toBe(201);
-
-      const row = await direct.query<{ status: string }>(
-        `SELECT status FROM approval_requests WHERE company_id = $1 AND id = $2`,
-        [A.companyId, requestId],
-      );
-      expect(row.rows[0].status, "từ chối xong không được còn 'pending'").not.toBe("pending");
-    });
-
-    it("POST /approval/requests/:id/reject — DTO 400 ở BIÊN khi thiếu `description`", async () => {
-      const requestId = await seedApprovalRequest(A.companyId, adminUserIdA);
-      const res = await authPost(tAdminA, `/approval/requests/${requestId}/reject`).send({
-        comment: "thiếu description",
-      });
-      expect(res.status, JSON.stringify(res.body)).toBe(400);
-    });
-
     // ─── 7. DENY — role RỖNG, đặt SAU toàn bộ ALLOW ─────────────────────────────
 
-    it("DENY 403: actor role RỖNG bị chặn ở cả 11 route", async () => {
+    it("DENY 403: actor role RỖNG bị chặn ở cả 10 route", async () => {
       const fake = randomUUID();
       const calls = [
-        authPost(tEmptyA, `/approval/requests/${fake}/reject`).send({ description: "x" }),
         authDelete(tEmptyA, `/employees/${fake}`),
         authPost(tEmptyA, `/recycle-bin/employees/${fake}/restore`).send({}),
         http()
@@ -500,25 +439,21 @@ describe.skipIf(!hasLaneDb)(
 
     // ─── 8. Cô lập tenant ───────────────────────────────────────────────────────
 
-    it("CROSS-TENANT: tenant B không xoá/khôi phục/từ chối được thực thể của tenant A", async () => {
+    it("CROSS-TENANT: tenant B không xoá/khôi phục được thực thể của tenant A", async () => {
+      // Vế `/approval/requests/:id/reject` ĐÃ GỠ cùng module (S10-CLEAN-WORKFLOWCLUSTER-2); ca này
+      // giữ vế `employees` — nó vẫn đo đúng thứ cần đo (B không chạm được thực thể của A) và vẫn có
+      // cạnh ĐỐI CHỨNG bên dưới để 404 ở trên không phải "404 vì mọi thứ đều hỏng".
       const empA = await seedEmployee(A.companyId, orgUnitA);
-      const reqA = await seedApprovalRequest(A.companyId, adminUserIdA);
 
       const del = await authDelete(tAdminB, `/employees/${empA}`);
       expect(del.status, JSON.stringify(del.body)).toBe(404);
 
-      const reject = await authPost(tAdminB, `/approval/requests/${reqA}/reject`).send({
-        description: "chiếm quyền",
-      });
-      expect(reject.status, JSON.stringify(reject.body)).toBeGreaterThanOrEqual(400);
-      expect(reject.status).toBeLessThan(500);
-
-      const stillPending = await direct.query<{ status: string }>(
-        `SELECT status FROM approval_requests WHERE company_id = $1 AND id = $2`,
-        [A.companyId, reqA],
+      const stillThere = await direct.query<{ deleted_at: string | null }>(
+        `SELECT deleted_at FROM employee_profiles WHERE company_id = $1 AND id = $2`,
+        [A.companyId, empA],
       );
-      expect(stillPending.rows[0].status, "tenant B KHÔNG được đổi trạng thái của A").toBe(
-        "pending",
+      expect(stillThere.rows[0].deleted_at, "tenant B KHÔNG được soft-delete thực thể của A").toBe(
+        null,
       );
 
       // Cạnh đối chứng: cùng token B tạo được yêu cầu đổi hồ sơ của CHÍNH nó ⇒ 404 ở trên là cô lập.

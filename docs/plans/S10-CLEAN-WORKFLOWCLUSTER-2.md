@@ -114,3 +114,46 @@ NGƯỢC LẠI — không phải vì spec bị nới.
 | Cột FK chết trên `tasks` | 2 | **0** |
 | Cặp quyền mồ côi | 20 | **0** |
 | Dòng code `apps/api/src/{workflow,approval}/` | ~2 600 + ~530 | **0** |
+
+---
+
+## 6. NGHIỆM THU nửa MIGRATION — số đo thật (2026-08-28)
+
+Migration `0548_s10cleanworkflowcluster2_drop_workflow_approval_cluster.sql`, áp trên lane cô lập
+`mediaos_wfcluster2` (chain-migrate 0000→latest).
+
+| Kiểm | Kết quả |
+| --- | --- |
+| 14 bảng cụm còn lại | **0** |
+| Cột chết trên `tasks` (`workflow_step_id`·`workflow_instance_id`) | **0** |
+| `evaluation_results.workflow_step_id` · `bonus_penalties.defect_id` | **0** |
+| Cặp quyền mồ côi · grant mồ côi | **0** · **0** (xoá 27 cặp + 89 grant) |
+| `bonus_penalties_reference_check` sau DROP COLUMN | **CÒN** (dựng lại tường minh) |
+| `bash harness/check.sh --lane-db=wfcluster2` | **XANH toàn phần** — 572/572 file API chạy, 0 đỏ |
+
+### 6.1 BẪY — `DROP COLUMN` giết CHECK trong im lặng
+
+Postgres gỡ luôn mọi `CHECK` tham chiếu cột bị xoá, không cảnh báo. Quét `pg_constraint` trên 3 bảng
+bị chạm trước khi viết migration chỉ ra **đúng một nạn nhân**: `bonus_penalties_reference_check`
+(bất biến "reference đúng-một-hoặc-không"). Migration nay DROP constraint → DROP cột → **DỰNG LẠI**
+constraint không còn vế `defect`, và `packages/contracts/src/payroll.ts` mirror ĐÚNG BẰNG hai chiều
+(hai enum `bonusSourceEnum`/`bonusReferenceTypeEnum` bỏ `"defect"`).
+
+### 6.2 BA lỗi lộ ra khi chạy trên lane DB — phân loại bằng ĐO A/B, không bằng suy luận
+
+| # | Triệu chứng | Do đâu | Xử lý |
+| --- | --- | --- | --- |
+| 1 | **364 test ĐỎ** | `cleanupTenants()` còn 10 lệnh `DELETE FROM <bảng đã DROP>`. Nó chạy trong `afterAll` của gần như MỌI int-spec ⇒ một dòng sót làm đỏ TOÀN BỘ suite tích hợp | Gỡ 10 lệnh. **Bài học: dọn bảng thì phải dọn cả đường DỌN DẸP của test** |
+| 2 | `employee_contracts_employee_id_fkey` vỡ ở `DELETE users` — "Failed Suite" trong khi 24/24 test XANH | **LỖI CÓ SẴN, KHÔNG do WO này.** Chứng minh bằng đối chứng: lane **mới tinh head 0547** (không có `0548`) ĐỎ y hệt; lane cũ `mediaos_workflowpark` (cùng head 0547, đã dùng lâu) XANH ⇒ biến quyết định là **lane vừa chain-migrate**, không phải migration. Gốc: `DELETE users` phát ra ĐỒNG THỜI cascade (users→employee_profiles→employee_contracts) và SET NULL (`created_by`/`updated_by`/`deleted_by`); vế UPDATE chạy sau khi hàng cha đã mất ⇒ composite FK kiểm lại và ném 23503. Thứ tự hai luồng phụ thuộc thứ tự trigger RI | Xoá `employee_contracts` tường minh TRƯỚC `DELETE users`. Xanh trên **cả hai** lane |
+| 3 | `evaluation_results_evaluator_user_id_fkey` vỡ ở `DELETE users` | **DO WO này.** Trước `0548`, hàng `evaluation_results` được dọn GIÁN TIẾP qua `workflow_step_id … ON DELETE CASCADE`. Gỡ cột ⇒ hàng ở lại chặn `DELETE users` | Dọn `evaluation_scores` + `evaluation_results` tường minh |
+
+### 6.3 Ba ratchet hạ theo — mỗi lần hạ đều đo A/B hai lane
+
+| Hằng số | Trước → Sau | Độ lệch giải thích được |
+| --- | --- | --- |
+| `FK_SINGLE_COL_PAIRS_FLOOR` | 440 → **423** | Đo `mediaos_wfcluster2` (0548) = 423 · đối chứng `mediaos_wfbase547` (0547, cũng mới tinh) = **459**. 459 − 423 = **36** = đúng phần DROP (14 bảng + 4 cột FK) |
+| `PROVEN_WITH_CHECK_FLOOR` | 147 → **133** | 147 − 133 = **14** = ĐÚNG số bảng bị DROP, mỗi bảng là một mục registry tự chứng minh WITH CHECK. Khớp 1–1 |
+| `W4_FK_BLOCKED_FLOOR` | 260 → **241** | Cặp thử 448 → 412 (**−36**, cùng con số trên); chứng minh bằng 23503 263 → 241 (**−22**) — 22 cặp trong 36 vốn thuộc nhóm "chứng minh bằng composite FK", 14 cặp còn lại vốn ở nhóm "chặn bằng cơ chế khác" |
+
+⛔ Cả ba là **MẤT ĐỐI TƯỢNG ĐO**, không phải mất hàng rào. Đệm của `W4_FK_BLOCKED_FLOOR` nay = 0 theo
+đúng luật đã ghi cho `PROVEN_WITH_CHECK_FLOOR`: hạ ĐÚNG số đo, không cộng biên.

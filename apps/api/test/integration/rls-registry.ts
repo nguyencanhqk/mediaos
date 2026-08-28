@@ -127,76 +127,8 @@ async function seedUserInvite(direct: Pool, companyId: string): Promise<string> 
   return r.rows[0].id as string;
 }
 
-async function seedWorkflowDefinition(direct: Pool, companyId: string): Promise<string> {
-  const r = await direct.query(
-    `INSERT INTO workflow_definitions (company_id, code, name, applies_to, max_approval_level, allow_parallel_steps)
-     VALUES ($1, $2, 'RLS Def', 'content_item', 1, false) RETURNING id`,
-    [companyId, `rls-def-${randomUUID().slice(0, 8)}`],
-  );
-  return r.rows[0].id as string;
-}
-
-async function seedWorkflowInstance(
-  direct: Pool,
-  companyId: string,
-  definitionId: string,
-  contentItemId: string,
-  userId: string,
-): Promise<string> {
-  const r = await direct.query(
-    `INSERT INTO workflow_instances
-       (company_id, workflow_definition_id, content_item_id, created_by, current_step_order, status)
-     VALUES ($1, $2, $3, $4, 1, 'active') RETURNING id`,
-    [companyId, definitionId, contentItemId, userId],
-  );
-  return r.rows[0].id as string;
-}
-
-async function seedWorkflowStep(
-  direct: Pool,
-  companyId: string,
-  instanceId: string,
-  stepOrder = 1,
-): Promise<string> {
-  const r = await direct.query(
-    `INSERT INTO workflow_steps
-       (company_id, workflow_instance_id, step_order, step_code, step_name, status)
-     VALUES ($1, $2, $3, 'script', 'Viết kịch bản', 'not_started') RETURNING id`,
-    [companyId, instanceId, stepOrder],
-  );
-  return r.rows[0].id as string;
-}
-
-/** Seed toàn bộ chuỗi FK nhỏ nhất cần cho workflow_step trở lên. */
-async function seedWorkflowChain(
-  direct: Pool,
-  t: SeededTenant,
-): Promise<{
-  userId: string;
-  projectId: string;
-  contentItemId: string;
-  instanceId: string;
-  stepId: string;
-}> {
-  const userId = await seedUser(
-    direct,
-    t.companyId,
-    `rls-chain-${randomUUID().slice(0, 8)}@x.test`,
-  );
-  const projectId = await seedProject(direct, t.companyId);
-  const contentItemId = await seedContentItem(direct, t.companyId, projectId);
-  const definitionId = await seedWorkflowDefinition(direct, t.companyId);
-  const instanceId = await seedWorkflowInstance(
-    direct,
-    t.companyId,
-    definitionId,
-    contentItemId,
-    userId,
-  );
-  const stepId = await seedWorkflowStep(direct, t.companyId, instanceId);
-  return { userId, projectId, contentItemId, instanceId, stepId };
-}
-
+// ⓘ 4 helper seedWorkflowDefinition/Instance/Step/Chain ĐÃ GỠ ở S10-CLEAN-WORKFLOWCLUSTER-2:
+// cả chuỗi bảng chúng seed đã DROP ở migration 0548.
 /**
  * Seed 1 task office (legacy shape) + employee_profiles của tenant — nền FK cho 5 bảng TASK mới
  * (S4-TASK-DB-1, mig 0478). Trả về taskId + employeeId + userId (FK-valid, cùng company).
@@ -842,138 +774,18 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
 
-  // ── G4-3 Workflow ────────────────────────────────────────────────────────────
-  {
-    name: "workflow_definitions",
-    table: "workflow_definitions",
-    seedRow: (direct, t) => seedWorkflowDefinition(direct, t.companyId),
-  },
-  {
-    name: "workflow_definition_steps",
-    table: "workflow_definition_steps",
-    seedRow: async (direct, t) => {
-      const defId = await seedWorkflowDefinition(direct, t.companyId);
-      const r = await direct.query(
-        `INSERT INTO workflow_definition_steps
-           (company_id, workflow_definition_id, step_order, code, name, node_key, default_task_title)
-         VALUES ($1, $2, 1, 'script', 'Viết kịch bản', 'script', 'Viết kịch bản') RETURNING id`,
-        [t.companyId, defId],
-      );
-      return r.rows[0].id as string;
-    },
-  },
-  {
-    name: "step_transitions",
-    table: "step_transitions",
-    seedRow: async (direct, t) => {
-      const defId = await seedWorkflowDefinition(direct, t.companyId);
-      const r = await direct.query(
-        `INSERT INTO step_transitions
-           (company_id, workflow_definition_id, from_state, event, to_state, written_by)
-         VALUES ($1, $2, 'not_started', 'start', 'in_progress', 'service') RETURNING id`,
-        [t.companyId, defId],
-      );
-      return r.rows[0].id as string;
-    },
-  },
-  {
-    name: "workflow_instances",
-    table: "workflow_instances",
-    seedRow: async (direct, t) => {
-      const { instanceId } = await seedWorkflowChain(direct, t);
-      return instanceId;
-    },
-  },
-  {
-    name: "workflow_steps",
-    table: "workflow_steps",
-    seedRow: async (direct, t) => {
-      const { stepId } = await seedWorkflowChain(direct, t);
-      return stepId;
-    },
-  },
-
-  // ── G7 Workflow Builder (template DAG + checklist) ───────────────────────────
-  {
-    name: "workflow_step_dependencies",
-    table: "workflow_step_dependencies",
-    seedRow: async (direct, t) => {
-      const defId = await seedWorkflowDefinition(direct, t.companyId);
-      const s1 = await direct.query(
-        `INSERT INTO workflow_definition_steps
-           (company_id, workflow_definition_id, step_order, code, name, node_key, default_task_title)
-         VALUES ($1, $2, 1, 'script', 'Viết kịch bản', 'script', 'Viết kịch bản') RETURNING id`,
-        [t.companyId, defId],
-      );
-      const s2 = await direct.query(
-        `INSERT INTO workflow_definition_steps
-           (company_id, workflow_definition_id, step_order, code, name, node_key, default_task_title)
-         VALUES ($1, $2, 2, 'edit', 'Dựng video', 'edit', 'Dựng video') RETURNING id`,
-        [t.companyId, defId],
-      );
-      const r = await direct.query(
-        `INSERT INTO workflow_step_dependencies
-           (company_id, workflow_definition_id, from_step_id, to_step_id)
-         VALUES ($1, $2, $3, $4) RETURNING id`,
-        [t.companyId, defId, s1.rows[0].id, s2.rows[0].id],
-      );
-      return r.rows[0].id as string;
-    },
-  },
-  {
-    name: "checklists",
-    table: "checklists",
-    seedRow: async (direct, t) => {
-      const r = await direct.query(
-        `INSERT INTO checklists (company_id, name) VALUES ($1, $2) RETURNING id`,
-        [t.companyId, `rls-checklist-${randomUUID().slice(0, 8)}`],
-      );
-      return r.rows[0].id as string;
-    },
-  },
-  {
-    name: "checklist_items",
-    table: "checklist_items",
-    seedRow: async (direct, t) => {
-      const clRes = await direct.query(
-        `INSERT INTO checklists (company_id, name) VALUES ($1, $2) RETURNING id`,
-        [t.companyId, `rls-cl-${randomUUID().slice(0, 8)}`],
-      );
-      const r = await direct.query(
-        `INSERT INTO checklist_items (company_id, checklist_id, label, is_required, sort_order)
-         VALUES ($1, $2, 'rls-item', true, 0) RETURNING id`,
-        [t.companyId, clRes.rows[0].id],
-      );
-      return r.rows[0].id as string;
-    },
-  },
-  {
-    name: "workflow_step_checklist_states",
-    table: "workflow_step_checklist_states",
-    seedRow: async (direct, t) => {
-      const { stepId } = await seedWorkflowChain(direct, t);
-      const clRes = await direct.query(
-        `INSERT INTO checklists (company_id, name) VALUES ($1, $2) RETURNING id`,
-        [t.companyId, `rls-wscs-cl-${randomUUID().slice(0, 8)}`],
-      );
-      const itemRes = await direct.query(
-        `INSERT INTO checklist_items (company_id, checklist_id, label) VALUES ($1, $2, 'rls-wscs-item') RETURNING id`,
-        [t.companyId, clRes.rows[0].id],
-      );
-      const r = await direct.query(
-        `INSERT INTO workflow_step_checklist_states (company_id, workflow_step_id, checklist_item_id)
-         VALUES ($1, $2, $3) RETURNING id`,
-        [t.companyId, stepId, itemRes.rows[0].id],
-      );
-      return r.rows[0].id as string;
-    },
-  },
+  // ── G4-3 Workflow + G7 Builder — 9 mục ĐÃ GỠ (S10-CLEAN-WORKFLOWCLUSTER-2) ──────────────────
+  // workflow_definitions · workflow_definition_steps · step_transitions · workflow_instances ·
+  // workflow_steps · workflow_step_dependencies · checklists · checklist_items ·
+  // workflow_step_checklist_states — 14 bảng của cụm DROP ở migration 0548. Bảng không tồn tại
+  // thì mục registry KHÔNG thể chỉ 'skip': `rls-guards.int-spec` so registry với pg_class nên một
+  // mục mồ côi làm cổng đó ĐỎ. Đừng để lại 'cho có'.
 
   // ── G4-4 Tasks & Comments ───────────────────────────────────────────────────
   {
     name: "tasks",
     table: "tasks",
-    // tasks có thể tồn tại không cần workflow_step (task_type=office, workflow_step_id nullable)
+    // `workflow_step_id` không còn tồn tại (migration 0548) — task chuẩn là task_type=office.
     seedRow: async (direct, t) => {
       const r = await direct.query(
         `INSERT INTO tasks (company_id, task_type, title, status, origin, revision_round)
@@ -1154,97 +966,8 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
 
-  // ── G4-5 Approval / Defect ───────────────────────────────────────────────────
-  {
-    name: "approval_requests",
-    table: "approval_requests",
-    seedRow: async (direct, t) => {
-      const { stepId, userId } = await seedWorkflowChain(direct, t);
-      const r = await direct.query(
-        `INSERT INTO approval_requests
-           (company_id, workflow_step_id, requested_by, status, current_level, max_level)
-         VALUES ($1, $2, $3, 'pending', 1, 1) RETURNING id`,
-        [t.companyId, stepId, userId],
-      );
-      return r.rows[0].id as string;
-    },
-  },
-  {
-    name: "approval_steps",
-    table: "approval_steps",
-    seedRow: async (direct, t) => {
-      const { stepId, userId } = await seedWorkflowChain(direct, t);
-      const reqRes = await direct.query(
-        `INSERT INTO approval_requests
-           (company_id, workflow_step_id, requested_by, status, current_level, max_level)
-         VALUES ($1, $2, $3, 'approved', 1, 1) RETURNING id`,
-        [t.companyId, stepId, userId],
-      );
-      const r = await direct.query(
-        `INSERT INTO approval_steps
-           (company_id, approval_request_id, level, approver_user_id, decision)
-         VALUES ($1, $2, 1, $3, 'approved') RETURNING id`,
-        [t.companyId, reqRes.rows[0].id, userId],
-      );
-      return r.rows[0].id as string;
-    },
-  },
-  {
-    name: "defects",
-    table: "defects",
-    seedRow: async (direct, t) => {
-      const { stepId } = await seedWorkflowChain(direct, t);
-      const r = await direct.query(
-        `INSERT INTO defects (company_id, workflow_step_id, description)
-         VALUES ($1, $2, 'rls-defect') RETURNING id`,
-        [t.companyId, stepId],
-      );
-      return r.rows[0].id as string;
-    },
-  },
-
-  // ── G8-1 Approval rules (multi-level — migration 0080) ───────────────────────
-  {
-    name: "approval_rules",
-    table: "approval_rules",
-    seedRow: async (direct, t) => {
-      const { stepId, userId } = await seedWorkflowChain(direct, t);
-      const r = await direct.query(
-        `INSERT INTO approval_rules (company_id, workflow_step_id, level, approver_user_id)
-         VALUES ($1, $2, 1, $3) RETURNING id`,
-        [t.companyId, stepId, userId],
-      );
-      return r.rows[0].id as string;
-    },
-  },
-  {
-    name: "workflow_step_instance_locks",
-    table: "workflow_step_instance_locks",
-    seedRow: async (direct, t) => {
-      const { instanceId } = await seedWorkflowChain(direct, t);
-      // Cần 2 steps (locked + caused_by); step đầu đã có từ seedWorkflowChain
-      const step2Res = await direct.query(
-        `INSERT INTO workflow_steps
-           (company_id, workflow_instance_id, step_order, step_code, step_name, status)
-         VALUES ($1, $2, 2, 'edit', 'Dựng video', 'not_started') RETURNING id`,
-        [t.companyId, instanceId],
-      );
-      const lockedStepId = step2Res.rows[0].id as string;
-      // step_order=1 từ seedWorkflowChain
-      const step1Res = await direct.query(
-        `SELECT id FROM workflow_steps WHERE workflow_instance_id = $1 AND step_order = 1`,
-        [instanceId],
-      );
-      const causedByStepId = step1Res.rows[0].id as string;
-      const r = await direct.query(
-        `INSERT INTO workflow_step_instance_locks
-           (company_id, locked_step_id, caused_by_step_id, lock_reason)
-         VALUES ($1, $2, $3, 'downstream_blocked_by_revision') RETURNING id`,
-        [t.companyId, lockedStepId, causedByStepId],
-      );
-      return r.rows[0].id as string;
-    },
-  },
+  // ── G4-5/G8-1 Approval · Defect · Lock — 5 mục ĐÃ GỠ (S10-CLEAN-WORKFLOWCLUSTER-2) ───────────
+  // approval_requests · approval_steps · defects · approval_rules · workflow_step_instance_locks.
 
   // ── G4-6 Communication ────────────────────────────────────────────────────────
   {
@@ -2076,16 +1799,22 @@ export const RLS_TABLES: RlsTableCase[] = [
     name: "evaluation_results",
     table: "evaluation_results",
     seedRow: async (direct, t) => {
-      const { stepId, userId } = await seedWorkflowChain(direct, t);
+      // `workflow_step_id` ĐÃ GỠ ở migration 0548 (bảng `workflow_steps` DROP) ⇒ không còn chuỗi FK
+      // workflow để seed; chỉ cần một user làm evaluator.
+      const userId = await seedUser(
+        direct,
+        t.companyId,
+        `rls-eval-res-${randomUUID().slice(0, 8)}@x.test`,
+      );
       const tplRes = await direct.query(
         `INSERT INTO evaluation_templates (company_id, name) VALUES ($1, $2) RETURNING id`,
         [t.companyId, `rls-eval-res-tpl-${randomUUID().slice(0, 8)}`],
       );
       const r = await direct.query(
         `INSERT INTO evaluation_results
-           (company_id, template_id, workflow_step_id, evaluator_user_id, total_score)
-         VALUES ($1, $2, $3, $4, 80.00) RETURNING id`,
-        [t.companyId, tplRes.rows[0].id, stepId, userId],
+           (company_id, template_id, evaluator_user_id, total_score)
+         VALUES ($1, $2, $3, 80.00) RETURNING id`,
+        [t.companyId, tplRes.rows[0].id, userId],
       );
       return r.rows[0].id as string;
     },
@@ -2094,7 +1823,11 @@ export const RLS_TABLES: RlsTableCase[] = [
     name: "evaluation_scores",
     table: "evaluation_scores",
     seedRow: async (direct, t) => {
-      const { stepId, userId } = await seedWorkflowChain(direct, t);
+      const userId = await seedUser(
+        direct,
+        t.companyId,
+        `rls-eval-score-${randomUUID().slice(0, 8)}@x.test`,
+      );
       const tplRes = await direct.query(
         `INSERT INTO evaluation_templates (company_id, name) VALUES ($1, $2) RETURNING id`,
         [t.companyId, `rls-eval-score-tpl-${randomUUID().slice(0, 8)}`],
@@ -2106,9 +1839,9 @@ export const RLS_TABLES: RlsTableCase[] = [
       );
       const resRes = await direct.query(
         `INSERT INTO evaluation_results
-           (company_id, template_id, workflow_step_id, evaluator_user_id, total_score)
-         VALUES ($1, $2, $3, $4, 80.00) RETURNING id`,
-        [t.companyId, tplRes.rows[0].id, stepId, userId],
+           (company_id, template_id, evaluator_user_id, total_score)
+         VALUES ($1, $2, $3, 80.00) RETURNING id`,
+        [t.companyId, tplRes.rows[0].id, userId],
       );
       const r = await direct.query(
         `INSERT INTO evaluation_scores (company_id, result_id, criteria_id, score)

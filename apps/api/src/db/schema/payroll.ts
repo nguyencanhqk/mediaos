@@ -17,7 +17,7 @@ import { currentCompanyDefault } from "./_helpers";
 import { attendancePeriods } from "./hr";
 import { companies } from "./companies";
 import { users } from "./users";
-import { tasks, defects } from "./workflow";
+import { tasks } from "./workflow";
 import { kpiResults } from "./kpi";
 
 /**
@@ -231,7 +231,7 @@ export type NewPayslipItem = typeof payslipItems.$inferInsert;
  * DDL/RLS/grant + trigger guard ở migration 0098. Soft-delete deleted_at (GRANT app SELECT/INSERT/UPDATE,
  * NO DELETE). KHÁC payslip snapshot (append-only) — đây là bản ghi đề xuất, payslip mới là sổ bất biến.
  *
- * BẤT BIẾN #1: company_id + RLS+FORCE (mig 0098). reference (task/defect/kpi_result) = typed-FK NULLABLE
+ * BẤT BIẾN #1: company_id + RLS+FORCE (mig 0098). reference (task/kpi_result) = typed-FK NULLABLE
  * + CHECK đúng-một-hoặc-không theo reference_type. ON DELETE RESTRICT giữ chuỗi audit (referent không biến mất).
  * Trigger `enforce_bonus_penalty_guard` (0098): chặn transition sai + đóng băng field tiền sau khi rời draft,
  * MIỄN TRỪ consume (payroll_period_id NULL→set 1 lần). amount > 0 (kind tách bonus/penalty — không số âm).
@@ -256,7 +256,6 @@ export const bonusPenalties = pgTable(
     source: text("source").notNull().default("manual"),
     referenceType: text("reference_type"),
     taskId: uuid("task_id").references(() => tasks.id, { onDelete: "restrict" }),
-    defectId: uuid("defect_id").references(() => defects.id, { onDelete: "restrict" }),
     kpiResultId: uuid("kpi_result_id").references(() => kpiResults.id, { onDelete: "restrict" }),
     status: text("status").notNull().default("draft"),
     approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "restrict" }),
@@ -287,17 +286,18 @@ export const bonusPenalties = pgTable(
     check("bonus_penalties_kind_check", sql`kind IN ('bonus','penalty')`),
     check("bonus_penalties_amount_check", sql`amount > 0`),
     check("bonus_penalties_status_check", sql`status IN ('draft','approved','rejected')`),
-    check("bonus_penalties_source_check", sql`source IN ('manual','kpi','defect')`),
+    check("bonus_penalties_source_check", sql`source IN ('manual','kpi')`),
     check("bonus_penalties_month_check", sql`period_month ~ '^\\d{4}-(0[1-9]|1[0-2])$'`),
     // reference đúng-một-hoặc-không (parity với contracts superRefine). CASE → boolean SẠCH (KHÔNG NULL):
     // literal `reference_type='task'` cho NULL khi reference_type NULL ⇒ OR ra NULL ⇒ CHECK pass sai. CASE ELSE false đóng lỗ.
     check(
       "bonus_penalties_reference_check",
+      // ⓘ Vế `defect` ĐÃ GỠ ở migration 0548 (bảng `defects` DROP). ⛔ Giữ mirror ĐÚNG BẰNG với CHECK
+      // trong 0548 — chặt hơn hoặc lỏng hơn đều đẻ 500 ở DB cho payload mà hợp đồng chấp nhận.
       sql`CASE
-        WHEN reference_type IS NULL THEN (task_id IS NULL AND defect_id IS NULL AND kpi_result_id IS NULL)
-        WHEN reference_type = 'task'       THEN (task_id       IS NOT NULL AND defect_id IS NULL AND kpi_result_id IS NULL)
-        WHEN reference_type = 'defect'     THEN (defect_id     IS NOT NULL AND task_id   IS NULL AND kpi_result_id IS NULL)
-        WHEN reference_type = 'kpi_result' THEN (kpi_result_id IS NOT NULL AND task_id   IS NULL AND defect_id     IS NULL)
+        WHEN reference_type IS NULL THEN (task_id IS NULL AND kpi_result_id IS NULL)
+        WHEN reference_type = 'task'       THEN (task_id       IS NOT NULL AND kpi_result_id IS NULL)
+        WHEN reference_type = 'kpi_result' THEN (kpi_result_id IS NOT NULL AND task_id       IS NULL)
         ELSE false
       END`,
     ),
