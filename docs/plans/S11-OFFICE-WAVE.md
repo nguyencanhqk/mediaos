@@ -2,7 +2,8 @@
 
 > Seed 2026-08-28. Trạng thái: **ĐÃ DUYỆT 2026-08-28** — owner duyệt nguyên gói hồ sơ
 > **`docs/plans/S11-OFFICE-WAVE-review.html`** (kèm wireframe UI) và ký 9/9 quyết định §3 theo cột
-> «Đề xuất». 2 WO gốc (`S11-ASSET-DOC-1`, `S11-ROOM-DOC-1`) đã mở khoá `blocked → todo` cùng ngày. Nguồn phạm vi: SPEC-01 §12.10–12.11 · §7 (Phase 3) ·
+> «Đề xuất». 2 WO gốc (`S11-ASSET-DOC-1`, `S11-ROOM-DOC-1`) đã mở khoá `blocked → todo` cùng ngày.
+> **`S11-ASSET-DOC-1` ĐÃ VIẾT (28/08/2026):** [SPEC-13](<../SPEC/SPEC-13 ASSET.md>) · [DB-15](<../DB/DB-15 ASSET Database Design.md>) · [API-14](<../API Design/API-14_ASSET_API_Design.md>) · permission-matrix §9d · SPEC-01 §17.8–17.9 + §20.2 (NOTI-EVENT-010..012) · IMPLEMENTATION-02 EPIC-17 (§8.18). Nguồn phạm vi: SPEC-01 §12.10–12.11 · §7 (Phase 3) ·
 > §10.8 (Asset Manager) · §10.9 (Office Admin) · IMPLEMENTATION-10 §22 (PARK-ASSET/ROOM) ·
 > RELEASE-14 §5.
 

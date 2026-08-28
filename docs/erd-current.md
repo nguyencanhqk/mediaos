@@ -447,6 +447,8 @@ CON, nên nếu cha còn "re-home" được thì hàng con của tenant khác th
 
 `employee_files` · `shift_assignments` · `attendance_rules` · `remote_work_requests`(+approvals) · `leave_policies` · `leave_balance_transactions` · `leave_request_approvals` · `leave_request_days` · `notification_events` · `notification_templates` · `notification_delivery_logs` · toàn bộ **DASH** (`dashboard_widgets`/`_configs`/`_cache`). *(ATT/LEAVE/TASK/NOTI ở code mới là bản rút gọn hướng cũ, chưa reconcile.)* — `employee_contracts` ĐÃ build (mig 0462, S2-HR-BE-6).
 
+- **ASSET (Phase 3, thiết kế 28/08/2026 — [DB-15](<DB/DB-15 ASSET Database Design.md>) · [SPEC-13](<SPEC/SPEC-13 ASSET.md>)):** 6 bảng **chưa build** `asset_categories` · `assets` · `asset_assignments` · `asset_maintenances` · `asset_inventories` · `asset_inventory_items` — thi công ở `S11-ASSET-DB-1` (migration `0549+` dự kiến). Đường tên sạch: không đụng `content_assets` (media, A5). Khi build: 4 bảng sổ (`asset_assignments` · `asset_maintenances` · `asset_inventories` · `asset_inventory_items`) vào danh sách **không DELETE / UPDATE cấp cột** ở §9; FK người giữ trỏ `employee_profiles` (tên code của `employees`, A2) bằng composite tenant FK.
+
 ### A5. Code CÒN bảng HƯỚNG CŨ — out-of-scope, cần DỌN (de-media-fy, CLAUDE.md §1)
 
 KHÔNG thuộc thiết kế MVP, còn sót trong DB:

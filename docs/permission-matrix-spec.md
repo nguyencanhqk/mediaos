@@ -492,6 +492,36 @@ Ghi chú:
 
 ---
 
+## 9d. ASSET — Quản lý tài sản (SPEC-13) · *Phase 3 — wave S11-OFFICE, chưa seed*
+
+ASSET đứng riêng, **11 cặp** quyền per-(action, resource) theo SPEC-13 §11 — owner duyệt gói wave 28/08/2026. Data scope **chốt cùng migration seed** (S11-ASSET-DB-1, KHÔNG để mở sau — flip sau đụng pin canonical-seed). Ngoài 4 role canonical, wave này seed thêm **role hệ thống `asset-manager`** (SPEC-01 §10.8; `roles.company_id IS NULL`, `is_system=true`, tiền lệ `hr-manager` mig `0019`) — **không** phải role canonical, không được thêm vào `DashCanonicalRole`/`NOTI_CANONICAL_ROLES`/pin `auth-seed-canonical-roles`.
+
+| Cặp quyền (SPEC-13 §11) | Ý nghĩa | Nhân viên | Trưởng đơn vị | HR | BOD/Admin · Asset Manager |
+| --- | --- | --- | --- | --- | --- |
+| `('access','asset')` | Cổng nav menu Tài sản | có | có | có | có |
+| `('view','asset')` | Xem loại · tài sản · lịch sử cấp phát/bảo trì · đợt kiểm kê · thống kê · **`/me/assets`** | **own** (tài sản mình đang/đã giữ) | **department** (tài sản nhân viên đơn vị mình đang giữ) | all | all |
+| `('create','asset')` | Tạo hồ sơ tài sản | không | không | không | all |
+| `('update','asset')` | Sửa thông tin mô tả (không đổi `status`/`asset_code`) | không | không | không | all |
+| `('delete','asset')` | Xoá mềm hồ sơ nhập nhầm (chỉ `In Stock`, 0 lịch sử) | không | không | không | all |
+| `('assign','asset')` | Cấp phát cho nhân viên | không | không | không | all |
+| `('revoke','asset')` | Thu hồi | không | không | không | all |
+| `('dispose','asset')` | Thanh lý (`Disposed`) · ghi nhận mất (`Lost`) · tìm thấy lại | không | không | không | all |
+| `('manage','asset-category')` | CRUD loại tài sản | không | không | không | all |
+| `('manage','asset-maintenance')` | Mở/đóng lượt bảo trì | không | không | không | all |
+| `('manage','asset-inventory')` | Mở/đánh dấu/đóng đợt kiểm kê | không | không | không | all |
+
+Ghi chú:
+
+- **`is_sensitive` chốt `false` cho cả 11 cặp.** Dữ liệu tài sản không thuộc danh sách nhạy cảm §10; trường **tài chính** (`purchase_price` · `supplier` · `asset_maintenances.cost`) che ở **server** khi scope hiệu dụng là Own (SPEC-13 §18), không dựng cặp nhạy cảm riêng.
+- **Cặp gate của `/me/assets` PHẢI là chính cặp đọc `('view','asset')`** (scope Own) — không tách `ASSET.ASSIGNMENT.VIEW` như bản dự kiến của hồ sơ duyệt HTML. Tách cặp đọc thành hai sẽ đẻ ra role "thấy danh sách của mình mà không mở được chi tiết" — bài học `read-path-gate-pair-must-match-download-pair` (S5-TASK-COVER-1).
+- Cột **department** là ràng buộc thật: chỉ tài sản có lượt cấp phát `Active` mà người giữ thuộc đơn vị mình (∪ đơn vị mình làm trưởng). Tài sản `In Stock` (không ai giữ) **chỉ** hiện ở scope Company. `access` seed scope Own cho mọi role (mẫu 0506).
+- **Ma trận seed = 28 hàng** `role_permissions`: `employee` 2 · `manager` 2 · `hr` 2 · `company-admin` 11 · `asset-manager` 11 (`access`@Own, 10 cặp còn lại @Company). Migration verify fail-loud đúng số; `super-admin` không enumerate (nhận qua `SuperAdminBootstrapService`).
+- RLS+FORCE cô lập **tenant** trên 6 bảng `asset_*`; data scope (own/department/all) ép ở **service layer** qua `buildReadScopeExists` pattern (không phải RLS). Ngoài scope → **404** (không 403 — chống dò sự tồn tại).
+- FSM 5 trạng thái tài sản (SPEC-01 §17.8) ép ở service; chốt cuối "một lượt đang sống" là partial unique ở DB (DB-15 §6.3–6.5).
+- Chi tiết mã lỗi/quy tắc: [SPEC-13 ASSET §11–13](<SPEC/SPEC-13 ASSET.md>); schema: [DB-15](<DB/DB-15 ASSET Database Design.md>); API: [API-14](<API Design/API-14_ASSET_API_Design.md>).
+
+---
+
 ## 10. Nguyên tắc dữ liệu nhạy cảm (SPEC-01 §11.3)
 
 Dữ liệu nhạy cảm: lương · tài khoản ngân hàng · CCCD/CMND · hợp đồng · hồ sơ nhân sự · dữ liệu kỷ luật/nghỉ việc · chấm công chi tiết · log hệ thống.

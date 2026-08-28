@@ -62,6 +62,8 @@ function migrationHead() {
 
 // Map từ khoá → spec MVP (để "kiểm tra ở đâu" trỏ đúng tài liệu nghiệm thu).
 const MODULE_SPEC = [
+  // ASSET đặt TRƯỚC AUTH: tiêu đề WO S11-ASSET-BE-1 chứa "permission guard" — để sau là trỏ nhầm SPEC-02.
+  { re: /(\bassets?\b|tài sản)/i, spec: "docs/SPEC/SPEC-13 ASSET.md" },
   {
     re: /(\bauth\b|login|token|2fa|đăng nhập|phân quyền|permission|acct)/i,
     spec: "docs/SPEC/SPEC-02 AUTH.md",

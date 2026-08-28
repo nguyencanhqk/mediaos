@@ -1,16 +1,25 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-28 10:36Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-28 13:17Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🟢 S11-ASSET-DOC-1 — Bộ tài liệu ASSET: SPEC-13 + DB-15 + API-14 + permission-matrix §9d + hợp thức trạng thái vào SPEC-01 §17 + đồng bộ README/DB-01·09·10/erd-current/RELEASE-14/IMPLEMENTATION-02 (EPIC-17) — owner chốt ASSET-DEC-001..004
+- **zone**: green
+- **sửa ở đâu (paths)**: `docs/SPEC/**`, `docs/DB/**`, `docs/API Design/**`, `docs/permission-matrix-spec.md`, `docs/README.md`, `docs/erd-current.md`, `docs/RELEASE/RELEASE-14_Post_Go_Live_Backlog.md`, `docs/IMPLEMENTATION/**`, `docs/plans/**`, `harness/backlog.mjs`, `harness/lib/stories.mjs`, `harness/dashboard/server.mjs`
+- **done_when (đích hội tụ)**:
+  - [ ] OWNER đã ký OFFICE-DEC-001 + ASSET-DEC-001..004 (ghi kết luận vào SPEC-13 bảng quyết định, khuôn SPEC-15 §22)
+  - [ ] SPEC-13 + DB-15 + API-14 tồn tại, trỏ chéo nhau đúng, không mâu thuẫn; SPEC-13 flip Draft → Approved sau khi owner chốt
+  - [ ] permission-matrix-spec.md §9d (cặp quyền ASSET + data_scope per-(perm,role) + is_sensitive) khớp API-14
+  - [ ] SPEC-01 §17 hợp thức bộ trạng thái tài sản/assignment; §12.10 + §5/§7/§8 trỏ về SPEC-13; SPEC-08 §15.0 cấp dải NOTI-EVENT mới cho ASSET (đo dải hiện có trước, KHÔNG hard-code số khi chưa đo)
+  - [ ] README §9 thêm dòng ASSET; DB-01 §3.2 + DB-09 (index) + DB-10 (seed) + erd-current + RELEASE-14 §5 đồng bộ; IMPLEMENTATION-02 thêm EPIC-17 §8.18 (story AS-01..10 + AC + point)
+  - [ ] harness/lib/stories.mjs (EPIC_MODULE + sprintOfStory) và harness/dashboard/server.mjs (MODULE_SPEC) nhận ASSET — WO không rơi vào rổ phẳng, không trỏ nhầm SPEC-01
+  - [ ] plan-reviewer đối kháng PASS trên SPEC-13 + DB-15 trước khi mở S11-ASSET-DB-1
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🔴 `S10-AUTH-2FAGUARD-FAILMODE-1` TwoFactorEnforcementGuard: BA lời gọi `withTenant` không được bọc chạy TRƯỚC mọi pipe — chốt ngữ nghĩa fail-mode rồi bọc cả ba (KI-083)
-- 🟢 `S11-ASSET-DOC-1` Bộ tài liệu ASSET: SPEC-13 + DB-15 + API-14 + permission-matrix §9d + hợp thức trạng thái vào SPEC-01 §17 + đồng bộ README/DB-01·09·10/erd-current/RELEASE-14/IMPLEMENTATION-02 (EPIC-17) — owner chốt ASSET-DEC-001..004
 - 🟢 `S11-ROOM-DOC-1` Bộ tài liệu ROOM: SPEC-14 + DB-16 + API-15 + permission-matrix §9e + hợp thức trạng thái booking vào SPEC-01 §17 + QUYẾT ĐỊNH số phận 5 bảng meeting_* di sản (ROOM-DEC-001) + đồng bộ README/DB-01·09·10/erd-current/RELEASE-14/IMPLEMENTATION-02 (EPIC-18)
 
 **CHỜ (kẹt phụ thuộc):**
@@ -28,7 +37,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `gov/s11-office-wave-seed` · **file đang đổi (dirty)**: 0
+- **branch**: `wo/s11-asset-doc-1` · **file đang đổi (dirty)**: 29
 - **migration head**: idx 215 — `0548_s10cleanworkflowcluster2_drop_workflow_approval_cluster` (216 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -37,9 +46,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
-| `36750594` | 2026-08-28 | chore(gov): owner DUYỆT wave S11-OFFICE 28/08 — chốt 9/9 DEC theo đề xuất, mở khoá S11-ASSET-DOC-1 + S11-ROOM-DOC-1 (blocked → todo) |
-| `852c9cc9` | 2026-08-28 | docs(plan): lưu hồ sơ duyệt wave S11-OFFICE dạng HTML (wireframe UI + bảng DEC) vào docs/plans/ |
-| `d440a028` | 2026-08-28 | chore(gov): seed wave S11-OFFICE — 11 WO ASSET+ROOM (Phase 3), 2 WO gốc blocked chờ owner duyệt tài liệu + ký DEC (docs/plans/S11-OFFICE-WAVE.md) |
+| `1845c9ed` | 2026-08-28 | chore(gov): seed wave S11-OFFICE — ASSET + ROOM (Phase 3), 11 WO + hồ sơ duyệt HTML, owner đã duyệt 28/08 (#432) |
 | `23406f1d` | 2026-08-28 | qa(fnd): CHẨN ĐOÁN 500 cold-start — TwoFactorEnforcementGuard mở transaction KHÔNG BỌC trước mọi pipe (S10-QA-COLDSTART500-1 · KI-083) (#431) |
 | `f7c40b43` | 2026-08-28 | fix(fnd+db): DỌN NỐT cụm workflow/approval — gỡ 3 route + 18 file, DROP 14 bảng, ĐÓNG KI-082 (S10-CLEAN-WORKFLOWCLUSTER-2) (#430) |
 | `b1e53e20` | 2026-08-28 | fix(fnd): GỠ bề mặt API của module PARK `workflow/` — 29 route, trần ratchet param-uuid 37 → 1 (S10-CLEAN-WORKFLOWPARK-1) (#429) |
@@ -49,6 +56,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `e47a36f5` | 2026-08-27 | fix(fnd): ép hợp đồng :id = UUID ở BIÊN cho 31 route LEAVE/ATT/APPROVAL — 500 GIẢ thành 400 đơn trị, hạ trần ratchet 221→190 (S10-FND-PARAMUUID-2) (#425) |
 | `9452197e` | 2026-08-26 | perf(fe): vá đường tải trang ba SPA — bootstrap 3→2 round-trip, splash, lazy-route console (S10-PERF-LOADPATH-1) (#424) |
 | `9d27b0b3` | 2026-08-26 | chore(gov): seed S10-FND-PARAMUUID-2 (KI-078) — vá tham số `:id` THEO NHÓM RỦI RO, đo HTTP trước rồi hạ trần ratchet (#423) |
+| `7ecc6b8b` | 2026-08-26 | fix(leave): hạn mức năm KHÔNG thuộc mặt `leave_type` — gỡ `annualQuota` khỏi hợp đồng + đường ghi, đóng KI-081 (S10-LEAVE-TYPEQUOTA-1) (#422) |
+| `9e05862c` | 2026-08-26 | fix(att): ép scope↔cột neo khớp CHECK của DB ở CONTRACT — đóng KI-080, vá kèm bản sao ở POST /attendance/rules (S10-ATT-SHIFTASSIGNSCOPE-1) (#421) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

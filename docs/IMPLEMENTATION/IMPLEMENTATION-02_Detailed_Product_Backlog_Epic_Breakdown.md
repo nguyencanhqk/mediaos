@@ -185,6 +185,8 @@ Một story đạt **Done** khi:
 >
 > Bổ sung 2026-08-03 (story hoá ngược wave hậu-MVP để bảng tiến độ `/progress` gom đúng module thay vì dồn vào rổ "WO nền / hạ tầng"): **EPIC-13 GOAL** (§8.14, 8 story / 45 point, SPEC-10) · **EPIC-14 LMS** (§8.15, 6 story / 34 point) · **EPIC-15 BRAND** (§8.16, 2 story / 8 point) · **EPIC-16 CHAT** (§8.17, 12 story / 97 point, SPEC-15 — **wave S7 đang chạy, epic DUY NHẤT chưa 100%**). Tổng hiệu dụng: **152 story / 1133 point**.
 >
+> Bổ sung 2026-08-28 (wave S11-OFFICE, Phase 3): **EPIC-17 ASSET** (§8.18, 10 story / 53 point, SPEC-13 — IMP02-STORY-153..162, **chưa bắt đầu code**). Tổng hiệu dụng: **162 story / 1186 point**. EPIC-18 ROOM (§8.19) sẽ thêm ở `S11-ROOM-DOC-1`.
+>
 > Crosswalk epic: bộ epic theo module trong IMPLEMENTATION-01 §9 (EPIC-FND/AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH) ánh xạ sang bộ epic chi tiết ở đây như sau: EPIC-FND -> EPIC-01; EPIC-AUTH -> EPIC-02; EPIC-HR -> EPIC-03; EPIC-ATT -> EPIC-04; EPIC-LEAVE -> EPIC-05; EPIC-TASK -> EPIC-06; EPIC-NOTI -> EPIC-07; EPIC-DASH -> EPIC-08. Ba epic EPIC-00 (Governance), EPIC-09 (Frontend Core), EPIC-10 (Integration) và EPIC-11 (QA/Release) là epic xuyên suốt, không thuộc một module nghiệp vụ đơn lẻ.
 
 ---
@@ -705,11 +707,44 @@ CHAT phụ thuộc AUTH (danh tính + quyền), HR/org_units (phòng ban), TASK/
 
 ---
 
+## 8.18 EPIC-17: ASSET - Quản lý tài sản
+
+> **Bổ sung 2026-08-28** theo SPEC-13 ASSET (wave S11-OFFICE, Phase 3 — owner duyệt 28/08/2026, **chưa bắt đầu code**). Story AS-01..10 của `docs/plans/S11-OFFICE-WAVE.md` §4 ánh xạ 1-1 sang IMP02-STORY-153..162. Trace: `S11-ASSET-DB-1 → BE-1 → FE-1 → QA-1` + `S11-OFFICE-DASH-1`.
+
+**Mục tiêu:** Một nguồn sự thật về tài sản công ty — cái gì · ai giữ · tình trạng: danh mục loại, hồ sơ có mã + QR, cấp phát/thu hồi một bước có biên bản, bảo trì, kiểm kê theo đợt, thanh lý/mất là trạng thái (không workflow phê duyệt), «tài sản của tôi», sự kiện NOTI và widget DASH.
+
+| Story ID | Actor | User Story / Technical Story | Priority | Point | Acceptance Criteria tóm tắt |
+| --- | --- | --- | --- | ---: | --- |
+| IMP02-STORY-153 | Asset Manager | Là Asset Manager, tôi muốn quản lý danh mục loại tài sản với prefix mã riêng để mã tài sản tự sinh theo loại. | P0 | 3 | CRUD loại (`code`, `name`, `code_prefix` 2–6 ký tự); tạo loại ⇒ tạo `sequence_counters` CÙNG transaction; `code_prefix` khoá sau mã đầu tiên; xoá loại còn tài sản bị chặn (ASSET-ERR-010, ASSET-FUNC-001, ASSET-SCREEN-007). |
+| IMP02-STORY-154 | Asset Manager | Là Asset Manager, tôi muốn tạo/sửa hồ sơ tài sản với mã tự sinh và QR để dán nhãn và tra cứu. | P0 | 8 | Mã `TS-<PREFIX>-<seq>` sinh qua `SequenceService`, bất biến; serial unique theo company; PATCH không nhận `assetCode`/`status`; QR render từ mã ở FE, không endpoint QR; xoá mềm chỉ khi `In Stock` + 0 lịch sử (ASSET-FUNC-002/003, ASSET-SCREEN-001/002/003). |
+| IMP02-STORY-155 | Asset Manager | Là Asset Manager, tôi muốn cấp phát tài sản cho nhân viên trong một bước và in biên bản. | P0 | 8 | `In Stock → Assigned`; lượt `Active` + partial unique 1 lượt/tài sản (race 2 request ⇒ 1 lượt, 409 không 500); chỉ nhân viên `active` cùng company (404/422); `Idempotency-Key` suy từ payload; audit + `ASSET_ASSIGNED`; biên bản render FE (ASSET-DEC-002, ASSET-FUNC-004, ASSET-SCREEN-004). |
+| IMP02-STORY-156 | Asset Manager | Là Asset Manager, tôi muốn thu hồi tài sản và ghi tình trạng khi thu. | P0 | 5 | `returnCondition` ∈ `Good`/`Damaged`/`Lost` (CHECK DB mirror Zod); `Good`/`Damaged` ⇒ `In Stock`, `Lost` ⇒ tài sản `Lost`; lượt → `Returned` qua UPDATE cấp cột; audit + `ASSET_REVOKED` (ASSET-FUNC-005). |
+| IMP02-STORY-157 | Asset Manager | Là Asset Manager, tôi muốn mở/đóng lượt bảo trì và biết hạn bảo trì kế tiếp. | P1 | 5 | Mở từ `In Stock` hoặc `Assigned` (lượt cấp phát vẫn Active); 1 lượt `Open`/tài sản; đóng ⇒ trạng thái **dẫn xuất** (`Assigned` nếu còn lượt Active, ngược lại `In Stock`), ghi `next_maintenance_due` (ASSET-FUNC-006/007). |
+| IMP02-STORY-158 | Asset Manager | Là Asset Manager, tôi muốn mở đợt kiểm kê, đánh dấu từng tài sản Thấy/Không thấy và đóng đợt có tổng kết. | P1 | 8 | Mở đợt = snapshot dòng (trừ `Disposed`/`Lost`), 1 đợt `Open`/company; đánh dấu 1/nhiều dòng chỉ khi `Open`; đóng ghi 4 số tổng kết một lần; **không** tự chuyển `Missing → Lost` (ASSET-FUNC-008/009/010, ASSET-SCREEN-005). |
+| IMP02-STORY-159 | Asset Manager | Là Asset Manager, tôi muốn thanh lý, ghi nhận mất hoặc tìm thấy lại tài sản với lý do bắt buộc. | P1 | 3 | FSM §13.1 ép ở một hàm `assertTransition`; `Disposed` khi còn lượt Active ⇒ 409 ASSET-ERR-008; `Lost` tự đóng lượt Active/bảo trì Open cùng transaction; `Lost → In Stock` cần lý do; audit mọi bước (ASSET-DEC-001, ASSET-FUNC-011/012). |
+| IMP02-STORY-160 | Employee | Là một Employee, tôi muốn xem tài sản tôi đang giữ và lịch sử của mình. | P1 | 3 | `GET /me/assets` own-scope, employee resolve từ token (không nhận `employeeId`); **không** trường tài chính (server strip, FE schema `.optional()`); tài sản người khác ⇒ 404 (ASSET-FUNC-013, ASSET-SCREEN-006). |
+| IMP02-STORY-161 | Employee / Asset Manager | Là người liên quan, tôi muốn được thông báo khi được cấp/bị thu hồi tài sản và khi tài sản sắp đến hạn bảo trì. | P1 | 5 | 3 event `ASSET_ASSIGNED`/`ASSET_REVOKED`/`ASSET_MAINTENANCE_DUE` (NOTI-EVENT-010..012) seed trước WO backend; CHECK nới CẢ HAI bảng NOTI; job nhắc `@SystemJobHandler` idempotent theo `(asset, hạn)`; payload không có số tiền (SPEC-13 §17). |
+| IMP02-STORY-162 | Manager / Admin | Là quản lý, tôi muốn widget dashboard thống kê tài sản theo trạng thái và loại. | P2 | 5 | `GET /assets/summary` theo data_scope người gọi; widget chỉ render khi có `('view','asset')`, không quyền thì không gọi API; mã widget cấp ở `S11-OFFICE-DASH-1` sau khi đo SPEC-07 §14 (ASSET-FUNC-014). |
+
+### Phạm vi kỹ thuật chính
+
+- 6 bảng mới `asset_*` (DB-15): RLS+FORCE, composite tenant FK, 4 bảng sổ không DELETE / UPDATE cấp cột, 3 partial unique là chốt cuối nghiệp vụ
+- FSM 5 trạng thái ép ở service, DB chỉ CHECK tập giá trị; "ai đang giữ" dẫn xuất từ lượt `Active`
+- 11 cặp quyền `is_sensitive=false` + role hệ thống mới `asset-manager` (không canonical); data scope Own/Department/Company ở service
+- Seed nối head thật (`0549+` dự kiến): module · role · quyền · audit UNION-ADD · NOTI catalog (cả hai bảng CHECK)
+- Không endpoint QR / PDF biên bản — FE render (ASSET-DEC-001/002)
+
+### Ghi chú dependency
+
+ASSET phụ thuộc AUTH (RBAC per-pair + scope), HR/`employee_profiles` (người giữ, chỉ nhân viên `active`), FOUNDATION (`sequence_counters` · `audit_logs` · Files) và NOTI (outbox bridge). Lane migration **nối tiếp**: `S11-ROOM-DB-1` chỉ chạy sau `S11-ASSET-DB-1` merge. `plan-reviewer` PASS trên SPEC-13 + DB-15 là cổng mở WO DB.
+
+---
+
 ## 9. Backlog theo Sprint đề xuất
 
 > Sprint mapping dưới đây bám đúng các IMPLEMENTATION execution plan (IMPLEMENTATION-03 -> IMPLEMENTATION-09): mô hình **7 sprint (Sprint 0 -> Sprint 6)**. Tổng MVP baseline: **112 story / 869 point** (+ EPIC-12 ME bổ sung 2026-07-13: 8 story / 44 point; + 4 story HR bổ sung EPIC-03 2026-07-13: IMP02-STORY-121..124, 36 point → **124 story / 949 point**). Khi biết velocity thực tế, Product Owner và Tech Lead cần điều chỉnh lại số story trong từng sprint (xem cảnh báo capacity ở §9.1).
 >
-> **Sprint hậu-MVP (bổ sung 2026-08-03):** wave sau go-live không nằm trong mô hình 7 sprint gốc. Sprint 5 nhận thêm GOAL/LMS/BRAND (IMP02-STORY-125..131, 133..140) vì chạy cùng đợt; IMP02-STORY-132 (tab Mục tiêu trong dự án) giao ở Sprint 7. **Sprint 7 = wave CHAT** (IMP02-STORY-141..152, SPEC-15) — đang chạy tại thời điểm cập nhật.
+> **Sprint hậu-MVP (bổ sung 2026-08-03):** wave sau go-live không nằm trong mô hình 7 sprint gốc. Sprint 5 nhận thêm GOAL/LMS/BRAND (IMP02-STORY-125..131, 133..140) vì chạy cùng đợt; IMP02-STORY-132 (tab Mục tiêu trong dự án) giao ở Sprint 7. **Sprint 7 = wave CHAT** (IMP02-STORY-141..152, SPEC-15) — đang chạy tại thời điểm cập nhật. **Sprint 11 = wave S11-OFFICE** (Phase 3): IMP02-STORY-153..162 (EPIC-17 ASSET, SPEC-13) + EPIC-18 ROOM (thêm ở `S11-ROOM-DOC-1`) — bổ sung 2026-08-28.
 
 | Sprint | Execution plan | Mục tiêu | Story trọng tâm | Point | Deliverable demo |
 | --- | --- | --- | --- | ---: | --- |
@@ -721,6 +756,7 @@ CHAT phụ thuộc AUTH (danh tính + quyền), HR/org_units (phòng ban), TASK/
 | Sprint 5 | IMPLEMENTATION-08 | Integration, QA Hardening & UAT | 097, 104-110, 113-120 (EPIC-12 ME), 121-124 (HR bổ sung) | 159 | Field/export security, OpenAPI contract, test matrix, API/E2E/security/perf test, responsive P0, Trung tâm cá nhân /me (SPEC-09), liên kết tài khoản UI + import Excel nhân viên + sơ đồ tổ chức trực quan + thông tin công việc đầy đủ |
 | Sprint 6 | IMPLEMENTATION-09 | Stabilization, Release Candidate & Go-live | 111-112 + bugfix | 13 | UAT sign-off, release readiness, RC build, go-live runbook |
 | Sprint 7 | SPEC-15 + docs/plans/S7-CHAT-WAVE.md | CHAT - Nhắn tin nội bộ (hậu go-live) | 132, 141-152 (EPIC-16 CHAT) | 100 | Phòng 1-1/nhóm/phòng-ban/dự án, gửi-đọc theo con trỏ seq, đính kèm qua Foundation Files, tìm kiếm tiếng Việt, realtime Valkey adapter, đọc-vượt membership có nhật ký, tab Mục tiêu trong dự án |
+| Sprint 11 | SPEC-13 + docs/plans/S11-OFFICE-WAVE.md | ASSET - Quản lý tài sản (Phase 3, hậu go-live) | 153-162 (EPIC-17 ASSET) | 53 | Danh mục loại + mã/QR, hồ sơ tài sản FSM, cấp phát/thu hồi 1 bước có biên bản, bảo trì, kiểm kê theo đợt, thanh lý/mất, «tài sản của tôi», 3 event NOTI, widget DASH (ROOM/EPIC-18 thêm ở S11-ROOM-DOC-1) |
 
 ### 9.1 Lưu ý capacity
 

@@ -42,6 +42,7 @@ const EPIC_MODULE = {
   14: "LMS", // wave S5-LMS (apps/lms = repo git riêng)
   15: "BRAND", // wave S5-BRAND (WO trước đây gắn nhầm mã module 'SYSTEM')
   16: "CHAT", // SPEC-15 — wave S7, ĐANG CHẠY
+  17: "ASSET", // SPEC-13 — wave S11-OFFICE (IMP02 §8.18, bổ sung 2026-08-28)
 };
 
 // Sprint của 1 story theo IMPLEMENTATION-02 §9 (story trọng tâm mỗi sprint, không chỉ theo epic).
@@ -56,6 +57,7 @@ function sprintOfStory(n) {
   if (inR(125, 131) || inR(133, 140)) return "S5"; // GOAL lõi · LMS · BRAND — cùng đợt S5 (IMP02 §9)
   if (inR(111, 112)) return "S6";
   if (n === 132 || inR(141, 152)) return "S7"; // 132 = tab Mục tiêu trong dự án (giao ở S7) · 141-152 = wave CHAT
+  if (inR(153, 162)) return "S11"; // EPIC-17 ASSET — wave S11-OFFICE (IMP02 §9 Sprint 11)
   return "?";
 }
 
@@ -174,6 +176,18 @@ const STORY_WO_OVERRIDE = {
   150: ["S7-CHAT-FE-1", "S7-CHAT-FE-2", "S7-CHAT-FE-3"], // trang /chat + panel nổi
   151: ["S7-CHAT-BE-7", "S7-CHAT-FE-5", "S7-CHAT-DOC-2"], // đọc-vượt membership (CHAT-DEC-004)
   152: ["S7-CHAT-QA-1"], // bộ test trọn vẹn CHAT
+  // ── EPIC-17 ASSET (IMP02 §8.18) — wave S11-OFFICE, bổ sung 2026-08-28 ──────────
+  //    WO S11-ASSET-* không trỏ IMP02-STORY trong src[] (seed trước khi có story) ⇒ map tay ở đây.
+  153: ["S11-ASSET-DB-1", "S11-ASSET-BE-1", "S11-ASSET-FE-1"], // danh mục loại + counter mã
+  154: ["S11-ASSET-DB-1", "S11-ASSET-BE-1", "S11-ASSET-FE-1"], // hồ sơ tài sản + mã/QR
+  155: ["S11-ASSET-BE-1", "S11-ASSET-FE-1", "S11-ASSET-QA-1"], // cấp phát 1 bước (race + deny-path)
+  156: ["S11-ASSET-BE-1", "S11-ASSET-FE-1"], // thu hồi
+  157: ["S11-ASSET-BE-1", "S11-ASSET-FE-1"], // bảo trì
+  158: ["S11-ASSET-BE-1", "S11-ASSET-FE-1", "S11-ASSET-QA-1"], // kiểm kê theo đợt
+  159: ["S11-ASSET-BE-1", "S11-ASSET-FE-1"], // thanh lý / mất / tìm thấy lại (FSM)
+  160: ["S11-ASSET-BE-1", "S11-ASSET-FE-1"], // /me/assets own-scope
+  161: ["S11-ASSET-DB-1", "S11-ASSET-BE-1"], // 3 event NOTI + job nhắc bảo trì
+  162: ["S11-OFFICE-DASH-1"], // widget DASH thống kê tài sản
 };
 
 // Vite dev port mỗi app (apps/*/vite.config.ts) → link "chạy thử" FE.

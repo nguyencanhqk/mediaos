@@ -769,6 +769,29 @@ Ghi chú riêng của CHAT:
 - `search_vector` là cột **GENERATED STORED** dùng `to_tsvector('simple', f_unaccent(body))`; `f_unaccent` phải là wrapper **IMMUTABLE** vì `unaccent()` gốc chỉ `STABLE` ⇒ không dùng trực tiếp trong index/cột generated được.
 - Cô lập tenant ép ở RLS + FORCE (đã có từ `0010`); ranh giới **phòng** ép ở service layer — khác tầng, không thay thế nhau.
 
+### 8.16 ASSET (`asset_categories`, `assets`, `asset_assignments`, `asset_maintenances`, `asset_inventories`, `asset_inventory_items`) · *Phase 3 — chưa thi công*
+
+> Chi tiết đầy đủ + DDL: [DB-15 ASSET Database Design §6/§8](<DB-15 ASSET Database Design.md>). 6 bảng mới, migration `0549+` dự kiến (S11-ASSET-DB-1). Tóm tắt use case → index:
+
+| Use case | Index dùng |
+| --- | --- |
+| Danh sách tài sản lọc trạng thái/loại (`ASSET-API-005`) | `idx_assets_company_status_category` |
+| Lọc theo người giữ · màn offboarding HR | `idx_asset_assignments_employee_active` (partial `status='Active'`) |
+| «Tài sản của tôi» (`/me/assets`, kèm lịch sử) | `idx_asset_assignments_employee_time` |
+| Người giữ hiện tại / lịch sử cấp phát của 1 tài sản | `uq_asset_assignments_active` · `idx_asset_assignments_asset_time` |
+| Lượt bảo trì đang mở · lịch sử bảo trì | `uq_asset_maintenances_open` · `idx_asset_maintenances_asset_time` |
+| Job nhắc bảo trì đến hạn | `idx_assets_company_maintenance_due` (partial, loại `Disposed`/`Lost`) |
+| Dòng kiểm kê theo kết quả | `idx_asset_inventory_items_inventory_result` |
+| Tìm theo mã / serial · chống trùng | `uq_assets_company_code_active` · `uq_assets_company_serial_active` |
+| Thống kê widget DASH (`/assets/summary`) | `idx_assets_company_status_category` (`GROUP BY status, category_id`) |
+
+Ghi chú riêng của ASSET:
+
+- **Ba partial unique là chốt cuối nghiệp vụ**, không chỉ là index: `uq_asset_assignments_active` (1 lượt cấp phát sống/tài sản) · `uq_asset_maintenances_open` (1 lượt bảo trì mở/tài sản) · `uq_asset_inventories_open` (1 đợt kiểm kê mở/company). Race hai request song song ⇒ vi phạm unique ⇒ service map về 409, không 500.
+- **Không có cột `holder_employee_id` trên `assets`** — "ai đang giữ" luôn đọc qua `uq_asset_assignments_active`; data scope Department là `EXISTS` trên lượt Active JOIN nhân viên theo đơn vị.
+- Tìm `q` (mã/tên/serial) v1 = `ILIKE`, chưa cần `pg_trgm` ở quy mô ≤ 10k tài sản.
+- Cô lập tenant ép ở RLS + FORCE; mọi index dẫn đầu bằng `company_id`.
+
 ---
 
 ## 9. Index cho AUTH / DB-02

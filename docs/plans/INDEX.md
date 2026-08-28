@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**400 WO** · có micro-plan: **229/400** · ⬜ 2 chờ · 🔵 0 đang làm · ✅ 398 xong · 🔴 0 chặn
+**419 WO** · có micro-plan: **240/419** · ⬜ 12 chờ · 🔵 0 đang làm · ✅ 407 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -462,9 +462,33 @@
 | `S10-SEC-FKCATALOG-1` | 🔴 | ✅ xong | [📄](S10-SEC-FKCATALOG-1.md) | — | KI-055 — 11 cặp FK lớp G trỏ tới bảng catalog toàn cục (`company_id` N |
 | `S10-QA-ROUTEHTTP-3` | 🟡 | ✅ xong | [📄](S10-QA-ROUTEHTTP-3.md) | — | KI-025 — nốt phần đuôi độ phủ HTTP: sau S10-QA-ROUTEHTTP-1 (370/499 ph |
 | `S10-ATT-SHIFTASSIGNSCOPE-1` | 🟡 | ✅ xong | [📄](S10-ATT-SHIFTASSIGNSCOPE-1.md) | — | KI-080 — `POST /attendance/shift-assignments` trả 500 khi client gửi ` |
-| `S10-LEAVE-TYPEQUOTA-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | KI-081 — `GET /leave/types` bỏ sót `annualQuota` dù contract khai bắt  |
+| `S10-LEAVE-TYPEQUOTA-1` | 🟡 | ✅ xong | [📄](S10-LEAVE-TYPEQUOTA-1.md) | — | KI-081 — `GET /leave/types` bỏ sót `annualQuota` dù contract khai bắt  |
 | `S10-FND-PARAMUUID-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S10-FND-BODYVALIDATE-1 | KI-077 — NĂM tham số `:id`/`:linkId` READ/DELETE còn lại của `foundati |
+| `S10-FND-PARAMUUID-2` | 🟡 | ✅ xong | [📄](S10-FND-PARAMUUID-2.md) | ✅S10-FND-PARAMUUID-1 | KI-078 — 221 tham số `:id`/`*Id` toàn API còn thiếu validate ở biên: v |
+| `S10-FND-PARAMUUID-3` | 🟡 | ✅ xong | [📄](S10-FND-PARAMUUID-3.md) | ✅S10-FND-PARAMUUID-2 | KI-078 đợt 2 — 42 tham số `:id`/`*Id` mảng HR/tổ chức (employees 21 ·  |
+| `S10-FND-PARAMUUID-4` | 🟡 | ✅ xong | [📄](S10-FND-PARAMUUID-4.md) | ✅S10-FND-PARAMUUID-3 | KI-078 đợt 3 — 36 tham số `:id`/`*Id`: KHÉP MỌI MODULE TRONG PHẠM VI T |
+| `S10-FND-PARAMUUID-5` | 🟡 | ✅ xong | [📄](S10-FND-PARAMUUID-5.md) | ✅S10-FND-PARAMUUID-4 | KI-078 đợt 4 (CUỐI trong phạm vi) — 75 tham số `:id`/`*Id` của `tasks/ |
+| `S10-CLEAN-WORKFLOWPARK-1` | 🟡 | ✅ xong | [📄](S10-CLEAN-WORKFLOWPARK-1.md) | — | DỌN bề mặt API của module `workflow/` (code PARK de-media-fy) — gỡ 29  |
+| `S10-CLEAN-WORKFLOWCLUSTER-2` | 🔴 | ✅ xong | [📄](S10-CLEAN-WORKFLOWCLUSTER-2.md) | ✅S10-CLEAN-WORKFLOWPARK-1 | KI-082 — DỌN NỐT cụm workflow/approval: gỡ `approval/` + engine còn lạ |
+| `S10-QA-COLDSTART500-1` | 🟡 | ✅ xong | [📄](S10-QA-COLDSTART500-1.md) | — | Tìm nguồn 500 cold-start ở lần chạy int-spec ĐẦU TIÊN trên lane DB vừa |
+| `S10-AUTH-2FAGUARD-FAILMODE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S10-QA-COLDSTART500-1 | TwoFactorEnforcementGuard: BA lời gọi `withTenant` không được bọc chạy |
 | `S10-GOV-IDUNIQUE-1` | 🟡 | ✅ xong | [📄](S10-GOV-IDUNIQUE-1.md) | — | KI-079 — danh tính TRÙNG lọt qua mọi lưới: mã WO trong `backlog.mjs` v |
+
+## Sprint 11
+
+| WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
+| --- | --- | --- | --- | --- | --- |
+| `S11-ASSET-DOC-1` | 🟢 | ⬜ chờ | [📄](S11-OFFICE-WAVE.md) | — | Bộ tài liệu ASSET: SPEC-13 + DB-15 + API-14 + permission-matrix §9d +  |
+| `S11-ASSET-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S11-ASSET-DOC-1 | Schema + migration ASSET theo DB-15: asset_categories · assets · asset |
+| `S11-ASSET-BE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S11-ASSET-DB-1 | Module NestJS assets/: CRUD danh mục + tài sản, cấp phát/thu hồi, bảo  |
+| `S11-ASSET-FE-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S11-ASSET-BE-1 | FE ASSET (apps/app routes/assets/): danh sách + chi tiết + form + cấp  |
+| `S11-ASSET-QA-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S11-ASSET-BE-1 ⏳S11-ASSET-FE-1 | QA ASSET: int-spec deny-path/IDOR/cross-tenant + FSM chuyển tiếp sai + |
+| `S11-ROOM-DOC-1` | 🟢 | ⬜ chờ | [📄](S11-OFFICE-WAVE.md) | — | Bộ tài liệu ROOM: SPEC-14 + DB-16 + API-15 + permission-matrix §9e + h |
+| `S11-ROOM-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S11-ROOM-DOC-1 ⏳S11-ASSET-DB-1 | Schema + migration ROOM theo DB-16 + ROOM-DEC-001: tái dụng/ALTER meet |
+| `S11-ROOM-BE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S11-ROOM-DB-1 | Module NestJS rooms/: CRUD phòng họp (Office Admin), đặt phòng + báo t |
+| `S11-ROOM-FE-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S11-ROOM-BE-1 | FE ROOM (apps/app routes/rooms/): lịch phòng tuần/ngày (cột = phòng, c |
+| `S11-ROOM-QA-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S11-ROOM-BE-1 ⏳S11-ROOM-FE-1 | QA ROOM: race double-booking (2 request song song → đúng 1 thắng), den |
+| `S11-OFFICE-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S11-ASSET-FE-1 ⏳S11-ROOM-FE-1 | Widget DASH cho wave OFFICE: «thống kê tài sản theo trạng thái/loại» + |
 
 ---
 

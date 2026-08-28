@@ -77,7 +77,7 @@ Database MVP cần hỗ trợ các module sau:
 | ------- | ------------------ | --------------------------------------------------- |
 | PAYROLL | Tiền lương         | Cần tách quyền riêng, dùng dữ liệu HR + ATT + LEAVE |
 | RECRUIT | Tuyển dụng         | Có thể chuyển candidate thành employee              |
-| ASSET   | Tài sản            | Gắn asset với employee                              |
+| ASSET   | Tài sản            | **Đã có thiết kế: [DB-15](<DB-15 ASSET Database Design.md>)** (SPEC-13, Phase 3, wave S11-OFFICE). 6 bảng **mới** `asset_categories` · `assets` · `asset_assignments` · `asset_maintenances` · `asset_inventories` · `asset_inventory_items` — RLS+FORCE, composite tenant FK, 4 bảng sổ không DELETE; người giữ = lượt cấp phát `Active` trỏ `employees`. Nhóm bảng: §7.10 |
 | ROOM    | Phòng họp          | Gắn booking với user/employee                       |
 | CHAT    | Chat nội bộ        | **Đã có thiết kế: [DB-12](<DB-12 CHAT Database Design.md>)** (SPEC-15). Bảng `chat_rooms`/`chat_room_members`/`chat_messages` **tồn tại thật** trong DB từ migration `0010`+`0050` — RLS+FORCE sẵn, `chat_messages` append-only (chỉ `SELECT`/`INSERT`, `UPDATE` theo cột). Wave `S7-CHAT` chỉ ALTER bổ sung |
 | SOCIAL  | Mạng xã hội nội bộ | Gắn post/comment/reaction với user                  |
@@ -601,6 +601,21 @@ notification_event_code
 | goal_updates        | Sổ check-in/finalize/reopen theo goal — append-only                    |
 | task_templates      | Danh mục mẫu phân rã mục tiêu thành task                                |
 | task_template_items | Các dòng công việc trong 1 template                                     |
+
+---
+
+## 7.10 Nhóm ASSET *(Phase 3 — wave S11-OFFICE, chưa migrate)*
+
+> Chi tiết đầy đủ: [DB-15 ASSET Database Design](<DB-15 ASSET Database Design.md>). Nghiệp vụ: SPEC-13.
+
+| Bảng                   | Mô tả                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------- |
+| asset_categories       | Loại tài sản + `code_prefix` sinh mã `TS-<PREFIX>-<seq>` (counter `sequence_counters` per-loại) |
+| assets                 | Hồ sơ tài sản, FSM `In Stock · Assigned · Under Maintenance · Disposed · Lost` (SPEC-01 §17.8) |
+| asset_assignments      | Lượt cấp phát ↔ `employees` — sổ không xoá; **1 lượt `Active`/tài sản** (partial unique)     |
+| asset_maintenances     | Lượt bảo trì — sổ không xoá; 1 lượt `Open`/tài sản                                           |
+| asset_inventories      | Đợt kiểm kê — sổ không xoá; 1 đợt `Open`/company; tổng kết cache lúc đóng                    |
+| asset_inventory_items  | Kết quả từng tài sản trong đợt (ảnh chụp trạng thái/người giữ lúc mở) — sổ không xoá         |
 
 ---
 

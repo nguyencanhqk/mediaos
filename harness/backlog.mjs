@@ -14261,7 +14261,7 @@ export const backlog = [
     title:
       "Bộ tài liệu ASSET: SPEC-13 + DB-15 + API-14 + permission-matrix §9d + hợp thức trạng thái vào SPEC-01 §17 + đồng bộ README/DB-01·09·10/erd-current/RELEASE-14/IMPLEMENTATION-02 (EPIC-17) — owner chốt ASSET-DEC-001..004",
     zone: "green",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "docs/SPEC/**",
       "docs/DB/**",
@@ -14297,6 +14297,7 @@ export const backlog = [
     notes: [
       "✅ OWNER ĐÃ DUYỆT 2026-08-28 nguyên gói hồ sơ docs/plans/S11-OFFICE-WAVE-review.html — OFFICE-DEC-001 + ASSET-DEC-001..004 chốt ĐÚNG cột Đề xuất ở wave plan §3. WO này chỉ còn việc GHI kết luận đó vào SPEC-13 (bảng quyết định) rồi viết bộ tài liệu — không hỏi lại owner các DEC đã ký.",
       "🟢 LIGHT gate (docs-only). Số hiệu DB-15/API-14 là ĐỀ XUẤT — chỉ chốt khi OFFICE-DEC-001 ký; nếu owner chốt khác, sửa lại toàn bộ tham chiếu trong wave này.",
+      "📐 KẾT QUẢ 2026-08-28 (số liệu THẬT cho DB-1/BE-1): SPEC-13 §11 = 11 cặp quyền is_sensitive=false + role hệ thống MỚI `asset-manager` (KHÔNG canonical) — ma trận grant 28 hàng (§9d); §12 = 16 mã ASSET-ERR; §15 = 24 endpoint ASSET-API-001..024 (KHÔNG có endpoint QR/PDF); §17 = 3 event ASSET_ASSIGNED/ASSET_REVOKED/ASSET_MAINTENANCE_DUE = NOTI-EVENT-010..012 (đo: SPEC-01 §20.2 dừng ở 009, GOAL/CHAT/LMS không cấp mã chuẩn); DB-15 = 6 bảng mới, head lúc viết idx 215/0548 ⇒ 0549+ dự kiến; counter mã tài sản tạo lúc tạo loại (KHÔNG seed ở migration). Tinh chỉnh so với hồ sơ HTML: /me/assets dùng ('view','asset')@Own thay vì cặp ASSIGNMENT.VIEW riêng (read-path-gate-pair); thêm ('delete','asset') + ('dispose','asset'); cho phép Lost→In Stock (tìm thấy lại).",
     ],
   },
   {

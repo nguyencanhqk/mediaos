@@ -99,7 +99,7 @@ Theo `SPEC-01` §7 · §25 — thiết kế đã tính chỗ, chưa xây.
 | --- | --- | --- |
 | **Phase 2** | **PAYROLL** — bảng lương, phiếu lương | Kéo theo bảng append-only mới (`payslips`) + vùng crown-jewel mới |
 | **Phase 2** | **RECRUIT** — tuyển dụng | |
-| Phase 3 | **ASSET** · **ROOM** | Tài sản · phòng họp |
+| Phase 3 | **ASSET** · **ROOM** | Tài sản · phòng họp — wave **`S11-OFFICE`** (owner duyệt 28/08/2026, [kế hoạch](<../plans/S11-OFFICE-WAVE.md>)). **ASSET ✅ đã có bộ tài liệu**: [SPEC-13](<../SPEC/SPEC-13 ASSET.md>) · [DB-15](<../DB/DB-15 ASSET Database Design.md>) · [API-14](<../API Design/API-14_ASSET_API_Design.md>) · [phân quyền §9d](<../permission-matrix-spec.md>) — 6 bảng mới, thi công `S11-ASSET-DB-1 → BE-1 → FE-1 → QA-1`. ROOM: `S11-ROOM-DOC-1` (tái dụng `meeting_rooms` di sản, ROOM-DEC-001) |
 | Phase 4 | **CHAT** — chat nội bộ | ✅ **Đã có bộ tài liệu** (01/08/2026): [SPEC-15](<../SPEC/SPEC-15 CHAT.md>) · [DB-12](<../DB/DB-12 CHAT Database Design.md>) · [API-13](<../API Design/API-13_CHAT_API_Design.md>) · [phân quyền §9c](<../permission-matrix-spec.md>). Wave `S7-CHAT` trong `harness/backlog.mjs`, thi công **sau** khi cửa sổ go-live đóng. Nền dữ liệu đã có sẵn trong DB (mig `0010`/`0050`) |
 | Phase 4 | **SOCIAL** — mạng xã hội nội bộ | Chưa có spec |
 | Phase 5 | **MOBILE** · **AI** · **INTEGRATION** | |
