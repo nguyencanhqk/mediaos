@@ -283,7 +283,11 @@ export class TasksService {
       const [task] = await this.repo.findRawByIdTx(tx, user.companyId, taskId);
       if (!task) throw new NotFoundException(`Task not found: ${taskId}`);
 
-      if (task.workflowStepId !== null || WORKFLOW_TASK_TYPES.has(task.taskType)) {
+      // ⓘ Vế `workflowStepId !== null` ĐÃ GỠ (S10-CLEAN-WORKFLOWCLUSTER-2): cột `tasks.workflow_step_id`
+      // bị DROP cùng cụm workflow/approval. Đo trước khi gỡ: 0/12 hàng có cột này NOT NULL và 0 hộ
+      // code còn sinh ra chúng ⇒ vế đó là hằng-sai. Vế `WORKFLOW_TASK_TYPES` GIỮ NGUYÊN — nó mới là
+      // vế đang gác thật (task_type ∈ workflow_step/production/review/revision vẫn hợp lệ ở CHECK).
+      if (WORKFLOW_TASK_TYPES.has(task.taskType)) {
         throw new BadRequestException(
           "Task thuộc workflow — đổi trạng thái qua workflow (submit/duyệt/trả về), không sửa tay.",
         );
@@ -322,7 +326,11 @@ export class TasksService {
       const [task] = await this.repo.findRawByIdTx(tx, user.companyId, taskId);
       if (!task) throw new NotFoundException(`Task not found: ${taskId}`);
 
-      if (task.workflowStepId !== null || WORKFLOW_TASK_TYPES.has(task.taskType)) {
+      // ⓘ Vế `workflowStepId !== null` ĐÃ GỠ (S10-CLEAN-WORKFLOWCLUSTER-2): cột `tasks.workflow_step_id`
+      // bị DROP cùng cụm workflow/approval. Đo trước khi gỡ: 0/12 hàng có cột này NOT NULL và 0 hộ
+      // code còn sinh ra chúng ⇒ vế đó là hằng-sai. Vế `WORKFLOW_TASK_TYPES` GIỮ NGUYÊN — nó mới là
+      // vế đang gác thật (task_type ∈ workflow_step/production/review/revision vẫn hợp lệ ở CHECK).
+      if (WORKFLOW_TASK_TYPES.has(task.taskType)) {
         throw new BadRequestException(
           "Task thuộc workflow — sửa qua workflow (submit/duyệt/trả về), không cập nhật tay.",
         );
@@ -380,7 +388,11 @@ export class TasksService {
       const [task] = await this.repo.findRawByIdTx(tx, user.companyId, taskId);
       if (!task) throw new NotFoundException(`Task not found: ${taskId}`);
       // Workflow-driven task do FSM quản — KHÔNG gắn nhãn tay (đồng bộ guard update/delete/status).
-      if (task.workflowStepId !== null || WORKFLOW_TASK_TYPES.has(task.taskType)) {
+      // ⓘ Vế `workflowStepId !== null` ĐÃ GỠ (S10-CLEAN-WORKFLOWCLUSTER-2): cột `tasks.workflow_step_id`
+      // bị DROP cùng cụm workflow/approval. Đo trước khi gỡ: 0/12 hàng có cột này NOT NULL và 0 hộ
+      // code còn sinh ra chúng ⇒ vế đó là hằng-sai. Vế `WORKFLOW_TASK_TYPES` GIỮ NGUYÊN — nó mới là
+      // vế đang gác thật (task_type ∈ workflow_step/production/review/revision vẫn hợp lệ ở CHECK).
+      if (WORKFLOW_TASK_TYPES.has(task.taskType)) {
         throw new BadRequestException("Task thuộc workflow — không gắn nhãn tay.");
       }
       // D-24 role-cap 'write' — mirror updateStatus (route gate update:task, sau 0501 với tới emp/mgr).
@@ -412,7 +424,11 @@ export class TasksService {
     await this.db.withTenant(user.companyId, async (tx) => {
       const [task] = await this.repo.findRawByIdTx(tx, user.companyId, taskId);
       if (!task) throw new NotFoundException(`Task not found: ${taskId}`);
-      if (task.workflowStepId !== null || WORKFLOW_TASK_TYPES.has(task.taskType)) {
+      // ⓘ Vế `workflowStepId !== null` ĐÃ GỠ (S10-CLEAN-WORKFLOWCLUSTER-2): cột `tasks.workflow_step_id`
+      // bị DROP cùng cụm workflow/approval. Đo trước khi gỡ: 0/12 hàng có cột này NOT NULL và 0 hộ
+      // code còn sinh ra chúng ⇒ vế đó là hằng-sai. Vế `WORKFLOW_TASK_TYPES` GIỮ NGUYÊN — nó mới là
+      // vế đang gác thật (task_type ∈ workflow_step/production/review/revision vẫn hợp lệ ở CHECK).
+      if (WORKFLOW_TASK_TYPES.has(task.taskType)) {
         throw new BadRequestException("Task thuộc workflow — không gỡ nhãn tay.");
       }
       // D-24 role-cap 'write' — mirror updateStatus/addLabel (route gate update:task).
@@ -437,7 +453,11 @@ export class TasksService {
       const [task] = await this.repo.findRawByIdTx(tx, user.companyId, taskId);
       if (!task) throw new NotFoundException(`Task not found: ${taskId}`);
 
-      if (task.workflowStepId !== null || WORKFLOW_TASK_TYPES.has(task.taskType)) {
+      // ⓘ Vế `workflowStepId !== null` ĐÃ GỠ (S10-CLEAN-WORKFLOWCLUSTER-2): cột `tasks.workflow_step_id`
+      // bị DROP cùng cụm workflow/approval. Đo trước khi gỡ: 0/12 hàng có cột này NOT NULL và 0 hộ
+      // code còn sinh ra chúng ⇒ vế đó là hằng-sai. Vế `WORKFLOW_TASK_TYPES` GIỮ NGUYÊN — nó mới là
+      // vế đang gác thật (task_type ∈ workflow_step/production/review/revision vẫn hợp lệ ở CHECK).
+      if (WORKFLOW_TASK_TYPES.has(task.taskType)) {
         throw new BadRequestException("Không thể xoá tay task thuộc workflow.");
       }
 

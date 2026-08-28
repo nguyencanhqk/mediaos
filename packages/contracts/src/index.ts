@@ -84,8 +84,6 @@ export * from "./two-factor";
 export * from "./org";
 export * from "./media";
 export * from "./platform-accounts";
-export * from "./workflow";
-export * from "./approval";
 export * from "./task";
 // S4-TASK-BE-3 (additive): Task actions crown-FSM — assign/change-status/change-priority/change-deadline/watch.
 export * from "./task-actions";
@@ -126,7 +124,6 @@ export * from "./dashboard-widget-data";
 export * from "./evaluation";
 export * from "./kpi";
 export * from "./payroll";
-export * from "./defect";
 export * from "./meeting";
 export * from "./permission";
 export * from "./crypto";

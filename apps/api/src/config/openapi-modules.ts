@@ -111,25 +111,15 @@ export const API_MODULE_TAGS: readonly ApiModuleTag[] = [
     segments: ["foundation", "settings", "health", "integrations"],
   },
   {
-    code: "APPROVAL",
-    tagPrefix: "Approval",
-    description: "Hộp duyệt dùng chung (approval-request) + duyệt/từ chối theo cấp.",
-    segments: ["approval"],
-  },
-  {
     code: "INTERNAL",
     tagPrefix: "Internal",
     description:
       "Endpoint nội bộ giữa các service (xác thực bằng internal key/API key), KHÔNG dành cho trình duyệt.",
     segments: ["internal"],
   },
-  {
-    code: "WORKFLOW",
-    tagPrefix: "Workflow",
-    description:
-      "Quy trình theo content-item — di sản hướng media, ĐÃ PARK ngoài phạm vi sản phẩm (CLAUDE.md §1 reframe 2026-06-20). Không phát triển tiếp.",
-    segments: ["workflow", "workflow-templates"],
-  },
+  // ⓘ Hai module APPROVAL + WORKFLOW ĐÃ GỠ KHỎI DANH SÁCH (S10-CLEAN-WORKFLOWPARK-1 +
+  // S10-CLEAN-WORKFLOWCLUSTER-2): cả cụm code + bảng đã bị xoá, không còn segment nào để gắn thẻ.
+  // Giữ mục ở đây sẽ khai một tag OpenAPI không route nào thuộc về.
 ] as const;
 
 /** Segment đầu của path (đã bỏ global prefix `api/v1` nếu có). Trả "" khi path rỗng/`/`. */

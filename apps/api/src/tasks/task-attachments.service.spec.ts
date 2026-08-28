@@ -38,7 +38,7 @@ function makeRepo() {
     findRawByIdTx: vi
       .fn()
       .mockResolvedValue([
-        { id: TASK_ID, taskType: "office", workflowStepId: null, status: "not_started" },
+        { id: TASK_ID, taskType: "office", status: "not_started" },
       ]),
     isTaskAssigneeTx: vi.fn().mockResolvedValue(false),
     createAttachment: vi.fn().mockResolvedValue([

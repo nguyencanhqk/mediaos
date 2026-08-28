@@ -46,7 +46,9 @@ import {
  * ⚠️ **1 KHÔNG PHẢI MỘT MÓN NỢ — nó là chỗ DUY NHẤT còn lại và đã có QUYẾT ĐỊNH.** Phân rã 27/08/2026
  * sau khi dọn `workflow/`:
  *     TRONG PHẠM VI, chưa đo: **0**. Mọi module nghiệp vụ trong phạm vi đã ĐO bằng HTTP và đã vá;
- *       tổng **185** site nằm trong `PARAM_UUID_MEASURED_FILES` với một dòng verdict mỗi site.
+ *       tổng **183** site nằm trong `PARAM_UUID_MEASURED_FILES` với một dòng verdict mỗi site
+ *       (185 → 183 vì `S10-CLEAN-WORKFLOWCLUSTER-2` XOÁ CẢ module `approval/` — lý do đầy đủ ở
+ *       docblock của `PARAM_UUID_MEASURED_SIZE`).
  *     NGOÀI PHẠM VI: **0** — vế 36 tham số của `workflow/` đã hết vì code mang chúng bị GỠ.
  *     ĐÃ KÝ `skipped` (**1**): `auth/` — quyết định có ý thức, không phải nợ.
  *   ⇒ Trần này giờ là SÀN: nó chỉ tụt tiếp nếu `auth.controller.ts#revokeSession:id` đổi quyết định,
@@ -110,6 +112,11 @@ const UNPIPED_CEILING = 1;
  * Cũng KHÔNG thêm nó vào danh sách này — một prefix không còn file nào thì ca (1) lọc ra tập rỗng và
  * xanh vĩnh viễn, tức là ghim một lời hứa không ai đo. Prefix ở đây phải trỏ tới code ĐANG SỐNG.
  *
+ * ⓘ `approval/` ĐÃ BỊ GỠ khỏi danh sách này ở `S10-CLEAN-WORKFLOWCLUSTER-2` theo ĐÚNG luật trên:
+ * cả module bị xoá nên prefix không còn file nào. Nó từng đứng ở đây với tư cách "đo bằng HTTP ở
+ * KI-078 đợt 1" — số đo đó CÓ THẬT, nhưng đối tượng đo không còn, và một prefix rỗng thì xanh vĩnh
+ * viễn dù ngày mai ai đó dựng lại `approval/` với tham số unpiped.
+ *
  * ⛔ `auth/` KHÔNG BAO GIỜ được vào danh sách này. Nó còn ĐÚNG MỘT tham số unpiped
  * (`auth.controller.ts#revokeSession:id`) và đó là quyết định CÓ Ý THỨC, không phải nợ: route đó đo
  * được **404** chứ không 500, và gắn pipe sẽ tách 400 khỏi 404 ⇒ đẻ oracle liệt kê session id. Lý do
@@ -122,7 +129,6 @@ const CLEAN_PREFIXES = [
   // Đo bằng HTTP ở KI-077 / KI-078 đợt 1:
   "leave/",
   "attendance/",
-  "approval/",
   // Đo bằng HTTP ở KI-078 đợt 2 (S10-FND-PARAMUUID-3):
   "employees/",
   "org/",
@@ -316,7 +322,10 @@ describe("S10-FND-PARAMUUID-1 — ratchet: tham số :id phải validate ở BI�
     expect(
       PARAM_UUID_VERDICTS.filter((v) => v.decision === "piped").length,
       "sổ không có dòng 'piped' nào — nhánh đó của assert đang chạy rỗng",
-    ).toBe(184);
+      // 184 → 182 ở `S10-CLEAN-WORKFLOWCLUSTER-2`: hai dòng `piped` của
+      // `approval/approval-inbox.controller.ts` bị gỡ vì CẢ MODULE bị xoá, không phải vì gỡ pipe.
+      // Số này chỉ được hạ khi controller biến mất khỏi cây mã — xem `PARAM_UUID_MEASURED_SIZE`.
+    ).toBe(182);
     expect(
       PARAM_UUID_VERDICTS.filter((v) => v.decision === "skipped").length,
       "sổ không có dòng 'skipped' nào — nhánh đó của assert đang chạy rỗng",

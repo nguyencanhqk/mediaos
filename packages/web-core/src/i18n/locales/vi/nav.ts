@@ -172,8 +172,6 @@ export default {
   platformAccounts: "Tài khoản nền tảng",
   projects: "Dự án",
   content: "Nội dung",
-  workflows: "Quy trình",
-  workflowInstances: "Tiến độ quy trình",
   departments: "Phòng ban",
   teams: "Nhóm",
   positions: "Chức vụ",

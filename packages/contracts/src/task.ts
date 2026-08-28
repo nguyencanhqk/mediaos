@@ -110,14 +110,10 @@ export const taskSchema = z.object({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   assigneeUserId: z.string().uuid().nullable(),
-  // Joined from workflow_steps (null for non-workflow tasks)
-  stepId: z.string().uuid().nullable(),
-  stepCode: z.string().nullable(),
-  stepName: z.string().nullable(),
-  stepStatus: z.string().nullable(),
-  submissionUrl: z.string().nullable(),
-  submissionNote: z.string().nullable(),
-  workflowInstanceId: z.string().uuid().nullable(),
+  // ⓘ 7 cột join từ `workflow_steps` (stepId · stepCode · stepName · stepStatus · submissionUrl ·
+  // submissionNote · workflowInstanceId) ĐÃ GỠ ở S10-CLEAN-WORKFLOWCLUSTER-2: bảng `workflow_steps`
+  // + cột `tasks.workflow_step_id`/`workflow_instance_id` bị DROP. 0 hộ tiêu thụ FE, và mọi hàng
+  // `tasks` hiện có đều NULL ở hai cột đó ⇒ hợp đồng cũ chỉ hứa 7 trường luôn `null`.
   // Joined from content_items (null for non-video tasks)
   contentItemId: z.string().uuid().nullable(),
   contentTitle: z.string().nullable(),

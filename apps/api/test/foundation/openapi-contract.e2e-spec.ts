@@ -167,11 +167,14 @@ describe("OpenAPI contract (e2e) — độ phủ auth/quyền/lỗi trên docume
   });
 
   it("x-required-permission phản ánh ĐÚNG @RequirePermission của code (đối chiếu điểm)", () => {
-    // Neo vào một cặp đã pin trong code: ApprovalInboxController.approve → approve:approval-request
-    // (chính tả gạch-ngang khớp seed migration 0082 — đổi lệch là 403 vĩnh viễn).
-    const approve = ops.find((e) => e.op.operationId === "ApprovalInboxController_approve");
-    expect(approve, "không tìm thấy operation ApprovalInboxController_approve").toBeDefined();
-    expect(approve?.op["x-required-permission"]).toBe("approve:approval-request");
+    // ⚠️ NEO CŨ (ApprovalInboxController.approve → approve:approval-request) ĐÃ CHẾT: cả module
+    // `approval/` bị gỡ ở S10-CLEAN-WORKFLOWCLUSTER-2. Neo mới phải là cặp của module ĐANG SỐNG,
+    // nếu không `ops.find` trả undefined và ca này chỉ còn đo "không tìm thấy" — xanh-rỗng.
+    // LeaveController.approve → approve:leave (SPEC-05, MVP lõi). Chính tả cặp khớp seed catalog;
+    // đổi lệch một ký tự là 403 vĩnh viễn, đó chính là thứ ca này gác.
+    const approve = ops.find((e) => e.op.operationId === "LeaveController_approveRequest");
+    expect(approve, "không tìm thấy operation LeaveController_approveRequest").toBeDefined();
+    expect(approve?.op["x-required-permission"]).toBe("approve:leave");
   });
 
   it("MỌI operation thuộc một module đã khai (không có nhóm 'chưa phân loại')", () => {

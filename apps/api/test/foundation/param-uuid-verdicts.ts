@@ -33,6 +33,8 @@
  *   · `test/integration/leave-param-uuid.int-spec.ts`      (lane DB `mediaos_paramuuid2a`)
  *   · `test/integration/attendance-param-uuid.int-spec.ts` (lane DB `mediaos_paramuuid2b`)
  *   · `test/integration/approval-param-uuid.int-spec.ts`   (lane DB `mediaos_paramuuid2c`)
+ *     ⓘ File này ĐÃ XOÁ ở `S10-CLEAN-WORKFLOWCLUSTER-2` cùng module `approval/`. Giữ dòng này như
+ *     GHI CHÉP LỊCH SỬ (số đo `before` của đợt 1 có thật, đã chạy ĐỎ) — đừng đi tìm file.
  * Riêng auth-session KHÔNG có spec mới (WO cấm chạm `auth.controller.ts`: chạm auth ⇒ FULL gate, WO
  * này 🟡 LIGHT) — số đo lấy từ spec CÓ SẴN `auth-session-selfservice.int-spec.ts`.
  *
@@ -304,21 +306,10 @@ export const PARAM_UUID_VERDICTS: readonly ParamVerdict[] = [
       PIPED_500,
   },
 
-  // ══ APPROVAL (hộp thư phê duyệt dùng chung) ══════════════════════════════════════════════════
-  {
-    key: "approval/approval-inbox.controller.ts#approve:id",
-    route: "POST /approval/requests/:id/approve",
-    decision: "piped",
-    before: "500 SYSTEM-ERR-001 · error.type='Error'",
-    reason: "Anh em LITERAL approval/inbox vẫn 200 sau khi gắn pipe. " + PIPED_500,
-  },
-  {
-    key: "approval/approval-inbox.controller.ts#reject:id",
-    route: "POST /approval/requests/:id/reject",
-    decision: "piped",
-    before: "500 SYSTEM-ERR-001 · error.type='Error'",
-    reason: "Workflow phê duyệt dùng chung. " + PIPED_500,
-  },
+  // ══ APPROVAL — HAI verdict `piped` của `approval/approval-inbox.controller.ts` ĐÃ GỠ ═══════════
+  // `S10-CLEAN-WORKFLOWCLUSTER-2` xoá cả module `approval/`: 3 route của nó không còn tồn tại để đo.
+  // Verdict là sổ phán quyết cho SITE ĐANG SỐNG — giữ hai dòng trỏ file đã xoá thì sổ nói dối.
+  // ⛔ KHÔNG phải nới ratchet: hai site đó vốn đã PIPED nên chưa bao giờ nằm trong `UNPIPED_CEILING`.
 
   // ══ AUTH — PHẢN-VÍ-DỤ: đo được 404, KHÔNG vá ════════════════════════════════════════════════
   {
@@ -1568,7 +1559,6 @@ export const PARAM_UUID_MEASURED_FILES: readonly string[] = [
   "attendance/remote-work-request.controller.ts",
   "attendance/attendance.controller.ts",
   "attendance/attendance-shift.controller.ts",
-  "approval/approval-inbox.controller.ts",
   "auth/auth.controller.ts",
   // ── Đợt 2 — S10-FND-PARAMUUID-3 (42 site) ────────────────────────────────────────────────────
   "employees/employees.controller.ts",
@@ -1599,8 +1589,15 @@ export const PARAM_UUID_MEASURED_FILES: readonly string[] = [
 ];
 
 /**
- * SÀN chống sổ co về rỗng: **185** tham số đã đo — 32 của đợt 1 (31 `piped` + 1 `skipped`) + 42 của
+ * SÀN chống sổ co về rỗng: **183** tham số đã đo — 30 của đợt 1 (29 `piped` + 1 `skipped`) + 42 của
  * đợt 2 + 36 của đợt 3 + 75 của đợt 4 (cả ba đợt sau đều 100% `piped`: mọi site đo được 500, KHÔNG
  * phản-ví-dụ). Xoá bớt dòng để "cho lưới xanh" sẽ ĐỎ ở đây trước khi kịp làm hỏng ca (5).
+ *
+ * ⚠️ **185 → 183 LÀ HẠ SÀN — LÝ DO BẰNG VĂN BẢN, đọc trước khi nghi ngờ.** Đợt 1 vốn 32 site; hai
+ * site `approval/approval-inbox.controller.ts#{approve,reject}:id` KHÔNG bị "gỡ pipe cho xanh" mà
+ * bị XOÁ CÙNG CẢ MODULE ở `S10-CLEAN-WORKFLOWCLUSTER-2` — không còn route để đo.
+ * Cách phân biệt nếu sàn này lại tụt: sàn chỉ được hạ khi CONTROLLER biến mất khỏi cây mã (kiểm
+ * bằng `PARAM_UUID_MEASURED_FILES` + `git log --diff-filter=D`). Site còn sống mà mất dòng verdict
+ * là NỢ, cấm hạ sàn.
  */
-export const PARAM_UUID_MEASURED_SIZE = 185;
+export const PARAM_UUID_MEASURED_SIZE = 183;

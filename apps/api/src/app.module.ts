@@ -11,7 +11,6 @@ import { OrgModule } from "./org/org.module";
 import { SettingsModule } from "./settings/settings.module";
 import { PositionsModule } from "./positions/positions.module";
 import { EmployeesModule } from "./employees/employees.module";
-import { ApprovalModule } from "./approval/approval.module";
 import { TasksModule } from "./tasks/tasks.module";
 import { AttendanceModule } from "./attendance/attendance.module";
 import { LeaveModule } from "./leave/leave.module";
@@ -56,10 +55,11 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     SettingsModule,
     PositionsModule,
     EmployeesModule,
-    // WorkflowModule ĐÃ GỠ khỏi đây ở S10-CLEAN-WORKFLOWPARK-1: nó không còn controller nào (bề
-    // mặt HTTP = 0). Nó vẫn được nạp GIÁN TIẾP qua ApprovalModule, thứ uỷ quyền cấp duyệt CUỐI cho
-    // ApprovalService. Thêm lại vào đây là dựng lại bề mặt đã cố ý gỡ.
-    ApprovalModule,
+    // WorkflowModule + ApprovalModule ĐÃ GỠ HẲN (S10-CLEAN-WORKFLOWPARK-1 gỡ bề mặt `/workflow`,
+    // S10-CLEAN-WORKFLOWCLUSTER-2 gỡ nốt `/approval` + engine). Cả cụm là code PARK của hướng media
+    // cũ: 0 hộ tiêu thụ FE/scripts/lms, và sau khi `workflow.service.ts` biến mất thì KHÔNG đường
+    // code nào còn sinh ra `approval_requests` ⇒ inbox chỉ thao tác được trên hàng không ai tạo.
+    // Bảng của cụm cũng đã DROP ở cùng WO. Thêm lại vào đây là dựng lại bề mặt đã cố ý gỡ.
     TasksModule,
     AttendanceModule,
     LeaveModule,

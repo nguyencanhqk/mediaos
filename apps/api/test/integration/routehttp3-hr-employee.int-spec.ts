@@ -72,8 +72,6 @@ const ADMIN_PAIRS: ReadonlyArray<readonly [string, string, boolean]> = [
   ["manage", "master-data", false],
   ["create", "profile-change-request", false],
   ["approve", "profile-change-request", false],
-  ["approve", "approval-request", false],
-  ["reject", "approval-request", false],
 ];
 
 describe.skipIf(!hasLaneDb)(
