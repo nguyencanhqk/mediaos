@@ -31,8 +31,9 @@
 //   id          : mã ngắn ổn định <MODULE>-<LAYER>-<n> (ISSUE-BOARD-01 §8)        — string, bắt buộc
 //   module      : mã module ISSUE-BOARD-01 §8.2 — dashboard nhóm thẻ. Thiếu/sai → suy từ id/title/paths (hay xếp NHẦM).
 //                 MVP:      PROJECT·FOUNDATION·AUTH·HR·ATT·LEAVE·TASK·NOTI·DASH·FRONTEND·BACKEND·INTEGRATION·QA·DEVOPS·RELEASE
-//                 hậu-MVP:  ME·GOAL·LMS·BRAND·CHAT·SOCIAL  (mỗi mã có epic riêng — IMPLEMENTATION-02 §8.13–8.17;
-//                           SOCIAL thêm 06/08/2026 cho app vệ tinh fbpost — docs/plans/S9-SOCIAL-WAVE.md)
+//                 hậu-MVP:  ME·GOAL·LMS·BRAND·CHAT·SOCIAL·ASSET·ROOM  (mỗi mã có epic riêng — IMPLEMENTATION-02 §8.13–8.17;
+//                           SOCIAL thêm 06/08/2026 cho app vệ tinh fbpost — docs/plans/S9-SOCIAL-WAVE.md;
+//                           ASSET·ROOM thêm 28/08/2026 cho wave S11-OFFICE — docs/plans/S11-OFFICE-WAVE.md)
 //                 ĐÃ BỎ (2026-08-03, đừng dùng lại): INT→INTEGRATION · FND→FOUNDATION · SYSTEM→BRAND
 //   layer       : mã layer ISSUE-BOARD-01 §8.3 (DOC·DB·API·BE·FE·UI·QA·DEVOPS·SEC·PERF·INT·REL)                                       — dashboard chip lớp. Thiếu → suy từ paths/title.
 //   title       : một câu mô tả                                                   — string, bắt buộc
@@ -13827,7 +13828,7 @@ export const backlog = [
       "✅ Tham số thứ 32 — `auth.controller.ts#revokeSession:id` — đo được **404, KHÔNG 500** ⇒ CỐ Ý không vá (verdict `skipped`): gắn pipe sẽ tách 400 khỏi 404 ⇒ đẻ oracle liệt kê session id, tức làm TỆ HƠN. Diff của PR KHÔNG chứa `auth.controller.ts` ⇒ WO ở lại 🟡 LIGHT đúng như notes yêu cầu. Vì thế `auth/` KHÔNG BAO GIỜ vào `CLEAN_PREFIXES`, và trần mới là 190 chứ không phải 189.",
       "✅ Sổ phán quyết mới `apps/api/test/foundation/param-uuid-verdicts.ts` — 32 dòng (31 `piped` + 1 `skipped`), khoá `file#handler:param` do census xuất thêm trường `handler` (số dòng TRÔI ngay ở chính commit vá — [[index-ratchet-must-pin-definition-not-name]]). Ratchet ca (5) assert HAI CHIỀU + song ánh site ↔ dòng; kiểm chứng bằng 4 đột biến (gỡ pipe · xoá dòng · lật `skipped`→`piped` · gắn pipe vào chỗ đã ký `skipped`) — cả 4 đều ĐỎ đúng chỗ, kết quả ở plan §L4.6.",
       "⚠️ **FLAKE ĐÃ QUAN SÁT ĐƯỢC, KHÔNG PHẢI LỖ CỦA BẢN VÁ:** ca DENY `PATCH /leave/types/:id` của `test/integration/leave-param-uuid.int-spec.ts` trả **500 MỘT LẦN** ở lần chạy ĐẦU trên lane DB vừa chain-migrate (1 failed / 49 passed); ba lần chạy sau đều 50/50 xanh. `ParseUUIDPipe` là TẤT ĐỊNH ⇒ nguồn 500 nằm TRƯỚC pipe (guard/interceptor · pool lạnh qua PgBouncer · permission-cache), khớp việc `check.sh` báo '@mediaos/api: 3 lần chạy lại (crash hạ tầng)'. ⇒ Spec biên này ĐỎ NGẪU NHIÊN được ở CI — đừng đọc nhầm thành \"bản vá thủng\". Xem plan §L4.8; truy nguồn ở `S10-QA-COLDSTART500-1`.",
-      "✅ **FLAKE Ở TRÊN ĐÃ TRUY RA NGUỒN 28/08/2026 — `S10-QA-COLDSTART500-1` (KI-083).** Thủ phạm KHÔNG phải bản vá và KHÔNG phải pipe: `TwoFactorEnforcementGuard` gọi `dbsvc.withTenant` ở `two-factor-enforcement.guard.ts:105` (từ `canActivate:77`) **NGOÀI mọi `try/catch`** ⇒ một trục trặc DB thoáng qua ở vỏ transaction thoát ra nguyên trạng và `AllExceptionsFilter` map thành 500. Guard chạy TRƯỚC pipe nên nó cướp mất cái 400. **Chữ ký nhận diện: `code=SYSTEM-ERR-001` + `error.type=\"Error\"` + stack có `two-factor-enforcement.guard.ts`; chạy lại một mình trên lane DB ẤM thì biến mất.** ⚠️ ĐÍNH CHÍNH: dòng ghi flake là `InternalServerErrorException` là CHÉP NHẦM từ cột `before` — đường này chỉ sinh ra `type=\"Error\"`. Hai nghi phạm còn lại BỊ BÁC BỎ bằng số đo: PgBouncer không nằm trên đường test (vitest ép URL postgres TRỰC TIẾP :5432), permission-cache lỗi cho **403** chứ không 500. Xem `docs/plans/S10-QA-COLDSTART500-1.md` + `apps/api/test/integration/prepipe-500-surface.int-spec.ts`.",
+      '✅ **FLAKE Ở TRÊN ĐÃ TRUY RA NGUỒN 28/08/2026 — `S10-QA-COLDSTART500-1` (KI-083).** Thủ phạm KHÔNG phải bản vá và KHÔNG phải pipe: `TwoFactorEnforcementGuard` gọi `dbsvc.withTenant` ở `two-factor-enforcement.guard.ts:105` (từ `canActivate:77`) **NGOÀI mọi `try/catch`** ⇒ một trục trặc DB thoáng qua ở vỏ transaction thoát ra nguyên trạng và `AllExceptionsFilter` map thành 500. Guard chạy TRƯỚC pipe nên nó cướp mất cái 400. **Chữ ký nhận diện: `code=SYSTEM-ERR-001` + `error.type="Error"` + stack có `two-factor-enforcement.guard.ts`; chạy lại một mình trên lane DB ẤM thì biến mất.** ⚠️ ĐÍNH CHÍNH: dòng ghi flake là `InternalServerErrorException` là CHÉP NHẦM từ cột `before` — đường này chỉ sinh ra `type="Error"`. Hai nghi phạm còn lại BỊ BÁC BỎ bằng số đo: PgBouncer không nằm trên đường test (vitest ép URL postgres TRỰC TIẾP :5432), permission-cache lỗi cho **403** chứ không 500. Xem `docs/plans/S10-QA-COLDSTART500-1.md` + `apps/api/test/integration/prepipe-500-surface.int-spec.ts`.',
       "⚠️ CÒN NỢ **189 tham số CHƯA ĐO** ⇒ KI-078 GIỮ MỞ (❌) trong RELEASE-02, không gạch tiêu đề. Đợt 2: `tasks/` **75** · `workflow/` 36 · `goals/` 21 · `employees/` 21 · `org/` 18 · `foundation/` ngoài `files` 8 · `notifications/` 6 · `positions/` 3 · `recycle-bin/` 1 — xem `S10-FND-PARAMUUID-3`. (75+36+21+21+18+8+6+3+1 = **189**, cộng `auth/` 1 đã ký `skipped` = trần **190**. Con số `tasks/` 71 ở vòng seed đầu là SAI SỐ ĐO — census 26/08 chạy lại cho **75**, 0 chỗ có pipe.)",
     ],
   },
@@ -14134,16 +14135,16 @@ export const backlog = [
       "⚠️ Đây là WO **CHẨN ĐOÁN**, không phải WO vá. Vá mù (thêm retry / nới assert của spec) là hỏng đúng thứ WO này tồn tại để bảo vệ: một spec biên phải ĐỎ khi biên thủng thật ([[tests-can-pin-a-hole-open]]).",
       "⚠️ Đừng đọc nhầm thành lỗ của `S10-FND-PARAMUUID-2`: bản vá ở đó là `ParseUUIDPipe` tất định; xem plan `docs/plans/S10-FND-PARAMUUID-2.md` §L4.8.",
       "Mức S4 — không chặn UAT, không chặn go-live. Làm khi rảnh.",
-      "✅ ĐÓNG 28/08/2026. **CHỈ ĐÍCH DANH BẰNG STACK THẬT:** tầng ném 500 là `TwoFactorEnforcementGuard` — lời gọi `dbsvc.withTenant` ở `two-factor-enforcement.guard.ts:105` (từ `canActivate:77`) KHÔNG nằm trong `try/catch` nào ⇒ lỗi hạ tầng ở VỎ transaction (lấy connection · BEGIN · set_config · COMMIT) thoát ra nguyên trạng ⇒ `AllExceptionsFilter` → **500 `SYSTEM-ERR-001` · `error.type=\"Error\"`**. Guard chạy TRƯỚC mọi pipe nên nó cướp cái 400 của `ParseUUIDPipe`.",
+      '✅ ĐÓNG 28/08/2026. **CHỈ ĐÍCH DANH BẰNG STACK THẬT:** tầng ném 500 là `TwoFactorEnforcementGuard` — lời gọi `dbsvc.withTenant` ở `two-factor-enforcement.guard.ts:105` (từ `canActivate:77`) KHÔNG nằm trong `try/catch` nào ⇒ lỗi hạ tầng ở VỎ transaction (lấy connection · BEGIN · set_config · COMMIT) thoát ra nguyên trạng ⇒ `AllExceptionsFilter` → **500 `SYSTEM-ERR-001` · `error.type="Error"`**. Guard chạy TRƯỚC mọi pipe nên nó cướp cái 400 của `ParseUUIDPipe`.',
       "⚠️ **BẪY ĐỌC-LƯỚT (ghi lại vì rất dễ kết luận ngược):** `SecurityPolicyService.getEffectiveTwoFactorRequired` CÓ `try/catch` fail-to-floor — nhưng nó nằm BÊN TRONG callback của `withTenant`. Phần hỏng được là VỎ transaction, phần KHÔNG ai bọc.",
       "✅ **BẢN ĐỒ BỀ MẶT TRƯỚC-PIPE (đo, không đọc):** một request `:id` RÁC chạm `withTenant` ĐÚNG **2** lần trước pipe — (#1) guard 2FA `:77→:105`, (#2) `PermissionGuard:128 → PermissionService.can:273 → CachedPermissionRepository:75 → PermissionRepository:29`. Tiêm lỗi vào #1 (cache 2FA lạnh) ⇒ **500**; vào #2 (cache 2FA ấm, cache quyền lạnh) ⇒ **403 `AUTH-ERR-FORBIDDEN`**; hai cache đều ấm ⇒ **400 `BadRequestException`** (đối chứng chứng minh PIPE KHÔNG HỎNG).",
       "❌ **HAI NGHI PHẠM BỊ BÁC BỎ.** (2) *pool lạnh qua PgBouncer* — PgBouncer KHÔNG nằm trên đường test: `apps/api/vitest.config.ts` ép URL postgres TRỰC TIẾP (`test/db-target.ts:133`, `PG_HOSTPORT` mặc định `localhost:5432`), PgBouncer bind host **:6432** (`docker-compose.yml:82`). (3) *permission-cache ném thay vì 403* — đo được **403**. Cũng loại: `JwtAuthGuard`/`CompanyGuard` đồng bộ không I/O; `ApiKeyAuthGuard` KHÔNG còn đăng ký (`app.module.ts:113`, gỡ ở CLEAN-DECOUPLE-1); `IdempotencyInterceptor` thoát sớm khi không `@Idempotent()`/không header.",
-      "📏 **TÁI HIỆN = 0/12** (mỗi vòng: `lane-db-setup.sh coldstart --reset` = DROP+CREATE+chain-migrate rồi chạy `leave-param-uuid.int-spec.ts` NGAY, máy không tải). 11 vòng 50/50 xanh; 1 vòng chết vì `ERR_IPC_CHANNEL_CLOSED` (\"Channel closed\") của tinypool — **crash worker, KHÔNG phải 500**. ⇒ điều kiện đủ KHÔNG phải \"DB vừa chain-migrate\" mà là \"vừa chain-migrate + TRỤC TRẶC HẠ TẦNG ĐỒNG THỜI\" — khớp với `check.sh` báo `3 lần chạy lại (crash hạ tầng)` ở đúng phiên quan sát được flake.",
-      "⚠️ **PHẠM VI Ở PROD RỘNG HƠN Ở TEST — lỗ là BA chỗ, không phải một.** `TWO_FACTOR_ENFORCEMENT_ENABLED` mặc định `\"true\"` (`env.schema:102`; vitest ép `\"false\"`) ⇒ nhánh `roleRequired` (`guard:78 → twoFactor.requiresTwoFactor` = `withTenant` TRẦN, **KHÔNG cache, KHÔNG try/catch**) chạy MỌI request đã xác thực; cache 30s của `guard:77` KHÔNG che nó (đo trực tiếp: `canActivate` ném `Error` nguyên trạng, `instanceof HttpException === false`). Nhánh `isEnabled` (`guard:84`) cùng hình dạng.",
+      '📏 **TÁI HIỆN = 0/12** (mỗi vòng: `lane-db-setup.sh coldstart --reset` = DROP+CREATE+chain-migrate rồi chạy `leave-param-uuid.int-spec.ts` NGAY, máy không tải). 11 vòng 50/50 xanh; 1 vòng chết vì `ERR_IPC_CHANNEL_CLOSED` ("Channel closed") của tinypool — **crash worker, KHÔNG phải 500**. ⇒ điều kiện đủ KHÔNG phải "DB vừa chain-migrate" mà là "vừa chain-migrate + TRỤC TRẶC HẠ TẦNG ĐỒNG THỜI" — khớp với `check.sh` báo `3 lần chạy lại (crash hạ tầng)` ở đúng phiên quan sát được flake.',
+      '⚠️ **PHẠM VI Ở PROD RỘNG HƠN Ở TEST — lỗ là BA chỗ, không phải một.** `TWO_FACTOR_ENFORCEMENT_ENABLED` mặc định `"true"` (`env.schema:102`; vitest ép `"false"`) ⇒ nhánh `roleRequired` (`guard:78 → twoFactor.requiresTwoFactor` = `withTenant` TRẦN, **KHÔNG cache, KHÔNG try/catch**) chạy MỌI request đã xác thực; cache 30s của `guard:77` KHÔNG che nó (đo trực tiếp: `canActivate` ném `Error` nguyên trạng, `instanceof HttpException === false`). Nhánh `isEnabled` (`guard:84`) cùng hình dạng.',
       "🚫 **KHÔNG VÁ Ở WO NÀY — CÓ CHỦ ĐÍCH.** Bản vá chạm `auth/2FA enforcement` ⇒ đổi tier, FULL gate (chính `notes` của WO này báo trước); lỗ nằm ở BA chỗ trong đó hai chỗ là đường mặc định PROD; và chọn ngữ nghĩa fail-mode là quyết định AN NINH phải do người chốt. Seed `S10-AUTH-2FAGUARD-FAILMODE-1`.",
       "🔎 **SỐ ĐO GIÚP CHỌN FAIL-MODE:** bọc `try/catch + return false` quanh `guard:105` rồi chạy lại spec ⇒ response chuyển 500 → **403 `AUTH-ERR-FORBIDDEN`** (PermissionGuard phía sau vẫn fail-closed). ⇒ với route có `@RequirePermission`, fail-to-floor KHÔNG mở cửa cho ai; rủi ro fail-open chỉ còn ở route KHÔNG gắn `@RequirePermission`. Đây cũng chính là ĐỘT BIẾN kiểm chứng spec: ca (2) ĐỎ, 4 ca kia giữ xanh ⇒ spec không xanh-rỗng.",
-      "📌 **DẤU HIỆU NHẬN DIỆN** (dán vào `S10-FND-PARAMUUID-2` + RELEASE-02 KI-083): body `code=SYSTEM-ERR-001` **và** `error.type=\"Error\"`; log filter `<METHOD> <path> -> 500 [SYSTEM-ERR-001]` kèm stack chứa `two-factor-enforcement.guard.ts`; chạy lại spec một mình trên lane DB ẤM thì 500 biến mất. ⛔ Cấm thêm retry hoặc nới `expect(400)` — đó là tháo van mà `S10-FND-PARAMUUID-*` vừa lắp.",
-      "⚠️ **ĐÍNH CHÍNH SEED CỦA CHÍNH WO NÀY:** `src` ghi flake là `500 InternalServerErrorException`. Đường này KHÔNG THỂ sinh ra `type` đó — lỗi thô ⇒ `type=\"Error\"`. `\"InternalServerErrorException\"` là giá trị TRƯỚC-VÁ của chính route trong bảng `ROUTES` (do `leave.service.ts#mapError` bọc), bị chép sang. Bản ghi gần thời điểm nhất (`docs/plans/S10-FND-PARAMUUID-2.md` §L4.8) chỉ nói `500 SYSTEM-ERR-001`.",
+      '📌 **DẤU HIỆU NHẬN DIỆN** (dán vào `S10-FND-PARAMUUID-2` + RELEASE-02 KI-083): body `code=SYSTEM-ERR-001` **và** `error.type="Error"`; log filter `<METHOD> <path> -> 500 [SYSTEM-ERR-001]` kèm stack chứa `two-factor-enforcement.guard.ts`; chạy lại spec một mình trên lane DB ẤM thì 500 biến mất. ⛔ Cấm thêm retry hoặc nới `expect(400)` — đó là tháo van mà `S10-FND-PARAMUUID-*` vừa lắp.',
+      '⚠️ **ĐÍNH CHÍNH SEED CỦA CHÍNH WO NÀY:** `src` ghi flake là `500 InternalServerErrorException`. Đường này KHÔNG THỂ sinh ra `type` đó — lỗi thô ⇒ `type="Error"`. `"InternalServerErrorException"` là giá trị TRƯỚC-VÁ của chính route trong bảng `ROUTES` (do `leave.service.ts#mapError` bọc), bị chép sang. Bản ghi gần thời điểm nhất (`docs/plans/S10-FND-PARAMUUID-2.md` §L4.8) chỉ nói `500 SYSTEM-ERR-001`.',
     ],
   },
   {
@@ -14170,9 +14171,9 @@ export const backlog = [
     skills: ["code-review"],
     src: [
       "**CHẨN ĐOÁN ĐÃ XONG — đừng chẩn lại.** `docs/plans/S10-QA-COLDSTART500-1.md` + `apps/api/test/integration/prepipe-500-surface.int-spec.ts` (5 ca, đã kiểm chứng bằng đột biến). WO này chỉ còn phần VÁ.",
-      "**BA lời gọi `withTenant` KHÔNG được bọc, chạy TRƯỚC mọi pipe:** `two-factor-enforcement.guard.ts:77` (`isCompany2faEnforced` → `:105`) · `:78` (`twoFactor.requiresTwoFactor` — `two-factor.service.ts:129-131`, `withTenant` TRẦN) · `:84` (`twoFactor.isEnabled`). Lỗi hạ tầng ở VỎ transaction thoát nguyên trạng ⇒ `AllExceptionsFilter` → 500 `SYSTEM-ERR-001` · `error.type=\"Error\"`.",
+      '**BA lời gọi `withTenant` KHÔNG được bọc, chạy TRƯỚC mọi pipe:** `two-factor-enforcement.guard.ts:77` (`isCompany2faEnforced` → `:105`) · `:78` (`twoFactor.requiresTwoFactor` — `two-factor.service.ts:129-131`, `withTenant` TRẦN) · `:84` (`twoFactor.isEnabled`). Lỗi hạ tầng ở VỎ transaction thoát nguyên trạng ⇒ `AllExceptionsFilter` → 500 `SYSTEM-ERR-001` · `error.type="Error"`.',
       "⚠️ `SecurityPolicyService.getEffectiveTwoFactorRequired` CÓ `try/catch` fail-to-floor nhưng nó nằm BÊN TRONG callback — bọc thêm ở đó KHÔNG vá được gì. Chỗ cần bọc là NGOÀI `withTenant`.",
-      "**Chỉ `:77` có cache** (`company2faCache`, TTL 30s, khoá theo CÔNG TY). `:78` và `:84` KHÔNG cache và `:78` là đường MẶC ĐỊNH của PROD (`TWO_FACTOR_ENFORCEMENT_ENABLED` default `\"true\"`, `env.schema:102`) ⇒ ở PROD **mọi** request đã xác thực mở một transaction không bọc trong guard này.",
+      '**Chỉ `:77` có cache** (`company2faCache`, TTL 30s, khoá theo CÔNG TY). `:78` và `:84` KHÔNG cache và `:78` là đường MẶC ĐỊNH của PROD (`TWO_FACTOR_ENFORCEMENT_ENABLED` default `"true"`, `env.schema:102`) ⇒ ở PROD **mọi** request đã xác thực mở một transaction không bọc trong guard này.',
       "**Số đo giúp CHỌN ngữ nghĩa:** bọc `try/catch + return false` quanh `:105` ⇒ response 500 → **403 `AUTH-ERR-FORBIDDEN`** (PermissionGuard phía sau vẫn fail-closed). ⇒ với route có `@RequirePermission` thì fail-to-floor KHÔNG mở cửa cho ai. Rủi ro fail-OPEN chỉ còn ở route KHÔNG gắn `@RequirePermission` — phải liệt kê tập route đó bằng CENSUS, không bằng lời.",
       "Hai hướng đã cân nhắc ở WO chẩn đoán, CHƯA chốt: (a) **fail-to-floor** — đồng nhất với `getEffectiveTwoFactorRequired`, nhưng hạ chuẩn 2FA khi DB lỗi; (b) **fail-closed CÓ PHÂN LOẠI** — ném `ServiceUnavailableException` mang mã riêng: giữ nguyên thế an toàn (vẫn từ chối) và chấm dứt 500 vô danh, nhưng đổi status quan sát được.",
     ],
@@ -14236,6 +14237,369 @@ export const backlog = [
       "⚠️ Cổng phải ghim ĐỊNH NGHĨA chứ không phải TÊN: đếm số ADR bằng tiền tố `DECISIONS-NN` trích từ tên file, đừng hard-code danh sách số đang có — hard-code thì thêm ADR mới là đỏ oan ([[index-ratchet-must-pin-definition-not-name]]).",
       "⚠️ Đừng chỉ ghim `backlog.mjs`: overlay ledger cũng khoá theo id, nên trùng id là lỗi HAI TẦNG. Test nên nêu rõ hệ quả tầng ledger trong docblock để người sau không nới luật.",
       "⚠️ `node --test` không cần DB/Docker ⇒ cổng này phải chạy được TRÊN MỌI PR, kể cả PR docs-only. Đó là lý do đặt ở `harness/` chứ không phải `apps/api/test/foundation/`.",
+    ],
+  },
+
+  // ════════════════════ WAVE S11-OFFICE — Phase 3 «Quản trị văn phòng»: ASSET + ROOM (SPEC-13/14) ════════════════════
+  // Seed 2026-08-28 theo yêu cầu owner («seed các WO thuộc ASSET và ROOM… để tôi duyệt trước»).
+  // Kế hoạch wave + bảng quyết định OFFICE/ASSET/ROOM-DEC: docs/plans/S11-OFFICE-WAVE.md.
+  // Tài liệu duyệt (kế hoạch · story · spec phác thảo · wireframe UI) đã publish dạng HTML Artifact.
+  //
+  // CHỐT VẬN HÀNH:
+  //   • 2 WO gốc (DOC-1 mỗi track) để `blocked` — CHỜ owner duyệt tài liệu + ký DEC. Duyệt xong: đổi todo.
+  //   • ĐO THẬT 28/08: ASSET/ROOM = 0 SPEC/DB/API/story/permission-matrix; SPEC-01 đã khoá SPEC-13/14.
+  //     DB-13/14 đã bị IMPLEMENTATION-10 đặt cho PAYROLL/RECRUIT ⇒ đề xuất DB-15/16, API-14/15 (OFFICE-DEC-001).
+  //   • DI SẢN meeting_* (mig 0052, sống trong DB thật, chết-code, meetings có sẵn EXCLUDE GIST chống
+  //     trùng lịch): ROOM-DEC-001 phải quyết TÁI DỤNG hay DROP trước khi mở S11-ROOM-DB-1 — cấm dựng
+  //     bảng mới song song bảng cũ (lớp lỗi KI-079).
+  //   • 2 WO DB là lane migration NỐI TIẾP — không chạy song song với nhau; đánh số theo head lúc chạy.
+  {
+    id: "S11-ASSET-DOC-1",
+    module: "ASSET",
+    layer: "DOC",
+    title:
+      "Bộ tài liệu ASSET: SPEC-13 + DB-15 + API-14 + permission-matrix §9d + hợp thức trạng thái vào SPEC-01 §17 + đồng bộ README/DB-01·09·10/erd-current/RELEASE-14/IMPLEMENTATION-02 (EPIC-17) — owner chốt ASSET-DEC-001..004",
+    zone: "green",
+    status: "blocked",
+    paths: [
+      "docs/SPEC/**",
+      "docs/DB/**",
+      "docs/API Design/**",
+      "docs/permission-matrix-spec.md",
+      "docs/README.md",
+      "docs/erd-current.md",
+      "docs/RELEASE/RELEASE-14_Post_Go_Live_Backlog.md",
+      "docs/IMPLEMENTATION/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+      "harness/lib/stories.mjs",
+      "harness/dashboard/server.mjs",
+    ],
+    skills: [],
+    depends_on: [],
+    plan: "docs/plans/S11-OFFICE-WAVE.md",
+    src: [
+      "owner-request 2026-08-28 — seed WO ASSET/ROOM, kế hoạch + spec + story + UI duyệt trước (tài liệu HTML)",
+      "SPEC-01 §12.10 (phạm vi) · §10.8 (Asset Manager) · §7/§8 (số SPEC-13 đã khoá) · §17.7 (luật hợp thức trạng thái)",
+      "IMPLEMENTATION-10 §22 PARK-ASSET-001/002 + xung đột DB-13/14 (dòng 697–698) → đề xuất DB-15",
+      "docs/plans/S11-OFFICE-WAVE.md §3 (ASSET-DEC-001..004) + §4 story AS-01..10",
+    ],
+    done_when: [
+      "OWNER đã ký OFFICE-DEC-001 + ASSET-DEC-001..004 (ghi kết luận vào SPEC-13 bảng quyết định, khuôn SPEC-15 §22)",
+      "SPEC-13 + DB-15 + API-14 tồn tại, trỏ chéo nhau đúng, không mâu thuẫn; SPEC-13 flip Draft → Approved sau khi owner chốt",
+      "permission-matrix-spec.md §9d (cặp quyền ASSET + data_scope per-(perm,role) + is_sensitive) khớp API-14",
+      "SPEC-01 §17 hợp thức bộ trạng thái tài sản/assignment; §12.10 + §5/§7/§8 trỏ về SPEC-13; SPEC-08 §15.0 cấp dải NOTI-EVENT mới cho ASSET (đo dải hiện có trước, KHÔNG hard-code số khi chưa đo)",
+      "README §9 thêm dòng ASSET; DB-01 §3.2 + DB-09 (index) + DB-10 (seed) + erd-current + RELEASE-14 §5 đồng bộ; IMPLEMENTATION-02 thêm EPIC-17 §8.18 (story AS-01..10 + AC + point)",
+      "harness/lib/stories.mjs (EPIC_MODULE + sprintOfStory) và harness/dashboard/server.mjs (MODULE_SPEC) nhận ASSET — WO không rơi vào rổ phẳng, không trỏ nhầm SPEC-01",
+      "plan-reviewer đối kháng PASS trên SPEC-13 + DB-15 trước khi mở S11-ASSET-DB-1",
+    ],
+    notes: [
+      "⛔ BLOCKED: chờ owner duyệt tài liệu wave (HTML Artifact) + ký DEC ở docs/plans/S11-OFFICE-WAVE.md §3. Duyệt xong đổi status → todo.",
+      "🟢 LIGHT gate (docs-only). Số hiệu DB-15/API-14 là ĐỀ XUẤT — chỉ chốt khi OFFICE-DEC-001 ký; nếu owner chốt khác, sửa lại toàn bộ tham chiếu trong wave này.",
+    ],
+  },
+  {
+    id: "S11-ASSET-DB-1",
+    module: "ASSET",
+    layer: "DB",
+    title:
+      "Schema + migration ASSET theo DB-15: asset_categories · assets · asset_assignments · asset_maintenances · asset_inventories(+items) — RLS+FORCE, composite tenant FK, seed module/permission/NOTI catalog, sequence_counters mã tài sản",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "apps/api/src/foundation/seed/**",
+      "apps/api/test/foundation/**",
+      "docs/erd-current.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S11-ASSET-DOC-1"],
+    plan: "docs/plans/S11-ASSET-DB-1.md",
+    src: [
+      "DB-15 (viết ở S11-ASSET-DOC-1) — nguồn sự thật schema",
+      "khuôn wave trước: seed modules (mig 0506 GOAL) · CHECK module_code NOTI nới CẢ HAI bảng (mig 0538 §642/§684) · composite tenant FK (mig 0535)",
+      "docs/plans/S11-OFFICE-WAVE.md §7 (bẫy 2–6)",
+    ],
+    done_when: [
+      "Migration đánh số nối head hiện tại, có trong journal; RLS policy + FORCE TRƯỚC mọi backfill; mọi FK mới là composite tenant FK",
+      "Seed hàng `modules` (ASSET) + cặp quyền §9d ON CONFLICT DO NOTHING + UNION-ADD audit object_types + nới CHECK module_code trên CẢ notification_events VÀ notifications + catalog NOTI-EVENT (union type notification-event-catalog.const.ts đồng bộ)",
+      "sequence_counters cấp mã tài sản theo ASSET-DEC-004; hợp đồng Zod (packages/contracts) mirror CHECK DB HAI CHIỀU, ĐÚNG BẰNG",
+      "rls-tenant-isolation-tester xanh cho mọi bảng mới trên LANE_DB; fk-tenant-census + các cổng foundation không đỏ",
+      "erd-current cập nhật (bảng mới + đối chiếu DB-15)",
+    ],
+    notes: ["🔴 FULL gate + lane migration NỐI TIẾP — không chạy song song S11-ROOM-DB-1."],
+  },
+  {
+    id: "S11-ASSET-BE-1",
+    module: "ASSET",
+    layer: "BE",
+    title:
+      "Module NestJS assets/: CRUD danh mục + tài sản, cấp phát/thu hồi, bảo trì, kiểm kê — permission guard §9d, audit log, outbox NOTI, :id=UUID ở biên, API_MODULE_TAGS + route-census regen",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/assets/**",
+      "apps/api/src/app.module.ts",
+      "apps/api/src/config/openapi-modules.ts",
+      "apps/api/test/foundation/**",
+      "packages/contracts/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S11-ASSET-DB-1"],
+    plan: "docs/plans/S11-ASSET-BE-1.md",
+    src: [
+      "API-14 + SPEC-13 §FUNC/§ERR (viết ở S11-ASSET-DOC-1)",
+      "docs/plans/S11-OFFICE-WAVE.md §4 (AS-01..09) + §7 (bẫy 5–6)",
+    ],
+    done_when: [
+      "Đủ API theo API-14: category/asset CRUD · assign/revoke · maintenance mở/đóng · inventory mở đợt/đánh dấu/đóng đợt · my-assets (own-scope); mọi handler qua withTenant + permission guard + DTO nestjs-zod (pipe ĐÚNG cấp method, không class-level)",
+      "FSM trạng thái tài sản ép ở service (In Stock↔Assigned↔Under Maintenance→Disposed/Lost) — chuyển tiếp sai trả 4xx đúng mã ASSET-ERR, không 500",
+      "Audit log cho cấp phát/thu hồi/thanh lý; outbox NOTI cho assigned/revoked/maintenance-due (qua bridge generic, dedupeKey)",
+      "API_MODULE_TAGS khai ASSET; route-census regen có chủ đích (ROUTE_CENSUS_WRITE=1); ratchet param-uuid KHÔNG tăng (mọi :id là UUID từ đầu)",
+      "Deny-path int-spec RED-trước cho assign/revoke/inventory (thiếu quyền → 403, cross-tenant → 404/403) xanh trên LANE_DB",
+    ],
+    notes: [
+      "🟡 gate thường nhưng chạm permission seed/guard ⇒ security-reviewer đọc diff phần guard trước khi merge.",
+    ],
+  },
+  {
+    id: "S11-ASSET-FE-1",
+    module: "ASSET",
+    layer: "FE",
+    title:
+      "FE ASSET (apps/app routes/assets/): danh sách + chi tiết + form + cấp phát/thu hồi + kiểm kê + «tài sản của tôi» — PermissionGate/useCan, i18n vi, wireframe đã duyệt ở tài liệu wave",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/assets/**",
+      "apps/app/src/routes/me/**",
+      "apps/app/src/router.tsx",
+      "apps/app/src/i18n/**",
+      "packages/web-core/**",
+      "packages/ui/**",
+      "packages/contracts/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S11-ASSET-BE-1"],
+    plan: "docs/plans/S11-ASSET-FE-1.md",
+    src: [
+      "SPEC-13 §SCREEN (ASSET-SCREEN-001..006) + wireframe HTML đã owner duyệt",
+      "docs/plans/S11-OFFICE-WAVE.md §6",
+    ],
+    done_when: [
+      "Đủ 6 màn ASSET-SCREEN-001..006; table pagination/filter; form validation Zod; loading/error/empty đủ",
+      "Quyền qua PermissionGate/useCan đúng cặp §9d (không hard-code); trường server mask ⇒ schema FE .optional()",
+      "QR tài sản render từ asset_code (theo ASSET-DEC-001); trạng thái dùng constants chuẩn SPEC-01 §17",
+      "vitest FE + typecheck + build xanh; e2e luồng cấp phát→thu hồi qua UI",
+    ],
+  },
+  {
+    id: "S11-ASSET-QA-1",
+    module: "ASSET",
+    layer: "QA",
+    title:
+      "QA ASSET: int-spec deny-path/IDOR/cross-tenant + FSM chuyển tiếp sai + kiểm kê race — coverage ≥80% module assets, chạy như CI trên LANE_DB",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/src/assets/**", "apps/api/test/**", "apps/app/src/routes/assets/**"],
+    skills: ["code-review"],
+    depends_on: ["S11-ASSET-BE-1", "S11-ASSET-FE-1"],
+    src: [
+      "SPEC-13 §TC (mã ASSET-TC-xxx) + docs/plans/S11-OFFICE-WAVE.md §7 (bẫy 9)",
+      "harness/check.sh --lane-db (khuôn verify như CI)",
+    ],
+    done_when: [
+      "Ma trận test SPEC-13 §TC phủ: allow-case + deny-case từng cặp quyền (deny không rỗng nghĩa — có ca ALLOW đối chứng), cross-tenant 2-tenant thật",
+      "FSM: mọi chuyển tiếp không hợp lệ có test trả đúng ASSET-ERR; coverage assets/ ≥80%",
+      "bash harness/check.sh --lane-db xanh KHÔNG kèm banner 'XANH KHÔNG ĐỦ BẰNG CHỨNG'; docs/TESTABLE-FEATURES.md cập nhật mục ASSET",
+    ],
+  },
+  {
+    id: "S11-ROOM-DOC-1",
+    module: "ROOM",
+    layer: "DOC",
+    title:
+      "Bộ tài liệu ROOM: SPEC-14 + DB-16 + API-15 + permission-matrix §9e + hợp thức trạng thái booking vào SPEC-01 §17 + QUYẾT ĐỊNH số phận 5 bảng meeting_* di sản (ROOM-DEC-001) + đồng bộ README/DB-01·09·10/erd-current/RELEASE-14/IMPLEMENTATION-02 (EPIC-18)",
+    zone: "green",
+    status: "blocked",
+    paths: [
+      "docs/SPEC/**",
+      "docs/DB/**",
+      "docs/API Design/**",
+      "docs/permission-matrix-spec.md",
+      "docs/README.md",
+      "docs/erd-current.md",
+      "docs/RELEASE/RELEASE-14_Post_Go_Live_Backlog.md",
+      "docs/IMPLEMENTATION/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+      "harness/lib/stories.mjs",
+      "harness/dashboard/server.mjs",
+    ],
+    skills: [],
+    depends_on: [],
+    plan: "docs/plans/S11-OFFICE-WAVE.md",
+    src: [
+      "owner-request 2026-08-28 — seed WO ASSET/ROOM, kế hoạch + spec + story + UI duyệt trước (tài liệu HTML)",
+      "SPEC-01 §12.11 (phạm vi) · §10.9 (Office Admin) · §17.7 (luật hợp thức trạng thái)",
+      "ĐO THẬT 28/08: meeting_rooms/meetings/meeting_attendees/meeting_notes/meeting_tasks sống trong DB (mig 0052 + 0535), chết-code, meetings có EXCLUDE GIST chống trùng lịch — apps/api/src/db/schema/meeting.ts",
+      "docs/plans/S11-OFFICE-WAVE.md §3 (ROOM-DEC-001..004) + §4 story RM-01..08",
+    ],
+    done_when: [
+      "OWNER đã ký OFFICE-DEC-001 + ROOM-DEC-001..004; riêng ROOM-DEC-001: DB-16 ghi rõ bảng nào TÁI DỤNG (ALTER/reconcile) · bảng nào DROP (kèm đếm hàng PROD thật trước) — không để bảng phòng họp hai danh tính",
+      "SPEC-14 + DB-16 + API-15 tồn tại, trỏ chéo đúng; SPEC-14 flip Draft → Approved sau khi owner chốt",
+      "permission-matrix-spec.md §9e (cặp quyền ROOM + data_scope, phân biệt BOOKING own/all) khớp API-15",
+      "SPEC-01 §17 hợp thức trạng thái booking (Confirmed·Cancelled; Completed = dẫn xuất); SPEC-08 §15.0 cấp dải NOTI-EVENT cho ROOM (đo dải hiện có trước)",
+      "README §9 thêm dòng ROOM; DB-01/09/10 + erd-current (gỡ meeting.ts khỏi nhóm 'di sản chưa quyết') + RELEASE-14 §5 + IMPLEMENTATION-02 EPIC-18 §8.19 (RM-01..08) đồng bộ",
+      "harness/lib/stories.mjs + harness/dashboard/server.mjs nhận ROOM (MODULE_SPEC regex KHÔNG để title ROOM lọt nhầm regex HR 'phòng ban' / TASK 'dự án')",
+      "plan-reviewer đối kháng PASS trên SPEC-14 + DB-16 (đặc biệt phương án xử lý meeting_*) trước khi mở S11-ROOM-DB-1",
+    ],
+    notes: [
+      "⛔ BLOCKED: chờ owner duyệt tài liệu wave (HTML Artifact) + ký DEC. Duyệt xong đổi status → todo.",
+      "🟢 LIGHT gate (docs-only) nhưng ROOM-DEC-001 là quyết định KIẾN TRÚC — sai ở đây trả giá ở DB WO.",
+    ],
+  },
+  {
+    id: "S11-ROOM-DB-1",
+    module: "ROOM",
+    layer: "DB",
+    title:
+      "Schema + migration ROOM theo DB-16 + ROOM-DEC-001: tái dụng/ALTER meeting_rooms (+ meetings→booking hoặc room_bookings mới qua expand-contract), EXCLUDE GIST chống trùng lịch, DROP meeting_notes/meeting_tasks nếu DEC chốt, seed module/permission/NOTI catalog",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "apps/api/src/foundation/seed/**",
+      "apps/api/test/foundation/**",
+      "apps/api/test/**",
+      "docs/erd-current.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S11-ROOM-DOC-1", "S11-ASSET-DB-1"],
+    plan: "docs/plans/S11-ROOM-DB-1.md",
+    src: [
+      "DB-16 (viết ở S11-ROOM-DOC-1) — nguồn sự thật schema; ROOM-DEC-001 quyết tái dụng/DROP",
+      "apps/api/migrations/0052_g10_meeting.sql (hiện trạng di sản) + 0535 (composite FK đã áp lên meeting_*)",
+      "docs/plans/S11-OFFICE-WAVE.md §7 (bẫy 1–4)",
+    ],
+    done_when: [
+      "Thi hành ĐÚNG ROOM-DEC-001: mọi bảng meeting_* hoặc được reconcile vào DB-16 hoặc DROP có đếm hàng PROD + expand-contract; KHÔNG còn bảng phòng họp ngoài DB-16; DROP nào cũng dọn cả teardown test",
+      "Ràng buộc chống trùng lịch = EXCLUDE USING gist (room, tstzrange) VERIFY bằng test 2 INSERT chồng giờ trên LANE_DB (chốt cuối ở DB, không chỉ ở service)",
+      "RLS+FORCE mọi bảng đích; composite tenant FK; seed modules(ROOM) + cặp quyền §9e + CHECK module_code NOTI nới CẢ HAI bảng + catalog NOTI-EVENT đồng bộ union type",
+      "Hợp đồng Zod mirror CHECK DB hai chiều; rls-tenant-isolation-tester + fk-tenant-census xanh; erd-current cập nhật (meeting.ts ra khỏi nhóm di sản)",
+    ],
+    notes: [
+      "🔴 FULL gate + lane migration NỐI TIẾP — chạy SAU S11-ASSET-DB-1 (depends_on đã khoá thứ tự để khỏi giẫm số migration).",
+    ],
+  },
+  {
+    id: "S11-ROOM-BE-1",
+    module: "ROOM",
+    layer: "BE",
+    title:
+      "Module NestJS rooms/: CRUD phòng họp (Office Admin), đặt phòng + báo trùng 409, hủy lịch (own/all theo quyền), lịch sử sử dụng, nhắc lịch NOTI trước 15′ — Idempotency-Key suy từ payload, :id=UUID, API_MODULE_TAGS",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/rooms/**",
+      "apps/api/src/app.module.ts",
+      "apps/api/src/config/openapi-modules.ts",
+      "apps/api/src/foundation/**",
+      "apps/api/test/foundation/**",
+      "packages/contracts/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S11-ROOM-DB-1"],
+    plan: "docs/plans/S11-ROOM-BE-1.md",
+    src: [
+      "API-15 + SPEC-14 §FUNC/§ERR (viết ở S11-ROOM-DOC-1)",
+      "docs/plans/S11-OFFICE-WAVE.md §4 (RM-01..07) + §7 (bẫy 5–7)",
+    ],
+    done_when: [
+      "Đủ API theo API-15: room CRUD · availability/lịch phòng theo khoảng ngày · tạo booking (chồng giờ → 409 kèm ROOM-ERR + khung giờ bận, KHÔNG 500 từ constraint) · hủy own/all theo data_scope · lịch sử; withTenant + guard + DTO nestjs-zod cấp method",
+      "POST tạo booking nhận Idempotency-Key SUY TỪ PAYLOAD (room+khung giờ+người đặt) — retry không nhân đôi",
+      "Nhắc lịch: system job quét booking sắp diễn ra → outbox NOTI (dedupeKey theo booking+mốc nhắc, không bắn trùng); hủy lịch bắn NOTI người tham dự; audit cho hủy-của-người-khác",
+      "API_MODULE_TAGS khai ROOM; route-census regen có chủ đích; ratchet param-uuid không tăng",
+      "Deny-path RED-trước: đặt phòng thiếu quyền 403 · hủy lịch người khác không có ROOM.BOOKING.MANAGE → 403 · cross-tenant 404/403 — xanh trên LANE_DB",
+    ],
+    notes: [
+      "🟡 Vá lỗi trùng lịch ở service CHỈ là tầng báo lỗi đẹp — chốt thật là EXCLUDE GIST (đã ép ở DB WO); bắt lỗi constraint qua cause (drizzle giấu mã lỗi PG trong cause).",
+    ],
+  },
+  {
+    id: "S11-ROOM-FE-1",
+    module: "ROOM",
+    layer: "FE",
+    title:
+      "FE ROOM (apps/app routes/rooms/): lịch phòng tuần/ngày (cột = phòng, chọn khung giờ), form đặt phòng báo trùng ngay, «đặt phòng của tôi», quản trị phòng họp — PermissionGate/useCan, i18n vi, wireframe đã duyệt",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/rooms/**",
+      "apps/app/src/router.tsx",
+      "apps/app/src/i18n/**",
+      "packages/web-core/**",
+      "packages/ui/**",
+      "packages/contracts/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S11-ROOM-BE-1"],
+    plan: "docs/plans/S11-ROOM-FE-1.md",
+    src: [
+      "SPEC-14 §SCREEN (ROOM-SCREEN-001..004) + wireframe HTML đã owner duyệt",
+      "docs/plans/S11-OFFICE-WAVE.md §6",
+    ],
+    done_when: [
+      "Đủ 4 màn ROOM-SCREEN-001..004; lịch tuần render đúng múi Asia/Ho_Chi_Minh trên nền UTC-at-rest (date-fns v4 + @date-fns/tz)",
+      "Form đặt phòng: chặn client-side khung giờ đã bận + xử lý 409 server trả về (hiện khung giờ bận, không nuốt lỗi); loading/error/empty đủ",
+      "Quyền qua PermissionGate/useCan đúng cặp §9e (own vs all); trạng thái dùng constants chuẩn",
+      "vitest FE + typecheck + build xanh; e2e luồng đặt→trùng→đổi giờ→hủy qua UI",
+    ],
+  },
+  {
+    id: "S11-ROOM-QA-1",
+    module: "ROOM",
+    layer: "QA",
+    title:
+      "QA ROOM: race double-booking (2 request song song → đúng 1 thắng), deny-path/IDOR/cross-tenant, nhắc lịch không bắn trùng — coverage ≥80% module rooms, chạy như CI trên LANE_DB",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/src/rooms/**", "apps/api/test/**", "apps/app/src/routes/rooms/**"],
+    skills: ["code-review"],
+    depends_on: ["S11-ROOM-BE-1", "S11-ROOM-FE-1"],
+    src: ["SPEC-14 §TC (mã ROOM-TC-xxx) + docs/plans/S11-OFFICE-WAVE.md §7 (bẫy 7, 9)"],
+    done_when: [
+      "Int-spec race: 2 request tạo booking chồng giờ bắn SONG SONG → đúng 1 thành công, 1 nhận 409 (không 500, không cả hai thành công) — trên LANE_DB; lưu ý bẫy supertest đóng server dùng chung khi chạy Promise.all",
+      "Ma trận allow/deny từng cặp quyền §9e + cross-tenant 2-tenant thật; job nhắc lịch có test dedupe (chạy 2 lần không bắn 2 NOTI)",
+      "Coverage rooms/ ≥80%; bash harness/check.sh --lane-db xanh không kèm banner; docs/TESTABLE-FEATURES.md cập nhật mục ROOM",
+    ],
+  },
+  {
+    id: "S11-OFFICE-DASH-1",
+    module: "DASH",
+    layer: "FE",
+    title:
+      "Widget DASH cho wave OFFICE: «thống kê tài sản theo trạng thái/loại» + «lịch họp hôm nay» — theo quyền, đăng ký mã MODULE-WIDGET theo SPEC-01 §9.9",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/dashboard/**",
+      "apps/api/src/dashboard/**",
+      "packages/contracts/**",
+      "docs/SPEC/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S11-ASSET-FE-1", "S11-ROOM-FE-1"],
+    src: [
+      "SPEC-01 §12.10/§12.11 (liên kết DASH) + §21.2 (báo cáo sau MVP) + SPEC-07 (khuôn widget)",
+      "docs/plans/S11-OFFICE-WAVE.md §8",
+    ],
+    done_when: [
+      "2 widget hiển thị đúng theo quyền (không có quyền ASSET/ROOM thì không render, không gọi API rỗng quyền)",
+      "Mã widget đăng ký theo SPEC-07/SPEC-01 §9.9; API widget đi qua DTO/masking chuẩn",
+      "Test widget allow/deny + typecheck/build xanh",
     ],
   },
 ];
