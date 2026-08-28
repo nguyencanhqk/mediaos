@@ -1,8 +1,8 @@
 # Kế hoạch wave S11-OFFICE — Phase 3 «Quản trị văn phòng»: ASSET (tài sản) + ROOM (phòng họp)
 
 > Seed 2026-08-28. Trạng thái: **CHỜ OWNER DUYỆT** — 2 WO gốc (`S11-ASSET-DOC-1`, `S11-ROOM-DOC-1`)
-> để `blocked` cho tới khi owner duyệt tài liệu định hướng (bản HTML kèm wireframe UI đã publish
-> làm Artifact) và ký các quyết định §3. Nguồn phạm vi: SPEC-01 §12.10–12.11 · §7 (Phase 3) ·
+> để `blocked` cho tới khi owner duyệt tài liệu định hướng (hồ sơ duyệt HTML kèm wireframe UI:
+> **`docs/plans/S11-OFFICE-WAVE-review.html`** — mở bằng trình duyệt) và ký các quyết định §3. Nguồn phạm vi: SPEC-01 §12.10–12.11 · §7 (Phase 3) ·
 > §10.8 (Asset Manager) · §10.9 (Office Admin) · IMPLEMENTATION-10 §22 (PARK-ASSET/ROOM) ·
 > RELEASE-14 §5.
 

@@ -1,0 +1,1857 @@
+<title>Wave S11-OFFICE</title>
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap"
+/>
+<style>
+  :root {
+    --bg: #f5f7f6;
+    --surface: #ffffff;
+    --surface-2: #eef2f0;
+    --ink: #1d2523;
+    --muted: #5c6663;
+    --line: #dbe1de;
+    --line-soft: #e7ece9;
+    --asset: #12796b;
+    --asset-ink: #0e5f55;
+    --asset-soft: #e0f0ec;
+    --room: #4054c4;
+    --room-ink: #34449e;
+    --room-soft: #e6eafa;
+    --amber: #96590c;
+    --amber-soft: #f6ecd9;
+    --red: #b3261e;
+    --red-soft: #f9e6e4;
+    --green: #256c2f;
+    --green-soft: #e3f0e1;
+    --code-bg: #ecf0ee;
+    --shadow:
+      0 1px 2px rgba(29, 37, 35, 0.05), 0 4px 16px rgba(29, 37, 35, 0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121617;
+      --surface: #1a2022;
+      --surface-2: #20282a;
+      --ink: #e3eae6;
+      --muted: #92a09a;
+      --line: #2c3639;
+      --line-soft: #242e30;
+      --asset: #48bfaa;
+      --asset-ink: #6ed0be;
+      --asset-soft: #143530;
+      --room: #93a2f0;
+      --room-ink: #aeb9f4;
+      --room-soft: #232a4e;
+      --amber: #e0a554;
+      --amber-soft: #3a2d15;
+      --red: #e98d82;
+      --red-soft: #3d201c;
+      --green: #7cc383;
+      --green-soft: #1d3320;
+      --code-bg: #232c2e;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121617;
+    --surface: #1a2022;
+    --surface-2: #20282a;
+    --ink: #e3eae6;
+    --muted: #92a09a;
+    --line: #2c3639;
+    --line-soft: #242e30;
+    --asset: #48bfaa;
+    --asset-ink: #6ed0be;
+    --asset-soft: #143530;
+    --room: #93a2f0;
+    --room-ink: #aeb9f4;
+    --room-soft: #232a4e;
+    --amber: #e0a554;
+    --amber-soft: #3a2d15;
+    --red: #e98d82;
+    --red-soft: #3d201c;
+    --green: #7cc383;
+    --green-soft: #1d3320;
+    --code-bg: #232c2e;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 40px 24px 96px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: Archivo, "Be Vietnam Pro", system-ui, sans-serif;
+    text-wrap: balance;
+    line-height: 1.2;
+  }
+  h1 {
+    font-size: 2.1rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin: 10px 0 8px;
+  }
+  h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin: 0 0 4px;
+  }
+  h3 {
+    font-size: 1.02rem;
+    font-weight: 700;
+    margin: 22px 0 8px;
+  }
+  p {
+    margin: 8px 0;
+  }
+  section {
+    margin-top: 44px;
+  }
+  .lede {
+    color: var(--muted);
+    max-width: 62ch;
+  }
+
+  .eyebrow {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .eyebrow::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+  .eyebrow .no {
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--ink);
+  }
+
+  code,
+  .mono {
+    font-family: "IBM Plex Mono", Consolas, monospace;
+    font-size: 0.86em;
+  }
+  code {
+    background: var(--code-bg);
+    border-radius: 4px;
+    padding: 0.12em 0.38em;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    padding: 3px 11px;
+    letter-spacing: 0.02em;
+  }
+  .badge-amber {
+    background: var(--amber-soft);
+    color: var(--amber);
+  }
+  .badge-asset {
+    background: var(--asset-soft);
+    color: var(--asset-ink);
+  }
+  .badge-room {
+    background: var(--room-soft);
+    color: var(--room-ink);
+  }
+  .badge-red {
+    background: var(--red-soft);
+    color: var(--red);
+  }
+  .badge-green {
+    background: var(--green-soft);
+    color: var(--green);
+  }
+
+  .head-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 28px 30px;
+    box-shadow: var(--shadow);
+  }
+  .head-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .callout {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--amber);
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 18px 0;
+  }
+  .callout.red-edge {
+    border-left-color: var(--red);
+  }
+  .callout b.tag {
+    color: var(--amber);
+  }
+
+  table.doc {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+  table.doc th {
+    text-align: left;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: 600;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-2);
+    white-space: nowrap;
+  }
+  table.doc td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+  }
+  table.doc tr:last-child td {
+    border-bottom: none;
+  }
+  table.doc td.mono,
+  table.doc th.mono {
+    white-space: nowrap;
+  }
+  table.doc .num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cols-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 760px) {
+    .cols-2 {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .story-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .story-card .story-head {
+    padding: 12px 16px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  .story-card.m-asset .story-head {
+    background: var(--asset-soft);
+    color: var(--asset-ink);
+  }
+  .story-card.m-room .story-head {
+    background: var(--room-soft);
+    color: var(--room-ink);
+  }
+  .story-card ul {
+    margin: 0;
+    padding: 12px 16px 14px 16px;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .story-card li {
+    display: grid;
+    grid-template-columns: 52px 1fr;
+    gap: 10px;
+    font-size: 0.88rem;
+  }
+  .story-card li .sid {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--muted);
+    padding-top: 2px;
+  }
+
+  /* FSM chips */
+  .fsm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0 2px;
+  }
+  .fsm .st {
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 3px 12px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .fsm .st.hi-asset {
+    border-color: var(--asset);
+    color: var(--asset-ink);
+  }
+  .fsm .st.hi-room {
+    border-color: var(--room);
+    color: var(--room-ink);
+  }
+  .fsm .st.terminal {
+    border-style: dashed;
+    color: var(--muted);
+  }
+  .fsm .arr {
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+  .fsm-note {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* ── Wireframes ─────────────────────────────── */
+  .wires {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 18px;
+  }
+  @media (max-width: 860px) {
+    .wires {
+      grid-template-columns: 1fr;
+    }
+  }
+  .wire {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .wire.m-asset {
+    border-top: 3px solid var(--asset);
+  }
+  .wire.m-room {
+    border-top: 3px solid var(--room);
+  }
+  .wire.m-dash {
+    border-top: 3px solid var(--muted);
+  }
+  .wire-caption {
+    padding: 12px 16px 14px;
+    border-top: 1px solid var(--line);
+  }
+  .wire-caption .wc-title {
+    font-weight: 700;
+    font-size: 0.9rem;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+  .wire-caption .wc-id {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+  .wire-caption p {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin: 4px 0 0;
+  }
+  .wire-screen {
+    padding: 14px;
+    background: var(--surface-2);
+    flex: 1;
+  }
+  .app {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 10.5px;
+    line-height: 1.45;
+    overflow: hidden;
+  }
+  .app-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--line-soft);
+    color: var(--muted);
+  }
+  .app-top .crumb {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .app-body {
+    display: flex;
+    min-height: 190px;
+  }
+  .app-nav {
+    width: 64px;
+    border-right: 1px solid var(--line-soft);
+    padding: 8px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .app-nav .ni {
+    height: 9px;
+    border-radius: 3px;
+    background: var(--line-soft);
+  }
+  .app-nav .ni.on-asset {
+    background: var(--asset-soft);
+    outline: 1px solid var(--asset);
+  }
+  .app-nav .ni.on-room {
+    background: var(--room-soft);
+    outline: 1px solid var(--room);
+  }
+  .app-main {
+    flex: 1;
+    padding: 9px 10px;
+    min-width: 0;
+  }
+
+  .ph {
+    background: var(--line-soft);
+    border-radius: 3px;
+    height: 8px;
+  }
+  .toolbar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+    align-items: center;
+  }
+  .inp {
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 2px 8px;
+    color: var(--muted);
+    background: var(--surface);
+    white-space: nowrap;
+  }
+  .btn {
+    border-radius: 5px;
+    padding: 2px 9px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .btn-asset {
+    background: var(--asset);
+    color: var(--surface);
+  }
+  .btn-room {
+    background: var(--room);
+    color: var(--surface);
+  }
+  .btn-ghost {
+    border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .btn-danger {
+    border: 1px solid var(--red);
+    color: var(--red);
+  }
+
+  .trow {
+    display: grid;
+    grid-template-columns: 2fr 1.4fr 1.2fr 1fr;
+    gap: 8px;
+    align-items: center;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .trow.hd {
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .chip {
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-weight: 600;
+    font-size: 9px;
+    white-space: nowrap;
+    justify-self: start;
+  }
+  .c-stock {
+    background: var(--green-soft);
+    color: var(--green);
+  }
+  .c-assigned {
+    background: var(--asset-soft);
+    color: var(--asset-ink);
+  }
+  .c-maint {
+    background: var(--amber-soft);
+    color: var(--amber);
+  }
+  .c-disposed {
+    background: var(--surface-2);
+    color: var(--muted);
+  }
+  .c-lost {
+    background: var(--red-soft);
+    color: var(--red);
+  }
+  .c-ok {
+    background: var(--green-soft);
+    color: var(--green);
+  }
+  .c-cancel {
+    background: var(--surface-2);
+    color: var(--muted);
+  }
+
+  .field {
+    margin-bottom: 7px;
+  }
+  .field .lb {
+    font-weight: 600;
+    margin-bottom: 2px;
+    color: var(--muted);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .field .bx {
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 3px 8px;
+    color: var(--ink);
+    background: var(--surface);
+  }
+  .field .bx.err {
+    border-color: var(--red);
+  }
+  .alert-409 {
+    background: var(--red-soft);
+    color: var(--red);
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-weight: 600;
+    margin: 6px 0;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 12px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 8px;
+  }
+  .tabs span {
+    padding: 2px 2px 4px;
+    color: var(--muted);
+  }
+  .tabs .on {
+    color: var(--asset-ink);
+    font-weight: 700;
+    border-bottom: 2px solid var(--asset);
+  }
+
+  .qr {
+    width: 46px;
+    height: 46px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    background:
+      linear-gradient(90deg, currentColor 2px, transparent 2px) 0 0 / 8px 8px,
+      linear-gradient(currentColor 2px, transparent 2px) 0 0 / 8px 8px;
+    color: var(--muted);
+    border: 4px solid var(--surface-2);
+  }
+
+  /* calendar */
+  .cal {
+    display: grid;
+    grid-template-columns: 34px repeat(3, 1fr);
+    gap: 3px;
+  }
+  .cal .cl-h {
+    font-weight: 700;
+    text-align: center;
+    font-size: 9.5px;
+    padding: 2px 0;
+    color: var(--room-ink);
+    background: var(--room-soft);
+    border-radius: 4px;
+  }
+  .cal .cl-t {
+    color: var(--muted);
+    font-size: 8.5px;
+    text-align: right;
+    padding-right: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .cal .cl-cell {
+    border: 1px dashed var(--line-soft);
+    border-radius: 3px;
+    min-height: 16px;
+  }
+  .cal .bk {
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 8.5px;
+    font-weight: 600;
+  }
+  .bk-a {
+    background: var(--room-soft);
+    color: var(--room-ink);
+    border: 1px solid var(--room);
+  }
+  .bk-busy {
+    background: var(--surface-2);
+    color: var(--muted);
+    border: 1px solid var(--line);
+  }
+  .bk-x {
+    background: var(--red-soft);
+    color: var(--red);
+    border: 1px dashed var(--red);
+  }
+
+  .widget-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .widget {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 7px 9px;
+  }
+  .widget .w-t {
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .stat-row {
+    display: flex;
+    gap: 4px;
+    align-items: flex-end;
+    height: 34px;
+    margin-top: 4px;
+  }
+  .stat-row i {
+    flex: 1;
+    background: var(--asset-soft);
+    border-top: 2px solid var(--asset);
+    border-radius: 2px 2px 0 0;
+  }
+
+  /* WO pipeline */
+  .pipe {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 16px 0;
+  }
+  .pipe-track {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .pipe-track .lbl {
+    font-family: Archivo, sans-serif;
+    font-weight: 700;
+    font-size: 0.78rem;
+    width: 58px;
+    flex-shrink: 0;
+  }
+  .wo {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    font-weight: 500;
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    border-radius: 7px;
+    padding: 4px 9px;
+    white-space: nowrap;
+  }
+  .wo.z-red {
+    border-color: var(--red);
+  }
+  .wo.z-yellow {
+    border-color: var(--amber);
+  }
+  .wo.blocked {
+    background: var(--amber-soft);
+    border-color: var(--amber);
+    border-style: dashed;
+  }
+  .pipe .arr {
+    color: var(--muted);
+    font-size: 0.78rem;
+  }
+  .pipe-note {
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+
+  .risk-list {
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: risk;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .risk-list li {
+    counter-increment: risk;
+    display: grid;
+    grid-template-columns: 30px 1fr;
+    gap: 12px;
+    font-size: 0.9rem;
+  }
+  .risk-list li::before {
+    content: counter(risk, decimal-leading-zero);
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--red);
+    font-size: 0.8rem;
+    padding-top: 2px;
+  }
+
+  .sign-box {
+    border: 1.5px solid var(--amber);
+    background: var(--amber-soft);
+    border-radius: 12px;
+    padding: 18px 22px;
+    margin-top: 18px;
+  }
+  .sign-box h3 {
+    margin-top: 0;
+    color: var(--amber);
+  }
+  .sign-box ol {
+    margin: 8px 0 0;
+    padding-left: 20px;
+  }
+  .sign-box li {
+    margin: 4px 0;
+  }
+
+  a {
+    color: var(--room-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--room);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    section {
+      scroll-margin-top: 24px;
+    }
+  }
+</style>
+
+<div class="page">
+  <header class="head-card">
+    <div class="eyebrow">
+      <span class="no">HỒ SƠ DUYỆT WAVE · SEED 28/08/2026</span>
+    </div>
+    <h1>Wave S11-OFFICE</h1>
+    <p class="lede">
+      Phase 3 «Quản trị văn phòng» — hai module <b>ASSET</b> (quản lý tài sản,
+      SPEC-13) và <b>ROOM</b> (quản lý phòng họp, SPEC-14). Tài liệu này gom mọi
+      thứ cần anh duyệt <em>trước khi thi công</em>: 9 quyết định, 18 story, mô
+      hình dữ liệu, bề mặt API, phân quyền và wireframe giao diện dự định.
+    </p>
+    <div class="head-meta">
+      <span class="badge badge-amber">⏳ Chờ owner duyệt</span>
+      <span class="badge badge-asset">ASSET — Asset Manager</span>
+      <span class="badge badge-room">ROOM — Office Admin</span>
+      <span class="badge badge-green">Đã seed 11 WO · 2 WO gốc blocked</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="eyebrow">
+      <span class="no">01</span> ĐIỂM XUẤT PHÁT — ĐO THẬT 28/08
+    </div>
+    <h2>Hai module chưa có gì ngoài chỗ đặt trước — và một bãi mìn di sản</h2>
+    <p>
+      ASSET/ROOM hiện tồn tại ở mức <em>«đã đặt chỗ, chưa xây»</em>: 0 SPEC · 0
+      DB doc · 0 API doc · 0 story · 0 mục permission-matrix. SPEC-01 đã khoá số
+      <code>SPEC-13</code>/<code>SPEC-14</code>. Khảo sát code và tài liệu phát
+      hiện 2 điểm phải quyết trước:
+    </p>
+
+    <div class="callout red-edge">
+      <b>Di sản <code>meeting_*</code> (ROOM).</b> 5 bảng
+      <code
+        >meeting_rooms · meetings · meeting_attendees · meeting_notes ·
+        meeting_tasks</code
+      >
+      từ migration <code>0052</code> vẫn <b>sống trong DB thật</b> (có RLS +
+      FORCE, soft-delete, composite tenant-FK từ 0535) nhưng <b>chết-code</b> —
+      không service/controller/test nào dùng. Đáng chú ý:
+      <code>meetings</code> đã cài sẵn <b>EXCLUDE GIST chống trùng lịch</b> —
+      đúng lõi nghiệp vụ SPEC-14. Dựng bảng mới song song mà không xử lý bảng cũ
+      = hai «phòng họp» cùng tồn tại (lớp lỗi KI-079). → <b>ROOM-DEC-001</b>.
+    </div>
+    <div class="callout">
+      <b>Xung đột đánh số tài liệu.</b> <code>docs/DB/</code> đang ở đầu DB-12
+      (CHAT), nhưng IMPLEMENTATION-10 đã
+      <b>đặt trước DB-13 = PAYROLL, DB-14 = RECRUIT</b>.
+      <code>docs/API Design/</code> đang ở đầu API-13 (CHAT). →
+      <b>OFFICE-DEC-001</b> đề xuất DB-15/DB-16 · API-14/API-15.
+    </div>
+    <p>
+      Đường tên cho ASSET sạch hoàn toàn: không có bảng <code>assets</code> nào
+      trong DB (chỉ <code>content_assets</code> thuộc cụm media đã park, không
+      đụng độ).
+    </p>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">02</span> QUYẾT ĐỊNH CẦN KÝ</div>
+    <h2>9 quyết định — mỗi dòng đã kèm đề xuất</h2>
+    <p class="lede">
+      Duyệt nguyên gói là chốt theo cột «Đề xuất». Muốn chỉnh, chỉ cần nêu mã
+      DEC.
+    </p>
+    <div class="table-wrap" style="margin-top: 12px">
+      <table class="doc">
+        <tr>
+          <th class="mono">Mã</th>
+          <th>Câu hỏi</th>
+          <th>Đề xuất</th>
+        </tr>
+        <tr>
+          <td class="mono">OFFICE-DEC-001</td>
+          <td>Đánh số tài liệu khi DB-13/14 đã bị PAYROLL/RECRUIT đặt trước</td>
+          <td>
+            <b>DB-15 ASSET · DB-16 ROOM</b> · API-14/API-15 · permission-matrix
+            §9d/§9e · EPIC-17/EPIC-18. Giữ nguyên chỗ đặt của IMPLEMENTATION-10.
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">ASSET-DEC-001</td>
+          <td>Thanh lý &amp; QR làm tới đâu ở v1</td>
+          <td>
+            Thanh lý = chuyển trạng thái <code>Disposed</code> + lý do, không
+            workflow phê duyệt riêng. QR render từ <code>asset_code</code> ở FE.
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">ASSET-DEC-002</td>
+          <td>Cấp phát 1 bước hay 2 bước (nhân viên xác nhận)</td>
+          <td>
+            <b>1 bước</b> do Asset Manager ghi nhận, in biên bản từ FE. 2 bước
+            để phase sau.
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">ASSET-DEC-003</td>
+          <td>Bộ trạng thái tài sản (hợp thức vào SPEC-01 §17)</td>
+          <td>
+            <code
+              >In Stock · Assigned · Under Maintenance · Disposed · Lost</code
+            >; assignment: <code>Active · Returned</code>.
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">ASSET-DEC-004</td>
+          <td>Sinh mã tài sản</td>
+          <td>
+            <code>sequence_counters</code> per-company theo prefix loại — dạng
+            <code>TS-&lt;LOẠI&gt;-&lt;seq&gt;</code>.
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">ROOM-DEC-001</td>
+          <td>
+            <b>Số phận 5 bảng <code>meeting_*</code> di sản</b>
+          </td>
+          <td>
+            <b>Tái dụng <code>meeting_rooms</code></b> (khớp ~1:1 SPEC-14).
+            <code>meetings</code>/<code>meeting_attendees</code>: WO DOC đo cột
+            thật rồi chốt tái-dụng hay thay bằng <code>room_bookings</code> qua
+            expand-contract. <code>meeting_notes</code> +
+            <code>meeting_tasks</code> → DROP (đếm hàng PROD trước).
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">ROOM-DEC-002</td>
+          <td>Có luồng duyệt đặt phòng không</td>
+          <td>
+            <b>v1 không duyệt</b> — đặt là giữ chỗ ngay nếu không trùng. Cột
+            <code>requires_approval</code> trên phòng để mở sau, tránh thêm một
+            FSM phê duyệt crown ở v1.
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">ROOM-DEC-003</td>
+          <td>Recurring booking / múi giờ</td>
+          <td>
+            v1 không recurring. UTC-at-rest + hiển thị Asia/Ho_Chi_Minh (chuẩn
+            hệ thống).
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">ROOM-DEC-004</td>
+          <td>Nhắc lịch họp</td>
+          <td>
+            Có — NOTI nhắc trước 15 phút, system job quét + outbox, dedupeKey
+            chống bắn trùng.
+          </td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">03</span> STORY</div>
+    <h2>18 story cấp wave</h2>
+    <p class="lede">
+      Bản nghiệp vụ đầy đủ (AC + point) sẽ viết vào IMPLEMENTATION-02 EPIC-17/18
+      trong WO tài liệu. Đây là khung để anh soát phạm vi.
+    </p>
+    <div class="cols-2" style="margin-top: 14px">
+      <div class="story-card m-asset">
+        <div class="story-head">ASSET — Quản lý tài sản</div>
+        <ul>
+          <li>
+            <span class="sid">AS-01</span
+            ><span>Quản lý danh mục loại tài sản</span>
+          </li>
+          <li>
+            <span class="sid">AS-02</span
+            ><span>CRUD hồ sơ tài sản — mã tự sinh + QR</span>
+          </li>
+          <li>
+            <span class="sid">AS-03</span
+            ><span>Cấp phát cho nhân viên (liên kết HR, có audit)</span>
+          </li>
+          <li>
+            <span class="sid">AS-04</span
+            ><span>Thu hồi — ghi tình trạng lúc thu</span>
+          </li>
+          <li>
+            <span class="sid">AS-05</span
+            ><span
+              >Bảo trì: mở/đóng lượt, tài sản sang
+              <i>Under Maintenance</i></span
+            >
+          </li>
+          <li>
+            <span class="sid">AS-06</span
+            ><span>Kiểm kê theo đợt — đánh dấu thấy/không thấy</span>
+          </li>
+          <li>
+            <span class="sid">AS-07</span
+            ><span>Thanh lý / báo mất (<i>Disposed</i>, <i>Lost</i>)</span>
+          </li>
+          <li>
+            <span class="sid">AS-08</span
+            ><span>Nhân viên xem «tài sản của tôi»</span>
+          </li>
+          <li>
+            <span class="sid">AS-09</span
+            ><span>NOTI: cấp phát · thu hồi · bảo trì đến hạn</span>
+          </li>
+          <li>
+            <span class="sid">AS-10</span
+            ><span>Widget DASH thống kê theo trạng thái/loại</span>
+          </li>
+        </ul>
+      </div>
+      <div class="story-card m-room">
+        <div class="story-head">ROOM — Quản lý phòng họp</div>
+        <ul>
+          <li>
+            <span class="sid">RM-01</span
+            ><span
+              >Office Admin quản trị phòng (sức chứa · thiết bị · vị trí)</span
+            >
+          </li>
+          <li>
+            <span class="sid">RM-02</span
+            ><span
+              >Đặt phòng theo khung giờ — trùng lịch bị chặn, lỗi 409 kèm khung
+              giờ bận</span
+            >
+          </li>
+          <li>
+            <span class="sid">RM-03</span
+            ><span
+              >Hủy lịch của mình / Office Admin hủy mọi lịch (audit + NOTI người
+              tham dự)</span
+            >
+          </li>
+          <li>
+            <span class="sid">RM-04</span
+            ><span>Lịch phòng dạng ngày/tuần theo từng phòng</span>
+          </li>
+          <li>
+            <span class="sid">RM-05</span><span>«Đặt phòng của tôi»</span>
+          </li>
+          <li>
+            <span class="sid">RM-06</span><span>Nhắc lịch trước 15 phút</span>
+          </li>
+          <li>
+            <span class="sid">RM-07</span><span>Lịch sử sử dụng phòng</span>
+          </li>
+          <li>
+            <span class="sid">RM-08</span
+            ><span>Widget DASH «lịch họp hôm nay»</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">
+      <span class="no">04</span> DỮ LIỆU &amp; TRẠNG THÁI
+    </div>
+    <h2>Mô hình dữ liệu dự kiến</h2>
+    <p class="lede">
+      Mọi bảng: UUID PK · <code>company_id</code> + RLS FORCE · soft-delete
+      <code>deleted_at</code> · composite tenant-FK. Chi tiết cột chốt ở
+      DB-15/DB-16.
+    </p>
+
+    <div class="cols-2" style="margin-top: 14px">
+      <div class="table-wrap">
+        <table class="doc">
+          <tr>
+            <th colspan="2" style="color: var(--asset-ink)">
+              ASSET — 6 bảng mới
+            </th>
+          </tr>
+          <tr>
+            <td class="mono">asset_categories</td>
+            <td>Loại tài sản + prefix mã</td>
+          </tr>
+          <tr>
+            <td class="mono">assets</td>
+            <td>Hồ sơ tài sản: mã, tên, serial, ngày mua, trạng thái</td>
+          </tr>
+          <tr>
+            <td class="mono">asset_assignments</td>
+            <td>
+              Lượt cấp phát ↔ nhân viên (HR), ngày cấp/thu, tình trạng khi thu
+            </td>
+          </tr>
+          <tr>
+            <td class="mono">asset_maintenances</td>
+            <td>Lượt bảo trì: lý do, chi phí, ngày mở/đóng</td>
+          </tr>
+          <tr>
+            <td class="mono">asset_inventories</td>
+            <td>Đợt kiểm kê</td>
+          </tr>
+          <tr>
+            <td class="mono">asset_inventory_items</td>
+            <td>Kết quả từng tài sản trong đợt</td>
+          </tr>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table class="doc">
+          <tr>
+            <th colspan="2" style="color: var(--room-ink)">
+              ROOM — tái dụng di sản theo ROOM-DEC-001
+            </th>
+          </tr>
+          <tr>
+            <td class="mono">meeting_rooms</td>
+            <td>
+              <b>Tái dụng</b> — đã có name, location, capacity; bổ sung thiết bị
+              + <code>requires_approval</code>
+            </td>
+          </tr>
+          <tr>
+            <td class="mono">
+              room_bookings
+              <span style="color: var(--muted)">(hoặc meetings)</span>
+            </td>
+            <td>
+              Lượt đặt: phòng, khung giờ <code>tstzrange</code>, người đặt, chủ
+              đề — <b>EXCLUDE GIST chống trùng</b>
+            </td>
+          </tr>
+          <tr>
+            <td class="mono">meeting_attendees</td>
+            <td>Người tham dự (tái dụng nếu khớp)</td>
+          </tr>
+          <tr>
+            <td class="mono">meeting_notes · meeting_tasks</td>
+            <td style="color: var(--red)">
+              DROP — ngoài phạm vi SPEC-14 (đếm hàng PROD trước)
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <h3>FSM trạng thái (hợp thức vào SPEC-01 §17 ở WO tài liệu)</h3>
+    <div class="fsm">
+      <span class="st hi-asset">In Stock</span><span class="arr">⇄</span>
+      <span class="st hi-asset">Assigned</span><span class="arr">⇄</span>
+      <span class="st hi-asset">Under Maintenance</span
+      ><span class="arr">→</span> <span class="st terminal">Disposed</span
+      ><span class="arr">·</span>
+      <span class="st terminal">Lost</span>
+    </div>
+    <p class="fsm-note">
+      Tài sản — chuyển tiếp sai trả 4xx đúng mã <code>ASSET-ERR</code>, FSM ép ở
+      service.
+    </p>
+    <div class="fsm">
+      <span class="st hi-room">Confirmed</span><span class="arr">→</span>
+      <span class="st terminal">Cancelled</span>
+      <span class="arr" style="margin-left: 10px">·</span>
+      <span class="st terminal">Completed (dẫn xuất)</span>
+    </div>
+    <p class="fsm-note">
+      Đặt phòng — <i>Completed</i> tính từ giờ kết thúc, không lưu cứng (cùng
+      nguyên tắc <i>Overdue</i> của TASK).
+    </p>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">05</span> API &amp; PHÂN QUYỀN</div>
+    <h2>Bề mặt API và cặp quyền dự kiến</h2>
+    <div class="cols-2" style="margin-top: 14px">
+      <div class="table-wrap">
+        <table class="doc">
+          <tr>
+            <th class="mono">ASSET (API-14)</th>
+            <th>Quyền</th>
+          </tr>
+          <tr>
+            <td class="mono">GET/POST/PATCH /assets, /asset-categories</td>
+            <td class="mono">
+              ASSET.ASSET.VIEW / CREATE / UPDATE · ASSET.CATEGORY.MANAGE
+            </td>
+          </tr>
+          <tr>
+            <td class="mono">POST /assets/:id/assign · /revoke</td>
+            <td class="mono">ASSET.ASSIGNMENT.CREATE / REVOKE</td>
+          </tr>
+          <tr>
+            <td class="mono">POST /assets/:id/maintenances (+đóng)</td>
+            <td class="mono">ASSET.MAINTENANCE.MANAGE</td>
+          </tr>
+          <tr>
+            <td class="mono">POST /asset-inventories (+items, +đóng đợt)</td>
+            <td class="mono">ASSET.INVENTORY.MANAGE</td>
+          </tr>
+          <tr>
+            <td class="mono">GET /me/assets</td>
+            <td class="mono">ASSET.ASSIGNMENT.VIEW <i>(scope own)</i></td>
+          </tr>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table class="doc">
+          <tr>
+            <th class="mono">ROOM (API-15)</th>
+            <th>Quyền</th>
+          </tr>
+          <tr>
+            <td class="mono">GET/POST/PATCH /rooms</td>
+            <td class="mono">ROOM.ROOM.VIEW / MANAGE</td>
+          </tr>
+          <tr>
+            <td class="mono">GET /rooms/availability?from&amp;to</td>
+            <td class="mono">ROOM.BOOKING.VIEW</td>
+          </tr>
+          <tr>
+            <td class="mono">
+              POST /room-bookings
+              <i>(Idempotency-Key từ payload; trùng → 409)</i>
+            </td>
+            <td class="mono">ROOM.BOOKING.CREATE</td>
+          </tr>
+          <tr>
+            <td class="mono">POST /room-bookings/:id/cancel</td>
+            <td class="mono">
+              ROOM.BOOKING.CANCEL <i>(own)</i> · ROOM.BOOKING.MANAGE
+              <i>(all)</i>
+            </td>
+          </tr>
+          <tr>
+            <td class="mono">GET /me/room-bookings · /rooms/:id/history</td>
+            <td class="mono">
+              ROOM.BOOKING.VIEW <i>(own/all theo data_scope)</i>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+    <p style="margin-top: 10px">
+      Vai trò seed: <b>Asset Manager</b> (SPEC-01 §10.8) và
+      <b>Office Admin</b> (§10.9), gán data_scope per-(perm,role). Sự kiện NOTI
+      mới (cấp phát · thu hồi · bảo trì đến hạn · xác nhận đặt phòng · hủy lịch
+      · nhắc lịch) lấy dải mã kế tiếp trong SPEC-08 §15.0 — đo dải hiện có
+      trước, không hard-code.
+    </p>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">06</span> GIAO DIỆN DỰ ĐỊNH</div>
+    <h2>Wireframe 8 màn hình chính</h2>
+    <p class="lede">
+      Khung ý định để anh duyệt bố cục và luồng — không phải pixel cuối. Mã màn
+      theo SPEC-01 §9.3; mọi màn đi qua <code>&lt;PermissionGate&gt;</code>, đủ
+      loading/error/empty, i18n tiếng Việt.
+    </p>
+
+    <div class="wires">
+      <!-- ASSET-SCREEN-001 -->
+      <figure class="wire m-asset" style="margin: 0">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top">
+              <span class="crumb">Tài sản</span><span>· 128 mục</span>
+            </div>
+            <div class="app-body">
+              <div class="app-nav">
+                <div class="ni"></div>
+                <div class="ni on-asset"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+              </div>
+              <div class="app-main">
+                <div class="toolbar">
+                  <span class="inp">🔍 Tìm mã, tên, serial…</span
+                  ><span class="inp">Loại ▾</span
+                  ><span class="inp">Trạng thái ▾</span
+                  ><span class="btn btn-asset">+ Thêm tài sản</span>
+                </div>
+                <div class="trow hd">
+                  <span>Tài sản</span><span>Người giữ</span
+                  ><span>Trạng thái</span><span></span>
+                </div>
+                <div class="trow">
+                  <span><b>TS-LAP-0031</b> · MacBook Pro 14</span
+                  ><span>Nguyễn V. An</span
+                  ><span class="chip c-assigned">Đang cấp phát</span
+                  ><span class="btn btn-ghost">Thu hồi</span>
+                </div>
+                <div class="trow">
+                  <span><b>TS-LAP-0032</b> · Dell XPS 13</span><span>—</span
+                  ><span class="chip c-stock">Trong kho</span
+                  ><span class="btn btn-ghost">Cấp phát</span>
+                </div>
+                <div class="trow">
+                  <span><b>TS-MON-0104</b> · Màn LG 27"</span><span>—</span
+                  ><span class="chip c-maint">Đang bảo trì</span
+                  ><span class="btn btn-ghost">…</span>
+                </div>
+                <div class="trow">
+                  <span><b>TS-PRJ-0002</b> · Máy chiếu Epson</span><span>—</span
+                  ><span class="chip c-lost">Mất</span
+                  ><span class="btn btn-ghost">…</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption class="wire-caption">
+          <div class="wc-title">
+            Danh sách tài sản <span class="wc-id">ASSET-SCREEN-001</span>
+          </div>
+          <p>
+            Table phân trang + filter loại/trạng thái/người giữ; hành động nhanh
+            theo quyền từng dòng.
+          </p>
+        </figcaption>
+      </figure>
+
+      <!-- ASSET-SCREEN-002 -->
+      <figure class="wire m-asset" style="margin: 0">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top">
+              <span>Tài sản /</span><span class="crumb">TS-LAP-0031</span>
+            </div>
+            <div class="app-body">
+              <div class="app-nav">
+                <div class="ni"></div>
+                <div class="ni on-asset"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+              </div>
+              <div class="app-main">
+                <div
+                  style="
+                    display: flex;
+                    gap: 10px;
+                    align-items: flex-start;
+                    margin-bottom: 8px;
+                  "
+                >
+                  <div class="qr"></div>
+                  <div style="flex: 1">
+                    <div style="font-weight: 700">
+                      MacBook Pro 14 — TS-LAP-0031
+                    </div>
+                    <div style="color: var(--muted)">
+                      Laptop · Serial C02XL0… · Mua 03/2026
+                    </div>
+                    <span class="chip c-assigned"
+                      >Đang cấp phát · Nguyễn V. An</span
+                    >
+                  </div>
+                  <span class="btn btn-ghost">Sửa</span>
+                </div>
+                <div class="tabs">
+                  <span class="on">Thông tin</span><span>Lịch sử cấp phát</span
+                  ><span>Bảo trì</span>
+                </div>
+                <div class="ph" style="width: 88%; margin-bottom: 6px"></div>
+                <div class="ph" style="width: 70%; margin-bottom: 6px"></div>
+                <div class="ph" style="width: 78%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption class="wire-caption">
+          <div class="wc-title">
+            Chi tiết tài sản <span class="wc-id">ASSET-SCREEN-002</span>
+          </div>
+          <p>
+            QR render từ mã tài sản; 3 tab: thông tin · lịch sử cấp phát · bảo
+            trì. Nút theo quyền.
+          </p>
+        </figcaption>
+      </figure>
+
+      <!-- ASSET-SCREEN-004 -->
+      <figure class="wire m-asset" style="margin: 0">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top">
+              <span>Tài sản /</span><span class="crumb">Cấp phát</span>
+            </div>
+            <div class="app-body">
+              <div class="app-nav">
+                <div class="ni"></div>
+                <div class="ni on-asset"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+              </div>
+              <div class="app-main" style="max-width: 250px">
+                <div class="field">
+                  <div class="lb">Tài sản</div>
+                  <div class="bx">TS-LAP-0032 · Dell XPS 13</div>
+                </div>
+                <div class="field">
+                  <div class="lb">Cấp cho nhân viên</div>
+                  <div class="bx">Trần T. Bình — Thiết kế ▾</div>
+                </div>
+                <div class="field">
+                  <div class="lb">Ngày cấp</div>
+                  <div class="bx">02/09/2026</div>
+                </div>
+                <div class="field">
+                  <div class="lb">Ghi chú tình trạng</div>
+                  <div class="bx" style="color: var(--muted)">
+                    Máy mới 100%, kèm sạc…
+                  </div>
+                </div>
+                <div style="display: flex; gap: 6px; margin-top: 8px">
+                  <span class="btn btn-asset">Cấp phát</span
+                  ><span class="btn btn-ghost">In biên bản</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption class="wire-caption">
+          <div class="wc-title">
+            Cấp phát tài sản <span class="wc-id">ASSET-SCREEN-004</span>
+          </div>
+          <p>
+            1 bước theo ASSET-DEC-002: ghi nhận + in biên bản. Thu hồi dùng cùng
+            khuôn, thêm tình trạng khi thu.
+          </p>
+        </figcaption>
+      </figure>
+
+      <!-- ASSET-SCREEN-005 -->
+      <figure class="wire m-asset" style="margin: 0">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top">
+              <span>Tài sản /</span><span class="crumb">Kiểm kê Q3-2026</span
+              ><span class="chip c-maint" style="margin-left: auto"
+                >Đang mở</span
+              >
+            </div>
+            <div class="app-body">
+              <div class="app-nav">
+                <div class="ni"></div>
+                <div class="ni on-asset"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+              </div>
+              <div class="app-main">
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    margin-bottom: 6px;
+                  "
+                >
+                  <span>Tiến độ: <b>96 / 128</b></span
+                  ><span class="btn btn-ghost">Đóng đợt</span>
+                </div>
+                <div
+                  style="
+                    height: 6px;
+                    border-radius: 3px;
+                    background: var(--line-soft);
+                    margin-bottom: 8px;
+                  "
+                >
+                  <div
+                    style="
+                      height: 6px;
+                      width: 75%;
+                      border-radius: 3px;
+                      background: var(--asset);
+                    "
+                  ></div>
+                </div>
+                <div class="trow" style="grid-template-columns: 2fr 1fr 1fr">
+                  <span>TS-LAP-0031 · MacBook Pro 14</span
+                  ><span class="chip c-ok">✓ Thấy</span
+                  ><span class="btn btn-ghost">Ghi chú</span>
+                </div>
+                <div class="trow" style="grid-template-columns: 2fr 1fr 1fr">
+                  <span>TS-MON-0104 · Màn LG 27"</span
+                  ><span class="chip c-ok">✓ Thấy</span
+                  ><span class="btn btn-ghost">Ghi chú</span>
+                </div>
+                <div class="trow" style="grid-template-columns: 2fr 1fr 1fr">
+                  <span>TS-PRJ-0002 · Máy chiếu Epson</span
+                  ><span class="chip c-lost">✗ Không thấy</span
+                  ><span class="btn btn-ghost">Ghi chú</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption class="wire-caption">
+          <div class="wc-title">
+            Kiểm kê theo đợt <span class="wc-id">ASSET-SCREEN-005</span>
+          </div>
+          <p>
+            Mở đợt → đánh dấu từng tài sản → đóng đợt; «không thấy» gợi ý chuyển
+            <i>Lost</i> khi đóng.
+          </p>
+        </figcaption>
+      </figure>
+
+      <!-- ROOM-SCREEN-001 -->
+      <figure class="wire m-room" style="margin: 0">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top">
+              <span class="crumb">Phòng họp</span><span>· Thứ 4, 02/09</span
+              ><span class="inp" style="margin-left: auto">‹ Ngày ›</span>
+            </div>
+            <div class="app-body">
+              <div class="app-nav">
+                <div class="ni"></div>
+                <div class="ni"></div>
+                <div class="ni on-room"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+              </div>
+              <div class="app-main">
+                <div class="cal">
+                  <span></span><span class="cl-h">Mercury · 6</span
+                  ><span class="cl-h">Venus · 10</span
+                  ><span class="cl-h">Mars · 16</span>
+                  <span class="cl-t">09:00</span
+                  ><span class="bk bk-a">Họp sprint · 09:00–10:30</span
+                  ><span class="cl-cell"></span
+                  ><span class="bk bk-busy">Review thiết kế</span>
+                  <span class="cl-t">10:00</span
+                  ><span class="bk bk-x">✗ Trùng lịch</span
+                  ><span class="cl-cell"></span><span class="cl-cell"></span>
+                  <span class="cl-t">11:00</span><span class="cl-cell"></span
+                  ><span class="bk bk-a">1-1 · 11:00–11:30</span
+                  ><span class="cl-cell"></span> <span class="cl-t">14:00</span
+                  ><span class="cl-cell"></span><span class="cl-cell"></span
+                  ><span class="bk bk-busy">Phỏng vấn</span>
+                </div>
+                <div style="margin-top: 8px; text-align: right">
+                  <span class="btn btn-room">+ Đặt phòng</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption class="wire-caption">
+          <div class="wc-title">
+            Lịch phòng theo ngày <span class="wc-id">ROOM-SCREEN-001</span>
+          </div>
+          <p>
+            Cột = phòng (kèm sức chứa), hàng = giờ; kéo chọn khung trống để đặt.
+            Khung trùng hiển thị rõ vì sao bị chặn.
+          </p>
+        </figcaption>
+      </figure>
+
+      <!-- ROOM-SCREEN-002 -->
+      <figure class="wire m-room" style="margin: 0">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top">
+              <span>Phòng họp /</span><span class="crumb">Đặt phòng</span>
+            </div>
+            <div class="app-body">
+              <div class="app-nav">
+                <div class="ni"></div>
+                <div class="ni"></div>
+                <div class="ni on-room"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+              </div>
+              <div class="app-main" style="max-width: 250px">
+                <div class="field">
+                  <div class="lb">Phòng</div>
+                  <div class="bx">Mercury · 6 chỗ ▾</div>
+                </div>
+                <div class="field">
+                  <div class="lb">Chủ đề</div>
+                  <div class="bx">Kickoff dự án Q4</div>
+                </div>
+                <div class="field">
+                  <div class="lb">Khung giờ</div>
+                  <div class="bx err">02/09 · 09:30 → 10:30</div>
+                </div>
+                <div class="alert-409">
+                  ⚠ Trùng lịch: «Họp sprint» 09:00–10:30. Còn trống từ 10:30.
+                </div>
+                <div class="field">
+                  <div class="lb">Người tham dự</div>
+                  <div class="bx" style="color: var(--muted)">
+                    + Thêm từ danh bạ HR…
+                  </div>
+                </div>
+                <div style="display: flex; gap: 6px; margin-top: 8px">
+                  <span class="btn btn-room">Đặt phòng</span
+                  ><span class="btn btn-ghost">Hủy</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption class="wire-caption">
+          <div class="wc-title">
+            Đặt phòng — báo trùng ngay
+            <span class="wc-id">ROOM-SCREEN-002</span>
+          </div>
+          <p>
+            Chặn sớm ở client + xử lý 409 server (chốt cuối là EXCLUDE GIST ở
+            DB). Lỗi nói rõ khung bận và gợi ý giờ trống.
+          </p>
+        </figcaption>
+      </figure>
+
+      <!-- ROOM-SCREEN-003/004 -->
+      <figure class="wire m-room" style="margin: 0">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top">
+              <span class="crumb">Đặt phòng của tôi</span>
+            </div>
+            <div class="app-body">
+              <div class="app-nav">
+                <div class="ni"></div>
+                <div class="ni"></div>
+                <div class="ni on-room"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+              </div>
+              <div class="app-main">
+                <div
+                  class="trow"
+                  style="grid-template-columns: 1.6fr 1.4fr 1fr 0.8fr"
+                >
+                  <span><b>Kickoff dự án Q4</b></span
+                  ><span>Mercury · 02/09 10:30</span
+                  ><span class="chip c-ok">Đã xác nhận</span
+                  ><span class="btn btn-danger">Hủy</span>
+                </div>
+                <div
+                  class="trow"
+                  style="grid-template-columns: 1.6fr 1.4fr 1fr 0.8fr"
+                >
+                  <span><b>Họp sprint</b></span
+                  ><span>Mercury · 02/09 09:00</span
+                  ><span class="chip c-ok">Đã xác nhận</span
+                  ><span class="btn btn-danger">Hủy</span>
+                </div>
+                <div
+                  class="trow"
+                  style="grid-template-columns: 1.6fr 1.4fr 1fr 0.8fr"
+                >
+                  <span><b>Demo khách</b></span
+                  ><span>Venus · 28/08 15:00</span
+                  ><span class="chip c-cancel">Đã hủy</span><span></span>
+                </div>
+                <div style="margin-top: 6px; color: var(--muted)">
+                  🔔 Nhắc trước 15 phút qua thông báo hệ thống
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption class="wire-caption">
+          <div class="wc-title">
+            Đặt phòng của tôi <span class="wc-id">ROOM-SCREEN-003</span>
+          </div>
+          <p>
+            Own-scope mặc định; Office Admin thấy mọi lịch và hủy được
+            (ROOM.BOOKING.MANAGE, có audit + NOTI). Quản trị phòng
+            (ROOM-SCREEN-004) dùng khuôn table chuẩn: tên · sức chứa · thiết bị
+            · trạng thái.
+          </p>
+        </figcaption>
+      </figure>
+
+      <!-- DASH widgets -->
+      <figure class="wire m-dash" style="margin: 0">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top"><span class="crumb">Dashboard</span></div>
+            <div class="app-body">
+              <div class="app-nav">
+                <div class="ni"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+              </div>
+              <div class="app-main">
+                <div class="widget-grid">
+                  <div class="widget">
+                    <div class="w-t" style="color: var(--asset-ink)">
+                      Tài sản theo trạng thái
+                    </div>
+                    <div>Kho 41 · Cấp phát 72 · Bảo trì 9</div>
+                    <div class="stat-row">
+                      <i style="height: 60%"></i><i style="height: 100%"></i
+                      ><i style="height: 18%"></i><i style="height: 8%"></i>
+                    </div>
+                  </div>
+                  <div class="widget">
+                    <div class="w-t" style="color: var(--room-ink)">
+                      Lịch họp hôm nay
+                    </div>
+                    <div
+                      class="bk bk-a"
+                      style="display: block; margin-bottom: 4px"
+                    >
+                      09:00 Mercury · Họp sprint
+                    </div>
+                    <div
+                      class="bk bk-busy"
+                      style="display: block; margin-bottom: 4px"
+                    >
+                      11:00 Venus · 1-1
+                    </div>
+                    <div class="bk bk-busy" style="display: block">
+                      14:00 Mars · Phỏng vấn
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption class="wire-caption">
+          <div class="wc-title">
+            Widget DASH của wave <span class="wc-id">S11-OFFICE-DASH-1</span>
+          </div>
+          <p>
+            Chỉ render khi có quyền ASSET/ROOM tương ứng — không quyền thì không
+            gọi API.
+          </p>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">07</span> PHÂN RÃ WORK ORDER</div>
+    <h2>11 WO — hai track song song, một cửa duyệt</h2>
+    <div class="pipe">
+      <div class="pipe-track">
+        <span class="lbl" style="color: var(--asset-ink)">ASSET</span>
+        <span class="wo blocked">DOC-1 ⏳</span><span class="arr">→</span>
+        <span class="wo z-red">DB-1 🔴</span><span class="arr">→</span>
+        <span class="wo z-yellow">BE-1</span><span class="arr">→</span>
+        <span class="wo">FE-1</span><span class="arr">→</span>
+        <span class="wo z-yellow">QA-1</span>
+      </div>
+      <div class="pipe-track">
+        <span class="lbl" style="color: var(--room-ink)">ROOM</span>
+        <span class="wo blocked">DOC-1 ⏳</span><span class="arr">→</span>
+        <span class="wo z-red">DB-1 🔴</span><span class="arr">→</span>
+        <span class="wo z-yellow">BE-1</span><span class="arr">→</span>
+        <span class="wo">FE-1</span><span class="arr">→</span>
+        <span class="wo z-yellow">QA-1</span>
+      </div>
+      <div class="pipe-track">
+        <span class="lbl">CHUNG</span>
+        <span class="wo">S11-OFFICE-DASH-1</span>
+        <span class="pipe-note">— sau khi cả hai FE xong</span>
+      </div>
+    </div>
+    <ul style="margin: 6px 0 0; padding-left: 20px; font-size: 0.9rem">
+      <li>
+        Hai WO <b>DB là lane migration nối tiếp</b>:
+        <code>S11-ROOM-DB-1</code> đã khoá <code>depends_on</code> chạy sau
+        <code>S11-ASSET-DB-1</code> để không giẫm số migration.
+      </li>
+      <li>
+        DOC → DB có chốt <b>plan-reviewer đối kháng PASS</b> trên SPEC + DB doc
+        (khuôn wave CHAT).
+      </li>
+      <li>
+        Hai WO DOC đang <code>blocked</code> — máy (auto-loop/gen-status) không
+        nhặt được cho tới khi anh duyệt.
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">08</span> RỦI RO ĐÃ GHIM</div>
+    <h2>9 bẫy đã biết, viết sẵn vào done_when</h2>
+    <ol class="risk-list">
+      <li>
+        Di sản <code>meeting_*</code>: dựng tên mới mà không DROP = hai «phòng
+        họp» cùng sống (lớp lỗi KI-079) — ROOM-DEC-001 chặn từ cửa.
+      </li>
+      <li>
+        CHECK <code>module_code</code> NOTI phải nới trên
+        <b>cả hai bảng</b> (<code>notification_events</code> +
+        <code>notifications</code>) — quên một bảng là 500 lúc chạy.
+      </li>
+      <li>
+        Hợp đồng Zod mirror CHECK DB <b>hai chiều, đúng bằng</b> — lệch một phía
+        là payload tự nhiên nhất nổ 500 ở DB.
+      </li>
+      <li>Mọi cột FK mới đi kèm composite tenant-FK (khuôn migration 0535).</li>
+      <li>
+        Route mới ⇒ route-census đỏ — regen có chủ đích; module mới khai
+        <code>API_MODULE_TAGS</code>.
+      </li>
+      <li>
+        <code>:id</code> = UUID ở biên ngay từ đầu — ratchet param-uuid đang
+        siết về 1, không thêm nợ.
+      </li>
+      <li>
+        Đặt phòng: Idempotency-Key <b>suy từ payload</b>; int-spec race 2
+        request song song — đúng 1 thắng, 1 nhận 409 (EXCLUDE GIST là chốt
+        cuối).
+      </li>
+      <li>
+        Trạng thái mới phải hợp thức vào SPEC-01 §17 trong WO tài liệu — không
+        module nào tự thêm.
+      </li>
+      <li>
+        Test chạy trên LANE_DB như CI; deny-path RED-trước; fixture giả-secret
+        phải ghép chuỗi (gitleaks).
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">09</span> DUYỆT</div>
+    <div class="sign-box">
+      <h3>Cách duyệt wave này</h3>
+      <p style="margin-top: 0">
+        Đã seed và commit trên nhánh
+        <code>fix/s10-qa-coldstart500-1</code> (<code>6a0af3bd</code>): 11 WO
+        trong <code>harness/backlog.mjs</code> + kế hoạch
+        <code>docs/plans/S11-OFFICE-WAVE.md</code>. Chưa push.
+      </p>
+      <ol>
+        <li>
+          <b>Duyệt nguyên gói</b> — trả lời «Duyệt S11-OFFICE»: tôi mở khoá 2 WO
+          DOC (blocked → todo), ghi kết luận DEC vào wave plan, và wave bắt đầu
+          từ tài liệu (SPEC-13/14, DB-15/16, API-14/15).
+        </li>
+        <li>
+          <b>Duyệt có chỉnh</b> — nêu mã DEC muốn đổi (vd: «ROOM-DEC-002: có
+          duyệt đặt phòng»): tôi cập nhật wave plan + WO rồi trình lại phần đổi.
+        </li>
+        <li>
+          <b>Chưa duyệt</b> — mọi thứ giữ nguyên trạng thái blocked; không WO
+          nào chạy.
+        </li>
+      </ol>
+    </div>
+  </section>
+</div>
