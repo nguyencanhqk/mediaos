@@ -14,7 +14,6 @@ import {
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
 import { users } from "./users";
-import { workflowSteps } from "./workflow";
 
 /**
  * G8-3 Evaluation schema — DDL/RLS/grant ở migrations 0083–0085 (xem TASKS G8-3).
@@ -92,9 +91,6 @@ export const evaluationResults = pgTable(
     templateId: uuid("template_id")
       .notNull()
       .references(() => evaluationTemplates.id, { onDelete: "cascade" }),
-    workflowStepId: uuid("workflow_step_id")
-      .notNull()
-      .references(() => workflowSteps.id, { onDelete: "cascade" }),
     // NOT NULL → NO ACTION (giữ chủ thể/tác giả cho audit; users soft-delete).
     subjectUserId: uuid("subject_user_id").references(() => users.id),
     evaluatorUserId: uuid("evaluator_user_id")
@@ -105,7 +101,7 @@ export const evaluationResults = pgTable(
   },
   (t) => [
     index("evaluation_results_company_idx").on(t.companyId),
-    index("evaluation_results_company_step_idx").on(t.companyId, t.workflowStepId),
+    // ⓘ index (company_id, workflow_step_id) ĐÃ GỠ ở migration 0548 cùng cột — bảng `workflow_steps` DROP.
     index("evaluation_results_company_template_idx").on(t.companyId, t.templateId),
   ],
 );

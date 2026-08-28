@@ -118,7 +118,6 @@ export interface MyTaskRow extends TaskCoreRow {
 export interface TaskRawRow {
   id: string;
   taskType: string;
-  workflowStepId: string | null;
   projectId: string | null;
   mainAssigneeEmployeeId: string | null;
   taskStatus: string | null;
@@ -448,7 +447,7 @@ export class TaskCoreRepository {
     id: string,
   ): Promise<TaskRawRow | undefined> {
     const res = await tx.execute(sql`
-      select t.id, t.task_type as "taskType", t.workflow_step_id as "workflowStepId",
+      select t.id, t.task_type as "taskType",
              t.project_id as "projectId", t.main_assignee_employee_id as "mainAssigneeEmployeeId",
              t.task_status as "taskStatus", t.state_id as "stateId", ps.name as "stateName",
              -- S5-TASK-SUBTASK-1 (D-36): mọi chốt "không ghi state_id lên việc con" đọc từ ĐÂY. Thêm ở
@@ -774,14 +773,12 @@ export class TaskCoreRepository {
       taskCode: string | null;
       title: string;
       taskType: string;
-      workflowStepId: string | null;
       // S5-GOAL-BE-2 (additive) — xoá lan con ⇒ tiến độ mục tiêu của TỪNG con phải được tính lại.
       goalId: string | null;
     }[]
   > {
     const res = await tx.execute(sql`
-      select id, task_code as "taskCode", title, task_type as "taskType",
-             workflow_step_id as "workflowStepId", goal_id as "goalId"
+      select id, task_code as "taskCode", title, task_type as "taskType", goal_id as "goalId"
         from tasks
        where company_id = ${companyId} and parent_task_id = ${parentId} and deleted_at is null
        order by id
@@ -791,7 +788,6 @@ export class TaskCoreRepository {
       taskCode: string | null;
       title: string;
       taskType: string;
-      workflowStepId: string | null;
       goalId: string | null;
     }[];
   }

@@ -259,7 +259,11 @@ describe.skipIf(!runIsolatedDb)(
            JOIN permissions p ON p.id = rp.permission_id
           WHERE rp.role_id='00000000-0000-0000-0000-000000000001'
             AND (p.resource_type LIKE 'foundation-%'
-                 OR p.resource_type IN ('channel','project','content','platform-account','workflow-instance','step'))`,
+            -- ⓘ 'workflow-instance' và 'step' ĐÃ RỜI danh sách: hai resource_type đó bị xoá khỏi
+            -- catalog ở S10-CLEAN-WORKFLOWCLUSTER-2 (mig 0548) cùng bảng workflow_*. Bốn cái còn
+            -- lại VẪN park thật (bảng của chúng còn) nên ca này vẫn đo được > 0 — giữ tên đã chết
+            -- trong IN-list chỉ làm người đọc sau tưởng chúng còn tồn tại.
+                 OR p.resource_type IN ('channel','project','content','platform-account'))`,
       );
       expect(
         res.rows[0].n,

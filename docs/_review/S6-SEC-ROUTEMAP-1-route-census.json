@@ -4,16 +4,16 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 471,
-    "controllers": 86,
-    "gated": 431,
+    "routes": 468,
+    "controllers": 85,
+    "gated": 429,
     "gatedAtClassLevel": 8,
     "public": 12,
-    "ungated": 28,
-    "needVerdict": 40
+    "ungated": 27,
+    "needVerdict": 39
   },
   "verdictCounts": {
-    "SELF": 16,
+    "SELF": 15,
     "PUBLIC": 11,
     "OTHER_GUARD": 3,
     "TENANT_READ": 6,
@@ -178,52 +178,6 @@
         "PermissionGuard"
       ],
       "routeGuards": [],
-      "verdict": null,
-      "verdictReason": null,
-      "verdictWo": null
-    },
-    {
-      "key": "ApprovalInboxController#approve",
-      "httpMethod": "POST",
-      "path": "/api/v1/approval/requests/:id/approve",
-      "hasPermission": true,
-      "permission": "approve:approval-request",
-      "permissionLevel": "handler",
-      "isPublic": false,
-      "classGuards": [],
-      "routeGuards": [
-        "PermissionGuard"
-      ],
-      "verdict": null,
-      "verdictReason": null,
-      "verdictWo": null
-    },
-    {
-      "key": "ApprovalInboxController#inbox",
-      "httpMethod": "GET",
-      "path": "/api/v1/approval/inbox",
-      "hasPermission": false,
-      "permission": null,
-      "permissionLevel": null,
-      "isPublic": false,
-      "classGuards": [],
-      "routeGuards": [],
-      "verdict": "SELF",
-      "verdictReason": "Hộp thư phê duyệt own-scope: chỉ trả yêu cầu mà chính người gọi là người duyệt.",
-      "verdictWo": null
-    },
-    {
-      "key": "ApprovalInboxController#reject",
-      "httpMethod": "POST",
-      "path": "/api/v1/approval/requests/:id/reject",
-      "hasPermission": true,
-      "permission": "reject:approval-request",
-      "permissionLevel": "handler",
-      "isPublic": false,
-      "classGuards": [],
-      "routeGuards": [
-        "PermissionGuard"
-      ],
       "verdict": null,
       "verdictReason": null,
       "verdictWo": null

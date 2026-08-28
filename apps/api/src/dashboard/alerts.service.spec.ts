@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { AlertsService, CHANNEL_RISK_OVERDUE_THRESHOLD, CHANNEL_RISK_MIN_TASKS, SEVERE_DEFECT_TYPES } from "./alerts.service";
+import {
+  AlertsService,
+  CHANNEL_RISK_OVERDUE_THRESHOLD,
+  CHANNEL_RISK_MIN_TASKS,
+} from "./alerts.service";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -128,93 +132,23 @@ describe("AlertsService", () => {
     expect((result[0] as { overdueRate: number }).overdueRate).toBeCloseTo(0.8);
   });
 
-  // ─── defect severity alerts ──────────────────────────────────────────────
+  // ─── S10-CLEAN-WORKFLOWCLUSTER-2: nhánh defect_severity ĐÃ GỠ ────────────────
+  //
+  // NĂM ca cũ (SEVERE_DEFECT_TYPES · getDefectSeverityAlerts x3 · getAlerts-có-defect_severity) đã
+  // xoá cùng bảng `defects`. Ca dưới đây thay chúng: nó khẳng định PHẦN BỊ XOÁ thực sự biến mất
+  // khỏi phản hồi — review gate MÙ với deletion, và "build vẫn xanh" không chứng minh gì cho một
+  // nhánh đã bốc hơi. Ca này ĐỎ nếu ai đó nối lại defect_severity mà không cập nhật hợp đồng.
 
-  it("SEVERE_DEFECT_TYPES is a non-empty array of strings", () => {
-    expect(Array.isArray(SEVERE_DEFECT_TYPES)).toBe(true);
-    expect(SEVERE_DEFECT_TYPES.length).toBeGreaterThan(0);
-  });
-
-  it("getDefectSeverityAlerts returns [] when no defects exist", async () => {
+  it("getAlerts KHÔNG còn phát ra loại `defect_severity` (bảng `defects` đã DROP)", async () => {
     mockWithTenant.mockImplementation((_: string, fn: (tx: unknown) => Promise<unknown>) => {
       const chain = buildSelectChain([]);
-      return fn(chain);
-    });
-    const result = await service.getDefectSeverityAlerts(COMPANY_A);
-    expect(result).toEqual([]);
-  });
-
-  it("getDefectSeverityAlerts always calls withTenant with companyId", async () => {
-    mockWithTenant.mockImplementation((_: string, fn: (tx: unknown) => Promise<unknown>) => {
-      const chain = buildSelectChain([]);
-      return fn(chain);
-    });
-    await service.getDefectSeverityAlerts(COMPANY_A);
-    expect(mockWithTenant).toHaveBeenCalledWith(COMPANY_A, expect.any(Function));
-  });
-
-  it("getDefectSeverityAlerts maps rows to defect_severity alert type", async () => {
-    const createdAt = new Date("2026-06-01T10:00:00Z");
-    mockWithTenant.mockImplementation((_: string, fn: (tx: unknown) => Promise<unknown>) => {
-      const chain = {
-        select: vi.fn().mockReturnValue({
-          from: vi.fn().mockReturnValue({
-            where: vi.fn().mockReturnValue({
-              limit: vi.fn().mockResolvedValue([
-                {
-                  id: "d1",
-                  description: "Policy violated",
-                  workflowStepId: "ws1",
-                  responsibleUserId: "u1",
-                  createdAt,
-                },
-              ]),
-            }),
-          }),
-        }),
-      };
-      return fn(chain);
-    });
-    const result = await service.getDefectSeverityAlerts(COMPANY_A);
-    expect(result).toHaveLength(1);
-    expect(result[0].type).toBe("defect_severity");
-    expect(result[0].defectId).toBe("d1");
-    expect(result[0].description).toBe("Policy violated");
-    expect(result[0].workflowStepId).toBe("ws1");
-    expect(result[0].responsibleUserId).toBe("u1");
-    expect(result[0].createdAt).toBe(createdAt.toISOString());
-  });
-
-  it("getAlerts includes defect_severity alerts alongside overdue and channel_risk", async () => {
-    const createdAt = new Date();
-    // Each call to withTenant returns appropriate mock data
-    let callCount = 0;
-    mockWithTenant.mockImplementation((_: string, fn: (tx: unknown) => Promise<unknown>) => {
-      callCount++;
-      if (callCount === 1) {
-        // getOverdueTasks — select chain returning empty
-        return fn(buildSelectChain([]));
-      } else if (callCount === 2) {
-        // getDefectSeverityAlerts — select chain returning 1 defect
-        const chain = {
-          select: vi.fn().mockReturnValue({
-            from: vi.fn().mockReturnValue({
-              where: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue([
-                  { id: "d2", description: "Quality issue", workflowStepId: "ws2", responsibleUserId: null, createdAt },
-                ]),
-              }),
-            }),
-          }),
-        };
-        return fn(chain);
-      } else {
-        // getChannelRiskAlerts — execute returning empty
-        return fn({ execute: vi.fn().mockResolvedValue({ rows: [] }) });
-      }
+      return fn({ ...chain, execute: vi.fn().mockResolvedValue({ rows: [] }) });
     });
     const alerts = await service.getAlerts(COMPANY_A);
-    expect(alerts.some((a) => a.type === "defect_severity")).toBe(true);
+    expect(alerts.some((a) => (a as { type: string }).type === "defect_severity")).toBe(false);
+    // ĐỐI CHỨNG: chỉ còn ĐÚNG HAI đường gọi withTenant (overdue + channel_risk). Không có ca này thì
+    // assert trên xanh cả khi `getAlerts` hỏng hẳn và trả mảng rỗng vì lý do khác.
+    expect(mockWithTenant).toHaveBeenCalledTimes(2);
   });
 
   // ─── tenant isolation: companyId always present ───────────────────────────

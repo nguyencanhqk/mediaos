@@ -49,7 +49,6 @@ const RESOURCE_LABELS: Record<string, string> = {
   comment: "Bình luận",
   label: "Nhãn",
   step: "Bước công việc",
-  "approval-request": "Yêu cầu phê duyệt",
   // NOTI / DASH
   notification: "Thông báo",
   notification_preference: "Tùy chọn thông báo",

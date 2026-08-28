@@ -28,7 +28,6 @@ export interface WatcherListRow {
 export interface ActionTaskRaw {
   id: string;
   taskType: string;
-  workflowStepId: string | null;
   projectId: string | null;
   mainAssigneeEmployeeId: string | null;
   assigneeUserId: string | null;
@@ -54,7 +53,7 @@ export class TaskActionsRepository {
     id: string,
   ): Promise<ActionTaskRaw | undefined> {
     const res = await tx.execute(sql`
-      select id, task_type as "taskType", workflow_step_id as "workflowStepId",
+      select id, task_type as "taskType",
              project_id as "projectId", main_assignee_employee_id as "mainAssigneeEmployeeId",
              assignee_user_id as "assigneeUserId", creator_user_id as "creatorUserId",
              task_status as "taskStatus", task_priority as "taskPriority", task_code as "taskCode",

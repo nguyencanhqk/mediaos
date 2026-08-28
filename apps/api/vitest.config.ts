@@ -65,7 +65,12 @@ export default defineConfig({
     exclude: [
       ...configDefaults.exclude,
       // de-media-fy (parked — CLAUDE.md reframe)
-      "test/workflow-lifecycle.e2e-spec.ts",
+      // ⓘ Mục workflow-lifecycle.e2e-spec (test/) ĐÃ XOÁ HẲN ở S10-CLEAN-WORKFLOWCLUSTER-2 — nó gọi
+      // /workflow/* vốn đã bị gỡ ở đợt trước. Exclude một file không tồn tại làm cổng tự-kiểm của
+      // route-http-coverage so lệch hai tập ⇒ phải gỡ ở CẢ HAI chỗ cùng lúc.
+      // ⛔ KHÔNG viết lại tên file trong ngoặc KÉP ở comment này: cổng tự-kiểm rút MỌI chuỗi
+      // trong khối `exclude:` bằng regex, kể cả chuỗi nằm trong comment ⇒ nó tưởng mục đã gỡ
+      // vẫn còn và ĐỎ. (Đã vấp đúng một lần khi viết bản vá này.)
       "test/integration/finance-cost-controller-deny.int-spec.ts",
       "test/integration/finance-cost-allocation-controller-deny.int-spec.ts",
       "test/integration/finance-revenue-controller-deny.int-spec.ts",

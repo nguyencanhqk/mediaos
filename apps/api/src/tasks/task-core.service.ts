@@ -617,7 +617,11 @@ export class TaskCoreService {
       const raw = await this.repo.findRawByIdTx(tx, user.companyId, id);
       if (!raw) throw new NotFoundException(ERR.NOT_FOUND);
       // Regression: task workflow-driven do FSM quản — KHÔNG cập nhật tay (giữ guard hiện có TasksService).
-      if (raw.workflowStepId !== null || WORKFLOW_TASK_TYPES.has(raw.taskType)) {
+      // ⓘ Vế `workflowStepId !== null` ĐÃ GỠ (S10-CLEAN-WORKFLOWCLUSTER-2): cột `tasks.workflow_step_id`
+      // bị DROP cùng cụm workflow/approval. Đo trước khi gỡ: 0/12 hàng có cột này NOT NULL và 0 hộ
+      // code còn sinh ra chúng ⇒ vế đó là hằng-sai. Vế `WORKFLOW_TASK_TYPES` GIỮ NGUYÊN — nó mới là
+      // vế đang gác thật (task_type ∈ workflow_step/production/review/revision vẫn hợp lệ ở CHECK).
+      if (WORKFLOW_TASK_TYPES.has(raw.taskType)) {
         throw new BadRequestException(ERR.WORKFLOW_LOCKED);
       }
       // DATA-SCOPE WRITE: scope < Company ⇒ task phải nằm trong phạm vi update của actor (fail-closed).
@@ -827,7 +831,11 @@ export class TaskCoreService {
     return this.db.withTenant(user.companyId, async (tx) => {
       const raw = await this.repo.findRawByIdTx(tx, user.companyId, taskId);
       if (!raw) throw new NotFoundException(ERR.NOT_FOUND);
-      if (raw.workflowStepId !== null || WORKFLOW_TASK_TYPES.has(raw.taskType)) {
+      // ⓘ Vế `workflowStepId !== null` ĐÃ GỠ (S10-CLEAN-WORKFLOWCLUSTER-2): cột `tasks.workflow_step_id`
+      // bị DROP cùng cụm workflow/approval. Đo trước khi gỡ: 0/12 hàng có cột này NOT NULL và 0 hộ
+      // code còn sinh ra chúng ⇒ vế đó là hằng-sai. Vế `WORKFLOW_TASK_TYPES` GIỮ NGUYÊN — nó mới là
+      // vế đang gác thật (task_type ∈ workflow_step/production/review/revision vẫn hợp lệ ở CHECK).
+      if (WORKFLOW_TASK_TYPES.has(raw.taskType)) {
         throw new BadRequestException(ERR.WORKFLOW_LOCKED);
       }
       // Bound data-scope update-state nằm TRONG applyStateChangeTx (finding security-reviewer:
@@ -976,7 +984,11 @@ export class TaskCoreService {
     await this.db.withTenant(user.companyId, async (tx) => {
       const raw = await this.repo.findRawByIdTx(tx, user.companyId, id);
       if (!raw) throw new NotFoundException(ERR.NOT_FOUND);
-      if (raw.workflowStepId !== null || WORKFLOW_TASK_TYPES.has(raw.taskType)) {
+      // ⓘ Vế `workflowStepId !== null` ĐÃ GỠ (S10-CLEAN-WORKFLOWCLUSTER-2): cột `tasks.workflow_step_id`
+      // bị DROP cùng cụm workflow/approval. Đo trước khi gỡ: 0/12 hàng có cột này NOT NULL và 0 hộ
+      // code còn sinh ra chúng ⇒ vế đó là hằng-sai. Vế `WORKFLOW_TASK_TYPES` GIỮ NGUYÊN — nó mới là
+      // vế đang gác thật (task_type ∈ workflow_step/production/review/revision vẫn hợp lệ ở CHECK).
+      if (WORKFLOW_TASK_TYPES.has(raw.taskType)) {
         throw new BadRequestException(ERR.WORKFLOW_LOCKED);
       }
       await this.assertInScopeForWrite(tx, user, id, deleteScope);
@@ -1008,7 +1020,11 @@ export class TaskCoreService {
       }
 
       // Con workflow-driven không nên tồn tại (HR task không bao giờ set parent) — fail-closed.
-      if (children.some((c) => c.workflowStepId !== null || WORKFLOW_TASK_TYPES.has(c.taskType))) {
+      // ⓘ Vế `workflowStepId !== null` ĐÃ GỠ (S10-CLEAN-WORKFLOWCLUSTER-2): cột `tasks.workflow_step_id`
+      // bị DROP cùng cụm workflow/approval. Đo trước khi gỡ: 0/12 hàng có cột này NOT NULL và 0 hộ
+      // code còn sinh ra chúng ⇒ vế đó là hằng-sai. Vế `WORKFLOW_TASK_TYPES` GIỮ NGUYÊN — nó mới là
+      // vế đang gác thật (task_type ∈ workflow_step/production/review/revision vẫn hợp lệ ở CHECK).
+      if (children.some((c) => WORKFLOW_TASK_TYPES.has(c.taskType))) {
         throw new BadRequestException(ERR.WORKFLOW_LOCKED);
       }
 

@@ -66,13 +66,25 @@ export const FK_TENANT_WAIVERS: readonly FkWaiver[] = [];
 export const FK_LAYER_G_GUARD_FLOOR = 11;
 
 /**
- * MỐC SÀN. Đo lại 2026-08-25 trên lane `mediaos_fkcatalog` (head 0546) VÀ PROD `mediaos`:
- * **459** FK một-cột giữa hai bảng tenant · **448** đã có composite phủ · **11 còn hở** (đúng 11 cặp
- * lớp G, nay đã có guard trigger thay vì waiver).
- * ⚠️ Số cũ ghi ở đây và ở header `0535` là **460/449** — đo ở head 0534, trước `0536`–`0546`.
- * Pin để lưới không âm thầm co về rỗng (bộ lọc sai ⇒ 0 cặp ⇒ mọi assert xanh vô nghĩa).
+ * MỐC SÀN. Đo lại 2026-08-28 trên lane `mediaos_wfcluster2` (head **0548**): **423** FK một-cột giữa
+ * hai bảng tenant. Sàn đặt ĐÚNG BẰNG số đo — pin để lưới không âm thầm co về rỗng (bộ lọc sai ⇒ 0 cặp
+ * ⇒ mọi assert xanh vô nghĩa).
+ *
+ * ⚠️ **440 → 423 LÀ HẠ SÀN, VÀ ĐÂY LÀ LÝ DO BẰNG VĂN BẢN.** `S10-CLEAN-WORKFLOWCLUSTER-2` DROP 14 bảng
+ * của cụm workflow/approval + 4 cột FK (`tasks.workflow_step_id` · `tasks.workflow_instance_id` ·
+ * `evaluation_results.workflow_step_id` · `bonus_penalties.defect_id`) ⇒ **36 cặp FK biến mất**.
+ * ĐỐI CHỨNG đo cùng ngày trên lane `mediaos_wfbase547` (mới tinh, head 0547, KHÔNG có `0548`): **459**
+ * — đúng con số cũ. ⇒ 459 − 423 = 36 khớp trọn vẹn với phần bị DROP, không có cặp nào "rơi" ngoài dự
+ * kiến. Đó là cách kiểm mà bất kỳ lần hạ sàn nào sau này cũng phải làm: đo HAI lane, chênh lệch phải
+ * giải thích được từng cặp.
+ *
+ * ⛔ Sàn này CHỈ được hạ khi BẢNG/CỘT thật sự biến mất khỏi schema. Census tụt vì bộ lọc hỏng, vì
+ * composite FK bị gỡ, hay vì lane DB migrate thiếu ⇒ là NỢ, cấm hạ sàn.
+ *
+ * (Lịch sử: 440 đặt 2026-08-25 trên lane `mediaos_fkcatalog` head 0546 khi đo được 459/448 phủ/11 hở;
+ * trước đó 460/449 ở head 0534.)
  */
-export const FK_SINGLE_COL_PAIRS_FLOOR = 440;
+export const FK_SINGLE_COL_PAIRS_FLOOR = 423;
 
 /**
  * LỚP P — "BỊT MỘT NỬA". Số cặp có `child.company_id` NULLABLE, đo 2026-07-31 sau mig `0535`.
