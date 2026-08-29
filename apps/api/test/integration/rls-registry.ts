@@ -1913,104 +1913,30 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
 
-  // ── G10-4 Meeting (meeting_rooms / meetings / meeting_attendees — mig 0052) ──
+  // ── S11-ROOM-DB-1 (mig 0552·0553) — ROOM: meeting_rooms (tái dụng, capacity NOT NULL từ 0552) + room_bookings +
+  // room_booking_attendees. 4 entry di sản meetings/meeting_attendees/meeting_notes/meeting_tasks ĐÃ GỠ (bảng DROP 0553).
+  // Mọi FK chéo là composite tenant FK ⇒ chain seed qua `direct` (owner) với company_id tường minh. Mỗi seedRow lượt
+  // tạo PHÒNG RIÊNG + ends_at = starts_at + 1h ⇒ hai lần seed/tenant không bao giờ đụng EXCLUDE
+  // room_bookings_no_overlap_excl (plan-reviewer M5). Cleanup: cleanupTenants() xoá attendees → bookings TRƯỚC users.
   {
     name: "meeting_rooms",
     table: "meeting_rooms",
-    seedRow: async (direct, t) => {
-      const r = await direct.query(
-        `INSERT INTO meeting_rooms (company_id, name) VALUES ($1, $2) RETURNING id`,
-        [t.companyId, `rls-room-${randomUUID().slice(0, 8)}`],
-      );
-      return r.rows[0].id as string;
-    },
+    seedRow: async (direct, t) => seedRoom(direct, t.companyId),
   },
   {
-    name: "meetings",
-    table: "meetings",
-    seedRow: async (direct, t) => {
-      const userId = await seedUser(
-        direct,
-        t.companyId,
-        `mtg-org-${randomUUID().slice(0, 8)}@x.test`,
-      );
-      const r = await direct.query(
-        `INSERT INTO meetings (company_id, title, starts_at, ends_at, organizer_id)
-         VALUES ($1, $2, now() + interval '1 hour', now() + interval '2 hours', $3) RETURNING id`,
-        [t.companyId, `rls-mtg-${randomUUID().slice(0, 8)}`, userId],
-      );
-      return r.rows[0].id as string;
-    },
+    name: "room_bookings",
+    table: "room_bookings",
+    seedRow: async (direct, t) => (await seedRoomBookingChain(direct, t.companyId)).bookingId,
   },
   {
-    name: "meeting_attendees",
-    table: "meeting_attendees",
+    name: "room_booking_attendees",
+    table: "room_booking_attendees",
     seedRow: async (direct, t) => {
-      const userId = await seedUser(
-        direct,
-        t.companyId,
-        `mtg-att-${randomUUID().slice(0, 8)}@x.test`,
-      );
-      const mtgRes = await direct.query(
-        `INSERT INTO meetings (company_id, title, starts_at, ends_at, organizer_id)
-         VALUES ($1, $2, now() + interval '1 hour', now() + interval '2 hours', $3) RETURNING id`,
-        [t.companyId, `rls-att-mtg-${randomUUID().slice(0, 8)}`, userId],
-      );
+      const c = await seedRoomBookingChain(direct, t.companyId);
+      const attendee = await seedUser(direct, t.companyId, `room-att-${randomUUID().slice(0, 8)}@x.test`);
       const r = await direct.query(
-        `INSERT INTO meeting_attendees (company_id, meeting_id, user_id)
-         VALUES ($1, $2, $3) RETURNING id`,
-        [t.companyId, mtgRes.rows[0].id, userId],
-      );
-      return r.rows[0].id as string;
-    },
-  },
-
-  // ── G10-4 Meeting notes + tasks link (meeting_notes / meeting_tasks — mig 0053) ──
-  {
-    name: "meeting_notes",
-    table: "meeting_notes",
-    seedRow: async (direct, t) => {
-      const userId = await seedUser(
-        direct,
-        t.companyId,
-        `mtg-note-${randomUUID().slice(0, 8)}@x.test`,
-      );
-      const mtgRes = await direct.query(
-        `INSERT INTO meetings (company_id, title, starts_at, ends_at, organizer_id)
-         VALUES ($1, $2, now() + interval '1 hour', now() + interval '2 hours', $3) RETURNING id`,
-        [t.companyId, `rls-note-mtg-${randomUUID().slice(0, 8)}`, userId],
-      );
-      const r = await direct.query(
-        `INSERT INTO meeting_notes (company_id, meeting_id, author_user_id, body)
-         VALUES ($1, $2, $3, $4) RETURNING id`,
-        [t.companyId, mtgRes.rows[0].id, userId, "rls biên bản"],
-      );
-      return r.rows[0].id as string;
-    },
-  },
-  {
-    name: "meeting_tasks",
-    table: "meeting_tasks",
-    seedRow: async (direct, t) => {
-      const userId = await seedUser(
-        direct,
-        t.companyId,
-        `mtg-mt-${randomUUID().slice(0, 8)}@x.test`,
-      );
-      const mtgRes = await direct.query(
-        `INSERT INTO meetings (company_id, title, starts_at, ends_at, organizer_id)
-         VALUES ($1, $2, now() + interval '1 hour', now() + interval '2 hours', $3) RETURNING id`,
-        [t.companyId, `rls-mt-mtg-${randomUUID().slice(0, 8)}`, userId],
-      );
-      const taskRes = await direct.query(
-        `INSERT INTO tasks (company_id, task_type, title, status, origin, revision_round)
-         VALUES ($1, 'meeting_action', $2, 'not_started', 'initial', 0) RETURNING id`,
-        [t.companyId, `rls-mt-task-${randomUUID().slice(0, 8)}`],
-      );
-      const r = await direct.query(
-        `INSERT INTO meeting_tasks (company_id, meeting_id, task_id)
-         VALUES ($1, $2, $3) RETURNING id`,
-        [t.companyId, mtgRes.rows[0].id, taskRes.rows[0].id],
+        `INSERT INTO room_booking_attendees (company_id, booking_id, user_id) VALUES ($1, $2, $3) RETURNING id`,
+        [t.companyId, c.bookingId, attendee],
       );
       return r.rows[0].id as string;
     },
@@ -2784,6 +2710,30 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
 ];
+
+/** ROOM: 1 phòng họp (tên ngẫu nhiên — unique lower(name) theo company trên hàng sống; capacity NOT NULL > 0). */
+async function seedRoom(direct: Pool, companyId: string): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO meeting_rooms (company_id, name, capacity) VALUES ($1, $2, 8) RETURNING id`,
+    [companyId, `rls-room-${randomUUID().slice(0, 8)}`],
+  );
+  return r.rows[0].id as string;
+}
+
+/** ROOM: user (organizer) → meeting_rooms (phòng RIÊNG) → room_bookings Confirmed 1h (FK-valid, cùng company). */
+async function seedRoomBookingChain(
+  direct: Pool,
+  companyId: string,
+): Promise<{ roomId: string; bookingId: string; organizerId: string }> {
+  const organizerId = await seedUser(direct, companyId, `room-org-${randomUUID().slice(0, 8)}@x.test`);
+  const roomId = await seedRoom(direct, companyId);
+  const r = await direct.query(
+    `INSERT INTO room_bookings (company_id, room_id, title, starts_at, ends_at, organizer_user_id, booked_by_user_id)
+     VALUES ($1, $2, $3, now() + interval '1 hour', now() + interval '2 hours', $4, $4) RETURNING id`,
+    [companyId, roomId, `rls-booking-${randomUUID().slice(0, 8)}`, organizerId],
+  );
+  return { roomId, bookingId: r.rows[0].id as string, organizerId };
+}
 
 /** ASSET: 1 loại tài sản (code/prefix ngẫu nhiên — prefix ^[A-Z0-9]{2,6}$, unique KHÔNG partial theo company). */
 async function seedAssetCategory(direct: Pool, companyId: string): Promise<string> {

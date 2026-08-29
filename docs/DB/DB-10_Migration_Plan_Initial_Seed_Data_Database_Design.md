@@ -633,7 +633,7 @@ Secret phải lấy từ environment variable hoặc secret manager.
 | PAYROLL | Tiền lương | Phase 2 | false |
 | RECRUIT | Tuyển dụng | Phase 2 | false |
 | ASSET | Quản lý tài sản | Phase 3 | false — **`0550` (S11-ASSET-DB-1) GIỮ false** (tiền lệ `0538` CHAT: chưa có endpoint thì không bật; pin `migration-smoke`); bật `true` ở **S11-ASSET-FE-1** bằng `UPDATE` tường minh + gỡ `ASSET` khỏi `EXTENSION_INACTIVE_MODULES` cùng commit |
-| ROOM | Quản lý phòng họp | Phase 3 | false → **true** khi S11-ROOM-DB-1 seed (DB-16 §9 bước C — UPDATE tường minh) |
+| ROOM | Quản lý phòng họp | Phase 3 | **false** (giữ sau S11-ROOM-DB-1 — mig `0554` chỉ verify; bật ở S11-ROOM-FE-1 + gỡ pin smoke cùng commit) |
 | CHAT | Chat nội bộ | Phase 4 | false |
 | SOCIAL | Mạng xã hội nội bộ | Phase 4 | false |
 | MOBILE | Mobile app | Phase 5 | false |

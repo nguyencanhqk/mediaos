@@ -142,9 +142,9 @@ export const AUDIT_OBJECT_TYPES = [
   "notification",
   "notification_rule",
   "notification_preference",
-  "meeting",
+  // ROOM (SPEC-14 §18, mig 0553/0554): 'meeting_room' giữ (bảng tái dụng); 'meeting'/'meeting_note' đã gỡ khỏi TS
+  // (bảng DROP 0553) — CHECK DB VẪN giữ hai giá trị đó (append-only #2; parity assert là một chiều CHECK ⊇ TS).
   "meeting_room",
-  "meeting_note",
   // G13 finance — sổ cái append-only + phân bổ + chốt lợi nhuận + đề xuất chi (xem migration 0070).
   // Quyết định duyệt chi audit trên `expense_request` (KHÔNG thêm type cho bảng log `expense_approvals`).
   "revenue_record",
@@ -386,5 +386,8 @@ export const AUDIT_OBJECT_TYPES = [
   "asset_assignment",
   "asset_maintenance",
   "asset_inventory",
+  // S11-ROOM-DB-1 (mig 0554): 'room_booking' cho đặt/huỷ lượt (object_id = bookingId; đặt hộ ghi cả organizer +
+  // bookedBy trong after); phòng họp dùng 'meeting_room' ở trên (create · update · deactivate · delete).
+  "room_booking",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

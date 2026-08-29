@@ -71,16 +71,16 @@ export const notificationEvents = pgTable(
     index("idx_notification_events_company_module")
       .on(t.companyId, t.moduleCode, t.isEnabled)
       .where(sql`deleted_at IS NULL`),
-    // PARITY với CHECK thật (0479 → +GOAL 0507 → +LMS 0529 → +CHAT 0538 → +ASSET 0551). Nới = re-stamp superset ở
+    // PARITY với CHECK thật (0479 → +GOAL 0507 → +LMS 0529 → +CHAT 0538 → +ASSET 0551 → +ROOM 0555). Nới = re-stamp superset ở
     // migration TRÊN CẢ HAI bảng notification_events + notifications, rồi cập nhật chuỗi này + NotiModuleCode/NotiType
     // (notification-event-catalog.const.ts) + notificationTypeEnumSchema (contracts) cùng commit.
     check(
       "chk_notification_events_module_code",
-      sql`module_code IN ('AUTH','HR','ATT','LEAVE','TASK','DASH','NOTI','SYSTEM','GOAL','LMS','CHAT','ASSET')`,
+      sql`module_code IN ('AUTH','HR','ATT','LEAVE','TASK','DASH','NOTI','SYSTEM','GOAL','LMS','CHAT','ASSET','ROOM')`,
     ),
     check(
       "chk_notification_events_type",
-      sql`notification_type IN ('System','Account','HR','Attendance','Leave','Task','Project','Approval','Reminder','Warning','Error','Goal','Training','Chat','Asset')`,
+      sql`notification_type IN ('System','Account','HR','Attendance','Leave','Task','Project','Approval','Reminder','Warning','Error','Goal','Training','Chat','Asset','Room')`,
     ),
     check(
       "chk_notification_events_priority",

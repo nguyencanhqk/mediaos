@@ -549,6 +549,13 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM assets WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM asset_categories WHERE company_id = ANY($1::uuid[])", ids);
 
+  // ── S11-ROOM-DB-1 (mig 0552) — 2 sổ ROOM, con → cha ──────────────────────────
+  // room_bookings.organizer_user_id / room_booking_attendees.user_id → users là composite `ON DELETE NO ACTION`
+  // ⇒ PHẢI xoá TRƯỚC `DELETE FROM users` bên dưới (DB-16 §4.2). meeting_rooms rơi theo cascade từ companies
+  // (room_bookings.room_id NO ACTION kiểm cuối câu — cùng câu DELETE companies nên không nổ).
+  await direct.query("DELETE FROM room_booking_attendees WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM room_bookings WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G4-6 Communication ───────────────────────────────────────────────────
   // ⚠️ S7-CALL (mig 0546): cuộc gọi xoá TRƯỚC chat_rooms VÀ trước `DELETE FROM users` bên dưới.
   // Cả 4 FK của hai bảng này là composite `ON DELETE RESTRICT` (KHÔNG cascade — cascade chạy tầng

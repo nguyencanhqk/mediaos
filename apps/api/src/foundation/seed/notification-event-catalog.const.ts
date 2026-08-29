@@ -13,7 +13,7 @@
  *   event_code VERBATIM: TASK_MENTIONED + TASK_COMMENT_CREATED (KHÔNG TASK_COMMENT_MENTIONED).
  */
 
-/** module_code hợp lệ (CHECK chk_notification_events_module_code — 0479 + 'GOAL' 0507 + 'LMS' 0529 + 'CHAT' 0538 + 'ASSET' 0551). */
+/** module_code hợp lệ (CHECK chk_notification_events_module_code — 0479 + 'GOAL' 0507 + 'LMS' 0529 + 'CHAT' 0538 + 'ASSET' 0551 + 'ROOM' 0555). */
 export type NotiModuleCode =
   | "AUTH"
   | "HR"
@@ -26,9 +26,10 @@ export type NotiModuleCode =
   | "GOAL"
   | "LMS"
   | "CHAT"
-  | "ASSET";
+  | "ASSET"
+  | "ROOM";
 
-/** notification_type hợp lệ (CHECK chk_notification_events_type — 0479 + 'Goal' 0507 + 'Training' 0529 + 'Chat' 0538 + 'Asset' 0551). */
+/** notification_type hợp lệ (CHECK chk_notification_events_type — 0479 + 'Goal' 0507 + 'Training' 0529 + 'Chat' 0538 + 'Asset' 0551 + 'Room' 0555). */
 export type NotiType =
   | "System"
   | "Account"
@@ -44,7 +45,8 @@ export type NotiType =
   | "Goal"
   | "Training"
   | "Chat"
-  | "Asset";
+  | "Asset"
+  | "Room";
 
 /** default_priority hợp lệ (CHECK chk_notification_events_priority — 0479). */
 export type NotiPriority = "Low" | "Normal" | "High" | "Urgent" | "Critical";
@@ -141,6 +143,15 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
   { module: "ASSET", eventCode: "ASSET_ASSIGNED", type: "Asset", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "ASSET", eventCode: "ASSET_REVOKED", type: "Asset", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "ASSET", eventCode: "ASSET_MAINTENANCE_DUE", type: "Asset", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  // ===== ROOM (SPEC-14 §17 · NOTI-EVENT-013..015 · mig 0555 · S11-ROOM-DB-1) =====
+  // Cả 3 dedupe_strategy='DedupeKey' (catalog thắng DEFAULT_DEDUPE — KHÔNG thêm entry notification-dedupe.const.ts):
+  //   confirmed/cancelled: dedupeKey 'room:confirmed|cancelled:{bookingId}' · reminder: 'room:reminder:{bookingId}:{startsAt}'
+  //   (job quét mỗi nhịp, nhắc đúng 1 lần/lượt). Người nhận = organizer ∪ attendees theo id CÓ SẴN trong lượt (mode UserIds);
+  //   013/014 trừ actor (isSystemEvent=false); 015 do job phát, KHÔNG có actor ⇒ isSystemEvent=true (không loại ai).
+  //   Payload CHỈ tiêu đề · tên phòng · khung giờ · tên người · deep-link /me/room-bookings?focus={bookingId}.
+  { module: "ROOM", eventCode: "ROOM_BOOKING_CONFIRMED", type: "Room", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "ROOM", eventCode: "ROOM_BOOKING_CANCELLED", type: "Room", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "ROOM", eventCode: "ROOM_BOOKING_REMINDER", type: "Room", priority: "High", isEnabled: true, isSystemEvent: true }, // prettier-ignore
   // ===== Phần dư SPEC-08 §15 (ngoài MVP) — isEnabled = false, GIỮ trong catalog (14 mã) =====
   { module: "AUTH", eventCode: "AUTH_PASSWORD_CHANGED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
   { module: "AUTH", eventCode: "AUTH_USER_UNLOCKED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
@@ -160,14 +171,14 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
 ] as const;
 
 /** Tổng số event UNION (pin để test bắt thiếu/thừa mã). */
-export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 64 (59 + 2 CHAT mig 0538 + 3 ASSET mig 0551)
+export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 67 (59 + 2 CHAT mig 0538 + 3 ASSET mig 0551 + 3 ROOM mig 0555)
 
 /** Danh mục event ENABLED (MVP set DB-07 §14.1) — mỗi mã PHẢI có đúng 1 template IN_APP/vi-VN. */
 export const NOTI_ENABLED_EVENTS: readonly NotiEventCatalogEntry[] = NOTI_EVENT_CATALOG.filter(
   (e) => e.isEnabled,
 );
 
-export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 50 (45 + 2 CHAT mig 0538 + 3 ASSET mig 0551)
+export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 53 (45 + 2 CHAT mig 0538 + 3 ASSET mig 0551 + 3 ROOM mig 0555)
 
 /**
  * S5-LMS-NOTI-1 — ALLOWLIST eventCode mà token máy LMS (`LMS_NOTI_TOKEN`) được phép đẩy vào intake.

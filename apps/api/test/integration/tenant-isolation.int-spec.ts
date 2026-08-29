@@ -264,10 +264,30 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
    * đo, không cộng biên. Tụt thêm một cặp là ĐỎ và phải điều tra — **không được hạ sàn lần nữa** trước
    * khi chứng minh được từng cặp biến mất, bằng đo A/B hai lane như lần này.
    *
+   * ⟲ S11-ROOM-DB-1 (ROOM-DEC-001) — HẠ **241 → 232**, có chủ đích, đo A/B hai lane 2026-08-29:
+   *   · đối chứng `mediaos_roombase551` (head `0551`, KHÔNG có `0552+`): 412 cặp thử · **241** chứng minh.
+   *   · `mediaos_roomdb1` (head `0555`): 404 cặp thử · **232** chứng minh.
+   *   · 412 − 404 = **8 cặp thử biến mất** = đúng 8 FK một-cột rơi theo `DROP TABLE` ở mig `0553`
+   *     (`meetings.meeting_room_id/organizer_id` · `meeting_attendees.meeting_id/user_id` ·
+   *     `meeting_notes.meeting_id/author_user_id` · `meeting_tasks.meeting_id/task_id`) — cả 8 vốn được 0535
+   *     phủ composite nên đều thuộc nhóm "chứng minh" ⇒ −8. Cùng con số `FK_SINGLE_COL_PAIRS_FLOOR` 423 → 415.
+   *   · Cặp thứ **9**: `meeting_rooms.created_by -> users` vẫn còn nhưng ĐỔI NHÓM sang "chặn bởi cơ chế
+   *     khác" = `23505/uq_meeting_rooms_company_name_active`: ca W4 chèn BẢN SAO hàng seed (cùng tên phòng)
+   *     với FK trỏ sang B, và unique `lower(name)` mới của 0552 nổ TRƯỚC khi FK kịp lên tiếng — cùng lớp
+   *     với `teams_company_name_active_uq` / `org_units_company_name_active_uq` đã nằm sẵn trong nhóm đó.
+   *     Composite FK `meeting_rooms_created_by_company_fk` (0535) KHÔNG bị đụng (xtenant-fk-ratchet (a) vẫn
+   *     xanh). ⇒ MẤT ĐỐI TƯỢNG ĐO (8) + ĐỔI NHÓM VÌ HÀNG RÀO MỚI (1), không phải mất hàng rào. Bằng chứng HÀNH VI
+   *     của cặp đổi nhóm (23503 đích danh với tên phòng duy nhất, + đối chứng cùng tenant) chuyển sang
+   *     `s11-room-db1-invariants.int-spec.ts` B4 — luật ở :247-250 vẫn đúng: không hạ sàn để "cho qua", mà
+   *     giữ chứng minh ở lưới có neo tên riêng. Lưới W4 vẫn nên xáo cột unique khi nhân bản (nợ harness, ngoài WO).
+   *   · 2 bảng mới `room_bookings`/`room_booking_attendees` chỉ có composite FK (0 FK một-cột) nên không
+   *     sinh cặp thử — không bù được.
+   * ⚠️ ĐỆM NAY = 0 (232 vs sàn 232). Tụt thêm một cặp là ĐỎ và phải điều tra bằng đo A/B như trên.
+   *
    * Sàn: tụt sâu = composite FK bị gỡ hoặc bộ lọc co lưới. Việc bắt CHÍNH XÁC từng constraint
    * bị gỡ là của `xtenant-fk-ratchet.int-spec.ts` (a) — ca này là lưới thứ hai.
    */
-  const W4_FK_BLOCKED_FLOOR = 241;
+  const W4_FK_BLOCKED_FLOOR = 232;
 
   /** Cơ chế chặn quan sát được cho từng (bảng, ca) — in ra cuối suite làm tài liệu sống. */
   const blockedBy: { table: string; testCase: string; how: string }[] = [];
