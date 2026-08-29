@@ -13,7 +13,7 @@
  *   event_code VERBATIM: TASK_MENTIONED + TASK_COMMENT_CREATED (KHÔNG TASK_COMMENT_MENTIONED).
  */
 
-/** module_code hợp lệ (CHECK chk_notification_events_module_code — 0479 + 'GOAL' 0507 + 'LMS' 0529 + 'CHAT' 0538). */
+/** module_code hợp lệ (CHECK chk_notification_events_module_code — 0479 + 'GOAL' 0507 + 'LMS' 0529 + 'CHAT' 0538 + 'ASSET' 0551). */
 export type NotiModuleCode =
   | "AUTH"
   | "HR"
@@ -25,9 +25,10 @@ export type NotiModuleCode =
   | "SYSTEM"
   | "GOAL"
   | "LMS"
-  | "CHAT";
+  | "CHAT"
+  | "ASSET";
 
-/** notification_type hợp lệ (CHECK chk_notification_events_type — 0479 + 'Goal' 0507 + 'Training' 0529 + 'Chat' 0538). */
+/** notification_type hợp lệ (CHECK chk_notification_events_type — 0479 + 'Goal' 0507 + 'Training' 0529 + 'Chat' 0538 + 'Asset' 0551). */
 export type NotiType =
   | "System"
   | "Account"
@@ -42,7 +43,8 @@ export type NotiType =
   | "Error"
   | "Goal"
   | "Training"
-  | "Chat";
+  | "Chat"
+  | "Asset";
 
 /** default_priority hợp lệ (CHECK chk_notification_events_priority — 0479). */
 export type NotiPriority = "Low" | "Normal" | "High" | "Urgent" | "Critical";
@@ -131,6 +133,14 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
   // dedupeKey 'chat:{roomId}:{recipientUserId}:{bucket15m}'; CHAT_MENTIONED gửi ngay nên None.
   { module: "CHAT", eventCode: "CHAT_MENTIONED", type: "Chat", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "CHAT", eventCode: "CHAT_DIRECT_MESSAGE", type: "Chat", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  // ===== ASSET (SPEC-13 §17 · NOTI-EVENT-010..012 · mig 0551 · S11-ASSET-DB-1) =====
+  // Cả 3 dedupe_strategy='DedupeKey' (catalog thắng DEFAULT_DEDUPE — KHÔNG thêm entry notification-dedupe.const.ts):
+  //   assigned/revoked: dedupeKey 'asset:assigned|revoked:{assignmentId}' · maint-due: 'asset:maint-due:{assetId}:{dueDate}'
+  //   (cùng hạn không nhắc lại; đổi hạn ⇒ khoá mới). Payload CHỈ mã + tên tài sản + tên người + link — KHÔNG giá/chi phí.
+  //   012 người nhận resolve theo ROLE (user_roles của asset-manager/company-admin, mode 'UserIds') — SPEC-13 §17.
+  { module: "ASSET", eventCode: "ASSET_ASSIGNED", type: "Asset", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "ASSET", eventCode: "ASSET_REVOKED", type: "Asset", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "ASSET", eventCode: "ASSET_MAINTENANCE_DUE", type: "Asset", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   // ===== Phần dư SPEC-08 §15 (ngoài MVP) — isEnabled = false, GIỮ trong catalog (14 mã) =====
   { module: "AUTH", eventCode: "AUTH_PASSWORD_CHANGED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
   { module: "AUTH", eventCode: "AUTH_USER_UNLOCKED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
@@ -150,14 +160,14 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
 ] as const;
 
 /** Tổng số event UNION (pin để test bắt thiếu/thừa mã). */
-export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 61 (59 + 2 CHAT, mig 0538)
+export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 64 (59 + 2 CHAT mig 0538 + 3 ASSET mig 0551)
 
 /** Danh mục event ENABLED (MVP set DB-07 §14.1) — mỗi mã PHẢI có đúng 1 template IN_APP/vi-VN. */
 export const NOTI_ENABLED_EVENTS: readonly NotiEventCatalogEntry[] = NOTI_EVENT_CATALOG.filter(
   (e) => e.isEnabled,
 );
 
-export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 47 (45 + 2 CHAT, mig 0538)
+export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 50 (45 + 2 CHAT mig 0538 + 3 ASSET mig 0551)
 
 /**
  * S5-LMS-NOTI-1 — ALLOWLIST eventCode mà token máy LMS (`LMS_NOTI_TOKEN`) được phép đẩy vào intake.

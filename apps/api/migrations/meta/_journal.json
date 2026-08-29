@@ -1513,6 +1513,27 @@
       "when": 1717587337000,
       "tag": "0548_s10cleanworkflowcluster2_drop_workflow_approval_cluster",
       "breakpoints": true
+    },
+    {
+      "idx": 216,
+      "version": "7",
+      "when": 1717587338000,
+      "tag": "0549_s11assetdb1_asset_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 217,
+      "version": "7",
+      "when": 1717587339000,
+      "tag": "0550_s11assetdb1_seed_role_perms_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 218,
+      "version": "7",
+      "when": 1717587340000,
+      "tag": "0551_s11assetdb1_noti_asset",
+      "breakpoints": true
     }
   ]
 }

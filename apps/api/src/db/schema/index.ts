@@ -109,3 +109,8 @@ export * from "./goals";
 // SELECT,INSERT,UPDATE — KHÔNG DELETE, worker SELECT). Quyền ('manage','task-template') seed 0527; audit
 // object_type 'task_template' UNION-ADD 0528.
 export * from "./task-templates";
+// S11-ASSET-DB-1 (DB-15 §6 / SPEC-13, mig 0549·0550·0551): asset_categories + assets (mutable, soft-delete — app
+// SELECT,INSERT,UPDATE, KHÔNG DELETE) + 4 SỔ asset_assignments · asset_maintenances · asset_inventories ·
+// asset_inventory_items (app SELECT,INSERT + UPDATE CẤP CỘT, KHÔNG DELETE, KHÔNG deleted_at). company_id NOT NULL,
+// RLS+FORCE literal-GUC, MỌI FK chéo là composite tenant FK (chỉ ở SQL). Quyền §9d seed 0550; NOTI 0551.
+export * from "./assets";

@@ -538,6 +538,17 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   // device_tokens.user_id → users (NO ACTION) → xoá TRƯỚC users.
   await direct.query("DELETE FROM device_tokens WHERE company_id = ANY($1::uuid[])", ids);
 
+  // ── S11-ASSET-DB-1 (mig 0549) — 6 bảng ASSET, con → cha ─────────────────────
+  // FK nội bộ composite `ON DELETE NO ACTION`; *_by của 4 sổ → users cũng NO ACTION (không để RI action ghi đè
+  // ledger) ⇒ PHẢI xoá tường minh TRƯỚC `DELETE FROM users` và `employee_profiles` bên dưới. Quên một dòng là
+  // 23503 ở afterAll của MỌI int-spec chạm ASSET (`drop-table-must-clean-test-teardown`).
+  await direct.query("DELETE FROM asset_inventory_items WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM asset_inventories WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM asset_maintenances WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM asset_assignments WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM assets WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM asset_categories WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G4-6 Communication ───────────────────────────────────────────────────
   // ⚠️ S7-CALL (mig 0546): cuộc gọi xoá TRƯỚC chat_rooms VÀ trước `DELETE FROM users` bên dưới.
   // Cả 4 FK của hai bảng này là composite `ON DELETE RESTRICT` (KHÔNG cascade — cascade chạy tầng

@@ -374,5 +374,17 @@ export const AUDIT_OBJECT_TYPES = [
   // (BẤT BIẾN #3). 0545 UNION ADD-only, NEO 2 TẦNG vào `object_type = ANY(…)` như 0528.
   "social_sso",
   "social_account",
+  // S11-ASSET-DB-1 (mig 0550): module ASSET (SPEC-13 §18) — 'asset' cho tạo/sửa/xoá mềm/đổi trạng thái (thanh
+  // lý · mất · tìm thấy lại), 'asset_category' cho CRUD/khôi phục loại, 'asset_assignment' cho cấp phát/thu hồi,
+  // 'asset_maintenance' cho mở/đóng lượt bảo trì, 'asset_inventory' cho mở/đóng đợt kiểm kê (dòng kiểm kê gom
+  // dưới aggregate này, objectId = inventoryId — KHÔNG có 'asset_inventory_item'). before/after = snapshot
+  // nghiệp vụ (mã/tên/trạng thái/người giữ) — KHÔNG giá mua/chi phí/PII vào before/after (BẤT BIẾN #3; trường tài
+  // chính chỉ trả ở scope Company). 0550 UNION ADD-only, NEO 2 TẦNG vào `object_type = ANY(…)` như 0545/0528,
+  // fail-closed + NO-LOSS/NO-GAIN; append-only #2 nguyên vẹn.
+  "asset",
+  "asset_category",
+  "asset_assignment",
+  "asset_maintenance",
+  "asset_inventory",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
