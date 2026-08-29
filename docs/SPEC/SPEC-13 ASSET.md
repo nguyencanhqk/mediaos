@@ -540,7 +540,7 @@ Nguồn chuẩn: [DB-15](<../DB/DB-15 ASSET Database Design.md>). Tóm tắt:
 - [x] Owner ký OFFICE-DEC-001 + ASSET-DEC-001..004 (28/08/2026) → §1 = **Approved**
 - [x] DB-15 + API-14 + permission-matrix §9d đồng bộ, không mâu thuẫn SPEC-13
 - [x] SPEC-01 §17 hợp thức bộ trạng thái; §20.2/SPEC-08 §15.0 cấp mã NOTI-EVENT sau khi **đo**
-- [ ] `plan-reviewer` đối kháng PASS trên SPEC-13 + DB-15 trước khi mở `S11-ASSET-DB-1`
+- [x] `plan-reviewer` đối kháng **PASS** trên SPEC-13 + DB-15 (29/08/2026, sau 3 vòng: 5B+4H+6M → 4B+2H+8M+4L → 2B → PASS) — cổng mở `S11-ASSET-DB-1` đã qua
 - [ ] Mọi WO code của track ASSET lấy SPEC-13 + DB-15 làm nguồn sự thật; lệch → sửa code, không sửa ngầm spec
 
 ---
