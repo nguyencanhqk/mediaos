@@ -120,13 +120,15 @@ export const notifications = pgTable(
       "chk_notifications_status",
       sql`status IS NULL OR status IN ('Unread','Read','Hidden','Archived','Deleted','Failed')`,
     ),
+    // PARITY với CHECK thật (0479 → +GOAL 0507 → +LMS 0529 → +CHAT 0538 → +ASSET 0551) — cùng superset với
+    // notification_events (noti.ts); nới = re-stamp CẢ HAI bảng ở migration rồi sửa CẢ HAI file parity cùng commit.
     check(
       "chk_notifications_module_code",
-      sql`module_code IS NULL OR module_code IN ('AUTH','HR','ATT','LEAVE','TASK','DASH','NOTI','SYSTEM')`,
+      sql`module_code IS NULL OR module_code IN ('AUTH','HR','ATT','LEAVE','TASK','DASH','NOTI','SYSTEM','GOAL','LMS','CHAT','ASSET')`,
     ),
     check(
       "chk_notifications_notification_type",
-      sql`notification_type IS NULL OR notification_type IN ('System','Account','HR','Attendance','Leave','Task','Project','Approval','Reminder','Warning','Error')`,
+      sql`notification_type IS NULL OR notification_type IN ('System','Account','HR','Attendance','Leave','Task','Project','Approval','Reminder','Warning','Error','Goal','Training','Chat','Asset')`,
     ),
     check(
       "chk_notifications_priority",

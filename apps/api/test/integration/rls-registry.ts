@@ -2723,4 +2723,110 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  // ── S11-ASSET-DB-1 (mig 0549) — 6 bảng ASSET (DB-15 §6). company_id NOT NULL + RLS+FORCE literal-GUC → PHẢI ở
+  // harness (rls-guards "không bảng company_id thiếu case"). KHÔNG skipNoContext. Mọi FK chéo là composite tenant
+  // FK (company_id, col) ⇒ chain seed qua `direct` (owner) với company_id tường minh. asset_inventories seed hàng
+  // `Closed` (kèm 4 số thoả chk_asset_inventories_close_pair) để không đụng uq_asset_inventories_open nếu harness
+  // gọi seedRow 2 lần/tenant. Cleanup: cleanupTenants() xoá 6 bảng con→cha TRƯỚC users/employee_profiles.
+  {
+    name: "asset_categories",
+    table: "asset_categories",
+    seedRow: async (direct, t) => seedAssetCategory(direct, t.companyId),
+  },
+  {
+    name: "assets",
+    table: "assets",
+    seedRow: async (direct, t) => (await seedAssetChain(direct, t.companyId)).assetId,
+  },
+  {
+    name: "asset_assignments",
+    table: "asset_assignments",
+    seedRow: async (direct, t) => {
+      const c = await seedAssetChain(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO asset_assignments (company_id, asset_id, employee_id, status)
+         VALUES ($1, $2, $3, 'Active') RETURNING id`,
+        [t.companyId, c.assetId, c.employeeId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "asset_maintenances",
+    table: "asset_maintenances",
+    seedRow: async (direct, t) => {
+      const c = await seedAssetChain(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO asset_maintenances (company_id, asset_id, reason, status)
+         VALUES ($1, $2, 'rls-maint', 'Open') RETURNING id`,
+        [t.companyId, c.assetId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "asset_inventories",
+    table: "asset_inventories",
+    seedRow: async (direct, t) => seedAssetInventoryClosed(direct, t.companyId),
+  },
+  {
+    name: "asset_inventory_items",
+    table: "asset_inventory_items",
+    seedRow: async (direct, t) => {
+      const c = await seedAssetChain(direct, t.companyId);
+      const inv = await seedAssetInventoryClosed(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO asset_inventory_items (company_id, inventory_id, asset_id, expected_status, result)
+         VALUES ($1, $2, $3, 'In Stock', 'Not Checked') RETURNING id`,
+        [t.companyId, inv, c.assetId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 ];
+
+/** ASSET: 1 loại tài sản (code/prefix ngẫu nhiên — prefix ^[A-Z0-9]{2,6}$, unique KHÔNG partial theo company). */
+async function seedAssetCategory(direct: Pool, companyId: string): Promise<string> {
+  const tag = randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
+  const r = await direct.query(
+    `INSERT INTO asset_categories (company_id, code, name, code_prefix)
+     VALUES ($1, $2, 'rls-cat', $3) RETURNING id`,
+    [companyId, `rls-cat-${tag}`, tag],
+  );
+  return r.rows[0].id as string;
+}
+
+/** ASSET: user → employee_profiles → asset_categories → assets (FK-valid, cùng company). */
+async function seedAssetChain(
+  direct: Pool,
+  companyId: string,
+): Promise<{ categoryId: string; assetId: string; employeeId: string; userId: string }> {
+  const userId = await seedUser(direct, companyId, `asset-${randomUUID().slice(0, 8)}@x.test`);
+  const emp = await direct.query(
+    `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+    [companyId, userId],
+  );
+  const categoryId = await seedAssetCategory(direct, companyId);
+  const asset = await direct.query(
+    `INSERT INTO assets (company_id, category_id, asset_code, name, status)
+     VALUES ($1, $2, $3, 'rls-asset', 'In Stock') RETURNING id`,
+    [companyId, categoryId, `TS-RLS-${randomUUID().slice(0, 8)}`],
+  );
+  return {
+    categoryId,
+    assetId: asset.rows[0].id as string,
+    employeeId: emp.rows[0].id as string,
+    userId,
+  };
+}
+
+/** ASSET: đợt kiểm kê ĐÃ ĐÓNG (4 số = 0 thoả close_pair) — tránh partial unique "1 đợt Open / company". */
+async function seedAssetInventoryClosed(direct: Pool, companyId: string): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO asset_inventories
+       (company_id, name, status, closed_at, total_items, found_count, missing_count, not_checked_count)
+     VALUES ($1, $2, 'Closed', now(), 0, 0, 0, 0) RETURNING id`,
+    [companyId, `rls-inv-${randomUUID().slice(0, 8)}`],
+  );
+  return r.rows[0].id as string;
+}
