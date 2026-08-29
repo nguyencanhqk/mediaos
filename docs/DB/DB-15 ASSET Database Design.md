@@ -121,8 +121,8 @@ ALTER TABLE asset_categories ADD CONSTRAINT asset_categories_company_id_id_uq UN
 | `brand` | VARCHAR(120) | Không | |
 | `model` | VARCHAR(120) | Không | |
 | `purchase_date` | DATE | Không | ≤ ngày hiện tại — kiểm ở service (ASSET-ERR-014) |
-| `purchase_price` | NUMERIC(18,2) | Không | **tài chính** — mask ở đường Own (SPEC-13 §18); CHECK ≥ 0 |
-| `supplier` | VARCHAR(255) | Không | **tài chính** — mask ở đường Own |
+| `purchase_price` | NUMERIC(18,2) | Không | **tài chính** — chỉ trả ở scope **Company**; vắng khoá ở Own **và** Department (SPEC-13 §18); CHECK ≥ 0 |
+| `supplier` | VARCHAR(255) | Không | **tài chính** — chỉ trả ở scope Company; vắng khoá ở Own **và** Department |
 | `warranty_end_date` | DATE | Không | CHECK ≥ `purchase_date` khi cả hai NOT NULL |
 | `location` | VARCHAR(255) | Không | nơi để khi không ai giữ |
 | `condition_note` | TEXT | Không | tình trạng hiện tại (ghi khi thu hồi `Damaged`) |
@@ -190,7 +190,7 @@ CREATE INDEX idx_asset_assignments_employee_active ON asset_assignments (company
 CREATE INDEX idx_asset_assignments_employee_time   ON asset_assignments (company_id, employee_id, assigned_at DESC);
 ```
 
-GRANT app role: `SELECT, INSERT` + `UPDATE (status, returned_at, returned_by, return_condition, return_note, updated_at, updated_by)`. **Không** `DELETE`. `acknowledged_at` **không** nằm trong grant ở v1 (ASSET-DEC-002: luôn NULL, không có đường ghi — đặc quyền thừa trên bảng sổ; Phase 2 mở cấp phát 2 bước mới grant thêm cột).
+GRANT app role: `SELECT, INSERT` + `UPDATE (status, returned_at, returned_by, return_condition, return_note, updated_at, updated_by)`. **Không** `DELETE`. ⚠️ `chk_asset_assignments_return_pair` buộc "thu hồi" là **một câu UPDATE** đặt `status` + `returned_at` + `return_condition` cùng lúc — tách hai câu là nổ CHECK giữa chừng. `acknowledged_at` **không** nằm trong grant ở v1 (ASSET-DEC-002: luôn NULL, không có đường ghi — đặc quyền thừa trên bảng sổ; Phase 2 mở cấp phát 2 bước mới grant thêm cột).
 
 ### 6.4 Bảng `asset_maintenances` — sổ bảo trì
 
@@ -207,7 +207,7 @@ GRANT app role: `SELECT, INSERT` + `UPDATE (status, returned_at, returned_by, re
 | `closed_at` | TIMESTAMPTZ | Không | |
 | `closed_by` | UUID | Không | FK `users.id` SET NULL |
 | `result_note` | TEXT | Không | |
-| `cost` | NUMERIC(18,2) | Không | **tài chính** — mask ở đường Own; CHECK ≥ 0 |
+| `cost` | NUMERIC(18,2) | Không | **tài chính** — chỉ trả ở scope Company; vắng khoá ở Own **và** Department (SPEC-13 §18); CHECK ≥ 0 |
 | `next_due_date` | DATE | Không | ghi sang `assets.next_maintenance_due` khi đóng |
 | `created_at` `updated_at/by` | | | |
 
@@ -252,7 +252,7 @@ CREATE UNIQUE INDEX uq_asset_inventories_open ON asset_inventories (company_id) 
 CREATE INDEX idx_asset_inventories_company_time ON asset_inventories (company_id, opened_at DESC);
 ```
 
-GRANT app role: `SELECT, INSERT` + `UPDATE (status, closed_at, closed_by, note, total_items, found_count, missing_count, not_checked_count, updated_at, updated_by)`. **Không** `DELETE`.
+GRANT app role: `SELECT, INSERT` + `UPDATE (status, closed_at, closed_by, note, total_items, found_count, missing_count, not_checked_count, updated_at, updated_by)`. **Không** `DELETE`. ⚠️ `chk_asset_inventories_close_pair` buộc "đóng đợt" là **một câu UPDATE** ghi `status` + `closed_at` + 4 số tổng kết cùng lúc (tính bằng `GROUP BY` trong cùng câu/CTE) — tách câu là nổ CHECK giữa chừng.
 
 ### 6.6 Bảng `asset_inventory_items` — dòng kiểm kê
 
@@ -335,7 +335,7 @@ GRANT app role: `SELECT, INSERT` + `UPDATE (result, checked_at, checked_by, note
 | Tìm theo mã / serial | `uq_assets_company_code_active` · `uq_assets_company_serial_active` |
 | Thống kê widget (`/assets/summary`) | `idx_assets_company_status_category` (`GROUP BY status, category_id`) |
 
-> Cô lập tenant ép ở RLS + FORCE; mọi index dẫn đầu bằng `company_id`. Data scope Department (SPEC-13 §13.6) = `EXISTS` trên `asset_assignments` Active JOIN `employees` theo đơn vị — đi qua `idx_asset_assignments_employee_active`.
+> Cô lập tenant ép ở RLS + FORCE; mọi index dẫn đầu bằng `company_id`. Data scope (SPEC-13 §13.6) ép bằng **`EXISTS` cho cả ba scope** (`buildReadScopeExists`), **không JOIN** `asset_assignments` vào truy vấn danh sách — Own bám theo _mọi_ lượt (Active + Returned) của tôi, một người có thể giữ cùng tài sản nhiều lượt ⇒ JOIN nhân bản hàng, hỏng `total`/phân trang (`partial-unique-index-makes-join-duplicate`). Department = `EXISTS` trên lượt Active JOIN `employees` theo đơn vị — đi qua `idx_asset_assignments_employee_active`.
 
 ---
 
@@ -344,7 +344,7 @@ GRANT app role: `SELECT, INSERT` + `UPDATE (result, checked_at, checked_by, note
 | Bước | Nội dung | Ràng buộc thứ tự |
 | --- | --- | --- |
 | **A** (`0549`) | Tạo 6 bảng (`company_id … ON DELETE CASCADE`; composite FK nội bộ `NO ACTION`, §4.2) + `UNIQUE (company_id, id)` ở bảng đích + CHECK + index §6 · **ENABLE/FORCE RLS + policy literal-GUC cả 6 bảng** · GRANT: `asset_categories`/`assets` = `SELECT, INSERT, UPDATE` (không DELETE — soft delete); 4 bảng sổ = `SELECT, INSERT` + UPDATE **cấp cột** §6.3–6.6 (**không** phát `GRANT UPDATE ON <table>` rồi mới grant cột; nhớ `REVOKE` cấp bảng về sau **xoá sạch** column-grant — `revoke-table-grant-wipes-column-grants`) · đăng ký `rls-registry` · **VERIFY fail-loud (`RAISE EXCEPTION`, khuôn `0506` bước 6)**: 6 bảng `relrowsecurity AND relforcerowsecurity` + có policy; app role **0 quyền DELETE** trên 4 sổ; tập cột UPDATE của app role trên 4 sổ **đúng bằng** allowlist §6.3–6.6 (so `information_schema.column_privileges`) · **cùng commit**: thêm 6 bảng vào `apps/api/test/helpers/seed.ts` `cleanupTenants()` theo thứ tự con→cha (`asset_inventory_items` → `asset_inventories` → `asset_maintenances` → `asset_assignments` → `assets` → `asset_categories`) | RLS TRƯỚC mọi INSERT (bất biến #1); `fk-tenant-census` không được đỏ; drizzle schema `apps/api/src/db/schema/assets.ts` parity (RLS/grant/partial-index chỉ ở SQL). Thiếu `cleanupTenants` = đỏ hàng loạt `afterAll` (`drop-table-must-clean-test-teardown`) |
-| **B** (`0550`) | Seed module `ASSET` (`module_group='Operation'` — giá trị **đã có** của ATT/LEAVE, `is_core=false`, `is_mvp=false`, `is_active=true`, `ON CONFLICT (module_code) WHERE deleted_at IS NULL DO NOTHING`) · seed role hệ thống **`asset-manager`** (`company_id NULL`, `is_system=true`, id cố định mới, `ON CONFLICT DO NOTHING` — tiền lệ `0019` `hr-manager`) · **11 cặp** permission SPEC-13 §11 `is_sensitive=false` `ON CONFLICT (action, resource_type) DO NOTHING` · grant per-(role, pair) theo ma trận **§9d** (resolve role theo `name + company_id IS NULL + deleted_at IS NULL`, DELETE-wrong-scope + INSERT ON CONFLICT, verify fail-loud đếm đúng **28** hàng — mirror `0506`) · **UNION-ADD** 5 giá trị vào CHECK `audit_logs.object_type` — **clone nguyên bước (4) của `0506:152-158`** (`position('ANY' IN upper(v_def))` + `substring(v_def FROM '\{[^}]*\}')::text[]`, rồi verify regex biên `~ '[,{'']asset['',}]'` cho **từng** giá trị như `0506:265`) — KHÔNG tự viết parser mới (`audit-check-union-parse-anchor-trap`) + `AUDIT_OBJECT_TYPES` cùng commit. **Không** có `asset_inventory_item`: đánh dấu dòng audit dưới aggregate `asset_inventory` (`object_id = inventory_id`) | `super-admin` KHÔNG enumerate (nhận qua bootstrap). `asset-manager` **không** vào danh sách canonical (`DashCanonicalRole`/`NOTI_CANONICAL_ROLES`/pin `auth-seed-canonical-roles` giữ 4 role) |
+| **B** (`0550`) | Seed module `ASSET` (`module_group='Operation'` — giá trị **đã có** của ATT/LEAVE, `is_core=false`, `is_mvp=false`, `is_active=true`, `ON CONFLICT (module_code) WHERE deleted_at IS NULL DO NOTHING`) · seed role hệ thống **`asset-manager`** (`company_id NULL`, `is_system=true`, **`requires_two_factor=false` khai tường minh** — không để mặc định ngầm, `company-admin` là `true` từ `0120`; id cố định mới, `ON CONFLICT DO NOTHING` — tiền lệ `0019` `hr-manager`) · **11 cặp** permission SPEC-13 §11 `is_sensitive=false` `ON CONFLICT (action, resource_type) DO NOTHING` · grant per-(role, pair) theo ma trận **§9d** (resolve role theo `name + company_id IS NULL + deleted_at IS NULL`, DELETE-wrong-scope + INSERT ON CONFLICT, verify fail-loud đếm đúng **28** hàng — mirror `0506`) · **UNION-ADD** 5 giá trị vào CHECK `audit_logs.object_type` — **clone nguyên bước (4) của `0506:152-158`** (`position('ANY' IN upper(v_def))` + `substring(v_def FROM '\{[^}]*\}')::text[]`, rồi verify regex biên `~ '[,{'']asset['',}]'` cho **từng** giá trị như `0506:265`) — KHÔNG tự viết parser mới (`audit-check-union-parse-anchor-trap`) + `AUDIT_OBJECT_TYPES` cùng commit. **Không** có `asset_inventory_item`: đánh dấu dòng audit dưới aggregate `asset_inventory` (`object_id = inventory_id`) | `super-admin` KHÔNG enumerate (nhận qua bootstrap). `asset-manager` **không** vào danh sách canonical (`DashCanonicalRole`/`NOTI_CANONICAL_ROLES`/pin `auth-seed-canonical-roles` giữ 4 role) |
 | **C** (`0551`) | Seed NOTI: 3 event `ASSET_ASSIGNED` · `ASSET_REVOKED` · `ASSET_MAINTENANCE_DUE` vào `notification-event-catalog.const.ts` (`module:'ASSET'`, `type:'Asset'`, `isEnabled:true`) + `notification_events` với **`dedupe_strategy = 'DedupeKey'`, `dedupe_window_seconds = NULL`** cho cả 3 (mặc định `0479` là `'None'` ⇒ `computeKey` trả NULL ⇒ partial unique `uq_notifications_dedupe_active` coi mọi NULL là distinct ⇒ tầng dedupe **biến mất**, job nhắc bảo trì nhân đôi mỗi ngày; sửa sau = migration thứ hai — `0538:707`) · INSERT dùng đúng `ON CONFLICT (event_code) WHERE company_id IS NULL AND deleted_at IS NULL DO NOTHING` (bare ON CONFLICT nổ `42P10` — `0538:721`) · **catalog thắng `DEFAULT_DEDUPE`** ⇒ không thêm entry vào `notification-dedupe.const.ts` · template · **nới CHECK trên CẢ HAI bảng**: `notification_events` (`module_code += 'ASSET'`, `notification_type += 'Asset'`) **VÀ** `notifications` (cùng hai CHECK, **giữ nhánh `IS NULL OR`**) — cách **guard LIKE + re-stamp superset tường minh** của `0507`/`0529`/`0538`, **không** dùng parser DO-block mẫu `0474` cho CHECK dạng `= ANY(ARRAY[…])` | PHẢI xong TRƯỚC khi `S11-ASSET-BE-1` đăng ký registrar outbox (`registerSource()` fail-loud lúc boot). Quên vế `notifications` = lỗi đã ship `0507` |
 
 Giá trị superset hiện hành để re-stamp (đo tại `0538`, xác minh lại lúc chạy):
@@ -366,7 +366,7 @@ Số migration là **dự kiến** — nối tiếp head THẬT tại thời đi
 | --- | --- |
 | #1 `company_id` + RLS FORCE | cả 6 bảng, policy trước INSERT, composite tenant FK mọi FK chéo, `withTenant` ở repo; data scope Own/Department ép ở service |
 | #2 append-only / soft delete | 4 bảng sổ **không DELETE**, UPDATE cấp cột (bổ sung danh sách ledger ở erd-current §9); `asset_categories`/`assets` soft delete, `assets` xoá mềm chỉ khi chưa có lịch sử (ASSET-ERR-015) |
-| #3 không secret | module không lưu secret; trường tài chính che ở đường Own; payload NOTI/audit không có số tiền |
+| #3 không secret | module không lưu secret; trường tài chính chỉ trả ở scope Company (che ở Own **và** Department, và **luôn** che ở `/me/assets`); payload NOTI/audit không có số tiền |
 
 ---
 

@@ -89,9 +89,13 @@ duyệt ──┤                                                               
         └ S11-ROOM-DOC-1  (blocked, chờ duyệt) → S11-ROOM-DB-1 🔴 → S11-ROOM-BE-1 → S11-ROOM-FE-1 → S11-ROOM-QA-1    ┘
 ```
 
-- 2 track chạy song song ĐƯỢC, **trừ** 2 WO DB (🔴 migration): lane migration là lane NỐI TIẾP duy
-  nhất — `S11-ROOM-DB-1` chỉ chạy sau khi `S11-ASSET-DB-1` merge (hoặc ngược lại), đánh số migration
-  nối tiếp head lúc đó.
+- 2 track chạy song song ĐƯỢC ở tầng BE/FE/QA, **trừ** hai chỗ: (a) 2 WO DB (🔴 migration): lane
+  migration là lane NỐI TIẾP duy nhất — `S11-ROOM-DB-1` chỉ chạy sau khi `S11-ASSET-DB-1` merge,
+  đánh số migration nối tiếp head lúc đó; (b) **2 WO DOC cũng NỐI TIẾP** — cùng ghi hot-file
+  (`permission-matrix-spec.md` · `README.md` · `erd-current.md` · DB-01/09/10 · IMPLEMENTATION-02 ·
+  `harness/backlog.mjs` · `stories.mjs` · `dashboard/server.mjs`): `S11-ROOM-DOC-1` xếp **trên**
+  `S11-ASSET-DOC-1` (nhánh `wo/s11-room-doc-1` tạo từ đỉnh `wo/s11-asset-doc-1`, chỉ **append**
+  §9e/§8.19/§7.11/§8.17, không rewrite mục có sẵn; sau squash-merge DOC-1 thì `rebase --onto`).
 - DOC → DB có chốt: plan-reviewer đối kháng PASS trên SPEC + DB doc trước khi mở WO DB (khuôn
   S7-CHAT-DOC-1).
 

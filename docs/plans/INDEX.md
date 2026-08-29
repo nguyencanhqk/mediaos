@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**419 WO** · có micro-plan: **240/419** · ⬜ 12 chờ · 🔵 0 đang làm · ✅ 407 xong · 🔴 0 chặn
+**419 WO** · có micro-plan: **240/419** · ⬜ 11 chờ · 🔵 1 đang làm · ✅ 407 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -478,7 +478,7 @@
 
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
-| `S11-ASSET-DOC-1` | 🟢 | ⬜ chờ | [📄](S11-OFFICE-WAVE.md) | — | Bộ tài liệu ASSET: SPEC-13 + DB-15 + API-14 + permission-matrix §9d +  |
+| `S11-ASSET-DOC-1` | 🟢 | 🔵 đang làm | [📄](S11-OFFICE-WAVE.md) | — | Bộ tài liệu ASSET: SPEC-13 + DB-15 + API-14 + permission-matrix §9d +  |
 | `S11-ASSET-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S11-ASSET-DOC-1 | Schema + migration ASSET theo DB-15: asset_categories · assets · asset |
 | `S11-ASSET-BE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S11-ASSET-DB-1 | Module NestJS assets/: CRUD danh mục + tài sản, cấp phát/thu hồi, bảo  |
 | `S11-ASSET-FE-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S11-ASSET-BE-1 | FE ASSET (apps/app routes/assets/): danh sách + chi tiết + form + cấp  |

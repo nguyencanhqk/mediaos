@@ -1239,7 +1239,7 @@ Tất cả user đã đăng nhập.
 | NOTI-EVENT-009   | HR_CONTRACT_EXPIRING    | Hợp đồng sắp hết hạn      | HR/Admin         |
 | NOTI-EVENT-010   | ASSET_ASSIGNED          | Tài sản được cấp phát     | Employee được cấp |
 | NOTI-EVENT-011   | ASSET_REVOKED           | Tài sản bị thu hồi        | Employee bị thu hồi |
-| NOTI-EVENT-012   | ASSET_MAINTENANCE_DUE   | Tài sản sắp đến hạn bảo trì | Người giữ `('manage','asset-maintenance')` |
+| NOTI-EVENT-012   | ASSET_MAINTENANCE_DUE   | Tài sản sắp đến hạn bảo trì | User giữ role `asset-manager` / `company-admin` (tra `user_roles` — SPEC-13 §17) |
 
 > **Dải mở rộng hậu-MVP:** 010–012 cấp cho **ASSET** (SPEC-13 §17, wave S11-OFFICE, 28/08/2026) — module Phase 3 đầu tiên nối tiếp bộ mã chuẩn. GOAL/LMS/CHAT trước đó chỉ là event mở rộng (§15.1–15.6 kiểu), **không** chiếm mã chuẩn. Module kế (ROOM) lấy 013+ sau khi đo lại.
 
@@ -1347,10 +1347,10 @@ Tất cả user đã đăng nhập.
 | ---------------------- | ------------------------------ | ------------------------------------------------- | ------------------------------------------------ |
 | ASSET_ASSIGNED         | Tài sản được cấp phát cho nhân viên | Employee được cấp                            | Bạn được cấp tài sản {asset_code} — {asset_name} |
 | ASSET_REVOKED          | Lượt cấp phát đóng (thu hồi, kể cả `Lost`) | Employee bị thu hồi                    | Tài sản {asset_code} đã được thu hồi             |
-| ASSET_MAINTENANCE_DUE  | Tài sản sắp đến hạn bảo trì (≤ 7 ngày, job hằng ngày) | User giữ `('manage','asset-maintenance')` | Tài sản {asset_code} đến hạn bảo trì ngày {due_date} |
+| ASSET_MAINTENANCE_DUE  | Tài sản sắp đến hạn bảo trì (≤ 7 ngày, job hằng ngày) | User giữ **role** `asset-manager` hoặc `company-admin` (tra `user_roles`, `recipient.mode='UserIds'` — engine **không** có tra ngược cặp quyền, SPEC-13 §17) | Tài sản {asset_code} đến hạn bảo trì ngày {due_date} |
 
 * `module_code = 'ASSET'`, `notification_type = 'Asset'` (nới CHECK trên **cả hai** bảng `notification_events` và `notifications` — DB-15 §9 bước C), `priority` Normal/Normal/High, `isEnabled=true`.
-* Payload chỉ mã + tên tài sản + tên người liên quan + liên kết; **không** giá mua/chi phí. `dedupeKey` suy từ nội dung (`asset:assigned:{assignmentId}` · `asset:revoked:{assignmentId}` · `asset:maint-due:{assetId}:{dueDate}`).
+* Payload chỉ mã + tên tài sản + tên người liên quan + liên kết; **không** giá mua/chi phí. `dedupeKey` suy từ nội dung (`asset:assigned:{assignmentId}` · `asset:revoked:{assignmentId}` · `asset:maint-due:{assetId}:{dueDate}`) — catalog seed **`dedupe_strategy = 'DedupeKey'`** cho cả 3 (mặc định `'None'` biến `dedupeKey` thành chuỗi trang trí — DB-15 §9 bước C).
 * Phát qua OutboxNotificationBridge; `registerSource()` fail-loud lúc boot nếu catalog chưa có 3 mã này ⇒ seed phải đi trước WO backend.
 
 ---
