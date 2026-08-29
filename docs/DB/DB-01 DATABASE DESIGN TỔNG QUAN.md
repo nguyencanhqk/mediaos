@@ -78,7 +78,7 @@ Database MVP cần hỗ trợ các module sau:
 | PAYROLL | Tiền lương         | Cần tách quyền riêng, dùng dữ liệu HR + ATT + LEAVE |
 | RECRUIT | Tuyển dụng         | Có thể chuyển candidate thành employee              |
 | ASSET   | Tài sản            | **Đã có thiết kế: [DB-15](<DB-15 ASSET Database Design.md>)** (SPEC-13, Phase 3, wave S11-OFFICE). 6 bảng **mới** `asset_categories` · `assets` · `asset_assignments` · `asset_maintenances` · `asset_inventories` · `asset_inventory_items` — RLS+FORCE, composite tenant FK, 4 bảng sổ không DELETE; người giữ = lượt cấp phát `Active` trỏ `employees`. Nhóm bảng: §7.10 |
-| ROOM    | Phòng họp          | Gắn booking với user/employee                       |
+| ROOM    | Phòng họp          | **Đã có thiết kế: [DB-16](<DB-16 ROOM Database Design.md>)** (SPEC-14, Phase 3, wave S11-OFFICE). Tái dụng `meeting_rooms` (mig `0052`) + 2 bảng **mới** `room_bookings` · `room_booking_attendees` — RLS+FORCE, composite tenant FK, EXCLUDE gist chống trùng lịch, `room_bookings` là sổ không DELETE; booking gắn `users` (organizer/attendees). 4 bảng `meeting_*` còn lại DROP. Nhóm bảng: §7.11 |
 | CHAT    | Chat nội bộ        | **Đã có thiết kế: [DB-12](<DB-12 CHAT Database Design.md>)** (SPEC-15). Bảng `chat_rooms`/`chat_room_members`/`chat_messages` **tồn tại thật** trong DB từ migration `0010`+`0050` — RLS+FORCE sẵn, `chat_messages` append-only (chỉ `SELECT`/`INSERT`, `UPDATE` theo cột). Wave `S7-CHAT` chỉ ALTER bổ sung |
 | SOCIAL  | Mạng xã hội nội bộ | Gắn post/comment/reaction với user                  |
 | MOBILE  | Mobile app         | Bổ sung device token, push notification             |
@@ -616,6 +616,19 @@ notification_event_code
 | asset_maintenances     | Lượt bảo trì — sổ không xoá; 1 lượt `Open`/tài sản                                           |
 | asset_inventories      | Đợt kiểm kê — sổ không xoá; 1 đợt `Open`/company; tổng kết cache lúc đóng                    |
 | asset_inventory_items  | Kết quả từng tài sản trong đợt (ảnh chụp trạng thái/người giữ lúc mở) — sổ không xoá         |
+
+---
+
+## 7.11 Nhóm ROOM *(Phase 3 — wave S11-OFFICE, chưa migrate)*
+
+> Chi tiết đầy đủ: [DB-16 ROOM Database Design](<DB-16 ROOM Database Design.md>). Nghiệp vụ: SPEC-14. Nền di sản `meeting_*` (mig `0052`/`0053`) xử lý theo ROOM-DEC-001: **tái dụng 1 · tạo mới 2 · DROP 4**.
+
+| Bảng                     | Mô tả                                                                                          |
+| ------------------------ | ---------------------------------------------------------------------------------------------- |
+| meeting_rooms            | Phòng họp (**tái dụng**, ALTER: thiết bị · `requires_approval` · `is_active`; gỡ `is_virtual`); soft delete |
+| room_bookings            | Lượt đặt phòng `Confirmed · Cancelled` (SPEC-01 §17.10), `Completed` dẫn xuất — sổ không xoá; **EXCLUDE gist** chống giao nhau khi `Confirmed` |
+| room_booking_attendees   | Người tham dự của lượt (cố định lúc đặt) — chỉ INSERT; organizer không nằm trong bảng          |
+| ~~meetings · meeting_attendees · meeting_notes · meeting_tasks~~ | **DROP** ở `S11-ROOM-DB-1` (0 hàng đo 29/08/2026)                    |
 
 ---
 

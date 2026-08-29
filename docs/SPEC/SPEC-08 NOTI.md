@@ -1,7 +1,7 @@
 # SPEC-08: THÔNG BÁO HỆ THỐNG
 
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
-> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · **SPEC-08 NOTI** · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
+> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · **SPEC-08 NOTI** · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · [SPEC-14 ROOM](<SPEC-14 ROOM.md>) · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
 >
 > **Liên quan:** [Thiết kế DB: DB-07 NOTI/DASH](<../DB/DB-07 NOTI DASH Database Design.md>) · [Sản phẩm: PRD-00 §9.7](<../PRD/PRD-00 Enterprise Management System .md>) · [Thiết kế API: API-07 NOTI](<../API Design/API-07_NOTI_API_Design.md>) · [Chỉ mục tài liệu](<../README.md>)
 >
@@ -1240,8 +1240,11 @@ Tất cả user đã đăng nhập.
 | NOTI-EVENT-010   | ASSET_ASSIGNED          | Tài sản được cấp phát     | Employee được cấp |
 | NOTI-EVENT-011   | ASSET_REVOKED           | Tài sản bị thu hồi        | Employee bị thu hồi |
 | NOTI-EVENT-012   | ASSET_MAINTENANCE_DUE   | Tài sản sắp đến hạn bảo trì | User giữ role `asset-manager` / `company-admin` (tra `user_roles` — SPEC-13 §17) |
+| NOTI-EVENT-013   | ROOM_BOOKING_CONFIRMED  | Đặt phòng họp được xác nhận | Organizer ∪ attendees, trừ actor |
+| NOTI-EVENT-014   | ROOM_BOOKING_CANCELLED  | Lịch đặt phòng bị huỷ       | Organizer ∪ attendees, trừ actor |
+| NOTI-EVENT-015   | ROOM_BOOKING_REMINDER   | Nhắc lịch họp trước 15 phút | Organizer ∪ attendees (system event — không loại ai) |
 
-> **Dải mở rộng hậu-MVP:** 010–012 cấp cho **ASSET** (SPEC-13 §17, wave S11-OFFICE, 28/08/2026) — module Phase 3 đầu tiên nối tiếp bộ mã chuẩn. GOAL/LMS/CHAT trước đó chỉ là event mở rộng (§15.1–15.6 kiểu), **không** chiếm mã chuẩn. Module kế (ROOM) lấy 013+ sau khi đo lại.
+> **Dải mở rộng hậu-MVP:** 010–012 cấp cho **ASSET** (SPEC-13 §17, 28/08/2026), 013–015 cấp cho **ROOM** (SPEC-14 §17, 29/08/2026) — cùng wave S11-OFFICE, hai module Phase 3 đầu tiên nối tiếp bộ mã chuẩn. GOAL/LMS/CHAT trước đó chỉ là event mở rộng (§15.1–15.6 kiểu), **không** chiếm mã chuẩn. Module kế lấy 016+ sau khi đo lại.
 
 ---
 
@@ -1351,6 +1354,21 @@ Tất cả user đã đăng nhập.
 
 * `module_code = 'ASSET'`, `notification_type = 'Asset'` (nới CHECK trên **cả hai** bảng `notification_events` và `notifications` — DB-15 §9 bước C), `priority` Normal/Normal/High, `isEnabled=true`.
 * Payload chỉ mã + tên tài sản + tên người liên quan + liên kết; **không** giá mua/chi phí. `dedupeKey` suy từ nội dung (`asset:assigned:{assignmentId}` · `asset:revoked:{assignmentId}` · `asset:maint-due:{assetId}:{dueDate}`) — catalog seed **`dedupe_strategy = 'DedupeKey'`** cho cả 3 (mặc định `'None'` biến `dedupeKey` thành chuỗi trang trí — DB-15 §9 bước C).
+* Phát qua OutboxNotificationBridge; `registerSource()` fail-loud lúc boot nếu catalog chưa có 3 mã này ⇒ seed phải đi trước WO backend.
+
+---
+
+### 15.8 ROOM events *(Phase 3 — wave S11-OFFICE, SPEC-14 §17; seed ở S11-ROOM-DB-1)*
+
+| Mã event                 | Sự kiện                                   | Người nhận                                              | Nội dung gợi ý                                                    |
+| ------------------------ | ----------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------- |
+| ROOM_BOOKING_CONFIRMED   | Lượt đặt phòng tạo xong                   | Organizer ∪ attendees, **trừ actor** (tự đặt ⇒ organizer không nhận; Office Admin đặt hộ ⇒ organizer nhận) | {organizer_name} đã đặt phòng {room_name}: {title} — {time_range} |
+| ROOM_BOOKING_CANCELLED   | Lượt `Confirmed → Cancelled`              | Organizer ∪ attendees, trừ actor                        | Lịch {title} tại {room_name} ({time_range}) đã bị huỷ            |
+| ROOM_BOOKING_REMINDER    | 15 phút trước giờ bắt đầu (system job quét mỗi nhịp) | Organizer ∪ attendees — `isSystemEvent=true`, **không** loại ai | Sắp họp: {title} tại {room_name} lúc {start_time} |
+
+* `module_code = 'ROOM'`, `notification_type = 'Room'` (nới CHECK trên **cả hai** bảng `notification_events` và `notifications` — DB-16 §9 bước C), `priority` Normal/High/High, `isEnabled=true`, `isSystemEvent` false/false/**true**.
+* Payload chỉ tiêu đề · tên phòng · khung giờ (ISO + đã format theo `companies.timezone`) · tên người tổ chức · deep-link `/me/room-bookings?focus={bookingId}`; **không** danh sách người tham dự đầy đủ. `dedupeKey` suy từ nội dung (`room:confirmed:{bookingId}` · `room:cancelled:{bookingId}` · `room:reminder:{bookingId}:{startsAt}`) — catalog seed **`dedupe_strategy = 'DedupeKey'`** cho cả 3 (mặc định `'None'` làm job nhắc phát lại mỗi nhịp).
+* Recipient resolve theo id có sẵn trong lượt (`recipient.mode='UserIds'`) — không tra ngược quyền/role.
 * Phát qua OutboxNotificationBridge; `registerSource()` fail-loud lúc boot nếu catalog chưa có 3 mã này ⇒ seed phải đi trước WO backend.
 
 ---

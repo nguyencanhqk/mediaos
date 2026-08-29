@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-29 02:43Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-29 03:23Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -16,19 +16,30 @@
   - [ ] harness/lib/stories.mjs (EPIC_MODULE + sprintOfStory) và harness/dashboard/server.mjs (MODULE_SPEC) nhận ASSET — WO không rơi vào rổ phẳng, không trỏ nhầm SPEC-01
   - [ ] plan-reviewer đối kháng PASS trên SPEC-13 + DB-15 trước khi mở S11-ASSET-DB-1
 
+### 🟢 S11-ROOM-DOC-1 — Bộ tài liệu ROOM: SPEC-14 + DB-16 + API-15 + permission-matrix §9e + hợp thức trạng thái booking vào SPEC-01 §17 + QUYẾT ĐỊNH số phận 5 bảng meeting_* di sản (ROOM-DEC-001) + đồng bộ README/DB-01·09·10/erd-current/RELEASE-14/IMPLEMENTATION-02 (EPIC-18)
+- **zone**: green
+- **sửa ở đâu (paths)**: `docs/SPEC/**`, `docs/DB/**`, `docs/API Design/**`, `docs/permission-matrix-spec.md`, `docs/README.md`, `docs/erd-current.md`, `docs/RELEASE/RELEASE-14_Post_Go_Live_Backlog.md`, `docs/IMPLEMENTATION/**`, `docs/plans/**`, `harness/backlog.mjs`, `harness/lib/stories.mjs`, `harness/dashboard/server.mjs`
+- **done_when (đích hội tụ)**:
+  - [ ] OWNER đã ký OFFICE-DEC-001 + ROOM-DEC-001..004; riêng ROOM-DEC-001: DB-16 ghi rõ bảng nào TÁI DỤNG (ALTER/reconcile) · bảng nào DROP (kèm đếm hàng PROD thật trước) — không để bảng phòng họp hai danh tính
+  - [ ] SPEC-14 + DB-16 + API-15 tồn tại, trỏ chéo đúng; SPEC-14 flip Draft → Approved sau khi owner chốt
+  - [ ] permission-matrix-spec.md §9e (cặp quyền ROOM + data_scope, phân biệt BOOKING own/all) khớp API-15
+  - [ ] SPEC-01 §17 hợp thức trạng thái booking (Confirmed·Cancelled; Completed = dẫn xuất); SPEC-08 §15.0 cấp dải NOTI-EVENT cho ROOM (đo dải hiện có trước)
+  - [ ] README §9 thêm dòng ROOM; DB-01/09/10 + erd-current (gỡ meeting.ts khỏi nhóm 'di sản chưa quyết') + RELEASE-14 §5 + IMPLEMENTATION-02 EPIC-18 §8.19 (RM-01..08) đồng bộ
+  - [ ] harness/lib/stories.mjs + harness/dashboard/server.mjs nhận ROOM (MODULE_SPEC regex KHÔNG để title ROOM lọt nhầm regex HR 'phòng ban' / TASK 'dự án')
+  - [ ] plan-reviewer đối kháng PASS trên SPEC-14 + DB-16 (đặc biệt phương án xử lý meeting_*) trước khi mở S11-ROOM-DB-1
+
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🔴 `S10-AUTH-2FAGUARD-FAILMODE-1` TwoFactorEnforcementGuard: BA lời gọi `withTenant` không được bọc chạy TRƯỚC mọi pipe — chốt ngữ nghĩa fail-mode rồi bọc cả ba (KI-083)
-- 🟢 `S11-ROOM-DOC-1` Bộ tài liệu ROOM: SPEC-14 + DB-16 + API-15 + permission-matrix §9e + hợp thức trạng thái booking vào SPEC-01 §17 + QUYẾT ĐỊNH số phận 5 bảng meeting_* di sản (ROOM-DEC-001) + đồng bộ README/DB-01·09·10/erd-current/RELEASE-14/IMPLEMENTATION-02 (EPIC-18)
 
 **CHỜ (kẹt phụ thuộc):**
 - `S11-ASSET-DB-1` Schema + migration ASSET theo DB-15: asset_categories · assets · asset_assignments · asset_maintenances · asset_inventories(+items) — RLS+FORCE, composite tenant FK, seed module/permission/NOTI catalog, sequence_counters mã tài sản ⏳ cần: S11-ASSET-DOC-1
 - `S11-ASSET-BE-1` Module NestJS assets/: CRUD danh mục + tài sản, cấp phát/thu hồi, bảo trì, kiểm kê — permission guard §9d, audit log, outbox NOTI, :id=UUID ở biên, API_MODULE_TAGS + route-census regen ⏳ cần: S11-ASSET-DB-1
 - `S11-ASSET-FE-1` FE ASSET (apps/app routes/assets/): danh sách + chi tiết + form + cấp phát/thu hồi + kiểm kê + «tài sản của tôi» — PermissionGate/useCan, i18n vi, wireframe đã duyệt ở tài liệu wave ⏳ cần: S11-ASSET-BE-1
 - `S11-ASSET-QA-1` QA ASSET: int-spec deny-path/IDOR/cross-tenant + FSM chuyển tiếp sai + kiểm kê race — coverage ≥80% module assets, chạy như CI trên LANE_DB ⏳ cần: S11-ASSET-BE-1, S11-ASSET-FE-1
-- `S11-ROOM-DB-1` Schema + migration ROOM theo DB-16 + ROOM-DEC-001: tái dụng/ALTER meeting_rooms (+ meetings→booking hoặc room_bookings mới qua expand-contract), EXCLUDE GIST chống trùng lịch, DROP meeting_notes/meeting_tasks nếu DEC chốt, seed module/permission/NOTI catalog ⏳ cần: S11-ROOM-DOC-1, S11-ASSET-DB-1
-- `S11-ROOM-BE-1` Module NestJS rooms/: CRUD phòng họp (Office Admin), đặt phòng + báo trùng 409, hủy lịch (own/all theo quyền), lịch sử sử dụng, nhắc lịch NOTI trước 15′ — Idempotency-Key suy từ payload, :id=UUID, API_MODULE_TAGS ⏳ cần: S11-ROOM-DB-1
+- `S11-ROOM-DB-1` Schema + migration ROOM theo DB-16 + ROOM-DEC-001 (ĐÃ CHỐT 29/08): ALTER meeting_rooms (gỡ is_virtual), tạo room_bookings + room_booking_attendees (EXCLUDE gist chống trùng), DROP 4 bảng meeting_* (tiền kiểm 0 hàng fail-loud) + xoá 12 grant/6 cặp meeting* di sản, seed module/office-admin/5 cặp/22 grant/NOTI catalog (CHECK cả hai bảng) ⏳ cần: S11-ROOM-DOC-1, S11-ASSET-DB-1
+- `S11-ROOM-BE-1` Module NestJS rooms/: CRUD phòng họp (Office Admin), đặt phòng + báo trùng 409 (EXCLUDE là chốt cuối), hủy lịch (own/all theo data_scope), lịch sử/usage-summary, nhắc lịch NOTI trước 15′ — Idempotency-Key do FE sinh khi mở form (@Idempotent() dùng chung), :id=UUID, API_MODULE_TAGS ⏳ cần: S11-ROOM-DB-1, S11-ASSET-BE-1
 - `S11-ROOM-FE-1` FE ROOM (apps/app routes/rooms/): lịch phòng tuần/ngày (cột = phòng, chọn khung giờ), form đặt phòng báo trùng ngay, «đặt phòng của tôi», quản trị phòng họp — PermissionGate/useCan, i18n vi, wireframe đã duyệt ⏳ cần: S11-ROOM-BE-1
 - `S11-ROOM-QA-1` QA ROOM: race double-booking (2 request song song → đúng 1 thắng), deny-path/IDOR/cross-tenant, nhắc lịch không bắn trùng — coverage ≥80% module rooms, chạy như CI trên LANE_DB ⏳ cần: S11-ROOM-BE-1, S11-ROOM-FE-1
 - `S11-OFFICE-DASH-1` Widget DASH cho wave OFFICE: «thống kê tài sản theo trạng thái/loại» + «lịch họp hôm nay» — theo quyền, đăng ký mã MODULE-WIDGET theo SPEC-01 §9.9 ⏳ cần: S11-ASSET-FE-1, S11-ROOM-FE-1
@@ -37,7 +48,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `wo/s11-asset-doc-1` · **file đang đổi (dirty)**: 0
+- **branch**: `wo/s11-room-doc-1` · **file đang đổi (dirty)**: 28
 - **migration head**: idx 215 — `0548_s10cleanworkflowcluster2_drop_workflow_approval_cluster` (216 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -46,6 +57,8 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `c71e2227` | 2026-08-29 | docs(asset): vá vòng 3 plan-reviewer — §8 SPEC-13 sót "Own"; đường restore hết chết (includeDeleted gate manage + prefix-taken trả categoryId); mã 409 interceptor idempotency; §20.2 thêm Company Admin; §25 không hạ gate |
+| `1a492216` | 2026-08-29 | docs(asset): vá vòng 2 plan-reviewer — 4 BLOCK + 2 HIGH + 8 MEDIUM + 4 LOW trên SPEC-13/DB-15/API-14/SPEC-08/IMP-02/backlog |
 | `fef2a9fa` | 2026-08-28 | docs(asset): vá 5 BLOCK + 4 HIGH + 6 MEDIUM từ plan-reviewer trên SPEC-13/DB-15/API-14/§9d |
 | `c6c217a4` | 2026-08-28 | docs(asset): S11-ASSET-DOC-1 — SPEC-13 + DB-15 + API-14 + permission-matrix §9d, hợp thức trạng thái SPEC-01 §17.8–17.9, NOTI-EVENT-010..012, EPIC-17 |
 | `1845c9ed` | 2026-08-28 | chore(gov): seed wave S11-OFFICE — ASSET + ROOM (Phase 3), 11 WO + hồ sơ duyệt HTML, owner đã duyệt 28/08 (#432) |
@@ -56,8 +69,6 @@
 | `2cfea8d8` | 2026-08-27 | fix(fnd): ép hợp đồng :id = UUID ở BIÊN cho 36 route goals/foundation/noti/recycle-bin — hạ trần ratchet 148→112 (S10-FND-PARAMUUID-4) (#427) |
 | `5d66a8c3` | 2026-08-27 | fix(fnd): ép hợp đồng :id = UUID ở BIÊN cho 42 route HR/tổ chức — 500 GIẢ thành 400 đơn trị, hạ trần ratchet 190→148 (S10-FND-PARAMUUID-3) (#426) |
 | `e47a36f5` | 2026-08-27 | fix(fnd): ép hợp đồng :id = UUID ở BIÊN cho 31 route LEAVE/ATT/APPROVAL — 500 GIẢ thành 400 đơn trị, hạ trần ratchet 221→190 (S10-FND-PARAMUUID-2) (#425) |
-| `9452197e` | 2026-08-26 | perf(fe): vá đường tải trang ba SPA — bootstrap 3→2 round-trip, splash, lazy-route console (S10-PERF-LOADPATH-1) (#424) |
-| `9d27b0b3` | 2026-08-26 | chore(gov): seed S10-FND-PARAMUUID-2 (KI-078) — vá tham số `:id` THEO NHÓM RỦI RO, đo HTTP trước rồi hạ trần ratchet (#423) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

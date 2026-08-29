@@ -522,6 +522,29 @@ Ghi chú:
 
 ---
 
+## 9e. ROOM — Quản lý phòng họp (SPEC-14) · *Phase 3 — wave S11-OFFICE, chưa seed*
+
+ROOM đứng riêng, **5 cặp** quyền per-(action, resource) theo SPEC-14 §11 — owner duyệt gói wave 28/08/2026. Data scope **chốt cùng migration seed** (S11-ROOM-DB-1, KHÔNG để mở sau). Ngoài 4 role canonical, wave này seed thêm **role hệ thống `office-admin`** (SPEC-01 §10.9; `roles.company_id IS NULL`, `is_system=true`, `requires_two_factor=false` tường minh; tiền lệ `hr-manager` mig `0019`, `asset-manager` §9d) — **không** phải role canonical, không được thêm vào `DashCanonicalRole`/`NOTI_CANONICAL_ROLES`/pin `auth-seed-canonical-roles`.
+
+| Cặp quyền (SPEC-14 §11) | Ý nghĩa | Nhân viên | Trưởng đơn vị | HR | BOD/Admin · Office Admin |
+| --- | --- | --- | --- | --- | --- |
+| `('access','room')` | Cổng nav menu Phòng họp | có | có | có | có |
+| `('view','room')` | Xem phòng · **lịch mọi phòng** (mọi lượt trong company) · phòng trống · chi tiết lượt · thống kê sử dụng · `/me/room-bookings` | **all** | **all** | **all** | all |
+| `('book','room')` | Tạo lượt đặt phòng | **own** (organizer = chính mình) | **own** | **own** | **all** (đặt hộ — `organizerUserId`) |
+| `('cancel','room-booking')` | Huỷ lượt đặt | **own** (lượt mình tổ chức) | **own** | **own** | **all** (mọi lượt) |
+| `('manage','room')` | CRUD phòng · kích hoạt/vô hiệu · xoá mềm | không | không | không | all |
+
+Ghi chú:
+
+- **`is_sensitive` chốt `false` cho cả 5 cặp.** Lịch phòng (tiêu đề · giờ · người tổ chức · người tham dự) là **dữ liệu dùng chung** của công ty, không thuộc danh sách nhạy cảm §10 — ai cũng cần thấy toàn bộ lịch để biết phòng bận. Vì vậy `('view','room')` là **all cho mọi role**; `/me/room-bookings` là **bộ lọc** theo caller trên cùng cặp đọc, không phải scope riêng (tinh chỉnh so với hồ sơ HTML dự kiến tách `ROOM.BOOKING.VIEW` — họ lỗi `read-path-gate-pair-must-match-download-pair`).
+- **Scope ở cặp GHI là ràng buộc thật:** `book@own` ⇒ `organizerUserId` (nếu gửi) phải bằng user gọi, khác ⇒ **403 ROOM-ERR-010**; `cancel@own` ⇒ chỉ lượt `organizer_user_id = caller`, lượt của người khác ⇒ **403** `AUTH-ERR-SCOPE-DENIED` (lịch công khai trong company nên không cần 404 che sự tồn tại như ASSET; **cross-tenant** vẫn 404). `ROOM.BOOKING.MANAGE` của hồ sơ HTML = chính `cancel@all`, không cần cặp riêng.
+- **Ma trận seed = 22 hàng** `role_permissions`: `employee` 4 · `manager` 4 · `hr` 4 (`access`@Own · `view`@Company · `book`@Own · `cancel`@Own) · `company-admin` 5 · `office-admin` 5 (`access`@Own, 4 cặp còn lại @Company). Migration verify fail-loud đúng số; `super-admin` không enumerate.
+- **6 cặp di sản `('view'|'create'|'update'|'cancel','meeting')` · `('view'|'manage','meeting_room')`** (mig `0052`, mỗi cặp 2 grant đo 29/08/2026, **0** guard dùng) bị **xoá grant + xoá mềm** ở `S11-ROOM-DB-1` bước B (DB-16 §9) — không có cửa sổ 403 vì không code nào ép; không tái dụng vì tên resource khác chuẩn `room`/`room-booking`.
+- RLS+FORCE cô lập **tenant** trên `meeting_rooms` · `room_bookings` · `room_booking_attendees`; data scope own/all ép ở **service layer**. Chống trùng lịch là ràng buộc **DB** (EXCLUDE gist — DB-16 §6.2), không phải quyền.
+- Chi tiết mã lỗi/quy tắc: [SPEC-14 ROOM §11–13](<SPEC/SPEC-14 ROOM.md>); schema: [DB-16](<DB/DB-16 ROOM Database Design.md>); API: [API-15](<API Design/API-15_ROOM_API_Design.md>).
+
+---
+
 ## 10. Nguyên tắc dữ liệu nhạy cảm (SPEC-01 §11.3)
 
 Dữ liệu nhạy cảm: lương · tài khoản ngân hàng · CCCD/CMND · hợp đồng · hồ sơ nhân sự · dữ liệu kỷ luật/nghỉ việc · chấm công chi tiết · log hệ thống.

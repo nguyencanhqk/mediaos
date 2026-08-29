@@ -623,6 +623,8 @@ Secret phải lấy từ environment variable hoặc secret manager.
 > **CHAT (SPEC-15 · DB-12) — Phase 4, CHƯA seed:** module chat nội bộ, nền dữ liệu (`chat_rooms`/`chat_room_members`/`chat_messages`) **đã tồn tại thật** trong DB từ migration `0010`+`0050` với RLS+FORCE và GRANT append-only đúng bất biến #2 — wave `S7-CHAT` chỉ ALTER bổ sung, KHÔNG tạo bảng mới. Seed đi kèm: module `CHAT` + **10 cặp** permission (SPEC-15 §11 — 9 cặp thường `is_sensitive=false`, cộng `('view','chat-oversight')` `is_sensitive=**true**` — migration **chỉ INSERT catalog, 0 hàng `role_permissions` cho mọi role canonical**; SA nhận qua `SuperAdminBootstrapService` lúc boot vì **`super-admin` không phải role canonical**, CHAT-DEC-004) + `sequence_counters` cho `room_code` + seed NOTI 2 event (`CHAT_MENTIONED`, `CHAT_DIRECT_MESSAGE`). ⚠️ **Hai điểm dễ sai:** (1) `audit_logs.object_type` **đã có** `'chat_room'`/`'chat_message'` từ `0050` ⇒ chỉ verify fail-loud, không UNION-ADD lại; (2) nới CHECK NOTI phải làm trên **CẢ HAI** bảng `notification_events` **VÀ** `notifications` (`module_code += 'CHAT'`, `notification_type += 'Chat'`) — quên vế `notifications` là lỗi đã ship thật với GOAL ở `0507` và phải vá ở `0529`. Chi tiết kế hoạch migration: DB-12 §9.
 >
 > **ASSET (SPEC-13 · DB-15) — Phase 3, CHƯA seed (wave S11-OFFICE, owner duyệt 28/08/2026):** module tài sản, **6 bảng mới** (`asset_categories` · `assets` · `asset_assignments` · `asset_maintenances` · `asset_inventories` · `asset_inventory_items`), migration `0549+` dự kiến — đọc `_journal.json` thật lúc chạy. Seed đi kèm: module `ASSET` (`module_group='Operation'`, `is_mvp=false`, `is_active=true` khi wave ship — hàng ở §10.2 chuyển `Active=true`) + **role hệ thống `asset-manager`** (`company_id NULL`, `is_system=true`, tiền lệ `hr-manager` mig `0019`; **không** phải role canonical) + **11 cặp** permission (§12.9, `is_sensitive=false` cả 11) + grant per-pair data_scope **28 hàng** cho 4 role canonical + `asset-manager` (permission-matrix §9d; DELETE-wrong-scope + INSERT ON CONFLICT, verify fail-loud) + **UNION-ADD 5 giá trị** `'asset'` · `'asset_category'` · `'asset_assignment'` · `'asset_maintenance'` · `'asset_inventory'` vào CHECK `audit_logs.object_type` + seed NOTI **3 event** (`ASSET_ASSIGNED`, `ASSET_REVOKED`, `ASSET_MAINTENANCE_DUE`; `notification_type='Asset'`) với nới CHECK trên **CẢ HAI** bảng `notification_events` **VÀ** `notifications`. ⚠️ **KHÔNG seed `sequence_counters`** ở migration: counter mã tài sản (`TS-<PREFIX>-<seq>`, scope `Custom` theo `asset_categories.id`) được tạo **cùng transaction với loại tài sản** lúc runtime (DB-15 §6.7) — seed loại sau này bắt buộc kèm counter. Chi tiết kế hoạch migration: DB-15 §9.
+>
+> **ROOM (SPEC-14 · DB-16) — Phase 3, CHƯA seed (wave S11-OFFICE, owner duyệt 28/08/2026; chạy SAU S11-ASSET-DB-1):** module phòng họp, **tái dụng `meeting_rooms`** (mig `0052`, ALTER) + **2 bảng mới** `room_bookings` · `room_booking_attendees` + **DROP 4 bảng di sản** `meetings` · `meeting_attendees` · `meeting_notes` · `meeting_tasks` (đo 29/08/2026: **0 hàng** cả 5 bảng — tiền kiểm fail-loud, không auto-migrate), migration `0552+` dự kiến — đọc `_journal.json` thật lúc chạy. Seed đi kèm: module `ROOM` (hàng **đã tồn tại** `is_active=false` ⇒ **UPDATE tường minh** `is_active=true`, `ON CONFLICT DO NOTHING` không lật cờ) + **role hệ thống `office-admin`** (`company_id NULL`, `is_system=true`, `requires_two_factor=false`; **không** canonical) + **5 cặp** permission (§12.10, `is_sensitive=false` cả 5) + grant per-pair data_scope **22 hàng** (permission-matrix §9e; verify fail-loud) + **xoá 12 grant + xoá mềm 6 cặp** `('view'|'create'|'update'|'cancel','meeting')` · `('view'|'manage','meeting_room')` di sản `0052` (0 guard dùng) + **UNION-ADD** `'room_booking'` vào CHECK `audit_logs.object_type` (verify `'meeting_room'` đã có, thêm nếu thiếu) + seed NOTI **3 event** (`ROOM_BOOKING_CONFIRMED`, `ROOM_BOOKING_CANCELLED`, `ROOM_BOOKING_REMINDER`; `notification_type='Room'`, `dedupe_strategy='DedupeKey'`) với nới CHECK trên **CẢ HAI** bảng `notification_events` **VÀ** `notifications`. ⚠️ `cleanupTenants()` thêm 2 bảng mới **trước dòng `DELETE FROM users`** (composite FK `NO ACTION` → `users`). Chi tiết kế hoạch migration: DB-16 §9.
 
 ### 10.2 Module phase sau inactive
 
@@ -631,7 +633,7 @@ Secret phải lấy từ environment variable hoặc secret manager.
 | PAYROLL | Tiền lương | Phase 2 | false |
 | RECRUIT | Tuyển dụng | Phase 2 | false |
 | ASSET | Quản lý tài sản | Phase 3 | false → **true** khi S11-ASSET-DB-1 seed (DB-15 §9 bước B) |
-| ROOM | Quản lý phòng họp | Phase 3 | false |
+| ROOM | Quản lý phòng họp | Phase 3 | false → **true** khi S11-ROOM-DB-1 seed (DB-16 §9 bước C — UPDATE tường minh) |
 | CHAT | Chat nội bộ | Phase 4 | false |
 | SOCIAL | Mạng xã hội nội bộ | Phase 4 | false |
 | MOBILE | Mobile app | Phase 5 | false |
@@ -881,6 +883,20 @@ Secret phải lấy từ environment variable hoặc secret manager.
 
 > Grant: `employee` `access`@Own + `view`@Own · `manager` `access`@Own + `view`@Department · `hr` `access`@Own + `view`@Company · `company-admin` và role mới **`asset-manager`** cả 11 (`access`@Own, còn lại @Company) = **28 hàng**. `super-admin` không enumerate (bootstrap runtime).
 
+### 12.10 ROOM permissions *(Phase 3 — seed ở S11-ROOM-DB-1, sau ASSET)*
+
+> Nguồn: SPEC-14 §11 + permission-matrix §9e. Mã dotted là tên hiển thị; cặp engine ghi trong ngoặc. `is_sensitive=false` cho cả 5 (lịch phòng là dữ liệu dùng chung). Idempotent: `ON CONFLICT (action, resource_type) DO NOTHING`.
+
+| Permission code | Cặp engine | Mô tả |
+| --- | --- | --- |
+| `ROOM.ACCESS` | `('access','room')` | Cổng nav menu Phòng họp |
+| `ROOM.ROOM.VIEW` | `('view','room')` | Xem phòng · lịch mọi phòng · phòng trống · chi tiết lượt · thống kê · `/me/room-bookings` (scope Company cho mọi role) |
+| `ROOM.BOOKING.CREATE` | `('book','room')` | Tạo lượt đặt (Own = organizer là chính mình; Company = đặt hộ) |
+| `ROOM.BOOKING.CANCEL` | `('cancel','room-booking')` | Huỷ lượt (Own = lượt mình tổ chức; Company = mọi lượt) |
+| `ROOM.ROOM.MANAGE` | `('manage','room')` | CRUD phòng · kích hoạt/vô hiệu · xoá mềm |
+
+> Grant: `employee` · `manager` · `hr` mỗi role 4 (`access`@Own, `view`@Company, `book`@Own, `cancel`@Own) · `company-admin` và role mới **`office-admin`** cả 5 (`access`@Own, còn lại @Company) = **22 hàng**. `super-admin` không enumerate. **6 cặp di sản** `meeting`/`meeting_room` (mig `0052`) bị xoá grant + xoá mềm cùng migration (DB-16 §9 bước B).
+
 ---
 
 ## 13. Seed roles và role-permission matrix
@@ -1114,8 +1130,11 @@ Urgent
 | `ASSET_ASSIGNED` | ASSET | Tài sản được cấp phát (Phase 3 — seed ở S11-ASSET-DB-1, SPEC-08 §15.7) |
 | `ASSET_REVOKED` | ASSET | Tài sản bị thu hồi (Phase 3) |
 | `ASSET_MAINTENANCE_DUE` | ASSET | Tài sản sắp đến hạn bảo trì — job hằng ngày (Phase 3) |
+| `ROOM_BOOKING_CONFIRMED` | ROOM | Đặt phòng họp được xác nhận (Phase 3 — seed ở S11-ROOM-DB-1, SPEC-08 §15.8) |
+| `ROOM_BOOKING_CANCELLED` | ROOM | Lịch đặt phòng bị huỷ (Phase 3) |
+| `ROOM_BOOKING_REMINDER` | ROOM | Nhắc lịch họp trước 15 phút — system job mỗi nhịp, `isSystemEvent=true` (Phase 3) |
 
-> 3 event ASSET cần `module_code='ASSET'` + `notification_type='Asset'` ⇒ nới CHECK trên **cả hai** bảng `notification_events` và `notifications` cùng migration (DB-15 §9 bước C).
+> 3 event ASSET cần `module_code='ASSET'` + `notification_type='Asset'`; 3 event ROOM cần `module_code='ROOM'` + `notification_type='Room'` ⇒ nới CHECK trên **cả hai** bảng `notification_events` và `notifications` cùng migration (DB-15 §9 bước C · DB-16 §9 bước C), `dedupe_strategy='DedupeKey'`.
 
 ### 15.2 Template mẫu
 

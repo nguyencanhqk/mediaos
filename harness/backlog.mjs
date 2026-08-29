@@ -14427,7 +14427,7 @@ export const backlog = [
     title:
       "Bộ tài liệu ROOM: SPEC-14 + DB-16 + API-15 + permission-matrix §9e + hợp thức trạng thái booking vào SPEC-01 §17 + QUYẾT ĐỊNH số phận 5 bảng meeting_* di sản (ROOM-DEC-001) + đồng bộ README/DB-01·09·10/erd-current/RELEASE-14/IMPLEMENTATION-02 (EPIC-18)",
     zone: "green",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "docs/SPEC/**",
       "docs/DB/**",
@@ -14463,6 +14463,7 @@ export const backlog = [
     notes: [
       "✅ OWNER ĐÃ DUYỆT 2026-08-28 nguyên gói hồ sơ docs/plans/S11-OFFICE-WAVE-review.html — OFFICE-DEC-001 + ROOM-DEC-001..004 chốt ĐÚNG cột Đề xuất ở wave plan §3 (ROOM-DEC-001 = tái dụng meeting_rooms; meetings/meeting_attendees ĐO cột thật rồi chốt trong WO này; meeting_notes/meeting_tasks DROP). Chỉ còn GHI kết luận vào SPEC-14 rồi viết bộ tài liệu — không hỏi lại các DEC đã ký.",
       "🟢 LIGHT gate (docs-only) nhưng ROOM-DEC-001 là quyết định KIẾN TRÚC — sai ở đây trả giá ở DB WO.",
+      "📐 KẾT QUẢ 2026-08-29 (số liệu THẬT cho DB-1/BE-1): ĐO DB `mediaos` (PROD + dev-online dùng chung, script logs/measure-meeting-legacy.mjs chỉ SELECT) = 0 hàng cả 5 bảng meeting_*; meetings có EXCLUDE gist + composite FK 0535; 6 cặp quyền meeting*/meeting_room* mỗi cặp 2 grant, 0 guard dùng; btree_gist 1.7 đã cài; modules.ROOM tồn tại is_active=false. ROOM-DEC-001 CHỐT: tái dụng+ALTER meeting_rooms (gỡ is_virtual), THAY meetings/meeting_attendees bằng room_bookings/room_booking_attendees (expand-contract cùng WO), DROP 4 bảng + xoá 12 grant + xoá mềm 6 cặp di sản (DB-16 §9 A/B/C, 0552+ dự kiến SAU ASSET). SPEC-14 §11 = 5 cặp is_sensitive=false + role hệ thống MỚI `office-admin` (KHÔNG canonical) — ma trận 22 hàng (§9e); view@Company cho MỌI role (lịch là dữ liệu dùng chung — gộp cặp đọc, không tách BOOKING.VIEW); §12 = 10 mã ROOM-ERR; §15 = 13 endpoint ROOM-API-001..013 (KHÔNG PATCH booking); §17 = 3 event = NOTI-EVENT-013..015 (đo: chuẩn dừng ở 012); SPEC-01 §17.10 Confirmed·Cancelled + Completed dẫn xuất; Idempotency-Key của POST /room-bookings do FE sinh khi mở form (cùng ASSET-API-010 — khoá suy từ payload phát lại lượt vừa huỷ khi đặt lại y hệt trong 15′). Nhánh wo/s11-room-doc-1 XẾP TRÊN wo/s11-asset-doc-1 (cùng hot-file) — sau squash-merge DOC-1 phải `git rebase --onto origin/master <đỉnh-cũ-doc1>`.",
     ],
   },
   {
@@ -14470,7 +14471,7 @@ export const backlog = [
     module: "ROOM",
     layer: "DB",
     title:
-      "Schema + migration ROOM theo DB-16 + ROOM-DEC-001: tái dụng/ALTER meeting_rooms (+ meetings→booking hoặc room_bookings mới qua expand-contract), EXCLUDE GIST chống trùng lịch, DROP meeting_notes/meeting_tasks nếu DEC chốt, seed module/permission/NOTI catalog",
+      "Schema + migration ROOM theo DB-16 + ROOM-DEC-001 (ĐÃ CHỐT 29/08): ALTER meeting_rooms (gỡ is_virtual), tạo room_bookings + room_booking_attendees (EXCLUDE gist chống trùng), DROP 4 bảng meeting_* (tiền kiểm 0 hàng fail-loud) + xoá 12 grant/6 cặp meeting* di sản, seed module/office-admin/5 cặp/22 grant/NOTI catalog (CHECK cả hai bảng)",
     zone: "red",
     status: "todo",
     paths: [
@@ -14497,6 +14498,7 @@ export const backlog = [
     ],
     notes: [
       "🔴 FULL gate + lane migration NỐI TIẾP — chạy SAU S11-ASSET-DB-1 (depends_on đã khoá thứ tự để khỏi giẫm số migration).",
+      "📐 Số đo 2026-08-29 (DB-16 §3.0): 0 hàng cả 5 bảng meeting_*; 6 cặp meeting*/meeting_room* × 2 grant = 12 hàng role_permissions, 0 guard; audit CHECK dạng `= ANY('{…}'::text[])` — verify từng giá trị `meeting_room` lúc chạy; modules.ROOM đã tồn tại is_active=false ⇒ UPDATE tường minh. Kế hoạch A (expand) / B (contract DROP + quyền di sản) / C (seed) ở DB-16 §9 — ĐO LẠI trước khi chạy; nếu bảng nào > 0 hàng ⇒ DỪNG, người quyết. cleanupTenants: room_booking_attendees → room_bookings TRƯỚC dòng `DELETE FROM users` (composite FK NO ACTION → users). rls-registry thay 2 entry meetings/meeting_attendees. schema/meeting.ts → rooms.ts.",
     ],
   },
   {
@@ -14504,8 +14506,8 @@ export const backlog = [
     module: "ROOM",
     layer: "BE",
     title:
-      "Module NestJS rooms/: CRUD phòng họp (Office Admin), đặt phòng + báo trùng 409, hủy lịch (own/all theo quyền), lịch sử sử dụng, nhắc lịch NOTI trước 15′ — Idempotency-Key suy từ payload, :id=UUID, API_MODULE_TAGS",
-    zone: "yellow",
+      "Module NestJS rooms/: CRUD phòng họp (Office Admin), đặt phòng + báo trùng 409 (EXCLUDE là chốt cuối), hủy lịch (own/all theo data_scope), lịch sử/usage-summary, nhắc lịch NOTI trước 15′ — Idempotency-Key do FE sinh khi mở form (@Idempotent() dùng chung), :id=UUID, API_MODULE_TAGS",
+    zone: "red",
     status: "todo",
     paths: [
       "apps/api/src/rooms/**",
@@ -14516,7 +14518,7 @@ export const backlog = [
       "packages/contracts/**",
     ],
     skills: ["code-review"],
-    depends_on: ["S11-ROOM-DB-1"],
+    depends_on: ["S11-ROOM-DB-1", "S11-ASSET-BE-1"],
     plan: "docs/plans/S11-ROOM-BE-1.md",
     src: [
       "API-15 + SPEC-14 §FUNC/§ERR (viết ở S11-ROOM-DOC-1)",
@@ -14524,13 +14526,15 @@ export const backlog = [
     ],
     done_when: [
       "Đủ API theo API-15: room CRUD · availability/lịch phòng theo khoảng ngày · tạo booking (chồng giờ → 409 kèm ROOM-ERR + khung giờ bận, KHÔNG 500 từ constraint) · hủy own/all theo data_scope · lịch sử; withTenant + guard + DTO nestjs-zod cấp method",
-      "POST tạo booking nhận Idempotency-Key SUY TỪ PAYLOAD (room+khung giờ+người đặt) — retry không nhân đôi",
-      "Nhắc lịch: system job quét booking sắp diễn ra → outbox NOTI (dedupeKey theo booking+mốc nhắc, không bắn trùng); hủy lịch bắn NOTI người tham dự; audit cho hủy-của-người-khác",
-      "API_MODULE_TAGS khai ROOM; route-census regen có chủ đích; ratchet param-uuid không tăng",
-      "Deny-path RED-trước: đặt phòng thiếu quyền 403 · hủy lịch người khác không có ROOM.BOOKING.MANAGE → 403 · cross-tenant 404/403 — xanh trên LANE_DB",
+      "POST /room-bookings gắn @Idempotent() dùng chung — Idempotency-Key DO FE SINH khi mở form (SPEC-14 §12/API-15 §6.9, KHÔNG suy từ payload — huỷ rồi đặt lại y hệt trong 15′ sẽ bị phát lại lượt đã huỷ); retry cùng key không nhân đôi; bấm-đúp → 409 IN_PROGRESS",
+      "Nhắc lịch: @SystemJobHandler ROOM_BOOKING_REMINDER quét starts_at ∈ (now, now+15′] mỗi nhịp → outbox NOTI (dedupeKey room:reminder:{bookingId}:{startsAt}, catalog DedupeKey, isSystemEvent=true không loại actor); huỷ/đặt bắn NOTI organizer ∪ attendees trừ actor; audit mọi mutation (đặt hộ ghi cả organizer + bookedBy)",
+      "API_MODULE_TAGS khai ROOM; route-census regen có chủ đích (13 route); ratchet param-uuid không tăng",
+      "Deny-path RED-trước (chủ thể = role dựng trong test, không SA): thiếu từng cặp trong 5 cặp → 403 · book@Own gửi organizerUserId khác → 403 ROOM-ERR-010 · cancel@Own lượt người khác → 403 AUTH-ERR-SCOPE-DENIED · cross-tenant → 404 · race 2 request đặt song song → đúng 1 Confirmed + 409 (không 500) — xanh trên LANE_DB",
     ],
     notes: [
-      "🟡 Vá lỗi trùng lịch ở service CHỈ là tầng báo lỗi đẹp — chốt thật là EXCLUDE GIST (đã ép ở DB WO); bắt lỗi constraint qua cause (drizzle giấu mã lỗi PG trong cause).",
+      "🔴 red (đổi từ yellow 2026-08-29, cùng lý do plan-reviewer nâng S11-ASSET-BE-1: data_scope Own/Company ép ở service trên cặp GHI + audit + 403-vs-404 phân biệt theo tenant — khuôn S5-GOAL-BE-1). FULL gate, NGƯỜI chốt, KHÔNG auto-merge. Nối tiếp SAU S11-ASSET-BE-1 vì cùng chạm app.module.ts / openapi-modules.ts / route-census.",
+      "Vá lỗi trùng lịch ở service CHỈ là tầng báo lỗi đẹp (409 kèm conflicts + nextFreeFrom) — chốt thật là EXCLUDE GIST (đã ép ở DB WO); bắt 23P01 qua cause (drizzle giấu mã lỗi PG trong cause) rồi truy vấn lại conflicts ⇒ cùng 409.",
+      "FE thêm 5 mã dotted ROOM.* vào PERMISSION_CODE_TO_PAIR (web-core registry, fail-closed) — ghi nợ cho S11-ROOM-FE-1 (SPEC-14 §23 mục 11).",
     ],
   },
   {
