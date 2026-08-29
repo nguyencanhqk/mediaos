@@ -126,6 +126,7 @@ Tên người đặt/tham dự luôn **JOIN** từ `users` (+ `employee_profiles
 - **Recurring booking** · đồng bộ Google/Outlook Calendar (PARK-ROOM-002) (ROOM-DEC-003).
 - **Sửa lượt đặt** (đổi giờ/phòng/người tham dự) — v1 = **huỷ rồi đặt lại**; không có `PATCH /room-bookings/:id` (giữ FSM 2 trạng thái + EXCLUDE đơn giản; thêm sau phải cấp `ROOM-API-014+`).
 - Check-in phòng / tự huỷ khi không ai đến · màn hình hiển thị ngoài cửa phòng · dịch vụ kèm (trà nước, kỹ thuật) · phòng ảo/link họp online (cột `is_virtual` di sản **bị gỡ**).
+- **Lượt riêng tư / ẩn tiêu đề** với người ngoài danh sách tham dự (PARK-ROOM-003) — v1 mọi tiêu đề công khai trong company (§18 ghi nhận rủi ro).
 - Biên bản cuộc họp, action-item gắn cuộc họp (đúng phần bị DROP của hub G10 — nếu quay lại là module khác, không phải ROOM).
 
 ### 5.3 Di sản được xử lý dứt điểm
@@ -196,7 +197,7 @@ Chi tiết cột/kiểu/constraint: [DB-16](<../DB/DB-16 ROOM Database Design.md
 | Mã | Màn hình | Ghi chú |
 | --- | --- | --- |
 | ROOM-SCREEN-001 | Lịch phòng (`/rooms`) | Ngày/tuần; **cột = phòng** (kèm sức chứa), hàng = giờ; kéo chọn khung trống mở màn 002; khung bận hiện tiêu đề + người tổ chức; bộ lọc phòng/sức chứa tối thiểu; nút «+ Đặt phòng» theo quyền |
-| ROOM-SCREEN-002 | Form đặt phòng (dialog từ 001) | Chọn phòng (chỉ `is_active` + không `requires_approval`), chủ đề, khung giờ, người tham dự từ danh bạ HR (tối đa 50), Office Admin có thêm «Đặt hộ cho»; **kiểm trùng trước ở client** (từ dữ liệu lịch đã tải) + xử lý 409 server: hiển thị khung bận + «Còn trống từ …»; không mất form |
+| ROOM-SCREEN-002 | Form đặt phòng (dialog từ 001) | Chọn phòng (chỉ `is_active` + không `requires_approval`), chủ đề (dòng nhắc «tiêu đề hiển thị cho toàn công ty» — §18), khung giờ, người tham dự từ danh bạ HR (tối đa 50), Office Admin có thêm «Đặt hộ cho»; **kiểm trùng trước ở client** (từ dữ liệu lịch đã tải) + xử lý lỗi server **theo `error.code`, không theo HTTP status**: `ROOM-ERR-001` ⇒ khung bận + «Còn trống từ …»; `IN_PROGRESS` ⇒ "đang gửi, chờ"; `KEY_REUSED` ⇒ sinh khoá mới rồi gửi lại; không mất form. FE **sinh `Idempotency-Key` mới** khi mở form, sau mỗi lần gửi thành công và sau `KEY_REUSED` |
 | ROOM-SCREEN-003 | «Đặt phòng của tôi» (`/me/room-bookings`) | Gắn khu vực ME; tab **Sắp tới** ‖ **Đã qua** ‖ **Đã huỷ**; vai trò (tổ chức / tham dự); nút Huỷ chỉ với lịch mình tổ chức chưa kết thúc |
 | ROOM-SCREEN-004 | Quản trị phòng họp (`/rooms/manage`) | `('manage','room')`; bảng tên · sức chứa · thiết bị · vị trí · trạng thái; form tạo/sửa; vô hiệu/xoá bị chặn khi còn lịch (ROOM-ERR-008); tab **Lịch sử sử dụng** (usage-summary theo khoảng ngày + danh sách lượt đã qua) |
 | ROOM-SCREEN-005 | Chi tiết lượt đặt (drawer từ 001/003/004) | Phòng · giờ · người tổ chức · người tham dự · trạng thái (kể cả `Completed` dẫn xuất) · nút **Huỷ** theo quyền + điều kiện (không hiện nút mà server sẽ trả 409/403) |
@@ -209,7 +210,7 @@ Mọi màn: `<PermissionGate>` + `useCan()`, trạng thái loading/error/empty (
 
 | Mã | Chức năng | Mô tả ngắn |
 | --- | --- | --- |
-| ROOM-FUNC-001 | Quản trị phòng họp | CRUD phòng; `name` unique (ROOM-ERR-009); vô hiệu (`is_active=false`) / xoá mềm chỉ khi **không** còn lịch `Confirmed` có `ends_at > now()` (ROOM-ERR-008); audit |
+| ROOM-FUNC-001 | Quản trị phòng họp | CRUD phòng; `name` unique (ROOM-ERR-009); vô hiệu (`is_active=false`) / xoá mềm chỉ khi **không** còn lịch `Confirmed` có `ends_at > now()` (ROOM-ERR-008) — kiểm **sau khi `SELECT … FROM meeting_rooms WHERE company_id = $c AND id = $1 FOR UPDATE`** trong cùng transaction (khoá cùng hàng với FUNC-003 để "vô hiệu" ‖ "đặt" không đua nhau — §13.2); audit |
 | ROOM-FUNC-002 | Tìm phòng trống | `GET /rooms/availability?from&to&capacityMin` — phòng `is_active`, không `requires_approval`, sức chứa đủ, **không** có lượt `Confirmed` giao `[from, to)` |
 | ROOM-FUNC-003 | Đặt phòng | kiểm giờ (ROOM-ERR-002) → phòng nhận đặt (ROOM-ERR-004) → organizer/attendees hợp lệ (ROOM-ERR-006/010) → sức chứa (ROOM-ERR-007) → **kiểm trùng** (ROOM-ERR-001) → INSERT lượt `Confirmed` + attendees (EXCLUDE là chốt cuối, `23P01` → ROOM-ERR-001) → audit → outbox `ROOM_BOOKING_CONFIRMED`. Một transaction |
 | ROOM-FUNC-004 | Huỷ lượt đặt | `Confirmed → Cancelled`, `cancel_reason` tuỳ chọn; chỉ khi `ends_at > now()` (ROOM-ERR-005); Own = organizer, Company = bất kỳ; audit → outbox `ROOM_BOOKING_CANCELLED` |
@@ -289,7 +290,7 @@ Quy tắc bổ sung (không cần mã riêng):
 ### 13.2 Đặt phòng — thứ tự kiểm và chốt cuối
 
 1. **Giờ** (ROOM-ERR-002): `endsAt > startsAt` · `startsAt ≥ now() − 5′` · 15′ ≤ thời lượng ≤ 8h · `startsAt ≤ now() + 90 ngày`.
-2. **Phòng** (ROOM-ERR-003/004): tồn tại trong company, `deleted_at IS NULL`, `is_active`, không `requires_approval`.
+2. **Phòng** (ROOM-ERR-003/004): `SELECT … FROM meeting_rooms WHERE company_id = $c AND id = $r FOR UPDATE` **trong transaction đặt phòng** — tồn tại, `deleted_at IS NULL`, `is_active`, không `requires_approval`. `FOR UPDATE` là bắt buộc: FUNC-001 (vô hiệu/xoá phòng) cũng khoá đúng hàng này ⇒ hai giao dịch "vô hiệu phòng" ‖ "đặt phòng" tuần tự hoá, không thể vừa `is_active=false` vừa nhận thêm lượt `Confirmed` tương lai (EXCLUDE **không** cứu ca này).
 3. **Organizer** (ROOM-ERR-010): mặc định = caller; `organizerUserId` chỉ được honour khi scope `book` = Company.
 4. **Người tham dự** (ROOM-ERR-006): distinct, ≠ organizer, ≤ 50, mỗi người là `users` active cùng company (một truy vấn `WHERE id = ANY($1)` — đếm khớp, không N+1).
 5. **Sức chứa** (ROOM-ERR-007).
@@ -301,13 +302,13 @@ Quy tắc bổ sung (không cần mã riêng):
 ### 13.3 Huỷ
 
 - Quyền: `('cancel','room-booking')` — scope Own ⇒ `organizer_user_id = caller`; Company ⇒ bất kỳ. Ngoài scope ⇒ **403** (lịch là công khai trong company).
-- Điều kiện: `status = 'Confirmed'` và `ends_at > now()` (ROOM-ERR-005). Một câu `UPDATE … SET status, cancelled_at, cancelled_by, cancel_reason, updated_* WHERE id = $1 AND status = 'Confirmed' AND ends_at > now()` — 0 hàng ⇒ đọc lại để chọn `kind` (CHECK cặp huỷ buộc một câu UPDATE, DB-16 §6.2).
+- Điều kiện: `status = 'Confirmed'` và `ends_at > now()` (ROOM-ERR-005). Một câu `UPDATE … SET status, cancelled_at, cancelled_by, cancel_reason, updated_* WHERE company_id = $c AND id = $1 AND status = 'Confirmed' AND ends_at > now()` (bất biến #1 — `company_id` ở mọi query dù RLS đã đỡ) — 0 hàng ⇒ đọc lại để chọn `kind` (CHECK cặp huỷ buộc một câu UPDATE, DB-16 §6.2).
 - Audit + outbox `ROOM_BOOKING_CANCELLED` (người nhận: organizer ∪ attendees, trừ actor — engine tự loại actor vì `isSystemEvent=false`).
 
 ### 13.4 Lịch và phòng trống
 
 - `GET /room-bookings?from&to` / `GET /rooms/:id/bookings?from&to`: `[from, to)` bắt buộc, ≤ 31 ngày (ROOM-ERR-002 `range-too-wide`); lọc lượt có `tstzrange(starts_at, ends_at) && tstzrange(from, to)`; mặc định `status=Confirmed`, `status=all` để xem cả huỷ (lịch sử). Trả **phẳng** (không phân trang) trong cửa sổ ≤ 31 ngày — một tuần × 20 phòng × 10 lượt/ngày ≈ 1.400 hàng là trần thực tế; FE nhóm theo phòng.
-- `GET /rooms/availability?from&to&capacityMin&equipment[]`: phòng `is_active`, không `requires_approval`, `capacity ≥ capacityMin`, chứa mọi `equipment[]` yêu cầu, **NOT EXISTS** lượt `Confirmed` giao `[from, to)`.
+- `GET /rooms/availability?from&to&capacityMin&equipment[]`: phòng `is_active`, không `requires_approval`, `capacity ≥ capacityMin`, chứa mọi `equipment[]` yêu cầu, **NOT EXISTS** lượt `Confirmed` giao `[from, to)`. Luật giờ áp cho `availability` **chỉ** là `end-before-start` và `too-long` (> 8h) của ROOM-ERR-002 — **không** áp `in-past`/`too-short`/`too-far` (đây là tra cứu, không phải đặt).
 
 ### 13.5 Nhắc lịch — ROOM-DEC-004
 
@@ -331,7 +332,7 @@ Quy tắc bổ sung (không cần mã riêng):
 
 ## 14. Trạng thái UI bắt buộc
 
-Mọi màn ROOM phải xử lý: **loading** (skeleton lịch/bảng) · **error** (thông điệp + thử lại) · **empty** ("chưa có phòng họp nào" — Office Admin thấy nút thêm; lịch trống = ô trống kéo được; «đặt phòng của tôi» rỗng = "bạn chưa có lịch nào") · **không có quyền** (ẩn bằng `<PermissionGate>`) · **409 trùng lịch** (khung bận + «Còn trống từ …», giữ nguyên form) · **409/403 khi huỷ** (tải lại chi tiết) · **nút Huỷ chỉ hiện khi `canCancel`** từ server · **múi giờ**: mọi giờ hiển thị theo `companies.timezone`, ghi rõ ở tiêu đề lịch.
+Mọi màn ROOM phải xử lý: **loading** (skeleton lịch/bảng) · **error** (thông điệp + thử lại) · **empty** ("chưa có phòng họp nào" — Office Admin thấy nút thêm; lịch trống = ô trống kéo được; «đặt phòng của tôi» rỗng = "bạn chưa có lịch nào") · **không có quyền** (ẩn bằng `<PermissionGate>`) · **lỗi khi đặt rẽ nhánh theo `error.code`, không theo HTTP status** — `ROOM-ERR-001` (khung bận + «Còn trống từ …», giữ nguyên form) ‖ `IN_PROGRESS` (đang gửi) ‖ `KEY_REUSED` (sinh khoá mới, gửi lại) ‖ `INVALID_KEY` (lỗi FE, sinh lại) — cả ba mã sau đều là 409 của interceptor idempotency dùng chung · **409/403 khi huỷ** (tải lại chi tiết) · **nút Huỷ chỉ hiện khi `canCancel`** từ server · **múi giờ**: mọi giờ hiển thị theo `companies.timezone`, ghi rõ ở tiêu đề lịch.
 
 ---
 
@@ -367,7 +368,7 @@ Nguồn chuẩn: [DB-16](<../DB/DB-16 ROOM Database Design.md>). Tóm tắt:
 - **EXCLUDE GIST** `room_bookings_no_overlap_excl` trên `(company_id, room_id, tstzrange(starts_at, ends_at, '[)')) WHERE status = 'Confirmed'` — `btree_gist` đã có từ `0052` (vẫn `CREATE EXTENSION IF NOT EXISTS` cho lane DB mới).
 - **DROP 4 bảng di sản** `meeting_tasks` → `meeting_notes` → `meeting_attendees` → `meetings` (thứ tự con→cha) + `DROP FUNCTION meetings_set_updated_at()` — bước **contract** cùng WO DB, có tiền kiểm fail-loud "0 hàng" (đo 29/08/2026 = 0/0/0/0; nếu lúc chạy > 0 ⇒ **dừng**, người quyết, không tự migrate dữ liệu).
 - **Seed đi kèm bắt buộc** (thiếu là 500 ngay bản ghi đầu): module `ROOM` (`is_active=true` — hàng đã tồn tại `is_active=false`, cần **UPDATE tường minh**, `ON CONFLICT DO NOTHING` không lật cờ) · role hệ thống `office-admin` · **5 cặp** permission §11 + grant **22 hàng** (verify fail-loud) · **xoá 12 grant + xoá mềm 6 cặp** `meeting*` di sản (đo 29/08: 6 cặp × 2 grant) · `audit_logs.object_type` **UNION-ADD** `room_booking` (+ verify `meeting_room` đã có trong CHECK — TS `AUDIT_OBJECT_TYPES` có sẵn, CHECK DB đo lại lúc chạy; clone khối UNION-ADD `0506`) · catalog + template **3 event NOTI** §17 với **`dedupe_strategy = 'DedupeKey'`** + nới CHECK trên **CẢ HAI bảng** `notification_events` **lẫn** `notifications` (`module_code += 'ROOM'`, `notification_type += 'Room'`).
-- **Teardown test:** `apps/api/test/helpers/seed.ts` `cleanupTenants()` thêm `room_booking_attendees` → `room_bookings` **TRƯỚC dòng `DELETE FROM users`** (composite FK `organizer_user_id`/`user_id` → `users` là `NO ACTION`; xoá users trước là nổ FK) — cùng commit với migration; `rls-registry.ts` thay 2 entry `meetings`/`meeting_attendees` bằng 2 bảng mới, giữ `meeting_rooms`.
+- **Teardown test:** `apps/api/test/helpers/seed.ts` `cleanupTenants()` thêm `room_booking_attendees` → `room_bookings` **TRƯỚC dòng `DELETE FROM users`** (composite FK `organizer_user_id`/`user_id` → `users` là `NO ACTION`; xoá users trước là nổ FK) — cùng commit với migration; `rls-registry.ts` **gỡ 4 entry** `meetings` · `meeting_attendees` · `meeting_notes` · `meeting_tasks` (hai entry sau vẫn `INSERT INTO meetings` trong `seedRow`), thêm 2 entry bảng mới, giữ `meeting_rooms`; gỡ khối MEETINGS khỏi `apps/api/demo-seed-full.mjs` (INSERT trong transaction trước `COMMIT` — không gỡ là demo-seed ROLLBACK toàn bộ).
 - Migration nối tiếp head **THẬT** lúc chạy (`migrations/meta/_journal.json`; head lúc viết = idx 215 / `0548`; ASSET dự kiến chiếm `0549–0551` ⇒ ROOM dự kiến **`0552+`**, lane migration nối tiếp: chạy **sau** `S11-ASSET-DB-1` merge).
 
 ---
@@ -393,6 +394,7 @@ Nguồn chuẩn: [DB-16](<../DB/DB-16 ROOM Database Design.md>). Tóm tắt:
 - **RLS + FORCE** theo `company_id` trên cả 3 bảng (2 bảng mới tạo policy **trước** mọi INSERT; `meeting_rooms` đã có từ `0052` — verify fail-loud); mọi repository qua `withTenant`.
 - **Sổ không xoá**: `room_bookings` — app role **không có DELETE**, UPDATE **cấp cột** (`status`, `cancelled_*`, `cancel_reason`, `updated_*`); `room_booking_attendees` — **không có UPDATE/DELETE**. Lịch sử sử dụng phòng = chính bảng này.
 - **Không có trường nhạy cảm** (SPEC-01 §11.3) — không masking theo scope; nhưng `users.email`/số điện thoại **không** vào DTO ROOM (chỉ `userId` · tên hiển thị · mã nhân viên nếu có). Payload WS (nếu có sau) đi cùng DTO — cấm emit thẳng row.
+- **Rủi ro đã chấp nhận có chủ đích — tiêu đề lượt đặt là văn bản tự do và công khai toàn công ty** (`view@Company`): "Phỏng vấn ứng viên X", "Họp kỷ luật A" là nội dung nhạy cảm dù *trường* không nhạy cảm. v1 không có lượt riêng tư; giảm thiểu bằng (a) màn 002 hiển thị dòng nhắc dưới ô Chủ đề «tiêu đề hiển thị cho toàn công ty — dùng tiêu đề trung tính cho họp nhạy cảm» (§9, §14), (b) NOTI/deep-link không phát tiêu đề ra ngoài company. Lượt riêng tư / ẩn tiêu đề với người ngoài attendees = **PARK-ROOM-003** (Phase sau, cần cột `is_private` + masking theo attendee — §5.2).
 - **404 cho cross-tenant** (ROOM-ERR-003); **403** cho ngoài scope ghi (`book`/`cancel`) vì lịch là công khai trong company; **403** khi thiếu cặp quyền.
 - **Audit** mọi mutation (§12); `object_type` = `meeting_room` (phòng) / `room_booking` (lượt); action `create` · `update` · `deactivate` · `delete` · `book` · `cancel`.
 - `/me/room-bookings` **không nhận** `userId` — chống IDOR.
@@ -477,7 +479,8 @@ Nguồn chuẩn: [DB-16](<../DB/DB-16 ROOM Database Design.md>). Tóm tắt:
 9. **IMPLEMENTATION-02** §8.19 **EPIC-18 ROOM** (IMP02-STORY-163..170) + §9 Sprint 11; **ISSUE-BOARD-01** §8.2 hàng ROOM/EPIC-18.
 10. **harness**: `lib/stories.mjs` (`EPIC_MODULE[18]`, `sprintOfStory` S11 mở rộng 153–170, override story→WO) · `dashboard/server.mjs` (`MODULE_SPEC` ROOM, đặt **trước** HR/TASK vì tiêu đề chứa "phòng" — regex HR bắt `phòng ban`, không bắt `phòng họp`) · `backlog.mjs` (ROOM-DOC-1 đóng, ROOM-DB-1 nhận số liệu thật + kế hoạch DROP).
 11. **Nợ để lại cho WO FE (`S11-ROOM-FE-1`)**: thêm **5 mã dotted `ROOM.*`** (§11) vào `PERMISSION_CODE_TO_PAIR` ở `packages/web-core/src/lib/registry.ts` (fail-closed).
-12. **Nợ để lại cho WO DB (`S11-ROOM-DB-1`)**: `apps/api/src/db/schema/meeting.ts` → `rooms.ts` (3 bảng), `schema/index.ts` đổi export; `rls-registry.ts` thay 2 entry; `cleanupTenants()` thêm 2 bảng **trước** `DELETE FROM users`; `AUDIT_OBJECT_TYPES` gỡ `meeting`/`meeting_note`, thêm `room_booking` (CHECK DB **giữ** giá trị cũ — union chỉ tăng); `NotiModuleCode` + `NotiType` thêm `ROOM`/`Room`; census composite FK `0535` mất 9 hàng `meeting*` (tự nhiên theo DROP), thêm hàng cho 2 bảng mới.
+12. **Nợ để lại cho WO DB (`S11-ROOM-DB-1`)**: `apps/api/src/db/schema/meeting.ts` → `rooms.ts` (3 bảng), `schema/index.ts` đổi export; `rls-registry.ts` gỡ **4** entry `meeting*` (giữ `meeting_rooms`) + thêm 2; `apps/api/demo-seed-full.mjs` gỡ khối MEETINGS + 2 dòng đếm; `cleanupTenants()` thêm 2 bảng **trước** `DELETE FROM users`; `AUDIT_OBJECT_TYPES` gỡ `meeting`/`meeting_note`, thêm `room_booking` (CHECK DB **giữ** giá trị cũ — union chỉ tăng, parity một chiều); `NotiModuleCode` + `NotiType` thêm `ROOM`/`Room`; **mọi FK tới `users` kể cả `*_by` là composite** `SET NULL (col)` (DB-16 §4.2 — ratchet `xtenant-fk` đếm cả FK nullable), sàn 423 không hạ; migration `0552`/`0553` mang marker `DESTRUCTIVE-APPROVED` (`DROP COLUMN` + `DROP TABLE` đều bị quét).
+13. **Nợ để lại cho WO BE (`S11-ROOM-BE-1`)**: DTO ROOM chiếu `displayName`/`employeeCode` của `users`/`employee_profiles` ⇒ cập nhật `identity-projection-census` (điểm chiếu danh tính mới phải có verdict scope — ratchet của `S10-SEC-LOGINLOG429-1`), không để census đỏ hoặc nới trần ngầm.
 
 ---
 
@@ -486,7 +489,7 @@ Nguồn chuẩn: [DB-16](<../DB/DB-16 ROOM Database Design.md>). Tóm tắt:
 - [x] Owner ký OFFICE-DEC-001 + ROOM-DEC-001..004 (28/08/2026) → §1 = **Approved**; nhánh mở ROOM-DEC-001 chốt sau khi ĐO (29/08/2026, §3.4)
 - [x] DB-16 + API-15 + permission-matrix §9e đồng bộ, không mâu thuẫn SPEC-14
 - [x] SPEC-01 §17.10 hợp thức bộ trạng thái; §20.2/SPEC-08 §15.0 cấp mã NOTI-EVENT sau khi **đo**
-- [ ] `plan-reviewer` đối kháng PASS trên SPEC-14 + DB-16 trước khi mở `S11-ROOM-DB-1`
+- [ ] `plan-reviewer` đối kháng PASS trên SPEC-14 + DB-16 trước khi mở `S11-ROOM-DB-1` — vòng 1 (29/08/2026) **BLOCK 3 mục** (FK `*_by` phải composite · rls-registry 4 entry · `demo-seed-full.mjs`) + 8 cảnh báo → **đã vá cùng ngày**; vòng xác nhận **chưa chạy** (dừng vì chi phí phiên) — owner quyết chạy lại trước khi mở WO DB
 - [ ] Mọi WO code của track ROOM lấy SPEC-14 + DB-16 làm nguồn sự thật; lệch → sửa code, không sửa ngầm spec
 
 ---

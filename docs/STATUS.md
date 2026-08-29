@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-29 03:23Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-29 03:37Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -48,7 +48,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `wo/s11-room-doc-1` · **file đang đổi (dirty)**: 28
+- **branch**: `wo/s11-room-doc-1` · **file đang đổi (dirty)**: 5
 - **migration head**: idx 215 — `0548_s10cleanworkflowcluster2_drop_workflow_approval_cluster` (216 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -57,6 +57,8 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `f380eff2` | 2026-08-29 | docs(room): S11-ROOM-DOC-1 — SPEC-14 + DB-16 + API-15 + permission-matrix §9e, hợp thức trạng thái SPEC-01 §17.10, NOTI-EVENT-013..015, EPIC-18, chốt ROOM-DEC-001 sau khi ĐO |
+| `79d77f7f` | 2026-08-29 | docs(asset): SPEC-13 §24 tick plan-reviewer PASS (29/08, 3 vòng); backlog DOC-1 ghi kết quả gate |
 | `c71e2227` | 2026-08-29 | docs(asset): vá vòng 3 plan-reviewer — §8 SPEC-13 sót "Own"; đường restore hết chết (includeDeleted gate manage + prefix-taken trả categoryId); mã 409 interceptor idempotency; §20.2 thêm Company Admin; §25 không hạ gate |
 | `1a492216` | 2026-08-29 | docs(asset): vá vòng 2 plan-reviewer — 4 BLOCK + 2 HIGH + 8 MEDIUM + 4 LOW trên SPEC-13/DB-15/API-14/SPEC-08/IMP-02/backlog |
 | `fef2a9fa` | 2026-08-28 | docs(asset): vá 5 BLOCK + 4 HIGH + 6 MEDIUM từ plan-reviewer trên SPEC-13/DB-15/API-14/§9d |
@@ -67,8 +69,6 @@
 | `b1e53e20` | 2026-08-28 | fix(fnd): GỠ bề mặt API của module PARK `workflow/` — 29 route, trần ratchet param-uuid 37 → 1 (S10-CLEAN-WORKFLOWPARK-1) (#429) |
 | `08c8f7de` | 2026-08-27 | fix(fnd): ép hợp đồng :id = UUID ở BIÊN cho 75 route `tasks/` — hạ trần ratchet 112→37 và ĐÓNG KI-078 (S10-FND-PARAMUUID-5) (#428) |
 | `2cfea8d8` | 2026-08-27 | fix(fnd): ép hợp đồng :id = UUID ở BIÊN cho 36 route goals/foundation/noti/recycle-bin — hạ trần ratchet 148→112 (S10-FND-PARAMUUID-4) (#427) |
-| `5d66a8c3` | 2026-08-27 | fix(fnd): ép hợp đồng :id = UUID ở BIÊN cho 42 route HR/tổ chức — 500 GIẢ thành 400 đơn trị, hạ trần ratchet 190→148 (S10-FND-PARAMUUID-3) (#426) |
-| `e47a36f5` | 2026-08-27 | fix(fnd): ép hợp đồng :id = UUID ở BIÊN cho 31 route LEAVE/ATT/APPROVAL — 500 GIẢ thành 400 đơn trị, hạ trần ratchet 221→190 (S10-FND-PARAMUUID-2) (#425) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

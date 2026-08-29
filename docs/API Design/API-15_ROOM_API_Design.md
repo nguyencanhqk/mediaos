@@ -101,7 +101,7 @@ GET    /api/v1/me/room-bookings
 | --- | --- | --- | --- | --- | --- | --- |
 | ROOM-API-001 | GET | `/rooms` | Danh sách phòng — mặc định `isActive=true` + chưa xoá; `?includeInactive=true` (màn 004); filter `capacityMin` · `q` (tên/vị trí); sort `sortOrder`,`name` | `('view','room')` | — | — |
 | ROOM-API-002 | POST | `/rooms` | Tạo phòng `{ name, location?, capacity, equipment?[], description?, requiresApproval?, sortOrder? }`; tên trùng (case-insensitive) → ROOM-ERR-009 | `('manage','room')` | ✅ `meeting_room` | — |
-| ROOM-API-003 | GET | `/rooms/availability` | `?from&to&capacityMin?&equipment[]?` — phòng `isActive`, không `requiresApproval`, đủ sức chứa/thiết bị, **NOT EXISTS** lượt `Confirmed` giao `[from, to)`; `[from, to)` hợp lệ theo ROOM-ERR-002 (≤ 8h) | `('view','room')` | — | — |
+| ROOM-API-003 | GET | `/rooms/availability` | `?from&to&capacityMin?&equipment[]?` — phòng `isActive`, không `requiresApproval`, đủ sức chứa/thiết bị, **NOT EXISTS** lượt `Confirmed` giao `[from, to)`; `[from, to)` chỉ kiểm `end-before-start` + `too-long` (≤ 8h) của ROOM-ERR-002 — **không** áp `in-past`/`too-short`/`too-far` (tra cứu, không phải đặt — SPEC-14 §13.4) | `('view','room')` | — | — |
 | ROOM-API-004 | GET | `/rooms/usage-summary` | `?from&to` (≤ 366 ngày): theo phòng `{ roomId, name, bookingsCount, hoursBooked, cancelledCount }` — chỉ lượt có `starts_at` trong cửa sổ; gồm cả phòng đã vô hiệu/xoá mềm nếu có lượt | `('view','room')` | — | — |
 | ROOM-API-005 | GET | `/rooms/{id}` | Chi tiết phòng + `upcomingCount` (lượt `Confirmed` có `endsAt > now`); phòng đã xoá mềm → 404 ROOM-ERR-003 | `('view','room')` | — | — |
 | ROOM-API-006 | PATCH | `/rooms/{id}` | Sửa thuộc tính + `isActive`; `isActive=false` khi `upcomingCount > 0` → ROOM-ERR-008; tên trùng → ROOM-ERR-009 | `('manage','room')` | ✅ `meeting_room` (`update` / `deactivate`) | — |
@@ -222,7 +222,9 @@ Mã lỗi theo API-01 §13 `MODULE-ERR-CODE`. Namespace ROOM gồm **hai nhóm**
 | `400` | Body/param sai định dạng (`VALIDATION-ERR-001`), `{id}` không phải UUID, `from`/`to` không phải ISO 8601 |
 | `403` | ROOM-ERR-010 (`book-on-behalf-denied`) · `AUTH-ERR-SCOPE-DENIED` (huỷ lượt người khác ở scope Own) |
 | `404` | ROOM-ERR-003 |
-| `409` | ROOM-ERR-001 · 004 · 005 · 008 · 009 |
+| `409` | ROOM-ERR-001 · 004 · 005 · 008 · 009 · **mã của interceptor idempotency dùng chung**: `IN_PROGRESS` (bấm-đúp khi request đầu chưa xong) · `KEY_REUSED` (cùng key, khác payload — xảy ra khi người dùng sửa giờ rồi gửi lại trên cùng form) · `INVALID_KEY` — FE **rẽ theo `error.code`**, không theo HTTP status (`idempotency.interceptor.ts`) |
+
+> **Mã trên dây cho 404:** giống ASSET, envelope trả **tên sentinel** `ROOM-ERR-NOT-FOUND` (`error.code`); `ROOM-ERR-003` là **mã quy tắc** trong SPEC-14 §12 để QA/FE tra cứu, không xuất hiện trên dây. Test assert `ROOM-ERR-NOT-FOUND`.
 | `422` | ROOM-ERR-002 · 006 · 007 · 010 (`organizer-not-found` / `organizer-inactive`) |
 
 Dùng lại nhóm lỗi chung API-01: `AUTH-ERR-UNAUTHENTICATED` 401 · `AUTH-ERR-FORBIDDEN` 403 · `AUTH-ERR-SCOPE-DENIED` 403 · `VALIDATION-ERR-001` 400 · `SYSTEM-ERR-RATE-LIMIT` 429.
@@ -245,7 +247,7 @@ Dùng lại nhóm lỗi chung API-01: `AUTH-ERR-UNAUTHENTICATED` 401 · `AUTH-ER
 
 ### 7.5 Idempotency
 
-`POST /room-bookings` gắn `@Idempotent()` (interceptor dùng chung — BACKEND-12 §14.1); header `Idempotency-Key` **do client sinh khi mở form** (§6.9), FE **luôn** gửi, interceptor **không bắt buộc** (thiếu header ⇒ chạy như thường — back-compat có chủ ý của hạ tầng chung). Khoá scope `company_id + user_id + method + path + idempotency_key`, **TTL 15 phút** (`IDEMPOTENCY_TTL_SEC = 900`); replay **phát lại envelope nguyên trạng** + header `Idempotency-Replayed: true` — **không** có `meta.idempotent_replay`. `POST /room-bookings/{id}/cancel` **không** cần idempotency (huỷ lặp trả 409 `already-cancelled` — đủ rõ, không tạo hàng mới).
+`POST /room-bookings` gắn `@Idempotent()` (interceptor dùng chung — BACKEND-12 §14.1); header `Idempotency-Key` **do client sinh khi mở form** (§6.9), FE **luôn** gửi, interceptor **không bắt buộc** (thiếu header ⇒ chạy như thường — back-compat có chủ ý của hạ tầng chung). Khoá scope `company_id + user_id + method + path + idempotency_key`, **TTL 15 phút** (`IDEMPOTENCY_TTL_SEC = 900`); replay **phát lại envelope nguyên trạng** + header `Idempotency-Replayed: true` — **không** có `meta.idempotent_replay`. FE **sinh khoá mới** khi mở form, sau mỗi lần gửi thành công và sau `KEY_REUSED` (cùng khoá + payload khác ⇒ 409 `KEY_REUSED` — không phải trùng lịch). Interceptor **nhả khoá khi handler ném lỗi** ⇒ sau 409 ROOM-ERR-001 người dùng sửa giờ và gửi lại cùng khoá vẫn chạy thật. `POST /room-bookings/{id}/cancel` **không** cần idempotency (huỷ lặp trả 409 `already-cancelled` — đủ rõ, không tạo hàng mới).
 
 ---
 

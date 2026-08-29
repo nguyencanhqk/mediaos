@@ -14480,6 +14480,7 @@ export const backlog = [
       "apps/api/src/foundation/seed/**",
       "apps/api/test/foundation/**",
       "apps/api/test/**",
+      "apps/api/demo-seed-full.mjs",
       "docs/erd-current.md",
     ],
     skills: ["code-review"],
@@ -14498,7 +14499,7 @@ export const backlog = [
     ],
     notes: [
       "🔴 FULL gate + lane migration NỐI TIẾP — chạy SAU S11-ASSET-DB-1 (depends_on đã khoá thứ tự để khỏi giẫm số migration).",
-      "📐 Số đo 2026-08-29 (DB-16 §3.0): 0 hàng cả 5 bảng meeting_*; 6 cặp meeting*/meeting_room* × 2 grant = 12 hàng role_permissions, 0 guard; audit CHECK dạng `= ANY('{…}'::text[])` — verify từng giá trị `meeting_room` lúc chạy; modules.ROOM đã tồn tại is_active=false ⇒ UPDATE tường minh. Kế hoạch A (expand) / B (contract DROP + quyền di sản) / C (seed) ở DB-16 §9 — ĐO LẠI trước khi chạy; nếu bảng nào > 0 hàng ⇒ DỪNG, người quyết. cleanupTenants: room_booking_attendees → room_bookings TRƯỚC dòng `DELETE FROM users` (composite FK NO ACTION → users). rls-registry thay 2 entry meetings/meeting_attendees. schema/meeting.ts → rooms.ts.",
+      "📐 Số đo 2026-08-29 (DB-16 §3.0): 0 hàng cả 5 bảng meeting_*; 6 cặp meeting*/meeting_room* × 2 grant = 12 hàng role_permissions, 0 guard; audit CHECK dạng `= ANY('{…}'::text[])` — verify từng giá trị `meeting_room` lúc chạy; modules.ROOM đã tồn tại is_active=false ⇒ UPDATE tường minh. Kế hoạch A (expand) / B (contract DROP + quyền di sản) / C (seed) ở DB-16 §9 — ĐO LẠI trước khi chạy; nếu bảng nào > 0 hàng ⇒ DỪNG, người quyết. cleanupTenants: room_booking_attendees → room_bookings TRƯỚC dòng `DELETE FROM users` (composite FK NO ACTION → users). rls-registry GỠ 4 entry meetings/meeting_attendees/meeting_notes/meeting_tasks (giữ meeting_rooms) + thêm 2; demo-seed-full.mjs gỡ khối MEETINGS (:877-921, :950-951 — trong transaction, không gỡ là ROLLBACK toàn bộ demo-seed); schema/meeting.ts → rooms.ts. MỌI FK tới users kể cả *_by = composite SET NULL (col) (ratchet xtenant-fk đếm cả FK nullable; sàn 423 KHÔNG hạ). 0552 (DROP COLUMN is_virtual) và 0553 (DROP TABLE) đều cần dòng `-- DESTRUCTIVE-APPROVED: … (owner 28/08/2026)` cho check-migration-no-drop.sh. Plan-reviewer vòng 1 (29/08) BLOCK 3 mục — đã vá trong DOC-1 (FK *_by composite · 4 entry registry · demo-seed) + 8 cảnh báo; CHƯA chạy vòng xác nhận vì chi phí — owner quyết có chạy lại trước khi mở WO này.",
     ],
   },
   {
@@ -14557,11 +14558,12 @@ export const backlog = [
     depends_on: ["S11-ROOM-BE-1"],
     plan: "docs/plans/S11-ROOM-FE-1.md",
     src: [
-      "SPEC-14 §SCREEN (ROOM-SCREEN-001..004) + wireframe HTML đã owner duyệt",
+      "SPEC-14 §9 (ROOM-SCREEN-001..005 — 005 = drawer chi tiết lượt, nơi duy nhất có nút Huỷ theo canCancel) + wireframe HTML đã owner duyệt",
       "docs/plans/S11-OFFICE-WAVE.md §6",
     ],
     done_when: [
-      "Đủ 4 màn ROOM-SCREEN-001..004; lịch tuần render đúng múi Asia/Ho_Chi_Minh trên nền UTC-at-rest (date-fns v4 + @date-fns/tz)",
+      "Đủ 5 màn ROOM-SCREEN-001..005; lịch tuần render đúng múi công ty (companies.timezone) trên nền UTC-at-rest (date-fns v4 + @date-fns/tz); lỗi đặt phòng rẽ theo error.code (ROOM-ERR-001 ‖ IN_PROGRESS ‖ KEY_REUSED), Idempotency-Key sinh mới khi mở form/sau gửi thành công/sau KEY_REUSED",
+      "Thêm 5 mã dotted ROOM.* (SPEC-14 §11) vào PERMISSION_CODE_TO_PAIR ở packages/web-core/src/lib/registry.ts — bảng fail-closed, thiếu là toàn bộ màn ROOM ẩn dù DB đã grant (SPEC-14 §23 mục 11)",
       "Form đặt phòng: chặn client-side khung giờ đã bận + xử lý 409 server trả về (hiện khung giờ bận, không nuốt lỗi); loading/error/empty đủ",
       "Quyền qua PermissionGate/useCan đúng cặp §9e (own vs all); trạng thái dùng constants chuẩn",
       "vitest FE + typecheck + build xanh; e2e luồng đặt→trùng→đổi giờ→hủy qua UI",
@@ -14578,7 +14580,9 @@ export const backlog = [
     paths: ["apps/api/src/rooms/**", "apps/api/test/**", "apps/app/src/routes/rooms/**"],
     skills: ["code-review"],
     depends_on: ["S11-ROOM-BE-1", "S11-ROOM-FE-1"],
-    src: ["SPEC-14 §TC (mã ROOM-TC-xxx) + docs/plans/S11-OFFICE-WAVE.md §7 (bẫy 7, 9)"],
+    src: [
+      "SPEC-14 §20 (tiêu chí nghiệm thu) + §21 (test scenario cấp cao — SPEC-14 KHÔNG có §TC/mã ROOM-TC) + docs/plans/S11-OFFICE-WAVE.md §7 (bẫy 7, 9)",
+    ],
     done_when: [
       "Int-spec race: 2 request tạo booking chồng giờ bắn SONG SONG → đúng 1 thành công, 1 nhận 409 (không 500, không cả hai thành công) — trên LANE_DB; lưu ý bẫy supertest đóng server dùng chung khi chạy Promise.all",
       "Ma trận allow/deny từng cặp quyền §9e + cross-tenant 2-tenant thật; job nhắc lịch có test dedupe (chạy 2 lần không bắn 2 NOTI)",
