@@ -14261,7 +14261,7 @@ export const backlog = [
     title:
       "Bộ tài liệu ASSET: SPEC-13 + DB-15 + API-14 + permission-matrix §9d + hợp thức trạng thái vào SPEC-01 §17 + đồng bộ README/DB-01·09·10/erd-current/RELEASE-14/IMPLEMENTATION-02 (EPIC-17) — owner chốt ASSET-DEC-001..004",
     zone: "green",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "docs/SPEC/**",
       "docs/DB/**",
@@ -14297,6 +14297,8 @@ export const backlog = [
     notes: [
       "✅ OWNER ĐÃ DUYỆT 2026-08-28 nguyên gói hồ sơ docs/plans/S11-OFFICE-WAVE-review.html — OFFICE-DEC-001 + ASSET-DEC-001..004 chốt ĐÚNG cột Đề xuất ở wave plan §3. WO này chỉ còn việc GHI kết luận đó vào SPEC-13 (bảng quyết định) rồi viết bộ tài liệu — không hỏi lại owner các DEC đã ký.",
       "🟢 LIGHT gate (docs-only). Số hiệu DB-15/API-14 là ĐỀ XUẤT — chỉ chốt khi OFFICE-DEC-001 ký; nếu owner chốt khác, sửa lại toàn bộ tham chiếu trong wave này.",
+      "✅ plan-reviewer PASS 2026-08-29 sau 3 vòng (vòng 1: 5 BLOCK; vòng 2: 4 BLOCK + 2 HIGH + 8 MEDIUM; vòng 3: 2 BLOCK nhỏ do bản vá vòng 2 đẻ ra → xác nhận PASS). Bài học ghi ở commit fef2a9fa/1a492216/c71e2227. Cổng mở S11-ASSET-DB-1 đã qua; PR mở cho owner merge (hot-file harness ⇒ không push thẳng master). S11-ROOM-DOC-1 xếp trên nhánh này.",
+      "📐 KẾT QUẢ 2026-08-28 (số liệu THẬT cho DB-1/BE-1): SPEC-13 §11 = 11 cặp quyền is_sensitive=false + role hệ thống MỚI `asset-manager` (KHÔNG canonical) — ma trận grant 28 hàng (§9d); §12 = 16 mã ASSET-ERR; §15 = 24 endpoint ASSET-API-001..024 (KHÔNG có endpoint QR/PDF); §17 = 3 event ASSET_ASSIGNED/ASSET_REVOKED/ASSET_MAINTENANCE_DUE = NOTI-EVENT-010..012 (đo: SPEC-01 §20.2 dừng ở 009, GOAL/CHAT/LMS không cấp mã chuẩn); DB-15 = 6 bảng mới, head lúc viết idx 215/0548 ⇒ 0549+ dự kiến; counter mã tài sản tạo lúc tạo loại (KHÔNG seed ở migration). Tinh chỉnh so với hồ sơ HTML: /me/assets dùng ('view','asset')@Own thay vì cặp ASSIGNMENT.VIEW riêng (read-path-gate-pair); thêm ('delete','asset') + ('dispose','asset'); cho phép Lost→In Stock (tìm thấy lại).",
     ],
   },
   {
@@ -14337,7 +14339,7 @@ export const backlog = [
     layer: "BE",
     title:
       "Module NestJS assets/: CRUD danh mục + tài sản, cấp phát/thu hồi, bảo trì, kiểm kê — permission guard §9d, audit log, outbox NOTI, :id=UUID ở biên, API_MODULE_TAGS + route-census regen",
-    zone: "yellow",
+    zone: "red",
     status: "todo",
     paths: [
       "apps/api/src/assets/**",
@@ -14361,7 +14363,8 @@ export const backlog = [
       "Deny-path int-spec RED-trước cho assign/revoke/inventory (thiếu quyền → 403, cross-tenant → 404/403) xanh trên LANE_DB",
     ],
     notes: [
-      "🟡 gate thường nhưng chạm permission seed/guard ⇒ security-reviewer đọc diff phần guard trước khi merge.",
+      "🔴 Nâng yellow → red 2026-08-29 theo plan-reviewer vòng 2 (BLOCK-4): WO này hiện thực data-scope Own/Department/Company ở service + MASKING danh tính & tài chính ở server + 404-không-403 + audit mọi mutation + guard 11 cặp — cùng khuôn S5-GOAL-BE-1 / S7-CHAT-BE-1 (đều red). FULL gate (security-reviewer + database-reviewer + silent-failure-hunter), NGƯỜI chốt, KHÔNG gắn nhãn auto-merge.",
+      "📌 Hợp đồng idempotency đi theo hạ tầng dùng chung `@Idempotent()` (TTL 15′, header không bắt buộc ở interceptor, replay = header `Idempotency-Replayed`) — KHÔNG fork interceptor để có `meta.idempotent_replay` (SPEC-13 §12 / API-14 §7.5 đã sửa theo).",
     ],
   },
   {
@@ -14385,12 +14388,13 @@ export const backlog = [
     depends_on: ["S11-ASSET-BE-1"],
     plan: "docs/plans/S11-ASSET-FE-1.md",
     src: [
-      "SPEC-13 §SCREEN (ASSET-SCREEN-001..006) + wireframe HTML đã owner duyệt",
+      "SPEC-13 §9 (ASSET-SCREEN-001..007 — 007 = quản trị loại, UI duy nhất của ('manage','asset-category')) + wireframe HTML đã owner duyệt",
       "docs/plans/S11-OFFICE-WAVE.md §6",
     ],
     done_when: [
-      "Đủ 6 màn ASSET-SCREEN-001..006; table pagination/filter; form validation Zod; loading/error/empty đủ",
+      "Đủ 7 màn ASSET-SCREEN-001..007; table pagination/filter; form validation Zod; loading/error/empty đủ",
       "Quyền qua PermissionGate/useCan đúng cặp §9d (không hard-code); trường server mask ⇒ schema FE .optional()",
+      "Thêm 11 mã dotted ASSET.* (SPEC-13 §11) vào PERMISSION_CODE_TO_PAIR ở packages/web-core/src/lib/registry.ts — bảng fail-closed với mã lạ, thiếu là toàn bộ màn ASSET ẩn dù DB đã grant (SPEC-13 §23 mục 11)",
       "QR tài sản render từ asset_code (theo ASSET-DEC-001); trạng thái dùng constants chuẩn SPEC-01 §17",
       "vitest FE + typecheck + build xanh; e2e luồng cấp phát→thu hồi qua UI",
     ],
@@ -14407,11 +14411,11 @@ export const backlog = [
     skills: ["code-review"],
     depends_on: ["S11-ASSET-BE-1", "S11-ASSET-FE-1"],
     src: [
-      "SPEC-13 §TC (mã ASSET-TC-xxx) + docs/plans/S11-OFFICE-WAVE.md §7 (bẫy 9)",
+      "SPEC-13 §20 (tiêu chí nghiệm thu) + §21 (test scenario cấp cao — SPEC-13 KHÔNG có §TC/mã ASSET-TC) + docs/plans/S11-OFFICE-WAVE.md §7 (bẫy 9)",
       "harness/check.sh --lane-db (khuôn verify như CI)",
     ],
     done_when: [
-      "Ma trận test SPEC-13 §TC phủ: allow-case + deny-case từng cặp quyền (deny không rỗng nghĩa — có ca ALLOW đối chứng), cross-tenant 2-tenant thật",
+      "Ma trận test SPEC-13 §21 phủ: allow-case + deny-case từng cặp quyền (deny không rỗng nghĩa — có ca ALLOW đối chứng), cross-tenant 2-tenant thật",
       "FSM: mọi chuyển tiếp không hợp lệ có test trả đúng ASSET-ERR; coverage assets/ ≥80%",
       "bash harness/check.sh --lane-db xanh KHÔNG kèm banner 'XANH KHÔNG ĐỦ BẰNG CHỨNG'; docs/TESTABLE-FEATURES.md cập nhật mục ASSET",
     ],

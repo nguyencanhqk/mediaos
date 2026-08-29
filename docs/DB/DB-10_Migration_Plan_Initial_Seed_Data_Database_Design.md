@@ -621,6 +621,8 @@ Secret phải lấy từ environment variable hoặc secret manager.
 > **GOAL (SPEC-10 · DB-11):** module MVP bổ sung, sở hữu riêng `goals`/`goal_updates`/`task_templates`/`task_template_items`; liên kết `tasks.goal_id`. Seed module + 7 cặp permission wave lõi (SPEC-10 §11, trừ `('manage','task-template')` seed riêng ở migration **đợt D — 0510+**, KHÔNG phải 0508: số đó đã bị wave LMS chiếm, luôn đọc `_journal.json` thật lúc chạy) + `sequence_counters` cho `goal_code` mỗi company + UNION-ADD `'goal'` vào CHECK `audit_logs.object_type` — chi tiết kế hoạch migration: DB-11 §9. Đã chạy thật: `0504`–`0507` (S5-GOAL-DB-1, PR #252). Seed module idempotent `ON CONFLICT (module_code) DO NOTHING` (§5.5); grant per-pair data_scope theo pattern DELETE-wrong-scope + INSERT ON CONFLICT (mirror 0466/0476).
 >
 > **CHAT (SPEC-15 · DB-12) — Phase 4, CHƯA seed:** module chat nội bộ, nền dữ liệu (`chat_rooms`/`chat_room_members`/`chat_messages`) **đã tồn tại thật** trong DB từ migration `0010`+`0050` với RLS+FORCE và GRANT append-only đúng bất biến #2 — wave `S7-CHAT` chỉ ALTER bổ sung, KHÔNG tạo bảng mới. Seed đi kèm: module `CHAT` + **10 cặp** permission (SPEC-15 §11 — 9 cặp thường `is_sensitive=false`, cộng `('view','chat-oversight')` `is_sensitive=**true**` — migration **chỉ INSERT catalog, 0 hàng `role_permissions` cho mọi role canonical**; SA nhận qua `SuperAdminBootstrapService` lúc boot vì **`super-admin` không phải role canonical**, CHAT-DEC-004) + `sequence_counters` cho `room_code` + seed NOTI 2 event (`CHAT_MENTIONED`, `CHAT_DIRECT_MESSAGE`). ⚠️ **Hai điểm dễ sai:** (1) `audit_logs.object_type` **đã có** `'chat_room'`/`'chat_message'` từ `0050` ⇒ chỉ verify fail-loud, không UNION-ADD lại; (2) nới CHECK NOTI phải làm trên **CẢ HAI** bảng `notification_events` **VÀ** `notifications` (`module_code += 'CHAT'`, `notification_type += 'Chat'`) — quên vế `notifications` là lỗi đã ship thật với GOAL ở `0507` và phải vá ở `0529`. Chi tiết kế hoạch migration: DB-12 §9.
+>
+> **ASSET (SPEC-13 · DB-15) — Phase 3, CHƯA seed (wave S11-OFFICE, owner duyệt 28/08/2026):** module tài sản, **6 bảng mới** (`asset_categories` · `assets` · `asset_assignments` · `asset_maintenances` · `asset_inventories` · `asset_inventory_items`), migration `0549+` dự kiến — đọc `_journal.json` thật lúc chạy. Seed đi kèm: module `ASSET` (`module_group='Operation'`, `is_mvp=false`, `is_active=true` khi wave ship — hàng ở §10.2 chuyển `Active=true`) + **role hệ thống `asset-manager`** (`company_id NULL`, `is_system=true`, tiền lệ `hr-manager` mig `0019`; **không** phải role canonical) + **11 cặp** permission (§12.9, `is_sensitive=false` cả 11) + grant per-pair data_scope **28 hàng** cho 4 role canonical + `asset-manager` (permission-matrix §9d; DELETE-wrong-scope + INSERT ON CONFLICT, verify fail-loud) + **UNION-ADD 5 giá trị** `'asset'` · `'asset_category'` · `'asset_assignment'` · `'asset_maintenance'` · `'asset_inventory'` vào CHECK `audit_logs.object_type` + seed NOTI **3 event** (`ASSET_ASSIGNED`, `ASSET_REVOKED`, `ASSET_MAINTENANCE_DUE`; `notification_type='Asset'`) với nới CHECK trên **CẢ HAI** bảng `notification_events` **VÀ** `notifications`. ⚠️ **KHÔNG seed `sequence_counters`** ở migration: counter mã tài sản (`TS-<PREFIX>-<seq>`, scope `Custom` theo `asset_categories.id`) được tạo **cùng transaction với loại tài sản** lúc runtime (DB-15 §6.7) — seed loại sau này bắt buộc kèm counter. Chi tiết kế hoạch migration: DB-15 §9.
 
 ### 10.2 Module phase sau inactive
 
@@ -628,7 +630,7 @@ Secret phải lấy từ environment variable hoặc secret manager.
 | --- | --- | --- | --- |
 | PAYROLL | Tiền lương | Phase 2 | false |
 | RECRUIT | Tuyển dụng | Phase 2 | false |
-| ASSET | Quản lý tài sản | Phase 3 | false |
+| ASSET | Quản lý tài sản | Phase 3 | false → **true** khi S11-ASSET-DB-1 seed (DB-15 §9 bước B) |
 | ROOM | Quản lý phòng họp | Phase 3 | false |
 | CHAT | Chat nội bộ | Phase 4 | false |
 | SOCIAL | Mạng xã hội nội bộ | Phase 4 | false |
@@ -858,6 +860,26 @@ Secret phải lấy từ environment variable hoặc secret manager.
 | `ME.DATA_EXPORT.REQUEST_OWN` | Yêu cầu xuất dữ liệu cá nhân (P1/phase sau — ME-DEC-009) |
 
 > **Idempotent (§5.5):** seed permission theo business key `permission_code`: `INSERT ... ON CONFLICT (permission_code) DO NOTHING`. Role-permission seed cho ME (kèm `data_scope = Own`) chốt ở WO S5-ME-DB-1 / seed migration nối tiếp (lane này chỉ đồng bộ docs, không viết migration).
+
+### 12.9 ASSET permissions *(Phase 3 — seed ở S11-ASSET-DB-1)*
+
+> Nguồn: SPEC-13 §11 + permission-matrix §9d. Bảng `permissions` thật chỉ có `(action, resource_type, is_sensitive)` — mã dotted dưới đây là tên hiển thị; cặp engine ghi trong ngoặc. `is_sensitive=false` cho cả 11 (trường tài chính che ở server theo scope, không dựng cặp nhạy cảm). Idempotent: `ON CONFLICT (action, resource_type) DO NOTHING`.
+
+| Permission code | Cặp engine | Mô tả |
+| --- | --- | --- |
+| `ASSET.ACCESS` | `('access','asset')` | Cổng nav menu Tài sản |
+| `ASSET.ASSET.VIEW` | `('view','asset')` | Xem loại · tài sản · lịch sử · đợt kiểm kê · thống kê · `/me/assets` (scope Own/Department/Company theo role) |
+| `ASSET.ASSET.CREATE` | `('create','asset')` | Tạo hồ sơ tài sản (sinh mã) |
+| `ASSET.ASSET.UPDATE` | `('update','asset')` | Sửa thông tin mô tả |
+| `ASSET.ASSET.DELETE` | `('delete','asset')` | Xoá mềm hồ sơ nhập nhầm |
+| `ASSET.ASSIGNMENT.CREATE` | `('assign','asset')` | Cấp phát cho nhân viên |
+| `ASSET.ASSIGNMENT.REVOKE` | `('revoke','asset')` | Thu hồi |
+| `ASSET.ASSET.DISPOSE` | `('dispose','asset')` | Thanh lý · ghi nhận mất · tìm thấy lại |
+| `ASSET.CATEGORY.MANAGE` | `('manage','asset-category')` | CRUD loại tài sản |
+| `ASSET.MAINTENANCE.MANAGE` | `('manage','asset-maintenance')` | Mở/đóng lượt bảo trì |
+| `ASSET.INVENTORY.MANAGE` | `('manage','asset-inventory')` | Mở/đánh dấu/đóng đợt kiểm kê |
+
+> Grant: `employee` `access`@Own + `view`@Own · `manager` `access`@Own + `view`@Department · `hr` `access`@Own + `view`@Company · `company-admin` và role mới **`asset-manager`** cả 11 (`access`@Own, còn lại @Company) = **28 hàng**. `super-admin` không enumerate (bootstrap runtime).
 
 ---
 
@@ -1089,6 +1111,11 @@ Urgent
 | `TASK_MENTIONED` | TASK | User được mention |
 | `TASK_DUE_SOON` | TASK | Task sắp đến hạn |
 | `TASK_OVERDUE` | TASK | Task quá hạn |
+| `ASSET_ASSIGNED` | ASSET | Tài sản được cấp phát (Phase 3 — seed ở S11-ASSET-DB-1, SPEC-08 §15.7) |
+| `ASSET_REVOKED` | ASSET | Tài sản bị thu hồi (Phase 3) |
+| `ASSET_MAINTENANCE_DUE` | ASSET | Tài sản sắp đến hạn bảo trì — job hằng ngày (Phase 3) |
+
+> 3 event ASSET cần `module_code='ASSET'` + `notification_type='Asset'` ⇒ nới CHECK trên **cả hai** bảng `notification_events` và `notifications` cùng migration (DB-15 §9 bước C).
 
 ### 15.2 Template mẫu
 

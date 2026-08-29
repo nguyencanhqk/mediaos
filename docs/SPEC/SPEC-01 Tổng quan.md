@@ -1,7 +1,7 @@
 # SPEC-01: TỔNG QUAN HỆ THỐNG QUẢN LÝ DOANH NGHIỆP
 
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
-> **SPEC-01 Tổng quan** · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
+> **SPEC-01 Tổng quan** · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
 >
 > **Liên quan:** [Thiết kế DB: DB-01 Tổng quan](<../DB/DB-01 DATABASE DESIGN TỔNG QUAN.md>) · [Sản phẩm: PRD-00](<../PRD/PRD-00 Enterprise Management System .md>) · [Thiết kế API: API-01 Tổng quan](<../API Design/API-01 TỔNG QUAN.md>) · [Chỉ mục tài liệu](<../README.md>)
 
@@ -163,7 +163,7 @@ Các module sau chưa triển khai chi tiết trong MVP v1.0, nhưng hệ thốn
 | --------- | ---------------------- | ----------------- | --------- |
 | PAYROLL   | Tiền lương             | SPEC-11           | Phase 2   |
 | RECRUIT   | Tuyển dụng             | SPEC-12           | Phase 2   |
-| ASSET     | Quản lý tài sản        | SPEC-13           | Phase 3   |
+| ASSET     | Quản lý tài sản        | [SPEC-13](<SPEC-13 ASSET.md>) | Phase 3 — spec **đã viết** (Approved 28/08/2026, wave S11-OFFICE) |
 | ROOM      | Quản lý phòng họp      | SPEC-14           | Phase 3   |
 | CHAT      | Chat nội bộ            | [SPEC-15](<SPEC-15 CHAT.md>) | Phase 4 — spec **đã viết** (Draft) |
 | SOCIAL    | Mạng xã hội nội bộ     | SPEC-16           | Phase 4   |
@@ -193,7 +193,7 @@ Bộ tài liệu spec của dự án sẽ được tổ chức như sau:
 | SPEC-10     | Mục tiêu (GOAL)                   | Spec module |
 | SPEC-11     | Tiền lương                        | Spec module |
 | SPEC-12     | Tuyển dụng                        | Spec module |
-| SPEC-13     | Quản lý tài sản                   | Spec module |
+| SPEC-13     | [Quản lý tài sản](<SPEC-13 ASSET.md>) | Spec module — **đã viết** (Approved) |
 | SPEC-14     | Quản lý phòng họp                 | Spec module |
 | SPEC-15     | [Chat nội bộ](<SPEC-15 CHAT.md>)  | Spec module — **đã viết** (Draft) |
 | SPEC-16     | Mạng xã hội nội bộ                | Spec module |
@@ -859,7 +859,7 @@ Module liên quan:
 
 ### 12.10 ASSET — Quản lý tài sản
 
-Tài liệu chi tiết: SPEC-13
+Tài liệu chi tiết: [SPEC-13](<SPEC-13 ASSET.md>) — **đã viết**, owner duyệt 28/08/2026 (wave S11-OFFICE). Trạng thái tài sản hợp thức ở §17.8–17.9; sự kiện NOTI-EVENT-010..012 ở §20.2.
 
 Giai đoạn: Phase 3
 
@@ -1408,6 +1408,28 @@ Các module được phép dùng thêm các giá trị dưới đây (đã hợp
 * **Trạng thái task (SPEC-06):** `Overdue` (mục 17.4) là giá trị **dẫn xuất** tính từ deadline, không lưu cứng.
 * **Trạng thái dự án (SPEC-06):** thêm `Archived` (lưu trữ dự án).
 * **Trạng thái thông báo (SPEC-08):** thêm `Hidden` (người dùng ẩn), `Deleted` (xóa mềm), `Failed` (gửi thất bại).
+* **Tài sản (SPEC-13, hợp thức 28/08/2026 — ASSET-DEC-003):** bộ chính ở mục 17.8 (tài sản) và 17.9 (lượt cấp phát). Các sổ phụ dùng giá trị đóng: lượt bảo trì `Open` / `Closed` · đợt kiểm kê `Open` / `Closed` · kết quả dòng kiểm kê `Found` / `Missing` / `Not Checked` · tình trạng khi giao/thu `Good` / `Damaged` (+ `Lost` khi thu). Chuyển tiếp hợp lệ (FSM) định nghĩa **duy nhất** tại SPEC-13 §13.1 — service ép, DB chỉ CHECK tập giá trị.
+
+### 17.8 Trạng thái tài sản (SPEC-13)
+
+```text
+In Stock
+Assigned
+Under Maintenance
+Disposed
+Lost
+```
+
+> `Disposed` là trạng thái kết thúc (không quay lại). `Lost` chỉ có một đường quay lại `In Stock` («tìm thấy lại», SPEC-13 §13.1) — cần lý do + audit.
+
+### 17.9 Trạng thái lượt cấp phát tài sản (SPEC-13)
+
+```text
+Active
+Returned
+```
+
+> Một tài sản tại một thời điểm chỉ có tối đa **một** lượt `Active` (ép ở DB bằng partial unique — DB-15 §6.3). "Ai đang giữ" là dẫn xuất từ lượt `Active`, không lưu cứng trên tài sản.
 
 ---
 
@@ -1581,6 +1603,11 @@ Hệ thống cần hỗ trợ các kênh sau:
 | NOTI-EVENT-007 | Đơn nghỉ được duyệt       | Người tạo đơn            |
 | NOTI-EVENT-008 | Đơn nghỉ bị từ chối       | Người tạo đơn            |
 | NOTI-EVENT-009 | Hợp đồng sắp hết hạn      | HR                       |
+| NOTI-EVENT-010 | Tài sản được cấp phát     | Nhân viên được cấp       |
+| NOTI-EVENT-011 | Tài sản bị thu hồi        | Nhân viên bị thu hồi     |
+| NOTI-EVENT-012 | Tài sản sắp đến hạn bảo trì | Asset Manager / Company Admin |
+
+> **Dải mở rộng hậu-MVP (đo 28/08/2026):** 001–009 là bộ MVP; GOAL/LMS/CHAT **không** cấp mã chuẩn (chỉ là mở rộng SPEC-08 §15). **010–012 cấp cho ASSET** (SPEC-13 §17, wave S11-OFFICE). Module sau (ROOM = SPEC-14) lấy **013+** — đo lại bằng grep `NOTI-EVENT-0` trước khi cấp, không mặc định còn trống.
 
 ---
 

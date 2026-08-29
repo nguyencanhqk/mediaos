@@ -330,6 +330,7 @@ FOUNDATION-DB-001
 | LMS | Đào tạo nội bộ — tích hợp `apps/lms` | EPIC-14 |
 | BRAND | Thương hiệu công ty (logo, favicon) | EPIC-15 |
 | CHAT | Nhắn tin nội bộ (SPEC-15) | EPIC-16 |
+| ASSET | Quản lý tài sản (SPEC-13) — wave S11-OFFICE, bổ sung 2026-08-28 | EPIC-17 |
 
 > **Mã KHÔNG hợp lệ** (đã dọn 2026-08-03, đừng dùng lại): `INT` -> dùng `INTEGRATION` · `FND` -> dùng `FOUNDATION` · `SYSTEM` -> dùng `BRAND` hoặc `FOUNDATION` tuỳ việc. Mã ngoài bảng này khiến Work Order rơi khỏi thẻ module trên `harness/dashboard` và bị suy đoán theo từ khoá.
 

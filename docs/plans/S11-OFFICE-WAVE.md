@@ -2,7 +2,8 @@
 
 > Seed 2026-08-28. Trạng thái: **ĐÃ DUYỆT 2026-08-28** — owner duyệt nguyên gói hồ sơ
 > **`docs/plans/S11-OFFICE-WAVE-review.html`** (kèm wireframe UI) và ký 9/9 quyết định §3 theo cột
-> «Đề xuất». 2 WO gốc (`S11-ASSET-DOC-1`, `S11-ROOM-DOC-1`) đã mở khoá `blocked → todo` cùng ngày. Nguồn phạm vi: SPEC-01 §12.10–12.11 · §7 (Phase 3) ·
+> «Đề xuất». 2 WO gốc (`S11-ASSET-DOC-1`, `S11-ROOM-DOC-1`) đã mở khoá `blocked → todo` cùng ngày.
+> **`S11-ASSET-DOC-1` ĐÃ VIẾT (28/08/2026):** [SPEC-13](<../SPEC/SPEC-13 ASSET.md>) · [DB-15](<../DB/DB-15 ASSET Database Design.md>) · [API-14](<../API Design/API-14_ASSET_API_Design.md>) · permission-matrix §9d · SPEC-01 §17.8–17.9 + §20.2 (NOTI-EVENT-010..012) · IMPLEMENTATION-02 EPIC-17 (§8.18). Nguồn phạm vi: SPEC-01 §12.10–12.11 · §7 (Phase 3) ·
 > §10.8 (Asset Manager) · §10.9 (Office Admin) · IMPLEMENTATION-10 §22 (PARK-ASSET/ROOM) ·
 > RELEASE-14 §5.
 
@@ -88,9 +89,13 @@ duyệt ──┤                                                               
         └ S11-ROOM-DOC-1  (blocked, chờ duyệt) → S11-ROOM-DB-1 🔴 → S11-ROOM-BE-1 → S11-ROOM-FE-1 → S11-ROOM-QA-1    ┘
 ```
 
-- 2 track chạy song song ĐƯỢC, **trừ** 2 WO DB (🔴 migration): lane migration là lane NỐI TIẾP duy
-  nhất — `S11-ROOM-DB-1` chỉ chạy sau khi `S11-ASSET-DB-1` merge (hoặc ngược lại), đánh số migration
-  nối tiếp head lúc đó.
+- 2 track chạy song song ĐƯỢC ở tầng BE/FE/QA, **trừ** hai chỗ: (a) 2 WO DB (🔴 migration): lane
+  migration là lane NỐI TIẾP duy nhất — `S11-ROOM-DB-1` chỉ chạy sau khi `S11-ASSET-DB-1` merge,
+  đánh số migration nối tiếp head lúc đó; (b) **2 WO DOC cũng NỐI TIẾP** — cùng ghi hot-file
+  (`permission-matrix-spec.md` · `README.md` · `erd-current.md` · DB-01/09/10 · IMPLEMENTATION-02 ·
+  `harness/backlog.mjs` · `stories.mjs` · `dashboard/server.mjs`): `S11-ROOM-DOC-1` xếp **trên**
+  `S11-ASSET-DOC-1` (nhánh `wo/s11-room-doc-1` tạo từ đỉnh `wo/s11-asset-doc-1`, chỉ **append**
+  §9e/§8.19/§7.11/§8.17, không rewrite mục có sẵn; sau squash-merge DOC-1 thì `rebase --onto`).
 - DOC → DB có chốt: plan-reviewer đối kháng PASS trên SPEC + DB doc trước khi mở WO DB (khuôn
   S7-CHAT-DOC-1).
 
