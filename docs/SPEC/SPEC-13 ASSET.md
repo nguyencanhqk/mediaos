@@ -1,7 +1,7 @@
 # SPEC-13: ASSET — QUẢN LÝ TÀI SẢN (DANH MỤC · HỒ SƠ · CẤP PHÁT · THU HỒI · BẢO TRÌ · KIỂM KÊ · THANH LÝ)
 
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
-> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · **SPEC-13 ASSET** · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
+> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · **SPEC-13 ASSET** · [SPEC-14 ROOM](<SPEC-14 ROOM.md>) · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
 >
 > **Liên quan:** [Chỉ mục tài liệu](<../README.md>) · [DB-15 ASSET Database Design](<../DB/DB-15 ASSET Database Design.md>) · [Thiết kế API: API-14 ASSET](<../API Design/API-14_ASSET_API_Design.md>) · [Ma trận phân quyền §9d](<../permission-matrix-spec.md>) · [HR nền: SPEC-03](<SPEC-03 HR.md>) · [NOTI nền: SPEC-08](<SPEC-08 NOTI.md>) · [Kế hoạch wave: S11-OFFICE](<../plans/S11-OFFICE-WAVE.md>)
 >

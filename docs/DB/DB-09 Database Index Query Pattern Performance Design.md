@@ -794,6 +794,28 @@ Ghi chú riêng của ASSET:
 
 ---
 
+### 8.17 ROOM (`meeting_rooms`, `room_bookings`, `room_booking_attendees`) · *Phase 3 — chưa thi công*
+
+> Chi tiết đầy đủ + DDL: [DB-16 ROOM Database Design §6/§8](<DB-16 ROOM Database Design.md>). `meeting_rooms` tái dụng (mig `0052`), 2 bảng mới, migration `0552+` dự kiến (S11-ROOM-DB-1, sau ASSET). Tóm tắt use case → index:
+
+| Use case | Index dùng |
+| --- | --- |
+| Lịch mọi phòng trong `[from, to)` (`ROOM-API-009`) · job nhắc 15′ | `idx_room_bookings_company_start` |
+| Lịch/lịch sử một phòng (`ROOM-API-008`) · kiểm-trước trùng lịch · thống kê (`ROOM-API-004`) | `idx_room_bookings_room_start` (partial `Confirmed`) · `room_bookings_no_overlap_excl` (GIST phục vụ `&&`) |
+| «Đặt phòng của tôi» — organizer (`ROOM-API-013`) | `idx_room_bookings_organizer` |
+| «Đặt phòng của tôi» — attendee | `idx_room_booking_attendees_user` |
+| Phòng trống (`ROOM-API-003`) | `idx_meeting_rooms_company_active` + `NOT EXISTS` qua `idx_room_bookings_room_start` |
+| Tên phòng trùng | `uq_meeting_rooms_company_name_active` (`lower(name)`, partial còn sống) |
+
+Ghi chú riêng của ROOM:
+
+- **`room_bookings_no_overlap_excl` là chốt cuối nghiệp vụ**, không chỉ là index: `EXCLUDE USING gist (company_id WITH =, room_id WITH =, tstzrange(starts_at, ends_at, '[)') WITH &&) WHERE status = 'Confirmed'` — hai request song song ⇒ `23P01` ⇒ service map về 409 ROOM-ERR-001, không 500. Cần `btree_gist` (đã có từ `0052`).
+- `[)` nửa-mở: lượt kề nhau không tính là giao. Lượt `Cancelled` **không** chặn (predicate).
+- «Của tôi» dùng `EXISTS` trên attendees, **không JOIN** (JOIN nhân bản theo số người tham dự).
+- Cô lập tenant ép ở RLS + FORCE; mọi index dẫn đầu bằng `company_id`.
+
+---
+
 ## 9. Index cho AUTH / DB-02
 
 ### 9.1 `users`

@@ -185,7 +185,7 @@ Một story đạt **Done** khi:
 >
 > Bổ sung 2026-08-03 (story hoá ngược wave hậu-MVP để bảng tiến độ `/progress` gom đúng module thay vì dồn vào rổ "WO nền / hạ tầng"): **EPIC-13 GOAL** (§8.14, 8 story / 45 point, SPEC-10) · **EPIC-14 LMS** (§8.15, 6 story / 34 point) · **EPIC-15 BRAND** (§8.16, 2 story / 8 point) · **EPIC-16 CHAT** (§8.17, 12 story / 97 point, SPEC-15 — **wave S7 đang chạy, epic DUY NHẤT chưa 100%**). Tổng hiệu dụng: **152 story / 1133 point**.
 >
-> Bổ sung 2026-08-28 (wave S11-OFFICE, Phase 3): **EPIC-17 ASSET** (§8.18, 10 story / 53 point, SPEC-13 — IMP02-STORY-153..162, **chưa bắt đầu code**). Tổng hiệu dụng: **162 story / 1186 point**. EPIC-18 ROOM (§8.19) sẽ thêm ở `S11-ROOM-DOC-1`.
+> Bổ sung 2026-08-28/29 (wave S11-OFFICE, Phase 3): **EPIC-17 ASSET** (§8.18, 10 story / 53 point, SPEC-13 — IMP02-STORY-153..162) · **EPIC-18 ROOM** (§8.19, 8 story / 40 point, SPEC-14 — IMP02-STORY-163..170) — cả hai **chưa bắt đầu code**. Tổng hiệu dụng: **170 story / 1226 point**.
 >
 > Crosswalk epic: bộ epic theo module trong IMPLEMENTATION-01 §9 (EPIC-FND/AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH) ánh xạ sang bộ epic chi tiết ở đây như sau: EPIC-FND -> EPIC-01; EPIC-AUTH -> EPIC-02; EPIC-HR -> EPIC-03; EPIC-ATT -> EPIC-04; EPIC-LEAVE -> EPIC-05; EPIC-TASK -> EPIC-06; EPIC-NOTI -> EPIC-07; EPIC-DASH -> EPIC-08. Ba epic EPIC-00 (Governance), EPIC-09 (Frontend Core), EPIC-10 (Integration) và EPIC-11 (QA/Release) là epic xuyên suốt, không thuộc một module nghiệp vụ đơn lẻ.
 
@@ -740,11 +740,42 @@ ASSET phụ thuộc AUTH (RBAC per-pair + scope), HR/`employee_profiles` (ngư�
 
 ---
 
+## 8.19 EPIC-18: ROOM - Quản lý phòng họp
+
+> **Bổ sung 2026-08-29** theo SPEC-14 ROOM (wave S11-OFFICE, Phase 3 — owner duyệt 28/08/2026, **chưa bắt đầu code**). Story RM-01..08 của `docs/plans/S11-OFFICE-WAVE.md` §4 ánh xạ 1-1 sang IMP02-STORY-163..170. Trace: `S11-ROOM-DB-1 (sau ASSET-DB-1) → BE-1 → FE-1 → QA-1` + `S11-OFFICE-DASH-1`.
+
+**Mục tiêu:** Một lịch phòng chung cho công ty — phòng họp có sức chứa/thiết bị, đặt theo khung giờ với **chống trùng ở tầng DB** (EXCLUDE gist), huỷ có audit + NOTI, nhắc trước 15 phút, «đặt phòng của tôi», lịch sử sử dụng và widget DASH; nền di sản `meeting_*` được xử lý dứt điểm (tái dụng 1 · tạo mới 2 · DROP 4).
+
+| Story ID | Actor | User Story / Technical Story | Priority | Point | Acceptance Criteria tóm tắt |
+| --- | --- | --- | --- | ---: | --- |
+| IMP02-STORY-163 | Office Admin | Là Office Admin, tôi muốn quản trị danh sách phòng họp (sức chứa · thiết bị · vị trí · kích hoạt) để nhân viên đặt đúng phòng. | P0 | 5 | CRUD `meeting_rooms` (tái dụng + ALTER: `equipment[]`, `requires_approval`, `is_active`, gỡ `is_virtual`); tên unique case-insensitive (ROOM-ERR-009); vô hiệu/xoá mềm bị chặn khi còn lịch `Confirmed` chưa kết thúc (ROOM-ERR-008); role hệ thống mới `office-admin`; audit (ROOM-FUNC-001, ROOM-SCREEN-004). |
+| IMP02-STORY-164 | Employee | Là một Employee, tôi muốn đặt phòng theo khung giờ và bị chặn ngay nếu trùng lịch, kèm gợi ý giờ trống. | P0 | 8 | Thứ tự kiểm SPEC-14 §13.2; trùng → 409 ROOM-ERR-001 với `conflicts[]` + `nextFreeFrom`; **EXCLUDE gist là chốt cuối** (race 2 request ⇒ 1 thắng, `23P01` → 409 không 500); `[)` nửa-mở; phòng `requires_approval` bị từ chối (ROOM-ERR-004); sức chứa (ROOM-ERR-007); `@Idempotent()` key do FE sinh khi mở form; audit + `ROOM_BOOKING_CONFIRMED` (ROOM-FUNC-002/003, ROOM-SCREEN-002). |
+| IMP02-STORY-165 | Employee / Office Admin | Là người tổ chức, tôi muốn huỷ lịch của mình; là Office Admin, tôi muốn huỷ mọi lịch — người tham dự được báo. | P0 | 5 | `('cancel','room-booking')` Own = organizer, Company = mọi lượt (ngoài scope → 403); chỉ khi `ends_at > now()` (ROOM-ERR-005); một câu UPDATE thoả CHECK cặp huỷ; audit + `ROOM_BOOKING_CANCELLED` (ROOM-FUNC-004). |
+| IMP02-STORY-166 | Employee | Là một Employee, tôi muốn xem lịch phòng theo ngày/tuần (cột = phòng) và tìm phòng trống theo khung giờ + sức chứa. | P0 | 8 | `GET /room-bookings` + `/rooms/:id/bookings` cửa sổ ≤ 31 ngày, trả phẳng kèm `isCompleted`; `GET /rooms/availability` bằng `NOT EXISTS` (không N+1); `('view','room')` Company cho mọi role; giờ hiển thị theo `companies.timezone` (ROOM-FUNC-005/006, ROOM-SCREEN-001/005). |
+| IMP02-STORY-167 | Employee | Là một Employee, tôi muốn xem «đặt phòng của tôi» (tổ chức / tham dự, sắp tới / đã qua / đã huỷ). | P1 | 3 | `GET /me/room-bookings` user từ token (không nhận `userId`), `role`/`date`/`from,to`/`includeCancelled`; `EXISTS` attendees không JOIN; `myRole` + `canCancel` từ server (ROOM-FUNC-007, ROOM-SCREEN-003). |
+| IMP02-STORY-168 | Employee | Là người tham dự, tôi muốn được nhắc 15 phút trước giờ họp. | P1 | 5 | `@SystemJobHandler` `ROOM_BOOKING_REMINDER` quét `starts_at ∈ (now, now+15′]` mỗi nhịp, recipient organizer ∪ attendees (`isSystemEvent=true`, không loại actor), `dedupeKey room:reminder:{bookingId}:{startsAt}` + catalog `DedupeKey`; chạy lại → 0 thông báo mới; 3 event NOTI-EVENT-013..015 seed trước WO backend, CHECK nới CẢ HAI bảng (ROOM-FUNC-008, SPEC-14 §17). |
+| IMP02-STORY-169 | Office Admin | Là Office Admin, tôi muốn xem lịch sử sử dụng và thống kê giờ dùng theo phòng. | P1 | 3 | `GET /rooms/usage-summary?from&to` (≤ 366 ngày): `bookingsCount` · `hoursBooked` · `cancelledCount` theo phòng, gồm phòng đã vô hiệu/xoá mềm; `room_bookings` là sổ không DELETE nên lịch sử không mất (ROOM-FUNC-009, ROOM-SCREEN-004 tab lịch sử). |
+| IMP02-STORY-170 | Employee / Manager | Là người dùng, tôi muốn widget dashboard «lịch họp hôm nay» của tôi. | P2 | 3 | Widget đọc `GET /me/room-bookings?date=today` (theo `companies.timezone`); chỉ render khi có `('view','room')`; mã widget cấp ở `S11-OFFICE-DASH-1` sau khi đo SPEC-07 §14 (hiện dừng ở DASH-WIDGET-022). |
+
+### Phạm vi kỹ thuật chính
+
+- Nền di sản (DB-16 §3.0, đo 29/08/2026 = 0 hàng): tái dụng `meeting_rooms`; tạo `room_bookings` + `room_booking_attendees` (RLS+FORCE, composite tenant FK → `users`, EXCLUDE gist); DROP `meetings` · `meeting_attendees` · `meeting_notes` · `meeting_tasks` + xoá 6 cặp quyền `meeting*` (expand-contract cùng WO, tiền kiểm fail-loud)
+- FSM 2 trạng thái ép ở service; `Completed` dẫn xuất ở server; chống trùng hai lớp (service 409 có nội dung + EXCLUDE chốt cuối)
+- 5 cặp quyền `is_sensitive=false` + role hệ thống mới `office-admin` (không canonical); `view` Company cho mọi role, `book`/`cancel` Own/Company ở service
+- Seed nối head thật (`0552+` dự kiến, **sau** ASSET): module `ROOM` (UPDATE `is_active`) · role · quyền · audit UNION-ADD `room_booking` · NOTI catalog (cả hai bảng CHECK, `DedupeKey`)
+- Không `PATCH` lượt đặt, không duyệt, không recurring ở v1 (ROOM-DEC-002/003)
+
+### Ghi chú dependency
+
+ROOM phụ thuộc AUTH (RBAC per-pair + scope; `users` là organizer/attendees), FOUNDATION (`audit_logs` · `system_jobs` · `@Idempotent()`) và NOTI (outbox bridge); HR chỉ cung cấp danh bạ cho FE. Lane migration **nối tiếp**: `S11-ROOM-DB-1` chỉ chạy sau `S11-ASSET-DB-1` merge; hai WO BE cùng chạm `app.module.ts`/`openapi-modules.ts`/route-census ⇒ cũng nối tiếp ở tầng BE (ASSET trước). `plan-reviewer` PASS trên SPEC-14 + DB-16 (đặc biệt phương án `meeting_*`) là cổng mở WO DB.
+
+---
+
 ## 9. Backlog theo Sprint đề xuất
 
 > Sprint mapping dưới đây bám đúng các IMPLEMENTATION execution plan (IMPLEMENTATION-03 -> IMPLEMENTATION-09): mô hình **7 sprint (Sprint 0 -> Sprint 6)**. Tổng MVP baseline: **112 story / 869 point** (+ EPIC-12 ME bổ sung 2026-07-13: 8 story / 44 point; + 4 story HR bổ sung EPIC-03 2026-07-13: IMP02-STORY-121..124, 36 point → **124 story / 949 point**). Khi biết velocity thực tế, Product Owner và Tech Lead cần điều chỉnh lại số story trong từng sprint (xem cảnh báo capacity ở §9.1).
 >
-> **Sprint hậu-MVP (bổ sung 2026-08-03):** wave sau go-live không nằm trong mô hình 7 sprint gốc. Sprint 5 nhận thêm GOAL/LMS/BRAND (IMP02-STORY-125..131, 133..140) vì chạy cùng đợt; IMP02-STORY-132 (tab Mục tiêu trong dự án) giao ở Sprint 7. **Sprint 7 = wave CHAT** (IMP02-STORY-141..152, SPEC-15) — đang chạy tại thời điểm cập nhật. **Sprint 11 = wave S11-OFFICE** (Phase 3): IMP02-STORY-153..162 (EPIC-17 ASSET, SPEC-13) + EPIC-18 ROOM (thêm ở `S11-ROOM-DOC-1`) — bổ sung 2026-08-28.
+> **Sprint hậu-MVP (bổ sung 2026-08-03):** wave sau go-live không nằm trong mô hình 7 sprint gốc. Sprint 5 nhận thêm GOAL/LMS/BRAND (IMP02-STORY-125..131, 133..140) vì chạy cùng đợt; IMP02-STORY-132 (tab Mục tiêu trong dự án) giao ở Sprint 7. **Sprint 7 = wave CHAT** (IMP02-STORY-141..152, SPEC-15) — đang chạy tại thời điểm cập nhật. **Sprint 11 = wave S11-OFFICE** (Phase 3): IMP02-STORY-153..162 (EPIC-17 ASSET, SPEC-13) + IMP02-STORY-163..170 (EPIC-18 ROOM, SPEC-14) — bổ sung 2026-08-28/29.
 
 | Sprint | Execution plan | Mục tiêu | Story trọng tâm | Point | Deliverable demo |
 | --- | --- | --- | --- | ---: | --- |
@@ -756,7 +787,7 @@ ASSET phụ thuộc AUTH (RBAC per-pair + scope), HR/`employee_profiles` (ngư�
 | Sprint 5 | IMPLEMENTATION-08 | Integration, QA Hardening & UAT | 097, 104-110, 113-120 (EPIC-12 ME), 121-124 (HR bổ sung) | 159 | Field/export security, OpenAPI contract, test matrix, API/E2E/security/perf test, responsive P0, Trung tâm cá nhân /me (SPEC-09), liên kết tài khoản UI + import Excel nhân viên + sơ đồ tổ chức trực quan + thông tin công việc đầy đủ |
 | Sprint 6 | IMPLEMENTATION-09 | Stabilization, Release Candidate & Go-live | 111-112 + bugfix | 13 | UAT sign-off, release readiness, RC build, go-live runbook |
 | Sprint 7 | SPEC-15 + docs/plans/S7-CHAT-WAVE.md | CHAT - Nhắn tin nội bộ (hậu go-live) | 132, 141-152 (EPIC-16 CHAT) | 100 | Phòng 1-1/nhóm/phòng-ban/dự án, gửi-đọc theo con trỏ seq, đính kèm qua Foundation Files, tìm kiếm tiếng Việt, realtime Valkey adapter, đọc-vượt membership có nhật ký, tab Mục tiêu trong dự án |
-| Sprint 11 | SPEC-13 + docs/plans/S11-OFFICE-WAVE.md | ASSET - Quản lý tài sản (Phase 3, hậu go-live) | 153-162 (EPIC-17 ASSET) | 53 | Danh mục loại + mã/QR, hồ sơ tài sản FSM, cấp phát/thu hồi 1 bước có biên bản, bảo trì, kiểm kê theo đợt, thanh lý/mất, «tài sản của tôi», 3 event NOTI, widget DASH (ROOM/EPIC-18 thêm ở S11-ROOM-DOC-1) |
+| Sprint 11 | SPEC-13 + SPEC-14 + docs/plans/S11-OFFICE-WAVE.md | ASSET - Quản lý tài sản + ROOM - Quản lý phòng họp (Phase 3, hậu go-live) | 153-162 (EPIC-17 ASSET), 163-170 (EPIC-18 ROOM) | 93 | ASSET: danh mục loại + mã/QR, hồ sơ tài sản FSM, cấp phát/thu hồi 1 bước có biên bản, bảo trì, kiểm kê theo đợt, thanh lý/mất, «tài sản của tôi», 3 event NOTI. ROOM: quản trị phòng, đặt phòng chống trùng ở DB, huỷ, lịch ngày/tuần + phòng trống, «đặt phòng của tôi», nhắc 15′, lịch sử sử dụng, dọn di sản `meeting_*`. 2 widget DASH |
 
 ### 9.1 Lưu ý capacity
 

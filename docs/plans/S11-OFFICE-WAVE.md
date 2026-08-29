@@ -3,7 +3,8 @@
 > Seed 2026-08-28. Trạng thái: **ĐÃ DUYỆT 2026-08-28** — owner duyệt nguyên gói hồ sơ
 > **`docs/plans/S11-OFFICE-WAVE-review.html`** (kèm wireframe UI) và ký 9/9 quyết định §3 theo cột
 > «Đề xuất». 2 WO gốc (`S11-ASSET-DOC-1`, `S11-ROOM-DOC-1`) đã mở khoá `blocked → todo` cùng ngày.
-> **`S11-ASSET-DOC-1` ĐÃ VIẾT (28/08/2026):** [SPEC-13](<../SPEC/SPEC-13 ASSET.md>) · [DB-15](<../DB/DB-15 ASSET Database Design.md>) · [API-14](<../API Design/API-14_ASSET_API_Design.md>) · permission-matrix §9d · SPEC-01 §17.8–17.9 + §20.2 (NOTI-EVENT-010..012) · IMPLEMENTATION-02 EPIC-17 (§8.18). Nguồn phạm vi: SPEC-01 §12.10–12.11 · §7 (Phase 3) ·
+> **`S11-ASSET-DOC-1` ĐÃ VIẾT (28/08/2026, plan-reviewer PASS 29/08 sau 3 vòng):** [SPEC-13](<../SPEC/SPEC-13 ASSET.md>) · [DB-15](<../DB/DB-15 ASSET Database Design.md>) · [API-14](<../API Design/API-14_ASSET_API_Design.md>) · permission-matrix §9d · SPEC-01 §17.8–17.9 + §20.2 (NOTI-EVENT-010..012) · IMPLEMENTATION-02 EPIC-17 (§8.18).
+> **`S11-ROOM-DOC-1` ĐÃ VIẾT (29/08/2026):** [SPEC-14](<../SPEC/SPEC-14 ROOM.md>) · [DB-16](<../DB/DB-16 ROOM Database Design.md>) · [API-15](<../API Design/API-15_ROOM_API_Design.md>) · permission-matrix §9e · SPEC-01 §17.10 + §20.2 (NOTI-EVENT-013..015) · IMPLEMENTATION-02 EPIC-18 (§8.19). ROOM-DEC-001 nhánh mở **đã chốt** sau khi ĐO (0 hàng cả 5 bảng `meeting_*`): tái dụng `meeting_rooms`, **thay** `meetings`/`meeting_attendees` bằng `room_bookings`/`room_booking_attendees`, DROP 4 bảng — SPEC-14 §3.4 / DB-16 §3.0, §9. Nguồn phạm vi: SPEC-01 §12.10–12.11 · §7 (Phase 3) ·
 > §10.8 (Asset Manager) · §10.9 (Office Admin) · IMPLEMENTATION-10 §22 (PARK-ASSET/ROOM) ·
 > RELEASE-14 §5.
 
@@ -84,12 +85,13 @@ widget DASH «lịch họp hôm nay».
 ## 5. Phân rã Work Order (11 WO — seed trong harness/backlog.mjs)
 
 ```text
-        ┌ S11-ASSET-DOC-1 (blocked, chờ duyệt) → S11-ASSET-DB-1 🔴 → S11-ASSET-BE-1 → S11-ASSET-FE-1 → S11-ASSET-QA-1 ┐
-duyệt ──┤                                                                                                            ├→ S11-OFFICE-DASH-1
-        └ S11-ROOM-DOC-1  (blocked, chờ duyệt) → S11-ROOM-DB-1 🔴 → S11-ROOM-BE-1 → S11-ROOM-FE-1 → S11-ROOM-QA-1    ┘
+        ┌ S11-ASSET-DOC-1 ✅ → S11-ASSET-DB-1 🔴 → S11-ASSET-BE-1 🔴 → S11-ASSET-FE-1 → S11-ASSET-QA-1 ┐
+duyệt ──┤                         ↓ (DB nối tiếp)      ↓ (BE nối tiếp)                                ├→ S11-OFFICE-DASH-1
+        └ S11-ROOM-DOC-1  ✅ → S11-ROOM-DB-1 🔴 → S11-ROOM-BE-1 🔴 → S11-ROOM-FE-1 → S11-ROOM-QA-1    ┘
 ```
 
-- 2 track chạy song song ĐƯỢC ở tầng BE/FE/QA, **trừ** hai chỗ: (a) 2 WO DB (🔴 migration): lane
+- 2 track chạy song song ĐƯỢC ở tầng FE/QA, **trừ** ba chỗ: (c) **2 WO BE cũng nối tiếp** (ASSET-BE-1 trước) — cùng
+  chạm `app.module.ts` · `config/openapi-modules.ts` · route-census regen, và cả hai nay là 🔴; (a) 2 WO DB (🔴 migration): lane
   migration là lane NỐI TIẾP duy nhất — `S11-ROOM-DB-1` chỉ chạy sau khi `S11-ASSET-DB-1` merge,
   đánh số migration nối tiếp head lúc đó; (b) **2 WO DOC cũng NỐI TIẾP** — cùng ghi hot-file
   (`permission-matrix-spec.md` · `README.md` · `erd-current.md` · DB-01/09/10 · IMPLEMENTATION-02 ·
@@ -117,7 +119,7 @@ duyệt ──┤                                                               
 4. Cột FK mới bắt buộc composite tenant FK (khuôn 0535).
 5. Route mới ⇒ route-census ĐỎ — regen `ROUTE_CENSUS_WRITE=1`; module mới khai `API_MODULE_TAGS` (openapi-modules).
 6. `:id` = UUID ở biên ngay từ đầu (ratchet param-uuid đang siết về 1 — không thêm nợ).
-7. Đặt phòng: POST tạo booking cần Idempotency-Key **suy từ payload**; race double-booking phải có int-spec 2 request song song (EXCLUDE GIST là chốt cuối).
+7. Đặt phòng: POST tạo booking gắn `@Idempotent()` dùng chung với Idempotency-Key **do FE sinh khi mở form** (SPEC-14 §12 — **không** suy từ payload như bản seed: huỷ rồi đặt lại y hệt trong 15′ sẽ bị phát lại lượt đã huỷ; cùng quyết định với ASSET-API-010); race double-booking phải có int-spec 2 request song song (EXCLUDE GIST là chốt cuối).
 8. SPEC-01 §17.7: trạng thái mới của ASSET/ROOM **phải hợp thức vào SPEC-01 §17** trong WO DOC, không được tự thêm.
 9. Test int chạy trên LANE_DB; deny-path/cross-tenant RED-trước cho mọi API nhạy cảm; fixture giả-secret phải ghép chuỗi.
 

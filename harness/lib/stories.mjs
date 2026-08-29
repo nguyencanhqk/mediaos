@@ -43,6 +43,7 @@ const EPIC_MODULE = {
   15: "BRAND", // wave S5-BRAND (WO trước đây gắn nhầm mã module 'SYSTEM')
   16: "CHAT", // SPEC-15 — wave S7, ĐANG CHẠY
   17: "ASSET", // SPEC-13 — wave S11-OFFICE (IMP02 §8.18, bổ sung 2026-08-28)
+  18: "ROOM", // SPEC-14 — wave S11-OFFICE (IMP02 §8.19, bổ sung 2026-08-29)
 };
 
 // Sprint của 1 story theo IMPLEMENTATION-02 §9 (story trọng tâm mỗi sprint, không chỉ theo epic).
@@ -57,7 +58,7 @@ function sprintOfStory(n) {
   if (inR(125, 131) || inR(133, 140)) return "S5"; // GOAL lõi · LMS · BRAND — cùng đợt S5 (IMP02 §9)
   if (inR(111, 112)) return "S6";
   if (n === 132 || inR(141, 152)) return "S7"; // 132 = tab Mục tiêu trong dự án (giao ở S7) · 141-152 = wave CHAT
-  if (inR(153, 162)) return "S11"; // EPIC-17 ASSET — wave S11-OFFICE (IMP02 §9 Sprint 11)
+  if (inR(153, 170)) return "S11"; // 153-162 EPIC-17 ASSET · 163-170 EPIC-18 ROOM — wave S11-OFFICE (IMP02 §9 Sprint 11)
   return "?";
 }
 
@@ -188,6 +189,15 @@ const STORY_WO_OVERRIDE = {
   160: ["S11-ASSET-BE-1", "S11-ASSET-FE-1"], // /me/assets own-scope
   161: ["S11-ASSET-DB-1", "S11-ASSET-BE-1"], // 3 event NOTI + job nhắc bảo trì
   162: ["S11-OFFICE-DASH-1"], // widget DASH thống kê tài sản
+  // ── EPIC-18 ROOM (IMP02 §8.19) — wave S11-OFFICE, bổ sung 2026-08-29 ──────────
+  163: ["S11-ROOM-DB-1", "S11-ROOM-BE-1", "S11-ROOM-FE-1"], // quản trị phòng (tái dụng meeting_rooms + role office-admin)
+  164: ["S11-ROOM-DB-1", "S11-ROOM-BE-1", "S11-ROOM-FE-1", "S11-ROOM-QA-1"], // đặt phòng + EXCLUDE chống trùng (race)
+  165: ["S11-ROOM-BE-1", "S11-ROOM-FE-1"], // huỷ lịch own/all
+  166: ["S11-ROOM-BE-1", "S11-ROOM-FE-1"], // lịch ngày/tuần + phòng trống
+  167: ["S11-ROOM-BE-1", "S11-ROOM-FE-1"], // /me/room-bookings
+  168: ["S11-ROOM-DB-1", "S11-ROOM-BE-1"], // 3 event NOTI + job nhắc 15′
+  169: ["S11-ROOM-BE-1", "S11-ROOM-FE-1"], // usage-summary + lịch sử
+  170: ["S11-OFFICE-DASH-1"], // widget DASH lịch họp hôm nay
 };
 
 // Vite dev port mỗi app (apps/*/vite.config.ts) → link "chạy thử" FE.

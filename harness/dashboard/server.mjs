@@ -64,6 +64,14 @@ function migrationHead() {
 const MODULE_SPEC = [
   // ASSET đặt TRƯỚC AUTH: tiêu đề WO S11-ASSET-BE-1 chứa "permission guard" — để sau là trỏ nhầm SPEC-02.
   { re: /(\bassets?\b|tài sản)/i, spec: "docs/SPEC/SPEC-13 ASSET.md" },
+  // CHAT đứng TRƯỚC ROOM: WO CHAT có thể chứa "room"/"booking" rời chữ (chat_rooms an toàn vì `_` là word-char).
+  { re: /(\bchat\b|tin nhắn|hội thoại|cuộc gọi)/i, spec: "docs/SPEC/SPEC-15 CHAT.md" },
+  // ROOM đặt TRƯỚC AUTH/HR/TASK: tiêu đề WO S11-ROOM-* chứa "Office Admin"/"phòng họp"/"booking" — regex HR bắt
+  // "phòng ban" (không bắt "phòng họp"), TASK bắt "dự án"; nhưng BE-1 có "permission" ⇒ phải đứng trước AUTH.
+  {
+    re: /(\brooms?\b|phòng họp|booking|đặt phòng|meeting_rooms?)/i,
+    spec: "docs/SPEC/SPEC-14 ROOM.md",
+  },
   {
     re: /(\bauth\b|login|token|2fa|đăng nhập|phân quyền|permission|acct)/i,
     spec: "docs/SPEC/SPEC-02 AUTH.md",
