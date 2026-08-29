@@ -8,7 +8,7 @@
 
 **Hai nhánh XẾP CHỒNG, một PR mở:** `#433` = `wo/s11-asset-doc-1` (base master, docs + hot-file harness ⇒ đi PR,
 KHÔNG push thẳng). `wo/s11-room-doc-1` xếp TRÊN đỉnh `79d77f7f` của DOC-1 — **sau squash-merge #433 phải**
-`git rebase --onto origin/master 79d77f7f wo/s11-room-doc-1` + force-push, rồi mới mở PR ROOM
+`git rebase --onto origin/master c1542c14 wo/s11-room-doc-1` + force-push, rồi mới merge PR ROOM **#434** (đã mở; plan-reviewer ROOM vòng 1 BLOCK 3 đã vá, vòng xác nhận chưa chạy)
 ([[squash-merge-breaks-stacked-prs]]). Merge #433 = `gh pr merge 433 --squash --delete-branch --admin` sau CI xanh;
 auto-mode classifier chặn lệnh này tới khi owner nói duyệt.
 
