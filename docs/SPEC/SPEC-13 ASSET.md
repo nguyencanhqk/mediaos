@@ -174,7 +174,7 @@ Chi tiết cột/kiểu/constraint: [DB-15](<../DB/DB-15 ASSET Database Design.m
 | --- | --- | --- |
 | Định danh | `asset_code`, `name`, `serial_number` | `asset_code` sinh qua `sequence_counters`, unique theo company, **không sửa**; `serial_number` unique theo company khi khác NULL |
 | Phân loại | `category_id`, `brand`, `model` | |
-| Mua sắm | `purchase_date`, `purchase_price`, `supplier`, `warranty_end_date` | **trường tài chính** — không trả ở đường Own (§18) |
+| Mua sắm | `purchase_date`, `purchase_price`, `supplier`, `warranty_end_date` | `purchase_price` + `supplier` là **trường tài chính** — **chỉ trả ở scope Company**, vắng khoá ở Own **và** Department, và **không bao giờ** ở `/me/assets` (§18) |
 | Vị trí & tình trạng | `location`, `condition_note` | `location` = nơi để khi không ai giữ |
 | Trạng thái | `status` | 5 giá trị §3.1; ai giữ = dẫn xuất từ lượt cấp phát Active (§3.2) |
 | Bảo trì | `next_maintenance_due` | job nhắc §17 |
@@ -218,7 +218,7 @@ Chi tiết cột/kiểu/constraint: [DB-15](<../DB/DB-15 ASSET Database Design.m
 | ASSET-SCREEN-004 | Form cấp phát / thu hồi | Chọn nhân viên từ danh bạ HR (chỉ `active`), tình trạng lúc giao/thu, ghi chú; sau khi lưu có nút **In biên bản** (render từ FE, ASSET-DEC-002) |
 | ASSET-SCREEN-005 | Kiểm kê theo đợt (`/assets/inventories`, `/assets/inventories/:id`) | Mở đợt (toàn bộ / theo loại) → bảng dòng với bộ lọc `result` → đánh dấu Thấy/Không thấy từng dòng (hoặc chọn nhiều) → đóng đợt kèm tổng kết; dòng `Missing` có gợi ý «Ghi nhận mất» **mở màn 002**, không tự đổi trạng thái |
 | ASSET-SCREEN-006 | «Tài sản của tôi» (`/me/assets`) | Gắn khu vực ME; danh sách đang giữ + lịch sử đã trả; **không** có trường tài chính |
-| ASSET-SCREEN-007 | Quản trị loại tài sản | Hộp thoại/tab trong 001 cho `('manage','asset-category')`; sửa `code_prefix` bị khoá khi loại đã có tài sản |
+| ASSET-SCREEN-007 | Quản trị loại tài sản | Hộp thoại/tab trong 001 cho `('manage','asset-category')`; sửa `code_prefix` bị khoá khi loại đã có tài sản; bộ lọc «Đã xoá» (`?includeDeleted=true`) với nút **Khôi phục** (`PATCH { restore: true }`) — đường duy nhất dùng lại prefix |
 
 Mọi màn: `<PermissionGate>` + `useCan()`, trạng thái loading/error/empty (§14), i18n vi namespace `asset`, nhãn trạng thái dùng constants chuẩn §17.
 
@@ -288,7 +288,7 @@ Ghi chú bắt buộc:
 | ASSET-ERR-007 | 409 | Đánh dấu dòng / đóng đợt trên đợt đã `Closed` |
 | ASSET-ERR-008 | 409 | Thanh lý (`Disposed`) khi **tồn tại lượt cấp phát `Active`** — bất kể `status` hiện tại là `Assigned` **hay `Under Maintenance`** (tài sản đang bảo trì vẫn có thể còn người giữ, §13.1) — **phải thu hồi trước**. Điều kiện kiểm theo **sự tồn tại hàng Active**, không theo `status`. Ghi nhận `Lost` thì **được** (tự đóng lượt với `return_condition='Lost'`) |
 | ASSET-ERR-009 | 422 | Thanh lý / ghi nhận mất / tìm thấy lại **thiếu `reason`** (tối thiểu 3 ký tự) |
-| ASSET-ERR-010 | 409 | Loại tài sản — **hai vế khác nhau**: (a) `code` trùng với loại **đang sống** trong company (`deleted_at IS NULL` — loại đã xoá mềm **được** dùng lại `code`; DB-15 §6.1 `uq_asset_categories_company_code_active` partial); (b) `code_prefix` trùng với **bất kỳ** loại nào kể cả đã xoá mềm (unique **không** partial: prefix đã từng dùng thì mã `TS-<PREFIX>-0001` đã tồn tại, cấp lại là đụng mã cũ); xoá/vô hiệu loại còn tài sản chưa `Disposed`/`Lost`; đổi `code_prefix` khi loại đã sinh mã. `details.kind` = `code-taken` / `prefix-taken` / `has-assets` / `prefix-locked` |
+| ASSET-ERR-010 | 409 | Loại tài sản — **hai vế khác nhau**: (a) `code` trùng với loại **đang sống** trong company (`deleted_at IS NULL` — loại đã xoá mềm **được** dùng lại `code`; DB-15 §6.1 `uq_asset_categories_company_code_active` partial); (b) `code_prefix` trùng với **bất kỳ** loại nào kể cả đã xoá mềm (unique **không** partial: prefix đã từng dùng thì mã `TS-<PREFIX>-0001` đã tồn tại, cấp lại là đụng mã cũ); xoá/vô hiệu loại còn tài sản chưa `Disposed`/`Lost`; đổi `code_prefix` khi loại đã sinh mã. `details.kind` = `code-taken` / `prefix-taken` / `has-assets` / `prefix-locked`; riêng `prefix-taken` trả thêm `details.categoryId` + `details.deleted` (true nếu loại đang chiếm prefix đã xoá mềm) để FE gợi ý «Khôi phục loại» thay vì tạo mới |
 | ASSET-ERR-011 | 409 / 422 | `serial_number` trùng trong company → **409** (`details.kind = serial-taken`); gửi `assetCode`/`status` trong body PATCH → **422** (`details.kind = readonly-field`) |
 | ASSET-ERR-012 | 404 | Sentinel `ASSET-ERR-NOT-FOUND`: tài sản/loại/lượt/đợt **không thuộc company** hoặc không tồn tại — **cùng một phản hồi** cho cả hai (chống dò chéo tenant) |
 | ASSET-ERR-013 | 404 | Own-scope: nhân viên mở tài sản mình **không** giữ → **404**, giống hệt ASSET-ERR-012 (không 403 — 403 xác nhận tài sản tồn tại) |
@@ -377,9 +377,9 @@ Envelope/error/pagination theo API-01. Chi tiết: [API-14](<../API Design/API-1
 
 | Mã | Endpoint | Cặp quyền | Ghi chú |
 | --- | --- | --- | --- |
-| ASSET-API-001 | `GET /asset-categories` | `('view','asset')` | danh mục loại (cả `is_active=false` khi `?includeInactive=true`) |
+| ASSET-API-001 | `GET /asset-categories` | `('view','asset')` | danh mục loại (cả `is_active=false` khi `?includeInactive=true`); **`?includeDeleted=true`** trả thêm loại **đã xoá mềm** (kèm `deletedAt`) — tham số này **chỉ** được honour khi caller có `('manage','asset-category')`, ngược lại bỏ qua — để màn 007 dựng nút «Khôi phục» (không có đường này thì `restore` là route chết: không endpoint nào phát ra id loại đã xoá) |
 | ASSET-API-002 | `POST /asset-categories` | `('manage','asset-category')` | tạo loại + counter cùng tx (§13.5) · audit |
-| ASSET-API-003 | `PATCH /asset-categories/:id` | `('manage','asset-category')` | `code_prefix` khoá khi đã sinh mã (ASSET-ERR-010) · audit |
+| ASSET-API-003 | `PATCH /asset-categories/:id` | `('manage','asset-category')` | `code_prefix` khoá khi đã sinh mã (ASSET-ERR-010); `{ isActive?, restore?: true }` — `restore` khôi phục loại đã xoá mềm (`deleted_at = NULL`, giữ counter, tiếp tục đếm) · audit |
 | ASSET-API-004 | `DELETE /asset-categories/:id` | `('manage','asset-category')` | soft delete; chặn khi còn tài sản (ASSET-ERR-010) · audit |
 | ASSET-API-005 | `GET /assets` | `('view','asset')` | filter `categoryId` · `status[]` · `holderEmployeeId` · `q` (mã/tên/serial) · `maintenanceDueBefore`; pagination; data_scope §13.6 |
 | ASSET-API-006 | `POST /assets` | `('create','asset')` | sinh `asset_code`; audit |
@@ -492,7 +492,8 @@ Nguồn chuẩn: [DB-15](<../DB/DB-15 ASSET Database Design.md>). Tóm tắt:
 | Mã & counter | tạo loại ⇒ counter tồn tại; xoá counter rồi tạo tài sản ⇒ `SequenceNotFoundError` fail-loud, không tự tạo |
 | Kiểm kê | snapshot đúng phạm vi (loại / toàn bộ), loại trừ Disposed/Lost; đánh dấu sau khi đóng → 409; tổng kết = đếm thật |
 | Masking tiền | Own **và Department** không có `purchasePrice`/`supplier`/`cost`; Company có; FE schema `.optional()` — đo cả ba scope, không chỉ Own vs Company |
-| Mã & prefix | tạo loại prefix `LT` → xoá mềm (sau khi thanh lý hết) → tạo loại mới prefix `LT` → **409 ERR-010 `prefix-taken`**, không 500 |
+| Mã & prefix | tạo loại prefix `LT` → xoá mềm (sau khi thanh lý hết) → tạo loại mới prefix `LT` → **409 ERR-010 `prefix-taken`** kèm `details.categoryId` + `deleted=true`, không 500; `GET /asset-categories?includeDeleted=true` với `('manage','asset-category')` **thấy** loại đã xoá, với chỉ `('view','asset')` **không** thấy; `PATCH { restore: true }` → loại sống lại, tạo tài sản mới ra **`TS-LT-0003`** (counter tiếp tục, không reset) |
+| Idempotent (interceptor chung) | bấm-đúp khi request đầu **chưa xong** → 409 `IN_PROGRESS` (không phải ERR-001); cùng key khác payload → 409 `KEY_REUSED`; key sai định dạng → 409 `INVALID_KEY` |
 | Sổ không xoá | app role `DELETE` trên 4 bảng sổ bị từ chối ở **DB**; UPDATE cột ngoài allowlist bị từ chối |
 | Tenant | `rls-tenant-isolation-tester` xanh cho 6 bảng trên `LANE_DB` |
 | NOTI | 3 event seed đúng; CHECK `module_code`/`notification_type` nới **cả hai bảng**; job nhắc idempotent theo `(asset, hạn)` |
@@ -546,4 +547,4 @@ Nguồn chuẩn: [DB-15](<../DB/DB-15 ASSET Database Design.md>). Tóm tắt:
 
 ## 25. Kết luận
 
-ASSET là module Phase 3 đầu tiên: gọn về nghiệp vụ nhưng là nơi thử luật FSM-ép-ở-service + chốt-cuối-ở-DB một cách sạch nhất trong hệ thống. Ba lựa chọn cứng — **một tài sản một lượt cấp phát đang sống (partial unique)**, **cấp phát một bước có biên bản in từ FE**, **thanh lý là trạng thái chứ không phải quy trình** — giữ v1 nằm ngoài vùng crown-jewel trong khi vẫn để dấu vết đầy đủ (4 bảng sổ không xoá + audit). Phần thật sự mới chỉ là 6 bảng, 11 cặp quyền, 24 mã API (26 route HTTP — route-census đếm route) và 7 màn hình; mọi thứ còn lại tái dùng nền đã có.
+ASSET là module Phase 3 đầu tiên: gọn về nghiệp vụ nhưng là nơi thử luật FSM-ép-ở-service + chốt-cuối-ở-DB một cách sạch nhất trong hệ thống. Ba lựa chọn cứng — **một tài sản một lượt cấp phát đang sống (partial unique)**, **cấp phát một bước có biên bản in từ FE**, **thanh lý là trạng thái chứ không phải quy trình** — giữ v1 nằm ngoài vùng crown-jewel **về nghiệp vụ** (không FSM phê duyệt, không lương/secret) trong khi vẫn để dấu vết đầy đủ (4 bảng sổ không xoá + audit) — WO backend vẫn là **🔴 red** vì data-scope + masking ở server + audit (không hạ gate theo câu này). Phần thật sự mới chỉ là 6 bảng, 11 cặp quyền, 24 mã API (26 route HTTP — route-census đếm route) và 7 màn hình; mọi thứ còn lại tái dùng nền đã có.

@@ -1605,7 +1605,7 @@ Hệ thống cần hỗ trợ các kênh sau:
 | NOTI-EVENT-009 | Hợp đồng sắp hết hạn      | HR                       |
 | NOTI-EVENT-010 | Tài sản được cấp phát     | Nhân viên được cấp       |
 | NOTI-EVENT-011 | Tài sản bị thu hồi        | Nhân viên bị thu hồi     |
-| NOTI-EVENT-012 | Tài sản sắp đến hạn bảo trì | Asset Manager          |
+| NOTI-EVENT-012 | Tài sản sắp đến hạn bảo trì | Asset Manager / Company Admin |
 
 > **Dải mở rộng hậu-MVP (đo 28/08/2026):** 001–009 là bộ MVP; GOAL/LMS/CHAT **không** cấp mã chuẩn (chỉ là mở rộng SPEC-08 §15). **010–012 cấp cho ASSET** (SPEC-13 §17, wave S11-OFFICE). Module sau (ROOM = SPEC-14) lấy **013+** — đo lại bằng grep `NOTI-EVENT-0` trước khi cấp, không mặc định còn trống.
 

@@ -118,7 +118,7 @@ GET    /api/v1/me/assets
 
 | Mã | Method | Path | Chức năng | Cặp quyền (SPEC-13 §11) | Audit | NOTI |
 | --- | --- | --- | --- | --- | --- | --- |
-| ASSET-API-001 | GET | `/asset-categories` | Danh mục loại; `?includeInactive=true` | `('view','asset')` | — | — |
+| ASSET-API-001 | GET | `/asset-categories` | Danh mục loại; `?includeInactive=true` (`is_active=false`); **`?includeDeleted=true`** trả thêm loại **đã xoá mềm** (kèm `deletedAt`, `deleted=true`) — tham số chỉ được honour khi caller có `('manage','asset-category')`, ngược lại **bỏ qua** (không 403) — nguồn id cho `restore` ở 003 | `('view','asset')` (+ `('manage','asset-category')` cho `includeDeleted`) | — | — |
 | ASSET-API-002 | POST | `/asset-categories` | Tạo loại `{ code, name, codePrefix, description?, defaultMaintenanceIntervalDays?, sortOrder? }` + tạo counter **cùng tx** | `('manage','asset-category')` | ✅ | — |
 | ASSET-API-003 | PATCH | `/asset-categories/{id}` | Sửa; `codePrefix` khoá khi đã sinh mã (ASSET-ERR-010). Nhận thêm `{ isActive?, restore?: true }` — `restore` **khôi phục loại đã xoá mềm** (`deleted_at = NULL`, giữ counter): đường **duy nhất** để dùng lại prefix (DB-15 §6.7); `{id}` của loại đã xoá mềm chỉ được chấp nhận ở route này | `('manage','asset-category')` | ✅ | — |
 | ASSET-API-004 | DELETE | `/asset-categories/{id}` | Xoá mềm; chặn khi còn tài sản chưa Disposed/Lost (ASSET-ERR-010) | `('manage','asset-category')` | ✅ | — |
@@ -244,7 +244,7 @@ Mã lỗi theo API-01 §13 `MODULE-ERR-CODE`. Namespace ASSET gồm **hai nhóm*
 | --- | --- |
 | `400` | Body/param sai định dạng (`VALIDATION-ERR-001`), `{id}` không phải UUID |
 | `404` | ASSET-ERR-002 (nhân viên không thuộc company) · 005 (`maintenance-not-found`) · 012 · 013 |
-| `409` | ASSET-ERR-001 · 003 · 004 · 005 · 006 · 007 · 008 · 010 · 011 (serial trùng) · 015 |
+| `409` | ASSET-ERR-001 · 003 · 004 · 005 · 006 · 007 · 008 · 010 · 011 (serial trùng) · 015 · **mã của interceptor idempotency dùng chung**: `IN_PROGRESS` (bấm-đúp khi request đầu chưa xong) · `KEY_REUSED` (cùng key, khác payload) · `INVALID_KEY` (key sai định dạng) — `idempotency.interceptor.ts` |
 | `422` | ASSET-ERR-002 (nhân viên không `active`) · 009 · 011 (gửi `assetCode`/`status`) · 014 · 016 |
 
 Dùng lại nhóm lỗi chung API-01: `AUTH-ERR-UNAUTHENTICATED` 401 · `AUTH-ERR-FORBIDDEN` 403 · `AUTH-ERR-SCOPE-DENIED` 403 (chỉ khi cố tình ghi ngoài scope — v1 mọi cặp ghi đều Company nên hiếm gặp) · `VALIDATION-ERR-001` 400 · `SYSTEM-ERR-RATE-LIMIT` 429.
