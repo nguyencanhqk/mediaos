@@ -595,6 +595,14 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
       "Tên của CHÍNH actor cho payload NOTI (actor_name): selfBound(userId, users.id) + WHERE users.id = actor AND company_id — hàng chỉ có thể là chính chủ. Thay cho raw SQL (không nới vùng mù rawSqlIdentity).",
     signedBy: "S11-ASSET-BE-1",
   },
+  // ── rooms (S11-ROOM-BE-1) ────────────────────────────────────────────────────
+  {
+    point: "rooms/room-people.repository.ts#namesByUserIdsTx:users.fullName",
+    basis: "identity-gated",
+    reason:
+      "ĐIỂM CHIẾU DUY NHẤT của module ROOM (organizer · bookedBy · attendees · cancelledBy · conflicts[].organizerName · organizer_name/actor_name NOTI). Cặp GATE của route ghi (`book`/`cancel`) KHÁC cặp BOUND: vị từ = room-access.service.ts#peopleVisibleCond suy từ resolveOrNull('view','room') — Company/System ⇒ true (SPEC-14 §11: view@Company mọi role seed, lịch là dữ liệu dùng chung), hẹp hơn/không có cặp ⇒ users.id = actor (fail-closed). Tập HÀNG là lượt đặt (không phải users) — bound bởi company_id + withTenant; cột tên bọc bởi identityColumns trên users (không alias), WHERE users.company_id AND deleted_at IS NULL. Bằng chứng: test/integration/room-be1-scope.int-spec.ts (tên hiện cho employee view@Company; role không có view ⇒ chỉ tên chính mình).",
+    signedBy: "S11-ROOM-BE-1",
+  },
 ];
 
 /**
@@ -625,7 +633,10 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   "scoped-predicate": 23, // S11-ASSET-BE-1: +2 (holderSelect · listByAssetTx) — plan-review B7, nâng có chủ đích qua FULL gate
   membership: 8,
   "self-bound-row": 4, // S11-ASSET-BE-1: +1 (findUserDisplayNameTx — tên actor cho payload NOTI, thay raw SQL để không nới vùng mù rawSqlIdentity)
-  "identity-gated": 14,
+  // 14 → 15 (S11-ROOM-BE-1, 30/08/2026): `rooms/room-people.repository.ts#namesByUserIdsTx` — điểm chiếu DUY NHẤT của
+  // module ROOM; cặp gate route ghi (`book`/`cancel`) ≠ cặp bound (`view`, resolveOrNull ⇒ fail-closed `users.id =
+  // actor`). Nới có chủ đích, plan-review B1 chọn basis này thay vì nâng `scoped-predicate` (đã bão hoà); qua FULL gate.
+  "identity-gated": 15,
 };
 
 /**

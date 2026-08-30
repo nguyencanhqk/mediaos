@@ -123,7 +123,7 @@ GET    /api/v1/me/room-bookings
 
 | Mã | Trạng thái | Ghi chú |
 | --- | --- | --- |
-| ROOM-API-001..013 | ⏳ Chưa | Thi công ở `S11-ROOM-BE-1` sau `S11-ROOM-DB-1`. Cập nhật bảng này khi WO đóng |
+| ROOM-API-001..013 | ✅ Đã ship (`S11-ROOM-BE-1`, 30/08/2026) | `apps/api/src/rooms/**` (3 controller · 13 route · route-census 507) + `notifications/room-*` (registrar 2 event + job `ROOM_BOOKING_REMINDER`). Lệch có chủ đích so với stub (đã đính chính tại chỗ): **không** `meta.window` (§7.2/§7.3); `details` là **mảng `ErrorDetail`** (§7.4); `ROOM-ERR-FORBIDDEN` không xuất hiện trên dây; kiểm organizer/attendee thêm `deleted_at IS NULL` |
 
 > Lệch giữa bảng này và code ⇒ **sửa code**, không sửa ngầm tài liệu (CLAUDE.md — docs/spec + docs/DB là chuẩn). Cột này là ảnh chụp tiến độ.
 
@@ -177,7 +177,7 @@ GET    /api/v1/me/room-bookings
 
 ### 7.2 Envelope list — lịch phẳng (`GET /room-bookings`, `/rooms/{id}/bookings`, `/me/room-bookings`) và list phân trang (`GET /rooms`)
 
-Lịch trong cửa sổ ≤ 31 ngày trả **mảng phẳng** trong `data` kèm `meta.window = { from, to }`, **không** có `pagination` (cửa sổ đã là giới hạn). `GET /rooms` phân trang chuẩn API-01:
+Lịch trong cửa sổ ≤ 31 ngày trả **mảng phẳng** trong `data`, **không** có `pagination` (cửa sổ đã là giới hạn) và **không** có `meta.window` — envelope chung (`ResponseEnvelopeInterceptor`) chỉ hoist `pagination`, không có cơ chế `meta` tuỳ biến; FE giữ `from/to` từ chính query nó gửi (đính chính `S11-ROOM-BE-1`, 30/08/2026 — không sửa interceptor toàn cục cho một module). `GET /rooms` phân trang chuẩn API-01:
 
 ```json
 {
@@ -194,13 +194,13 @@ Lịch trong cửa sổ ≤ 31 ngày trả **mảng phẳng** trong `data` kèm 
 ```json
 { "success": true, "message": "OK",
   "data": [ { "id": "…", "name": "Mercury", "capacity": 6, "equipment": ["TV"], "location": "Tầng 3" } ],
-  "meta": { "request_id": "req_…", "timestamp": "…", "window": { "from": "…", "to": "…" } } }
+  "meta": { "request_id": "req_…", "timestamp": "…" } }
 ```
 
 ```json
 { "success": true, "message": "OK",
   "data": [ { "roomId": "…", "name": "Mercury", "bookingsCount": 42, "hoursBooked": 61.5, "cancelledCount": 3 } ],
-  "meta": { "request_id": "req_…", "timestamp": "…", "window": { "from": "…", "to": "…" } } }
+  "meta": { "request_id": "req_…", "timestamp": "…" } }
 ```
 
 ### 7.4 Envelope lỗi + mã lỗi
@@ -213,7 +213,7 @@ Mã lỗi theo API-01 §13 `MODULE-ERR-CODE`. Namespace ROOM gồm **hai nhóm**
 | Mã sentinel | HTTP | Ý nghĩa |
 | --- | ---: | --- |
 | `ROOM-ERR-NOT-FOUND` | 404 | Phòng / lượt đặt **không tồn tại trong company** (kể cả tenant khác) — một phản hồi duy nhất (ROOM-ERR-003) |
-| `ROOM-ERR-FORBIDDEN` | 403 | Có cặp `access` nhưng thiếu cặp hành động (do `PermissionGuard`, thường trả `AUTH-ERR-FORBIDDEN`) |
+| `ROOM-ERR-FORBIDDEN` | 403 | **Không xuất hiện trên dây** (BE-1 không ném mã này): thiếu cặp hành động ⇒ `PermissionGuard` trả `AUTH-ERR-FORBIDDEN`; ngoài scope ghi (`cancel@Own` lượt người khác) ⇒ `AUTH-ERR-SCOPE-DENIED`. Giữ tên để tra cứu, không dựng mã chết |
 
 Ánh xạ HTTP của dãy đánh số:
 
@@ -236,14 +236,17 @@ Dùng lại nhóm lỗi chung API-01: `AUTH-ERR-UNAUTHENTICATED` 401 · `AUTH-ER
   "error": {
     "code": "ROOM-ERR-001",
     "type": "BusinessRuleError",
-    "details": {
-      "conflicts": [ { "bookingId": "…", "title": "Họp sprint", "startsAt": "2026-09-02T02:00:00Z", "endsAt": "2026-09-02T03:30:00Z", "organizerName": "Lê C" } ],
-      "nextFreeFrom": "2026-09-02T03:30:00Z"
-    }
+    "details": [
+      { "field": "kind", "message": "overlap", "rule": "room" },
+      { "field": "conflicts", "message": "[{\"bookingId\":\"…\",\"title\":\"Họp sprint\",\"startsAt\":\"2026-09-02T02:00:00.000Z\",\"endsAt\":\"2026-09-02T03:30:00.000Z\",\"organizerName\":\"Lê C\"}]", "rule": "room" },
+      { "field": "nextFreeFrom", "message": "2026-09-02T03:30:00.000Z", "rule": "room" }
+    ]
   },
   "meta": { "request_id": "req_…", "timestamp": "…" }
 }
 ```
+
+> **Hình dạng `details` (đính chính `S11-ROOM-BE-1`, 30/08/2026):** `AllExceptionsFilter` CHỈ cho `details` đi ra khi là **mảng `ErrorDetail { field, message, rule }`** (API-01) — object bị nuốt thành `null`. Vì thế mọi `details.kind` của SPEC-14 §12 là phần tử `{ field: "kind", message: "<kind>", rule: "room" }`; cặp phụ (`capacity` · `headcount` · `upcomingCount` · `userId`) là phần tử cùng hình; riêng ROOM-ERR-001: `conflicts` = chuỗi JSON (≤ 20 phần tử `roomBookingConflictSchema`, trần `ROOM_CONFLICTS_MAX`) và `nextFreeFrom` = ISO hoặc chuỗi `"null"`. FE **không tự parse** — dùng `parseRoomConflictsDetail(error.details)` từ `@mediaos/contracts` (trả `{ kind: "overlap", conflicts[], nextFreeFrom | null }`). Mã idempotency thật = `IDEMPOTENCY_ERROR_CODES.{IN_PROGRESS, KEY_REUSED, INVALID_KEY}` (`idempotency.interceptor.ts`).
 
 ### 7.5 Idempotency
 

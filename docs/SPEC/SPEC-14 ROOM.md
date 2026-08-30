@@ -217,8 +217,8 @@ Mọi màn: `<PermissionGate>` + `useCan()`, trạng thái loading/error/empty (
 | ROOM-FUNC-005 | Lịch phòng | theo phòng (`/rooms/:id/bookings`) hoặc tất cả phòng (`/room-bookings`) trong `[from, to)` ≤ 31 ngày; mặc định chỉ `Confirmed`; trả `isCompleted` |
 | ROOM-FUNC-006 | Chi tiết lượt đặt | phòng + organizer + attendees (JOIN tên) + `isCompleted` + `canCancel` (server tính theo quyền/scope/thời gian) |
 | ROOM-FUNC-007 | Đặt phòng của tôi | user từ token; `role = organizer \| attendee \| all`; `date` hoặc `from/to`; `includeCancelled` |
-| ROOM-FUNC-008 | Nhắc lịch trước 15 phút | `@SystemJobHandler` `ROOM_BOOKING_REMINDER`: mỗi nhịp quét lượt `Confirmed` có `starts_at ∈ (now, now + 15′]`, phát cho organizer ∪ attendees, `dedupeKey = room:reminder:{bookingId}:{startsAt}` |
-| ROOM-FUNC-009 | Lịch sử sử dụng & thống kê | `GET /rooms/usage-summary?from&to`: theo phòng — số lượt `Confirmed` đã qua, tổng giờ, số lượt huỷ; nguồn cho tab lịch sử màn 004 |
+| ROOM-FUNC-008 | Nhắc lịch trước 15 phút | `@SystemJobHandler` `ROOM_BOOKING_REMINDER`: mỗi nhịp quét lượt `Confirmed` có `starts_at ∈ (now, now + 15′]`, phát cho organizer ∪ attendees, `dedupe_key` thật = `ROOM_BOOKING_REMINDER:{bookingId}:{startsAt ISO}` (§17) |
+| ROOM-FUNC-009 | Lịch sử sử dụng & thống kê | `GET /rooms/usage-summary?from&to`: theo phòng — số lượt `Confirmed` **có `starts_at ∈ [from, to)`** (không chỉ "đã qua" — cửa sổ do người xem chọn, đính chính 30/08/2026 theo API-15 ROOM-API-004), tổng giờ (chỉ `Confirmed`), số lượt huỷ; gồm cả phòng vô hiệu/xoá mềm nếu có lượt trong cửa sổ; nguồn cho tab lịch sử màn 004 |
 | ROOM-FUNC-010 | Trạng thái dẫn xuất | `isCompleted = status = 'Confirmed' AND ends_at ≤ now()` tính ở **server** trong mọi DTO; FE không tự suy từ đồng hồ máy |
 
 ---
@@ -260,6 +260,8 @@ Ghi chú bắt buộc:
 | ROOM-ERR-008 | 409 | **Phòng còn lịch**: vô hiệu (`is_active=false`) hoặc xoá mềm phòng khi còn lượt `Confirmed` có `ends_at > now()` — `details = { upcomingCount }`; Office Admin phải huỷ (có NOTI người tham dự) trước |
 | ROOM-ERR-009 | 409 | Tên phòng trùng (không phân biệt hoa/thường) với phòng **còn sống** trong company — `details.kind = name-taken` (phòng đã xoá mềm **được** dùng lại tên) |
 | ROOM-ERR-010 | 403 / 422 | Đặt hộ: gửi `organizerUserId ≠` user gọi khi scope `book` là **Own** → **403** (`details.kind = book-on-behalf-denied`); scope Company nhưng organizer không tồn tại / không thuộc company / không `active` → **422** (`details.kind = organizer-not-found` / `organizer-inactive`) |
+
+> **Hình dạng `details` trên dây (đính chính `S11-ROOM-BE-1`, 30/08/2026):** envelope lỗi chung chỉ cho `details` đi ra khi là **mảng `ErrorDetail { field, message, rule }`** (API-01 · `AllExceptionsFilter`). `details.kind` ở bảng trên = phần tử `{ field: "kind", message: "<kind>", rule: "room" }`; `capacity`/`headcount`/`upcomingCount`/`userId` là phần tử cùng hình; ROOM-ERR-001 gửi `conflicts` (chuỗi JSON, ≤ 20 lượt) + `nextFreeFrom` (ISO hoặc `"null"`) — FE bóc bằng `parseRoomConflictsDetail()` (`@mediaos/contracts`). Xem API-15 §7.4. `attendee-not-found`/`organizer-not-found` bao gồm cả user **đã xoá mềm** (`users.deleted_at IS NOT NULL`) — cùng một mã, không thành oracle.
 
 Quy tắc bổ sung (không cần mã riêng):
 
@@ -312,9 +314,9 @@ Quy tắc bổ sung (không cần mã riêng):
 
 ### 13.5 Nhắc lịch — ROOM-DEC-004
 
-- `RoomBookingReminderJobHandler` (`@SystemJobHandler()`, `@Optional()` cho DI — `systemjobhandler-optional-dbw-di`), jobCode `ROOM_BOOKING_REMINDER`, chạy theo nhịp `SYSTEM_JOBS_POLL_MS` của `WorkerSchedulerService` (không cần cron riêng), throttle theo `companyId`.
-- Mỗi nhịp: `SELECT` lượt `Confirmed` có `starts_at > now() AND starts_at ≤ now() + interval '15 minutes'` (index `idx_room_bookings_room_start`), materialize **rồi** gọi `intake()` (không lồng `withTenant`, chốt của `AttendanceAlertNotiJobHandler`).
-- Người nhận = organizer ∪ attendees (mode `UserIds`); `dedupeKey = room:reminder:{bookingId}:{startsAt ISO}` — một lượt nhắc đúng một lần (catalog `dedupe_strategy='DedupeKey'`); lượt đặt trong vòng < 15′ trước giờ họp được nhắc ở nhịp kế tiếp.
+- `RoomBookingReminderJobHandler` (`@SystemJobHandler()`; dep `DatabaseService` · `RoomAudienceReader` · `NotificationEngineService` đều là provider thật ⇒ **không cần `@Optional()`** — đính chính 30/08/2026, cùng khuôn `AssetMaintenanceDueJobHandler`), jobCode `ROOM_BOOKING_REMINDER`, chạy theo nhịp `SYSTEM_JOBS_POLL_MS` của `WorkerSchedulerService` (không cần cron riêng); "throttle theo `companyId`" = scheduler đã lặp `run({ companyId })` từng công ty, handler tự `withTenant(companyId)` (worker policy chỉ theo GUC + FORCE — không scan trần, không policy `USING(true)`); `LIMIT 500`/nhịp.
+- Mỗi nhịp: `SELECT` lượt `Confirmed` có `starts_at > now() AND starts_at ≤ now() + interval '15 minutes'` (index `idx_room_bookings_company_start` — `idx_room_bookings_room_start` có `room_id` ở cột 2 nên không khớp tiền tố; đính chính 30/08/2026), materialize **rồi** gọi `intake()` (không lồng `withTenant`, chốt của `AttendanceAlertNotiJobHandler`). 0 người nhận (organizer đã xoá) ⇒ WARN + bỏ qua, run vẫn OK; chỉ `failed` khi `intake()` ném.
+- Người nhận = organizer ∪ attendees (mode `UserIds`); `dedupeKey` truyền thô `{bookingId}:{startsAt ISO}`, engine ghép thành `ROOM_BOOKING_REMINDER:{bookingId}:{startsAt ISO}` (giá trị lưu thật — §17) — một lượt nhắc đúng một lần (catalog `dedupe_strategy='DedupeKey'`); lượt đặt trong vòng < 15′ trước giờ họp được nhắc ở nhịp kế tiếp.
 - Không có cột "đã nhắc" — dedupe ở tầng NOTI là đủ (cột ghi-rồi-bỏ là thứ để gỡ).
 
 ### 13.6 Data scope
@@ -377,9 +379,11 @@ Nguồn chuẩn: [DB-16](<../DB/DB-16 ROOM Database Design.md>). Tóm tắt:
 
 | Event code | Mã chuẩn (SPEC-01 §20.2 · SPEC-08 §15.0) | Khi nào | Người nhận | Gộp / dedupe |
 | --- | --- | --- | --- | --- |
-| `ROOM_BOOKING_CONFIRMED` | NOTI-EVENT-013 | lượt đặt tạo xong (commit) | organizer ∪ attendees, **trừ actor** (tự đặt ⇒ organizer không nhận; Office Admin đặt hộ ⇒ organizer nhận) | `dedupeKey = room:confirmed:{bookingId}` |
-| `ROOM_BOOKING_CANCELLED` | NOTI-EVENT-014 | lượt `Confirmed → Cancelled` | organizer ∪ attendees, trừ actor | `dedupeKey = room:cancelled:{bookingId}` |
-| `ROOM_BOOKING_REMINDER` | NOTI-EVENT-015 | job: `starts_at ∈ (now, now + 15′]` | organizer ∪ attendees (**không** loại ai — `isSystemEvent=true`) | `dedupeKey = room:reminder:{bookingId}:{startsAt}` |
+| `ROOM_BOOKING_CONFIRMED` | NOTI-EVENT-013 | lượt đặt tạo xong (commit) | organizer ∪ attendees, **trừ actor** (tự đặt ⇒ organizer không nhận; Office Admin đặt hộ ⇒ organizer nhận) | `dedupe_key` thật = `ROOM_BOOKING_CONFIRMED:{bookingId}` |
+| `ROOM_BOOKING_CANCELLED` | NOTI-EVENT-014 | lượt `Confirmed → Cancelled` | organizer ∪ attendees, trừ actor | `dedupe_key` thật = `ROOM_BOOKING_CANCELLED:{bookingId}` |
+| `ROOM_BOOKING_REMINDER` | NOTI-EVENT-015 | job: `starts_at ∈ (now, now + 15′]` | organizer ∪ attendees (**không** loại ai — `isSystemEvent=true`) | `dedupe_key` thật = `ROOM_BOOKING_REMINDER:{bookingId}:{startsAt ISO}` |
+
+> Đính chính 30/08/2026 (`S11-ROOM-BE-1`): bản DOC minh hoạ `room:confirmed:{id}` — giá trị lưu thật có tiền tố `eventCode` vì `NotificationDedupeService` ghép `${eventCode}:${dedupeKey}` (cùng hành vi ASSET); registrar/job truyền khoá thô `{bookingId}` / `{bookingId}:{startsAt ISO}`. outbox `event_type` nội bộ = `room.booking.confirmed` / `room.booking.cancelled` (registrar map → `eventCode`). Tự đặt không có người tham dự ⇒ sau khi loại actor còn 0 người nhận ⇒ engine `skip(no_recipient)`, **không** dead-letter.
 
 - `notification_type = 'Room'`, `module_code = 'ROOM'`, `priority` Normal (013) · High (014 · 015), `isEnabled=true`, `isSystemEvent` = false/false/**true**, **`dedupe_strategy='DedupeKey'`** cho cả 3 (catalog thắng `DEFAULT_DEDUPE` — không thêm entry vào `notification-dedupe.const.ts`).
 - Recipient resolve **theo id có sẵn trong lượt** (mode `UserIds`) — không tra ngược quyền/role (engine không có tra ngược cặp quyền — SPEC-13 §17).

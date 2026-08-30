@@ -14544,14 +14544,17 @@ export const backlog = [
     title:
       "Module NestJS rooms/: CRUD phòng họp (Office Admin), đặt phòng + báo trùng 409 (EXCLUDE là chốt cuối), hủy lịch (own/all theo data_scope), lịch sử/usage-summary, nhắc lịch NOTI trước 15′ — Idempotency-Key do FE sinh khi mở form (@Idempotent() dùng chung), :id=UUID, API_MODULE_TAGS",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/rooms/**",
+      "apps/api/src/notifications/**",
       "apps/api/src/app.module.ts",
       "apps/api/src/config/openapi-modules.ts",
       "apps/api/src/foundation/**",
       "apps/api/test/foundation/**",
+      "apps/api/test/integration/**",
       "packages/contracts/**",
+      "docs/**",
     ],
     skills: ["code-review"],
     depends_on: ["S11-ROOM-DB-1", "S11-ASSET-BE-1"],

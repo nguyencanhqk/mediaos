@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 494,
-    "controllers": 89,
-    "gated": 455,
+    "routes": 507,
+    "controllers": 92,
+    "gated": 468,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -5108,6 +5108,22 @@
       "verdictWo": null
     },
     {
+      "key": "MeRoomBookingsController#mine",
+      "httpMethod": "GET",
+      "path": "/api/v1/me/room-bookings",
+      "hasPermission": true,
+      "permission": "view:room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "MeSecurityActivityController#listActivity",
       "httpMethod": "GET",
       "path": "/api/v1/me/security/activity",
@@ -6621,6 +6637,198 @@
         "PermissionGuard"
       ],
       "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RoomBookingsController#cancel",
+      "httpMethod": "POST",
+      "path": "/api/v1/room-bookings/:id/cancel",
+      "hasPermission": true,
+      "permission": "cancel:room-booking",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RoomBookingsController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/room-bookings",
+      "hasPermission": true,
+      "permission": "book:room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RoomBookingsController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/room-bookings/:id",
+      "hasPermission": true,
+      "permission": "view:room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RoomBookingsController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/room-bookings",
+      "hasPermission": true,
+      "permission": "view:room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RoomsController#availability",
+      "httpMethod": "GET",
+      "path": "/api/v1/rooms/availability",
+      "hasPermission": true,
+      "permission": "view:room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RoomsController#bookings",
+      "httpMethod": "GET",
+      "path": "/api/v1/rooms/:id/bookings",
+      "hasPermission": true,
+      "permission": "view:room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RoomsController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/rooms",
+      "hasPermission": true,
+      "permission": "manage:room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RoomsController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/rooms/:id",
+      "hasPermission": true,
+      "permission": "view:room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RoomsController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/rooms",
+      "hasPermission": true,
+      "permission": "view:room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RoomsController#remove",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/rooms/:id",
+      "hasPermission": true,
+      "permission": "manage:room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RoomsController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/rooms/:id",
+      "hasPermission": true,
+      "permission": "manage:room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RoomsController#usageSummary",
+      "httpMethod": "GET",
+      "path": "/api/v1/rooms/usage-summary",
+      "hasPermission": true,
+      "permission": "view:room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
       "verdict": null,
       "verdictReason": null,
       "verdictWo": null

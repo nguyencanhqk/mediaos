@@ -104,6 +104,15 @@ export const API_MODULE_TAGS: readonly ApiModuleTag[] = [
     segments: ["assets", "asset-categories", "asset-inventories"],
   },
   {
+    // S11-ROOM-BE-1: BẮT BUỘC khai TRƯỚC khi route ROOM lên — thiếu ⇒ UNCLASSIFIED_PREFIX ⇒ openapi-contract ĐỎ.
+    // `/me/room-bookings` thuộc segment `me` (module ME) — không khai ở đây.
+    code: "ROOM",
+    tagPrefix: "Room",
+    description:
+      "Quản lý phòng họp: danh mục phòng, đặt lịch chống trùng, huỷ, phòng trống, lịch sử/thống kê (SPEC-14).",
+    segments: ["rooms", "room-bookings"],
+  },
+  {
     // S7-CHAT-BE-1: BẮT BUỘC khai TRƯỚC khi route `/chat/**` đầu tiên lên — route không có mục ở đây rơi
     // vào UNCLASSIFIED_PREFIX, và `openapi-contract.e2e-spec` coi đó là LỖI (không phải "mất nhãn đẹp").
     code: "CHAT",
