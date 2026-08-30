@@ -205,6 +205,9 @@ export { hrMasterDataApi, type HrDepartment } from "./lib/hr-master-data-api";
 export { leaveApi } from "./lib/leave-api";
 // S5-GOAL-FE-1 — GOAL API client (Mục tiêu, SPEC-10 GOAL-API-001..010, GoalsController).
 export { goalApi, taskTemplateApi } from "./lib/goal-api";
+// S11-ASSET-FE-1 — ASSET API client (SPEC-13 §15). Endpoint danh sách đi apiFetchPaginated vì BE trả
+// PaginatedResult; apiFetch thường sẽ VỨT block pagination (apifetch-drops-pagination-bare-array).
+export { assetApi } from "./lib/asset-api";
 export { attendanceApi } from "./lib/attendance-api";
 // S2-FE-HR-7: employee contracts (hợp đồng lao động) CRUD client.
 export { contractsApi } from "./lib/contracts-api";
@@ -310,6 +313,10 @@ export {
   evaluateRouteAccess,
   ROUTE_REGISTRY,
   getRouteMeta,
+  // S11-ASSET-FE-1 — bảng cầu nối mã dotted → cặp engine. Export để app NEO được ánh xạ trong spec
+  // (chống pair-drift): trước đây chỉ dùng nội bộ package nên spec của apps/* không với tới, và mọi
+  // lệch giữa mã FE với cặp mà controller enforce chỉ lộ ra lúc chạy thật.
+  PERMISSION_CODE_TO_PAIR,
   // App registry
   type AppRegistryItem,
   APP_REGISTRY,

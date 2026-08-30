@@ -1562,6 +1562,13 @@
       "when": 1717587344000,
       "tag": "0555_s11roomdb1_noti_room",
       "breakpoints": true
+    },
+    {
+      "idx": 223,
+      "version": "7",
+      "when": 1717587345000,
+      "tag": "0556_s11assetfe1_enable_asset_module",
+      "breakpoints": true
     }
   ]
 }

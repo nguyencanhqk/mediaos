@@ -178,3 +178,37 @@ apps/app/src/routes/me/MeAssetsPage.tsx(+spec)  -- ASSET-SCREEN-006
 - [ ] QR render từ `asset_code`; nhãn trạng thái từ constants chuẩn
 - [ ] Migration 0556 bật `modules.ASSET.is_active=true` + gỡ pin smoke CÙNG commit
 - [ ] `pnpm typecheck` · `pnpm test` · `pnpm build` xanh; `harness/check.sh` xanh
+
+---
+
+## 7. Kết quả thi công (30/08/2026)
+
+### 7.1 Đã giao
+
+| Hạng mục | Chi tiết |
+| --- | --- |
+| 7 màn | `AssetListPage` (001) · `AssetDetailPage` (002, 3 tab + QR) · `AssetFormPage` (003, tạo+sửa) · `AssetAssignDialog`/`AssetRevokeDialog` (004) · `AssetInventoryListPage`+`AssetInventoryDetailPage` (005) · `MeAssetsPage` (006) · `AssetCategoryDialog` (007) |
+| API client | `packages/web-core/src/lib/asset-api.ts` — 22 hàm phủ 26 route BE |
+| Quyền | 11 mã dotted vào `PERMISSION_CODE_TO_PAIR`; `ASSET_ENGINE_PAIRS` cho `useCan` trong page |
+| Wiring | `APP_REGISTRY` 'assets' · 3 `ROUTE_REGISTRY` · 7 route trong `router.tsx` · `ASSET_SIDEBAR` + mục ME · icon `package` · namespace i18n `assets` |
+| Migration | `0556_s11assetfe1_enable_asset_module.sql` + journal idx 223; gỡ `"ASSET"` khỏi `EXTENSION_INACTIVE_MODULES` CÙNG commit |
+| Test | 91 ca mới (47 FSM∩quyền · 28 lỗi · 16 wiring) |
+
+### 7.2 Verify
+
+- `pnpm typecheck` (10/10 task) · `pnpm lint` (**0 error**, 44 warning có sẵn ở `apps/api/test`) · `pnpm --filter @mediaos/app build` xanh
+- `apps/app` **2092/2092** test xanh (234 file) — không hồi quy
+- `web-core` **722/722** xanh
+- Lane DB thật `mediaos_assetfe1` (chain 0000→0556 áp sạch): `migration-smoke.int-spec.ts` **62/62** xanh; `SELECT module_code, is_active` ⇒ `ASSET|t`, `ROOM|f` (đúng: FE ROOM là WO khác)
+
+### 7.3 Hai chỗ SPEC lệch bản đã ship — sửa theo CODE THẬT
+
+1. **`kind` lỗi**: bảng SPEC-13 §12 liệt `employee-not-found` · `maintenance-not-found` · `readonly-field`, nhưng `grep assetDetails(" apps/api/src/assets/` cho thấy **không cái nào được phát ra** (hai cái đầu đi sentinel 404 chung ASSET-ERR-012 để không thành oracle dò chéo tenant; cái cuối bị `.strict()` chặn thành 400). Bản ship phát **19** kind khác. Map theo bảng spec sẽ đẻ 3 nhánh chết + bỏ sót 9 kind thật.
+2. **Ô FSM `Under Maintenance → Under Maintenance: revoke`** có trong `asset-fsm.ts` nhưng dễ bị bỏ khi đọc bảng §13.1 theo trực giác "thu hồi = đang Assigned". Bỏ ô đó là dựng **ngõ cụt**: tài sản đang bảo trì mà còn người giữ thì không thu hồi được từ UI, và vì còn lượt Active nên cũng không thanh lý được (ASSET-ERR-008). Có ca test riêng neo đường thoát.
+
+### 7.4 Nợ / bàn giao
+
+- **Go-live PROD**: phải gán role `asset-manager` (mig 0550) cho admin thật qua màn quản trị role. `SuperAdminBootstrap` no-op trên PROD và 0550 KHÔNG có khối catch-up ⇒ tới khi gán, ASSET vô hình với admin PROD và job `ASSET_MAINTENANCE_DUE` phát 0 thông báo. **KHÔNG** vá bằng blanket/CROSS JOIN grant.
+- **`MODULE_APP_METADATA` thiếu ASSET** (`apps/api/src/foundation/module-catalog/module-app-metadata.ts`, NGOÀI `paths` của WO): module active mà vắng metadata thì `getMyApps` bỏ qua kèm log warn. GOAL (active từ 0506) đã ở đúng tình trạng đó từ trước ⇒ hành vi có sẵn, không phải hồi quy do 0556. Lưới "Ứng dụng của tôi" của FE dựng từ `APP_REGISTRY` tĩnh nên người dùng vẫn thấy thẻ. WO nào chạm module-catalog dọn một thể.
+- **`modules.is_active` không phải cổng**: đo lại ở header 0556 — không có `ModuleActiveGuard`, và route FE bỏ qua `moduleCode` vì `/auth/me` chưa expand `modules`. Cờ này hôm nay chỉ lọc catalog `getMyApps`. Đừng dùng nó làm đệm an toàn khi lập luận rủi ro deploy.
+- **e2e cấp phát→thu hồi qua UI** chưa chạy (cần môi trường có seed dữ liệu ASSET); đã phủ bằng 91 unit/wiring + 62 int-spec migration.
