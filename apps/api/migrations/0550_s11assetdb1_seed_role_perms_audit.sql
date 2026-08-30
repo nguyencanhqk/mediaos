@@ -40,7 +40,9 @@ BEGIN
   IF v_n <> 1 THEN
     RAISE EXCEPTION '[0550] modules.ASSET khong ton tai (ky vong 1 hang tu mig 0435, dem duoc %)', v_n;
   END IF;
-  RAISE NOTICE '[0550] modules.ASSET ton tai, GIU is_active=false (chua co endpoint — S11-ASSET-FE-1 moi bat)';
+  -- KHÔNG assert is_active ở đây (xem ghi chú forward-compat ở khối verify (e) cuối file): 0556 bật cờ,
+  -- và khối này bị CHẠY LẠI bởi ca idempotency H1.
+  RAISE NOTICE '[0550] modules.ASSET ton tai (0550 KHONG bat co; S11-ASSET-FE-1/mig 0556 moi bat)';
 END;
 $$;
 --> statement-breakpoint
@@ -369,11 +371,22 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- (e) module ASSET tồn tại và VẪN inactive (D1 — pin migration-smoke)
+  -- (e) module ASSET TỒN TẠI (D1). CỐ Ý **KHÔNG** ép `is_active = false`.
+  --
+  -- S11-ASSET-FE-1 (30/08/2026) — vá forward-compat. Bản đầu của guard này khẳng định `is_active = false`,
+  -- tức đóng đinh đúng một trạng thái mà CHÍNH NÓ ghi trong thông điệp là 'bat o S11-ASSET-FE-1' sẽ đổi.
+  -- Hệ quả: mig 0556 bật cờ lên true ⇒ ca H1 của `s11-asset-db1-invariants.int-spec.ts` (chạy lại NGUYÊN
+  -- file 0550 để chứng minh idempotency) ném P0001 và CI đỏ, dù 0550 không hề sai.
+  --
+  -- Đây là họ lỗi đã ghi: guard baseline phải FORWARD-COMPATIBLE (memory
+  -- `noti-check-baseline-guard-must-be-forward-compatible`) — verify cái migration này TỰ CHỊU TRÁCH NHIỆM
+  -- (hàng modules.ASSET có tồn tại để các bước sau bám vào), KHÔNG verify một trạng thái mà WO sau được
+  -- quyền đổi. Hợp đồng 'ASSET phải inactive cho tới khi có màn' vẫn được canh, nhưng ở ĐÚNG chỗ có thể
+  -- cập nhật cùng lúc: pin `EXTENSION_INACTIVE_MODULES` của migration-smoke.int-spec.ts.
   IF NOT EXISTS (
-    SELECT 1 FROM modules WHERE module_code = 'ASSET' AND deleted_at IS NULL AND is_active = false
+    SELECT 1 FROM modules WHERE module_code = 'ASSET' AND deleted_at IS NULL
   ) THEN
-    RAISE EXCEPTION '[0550] verify: modules.ASSET phai ton tai va is_active=false (bat o S11-ASSET-FE-1)';
+    RAISE EXCEPTION '[0550] verify: modules.ASSET phai ton tai (ky vong 1 hang tu mig 0435)';
   END IF;
 
   -- (f) super-admin KHÔNG được enumerate ở tầng migration
@@ -382,7 +395,7 @@ BEGIN
     RAISE EXCEPTION '[0550] verify: super-admin xuat hien trong roles he thong (% hang) — phai la runtime company-scoped', v_n;
   END IF;
 
-  RAISE NOTICE '[0550] verify PASS: 11 perm asset + 28 grant §9d + role asset-manager + audit CHECK 5 gia tri + module ASSET inactive';
+  RAISE NOTICE '[0550] verify PASS: 11 perm asset + 28 grant §9d + role asset-manager + audit CHECK 5 gia tri + module ASSET ton tai';
 END;
 $$;
 
