@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**419 WO** · có micro-plan: **241/419** · ⬜ 9 chờ · 🔵 1 đang làm · ✅ 409 xong · 🔴 0 chặn
+**419 WO** · có micro-plan: **241/419** · ⬜ 9 chờ · 🔵 0 đang làm · ✅ 410 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -479,12 +479,12 @@
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
 | `S11-ASSET-DOC-1` | 🟢 | ✅ xong | [📄](S11-OFFICE-WAVE.md) | — | Bộ tài liệu ASSET: SPEC-13 + DB-15 + API-14 + permission-matrix §9d +  |
-| `S11-ASSET-DB-1` | 🔴 | 🔵 đang làm | [📄](S11-ASSET-DB-1.md) | ✅S11-ASSET-DOC-1 | Schema + migration ASSET theo DB-15: asset_categories · assets · asset |
-| `S11-ASSET-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S11-ASSET-DB-1 | Module NestJS assets/: CRUD danh mục + tài sản, cấp phát/thu hồi, bảo  |
+| `S11-ASSET-DB-1` | 🔴 | ✅ xong | [📄](S11-ASSET-DB-1.md) | ✅S11-ASSET-DOC-1 | Schema + migration ASSET theo DB-15: asset_categories · assets · asset |
+| `S11-ASSET-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S11-ASSET-DB-1 | Module NestJS assets/: CRUD danh mục + tài sản, cấp phát/thu hồi, bảo  |
 | `S11-ASSET-FE-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S11-ASSET-BE-1 | FE ASSET (apps/app routes/assets/): danh sách + chi tiết + form + cấp  |
 | `S11-ASSET-QA-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S11-ASSET-BE-1 ⏳S11-ASSET-FE-1 | QA ASSET: int-spec deny-path/IDOR/cross-tenant + FSM chuyển tiếp sai + |
 | `S11-ROOM-DOC-1` | 🟢 | ✅ xong | [📄](S11-OFFICE-WAVE.md) | — | Bộ tài liệu ROOM: SPEC-14 + DB-16 + API-15 + permission-matrix §9e + h |
-| `S11-ROOM-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S11-ROOM-DOC-1 ⏳S11-ASSET-DB-1 | Schema + migration ROOM theo DB-16 + ROOM-DEC-001 (ĐÃ CHỐT 29/08): ALT |
+| `S11-ROOM-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S11-ROOM-DOC-1 ✅S11-ASSET-DB-1 | Schema + migration ROOM theo DB-16 + ROOM-DEC-001 (ĐÃ CHỐT 29/08): ALT |
 | `S11-ROOM-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S11-ROOM-DB-1 ⏳S11-ASSET-BE-1 | Module NestJS rooms/: CRUD phòng họp (Office Admin), đặt phòng + báo t |
 | `S11-ROOM-FE-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S11-ROOM-BE-1 | FE ROOM (apps/app routes/rooms/): lịch phòng tuần/ngày (cột = phòng, c |
 | `S11-ROOM-QA-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S11-ROOM-BE-1 ⏳S11-ROOM-FE-1 | QA ROOM: race double-booking (2 request song song → đúng 1 thắng), den |

@@ -873,52 +873,7 @@ async function main() {
       );
     }
 
-    // ── MEETINGS (vài cái) + attendees ────────────────────────────────────────
-    const meetings = [
-      {
-        title: "Họp kế hoạch nội dung tháng 7",
-        start: day(2),
-        durH: 1.5,
-        status: "scheduled",
-        attendees: [PEOPLE[0].email, PEOPLE[1].email, PEOPLE[5].email],
-      },
-      {
-        title: "Review chất lượng video tuần 24",
-        start: day(1),
-        durH: 1,
-        status: "scheduled",
-        attendees: [PEOPLE[2].email, PEOPLE[3].email, PEOPLE[4].email],
-      },
-      {
-        title: "Họp tổng kết doanh thu T5",
-        start: day(-5),
-        durH: 2,
-        status: "completed",
-        attendees: [PEOPLE[8].email, PEOPLE[0].email],
-      },
-    ];
-    for (const m of meetings) {
-      let mid = await selId(
-        c,
-        `SELECT id FROM meetings WHERE company_id=$1 AND title=$2 AND deleted_at IS NULL`,
-        [COMPANY_ID, m.title],
-      );
-      if (!mid) {
-        const starts = new Date(m.start.getTime() + 9 * 60 * 60 * 1000); // 9h sáng
-        const ends = new Date(starts.getTime() + m.durH * 60 * 60 * 1000);
-        mid = await selId(
-          c,
-          `INSERT INTO meetings (company_id,title,starts_at,ends_at,organizer_id,status) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-          [COMPANY_ID, m.title, starts.toISOString(), ends.toISOString(), ADMIN_ID, m.status],
-        );
-        for (const email of m.attendees) {
-          await c.query(
-            `INSERT INTO meeting_attendees (company_id,meeting_id,user_id,rsvp) VALUES ($1,$2,$3,'accepted') ON CONFLICT DO NOTHING`,
-            [COMPANY_ID, mid, userId[email]],
-          );
-        }
-      }
-    }
+    // (S11-ROOM-DB-1 mig 0553: khối MEETINGS di sản đã gỡ — bảng meetings/meeting_attendees không còn.)
 
     await c.query("COMMIT");
     console.log("✓ Seed COMMIT thành công.\n");
@@ -947,8 +902,6 @@ async function main() {
       ["revenue_records", "company_id=$1"],
       ["cost_records", "company_id=$1"],
       ["notifications", "company_id=$1"],
-      ["meetings", "company_id=$1 AND deleted_at IS NULL"],
-      ["meeting_attendees", "company_id=$1"],
       ["tasks", "company_id=$1"],
     ];
     console.log("── Đếm dòng cho công ty demo ──");

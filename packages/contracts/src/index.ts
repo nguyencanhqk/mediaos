@@ -124,7 +124,9 @@ export * from "./dashboard-widget-data";
 export * from "./evaluation";
 export * from "./kpi";
 export * from "./payroll";
-export * from "./meeting";
+// S11-ROOM-DB-1 (SPEC-14 · DB-16 §7): enum/hằng ROOM mirror CHECK 0552 hai chiều. DTO park meeting.ts (bảng meetings/
+// meeting_notes/meeting_tasks đã DROP ở 0553, 0 consumer) đã gỡ cùng WO — DTO ROOM thật viết ở S11-ROOM-BE-1 theo API-15.
+export * from "./room";
 export * from "./permission";
 export * from "./crypto";
 // AC-5 API key / Personal Access Token (PAT)

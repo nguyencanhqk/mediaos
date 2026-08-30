@@ -1534,6 +1534,34 @@
       "when": 1717587340000,
       "tag": "0551_s11assetdb1_noti_asset",
       "breakpoints": true
+    },
+    {
+      "idx": 219,
+      "version": "7",
+      "when": 1717587341000,
+      "tag": "0552_s11roomdb1_room_expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 220,
+      "version": "7",
+      "when": 1717587342000,
+      "tag": "0553_s11roomdb1_drop_meeting_legacy",
+      "breakpoints": true
+    },
+    {
+      "idx": 221,
+      "version": "7",
+      "when": 1717587343000,
+      "tag": "0554_s11roomdb1_seed_role_perms_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 222,
+      "version": "7",
+      "when": 1717587344000,
+      "tag": "0555_s11roomdb1_noti_room",
+      "breakpoints": true
     }
   ]
 }

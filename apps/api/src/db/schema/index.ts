@@ -41,8 +41,9 @@ export * from "./evaluation";
 export * from "./kpi";
 // G12 payroll (salary profile — lương nhạy cảm, ADR-0010)
 export * from "./payroll";
-// G10-4 meeting (meeting_rooms + meetings + meeting_attendees)
-export * from "./meeting";
+// S11-ROOM-DB-1 (DB-16 / SPEC-14, mig 0552·0553·0554·0555): meeting_rooms (tái dụng + ALTER) + room_bookings +
+// room_booking_attendees; 4 bảng meeting_* di sản G10 đã DROP ở 0553 (schema/meeting.ts → rooms.ts).
+export * from "./rooms";
 // G16-1 2FA (user_totp envelope-encrypted secret + user_recovery_codes; AUTH-003)
 export * from "./two-factor";
 // G16-1b security alerting (append-only — repeated re-auth fail / cross-scope deny / anomalous login)

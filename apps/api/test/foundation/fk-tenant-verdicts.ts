@@ -81,10 +81,19 @@ export const FK_LAYER_G_GUARD_FLOOR = 11;
  * ⛔ Sàn này CHỈ được hạ khi BẢNG/CỘT thật sự biến mất khỏi schema. Census tụt vì bộ lọc hỏng, vì
  * composite FK bị gỡ, hay vì lane DB migrate thiếu ⇒ là NỢ, cấm hạ sàn.
  *
+ * ⟲ S11-ROOM-DB-1 (ROOM-DEC-001) — HẠ **423 → 415**, có chủ đích. Đo 2026-08-29 trên HAI lane cùng ngày:
+ * đối chứng `mediaos_roombase551` (mới tinh, head `0551`, KHÔNG có `0552+`) = **423**; `mediaos_roomdb1` (head
+ * `0555`) = **415**. 423 − 415 = **8 = ĐÚNG số FK một-cột rơi theo `DROP TABLE` ở mig `0553`**: `meetings.meeting_room_id`
+ * · `meetings.organizer_id` · `meeting_attendees.meeting_id` · `meeting_attendees.user_id` · `meeting_notes.meeting_id`
+ * · `meeting_notes.author_user_id` · `meeting_tasks.meeting_id` · `meeting_tasks.task_id` (cả 8 vốn được `0535` phủ
+ * composite — MẤT ĐỐI TƯỢNG ĐO, không phải mất hàng rào). 2 bảng mới `room_bookings`/`room_booking_attendees` +
+ * 2 cột `*_by` mới trên `meeting_rooms` đều là composite FK THUẦN (0 FK một-cột) nên không cộng vào census này;
+ * `meeting_rooms.created_by` (0052) giữ nguyên. Khớp 1–1, không cặp nào rơi ngoài dự kiến.
+ *
  * (Lịch sử: 440 đặt 2026-08-25 trên lane `mediaos_fkcatalog` head 0546 khi đo được 459/448 phủ/11 hở;
  * trước đó 460/449 ở head 0534.)
  */
-export const FK_SINGLE_COL_PAIRS_FLOOR = 423;
+export const FK_SINGLE_COL_PAIRS_FLOOR = 415;
 
 /**
  * LỚP P — "BỊT MỘT NỬA". Số cặp có `child.company_id` NULLABLE, đo 2026-07-31 sau mig `0535`.

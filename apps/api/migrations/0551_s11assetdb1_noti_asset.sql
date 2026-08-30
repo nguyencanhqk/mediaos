@@ -31,6 +31,7 @@ DECLARE
   r        record;
   v_super  text[];
   v_extra  text[];
+  v_needle text;
 BEGIN
   PERFORM set_config('lock_timeout', '5s', true);
 
@@ -51,7 +52,13 @@ BEGIN
       FROM regexp_matches(r.def, '''([^'']+)''', 'g') AS m
      WHERE m[1] <> ALL (v_super);
 
-    IF v_extra IS NOT NULL AND array_length(v_extra, 1) > 0 THEN
+    -- Chỉ ĐỎ khi re-stamp (B)/(C) THẬT SỰ sắp chạy (CHECK chưa có ASSET/Asset). Nếu ASSET đã có thì các khối dưới
+    -- idempotent-skip, không DROP/ADD gì ⇒ giá trị của module SAU (ROOM 0555…) không bị đe doạ và file này vẫn
+    -- replay được trên DB đã tiến xa hơn (ca H1 s11-asset-db1-invariants chạy lại nguyên file — vá 29/08/2026 khi
+    -- S11-ROOM-DB-1 thêm ROOM/Room; trước đó guard RAISE vô điều kiện).
+    -- (needle tính TRƯỚC IF: PL/pgSQL cắt điều kiện IF ở chữ THEN đầu tiên — CASE…THEN lồng trong IF bị cắt cụt.)
+    v_needle := CASE WHEN r.conname LIKE '%module_code%' THEN '%''ASSET''%' ELSE '%''Asset''%' END;
+    IF v_extra IS NOT NULL AND array_length(v_extra, 1) > 0 AND r.def NOT LIKE v_needle THEN
       RAISE EXCEPTION '[0551] % (%) chua gia tri NGOAI superset cua 0551: % — superset viet tay se XOA chung. '
                       'Cap nhat danh sach trong 0551 roi chay lai.', r.conname, r.tbl, v_extra;
     END IF;

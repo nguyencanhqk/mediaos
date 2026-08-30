@@ -14487,7 +14487,7 @@ export const backlog = [
     module: "ROOM",
     layer: "DB",
     title:
-      "Schema + migration ROOM theo DB-16 + ROOM-DEC-001 (ĐÃ CHỐT 29/08): ALTER meeting_rooms (gỡ is_virtual), tạo room_bookings + room_booking_attendees (EXCLUDE gist chống trùng), DROP 4 bảng meeting_* (tiền kiểm 0 hàng fail-loud) + xoá 12 grant/6 cặp meeting* di sản, seed module/office-admin/5 cặp/22 grant/NOTI catalog (CHECK cả hai bảng)",
+      "Schema + migration ROOM theo DB-16 + ROOM-DEC-001 (ĐÃ CHỐT 29/08): ALTER meeting_rooms (gỡ is_virtual), tạo room_bookings + room_booking_attendees (EXCLUDE gist chống trùng), DROP 4 bảng meeting_* (tiền kiểm 0 hàng fail-loud) + xoá 12 grant/6 cặp meeting* di sản, seed office-admin/5 cặp/22 grant/NOTI catalog (CHECK cả hai bảng) — modules.ROOM GIỮ inactive",
     zone: "red",
     status: "todo",
     paths: [
@@ -14497,7 +14497,18 @@ export const backlog = [
       "apps/api/test/foundation/**",
       "apps/api/test/**",
       "apps/api/demo-seed-full.mjs",
+      "packages/contracts/src/room*.ts",
+      "packages/contracts/src/meeting.ts",
+      "packages/contracts/src/notification.ts",
+      "packages/contracts/src/index.ts",
+      "packages/contracts/src/index.spec.ts",
       "docs/erd-current.md",
+      "docs/DB/DB-16*.md",
+      "docs/DB/DB-10*.md",
+      "docs/SPEC/SPEC-14*.md",
+      "docs/permission-matrix-spec.md",
+      "docs/plans/S11-ROOM-DB-1.md",
+      "harness/backlog.mjs",
     ],
     skills: ["code-review"],
     depends_on: ["S11-ROOM-DOC-1", "S11-ASSET-DB-1"],
@@ -14510,7 +14521,8 @@ export const backlog = [
     done_when: [
       "Thi hành ĐÚNG ROOM-DEC-001: mọi bảng meeting_* hoặc được reconcile vào DB-16 hoặc DROP có đếm hàng PROD + expand-contract; KHÔNG còn bảng phòng họp ngoài DB-16; DROP nào cũng dọn cả teardown test",
       "Ràng buộc chống trùng lịch = EXCLUDE USING gist (room, tstzrange) VERIFY bằng test 2 INSERT chồng giờ trên LANE_DB (chốt cuối ở DB, không chỉ ở service)",
-      "RLS+FORCE mọi bảng đích; composite tenant FK; seed modules(ROOM) + cặp quyền §9e + CHECK module_code NOTI nới CẢ HAI bảng + catalog NOTI-EVENT đồng bộ union type",
+      "RLS+FORCE mọi bảng đích; composite tenant FK; modules.ROOM GIỮ is_active=false (verify tồn tại; bật ở S11-ROOM-FE-1 + gỡ pin smoke) + cặp quyền §9e + CHECK module_code NOTI nới CẢ HAI bảng + catalog NOTI-EVENT đồng bộ union type",
+      "Sàn ratchet hạ CÓ ĐỐI CHỨNG hai lane (FK_SINGLE_COL_PAIRS_FLOOR 423→415 · W4_FK_BLOCKED_FLOOR 241→232), lý do văn bản tại chỗ; 6 cặp meeting* XOÁ CỨNG (permissions không có deleted_at)",
       "Hợp đồng Zod mirror CHECK DB hai chiều; rls-tenant-isolation-tester + fk-tenant-census xanh; erd-current cập nhật (meeting.ts ra khỏi nhóm di sản)",
     ],
     notes: [
@@ -14552,6 +14564,7 @@ export const backlog = [
       "🔴 red (đổi từ yellow 2026-08-29, cùng lý do plan-reviewer nâng S11-ASSET-BE-1: data_scope Own/Company ép ở service trên cặp GHI + audit + 403-vs-404 phân biệt theo tenant — khuôn S5-GOAL-BE-1). FULL gate, NGƯỜI chốt, KHÔNG auto-merge. Nối tiếp SAU S11-ASSET-BE-1 vì cùng chạm app.module.ts / openapi-modules.ts / route-census.",
       "Vá lỗi trùng lịch ở service CHỈ là tầng báo lỗi đẹp (409 kèm conflicts + nextFreeFrom) — chốt thật là EXCLUDE GIST (đã ép ở DB WO); bắt 23P01 qua cause (drizzle giấu mã lỗi PG trong cause) rồi truy vấn lại conflicts ⇒ cùng 409.",
       "FE thêm 5 mã dotted ROOM.* vào PERMISSION_CODE_TO_PAIR (web-core registry, fail-closed) — ghi nợ cho S11-ROOM-FE-1 (SPEC-14 §23 mục 11).",
+      "📐 Bàn giao từ S11-ROOM-DB-1 (29/08): mediaos_worker đã có SELECT trên meeting_rooms/room_bookings/room_booking_attendees (0552) NHƯNG policy chỉ theo GUC + FORCE — job ROOM_BOOKING_REMINDER PHẢI quét TRONG withTenant từng company (không scan trần như system_job_runs có policy *_worker_all). Huỷ = MỘT câu UPDATE đủ status+cancelled_at(+cancelled_by, cancel_reason)+updated_* (chk_room_bookings_cancel_pair; tách câu là 23514). booked_by_user_id = NO ACTION và KHÔNG nằm trong column-grant UPDATE (dấu vết đặt hộ). EXCLUDE 23P01 bắt qua err.cause (drizzle giấu mã PG). Role office-admin id …0013 KHÔNG canonical. ⛔ KHÔNG được 'vá' job đọc rỗng bằng CREATE POLICY … TO mediaos_worker USING (true) (mở đọc toàn tenant — rls-tester 29/08); worker không GUC = 0 hàng là fail-closed đúng. Nợ ngoài WO: (a) FK một-cột di sản meeting_rooms_created_by_fkey (0052) làm oracle 'user tồn tại ở tenant khác' qua TÊN constraint (fkey bắn trước composite khi uuid không tồn tại) — cân nhắc DROP fkey ở WO dọn (composite 0535 đã phủ) + đổi verify (3b) 0552 sang 0; (b) workerPool fallback directPool (superuser BYPASSRLS) khi thiếu DATABASE_WORKER_URL (apps/api/src/db/index.ts:30) — nợ hạ tầng.",
     ],
   },
   {
@@ -14582,6 +14595,7 @@ export const backlog = [
       "Thêm 5 mã dotted ROOM.* (SPEC-14 §11) vào PERMISSION_CODE_TO_PAIR ở packages/web-core/src/lib/registry.ts — bảng fail-closed, thiếu là toàn bộ màn ROOM ẩn dù DB đã grant (SPEC-14 §23 mục 11)",
       "Form đặt phòng: chặn client-side khung giờ đã bận + xử lý 409 server trả về (hiện khung giờ bận, không nuốt lỗi); loading/error/empty đủ",
       "Quyền qua PermissionGate/useCan đúng cặp §9e (own vs all); trạng thái dùng constants chuẩn",
+      "Bật modules.ROOM.is_active=true bằng migration UPDATE tường minh + gỡ 'ROOM' khỏi EXTENSION_INACTIVE_MODULES (apps/api/test/integration/migration-smoke.int-spec.ts:90-97) CÙNG commit (bàn giao từ S11-ROOM-DB-1 — DB-16 §9C, tiền lệ ASSET-FE-1)",
       "vitest FE + typecheck + build xanh; e2e luồng đặt→trùng→đổi giờ→hủy qua UI",
     ],
   },

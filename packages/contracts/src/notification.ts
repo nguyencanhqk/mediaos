@@ -100,9 +100,10 @@ export const notificationTypeEnumSchema = z.enum([
   "Goal",
   "Training",
   // S7-CHAT-DB-1 (mig 0538) + S11-ASSET-DB-1 (mig 0551) — cùng lý do: engine ghi thẳng cột, enum phải theo kịp
-  // CHECK chk_notifications_notification_type (0538 nới 'Chat', 0551 nới 'Asset').
+  // CHECK chk_notifications_notification_type (0538 nới 'Chat', 0551 nới 'Asset', 0555 nới 'Room').
   "Chat",
   "Asset",
+  "Room",
 ]);
 export type NotificationTypeEnum = z.infer<typeof notificationTypeEnumSchema>;
 
