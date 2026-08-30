@@ -4,6 +4,26 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
+## Phiên 2026-08-30 — S11-ROOM-BE-1 THI CÔNG XONG → PR #438 (vùng đỏ, người chốt)
+
+**Trạng thái:** nhánh `wo/s11-room-be-1` (2 commit `44bddd23` + `52cb4761`), PR **#438** base master, KHÔNG auto-merge. Lane
+`mediaos_roombe1` còn sống — DROP sau merge (`docker exec mediaos-postgres psql -U mediaos`, terminate backend rồi
+`DROP DATABASE mediaos_roombe1`). Plan `docs/plans/S11-ROOM-BE-1.md` §12 = kết quả + FULL gate + §12.1 nợ.
+
+- Quy trình thật: orchestrator tự viết plan từ số đo (không planner Sonnet) → plan-reviewer Opus 1 vòng (5 BLOCK + 8 cảnh
+  báo, đã vá) → thi công trực tiếp 17 file `rooms/` + 3 `notifications/room-*` + contracts → QA agent viết 3 int-spec song
+  song (RED thật: lần đầu 5 đỏ = 1 lỗi code drizzle SELECT-list + 4 lỗi test) → FULL gate 3 reviewer Opus: security
+  **BLOCK** (nhánh fail-closed identity chưa test · `employeeCode` không qua cổng · `conflicts.title` phơi · `view@Own` coi
+  như Company) → vá hết → 69/69 int + 55 unit/ratchet xanh; `check.sh --all --lane-db=roombe1` xanh trên commit 1, chạy lại
+  sau commit 2 (kết quả ở comment PR / ledger).
+- Việc kế: owner merge #438 sau CI xanh → DROP lane → `S11-ASSET-FE-1` / `S11-ROOM-FE-1` (bật `modules.ROOM`, 5 mã dotted
+  `ROOM.*` vào `PERMISSION_CODE_TO_PAIR`, FE dùng `parseRoomConflictsDetail`).
+
+**Friction:** (1) heredoc dài trong Bash tool bị cắt (quote/ENAMETOOLONG) — ghi file bằng Write rồi `cat >>`, hoặc node
+patch-script đọc từ file; python không cài trên máy. (2) Prettier hook reflow làm `old_string` lệch ⇒ patch bằng node
+script (regex) thay vì Edit tool; **KHÔNG** nhúng backtick vào `node -e "…"` (shell ăn). (3) Chi phí phiên ~$115 — 3
+reviewer + plan-reviewer + QA agent ≈ 60%; reviewer bắt được 1 HIGH thật (nhánh fail-closed không test) nên đáng tiền.
+
 ## Phiên 2026-08-29 — wave S11-OFFICE: ASSET-DOC-1 PASS + PR #433 · ROOM-DOC-1 đã viết (xếp chồng)
 
 **Hai nhánh XẾP CHỒNG, một PR mở:** `#433` = `wo/s11-asset-doc-1` (base master, docs + hot-file harness ⇒ đi PR,
