@@ -120,6 +120,9 @@ export {
   // S7-CHAT-FE-1 — Chat nội bộ (SPEC-15). KHÔNG có `chatInvalidation`: nguồn sự thật hiển thị là store
   // Zustand do WS đẩy, không phải cache react-query — xem ghi chú ở query-keys.ts.
   chatKeys,
+  // S11-ASSET-FE-1 — Tài sản (SPEC-13). KHÔNG có `assetInvalidation`: mutation ASSET đổi trạng thái
+  // MỘT hồ sơ, page tự invalidate detail(id) + list() tại chỗ — chưa có luồng phân rã nhiều nhánh như GOAL.
+  assetKeys,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep

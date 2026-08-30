@@ -210,6 +210,28 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   // (is_sensitive=false, bulk-grant company-admin qua LIKE 'foundation-%'). KHÁC my-apps (Authenticated-only,
   // KHÔNG PermissionGuard) — admin catalog GET /foundation/modules[/:code] gated đúng cặp này.
   "FOUNDATION.MODULE.VIEW": "view:foundation-module",
+  // S11-ASSET-FE-1 — ASSET (SPEC-13 §11, seed mig 0550). 11 cặp, `is_sensitive=false` cả 11. Cặp lấy từ
+  // CONTROLLER THẬT (chống pair-drift): assets.controller (view/create/update/delete/assign/revoke/dispose
+  // :asset + manage:asset-maintenance) · asset-categories.controller (manage:asset-category) ·
+  // asset-inventories.controller (manage:asset-inventory) · me-assets.controller (view:asset @Own).
+  //
+  // `access:asset` KHÔNG route nào enforce — nó là cổng nav (họ access:goal/access:me/access:chat). Lối vào
+  // (APP_REGISTRY · ROUTE_REGISTRY · sidebar) gate bằng cặp LITERAL đủ CẢ HAI `access:asset` + `view:asset`,
+  // KHÔNG qua bảng này — xem ghi chú ở ROUTE_REGISTRY 'asset.list'. Bảng này phục vụ useCan() TRONG page.
+  //
+  // Đường «tài sản của tôi» dùng CHÍNH `view:asset` @Own — SPEC-13 §11 cố ý KHÔNG tách cặp đọc riêng
+  // (tách ra đẻ role "thấy danh sách mà không mở được chi tiết" — read-path-gate-pair-must-match-download-pair).
+  "ASSET.ACCESS": "access:asset",
+  "ASSET.ASSET.VIEW": "view:asset",
+  "ASSET.ASSET.CREATE": "create:asset",
+  "ASSET.ASSET.UPDATE": "update:asset",
+  "ASSET.ASSET.DELETE": "delete:asset",
+  "ASSET.ASSIGNMENT.CREATE": "assign:asset",
+  "ASSET.ASSIGNMENT.REVOKE": "revoke:asset",
+  "ASSET.ASSET.DISPOSE": "dispose:asset",
+  "ASSET.CATEGORY.MANAGE": "manage:asset-category",
+  "ASSET.MAINTENANCE.MANAGE": "manage:asset-maintenance",
+  "ASSET.INVENTORY.MANAGE": "manage:asset-inventory",
 };
 
 export function createPermissionChecker(userPermissions: readonly UserPermission[]) {
@@ -719,6 +741,28 @@ export const APP_REGISTRY: readonly AppRegistryItem[] = [
     requiredAnyPermissions: ["view:social-post"],
     status: "active",
     order: 90,
+  },
+  {
+    // S11-ASSET-FE-1 — thẻ "Tài sản" (SPEC-13, wave S11-OFFICE). Module NỘI BỘ thật (khác LMS/SOCIAL).
+    //
+    // Gate = ĐỦ CẢ HAI cặp engine LITERAL, KHÔNG qua PERMISSION_CODE_TO_PAIR (họ access:me/goal/chat).
+    // Vì sao không chỉ `access:asset` như tiền lệ GOAL: thẻ điều hướng tới /assets, mà trang đó tải
+    // GET /assets = `view:asset`. Gate bằng mình cặp access dựng lại đúng lỗ đã vá ở CHAT (owner báo
+    // 05/08/2026) và ở social ngay trên — "ô hiện ra thì bấm vào phải vào được". Seed 0550 cấp cả hai
+    // cùng lúc cho 4 role canonical nên hôm nay hai vế trùng nhau, nhưng grant là per-(permission, role)
+    // nên admin thu `view:asset` riêng được ⇒ fail-closed ở đây là thẻ biến mất, không phải đâm tường.
+    appKey: "assets",
+    moduleCode: "ASSET",
+    nameKey: "app.assets",
+    descKey: "appDesc.assets",
+    icon: "package",
+    rootPath: "/assets",
+    defaultRoute: "/assets",
+    category: "operation",
+    aliases: ["tai san", "asset", "thiet bi", "kiem ke", "cap phat", "quan ly tai san"],
+    requiredPermissions: ["access:asset", "view:asset"],
+    status: "active",
+    order: 100,
   },
 ] as const;
 
@@ -1481,6 +1525,57 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["access:me"],
     showInSidebar: false,
     order: 77,
+  },
+
+  // S11-ASSET-FE-1 — «Tài sản của tôi» (ASSET-SCREEN-006) chảy ngược về /me, cùng kỹ thuật me.training.
+  // Gate = cặp ASSET (KHÁC các route ME khác dùng access:me): quyền xem tài sản độc lập với quyền vào
+  // Personal Hub. ĐỦ CẢ HAI vì trang tải GET /me/assets = view:asset @Own (employee resolve từ token —
+  // KHÔNG nhận employeeId, chống IDOR); endpoint này KHÔNG BAO GIỜ trả trường tài chính, kể cả cho
+  // company-admin, nên không có vế masking nào phụ thuộc scope ở màn này.
+  {
+    routeKey: "me.assets",
+    path: "/me/assets",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ASSET-SCREEN-006",
+    titleKey: "routeTitle.meAssets",
+    requiredPermissions: ["access:asset", "view:asset"],
+    showInSidebar: true,
+    order: 23,
+  },
+
+  // ASSET — Quản lý tài sản (SPEC-13 §9, wave S11-OFFICE). Gate route module-entry = cặp engine LITERAL
+  // ĐỦ CẢ HAI `access:asset` + `view:asset` (seed 0550, non-sensitive) — KHÔNG qua PERMISSION_CODE_TO_PAIR,
+  // cùng kỹ thuật me.overview/goal.list. Vì sao ĐỦ CẢ HAI chứ không chỉ access như goal.list: cả hai màn
+  // dưới đây tải dữ liệu qua `view:asset` (GET /assets · GET /asset-inventories) ⇒ gate màn PHẢI khớp gate
+  // đường tải, nếu không role bị thu `view:asset` riêng sẽ vào được route rồi ăn lỗi thay vì thấy 403 sạch
+  // (read-path-gate-pair-must-match-download-pair).
+  //
+  // Các màn còn lại (new/detail/edit ASSET-SCREEN-002/003 · chi tiết đợt kiểm kê · form cấp phát 004 ·
+  // quản trị loại 007) dùng RouteMeta CỤC BỘ trong router.tsx (mẫu HR employees / goals) — chỉ 2 màn có
+  // mục sidebar khai ở đây. Quyền GHI (create/update/assign/revoke/dispose/manage-*) gate TRONG page qua
+  // useCan + BE ép — KHÔNG nhét vào route (route gate là cổng nav, không phải cổng nghiệp vụ).
+  {
+    routeKey: "asset.list",
+    path: "/assets",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ASSET",
+    screenCode: "ASSET-SCREEN-001",
+    titleKey: "routeTitle.assets",
+    requiredPermissions: ["access:asset", "view:asset"],
+    showInSidebar: true,
+    order: 81,
+  },
+  {
+    routeKey: "asset.inventories",
+    path: "/assets/inventories",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ASSET",
+    screenCode: "ASSET-SCREEN-005",
+    titleKey: "routeTitle.assetInventories",
+    requiredPermissions: ["access:asset", "view:asset"],
+    showInSidebar: true,
+    order: 82,
   },
 
   // System

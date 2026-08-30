@@ -20,6 +20,8 @@ export default {
     chat: "Tin nhắn",
     // S9-SOCIAL-FE-1 — cổng SSO sang app vệ tinh fbpost (DECISIONS-08).
     social: "Đăng bài",
+    // S11-ASSET-FE-1 — module ASSET nội bộ (SPEC-13, wave S11-OFFICE).
+    assets: "Tài sản",
   },
   // App registry descriptions
   appDesc: {
@@ -35,6 +37,7 @@ export default {
     lms: "Khóa học, bài kiểm tra và lộ trình đào tạo (mở hệ LMS).",
     chat: "Nhắn tin nội bộ theo phòng ban, dự án và hội thoại riêng.",
     social: "Soạn, hẹn giờ và đăng bài lên các trang Facebook của công ty.",
+    assets: "Danh mục tài sản, cấp phát, thu hồi, bảo trì và kiểm kê theo đợt.",
   },
   // Route titles
   routeTitle: {
@@ -136,6 +139,14 @@ export default {
     meTraining: "Tiến độ đào tạo",
     // Bật 2FA mount trong ME workspace (reuse TwoFactorSetupPage) — route SHELL /account/setup-2fa giữ nguyên.
     meSecurityTwoFactor: "Xác thực 2 lớp",
+    // S11-ASSET-FE-1 — ASSET (SPEC-13 §9, ASSET-SCREEN-001..007).
+    assets: "Tài sản",
+    assetNew: "Thêm tài sản",
+    assetDetail: "Chi tiết tài sản",
+    assetEdit: "Sửa tài sản",
+    assetInventories: "Kiểm kê tài sản",
+    assetInventoryDetail: "Chi tiết đợt kiểm kê",
+    meAssets: "Tài sản của tôi",
     forbidden: "Không có quyền truy cập",
     notFound: "Không tìm thấy trang",
   },
