@@ -256,6 +256,42 @@ RED-trước-GREEN · cross-tenant · coverage):
 
 ---
 
+## 5d. ASSET — Quản lý tài sản (wave S11-OFFICE, nghiệm thu QA 30/08/2026)
+
+Module Phase 3 đầu tiên vào được tay người dùng: `modules.ASSET.is_active = true` từ migration `0556`
+(bật cùng `S11-ASSET-FE-1`). Nghiệp vụ: [SPEC-13](spec/SPEC-13%20ASSET.md) · schema
+[DB-15](DB/DB-15%20ASSET%20Database%20Design.md).
+
+**Quyền cần có để thấy gì:** 11 cặp `(action, resource)` — `access:asset` là cổng **nav**, `view:asset`
+là cổng **API đọc** (Own = tài sản mình đang/đã giữ · Department = nhân viên đơn vị mình · Company =
+toàn bộ). 9 cặp ghi chỉ cấp `@Company`. Role hệ thống `asset-manager` giữ đủ 11 cặp.
+
+> ⚠️ **Vận hành trước khi test trên môi trường thật:** phải gán role `asset-manager` cho tài khoản quản
+> trị qua màn quản trị role — migration seed **không** tự gán. Chưa gán thì ASSET vô hình với admin và
+> job `ASSET_MAINTENANCE_DUE` phát 0 thông báo.
+
+| Việc | Cách kiểm | Kỳ vọng |
+| --- | --- | --- |
+| Tạo loại + sinh mã | tạo loại «Laptop» prefix `LT` → tạo 2 tài sản | mã `TS-LT-0001`, `TS-LT-0002`; đổi prefix sau khi đã sinh mã ⇒ `ASSET-ERR-010` `prefix-locked` |
+| Cấp phát / thu hồi | cấp `TS-LT-0001` cho nhân viên A → thu hồi `Good` | A nhận thông báo `ASSET_ASSIGNED`; `/me/assets` của A thấy tài sản và **không** thấy giá mua; cấp lần 2 khi đang `Assigned` ⇒ `ASSET-ERR-001` |
+| Bảo trì | mở lượt khi A đang giữ → đóng lượt | trạng thái `Under Maintenance` (lượt của A **vẫn** Active) → đóng ⇒ về `Assigned`, không phải `In Stock`; mở lượt thứ 2 ⇒ `ASSET-ERR-004` |
+| Thanh lý / mất / tìm lại | thanh lý khi còn lượt Active | `ASSET-ERR-008` (phải thu hồi trước); ghi nhận mất thì được (tự đóng lượt `Lost`); tìm thấy lại ⇒ `In Stock`, bắt buộc lý do ≥ 3 ký tự |
+| Kiểm kê | mở đợt toàn bộ → đánh dấu 1 dòng `Missing` → đóng đợt | số dòng = số tài sản không `Disposed`/`Lost`; tài sản tạo SAU không vào đợt; đóng rồi đánh dấu tiếp ⇒ `ASSET-ERR-007` |
+| Phạm vi nhìn thấy | nhân viên thường mở `/assets/:id` của tài sản mình **không** giữ | **404** (không phải 403 — 403 sẽ xác nhận tài sản tồn tại); tài sản `In Stock` chỉ hiện với scope Company |
+| Che tài chính | mở chi tiết bằng 3 tư cách | `purchasePrice`/`supplier`/`maintenances[].cost` **chỉ** có ở scope Company; Own **và** Department đều vắng khoá |
+| Bấm-đúp nút cấp phát | bấm nhanh 2 lần | 1 lượt duy nhất (FE gửi `Idempotency-Key`); lần 2 nhận lại đúng phản hồi cũ |
+
+**Chưa có (không phải bug):** widget «Tài sản» trên Dashboard (SPEC-13 §20 mục 11) — cần WO riêng cho
+module DASH.
+
+Bộ test tự động: **157 ca** cụm ASSET (unit + int-spec, cần `LANE_DB`) — trong đó **81 ca mới** của
+`S11-ASSET-QA-1` — + **91 ca** FE `apps/app/src/routes/assets`. Coverage `src/assets/**`: **97.6 %**
+statements / **88.7 %** branches (lệnh tái lập: `pnpm --filter @mediaos/api test:cov:asset`). Bằng chứng
+nghiệm thu (ma trận quyền per-pair · đột biến RED-trước-GREEN · biên idempotency · census mã lỗi):
+[`QA/evidence/S11-ASSET-QA-1-ACCEPTANCE.md`](QA/evidence/S11-ASSET-QA-1-ACCEPTANCE.md).
+
+---
+
 ## 6. Tham chiếu
 
 - Trạng thái tự sinh: [docs/STATUS.md](STATUS.md) — danh sách WO "Đã xong (v2)".
