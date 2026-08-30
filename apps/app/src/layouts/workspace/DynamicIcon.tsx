@@ -53,6 +53,7 @@ import {
   Target,
   MessagesSquare,
   Package,
+  DoorOpen,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@mediaos/ui";
@@ -115,6 +116,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   // S11-ASSET-FE-1 — module Tài sản (APP_REGISTRY 'assets' + ASSET_SIDEBAR + mục ME «Tài sản của tôi»);
   // tránh fallback Circle. "clipboard-list" (mục Kiểm kê) đã map sẵn ở trên.
   package: Package,
+  // S11-ROOM-FE-1 — mục sidebar «Quản trị phòng họp» (ROOM). Thiếu khoá này thì rơi về fallback Circle.
+  "door-open": DoorOpen,
 };
 
 interface DynamicIconProps {

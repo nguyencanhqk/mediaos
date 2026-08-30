@@ -92,9 +92,11 @@ const MVP_ACTIVE_MODULES = ["AUTH", "HR", "ATT", "LEAVE", "TASK", "DASH", "NOTI"
 // này. 0550 cố ý để module tắt ("chua co endpoint") và bàn giao việc bật cho WO FE; nay 7 màn
 // ASSET-SCREEN-001..007 đã có nên cửa mở ra là vào được phòng thật. CHAT (0538) đi trước cùng đường.
 //
-// "ROOM" GIỮ NGUYÊN ở đây: BE ROOM đã merge (#438) nhưng FE ROOM là WO riêng (S11-ROOM-FE-1) —
-// bật ROOM lúc này là dựng menu trỏ vào màn chưa tồn tại.
-const EXTENSION_INACTIVE_MODULES = ["PAYROLL", "RECRUIT", "ROOM", "CHAT", "SOCIAL"] as const;
+// S11-ROOM-FE-1 — GỠ "ROOM": migration 0557 bật modules.ROOM.is_active=true CÙNG COMMIT với lần gỡ
+// này, và 5 màn ROOM-SCREEN-001..005 đã có nên menu trỏ vào phòng thật. 0554 cũng được NỚI guard
+// verify (e) cùng commit — guard đó assert is_active=false vô điều kiện và ca H1 của
+// s11-room-db1-invariants replay nguyên file (memory module-enable-guard-blocks-next-wo).
+const EXTENSION_INACTIVE_MODULES = ["PAYROLL", "RECRUIT", "CHAT", "SOCIAL"] as const;
 
 // system_settings defaults phải tồn tại sau seed (DB-08 §8.3 + 0435_foundation_db5).
 const REQUIRED_SYSTEM_SETTINGS = [

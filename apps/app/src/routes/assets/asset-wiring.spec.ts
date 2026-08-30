@@ -154,7 +154,7 @@ describe("ASSET wiring — migration bật module đi CÙNG commit với lần g
     expect(journal.entries.some((e) => e.tag === tag), `${tag} chưa vào journal`).toBe(true);
   });
 
-  it("pin smoke KHÔNG còn liệt ASSET là inactive, nhưng VẪN liệt ROOM (FE ROOM là WO khác)", () => {
+  it("pin smoke KHÔNG còn liệt ASSET là inactive", () => {
     const smoke = fs.readFileSync(
       path.join(repoRoot, "apps/api/test/integration/migration-smoke.int-spec.ts"),
       "utf8",
@@ -164,6 +164,9 @@ describe("ASSET wiring — migration bật module đi CÙNG commit với lần g
       .find((l) => l.startsWith("const EXTENSION_INACTIVE_MODULES"));
     expect(line, "không tìm thấy khai báo EXTENSION_INACTIVE_MODULES").toBeTruthy();
     expect(line).not.toContain('"ASSET"');
-    expect(line).toContain('"ROOM"');
+    // S11-ROOM-FE-1 (30/08/2026): ca này TRƯỚC ĐÂY còn khẳng định `line` VẪN chứa "ROOM" (lúc đó FE
+    // ROOM chưa có màn nào). WO đó đã ship 5 màn + mig 0557 nên vế ROOM được gỡ khỏi đây — neo trạng
+    // thái của MODULE KHÁC trong spec của module này là tự đặt mìn cho WO kế tiếp. Vế ROOM giờ nằm ở
+    // `room-wiring.spec.ts`, cạnh chính nó.
   });
 });

@@ -871,6 +871,18 @@ export const ME_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 23,
     requiredPermissions: ["access:asset", "view:asset"],
   },
+  // S11-ROOM-FE-1 — «Đặt phòng của tôi» (ROOM-SCREEN-003, GET /me/room-bookings). Cùng kỹ thuật
+  // me.assets: gate bằng cặp ROOM, không phải access:me.
+  {
+    sidebarKey: "me.roomBookings",
+    moduleCode: "ME",
+    label: "Đặt phòng của tôi",
+    path: "/me/room-bookings",
+    icon: "calendar-clock",
+    group: "Công việc của tôi",
+    order: 24,
+    requiredPermissions: ["access:room", "view:room"],
+  },
   {
     sidebarKey: "me.notifications",
     moduleCode: "ME",
@@ -1072,6 +1084,37 @@ export const ASSET_SIDEBAR: readonly SidebarItemMeta[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// ROOM — Phòng họp (S11-ROOM-FE-1, SPEC-14 §9)
+// ---------------------------------------------------------------------------
+//
+// Hai mục, cùng gate `access:room` + `view:room` (ĐỦ CẢ HAI — khớp gate đường tải, xem ROUTE_REGISTRY).
+// «Quản trị phòng họp» KHÔNG gate bằng `manage:room`: tab «Lịch sử sử dụng» của màn đó chạy trên
+// `view:room`, gate mục sidebar bằng cặp ghi sẽ giấu luôn phần đọc khỏi role chỉ có quyền xem. Nút
+// tạo/sửa/xoá bên trong ẩn qua useCan("ROOM.ROOM.MANAGE").
+export const ROOM_SIDEBAR: readonly SidebarItemMeta[] = [
+  {
+    sidebarKey: "room.calendar",
+    moduleCode: "ROOM",
+    label: "Lịch phòng",
+    path: "/rooms",
+    icon: "calendar-clock",
+    group: "overview",
+    order: 10,
+    requiredPermissions: ["access:room", "view:room"],
+  },
+  {
+    sidebarKey: "room.manage",
+    moduleCode: "ROOM",
+    label: "Quản trị phòng họp",
+    path: "/rooms/manage",
+    icon: "door-open",
+    group: "overview",
+    order: 20,
+    requiredPermissions: ["access:room", "view:room"],
+  },
+];
+
+// ---------------------------------------------------------------------------
 // Map moduleCode → sidebar items
 // ---------------------------------------------------------------------------
 import { type ModuleCode } from "@mediaos/web-core";
@@ -1087,6 +1130,7 @@ export const SIDEBAR_REGISTRY: Partial<Record<ModuleCode, readonly SidebarItemMe
   ME: ME_SIDEBAR,
   GOAL: GOAL_SIDEBAR,
   ASSET: ASSET_SIDEBAR,
+  ROOM: ROOM_SIDEBAR,
 };
 
 export function getSidebarItems(moduleCode: ModuleCode): readonly SidebarItemMeta[] {

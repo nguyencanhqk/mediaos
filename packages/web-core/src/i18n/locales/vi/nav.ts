@@ -22,6 +22,8 @@ export default {
     social: "Đăng bài",
     // S11-ASSET-FE-1 — module ASSET nội bộ (SPEC-13, wave S11-OFFICE).
     assets: "Tài sản",
+    // S11-ROOM-FE-1 — module ROOM nội bộ (SPEC-14, wave S11-OFFICE).
+    rooms: "Phòng họp",
   },
   // App registry descriptions
   appDesc: {
@@ -38,6 +40,7 @@ export default {
     chat: "Nhắn tin nội bộ theo phòng ban, dự án và hội thoại riêng.",
     social: "Soạn, hẹn giờ và đăng bài lên các trang Facebook của công ty.",
     assets: "Danh mục tài sản, cấp phát, thu hồi, bảo trì và kiểm kê theo đợt.",
+    rooms: "Lịch phòng họp theo tuần, đặt phòng, huỷ lịch và quản trị phòng.",
   },
   // Route titles
   routeTitle: {
@@ -147,6 +150,10 @@ export default {
     assetInventories: "Kiểm kê tài sản",
     assetInventoryDetail: "Chi tiết đợt kiểm kê",
     meAssets: "Tài sản của tôi",
+    // S11-ROOM-FE-1 — ROOM (SPEC-14 §9, ROOM-SCREEN-001..005). Màn 002/005 là dialog/drawer, không route.
+    rooms: "Lịch phòng họp",
+    roomManage: "Quản trị phòng họp",
+    meRoomBookings: "Đặt phòng của tôi",
     forbidden: "Không có quyền truy cập",
     notFound: "Không tìm thấy trang",
   },

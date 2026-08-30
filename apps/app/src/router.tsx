@@ -1889,6 +1889,31 @@ const MeAssetsPage = React.lazy(() =>
 );
 const meAssetsRoute = makeModuleRoute("/me/assets", "me.assets", "ME", MeAssetsPage);
 
+// ROOM — Phòng họp (S11-ROOM-FE-1, SPEC-14 ROOM-SCREEN-001..005). Ba route, cả ba đều có entry
+// ROUTE_REGISTRY ⇒ đi makeModuleRoute, KHÔNG cần RouteMeta cục bộ như ASSET.
+//
+// Màn 002 (form đặt) và 005 (chi tiết lượt) là DIALOG/DRAWER trong 001/003/004 — v1 KHÔNG cho sửa lượt
+// đặt (SPEC-14 §12: huỷ rồi đặt lại), nên không có `/rooms/$bookingId` và không có bẫy thứ-tự-route
+// như khối ASSET. "/rooms/manage" vẫn khai TRƯỚC "/rooms" cho nhất quán thói quen.
+const RoomCalendarPage = React.lazy(() =>
+  import("@/routes/rooms/RoomCalendarPage").then((m) => ({ default: m.RoomCalendarPage })),
+);
+const RoomManagePage = React.lazy(() =>
+  import("@/routes/rooms/RoomManagePage").then((m) => ({ default: m.RoomManagePage })),
+);
+const MeRoomBookingsPage = React.lazy(() =>
+  import("@/routes/me/MeRoomBookingsPage").then((m) => ({ default: m.MeRoomBookingsPage })),
+);
+
+const roomsCalendarRoute = makeModuleRoute("/rooms", "room.calendar", "ROOM", RoomCalendarPage);
+const roomsManageRoute = makeModuleRoute("/rooms/manage", "room.manage", "ROOM", RoomManagePage);
+const meRoomBookingsRoute = makeModuleRoute(
+  "/me/room-bookings",
+  "me.roomBookings",
+  "ME",
+  MeRoomBookingsPage,
+);
+
 const goalsListRoute = makeModuleRoute("/goals", "goal.list", "GOAL", GoalListPage);
 
 const goalNewMeta: RouteMeta = {
@@ -2585,6 +2610,10 @@ const routeTree = rootRoute.addChildren([
   assetDetailRoute,
   assetEditRoute,
   meAssetsRoute,
+  // S11-ROOM-FE-1 — static "/rooms/manage" TRƯỚC "/rooms" (thói quen; ROOM không có route param).
+  roomsManageRoute,
+  roomsCalendarRoute,
+  meRoomBookingsRoute,
   goalsListRoute,
   // S5-GOAL-TPL-1 — static TRƯỚC "/goals/$goalId" (xem docblock goalTemplatesMeta).
   goalTemplatesRoute,
