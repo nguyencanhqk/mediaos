@@ -14442,6 +14442,13 @@ export const backlog = [
       "FSM: mọi chuyển tiếp không hợp lệ có test trả đúng ASSET-ERR; coverage assets/ ≥80%",
       "bash harness/check.sh --lane-db xanh KHÔNG kèm banner 'XANH KHÔNG ĐỦ BẰNG CHỨNG'; docs/TESTABLE-FEATURES.md cập nhật mục ASSET",
     ],
+    notes: [
+      "✅ 30/08/2026 — 81 ca mới (ma trận quyền per-pair 22 route · biên idempotency · ERR-003 · census mã lỗi). check.sh --lane-db=assetqa XANH (lint/typecheck/migration-no-drop/tooling/test đủ 591 file api), KHÔNG banner 'XANH KHÔNG ĐỦ BẰNG CHỨNG'. Coverage src/assets/** = 97.59% stmts / 88.74% branch (lệnh tái lập: pnpm --filter @mediaos/api test:cov:asset). Bằng chứng: docs/QA/evidence/S11-ASSET-QA-1-ACCEPTANCE.md.",
+      "PHÁT HIỆN 1 — ASSET gác cặp ở HAI TẦNG (@RequirePermission + service access.assertCan). Đột biến MỘT tầng ⇒ 55 ca A/B vẫn XANH (tầng kia chặn); đổi CẢ HAI ⇒ đỏ. Đã thêm census tĩnh đối chiếu hai tầng — thiếu nó, lệch một-tầng trôi im lặng tới ngày service bị gọi từ job (không qua guard).",
+      "PHÁT HIỆN 2 — ASSET-ERR-003 chưa từng có ca nào dù coverage 97.5%: đường 'thu hồi khi In Stock' bị FSM chặn trước bằng 001. Đường thật = Under Maintenance KHÔNG có lượt Active. Đã có ca + ca ALLOW đối chứng.",
+      "CÒN THIẾU (ngoài paths WO, cần WO riêng): SPEC-13 §20 mục 11 — widget DASH «Tài sản» chưa xây (0 mã ASSET trong src/dashboard/** và routes/dashboard). Đề xuất S11-ASSET-DASH-1.",
+      "KHÔNG cắm thresholds coverage cho src/assets/** vào vitest.config.ts: số đo do int-spec sinh, mà int-spec skipIf(!LANE_DB) ⇒ lần chạy không-DB đọc ~0% ⇒ ĐỎ GIẢ (đúng bẫy mà khối thresholds hiện tại đã ghi chú).",
+    ],
   },
   {
     id: "S11-ROOM-DOC-1",
