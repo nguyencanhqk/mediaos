@@ -323,12 +323,14 @@ Quy tắc bổ sung (không cần mã riêng):
 
 | Cặp | Own | Company |
 | --- | --- | --- |
-| `view` | — (không role nào ở Own) | toàn bộ phòng + lượt trong company |
+| `view` | — (không role nào ở Own; role tuỳ biến cấp `view` hẹp hơn Company ⇒ đường đọc **từ chối 403 `AUTH-ERR-SCOPE-DENIED`** — fail-closed, không "coi như" Company; đính chính 30/08/2026, security gate M4) | toàn bộ phòng + lượt trong company |
 | `book` | organizer = caller | organizer tuỳ chọn (`organizerUserId`) |
 | `cancel` | lượt `organizer_user_id = caller` | mọi lượt |
 | `manage` | — | mọi phòng |
 
 `/me/room-bookings` là **bộ lọc** (organizer hoặc attendee = caller) trên cặp `view`, không phải scope riêng.
+
+Tên người (`displayName` + `employeeCode`) trong MỌI DTO/`conflicts[]` được **gác bởi cặp `view`** (điểm chiếu danh tính duy nhất `room-people.repository.ts`, basis `identity-gated`): route ghi (`book`/`cancel`) resolve `view` KHÔNG ném — actor có `book` mà không có `view` (role tuỳ biến) vẫn đặt được nhưng chỉ thấy tên **chính mình**; tên/mã người khác về `null` và `conflicts[].title` thay bằng `"(đã có lịch)"` (đính chính 30/08/2026, security gate H1/M2/M3).
 
 ---
 

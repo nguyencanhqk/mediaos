@@ -19,7 +19,6 @@ export const ROOM_REMINDER_WINDOW_MINUTES = 15;
 export const ROOM_REMINDER_BATCH = 500;
 const SOURCE_MODULE = "ROOM";
 const SOURCE_ENTITY_TYPE = "room_booking";
-const DEFAULT_TZ = "Asia/Ho_Chi_Minh";
 
 interface ReminderRow {
   id: string;
@@ -112,8 +111,14 @@ export class RoomBookingReminderJobHandler implements JobHandler {
     const tzRes = await tx.execute(
       sql`select timezone from companies where id = ${companyId} limit 1`,
     );
-    const timezone =
-      (tzRes.rows as unknown as Array<{ timezone: string | null }>)[0]?.timezone ?? DEFAULT_TZ;
+    const timezone = (tzRes.rows as unknown as Array<{ timezone: string | null }>)[0]?.timezone;
+    // Thiếu hàng companies (RLS worker/GUC hỏng/company xoá) ⇒ NÉM (gate silent-failure H2) — render giờ bằng tz mặc
+    // định câm là báo xanh trên dữ liệu sai; run này thành failed và kêu ở system_job_runs.
+    if (!timezone) {
+      throw new Error(
+        `ROOM_BOOKING_REMINDER tenant=${companyId}: không đọc được companies.timezone (0 hàng) — RLS/GUC của worker?`,
+      );
+    }
     return { timezone, rows, participants };
   }
 

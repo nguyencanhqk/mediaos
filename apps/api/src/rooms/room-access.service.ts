@@ -3,6 +3,7 @@ import { eq, sql, type SQL } from "drizzle-orm";
 import type { DataScope } from "@mediaos/contracts";
 import { users } from "../db/schema/users";
 import { DataScopeService } from "../permission/data-scope.service";
+import { viewScopeDenied } from "./rooms.errors";
 import type { RoomActor, RoomRequestUser } from "./rooms.types";
 
 const ROOM = "room";
@@ -27,6 +28,8 @@ export class RoomAccessService {
 
   async resolveViewActor(user: RoomRequestUser): Promise<RoomActor> {
     const viewScope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "view", ROOM);
+    // Đường ĐỌC không thu hẹp hàng theo scope ⇒ scope hẹp hơn Company bị TỪ CHỐI, không "coi như" Company (gate M4).
+    if (!RoomAccessService.isCompany(viewScope)) throw viewScopeDenied();
     const cancelScope = await this.dataScope.resolveOrNull(
       user.id,
       user.companyId,

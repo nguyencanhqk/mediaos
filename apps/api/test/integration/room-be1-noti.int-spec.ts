@@ -32,6 +32,7 @@ import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/respo
 import { PasswordService } from "../../src/auth/password.service";
 import { OutboxWorker } from "../../src/events/outbox-worker";
 import { RoomBookingReminderJobHandler } from "../../src/notifications/room-booking-reminder.job-handler";
+import { loginPasswordFixture } from "../helpers/fixture-secrets";
 import { directPool, hasDb } from "../helpers/integration-db";
 import { drainOutboxUntilSettled } from "../helpers/outbox-drain";
 import {
@@ -51,7 +52,7 @@ import {
 } from "../helpers/seed";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
-const LOGIN_PW = "Passw0rd!room3";
+const LOGIN_PW = loginPasswordFixture("s11room3");
 
 type Scope = "Own" | "Company";
 type PairGrant = [action: string, resource: string, scope: Scope];
@@ -304,6 +305,9 @@ describe.skipIf(!hasLaneDb)("S11-ROOM-BE-1 NOTI (outbox thật) + job nhắc l�
 
     const run1 = await handler.run({ companyId: A.companyId });
     expect(run1.total, JSON.stringify(run1)).toBeGreaterThanOrEqual(1);
+    // Bộ đếm là cổng thật (gate L3): không lượt nào failed / không người nhận.
+    expect(run1.failed, JSON.stringify(run1)).toBe(0);
+    expect(run1.metadata?.noRecipient).toBe(0);
 
     const organizerNotis = await notisOf(e1User, "ROOM_BOOKING_REMINDER");
     const attendeeNotis = await notisOf(e2User, "ROOM_BOOKING_REMINDER");
@@ -317,6 +321,36 @@ describe.skipIf(!hasLaneDb)("S11-ROOM-BE-1 NOTI (outbox thật) + job nhắc l�
     expect(forSoonOrganizer[0].dedupeKey).toBe(`ROOM_BOOKING_REMINDER:${bookingId}:${startsAt}`);
     // `starts_at_local` — HH:mm dd/MM/yyyy theo companies.timezone (ROOM-DEC-004).
     expect(forSoonOrganizer[0].body).toMatch(/\d{2}:\d{2} \d{2}\/\d{2}\/\d{4}/);
+    // Giờ render THEO companies.timezone (không tz mặc định câm — gate H2): đổi tz công ty sang Pacific/Kiritimati (+14)
+    // rồi nhắc một lượt khác ⇒ giờ trong body khác giờ VN 7 tiếng.
+    await direct.query("UPDATE companies SET timezone='Pacific/Kiritimati' WHERE id=$1", [
+      A.companyId,
+    ]);
+    try {
+      const kiriRoom = await newRoom(tOa);
+      const kiri = slot(12, 30);
+      const bKiri = await book(tE1, kiriRoom.id, kiri, {});
+      expect(bKiri.status, JSON.stringify(bKiri.body)).toBe(201);
+      const runK = await handler.run({ companyId: A.companyId });
+      expect(runK.failed, JSON.stringify(runK)).toBe(0);
+      const kiriNotis = (await notisOf(e1User, "ROOM_BOOKING_REMINDER")).filter(
+        (r) => r.sourceEntityId === (bKiri.body.data.id as string),
+      );
+      expect(kiriNotis).toHaveLength(1);
+      const fmt = (tz: string) =>
+        new Intl.DateTimeFormat("en-GB", {
+          timeZone: tz,
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }).format(new Date(kiri.startsAt));
+      expect(kiriNotis[0].body).toContain(fmt("Pacific/Kiritimati"));
+      expect(kiriNotis[0].body).not.toContain(fmt("Asia/Ho_Chi_Minh"));
+    } finally {
+      await direct.query("UPDATE companies SET timezone='Asia/Ho_Chi_Minh' WHERE id=$1", [
+        A.companyId,
+      ]);
+    }
     expect(forSoonOrganizer[0].body).not.toContain("{");
 
     // Lượt sau 20′ (ngoài cửa sổ (now, now+15′]) ⇒ KHÔNG nhắc.

@@ -197,7 +197,9 @@ export class RoomsService {
         if (dto.isActive !== undefined) patch.isActive = dto.isActive;
         if (dto.sortOrder !== undefined) patch.sortOrder = dto.sortOrder;
         const updated = await this.rooms.updateTx(tx, user.companyId, room.id, patch, user.id);
-        if (!updated) throw notFoundRoom();
+        // Đã lock hàng còn sống trong CÙNG tx ⇒ 0 hàng là vi phạm bất biến nội bộ, không phải 404 (gate M1).
+        if (!updated)
+          throw new Error(`ROOM: phòng ${room.id} vừa FOR UPDATE nhưng UPDATE trả 0 hàng`);
         await this.audit.record(tx, {
           action: deactivating ? "deactivate" : "update",
           objectType: "meeting_room",
@@ -221,7 +223,8 @@ export class RoomsService {
       if (!room) throw notFoundRoom();
       await this.assertNoUpcoming(tx, user.companyId, room.id);
       const deleted = await this.rooms.softDeleteTx(tx, user.companyId, room.id, user.id);
-      if (!deleted) throw notFoundRoom();
+      if (!deleted)
+        throw new Error(`ROOM: phòng ${room.id} vừa FOR UPDATE nhưng soft-delete trả 0 hàng`);
       await this.audit.record(tx, {
         action: "delete",
         objectType: "meeting_room",

@@ -47,14 +47,17 @@ export class RoomPeopleRepository {
         ...identityColumns(this.peopleGrant(actor), { displayName: users.fullName }),
         // mã nhân viên KHÔNG phải cột danh tính (census chỉ quét email/full_name). Partial unique
         // (company_id, user_id) WHERE deleted_at IS NULL ⇒ ≤ 1 hàng sống; ORDER BY chỉ để tất định.
-        // ⚠️ Định danh CHỮ `users.id` — drizzle render `${users.id}` trong SELECT-list thành `"id"` TRẦN ⇒ subquery so
-        // với `ep.id` (memory `drizzle-sql-template-renders-columns-unqualified`; đo lại 30/08/2026 trên 0.45).
-        employeeCode: sql<string | null>`(
+        // ⚠️ Định danh CHỮ `users.id`: khi select từ MỘT bảng, drizzle 0.45 bỏ tên bảng cho Column trong `sql` ở
+        // SELECT-list (`isSingleTable` ⇒ `"id"` trần — đo `toSQL()` 30/08/2026) ⇒ `${users.id}` sẽ so với `ep.id` và
+        // trả NULL câm; trong `.where()` thì vẫn đủ `"users"."id"` (memory `drizzle-sql-template-renders-columns-unqualified`).
+        // CÙNG vị từ với displayName (security gate M2): mã nhân viên là một nửa danh tính — không được rò ở nhánh
+        // fail-closed trong khi tên đã bị che.
+        employeeCode: sql<string | null>`case when (${actor.peopleVisibleCond}) then (
           select ep.employee_code from employee_profiles ep
            where ep.user_id = users.id and ep.company_id = ${actor.companyId} and ep.deleted_at is null
            order by ep.created_at desc
            limit 1
-        )`,
+        ) else null end`,
       })
       .from(users)
       .where(

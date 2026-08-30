@@ -18,7 +18,7 @@ import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Pool } from "pg";
 import request from "supertest";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { IDEMPOTENCY_ERROR_CODES, parseRoomConflictsDetail } from "@mediaos/contracts";
 import { AppModule } from "../../src/app.module";
 import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
@@ -27,6 +27,7 @@ import { PasswordService } from "../../src/auth/password.service";
 import { DatabaseService } from "../../src/db/db.service";
 import { RoomBookingsRepository } from "../../src/rooms/room-bookings.repository";
 import { isOverlapExclusion } from "../../src/rooms/rooms.errors";
+import { loginPasswordFixture } from "../helpers/fixture-secrets";
 import { appPool, directPool, hasDb, withClient } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -40,7 +41,7 @@ import {
 } from "../helpers/seed";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
-const LOGIN_PW = "Passw0rd!room2";
+const LOGIN_PW = loginPasswordFixture("s11room2");
 
 type Scope = "Own" | "Company";
 type PairGrant = [action: string, resource: string, scope: Scope];
@@ -81,7 +82,6 @@ describe.skipIf(!hasLaneDb)(
     let tOa = "";
     let tE1 = "";
     let tE2 = "";
-    let _tE3 = ""; // e3 chỉ là attendee (token không dùng)
 
     const http = () => request(app.getHttpServer());
     const get = (t: string, u: string) => http().get(u).set("Authorization", `Bearer ${t}`);
@@ -168,7 +168,6 @@ describe.skipIf(!hasLaneDb)(
       tOa = await login(A.slug, `oa@${A.slug}.test`);
       tE1 = await login(A.slug, `e1@${A.slug}.test`);
       tE2 = await login(A.slug, `e2@${A.slug}.test`);
-      _tE3 = await login(A.slug, `e3@${A.slug}.test`);
     }, 120_000);
 
     afterAll(async () => {
@@ -363,6 +362,32 @@ describe.skipIf(!hasLaneDb)(
         expect(cnt.rows[0].n).toBe(1);
       });
 
+      it("nhánh EXCLUDE QUA SERVICE: làm mù findOverlapsTx một lần ⇒ INSERT vi phạm 23P01 ⇒ 409 ROOM-ERR-001 (không 500/25P02)", async () => {
+        const roomId = await newRoom(tOa);
+        const s = slot(3000, 60);
+        const first = await book(tE1, roomId, s);
+        expect(first.status, JSON.stringify(first.body)).toBe(201);
+        const repo = app.get(RoomBookingsRepository);
+        const spy = vi.spyOn(repo, "findOverlapsTx").mockResolvedValueOnce([]);
+        try {
+          const res = await book(tE2, roomId, s);
+          expect(res.status, JSON.stringify(res.body)).toBe(409);
+          expect(res.body.error.code).toBe("ROOM-ERR-001");
+          const parsed = parseRoomConflictsDetail(res.body.error.details);
+          expect(parsed?.malformed).toBeUndefined();
+          expect(parsed?.conflicts.map((c) => c.bookingId)).toContain(first.body.data.id);
+          // kiểm-trước bị mù đúng 1 lần ⇒ tx thứ hai (SELECT lại) dùng bản thật.
+          expect(spy).toHaveBeenCalledTimes(2);
+        } finally {
+          spy.mockRestore();
+        }
+        const n = await direct.query(
+          "SELECT count(*)::int AS n FROM room_bookings WHERE room_id=$1 AND status='Confirmed'",
+          [roomId],
+        );
+        expect(n.rows[0].n).toBe(1);
+      });
+
       it("23P01 THẬT: insertTx trực tiếp giao lượt Confirmed đã có ⇒ isOverlapExclusion(err) === true, KHÔNG 500/25P02", async () => {
         const roomId = await newRoom(tOa);
         const s = slot(1000, 60);
@@ -490,6 +515,15 @@ describe.skipIf(!hasLaneDb)(
     // ── ROOM-ERR-009 — tên phòng trùng ───────────────────────────────────────────
 
     describe("ROOM-ERR-009 — tên phòng trùng", () => {
+      it("PATCH /rooms/:id body rỗng ⇒ 400 (không UPDATE giả, không audit giả); khoá lạ ⇒ 400 (.strict())", async () => {
+        const roomId = await newRoom(tOa);
+        expect((await patch(tOa, `/rooms/${roomId}`).send({})).status).toBe(400);
+        expect((await patch(tOa, `/rooms/${roomId}`).send({ deletedAt: null })).status).toBe(400);
+        expect((await patch(tOa, `/rooms/${roomId}`).send({ location: "Tầng 9" })).status).toBe(
+          200,
+        );
+      });
+
       it("case-insensitive trùng tên ⇒ 409; xoá mềm rồi dùng lại tên ⇒ 201", async () => {
         const name = `Phòng Trùng ${Date.now()}`;
         const r1 = await post(tOa, "/rooms").send({ name, capacity: 4 });

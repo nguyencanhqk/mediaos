@@ -54,6 +54,8 @@ describe("contracts/room — DTO S11-ROOM-BE-1 (API-15)", () => {
   it("updateRoomSchema `.strict()`: khoá lạ ⇒ lỗi (không strip im lặng); partial hợp lệ", () => {
     expect(updateRoomSchema.safeParse({ name: "A", isActive: false }).success).toBe(true);
     expect(updateRoomSchema.safeParse({ deletedAt: null }).success).toBe(false);
+    // PATCH rỗng ⇒ lỗi (silent-failure gate L2 — không UPDATE/audit giả).
+    expect(updateRoomSchema.safeParse({}).success).toBe(false);
     expect(updateRoomSchema.safeParse({ companyId: "x" }).success).toBe(false);
   });
 
@@ -126,7 +128,7 @@ describe("contracts/room — DTO S11-ROOM-BE-1 (API-15)", () => {
     ).toBe(false);
   });
 
-  it("parseRoomConflictsDetail: bóc details mảng ErrorDetail ⇒ object có kiểu; sai hình ⇒ null", () => {
+  it("parseRoomConflictsDetail: bóc details mảng ErrorDetail ⇒ object có kiểu; sai hình ⇒ malformed", () => {
     const c = {
       bookingId: "11111111-1111-4111-8111-111111111111",
       title: "Họp sprint",
@@ -162,8 +164,21 @@ describe("contracts/room — DTO S11-ROOM-BE-1 (API-15)", () => {
       parseRoomConflictsDetail([
         { field: "kind", message: "overlap", rule: "room" },
         { field: "conflicts", message: "{not-json", rule: "room" },
-      ]),
-    ).toBeNull();
+      ])?.malformed,
+    ).toBe(true);
     expect(ROOM_CONFLICTS_MAX).toBe(20);
+    // Hỏng hình ⇒ malformed:true (phân biệt với "không phải overlap" = null) — gate M3.
+    expect(
+      parseRoomConflictsDetail([
+        { field: "kind", message: "overlap", rule: "room" },
+        { field: "conflicts", message: "{[", rule: "room" },
+      ]),
+    ).toEqual({ kind: "overlap", conflicts: [], nextFreeFrom: null, malformed: true });
+    expect(
+      parseRoomConflictsDetail([
+        { field: "kind", message: "overlap", rule: "room" },
+        { field: "conflicts", message: JSON.stringify([{}]), rule: "room" },
+      ])?.malformed,
+    ).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import {
   ROOM_CONFLICTS_MAX,
   ROOM_MAX_ATTENDEES,
@@ -50,6 +50,16 @@ import { collectPeopleIds, toBookingDto, toConflictDto, toMyBookingDto } from ".
 import { RoomsRepository } from "./rooms.repository";
 import type { RoomActor, RoomRequestUser } from "./rooms.types";
 
+/** CHECK cặp huỷ bảo đảm `cancelled_at` không null sau `cancelTx`; null ⇒ vi phạm bất biến, NÉM (gate L1, không ép kiểu). */
+function cancelledAtOf(row: { id: string; cancelledAt: Date | null }): Date {
+  if (!row.cancelledAt)
+    throw new Error(`ROOM: booking ${row.id} Cancelled nhưng cancelled_at NULL`);
+  return new Date(row.cancelledAt);
+}
+
+/** Tiêu đề thay thế trong `conflicts[]` khi actor không có `view@Company` (SPEC-14 §12 ROOM-ERR-001). */
+export const CONFLICT_TITLE_MASKED = "(đã có lịch)";
+
 interface BookingSlot {
   roomId: string;
   startsAt: Date;
@@ -72,6 +82,8 @@ interface BookingSlot {
  */
 @Injectable()
 export class RoomBookingsService {
+  private readonly logger = new Logger(RoomBookingsService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly access: RoomAccessService,
@@ -175,11 +187,15 @@ export class RoomBookingsService {
     if (attendees.length > ROOM_MAX_ATTENDEES) throw attendeeError("too-many-attendees");
 
     const slot: BookingSlot = { roomId: dto.roomId, startsAt, endsAt };
+    let roomName = "";
     try {
       return await this.db.withTenant(user.companyId, async (tx) => {
         // (2) Phòng — FOR UPDATE tuần tự hoá với vô hiệu/xoá phòng và với lượt đặt khác cùng phòng.
+        // tz đọc TRƯỚC khi khoá phòng (database gate M2 — rút ngắn thời gian giữ FOR UPDATE).
+        const tz = await this.people.companyTimezoneTx(tx, user.companyId);
         const room = await this.rooms.lockAliveByIdTx(tx, user.companyId, dto.roomId);
         if (!room) throw notFoundRoom();
+        roomName = room.name;
         if (!room.isActive) {
           throw conflict(
             ROOM_ERR_CODE.ROOM_NOT_BOOKABLE,
@@ -268,13 +284,17 @@ export class RoomBookingsService {
           },
         });
         const detail = await this.bookings.findDetailTx(tx, user.companyId, row.id);
-        if (!detail) throw notFoundBooking(); // không thể xảy ra trong cùng tx — fail-loud thay vì trả rỗng
+        // Vừa INSERT trong CÙNG tx ⇒ không thấy là vi phạm bất biến (JOIN meeting_rooms/RLS) — 500 có stack, không 404 câm.
+        if (!detail) {
+          throw new Error(
+            `ROOM: booking ${row.id} vừa INSERT nhưng findDetailTx không thấy — kiểm JOIN meeting_rooms/RLS`,
+          );
+        }
         const people = await this.people.namesByUserIdsTx(
           tx,
           actor,
           collectPeopleIds([detail], new Map([[row.id, attendees]])),
         );
-        const tz = await this.people.companyTimezoneTx(tx, user.companyId);
         await this.outbox.enqueue(tx, {
           eventType: ROOM_EVENT_CONFIRMED,
           payload: roomBookingConfirmedPayload(
@@ -295,10 +315,23 @@ export class RoomBookingsService {
         });
       });
     } catch (err) {
-      if (!isOverlapExclusion(err)) throw mapRoomPgError(err) ?? err;
-      // Đường EXCLUDE — tx thứ nhất đã rollback; mở tx MỚI chỉ để SELECT rồi ném cùng 409 ROOM-ERR-001.
+      if (!isOverlapExclusion(err)) {
+        const mapped = mapRoomPgError(err);
+        if (!mapped) {
+          // Lỗi PG/khác ngoài hợp đồng ⇒ ném nguyên bản (filter ⇒ 500) — để vết ở đây cho điều tra (gate M5).
+          this.logger.error(
+            `ROOM create room=${dto.roomId} actor=${user.id}: lỗi ngoài hợp đồng — ${err instanceof Error ? err.message : String(err)}`,
+          );
+          throw err;
+        }
+        throw mapped;
+      }
+      // Đường EXCLUDE (23P01): kiểm-trước trượt dù đã FOR UPDATE ⇒ có writer ngoài service (bất thường vận hành) — LOG.
+      // tx thứ nhất đã rollback; mở tx MỚI chỉ để SELECT rồi ném cùng 409 ROOM-ERR-001.
+      this.logger.warn(
+        `ROOM create: EXCLUDE 23P01 sau kiểm-trước — room=${dto.roomId} startsAt=${startsAt.toISOString()} actor=${user.id}`,
+      );
       throw await this.db.withTenant(user.companyId, async (tx) => {
-        const room = await this.rooms.findAnyByIdTx(tx, user.companyId, dto.roomId);
         const overlaps = await this.bookings.findOverlapsTx(
           tx,
           user.companyId,
@@ -306,7 +339,15 @@ export class RoomBookingsService {
           startsAt,
           endsAt,
         );
-        return this.buildOverlapError(tx, actor, room?.name ?? "?", slot, overlaps);
+        if (overlaps.length === 0) {
+          // Lượt chặn biến mất giữa hai tx (huỷ xen giữa) ⇒ KHÔNG gợi ý chính startsAt (FE lặp vô hạn): 409 conflicts
+          // rỗng + nextFreeFrom null để FE thử lại (gate M2).
+          this.logger.warn(
+            `ROOM create: 23P01 nhưng findOverlapsTx trống — room=${dto.roomId} (transient)`,
+          );
+          return overlapError(roomName || "?", [], null);
+        }
+        return this.buildOverlapError(tx, actor, roomName || "?", slot, overlaps);
       });
     }
   }
@@ -355,13 +396,14 @@ export class RoomBookingsService {
         },
         after: {
           status: "Cancelled",
-          cancelledAt: new Date(updated.cancelledAt as Date).toISOString(),
+          cancelledAt: cancelledAtOf(updated).toISOString(),
           cancelledBy: user.id,
           cancelReason: updated.cancelReason ?? null,
         },
       });
       const detail = await this.bookings.findDetailTx(tx, user.companyId, id);
-      if (!detail) throw notFoundBooking();
+      if (!detail)
+        throw new Error(`ROOM: booking ${id} vừa UPDATE (cancel) nhưng findDetailTx không thấy`);
       const attendees = await this.bookings.attendeesByBookingIdsTx(tx, user.companyId, [id]);
       const people = await this.people.namesByUserIdsTx(
         tx,
@@ -432,9 +474,15 @@ export class RoomBookingsService {
       slot.endsAt.getTime() - slot.startsAt.getTime(),
       day.map((d) => ({ startsAt: new Date(d.startsAt), endsAt: new Date(d.endsAt) })),
     );
+    // Actor KHÔNG có `view@Company` (role tuỳ biến chỉ `book`) ⇒ tiêu đề lượt của người khác bị che (gate M3) —
+    // cùng luật với tên người tổ chức; khung giờ vẫn trả (đó là điều cần biết để chọn giờ khác).
+    const showTitle = RoomAccessService.isCompany(actor.viewScope);
     return overlapError(
       roomName,
-      capped.map((o) => toConflictDto(o, people)),
+      capped.map((o) => {
+        const dto = toConflictDto(o, people);
+        return showTitle ? dto : { ...dto, title: CONFLICT_TITLE_MASKED };
+      }),
       nextFreeFrom,
     );
   }

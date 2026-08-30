@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { sql, type SQL } from "drizzle-orm";
+import { ROOM_WINDOW_MAX_ROWS } from "@mediaos/contracts";
 import type { TenantTx } from "../db/db.service";
 import {
   roomBookingAttendees,
@@ -55,13 +56,6 @@ export interface BookingStatusRow {
   endsAt: Date;
   organizerUserId: string;
   startsAt: Date;
-}
-
-export interface ReminderRow {
-  id: string;
-  title: string;
-  startsAt: Date;
-  roomName: string;
 }
 
 /** Cột chọn dùng chung (raw SQL — alias `b` + `r`). */
@@ -169,7 +163,7 @@ export class RoomBookingsRepository {
     return (res.rows as unknown as BookingStatusRow[])[0];
   }
 
-  /** Người tham dự của nhiều lượt (MỘT câu `= ANY`) — `bookingId → userId[]` theo thứ tự chèn. */
+  /** Người tham dự của nhiều lượt (MỘT câu `= ANY`) — `bookingId → userId[]`. Thứ tự TẤT ĐỊNH (created_at, user_id) — KHÔNG phải thứ tự chèn (multi-row INSERT có cùng now()). */
   async attendeesByBookingIdsTx(
     tx: TenantTx,
     companyId: string,
@@ -181,7 +175,7 @@ export class RoomBookingsRepository {
       select a.booking_id as "bookingId", a.user_id as "userId"
         from room_booking_attendees a
        where a.company_id = ${companyId} and a.booking_id = any(${sql.param([...bookingIds])}::uuid[])
-       order by a.created_at asc, a.id asc
+       order by a.created_at asc, a.user_id asc
     `);
     for (const r of res.rows as unknown as Array<{ bookingId: string; userId: string }>) {
       const list = out.get(r.bookingId) ?? [];
@@ -211,9 +205,10 @@ export class RoomBookingsRepository {
         from room_bookings b
         join meeting_rooms r on r.id = b.room_id and r.company_id = ${companyId}
        where b.company_id = ${companyId}
-         and tstzrange(b.starts_at, b.ends_at, '[)') && tstzrange(${f.from}::timestamptz, ${f.to}::timestamptz, '[)')
+         and b.starts_at < ${f.to}::timestamptz and b.ends_at > ${f.from}::timestamptz
          and ${this.statusCond(f.status)} and ${roomCond} and ${orgCond}
        order by b.starts_at asc, r.sort_order asc, r.name asc, b.id asc
+       limit ${ROOM_WINDOW_MAX_ROWS}
     `);
     return res.rows as unknown as RoomBookingRow[];
   }
@@ -246,9 +241,10 @@ export class RoomBookingsRepository {
         from room_bookings b
         join meeting_rooms r on r.id = b.room_id and r.company_id = ${companyId}
        where b.company_id = ${companyId}
-         and tstzrange(b.starts_at, b.ends_at, '[)') && tstzrange(${f.from}::timestamptz, ${f.to}::timestamptz, '[)')
+         and b.starts_at < ${f.to}::timestamptz and b.ends_at > ${f.from}::timestamptz
          and ${statusCond} and ${roleCond}
        order by b.starts_at asc, b.id asc
+       limit ${ROOM_WINDOW_MAX_ROWS}
     `);
     return res.rows as unknown as MyRoomBookingRow[];
   }
@@ -275,28 +271,5 @@ export class RoomBookingsRepository {
                  created_at as "createdAt", updated_at as "updatedAt", updated_by as "updatedBy"
     `);
     return (res.rows as unknown as RoomBooking[])[0];
-  }
-
-  /**
-   * Job nhắc (ROOM-DEC-004): lượt `Confirmed` có `starts_at ∈ (now, now + 15′]` — index `idx_room_bookings_room_start`
-   * không khớp tiền tố (cột 2 là room_id) ⇒ dùng `idx_room_bookings_company_start (company_id, starts_at)`. LIMIT
-   * chống unbounded read (mỗi nhịp 60s; dedupe (booking, startsAt) ở NOTI).
-   */
-  async findRemindersTx(
-    tx: TenantTx,
-    companyId: string,
-    windowMinutes: number,
-    limit: number,
-  ): Promise<ReminderRow[]> {
-    const res = await tx.execute(sql`
-      select b.id, b.title, b.starts_at as "startsAt", r.name as "roomName"
-        from room_bookings b
-        join meeting_rooms r on r.id = b.room_id and r.company_id = ${companyId}
-       where b.company_id = ${companyId} and b.status = 'Confirmed'
-         and b.starts_at > now() and b.starts_at <= now() + make_interval(mins => ${windowMinutes}::int)
-       order by b.starts_at asc, b.id asc
-       limit ${limit}
-    `);
-    return res.rows as unknown as ReminderRow[];
   }
 }

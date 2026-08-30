@@ -41,6 +41,8 @@ export const ROOM_BOOKING_PAST_TOLERANCE_MINUTES = 5;
 export const ROOM_BOOKING_MAX_AHEAD_DAYS = 90;
 /** Cửa sổ TRA CỨU lịch `[from, to)` ≤ 31 ngày (API-15 §6.12); usage-summary ≤ 366 ngày. */
 export const ROOM_WINDOW_MAX_DAYS = 31;
+/** Trần HÀNG cho lịch phẳng trong cửa sổ (database gate H1 — không unbounded read); vượt ⇒ FE thu hẹp cửa sổ. */
+export const ROOM_WINDOW_MAX_ROWS = 2000;
 export const ROOM_USAGE_WINDOW_MAX_DAYS = 366;
 /** SPEC-14 §12 ROOM-ERR-006 `too-many-attendees`. */
 export const ROOM_MAX_ATTENDEES = 50;
@@ -122,7 +124,9 @@ export type CreateRoomDto = z.infer<typeof createRoomSchema>;
 export const updateRoomSchema = createRoomSchema
   .partial()
   .extend({ isActive: z.boolean().optional() })
-  .strict();
+  .strict()
+  // PATCH rỗng ⇒ 400 (silent-failure gate L2): không UPDATE vô nghĩa + không ghi audit "update" giả.
+  .refine((o) => Object.keys(o).length > 0, { message: "Cần ít nhất một trường để sửa" });
 export type UpdateRoomDto = z.infer<typeof updateRoomSchema>;
 
 export const roomAvailabilityQuerySchema = z.object({
@@ -301,6 +305,8 @@ export const roomConflictsDetailSchema = z.object({
   kind: z.literal("overlap"),
   conflicts: z.array(roomBookingConflictSchema).max(ROOM_CONFLICTS_MAX),
   nextFreeFrom: z.string().nullable(),
+  /** `true` khi server trả details ROOM-ERR-001 nhưng HỎNG HÌNH (JSON/schema) — bug, không phải "không trùng". */
+  malformed: z.boolean().optional(),
 });
 export type RoomConflictsDetailDto = z.infer<typeof roomConflictsDetailSchema>;
 
@@ -315,11 +321,19 @@ export function parseRoomConflictsDetail(
   if (!details) return null;
   const get = (field: string) => details.find((d) => d.field === field)?.message;
   if (get("kind") !== "overlap") return null;
+  // `null` CHỈ cho "không phải overlap"; hỏng hình (JSON/schema) ⇒ `malformed: true` để FE/log phân biệt bug
+  // với trạng thái bình thường (silent-failure gate M3).
+  const MALFORMED: RoomConflictsDetailDto = {
+    kind: "overlap",
+    conflicts: [],
+    nextFreeFrom: null,
+    malformed: true,
+  };
   let conflicts: unknown;
   try {
     conflicts = JSON.parse(get("conflicts") ?? "[]");
   } catch {
-    return null;
+    return MALFORMED;
   }
   const next = get("nextFreeFrom");
   const parsed = roomConflictsDetailSchema.safeParse({
@@ -327,5 +341,5 @@ export function parseRoomConflictsDetail(
     conflicts,
     nextFreeFrom: next === undefined || next === "null" ? null : next,
   });
-  return parsed.success ? parsed.data : null;
+  return parsed.success ? parsed.data : MALFORMED;
 }

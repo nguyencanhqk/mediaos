@@ -21,10 +21,12 @@ import { Test } from "@nestjs/testing";
 import type { Pool } from "pg";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { parseRoomConflictsDetail } from "@mediaos/contracts";
 import { AppModule } from "../../src/app.module";
 import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
+import { loginPasswordFixture } from "../helpers/fixture-secrets";
 import { directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -38,7 +40,7 @@ import {
 } from "../helpers/seed";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
-const LOGIN_PW = "Passw0rd!room1";
+const LOGIN_PW = loginPasswordFixture("s11room1");
 
 type Scope = "Own" | "Company";
 type PairGrant = [action: string, resource: string, scope: Scope];
@@ -63,6 +65,17 @@ const ROOM_VIEW_ONLY: PairGrant[] = [
   ["access", "room", "Own"],
   ["view", "room", "Company"],
 ];
+/** Role tuỳ biến: `book`/`cancel` mà KHÔNG `view` — nhánh fail-closed của điểm chiếu danh tính (gate H1). */
+const ROOM_BOOK_NO_VIEW: PairGrant[] = [
+  ["access", "room", "Own"],
+  ["book", "room", "Own"],
+  ["cancel", "room-booking", "Own"],
+];
+/** Role tuỳ biến: `view` ở scope Own — đường đọc phải TỪ CHỐI (gate M4, SPEC-14 §13.6). */
+const ROOM_VIEW_OWN: PairGrant[] = [
+  ["access", "room", "Own"],
+  ["view", "room", "Own"],
+];
 /** `np` KHÔNG có cặp nào — kể cả `access` (SPEC-14 §11 ghi chú "NONE"). */
 
 type ErrDetail = { field: string; message: string; rule?: string };
@@ -85,7 +98,8 @@ describe.skipIf(!hasLaneDb)(
     let e1User = ""; // employee @A — book/cancel Own, CÓ employee_profiles
     let e2User = ""; // employee @A — book/cancel Own, KHÔNG có employee_profiles
     let voUser = ""; // view-only @A — chỉ view
-    let _npUser = ""; // KHÔNG cặp nào @A (chỉ cần token)
+    let bnUser = ""; // book/cancel KHÔNG view @A (gate H1)
+    let vwUser = ""; // view@Own @A (gate M4)
     let cbUser = ""; // office-admin-tương-đương @B (cross-tenant)
 
     let tOa = "";
@@ -93,6 +107,8 @@ describe.skipIf(!hasLaneDb)(
     let tE2 = "";
     let tVo = "";
     let tNp = "";
+    let tBn = "";
+    let tVw = "";
     let tCb = "";
 
     let rMain = ""; // phòng dùng chung cho các ca đọc/scope (không chạm chống-trùng — booking spec riêng lo)
@@ -190,8 +206,11 @@ describe.skipIf(!hasLaneDb)(
       e1User = await mk("e1");
       e2User = await mk("e2");
       voUser = await mk("vo");
-      _npUser = await mk("np");
+      await mk("np"); // KHÔNG cặp nào — chỉ cần token
+      bnUser = await mk("bn");
+      vwUser = await mk("vw");
       cbUser = await seedUser(direct, B.companyId, `cb@${B.slug}.test`, hash);
+      await direct.query("UPDATE users SET full_name = $2 WHERE id = $1", [bnUser, "Người đặt BN"]);
 
       await direct.query("UPDATE users SET full_name = $2 WHERE id = $1", [e1User, "Nhân viên E1"]);
       await direct.query("UPDATE users SET full_name = $2 WHERE id = $1", [e2User, "Nhân viên E2"]);
@@ -207,6 +226,8 @@ describe.skipIf(!hasLaneDb)(
       await grantPairs(A.companyId, e1User, "e1", ROOM_EMPLOYEE);
       await grantPairs(A.companyId, e2User, "e2", ROOM_EMPLOYEE);
       await grantPairs(A.companyId, voUser, "vo", ROOM_VIEW_ONLY);
+      await grantPairs(A.companyId, bnUser, "bn", ROOM_BOOK_NO_VIEW);
+      await grantPairs(A.companyId, vwUser, "vw", ROOM_VIEW_OWN);
       // npUser: KHÔNG grant gì cả.
       await grantPairs(B.companyId, cbUser, "cb", ROOM_OFFICE_ADMIN);
 
@@ -215,6 +236,8 @@ describe.skipIf(!hasLaneDb)(
       tE2 = await login(A.slug, `e2@${A.slug}.test`);
       tVo = await login(A.slug, `vo@${A.slug}.test`);
       tNp = await login(A.slug, `np@${A.slug}.test`);
+      tBn = await login(A.slug, `bn@${A.slug}.test`);
+      tVw = await login(A.slug, `vw@${A.slug}.test`);
       tCb = await login(B.slug, `cb@${B.slug}.test`);
 
       rMain = await newRoom(tOa, "Phòng Scope Main");
@@ -448,6 +471,65 @@ describe.skipIf(!hasLaneDb)(
         const withProfile = await bookRoom(tE1, rMain);
         const d2 = await get(tOa, `/room-bookings/${withProfile.id}`);
         expect(d2.body.data.organizer.employeeCode).toBe("NV-E1");
+      });
+
+      it("role bn (book/cancel, KHÔNG view) ⇒ FAIL-CLOSED: POST 201, organizer = chính mình có tên, attendee → displayName/employeeCode null; conflicts[] che organizerName + title", async () => {
+        // ALLOW: đặt được (cặp gate `book` có).
+        const own = await bookRoom(tBn, rMain, { attendeeUserIds: [e1User] });
+        const dto = own.body as {
+          organizer: { displayName: string | null; employeeCode: string | null };
+          attendees: Array<{
+            userId: string;
+            displayName: string | null;
+            employeeCode: string | null;
+          }>;
+          startsAt: string;
+          endsAt: string;
+        };
+        expect(dto.organizer.displayName).toBe("Người đặt BN");
+        expect(dto.attendees[0].userId).toBe(e1User);
+        // DENY (danh tính người khác): e1 CÓ tên + CÓ mã NV-E1, nhưng bn không có `view` ⇒ cả hai về null.
+        expect(dto.attendees[0].displayName).toBeNull();
+        expect(dto.attendees[0].employeeCode).toBeNull();
+        // Trùng lịch với chính lượt trên ⇒ 409 nhưng conflicts[] không lộ tên tổ chức/tiêu đề của người khác.
+        const e1Own = await bookRoom(tE1, rMain);
+        const clash = await post(tBn, "/room-bookings").send({
+          roomId: rMain,
+          title: "x",
+          startsAt: (e1Own.body as { startsAt: string }).startsAt,
+          endsAt: (e1Own.body as { endsAt: string }).endsAt,
+        });
+        expect(clash.status, JSON.stringify(clash.body)).toBe(409);
+        const parsed = parseRoomConflictsDetail(clash.body.error.details);
+        expect(parsed?.conflicts.map((c) => c.bookingId)).toContain(e1Own.id);
+        for (const c of parsed?.conflicts ?? []) {
+          expect(c.organizerName).toBeNull();
+          expect(c.title).toBe("(đã có lịch)");
+        }
+        // ĐỐI CHỨNG: cùng câu hỏi, e2 (view@Company) thấy tên + tiêu đề thật.
+        const clash2 = await post(tE2, "/room-bookings").send({
+          roomId: rMain,
+          title: "x",
+          startsAt: (e1Own.body as { startsAt: string }).startsAt,
+          endsAt: (e1Own.body as { endsAt: string }).endsAt,
+        });
+        expect(clash2.status).toBe(409);
+        const c2 = parseRoomConflictsDetail(clash2.body.error.details)?.conflicts.find(
+          (c) => c.bookingId === e1Own.id,
+        );
+        expect(c2?.organizerName).toBe("Nhân viên E1");
+        expect(c2?.title).toBe("Họp");
+        // Đường đọc: bn không có `view` ⇒ 403 guard (không phải 200 với tên bị che).
+        expect((await get(tBn, `/room-bookings/${own.id}`)).status).toBe(403);
+      });
+
+      it("role vw (view@Own — hẹp hơn Company) ⇒ đường đọc TỪ CHỐI 403 AUTH-ERR-SCOPE-DENIED (fail-closed, không coi như Company)", async () => {
+        const res = await get(tVw, "/rooms");
+        expect(res.status, JSON.stringify(res.body)).toBe(403);
+        expect(res.body.error.code).toBe("AUTH-ERR-SCOPE-DENIED");
+        expect((await get(tVw, "/me/room-bookings?date=2026-09-02")).status).toBe(403);
+        // ĐỐI CHỨNG: vo (view@Company) ⇒ 200.
+        expect((await get(tVo, "/rooms")).status).toBe(200);
       });
 
       it("attendee đã xoá mềm ⇒ 422 ROOM-ERR-006 attendee-not-found", async () => {

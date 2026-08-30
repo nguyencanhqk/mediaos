@@ -249,3 +249,25 @@ withTenant(c, tx):
 **BLOCK 5 — đã vá vào plan:** B1 điểm chiếu danh tính buộc vào cặp ghi ⇒ `organizerName`/`displayName` null cho employee → căn cứ = `view` scope, basis `identity-gated`, bỏ nâng trần/pin (§1.1.5, §4, §7.3) · B2 `activeUserStatusTx` thiếu `company_id` + `deleted_at` (§1.1.7) · B3 `ParseUUIDPipe` thiếu ở 006/008/012 (§2) · B4 pseudo-code bắt 23P01 trong tx ⇒ 25P02 (§1.1.4, §5.1) · B5 LEFT JOIN `employee_profiles` thành INNER (§1.1.7).
 **Cảnh báo 8 — H1 đọc lại sau UPDATE 0 hàng (§1.1.8) · H2 schema + trần `conflicts` + ví dụ doc (§1.1.2) · H3 lấy tz trong tx (§5.1/§5.2) · H4 job 0 recipient = ok (§1.1.10) · H5 `findDayBookingsTx` overlap (đã đúng trong code) · H6 `access:room` không gác route (§7.1a) · H7 SPEC-14 §10 lệch API-15 (§1.1.9, §8) · H8 test bất biến #2 (§7.1).**
 **M/L:** M1 inactive bằng `direct` UPDATE · M2 không `@Optional()` + đính chính §13.5 · M3 throttle = scheduler lặp company · M4 0 recipient CONFIRMED assert · M5 `::float8` · L1 `addDaysToLocalDate` (đã dùng) · L2 equipment ≤ 20 + escape ILIKE (đã có) · L3 kind 6 ghi rõ · L4 rollback · L5 hai khối JSON.
+
+---
+
+## 12. Kết quả thi công + FULL gate (30/08/2026)
+
+| Mục | Kết quả |
+| --- | --- |
+| Code | `apps/api/src/rooms/**` 17 file (3 controller · 13 route · `room-time.ts` thuần · `rooms.errors.ts` · access/people/2 repository/2 service/mapper) + `notifications/room-{audience.reader,noti-bridge.registrar,booking-reminder.job-handler}.ts` + contracts `room.ts` (DTO/response, `roomConflictsDetailSchema` + `parseRoomConflictsDetail`, `ROOM_WINDOW_MAX_ROWS`) |
+| Census/ratchet | route 494→**507** (gated 468, ungated 27/needVerdict 39 giữ) · `API_MODULE_TAGS` ROOM · identity-projection +1 verdict `identity-gated`, trần 14→**15** có chủ đích · param-uuid = 1 · body-validation · openapi-contract · route-http-coverage · noti-seed-catalog (registrar boot) đều xanh |
+| Test | 3 int-spec **69 ca** trên `LANE_DB=mediaos_roombe1` (deny 4 cặp + ALLOW · đặt hộ/huỷ Own-Company · cross-tenant 404 ×6 · `:id` 400 · role `book`-không-`view` fail-closed (tên/mã null, conflicts che) · `view@Own` ⇒ 403 · 002 5 kind · 004/005/006/007/008/009 · race đặt + race huỷ · 23P01 thật + **nhánh EXCLUDE qua service** (spy `findOverlapsTx`) · bất biến #2 42501/23514 · TZ `/me` + job render theo tz công ty (Kiritimati) · idempotency 3 ca · PATCH rỗng 400 · NOTI dedupe/actor-exclusion/job 2 lần/bộ đếm) + unit `room-time` 17 · `rooms.errors` 12 · `rooms.mapper` 9 · contracts `room.spec` 10 |
+| `check.sh` | `--quick` XANH · `--all --lane-db=roombe1` XANH (commit gốc `44bddd23`; chạy lại sau vá gate — xem §12.1) |
+| FULL gate | **security-reviewer BLOCK→vá:** H1 nhánh fail-closed identity chưa test + verdict viện dẫn test không tồn tại → thêm role `bn`/`vw` + sửa reason · M2 `employeeCode` không qua cổng → bọc cùng `case when` · M3 `conflicts[].title` phơi → che `"(đã có lịch)"` khi `!isCompany(viewScope)` · M4 `view@Own` coi như Company → 403 fail-closed (đính chính SPEC-14 §13.6) · L5 `LOGIN_PW` literal → `loginPasswordFixture` · L6 biến thừa. **database-reviewer PASS có điều kiện:** H1 vị từ cửa sổ không sargable + không trần → `starts_at < to AND ends_at > from` + `LIMIT ROOM_WINDOW_MAX_ROWS=2000` · M1 `findRemindersTx` chết → xoá · M2 tz đọc trước `FOR UPDATE` · M3 attendees order tất định `(created_at, user_id)` · L1 comment drizzle (SELECT-list single-table bỏ tên bảng) · **nợ:** M4 `canCancel` dùng đồng hồ JS (gợi ý; cổng thật là `now()` DB) · L2 23P01 với overlaps rỗng → trả 409 conflicts rỗng + log (không retry) · L3 GIN cho `equipment @>`. **silent-failure-hunter PASS có điều kiện:** H1 test nhánh EXCLUDE qua service · H2 job tz thiếu ⇒ NÉM (không default câm) + test tz khác · M1 trạng thái bất khả thi ⇒ `Error` (500 có stack) thay 404 · M2 log 23P01 + `roomName` hoist · M3 `parseRoomConflictsDetail` phân biệt `malformed` · M4 = DB M1 · M5 Logger ở `RoomBookingsService` · M6 = security H1 · L1 `cancelledAtOf` ném · L2 PATCH rỗng ⇒ 400 · L3 assert bộ đếm job · L4 `{cause}` cho lỗi map |
+| Lệch doc có chủ đích (đã đính chính) | API-15 §5.2/§7.2/§7.3/§7.4 · SPEC-14 §10/§12/§13.5/§13.6/§17 |
+
+### 12.1 Nợ ghi lại (ngoài WO, không chặn merge)
+
+- `canCancel`/`isCompleted` tính bằng đồng hồ API (gợi ý cho FE); cổng thật ở `cancelTx` dùng `now()` DB — lệch đồng hồ hai máy ⇒ FE có thể thấy `canCancel:true` rồi nhận 409 `already-ended` (DB gate M4). Vá chung: lấy `now()` từ DB trong tx.
+- Đường 23P01 với `findOverlapsTx` trống (lượt chặn huỷ xen giữa) trả 409 `conflicts: []`, `nextFreeFrom: null` + WARN — FE thử lại; không auto-retry INSERT (DB gate L2).
+- `equipment @> $::text[]` chưa có GIN (DB gate L3) — cardinality phòng nhỏ.
+- Vị từ cửa sổ chỉ sargable một chiều (`starts_at < to`); cận dưới cần CHECK thời lượng ở DB (migration sau) mới dùng được `(company_id, starts_at)` đầy đủ (DB gate H1 phần 2).
+- `RoomAccessService` gọi `resolveOrNull` 2–3 lần/request (nested connection khuôn GOAL/ASSET) — nợ chung.
+- FE-1: `PERMISSION_CODE_TO_PAIR` 5 mã dotted ROOM.* + bật `modules.ROOM`.

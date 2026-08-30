@@ -131,6 +131,19 @@ export const bookOnBehalfDenied = (): ForbiddenException =>
     ),
   );
 
+/**
+ * `('view','room')` ở scope HẸP HƠN Company (role tuỳ biến — không role seed nào) — 403 `AUTH-ERR-SCOPE-DENIED`
+ * FAIL-CLOSED (security gate M4): lịch phòng là dữ liệu dùng chung ở mức company (SPEC-14 §11/§13.6); đường đọc
+ * KHÔNG thu hẹp hàng theo Own/Department nên không được để scope hẹp "trông như" Company (`ui-promises-backend-never-reads`).
+ */
+export const viewScopeDenied = (): ForbiddenException =>
+  new ForbiddenException(
+    roomErrorBody(
+      AUTH_ERR_SCOPE_DENIED,
+      "AUTH-ERR-SCOPE-DENIED: quyền xem phòng họp chỉ hợp lệ ở phạm vi Company (lịch là dữ liệu dùng chung).",
+    ),
+  );
+
 /** `cancel@Own` trên lượt người khác — 403 `AUTH-ERR-SCOPE-DENIED` (SPEC-14 §13.3). Mã đặt trong payload để lên dây. */
 export const cancelScopeDenied = (): ForbiddenException =>
   new ForbiddenException(roomErrorBody(AUTH_ERR_SCOPE_DENIED, ROOM_ERR.SCOPE_DENIED_CANCEL));
@@ -196,13 +209,24 @@ export function mapRoomPgError(err: unknown, ctx: { name?: string } = {}): HttpE
   if (e.code === "23505") {
     switch (constraint) {
       case ROOM_NAME_UNIQUE_CONSTRAINT:
-        return conflict(
-          ROOM_ERR_CODE.NAME_TAKEN,
-          ROOM_ERR.NAME_TAKEN(ctx.name ?? "?"),
-          roomDetails("name-taken"),
+        // `{ cause: err }` giữ stack driver PG cho log (silent-failure gate L4).
+        return new ConflictException(
+          roomErrorBody(
+            ROOM_ERR_CODE.NAME_TAKEN,
+            ROOM_ERR.NAME_TAKEN(ctx.name ?? "?"),
+            roomDetails("name-taken"),
+          ),
+          { cause: err },
         );
       case ATTENDEE_UNIQUE_CONSTRAINT:
-        return attendeeError("attendee-duplicate");
+        return new UnprocessableEntityException(
+          roomErrorBody(
+            ROOM_ERR_CODE.ATTENDEE,
+            ROOM_ERR.ATTENDEE["attendee-duplicate"],
+            roomDetails("attendee-duplicate"),
+          ),
+          { cause: err },
+        );
       default:
         return null;
     }
