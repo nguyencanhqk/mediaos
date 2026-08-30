@@ -34,9 +34,15 @@ import { AuditModule } from "../foundation/audit/audit.module";
 // thức MỘT con số với /goals/tree) · OrgModule (HrDepartmentService.listDepartments — tên phòng hiển thị).
 import { GoalsModule } from "../goals/goals.module";
 import { OrgModule } from "../org/org.module";
+// S11-OFFICE-DASH-1 (additive): 2 module nguồn cho ROOM_TODAY / ASSET_SUMMARY — AssetsModule
+// (AssetsService.summary = đúng công thức GET /assets/summary) · RoomsModule (RoomBookingsService.listMine
+// = đúng GET /me/room-bookings?date=…). Cả hai KHÔNG import DashboardModule ⇒ không circular-dep.
+import { AssetsModule } from "../assets/assets.module";
+import { RoomsModule } from "../rooms/rooms.module";
 import { DashboardWidgetDataController } from "./dashboard-widget-data.controller";
 import { DashboardWidgetDataService } from "./dashboard-widget-data.service";
 import { DashboardWidgetHandlersService } from "./dashboard-widget-handlers.service";
+import { DashboardWidgetOfficeHandlers } from "./dashboard-widget-office.handlers";
 import { DashboardWidgetCacheService } from "./dashboard-widget-cache.service";
 // S4-DASH-BE-3 (additive): config CRUD — controller THỨ TƯ (/configs + /configs/:id), không đụng khối trên.
 import { DashboardConfigController } from "./dashboard-config.controller";
@@ -78,6 +84,9 @@ import { DashboardMvRefreshJobHandler } from "./dashboard-mv-refresh.job-handler
     // S5-GOAL-DASH-1 (additive): + 2 module nguồn cho GOAL_PROGRESS.
     GoalsModule,
     OrgModule,
+    // S11-OFFICE-DASH-1 (additive): + 2 module nguồn cho ROOM_TODAY / ASSET_SUMMARY.
+    AssetsModule,
+    RoomsModule,
   ],
   controllers: [
     DashboardController,
@@ -103,6 +112,8 @@ import { DashboardMvRefreshJobHandler } from "./dashboard-mv-refresh.job-handler
     DashboardWidgetDataService,
     DashboardWidgetHandlersService,
     DashboardWidgetCacheService,
+    // S11-OFFICE-DASH-1 (additive): handler ROOM_TODAY / ASSET_SUMMARY (file riêng, cùng MỘT registry).
+    DashboardWidgetOfficeHandlers,
     // S4-DASH-BE-3 (additive): config CRUD service.
     DashboardConfigService,
     // S4-INT-2 (additive): internal cache invalidation service.

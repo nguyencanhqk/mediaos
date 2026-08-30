@@ -1,5 +1,4 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
-import { sql } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
 import { PermissionService } from "../permission/permission.service";
 import { DataScopeService } from "../permission/data-scope.service";
@@ -19,11 +18,15 @@ import { LeaveReadService } from "../leave/leave-read.service";
 import { LeaveCalendarService } from "../leave/leave-calendar.service";
 import { ContractService } from "../employees/contract.service";
 import { addDaysToLocalDate, localDateOf } from "../common/tz.util";
+import { resolveCompanyTz } from "./dashboard-company-tz.util";
 // S5-GOAL-DASH-1 (additive): nguồn cho GOAL_PROGRESS — TÁI DÙNG GoalsService.getTree (MỘT công thức, MỘT
 // con số với GET /goals/tree — SPEC-10 §13, RÀNG BUỘC Work Order) + HrDepartmentService.listDepartments
 // (chỉ để map departmentId→tên hiển thị, KHÔNG raw-query bảng khác).
 import { GoalsService } from "../goals/goals.service";
 import { HrDepartmentService } from "../org/hr-department.service";
+// S11-OFFICE-DASH-1 (additive): 2 handler wave OFFICE sống ở FILE RIÊNG (file này đã sát trần 800 dòng
+// của CLAUDE.md §5) — registry vẫn MỘT: `add()` bên dưới trỏ thẳng vào method của collaborator.
+import { DashboardWidgetOfficeHandlers } from "./dashboard-widget-office.handlers";
 import {
   gatePairFor,
   ttlSecondsFor,
@@ -40,7 +43,6 @@ import type {
 } from "./dashboard-widget-data.types";
 import type { EnginePair } from "./dashboard-widget-catalog.const";
 
-const DEFAULT_TZ = "Asia/Ho_Chi_Minh";
 /** Ngưỡng "sắp đến hạn" cho TASK_ALERTS: task chưa hoàn thành có due trong 48h tới (hoặc đã overdue). */
 const DUE_SOON_MS = 48 * 60 * 60 * 1000;
 
@@ -98,6 +100,8 @@ export class DashboardWidgetHandlersService {
     // S5-GOAL-DASH-1 (additive): nguồn GOAL_PROGRESS (đã export ở module nguồn).
     private readonly goals: GoalsService,
     private readonly hrDepartments: HrDepartmentService,
+    // S11-OFFICE-DASH-1 (additive): handler ROOM_TODAY / ASSET_SUMMARY.
+    private readonly office: DashboardWidgetOfficeHandlers,
   ) {
     this.buildRegistry();
   }
@@ -233,6 +237,16 @@ export class DashboardWidgetHandlersService {
       gateAndResolve: async (ctx) => this.gateSelf(ctx, "GOAL_PROGRESS"),
       fetch: (ctx) => this.fetchGoalProgress(ctx),
     });
+
+    // ─── S11-OFFICE-DASH-1 (APPEND) — 2 widget wave OFFICE (gate + fetch ở office.handlers.ts) ──────
+    add("room-today", "ROOM_TODAY", {
+      gateAndResolve: (ctx) => this.office.gateRoomToday(ctx),
+      fetch: (ctx) => this.office.fetchRoomToday(ctx),
+    });
+    add("asset-summary", "ASSET_SUMMARY", {
+      gateAndResolve: (ctx) => this.office.gateAssetSummary(ctx),
+      fetch: (ctx) => this.office.fetchAssetSummary(ctx),
+    });
   }
 
   /** Gate widget self-locked/viewer-dependent (per-user Own cache). */
@@ -353,13 +367,9 @@ export class DashboardWidgetHandlersService {
   }
 
   private async resolveCompanyTz(companyId: string): Promise<string> {
-    return this.db.withTenant(companyId, async (tx) => {
-      const r = await tx.execute(
-        sql`SELECT timezone FROM companies WHERE id = ${companyId} AND deleted_at IS NULL LIMIT 1`,
-      );
-      const row = r.rows[0] as { timezone: string | null } | undefined;
-      return row?.timezone ?? DEFAULT_TZ;
-    });
+    // S11-OFFICE-DASH-1: thân hàm chuyển sang `dashboard-company-tz.util.ts` để ROOM_TODAY (file handler
+    // riêng) dùng CHUNG một phép "hôm nay theo tz công ty" — hai bản sao là chỗ trôi lệch âm thầm.
+    return resolveCompanyTz(this.db, companyId);
   }
 
   // ── PENDING_LEAVE (LeaveApprovalService.listPending — assertOwnerInScope, gate view:leave) ──────

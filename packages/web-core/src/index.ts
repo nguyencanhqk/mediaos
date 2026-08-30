@@ -170,7 +170,9 @@ export { taskLabelsApi } from "./lib/task-labels-api";
 // S4-FE-TASK-4 — Task File (list/upload 4-pha có tiến độ/xóa mềm/tải), nối canonical /tasks/:id/files
 // (S4-TASK-BE-5, PR #184).
 export { taskFileApi, type UploadTaskFileOptions } from "./lib/task-file-api";
-export { dashboardApi } from "./lib/dashboard-api";
+// S11-OFFICE-DASH-1: export thêm DASH_WIDGET_SLUG để apps/app GHIM được "mọi widget FE biết đều có slug"
+// (DashboardWidgetGrid.spec) — lỗ GOAL_PROGRESS chỉ nổ ở runtime vì map này không ai kiểm.
+export { dashboardApi, DASH_WIDGET_SLUG } from "./lib/dashboard-api";
 // S5-ME-FE-1/FE-3 — ME API client (Personal Hub, ME-SCREEN-001/009-014: overview + 4 summary +
 // preferences/appearance).
 export { meApi } from "./lib/me-api";

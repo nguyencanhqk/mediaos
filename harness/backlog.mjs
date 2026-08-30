@@ -14658,6 +14658,8 @@ export const backlog = [
   {
     id: "S11-OFFICE-DASH-1",
     module: "DASH",
+    // layer FE là NHÃN THIẾU: WO này có vế BE thật (migration CHECK + 2 handler + sàn scope ở registry) —
+    // memory `wo-layer-field-can-understate-scope`. Giữ nhãn cho ổn định lịch sử, ghi rõ ở đây.
     layer: "FE",
     title:
       "Widget DASH cho wave OFFICE: «thống kê tài sản theo trạng thái/loại» + «lịch họp hôm nay» — theo quyền, đăng ký mã MODULE-WIDGET theo SPEC-01 §9.9",
@@ -14679,6 +14681,13 @@ export const backlog = [
       "2 widget hiển thị đúng theo quyền (không có quyền ASSET/ROOM thì không render, không gọi API rỗng quyền)",
       "Mã widget đăng ký theo SPEC-07/SPEC-01 §9.9; API widget đi qua DTO/masking chuẩn",
       "Test widget allow/deny + typecheck/build xanh",
+    ],
+    notes: [
+      "✅ 30/08/2026 — mig 0558 (CHECK module_code APPEND 'ASSET','ROOM' + 2 hàng catalog GLOBAL) · ROOM_TODAY@70 (slug room-today, gate view:room, nguồn RoomBookingsService.listMine — 'hôm nay' theo tz CÔNG TY) · ASSET_SUMMARY@80 (slug asset-summary, gate view:asset, nguồn AssetsService.summary). Handler ở FILE RIÊNG `dashboard-widget-office.handlers.ts` (file registry cũ đã 782 dòng, thêm nữa là vượt trần 800 của CLAUDE.md §5) — registry vẫn MỘT. seedVersion dash.default-configs v2→v3.",
+      "🔑 SÀN SCOPE (khái niệm MỚI, dùng lại được): `DASH_WIDGET_MIN_DATA_SCOPE` + `meetsMinDataScope`. Cặp gate MỘT MÌNH không đủ cho ASSET_SUMMARY vì CẢ 4 role canonical đều có ('view','asset'), chỉ khác SCOPE (0550: employee@Own · manager@Department · hr/CA@Company); SPEC-13 §482 buộc nhân viên thường KHÔNG thấy widget còn Asset Manager PHẢI thấy — mà cả hai cùng dashboard_type 'Employee' ⇒ không thể phân biệt bằng role/dashboard-type (bất biến: không hard-code role). Ép ở HAI tầng đọc CÙNG hằng: registry (omit khỏi /dashboard/me ⇒ FE không mount ⇒ KHÔNG gọi API) + handler (403 ở /dashboard/widgets/:slug). Đột biến đã đo: gỡ hằng ⇒ 3 ca ĐỎ (data · /dashboard/me · /dashboard/widgets) — không có ca xanh-rỗng.",
+      "🐞 VÁ LỖI CÓ SẴN: `GOAL_PROGRESS` thiếu dòng trong `DASH_WIDGET_SLUG` (web-core) từ S5-GOAL-DASH-1 ⇒ widget đó ném 'widget chưa có FE slug mapping' MỌI lần mở, mà spec component vẫn xanh vì mock thẳng dashboardApi. Đã thêm slug + RATCHET ở DashboardWidgetGrid.spec: mọi DASH_WIDGET_CODE phải có slug (thêm widget mà quên slug từ nay là ĐỎ).",
+      "🧪 18 ca int-spec `dashboard-office-widgets.int-spec.ts` (LANE_DB) + 18 ca FE (RoomTodayWidget/AssetSummaryWidget) + 2 ca Grid. Fixture lượt đặt gieo THẲNG bằng SQL ở giờ tường 08:00 local: đặt qua API cần thời điểm tương lai, lượt '+60 phút' chạy lúc 23:30 rơi sang NGÀY MAI ⇒ ca ALLOW rỗng tuỳ giờ chạy CI. Cập nhật 4 danh sách vét-cạn của `dashboard-resolver.int-spec.ts` (employee +ROOM_TODAY; manager +ROOM_TODAY +ASSET_SUMMARY — đối chứng scope trên ROLE CANONICAL THẬT).",
+      "📌 Nợ ngoài phạm vi: chưa có quick-action cho 2 widget (cùng họ với 9 widget đợt 2 + GOAL_PROGRESS — đều chưa có); giờ hiển thị FE vẫn đi qua `companyTimeZone()` = DEFAULT_TIMEZONE tới khi session mang được `company.timezone` (memory `fe-has-no-company-timezone`) — 'hôm nay' thì đã đúng vì SERVER chốt.",
     ],
   },
 ];

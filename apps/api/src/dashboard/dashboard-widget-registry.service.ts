@@ -2,10 +2,16 @@ import { Injectable, Logger } from "@nestjs/common";
 import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 import type { DashboardWidgetSummaryDto } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
-import { PermissionService } from "../permission/permission.service";
 import { dashboardWidgetConfigs, dashboardWidgets } from "../db/schema/dashboard";
 import { userRoles } from "../db/schema/permissions";
-import { DASH_WIDGET_GATE_PAIR, type EnginePair } from "./dashboard-widget-catalog.const";
+import { PermissionService } from "../permission/permission.service";
+import { DataScopeService } from "../permission/data-scope.service";
+import {
+  DASH_WIDGET_GATE_PAIR,
+  DASH_WIDGET_MIN_DATA_SCOPE,
+  meetsMinDataScope,
+  type EnginePair,
+} from "./dashboard-widget-catalog.const";
 
 /** Precedence config_scope: User > Role > Company (DB-07 §8.2 rule 1). */
 const SCOPE_RANK: Record<string, number> = { User: 3, Role: 2, Company: 1 };
@@ -28,7 +34,8 @@ interface ConfigRow {
  * METADATA (KHÔNG data — đó là S4-DASH-BE-2) đã lọc 2 tầng:
  *   1. dashboard_widget_configs (precedence User>Role>Company, is_enabled, deleted_at) — nguồn DUY NHẤT
  *      quyết định widget nào thuộc dashboard type nào (KHÔNG hard-code if(role)).
- *   2. DASH_WIDGET_GATE_PAIR[widgetCode] — permission MODULE NGUỒN, fail-closed khi thiếu entry.
+ *   2. DASH_WIDGET_GATE_PAIR[widgetCode] — permission MODULE NGUỒN, fail-closed khi thiếu entry; kèm
+ *      SÀN scope DASH_WIDGET_MIN_DATA_SCOPE cho widget mà cặp một mình quá rộng (S11-OFFICE-DASH-1).
  * Mọi query đi qua db.withTenant(companyId) (RLS + FORCE, BẤT BIẾN #1); mọi filter deleted_at IS NULL.
  */
 @Injectable()
@@ -38,6 +45,8 @@ export class DashboardWidgetRegistryService {
   constructor(
     private readonly db: DatabaseService,
     private readonly permission: PermissionService,
+    // S11-OFFICE-DASH-1: sàn data-scope cho widget mà cặp gate một mình quá rộng (ASSET_SUMMARY).
+    private readonly dataScope: DataScopeService,
   ) {}
 
   async listWidgets(
@@ -55,7 +64,7 @@ export class DashboardWidgetRegistryService {
     // Bước 3: precedence User>Role>Company — 1 row / widget_id; loại nếu row thắng có is_enabled=false.
     const picked = this.pickByPrecedence(rows);
 
-    // Bước 4: gate tầng-2 permission module nguồn (fail-closed). can() song song.
+    // Bước 4: gate tầng-2 permission module nguồn + SÀN scope (fail-closed). can() song song.
     const gated = await this.filterByGatePair(companyId, userId, picked);
 
     // Bước 5: sort theo sort_order asc rồi cap.
@@ -156,7 +165,8 @@ export class DashboardWidgetRegistryService {
   }
 
   /**
-   * Gate tầng-2: mỗi widget qua DASH_WIDGET_GATE_PAIR[widgetCode] → can(action,resourceType).
+   * Gate tầng-2: mỗi widget qua DASH_WIDGET_GATE_PAIR[widgetCode] → can(action,resourceType), rồi (nếu
+   * widget khai sàn) resolveOrNull(cùng cặp) → meetsMinDataScope.
    *   - thiếu entry map ⇒ LOẠI + log.warn (fail-closed; KHÔNG throw làm sập cả dashboard).
    *   - KHÔNG truyền isSensitive: engine tự ép effectivelySensitive = input.isSensitive OR grant.isSensitive
    *     (permission.service.ts:206) ⇒ cặp nguồn is_sensitive=true VẪN bị ép exact-match, wildcard KHÔNG lọt.
@@ -181,7 +191,18 @@ export class DashboardWidgetRegistryService {
           action: pair.action,
           resourceType: pair.resourceType,
         });
-        return decision.allow;
+        if (!decision.allow) return false;
+        // S11-OFFICE-DASH-1 — sàn scope, CHỈ cho widget có khai (đa số không khai ⇒ không tốn round-trip
+        // thứ hai). resolveOrNull KHÔNG ném (một widget thiếu scope không được làm sập cả dashboard);
+        // null ⇒ meetsMinDataScope trả false = fail-closed.
+        if (!DASH_WIDGET_MIN_DATA_SCOPE[row.widgetCode]) return true;
+        const scope = await this.dataScope.resolveOrNull(
+          userId,
+          companyId,
+          pair.action,
+          pair.resourceType,
+        );
+        return meetsMinDataScope(row.widgetCode, scope);
       }),
     );
     return rows.filter((_, i) => decisions[i]);
