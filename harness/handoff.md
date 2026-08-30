@@ -4,6 +4,42 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
+## Phiên 2026-08-30 — S11-ROOM-BE-1 merge (#438) → S11-ASSET-FE-1 XONG (#439, master `8b551f93`)
+
+**Trạng thái:** cả hai đã merge, lane `mediaos_roombe1`/`assetfe1`/`assetfe2` đã DROP. Plan + kết quả:
+`docs/plans/S11-ASSET-FE-1.md` §7. Kế tiếp READY: `S11-ROOM-FE-1` 🟢 · `S11-ASSET-QA-1` 🟡 ·
+`S10-AUTH-2FAGUARD-FAILMODE-1` 🔴.
+
+- **S11-ASSET-FE-1**: 7 màn ASSET-SCREEN-001..007 + `asset-api.ts` (22 hàm / 26 route) + 11 mã dotted +
+  mig 0556 bật `modules.ASSET`. 91 test mới; CI xanh 11/11.
+- **Hai chỗ SPEC-13 lệch bản ship, làm theo CODE THẬT:** (1) ba `kind` lỗi trong bảng §12
+  (`employee-not-found`/`maintenance-not-found`/`readonly-field`) **không bao giờ được phát ra** — bản ship
+  phát 19 kind khác; map theo spec sẽ đẻ 3 nhánh chết + sót 9 kind. (2) ô FSM `Under Maintenance → Under
+  Maintenance: revoke` có thật trong `asset-fsm.ts`; bỏ nó là dựng **ngõ cụt** (còn người giữ ⇒ không thu
+  hồi được mà cũng không thanh lý được vì ERR-008).
+- **Gate lối vào ASSET đòi ĐỦ CẢ HAI** `access:asset` + `view:asset` (lệch tiền lệ GOAL vốn chỉ dùng
+  `access`) — trang tải `GET /assets` = `view:asset`, gate bằng mình cặp access là dựng lại lỗ đã vá ở
+  CHAT/social.
+
+**⚠️ BẪY ĐÃ ĐO — `S11-ROOM-FE-1` SẼ DÍNH Y HỆT:** `0554:373-375` có guard
+`RAISE EXCEPTION ... modules.ROOM phai ... is_active=false` **vô điều kiện**. Ca H1 của
+`s11-room-db1-invariants` replay NGUYÊN file 0554 ⇒ khi WO đó bật cờ ROOM sẽ đỏ `P0001`, đúng như ASSET đã
+đỏ ở CI #439. **WO bật module = 3 việc CÙNG commit:** migration `UPDATE is_active=true` (hàng có sẵn từ
+0435 ⇒ UPDATE, không INSERT) · gỡ mã khỏi `EXTENSION_INACTIVE_MODULES` · **nới guard verify của migration
+seed module đó**. 0550 đã vá ở `230c41b7`; 0554 **CHƯA** — cố ý, vì không có test nào ở PR #439 chứng minh
+được. Memory: `module-enable-guard-blocks-next-wo`.
+
+**Nợ ASSET:** gán role `asset-manager` (mig 0550) cho admin thật trên PROD qua màn quản trị role —
+`SuperAdminBootstrap` no-op trên PROD, 0550 không có khối catch-up; tới khi gán, ASSET vô hình với admin
+PROD và job `ASSET_MAINTENANCE_DUE` phát 0 thông báo (KHÔNG vá bằng blanket grant). `MODULE_APP_METADATA`
+thiếu ASSET (ngoài `paths` WO; GOAL đã vậy từ 0506 ⇒ hành vi có sẵn). e2e UI chưa chạy.
+
+**Friction:** (1) `harness/check.sh` in `THIẾU 40 file — phạm vi bị co lại` và `s11-asset-db1-invariants`
+nằm trong nhóm bị co ⇒ **máy xanh, CI đỏ**. Thấy dòng đó phải chạy tay đúng spec của module đang đụng.
+(2) `gh run view --log-failed` kéo log rất lớn — tốn ~$260 cho 2 lần gọi; lần sau lọc bằng
+`grep -E "Failed Tests|FAIL "` ngay trong cùng lệnh, đừng pipe cả log. (3) Backtick trong `node -e "…"` bị
+shell ăn (đã ghi memory) — dùng nháy đơn cho script node, hoặc ghi file rồi chạy.
+
 ## Phiên 2026-08-30 — S11-ROOM-BE-1 THI CÔNG XONG → PR #438 (vùng đỏ, người chốt)
 
 **Trạng thái:** nhánh `wo/s11-room-be-1` (2 commit `44bddd23` + `52cb4761`), PR **#438** base master, KHÔNG auto-merge. Lane
