@@ -33,6 +33,8 @@ import { IntegrationsSocialModule } from "./integrations/social/social.module";
 import { GoalsModule } from "./goals/goals.module";
 // S11-ASSET-BE-1 (additive): AssetsModule — quản lý tài sản (SPEC-13 / DB-15 / API-14).
 import { AssetsModule } from "./assets/assets.module";
+// S11-ROOM-BE-1 (additive): RoomsModule — phòng họp + đặt lịch (SPEC-14 / DB-16 / API-15).
+import { RoomsModule } from "./rooms/rooms.module";
 // S7-CHAT-BE-1 (additive): ChatModule — phòng chat & thành viên (SPEC-15 / DB-12 / API-13).
 import { ChatModule } from "./chat/chat.module";
 import { IdempotencyModule } from "./common/idempotency/idempotency.module";
@@ -108,6 +110,11 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     // bảo trì + kiểm kê + /me/assets. Data-scope Own/Department/Company + masking tài chính/danh tính ở service;
     // ngoài scope ⇒ 404. Registrar NOTI + job nhắc bảo trì sống ở NotificationsModule.
     AssetsModule,
+    // S11-ROOM-BE-1 (additive): module ROOM (SPEC-14) — CRUD phòng họp (Office Admin) + đặt lịch chống trùng
+    // (EXCLUDE là chốt cuối) + huỷ own/all theo data_scope + lịch/phòng trống/thống kê + /me/room-bookings.
+    // Ngoài scope GHI ⇒ 403 (lịch công khai trong company), cross-tenant ⇒ 404. Registrar NOTI + job nhắc 15′
+    // sống ở NotificationsModule.
+    RoomsModule,
   ],
   providers: [
     // Global guard pipeline (THỨ TỰ QUAN TRỌNG):

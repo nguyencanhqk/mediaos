@@ -51,6 +51,10 @@ import { GoalNotiBridgeRegistrar } from "./goal-noti-bridge.registrar";
 import { AssetAudienceReader } from "./asset-audience.reader";
 import { AssetNotiBridgeRegistrar } from "./asset-noti-bridge.registrar";
 import { AssetMaintenanceDueJobHandler } from "./asset-maintenance-due.job-handler";
+// S11-ROOM-BE-1 (additive): reader + registrar ROOM (2 consumer outbox) + job ROOM_BOOKING_REMINDER.
+import { RoomAudienceReader } from "./room-audience.reader";
+import { RoomNotiBridgeRegistrar } from "./room-noti-bridge.registrar";
+import { RoomBookingReminderJobHandler } from "./room-booking-reminder.job-handler";
 // S4-INT-5 (additive): AUTH/HR → NOTI producer wiring. TÁI DÙNG OutboxNotificationBridge (INT-1) — đăng ký 3
 // mapping (auth.user_created/password_reset_requested/user_locked) qua registrar OnModuleInit. KHÔNG import
 // AuthModule/EmployeesModule (acyclic — consumer đọc payload, producer enqueue outbox ở service tương ứng).
@@ -129,6 +133,12 @@ import { LmsServiceIntakeGuard } from "./lms-service-intake.guard";
     AssetAudienceReader,
     AssetNotiBridgeRegistrar,
     AssetMaintenanceDueJobHandler,
+    // S11-ROOM-BE-1 (additive) — ROOM_BOOKING_CONFIRMED / ROOM_BOOKING_CANCELLED qua CÙNG bridge (dedupeKeyOf
+    // BẮT BUỘC, catalog 0555 DedupeKey) + job ROOM_BOOKING_REMINDER (quét trong withTenant từng company, intake
+    // in-process ngoài tx, dedupe (booking, startsAt)).
+    RoomAudienceReader,
+    RoomNotiBridgeRegistrar,
+    RoomBookingReminderJobHandler,
     // S4-INT-5 (additive): registrar OnModuleInit đăng ký 3 consumer AUTH lên EventBus (@Global EventsModule)
     // tại boot, tái dùng OutboxNotificationBridge — KHÔNG bridge/consumer mới.
     AuthHrNotiBridgeRegistrar,
