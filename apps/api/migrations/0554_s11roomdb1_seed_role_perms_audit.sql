@@ -27,7 +27,10 @@
 --   AUDIT_OBJECT_TYPES (schema/audit.ts) += 'room_booking' CÙNG commit.
 -- ════════════════════════════════════════════════════════════════════════════════════════════════
 
--- ─────────────── (1) modules.ROOM: verify tồn tại, GIỮ is_active=false (mirror 0550 bước 1) ───────────────
+-- ─────────────── (1) modules.ROOM: verify TỒN TẠI (mirror 0550 bước 1) ───────────────
+-- S11-ROOM-FE-1: bỏ vế "GIỮ is_active=false" khỏi tiêu đề + thông điệp. 0554 KHÔNG bật cờ (mig 0557
+-- mới bật), nhưng khối này CŨNG bị ca H1 chạy lại sau khi cờ đã true — một câu NOTICE khẳng định
+-- trạng thái cũ là câu nói sai trong log, và là bậc thang dẫn tới việc ai đó "sửa" nó thành EXCEPTION.
 DO $$
 DECLARE v_n int;
 BEGIN
@@ -35,7 +38,7 @@ BEGIN
   IF v_n <> 1 THEN
     RAISE EXCEPTION '[0554] modules.ROOM khong ton tai (ky vong 1 hang tu mig 0435, dem duoc %)', v_n;
   END IF;
-  RAISE NOTICE '[0554] modules.ROOM ton tai, GIU is_active=false (chua co endpoint — S11-ROOM-FE-1 moi bat)';
+  RAISE NOTICE '[0554] modules.ROOM ton tai (0554 KHONG bat co; S11-ROOM-FE-1/mig 0557 moi bat)';
 END;
 $$;
 --> statement-breakpoint
@@ -368,11 +371,23 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- (e) module ROOM tồn tại và VẪN inactive (D1 — pin migration-smoke)
+  -- (e) module ROOM TỒN TẠI (D1). CỐ Ý **KHÔNG** ép `is_active = false`.
+  --
+  -- S11-ROOM-FE-1 (30/08/2026) — vá forward-compat, mirror đúng bản vá của 0550 (ASSET) cùng ngày.
+  -- Bản đầu của guard này khẳng định `is_active = false`, tức đóng đinh đúng một trạng thái mà CHÍNH
+  -- thông điệp của nó ghi là 'bat o S11-ROOM-FE-1' sẽ đổi. Hệ quả: mig 0557 bật cờ lên true ⇒ ca H1 của
+  -- `s11-room-db1-invariants.int-spec.ts` (chạy lại NGUYÊN file 0554 để chứng minh idempotency) ném
+  -- P0001 và CI đỏ, dù 0554 không hề sai.
+  --
+  -- Guard baseline phải FORWARD-COMPATIBLE (memory `module-enable-guard-blocks-next-wo` +
+  -- `noti-check-baseline-guard-must-be-forward-compatible`): verify cái migration này TỰ CHỊU TRÁCH
+  -- NHIỆM (hàng modules.ROOM tồn tại để các bước sau bám vào), KHÔNG verify một trạng thái mà WO sau
+  -- được quyền đổi. Hợp đồng 'ROOM inactive cho tới khi có màn' vẫn được canh, ở ĐÚNG chỗ sửa được
+  -- cùng commit: pin `EXTENSION_INACTIVE_MODULES` của migration-smoke.int-spec.ts.
   IF NOT EXISTS (
-    SELECT 1 FROM modules WHERE module_code = 'ROOM' AND deleted_at IS NULL AND is_active = false
+    SELECT 1 FROM modules WHERE module_code = 'ROOM' AND deleted_at IS NULL
   ) THEN
-    RAISE EXCEPTION '[0554] verify: modules.ROOM phai ton tai va is_active=false (bat o S11-ROOM-FE-1)';
+    RAISE EXCEPTION '[0554] verify: modules.ROOM phai ton tai (ky vong 1 hang tu mig 0435)';
   END IF;
 
   -- (f) super-admin KHÔNG được enumerate ở tầng migration

@@ -232,6 +232,24 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "ASSET.CATEGORY.MANAGE": "manage:asset-category",
   "ASSET.MAINTENANCE.MANAGE": "manage:asset-maintenance",
   "ASSET.INVENTORY.MANAGE": "manage:asset-inventory",
+  // S11-ROOM-FE-1 — ROOM (SPEC-14 §11, seed mig 0554). 5 cặp, `is_sensitive=false` cả 5. Cặp lấy từ
+  // CONTROLLER THẬT (chống pair-drift): rooms.controller (view:room ×5, manage:room ×3) ·
+  // room-bookings.controller (view:room ×2, book:room, cancel:room-booking) · me-room-bookings.controller
+  // (view:room, user resolve từ token — KHÔNG nhận tham số người dùng, chống IDOR).
+  //
+  // `access:room` KHÔNG route nào enforce — cổng nav, cùng họ `access:asset`. Lối vào (APP_REGISTRY ·
+  // ROUTE_REGISTRY · sidebar) gate bằng cặp LITERAL đủ CẢ HAI `access:room` + `view:room`, KHÔNG qua bảng
+  // này. Bảng này phục vụ useCan() TRONG page (ẩn nút «+ Đặt phòng», tab quản trị).
+  //
+  // `view:room` là Company cho MỌI role (SPEC-14 §11) — lịch phòng là dữ liệu dùng chung; cặp đọc CỐ Ý
+  // không tách own/all để khỏi đẻ role "thấy lịch mà không mở được chi tiết lượt"
+  // (read-path-gate-pair-must-match-download-pair). Ràng buộc thật nằm ở cặp GHI: `book:room` @Own chặn
+  // đặt hộ (403 ROOM-ERR-010), `cancel:room-booking` @Own chỉ huỷ lượt mình tổ chức.
+  "ROOM.ACCESS": "access:room",
+  "ROOM.ROOM.VIEW": "view:room",
+  "ROOM.BOOKING.CREATE": "book:room",
+  "ROOM.BOOKING.CANCEL": "cancel:room-booking",
+  "ROOM.ROOM.MANAGE": "manage:room",
 };
 
 export function createPermissionChecker(userPermissions: readonly UserPermission[]) {
@@ -763,6 +781,27 @@ export const APP_REGISTRY: readonly AppRegistryItem[] = [
     requiredPermissions: ["access:asset", "view:asset"],
     status: "active",
     order: 100,
+  },
+  {
+    // S11-ROOM-FE-1 — thẻ "Phòng họp" (SPEC-14, wave S11-OFFICE). Module NỘI BỘ thật.
+    //
+    // Gate = ĐỦ CẢ HAI cặp engine LITERAL, KHÔNG qua PERMISSION_CODE_TO_PAIR (họ access:asset/goal/chat).
+    // Thẻ điều hướng tới /rooms, mà trang đó tải GET /room-bookings + GET /rooms = `view:room`. Gate bằng
+    // mình `access:room` dựng lại lỗ đã vá ở CHAT/ASSET — "ô hiện ra thì bấm vào phải vào được". Seed 0554
+    // cấp cả hai cùng lúc cho 4 role canonical + office-admin, nhưng grant là per-(permission, role) nên
+    // admin thu `view:room` riêng được ⇒ fail-closed ở đây là thẻ biến mất, không phải đâm tường.
+    appKey: "rooms",
+    moduleCode: "ROOM",
+    nameKey: "app.rooms",
+    descKey: "appDesc.rooms",
+    icon: "calendar-clock",
+    rootPath: "/rooms",
+    defaultRoute: "/rooms",
+    category: "operation",
+    aliases: ["phong hop", "room", "dat phong", "lich phong", "meeting room", "booking"],
+    requiredPermissions: ["access:room", "view:room"],
+    status: "active",
+    order: 110,
   },
 ] as const;
 
@@ -1544,6 +1583,21 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     order: 23,
   },
 
+  // S11-ROOM-FE-1 — «Đặt phòng của tôi» (ROOM-SCREEN-003) chảy ngược về /me, cùng kỹ thuật me.assets.
+  // Gate = cặp ROOM ĐỦ CẢ HAI: trang tải GET /me/room-bookings = view:room (user resolve từ token, KHÔNG
+  // nhận tham số người dùng — chống IDOR, SPEC-14 §12). Nút Huỷ trong drawer đọc `canCancel` của server.
+  {
+    routeKey: "me.roomBookings",
+    path: "/me/room-bookings",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ROOM-SCREEN-003",
+    titleKey: "routeTitle.meRoomBookings",
+    requiredPermissions: ["access:room", "view:room"],
+    showInSidebar: true,
+    order: 24,
+  },
+
   // ASSET — Quản lý tài sản (SPEC-13 §9, wave S11-OFFICE). Gate route module-entry = cặp engine LITERAL
   // ĐỦ CẢ HAI `access:asset` + `view:asset` (seed 0550, non-sensitive) — KHÔNG qua PERMISSION_CODE_TO_PAIR,
   // cùng kỹ thuật me.overview/goal.list. Vì sao ĐỦ CẢ HAI chứ không chỉ access như goal.list: cả hai màn
@@ -1576,6 +1630,40 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredPermissions: ["access:asset", "view:asset"],
     showInSidebar: true,
     order: 82,
+  },
+
+  // ROOM — Phòng họp (SPEC-14 §9, wave S11-OFFICE). Gate route module-entry = cặp engine LITERAL ĐỦ CẢ HAI
+  // `access:room` + `view:room` (seed 0554, non-sensitive) — cùng kỹ thuật asset.list. Cả hai màn dưới đây
+  // tải dữ liệu qua `view:room` (GET /room-bookings · GET /rooms) ⇒ gate màn PHẢI khớp gate đường tải.
+  //
+  // Màn còn lại (form đặt 002 · drawer chi tiết 005) là DIALOG/DRAWER trong 001/003/004, KHÔNG có route
+  // riêng — v1 không cho sửa lượt đặt (SPEC-14 §12: huỷ rồi đặt lại) nên không có `/rooms/$bookingId`.
+  // Quyền GHI (`book:room` · `cancel:room-booking` · `manage:room`) gate TRONG page qua useCan + BE ép.
+  //
+  // `/rooms/manage` gate BẰNG CẶP ĐỌC, không phải `manage:room`: trang tải GET /rooms trước rồi mới cần
+  // quyền ghi; nút tạo/sửa/xoá ẩn qua useCan("ROOM.ROOM.MANAGE") bên trong. Gate route bằng `manage:room`
+  // sẽ khoá cả tab «Lịch sử sử dụng» (usage-summary = view:room) khỏi role chỉ có quyền đọc.
+  {
+    routeKey: "room.calendar",
+    path: "/rooms",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ROOM",
+    screenCode: "ROOM-SCREEN-001",
+    titleKey: "routeTitle.rooms",
+    requiredPermissions: ["access:room", "view:room"],
+    showInSidebar: true,
+    order: 83,
+  },
+  {
+    routeKey: "room.manage",
+    path: "/rooms/manage",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ROOM",
+    screenCode: "ROOM-SCREEN-004",
+    titleKey: "routeTitle.roomManage",
+    requiredPermissions: ["access:room", "view:room"],
+    showInSidebar: true,
+    order: 84,
   },
 
   // System

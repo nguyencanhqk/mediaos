@@ -1569,6 +1569,13 @@
       "when": 1717587345000,
       "tag": "0556_s11assetfe1_enable_asset_module",
       "breakpoints": true
+    },
+    {
+      "idx": 224,
+      "version": "7",
+      "when": 1717587346000,
+      "tag": "0557_s11roomfe1_enable_room_module",
+      "breakpoints": true
     }
   ]
 }

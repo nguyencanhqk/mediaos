@@ -14584,14 +14584,24 @@ export const backlog = [
     title:
       "FE ROOM (apps/app routes/rooms/): lịch phòng tuần/ngày (cột = phòng, chọn khung giờ), form đặt phòng báo trùng ngay, «đặt phòng của tôi», quản trị phòng họp — PermissionGate/useCan, i18n vi, wireframe đã duyệt",
     zone: "green",
-    status: "todo",
+    status: "in_progress",
+    // paths MỞ RỘNG 30/08 khi thi công: bản seed chỉ liệt vùng FE thuần, nhưng `done_when` của chính WO
+    // này đòi migration bật module + gỡ pin smoke, và việc bật cờ kéo theo nới guard 0554 + mục
+    // sidebar/layout. Bản ASSET-FE-1 cũng thiếu đúng những mục đó và đã ship ra ngoài `paths` — khai
+    // đúng ở đây để `guard-scope` còn nói được sự thật (memory wo-paths-drive-gate-and-scheduler).
     paths: [
       "apps/app/src/routes/rooms/**",
+      "apps/app/src/routes/me/**",
+      "apps/app/src/routes/assets/asset-wiring.spec.ts",
       "apps/app/src/router.tsx",
       "apps/app/src/i18n/**",
+      "apps/app/src/layouts/workspace/**",
       "packages/web-core/**",
       "packages/ui/**",
       "packages/contracts/**",
+      "apps/api/migrations/**",
+      "apps/api/test/integration/migration-smoke.int-spec.ts",
+      "docs/**",
     ],
     skills: ["code-review"],
     depends_on: ["S11-ROOM-BE-1"],
@@ -14607,6 +14617,15 @@ export const backlog = [
       "Quyền qua PermissionGate/useCan đúng cặp §9e (own vs all); trạng thái dùng constants chuẩn",
       "Bật modules.ROOM.is_active=true bằng migration UPDATE tường minh + gỡ 'ROOM' khỏi EXTENSION_INACTIVE_MODULES (apps/api/test/integration/migration-smoke.int-spec.ts:90-97) CÙNG commit (bàn giao từ S11-ROOM-DB-1 — DB-16 §9C, tiền lệ ASSET-FE-1)",
       "vitest FE + typecheck + build xanh; e2e luồng đặt→trùng→đổi giờ→hủy qua UI",
+    ],
+    notes: [
+      "🟢 zone green — LIGHT gate. Kèm MỘT migration (0557 bật modules.ROOM) nên vẫn phải chạy lane DB thật.",
+      "📐 Bàn giao (30/08): 5 màn ROOM-SCREEN-001..005 + `packages/web-core/src/lib/room-api.ts` (13 hàm phủ 13 route). BA việc bật module đi CÙNG commit: mig 0557 + journal idx 224 · gỡ 'ROOM' khỏi EXTENSION_INACTIVE_MODULES · **nới guard verify (e) của 0554** (assert is_active=false vô điều kiện ⇒ ca H1 s11-room-db1-invariants replay nguyên file sẽ P0001) — memory module-enable-guard-blocks-next-wo. `room-wiring.spec.ts` neo cả ba, ca (3) đã kiểm chứng phân biệt được bản gốc/bản vá. asset-wiring.spec.ts từng assert 'line VẪN chứa \"ROOM\"' — đã gỡ vế đó (neo trạng thái module KHÁC là tự đặt mìn cho WO kế).",
+      "⚠️ NỢ: `companies.timezone` KHÔNG có đường ra FE (/auth/me không trả; /me/preferences.timezone là override cá nhân, null = kế thừa). Lịch dùng `companyTimeZone()` → DEFAULT_TIMEZONE ('Asia/Ho_Chi_Minh', đúng bằng fallback tz.util của API); mọi hàm room-time nhận tz THAM SỐ nên khi /auth/me expand company.timezone chỉ sửa MỘT hàm. FE resolver two-pass đã ghim PARITY với apps/api/src/common/tz.util.spec.ts ở đúng hai mốc DST canonical (NY 2024-03-10 02:30 ⇒ 06:30Z · 2024-11-03 01:30 ⇒ 05:30Z).",
+      "⚠️ Go-live PROD: role `office-admin` (mig 0554) chưa gán cho admin thật ⇒ màn 004 + đặt hộ vô hình cho tới khi gán qua màn quản trị role. KHÔNG vá bằng blanket grant (blanket-grant-migration-role-drift). Cùng họ với nợ `asset-manager` của S11-ASSET-FE-1.",
+      "⚠️ `MODULE_APP_METADATA` vẫn thiếu cả ASSET lẫn ROOM (apps/api/src/foundation/module-catalog/) — module active mà vắng metadata thì getMyApps bỏ qua kèm log warn. Lưới «Ứng dụng của tôi» dựng từ APP_REGISTRY tĩnh nên người dùng vẫn thấy thẻ. WO nào chạm module-catalog dọn một thể.",
+      "⚠️ Người tham dự chọn qua `EmployeeMultiPickerDialog` (danh bạ HR, cần `read:employee`) — nhân viên chưa liên kết tài khoản (users.id null) bị khoá hàng vì BE nhận userId, không nhận employeeId. Nhân viên không có read:employee vẫn đặt được phòng nhưng danh sách chọn rỗng ⇒ đặt một mình. Chưa có endpoint danh bạ nhẹ; ghi nợ cho QA/UX quyết.",
+      "❌ CHƯA làm: e2e đặt→trùng→đổi giờ→huỷ qua UI (cần môi trường có seed phòng thật) — phủ tạm bằng 39 ca thuần (room-time/room-errors/room-actions) + 19 ca wiring + 103 int-spec trên lane DB.",
     ],
   },
   {

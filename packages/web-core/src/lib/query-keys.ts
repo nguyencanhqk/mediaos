@@ -28,6 +28,9 @@ export const rootKeys = {
   chat: ["chat"] as const,
   // S11-ASSET-FE-1 — Tài sản (SPEC-13). Module RIÊNG, wave S11-OFFICE.
   assets: ["assets"] as const,
+  // S11-ROOM-FE-1 — Phòng họp (SPEC-14). Module RIÊNG, wave S11-OFFICE. KHÔNG dùng chung với
+  // `rootKeys.chat` (chat cũng có nhánh "rooms" nhưng đó là phòng CHAT — miền khác hẳn).
+  rooms: ["rooms"] as const,
 } as const;
 
 // ── Auth keys ─────────────────────────────────────────────────────────────────
@@ -833,6 +836,15 @@ export const meKeys = {
   // endpoint own-scope, employee resolve từ token (KHÔNG nhận employeeId — chống IDOR), và KHÔNG BAO GIỜ
   // trả trường tài chính bất kể data_scope của caller ⇒ cache riêng, không lẫn với cache danh sách chung.
   assets: (params?: Record<string, unknown>) => [...rootKeys.me, "assets", params] as const,
+  // S11-ROOM-FE-1 — «Đặt phòng của tôi» (GET /me/room-bookings, ROOM-API-013). Query RIÊNG khỏi
+  // roomKeys.bookings.list(): endpoint own-scope (user từ token, KHÔNG nhận tham số người dùng) và trả
+  // DTO MỞ RỘNG `myRole: organizer | attendee` mà đường chung không có ⇒ cache riêng.
+  //
+  // `roomBookingsAll()` = PREFIX 2 phần tử: huỷ một lượt phải làm mới CẢ ba tab (Sắp tới / Đã qua /
+  // Đã huỷ) vì lượt vừa huỷ nhảy tab — invalidate đúng params của tab đang mở là bỏ sót tab đích.
+  roomBookings: (params?: Record<string, unknown>) =>
+    [...rootKeys.me, "room-bookings", params] as const,
+  roomBookingsAll: () => [...rootKeys.me, "room-bookings"] as const,
 };
 
 // ── GOAL keys (S5-GOAL-FE-1) — Mục tiêu, SPEC-10 ───────────────────────────────
@@ -1071,5 +1083,34 @@ export const assetKeys = {
     items: (id: string, params?: Record<string, unknown>) =>
       [...rootKeys.assets, "inventories", "items", id, params] as const,
     itemsOf: (id: string) => [...rootKeys.assets, "inventories", "items", id] as const,
+  },
+};
+
+// ── S11-ROOM-FE-1 — Phòng họp (SPEC-14 §15, 13 route BE) ──────────────────────
+//
+// `bookings.*` là nhánh RIÊNG dưới `rooms/*` chứ không phải con của một phòng: màn lịch (001) tải lượt
+// đặt của MỌI phòng trong một cửa sổ (`GET /room-bookings?from&to`), còn `bookingsOfRoom` là đường hẹp
+// hơn cho drawer/tab lịch sử một phòng (`GET /rooms/:id/bookings`). Hai đường trả cùng DTO nhưng KHÁC
+// cửa sổ ⇒ khác key.
+//
+// `bookings.allOf()` là PREFIX 3 phần tử (bỏ slot params) — sau khi đặt/huỷ phải làm mới MỌI cửa sổ đang
+// cache, không chỉ cửa sổ hiện tại (cùng bẫy assetKeys.assignmentsOf): người dùng đổi tuần rồi quay lại
+// mà key mang params cụ thể thì tuần cũ vẫn là dữ liệu trước khi huỷ.
+export const roomKeys = {
+  all: rootKeys.rooms,
+  list: (params?: Record<string, unknown>) => [...rootKeys.rooms, "list", params] as const,
+  detail: (id: string) => [...rootKeys.rooms, "detail", id] as const,
+  availability: (params?: Record<string, unknown>) =>
+    [...rootKeys.rooms, "availability", params] as const,
+  usageSummary: (params?: Record<string, unknown>) =>
+    [...rootKeys.rooms, "usage-summary", params] as const,
+  bookings: {
+    allOf: () => [...rootKeys.rooms, "bookings"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.rooms, "bookings", "list", params] as const,
+    detail: (id: string) => [...rootKeys.rooms, "bookings", "detail", id] as const,
+    ofRoom: (roomId: string, params?: Record<string, unknown>) =>
+      [...rootKeys.rooms, "bookings", "of-room", roomId, params] as const,
+    ofRoomAll: (roomId: string) => [...rootKeys.rooms, "bookings", "of-room", roomId] as const,
   },
 };

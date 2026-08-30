@@ -1,17 +1,26 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-30 12:34Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-30 13:52Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🟢 S11-ROOM-FE-1 — FE ROOM (apps/app routes/rooms/): lịch phòng tuần/ngày (cột = phòng, chọn khung giờ), form đặt phòng báo trùng ngay, «đặt phòng của tôi», quản trị phòng họp — PermissionGate/useCan, i18n vi, wireframe đã duyệt
+- **zone**: green · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/app/src/routes/rooms/**`, `apps/app/src/routes/me/**`, `apps/app/src/routes/assets/asset-wiring.spec.ts`, `apps/app/src/router.tsx`, `apps/app/src/i18n/**`, `apps/app/src/layouts/workspace/**`, `packages/web-core/**`, `packages/ui/**`, `packages/contracts/**`, `apps/api/migrations/**`, `apps/api/test/integration/migration-smoke.int-spec.ts`, `docs/**`
+- **phụ thuộc**: S11-ROOM-BE-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] Đủ 5 màn ROOM-SCREEN-001..005; lịch tuần render đúng múi công ty (companies.timezone) trên nền UTC-at-rest (date-fns v4 + @date-fns/tz); lỗi đặt phòng rẽ theo error.code (ROOM-ERR-001 ‖ IN_PROGRESS ‖ KEY_REUSED), Idempotency-Key sinh mới khi mở form/sau gửi thành công/sau KEY_REUSED
+  - [ ] Thêm 5 mã dotted ROOM.* (SPEC-14 §11) vào PERMISSION_CODE_TO_PAIR ở packages/web-core/src/lib/registry.ts — bảng fail-closed, thiếu là toàn bộ màn ROOM ẩn dù DB đã grant (SPEC-14 §23 mục 11)
+  - [ ] Form đặt phòng: chặn client-side khung giờ đã bận + xử lý 409 server trả về (hiện khung giờ bận, không nuốt lỗi); loading/error/empty đủ
+  - [ ] Quyền qua PermissionGate/useCan đúng cặp §9e (own vs all); trạng thái dùng constants chuẩn
+  - [ ] Bật modules.ROOM.is_active=true bằng migration UPDATE tường minh + gỡ 'ROOM' khỏi EXTENSION_INACTIVE_MODULES (apps/api/test/integration/migration-smoke.int-spec.ts:90-97) CÙNG commit (bàn giao từ S11-ROOM-DB-1 — DB-16 §9C, tiền lệ ASSET-FE-1)
+  - [ ] vitest FE + typecheck + build xanh; e2e luồng đặt→trùng→đổi giờ→hủy qua UI
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🔴 `S10-AUTH-2FAGUARD-FAILMODE-1` TwoFactorEnforcementGuard: BA lời gọi `withTenant` không được bọc chạy TRƯỚC mọi pipe — chốt ngữ nghĩa fail-mode rồi bọc cả ba (KI-083)
 - 🟡 `S11-ASSET-QA-1` QA ASSET: int-spec deny-path/IDOR/cross-tenant + FSM chuyển tiếp sai + kiểm kê race — coverage ≥80% module assets, chạy như CI trên LANE_DB
-- 🟢 `S11-ROOM-FE-1` FE ROOM (apps/app routes/rooms/): lịch phòng tuần/ngày (cột = phòng, chọn khung giờ), form đặt phòng báo trùng ngay, «đặt phòng của tôi», quản trị phòng họp — PermissionGate/useCan, i18n vi, wireframe đã duyệt
 
 **CHỜ (kẹt phụ thuộc):**
 - `S11-ROOM-QA-1` QA ROOM: race double-booking (2 request song song → đúng 1 thắng), deny-path/IDOR/cross-tenant, nhắc lịch không bắn trùng — coverage ≥80% module rooms, chạy như CI trên LANE_DB ⏳ cần: S11-ROOM-FE-1
@@ -21,8 +30,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 0
-- **migration head**: idx 223 — `0556_s11assetfe1_enable_asset_module` (224 migration)
+- **branch**: `master` · **file đang đổi (dirty)**: 20
+- **migration head**: idx 224 — `0557_s11roomfe1_enable_room_module` (225 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
 
@@ -30,6 +39,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `c71f1169` | 2026-08-30 | chore(harness): đóng S11-ASSET-FE-1 (#439) — regen STATUS + bàn giao |
 | `8b551f93` | 2026-08-30 | feat(asset): S11-ASSET-FE-1 — 7 màn FE ASSET (ASSET-SCREEN-001..007) · bật module mig 0556 · 91 test (#439) |
 | `135ae0c8` | 2026-08-30 | chore(harness): đóng S11-ROOM-BE-1 — regen STATUS + bàn giao phiên |
 | `99b885fa` | 2026-08-30 | feat(room): S11-ROOM-BE-1 — module NestJS rooms/ (13 route · chống trùng EXCLUDE→409 · huỷ own/all · lịch/phòng trống/usage · /me · NOTI + job nhắc 15′) (#438) |
@@ -41,7 +51,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `1845c9ed` | 2026-08-28 | chore(gov): seed wave S11-OFFICE — ASSET + ROOM (Phase 3), 11 WO + hồ sơ duyệt HTML, owner đã duyệt 28/08 (#432) |
 | `23406f1d` | 2026-08-28 | qa(fnd): CHẨN ĐOÁN 500 cold-start — TwoFactorEnforcementGuard mở transaction KHÔNG BỌC trước mọi pipe (S10-QA-COLDSTART500-1 · KI-083) (#431) |
 | `f7c40b43` | 2026-08-28 | fix(fnd+db): DỌN NỐT cụm workflow/approval — gỡ 3 route + 18 file, DROP 14 bảng, ĐÓNG KI-082 (S10-CLEAN-WORKFLOWCLUSTER-2) (#430) |
-| `b1e53e20` | 2026-08-28 | fix(fnd): GỠ bề mặt API của module PARK `workflow/` — 29 route, trần ratchet param-uuid 37 → 1 (S10-CLEAN-WORKFLOWPARK-1) (#429) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
