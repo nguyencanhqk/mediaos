@@ -52,6 +52,7 @@ import {
   GraduationCap,
   Target,
   MessagesSquare,
+  Package,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@mediaos/ui";
@@ -111,6 +112,9 @@ const ICON_MAP: Record<string, LucideIcon> = {
   // S7-CHAT-FE-3 — mục sidebar "Tin nhắn" (me.chat → /chat). Thiếu dòng này thì `ICON_MAP` rơi về
   // Circle: mục vẫn bấm được nhưng đeo icon vô nghĩa, và không có gì đỏ để ai đó nhận ra.
   "messages-square": MessagesSquare,
+  // S11-ASSET-FE-1 — module Tài sản (APP_REGISTRY 'assets' + ASSET_SIDEBAR + mục ME «Tài sản của tôi»);
+  // tránh fallback Circle. "clipboard-list" (mục Kiểm kê) đã map sẵn ở trên.
+  package: Package,
 };
 
 interface DynamicIconProps {

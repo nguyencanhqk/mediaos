@@ -1715,6 +1715,180 @@ const TaskTemplateListPage = React.lazy(() =>
   import("@/routes/goals/TaskTemplateListPage").then((m) => ({ default: m.TaskTemplateListPage })),
 );
 
+// ASSET — Quản lý tài sản (S11-ASSET-FE-1, SPEC-13 ASSET-SCREEN-001..007). List + kiểm kê qua
+// makeModuleRoute (ROUTE_REGISTRY "asset.list"/"asset.inventories", gate access:asset + view:asset).
+// new/detail/edit + chi tiết đợt dùng RouteMeta CỤC BỘ (mẫu HR employees / goals).
+//
+// ⚠️ THỨ TỰ: mọi path TĨNH ("/assets/new", "/assets/inventories") PHẢI khai TRƯỚC "/assets/$assetId",
+// nếu không TanStack coi "new"/"inventories" là một assetId ⇒ vào chi tiết rồi 404 (đúng bẫy đã ghi
+// cho "/goals/new" và "/goals/templates").
+const AssetListPage = React.lazy(() =>
+  import("@/routes/assets/AssetListPage").then((m) => ({ default: m.AssetListPage })),
+);
+const AssetFormPage = React.lazy(() =>
+  import("@/routes/assets/AssetFormPage").then((m) => ({ default: m.AssetFormPage })),
+);
+const AssetDetailPage = React.lazy(() =>
+  import("@/routes/assets/AssetDetailPage").then((m) => ({ default: m.AssetDetailPage })),
+);
+const AssetInventoryListPage = React.lazy(() =>
+  import("@/routes/assets/AssetInventoryListPage").then((m) => ({
+    default: m.AssetInventoryListPage,
+  })),
+);
+const AssetInventoryDetailPage = React.lazy(() =>
+  import("@/routes/assets/AssetInventoryDetailPage").then((m) => ({
+    default: m.AssetInventoryDetailPage,
+  })),
+);
+
+const assetsListRoute = makeModuleRoute("/assets", "asset.list", "ASSET", AssetListPage);
+
+const assetNewMeta: RouteMeta = {
+  routeKey: "asset.new",
+  path: "/assets/new",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ASSET",
+  screenCode: "ASSET-SCREEN-003",
+  titleKey: "routeTitle.assetNew",
+  requiredPermissions: ["access:asset", "view:asset"],
+  showInSidebar: false,
+  order: 81.1,
+};
+const assetNewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/assets/new",
+  beforeLoad: authGuard,
+  component: () => {
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      assetNewMeta,
+      "ASSET",
+      <AssetFormPage
+        onSuccess={(id) => void navigate({ to: "/assets/$assetId", params: { assetId: id } })}
+        onCancel={() => void navigate({ to: "/assets" as "/" })}
+      />,
+    );
+  },
+});
+
+function AssetInventoryListRouteContent() {
+  const navigate = useNavigate();
+  return (
+    <AssetInventoryListPage
+      onOpenInventory={(id) =>
+        void navigate({
+          to: "/assets/inventories/$inventoryId",
+          params: { inventoryId: id },
+        })
+      }
+    />
+  );
+}
+
+const assetInventoriesRoute = makeModuleRoute(
+  "/assets/inventories",
+  "asset.inventories",
+  "ASSET",
+  AssetInventoryListRouteContent,
+);
+
+const assetInventoryDetailMeta: RouteMeta = {
+  routeKey: "asset.inventory.detail",
+  path: "/assets/inventories/$inventoryId",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ASSET",
+  screenCode: "ASSET-SCREEN-005",
+  titleKey: "routeTitle.assetInventoryDetail",
+  requiredPermissions: ["access:asset", "view:asset"],
+  showInSidebar: false,
+  order: 82.1,
+};
+const assetInventoryDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/assets/inventories/$inventoryId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { inventoryId } = assetInventoryDetailRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      assetInventoryDetailMeta,
+      "ASSET",
+      <AssetInventoryDetailPage
+        inventoryId={inventoryId}
+        onBack={() => void navigate({ to: "/assets/inventories" as "/" })}
+        onOpenAsset={(id) => void navigate({ to: "/assets/$assetId", params: { assetId: id } })}
+      />,
+    );
+  },
+});
+
+const assetDetailMeta: RouteMeta = {
+  routeKey: "asset.detail",
+  path: "/assets/$assetId",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ASSET",
+  screenCode: "ASSET-SCREEN-002",
+  titleKey: "routeTitle.assetDetail",
+  requiredPermissions: ["access:asset", "view:asset"],
+  showInSidebar: false,
+  order: 81.2,
+};
+const assetDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/assets/$assetId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { assetId } = assetDetailRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      assetDetailMeta,
+      "ASSET",
+      <AssetDetailPage
+        assetId={assetId}
+        onBack={() => void navigate({ to: "/assets" as "/" })}
+        onEdit={(id) => void navigate({ to: "/assets/$assetId/edit", params: { assetId: id } })}
+      />,
+    );
+  },
+});
+
+const assetEditMeta: RouteMeta = {
+  routeKey: "asset.edit",
+  path: "/assets/$assetId/edit",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ASSET",
+  screenCode: "ASSET-SCREEN-003",
+  titleKey: "routeTitle.assetEdit",
+  requiredPermissions: ["access:asset", "view:asset"],
+  showInSidebar: false,
+  order: 81.3,
+};
+const assetEditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/assets/$assetId/edit",
+  beforeLoad: authGuard,
+  component: () => {
+    const { assetId } = assetEditRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      assetEditMeta,
+      "ASSET",
+      <AssetFormPage
+        assetId={assetId}
+        onSuccess={(id) => void navigate({ to: "/assets/$assetId", params: { assetId: id } })}
+        onCancel={() => void navigate({ to: "/assets/$assetId", params: { assetId } })}
+      />,
+    );
+  },
+});
+
+// ME — «Tài sản của tôi» (ASSET-SCREEN-006) mount trong ME workspace, gate bằng cặp ASSET.
+const MeAssetsPage = React.lazy(() =>
+  import("@/routes/me/MeAssetsPage").then((m) => ({ default: m.MeAssetsPage })),
+);
+const meAssetsRoute = makeModuleRoute("/me/assets", "me.assets", "ME", MeAssetsPage);
+
 const goalsListRoute = makeModuleRoute("/goals", "goal.list", "GOAL", GoalListPage);
 
 const goalNewMeta: RouteMeta = {
@@ -2403,6 +2577,14 @@ const routeTree = rootRoute.addChildren([
   meSecurityActivityRoute,
   meTrainingRoute,
   meSecurityTwoFactorRoute,
+  assetsListRoute,
+  // S11-ASSET-FE-1 — static TRƯỚC "/assets/$assetId" (xem docblock khối ASSET).
+  assetNewRoute,
+  assetInventoriesRoute,
+  assetInventoryDetailRoute,
+  assetDetailRoute,
+  assetEditRoute,
+  meAssetsRoute,
   goalsListRoute,
   // S5-GOAL-TPL-1 — static TRƯỚC "/goals/$goalId" (xem docblock goalTemplatesMeta).
   goalTemplatesRoute,

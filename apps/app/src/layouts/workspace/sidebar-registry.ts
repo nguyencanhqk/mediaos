@@ -857,6 +857,20 @@ export const ME_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 22,
     requiredAnyPermissions: ["access:me"],
   },
+  // S11-ASSET-FE-1 — «Tài sản của tôi» (ASSET-SCREEN-006, GET /me/assets). Gate = cặp ASSET (KHÁC các
+  // mục ME khác dùng access:me), cùng kỹ thuật me.lms dùng access:lms: quyền xem tài sản độc lập với
+  // quyền vào Personal Hub — ai bị thu view:asset KHÔNG thấy mục này. ĐỦ CẢ HAI vì trang tải GET
+  // /me/assets = view:asset (gate màn khớp gate đường tải).
+  {
+    sidebarKey: "me.assets",
+    moduleCode: "ME",
+    label: "Tài sản của tôi",
+    path: "/me/assets",
+    icon: "package",
+    group: "Công việc của tôi",
+    order: 23,
+    requiredPermissions: ["access:asset", "view:asset"],
+  },
   {
     sidebarKey: "me.notifications",
     moduleCode: "ME",
@@ -1024,6 +1038,40 @@ export const GOAL_SIDEBAR: readonly SidebarItemMeta[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// ASSET — Quản lý tài sản (S11-ASSET-FE-1, SPEC-13, wave S11-OFFICE)
+// ---------------------------------------------------------------------------
+//
+// Gate ĐỦ CẢ HAI cặp engine LITERAL `access:asset` + `view:asset` (seed 0550) — KHÔNG qua
+// PERMISSION_CODE_TO_PAIR (họ access:me/access:goal). Vì sao cả hai: cả hai mục đều tải dữ liệu qua
+// `view:asset`, nên gate mục PHẢI khớp gate đường tải — thu `view:asset` per-role thì mục biến mất,
+// không phải hiện ra rồi đâm vào trang lỗi (read-path-gate-pair-must-match-download-pair).
+//
+// Quyền GHI (create/update/assign/revoke/dispose/manage-*) KHÔNG gate ở đây: sidebar là cổng nav.
+// Màn quản trị loại (ASSET-SCREEN-007) là hộp thoại TRONG /assets, không phải mục riêng.
+export const ASSET_SIDEBAR: readonly SidebarItemMeta[] = [
+  {
+    sidebarKey: "asset.list",
+    moduleCode: "ASSET",
+    label: "Danh sách tài sản",
+    path: "/assets",
+    icon: "package",
+    group: "overview",
+    order: 10,
+    requiredPermissions: ["access:asset", "view:asset"],
+  },
+  {
+    sidebarKey: "asset.inventories",
+    moduleCode: "ASSET",
+    label: "Kiểm kê",
+    path: "/assets/inventories",
+    icon: "clipboard-list",
+    group: "overview",
+    order: 20,
+    requiredPermissions: ["access:asset", "view:asset"],
+  },
+];
+
+// ---------------------------------------------------------------------------
 // Map moduleCode → sidebar items
 // ---------------------------------------------------------------------------
 import { type ModuleCode } from "@mediaos/web-core";
@@ -1038,6 +1086,7 @@ export const SIDEBAR_REGISTRY: Partial<Record<ModuleCode, readonly SidebarItemMe
   FOUNDATION: SYSTEM_SIDEBAR,
   ME: ME_SIDEBAR,
   GOAL: GOAL_SIDEBAR,
+  ASSET: ASSET_SIDEBAR,
 };
 
 export function getSidebarItems(moduleCode: ModuleCode): readonly SidebarItemMeta[] {

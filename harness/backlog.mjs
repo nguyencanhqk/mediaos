@@ -14395,7 +14395,7 @@ export const backlog = [
     title:
       "FE ASSET (apps/app routes/assets/): danh sách + chi tiết + form + cấp phát/thu hồi + kiểm kê + «tài sản của tôi» — PermissionGate/useCan, i18n vi, wireframe đã duyệt ở tài liệu wave",
     zone: "green",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/app/src/routes/assets/**",
       "apps/app/src/routes/me/**",

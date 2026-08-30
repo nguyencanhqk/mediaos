@@ -24,6 +24,8 @@ import goalsVi from "./locales/vi/goals";
 import employeePickerVi from "./locales/vi/employee-picker";
 // S7-CHAT-FE-2 — trang /chat (namespace mới "chat", SPEC-15 §9/§14).
 import chatVi from "./locales/vi/chat";
+// S11-ASSET-FE-1 — ASSET-SCREEN-001..007 (namespace mới "assets", SPEC-13 §9/§14).
+import assetsVi from "./locales/vi/assets";
 
 registerI18nResources("vi", {
   common: employeePickerVi,
@@ -38,6 +40,7 @@ registerI18nResources("vi", {
   me: meVi,
   goals: goalsVi,
   chat: chatVi,
+  assets: assetsVi,
   // S4-FE-NOTI-2 — ĐÈ THÊM 1 khoá routeTitle.notiEvents vào bundle "nav" đã nhúng sẵn ở @mediaos/web-core
   // (deep-merge, KHÔNG đụng khoá cũ) — route noti.events (ROUTE_REGISTRY) cần titleKey này.
   // S4-FE-NOTI-4 — THÊM notiTemplates (route noti.templates, MỚI) + notificationDeliveryLogs (route

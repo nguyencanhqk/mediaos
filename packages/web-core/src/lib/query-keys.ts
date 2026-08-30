@@ -26,6 +26,8 @@ export const rootKeys = {
   goals: ["goals"] as const,
   // S7-CHAT-FE-1 — Chat nội bộ (SPEC-15). Module RIÊNG: trang /chat và panel nổi dùng CHUNG cache này.
   chat: ["chat"] as const,
+  // S11-ASSET-FE-1 — Tài sản (SPEC-13). Module RIÊNG, wave S11-OFFICE.
+  assets: ["assets"] as const,
 } as const;
 
 // ── Auth keys ─────────────────────────────────────────────────────────────────
@@ -827,6 +829,10 @@ export const meKeys = {
   // S5-GOAL-FE-2 — "Mục tiêu của tôi" (GET /me/goals, GOAL-API-013). Query RIÊNG khỏi overview() và
   // KHÁC goalKeys.list(): endpoint own-scope khác, gate khác, không nhận employeeId (chống IDOR).
   goals: (params?: Record<string, unknown>) => [...rootKeys.me, "goals", params] as const,
+  // S11-ASSET-FE-1 — «Tài sản của tôi» (GET /me/assets, ASSET-API-023). Query RIÊNG khỏi assetKeys.list():
+  // endpoint own-scope, employee resolve từ token (KHÔNG nhận employeeId — chống IDOR), và KHÔNG BAO GIỜ
+  // trả trường tài chính bất kể data_scope của caller ⇒ cache riêng, không lẫn với cache danh sách chung.
+  assets: (params?: Record<string, unknown>) => [...rootKeys.me, "assets", params] as const,
 };
 
 // ── GOAL keys (S5-GOAL-FE-1) — Mục tiêu, SPEC-10 ───────────────────────────────
@@ -1026,4 +1032,44 @@ export const chatKeys = {
   },
   /** Badge tổng chưa đọc (CHAT-API-016) — lối vào của FE-3; FE-1 chỉ khai key. */
   unreadCount: () => [...rootKeys.chat, "unread-count"] as const,
+};
+
+// ── S11-ASSET-FE-1 — Tài sản (SPEC-13 §15, 26 route BE) ───────────────────────
+//
+// Ba nhánh dưới `assets/*`:
+//   - `assets.*`      hồ sơ tài sản + lịch sử cấp phát/bảo trì + thống kê
+//   - `categories.*`  danh mục loại (ASSET-API-001..004) — nhánh RIÊNG: sửa loại KHÔNG làm đổi tiến
+//                     trình của hồ sơ nào, nên mutation loại không kéo theo invalidate list tài sản
+//                     (mirror taskTemplateKeys tách khỏi goalKeys)
+//   - `inventories.*` đợt kiểm kê (ASSET-API-018..022)
+//
+// `assignmentsOf`/`maintenancesOf` là PREFIX 4 phần tử (bỏ slot params) của bản mang params: hai sổ này
+// phân trang nên key mang params CỤ THỂ — invalidate bản có params=undefined KHÔNG khớp trang khác
+// (cùng bẫy đã ghi ở goalKeys.updatesOf / taskKeys.activityOf). Sau cấp phát/thu hồi phải làm mới MỌI
+// trang của sổ ⇒ dùng bản `*Of`.
+export const assetKeys = {
+  all: rootKeys.assets,
+  list: (params?: Record<string, unknown>) => [...rootKeys.assets, "list", params] as const,
+  detail: (id: string) => [...rootKeys.assets, "detail", id] as const,
+  summary: (params?: Record<string, unknown>) => [...rootKeys.assets, "summary", params] as const,
+  assignments: (id: string, params?: Record<string, unknown>) =>
+    [...rootKeys.assets, "assignments", id, params] as const,
+  assignmentsOf: (id: string) => [...rootKeys.assets, "assignments", id] as const,
+  maintenances: (id: string, params?: Record<string, unknown>) =>
+    [...rootKeys.assets, "maintenances", id, params] as const,
+  maintenancesOf: (id: string) => [...rootKeys.assets, "maintenances", id] as const,
+  categories: {
+    all: [...rootKeys.assets, "categories"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.assets, "categories", "list", params] as const,
+  },
+  inventories: {
+    all: [...rootKeys.assets, "inventories"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.assets, "inventories", "list", params] as const,
+    detail: (id: string) => [...rootKeys.assets, "inventories", "detail", id] as const,
+    items: (id: string, params?: Record<string, unknown>) =>
+      [...rootKeys.assets, "inventories", "items", id, params] as const,
+    itemsOf: (id: string) => [...rootKeys.assets, "inventories", "items", id] as const,
+  },
 };

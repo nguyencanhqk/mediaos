@@ -87,14 +87,14 @@ const REQUIRED_TABLES = [
 const MVP_ACTIVE_MODULES = ["AUTH", "HR", "ATT", "LEAVE", "TASK", "DASH", "NOTI"] as const;
 
 // Extension modules phải inactive.
-const EXTENSION_INACTIVE_MODULES = [
-  "PAYROLL",
-  "RECRUIT",
-  "ASSET",
-  "ROOM",
-  "CHAT",
-  "SOCIAL",
-] as const;
+//
+// S11-ASSET-FE-1 — GỠ "ASSET": migration 0556 bật modules.ASSET.is_active=true CÙNG COMMIT với lần gỡ
+// này. 0550 cố ý để module tắt ("chua co endpoint") và bàn giao việc bật cho WO FE; nay 7 màn
+// ASSET-SCREEN-001..007 đã có nên cửa mở ra là vào được phòng thật. CHAT (0538) đi trước cùng đường.
+//
+// "ROOM" GIỮ NGUYÊN ở đây: BE ROOM đã merge (#438) nhưng FE ROOM là WO riêng (S11-ROOM-FE-1) —
+// bật ROOM lúc này là dựng menu trỏ vào màn chưa tồn tại.
+const EXTENSION_INACTIVE_MODULES = ["PAYROLL", "RECRUIT", "ROOM", "CHAT", "SOCIAL"] as const;
 
 // system_settings defaults phải tồn tại sau seed (DB-08 §8.3 + 0435_foundation_db5).
 const REQUIRED_SYSTEM_SETTINGS = [
