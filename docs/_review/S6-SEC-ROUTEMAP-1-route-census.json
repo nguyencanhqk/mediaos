@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 468,
-    "controllers": 85,
-    "gated": 429,
+    "routes": 494,
+    "controllers": 89,
+    "gated": 455,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -178,6 +178,406 @@
         "PermissionGuard"
       ],
       "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetCategoriesController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/asset-categories",
+      "hasPermission": true,
+      "permission": "manage:asset-category",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetCategoriesController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/asset-categories",
+      "hasPermission": true,
+      "permission": "view:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetCategoriesController#remove",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/asset-categories/:id",
+      "hasPermission": true,
+      "permission": "manage:asset-category",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetCategoriesController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/asset-categories/:id",
+      "hasPermission": true,
+      "permission": "manage:asset-category",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetInventoriesController#close",
+      "httpMethod": "POST",
+      "path": "/api/v1/asset-inventories/:id/close",
+      "hasPermission": true,
+      "permission": "manage:asset-inventory",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetInventoriesController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/asset-inventories/:id",
+      "hasPermission": true,
+      "permission": "view:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetInventoriesController#items",
+      "httpMethod": "GET",
+      "path": "/api/v1/asset-inventories/:id/items",
+      "hasPermission": true,
+      "permission": "view:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetInventoriesController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/asset-inventories",
+      "hasPermission": true,
+      "permission": "view:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetInventoriesController#markMany",
+      "httpMethod": "POST",
+      "path": "/api/v1/asset-inventories/:id/items/bulk-mark",
+      "hasPermission": true,
+      "permission": "manage:asset-inventory",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetInventoriesController#markOne",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/asset-inventories/:id/items/:itemId",
+      "hasPermission": true,
+      "permission": "manage:asset-inventory",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetInventoriesController#open",
+      "httpMethod": "POST",
+      "path": "/api/v1/asset-inventories",
+      "hasPermission": true,
+      "permission": "manage:asset-inventory",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetsController#assign",
+      "httpMethod": "POST",
+      "path": "/api/v1/assets/:id/assign",
+      "hasPermission": true,
+      "permission": "assign:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetsController#assignments",
+      "httpMethod": "GET",
+      "path": "/api/v1/assets/:id/assignments",
+      "hasPermission": true,
+      "permission": "view:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetsController#closeMaintenance",
+      "httpMethod": "POST",
+      "path": "/api/v1/assets/:id/maintenances/:maintenanceId/close",
+      "hasPermission": true,
+      "permission": "manage:asset-maintenance",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetsController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/assets",
+      "hasPermission": true,
+      "permission": "create:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetsController#dispose",
+      "httpMethod": "POST",
+      "path": "/api/v1/assets/:id/dispose",
+      "hasPermission": true,
+      "permission": "dispose:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetsController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/assets/:id",
+      "hasPermission": true,
+      "permission": "view:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetsController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/assets",
+      "hasPermission": true,
+      "permission": "view:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetsController#maintenances",
+      "httpMethod": "GET",
+      "path": "/api/v1/assets/:id/maintenances",
+      "hasPermission": true,
+      "permission": "view:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetsController#openMaintenance",
+      "httpMethod": "POST",
+      "path": "/api/v1/assets/:id/maintenances",
+      "hasPermission": true,
+      "permission": "manage:asset-maintenance",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetsController#recover",
+      "httpMethod": "POST",
+      "path": "/api/v1/assets/:id/recover",
+      "hasPermission": true,
+      "permission": "dispose:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetsController#remove",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/assets/:id",
+      "hasPermission": true,
+      "permission": "delete:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetsController#revoke",
+      "httpMethod": "POST",
+      "path": "/api/v1/assets/:id/revoke",
+      "hasPermission": true,
+      "permission": "revoke:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetsController#summary",
+      "httpMethod": "GET",
+      "path": "/api/v1/assets/summary",
+      "hasPermission": true,
+      "permission": "view:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AssetsController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/assets/:id",
+      "hasPermission": true,
+      "permission": "update:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
       "verdict": null,
       "verdictReason": null,
       "verdictWo": null
@@ -4447,6 +4847,22 @@
         "PermissionGuard"
       ],
       "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "MeAssetsController#myAssets",
+      "httpMethod": "GET",
+      "path": "/api/v1/me/assets",
+      "hasPermission": true,
+      "permission": "view:asset",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
       "verdict": null,
       "verdictReason": null,
       "verdictWo": null

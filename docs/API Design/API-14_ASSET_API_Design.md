@@ -151,7 +151,7 @@ GET    /api/v1/me/assets
 
 | Mã | Trạng thái | Ghi chú |
 | --- | --- | --- |
-| ASSET-API-001..024 | ⏳ Chưa | Thi công ở `S11-ASSET-BE-1` sau `S11-ASSET-DB-1`. Cập nhật bảng này khi WO đóng |
+| ASSET-API-001..024 | ✅ Đã hiện thực (S11-ASSET-BE-1, 30/08/2026) | `apps/api/src/assets/**` (4 controller · 26 route · `API_MODULE_TAGS` ASSET); NOTI registrar + job `ASSET_MAINTENANCE_DUE` ở `apps/api/src/notifications/asset-*`; int-spec `test/integration/asset-be1-*.int-spec.ts`. Lệch chữ có chủ đích so với bản stub: xem §7.4 (hình dạng `details`, `readonly-field` = 400) |
 
 > Lệch giữa bảng này và code ⇒ **sửa code**, không sửa ngầm tài liệu (CLAUDE.md — docs/spec + docs/DB là chuẩn). Cột này là ảnh chụp tiến độ.
 
@@ -244,8 +244,10 @@ Mã lỗi theo API-01 §13 `MODULE-ERR-CODE`. Namespace ASSET gồm **hai nhóm*
 | --- | --- |
 | `400` | Body/param sai định dạng (`VALIDATION-ERR-001`), `{id}` không phải UUID |
 | `404` | ASSET-ERR-002 (nhân viên không thuộc company) · 005 (`maintenance-not-found`) · 012 · 013 |
-| `409` | ASSET-ERR-001 · 003 · 004 · 005 · 006 · 007 · 008 · 010 · 011 (serial trùng) · 015 · **mã của interceptor idempotency dùng chung**: `IN_PROGRESS` (bấm-đúp khi request đầu chưa xong) · `KEY_REUSED` (cùng key, khác payload) · `INVALID_KEY` (key sai định dạng) — `idempotency.interceptor.ts` |
-| `422` | ASSET-ERR-002 (nhân viên không `active`) · 009 · 011 (gửi `assetCode`/`status`) · 014 · 016 |
+| `409` | ASSET-ERR-001 · 003 · 004 · 005 · 006 · 007 · 008 · 010 · 011 (serial trùng) · 015 · `ASSET-ERR-COUNTER-MISSING` · `ASSET-ERR-INVENTORY-SNAPSHOT-INVALID` · **mã của interceptor idempotency dùng chung** (mã thật dạng `REQUEST-ERR-IDEMPOTENCY-<X>`, ví dụ `REQUEST-ERR-IDEMPOTENCY-KEY-REUSED`): `IN_PROGRESS` (bấm-đúp khi request đầu chưa xong) · `KEY_REUSED` (cùng key, khác payload) · `INVALID_KEY` (key sai định dạng) — `idempotency.interceptor.ts` |
+| `422` | ASSET-ERR-002 (nhân viên không `active`) · 014 |
+
+> **Đính chính S11-ASSET-BE-1 (30/08/2026):** (1) `details` **là MẢNG** `ErrorDetail {field, message, rule}` theo API-01/`AllExceptionsFilter` — không phải object; `details.kind` của SPEC-13 §12 biểu diễn bằng phần tử `{ "field": "kind", "message": "<kind>", "rule": "asset" }`, cặp phụ (`categoryId` · `deleted` · `from` · `action` …) là các phần tử tiếp theo. Ví dụ dưới đã sửa theo. (2) Gửi `assetCode`/`status` (hoặc bất kỳ khoá lạ) trong PATCH ⇒ **400 `VALIDATION-ERR-001`** tại biên (schema `.strict()`), không còn vế 422 của ASSET-ERR-011 — mã 011 chỉ còn `serial-taken` (409). (3) `reason` < 3 ký tự (009) và `returnCondition` thiếu/sai (016) chặn ở Zod ⇒ **400** (không 422). (4) Hai sentinel mới (không chiếm số): `ASSET-ERR-COUNTER-MISSING` (409 — loại thiếu bộ đếm mã) · `ASSET-ERR-INVENTORY-SNAPSHOT-INVALID` (409 — ảnh chụp đợt chứa Disposed/Lost, chỉ nổ khi service sót lọc).
 
 Dùng lại nhóm lỗi chung API-01: `AUTH-ERR-UNAUTHENTICATED` 401 · `AUTH-ERR-FORBIDDEN` 403 · `AUTH-ERR-SCOPE-DENIED` 403 (chỉ khi cố tình ghi ngoài scope — v1 mọi cặp ghi đều Company nên hiếm gặp) · `VALIDATION-ERR-001` 400 · `SYSTEM-ERR-RATE-LIMIT` 429.
 
@@ -253,7 +255,7 @@ Dùng lại nhóm lỗi chung API-01: `AUTH-ERR-UNAUTHENTICATED` 401 · `AUTH-ER
 {
   "success": false,
   "message": "Tài sản đang ở trạng thái Assigned, không thể cấp phát",
-  "error": { "code": "ASSET-ERR-001", "type": "BusinessRuleError", "details": { "from": "Assigned", "action": "assign" } },
+  "error": { "code": "ASSET-ERR-001", "type": "ConflictException", "details": [ { "field": "from", "message": "Assigned", "rule": "asset-fsm" }, { "field": "to", "message": "Assigned", "rule": "asset-fsm" }, { "field": "action", "message": "assign", "rule": "asset-fsm" } ] },
   "meta": { "request_id": "req_…", "timestamp": "…" }
 }
 ```

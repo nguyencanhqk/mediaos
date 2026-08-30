@@ -31,6 +31,8 @@ import { IntegrationsLmsModule } from "./integrations/lms/lms.module";
 import { IntegrationsSocialModule } from "./integrations/social/social.module";
 // S5-GOAL-BE-1 (additive): GoalsModule — cây mục tiêu 3 cấp + /me/goals (SPEC-10 / DB-11).
 import { GoalsModule } from "./goals/goals.module";
+// S11-ASSET-BE-1 (additive): AssetsModule — quản lý tài sản (SPEC-13 / DB-15 / API-14).
+import { AssetsModule } from "./assets/assets.module";
 // S7-CHAT-BE-1 (additive): ChatModule — phòng chat & thành viên (SPEC-15 / DB-12 / API-13).
 import { ChatModule } from "./chat/chat.module";
 import { IdempotencyModule } from "./common/idempotency/idempotency.module";
@@ -102,6 +104,10 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     // tiết/sửa/lưu trữ/rời) + thành viên. Ranh giới dữ liệu là THÀNH VIÊN PHÒNG (ChatAccessService),
     // KHÔNG phải data_scope. Đường đọc-vượt của Super Admin nằm ở WO RIÊNG S7-CHAT-BE-7.
     ChatModule,
+    // S11-ASSET-BE-1 (additive): module ASSET (SPEC-13) — danh mục loại + hồ sơ tài sản + cấp phát/thu hồi +
+    // bảo trì + kiểm kê + /me/assets. Data-scope Own/Department/Company + masking tài chính/danh tính ở service;
+    // ngoài scope ⇒ 404. Registrar NOTI + job nhắc bảo trì sống ở NotificationsModule.
+    AssetsModule,
   ],
   providers: [
     // Global guard pipeline (THỨ TỰ QUAN TRỌNG):
