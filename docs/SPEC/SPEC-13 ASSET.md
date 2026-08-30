@@ -295,6 +295,10 @@ Ghi chú bắt buộc:
 | ASSET-ERR-014 | 422 | Ngày: `purchase_date` > hôm nay · `warranty_end_date` < `purchase_date` · `expected_return_date` < ngày cấp · `next_due_date` ≤ ngày đóng bảo trì |
 | ASSET-ERR-015 | 409 | Xoá mềm tài sản khi **không** `In Stock` hoặc đã có ≥ 1 lượt cấp phát/bảo trì — hồ sơ có lịch sử thì **thanh lý**, không xoá |
 | ASSET-ERR-016 | 422 | Thu hồi thiếu `returnCondition` hoặc giá trị ngoài bộ đóng `Good` / `Damaged` / `Lost` (ép ở **CHECK cấp DB**, không chỉ Zod) |
+| ASSET-ERR-COUNTER-MISSING | 409 | *(sentinel, S11-ASSET-BE-1)* Tạo hồ sơ khi loại **không có bộ đếm mã** (`sequence_counters` bị xoá tay — bộ đếm luôn tạo cùng tx với loại, FUNC-001) — `SequenceNotFoundError` map ra mã này, không 500 |
+| ASSET-ERR-INVENTORY-SNAPSHOT-INVALID | 409 | *(sentinel, S11-ASSET-BE-1)* Ảnh chụp đợt kiểm kê chứa tài sản `Disposed`/`Lost` (`23514 chk_asset_inventory_items_expected`) — chỉ nổ khi service sót lọc; đường đúng không bao giờ tới đây |
+
+> **Đính chính hiện thực (S11-ASSET-BE-1, 30/08/2026):** `error.details` là **mảng** `ErrorDetail {field,message,rule}` (API-01) — `details.kind` = phần tử `field:"kind"`. Các vế "lỗi hình thức" chặn ở Zod trả **400** `VALIDATION-ERR-001` thay vì 422: ASSET-ERR-009 (`reason` < 3), ASSET-ERR-011 vế `readonly-field` (PATCH gửi `assetCode`/`status` — schema `.strict()`), ASSET-ERR-016 (`returnCondition` thiếu/sai). Ô `Assigned → Disposed` của §13.1 trả **008** (guard theo lượt Active chạy TRƯỚC FSM) — câu ví dụ "thanh lý tài sản đang Assigned" ở ASSET-ERR-001 là ví dụ SAI, giữ để đối chiếu.
 
 Quy tắc bổ sung (không cần mã riêng):
 
@@ -427,9 +431,9 @@ Nguồn chuẩn: [DB-15](<../DB/DB-15 ASSET Database Design.md>). Tóm tắt:
 
 | Event code | Mã chuẩn (SPEC-01 §20.2 · SPEC-08 §15.0) | Khi nào | Người nhận | Gộp / dedupe |
 | --- | --- | --- | --- | --- |
-| `ASSET_ASSIGNED` | NOTI-EVENT-010 | lượt cấp phát tạo xong (commit) | user của nhân viên được cấp | không gộp; `dedupeKey = asset:assigned:{assignmentId}` |
-| `ASSET_REVOKED` | NOTI-EVENT-011 | lượt cấp phát đóng (`Returned`, kể cả `Lost`) | user của nhân viên bị thu hồi | `dedupeKey = asset:revoked:{assignmentId}` |
-| `ASSET_MAINTENANCE_DUE` | NOTI-EVENT-012 | job hằng ngày: `next_maintenance_due ≤ hôm nay + 7` và tài sản không `Disposed`/`Lost` | **user đang giữ role `asset-manager` hoặc `company-admin`** trong company (tra `user_roles`, phát với `recipient.mode='UserIds'`) — xem ghi chú | `dedupeKey = asset:maint-due:{assetId}:{dueDate}` — cùng hạn không nhắc lại; đổi hạn ⇒ khoá mới |
+| `ASSET_ASSIGNED` | NOTI-EVENT-010 | lượt cấp phát tạo xong (commit) | user của nhân viên được cấp | không gộp; `dedupe_key` lưu thật = `ASSET_ASSIGNED:{assignmentId}` (engine ghép `eventCode:` + `dedupeKeyOf` = assignmentId — S11-ASSET-BE-1) |
+| `ASSET_REVOKED` | NOTI-EVENT-011 | lượt cấp phát đóng (`Returned`, kể cả `Lost`) | user của nhân viên bị thu hồi | `dedupe_key = ASSET_REVOKED:{assignmentId}` |
+| `ASSET_MAINTENANCE_DUE` | NOTI-EVENT-012 | job mỗi nhịp scheduler (60s — dedupe làm thành 1 lần/(asset, hạn); "hằng ngày" là nhịp hạ tầng chung, ghi nợ): `next_maintenance_due ≤ hôm nay + 7` và tài sản không `Disposed`/`Lost` | **user đang giữ role `asset-manager` hoặc `company-admin`** trong company (tra `user_roles` còn hiệu lực: `deleted_at IS NULL`, chưa `expires_at`; phát với `recipient.mode='UserIds'`) — xem ghi chú | `dedupe_key = ASSET_MAINTENANCE_DUE:{assetId}:{dueDate}` — cùng hạn không nhắc lại; đổi hạn ⇒ khoá mới |
 
 - **Người nhận của 012 resolve theo ROLE, không theo cặp quyền** (đo 28/08/2026): `NotificationRecipientResolverService` chỉ có `mode: 'UserIds' | 'EmployeeIds'`, và `PermissionService` **không có** tra ngược "user nào giữ cặp X" (mọi hàm đều tra theo một user). Dựng tra-ngược permission engine là việc vùng đỏ ngoài phạm vi wave ⇒ v1 liệt kê user qua `user_roles` của hai role trên. Nếu Phase sau có tra-ngược, đổi sang cặp `('manage','asset-maintenance')` và ghi lại đây. *(Không có tiền lệ `HR_CONTRACT_EXPIRING` để noi theo — mã đó chỉ nằm trong catalog, chưa có producer.)*
 - `notification_type = 'Asset'`, `module_code = 'ASSET'`, `priority` Normal (010/011) · High (012), `isEnabled=true`, `isSystemEvent=false`, **`dedupe_strategy='DedupeKey'`** (catalog thắng `DEFAULT_DEDUPE` — không thêm entry vào `notification-dedupe.const.ts`, tránh hai nguồn sự thật).

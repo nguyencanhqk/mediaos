@@ -47,6 +47,10 @@ import { TaskNotiBridgeRegistrar } from "./task-noti-bridge.registrar";
 // đọc thẳng goals/employee_profiles/org_units — KHÔNG import GoalsModule (acyclic, mirror TASK).
 import { GoalAudienceReader } from "./goal-audience.reader";
 import { GoalNotiBridgeRegistrar } from "./goal-noti-bridge.registrar";
+// S11-ASSET-BE-1 (additive): reader + registrar ASSET (2 consumer outbox) + job ASSET_MAINTENANCE_DUE.
+import { AssetAudienceReader } from "./asset-audience.reader";
+import { AssetNotiBridgeRegistrar } from "./asset-noti-bridge.registrar";
+import { AssetMaintenanceDueJobHandler } from "./asset-maintenance-due.job-handler";
 // S4-INT-5 (additive): AUTH/HR → NOTI producer wiring. TÁI DÙNG OutboxNotificationBridge (INT-1) — đăng ký 3
 // mapping (auth.user_created/password_reset_requested/user_locked) qua registrar OnModuleInit. KHÔNG import
 // AuthModule/EmployeesModule (acyclic — consumer đọc payload, producer enqueue outbox ở service tương ứng).
@@ -120,6 +124,11 @@ import { LmsServiceIntakeGuard } from "./lms-service-intake.guard";
     // S5-GOAL-BE-2 (additive) — GOAL_ASSIGNED / GOAL_FINALIZED (catalog + template seed 0507).
     GoalAudienceReader,
     GoalNotiBridgeRegistrar,
+    // S11-ASSET-BE-1 (additive) — ASSET_ASSIGNED / ASSET_REVOKED qua CÙNG bridge (dedupeKeyOf BẮT BUỘC, catalog
+    // 0551 DedupeKey) + job ASSET_MAINTENANCE_DUE (intake in-process, mirror TaskReminderJobHandler).
+    AssetAudienceReader,
+    AssetNotiBridgeRegistrar,
+    AssetMaintenanceDueJobHandler,
     // S4-INT-5 (additive): registrar OnModuleInit đăng ký 3 consumer AUTH lên EventBus (@Global EventsModule)
     // tại boot, tái dùng OutboxNotificationBridge — KHÔNG bridge/consumer mới.
     AuthHrNotiBridgeRegistrar,

@@ -14352,12 +14352,18 @@ export const backlog = [
     title:
       "Module NestJS assets/: CRUD danh mục + tài sản, cấp phát/thu hồi, bảo trì, kiểm kê — permission guard §9d, audit log, outbox NOTI, :id=UUID ở biên, API_MODULE_TAGS + route-census regen",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/assets/**",
       "apps/api/src/app.module.ts",
       "apps/api/src/config/openapi-modules.ts",
+      "apps/api/src/notifications/**",
       "apps/api/test/foundation/**",
+      "apps/api/test/integration/**",
+      "docs/_review/**",
+      "docs/API Design/**",
+      "docs/spec/**",
+      "docs/plans/**",
       "packages/contracts/**",
     ],
     skills: ["code-review"],
@@ -14377,6 +14383,7 @@ export const backlog = [
       "Mở đợt kiểm kê: INSERT…SELECT PHẢI lọc status NOT IN ('Disposed','Lost') — 23514 chk_asset_inventory_items_expected phải map ra mã ASSET-ERR, không 500; thiếu counter ⇒ SequenceNotFoundError (tạo counter CÙNG tx với loại, DB-15 §6.7); thu hồi/đóng bảo trì/đóng đợt = MỘT câu UPDATE đủ cột (CHECK *_pair)",
     ],
     notes: [
+      "✅ THI CÔNG 30/08/2026 (nhánh wo/s11-asset-be-1, plan Rev 2 §13 = 1 vòng plan-review BLOCK 15 đã vá): 19 file apps/api/src/assets/** (4 controller · 26 route · FSM thuần asset-fsm.ts · masking DUY NHẤT ở assets.mapper.ts · scope EXISTS ở asset-access.service.ts) + notifications/asset-{audience.reader,noti-bridge.registrar,maintenance-due.job-handler}.ts (dedupeKeyOf BẮT BUỘC — catalog 0551 DedupeKey) + contracts asset.ts (DTO/response, .strict() cho PATCH). Census 468→494 route (gated +26, ungated/needVerdict KHÔNG đổi); identity-projection: +3 verdict (holderSelect · listByAssetTx · findUserDisplayNameTx self-bound) + 2 ROW_SCOPE_MINT_PINS, trần scoped-predicate 21→23, self-bound-row 3→4 (có chủ đích, FULL gate). Test: 4 int-spec asset-be1-{scope,fsm,inventory-counter,noti-idempotency} 62/62 trên LANE_DB mediaos_assetbe1 + 34 unit (fsm/errors/mapper). LỆCH DOC CÓ CHỦ ĐÍCH (đã đính chính API-14 §5.2/§7.4 + SPEC-13 §12/§17): error.details là MẢNG ErrorDetail (kind = phần tử field:kind); 009/011-readonly-field/016 chặn ở Zod ⇒ 400 không 422; 2 sentinel ASSET-ERR-COUNTER-MISSING / ASSET-ERR-INVENTORY-SNAPSHOT-INVALID; Assigned→Disposed = 008 (guard trước FSM); dedupe_key thật = ASSET_ASSIGNED:{assignmentId}; job chạy mỗi 60s (nhịp hạ tầng chung, dedupe (asset,hạn) làm thành 1 lần) — NỢ: nhịp 1 lần/ngày của SPEC-13 §13.3 là việc scheduler chung, không thuộc WO. Registrar/job NOTI sống ở notifications/** (tiền lệ GOAL/TASK) — AssetsModule KHÔNG import NotificationsModule.",
       "🔴 Nâng yellow → red 2026-08-29 theo plan-reviewer vòng 2 (BLOCK-4): WO này hiện thực data-scope Own/Department/Company ở service + MASKING danh tính & tài chính ở server + 404-không-403 + audit mọi mutation + guard 11 cặp — cùng khuôn S5-GOAL-BE-1 / S7-CHAT-BE-1 (đều red). FULL gate (security-reviewer + database-reviewer + silent-failure-hunter), NGƯỜI chốt, KHÔNG gắn nhãn auto-merge.",
       "📌 Hợp đồng idempotency đi theo hạ tầng dùng chung `@Idempotent()` (TTL 15′, header không bắt buộc ở interceptor, replay = header `Idempotency-Replayed`) — KHÔNG fork interceptor để có `meta.idempotent_replay` (SPEC-13 §12 / API-14 §7.5 đã sửa theo).",
     ],

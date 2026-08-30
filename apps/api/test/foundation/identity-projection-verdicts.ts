@@ -573,6 +573,28 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
       "KI-069 — leave-admin.service.ts:511-560 gọi `resolveAndAssert('view','leave-balance')` rồi VỨT giá trị scope: gate đúng, tập hàng vẫn toàn công ty. Nay có grant riêng cho cặp danh bạ + ORDER BY đổi sang cột đã che (che tên mà vẫn sắp theo tên gốc thì thứ tự hàng rò alphabet).",
     signedBy: WO,
   },
+  // ── assets (S11-ASSET-BE-1) ──────────────────────────────────────────────────
+  {
+    point: "assets/assets.repository.ts#holderSelect:users.fullName",
+    basis: "scoped-predicate",
+    reason:
+      "asset-access.service.ts#resolveActorScope — resolveAndAssert(view,asset) rồi dựng holderVisibleCond (Own = users.id = actor · Department = employee_profiles.org_unit_id IN đơn vị ∪ đơn vị làm trưởng · Company = true); holderGrant bọc users.full_name của NGƯỜI ĐANG GIỮ (lượt Active) ở cả chi tiết 007 lẫn danh sách 005 (holderSelect dùng chung). Cờ holderVisible quyết định mapper BỎ HẲN khoá currentHolder (SPEC-13 §13.6). Tập HÀNG bound bởi readScopeExists (EXISTS asset_assignments, không JOIN). Bằng chứng: test/integration/asset-be1-scope.int-spec.ts.",
+    signedBy: "S11-ASSET-BE-1",
+  },
+  {
+    point: "assets/asset-assignments.repository.ts#listByAssetTx:users.fullName",
+    basis: "scoped-predicate",
+    reason:
+      "Lịch sử cấp phát 012: cùng holderVisibleCond của actor vừa LỌC HÀNG (rowScope: Own = employee_profiles.user_id = actor · Department = org_unit_id IN đơn vị) vừa bọc users.full_name của người nhận trong từng hàng — hàng ngoài scope không tới được lời chiếu (SPEC-13 §13.6, API-14 §6.4). Bằng chứng: test/integration/asset-be1-scope.int-spec.ts.",
+    signedBy: "S11-ASSET-BE-1",
+  },
+  {
+    point: "assets/asset-access.service.ts#findUserDisplayNameTx:users.fullName",
+    basis: "self-bound-row",
+    reason:
+      "Tên của CHÍNH actor cho payload NOTI (actor_name): selfBound(userId, users.id) + WHERE users.id = actor AND company_id — hàng chỉ có thể là chính chủ. Thay cho raw SQL (không nới vùng mù rawSqlIdentity).",
+    signedBy: "S11-ASSET-BE-1",
+  },
 ];
 
 /**
@@ -600,9 +622,9 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   "self-bound-route": 8,
   "order-only": 1,
   // Có vị từ SQL thật, nhưng SỔ này không nhìn thấy vị từ ⇒ vẫn phải có trần.
-  "scoped-predicate": 21,
+  "scoped-predicate": 23, // S11-ASSET-BE-1: +2 (holderSelect · listByAssetTx) — plan-review B7, nâng có chủ đích qua FULL gate
   membership: 8,
-  "self-bound-row": 3,
+  "self-bound-row": 4, // S11-ASSET-BE-1: +1 (findUserDisplayNameTx — tên actor cho payload NOTI, thay raw SQL để không nới vùng mù rawSqlIdentity)
   "identity-gated": 14,
 };
 
@@ -677,6 +699,19 @@ export const ROW_SCOPE_MINT_PINS = [
    * nuôi cả hai tầng.
    */
   "permission/role-admin.service.ts#rowScopeFor",
+  /**
+   * `assets` ⋈ `asset_assignments` ⋈ `employee_profiles` ⋈ `users` (chi tiết 007 + danh sách 005) —
+   * S11-ASSET-BE-1. Vị từ = holderVisibleCond của actor (Own: chính chủ · Department: đơn vị ∪ đơn vị làm
+   * trưởng · Company: true) — bọc CỘT tên người giữ; tập HÀNG bound riêng bởi readScopeExists (EXISTS).
+   * Bằng chứng deny/allow của CHÍNH bảng này: `test/integration/asset-be1-scope.int-spec.ts`.
+   */
+  "assets/assets.repository.ts#holderGrant",
+  /**
+   * `asset_assignments` ⋈ `employee_profiles` ⋈ `users` (lịch sử cấp phát 012) — S11-ASSET-BE-1. Cùng
+   * vị từ với điểm trên nhưng ở đây nó LỌC HÀNG (rowScope) VÀ bọc cột trong cùng một hàm. Bằng chứng:
+   * `test/integration/asset-be1-scope.int-spec.ts`.
+   */
+  "assets/asset-assignments.repository.ts#listByAssetTx",
 ] as const;
 
 /**

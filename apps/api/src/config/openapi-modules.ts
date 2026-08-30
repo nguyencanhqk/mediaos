@@ -95,6 +95,15 @@ export const API_MODULE_TAGS: readonly ApiModuleTag[] = [
     segments: ["goals", "task-templates"],
   },
   {
+    // S11-ASSET-BE-1: BẮT BUỘC khai TRƯỚC khi route ASSET lên — thiếu ⇒ UNCLASSIFIED_PREFIX ⇒ openapi-contract ĐỎ.
+    // `/me/assets` thuộc segment `me` (module ME) — không khai ở đây.
+    code: "ASSET",
+    tagPrefix: "Asset",
+    description:
+      "Quản lý tài sản: loại tài sản, hồ sơ, cấp phát/thu hồi, bảo trì, kiểm kê, thống kê (SPEC-13).",
+    segments: ["assets", "asset-categories", "asset-inventories"],
+  },
+  {
     // S7-CHAT-BE-1: BẮT BUỘC khai TRƯỚC khi route `/chat/**` đầu tiên lên — route không có mục ở đây rơi
     // vào UNCLASSIFIED_PREFIX, và `openapi-contract.e2e-spec` coi đó là LỖI (không phải "mất nhãn đẹp").
     code: "CHAT",
