@@ -14720,7 +14720,7 @@ export const backlog = [
     title:
       "Bộ tài liệu RECRUIT: SPEC-12 + DB-14 + API-17 + permission-matrix §9f + hợp thức trạng thái vào SPEC-01 §17.11–17.14 + EPIC-19 (§8.20) + đồng bộ README/DB-01·09·10/erd-current/RELEASE-14 (PARK-RECRUIT-001) — 8 REC-DEC đã ký 31/08, chỉ chép kết luận",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "docs/SPEC/**",
       "docs/DB/**",
@@ -14756,6 +14756,8 @@ export const backlog = [
       "✅ OWNER ĐÃ DUYỆT 2026-08-31 nguyên gói hồ sơ docs/plans/S12-RECRUIT-WAVE-review.html — REC-DEC-001..008 chốt ĐÚNG cột Đề xuất ở wave plan §3. WO này chỉ GHI kết luận vào SPEC-12 rồi viết bộ tài liệu — không hỏi lại owner.",
       "🟢 LIGHT gate (docs-only). Số hiệu DB-14/API-17 đã chốt ở REC-DEC-001 (DB-14 đúng chỗ IMP-10 §13.2 giữ; API-16 đã bị PERMISSION AUDIT REPORT chiếm).",
       "Nền sạch: 0 bảng di sản recruit (chỉ 2 enum trong finance/media đã park); hàng modules RECRUIT pre-seed inactive từ 0435.",
+      "✅ HOÀN THÀNH 31/08/2026: SPEC-12 Approved + DB-14 + API-17 (Stub—Approved) + §9f + SPEC-01 §17.11–17.14/§20.2 (NOTI-EVENT-016..019) + SPEC-08 §15.9 + EPIC-19 (IMP02-STORY-171..180, 50pt, Sprint 12) + nav 13 file SPEC + README/DB-01 §7.12/DB-09 §8.18/DB-10 §12.11/erd A4/RELEASE-14 PARK-RECRUIT-001 + stories.mjs/dashboard nhận RECRUIT. Số chốt: 8 bảng · 16 cặp (7 sensitive) · 42 grant · 32 route (RECRUIT-API-001..032, có 2 picker) · 15 mã lỗi · 4 event NOTI · 4 audit object_type · mig dự kiến 0559..0561.",
+      "✅ plan-reviewer đối kháng PASS sau 2 vòng (BLOCK 6B/7H/9M → BLOCK 2 → PASS). Chốt quan trọng cho WO sau: convert KHÔNG gọi HrWriteService.createEmployee (tự mint user + đòi scope employee/user + tự mở tx) — BE-1 viết createEmployeeFromCandidateTx(tx, actor, input) theo hợp đồng SPEC-12 §13.5; thứ tự tiền điều kiện convert: employee_id NULL → stage=Offer → tồn tại offer Accepted; Zod move-stage giữ đủ 6 giá trị (kẻo 014 chết); NOTI 019 chỉ role hr; dedupe 016 theo LẦN gán ({jobOpeningId}:{auditLogId}); export đòi CẢ export+view; widget DASH seed ở DASH-1 (không nằm trong DB-1).",
     ],
   },
   {
@@ -14800,7 +14802,8 @@ export const backlog = [
     ],
     notes: [
       "🔴 FULL gate + Opus (crown: permission seed + RLS + append-only). Lane migration NỐI TIẾP duy nhất của wave.",
-      "KHÔNG bật modules.is_active (việc của S12-RECRUIT-FE-1, khuôn 0556); guard trong migration KHÔNG assert trạng thái module khác (bài học wiring-spec ASSET↔ROOM).",
+      "KHÔNG bật modules.is_active (việc của S12-RECRUIT-FE-1, khuôn 0556); guard trong migration KHÔNG assert trạng thái module khác (bài học wiring-spec ASSET↔ROOM) và guard verify hàng RECRUIT phải forward-compatible (không RAISE khi is_active=true — DB-14 §9B).",
+      "Số liệu thật từ DOC-1 (plan-reviewer PASS 31/08): 8 bảng · 16 cặp (7 candidate is_sensitive=TRUE) · 42 grant (§9f: employee 0 · manager 3 · hr 7 · company-admin 16 · recruiter 16) · UNION-ADD 4 audit object_type (job_opening/candidate/interview/offer — bản đồ ĐÓNG ở SPEC-12 §12) · 4 event NOTI DedupeKey · mig dự kiến 0559 DDL / 0560 seed / 0561 NOTI (đọc journal thật; head lúc viết 0558). candidate_stage_events = SELECT+INSERT duy nhất; interview_participants chỉ INSERT; index check-duplicate theo BIỂU THỨC không partial deleted_at (DB-14 §6.2, DoD EXPLAIN trên LANE_DB).",
     ],
   },
   {
@@ -14840,6 +14843,7 @@ export const backlog = [
     notes: [
       "🔴 FULL gate + Opus (PII ứng viên — PMVP-AUTH-005/006). Ứng viên là người NGOÀI hệ thống: KHÔNG FK sang users; identity nội bộ (recruiter/interviewer) FK employee/user chuẩn.",
       "own-scope interview theo interview_participants (người ĐƯỢC XẾP), không theo người tạo.",
+      "Số liệu thật từ DOC-1 (plan-reviewer PASS 31/08): 32 route RECRUIT-API-001..032 (2 picker 031/032 qua RecruitPeopleRepository — điểm chiếu danh tính DUY NHẤT, trường bó hẹp) · 15 mã lỗi 001..015 (census theo MÃ, không mã nào 0 ca — 014 phải SỐNG: Zod move-stage giữ ĐỦ 6 giá trị). Convert: VIẾT MỚI HrWriteService.createEmployeeFromCandidateTx(tx, actor, input) theo hợp đồng SPEC-12 §13.5 — CẤM gọi createEmployee (tự mint user + đòi scope employee/user + tự mở tx riêng); thứ tự tiền điều kiện: employee_id NULL → stage=Offer → tồn tại offer Accepted. Masking: email/phone theo ('update','candidate'), salary theo ('manage','offer'), full_name là projection duy nhất trên đường view:interview + NOTI; export đòi CẢ HAI cặp export+view, trần 10k = ERR-015. Allowlist capability BACKEND cho 7 cặp sensitive + resolver file entity candidate = ('view','candidate').",
     ],
   },
   {

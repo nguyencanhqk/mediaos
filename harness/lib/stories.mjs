@@ -44,6 +44,7 @@ const EPIC_MODULE = {
   16: "CHAT", // SPEC-15 — wave S7, ĐANG CHẠY
   17: "ASSET", // SPEC-13 — wave S11-OFFICE (IMP02 §8.18, bổ sung 2026-08-28)
   18: "ROOM", // SPEC-14 — wave S11-OFFICE (IMP02 §8.19, bổ sung 2026-08-29)
+  19: "RECRUIT", // SPEC-12 — wave S12-RECRUIT (IMP02 §8.20, bổ sung 2026-08-31)
 };
 
 // Sprint của 1 story theo IMPLEMENTATION-02 §9 (story trọng tâm mỗi sprint, không chỉ theo epic).
@@ -59,6 +60,7 @@ function sprintOfStory(n) {
   if (inR(111, 112)) return "S6";
   if (n === 132 || inR(141, 152)) return "S7"; // 132 = tab Mục tiêu trong dự án (giao ở S7) · 141-152 = wave CHAT
   if (inR(153, 170)) return "S11"; // 153-162 EPIC-17 ASSET · 163-170 EPIC-18 ROOM — wave S11-OFFICE (IMP02 §9 Sprint 11)
+  if (inR(171, 180)) return "S12"; // 171-180 EPIC-19 RECRUIT — wave S12-RECRUIT (IMP02 §9 Sprint 12)
   return "?";
 }
 
@@ -198,6 +200,19 @@ const STORY_WO_OVERRIDE = {
   168: ["S11-ROOM-DB-1", "S11-ROOM-BE-1"], // 3 event NOTI + job nhắc 15′
   169: ["S11-ROOM-BE-1", "S11-ROOM-FE-1"], // usage-summary + lịch sử
   170: ["S11-OFFICE-DASH-1"], // widget DASH lịch họp hôm nay
+
+  // ── EPIC-19 RECRUIT (IMP02 §8.20) — wave S12-RECRUIT, bổ sung 2026-08-31 ───────
+  //    WO S12-RECRUIT-* không trỏ IMP02-STORY trong src[] (seed trước khi có story) ⇒ map tay ở đây.
+  171: ["S12-RECRUIT-DB-1", "S12-RECRUIT-BE-1", "S12-RECRUIT-FE-1"], // vị trí tuyển FSM + gán recruiter
+  172: ["S12-RECRUIT-BE-1", "S12-RECRUIT-FE-1"], // hồ sơ ứng viên + cảnh báo trùng
+  173: ["S12-RECRUIT-BE-1", "S12-RECRUIT-FE-1"], // CV qua Foundation Files (private + file_access_logs)
+  174: ["S12-RECRUIT-DB-1", "S12-RECRUIT-BE-1", "S12-RECRUIT-FE-1", "S12-RECRUIT-QA-1"], // kanban 6 stage + sổ append-only
+  175: ["S12-RECRUIT-BE-1", "S12-RECRUIT-FE-1"], // lịch phỏng vấn + NOTI interviewer + own-scope
+  176: ["S12-RECRUIT-BE-1", "S12-RECRUIT-FE-1"], // feedback own-scope per interviewer
+  177: ["S12-RECRUIT-BE-1", "S12-RECRUIT-FE-1"], // offer + mask lương
+  178: ["S12-RECRUIT-BE-1", "S12-RECRUIT-QA-1"], // convert 1 bước (race double-convert)
+  179: ["S12-RECRUIT-DB-1", "S12-RECRUIT-BE-1", "S12-RECRUIT-QA-1"], // masking PII + deny-path + audit
+  180: ["S12-RECRUIT-DASH-1"], // widget DASH phễu tuyển dụng
 };
 
 // Vite dev port mỗi app (apps/*/vite.config.ts) → link "chạy thử" FE.

@@ -1,7 +1,7 @@
 # SPEC-01: TỔNG QUAN HỆ THỐNG QUẢN LÝ DOANH NGHIỆP
 
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
-> **SPEC-01 Tổng quan** · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · [SPEC-14 ROOM](<SPEC-14 ROOM.md>) · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
+> **SPEC-01 Tổng quan** · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-12 RECRUIT](<SPEC-12 RECRUIT.md>) · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · [SPEC-14 ROOM](<SPEC-14 ROOM.md>) · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
 >
 > **Liên quan:** [Thiết kế DB: DB-01 Tổng quan](<../DB/DB-01 DATABASE DESIGN TỔNG QUAN.md>) · [Sản phẩm: PRD-00](<../PRD/PRD-00 Enterprise Management System .md>) · [Thiết kế API: API-01 Tổng quan](<../API Design/API-01 TỔNG QUAN.md>) · [Chỉ mục tài liệu](<../README.md>)
 
@@ -162,7 +162,7 @@ Các module sau chưa triển khai chi tiết trong MVP v1.0, nhưng hệ thốn
 | Mã module | Tên module             | Tài liệu liên kết | Giai đoạn |
 | --------- | ---------------------- | ----------------- | --------- |
 | PAYROLL   | Tiền lương             | SPEC-11           | Phase 2   |
-| RECRUIT   | Tuyển dụng             | SPEC-12           | Phase 2   |
+| RECRUIT   | Tuyển dụng             | [SPEC-12](<SPEC-12 RECRUIT.md>) | Phase 2 — spec **đã viết** (Approved 31/08/2026, wave S12-RECRUIT) |
 | ASSET     | Quản lý tài sản        | [SPEC-13](<SPEC-13 ASSET.md>) | Phase 3 — spec **đã viết** (Approved 28/08/2026, wave S11-OFFICE) |
 | ROOM      | Quản lý phòng họp      | [SPEC-14](<SPEC-14 ROOM.md>) | Phase 3 — spec **đã viết** (Approved 28/08/2026, wave S11-OFFICE; tái dụng nền `meeting_rooms`) |
 | CHAT      | Chat nội bộ            | [SPEC-15](<SPEC-15 CHAT.md>) | Phase 4 — spec **đã viết** (Draft) |
@@ -192,7 +192,7 @@ Bộ tài liệu spec của dự án sẽ được tổ chức như sau:
 | SPEC-09     | Trung tâm cá nhân & Cài đặt (ME)  | Spec module |
 | SPEC-10     | Mục tiêu (GOAL)                   | Spec module |
 | SPEC-11     | Tiền lương                        | Spec module |
-| SPEC-12     | Tuyển dụng                        | Spec module |
+| SPEC-12     | [Tuyển dụng](<SPEC-12 RECRUIT.md>) | Spec module — **đã viết** (Approved) |
 | SPEC-13     | [Quản lý tài sản](<SPEC-13 ASSET.md>) | Spec module — **đã viết** (Approved) |
 | SPEC-14     | [Quản lý phòng họp](<SPEC-14 ROOM.md>) | Spec module — **đã viết** (Approved) |
 | SPEC-15     | [Chat nội bộ](<SPEC-15 CHAT.md>)  | Spec module — **đã viết** (Draft) |
@@ -831,7 +831,7 @@ Module liên quan:
 
 ### 12.9 RECRUIT — Tuyển dụng
 
-Tài liệu chi tiết: SPEC-12
+Tài liệu chi tiết: [SPEC-12](<SPEC-12 RECRUIT.md>) — **đã viết**, owner duyệt 31/08/2026 (wave S12-RECRUIT, REC-DEC-001..008). Bốn bộ trạng thái hợp thức ở §17.11–17.14; sự kiện NOTI-EVENT-016..019 ở §20.2.
 
 Giai đoạn: Phase 2
 
@@ -1410,6 +1410,7 @@ Các module được phép dùng thêm các giá trị dưới đây (đã hợp
 * **Trạng thái thông báo (SPEC-08):** thêm `Hidden` (người dùng ẩn), `Deleted` (xóa mềm), `Failed` (gửi thất bại).
 * **Tài sản (SPEC-13, hợp thức 28/08/2026 — ASSET-DEC-003):** bộ chính ở mục 17.8 (tài sản) và 17.9 (lượt cấp phát). Các sổ phụ dùng giá trị đóng: lượt bảo trì `Open` / `Closed` · đợt kiểm kê `Open` / `Closed` · kết quả dòng kiểm kê `Found` / `Missing` / `Not Checked` · tình trạng khi giao/thu `Good` / `Damaged` (+ `Lost` khi thu). Chuyển tiếp hợp lệ (FSM) định nghĩa **duy nhất** tại SPEC-13 §13.1 — service ép, DB chỉ CHECK tập giá trị.
 * **Lượt đặt phòng họp (SPEC-14, hợp thức 29/08/2026 — ROOM-DEC-003):** bộ chính ở mục 17.10 (`Confirmed` / `Cancelled`). `Completed` là giá trị **dẫn xuất** (`Confirmed` và giờ kết thúc đã qua), không lưu cứng — cùng nguyên tắc `Overdue` của task. Phòng họp dùng cờ `is_active` (boolean), không có bộ trạng thái riêng.
+* **Tuyển dụng (SPEC-12, hợp thức 31/08/2026 — REC-DEC-002/004):** bốn bộ chính ở mục 17.11 (ứng viên) · 17.12 (vị trí tuyển) · 17.13 (lượt phỏng vấn) · 17.14 (offer). Giá trị phụ dùng bộ đóng: recommendation feedback `Hire` / `No Hire` / `Consider` · action stage-event `move` / `convert`. Nguồn ứng viên (`source`) là text tự do, không phải bộ trạng thái. Chuyển tiếp hợp lệ (FSM) định nghĩa **duy nhất** tại SPEC-12 §13.1–13.4 — service ép, DB chỉ CHECK tập giá trị.
 
 ### 17.8 Trạng thái tài sản (SPEC-13)
 
@@ -1440,6 +1441,52 @@ Cancelled
 ```
 
 > `Completed` là giá trị **dẫn xuất** (`Confirmed` và `ends_at ≤ now()`), server tính trong DTO, không lưu cột, không có job chuyển trạng thái. Hai lượt `Confirmed` trên cùng phòng không được giao nhau (ép ở DB bằng `EXCLUDE USING gist` — DB-16 §6.2). Lượt đã kết thúc không huỷ được (SPEC-14 §13.1).
+
+### 17.11 Trạng thái ứng viên (SPEC-12)
+
+```text
+New
+Screening
+Interview
+Offer
+Hired
+Rejected
+```
+
+> Pipeline **cố định 6 stage** (REC-DEC-002). `Hired` là terminal và **chỉ** đạt được qua convert (tạo hồ sơ nhân viên — chốt bằng UNIQUE `candidates.employee_id`); `Rejected` có đúng một đường quay lại `Screening` («reopen», kèm lý do). Mỗi lần chuyển ghi sổ append-only `candidate_stage_events` (SPEC-12 §13.1).
+
+### 17.12 Trạng thái vị trí tuyển dụng (SPEC-12)
+
+```text
+Draft
+Open
+Paused
+Closed
+```
+
+> `Closed` là terminal ở v1 (mở tuyển lại = tạo vị trí mới) và chặn thêm ứng viên vào (SPEC-12 §13.2).
+
+### 17.13 Trạng thái lượt phỏng vấn (SPEC-12)
+
+```text
+Scheduled
+Completed
+Cancelled
+```
+
+> `Completed`/`Cancelled` là terminal; sửa giờ/địa điểm chỉ khi `Scheduled` (SPEC-12 §13.4).
+
+### 17.14 Trạng thái offer (SPEC-12)
+
+```text
+Draft
+Sent
+Accepted
+Declined
+Withdrawn
+```
+
+> Không có workflow duyệt (REC-DEC-004); ba trạng thái kết quả là terminal, recruiter tự cập nhật. Một ứng viên chỉ có tối đa **một** offer đang sống `Draft`/`Sent` (ép ở DB bằng partial unique — DB-14 §6.8).
 
 ---
 
@@ -1619,8 +1666,12 @@ Hệ thống cần hỗ trợ các kênh sau:
 | NOTI-EVENT-013 | Đặt phòng họp được xác nhận | Người tổ chức + người tham dự (trừ người thao tác) |
 | NOTI-EVENT-014 | Lịch đặt phòng bị huỷ      | Người tổ chức + người tham dự (trừ người thao tác) |
 | NOTI-EVENT-015 | Nhắc lịch họp trước 15 phút | Người tổ chức + người tham dự |
+| NOTI-EVENT-016 | Được gán phụ trách vị trí tuyển dụng | Recruiter được gán |
+| NOTI-EVENT-017 | Được xếp lịch phỏng vấn | Interviewer (người tham gia lượt) |
+| NOTI-EVENT-018 | Ứng viên đổi stage cần xử lý | Recruiter phụ trách vị trí |
+| NOTI-EVENT-019 | Ứng viên trúng tuyển đã chuyển thành nhân viên | HR (user giữ role `hr` — SPEC-12 §17) |
 
-> **Dải mở rộng hậu-MVP (đo 28–29/08/2026):** 001–009 là bộ MVP; GOAL/LMS/CHAT **không** cấp mã chuẩn (chỉ là mở rộng SPEC-08 §15). **010–012 cấp cho ASSET** (SPEC-13 §17), **013–015 cấp cho ROOM** (SPEC-14 §17) — cùng wave S11-OFFICE. Module sau lấy **016+** — đo lại bằng grep `NOTI-EVENT-0` trước khi cấp, không mặc định còn trống.
+> **Dải mở rộng hậu-MVP (đo 28–31/08/2026):** 001–009 là bộ MVP; GOAL/LMS/CHAT **không** cấp mã chuẩn (chỉ là mở rộng SPEC-08 §15). **010–012 cấp cho ASSET** (SPEC-13 §17), **013–015 cấp cho ROOM** (SPEC-14 §17) — wave S11-OFFICE; **016–019 cấp cho RECRUIT** (SPEC-12 §17) — wave S12-RECRUIT. Module sau lấy **020+** — đo lại bằng grep `NOTI-EVENT-0` trước khi cấp, không mặc định còn trống.
 
 ---
 

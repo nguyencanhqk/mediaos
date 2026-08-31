@@ -39,11 +39,12 @@ Mọi tài liệu đều liên kết chéo với nhau: mỗi file có breadcrumb
 | SPEC-08 | [Thông báo hệ thống](<SPEC/SPEC-08 NOTI.md>) | NOTI |
 | SPEC-09 | [ME - Trung tâm cá nhân & Cài đặt tài khoản](<SPEC/SPEC-09 ME.md>) | ME |
 | SPEC-10 | [GOAL - Mục tiêu (Phòng ban · Dự án · Nhân viên)](<SPEC/SPEC-10 GOAL.md>) | GOAL |
+| SPEC-12 | [RECRUIT - Tuyển dụng](<SPEC/SPEC-12 RECRUIT.md>) | RECRUIT — *Phase 2, Approved 31/08/2026 (wave S12-RECRUIT)* |
 | SPEC-13 | [ASSET - Quản lý tài sản](<SPEC/SPEC-13 ASSET.md>) | ASSET — *Phase 3, Approved 28/08/2026 (wave S11-OFFICE)* |
 | SPEC-14 | [ROOM - Quản lý phòng họp](<SPEC/SPEC-14 ROOM.md>) | ROOM — *Phase 3, Approved 28/08/2026 (wave S11-OFFICE)* |
 | SPEC-15 | [CHAT - Chat nội bộ (1-1 · Nhóm · Phòng ban · Dự án)](<SPEC/SPEC-15 CHAT.md>) | CHAT — *Phase 4, Draft* |
 
-> SPEC-11 · 12 (PAYROLL · RECRUIT) là module Phase 2 **chưa viết**; ASSET (SPEC-13) · ROOM (SPEC-14) · CHAT (SPEC-15) giữ đúng số đã khoá tại SPEC-01 §7.2/§8 — không dồn số. Đánh số DB/API của ASSET/ROOM là **DB-15/16 · API-14/15** (OFFICE-DEC-001 — DB-13/14 đã dành cho PAYROLL/RECRUIT ở IMPLEMENTATION-10).
+> SPEC-11 (PAYROLL) là module Phase 2 **chưa viết**; RECRUIT (SPEC-12) · ASSET (SPEC-13) · ROOM (SPEC-14) · CHAT (SPEC-15) giữ đúng số đã khoá tại SPEC-01 §7.2/§8 — không dồn số. Đánh số DB/API: ASSET/ROOM = **DB-15/16 · API-14/15** (OFFICE-DEC-001 — DB-13/14 dành cho PAYROLL/RECRUIT ở IMPLEMENTATION-10); RECRUIT = **DB-14 · API-17** (REC-DEC-001 — API-16 đã bị Permission Audit Report chiếm).
 
 ---
 
@@ -63,7 +64,8 @@ Mọi tài liệu đều liên kết chéo với nhau: mỗi file có breadcrumb
 | DB-10 | [Migration Plan & Initial Seed Data](<DB/DB-10_Migration_Plan_Initial_Seed_Data_Database_Design.md>) | Migration / Seed |
 | DB-11 | [GOAL Database Design](<DB/DB-11 GOAL Database Design.md>) | GOAL |
 | DB-12 | [CHAT Database Design](<DB/DB-12 CHAT Database Design.md>) | CHAT — *Phase 4, Draft* |
-| DB-15 | [ASSET Database Design](<DB/DB-15 ASSET Database Design.md>) | ASSET — *Phase 3, Approved* (DB-13/14 dành cho PAYROLL/RECRUIT — IMPLEMENTATION-10) |
+| DB-14 | [RECRUIT Database Design](<DB/DB-14 RECRUIT Database Design.md>) | RECRUIT — *Phase 2, Approved* (8 bảng mới, chưa migrate; DB-13 dành cho PAYROLL) |
+| DB-15 | [ASSET Database Design](<DB/DB-15 ASSET Database Design.md>) | ASSET — *Phase 3, Approved* (DB-13/14 dành cho PAYROLL/RECRUIT — IMPLEMENTATION-10; DB-14 đã dùng đúng chỗ cho RECRUIT 31/08/2026) |
 | DB-16 | [ROOM Database Design](<DB/DB-16 ROOM Database Design.md>) | ROOM — *Phase 3, Approved* (tái dụng `meeting_rooms` · 2 bảng mới · DROP 4 bảng `meeting_*` di sản) |
 
 ---
@@ -86,6 +88,7 @@ Mọi tài liệu đều liên kết chéo với nhau: mỗi file có breadcrumb
 | API-13 | [CHAT API Design](<API Design/API-13_CHAT_API_Design.md>) | CHAT — *Phase 4, Draft* |
 | API-14 | [ASSET API Design](<API Design/API-14_ASSET_API_Design.md>) | ASSET — *Phase 3, Stub — Approved* |
 | API-15 | [ROOM API Design](<API Design/API-15_ROOM_API_Design.md>) | ROOM — *Phase 3, Stub — Approved* |
+| API-17 | [RECRUIT API Design](<API Design/API-17_RECRUIT_API_Design.md>) | RECRUIT — *Phase 2, Stub — Approved* (API-16 = Permission Audit Report) |
 
 > Tham khảo thêm: [API-10 Permission Matrix](<API Design/API-10 PERMISSION MATRIX.md>) · [API-16 Permission Audit Report](<API Design/API-16 PERMISSION AUDIT REPORT.md>) · [OpenAPI](<API Design/openapi/README.md>)
 
@@ -220,6 +223,7 @@ Mỗi module nghiệp vụ được mô tả xuyên suốt qua 5 nhóm tài li�
 | **GOAL** | PRD §8.1 (MVP bổ sung) | [SPEC-10](<SPEC/SPEC-10 GOAL.md>) | [DB-11](<DB/DB-11 GOAL Database Design.md>) · [DB-09](<DB/DB-09 Database Index Query Pattern Performance Design.md>) §8.14 index · [DB-10](<DB/DB-10_Migration_Plan_Initial_Seed_Data_Database_Design.md>) seed GOAL | [API-12](<API Design/API-12_GOAL_API_Design.md>) (stub — DTO chi tiết ở WO backend) | UI — dự kiến (WO sau) | FRONTEND — dự kiến (WO sau) | BACKEND — dự kiến (WO sau); code đã ship `apps/api/src/goals/` (S5-GOAL-BE-1) |
 | **CHAT** | PRD §8.1 (Phase 4) | [SPEC-15](<SPEC/SPEC-15 CHAT.md>) *(Draft)* | [DB-12](<DB/DB-12 CHAT Database Design.md>) — bảng đã tồn tại thật từ migration `0010`/`0050` | [API-13](<API Design/API-13_CHAT_API_Design.md>) (stub) | UI — dự kiến (wave S7-CHAT) | FRONTEND — dự kiến (wave S7-CHAT) | BACKEND — **chưa có code**; module cũ đã gỡ ở de-media-fy (`2591db13`) |
 | **ROOM** | PRD §8.1 (Phase 3) | [SPEC-14](<SPEC/SPEC-14 ROOM.md>) *(Approved 28/08/2026)* | [DB-16](<DB/DB-16 ROOM Database Design.md>) — tái dụng `meeting_rooms` (mig `0052`) + 2 bảng **mới** `room_bookings`/`room_booking_attendees`, DROP 4 bảng `meeting_*` · [DB-09](<DB/DB-09 Database Index Query Pattern Performance Design.md>) §8.17 index · [DB-10](<DB/DB-10_Migration_Plan_Initial_Seed_Data_Database_Design.md>) seed ROOM | [API-15](<API Design/API-15_ROOM_API_Design.md>) (stub — DTO chi tiết ở `S11-ROOM-BE-1`) | UI — wireframe đã duyệt ở [hồ sơ wave](<plans/S11-OFFICE-WAVE-review.html>) | FRONTEND — dự kiến (`S11-ROOM-FE-1`, `apps/app/src/routes/rooms/`) | BACKEND — **chưa có code** (`S11-ROOM-BE-1` sau `S11-ROOM-DB-1`, chạy sau `S11-ASSET-DB-1`) |
+| **RECRUIT** | PRD §8.1 (Phase 2) | [SPEC-12](<SPEC/SPEC-12 RECRUIT.md>) *(Approved 31/08/2026)* | [DB-14](<DB/DB-14 RECRUIT Database Design.md>) — 8 bảng **mới** (`job_openings`/`candidates`/… , chưa migrate) · [DB-09](<DB/DB-09 Database Index Query Pattern Performance Design.md>) §8.18 index · [DB-10](<DB/DB-10_Migration_Plan_Initial_Seed_Data_Database_Design.md>) seed RECRUIT | [API-17](<API Design/API-17_RECRUIT_API_Design.md>) (stub — DTO chi tiết ở `S12-RECRUIT-BE-1`) | UI — wireframe đã duyệt ở [hồ sơ wave](<plans/S12-RECRUIT-WAVE-review.html>) | FRONTEND — dự kiến (`S12-RECRUIT-FE-1`, `apps/app/src/routes/recruit/`) | BACKEND — **chưa có code** (`S12-RECRUIT-BE-1` sau `S12-RECRUIT-DB-1`) |
 | **ASSET** | PRD §8.1 (Phase 3) | [SPEC-13](<SPEC/SPEC-13 ASSET.md>) *(Approved 28/08/2026)* | [DB-15](<DB/DB-15 ASSET Database Design.md>) — 6 bảng **mới** (`asset_*`, chưa migrate) · [DB-09](<DB/DB-09 Database Index Query Pattern Performance Design.md>) §8.16 index · [DB-10](<DB/DB-10_Migration_Plan_Initial_Seed_Data_Database_Design.md>) seed ASSET | [API-14](<API Design/API-14_ASSET_API_Design.md>) (stub — DTO chi tiết ở `S11-ASSET-BE-1`) | UI — wireframe đã duyệt ở [hồ sơ wave](<plans/S11-OFFICE-WAVE-review.html>) | FRONTEND — dự kiến (`S11-ASSET-FE-1`, `apps/app/src/routes/assets/`) | BACKEND — **chưa có code** (`S11-ASSET-BE-1` sau `S11-ASSET-DB-1`) |
 | Audit / Files / Settings | PRD §12.4 | SPEC-01 §16 | [DB-08](<DB/DB-08 Audit Files Settings Seeds Database Design.md>) | [API-09](<API Design/API-09_FOUNDATION_API_Design.md>) | [UI-09](<UI/UI-09_Module_UI_Design.md>) | [FRONTEND-13](<FRONTEND/FRONTEND-13_System_Foundation_Frontend.md>) | [BACKEND-04](<BACKEND/BACKEND-04_Foundation_Backend.md>) · [BACKEND-11](<BACKEND/BACKEND-11_File_Audit_Settings_System_Jobs.md>) |
 | Home Portal / App Switcher | PRD §9 | SPEC-01 | — | [API-09](<API Design/API-09_FOUNDATION_API_Design.md>) | [UI-06](<UI/UI-06_Home_Portal_App_Switcher_UI_Design.md>) · [UI-07](<UI/UI-07_Module_Workspace_Template_Design.md>) | [FRONTEND-05](<FRONTEND/FRONTEND-05_Layout_Implementation.md>) | [BACKEND-04](<BACKEND/BACKEND-04_Foundation_Backend.md>) · [BACKEND-11](<BACKEND/BACKEND-11_File_Audit_Settings_System_Jobs.md>) |

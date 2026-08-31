@@ -62,6 +62,12 @@ function migrationHead() {
 
 // Map từ khoá → spec MVP (để "kiểm tra ở đâu" trỏ đúng tài liệu nghiệm thu).
 const MODULE_SPEC = [
+  // RECRUIT đặt TRÊN CÙNG: tiêu đề WO S12-RECRUIT-* chứa "employee" (HR bắt), "permission §9f" (AUTH bắt),
+  // "offer"/"phỏng vấn" — để sau là trỏ nhầm SPEC-02/SPEC-03.
+  {
+    re: /(\brecruit\b|tuyển dụng|candidate|ứng viên|phỏng vấn|job.opening|\boffer\b)/i,
+    spec: "docs/SPEC/SPEC-12 RECRUIT.md",
+  },
   // ASSET đặt TRƯỚC AUTH: tiêu đề WO S11-ASSET-BE-1 chứa "permission guard" — để sau là trỏ nhầm SPEC-02.
   { re: /(\bassets?\b|tài sản)/i, spec: "docs/SPEC/SPEC-13 ASSET.md" },
   // CHAT đứng TRƯỚC ROOM: WO CHAT có thể chứa "room"/"booking" rời chữ (chat_rooms an toàn vì `_` là word-char).

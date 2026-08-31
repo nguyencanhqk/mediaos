@@ -1,15 +1,24 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-31 03:56Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-31 05:02Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🟢 S12-RECRUIT-DOC-1 — Bộ tài liệu RECRUIT: SPEC-12 + DB-14 + API-17 + permission-matrix §9f + hợp thức trạng thái vào SPEC-01 §17.11–17.14 + EPIC-19 (§8.20) + đồng bộ README/DB-01·09·10/erd-current/RELEASE-14 (PARK-RECRUIT-001) — 8 REC-DEC đã ký 31/08, chỉ chép kết luận
+- **zone**: green
+- **sửa ở đâu (paths)**: `docs/SPEC/**`, `docs/DB/**`, `docs/API Design/**`, `docs/permission-matrix-spec.md`, `docs/README.md`, `docs/erd-current.md`, `docs/RELEASE/RELEASE-14_Post_Go_Live_Backlog.md`, `docs/IMPLEMENTATION/**`, `docs/plans/**`, `harness/backlog.mjs`, `harness/lib/stories.mjs`, `harness/dashboard/server.mjs`
+- **done_when (đích hội tụ)**:
+  - [ ] Ghi kết luận 8 REC-DEC vào SPEC-12 bảng quyết định (khuôn SPEC-15 §22); SPEC-12 flip Draft → Approved
+  - [ ] SPEC-12 + DB-14 + API-17 tồn tại, trỏ chéo đúng, không mâu thuẫn; permission-matrix §9f (cặp quyền per-(perm,role) data_scope, candidate is_sensitive=true) khớp API-17
+  - [ ] SPEC-01 §17.11–17.14 hợp thức 4 bộ trạng thái (candidate·job_opening·interview·offer); §12.9 + §7/§8 trỏ SPEC-12; SPEC-01 §20.2/SPEC-08 cấp dải NOTI-EVENT mới (đo dải hiện có trước — 015 là mã cuối lúc seed, KHÔNG hard-code khi chưa đo lại)
+  - [ ] README §9 thêm dòng RECRUIT; DB-01 §3.2 + DB-09 (index) + DB-10 (seed) + erd-current + RELEASE-14 §5 (PARK-RECRUIT-001 retention) đồng bộ; IMPLEMENTATION-02 thêm EPIC-19 §8.20 (RC-01..10 + AC + point, IMP02-STORY-171..180)
+  - [ ] harness/lib/stories.mjs (EPIC_MODULE + sprintOfStory) và harness/dashboard/server.mjs (MODULE_SPEC) nhận RECRUIT — WO không rơi vào rổ phẳng
+  - [ ] plan-reviewer đối kháng PASS trên SPEC-12 + DB-14 trước khi mở S12-RECRUIT-DB-1
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
-- 🟢 `S12-RECRUIT-DOC-1` Bộ tài liệu RECRUIT: SPEC-12 + DB-14 + API-17 + permission-matrix §9f + hợp thức trạng thái vào SPEC-01 §17.11–17.14 + EPIC-19 (§8.20) + đồng bộ README/DB-01·09·10/erd-current/RELEASE-14 (PARK-RECRUIT-001) — 8 REC-DEC đã ký 31/08, chỉ chép kết luận
+- _(trống)_
 
 **CHỜ (kẹt phụ thuộc):**
 - `S12-RECRUIT-DB-1` Schema + migration RECRUIT theo DB-14: job_openings · candidates · candidate_stage_events (append-only) · candidate_notes · interviews (+participants) · interview_feedbacks · offers — RLS+FORCE, composite tenant FK, seed role recruiter + permission §9f + NOTI catalog (CẢ HAI bảng) ⏳ cần: S12-RECRUIT-DOC-1
@@ -22,7 +31,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 3
+- **branch**: `master` · **file đang đổi (dirty)**: 29
 - **migration head**: idx 225 — `0558_s11officedash1_widgets_asset_room` (226 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -31,6 +40,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `f524fb9f` | 2026-08-31 | chore(gov): seed wave S12-RECRUIT — 6 WO Phase 2 tuyển dụng + hồ sơ duyệt HTML, owner đã duyệt 31/08 (#446) |
 | `5ef35bc7` | 2026-08-31 | fix(gov): S10-GOV-IDUNIQUE-1 nối tiếp — C4 phủ 15 họ số hiệu docs + vá API-10/DEVOPS-10 trùng số (KI-079) (#445) |
 | `050623a0` | 2026-08-31 | fix(auth): S10-AUTH-2FAGUARD-FAILMODE-1 — bọc CẢ BA withTenant của 2FA guard, fail-closed có phân loại (KI-083) (#444) |
 | `9186a666` | 2026-08-31 | feat(dash): S11-OFFICE-DASH-1 — 2 widget wave OFFICE (ROOM_TODAY · ASSET_SUMMARY) + sàn scope widget (#443) |
@@ -42,7 +52,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `135ae0c8` | 2026-08-30 | chore(harness): đóng S11-ROOM-BE-1 — regen STATUS + bàn giao phiên |
 | `99b885fa` | 2026-08-30 | feat(room): S11-ROOM-BE-1 — module NestJS rooms/ (13 route · chống trùng EXCLUDE→409 · huỷ own/all · lịch/phòng trống/usage · /me · NOTI + job nhắc 15′) (#438) |
 | `54887ce6` | 2026-08-30 | feat(asset): S11-ASSET-BE-1 — module NestJS assets/ (26 route · FSM · data-scope Own/Department/Company + masking · audit · NOTI outbox/job · counter mã theo loại) (#437) |
-| `f400cfa8` | 2026-08-30 | feat(room): S11-ROOM-DB-1 — schema + migration ROOM theo DB-16 + ROOM-DEC-001 (0552 expand · 0553 DROP meeting_* · 0554 seed office-admin/5 cặp/22 grant/audit · 0555 NOTI) (#436) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

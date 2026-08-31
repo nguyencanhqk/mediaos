@@ -1,7 +1,7 @@
 # SPEC-08: THÔNG BÁO HỆ THỐNG
 
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
-> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · **SPEC-08 NOTI** · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · [SPEC-14 ROOM](<SPEC-14 ROOM.md>) · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
+> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · **SPEC-08 NOTI** · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-12 RECRUIT](<SPEC-12 RECRUIT.md>) · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · [SPEC-14 ROOM](<SPEC-14 ROOM.md>) · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
 >
 > **Liên quan:** [Thiết kế DB: DB-07 NOTI/DASH](<../DB/DB-07 NOTI DASH Database Design.md>) · [Sản phẩm: PRD-00 §9.7](<../PRD/PRD-00 Enterprise Management System .md>) · [Thiết kế API: API-07 NOTI](<../API Design/API-07_NOTI_API_Design.md>) · [Chỉ mục tài liệu](<../README.md>)
 >
@@ -1243,8 +1243,12 @@ Tất cả user đã đăng nhập.
 | NOTI-EVENT-013   | ROOM_BOOKING_CONFIRMED  | Đặt phòng họp được xác nhận | Organizer ∪ attendees, trừ actor |
 | NOTI-EVENT-014   | ROOM_BOOKING_CANCELLED  | Lịch đặt phòng bị huỷ       | Organizer ∪ attendees, trừ actor |
 | NOTI-EVENT-015   | ROOM_BOOKING_REMINDER   | Nhắc lịch họp trước 15 phút | Organizer ∪ attendees (system event — không loại ai) |
+| NOTI-EVENT-016   | RECRUIT_JOB_ASSIGNED    | Được gán phụ trách vị trí tuyển | Recruiter được gán (trừ actor) |
+| NOTI-EVENT-017   | RECRUIT_INTERVIEW_SCHEDULED | Được xếp lịch phỏng vấn | Interviewer — user của participants |
+| NOTI-EVENT-018   | RECRUIT_STAGE_CHANGED   | Ứng viên đổi stage cần xử lý | Recruiter phụ trách vị trí (trừ actor) |
+| NOTI-EVENT-019   | RECRUIT_CANDIDATE_HIRED | Ứng viên trúng tuyển đã convert | User giữ role `hr` (tra `user_roles` — SPEC-12 §17; không gửi `hr-manager`, role đó chưa có grant RECRUIT) |
 
-> **Dải mở rộng hậu-MVP:** 010–012 cấp cho **ASSET** (SPEC-13 §17, 28/08/2026), 013–015 cấp cho **ROOM** (SPEC-14 §17, 29/08/2026) — cùng wave S11-OFFICE, hai module Phase 3 đầu tiên nối tiếp bộ mã chuẩn. GOAL/LMS/CHAT trước đó chỉ là event mở rộng (§15.1–15.6 kiểu), **không** chiếm mã chuẩn. Module kế lấy 016+ sau khi đo lại.
+> **Dải mở rộng hậu-MVP:** 010–012 cấp cho **ASSET** (SPEC-13 §17, 28/08/2026), 013–015 cấp cho **ROOM** (SPEC-14 §17, 29/08/2026) — wave S11-OFFICE; **016–019 cấp cho RECRUIT** (SPEC-12 §17, 31/08/2026 — wave S12-RECRUIT). GOAL/LMS/CHAT trước đó chỉ là event mở rộng (§15.1–15.6 kiểu), **không** chiếm mã chuẩn. Module kế lấy 020+ sau khi đo lại.
 
 ---
 
@@ -1370,6 +1374,21 @@ Tất cả user đã đăng nhập.
 * Payload chỉ tiêu đề · tên phòng · khung giờ (ISO + đã format theo `companies.timezone`) · tên người tổ chức · deep-link `/me/room-bookings?focus={bookingId}`; **không** danh sách người tham dự đầy đủ. `dedupeKey` suy từ nội dung (`room:confirmed:{bookingId}` · `room:cancelled:{bookingId}` · `room:reminder:{bookingId}:{startsAt}`) — catalog seed **`dedupe_strategy = 'DedupeKey'`** cho cả 3 (mặc định `'None'` làm job nhắc phát lại mỗi nhịp).
 * Recipient resolve theo id có sẵn trong lượt (`recipient.mode='UserIds'`) — không tra ngược quyền/role.
 * Phát qua OutboxNotificationBridge; `registerSource()` fail-loud lúc boot nếu catalog chưa có 3 mã này ⇒ seed phải đi trước WO backend.
+
+---
+
+### 15.9 RECRUIT events *(Phase 2 — wave S12-RECRUIT, SPEC-12 §17; seed ở S12-RECRUIT-DB-1)*
+
+| Mã event                    | Sự kiện                                  | Người nhận                                                    | Nội dung gợi ý                                              |
+| --------------------------- | ---------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------- |
+| RECRUIT_JOB_ASSIGNED        | Gán/đổi recruiter phụ trách vị trí tuyển | Recruiter mới được gán (trừ actor tự gán mình)                | Bạn được giao phụ trách vị trí «{job_title}»                |
+| RECRUIT_INTERVIEW_SCHEDULED | Lượt phỏng vấn tạo xong                  | User của các interviewer (`interview_participants` → resolve employee → user; employee không có user thì bỏ qua) | Bạn có lịch phỏng vấn {candidate_name} — vòng {round}, {time_range} |
+| RECRUIT_STAGE_CHANGED       | Ứng viên đổi stage (move tay)            | Recruiter phụ trách vị trí (trừ actor)                        | Ứng viên {candidate_name} chuyển {from_stage} → {to_stage}  |
+| RECRUIT_CANDIDATE_HIRED     | Convert thành công                       | User giữ **role `hr`** trong company (tra `user_roles` còn hiệu lực, `recipient.mode='UserIds'` — engine **không** có tra ngược cặp quyền, tiền lệ `ASSET_MAINTENANCE_DUE`), trừ actor. KHÔNG gửi `hr-manager` — role đó không có grant RECRUIT ở v1 (SPEC-12 §17) | Ứng viên {candidate_name} đã trở thành nhân viên {employee_code} |
+
+* `module_code = 'RECRUIT'`, `notification_type = 'Recruit'` (nới CHECK trên **cả hai** bảng `notification_events` và `notifications` — DB-14 §9 bước C), `priority` Normal/High/Normal/Normal, `isEnabled=true`, `isSystemEvent=false` cả 4 — **RECRUIT v1 không có system job** (mọi event đều event-driven).
+* Payload chỉ tên ứng viên · tên vị trí · stage/khung giờ · deep-link `/recruit/candidates/{candidateId}`; **không** email/phone/lương — `full_name` ứng viên là projection duy nhất được lộ (SPEC-12 §18). `dedupeKey` suy từ nội dung (`RECRUIT_JOB_ASSIGNED:{jobOpeningId}:{auditLogId}` — theo LẦN gán, không theo cặp job+user kẻo A→B→A không báo lại (engine DedupeKey là once-ever, không bucket thời gian) · `RECRUIT_INTERVIEW_SCHEDULED:{interviewId}` · `RECRUIT_STAGE_CHANGED:{stageEventId}` · `RECRUIT_CANDIDATE_HIRED:{candidateId}`) — catalog seed **`dedupe_strategy = 'DedupeKey'`** cho cả 4.
+* Phát qua OutboxNotificationBridge; `registerSource()` fail-loud lúc boot nếu catalog chưa có 4 mã này ⇒ seed phải đi trước WO backend.
 
 ---
 
