@@ -281,8 +281,7 @@ toàn bộ). 9 cặp ghi chỉ cấp `@Company`. Role hệ thống `asset-manage
 | Che tài chính | mở chi tiết bằng 3 tư cách | `purchasePrice`/`supplier`/`maintenances[].cost` **chỉ** có ở scope Company; Own **và** Department đều vắng khoá |
 | Bấm-đúp nút cấp phát | bấm nhanh 2 lần | 1 lượt duy nhất (FE gửi `Idempotency-Key`); lần 2 nhận lại đúng phản hồi cũ |
 
-**Chưa có (không phải bug):** widget «Tài sản» trên Dashboard (SPEC-13 §20 mục 11) — cần WO riêng cho
-module DASH.
+Widget «Thống kê tài sản» trên Dashboard (SPEC-13 §20 mục 11) đã có từ `S11-OFFICE-DASH-1` — xem §5f.
 
 Bộ test tự động: **157 ca** cụm ASSET (unit + int-spec, cần `LANE_DB`) — trong đó **81 ca mới** của
 `S11-ASSET-QA-1` — + **91 ca** FE `apps/app/src/routes/assets`. Coverage `src/assets/**`: **97.6 %**
@@ -324,8 +323,7 @@ trị phòng + tab «Lịch sử sử dụng» · `005` drawer chi tiết lượ
 | Bấm-đúp nút đặt | bấm nhanh 2 lần | lần 2 báo «đang gửi» (`IN_PROGRESS`), **không** báo «phòng đã bận»; chỉ sinh 1 lượt |
 | Quá nhiều người tham dự | chọn 51 người | **400** `VALIDATION-ERR-001` ở biên (KHÔNG phải 422 — xem đính chính SPEC-14 §12); đúng 50 người ⇒ đặt được |
 
-**Chưa có (không phải bug):** widget «Lịch họp hôm nay» trên Dashboard (SPEC-14 §20) — cần WO riêng cho module
-DASH · e2e qua UI (đặt → trùng → đổi giờ → huỷ) · **sửa lượt đặt**: v1 không có `PATCH`, muốn đổi giờ/phòng thì
+**Chưa có (không phải bug):** e2e qua UI (đặt → trùng → đổi giờ → huỷ) · **sửa lượt đặt**: v1 không có `PATCH`, muốn đổi giờ/phòng thì
 huỷ rồi đặt lại (SPEC-14 §5.2) · chọn người tham dự đi qua danh bạ HR nên người không có `read:employee` sẽ thấy
 danh sách rỗng (đặt được, nhưng một mình) · giờ hiển thị dùng `DEFAULT_TIMEZONE` vì `/auth/me` chưa trả
 `companies.timezone`.
@@ -335,6 +333,35 @@ Bộ test tự động: **213 ca** cụm ROOM (unit + int-spec, cần `LANE_DB`;
 **92.1 %** branches (lệnh tái lập: `pnpm --filter @mediaos/api test:cov:room`). Bằng chứng nghiệm thu (ma trận
 quyền per-pair 13 route · đột biến RED-trước-GREEN hai tầng · sentinel 404 · biên idempotency · census 21 `kind`):
 [`QA/evidence/S11-ROOM-QA-1-ACCEPTANCE.md`](QA/evidence/S11-ROOM-QA-1-ACCEPTANCE.md).
+
+---
+
+## 5f. DASH — 2 widget wave OFFICE (S11-OFFICE-DASH-1, 30/08/2026)
+
+Dashboard nay có thêm «Lịch họp hôm nay» (`ROOM_TODAY`) và «Thống kê tài sản» (`ASSET_SUMMARY`). Cả hai
+**đọc lại đúng endpoint của module gốc** (`GET /me/room-bookings?date=…` · `GET /assets/summary`) — số trên
+widget và số trong màn module luôn là MỘT.
+
+**Ai thấy widget nào** — điểm dễ tưởng là bug nhất:
+
+| Widget | Điều kiện thấy | Ghi chú |
+| --- | --- | --- |
+| Lịch họp hôm nay | có `view:room` (mọi role canonical đều có @Company) | Nội dung **chỉ** là lịch của CHÍNH người xem (mình tổ chức hoặc được mời) — không phải lịch toàn công ty |
+| Thống kê tài sản | có `view:asset` **ở phạm vi ≥ Department** | Nhân viên thường (`view:asset@Own`) **không** thấy widget và **không** gọi API — đúng SPEC-13 §482. Trưởng đơn vị, HR, Admin và role `asset-manager` thì thấy |
+
+| Việc | Cách kiểm | Kỳ vọng |
+| --- | --- | --- |
+| Lịch hôm nay | đặt 1 lượt trong ngày → mở Dashboard | lượt hiện với giờ bắt đầu–kết thúc, huy hiệu «Bạn tổ chức» nếu mình là người đặt; bấm vào → sang lưới lịch `/rooms` |
+| Ngày theo múi giờ CÔNG TY | đặt lượt lúc 07:00 giờ Việt Nam rồi mở Dashboard từ máy đặt múi giờ khác | vẫn nằm trong «hôm nay» — server chốt ngày theo `companies.timezone`, **không** theo đồng hồ trình duyệt (SPEC-14 §83) |
+| Chỉ lịch của mình | người khác đặt lượt không mời mình | lượt đó **không** xuất hiện; widget cũng không hiện TÊN người tham dự (chỉ số lượng) |
+| Không có lịch | ngày trống | trạng thái rỗng «Hôm nay bạn không có lịch họp», không phải lỗi |
+| Thống kê tài sản theo phạm vi | mở Dashboard bằng tài khoản Admin rồi bằng trưởng đơn vị | Admin thấy số toàn công ty; trưởng đơn vị thấy số **hẹp hơn** (chỉ đơn vị mình) — đây là data scope, không phải sai số |
+| Nhân viên thường | mở Dashboard bằng tài khoản chỉ có `view:asset@Own` | **không có** ô «Thống kê tài sản»; tab Network cũng **không** có lời gọi `/dashboard/widgets/asset-summary` |
+| Bảo trì sắp đến hạn | có tài sản `next_maintenance_due` trong 7 ngày | dòng cảnh báo màu vàng dưới tổng số; không có thì dòng đó ẩn hẳn |
+| Không lộ tiền | mở widget bằng tài khoản scope Company | payload **không** chứa `purchasePrice`/`supplier` — widget chỉ đếm |
+
+Bộ test tự động: **18 ca** int-spec `dashboard-office-widgets.int-spec.ts` (cần `LANE_DB` — phủ sàn scope ở
+CẢ hai tầng, đối chiếu widget vs endpoint gốc, self-lock, cross-tenant) + **20 ca** FE.
 
 ---
 

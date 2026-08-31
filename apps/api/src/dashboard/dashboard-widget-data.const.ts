@@ -29,6 +29,10 @@ export const DASH_WIDGET_TTL_SECONDS: Readonly<Record<DashModuleCode, number>> =
   SYSTEM: 60,
   // S5-GOAL-DASH-1: goal check-in không đổi liên tục — 300s (5m), giữa TASK(60s) và HR(900s).
   GOAL: 300,
+  // S11-OFFICE-DASH-1: ASSET đổi theo nhịp cấp phát/thu hồi (vài lần/ngày) — 300s. ROOM là lịch HÔM NAY,
+  // người dùng vừa đặt xong phải thấy ngay ⇒ 60s (cùng nhóm TASK), KHÔNG dùng TTL dài của HR.
+  ASSET: 300,
+  ROOM: 60,
 } as const;
 
 /**

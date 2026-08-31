@@ -1,3 +1,5 @@
+import type { DataScope } from "@mediaos/contracts";
+
 /**
  * S4-DASH-SEED-1 — registry TĨNH cho catalog widget DASH + quyền DASH + default config.
  *
@@ -13,7 +15,7 @@
  *  - mô hình gate widget       → docs/permission-matrix-spec.md §7 (dòng 144)
  */
 
-/** Union khớp CHECK chk_dashboard_widgets_module_code (mig 0482:71-72; APPEND 'GOAL' ở mig 0525). */
+/** Union khớp CHECK chk_dashboard_widgets_module_code (mig 0482:71-72; APPEND 'GOAL' 0525; 'ASSET','ROOM' 0558). */
 export type DashModuleCode =
   | "AUTH"
   | "HR"
@@ -23,7 +25,9 @@ export type DashModuleCode =
   | "DASH"
   | "NOTI"
   | "SYSTEM"
-  | "GOAL";
+  | "GOAL"
+  | "ASSET"
+  | "ROOM";
 /** Union khớp CHECK chk_dashboard_widgets_widget_type (mig 0482:73-74). */
 export type DashWidgetType = "Summary" | "List" | "Chart" | "Calendar" | "Action" | "Alert";
 /** Union khớp CHECK chk_dashboard_widgets_default_data_scope (mig 0482:75-76). */
@@ -238,6 +242,30 @@ export const DASH_WIDGET_CATALOG: readonly DashWidgetEntry[] = [
     dataSourceKey: "goal-progress",
     componentKey: "GoalProgressWidget",
   },
+  // ─── S11-OFFICE-DASH-1 (APPEND-only) — 2 widget wave OFFICE (SPEC-13 AS-10 · SPEC-14 RM-08, mig 0558) ───
+  // ROOM_TODAY: self-locked (chỉ lượt người xem tổ chức/tham dự) ⇒ Scope=Own, widgetType=Calendar.
+  {
+    widgetCode: "ROOM_TODAY",
+    moduleCode: "ROOM",
+    name: "Lịch họp hôm nay",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_ROOM_TODAY",
+    defaultDataScope: "Own",
+    widgetType: "Calendar",
+    dataSourceKey: "room-today",
+    componentKey: "RoomTodayWidget",
+  },
+  // ASSET_SUMMARY: đếm theo trạng thái × loại trong data_scope người gọi (SPEC-13 §244). CẬN DƯỚI 'Department'
+  // = sàn scope THẬT của widget (xem DASH_WIDGET_MIN_DATA_SCOPE) — KHÔNG phải chỉ giá trị hiển thị.
+  {
+    widgetCode: "ASSET_SUMMARY",
+    moduleCode: "ASSET",
+    name: "Thống kê tài sản",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_ASSET_SUMMARY",
+    defaultDataScope: "Department",
+    widgetType: "Summary",
+    dataSourceKey: "asset-summary",
+    componentKey: "AssetSummaryWidget",
+  },
 ] as const;
 
 export const DASH_WIDGET_COUNT = DASH_WIDGET_CATALOG.length;
@@ -294,7 +322,64 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<Record<string, EnginePair>> = {
   // department · manager@department · hr/company-admin@company). getTree tự resolveAndAssert('view','goal')
   // + áp actor scope (GoalAccessService) ⇒ handler gate LẠI cho nhất quán (mirror pattern PENDING_LEAVE).
   GOAL_PROGRESS: { action: "view", resourceType: "goal" },
+  // ─── S11-OFFICE-DASH-1 (APPEND) — cặp gate 2 widget wave OFFICE ─────────────────────────────────
+  // ('view','room') — mig 0554:58, is_sensitive=false; grant 4 role canonical @Company (0554:69-86) +
+  // office-admin. `listMine` tự resolveViewActor('view','room') rồi tự khoá organizer/attendee = caller ⇒
+  // handler gate LẠI cho nhất quán (mirror PENDING_LEAVE/GOAL_PROGRESS).
+  ROOM_TODAY: { action: "view", resourceType: "room" },
+  // ('view','asset') — mig 0550:62, is_sensitive=false. CẢ 4 role canonical đều CÓ cặp này, nhưng ở SCOPE
+  // khác nhau (employee@Own · manager@Department · hr/company-admin@Company · asset-manager@Company).
+  // Cặp một mình KHÔNG đủ gate: xem DASH_WIDGET_MIN_DATA_SCOPE.ASSET_SUMMARY (sàn 'Department').
+  ASSET_SUMMARY: { action: "view", resourceType: "asset" },
 } as const;
+
+/**
+ * S11-OFFICE-DASH-1 — SÀN data-scope phụ cho widget mà cặp gate MỘT MÌNH quá rộng.
+ *
+ * VÌ SAO cần tầng thứ hai: `DASH_WIDGET_GATE_PAIR` chỉ hỏi "có cặp không" (`PermissionService.can`). Với
+ * ('view','asset') thì CẢ 4 role canonical đều CÓ — nhân viên thường có nó ở scope `Own` (mig 0550:319).
+ * SPEC-13 §482 chốt "nhân viên thường KHÔNG thấy widget (KHÔNG gọi API)", trong khi Asset Manager
+ * (`view:asset@Company`) PHẢI thấy — mà Asset Manager dùng chung dashboard_type 'Employee' (role đó không
+ * có cặp `view-*:dashboard` riêng). Vì vậy điều kiện phân biệt KHÔNG THỂ là dashboard_type hay role
+ * (BẤT BIẾN: không hard-code role) — phải là SCOPE của chính grant.
+ *
+ * Ép ở ĐÚNG HAI tầng, đọc CÙNG hằng này (memory `read-path-gate-pair-must-match-download-pair` +
+ * `asset-guards-pairs-in-two-layers`: đổi một tầng mà quên tầng kia ⇒ deny-path xanh rỗng):
+ *   1. `DashboardWidgetRegistryService.filterByGatePair` — loại khỏi METADATA (/dashboard/me) ⇒ FE không
+ *      mount shell, KHÔNG gọi API (đúng chữ "không gọi API" của §482);
+ *   2. `DashboardWidgetHandlersService.gateMinScope` — 403 fail-closed ở ĐƯỜNG DATA (/dashboard/widgets/
+ *      :slug), kể cả khi ai đó gọi thẳng slug hoặc widget được bật tay qua dashboard_widget_configs.
+ *
+ * Widget VẮNG MẶT trong map ⇒ KHÔNG có sàn (chỉ gate bằng cặp) — hành vi cũ, không đổi.
+ */
+export const DASH_WIDGET_MIN_DATA_SCOPE: Readonly<Record<string, DataScope>> = {
+  ASSET_SUMMARY: "Department",
+} as const;
+
+/**
+ * Độ mạnh scope — MIRROR `SCOPE_STRENGTH` của PermissionService (permission.service.ts:16-22), nguồn duy
+ * nhất mà `resolveStrongestScope` dùng để chọn grant mạnh nhất. Khai lại ở đây (thay vì export chéo) để
+ * DASH không phụ thuộc chi tiết nội bộ của permission engine; `DataScope` là kiểu chung của contracts nên
+ * thêm giá trị mới sẽ ĐỎ typecheck ở CẢ HAI nơi.
+ */
+const DASH_SCOPE_STRENGTH: Readonly<Record<DataScope, number>> = {
+  Own: 1,
+  Team: 2,
+  Department: 3,
+  Company: 4,
+  System: 5,
+} as const;
+
+/**
+ * `true` khi `scope` của người xem đạt sàn của widget. `scope` null (không grant nào) ⇒ false (fail-closed).
+ * Widget không khai sàn ⇒ true (cặp gate đã là cổng duy nhất).
+ */
+export function meetsMinDataScope(widgetCode: string, scope: DataScope | null): boolean {
+  const min = DASH_WIDGET_MIN_DATA_SCOPE[widgetCode];
+  if (!min) return true;
+  if (scope == null) return false;
+  return DASH_SCOPE_STRENGTH[scope] >= DASH_SCOPE_STRENGTH[min];
+}
 
 export interface DashPermissionPair extends EnginePair {
   /** SPEC code tương ứng (DB-07 §10.2 / API-10) — chỉ để truy vết, KHÔNG lưu vào DB. */
@@ -465,6 +550,21 @@ export const DASH_DEFAULT_CONFIG: readonly DashDefaultConfigEntry[] = [
   { dashboardType: "Manager", widgetCode: "GOAL_PROGRESS", sortOrder: 60 },
   { dashboardType: "HR", widgetCode: "GOAL_PROGRESS", sortOrder: 60 },
   { dashboardType: "Admin", widgetCode: "GOAL_PROGRESS", sortOrder: 60 },
+  // ─── S11-OFFICE-DASH-1 (APPEND) — 2 widget wave OFFICE trên CẢ 4 dashboard type ────────────────────
+  // ROOM_TODAY@70: lịch họp CỦA CHÍNH người xem — ai cũng đặt/được mời được, 4 role canonical đều có
+  // view:room@Company (mig 0554) ⇒ mặc định bật khắp nơi, KHÔNG sàn scope.
+  { dashboardType: "Employee", widgetCode: "ROOM_TODAY", sortOrder: 70 },
+  { dashboardType: "Manager", widgetCode: "ROOM_TODAY", sortOrder: 70 },
+  { dashboardType: "HR", widgetCode: "ROOM_TODAY", sortOrder: 70 },
+  { dashboardType: "Admin", widgetCode: "ROOM_TODAY", sortOrder: 70 },
+  // ASSET_SUMMARY@80 CÓ MẶT ở dashboard 'Employee' là CỐ Ý — Asset Manager (view:asset@Company) dùng chung
+  // dashboard type đó (role `asset-manager` không có cặp view-*:dashboard riêng, SPEC-13 §272). Nhân viên
+  // thường bị loại bởi SÀN scope 'Department' (DASH_WIDGET_MIN_DATA_SCOPE), KHÔNG bởi việc vắng config —
+  // lọc theo config sẽ giấu widget khỏi CHÍNH người đáng thấy nó (SPEC-13 §482).
+  { dashboardType: "Employee", widgetCode: "ASSET_SUMMARY", sortOrder: 80 },
+  { dashboardType: "Manager", widgetCode: "ASSET_SUMMARY", sortOrder: 80 },
+  { dashboardType: "HR", widgetCode: "ASSET_SUMMARY", sortOrder: 80 },
+  { dashboardType: "Admin", widgetCode: "ASSET_SUMMARY", sortOrder: 80 },
 ] as const;
 
 // ─── S4-DASH-BE-1 (APPEND-only) — resolver route → cặp engine ────────────────────────────────────────

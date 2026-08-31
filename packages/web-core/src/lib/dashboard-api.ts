@@ -37,8 +37,10 @@ import { buildQueryString } from "./api-params";
  * S4-FE-DASH-1 — widget_code (S4-DASH-SEED-1 catalog) → dataSourceKey (slug GET /dashboard/widgets/:slug).
  * Mirror TẠI ĐÂY apps/api/src/dashboard/dashboard-widget-catalog.const.ts (DASH_WIDGET_CATALOG[].dataSourceKey)
  * — web-core KHÔNG import ngược từ apps/api. Chỉ liệt kê widget ĐÃ có FE component (P0: MY_TASKS/TASK_ALERTS/
- * NOTIFICATIONS · S4-FE-DASH-2 P1: ATTENDANCE_TODAY/PENDING_LEAVE/PROJECT_PROGRESS/HR_OVERVIEW). Thêm widget
- * mới → thêm dòng khi component tương ứng được build.
+ * NOTIFICATIONS · S4-FE-DASH-2 P1: ATTENDANCE_TODAY/PENDING_LEAVE/PROJECT_PROGRESS/HR_OVERVIEW ·
+ * GOAL_PROGRESS · S11-OFFICE-DASH-1: ROOM_TODAY/ASSET_SUMMARY). Thêm widget mới → thêm dòng khi component
+ * tương ứng được build; `DashboardWidgetGrid.spec` GHIM tập component ⊆ tập slug (thiếu dòng ⇒ ĐỎ, thay vì
+ * chỉ nổ lúc chạy như GOAL_PROGRESS trước đây).
  */
 export const DASH_WIDGET_SLUG: Readonly<Record<string, string>> = {
   MY_TASKS: "my-tasks",
@@ -49,6 +51,13 @@ export const DASH_WIDGET_SLUG: Readonly<Record<string, string>> = {
   PENDING_LEAVE: "pending-leave",
   PROJECT_PROGRESS: "project-progress",
   HR_OVERVIEW: "hr-overview",
+  // S11-OFFICE-DASH-1 (APPEND) — GOAL_PROGRESS BỊ BỎ SÓT ở S5-GOAL-DASH-1: component GoalProgressWidget đã
+  // land và được Grid mount, nhưng thiếu dòng này nên getWidgetData ném "widget chưa có FE slug mapping"
+  // MỌI lần — spec của component mock thẳng dashboardApi nên không đụng map này (test ghim lỗ mở).
+  GOAL_PROGRESS: "goal-progress",
+  // S11-OFFICE-DASH-1 — 2 widget wave OFFICE (mig 0558).
+  ROOM_TODAY: "room-today",
+  ASSET_SUMMARY: "asset-summary",
 };
 
 /** 4 dashboard type user-facing → path GET /dashboard/{type} (API-08 §10.1, DashboardResolverController). */

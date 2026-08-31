@@ -240,6 +240,8 @@ describe.skipIf(!hasLaneDb)("S4-DASH-BE-1 Dashboard resolver + widget registry (
       "TASK_ALERTS",
       "LEAVE_BALANCE",
       "NOTIFICATIONS",
+      // S11-OFFICE-DASH-1: + ROOM_TODAY@70; ASSET_SUMMARY@80 bị SÀN scope loại (view:asset@Own).
+      "ROOM_TODAY",
     ]);
     expect(res.body.data.generated_at).toBeTruthy();
   });
@@ -280,6 +282,10 @@ describe.skipIf(!hasLaneDb)("S4-DASH-BE-1 Dashboard resolver + widget registry (
         "NOTIFICATIONS",
         "PENDING_LEAVE",
         "TASK_ALERTS",
+        // S11-OFFICE-DASH-1: manager canonical có view:room@Company VÀ view:asset@Department (mig 0550/0554)
+        // ⇒ CÓ CẢ HAI widget mới. Đối chứng với employee ở M2/M10: cùng cặp view:asset, khác SCOPE, khác kết quả.
+        "ROOM_TODAY",
+        "ASSET_SUMMARY",
       ].sort(),
     );
     expect(codes.slice(0, 3)).toEqual(["PENDING_LEAVE", "TASK_ALERTS", "LEAVE_CALENDAR"]);
@@ -342,6 +348,9 @@ describe.skipIf(!hasLaneDb)("S4-DASH-BE-1 Dashboard resolver + widget registry (
       "TASK_ALERTS",
       "LEAVE_BALANCE",
       "NOTIFICATIONS",
+      // S11-OFFICE-DASH-1: ROOM_TODAY@70 — employee canonical CÓ view:room@Company (mig 0554).
+      // ASSET_SUMMARY@80 VẮNG: employee chỉ có view:asset@Own, dưới sàn 'Department' (SPEC-13 §482).
+      "ROOM_TODAY",
     ]);
   });
 
@@ -399,6 +408,9 @@ describe.skipIf(!hasLaneDb)("S4-DASH-BE-1 Dashboard resolver + widget registry (
       "TASK_ALERTS",
       "LEAVE_BALANCE",
       "NOTIFICATIONS",
+      // S11-OFFICE-DASH-1: ROOM_TODAY@70 — employee canonical CÓ view:room@Company (mig 0554).
+      // ASSET_SUMMARY@80 VẮNG: employee chỉ có view:asset@Own, dưới sàn 'Department' (SPEC-13 §482).
+      "ROOM_TODAY",
     ]);
   });
 

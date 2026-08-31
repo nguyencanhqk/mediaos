@@ -151,3 +151,60 @@ export const goalProgressWidgetDataSchema = z.object({
   }),
 });
 export type GoalProgressWidgetData = z.infer<typeof goalProgressWidgetDataSchema>;
+
+// ── S11-OFFICE-DASH-1 — ROOM_TODAY / ASSET_SUMMARY (dashboard-widget-office.handlers.ts) ─────────
+
+/**
+ * ROOM_TODAY — `fetchRoomToday()`: { date, items, summary: { total, upcoming } }.
+ * `date` là ngày hôm nay theo múi giờ CÔNG TY do SERVER tính (SPEC-14 §83) — FE hiển thị nguyên, KHÔNG
+ * tự suy từ đồng hồ máy. `attendeeCount` là SỐ LƯỢNG, không có tên người (BE cố ý bỏ để không đưa dữ liệu
+ * mask-theo-người-xem vào hàng cache — xem doc-block handler).
+ */
+export const dashWidgetRoomTodayItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  roomName: z.string(),
+  roomLocation: z.string().nullable(),
+  startsAt: z.string(),
+  endsAt: z.string(),
+  myRole: z.enum(["organizer", "attendee"]),
+  status: z.string(),
+  isCompleted: z.boolean(),
+  attendeeCount: z.number().int().nonnegative(),
+});
+export type DashWidgetRoomTodayItem = z.infer<typeof dashWidgetRoomTodayItemSchema>;
+
+export const roomTodayWidgetDataSchema = z.object({
+  date: z.string(),
+  items: z.array(dashWidgetRoomTodayItemSchema),
+  summary: z.object({
+    total: z.number().int().nonnegative(),
+    upcoming: z.number().int().nonnegative(),
+  }),
+});
+export type RoomTodayWidgetData = z.infer<typeof roomTodayWidgetDataSchema>;
+
+/**
+ * ASSET_SUMMARY — `fetchAssetSummary()`: { summary: { total, maintenanceDueSoon }, byStatus, byCategory }.
+ * `byStatus` để `z.record(z.string(), …)` chứ KHÔNG ghim 5 trạng thái FSM: BE trả nguyên object của
+ * `AssetsService.summary`, và một trạng thái mới ở SPEC-13 sẽ làm parse ĐỎ cả widget nếu ghim cứng —
+ * widget chỉ liệt kê, không suy luận theo từng trạng thái.
+ */
+export const dashWidgetAssetCategoryRowSchema = z.object({
+  categoryId: z.string(),
+  code: z.string(),
+  name: z.string(),
+  total: z.number().int().nonnegative(),
+  assigned: z.number().int().nonnegative(),
+});
+export type DashWidgetAssetCategoryRow = z.infer<typeof dashWidgetAssetCategoryRowSchema>;
+
+export const assetSummaryWidgetDataSchema = z.object({
+  summary: z.object({
+    total: z.number().int().nonnegative(),
+    maintenanceDueSoon: z.number().int().nonnegative(),
+  }),
+  byStatus: z.record(z.string(), z.number().int().nonnegative()),
+  byCategory: z.array(dashWidgetAssetCategoryRowSchema),
+});
+export type AssetSummaryWidgetData = z.infer<typeof assetSummaryWidgetDataSchema>;

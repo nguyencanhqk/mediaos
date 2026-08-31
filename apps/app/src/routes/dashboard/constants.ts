@@ -17,6 +17,9 @@ import { LEAVE_ENGINE_PAIRS } from "@/routes/leave/constants";
 import { HR_ENGINE_PAIRS } from "@/routes/hr/constants";
 // S5-GOAL-DASH-1 (additive): cặp gate GOAL_PROGRESS — tái dùng GOAL_ENGINE_PAIRS.VIEW đã có (DRY).
 import { GOAL_ENGINE_PAIRS } from "@/routes/goals/constants";
+// S11-OFFICE-DASH-1 (additive): cặp gate 2 widget wave OFFICE — tái dùng hằng module đã có (DRY).
+import { ASSET_ENGINE_PAIRS } from "@/routes/assets/constants";
+import { ROOM_ENGINE_PAIRS } from "@/routes/rooms/constants";
 
 export const DASH_WIDGET_CODE = {
   MY_TASKS: "MY_TASKS",
@@ -29,6 +32,9 @@ export const DASH_WIDGET_CODE = {
   HR_OVERVIEW: "HR_OVERVIEW",
   // S5-GOAL-DASH-1 (APPEND) — widget "Mục tiêu kỳ này" (SPEC-10 §7/§13, mig 0525).
   GOAL_PROGRESS: "GOAL_PROGRESS",
+  // S11-OFFICE-DASH-1 (APPEND) — 2 widget wave OFFICE (SPEC-13 AS-10 · SPEC-14 RM-08, mig 0558).
+  ROOM_TODAY: "ROOM_TODAY",
+  ASSET_SUMMARY: "ASSET_SUMMARY",
 } as const;
 
 export type DashWidgetCode = (typeof DASH_WIDGET_CODE)[keyof typeof DASH_WIDGET_CODE];
@@ -48,6 +54,14 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<
   HR_OVERVIEW: HR_ENGINE_PAIRS.READ_EMPLOYEE,
   // S5-GOAL-DASH-1 (APPEND) — MIRROR đúng BE DASH_WIDGET_GATE_PAIR.GOAL_PROGRESS (view:goal).
   GOAL_PROGRESS: GOAL_ENGINE_PAIRS.VIEW,
+  // S11-OFFICE-DASH-1 (APPEND) — MIRROR đúng BE: ROOM_TODAY→view:room · ASSET_SUMMARY→view:asset.
+  //
+  // ⚠ ASSET_SUMMARY: cặp view:asset MỘT MÌNH KHÔNG phải cổng thật — BE còn ép SÀN scope 'Department'
+  // (DASH_WIDGET_MIN_DATA_SCOPE) để nhân viên thường (view:asset@Own) KHÔNG thấy widget (SPEC-13 §482).
+  // FE KHÔNG kiểm được scope (capabilities chỉ có cặp, không có scope) ⇒ PermissionGate ở component là
+  // gate PHỤ; cổng THẬT là GET /dashboard/me đã omit widget khỏi metadata ⇒ Grid không mount nó.
+  ROOM_TODAY: ROOM_ENGINE_PAIRS.VIEW,
+  ASSET_SUMMARY: ASSET_ENGINE_PAIRS.VIEW,
 };
 
 /**

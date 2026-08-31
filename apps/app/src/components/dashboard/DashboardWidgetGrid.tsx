@@ -20,6 +20,9 @@ import { HrOverviewWidget } from "./HrOverviewWidget";
 // S5-GOAL-DASH-1 (additive): GOAL_PROGRESS KHÔNG cần tham số ngoài dashboardType ⇒ mount qua Grid bình
 // thường (khác PROJECT_PROGRESS — xem doc-block WIDGET_COMPONENTS bên dưới).
 import { GoalProgressWidget } from "./GoalProgressWidget";
+// S11-OFFICE-DASH-1 (additive): 2 widget wave OFFICE — cả hai chỉ cần dashboardType ⇒ mount qua Grid.
+import { RoomTodayWidget } from "./RoomTodayWidget";
+import { AssetSummaryWidget } from "./AssetSummaryWidget";
 import { DASH_WIDGET_CODE } from "@/routes/dashboard/constants";
 
 interface DashboardWidgetProps {
@@ -43,6 +46,8 @@ const WIDGET_COMPONENTS: Readonly<Record<string, ComponentType<DashboardWidgetPr
   [DASH_WIDGET_CODE.PENDING_LEAVE]: PendingLeaveWidget,
   [DASH_WIDGET_CODE.HR_OVERVIEW]: HrOverviewWidget,
   [DASH_WIDGET_CODE.GOAL_PROGRESS]: GoalProgressWidget,
+  [DASH_WIDGET_CODE.ROOM_TODAY]: RoomTodayWidget,
+  [DASH_WIDGET_CODE.ASSET_SUMMARY]: AssetSummaryWidget,
 };
 
 interface DashboardWidgetGridProps {

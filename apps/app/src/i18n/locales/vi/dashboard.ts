@@ -77,6 +77,21 @@ export default {
     empty: { title: "Chưa có mục tiêu phòng ban kỳ này" },
     average: "Trung bình {{percent}}%",
   },
+  // ── S11-OFFICE-DASH-1 — 2 widget wave OFFICE (SPEC-13 AS-10 · SPEC-14 RM-08) ───
+  roomToday: {
+    title: "Lịch họp hôm nay",
+    empty: { title: "Hôm nay bạn không có lịch họp" },
+    summary: "{{total}} cuộc họp · {{upcoming}} sắp diễn ra",
+    roomLine: "{{room}} · {{count}} người tham dự",
+    role: { organizer: "Bạn tổ chức" },
+  },
+  assetSummary: {
+    title: "Thống kê tài sản",
+    empty: { title: "Chưa có tài sản trong phạm vi của bạn" },
+    totalUnit: "tài sản",
+    maintenanceDueSoon: "{{count}} tài sản sắp đến hạn bảo trì",
+    categoryCount: "{{total}} · đang cấp {{assigned}}",
+  },
   typeSwitcher: {
     label: "Chuyển đổi loại bảng điều khiển",
   },
