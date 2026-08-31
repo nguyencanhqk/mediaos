@@ -816,6 +816,30 @@ Ghi chú riêng của ROOM:
 
 ---
 
+### 8.18 RECRUIT (`job_openings`, `candidates`, `candidate_stage_events`, `candidate_notes`, `interviews`, `interview_participants`, `interview_feedbacks`, `offers`) · *Phase 2 — chưa thi công*
+
+> Chi tiết đầy đủ + DDL: [DB-14 RECRUIT Database Design §6/§8](<DB-14 RECRUIT Database Design.md>). 8 bảng mới, migration `0559+` dự kiến (S12-RECRUIT-DB-1). Tóm tắt use case → index:
+
+| Use case | Index dùng |
+| --- | --- |
+| Danh sách vị trí lọc trạng thái/phòng ban (`RECRUIT-API-001`) | `idx_job_openings_company_status` · `idx_job_openings_company_org` |
+| Kanban/danh sách ứng viên theo stage + vị trí (`006`) · phễu widget (`009`) | `idx_candidates_company_stage_job` (`GROUP BY stage`) |
+| Check-duplicate email/phone (`008`) | `idx_candidates_company_email` (`lower(email)`) · `idx_candidates_company_phone` |
+| Timeline stage / ghi chú (`014`/`015`) | `idx_cse_company_candidate_time` · `idx_candidate_notes_company_candidate` |
+| Lịch phỏng vấn theo ứng viên / khung thời gian (`018`) | `idx_interviews_company_candidate` · `idx_interviews_company_start` |
+| «Lượt của tôi» — view@Own theo participant | `idx_interview_participants_employee` (`EXISTS`, không JOIN) |
+| Offer của ứng viên · offer đang sống | `idx_offers_company_candidate_time` · `uq_offers_candidate_open` |
+| Chống double-convert | `uq_candidates_company_employee` |
+
+Ghi chú riêng của RECRUIT:
+
+- **Ba unique là chốt cuối nghiệp vụ**, không chỉ là index: `uq_candidates_company_employee` (1 nhân viên ↔ 1 ứng viên — race convert) · `uq_offers_candidate_open` (1 offer `Draft`/`Sent`/ứng viên) · `uq_interview_feedbacks` (1 feedback/interviewer/lượt). Race ⇒ `23505` ⇒ service map 409 (RECRUIT-ERR-008/006/012), không 500.
+- **Email/phone KHÔNG unique** — trùng là cảnh báo mềm (REC-DEC hồ sơ nộp lại là hợp lệ); index chỉ phục vụ check-duplicate.
+- Own-scope interview = `EXISTS interview_participants` theo employee của caller — không JOIN (nhân bản hàng theo số interviewer).
+- Cô lập tenant ép ở RLS + FORCE; mọi index dẫn đầu bằng `company_id`.
+
+---
+
 ## 9. Index cho AUTH / DB-02
 
 ### 9.1 `users`

@@ -626,12 +626,14 @@ Secret phải lấy từ environment variable hoặc secret manager.
 >
 > **ROOM (SPEC-14 · DB-16) — Phase 3, CHƯA seed (wave S11-OFFICE, owner duyệt 28/08/2026; chạy SAU S11-ASSET-DB-1):** module phòng họp, **tái dụng `meeting_rooms`** (mig `0052`, ALTER) + **2 bảng mới** `room_bookings` · `room_booking_attendees` + **DROP 4 bảng di sản** `meetings` · `meeting_attendees` · `meeting_notes` · `meeting_tasks` (đo 29/08/2026: **0 hàng** cả 5 bảng — tiền kiểm fail-loud, không auto-migrate), migration `0552+` dự kiến — đọc `_journal.json` thật lúc chạy. Seed đi kèm: module `ROOM` (hàng **đã tồn tại** `is_active=false` ⇒ **UPDATE tường minh** `is_active=true`, `ON CONFLICT DO NOTHING` không lật cờ) + **role hệ thống `office-admin`** (`company_id NULL`, `is_system=true`, `requires_two_factor=false`; **không** canonical) + **5 cặp** permission (§12.10, `is_sensitive=false` cả 5) + grant per-pair data_scope **22 hàng** (permission-matrix §9e; verify fail-loud) + **xoá 12 grant + xoá mềm 6 cặp** `('view'|'create'|'update'|'cancel','meeting')` · `('view'|'manage','meeting_room')` di sản `0052` (0 guard dùng) + **UNION-ADD** `'room_booking'` vào CHECK `audit_logs.object_type` (verify `'meeting_room'` đã có, thêm nếu thiếu) + seed NOTI **3 event** (`ROOM_BOOKING_CONFIRMED`, `ROOM_BOOKING_CANCELLED`, `ROOM_BOOKING_REMINDER`; `notification_type='Room'`, `dedupe_strategy='DedupeKey'`) với nới CHECK trên **CẢ HAI** bảng `notification_events` **VÀ** `notifications`. ⚠️ `cleanupTenants()` thêm 2 bảng mới **trước dòng `DELETE FROM users`** (composite FK `NO ACTION` → `users`). Chi tiết kế hoạch migration: DB-16 §9.
 
+> **RECRUIT (SPEC-12 · DB-14) — Phase 2, CHƯA seed (wave S12-RECRUIT, owner duyệt 31/08/2026):** module tuyển dụng, **8 bảng mới** (`job_openings` · `candidates` · `candidate_stage_events` · `candidate_notes` · `interviews` · `interview_participants` · `interview_feedbacks` · `offers`), migration `0559+` dự kiến — đọc `_journal.json` thật lúc chạy. Seed đi kèm: hàng module `RECRUIT` **đã pre-seed inactive từ `0435`** ⇒ migration chỉ **verify tồn tại và GIỮ `is_active=false`** (bật ở `S12-RECRUIT-FE-1` bằng UPDATE tường minh + gỡ pin `EXTENSION_INACTIVE_MODULES` cùng commit — khuôn `0556`/`0557`) + **role hệ thống `recruiter`** (`company_id NULL`, `is_system=true`, `requires_two_factor=false` tường minh; **không** canonical) + **16 cặp** permission (§12.11 — **7 cặp resource `candidate` `is_sensitive=TRUE`**, 9 cặp false) + grant per-pair data_scope **42 hàng** (permission-matrix §9f; verify fail-loud) + **UNION-ADD 4 giá trị** `'job_opening'` · `'candidate'` · `'interview'` · `'offer'` vào CHECK `audit_logs.object_type` (khuôn `0545`) + seed NOTI **4 event** (`RECRUIT_JOB_ASSIGNED` · `RECRUIT_INTERVIEW_SCHEDULED` · `RECRUIT_STAGE_CHANGED` · `RECRUIT_CANDIDATE_HIRED`; `notification_type='Recruit'`, `dedupe_strategy='DedupeKey'`) với nới CHECK trên **CẢ HAI** bảng `notification_events` **VÀ** `notifications`. ⚠️ **KHÔNG seed counter mới**: convert dùng lại `employee_code` của HR (ensure-on-miss). `cleanupTenants()` thêm 8 bảng con→cha **trước dòng `DELETE FROM users`**. Chi tiết kế hoạch migration: DB-14 §9.
+
 ### 10.2 Module phase sau inactive
 
 | Module code | Tên module | Phase | Active |
 | --- | --- | --- | --- |
 | PAYROLL | Tiền lương | Phase 2 | false |
-| RECRUIT | Tuyển dụng | Phase 2 | false |
+| RECRUIT | Tuyển dụng | Phase 2 | false — hàng pre-seed từ `0435`; **`0560` (S12-RECRUIT-DB-1) GIỮ false** (pin `migration-smoke`); bật `true` ở **S12-RECRUIT-FE-1** bằng `UPDATE` tường minh + gỡ `RECRUIT` khỏi `EXTENSION_INACTIVE_MODULES` cùng commit |
 | ASSET | Quản lý tài sản | Phase 3 | false — **`0550` (S11-ASSET-DB-1) GIỮ false** (tiền lệ `0538` CHAT: chưa có endpoint thì không bật; pin `migration-smoke`); bật `true` ở **S11-ASSET-FE-1** bằng `UPDATE` tường minh + gỡ `ASSET` khỏi `EXTENSION_INACTIVE_MODULES` cùng commit |
 | ROOM | Quản lý phòng họp | Phase 3 | **false** (giữ sau S11-ROOM-DB-1 — mig `0554` chỉ verify; bật ở S11-ROOM-FE-1 + gỡ pin smoke cùng commit) |
 | CHAT | Chat nội bộ | Phase 4 | false |
@@ -897,6 +899,31 @@ Secret phải lấy từ environment variable hoặc secret manager.
 
 > Grant: `employee` · `manager` · `hr` mỗi role 4 (`access`@Own, `view`@Company, `book`@Own, `cancel`@Own) · `company-admin` và role mới **`office-admin`** cả 5 (`access`@Own, còn lại @Company) = **22 hàng**. `super-admin` không enumerate. **6 cặp di sản** `meeting`/`meeting_room` (mig `0052`) bị xoá grant + xoá mềm cùng migration (DB-16 §9 bước B).
 
+### 12.11 RECRUIT permissions *(Phase 2 — seed ở S12-RECRUIT-DB-1)*
+
+> Nguồn: SPEC-12 §11 + permission-matrix §9f. Mã dotted là tên hiển thị; cặp engine ghi trong ngoặc. **7 cặp resource `candidate` mang `is_sensitive=TRUE`** (REC-DEC-003), 9 cặp còn lại false. Idempotent: `ON CONFLICT (action, resource_type) DO NOTHING`.
+
+| Permission code | Cặp engine | Mô tả |
+| --- | --- | --- |
+| `RECRUIT.ACCESS` | `('access','recruit')` | Cổng nav menu Tuyển dụng |
+| `RECRUIT.JOB.VIEW` | `('view','job-opening')` | Xem vị trí tuyển + đếm ứng viên |
+| `RECRUIT.JOB.CREATE` | `('create','job-opening')` | Tạo vị trí |
+| `RECRUIT.JOB.UPDATE` | `('update','job-opening')` | Sửa · gán recruiter · đổi trạng thái FSM |
+| `RECRUIT.CANDIDATE.VIEW` | `('view','candidate')` **S** | Xem ứng viên · timeline · ghi chú · tệp CV (email/phone dạng che) |
+| `RECRUIT.CANDIDATE.CREATE` | `('create','candidate')` **S** | Tạo hồ sơ + check-duplicate + upload CV |
+| `RECRUIT.CANDIDATE.UPDATE` | `('update','candidate')` **S** | Sửa hồ sơ — thấy email/phone không che |
+| `RECRUIT.CANDIDATE.MOVE-STAGE` | `('move-stage','candidate')` **S** | Chuyển stage kèm lý do |
+| `RECRUIT.CANDIDATE.COMMENT` | `('comment','candidate')` **S** | Ghi chú nội bộ |
+| `RECRUIT.CANDIDATE.EXPORT` | `('export','candidate')` **S** | Export danh sách + audit |
+| `RECRUIT.CANDIDATE.CONVERT` | `('convert','candidate')` **S** | Chuyển ứng viên trúng tuyển → nhân viên |
+| `RECRUIT.INTERVIEW.VIEW` | `('view','interview')` | Xem lượt phỏng vấn + feedback (Own = participant) |
+| `RECRUIT.INTERVIEW.MANAGE` | `('manage','interview')` | Xếp/sửa/kết thúc/huỷ lượt |
+| `RECRUIT.INTERVIEW.FEEDBACK` | `('feedback','interview')` | Ghi/sửa feedback của mình (Own mọi role) |
+| `RECRUIT.OFFER.VIEW` | `('view','offer')` | Xem offer (không lương) |
+| `RECRUIT.OFFER.MANAGE` | `('manage','offer')` | Tạo/sửa/đổi trạng thái offer + thấy lương |
+
+> Grant: `employee` 0 · `manager` 3 (`access`@Own · `view:interview`@Own · `feedback`@Own) · `hr` 7 (`access`@Own · 4 cặp `view`@Company · `convert`@Company · `feedback`@Own) · `company-admin` và role mới **`recruiter`** cả 16 (`access`@Own · `feedback`@Own · 14 cặp @Company) = **42 hàng**. `super-admin` không enumerate. Cặp **S** (sensitive) khai allowlist capability BACKEND ở WO BE.
+
 ---
 
 ## 13. Seed roles và role-permission matrix
@@ -1133,8 +1160,12 @@ Urgent
 | `ROOM_BOOKING_CONFIRMED` | ROOM | Đặt phòng họp được xác nhận (Phase 3 — seed ở S11-ROOM-DB-1, SPEC-08 §15.8) |
 | `ROOM_BOOKING_CANCELLED` | ROOM | Lịch đặt phòng bị huỷ (Phase 3) |
 | `ROOM_BOOKING_REMINDER` | ROOM | Nhắc lịch họp trước 15 phút — system job mỗi nhịp, `isSystemEvent=true` (Phase 3) |
+| `RECRUIT_JOB_ASSIGNED` | RECRUIT | Được gán phụ trách vị trí tuyển (Phase 2 — seed ở S12-RECRUIT-DB-1, SPEC-08 §15.9) |
+| `RECRUIT_INTERVIEW_SCHEDULED` | RECRUIT | Interviewer được xếp lịch phỏng vấn (Phase 2) |
+| `RECRUIT_STAGE_CHANGED` | RECRUIT | Ứng viên đổi stage — báo recruiter phụ trách (Phase 2) |
+| `RECRUIT_CANDIDATE_HIRED` | RECRUIT | Ứng viên trúng tuyển đã convert — báo HR qua `user_roles` (Phase 2) |
 
-> 3 event ASSET cần `module_code='ASSET'` + `notification_type='Asset'`; 3 event ROOM cần `module_code='ROOM'` + `notification_type='Room'` ⇒ nới CHECK trên **cả hai** bảng `notification_events` và `notifications` cùng migration (DB-15 §9 bước C · DB-16 §9 bước C), `dedupe_strategy='DedupeKey'`.
+> 3 event ASSET cần `module_code='ASSET'` + `notification_type='Asset'`; 3 event ROOM cần `module_code='ROOM'` + `notification_type='Room'`; 4 event RECRUIT cần `module_code='RECRUIT'` + `notification_type='Recruit'` ⇒ nới CHECK trên **cả hai** bảng `notification_events` và `notifications` cùng migration (DB-15 §9 bước C · DB-16 §9 bước C · DB-14 §9 bước C), `dedupe_strategy='DedupeKey'`.
 
 ### 15.2 Template mẫu
 
@@ -1415,9 +1446,9 @@ DB-11: Phase 2+ Extension Database Design
 DB-11 nên đi sâu vào:
 
 1. PAYROLL database design.
-2. RECRUIT database design.
-3. ASSET database design.
-4. ROOM database design.
+2. RECRUIT database design — **✅ đã viết: [DB-14](<DB-14 RECRUIT Database Design.md>)** (31/08/2026, wave S12-RECRUIT).
+3. ASSET database design — **✅ đã viết: [DB-15](<DB-15 ASSET Database Design.md>)**.
+4. ROOM database design — **✅ đã viết: [DB-16](<DB-16 ROOM Database Design.md>)**.
 5. CHAT/SOCIAL database design.
 6. MOBILE device/push database design.
 7. AI logs/suggestions/summaries database design.

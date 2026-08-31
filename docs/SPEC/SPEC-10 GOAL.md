@@ -1,7 +1,7 @@
 # SPEC-10: GOAL - MỤC TIÊU (PHÒNG BAN · DỰ ÁN · NHÂN VIÊN)
 
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
-> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · **SPEC-10 GOAL** · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · [SPEC-14 ROOM](<SPEC-14 ROOM.md>) · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
+> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · **SPEC-10 GOAL** · [SPEC-12 RECRUIT](<SPEC-12 RECRUIT.md>) · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · [SPEC-14 ROOM](<SPEC-14 ROOM.md>) · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
 >
 > **Liên quan:** [Chỉ mục tài liệu](<../README.md>) · [DB-11 GOAL Database Design](<../DB/DB-11 GOAL Database Design.md>) · [Thiết kế API: API-12 GOAL](<../API Design/API-12_GOAL_API_Design.md>) · [Ma trận phân quyền §9b](<../permission-matrix-spec.md>) · [TASK nền: SPEC-06 §3.8](<SPEC-06 TASK.md>)
 

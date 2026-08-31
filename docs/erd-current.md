@@ -453,6 +453,8 @@ CON, nên nếu cha còn "re-home" được thì hàng con của tenant khác th
 
 - ~~ROOM~~ — **ĐÃ BUILD** ở `S11-ROOM-DB-1` (mig `0552`–`0555`, 29/08/2026): xem A1. Còn lại của module ROOM là BE/FE (`S11-ROOM-BE-1`, `S11-ROOM-FE-1`), không phải nền dữ liệu.
 
+- **RECRUIT (Phase 2 — [DB-14](<DB/DB-14 RECRUIT Database Design.md>) · [SPEC-12](<SPEC/SPEC-12 RECRUIT.md>)): thiết kế CÓ (Approved 31/08/2026, wave S12-RECRUIT), code CHƯA build.** 8 bảng mới `job_openings` · `candidates` · `candidate_stage_events` (append-only) · `candidate_notes` · `interviews` · `interview_participants` · `interview_feedbacks` · `offers` — thi công ở `S12-RECRUIT-DB-1` (mig `0559+` dự kiến, `schema/recruit.ts`). Nền sạch: 0 bảng di sản tuyển dụng (chỉ 2 giá trị enum trong `finance.ts`/`media.ts` đã park — A5); hàng `modules.RECRUIT` pre-seed inactive từ `0435`, GIỮ `false` tới `S12-RECRUIT-FE-1`. Khi build: `candidate_stage_events` bổ sung danh sách bảng append-only §9; role hệ thống `recruiter` (không canonical); 7 cặp `candidate` `is_sensitive=true`.
+
 ### A5. Code CÒN bảng HƯỚNG CŨ — out-of-scope, cần DỌN (de-media-fy, CLAUDE.md §1)
 
 KHÔNG thuộc thiết kế MVP, còn sót trong DB:

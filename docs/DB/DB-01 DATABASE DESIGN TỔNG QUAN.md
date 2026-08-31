@@ -76,7 +76,7 @@ Database MVP cần hỗ trợ các module sau:
 | Module  | Tên module         | Ghi chú database                                    |
 | ------- | ------------------ | --------------------------------------------------- |
 | PAYROLL | Tiền lương         | Cần tách quyền riêng, dùng dữ liệu HR + ATT + LEAVE |
-| RECRUIT | Tuyển dụng         | Có thể chuyển candidate thành employee              |
+| RECRUIT | Tuyển dụng         | **Đã có thiết kế: [DB-14](<DB-14 RECRUIT Database Design.md>)** (SPEC-12, Phase 2, wave S12-RECRUIT). 8 bảng **mới** `job_openings` · `candidates` · `candidate_stage_events` · `candidate_notes` · `interviews` · `interview_participants` · `interview_feedbacks` · `offers` — RLS+FORCE, composite tenant FK, sổ stage **append-only**, PII mask ở server; convert tạo employee qua service HR, link `candidates.employee_id` UNIQUE. Nhóm bảng: §7.12 |
 | ASSET   | Tài sản            | **Đã có thiết kế: [DB-15](<DB-15 ASSET Database Design.md>)** (SPEC-13, Phase 3, wave S11-OFFICE). 6 bảng **mới** `asset_categories` · `assets` · `asset_assignments` · `asset_maintenances` · `asset_inventories` · `asset_inventory_items` — RLS+FORCE, composite tenant FK, 4 bảng sổ không DELETE; người giữ = lượt cấp phát `Active` trỏ `employees`. Nhóm bảng: §7.10 |
 | ROOM    | Phòng họp          | **Đã có thiết kế: [DB-16](<DB-16 ROOM Database Design.md>)** (SPEC-14, Phase 3, wave S11-OFFICE). Tái dụng `meeting_rooms` (mig `0052`) + 2 bảng **mới** `room_bookings` · `room_booking_attendees` — RLS+FORCE, composite tenant FK, EXCLUDE gist chống trùng lịch, `room_bookings` là sổ không DELETE; booking gắn `users` (organizer/attendees). 4 bảng `meeting_*` còn lại DROP. Nhóm bảng: §7.11 |
 | CHAT    | Chat nội bộ        | **Đã có thiết kế: [DB-12](<DB-12 CHAT Database Design.md>)** (SPEC-15). Bảng `chat_rooms`/`chat_room_members`/`chat_messages` **tồn tại thật** trong DB từ migration `0010`+`0050` — RLS+FORCE sẵn, `chat_messages` append-only (chỉ `SELECT`/`INSERT`, `UPDATE` theo cột). Wave `S7-CHAT` chỉ ALTER bổ sung |
@@ -629,6 +629,23 @@ notification_event_code
 | room_bookings            | Lượt đặt phòng `Confirmed · Cancelled` (SPEC-01 §17.10), `Completed` dẫn xuất — sổ không xoá; **EXCLUDE gist** chống giao nhau khi `Confirmed` |
 | room_booking_attendees   | Người tham dự của lượt (cố định lúc đặt) — chỉ INSERT; organizer không nằm trong bảng          |
 | ~~meetings · meeting_attendees · meeting_notes · meeting_tasks~~ | **DROP** ở `S11-ROOM-DB-1` (0 hàng đo 29/08/2026)                    |
+
+---
+
+## 7.12 Nhóm RECRUIT *(Phase 2 — wave S12-RECRUIT, chưa migrate)*
+
+> Chi tiết đầy đủ: [DB-14 RECRUIT Database Design](<DB-14 RECRUIT Database Design.md>). Nghiệp vụ: SPEC-12. Nền sạch — không bảng di sản (đo 31/08/2026).
+
+| Bảng                    | Mô tả                                                                                          |
+| ----------------------- | ---------------------------------------------------------------------------------------------- |
+| job_openings            | Vị trí tuyển dụng `Draft · Open · Paused · Closed` (SPEC-01 §17.12); recruiter phụ trách trỏ `users` |
+| candidates              | Ứng viên (người NGOÀI hệ thống — không FK `users`); PII mask server; `stage` 6 giá trị (§17.11); `employee_id` **UNIQUE partial** — link convert 1-1 |
+| candidate_stage_events  | Lịch sử chuyển stage — **append-only** (chỉ SELECT+INSERT, bất biến #2)                        |
+| candidate_notes         | Ghi chú nội bộ, sửa/xoá mềm của mình                                                           |
+| interviews              | Lượt phỏng vấn `Scheduled · Completed · Cancelled` (§17.13); địa điểm text/link tự do          |
+| interview_participants  | Interviewer (FK `employees`) — chỉ INSERT; chân own-scope + NOTI                               |
+| interview_feedbacks     | Đánh giá per-interviewer; unique (interview, interviewer)                                      |
+| offers                  | Offer `Draft · Sent · Accepted · Declined · Withdrawn` (§17.14); `salary` mask; **1 offer sống/ứng viên** (partial unique) |
 
 ---
 

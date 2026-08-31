@@ -185,7 +185,7 @@ Một story đạt **Done** khi:
 >
 > Bổ sung 2026-08-03 (story hoá ngược wave hậu-MVP để bảng tiến độ `/progress` gom đúng module thay vì dồn vào rổ "WO nền / hạ tầng"): **EPIC-13 GOAL** (§8.14, 8 story / 45 point, SPEC-10) · **EPIC-14 LMS** (§8.15, 6 story / 34 point) · **EPIC-15 BRAND** (§8.16, 2 story / 8 point) · **EPIC-16 CHAT** (§8.17, 12 story / 97 point, SPEC-15 — **wave S7 đang chạy, epic DUY NHẤT chưa 100%**). Tổng hiệu dụng: **152 story / 1133 point**.
 >
-> Bổ sung 2026-08-28/29 (wave S11-OFFICE, Phase 3): **EPIC-17 ASSET** (§8.18, 10 story / 53 point, SPEC-13 — IMP02-STORY-153..162) · **EPIC-18 ROOM** (§8.19, 8 story / 40 point, SPEC-14 — IMP02-STORY-163..170) — cả hai **chưa bắt đầu code**. Tổng hiệu dụng: **170 story / 1226 point**.
+> Bổ sung 2026-08-28/29 (wave S11-OFFICE, Phase 3): **EPIC-17 ASSET** (§8.18, 10 story / 53 point, SPEC-13 — IMP02-STORY-153..162) · **EPIC-18 ROOM** (§8.19, 8 story / 40 point, SPEC-14 — IMP02-STORY-163..170). Bổ sung 2026-08-31 (wave S12-RECRUIT, Phase 2): **EPIC-19 RECRUIT** (§8.20, 10 story / 50 point, SPEC-12 — IMP02-STORY-171..180) — **chưa bắt đầu code**. Tổng hiệu dụng: **180 story / 1276 point**.
 >
 > Crosswalk epic: bộ epic theo module trong IMPLEMENTATION-01 §9 (EPIC-FND/AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH) ánh xạ sang bộ epic chi tiết ở đây như sau: EPIC-FND -> EPIC-01; EPIC-AUTH -> EPIC-02; EPIC-HR -> EPIC-03; EPIC-ATT -> EPIC-04; EPIC-LEAVE -> EPIC-05; EPIC-TASK -> EPIC-06; EPIC-NOTI -> EPIC-07; EPIC-DASH -> EPIC-08. Ba epic EPIC-00 (Governance), EPIC-09 (Frontend Core), EPIC-10 (Integration) và EPIC-11 (QA/Release) là epic xuyên suốt, không thuộc một module nghiệp vụ đơn lẻ.
 
@@ -771,11 +771,44 @@ ROOM phụ thuộc AUTH (RBAC per-pair + scope; `users` là organizer/attendees)
 
 ---
 
+## 8.20 EPIC-19: RECRUIT - Tuyển dụng
+
+> **Bổ sung 2026-08-31** theo SPEC-12 RECRUIT (wave S12-RECRUIT, Phase 2 «HR nâng cao» — owner duyệt 31/08/2026, **chưa bắt đầu code**). Story RC-01..10 của `docs/plans/S12-RECRUIT-WAVE.md` §4 ánh xạ 1-1 sang IMP02-STORY-171..180. Trace: `S12-RECRUIT-DB-1 → BE-1 → FE-1 → QA-1 → DASH-1`.
+
+**Mục tiêu:** Khép trục HR từ đầu vào — vị trí tuyển dụng có FSM, hồ sơ ứng viên với PII mask ở server + cảnh báo trùng, pipeline kanban 6 stage cố định với sổ lịch sử append-only, lịch phỏng vấn + feedback own-scope per interviewer, offer mask lương không workflow duyệt, convert ứng viên trúng tuyển thành nhân viên HR một bước, và widget DASH «phễu tuyển dụng».
+
+| Story ID | Actor | User Story / Technical Story | Priority | Point | Acceptance Criteria tóm tắt |
+| --- | --- | --- | --- | ---: | --- |
+| IMP02-STORY-171 | Recruiter | Là Recruiter, tôi muốn quản lý vị trí tuyển dụng (đóng/tạm dừng, gán người phụ trách) để kiểm soát phễu đầu vào. | P0 | 5 | CRUD + FSM `Draft/Open/Paused/Closed` (RECRUIT-ERR-002); gán recruiter ⇒ `RECRUIT_JOB_ASSIGNED` (NOTI-EVENT-016); `Closed` chặn thêm/chuyển ứng viên vào (RECRUIT-ERR-005); audit (RECRUIT-FUNC-001, REC-SCREEN-001). |
+| IMP02-STORY-172 | Recruiter | Là Recruiter, tôi muốn tạo hồ sơ ứng viên với nguồn và được cảnh báo trùng email/phone trong company. | P0 | 5 | Tạo/sửa hồ sơ (idempotent theo key FE sinh); `GET /candidates/check-duplicate` trả hồ sơ khớp **không kèm email/phone** — cảnh báo mềm, không chặn; PATCH không nhận `stage`/`employeeId` (RECRUIT-FUNC-002/003, REC-SCREEN-004). |
+| IMP02-STORY-173 | Recruiter | Là Recruiter, tôi muốn đính CV và tệp của ứng viên ở chế độ riêng tư, mọi lượt tải có dấu vết. | P1 | 3 | Tệp qua Foundation Files `entity_type='candidate'` private; resolver quyền đọc = chính cặp `('view','candidate')`; tải ghi `file_access_logs`; không route file riêng trong RECRUIT (RECRUIT-FUNC-006, SPEC-12 §15). |
+| IMP02-STORY-174 | Recruiter | Là Recruiter, tôi muốn kéo-thả ứng viên trên kanban 6 stage kèm lý do, lịch sử không sửa được. | P0 | 8 | FSM §13.1 ép ở một hàm (`Hired` chỉ qua convert — RECRUIT-ERR-014; Rejected reopen→Screening); mỗi move = UPDATE stage + INSERT `candidate_stage_events` cùng tx, sổ **append-only** (app role 0 UPDATE/DELETE); `RECRUIT_STAGE_CHANGED` cho recruiter phụ trách (RECRUIT-FUNC-004, REC-SCREEN-002/003). |
+| IMP02-STORY-175 | Recruiter / Hiring manager | Là Recruiter, tôi muốn xếp lịch phỏng vấn với interviewer nội bộ; là interviewer, tôi muốn được báo và thấy lượt của mình. | P1 | 5 | Tạo lượt khi stage=`Interview` (007); participants là nhân viên `active` cùng company (009), cố định lúc tạo; `RECRUIT_INTERVIEW_SCHEDULED` (NOTI-EVENT-017); view@Own = `EXISTS` participant — manager thấy đúng lượt mình (RECRUIT-FUNC-007/008, REC-SCREEN-005). |
+| IMP02-STORY-176 | Hiring manager | Là interviewer, tôi muốn ghi đánh giá (rating + đề xuất) cho lượt của mình và chỉ mình tôi sửa được nó. | P1 | 3 | `('feedback','interview')` scope Own mọi role; not-participant ⇒ 403 (011); 1 feedback/interviewer (unique — 012, sửa qua PATCH); recommendation `Hire`/`No Hire`/`Consider` (RECRUIT-FUNC-009). |
+| IMP02-STORY-177 | Recruiter | Là Recruiter, tôi muốn tạo/gửi offer và ghi kết quả; lương chỉ người có quyền quản lý offer thấy. | P1 | 5 | FSM `Draft→Sent→Accepted/Declined/Withdrawn` (003); 1 offer sống/ứng viên (006 — partial unique); tạo khi stage=`Offer` (007); `salary` **vắng khoá** với `('view','offer')` — FE schema `.optional()`; audit (RECRUIT-FUNC-010, REC-SCREEN-006). |
+| IMP02-STORY-178 | HR / Recruiter | Là HR, tôi muốn chuyển ứng viên trúng tuyển thành nhân viên trong một bước, không trùng hồ sơ. | P0 | 8 | Chỉ khi offer `Accepted` (008); một transaction: tạo employee qua **API nội bộ tx-aware MỚI** `createEmployeeFromCandidateTx` của HR (KHÔNG gọi `createEmployee` — SPEC-12 §13.5; mã từ SequenceService ensure-on-miss) + link `employee_id` UNIQUE (race 2 request đúng-1-thắng) + stage→`Hired` (event `convert`) + `RECRUIT_CANDIDATE_HIRED`; **không tạo user account** (RECRUIT-FUNC-011, SPEC-12 §13.5). |
+| IMP02-STORY-179 | Recruiter / QA | Là người giữ dữ liệu ứng viên, tôi muốn PII được che theo quyền và export/tải có audit. | P0 | 5 | 7 cặp `candidate` `is_sensitive=true` + allowlist capability BACKEND; email/phone mask trừ `('update','candidate')`; export cần `('export','candidate')` + audit; deny-path per-pair có ca ALLOW đối chứng; cross-tenant 404; payload NOTI/audit không PII/lương (RECRUIT-FUNC-012, SPEC-12 §18). |
+| IMP02-STORY-180 | Recruiter / BOD | Là quản lý, tôi muốn widget dashboard «phễu tuyển dụng» (ứng viên theo stage + vị trí đang mở). | P2 | 3 | `GET /candidates/summary` theo quyền; widget catalog BE + **sàn scope** + wire slug FE `DashboardWidgetGrid` + test slug-map (bài học GOAL_PROGRESS); không quyền thì không gọi API (RECRUIT-FUNC-013, `S12-RECRUIT-DASH-1`). |
+
+### Phạm vi kỹ thuật chính
+
+- 8 bảng mới (DB-14): RLS+FORCE, composite tenant FK, `candidate_stage_events` append-only tuyệt đối, 3 UNIQUE chốt cuối (double-convert · 1 offer sống · 1 feedback/interviewer)
+- 4 FSM (SPEC-01 §17.11–17.14) ép ở service; 16 cặp quyền — **7 cặp `candidate` `is_sensitive=true`** + role hệ thống mới `recruiter` (không canonical); 42 grant §9f
+- Masking server: email/phone theo `('update','candidate')`, lương theo `('manage','offer')`; CV private + `file_access_logs`
+- Seed nối head thật (`0559+` dự kiến): giữ module inactive · role · quyền · audit UNION-ADD 4 giá trị · NOTI catalog 4 event (cả hai bảng CHECK, `DedupeKey`)
+- Ứng viên là người NGOÀI hệ thống — không FK `users`; không tạo tài khoản khi convert (REC-DEC-005)
+
+### Ghi chú dependency
+
+RECRUIT phụ thuộc AUTH (RBAC per-pair + scope; `users` cho recruiter/`*_by`), HR (`org_units`/`positions`/`employee_profiles` + service tạo nhân viên + counter `employee_code`), FOUNDATION (`audit_logs` · Files/`file_access_logs` · `@Idempotent()`) và NOTI (outbox bridge). Lane migration **nối tiếp**: một track duy nhất `DB-1 → BE-1 → FE-1 → QA-1 → DASH-1`. `plan-reviewer` PASS trên SPEC-12 + DB-14 là cổng mở WO DB. PAYROLL **không** thuộc wave này.
+
+---
+
 ## 9. Backlog theo Sprint đề xuất
 
 > Sprint mapping dưới đây bám đúng các IMPLEMENTATION execution plan (IMPLEMENTATION-03 -> IMPLEMENTATION-09): mô hình **7 sprint (Sprint 0 -> Sprint 6)**. Tổng MVP baseline: **112 story / 869 point** (+ EPIC-12 ME bổ sung 2026-07-13: 8 story / 44 point; + 4 story HR bổ sung EPIC-03 2026-07-13: IMP02-STORY-121..124, 36 point → **124 story / 949 point**). Khi biết velocity thực tế, Product Owner và Tech Lead cần điều chỉnh lại số story trong từng sprint (xem cảnh báo capacity ở §9.1).
 >
-> **Sprint hậu-MVP (bổ sung 2026-08-03):** wave sau go-live không nằm trong mô hình 7 sprint gốc. Sprint 5 nhận thêm GOAL/LMS/BRAND (IMP02-STORY-125..131, 133..140) vì chạy cùng đợt; IMP02-STORY-132 (tab Mục tiêu trong dự án) giao ở Sprint 7. **Sprint 7 = wave CHAT** (IMP02-STORY-141..152, SPEC-15) — đang chạy tại thời điểm cập nhật. **Sprint 11 = wave S11-OFFICE** (Phase 3): IMP02-STORY-153..162 (EPIC-17 ASSET, SPEC-13) + IMP02-STORY-163..170 (EPIC-18 ROOM, SPEC-14) — bổ sung 2026-08-28/29.
+> **Sprint hậu-MVP (bổ sung 2026-08-03):** wave sau go-live không nằm trong mô hình 7 sprint gốc. Sprint 5 nhận thêm GOAL/LMS/BRAND (IMP02-STORY-125..131, 133..140) vì chạy cùng đợt; IMP02-STORY-132 (tab Mục tiêu trong dự án) giao ở Sprint 7. **Sprint 7 = wave CHAT** (IMP02-STORY-141..152, SPEC-15) — đang chạy tại thời điểm cập nhật. **Sprint 11 = wave S11-OFFICE** (Phase 3): IMP02-STORY-153..162 (EPIC-17 ASSET, SPEC-13) + IMP02-STORY-163..170 (EPIC-18 ROOM, SPEC-14) — bổ sung 2026-08-28/29. **Sprint 12 = wave S12-RECRUIT** (Phase 2): IMP02-STORY-171..180 (EPIC-19 RECRUIT, SPEC-12) — bổ sung 2026-08-31.
 
 | Sprint | Execution plan | Mục tiêu | Story trọng tâm | Point | Deliverable demo |
 | --- | --- | --- | --- | ---: | --- |
@@ -788,6 +821,7 @@ ROOM phụ thuộc AUTH (RBAC per-pair + scope; `users` là organizer/attendees)
 | Sprint 6 | IMPLEMENTATION-09 | Stabilization, Release Candidate & Go-live | 111-112 + bugfix | 13 | UAT sign-off, release readiness, RC build, go-live runbook |
 | Sprint 7 | SPEC-15 + docs/plans/S7-CHAT-WAVE.md | CHAT - Nhắn tin nội bộ (hậu go-live) | 132, 141-152 (EPIC-16 CHAT) | 100 | Phòng 1-1/nhóm/phòng-ban/dự án, gửi-đọc theo con trỏ seq, đính kèm qua Foundation Files, tìm kiếm tiếng Việt, realtime Valkey adapter, đọc-vượt membership có nhật ký, tab Mục tiêu trong dự án |
 | Sprint 11 | SPEC-13 + SPEC-14 + docs/plans/S11-OFFICE-WAVE.md | ASSET - Quản lý tài sản + ROOM - Quản lý phòng họp (Phase 3, hậu go-live) | 153-162 (EPIC-17 ASSET), 163-170 (EPIC-18 ROOM) | 93 | ASSET: danh mục loại + mã/QR, hồ sơ tài sản FSM, cấp phát/thu hồi 1 bước có biên bản, bảo trì, kiểm kê theo đợt, thanh lý/mất, «tài sản của tôi», 3 event NOTI. ROOM: quản trị phòng, đặt phòng chống trùng ở DB, huỷ, lịch ngày/tuần + phòng trống, «đặt phòng của tôi», nhắc 15′, lịch sử sử dụng, dọn di sản `meeting_*`. 2 widget DASH |
+| Sprint 12 | SPEC-12 + docs/plans/S12-RECRUIT-WAVE.md | RECRUIT - Tuyển dụng (Phase 2 «HR nâng cao», hậu go-live) | 171-180 (EPIC-19 RECRUIT) | 50 | Vị trí tuyển FSM + gán recruiter, ứng viên PII-mask + cảnh báo trùng + CV private, kanban 6 stage với sổ append-only, phỏng vấn + feedback own-scope, offer mask lương, convert 1 bước sang HR (race-safe), 4 event NOTI, widget «phễu tuyển dụng» |
 
 ### 9.1 Lưu ý capacity
 

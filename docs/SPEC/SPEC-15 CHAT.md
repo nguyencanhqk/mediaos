@@ -1,7 +1,7 @@
 # SPEC-15: CHAT — CHAT NỘI BỘ (1-1 · NHÓM · PHÒNG BAN · DỰ ÁN)
 
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
-> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · **SPEC-15 CHAT**
+> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-12 RECRUIT](<SPEC-12 RECRUIT.md>) · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · **SPEC-15 CHAT**
 >
 > **Liên quan:** [Chỉ mục tài liệu](<../README.md>) · [DB-12 CHAT Database Design](<../DB/DB-12 CHAT Database Design.md>) · [Thiết kế API: API-13 CHAT](<../API Design/API-13_CHAT_API_Design.md>) · [Ma trận phân quyền §9c](<../permission-matrix-spec.md>) · [NOTI nền: SPEC-08](<SPEC-08 NOTI.md>) · [TASK nền: SPEC-06](<SPEC-06 TASK.md>)
 >
