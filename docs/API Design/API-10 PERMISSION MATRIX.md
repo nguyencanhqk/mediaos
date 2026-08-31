@@ -3,7 +3,7 @@
 **HỆ THỐNG QUẢN LÝ DOANH NGHIỆP NỘI BỘ — Consolidated RBAC Permission Matrix**
 
 > **📚 Bộ tài liệu API**
-> [API-01 Tổng quan](<API-01 TỔNG QUAN.md>) · [API-02 AUTH](<API-02 AUTH API Design.md>) · [API-03 HR](<API-03_HR_API_Design.md>) · [API-04 ATT](<API-04_ATT_API_Design.md>) · [API-05 LEAVE](<API-05_LEAVE_API_Design.md>) · [API-06 TASK](<API-06_TASK_API_Design.md>) · [API-07 NOTI](<API-07_NOTI_API_Design.md>) · [API-08 DASH](<API-08_DASH_API_Design.md>) · [API-09 FOUNDATION](<API-09_FOUNDATION_API_Design.md>) · **API-10 Permission Matrix** · [API-10 Audit Report](<API-10 PERMISSION AUDIT REPORT.md>)
+> [API-01 Tổng quan](<API-01 TỔNG QUAN.md>) · [API-02 AUTH](<API-02 AUTH API Design.md>) · [API-03 HR](<API-03_HR_API_Design.md>) · [API-04 ATT](<API-04_ATT_API_Design.md>) · [API-05 LEAVE](<API-05_LEAVE_API_Design.md>) · [API-06 TASK](<API-06_TASK_API_Design.md>) · [API-07 NOTI](<API-07_NOTI_API_Design.md>) · [API-08 DASH](<API-08_DASH_API_Design.md>) · [API-09 FOUNDATION](<API-09_FOUNDATION_API_Design.md>) · **API-10 Permission Matrix** · [API-16 Audit Report](<API-16 PERMISSION AUDIT REPORT.md>)
 >
 > **Nguồn:** Trích xuất từ phần "Required permission / Allowed roles / Data scope" của API-02 → API-09 và quy chuẩn authorization của [API-01 §7](<API-01 TỔNG QUAN.md>).
 
@@ -19,7 +19,7 @@
 | Trạng thái     | Draft                                             |
 | Phạm vi        | API-02 AUTH → API-09 FOUNDATION                   |
 | Tài liệu nguồn | API-01 → API-09                                   |
-| Tài liệu liên quan | [API-10 Permission Audit Report](<API-10 PERMISSION AUDIT REPORT.md>) |
+| Tài liệu liên quan | [API-16 Permission Audit Report](<API-16 PERMISSION AUDIT REPORT.md>) |
 | Ngày tạo       | 20/06/2026                                        |
 
 ---
@@ -33,7 +33,7 @@ Tài liệu này hợp nhất **toàn bộ permission RBAC** của 8 module nghi
 3. Đối chiếu chéo giữa các module (tránh trùng/thiếu permission).
 4. Sinh `x-required-permission` / `x-data-scope` cho OpenAPI (xem `openapi/enterprise-api.yaml`).
 
-> ⚠️ **Cảnh báo độ tin cậy.** Một số endpoint trong API-02 → API-09 **không khai báo đầy đủ** Allowed roles / Data scope ở detail block. Cột "Default roles (seed)" dưới đây là **đề xuất chuẩn hóa** dựa trên `Required permission`, scope ngầm định và ví dụ trong API-01 §26 — KHÔNG phải lúc nào cũng được khai báo verbatim trong module doc. Các điểm cần chốt được liệt kê trong [Audit Report](<API-10 PERMISSION AUDIT REPORT.md>).
+> ⚠️ **Cảnh báo độ tin cậy.** Một số endpoint trong API-02 → API-09 **không khai báo đầy đủ** Allowed roles / Data scope ở detail block. Cột "Default roles (seed)" dưới đây là **đề xuất chuẩn hóa** dựa trên `Required permission`, scope ngầm định và ví dụ trong API-01 §26 — KHÔNG phải lúc nào cũng được khai báo verbatim trong module doc. Các điểm cần chốt được liệt kê trong [Audit Report](<API-16 PERMISSION AUDIT REPORT.md>).
 
 **Ký hiệu role (cột grid):**
 
@@ -67,7 +67,7 @@ MODULE.RESOURCE.ACTION
 - `RESOURCE` = danh từ tài nguyên (EMPLOYEE, REQUEST, SHIFT…). Dùng `_` cho tên ghép (AUDIT_LOG, SHIFT_ASSIGNMENT).
 - `ACTION` = VIEW / CREATE / UPDATE / DELETE / EXPORT / APPROVE / REJECT … ; hậu tố `_OWN` / `_TEAM` / `_COMPANY` khi quyền tách theo scope.
 
-Các sai lệch so với quy ước này được ghi trong [Audit Report §3](<API-10 PERMISSION AUDIT REPORT.md>).
+Các sai lệch so với quy ước này được ghi trong [Audit Report §3](<API-16 PERMISSION AUDIT REPORT.md>).
 
 ---
 
@@ -490,7 +490,7 @@ Mỗi bảng: **Permission · Action · Default roles (seed) · Max data scope �
 | JOB.VIEW | ✓ | (✓) | | | | |
 | JOB.RUN / SEED.* | ✓ | | | | | |
 
-> `AUD` (Auditor) được tham chiếu trong API-09 cho audit/file-access logs nhưng **chưa có trong role catalog hệ thống chuẩn** → giữ là role tương lai. `SEED.*`/`JOB.RUN` gate ở `SUPER_ADMIN` (System scope); DevOps không phải role chuẩn MVP. Xem [Audit Report §5](<API-10 PERMISSION AUDIT REPORT.md>).
+> `AUD` (Auditor) được tham chiếu trong API-09 cho audit/file-access logs nhưng **chưa có trong role catalog hệ thống chuẩn** → giữ là role tương lai. `SEED.*`/`JOB.RUN` gate ở `SUPER_ADMIN` (System scope); DevOps không phải role chuẩn MVP. Xem [Audit Report §5](<API-16 PERMISSION AUDIT REPORT.md>).
 
 ---
 
@@ -508,7 +508,7 @@ Mỗi bảng: **Permission · Action · Default roles (seed) · Max data scope �
 | FOUNDATION | 28 | ~44 | 7 | catalog = BACKEND-11 §8.1; chưa có API ID |
 | **Tổng**   | **~217** | **~347** | **~21** | |
 
-> Con số là **xấp xỉ**: một số endpoint chỉ xuất hiện ở bảng overview, một số permission là field-level gate. Chi tiết sai lệch trong [Audit Report](<API-10 PERMISSION AUDIT REPORT.md>).
+> Con số là **xấp xỉ**: một số endpoint chỉ xuất hiện ở bảng overview, một số permission là field-level gate. Chi tiết sai lệch trong [Audit Report](<API-16 PERMISSION AUDIT REPORT.md>).
 
 ---
 
@@ -520,10 +520,10 @@ Các chuỗi dạng `MODULE.RESOURCE.ACTION` sau xuất hiện trong tài liệu
 - **Audit action (DASH §13/§16):** `DASH.CONFIG.CREATE`, `DASH.CONFIG.DELETE`, `DASH.CONFIG.REORDER`, `DASH.CONFIG.RESET_DEFAULT`, `DASH.EXPORT`, `DASH.WIDGET.VIEW_SENSITIVE`.
 - **Chỉ trong ví dụ payload (AUTH):** `AUTH.PROFILE.VIEW`.
 
-Trùng tên giữa audit-action và permission (vd. `NOTI.TEMPLATE.CREATE`) được phân tích trong [Audit Report §3.4](<API-10 PERMISSION AUDIT REPORT.md>).
+Trùng tên giữa audit-action và permission (vd. `NOTI.TEMPLATE.CREATE`) được phân tích trong [Audit Report §3.4](<API-16 PERMISSION AUDIT REPORT.md>).
 
 ---
 
 ## 9. Việc cần chốt
 
-Toàn bộ điểm mâu thuẫn, thiếu sót và đề xuất sửa được tổng hợp trong **[API-10 Permission Audit Report](<API-10 PERMISSION AUDIT REPORT.md>)**. Sau khi chốt audit, cập nhật lại bảng matrix này và regenerate phần `x-required-permission` trong `openapi/enterprise-api.yaml`.
+Toàn bộ điểm mâu thuẫn, thiếu sót và đề xuất sửa được tổng hợp trong **[API-16 Permission Audit Report](<API-16 PERMISSION AUDIT REPORT.md>)**. Sau khi chốt audit, cập nhật lại bảng matrix này và regenerate phần `x-required-permission` trong `openapi/enterprise-api.yaml`.

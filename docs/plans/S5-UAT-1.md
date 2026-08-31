@@ -48,7 +48,7 @@ KHÔNG thể tự ký thay owner. Vì vậy WO chia đôi rành mạch, không g
 | `docs/QA/evidence/S5-QA-REG-1-REGRESSION-SIGNOFF.md` | Functional QA + UI-state + a11y — QA-10 §8 |
 | `docs/QA/evidence/S5-SEC-1-PERM-SCOPE-SUITE.md` (QA-PERM-001) | Permission & data-scope — QA-10 §13.2 |
 | `docs/_review/S5-SEC-1-SECURITY-TESTING-2026-07-25.md` | Security readiness + accepted-risk D3 — QA-10 §13 |
-| `docs/DEVOPS/DEVOPS-10_Performance_Smoke_Observability_Baseline_Report.md` | Performance + observability — QA-10 §14 · §16 |
+| `docs/DEVOPS/DEVOPS-15_Performance_Smoke_Observability_Baseline_Report.md` | Performance + observability — QA-10 §14 · §16 |
 | `docs/plans/S5-QA-E2E-1.md` + `qae2e1-full-journey.int-spec.ts` | E2E P0 — QA-10 §8.1 |
 | `docs/plans/S5-DEVOPS-1.md` | Topology PROD ‖ UAT, thứ tự deploy/seed — QA-10 §15 |
 | `scripts/migrate-verify-ephemeral.sh` · `scripts/backup-restore-drill.sh` · `scripts/canary-watch.sh` | Migration-from-empty · backup restore · post-deploy smoke |

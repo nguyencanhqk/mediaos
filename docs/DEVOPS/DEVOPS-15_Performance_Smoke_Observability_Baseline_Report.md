@@ -1,9 +1,12 @@
-# DEVOPS-10: PERFORMANCE SMOKE & OBSERVABILITY BASELINE REPORT
+# DEVOPS-15: PERFORMANCE SMOKE & OBSERVABILITY BASELINE REPORT
 # HỆ THỐNG QUẢN LÝ DOANH NGHIỆP NỘI BỘ
 
 > **Work Order:** S5-PERF-1 · Workstream H (WS-H)
 > **Nguồn:** IMPLEMENTATION-08 §17 · ISSUE-BOARD-01 (QA-PERF-001, DEVOPS-MON-001) · IMP02-STORY-110
 > **Chuẩn thiết kế đối chiếu:** [DEVOPS-09 Monitoring/Logging/Alerting](DEVOPS-09_Monitoring_Logging_Alerting.md)
+> **Đổi số 31/08/2026 (`S10-GOV-IDUNIQUE-1` nối tiếp):** tài liệu này **trước đây mang số `DEVOPS-10`**, trùng với
+> [DEVOPS-10 Backup/Rollback/DR](DEVOPS-10_Backup_Rollback_Disaster_Recovery.md) vốn có từ bộ tài liệu gốc. Báo cáo này
+> thêm sau ở `S5-PERF-1` (#286) nên nhận số kế tiếp `DEVOPS-15` — lớp lỗi **KI-079**.
 > **Loại:** smoke/baseline — **KHÔNG phải load test sâu** (§17.2). Một client, ít vòng, đo p50/p95 để bắt điểm nghẽn thô + hồi quy rõ rệt.
 
 ---

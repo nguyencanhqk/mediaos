@@ -2859,7 +2859,7 @@ Quy tắc:
 
 ## 31. OpenAPI / Swagger
 
-> Đặc tả OpenAPI 3.1 máy đọc cho toàn hệ thống: [`openapi/enterprise-api.yaml`](openapi/enterprise-api.yaml). Fragment của module: [`openapi/paths/hr.paths.yaml`](openapi/paths/hr.paths.yaml). Quy ước build & vendor extension: [`openapi/README.md`](openapi/README.md). Phân quyền: [API-10 Permission Matrix](<API-10 PERMISSION MATRIX.md>) · [Audit Report](<API-10 PERMISSION AUDIT REPORT.md>).
+> Đặc tả OpenAPI 3.1 máy đọc cho toàn hệ thống: [`openapi/enterprise-api.yaml`](openapi/enterprise-api.yaml). Fragment của module: [`openapi/paths/hr.paths.yaml`](openapi/paths/hr.paths.yaml). Quy ước build & vendor extension: [`openapi/README.md`](openapi/README.md). Phân quyền: [API-10 Permission Matrix](<API-10 PERMISSION MATRIX.md>) · [Audit Report](<API-16 PERMISSION AUDIT REPORT.md>).
 
 ### 31.1 Security
 `bearerAuth` (HTTP bearer JWT) cho mọi endpoint HR (`/api/v1/hr/*`); không có endpoint public. File upload dùng `multipart/form-data`.

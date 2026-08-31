@@ -289,7 +289,8 @@ Checklist chốt nhóm Database:
 | API-07 | NOTI API Design | My notifications, unread, event/template, delivery | [ ] Chưa rà soát / [ ] Đạt / [ ] Cần sửa |  |
 | API-08 | DASH API Design | Dashboard me/type/widget/config/cache | [ ] Chưa rà soát / [ ] Đạt / [ ] Cần sửa |  |
 | API-09 | FOUNDATION API Design | Settings, files, audit, module catalog, company | [ ] Chưa rà soát / [ ] Đạt / [ ] Cần sửa | Cần gắn file nếu đang nằm riêng |
-| API-10 | Permission Matrix & Permission Audit Report | Ma trận quyền tổng hợp và báo cáo rà soát quyền | [ ] Chưa rà soát / [ ] Đạt / [ ] Cần sửa | Gồm 2 file: PERMISSION MATRIX + PERMISSION AUDIT REPORT |
+| API-10 | Permission Matrix | Ma trận quyền tổng hợp | [ ] Chưa rà soát / [ ] Đạt / [ ] Cần sửa |  |
+| API-16 | Permission Audit Report | Báo cáo rà soát quyền API-02 → API-09 | [ ] Chưa rà soát / [ ] Đạt / [ ] Cần sửa | Trước 31/08/2026 mang số API-10 (trùng số, đã tách) |
 
 Checklist chốt nhóm API:
 

@@ -95,7 +95,7 @@ Endpoint không cần đăng nhập (login, refresh, forgot/reset password, heal
 
 ## Liên hệ permission
 
-Giá trị `x-required-permission` / `x-data-scope` đồng bộ với [API-10 Permission Matrix](../API-10%20PERMISSION%20MATRIX.md). Các điểm cần chốt (đặt tên, scope vs role, permission orphan, OR-permission) xem [API-10 Permission Audit Report](../API-10%20PERMISSION%20AUDIT%20REPORT.md).
+Giá trị `x-required-permission` / `x-data-scope` đồng bộ với [API-10 Permission Matrix](../API-10%20PERMISSION%20MATRIX.md). Các điểm cần chốt (đặt tên, scope vs role, permission orphan, OR-permission) xem [API-16 Permission Audit Report](../API-16%20PERMISSION%20AUDIT%20REPORT.md).
 
 ## Quy trình cập nhật
 
