@@ -941,24 +941,37 @@ describe.skipIf(!hasDb)("S12-RECRUIT-DB-1 · bất biến nền dữ liệu RECR
       );
       expect(mismatchOwner).not.toMatch(/Index Cond:.*lower\(\(email\)::text\)/);
 
-      // (2) access path dưới app role — đúng index này (không seq-scan)
+      // (2) access path dưới app role — đi INDEX theo tiền tố company_id, KHÔNG seq-scan.
+      // KHÔNG pin TÊN index ở tầng này (sửa 31/08/2026, S12-RECRUIT-QA-1): vì expr không leakproof
+      // nằm ở Filter (xem ghi chú trên), MỌI index tiền tố company_id là access path tương đương —
+      // planner cost-pick giữa email_expr/phone_norm/company_id_id_uq đổi theo stats thực tế (sau
+      // churn dữ liệu của bộ QA-1 nó chọn candidates_company_id_id_uq ⇒ assert theo TÊN đỏ giả —
+      // pg-planner-index-assert-trap đúng nghĩa đen). Vế "biểu thức đúng từng ký tự vào Index Cond"
+      // đã đo tất định ở (1) owner; vế app role chỉ đảm bảo được: có Index Cond company_id (chặn
+      // seq-scan cross-tenant), không hơn.
       const emailApp = await appPlanOf(
         `SELECT id FROM candidates WHERE company_id = $1 AND lower(email) = lower($2)`,
         [A.companyId, "bulk-1@x.test"],
       );
+      expect(emailApp, "app role: check-duplicate email không được seq-scan").not.toContain(
+        "Seq Scan on candidates",
+      );
       expect(
         emailApp,
-        "app role: check-duplicate email vẫn phải dùng idx_candidates_company_email_expr làm access path",
-      ).toContain("idx_candidates_company_email_expr");
+        "app role: check-duplicate email phải vào index qua tiền tố company_id",
+      ).toMatch(/Index Cond: \(company_id = /);
       const phoneApp = await appPlanOf(
         `SELECT id FROM candidates
           WHERE company_id = $1 AND regexp_replace(phone, '[^0-9+]', '', 'g') = $2`,
         [A.companyId, "0901000001"],
       );
+      expect(phoneApp, "app role: check-duplicate phone không được seq-scan").not.toContain(
+        "Seq Scan on candidates",
+      );
       expect(
         phoneApp,
-        "app role: check-duplicate phone vẫn phải dùng idx_candidates_company_phone_norm làm access path",
-      ).toContain("idx_candidates_company_phone_norm");
+        "app role: check-duplicate phone phải vào index qua tiền tố company_id",
+      ).toMatch(/Index Cond: \(company_id = /);
     });
   });
 
