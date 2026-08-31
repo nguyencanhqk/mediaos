@@ -651,8 +651,15 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
 export const BLIND_SPOT_PINS = {
   /** `.select()` trần trên bảng `users` — đo 2026-08-19. */
   bareSelect: 6,
-  /** Template `sql` ghép `email`/`full_name` bằng chuỗi thô — đo 2026-08-19. */
-  rawSqlIdentity: 13,
+  /**
+   * Template `sql` ghép `email`/`full_name` bằng chuỗi thô — đo 2026-08-19.
+   * 13 → 14 (S12-RECRUIT-DB-1, 31/08/2026): `db/schema/recruit.ts` — expression index
+   * `lower(${t.email})` trên `candidates.email` (idx_candidates_company_email_expr, RECRUIT-API-008
+   * check-duplicate). Đây là DDL trên cột email CỦA ỨNG VIÊN, không phải chiếu danh tính `users`;
+   * drizzle bắt buộc dùng `sql` cho expression index nên không có đường viết khác. Vế partial-WHERE
+   * đi qua `isNotNull()` để không tốn thêm một đếm. Nới có chủ đích, ký qua gate của WO DB-1.
+   */
+  rawSqlIdentity: 14,
   /** Ép kiểu TƯỜNG MINH sang `IdentityGrant` ngoài điểm đúc — phải LUÔN bằng 0. */
   asIdentityGrant: 0,
   /** File export `alias(users,…)` — mỗi cái là một đường mà scanner một-file không lần được (F12). */

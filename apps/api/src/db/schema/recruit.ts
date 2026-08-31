@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { isNotNull, sql } from "drizzle-orm";
 import {
   check,
   date,
@@ -138,9 +138,11 @@ export const candidates = pgTable(
       .where(sql`deleted_at IS NULL`),
     // Check-duplicate (RECRUIT-API-008): index đúng BIỂU THỨC service so sánh; KHÔNG partial deleted_at
     // (cảnh báo tính cả hồ sơ đã xoá mềm — DB-14 §6.2).
+    // `isNotNull` thay vì sql`email IS NOT NULL`: cùng DDL, không nới vùng mù `rawSqlIdentity`
+    // của identity-projection-ratchet (bộ đếm bắt MỌI template `sql` chứa chữ email).
     index("idx_candidates_company_email_expr")
       .on(t.companyId, sql`lower(${t.email})`)
-      .where(sql`email IS NOT NULL`),
+      .where(isNotNull(t.email)),
     index("idx_candidates_company_phone_norm")
       .on(t.companyId, sql`regexp_replace(${t.phone}, '[^0-9+]', '', 'g')`)
       .where(sql`phone IS NOT NULL`),
