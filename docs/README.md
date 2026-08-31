@@ -87,7 +87,7 @@ Mọi tài liệu đều liên kết chéo với nhau: mỗi file có breadcrumb
 | API-14 | [ASSET API Design](<API Design/API-14_ASSET_API_Design.md>) | ASSET — *Phase 3, Stub — Approved* |
 | API-15 | [ROOM API Design](<API Design/API-15_ROOM_API_Design.md>) | ROOM — *Phase 3, Stub — Approved* |
 
-> Tham khảo thêm: [API-10 Permission Matrix](<API Design/API-10 PERMISSION MATRIX.md>) · [API-10 Permission Audit Report](<API Design/API-10 PERMISSION AUDIT REPORT.md>) · [OpenAPI](<API Design/openapi/README.md>)
+> Tham khảo thêm: [API-10 Permission Matrix](<API Design/API-10 PERMISSION MATRIX.md>) · [API-16 Permission Audit Report](<API Design/API-16 PERMISSION AUDIT REPORT.md>) · [OpenAPI](<API Design/openapi/README.md>)
 
 ---
 
@@ -254,6 +254,7 @@ Mỗi module nghiệp vụ được mô tả xuyên suốt qua 5 nhóm tài li�
 | Mã | Tên tài liệu | Phạm vi | Trạng thái |
 | -- | ------------ | ------- | ---------- |
 | DEVOPS-01 → 12 | [DevOps Architecture & Environment Strategy](<DEVOPS/DEVOPS-01_DevOps_Architecture_Environment_Strategy.md>) | Bộ 12 tài liệu DevOps: kiến trúc/môi trường, CI/CD, Docker, secrets, deploy BE/FE, staging/prod, monitoring, backup/DR, hardening, release — kèm [DEVOPS-00 Traceability Matrix](<DEVOPS/DEVOPS-00_DevOps_QA_Traceability_Matrix.md>) | Đã có |
+| DEVOPS-13 · 14 · 15 | [DEVOPS-13 DB Readiness/Backup/Rollback](<DEVOPS/DEVOPS-13_DB_Readiness_Backup_Rollback_Verification_Report.md>) · [DEVOPS-14 Social Satellite Deployment](<DEVOPS/DEVOPS-14_Social_Satellite_App_Deployment.md>) · [DEVOPS-15 Performance Smoke & Observability Baseline](<DEVOPS/DEVOPS-15_Performance_Smoke_Observability_Baseline_Report.md>) | Bổ sung sau bộ gốc: báo cáo nghiệm thu + triển khai vệ tinh. **DEVOPS-15 trước 31/08/2026 mang số DEVOPS-10** (trùng số với Backup/Rollback/DR — lớp lỗi KI-079) | Đã có |
 | COMPLIANCE-01 | [Bảo vệ Dữ liệu Cá nhân & Backup/DR](<COMPLIANCE/COMPLIANCE-01_Personal_Data_Protection_Backup_DR.md>) | Tuân thủ NĐ 13/2023, retention, breach 72h, RPO/RTO, DR runbook | Đã có (mới) |
 | DECISIONS-01 | [Sổ Quyết định — Chốt câu hỏi mở trước triển khai](<DECISIONS/DECISIONS-01_Open_Decisions_Lock.md>) | Chốt 15 câu hỏi mở SPEC-01 §29 (D-01 → D-15) trước khi code | Đã có (mới) |
 | DECISIONS-02 | [Khóa Stack & Hiện thực 3 Bất biến](<DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md>) | **ĐÃ CHỐT** — ghi đè mọi nhắc Next.js/Prisma/Redis/Jest; bổ sung DDL RLS+FORCE / audit append-only / outbox + `withTenant`/`set_config` | Đã có (mới) |

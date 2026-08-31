@@ -36,7 +36,7 @@ Tất cả số dưới đây lấy bằng lệnh chạy thật trên cluster do
 | M8 | `backup-restore-drill.sh` **chạy được trên máy này** | `command -v pg_dump/pg_restore/psql` | ❌ **KHÔNG** — host Windows không có pg client trên PATH, chỉ có trong container |
 | M9 | Danh sách bảng cốt lõi mà drill assert | đọc script | ❌ **LỆCH** — assert `payslips`, `cost_allocations` (**đã park, out-of-scope**); **thiếu** `employee_profiles`, `permissions`, `role_permissions`, `outbox_events` |
 | M10 | Chốt hồi quy cho "index đủ cho query nặng" | tìm trong `check.sh`/CI | ❌ **KHÔNG CÓ** — §14.3 hôm nay là checklist người đọc, không ai canh |
-| M11 | Baseline perf mới nhất | `DEVOPS-10_Performance_Smoke...md` | ⚠️ đo **2026-07-25** trên dev-online, **trước** loạt thay đổi S6 (data_scope /org, NOTI tx, matview wrapper) |
+| M11 | Baseline perf mới nhất | `DEVOPS-15_Performance_Smoke...md` | ⚠️ đo **2026-07-25** trên dev-online, **trước** loạt thay đổi S6 (data_scope /org, NOTI tx, matview wrapper) |
 | M12 | dev-online :3200 sống không (để chạy perf-smoke) | `curl /health` | ❌ **DOWN** (000). PROD :3100 → 200 |
 
 **Đọc bảng trên:** 7 ô XANH là bảo đảm **đang đúng** — việc của WO là **khoá chúng lại** bằng chốt hồi quy, không

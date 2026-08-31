@@ -3085,7 +3085,7 @@ Sequence generate không nên cache current value ở application nếu cần t�
 
 ## 27. OpenAPI / Swagger
 
-> Đặc tả OpenAPI 3.1 máy đọc cho toàn hệ thống: [`openapi/enterprise-api.yaml`](openapi/enterprise-api.yaml). Fragment của module: [`openapi/paths/fnd.paths.yaml`](openapi/paths/fnd.paths.yaml). Quy ước build & vendor extension: [`openapi/README.md`](openapi/README.md). Phân quyền: [API-10 Permission Matrix](<API-10 PERMISSION MATRIX.md>) · [Audit Report](<API-10 PERMISSION AUDIT REPORT.md>).
+> Đặc tả OpenAPI 3.1 máy đọc cho toàn hệ thống: [`openapi/enterprise-api.yaml`](openapi/enterprise-api.yaml). Fragment của module: [`openapi/paths/fnd.paths.yaml`](openapi/paths/fnd.paths.yaml). Quy ước build & vendor extension: [`openapi/README.md`](openapi/README.md). Phân quyền: [API-10 Permission Matrix](<API-10 PERMISSION MATRIX.md>) · [Audit Report](<API-16 PERMISSION AUDIT REPORT.md>).
 
 ### 27.1 Security
 
@@ -3119,7 +3119,7 @@ Sequence generate không nên cache current value ở application nếu cần t�
 | `x-audit-log` | `always` \| `conditional` \| `none` | mức ghi audit |
 | `x-notification-event` | `string` \| `null` | event phát ra |
 
-operationId prefix: `fnd`. (Lưu ý: tài liệu này chưa gán mã API ID — xem [Audit Report](<API-10 PERMISSION AUDIT REPORT.md>) AUD-012.)
+operationId prefix: `fnd`. (Lưu ý: tài liệu này chưa gán mã API ID — xem [Audit Report](<API-16 PERMISSION AUDIT REPORT.md>) AUD-012.)
 
 ### 27.4 Schema & response dùng chung
 

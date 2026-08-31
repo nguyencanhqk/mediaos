@@ -1,4 +1,4 @@
-// harness/id-uniqueness.test.mjs — cổng ép DUY NHẤT cho ba họ ĐỊNH DANH mà git KHÔNG bảo vệ được.
+// harness/id-uniqueness.test.mjs — cổng ép DUY NHẤT cho các họ ĐỊNH DANH mà git KHÔNG bảo vệ được.
 //
 // ─────────────────────────────────────────────────────────────────────────────
 // MỨC ĐỘ (đọc trước khi sửa): đây là nợ SỔ SÁCH, KHÔNG phải lỗ bảo mật. Không rò dữ liệu, không
@@ -29,12 +29,18 @@
 //     "lấy số kế tiếp" là kịch bản y hệt ca 2, chỉ khác là cùng MỘT file nên xác suất git bắt được
 //     cao hơn — cao hơn, KHÔNG phải chắc chắn (hai hàng chèn ở hai vùng khác nhau vẫn merge sạch).
 //
-// KHÔNG phủ ở WO này (khai rõ, không bỏ lửng):
+//   Ca 4 (mở rộng 31/08/2026, xem CHỔNG 4 cuối file) — số hiệu tài liệu ở MỌI họ dưới `docs/`,
+//     không chỉ `DECISIONS`. C2 đúng LỚP nhưng hẹp PHẠM VI: quét 14 họ còn lại tìm được HAI số
+//     trùng ĐANG SỐNG trên master (`API-10` ×2, `DEVOPS-10` ×2) — cùng kiểu "khác tên file ⇒ git
+//     merge sạch" như ca 2, lần này không ai vá tay vì không ai thấy.
+//
+// KHÔNG phủ (khai rõ, không bỏ lửng):
 //   - `docs/plans/INDEX.md` — TỰ SINH từ `backlog.mjs` bởi `harness/gen-plan-index.mjs`. Trùng ở đó
 //     là HỆ QUẢ của trùng id backlog, không phải nguồn độc lập ⇒ cổng 1 đã phủ. Thêm cổng thứ hai
 //     lên file sinh ra chỉ nhân đôi tiếng ồn.
-//   - Tính ĐẦY ĐỦ (KI có ở §2 mà thiếu hàng §1, ADR có số mà không ai trích dẫn) — đó là lớp
-//     "thiếu", khác lớp "trùng". Ngoài phạm vi WO này.
+//   - Tính ĐẦY ĐỦ (KI có ở §2 mà thiếu hàng §1, ADR có số mà không ai trích dẫn, số HỤT giữa dãy)
+//     — đó là lớp "thiếu", khác lớp "trùng". Vẫn ngoài phạm vi.
+//   - Trùng số GIỮA các họ (`API-10` vs `DB-10`) — HỢP LỆ theo thiết kế, C4 khoá theo (họ, số).
 //
 // LUẬT VIẾT CỔNG (đã trả học phí, xem [[index-ratchet-must-pin-definition-not-name]]):
 //   1. Ghim ĐỊNH NGHĨA, không ghim TÊN. Số ADR TRÍCH từ tên file bằng regex, so sánh theo GIÁ TRỊ
@@ -290,4 +296,176 @@ test("C3-thử-ngược — sổ giả có hai KI-079 ⇒ cổng PHẢI phát hi
   assert.equal(dups.length, 1, "chỉ §1 được tính là sổ đăng ký");
   assert.equal(dups[0].value, 79);
   assert.equal(dups[0].count, 2);
+});
+// ─────────────────────────────────────────────────────────────────────────────
+// CỔNG 4 — số hiệu tài liệu trong MỌI họ đánh số dưới docs/ (SPEC · DB · API · BACKEND · FRONTEND ·
+// UI · QA · DEVOPS · IMPLEMENTATION · RELEASE · PRD · ISSUE-BOARD · COMPLIANCE · PROJECT-BASELINE ·
+// DECISIONS).
+//
+// LÝ DO THÊM (31/08/2026, nối tiếp S10-GOV-IDUNIQUE-1 / KI-079): cổng C2 chỉ phủ `docs/DECISIONS/`,
+// tức 1 trên 15 họ. Quét 14 họ còn lại ở head `050623a0` tìm được HAI SỐ TRÙNG ĐANG SỐNG TRÊN
+// MASTER — cùng đúng lớp lỗi KI-079 mô tả, chỉ ở họ khác:
+//
+//   • `API-10` ×2 — `API-10 PERMISSION MATRIX.md` + `API-10 PERMISSION AUDIT REPORT.md` (cả hai
+//     sinh cùng commit gốc `2591db13`). Repo có 180 trích dẫn "API-10" TRẦN ⇒ toàn bộ mơ hồ.
+//     Vá: Matrix giữ 10, báo cáo rà soát → `API-16`.
+//   • `DEVOPS-10` ×2 — `DEVOPS-10_Backup_Rollback_Disaster_Recovery.md` (bộ gốc `2591db13`) +
+//     `DEVOPS-10_Performance_Smoke_Observability_Baseline_Report.md` (thêm sau ở #286 / S5-PERF-1,
+//     GIÀNH số của file có sẵn). 37 trích dẫn "DEVOPS-10" trần. Vá: báo cáo perf → `DEVOPS-15`.
+//
+// Hai ca đó là bằng chứng C2 đúng LỚP nhưng hẹp PHẠM VI: chỉ chặn được họ ADR. C4 tổng quát hoá
+// đúng hàm thuần của C2 (`parseAdrNumber`) sang mọi họ, giữ nguyên ba luật viết cổng ở đầu file.
+//
+// PHẠM VI QUÉT — khai rõ, không bỏ lửng:
+//   - Quét CÁC THƯ MỤC CON CẤP 1 của `docs/`, chỉ file `.md` ngay trong đó (KHÔNG đệ quy: thư mục
+//     con như `docs/API Design/openapi/`, `docs/QA/evidence/` là kho hiện vật, không có dãy số).
+//   - BỎ QUA `docs/plans/` (file đặt theo MÃ WO ⇒ C1 đã phủ đúng nguồn đó) và `docs/_review/`
+//     (ghi chép rà soát tự do, không có dãy số). Hai thư mục này được assert là TỒN TẠI ở C4b nên
+//     danh sách bỏ qua không thể mục rữa trong im lặng.
+//   - Số so sánh theo GIÁ TRỊ và TRONG CÙNG HỌ: `API-10` và `DB-10` KHÔNG phải trùng.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DOCS_DIR = path.join(REPO_ROOT, "docs");
+/** Thư mục con của docs/ KHÔNG theo dãy số. C4b assert chúng tồn tại ⇒ danh sách không mục rữa. */
+const DOCS_DIRS_WITHOUT_SERIES = ["plans", "_review"];
+
+/**
+ * Trích (họ, số) từ TÊN FILE tài liệu. Ghim ĐỊNH NGHĨA, không ghim TÊN HỌ:
+ *   - họ = chuỗi CHỮ HOA, cho phép `-` bên trong (vd `PROJECT-BASELINE`, `ISSUE-BOARD`);
+ *   - theo sau là `-` + chữ số, rồi `_` hoặc khoảng trắng ngăn với phần tên còn lại;
+ *   - khoá so sánh gồm CẢ họ và GIÁ TRỊ SỐ ⇒ `API-9` đụng `API-09`, `API-10` KHÔNG đụng `DB-10`.
+ * Trả `null` khi tên file không theo quy ước (để ca chống-xanh-rỗng bắt được).
+ */
+export function parseDocNumber(filename) {
+  const m = /^([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*)-(\d{1,3})[_ ].+\.md$/.exec(filename);
+  if (!m) return null;
+  return { family: m[1], number: Number(m[2]) };
+}
+
+/** Đọc các thư mục con cấp 1 của docs/ có đánh số dãy, trả [{ dir, files[] }] sắp xếp ổn định. */
+function readNumberedDocDirs() {
+  return fs
+    .readdirSync(DOCS_DIR, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && !DOCS_DIRS_WITHOUT_SERIES.includes(d.name))
+    .map((d) => d.name)
+    .sort()
+    .map((dir) => ({
+      dir,
+      files: fs
+        .readdirSync(path.join(DOCS_DIR, dir), { withFileTypes: true })
+        .filter((f) => f.isFile() && f.name.endsWith(".md"))
+        .map((f) => f.name)
+        .sort(),
+    }));
+}
+
+/** Gộp mọi thư mục thành entries cho findDuplicates. Khoá = `<HỌ>-<số đã chuẩn hoá về giá trị>`. */
+export function docNumberEntries(dirs) {
+  const entries = [];
+  for (const { dir, files } of dirs) {
+    for (const name of files) {
+      const parsed = parseDocNumber(name);
+      if (parsed === null) continue;
+      entries.push({
+        value: `${parsed.family}-${parsed.number}`,
+        member: `docs/${dir}/${name}`,
+      });
+    }
+  }
+  return entries;
+}
+
+test("C4 — không hai file nào trong cùng một họ tài liệu docs/ mang cùng số", () => {
+  const dups = findDuplicates(docNumberEntries(readNumberedDocDirs()));
+  assert.deepEqual(
+    dups.map((d) => `${d.value} ×${d.count}`),
+    [],
+    "Số hiệu tài liệu TRÙNG (git KHÔNG báo xung đột vì khác tên file):\n" +
+      dups.map((d) => `  ${d.value}\n${d.members.map((m) => `    - ${m}`).join("\n")}`).join("\n") +
+      "\nMọi trích dẫn tới SỐ đó đều mơ hồ. Đổi số của file thêm SAU (lấy số kế tiếp trong họ), sửa " +
+      "mọi trích dẫn tới nó, và ghi một dòng 'đổi số' trong chính file đó để trích dẫn cũ còn lần ra được.",
+  );
+});
+
+test("C4b — chống xanh-RỖNG: có thư mục để quét, mỗi thư mục có file, MỌI file .md trích được số", () => {
+  const dirs = readNumberedDocDirs();
+  assert.ok(
+    dirs.length >= 10,
+    `docs/ chỉ có ${dirs.length} thư mục đánh số ⇒ nhiều khả năng cấu trúc đã đổi, C4 sắp xanh RỖNG`,
+  );
+
+  const empty = dirs.filter((d) => d.files.length === 0).map((d) => d.dir);
+  assert.deepEqual(empty, [], `thư mục rỗng ⇒ C4 xanh RỖNG cho họ đó: ${empty.join(", ")}`);
+
+  const unparsed = dirs.flatMap(({ dir, files }) =>
+    files.filter((n) => parseDocNumber(n) === null).map((n) => `docs/${dir}/${n}`),
+  );
+  assert.deepEqual(
+    unparsed,
+    [],
+    "file .md không trích được (họ, số) ⇒ NẰM NGOÀI cổng C4. Đổi quy ước đặt tên thì phải sửa " +
+      `parseDocNumber hoặc khai vào DOCS_DIRS_WITHOUT_SERIES, đừng để cổng mù: ${unparsed.join(", ")}`,
+  );
+
+  // Danh sách bỏ qua phải trỏ vào thư mục CÓ THẬT — đổi tên/xoá mà quên sửa thì cổng đỏ ngay,
+  // thay vì âm thầm bỏ qua một thư mục khác.
+  for (const dir of DOCS_DIRS_WITHOUT_SERIES) {
+    assert.ok(
+      fs.existsSync(path.join(DOCS_DIR, dir)),
+      `DOCS_DIRS_WITHOUT_SERIES trỏ vào thư mục KHÔNG tồn tại: docs/${dir} — danh sách đã mục rữa`,
+    );
+  }
+});
+
+test("C4-thử-ngược — gieo đúng HAI ca bệnh thật (API-10 ×2, DEVOPS-10 ×2) ⇒ cổng PHẢI phát hiện", () => {
+  const fake = [
+    {
+      dir: "API Design",
+      files: [
+        "API-09_FOUNDATION_API_Design.md",
+        "API-10 PERMISSION AUDIT REPORT.md",
+        "API-10 PERMISSION MATRIX.md",
+      ],
+    },
+    {
+      dir: "DEVOPS",
+      files: [
+        "DEVOPS-10_Backup_Rollback_Disaster_Recovery.md",
+        "DEVOPS-10_Performance_Smoke_Observability_Baseline_Report.md",
+      ],
+    },
+  ];
+  const dups = findDuplicates(docNumberEntries(fake));
+  assert.deepEqual(
+    dups.map((d) => `${d.value} ×${d.count}`),
+    ["API-10 ×2", "DEVOPS-10 ×2"],
+  );
+  assert.deepEqual(dups[1].members, [
+    "docs/DEVOPS/DEVOPS-10_Backup_Rollback_Disaster_Recovery.md",
+    "docs/DEVOPS/DEVOPS-10_Performance_Smoke_Observability_Baseline_Report.md",
+  ]);
+});
+
+test("C4-thử-ngược-2 — khoá gồm CẢ HỌ: API-10 và DB-10 KHÔNG trùng; API-9 và API-09 thì CÓ", () => {
+  const khacHo = [
+    { dir: "API Design", files: ["API-10 PERMISSION MATRIX.md"] },
+    {
+      dir: "DB",
+      files: ["DB-10_Migration_Plan_Initial_Seed_Data_Database_Design.md"],
+    },
+  ];
+  assert.deepEqual(
+    findDuplicates(docNumberEntries(khacHo)),
+    [],
+    "cùng SỐ nhưng khác HỌ ⇒ hợp lệ; gộp khoá theo số trần là đỏ oan cho gần như mọi tài liệu",
+  );
+
+  const cungHoLechSo = [{ dir: "API Design", files: ["API-9 A.md", "API-09 B.md"] }];
+  const dups = findDuplicates(docNumberEntries(cungHoLechSo));
+  assert.equal(
+    dups.length,
+    1,
+    "API-9 và API-09 phải bị coi là cùng số (so theo GIÁ TRỊ, không theo CHUỖI)",
+  );
+  assert.equal(dups[0].value, "API-9");
 });

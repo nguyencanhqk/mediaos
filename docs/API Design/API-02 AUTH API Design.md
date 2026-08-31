@@ -2633,7 +2633,7 @@ GET /api/v1/auth/login-logs?page=1&per_page=20&user_id=uuid&status=SUCCESS&from_
 
 ## 20. OpenAPI / Swagger
 
-> Đặc tả OpenAPI 3.1 máy đọc cho toàn hệ thống: [`openapi/enterprise-api.yaml`](openapi/enterprise-api.yaml). Fragment của module: [`openapi/paths/auth.paths.yaml`](openapi/paths/auth.paths.yaml). Quy ước build & vendor extension: [`openapi/README.md`](openapi/README.md). Phân quyền: [API-10 Permission Matrix](<API-10 PERMISSION MATRIX.md>) · [Audit Report](<API-10 PERMISSION AUDIT REPORT.md>).
+> Đặc tả OpenAPI 3.1 máy đọc cho toàn hệ thống: [`openapi/enterprise-api.yaml`](openapi/enterprise-api.yaml). Fragment của module: [`openapi/paths/auth.paths.yaml`](openapi/paths/auth.paths.yaml). Quy ước build & vendor extension: [`openapi/README.md`](openapi/README.md). Phân quyền: [API-10 Permission Matrix](<API-10 PERMISSION MATRIX.md>) · [Audit Report](<API-16 PERMISSION AUDIT REPORT.md>).
 
 ### 20.1 Security
 `bearerAuth` (HTTP bearer JWT) cho `/api/v1/*` cần đăng nhập; `internalServiceAuth` (header `X-Internal-Token`) cho `/internal/v1/*`; endpoint public (login, refresh-token, forgot-password, reset-password) dùng `security: []`.

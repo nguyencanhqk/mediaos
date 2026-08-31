@@ -4,7 +4,7 @@
 > **Work Order:** S6-PERF-DB-1 · Workstream WS5 (Performance/Query/Cache) + WS6 (Migration/Seed/Backup/Rollback)
 > **Nguồn:** [IMPLEMENTATION-09](../IMPLEMENTATION/IMPLEMENTATION-09_Sprint_6_Stabilization_Release_Candidate_Go-live_Execution_Plan.md) §14 · §15 · IMP09-IN-006/008/012 · IMP09-DB-001..005
 > **Chuẩn đối chiếu:** [DEVOPS-05](DEVOPS-05_Database_Migration_Seed_Deployment.md) · [DEVOPS-10 Backup/Rollback/DR](DEVOPS-10_Backup_Rollback_Disaster_Recovery.md)
-> **Bổ trợ (không thay thế):** [DEVOPS-10 Performance Smoke Baseline](DEVOPS-10_Performance_Smoke_Observability_Baseline_Report.md) — S5-PERF-1
+> **Bổ trợ (không thay thế):** [DEVOPS-15 Performance Smoke Baseline](DEVOPS-15_Performance_Smoke_Observability_Baseline_Report.md) — S5-PERF-1
 > **Kế hoạch:** [docs/plans/S6-PERF-DB-1.md](../plans/S6-PERF-DB-1.md)
 > **Gate:** 🔴 FULL (chạm migration/DB) — `database-reviewer`
 
@@ -278,7 +278,7 @@ người sau không lặp lại:
 
 - Baseline hiện hành là của **S5-PERF-1, đo 2026-07-25** trên DEV-ONLINE (`mediaos_dev`, company `demo`,
   30 vòng/endpoint): 5/5 endpoint SLA lõi p95 ≤ 30ms, ngưỡng smoke MVP 800ms — xem
-  [DEVOPS-10 Performance Smoke Baseline](DEVOPS-10_Performance_Smoke_Observability_Baseline_Report.md).
+  [DEVOPS-15 Performance Smoke Baseline](DEVOPS-15_Performance_Smoke_Observability_Baseline_Report.md).
 - **Đã đổi gì kể từ đó:** loạt WO bảo mật S6 — ép `data_scope` cho `/org/employees` (#302), gộp
   transaction NOTI (#301), siết đường đọc `login_logs` (#300), lưới tenant-isolation vế GHI (#303).
   Các thay đổi này thêm **điều kiện lọc**, không thêm vòng lặp N+1; nhưng **chưa có số đo sau thay đổi**.

@@ -145,7 +145,7 @@ Nguồn: `docs/_review/S5-SEC-1-SECURITY-TESTING-2026-07-25.md` · **cập nhậ
 | Load test quy mô lớn | — | — | ❌ **không làm ở MVP** (có chủ đích) |
 
 Cảnh báo diễn giải: số đo lấy trên DEV-ONLINE dataset nhỏ ⇒ là **baseline hình dạng truy vấn**, không
-phải SLA dưới tải. Nguồn: `DEVOPS-10_Performance_Smoke_Observability_Baseline_Report.md`.
+phải SLA dưới tải. Nguồn: `DEVOPS-15_Performance_Smoke_Observability_Baseline_Report.md`.
 
 ---
 

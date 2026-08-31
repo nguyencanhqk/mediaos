@@ -14242,6 +14242,7 @@ export const backlog = [
       "⚠️ Cổng phải ghim ĐỊNH NGHĨA chứ không phải TÊN: đếm số ADR bằng tiền tố `DECISIONS-NN` trích từ tên file, đừng hard-code danh sách số đang có — hard-code thì thêm ADR mới là đỏ oan ([[index-ratchet-must-pin-definition-not-name]]).",
       "⚠️ Đừng chỉ ghim `backlog.mjs`: overlay ledger cũng khoá theo id, nên trùng id là lỗi HAI TẦNG. Test nên nêu rõ hệ quả tầng ledger trong docblock để người sau không nới luật.",
       "⚠️ `node --test` không cần DB/Docker ⇒ cổng này phải chạy được TRÊN MỌI PR, kể cả PR docs-only. Đó là lý do đặt ở `harness/` chứ không phải `apps/api/test/foundation/`.",
+      '✅ ĐÃ SHIP 25/08 (PR #418) — cổng C1/C2/C3, 10/10 xanh, đăng ký đủ 3 danh sách CI (ci.yml · api.yml · check.sh). ➕ **NỐI TIẾP 31/08:** đo lại thấy cổng chỉ phủ 1/15 họ số hiệu tài liệu; quét 14 họ còn lại tìm được HAI số trùng ĐANG SỐNG trên master — `API-10` ×2 (Matrix + Audit Report, 180 trích dẫn trần) và `DEVOPS-10` ×2 (Backup/DR + báo cáo perf thêm sau ở #286, 37 trích dẫn trần). Vá: Audit Report → `API-16`, báo cáo perf → `DEVOPS-15`, mỗi file có dòng "đổi số" tại chỗ; thêm cổng **C4** (khoá theo (HỌ, GIÁ TRỊ SỐ)) vào cùng file test ⇒ KHÔNG phải sửa 3 danh sách CI. 14/14 xanh, RED-proof 3/3. Ghi ở KI-079 (cùng lớp lỗi, không cấp số KI mới).',
     ],
   },
 

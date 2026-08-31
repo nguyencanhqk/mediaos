@@ -2509,7 +2509,7 @@ ON notification_delivery_logs (notification_id, channel, delivery_status);
 
 ## 26. OpenAPI / Swagger
 
-> Đặc tả OpenAPI 3.1 máy đọc cho toàn hệ thống: [`openapi/enterprise-api.yaml`](openapi/enterprise-api.yaml). Fragment của module: [`openapi/paths/noti.paths.yaml`](openapi/paths/noti.paths.yaml). Quy ước build & vendor extension: [`openapi/README.md`](openapi/README.md). Phân quyền: [API-10 Permission Matrix](<API-10 PERMISSION MATRIX.md>) · [Audit Report](<API-10 PERMISSION AUDIT REPORT.md>).
+> Đặc tả OpenAPI 3.1 máy đọc cho toàn hệ thống: [`openapi/enterprise-api.yaml`](openapi/enterprise-api.yaml). Fragment của module: [`openapi/paths/noti.paths.yaml`](openapi/paths/noti.paths.yaml). Quy ước build & vendor extension: [`openapi/README.md`](openapi/README.md). Phân quyền: [API-10 Permission Matrix](<API-10 PERMISSION MATRIX.md>) · [Audit Report](<API-16 PERMISSION AUDIT REPORT.md>).
 
 ### 26.1 Security
 
@@ -2540,7 +2540,7 @@ ON notification_delivery_logs (notification_id, channel, delivery_status);
 
 operationId prefix: `noti`.
 
-> Lưu ý chuẩn hóa (xem [Audit Report](<API-10 PERMISSION AUDIT REPORT.md>) AUD-010): permission hiện dùng `NOTI.LOG.*`; đề xuất đổi thành `NOTI.DELIVERY_LOG.*` cho khớp resource. Spec hiện giữ nguyên `NOTI.LOG.*` cho tới khi chốt.
+> Lưu ý chuẩn hóa (xem [Audit Report](<API-16 PERMISSION AUDIT REPORT.md>) AUD-010): permission hiện dùng `NOTI.LOG.*`; đề xuất đổi thành `NOTI.DELIVERY_LOG.*` cho khớp resource. Spec hiện giữ nguyên `NOTI.LOG.*` cho tới khi chốt.
 
 ### 26.4 Schema & response dùng chung
 

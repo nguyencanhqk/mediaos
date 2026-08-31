@@ -1,4 +1,9 @@
-# API-10: PERMISSION MATRIX — AUDIT REPORT (Rà soát API-02 → API-09)
+# API-16: PERMISSION AUDIT REPORT (Rà soát API-02 → API-09)
+
+> **Đổi số 31/08/2026 (`S10-GOV-IDUNIQUE-1` nối tiếp):** tài liệu này **trước đây mang số `API-10`**, trùng số với
+> [API-10 Permission Matrix](<API-10 PERMISSION MATRIX.md>). Trùng số ⇒ mọi trích dẫn "API-10" đều mơ hồ, đúng lớp lỗi
+> **KI-079**. Matrix giữ `API-10` (là tài liệu thiết kế trong dãy); báo cáo rà soát này nhận số kế tiếp `API-16`.
+> Trích dẫn cũ "API-10 Audit Report" ⇒ đọc là tài liệu này.
 
 **HỆ THỐNG QUẢN LÝ DOANH NGHIỆP NỘI BỘ — Kết quả rà soát permission / authorization**
 
@@ -10,7 +15,7 @@
 
 | Trường         | Nội dung                                  |
 | -------------- | ----------------------------------------- |
-| Mã tài liệu    | API-10 (Audit)                            |
+| Mã tài liệu    | API-16 (Audit của API-10 Matrix; trước 31/08/2026 là API-10) |
 | Phạm vi rà soát| Permission / Allowed roles / Data scope của API-02 → API-09 |
 | Phương pháp    | Trích xuất toàn bộ endpoint + permission code, đối chiếu chéo với API-01 §7 và giữa các module |
 | Ngày rà soát   | 20/06/2026                                 |
