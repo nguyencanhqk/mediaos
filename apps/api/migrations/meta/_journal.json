@@ -1611,6 +1611,13 @@
       "when": 1717587351000,
       "tag": "0562_s12recruitfe1_enable_recruit_module",
       "breakpoints": true
+    },
+    {
+      "idx": 230,
+      "version": "7",
+      "when": 1717587352000,
+      "tag": "0563_s12recruitdash1_widget_recruit_funnel",
+      "breakpoints": true
     }
   ]
 }

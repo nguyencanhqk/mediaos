@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**419 WO** · có micro-plan: **243/419** · ⬜ 7 chờ · 🔵 0 đang làm · ✅ 412 xong · 🔴 0 chặn
+**425 WO** · có micro-plan: **250/425** · ⬜ 1 chờ · 🔵 0 đang làm · ✅ 424 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -471,7 +471,7 @@
 | `S10-CLEAN-WORKFLOWPARK-1` | 🟡 | ✅ xong | [📄](S10-CLEAN-WORKFLOWPARK-1.md) | — | DỌN bề mặt API của module `workflow/` (code PARK de-media-fy) — gỡ 29  |
 | `S10-CLEAN-WORKFLOWCLUSTER-2` | 🔴 | ✅ xong | [📄](S10-CLEAN-WORKFLOWCLUSTER-2.md) | ✅S10-CLEAN-WORKFLOWPARK-1 | KI-082 — DỌN NỐT cụm workflow/approval: gỡ `approval/` + engine còn lạ |
 | `S10-QA-COLDSTART500-1` | 🟡 | ✅ xong | [📄](S10-QA-COLDSTART500-1.md) | — | Tìm nguồn 500 cold-start ở lần chạy int-spec ĐẦU TIÊN trên lane DB vừa |
-| `S10-AUTH-2FAGUARD-FAILMODE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S10-QA-COLDSTART500-1 | TwoFactorEnforcementGuard: BA lời gọi `withTenant` không được bọc chạy |
+| `S10-AUTH-2FAGUARD-FAILMODE-1` | 🔴 | ✅ xong | [📄](S10-AUTH-2FAGUARD-FAILMODE-1.md) | ✅S10-QA-COLDSTART500-1 | TwoFactorEnforcementGuard: BA lời gọi `withTenant` không được bọc chạy |
 | `S10-GOV-IDUNIQUE-1` | 🟡 | ✅ xong | [📄](S10-GOV-IDUNIQUE-1.md) | — | KI-079 — danh tính TRÙNG lọt qua mọi lưới: mã WO trong `backlog.mjs` v |
 
 ## Sprint 11
@@ -481,14 +481,25 @@
 | `S11-ASSET-DOC-1` | 🟢 | ✅ xong | [📄](S11-OFFICE-WAVE.md) | — | Bộ tài liệu ASSET: SPEC-13 + DB-15 + API-14 + permission-matrix §9d +  |
 | `S11-ASSET-DB-1` | 🔴 | ✅ xong | [📄](S11-ASSET-DB-1.md) | ✅S11-ASSET-DOC-1 | Schema + migration ASSET theo DB-15: asset_categories · assets · asset |
 | `S11-ASSET-BE-1` | 🔴 | ✅ xong | [📄](S11-ASSET-BE-1.md) | ✅S11-ASSET-DB-1 | Module NestJS assets/: CRUD danh mục + tài sản, cấp phát/thu hồi, bảo  |
-| `S11-ASSET-FE-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S11-ASSET-BE-1 | FE ASSET (apps/app routes/assets/): danh sách + chi tiết + form + cấp  |
-| `S11-ASSET-QA-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S11-ASSET-BE-1 ⏳S11-ASSET-FE-1 | QA ASSET: int-spec deny-path/IDOR/cross-tenant + FSM chuyển tiếp sai + |
+| `S11-ASSET-FE-1` | 🟢 | ✅ xong | [📄](S11-ASSET-FE-1.md) | ✅S11-ASSET-BE-1 | FE ASSET (apps/app routes/assets/): danh sách + chi tiết + form + cấp  |
+| `S11-ASSET-QA-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S11-ASSET-BE-1 ✅S11-ASSET-FE-1 | QA ASSET: int-spec deny-path/IDOR/cross-tenant + FSM chuyển tiếp sai + |
 | `S11-ROOM-DOC-1` | 🟢 | ✅ xong | [📄](S11-OFFICE-WAVE.md) | — | Bộ tài liệu ROOM: SPEC-14 + DB-16 + API-15 + permission-matrix §9e + h |
 | `S11-ROOM-DB-1` | 🔴 | ✅ xong | [📄](S11-ROOM-DB-1.md) | ✅S11-ROOM-DOC-1 ✅S11-ASSET-DB-1 | Schema + migration ROOM theo DB-16 + ROOM-DEC-001 (ĐÃ CHỐT 29/08): ALT |
-| `S11-ROOM-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S11-ROOM-DB-1 ✅S11-ASSET-BE-1 | Module NestJS rooms/: CRUD phòng họp (Office Admin), đặt phòng + báo t |
-| `S11-ROOM-FE-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S11-ROOM-BE-1 | FE ROOM (apps/app routes/rooms/): lịch phòng tuần/ngày (cột = phòng, c |
-| `S11-ROOM-QA-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S11-ROOM-BE-1 ⏳S11-ROOM-FE-1 | QA ROOM: race double-booking (2 request song song → đúng 1 thắng), den |
-| `S11-OFFICE-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S11-ASSET-FE-1 ⏳S11-ROOM-FE-1 | Widget DASH cho wave OFFICE: «thống kê tài sản theo trạng thái/loại» + |
+| `S11-ROOM-BE-1` | 🔴 | ✅ xong | [📄](S11-ROOM-BE-1.md) | ✅S11-ROOM-DB-1 ✅S11-ASSET-BE-1 | Module NestJS rooms/: CRUD phòng họp (Office Admin), đặt phòng + báo t |
+| `S11-ROOM-FE-1` | 🟢 | ✅ xong | [📄](S11-ROOM-FE-1.md) | ✅S11-ROOM-BE-1 | FE ROOM (apps/app routes/rooms/): lịch phòng tuần/ngày (cột = phòng, c |
+| `S11-ROOM-QA-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S11-ROOM-BE-1 ✅S11-ROOM-FE-1 | QA ROOM: race double-booking (2 request song song → đúng 1 thắng), den |
+| `S11-OFFICE-DASH-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S11-ASSET-FE-1 ✅S11-ROOM-FE-1 | Widget DASH cho wave OFFICE: «thống kê tài sản theo trạng thái/loại» + |
+
+## Sprint 12
+
+| WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
+| --- | --- | --- | --- | --- | --- |
+| `S12-RECRUIT-DOC-1` | 🟢 | ✅ xong | [📄](S12-RECRUIT-WAVE.md) | — | Bộ tài liệu RECRUIT: SPEC-12 + DB-14 + API-17 + permission-matrix §9f  |
+| `S12-RECRUIT-DB-1` | 🔴 | ✅ xong | [📄](S12-RECRUIT-DB-1.md) | ✅S12-RECRUIT-DOC-1 | Schema + migration RECRUIT theo DB-14: job_openings · candidates · can |
+| `S12-RECRUIT-BE-1` | 🔴 | ✅ xong | [📄](S12-RECRUIT-BE-1.md) | ✅S12-RECRUIT-DB-1 | Module NestJS recruit/: vị trí tuyển + ứng viên (mask PII server) + pi |
+| `S12-RECRUIT-FE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S12-RECRUIT-BE-1 | FE RECRUIT (apps/app routes/recruit/): 6 màn REC-SCREEN-001..006 — dan |
+| `S12-RECRUIT-QA-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S12-RECRUIT-FE-1 | QA RECRUIT: ma trận allow/deny per-pair TỪNG route · IDOR/cross-tenant |
+| `S12-RECRUIT-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S12-RECRUIT-QA-1 | Widget DASH «phễu tuyển dụng» (RECRUIT-WIDGET-001): ứng viên theo stag |
 
 ---
 

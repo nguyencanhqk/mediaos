@@ -27,6 +27,7 @@ import { HrDepartmentService } from "../org/hr-department.service";
 // S11-OFFICE-DASH-1 (additive): 2 handler wave OFFICE sống ở FILE RIÊNG (file này đã sát trần 800 dòng
 // của CLAUDE.md §5) — registry vẫn MỘT: `add()` bên dưới trỏ thẳng vào method của collaborator.
 import { DashboardWidgetOfficeHandlers } from "./dashboard-widget-office.handlers";
+import { DashboardWidgetRecruitHandlers } from "./dashboard-widget-recruit.handlers";
 import {
   gatePairFor,
   ttlSecondsFor,
@@ -102,6 +103,8 @@ export class DashboardWidgetHandlersService {
     private readonly hrDepartments: HrDepartmentService,
     // S11-OFFICE-DASH-1 (additive): handler ROOM_TODAY / ASSET_SUMMARY.
     private readonly office: DashboardWidgetOfficeHandlers,
+    // S12-RECRUIT-DASH-1 (additive): handler RECRUIT_FUNNEL.
+    private readonly recruit: DashboardWidgetRecruitHandlers,
   ) {
     this.buildRegistry();
   }
@@ -246,6 +249,12 @@ export class DashboardWidgetHandlersService {
     add("asset-summary", "ASSET_SUMMARY", {
       gateAndResolve: (ctx) => this.office.gateAssetSummary(ctx),
       fetch: (ctx) => this.office.fetchAssetSummary(ctx),
+    });
+
+    // ─── S12-RECRUIT-DASH-1 (APPEND) — RECRUIT_FUNNEL (gate + fetch ở recruit.handlers.ts) ─────────
+    add("recruit-funnel", "RECRUIT_FUNNEL", {
+      gateAndResolve: (ctx) => this.recruit.gateRecruitFunnel(ctx),
+      fetch: (ctx) => this.recruit.fetchRecruitFunnel(ctx),
     });
   }
 

@@ -92,6 +92,13 @@ export default {
     maintenanceDueSoon: "{{count}} tài sản sắp đến hạn bảo trì",
     categoryCount: "{{total}} · đang cấp {{assigned}}",
   },
+  // S12-RECRUIT-DASH-1 — RECRUIT_FUNNEL «Phễu tuyển dụng» (nhãn stage tra namespace recruit:stage.*).
+  recruitFunnel: {
+    title: "Phễu tuyển dụng",
+    empty: { title: "Chưa có vị trí đang mở hay ứng viên trong phễu" },
+    totalUnit: "ứng viên",
+    openJobOpenings: "{{count}} vị trí đang mở",
+  },
   typeSwitcher: {
     label: "Chuyển đổi loại bảng điều khiển",
   },

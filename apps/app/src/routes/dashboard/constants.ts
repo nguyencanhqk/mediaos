@@ -20,6 +20,8 @@ import { GOAL_ENGINE_PAIRS } from "@/routes/goals/constants";
 // S11-OFFICE-DASH-1 (additive): cặp gate 2 widget wave OFFICE — tái dùng hằng module đã có (DRY).
 import { ASSET_ENGINE_PAIRS } from "@/routes/assets/constants";
 import { ROOM_ENGINE_PAIRS } from "@/routes/rooms/constants";
+// S12-RECRUIT-DASH-1 (additive): cặp gate RECRUIT_FUNNEL — tái dùng RECRUIT_ENGINE_PAIRS.candidateSummary (DRY).
+import { RECRUIT_ENGINE_PAIRS } from "@/routes/recruit/constants";
 
 export const DASH_WIDGET_CODE = {
   MY_TASKS: "MY_TASKS",
@@ -35,6 +37,8 @@ export const DASH_WIDGET_CODE = {
   // S11-OFFICE-DASH-1 (APPEND) — 2 widget wave OFFICE (SPEC-13 AS-10 · SPEC-14 RM-08, mig 0558).
   ROOM_TODAY: "ROOM_TODAY",
   ASSET_SUMMARY: "ASSET_SUMMARY",
+  // S12-RECRUIT-DASH-1 (APPEND) — widget «phễu tuyển dụng» (SPEC-12 RC-10 · RECRUIT-WIDGET-001, mig 0563).
+  RECRUIT_FUNNEL: "RECRUIT_FUNNEL",
 } as const;
 
 export type DashWidgetCode = (typeof DASH_WIDGET_CODE)[keyof typeof DASH_WIDGET_CODE];
@@ -62,6 +66,11 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<
   // gate PHỤ; cổng THẬT là GET /dashboard/me đã omit widget khỏi metadata ⇒ Grid không mount nó.
   ROOM_TODAY: ROOM_ENGINE_PAIRS.VIEW,
   ASSET_SUMMARY: ASSET_ENGINE_PAIRS.VIEW,
+  // S12-RECRUIT-DASH-1 (APPEND) — MIRROR đúng BE: RECRUIT_FUNNEL→view:candidate (SENSITIVE, mig 0560 —
+  // chỉ hr/company-admin/recruiter @Company). BE còn ép SÀN scope 'Company' (DASH_WIDGET_MIN_DATA_SCOPE):
+  // summaryTx đếm TOÀN company nên grant hẹp hơn không được thấy. FE không kiểm được scope ⇒ PermissionGate
+  // ở component là gate PHỤ; cổng THẬT là GET /dashboard/me đã omit widget ⇒ Grid không mount nó.
+  RECRUIT_FUNNEL: RECRUIT_ENGINE_PAIRS.candidateSummary,
 };
 
 /**

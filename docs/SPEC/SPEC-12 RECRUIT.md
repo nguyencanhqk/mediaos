@@ -253,6 +253,12 @@ Mọi màn: `<PermissionGate>` + `useCan()`, trạng thái loading/error/empty (
 | RECRUIT-FUNC-012 | Export danh sách ứng viên | CSV theo filter hiện hành, cặp `('export','candidate')` + **audit**; PII trong file theo đúng luật mask của caller (§18) |
 | RECRUIT-FUNC-013 | Phễu tuyển dụng | đếm ứng viên theo stage + vị trí đang `Open` — nguồn widget DASH (`/candidates/summary`) |
 
+### 10.1 Mã widget dashboard (SPEC-01 §9.9)
+
+| Mã | widget_code | Tên | Nguồn | Gate |
+| --- | --- | --- | --- | --- |
+| **RECRUIT-WIDGET-001** | `RECRUIT_FUNNEL` | Phễu tuyển dụng (slug `recruit-funnel`, mig 0563 — ship `S12-RECRUIT-DASH-1`) | RECRUIT-FUNC-013 / RECRUIT-API-009 (`CandidatesService.summary` — một công thức, một con số) | cặp `('view','candidate')` **+ SÀN scope `Company`** (`DASH_WIDGET_MIN_DATA_SCOPE` — `summaryTx` đếm toàn company nên grant hẹp hơn không được serve); payload chỉ ĐẾM, không PII (§20.11) |
+
 ---
 
 ## 11. Permission đề xuất — **ĐÃ CHỐT cùng gói duyệt 31/08/2026**
