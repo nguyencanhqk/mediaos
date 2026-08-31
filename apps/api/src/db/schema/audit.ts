@@ -145,6 +145,13 @@ export const AUDIT_OBJECT_TYPES = [
   // ROOM (SPEC-14 §18, mig 0553/0554): 'meeting_room' giữ (bảng tái dụng); 'meeting'/'meeting_note' đã gỡ khỏi TS
   // (bảng DROP 0553) — CHECK DB VẪN giữ hai giá trị đó (append-only #2; parity assert là một chiều CHECK ⊇ TS).
   "meeting_room",
+  // RECRUIT (SPEC-12 §12, mig 0560): bản đồ hành động → object_type là danh sách ĐÓNG — 4 aggregate.
+  // Ghi chú/feedback/export GOM về aggregate cha (candidate/interview, payload kèm noteId/feedbackId) —
+  // KHÔNG có 'candidate_note'/'interview_feedback' riêng; vế HR của convert dùng 'employee' có sẵn.
+  "job_opening",
+  "candidate",
+  "interview",
+  "offer",
   // G13 finance — sổ cái append-only + phân bổ + chốt lợi nhuận + đề xuất chi (xem migration 0070).
   // Quyết định duyệt chi audit trên `expense_request` (KHÔNG thêm type cho bảng log `expense_approvals`).
   "revenue_record",
