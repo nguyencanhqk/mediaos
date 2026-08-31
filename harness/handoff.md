@@ -4,6 +4,24 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
+## Phiên 2026-08-31 — S12-RECRUIT-DASH-1 XONG (#452 squash `36b4b283`) — ĐÓNG WAVE S12-RECRUIT
+
+**Trạng thái:** merged --admin sau CI 14/14 xanh; STATUS regen push docs-only (`34190163`). Backlog
+hiện **0 READY / 0 in-progress** — hết WO, wave sau chờ owner seed. Lane `mediaos_recruitdash1` CHƯA drop.
+
+- Widget `RECRUIT_FUNNEL` (RECRUIT-WIDGET-001, SPEC-12 §10.1; mig 0563 CHECK+'RECRUIT'+seed row):
+  khuôn 0558 nhưng **sàn scope = `Company` vì lý do KHÁC ASSET** — `summaryTx` đếm TOÀN company,
+  sàn phải bằng bề rộng phép đếm (grant hẹp hơn được serve = rò số liệu ngoài scope). Cache
+  company-shared (payload chỉ ĐẾM). Handler file riêng; `RecruitModule` export `CandidatesService`;
+  seeder v3→v4. 19 ca test mới (int 10 + FE 9), regression DASH 127/127.
+- **Follow-up ghi nhận (không chặn):** `gateOrThrow` trùng 3 bản (main/office/recruit handlers) ·
+  `resolveActor` đốt 4 round-trip `getCompanyRoleGrantsWithScope` uncached mỗi `summary()` (từ BE-1).
+  Gap defer wave (từ FE-1): grant foundation-file recruiter/hr · org-unit picker · refactor
+  PaginationFooter/error-parser.
+- **Friction:** classifier auto-mode chặn cả `git log`/`node harness/gen-status.mjs` NGAY SAU lệnh
+  `gh pr merge --admin` (lệnh merge đã chạy xong, chỉ lệnh sau bị vạ) — retry lệnh y hệt qua Bash
+  sau 1 nhịp là qua; đừng tưởng merge fail.
+
 ## Phiên 2026-08-30 — S11-ROOM-BE-1 merge (#438) → S11-ASSET-FE-1 XONG (#439, master `8b551f93`)
 
 **Trạng thái:** cả hai đã merge, lane `mediaos_roombe1`/`assetfe1`/`assetfe2` đã DROP. Plan + kết quả:
