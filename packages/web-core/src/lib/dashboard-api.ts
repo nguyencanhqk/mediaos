@@ -58,6 +58,8 @@ export const DASH_WIDGET_SLUG: Readonly<Record<string, string>> = {
   // S11-OFFICE-DASH-1 — 2 widget wave OFFICE (mig 0558).
   ROOM_TODAY: "room-today",
   ASSET_SUMMARY: "asset-summary",
+  // S12-RECRUIT-DASH-1 — widget «phễu tuyển dụng» (mig 0563), khớp dataSourceKey của RECRUIT_FUNNEL.
+  RECRUIT_FUNNEL: "recruit-funnel",
 };
 
 /** 4 dashboard type user-facing → path GET /dashboard/{type} (API-08 §10.1, DashboardResolverController). */

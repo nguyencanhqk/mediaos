@@ -208,3 +208,21 @@ export const assetSummaryWidgetDataSchema = z.object({
   byCategory: z.array(dashWidgetAssetCategoryRowSchema),
 });
 export type AssetSummaryWidgetData = z.infer<typeof assetSummaryWidgetDataSchema>;
+
+// ── S12-RECRUIT-DASH-1 — RECRUIT_FUNNEL (dashboard-widget-recruit.handlers.ts) ───────────────────
+
+/**
+ * RECRUIT_FUNNEL — `fetchRecruitFunnel()`: { byStage, summary: { totalCandidates, openJobOpenings } }.
+ * `byStage` để `z.record(z.string(), …)` chứ KHÔNG ghim 6 stage FSM: BE trả nguyên object của
+ * `CandidatesRepository.summaryTx` (stage vắng = không có key) — FE zero-fill 6 cột cố định theo
+ * RECRUIT_STAGE_COLUMNS khi render, KHÔNG chép danh sách stage vào schema để khỏi trôi hai nơi.
+ * Payload CHỈ là ĐẾM — không PII ứng viên (REC-DEC-003).
+ */
+export const recruitFunnelWidgetDataSchema = z.object({
+  byStage: z.record(z.string(), z.number().int().nonnegative()),
+  summary: z.object({
+    totalCandidates: z.number().int().nonnegative(),
+    openJobOpenings: z.number().int().nonnegative(),
+  }),
+});
+export type RecruitFunnelWidgetData = z.infer<typeof recruitFunnelWidgetDataSchema>;

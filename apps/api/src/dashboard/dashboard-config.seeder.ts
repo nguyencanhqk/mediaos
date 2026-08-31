@@ -32,7 +32,8 @@ export class DashboardConfigSeeder implements ModuleMasterDataSeeder {
   // DASH_DEFAULT_CONFIG (startBatch idempotent theo (companyId,seedKey,seedVersion) — version mới ⇒ batch
   // mới; entry CŨ vẫn no-op qua WHERE NOT EXISTS, entry MỚI mới insert — an toàn, KHÔNG re-seed sai).
   // S11-OFFICE-DASH-1: bump v2→v3 — CÙNG lý do, cho 8 entry mới (ROOM_TODAY + ASSET_SUMMARY × 4 dashboard).
-  readonly seedVersion = "v3";
+  // S12-RECRUIT-DASH-1: bump v3→v4 — CÙNG lý do, cho 4 entry mới (RECRUIT_FUNNEL × 4 dashboard type).
+  readonly seedVersion = "v4";
 
   async seed(ctx: MasterDataSeedContext): Promise<void> {
     for (const entry of DASH_DEFAULT_CONFIG) {

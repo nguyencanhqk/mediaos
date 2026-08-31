@@ -408,6 +408,29 @@ fs-pin FE↔BE mới: parity 4 bảng FSM + census 27 `kind`). Coverage `src/rec
 
 ---
 
+## 5h. DASH — widget «Phễu tuyển dụng» (S12-RECRUIT-DASH-1, 31/08/2026)
+
+Dashboard có thêm «Phễu tuyển dụng» (`RECRUIT_FUNNEL`, mã `RECRUIT-WIDGET-001`): ứng viên theo 6 stage
+(zero-fill cả bậc rỗng) + số vị trí đang `Open`. Widget **đọc lại đúng** `GET /candidates/summary`
+(RECRUIT-API-009) — số trên widget và số trong màn pipeline luôn là MỘT. Bấm 1 bậc phễu → sang
+`/recruit/pipeline`.
+
+**Ai thấy widget:** cần `view:candidate` **@Company** (recruiter · HR · Company Admin — ma trận §9f).
+Điểm KHÁC ASSET_SUMMARY: sàn `Company` không phải vì "role nào cũng có cặp" mà vì phép đếm là
+**toàn company** — grant hẹp hơn (nếu mai sau xuất hiện) sẽ bị chặn ở CẢ metadata lẫn data-path.
+
+| Việc | Cách kiểm | Kỳ vọng |
+| --- | --- | --- |
+| Đếm đúng phễu | tạo vài ứng viên ở stage khác nhau → mở Dashboard | số từng bậc khớp kanban; ứng viên xoá mềm KHÔNG đếm; vị trí `Draft`/`Paused`/`Closed` KHÔNG tính vào «vị trí đang mở» |
+| Nhân viên/manager | mở Dashboard bằng tài khoản không có `view:candidate` | **không có** ô «Phễu tuyển dụng»; tab Network **không** có lời gọi `/dashboard/widgets/recruit-funnel` |
+| Không lộ PII | mở widget bằng recruiter, xem payload | chỉ ĐẾM — không tên/email/phone ứng viên (REC-DEC-003) |
+| Trống | công ty chưa có vị trí mở lẫn ứng viên | trạng thái rỗng «Chưa có vị trí đang mở hay ứng viên trong phễu», không phải lỗi |
+
+Bộ test tự động: **10 ca** int-spec `dashboard-recruit-funnel.int-spec.ts` (cần `LANE_DB` — sàn scope 2
+tầng, parity nguồn, PII, cross-tenant) + **9 ca** FE (`RecruitFunnelWidget.spec` + Grid).
+
+---
+
 ## 6. Tham chiếu
 
 - Trạng thái tự sinh: [docs/STATUS.md](STATUS.md) — danh sách WO "Đã xong (v2)".

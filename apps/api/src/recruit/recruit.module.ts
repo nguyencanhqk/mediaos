@@ -57,6 +57,9 @@ import {
     RecruitConvertService,
     RecruitCandidateFileResolver,
   ],
+  // S12-RECRUIT-DASH-1 (additive): DashboardModule inject CandidatesService.summary cho widget
+  // RECRUIT_FUNNEL (MỘT công thức, MỘT con số với GET /candidates/summary) — mirror AssetsModule/RoomsModule.
+  exports: [CandidatesService],
 })
 export class RecruitModule implements OnModuleInit {
   constructor(

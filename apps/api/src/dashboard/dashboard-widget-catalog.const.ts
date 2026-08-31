@@ -15,7 +15,7 @@ import type { DataScope } from "@mediaos/contracts";
  *  - mô hình gate widget       → docs/permission-matrix-spec.md §7 (dòng 144)
  */
 
-/** Union khớp CHECK chk_dashboard_widgets_module_code (mig 0482:71-72; APPEND 'GOAL' 0525; 'ASSET','ROOM' 0558). */
+/** Union khớp CHECK chk_dashboard_widgets_module_code (mig 0482:71-72; APPEND 'GOAL' 0525; 'ASSET','ROOM' 0558; 'RECRUIT' 0563). */
 export type DashModuleCode =
   | "AUTH"
   | "HR"
@@ -27,7 +27,8 @@ export type DashModuleCode =
   | "SYSTEM"
   | "GOAL"
   | "ASSET"
-  | "ROOM";
+  | "ROOM"
+  | "RECRUIT";
 /** Union khớp CHECK chk_dashboard_widgets_widget_type (mig 0482:73-74). */
 export type DashWidgetType = "Summary" | "List" | "Chart" | "Calendar" | "Action" | "Alert";
 /** Union khớp CHECK chk_dashboard_widgets_default_data_scope (mig 0482:75-76). */
@@ -266,6 +267,19 @@ export const DASH_WIDGET_CATALOG: readonly DashWidgetEntry[] = [
     dataSourceKey: "asset-summary",
     componentKey: "AssetSummaryWidget",
   },
+  // ─── S12-RECRUIT-DASH-1 (APPEND-only) — widget «phễu tuyển dụng» (SPEC-12 RC-10 · RECRUIT-FUNC-013 ·
+  // RECRUIT-WIDGET-001, mig 0563). Scope 'Company' KHÔNG phải cận-dưới trang trí — nó là SÀN THẬT (xem
+  // DASH_WIDGET_MIN_DATA_SCOPE.RECRUIT_FUNNEL): CandidatesRepository.summaryTx đếm TOÀN company.
+  {
+    widgetCode: "RECRUIT_FUNNEL",
+    moduleCode: "RECRUIT",
+    name: "Phễu tuyển dụng",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_RECRUIT_FUNNEL",
+    defaultDataScope: "Company",
+    widgetType: "Chart",
+    dataSourceKey: "recruit-funnel",
+    componentKey: "RecruitFunnelWidget",
+  },
 ] as const;
 
 export const DASH_WIDGET_COUNT = DASH_WIDGET_CATALOG.length;
@@ -331,6 +345,12 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<Record<string, EnginePair>> = {
   // khác nhau (employee@Own · manager@Department · hr/company-admin@Company · asset-manager@Company).
   // Cặp một mình KHÔNG đủ gate: xem DASH_WIDGET_MIN_DATA_SCOPE.ASSET_SUMMARY (sàn 'Department').
   ASSET_SUMMARY: { action: "view", resourceType: "asset" },
+  // ─── S12-RECRUIT-DASH-1 (APPEND) — cặp gate RECRUIT_FUNNEL ──────────────────────────────────────
+  // ('view','candidate') — mig 0560, is_sensitive=TRUE (PII ứng viên — REC-DEC-003); grant CHỈ hr/
+  // company-admin/recruiter @Company (permission-matrix §9f) ⇒ employee/manager thiếu CẶP đã bị loại.
+  // engine tự ép effectivelySensitive ⇒ wildcard KHÔNG lọt. Cặp vẫn CHƯA đủ một mình: xem
+  // DASH_WIDGET_MIN_DATA_SCOPE.RECRUIT_FUNNEL (sàn 'Company' — summaryTx đếm toàn company).
+  RECRUIT_FUNNEL: { action: "view", resourceType: "candidate" },
 } as const;
 
 /**
@@ -354,6 +374,12 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<Record<string, EnginePair>> = {
  */
 export const DASH_WIDGET_MIN_DATA_SCOPE: Readonly<Record<string, DataScope>> = {
   ASSET_SUMMARY: "Department",
+  // S12-RECRUIT-DASH-1: sàn = 'Company' vì lý do KHÁC ASSET_SUMMARY — không phải "role nào cũng có cặp"
+  // (grant view:candidate hôm nay CHỈ @Company), mà vì `CandidatesRepository.summaryTx` đếm TOÀN company
+  // (không co theo actor scope như AssetsService.summary). Sàn PHẢI bằng đúng bề rộng phép đếm: nếu mai
+  // sau ai đó grant view:candidate@Department, thiếu sàn này widget sẽ serve số TOÀN company cho scope
+  // hẹp — rò dữ liệu ngoài scope. Hôm nay sàn không loại ai; nó gác grant hẹp hơn xuất hiện về sau.
+  RECRUIT_FUNNEL: "Company",
 } as const;
 
 /**
@@ -565,6 +591,15 @@ export const DASH_DEFAULT_CONFIG: readonly DashDefaultConfigEntry[] = [
   { dashboardType: "Manager", widgetCode: "ASSET_SUMMARY", sortOrder: 80 },
   { dashboardType: "HR", widgetCode: "ASSET_SUMMARY", sortOrder: 80 },
   { dashboardType: "Admin", widgetCode: "ASSET_SUMMARY", sortOrder: 80 },
+  // ─── S12-RECRUIT-DASH-1 (APPEND) — RECRUIT_FUNNEL@90 trên CẢ 4 dashboard type (mirror lý do
+  // ASSET_SUMMARY@Employee): role `recruiter` KHÔNG có cặp view-*:dashboard riêng ⇒ resolve về dashboard
+  // type của các role KHÁC user đó mang (thường 'Employee'). Ai không có view:candidate@Company bị loại
+  // bởi CẶP + SÀN (filterByGatePair), KHÔNG bởi việc vắng config — lọc theo config sẽ giấu widget khỏi
+  // chính người đáng thấy nó.
+  { dashboardType: "Employee", widgetCode: "RECRUIT_FUNNEL", sortOrder: 90 },
+  { dashboardType: "Manager", widgetCode: "RECRUIT_FUNNEL", sortOrder: 90 },
+  { dashboardType: "HR", widgetCode: "RECRUIT_FUNNEL", sortOrder: 90 },
+  { dashboardType: "Admin", widgetCode: "RECRUIT_FUNNEL", sortOrder: 90 },
 ] as const;
 
 // ─── S4-DASH-BE-1 (APPEND-only) — resolver route → cặp engine ────────────────────────────────────────

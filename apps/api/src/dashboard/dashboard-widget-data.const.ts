@@ -33,6 +33,9 @@ export const DASH_WIDGET_TTL_SECONDS: Readonly<Record<DashModuleCode, number>> =
   // người dùng vừa đặt xong phải thấy ngay ⇒ 60s (cùng nhóm TASK), KHÔNG dùng TTL dài của HR.
   ASSET: 300,
   ROOM: 60,
+  // S12-RECRUIT-DASH-1: phễu tuyển dụng đổi theo nhịp move-stage/mở vị trí (vài lần/ngày) — 300s, cùng
+  // nhóm ASSET/GOAL. Cache company-shared (payload chỉ ĐẾM, sàn scope Company) nên TTL dài không rò gì.
+  RECRUIT: 300,
 } as const;
 
 /**

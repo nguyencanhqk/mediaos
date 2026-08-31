@@ -23,6 +23,8 @@ import { GoalProgressWidget } from "./GoalProgressWidget";
 // S11-OFFICE-DASH-1 (additive): 2 widget wave OFFICE — cả hai chỉ cần dashboardType ⇒ mount qua Grid.
 import { RoomTodayWidget } from "./RoomTodayWidget";
 import { AssetSummaryWidget } from "./AssetSummaryWidget";
+// S12-RECRUIT-DASH-1 (additive): widget «phễu tuyển dụng» — chỉ cần dashboardType ⇒ mount qua Grid.
+import { RecruitFunnelWidget } from "./RecruitFunnelWidget";
 import { DASH_WIDGET_CODE } from "@/routes/dashboard/constants";
 
 interface DashboardWidgetProps {
@@ -48,6 +50,7 @@ const WIDGET_COMPONENTS: Readonly<Record<string, ComponentType<DashboardWidgetPr
   [DASH_WIDGET_CODE.GOAL_PROGRESS]: GoalProgressWidget,
   [DASH_WIDGET_CODE.ROOM_TODAY]: RoomTodayWidget,
   [DASH_WIDGET_CODE.ASSET_SUMMARY]: AssetSummaryWidget,
+  [DASH_WIDGET_CODE.RECRUIT_FUNNEL]: RecruitFunnelWidget,
 };
 
 interface DashboardWidgetGridProps {

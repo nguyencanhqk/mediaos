@@ -51,6 +51,11 @@ vi.mock("./AssetSummaryWidget", () => ({
     <div data-testid="widget-ASSET_SUMMARY">ASSET_SUMMARY:{dashboardType}</div>
   ),
 }));
+vi.mock("./RecruitFunnelWidget", () => ({
+  RecruitFunnelWidget: ({ dashboardType }: { dashboardType?: string }) => (
+    <div data-testid="widget-RECRUIT_FUNNEL">RECRUIT_FUNNEL:{dashboardType}</div>
+  ),
+}));
 
 function widget(code: string, order: number): DashboardWidgetSummaryDto {
   return {
@@ -106,6 +111,11 @@ describe("DashboardWidgetGrid", () => {
     render(<DashboardWidgetGrid widgets={widgets} dashboardType="Admin" />);
     expect(screen.getByTestId("widget-ROOM_TODAY")).toHaveTextContent("ROOM_TODAY:Admin");
     expect(screen.getByTestId("widget-ASSET_SUMMARY")).toHaveTextContent("ASSET_SUMMARY:Admin");
+  });
+
+  it("S12-RECRUIT-DASH-1 — wire widget RECRUIT_FUNNEL", () => {
+    render(<DashboardWidgetGrid widgets={[widget("RECRUIT_FUNNEL", 90)]} dashboardType="HR" />);
+    expect(screen.getByTestId("widget-RECRUIT_FUNNEL")).toHaveTextContent("RECRUIT_FUNNEL:HR");
   });
 
   /**
