@@ -603,6 +603,14 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
       "ĐIỂM CHIẾU DUY NHẤT của module ROOM (organizer · bookedBy · attendees · cancelledBy · conflicts[].organizerName · organizer_name/actor_name NOTI). Cặp GATE của route ghi (`book`/`cancel`) KHÁC cặp BOUND: vị từ = room-access.service.ts#peopleVisibleCond suy từ resolveOrNull('view','room') — Company/System ⇒ true (SPEC-14 §11: view@Company mọi role seed, lịch là dữ liệu dùng chung), hẹp hơn/không có cặp ⇒ users.id = actor (fail-closed). Tập HÀNG là lượt đặt (không phải users) — bound bởi company_id + withTenant; cột tên bọc bởi identityColumns trên users (không alias), employeeCode bọc CÙNG vị từ, WHERE users.company_id AND deleted_at IS NULL. Đường đọc (resolveViewActor) TỪ CHỐI 403 khi view hẹp hơn Company. Bằng chứng: test/integration/room-be1-scope.int-spec.ts §H (tên + mã hiện cho employee view@Company; role `bn` chỉ book/cancel KHÔNG view ⇒ POST 201 với organizer = chính mình có tên, attendees[].displayName/employeeCode = null, conflicts[].organizerName = null; role view@Own ⇒ 403 AUTH-ERR-SCOPE-DENIED).",
     signedBy: "S11-ROOM-BE-1",
   },
+  // ── recruit (S12-RECRUIT-BE-1) ───────────────────────────────────────────────
+  {
+    point: "recruit/recruit-people.repository.ts#namesByUserIdsTx:users.fullName",
+    basis: "identity-gated",
+    reason:
+      "ĐIỂM CHIẾU DUY NHẤT của module RECRUIT (recruiter phụ trách · interviewer/participant · picker 031/032 — SPEC-12 §18, khuôn ROOM). Vị từ = RecruitActor.peopleVisibleCond, tính ĐÚNG MỘT LẦN/request bởi recruit-access.service.ts#resolveActor theo cặp CỦA ROUTE lấy từ bảng hằng RECRUIT_ROUTE_PAIRS (recruit-route-pairs.const.ts — CÙNG bảng cho decorator + assert tầng 2 + căn cứ chiếu; repository KHÔNG nhận cặp rời ⇒ không có đường truyền cặp sai route, plan-review vòng 2 #3). Company/System ⇒ true (job-opening/candidate/offer CHỈ Company theo §13.6 — mọi grant thật đều mở tên); scope hẹp hơn/không grant ⇒ users.id = actor (fail-closed). employeeCode bọc CÙNG vị từ (mirror ROOM M2). Hai picker tái dùng CHÍNH hàm này (lọc q SAU khi bọc cột — không SELECT users trần). Bằng chứng: test/foundation/recruit-two-layer-guard-census.unit-spec.ts (32 route × cặp, 2 tầng so với CÙNG bảng hằng) + test/integration/recruit-be1-scope.int-spec.ts (ma trận per-pair + masking).",
+    signedBy: "S12-RECRUIT-BE-1",
+  },
 ];
 
 /**
@@ -636,7 +644,10 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   // 14 → 15 (S11-ROOM-BE-1, 30/08/2026): `rooms/room-people.repository.ts#namesByUserIdsTx` — điểm chiếu DUY NHẤT của
   // module ROOM; cặp gate route ghi (`book`/`cancel`) ≠ cặp bound (`view`, resolveOrNull ⇒ fail-closed `users.id =
   // actor`). Nới có chủ đích, plan-review B1 chọn basis này thay vì nâng `scoped-predicate` (đã bão hoà); qua FULL gate.
-  "identity-gated": 15,
+  // 15 → 16 (S12-RECRUIT-BE-1, 31/08/2026): `recruit/recruit-people.repository.ts#namesByUserIdsTx` — điểm
+  // chiếu DUY NHẤT của module RECRUIT; cond thật từ resolveOrNull theo cặp của route (bảng hằng
+  // RECRUIT_ROUTE_PAIRS), fail-closed users.id=actor. Nới có chủ đích, plan-review 2 vòng + FULL gate.
+  "identity-gated": 16,
 };
 
 /**
@@ -659,7 +670,14 @@ export const BLIND_SPOT_PINS = {
    * drizzle bắt buộc dùng `sql` cho expression index nên không có đường viết khác. Vế partial-WHERE
    * đi qua `isNotNull()` để không tốn thêm một đếm. Nới có chủ đích, ký qua gate của WO DB-1.
    */
-  rawSqlIdentity: 14,
+  /**
+   * 14 → 15 (S12-RECRUIT-BE-1, 31/08/2026): `recruit/candidates.repository.ts#findDuplicatesTx` —
+   * `lower(${candidates.email}) = lower(${email})`: biểu thức check-duplicate PHẢI mirror ĐÚNG
+   * biểu thức của index `idx_candidates_company_email_expr` (RECRUIT-API-008); cột email CỦA ỨNG
+   * VIÊN (bảng candidates), không phải chiếu danh tính `users` — cùng lớp với bump 13→14 của DB-1.
+   * Response check-duplicate KHÔNG trả email/phone (chỉ id/fullName/stage/jobTitle/deleted).
+   */
+  rawSqlIdentity: 15,
   /** Ép kiểu TƯỜNG MINH sang `IdentityGrant` ngoài điểm đúc — phải LUÔN bằng 0. */
   asIdentityGrant: 0,
   /** File export `alias(users,…)` — mỗi cái là một đường mà scanner một-file không lần được (F12). */

@@ -113,6 +113,14 @@ export const API_MODULE_TAGS: readonly ApiModuleTag[] = [
     segments: ["rooms", "room-bookings"],
   },
   {
+    // S12-RECRUIT-BE-1: khai TRƯỚC khi 32 route RECRUIT lên (thiếu ⇒ UNCLASSIFIED_PREFIX ⇒ openapi-contract ĐỎ).
+    code: "RECRUIT",
+    tagPrefix: "Recruit",
+    description:
+      "Tuyển dụng: vị trí tuyển, ứng viên (mask PII server), pipeline 6 stage, phỏng vấn/feedback own-scope, offer (mask lương), convert→nhân viên (SPEC-12).",
+    segments: ["job-openings", "candidates", "interviews", "offers", "recruit"],
+  },
+  {
     // S7-CHAT-BE-1: BẮT BUỘC khai TRƯỚC khi route `/chat/**` đầu tiên lên — route không có mục ở đây rơi
     // vào UNCLASSIFIED_PREFIX, và `openapi-contract.e2e-spec` coi đó là LỖI (không phải "mất nhãn đẹp").
     code: "CHAT",

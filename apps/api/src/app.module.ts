@@ -35,6 +35,8 @@ import { GoalsModule } from "./goals/goals.module";
 import { AssetsModule } from "./assets/assets.module";
 // S11-ROOM-BE-1 (additive): RoomsModule — phòng họp + đặt lịch (SPEC-14 / DB-16 / API-15).
 import { RoomsModule } from "./rooms/rooms.module";
+// S12-RECRUIT-BE-1 (additive): RecruitModule — tuyển dụng Phase 2 (SPEC-12 / DB-14 / API-17).
+import { RecruitModule } from "./recruit/recruit.module";
 // S7-CHAT-BE-1 (additive): ChatModule — phòng chat & thành viên (SPEC-15 / DB-12 / API-13).
 import { ChatModule } from "./chat/chat.module";
 import { IdempotencyModule } from "./common/idempotency/idempotency.module";
@@ -115,6 +117,11 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     // Ngoài scope GHI ⇒ 403 (lịch công khai trong company), cross-tenant ⇒ 404. Registrar NOTI + job nhắc 15′
     // sống ở NotificationsModule.
     RoomsModule,
+    // S12-RECRUIT-BE-1 (additive): module RECRUIT (SPEC-12) — vị trí tuyển + ứng viên (mask PII server,
+    // 7 cặp sensitive) + pipeline FSM 6 stage + phỏng vấn own-scope participant + offer (mask salary) +
+    // convert→employee 3 pha (UNIQUE employee_id chốt cuối). Registrar NOTI 4 event sống ở
+    // NotificationsModule. Module vẫn inactive — FE-1 mới bật cờ.
+    RecruitModule,
   ],
   providers: [
     // Global guard pipeline (THỨ TỰ QUAN TRỌNG):
