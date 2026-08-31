@@ -365,6 +365,49 @@ CẢ hai tầng, đối chiếu widget vs endpoint gốc, self-lock, cross-tenan
 
 ---
 
+## 5g. RECRUIT — Tuyển dụng (wave S12-RECRUIT, nghiệm thu QA 31/08/2026)
+
+Module Phase 2 đầu tiên vào tay người dùng: `modules.RECRUIT.is_active = true` từ migration `0562`
+(bật cùng `S12-RECRUIT-FE-1`). Nghiệp vụ: [SPEC-12](spec/SPEC-12%20RECRUIT.md) · schema DB-14 · API-17
+(32 route). **6 màn:** `REC-SCREEN-001` danh sách vị trí tuyển · `002` pipeline ứng viên (kanban 6 stage) ·
+`003` chi tiết ứng viên (tab CV · phỏng vấn · ghi chú · offer) · `004` form ứng viên · `005` danh sách
+phỏng vấn · `006` form vị trí tuyển.
+
+**Quyền cần có để thấy gì:** 15 cặp `(action, resource)` — `access:recruit` là cổng **nav**. Điểm KHÁC
+các module trước: **28/32 route ép SÀN SCOPE Company** — có đúng cặp nhưng scope Own/Department vẫn 403
+(dữ liệu ứng viên là PII nhạy cảm, không có khái niệm "ứng viên của phòng tôi"). Ngoại lệ duy nhất là 4
+route interview theo **Own** (participant thật mới thấy lượt của mình): list · detail · ghi/sửa feedback.
+7 cặp `*:candidate` là **SENSITIVE** — wildcard `*:*` không qua được. PII ứng viên (email/phone) mask
+theo server; lương offer chỉ hiện khi có `manage:offer`.
+
+> ⚠️ **Gap defer có chủ đích (không phải bug — bàn giao từ FE-1):** (1) role recruiter/hr **chưa** có
+> grant foundation-file ⇒ tab CV ẩn nút upload với đúng role chính (cần WO seed grant riêng); (2) dropdown
+> Đơn vị/Chức danh của form vị trí đi `hrApi` (`read:department/position`) mà recruiter không có ⇒ FE hiện
+> lỗi tường minh + disable submit; (3) thẻ app gate `view:job-opening` nên manager (chỉ interview@Own)
+> vào `/recruit/interviews` qua deep-link thông báo.
+
+| Việc | Cách kiểm | Kỳ vọng |
+| --- | --- | --- |
+| Vòng đời vị trí tuyển | Draft → Open → Paused → Open → Closed | đúng FSM §13.2; `Closed` terminal — mở lại ⇒ `RECRUIT-ERR-002`; thêm ứng viên vào vị trí Closed ⇒ `RECRUIT-ERR-005` |
+| Pipeline ứng viên | kéo New → Screening → Interview → Offer | đúng FSM §13.1; kéo tắt (New → Offer) ⇒ `RECRUIT-ERR-001`; kéo tay sang **Hired** ⇒ `RECRUIT-ERR-014` («dùng Chuyển thành nhân viên») — Hired CHỈ đạt qua convert |
+| Trùng ứng viên | tạo ứng viên email `Abc@X.com` → tạo tiếp `abc@x.com` | cảnh báo trùng (không phân hoa/thường; phone chuẩn hoá cũng bắt); phản hồi check-duplicate **không** lộ email/phone đã lưu |
+| Phỏng vấn | xếp lịch khi ứng viên chưa ở stage Interview · giờ kết thúc ≤ bắt đầu · feedback 2 lần · feedback vào lượt đã huỷ | `RECRUIT-ERR-007` · `RECRUIT-ERR-013 invalid-time-range` (422) · `RECRUIT-ERR-012` · `RECRUIT-ERR-004 interview-cancelled` |
+| Interviewer scope Own | đăng nhập bằng người được mời phỏng vấn (chỉ `view:interview@Own`) | thấy ĐÚNG lượt mình tham gia; ghi feedback được; lượt của người khác ⇒ 404 (không phải 403 — chống oracle); người có view@Company nhưng KHÔNG tham gia ghi feedback ⇒ 403 `RECRUIT-ERR-011` |
+| Offer | tạo offer thứ 2 khi còn offer Draft/Sent · sửa offer đã Sent · Draft → Accepted | `RECRUIT-ERR-006` · `RECRUIT-ERR-003 not-draft` · `RECRUIT-ERR-003` (phải qua Sent) |
+| Chuyển thành nhân viên | convert khi offer đã Accepted → convert lần 2 → bấm-đúp | tạo `employee_profiles` + stage `Hired`; lần 2 ⇒ `RECRUIT-ERR-008 already-converted`; bấm-đúp cùng key ⇒ IN_PROGRESS/replay, đúng **1** nhân viên |
+| Sàn scope | gán user đủ 15 cặp nhưng scope Own/Department rồi mở danh sách ứng viên | **403** (`AUTH-ERR-SCOPE-DENIED` trong message) — có cặp chưa đủ, RECRUIT ép sàn Company |
+| Phạm vi nhìn thấy | mở `/candidates/:id` của công ty khác · id bịa · ứng viên đã xoá mềm · sửa note của người khác | cả bốn trả **404 giống hệt nhau** (sentinel `RECRUIT-ERR-010` — chống dò chéo tenant/oracle) |
+| Export | export vượt trần dòng | `RECRUIT-ERR-015 export-too-large`; CSV không dính formula-injection (đã vá FE-1) |
+
+Bộ test tự động: **327 ca** cụm RECRUIT BE (15 tệp unit + int-spec, cần `LANE_DB`; gồm bất biến DB của
+`S12-RECRUIT-DB-1`) — trong đó **135 ca mới** của `S12-RECRUIT-QA-1` (sàn scope 66 · biên idempotency 6 ·
+error-residue 20 · census mã lỗi/kind 43) — + **108 ca** FE `apps/app/src/routes/recruit` (trong đó 6 ca
+fs-pin FE↔BE mới: parity 4 bảng FSM + census 27 `kind`). Coverage `src/recruit/**`: **93.6 %** statements /
+**82.1 %** branches (lệnh tái lập: `pnpm --filter @mediaos/api test:cov:recruit`). Bằng chứng nghiệm thu:
+[`QA/evidence/S12-RECRUIT-QA-1-ACCEPTANCE.md`](QA/evidence/S12-RECRUIT-QA-1-ACCEPTANCE.md).
+
+---
+
 ## 6. Tham chiếu
 
 - Trạng thái tự sinh: [docs/STATUS.md](STATUS.md) — danh sách WO "Đã xong (v2)".

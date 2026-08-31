@@ -14898,7 +14898,7 @@ export const backlog = [
     title:
       "QA RECRUIT: ma trận allow/deny per-pair TỪNG route · IDOR/cross-tenant 2-tenant thật · FSM chuyển tiếp sai · race double-convert · census mã lỗi theo MÃ · biên idempotency — coverage ≥80% module recruit, chạy như CI trên LANE_DB",
     zone: "yellow",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/recruit/**",
       "apps/api/test/**",
@@ -14921,6 +14921,7 @@ export const backlog = [
     notes: [
       "Fixture giả-secret ghép chuỗi (gitleaks); test int trên LANE_DB cô lập; deny-path đã RED-trước ở BE-1, WO này vét ma trận + biên.",
       "Nhận bàn giao từ FE-1 review gate (31/08): thêm fs-pin chống drift cho FE — (a) 4 bảng FSM trong apps/app/src/routes/recruit/recruit-actions.ts phải khớp apps/api/src/recruit/recruit-fsm.ts (khuôn pair-drift của recruit-wiring.spec.ts); (b) census error-kind FE (recruit-errors.ts) ↔ BE (grep recruitDetails trong apps/api/src/recruit/*.ts) — kind mới của BE rơi về errors.generic là drift câm. Cân nhắc extract PaginationFooter → packages/ui + error-parser/idempotency helper → web-core (3 bản copy assets/rooms/recruit).",
+      "HOÀN THÀNH 31/08/2026 — 135 ca BE mới (sàn scope AUTH-ERR-SCOPE-DENIED 28/32 route: s12-recruit-qa1-permission-matrix 66 ca · biên idempotency 2-tenant 6 ca · error-residue 20 ca gồm 3 kind 0-ca position-invalid/recruiter-invalid/interview-cancelled + sentinel identity + 11 pin nhãn kind · recruit-error-code-census 43 ca 15 mã + 27 kind) + 6 ca fs-pin FE (recruit-fsm-parity 5 · recruit-error-kind-census 1). Cụm RECRUIT BE 15 tệp/327 ca xanh trên mediaos_recruitqa1; FE recruit 6 tệp/108 ca. Coverage src/recruit: 93.6% stmts / 82.1% branch / 95.0% funcs (test:cov:recruit thêm vào apps/api/package.json). 0 bug sản phẩm; 2 điểm xác minh là thiết kế (recruiter-invalid 404 chống oracle · interviews/offers không có deleted_at). GAP REFACTOR (PaginationFooter/ui · error-parser+idempotency/web-core) NGOÀI paths WO — dồn WO sau. PHÁT HIỆN PHỤ: H1 của s12-recruit-db1-invariants (DB-1, đã merge) là assert flaky tiềm ẩn — ghim TÊN index dưới FORCE RLS trong khi expr không leakproof ⇒ planner cost-pick đổi index sau churn dữ liệu; đã vá tại QA-1 (assert không-Seq-Scan + Index Cond company_id, parity expr vẫn đo ở owner). Bằng chứng: docs/QA/evidence/S12-RECRUIT-QA-1-ACCEPTANCE.md.",
     ],
   },
   {
