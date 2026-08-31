@@ -291,6 +291,51 @@ nghiệm thu (ma trận quyền per-pair · đột biến RED-trước-GREEN · 
 
 ---
 
+## 5e. ROOM — Đặt phòng họp (wave S11-OFFICE, nghiệm thu QA 30/08/2026)
+
+Module Phase 3 thứ hai vào tay người dùng: `modules.ROOM.is_active = true` từ migration `0557` (bật cùng
+`S11-ROOM-FE-1`). Nghiệp vụ: [SPEC-14](SPEC/SPEC-14%20ROOM.md) · schema
+[DB-16](DB/DB-16%20ROOM%20Database%20Design.md).
+
+**Quyền cần có để thấy gì:** 5 cặp `(action, resource)` — `access:room` là cổng **nav**, `view:room` là cổng
+**API đọc** và luôn ở phạm vi **Company** (lịch phòng là dữ liệu dùng chung — ai cũng xem được toàn bộ lịch để
+biết phòng bận). `book`/`cancel` ở **Own** cho nhân viên (chỉ đặt/huỷ lượt của mình) và **Company** cho Office
+Admin (đặt hộ · huỷ mọi lượt); `manage:room` chỉ cấp @Company. Role hệ thống `office-admin` giữ đủ 5 cặp.
+
+> ⚠️ **Vận hành trước khi test trên môi trường thật:** phải gán role `office-admin` cho tài khoản quản trị
+> qua màn quản trị role — migration seed **không** tự gán. Chưa gán thì màn «Quản trị phòng» và chức năng
+> đặt hộ vô hình với admin. Cùng họ với nợ `asset-manager` của ASSET — KHÔNG vá bằng blanket grant.
+
+**5 màn:** `ROOM-SCREEN-001` lịch phòng ngày/tuần · `002` form đặt phòng · `003` tìm phòng trống · `004` quản
+trị phòng + tab «Lịch sử sử dụng» · `005` drawer chi tiết lượt đặt.
+
+| Việc | Cách kiểm | Kỳ vọng |
+| --- | --- | --- |
+| Tạo phòng | Office Admin tạo «Mercury» sức chứa 6, thiết bị `TV` → tạo tiếp «mercury» | lần hai `ROOM-ERR-009` (trùng tên không phân biệt hoa/thường); nhân viên thường `POST /rooms` ⇒ **403** |
+| Đặt phòng | A đặt Mercury 09:00–10:30, người tham dự B | `Confirmed`; **A không** nhận thông báo (là actor), **B nhận** `ROOM_BOOKING_CONFIRMED`; B mở «Lịch của tôi» thấy lượt với vai `attendee` |
+| Trùng lịch | C đặt Mercury 09:30–10:30 → rồi đặt 10:30–11:30 | lần đầu `ROOM-ERR-001` kèm khung bận + «Còn trống từ 10:30»; lần sau **thành công** (đầu-đóng-cuối-mở) |
+| Sức chứa & duyệt | đặt 7 người vào phòng 6 chỗ · đặt phòng `requires_approval` · đặt 08:00–17:00 | `ROOM-ERR-007` · `ROOM-ERR-004 approval-not-supported` · `ROOM-ERR-002 too-long` (tối đa 8h) |
+| Huỷ | B (không phải người tổ chức) huỷ lịch của A → A tự huỷ → A huỷ lần 2 | **403** → `Cancelled` + B nhận `ROOM_BOOKING_CANCELLED` → `ROOM-ERR-005 already-cancelled`; Office Admin huỷ lịch bất kỳ ai ⇒ được |
+| Lịch đã kết thúc | mở lượt đã qua giờ | `isCompleted=true`, **không có nút Huỷ** (`canCancel` do server quyết, FE không tự suy); cố huỷ ⇒ `ROOM-ERR-005 already-ended` |
+| Vô hiệu phòng | vô hiệu Mercury khi còn lịch ngày mai → huỷ lịch → vô hiệu lại | `ROOM-ERR-008` kèm `upcomingCount=1` → thành công; Mercury biến khỏi «tìm phòng trống» và form đặt, **vẫn** xem được lịch sử |
+| Nhắc lịch | đặt lịch bắt đầu sau 10′, chờ nhịp job | **đúng một** `ROOM_BOOKING_REMINDER` cho người tổ chức + mỗi người tham dự; nhịp sau không bắn thêm |
+| Phạm vi nhìn thấy | mở `/rooms/:id` của công ty khác · mở id bịa · mở phòng đã xoá mềm | cả ba trả **404 giống hệt nhau** (không phân biệt được — chống dò chéo tenant) |
+| Bấm-đúp nút đặt | bấm nhanh 2 lần | lần 2 báo «đang gửi» (`IN_PROGRESS`), **không** báo «phòng đã bận»; chỉ sinh 1 lượt |
+| Quá nhiều người tham dự | chọn 51 người | **400** `VALIDATION-ERR-001` ở biên (KHÔNG phải 422 — xem đính chính SPEC-14 §12); đúng 50 người ⇒ đặt được |
+
+**Chưa có (không phải bug):** e2e qua UI (đặt → trùng → đổi giờ → huỷ) · **sửa lượt đặt**: v1 không có `PATCH`, muốn đổi giờ/phòng thì
+huỷ rồi đặt lại (SPEC-14 §5.2) · chọn người tham dự đi qua danh bạ HR nên người không có `read:employee` sẽ thấy
+danh sách rỗng (đặt được, nhưng một mình) · giờ hiển thị dùng `DEFAULT_TIMEZONE` vì `/auth/me` chưa trả
+`companies.timezone`.
+
+Bộ test tự động: **213 ca** cụm ROOM (unit + int-spec, cần `LANE_DB`; gồm cả bất biến DB của `S11-ROOM-DB-1`) — trong đó **86 ca mới** của
+`S11-ROOM-QA-1` — + **77 ca** FE `apps/app/src/routes/rooms`. Coverage `src/rooms/**`: **99.1 %** statements /
+**92.1 %** branches (lệnh tái lập: `pnpm --filter @mediaos/api test:cov:room`). Bằng chứng nghiệm thu (ma trận
+quyền per-pair 13 route · đột biến RED-trước-GREEN hai tầng · sentinel 404 · biên idempotency · census 21 `kind`):
+[`QA/evidence/S11-ROOM-QA-1-ACCEPTANCE.md`](QA/evidence/S11-ROOM-QA-1-ACCEPTANCE.md).
+
+---
+
 ## 5f. DASH — 2 widget wave OFFICE (S11-OFFICE-DASH-1, 30/08/2026)
 
 Dashboard nay có thêm «Lịch họp hôm nay» (`ROOM_TODAY`) và «Thống kê tài sản» (`ASSET_SUMMARY`). Cả hai

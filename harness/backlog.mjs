@@ -14654,6 +14654,14 @@ export const backlog = [
       "Ma trận allow/deny từng cặp quyền §9e + cross-tenant 2-tenant thật; job nhắc lịch có test dedupe (chạy 2 lần không bắn 2 NOTI)",
       "Coverage rooms/ ≥80%; bash harness/check.sh --lane-db xanh không kèm banner; docs/TESTABLE-FEATURES.md cập nhật mục ROOM",
     ],
+    notes: [
+      "🟡 zone yellow — LIGHT gate + security-reviewer (diễn giải quyền). KHÔNG migration; chạy trên lane DB `mediaos_roomqa` (`bash scripts/lane-db-setup.sh roomqa --reset`).",
+      "✅ ĐÃ XONG (30/08): 86 ca mới — `s11-room-qa1-permission-matrix` (30) · `s11-room-qa1-error-residue` (19) · `s11-room-qa1-idempotency-scope` (5) · `test/foundation/room-error-code-census.unit-spec` (32). Cụm ROOM 213 ca/11 file xanh; coverage `src/rooms/**` 99.1% stmt / 92.1% branch (lệnh mới `pnpm --filter @mediaos/api test:cov:room`). Bằng chứng: `docs/QA/evidence/S11-ROOM-QA-1-ACCEPTANCE.md`.",
+      "🔎 PHÁT HIỆN 1 — ROOM gác cặp ở HAI TẦNG và đối chiếu BẰNG TẬP là KHÔNG ĐỦ. Đột biến có kiểm soát: (a) đổi decorator `GET /rooms/:id/bookings` view→manage ⇒ 28/30 ca A/B/D VẪN XANH, chỉ census ĐỎ; (b) đổi RIÊNG tầng service (`bookingsOfRoom` → `resolveManageActor`) ⇒ 29/30 XANH, chỉ ca census 'ba chặng' ĐỎ. 4 resolver phủ đúng 4 cặp nên census kiểu ASSET (so tập) luôn khớp ⇒ phải so TỪNG ROUTE qua chuỗi route→method service→resolve*Actor→cặp.",
+      "🔎 PHÁT HIỆN 2 — `too-many-attendees` là MÃ CHẾT trên đường HTTP: Zod `.max(50)` ở contracts và `> 50` ở service BẰNG NHAU, controller là caller duy nhất ⇒ trên dây luôn là 400 VALIDATION-ERR-001, KHÔNG phải 422 ROOM-ERR-006 như SPEC-14 §12 ghi. ĐÃ ĐÍNH CHÍNH SPEC-14 §12 cùng PR; giữ nguyên CẢ HAI tầng (biên chặn payload khổng lồ; service là tầng hai cho caller không qua pipe); census xếp kind vào `BOUNDARY_ONLY`.",
+      "🔎 PHÁT HIỆN 3 — coverage 99.1% vẫn sót 7 `kind` không ai neo (`organizer-not-found` · `organizer-inactive` · nửa `range-too-wide` (`to ≤ from`) · `overlap` · `over-capacity` · `room-has-upcoming` · `too-many-attendees`). ROOM gộp nhiều luật vào một mã (ERR-002 có 6 kind, ERR-006 có 4) ⇒ census phải theo **kind**, không theo mã — mức tiếp theo của `coverage-high-but-error-code-untested`.",
+      "⚠️ NỢ (ngoài phạm vi, đã báo): e2e qua UI đặt→trùng→đổi giờ→huỷ (§20 mục 9) CHƯA làm — cần môi trường seed phòng thật; đề xuất gộp vào WO e2e chung của wave. Widget DASH «lịch họp hôm nay» thuộc `S11-OFFICE-DASH-1`. Role `office-admin` vẫn chưa gán cho admin thật (cùng họ nợ `asset-manager`) — KHÔNG vá bằng blanket grant.",
+    ],
   },
   {
     id: "S11-OFFICE-DASH-1",
