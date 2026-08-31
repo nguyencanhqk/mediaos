@@ -201,7 +201,14 @@ export class InterviewsService {
       } catch (err) {
         throw mapRecruitPgError(err) ?? err;
       }
-      if (!row) throw recruitNotFound();
+      // Pre-check đã thấy hàng + Scheduled ⇒ 0 hàng ở đây = thua race đổi trạng thái (FULL gate F1).
+      if (!row) {
+        throw recruitConflict(
+          "INTERVIEW_TRANSITION",
+          RECRUIT_ERR.INTERVIEW_NOT_SCHEDULED,
+          recruitDetails("not-scheduled"),
+        );
+      }
       await this.audit.record(tx, {
         action: "update",
         objectType: "interview",
@@ -222,8 +229,25 @@ export class InterviewsService {
       const before = await this.repo.findScopedTx(tx, user.companyId, id, null);
       if (!before) throw recruitNotFound();
       assertInterviewTransition(before.status, dto.toStatus);
-      const row = await this.repo.setStatusTx(tx, user.companyId, id, dto.toStatus, user.id);
-      if (!row) throw recruitNotFound();
+      const row = await this.repo.setStatusTx(
+        tx,
+        user.companyId,
+        id,
+        before.status,
+        dto.toStatus,
+        user.id,
+      );
+      // 0 hàng = thua race đổi trạng thái (FULL gate F1) ⇒ CÙNG 409 004 như FSM, không im lặng.
+      if (!row) {
+        throw recruitConflict(
+          "INTERVIEW_TRANSITION",
+          RECRUIT_ERR.INTERVIEW_TRANSITION(before.status, dto.toStatus),
+          recruitDetails("invalid-interview-transition", {
+            from: before.status,
+            to: dto.toStatus,
+          }),
+        );
+      }
       await this.audit.record(tx, {
         action: "change-status",
         objectType: "interview",

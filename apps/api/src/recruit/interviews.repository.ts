@@ -156,6 +156,8 @@ export class InterviewsRepository {
     return row;
   }
 
+  /** Sửa nội dung — khoá lạc quan `status='Scheduled'` NGAY TRONG WHERE (FULL gate F1: mirror
+   * offers.updateDraftTx — pre-check ở service không chặn được race giữa SELECT và UPDATE). */
   async updateTx(
     tx: TenantTx,
     companyId: string,
@@ -166,22 +168,37 @@ export class InterviewsRepository {
     const [row] = await tx
       .update(interviews)
       .set({ ...patch, updatedAt: sql`now()`, updatedBy: actorUserId })
-      .where(and(eq(interviews.companyId, companyId), eq(interviews.id, id)))
+      .where(
+        and(
+          eq(interviews.companyId, companyId),
+          eq(interviews.id, id),
+          eq(interviews.status, "Scheduled"),
+        ),
+      )
       .returning();
     return row ?? null;
   }
 
+  /** Đổi trạng thái — khoá lạc quan `status=fromStatus` (FULL gate F1: mirror offers.setStatusTx;
+   * 0 hàng = thua race ⇒ service map 409 004, audit không ghi before cũ sai). */
   async setStatusTx(
     tx: TenantTx,
     companyId: string,
     id: string,
+    fromStatus: InterviewStatus,
     status: InterviewStatus,
     actorUserId: string,
   ): Promise<Interview | null> {
     const [row] = await tx
       .update(interviews)
       .set({ status, updatedAt: sql`now()`, updatedBy: actorUserId })
-      .where(and(eq(interviews.companyId, companyId), eq(interviews.id, id)))
+      .where(
+        and(
+          eq(interviews.companyId, companyId),
+          eq(interviews.id, id),
+          eq(interviews.status, fromStatus),
+        ),
+      )
       .returning();
     return row ?? null;
   }
