@@ -104,6 +104,9 @@ export const notificationTypeEnumSchema = z.enum([
   "Chat",
   "Asset",
   "Room",
+  // S12-RECRUIT-DB-1 (mig 0561) — cùng lý do: 'Recruit' nới ở CẢ chk_notification_events_type lẫn
+  // chk_notifications_notification_type; enum này là vế TS của cùng tập giá trị.
+  "Recruit",
 ]);
 export type NotificationTypeEnum = z.infer<typeof notificationTypeEnumSchema>;
 

@@ -178,3 +178,7 @@ export * from "./me-training";
 // S5-BE-CONTRACT-1 (additive): hằng số idempotency dùng chung api ↔ web (tên header + mã lỗi).
 // Tên export riêng (IDEMPOTENCY_*) KHÔNG trùng barrel hiện có.
 export * from "./idempotency";
+// S12-RECRUIT-DB-1 (SPEC-12 · DB-14 §7): enum/hằng RECRUIT mirror CHECK 0559 hai chiều + chuẩn hoá
+// check-duplicate khớp index biểu-thức. DTO request/response viết ở S12-RECRUIT-BE-1 theo API-17.
+// Tên export riêng (recruit*/Recruit*/RECRUIT_*) không đụng barrel park media.
+export * from "./recruit";

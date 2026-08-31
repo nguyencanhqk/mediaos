@@ -651,8 +651,21 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
 export const BLIND_SPOT_PINS = {
   /** `.select()` trần trên bảng `users` — đo 2026-08-19. */
   bareSelect: 6,
-  /** Template `sql` ghép `email`/`full_name` bằng chuỗi thô — đo 2026-08-19. */
-  rawSqlIdentity: 13,
+  /**
+   * Template `sql` ghép `email`/`full_name` bằng chuỗi thô — đo 2026-08-19 (13).
+   *
+   * 13 → 15 (S12-RECRUIT-DB-1, 31/08/2026): **PARITY DDL, không phải điểm chiếu danh tính.** Hai template
+   * mới nằm ở `db/schema/recruit.ts` và cùng mô tả ĐÚNG MỘT index biểu-thức của migration `0559`:
+   * `sql`lower(email)`` (biểu thức index) + `sql`email IS NOT NULL`` (predicate partial). Cột là
+   * `candidates.email` — PII **ứng viên**, KHÔNG phải `users.email`; không có `.select()`/JOIN nào ở đây,
+   * schema file không đọc dữ liệu. Không nới được bằng cách khác: index check-duplicate PHẢI khớp TỪNG KÝ
+   * TỰ với biểu thức service (`pg-planner-index-assert-trap`), nên tên cột buộc xuất hiện trong template;
+   * `sql`${t.email} IS NOT NULL`` cũng bị đếm (regex `\bemail\b` khớp cả `t.email`).
+   * Tiền lệ ngược: `S11-ASSET-BE-1` cố ý dùng drizzle thay raw SQL để KHÔNG nới bộ đếm này — ở đó có
+   * đường tránh (repository đọc `users.full_name`), ở đây thì không. Nới CÓ CHỦ ĐÍCH, qua FULL gate.
+   * Bề mặt đọc `candidates.email` vẫn gác riêng: mask ở server theo `('update','candidate')` (SPEC-12 §18).
+   */
+  rawSqlIdentity: 15,
   /** Ép kiểu TƯỜNG MINH sang `IdentityGrant` ngoài điểm đúc — phải LUÔN bằng 0. */
   asIdentityGrant: 0,
   /** File export `alias(users,…)` — mỗi cái là một đường mà scanner một-file không lần được (F12). */

@@ -90,10 +90,12 @@ describe.skipIf(!runIsolatedDb)(
       // là TAUTOLOGY, giết luôn pin (lớp `canonical-seed-pin-regression`). Thêm/bớt event ⇒ BUMP SỐ.
       // 59/45 (mig 0529 · S5-LMS-NOTI-1) → 61/47 (mig 0538 · S7-CHAT-DB-1: +CHAT_MENTIONED,
       // +CHAT_DIRECT_MESSAGE) → 64/50 (mig 0551 · S11-ASSET-DB-1: +ASSET_ASSIGNED, +ASSET_REVOKED,
-      // +ASSET_MAINTENANCE_DUE, cả ba isEnabled=true).
-      it("pin: registry có đúng 67 mã (53 enabled + 14 disabled) — sau mig 0555 (S11-ROOM-DB-1)", () => {
-        expect(NOTI_EVENT_COUNT).toBe(67);
-        expect(NOTI_ENABLED_EVENT_COUNT).toBe(53);
+      // +ASSET_MAINTENANCE_DUE, cả ba isEnabled=true) → 67/53 (mig 0555 · S11-ROOM-DB-1: +3 ROOM) →
+      // 71/57 (mig 0561 · S12-RECRUIT-DB-1: +RECRUIT_JOB_ASSIGNED, +RECRUIT_INTERVIEW_SCHEDULED,
+      // +RECRUIT_STAGE_CHANGED, +RECRUIT_CANDIDATE_HIRED — cả bốn isEnabled=true).
+      it("pin: registry có đúng 71 mã (57 enabled + 14 disabled) — sau mig 0561 (S12-RECRUIT-DB-1)", () => {
+        expect(NOTI_EVENT_COUNT).toBe(71);
+        expect(NOTI_ENABLED_EVENT_COUNT).toBe(57);
       });
 
       it("tập event_code (company_id IS NULL) == registry — KHÔNG mã lạ, KHÔNG thiếu", async () => {

@@ -14767,7 +14767,7 @@ export const backlog = [
     title:
       "Schema + migration RECRUIT theo DB-14: job_openings · candidates · candidate_stage_events (append-only) · candidate_notes · interviews (+participants) · interview_feedbacks · offers — RLS+FORCE, composite tenant FK, seed role recruiter + permission §9f + NOTI catalog (CẢ HAI bảng)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
@@ -14804,6 +14804,7 @@ export const backlog = [
       "🔴 FULL gate + Opus (crown: permission seed + RLS + append-only). Lane migration NỐI TIẾP duy nhất của wave.",
       "KHÔNG bật modules.is_active (việc của S12-RECRUIT-FE-1, khuôn 0556); guard trong migration KHÔNG assert trạng thái module khác (bài học wiring-spec ASSET↔ROOM) và guard verify hàng RECRUIT phải forward-compatible (không RAISE khi is_active=true — DB-14 §9B).",
       "Số liệu thật từ DOC-1 (plan-reviewer PASS 31/08): 8 bảng · 16 cặp (7 candidate is_sensitive=TRUE) · 42 grant (§9f: employee 0 · manager 3 · hr 7 · company-admin 16 · recruiter 16) · UNION-ADD 4 audit object_type (job_opening/candidate/interview/offer — bản đồ ĐÓNG ở SPEC-12 §12) · 4 event NOTI DedupeKey · mig dự kiến 0559 DDL / 0560 seed / 0561 NOTI (đọc journal thật; head lúc viết 0558). candidate_stage_events = SELECT+INSERT duy nhất; interview_participants chỉ INSERT; index check-duplicate theo BIỂU THỨC không partial deleted_at (DB-14 §6.2, DoD EXPLAIN trên LANE_DB).",
+      "✅ HOÀN THÀNH 31/08/2026 — mig 0559 (DDL 8 bảng · RLS+FORCE · 27 composite FK · 4 unique + 11 index · GRANT allowlist) · 0560 (role `recruiter` …0014 · 16 cặp/7 sensitive · 42 grant §9f · UNION-ADD 4 audit object_type) · 0561 (4 CHECK NOTI trên CẢ HAI bảng · 4 event DedupeKey · 4 template). Journal idx 226–228. Số chốt THẬT (đo trên lane `mediaos_recruitdb1`, PG16, migrate sạch 0000→0561): 8 bảng · 27 composite FK · 42 grant · 16 cặp · 4 event · 57 template global (53+4). Cùng commit: schema/recruit.ts + barrel · AUDIT_OBJECT_TYPES +4 · noti catalog (NotiModuleCode/NotiType + 4 entry, pin 67/53→71/57) · contracts recruit.ts + recruit.spec.ts + notification.ts (`Recruit`) · cleanupTenants 8 bảng con→cha · rls-registry 8 case · s12-recruit-db1-invariants.int-spec.ts (29 ca, gồm EXPLAIN chứng minh 2 index biểu-thức) · pin s5-noti-fix1-deeplink 53→57. Ghi nhận thi công (không đổi thiết kế): predicate `uq_offers_candidate_open` deparse THẬT trên PG16 là `((status)::text = ANY ((ARRAY['Draft'::character varying, 'Sent'::character varying])::text[]))`, KHÔNG phải dạng OR — verify (5) của 0559 so đúng chuỗi ĐO ĐƯỢC (khuôn 0549 dùng chuỗi exact, đoán dạng OR là đỏ oan). KHÔNG bật modules.RECRUIT (giữ pin EXTENSION_INACTIVE_MODULES) · KHÔNG seed widget DASH (S12-RECRUIT-DASH-1) · KHÔNG hạ FK_SINGLE_COL_PAIRS_FLOOR (8 bảng mới là composite THUẦN, 0 FK một-cột ngoài company_id).",
     ],
   },
   {

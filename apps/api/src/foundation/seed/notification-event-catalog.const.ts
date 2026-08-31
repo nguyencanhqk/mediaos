@@ -13,7 +13,7 @@
  *   event_code VERBATIM: TASK_MENTIONED + TASK_COMMENT_CREATED (KHÔNG TASK_COMMENT_MENTIONED).
  */
 
-/** module_code hợp lệ (CHECK chk_notification_events_module_code — 0479 + 'GOAL' 0507 + 'LMS' 0529 + 'CHAT' 0538 + 'ASSET' 0551 + 'ROOM' 0555). */
+/** module_code hợp lệ (CHECK chk_notification_events_module_code — 0479 + 'GOAL' 0507 + 'LMS' 0529 + 'CHAT' 0538 + 'ASSET' 0551 + 'ROOM' 0555 + 'RECRUIT' 0561). */
 export type NotiModuleCode =
   | "AUTH"
   | "HR"
@@ -27,9 +27,10 @@ export type NotiModuleCode =
   | "LMS"
   | "CHAT"
   | "ASSET"
-  | "ROOM";
+  | "ROOM"
+  | "RECRUIT";
 
-/** notification_type hợp lệ (CHECK chk_notification_events_type — 0479 + 'Goal' 0507 + 'Training' 0529 + 'Chat' 0538 + 'Asset' 0551 + 'Room' 0555). */
+/** notification_type hợp lệ (CHECK chk_notification_events_type — 0479 + 'Goal' 0507 + 'Training' 0529 + 'Chat' 0538 + 'Asset' 0551 + 'Room' 0555 + 'Recruit' 0561). */
 export type NotiType =
   | "System"
   | "Account"
@@ -46,7 +47,8 @@ export type NotiType =
   | "Training"
   | "Chat"
   | "Asset"
-  | "Room";
+  | "Room"
+  | "Recruit";
 
 /** default_priority hợp lệ (CHECK chk_notification_events_priority — 0479). */
 export type NotiPriority = "Low" | "Normal" | "High" | "Urgent" | "Critical";
@@ -152,6 +154,19 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
   { module: "ROOM", eventCode: "ROOM_BOOKING_CONFIRMED", type: "Room", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "ROOM", eventCode: "ROOM_BOOKING_CANCELLED", type: "Room", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "ROOM", eventCode: "ROOM_BOOKING_REMINDER", type: "Room", priority: "High", isEnabled: true, isSystemEvent: true }, // prettier-ignore
+  // ===== RECRUIT (SPEC-12 §17 · NOTI-EVENT-016..019 · mig 0561 · S12-RECRUIT-DB-1) =====
+  // Cả 4 dedupe_strategy='DedupeKey' (catalog thắng DEFAULT_DEDUPE — KHÔNG thêm entry notification-dedupe.const.ts):
+  //   016 'RECRUIT_JOB_ASSIGNED:{jobOpeningId}:{auditLogId}' — mỗi LẦN gán là một sự kiện. Khoá {jobId}:{userId}
+  //       là "once-ever": A→B→A thì A không bao giờ được báo lại (engine DedupeKey KHÔNG có bucket thời gian).
+  //   017 'RECRUIT_INTERVIEW_SCHEDULED:{interviewId}' · 018 'RECRUIT_STAGE_CHANGED:{stageEventId}' ·
+  //   019 'RECRUIT_CANDIDATE_HIRED:{candidateId}'.
+  //   019 người nhận resolve theo ROLE `hr` (user_roles còn hiệu lực, mode 'UserIds') — KHÔNG gửi `hr-manager`:
+  //   role đó không có grant RECRUIT ở v1, nhận link là đâm vào 403 (SPEC-12 §17).
+  //   Payload CHỈ tên ứng viên + tên vị trí + stage/giờ hẹn + link — KHÔNG email/phone/lương (bất biến #3).
+  { module: "RECRUIT", eventCode: "RECRUIT_JOB_ASSIGNED", type: "Recruit", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "RECRUIT", eventCode: "RECRUIT_INTERVIEW_SCHEDULED", type: "Recruit", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "RECRUIT", eventCode: "RECRUIT_STAGE_CHANGED", type: "Recruit", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "RECRUIT", eventCode: "RECRUIT_CANDIDATE_HIRED", type: "Recruit", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   // ===== Phần dư SPEC-08 §15 (ngoài MVP) — isEnabled = false, GIỮ trong catalog (14 mã) =====
   { module: "AUTH", eventCode: "AUTH_PASSWORD_CHANGED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
   { module: "AUTH", eventCode: "AUTH_USER_UNLOCKED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
@@ -171,14 +186,14 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
 ] as const;
 
 /** Tổng số event UNION (pin để test bắt thiếu/thừa mã). */
-export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 67 (59 + 2 CHAT mig 0538 + 3 ASSET mig 0551 + 3 ROOM mig 0555)
+export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 71 (59 + 2 CHAT mig 0538 + 3 ASSET mig 0551 + 3 ROOM mig 0555 + 4 RECRUIT mig 0561)
 
 /** Danh mục event ENABLED (MVP set DB-07 §14.1) — mỗi mã PHẢI có đúng 1 template IN_APP/vi-VN. */
 export const NOTI_ENABLED_EVENTS: readonly NotiEventCatalogEntry[] = NOTI_EVENT_CATALOG.filter(
   (e) => e.isEnabled,
 );
 
-export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 53 (45 + 2 CHAT mig 0538 + 3 ASSET mig 0551 + 3 ROOM mig 0555)
+export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 57 (45 + 2 CHAT mig 0538 + 3 ASSET mig 0551 + 3 ROOM mig 0555 + 4 RECRUIT mig 0561)
 
 /**
  * S5-LMS-NOTI-1 — ALLOWLIST eventCode mà token máy LMS (`LMS_NOTI_TOKEN`) được phép đẩy vào intake.

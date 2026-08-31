@@ -115,3 +115,9 @@ export * from "./task-templates";
 // asset_inventory_items (app SELECT,INSERT + UPDATE CẤP CỘT, KHÔNG DELETE, KHÔNG deleted_at). company_id NOT NULL,
 // RLS+FORCE literal-GUC, MỌI FK chéo là composite tenant FK (chỉ ở SQL). Quyền §9d seed 0550; NOTI 0551.
 export * from "./assets";
+// S12-RECRUIT-DB-1 (DB-14 §6 / SPEC-12, mig 0559·0560·0561): job_openings + candidates + candidate_notes +
+// interviews (mutable — app SELECT,INSERT,UPDATE, KHÔNG DELETE) + candidate_stage_events (SỔ APPEND-ONLY
+// TUYỆT ĐỐI: SELECT,INSERT — 0 UPDATE/DELETE) + interview_participants (chỉ SELECT,INSERT) +
+// interview_feedbacks/offers (SELECT,INSERT + UPDATE CẤP CỘT). company_id NOT NULL, RLS+FORCE literal-GUC,
+// MỌI FK chéo là composite tenant FK (chỉ ở SQL). Quyền §9f + role `recruiter` seed 0560; NOTI 0561.
+export * from "./recruit";
