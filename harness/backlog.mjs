@@ -34,7 +34,8 @@
 //                 hậu-MVP:  ME·GOAL·LMS·BRAND·CHAT·SOCIAL·ASSET·ROOM·RECRUIT  (mỗi mã có epic riêng — IMPLEMENTATION-02 §8.13–8.20;
 //                           SOCIAL thêm 06/08/2026 cho app vệ tinh fbpost — docs/plans/S9-SOCIAL-WAVE.md;
 //                           ASSET·ROOM thêm 28/08/2026 cho wave S11-OFFICE — docs/plans/S11-OFFICE-WAVE.md;
-//                           RECRUIT thêm 31/08/2026 cho wave S12-RECRUIT — docs/plans/S12-RECRUIT-WAVE.md)
+//                           RECRUIT thêm 31/08/2026 cho wave S12-RECRUIT — docs/plans/S12-RECRUIT-WAVE.md;
+//                           PAYROLL thêm 31/08/2026 cho wave S13-PAYROLL — docs/plans/S13-PAYROLL-WAVE.md)
 //                 ĐÃ BỎ (2026-08-03, đừng dùng lại): INT→INTEGRATION · FND→FOUNDATION · SYSTEM→BRAND
 //   layer       : mã layer ISSUE-BOARD-01 §8.3 (DOC·DB·API·BE·FE·UI·QA·DEVOPS·SEC·PERF·INT·REL)                                       — dashboard chip lớp. Thiếu → suy từ paths/title.
 //   title       : một câu mô tả                                                   — string, bắt buộc
@@ -14861,7 +14862,7 @@ export const backlog = [
     title:
       "FE RECRUIT (apps/app routes/recruit/): 6 màn REC-SCREEN-001..006 — danh sách vị trí · kanban pipeline · chi tiết ứng viên (mask) · form + cảnh báo trùng + CV · lịch phỏng vấn/feedback · offer & convert; bật module RECRUIT (mig khuôn 0556)",
     zone: "yellow",
-    status: "in_progress",
+    status: "done", // PR #450 merged 2026-08-31 — 6 màn + mig 0562 enable RECRUIT
     paths: [
       "apps/app/src/routes/recruit/**",
       "apps/app/src/**",
@@ -14898,7 +14899,7 @@ export const backlog = [
     title:
       "QA RECRUIT: ma trận allow/deny per-pair TỪNG route · IDOR/cross-tenant 2-tenant thật · FSM chuyển tiếp sai · race double-convert · census mã lỗi theo MÃ · biên idempotency — coverage ≥80% module recruit, chạy như CI trên LANE_DB",
     zone: "yellow",
-    status: "in_progress",
+    status: "done", // PR #451 merged 2026-08-31 — 141 ca mới, coverage 93.6%
     paths: [
       "apps/api/src/recruit/**",
       "apps/api/test/**",
@@ -14931,7 +14932,7 @@ export const backlog = [
     title:
       "Widget DASH «phễu tuyển dụng» (RECRUIT-WIDGET-001): ứng viên theo stage + vị trí đang mở — catalog BE + SÀN SCOPE + wire slug FE DashboardWidgetGrid + test slug-map, đăng ký mã theo SPEC-01 §9.9",
     zone: "green",
-    status: "todo",
+    status: "done", // PR #452 merged 2026-08-31 — mig 0563, đóng wave S12-RECRUIT 6/6
     paths: [
       "apps/api/src/dashboard/**",
       "apps/api/migrations/**",
@@ -14953,6 +14954,291 @@ export const backlog = [
     ],
     notes: [
       "🟢 LIGHT gate. Đóng wave S12-RECRUIT — sau WO này regen STATUS + cập nhật memory wave.",
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Wave S13-PAYROLL — Phase 2 «HR nâng cao»: PAYROLL (tiền lương)
+  // Owner ĐÃ DUYỆT 31/08/2026 nguyên gói hồ sơ docs/plans/S13-PAYROLL-WAVE-review.html
+  // (10/10 PAY-DEC chốt theo cột Đề xuất — docs/plans/S13-PAYROLL-WAVE.md §3).
+  // RECONCILE-FIRST: 6 bảng payroll G12 (mig 0091–0131) ĐÃ TỒN TẠI với RLS+FORCE nhưng
+  // 0 route/0 module NestJS — KHÔNG phải greenfield; band di sản 0091–0180 bất khả xâm phạm.
+  // Track nối tiếp: DOC → DB 🔴 → BE-1 🔴 → BE-2 🔴 → FE → QA 🟡 → DASH (BE tách đôi vì
+  // máy tính lương + FSM duyệt + phát hành là cụm crown đặc quánh).
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "S13-PAYROLL-DOC-1",
+    module: "PAYROLL",
+    layer: "DOC",
+    title:
+      "Bộ tài liệu PAYROLL: SPEC-11 + DB-13 (kèm bản đồ reconcile 6 bảng G12) + API-18 + permission-matrix §9g + hợp thức trạng thái SPEC-01 §17.15–17.17 + EPIC-20 (§8.21) + vá SPEC-01 §30 (thiếu HR→PAYROLL, LEAVE→PAYROLL) + đồng bộ README/DB-01·09·10/erd-current (payroll rời §A5)/RELEASE-14 (PARK-PAYROLL-001) — 10 PAY-DEC đã ký 31/08, chỉ chép kết luận",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "docs/SPEC/**",
+      "docs/DB/**",
+      "docs/API Design/**",
+      "docs/permission-matrix-spec.md",
+      "docs/README.md",
+      "docs/erd-current.md",
+      "docs/RELEASE/RELEASE-14_Post_Go_Live_Backlog.md",
+      "docs/IMPLEMENTATION/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+      "harness/lib/stories.mjs",
+      "harness/dashboard/server.mjs",
+    ],
+    skills: [],
+    depends_on: [],
+    plan: "docs/plans/S13-PAYROLL-WAVE.md",
+    src: [
+      "owner-request 2026-08-31 — duyệt nguyên gói hồ sơ HTML wave S13-PAYROLL (10/10 PAY-DEC theo Đề xuất)",
+      "SPEC-01 §12.8 (phạm vi) · §10.6 (Payroll Officer) · §7.2 (số SPEC-11 đã khoá) · §29 câu #9/#14/#15 (chốt tại PAY-DEC-006/008)",
+      "IMPLEMENTATION-10 §10.1 (P2-PAY-01..10 + AC) · §13.2 (DB-13 giữ chỗ) — P2-PAY-10 KHÔNG có story chi tiết, viết mới ở EPIC-20",
+      "DECISIONS-01 Phương án B (quyền lương tách riêng, Block-code) — nguồn PAY-DEC-006",
+      "docs/plans/S13-PAYROLL-WAVE.md §3 (PAY-DEC-001..010) + §4 story PL-01..10",
+    ],
+    done_when: [
+      "Ghi kết luận 10 PAY-DEC vào SPEC-11 bảng quyết định (khuôn SPEC-12/15); SPEC-11 flip Draft → Approved",
+      "SPEC-11 + DB-13 + API-18 tồn tại, trỏ chéo đúng, không mâu thuẫn; DB-13 có BẢN ĐỒ RECONCILE từng bảng G12 (salary_profiles·payroll_periods·payslips·payslip_items·bonus_penalties·payslip_acknowledgements): giữ khung — cột/CHECK lệch thiết kế → GỠ theo DB-13, không nối dây",
+      "permission-matrix §9g khớp API-18: cặp payroll is_sensitive=true (trừ cấu hình kỳ), grant payroll-officer/company-admin theo PAY-DEC-006/007 (four-eyes: officer KHÔNG approve), hr-manager 0 cặp payroll (THU HỒI di sản 0092/0097 ghi rõ), employee giữ view-own-payslip (0180)",
+      "SPEC-01 §17.15–17.17 hợp thức 3 bộ trạng thái (payroll_period 7 trạng thái P2-PAY-03-002 · payslip Generated→Published→Acknowledged · bonus_penalty Pending→Approved/Rejected); §12.8 trỏ SPEC-11; §30 bổ sung HR→PAYROLL + LEAVE→PAYROLL; SPEC-01 §20.2/SPEC-08 cấp dải NOTI-EVENT mới (đo dải trước — 019 là mã cuối lúc seed, KHÔNG hard-code)",
+      "README §8 thêm dòng PAYROLL; DB-01 + DB-09 (index) + DB-10 (seed — role payroll-officer …0015 requires_two_factor=true theo PAY-DEC-009) + erd-current (payroll RỜI §A5) + RELEASE-14 §5 (PARK-PAYROLL-001: engine BHXH/BHYT/TNCN + PDF payslip + variance report) đồng bộ; IMPLEMENTATION-02 thêm EPIC-20 §8.21 (PL-01..10 + AC + point, IMP02-STORY-181+, Sprint 13)",
+      "harness/lib/stories.mjs (EPIC_MODULE + sprintOfStory) và harness/dashboard/server.mjs (MODULE_SPEC) nhận PAYROLL — WO không rơi vào rổ phẳng",
+      "plan-reviewer đối kháng PASS trên SPEC-11 + DB-13 trước khi mở S13-PAYROLL-DB-1",
+    ],
+    notes: [
+      "✅ OWNER ĐÃ DUYỆT 2026-08-31 nguyên gói hồ sơ docs/plans/S13-PAYROLL-WAVE-review.html — PAY-DEC-001..010 chốt ĐÚNG cột Đề xuất ở wave plan §3. WO này chỉ GHI kết luận vào SPEC-11 rồi viết bộ tài liệu — không hỏi lại owner.",
+      "🟢 LIGHT gate (docs-only). Số hiệu đã chốt PAY-DEC-001: SPEC-11 · DB-13 (đúng chỗ IMP-10 §13.2 giữ) · API-18 (API-13 vốn định cho PAYROLL đã bị CHAT chiếm, 14..17 đã dùng) · §9g · EPIC-20 §8.21 · §17.15–17.17 · NOTI-EVENT-020..023 · mig 0564+ · Sprint 13.",
+      "RECONCILE-FIRST (khác S12): 6 bảng G12 đã build (RLS+FORCE đủ, payslips append-only SELECT+INSERT đúng khuôn) nhưng 0 route; permission di sản 0092/0097 grant TAY company-admin+hr-manager MÂU THUẪN Phương án B; masking lương HR đang SỐNG (hr-read.service reveal+audit); attendance_periods (open/locked) + leave_types.paid + companies.payroll_config_json (cutoffDay 25/payDay 5) có sẵn; KHÔNG có bảng tổng hợp công — nguồn công là raw attendance_records; modules.PAYROLL pre-seed inactive từ 0435 (sort 8).",
+      "Phạm vi v1 chốt: VND duy nhất · numeric(18,2) tính ở SQL · KHÔNG engine BHXH/BHYT/BHTN/TNCN (khấu trừ %/nhập tay — PARK-PAYROLL-001) · 1 cấp duyệt · XLSX export (PDF Phase sau) · gross = base pro-rate + phụ cấp + thưởng − phạt; khấu trừ = không lương + trễ/sớm (nếu bật rule ATT) + dòng tay.",
+    ],
+  },
+  {
+    id: "S13-PAYROLL-DB-1",
+    module: "PAYROLL",
+    layer: "DB",
+    title:
+      "Schema + migration PAYROLL theo DB-13 (mig 0564+): ĐO dữ liệu PROD 6 bảng G12 trước → ALTER reconcile (giữ khuôn append-only payslips) + composite tenant-FK band cũ + CHECK FSM + THU HỒI grant payroll di sản hr-manager + seed §9g + role payroll-officer …0015 (2FA) + NOTI catalog CẢ HAI bảng + contracts Zod mirror HIỆN TRẠNG",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "apps/api/src/foundation/seed/**",
+      "apps/api/test/foundation/**",
+      "apps/api/test/integration/**",
+      "apps/api/test/helpers/seed.ts",
+      "packages/contracts/src/payroll*.ts",
+      "packages/contracts/src/notification.ts",
+      "packages/contracts/src/index.ts",
+      "docs/erd-current.md",
+      "docs/DB/DB-13*.md",
+      "docs/DB/DB-10*.md",
+      "docs/SPEC/SPEC-11*.md",
+      "docs/plans/S13-PAYROLL-DB-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S13-PAYROLL-DOC-1"],
+    plan: "docs/plans/S13-PAYROLL-DB-1.md",
+    src: [
+      "DB-13 (viết ở S13-PAYROLL-DOC-1) — nguồn sự thật schema + bản đồ reconcile",
+      "PAY-DEC-002 (giữ khung 6 bảng, không drop-rebuild) · 003 (salary_profiles nguồn duy nhất) · 005 (FSM 7 trạng thái + CHECK) · 006 (thu hồi grant hr-manager) · 009 (role …0015 2FA) — wave plan §3",
+      "Khuôn: 0559..0561 (RECRUIT DDL/seed/NOTI) · 0535 (composite tenant-FK) · 0548 (bonus_penalties_reference_check hiện trạng) · quy ước journal idx = max+1 (ghi trong 0180)",
+    ],
+    done_when: [
+      "ĐO trước khi ALTER: SELECT count 6 bảng trên DB đích (dự kiến 0 hàng — nhưng đo, không đoán) + đọc pg_catalog grant HIỆN TRẠNG trước khi viết REVOKE/GRANT (GRANT trong migration cũ ≠ hiện trạng); band 0091–0180 KHÔNG sửa file — mọi thay đổi bằng migration MỚI 0564+, journal idx = max+1 KHÔNG suy từ tên file",
+      "Reconcile theo DB-13: giữ khuôn append-only payslips/payslip_items (SELECT+INSERT — không «chuẩn hoá» thành S/I/U); bổ sung composite tenant-FK còn thiếu của band G12; CHECK FSM payroll_periods theo §17.15; cột duyệt/khoá/lý-do-reopen; CHECK effective-range salary_profiles",
+      "THU HỒI grant payroll di sản của hr-manager (0092/0097) bằng migration mới — cẩn thận REVOKE bảng xoá column-GRANT; giữ nguyên view-salary:employee hiện hành của HR (khác domain) + view-own-payslip của employee (0180)",
+      "Seed: role hệ thống payroll-officer (…0015 · company_id NULL · is_system=true · requires_two_factor=TRUE tường minh — PAY-DEC-009, KHÔNG canonical) + cặp quyền §9g ON CONFLICT DO NOTHING (officer KHÔNG có approve — four-eyes) + NOTI catalog nới CHECK module_code CẢ HAI bảng + events 020..023; verify 6 audit object_type payroll đã có từ 0093 (không UNION-ADD trùng)",
+      "packages/contracts payroll*.ts: Zod mirror CHECK theo HIỆN TRẠNG DB (bonus_penalties_reference_check đã bị 0548 sửa — soi CHECK đang sống, KHÔNG chép file 0098) HAI CHIỀU ĐÚNG BẰNG; barrel index.ts không đụng export park",
+      "Census grant phủ 4 hình dạng wildcard; rls-registry cập nhật; test schema + seed trên LANE_DB xanh",
+    ],
+    notes: [
+      "🔴 FULL gate + Opus (crown khai báo sẵn CLAUDE.md §6: payroll/payslip). Lane migration NỐI TIẾP duy nhất của wave.",
+      "KHÔNG bật modules.is_active (việc của S13-PAYROLL-FE-1, khuôn 0556/0562); guard trong migration KHÔNG assert trạng thái module khác; guard verify hàng PAYROLL forward-compatible (không RAISE khi is_active=true).",
+      "Tiền: numeric(18,2), VND duy nhất; mọi CHECK số học viết ở SQL. Bảng mới duy nhất CÓ THỂ cần: payroll_period_inputs (snapshot công/phép per NV per kỳ) — DB-13 chốt bảng riêng hay cột snapshot trong payslips là đủ (payslips đã có workDays/presentDays/lateMinutes).",
+    ],
+  },
+  {
+    id: "S13-PAYROLL-BE-1",
+    module: "PAYROLL",
+    layer: "BE",
+    title:
+      "Module NestJS payroll/ (nền): salary-profile versioned + bonus-penalty CRUD (trạng thái duyệt) + masking lương server (khuôn reveal+audit HR) + kỳ lương FSM 7 trạng thái + gắn khoá kỳ công ATT + tổng hợp đầu vào công/phép per NV + cảnh báo thiếu — guard per-pair §9g HAI tầng, audit, @Idempotent",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/payroll/**",
+      "apps/api/src/app.module.ts",
+      "apps/api/src/config/openapi-modules.ts",
+      "apps/api/src/attendance/**",
+      "apps/api/src/employees/**",
+      "apps/api/src/permission/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/SPEC/SPEC-11*.md",
+      "docs/API Design/API-18*.md",
+      "docs/erd-current.md",
+      "docs/plans/S13-PAYROLL-BE-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S13-PAYROLL-DB-1"],
+    plan: "docs/plans/S13-PAYROLL-BE-1.md",
+    src: [
+      "SPEC-11 §API/§ERR (viết ở DOC-1) + API-18 — nguồn sự thật endpoint/mã lỗi",
+      "PAY-DEC-003 (salary_profiles nguồn duy nhất — base_salary employee_profiles KHÔNG tham gia tính lương) · 004 (phạm vi công thức v1) · 005 (Calculated đòi attendance_periods locked; Locked khoá luôn chỉnh công phía ATT) · 006 (masking Phương án B)",
+      "Khuôn: recruit/ (S12-RECRUIT-BE-1 — 32 route guard 2 tầng) · hr-read.service reveal-salary+audit atomic (masking) · attendance_periods open/locked (đã có sẵn)",
+    ],
+    done_when: [
+      "Deny-path test RED-TRƯỚC cho mọi route lương; mọi API check company_id qua withTenant; guard cặp quyền ở CẢ decorator route lẫn service; 4xx đúng mã PAYROLL-ERR; trần Zod ≠ trần service không đẻ mã lỗi chết",
+      "Masking SERVER theo Phương án B: mọi trường tiền/bank chỉ trả cho cặp payroll tương ứng; mọi lượt XEM dữ liệu lương ghi audit (khuôn reveal+audit atomic của HR); hr-manager sau thu hồi grant nhận deny sạch (có int-spec khẳng định)",
+      "Kỳ lương FSM: 7 trạng thái ép ở service (CHECK không ép được chuyển tiếp) + ma trận chuyển sai có test; tạo kỳ chặn trùng tháng per company; Calculated đòi attendance_periods locked; Locked chặn chỉnh công kỳ đó phía ATT (deny-path chỉnh công sau lock — ATT-ERR-024); reopen = cặp quyền riêng + bắt buộc lý do + audit",
+      "Tổng hợp đầu vào per NV: ngày công (raw attendance_records) + phép có lương/KHÔNG lương (leave_types.paid) + trễ/sớm; cảnh báo NV thiếu salary_profile/bảng công trước khi tính; recalc đầu vào khi nguồn đổi TRƯỚC duyệt; biên kỳ cắt theo tháng công ty Ở BE (UTC-at-rest — FE không có companies.timezone)",
+      "salary-profile versioned theo effective date (kỳ lấy bản hiệu lực tại thời điểm kỳ); bonus-penalty chỉ dòng Approved vào công thức; đóng băng theo FSM kỳ",
+      "API_MODULE_TAGS khai PAYROLL; route-census regen ROUTE_CENSUS_WRITE=1 có chủ đích; :id = UUID ở biên; @Idempotent các POST tạo; test trên LANE_DB",
+    ],
+    notes: [
+      "🔴 FULL gate + Opus. WO NỀN — máy tính lương/duyệt/phát hành nằm ở BE-2 (tách đôi vì cụm crown đặc quánh, ~$136/WO đỏ).",
+      "Allowlist capability BACKEND cho mọi cặp is_sensitive (kẻo màn quản trị biến mất khỏi nav — bài học capability-allowlist).",
+    ],
+  },
+  {
+    id: "S13-PAYROLL-BE-2",
+    module: "PAYROLL",
+    layer: "BE",
+    title:
+      "Máy tính lương: calculate (SQL numeric, snapshot ĐÓNG BĂNG, idempotency theo kỳ) → điều chỉnh dòng có lý do → submit/approve/reject/lock/reopen (four-eyes) → generate + publish payslip (bản ghi bất biến) + ack + export XLSX (quyền riêng + audit) + outbox NOTI 020..023",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/payroll/**",
+      "apps/api/src/notifications/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/SPEC/SPEC-11*.md",
+      "docs/API Design/API-18*.md",
+      "docs/plans/S13-PAYROLL-BE-2.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S13-PAYROLL-BE-1"],
+    plan: "docs/plans/S13-PAYROLL-BE-2.md",
+    src: [
+      "SPEC-11 §công-thức/§FSM (viết ở DOC-1): gross = base pro-rate + phụ cấp + thưởng − phạt; khấu trừ = không lương + trễ/sớm (nếu bật rule) + dòng tay; net = gross − khấu trừ; breakdown giải-thích-được (P2-PAY-05-006)",
+      "PAY-DEC-004 (KHÔNG engine BHXH/thuế — PARK-PAYROLL-001) · 007 (1 cấp duyệt, officer KHÔNG approve) · 008 (publish + ack + XLSX, PDF Phase sau)",
+      "Khuôn: outbox NOTI dedupeKey content-derived (0561) · memory period-key-idempotency-needs-frozen-source · clamp-must-be-sql",
+    ],
+    done_when: [
+      "Calculate: toàn bộ số học ở SQL (numeric 18,2 + làm tròn + clamp trong câu SQL — CẤM float JS); snapshot đầu vào ĐÓNG BĂNG vào payslip/inputs lúc tính; idempotency key content-derived (period + snapshot version, KHÔNG từ thời điểm gọi); race double-calculate/double-publish 2 request song song → đúng-1-thắng (int-spec)",
+      "FSM duyệt: submit → approve/reject (reject bắt buộc comment) → lock; recalc sau Approved bị CHẶN (test); reopen quyền riêng + lý do + audit; điều chỉnh dòng lương bắt buộc lý do + audit",
+      "Payslip: generate từ kỳ Approved → Published + NOTI 022 từng NV; bản ghi BẤT BIẾN sau Published (append-only đã ép ở DB — điều chỉnh đi vào kỳ sau); ack ghi payslip_acknowledgements; employee chỉ thấy Own (IDOR cross-employee CÙNG company có int-spec riêng, không chỉ cross-tenant)",
+      "Export XLSX bảng lương tổng: đòi cặp ('export','payroll') RIÊNG + audit TỪNG lần xuất; số trong file khớp breakdown",
+      "Outbox NOTI đúng catalog 020 (chờ duyệt→người duyệt) · 021 (duyệt/từ chối→officer) · 022 (payslip→NV) · 023 (reopen→officer+admin), dedupeKey content-derived; fixture đối soát TAY ít nhất 1 NV đủ mọi loại khoản (số khớp từng đồng)",
+    ],
+    notes: [
+      "🔴 FULL gate + Opus. Đây là WO crown nặng nhất wave — nếu plan-reviewer thấy vượt khẩu độ, được phép cắt export XLSX sang WO FE/QA, KHÔNG được cắt four-eyes hay snapshot đóng băng.",
+      "Test biên: ngày cuối tháng + NV vào/nghỉ giữa kỳ (pro-rate) + kỳ 0 NV (tính rỗng hợp lệ) + bonus_penalty Pending không vào công thức.",
+    ],
+  },
+  {
+    id: "S13-PAYROLL-FE-1",
+    module: "PAYROLL",
+    layer: "FE",
+    title:
+      "FE PAYROLL (apps/app routes/payroll/ + màn ME): 6 màn PAY-SCREEN-001..006 — danh sách kỳ · chi tiết kỳ (bảng lương + FSM actions + cảnh báo thiếu) · phiếu lương breakdown · hồ sơ lương NV (versioned) · thưởng/phạt kỳ · «Phiếu lương của tôi» (Own + ack); bật module PAYROLL (mig khuôn 0556)",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/payroll/**",
+      "apps/app/src/**",
+      "packages/web-core/**",
+      "packages/contracts/**",
+      "apps/api/migrations/**",
+      "docs/SPEC/SPEC-11*.md",
+      "docs/plans/S13-PAYROLL-FE-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S13-PAYROLL-BE-2"],
+    src: [
+      "SPEC-11 §SCREEN (PAY-SCREEN-001..006) + wireframe hồ sơ HTML §06",
+      "Khuôn: routes/recruit/ (S12 FE — constants/errors/actions FSM∩quyền + wiring.spec) · mig 0562 (enable module)",
+    ],
+    done_when: [
+      "6 màn đủ loading/error/empty, i18n vi, trạng thái constants §17.15–17.17; PermissionGate + useCan, KHÔNG hard-code quyền/role; số tiền tabular-nums",
+      "Schema FE .optional() cho MỌI trường tiền/bank server mask — role thiếu quyền không trang trắng; action theo FSM∩quyền (Trình duyệt ≠ Duyệt — four-eyes hiện đúng nút)",
+      "Màn ME «Phiếu lương của tôi»: Own tuyệt đối + nút xác nhận đã xem; KHÔNG nằm sau cổng quyền payroll (prefs cá nhân — memory personal-prefs); deep-link từ NOTI 022 vào đúng phiếu",
+      "Migration bật modules.is_active cho PAYROLL (nối head lúc merge); guard bật-module KHÔNG assert trạng thái module khác",
+      "Test màn hình + fs-pin FSM FE↔BE (khuôn recruit-actions/recruit-fsm parity) + typecheck/build xanh toàn workspace",
+    ],
+    notes: [
+      "🟡 zone yellow: có 1 migration nhỏ (enable module) + đụng packages/web-core; phần màn hình là LIGHT gate.",
+      "Biên kỳ/giờ hiển thị đi qua server — FE không tự cắt kỳ (không có companies.timezone).",
+    ],
+  },
+  {
+    id: "S13-PAYROLL-QA-1",
+    module: "PAYROLL",
+    layer: "QA",
+    title:
+      "QA PAYROLL: ma trận allow/deny per-pair TỪNG route (kể cả hr-manager SAU thu hồi) · IDOR cross-employee payslip + cross-tenant 2-tenant · FSM chuyển sai đủ 7 trạng thái · race double-calculate/publish · biên idempotency theo kỳ ĐÓNG BĂNG · census mã lỗi theo MÃ · audit-trail lượt xem lương — coverage payroll/ ≥85%, chạy như CI trên LANE_DB",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/payroll/**",
+      "apps/api/test/**",
+      "apps/app/src/routes/payroll/**",
+      "docs/QA/**",
+      "docs/TESTABLE-FEATURES.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S13-PAYROLL-FE-1"],
+    src: [
+      "SPEC-11 ma trận test (viết ở DOC-1); khuôn S12-RECRUIT-QA-1 (141 ca — sàn scope + error-residue + census kind)",
+    ],
+    done_when: [
+      "Ma trận per-pair từng route: deny KHÔNG rỗng nghĩa (mỗi cặp có ca ALLOW đối chứng); hr-manager sau thu hồi grant có ca deny TƯỜNG MINH; cross-tenant 2-tenant thật; IDOR cross-employee payslip (A xem phiếu B cùng company) có cụm ca riêng",
+      "FSM: đủ ma trận chuyển sai 7 trạng thái + recalc-sau-Approved + chỉnh-công-sau-Locked (phía ATT); census mã lỗi PAYROLL-ERR theo MÃ — không mã nào 0 ca",
+      "Số học: fixture đối soát tay khớp từng đồng; biên cuối tháng + pro-rate giữa kỳ + kỳ 0 NV; race double-calculate/double-publish đúng-1-thắng",
+      "Audit-trail: mọi lượt XEM/EXPORT dữ liệu lương có bằng chứng audit trong test; bash harness/check.sh --lane-db xanh KHÔNG banner; coverage payroll/ ≥85% (crown); docs/TESTABLE-FEATURES.md cập nhật mục PAYROLL",
+    ],
+    notes: [
+      "Fixture số tiền/tài khoản giả ghép chuỗi (gitleaks); LANE_DB cô lập; deny-path đã RED-trước ở BE-1/BE-2, WO này vét ma trận + biên + đối soát số.",
+    ],
+  },
+  {
+    id: "S13-PAYROLL-DASH-1",
+    module: "PAYROLL",
+    layer: "FE",
+    title:
+      "Widget DASH «chi phí lương kỳ» (PAYROLL-WIDGET-001): tổng gross/net + headcount + trạng thái kỳ gần nhất — catalog BE + SÀN SCOPE (chỉ role có cặp payroll) + wire slug FE DashboardWidgetGrid + test slug-map, đăng ký mã theo SPEC-01 §9.9",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/api/src/dashboard/**",
+      "apps/api/migrations/**",
+      "apps/app/src/components/dashboard/**",
+      "packages/web-core/**",
+      "packages/contracts/**",
+      "docs/SPEC/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S13-PAYROLL-QA-1"],
+    src: [
+      "PAY-DEC-010 · Khuôn S12-RECRUIT-DASH-1/S11-OFFICE-DASH-1: CHECK module_code widget catalog · DASH_WIDGET_MIN_DATA_SCOPE · handler file riêng · ratchet slug-map DashboardWidgetGrid.spec",
+    ],
+    done_when: [
+      "Widget render đúng theo quyền: role không có cặp PAYROLL không thấy + KHÔNG gọi API (registry omit + handler 403 đọc CÙNG hằng sàn scope Company); số liệu lương KHÔNG rơi vào widget chung",
+      "Slug thêm vào DASH_WIDGET_SLUG (web-core) — ratchet slug-map xanh; API widget qua DTO/masking chuẩn",
+      "Test widget allow/deny (int-spec LANE_DB + FE) + typecheck/build xanh",
+    ],
+    notes: [
+      "🟢 LIGHT gate. Đóng wave S13-PAYROLL — sau WO này regen STATUS + cập nhật memory wave. Variance/report theo phòng ban = Phase sau (PARK-PAYROLL-001).",
     ],
   },
 ];
