@@ -1883,6 +1883,172 @@ const assetEditRoute = createRoute({
   },
 });
 
+// RECRUIT — Tuyển dụng (S12-RECRUIT-FE-1, SPEC-12 REC-SCREEN-001..006). 3 màn sidebar qua
+// makeModuleRoute (ROUTE_REGISTRY "recruit.jobs"/"recruit.pipeline"/"recruit.interviews"); chi tiết/
+// form ứng viên dùng RouteMeta CỤC BỘ (mẫu ASSET). Màn 006 (Offer & convert) là TAB trong chi tiết
+// ứng viên — không route riêng. Job detail/form là dialog trong màn 001 (SPEC-12 không có screen riêng).
+//
+// ⚠️ THỨ TỰ: "/recruit/candidates/new" (TĨNH) PHẢI khai TRƯỚC "/recruit/candidates/$candidateId",
+// nếu không TanStack coi "new" là một candidateId (đúng bẫy "/goals/new" · "/assets/new").
+const RecruitJobOpeningListPage = React.lazy(() =>
+  import("@/routes/recruit/JobOpeningListPage").then((m) => ({ default: m.JobOpeningListPage })),
+);
+const RecruitPipelinePage = React.lazy(() =>
+  import("@/routes/recruit/PipelinePage").then((m) => ({ default: m.PipelinePage })),
+);
+const RecruitCandidateDetailPage = React.lazy(() =>
+  import("@/routes/recruit/CandidateDetailPage").then((m) => ({ default: m.CandidateDetailPage })),
+);
+const RecruitCandidateFormPage = React.lazy(() =>
+  import("@/routes/recruit/CandidateFormPage").then((m) => ({ default: m.CandidateFormPage })),
+);
+const RecruitInterviewListPage = React.lazy(() =>
+  import("@/routes/recruit/InterviewListPage").then((m) => ({ default: m.InterviewListPage })),
+);
+
+const recruitJobsRoute = makeModuleRoute(
+  "/recruit/job-openings",
+  "recruit.jobs",
+  "RECRUIT",
+  RecruitJobOpeningListPage,
+);
+
+function RecruitPipelineRouteContent() {
+  const navigate = useNavigate();
+  return (
+    <RecruitPipelinePage
+      onOpenCandidate={(id) =>
+        void navigate({ to: "/recruit/candidates/$candidateId", params: { candidateId: id } })
+      }
+      onCreateCandidate={() => void navigate({ to: "/recruit/candidates/new" as "/" })}
+    />
+  );
+}
+const recruitPipelineRoute = makeModuleRoute(
+  "/recruit/pipeline",
+  "recruit.pipeline",
+  "RECRUIT",
+  RecruitPipelineRouteContent,
+);
+
+function RecruitInterviewsRouteContent() {
+  const navigate = useNavigate();
+  return (
+    <RecruitInterviewListPage
+      onOpenCandidate={(id) =>
+        void navigate({ to: "/recruit/candidates/$candidateId", params: { candidateId: id } })
+      }
+    />
+  );
+}
+const recruitInterviewsRoute = makeModuleRoute(
+  "/recruit/interviews",
+  "recruit.interviews",
+  "RECRUIT",
+  RecruitInterviewsRouteContent,
+);
+
+// Gate chi tiết/form = cặp ĐƯỜNG TẢI `view:candidate` (SENSITIVE, allowlist BE — như recruit.pipeline);
+// quyền GHI (create/update:candidate) gate TRONG page qua useCanExact + BE ép.
+const recruitCandidateNewMeta: RouteMeta = {
+  routeKey: "recruit.candidate.new",
+  path: "/recruit/candidates/new",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "RECRUIT",
+  screenCode: "REC-SCREEN-004",
+  titleKey: "routeTitle.recruitCandidateNew",
+  requiredPermissions: ["access:recruit", "view:candidate"],
+  showInSidebar: false,
+  order: 86.1,
+};
+const recruitCandidateNewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/recruit/candidates/new",
+  beforeLoad: authGuard,
+  component: () => {
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      recruitCandidateNewMeta,
+      "RECRUIT",
+      <RecruitCandidateFormPage
+        onSuccess={(id) =>
+          void navigate({ to: "/recruit/candidates/$candidateId", params: { candidateId: id } })
+        }
+        onCancel={() => void navigate({ to: "/recruit/pipeline" as "/" })}
+      />,
+    );
+  },
+});
+
+const recruitCandidateDetailMeta: RouteMeta = {
+  routeKey: "recruit.candidate.detail",
+  path: "/recruit/candidates/$candidateId",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "RECRUIT",
+  screenCode: "REC-SCREEN-003",
+  titleKey: "routeTitle.recruitCandidateDetail",
+  requiredPermissions: ["access:recruit", "view:candidate"],
+  showInSidebar: false,
+  order: 86.2,
+};
+const recruitCandidateDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/recruit/candidates/$candidateId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { candidateId } = recruitCandidateDetailRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      recruitCandidateDetailMeta,
+      "RECRUIT",
+      <RecruitCandidateDetailPage
+        candidateId={candidateId}
+        onBack={() => void navigate({ to: "/recruit/pipeline" as "/" })}
+        onEdit={(id) =>
+          void navigate({
+            to: "/recruit/candidates/$candidateId/edit",
+            params: { candidateId: id },
+          })
+        }
+      />,
+    );
+  },
+});
+
+const recruitCandidateEditMeta: RouteMeta = {
+  routeKey: "recruit.candidate.edit",
+  path: "/recruit/candidates/$candidateId/edit",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "RECRUIT",
+  screenCode: "REC-SCREEN-004",
+  titleKey: "routeTitle.recruitCandidateEdit",
+  requiredPermissions: ["access:recruit", "view:candidate"],
+  showInSidebar: false,
+  order: 86.3,
+};
+const recruitCandidateEditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/recruit/candidates/$candidateId/edit",
+  beforeLoad: authGuard,
+  component: () => {
+    const { candidateId } = recruitCandidateEditRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      recruitCandidateEditMeta,
+      "RECRUIT",
+      <RecruitCandidateFormPage
+        candidateId={candidateId}
+        onSuccess={(id) =>
+          void navigate({ to: "/recruit/candidates/$candidateId", params: { candidateId: id } })
+        }
+        onCancel={() =>
+          void navigate({ to: "/recruit/candidates/$candidateId", params: { candidateId } })
+        }
+      />,
+    );
+  },
+});
+
 // ME — «Tài sản của tôi» (ASSET-SCREEN-006) mount trong ME workspace, gate bằng cặp ASSET.
 const MeAssetsPage = React.lazy(() =>
   import("@/routes/me/MeAssetsPage").then((m) => ({ default: m.MeAssetsPage })),
@@ -2614,6 +2780,14 @@ const routeTree = rootRoute.addChildren([
   roomsManageRoute,
   roomsCalendarRoute,
   meRoomBookingsRoute,
+  // S12-RECRUIT-FE-1 — static "/recruit/candidates/new" TRƯỚC "/recruit/candidates/$candidateId"
+  // (xem docblock khối RECRUIT).
+  recruitJobsRoute,
+  recruitPipelineRoute,
+  recruitInterviewsRoute,
+  recruitCandidateNewRoute,
+  recruitCandidateDetailRoute,
+  recruitCandidateEditRoute,
   goalsListRoute,
   // S5-GOAL-TPL-1 — static TRƯỚC "/goals/$goalId" (xem docblock goalTemplatesMeta).
   goalTemplatesRoute,

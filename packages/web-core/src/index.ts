@@ -126,6 +126,9 @@ export {
   // S11-ROOM-FE-1 — Phòng họp (SPEC-14). `roomKeys.bookings.allOf()` là prefix CỐ Ý: đặt/huỷ phải làm
   // mới MỌI cửa sổ lịch đang cache, không chỉ tuần đang mở.
   roomKeys,
+  // S12-RECRUIT-FE-1 — Tuyển dụng (SPEC-12). Sau move-stage/convert: invalidate candidates.allOf()
+  // (kanban mọi filter) + summary; sổ con stage-events/notes dùng prefix `*Of`.
+  recruitKeys,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -213,6 +216,9 @@ export { goalApi, taskTemplateApi } from "./lib/goal-api";
 // S11-ASSET-FE-1 — ASSET API client (SPEC-13 §15). Endpoint danh sách đi apiFetchPaginated vì BE trả
 // PaginatedResult; apiFetch thường sẽ VỨT block pagination (apifetch-drops-pagination-bare-array).
 export { assetApi } from "./lib/asset-api";
+// S12-RECRUIT-FE-1 — RECRUIT API client (SPEC-12 §15, RECRUIT-API-001..032). List đi apiFetchPaginated;
+// check-duplicate/summary/export/picker trả mảng/object trần ⇒ apiFetch (xem docblock recruit-api.ts).
+export { recruitApi } from "./lib/recruit-api";
 // S11-ROOM-FE-1 — ROOM API client (SPEC-14 §15 / API-15). CHỈ `GET /rooms` phân trang; 12 route còn lại
 // trả mảng/object trần ⇒ đi apiFetch (xem docblock room-api.ts).
 export { roomApi } from "./lib/room-api";
