@@ -14814,14 +14814,21 @@ export const backlog = [
     title:
       "Module NestJS recruit/: vị trí tuyển + ứng viên (mask PII server) + pipeline FSM 6 stage + phỏng vấn/feedback own-scope + offer (mask lương theo ('manage','offer')) + convert→employee tái dùng HR SequenceService — guard per-pair §9f ở HAI tầng, audit, outbox NOTI, @Idempotent",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/recruit/**",
       "apps/api/src/app.module.ts",
       "apps/api/src/config/openapi-modules.ts",
+      // plan-review 31/08: BE-1 đụng NOTI registrar + createEmployeeFromCandidateTx + allowlist
+      // sensitive-capability; KHÔNG thêm events/** và foundation/sequences/** (thiết kế cấm sửa).
+      "apps/api/src/notifications/**",
+      "apps/api/src/employees/**",
+      "apps/api/src/permission/**",
       "apps/api/test/**",
       "packages/contracts/**",
       "docs/SPEC/SPEC-12*.md",
+      "docs/API Design/API-17*.md",
+      "docs/erd-current.md",
       "docs/plans/S12-RECRUIT-BE-1.md",
       "harness/backlog.mjs",
     ],
