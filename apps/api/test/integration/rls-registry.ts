@@ -1933,7 +1933,11 @@ export const RLS_TABLES: RlsTableCase[] = [
     table: "room_booking_attendees",
     seedRow: async (direct, t) => {
       const c = await seedRoomBookingChain(direct, t.companyId);
-      const attendee = await seedUser(direct, t.companyId, `room-att-${randomUUID().slice(0, 8)}@x.test`);
+      const attendee = await seedUser(
+        direct,
+        t.companyId,
+        `room-att-${randomUUID().slice(0, 8)}@x.test`,
+      );
       const r = await direct.query(
         `INSERT INTO room_booking_attendees (company_id, booking_id, user_id) VALUES ($1, $2, $3) RETURNING id`,
         [t.companyId, c.bookingId, attendee],
@@ -2709,7 +2713,160 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+
+  // ── S12-RECRUIT-DB-1 (mig 0559) — 8 bảng RECRUIT (DB-14 §6). company_id NOT NULL + RLS+FORCE literal-GUC
+  // → PHẢI ở harness (rls-guards "không bảng company_id thiếu case"). KHÔNG skipNoContext. Mọi FK chéo là
+  // composite tenant FK ⇒ chain seed qua `direct` (owner) với company_id tường minh: user → employee_profile →
+  // org_unit → job_opening → candidate → interview → participant/feedback/offer (khuôn seedAssetChain).
+  // candidate_stage_events/interview_participants APPEND-ONLY/chỉ-INSERT — mutate-deny kiểm ở
+  // s12-recruit-db1-invariants.int-spec; seedRow dùng direct (owner) nên chèn OK.
+  // Cleanup: cleanupTenants() xoá 8 bảng con→cha TRƯỚC users/employee_profiles.
+  {
+    name: "job_openings",
+    table: "job_openings",
+    seedRow: async (direct, t) => (await seedRecruitChain(direct, t.companyId)).jobOpeningId,
+  },
+  {
+    name: "candidates",
+    table: "candidates",
+    seedRow: async (direct, t) => (await seedRecruitChain(direct, t.companyId)).candidateId,
+  },
+  {
+    name: "candidate_stage_events",
+    table: "candidate_stage_events",
+    seedRow: async (direct, t) => {
+      const c = await seedRecruitChain(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO candidate_stage_events
+           (company_id, candidate_id, from_stage, to_stage, action, reason, acted_by)
+         VALUES ($1, $2, 'New', 'Screening', 'move', 'rls-move', $3) RETURNING id`,
+        [t.companyId, c.candidateId, c.userId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "candidate_notes",
+    table: "candidate_notes",
+    seedRow: async (direct, t) => {
+      const c = await seedRecruitChain(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO candidate_notes (company_id, candidate_id, body, created_by)
+         VALUES ($1, $2, 'rls-note', $3) RETURNING id`,
+        [t.companyId, c.candidateId, c.userId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "interviews",
+    table: "interviews",
+    seedRow: async (direct, t) =>
+      (await seedRecruitInterview(direct, await seedRecruitChain(direct, t.companyId))).interviewId,
+  },
+  {
+    name: "interview_participants",
+    table: "interview_participants",
+    seedRow: async (direct, t) => {
+      const c = await seedRecruitChain(direct, t.companyId);
+      const { participantId } = await seedRecruitInterview(direct, c);
+      return participantId;
+    },
+  },
+  {
+    name: "interview_feedbacks",
+    table: "interview_feedbacks",
+    seedRow: async (direct, t) => {
+      const c = await seedRecruitChain(direct, t.companyId);
+      const { interviewId } = await seedRecruitInterview(direct, c);
+      const r = await direct.query(
+        `INSERT INTO interview_feedbacks
+           (company_id, interview_id, interviewer_employee_id, rating, recommendation)
+         VALUES ($1, $2, $3, 4, 'Hire') RETURNING id`,
+        [t.companyId, interviewId, c.employeeId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "offers",
+    table: "offers",
+    // Mỗi seedRow tạo chain candidate MỚI ⇒ không đụng uq_offers_candidate_open (partial theo candidate).
+    seedRow: async (direct, t) => {
+      const c = await seedRecruitChain(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO offers (company_id, candidate_id, start_date, salary, status)
+         VALUES ($1, $2, '2026-10-01', 1000, 'Draft') RETURNING id`,
+        [t.companyId, c.candidateId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 ];
+
+/**
+ * RECRUIT: user → employee_profiles → org_units → job_openings → candidates (FK-valid, cùng company).
+ * Composite tenant FK mọi FK chéo (0559) ⇒ mọi INSERT truyền company_id tường minh.
+ */
+async function seedRecruitChain(
+  direct: Pool,
+  companyId: string,
+): Promise<{
+  jobOpeningId: string;
+  candidateId: string;
+  employeeId: string;
+  userId: string;
+  orgUnitId: string;
+}> {
+  const userId = await seedUser(direct, companyId, `rec-${randomUUID().slice(0, 8)}@x.test`);
+  const emp = await direct.query(
+    `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+    [companyId, userId],
+  );
+  const org = await direct.query(
+    `INSERT INTO org_units (company_id, name, type) VALUES ($1, $2, 'department') RETURNING id`,
+    [companyId, `rls-rec-org-${randomUUID().slice(0, 8)}`],
+  );
+  const job = await direct.query(
+    `INSERT INTO job_openings (company_id, title, org_unit_id, recruiter_user_id, status)
+     VALUES ($1, 'rls-job', $2, $3, 'Open') RETURNING id`,
+    [companyId, org.rows[0].id, userId],
+  );
+  const cand = await direct.query(
+    `INSERT INTO candidates (company_id, job_opening_id, full_name, stage)
+     VALUES ($1, $2, 'rls-candidate', 'Interview') RETURNING id`,
+    [companyId, job.rows[0].id],
+  );
+  return {
+    jobOpeningId: job.rows[0].id as string,
+    candidateId: cand.rows[0].id as string,
+    employeeId: emp.rows[0].id as string,
+    userId,
+    orgUnitId: org.rows[0].id as string,
+  };
+}
+
+/** RECRUIT: lượt phỏng vấn Scheduled 1h + 1 participant (employee của chain). */
+async function seedRecruitInterview(
+  direct: Pool,
+  c: { candidateId: string; employeeId: string },
+): Promise<{ interviewId: string; participantId: string }> {
+  const companyRes = await direct.query(`SELECT company_id FROM candidates WHERE id = $1`, [
+    c.candidateId,
+  ]);
+  const companyId = companyRes.rows[0].company_id as string;
+  const iv = await direct.query(
+    `INSERT INTO interviews (company_id, candidate_id, round, starts_at, ends_at, status)
+     VALUES ($1, $2, 1, now() + interval '1 day', now() + interval '1 day 1 hour', 'Scheduled') RETURNING id`,
+    [companyId, c.candidateId],
+  );
+  const p = await direct.query(
+    `INSERT INTO interview_participants (company_id, interview_id, employee_id)
+     VALUES ($1, $2, $3) RETURNING id`,
+    [companyId, iv.rows[0].id, c.employeeId],
+  );
+  return { interviewId: iv.rows[0].id as string, participantId: p.rows[0].id as string };
+}
 
 /** ROOM: 1 phòng họp (tên ngẫu nhiên — unique lower(name) theo company trên hàng sống; capacity NOT NULL > 0). */
 async function seedRoom(direct: Pool, companyId: string): Promise<string> {
@@ -2725,7 +2882,11 @@ async function seedRoomBookingChain(
   direct: Pool,
   companyId: string,
 ): Promise<{ roomId: string; bookingId: string; organizerId: string }> {
-  const organizerId = await seedUser(direct, companyId, `room-org-${randomUUID().slice(0, 8)}@x.test`);
+  const organizerId = await seedUser(
+    direct,
+    companyId,
+    `room-org-${randomUUID().slice(0, 8)}@x.test`,
+  );
   const roomId = await seedRoom(direct, companyId);
   const r = await direct.query(
     `INSERT INTO room_bookings (company_id, room_id, title, starts_at, ends_at, organizer_user_id, booked_by_user_id)

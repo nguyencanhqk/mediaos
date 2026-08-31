@@ -76,11 +76,11 @@ export const notificationEvents = pgTable(
     // (notification-event-catalog.const.ts) + notificationTypeEnumSchema (contracts) cùng commit.
     check(
       "chk_notification_events_module_code",
-      sql`module_code IN ('AUTH','HR','ATT','LEAVE','TASK','DASH','NOTI','SYSTEM','GOAL','LMS','CHAT','ASSET','ROOM')`,
+      sql`module_code IN ('AUTH','HR','ATT','LEAVE','TASK','DASH','NOTI','SYSTEM','GOAL','LMS','CHAT','ASSET','ROOM','RECRUIT')`,
     ),
     check(
       "chk_notification_events_type",
-      sql`notification_type IN ('System','Account','HR','Attendance','Leave','Task','Project','Approval','Reminder','Warning','Error','Goal','Training','Chat','Asset','Room')`,
+      sql`notification_type IN ('System','Account','HR','Attendance','Leave','Task','Project','Approval','Reminder','Warning','Error','Goal','Training','Chat','Asset','Room','Recruit')`,
     ),
     check(
       "chk_notification_events_priority",

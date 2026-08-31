@@ -545,7 +545,7 @@ Ghi chú:
 
 ---
 
-## 9f. RECRUIT — Tuyển dụng (SPEC-12) · *Phase 2 — wave S12-RECRUIT, chưa seed*
+## 9f. RECRUIT — Tuyển dụng (SPEC-12) · *ĐÃ SEED 31/08/2026 (S12-RECRUIT-DB-1, mig `0560`)*
 
 RECRUIT đứng riêng, **16 cặp** quyền per-(action, resource) theo SPEC-12 §11 — owner duyệt gói wave 31/08/2026 (REC-DEC-001..008). Data scope **chốt cùng migration seed** (S12-RECRUIT-DB-1, KHÔNG để mở sau). Ngoài 4 role canonical, wave này seed thêm **role hệ thống `recruiter`** (SPEC-01 §10.7; `roles.company_id IS NULL`, `is_system=true`, `requires_two_factor=false` tường minh; tiền lệ `asset-manager` §9d, `office-admin` §9e) — **không** phải role canonical, không được thêm vào `DashCanonicalRole`/`NOTI_CANONICAL_ROLES`/pin `auth-seed-canonical-roles`. Hiring manager = role `manager` hiện có, **không** role mới (REC-DEC-008).
 

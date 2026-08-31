@@ -171,6 +171,9 @@ export * from "./goal";
 // S11-ASSET-DB-1 (SPEC-13 · DB-15 §7): enum ASSET mirror CHECK 0549 hai chiều. Tên export riêng (asset*/Asset*/
 // ASSET_*) không đụng barrel.
 export * from "./asset";
+// S12-RECRUIT-DB-1 (SPEC-12 · DB-14 §7): enum RECRUIT mirror CHECK 0559 hai chiều. Tên export riêng
+// (candidate*/jobOpening*/interview*/offer*/RECRUIT_*) không đụng barrel.
+export * from "./recruit";
 // S5-LMS-BE-3 (additive): DTO tiến độ đào tạo (GET /me/training) — pin version 1 của hợp đồng LMS
 // (docs/plans/S5-LMS-APP-3.md §5) + envelope ok|no_account. Tên export riêng (meTraining*/MeTraining*/
 // ME_TRAINING_*) KHÔNG trùng barrel hiện có.

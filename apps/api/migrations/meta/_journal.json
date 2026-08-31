@@ -1583,6 +1583,27 @@
       "when": 1717587347000,
       "tag": "0558_s11officedash1_widgets_asset_room",
       "breakpoints": true
+    },
+    {
+      "idx": 226,
+      "version": "7",
+      "when": 1717587348000,
+      "tag": "0559_s12recruitdb1_recruit_ddl",
+      "breakpoints": true
+    },
+    {
+      "idx": 227,
+      "version": "7",
+      "when": 1717587349000,
+      "tag": "0560_s12recruitdb1_seed_role_perms_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 228,
+      "version": "7",
+      "when": 1717587350000,
+      "tag": "0561_s12recruitdb1_noti_recruit",
+      "breakpoints": true
     }
   ]
 }

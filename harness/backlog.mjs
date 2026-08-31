@@ -14767,7 +14767,7 @@ export const backlog = [
     title:
       "Schema + migration RECRUIT theo DB-14: job_openings · candidates · candidate_stage_events (append-only) · candidate_notes · interviews (+participants) · interview_feedbacks · offers — RLS+FORCE, composite tenant FK, seed role recruiter + permission §9f + NOTI catalog (CẢ HAI bảng)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
@@ -14801,6 +14801,7 @@ export const backlog = [
       "Census grant phủ 4 hình dạng wildcard; test schema + seed trên LANE_DB xanh",
     ],
     notes: [
+      "✅ HOÀN THÀNH 31/08/2026 (S12-RECRUIT-DB-1): mig 0559 DDL 8 bảng (RLS+FORCE, 27 composite FK, cse append-only tuyệt đối, verify fail-loud aclexplode/indpred/indexprs) · 0560 role recruiter …0014 + 16 cặp (7 sensitive) + 42 grant §9f per-row + audit UNION-ADD 4 object_type · 0561 NOTI 4 event DedupeKey + CHECK cả hai bảng + 4 template (pin 71/57). cleanupTenants +8, rls-registry +8 case, contracts recruit.ts + spec, s12-recruit-db1-invariants 24 ca. plan-reviewer PASS (BLOCK vòng 1 → vá 12 finding); FULL gate 3/3 PASS (6 MED đã vá: PII-scan đủ cột, census E1 mọi role hệ thống, parity communication.ts vá bù drift 0555). check.sh --lane-db XANH 596/596; 4 vi phạm giả đều làm lưới ĐỎ. Phát hiện ghi DB-14 §6.2: lower/regexp_replace không leakproof — dưới FORCE RLS biểu thức nằm ở Filter, index vẫn là access path company_id.",
       "🔴 FULL gate + Opus (crown: permission seed + RLS + append-only). Lane migration NỐI TIẾP duy nhất của wave.",
       "KHÔNG bật modules.is_active (việc của S12-RECRUIT-FE-1, khuôn 0556); guard trong migration KHÔNG assert trạng thái module khác (bài học wiring-spec ASSET↔ROOM) và guard verify hàng RECRUIT phải forward-compatible (không RAISE khi is_active=true — DB-14 §9B).",
       "Số liệu thật từ DOC-1 (plan-reviewer PASS 31/08): 8 bảng · 16 cặp (7 candidate is_sensitive=TRUE) · 42 grant (§9f: employee 0 · manager 3 · hr 7 · company-admin 16 · recruiter 16) · UNION-ADD 4 audit object_type (job_opening/candidate/interview/offer — bản đồ ĐÓNG ở SPEC-12 §12) · 4 event NOTI DedupeKey · mig dự kiến 0559 DDL / 0560 seed / 0561 NOTI (đọc journal thật; head lúc viết 0558). candidate_stage_events = SELECT+INSERT duy nhất; interview_participants chỉ INSERT; index check-duplicate theo BIỂU THỨC không partial deleted_at (DB-14 §6.2, DoD EXPLAIN trên LANE_DB).",

@@ -120,15 +120,18 @@ export const notifications = pgTable(
       "chk_notifications_status",
       sql`status IS NULL OR status IN ('Unread','Read','Hidden','Archived','Deleted','Failed')`,
     ),
-    // PARITY với CHECK thật (0479 → +GOAL 0507 → +LMS 0529 → +CHAT 0538 → +ASSET 0551) — cùng superset với
-    // notification_events (noti.ts); nới = re-stamp CẢ HAI bảng ở migration rồi sửa CẢ HAI file parity cùng commit.
+    // PARITY với CHECK thật (0479 → +GOAL 0507 → +LMS 0529 → +CHAT 0538 → +ASSET 0551 → +ROOM 0555 →
+    // +RECRUIT 0561) — cùng superset với notification_events (noti.ts); nới = re-stamp CẢ HAI bảng ở migration
+    // rồi sửa CẢ HAI file parity cùng commit. (0555 từng quên file này — vá bù ở S12-RECRUIT-DB-1, security
+    // review MED-3: parity hẹp hơn CHECK thật thì `db:generate` sẽ sinh migration THU HẸP, đánh rơi giá trị
+    // đã ghi — vi phạm append-only #2. KHÔNG db:generate.)
     check(
       "chk_notifications_module_code",
-      sql`module_code IS NULL OR module_code IN ('AUTH','HR','ATT','LEAVE','TASK','DASH','NOTI','SYSTEM','GOAL','LMS','CHAT','ASSET')`,
+      sql`module_code IS NULL OR module_code IN ('AUTH','HR','ATT','LEAVE','TASK','DASH','NOTI','SYSTEM','GOAL','LMS','CHAT','ASSET','ROOM','RECRUIT')`,
     ),
     check(
       "chk_notifications_notification_type",
-      sql`notification_type IS NULL OR notification_type IN ('System','Account','HR','Attendance','Leave','Task','Project','Approval','Reminder','Warning','Error','Goal','Training','Chat','Asset')`,
+      sql`notification_type IS NULL OR notification_type IN ('System','Account','HR','Attendance','Leave','Task','Project','Approval','Reminder','Warning','Error','Goal','Training','Chat','Asset','Room','Recruit')`,
     ),
     check(
       "chk_notifications_priority",

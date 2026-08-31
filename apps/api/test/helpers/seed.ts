@@ -556,6 +556,20 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM room_booking_attendees WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM room_bookings WHERE company_id = ANY($1::uuid[])", ids);
 
+  // ── S12-RECRUIT-DB-1 (mig 0559) — 8 bảng RECRUIT, con → cha ──────────────────
+  // FK nội bộ composite `ON DELETE NO ACTION`; FK về users của 5 bảng mutable là SET NULL (col) nhưng
+  // candidate_stage_events.acted_by NO ACTION, và employee_id → employee_profiles cũng NO ACTION ⇒ PHẢI xoá
+  // tường minh TRƯỚC `DELETE FROM users`/`employee_profiles` bên dưới (DB-14 §4.2). Quên một dòng là 23503
+  // ở afterAll của MỌI int-spec chạm RECRUIT (`drop-table-must-clean-test-teardown`).
+  await direct.query("DELETE FROM interview_feedbacks WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM interview_participants WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM interviews WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM offers WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM candidate_notes WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM candidate_stage_events WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM candidates WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM job_openings WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G4-6 Communication ───────────────────────────────────────────────────
   // ⚠️ S7-CALL (mig 0546): cuộc gọi xoá TRƯỚC chat_rooms VÀ trước `DELETE FROM users` bên dưới.
   // Cả 4 FK của hai bảng này là composite `ON DELETE RESTRICT` (KHÔNG cascade — cascade chạy tầng
