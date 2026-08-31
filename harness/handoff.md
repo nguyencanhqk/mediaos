@@ -7,7 +7,7 @@
 ## Phiên 2026-08-31 — S12-RECRUIT-DASH-1 XONG (#452 squash `36b4b283`) — ĐÓNG WAVE S12-RECRUIT
 
 **Trạng thái:** merged --admin sau CI 14/14 xanh; STATUS regen push docs-only (`34190163`). Backlog
-hiện **0 READY / 0 in-progress** — hết WO, wave sau chờ owner seed. Lane `mediaos_recruitdash1` CHƯA drop.
+hiện **0 READY / 0 in-progress** — hết WO, wave sau chờ owner seed. Lane `mediaos_recruitdash1` đã DROP.
 
 - Widget `RECRUIT_FUNNEL` (RECRUIT-WIDGET-001, SPEC-12 §10.1; mig 0563 CHECK+'RECRUIT'+seed row):
   khuôn 0558 nhưng **sàn scope = `Company` vì lý do KHÁC ASSET** — `summaryTx` đếm TOÀN company,
