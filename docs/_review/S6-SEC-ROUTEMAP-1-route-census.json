@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 507,
-    "controllers": 92,
-    "gated": 468,
+    "routes": 539,
+    "controllers": 97,
+    "gated": 500,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -1681,6 +1681,214 @@
         "PermissionGuard"
       ],
       "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "CandidatesController#checkDuplicate",
+      "httpMethod": "GET",
+      "path": "/api/v1/candidates/check-duplicate",
+      "hasPermission": true,
+      "permission": "create:candidate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "CandidatesController#convertCandidate",
+      "httpMethod": "POST",
+      "path": "/api/v1/candidates/:id/convert",
+      "hasPermission": true,
+      "permission": "convert:candidate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "CandidatesController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/candidates",
+      "hasPermission": true,
+      "permission": "create:candidate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "CandidatesController#createNote",
+      "httpMethod": "POST",
+      "path": "/api/v1/candidates/:id/notes",
+      "hasPermission": true,
+      "permission": "comment:candidate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "CandidatesController#export",
+      "httpMethod": "GET",
+      "path": "/api/v1/candidates/export",
+      "hasPermission": true,
+      "permission": "export:candidate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "CandidatesController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/candidates/:id",
+      "hasPermission": true,
+      "permission": "view:candidate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "CandidatesController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/candidates",
+      "hasPermission": true,
+      "permission": "view:candidate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "CandidatesController#moveStage",
+      "httpMethod": "POST",
+      "path": "/api/v1/candidates/:id/move-stage",
+      "hasPermission": true,
+      "permission": "move-stage:candidate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "CandidatesController#notes",
+      "httpMethod": "GET",
+      "path": "/api/v1/candidates/:id/notes",
+      "hasPermission": true,
+      "permission": "view:candidate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "CandidatesController#stageEvents",
+      "httpMethod": "GET",
+      "path": "/api/v1/candidates/:id/stage-events",
+      "hasPermission": true,
+      "permission": "view:candidate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "CandidatesController#summary",
+      "httpMethod": "GET",
+      "path": "/api/v1/candidates/summary",
+      "hasPermission": true,
+      "permission": "view:candidate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "CandidatesController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/candidates/:id",
+      "hasPermission": true,
+      "permission": "update:candidate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "CandidatesController#updateNote",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/candidates/:id/notes/:noteId",
+      "hasPermission": true,
+      "permission": "comment:candidate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
       "verdict": null,
       "verdictReason": null,
       "verdictWo": null
@@ -4148,6 +4356,198 @@
       "verdictWo": null
     },
     {
+      "key": "InterviewsController#changeStatus",
+      "httpMethod": "POST",
+      "path": "/api/v1/interviews/:id/change-status",
+      "hasPermission": true,
+      "permission": "manage:interview",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "InterviewsController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/interviews",
+      "hasPermission": true,
+      "permission": "manage:interview",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "InterviewsController#createFeedback",
+      "httpMethod": "POST",
+      "path": "/api/v1/interviews/:id/feedback",
+      "hasPermission": true,
+      "permission": "feedback:interview",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "InterviewsController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/interviews/:id",
+      "hasPermission": true,
+      "permission": "view:interview",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "InterviewsController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/interviews",
+      "hasPermission": true,
+      "permission": "view:interview",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "InterviewsController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/interviews/:id",
+      "hasPermission": true,
+      "permission": "manage:interview",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "InterviewsController#updateFeedback",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/interviews/:id/feedback",
+      "hasPermission": true,
+      "permission": "feedback:interview",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "JobOpeningsController#changeStatus",
+      "httpMethod": "POST",
+      "path": "/api/v1/job-openings/:id/change-status",
+      "hasPermission": true,
+      "permission": "update:job-opening",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "JobOpeningsController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/job-openings",
+      "hasPermission": true,
+      "permission": "create:job-opening",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "JobOpeningsController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/job-openings/:id",
+      "hasPermission": true,
+      "permission": "view:job-opening",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "JobOpeningsController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/job-openings",
+      "hasPermission": true,
+      "permission": "view:job-opening",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "JobOpeningsController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/job-openings/:id",
+      "hasPermission": true,
+      "permission": "update:job-opening",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "LabelsController#createLabel",
       "httpMethod": "POST",
       "path": "/api/v1/projects/:projectId/labels",
@@ -5482,6 +5882,86 @@
       "verdictWo": null
     },
     {
+      "key": "OffersController#changeStatus",
+      "httpMethod": "POST",
+      "path": "/api/v1/offers/:id/change-status",
+      "hasPermission": true,
+      "permission": "manage:offer",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "OffersController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/offers",
+      "hasPermission": true,
+      "permission": "manage:offer",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "OffersController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/offers/:id",
+      "hasPermission": true,
+      "permission": "view:offer",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "OffersController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/offers",
+      "hasPermission": true,
+      "permission": "view:offer",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "OffersController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/offers/:id",
+      "hasPermission": true,
+      "permission": "manage:offer",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "OrgController#addTeamMember",
       "httpMethod": "POST",
       "path": "/api/v1/org/teams/:id/members",
@@ -6269,6 +6749,38 @@
         "PermissionGuard"
       ],
       "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RecruitPickersController#employees",
+      "httpMethod": "GET",
+      "path": "/api/v1/recruit/pickers/employees",
+      "hasPermission": true,
+      "permission": "manage:interview",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RecruitPickersController#recruiterUsers",
+      "httpMethod": "GET",
+      "path": "/api/v1/recruit/pickers/recruiter-users",
+      "hasPermission": true,
+      "permission": "update:job-opening",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
       "verdict": null,
       "verdictReason": null,
       "verdictWo": null

@@ -206,6 +206,39 @@ export class HrWriteRepository {
     return row;
   }
 
+  /**
+   * S12-RECRUIT-BE-1 — INSERT hồ sơ UNLINKED từ ứng viên convert (SPEC-12 §13.5). Khác `createTx`:
+   * ghi thêm `phone`/`personal_email` (cột PII ngoài `EmployeeWriteData`); work/employment/salary
+   * type dùng DEFAULT của DB (offline/full_time/monthly). `user_id = NULL` luôn.
+   */
+  async createUnlinkedFromCandidateTx(
+    tx: TenantTx,
+    companyId: string,
+    data: {
+      employeeCode: string;
+      orgUnitId: string;
+      positionId: string | null;
+      startDate: string;
+      phone: string | null;
+      personalEmail: string | null;
+    },
+  ) {
+    const [row] = await tx
+      .insert(employeeProfiles)
+      .values({
+        companyId,
+        userId: null,
+        employeeCode: data.employeeCode,
+        orgUnitId: data.orgUnitId,
+        positionId: data.positionId,
+        startDate: data.startDate,
+        phone: data.phone,
+        personalEmail: data.personalEmail,
+      })
+      .returning({ id: employeeProfiles.id, employeeCode: employeeProfiles.employeeCode });
+    return row;
+  }
+
   async updateTx(tx: TenantTx, companyId: string, id: string, data: EmployeeUpdateData) {
     const [row] = await tx
       .update(employeeProfiles)

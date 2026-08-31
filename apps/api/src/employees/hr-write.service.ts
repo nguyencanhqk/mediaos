@@ -65,6 +65,36 @@ export interface ImportEmployeeCreateData {
   endDate: string | null;
 }
 
+/**
+ * S12-RECRUIT-BE-1 — input cho `createEmployeeFromCandidateTx` (SPEC-12 §13.5). Type nội bộ (KHÔNG
+ * Zod — không phải input HTTP trực tiếp; RECRUIT convert đọc mọi trường TRONG Pha-3 FOR UPDATE).
+ *
+ * ⚠️ KHÔNG có `fullName`: `employee_profiles` CHƯA có cột họ tên (DB-03 §7.2 thiết kế
+ * `employees.full_name` nhưng code chưa reconcile — WO này CẤM migration). Tên người vẫn truy được
+ * qua `candidates.full_name` (link `candidates.employee_id`) và sẽ sang `users.full_name` khi HR
+ * link/tạo tài khoản — CÙNG hình dạng với hồ sơ import UNLINKED đã ship (ImportEmployeeCreateData
+ * cũng không tên). Đính chính SPEC-12 §13.5 cùng PR.
+ */
+export interface CreateEmployeeFromCandidateInput {
+  /** Mã đã cấp SẴN ở Pha 2 (allocateEmployeeCode NGOÀI tx) — hàm này KHÔNG đụng SequenceService. */
+  employeeCode: string;
+  /** Email cá nhân của ứng viên (nullable) → `personal_email`. */
+  email: string | null;
+  phone: string | null;
+  orgUnitId: string;
+  positionId: string | null;
+  /** `offers.start_date` của offer Accepted dùng để convert. */
+  startDate: string;
+}
+
+/** Tham chiếu tổ chức không hợp lệ lúc convert — RECRUIT bắt và map 422 RECRUIT-ERR-009. */
+export class EmployeeRefInvalidError extends Error {
+  constructor(readonly refKind: "org-unit" | "position") {
+    super(`employee reference invalid: ${refKind}`);
+    this.name = "EmployeeRefInvalidError";
+  }
+}
+
 /** Sequence counter key for employee codes (scopeType defaults to "Company" in the repo). */
 export const EMPLOYEE_CODE_SEQUENCE_KEY = "EMPLOYEE_CODE";
 
@@ -373,6 +403,63 @@ export class HrWriteService {
       }
       throw err;
     }
+  }
+
+  /**
+   * S12-RECRUIT-BE-1 — tạo hồ sơ nhân viên từ ứng viên convert (SPEC-12 §13.5), TX-AWARE: nhận `tx`
+   * của RECRUIT convert (Pha 3 — CÙNG transaction với link `candidates.employee_id` + move stage;
+   * cả cụm commit/rollback nguyên khối). KHÁC `createEmployee` CÓ CHỦ ĐÍCH (REC-DEC-005):
+   *   • KHÔNG mint/link user (`user_id = NULL` — UNLINKED, mirror `createFromImportTx`).
+   *   • KHÔNG đụng `SequenceService` — `input.employeeCode` đã cấp SẴN ở Pha 2 (NGOÀI tx).
+   *   • KHÔNG map salary (BẤT BIẾN #3); KHÔNG bắt `isUniqueViolation` ở đây — RECRUIT convert tự
+   *     bóc `23505` (uq_candidates_company_employee · employee_profiles_company_code_active_uq) và
+   *     map mã RECRUIT-ERR-008 rồi rollback trọn tx.
+   * Permission do RECRUIT ép ở Pha 1 (`('convert','candidate')` isSensitive:true, TRƯỚC cấp mã —
+   * deny = zero side-effect); hàm này KHÔNG phải public entrypoint.
+   */
+  async createEmployeeFromCandidateTx(
+    tx: TenantTx,
+    actor: RequestUser,
+    input: CreateEmployeeFromCandidateInput,
+  ): Promise<{ employeeId: string; employeeCode: string }> {
+    // Tham chiếu tổ chức đọc TRONG tx của convert — org/position có thể bị đóng SAU khi vị trí tạo.
+    if (!(await this.repo.orgUnitActiveTx(tx, actor.companyId, input.orgUnitId))) {
+      throw new EmployeeRefInvalidError("org-unit");
+    }
+    if (
+      input.positionId &&
+      !(await this.repo.positionActiveTx(tx, actor.companyId, input.positionId))
+    ) {
+      throw new EmployeeRefInvalidError("position");
+    }
+
+    const created = await this.repo.createUnlinkedFromCandidateTx(tx, actor.companyId, {
+      employeeCode: input.employeeCode,
+      orgUnitId: input.orgUnitId,
+      positionId: input.positionId,
+      startDate: input.startDate,
+      phone: input.phone,
+      personalEmail: input.email,
+    });
+    if (!created) throw new Error("Failed to create employee profile from candidate");
+
+    // Audit HR trong CÙNG tx (BẤT BIẾN #2) — structural-only, không PII/lương.
+    await this.audit.record(tx, {
+      action: "create",
+      objectType: "employee",
+      objectId: created.id,
+      actorUserId: actor.id,
+      before: null,
+      after: this.structuralSnapshot({
+        employeeCode: created.employeeCode,
+        orgUnitId: input.orgUnitId,
+        positionId: input.positionId,
+        startDate: input.startDate,
+        status: "active",
+      }),
+    });
+
+    return { employeeId: created.id, employeeCode: created.employeeCode ?? input.employeeCode };
   }
 
   // ── Update ───────────────────────────────────────────────────────────────────────
@@ -724,8 +811,13 @@ export class HrWriteService {
    * when that row exists, provision the counter from it and retry once. An Inactive counter
    * (SequenceInactiveError) is NEVER auto-re-enabled — it 422s immediately, same as a genuinely
    * unconfigured tenant (no config row at all — CẤM hard-code EMP/4 as a fallback).
+   *
+   * ⟲ S12-RECRUIT-BE-1 — `private` → `public` (CHỈ đổi khả kiến, KHÔNG đổi thân hàm ⇒ 0 thay đổi
+   * hành vi cho caller cũ). RECRUIT convert cấp mã NGOÀI business tx (Pha 2, plan §6.1 — mirror
+   * `allocateTaskCodeOutsideTx`); gọi `nextCode` TRONG tx đang giữ FOR UPDATE là mẫu ĐÃ CẤM
+   * (S5-SEQ-HARDEN-1: 2 connection/lock dưới PgBouncer transaction-mode).
    */
-  private async allocateEmployeeCode(companyId: string): Promise<string> {
+  async allocateEmployeeCode(companyId: string): Promise<string> {
     try {
       return await this.requestNextEmployeeCode(companyId);
     } catch (err) {

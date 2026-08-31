@@ -194,6 +194,18 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   // + PermissionGuard + RLS company_id vẫn là cổng THẬT; wildcard KHÔNG thuộc allowlist ⇒ KHÔNG kế thừa.
   // Chỉ mở CỜ HIỂN THỊ.
   "configure-security-policy:company",
+  // S12-RECRUIT-BE-1 — APPEND-only: 7 cặp `candidate` is_sensitive=true (seed mig 0560, SPEC-12 §11)
+  // gác các màn REC-SCREEN-002..006 (danh sách/chi tiết ứng viên · kanban · export · convert). Thiếu
+  // allowlist ⇒ /auth/me KHÔNG trả ⇒ màn ẨN với CHÍNH role recruiter/hr được cấp quyền (lần lặp 10+
+  // của CAP-2). Enforcement KHÔNG đổi — @RequirePermission + tầng 2 RecruitAccessService (isSensitive
+  // tường minh) + RLS vẫn là cổng THẬT; wildcard *:* KHÔNG thuộc allowlist. Chỉ mở CỜ HIỂN THỊ.
+  "view:candidate",
+  "create:candidate",
+  "update:candidate",
+  "move-stage:candidate",
+  "comment:candidate",
+  "export:candidate",
+  "convert:candidate",
 ]);
 
 /**
@@ -233,6 +245,15 @@ export const SENSITIVE_SCREEN_GATE_PAIRS: readonly string[] = [
   // CS-9 — console `/settings/security-policy` (S10-QA-SECPOLICY-GATE-1): cặp này gác CẢ MÀN
   // (không có quyền ⇒ EmptyState), nên nó phải surface được qua /auth/me.
   "configure-security-policy:company",
+  // RECRUIT — 7 cặp `candidate` is_sensitive=true (mig 0560, SPEC-12 §11) gác các màn REC-SCREEN-002..006
+  // (S12-RECRUIT-BE-1 — FE cần cờ hiển thị qua /auth/me capabilities; wildcard *:* không kế thừa).
+  "view:candidate",
+  "create:candidate",
+  "update:candidate",
+  "move-stage:candidate",
+  "comment:candidate",
+  "export:candidate",
+  "convert:candidate",
 ];
 
 /** Chỉ dùng cho test khoá — KHÔNG export ra ngoài module permission. */

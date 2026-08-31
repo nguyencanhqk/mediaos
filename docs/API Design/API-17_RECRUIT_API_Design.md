@@ -143,7 +143,7 @@ Bảng mã ↔ method/path ↔ cặp quyền ↔ audit/NOTI: xem **SPEC-12 §15*
 
 | Mã | Trạng thái | Ghi chú |
 | --- | --- | --- |
-| RECRUIT-API-001..032 | ⏳ Chưa hiện thực | Thi công ở `S12-RECRUIT-BE-1` (sau `S12-RECRUIT-DB-1`); cập nhật bảng này khi WO đóng |
+| RECRUIT-API-001..032 | ✅ Đã hiện thực (S12-RECRUIT-BE-1, 31/08/2026) | 5 controller `apps/api/src/recruit/recruit.controllers.ts`; cặp quyền đọc từ bảng hằng `recruit-route-pairs.const.ts` (census 2 tầng `recruit-two-layer-guard-census.unit-spec.ts`); DTO = `packages/contracts/src/recruit.ts`; route census 539/500 gated |
 
 > Lệch giữa thiết kế và code ⇒ **sửa code**, không sửa ngầm tài liệu (CLAUDE.md — docs/spec + docs/DB là chuẩn).
 
