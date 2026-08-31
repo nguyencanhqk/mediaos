@@ -24,14 +24,22 @@
  * `roleRequired` (guard:78 → `twoFactor.requiresTwoFactor` → `withTenant`) chạy MỌI request và
  * KHÔNG có cache nào — cache 30s ở nhánh L77 KHÔNG che được nó (ca 5).
  *
- * ⚠️ CA 2 VÀ CA 5 ĐANG GHIM MỘT CÁI LỖ, KHÔNG PHẢI MỘT HỢP ĐỒNG. Khi WO vá đường này
- * (`S10-AUTH-2FAGUARD-FAILMODE-1`) thì hai ca đó PHẢI ĐỎ — sửa chúng CÓ CHỦ ĐÍCH theo hành vi mới,
- * đừng nới để giữ xanh (memory: tests-can-pin-a-hole-open).
+ * ─── ĐÃ VÁ (31/08/2026 · `S10-AUTH-2FAGUARD-FAILMODE-1`, owner chốt fail-mode (b)) ───────────────
+ * Ca (2) và (5) TRƯỚC ĐÂY ghim cái lỗ (500 vô danh). WO vá đã sửa CHÚNG CÓ CHỦ ĐÍCH sang hợp đồng
+ * MỚI: cả BA lời gọi (`:77` · `:78` · `:84`) bọc `guardedRead` ⇒ lỗi HẠ TẦNG thành
+ * **503 `AUTH-ERR-2FA-UNAVAILABLE`** (fail-closed CÓ PHÂN LOẠI — vẫn từ chối, nhưng quan sát được và
+ * KHÔNG giả dạng 403 "thiếu quyền"). Ca (6)(7)(8) phủ nốt `:84`, "không cache khi lỗi", và
+ * "không nuốt 403 nghiệp vụ". Plan + census 16 route: `docs/plans/S10-AUTH-2FAGUARD-FAILMODE-1.md`.
  *
  * GATE CỨNG `hasDb && LANE_DB` (CLAUDE.md §9.5).
  */
 import { randomUUID } from "node:crypto";
-import { HttpException, type INestApplication } from "@nestjs/common";
+import {
+  ForbiddenException,
+  HttpException,
+  ServiceUnavailableException,
+  type INestApplication,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
 import type { Pool } from "pg";
@@ -39,7 +47,11 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../../src/app.module";
 import { PasswordService } from "../../src/auth/password.service";
-import { TwoFactorEnforcementGuard } from "../../src/auth/two-factor-enforcement.guard";
+import {
+  TWO_FACTOR_SETUP_REQUIRED,
+  TWO_FACTOR_UNAVAILABLE,
+  TwoFactorEnforcementGuard,
+} from "../../src/auth/two-factor-enforcement.guard";
 import { TwoFactorService } from "../../src/auth/two-factor.service";
 import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
@@ -109,6 +121,34 @@ describe.skipIf(!hasLaneDb)(
         .set("Authorization", `Bearer ${token}`)
         .send({ name: "Đổi tên" });
 
+    /**
+     * Guard THẬT dựng từ deps của container (vitest.config ép `TWO_FACTOR_ENFORCEMENT_ENABLED='false'`
+     * cho toàn suite, nên nhánh `:78`/`:84` chỉ đo được bằng cách tự dựng rồi đặt cờ).
+     */
+    function freshGuard() {
+      const guard = new TwoFactorEnforcementGuard(
+        app.get(Reflector),
+        app.get(TwoFactorService, { strict: false }),
+        app.get(DatabaseService),
+        app.get(SecurityPolicyService, { strict: false }),
+      );
+      const g = guard as unknown as {
+        globalEnabled: boolean;
+        company2faCache: Map<string, { value: boolean; expiresAt: number }>;
+      };
+      return { guard, g, companyId: randomUUID() };
+    }
+
+    /** ExecutionContext HTTP tối thiểu: route thường (không @Public/@AllowWithoutTwoFactor). */
+    function ctxFor(companyId: string, userId: string = randomUUID()) {
+      return {
+        getType: () => "http",
+        getHandler: () => function handler() {},
+        getClass: () => class Ctrl {},
+        switchToHttp: () => ({ getRequest: () => ({ user: { id: userId, companyId } }) }),
+      } as unknown as Parameters<TwoFactorEnforcementGuard["canActivate"]>[0];
+    }
+
     /** Chạy `fn` với `DatabaseService.withTenant` LUÔN HỎNG, rồi trả nguyên trạng. */
     async function withBrokenDb<T>(fn: () => Promise<T>): Promise<T> {
       const dbsvc = app.get(DatabaseService);
@@ -176,22 +216,23 @@ describe.skipIf(!hasLaneDb)(
       expect(callSites[1]).toContain("PermissionGuard.canActivate");
     }, 60_000);
 
-    // ══ (2) THỦ PHẠM — lỗi hạ tầng ở guard 2FA biến 400 thành 500 vô danh ══════════════════════
-    // ⚠️ GHIM MỘT CÁI LỖ (xem docblock). Vá xong ⇒ ca này ĐỎ ⇒ sửa có chủ đích.
-    it("THỦ PHẠM · withTenant hỏng khi cache 2FA LẠNH ⇒ 500 SYSTEM-ERR-001 · type=Error", async () => {
+    // ══ (2) HỢP ĐỒNG SAU VÁ — lỗi hạ tầng ở guard 2FA ⇒ 503 CÓ PHÂN LOẠI, KHÔNG 500 vô danh ═════
+    // Trước vá ca này ghim 500 `SYSTEM-ERR-001` · `type:"Error"`. Sau vá: mã riêng + type có tên
+    // ⇒ 500 THẬT trên PROD không còn bị 500 GIẢ này làm loãng.
+    it("SAU VÁ · withTenant hỏng khi cache 2FA LẠNH (:77) ⇒ 503 AUTH-ERR-2FA-UNAVAILABLE", async () => {
       const token = await freshAdmin();
       errorLog.length = 0;
       const res = await withBrokenDb(() => patchJunk(token));
 
-      expect(res.status, JSON.stringify(res.body)).toBe(500);
-      expect(res.body.error?.code).toBe("SYSTEM-ERR-001");
-      // `type:"Error"` = lỗi THÔ nổi lên tới filter (khác `InternalServerErrorException` = service đã
-      // bọc). Đây chính là chữ ký để phiên sau nhận diện 500-cold-start.
-      expect(res.body.error?.type).toBe("Error");
-      // STACK THẬT chỉ đích danh tầng — không phải suy luận từ status.
-      const stack = errorLog.map((e) => `${e.message}\n${e.stack}`).join("\n");
-      expect(stack).toContain("TwoFactorEnforcementGuard.isCompany2faEnforced");
-      expect(stack).toContain("two-factor-enforcement.guard.ts");
+      expect(res.status, JSON.stringify(res.body)).toBe(503);
+      expect(res.body.error?.code).toBe(TWO_FACTOR_UNAVAILABLE);
+      // `type` = tên exception ⇒ KHÔNG còn là `"Error"` thô nổi lên filter.
+      expect(res.body.error?.type).toBe("ServiceUnavailableException");
+      // Message ra client KHÔNG mang chi tiết hạ tầng (security.md).
+      expect(JSON.stringify(res.body)).not.toContain(INFRA_ERR);
+      // …nhưng lý do THẬT vẫn vào log server-side, chỉ đích danh tầng.
+      const logged = errorLog.map((e) => `${e.message}\n${e.stack}`).join("\n");
+      expect(logged).toContain(INFRA_ERR);
     }, 60_000);
 
     // ══ (3) ĐỐI CHỨNG — pipe KHÔNG hỏng: cache ẤM thì cùng lỗi đó không chạm request ═══════════
@@ -221,41 +262,110 @@ describe.skipIf(!hasLaneDb)(
     // ══ (5) HÌNH DẠNG PROD — nhánh `roleRequired` KHÔNG có cache nào che ═══════════════════════
     // vitest.config ép `TWO_FACTOR_ENFORCEMENT_ENABLED='false'` cho toàn suite, nên nhánh này chỉ đo
     // được bằng cách dựng guard THẬT (deps thật từ container) rồi bật cờ đúng như mặc định PROD.
-    // ⚠️ GHIM MỘT CÁI LỖ (xem docblock).
-    it("HÌNH DẠNG PROD · nhánh roleRequired (guard:78) KHÔNG try/catch ⇒ lỗi thoát NGUYÊN TRẠNG", async () => {
-      const guard = new TwoFactorEnforcementGuard(
-        app.get(Reflector),
-        app.get(TwoFactorService, { strict: false }),
-        app.get(DatabaseService),
-        app.get(SecurityPolicyService, { strict: false }),
-      );
-      const g = guard as unknown as {
-        globalEnabled: boolean;
-        company2faCache: Map<string, { value: boolean; expiresAt: number }>;
-      };
+    it("SAU VÁ · nhánh roleRequired (guard:78) ⇒ 503 AUTH-ERR-2FA-UNAVAILABLE, KHÔNG lỗi thô", async () => {
+      const { guard, g, companyId } = freshGuard();
       g.globalEnabled = true; // = mặc định PROD (env.schema:102)
-      const companyId = randomUUID();
       // Cho nhánh L77 TRÚNG cache ⇒ ca này phân lập ĐÚNG nhánh L78.
       g.company2faCache.set(companyId, { value: false, expiresAt: Date.now() + 60_000 });
 
-      const ctx = {
-        getType: () => "http",
-        getHandler: () => function handler() {},
-        getClass: () => class Ctrl {},
-        switchToHttp: () => ({ getRequest: () => ({ user: { id: randomUUID(), companyId } }) }),
-      } as unknown as Parameters<TwoFactorEnforcementGuard["canActivate"]>[0];
-
       const err = await withBrokenDb(() =>
-        guard.canActivate(ctx).then(
+        guard.canActivate(ctxFor(companyId)).then(
           () => null as unknown,
           (e: unknown) => e,
         ),
       );
 
-      expect(err).toBeInstanceOf(Error);
-      expect((err as Error).message).toBe(INFRA_ERR);
-      // KHÔNG phải HttpException ⇒ filter buộc phải map thành 500 SYSTEM-ERR-001 vô danh.
-      expect(err instanceof HttpException).toBe(false);
+      // Trước vá: lỗi THÔ (`instanceof HttpException === false`) ⇒ 500 vô danh. Sau vá: đã phân loại.
+      expect(err).toBeInstanceOf(ServiceUnavailableException);
+      expect((err as HttpException).getStatus()).toBe(503);
+      expect((err as HttpException).getResponse()).toMatchObject({ code: TWO_FACTOR_UNAVAILABLE });
+    }, 60_000);
+
+    // ══ (6) NHÁNH THỨ BA — `:84` isEnabled cũng phải được bọc ═════════════════════════════════
+    // Phân lập `:84`: globalEnabled=false ⇒ bỏ qua `:78`; cache `:77` = true ⇒ mustHaveTwoFactor
+    // ⇒ lời gọi withTenant DUY NHẤT còn lại là `isEnabled`.
+    it("SAU VÁ · nhánh isEnabled (guard:84) ⇒ 503 AUTH-ERR-2FA-UNAVAILABLE", async () => {
+      const { guard, g, companyId } = freshGuard();
+      g.globalEnabled = false;
+      g.company2faCache.set(companyId, { value: true, expiresAt: Date.now() + 60_000 });
+
+      const err = await withBrokenDb(() =>
+        guard.canActivate(ctxFor(companyId)).then(
+          () => null as unknown,
+          (e: unknown) => e,
+        ),
+      );
+
+      expect(err).toBeInstanceOf(ServiceUnavailableException);
+      expect((err as HttpException).getResponse()).toMatchObject({ code: TWO_FACTOR_UNAVAILABLE });
+    }, 60_000);
+
+    // ══ (7) KHÔNG CACHE GIÁ TRỊ SINH TỪ LỖI ═══════════════════════════════════════════════════
+    // Bẫy của hướng (a): đóng dấu một quyết định-từ-lỗi vào cache TTL 30s = kéo dài hạ-chuẩn thêm 30s.
+    // Hướng (b) không có giá trị fallback, nhưng ca này GHIM điều đó lại để bản vá sau không lén thêm.
+    it("SAU VÁ · lỗi hạ tầng KHÔNG đóng dấu company2faCache (không hạ chuẩn thêm 30s)", async () => {
+      const { guard, g, companyId } = freshGuard();
+      g.globalEnabled = false;
+
+      const err = await withBrokenDb(() =>
+        guard.canActivate(ctxFor(companyId)).then(
+          () => null as unknown,
+          (e: unknown) => e,
+        ),
+      );
+      expect(err).toBeInstanceOf(ServiceUnavailableException);
+      // Cache PHẢI còn trống ⇒ request kế tiếp đọc lại DB thật, không dùng lại quyết-định-từ-lỗi.
+      expect(g.company2faCache.has(companyId)).toBe(false);
+    }, 60_000);
+
+    // ══ (8) KHÔNG NUỐT ĐƯỜNG NGHIỆP VỤ ════════════════════════════════════════════════════════
+    // Helper chỉ được phân loại lỗi HẠ TẦNG. 403 TWO_FACTOR_SETUP_REQUIRED (bị ép 2FA + chưa enroll)
+    // là NGHIỆP VỤ — bọc quá tay (try/catch cả thân canActivate) sẽ biến nó thành 503 và ca này ĐỎ.
+    it("SAU VÁ · DB KHOẺ + bị ép 2FA chưa enroll ⇒ vẫn 403 TWO_FACTOR_SETUP_REQUIRED", async () => {
+      const T = await freshCompany();
+      const { guard, g } = freshGuard();
+      g.globalEnabled = false;
+      g.company2faCache.set(T.companyId, { value: true, expiresAt: Date.now() + 60_000 });
+
+      const err = await guard.canActivate(ctxFor(T.companyId)).then(
+        () => null as unknown,
+        (e: unknown) => e,
+      );
+
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect((err as HttpException).getResponse()).toMatchObject({
+        code: TWO_FACTOR_SETUP_REQUIRED,
+      });
+    }, 60_000);
+
+    // ══ (9) LỐI THOÁT HttpException — `guardedRead` chỉ phân loại lỗi HẠ TẦNG ══════════════════
+    // Ca (8) chứng "không bọc cả thân canActivate", nhưng 403 ở đó ném NGOÀI guardedRead nên nó KHÔNG
+    // chạm `if (err instanceof HttpException) throw err`. Ca này ném HttpException TỪ BÊN TRONG một lời
+    // đọc được bọc: nếu lối thoát bị gỡ, nó biến thành 503 và ca ĐỎ. (Đo đột biến: gỡ dòng đó ⇒ ca này
+    // là ca DUY NHẤT bắt được — trước khi có nó, đột biến sống sót hoàn toàn.)
+    it("SAU VÁ · HttpException từ TRONG lời đọc được bọc đi qua NGUYÊN TRẠNG, không thành 503", async () => {
+      const { guard, g, companyId } = freshGuard();
+      g.globalEnabled = false;
+      g.company2faCache.set(companyId, { value: true, expiresAt: Date.now() + 60_000 });
+
+      // `isEnabled` (:84) là lời đọc được bọc; cho nó ném lỗi NGHIỆP VỤ thay vì lỗi hạ tầng.
+      const tfa = app.get(TwoFactorService, { strict: false });
+      const realIsEnabled = tfa.isEnabled.bind(tfa);
+      const BUSINESS = new ForbiddenException({ code: "AUTH-ERR-BUSINESS-PROBE" });
+      (tfa as unknown as { isEnabled: unknown }).isEnabled = (): Promise<never> =>
+        Promise.reject(BUSINESS);
+      let err: unknown;
+      try {
+        err = await guard.canActivate(ctxFor(companyId)).then(
+          () => null as unknown,
+          (e: unknown) => e,
+        );
+      } finally {
+        (tfa as unknown as { isEnabled: unknown }).isEnabled = realIsEnabled;
+      }
+
+      expect(err).toBe(BUSINESS); // ĐÚNG object gốc — không bị bọc lại, không bị thay mã.
+      expect(err).not.toBeInstanceOf(ServiceUnavailableException);
     }, 60_000);
   },
 );
