@@ -1,15 +1,25 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-31 07:07Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-31 09:42Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🔴 S12-RECRUIT-BE-1 — Module NestJS recruit/: vị trí tuyển + ứng viên (mask PII server) + pipeline FSM 6 stage + phỏng vấn/feedback own-scope + offer (mask lương theo ('manage','offer')) + convert→employee tái dùng HR SequenceService — guard per-pair §9f ở HAI tầng, audit, outbox NOTI, @Idempotent
+- **zone**: red · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/api/src/recruit/**`, `apps/api/src/app.module.ts`, `apps/api/src/config/openapi-modules.ts`, `apps/api/src/notifications/**`, `apps/api/src/employees/**`, `apps/api/src/permission/**`, `apps/api/test/**`, `packages/contracts/**`, `docs/SPEC/SPEC-12*.md`, `docs/API Design/API-17*.md`, `docs/erd-current.md`, `docs/plans/S12-RECRUIT-BE-1.md`, `harness/backlog.mjs`
+- **phụ thuộc**: S12-RECRUIT-DB-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] Deny-path test RED-TRƯỚC cho mọi route nhạy cảm; mọi API check company_id qua withTenant; guard cặp quyền ở CẢ decorator route lẫn service
+  - [ ] FSM: chuyển tiếp sai trả 4xx đúng mã RECRUIT-ERR (Hired terminal; Rejected reopen→Screening kèm lý do; job Closed chặn thêm candidate); trần Zod ≠ trần service không đẻ mã lỗi chết
+  - [ ] Masking SERVER: email/phone candidate theo quyền; lương offer chỉ trả cho ('manage','offer'); CV qua Foundation Files private + file_access_logs khi tải; export có audit
+  - [ ] Convert: transaction + UNIQUE employee_id (race 2 request song song đúng-1-thắng); mã NV từ employee_code_config ensure-on-miss, KHÔNG hard-code prefix; chỉ khi Offer=Accepted
+  - [ ] Outbox NOTI đúng catalog (dedupeKey content-derived); audit log mọi hành động quan trọng; @Idempotent các POST tạo
+  - [ ] API_MODULE_TAGS khai RECRUIT; route-census regen ROUTE_CENSUS_WRITE=1 có chủ đích; :id = UUID ở biên; test trên LANE_DB
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
-- 🔴 `S12-RECRUIT-BE-1` Module NestJS recruit/: vị trí tuyển + ứng viên (mask PII server) + pipeline FSM 6 stage + phỏng vấn/feedback own-scope + offer (mask lương theo ('manage','offer')) + convert→employee tái dùng HR SequenceService — guard per-pair §9f ở HAI tầng, audit, outbox NOTI, @Idempotent
+- _(trống)_
 
 **CHỜ (kẹt phụ thuộc):**
 - `S12-RECRUIT-FE-1` FE RECRUIT (apps/app routes/recruit/): 6 màn REC-SCREEN-001..006 — danh sách vị trí · kanban pipeline · chi tiết ứng viên (mask) · form + cảnh báo trùng + CV · lịch phỏng vấn/feedback · offer & convert; bật module RECRUIT (mig khuôn 0556) ⏳ cần: S12-RECRUIT-BE-1
@@ -20,7 +30,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 26
+- **branch**: `feat/s12-recruit-be-1` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 228 — `0561_s12recruitdb1_noti_recruit` (229 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -29,18 +39,18 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `7291cf2e` | 2026-08-31 | fix(recruit): S12-RECRUIT-BE-1 — FULL gate security M1-M5 + L2/L3 |
+| `310579aa` | 2026-08-31 | fix(recruit): S12-RECRUIT-BE-1 — FULL gate silent-failure F1-F5: Intl fallback ISO (không rollback oan tx), warn job_title rỗng/0-recipient/toàn-vẹn-hỏng, InternalServerErrorException thay Error trần |
+| `f2e2c3c3` | 2026-08-31 | fix(recruit): S12-RECRUIT-BE-1 — khoá lạc quan status cho interviews setStatusTx/updateTx (FULL gate database F1: race 2 change-status song song thắng câm + audit sai; mirror offers/candidates) |
+| `f532f02a` | 2026-08-31 | test(recruit): S12-RECRUIT-BE-1 — 6 int-spec trên lane DB (143 ca: ma trận per-pair 90 + FSM 18 + convert race 9 + interview/offer 12 + NOTI dedupe 6 + idempotency/audit 8) |
+| `7e0d5073` | 2026-08-31 | fix(recruit): S12-RECRUIT-BE-1 — payload NOTI khớp biến template snake_case của 0561 (bug chặn merge: 4 event dead-letter vì {placeholder} sống trong target_url) |
+| `43597960` | 2026-08-31 | feat(recruit): S12-RECRUIT-BE-1 — module recruit/ 32 route API-17 (guard 2 tầng, mask PII/salary, FSM, convert 3 pha) |
+| `13e08a6f` | 2026-08-31 | docs(recruit): S12-RECRUIT-BE-1 — micro-plan qua plan-reviewer PASS 2 vòng + WO in_progress, mở rộng paths |
+| `c687c524` | 2026-08-31 | feat(recruit): S12-RECRUIT-DB-1 — nền dữ liệu RECRUIT theo DB-14 (mig 0559–0561) (#448) |
 | `0db6d4a3` | 2026-08-31 | docs(recruit): S12-RECRUIT-DOC-1 — bộ tài liệu RECRUIT (SPEC-12 · DB-14 · API-17 · §9f), plan-reviewer PASS 2 vòng (#447) |
 | `f524fb9f` | 2026-08-31 | chore(gov): seed wave S12-RECRUIT — 6 WO Phase 2 tuyển dụng + hồ sơ duyệt HTML, owner đã duyệt 31/08 (#446) |
 | `5ef35bc7` | 2026-08-31 | fix(gov): S10-GOV-IDUNIQUE-1 nối tiếp — C4 phủ 15 họ số hiệu docs + vá API-10/DEVOPS-10 trùng số (KI-079) (#445) |
 | `050623a0` | 2026-08-31 | fix(auth): S10-AUTH-2FAGUARD-FAILMODE-1 — bọc CẢ BA withTenant của 2FA guard, fail-closed có phân loại (KI-083) (#444) |
-| `9186a666` | 2026-08-31 | feat(dash): S11-OFFICE-DASH-1 — 2 widget wave OFFICE (ROOM_TODAY · ASSET_SUMMARY) + sàn scope widget (#443) |
-| `d3dd64d4` | 2026-08-31 | test(room): S11-ROOM-QA-1 — ma trận quyền per-pair 13 route · census 21 kind · sentinel ERR-003 · biên idempotency (86 ca) (#442) |
-| `b092cf60` | 2026-08-30 | test(asset): S11-ASSET-QA-1 — ma trận quyền per-pair 22 route · biên idempotency · ERR-003 · census mã lỗi (81 ca) (#441) |
-| `454c60b3` | 2026-08-30 | feat(room): S11-ROOM-FE-1 — 5 màn FE ROOM (ROOM-SCREEN-001..005) · bật module mig 0557 · 77 test (#440) |
-| `c71f1169` | 2026-08-30 | chore(harness): đóng S11-ASSET-FE-1 (#439) — regen STATUS + bàn giao |
-| `8b551f93` | 2026-08-30 | feat(asset): S11-ASSET-FE-1 — 7 màn FE ASSET (ASSET-SCREEN-001..007) · bật module mig 0556 · 91 test (#439) |
-| `135ae0c8` | 2026-08-30 | chore(harness): đóng S11-ROOM-BE-1 — regen STATUS + bàn giao phiên |
-| `99b885fa` | 2026-08-30 | feat(room): S11-ROOM-BE-1 — module NestJS rooms/ (13 route · chống trùng EXCLUDE→409 · huỷ own/all · lịch/phòng trống/usage · /me · NOTI + job nhắc 15′) (#438) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
