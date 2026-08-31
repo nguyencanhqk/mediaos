@@ -91,6 +91,23 @@ export class InterviewsRepository {
     return row ?? null;
   }
 
+  /** Batch embed cho list (FULL gate M5 — gỡ N+1: MỘT câu `IN` cho cả trang). */
+  async candidateEmbedsTx(
+    tx: TenantTx,
+    companyId: string,
+    candidateIds: readonly string[],
+  ): Promise<Map<string, { id: string; fullName: string; stage: string }>> {
+    const out = new Map<string, { id: string; fullName: string; stage: string }>();
+    const ids = [...new Set(candidateIds)];
+    if (ids.length === 0) return out;
+    const rows = await tx
+      .select({ id: candidates.id, fullName: candidates.fullName, stage: candidates.stage })
+      .from(candidates)
+      .where(and(eq(candidates.companyId, companyId), inArray(candidates.id, ids)));
+    for (const r of rows) out.set(r.id, r);
+    return out;
+  }
+
   async participantsTx(
     tx: TenantTx,
     companyId: string,

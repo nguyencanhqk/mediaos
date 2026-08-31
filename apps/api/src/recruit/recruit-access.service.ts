@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable } from "@nestjs/common";
 import { eq, sql, type SQL } from "drizzle-orm";
 import type { DataScope } from "@mediaos/contracts";
 import { users } from "../db/schema/users";
@@ -37,6 +37,14 @@ export class RecruitAccessService {
       p.resourceType,
       { isSensitive: p.isSensitive },
     );
+    // SÀN SCOPE (FULL gate security M1, khuôn ROOM resolveViewActor + dash-widget-gate-needs-scope-floor):
+    // cặp §13.6 CHỈ-Company mà grant resolve ra hẹp hơn ⇒ TỪ CHỐI, không "coi như" Company — một lần
+    // đổi data_scope per-pair sau này không được âm thầm nới thành toàn công ty.
+    if (p.companyFloor && !RecruitAccessService.isCompany(routeScope)) {
+      throw new ForbiddenException(
+        "AUTH-ERR-SCOPE-DENIED: cặp RECRUIT này chỉ hợp lệ ở scope Company",
+      );
+    }
     const [interviewViewScope, candidateUpdateScope, offerManageScope] = await Promise.all([
       this.dataScope.resolveOrNull(user.id, user.companyId, "view", "interview"),
       // isSensitive:true TƯỜNG MINH — thiếu cờ thì wildcard *:* mở khoá PII (plan §4.4).

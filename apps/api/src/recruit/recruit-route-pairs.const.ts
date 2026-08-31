@@ -16,13 +16,21 @@ export interface RecruitPair {
   readonly resourceType: string;
   /** true = cặp trong danh sách 7 cặp sensitive `candidate` (mig 0560). */
   readonly isSensitive: boolean;
+  /**
+   * SÀN SCOPE Company (FULL gate security M1, khuôn `dash-widget-gate-needs-scope-floor`):
+   * §13.6 chốt job-opening/candidate/offer CHỈ Company (đọc lẫn ghi) — scope hẹp hơn phải bị TỪ
+   * CHỐI 403 chứ không "coi như" Company, nếu không một lần đổi `data_scope` (DELETE+INSERT
+   * per-pair) sẽ âm thầm nới quyền. false CHỈ cho 4 key interview view/feedback (Own hợp lệ §13.6).
+   */
+  readonly companyFloor: boolean;
 }
 
-const pair = (action: string, resourceType: string, isSensitive = false): RecruitPair => ({
-  action,
-  resourceType,
-  isSensitive,
-});
+const pair = (
+  action: string,
+  resourceType: string,
+  isSensitive = false,
+  companyFloor = true,
+): RecruitPair => ({ action, resourceType, isSensitive, companyFloor });
 
 /** Key = mã route API-17 (RECRUIT-API-XXX) — đủ 32 route. */
 export const RECRUIT_ROUTE_PAIRS = {
@@ -46,14 +54,14 @@ export const RECRUIT_ROUTE_PAIRS = {
   candidateNoteCreate: pair("comment", "candidate", true),
   candidateNoteUpdate: pair("comment", "candidate", true),
   candidateConvert: pair("convert", "candidate", true),
-  // Interviews 018–024
-  interviewList: pair("view", "interview"),
+  // Interviews 018–024 — 4 key view/feedback là NGOẠI LỆ sàn (Own hợp lệ theo §13.6).
+  interviewList: pair("view", "interview", false, false),
   interviewCreate: pair("manage", "interview"),
-  interviewDetail: pair("view", "interview"),
+  interviewDetail: pair("view", "interview", false, false),
   interviewUpdate: pair("manage", "interview"),
   interviewChangeStatus: pair("manage", "interview"),
-  interviewFeedbackCreate: pair("feedback", "interview"),
-  interviewFeedbackUpdate: pair("feedback", "interview"),
+  interviewFeedbackCreate: pair("feedback", "interview", false, false),
+  interviewFeedbackUpdate: pair("feedback", "interview", false, false),
   // Offers 025–028, 030
   offerList: pair("view", "offer"),
   offerCreate: pair("manage", "offer"),

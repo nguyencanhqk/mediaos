@@ -180,9 +180,20 @@ export class OffersService {
     });
   }
 
-  /** `startDate` ở quá khứ ⇒ 422 `013` kind=invalid-start-date (so theo NGÀY, không giờ). */
+  /**
+   * `startDate` ở quá khứ ⇒ 422 `013` kind=invalid-start-date — so theo NGÀY của múi giờ hệ thống
+   * (FULL gate security L2: so UTC làm khung 00:00–07:00 VN từ chối oan ngày hôm nay).
+   */
   private assertStartDateNotPast(startDate: string): void {
-    const today = new Date().toISOString().slice(0, 10);
+    let today: string;
+    try {
+      // en-CA ⇒ YYYY-MM-DD, cùng định dạng cột date.
+      today = new Intl.DateTimeFormat("en-CA", {
+        timeZone: process.env.DEFAULT_TIMEZONE || "Asia/Ho_Chi_Minh",
+      }).format(new Date());
+    } catch {
+      today = new Date().toISOString().slice(0, 10);
+    }
     if (startDate < today) {
       throw recruitUnprocessable(
         "INVALID_VALUE",

@@ -73,14 +73,22 @@ const RECRUIT_CONTROLLERS = new Set([
   "RecruitPickersController",
 ]);
 
-/** Mọi literal `resolveActor(<expr>, "<key>")` trong recruit/**.ts (service + convert). */
-function serviceResolveActorKeys(): string[] {
-  const keys: string[] = [];
+/**
+ * Mọi literal `resolveActor(<expr>, "<key>")` trong recruit/**.ts, kèm `Class#method` bao quanh —
+ * FULL gate security M2: "key xuất hiện ít nhất một lần" là chưa đủ (route assert nhầm key của
+ * route KHÁC cùng cặp vẫn xanh); map method↔key pin ĐÚNG HANDLER dùng ĐÚNG KEY.
+ */
+function serviceResolveActorCalls(): Array<{ site: string; key: string }> {
+  const calls: Array<{ site: string; key: string }> = [];
   for (const file of fs.readdirSync(SRC_RECRUIT)) {
     if (!file.endsWith(".ts") || file.endsWith(".spec.ts")) continue;
     const text = fs.readFileSync(path.join(SRC_RECRUIT, file), "utf8");
     const sf = ts.createSourceFile(file, text, ts.ScriptTarget.ES2022, true);
-    const visit = (node: ts.Node): void => {
+    const visit = (node: ts.Node, cls: string, method: string): void => {
+      let nextCls = cls;
+      let nextMethod = method;
+      if (ts.isClassDeclaration(node) && node.name) nextCls = node.name.text;
+      if (ts.isMethodDeclaration(node) && ts.isIdentifier(node.name)) nextMethod = node.name.text;
       if (
         ts.isCallExpression(node) &&
         ts.isPropertyAccessExpression(node.expression) &&
@@ -88,14 +96,51 @@ function serviceResolveActorKeys(): string[] {
         node.arguments.length === 2 &&
         ts.isStringLiteral(node.arguments[1])
       ) {
-        keys.push(node.arguments[1].text);
+        calls.push({ site: `${nextCls}#${nextMethod}`, key: node.arguments[1].text });
       }
-      ts.forEachChild(node, visit);
+      ts.forEachChild(node, (c) => visit(c, nextCls, nextMethod));
     };
-    visit(sf);
+    visit(sf, "?", "?");
   }
-  return keys;
+  return calls;
 }
+
+/** Sổ pin method↔key — đổi handler/key là ĐỎ, phải sửa CÓ CHỦ ĐÍCH qua FULL gate. */
+const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
+  "JobOpeningsService#list": ["jobOpeningList"],
+  "JobOpeningsService#get": ["jobOpeningDetail"],
+  "JobOpeningsService#create": ["jobOpeningCreate"],
+  "JobOpeningsService#update": ["jobOpeningUpdate"],
+  "JobOpeningsService#changeStatus": ["jobOpeningChangeStatus"],
+  "JobOpeningsService#recruiterUserPicker": ["pickerRecruiterUsers"],
+  "CandidatesService#list": ["candidateList"],
+  "CandidatesService#get": ["candidateDetail"],
+  "CandidatesService#checkDuplicate": ["candidateCheckDuplicate"],
+  "CandidatesService#summary": ["candidateSummary"],
+  // 010 đòi CẢ HAI cặp (export + view) — SPEC-12 §18.
+  "CandidatesService#export": ["candidateExport", "candidateList"],
+  "CandidatesService#create": ["candidateCreate"],
+  "CandidatesService#update": ["candidateUpdate"],
+  "CandidatesService#moveStage": ["candidateMoveStage"],
+  "CandidatesService#listStageEvents": ["candidateStageEvents"],
+  "CandidatesService#listNotes": ["candidateNotesList"],
+  "CandidatesService#createNote": ["candidateNoteCreate"],
+  "CandidatesService#updateNote": ["candidateNoteUpdate"],
+  "InterviewsService#list": ["interviewList"],
+  "InterviewsService#get": ["interviewDetail"],
+  "InterviewsService#create": ["interviewCreate"],
+  "InterviewsService#update": ["interviewUpdate"],
+  "InterviewsService#changeStatus": ["interviewChangeStatus"],
+  "InterviewsService#createFeedback": ["interviewFeedbackCreate"],
+  "InterviewsService#updateFeedback": ["interviewFeedbackUpdate"],
+  "InterviewsService#employeePicker": ["pickerEmployees"],
+  "OffersService#list": ["offerList"],
+  "OffersService#get": ["offerDetail"],
+  "OffersService#create": ["offerCreate"],
+  "OffersService#update": ["offerUpdate"],
+  "OffersService#changeStatus": ["offerChangeStatus"],
+  "RecruitConvertService#convert": ["candidateConvert"],
+};
 
 describe("RECRUIT census 2 tầng — decorator + service so với RECRUIT_ROUTE_PAIRS", () => {
   let app: INestApplication;
@@ -142,20 +187,47 @@ describe("RECRUIT census 2 tầng — decorator + service so với RECRUIT_ROUTE
     expect(bad, "decorator lệch bảng hằng (sửa route hoặc sửa bảng QUA FULL gate)").toEqual([]);
   });
 
-  it("TẦNG 2 — service: đủ 32 key được assert lại qua resolveActor, không literal lạ", () => {
-    const used = serviceResolveActorKeys();
+  it("TẦNG 2 — service: ĐÚNG method dùng ĐÚNG key (map pin, không chỉ đếm) + đủ 32 key", () => {
+    const calls = serviceResolveActorCalls();
     // Chốt chặn xanh-RỖNG cho scanner AST.
-    expect(used.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(32);
+    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(32);
     const validKeys = new Set(Object.keys(RECRUIT_ROUTE_PAIRS));
     expect(
-      used.filter((k) => !validKeys.has(k)),
+      calls.filter((c) => !validKeys.has(c.key)).map((c) => `${c.site}→${c.key}`),
       "literal routeKey KHÔNG có trong RECRUIT_ROUTE_PAIRS",
     ).toEqual([]);
-    const missing = [...validKeys].filter((k) => !used.includes(k));
+    // So TỪNG site với sổ pin (FULL gate M2 — route assert nhầm key route khác cùng cặp là ĐỎ).
+    const bySite = new Map<string, string[]>();
+    for (const c of calls) {
+      (bySite.get(c.site) ?? bySite.set(c.site, []).get(c.site)!).push(c.key);
+    }
+    const actual = Object.fromEntries(
+      [...bySite.entries()].map(([site, keys]) => [site, [...keys].sort()]),
+    );
+    const expected = Object.fromEntries(
+      Object.entries(SERVICE_SITE_TO_KEYS).map(([site, keys]) => [site, [...keys].sort()]),
+    );
+    expect(actual, "map Class#method → routeKey lệch sổ pin SERVICE_SITE_TO_KEYS").toEqual(
+      expected,
+    );
+    const used = calls.map((c) => c.key);
     expect(
-      missing,
+      [...validKeys].filter((k) => !used.includes(k)),
       "route có decorator nhưng KHÔNG được assert lại ở tầng service (thiếu tầng 2)",
     ).toEqual([]);
+  });
+
+  it("SÀN SCOPE Company — đúng 4 key interview view/feedback được miễn (FULL gate M1)", () => {
+    const noFloor = Object.entries(RECRUIT_ROUTE_PAIRS)
+      .filter(([, p]) => !p.companyFloor)
+      .map(([k]) => k)
+      .sort();
+    expect(noFloor).toEqual([
+      "interviewDetail",
+      "interviewFeedbackCreate",
+      "interviewFeedbackUpdate",
+      "interviewList",
+    ]);
   });
 
   it("cờ sensitive của bảng khớp seed: đúng 7 cặp resource candidate", () => {

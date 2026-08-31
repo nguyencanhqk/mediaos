@@ -19,6 +19,9 @@ import type { RecruitActor, RecruitPeopleMap, RecruitPersonRef } from "./recruit
  * BẤT BIẾN #1: mọi câu bind `company_id` tường minh dù RLS đã đỡ; `deleted_at IS NULL`.
  * KHÔNG `users.email`/số điện thoại trong bất kỳ projection nào (SPEC-12 §18).
  */
+/** Trần QUÉT của 2 picker — chặn full-table-scan không giới hạn ở tenant lớn (security M3). */
+export const RECRUIT_PICKER_SCAN_CAP = 1000;
+
 @Injectable()
 export class RecruitPeopleRepository {
   private peopleGrant(actor: RecruitActor) {
@@ -95,7 +98,10 @@ export class RecruitPeopleRepository {
           isNull(employeeProfiles.deletedAt),
           eq(employeeProfiles.status, "active"),
         ),
-      );
+      )
+      // FULL gate security M3 (clamp-must-be-sql-not-js): chặn công việc ở SQL — lọc `q` theo tên
+      // vẫn phải làm SAU khi bọc cột (không filter users trần), nhưng tập quét bị TRẦN cứng.
+      .limit(RECRUIT_PICKER_SCAN_CAP);
     const names = await this.namesByUserIdsTx(
       tx,
       actor,
@@ -135,7 +141,9 @@ export class RecruitPeopleRepository {
           isNull(users.deletedAt),
           eq(users.status, "active"),
         ),
-      );
+      )
+      // FULL gate security M3 — cùng trần cứng như picker 031.
+      .limit(RECRUIT_PICKER_SCAN_CAP);
     const names = await this.namesByUserIdsTx(
       tx,
       actor,

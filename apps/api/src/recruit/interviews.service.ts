@@ -312,7 +312,15 @@ export class InterviewsService {
   async updateFeedback(user: RecruitRequestUser, id: string, dto: UpdateInterviewFeedbackInput) {
     const actor = await this.access.resolveActor(user, "interviewFeedbackUpdate");
     return this.db.withTenant(user.companyId, async (tx) => {
-      const { callerEmployeeId } = await this.resolveFeedbackTarget(tx, actor, id);
+      const { interview, callerEmployeeId } = await this.resolveFeedbackTarget(tx, actor, id);
+      // FULL gate security L3 — đối xứng với 023: lượt Cancelled thì KHÔNG sửa feedback nữa.
+      if (interview.status === "Cancelled") {
+        throw recruitConflict(
+          "INTERVIEW_TRANSITION",
+          RECRUIT_ERR.INTERVIEW_TRANSITION(interview.status, "Completed"),
+          recruitDetails("interview-cancelled"),
+        );
+      }
       const row = await this.repo.updateOwnFeedbackTx(tx, user.companyId, id, callerEmployeeId, {
         rating: dto.rating,
         comment: dto.comment === undefined ? undefined : (dto.comment ?? null),
@@ -404,9 +412,15 @@ export class InterviewsService {
       actor,
       [...employeeToUser.values()].filter((x): x is string => Boolean(x)),
     );
+    // FULL gate M5 — batch MỘT câu `IN` thay N+1 per-interview.
+    const embeds = await this.repo.candidateEmbedsTx(
+      tx,
+      actor.companyId,
+      rows.map((r) => r.candidateId),
+    );
     const out = [];
     for (const row of rows) {
-      const candidate = await this.repo.candidateEmbedTx(tx, actor.companyId, row.candidateId);
+      const candidate = embeds.get(row.candidateId) ?? null;
       // FULL gate silent-failure F4: nhánh này là VI PHẠM toàn vẹn (FK interview→candidate, không
       // hard-delete) — render rỗng để list không chết, nhưng phải kêu to.
       if (!candidate) {

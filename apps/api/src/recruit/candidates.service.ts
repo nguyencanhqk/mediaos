@@ -36,12 +36,18 @@ import {
 import { RecruitPeopleRepository } from "./recruit-people.repository";
 import type { RecruitRequestUser } from "./recruit.types";
 
-/** Ngưỡng export — test-only override qua env (RECRUIT-ERR-015 phải có ca THẬT, plan §2.2). */
+/**
+ * Ngưỡng export — test-only override qua env (RECRUIT-ERR-015 phải có ca THẬT, plan §2.2).
+ * FULL gate security M4: override CHỈ sống ngoài production — không để một biến env đổi được trần
+ * 10.000 của SPEC-12 §19 trên PROD.
+ */
 export function recruitExportMaxRows(): number {
-  const raw = process.env.RECRUIT_EXPORT_MAX_ROWS_OVERRIDE;
-  if (raw) {
-    const n = Number(raw);
-    if (Number.isInteger(n) && n > 0) return n;
+  if (process.env.NODE_ENV !== "production") {
+    const raw = process.env.RECRUIT_EXPORT_MAX_ROWS_OVERRIDE;
+    if (raw) {
+      const n = Number(raw);
+      if (Number.isInteger(n) && n > 0) return n;
+    }
   }
   return RECRUIT_EXPORT_MAX_ROWS;
 }
