@@ -86,6 +86,14 @@ const REQUIRED_TABLES = [
 // MVP modules phải active sau seed (DB-08 §8.2 + 0435_foundation_db5).
 const MVP_ACTIVE_MODULES = ["AUTH", "HR", "ATT", "LEAVE", "TASK", "DASH", "NOTI"] as const;
 
+// Extension modules ĐÃ LAUNCH (is_active=true) — vá lỗ review-gate S12-RECRUIT-FE-1 mục 13: trước bản
+// vá này, mỗi lần một Extension module gỡ khỏi `EXTENSION_INACTIVE_MODULES` (ASSET 0556, ROOM 0557,
+// RECRUIT 0562) thì KHÔNG có assert nào xác nhận nó phải TRUE — chỉ có phủ định "không còn trong danh
+// sách inactive" (`recruit-wiring.spec.ts` cũ), một mã module gõ sai/migration quên chạy vẫn lọt qua vì
+// không assert dương tính is_active=true. `describe` "2a-ext" bên dưới đóng lỗ này cho CẢ BA module đã
+// launch, không chỉ RECRUIT.
+const EXTENSION_ACTIVE_MODULES = ["ASSET", "ROOM", "RECRUIT"] as const;
+
 // Extension modules phải inactive.
 //
 // S11-ASSET-FE-1 — GỠ "ASSET": migration 0556 bật modules.ASSET.is_active=true CÙNG COMMIT với lần gỡ
@@ -96,7 +104,10 @@ const MVP_ACTIVE_MODULES = ["AUTH", "HR", "ATT", "LEAVE", "TASK", "DASH", "NOTI"
 // này, và 5 màn ROOM-SCREEN-001..005 đã có nên menu trỏ vào phòng thật. 0554 cũng được NỚI guard
 // verify (e) cùng commit — guard đó assert is_active=false vô điều kiện và ca H1 của
 // s11-room-db1-invariants replay nguyên file (memory module-enable-guard-blocks-next-wo).
-const EXTENSION_INACTIVE_MODULES = ["PAYROLL", "RECRUIT", "CHAT", "SOCIAL"] as const;
+// S12-RECRUIT-FE-1 — GỠ "RECRUIT": migration 0562 bật modules.RECRUIT.is_active=true CÙNG COMMIT với
+// lần gỡ này; 6 màn REC-SCREEN-001..006 đã có nên menu trỏ vào phòng thật. Guard (e) của 0560 vốn đã
+// forward-compatible (không assert is_active) nên KHÔNG cần nới guard như ROOM/ASSET.
+const EXTENSION_INACTIVE_MODULES = ["PAYROLL", "CHAT", "SOCIAL"] as const;
 
 // system_settings defaults phải tồn tại sau seed (DB-08 §8.3 + 0435_foundation_db5).
 const REQUIRED_SYSTEM_SETTINGS = [
@@ -162,6 +173,23 @@ describe.skipIf(!runIsolatedDb)(
           );
           expect(res.rows.length, `Module '${code}' phải được seed`).toBe(1);
           expect(res.rows[0].is_active, `Module MVP '${code}' phải is_active=true`).toBe(true);
+        });
+      }
+    });
+
+    // ── 2a-ext. modules catalog seeded — Extension đã launch phải active ─────────────
+    describe("2a-ext. Modules catalog — Extension đã launch phải active", () => {
+      for (const code of EXTENSION_ACTIVE_MODULES) {
+        it(`module Extension ${code} is_active=true after seed (đã launch)`, async () => {
+          const res = await direct.query<{ is_active: boolean }>(
+            `SELECT is_active FROM modules WHERE module_code = $1 AND deleted_at IS NULL LIMIT 1`,
+            [code],
+          );
+          expect(res.rows.length, `Module Extension đã launch '${code}' phải được seed`).toBe(1);
+          expect(
+            res.rows[0].is_active,
+            `Module Extension đã launch '${code}' phải is_active=true`,
+          ).toBe(true);
         });
       }
     });

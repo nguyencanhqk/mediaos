@@ -14814,7 +14814,7 @@ export const backlog = [
     title:
       "Module NestJS recruit/: vị trí tuyển + ứng viên (mask PII server) + pipeline FSM 6 stage + phỏng vấn/feedback own-scope + offer (mask lương theo ('manage','offer')) + convert→employee tái dùng HR SequenceService — guard per-pair §9f ở HAI tầng, audit, outbox NOTI, @Idempotent",
     zone: "red",
-    status: "in_progress",
+    status: "done", // PR #449 merged 2026-08-31 — 32 route, FULL gate 3/3, 143 int-spec
     paths: [
       "apps/api/src/recruit/**",
       "apps/api/src/app.module.ts",
@@ -14861,7 +14861,7 @@ export const backlog = [
     title:
       "FE RECRUIT (apps/app routes/recruit/): 6 màn REC-SCREEN-001..006 — danh sách vị trí · kanban pipeline · chi tiết ứng viên (mask) · form + cảnh báo trùng + CV · lịch phỏng vấn/feedback · offer & convert; bật module RECRUIT (mig khuôn 0556)",
     zone: "yellow",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/app/src/routes/recruit/**",
       "apps/app/src/**",
@@ -14887,6 +14887,8 @@ export const backlog = [
     ],
     notes: [
       "🟡 zone yellow vì có 1 migration nhỏ (enable module) + đụng packages/web-core; phần màn hình là LIGHT gate.",
+      "6 màn + constants/recruit-errors/recruit-actions (FSM∩quyền, mirror recruit-fsm.ts) + recruit-wiring.spec.ts (pair-drift/gate/route-order) đã code xong 31/08/2026 — typecheck + test @mediaos/app XANH (244 file/2298 ca). Tab CV dùng Foundation Files GENERIC qua client cục bộ candidate-file-api.ts (apps/app, KHÔNG sửa web-core). Review gate 31/08 (8 finder): các bug correctness (TZ datetime-local, filledRef latch, export nuốt lỗi, popup-block tải CV, idempotency-key sinh trong mutationFn, CSV formula-injection, smoke-pin thiếu vế ACTIVE) đã vá cùng ngày trước khi mở PR.",
+      "⚠️ GAP DEFER có chủ đích (cần WO sau, KHÔNG phải lỗi FE): (1) role recruiter/hr CHƯA có grant foundation-file (chỉ company-admin, mig 0435) ⇒ tab CV ẩn nút với đúng role chính — cần WO seed grant riêng; (2) dropdown Đơn vị/Chức danh của form vị trí tuyển đi hrApi (read:department/position) mà recruiter không có ⇒ FE đã hiện lỗi tường minh + disable submit, muốn recruiter tự tạo vị trí cần BE thêm picker org-unit (đổi API-17, hỏi owner); (3) thẻ app gate view:job-opening nên role manager (chỉ access+view:interview@Own) không thấy thẻ — ĐÚNG luật 'ô hiện ra thì bấm vào phải vào được', manager vào /recruit/interviews qua deep-link NOTI (route gate pass); (4) refactor dùng chung (PaginationFooter → packages/ui, error-parser/idempotency → web-core, fs-pin FSM tables + error-kind census FE↔BE) → dồn cho S12-RECRUIT-QA-1; (5) BE không trả per-job candidate count nên REC-SCREEN-001 hiển thị headcount+status thay vì đếm ứng viên.",
     ],
   },
   {
@@ -14918,6 +14920,7 @@ export const backlog = [
     ],
     notes: [
       "Fixture giả-secret ghép chuỗi (gitleaks); test int trên LANE_DB cô lập; deny-path đã RED-trước ở BE-1, WO này vét ma trận + biên.",
+      "Nhận bàn giao từ FE-1 review gate (31/08): thêm fs-pin chống drift cho FE — (a) 4 bảng FSM trong apps/app/src/routes/recruit/recruit-actions.ts phải khớp apps/api/src/recruit/recruit-fsm.ts (khuôn pair-drift của recruit-wiring.spec.ts); (b) census error-kind FE (recruit-errors.ts) ↔ BE (grep recruitDetails trong apps/api/src/recruit/*.ts) — kind mới của BE rơi về errors.generic là drift câm. Cân nhắc extract PaginationFooter → packages/ui + error-parser/idempotency helper → web-core (3 bản copy assets/rooms/recruit).",
     ],
   },
   {

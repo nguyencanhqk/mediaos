@@ -24,6 +24,8 @@ export default {
     assets: "Tài sản",
     // S11-ROOM-FE-1 — module ROOM nội bộ (SPEC-14, wave S11-OFFICE).
     rooms: "Phòng họp",
+    // S12-RECRUIT-FE-1 — module RECRUIT nội bộ (SPEC-12, wave S12-RECRUIT).
+    recruit: "Tuyển dụng",
   },
   // App registry descriptions
   appDesc: {
@@ -41,6 +43,7 @@ export default {
     social: "Soạn, hẹn giờ và đăng bài lên các trang Facebook của công ty.",
     assets: "Danh mục tài sản, cấp phát, thu hồi, bảo trì và kiểm kê theo đợt.",
     rooms: "Lịch phòng họp theo tuần, đặt phòng, huỷ lịch và quản trị phòng.",
+    recruit: "Vị trí tuyển, pipeline ứng viên, phỏng vấn, offer và chuyển thành nhân viên.",
   },
   // Route titles
   routeTitle: {
@@ -154,6 +157,15 @@ export default {
     rooms: "Lịch phòng họp",
     roomManage: "Quản trị phòng họp",
     meRoomBookings: "Đặt phòng của tôi",
+    // S12-RECRUIT-FE-1 — RECRUIT (SPEC-12 §9, REC-SCREEN-001..006). Màn 006 (Offer & convert) là tab
+    // trong chi tiết ứng viên, không route riêng.
+    recruit: "Vị trí tuyển dụng",
+    recruitJobDetail: "Chi tiết vị trí tuyển",
+    recruitPipeline: "Pipeline ứng viên",
+    recruitInterviews: "Lịch phỏng vấn",
+    recruitCandidateNew: "Thêm ứng viên",
+    recruitCandidateDetail: "Chi tiết ứng viên",
+    recruitCandidateEdit: "Sửa hồ sơ ứng viên",
     forbidden: "Không có quyền truy cập",
     notFound: "Không tìm thấy trang",
   },

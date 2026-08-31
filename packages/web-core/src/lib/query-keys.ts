@@ -31,6 +31,8 @@ export const rootKeys = {
   // S11-ROOM-FE-1 — Phòng họp (SPEC-14). Module RIÊNG, wave S11-OFFICE. KHÔNG dùng chung với
   // `rootKeys.chat` (chat cũng có nhánh "rooms" nhưng đó là phòng CHAT — miền khác hẳn).
   rooms: ["rooms"] as const,
+  // S12-RECRUIT-FE-1 — Tuyển dụng (SPEC-12). Module RIÊNG, wave S12-RECRUIT.
+  recruit: ["recruit"] as const,
 } as const;
 
 // ── Auth keys ─────────────────────────────────────────────────────────────────
@@ -1112,5 +1114,54 @@ export const roomKeys = {
     ofRoom: (roomId: string, params?: Record<string, unknown>) =>
       [...rootKeys.rooms, "bookings", "of-room", roomId, params] as const,
     ofRoomAll: (roomId: string) => [...rootKeys.rooms, "bookings", "of-room", roomId] as const,
+  },
+};
+
+// ── S12-RECRUIT-FE-1 — Tuyển dụng (SPEC-12 §15, 32 route BE) ──────────────────
+//
+// `candidates`/`interviews`/`offers` là nhánh RIÊNG dưới `recruit/*`. Các sổ con của MỘT ứng viên
+// (stage-events · notes) phân trang nên key mang params CỤ THỂ — sau move-stage/thêm ghi chú phải
+// invalidate bản PREFIX `*Of` để làm mới MỌI trang (cùng bẫy assetKeys.assignmentsOf). Sau move-stage/
+// convert phải invalidate CẢ `candidates.allOf()` (kanban list mọi filter) + `summary`.
+export const recruitKeys = {
+  all: rootKeys.recruit,
+  jobs: {
+    allOf: () => [...rootKeys.recruit, "jobs"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.recruit, "jobs", "list", params] as const,
+    detail: (id: string) => [...rootKeys.recruit, "jobs", "detail", id] as const,
+  },
+  candidates: {
+    allOf: () => [...rootKeys.recruit, "candidates"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.recruit, "candidates", "list", params] as const,
+    detail: (id: string) => [...rootKeys.recruit, "candidates", "detail", id] as const,
+    summary: () => [...rootKeys.recruit, "candidates", "summary"] as const,
+    duplicate: (params?: Record<string, unknown>) =>
+      [...rootKeys.recruit, "candidates", "duplicate", params] as const,
+    stageEvents: (id: string, params?: Record<string, unknown>) =>
+      [...rootKeys.recruit, "candidates", "stage-events", id, params] as const,
+    stageEventsOf: (id: string) => [...rootKeys.recruit, "candidates", "stage-events", id] as const,
+    notes: (id: string, params?: Record<string, unknown>) =>
+      [...rootKeys.recruit, "candidates", "notes", id, params] as const,
+    notesOf: (id: string) => [...rootKeys.recruit, "candidates", "notes", id] as const,
+  },
+  interviews: {
+    allOf: () => [...rootKeys.recruit, "interviews"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.recruit, "interviews", "list", params] as const,
+    detail: (id: string) => [...rootKeys.recruit, "interviews", "detail", id] as const,
+  },
+  offers: {
+    allOf: () => [...rootKeys.recruit, "offers"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.recruit, "offers", "list", params] as const,
+    detail: (id: string) => [...rootKeys.recruit, "offers", "detail", id] as const,
+  },
+  pickers: {
+    employees: (params?: Record<string, unknown>) =>
+      [...rootKeys.recruit, "pickers", "employees", params] as const,
+    recruiterUsers: (params?: Record<string, unknown>) =>
+      [...rootKeys.recruit, "pickers", "recruiter-users", params] as const,
   },
 };

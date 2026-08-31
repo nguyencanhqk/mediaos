@@ -54,6 +54,8 @@ import {
   MessagesSquare,
   Package,
   DoorOpen,
+  UserPlus,
+  Briefcase,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@mediaos/ui";
@@ -118,6 +120,10 @@ const ICON_MAP: Record<string, LucideIcon> = {
   package: Package,
   // S11-ROOM-FE-1 — mục sidebar «Quản trị phòng họp» (ROOM). Thiếu khoá này thì rơi về fallback Circle.
   "door-open": DoorOpen,
+  // S12-RECRUIT-FE-1 — APP_REGISTRY 'recruit' + mục sidebar «Vị trí tuyển dụng». "kanban-square" (mục
+  // Pipeline) và "calendar-days" (mục Lịch phỏng vấn) đã map sẵn ở trên.
+  "user-plus": UserPlus,
+  briefcase: Briefcase,
 };
 
 interface DynamicIconProps {

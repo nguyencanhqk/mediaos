@@ -803,6 +803,27 @@ export const APP_REGISTRY: readonly AppRegistryItem[] = [
     status: "active",
     order: 110,
   },
+  {
+    // S12-RECRUIT-FE-1 — thẻ "Tuyển dụng" (SPEC-12, wave S12-RECRUIT). Module NỘI BỘ thật.
+    //
+    // Gate = ĐỦ CẢ HAI cặp engine LITERAL `access:recruit` + `view:job-opening` (seed 0560) — thẻ điều
+    // hướng tới /recruit/job-openings, trang đó tải GET /job-openings = `view:job-opening` ⇒ "ô hiện ra
+    // thì bấm vào phải vào được" (cùng lý do ASSET/ROOM ngay trên). KHÔNG gate bằng cặp `candidate`:
+    // 7 cặp đó is_sensitive ⇒ wildcard không kế thừa, gate thẻ bằng chúng sẽ giấu CẢ app khỏi role chỉ
+    // được xem vị trí tuyển; màn pipeline/ứng viên tự gate riêng bằng useCanExact('view','candidate').
+    appKey: "recruit",
+    moduleCode: "RECRUIT",
+    nameKey: "app.recruit",
+    descKey: "appDesc.recruit",
+    icon: "user-plus",
+    rootPath: "/recruit",
+    defaultRoute: "/recruit/job-openings",
+    category: "hr",
+    aliases: ["tuyen dung", "recruit", "ung vien", "phong van", "offer", "candidate", "pipeline"],
+    requiredPermissions: ["access:recruit", "view:job-opening"],
+    status: "active",
+    order: 120,
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -1664,6 +1685,51 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredPermissions: ["access:room", "view:room"],
     showInSidebar: true,
     order: 84,
+  },
+
+  // RECRUIT — Tuyển dụng (SPEC-12 §9, wave S12-RECRUIT). Gate màn = gate ĐƯỜNG TẢI của chính màn đó
+  // (read-path-gate-pair-must-match-download-pair), cặp engine LITERAL access:recruit + view:<resource>:
+  //   • job-openings tải GET /job-openings = view:job-opening (non-sensitive — useCan/wildcard OK);
+  //   • pipeline tải GET /candidates = view:candidate — cặp SENSITIVE trong allowlist BE
+  //     (SENSITIVE_CAPABILITY_ALLOWLIST + SENSITIVE_SCREEN_GATE_PAIRS, permission.service.ts): /auth/me
+  //     CÓ trả cặp literal cho role được cấp; wildcard *:* KHÔNG kế thừa ⇒ fail-closed đúng semantics BE;
+  //   • interviews tải GET /interviews = view:interview (non-sensitive, Own = lượt mình được xếp).
+  //
+  // Màn còn lại (chi tiết/form ứng viên REC-SCREEN-003/004; offer 006 là tab trong chi tiết) dùng
+  // RouteMeta CỤC BỘ trong router.tsx (mẫu ASSET detail/new/edit). Quyền GHI (create/update/move-stage/
+  // convert/manage-*) gate TRONG page qua useCanExact/useCan + BE ép — KHÔNG nhét vào route.
+  {
+    routeKey: "recruit.jobs",
+    path: "/recruit/job-openings",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "RECRUIT",
+    screenCode: "REC-SCREEN-001",
+    titleKey: "routeTitle.recruit",
+    requiredPermissions: ["access:recruit", "view:job-opening"],
+    showInSidebar: true,
+    order: 85,
+  },
+  {
+    routeKey: "recruit.pipeline",
+    path: "/recruit/pipeline",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "RECRUIT",
+    screenCode: "REC-SCREEN-002",
+    titleKey: "routeTitle.recruitPipeline",
+    requiredPermissions: ["access:recruit", "view:candidate"],
+    showInSidebar: true,
+    order: 86,
+  },
+  {
+    routeKey: "recruit.interviews",
+    path: "/recruit/interviews",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "RECRUIT",
+    screenCode: "REC-SCREEN-005",
+    titleKey: "routeTitle.recruitInterviews",
+    requiredPermissions: ["access:recruit", "view:interview"],
+    showInSidebar: true,
+    order: 87,
   },
 
   // System
