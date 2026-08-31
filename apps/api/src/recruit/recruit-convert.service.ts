@@ -161,6 +161,7 @@ export class RecruitConvertService {
         actorUserId: user.id,
         candidate_name: locked.fullName,
         job_title: locked.jobTitle,
+        candidate_id: candidateId,
       };
       await this.outbox.enqueue(tx, { eventType: RECRUIT_EVENT_CANDIDATE_HIRED, payload });
 

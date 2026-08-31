@@ -30,6 +30,8 @@ import {
 } from "./recruit.errors";
 import { toFeedbackDto, toInterviewDto } from "./recruit.mapper";
 import {
+  formatInterviewTimeRange,
+  RECRUIT_ACTOR_FALLBACK,
   RECRUIT_EVENT_INTERVIEW_SCHEDULED,
   type RecruitInterviewScheduledPayload,
 } from "./recruit-noti.payload";
@@ -140,16 +142,19 @@ export class InterviewsService {
         before: null,
         after: { candidateId: row.candidateId, round: row.round, startsAt: dto.startsAt },
       });
+      const job = await this.candidates.jobStatusTx(tx, user.companyId, candidate.jobOpeningId);
+      const actorRef = (await this.people.namesByUserIdsTx(tx, actor, [user.id])).get(user.id);
       const payload: RecruitInterviewScheduledPayload = {
         interviewId: row.id,
         candidateId: row.candidateId,
         actorUserId: user.id,
+        actor_name: actorRef?.displayName ?? RECRUIT_ACTOR_FALLBACK,
         candidate_name: candidate.fullName,
-        job_title: "",
-        starts_at: row.startsAt.toISOString(),
+        round: row.round,
+        job_title: job?.title ?? "",
+        time_range: formatInterviewTimeRange(row.startsAt, row.endsAt),
+        candidate_id: row.candidateId,
       };
-      const job = await this.candidates.jobStatusTx(tx, user.companyId, candidate.jobOpeningId);
-      payload.job_title = job?.title ?? "";
       await this.outbox.enqueue(tx, { eventType: RECRUIT_EVENT_INTERVIEW_SCHEDULED, payload });
       const [out] = await this.toDtos(tx, actor, [row]);
       return out;

@@ -29,9 +29,11 @@ import {
 } from "./recruit.errors";
 import { toCandidateDetail, toCandidateListItem } from "./recruit.mapper";
 import {
+  RECRUIT_ACTOR_FALLBACK,
   RECRUIT_EVENT_STAGE_CHANGED,
   type RecruitStageChangedPayload,
 } from "./recruit-noti.payload";
+import { RecruitPeopleRepository } from "./recruit-people.repository";
 import type { RecruitRequestUser } from "./recruit.types";
 
 /** Ngưỡng export — test-only override qua env (RECRUIT-ERR-015 phải có ca THẬT, plan §2.2). */
@@ -56,6 +58,7 @@ export class CandidatesService {
     private readonly db: DatabaseService,
     private readonly access: RecruitAccessService,
     private readonly repo: CandidatesRepository,
+    private readonly people: RecruitPeopleRepository,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
   ) {}
@@ -227,14 +230,19 @@ export class CandidatesService {
         before: { stage: before.stage },
         after: { stage: moved.candidate.stage, reason: dto.reason },
       });
+      const job = await this.repo.jobStatusTx(tx, user.companyId, moved.candidate.jobOpeningId);
+      const actorRef = (await this.people.namesByUserIdsTx(tx, actor, [user.id])).get(user.id);
       const payload: RecruitStageChangedPayload = {
         stageEventId: moved.stageEvent.id,
         candidateId: id,
         jobOpeningId: moved.candidate.jobOpeningId,
         actorUserId: user.id,
+        actor_name: actorRef?.displayName ?? RECRUIT_ACTOR_FALLBACK,
         candidate_name: moved.candidate.fullName,
+        job_title: job?.title ?? "",
         from_stage: before.stage,
         to_stage: moved.candidate.stage,
+        candidate_id: id,
       };
       await this.outbox.enqueue(tx, { eventType: RECRUIT_EVENT_STAGE_CHANGED, payload });
       return toCandidateDetail(moved.candidate, actor);

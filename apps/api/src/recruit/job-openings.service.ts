@@ -25,7 +25,11 @@ import {
   RECRUIT_ERR,
   recruitDetails,
 } from "./recruit.errors";
-import { RECRUIT_EVENT_JOB_ASSIGNED, type RecruitJobAssignedPayload } from "./recruit-noti.payload";
+import {
+  RECRUIT_ACTOR_FALLBACK,
+  RECRUIT_EVENT_JOB_ASSIGNED,
+  type RecruitJobAssignedPayload,
+} from "./recruit-noti.payload";
 import type { RecruitRequestUser } from "./recruit.types";
 
 /**
@@ -144,12 +148,16 @@ export class JobOpeningsService {
       });
       // NOTI-016 — CHỈ khi recruiter ĐỔI sang một user khác actor (engine vẫn loại actor lần nữa).
       if (recruiterChanged && row.recruiterUserId && row.recruiterUserId !== user.id) {
+        // Tên CHÍNH actor qua điểm chiếu duy nhất (route này scope Company ⇒ cond mở; fallback nhãn).
+        const actorRef = (await this.people.namesByUserIdsTx(tx, actor, [user.id])).get(user.id);
         const payload: RecruitJobAssignedPayload = {
           jobOpeningId: row.id,
           newRecruiterUserId: row.recruiterUserId,
           assignedAtIso: row.updatedAt.toISOString(),
           actorUserId: user.id,
+          actor_name: actorRef?.displayName ?? RECRUIT_ACTOR_FALLBACK,
           job_title: row.title,
+          job_opening_id: row.id,
         };
         await this.outbox.enqueue(tx, { eventType: RECRUIT_EVENT_JOB_ASSIGNED, payload });
       }
