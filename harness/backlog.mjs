@@ -31,9 +31,10 @@
 //   id          : mã ngắn ổn định <MODULE>-<LAYER>-<n> (ISSUE-BOARD-01 §8)        — string, bắt buộc
 //   module      : mã module ISSUE-BOARD-01 §8.2 — dashboard nhóm thẻ. Thiếu/sai → suy từ id/title/paths (hay xếp NHẦM).
 //                 MVP:      PROJECT·FOUNDATION·AUTH·HR·ATT·LEAVE·TASK·NOTI·DASH·FRONTEND·BACKEND·INTEGRATION·QA·DEVOPS·RELEASE
-//                 hậu-MVP:  ME·GOAL·LMS·BRAND·CHAT·SOCIAL·ASSET·ROOM  (mỗi mã có epic riêng — IMPLEMENTATION-02 §8.13–8.17;
+//                 hậu-MVP:  ME·GOAL·LMS·BRAND·CHAT·SOCIAL·ASSET·ROOM·RECRUIT  (mỗi mã có epic riêng — IMPLEMENTATION-02 §8.13–8.20;
 //                           SOCIAL thêm 06/08/2026 cho app vệ tinh fbpost — docs/plans/S9-SOCIAL-WAVE.md;
-//                           ASSET·ROOM thêm 28/08/2026 cho wave S11-OFFICE — docs/plans/S11-OFFICE-WAVE.md)
+//                           ASSET·ROOM thêm 28/08/2026 cho wave S11-OFFICE — docs/plans/S11-OFFICE-WAVE.md;
+//                           RECRUIT thêm 31/08/2026 cho wave S12-RECRUIT — docs/plans/S12-RECRUIT-WAVE.md)
 //                 ĐÃ BỎ (2026-08-03, đừng dùng lại): INT→INTEGRATION · FND→FOUNDATION · SYSTEM→BRAND
 //   layer       : mã layer ISSUE-BOARD-01 §8.3 (DOC·DB·API·BE·FE·UI·QA·DEVOPS·SEC·PERF·INT·REL)                                       — dashboard chip lớp. Thiếu → suy từ paths/title.
 //   title       : một câu mô tả                                                   — string, bắt buộc
@@ -14702,6 +14703,240 @@ export const backlog = [
       "🐞 VÁ LỖI CÓ SẴN: `GOAL_PROGRESS` thiếu dòng trong `DASH_WIDGET_SLUG` (web-core) từ S5-GOAL-DASH-1 ⇒ widget đó ném 'widget chưa có FE slug mapping' MỌI lần mở, mà spec component vẫn xanh vì mock thẳng dashboardApi. Đã thêm slug + RATCHET ở DashboardWidgetGrid.spec: mọi DASH_WIDGET_CODE phải có slug (thêm widget mà quên slug từ nay là ĐỎ).",
       "🧪 18 ca int-spec `dashboard-office-widgets.int-spec.ts` (LANE_DB) + 18 ca FE (RoomTodayWidget/AssetSummaryWidget) + 2 ca Grid. Fixture lượt đặt gieo THẲNG bằng SQL ở giờ tường 08:00 local: đặt qua API cần thời điểm tương lai, lượt '+60 phút' chạy lúc 23:30 rơi sang NGÀY MAI ⇒ ca ALLOW rỗng tuỳ giờ chạy CI. Cập nhật 4 danh sách vét-cạn của `dashboard-resolver.int-spec.ts` (employee +ROOM_TODAY; manager +ROOM_TODAY +ASSET_SUMMARY — đối chứng scope trên ROLE CANONICAL THẬT).",
       "📌 Nợ ngoài phạm vi: chưa có quick-action cho 2 widget (cùng họ với 9 widget đợt 2 + GOAL_PROGRESS — đều chưa có); giờ hiển thị FE vẫn đi qua `companyTimeZone()` = DEFAULT_TIMEZONE tới khi session mang được `company.timezone` (memory `fe-has-no-company-timezone`) — 'hôm nay' thì đã đúng vì SERVER chốt.",
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Wave S12-RECRUIT — Phase 2 «HR nâng cao»: RECRUIT (tuyển dụng)
+  // Owner ĐÃ DUYỆT 31/08/2026 nguyên gói hồ sơ docs/plans/S12-RECRUIT-WAVE-review.html
+  // (8/8 REC-DEC chốt theo cột Đề xuất — docs/plans/S12-RECRUIT-WAVE.md §3).
+  // Track nối tiếp duy nhất: DOC → DB 🔴 → BE 🔴 → FE → QA 🟡 → DASH.
+  // PAYROLL KHÔNG thuộc wave này (wave riêng, cần chốt nghiệp vụ lương trước).
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "S12-RECRUIT-DOC-1",
+    module: "RECRUIT",
+    layer: "DOC",
+    title:
+      "Bộ tài liệu RECRUIT: SPEC-12 + DB-14 + API-17 + permission-matrix §9f + hợp thức trạng thái vào SPEC-01 §17.11–17.14 + EPIC-19 (§8.20) + đồng bộ README/DB-01·09·10/erd-current/RELEASE-14 (PARK-RECRUIT-001) — 8 REC-DEC đã ký 31/08, chỉ chép kết luận",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "docs/SPEC/**",
+      "docs/DB/**",
+      "docs/API Design/**",
+      "docs/permission-matrix-spec.md",
+      "docs/README.md",
+      "docs/erd-current.md",
+      "docs/RELEASE/RELEASE-14_Post_Go_Live_Backlog.md",
+      "docs/IMPLEMENTATION/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+      "harness/lib/stories.mjs",
+      "harness/dashboard/server.mjs",
+    ],
+    skills: [],
+    depends_on: [],
+    plan: "docs/plans/S12-RECRUIT-WAVE.md",
+    src: [
+      "owner-request 2026-08-31 — duyệt nguyên gói hồ sơ HTML wave S12-RECRUIT (8/8 REC-DEC theo Đề xuất)",
+      "SPEC-01 §12.9 (phạm vi) · §10.7 (Recruiter) · §7 Phase 2 (số SPEC-12 đã khoá) · §17.7 (luật hợp thức trạng thái)",
+      "IMPLEMENTATION-10 §10.2 (P2-REC-01..09 + AC) · §11 (PMVP-AUTH-003/005/006 · PMVP-HR-004/005) · §13.2 (DB-14 giữ chỗ)",
+      "docs/plans/S12-RECRUIT-WAVE.md §3 (REC-DEC-001..008) + §4 story RC-01..10",
+    ],
+    done_when: [
+      "Ghi kết luận 8 REC-DEC vào SPEC-12 bảng quyết định (khuôn SPEC-15 §22); SPEC-12 flip Draft → Approved",
+      "SPEC-12 + DB-14 + API-17 tồn tại, trỏ chéo đúng, không mâu thuẫn; permission-matrix §9f (cặp quyền per-(perm,role) data_scope, candidate is_sensitive=true) khớp API-17",
+      "SPEC-01 §17.11–17.14 hợp thức 4 bộ trạng thái (candidate·job_opening·interview·offer); §12.9 + §7/§8 trỏ SPEC-12; SPEC-01 §20.2/SPEC-08 cấp dải NOTI-EVENT mới (đo dải hiện có trước — 015 là mã cuối lúc seed, KHÔNG hard-code khi chưa đo lại)",
+      "README §9 thêm dòng RECRUIT; DB-01 §3.2 + DB-09 (index) + DB-10 (seed) + erd-current + RELEASE-14 §5 (PARK-RECRUIT-001 retention) đồng bộ; IMPLEMENTATION-02 thêm EPIC-19 §8.20 (RC-01..10 + AC + point, IMP02-STORY-171..180)",
+      "harness/lib/stories.mjs (EPIC_MODULE + sprintOfStory) và harness/dashboard/server.mjs (MODULE_SPEC) nhận RECRUIT — WO không rơi vào rổ phẳng",
+      "plan-reviewer đối kháng PASS trên SPEC-12 + DB-14 trước khi mở S12-RECRUIT-DB-1",
+    ],
+    notes: [
+      "✅ OWNER ĐÃ DUYỆT 2026-08-31 nguyên gói hồ sơ docs/plans/S12-RECRUIT-WAVE-review.html — REC-DEC-001..008 chốt ĐÚNG cột Đề xuất ở wave plan §3. WO này chỉ GHI kết luận vào SPEC-12 rồi viết bộ tài liệu — không hỏi lại owner.",
+      "🟢 LIGHT gate (docs-only). Số hiệu DB-14/API-17 đã chốt ở REC-DEC-001 (DB-14 đúng chỗ IMP-10 §13.2 giữ; API-16 đã bị PERMISSION AUDIT REPORT chiếm).",
+      "Nền sạch: 0 bảng di sản recruit (chỉ 2 enum trong finance/media đã park); hàng modules RECRUIT pre-seed inactive từ 0435.",
+    ],
+  },
+  {
+    id: "S12-RECRUIT-DB-1",
+    module: "RECRUIT",
+    layer: "DB",
+    title:
+      "Schema + migration RECRUIT theo DB-14: job_openings · candidates · candidate_stage_events (append-only) · candidate_notes · interviews (+participants) · interview_feedbacks · offers — RLS+FORCE, composite tenant FK, seed role recruiter + permission §9f + NOTI catalog (CẢ HAI bảng)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "apps/api/src/foundation/seed/**",
+      "apps/api/test/foundation/**",
+      "apps/api/test/integration/**",
+      "apps/api/test/helpers/seed.ts",
+      "packages/contracts/src/recruit*.ts",
+      "packages/contracts/src/notification.ts",
+      "packages/contracts/src/index.ts",
+      "docs/erd-current.md",
+      "docs/DB/DB-14*.md",
+      "docs/DB/DB-10*.md",
+      "docs/SPEC/SPEC-12*.md",
+      "docs/plans/S12-RECRUIT-DB-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S12-RECRUIT-DOC-1"],
+    plan: "docs/plans/S12-RECRUIT-DB-1.md",
+    src: [
+      "DB-14 (viết ở S12-RECRUIT-DOC-1) — nguồn sự thật schema",
+      "REC-DEC-002 (6 stage cố định) · 003 (is_sensitive) · 005 (employee_id UNIQUE) · 008 (role recruiter) — wave plan §3",
+      "Khuôn: 0549..0551 (ASSET DDL/seed/NOTI) · 0535 (composite tenant-FK) · 0435 (modules pre-seed — seed lại NO-OP, KHÔNG bật is_active ở đây)",
+    ],
+    done_when: [
+      "Migration đánh số NỐI TIẾP head thật lúc merge (dự kiến 0559+), có mặt trong journal; RLS policy + FORCE TRƯỚC mọi dữ liệu; mọi FK mới kèm composite tenant-FK",
+      "candidate_stage_events append-only: REVOKE UPDATE/DELETE với app role; UNION-ADD audit_logs.object_types đúng neo parse",
+      "Seed: role hệ thống recruiter (company_id NULL · is_system=true · requires_two_factor=false tường minh, KHÔNG canonical) + cặp quyền §9f ON CONFLICT DO NOTHING + NOTI catalog nới CHECK module_code trên CẢ HAI bảng (notification_events + notifications) + hàng events; candidates.employee_id UNIQUE",
+      "packages/contracts recruit*.ts: Zod mirror CHECK DB HAI CHIỀU ĐÚNG BẰNG (không chặt hơn, không lỏng hơn); barrel index.ts không đụng export park (bẫy TS2308)",
+      "Census grant phủ 4 hình dạng wildcard; test schema + seed trên LANE_DB xanh",
+    ],
+    notes: [
+      "🔴 FULL gate + Opus (crown: permission seed + RLS + append-only). Lane migration NỐI TIẾP duy nhất của wave.",
+      "KHÔNG bật modules.is_active (việc của S12-RECRUIT-FE-1, khuôn 0556); guard trong migration KHÔNG assert trạng thái module khác (bài học wiring-spec ASSET↔ROOM).",
+    ],
+  },
+  {
+    id: "S12-RECRUIT-BE-1",
+    module: "RECRUIT",
+    layer: "BE",
+    title:
+      "Module NestJS recruit/: vị trí tuyển + ứng viên (mask PII server) + pipeline FSM 6 stage + phỏng vấn/feedback own-scope + offer (mask lương theo ('manage','offer')) + convert→employee tái dùng HR SequenceService — guard per-pair §9f ở HAI tầng, audit, outbox NOTI, @Idempotent",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/recruit/**",
+      "apps/api/src/app.module.ts",
+      "apps/api/src/config/openapi-modules.ts",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/SPEC/SPEC-12*.md",
+      "docs/plans/S12-RECRUIT-BE-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S12-RECRUIT-DB-1"],
+    plan: "docs/plans/S12-RECRUIT-BE-1.md",
+    src: [
+      "SPEC-12 §API/§ERR (viết ở DOC-1) + API-17 — nguồn sự thật endpoint/mã lỗi",
+      "REC-DEC-003 (mask server) · 004 (lương offer) · 005 (convert 1 bước, chỉ khi Offer Accepted) · 006 (own-scope interviewer)",
+      "Khuôn: assets/ (S11-ASSET-BE-1 — 26 route FSM + masking + counter) · employees/ SequenceService ensure-on-miss (S2-HR-BE-2)",
+    ],
+    done_when: [
+      "Deny-path test RED-TRƯỚC cho mọi route nhạy cảm; mọi API check company_id qua withTenant; guard cặp quyền ở CẢ decorator route lẫn service",
+      "FSM: chuyển tiếp sai trả 4xx đúng mã RECRUIT-ERR (Hired terminal; Rejected reopen→Screening kèm lý do; job Closed chặn thêm candidate); trần Zod ≠ trần service không đẻ mã lỗi chết",
+      "Masking SERVER: email/phone candidate theo quyền; lương offer chỉ trả cho ('manage','offer'); CV qua Foundation Files private + file_access_logs khi tải; export có audit",
+      "Convert: transaction + UNIQUE employee_id (race 2 request song song đúng-1-thắng); mã NV từ employee_code_config ensure-on-miss, KHÔNG hard-code prefix; chỉ khi Offer=Accepted",
+      "Outbox NOTI đúng catalog (dedupeKey content-derived); audit log mọi hành động quan trọng; @Idempotent các POST tạo",
+      "API_MODULE_TAGS khai RECRUIT; route-census regen ROUTE_CENSUS_WRITE=1 có chủ đích; :id = UUID ở biên; test trên LANE_DB",
+    ],
+    notes: [
+      "🔴 FULL gate + Opus (PII ứng viên — PMVP-AUTH-005/006). Ứng viên là người NGOÀI hệ thống: KHÔNG FK sang users; identity nội bộ (recruiter/interviewer) FK employee/user chuẩn.",
+      "own-scope interview theo interview_participants (người ĐƯỢC XẾP), không theo người tạo.",
+    ],
+  },
+  {
+    id: "S12-RECRUIT-FE-1",
+    module: "RECRUIT",
+    layer: "FE",
+    title:
+      "FE RECRUIT (apps/app routes/recruit/): 6 màn REC-SCREEN-001..006 — danh sách vị trí · kanban pipeline · chi tiết ứng viên (mask) · form + cảnh báo trùng + CV · lịch phỏng vấn/feedback · offer & convert; bật module RECRUIT (mig khuôn 0556)",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/recruit/**",
+      "apps/app/src/**",
+      "packages/web-core/**",
+      "packages/contracts/**",
+      "apps/api/migrations/**",
+      "docs/SPEC/SPEC-12*.md",
+      "docs/plans/S12-RECRUIT-FE-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S12-RECRUIT-BE-1"],
+    src: [
+      "SPEC-12 §SCREEN (REC-SCREEN-001..006) + wireframe hồ sơ HTML §06",
+      "Khuôn: routes/assets/ + routes/rooms/ (S11 FE) · mig 0556/0557 (enable module)",
+    ],
+    done_when: [
+      "6 màn đủ loading/error/empty, i18n vi, trạng thái dùng constants chuẩn §17; PermissionGate + useCan, KHÔNG hard-code quyền/role",
+      "Schema FE .optional() cho MỌI trường server mask (email/phone candidate, lương offer) — role thiếu quyền không trang trắng",
+      "Kanban move-stage kèm hộp lý do; form ứng viên hiện cảnh báo trùng email/phone (không chặn cứng); convert khoá khi offer chưa Accepted",
+      "Migration bật modules.is_active cho RECRUIT (nối head lúc merge); guard bật-module KHÔNG assert trạng thái module khác",
+      "Test màn hình + typecheck/build xanh toàn workspace",
+    ],
+    notes: [
+      "🟡 zone yellow vì có 1 migration nhỏ (enable module) + đụng packages/web-core; phần màn hình là LIGHT gate.",
+    ],
+  },
+  {
+    id: "S12-RECRUIT-QA-1",
+    module: "RECRUIT",
+    layer: "QA",
+    title:
+      "QA RECRUIT: ma trận allow/deny per-pair TỪNG route · IDOR/cross-tenant 2-tenant thật · FSM chuyển tiếp sai · race double-convert · census mã lỗi theo MÃ · biên idempotency — coverage ≥80% module recruit, chạy như CI trên LANE_DB",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/recruit/**",
+      "apps/api/test/**",
+      "apps/app/src/routes/recruit/**",
+      "docs/QA/**",
+      "docs/TESTABLE-FEATURES.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S12-RECRUIT-FE-1"],
+    src: [
+      "SPEC-12 ma trận test (viết ở DOC-1); khuôn S11-ASSET-QA-1 (81 ca) + S11-ROOM-QA-1 (86 ca)",
+    ],
+    done_when: [
+      "Ma trận per-pair từng route: deny-case KHÔNG rỗng nghĩa (mỗi cặp có ca ALLOW đối chứng); cross-tenant 2-tenant thật; census so TỪNG ROUTE theo MÃ cặp ở CẢ HAI tầng guard",
+      "FSM: mọi chuyển tiếp không hợp lệ có test trả đúng RECRUIT-ERR; census mã lỗi theo MÃ (không theo dòng) — không mã nào 0 ca",
+      "Race double-convert: 2 request song song → đúng 1 thắng; own-scope interviewer có ca deny lẫn allow",
+      "bash harness/check.sh --lane-db xanh KHÔNG kèm banner 'XANH KHÔNG ĐỦ BẰNG CHỨNG'; coverage recruit/ ≥80%; docs/TESTABLE-FEATURES.md cập nhật mục RECRUIT",
+    ],
+    notes: [
+      "Fixture giả-secret ghép chuỗi (gitleaks); test int trên LANE_DB cô lập; deny-path đã RED-trước ở BE-1, WO này vét ma trận + biên.",
+    ],
+  },
+  {
+    id: "S12-RECRUIT-DASH-1",
+    module: "RECRUIT",
+    layer: "FE",
+    title:
+      "Widget DASH «phễu tuyển dụng» (RECRUIT-WIDGET-001): ứng viên theo stage + vị trí đang mở — catalog BE + SÀN SCOPE + wire slug FE DashboardWidgetGrid + test slug-map, đăng ký mã theo SPEC-01 §9.9",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/api/src/dashboard/**",
+      "apps/api/migrations/**",
+      "apps/app/src/components/dashboard/**",
+      "packages/web-core/**",
+      "packages/contracts/**",
+      "docs/SPEC/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S12-RECRUIT-QA-1"],
+    src: [
+      "Khuôn S11-OFFICE-DASH-1: mig 0558 (CHECK module_code widget catalog) · DASH_WIDGET_MIN_DATA_SCOPE (sàn scope) · handler file riêng · ratchet slug-map DashboardWidgetGrid.spec",
+    ],
+    done_when: [
+      "Widget render đúng theo quyền: role không có cặp RECRUIT không thấy + KHÔNG gọi API (registry omit + handler 403 đọc CÙNG hằng sàn scope)",
+      "Slug thêm vào DASH_WIDGET_SLUG (web-core) — ratchet slug-map xanh; API widget qua DTO/masking chuẩn (không lộ PII ứng viên trong widget)",
+      "Test widget allow/deny (int-spec LANE_DB + FE) + typecheck/build xanh",
+    ],
+    notes: [
+      "🟢 LIGHT gate. Đóng wave S12-RECRUIT — sau WO này regen STATUS + cập nhật memory wave.",
     ],
   },
 ];

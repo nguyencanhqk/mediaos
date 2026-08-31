@@ -1,0 +1,1651 @@
+<title>Wave S12-RECRUIT</title>
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap"
+/>
+<style>
+  :root {
+    --bg: #f7f5f6;
+    --surface: #ffffff;
+    --surface-2: #f1edf0;
+    --ink: #241f23;
+    --muted: #675e64;
+    --line: #e0d9dd;
+    --line-soft: #eae4e8;
+    --rec: #8a3e78;
+    --rec-ink: #6f2f60;
+    --rec-soft: #f4e3ef;
+    --hr: #12796b;
+    --hr-ink: #0e5f55;
+    --hr-soft: #e0f0ec;
+    --amber: #96590c;
+    --amber-soft: #f6ecd9;
+    --red: #b3261e;
+    --red-soft: #f9e6e4;
+    --green: #256c2f;
+    --green-soft: #e3f0e1;
+    --code-bg: #efe9ed;
+    --shadow: 0 1px 2px rgba(36, 31, 35, 0.05), 0 4px 16px rgba(36, 31, 35, 0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #171317;
+      --surface: #201a1f;
+      --surface-2: #282127;
+      --ink: #eae3e8;
+      --muted: #a3949e;
+      --line: #382e35;
+      --line-soft: #2e262c;
+      --rec: #d08fc0;
+      --rec-ink: #dfa9d2;
+      --rec-soft: #3a2034;
+      --hr: #48bfaa;
+      --hr-ink: #6ed0be;
+      --hr-soft: #143530;
+      --amber: #e0a554;
+      --amber-soft: #3a2d15;
+      --red: #e98d82;
+      --red-soft: #3d201c;
+      --green: #7cc383;
+      --green-soft: #1d3320;
+      --code-bg: #2d242b;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #171317;
+    --surface: #201a1f;
+    --surface-2: #282127;
+    --ink: #eae3e8;
+    --muted: #a3949e;
+    --line: #382e35;
+    --line-soft: #2e262c;
+    --rec: #d08fc0;
+    --rec-ink: #dfa9d2;
+    --rec-soft: #3a2034;
+    --hr: #48bfaa;
+    --hr-ink: #6ed0be;
+    --hr-soft: #143530;
+    --amber: #e0a554;
+    --amber-soft: #3a2d15;
+    --red: #e98d82;
+    --red-soft: #3d201c;
+    --green: #7cc383;
+    --green-soft: #1d3320;
+    --code-bg: #2d242b;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 40px 24px 96px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: Archivo, "Be Vietnam Pro", system-ui, sans-serif;
+    text-wrap: balance;
+    line-height: 1.2;
+  }
+  h1 {
+    font-size: 2.1rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin: 10px 0 8px;
+  }
+  h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin: 0 0 4px;
+  }
+  h3 {
+    font-size: 1.02rem;
+    font-weight: 700;
+    margin: 22px 0 8px;
+  }
+  p {
+    margin: 8px 0;
+  }
+  section {
+    margin-top: 44px;
+  }
+  .lede {
+    color: var(--muted);
+    max-width: 62ch;
+  }
+
+  .eyebrow {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .eyebrow::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+  .eyebrow .no {
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--ink);
+  }
+
+  code,
+  .mono {
+    font-family: "IBM Plex Mono", Consolas, monospace;
+    font-size: 0.86em;
+  }
+  code {
+    background: var(--code-bg);
+    border-radius: 4px;
+    padding: 0.12em 0.38em;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    padding: 3px 11px;
+    letter-spacing: 0.02em;
+  }
+  .badge-amber {
+    background: var(--amber-soft);
+    color: var(--amber);
+  }
+  .badge-rec {
+    background: var(--rec-soft);
+    color: var(--rec-ink);
+  }
+  .badge-hr {
+    background: var(--hr-soft);
+    color: var(--hr-ink);
+  }
+  .badge-red {
+    background: var(--red-soft);
+    color: var(--red);
+  }
+  .badge-green {
+    background: var(--green-soft);
+    color: var(--green);
+  }
+
+  .head-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 28px 30px;
+    box-shadow: var(--shadow);
+  }
+  .head-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .callout {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--amber);
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 18px 0;
+  }
+  .callout.red-edge {
+    border-left-color: var(--red);
+  }
+  .callout.green-edge {
+    border-left-color: var(--green);
+  }
+
+  table.doc {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+  table.doc th {
+    text-align: left;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: 600;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-2);
+    white-space: nowrap;
+  }
+  table.doc td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+  }
+  table.doc tr:last-child td {
+    border-bottom: none;
+  }
+  table.doc td.mono,
+  table.doc th.mono {
+    white-space: nowrap;
+  }
+
+  .cols-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 760px) {
+    .cols-2 {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .story-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .story-card .story-head {
+    padding: 12px 16px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--line);
+    background: var(--rec-soft);
+    color: var(--rec-ink);
+  }
+  .story-card ul {
+    margin: 0;
+    padding: 12px 16px 14px 16px;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .story-card li {
+    display: grid;
+    grid-template-columns: 52px 1fr;
+    gap: 10px;
+    font-size: 0.88rem;
+  }
+  .story-card li .sid {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--muted);
+    padding-top: 2px;
+  }
+
+  .fsm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0 2px;
+  }
+  .fsm .st {
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 3px 12px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .fsm .st.hi-rec {
+    border-color: var(--rec);
+    color: var(--rec-ink);
+  }
+  .fsm .st.hi-hr {
+    border-color: var(--hr);
+    color: var(--hr-ink);
+  }
+  .fsm .st.terminal {
+    border-style: dashed;
+    color: var(--muted);
+  }
+  .fsm .arr {
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+  .fsm-note {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* ── Wireframes ─────────────────────────────── */
+  .wires {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 18px;
+  }
+  @media (max-width: 860px) {
+    .wires {
+      grid-template-columns: 1fr;
+    }
+  }
+  .wire {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border-top: 3px solid var(--rec);
+  }
+  .wire-caption {
+    padding: 12px 16px 14px;
+    border-top: 1px solid var(--line);
+  }
+  .wire-caption .wc-title {
+    font-weight: 700;
+    font-size: 0.9rem;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+  .wire-caption .wc-id {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+  .wire-caption p {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin: 4px 0 0;
+  }
+  .wire-screen {
+    padding: 14px;
+    background: var(--surface-2);
+    flex: 1;
+  }
+  .app {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 10.5px;
+    line-height: 1.45;
+    overflow: hidden;
+  }
+  .app-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--line-soft);
+    color: var(--muted);
+  }
+  .app-top .crumb {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .app-body {
+    display: flex;
+    min-height: 190px;
+  }
+  .app-nav {
+    width: 64px;
+    border-right: 1px solid var(--line-soft);
+    padding: 8px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .app-nav .ni {
+    height: 9px;
+    border-radius: 3px;
+    background: var(--line-soft);
+  }
+  .app-nav .ni.on-rec {
+    background: var(--rec-soft);
+    outline: 1px solid var(--rec);
+  }
+  .app-main {
+    flex: 1;
+    padding: 9px 10px;
+    min-width: 0;
+  }
+
+  .ph {
+    background: var(--line-soft);
+    border-radius: 3px;
+    height: 8px;
+  }
+  .toolbar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+    align-items: center;
+  }
+  .inp {
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 2px 8px;
+    color: var(--muted);
+    background: var(--surface);
+    white-space: nowrap;
+  }
+  .btn {
+    border-radius: 5px;
+    padding: 2px 9px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .btn-rec {
+    background: var(--rec);
+    color: var(--surface);
+  }
+  .btn-ghost {
+    border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .btn-ok {
+    border: 1px solid var(--green);
+    color: var(--green);
+  }
+
+  .trow {
+    display: grid;
+    grid-template-columns: 2fr 1.4fr 1.2fr 1fr;
+    gap: 8px;
+    align-items: center;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .trow.hd {
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .chip {
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-weight: 600;
+    font-size: 9px;
+    white-space: nowrap;
+    justify-self: start;
+  }
+  .c-open {
+    background: var(--green-soft);
+    color: var(--green);
+  }
+  .c-paused {
+    background: var(--amber-soft);
+    color: var(--amber);
+  }
+  .c-closed {
+    background: var(--surface-2);
+    color: var(--muted);
+  }
+  .c-stage {
+    background: var(--rec-soft);
+    color: var(--rec-ink);
+  }
+  .c-hired {
+    background: var(--hr-soft);
+    color: var(--hr-ink);
+  }
+  .c-rejected {
+    background: var(--red-soft);
+    color: var(--red);
+  }
+  .c-mask {
+    background: var(--surface-2);
+    color: var(--muted);
+    border: 1px dashed var(--line);
+  }
+
+  .field {
+    margin-bottom: 7px;
+  }
+  .field .lb {
+    font-weight: 600;
+    margin-bottom: 2px;
+    color: var(--muted);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .field .bx {
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 3px 8px;
+    color: var(--ink);
+    background: var(--surface);
+  }
+  .alert-dup {
+    background: var(--amber-soft);
+    color: var(--amber);
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-weight: 600;
+    margin: 6px 0;
+  }
+  .alert-lock {
+    background: var(--red-soft);
+    color: var(--red);
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-weight: 600;
+    margin: 6px 0;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 12px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 8px;
+  }
+  .tabs span {
+    padding: 2px 2px 4px;
+    color: var(--muted);
+  }
+  .tabs .on {
+    color: var(--rec-ink);
+    font-weight: 700;
+    border-bottom: 2px solid var(--rec);
+  }
+
+  /* kanban */
+  .kb {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+  }
+  .kb .kb-col {
+    background: var(--surface-2);
+    border-radius: 5px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 120px;
+  }
+  .kb .kb-h {
+    font-weight: 700;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    padding: 1px 4px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .kb .kb-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 4px 6px;
+  }
+  .kb .kb-card b {
+    display: block;
+    font-size: 9.5px;
+  }
+  .kb .kb-card i {
+    font-style: normal;
+    color: var(--muted);
+    font-size: 8.5px;
+  }
+
+  .timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .timeline .tl {
+    display: grid;
+    grid-template-columns: 62px 1fr;
+    gap: 8px;
+    font-size: 9.5px;
+    padding: 2px 4px;
+    border-left: 2px solid var(--rec-soft);
+  }
+  .timeline .tl .tl-d {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* WO pipeline */
+  .pipe {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 16px 0;
+  }
+  .pipe-track {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .pipe-track .lbl {
+    font-family: Archivo, sans-serif;
+    font-weight: 700;
+    font-size: 0.78rem;
+    width: 72px;
+    flex-shrink: 0;
+    color: var(--rec-ink);
+  }
+  .wo {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    font-weight: 500;
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    border-radius: 7px;
+    padding: 4px 9px;
+    white-space: nowrap;
+  }
+  .wo.z-red {
+    border-color: var(--red);
+  }
+  .wo.z-yellow {
+    border-color: var(--amber);
+  }
+  .wo.blocked {
+    background: var(--amber-soft);
+    border-color: var(--amber);
+    border-style: dashed;
+  }
+  .pipe .arr {
+    color: var(--muted);
+    font-size: 0.78rem;
+  }
+  .pipe-note {
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+
+  .risk-list {
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: risk;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .risk-list li {
+    counter-increment: risk;
+    display: grid;
+    grid-template-columns: 30px 1fr;
+    gap: 12px;
+    font-size: 0.9rem;
+  }
+  .risk-list li::before {
+    content: counter(risk, decimal-leading-zero);
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--red);
+    font-size: 0.8rem;
+    padding-top: 2px;
+  }
+
+  .sign-box {
+    border: 1.5px solid var(--amber);
+    background: var(--amber-soft);
+    border-radius: 12px;
+    padding: 18px 22px;
+    margin-top: 18px;
+  }
+  .sign-box h3 {
+    margin-top: 0;
+    color: var(--amber);
+  }
+  .sign-box ol {
+    margin: 8px 0 0;
+    padding-left: 20px;
+  }
+  .sign-box li {
+    margin: 4px 0;
+  }
+
+  a {
+    color: var(--rec-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--rec);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    section {
+      scroll-margin-top: 24px;
+    }
+  }
+</style>
+
+<div class="page">
+  <header class="head-card">
+    <div class="eyebrow">
+      <span class="no">HỒ SƠ DUYỆT WAVE · SOẠN 31/08/2026</span>
+    </div>
+    <h1>Wave S12-RECRUIT — Phase 2 «HR nâng cao»: Tuyển dụng</h1>
+    <p class="lede">
+      Module cuối cùng còn thiếu của trục HR (trừ PAYROLL — wave riêng, cần chốt nghiệp vụ lương
+      trước). Quản lý từ vị trí tuyển dụng → ứng viên → pipeline → phỏng vấn → offer → chuyển thành
+      nhân viên HR. Nguồn phạm vi: SPEC-01 §12.9 · §10.7 (Recruiter) · IMPLEMENTATION-10 §10.2
+      (P2-REC-01..09) + §11 (PMVP-AUTH-003/005/006 · PMVP-HR-004/005).
+    </p>
+    <div class="head-meta">
+      <span class="badge badge-green"
+        >✅ Owner đã duyệt 31/08/2026 — 8/8 DEC chốt theo đề xuất</span
+      >
+      <span class="badge badge-rec">RECRUIT — SPEC-12 · role Recruiter</span>
+      <span class="badge badge-hr">Điểm nối HR: convert ứng viên → nhân viên</span>
+      <span class="badge badge-rec">6 WO đề xuất · 1 track nối tiếp</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="eyebrow"><span class="no">01</span> ĐIỂM XUẤT PHÁT — ĐO THẬT 31/08</div>
+    <h2>Nền hoàn toàn sạch — khác S11, không có bãi mìn di sản</h2>
+    <ul style="padding-left: 20px; margin-top: 10px">
+      <li>
+        <b>RECRUIT «đặt chỗ, chưa xây»:</b> 0 SPEC · 0 DB doc · 0 API doc · 0 story triển khai · 0
+        WO · 0 mục permission-matrix. SPEC-01 đã khoá số <b>SPEC-12</b> (§7 bảng dòng 165, §8); vai
+        trò <b>Recruiter</b> mô tả sẵn ở §10.7; IMPLEMENTATION-10 §10.2 có sẵn 9 epic
+        <span class="mono">P2-REC-01..09</span> với acceptance criteria từng story.
+      </li>
+      <li>
+        <b>Không có bảng di sản recruit:</b> quét
+        <code>candidates / vacanc / applicant / job_opening</code> toàn schema + migrations = chỉ 2
+        giá trị enum trong <code>finance.ts</code>/<code>media.ts</code> (cụm đã park, không đụng).
+        Đường tên sạch — không cần DEC «số phận bảng cũ» như ROOM.
+      </li>
+      <li>
+        <b>Hàng <code>modules</code> RECRUIT ĐÃ pre-seed inactive</b> từ migration
+        <code>0435</code> (sort_order 9) — seed lại là NO-OP; chỉ bật <code>is_active</code> ở WO FE
+        cuối wave (khuôn 0556/0557 của ASSET/ROOM).
+      </li>
+      <li>
+        <b>Đụng độ đánh số API:</b> IMP-10 §13.2 giữ chỗ <b>DB-14 RECRUIT</b> (OFFICE-DEC-001 đã tôn
+        trọng: ASSET/ROOM nhảy lên DB-15/16) — DB-14 còn trống, dùng được. Nhưng
+        <b>API-16 đã bị «PERMISSION AUDIT REPORT» chiếm</b> → RECRUIT phải nhận <b>API-17</b>. → cần
+        REC-DEC-001.
+      </li>
+      <li>
+        <b>Điểm nối đã có khuôn từ 11 wave trước:</b> nới CHECK <code>module_code</code> NOTI trên
+        <b>cả hai bảng</b> (mẫu 0538/0551/0555) · composite tenant-FK (0535) · permission seed
+        <code>ON CONFLICT DO NOTHING</code> · UNION-ADD <code>audit_logs.object_types</code> ·
+        CV/file đi qua <b>Foundation Files</b> (private + <code>file_access_logs</code>) · convert
+        tái dùng <b>SequenceService <code>employee_code</code></b> có sẵn ở module employees
+        (ensure-on-miss, 0-dup).
+      </li>
+      <li>
+        <b>Dải mã còn trống đo được:</b> migration head <code>0558</code> ⇒ RECRUIT nhận
+        <code>0559+</code> · NOTI-EVENT catalog (SPEC-01 §20.2) dừng ở <b>015</b> ⇒ nhận
+        <b>016+</b> · SPEC-01 §17 dừng ở <b>§17.10</b> ⇒ trạng thái mới vào <b>§17.11+</b> ·
+        IMPLEMENTATION-02 dừng ở EPIC-18/IMP02-STORY-170 ⇒ nhận
+        <b>EPIC-19 (§8.20), IMP02-STORY-171+</b> · permission-matrix dừng ở §9e ⇒ nhận <b>§9f</b>.
+      </li>
+    </ul>
+    <div class="callout">
+      <b>Việc dọn kèm khi seed:</b> ledger còn ~14 WO S10/S11 đã merge nhưng chưa đóng dấu
+      <code>done</code> (STATUS đang báo sai tiêu điểm) — commit seed wave này đóng dấu ledger +
+      regen STATUS luôn, để hàng đợi máy-đọc phản ánh đúng «S11 đã xong, S12 là wave kế».
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">02</span> QUYẾT ĐỊNH CẦN KÝ</div>
+    <h2>8 quyết định — mỗi dòng đã kèm đề xuất</h2>
+    <p class="lede">Duyệt nguyên gói là chốt theo cột «Đề xuất». Muốn chỉnh, chỉ cần nêu mã DEC.</p>
+    <div class="table-wrap" style="margin-top: 12px">
+      <table class="doc">
+        <tr>
+          <th class="mono">Mã</th>
+          <th>Câu hỏi</th>
+          <th>Đề xuất</th>
+        </tr>
+        <tr>
+          <td class="mono">REC-DEC-001</td>
+          <td>Đánh số tài liệu khi API-16 đã bị PERMISSION AUDIT REPORT chiếm</td>
+          <td>
+            <b>SPEC-12 · DB-14</b> (đúng chỗ IMP-10 giữ) · <b>API-17</b> · permission-matrix
+            <b>§9f</b> · IMPLEMENTATION-02 <b>EPIC-19 (§8.20)</b>, story IMP02-STORY-171..180 ·
+            trạng thái SPEC-01 §17.11–17.14 · NOTI-EVENT-016..019 (đo lại dải trước khi ghi)
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">REC-DEC-002</td>
+          <td>Pipeline ứng viên: cố định hay tuỳ biến per-company</td>
+          <td>
+            v1 <b>cố định 6 stage</b>: New → Screening → Interview → Offer → Hired / Rejected (khớp
+            P2-REC-04-001). Rejected được <b>reopen về Screening</b> kèm lý do; Hired là terminal
+            (khoá chống convert lần 2). Custom stage per-company = Phase sau.
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">REC-DEC-003</td>
+          <td>Bảo vệ PII ứng viên (email · phone · CV) tới mức nào</td>
+          <td>
+            Cặp quyền <code>candidate</code> đánh dấu <b>is_sensitive=true</b>; email/phone
+            <b>mask ở SERVER</b> theo quyền (FE schema <code>.optional()</code>); CV lưu Foundation
+            Files <b>private</b>, tải về ghi <code>file_access_logs</code>; export danh sách cần cặp
+            quyền riêng + audit (PMVP-AUTH-006).
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">REC-DEC-004</td>
+          <td>Offer v1: có workflow duyệt nội bộ không · lương offer ai thấy</td>
+          <td>
+            <b>Không workflow duyệt</b> (P2-REC-06-002 để Phase sau — tránh thêm FSM phê duyệt
+            crown). Offer: Draft → Sent → Accepted / Declined / Withdrawn, Recruiter tự cập nhật kết
+            quả. Trường <b>lương offer chỉ trả về cho người có <code>('manage','offer')</code></b
+            >; <code>('view','offer')</code> nhận bản mask.
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">REC-DEC-005</td>
+          <td>Convert ứng viên → nhân viên: 1 bước hay wizard onboarding</td>
+          <td>
+            <b>1 bước</b>, quyền <code>('convert','candidate')</code>, chỉ khi Offer = Accepted
+            (P2-REC-06-004). Tạo hồ sơ qua service HR hiện có — mã nhân viên từ SequenceService
+            (ensure-on-miss), map trường tường minh (P2-REC-07-002); link
+            <code>candidates.employee_id</code> UNIQUE chống trùng.
+            <b>KHÔNG tự tạo tài khoản đăng nhập</b> — HR tạo qua luồng AUTH hiện có (P2-REC-07-004 →
+            Phase sau).
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">REC-DEC-006</td>
+          <td>Phỏng vấn: có buộc đặt phòng ROOM · calendar ngoài không</td>
+          <td>
+            v1 địa điểm = <b>text/link tự do</b> (online/onsite), KHÔNG buộc tạo booking ROOM, KHÔNG
+            tích hợp Google/Microsoft (P2-REC-05-005 placeholder). Interviewer là nhân viên nội bộ,
+            nhận NOTI khi được xếp lịch; feedback <b>own-scope</b> — mỗi interviewer chỉ sửa
+            feedback của mình.
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">REC-DEC-007</td>
+          <td>Lưu trữ ứng viên Rejected (privacy/retention)</td>
+          <td>
+            v1 <b>soft-delete</b> (chuẩn hệ thống §16.2), chưa auto-purge; policy retention ứng viên
+            rejected (P2-REC-09-004) ghi PARK-RECRUIT-001 vào RELEASE-14 §5 cho Phase sau.
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">REC-DEC-008</td>
+          <td>Role seed: recruiter là role gì, hiring manager có role mới không</td>
+          <td>
+            Seed <b>role hệ thống <code>recruiter</code></b> (tiền lệ hr-manager/asset-manager/
+            office-admin): <code>company_id IS NULL</code> · <code>is_system=true</code> ·
+            <code>requires_two_factor=false</code> tường minh · <b>KHÔNG canonical</b> (không vào
+            DashCanonicalRole / NOTI_CANONICAL_ROLES / pin seed). Hiring manager KHÔNG phải role mới
+            — role <code>manager</code> hiện có nhận <code>('view','interview')</code> scope Own +
+            ghi feedback lượt mình tham gia.
+          </td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">03</span> STORY</div>
+    <h2>10 story cấp wave</h2>
+    <p class="lede">
+      Bản nghiệp vụ đầy đủ (AC + point) viết ở EPIC-19 §8.20 trong WO tài liệu — chưng cất từ
+      P2-REC-01..09, cắt các mục P2/P3 đã đẩy Phase sau theo DEC.
+    </p>
+    <div class="cols-2" style="margin-top: 14px">
+      <div class="story-card">
+        <div class="story-head">Pipeline tuyển dụng</div>
+        <ul>
+          <li>
+            <span class="sid">RC-01</span
+            ><span
+              >Vị trí tuyển dụng: CRUD + đóng/tạm dừng + gán recruiter phụ trách (Closed thì không
+              thêm ứng viên mới)</span
+            >
+          </li>
+          <li>
+            <span class="sid">RC-02</span
+            ><span
+              >Hồ sơ ứng viên: CRUD + nguồn (source) + cảnh báo trùng email/phone trong
+              company</span
+            >
+          </li>
+          <li>
+            <span class="sid">RC-03</span
+            ><span
+              >CV/tệp ứng viên qua Foundation Files — private, tải về ghi file_access_logs</span
+            >
+          </li>
+          <li>
+            <span class="sid">RC-04</span
+            ><span
+              >Pipeline kanban: chuyển stage kèm lý do, lịch sử append-only, kéo-thả theo
+              quyền</span
+            >
+          </li>
+          <li>
+            <span class="sid">RC-05</span
+            ><span>Lịch phỏng vấn: vòng, thời gian, địa điểm/link, interviewer nội bộ + NOTI</span>
+          </li>
+        </ul>
+      </div>
+      <div class="story-card">
+        <div class="story-head">Offer · convert · bảo vệ dữ liệu</div>
+        <ul>
+          <li>
+            <span class="sid">RC-06</span
+            ><span
+              >Feedback phỏng vấn: rating + recommendation, own-scope per interviewer, timeline ở
+              chi tiết ứng viên</span
+            >
+          </li>
+          <li>
+            <span class="sid">RC-07</span
+            ><span
+              >Offer: tạo/gửi/ghi kết quả Accepted-Declined-Withdrawn; lương offer mask theo
+              quyền</span
+            >
+          </li>
+          <li>
+            <span class="sid">RC-08</span
+            ><span
+              >Convert ứng viên trúng tuyển → nhân viên HR (mã NV từ sequence, link 1-1 chống
+              trùng)</span
+            >
+          </li>
+          <li>
+            <span class="sid">RC-09</span
+            ><span>Masking PII + deny-path + audit export/tải CV (P2-REC-09 — P0 toàn bộ)</span>
+          </li>
+          <li>
+            <span class="sid">RC-10</span
+            ><span
+              >Widget DASH «phễu tuyển dụng» (ứng viên theo stage + vị trí đang mở) theo quyền</span
+            >
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">04</span> DỮ LIỆU &amp; TRẠNG THÁI</div>
+    <h2>Mô hình dữ liệu dự kiến — 8 bảng mới</h2>
+    <p class="lede">
+      Mọi bảng: UUID PK · <code>company_id</code> + RLS FORCE · soft-delete <code>deleted_at</code>
+      · composite tenant-FK. Chi tiết cột chốt ở DB-14 (WO tài liệu).
+    </p>
+    <div class="cols-2" style="margin-top: 14px">
+      <div class="table-wrap">
+        <table class="doc">
+          <tr>
+            <th colspan="2" style="color: var(--rec-ink)">Vị trí · ứng viên · pipeline</th>
+          </tr>
+          <tr>
+            <td class="mono">job_openings</td>
+            <td>
+              Vị trí tuyển: tiêu đề, <code>org_unit_id</code> + <code>position_id</code> (FK HR),
+              headcount, recruiter phụ trách, trạng thái
+            </td>
+          </tr>
+          <tr>
+            <td class="mono">candidates</td>
+            <td>
+              Ứng viên: họ tên, email/phone (mask), nguồn, <code>job_opening_id</code>, stage hiện
+              tại, <code>employee_id</code> nullable <b>UNIQUE</b> (link sau convert)
+            </td>
+          </tr>
+          <tr>
+            <td class="mono">candidate_stage_events</td>
+            <td><b>Append-only</b> — lịch sử chuyển stage: from → to, lý do, người thao tác</td>
+          </tr>
+          <tr>
+            <td class="mono">candidate_notes</td>
+            <td>Ghi chú nội bộ: người tạo, thời gian</td>
+          </tr>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table class="doc">
+          <tr>
+            <th colspan="2" style="color: var(--rec-ink)">Phỏng vấn · offer</th>
+          </tr>
+          <tr>
+            <td class="mono">interviews</td>
+            <td>Lượt phỏng vấn: vòng, khung giờ, địa điểm/link, trạng thái</td>
+          </tr>
+          <tr>
+            <td class="mono">interview_participants</td>
+            <td>Interviewer (FK employee) — chân NOTI + own-scope feedback</td>
+          </tr>
+          <tr>
+            <td class="mono">interview_feedbacks</td>
+            <td>Đánh giá per-interviewer: rating, nhận xét, recommendation</td>
+          </tr>
+          <tr>
+            <td class="mono">offers</td>
+            <td>
+              Offer: vị trí, ngày dự kiến nhận việc, lương đề nghị (mask), trạng thái, kết quả
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <h3>FSM trạng thái (hợp thức vào SPEC-01 §17.11–17.14 ở WO tài liệu)</h3>
+    <div class="fsm">
+      <span class="st hi-rec">New</span><span class="arr">→</span>
+      <span class="st hi-rec">Screening</span><span class="arr">→</span>
+      <span class="st hi-rec">Interview</span><span class="arr">→</span>
+      <span class="st hi-rec">Offer</span><span class="arr">→</span>
+      <span class="st hi-hr">Hired</span><span class="arr">·</span>
+      <span class="st terminal">Rejected ⇢ reopen Screening</span>
+    </div>
+    <p class="fsm-note">
+      Ứng viên — Rejected có thể xảy ra từ mọi stage (kèm lý do); Hired là terminal, chốt bằng link
+      employee UNIQUE. Chuyển tiếp sai trả 4xx đúng mã <code>RECRUIT-ERR</code>, FSM ép ở service.
+    </p>
+    <div class="fsm">
+      <span class="st hi-rec">Draft</span><span class="arr">→</span>
+      <span class="st hi-rec">Open</span><span class="arr">⇄</span>
+      <span class="st hi-rec">Paused</span><span class="arr">→</span>
+      <span class="st terminal">Closed</span>
+      <span class="arr" style="margin-left: 10px">‖</span>
+      <span class="st hi-rec">Offer: Draft → Sent</span><span class="arr">→</span>
+      <span class="st terminal">Accepted · Declined · Withdrawn</span>
+    </div>
+    <p class="fsm-note">
+      Vị trí tuyển (trái) và offer (phải). Interview: Scheduled → Completed / Cancelled.
+    </p>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">05</span> API &amp; PHÂN QUYỀN</div>
+    <h2>Bề mặt API và cặp quyền dự kiến</h2>
+    <p class="lede">
+      ~20–24 endpoint <span class="mono">RECRUIT-API-001..</span> — số chính xác đo & chốt ở SPEC-12
+      §15 / API-17. Cặp quyền theo ma trận per-(perm,role) data_scope, seed cùng migration.
+    </p>
+    <div class="cols-2" style="margin-top: 14px">
+      <div class="table-wrap">
+        <table class="doc">
+          <tr>
+            <th class="mono">Nhóm endpoint (API-17)</th>
+            <th>Quyền</th>
+          </tr>
+          <tr>
+            <td class="mono">GET/POST/PATCH /job-openings (+close/pause)</td>
+            <td class="mono">('view'|'create'|'update','job_opening')</td>
+          </tr>
+          <tr>
+            <td class="mono">GET/POST/PATCH /candidates</td>
+            <td class="mono">('view'|'create'|'update','candidate') <i>is_sensitive</i></td>
+          </tr>
+          <tr>
+            <td class="mono">POST /candidates/:id/move-stage</td>
+            <td class="mono">('move_stage','candidate')</td>
+          </tr>
+          <tr>
+            <td class="mono">POST /candidates/:id/notes · /files</td>
+            <td class="mono">('comment','candidate') · file qua Foundation Files</td>
+          </tr>
+          <tr>
+            <td class="mono">GET /candidates/export</td>
+            <td class="mono">('export','candidate') + audit</td>
+          </tr>
+          <tr>
+            <td class="mono">GET/POST/PATCH /interviews (+feedback)</td>
+            <td class="mono">('view','interview')@Own‖Company · ('manage','interview')</td>
+          </tr>
+          <tr>
+            <td class="mono">GET/POST/PATCH /offers (+kết quả)</td>
+            <td class="mono">('view','offer') <i>mask lương</i> · ('manage','offer')</td>
+          </tr>
+          <tr>
+            <td class="mono">POST /candidates/:id/convert</td>
+            <td class="mono">('convert','candidate') — chỉ khi Offer Accepted</td>
+          </tr>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table class="doc">
+          <tr>
+            <th>Role</th>
+            <th>Grant dự kiến (§9f)</th>
+          </tr>
+          <tr>
+            <td><b>recruiter</b> <i>(seed mới — REC-DEC-008)</i></td>
+            <td>Toàn bộ cặp RECRUIT, scope Company</td>
+          </tr>
+          <tr>
+            <td><b>admin</b></td>
+            <td>Toàn bộ cặp RECRUIT, scope Company</td>
+          </tr>
+          <tr>
+            <td><b>hr-manager</b></td>
+            <td>
+              view job_opening/candidate/interview/offer (mask lương) + convert, scope Company
+            </td>
+          </tr>
+          <tr>
+            <td><b>manager</b></td>
+            <td>('view','interview') + feedback — scope <b>Own</b> (lượt mình được xếp)</td>
+          </tr>
+          <tr>
+            <td><b>employee</b></td>
+            <td>Không grant — RECRUIT không có mặt «của tôi» v1</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+    <p style="margin-top: 10px">
+      Sự kiện NOTI dự kiến (<span class="mono">NOTI-EVENT-016..019</span>, đo lại dải khi viết):
+      <b>016</b> được gán phụ trách vị trí tuyển · <b>017</b> được xếp lịch phỏng vấn (interviewer)
+      · <b>018</b> ứng viên đổi stage cần xử lý (recruiter phụ trách) · <b>019</b> ứng viên trúng
+      tuyển đã convert (HR). Mã lỗi <span class="mono">RECRUIT-ERR-001..~014</span> — census theo MÃ
+      ở WO QA.
+    </p>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">06</span> GIAO DIỆN DỰ ĐỊNH</div>
+    <h2>Wireframe 6 màn hình chính</h2>
+    <p class="lede">
+      <code>apps/app/src/routes/recruit/</code> — mọi màn: <code>&lt;PermissionGate&gt;</code> +
+      <code>useCan()</code>, loading/error/empty, i18n vi, trạng thái dùng constants §17. Masking là
+      việc của server — client không nhận thì không render.
+    </p>
+    <div class="wires">
+      <div class="wire">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top"><span class="crumb">Tuyển dụng</span> › Vị trí tuyển dụng</div>
+            <div class="app-body">
+              <div class="app-nav">
+                <div class="ni"></div>
+                <div class="ni"></div>
+                <div class="ni on-rec"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+              </div>
+              <div class="app-main">
+                <div class="toolbar">
+                  <span class="inp">🔍 Tìm vị trí…</span>
+                  <span class="inp">Phòng ban ▾</span>
+                  <span class="inp">Trạng thái ▾</span>
+                  <span class="btn btn-rec">+ Vị trí tuyển</span>
+                </div>
+                <div class="trow hd">
+                  <span>Vị trí</span><span>Phòng ban</span><span>Ứng viên</span
+                  ><span>Trạng thái</span>
+                </div>
+                <div class="trow">
+                  <b>NV Kinh doanh</b><span>Kinh doanh</span><span>12 · 3 phỏng vấn</span
+                  ><span class="chip c-open">Đang tuyển</span>
+                </div>
+                <div class="trow">
+                  <b>Kế toán tổng hợp</b><span>Tài chính</span><span>5 · 1 offer</span
+                  ><span class="chip c-open">Đang tuyển</span>
+                </div>
+                <div class="trow">
+                  <b>Designer</b><span>Marketing</span><span>8</span
+                  ><span class="chip c-paused">Tạm dừng</span>
+                </div>
+                <div class="trow">
+                  <b>Trưởng ca vận hành</b><span>Vận hành</span><span>21 · đủ HC</span
+                  ><span class="chip c-closed">Đã đóng</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="wire-caption">
+          <div class="wc-title">
+            Danh sách vị trí tuyển dụng <span class="wc-id">REC-SCREEN-001</span>
+          </div>
+          <p>
+            CRUD + đóng/tạm dừng; gán recruiter phụ trách (bắn NOTI-EVENT-016). Closed chặn thêm ứng
+            viên mới.
+          </p>
+        </div>
+      </div>
+
+      <div class="wire">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top">
+              <span class="crumb">Tuyển dụng</span> › Pipeline — NV Kinh doanh
+            </div>
+            <div class="app-body">
+              <div class="app-main">
+                <div class="kb">
+                  <div class="kb-col">
+                    <div class="kb-h"><span>New</span><span>4</span></div>
+                    <div class="kb-card"><b>Ng. Văn A</b><i>TopCV · 29/08</i></div>
+                    <div class="kb-card"><b>Tr. Thị B</b><i>Giới thiệu</i></div>
+                  </div>
+                  <div class="kb-col">
+                    <div class="kb-h"><span>Screening</span><span>3</span></div>
+                    <div class="kb-card"><b>L. Văn C</b><i>CV ✓ · gọi 01/09</i></div>
+                  </div>
+                  <div class="kb-col">
+                    <div class="kb-h"><span>Interview</span><span>3</span></div>
+                    <div class="kb-card"><b>P. Thị D</b><i>V2 · 03/09 14:00</i></div>
+                  </div>
+                  <div class="kb-col">
+                    <div class="kb-h"><span>Offer</span><span>2</span></div>
+                    <div class="kb-card"><b>H. Văn E</b><i>Đã gửi · chờ</i></div>
+                  </div>
+                </div>
+                <div style="margin-top: 6px; color: var(--muted); font-size: 9px">
+                  Kéo-thả = move-stage (kèm hộp lý do) · cột Hired/Rejected thu gọn bên phải
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="wire-caption">
+          <div class="wc-title">Kanban pipeline <span class="wc-id">REC-SCREEN-002</span></div>
+          <p>
+            6 stage cố định (REC-DEC-002). Chuyển stage ghi candidate_stage_events append-only + lý
+            do.
+          </p>
+        </div>
+      </div>
+
+      <div class="wire">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top"><span class="crumb">Ứng viên</span> › P. Thị D</div>
+            <div class="app-body">
+              <div class="app-main">
+                <div class="tabs">
+                  <span class="on">Hồ sơ</span><span>Timeline</span><span>Phỏng vấn</span
+                  ><span>Tệp CV</span>
+                </div>
+                <div class="trow" style="grid-template-columns: 1fr 1fr">
+                  <span>Email: <span class="chip c-mask">d***@***.com 🔒</span></span>
+                  <span>SĐT: <span class="chip c-mask">09** *** *45 🔒</span></span>
+                </div>
+                <div class="trow" style="grid-template-columns: 1fr 1fr">
+                  <span>Nguồn: TopCV</span>
+                  <span>Stage: <span class="chip c-stage">Interview</span></span>
+                </div>
+                <div class="timeline" style="margin-top: 6px">
+                  <div class="tl">
+                    <span class="tl-d">29/08</span><span>Tạo hồ sơ — recruiter Lan</span>
+                  </div>
+                  <div class="tl">
+                    <span class="tl-d">30/08</span><span>New → Screening · «CV đạt»</span>
+                  </div>
+                  <div class="tl">
+                    <span class="tl-d">01/09</span><span>Screening → Interview · xếp V1</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="wire-caption">
+          <div class="wc-title">Chi tiết ứng viên <span class="wc-id">REC-SCREEN-003</span></div>
+          <p>
+            Email/phone mask server-side theo quyền (REC-DEC-003); timeline từ stage events; tab tệp
+            đi qua Foundation Files.
+          </p>
+        </div>
+      </div>
+
+      <div class="wire">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top"><span class="crumb">Ứng viên</span> › Thêm mới</div>
+            <div class="app-body">
+              <div class="app-main">
+                <div class="field">
+                  <div class="lb">Họ tên *</div>
+                  <div class="bx">Ngô Văn F</div>
+                </div>
+                <div class="field">
+                  <div class="lb">Email *</div>
+                  <div class="bx">f.ngo@gmail.com</div>
+                </div>
+                <div class="alert-dup">
+                  ⚠ Trùng email với ứng viên «Ngô Văn F» (Rejected 05/2026) — xem hồ sơ cũ?
+                </div>
+                <div class="field">
+                  <div class="lb">Vị trí ứng tuyển *</div>
+                  <div class="bx">NV Kinh doanh ▾</div>
+                </div>
+                <div class="field">
+                  <div class="lb">CV đính kèm</div>
+                  <div class="bx">📎 CV-NgoVanF.pdf (private)</div>
+                </div>
+                <div class="toolbar" style="margin-top: 8px">
+                  <span class="btn btn-rec">Lưu ứng viên</span>
+                  <span class="btn btn-ghost">Huỷ</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="wire-caption">
+          <div class="wc-title">Form ứng viên + CV <span class="wc-id">REC-SCREEN-004</span></div>
+          <p>
+            Cảnh báo trùng email/phone trong company (không chặn cứng); upload private, tải về ghi
+            file_access_logs.
+          </p>
+        </div>
+      </div>
+
+      <div class="wire">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top"><span class="crumb">Phỏng vấn</span> › P. Thị D — Vòng 2</div>
+            <div class="app-body">
+              <div class="app-main">
+                <div class="field">
+                  <div class="lb">Thời gian</div>
+                  <div class="bx">03/09/2026 · 14:00–15:00</div>
+                </div>
+                <div class="field">
+                  <div class="lb">Địa điểm / link</div>
+                  <div class="bx">Meet: meet.funtime.vn/rec-d2</div>
+                </div>
+                <div class="field">
+                  <div class="lb">Interviewer</div>
+                  <div class="bx">Trưởng phòng KD · HR Lan — đã nhận NOTI ✓</div>
+                </div>
+                <div class="trow hd" style="grid-template-columns: 1.4fr 1fr 1.6fr">
+                  <span>Người đánh giá</span><span>Rating</span><span>Đề xuất</span>
+                </div>
+                <div class="trow" style="grid-template-columns: 1.4fr 1fr 1.6fr">
+                  <span>Trưởng phòng KD</span><span>★★★★☆</span
+                  ><span class="chip c-open">Nên tuyển</span>
+                </div>
+                <div class="trow" style="grid-template-columns: 1.4fr 1fr 1.6fr">
+                  <span>HR Lan</span><span>—</span><span class="chip c-paused">Chưa gửi</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="wire-caption">
+          <div class="wc-title">
+            Lịch phỏng vấn + feedback <span class="wc-id">REC-SCREEN-005</span>
+          </div>
+          <p>
+            Địa điểm text/link tự do (REC-DEC-006); mỗi interviewer chỉ sửa feedback của mình
+            (own-scope).
+          </p>
+        </div>
+      </div>
+
+      <div class="wire">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top"><span class="crumb">Ứng viên</span> › H. Văn E — Offer</div>
+            <div class="app-body">
+              <div class="app-main">
+                <div class="field">
+                  <div class="lb">Vị trí · ngày nhận việc</div>
+                  <div class="bx">NV Kinh doanh · 15/09/2026</div>
+                </div>
+                <div class="field">
+                  <div class="lb">Lương đề nghị</div>
+                  <div class="bx"><span class="chip c-mask">🔒 cần ('manage','offer')</span></div>
+                </div>
+                <div class="field">
+                  <div class="lb">Trạng thái</div>
+                  <div class="bx"><span class="chip c-open">Accepted — 30/08</span></div>
+                </div>
+                <div class="alert-lock">
+                  Convert khoá khi offer chưa Accepted hoặc ứng viên đã có employee link
+                </div>
+                <div class="toolbar" style="margin-top: 8px">
+                  <span class="btn btn-ok">Chuyển thành nhân viên →</span>
+                  <span class="btn btn-ghost">Withdraw offer</span>
+                </div>
+                <div style="color: var(--muted); font-size: 9px">
+                  Convert: tạo hồ sơ HR (mã NV từ sequence) + link 1-1 + NOTI-EVENT-019 cho HR
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="wire-caption">
+          <div class="wc-title">Offer &amp; convert <span class="wc-id">REC-SCREEN-006</span></div>
+          <p>
+            Lương offer mask theo quyền (REC-DEC-004); convert 1 bước tái dùng service HR +
+            SequenceService (REC-DEC-005).
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">07</span> PHÂN RÃ WORK ORDER</div>
+    <h2>6 WO — một track nối tiếp, một cửa duyệt</h2>
+    <div class="pipe">
+      <div class="pipe-track">
+        <span class="lbl">RECRUIT</span>
+        <span class="wo blocked">DOC-1 ⏳</span><span class="arr">→</span>
+        <span class="wo z-red">DB-1 🔴</span><span class="arr">→</span>
+        <span class="wo z-red">BE-1 🔴</span><span class="arr">→</span> <span class="wo">FE-1</span
+        ><span class="arr">→</span> <span class="wo z-yellow">QA-1</span><span class="arr">→</span>
+        <span class="wo">DASH-1</span>
+      </div>
+    </div>
+    <div class="table-wrap" style="margin-top: 6px">
+      <table class="doc">
+        <tr>
+          <th class="mono">WO</th>
+          <th>Zone · gate</th>
+          <th>Phạm vi chính</th>
+          <th>done_when rút gọn</th>
+        </tr>
+        <tr>
+          <td class="mono">S12-RECRUIT-DOC-1</td>
+          <td>🟢 LIGHT</td>
+          <td>
+            SPEC-12 · DB-14 · API-17 · §9f · EPIC-19 §8.20 · §17.11–17.14 · NOTI-EVENT dải mới ·
+            đồng bộ README/DB-01·09·10/erd-current/RELEASE-14 · stories.mjs + dashboard server.mjs
+            nhận RECRUIT
+          </td>
+          <td>
+            Ghi 8 DEC đã ký vào SPEC-12; <b>plan-reviewer đối kháng PASS</b> trước khi mở DB-1
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">S12-RECRUIT-DB-1</td>
+          <td>🔴 FULL</td>
+          <td>
+            8 bảng (0559+): RLS+FORCE trước hết · composite tenant-FK · stage_events append-only
+            (REVOKE UPDATE/DELETE) · seed permission/role recruiter/NOTI catalog 2 bảng · UNION-ADD
+            audit object_types · contracts Zod mirror CHECK
+          </td>
+          <td>Lane migration nối tiếp; test schema + census grant trên LANE_DB</td>
+        </tr>
+        <tr>
+          <td class="mono">S12-RECRUIT-BE-1</td>
+          <td>🔴 FULL</td>
+          <td>
+            Module NestJS recruit/: guard per-pair 2 tầng · FSM service · masking PII server ·
+            convert tái dùng HR service · outbox NOTI · audit · @Idempotent các POST tạo ·
+            API_MODULE_TAGS + route-census regen
+          </td>
+          <td>Deny-path RED-trước cho mọi route nhạy cảm; 4xx đúng mã RECRUIT-ERR</td>
+        </tr>
+        <tr>
+          <td class="mono">S12-RECRUIT-FE-1</td>
+          <td>🟢 LIGHT</td>
+          <td>
+            6 màn REC-SCREEN-001..006 (routes/recruit/) · PermissionGate/useCan · schema FE
+            .optional() cho trường mask · bật module (mig cuối, khuôn 0556)
+          </td>
+          <td>Loading/error/empty đủ; không hard-code quyền; i18n vi</td>
+        </tr>
+        <tr>
+          <td class="mono">S12-RECRUIT-QA-1</td>
+          <td>🟡 LIGHT+</td>
+          <td>
+            Ma trận allow/deny per-pair từng route · IDOR/cross-tenant 2-tenant thật · FSM chuyển
+            tiếp sai · double-convert race · census mã lỗi theo MÃ · biên idempotency
+          </td>
+          <td>
+            check.sh --lane-db xanh KHÔNG banner; coverage recruit/ ≥80%; TESTABLE-FEATURES cập nhật
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">S12-RECRUIT-DASH-1</td>
+          <td>🟢 LIGHT</td>
+          <td>
+            Widget «phễu tuyển dụng» (RECRUIT-WIDGET-001): đăng ký catalog BE + sàn scope + wire
+            slug FE (DashboardWidgetGrid)
+          </td>
+          <td>Widget render theo quyền; test slug-map FE (bài học GOAL_PROGRESS)</td>
+        </tr>
+      </table>
+    </div>
+    <ul style="margin: 6px 0 0; padding-left: 20px; font-size: 0.9rem">
+      <li>
+        Một module = <b>không có bài toán song song</b>: track nối tiếp tự nhiên, DB là lane
+        migration duy nhất.
+      </li>
+      <li>
+        DOC → DB có chốt <b>plan-reviewer đối kháng PASS</b> trên SPEC-12 + DB-14 (khuôn wave
+        CHAT/OFFICE).
+      </li>
+      <li>
+        WO DOC seed ở trạng thái <code>blocked</code> — máy không nhặt được cho tới khi anh duyệt hồ
+        sơ này.
+      </li>
+      <li>
+        Crown-jewel routing: DB-1/BE-1 chạy Opus + FULL gate (PII ứng viên = dữ liệu nhạy cảm,
+        PMVP-AUTH-005/006).
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">08</span> RỦI RO ĐÃ GHIM</div>
+    <h2>12 bẫy đã biết, viết sẵn vào done_when</h2>
+    <ol class="risk-list">
+      <li>
+        Hàng <code>modules</code> RECRUIT đã pre-seed inactive từ 0435 — seed lại là NO-OP; bật
+        <code>is_active</code> CHỈ ở WO FE cuối, và guard bật-module không được assert trạng thái
+        module KHÁC (bài học 0550/0554 + wiring-spec ASSET↔ROOM).
+      </li>
+      <li>
+        CHECK <code>module_code</code> NOTI phải nới trên <b>cả hai bảng</b> (<code
+          >notification_events</code
+        >
+        + <code>notifications</code>) — quên một bảng là 500 lúc chạy; baseline guard viết
+        forward-compatible.
+      </li>
+      <li>
+        Hợp đồng Zod mirror CHECK DB <b>hai chiều, đúng bằng</b> — lệch một phía là payload tự nhiên
+        nhất nổ 500; trần Zod ≠ trần service kẻo đẻ mã lỗi CHẾT.
+      </li>
+      <li>
+        Mọi cột FK mới (job_opening_id · candidate_id · employee_id…) đi kèm composite tenant-FK
+        (khuôn 0535).
+      </li>
+      <li>
+        Route mới ⇒ route-census đỏ — regen <code>ROUTE_CENSUS_WRITE=1</code> có chủ đích; module
+        mới khai <code>API_MODULE_TAGS</code>; <code>:id</code> = UUID ở biên ngay từ đầu.
+      </li>
+      <li>
+        Masking server-side ⇒ FE schema phải <code>.optional()</code> cho trường mask — kẻo trang
+        trắng cho role không quyền; cặp is_sensitive nhớ khai allowlist capability ở BACKEND (kẻo
+        màn quản trị biến mất).
+      </li>
+      <li>
+        Guard cặp quyền tồn tại ở <b>HAI tầng</b> (decorator route + service) — census QA phải so
+        TỪNG ROUTE theo cặp, không so tập (bài học ASSET: coverage 97.5% vẫn lọt).
+      </li>
+      <li>
+        <code>candidate_stage_events</code> append-only: REVOKE UPDATE/DELETE với app role +
+        UNION-ADD <code>audit_logs.object_types</code> đúng neo parse (bẫy audit-check).
+      </li>
+      <li>
+        Convert: chống double-convert bằng UNIQUE <code>candidates.employee_id</code> + kiểm tra
+        trong transaction (race 2 request song song phải có int-spec — đúng 1 thắng); mã nhân viên
+        đi qua ensure-on-miss của employee_code_config, KHÔNG hard-code prefix.
+      </li>
+      <li>
+        Widget DASH: đăng ký catalog BE chưa đủ — phải wire slug ở
+        <code>DashboardWidgetGrid</code> FE + test, và áp <b>sàn scope</b> (mọi role có thể có view
+        nhưng khác scope) — bài học GOAL_PROGRESS chết 1 tháng lưới vẫn xanh.
+      </li>
+      <li>
+        Ứng viên là người NGOÀI hệ thống — không FK sang users; mọi identity nội bộ
+        (recruiter/interviewer) FK employee/user như chuẩn; đừng nhầm own-scope của interviewer
+        (theo participant) với own của người tạo.
+      </li>
+      <li>
+        Test chạy trên LANE_DB như CI; deny-path RED-trước; deny không rỗng nghĩa (mỗi cặp có ca
+        ALLOW đối chứng); fixture giả-secret ghép chuỗi (gitleaks).
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">09</span> DUYỆT</div>
+    <div class="sign-box" style="border-color: var(--green); background: var(--green-soft)">
+      <h3 style="color: var(--green)">Đã duyệt — 31/08/2026</h3>
+      <p style="margin-top: 0">
+        Owner duyệt <b>nguyên gói</b> («ok tôi duyệt»): 8/8 quyết định ở mục 02 chốt đúng cột «Đề
+        xuất». Kết luận ghi vào <code>docs/plans/S12-RECRUIT-WAVE.md</code> §3; 6 WO đã seed vào
+        <code>harness/backlog.mjs</code> cùng ngày (<code>S12-RECRUIT-DOC-1</code> = todo, 5 WO sau
+        xích <code>depends_on</code>).
+      </p>
+      <ol>
+        <li>
+          <b>Wave bắt đầu từ tài liệu</b>: SPEC-12 · DB-14 · API-17 · §9f — plan-reviewer PASS rồi
+          mới mở WO DB. Code chỉ chạy sau cửa đó.
+        </li>
+        <li>
+          <b>PAYROLL không nằm trong wave này</b> — là wave riêng kế tiếp, mở bằng buổi chốt nghiệp
+          vụ lương (công thức, kỳ lương, ai thấy lương ai) trước khi viết SPEC-11.
+        </li>
+        <li>
+          <b>Hồ sơ này</b> là bản ghi tại thời điểm duyệt; thay đổi sau đó ghi ở SPEC-12 và wave
+          plan, không sửa ngược vào đây.
+        </li>
+      </ol>
+    </div>
+  </section>
+</div>
