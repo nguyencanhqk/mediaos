@@ -1,0 +1,1757 @@
+<title>Wave S13-PAYROLL</title>
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap"
+/>
+<style>
+  :root {
+    --bg: #f4f6f8;
+    --surface: #ffffff;
+    --surface-2: #ecf0f4;
+    --ink: #1e242e;
+    --muted: #5c6572;
+    --line: #d9dfe7;
+    --line-soft: #e5eaf0;
+    --pay: #2c549c;
+    --pay-ink: #234380;
+    --pay-soft: #e2eaf8;
+    --hr: #12796b;
+    --hr-ink: #0e5f55;
+    --hr-soft: #e0f0ec;
+    --amber: #96590c;
+    --amber-soft: #f6ecd9;
+    --red: #b3261e;
+    --red-soft: #f9e6e4;
+    --green: #256c2f;
+    --green-soft: #e3f0e1;
+    --code-bg: #e9edf3;
+    --shadow: 0 1px 2px rgba(30, 36, 46, 0.05), 0 4px 16px rgba(30, 36, 46, 0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #13161c;
+      --surface: #1a1e26;
+      --surface-2: #222731;
+      --ink: #e4e8ee;
+      --muted: #949dab;
+      --line: #2e3542;
+      --line-soft: #262c37;
+      --pay: #8fb2ec;
+      --pay-ink: #a8c3f2;
+      --pay-soft: #1e2b44;
+      --hr: #48bfaa;
+      --hr-ink: #6ed0be;
+      --hr-soft: #143530;
+      --amber: #e0a554;
+      --amber-soft: #3a2d15;
+      --red: #e98d82;
+      --red-soft: #3d201c;
+      --green: #7cc383;
+      --green-soft: #1d3320;
+      --code-bg: #262d39;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #13161c;
+    --surface: #1a1e26;
+    --surface-2: #222731;
+    --ink: #e4e8ee;
+    --muted: #949dab;
+    --line: #2e3542;
+    --line-soft: #262c37;
+    --pay: #8fb2ec;
+    --pay-ink: #a8c3f2;
+    --pay-soft: #1e2b44;
+    --hr: #48bfaa;
+    --hr-ink: #6ed0be;
+    --hr-soft: #143530;
+    --amber: #e0a554;
+    --amber-soft: #3a2d15;
+    --red: #e98d82;
+    --red-soft: #3d201c;
+    --green: #7cc383;
+    --green-soft: #1d3320;
+    --code-bg: #262d39;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 40px 24px 96px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: Archivo, "Be Vietnam Pro", system-ui, sans-serif;
+    text-wrap: balance;
+    line-height: 1.2;
+  }
+  h1 {
+    font-size: 2.1rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin: 10px 0 8px;
+  }
+  h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin: 0 0 4px;
+  }
+  h3 {
+    font-size: 1.02rem;
+    font-weight: 700;
+    margin: 22px 0 8px;
+  }
+  p {
+    margin: 8px 0;
+  }
+  section {
+    margin-top: 44px;
+  }
+  .lede {
+    color: var(--muted);
+    max-width: 62ch;
+  }
+
+  .eyebrow {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .eyebrow::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+  .eyebrow .no {
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--ink);
+  }
+
+  code,
+  .mono {
+    font-family: "IBM Plex Mono", Consolas, monospace;
+    font-size: 0.86em;
+  }
+  code {
+    background: var(--code-bg);
+    border-radius: 4px;
+    padding: 0.12em 0.38em;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    padding: 3px 11px;
+    letter-spacing: 0.02em;
+  }
+  .badge-amber {
+    background: var(--amber-soft);
+    color: var(--amber);
+  }
+  .badge-pay {
+    background: var(--pay-soft);
+    color: var(--pay-ink);
+  }
+  .badge-hr {
+    background: var(--hr-soft);
+    color: var(--hr-ink);
+  }
+  .badge-red {
+    background: var(--red-soft);
+    color: var(--red);
+  }
+  .badge-green {
+    background: var(--green-soft);
+    color: var(--green);
+  }
+
+  .head-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 28px 30px;
+    box-shadow: var(--shadow);
+  }
+  .head-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .callout {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--amber);
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 18px 0;
+  }
+  .callout.red-edge {
+    border-left-color: var(--red);
+  }
+  .callout.pay-edge {
+    border-left-color: var(--pay);
+  }
+
+  table.doc {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+  table.doc th {
+    text-align: left;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: 600;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-2);
+    white-space: nowrap;
+  }
+  table.doc td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+  }
+  table.doc tr:last-child td {
+    border-bottom: none;
+  }
+  table.doc td.mono,
+  table.doc th.mono {
+    white-space: nowrap;
+  }
+
+  .cols-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 760px) {
+    .cols-2 {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .story-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .story-card .story-head {
+    padding: 12px 16px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--line);
+    background: var(--pay-soft);
+    color: var(--pay-ink);
+  }
+  .story-card ul {
+    margin: 0;
+    padding: 12px 16px 14px 16px;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .story-card li {
+    display: grid;
+    grid-template-columns: 52px 1fr;
+    gap: 10px;
+    font-size: 0.88rem;
+  }
+  .story-card li .sid {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--muted);
+    padding-top: 2px;
+  }
+
+  .fsm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0 2px;
+  }
+  .fsm .st {
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 3px 12px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .fsm .st.hi-pay {
+    border-color: var(--pay);
+    color: var(--pay-ink);
+  }
+  .fsm .st.hi-hr {
+    border-color: var(--hr);
+    color: var(--hr-ink);
+  }
+  .fsm .st.terminal {
+    border-style: dashed;
+    color: var(--muted);
+  }
+  .fsm .arr {
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+  .fsm-note {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* ── Wireframes ─────────────────────────────── */
+  .wires {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 18px;
+  }
+  @media (max-width: 860px) {
+    .wires {
+      grid-template-columns: 1fr;
+    }
+  }
+  .wire {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border-top: 3px solid var(--pay);
+  }
+  .wire-caption {
+    padding: 12px 16px 14px;
+    border-top: 1px solid var(--line);
+  }
+  .wire-caption .wc-title {
+    font-weight: 700;
+    font-size: 0.9rem;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+  .wire-caption .wc-id {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+  .wire-caption p {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin: 4px 0 0;
+  }
+  .wire-screen {
+    padding: 14px;
+    background: var(--surface-2);
+    flex: 1;
+  }
+  .app {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 10.5px;
+    line-height: 1.45;
+    overflow: hidden;
+  }
+  .app-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--line-soft);
+    color: var(--muted);
+  }
+  .app-top .crumb {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .app-body {
+    display: flex;
+    min-height: 190px;
+  }
+  .app-nav {
+    width: 64px;
+    border-right: 1px solid var(--line-soft);
+    padding: 8px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .app-nav .ni {
+    height: 9px;
+    border-radius: 3px;
+    background: var(--line-soft);
+  }
+  .app-nav .ni.on-pay {
+    background: var(--pay-soft);
+    outline: 1px solid var(--pay);
+  }
+  .app-main {
+    flex: 1;
+    padding: 9px 10px;
+    min-width: 0;
+  }
+
+  .toolbar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .inp {
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 2px 8px;
+    color: var(--muted);
+    background: var(--surface);
+    white-space: nowrap;
+  }
+  .btn {
+    border-radius: 5px;
+    padding: 2px 9px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .btn-pay {
+    background: var(--pay);
+    color: var(--surface);
+  }
+  .btn-ghost {
+    border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .btn-ok {
+    border: 1px solid var(--green);
+    color: var(--green);
+  }
+
+  .trow {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr 1fr 1fr;
+    gap: 8px;
+    align-items: center;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .trow.hd {
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .chip {
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-weight: 600;
+    font-size: 9px;
+    white-space: nowrap;
+    justify-self: start;
+  }
+  .c-draft {
+    background: var(--surface-2);
+    color: var(--muted);
+  }
+  .c-run {
+    background: var(--pay-soft);
+    color: var(--pay-ink);
+  }
+  .c-review {
+    background: var(--amber-soft);
+    color: var(--amber);
+  }
+  .c-ok {
+    background: var(--green-soft);
+    color: var(--green);
+  }
+  .c-locked {
+    background: var(--surface-2);
+    color: var(--muted);
+    border: 1px solid var(--line);
+  }
+  .c-mask {
+    background: var(--surface-2);
+    color: var(--muted);
+    border: 1px dashed var(--line);
+  }
+
+  .field {
+    margin-bottom: 7px;
+  }
+  .field .lb {
+    font-weight: 600;
+    margin-bottom: 2px;
+    color: var(--muted);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .field .bx {
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 3px 8px;
+    color: var(--ink);
+    background: var(--surface);
+  }
+  .alert-warn {
+    background: var(--amber-soft);
+    color: var(--amber);
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-weight: 600;
+    margin: 6px 0;
+  }
+  .alert-lock {
+    background: var(--red-soft);
+    color: var(--red);
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-weight: 600;
+    margin: 6px 0;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 12px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 8px;
+  }
+  .tabs span {
+    padding: 2px 2px 4px;
+    color: var(--muted);
+  }
+  .tabs .on {
+    color: var(--pay-ink);
+    font-weight: 700;
+    border-bottom: 2px solid var(--pay);
+  }
+
+  .timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .timeline .tl {
+    display: grid;
+    grid-template-columns: 62px 1fr;
+    gap: 8px;
+    font-size: 9.5px;
+    padding: 2px 4px;
+    border-left: 2px solid var(--pay-soft);
+  }
+  .timeline .tl .tl-d {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* payslip breakdown lines */
+  .bd {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 4px;
+  }
+  .bd .bl {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 2px 6px;
+    border-bottom: 1px dashed var(--line-soft);
+    font-size: 9.8px;
+  }
+  .bd .bl.sum {
+    border-bottom: none;
+    border-top: 1.5px solid var(--line);
+    font-weight: 700;
+    margin-top: 2px;
+    padding-top: 4px;
+  }
+  .bd .neg {
+    color: var(--red);
+  }
+
+  /* WO pipeline */
+  .pipe {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 16px 0;
+  }
+  .pipe-track {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .pipe-track .lbl {
+    font-family: Archivo, sans-serif;
+    font-weight: 700;
+    font-size: 0.78rem;
+    width: 72px;
+    flex-shrink: 0;
+    color: var(--pay-ink);
+  }
+  .wo {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    font-weight: 500;
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    border-radius: 7px;
+    padding: 4px 9px;
+    white-space: nowrap;
+  }
+  .wo.z-red {
+    border-color: var(--red);
+  }
+  .wo.z-yellow {
+    border-color: var(--amber);
+  }
+  .wo.blocked {
+    background: var(--amber-soft);
+    border-color: var(--amber);
+    border-style: dashed;
+  }
+  .pipe .arr {
+    color: var(--muted);
+    font-size: 0.78rem;
+  }
+
+  .risk-list {
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: risk;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .risk-list li {
+    counter-increment: risk;
+    display: grid;
+    grid-template-columns: 30px 1fr;
+    gap: 12px;
+    font-size: 0.9rem;
+  }
+  .risk-list li::before {
+    content: counter(risk, decimal-leading-zero);
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--red);
+    font-size: 0.8rem;
+    padding-top: 2px;
+  }
+
+  .sign-box {
+    border: 1.5px solid var(--amber);
+    background: var(--amber-soft);
+    border-radius: 12px;
+    padding: 18px 22px;
+    margin-top: 18px;
+  }
+  .sign-box h3 {
+    margin-top: 0;
+    color: var(--amber);
+  }
+  .sign-box ol {
+    margin: 8px 0 0;
+    padding-left: 20px;
+  }
+  .sign-box li {
+    margin: 4px 0;
+  }
+
+  a {
+    color: var(--pay-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--pay);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    section {
+      scroll-margin-top: 24px;
+    }
+  }
+</style>
+
+<div class="page">
+  <header class="head-card">
+    <div class="eyebrow">
+      <span class="no">HỒ SƠ DUYỆT WAVE · SOẠN 31/08/2026</span>
+    </div>
+    <h1>Wave S13-PAYROLL — Phase 2 «HR nâng cao»: Tiền lương</h1>
+    <p class="lede">
+      Mảnh cuối của Phase 2 sau RECRUIT: tính lương từ hồ sơ nhân sự + công + phép + phụ cấp +
+      thưởng/phạt + khấu trừ, duyệt bảng lương, phát hành phiếu lương. Nguồn phạm vi: SPEC-01 §12.8
+      · §10.6 (Payroll Officer) · IMPLEMENTATION-10 §10.1 (P2-PAY-01..10) · DECISIONS-01 (Phương án
+      B — quyền lương tách riêng, đã đánh dấu Block-code).
+    </p>
+    <div class="head-meta">
+      <span class="badge badge-green"
+        >✅ Owner đã duyệt 31/08/2026 — 10/10 DEC chốt theo đề xuất</span
+      >
+      <span class="badge badge-pay">PAYROLL — SPEC-11 · DB-13 · API-18</span>
+      <span class="badge badge-red">RECONCILE-FIRST: 6 bảng G12 đã build, 0 route</span>
+      <span class="badge badge-hr"
+        >Điểm nối: HR lương cơ bản · ATT kỳ công · LEAVE không lương</span
+      >
+      <span class="badge badge-pay">7 WO đề xuất · BE tách 2</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="eyebrow"><span class="no">01</span> ĐIỂM XUẤT PHÁT — ĐO THẬT 31/08</div>
+    <h2>Không phải nền trống — tầng DB đã build từ đợt G12, tầng API chưa từng tồn tại</h2>
+    <p class="lede">
+      Khác hẳn RECRUIT (nền sạch 100%). PAYROLL giống TASK trước redesign: <b>hạ tầng nằm ngủ</b> —
+      phải reconcile trước khi build, không được coi là greenfield.
+    </p>
+    <ul style="padding-left: 20px; margin-top: 10px">
+      <li>
+        <b>6 bảng payroll ĐÃ TỒN TẠI trên DB</b> (band G12, mig <code>0091–0131</code>):
+        <code>salary_profiles</code> · <code>payroll_periods</code> · <code>payslips</code> ·
+        <code>payslip_items</code> · <code>bonus_penalties</code> ·
+        <code>payslip_acknowledgements</code>. Tất cả đủ RLS ENABLE+<b>FORCE</b> + policy tenant;
+        <code>payslips</code>/<code>payslip_items</code> đã append-only đúng khuôn (GRANT app
+        <b>SELECT, INSERT — không UPDATE/DELETE</b>). Nhưng <b>0 route, 0 thư mục</b>
+        <code>apps/api/src/payroll/</code>, 0 dòng trong <code>app.module.ts</code> —
+        <code>docs/erd-current.md</code> §A5 đang xếp cả cụm vào «hướng cũ, cần dọn».
+      </li>
+      <li>
+        <b>Permission di sản đã seed và GRANT TAY:</b>
+        <code>0092</code> (view/manage-salary-profile, sensitive) +
+        <code>0097</code> (manage-payroll-period · run-payroll · view-payslip · read-payslip) grant
+        cho <b>company-admin + hr-manager</b>; <code>0180</code> seed
+        <code>view-own-payslip</code> cho role <b>employee</b>. Mâu thuẫn trực tiếp với
+        <b>DECISIONS-01 Phương án B</b> («tách quyền lương riêng, KHÔNG mặc định cho HR» — đã đánh
+        dấu Block-code) và với mô tả role canonical <code>hr</code> («company-wide employee
+        management, <i>non-salary</i>»). → PAY-DEC-006.
+      </li>
+      <li>
+        <b>Điểm nối đã có sẵn, đang sống:</b> masking lương HR chạy thật (<code
+          >hr-read.service</code
+        >
+        — reveal <code>base_salary</code> chỉ khi có <code>view-salary</code> + ghi audit atomic) ·
+        <code>attendance_periods</code> (khoá kỳ công <code>open/locked</code>,
+        <code>payroll_periods.attendance_period_id</code> đã tham chiếu) ·
+        <code>leave_types.paid</code> + loại <code>UNPAID</code> seed sẵn ·
+        <code>companies.payroll_config_json</code> (cutoffDay 25 · payDay 5) đọc/ghi ở Settings.
+        <b>KHÔNG có bảng tổng hợp công kỳ</b> — nguồn công duy nhất là raw
+        <code>attendance_records</code>.
+      </li>
+      <li>
+        <b>Hàng <code>modules</code> PAYROLL đã pre-seed inactive</b> từ mig <code>0435</code> (nhóm
+        Extension, sort_order 8) — seed lại là NO-OP; chỉ bật <code>is_active</code> ở WO FE cuối
+        wave (khuôn 0556/0557/0562).
+      </li>
+      <li>
+        <b>Đánh số:</b> <b>SPEC-11</b> giữ chỗ sẵn tại SPEC-01 §7.2 · <b>DB-13</b> giữ chỗ sẵn tại
+        IMP-10 §13.2 (ASSET/ROOM đã né sang DB-15/16 vì lý do này) · API-13 vốn định cho PAYROLL đã
+        bị <b>CHAT chiếm</b>, API-14..17 cũng đã dùng ⇒ PAYROLL nhận <b>API-18</b>. → PAY-DEC-001.
+      </li>
+      <li>
+        <b>Dải mã trống đo được:</b> migration head <code>0563</code> (journal idx 230) ⇒ nhận
+        <code>0564+</code>, idx = max+1 KHÔNG suy từ tên file · NOTI-EVENT dừng <b>019</b> ⇒ nhận
+        <b>020+</b> · permission-matrix dừng <b>§9f</b> ⇒ nhận <b>§9g</b> · IMPLEMENTATION-02 dừng
+        EPIC-19/IMP02-STORY-180/Sprint 12 ⇒ nhận <b>EPIC-20 (§8.21) · STORY-181+ · Sprint 13</b> ·
+        SPEC-01 §17 dừng <b>§17.14</b> ⇒ nhận <b>§17.15+</b> · ID role hệ thống trống kế tiếp
+        <code>…0015</code>.
+      </li>
+      <li>
+        <b>Lỗ tài liệu phát hiện khi đo</b> (WO DOC vá): SPEC-01 §30 chỉ có dòng
+        <code>ATT → PAYROLL</code>, <b>thiếu</b> <code>HR → PAYROLL</code> và
+        <code>LEAVE → PAYROLL</code> dù §12.8 khai cả hai; IMP-10 có epic P2-PAY-10 (widget DASH)
+        trong bảng overview nhưng <b>không có story chi tiết</b>.
+      </li>
+    </ul>
+    <div class="callout red-edge">
+      <b>Hệ quả cho cách làm:</b> đây là wave <b>RECONCILE-FIRST</b>. WO DB không «tạo 6 bảng mới»
+      mà <b>đối chiếu 6 bảng di sản với DB-13 viết mới</b> — đo dữ liệu PROD từng bảng trước (dự
+      kiến 0 hàng vì chưa từng có route ghi, nhưng phải đo chứ không đoán), rồi ALTER theo thiết kế
+      bằng migration <b>mới</b> 0564+ — cấm sửa file band 0091–0180.
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">02</span> QUYẾT ĐỊNH CẦN KÝ</div>
+    <h2>10 quyết định — mỗi dòng đã kèm đề xuất</h2>
+    <p class="lede">Duyệt nguyên gói là chốt theo cột «Đề xuất». Muốn chỉnh, chỉ cần nêu mã DEC.</p>
+    <div class="table-wrap" style="margin-top: 12px">
+      <table class="doc">
+        <tr>
+          <th class="mono">Mã</th>
+          <th>Câu hỏi</th>
+          <th>Đề xuất</th>
+        </tr>
+        <tr>
+          <td class="mono">PAY-DEC-001</td>
+          <td>Đánh số tài liệu khi API-13 (chỗ IMP-10 định cho PAYROLL) đã bị CHAT chiếm</td>
+          <td>
+            <b>SPEC-11 · DB-13</b> (đúng chỗ giữ) · <b>API-18</b> · permission-matrix <b>§9g</b> ·
+            IMPLEMENTATION-02 <b>EPIC-20 (§8.21)</b>, IMP02-STORY-181..~192, Sprint 13 · trạng thái
+            SPEC-01 <b>§17.15–17.17</b> · <b>NOTI-EVENT-020..023</b> · migration <b>0564+</b> (đo
+            lại mọi dải trước khi ghi)
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">PAY-DEC-002</td>
+          <td>Số phận 6 bảng payroll di sản G12 (erd-current §A5 «cần dọn»)</td>
+          <td>
+            <b>RECONCILE — giữ khung, không drop-rebuild:</b> DB-13 viết thiết kế chuẩn rồi đối
+            chiếu từng bảng; phần lệch sửa bằng ALTER trong migration mới (bảng dự kiến rỗng trên
+            PROD — WO DB phải ĐO xác nhận trước khi ALTER mạnh). Giữ nguyên khuôn append-only của
+            <code>payslips</code>/<code>payslip_items</code>. Cột/CHECK không còn phù hợp thiết kế
+            mới → <b>GỠ</b> theo DB-13, không nối dây. erd-current chuyển payroll từ §A5 sang nhóm
+            «khớp thiết kế» sau wave.
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">PAY-DEC-003</td>
+          <td>
+            Nguồn sự thật lương cơ bản: <code>salary_profiles</code> hay
+            <code>employee_profiles.base_salary</code>
+          </td>
+          <td>
+            <b
+              ><code>salary_profiles</code> versioned (effective date) là nguồn DUY NHẤT cho tính
+              lương</b
+            >: lương cơ bản + phụ cấp có hiệu lực theo thời gian, lịch sử giữ nguyên.
+            <code>employee_profiles.base_salary</code> KHÔNG tham gia tính lương — giữ nguyên vai
+            trò hiển thị HR (masking hiện hành), DB-13 ghi chú deprecate dần Phase sau. Tránh hai
+            nguồn lệch nhau.
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">PAY-DEC-004</td>
+          <td>Phạm vi công thức lương v1 — có BHXH/BHYT/TNCN không</td>
+          <td>
+            v1: <b>gross = lương cơ bản (pro-rate theo công) + phụ cấp + thưởng − phạt</b>; khấu trừ
+            = nghỉ không lương + đi trễ/về sớm (nếu bật rule ATT) +
+            <b>dòng khấu trừ nhập tay</b> (bảo hiểm/thuế nhập số hoặc % cấu hình đơn giản).
+            <b>KHÔNG engine BHXH/BHYT/BHTN/TNCN luỹ tiến</b> — ghi <b>PARK-PAYROLL-001</b> vào
+            RELEASE-14 cho Phase sau. Tiền tệ <b>VND duy nhất</b>, <code>numeric(18,2)</code>, tính
+            + làm tròn <b>ở SQL</b>. Breakdown từng khoản phải giải-thích-được (P2-PAY-05-006).
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">PAY-DEC-005</td>
+          <td>Kỳ lương: chu kỳ, FSM, quan hệ với khoá kỳ công ATT</td>
+          <td>
+            Kỳ <b>theo tháng</b>, tái dùng <code>companies.payroll_config_json</code> (cutoffDay ·
+            payDay). FSM <b>7 trạng thái</b> đúng P2-PAY-03-002: Draft → CollectingData → Calculated
+            → Reviewing → Approved → Paid → Locked (hợp thức §17.15). Điều kiện tính:
+            <b>kỳ công <code>attendance_periods</code> phải <code>locked</code></b
+            >; đầu vào <b>snapshot ĐÓNG BĂNG</b> lúc tính; recalc chỉ khi chưa Approved;
+            <b>reopen</b> = cặp quyền riêng + bắt buộc lý do + audit.
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">PAY-DEC-006</td>
+          <td>Ai thấy lương ai — câu hỏi mở #9 của SPEC-01 §29 + xử lý grant di sản</td>
+          <td>
+            Chốt theo <b>DECISIONS-01 Phương án B</b>: cặp quyền PAYROLL là nhóm độc lập,
+            <b>KHÔNG mặc định cho HR</b>. Grant: <b>payroll-officer + company-admin</b> đủ bộ;
+            <b>hr-manager THU HỒI toàn bộ grant payroll di sản</b> (0092/0097) bằng migration mới —
+            giữ nguyên <code>view-salary:employee</code> hiện hành của HR (khác domain, ngoài phạm
+            vi wave); <b>employee giữ <code>view-own-payslip</code></b> (0180). Mọi cặp payroll
+            <code>is_sensitive=true</code> trừ cấu hình kỳ.
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">PAY-DEC-007</td>
+          <td>Duyệt bảng lương: mấy cấp, ai duyệt</td>
+          <td>
+            <b>1 cấp duyệt</b>. Cặp <code>('approve','payroll_period')</code> gán
+            <b>company-admin</b>, KHÔNG gán payroll-officer — tách người tính / người duyệt
+            (four-eyes). Reject bắt buộc comment; approve/reject/lock/reopen đều ghi audit + NOTI.
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">PAY-DEC-008</td>
+          <td>Phiếu lương &amp; xuất file: phát hành thế nào, PDF hay không</td>
+          <td>
+            Generate payslip khi kỳ <b>Approved</b> → <b>phát hành (Published)</b> + NOTI từng nhân
+            viên; employee xem <b>Own</b> in-app, xác nhận đã xem qua
+            <code>payslip_acknowledgements</code> (tái dùng bảng có sẵn). Xuất
+            <b>XLSX bảng lương tổng</b> với cặp <code>('export','payroll')</code> RIÊNG + audit (câu
+            hỏi mở #14/#15 SPEC-01 chốt luôn: có). <b>PDF phiếu lương = Phase sau</b>.
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">PAY-DEC-009</td>
+          <td>Role seed: payroll-officer là role gì, 2FA có bắt buộc không</td>
+          <td>
+            Seed <b>role hệ thống <code>payroll-officer</code></b> (ID <code>…0015</code>, tiền lệ
+            recruiter): <code>company_id IS NULL</code> · <code>is_system=true</code> ·
+            <b>KHÔNG canonical</b>. Điểm KHÁC tiền lệ:
+            <b><code>requires_two_factor=true</code></b> — lương là dữ liệu crown, người giữ role
+            này buộc bật 2FA (recruiter/asset-manager đang để false; nếu owner muốn đồng nhất false
+            thì nêu ở DEC này).
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">PAY-DEC-010</td>
+          <td>Widget DASH cho PAYROLL (epic P2-PAY-10 không có story chi tiết)</td>
+          <td>
+            v1 đúng <b>1 widget «chi phí lương kỳ»</b> (<code>PAYROLL-WIDGET-001</code>): tổng
+            gross/net + headcount + trạng thái kỳ gần nhất. Catalog BE + <b>SÀN scope Company</b> +
+            chỉ role có cặp payroll thấy (số liệu lương KHÔNG rơi vào widget chung); wire slug FE
+            <code>DashboardWidgetGrid</code> + test slug-map. Variance/report theo phòng ban = Phase
+            sau.
+          </td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">03</span> STORY</div>
+    <h2>10 story cấp wave</h2>
+    <p class="lede">
+      Bản nghiệp vụ đầy đủ (AC + point) viết ở EPIC-20 §8.21 trong WO tài liệu — chưng cất từ
+      P2-PAY-01..10, cắt các mục P2 đã đẩy Phase sau theo DEC.
+    </p>
+    <div class="cols-2" style="margin-top: 14px">
+      <div class="story-card">
+        <div class="story-head">Nền lương &amp; kỳ lương</div>
+        <ul>
+          <li>
+            <span class="sid">PL-01</span
+            ><span
+              >Hồ sơ lương nhân viên: lương cơ bản + phụ cấp, versioned theo effective date, lịch sử
+              đầy đủ, mask theo quyền</span
+            >
+          </li>
+          <li>
+            <span class="sid">PL-02</span
+            ><span
+              >Thưởng / phạt / khấu trừ nhập tay theo kỳ: lý do, người tạo, trạng thái duyệt
+              (reconcile bảng <code>bonus_penalties</code> có sẵn)</span
+            >
+          </li>
+          <li>
+            <span class="sid">PL-03</span
+            ><span
+              >Kỳ lương FSM 7 trạng thái + gắn khoá kỳ công ATT + cảnh báo nhân viên thiếu hồ sơ
+              lương / bảng công trước khi tính</span
+            >
+          </li>
+          <li>
+            <span class="sid">PL-04</span
+            ><span
+              >Tổng hợp đầu vào per nhân viên: ngày công, phép có lương / KHÔNG lương, đi trễ/về sớm
+              — đối soát được, recalc khi nguồn đổi trước duyệt</span
+            >
+          </li>
+          <li>
+            <span class="sid">PL-05</span
+            ><span
+              >Tính bảng lương nháp: gross / khấu trừ / net + snapshot đóng băng + breakdown từng
+              khoản giải-thích-được</span
+            >
+          </li>
+        </ul>
+      </div>
+      <div class="story-card">
+        <div class="story-head">Duyệt · phát hành · bảo vệ dữ liệu</div>
+        <ul>
+          <li>
+            <span class="sid">PL-06</span
+            ><span
+              >Review + điều chỉnh dòng lương (bắt buộc lý do, audit) + trình duyệt → approve/reject
+              1 cấp → lock; reopen quyền riêng</span
+            >
+          </li>
+          <li>
+            <span class="sid">PL-07</span
+            ><span
+              >Phiếu lương: generate từ kỳ Approved, phát hành + NOTI, employee xem Own + xác nhận
+              đã xem</span
+            >
+          </li>
+          <li>
+            <span class="sid">PL-08</span
+            ><span>Xuất XLSX bảng lương tổng — cặp quyền export riêng + audit từng lần xuất</span>
+          </li>
+          <li>
+            <span class="sid">PL-09</span
+            ><span
+              >Masking lương/bank server-side + deny-path + audit mọi lượt xem dữ liệu lương
+              (P2-PAY-09 — P0 toàn bộ)</span
+            >
+          </li>
+          <li>
+            <span class="sid">PL-10</span
+            ><span
+              >Widget DASH «chi phí lương kỳ» — chỉ role có quyền payroll, sàn scope Company</span
+            >
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">04</span> DỮ LIỆU &amp; TRẠNG THÁI</div>
+    <h2>Mô hình dữ liệu — reconcile 6 bảng có sẵn, tối đa 1 bảng mới</h2>
+    <p class="lede">
+      Mọi bảng: UUID PK · <code>company_id</code> + RLS FORCE (đã có) · soft-delete · bổ sung
+      composite tenant-FK còn thiếu (band G12 có trước khuôn 0535). Chi tiết cột chốt ở DB-13 (WO
+      tài liệu).
+    </p>
+    <div class="table-wrap" style="margin-top: 14px">
+      <table class="doc">
+        <tr>
+          <th class="mono">Bảng (đã có từ G12)</th>
+          <th>Vai trò trong thiết kế mới</th>
+          <th>Việc reconcile chính</th>
+        </tr>
+        <tr>
+          <td class="mono">salary_profiles</td>
+          <td>
+            Hồ sơ lương versioned: base + phụ cấp, effective date — nguồn duy nhất cho tính lương
+          </td>
+          <td>Đối chiếu cột allowances (jsonb) với DB-13; siết CHECK effective-range</td>
+        </tr>
+        <tr>
+          <td class="mono">payroll_periods</td>
+          <td>Kỳ lương — FSM 7 trạng thái, gắn <code>attendance_period_id</code> (đã có FK)</td>
+          <td>
+            CHECK trạng thái theo §17.15; thêm cột duyệt/khoá (người + thời điểm + lý do reopen)
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">payslips</td>
+          <td>
+            Phiếu lương — <b>append-only</b> (GRANT SELECT,INSERT đã đúng khuôn); snapshot đầu vào
+            công/phép đông cứng
+          </td>
+          <td>
+            Đối chiếu cột snapshot (workDays/presentDays/lateMinutes có sẵn) với đầu vào DB-13
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">payslip_items</td>
+          <td>Dòng thành phần per phiếu: loại (earning/deduction), số tiền, diễn giải breakdown</td>
+          <td>Chuẩn hoá kind theo danh mục thành phần DB-13</td>
+        </tr>
+        <tr>
+          <td class="mono">bonus_penalties</td>
+          <td>Thưởng/phạt/khấu trừ tay theo kỳ + trạng thái duyệt</td>
+          <td>
+            CHECK <code>reference_check</code> đã bị 0548 sửa — contracts mirror theo HIỆN TRẠNG DB;
+            rà trigger guard có sẵn
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">payslip_acknowledgements</td>
+          <td>Nhân viên xác nhận đã xem phiếu lương — chân NOTI + bằng chứng phát hành</td>
+          <td>Giữ nguyên; nối vào luồng Published mới</td>
+        </tr>
+        <tr>
+          <td class="mono" style="color: var(--pay-ink)">payroll_period_inputs <i>(mới?)</i></td>
+          <td>Snapshot đầu vào công/phép per NV per kỳ — nếu DB-13 quyết tách khỏi payslips</td>
+          <td>DB-13 chốt: bảng riêng hay cột snapshot trong payslips là đủ</td>
+        </tr>
+      </table>
+    </div>
+
+    <h3>FSM trạng thái (hợp thức vào SPEC-01 §17.15–17.17 ở WO tài liệu)</h3>
+    <div class="fsm">
+      <span class="st hi-pay">Draft</span><span class="arr">→</span>
+      <span class="st hi-pay">CollectingData</span><span class="arr">→</span>
+      <span class="st hi-pay">Calculated</span><span class="arr">→</span>
+      <span class="st hi-pay">Reviewing</span><span class="arr">→</span>
+      <span class="st hi-hr">Approved</span><span class="arr">→</span>
+      <span class="st hi-hr">Paid</span><span class="arr">→</span>
+      <span class="st terminal">Locked ⇢ reopen (quyền riêng + lý do)</span>
+    </div>
+    <p class="fsm-note">
+      Kỳ lương (P2-PAY-03-002). Calculated đòi kỳ công ATT đã <code>locked</code>; sau Approved cấm
+      recalc; Locked khoá luôn chỉnh công kỳ đó phía ATT. Chuyển tiếp sai trả 4xx đúng mã
+      <code>PAYROLL-ERR</code>, FSM ép ở service — CHECK không ép được chuyển tiếp.
+    </p>
+    <div class="fsm">
+      <span class="st hi-pay">Payslip: Generated</span><span class="arr">→</span>
+      <span class="st hi-hr">Published</span><span class="arr">→</span>
+      <span class="st terminal">Acknowledged (bảng ack)</span>
+      <span class="arr" style="margin-left: 10px">‖</span>
+      <span class="st hi-pay">Thưởng/phạt: Pending</span><span class="arr">→</span>
+      <span class="st terminal">Approved · Rejected</span>
+    </div>
+    <p class="fsm-note">
+      Phiếu lương (trái — bản ghi bất biến sau Published, điều chỉnh = kỳ sau) và thưởng/phạt nhập
+      tay (phải — chỉ dòng Approved vào công thức).
+    </p>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">05</span> API &amp; PHÂN QUYỀN</div>
+    <h2>Bề mặt API và cặp quyền dự kiến</h2>
+    <p class="lede">
+      ~24–28 endpoint <span class="mono">PAYROLL-API-001..</span> — số chính xác đo &amp; chốt ở
+      SPEC-11 / API-18. Cặp quyền theo ma trận per-(perm,role) data_scope, seed cùng migration —
+      reconcile với 7 permission di sản đã có tên (0092/0097/0180).
+    </p>
+    <div class="cols-2" style="margin-top: 14px">
+      <div class="table-wrap">
+        <table class="doc">
+          <tr>
+            <th class="mono">Nhóm endpoint (API-18)</th>
+            <th>Quyền</th>
+          </tr>
+          <tr>
+            <td class="mono">GET/POST/PATCH /payroll/salary-profiles</td>
+            <td class="mono">('view'|'manage','salary_profile') <i>sensitive</i></td>
+          </tr>
+          <tr>
+            <td class="mono">GET/POST/PATCH /payroll/bonus-penalties</td>
+            <td class="mono">('manage','bonus_penalty') <i>sensitive</i></td>
+          </tr>
+          <tr>
+            <td class="mono">GET/POST /payroll/periods + FSM actions</td>
+            <td class="mono">('manage','payroll_period') · ('approve',…) · ('reopen',…)</td>
+          </tr>
+          <tr>
+            <td class="mono">GET /payroll/periods/:id/inputs (+recalc)</td>
+            <td class="mono">('view','payroll_period') — đối soát công/phép</td>
+          </tr>
+          <tr>
+            <td class="mono">POST /payroll/periods/:id/calculate</td>
+            <td class="mono">('run','payroll') — @Idempotent theo kỳ ĐÓNG BĂNG</td>
+          </tr>
+          <tr>
+            <td class="mono">GET /payroll/payslips (+/:id) · PATCH adjust</td>
+            <td class="mono">('view','payslip') <i>sensitive</i> · ('adjust','payslip')</td>
+          </tr>
+          <tr>
+            <td class="mono">GET /me/payslips (+ack)</td>
+            <td class="mono">('view-own','payslip') — đã seed 0180</td>
+          </tr>
+          <tr>
+            <td class="mono">GET /payroll/export</td>
+            <td class="mono">('export','payroll') riêng + audit</td>
+          </tr>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table class="doc">
+          <tr>
+            <th>Role</th>
+            <th>Grant dự kiến (§9g)</th>
+          </tr>
+          <tr>
+            <td><b>payroll-officer</b> <i>(seed mới — PAY-DEC-009)</i></td>
+            <td>Đủ bộ trừ <code>approve</code>, scope Company · 2FA bắt buộc</td>
+          </tr>
+          <tr>
+            <td><b>company-admin</b></td>
+            <td>Đủ bộ + <code>approve</code>/<code>reopen</code> (four-eyes với officer)</td>
+          </tr>
+          <tr>
+            <td><b>hr-manager</b></td>
+            <td>
+              <b>THU HỒI</b> grant payroll di sản 0092/0097 — không cặp PAYROLL nào (Phương án B)
+            </td>
+          </tr>
+          <tr>
+            <td><b>employee</b></td>
+            <td>('view-own','payslip') — phiếu lương của chính mình + ack</td>
+          </tr>
+          <tr>
+            <td><b>manager · các role khác</b></td>
+            <td>Không grant — lương không có mặt team-scope v1</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+    <p style="margin-top: 10px">
+      Sự kiện NOTI dự kiến (<span class="mono">NOTI-EVENT-020..023</span>, đo lại dải khi viết):
+      <b>020</b> bảng lương chờ duyệt (người duyệt) · <b>021</b> kỳ lương được duyệt / bị từ chối
+      (payroll-officer) · <b>022</b> phiếu lương sẵn sàng (từng nhân viên) · <b>023</b> kỳ lương bị
+      reopen (officer + admin). Mã lỗi <span class="mono">PAYROLL-ERR-001..~016</span> — census theo
+      MÃ ở WO QA. CHECK <code>module_code</code> NOTI nới trên <b>cả hai bảng</b>.
+    </p>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">06</span> GIAO DIỆN DỰ ĐỊNH</div>
+    <h2>Wireframe 6 màn hình chính</h2>
+    <p class="lede">
+      <code>apps/app/src/routes/payroll/</code> (+ 1 màn trong ME) — mọi màn:
+      <code>&lt;PermissionGate&gt;</code> + <code>useCan()</code>, loading/error/empty, i18n vi,
+      trạng thái dùng constants §17. Số tiền: server mask theo quyền — client không nhận thì không
+      render; FE schema <code>.optional()</code> cho mọi trường lương.
+    </p>
+    <div class="wires">
+      <div class="wire">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top"><span class="crumb">Tiền lương</span> › Kỳ lương</div>
+            <div class="app-body">
+              <div class="app-nav">
+                <div class="ni"></div>
+                <div class="ni"></div>
+                <div class="ni on-pay"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+              </div>
+              <div class="app-main">
+                <div class="toolbar">
+                  <span class="inp">Năm 2026 ▾</span>
+                  <span class="inp">Trạng thái ▾</span>
+                  <span style="flex: 1"></span>
+                  <span class="btn btn-pay">+ Tạo kỳ lương</span>
+                </div>
+                <div class="trow hd">
+                  <span>Kỳ</span><span>Ngày trả</span><span class="num">NV</span
+                  ><span>Trạng thái</span>
+                </div>
+                <div class="trow">
+                  <span><b>2026-08</b></span
+                  ><span class="num">05/09</span><span class="num">36</span
+                  ><span class="chip c-review">Reviewing</span>
+                </div>
+                <div class="trow">
+                  <span><b>2026-07</b></span
+                  ><span class="num">05/08</span><span class="num">35</span
+                  ><span class="chip c-locked">Locked</span>
+                </div>
+                <div class="trow">
+                  <span><b>2026-06</b></span
+                  ><span class="num">05/07</span><span class="num">35</span
+                  ><span class="chip c-locked">Locked</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="wire-caption">
+          <div class="wc-title">Danh sách kỳ lương <span class="wc-id">PAY-SCREEN-001</span></div>
+          <p>
+            Kỳ theo tháng (cutoff/payDay từ cấu hình công ty). Chip FSM 7 trạng thái; tạo kỳ chặn
+            trùng tháng (unique per company).
+          </p>
+        </div>
+      </div>
+
+      <div class="wire">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top"><span class="crumb">Kỳ 2026-08</span> · Reviewing</div>
+            <div class="app-body">
+              <div class="app-nav">
+                <div class="ni"></div>
+                <div class="ni"></div>
+                <div class="ni on-pay"></div>
+                <div class="ni"></div>
+              </div>
+              <div class="app-main">
+                <div class="alert-warn">⚠ 2 nhân viên thiếu hồ sơ lương — chưa tính được</div>
+                <div class="toolbar">
+                  <span class="btn btn-ghost">Tính lại</span>
+                  <span class="btn btn-pay">Trình duyệt</span>
+                  <span class="btn btn-ok">Xuất XLSX</span>
+                </div>
+                <div class="trow hd" style="grid-template-columns: 1.6fr 0.8fr 1fr 1fr">
+                  <span>Nhân viên</span><span class="num">Công</span><span class="num">Gross</span
+                  ><span class="num">Net</span>
+                </div>
+                <div class="trow" style="grid-template-columns: 1.6fr 0.8fr 1fr 1fr">
+                  <span>Nguyễn Văn A</span><span class="num">22.0</span
+                  ><span class="num">18.500.000</span><span class="num"><b>17.100.000</b></span>
+                </div>
+                <div class="trow" style="grid-template-columns: 1.6fr 0.8fr 1fr 1fr">
+                  <span>Trần Thị B</span><span class="num">20.5</span
+                  ><span class="num">15.230.000</span><span class="num"><b>14.020.000</b></span>
+                </div>
+                <div class="trow" style="grid-template-columns: 1.6fr 0.8fr 1fr 1fr">
+                  <span>Lê C <i style="color: var(--muted)">(không quyền)</i></span
+                  ><span class="num">21.0</span><span class="chip c-mask">•••</span
+                  ><span class="chip c-mask">•••</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="wire-caption">
+          <div class="wc-title">
+            Chi tiết kỳ — bảng lương <span class="wc-id">PAY-SCREEN-002</span>
+          </div>
+          <p>
+            Cảnh báo thiếu dữ liệu trước khi tính; action theo FSM + quyền (Trình duyệt ≠ Duyệt). Số
+            tiền mask server-side cho role thiếu quyền.
+          </p>
+        </div>
+      </div>
+
+      <div class="wire">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top">
+              <span class="crumb">Phiếu lương</span> · Nguyễn Văn A · 2026-08
+            </div>
+            <div class="app-body">
+              <div class="app-nav">
+                <div class="ni"></div>
+                <div class="ni on-pay"></div>
+                <div class="ni"></div>
+              </div>
+              <div class="app-main">
+                <div class="toolbar">
+                  <span class="chip c-ok">Published</span>
+                  <span class="chip c-run">Đã xác nhận 05/09</span>
+                </div>
+                <div class="bd">
+                  <div class="bl">
+                    <span>Lương cơ bản (22/22 công)</span><span class="num">15.000.000</span>
+                  </div>
+                  <div class="bl">
+                    <span>Phụ cấp ăn trưa</span><span class="num">1.000.000</span>
+                  </div>
+                  <div class="bl">
+                    <span>Thưởng dự án Q3</span><span class="num">2.500.000</span>
+                  </div>
+                  <div class="bl">
+                    <span class="neg">Nghỉ không lương (1 ngày)</span
+                    ><span class="num neg">−680.000</span>
+                  </div>
+                  <div class="bl">
+                    <span class="neg">Khấu trừ BH (nhập tay)</span
+                    ><span class="num neg">−720.000</span>
+                  </div>
+                  <div class="bl sum">
+                    <span>Thực nhận</span><span class="num">17.100.000</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="wire-caption">
+          <div class="wc-title">Phiếu lương chi tiết <span class="wc-id">PAY-SCREEN-003</span></div>
+          <p>
+            Breakdown từng khoản giải-thích-được (P2-PAY-05-006). Bản ghi bất biến sau phát hành —
+            điều chỉnh đi vào kỳ sau.
+          </p>
+        </div>
+      </div>
+
+      <div class="wire">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top"><span class="crumb">Hồ sơ lương</span> · Trần Thị B</div>
+            <div class="app-body">
+              <div class="app-nav">
+                <div class="ni"></div>
+                <div class="ni"></div>
+                <div class="ni on-pay"></div>
+              </div>
+              <div class="app-main">
+                <div class="tabs"><span class="on">Hiện hành</span><span>Lịch sử</span></div>
+                <div class="field">
+                  <div class="lb">Lương cơ bản (hiệu lực 01/07/2026)</div>
+                  <div class="bx num">14.000.000 ₫ / tháng</div>
+                </div>
+                <div class="field">
+                  <div class="lb">Phụ cấp</div>
+                  <div class="bx">Ăn trưa 1.000.000 · Xăng xe 500.000</div>
+                </div>
+                <div class="timeline">
+                  <div class="tl">
+                    <span class="tl-d">01/07/26</span><span>Tăng 13tr → 14tr (ký HĐ mới)</span>
+                  </div>
+                  <div class="tl">
+                    <span class="tl-d">01/01/26</span><span>Khởi tạo hồ sơ lương 13.000.000</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="wire-caption">
+          <div class="wc-title">
+            Hồ sơ lương nhân viên <span class="wc-id">PAY-SCREEN-004</span>
+          </div>
+          <p>
+            Versioned theo effective date — kỳ lương lấy bản hiệu lực tại thời điểm kỳ. Mọi lượt xem
+            ghi audit (khuôn reveal-salary HR hiện hành).
+          </p>
+        </div>
+      </div>
+
+      <div class="wire">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top">
+              <span class="crumb">Thưởng · phạt · khấu trừ</span> · Kỳ 2026-08
+            </div>
+            <div class="app-body">
+              <div class="app-nav">
+                <div class="ni"></div>
+                <div class="ni on-pay"></div>
+                <div class="ni"></div>
+              </div>
+              <div class="app-main">
+                <div class="toolbar">
+                  <span class="inp">Loại ▾</span>
+                  <span style="flex: 1"></span>
+                  <span class="btn btn-pay">+ Thêm dòng</span>
+                </div>
+                <div class="trow hd" style="grid-template-columns: 1.4fr 1fr 1fr 0.9fr">
+                  <span>Nhân viên</span><span>Loại</span><span class="num">Số tiền</span
+                  ><span>Duyệt</span>
+                </div>
+                <div class="trow" style="grid-template-columns: 1.4fr 1fr 1fr 0.9fr">
+                  <span>Nguyễn Văn A</span><span>Thưởng dự án</span
+                  ><span class="num">2.500.000</span><span class="chip c-ok">Approved</span>
+                </div>
+                <div class="trow" style="grid-template-columns: 1.4fr 1fr 1fr 0.9fr">
+                  <span>Phạm D</span><span>Phạt đi trễ</span
+                  ><span class="num neg" style="color: var(--red)">−200.000</span
+                  ><span class="chip c-review">Pending</span>
+                </div>
+                <div class="alert-lock">
+                  Kỳ đã Locked — mọi dòng đóng băng, chỉ reopen đúng quyền
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="wire-caption">
+          <div class="wc-title">
+            Thưởng / phạt / khấu trừ kỳ <span class="wc-id">PAY-SCREEN-005</span>
+          </div>
+          <p>
+            Nhập tay có lý do + trạng thái duyệt; chỉ dòng Approved vào công thức. Đóng băng theo
+            FSM kỳ.
+          </p>
+        </div>
+      </div>
+
+      <div class="wire">
+        <div class="wire-screen">
+          <div class="app">
+            <div class="app-top"><span class="crumb">Của tôi</span> › Phiếu lương của tôi</div>
+            <div class="app-body">
+              <div class="app-nav">
+                <div class="ni on-pay"></div>
+                <div class="ni"></div>
+                <div class="ni"></div>
+              </div>
+              <div class="app-main">
+                <div class="trow hd" style="grid-template-columns: 1fr 1fr 1fr">
+                  <span>Kỳ</span><span class="num">Thực nhận</span><span>Trạng thái</span>
+                </div>
+                <div class="trow" style="grid-template-columns: 1fr 1fr 1fr">
+                  <span><b>2026-08</b></span
+                  ><span class="num">17.100.000</span
+                  ><span class="btn btn-ok" style="font-size: 9px">Xác nhận đã xem</span>
+                </div>
+                <div class="trow" style="grid-template-columns: 1fr 1fr 1fr">
+                  <span><b>2026-07</b></span
+                  ><span class="num">16.800.000</span><span class="chip c-ok">Đã xác nhận</span>
+                </div>
+                <div class="trow" style="grid-template-columns: 1fr 1fr 1fr">
+                  <span><b>2026-06</b></span
+                  ><span class="num">16.800.000</span><span class="chip c-ok">Đã xác nhận</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="wire-caption">
+          <div class="wc-title">
+            Phiếu lương của tôi (ME) <span class="wc-id">PAY-SCREEN-006</span>
+          </div>
+          <p>
+            Scope Own tuyệt đối (<code>view-own-payslip</code> đã seed 0180) — không bao giờ thấy
+            phiếu người khác; NOTI khi phiếu phát hành; nút xác nhận ghi
+            <code>payslip_acknowledgements</code>.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">07</span> PHÂN RÃ WORK ORDER</div>
+    <h2>7 WO — một track nối tiếp, BE tách đôi, một cửa duyệt</h2>
+    <div class="pipe">
+      <div class="pipe-track">
+        <span class="lbl">PAYROLL</span>
+        <span class="wo blocked">DOC-1 ⏳</span><span class="arr">→</span>
+        <span class="wo z-red">DB-1 🔴</span><span class="arr">→</span>
+        <span class="wo z-red">BE-1 🔴</span><span class="arr">→</span>
+        <span class="wo z-red">BE-2 🔴</span><span class="arr">→</span> <span class="wo">FE-1</span
+        ><span class="arr">→</span> <span class="wo z-yellow">QA-1</span><span class="arr">→</span>
+        <span class="wo">DASH-1</span>
+      </div>
+    </div>
+    <div class="table-wrap" style="margin-top: 6px">
+      <table class="doc">
+        <tr>
+          <th class="mono">WO</th>
+          <th>Zone · gate</th>
+          <th>Phạm vi chính</th>
+          <th>done_when rút gọn</th>
+        </tr>
+        <tr>
+          <td class="mono">S13-PAYROLL-DOC-1</td>
+          <td>🟢 LIGHT</td>
+          <td>
+            SPEC-11 · DB-13 (kèm bản đồ reconcile 6 bảng G12) · API-18 · §9g · EPIC-20 §8.21 ·
+            §17.15–17.17 · NOTI-EVENT-020..023 · vá SPEC-01 §30 (HR/LEAVE→PAYROLL) · đồng bộ README
+            / DB-01·09·10 / erd-current (payroll rời §A5) / RELEASE-14 (PARK-PAYROLL-001) ·
+            stories.mjs + dashboard MODULE_SPEC nhận PAYROLL
+          </td>
+          <td>
+            Ghi 10 DEC đã ký vào SPEC-11; <b>plan-reviewer đối kháng PASS</b> trên SPEC-11 + DB-13
+            trước khi mở DB-1
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">S13-PAYROLL-DB-1</td>
+          <td>🔴 FULL</td>
+          <td>
+            Mig 0564+: <b>ĐO dữ liệu PROD 6 bảng trước</b> → ALTER theo DB-13 (giữ khuôn append-only
+            payslips) · bổ sung composite tenant-FK band G12 · CHECK FSM ·
+            <b>thu hồi grant payroll di sản của hr-manager</b> (đo pg_catalog hiện trạng trước khi
+            REVOKE) · seed §9g + role payroll-officer …0015 (2FA) · NOTI catalog 2 bảng · verify
+            audit object_types (6 type đã có từ 0093) · contracts Zod mirror hiện trạng
+          </td>
+          <td>
+            Lane migration nối tiếp; test schema + census grant 4 hình dạng wildcard trên LANE_DB
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">S13-PAYROLL-BE-1</td>
+          <td>🔴 FULL</td>
+          <td>
+            Module NestJS payroll/ (nền): salary-profile + bonus-penalty CRUD · masking lương server
+            (khuôn reveal+audit của HR) · kỳ lương FSM + gắn khoá kỳ công ATT · tổng hợp đầu vào
+            công/phép + cảnh báo thiếu · guard per-pair 2 tầng · audit · @Idempotent
+          </td>
+          <td>Deny-path RED-trước cho mọi route lương; 4xx đúng mã PAYROLL-ERR</td>
+        </tr>
+        <tr>
+          <td class="mono">S13-PAYROLL-BE-2</td>
+          <td>🔴 FULL</td>
+          <td>
+            Máy tính lương: calculate (SQL, numeric, snapshot ĐÓNG BĂNG) · điều chỉnh dòng có lý do
+            · submit/approve/reject/lock/reopen (four-eyes) · generate + publish payslip + ack ·
+            export XLSX + audit · outbox NOTI 4 sự kiện
+          </td>
+          <td>
+            Race double-calculate/double-publish đúng-1-thắng; recalc sau Approved bị chặn; số khớp
+            đối soát tay trên fixture chuẩn
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">S13-PAYROLL-FE-1</td>
+          <td>🟢 LIGHT</td>
+          <td>
+            6 màn PAY-SCREEN-001..006 (routes/payroll/ + màn ME) · PermissionGate/useCan · schema FE
+            .optional() mọi trường lương · bật module (mig cuối, khuôn 0556)
+          </td>
+          <td>Loading/error/empty đủ; không hard-code quyền; i18n vi; số tabular-nums</td>
+        </tr>
+        <tr>
+          <td class="mono">S13-PAYROLL-QA-1</td>
+          <td>🟡 LIGHT+</td>
+          <td>
+            Ma trận allow/deny per-pair TỪNG route · IDOR/cross-tenant 2-tenant + cross-employee
+            payslip · FSM chuyển sai đủ 7 trạng thái · biên idempotency theo kỳ · census mã lỗi theo
+            MÃ · audit-trail lượt xem lương có bằng chứng
+          </td>
+          <td>
+            check.sh --lane-db xanh KHÔNG banner; coverage payroll/ ≥85% (crown); TESTABLE-FEATURES
+            cập nhật
+          </td>
+        </tr>
+        <tr>
+          <td class="mono">S13-PAYROLL-DASH-1</td>
+          <td>🟢 LIGHT</td>
+          <td>
+            Widget «chi phí lương kỳ» (PAYROLL-WIDGET-001): catalog BE + sàn scope + wire slug FE
+            DashboardWidgetGrid
+          </td>
+          <td>Widget chỉ hiện cho role có cặp payroll; test slug-map FE</td>
+        </tr>
+      </table>
+    </div>
+    <ul style="margin: 6px 0 0; padding-left: 20px; font-size: 0.9rem">
+      <li>
+        <b>BE tách đôi</b> — khác RECRUIT: máy tính lương + FSM duyệt + phát hành là cụm crown đặc
+        quánh, gộp một WO sẽ vượt khẩu độ một phiên vùng đỏ (~$136/WO đỏ theo số đo cũ).
+      </li>
+      <li>
+        DOC → DB có chốt <b>plan-reviewer đối kháng PASS</b> trên SPEC-11 + DB-13 (khuôn wave
+        CHAT/OFFICE/RECRUIT).
+      </li>
+      <li>
+        WO DOC seed ở trạng thái <code>blocked</code> — máy không nhặt được cho tới khi anh duyệt hồ
+        sơ này.
+      </li>
+      <li>
+        Crown routing: DB-1/BE-1/BE-2 chạy Opus + FULL gate (lương = crown-jewel khai báo sẵn trong
+        CLAUDE.md §6: «Phase 2: payroll/payslip»).
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">08</span> RỦI RO ĐÃ GHIM</div>
+    <h2>14 bẫy đã biết, viết sẵn vào done_when</h2>
+    <ol class="risk-list">
+      <li>
+        <b>Band di sản 0091–0180 là bất khả xâm phạm:</b> mọi thay đổi schema/grant đi bằng
+        migration MỚI 0564+; journal idx = max hiện tại + 1, KHÔNG suy từ tên file (quy ước ghi ngay
+        trong 0180).
+      </li>
+      <li>
+        <b>Đo trước khi ALTER:</b> 6 bảng dự kiến rỗng trên PROD (0 route ghi) nhưng phải SELECT
+        count đo thật; GRANT trong migration cũ ≠ hiện trạng — đọc pg_catalog trước khi viết
+        REVOKE/GRANT mới.
+      </li>
+      <li>
+        <b>REVOKE bảng xoá cả column-GRANT</b> — khi thu hồi quyền hr-manager không được REVOKE
+        table-level trên bảng còn grant cột; khuôn append-only của payslips (SELECT,INSERT) giữ
+        nguyên, đừng «chuẩn hoá» thành S/I/U.
+      </li>
+      <li>
+        <b>Khoá theo KỲ cần nguồn ĐÓNG BĂNG:</b> idempotency key của calculate suy từ nội dung kỳ
+        (period + snapshot version), không từ thời điểm gọi; recalc sau Approved phải bị chặn bằng
+        FSM + test.
+      </li>
+      <li>
+        <b>Tiền tính ở SQL:</b> <code>numeric(18,2)</code>, cộng trừ + làm tròn + clamp trong câu
+        SQL — cấm số học float phía JS; fixture đối soát tay ít nhất 1 nhân viên đủ mọi loại khoản.
+      </li>
+      <li>
+        <b>Composite tenant-FK:</b> band G12 ra đời TRƯỚC khuôn 0535 — rà từng FK payroll, bổ sung
+        cặp <code>(company_id, id)</code> còn thiếu.
+      </li>
+      <li>
+        <b>Zod mirror theo HIỆN TRẠNG DB, không theo file migration gốc:</b>
+        <code>bonus_penalties_reference_check</code> đã bị 0548 sửa (gỡ vế defect) — contracts phải
+        soi CHECK đang sống; trần Zod ≠ trần service kẻo đẻ mã lỗi chết.
+      </li>
+      <li>
+        <b>Masking server ⇒ FE schema <code>.optional()</code></b> cho MỌI trường tiền — kẻo trang
+        trắng cho role thiếu quyền; cặp is_sensitive khai allowlist capability ở BACKEND kẻo màn
+        quản trị biến mất khỏi nav.
+      </li>
+      <li>
+        <b>CHECK không ép được chuyển tiếp FSM</b> — 7 trạng thái ép ở service + test đủ ma trận
+        chuyển sai; reopen bắt buộc lý do + audit; khoá kỳ lương phải khoá luôn chỉnh công phía ATT
+        (deny-path chỉnh công sau lock — ATT-ERR-024 đã có chỗ).
+      </li>
+      <li>
+        <b>NOTI CHECK 2 bảng + module guard:</b> nới <code>module_code</code> trên cả
+        <code>notification_events</code> + <code>notifications</code>; hàng modules PAYROLL đã
+        pre-seed inactive từ 0435 — bật <code>is_active</code> CHỈ ở WO FE, guard không assert trạng
+        thái module KHÁC.
+      </li>
+      <li>
+        <b>Guard cặp ở HAI tầng</b> (decorator route + service) — census QA so TỪNG ROUTE theo MÃ,
+        không so tập; route mới regen route-census có chủ đích; <code>:id</code> = UUID ở biên.
+      </li>
+      <li>
+        <b>Own-scope payslip là biên cứng nhất wave:</b> IDOR cross-employee (A xem phiếu B cùng
+        company) phải có int-spec riêng, không chỉ cross-tenant; audit lượt XEM lương theo khuôn
+        reveal+audit atomic của HR.
+      </li>
+      <li>
+        <b>TZ &amp; biên kỳ:</b> cắt kỳ theo tháng công ty tính ở BE (UTC-at-rest) — FE không có
+        <code>companies.timezone</code>, đừng cắt kỳ phía client; test biên ngày cuối tháng.
+      </li>
+      <li>
+        <b>LANE_DB như CI</b>; deny-path RED-trước và mỗi cặp có ca ALLOW đối chứng (deny không rỗng
+        nghĩa); fixture số tiền/tài khoản giả ghép chuỗi tránh gitleaks.
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="no">09</span> DUYỆT</div>
+    <div class="sign-box" style="border-color: var(--green); background: var(--green-soft)">
+      <h3 style="color: var(--green)">Đã duyệt — 31/08/2026</h3>
+      <p style="margin-top: 0">
+        Owner duyệt <b>nguyên gói</b> («ok tôi duyệt»): 10/10 quyết định ở mục 02 chốt đúng cột «Đề
+        xuất» — bao gồm PAY-DEC-002 (giữ khung 6 bảng di sản), PAY-DEC-006 (thu hồi quyền lương của
+        hr-manager theo Phương án B) và PAY-DEC-009 (payroll-officer bắt buộc 2FA). Kết luận ghi vào
+        <code>docs/plans/S13-PAYROLL-WAVE.md</code> §3; 7 WO đã seed vào
+        <code>harness/backlog.mjs</code> cùng ngày (<code>S13-PAYROLL-DOC-1</code> = todo, 6 WO sau
+        xích <code>depends_on</code>).
+      </p>
+      <ol>
+        <li>
+          <b>Wave bắt đầu từ tài liệu:</b> SPEC-11 · DB-13 · API-18 · §9g — plan-reviewer PASS rồi
+          mới mở WO DB. Code chỉ chạy sau cửa đó.
+        </li>
+        <li>
+          <b>RECONCILE-FIRST:</b> WO DB phải ĐO dữ liệu PROD 6 bảng di sản + grant pg_catalog hiện
+          trạng trước khi ALTER/REVOKE; band 0091–0180 bất khả xâm phạm.
+        </li>
+        <li>
+          <b>Hồ sơ này</b> là bản ghi tại thời điểm duyệt; thay đổi sau đó ghi ở SPEC-11 và wave
+          plan, không sửa ngược vào đây.
+        </li>
+      </ol>
+    </div>
+  </section>
+</div>
