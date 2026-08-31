@@ -255,13 +255,25 @@ Ghi chú bắt buộc:
 | ROOM-ERR-003 | 404 | Sentinel `ROOM-ERR-NOT-FOUND`: phòng / lượt đặt **không thuộc company** hoặc không tồn tại (kể cả phòng đã xoá mềm ở mọi route trừ lịch sử) — **cùng một phản hồi** (chống dò chéo tenant) |
 | ROOM-ERR-004 | 409 | **Phòng không nhận đặt** — `details.kind`: `room-inactive` (`is_active=false`) · `approval-not-supported` (`requires_approval=true`, ROOM-DEC-002 — v1 chưa có luồng duyệt) |
 | ROOM-ERR-005 | 409 | **Huỷ không hợp lệ** — `details.kind`: `already-cancelled` · `already-ended` (`ends_at ≤ now()` — lượt đã `Completed` là lịch sử, không huỷ được) |
-| ROOM-ERR-006 | 422 | **Người tham dự không hợp lệ** — `details.kind`: `attendee-not-found` (user không tồn tại **hoặc** không thuộc company — cùng một mã, không thành oracle) · `attendee-inactive` (`users.status ≠ 'active'`) · `attendee-duplicate` (trùng trong danh sách, hoặc trùng organizer) · `too-many-attendees` (> 50) |
+| ROOM-ERR-006 | 422 | **Người tham dự không hợp lệ** — `details.kind`: `attendee-not-found` (user không tồn tại **hoặc** không thuộc company — cùng một mã, không thành oracle) · `attendee-inactive` (`users.status ≠ 'active'`) · `attendee-duplicate` (trùng trong danh sách, hoặc trùng organizer) · ~~`too-many-attendees` (> 50)~~ **⇒ xem đính chính bên dưới: trên dây là 400, không phải 422** |
 | ROOM-ERR-007 | 422 | **Vượt sức chứa**: `1 + attendees.length > capacity` — `details = { capacity, headcount }` |
 | ROOM-ERR-008 | 409 | **Phòng còn lịch**: vô hiệu (`is_active=false`) hoặc xoá mềm phòng khi còn lượt `Confirmed` có `ends_at > now()` — `details = { upcomingCount }`; Office Admin phải huỷ (có NOTI người tham dự) trước |
 | ROOM-ERR-009 | 409 | Tên phòng trùng (không phân biệt hoa/thường) với phòng **còn sống** trong company — `details.kind = name-taken` (phòng đã xoá mềm **được** dùng lại tên) |
 | ROOM-ERR-010 | 403 / 422 | Đặt hộ: gửi `organizerUserId ≠` user gọi khi scope `book` là **Own** → **403** (`details.kind = book-on-behalf-denied`); scope Company nhưng organizer không tồn tại / không thuộc company / không `active` → **422** (`details.kind = organizer-not-found` / `organizer-inactive`) |
 
 > **Hình dạng `details` trên dây (đính chính `S11-ROOM-BE-1`, 30/08/2026):** envelope lỗi chung chỉ cho `details` đi ra khi là **mảng `ErrorDetail { field, message, rule }`** (API-01 · `AllExceptionsFilter`). `details.kind` ở bảng trên = phần tử `{ field: "kind", message: "<kind>", rule: "room" }`; `capacity`/`headcount`/`upcomingCount`/`userId` là phần tử cùng hình; ROOM-ERR-001 gửi `conflicts` (chuỗi JSON, ≤ 20 lượt) + `nextFreeFrom` (ISO hoặc `"null"`) — FE bóc bằng `parseRoomConflictsDetail()` (`@mediaos/contracts`). Xem API-15 §7.4. `attendee-not-found`/`organizer-not-found` bao gồm cả user **đã xoá mềm** (`users.deleted_at IS NOT NULL`) — cùng một mã, không thành oracle.
+
+> **Đính chính `too-many-attendees` (S11-ROOM-QA-1, 30/08/2026) — đo được, không suy luận.** Trần 50 người
+> tham dự bị gác ở **hai tầng đúng bằng nhau**: `attendeeUserIds: z.array(...).max(ROOM_MAX_ATTENDEES)` ở
+> `packages/contracts/src/room.ts` (BIÊN) và `attendees.length > ROOM_MAX_ATTENDEES` ở
+> `room-bookings.service.ts` (tầng hai). Vì hai ngưỡng bằng nhau và controller là caller **duy nhất** của
+> `RoomBookingsService.create`, nhánh service **không thể chạm tới qua HTTP**: `ZodValidationPipe` trả
+> **`400 VALIDATION-ERR-001`** (`details[].field = "attendeeUserIds"`, `rule = "too_big"`) trước. Vậy
+> `too-many-attendees` **không** phải một `kind` của ROOM-ERR-006 trên dây — FE phải rẽ nhánh theo
+> `VALIDATION-ERR-001`, không chờ 422. Giữ nguyên **cả hai** tầng: trần ở biên chặn mảng khổng lồ trước khi
+> bất kỳ việc gì chạy; nhánh service là tầng hai cho caller không qua pipe. Ca canh:
+> `s11-room-qa1-error-residue.int-spec.ts` mục B; census `room-error-code-census.unit-spec.ts` xếp kind này
+> vào `BOUNDARY_ONLY` và sẽ ĐỎ nếu một ngày nhánh service ra được dây.
 
 Quy tắc bổ sung (không cần mã riêng):
 
