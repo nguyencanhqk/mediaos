@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import type {
   ChangeInterviewStatusInput,
   CreateInterviewFeedbackInput,
@@ -46,6 +46,8 @@ import type { RecruitActor, RecruitRequestUser } from "./recruit.types";
  */
 @Injectable()
 export class InterviewsService {
+  private readonly logger = new Logger(InterviewsService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly access: RecruitAccessService,
@@ -143,6 +145,13 @@ export class InterviewsService {
         after: { candidateId: row.candidateId, round: row.round, startsAt: dto.startsAt },
       });
       const job = await this.candidates.jobStatusTx(tx, user.companyId, candidate.jobOpeningId);
+      // FULL gate silent-failure F2: job xoá mềm sau khi candidate trỏ vào — noti vẫn đi (thiết kế)
+      // nhưng phải ĐỂ VẾT, không render job_title rỗng câm.
+      if (!job) {
+        this.logger.warn(
+          `NOTI-017 job_title rỗng: job_openings ${candidate.jobOpeningId} đã xoá mềm (candidate ${candidate.id}, interview ${row.id})`,
+        );
+      }
       const actorRef = (await this.people.namesByUserIdsTx(tx, actor, [user.id])).get(user.id);
       const payload: RecruitInterviewScheduledPayload = {
         interviewId: row.id,
@@ -398,6 +407,13 @@ export class InterviewsService {
     const out = [];
     for (const row of rows) {
       const candidate = await this.repo.candidateEmbedTx(tx, actor.companyId, row.candidateId);
+      // FULL gate silent-failure F4: nhánh này là VI PHẠM toàn vẹn (FK interview→candidate, không
+      // hard-delete) — render rỗng để list không chết, nhưng phải kêu to.
+      if (!candidate) {
+        this.logger.error(
+          `Toàn vẹn hỏng: interview ${row.id} trỏ candidate ${row.candidateId} không tồn tại trong company ${actor.companyId}`,
+        );
+      }
       const participants = (participantsByInterview.get(row.id) ?? []).map((p) => ({
         employeeId: p.employeeId,
         userId: employeeToUser.get(p.employeeId) ?? null,

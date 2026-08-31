@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -441,7 +442,13 @@ export class HrWriteService {
       phone: input.phone,
       personalEmail: input.email,
     });
-    if (!created) throw new Error("Failed to create employee profile from candidate");
+    // FULL gate silent-failure F5: nhánh bất khả (INSERT..RETURNING hoặc ném PG error) — nhưng nếu
+    // xảy ra thì phải là HttpException có thông điệp, không phải Error trần lọt qua biên map lỗi.
+    if (!created) {
+      throw new InternalServerErrorException(
+        "HR-ERR-EMPLOYEE-CREATE-FAILED: insert employee_profiles từ convert trả 0 hàng",
+      );
+    }
 
     // Audit HR trong CÙNG tx (BẤT BIẾN #2) — structural-only, không PII/lương.
     await this.audit.record(tx, {

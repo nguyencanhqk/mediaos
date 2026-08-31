@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import {
   RECRUIT_EXPORT_MAX_ROWS,
   type CheckDuplicateQuery,
@@ -54,6 +54,8 @@ export function recruitExportMaxRows(): number {
  */
 @Injectable()
 export class CandidatesService {
+  private readonly logger = new Logger(CandidatesService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly access: RecruitAccessService,
@@ -231,6 +233,12 @@ export class CandidatesService {
         after: { stage: moved.candidate.stage, reason: dto.reason },
       });
       const job = await this.repo.jobStatusTx(tx, user.companyId, moved.candidate.jobOpeningId);
+      // FULL gate silent-failure F2: job xoá mềm ⇒ noti vẫn đi nhưng để vết (không rỗng câm).
+      if (!job) {
+        this.logger.warn(
+          `NOTI-018 job_title rỗng: job_openings ${moved.candidate.jobOpeningId} đã xoá mềm (candidate ${id})`,
+        );
+      }
       const actorRef = (await this.people.namesByUserIdsTx(tx, actor, [user.id])).get(user.id);
       const payload: RecruitStageChangedPayload = {
         stageEventId: moved.stageEvent.id,

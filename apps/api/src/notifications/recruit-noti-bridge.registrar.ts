@@ -1,4 +1,4 @@
-import { Injectable, type OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import type { EventContext } from "../events/event-bus";
 import { DatabaseService } from "../db/db.service";
 import { OutboxNotificationBridge } from "./outbox-notification-bridge.service";
@@ -37,11 +37,25 @@ function requireField(payload: Record<string, unknown>, key: string): string {
  */
 @Injectable()
 export class RecruitNotiBridgeRegistrar implements OnModuleInit {
+  private readonly logger = new Logger(RecruitNotiBridgeRegistrar.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly reader: RecruitAudienceReader,
     private readonly bridge: OutboxNotificationBridge,
   ) {}
+
+  /** FULL gate silent-failure F3: 0 recipient là hợp lệ theo thiết kế nhưng phải ĐỂ VẾT — misconfig
+   * hệ thống (không ai giữ role hr / job không recruiter / participant toàn employee chưa link user)
+   * phải đọc được từ log thay vì suy từ ticket "sao không ai nhận". */
+  private warnIfEmpty(eventCode: string, ctx: EventContext, userIds: string[]): string[] {
+    if (userIds.length === 0) {
+      this.logger.warn(
+        `${eventCode}: 0 recipient (company=${ctx.companyId}, event=${ctx.eventId}) — kiểm role/recruiter/link user`,
+      );
+    }
+    return userIds;
+  }
 
   onModuleInit(): void {
     this.registerJobAssigned();
@@ -73,7 +87,8 @@ export class RecruitNotiBridgeRegistrar implements OnModuleInit {
       sourceModule: SOURCE_MODULE_RECRUIT,
       sourceEntityType: "interview",
       sourceEntityIdOf: (ctx) => requireField(ctx.payload, "interviewId"),
-      resolveRecipients: (ctx) => this.participantsOf(ctx),
+      resolveRecipients: async (ctx) =>
+        this.warnIfEmpty("RECRUIT_INTERVIEW_SCHEDULED", ctx, await this.participantsOf(ctx)),
       dedupeKeyOf: (ctx) => requireField(ctx.payload, "interviewId"),
     });
   }
@@ -91,7 +106,7 @@ export class RecruitNotiBridgeRegistrar implements OnModuleInit {
         const userId = await this.db.withTenant(ctx.companyId, (tx) =>
           this.reader.jobRecruiterUserId(tx, ctx.companyId, jobOpeningId),
         );
-        return userId ? [userId] : [];
+        return this.warnIfEmpty("RECRUIT_STAGE_CHANGED", ctx, userId ? [userId] : []);
       },
       dedupeKeyOf: (ctx) => requireField(ctx.payload, "stageEventId"),
     });
@@ -105,8 +120,14 @@ export class RecruitNotiBridgeRegistrar implements OnModuleInit {
       sourceModule: SOURCE_MODULE_RECRUIT,
       sourceEntityType: "candidate",
       sourceEntityIdOf: (ctx) => requireField(ctx.payload, "candidateId"),
-      resolveRecipients: (ctx) =>
-        this.db.withTenant(ctx.companyId, (tx) => this.reader.hrRoleUserIds(tx, ctx.companyId)),
+      resolveRecipients: async (ctx) =>
+        this.warnIfEmpty(
+          "RECRUIT_CANDIDATE_HIRED",
+          ctx,
+          await this.db.withTenant(ctx.companyId, (tx) =>
+            this.reader.hrRoleUserIds(tx, ctx.companyId),
+          ),
+        ),
       dedupeKeyOf: (ctx) => requireField(ctx.payload, "candidateId"),
     });
   }

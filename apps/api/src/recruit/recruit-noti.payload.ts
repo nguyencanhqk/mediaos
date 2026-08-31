@@ -72,19 +72,29 @@ export interface RecruitCandidateHiredPayload {
 /** Nhãn trung tính khi `users.full_name` NULL — không quy hành động cho "Hệ thống" (khuôn ASSET). */
 export const RECRUIT_ACTOR_FALLBACK = "Bộ phận tuyển dụng";
 
-/** `time_range` cho template 017 — giờ VN mặc định hệ thống (FE cũng chạy DEFAULT_TIMEZONE). */
+/**
+ * `time_range` cho template 017 — giờ VN mặc định hệ thống (FE cũng chạy DEFAULT_TIMEZONE).
+ *
+ * FULL gate silent-failure F1: `DEFAULT_TIMEZONE` KHÔNG qua env.schema — giá trị rác làm `Intl` ném
+ * RangeError ĐỒNG BỘ giữa business tx (interview đã insert) ⇒ rollback oan + 500 vô danh vì một mối
+ * bận tâm ĐỊNH DẠNG. Suy thoái ĐÚNG chiều: lỗi format ⇒ fallback ISO thô (noti xấu nhưng tx sống).
+ */
 export function formatInterviewTimeRange(startsAt: Date, endsAt: Date): string {
-  const tz = process.env.DEFAULT_TIMEZONE || "Asia/Ho_Chi_Minh";
-  const time = new Intl.DateTimeFormat("vi-VN", {
-    timeZone: tz,
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const day = new Intl.DateTimeFormat("vi-VN", {
-    timeZone: tz,
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-  return `${time.format(startsAt)}–${time.format(endsAt)} ${day.format(startsAt)}`;
+  try {
+    const tz = process.env.DEFAULT_TIMEZONE || "Asia/Ho_Chi_Minh";
+    const time = new Intl.DateTimeFormat("vi-VN", {
+      timeZone: tz,
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const day = new Intl.DateTimeFormat("vi-VN", {
+      timeZone: tz,
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+    return `${time.format(startsAt)}–${time.format(endsAt)} ${day.format(startsAt)}`;
+  } catch {
+    return `${startsAt.toISOString()} – ${endsAt.toISOString()}`;
+  }
 }
