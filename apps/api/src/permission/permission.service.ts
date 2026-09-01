@@ -206,6 +206,28 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   "comment:candidate",
   "export:candidate",
   "convert:candidate",
+  // S13-PAYROLL-BE-1 — APPEND-only: 13 cặp PAYROLL is_sensitive=true (seed mig 0565, SPEC-11 §11.1)
+  // gác toàn bộ màn hình tiền lương. Khai NGAY ở WO BE dù màn FE dựng ở S13-PAYROLL-FE-1: thiếu
+  // allowlist ⇒ getCapabilities() lọc bỏ sensitive ⇒ /auth/me KHÔNG BAO GIỜ trả ⇒ màn ẨN với CHÍNH
+  // payroll-officer/company-admin được cấp quyền (lần lặp 11+ của CAP-2 → … → RECRUIT-BE-1).
+  // Enforcement KHÔNG đổi — @RequirePermission (isSensitive tường minh) + tầng 2 PayrollAccessService
+  // + sàn scope Company + RLS company_id vẫn là cổng THẬT; wildcard *:* KHÔNG thuộc allowlist ⇒ KHÔNG
+  // kế thừa. Chỉ mở CỜ HIỂN THỊ.
+  // 4 cặp KHÔNG sensitive của PAYROLL (`access:payroll` · `view:payroll-period` ·
+  // `manage:payroll-period` · `acknowledge-own-payslip:payslip`) KHÔNG cần ở đây — chúng đã surface.
+  "calculate:payroll-period",
+  "view-line:payroll-period",
+  "approve:payroll-period",
+  "publish:payroll-period",
+  "reopen:payroll-period",
+  "export:payroll",
+  "view:salary-profile",
+  "manage:salary-profile",
+  "view:bonus-penalty",
+  "manage:bonus-penalty",
+  "approve:bonus-penalty",
+  "view-payslip:payslip",
+  "view-own-payslip:payslip",
 ]);
 
 /**
@@ -254,6 +276,21 @@ export const SENSITIVE_SCREEN_GATE_PAIRS: readonly string[] = [
   "comment:candidate",
   "export:candidate",
   "convert:candidate",
+  // PAYROLL — 13 cặp is_sensitive=true (mig 0565, SPEC-11 §11.1) gác các màn PAYROLL-SCREEN-*
+  // (S13-PAYROLL-BE-1; FE cần cờ hiển thị qua /auth/me capabilities — wildcard *:* không kế thừa).
+  "calculate:payroll-period",
+  "view-line:payroll-period",
+  "approve:payroll-period",
+  "publish:payroll-period",
+  "reopen:payroll-period",
+  "export:payroll",
+  "view:salary-profile",
+  "manage:salary-profile",
+  "view:bonus-penalty",
+  "manage:bonus-penalty",
+  "approve:bonus-penalty",
+  "view-payslip:payslip",
+  "view-own-payslip:payslip",
 ];
 
 /** Chỉ dùng cho test khoá — KHÔNG export ra ngoài module permission. */

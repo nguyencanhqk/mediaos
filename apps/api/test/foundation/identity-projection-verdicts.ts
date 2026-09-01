@@ -611,6 +611,14 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
       "ĐIỂM CHIẾU DUY NHẤT của module RECRUIT (recruiter phụ trách · interviewer/participant · picker 031/032 — SPEC-12 §18, khuôn ROOM). Vị từ = RecruitActor.peopleVisibleCond, tính ĐÚNG MỘT LẦN/request bởi recruit-access.service.ts#resolveActor theo cặp CỦA ROUTE lấy từ bảng hằng RECRUIT_ROUTE_PAIRS (recruit-route-pairs.const.ts — CÙNG bảng cho decorator + assert tầng 2 + căn cứ chiếu; repository KHÔNG nhận cặp rời ⇒ không có đường truyền cặp sai route, plan-review vòng 2 #3). Company/System ⇒ true (job-opening/candidate/offer CHỈ Company theo §13.6 — mọi grant thật đều mở tên); scope hẹp hơn/không grant ⇒ users.id = actor (fail-closed). employeeCode bọc CÙNG vị từ (mirror ROOM M2). Hai picker tái dùng CHÍNH hàm này (lọc q SAU khi bọc cột — không SELECT users trần). Bằng chứng: test/foundation/recruit-two-layer-guard-census.unit-spec.ts (32 route × cặp, 2 tầng so với CÙNG bảng hằng) + test/integration/recruit-be1-scope.int-spec.ts (ma trận per-pair + masking).",
     signedBy: "S12-RECRUIT-BE-1",
   },
+  // ── payroll (S13-PAYROLL-BE-1) ───────────────────────────────────────────────
+  {
+    point: "payroll/payroll-people.repository.ts#namesByUserIdsTx:users.fullName",
+    basis: "identity-gated",
+    reason:
+      "ĐIỂM CHIẾU DUY NHẤT của module PAYROLL (tên trong cảnh báo readiness 006 · danh bạ picker 034 · tên trên bảng lương của BE-2 — SPEC-11 §18, khuôn ROOM/RECRUIT). Vị từ = PayrollActor.peopleVisibleCond, tính ĐÚNG MỘT LẦN/request bởi payroll-access.service.ts#resolveActor theo cặp CỦA ROUTE lấy từ bảng hằng PAYROLL_ROUTE_PAIRS (payroll-route-pairs.const.ts — CÙNG bảng cho decorator + assert tầng 2 + căn cứ chiếu; repository KHÔNG nhận cặp rời ⇒ không có đường truyền cặp sai route). SPEC-11 §13.5 chốt kỳ lương/hồ sơ lương/thưởng-phạt CHỈ Company và resolveActor ép SÀN scope Company (403 AUTH-ERR-SCOPE-DENIED khi grant hẹp hơn) ⇒ mọi grant THẬT trên các route này đều mở tên; nhánh users.id = actor là fail-closed cho trường hợp scope hẹp lọt qua. employeeCode bọc CÙNG vị từ (mirror ROOM M2); picker 034 tái dùng CHÍNH hàm này và lọc `q` SAU khi bọc cột (không SELECT users trần ⇒ không dò được tên bằng cách thử q). Bằng chứng: test/foundation/payroll-two-layer-guard-census.unit-spec.ts (18 route × cặp, 2 tầng so với CÙNG bảng hằng) + test/integration/payroll-be1-scope.int-spec.ts (ma trận per-pair A/B + wildcard *:* ⇒ 403).",
+    signedBy: "S13-PAYROLL-BE-1",
+  },
 ];
 
 /**
@@ -647,7 +655,11 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   // 15 → 16 (S12-RECRUIT-BE-1, 31/08/2026): `recruit/recruit-people.repository.ts#namesByUserIdsTx` — điểm
   // chiếu DUY NHẤT của module RECRUIT; cond thật từ resolveOrNull theo cặp của route (bảng hằng
   // RECRUIT_ROUTE_PAIRS), fail-closed users.id=actor. Nới có chủ đích, plan-review 2 vòng + FULL gate.
-  "identity-gated": 16,
+  // 16 → 17 (S13-PAYROLL-BE-1, 01/09/2026): `payroll/payroll-people.repository.ts#namesByUserIdsTx` —
+  // điểm chiếu DUY NHẤT của module PAYROLL; cond thật từ resolveAndAssert theo cặp của route (bảng
+  // hằng PAYROLL_ROUTE_PAIRS) + SÀN scope Company, fail-closed users.id=actor. Nới có chủ đích,
+  // plan-review + FULL gate.
+  "identity-gated": 17,
 };
 
 /**

@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 539,
-    "controllers": 97,
-    "gated": 500,
+    "routes": 557,
+    "controllers": 101,
+    "gated": 518,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -1681,6 +1681,102 @@
         "PermissionGuard"
       ],
       "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "BonusPenaltiesController#approve",
+      "httpMethod": "POST",
+      "path": "/api/v1/bonus-penalties/:id/approve",
+      "hasPermission": true,
+      "permission": "approve:bonus-penalty",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "BonusPenaltiesController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/bonus-penalties",
+      "hasPermission": true,
+      "permission": "manage:bonus-penalty",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "BonusPenaltiesController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/bonus-penalties/:id",
+      "hasPermission": true,
+      "permission": "view:bonus-penalty",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "BonusPenaltiesController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/bonus-penalties",
+      "hasPermission": true,
+      "permission": "view:bonus-penalty",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "BonusPenaltiesController#reject",
+      "httpMethod": "POST",
+      "path": "/api/v1/bonus-penalties/:id/reject",
+      "hasPermission": true,
+      "permission": "approve:bonus-penalty",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "BonusPenaltiesController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/bonus-penalties/:id",
+      "hasPermission": true,
+      "permission": "manage:bonus-penalty",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
       "verdict": null,
       "verdictReason": null,
       "verdictWo": null
@@ -6226,6 +6322,134 @@
       "verdictWo": null
     },
     {
+      "key": "PayrollPeriodsController#collect",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll-periods/:id/collect",
+      "hasPermission": true,
+      "permission": "calculate:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPeriodsController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll-periods",
+      "hasPermission": true,
+      "permission": "manage:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPeriodsController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll-periods/:id",
+      "hasPermission": true,
+      "permission": "view:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPeriodsController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll-periods",
+      "hasPermission": true,
+      "permission": "view:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPeriodsController#readiness",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll-periods/:id/readiness",
+      "hasPermission": true,
+      "permission": "calculate:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPeriodsController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/payroll-periods/:id",
+      "hasPermission": true,
+      "permission": "manage:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPickersController#attendancePeriods",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/pickers/attendance-periods",
+      "hasPermission": true,
+      "permission": "manage:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPickersController#people",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/pickers/people",
+      "hasPermission": true,
+      "permission": "view:salary-profile",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "PermissionAdminController#assignRole",
       "httpMethod": "POST",
       "path": "/api/v1/permissions/users/:userId/roles",
@@ -7335,6 +7559,70 @@
       "path": "/api/v1/rooms/usage-summary",
       "hasPermission": true,
       "permission": "view:room",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SalaryProfilesController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/salary-profiles",
+      "hasPermission": true,
+      "permission": "manage:salary-profile",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SalaryProfilesController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/salary-profiles/:id",
+      "hasPermission": true,
+      "permission": "view:salary-profile",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SalaryProfilesController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/salary-profiles",
+      "hasPermission": true,
+      "permission": "view:salary-profile",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SalaryProfilesController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/salary-profiles/:id",
+      "hasPermission": true,
+      "permission": "manage:salary-profile",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],

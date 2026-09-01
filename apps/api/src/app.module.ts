@@ -37,6 +37,8 @@ import { AssetsModule } from "./assets/assets.module";
 import { RoomsModule } from "./rooms/rooms.module";
 // S12-RECRUIT-BE-1 (additive): RecruitModule — tuyển dụng Phase 2 (SPEC-12 / DB-14 / API-17).
 import { RecruitModule } from "./recruit/recruit.module";
+// S13-PAYROLL-BE-1 (additive): PayrollModule — tiền lương Phase 2 (SPEC-11 / DB-13 / API-18).
+import { PayrollModule } from "./payroll/payroll.module";
 // S7-CHAT-BE-1 (additive): ChatModule — phòng chat & thành viên (SPEC-15 / DB-12 / API-13).
 import { ChatModule } from "./chat/chat.module";
 import { IdempotencyModule } from "./common/idempotency/idempotency.module";
@@ -122,6 +124,7 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     // convert→employee 3 pha (UNIQUE employee_id chốt cuối). Registrar NOTI 4 event sống ở
     // NotificationsModule. Module vẫn inactive — FE-1 mới bật cờ.
     RecruitModule,
+    PayrollModule,
   ],
   providers: [
     // Global guard pipeline (THỨ TỰ QUAN TRỌNG):
