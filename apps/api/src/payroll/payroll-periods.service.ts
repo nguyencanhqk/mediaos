@@ -16,7 +16,7 @@ import { PayrollAccessService } from "./payroll-access.service";
 import { PayrollInputsRepository } from "./payroll-inputs.repository";
 import { PayrollPeopleRepository } from "./payroll-people.repository";
 import { PayrollPeriodsRepository } from "./payroll-periods.repository";
-import { assertPeriodTransition, nextStatus } from "./payroll-fsm";
+import { assertPeriodTransition, resolveActionTarget } from "./payroll-fsm";
 import { mapPayrollPgError, payrollNotFound, PAYROLL_ERR, payrollConflict } from "./payroll.errors";
 import { toPayrollPeriodDto } from "./payroll.mapper";
 import { payrollOffset, type PayrollRequestUser } from "./payroll.types";
@@ -176,9 +176,11 @@ export class PayrollPeriodsService {
       const period = await this.repo.lockForUpdateTx(tx, user.companyId, id);
       if (!period) throw payrollNotFound();
       const from = period.status as PayrollPeriodStatus;
-      const to = nextStatus(from, "collect");
-      // `to === null` ⇒ ô cấm; để `assertPeriodTransition` ném đúng 409 001 kèm from/to.
-      assertPeriodTransition(from, to ?? from, "collect");
+      // ⚠️ KHÔNG viết `assertPeriodTransition(from, to ?? from, …)`: khi `collect` không áp dụng được
+      // ở `from`, `to ?? from` sinh ra thông điệp "không thể chuyển từ Calculated sang Calculated" —
+      // đọc như "bạn tự chuyển vào chính nó", che mất nguyên nhân thật (FULL gate silent-failure #2).
+      const to = resolveActionTarget(from, "collect");
+      assertPeriodTransition(from, to, "collect");
       const summary = await this.readinessTx(tx, user.companyId, period.periodMonth);
       const row = await this.repo.applyTransitionTx(
         tx,
@@ -255,11 +257,15 @@ export class PayrollPeriodsService {
    */
   private async readinessTx(tx: TenantTx, companyId: string, periodMonth: string) {
     const lastDay = PayrollPeriodsService.lastDayOf(periodMonth);
-    const [aliveIds, effective, inputs] = await Promise.all([
-      this.people.aliveUserIdsTx(tx, companyId),
+    const [alive, effective, inputs] = await Promise.all([
+      // `limit: null` — readiness là tổng hợp cấp KỲ, PHẢI phủ hết công ty. Dùng trần của picker ở
+      // đây là cắt lặng lẽ: công ty > 1000 người thì `eligibleCount` thiếu và cảnh báo của người
+      // ngoài 1000 hàng đầu biến mất không dấu vết (FULL gate silent-failure #1).
+      this.people.aliveUserIdsTx(tx, companyId, { limit: null }),
       this.salaries.effectiveByUserTx(tx, companyId, lastDay),
       this.inputs.computeInputsTx(tx, companyId, periodMonth),
     ]);
+    const aliveIds = alive.userIds;
     const presentByUser = new Map(inputs.rows.map((r) => [r.userId, r.presentDays]));
     const warnings: Omit<PayrollReadinessWarningDto, "fullName">[] = [];
     for (const userId of aliveIds) {

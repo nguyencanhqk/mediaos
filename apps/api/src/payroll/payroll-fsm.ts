@@ -128,6 +128,26 @@ export function assertPeriodTransition(
   throw conflict(PAYROLL_ERR.PERIOD_TRANSITION(from, to), "invalid-transition");
 }
 
+/**
+ * Trạng thái đích của action từ `from`, **ném 409 khi action không áp dụng được** ở trạng thái đó.
+ *
+ * Vì sao tách khỏi `nextStatus`: caller viết `assertPeriodTransition(from, nextStatus(...) ?? from, via)`
+ * sẽ tự tạo ra ô `from → from` và sinh thông điệp *"không thể chuyển từ X sang X"* — sai ngữ nghĩa
+ * (nghe như người dùng tự chuyển vào chính trạng thái hiện tại), che mất nguyên nhân thật là
+ * *"hành động này không áp dụng được ở X"*. `kind` cũng khác: `action-not-applicable` ≠
+ * `invalid-transition`.
+ */
+export function resolveActionTarget(
+  from: PayrollPeriodStatus,
+  via: PeriodAction,
+): PayrollPeriodStatus {
+  const to = nextStatus(from, via);
+  if (to === null) {
+    throw conflict(PAYROLL_ERR.ACTION_NOT_APPLICABLE(via, from), "action-not-applicable");
+  }
+  return to;
+}
+
 /** Trạng thái đích của một action từ `from` — `null` nếu ô đó bị cấm. */
 export function nextStatus(
   from: PayrollPeriodStatus,

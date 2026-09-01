@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { users } from "../db/schema/users";
@@ -21,6 +21,8 @@ import type { PayrollActor, PayrollPeopleMap, PayrollPersonRef } from "./payroll
  */
 @Injectable()
 export class PayrollPeopleRepository {
+  private readonly logger = new Logger(PayrollPeopleRepository.name);
+
   private peopleGrant(actor: PayrollActor) {
     return fromScope(
       actor.peopleVisibleCond,
@@ -71,19 +73,38 @@ export class PayrollPeopleRepository {
   }
 
   /**
-   * `userId` của mọi nhân sự còn sống trong company — tập nền của `readiness` (006) và của bộ chọn
-   * nhân sự (034). Trần quét `PAYROLL_PICKER_SCAN_CAP` chặn full-scan ở tenant lớn.
+   * `userId` của mọi nhân sự còn sống trong company.
    *
-   * GIỮ MỘT điểm chiếu: hàm này **chỉ trả id** (không chạm cột danh tính) — tên lấy ở bước hai qua
-   * `namesByUserIdsTx`.
+   * ⚠️ **Trần phải do CALLER quyết, không có mặc định.** `readiness` (006) là tổng hợp cấp KỲ nên
+   * phải phủ HẾT công ty (`limit: null`); picker (034) là hộp chọn nên có trần. Bản đầu để mặc định
+   * `PAYROLL_PICKER_SCAN_CAP` khiến `readiness` **âm thầm** dính trần của picker: công ty > 1000 nhân
+   * sự thì `eligibleCount` thiếu và cảnh báo `missing-salary-profile` của người ngoài 1000 hàng đầu
+   * **biến mất** — không log, không cờ (FULL gate silent-failure #1).
+   *
+   * `truncated` là vế chống-im-lặng: caller có trần PHẢI xử lý nó, không được bỏ qua.
+   * `ORDER BY users.id` cho thứ tự ổn định — không có nó thì hai lần gọi liên tiếp có thể cắt hai tập
+   * khác nhau tuỳ planner.
    */
-  async aliveUserIdsTx(tx: TenantTx, companyId: string, limit = PAYROLL_PICKER_SCAN_CAP) {
-    const rows = await tx
+  async aliveUserIdsTx(
+    tx: TenantTx,
+    companyId: string,
+    opts: { limit: number | null },
+  ): Promise<{ userIds: string[]; truncated: boolean }> {
+    const base = tx
       .select({ userId: users.id })
       .from(users)
       .where(and(eq(users.companyId, companyId), isNull(users.deletedAt)))
-      .limit(limit);
-    return rows.map((r) => r.userId);
+      .orderBy(users.id);
+    if (opts.limit === null) {
+      const rows = await base;
+      return { userIds: rows.map((r) => r.userId), truncated: false };
+    }
+    // Lấy dư MỘT hàng để BIẾT có bị cắt hay không (đếm riêng là một câu nữa, không cần).
+    const rows = await base.limit(opts.limit + 1);
+    return {
+      userIds: rows.slice(0, opts.limit).map((r) => r.userId),
+      truncated: rows.length > opts.limit,
+    };
   }
 
   /**
@@ -97,8 +118,16 @@ export class PayrollPeopleRepository {
     q: string | undefined,
     limit: number,
   ): Promise<PayrollPersonRef[]> {
-    const ids = await this.aliveUserIdsTx(tx, actor.companyId);
-    const map = await this.namesByUserIdsTx(tx, actor, ids);
+    const { userIds, truncated } = await this.aliveUserIdsTx(tx, actor.companyId, {
+      limit: PAYROLL_PICKER_SCAN_CAP,
+    });
+    if (truncated) {
+      // Không im lặng: hộp chọn KHÔNG phủ hết công ty ⇒ người vận hành phải biết để nâng trần.
+      this.logger.warn(
+        `payroll picker 034: company ${actor.companyId} có hơn ${PAYROLL_PICKER_SCAN_CAP} nhân sự còn sống — danh bạ bị cắt ở trần quét, kết quả KHÔNG phủ hết.`,
+      );
+    }
+    const map = await this.namesByUserIdsTx(tx, actor, userIds);
     const needle = q?.trim().toLowerCase();
     const all = [...map.values()];
     const matched = needle

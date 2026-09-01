@@ -25,6 +25,7 @@ import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/respo
 import { PasswordService } from "../../src/auth/password.service";
 import { DatabaseService } from "../../src/db/db.service";
 import { PayrollInputsRepository } from "../../src/payroll/payroll-inputs.repository";
+import { PayrollPeopleRepository } from "../../src/payroll/payroll-people.repository";
 import { directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -324,6 +325,56 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 đầu vào công/phép + audit đ
     expect(
       res.body.data.warnings.some((w: { fullName: string | null }) => w.fullName !== null),
     ).toBe(true);
+  });
+
+  // ── C2. Trần quét — hợp đồng chống cắt-lặng-lẽ ────────────────────────────────────────────────
+
+  it("C2 — `aliveUserIdsTx`: `limit: null` phủ HẾT; có trần thì báo `truncated` (không im lặng)", async () => {
+    const people = app.get(PayrollPeopleRepository);
+    const full = await db.withTenant(A.companyId, (tx) =>
+      people.aliveUserIdsTx(tx, A.companyId, { limit: null }),
+    );
+    // Spec này seed ≥ 3 user (io · worker · các user của seedCompany).
+    expect(full.userIds.length, "đường không trần phải phủ hết công ty").toBeGreaterThanOrEqual(2);
+    expect(full.truncated, "không trần thì không bao giờ báo cắt").toBe(false);
+
+    const capped = await db.withTenant(A.companyId, (tx) =>
+      people.aliveUserIdsTx(tx, A.companyId, { limit: 1 }),
+    );
+    expect(capped.userIds).toHaveLength(1);
+    // ⚠️ Đây là vế chống-im-lặng: trần cắt mà không có cờ thì `readiness` trả số THIẾU mà không ai
+    // biết (FULL gate: silent-failure #1 / security HIGH #2).
+    expect(capped.truncated, "cắt mà không báo = mất dữ liệu trong im lặng").toBe(true);
+
+    // Thứ tự ỔN ĐỊNH — hai lần gọi cùng trần phải cắt CÙNG một tập.
+    const again = await db.withTenant(A.companyId, (tx) =>
+      people.aliveUserIdsTx(tx, A.companyId, { limit: 1 }),
+    );
+    expect(again.userIds).toEqual(capped.userIds);
+  });
+
+  it("C3 — `readiness` KHÔNG dính trần của picker: eligibleCount đếm trên tập ĐẦY ĐỦ", async () => {
+    const full = await db.withTenant(A.companyId, (tx) =>
+      app.get(PayrollPeopleRepository).aliveUserIdsTx(tx, A.companyId, { limit: null }),
+    );
+    const p = await http()
+      .post("/payroll-periods")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ periodMonth: "2027-12" });
+    expect(p.status).toBe(201);
+    const res = await get(`/payroll-periods/${p.body.data.id}/readiness`);
+    expect(res.status).toBe(200);
+    // ⚠️ Hai tập CHỒNG nhau: `missing-attendance` áp cho người ĐÃ eligible (có hồ sơ lương nhưng
+    // chưa có ngày công). Bất biến đúng là: eligible ⊎ missing-salary-profile = toàn bộ người sống.
+    const noProfile = res.body.data.warnings.filter(
+      (w: { kind: string }) => w.kind === "missing-salary-profile",
+    ).length;
+    expect(res.body.data.eligibleCount + noProfile).toBe(full.userIds.length);
+    // Và mọi userId được cảnh báo đều nằm trong tập người sống (không có id ma).
+    const alive = new Set(full.userIds);
+    expect(
+      res.body.data.warnings.filter((w: { userId: string }) => !alive.has(w.userId)),
+    ).toEqual([]);
   });
 
   // ── D. audit lượt ĐỌC atomic ──────────────────────────────────────────────────────────────────

@@ -221,6 +221,30 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 mã lỗi (DB cô lập, đường
     expect(denied.body.message).toContain("Approved");
   });
 
+  it("001 — `collect` ở trạng thái cấm: kind `action-not-applicable`, KHÔNG phải \"X sang X\"", async () => {
+    const p = await post(tAuthor, "/payroll-periods").send({ periodMonth: "2028-09" });
+    const id = p.body.data.id as string;
+    await direct.query(
+      `UPDATE payroll_periods SET status='Calculated', attendance_period_id=$2,
+         calculated_by=$3, calculated_at=now() WHERE id=$1`,
+      [id, attendancePeriodId, authorId],
+    );
+    const res = await post(tAuthor, `/payroll-periods/${id}/collect`);
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("PAYROLL-ERR-001");
+    // Nguyên nhân THẬT là "hành động không áp dụng được", không phải "tự chuyển vào chính mình".
+    expect(res.body.error.details).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: "kind", message: "action-not-applicable" }),
+      ]),
+    );
+    expect(res.body.message).toContain("collect");
+    expect(res.body.message).toContain("Calculated");
+    expect(res.body.message, 'thông điệp "từ X sang X" là dấu của bug to ?? from').not.toContain(
+      'sang "Calculated"',
+    );
+  });
+
   it("010 — gắn kỳ công không thuộc company ⇒ 404 sentinel (không 403, không 500)", async () => {
     const res = await post(tAuthor, "/payroll-periods").send({
       periodMonth: "2028-05",

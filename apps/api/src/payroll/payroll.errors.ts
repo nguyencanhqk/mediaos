@@ -81,6 +81,9 @@ export const PAYROLL_PENDING_BE2_ERRORS: readonly PayrollErrKey[] = [
 export const PAYROLL_ERR = {
   PERIOD_TRANSITION: (from: string, to: string) =>
     `PAYROLL-ERR-001: không thể chuyển kỳ lương từ "${from}" sang "${to}".`,
+  /** Cùng mã 001 nhưng KHÁC nguyên nhân — xem `resolveActionTarget` (payroll-fsm.ts). */
+  ACTION_NOT_APPLICABLE: (via: string, from: string) =>
+    `PAYROLL-ERR-001: hành động "${via}" không áp dụng được khi kỳ lương đang ở "${from}".`,
   ATTENDANCE_NOT_LOCKED:
     "PAYROLL-ERR-002: kỳ công của tháng này chưa được khoá — chưa thể tính lương.",
   ATTENDANCE_PERIOD_MISSING:
