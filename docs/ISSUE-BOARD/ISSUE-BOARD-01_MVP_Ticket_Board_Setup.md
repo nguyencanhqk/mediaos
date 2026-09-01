@@ -333,6 +333,7 @@ FOUNDATION-DB-001
 | ASSET | Quản lý tài sản (SPEC-13) — wave S11-OFFICE, bổ sung 2026-08-28 | EPIC-17 |
 | ROOM | Quản lý phòng họp (SPEC-14) — wave S11-OFFICE, bổ sung 2026-08-29 | EPIC-18 |
 | RECRUIT | Tuyển dụng (SPEC-12) — wave S12-RECRUIT, bổ sung 2026-08-31 | EPIC-19 |
+| PAYROLL | Tiền lương (SPEC-11) — wave S13-PAYROLL, bổ sung 2026-08-31 | EPIC-20 |
 
 > **Mã KHÔNG hợp lệ** (đã dọn 2026-08-03, đừng dùng lại): `INT` -> dùng `INTEGRATION` · `FND` -> dùng `FOUNDATION` · `SYSTEM` -> dùng `BRAND` hoặc `FOUNDATION` tuỳ việc. Mã ngoài bảng này khiến Work Order rơi khỏi thẻ module trên `harness/dashboard` và bị suy đoán theo từ khoá.
 

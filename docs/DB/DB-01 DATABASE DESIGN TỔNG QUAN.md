@@ -75,7 +75,7 @@ Database MVP cần hỗ trợ các module sau:
 
 | Module  | Tên module         | Ghi chú database                                    |
 | ------- | ------------------ | --------------------------------------------------- |
-| PAYROLL | Tiền lương         | Cần tách quyền riêng, dùng dữ liệu HR + ATT + LEAVE |
+| PAYROLL | Tiền lương         | **Đã có thiết kế: [DB-13](<DB-13 PAYROLL Database Design.md>)** (SPEC-11, Phase 2, wave S13-PAYROLL). **KHÔNG phải nền trắng** — 6 bảng di sản G12 (`salary_profiles` · `payroll_periods` · `payslips` · `payslip_items` · `bonus_penalties` · `payslip_acknowledgements`, mig `0091`–`0132`) được **RECONCILE** (giữ khung, GỠ 19 cột/11 CHECK/3 trigger lệch thiết kế) + **1 bảng MỚI** `payroll_period_lines` (bảng lương nháp). Quyền lương tách riêng, KHÔNG mặc định cho HR (Phương án B); 16 cặp quyền di sản bị **thu hồi**. Nhóm bảng: §7.13 |
 | RECRUIT | Tuyển dụng         | **Đã có thiết kế: [DB-14](<DB-14 RECRUIT Database Design.md>)** (SPEC-12, Phase 2, wave S12-RECRUIT). 8 bảng **mới** `job_openings` · `candidates` · `candidate_stage_events` · `candidate_notes` · `interviews` · `interview_participants` · `interview_feedbacks` · `offers` — RLS+FORCE, composite tenant FK, sổ stage **append-only**, PII mask ở server; convert tạo employee qua service HR, link `candidates.employee_id` UNIQUE. Nhóm bảng: §7.12 |
 | ASSET   | Tài sản            | **Đã có thiết kế: [DB-15](<DB-15 ASSET Database Design.md>)** (SPEC-13, Phase 3, wave S11-OFFICE). 6 bảng **mới** `asset_categories` · `assets` · `asset_assignments` · `asset_maintenances` · `asset_inventories` · `asset_inventory_items` — RLS+FORCE, composite tenant FK, 4 bảng sổ không DELETE; người giữ = lượt cấp phát `Active` trỏ `employees`. Nhóm bảng: §7.10 |
 | ROOM    | Phòng họp          | **Đã có thiết kế: [DB-16](<DB-16 ROOM Database Design.md>)** (SPEC-14, Phase 3, wave S11-OFFICE). Tái dụng `meeting_rooms` (mig `0052`) + 2 bảng **mới** `room_bookings` · `room_booking_attendees` — RLS+FORCE, composite tenant FK, EXCLUDE gist chống trùng lịch, `room_bookings` là sổ không DELETE; booking gắn `users` (organizer/attendees). 4 bảng `meeting_*` còn lại DROP. Nhóm bảng: §7.11 |
@@ -646,6 +646,22 @@ notification_event_code
 | interview_participants  | Interviewer (FK `employees`) — chỉ INSERT; chân own-scope + NOTI                               |
 | interview_feedbacks     | Đánh giá per-interviewer; unique (interview, interviewer)                                      |
 | offers                  | Offer `Draft · Sent · Accepted · Declined · Withdrawn` (§17.14); `salary` mask; **1 offer sống/ứng viên** (partial unique) |
+
+---
+
+## 7.13 Nhóm PAYROLL *(Phase 2 — wave S13-PAYROLL, RECONCILE, chưa migrate)*
+
+> Chi tiết đầy đủ + **bản đồ reconcile từng bảng**: [DB-13 PAYROLL Database Design §5/§6](<DB-13 PAYROLL Database Design.md>). Nghiệp vụ: [SPEC-11](<../SPEC/SPEC-11 PAYROLL.md>). **Không phải nền trắng** — 6 bảng đã tồn tại thật từ đợt G12 hướng cũ (`0091`–`0132`), 0 route; wave này giữ khung và ALTER bằng migration mới (`0564+`), band di sản bất khả xâm phạm.
+
+| Bảng | Mô tả |
+| ----------------------- | ---------------------------------------------------------------------------------------------- |
+| salary_profiles | Hồ sơ lương **versioned theo `effective_date`** (lương cơ bản + phụ cấp jsonb) — nguồn DUY NHẤT cho tính lương (PAY-DEC-003); GỠ `salary_type`/`pay_cycle`/`currency`/`status` |
+| payroll_periods | Kỳ lương tháng, **7 trạng thái** (SPEC-01 §17.15); gắn `attendance_period_id` (phải `locked` trước khi tính); **CHECK four-eyes** `approved_by <> submitted_by`; GỠ `kpi_locked` + trigger FSM cũ |
+| payroll_period_lines | **BẢNG MỚI** — bảng lương nháp, 1 dòng / (kỳ, người), mutable trước `Approved`; `input_snapshot_json` đóng băng đầu vào; điều chỉnh dòng có lý do bắt buộc |
+| payslips | Phiếu lương **append-only** (chỉ SELECT+INSERT, bất biến #2); **UNIQUE (company, kỳ, người)** chống sinh hai lần; GỠ chuỗi `entry_kind`/`replaces_payslip_id`/`kpi_amount`/`currency` |
+| payslip_items | Dòng chi tiết phiếu (breakdown giải-thích-được) — **append-only**; `item_type` 6 giá trị (bỏ `kpi`) |
+| bonus_penalties | Thưởng/phạt/khấu trừ nhập tay theo kỳ, `Pending`/`Approved`/`Rejected` (§17.17); consume bind kỳ chống cộng hai lần; GỠ `source`/`reference_type`/`task_id`/`kpi_result_id`/`currency` + trigger |
+| payslip_acknowledgements | Sổ xác nhận phiếu — thu về **chỉ-INSERT** (REVOKE UPDATE); hàng tồn tại = đã xác nhận; GỠ nhánh khiếu nại (`status`/`resolved_*`) → PARK-PAYROLL-001 |
 
 ---
 

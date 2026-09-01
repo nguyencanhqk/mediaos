@@ -62,6 +62,13 @@ function migrationHead() {
 
 // Map từ khoá → spec MVP (để "kiểm tra ở đâu" trỏ đúng tài liệu nghiệm thu).
 const MODULE_SPEC = [
+  // PAYROLL đặt TRÊN CÙNG: tiêu đề WO S13-PAYROLL-* chứa "chấm công"/"phép" (ATT/LEAVE bắt), "permission"
+  // (AUTH bắt), "employee"/"hồ sơ" (HR bắt), "widget DASH" (DASH bắt) — để sau là trỏ nhầm SPEC-04/02/03.
+  // KHÔNG dùng "lương" trần: "chất lượng"/"khối lượng" khác dấu nên không đụng, nhưng cụm ghép an toàn hơn.
+  {
+    re: /(payroll|payslip|salary|tiền lương|kỳ lương|bảng lương|phiếu lương|hồ sơ lương|thưởng\/phạt)/i,
+    spec: "docs/SPEC/SPEC-11 PAYROLL.md",
+  },
   // RECRUIT đặt TRÊN CÙNG: tiêu đề WO S12-RECRUIT-* chứa "employee" (HR bắt), "permission §9f" (AUTH bắt),
   // "offer"/"phỏng vấn" — để sau là trỏ nhầm SPEC-02/SPEC-03.
   {

@@ -97,7 +97,7 @@ Theo `SPEC-01` §7 · §25 — thiết kế đã tính chỗ, chưa xây.
 
 | Giai đoạn | Module | Ghi chú |
 | --- | --- | --- |
-| **Phase 2** | **PAYROLL** — bảng lương, phiếu lương | Kéo theo bảng append-only mới (`payslips`) + vùng crown-jewel mới |
+| **Phase 2** | **PAYROLL** — tiền lương | Wave **`S13-PAYROLL`** (owner duyệt 31/08/2026, [kế hoạch](<../plans/S13-PAYROLL-WAVE.md>)). **✅ đã có bộ tài liệu**: [SPEC-11](<../SPEC/SPEC-11 PAYROLL.md>) · [DB-13](<../DB/DB-13 PAYROLL Database Design.md>) · [API-18](<../API Design/API-18_PAYROLL_API_Design.md>) · [phân quyền §9g](<../permission-matrix-spec.md>) — **RECONCILE 6 bảng di sản G12** (không phải nền trắng) + 1 bảng mới `payroll_period_lines`, thi công `S13-PAYROLL-DOC-1 → DB-1 → BE-1 → BE-2 → FE-1 → QA-1 → DASH-1`. **PARK-PAYROLL-001**: engine BHXH/BHYT/BHTN/TNCN luỹ tiến (P2-PAY-05-002/003) · PDF phiếu lương (P2-PAY-07-003) · export payslip batch/signed-URL (P2-PAY-08-002) · variance report (P2-PAY-08-004) · report theo phòng ban (P2-PAY-08-003) · **khiếu nại phiếu lương (dispute/resolve)** · multi-currency · chu kỳ trả ngoài tháng — v1 chỉ khấu trừ nghỉ-không-lương/trễ/phạt/dòng tay, XLSX, xác nhận phiếu |
 | **Phase 2** | **RECRUIT** — tuyển dụng | Wave **`S12-RECRUIT`** (owner duyệt 31/08/2026, [kế hoạch](<../plans/S12-RECRUIT-WAVE.md>)). **✅ đã có bộ tài liệu**: [SPEC-12](<../SPEC/SPEC-12 RECRUIT.md>) · [DB-14](<../DB/DB-14 RECRUIT Database Design.md>) · [API-17](<../API Design/API-17_RECRUIT_API_Design.md>) · [phân quyền §9f](<../permission-matrix-spec.md>) — 8 bảng mới, thi công `S12-RECRUIT-DB-1 → BE-1 → FE-1 → QA-1 → DASH-1`. **PARK-RECRUIT-001**: policy retention/auto-purge ứng viên `Rejected` (P2-REC-09-004, REC-DEC-007) — v1 chỉ soft-delete, mở lại ở Phase sau cùng đường xoá hồ sơ |
 | Phase 3 | **ASSET** · **ROOM** | Tài sản · phòng họp — wave **`S11-OFFICE`** (owner duyệt 28/08/2026, [kế hoạch](<../plans/S11-OFFICE-WAVE.md>)). **ASSET ✅ đã có bộ tài liệu**: [SPEC-13](<../SPEC/SPEC-13 ASSET.md>) · [DB-15](<../DB/DB-15 ASSET Database Design.md>) · [API-14](<../API Design/API-14_ASSET_API_Design.md>) · [phân quyền §9d](<../permission-matrix-spec.md>) — 6 bảng mới, thi công `S11-ASSET-DB-1 → BE-1 → FE-1 → QA-1`. **ROOM ✅ đã có bộ tài liệu** (29/08/2026): [SPEC-14](<../SPEC/SPEC-14 ROOM.md>) · [DB-16](<../DB/DB-16 ROOM Database Design.md>) · [API-15](<../API Design/API-15_ROOM_API_Design.md>) · [phân quyền §9e](<../permission-matrix-spec.md>) — tái dụng `meeting_rooms` + 2 bảng mới, DROP 4 bảng `meeting_*` (ROOM-DEC-001, 0 hàng đo được), thi công `S11-ROOM-DB-1` (sau ASSET-DB-1) `→ BE-1 → FE-1 → QA-1` |
 | Phase 4 | **CHAT** — chat nội bộ | ✅ **Đã có bộ tài liệu** (01/08/2026): [SPEC-15](<../SPEC/SPEC-15 CHAT.md>) · [DB-12](<../DB/DB-12 CHAT Database Design.md>) · [API-13](<../API Design/API-13_CHAT_API_Design.md>) · [phân quyền §9c](<../permission-matrix-spec.md>). Wave `S7-CHAT` trong `harness/backlog.mjs`, thi công **sau** khi cửa sổ go-live đóng. Nền dữ liệu đã có sẵn trong DB (mig `0010`/`0050`) |
@@ -106,6 +106,12 @@ Theo `SPEC-01` §7 · §25 — thiết kế đã tính chỗ, chưa xây.
 
 > Khi mở PAYROLL: nó là **crown-jewel** ngay từ dòng code đầu (lương = dữ liệu nhạy cảm nhất). Áp
 > `CLAUDE.md` §6 FULL gate + test deny-path TRƯỚC, không làm như module CRUD thường.
+>
+> ⚠️ **Đã đo 31/08/2026 (S13-PAYROLL-DOC-1):** PAYROLL **không phải nền trắng** — 6 bảng + **19 cặp quyền lương**
+> đã tồn tại từ đợt G12 hướng cũ, trong đó `approve-payroll-period` và `publish-payroll-period` để
+> `is_sensitive=false` ⇒ **duyệt và phát hành lương đang kế thừa được qua wildcard `*:*`**, và 4 cặp `payslip`
+> của `0005` (gồm `('update','payslip')`, mâu thuẫn bất biến #2) đã bị blanket-grant. Thu hồi 16 cặp là phần
+> **an ninh** của wave, không chỉ là dọn dẹp — chi tiết: [permission-matrix §9g.1](<../permission-matrix-spec.md>).
 
 ---
 

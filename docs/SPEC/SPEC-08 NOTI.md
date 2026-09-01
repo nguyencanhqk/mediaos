@@ -1,7 +1,7 @@
 # SPEC-08: THÔNG BÁO HỆ THỐNG
 
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
-> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · **SPEC-08 NOTI** · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-12 RECRUIT](<SPEC-12 RECRUIT.md>) · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · [SPEC-14 ROOM](<SPEC-14 ROOM.md>) · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
+> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · **SPEC-08 NOTI** · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-11 PAYROLL](<SPEC-11 PAYROLL.md>) · [SPEC-12 RECRUIT](<SPEC-12 RECRUIT.md>) · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · [SPEC-14 ROOM](<SPEC-14 ROOM.md>) · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
 >
 > **Liên quan:** [Thiết kế DB: DB-07 NOTI/DASH](<../DB/DB-07 NOTI DASH Database Design.md>) · [Sản phẩm: PRD-00 §9.7](<../PRD/PRD-00 Enterprise Management System .md>) · [Thiết kế API: API-07 NOTI](<../API Design/API-07_NOTI_API_Design.md>) · [Chỉ mục tài liệu](<../README.md>)
 >
@@ -1247,8 +1247,12 @@ Tất cả user đã đăng nhập.
 | NOTI-EVENT-017   | RECRUIT_INTERVIEW_SCHEDULED | Được xếp lịch phỏng vấn | Interviewer — user của participants |
 | NOTI-EVENT-018   | RECRUIT_STAGE_CHANGED   | Ứng viên đổi stage cần xử lý | Recruiter phụ trách vị trí (trừ actor) |
 | NOTI-EVENT-019   | RECRUIT_CANDIDATE_HIRED | Ứng viên trúng tuyển đã convert | User giữ role `hr` (tra `user_roles` — SPEC-12 §17; không gửi `hr-manager`, role đó chưa có grant RECRUIT) |
+| NOTI-EVENT-020   | PAYROLL_PERIOD_SUBMITTED | Bảng lương kỳ được gửi duyệt | User giữ role `company-admin` (tra `user_roles` — SPEC-11 §17), trừ actor |
+| NOTI-EVENT-021   | PAYROLL_PERIOD_APPROVED  | Bảng lương kỳ được duyệt      | Người gửi duyệt (`payroll_periods.submitted_by`), trừ actor |
+| NOTI-EVENT-022   | PAYROLL_PERIOD_REJECTED  | Bảng lương kỳ bị từ chối      | Người gửi duyệt (`submitted_by`), trừ actor — kèm lý do |
+| NOTI-EVENT-023   | PAYSLIP_PUBLISHED        | Phiếu lương đã phát hành      | Từng nhân viên có phiếu trong kỳ (`payslips.user_id`), trừ actor |
 
-> **Dải mở rộng hậu-MVP:** 010–012 cấp cho **ASSET** (SPEC-13 §17, 28/08/2026), 013–015 cấp cho **ROOM** (SPEC-14 §17, 29/08/2026) — wave S11-OFFICE; **016–019 cấp cho RECRUIT** (SPEC-12 §17, 31/08/2026 — wave S12-RECRUIT). GOAL/LMS/CHAT trước đó chỉ là event mở rộng (§15.1–15.6 kiểu), **không** chiếm mã chuẩn. Module kế lấy 020+ sau khi đo lại.
+> **Dải mở rộng hậu-MVP:** 010–012 cấp cho **ASSET** (SPEC-13 §17, 28/08/2026), 013–015 cấp cho **ROOM** (SPEC-14 §17, 29/08/2026) — wave S11-OFFICE; **016–019 cấp cho RECRUIT** (SPEC-12 §17, 31/08/2026 — wave S12-RECRUIT); **020–023 cấp cho PAYROLL** (SPEC-11 §17, 31/08/2026 — wave S13-PAYROLL). GOAL/LMS/CHAT trước đó chỉ là event mở rộng (§15.1–15.6 kiểu), **không** chiếm mã chuẩn. Module kế lấy 024+ sau khi đo lại.
 
 ---
 
@@ -1389,6 +1393,22 @@ Tất cả user đã đăng nhập.
 * `module_code = 'RECRUIT'`, `notification_type = 'Recruit'` (nới CHECK trên **cả hai** bảng `notification_events` và `notifications` — DB-14 §9 bước C), `priority` Normal/High/Normal/Normal, `isEnabled=true`, `isSystemEvent=false` cả 4 — **RECRUIT v1 không có system job** (mọi event đều event-driven).
 * Payload chỉ tên ứng viên · tên vị trí · stage/khung giờ · deep-link `/recruit/candidates/{candidateId}`; **không** email/phone/lương — `full_name` ứng viên là projection duy nhất được lộ (SPEC-12 §18). `dedupeKey` suy từ nội dung (`RECRUIT_JOB_ASSIGNED:{jobOpeningId}:{auditLogId}` — theo LẦN gán, không theo cặp job+user kẻo A→B→A không báo lại (engine DedupeKey là once-ever, không bucket thời gian) · `RECRUIT_INTERVIEW_SCHEDULED:{interviewId}` · `RECRUIT_STAGE_CHANGED:{stageEventId}` · `RECRUIT_CANDIDATE_HIRED:{candidateId}`) — catalog seed **`dedupe_strategy = 'DedupeKey'`** cho cả 4.
 * Phát qua OutboxNotificationBridge; `registerSource()` fail-loud lúc boot nếu catalog chưa có 4 mã này ⇒ seed phải đi trước WO backend.
+
+---
+
+### 15.10 PAYROLL events *(Phase 2 — wave S13-PAYROLL, SPEC-11 §17; seed ở S13-PAYROLL-DB-1)*
+
+| Mã event                  | Sự kiện                          | Người nhận                                                     | Nội dung gợi ý                                             |
+| ------------------------- | -------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------- |
+| PAYROLL_PERIOD_SUBMITTED  | Bảng lương kỳ gửi duyệt          | User giữ **role `company-admin`** trong company (tra `user_roles` còn hiệu lực, `recipient.mode='UserIds'` — engine **không** có tra ngược cặp quyền, tiền lệ `ASSET_MAINTENANCE_DUE`), trừ actor. **KHÔNG gửi `payroll-officer`** — role đó không có cặp `('approve','payroll-period')` (four-eyes), nhận link là đâm vào 403 | Bảng lương kỳ {period_month} đang chờ bạn duyệt             |
+| PAYROLL_PERIOD_APPROVED   | Kỳ lương được duyệt              | `payroll_periods.submitted_by`, trừ actor                      | Bảng lương kỳ {period_month} đã được duyệt                 |
+| PAYROLL_PERIOD_REJECTED   | Kỳ lương bị từ chối              | `payroll_periods.submitted_by`, trừ actor                      | Bảng lương kỳ {period_month} bị từ chối: {comment}         |
+| PAYSLIP_PUBLISHED         | Phát hành phiếu lương            | Từng nhân sự có phiếu trong kỳ (`payslips.user_id`), trừ actor | Phiếu lương kỳ {period_month} của bạn đã sẵn sàng          |
+
+* `module_code = 'PAYROLL'`, `notification_type = 'Payroll'` (nới CHECK trên **cả hai** bảng `notification_events` và `notifications` — DB-13 §10 bước C), `priority` Normal/Normal/High/High, `isEnabled=true`, `isSystemEvent=false` cả 4 — **PAYROLL v1 không có system job** (mọi event đều event-driven).
+* ⚠️ **Payload TUYỆT ĐỐI KHÔNG chứa số tiền** — chỉ `periodMonth`, lý do từ chối (022) và deep-link (`/payroll/periods/{id}` cho 020/021/022, `/me/payslips` cho 023). Ràng buộc này mạnh hơn các module khác vì NOTI đi qua nhiều kênh và **không có tầng masking riêng** (SPEC-11 §17/§18).
+* `dedupeKey` suy từ nội dung — **theo LẦN thao tác, không theo cặp kỳ+người**: `PAYROLL_PERIOD_SUBMITTED:{periodId}:{auditLogId}` · `PAYROLL_PERIOD_APPROVED:{periodId}:{auditLogId}` · `PAYROLL_PERIOD_REJECTED:{periodId}:{auditLogId}` · `PAYSLIP_PUBLISHED:{payslipId}`. Khoá theo `{periodId}` trần là "once-ever" ⇒ chu trình reject → sửa → gửi lại **không bao giờ báo lần hai** (engine `DedupeKey` không có bucket thời gian). Catalog seed **`dedupe_strategy = 'DedupeKey'`** cho cả 4.
+* Phát qua OutboxNotificationBridge; `registerSource()` fail-loud lúc boot nếu catalog chưa có 4 mã này ⇒ seed phải đi trước WO backend (`S13-PAYROLL-BE-2`).
 
 ---
 
