@@ -120,14 +120,19 @@ export class PayrollInputsRepository {
            and ar.work_date >= bounds.d0 and ar.work_date < bounds.d1
            and ar.status = any(${sql.param(VALID_ATTENDANCE_STATUSES)}::text[])
       ),
+      -- Đơn đã duyệt CHẠM kỳ. Chặn theo kỳ ngay tại đây (không để tới lúc join cal_work): thiếu nó,
+      -- CTE này và req_has_days quét MỌI đơn nghỉ của công ty từ trước tới nay ở mỗi lần tính
+      -- (NFR §19: 500 NV < 5s). Vị từ chồng-lấn, KHÔNG chứa-trong ⇒ đơn bắc qua biên tháng vẫn vào.
       req as (
         select lr.id, lr.user_id, lr.start_date, lr.end_date, lt.paid
           from leave_requests lr
           join leave_types lt
             on lt.id = lr.leave_type_id and lt.company_id = ${companyId}
+          cross join bounds
          where lr.company_id = ${companyId}
            and lr.deleted_at is null
            and lr.status = any(${sql.param(APPROVED_LEAVE_STATUSES)}::text[])
+           and lr.end_date >= bounds.d0 and lr.start_date < bounds.d1
       ),
       -- Đơn CÓ day-row Active — đo trên TOÀN BỘ day-row của đơn, KHÔNG chỉ phần giao cal_work.
       -- Đo trên phần giao thì đơn có day-row nằm ngoài lịch PAYROLL (lịch LEAVE ≠ lịch PAYROLL, §13.4)
