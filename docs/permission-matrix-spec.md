@@ -580,6 +580,71 @@ Ghi chú:
 
 ---
 
+## 9g. PAYROLL — Tiền lương (SPEC-11) · *Phase 2 — wave S13-PAYROLL, chưa seed*
+
+PAYROLL đứng riêng, **17 cặp** quyền per-(action, resource) theo SPEC-11 §11.1 — owner duyệt gói wave 31/08/2026 (PAY-DEC-001..010). Data scope **chốt cùng migration seed** (`S13-PAYROLL-DB-1`, KHÔNG để mở sau). Ngoài 4 role canonical, wave này seed thêm **role hệ thống `payroll-officer`** (SPEC-01 §10.6; `roles.company_id IS NULL`, `is_system=true`, **`requires_two_factor=TRUE`** — khác tiền lệ `asset-manager` §9d / `office-admin` §9e / `recruiter` §9f vốn để `false`, vì lương là vùng crown) — **không** phải role canonical, không được thêm vào `DashCanonicalRole`/`NOTI_CANONICAL_ROLES`/pin `auth-seed-canonical-roles`. Id cố định **`…0015`**.
+
+**Nguyên tắc nền — DECISIONS-01 «Phương án B» (Block-code):** quyền lương là nhóm **độc lập**, **KHÔNG mặc định cho HR**. Sau wave này `hr`, `hr-manager` và `manager` giữ **0 cặp PAYROLL**.
+
+| Cặp quyền (SPEC-11 §11.1) | `is_sensitive` | Ý nghĩa | Nhân viên | Trưởng đơn vị · HR · HR Manager | Payroll Officer | BOD/Admin |
+| --- | --- | --- | --- | --- | --- | --- |
+| `('access','payroll')` | false | Cổng nav menu Tiền lương | **own** | không | own | own |
+| `('view','payroll-period')` | false | Xem danh sách/chi tiết kỳ — **không số tiền** | không | không | all | all |
+| `('manage','payroll-period')` | false | Tạo kỳ · cấu hình · gắn kỳ công · **khoá kỳ** (cấu hình kỳ — PAY-DEC-006) | không | không | all | all |
+| `('view-line','payroll-period')` | **true** | **Đọc dòng bảng lương (CÓ TIỀN)** + tổng chi phí kỳ + vế đọc export — **cặp ĐỌC thuần** | không | không | all | all |
+| `('calculate','payroll-period')` | **true** | Gom đầu vào · tính · điều chỉnh dòng · gửi duyệt (**ghi**) | không | không | all | all |
+| `('approve','payroll-period')` | **true** | Duyệt / từ chối bảng lương — **KHÔNG gán Payroll Officer** (four-eyes, PAY-DEC-007) | không | không | **không** | all |
+| `('publish','payroll-period')` | **true** | Sinh phiếu lương + phát hành cho nhân viên | không | không | all | all |
+| `('reopen','payroll-period')` | **true** | Mở lại kỳ (lý do bắt buộc + audit) | không | không | all | all |
+| `('view','salary-profile')` | **true** | Xem hồ sơ lương + lịch sử phiên bản (+ danh bạ chọn người) | không | không | all | all |
+| `('manage','salary-profile')` | **true** | Tạo phiên bản mới · sửa · xoá mềm | không | không | all | all |
+| `('view','bonus-penalty')` | **true** | Xem thưởng/phạt/khấu trừ theo kỳ | không | không | all | all |
+| `('manage','bonus-penalty')` | **true** | Tạo · sửa khi `Pending` · xoá mềm | không | không | all | all |
+| `('approve','bonus-penalty')` | **true** | Duyệt / từ chối (tự duyệt bị chặn ở service — PAYROLL-ERR-012) | không | không | all | all |
+| `('export','payroll')` | **true** | Export XLSX bảng lương (audit bắt buộc) | không | không | all | all |
+| `('view-payslip','payslip')` *(di sản `0097` — GIỮ)* | **true** | Xem phiếu lương của **người khác** | không | không | all | all |
+| `('view-own-payslip','payslip')` *(di sản `0180` — GIỮ)* | **true** | Xem phiếu lương **của mình** | **own** | không | không | không |
+| `('acknowledge-own-payslip','payslip')` *(di sản `0132` — GIỮ)* | false | Xác nhận phiếu lương của mình | **own** | không | không | không |
+
+Ghi chú:
+
+- **13 cặp `is_sensitive = true`**, 4 cặp `false` (`access:payroll` cổng nav · `view:payroll-period` không chở số tiền · `manage:payroll-period` cấu hình kỳ · `acknowledge-own-payslip` không chở số tiền) — đúng PAY-DEC-006 «cặp payroll nhạy cảm **trừ cấu hình kỳ**». Chốt cùng seed, **không flip sau** (bẫy `canonical-seed-pin-regression`). 13 cặp sensitive phải khai **allowlist capability ở BACKEND** cùng WO BE (kẻo màn quản trị biến mất với chính role được grant).
+- **Ba cặp họ `payslip` giữ NGUYÊN TÊN di sản** (kiểu action-carries-resource) thay vì đổi sang bộ `(action, resource)` sạch: `view-own-payslip` đang có **grant sống cho `employee` từ `0180`** mà PAY-DEC-006 yêu cầu giữ, và `view-payslip` đang là fixture của `permission-admin.int-spec.ts`. Đổi tên phá cả hai.
+- **Four-eyes là ràng buộc QUYỀN, không chỉ kiểm tra runtime:** `('approve','payroll-period')` **không** nằm trong grant của `payroll-officer`. Service kiểm thêm `submitted_by ≠ approved_by` (**PAYROLL-ERR-005**), và DB có CHECK `payroll_periods_four_eyes_check` làm chốt cuối — ba tầng.
+- **Cặp ĐỌC tiền tách khỏi cặp GHI** (`view-line` ≠ `calculate`): dòng bảng lương (`GET /payroll-periods/{id}/lines`), tổng chi phí (`/payroll-periods/summary`), vế đọc export và widget DASH `PAYROLL_COST` đều gác bằng **`('view-line','payroll-period')`** (+ **SÀN scope `Company`** cho summary/widget) — KHÔNG bằng `('view','payroll-period')` (cố ý không nhạy cảm) và KHÔNG bằng `calculate` (gộp thì người chỉ có `approve` **duyệt mù**, và ai thấy widget đều ghi được lương). **Mọi role giữ `('approve','payroll-period')` BẮT BUỘC được cấp kèm `('view-line','payroll-period')`** — migration verify fail-loud.
+- **Export đòi CẢ HAI cặp** `('export','payroll')` **và** `('view-line','payroll-period')` — cổng export đứng một mình là đường đọc lương rộng hơn đường đọc từng dòng (bài học RECRUIT §9f H5).
+- **Masking là tầng thứ hai, tách khỏi cặp quyền:** trường tiền **vắng khoá** (không `null`, không `0`) khi caller không giữ cặp tương ứng; FE schema `.optional()`. **Mọi lượt đọc số lương của người khác ghi `audit_logs` trong cùng transaction** (khuôn reveal+audit atomic của `hr-read.service`); `/me/payslips*` **không** ghi audit.
+- **Ma trận seed = 32 hàng** `role_permissions`: `employee` **3** (`access`@Own · `view-own-payslip`@Own · `acknowledge-own-payslip`@Own) · `manager` **0** · `hr` **0** · `hr-manager` **0** · `payroll-officer` **14** (`access`@Own + 13 cặp @Company) · `company-admin` **15** (`access`@Own + 14 cặp @Company). Migration verify fail-loud đúng số; `super-admin` không enumerate (nhận qua `SuperAdminBootstrapService`).
+- **Hai điều kiện verify fail-loud trong migration:** (1) mọi role giữ `('manage','bonus-penalty')` **phải** giữ `('view','salary-profile')` — `PAYROLL-API-034` (danh bạ nhân sự) gác bằng cặp sau; (2) mọi role giữ `('approve','payroll-period')` **phải** giữ `('view-line','payroll-period')` — kẻo người duyệt không đọc được bảng lương. `payroll-officer` giữ **0 cặp ngoài PAYROLL** ⇒ danh sách kỳ công phải đi qua `PAYROLL-API-035`, không qua `GET /attendance/periods` (`('read','attendance')`).
+- RLS+FORCE cô lập **tenant** trên 7 bảng PAYROLL; own-scope phiếu lương ép ở **service layer** (`payslips.user_id` = user của caller **và** kỳ ∈ `Paid`/`Locked`). Ngoài scope → **404** (không 403 — chống dò sự tồn tại).
+- 3 bộ trạng thái (SPEC-01 §17.15–17.17) ép ở service; chốt cuối ở DB: `UNIQUE (company_id, payroll_period_id, user_id)` trên `payslips` · `UNIQUE (company_id, period_month)` trên kỳ · `UNIQUE (company_id, user_id, effective_date)` trên hồ sơ lương · CHECK four-eyes (DB-13 §6).
+- Chi tiết mã lỗi/quy tắc: [SPEC-11 PAYROLL §11–13](<SPEC/SPEC-11 PAYROLL.md>); schema + **bản đồ reconcile**: [DB-13 §5](<DB/DB-13 PAYROLL Database Design.md>); API: [API-18](<API Design/API-18_PAYROLL_API_Design.md>).
+
+### 9g.1 THU HỒI quyền lương di sản — 19 cặp / 5 migration (PAY-DEC-006)
+
+> ⚠️ Hồ sơ duyệt ghi tay chỉ nhắc `0092`/`0097`/`0180`. Đo bằng grep toàn bộ `apps/api/migrations/` ngày 31/08/2026 cho thấy họ lương trải **5 migration / 19 cặp**. Hai lỗ thật:
+>
+> 1. **`('approve-payroll-period','payroll_period')` và `('publish-payroll-period','payroll_period')` (`0132`) để `is_sensitive = false`** ⇒ **duyệt và phát hành lương đang kế thừa được qua wildcard `*:*`**.
+> 2. **4 cặp `payslip` của `0005:282-285`** (`create`/`read`/`update`/`delete`, đều `is_sensitive=false`) dính **blanket-grant `WHERE p.is_sensitive = false` KHÔNG điều kiện** ở `0005:310-313` — **chỉ của `company-admin` (`…0001`)**. *(Đính chính phép đo: 7 role hệ thống thời media còn lại (`0005:317-433`) đều có thêm `AND (action, resource_type) IN (…)` liệt kê cụ thể và **không** chứa cặp `payslip` nào.)* Trong bốn cặp đó, `('update','payslip')` mâu thuẫn thẳng bất biến #2 (phiếu lương append-only).
+>
+> **GRANT trong migration cũ ≠ hiện trạng DB** (`grant-in-old-migration-is-not-current-state`): WO DB **phải ĐO bảng thật** (`permissions ⋈ role_permissions ⋈ roles`) trước khi viết lệnh thu hồi.
+
+| Cặp di sản | sensitive | Nguồn | Xử lý |
+| --- | --- | --- | --- |
+| `('create','payslip')` · `('read','payslip')` · `('update','payslip')` · `('delete','payslip')` · `('view-salary','payslip')` | 4× false, 1× true | `0005` | **GỠ cả 5** (+ mọi grant) |
+| `('view-salary-profile','salary_profile')` · `('manage-salary-profile','salary_profile')` | true | `0092` | **GỠ** → thay bằng `('view'/'manage','salary-profile')` |
+| `('manage-payroll-period','payroll_period')` · `('run-payroll','payroll_period')` · `('read-payslip','payslip')` | false/true/true | `0097` | **GỠ** → thay bằng `('manage','payroll-period')` / `('calculate','payroll-period')` / *(trùng `view-payslip`)* |
+| `('manage-bonus-penalty',…)` · `('approve-bonus-penalty',…)` · `('view-bonus-penalty','bonus_penalty')` | true | `0099` | **GỠ** → thay bằng `('manage'/'approve'/'view','bonus-penalty')` |
+| `('approve-payroll-period','payroll_period')` · `('publish-payroll-period','payroll_period')` | **false ⚠️** | `0132` | **GỠ** → thay bằng `('approve'/'publish','payroll-period')` **`is_sensitive=true`** — vá lỗ wildcard |
+| `('resolve-payslip-dispute','payslip')` | true | `0132` | **GỠ** — khiếu nại ngoài v1, mở lại cùng PARK-PAYROLL-001 |
+| `('view-payslip','payslip')` | true | `0097` | **GIỮ** — vào bảng §9g; **thu hồi grant `hr-manager`** |
+| `('view-own-payslip','payslip')` | true | `0180` | **GIỮ nguyên grant `employee`** |
+| `('acknowledge-own-payslip','payslip')` | false | `0132` | **GIỮ grant `employee`**; thu hồi grant `company-admin` + `hr-manager` |
+
+**Trình tự bắt buộc trong migration seed** (DB-13 §10 bước B): thu hồi **TRƯỚC**, seed cặp mới **SAU** — xoá mọi hàng `role_permissions` **VÀ `object_permissions`** trỏ **16 cặp GỠ** rồi xoá 16 cặp khỏi `permissions`. ⚠️ `object_permissions.permission_id` là **`ON DELETE CASCADE`** (`0005:154`) ⇒ xoá cặp cascade âm thầm: phải ĐO trước rồi xoá tường minh. **Với cặp GIỮ `view-payslip`** (vốn *giữ ngữ nghĩa object-permission override*): thu hồi grant `hr-manager` ở **cả hai** bảng — chỉ xoá `role_permissions` là để lại đường đọc phiếu lương sống trong khi verify vẫn XANH. Verify fail-loud: `hr-manager` = **0 cặp PAYROLL trên CẢ BA bảng**, 16 cặp GỠ = **0 hàng** ở cả ba. Cặp `('view-salary','employee')` (`0019`, domain HR — masking hồ sơ nhân sự của SPEC-03) **KHÔNG đụng tới**. Tiền lệ xoá cặp mồ côi + grant: `0548` (27 cặp / 89 grant của cụm workflow).
+
+---
+
 ## 10. Nguyên tắc dữ liệu nhạy cảm (SPEC-01 §11.3)
 
 Dữ liệu nhạy cảm: lương · tài khoản ngân hàng · CCCD/CMND · hợp đồng · hồ sơ nhân sự · dữ liệu kỷ luật/nghỉ việc · chấm công chi tiết · log hệ thống.

@@ -14973,7 +14973,7 @@ export const backlog = [
     title:
       "Bộ tài liệu PAYROLL: SPEC-11 + DB-13 (kèm bản đồ reconcile 6 bảng G12) + API-18 + permission-matrix §9g + hợp thức trạng thái SPEC-01 §17.15–17.17 + EPIC-20 (§8.21) + vá SPEC-01 §30 (thiếu HR→PAYROLL, LEAVE→PAYROLL) + đồng bộ README/DB-01·09·10/erd-current (payroll rời §A5)/RELEASE-14 (PARK-PAYROLL-001) — 10 PAY-DEC đã ký 31/08, chỉ chép kết luận",
     zone: "green",
-    status: "todo",
+    status: "done", // 2026-08-31 — SPEC-11 + DB-13 + API-18 + §9g + §17.15-17.17 + EPIC-20 + §9g.1 (thu hồi 19 cặp quyền lương di sản, rộng hơn 6 cặp hồ sơ ghi tay). plan-reviewer chạy 3 vòng (BLOCK/BLOCK/BLOCK-1-cụm), đã vá 6+10+7 mục — cổng mở DB-1 ĐẠT theo điều kiện tự-mở reviewer khai ở vòng 3 (SPEC-11 §24). ĐÍNH CHÍNH: ma trận liên kết module là SPEC-01 §31, KHÔNG phải §30
     paths: [
       "docs/SPEC/**",
       "docs/DB/**",
@@ -15029,6 +15029,10 @@ export const backlog = [
       "apps/api/test/foundation/**",
       "apps/api/test/integration/**",
       "apps/api/test/helpers/seed.ts",
+      // plan-review #1 (31/08): 3 đường dưới ĐANG đọc/ghi đúng cột+GRANT mà DB-13 §5 gỡ ⇒
+      // thiếu path là hook guard-scope cảnh báo ra-ngoài-phạm-vi giữa lane ĐỎ (DB-13 §10.1).
+      "apps/api/demo-seed-full.mjs",
+      "apps/api/src/foundation/retention/**",
       "packages/contracts/src/payroll*.ts",
       "packages/contracts/src/notification.ts",
       "packages/contracts/src/index.ts",
@@ -15043,22 +15047,28 @@ export const backlog = [
     depends_on: ["S13-PAYROLL-DOC-1"],
     plan: "docs/plans/S13-PAYROLL-DB-1.md",
     src: [
-      "DB-13 (viết ở S13-PAYROLL-DOC-1) — nguồn sự thật schema + bản đồ reconcile",
+      "DB-13 (viết ở S13-PAYROLL-DOC-1, PASS plan-reviewer vòng 2) — nguồn sự thật schema + bản đồ reconcile §5 + kế hoạch migration §10 + danh sách test di sản phải sửa §10.1",
       "PAY-DEC-002 (giữ khung 6 bảng, không drop-rebuild) · 003 (salary_profiles nguồn duy nhất) · 005 (FSM 7 trạng thái + CHECK) · 006 (thu hồi grant hr-manager) · 009 (role …0015 2FA) — wave plan §3",
       "Khuôn: 0559..0561 (RECRUIT DDL/seed/NOTI) · 0535 (composite tenant-FK) · 0548 (bonus_penalties_reference_check hiện trạng) · quy ước journal idx = max+1 (ghi trong 0180)",
     ],
     done_when: [
       "ĐO trước khi ALTER: SELECT count 6 bảng trên DB đích (dự kiến 0 hàng — nhưng đo, không đoán) + đọc pg_catalog grant HIỆN TRẠNG trước khi viết REVOKE/GRANT (GRANT trong migration cũ ≠ hiện trạng); band 0091–0180 KHÔNG sửa file — mọi thay đổi bằng migration MỚI 0564+, journal idx = max+1 KHÔNG suy từ tên file",
       "Reconcile theo DB-13: giữ khuôn append-only payslips/payslip_items (SELECT+INSERT — không «chuẩn hoá» thành S/I/U); bổ sung composite tenant-FK còn thiếu của band G12; CHECK FSM payroll_periods theo §17.15; cột duyệt/khoá/lý-do-reopen; CHECK effective-range salary_profiles",
-      "THU HỒI grant payroll di sản của hr-manager (0092/0097) bằng migration mới — cẩn thận REVOKE bảng xoá column-GRANT; giữ nguyên view-salary:employee hiện hành của HR (khác domain) + view-own-payslip của employee (0180)",
-      "Seed: role hệ thống payroll-officer (…0015 · company_id NULL · is_system=true · requires_two_factor=TRUE tường minh — PAY-DEC-009, KHÔNG canonical) + cặp quyền §9g ON CONFLICT DO NOTHING (officer KHÔNG có approve — four-eyes) + NOTI catalog nới CHECK module_code CẢ HAI bảng + events 020..023; verify 6 audit object_type payroll đã có từ 0093 (không UNION-ADD trùng)",
+      "THU HỒI 16/19 cặp quyền lương di sản + MỌI grant TRƯỚC khi seed 17 cặp mới (permission-matrix §9g.1 — dải rộng hơn hồ sơ duyệt ghi tay: 5 migration 0005/0092/0097/0099/0132, gồm approve/publish-payroll-period để is_sensitive=false ⇒ ăn theo wildcard). Verify fail-loud: hr-manager = 0 cặp PAYROLL; 16 cặp GỠ = 0 hàng ở CẢ permissions và role_permissions. Cẩn thận REVOKE bảng xoá column-GRANT; giữ nguyên view-salary:employee của HR (khác domain) + view-own-payslip của employee (0180)",
+      "[plan-review B2] SỬA — KHÔNG XOÁ — 5 file test/fixture/seed di sản CÙNG COMMIT (DB-13 §10.1): bonus-penalty-transition.int-spec · payslip-acknowledgement-transition.int-spec · payslip-appendonly.int-spec (ca GHIM bất biến #2 — tuyệt đối không xoá) · test/integration/rls-registry.ts fixture · demo-seed-full.mjs",
+      "[plan-review H1] DROP trigger bonus_penalty_guard (ép FSM chữ thường) rồi DỰNG LẠI bản HẸP bonus_penalty_freeze_guard: chỉ đóng băng amount/kind/user_id/period_month khi OLD.status <> 'Pending' HOẶC đã consume — CHECK không so được OLD/NEW, gỡ trắng là mất bất biến tiền trong im lặng",
+      "[plan-review H2] thêm payslip_acknowledgements + payroll_period_lines vào RetentionService.PROTECTED_TABLES (+ spec) — bảng không có GRANT DELETE ⇒ retention ăn 42501 uncaught làm hỏng CẢ lượt cleanup tenant",
+      "[plan-review H3] composite tenant-FK là THÊM, KHÔNG THAY: giữ nguyên FK đơn cột. FK_SINGLE_COL_PAIRS_FLOOR chỉ hạ ĐÚNG BẰNG số FK biến mất theo cột bị GỠ (bonus_penalties.task_id/kpi_result_id), có đo hai lane giải thích",
+      "[plan-review M7] THU HỒI SELECT của mediaos_worker trên salary_profiles/payroll_period_lines/payslips/payslip_items ngay ở WO này (v1 không có system job nào đọc bảng lương — đã đo 0 route/0 handler)",
+      "Cột mới payroll_periods.payslips_generated_by/at (cờ đã-sinh-phiếu đọc dưới row-lock — SPEC-11 §13.1) + CHECK cặp; UNIQUE payroll_period_lines là PARTIAL (WHERE deleted_at IS NULL)",
+      "Seed: role hệ thống payroll-officer (…0015 · company_id NULL · is_system=true · requires_two_factor=TRUE tường minh — PAY-DEC-009, KHÔNG canonical) + cặp quyền §9g ON CONFLICT DO NOTHING (officer KHÔNG có approve — four-eyes) + NOTI catalog nới CHECK module_code CẢ HAI bảng + events 020..023; verify 4 audit object_type payroll (payroll_period · salary_profile · bonus_penalty · payslip) đã có sẵn từ band G12 (0090/0093/0099) — ĐO trước, đủ cả 4 thì bước UNION-ADD là NO-OP có chủ đích, ghi RAISE NOTICE, KHÔNG viết ALTER rỗng",
       "packages/contracts payroll*.ts: Zod mirror CHECK theo HIỆN TRẠNG DB (bonus_penalties_reference_check đã bị 0548 sửa — soi CHECK đang sống, KHÔNG chép file 0098) HAI CHIỀU ĐÚNG BẰNG; barrel index.ts không đụng export park",
       "Census grant phủ 4 hình dạng wildcard; rls-registry cập nhật; test schema + seed trên LANE_DB xanh",
     ],
     notes: [
       "🔴 FULL gate + Opus (crown khai báo sẵn CLAUDE.md §6: payroll/payslip). Lane migration NỐI TIẾP duy nhất của wave.",
       "KHÔNG bật modules.is_active (việc của S13-PAYROLL-FE-1, khuôn 0556/0562); guard trong migration KHÔNG assert trạng thái module khác; guard verify hàng PAYROLL forward-compatible (không RAISE khi is_active=true).",
-      "Tiền: numeric(18,2), VND duy nhất; mọi CHECK số học viết ở SQL. Bảng mới duy nhất CÓ THỂ cần: payroll_period_inputs (snapshot công/phép per NV per kỳ) — DB-13 chốt bảng riêng hay cột snapshot trong payslips là đủ (payslips đã có workDays/presentDays/lateMinutes).",
+      "Tiền: numeric(18,2), VND duy nhất; mọi CHECK số học viết ở SQL. Bảng MỚI duy nhất của wave ĐÃ CHỐT ở DB-13 §3.1/§6.4: payroll_period_lines (bảng lương NHÁP, mutable trước Approved, UNIQUE partial WHERE deleted_at IS NULL). KHÔNG đẻ bảng thứ 8 kiểu payroll_period_inputs — snapshot đầu vào là cột input_snapshot_json trên chính dòng nháp và trên payslips (NOT NULL, KHÔNG DEFAULT, có CHECK <> '{}').",
     ],
   },
   {
@@ -15095,7 +15105,7 @@ export const backlog = [
     done_when: [
       "Deny-path test RED-TRƯỚC cho mọi route lương; mọi API check company_id qua withTenant; guard cặp quyền ở CẢ decorator route lẫn service; 4xx đúng mã PAYROLL-ERR; trần Zod ≠ trần service không đẻ mã lỗi chết",
       "Masking SERVER theo Phương án B: mọi trường tiền/bank chỉ trả cho cặp payroll tương ứng; mọi lượt XEM dữ liệu lương ghi audit (khuôn reveal+audit atomic của HR); hr-manager sau thu hồi grant nhận deny sạch (có int-spec khẳng định)",
-      "Kỳ lương FSM: 7 trạng thái ép ở service (CHECK không ép được chuyển tiếp) + ma trận chuyển sai có test; tạo kỳ chặn trùng tháng per company; Calculated đòi attendance_periods locked; Locked chặn chỉnh công kỳ đó phía ATT (deny-path chỉnh công sau lock — ATT-ERR-024); reopen = cặp quyền riêng + bắt buộc lý do + audit",
+      "Kỳ lương FSM: 7 trạng thái ép ở service (CHECK không ép được chuyển tiếp) + ma trận chuyển sai có test; tạo kỳ chặn trùng tháng per company; Calculated đòi attendance_periods locked (409 PAYROLL-ERR-002); KHÔNG dựng cổng khoá-ngược ATT và KHÔNG viện dẫn ATT-ERR-024 — kỳ công đã bất biến từ lúc locked (trigger 0064 chặn locked→open), mã đó không tồn tại trong apps/api và SPEC-04 vs API-04 mô tả khác nhau (SPEC-11 §3.5/§22(o), nợ ATT ở §23 mục 12). KHÔNG viết ca DENY 'Locked chặn chỉnh công' — xanh-rỗng, không dựng được ca ALLOW đối chứng; reopen = cặp quyền riêng + bắt buộc lý do + audit + CHẶN khi payslips_generated_at đã set, và XOÁ calculated_*/submitted_*/approved_* theo bảng RESET SPEC-11 §13.1",
       "Tổng hợp đầu vào per NV: ngày công (raw attendance_records) + phép có lương/KHÔNG lương (leave_types.paid) + trễ/sớm; cảnh báo NV thiếu salary_profile/bảng công trước khi tính; recalc đầu vào khi nguồn đổi TRƯỚC duyệt; biên kỳ cắt theo tháng công ty Ở BE (UTC-at-rest — FE không có companies.timezone)",
       "salary-profile versioned theo effective date (kỳ lấy bản hiệu lực tại thời điểm kỳ); bonus-penalty chỉ dòng Approved vào công thức; đóng băng theo FSM kỳ",
       "API_MODULE_TAGS khai PAYROLL; route-census regen ROUTE_CENSUS_WRITE=1 có chủ đích; :id = UUID ở biên; @Idempotent các POST tạo; test trên LANE_DB",
@@ -15132,11 +15142,11 @@ export const backlog = [
       "Khuôn: outbox NOTI dedupeKey content-derived (0561) · memory period-key-idempotency-needs-frozen-source · clamp-must-be-sql",
     ],
     done_when: [
-      "Calculate: toàn bộ số học ở SQL (numeric 18,2 + làm tròn + clamp trong câu SQL — CẤM float JS); snapshot đầu vào ĐÓNG BĂNG vào payslip/inputs lúc tính; idempotency key content-derived (period + snapshot version, KHÔNG từ thời điểm gọi); race double-calculate/double-publish 2 request song song → đúng-1-thắng (int-spec)",
+      "Calculate: toàn bộ số học ở SQL (numeric 18,2 + làm tròn + clamp trong câu SQL — CẤM float JS); snapshot đầu vào ĐÓNG BĂNG vào payslip/inputs lúc tính; idempotency key DO CLIENT SINH khi bấm nút, server KHÔNG tự suy từ payload (@Idempotent dùng chung, khoá company+user+method+path+key, TTL 15' — SPEC-11 §12, API-18 §6.6). Chống trùng NGHIỆP VỤ là việc của UNIQUE ở DB (kỳ trùng tháng 008 · phiếu sinh hai lần 006 · phiên bản lương trùng ngày 014 · ack hai lần 015). generate-payslips gọi lần hai = no-op 200 nhờ cờ payslips_generated_at đọc dưới row-lock; race double-calculate/double-publish 2 request song song → đúng-1-thắng (int-spec)",
       "FSM duyệt: submit → approve/reject (reject bắt buộc comment) → lock; recalc sau Approved bị CHẶN (test); reopen quyền riêng + lý do + audit; điều chỉnh dòng lương bắt buộc lý do + audit",
       "Payslip: generate từ kỳ Approved → Published + NOTI 022 từng NV; bản ghi BẤT BIẾN sau Published (append-only đã ép ở DB — điều chỉnh đi vào kỳ sau); ack ghi payslip_acknowledgements; employee chỉ thấy Own (IDOR cross-employee CÙNG company có int-spec riêng, không chỉ cross-tenant)",
       "Export XLSX bảng lương tổng: đòi cặp ('export','payroll') RIÊNG + audit TỪNG lần xuất; số trong file khớp breakdown",
-      "Outbox NOTI đúng catalog 020 (chờ duyệt→người duyệt) · 021 (duyệt/từ chối→officer) · 022 (payslip→NV) · 023 (reopen→officer+admin), dedupeKey content-derived; fixture đối soát TAY ít nhất 1 NV đủ mọi loại khoản (số khớp từng đồng)",
+      "Outbox NOTI đúng catalog ĐÃ CHỐT (SPEC-11 §17 · SPEC-08 §15.10 · DB-13 §10 bước C): 020 PAYROLL_PERIOD_SUBMITTED (→ người duyệt hợp lệ qua PayrollApproverReader, CÙNG bộ giải với PAYROLL-ERR-017) · 021 PAYROLL_PERIOD_APPROVED (→ submitted_by) · 022 PAYROLL_PERIOD_REJECTED (→ submitted_by, kèm lý do) · 023 PAYSLIP_PUBLISHED (→ từng payslips.user_id). KHÔNG có event cho reopen. dedupeKey theo LẦN thao tác ({periodId}:{auditLogId}) — audit ghi TRƯỚC, enqueue SAU. Payload TUYỆT ĐỐI không có số tiền. Fixture đối soát TAY ít nhất 1 NV đủ mọi loại khoản (số khớp từng đồng)",
     ],
     notes: [
       "🔴 FULL gate + Opus. Đây là WO crown nặng nhất wave — nếu plan-reviewer thấy vượt khẩu độ, được phép cắt export XLSX sang WO FE/QA, KHÔNG được cắt four-eyes hay snapshot đóng băng.",

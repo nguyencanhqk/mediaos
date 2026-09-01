@@ -1,7 +1,7 @@
 # SPEC-01: TỔNG QUAN HỆ THỐNG QUẢN LÝ DOANH NGHIỆP
 
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
-> **SPEC-01 Tổng quan** · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-12 RECRUIT](<SPEC-12 RECRUIT.md>) · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · [SPEC-14 ROOM](<SPEC-14 ROOM.md>) · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
+> **SPEC-01 Tổng quan** · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-11 PAYROLL](<SPEC-11 PAYROLL.md>) · [SPEC-12 RECRUIT](<SPEC-12 RECRUIT.md>) · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · [SPEC-14 ROOM](<SPEC-14 ROOM.md>) · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
 >
 > **Liên quan:** [Thiết kế DB: DB-01 Tổng quan](<../DB/DB-01 DATABASE DESIGN TỔNG QUAN.md>) · [Sản phẩm: PRD-00](<../PRD/PRD-00 Enterprise Management System .md>) · [Thiết kế API: API-01 Tổng quan](<../API Design/API-01 TỔNG QUAN.md>) · [Chỉ mục tài liệu](<../README.md>)
 
@@ -161,7 +161,7 @@ Các module sau chưa triển khai chi tiết trong MVP v1.0, nhưng hệ thốn
 
 | Mã module | Tên module             | Tài liệu liên kết | Giai đoạn |
 | --------- | ---------------------- | ----------------- | --------- |
-| PAYROLL   | Tiền lương             | SPEC-11           | Phase 2   |
+| PAYROLL   | Tiền lương             | [SPEC-11](<SPEC-11 PAYROLL.md>) | Phase 2 — spec **đã viết** (Approved 31/08/2026, wave S13-PAYROLL) |
 | RECRUIT   | Tuyển dụng             | [SPEC-12](<SPEC-12 RECRUIT.md>) | Phase 2 — spec **đã viết** (Approved 31/08/2026, wave S12-RECRUIT) |
 | ASSET     | Quản lý tài sản        | [SPEC-13](<SPEC-13 ASSET.md>) | Phase 3 — spec **đã viết** (Approved 28/08/2026, wave S11-OFFICE) |
 | ROOM      | Quản lý phòng họp      | [SPEC-14](<SPEC-14 ROOM.md>) | Phase 3 — spec **đã viết** (Approved 28/08/2026, wave S11-OFFICE; tái dụng nền `meeting_rooms`) |
@@ -191,7 +191,7 @@ Bộ tài liệu spec của dự án sẽ được tổ chức như sau:
 | SPEC-08     | Thông báo hệ thống                | Spec module |
 | SPEC-09     | Trung tâm cá nhân & Cài đặt (ME)  | Spec module |
 | SPEC-10     | Mục tiêu (GOAL)                   | Spec module |
-| SPEC-11     | Tiền lương                        | Spec module |
+| SPEC-11     | [Tiền lương](<SPEC-11 PAYROLL.md>) | Spec module — **đã viết** (Approved) |
 | SPEC-12     | [Tuyển dụng](<SPEC-12 RECRUIT.md>) | Spec module — **đã viết** (Approved) |
 | SPEC-13     | [Quản lý tài sản](<SPEC-13 ASSET.md>) | Spec module — **đã viết** (Approved) |
 | SPEC-14     | [Quản lý phòng họp](<SPEC-14 ROOM.md>) | Spec module — **đã viết** (Approved) |
@@ -460,7 +460,9 @@ Quyền chính:
 * Xuất phiếu lương.
 * Khóa kỳ lương.
 
-Vai trò này thuộc giai đoạn sau MVP.
+Chi tiết quyền: [SPEC-11 §11](<SPEC-11 PAYROLL.md>) · [ma trận phân quyền §9g](<../permission-matrix-spec.md>). Role hệ thống **`payroll-officer`** (id `…0015`, `is_system=true`, **`requires_two_factor=true`**, KHÔNG canonical — PAY-DEC-009). **KHÔNG có quyền duyệt bảng lương** — `('approve','payroll-period')` chỉ gán Company Admin để giữ four-eyes người tính ≠ người duyệt (PAY-DEC-007).
+
+Vai trò này thuộc giai đoạn sau MVP (wave **S13-PAYROLL**).
 
 ### 10.7 Recruiter
 
@@ -800,7 +802,7 @@ Module liên quan:
 
 ### 12.8 PAYROLL — Tiền lương
 
-Tài liệu chi tiết: SPEC-11
+Tài liệu chi tiết: [SPEC-11](<SPEC-11 PAYROLL.md>) — **đã viết**, owner duyệt 31/08/2026 (wave S13-PAYROLL, PAY-DEC-001..010). Ba bộ trạng thái hợp thức ở §17.15–17.17; sự kiện NOTI-EVENT-020..023 ở §20.2.
 
 Giai đoạn: Phase 2
 
@@ -818,14 +820,16 @@ Chức năng chính:
 * Tạo bảng lương
 * Duyệt bảng lương
 * Phiếu lương
-* Xuất Excel/PDF
+* Xuất Excel (**PDF = Phase sau**, PARK-PAYROLL-001)
+
+Phạm vi v1 (SPEC-11 §5): hồ sơ lương versioned · thưởng/phạt/khấu trừ nhập tay theo kỳ · kỳ lương FSM 7 trạng thái gắn khoá kỳ công ATT · tổng hợp đầu vào công/phép · tính bảng lương nháp (SQL, snapshot đóng băng) · duyệt một cấp **four-eyes** · phiếu lương phát hành + «phiếu của tôi» + xác nhận · export XLSX + audit · masking lương ở server. **Ngoài v1:** engine BHXH/BHYT/BHTN/TNCN, PDF phiếu lương, variance report, khiếu nại phiếu lương, multi-currency.
 
 Module liên quan:
 
-* HR: hồ sơ nhân viên, lương cơ bản, tài khoản ngân hàng.
-* ATT: dữ liệu ngày công.
-* LEAVE: dữ liệu nghỉ phép.
-* NOTI: thông báo phiếu lương.
+* HR: hồ sơ nhân viên (danh tính, đơn vị). *Lưu ý: `employee_profiles.base_salary` **không** tham gia tính lương — nguồn duy nhất là `salary_profiles` versioned (PAY-DEC-003).*
+* ATT: dữ liệu ngày công + `attendance_periods` (phải `locked` trước khi tính; kỳ lương `Locked` khoá ngược đường chỉnh công — `ATT-ERR-024`).
+* LEAVE: dữ liệu nghỉ phép + `leave_types.paid` (tách phép có lương / không lương).
+* NOTI: gửi duyệt · duyệt/từ chối · phát hành phiếu lương.
 
 ---
 
@@ -1410,6 +1414,7 @@ Các module được phép dùng thêm các giá trị dưới đây (đã hợp
 * **Trạng thái thông báo (SPEC-08):** thêm `Hidden` (người dùng ẩn), `Deleted` (xóa mềm), `Failed` (gửi thất bại).
 * **Tài sản (SPEC-13, hợp thức 28/08/2026 — ASSET-DEC-003):** bộ chính ở mục 17.8 (tài sản) và 17.9 (lượt cấp phát). Các sổ phụ dùng giá trị đóng: lượt bảo trì `Open` / `Closed` · đợt kiểm kê `Open` / `Closed` · kết quả dòng kiểm kê `Found` / `Missing` / `Not Checked` · tình trạng khi giao/thu `Good` / `Damaged` (+ `Lost` khi thu). Chuyển tiếp hợp lệ (FSM) định nghĩa **duy nhất** tại SPEC-13 §13.1 — service ép, DB chỉ CHECK tập giá trị.
 * **Lượt đặt phòng họp (SPEC-14, hợp thức 29/08/2026 — ROOM-DEC-003):** bộ chính ở mục 17.10 (`Confirmed` / `Cancelled`). `Completed` là giá trị **dẫn xuất** (`Confirmed` và giờ kết thúc đã qua), không lưu cứng — cùng nguyên tắc `Overdue` của task. Phòng họp dùng cờ `is_active` (boolean), không có bộ trạng thái riêng.
+* **Tiền lương (SPEC-11, hợp thức 31/08/2026 — PAY-DEC-005/007/008):** ba bộ chính ở mục 17.15 (kỳ lương) · 17.16 (phiếu lương — **dẫn xuất**) · 17.17 (thưởng/phạt). Giá trị phụ dùng bộ đóng: loại dòng phiếu lương `earning` / `deduction` / `allowance` / `attendance` / `bonus` / `penalty` · loại thưởng-phạt `bonus` / `penalty`. Chuyển tiếp hợp lệ (FSM) định nghĩa **duy nhất** tại SPEC-11 §13.1/§13.3 — service ép, DB chỉ CHECK tập giá trị.
 * **Tuyển dụng (SPEC-12, hợp thức 31/08/2026 — REC-DEC-002/004):** bốn bộ chính ở mục 17.11 (ứng viên) · 17.12 (vị trí tuyển) · 17.13 (lượt phỏng vấn) · 17.14 (offer). Giá trị phụ dùng bộ đóng: recommendation feedback `Hire` / `No Hire` / `Consider` · action stage-event `move` / `convert`. Nguồn ứng viên (`source`) là text tự do, không phải bộ trạng thái. Chuyển tiếp hợp lệ (FSM) định nghĩa **duy nhất** tại SPEC-12 §13.1–13.4 — service ép, DB chỉ CHECK tập giá trị.
 
 ### 17.8 Trạng thái tài sản (SPEC-13)
@@ -1487,6 +1492,40 @@ Withdrawn
 ```
 
 > Không có workflow duyệt (REC-DEC-004); ba trạng thái kết quả là terminal, recruiter tự cập nhật. Một ứng viên chỉ có tối đa **một** offer đang sống `Draft`/`Sent` (ép ở DB bằng partial unique — DB-14 §6.8).
+
+### 17.15 Trạng thái kỳ lương (SPEC-11)
+
+```text
+Draft
+CollectingData
+Calculated
+Reviewing
+Approved
+Paid
+Locked
+```
+
+> Bảy trạng thái theo IMPLEMENTATION-10 §10.1 (P2-PAY-03-002; ở đó viết «Collecting Data» — **cùng một trạng thái**, giá trị lưu là `CollectingData` không dấu cách). `Calculated` chỉ đạt được khi kỳ công ATT của tháng đó đã `locked` (PAYROLL-ERR-002). `Locked` là **terminal tuyệt đối** — không có đường ra, và khoá ngược đường chỉnh công phía ATT (`ATT-ERR-024`). Mở lại kỳ (`reopen`) đưa về `CollectingData`, cần quyền riêng + lý do + audit, và **bị chặn khi kỳ đã sinh phiếu lương** (phiếu là bản ghi bất biến). Chuyển tiếp hợp lệ: SPEC-11 §13.1 — service ép, DB chỉ CHECK tập giá trị.
+
+### 17.16 Trạng thái phiếu lương (SPEC-11) — **giá trị DẪN XUẤT**
+
+```text
+Generated
+Published
+Acknowledged
+```
+
+> Ba giá trị này **không lưu cột**, server tính trong DTO (cùng nguyên tắc `Overdue` của task ở mục 17.4 và `Completed` của lượt đặt phòng ở mục 17.10): `Generated` = có hàng `payslips` và kỳ ở `Approved` · `Published` = kỳ ở `Paid`/`Locked` · `Acknowledged` = `Published` và có hàng xác nhận của chính nhân sự đó. Lý do: phát hành là hành động **cấp kỳ**, lưu cờ trên từng phiếu buộc phải UPDATE một bảng append-only cho thông tin đã suy được (SPEC-11 §13.2). Nhân viên **không thấy** phiếu ở `Generated`.
+
+### 17.17 Trạng thái thưởng/phạt/khấu trừ (SPEC-11)
+
+```text
+Pending
+Approved
+Rejected
+```
+
+> `Approved` và `Rejected` là terminal; sửa nội dung/số tiền chỉ khi `Pending`; `Rejected` bắt buộc ghi lý do; **người quyết định phải khác người tạo** (PAYROLL-ERR-012). Chỉ hàng `Approved` cùng kỳ và **chưa được gộp** mới chảy vào bảng lương; lúc gộp bind kỳ (`consumed`) làm khoá chống cộng hai lần (SPEC-11 §13.3).
 
 ---
 
@@ -1670,8 +1709,14 @@ Hệ thống cần hỗ trợ các kênh sau:
 | NOTI-EVENT-017 | Được xếp lịch phỏng vấn | Interviewer (người tham gia lượt) |
 | NOTI-EVENT-018 | Ứng viên đổi stage cần xử lý | Recruiter phụ trách vị trí |
 | NOTI-EVENT-019 | Ứng viên trúng tuyển đã chuyển thành nhân viên | HR (user giữ role `hr` — SPEC-12 §17) |
+| NOTI-EVENT-020 | Bảng lương kỳ được gửi duyệt | Company Admin (người duyệt — SPEC-11 §17) |
+| NOTI-EVENT-021 | Bảng lương kỳ được duyệt | Người gửi duyệt (`submitted_by`) |
+| NOTI-EVENT-022 | Bảng lương kỳ bị từ chối | Người gửi duyệt (`submitted_by`), kèm lý do |
+| NOTI-EVENT-023 | Phiếu lương đã phát hành | Từng nhân viên có phiếu trong kỳ |
 
-> **Dải mở rộng hậu-MVP (đo 28–31/08/2026):** 001–009 là bộ MVP; GOAL/LMS/CHAT **không** cấp mã chuẩn (chỉ là mở rộng SPEC-08 §15). **010–012 cấp cho ASSET** (SPEC-13 §17), **013–015 cấp cho ROOM** (SPEC-14 §17) — wave S11-OFFICE; **016–019 cấp cho RECRUIT** (SPEC-12 §17) — wave S12-RECRUIT. Module sau lấy **020+** — đo lại bằng grep `NOTI-EVENT-0` trước khi cấp, không mặc định còn trống.
+> **Dải mở rộng hậu-MVP (đo 28–31/08/2026):** 001–009 là bộ MVP; GOAL/LMS/CHAT **không** cấp mã chuẩn (chỉ là mở rộng SPEC-08 §15). **010–012 cấp cho ASSET** (SPEC-13 §17), **013–015 cấp cho ROOM** (SPEC-14 §17) — wave S11-OFFICE; **016–019 cấp cho RECRUIT** (SPEC-12 §17) — wave S12-RECRUIT; **020–023 cấp cho PAYROLL** (SPEC-11 §17) — wave S13-PAYROLL. Module sau lấy **024+** — đo lại bằng grep `NOTI-EVENT-0` trước khi cấp, không mặc định còn trống.
+>
+> ⚠️ Payload của 020–023 **tuyệt đối không chứa số tiền** (SPEC-11 §17) — NOTI đi qua nhiều kênh và không có tầng masking riêng.
 
 ---
 
@@ -2055,7 +2100,12 @@ Chức năng chính:
 | HR           | LEAVE            | Nhân viên là người tạo đơn nghỉ        |
 | HR           | TASK             | Nhân viên được gán task                |
 | ATT          | LEAVE            | Ngày nghỉ ảnh hưởng bảng công          |
-| ATT          | PAYROLL          | Bảng công là dữ liệu tính lương        |
+| ATT          | PAYROLL          | Bảng công là dữ liệu tính lương; kỳ công phải `locked` trước khi tính, kỳ lương `Locked` khoá ngược đường chỉnh công (`ATT-ERR-024`) |
+| HR           | PAYROLL          | Nhân sự là đối tượng hưởng lương; PAYROLL đọc danh tính/đơn vị từ HR. Lương cơ bản dùng để **tính** nằm ở `salary_profiles` (SPEC-11), **không** phải `employee_profiles.base_salary` |
+| LEAVE        | PAYROLL          | Ngày nghỉ có lương / không lương (`leave_types.paid`) là đầu vào khấu trừ |
+| PAYROLL      | NOTI             | Gửi duyệt · duyệt/từ chối · phát hành phiếu lương tạo thông báo (`NOTI-EVENT-020..023`) |
+| PAYROLL      | DASH             | Widget «chi phí lương kỳ» (`PAYROLL-WIDGET-001`) — gác bằng cặp nhạy cảm + sàn scope Company |
+| PAYROLL      | ME               | «Phiếu lương của tôi» đọc-lại phiếu đã phát hành (Own) |
 | LEAVE        | NOTI             | Đơn nghỉ tạo thông báo duyệt           |
 | TASK         | NOTI             | Task tạo thông báo cho người liên quan |
 | HR           | DASH             | Dashboard lấy dữ liệu nhân sự          |

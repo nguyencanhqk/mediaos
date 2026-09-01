@@ -1,7 +1,7 @@
 # SPEC-14: ROOM — QUẢN LÝ PHÒNG HỌP (DANH MỤC PHÒNG · ĐẶT LỊCH · CHỐNG TRÙNG · HUỶ · NHẮC LỊCH · LỊCH SỬ SỬ DỤNG)
 
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
-> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-12 RECRUIT](<SPEC-12 RECRUIT.md>) · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · **SPEC-14 ROOM** · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
+> [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>) · [SPEC-10 GOAL](<SPEC-10 GOAL.md>) · [SPEC-11 PAYROLL](<SPEC-11 PAYROLL.md>) · [SPEC-12 RECRUIT](<SPEC-12 RECRUIT.md>) · [SPEC-13 ASSET](<SPEC-13 ASSET.md>) · **SPEC-14 ROOM** · [SPEC-15 CHAT](<SPEC-15 CHAT.md>)
 >
 > **Liên quan:** [Chỉ mục tài liệu](<../README.md>) · [DB-16 ROOM Database Design](<../DB/DB-16 ROOM Database Design.md>) · [Thiết kế API: API-15 ROOM](<../API Design/API-15_ROOM_API_Design.md>) · [Ma trận phân quyền §9e](<../permission-matrix-spec.md>) · [NOTI nền: SPEC-08](<SPEC-08 NOTI.md>) · [DASH: SPEC-07](<SPEC-07 DASH.md>) · [Kế hoạch wave: S11-OFFICE](<../plans/S11-OFFICE-WAVE.md>) · [Module anh em: SPEC-13 ASSET](<SPEC-13 ASSET.md>)
 >

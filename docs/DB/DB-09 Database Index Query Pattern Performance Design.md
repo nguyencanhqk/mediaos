@@ -840,6 +840,30 @@ Ghi chú riêng của RECRUIT:
 
 ---
 
+### 8.19 PAYROLL (`salary_profiles`, `payroll_periods`, `payroll_period_lines`, `payslips`, `payslip_items`, `bonus_penalties`, `payslip_acknowledgements`) · *Phase 2 — chưa thi công*
+
+> Chi tiết đầy đủ + DDL + **bản đồ reconcile**: [DB-13 PAYROLL Database Design §5/§6/§8](<DB-13 PAYROLL Database Design.md>). 6 bảng **reconcile** (di sản G12 `0091`–`0132`) + 1 bảng **mới** `payroll_period_lines`, migration `0564+` dự kiến (S13-PAYROLL-DB-1). Tóm tắt use case → index:
+
+| Use case | Index dùng |
+| --- | --- |
+| Danh sách kỳ lương lọc trạng thái/tháng (`PAYROLL-API-001`) | `payroll_periods_company_id_idx` · `payroll_periods_company_month_uq` |
+| Bảng lương nháp theo kỳ (`008`) · tổng chi phí widget (`018`) | `payroll_period_lines_company_period_idx` (`GROUP BY` một lần) |
+| Phiếu lương theo kỳ / theo người (`029`) · «phiếu của tôi» (`031`/`032`) | `payslips_company_period_user_idx` · `payslips_company_user_idx` |
+| Breakdown phiếu (`030`/`032`) | `payslip_items_company_payslip_idx` |
+| Hồ sơ lương **hiệu lực tại ngày X** (máy tính lương) | `salary_profiles_user_id_idx` (`(company_id, user_id)`) + `effective_date <= X ORDER BY effective_date DESC` |
+| Gộp thưởng/phạt khi tính (`period_month` + chưa consume) | `bonus_penalties_company_user_month_idx` · `bonus_penalties_company_status_idx` |
+| Xác nhận phiếu (`033`) | `payslip_acknowledgements_payslip_user_uq` |
+
+Ghi chú riêng của PAYROLL:
+
+- **Bốn unique là chốt cuối nghiệp vụ**, không chỉ là index: `payslips_period_user_uq` (1 phiếu / kỳ / người — race double-generate) · `payroll_periods_company_month_uq` (1 kỳ / tháng) · `salary_profiles_company_user_effective_uq` (1 phiên bản lương / người / ngày hiệu lực) · `payslip_acknowledgements_payslip_user_uq` (1 xác nhận / phiếu / người). Race ⇒ `23505` (bóc từ `error.cause` — drizzle bọc) ⇒ service map 409 (PAYROLL-ERR-006/008/014/015), **không 500**.
+- **`payslips_period_user_uq` là UNIQUE THẲNG**, không còn partial `WHERE entry_kind='original'` — v1 gỡ chuỗi `adjustment`/`void` (DB-13 §5.3).
+- **Máy tính lương chạy set-based**: một câu lệnh SQL cho cả kỳ, **không** vòng lặp per-người ở JS; tiền là `numeric(18,2)`, pro-rate/làm tròn/`GREATEST(gross − deduction, 0)` **ở SQL** (`clamp-must-be-sql-not-js`).
+- **Đừng assert `Index Scan` trong test**: `FORCE RLS` giấu biểu thức không-leakproof khỏi `Index Cond` và planner đổi kế hoạch theo số hàng (`rls-force-hides-nonleakproof-expr-from-index-cond` · `pg-planner-index-assert-trap` · `idx-scan-zero-is-not-unused`).
+- Cô lập tenant ép ở RLS + FORCE; mọi index dẫn đầu bằng `company_id`. Own-scope phiếu lương ép ở **service** (`payslips.user_id` = caller **và** kỳ ∈ `Paid`/`Locked`).
+
+---
+
 ## 9. Index cho AUTH / DB-02
 
 ### 9.1 `users`

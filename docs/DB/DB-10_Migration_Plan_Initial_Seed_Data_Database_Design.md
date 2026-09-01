@@ -628,11 +628,13 @@ Secret phải lấy từ environment variable hoặc secret manager.
 
 > **RECRUIT (SPEC-12 · DB-14) — ĐÃ SEED 31/08/2026 (`S12-RECRUIT-DB-1`, mig `0559` DDL · `0560` role/quyền/audit · `0561` NOTI):** module tuyển dụng, **8 bảng mới** (`job_openings` · `candidates` · `candidate_stage_events` · `candidate_notes` · `interviews` · `interview_participants` · `interview_feedbacks` · `offers`), migration `0559+` dự kiến — đọc `_journal.json` thật lúc chạy. Seed đi kèm: hàng module `RECRUIT` **đã pre-seed inactive từ `0435`** ⇒ migration chỉ **verify tồn tại và GIỮ `is_active=false`** (bật ở `S12-RECRUIT-FE-1` bằng UPDATE tường minh + gỡ pin `EXTENSION_INACTIVE_MODULES` cùng commit — khuôn `0556`/`0557`) + **role hệ thống `recruiter`** (`company_id NULL`, `is_system=true`, `requires_two_factor=false` tường minh; **không** canonical) + **16 cặp** permission (§12.11 — **7 cặp resource `candidate` `is_sensitive=TRUE`**, 9 cặp false) + grant per-pair data_scope **42 hàng** (permission-matrix §9f; verify fail-loud) + **UNION-ADD 4 giá trị** `'job_opening'` · `'candidate'` · `'interview'` · `'offer'` vào CHECK `audit_logs.object_type` (khuôn `0545`) + seed NOTI **4 event** (`RECRUIT_JOB_ASSIGNED` · `RECRUIT_INTERVIEW_SCHEDULED` · `RECRUIT_STAGE_CHANGED` · `RECRUIT_CANDIDATE_HIRED`; `notification_type='Recruit'`, `dedupe_strategy='DedupeKey'`) với nới CHECK trên **CẢ HAI** bảng `notification_events` **VÀ** `notifications`. ⚠️ **KHÔNG seed counter mới**: convert dùng lại `employee_code` của HR (ensure-on-miss). `cleanupTenants()` thêm 8 bảng con→cha **trước dòng `DELETE FROM users`**. Chi tiết kế hoạch migration: DB-14 §9.
 
+> **PAYROLL (SPEC-11 · DB-13) — Phase 2, CHƯA seed (wave S13-PAYROLL, owner duyệt 31/08/2026):** module tiền lương. **KHÔNG phải nền trắng — RECONCILE:** 6 bảng di sản G12 (`salary_profiles` · `payroll_periods` · `payslips` · `payslip_items` · `bonus_penalties` · `payslip_acknowledgements`, mig `0091`–`0132`) được ALTER bằng migration MỚI (`0564+` dự kiến — đọc `_journal.json` thật lúc chạy; **band di sản `0091`–`0180` bất khả xâm phạm**) + **1 bảng MỚI** `payroll_period_lines`. Seed đi kèm: hàng module `PAYROLL` **đã pre-seed inactive từ `0435`** ⇒ migration chỉ **verify tồn tại và GIỮ `is_active=false`** (guard forward-compatible; bật ở `S13-PAYROLL-FE-1` bằng UPDATE tường minh + gỡ pin `EXTENSION_INACTIVE_MODULES` cùng commit — khuôn `0556`/`0562`) + **role hệ thống `payroll-officer`** (`…0015`, `company_id NULL`, `is_system=true`, **`requires_two_factor=TRUE`** — khác tiền lệ `recruiter`/`asset-manager`/`office-admin` vốn `false`; **không** canonical) + ⚠️ **THU HỒI 16 cặp quyền lương DI SẢN + mọi grant TRƯỚC khi seed cặp mới** (§12.12 — 19 cặp / 5 migration `0005`/`0092`/`0097`/`0099`/`0132`/`0180`; trong đó `approve-payroll-period` và `publish-payroll-period` để `is_sensitive=false` nên **ăn theo wildcard**, và 4 cặp `payslip` của `0005` đã bị blanket-grant) + **17 cặp** permission mới (§12.12 — **13 cặp `is_sensitive=TRUE`**, 4 cặp false) + grant per-pair data_scope **32 hàng** (permission-matrix §9g; verify fail-loud, **`hr-manager` = 0 cặp PAYROLL**) + **UNION-ADD chỉ giá trị CÒN THIẾU** trong `'payroll_period'`/`'salary_profile'`/`'bonus_penalty'`/`'payslip'` vào CHECK `audit_logs.object_type` (**4 giá trị này đã có sẵn từ band G12** `0090`/`0093`/`0099` — ĐO trước, đủ cả 4 thì bước này NO-OP có chủ đích) + seed NOTI **4 event** (`PAYROLL_PERIOD_SUBMITTED` · `PAYROLL_PERIOD_APPROVED` · `PAYROLL_PERIOD_REJECTED` · `PAYSLIP_PUBLISHED`; `notification_type='Payroll'`, `dedupe_strategy='DedupeKey'`) với nới CHECK trên **CẢ HAI** bảng `notification_events` **VÀ** `notifications`. ⚠️ **KHÔNG seed counter mới** (PAYROLL không có mã tự sinh). `cleanupTenants()` thêm `payroll_period_lines` con→cha **trước dòng `DELETE FROM users`**. ⚠️ **ĐO TRƯỚC KHI ALTER**: `count(*)` 6 bảng (kỳ vọng 0 — **≠ 0 ⇒ DỪNG, báo người**) + `pg_catalog` + `permissions ⋈ role_permissions` trên DB THẬT (GRANT migration cũ ≠ hiện trạng). Chi tiết kế hoạch migration + **bản đồ reconcile từng bảng**: DB-13 §5/§10.
+
 ### 10.2 Module phase sau inactive
 
 | Module code | Tên module | Phase | Active |
 | --- | --- | --- | --- |
-| PAYROLL | Tiền lương | Phase 2 | false |
+| PAYROLL | Tiền lương | Phase 2 | false — hàng pre-seed từ `0435`; **`0565` (S13-PAYROLL-DB-1) GIỮ false** (pin `migration-smoke`); bật `true` ở **S13-PAYROLL-FE-1** bằng `UPDATE` tường minh + gỡ `PAYROLL` khỏi `EXTENSION_INACTIVE_MODULES` cùng commit |
 | RECRUIT | Tuyển dụng | Phase 2 | false — hàng pre-seed từ `0435`; **`0560` (S12-RECRUIT-DB-1) GIỮ false** (pin `migration-smoke`); bật `true` ở **S12-RECRUIT-FE-1** bằng `UPDATE` tường minh + gỡ `RECRUIT` khỏi `EXTENSION_INACTIVE_MODULES` cùng commit |
 | ASSET | Quản lý tài sản | Phase 3 | false — **`0550` (S11-ASSET-DB-1) GIỮ false** (tiền lệ `0538` CHAT: chưa có endpoint thì không bật; pin `migration-smoke`); bật `true` ở **S11-ASSET-FE-1** bằng `UPDATE` tường minh + gỡ `ASSET` khỏi `EXTENSION_INACTIVE_MODULES` cùng commit |
 | ROOM | Quản lý phòng họp | Phase 3 | **false** (giữ sau S11-ROOM-DB-1 — mig `0554` chỉ verify; bật ở S11-ROOM-FE-1 + gỡ pin smoke cùng commit) |
@@ -924,6 +926,32 @@ Secret phải lấy từ environment variable hoặc secret manager.
 
 > Grant: `employee` 0 · `manager` 3 (`access`@Own · `view:interview`@Own · `feedback`@Own) · `hr` 7 (`access`@Own · 4 cặp `view`@Company · `convert`@Company · `feedback`@Own) · `company-admin` và role mới **`recruiter`** cả 16 (`access`@Own · `feedback`@Own · 14 cặp @Company) = **42 hàng**. `super-admin` không enumerate. Cặp **S** (sensitive) khai allowlist capability BACKEND ở WO BE.
 
+### 12.12 PAYROLL permissions *(Phase 2 — CHƯA seed, wave S13-PAYROLL; `S13-PAYROLL-DB-1`)*
+
+| Mã hiển thị | Cặp engine `(action, resource_type)` | Ý nghĩa |
+| --- | --- | --- |
+| `PAYROLL.ACCESS` | `('access','payroll')` | Cổng nav menu Tiền lương |
+| `PAYROLL.PERIOD.VIEW` | `('view','payroll-period')` | Xem danh sách/chi tiết kỳ — **không số tiền** |
+| `PAYROLL.PERIOD.MANAGE` | `('manage','payroll-period')` | Tạo kỳ · cấu hình · gắn kỳ công · khoá kỳ |
+| `PAYROLL.PERIOD.VIEW-LINE` | `('view-line','payroll-period')` **S** | **Đọc dòng bảng lương (có tiền)** + tổng chi phí + vế đọc export — cặp ĐỌC thuần |
+| `PAYROLL.PERIOD.CALCULATE` | `('calculate','payroll-period')` **S** | Gom đầu vào · tính · điều chỉnh · gửi duyệt (**ghi**) |
+| `PAYROLL.PERIOD.APPROVE` | `('approve','payroll-period')` **S** | Duyệt/từ chối — **KHÔNG gán `payroll-officer`** (four-eyes) |
+| `PAYROLL.PERIOD.PUBLISH` | `('publish','payroll-period')` **S** | Sinh phiếu lương + phát hành |
+| `PAYROLL.PERIOD.REOPEN` | `('reopen','payroll-period')` **S** | Mở lại kỳ (lý do + audit) |
+| `PAYROLL.SALARY.VIEW` | `('view','salary-profile')` **S** | Xem hồ sơ lương + lịch sử phiên bản |
+| `PAYROLL.SALARY.MANAGE` | `('manage','salary-profile')` **S** | Tạo phiên bản mới · sửa · xoá mềm |
+| `PAYROLL.BONUS.VIEW` | `('view','bonus-penalty')` **S** | Xem thưởng/phạt/khấu trừ |
+| `PAYROLL.BONUS.MANAGE` | `('manage','bonus-penalty')` **S** | Tạo · sửa khi `Pending` · xoá mềm |
+| `PAYROLL.BONUS.APPROVE` | `('approve','bonus-penalty')` **S** | Duyệt/từ chối (chặn tự duyệt ở service) |
+| `PAYROLL.EXPORT` | `('export','payroll')` **S** | Export XLSX bảng lương + audit |
+| `PAYROLL.PAYSLIP.VIEW` | `('view-payslip','payslip')` **S** *(di sản `0097` — GIỮ)* | Xem phiếu lương của người khác |
+| `PAYROLL.PAYSLIP.VIEW-OWN` | `('view-own-payslip','payslip')` **S** *(di sản `0180` — GIỮ)* | Xem phiếu lương của mình |
+| `PAYROLL.PAYSLIP.ACK-OWN` | `('acknowledge-own-payslip','payslip')` *(di sản `0132` — GIỮ)* | Xác nhận phiếu lương của mình |
+
+> Grant: `employee` **3** (`access`@Own · `view-own-payslip`@Own · `acknowledge-own-payslip`@Own) · `manager` **0** · `hr` **0** · `hr-manager` **0** · role mới **`payroll-officer`** **14** (`access`@Own + 13 cặp @Company, **KHÔNG** `approve:payroll-period`) · `company-admin` **15** (`access`@Own + 14 cặp @Company) = **32 hàng**. `super-admin` không enumerate. **13 cặp S** (sensitive) khai allowlist capability BACKEND ở WO BE. Verify fail-loud thêm: **mọi role giữ `approve:payroll-period` đều giữ `view-line:payroll-period`** (kẻo người duyệt «duyệt mù»).
+>
+> ⚠️ **THU HỒI TRƯỚC, SEED SAU — trên CẢ BA bảng `permissions`/`role_permissions`/`object_permissions`** (`object_permissions.permission_id` là `ON DELETE CASCADE`, xoá cặp cascade âm thầm ⇒ ĐO trước, xoá tường minh). 19 cặp quyền lương di sản nằm ở `0005`/`0092`/`0097`/`0099`/`0132`/`0180` — **16 cặp bị GỠ** (kèm mọi grant), **3 cặp họ `payslip` GIỮ nguyên tên** (`view-payslip` · `view-own-payslip` · `acknowledge-own-payslip`). Hai lỗ đã đo: `approve-payroll-period`/`publish-payroll-period` (`0132`) để `is_sensitive=false` ⇒ **kế thừa được qua wildcard**; 4 cặp `payslip` của `0005` (gồm `('update','payslip')` mâu thuẫn bất biến #2) đã **blanket-grant**. Bản đồ đầy đủ + trình tự: **permission-matrix §9g.1** · SPEC-11 §11.2. Verify fail-loud: `hr-manager` = **0 cặp PAYROLL**, 16 cặp GỠ = **0 hàng** ở cả `permissions` và `role_permissions`. Cặp `('view-salary','employee')` (`0019`, domain HR) **KHÔNG đụng tới**.
+
 ---
 
 ## 13. Seed roles và role-permission matrix
@@ -938,7 +966,7 @@ Secret phải lấy từ environment variable hoặc secret manager.
 | `MANAGER` | Manager | Company | company_id | Quản lý team, duyệt đơn, giao task |
 | `EMPLOYEE` | Employee | Company | company_id | Nhân viên sử dụng hệ thống hằng ngày |
 | `PROJECT_MANAGER` | Project Manager | Company | company_id | Quản lý dự án được phân công |
-| `PAYROLL_OFFICER` | Payroll Officer | Company | company_id | Phase 2, xem dữ liệu tính lương |
+| `PAYROLL_OFFICER` | Payroll Officer | Company | company_id | ⚠️ **0 cặp ngoài PAYROLL** (Phương án B — KHÔNG có HR/ATT/LEAVE view; danh bạ nhân sự và danh sách kỳ công đi qua picker `PAYROLL-API-034/035`). Phase 2 — role hệ thống `payroll-officer` (`…0015`, `company_id NULL`, `is_system=true`, **`requires_two_factor=true`**, KHÔNG canonical). Vận hành lương đầy đủ **trừ duyệt bảng lương** (four-eyes — PAY-DEC-007). Seed ở `S13-PAYROLL-DB-1` |
 
 ### 13.2 Scope chuẩn
 
@@ -976,7 +1004,7 @@ Secret phải lấy từ environment variable hoặc secret manager.
 | MANAGER | HR view team, ATT view/approve team, LEAVE approve team, TASK team/project, DASH manager | Team/Project |
 | EMPLOYEE | AUTH profile, HR own, ATT own, LEAVE own, TASK assigned, NOTI own, DASH own | Own |
 | PROJECT_MANAGER | TASK project manage, TASK report project, NOTI own, DASH project | Project |
-| PAYROLL_OFFICER | HR limited, ATT view, LEAVE view, PAYROLL phase sau | Company |
+| PAYROLL_OFFICER | **PAYROLL only** — 14 cặp @Company (không `approve:payroll-period`, four-eyes). ⚠️ **KHÔNG** HR/ATT/LEAVE view (Phương án B): tham chiếu nhân sự & kỳ công đi qua picker `PAYROLL-API-034/035` | Company |
 
 ---
 
@@ -1164,8 +1192,14 @@ Urgent
 | `RECRUIT_INTERVIEW_SCHEDULED` | RECRUIT | Interviewer được xếp lịch phỏng vấn (Phase 2) |
 | `RECRUIT_STAGE_CHANGED` | RECRUIT | Ứng viên đổi stage — báo recruiter phụ trách (Phase 2) |
 | `RECRUIT_CANDIDATE_HIRED` | RECRUIT | Ứng viên trúng tuyển đã convert — báo HR qua `user_roles` (Phase 2) |
+| `PAYROLL_PERIOD_SUBMITTED` | PAYROLL | Bảng lương kỳ gửi duyệt — báo `company-admin` qua `user_roles` (Phase 2 — seed ở S13-PAYROLL-DB-1, SPEC-08 §15.10) |
+| `PAYROLL_PERIOD_APPROVED` | PAYROLL | Bảng lương kỳ được duyệt — báo `submitted_by` (Phase 2) |
+| `PAYROLL_PERIOD_REJECTED` | PAYROLL | Bảng lương kỳ bị từ chối (kèm lý do) — báo `submitted_by` (Phase 2) |
+| `PAYSLIP_PUBLISHED` | PAYROLL | Phiếu lương đã phát hành — báo từng nhân sự có phiếu (Phase 2) |
 
-> 3 event ASSET cần `module_code='ASSET'` + `notification_type='Asset'`; 3 event ROOM cần `module_code='ROOM'` + `notification_type='Room'`; 4 event RECRUIT cần `module_code='RECRUIT'` + `notification_type='Recruit'` ⇒ nới CHECK trên **cả hai** bảng `notification_events` và `notifications` cùng migration (DB-15 §9 bước C · DB-16 §9 bước C · DB-14 §9 bước C), `dedupe_strategy='DedupeKey'`.
+> 3 event ASSET cần `module_code='ASSET'` + `notification_type='Asset'`; 3 event ROOM cần `module_code='ROOM'` + `notification_type='Room'`; 4 event RECRUIT cần `module_code='RECRUIT'` + `notification_type='Recruit'`; **4 event PAYROLL cần `module_code='PAYROLL'` + `notification_type='Payroll'`** ⇒ nới CHECK trên **cả hai** bảng `notification_events` và `notifications` cùng migration (DB-15 §9 bước C · DB-16 §9 bước C · DB-14 §9 bước C · **DB-13 §10 bước C**), `dedupe_strategy='DedupeKey'`.
+>
+> ⚠️ Payload 4 event PAYROLL **tuyệt đối không chứa số tiền** (SPEC-11 §17) — NOTI đi qua nhiều kênh và không có tầng masking riêng.
 
 ### 15.2 Template mẫu
 

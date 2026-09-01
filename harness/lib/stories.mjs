@@ -45,6 +45,7 @@ const EPIC_MODULE = {
   17: "ASSET", // SPEC-13 — wave S11-OFFICE (IMP02 §8.18, bổ sung 2026-08-28)
   18: "ROOM", // SPEC-14 — wave S11-OFFICE (IMP02 §8.19, bổ sung 2026-08-29)
   19: "RECRUIT", // SPEC-12 — wave S12-RECRUIT (IMP02 §8.20, bổ sung 2026-08-31)
+  20: "PAYROLL", // SPEC-11 — wave S13-PAYROLL (IMP02 §8.21, bổ sung 2026-08-31)
 };
 
 // Sprint của 1 story theo IMPLEMENTATION-02 §9 (story trọng tâm mỗi sprint, không chỉ theo epic).
@@ -61,6 +62,7 @@ function sprintOfStory(n) {
   if (n === 132 || inR(141, 152)) return "S7"; // 132 = tab Mục tiêu trong dự án (giao ở S7) · 141-152 = wave CHAT
   if (inR(153, 170)) return "S11"; // 153-162 EPIC-17 ASSET · 163-170 EPIC-18 ROOM — wave S11-OFFICE (IMP02 §9 Sprint 11)
   if (inR(171, 180)) return "S12"; // 171-180 EPIC-19 RECRUIT — wave S12-RECRUIT (IMP02 §9 Sprint 12)
+  if (inR(181, 190)) return "S13"; // 181-190 EPIC-20 PAYROLL — wave S13-PAYROLL (IMP02 §9 Sprint 13)
   return "?";
 }
 
@@ -213,6 +215,19 @@ const STORY_WO_OVERRIDE = {
   178: ["S12-RECRUIT-BE-1", "S12-RECRUIT-QA-1"], // convert 1 bước (race double-convert)
   179: ["S12-RECRUIT-DB-1", "S12-RECRUIT-BE-1", "S12-RECRUIT-QA-1"], // masking PII + deny-path + audit
   180: ["S12-RECRUIT-DASH-1"], // widget DASH phễu tuyển dụng
+
+  // ── EPIC-20 PAYROLL (IMP02 §8.21) — wave S13-PAYROLL, bổ sung 2026-08-31 ──────
+  //    WO S13-PAYROLL-* không trỏ IMP02-STORY trong src[] (seed trước khi có story) ⇒ map tay ở đây.
+  181: ["S13-PAYROLL-DB-1", "S13-PAYROLL-BE-1", "S13-PAYROLL-FE-1"], // hồ sơ lương versioned
+  182: ["S13-PAYROLL-BE-1", "S13-PAYROLL-FE-1"], // thưởng/phạt theo kỳ (trạng thái duyệt)
+  183: ["S13-PAYROLL-DB-1", "S13-PAYROLL-BE-1", "S13-PAYROLL-FE-1"], // kỳ lương FSM 7 trạng thái + cảnh báo thiếu
+  184: ["S13-PAYROLL-BE-1"], // gom đầu vào công/phép per nhân sự
+  185: ["S13-PAYROLL-BE-2", "S13-PAYROLL-QA-1"], // máy tính lương SQL + snapshot đóng băng
+  186: ["S13-PAYROLL-BE-2", "S13-PAYROLL-FE-1", "S13-PAYROLL-QA-1"], // duyệt four-eyes + lock/reopen
+  187: ["S13-PAYROLL-BE-2", "S13-PAYROLL-FE-1", "S13-PAYROLL-QA-1"], // phiếu lương + Own + ack
+  188: ["S13-PAYROLL-BE-2"], // export XLSX + audit
+  189: ["S13-PAYROLL-DB-1", "S13-PAYROLL-BE-1", "S13-PAYROLL-QA-1"], // masking + thu hồi quyền di sản + audit
+  190: ["S13-PAYROLL-DASH-1"], // widget DASH chi phí lương kỳ
 };
 
 // Vite dev port mỗi app (apps/*/vite.config.ts) → link "chạy thử" FE.

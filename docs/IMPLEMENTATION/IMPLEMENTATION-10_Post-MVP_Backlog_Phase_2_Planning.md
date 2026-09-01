@@ -694,7 +694,7 @@ Trước khi code Phase 2, cần triển khai bộ tài liệu sau:
 | Tài liệu | Mục tiêu | Priority |
 | --- | --- | --- |
 | DB-12 Phase 2 Database Overview | Tổng quan database Phase 2 | P0 |
-| DB-13 PAYROLL Database Design | Bảng payroll, payslip, salary components | P0 |
+| DB-13 PAYROLL Database Design | Bảng payroll, payslip, salary components — **✅ đã viết 31/08/2026** ([DB-13](<../DB/DB-13 PAYROLL Database Design.md>), wave S13-PAYROLL; SPEC = [SPEC-11](<../SPEC/SPEC-11 PAYROLL.md>), API = **API-18** vì API-13 vốn dự định cho PAYROLL đã bị CHAT chiếm — PAY-DEC-001). **RECONCILE 6 bảng di sản G12**, không phải nền trắng | P0 |
 | DB-14 RECRUIT Database Design | Bảng job, candidate, pipeline, interview — **✅ đã viết 31/08/2026** ([DB-14](<../DB/DB-14 RECRUIT Database Design.md>), wave S12-RECRUIT; SPEC = [SPEC-12](<../SPEC/SPEC-12 RECRUIT.md>), API = **API-17** vì API-14/15/16 đã bị ASSET/ROOM/Permission-Audit chiếm — REC-DEC-001) | P0 |
 | DB-15 Phase 2 Index & Performance | Index/query cho payroll/recruit | P1 |
 | DB-16 Phase 2 Migration & Seed | Migration/seed role/permission/module | P0 |
