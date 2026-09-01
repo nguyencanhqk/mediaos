@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-08-31 16:21Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-01 01:40Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -22,7 +22,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 32
+- **branch**: `master` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 230 — `0563_s12recruitdash1_widget_recruit_funnel` (231 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -31,6 +31,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `fc537168` | 2026-09-01 | docs(payroll): S13-PAYROLL-DOC-1 — bộ tài liệu PAYROLL (SPEC-11 · DB-13 · API-18 · §9g), plan-reviewer 3 vòng (#454) |
 | `a080c83c` | 2026-08-31 | chore(gov): seed wave S13-PAYROLL — 7 WO Phase 2 tiền lương + hồ sơ duyệt HTML, owner đã duyệt 31/08 (#453) |
 | `b642d86d` | 2026-08-31 | chore(harness): đính chính bàn giao — lane recruitdash1 đã drop |
 | `86d6ee75` | 2026-08-31 | chore(harness): đóng S12-RECRUIT-DASH-1 (#452) — đóng wave S12-RECRUIT, bàn giao phiên |
@@ -42,7 +43,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `c687c524` | 2026-08-31 | feat(recruit): S12-RECRUIT-DB-1 — nền dữ liệu RECRUIT theo DB-14 (mig 0559–0561) (#448) |
 | `0db6d4a3` | 2026-08-31 | docs(recruit): S12-RECRUIT-DOC-1 — bộ tài liệu RECRUIT (SPEC-12 · DB-14 · API-17 · §9f), plan-reviewer PASS 2 vòng (#447) |
 | `f524fb9f` | 2026-08-31 | chore(gov): seed wave S12-RECRUIT — 6 WO Phase 2 tuyển dụng + hồ sơ duyệt HTML, owner đã duyệt 31/08 (#446) |
-| `5ef35bc7` | 2026-08-31 | fix(gov): S10-GOV-IDUNIQUE-1 nối tiếp — C4 phủ 15 họ số hiệu docs + vá API-10/DEVOPS-10 trùng số (KI-079) (#445) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
