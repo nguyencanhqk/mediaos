@@ -21,4 +21,23 @@ export class OutboxService {
       .returning({ id: outboxEvents.id });
     return row.id;
   }
+
+  /**
+   * S13-PAYROLL-BE-2 (additive) — chèn NHIỀU event trong MỘT câu lệnh.
+   *
+   * Dùng khi một hành động nghiệp vụ phát N event cùng lúc (`publish` một kỳ lương 500 người phát 500
+   * `PAYSLIP_PUBLISHED`): 500 lượt `enqueue` là 500 round-trip nằm trong transaction nghiệp vụ đang
+   * giữ row-lock trên kỳ.
+   *
+   * ⚠️ Outbox **KHÔNG FIFO** (worker lấy theo `available_at` + khoá hàng, `RETURNING` không giữ thứ
+   * tự chèn) — không consumer/test nào được assert thứ tự phát, kể cả khi chèn một lô.
+   */
+  async enqueueMany(tx: TenantTx, events: readonly NewEvent[]): Promise<string[]> {
+    if (events.length === 0) return [];
+    const rows = await tx
+      .insert(outboxEvents)
+      .values(events.map((e) => ({ eventType: e.eventType, payload: e.payload })))
+      .returning({ id: outboxEvents.id });
+    return rows.map((r) => r.id);
+  }
 }

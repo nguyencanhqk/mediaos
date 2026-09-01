@@ -83,6 +83,7 @@ import { PcrApproverAudienceReader } from "./pcr-approver-audience.reader";
 import { HrPcrNotiBridgeRegistrar } from "./hr-pcr-noti-bridge.registrar";
 // S12-RECRUIT-BE-1 (additive): reader raw-SQL + registrar 4 mapping RECRUIT (seed 0561) — KHÔNG
 // import RecruitModule (acyclic, tiền lệ GOAL/ASSET/ROOM). dedupeKeyOf content-derived cả 4.
+import { PayrollNotiBridgeRegistrar } from "./payroll-noti-bridge.registrar";
 import { RecruitAudienceReader } from "./recruit-audience.reader";
 import { RecruitNotiBridgeRegistrar } from "./recruit-noti-bridge.registrar";
 // S5-LMS-NOTI-1 (additive): đường intake cho caller MÁY ngoài tiến trình api (LMS/fmc-app) —
@@ -161,6 +162,7 @@ import { LmsServiceIntakeGuard } from "./lms-service-intake.guard";
     // S12-RECRUIT-BE-1 (additive):
     RecruitAudienceReader,
     RecruitNotiBridgeRegistrar,
+    PayrollNotiBridgeRegistrar,
     // S7-CHAT-BE-6 (additive): reader + registrar CHAT đăng ký 2 consumer lên EventBus (@Global
     // EventsModule) tại boot qua CÙNG OutboxNotificationBridge INT-1 ở trên (KHÔNG re-provide bridge).
     ChatAudienceReader,

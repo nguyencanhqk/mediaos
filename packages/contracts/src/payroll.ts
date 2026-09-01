@@ -344,6 +344,28 @@ export const adjustPayrollLineSchema = z
   });
 export type AdjustPayrollLineRequest = z.infer<typeof adjustPayrollLineSchema>;
 
+/**
+ * `GET /payroll-periods/{id}/lines` (008) — phân trang + lọc theo nhân sự.
+ *
+ * ⚠️ CỐ Ý KHÔNG có `q` (tìm theo TÊN). Tên người là cột danh tính đã CHIẾU qua
+ * `PayrollPeopleRepository` (SPEC-11 §18) nên chỉ có sau khi đã bọc: lọc trước khi bọc là đọc
+ * `users.full_name` trần (vỡ ratchet identity-projection), lọc sau khi bọc thì `pagination.total`
+ * đếm một tập còn `data` là tập khác — phân trang sai IM LẶNG. FE lọc theo người bằng `userId`
+ * (lấy từ picker 034). Export (017) KHÔNG phân trang nên ở đó `q` an toàn.
+ */
+export const payrollLineListQuerySchema = z.object({
+  userId: z.string().uuid().optional(),
+  ...payrollPageQuery,
+});
+export type PayrollLineListQuery = z.infer<typeof payrollLineListQuerySchema>;
+
+/** `GET /payroll-periods/{id}/export` (017) — KHÔNG phân trang (trần 10.000 dòng ⇒ 422 `016`). */
+export const payrollExportQuerySchema = z.object({
+  /** Lọc theo tên/mã NV — áp SAU khi đã chiếu danh tính, an toàn vì route này không phân trang. */
+  q: z.string().trim().min(1).max(100).optional(),
+});
+export type PayrollExportQuery = z.infer<typeof payrollExportQuerySchema>;
+
 /** Tổng chi phí kỳ — gác bằng `('view-line','payroll-period')` + SÀN scope Company (§9g). */
 export const payrollSummarySchema = z.object({
   payrollPeriodId: z.string().uuid(),
@@ -407,11 +429,34 @@ export const payslipItemSchema = z.object({
 });
 export type PayslipItemDto = z.infer<typeof payslipItemSchema>;
 
+/**
+ * `GET /payslips` (029) — API-18 §6.2 bắt phân trang cho danh sách này; bản BE-1 khai thiếu
+ * `page`/`per_page` nên client không lật được trang ở kỳ 500 người.
+ */
 export const payslipListQuerySchema = z.object({
   payrollPeriodId: z.string().uuid().optional(),
   userId: z.string().uuid().optional(),
+  ...payrollPageQuery,
 });
 export type PayslipListQuery = z.infer<typeof payslipListQuerySchema>;
+
+/** `GET /me/payslips` (031) — Own scope; chỉ phiếu của kỳ ĐÃ phát hành (`Paid`/`Locked`, §13.2). */
+export const mePayslipListQuerySchema = z.object({
+  payrollPeriodId: z.string().uuid().optional(),
+  ...payrollPageQuery,
+});
+export type MePayslipListQuery = z.infer<typeof mePayslipListQuerySchema>;
+
+/**
+ * Chi tiết phiếu (030 · 032) = phiếu + breakdown. `items` đi CÙNG cổng mask với các trường tiền của
+ * phiếu: caller không giữ cặp chở-tiền thì `amount`/`meta` của từng dòng cũng vắng khoá.
+ */
+export const payslipDetailSchema = payslipSchema.extend({
+  items: z.array(payslipItemSchema),
+  /** Thời điểm chính chủ xác nhận — `null` khi chưa xác nhận (bảng ack KHÔNG có cột trạng thái). */
+  acknowledgedAt: z.string().datetime().nullable(),
+});
+export type PayslipDetailDto = z.infer<typeof payslipDetailSchema>;
 
 /**
  * Xác nhận phiếu lương của mình — không cần body. Hàng tồn tại = đã xác nhận (bảng KHÔNG có cột trạng thái).

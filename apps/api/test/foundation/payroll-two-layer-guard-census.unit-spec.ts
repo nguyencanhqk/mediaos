@@ -32,7 +32,7 @@ import { collectRoutes, type RouteInfo } from "./route-census";
 
 const SRC_PAYROLL = path.join(__dirname, "..", "..", "src", "payroll");
 
-/** 18 route của BE-1 (`001..006` · `019..028` · `034..035`). */
+/** 35 route — BE-1 (`001..006` · `019..028` · `034..035`) + BE-2 (`007..018` · `029..033`). */
 const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: PayrollRouteKey }> = [
   { method: "GET", path: "/api/v1/payroll-periods", key: "periodList" },
   { method: "POST", path: "/api/v1/payroll-periods", key: "periodCreate" },
@@ -40,6 +40,30 @@ const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: PayrollRo
   { method: "GET", path: "/api/v1/payroll-periods/:id/readiness", key: "periodReadiness" },
   { method: "GET", path: "/api/v1/payroll-periods/:id", key: "periodDetail" },
   { method: "PATCH", path: "/api/v1/payroll-periods/:id", key: "periodUpdate" },
+  // ── S13-PAYROLL-BE-2 ──
+  // `summary` là route TĨNH dưới cùng basePath với `:id` — controller khai nó TRƯỚC, nếu không Nest
+  // nuốt thành `:id` rồi trả 400 «không phải UUID» (bài học `goals/tree`).
+  { method: "GET", path: "/api/v1/payroll-periods/summary", key: "periodSummary" },
+  { method: "POST", path: "/api/v1/payroll-periods/:id/calculate", key: "periodCalculate" },
+  { method: "GET", path: "/api/v1/payroll-periods/:id/lines", key: "periodLines" },
+  { method: "GET", path: "/api/v1/payroll-periods/:id/export", key: "periodExport" },
+  { method: "PATCH", path: "/api/v1/payroll-periods/:id/lines/:lineId", key: "periodAdjustLine" },
+  { method: "POST", path: "/api/v1/payroll-periods/:id/submit", key: "periodSubmit" },
+  { method: "POST", path: "/api/v1/payroll-periods/:id/approve", key: "periodApprove" },
+  { method: "POST", path: "/api/v1/payroll-periods/:id/reject", key: "periodReject" },
+  {
+    method: "POST",
+    path: "/api/v1/payroll-periods/:id/generate-payslips",
+    key: "periodGeneratePayslips",
+  },
+  { method: "POST", path: "/api/v1/payroll-periods/:id/publish", key: "periodPublish" },
+  { method: "POST", path: "/api/v1/payroll-periods/:id/lock", key: "periodLock" },
+  { method: "POST", path: "/api/v1/payroll-periods/:id/reopen", key: "periodReopen" },
+  { method: "GET", path: "/api/v1/payslips", key: "payslipList" },
+  { method: "GET", path: "/api/v1/payslips/:id", key: "payslipDetail" },
+  { method: "GET", path: "/api/v1/me/payslips", key: "mePayslipList" },
+  { method: "GET", path: "/api/v1/me/payslips/:id", key: "mePayslipDetail" },
+  { method: "POST", path: "/api/v1/me/payslips/:id/acknowledge", key: "mePayslipAck" },
   { method: "GET", path: "/api/v1/salary-profiles", key: "salaryProfileList" },
   { method: "POST", path: "/api/v1/salary-profiles", key: "salaryProfileCreate" },
   { method: "GET", path: "/api/v1/salary-profiles/:id", key: "salaryProfileDetail" },
@@ -62,6 +86,8 @@ const PAYROLL_CONTROLLERS = new Set([
   "PayrollPeriodsController",
   "SalaryProfilesController",
   "BonusPenaltiesController",
+  "PayslipsController",
+  "MePayslipsController",
   "PayrollPickersController",
 ]);
 
@@ -87,6 +113,27 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   // mang HAI key. Đó là hình dạng ĐÚNG, không phải thiếu pin: hai route dùng CÙNG resource
   // `bonus-penalty` + CÙNG action `approve`, chỉ khác đích FSM.
   "BonusPenaltiesService#decide": ["bonusPenaltyApprove", "bonusPenaltyReject"],
+  // ── S13-PAYROLL-BE-2 ──
+  "PayrollCalcService#calculate": ["periodCalculate"],
+  "PayrollCalcService#listLines": ["periodLines"],
+  "PayrollCalcService#adjustLine": ["periodAdjustLine"],
+  "PayrollCalcService#summary": ["periodSummary"],
+  "PayrollApprovalService#submit": ["periodSubmit"],
+  "PayrollApprovalService#approve": ["periodApprove"],
+  "PayrollApprovalService#reject": ["periodReject"],
+  "PayrollApprovalService#lock": ["periodLock"],
+  "PayrollApprovalService#reopen": ["periodReopen"],
+  "PayrollPayslipsService#generate": ["periodGeneratePayslips"],
+  "PayrollPayslipsService#publish": ["periodPublish"],
+  "PayrollPayslipsService#list": ["payslipList"],
+  "PayrollPayslipsService#get": ["payslipDetail"],
+  "PayrollPayslipsService#listMine": ["mePayslipList"],
+  "PayrollPayslipsService#getMine": ["mePayslipDetail"],
+  "PayrollPayslipsService#acknowledge": ["mePayslipAck"],
+  // `export` (017) đòi **HAI** cặp: `export:payroll` (decorator) + `view-line:payroll-period`
+  // (SPEC-11 §18 · API-18 §5.1). Hai literal ở CÙNG site là hình dạng ĐÚNG — mất một literal ở đây
+  // nghĩa là ai đó vừa gỡ một vế assert, và ca này phải ĐỎ. Tiền lệ: `BonusPenaltiesService#decide`.
+  "PayrollExportService#export": ["periodExport", "periodLines"],
 };
 
 function serviceResolveActorCalls(): Array<{ site: string; key: string }> {
@@ -154,7 +201,7 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
 
   it("(1) bảng fixture phủ ĐÚNG tập route PAYROLL đã boot — không thiếu, không thừa", () => {
     // Chốt chặn xanh-RỖNG: scanner/boot hỏng ⇒ 0 route ⇒ mọi assert dưới vô nghĩa.
-    expect(payrollRoutes.length, "app boot phải thấy 18 route PAYROLL của BE-1").toBe(18);
+    expect(payrollRoutes.length, "app boot phải thấy ĐỦ 35 route PAYROLL (API-18 §5)").toBe(35);
     const seen = new Set(payrollRoutes.map((r) => `${r.httpMethod} ${r.path}`));
     const expected = new Set(ROUTE_TO_KEY.map((r) => `${r.method} ${r.path}`));
     expect(
@@ -183,7 +230,8 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
 
   it("(3) TẦNG 2 — service: ĐÚNG method dùng ĐÚNG key (map pin, không chỉ đếm)", () => {
     const calls = serviceResolveActorCalls();
-    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(18);
+    // 36 = 35 route + literal thứ hai của `PayrollExportService#export` (cặp `view-line`).
+    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(36);
     const validKeys = new Set(Object.keys(PAYROLL_ROUTE_PAIRS));
     expect(
       calls.filter((c) => !validKeys.has(c.key)).map((c) => `${c.site}→${c.key}`),
@@ -215,7 +263,7 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     ).toEqual([]);
   });
 
-  it("(5) PENDING_BE2 là CỔNG: hợp = toàn bộ 35 key, giao với key đã dùng = ∅", () => {
+  it("(5) PENDING_BE2 là CỔNG: hợp = toàn bộ 35 key, giao với key đã dùng = ∅ (BE-2: PENDING rỗng)", () => {
     const all = new Set(Object.keys(PAYROLL_ROUTE_PAIRS));
     const used = new Set(ROUTE_TO_KEY.map((r) => r.key as string));
     const pending = new Set<string>(PAYROLL_PENDING_BE2);
@@ -228,7 +276,11 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
       [...all].filter((k) => !used.has(k) && !pending.has(k)),
       "key không có route và cũng không khai PENDING_BE2 — vùng mù im lặng",
     ).toEqual([]);
-    expect(pending.size, "BE-2 còn 17 route").toBe(17);
+    // ⚠️ NEO THAY THẾ (§10). `PENDING_BE2` rỗng từ BE-2 ⇒ chính nó không còn chống được xanh-RỖNG:
+    // một `ROUTE_TO_KEY` bị xoá sạch cũng thoả cả ba assert trên. Hai neo dưới ghim SỐ LƯỢNG thật của
+    // cả bảng hằng lẫn tập key đã nối dây. **Cấm hạ neo để lấy màu xanh.**
+    expect(pending.size, "BE-2 đã nối dây hết — PENDING_BE2 phải RỖNG").toBe(0);
+    expect(used.size, "35 key đều phải có route").toBe(35);
   });
 
   it("(6) SÀN SCOPE Company — đúng 3 route /me/payslips* được miễn", () => {
