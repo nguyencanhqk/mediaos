@@ -24,6 +24,29 @@ import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../hel
  * ĐỐI CHỨNG DƯƠNG (`deny-cases-vacuous-without-allow-case`); mọi mutation trong tx ROLLBACK.
  */
 
+/**
+ * S13-PAYROLL-BE-2 — vị từ loại **role của TENANT FIXTURE** khỏi các câu census quét-mọi-scope.
+ *
+ * VÌ SAO CẦN. Năm ca D1/D6/D8/D9/D12 cố ý **KHÔNG lọc `company_id IS NULL`** (§0.7 của WO DB-1 phát
+ * hiện role TUỲ BIẾN của tenant cũng giữ quyền lương, nên lọc theo scope là mù với đúng nhóm vừa tìm
+ * ra). Nhưng lane DB dùng CHUNG với mọi int-spec chạy SONG SONG, và các spec đó dựng role tạm cố ý
+ * "thiếu đúng một cặp" hoặc mang `*:*` để đo deny-path — đúng những hình dạng năm câu này cấm. Hệ
+ * quả: ĐỎ THEO THỨ TỰ CHẠY, không tất định (đã đỏ thật trên CI #458 ở D6, và ở D8/D9/D12 ngay khi
+ * `payroll-be2-permission` rơi cùng chunk).
+ *
+ * Đây **KHÔNG phải nới cổng**: role seed thật — cả `company_id IS NULL` lẫn role tuỳ biến của tenant
+ * THẬT — vẫn bị quét. Chữ ký nhận dạng lấy từ chính helper fixture: `seedCompany()` đặt
+ * `name = 'Company ' || slug` và `slug` kết thúc bằng 8 hex. Ca **D6b** là đối chứng DƯƠNG chứng
+ * minh câu census vẫn THẤY role thật sau khi lọc.
+ */
+const NOT_FIXTURE_TENANT = `
+            AND NOT EXISTS (
+              SELECT 1 FROM companies c
+               WHERE c.id = r.company_id
+                 AND c.name = 'Company ' || c.slug
+                 AND c.slug ~ '-[0-9a-f]{8}$'
+            )`;
+
 /** Ma trận §9g — literal chép từ 0565, CỐ Ý không import (import lại chính nguồn là tautology). */
 const EXPECTED_32: Array<[string, string, string, string]> = [
   ["employee", "access", "payroll", "Own"],
@@ -502,18 +525,7 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
            JOIN roles r       ON r.id = rp.role_id
            JOIN permissions p ON p.id = rp.permission_id
           WHERE r.name <> 'super-admin'
-            -- S13-PAYROLL-BE-2: loại role của TENANT FIXTURE. Census này quét MỌI scope (chủ ý §0.7),
-            -- nhưng lane DB dùng chung với các int-spec khác đang chạy SONG SONG: 'recruit-be1-scope'
-            -- dựng role '*:*' trong tenant tạm của nó ⇒ ca này ĐỎ theo THỨ TỰ CHẠY, không tất định
-            -- (đã đỏ thật trên CI #458). Chữ ký fixture: 'seedCompany()' đặt name = 'Company ' || slug
-            -- và slug kết thúc bằng 8 hex. Đây KHÔNG phải nới cổng — role seed thật (company_id NULL
-            -- lẫn role tuỳ biến của tenant thật) vẫn bị quét; ca đối chứng DƯƠNG bên dưới chứng minh.
-            AND NOT EXISTS (
-              SELECT 1 FROM companies c
-               WHERE c.id = r.company_id
-                 AND c.name = 'Company ' || c.slug
-                 AND c.slug ~ '-[0-9a-f]{8}$'
-            )
+${NOT_FIXTURE_TENANT}
             AND p.resource_type IN ('payroll','payroll-period','salary-profile','bonus-penalty','payslip')`,
       );
       const actual = rows
@@ -599,18 +611,7 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
            JOIN roles r       ON r.id = rp.role_id
            JOIN permissions p ON p.id = rp.permission_id
           WHERE r.deleted_at IS NULL AND r.name <> 'super-admin'
-            -- S13-PAYROLL-BE-2: loại role của TENANT FIXTURE. Census này quét MỌI scope (chủ ý §0.7),
-            -- nhưng lane DB dùng chung với các int-spec khác đang chạy SONG SONG: 'recruit-be1-scope'
-            -- dựng role '*:*' trong tenant tạm của nó ⇒ ca này ĐỎ theo THỨ TỰ CHẠY, không tất định
-            -- (đã đỏ thật trên CI #458). Chữ ký fixture: 'seedCompany()' đặt name = 'Company ' || slug
-            -- và slug kết thúc bằng 8 hex. Đây KHÔNG phải nới cổng — role seed thật (company_id NULL
-            -- lẫn role tuỳ biến của tenant thật) vẫn bị quét; ca đối chứng DƯƠNG bên dưới chứng minh.
-            AND NOT EXISTS (
-              SELECT 1 FROM companies c
-               WHERE c.id = r.company_id
-                 AND c.name = 'Company ' || c.slug
-                 AND c.slug ~ '-[0-9a-f]{8}$'
-            )
+${NOT_FIXTURE_TENANT}
             AND (p.action = '*' OR p.resource_type = '*')`,
       );
       expect(rows).toEqual([]);
@@ -644,18 +645,7 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
              JOIN roles r       ON r.id = rp.role_id
              JOIN permissions p ON p.id = rp.permission_id
             WHERE r.deleted_at IS NULL AND r.name <> 'super-admin'
-            -- S13-PAYROLL-BE-2: loại role của TENANT FIXTURE. Census này quét MỌI scope (chủ ý §0.7),
-            -- nhưng lane DB dùng chung với các int-spec khác đang chạy SONG SONG: 'recruit-be1-scope'
-            -- dựng role '*:*' trong tenant tạm của nó ⇒ ca này ĐỎ theo THỨ TỰ CHẠY, không tất định
-            -- (đã đỏ thật trên CI #458). Chữ ký fixture: 'seedCompany()' đặt name = 'Company ' || slug
-            -- và slug kết thúc bằng 8 hex. Đây KHÔNG phải nới cổng — role seed thật (company_id NULL
-            -- lẫn role tuỳ biến của tenant thật) vẫn bị quét; ca đối chứng DƯƠNG bên dưới chứng minh.
-            AND NOT EXISTS (
-              SELECT 1 FROM companies c
-               WHERE c.id = r.company_id
-                 AND c.name = 'Company ' || c.slug
-                 AND c.slug ~ '-[0-9a-f]{8}$'
-            )
+${NOT_FIXTURE_TENANT}
               AND (p.action = '*' OR p.resource_type = '*')`,
         );
         expect(
@@ -689,7 +679,7 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
            FROM role_permissions rp JOIN roles r ON r.id = rp.role_id
           WHERE rp.permission_id IN (
                   SELECT id FROM permissions
-                   WHERE resource_type = 'payroll-period' AND action IN ('approve','calculate'))
+                   WHERE resource_type = 'payroll-period' AND action IN ('approve','calculate'))${NOT_FIXTURE_TENANT}
             AND NOT EXISTS (
                   SELECT 1 FROM role_permissions rp2
                    WHERE rp2.role_id = rp.role_id
@@ -704,7 +694,7 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
         `SELECT DISTINCT r.name AS role
            FROM role_permissions rp JOIN roles r ON r.id = rp.role_id
           WHERE rp.permission_id = (SELECT id FROM permissions
-                                     WHERE action='manage' AND resource_type='bonus-penalty')
+                                     WHERE action='manage' AND resource_type='bonus-penalty')${NOT_FIXTURE_TENANT}
             AND NOT EXISTS (
                   SELECT 1 FROM role_permissions rp2
                    WHERE rp2.role_id = rp.role_id
@@ -735,7 +725,7 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
       const { rows } = await direct.query<{ role: string }>(
         `SELECT DISTINCT r.name AS role
            FROM role_permissions rp JOIN roles r ON r.id = rp.role_id
-          WHERE r.name <> 'super-admin'
+          WHERE r.name <> 'super-admin'${NOT_FIXTURE_TENANT}
             AND rp.permission_id = (SELECT id FROM permissions
                                      WHERE action='export' AND resource_type='payroll')
             AND NOT EXISTS (
