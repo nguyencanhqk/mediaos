@@ -14,7 +14,9 @@ import type { PayrollInputSnapshotMeta, PayrollUserInputs } from "./payroll.type
  * Ghi nguyên văn vào `input_snapshot_json.presentDaysRule` để nhiều tháng sau còn đối chiếu được.
  */
 export const PRESENT_DAYS_RULE =
-  "attendance_records.status IN ('present','late','early_leave','approved_adjustment') AND deleted_at IS NULL (owner 2026-09-01)";
+  "attendance_records.status IN ('present','late','early_leave','approved_adjustment') AND deleted_at IS NULL" +
+  " | ngày = LEAST(GREATEST(công_ngày, phép_có_lương_ngày), 1), phép đọc từ leave_request_days (Active)," +
+  " fallback bung leave_requests 1.00/ngày khi đơn không có day-row (owner 2026-09-01, S13-PAYROLL-BE-1B)";
 
 const VALID_ATTENDANCE_STATUSES = ["present", "late", "early_leave", "approved_adjustment"];
 
@@ -43,6 +45,10 @@ export interface PayrollPeriodInputs {
  *  2. `public_holidays.company_id` **NULLABLE** — hàng lễ quốc gia có `company_id IS NULL` (mig `0434`);
  *     lọc `= $companyId` là **mất toàn bộ lễ quốc gia**.
  *  3. `leave_requests.status` là **UNION hoa/thường** (mig `0453`).
+ *  4. **Số ngày nghỉ là THẬP PHÂN** (S13-PAYROLL-BE-1B): nguồn chốt là `leave_request_days.leave_days`
+ *     (`numeric(8,2)` — 0.50 nửa buổi, 0.38 cho 3 giờ), KHÔNG phải `count(distinct ngày)` và KHÔNG phải
+ *     `leave_requests.total_days` (`numeric(5,1)`, là con số của CẢ đơn nên đơn bắc qua biên tháng không
+ *     quy kết được cho kỳ). Xem SPEC-11 §13.4 «Ngày nghỉ tính theo NỬA NGÀY».
  */
 @Injectable()
 export class PayrollInputsRepository {
@@ -114,35 +120,88 @@ export class PayrollInputsRepository {
            and ar.work_date >= bounds.d0 and ar.work_date < bounds.d1
            and ar.status = any(${sql.param(VALID_ATTENDANCE_STATUSES)}::text[])
       ),
-      lv as (
-        select lr.user_id, cw.d, lt.paid
+      -- Đơn đã duyệt CHẠM kỳ. Chặn theo kỳ ngay tại đây (không để tới lúc join cal_work): thiếu nó,
+      -- CTE này và req_has_days quét MỌI đơn nghỉ của công ty từ trước tới nay ở mỗi lần tính
+      -- (NFR §19: 500 NV < 5s). Vị từ chồng-lấn, KHÔNG chứa-trong ⇒ đơn bắc qua biên tháng vẫn vào.
+      req as (
+        select lr.id, lr.user_id, lr.start_date, lr.end_date, lt.paid
           from leave_requests lr
           join leave_types lt
             on lt.id = lr.leave_type_id and lt.company_id = ${companyId}
-          join cal_work cw
-            on cw.d >= lr.start_date and cw.d <= lr.end_date
+          cross join bounds
          where lr.company_id = ${companyId}
            and lr.deleted_at is null
            and lr.status = any(${sql.param(APPROVED_LEAVE_STATUSES)}::text[])
+           and lr.end_date >= bounds.d0 and lr.start_date < bounds.d1
       ),
-      -- Tập ngày "có mặt" = ngày công ∪ ngày nghỉ CÓ LƯƠNG. UNION (không ALL) ⇒ một ngày vừa có bản
-      -- ghi công vừa có phép nửa buổi có lương chỉ đếm **MỘT** lần. Cộng hai COUNT rời là +2/ngày.
-      present as (
-        select user_id, d from att
-        union
-        select user_id, d from lv where paid = true
+      -- Đơn CÓ day-row Active — đo trên TOÀN BỘ day-row của đơn, KHÔNG chỉ phần giao cal_work.
+      -- Đo trên phần giao thì đơn có day-row nằm ngoài lịch PAYROLL (lịch LEAVE ≠ lịch PAYROLL, §13.4)
+      -- bị coi là "không có day-row" ⇒ rơi vào fallback ⇒ ĐẺ RA ngày nghỉ mà chính LEAVE nói là không có.
+      req_has_days as (
+        select distinct d.leave_request_id
+          from leave_request_days d
+          join req r on r.id = d.leave_request_id
+         where d.company_id = ${companyId} and d.deleted_at is null and d.status = 'Active'
+      ),
+      -- NGUỒN CHỐT (SPEC-11 §13.4): số ngày nghỉ THẬP PHÂN, từng ngày, từ leave_request_days.
+      -- leave_days = 0.50 cho nửa buổi, 0.38 cho 3 giờ — count(distinct ngày) làm tròn LÊN thành 1.
+      lv_rows as (
+        select r.user_id, cw.d, r.paid, d.leave_days::numeric(8,2) as days
+          from leave_request_days d
+          join req r on r.id = d.leave_request_id
+          join cal_work cw on cw.d = d.work_date
+         where d.company_id = ${companyId} and d.deleted_at is null and d.status = 'Active'
+      ),
+      -- FALLBACK mức ĐƠN: đơn đã duyệt KHÔNG có day-row nào (dữ liệu di sản/nhập ngoài ứng dụng).
+      -- Nguồn RỖNG ≠ bằng 0 — đọc rỗng thành 0 là mất lặng lẽ một khoản tiền (nghỉ không lương biến
+      -- khỏi khấu trừ). Bung như cách cũ, 1.00/ngày.
+      lv_legacy as (
+        select r.user_id, cw.d, r.paid, 1.00::numeric(8,2) as days
+          from req r
+          join cal_work cw on cw.d >= r.start_date and cw.d <= r.end_date
+         -- NOT EXISTS (không NOT IN): một NULL trong tập con của NOT IN làm CẢ vế thành rỗng ⇒ fallback
+         -- im lặng không chạy cho ai. Cột NOT NULL hôm nay, nhưng cái giá của việc sai ở đây là tiền.
+         where not exists (
+           select 1 from req_has_days h where h.leave_request_id = r.id
+         )
+      ),
+      lv as (
+        select user_id, d, paid, days from lv_rows
+        union all
+        select user_id, d, paid, days from lv_legacy
+      ),
+      -- Gộp về (người, ngày, cờ paid): hai đơn nửa buổi cùng một ngày cộng lại thành 1.00.
+      lv_day as (
+        select user_id, d, paid, sum(days)::numeric(8,2) as days from lv group by user_id, d, paid
+      ),
+      paid_day as (
+        select user_id, d, sum(days)::numeric(8,2) as days from lv_day where paid is true
+         group by user_id, d
+      ),
+      att_day as (select distinct user_id, d from att),
+      -- Một ngày đếm ĐÚNG MỘT lần: GREATEST(công, phép có lương) — KHÔNG SUM. Ngày vừa có bản ghi công
+      -- vừa có phép nửa buổi có lương = 1 (không 1.5); ngày CHỈ có phép nửa buổi = 0.5. Trần LEAST(…,1)
+      -- chặn hai đơn nửa buổi cùng ngày đẩy một ngày vượt 1.
+      present_day as (
+        select coalesce(a.user_id, p.user_id) as user_id,
+               least(greatest(case when a.user_id is null then 0 else 1 end,
+                              coalesce(p.days, 0)), 1)::numeric(8,2) as days
+          from att_day a
+          full join paid_day p on p.user_id = a.user_id and p.d = a.d
       ),
       people as (
         select user_id from att union select user_id from lv
       )
       select p.user_id,
              (select n from work_days)                                              as work_days,
-             coalesce((select count(*) from present pr where pr.user_id = p.user_id), 0)::int
-                                                                                     as present_days,
-             coalesce((select count(distinct l.d) from lv l
-                        where l.user_id = p.user_id and l.paid = true), 0)::int      as paid_leave_days,
-             coalesce((select count(distinct l.d) from lv l
-                        where l.user_id = p.user_id and l.paid = false), 0)::int     as unpaid_leave_days,
+             coalesce((select sum(pd.days) from present_day pd where pd.user_id = p.user_id), 0)
+               ::numeric(8,2)                                                        as present_days,
+             coalesce((select sum(l.days) from lv_day l
+                        where l.user_id = p.user_id and l.paid is true), 0)::numeric(8,2)
+                                                                                     as paid_leave_days,
+             coalesce((select sum(l.days) from lv_day l
+                        where l.user_id = p.user_id and l.paid is false), 0)::numeric(8,2)
+                                                                                     as unpaid_leave_days,
              coalesce((select sum(a.mins) from att a where a.user_id = p.user_id), 0)::int
                                                                                      as late_minutes
         from people p

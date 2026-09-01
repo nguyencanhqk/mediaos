@@ -487,8 +487,8 @@ Chỉ hàng **`Approved` cùng `period_month`, chưa consume** mới được m�
 | Đại lượng | Nguồn | Công thức |
 | --- | --- | --- |
 | `work_days` (mẫu số pro-rate) | `companies.working_days_json` **khoá `->'days'`** + `public_holidays` | đếm ngày trong `period_month` có ISO-dow ∈ `working_days_json->'days'`, **trừ** ngày trong `public_holidays` thoả **đủ 4 vị từ** (xem dưới). Là **hằng chung cả kỳ**, không per-người |
-| `present_days` | `attendance_records` + đơn nghỉ đã duyệt có `leave_types.paid = true` | số ngày có bản ghi công hợp lệ **cộng** số ngày nghỉ **có lương** đã duyệt rơi vào kỳ |
-| `paid_leave_days` / `unpaid_leave_days` | đơn nghỉ đã duyệt ⋈ `leave_types.paid` | tách theo cờ `paid` |
+| `present_days` **numeric(8,2)** | `attendance_records` + ngày nghỉ **có lương** đã duyệt (`leave_request_days`) | cộng theo NGÀY: mỗi ngày lấy `LEAST(GREATEST(công_ngày, phép_có_lương_ngày), 1)` — xem «Ngày nghỉ tính theo NỬA NGÀY» dưới |
+| `paid_leave_days` / `unpaid_leave_days` **numeric(8,2)** | `leave_request_days` (đã vật chất hoá) ⋈ đơn đã duyệt ⋈ `leave_types.paid` | `SUM(leave_days)` của các ngày rơi vào `cal_work`, tách theo cờ `paid` |
 | `late_minutes` | `attendance_records` | tổng phút trễ/về sớm trong kỳ |
 | hệ số pro-rate | — | `LEAST(present_days / NULLIF(work_days, 0), 1)` — clamp trần 1 ở SQL |
 
@@ -507,6 +507,29 @@ WHERE (h.company_id = $companyId OR h.company_id IS NULL)   -- ⚠️ hàng GLOB
   AND h.deleted_at IS NULL
   AND h.holiday_type <> 'WorkingDayOverride'                 -- loại này là ngày LÀM BÙ, trừ nó là trừ ngược
   AND h.is_paid_holiday = true
+```
+
+**Ngày nghỉ tính theo NỬA NGÀY — nguồn CHỐT ở đây (S13-PAYROLL-BE-1B, owner 2026-09-01):**
+
+Số ngày nghỉ **KHÔNG phải số nguyên**. `leave_types` cho phép `HalfDay` (0.5 ngày) và `Hourly` (phân số bất kỳ) ⇒ ba đại lượng trên là `numeric(8,2)`, **không** `int`. Đếm `COUNT(DISTINCT ngày)` là làm tròn LÊN mọi buổi nghỉ thành nguyên ngày — sai thẳng vào tiền (mỗi buổi nghỉ không lương bị trừ trọn một ngày công).
+
+| Nguồn | Phán quyết | Vì sao (**đo thật** 2026-09-01, đường ghi `LeaveRequestService.createDraft`) |
+| --- | --- | --- |
+| `leave_request_days` (Active, `deleted_at IS NULL`) | **THẮNG** | Mang số ngày **từng ngày** (`leave_days numeric(8,2)`: `0.50` cho nửa buổi, `0.38` cho 3 giờ) và có `is_working_day`. Ứng dụng ghi nó trong CÙNG transaction với đơn (`leave-request.service.ts:110`) ⇒ đơn nào do ứng dụng tạo cũng có. |
+| `leave_requests.total_days` | **CHỈ đối soát** | (a) là con số của **cả đơn**: đơn 29/11→03/12 mang `5.0` trong khi kỳ tháng 11 chỉ được hưởng `2` — không quy kết được theo kỳ nếu không bung ngày; (b) `numeric(5,1)` làm tròn: đơn 3 giờ (0.375 ngày) bị lưu **`0.4`**. |
+
+- **Khi một đơn đã duyệt KHÔNG có day-row Active nào** (dữ liệu di sản/nhập ngoài ứng dụng) ⇒ **rơi về** cách cũ: bung đơn trên `cal_work`, mỗi ngày `1.00`. Nguồn day-row **rỗng** ≠ **bằng 0**; đọc rỗng thành 0 là mất lặng lẽ một khoản tiền. Fallback ở **mức ĐƠN** (một đơn có day-rows thì day-rows quyết toàn bộ đơn đó) — KHÔNG trộn hai nguồn trong một đơn, kẻo đẻ ngày ma.
+- **Một ngày vẫn chỉ đếm MỘT lần cho `present_days`**: dùng `GREATEST(công, phép có lương)` chứ không `SUM` — ngày vừa có bản ghi công vừa có phép nửa buổi có lương là **1**, không phải 1.5. Ngày **chỉ** có phép nửa buổi có lương là **0.5**. Trần `LEAST(…, 1)` chặn hai đơn nửa buổi cùng ngày đẩy một ngày vượt 1.
+- **Hệ quả lên clamp:** `LEAST(present_days / NULLIF(work_days, 0), 1)` **giữ nguyên** — chỉ khác là tử số nay có thể lẻ (vd `20.5 / 22`). Clamp vẫn phải ở SQL.
+
+```sql
+-- ngày nghỉ: nguồn CHỐT là day-rows, giao với cal_work của PAYROLL
+JOIN leave_request_days d ON d.leave_request_id = r.id
+ AND d.deleted_at IS NULL AND d.status = 'Active'
+JOIN cal_work cw ON cw.d = d.work_date
+WHERE r.deleted_at IS NULL
+  AND r.status = ANY (ARRAY['approved','Approved'])   -- ⚠️ CHECK union hoa/thường (mig 0453)
+-- → SUM(d.leave_days) tách theo leave_types.paid
 ```
 
 - **Quyết định tường minh — dùng lịch CẤP CÔNG TY (`companies.working_days_json`), không dùng `work_schedules`:** LEAVE đang đếm ngày nghỉ theo `work_schedules.working_days_json` (lịch cấp ca làm việc). Hai lịch khác nhau ⇒ tử số (`paid_leave_days` từ LEAVE) và mẫu số (`work_days` của PAYROLL) lệch nhau có hệ thống. v1 chấp nhận rủi ro này vì công ty đang chạy **một lịch duy nhất**; QA có **ca đối chứng** so `work_days` với số ngày LEAVE dùng, và rủi ro ghi ở §21. Nếu công ty có **hai `work_schedules` khác nhau** thì đây là **quyết định phải hỏi owner**, không phải chi tiết thi công.
@@ -764,6 +787,10 @@ Nguồn chuẩn: [DB-13](<../DB/DB-13 PAYROLL Database Design.md>). Tóm tắt:
 >
 > (n) **`work_days` được chốt nguồn tường minh** (`companies.working_days_json` + `public_holidays.is_paid_holiday` — §13.4) — trước đó tài liệu bỏ ngỏ, WO BE-2 sẽ phải tự phát minh quy tắc tính tiền. Và **tính lại GIỮ `adjustment_*`** thay vì xoá trắng số người dùng nhập tay.
 >
+> **Sửa sau khi FULL gate của `S13-PAYROLL-BE-1` phát hiện (01/09/2026, owner chốt cùng ngày):**
+>
+> (p) **Ngày nghỉ là số THẬP PHÂN, nguồn chốt là `leave_request_days`** (§13.4) — §13.4 bản đầu chốt nguồn ở mức NGÀY («đơn nghỉ đã duyệt ⋈ `leave_types.paid`»), nên `PayrollInputsRepository` bung đơn theo dải `start_date..end_date` rồi `COUNT(DISTINCT ngày)` ⇒ **mọi đơn nghỉ nửa buổi thành nguyên ngày**. Đo thật: `total_days` là `numeric(5,1)` (đơn 3 giờ = 0.375 ngày bị lưu `0.4`) và là con số của **cả đơn**, không quy kết được cho kỳ khi đơn bắc qua biên tháng ⇒ `leave_request_days` (`numeric(8,2)`, có `is_working_day`, ghi cùng tx với đơn) là nguồn. Kèm luật fallback cho đơn không có day-row và luật `GREATEST` cho `present_days`. BE-1 chưa chở tiền nên chưa gây thiệt hại; phải xong **trước** BE-2 vì BE-2 nối `unpaid_leave_days` vào khấu trừ.
+
 > (o) **Vế «kỳ lương `Locked` khoá chỉnh công ATT» của PAY-DEC-005 đã được thoả sẵn**, PAYROLL không dựng cổng thứ hai và **không viện dẫn `ATT-ERR-024`** (mã không tồn tại trong code; SPEC-04 và API-04 đang mô tả nó khác nhau) — §3.5. Đây là **thu hẹp phần hiện thực**, không thu hẹp phạm vi đã duyệt: kết quả nghiệp vụ owner yêu cầu vẫn đúng.
 >
 > Điều kiện mở WO code của track PAYROLL: 10 quyết định chốt (✅) · §1 = `Approved` (✅) · `plan-reviewer` đối kháng **PASS** trên SPEC-11 + DB-13 (làm ở cuối `S13-PAYROLL-DOC-1`, trước khi mở `S13-PAYROLL-DB-1`).

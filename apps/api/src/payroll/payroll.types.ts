@@ -58,6 +58,7 @@ export interface PayrollUserInputs {
   userId: string;
   /** Hằng CHUNG cả kỳ (không per-người) — lặp lại mỗi hàng cho tiện tiêu thụ. */
   workDays: number;
+  /** THẬP PHÂN (numeric(8,2) ở SQL) — nghỉ nửa buổi/theo giờ ⇒ 0.5 / 0.38. KHÔNG ép về int. */
   presentDays: number;
   paidLeaveDays: number;
   unpaidLeaveDays: number;
