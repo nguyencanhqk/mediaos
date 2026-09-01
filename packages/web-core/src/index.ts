@@ -129,6 +129,10 @@ export {
   // S12-RECRUIT-FE-1 — Tuyển dụng (SPEC-12). Sau move-stage/convert: invalidate candidates.allOf()
   // (kanban mọi filter) + summary; sổ con stage-events/notes dùng prefix `*Of`.
   recruitKeys,
+  // S13-PAYROLL-FE-1 — Tiền lương (SPEC-11). Mọi hành động FSM kỳ lương invalidate `periods.allOf()`
+  // (kỳ + dòng + readiness + summary cùng đổi); nhánh Own `mePayslips` tách RIÊNG khỏi `payslips`
+  // vì hai đường tải khác cặp quyền và trả tập khác nhau.
+  payrollKeys,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -219,6 +223,9 @@ export { assetApi } from "./lib/asset-api";
 // S12-RECRUIT-FE-1 — RECRUIT API client (SPEC-12 §15, RECRUIT-API-001..032). List đi apiFetchPaginated;
 // check-duplicate/summary/export/picker trả mảng/object trần ⇒ apiFetch (xem docblock recruit-api.ts).
 export { recruitApi } from "./lib/recruit-api";
+// S13-PAYROLL-FE-1 — PAYROLL (SPEC-11 §15, 35 route). `payrollIdempotencyKey` SUY TỪ NỘI DUNG cho 5
+// route @Idempotent — khoá ngẫu nhiên mỗi render là bấm-đúp «Tính lương» chạy máy tính lương hai lần.
+export { payrollApi, payrollIdempotencyKey } from "./lib/payroll-api";
 // S11-ROOM-FE-1 — ROOM API client (SPEC-14 §15 / API-15). CHỈ `GET /rooms` phân trang; 12 route còn lại
 // trả mảng/object trần ⇒ đi apiFetch (xem docblock room-api.ts).
 export { roomApi } from "./lib/room-api";

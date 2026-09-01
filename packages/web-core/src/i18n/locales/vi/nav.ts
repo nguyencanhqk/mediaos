@@ -26,6 +26,8 @@ export default {
     rooms: "Phòng họp",
     // S12-RECRUIT-FE-1 — module RECRUIT nội bộ (SPEC-12, wave S12-RECRUIT).
     recruit: "Tuyển dụng",
+    // S13-PAYROLL-FE-1 — module PAYROLL nội bộ (SPEC-11, wave S13-PAYROLL).
+    payroll: "Tiền lương",
   },
   // App registry descriptions
   appDesc: {
@@ -44,6 +46,7 @@ export default {
     assets: "Danh mục tài sản, cấp phát, thu hồi, bảo trì và kiểm kê theo đợt.",
     rooms: "Lịch phòng họp theo tuần, đặt phòng, huỷ lịch và quản trị phòng.",
     recruit: "Vị trí tuyển, pipeline ứng viên, phỏng vấn, offer và chuyển thành nhân viên.",
+    payroll: "Hồ sơ lương, thưởng/phạt, kỳ lương, tính lương, duyệt và phát hành phiếu lương.",
   },
   // Route titles
   routeTitle: {
@@ -166,6 +169,13 @@ export default {
     recruitCandidateNew: "Thêm ứng viên",
     recruitCandidateDetail: "Chi tiết ứng viên",
     recruitCandidateEdit: "Sửa hồ sơ ứng viên",
+    // S13-PAYROLL-FE-1 — PAY-SCREEN-001..006. `mePayslips` nằm trong khối ME (route `access:me`).
+    payroll: "Kỳ lương",
+    payrollPeriodDetail: "Chi tiết kỳ lương",
+    payrollPayslipDetail: "Phiếu lương",
+    payrollSalaryProfiles: "Hồ sơ lương",
+    payrollBonusPenalties: "Thưởng/phạt",
+    mePayslips: "Phiếu lương của tôi",
     forbidden: "Không có quyền truy cập",
     notFound: "Không tìm thấy trang",
   },

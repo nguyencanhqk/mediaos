@@ -2049,6 +2049,140 @@ const recruitCandidateEditRoute = createRoute({
   },
 });
 
+// PAYROLL — Tiền lương (S13-PAYROLL-FE-1, SPEC-11 PAY-SCREEN-001..006). 3 màn sidebar qua
+// makeModuleRoute (ROUTE_REGISTRY "payroll.periods"/"payroll.salaryProfiles"/"payroll.bonusPenalties");
+// chi tiết kỳ (002) và phiếu lương (003) dùng RouteMeta CỤC BỘ (mẫu ASSET/RECRUIT). Màn 006 là route ME
+// (`/me/payslips`, gate `access:me`) — xem khối ME bên dưới.
+//
+// ⚠️ KHÔNG có bẫy thứ-tự-route ở đây: mọi đường tĩnh của PAYROLL nằm dưới tiền tố khác nhau
+// ("/payroll/periods" · "/payroll/salary-profiles" · "/payroll/bonus-penalties") và chỉ có ĐÚNG MỘT
+// tham số động sau "/payroll/periods/" nên không cạnh tranh với "/payroll/periods" như "/goals/new".
+const PayrollPeriodListPage = React.lazy(() =>
+  import("@/routes/payroll/PayrollPeriodListPage").then((m) => ({
+    default: m.PayrollPeriodListPage,
+  })),
+);
+const PayrollPeriodDetailPage = React.lazy(() =>
+  import("@/routes/payroll/PayrollPeriodDetailPage").then((m) => ({
+    default: m.PayrollPeriodDetailPage,
+  })),
+);
+const PayslipDetailPage = React.lazy(() =>
+  import("@/routes/payroll/PayslipDetailPage").then((m) => ({ default: m.PayslipDetailPage })),
+);
+const SalaryProfileListPage = React.lazy(() =>
+  import("@/routes/payroll/SalaryProfileListPage").then((m) => ({
+    default: m.SalaryProfileListPage,
+  })),
+);
+const BonusPenaltyListPage = React.lazy(() =>
+  import("@/routes/payroll/BonusPenaltyListPage").then((m) => ({
+    default: m.BonusPenaltyListPage,
+  })),
+);
+const MePayslipsPage = React.lazy(() =>
+  import("@/routes/payroll/MePayslipsPage").then((m) => ({ default: m.MePayslipsPage })),
+);
+
+function PayrollPeriodListRouteContent() {
+  const navigate = useNavigate();
+  return (
+    <PayrollPeriodListPage
+      onOpenPeriod={(id) =>
+        void navigate({ to: "/payroll/periods/$periodId", params: { periodId: id } })
+      }
+    />
+  );
+}
+const payrollPeriodsRoute = makeModuleRoute(
+  "/payroll/periods",
+  "payroll.periods",
+  "PAYROLL",
+  PayrollPeriodListRouteContent,
+);
+const payrollSalaryProfilesRoute = makeModuleRoute(
+  "/payroll/salary-profiles",
+  "payroll.salaryProfiles",
+  "PAYROLL",
+  SalaryProfileListPage,
+);
+const payrollBonusPenaltiesRoute = makeModuleRoute(
+  "/payroll/bonus-penalties",
+  "payroll.bonusPenalties",
+  "PAYROLL",
+  BonusPenaltyListPage,
+);
+
+// Gate chi tiết kỳ = gate ĐƯỜNG TẢI của chính nó (`GET /payroll-periods/:id` = view:payroll-period,
+// KHÔNG nhạy cảm). Bảng lương bên trong gác THÊM bằng view-line:payroll-period NGAY TRONG PAGE — người
+// chỉ có `approve` phải vào được trang để duyệt (DOC-1 quyết định #3: gộp hai cặp = duyệt mù).
+const payrollPeriodDetailMeta: RouteMeta = {
+  routeKey: "payroll.period.detail",
+  path: "/payroll/periods/$periodId",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "PAYROLL",
+  screenCode: "PAY-SCREEN-002",
+  titleKey: "routeTitle.payrollPeriodDetail",
+  requiredPermissions: ["access:payroll", "view:payroll-period"],
+  showInSidebar: false,
+  order: 88.1,
+};
+const payrollPeriodDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/payroll/periods/$periodId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { periodId } = payrollPeriodDetailRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      payrollPeriodDetailMeta,
+      "PAYROLL",
+      <PayrollPeriodDetailPage
+        periodId={periodId}
+        onBack={() => void navigate({ to: "/payroll/periods" as "/" })}
+        onOpenPayslip={(id) =>
+          void navigate({ to: "/payroll/payslips/$payslipId", params: { payslipId: id } })
+        }
+      />,
+    );
+  },
+});
+
+// Gate phiếu lương QUẢN TRỊ = cặp đường tải `view-payslip:payslip` (SENSITIVE, có trong allowlist BE).
+// KHÁC hẳn đường Own `/me/payslips/:id` (`view-own-payslip`) — hai cặp, hai màn, không gộp.
+const payslipDetailMeta: RouteMeta = {
+  routeKey: "payroll.payslip.detail",
+  path: "/payroll/payslips/$payslipId",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "PAYROLL",
+  screenCode: "PAY-SCREEN-003",
+  titleKey: "routeTitle.payrollPayslipDetail",
+  requiredPermissions: ["access:payroll", "view-payslip:payslip"],
+  showInSidebar: false,
+  order: 88.2,
+};
+const payslipDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/payroll/payslips/$payslipId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { payslipId } = payslipDetailRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      payslipDetailMeta,
+      "PAYROLL",
+      <PayslipDetailPage
+        payslipId={payslipId}
+        onBack={() => void navigate({ to: "/payroll/periods" as "/" })}
+      />,
+    );
+  },
+});
+
+// PAY-SCREEN-006 «Phiếu lương của tôi» — route ME (`access:me`), KHÔNG phải route PAYROLL. Deep-link từ
+// NOTI-EVENT-023 trỏ vào `/me/payslips` (target_url TĨNH ở template mig 0566).
+const mePayslipsRoute = makeModuleRoute("/me/payslips", "me.payslips", "ME", MePayslipsPage);
+
 // ME — «Tài sản của tôi» (ASSET-SCREEN-006) mount trong ME workspace, gate bằng cặp ASSET.
 const MeAssetsPage = React.lazy(() =>
   import("@/routes/me/MeAssetsPage").then((m) => ({ default: m.MeAssetsPage })),
@@ -2788,6 +2922,13 @@ const routeTree = rootRoute.addChildren([
   recruitCandidateNewRoute,
   recruitCandidateDetailRoute,
   recruitCandidateEditRoute,
+  // S13-PAYROLL-FE-1 — PAYROLL (SPEC-11). `/me/payslips` là route ME, đăng ký cùng khối cho dễ đọc.
+  payrollPeriodsRoute,
+  payrollSalaryProfilesRoute,
+  payrollBonusPenaltiesRoute,
+  payrollPeriodDetailRoute,
+  payslipDetailRoute,
+  mePayslipsRoute,
   goalsListRoute,
   // S5-GOAL-TPL-1 — static TRƯỚC "/goals/$goalId" (xem docblock goalTemplatesMeta).
   goalTemplatesRoute,

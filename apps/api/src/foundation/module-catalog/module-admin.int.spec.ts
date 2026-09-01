@@ -142,7 +142,7 @@ describe.skipIf(!runDb)("S2-FND-BE-1 admin module-catalog deny-path / catalog / 
   });
 
   // ── P3: company-admin → 200, thấy CẢ active + inactive ─────────────────────────
-  it("P3 — company-admin GET /foundation/modules → 200; gồm active (HR) VÀ inactive (PAYROLL)", async () => {
+  it("P3 — company-admin GET /foundation/modules → 200; thấy CẢ module active LẪN module inactive", async () => {
     const res = await api(app)
       .get("/foundation/modules")
       .set("Authorization", `Bearer ${adminToken}`);
@@ -154,8 +154,15 @@ describe.skipIf(!runDb)("S2-FND-BE-1 admin module-catalog deny-path / catalog / 
     expect(byCode.has("HR")).toBe(true);
     expect((byCode.get("HR") as { is_active: boolean }).is_active).toBe(true);
     // Extension module INACTIVE — admin THẤY (khác my-apps).
-    expect(byCode.has("PAYROLL")).toBe(true);
-    expect((byCode.get("PAYROLL") as { is_active: boolean }).is_active).toBe(false);
+    // KHÔNG ghim `is_active` của một module CỤ THỂ: mọi module rồi cũng tới lượt được bật
+    // (mig 0567 bật PAYROLL và làm ca này đỏ ở PR S13-PAYROLL-FE-1). Điều ca này cần ghim là
+    // "catalog admin CÓ chứa module đang tắt", không phải "module X đang tắt".
+    expect(byCode.has("PAYROLL")).toBe(true); // đã ship ⇒ phải có mặt trong catalog admin
+    const inactive = rows.filter((r) => (r as { is_active: boolean }).is_active === false);
+    expect(
+      inactive.length,
+      "catalog không còn module inactive nào ⇒ ca này mất đối tượng quan sát: dựng một module tắt riêng cho fixture thay vì hạ assert",
+    ).toBeGreaterThan(0);
     // enabled hiện diện trên mỗi row.
     for (const r of rows) expect(typeof r.enabled).toBe("boolean");
   });

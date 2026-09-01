@@ -857,6 +857,24 @@ export const ME_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 22,
     requiredAnyPermissions: ["access:me"],
   },
+  // S13-PAYROLL-FE-1 — «Phiếu lương của tôi» (PAY-SCREEN-006, GET /me/payslips).
+  //
+  // ⚠️ CỐ Ý **KHÔNG** theo kỹ thuật me.assets/me.roomBookings (gate bằng cặp module). Cặp đường tải là
+  // `view-own-payslip:payslip` — cặp SENSITIVE mà MỌI nhân viên được cấp qua seed 0180, và ý nghĩa của
+  // nó là "phiếu của chính tôi", không phải "quyền vào module tiền lương". Gate mục này bằng cặp
+  // PAYROLL nào đó là dựng một cổng có thể thu hồi trước dữ liệu riêng của chính người dùng — đúng lớp
+  // lỗi `personal-prefs-must-not-sit-behind-permission-gate`. Cổng THẬT vẫn là cặp đó ở BE; ai không có
+  // nó thì màn hiện rỗng, không phải biến mất khỏi Personal Hub.
+  {
+    sidebarKey: "me.payslips",
+    moduleCode: "ME",
+    label: "Phiếu lương của tôi",
+    path: "/me/payslips",
+    icon: "wallet",
+    group: "Công việc của tôi",
+    order: 24,
+    requiredPermissions: ["access:me"],
+  },
   // S11-ASSET-FE-1 — «Tài sản của tôi» (ASSET-SCREEN-006, GET /me/assets). Gate = cặp ASSET (KHÁC các
   // mục ME khác dùng access:me), cùng kỹ thuật me.lms dùng access:lms: quyền xem tài sản độc lập với
   // quyền vào Personal Hub — ai bị thu view:asset KHÔNG thấy mục này. ĐỦ CẢ HAI vì trang tải GET
@@ -1156,6 +1174,44 @@ export const RECRUIT_SIDEBAR: readonly SidebarItemMeta[] = [
   },
 ];
 
+// S13-PAYROLL-FE-1 — sidebar PAYROLL (SPEC-11 §9). Ba mục = ba màn có entry ROUTE_REGISTRY; chi tiết kỳ
+// (PAY-SCREEN-002) và phiếu lương (003) là màn con, KHÔNG lên sidebar.
+//
+// ⚠️ «Phiếu lương của tôi» (PAY-SCREEN-006) KHÔNG ở đây — nó thuộc sidebar ME (`access:me`), vì phiếu
+// của chính mình không được nằm sau cổng module quản trị tiền lương.
+export const PAYROLL_SIDEBAR: readonly SidebarItemMeta[] = [
+  {
+    sidebarKey: "payroll.periods",
+    moduleCode: "PAYROLL",
+    label: "Kỳ lương",
+    path: "/payroll/periods",
+    icon: "calendar-days",
+    group: "overview",
+    order: 10,
+    requiredPermissions: ["access:payroll", "view:payroll-period"],
+  },
+  {
+    sidebarKey: "payroll.salaryProfiles",
+    moduleCode: "PAYROLL",
+    label: "Hồ sơ lương",
+    path: "/payroll/salary-profiles",
+    icon: "wallet",
+    group: "overview",
+    order: 20,
+    requiredPermissions: ["access:payroll", "view:salary-profile"],
+  },
+  {
+    sidebarKey: "payroll.bonusPenalties",
+    moduleCode: "PAYROLL",
+    label: "Thưởng / phạt",
+    path: "/payroll/bonus-penalties",
+    icon: "circle-dollar-sign",
+    group: "overview",
+    order: 30,
+    requiredPermissions: ["access:payroll", "view:bonus-penalty"],
+  },
+];
+
 // ---------------------------------------------------------------------------
 // Map moduleCode → sidebar items
 // ---------------------------------------------------------------------------
@@ -1174,6 +1230,7 @@ export const SIDEBAR_REGISTRY: Partial<Record<ModuleCode, readonly SidebarItemMe
   ASSET: ASSET_SIDEBAR,
   ROOM: ROOM_SIDEBAR,
   RECRUIT: RECRUIT_SIDEBAR,
+  PAYROLL: PAYROLL_SIDEBAR,
 };
 
 export function getSidebarItems(moduleCode: ModuleCode): readonly SidebarItemMeta[] {
