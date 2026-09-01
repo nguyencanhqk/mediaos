@@ -16,12 +16,19 @@ import { SetMetadata } from "@nestjs/common";
 export const SYSTEM_JOB_HANDLER = "SYSTEM_JOB_HANDLER";
 
 /**
- * Ngữ cảnh trao cho handler khi chạy cho MỘT tenant. CHỈ `companyId` — KHÔNG có tham số `tx` (chốt round4):
- * handler TỰ mở `withTenant(companyId, …)` (BẤT BIẾN #1) bên trong `run()`. JobRunner enumerate tenant qua
+ * Ngữ cảnh trao cho handler khi chạy cho MỘT tenant. KHÔNG có tham số `tx` (chốt round4): handler TỰ mở
+ * `withTenant(companyId, …)` (BẤT BIẾN #1) bên trong `run()`. JobRunner enumerate tenant qua
  * withPlatformContext RỒI đóng tx TRƯỚC khi gọi `run()` ⇒ handler KHÔNG chạy trong nested-context.
  */
 export interface JobRunContext {
   companyId: string;
+  /**
+   * S13-LEAVE-JOBDATE-1 — ngày nghiệp vụ (`YYYY-MM-DD`) mà handler phải coi là "hôm nay". TUỲ CHỌN và
+   * CHỈ để test ghim được mốc thời gian: JobRunner PROD (job-runner.ts:117) gọi `run({ companyId })` —
+   * KHÔNG set field này ⇒ handler rơi về ngày THẬT của đồng hồ máy, hành vi chạy thật KHÔNG đổi.
+   * Handler nào không quan tâm ngày thì bỏ qua; hợp đồng của các handler khác KHÔNG đổi (field optional).
+   */
+  today?: string;
 }
 
 /**

@@ -39,7 +39,10 @@ export class LeaveAccrualJobHandler implements JobHandler {
   constructor(private readonly accrual: LeaveAccrualService) {}
 
   async run(ctx: JobRunContext): Promise<JobRunResult> {
-    const result = await this.accrual.runCompany(ctx.companyId);
+    // `ctx.today` là TUỲ CHỌN và JobRunner PROD KHÔNG set nó ⇒ `runCompany` rơi về tham số mặc định
+    // `LeaveAccrualService.today()` = ngày THẬT. Chỉ spec truyền vào để ghim mốc thời gian (S13-LEAVE-JOBDATE-1)
+    // — trước đó handler nuốt mất tham số ngày và ca test phụ thuộc đồng hồ máy ⇒ đỏ vĩnh viễn từ 01/09/2026.
+    const result = await this.accrual.runCompany(ctx.companyId, ctx.today);
     const { preview, granted, grantedDays, failed } = result;
 
     this.warnOnce(ctx.companyId, preview.skipped, preview.policies.length);
