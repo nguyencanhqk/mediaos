@@ -121,6 +121,17 @@ export const API_MODULE_TAGS: readonly ApiModuleTag[] = [
     segments: ["job-openings", "candidates", "interviews", "offers", "recruit"],
   },
   {
+    // S13-PAYROLL-BE-1: BẮT BUỘC khai TRƯỚC khi route PAYROLL đầu tiên lên — route không có mục ở đây
+    // rơi vào UNCLASSIFIED_PREFIX và `openapi-contract.e2e-spec` coi đó là LỖI.
+    // `payslips` khai SẴN cho S13-PAYROLL-BE-2 (029/030); `/me/payslips` (031–033) thuộc segment `me`
+    // của module ME — KHÔNG khai ở đây (mỗi segment thuộc đúng một module).
+    code: "PAYROLL",
+    tagPrefix: "Payroll",
+    description:
+      "Tiền lương: hồ sơ lương versioned, kỳ lương FSM 7 trạng thái, thưởng/phạt có duyệt, bảng lương, phiếu lương (mask số tiền ở server, audit lượt đọc) (SPEC-11).",
+    segments: ["payroll-periods", "salary-profiles", "bonus-penalties", "payslips", "payroll"],
+  },
+  {
     // S7-CHAT-BE-1: BẮT BUỘC khai TRƯỚC khi route `/chat/**` đầu tiên lên — route không có mục ở đây rơi
     // vào UNCLASSIFIED_PREFIX, và `openapi-contract.e2e-spec` coi đó là LỖI (không phải "mất nhãn đẹp").
     code: "CHAT",

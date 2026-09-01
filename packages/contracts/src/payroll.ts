@@ -20,6 +20,33 @@ import { periodMonthSchema } from "./attendance";
  */
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
+// 0. Helper query — S13-PAYROLL-BE-1
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+
+export const PAYROLL_PAGE_DEFAULT = 20;
+export const PAYROLL_PAGE_MAX = 100;
+
+/** Khuôn `recruitPageQuery` — pagination API-01 §16.1 cho 4 route list của BE-1 + 2 của BE-2. */
+const payrollPageQuery = {
+  page: z.coerce.number().int().min(1).default(1),
+  per_page: z.coerce.number().int().min(1).max(PAYROLL_PAGE_MAX).default(PAYROLL_PAGE_DEFAULT),
+};
+
+/**
+ * CSV hoặc lặp key → mảng enum. Idempotent với cả hai hình dạng Express tạo ra
+ * (`?status=a,b` và `?status=a&status=b`) — memory `zod-query-param-double-pipe-idempotent`.
+ */
+const csvEnumList = <T extends z.ZodTypeAny>(item: T) =>
+  z
+    .preprocess((v) => {
+      if (v === undefined || v === null || v === "") return undefined;
+      if (Array.isArray(v)) return v;
+      if (typeof v === "string") return v.split(",").map((s) => s.trim());
+      return v;
+    }, z.array(item).min(1))
+    .optional();
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
 // 1. Enum — mirror CHECK (DB-13 §7)
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 
@@ -130,20 +157,28 @@ export const createSalaryProfileSchema = z.object({
 });
 export type CreateSalaryProfileRequest = z.infer<typeof createSalaryProfileSchema>;
 
-/** Sửa phiên bản — mọi field optional; `baseSalary` nếu có PHẢI > 0 (mirror CHECK). */
-export const updateSalaryProfileSchema = z.object({
-  effectiveDate: z.string().date().optional(),
-  baseSalary: z.number().positive().optional(),
-  allowances: z.array(allowanceSchema).optional(),
-  note: z.string().max(500).nullable().optional(),
-});
+/**
+ * Sửa phiên bản (PAYROLL-API-022) — mọi field optional; `baseSalary` nếu có PHẢI > 0 (mirror CHECK).
+ * `delete: true` là đường **xoá mềm** (API-18 §5 — không có route DELETE riêng).
+ * `.strict()`: khoá lạ ⇒ **400 VALIDATION-ERR-001** (SPEC-11 §12), không âm thầm bỏ qua.
+ */
+export const updateSalaryProfileSchema = z
+  .object({
+    effectiveDate: z.string().date().optional(),
+    baseSalary: z.number().positive().optional(),
+    allowances: z.array(allowanceSchema).optional(),
+    note: z.string().max(500).nullable().optional(),
+    delete: z.literal(true).optional(),
+  })
+  .strict();
 export type UpdateSalaryProfileRequest = z.infer<typeof updateSalaryProfileSchema>;
 
-/** GET /salary-profiles query filters. */
+/** GET /salary-profiles query filters (PAYROLL-API-019) + pagination API-01 §16.1. */
 export const salaryProfileListQuerySchema = z.object({
   userId: z.string().uuid().optional(),
   /** Lọc phiên bản có hiệu lực tại ngày X (bản `effective_date <= X` mới nhất). */
   effectiveOn: z.string().date().optional(),
+  ...payrollPageQuery,
 });
 export type SalaryProfileListQuery = z.infer<typeof salaryProfileListQuerySchema>;
 
@@ -192,6 +227,23 @@ export const createPayrollPeriodSchema = z.object({
 });
 export type CreatePayrollPeriodRequest = z.infer<typeof createPayrollPeriodSchema>;
 
+/**
+ * PAYROLL-API-004 — gắn/đổi kỳ công + ghi chú. Chỉ khi `Draft`/`CollectingData` (khác ⇒ 409 001).
+ *
+ * ⚠️ **KHÔNG nhận `status`** (đổi trạng thái đi qua route hành động — FSM ép ở service), và
+ * `attendancePeriodId` **KHÔNG `.nullable()`**: cho gỡ về NULL thì `PAYROLL-API-007` mất nguồn kiểm
+ * "kỳ công đã `locked`" ngay trước khi tính (CHECK `payroll_periods_calculated_needs_attendance_check`
+ * chỉ cấm NULL từ `Calculated` trở đi, nên DB KHÔNG chặn giúp ở `Draft`/`CollectingData`).
+ * `.strict()`: khoá lạ ⇒ 400.
+ */
+export const updatePayrollPeriodSchema = z
+  .object({
+    attendancePeriodId: z.string().uuid().optional(),
+    note: z.string().max(500).nullable().optional(),
+  })
+  .strict();
+export type UpdatePayrollPeriodRequest = z.infer<typeof updatePayrollPeriodSchema>;
+
 /** Từ chối bảng lương — **comment BẮT BUỘC** (SPEC-11 §13.1), đi vào audit + NOTI-EVENT-022. */
 export const rejectPayrollPeriodSchema = z.object({
   reason: z.string().trim().min(1).max(1000),
@@ -211,9 +263,16 @@ export type ReopenPayrollPeriodRequest = z.infer<typeof reopenPayrollPeriodSchem
 export const decidePayrollPeriodSchema = z.object({});
 export type DecidePayrollPeriodRequest = z.infer<typeof decidePayrollPeriodSchema>;
 
+/**
+ * PAYROLL-API-001 — filter `status[]` · `periodMonth` · `from,to` (SPEC-11 §15) + pagination.
+ * `status` nhận CSV **hoặc** lặp key; `from`/`to` là biên **tháng** (`YYYY-MM`), so trên `period_month`.
+ */
 export const payrollPeriodListQuerySchema = z.object({
-  status: payrollPeriodStatusEnum.optional(),
+  status: csvEnumList(payrollPeriodStatusEnum),
   periodMonth: periodMonthSchema.optional(),
+  from: periodMonthSchema.optional(),
+  to: periodMonthSchema.optional(),
+  ...payrollPageQuery,
 });
 export type PayrollPeriodListQuery = z.infer<typeof payrollPeriodListQuerySchema>;
 
@@ -408,13 +467,20 @@ export const createBonusPenaltySchema = z.object({
 });
 export type CreateBonusPenaltyRequest = z.infer<typeof createBonusPenaltySchema>;
 
-/** Sửa — CHỈ khi còn `Pending` và chưa consume (trigger `bonus_penalty_freeze_guard` là chốt cuối ở DB). */
-export const updateBonusPenaltySchema = z.object({
-  kind: bonusKindEnum.optional(),
-  amount: z.number().positive().optional(),
-  periodMonth: periodMonthSchema.optional(),
-  reason: z.string().trim().min(1).max(500).optional(),
-});
+/**
+ * Sửa (PAYROLL-API-026) — CHỈ khi còn `Pending` và chưa consume; `delete: true` là đường **xoá mềm**.
+ * Service tiền-kiểm dưới `FOR UPDATE` (⇒ 011 / 013); trigger `enforce_bonus_penalty_freeze` là chốt
+ * cuối ở DB cho race. `.strict()`: khoá lạ ⇒ 400.
+ */
+export const updateBonusPenaltySchema = z
+  .object({
+    kind: bonusKindEnum.optional(),
+    amount: z.number().positive().optional(),
+    periodMonth: periodMonthSchema.optional(),
+    reason: z.string().trim().min(1).max(500).optional(),
+    delete: z.literal(true).optional(),
+  })
+  .strict();
 export type UpdateBonusPenaltyRequest = z.infer<typeof updateBonusPenaltySchema>;
 
 /** Duyệt — `decisionNote` tuỳ chọn (mirror: CHECK chỉ bắt buộc note khi `Rejected`). */
@@ -432,10 +498,100 @@ export const rejectBonusPenaltySchema = z.object({
 });
 export type RejectBonusPenaltyRequest = z.infer<typeof rejectBonusPenaltySchema>;
 
+/** PAYROLL-API-023 — filter `periodMonth` · `status[]` · `kind` · `userId` (SPEC-11 §15) + pagination. */
 export const bonusPenaltyListQuerySchema = z.object({
   userId: z.string().uuid().optional(),
-  status: bonusPenaltyStatusEnum.optional(),
+  status: csvEnumList(bonusPenaltyStatusEnum),
   periodMonth: periodMonthSchema.optional(),
   kind: bonusKindEnum.optional(),
+  ...payrollPageQuery,
 });
 export type BonusPenaltyListQuery = z.infer<typeof bonusPenaltyListQuerySchema>;
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// 7. Readiness + picker — S13-PAYROLL-BE-1 (PAYROLL-API-006 · 034 · 035)
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Hai loại cảnh báo dữ liệu thiếu (PAYROLL-FUNC-005). Cảnh báo là **MỀM** — không chặn `calculate`;
+ * chỉ khi `eligibleCount = 0` thì `calculate` trả 422 PAYROLL-ERR-009.
+ */
+export const payrollReadinessWarningKindEnum = z.enum([
+  "missing-salary-profile",
+  "missing-attendance",
+]);
+export type PayrollReadinessWarningKind = z.infer<typeof payrollReadinessWarningKindEnum>;
+
+export const payrollReadinessWarningSchema = z.object({
+  userId: z.string().uuid(),
+  /** Qua điểm chiếu danh tính DUY NHẤT `PayrollPeopleRepository`; `null` khi ngoài vị từ chiếu. */
+  fullName: z.string().nullable(),
+  kind: payrollReadinessWarningKindEnum,
+});
+export type PayrollReadinessWarningDto = z.infer<typeof payrollReadinessWarningSchema>;
+
+/**
+ * PAYROLL-API-006 — **KHÔNG khoá tiền nào** (gác bằng `('calculate','payroll-period')` là cặp GHI;
+ * cặp ĐỌC tiền là `view-line`, SPEC-11 §11.1).
+ *
+ * ⚠️ Hình dạng cảnh báo ở ĐÂY (object có cấu trúc) **cố ý khác** `payrollWriteResultSchema.warnings`
+ * (mảng CHUỖI tóm tắt của route GHI `collect`/`calculate`/`adjust-line`) — route ghi trả envelope tối
+ * thiểu, màn readiness mới cần từng người.
+ */
+export const payrollReadinessSchema = z.object({
+  eligibleCount: z.number().int().nonnegative(),
+  warnings: z.array(payrollReadinessWarningSchema),
+});
+export type PayrollReadinessDto = z.infer<typeof payrollReadinessSchema>;
+
+export const PAYROLL_PICKER_LIMIT_DEFAULT = 20;
+export const PAYROLL_PICKER_LIMIT_MAX = 100;
+
+/** PAYROLL-API-034 — danh bạ chọn nhân sự (`payroll-officer` KHÔNG có cặp HR ⇒ không dùng API-03). */
+export const payrollPeoplePickerQuerySchema = z.object({
+  q: z.string().trim().min(1).max(120).optional(),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(PAYROLL_PICKER_LIMIT_MAX)
+    .default(PAYROLL_PICKER_LIMIT_DEFAULT),
+});
+export type PayrollPeoplePickerQuery = z.infer<typeof payrollPeoplePickerQuerySchema>;
+
+/** Trường bó HẸP — không `email`, không số điện thoại (SPEC-11 §18). */
+export const payrollPersonRefSchema = z.object({
+  userId: z.string().uuid(),
+  fullName: z.string().nullable(),
+  employeeCode: z.string().nullable(),
+});
+export type PayrollPersonRefDto = z.infer<typeof payrollPersonRefSchema>;
+
+/** mirror `att_periods_status_check` — chữ **thường** (`'open'/'locked'`, KHÔNG TitleCase). */
+export const attendancePeriodStatusEnum = z.enum(["open", "locked"]);
+export type AttendancePeriodStatus = z.infer<typeof attendancePeriodStatusEnum>;
+
+/**
+ * PAYROLL-API-035 — kỳ công để gắn vào kỳ lương. **BẮT BUỘC**, không phải tiện nghi:
+ * `GET /attendance/periods` gác bằng `('read','attendance')` mà `payroll-officer` giữ **0 cặp ngoài
+ * PAYROLL** (§9g) ⇒ thiếu route này thì PAYROLL-API-002/004 không dùng được.
+ */
+export const payrollAttendancePeriodPickerQuerySchema = z.object({
+  status: attendancePeriodStatusEnum.optional(),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(PAYROLL_PICKER_LIMIT_MAX)
+    .default(PAYROLL_PICKER_LIMIT_DEFAULT),
+});
+export type PayrollAttendancePeriodPickerQuery = z.infer<
+  typeof payrollAttendancePeriodPickerQuerySchema
+>;
+
+export const payrollAttendancePeriodRefSchema = z.object({
+  id: z.string().uuid(),
+  periodMonth: periodMonthSchema,
+  status: attendancePeriodStatusEnum,
+});
+export type PayrollAttendancePeriodRefDto = z.infer<typeof payrollAttendancePeriodRefSchema>;
