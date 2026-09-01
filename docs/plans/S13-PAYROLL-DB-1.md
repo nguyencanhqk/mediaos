@@ -409,3 +409,77 @@ Teardown an toàn: `cleanupTenants` đã xoá `payroll_periods` (`seed.ts:503`) 
 | LOW-lock | `lock_timeout '5s'` đặt ở **cả ba** migration (0565 re-stamp CHECK `audit_logs`, 0566 CHECK `notifications` đều lấy ACCESS EXCLUSIVE) | §3 · §4 |
 | LOW-cols | §0 bổ sung đo **danh sách cột hiện có** 6 bảng trước `ADD COLUMN` (tránh `42701` trên DB đã lệch) — chạy ngay trước khi viết 0564 | §0 |
 | OPEN-roles | Hệ quả §0.7 (3 role tuỳ biến về 0 cặp PAYROLL) nâng từ "ghi trong PR" thành **mục checklist bàn giao + `notes` của WO trong `harness/backlog.mjs`** | bàn giao |
+
+---
+
+## 9. VÁ SAU FULL GATE (2026-09-01) — security BLOCK · database PASS · silent-failure 2 mục
+
+| Reviewer | Verdict | Kết quả |
+| --- | --- | --- |
+| `security-reviewer` | **BLOCK** → đã vá | 2 HIGH + 4 MEDIUM + 2 LOW |
+| `ecc:database-reviewer` | **PASS** | 1 MEDIUM đã vá · 1 LOW để ngỏ |
+| `ecc:silent-failure-hunter` | 2 mục | 1 đọc nhầm (làm rõ comment) · 1 thật (gỡ assert tautology) |
+
+### 9.1 [HIGH-1] Nhánh (1) của trigger di sản làm HAI việc — §8.1 chỉ nhận ra MỘT
+
+§8.1 kết luận "chỉ nhánh (1) ép FSM chữ thường bị bỏ, ba nhánh còn lại giữ". **Vẫn thiếu:** nhánh (1) của
+`0098:113-119` cấm **mọi** đổi `status` sau khi rời `draft` — tức nó ép cả **tính TERMINAL**, và chính đó là
+NEO giữ cho các nhánh đóng băng tiền không bị vòng qua:
+
+```text
+hàng Approved, chưa consume:
+  1. UPDATE … SET status='Pending'   → (A) không kể `status` · (D) đòi OLD.status='Pending' ⇒ LỌT
+                                        CHECK decided_pair cũng cho qua (vế `status = 'Pending'`)
+  2. UPDATE … SET amount=99999999    → OLD.status='Pending', chưa consume ⇒ v_frozen=false ⇒ LỌT
+  3. duyệt lại                        → khoản tiền đã bị đổi sau khi duyệt, 0 vết
+```
+
+⇒ dựng lại thành **nhánh (E)**: `OLD.status <> 'Pending' AND NEW.status IS DISTINCT FROM OLD.status → RAISE`.
+KHÔNG mâu thuẫn `check-cannot-enforce-fsm-transitions`: (E) không ép **đồ thị** chuyển tiếp (việc của service,
+PAYROLL-ERR-011/012/013) mà ép một **bất biến cần so OLD/NEW** — thứ CHECK không diễn đạt được.
+**Bài học chung:** khi gỡ một nhánh trigger di sản, phải kể ra TỪNG VIỆC nhánh đó làm, không phải từng nhánh.
+
+### 9.2 [HIGH-2] `four_eyes_check` RỖNG khi `submitted_by IS NULL` — và diff tự tạo mẫu code dùng lối thoát
+
+`CHECK (approved_by IS NULL OR submitted_by IS NULL OR approved_by <> submitted_by)`: vế thứ hai là **bắt buộc**
+(bảng RESET SPEC-11 §13.1 xoá `submitted_*` khi reject/reopen), nhưng một mình nó ⇒ chỉ cần để `submitted_by`
+NULL là four-eyes vô hiệu — ghi thẳng kỳ `Approved` với `approved_by` = chính người tính.
+DB-13 §6.3 liệt kê 7 CHECK và **không có** `submitted_pair` ⇒ lỗ có từ thiết kế.
+
+⇒ thêm `payroll_periods_submitted_pair_check` (`status NOT IN ('Reviewing','Approved','Paid','Locked') OR
+(submitted_by IS NOT NULL AND submitted_at IS NOT NULL)`). Tương thích bảng RESET: `reject` hạ về `Calculated`,
+`reopen` hạ về `CollectingData` — cả hai NGOÀI danh sách nên xoá `submitted_*` cùng lệnh vẫn hợp lệ.
+
+⚠️ Nghiêm trọng hơn CHECK: `demo-seed-full.mjs` của commit đầu **ghi comment hướng dẫn dùng đúng lối thoát đó**
+("demo KHÔNG ghi submitted_by, vế `submitted_by IS NULL` cho qua"). demo-seed là thứ người viết BE-1 ĐỌC VÀ CHÉP
+⇒ đã sửa dùng **hai actor khác nhau**. **Bài học:** fixture/demo là bề mặt API của bất biến, không phải phụ lục.
+
+### 9.3 Census quyền: lọc theo SCOPE thì mù, không lọc thì đỏ ngẫu nhiên
+
+Verify wildcard (0565) và int-spec D1/D6 ban đầu lọc `r.company_id IS NULL` (chép khuôn S12). Nhưng **chính §0.7
+của WO này** phát hiện 3 role TUỲ BIẾN của tenant (`company_id NOT NULL`) đang giữ quyền lương ⇒ câu census mù
+với đúng nhóm vừa tìm ra. Bỏ lọc thì D1 đỏ ngẫu nhiên vì `SuperAdminBootstrapService` cấp catalog per-pair lúc
+boot (tuỳ thứ tự chunk).
+⇒ **loại `super-admin` theo TÊN, quét mọi scope.** Một thay đổi đóng cả hai.
+
+### 9.4 Mục còn lại đã vá
+
+| # | Nội dung |
+| --- | --- |
+| MED (db-reviewer) | Nhánh (A) thêm `decided_by`/`decided_at` — trigger di sản không đóng băng `approved_by/at` ⇒ gán lại NGƯỜI DUYỆT một khoản tiền trong im lặng. Rewrite trigger là dịp đóng. |
+| MED | Census `object_permissions` = 0 hàng trỏ 17 cặp (verify 0565 + D11) — object grant thoả **thẳng** cổng sensitive, mạnh hơn wildcard; (6.5)/D2 chỉ soi `hr-manager`. |
+| MED | `payslipItemSchema.meta` (jsonb tự do, cạnh `amount` đã mask) vào cùng cổng `.optional()`. |
+| LOW | Verify `export:payroll ⇒ view-line` (SPEC-11 §11.1, bài học RECRUIT H5) + D12. |
+| LOW | demo-seed tự tạo `attendance_period` thay vì để NULL (`LIMIT 1` có thể NULL ⇒ 23514 hỏng **cả lượt** seed). |
+| LOW (sf-hunter) | Gỡ assert tautology `expect(x).toBe(x)` ở ca A1. |
+
+### 9.5 Để NGỎ — bàn giao, không vá ở WO này
+
+- **`bonus_penalties(payroll_period_id)` không có index dẫn đầu** cho đường "nhả consume" (`WHERE
+  payroll_period_id = X`, SPEC-11 §13.3). DB-13 §8 **không liệt kê** index này ⇒ thêm ở đây là vượt phạm vi và
+  đoán mò. Bàn giao **BE-2** (WO viết đường recalc): đo `EXPLAIN` trên dữ liệu thật rồi quyết
+  (`idx-scan-zero-is-not-unused` · `pg-planner-index-assert-trap`).
+- `security-reviewer` và `database-reviewer` đều dừng sớm ở mốc chi phí; `silent-failure-hunter` chưa soi
+  `seed.ts` · `fk-tenant-verdicts.ts` · `rls-registry.ts` · 2 int-spec · `demo-seed-full.mjs`.
+  Phần `seed.ts`/`fk-tenant-verdicts.ts` **đã được `database-reviewer` phủ** (xác nhận thứ tự teardown + FK).
+  Còn lại là vùng test/fixture, rủi ro thấp hơn vùng DDL/quyền.
