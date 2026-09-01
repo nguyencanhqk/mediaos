@@ -1639,6 +1639,13 @@
       "when": 1717587355000,
       "tag": "0566_s13payrolldb1_noti_payroll",
       "breakpoints": true
+    },
+    {
+      "idx": 234,
+      "version": "7",
+      "when": 1717587356000,
+      "tag": "0567_s13payrollfe1_enable_payroll_module",
+      "breakpoints": true
     }
   ]
 }

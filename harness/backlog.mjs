@@ -15192,7 +15192,7 @@ export const backlog = [
     title:
       "Máy tính lương: calculate (SQL numeric, snapshot ĐÓNG BĂNG, idempotency theo kỳ) → điều chỉnh dòng có lý do → submit/approve/reject/lock/reopen (four-eyes) → generate + publish payslip (bản ghi bất biến) + ack + export XLSX (quyền riêng + audit) + outbox NOTI 020..023",
     zone: "red",
-    status: "in_progress",
+    status: "done",
     paths: [
       "apps/api/src/payroll/**",
       "apps/api/src/notifications/**",
@@ -15232,7 +15232,7 @@ export const backlog = [
     title:
       "FE PAYROLL (apps/app routes/payroll/ + màn ME): 6 màn PAY-SCREEN-001..006 — danh sách kỳ · chi tiết kỳ (bảng lương + FSM actions + cảnh báo thiếu) · phiếu lương breakdown · hồ sơ lương NV (versioned) · thưởng/phạt kỳ · «Phiếu lương của tôi» (Own + ack); bật module PAYROLL (mig khuôn 0556)",
     zone: "yellow",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/app/src/routes/payroll/**",
       "apps/app/src/**",

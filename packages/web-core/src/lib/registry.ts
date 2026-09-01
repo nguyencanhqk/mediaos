@@ -824,6 +824,37 @@ export const APP_REGISTRY: readonly AppRegistryItem[] = [
     status: "active",
     order: 120,
   },
+  {
+    // S13-PAYROLL-FE-1 — thẻ "Tiền lương" (SPEC-11, wave S13-PAYROLL). Module NỘI BỘ thật.
+    //
+    // Gate = ĐỦ CẢ HAI cặp engine LITERAL `access:payroll` + `view:payroll-period` (seed 0565) — thẻ
+    // điều hướng tới /payroll/periods, trang đó tải GET /payroll-periods = `view:payroll-period` ⇒ "ô
+    // hiện ra thì bấm vào phải vào được" (cùng lý do ASSET/ROOM/RECRUIT ở trên).
+    //
+    // KHÔNG gate bằng cặp chở-tiền (`view-line:payroll-period` / `view:salary-profile` / `view-payslip:
+    // payslip`): 13 cặp đó is_sensitive ⇒ wildcard không kế thừa, gate thẻ bằng chúng sẽ giấu CẢ app
+    // khỏi vai chỉ được xem danh sách kỳ. Các màn/khối chở tiền tự gate riêng bằng `useCanExact`.
+    appKey: "payroll",
+    moduleCode: "PAYROLL",
+    nameKey: "app.payroll",
+    descKey: "appDesc.payroll",
+    icon: "wallet",
+    rootPath: "/payroll",
+    defaultRoute: "/payroll/periods",
+    category: "hr",
+    aliases: [
+      "tien luong",
+      "payroll",
+      "luong",
+      "phieu luong",
+      "payslip",
+      "thuong phat",
+      "bang luong",
+    ],
+    requiredPermissions: ["access:payroll", "view:payroll-period"],
+    status: "active",
+    order: 130,
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -1470,6 +1501,24 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 71,
   },
+  // S13-PAYROLL-FE-1 — «Phiếu lương của tôi» (PAY-SCREEN-006). Đặt trong khối ME, gate `access:me`
+  // như MỌI màn ME khác — **CỐ Ý KHÔNG gate bằng `access:payroll`**: phiếu lương của chính mình là thứ
+  // mọi nhân viên phải xem được, nhét sau cổng module quản trị tiền lương là đúng lớp lỗi
+  // `personal-prefs-must-not-sit-behind-permission-gate` (người ít quyền nhất mất đường xem dữ liệu của
+  // chính họ). Cổng THẬT là cặp `('view-own-payslip','payslip')` ở BE — sàn scope Company TẮT và
+  // `objectGrantRequired: false` cho 3 route `/me/payslips*`, nếu không nhân viên 403 trên phiếu của
+  // chính mình (bẫy ghi trong mig `0180`).
+  {
+    routeKey: "me.payslips",
+    path: "/me/payslips",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "PAY-SCREEN-006",
+    titleKey: "routeTitle.mePayslips",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: true,
+    order: 71.5,
+  },
   // S5-ME-FE-2 — APPEND 6 route "Hồ sơ của tôi / Tài khoản & bảo mật" (SPEC-09 §8.1, ME-SCREEN-002..008).
   // Gate GIỮ literal `access:me` (KHÔNG qua PERMISSION_CODE_TO_PAIR — cùng kỹ thuật me.overview): 5 màn
   // TÁI DÙNG page sẵn có (MyProfilePage/MyChangeRequestPage/AccountProfilePage/ChangePasswordPage/
@@ -1730,6 +1779,55 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredPermissions: ["access:recruit", "view:interview"],
     showInSidebar: true,
     order: 87,
+  },
+
+  // PAYROLL — Tiền lương (SPEC-11 §9, wave S13-PAYROLL). Gate màn = gate ĐƯỜNG TẢI của chính màn đó
+  // (read-path-gate-pair-must-match-download-pair), cặp engine LITERAL access:payroll + view:<resource>:
+  //   • periods tải GET /payroll-periods = view:payroll-period — cặp KHÔNG nhạy cảm, và DTO kỳ **không
+  //     chở số tiền nào** (SPEC-11 §18): danh sách kỳ mở rộng hơn hẳn bảng lương là CỐ Ý;
+  //   • salary-profiles tải GET /salary-profiles = view:salary-profile — SENSITIVE, có trong
+  //     SENSITIVE_CAPABILITY_ALLOWLIST + SENSITIVE_SCREEN_GATE_PAIRS của BE nên /auth/me CÓ trả cặp
+  //     literal cho vai được cấp; wildcard *:* KHÔNG kế thừa ⇒ fail-closed đúng semantics BE;
+  //   • bonus-penalties tải GET /bonus-penalties = view:bonus-penalty — SENSITIVE, cùng lý do.
+  //
+  // ⚠️ Chi tiết kỳ (PAY-SCREEN-002) và phiếu lương (PAY-SCREEN-003) dùng RouteMeta CỤC BỘ trong
+  // router.tsx (mẫu ASSET/RECRUIT detail). Bảng lương bên trong PAY-SCREEN-002 gác THÊM bằng cặp ĐỌC
+  // tiền view-line:payroll-period NGAY TRONG PAGE — KHÔNG nhét vào route: người có `approve` phải mở
+  // được trang để duyệt, chỉ là không thấy bảng số nếu thiếu cặp đó (DOC-1 quyết định #3).
+  //
+  // ⚠️ «Phiếu lương của tôi» (PAY-SCREEN-006) KHÔNG ở đây — nó là route ME (`access:me`), xem khối ME.
+  {
+    routeKey: "payroll.periods",
+    path: "/payroll/periods",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "PAYROLL",
+    screenCode: "PAY-SCREEN-001",
+    titleKey: "routeTitle.payroll",
+    requiredPermissions: ["access:payroll", "view:payroll-period"],
+    showInSidebar: true,
+    order: 88,
+  },
+  {
+    routeKey: "payroll.salaryProfiles",
+    path: "/payroll/salary-profiles",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "PAYROLL",
+    screenCode: "PAY-SCREEN-004",
+    titleKey: "routeTitle.payrollSalaryProfiles",
+    requiredPermissions: ["access:payroll", "view:salary-profile"],
+    showInSidebar: true,
+    order: 89,
+  },
+  {
+    routeKey: "payroll.bonusPenalties",
+    path: "/payroll/bonus-penalties",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "PAYROLL",
+    screenCode: "PAY-SCREEN-005",
+    titleKey: "routeTitle.payrollBonusPenalties",
+    requiredPermissions: ["access:payroll", "view:bonus-penalty"],
+    showInSidebar: true,
+    order: 90,
   },
 
   // System

@@ -92,7 +92,7 @@ const MVP_ACTIVE_MODULES = ["AUTH", "HR", "ATT", "LEAVE", "TASK", "DASH", "NOTI"
 // sách inactive" (`recruit-wiring.spec.ts` cũ), một mã module gõ sai/migration quên chạy vẫn lọt qua vì
 // không assert dương tính is_active=true. `describe` "2a-ext" bên dưới đóng lỗ này cho CẢ BA module đã
 // launch, không chỉ RECRUIT.
-const EXTENSION_ACTIVE_MODULES = ["ASSET", "ROOM", "RECRUIT"] as const;
+const EXTENSION_ACTIVE_MODULES = ["ASSET", "ROOM", "RECRUIT", "PAYROLL"] as const;
 
 // Extension modules phải inactive.
 //
@@ -107,7 +107,11 @@ const EXTENSION_ACTIVE_MODULES = ["ASSET", "ROOM", "RECRUIT"] as const;
 // S12-RECRUIT-FE-1 — GỠ "RECRUIT": migration 0562 bật modules.RECRUIT.is_active=true CÙNG COMMIT với
 // lần gỡ này; 6 màn REC-SCREEN-001..006 đã có nên menu trỏ vào phòng thật. Guard (e) của 0560 vốn đã
 // forward-compatible (không assert is_active) nên KHÔNG cần nới guard như ROOM/ASSET.
-const EXTENSION_INACTIVE_MODULES = ["PAYROLL", "CHAT", "SOCIAL"] as const;
+// S13-PAYROLL-FE-1 — CHUYỂN "PAYROLL" sang EXTENSION_ACTIVE_MODULES (không chỉ gỡ khỏi đây): migration
+// 0567 bật modules.PAYROLL.is_active=true CÙNG COMMIT với lần chuyển này, sau khi 35/35 route PAYROLL
+// đã lên dây ở BE-1/BE-2 và 6 màn PAY-SCREEN-001..006 đã có. Chỉ GỠ mà không THÊM là để lọt đúng ca
+// "migration quên chạy" — danh sách ACTIVE mới assert dương tính is_active=true.
+const EXTENSION_INACTIVE_MODULES = ["CHAT", "SOCIAL"] as const;
 
 // system_settings defaults phải tồn tại sau seed (DB-08 §8.3 + 0435_foundation_db5).
 const REQUIRED_SYSTEM_SETTINGS = [

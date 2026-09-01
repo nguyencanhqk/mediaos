@@ -33,6 +33,8 @@ export const rootKeys = {
   rooms: ["rooms"] as const,
   // S12-RECRUIT-FE-1 — Tuyển dụng (SPEC-12). Module RIÊNG, wave S12-RECRUIT.
   recruit: ["recruit"] as const,
+  // S13-PAYROLL-FE-1 — Tiền lương (SPEC-11). Module RIÊNG, wave S13-PAYROLL.
+  payroll: ["payroll"] as const,
 } as const;
 
 // ── Auth keys ─────────────────────────────────────────────────────────────────
@@ -1163,5 +1165,66 @@ export const recruitKeys = {
       [...rootKeys.recruit, "pickers", "employees", params] as const,
     recruiterUsers: (params?: Record<string, unknown>) =>
       [...rootKeys.recruit, "pickers", "recruiter-users", params] as const,
+  },
+};
+
+/**
+ * S13-PAYROLL-FE-1 — sổ cache PAYROLL (SPEC-11 §9, PAYROLL-API-001..035).
+ *
+ * ⚠️ Mọi hành động FSM trên kỳ lương (`collect`/`calculate`/`submit`/`approve`/`reject`/
+ * `generate-payslips`/`publish`/`lock`/`reopen`) đổi **cả** hàng kỳ, **cả** bảng dòng lương, **cả**
+ * readiness, **cả** summary — nên page invalidate bằng prefix `periods.allOf()` chứ không gỡ từng
+ * khoá: sót một nhánh là màn hiện trạng thái cũ cạnh nút đã đổi.
+ *
+ * `lines` KHÔNG nhận `q` (contracts cố ý bỏ — lọc theo tên vỡ phân trang, xem
+ * `payrollLineListQuerySchema`); tham số lọc người là `userId` lấy từ picker 034.
+ */
+export const payrollKeys = {
+  all: rootKeys.payroll,
+  periods: {
+    allOf: () => [...rootKeys.payroll, "periods"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "periods", "list", params] as const,
+    detail: (id: string) => [...rootKeys.payroll, "periods", "detail", id] as const,
+    readiness: (id: string) => [...rootKeys.payroll, "periods", "readiness", id] as const,
+    lines: (id: string, params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "periods", "lines", id, params] as const,
+    linesOf: (id: string) => [...rootKeys.payroll, "periods", "lines", id] as const,
+    summary: () => [...rootKeys.payroll, "periods", "summary"] as const,
+  },
+  salaryProfiles: {
+    allOf: () => [...rootKeys.payroll, "salary-profiles"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "salary-profiles", "list", params] as const,
+    detail: (id: string) => [...rootKeys.payroll, "salary-profiles", "detail", id] as const,
+  },
+  bonusPenalties: {
+    allOf: () => [...rootKeys.payroll, "bonus-penalties"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "bonus-penalties", "list", params] as const,
+    detail: (id: string) => [...rootKeys.payroll, "bonus-penalties", "detail", id] as const,
+  },
+  payslips: {
+    allOf: () => [...rootKeys.payroll, "payslips"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "payslips", "list", params] as const,
+    detail: (id: string) => [...rootKeys.payroll, "payslips", "detail", id] as const,
+  },
+  /**
+   * Nhánh Own — sổ RIÊNG với `payslips` ở trên. Hai đường tải khác cặp quyền
+   * (`view-payslip:payslip` vs `view-own-payslip:payslip`) và trả tập khác nhau (Own chỉ kỳ ĐÃ phát
+   * hành): gộp một khoá là nhân viên đọc trúng cache của màn quản trị và ngược lại.
+   */
+  mePayslips: {
+    allOf: () => [...rootKeys.payroll, "me-payslips"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "me-payslips", "list", params] as const,
+    detail: (id: string) => [...rootKeys.payroll, "me-payslips", "detail", id] as const,
+  },
+  pickers: {
+    people: (params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "pickers", "people", params] as const,
+    attendancePeriods: (params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "pickers", "attendance-periods", params] as const,
   },
 };

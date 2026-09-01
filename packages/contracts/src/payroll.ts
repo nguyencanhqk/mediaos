@@ -286,7 +286,14 @@ export const payrollWriteResultSchema = z.object({
   id: z.string().uuid(),
   status: payrollPeriodStatusEnum,
   affectedLines: z.number().int().nonnegative(),
-  warnings: z.array(z.string()).default([]),
+  /**
+   * BẮT BUỘC, **KHÔNG** `.default([])`. Mọi đường ghi của BE đều set tường minh (approval 5 chỗ · calc 2 ·
+   * payslips 3) ⇒ khoá luôn có mặt. Default ở schema PHẢN HỒI sẽ biến "server quên gửi" thành "không có
+   * cảnh báo" — mà cảnh báo ở đây là tín hiệu an toàn (`payslips-already-generated`, thiếu hồ sơ lương).
+   * Kèm hệ quả kiểu: `.default()` làm input ≠ output, còn `apiFetch<T>(path, schema: z.ZodType<T>)` gộp hai
+   * vế thành một ⇒ TS suy T về hình dạng INPUT và mọi caller khai kiểu output đều đỏ.
+   */
+  warnings: z.array(z.string()),
 });
 export type PayrollWriteResultDto = z.infer<typeof payrollWriteResultSchema>;
 
