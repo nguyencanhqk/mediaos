@@ -15119,6 +15119,73 @@ export const backlog = [
     ],
   },
   {
+    id: "S13-LEAVE-JOBDATE-1",
+    module: "LEAVE",
+    layer: "BE",
+    title:
+      "Gỡ ca đỏ-vĩnh-viễn leave-accrual: tiêm `today` vào JobRunContext để spec ghim được ngày, PROD vẫn đọc ngày thật",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/scheduler/**",
+      "apps/api/src/leave/leave-accrual.job-handler.ts",
+      "apps/api/src/leave/leave-accrual.int.spec.ts",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "memory leave-accrual-spec-red-on-real-today — chẩn đoán đầy đủ, đo 2026-09-01 trên PR #456",
+      "apps/api/src/leave/leave-accrual.job-handler.ts:42 — `runCompany(ctx.companyId)` KHÔNG truyền ngày; LeaveAccrualService.runCompany(co, TODAY) thì có",
+      "apps/api/src/leave/leave-accrual.int.spec.ts:544 — ca «job handler: jobCode duy nhất + metadata chỉ có SỐ ĐẾM»",
+    ],
+    done_when: [
+      "`JobRunContext` nhận trường ngày TUỲ CHỌN (vd `today?: string`); `LeaveAccrualJobHandler.run` truyền xuống `runCompany(ctx.companyId, ctx.today)`; JobRunner PROD KHÔNG set trường đó ⇒ hành vi thật KHÔNG đổi (có ca chứng minh nhánh undefined vẫn dùng ngày thật)",
+      "Ca ĐỎ ở leave-accrual.int.spec.ts:544 chuyển sang truyền `today: TODAY` và giữ NGUYÊN con số kỳ vọng 7 — CẤM bump 7→8 (bump = ghim lỗ mở, memory tests-can-pin-a-hole-open)",
+      "Chạy spec đó HAI lần cách nhau qua mốc tháng giả lập (hoặc ca bảng với 2 giá trị `today` khác nhau) để chứng minh kết quả KHÔNG còn phụ thuộc đồng hồ máy",
+      "Job handler khác cùng khuôn (Goal reconciliation / retention cleanup) KHÔNG bị đổi hợp đồng — trường mới tuỳ chọn, không bắt buộc",
+    ],
+    notes: [
+      "🟡 LIGHT gate. WO NHỎ nhưng CHẶN cả wave: ca này đỏ ĐỘC LẬP với mọi diff kể từ 2026-09-01 (đọc ngày thật của máy), nên MỌI PR còn lại phải merge bằng --admin ⇒ CI mất giá trị làm cổng, một ca đỏ THẬT sẽ lẫn vào không ai phân biệt được. Owner chốt 2026-09-01.",
+      "Chạy TRƯỚC S13-PAYROLL-BE-1B và BE-2 để hai WO đỏ đó có CI xanh thật mà đối chiếu.",
+    ],
+  },
+  {
+    id: "S13-PAYROLL-BE-1B",
+    module: "PAYROLL",
+    layer: "BE",
+    title:
+      "Đầu vào phép theo NỬA NGÀY: sửa SPEC-11 §13.4 sang mức 0.5 ngày rồi vá PayrollInputsRepository — nghỉ nửa buổi đang bị đếm thành nguyên ngày",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/payroll/payroll-inputs.repository.ts",
+      "apps/api/test/integration/payroll-be1-inputs-audit.int-spec.ts",
+      "docs/SPEC/SPEC-11*.md",
+      "docs/plans/S13-PAYROLL-BE-1B.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S13-PAYROLL-BE-1"],
+    plan: "docs/plans/S13-PAYROLL-BE-1B.md",
+    src: [
+      "PHÁT HIỆN 2026-09-01 (FULL gate BE-1, vế security review): payroll-inputs.repository.ts `lv` CTE bung leave_requests theo dải start_date..end_date rồi count(distinct d) ⇒ MỌI đơn nghỉ nửa buổi thành 1 ngày TRÒN",
+      "Dữ liệu ĐÃ CÓ, không cần migration: `leave_requests.total_days numeric(5,1)` + `duration_type` + `half_day_session` (schema/hr.ts:397+); LEAVE còn vật chất hoá `leave_request_days.leave_days = 0.5` + `is_working_day` (schema/leave.ts:230+, leave-calc.logic.ts:115)",
+      "SPEC-11 §13.4 hiện chốt nguồn ở mức NGÀY («đơn nghỉ đã duyệt ⋈ leave_types.paid») và CẤM WO BE tự phát minh định nghĩa đầu vào ⇒ phải sửa SPEC TRƯỚC, code sau. Owner chốt hướng 0.5 ngày 2026-09-01",
+    ],
+    done_when: [
+      "SPEC-11 §13.4 sửa TRƯỚC: `paid_leave_days`/`unpaid_leave_days` là numeric (bội của 0.5), nguồn tường minh + vị từ SQL bắt buộc viết lại như §13.4 vẫn làm; nêu rõ hệ quả lên `present_days` và lên clamp `LEAST(present_days/NULLIF(work_days,0),1)`",
+      "Chốt trong SPEC nguồn nào thắng khi lệch: `leave_request_days` (đã vật chất hoá, có `is_working_day` — đóng luôn rủi ro lệch lịch mà §13.4 đang ghi là chấp nhận) HAY `leave_requests.total_days` (đơn giản, nhưng phải tự giao với cal_work). Đo cả hai trên dữ liệu thật trước khi chốt, đừng suy từ tài liệu",
+      "`payroll-inputs.repository.ts` vá theo SPEC mới; `present_days` giữ nguyên tắc UNION không-đếm-hai-lần khi một ngày vừa có công vừa có phép nửa buổi (ngày đó KHÔNG được thành 1.5)",
+      "Ca test MỚI trong payroll-be1-inputs-audit.int-spec.ts: nghỉ nửa buổi CÓ lương ⇒ paid_leave_days = 0.5 · nghỉ nửa buổi KHÔNG lương ⇒ unpaid_leave_days = 0.5 · ngày vừa có bản ghi công vừa có phép nửa buổi có lương ⇒ present_days đếm ĐÚNG MỘT · ca ALLOW đối chứng nguyên ngày vẫn = 1.0",
+      "PayrollUserInputs đổi kiểu số ngày sang thập phân ⇒ rà MỌI nơi tiêu thụ (readiness/collect envelope + input_snapshot_json) không bị ép về int âm thầm",
+    ],
+    notes: [
+      "🔴 FULL gate. NHỎ nhưng ĐỎ: nó định nghĩa lại một đại lượng ĐẦU VÀO TIỀN LƯƠNG. Phải xong TRƯỚC S13-PAYROLL-BE-2 — BE-2 nối `unpaid_leave_days` vào khấu trừ, chạy sau thì mỗi buổi nghỉ không lương bị trừ TRỌN một ngày công.",
+      "BE-1 (đã ship #456) KHÔNG chở tiền nên lỗi chưa gây thiệt hại; không có ca test nào ghim hành vi nguyên-ngày ⇒ không phải gỡ ca cũ, chỉ thêm ca mới.",
+    ],
+  },
+  {
     id: "S13-PAYROLL-BE-2",
     module: "PAYROLL",
     layer: "BE",
@@ -15137,7 +15204,7 @@ export const backlog = [
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],
-    depends_on: ["S13-PAYROLL-BE-1"],
+    depends_on: ["S13-PAYROLL-BE-1", "S13-PAYROLL-BE-1B"],
     plan: "docs/plans/S13-PAYROLL-BE-2.md",
     src: [
       "SPEC-11 §công-thức/§FSM (viết ở DOC-1): gross = base pro-rate + phụ cấp + thưởng − phạt; khấu trừ = không lương + trễ/sớm (nếu bật rule) + dòng tay; net = gross − khấu trừ; breakdown giải-thích-được (P2-PAY-05-006)",
