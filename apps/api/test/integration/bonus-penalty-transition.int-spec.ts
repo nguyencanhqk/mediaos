@@ -6,15 +6,23 @@ import { appPool, directPool, hasDb } from "../helpers/integration-db";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
 
 /**
- * G12-3 — FSM duyệt + đóng băng tiền sau duyệt + CHECK, ép Ở TẦNG DB (trigger 0098 + CHECK constraints).
- * Đây là lớp 2 (sau service) cho lõi tính tiền — phải ĐỎ nếu trigger/CHECK biến mất.
- *  (1) draft→approved hợp lệ; (2) approved→draft / approved→rejected / rejected→approved bị chặn (trigger);
- *  (3) đóng băng: sửa amount/kind/user/period/reference trên hàng approved bị chặn;
- *  (4) amount > 0 (CHECK); (5) reference đúng-một-hoặc-không (CHECK);
- *  (6) consume re-bind sang kỳ khác bị chặn (trigger).
- * Chạy UPDATE/INSERT qua app role (mediaos_app) trong ngữ cảnh tenant; seed qua direct (superuser).
+ * PAYROLL — ĐÓNG BĂNG TIỀN của `bonus_penalties`, ép Ở TẦNG DB (trigger `bonus_penalty_freeze_guard` mig 0564
+ * + CHECK). Đây là lớp 2 (sau service) cho lõi tính tiền — phải ĐỎ nếu trigger/CHECK biến mất.
+ *
+ * ⚠️ S13-PAYROLL-DB-1 — file này ĐƯỢC SỬA, KHÔNG XOÁ. `0564` DROP trigger di sản `bonus_penalty_guard` vì
+ * nhánh (1) của nó ép FSM CŨ chữ thường (`draft→approved/rejected`) và sẽ **chặn oan** mọi hàng PascalCase.
+ * Nhưng ba nhánh còn lại là BẤT BIẾN TIỀN và CHECK **không so được OLD/NEW** ⇒ chúng được dựng lại HẸP trong
+ * `enforce_bonus_penalty_freeze()`. File này chuyển đúng theo:
+ *   · ca **chuyển tiếp FSM** (draft→approved→…) ĐÃ RỜI khỏi đây — lên tầng service (PAYROLL-ERR-011/012/013);
+ *   · ca **reference_type/task_id/kpi_result_id/currency** ĐÃ BỎ — 4+1 cột đó GỠ ở 0564 (DB-13 §5.5);
+ *   · giữ + mở rộng ca đóng băng theo BỐN nhánh (A)(B)(C)(D) của trigger mới.
+ *
+ * Mỗi nhánh có CẢ ca ALLOW lẫn ca DENY — ca DENY đứng một mình là ca xanh-RỖNG
+ * (`deny-cases-vacuous-without-allow-case`): nếu trigger lỡ RAISE cho mọi UPDATE thì chỉ ca ALLOW mới bắt được.
+ *
+ * Chạy UPDATE qua app role (mediaos_app) trong ngữ cảnh tenant; seed qua direct (superuser).
  */
-describe.skipIf(!hasDb)("G12-3 bonus/penalty FSM + freeze + CHECK (DB enforcement)", () => {
+describe.skipIf(!hasDb)("PAYROLL bonus/penalty freeze guard + CHECK (DB enforcement)", () => {
   const direct = directPool();
   const app = appPool();
   let A: SeededTenant;
@@ -29,6 +37,7 @@ describe.skipIf(!hasDb)("G12-3 bonus/penalty FSM + freeze + CHECK (DB enforcemen
       await c.query("BEGIN");
       await c.query("SELECT set_config('app.current_company_id', $1, true)", [companyId]);
       const out = await fn(c);
+      // ROLLBACK luôn: mỗi ca độc lập, không rò trạng thái sang ca sau.
       await c.query("ROLLBACK");
       return out;
     } catch (e) {
@@ -43,26 +52,31 @@ describe.skipIf(!hasDb)("G12-3 bonus/penalty FSM + freeze + CHECK (DB enforcemen
     }
   }
 
-  /** Seed 1 bonus_penalty qua direct (INSERT không có trigger — trigger chỉ BEFORE UPDATE). */
+  /**
+   * Seed 1 hàng qua direct. Trigger là BEFORE **UPDATE** nên INSERT không bị nó chạm — đó là cách duy nhất
+   * dựng được hàng ở trạng thái đã-duyệt/đã-consume để thử các nhánh đóng băng.
+   */
   async function seedBonus(opts: {
-    status?: string;
-    approved?: boolean;
+    status?: "Pending" | "Approved" | "Rejected";
     payrollPeriodId?: string;
   }): Promise<string> {
-    const approved = opts.approved || opts.status === "approved";
+    const status = opts.status ?? "Pending";
+    const decided = status !== "Pending";
     const r = await direct.query(
       `INSERT INTO bonus_penalties
-         (company_id, user_id, kind, amount, period_month, status, created_by,
-          approved_by, approved_at, payroll_period_id, consumed_at)
-       VALUES ($1, $2, 'bonus', 500.00, '2026-05', $3, $2,
-               $4, $5, $6, $7)
+         (company_id, user_id, kind, amount, period_month, reason, status, created_by,
+          decided_by, decided_at, decision_note, payroll_period_id, consumed_at)
+       VALUES ($1, $2, 'bonus', 500.00, '2026-05', 'Thưởng dự án', $3, $2,
+               $4, $5, $6, $7, $8)
        RETURNING id`,
       [
         A.companyId,
         emp,
-        opts.status ?? "draft",
-        approved ? approver : null,
-        approved ? new Date().toISOString() : null,
+        status,
+        decided ? approver : null,
+        decided ? new Date().toISOString() : null,
+        // CHECK bonus_penalties_reject_note_check: Rejected BẮT BUỘC có decision_note.
+        status === "Rejected" ? "Không hợp lệ" : null,
         opts.payrollPeriodId ?? null,
         opts.payrollPeriodId ? new Date().toISOString() : null,
       ],
@@ -76,13 +90,13 @@ describe.skipIf(!hasDb)("G12-3 bonus/penalty FSM + freeze + CHECK (DB enforcemen
     approver = await seedUser(direct, A.companyId, `bpt-apr-${randomUUID().slice(0, 8)}@a.test`);
     const p1 = await direct.query(
       `INSERT INTO payroll_periods (company_id, period_month, status)
-       VALUES ($1, '2026-05', 'draft') RETURNING id`,
+       VALUES ($1, '2026-05', 'Draft') RETURNING id`,
       [A.companyId],
     );
     periodId = p1.rows[0].id as string;
     const p2 = await direct.query(
       `INSERT INTO payroll_periods (company_id, period_month, status)
-       VALUES ($1, '2026-06', 'draft') RETURNING id`,
+       VALUES ($1, '2026-06', 'Draft') RETURNING id`,
       [A.companyId],
     );
     period2Id = p2.rows[0].id as string;
@@ -90,160 +104,232 @@ describe.skipIf(!hasDb)("G12-3 bonus/penalty FSM + freeze + CHECK (DB enforcemen
 
   afterAll(async () => {
     await cleanupTenants(direct, [A.companyId]);
-    await app.end();
     await direct.end();
+    await app.end();
   });
 
-  it("(1) draft→approved is allowed (sets approver pair)", async () => {
-    const id = await seedBonus({ status: "draft" });
-    await expect(
-      asApp(A.companyId, (c) =>
-        c.query(
-          `UPDATE bonus_penalties SET status='approved', approved_by=$2, approved_at=now() WHERE id=$1`,
-          [id, approver],
-        ),
-      ),
-    ).resolves.toBeDefined();
+  // ───────────────────────────────────────────────────────────────────────────────────────────────
+  // ALLOW — nếu trigger RAISE ở đây thì mọi ca DENY bên dưới là xanh-RỖNG
+  // ───────────────────────────────────────────────────────────────────────────────────────────────
+
+  it("ALLOW: sửa amount/reason khi còn Pending và CHƯA consume", async () => {
+    const id = await seedBonus({});
+    const n = await asApp(A.companyId, async (c) => {
+      const r = await c.query(
+        `UPDATE bonus_penalties SET amount = 900.00, reason = 'Sửa khi còn Pending' WHERE id = $1`,
+        [id],
+      );
+      return r.rowCount;
+    });
+    expect(n).toBe(1);
   });
 
-  it("(2) approved→draft / approved→rejected / rejected→approved blocked by trigger", async () => {
-    const appr = await seedBonus({ status: "approved" });
-    await expect(
-      asApp(A.companyId, (c) =>
-        c.query(`UPDATE bonus_penalties SET status='draft' WHERE id=$1`, [appr]),
-      ),
-    ).rejects.toThrow();
-    await expect(
-      asApp(A.companyId, (c) =>
-        c.query(`UPDATE bonus_penalties SET status='rejected' WHERE id=$1`, [appr]),
-      ),
-    ).rejects.toThrow();
-    const rej = await seedBonus({ status: "rejected" });
-    await expect(
-      asApp(A.companyId, (c) =>
-        c.query(
-          `UPDATE bonus_penalties SET status='approved', approved_by=$2, approved_at=now() WHERE id=$1`,
-          [rej, approver],
-        ),
-      ),
-    ).rejects.toThrow();
+  it("ALLOW: câu lệnh DUYỆT sạch (Pending → Approved, chỉ ghi decided_*) đi qua", async () => {
+    const id = await seedBonus({});
+    const n = await asApp(A.companyId, async (c) => {
+      const r = await c.query(
+        `UPDATE bonus_penalties
+            SET status = 'Approved', decided_by = $2, decided_at = now()
+          WHERE id = $1`,
+        [id, approver],
+      );
+      return r.rowCount;
+    });
+    expect(n).toBe(1);
   });
 
-  it("(3) freeze: editing amount/kind/user/period/reference on approved row blocked by trigger", async () => {
-    const appr = await seedBonus({ status: "approved" });
-    await expect(
-      asApp(A.companyId, (c) =>
-        c.query(`UPDATE bonus_penalties SET amount=9999.00 WHERE id=$1`, [appr]),
-      ),
-    ).rejects.toThrow();
-    await expect(
-      asApp(A.companyId, (c) =>
-        c.query(`UPDATE bonus_penalties SET kind='penalty' WHERE id=$1`, [appr]),
-      ),
-    ).rejects.toThrow();
-    await expect(
-      asApp(A.companyId, (c) =>
-        c.query(`UPDATE bonus_penalties SET period_month='2026-07' WHERE id=$1`, [appr]),
-      ),
-    ).rejects.toThrow();
+  it("ALLOW: NHẢ consume (payroll_period_id x → NULL) khi tính lại kỳ — SPEC-11 §13.3", async () => {
+    // Tính lại một kỳ CHƯA Approved sẽ nhả consume của chính kỳ đó rồi gộp lại trong cùng transaction.
+    // Nhánh (C) của trigger CỐ Ý chỉ cấm x → y, không cấm x → NULL; cấm cả hai là khoá chết đường tính lại.
+    const id = await seedBonus({ status: "Approved", payrollPeriodId: periodId });
+    const n = await asApp(A.companyId, async (c) => {
+      const r = await c.query(
+        `UPDATE bonus_penalties SET payroll_period_id = NULL, consumed_at = NULL WHERE id = $1`,
+        [id],
+      );
+      return r.rowCount;
+    });
+    expect(n).toBe(1);
   });
 
-  it("(4) amount must be > 0 (CHECK)", async () => {
+  // ───────────────────────────────────────────────────────────────────────────────────────────────
+  // (A) đóng băng field tiền/lý do sau khi rời Pending HOẶC đã consume
+  // ───────────────────────────────────────────────────────────────────────────────────────────────
+
+  it.each([
+    ["amount", `amount = 1.00`],
+    ["kind", `kind = 'penalty'`],
+    ["period_month", `period_month = '2026-07'`],
+    ["reason", `reason = 'Đổi lý do sau khi duyệt'`],
+  ])("(A) DENY: sửa %s trên hàng ĐÃ Approved bị trigger chặn", async (_label, setExpr) => {
+    const id = await seedBonus({ status: "Approved" });
     await expect(
-      asApp(A.companyId, (c) =>
-        c.query(
-          `INSERT INTO bonus_penalties (company_id, user_id, kind, amount, period_month, status, created_by)
-           VALUES ($1, $2, 'bonus', 0, '2026-05', 'draft', $2)`,
-          [A.companyId, emp],
-        ),
-      ),
-    ).rejects.toThrow();
-    await expect(
-      asApp(A.companyId, (c) =>
-        c.query(
-          `INSERT INTO bonus_penalties (company_id, user_id, kind, amount, period_month, status, created_by)
-           VALUES ($1, $2, 'penalty', -5, '2026-05', 'draft', $2)`,
-          [A.companyId, emp],
-        ),
-      ),
-    ).rejects.toThrow();
+      asApp(A.companyId, async (c) => {
+        await c.query(`UPDATE bonus_penalties SET ${setExpr} WHERE id = $1`, [id]);
+      }),
+    ).rejects.toThrow(/bonus_penalty_freeze_guard/i);
   });
 
-  it("(5) reference must be exactly-one-or-none matching reference_type (CHECK)", async () => {
-    const taskId = (
-      await direct.query(
-        `INSERT INTO tasks (company_id, task_type, title, status, origin, revision_round)
-         VALUES ($1, 'meeting_action', 'bpt', 'not_started', 'initial', 0) RETURNING id`,
-        [A.companyId],
-      )
-    ).rows[0].id as string;
-    // reference_type='task' but task_id NULL → reject.
+  it("(A) DENY: sửa decision_note trên hàng đã duyệt — cột NULLABLE, phải dùng IS DISTINCT FROM", async () => {
+    // Bẫy: `NEW.decision_note <> OLD.decision_note` với một vế NULL trả NULL ⇒ điều kiện KHÔNG BAO GIỜ true
+    // ⇒ sửa lý do một khoản phạt đã duyệt lọt trong im lặng. Ca này ghim việc trigger dùng IS DISTINCT FROM.
+    const id = await seedBonus({ status: "Approved" });
     await expect(
-      asApp(A.companyId, (c) =>
-        c.query(
-          `INSERT INTO bonus_penalties (company_id, user_id, kind, amount, period_month, status, created_by, reference_type)
-           VALUES ($1, $2, 'bonus', 100, '2026-05', 'draft', $2, 'task')`,
-          [A.companyId, emp],
-        ),
-      ),
-    ).rejects.toThrow();
-    // reference_type NULL but task_id set → reject.
-    await expect(
-      asApp(A.companyId, (c) =>
-        c.query(
-          `INSERT INTO bonus_penalties (company_id, user_id, kind, amount, period_month, status, created_by, task_id)
-           VALUES ($1, $2, 'bonus', 100, '2026-05', 'draft', $2, $3)`,
-          [A.companyId, emp, taskId],
-        ),
-      ),
-    ).rejects.toThrow();
-    // reference_type='task' + matching task_id → OK.
-    await expect(
-      asApp(A.companyId, (c) =>
-        c.query(
-          `INSERT INTO bonus_penalties (company_id, user_id, kind, amount, period_month, status, created_by, reference_type, task_id)
-           VALUES ($1, $2, 'bonus', 100, '2026-05', 'draft', $2, 'task', $3)`,
-          [A.companyId, emp, taskId],
-        ),
-      ),
-    ).resolves.toBeDefined();
+      asApp(A.companyId, async (c) => {
+        await c.query(`UPDATE bonus_penalties SET decision_note = 'ghi thêm' WHERE id = $1`, [id]);
+      }),
+    ).rejects.toThrow(/bonus_penalty_freeze_guard/i);
   });
 
-  it("(6) consume re-bind to a different period blocked by trigger", async () => {
-    const consumed = await seedBonus({ status: "approved", payrollPeriodId: periodId });
+  it("(A) DENY: sửa amount trên hàng còn Pending nhưng ĐÃ consume", async () => {
+    // Điều kiện đóng băng là `status <> 'Pending' **HOẶC** đã consume` — vế thứ hai có ca riêng, kẻo ai đó
+    // rút gọn thành chỉ kiểm status mà không ai phát hiện.
+    const id = await seedBonus({ status: "Approved", payrollPeriodId: periodId });
     await expect(
-      asApp(A.companyId, (c) =>
-        c.query(`UPDATE bonus_penalties SET payroll_period_id=$2 WHERE id=$1`, [
-          consumed,
+      asApp(A.companyId, async (c) => {
+        await c.query(`UPDATE bonus_penalties SET amount = 1.00 WHERE id = $1`, [id]);
+      }),
+    ).rejects.toThrow(/bonus_penalty_freeze_guard/i);
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────────────────────────
+  // (B) cấm xoá mềm sau khi rời Pending / đã consume — nhánh (2b) của trigger di sản 0098
+  // ───────────────────────────────────────────────────────────────────────────────────────────────
+
+  it("(B) DENY: xoá mềm hàng ĐÃ Approved bị chặn", async () => {
+    const id = await seedBonus({ status: "Approved" });
+    await expect(
+      asApp(A.companyId, async (c) => {
+        await c.query(`UPDATE bonus_penalties SET deleted_at = now() WHERE id = $1`, [id]);
+      }),
+    ).rejects.toThrow(/bonus_penalty_freeze_guard/i);
+  });
+
+  it("(B) ALLOW: xoá mềm hàng còn Pending, chưa consume", async () => {
+    const id = await seedBonus({});
+    const n = await asApp(A.companyId, async (c) => {
+      const r = await c.query(`UPDATE bonus_penalties SET deleted_at = now() WHERE id = $1`, [id]);
+      return r.rowCount;
+    });
+    expect(n).toBe(1);
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────────────────────────
+  // (C) cấm RE-BIND sang kỳ khác — chốt "một khoản thưởng vào hai kỳ" (DB-13 §11)
+  // ───────────────────────────────────────────────────────────────────────────────────────────────
+
+  it("(C) DENY: re-bind payroll_period_id sang kỳ KHÁC sau khi đã consume", async () => {
+    const id = await seedBonus({ status: "Approved", payrollPeriodId: periodId });
+    await expect(
+      asApp(A.companyId, async (c) => {
+        await c.query(`UPDATE bonus_penalties SET payroll_period_id = $2 WHERE id = $1`, [
+          id,
           period2Id,
-        ]),
-      ),
-    ).rejects.toThrow();
+        ]);
+      }),
+    ).rejects.toThrow(/bonus_penalty_freeze_guard/i);
   });
 
-  it("(7) freeze currency + block soft-delete after approval (trigger)", async () => {
-    const appr = await seedBonus({ status: "approved" });
+  // ───────────────────────────────────────────────────────────────────────────────────────────────
+  // (D) câu lệnh duyệt không được KÈM sửa tiền
+  // ───────────────────────────────────────────────────────────────────────────────────────────────
+
+  it("(D) DENY: một UPDATE vừa Pending→Approved vừa đổi amount", async () => {
+    // Nhánh (A) một mình KHÔNG bắt được ca này: `OLD.status = 'Pending'` nên v_frozen = false.
+    const id = await seedBonus({});
     await expect(
-      asApp(A.companyId, (c) =>
-        c.query(`UPDATE bonus_penalties SET currency='USD' WHERE id=$1`, [appr]),
-      ),
-    ).rejects.toThrow();
-    await expect(
-      asApp(A.companyId, (c) =>
-        c.query(`UPDATE bonus_penalties SET deleted_at=now() WHERE id=$1`, [appr]),
-      ),
-    ).rejects.toThrow();
+      asApp(A.companyId, async (c) => {
+        await c.query(
+          `UPDATE bonus_penalties
+              SET status = 'Approved', decided_by = $2, decided_at = now(), amount = 99999.00
+            WHERE id = $1`,
+          [id, approver],
+        );
+      }),
+    ).rejects.toThrow(/bonus_penalty_freeze_guard/i);
   });
 
-  it("(8) cannot consume a draft/rejected row (consume_approved CHECK)", async () => {
-    const draftId = await seedBonus({ status: "draft" });
+  // ───────────────────────────────────────────────────────────────────────────────────────────────
+  // CHECK constraint — chốt cuối độc lập với trigger
+  // ───────────────────────────────────────────────────────────────────────────────────────────────
+
+  it("CHECK amount > 0 (kind tách dấu — KHÔNG dùng số âm)", async () => {
     await expect(
-      asApp(A.companyId, (c) =>
-        c.query(`UPDATE bonus_penalties SET payroll_period_id=$2, consumed_at=now() WHERE id=$1`, [
-          draftId,
-          periodId,
-        ]),
-      ),
-    ).rejects.toThrow();
+      asApp(A.companyId, async (c) => {
+        await c.query(
+          `INSERT INTO bonus_penalties (user_id, kind, amount, period_month, reason, created_by)
+           VALUES ($1, 'bonus', -1.00, '2026-05', 'âm', $1)`,
+          [emp],
+        );
+      }),
+    ).rejects.toThrow(/bonus_penalties_amount_check/i);
+  });
+
+  it("CHECK status ∈ {Pending,Approved,Rejected} — giá trị chữ thường DI SẢN bị từ chối", async () => {
+    // ⚠️ Hàng phải vi phạm ĐÚNG MỘT constraint: PG báo CHECK TUỲ Ý khi nhiều CHECK cùng vỡ
+    // (pg-reports-arbitrary-check-when-multiple-violated). 'draft' <> 'Pending' nên `decided_pair_check`
+    // cũng vỡ nếu để decided_* NULL ⇒ ghi đủ cặp quyết định để chỉ còn status_check là vế sai.
+    await expect(
+      asApp(A.companyId, async (c) => {
+        await c.query(
+          `INSERT INTO bonus_penalties
+             (user_id, kind, amount, period_month, reason, status, decided_by, decided_at, created_by)
+           VALUES ($1, 'bonus', 100.00, '2026-05', 'x', 'draft', $2, now(), $1)`,
+          [emp, approver],
+        );
+      }),
+    ).rejects.toThrow(/bonus_penalties_status_check/i);
+  });
+
+  it("CHECK reason NOT NULL — lý do là BẮT BUỘC (PL-02)", async () => {
+    await expect(
+      asApp(A.companyId, async (c) => {
+        await c.query(
+          `INSERT INTO bonus_penalties (user_id, kind, amount, period_month, created_by)
+           VALUES ($1, 'bonus', 100.00, '2026-05', $1)`,
+          [emp],
+        );
+      }),
+    ).rejects.toThrow(/reason/i);
+  });
+
+  it("CHECK Rejected BẮT BUỘC decision_note", async () => {
+    await expect(
+      asApp(A.companyId, async (c) => {
+        await c.query(
+          `INSERT INTO bonus_penalties
+             (user_id, kind, amount, period_month, reason, status, decided_by, decided_at, created_by)
+           VALUES ($1, 'bonus', 100.00, '2026-05', 'x', 'Rejected', $2, now(), $1)`,
+          [emp, approver],
+        );
+      }),
+    ).rejects.toThrow(/bonus_penalties_reject_note_check/i);
+  });
+
+  it("CHECK consume CHỈ cho hàng Approved (chống gộp hàng chưa duyệt vào lương)", async () => {
+    await expect(
+      asApp(A.companyId, async (c) => {
+        await c.query(
+          `INSERT INTO bonus_penalties
+             (user_id, kind, amount, period_month, reason, status, payroll_period_id, consumed_at, created_by)
+           VALUES ($1, 'bonus', 100.00, '2026-05', 'x', 'Pending', $2, now(), $1)`,
+          [emp, periodId],
+        );
+      }),
+    ).rejects.toThrow(/bonus_penalties_consume_approved_check/i);
+  });
+
+  it("CHECK cặp consume: payroll_period_id ↔ consumed_at cùng NULL hoặc cùng set", async () => {
+    await expect(
+      asApp(A.companyId, async (c) => {
+        await c.query(
+          `INSERT INTO bonus_penalties
+             (user_id, kind, amount, period_month, reason, status, decided_by, decided_at,
+              payroll_period_id, created_by)
+           VALUES ($1, 'bonus', 100.00, '2026-05', 'x', 'Approved', $2, now(), $3, $1)`,
+          [emp, approver, periodId],
+        );
+      }),
+    ).rejects.toThrow(/bonus_penalties_consumed_pair_check/i);
   });
 });

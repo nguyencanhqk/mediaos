@@ -153,13 +153,13 @@ async function seedRevenue(direct: ReturnType<typeof directPool>, companyId: str
 async function seedPayslip(direct: ReturnType<typeof directPool>, companyId: string, userId: string) {
   const period = await direct.query(
     `INSERT INTO payroll_periods (company_id, period_month, status)
-     VALUES ($1, '2026-01', 'draft') RETURNING id`,
+     VALUES ($1, '2026-01', 'Draft') RETURNING id`,
     [companyId],
   );
   const r = await direct.query(
     `INSERT INTO payslips
-       (company_id, payroll_period_id, user_id, base_salary, gross, net, created_by, entry_kind)
-     VALUES ($1, $2, $3, 5000.00, 5000.00, 5000.00, $3, 'original') RETURNING id`,
+       (company_id, payroll_period_id, user_id, base_salary, gross, net, created_by, input_snapshot_json)
+     VALUES ($1, $2, $3, 5000.00, 5000.00, 5000.00, $3, '{"workDays":22}'::jsonb) RETURNING id`,
     [companyId, period.rows[0].id, userId],
   );
   return r.rows[0].id as string;

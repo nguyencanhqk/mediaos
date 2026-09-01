@@ -1,286 +1,268 @@
 import { describe, expect, it } from "vitest";
 import {
+  adjustPayrollLineSchema,
+  bonusKindEnum,
+  bonusPenaltyStatusEnum,
+  createBonusPenaltySchema,
   createPayrollPeriodSchema,
   createSalaryProfileSchema,
-  payrollPeriodSchema,
-  payslipItemSchema,
+  inputSnapshotSchema,
+  payrollPeriodStatusEnum,
+  payrollWriteResultSchema,
+  payslipItemTypeEnum,
   payslipSchema,
-  runPayrollRequestSchema,
+  rejectBonusPenaltySchema,
+  rejectPayrollPeriodSchema,
   salaryProfileSchema,
-  updateSalaryProfileSchema,
 } from "./payroll";
 
 /**
- * G12-1 — Zod contract RED suite cho salary profile (NGUỒN SỰ THẬT DTO).
- * Lương nhạy cảm (ADR-0010): DTO masked KHÔNG bao giờ có field secret/plaintext ngoài
- * baseSalary/allowances có kiểm soát (nullable khi masked).
+ * PAYROLL — Zod contract suite (SPEC-11 · DB-13 §7, mig `0564`).
+ *
+ * Mục đích KHÔNG phải "kiểm Zod chạy được", mà là ghim **mirror hai chiều ĐÚNG BẰNG** giữa hợp đồng và CHECK
+ * đang sống trong DB. Mỗi khối dưới đây có CẢ ca ALLOW lẫn ca DENY — ca DENY đứng một mình là ca xanh-RỖNG
+ * (`deny-cases-vacuous-without-allow-case`).
+ *
+ * Hai lớp lỗi được ghim:
+ *  · Zod LỎNG hơn CHECK ⇒ payload qua hợp đồng rồi nổ **500** ở DB (23514/23502).
+ *  · Zod CHẶT hơn CHECK ⇒ chặn oan hàng DB vẫn nhận ⇒ mã lỗi CHẾT
+ *    (`equal-caps-at-zod-and-service-make-dead-error-code`).
  */
 
-const validCreate = {
-  userId: "22222222-2222-2222-2222-222222222222",
-  salaryType: "monthly" as const,
-  payCycle: "monthly" as const,
-  effectiveDate: "2026-01-01",
-  baseSalary: 5000,
-  allowances: [{ name: "lunch", amount: 500 }],
-};
+const UUID_A = "11111111-1111-1111-1111-111111111111";
+const UUID_B = "22222222-2222-2222-2222-222222222222";
 
-describe("createSalaryProfileSchema", () => {
-  it("accepts a valid create payload", () => {
+describe("PAYROLL enum — mirror CHECK tập giá trị", () => {
+  it("payrollPeriodStatusEnum = ĐÚNG 7 giá trị của payroll_periods_status_check (SPEC-01 §17.15)", () => {
+    expect(payrollPeriodStatusEnum.options).toEqual([
+      "Draft",
+      "CollectingData",
+      "Calculated",
+      "Reviewing",
+      "Approved",
+      "Paid",
+      "Locked",
+    ]);
+    // Giá trị chữ thường là hình dạng DI SẢN đã bị 0564 gỡ khỏi CHECK — nhận nó là 23514 ở DB.
+    expect(payrollPeriodStatusEnum.safeParse("draft").success).toBe(false);
+    expect(payrollPeriodStatusEnum.safeParse("published").success).toBe(false);
+  });
+
+  it("bonusPenaltyStatusEnum = ĐÚNG 3 giá trị PascalCase (SPEC-01 §17.17)", () => {
+    expect(bonusPenaltyStatusEnum.options).toEqual(["Pending", "Approved", "Rejected"]);
+    expect(bonusPenaltyStatusEnum.safeParse("draft").success).toBe(false);
+  });
+
+  it("bonusKindEnum = bonus|penalty (amount > 0 luôn — kind tách dấu, không dùng số âm)", () => {
+    expect(bonusKindEnum.options).toEqual(["bonus", "penalty"]);
+  });
+
+  it("payslipItemTypeEnum = ĐÚNG 7 giá trị: bỏ 'kpi', thêm 'adjustment'", () => {
+    expect(payslipItemTypeEnum.options).toEqual([
+      "earning",
+      "deduction",
+      "allowance",
+      "attendance",
+      "bonus",
+      "penalty",
+      "adjustment",
+    ]);
+    // 'kpi' đã rời CHECK ở 0564 (KPI ngoài phạm vi sản phẩm) ⇒ giữ trong Zod là enum CHẾT.
+    expect(payslipItemTypeEnum.safeParse("kpi").success).toBe(false);
+    // 'adjustment' là đích của payroll_period_lines.adjustment_amount ⇒ THIẾU nó là chặn oan.
+    expect(payslipItemTypeEnum.safeParse("adjustment").success).toBe(true);
+  });
+});
+
+describe("input_snapshot_json — mirror CHECK `<> '{}'::jsonb` (payslips + payroll_period_lines)", () => {
+  it("ALLOW: object có ít nhất một khoá", () => {
+    expect(inputSnapshotSchema.safeParse({ workDays: 22 }).success).toBe(true);
+  });
+
+  it("DENY: object RỖNG — cột NOT NULL, KHÔNG DEFAULT, có CHECK; '{}' là snapshot giả", () => {
+    expect(inputSnapshotSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("salary_profiles — versioned, không còn salaryType/payCycle/currency/status", () => {
+  const validCreate = {
+    userId: UUID_B,
+    effectiveDate: "2026-01-01",
+    baseSalary: 15_000_000,
+    allowances: [{ name: "Ăn trưa", amount: 730_000 }],
+  };
+
+  it("ALLOW: payload tối thiểu hợp lệ", () => {
     const r = createSalaryProfileSchema.safeParse(validCreate);
     expect(r.success).toBe(true);
   });
 
-  it("rejects salaryType outside enum", () => {
-    const r = createSalaryProfileSchema.safeParse({ ...validCreate, salaryType: "annual" });
-    expect(r.success).toBe(false);
-  });
-
-  it("rejects payCycle outside enum", () => {
-    const r = createSalaryProfileSchema.safeParse({ ...validCreate, payCycle: "quarterly" });
-    expect(r.success).toBe(false);
-  });
-
-  it("rejects baseSalary <= 0", () => {
+  it("DENY: baseSalary <= 0 — mirror CHECK salary_profile_base_positive_check", () => {
     expect(createSalaryProfileSchema.safeParse({ ...validCreate, baseSalary: 0 }).success).toBe(
       false,
     );
-    expect(createSalaryProfileSchema.safeParse({ ...validCreate, baseSalary: -100 }).success).toBe(
+    expect(createSalaryProfileSchema.safeParse({ ...validCreate, baseSalary: -1 }).success).toBe(
       false,
     );
   });
 
-  it("rejects non-ISO effectiveDate", () => {
-    const r = createSalaryProfileSchema.safeParse({ ...validCreate, effectiveDate: "01/01/2026" });
-    expect(r.success).toBe(false);
-  });
-
-  it("rejects an allowance with negative amount", () => {
-    const r = createSalaryProfileSchema.safeParse({
-      ...validCreate,
-      allowances: [{ name: "bonus", amount: -1 }],
-    });
-    expect(r.success).toBe(false);
-  });
-
-  it("rejects an allowance missing name", () => {
-    const r = createSalaryProfileSchema.safeParse({
-      ...validCreate,
-      allowances: [{ amount: 100 }],
-    });
-    expect(r.success).toBe(false);
-  });
-
-  it("defaults allowances to [] when omitted", () => {
-    const { allowances, ...noAllowances } = validCreate;
-    const r = createSalaryProfileSchema.parse(noAllowances);
-    expect(r.allowances).toEqual([]);
-  });
-
-  it("rejects a non-uuid userId", () => {
-    const r = createSalaryProfileSchema.safeParse({ ...validCreate, userId: "not-a-uuid" });
-    expect(r.success).toBe(false);
-  });
-});
-
-describe("updateSalaryProfileSchema", () => {
-  it("accepts a partial update", () => {
-    expect(updateSalaryProfileSchema.safeParse({ baseSalary: 6000 }).success).toBe(true);
-    expect(updateSalaryProfileSchema.safeParse({ status: "inactive" }).success).toBe(true);
-  });
-
-  it("rejects baseSalary <= 0 on update", () => {
-    expect(updateSalaryProfileSchema.safeParse({ baseSalary: 0 }).success).toBe(false);
-  });
-
-  it("rejects status outside enum", () => {
-    expect(updateSalaryProfileSchema.safeParse({ status: "archived" }).success).toBe(false);
-  });
-});
-
-describe("salaryProfileSchema (masked DTO)", () => {
-  it("allows baseSalary=null and allowances=null (masked for unauthorized role)", () => {
+  it("DTO chấp nhận VẮNG KHOÁ tiền (server mask) — không phải null, không phải 0", () => {
     const masked = {
-      id: "11111111-1111-1111-1111-111111111111",
-      companyId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
-      userId: "22222222-2222-2222-2222-222222222222",
-      salaryType: "monthly" as const,
-      payCycle: "monthly" as const,
+      id: UUID_A,
+      companyId: UUID_A,
+      userId: UUID_B,
       effectiveDate: "2026-01-01",
-      baseSalary: null,
-      allowances: null,
-      status: "active" as const,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
+    // Caller không giữ ('view','salary-profile') ⇒ server trả DTO VẮNG baseSalary/allowances.
     expect(salaryProfileSchema.safeParse(masked).success).toBe(true);
-  });
-
-  it("does NOT permit unknown secret/plaintext fields to flow through (strips extras)", () => {
-    const parsed = salaryProfileSchema.parse({
-      id: "11111111-1111-1111-1111-111111111111",
-      companyId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
-      userId: "22222222-2222-2222-2222-222222222222",
-      salaryType: "monthly",
-      payCycle: "monthly",
-      effectiveDate: "2026-01-01",
-      baseSalary: 5000,
-      allowances: [{ name: "lunch", amount: 500 }],
-      status: "active",
-      createdAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-      secretPlaintext: "should-be-stripped",
-    });
-    expect((parsed as Record<string, unknown>).secretPlaintext).toBeUndefined();
+    // `null` KHÔNG phải hình dạng mask hợp đồng đã chốt (server-masking-needs-optional-fe-schema).
+    expect(salaryProfileSchema.safeParse({ ...masked, baseSalary: null }).success).toBe(false);
+    // Và bản KHÔNG mask vẫn đi qua — kẻo ca trên xanh-rỗng.
+    expect(salaryProfileSchema.safeParse({ ...masked, baseSalary: 15_000_000 }).success).toBe(true);
   });
 });
 
-// ── G12-2 payroll period + payslip snapshot ────────────────────────────────────
-
-describe("createPayrollPeriodSchema", () => {
-  it("accepts a valid period_month YYYY-MM", () => {
+describe("payroll_periods — period_month regex + comment bắt buộc khi reject", () => {
+  it("ALLOW/DENY period_month — mirror payroll_periods_month_check", () => {
     expect(createPayrollPeriodSchema.safeParse({ periodMonth: "2026-01" }).success).toBe(true);
-  });
-
-  it("accepts an optional attendancePeriodId", () => {
-    const r = createPayrollPeriodSchema.safeParse({
-      periodMonth: "2026-12",
-      attendancePeriodId: "33333333-3333-3333-3333-333333333333",
-    });
-    expect(r.success).toBe(true);
-  });
-
-  it("rejects a malformed period_month", () => {
+    expect(createPayrollPeriodSchema.safeParse({ periodMonth: "2026-12" }).success).toBe(true);
     expect(createPayrollPeriodSchema.safeParse({ periodMonth: "2026-13" }).success).toBe(false);
-    expect(createPayrollPeriodSchema.safeParse({ periodMonth: "26-01" }).success).toBe(false);
-    expect(createPayrollPeriodSchema.safeParse({ periodMonth: "2026/01" }).success).toBe(false);
+    expect(createPayrollPeriodSchema.safeParse({ periodMonth: "2026-00" }).success).toBe(false);
+    expect(createPayrollPeriodSchema.safeParse({ periodMonth: "2026-1" }).success).toBe(false);
+  });
+
+  it("reject BẮT BUỘC comment (SPEC-11 §13.1) — chuỗi khoảng trắng cũng bị chặn", () => {
+    expect(rejectPayrollPeriodSchema.safeParse({ reason: "Sai số công tháng 1" }).success).toBe(
+      true,
+    );
+    expect(rejectPayrollPeriodSchema.safeParse({}).success).toBe(false);
+    expect(rejectPayrollPeriodSchema.safeParse({ reason: "   " }).success).toBe(false);
   });
 });
 
-describe("payrollPeriodSchema", () => {
-  const valid = {
-    id: "11111111-1111-1111-1111-111111111111",
-    companyId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
-    periodMonth: "2026-01",
-    status: "draft" as const,
-    attendancePeriodId: null,
-    kpiLocked: false,
-    createdBy: null,
-    approvedBy: null,
-    approvedAt: null,
-    publishedBy: null,
-    publishedAt: null,
-    createdAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-01T00:00:00.000Z",
-  };
-
-  it("accepts a draft, approved and published period (G12-4 FSM)", () => {
-    expect(payrollPeriodSchema.safeParse(valid).success).toBe(true);
-    expect(
-      payrollPeriodSchema.safeParse({
-        ...valid,
-        status: "approved",
-        approvedBy: "22222222-2222-2222-2222-222222222222",
-        approvedAt: "2026-01-31T00:00:00.000Z",
-      }).success,
-    ).toBe(true);
-    expect(
-      payrollPeriodSchema.safeParse({
-        ...valid,
-        status: "published",
-        approvedBy: "22222222-2222-2222-2222-222222222222",
-        approvedAt: "2026-01-31T00:00:00.000Z",
-        publishedBy: "33333333-3333-3333-3333-333333333333",
-        publishedAt: "2026-02-01T00:00:00.000Z",
-      }).success,
-    ).toBe(true);
-  });
-
-  it("rejects a status outside draft/approved/published (e.g. retired 'locked')", () => {
-    expect(payrollPeriodSchema.safeParse({ ...valid, status: "locked" }).success).toBe(false);
-  });
-});
-
-describe("payslipSchema (snapshot, kpi/bonus/penalty nullable slots)", () => {
-  const base = {
-    id: "11111111-1111-1111-1111-111111111111",
-    companyId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
-    payrollPeriodId: "44444444-4444-4444-4444-444444444444",
-    userId: "22222222-2222-2222-2222-222222222222",
-    salaryProfileId: null,
-    baseSalary: 5000,
-    totalAllowances: 500,
-    gross: 5500,
-    net: 5500,
-    currency: "VND",
-    workDays: 22,
-    presentDays: 22,
-    lateMinutes: 0,
-    kpiAmount: null,
-    bonusAmount: null,
-    penaltyAmount: null,
-    entryKind: "original" as const,
-    replacesPayslipId: null,
-    createdBy: "22222222-2222-2222-2222-222222222222",
-    createdAt: "2026-01-31T00:00:00.000Z",
-  };
-
-  it("allows kpi/bonus/penalty = null (slot G8-4 not yet wired)", () => {
-    expect(payslipSchema.safeParse(base).success).toBe(true);
-  });
-
-  it("allows an adjustment entry chained to a prior payslip", () => {
-    const r = payslipSchema.safeParse({
-      ...base,
-      entryKind: "adjustment",
-      replacesPayslipId: "55555555-5555-5555-5555-555555555555",
+describe("route GHI không chở tiền — cặp view-line tách khỏi cặp calculate (SPEC-11 §11.1)", () => {
+  it("envelope chỉ có {id,status,affectedLines,warnings} — thêm khoá tiền là đường đọc CỬA SAU", () => {
+    const r = payrollWriteResultSchema.safeParse({
+      id: UUID_A,
+      status: "Calculated",
+      affectedLines: 12,
+      warnings: [],
     });
     expect(r.success).toBe(true);
-  });
-
-  it("rejects a payslip missing the company scope field", () => {
-    const { companyId, ...noCompany } = base;
-    expect(payslipSchema.safeParse(noCompany).success).toBe(false);
-  });
-
-  it("rejects an entryKind outside the enum", () => {
-    expect(payslipSchema.safeParse({ ...base, entryKind: "deleted" }).success).toBe(false);
+    // Ghim tập khoá: nếu ai đó thêm `gross`/`net` vào envelope thì ca này ĐỎ.
+    expect(Object.keys(payrollWriteResultSchema.shape).sort()).toEqual([
+      "affectedLines",
+      "id",
+      "status",
+      "warnings",
+    ]);
   });
 });
 
-describe("payslipItemSchema", () => {
-  const base = {
-    id: "11111111-1111-1111-1111-111111111111",
-    companyId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
-    payslipId: "44444444-4444-4444-4444-444444444444",
-    itemType: "earning" as const,
-    label: "Base salary",
-    amount: 5000,
-    meta: null,
-    createdAt: "2026-01-31T00:00:00.000Z",
-  };
-
-  it("accepts the kpi/bonus/penalty slot item types", () => {
-    expect(payslipItemSchema.safeParse({ ...base, itemType: "kpi" }).success).toBe(true);
-    expect(payslipItemSchema.safeParse({ ...base, itemType: "bonus" }).success).toBe(true);
-    expect(payslipItemSchema.safeParse({ ...base, itemType: "penalty" }).success).toBe(true);
+describe("adjust-line — mirror ĐÚNG BẰNG payroll_period_lines_adjustment_check", () => {
+  it("ALLOW: adjustmentAmount = 0 KHÔNG cần lý do", () => {
+    expect(adjustPayrollLineSchema.safeParse({ adjustmentAmount: 0 }).success).toBe(true);
   });
 
-  it("rejects an unknown itemType", () => {
-    expect(payslipItemSchema.safeParse({ ...base, itemType: "tip" }).success).toBe(false);
-  });
-});
-
-describe("runPayrollRequestSchema", () => {
-  it("accepts a period id with no userIds (whole company)", () => {
+  it("ALLOW: khác 0 kèm lý do — cả dấu DƯƠNG (truy lĩnh) lẫn ÂM (truy thu)", () => {
     expect(
-      runPayrollRequestSchema.safeParse({
-        payrollPeriodId: "44444444-4444-4444-4444-444444444444",
+      adjustPayrollLineSchema.safeParse({
+        adjustmentAmount: 500_000,
+        adjustmentReason: "Truy lĩnh",
+      }).success,
+    ).toBe(true);
+    // adjustment_amount CỐ Ý nằm ngoài CHECK amounts (>= 0) ⇒ Zod cấm số âm là CHẶT HƠN DB = chặn oan.
+    expect(
+      adjustPayrollLineSchema.safeParse({
+        adjustmentAmount: -500_000,
+        adjustmentReason: "Truy thu",
       }).success,
     ).toBe(true);
   });
 
-  it("rejects a non-uuid payrollPeriodId", () => {
-    expect(runPayrollRequestSchema.safeParse({ payrollPeriodId: "nope" }).success).toBe(false);
+  it("DENY: khác 0 mà thiếu lý do — để lọt là 23514 ở DB", () => {
+    expect(adjustPayrollLineSchema.safeParse({ adjustmentAmount: 500_000 }).success).toBe(false);
+  });
+});
+
+describe("bonus_penalties — reason NOT NULL + reject bắt buộc decisionNote", () => {
+  const valid = {
+    userId: UUID_B,
+    kind: "penalty" as const,
+    amount: 200_000,
+    periodMonth: "2026-01",
+    reason: "Đi trễ 5 lần",
+  };
+
+  it("ALLOW: payload đầy đủ", () => {
+    expect(createBonusPenaltySchema.safeParse(valid).success).toBe(true);
+  });
+
+  it("DENY: amount <= 0 — mirror bonus_penalties_amount_check (kind tách dấu, không dùng số âm)", () => {
+    expect(createBonusPenaltySchema.safeParse({ ...valid, amount: 0 }).success).toBe(false);
+    expect(createBonusPenaltySchema.safeParse({ ...valid, amount: -1 }).success).toBe(false);
+  });
+
+  it("DENY: thiếu reason — 0564 đặt cột NOT NULL, để lọt là 23502", () => {
+    const { reason: _drop, ...noReason } = valid;
+    expect(createBonusPenaltySchema.safeParse(noReason).success).toBe(false);
+    expect(createBonusPenaltySchema.safeParse({ ...valid, reason: "   " }).success).toBe(false);
+  });
+
+  it("reject BẮT BUỘC decisionNote — mirror bonus_penalties_reject_note_check", () => {
+    expect(rejectBonusPenaltySchema.safeParse({ decisionNote: "Không hợp lệ" }).success).toBe(true);
+    expect(rejectBonusPenaltySchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("payslips — append-only + trạng thái DẪN XUẤT", () => {
+  const base = {
+    id: UUID_A,
+    companyId: UUID_A,
+    payrollPeriodId: UUID_A,
+    userId: UUID_B,
+    salaryProfileId: null,
+    status: "Published" as const,
+    workDays: 22,
+    presentDays: 20,
+    paidLeaveDays: 1,
+    unpaidLeaveDays: 1,
+    lateMinutes: 30,
+    createdBy: UUID_B,
+    createdAt: "2026-02-01T00:00:00.000Z",
+  };
+
+  it("DTO KHÔNG có updatedAt/deletedAt — bảng append-only (bất biến #2)", () => {
+    expect(Object.keys(payslipSchema.shape)).not.toContain("updatedAt");
+    expect(Object.keys(payslipSchema.shape)).not.toContain("deletedAt");
+  });
+
+  it("status là DẪN XUẤT và CHO PHÉP null — nhánh fail-closed mặc định (SPEC-11 §13.2)", () => {
+    expect(payslipSchema.safeParse({ ...base, status: null }).success).toBe(true);
+    expect(payslipSchema.safeParse({ ...base, status: "Acknowledged" }).success).toBe(true);
+    expect(payslipSchema.safeParse({ ...base, status: "Voided" }).success).toBe(false);
+  });
+
+  it("mọi trường tiền VẮNG KHOÁ khi bị mask; adjustmentAmount vẫn nhận số ÂM", () => {
+    // Bản mask hoàn toàn (caller không giữ cặp chở-tiền) — đây là hình dạng THẬT server trả.
+    expect(payslipSchema.safeParse(base).success).toBe(true);
+    // Bản đầy đủ — kẻo ca trên xanh-rỗng.
+    expect(
+      payslipSchema.safeParse({
+        ...base,
+        baseSalary: 15_000_000,
+        totalAllowances: 730_000,
+        bonusAmount: 0,
+        penaltyAmount: 200_000,
+        deductionAmount: 500_000,
+        adjustmentAmount: -300_000,
+        gross: 15_730_000,
+        net: 14_730_000,
+      }).success,
+    ).toBe(true);
+    // gross/net âm bị chặn (mirror payslips_amounts_check), nhưng adjustmentAmount âm thì KHÔNG.
+    expect(payslipSchema.safeParse({ ...base, net: -1 }).success).toBe(false);
   });
 });

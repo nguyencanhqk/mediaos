@@ -3,11 +3,18 @@ import { appPool, directPool, hasDb } from "../helpers/integration-db";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
 
 /**
- * G12-2 — payslips + payslip_items APPEND-ONLY TUYỆT ĐỐI (ADR-0005, BẤT BIẾN #2).
+ * payslips + payslip_items APPEND-ONLY TUYỆT ĐỐI (ADR-0005, BẤT BIẾN #2).
  *  - app role (mediaos_app) GRANT SELECT,INSERT ONLY → UPDATE/DELETE payslips/payslip_items bị TỪ CHỐI.
- *  - INSERT qua app role SUCCEEDS (sửa = ghi entry_kind adjustment/void mới).
+ *  - INSERT qua app role SUCCEEDS.
  *  - audit_logs CHECK CHẤP NHẬN object_type IN ('payroll_period','payslip','payslip_item')
  *    (chống class-bug: 0093 PHẢI là superset, không phải đè danh sách cũ).
+ *
+ * ⚠️ CA GHIM BẤT BIẾN #2 — S13-PAYROLL-DB-1 (mig 0564) CẬP NHẬT, KHÔNG XOÁ (tests-can-pin-a-hole-open).
+ * Ba thay đổi bắt buộc của 0564 đối với file này:
+ *   1. `entry_kind`/`replaces_payslip_id` đã GỠ (v1 không có đường adjustment/void — SPEC-11 §3.4, §22g);
+ *   2. `input_snapshot_json` NOT NULL, KHÔNG DEFAULT, CHECK `<> '{}'` ⇒ MỌI INSERT payslips phải ghi tường minh;
+ *   3. `payslips_period_user_uq` là UNIQUE THẲNG (thay partial `WHERE entry_kind='original'`) — chốt cuối
+ *      chống SINH PHIẾU HAI LẦN (PAYROLL-ERR-006), có ca riêng bên dưới.
  * Mirror salary-profile-appendonly-audit.int-spec.
  */
 
@@ -25,20 +32,20 @@ describe.skipIf(!hasDb)("G12-2 payslip + payslip_item append-only", () => {
   beforeAll(async () => {
     A = await seedCompany(direct, "pslip-ao");
     userId = await seedUser(direct, A.companyId, `pslip-ao-${A.slug}@x.test`);
-    // Distinct payee: INSERT-grant test phải dùng (kỳ,user) KHÁC bản seed (G12-3 unique
-    // payslips_period_user_original_uq: 1 original / (company,kỳ,user)).
+    // Distinct payee: ca INSERT-grant phải dùng (kỳ,user) KHÁC bản seed — `payslips_period_user_uq`
+    // (unique THẲNG sau 0564) cho đúng MỘT phiếu / (company, kỳ, user).
     userId2 = await seedUser(direct, A.companyId, `pslip-ao2-${A.slug}@x.test`);
     // Seed via superuser (bypasses grants/RLS) — the rows the app role will try to mutate.
     const p = await direct.query(
       `INSERT INTO payroll_periods (company_id, period_month, status)
-       VALUES ($1, '2026-04', 'draft') RETURNING id`,
+       VALUES ($1, '2026-04', 'Draft') RETURNING id`,
       [A.companyId],
     );
     periodId = p.rows[0].id as string;
     const ps = await direct.query(
       `INSERT INTO payslips
-         (company_id, payroll_period_id, user_id, base_salary, gross, net, created_by, entry_kind)
-       VALUES ($1, $2, $3, 5000.00, 5000.00, 5000.00, $3, 'original') RETURNING id`,
+         (company_id, payroll_period_id, user_id, base_salary, gross, net, created_by, input_snapshot_json)
+       VALUES ($1, $2, $3, 5000.00, 5000.00, 5000.00, $3, '{"workDays":22}'::jsonb) RETURNING id`,
       [A.companyId, periodId, userId],
     );
     payslipId = ps.rows[0].id as string;
@@ -79,8 +86,8 @@ describe.skipIf(!hasDb)("G12-2 payslip + payslip_item append-only", () => {
     const inserted = await asTenant(A.companyId, async (c) => {
       const r = await c.query(
         `INSERT INTO payslips
-           (payroll_period_id, user_id, base_salary, gross, net, created_by, entry_kind)
-         VALUES ($1, $2, 6000.00, 6000.00, 6000.00, $2, 'original') RETURNING id`,
+           (payroll_period_id, user_id, base_salary, gross, net, created_by, input_snapshot_json)
+         VALUES ($1, $2, 6000.00, 6000.00, 6000.00, $2, '{"workDays":22}'::jsonb) RETURNING id`,
         [periodId, userId2],
       );
       return r.rows[0].id as string;
@@ -130,6 +137,36 @@ describe.skipIf(!hasDb)("G12-2 payslip + payslip_item append-only", () => {
         await c.query(`DELETE FROM payslip_items WHERE id = $1`, [payslipItemId]);
       }),
     ).rejects.toThrow();
+  });
+
+  it("payslips_period_user_uq chặn SINH PHIẾU HAI LẦN cho cùng (kỳ, người) — PAYROLL-ERR-006", async () => {
+    // 0564 đổi partial `WHERE entry_kind='original'` → UNIQUE THẲNG. Phiếu là append-only nên không có đường
+    // xoá để sinh lại ⇒ đây là chốt cuối chống trả lương hai lần. Service map 23505 → 409 (bóc mã từ `cause`).
+    await expect(
+      asTenant(A.companyId, async (c) => {
+        await c.query(
+          `INSERT INTO payslips
+             (payroll_period_id, user_id, base_salary, gross, net, created_by, input_snapshot_json)
+           VALUES ($1, $2, 7000.00, 7000.00, 7000.00, $2, '{"workDays":22}'::jsonb)`,
+          [periodId, userId],
+        );
+      }),
+    ).rejects.toThrow(/payslips_period_user_uq|duplicate key/i);
+  });
+
+  it("payslips_snapshot_check chặn snapshot RỖNG — cột NOT NULL + không DEFAULT", async () => {
+    // Cặp "NOT NULL + KHÔNG DEFAULT + CHECK <> '{}'" là có chủ đích: để DEFAULT '{}' thì mọi INSERT bỏ trống
+    // cột đều 23514 và DEFAULT thành giá trị CHẾT. Ca này ghim vế CHECK.
+    await expect(
+      asTenant(A.companyId, async (c) => {
+        await c.query(
+          `INSERT INTO payslips
+             (payroll_period_id, user_id, base_salary, gross, net, created_by, input_snapshot_json)
+           VALUES ($1, $2, 8000.00, 8000.00, 8000.00, $2, '{}'::jsonb)`,
+          [periodId, userId2],
+        );
+      }),
+    ).rejects.toThrow(/payslips_snapshot_check|check constraint/i);
   });
 
   it("audit_logs CHECK accepts payroll_period/payslip/payslip_item (0093 superset, not a shrink)", async () => {

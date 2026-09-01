@@ -164,8 +164,8 @@ describe.skipIf(!hasLaneDb)(
       expect(
         stats.rows[0].total,
         // LITERAL CỐ Ý — thêm/bớt template global thì BUMP SỐ, cấm đổi thành biến (tautology).
-        "0481 (36) + 0490 (3) + 0507 (2 GOAL) + 0529 (4 LMS) + 0538 (2 CHAT) + 0551 (3 ASSET) + 0555 (3 ROOM) + 0561 (4 RECRUIT) = 57 template global",
-      ).toBe(57);
+        "0481 (36) + 0490 (3) + 0507 (2 GOAL) + 0529 (4 LMS) + 0538 (2 CHAT) + 0551 (3 ASSET) + 0555 (3 ROOM) + 0561 (4 RECRUIT) + 0566 (4 PAYROLL) = 61 template global",
+      ).toBe(61);
     });
 
     it("(a) sample-map target_url_template khớp bảng §4 (placeholder + tĩnh)", async () => {

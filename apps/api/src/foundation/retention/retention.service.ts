@@ -62,9 +62,19 @@ export class RetentionService {
     "notification_delivery_logs",
     // HR employee status history (CLAUDE §2 — DB-03 append-only snapshot).
     "employee_status_histories",
-    // Payroll snapshots + finance ledgers (Phase 2 / G12-G13 — append-only, GIỮ).
+    // PAYROLL — CẢ BẢY bảng (S13-PAYROLL-DB-1, mig 0564). Lý do KHÔNG chỉ là "append-only":
+    //   · payslips/payslip_items/payslip_acknowledgements là sổ chỉ-INSERT (GRANT app SELECT+INSERT);
+    //   · salary_profiles/payroll_periods/payroll_period_lines/bonus_penalties là soft-delete.
+    // ĐIỂM CHUNG QUYẾT ĐỊNH: **KHÔNG bảng PAYROLL nào có GRANT DELETE cho mediaos_app** ⇒ retention phát lệnh
+    // DELETE sẽ ăn 42501 UNCAUGHT và làm hỏng CẢ LƯỢT cleanup của tenant. Chặn ở lớp app trước khi phát lệnh.
     "payslips",
     "payslip_items",
+    "payslip_acknowledgements",
+    "salary_profiles",
+    "payroll_periods",
+    "payroll_period_lines",
+    "bonus_penalties",
+    // Finance ledgers (G13 — append-only, GIỮ; cụm media/finance đang park).
     "kpi_results",
     "profit_snapshots",
     "revenue_records",

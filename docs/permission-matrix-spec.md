@@ -641,6 +641,17 @@ Ghi chú:
 | `('view-own-payslip','payslip')` | true | `0180` | **GIỮ nguyên grant `employee`** |
 | `('acknowledge-own-payslip','payslip')` | false | `0132` | **GIỮ grant `employee`**; thu hồi grant `company-admin` + `hr-manager` |
 
+> 📏 **ĐO THẬT khi thi công `S13-PAYROLL-DB-1` (01/09/2026) — bề mặt RỘNG HƠN tài liệu 31/08.**
+> Ngoài ba role hệ thống (`company-admin` 13 cặp · `hr-manager` 12 · `employee` 2), **ba role TUỲ BIẾN của
+> tenant** cũng đang giữ grant lương di sản: `QUẢN LÝ CẤP CAO` (19 cặp) · `SA` (19) · `SEO` (2). Luật "xoá
+> **mọi** hàng `role_permissions` trỏ 16 cặp GỠ" đã phủ chúng, nhưng verify «đúng 32 hàng» chỉ đạt nếu **cũng**
+> xoá grant của chúng trên **3 cặp GIỮ** ⇒ mig `0565` bước (3c) xoá SẠCH grant của cả 19 cặp trước khi seed lại.
+> **Hệ quả có chủ đích: sau wave này 3 role tuỳ biến giữ 0 cặp PAYROLL.** Chấp nhận được vì PAYROLL có **0 route**
+> ở thời điểm chạy (không ai đang dùng) và PAY-DEC-006 định nghĩa quyền lương là khối độc lập; cấp lại được lúc
+> chạy qua `permission-admin`. Đo thêm: `object_permissions` = **0 hàng** cho cả 19 cặp (cascade `0005:154` là
+> NO-OP thực tế), và `('view-own-payslip','payslip')` của `employee` đang ở scope **@Company** chứ không phải
+> **@Own** như bảng §9g ghi — vòng grant `DELETE data_scope <> 'Own'` + INSERT tự sửa.
+
 **Trình tự bắt buộc trong migration seed** (DB-13 §10 bước B): thu hồi **TRƯỚC**, seed cặp mới **SAU** — xoá mọi hàng `role_permissions` **VÀ `object_permissions`** trỏ **16 cặp GỠ** rồi xoá 16 cặp khỏi `permissions`. ⚠️ `object_permissions.permission_id` là **`ON DELETE CASCADE`** (`0005:154`) ⇒ xoá cặp cascade âm thầm: phải ĐO trước rồi xoá tường minh. **Với cặp GIỮ `view-payslip`** (vốn *giữ ngữ nghĩa object-permission override*): thu hồi grant `hr-manager` ở **cả hai** bảng — chỉ xoá `role_permissions` là để lại đường đọc phiếu lương sống trong khi verify vẫn XANH. Verify fail-loud: `hr-manager` = **0 cặp PAYROLL trên CẢ BA bảng**, 16 cặp GỠ = **0 hàng** ở cả ba. Cặp `('view-salary','employee')` (`0019`, domain HR — masking hồ sơ nhân sự của SPEC-03) **KHÔNG đụng tới**. Tiền lệ xoá cặp mồ côi + grant: `0548` (27 cặp / 89 grant của cụm workflow).
 
 ---

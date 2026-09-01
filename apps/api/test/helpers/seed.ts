@@ -483,24 +483,32 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM break_glass_approvals WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM break_glass_grants WHERE company_id = ANY($1::uuid[])", ids);
 
-  // ── G12-3 Bonus/Penalty ─────────────────────────────────────────────────────
-  // bonus_penalties.task_id/defect_id/kpi_result_id ON DELETE RESTRICT + user_id/created_by (NO ACTION)
-  // → PHẢI xoá TRƯỚC tasks/kpi_results/users (vế `defects` bỏ — bảng DROP ở migration 0548).
-  // payroll_period_id ON DELETE SET NULL (an toàn).
-  await direct.query("DELETE FROM bonus_penalties WHERE company_id = ANY($1::uuid[])", ids);
-
-  // ── G12-2/G12-4 Payroll (period + payslip snapshot + ack, append-only) ──────
-  // payslip_acknowledgements.payslip_id REFERENCES payslips(id) (NO ACTION) → xoá TRƯỚC payslips.
-  // payslip_items → payslips (FK CASCADE on payslip_id, but delete explicitly for clarity);
-  // payslips → payroll_periods/users/salary_profiles (no cascade) → xoá TRƯỚC users/salary_profiles.
-  // payroll_periods.attendance_period_id ON DELETE SET NULL → an toàn xoá trước attendance_periods.
+  // ── PAYROLL (S13-PAYROLL-DB-1, mig 0564) — 7 bảng, thứ tự CON → CHA ────────────
+  // Sau 0564 gần như MỌI FK nội bộ của cụm là NO ACTION (không còn CASCADE/SET NULL cứu vớt) ⇒ thứ tự dưới
+  // đây là BẮT BUỘC, và cả khối phải nằm TRƯỚC `DELETE FROM users` + `DELETE FROM attendance_periods`.
+  //
+  // ⚠️ `salary_profiles` TRƯỚC ĐÂY KHÔNG có trong hàm này — nó sống nhờ `user_id → users ON DELETE CASCADE`.
+  //    0564 đổi FK đó sang NO ACTION (DB-13 §4.2) ⇒ thiếu dòng dưới là 23503 hàng loạt ở mọi afterAll
+  //    (drop-table-must-clean-test-teardown). Hai thay đổi PHẢI đi cùng commit.
+  //
+  // Phụ thuộc từng bảng:
+  //   payslip_acknowledgements → payslips (NO ACTION)
+  //   payslip_items            → payslips (NO ACTION — 0564 bỏ CASCADE: bảng chỉ-INSERT không có đường xoá ẩn)
+  //   payslips                 → payroll_periods / users / salary_profiles (NO ACTION)
+  //   payroll_period_lines     → payroll_periods / users / salary_profiles (NO ACTION) — BẢNG MỚI của 0564
+  //   bonus_penalties          → payroll_periods (NO ACTION — 0564 bỏ SET NULL, kẻo vỡ CHECK cặp consume) / users
+  //   payroll_periods          → attendance_periods (NO ACTION — 0564 bỏ SET NULL, kẻo vỡ CHECK needs-attendance)
+  //   salary_profiles          → users (NO ACTION)
   await direct.query(
     "DELETE FROM payslip_acknowledgements WHERE company_id = ANY($1::uuid[])",
     ids,
   );
   await direct.query("DELETE FROM payslip_items WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM payslips WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM payroll_period_lines WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM bonus_penalties WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM payroll_periods WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM salary_profiles WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── G13 Finance ────────────────────────────────────────────────────────────
   // Xoá TRƯỚC projects/channels/content_items/org_units/teams/users (FK target). Thứ tự nội bộ:
