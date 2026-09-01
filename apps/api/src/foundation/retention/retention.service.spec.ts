@@ -337,7 +337,15 @@ describe("RetentionService", () => {
       "task_activity_logs",
       "notification_delivery_logs",
       "employee_status_histories",
+      // PAYROLL — CẢ BẢY bảng (S13-PAYROLL-DB-1, mig 0564). Không bảng nào có GRANT DELETE cho mediaos_app
+      // ⇒ retention phát lệnh DELETE là 42501 uncaught làm hỏng CẢ LƯỢT cleanup tenant.
       "payslips",
+      "payslip_items",
+      "payslip_acknowledgements",
+      "salary_profiles",
+      "payroll_periods",
+      "payroll_period_lines",
+      "bonus_penalties",
       "seed_batches",
     ];
     it.each(APPEND_ONLY_TABLES)(

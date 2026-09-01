@@ -1573,7 +1573,7 @@ export const RLS_TABLES: RlsTableCase[] = [
     seedRow: async (direct, t) => {
       const r = await direct.query(
         `INSERT INTO payroll_periods (company_id, period_month, status)
-         VALUES ($1, '2026-01', 'draft') RETURNING id`,
+         VALUES ($1, '2026-01', 'Draft') RETURNING id`,
         [t.companyId],
       );
       return r.rows[0].id as string;
@@ -1586,13 +1586,13 @@ export const RLS_TABLES: RlsTableCase[] = [
       const u = await seedUser(direct, t.companyId, `pslip-${randomUUID().slice(0, 8)}@x.test`);
       const periodRes = await direct.query(
         `INSERT INTO payroll_periods (company_id, period_month, status)
-         VALUES ($1, '2026-02', 'draft') RETURNING id`,
+         VALUES ($1, '2026-02', 'Draft') RETURNING id`,
         [t.companyId],
       );
       const r = await direct.query(
         `INSERT INTO payslips
-           (company_id, payroll_period_id, user_id, base_salary, gross, net, created_by, entry_kind)
-         VALUES ($1, $2, $3, 5000.00, 5000.00, 5000.00, $3, 'original') RETURNING id`,
+           (company_id, payroll_period_id, user_id, base_salary, gross, net, created_by, input_snapshot_json)
+         VALUES ($1, $2, $3, 5000.00, 5000.00, 5000.00, $3, '{"workDays":22}'::jsonb) RETURNING id`,
         [t.companyId, periodRes.rows[0].id, u],
       );
       return r.rows[0].id as string;
@@ -1605,13 +1605,13 @@ export const RLS_TABLES: RlsTableCase[] = [
       const u = await seedUser(direct, t.companyId, `pitem-${randomUUID().slice(0, 8)}@x.test`);
       const periodRes = await direct.query(
         `INSERT INTO payroll_periods (company_id, period_month, status)
-         VALUES ($1, '2026-03', 'draft') RETURNING id`,
+         VALUES ($1, '2026-03', 'Draft') RETURNING id`,
         [t.companyId],
       );
       const psRes = await direct.query(
         `INSERT INTO payslips
-           (company_id, payroll_period_id, user_id, base_salary, gross, net, created_by, entry_kind)
-         VALUES ($1, $2, $3, 5000.00, 5000.00, 5000.00, $3, 'original') RETURNING id`,
+           (company_id, payroll_period_id, user_id, base_salary, gross, net, created_by, input_snapshot_json)
+         VALUES ($1, $2, $3, 5000.00, 5000.00, 5000.00, $3, '{"workDays":22}'::jsonb) RETURNING id`,
         [t.companyId, periodRes.rows[0].id, u],
       );
       const r = await direct.query(
@@ -1622,7 +1622,29 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
-  // ── G12-3 Bonus/Penalty (mutable draft→approved/rejected, mig 0098) ──
+  // ── PAYROLL — payroll_period_lines: bảng lương NHÁP (BẢNG MỚI, mig 0564 · S13-PAYROLL-DB-1) ──
+  // Bảng mới có company_id + RLS+FORCE ⇒ PHẢI ở harness, kẻo rls-guards.int-spec ĐỎ ("không bảng nào
+  // company_id thiếu case"). input_snapshot_json NOT NULL, KHÔNG DEFAULT, CHECK <> '{}'.
+  {
+    name: "payroll_period_lines",
+    table: "payroll_period_lines",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `ppl-${randomUUID().slice(0, 8)}@x.test`);
+      const period = await direct.query(
+        `INSERT INTO payroll_periods (company_id, period_month, status)
+         VALUES ($1, '2026-05', 'Draft') RETURNING id`,
+        [t.companyId],
+      );
+      const r = await direct.query(
+        `INSERT INTO payroll_period_lines
+           (company_id, payroll_period_id, user_id, input_snapshot_json)
+         VALUES ($1, $2, $3, '{"workDays":22}'::jsonb) RETURNING id`,
+        [t.companyId, period.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  // ── G12-3 Bonus/Penalty (Pending→Approved/Rejected, mig 0098 + 0564) ──
   {
     name: "bonus_penalties",
     table: "bonus_penalties",
@@ -1630,8 +1652,8 @@ export const RLS_TABLES: RlsTableCase[] = [
       const u = await seedUser(direct, t.companyId, `bp-${randomUUID().slice(0, 8)}@x.test`);
       const r = await direct.query(
         `INSERT INTO bonus_penalties
-           (company_id, user_id, kind, amount, period_month, status, created_by)
-         VALUES ($1, $2, 'bonus', 100.00, '2026-01', 'draft', $2) RETURNING id`,
+           (company_id, user_id, kind, amount, period_month, reason, status, created_by)
+         VALUES ($1, $2, 'bonus', 100.00, '2026-01', 'RLS fixture', 'Pending', $2) RETURNING id`,
         [t.companyId, u],
       );
       return r.rows[0].id as string;
@@ -1643,21 +1665,22 @@ export const RLS_TABLES: RlsTableCase[] = [
     table: "payslip_acknowledgements",
     seedRow: async (direct, t) => {
       const u = await seedUser(direct, t.companyId, `pack-${randomUUID().slice(0, 8)}@x.test`);
-      // RLS isolation chỉ cần 1 hàng ack tồn tại — kỳ 'draft' (tránh published_pair CHECK của 0130).
+      // RLS isolation chỉ cần 1 hàng ack tồn tại — kỳ 'Draft' (tránh approved/published_pair CHECK).
+      // 0564 thu bảng về SỔ CHỈ-INSERT: cột `status` đã GỠ, GRANT UPDATE đã REVOKE.
       const period = await direct.query(
         `INSERT INTO payroll_periods (company_id, period_month, status)
-         VALUES ($1, '2026-04', 'draft') RETURNING id`,
+         VALUES ($1, '2026-04', 'Draft') RETURNING id`,
         [t.companyId],
       );
       const ps = await direct.query(
         `INSERT INTO payslips
-           (company_id, payroll_period_id, user_id, base_salary, gross, net, created_by, entry_kind)
-         VALUES ($1, $2, $3, 5000.00, 5000.00, 5000.00, $3, 'original') RETURNING id`,
+           (company_id, payroll_period_id, user_id, base_salary, gross, net, created_by, input_snapshot_json)
+         VALUES ($1, $2, $3, 5000.00, 5000.00, 5000.00, $3, '{"workDays":22}'::jsonb) RETURNING id`,
         [t.companyId, period.rows[0].id, u],
       );
       const r = await direct.query(
-        `INSERT INTO payslip_acknowledgements (company_id, payslip_id, user_id, status)
-         VALUES ($1, $2, $3, 'acknowledged') RETURNING id`,
+        `INSERT INTO payslip_acknowledgements (company_id, payslip_id, user_id)
+         VALUES ($1, $2, $3) RETURNING id`,
         [t.companyId, ps.rows[0].id, u],
       );
       return r.rows[0].id as string;

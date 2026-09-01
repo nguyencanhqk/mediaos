@@ -92,10 +92,12 @@ describe.skipIf(!runIsolatedDb)(
       // +CHAT_DIRECT_MESSAGE) → 64/50 (mig 0551 · S11-ASSET-DB-1: +ASSET_ASSIGNED, +ASSET_REVOKED,
       // +ASSET_MAINTENANCE_DUE, cả ba isEnabled=true) → 67/53 (mig 0555 · S11-ROOM-DB-1: +3 ROOM) →
       // 71/57 (mig 0561 · S12-RECRUIT-DB-1: +RECRUIT_JOB_ASSIGNED, +RECRUIT_INTERVIEW_SCHEDULED,
-      // +RECRUIT_STAGE_CHANGED, +RECRUIT_CANDIDATE_HIRED, cả bốn isEnabled=true).
-      it("pin: registry có đúng 71 mã (57 enabled + 14 disabled) — sau mig 0561 (S12-RECRUIT-DB-1)", () => {
-        expect(NOTI_EVENT_COUNT).toBe(71);
-        expect(NOTI_ENABLED_EVENT_COUNT).toBe(57);
+      // +RECRUIT_STAGE_CHANGED, +RECRUIT_CANDIDATE_HIRED, cả bốn isEnabled=true) → 75/61 (mig 0566 ·
+      // S13-PAYROLL-DB-1: +PAYROLL_PERIOD_SUBMITTED, +PAYROLL_PERIOD_APPROVED, +PAYROLL_PERIOD_REJECTED,
+      // +PAYSLIP_PUBLISHED, cả bốn isEnabled=true, is_system_event=false).
+      it("pin: registry có đúng 75 mã (61 enabled + 14 disabled) — sau mig 0566 (S13-PAYROLL-DB-1)", () => {
+        expect(NOTI_EVENT_COUNT).toBe(75);
+        expect(NOTI_ENABLED_EVENT_COUNT).toBe(61);
       });
 
       it("tập event_code (company_id IS NULL) == registry — KHÔNG mã lạ, KHÔNG thiếu", async () => {

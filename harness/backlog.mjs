@@ -15021,7 +15021,7 @@ export const backlog = [
     title:
       "Schema + migration PAYROLL theo DB-13 (mig 0564+): ĐO dữ liệu PROD 6 bảng G12 trước → ALTER reconcile (giữ khuôn append-only payslips) + composite tenant-FK band cũ + CHECK FSM + THU HỒI grant payroll di sản hr-manager + seed §9g + role payroll-officer …0015 (2FA) + NOTI catalog CẢ HAI bảng + contracts Zod mirror HIỆN TRẠNG",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
@@ -15066,6 +15066,9 @@ export const backlog = [
       "Census grant phủ 4 hình dạng wildcard; rls-registry cập nhật; test schema + seed trên LANE_DB xanh",
     ],
     notes: [
+      "✅ DONE 01/09/2026 — mig 0564 (reconcile DDL + payroll_period_lines) · 0565 (role payroll-officer + thu hồi 16 cặp + seed 17 cặp/32 grant) · 0566 (NOTI 020..023). plan-reviewer 1 vòng: BLOCK, đã vá 6 blocker.",
+      "⚠️ BÀN GIAO CHO OWNER — hệ quả ngoài hồ sơ duyệt: ĐO 01/09 thấy BA role TUỲ BIẾN của tenant (`QUẢN LÝ CẤP CAO` 19 cặp · `SA` 19 · `SEO` 2) cũng giữ grant lương di sản, không chỉ 3 role hệ thống. Verify «đúng 32 hàng» đòi xoá sạch grant của chúng ⇒ SAU wave này 3 role đó giữ 0 cặp PAYROLL. Chấp nhận có chủ đích (PAYROLL 0 route lúc chạy; PAY-DEC-006 tách khối; cấp lại được qua permission-admin) — nhưng owner cần biết.",
+      "⚠️ BÀN GIAO CHO BE-1: (a) FSM 7 trạng thái giờ CHỈ có CHECK tập giá trị — 0564 DROP `payroll_period_status_guard`, kéo theo mất luôn nhánh «cấm xoá mềm kỳ non-Draft». Cả chuyển tiếp lẫn cấm-xoá-mềm phải ép ở `assertPeriodTransition` + service. (b) 13 cặp sensitive PHẢI khai `SENSITIVE_CAPABILITY_ALLOWLIST` ở BACKEND, gồm `view-own-payslip` — thiếu là màn «Phiếu lương của tôi» biến mất dù DB có grant.",
       "🔴 FULL gate + Opus (crown khai báo sẵn CLAUDE.md §6: payroll/payslip). Lane migration NỐI TIẾP duy nhất của wave.",
       "KHÔNG bật modules.is_active (việc của S13-PAYROLL-FE-1, khuôn 0556/0562); guard trong migration KHÔNG assert trạng thái module khác; guard verify hàng PAYROLL forward-compatible (không RAISE khi is_active=true).",
       "Tiền: numeric(18,2), VND duy nhất; mọi CHECK số học viết ở SQL. Bảng MỚI duy nhất của wave ĐÃ CHỐT ở DB-13 §3.1/§6.4: payroll_period_lines (bảng lương NHÁP, mutable trước Approved, UNIQUE partial WHERE deleted_at IS NULL). KHÔNG đẻ bảng thứ 8 kiểu payroll_period_inputs — snapshot đầu vào là cột input_snapshot_json trên chính dòng nháp và trên payslips (NOT NULL, KHÔNG DEFAULT, có CHECK <> '{}').",

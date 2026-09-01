@@ -93,7 +93,25 @@ export const FK_LAYER_G_GUARD_FLOOR = 11;
  * (Lịch sử: 440 đặt 2026-08-25 trên lane `mediaos_fkcatalog` head 0546 khi đo được 459/448 phủ/11 hở;
  * trước đó 460/449 ở head 0534.)
  */
-export const FK_SINGLE_COL_PAIRS_FLOOR = 415;
+/**
+ * ⟲ S13-PAYROLL-DB-1 (PAY-DEC-002) — HẠ **415 → 411**, có chủ đích. Đo 2026-09-01 trên HAI trạng thái cùng
+ * ngày: đối chứng `mediaos` (head `0563`, KHÔNG có `0564+`) = **416**; `mediaos_payrolldb1` (head `0566`)
+ * = **412**. 416 − 412 = **4 = ĐÚNG số FK một-cột rơi theo `DROP COLUMN` ở mig `0564`**:
+ *   · `bonus_penalties.task_id → tasks` · `bonus_penalties.kpi_result_id → kpi_results` (DB-13 §5.5 GỠ
+ *     tham chiếu TASK/KPI di sản)
+ *   · `payslip_acknowledgements.resolved_by → users` (§5.6 thu bảng về sổ chỉ-INSERT — DB-13 §4.2 SÓT cặp này)
+ *   · `payslips.replaces_payslip_id → payslips` (§5.3 GỠ chuỗi adjustment/void — DB-13 §4.2 SÓT cặp này)
+ * Khớp 1–1, không cặp nào rơi ngoài dự kiến.
+ *
+ * HAI ĐIỀU KIỆN giữ cho con số này đúng, đã ép bằng verify trong chính `0564`:
+ *  (i) mọi thay đổi `ON DELETE` ở `0564` làm bằng **DROP + ADD giữ NGUYÊN TÊN constraint**, KHÔNG "thay FK đơn
+ *      cột bằng composite" — census đếm MỘT HÀNG / MỘT CONSTRAINT, drop FK đơn cột là tụt sàn ngoài dự kiến.
+ *      (`bonus_penalties.approved_by → decided_by` chỉ ĐỔI TÊN theo cột nên census vẫn thấy đủ cặp.)
+ *  (ii) bảng mới `payroll_period_lines` là **composite THUẦN** — 0 FK một-cột tới bảng khác `companies`.
+ *
+ * (Lịch sử: 415 đặt 2026-08-29 ở S11-ROOM-DB-1; trước đó 423 / 440 / 459.)
+ */
+export const FK_SINGLE_COL_PAIRS_FLOOR = 411;
 
 /**
  * LỚP P — "BỊT MỘT NỬA". Số cặp có `child.company_id` NULLABLE, đo 2026-07-31 sau mig `0535`.

@@ -717,23 +717,30 @@ async function main() {
     }
 
     // ── PAYROLL: salary_profiles + 1 period + payslips ────────────────────────
+    // S13-PAYROLL-DB-1 (mig 0564) đổi hình dạng cụm này: salary_profiles VERSIONED theo effective_date
+    // (GỠ salary_type/pay_cycle/currency/status), payroll_periods FSM 7 trạng thái PascalCase,
+    // payslips GỠ entry_kind/currency và THÊM input_snapshot_json (NOT NULL, KHÔNG DEFAULT, CHECK <> '{}').
+    const SALARY_EFFECTIVE_DATE = isoDate(day(-120));
     for (const person of PEOPLE) {
       const uid = userId[person.email];
+      // Khoá idempotency theo (user, effective_date) — khớp salary_profiles_company_user_effective_uq.
       const exists = await selId(
         c,
-        `SELECT id FROM salary_profiles WHERE company_id=$1 AND user_id=$2 AND status='active' AND deleted_at IS NULL`,
-        [COMPANY_ID, uid],
+        `SELECT id FROM salary_profiles
+          WHERE company_id=$1 AND user_id=$2 AND effective_date=$3 AND deleted_at IS NULL`,
+        [COMPANY_ID, uid, SALARY_EFFECTIVE_DATE],
       );
       if (!exists) {
         await c.query(
-          `INSERT INTO salary_profiles (company_id,user_id,salary_type,pay_cycle,effective_date,base_salary,allowances,currency,status)
-           VALUES ($1,$2,'monthly','monthly',$3,$4,$5,'VND','active')`,
+          `INSERT INTO salary_profiles (company_id,user_id,effective_date,base_salary,allowances,created_by)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
           [
             COMPANY_ID,
             uid,
-            isoDate(day(-120)),
+            SALARY_EFFECTIVE_DATE,
             person.salary,
             JSON.stringify([{ name: "Phụ cấp ăn trưa", amount: 730000 }]),
+            ADMIN_ID,
           ],
         );
       }
@@ -745,29 +752,73 @@ async function main() {
       [COMPANY_ID, periodMonth],
     );
     if (!periodId) {
+      // 'Paid' = trạng thái ĐÃ PHÁT HÀNH của FSM mới (SPEC-01 §17.15; 'published' cũ đã rời CHECK).
+      //
+      // ⚠️ four-eyes: demo dùng HAI ACTOR KHÁC NHAU (người gửi duyệt ≠ người duyệt). TUYỆT ĐỐI KHÔNG để
+      //    `submitted_by` NULL cho "qua" CHECK — `payroll_periods_submitted_pair_check` (mig 0564) đóng lối
+      //    đó rồi, và quan trọng hơn: demo-seed là thứ người viết BE-1 sẽ ĐỌC VÀ CHÉP. Một mẫu code lách
+      //    four-eyes ở đây là lỗ trong module thật ở WO sau.
+      const submitterId = userId[PEOPLE[0].email] ?? ADMIN_ID;
+      if (submitterId === ADMIN_ID) {
+        throw new Error(
+          "[demo-seed] không tìm được actor thứ hai cho four-eyes kỳ lương — " +
+            "PEOPLE[0] phải là user đã seed trước khối PAYROLL.",
+        );
+      }
+      // CHECK calculated_needs_attendance đòi attendance_period_id NOT NULL khi kỳ rời Draft/CollectingData.
+      // ⚠️ Không có kỳ công ⇒ TẠO, không để NULL: NULL sẽ nổ 23514 và hỏng CẢ LƯỢT seed (không phải chỉ khối này).
+      let attPeriodId = await selId(
+        c,
+        `SELECT id FROM attendance_periods WHERE company_id=$1 AND period_month=$2`,
+        [COMPANY_ID, periodMonth],
+      );
+      if (!attPeriodId) {
+        attPeriodId = await selId(
+          c,
+          `INSERT INTO attendance_periods (company_id,period_month,status)
+           VALUES ($1,$2,'locked') RETURNING id`,
+          [COMPANY_ID, periodMonth],
+        );
+      }
       periodId = await selId(
         c,
-        `INSERT INTO payroll_periods (company_id,period_month,status,created_by,approved_by,approved_at,published_by,published_at)
-         VALUES ($1,$2,'published',$3,$3,$4,$3,$4) RETURNING id`,
-        [COMPANY_ID, periodMonth, ADMIN_ID, day(-15).toISOString()],
+        `INSERT INTO payroll_periods
+           (company_id,period_month,status,attendance_period_id,created_by,
+            calculated_by,calculated_at,submitted_by,submitted_at,approved_by,approved_at,
+            published_by,published_at,payslips_generated_by,payslips_generated_at)
+         VALUES ($1,$2,'Paid',$5,$6,$6,$4,$6,$4,$3,$4,$3,$4,$3,$4) RETURNING id`,
+        [COMPANY_ID, periodMonth, ADMIN_ID, day(-15).toISOString(), attPeriodId, submitterId],
       );
     }
-    // payslips: append-only — chỉ INSERT nếu chưa có original cho (period,user)
+    // payslips: append-only — chỉ INSERT nếu chưa có phiếu cho (period,user).
+    // `payslips_period_user_uq` giờ là UNIQUE THẲNG (0564) ⇒ khoá idempotency bỏ vế entry_kind.
     for (const person of PEOPLE) {
       const uid = userId[person.email];
       const exists = await selId(
         c,
-        `SELECT id FROM payslips WHERE company_id=$1 AND payroll_period_id=$2 AND user_id=$3 AND entry_kind='original'`,
+        `SELECT id FROM payslips WHERE company_id=$1 AND payroll_period_id=$2 AND user_id=$3`,
         [COMPANY_ID, periodId, uid],
       );
       if (exists) continue;
       const allowances = 730000;
       const gross = person.salary + allowances;
-      const net = Math.round(gross * 0.895); // trừ BHXH/thuế ước lượng
+      const deduction = gross - Math.round(gross * 0.895); // BHXH/thuế ước lượng
+      const net = gross - deduction;
+      // input_snapshot_json: NOT NULL, KHÔNG DEFAULT, CHECK <> '{}' — snapshot đóng băng đầu vào lúc tính.
+      const snapshot = JSON.stringify({
+        workDays: 22,
+        presentDays: 22,
+        lateMinutes: 0,
+        baseSalary: person.salary,
+        source: "demo-seed-full",
+      });
       await c.query(
-        `INSERT INTO payslips (company_id,payroll_period_id,user_id,base_salary,total_allowances,gross,net,currency,work_days,present_days,late_minutes,entry_kind,created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'VND',22,22,0,'original',$8)`,
-        [COMPANY_ID, periodId, uid, person.salary, allowances, gross, net, ADMIN_ID],
+        `INSERT INTO payslips
+           (company_id,payroll_period_id,user_id,base_salary,total_allowances,deduction_amount,
+            gross,net,work_days,present_days,paid_leave_days,unpaid_leave_days,late_minutes,
+            input_snapshot_json,created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,22,22,0,0,0,$9::jsonb,$10)`,
+        [COMPANY_ID, periodId, uid, person.salary, allowances, deduction, gross, net, snapshot, ADMIN_ID],
       );
     }
 

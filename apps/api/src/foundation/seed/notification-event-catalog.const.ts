@@ -13,7 +13,7 @@
  *   event_code VERBATIM: TASK_MENTIONED + TASK_COMMENT_CREATED (KHÔNG TASK_COMMENT_MENTIONED).
  */
 
-/** module_code hợp lệ (CHECK chk_notification_events_module_code — 0479 + 'GOAL' 0507 + 'LMS' 0529 + 'CHAT' 0538 + 'ASSET' 0551 + 'ROOM' 0555 + 'RECRUIT' 0561). */
+/** module_code hợp lệ (CHECK chk_notification_events_module_code — 0479 + 'GOAL' 0507 + 'LMS' 0529 + 'CHAT' 0538 + 'ASSET' 0551 + 'ROOM' 0555 + 'RECRUIT' 0561 + 'PAYROLL' 0566). */
 export type NotiModuleCode =
   | "AUTH"
   | "HR"
@@ -28,9 +28,10 @@ export type NotiModuleCode =
   | "CHAT"
   | "ASSET"
   | "ROOM"
-  | "RECRUIT";
+  | "RECRUIT"
+  | "PAYROLL";
 
-/** notification_type hợp lệ (CHECK chk_notification_events_type — 0479 + 'Goal' 0507 + 'Training' 0529 + 'Chat' 0538 + 'Asset' 0551 + 'Room' 0555 + 'Recruit' 0561). */
+/** notification_type hợp lệ (CHECK chk_notification_events_type — 0479 + 'Goal' 0507 + 'Training' 0529 + 'Chat' 0538 + 'Asset' 0551 + 'Room' 0555 + 'Recruit' 0561 + 'Payroll' 0566). */
 export type NotiType =
   | "System"
   | "Account"
@@ -48,7 +49,8 @@ export type NotiType =
   | "Chat"
   | "Asset"
   | "Room"
-  | "Recruit";
+  | "Recruit"
+  | "Payroll";
 
 /** default_priority hợp lệ (CHECK chk_notification_events_priority — 0479). */
 export type NotiPriority = "Low" | "Normal" | "High" | "Urgent" | "Critical";
@@ -166,6 +168,22 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
   { module: "RECRUIT", eventCode: "RECRUIT_INTERVIEW_SCHEDULED", type: "Recruit", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "RECRUIT", eventCode: "RECRUIT_STAGE_CHANGED", type: "Recruit", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "RECRUIT", eventCode: "RECRUIT_CANDIDATE_HIRED", type: "Recruit", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+
+  // ===== PAYROLL (SPEC-11 §17 · NOTI-EVENT-020..023 · mig 0566 · S13-PAYROLL-DB-1) =====
+  //   dedupe_strategy='DedupeKey' + window NULL cả 4 (mặc định 'None' làm tầng dedupe BIẾN MẤT — 0479/0507/0538).
+  //   020 'PAYROLL_PERIOD_SUBMITTED:{periodId}:{auditLogId}' — MỖI LẦN GỬI là một sự kiện (reject → sửa → gửi lại
+  //       phải báo lại; engine DedupeKey là once-ever, không có bucket thời gian);
+  //   021 ':{periodId}:{auditLogId}' · 022 ':{periodId}:{auditLogId}' · 023 'PAYSLIP_PUBLISHED:{payslipId}'.
+  //   is_system_event=false CẢ 4 (PAYROLL v1 KHÔNG có system job — mọi event event-driven).
+  //   Người nhận: 020 = người duyệt hợp lệ theo `PayrollApproverReader` — CÙNG bộ giải với PAYROLL-ERR-017
+  //       (SPEC-11 §13.1); hai bộ giải lệch nhau đẻ đúng thất bại mà 017 sinh ra để chặn. 021/022 = submitted_by.
+  //       023 = từng nhân sự có phiếu trong kỳ. Tất cả trừ actor.
+  //   ⚠️ Payload/template TUYỆT ĐỐI KHÔNG chứa số tiền — NOTI đi qua nhiều kênh và KHÔNG có tầng masking riêng
+  //       (SPEC-11 §17/§18). Chỉ periodMonth · tên người thao tác · lý do từ chối (022) · deep-link.
+  { module: "PAYROLL", eventCode: "PAYROLL_PERIOD_SUBMITTED", type: "Payroll", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "PAYROLL", eventCode: "PAYROLL_PERIOD_APPROVED", type: "Payroll", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "PAYROLL", eventCode: "PAYROLL_PERIOD_REJECTED", type: "Payroll", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "PAYROLL", eventCode: "PAYSLIP_PUBLISHED", type: "Payroll", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   // ===== Phần dư SPEC-08 §15 (ngoài MVP) — isEnabled = false, GIỮ trong catalog (14 mã) =====
   { module: "AUTH", eventCode: "AUTH_PASSWORD_CHANGED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
   { module: "AUTH", eventCode: "AUTH_USER_UNLOCKED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
@@ -185,14 +203,14 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
 ] as const;
 
 /** Tổng số event UNION (pin để test bắt thiếu/thừa mã). */
-export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 71 (59 + 2 CHAT 0538 + 3 ASSET 0551 + 3 ROOM 0555 + 4 RECRUIT 0561)
+export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 75 (59 + 2 CHAT 0538 + 3 ASSET 0551 + 3 ROOM 0555 + 4 RECRUIT 0561 + 4 PAYROLL 0566)
 
 /** Danh mục event ENABLED (MVP set DB-07 §14.1) — mỗi mã PHẢI có đúng 1 template IN_APP/vi-VN. */
 export const NOTI_ENABLED_EVENTS: readonly NotiEventCatalogEntry[] = NOTI_EVENT_CATALOG.filter(
   (e) => e.isEnabled,
 );
 
-export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 57 (45 + 2 CHAT 0538 + 3 ASSET 0551 + 3 ROOM 0555 + 4 RECRUIT 0561)
+export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 61 (45 + 2 CHAT 0538 + 3 ASSET 0551 + 3 ROOM 0555 + 4 RECRUIT 0561 + 4 PAYROLL 0566)
 
 /**
  * S5-LMS-NOTI-1 — ALLOWLIST eventCode mà token máy LMS (`LMS_NOTI_TOKEN`) được phép đẩy vào intake.
