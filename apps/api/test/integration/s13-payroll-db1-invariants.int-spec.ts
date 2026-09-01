@@ -184,7 +184,6 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
       );
       expect(rows).toHaveLength(PAYROLL_TABLES.length);
       for (const r of rows) {
-        expect(`${r.relname}:rls`, `${r.relname} thiếu ENABLE RLS`).toBe(`${r.relname}:rls`);
         expect(r.relrowsecurity, `${r.relname} thiếu ENABLE ROW LEVEL SECURITY`).toBe(true);
         expect(r.relforcerowsecurity, `${r.relname} thiếu FORCE ROW LEVEL SECURITY`).toBe(true);
         expect(r.npolicy, `${r.relname} thiếu policy tenant_isolation`).toBe("1");

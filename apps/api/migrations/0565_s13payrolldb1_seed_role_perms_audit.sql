@@ -96,8 +96,13 @@ ON CONFLICT DO NOTHING;
 -- (3a) ĐO + ghi vết hiện trạng trước khi xoá (kể cả hàng object_permissions sẽ cascade theo permissions).
 -- (3b) 16 cặp GỠ: object_permissions → role_permissions → permissions.
 -- (3c) 3 cặp GIỮ: xoá SẠCH grant hiện có ở CẢ HAI bảng (gồm role tuỳ biến — §0.7) để (4) seed lại đúng 32.
---      ⚠️ Với `view-payslip` (giữ ngữ nghĩa object-permission override), thu hồi chỉ ở role_permissions là để
---      lại ĐƯỜNG ĐỌC PHIẾU LƯƠNG SỐNG trong khi verify «hr-manager = 0 cặp» vẫn XANH.
+--      ⚠️ ĐỌC KỸ — `view-payslip` PHẢI bị thu hồi ở CẢ HAI bảng, KHÔNG phải chỉ `role_permissions`.
+--      Cặp này *giữ ngữ nghĩa object-permission override* (permission-admin cấp/thu theo TỪNG đối tượng), nên
+--      nếu chỉ xoá ở `role_permissions` thì một hàng `object_permissions` còn sót vẫn là ĐƯỜNG ĐỌC PHIẾU LƯƠNG
+--      SỐNG, trong khi verify «hr-manager = 0 cặp» (chỉ đếm role_permissions) vẫn XANH. Đó chính là lỗ mà
+--      SPEC-11 §11.2 / permission-matrix §9g.1 yêu cầu bịt ⇒ vòng dưới xoá CẢ HAI, cho CẢ BA cặp GIỮ.
+--      Đo 01/09/2026: `object_permissions` = 0 hàng cho cả 19 cặp ⇒ lượt chạy này là NO-OP, nhưng lệnh phải có
+--      để migration đúng trên DB khác. Verify (6.5) assert hr-manager = 0 trên CẢ HAI bảng.
 DO $$
 DECLARE
   legacy_removed CONSTANT text[][] := ARRAY[
