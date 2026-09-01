@@ -433,6 +433,8 @@ BEGIN
   --   (a) manage:bonus-penalty ⇒ view:salary-profile   (danh bạ nhân sự PAYROLL-API-034)
   --   (b) approve:payroll-period ⇒ view-line           (kẻo người duyệt DUYỆT MÙ)
   --   (c) calculate:payroll-period ⇒ view-line         (kẻo route GHI phải chở tiền — SPEC-11 §11.1)
+  --   (d) export:payroll ⇒ view-line                   SPEC-11 §11.1: "Export đòi CẢ HAI cặp — cổng export
+  --       đứng một mình là đường đọc lương RỘNG HƠN đường đọc từng hàng" (bài học RECRUIT H5).
   FOR v_bad IN
     SELECT r.name FROM role_permissions rp JOIN roles r ON r.id = rp.role_id
      WHERE rp.permission_id = (SELECT id FROM permissions WHERE action='manage' AND resource_type='bonus-penalty')
@@ -448,26 +450,49 @@ BEGIN
     SELECT r.name FROM role_permissions rp JOIN roles r ON r.id = rp.role_id
      WHERE rp.permission_id IN (
              SELECT id FROM permissions
-              WHERE resource_type='payroll-period' AND action IN ('approve','calculate'))
+              WHERE (resource_type = 'payroll-period' AND action IN ('approve','calculate'))
+                 OR (resource_type = 'payroll'        AND action = 'export'))
        AND NOT EXISTS (
          SELECT 1 FROM role_permissions rp2
           WHERE rp2.role_id = rp.role_id
             AND rp2.permission_id = (SELECT id FROM permissions WHERE action='view-line' AND resource_type='payroll-period'))
   LOOP
-    RAISE EXCEPTION '[0565] verify: role % giu approve/calculate:payroll-period ma THIEU view-line — duyet mu', v_bad;
+    RAISE EXCEPTION '[0565] verify: role % giu approve/calculate:payroll-period hoac export:payroll ma THIEU view-line', v_bad;
   END LOOP;
 
-  -- (6.7) Census 4 hình dạng wildcard: KHÔNG role hệ thống nào giữ ('*','*')/('act','*')/('*','res').
+  -- (6.7) Census 4 hình dạng wildcard: KHÔNG role nào giữ ('*','*')/('act','*')/('*','res').
   --       matches() là HAI vế độc lập ⇒ câu đo exact-only MÙ với wildcard
   --       (permission-grant-census-must-cover-four-wildcard-shapes).
+  --  ⚠️ QUÉT MỌI ROLE, loại `super-admin` theo TÊN — KHÔNG lọc `company_id IS NULL`.
+  --     Chính file này (§0.7, đầu file) đo được ba role TUỲ BIẾN CỦA TENANT giữ quyền lương; chúng có
+  --     `company_id NOT NULL` nên một câu census lọc theo scope sẽ MÙ với đúng nhóm vừa phát hiện. Và 4 cặp
+  --     `is_sensitive=false` (`access:payroll` · `view:payroll-period` · `manage:payroll-period` = cấu hình +
+  --     KHOÁ KỲ · `acknowledge-own-payslip`) ăn theo được wildcard ⇒ lỗ thật, không lý thuyết.
+  --     `super-admin` là role company-scoped do SuperAdminBootstrapService dựng lúc chạy và nhận catalog
+  --     PER-PAIR (exact, không wildcard) — loại theo tên, không theo scope.
   SELECT string_agg(format('%s -> %s:%s', r.name, p.action, p.resource_type), ' ; ') INTO v_bad
     FROM role_permissions rp
     JOIN roles r       ON r.id = rp.role_id
     JOIN permissions p ON p.id = rp.permission_id
-   WHERE r.company_id IS NULL AND r.deleted_at IS NULL
+   WHERE r.deleted_at IS NULL
+     AND r.name <> 'super-admin'
      AND (p.action = '*' OR p.resource_type = '*');
   IF v_bad IS NOT NULL THEN
-    RAISE EXCEPTION '[0565] verify: grant wildcard cho role he thong = duong ngam vao cap sensitive PAYROLL: %', v_bad;
+    RAISE EXCEPTION '[0565] verify: grant wildcard = duong ngam vao cap sensitive PAYROLL: %', v_bad;
+  END IF;
+
+  -- (6.7b) object_permissions = 0 hàng trỏ 17 cặp PAYROLL (allowlist RỖNG).
+  --  ⚠️ Object grant thoả THẲNG cổng sensitive (permission.decide.ts: object grant vốn là exact ⇒ nó CHÍNH LÀ
+  --     grant tường minh mà cổng sensitive đòi) — đây là hình dạng bypass MẠNH NHẤT, mạnh hơn wildcard.
+  --     Verify (6.5) chỉ soi hr-manager; câu này phủ MỌI subject. Đo 01/09: 0 hàng, và 14 cặp dash là cặp mới
+  --     hoàn toàn ⇒ đúng phải rỗng ngay sau seed.
+  SELECT string_agg(format('%s/%s -> %s:%s', op.subject_type, op.subject_id, p.action, p.resource_type), ' ; ')
+    INTO v_bad
+    FROM object_permissions op
+    JOIN permissions p ON p.id = op.permission_id
+   WHERE op.permission_id = ANY (v_ids);
+  IF v_bad IS NOT NULL THEN
+    RAISE EXCEPTION '[0565] verify: co object_permissions tro cap PAYROLL ngay sau seed (bypass cong sensitive): %', v_bad;
   END IF;
 
   -- (6.8) role payroll-officer đúng thuộc tính

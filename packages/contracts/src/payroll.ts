@@ -338,7 +338,12 @@ export const payslipItemSchema = z.object({
   label: z.string(),
   amount: z.number().optional(),
   sortOrder: z.number().int(),
-  meta: z.record(z.unknown()).nullable(),
+  /**
+   * ⚠️ CÙNG CỔNG MASK với `amount`. `meta` là jsonb TỰ DO hình dạng đứng ngay cạnh một trường tiền đã che —
+   * để nó bắt buộc là mở một kênh rò không kiểm soát (đơn giá · mức lương · hệ số rất dễ nằm trong đây).
+   * Server strip cả hai cùng lúc theo cặp quyền chở-tiền.
+   */
+  meta: z.record(z.unknown()).nullable().optional(),
   createdAt: z.string().datetime(),
 });
 export type PayslipItemDto = z.infer<typeof payslipItemSchema>;

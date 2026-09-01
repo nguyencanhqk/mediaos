@@ -160,9 +160,17 @@ export const payrollPeriods = pgTable(
       sql`status <> 'Locked' OR (locked_by IS NOT NULL AND locked_at IS NOT NULL)`,
     ),
     // Chốt cuối four-eyes (PAY-DEC-007) — khoá cả super-admin. Service map 23514 → 409 PAYROLL-ERR-005.
+    // ⚠️ CẶP với `submitted_pair_check` ngay dưới — KHÔNG tách. Vế `submitted_by IS NULL OR …` là bắt buộc
+    // (bảng RESET SPEC-11 §13.1 xoá `submitted_*` khi reject/reopen), nhưng một mình nó thì chỉ cần để
+    // `submitted_by` NULL là four-eyes vô hiệu.
     check(
       "payroll_periods_four_eyes_check",
       sql`approved_by IS NULL OR submitted_by IS NULL OR approved_by <> submitted_by`,
+    ),
+    check(
+      "payroll_periods_submitted_pair_check",
+      sql`status NOT IN ('Reviewing','Approved','Paid','Locked')
+        OR (submitted_by IS NOT NULL AND submitted_at IS NOT NULL)`,
     ),
     // Không tồn tại kỳ đã tính mà không có nguồn công.
     check(

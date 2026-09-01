@@ -237,6 +237,17 @@ ALTER TABLE payroll_periods
 ALTER TABLE payroll_periods ADD CONSTRAINT payroll_periods_four_eyes_check
   CHECK (approved_by IS NULL OR submitted_by IS NULL OR approved_by <> submitted_by);
 --> statement-breakpoint
+-- ⚠️ CẶP BẮT BUỘC của four_eyes_check — KHÔNG được tách khỏi nhau.
+-- `four_eyes_check` có vế `submitted_by IS NULL OR …` (bắt buộc, vì bảng RESET SPEC-11 §13.1 xoá `submitted_*`
+-- khi reject/reopen). Một mình nó ⇒ chỉ cần ĐỂ `submitted_by` NULL là four-eyes VÔ HIỆU: ghi thẳng kỳ
+-- `Approved` với approved_by = người tính, CHECK vẫn xanh. CHECK dưới đây đóng lối thoát đó bằng cách đòi
+-- `submitted_by` phải có mặt từ `Reviewing` trở đi (security-reviewer S13-PAYROLL-DB-1, HIGH-2).
+-- Tương thích bảng RESET: `reject` hạ về `Calculated`, `reopen` hạ về `CollectingData` — cả hai NGOÀI danh
+-- sách nên xoá `submitted_*` cùng lệnh là hợp lệ; `approve`/`publish`/`lock` đều giữ nguyên `submitted_*`.
+ALTER TABLE payroll_periods ADD CONSTRAINT payroll_periods_submitted_pair_check
+  CHECK (status NOT IN ('Reviewing', 'Approved', 'Paid', 'Locked')
+         OR (submitted_by IS NOT NULL AND submitted_at IS NOT NULL));
+--> statement-breakpoint
 ALTER TABLE payroll_periods ADD CONSTRAINT payroll_periods_locked_pair_check
   CHECK (status <> 'Locked' OR (locked_by IS NOT NULL AND locked_at IS NOT NULL));
 --> statement-breakpoint
@@ -406,16 +417,18 @@ ALTER TABLE bonus_penalties ADD CONSTRAINT bonus_penalties_company_id_id_uq UNIQ
 --> statement-breakpoint
 
 -- ─────────────── (7g) Trigger HẸP thay `bonus_penalty_guard` — BA nhánh bất biến tiền (plan §8.1) ───────────────
--- Bản cũ (0098:110-149) có BỐN nhánh. Chỉ nhánh (1) — ép FSM chữ thường draft→approved/rejected — bị bỏ vì nó
--- chặn oan MỌI hàng PascalCase mới. Ba nhánh còn lại là lớp DB DUY NHẤT so được OLD/NEW; CHECK không làm được
--- ⇒ gỡ trắng là mất bất biến tiền TRONG IM LẶNG.
---   (A) đóng băng field tiền/lý do sau khi rời Pending HOẶC đã consume
+-- Bản cũ (0098:110-149) có BỐN nhánh, tất cả là lớp DB DUY NHẤT so được OLD/NEW (CHECK không làm được)
+-- ⇒ gỡ trắng bất kỳ nhánh nào là mất bất biến tiền TRONG IM LẶNG. Nhánh (1) của bản cũ làm HAI việc: ép FSM
+-- chữ thường (phải bỏ — chặn oan hàng PascalCase) VÀ ép tính TERMINAL (phải giữ) ⇒ tách ra thành nhánh (E).
+--   (A) đóng băng field tiền/lý do/VẾT NGƯỜI QUYẾT ĐỊNH sau khi rời Pending HOẶC đã consume
 --   (B) cấm xoá mềm sau khi rời Pending HOẶC đã consume            [nhánh 2b của 0098]
 --   (C) cấm RE-BIND payroll_period_id sang kỳ KHÁC sau khi consume [nhánh 3 của 0098]
 --       ⇒ CHO PHÉP x → NULL (nhả consume khi tính lại kỳ chưa Approved — SPEC-11 §13.3)
 --       ⇒ CẤM      x → y  (y ≠ x, y NOT NULL)
 --   (D) câu lệnh DUYỆT (Pending → khác) không được kèm sửa tiền — điều kiện OLD.status <> 'Pending' của (A)
 --       một mình cho phép UPDATE vừa duyệt vừa đổi amount.
+--   (E) TERMINAL: rời Pending rồi thì KHÔNG đổi status nữa  [= nhánh (1) của 0098, DỰNG LẠI]
+--       — thiếu (E) thì `Approved → Pending → sửa tiền → duyệt lại` gỡ băng được toàn bộ (A).
 -- KHÔNG nhánh nào ép chuyển tiếp FSM (PAYROLL-ERR-011/012/013 là việc của service).
 -- ⚠️ Cột NULLABLE dùng IS DISTINCT FROM: `<>` với một vế NULL trả NULL ⇒ không bao giờ true ⇒ sửa
 --    decision_note trên hàng đã duyệt sẽ lọt im lặng.
@@ -427,7 +440,14 @@ AS $$
 DECLARE
   v_frozen boolean := (OLD.status <> 'Pending' OR OLD.payroll_period_id IS NOT NULL);
 BEGIN
-  -- (A) đóng băng field tiền + lý do
+  -- (A) đóng băng field tiền + lý do + VẾT NGƯỜI QUYẾT ĐỊNH
+  -- ⚠️ `decided_by`/`decided_at` NẰM TRONG danh sách này — trigger di sản 0098 KHÔNG đóng băng
+  --    `approved_by`/`approved_at`, tức sau khi duyệt vẫn có thể GÁN LẠI ai là người duyệt một khoản tiền
+  --    trong im lặng. Đó là lỗ trong chính câu chuyện "DB là lưới an toàn của four-eyes" mà file này khẳng
+  --    định; wave rewrite trigger là dịp đóng, nên đóng (database-reviewer S13-PAYROLL-DB-1, MEDIUM-1).
+  --    An toàn với đường hợp lệ: CHECK bonus_penalties_consume_approved_check cấm hàng `Pending` được consume
+  --    ⇒ hàng Pending LUÔN có v_frozen = false ⇒ chính câu lệnh DUYỆT (Pending → Approved/Rejected, ghi
+  --    decided_*) không bao giờ vào nhánh này. FSM §13.3 cho hai đích là TERMINAL nên không có đường un-decide.
   IF v_frozen AND (
        NEW.amount        IS DISTINCT FROM OLD.amount
     OR NEW.kind          IS DISTINCT FROM OLD.kind
@@ -435,9 +455,11 @@ BEGIN
     OR NEW.period_month  IS DISTINCT FROM OLD.period_month
     OR NEW.reason        IS DISTINCT FROM OLD.reason
     OR NEW.decision_note IS DISTINCT FROM OLD.decision_note
+    OR NEW.decided_by    IS DISTINCT FROM OLD.decided_by
+    OR NEW.decided_at    IS DISTINCT FROM OLD.decided_at
   ) THEN
     RAISE EXCEPTION
-      'bonus_penalty_freeze_guard: % (id=%, ky %) da roi Pending hoac da consume — cam sua field tien/ly do',
+      'bonus_penalty_freeze_guard: % (id=%, ky %) da roi Pending hoac da consume — cam sua field tien/ly do/vet quyet dinh',
       OLD.kind, OLD.id, OLD.period_month
       USING ERRCODE = 'check_violation';
   END IF;
@@ -471,6 +493,26 @@ BEGIN
     RAISE EXCEPTION
       'bonus_penalty_freeze_guard: % (id=%, ky %) — cam vua doi status vua sua field tien trong cung mot lenh',
       OLD.kind, OLD.id, OLD.period_month
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- (E) TERMINAL: rời `Pending` rồi thì KHÔNG đổi `status` nữa.
+  -- ⚠️ ĐÂY LÀ NHÁNH (1) CỦA TRIGGER DI SẢN, DỰNG LẠI. Bản đầu của migration này gỡ trắng nhánh (1) vì tưởng
+  --    nó CHỈ ép FSM chữ thường `draft→approved/rejected`. Sai: nó làm HAI việc, và việc thứ hai — ép tính
+  --    TERMINAL — là cái NEO giữ cho các nhánh đóng băng tiền không bị vòng qua. Không có (E), chuỗi ba lệnh
+  --    sau gỡ băng hoàn toàn một khoản đã duyệt:
+  --      1. UPDATE … SET status='Pending'      → (A) không kể `status`; (D) đòi OLD.status='Pending' ⇒ lọt.
+  --                                               CHECK decided_pair cũng cho qua vì vế `status='Pending'`.
+  --      2. UPDATE … SET amount=99999999       → giờ OLD.status='Pending' ⇒ v_frozen=false ⇒ lọt.
+  --      3. duyệt lại.
+  --    (security-reviewer S13-PAYROLL-DB-1, HIGH-1.)
+  --    KHÔNG mâu thuẫn `check-cannot-enforce-fsm-transitions`: (E) không ép ĐỒ THỊ chuyển tiếp (việc của
+  --    service, PAYROLL-ERR-011/012/013) — nó chỉ ép một BẤT BIẾN mà CHECK không diễn đạt được vì cần so
+  --    OLD/NEW. SPEC-11 §13.3: `Pending → Approved | Rejected`, hai đích là TERMINAL, không có đường un-decide.
+  IF OLD.status <> 'Pending' AND NEW.status IS DISTINCT FROM OLD.status THEN
+    RAISE EXCEPTION
+      'bonus_penalty_freeze_guard: % (id=%, ky %) da o trang thai TERMINAL % — cam doi status',
+      OLD.kind, OLD.id, OLD.period_month, OLD.status
       USING ERRCODE = 'check_violation';
   END IF;
 

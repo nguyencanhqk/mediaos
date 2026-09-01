@@ -323,6 +323,50 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
       }
     });
 
+    it("C2b CHECK submitted_pair: kỳ Approved mà submitted_by NULL bị chặn — bịt four-eyes RỖNG", async () => {
+      // four_eyes_check có vế `submitted_by IS NULL OR …` (BẮT BUỘC — bảng RESET SPEC-11 §13.1 xoá submitted_*
+      // khi reject/reopen). Một mình nó ⇒ chỉ cần ĐỂ submitted_by NULL là four-eyes vô hiệu: ghi thẳng kỳ
+      // Approved với approved_by = chính người tính, CHECK vẫn xanh (security-reviewer HIGH-2).
+      // ⚠️ Phải vi phạm ĐÚNG MỘT constraint: status 'Approved' cũng đòi attendance_period_id NOT NULL
+      // (calculated_needs_attendance) và PG báo CHECK TUỲ Ý khi nhiều CHECK cùng vỡ ⇒ gắn kỳ công thật.
+      const att = await direct.query<{ id: string }>(
+        `INSERT INTO attendance_periods (company_id, period_month, status)
+         VALUES ($1, '2027-01', 'locked') RETURNING id`,
+        [A.companyId],
+      );
+      await expect(
+        direct.query(
+          `INSERT INTO payroll_periods
+             (company_id, period_month, status, attendance_period_id, approved_by, approved_at)
+           VALUES ($1, '2027-01', 'Approved', $3, $2, now())`,
+          [A.companyId, uA, att.rows[0].id],
+        ),
+      ).rejects.toMatchObject({ constraint: "payroll_periods_submitted_pair_check" });
+    });
+
+    it("C2c ĐỐI CHỨNG DƯƠNG submitted_pair: có submitted_* (khác người duyệt) thì đi qua", async () => {
+      const c = await direct.connect();
+      try {
+        await c.query("BEGIN");
+        const att = await c.query<{ id: string }>(
+          `INSERT INTO attendance_periods (company_id, period_month, status)
+           VALUES ($1, '2027-02', 'locked') RETURNING id`,
+          [A.companyId],
+        );
+        const r = await c.query(
+          `INSERT INTO payroll_periods
+             (company_id, period_month, status, attendance_period_id,
+              submitted_by, submitted_at, approved_by, approved_at)
+           VALUES ($1, '2027-02', 'Approved', $2, $3, now(), $4, now()) RETURNING id`,
+          [A.companyId, att.rows[0].id, uA, uA2],
+        );
+        expect(r.rows[0].id).toBeTruthy();
+      } finally {
+        await c.query("ROLLBACK");
+        c.release();
+      }
+    });
+
     it("C3 CHECK status kỳ lương: 7 giá trị PascalCase; 'draft' di sản bị từ chối", async () => {
       // ⚠️ Hàng phải vi phạm ĐÚNG MỘT constraint: 'draft' không thuộc ('Draft','CollectingData') nên
       // `calculated_needs_attendance_check` cũng vỡ nếu attendance_period_id NULL, và PG báo CHECK TUỲ Ý
@@ -443,6 +487,10 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
   describe("D. seed quyền / role", () => {
     it("D1 ma trận grant PAYROLL = ĐÚNG 32 bộ (role, action, resource, scope) — SET-EQUALITY", async () => {
       // Đếm đúng mà SAI NGƯỜI vẫn xanh ⇒ phải so từng bộ.
+      // ⚠️ Loại `super-admin` theo TÊN, KHÔNG lọc `company_id IS NULL`: SuperAdminBootstrapService dựng role
+      //    company-scoped và cấp TOÀN BỘ catalog PER-PAIR ở mỗi lần boot ⇒ không loại thì ca này đỏ ngẫu
+      //    nhiên tuỳ thứ tự chunk (spec nào dựng Nest app trước). Nhưng lọc theo SCOPE thì mù với role tuỳ
+      //    biến của tenant — đúng nhóm mà §0.7 của WO này vừa phát hiện đang giữ quyền lương di sản.
       const { rows } = await direct.query<{
         role: string;
         action: string;
@@ -453,7 +501,8 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
            FROM role_permissions rp
            JOIN roles r       ON r.id = rp.role_id
            JOIN permissions p ON p.id = rp.permission_id
-          WHERE p.resource_type IN ('payroll','payroll-period','salary-profile','bonus-penalty','payslip')`,
+          WHERE r.name <> 'super-admin'
+            AND p.resource_type IN ('payroll','payroll-period','salary-profile','bonus-penalty','payslip')`,
       );
       const actual = rows
         .map((r) => `${r.role}|${r.action}|${r.resource_type}|${r.data_scope}`)
@@ -529,12 +578,15 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
     it("D6 census 4 hình dạng wildcard: không role hệ thống nào giữ ('*','*')/('act','*')/('*','res')", async () => {
       // matches() là HAI vế độc lập ⇒ câu đo exact-only MÙ với wildcard
       // (permission-grant-census-must-cover-four-wildcard-shapes).
+      // ⚠️ QUÉT MỌI ROLE (loại `super-admin` theo TÊN) — KHÔNG lọc `company_id IS NULL`: ba role tuỳ biến của
+      //    tenant mà §0.7 phát hiện có `company_id NOT NULL`, và 4 cặp `is_sensitive=false` của PAYROLL
+      //    (gồm `manage:payroll-period` = cấu hình + KHOÁ KỲ) ăn theo được wildcard.
       const { rows } = await direct.query(
         `SELECT r.name AS role, p.action, p.resource_type
            FROM role_permissions rp
            JOIN roles r       ON r.id = rp.role_id
            JOIN permissions p ON p.id = rp.permission_id
-          WHERE r.company_id IS NULL AND r.deleted_at IS NULL
+          WHERE r.deleted_at IS NULL AND r.name <> 'super-admin'
             AND (p.action = '*' OR p.resource_type = '*')`,
       );
       expect(rows).toEqual([]);
@@ -578,6 +630,39 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
                    WHERE rp2.role_id = rp.role_id
                      AND rp2.permission_id = (SELECT id FROM permissions
                                                WHERE action='view' AND resource_type='salary-profile'))`,
+      );
+      expect(rows).toEqual([]);
+    });
+
+    it("D11 object_permissions = 0 hàng trỏ 17 cặp PAYROLL — hình dạng bypass MẠNH NHẤT", async () => {
+      // Object grant thoả THẲNG cổng sensitive (permission.decide.ts: object grant vốn exact ⇒ nó CHÍNH LÀ
+      // grant tường minh mà cổng sensitive đòi) — mạnh hơn wildcard. D2 chỉ soi hr-manager/hr/manager;
+      // ca này phủ MỌI subject. Allowlist RỖNG: sau seed không subject nào được có object-grant PAYROLL.
+      const { rows } = await direct.query<{
+        subject_type: string;
+        action: string;
+        resource_type: string;
+      }>(
+        `SELECT op.subject_type, p.action, p.resource_type
+           FROM object_permissions op JOIN permissions p ON p.id = op.permission_id
+          WHERE p.resource_type IN ('payroll','payroll-period','salary-profile','bonus-penalty','payslip')`,
+      );
+      expect(rows).toEqual([]);
+    });
+
+    it("D12 mọi role giữ export:payroll đều giữ view-line (export đứng một mình là đường đọc RỘNG HƠN)", async () => {
+      // SPEC-11 §11.1: "Export đòi CẢ HAI cặp" — bài học RECRUIT H5. D8 chỉ phủ approve/calculate.
+      const { rows } = await direct.query<{ role: string }>(
+        `SELECT DISTINCT r.name AS role
+           FROM role_permissions rp JOIN roles r ON r.id = rp.role_id
+          WHERE r.name <> 'super-admin'
+            AND rp.permission_id = (SELECT id FROM permissions
+                                     WHERE action='export' AND resource_type='payroll')
+            AND NOT EXISTS (
+                  SELECT 1 FROM role_permissions rp2
+                   WHERE rp2.role_id = rp.role_id
+                     AND rp2.permission_id = (SELECT id FROM permissions
+                                               WHERE action='view-line' AND resource_type='payroll-period'))`,
       );
       expect(rows).toEqual([]);
     });

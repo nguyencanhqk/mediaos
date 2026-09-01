@@ -250,6 +250,45 @@ describe.skipIf(!hasDb)("PAYROLL bonus/penalty freeze guard + CHECK (DB enforcem
   });
 
   // ───────────────────────────────────────────────────────────────────────────────────────────────
+  // (E) TERMINAL — nhánh (1) của trigger di sản 0098, DỰNG LẠI
+  // ───────────────────────────────────────────────────────────────────────────────────────────────
+
+  it("(E) DENY: Approved → Pending bị chặn — thiếu nhánh này thì GỠ BĂNG được toàn bộ (A)", async () => {
+    // Chuỗi bypass mà (E) đóng (security-reviewer S13-PAYROLL-DB-1 HIGH-1):
+    //   1. SET status='Pending'   → (A) không kể `status`; (D) đòi OLD.status='Pending' ⇒ lọt;
+    //                               CHECK decided_pair cũng cho qua vì vế `status = 'Pending'`.
+    //   2. SET amount=99999999    → giờ OLD.status='Pending', chưa consume ⇒ v_frozen=false ⇒ lọt.
+    //   3. duyệt lại.
+    // Ca này ghim BƯỚC 1. KHÔNG đụng decided_* — nếu đụng thì (A) bắt, và ca sẽ xanh vì lý do SAI.
+    const id = await seedBonus({ status: "Approved" });
+    await expect(
+      asApp(A.companyId, async (c) => {
+        await c.query(`UPDATE bonus_penalties SET status = 'Pending' WHERE id = $1`, [id]);
+      }),
+    ).rejects.toThrow(/bonus_penalty_freeze_guard/i);
+  });
+
+  it("(E) DENY: Rejected → Approved bị chặn — hai đích đều TERMINAL (SPEC-11 §13.3)", async () => {
+    const id = await seedBonus({ status: "Rejected" });
+    await expect(
+      asApp(A.companyId, async (c) => {
+        await c.query(`UPDATE bonus_penalties SET status = 'Approved' WHERE id = $1`, [id]);
+      }),
+    ).rejects.toThrow(/bonus_penalty_freeze_guard/i);
+  });
+
+  it("(A) DENY: gán lại decided_by trên hàng đã duyệt — vết NGƯỜI QUYẾT ĐỊNH cũng bị đóng băng", async () => {
+    // Trigger di sản KHÔNG đóng băng approved_by/at ⇒ sau khi duyệt vẫn gán lại được người duyệt một khoản
+    // tiền trong im lặng. Wave rewrite trigger là dịp đóng (database-reviewer MEDIUM-1).
+    const id = await seedBonus({ status: "Approved" });
+    await expect(
+      asApp(A.companyId, async (c) => {
+        await c.query(`UPDATE bonus_penalties SET decided_by = $2 WHERE id = $1`, [id, emp]);
+      }),
+    ).rejects.toThrow(/bonus_penalty_freeze_guard/i);
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────────────────────────
   // CHECK constraint — chốt cuối độc lập với trigger
   // ───────────────────────────────────────────────────────────────────────────────────────────────
 

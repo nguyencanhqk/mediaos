@@ -753,22 +753,41 @@ async function main() {
     );
     if (!periodId) {
       // 'Paid' = trạng thái ĐÃ PHÁT HÀNH của FSM mới (SPEC-01 §17.15; 'published' cũ đã rời CHECK).
-      // ⚠️ CHECK payroll_periods_four_eyes_check đòi approved_by <> submitted_by ⇒ demo KHÔNG ghi submitted_by
-      // (để NULL, vế `submitted_by IS NULL` cho qua) thay vì để cùng một ADMIN_ID ở cả hai cột.
+      //
+      // ⚠️ four-eyes: demo dùng HAI ACTOR KHÁC NHAU (người gửi duyệt ≠ người duyệt). TUYỆT ĐỐI KHÔNG để
+      //    `submitted_by` NULL cho "qua" CHECK — `payroll_periods_submitted_pair_check` (mig 0564) đóng lối
+      //    đó rồi, và quan trọng hơn: demo-seed là thứ người viết BE-1 sẽ ĐỌC VÀ CHÉP. Một mẫu code lách
+      //    four-eyes ở đây là lỗ trong module thật ở WO sau.
+      const submitterId = userId[PEOPLE[0].email] ?? ADMIN_ID;
+      if (submitterId === ADMIN_ID) {
+        throw new Error(
+          "[demo-seed] không tìm được actor thứ hai cho four-eyes kỳ lương — " +
+            "PEOPLE[0] phải là user đã seed trước khối PAYROLL.",
+        );
+      }
       // CHECK calculated_needs_attendance đòi attendance_period_id NOT NULL khi kỳ rời Draft/CollectingData.
-      const attPeriodId = await selId(
+      // ⚠️ Không có kỳ công ⇒ TẠO, không để NULL: NULL sẽ nổ 23514 và hỏng CẢ LƯỢT seed (không phải chỉ khối này).
+      let attPeriodId = await selId(
         c,
-        `SELECT id FROM attendance_periods WHERE company_id=$1 ORDER BY created_at DESC LIMIT 1`,
-        [COMPANY_ID],
+        `SELECT id FROM attendance_periods WHERE company_id=$1 AND period_month=$2`,
+        [COMPANY_ID, periodMonth],
       );
+      if (!attPeriodId) {
+        attPeriodId = await selId(
+          c,
+          `INSERT INTO attendance_periods (company_id,period_month,status)
+           VALUES ($1,$2,'locked') RETURNING id`,
+          [COMPANY_ID, periodMonth],
+        );
+      }
       periodId = await selId(
         c,
         `INSERT INTO payroll_periods
            (company_id,period_month,status,attendance_period_id,created_by,
-            calculated_by,calculated_at,approved_by,approved_at,published_by,published_at,
-            payslips_generated_by,payslips_generated_at)
-         VALUES ($1,$2,'Paid',$5,$3,$3,$4,$3,$4,$3,$4,$3,$4) RETURNING id`,
-        [COMPANY_ID, periodMonth, ADMIN_ID, day(-15).toISOString(), attPeriodId],
+            calculated_by,calculated_at,submitted_by,submitted_at,approved_by,approved_at,
+            published_by,published_at,payslips_generated_by,payslips_generated_at)
+         VALUES ($1,$2,'Paid',$5,$6,$6,$4,$6,$4,$3,$4,$3,$4,$3,$4) RETURNING id`,
+        [COMPANY_ID, periodMonth, ADMIN_ID, day(-15).toISOString(), attPeriodId, submitterId],
       );
     }
     // payslips: append-only — chỉ INSERT nếu chưa có phiếu cho (period,user).
