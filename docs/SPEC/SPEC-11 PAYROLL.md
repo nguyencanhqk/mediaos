@@ -490,7 +490,7 @@ Chỉ hàng **`Approved` cùng `period_month`, chưa consume** mới được m�
 | `present_days` **numeric(8,2)** | `attendance_records` + ngày nghỉ **có lương** đã duyệt (`leave_request_days`) | cộng theo NGÀY: mỗi ngày lấy `LEAST(GREATEST(công_ngày, phép_có_lương_ngày), 1)` — xem «Ngày nghỉ tính theo NỬA NGÀY» dưới |
 | `paid_leave_days` / `unpaid_leave_days` **numeric(8,2)** | `leave_request_days` (đã vật chất hoá) ⋈ đơn đã duyệt ⋈ `leave_types.paid` | `SUM(leave_days)` của các ngày rơi vào `cal_work`, tách theo cờ `paid` |
 | `late_minutes` | `attendance_records` | tổng phút trễ/về sớm trong kỳ |
-| hệ số pro-rate | — | `LEAST(present_days / NULLIF(work_days, 0), 1)` — clamp trần 1 ở SQL |
+| hệ số pro-rate | — | `LEAST((present_days + unpaid_leave_days) / NULLIF(work_days, 0), 1)` — clamp trần 1 ở SQL. **Tử số CỘNG `unpaid_leave_days`** — xem «Nghỉ KHÔNG lương» dưới |
 
 **Vị từ SQL bắt buộc — viết đúng như sau, không nội suy:**
 
@@ -520,7 +520,26 @@ Số ngày nghỉ **KHÔNG phải số nguyên**. `leave_types` cho phép `HalfD
 
 - **Khi một đơn đã duyệt KHÔNG có day-row Active nào** (dữ liệu di sản/nhập ngoài ứng dụng) ⇒ **rơi về** cách cũ: bung đơn trên `cal_work`, mỗi ngày `1.00`. Nguồn day-row **rỗng** ≠ **bằng 0**; đọc rỗng thành 0 là mất lặng lẽ một khoản tiền. Fallback ở **mức ĐƠN** (một đơn có day-rows thì day-rows quyết toàn bộ đơn đó) — KHÔNG trộn hai nguồn trong một đơn, kẻo đẻ ngày ma.
 - **Một ngày vẫn chỉ đếm MỘT lần cho `present_days`**: dùng `GREATEST(công, phép có lương)` chứ không `SUM` — ngày vừa có bản ghi công vừa có phép nửa buổi có lương là **1**, không phải 1.5. Ngày **chỉ** có phép nửa buổi có lương là **0.5**. Trần `LEAST(…, 1)` chặn hai đơn nửa buổi cùng ngày đẩy một ngày vượt 1.
-- **Hệ quả lên clamp:** `LEAST(present_days / NULLIF(work_days, 0), 1)` **giữ nguyên** — chỉ khác là tử số nay có thể lẻ (vd `20.5 / 22`). Clamp vẫn phải ở SQL.
+- **Hệ quả lên clamp:** clamp `LEAST(…, 1)` **giữ nguyên** và vẫn phải ở SQL — chỉ khác là tử số nay có thể lẻ (vd `20.5 / 22`).
+
+**Nghỉ KHÔNG lương — tử số pro-rate CỘNG `unpaid_leave_days` (QUYẾT ĐỊNH OWNER 2026-09-01, S13-PAYROLL-BE-2):**
+
+`present_days` **đã loại** ngày nghỉ không lương (nó chỉ gộp bản ghi công ∪ phép **có lương**). Vì thế pro-rate theo `present_days` **rồi lại** trừ `unpaid_leave_days × đơn giá ngày` là **trừ HAI LẦN**: mỗi người mỗi kỳ mất `base_salary × unpaid / work_days`, im lặng, không CHECK nào bắt.
+
+Chốt: **tử số = `present_days + unpaid_leave_days`**, và **giữ** vế khấu trừ nghỉ không lương. Hai phương án (bỏ vế khấu trừ / cộng vào tử số) cho **cùng một `net`**, nhưng phương án này để phiếu lương hiện dòng «nghỉ không lương −N ngày: −X đ» (`payslip_items.item_type = 'attendance'`) — đúng PAY-DEC-004 «breakdown giải-thích-được»; bỏ vế khấu trừ thì nhân viên chỉ thấy lương cơ bản đã bị cắt mà không dòng nào giải thích.
+
+```text
+work = 22   present = 18   unpaid = 2   base_salary = 22.000.000
+prorate      = LEAST((18 + 2) / 22, 1) = 20/22
+base_amount  = round(22.000.000 × 20/22, 2)  = 20.000.000
+dailyRate    = 22.000.000 / 22               =  1.000.000
+unpaidDeduct = round(2 × 1.000.000, 2)       =  2.000.000
+→ phần base đóng góp vào net                  = 18.000.000
+```
+
+⚠️ Phương án này **chỉ đúng khi ba đại lượng ngày mang ngữ nghĩa thập phân nửa ngày** (đã chốt ở khối trên): với ngữ nghĩa nguyên-ngày, một ngày nửa-làm/nửa-nghỉ-không-lương cho `present = 1` **và** `unpaid = 1` ⇒ tử số vượt mẫu số (trần `LEAST(…,1)` che mất, số vẫn sai).
+
+**Trễ/về sớm — v1 KHÔNG trừ tiền (QUYẾT ĐỊNH OWNER 2026-09-01):** văn bản cũ viết "trễ/sớm (**nếu bật rule** ATT)", nhưng `companies.payroll_config_json` (mig `0015`) chỉ có `{cutoffDay, payDay}` — **không tồn tại rule nào để bật**, nên câu đó để ngỏ cho người code tự phát minh đơn giá phút. `late_minutes` vẫn ghi vào dòng lương + `input_snapshot_json` để giải thích, nhưng **`deduction_amount` KHÔNG cộng vế trễ**. Đảo quyết định này là việc của WO sau, kèm nơi cấu hình rule.
 
 ```sql
 -- ngày nghỉ: nguồn CHỐT là day-rows, giao với cal_work của PAYROLL
@@ -544,11 +563,11 @@ Thứ tự chạy trong **MỘT transaction** (mở bằng `SELECT … FROM payr
 3. Kiểm `attendance_period_id` NOT NULL và kỳ công đó `locked` (⇒ **002**).
 4. Nhả consume của **chính kỳ này** (`bonus_penalties` có `payroll_period_id = kỳ` → set NULL **cả cặp** `payroll_period_id`/`consumed_at`, kẻo vỡ `bonus_penalties_consumed_pair_check`). **KHÔNG đụng hàng đã consume bởi kỳ khác.**
 5. Chọn tập nhân sự: có **hồ sơ lương hiệu lực** tại ngày cuối kỳ. Tập rỗng ⇒ **422 009**. Người thiếu hồ sơ lương / thiếu bản ghi công **không chặn** — vào danh sách cảnh báo (PAYROLL-FUNC-005).
-6. **UPSERT** `payroll_period_lines` theo `(company_id, payroll_period_id, user_id)` bằng **một câu lệnh SQL set-based** (không vòng lặp per-người ở JS): pro-rate lương cơ bản, cộng phụ cấp, cộng thưởng `Approved` chưa consume, trừ phạt · ngày nghỉ không lương · trễ/sớm (nếu rule ATT bật), `net = GREATEST(gross − khấu trừ, 0)`; làm tròn `numeric(18,2)` **ở SQL**. Ghi `input_snapshot_json`.
+6. **UPSERT** `payroll_period_lines` theo `(company_id, payroll_period_id, user_id)` bằng **một câu lệnh SQL set-based** (không vòng lặp per-người ở JS): pro-rate lương cơ bản, cộng phụ cấp, cộng thưởng `Approved` chưa consume, trừ phạt · ngày nghỉ không lương (**KHÔNG trừ vế trễ/sớm ở v1** — xem quyết định owner ở trên), `net = GREATEST(gross − khấu trừ, 0)`; làm tròn `numeric(18,2)` **ở SQL**. Ghi `input_snapshot_json`.
    - **`adjustment_amount` CÓ DẤU** (dương = truy lĩnh/cộng thêm · âm = truy thu/trừ thêm) và **nằm NGOÀI `gross` lẫn `deduction_amount`** — vì `gross`/`deduction` đều bị CHECK `>= 0` nên gộp vào là không biểu diễn được khoản điều chỉnh âm/dương. Công thức đóng: **`net = GREATEST(gross − deduction_amount + adjustment_amount, 0)`** (ở SQL).
    - **`adjustment_amount` và `adjustment_reason` của dòng cũ được GIỮ NGUYÊN qua UPSERT** — đó là số người dùng nhập tay, tính lại **không được xoá âm thầm**. Dòng của nhân sự **không còn đủ điều kiện** thì **xoá mềm** (`deleted_at`), không hard-delete.
    - FE hiện băng cảnh báo «N dòng có điều chỉnh tay được giữ lại» sau mỗi lần tính lại (§14).
-7. Bind consume cho các hàng thưởng/phạt vừa gộp; `status` kỳ → `Calculated`; ghi `calculated_by/at`, **xoá `submitted_by/at`** (§13.1 bảng RESET); **audit trước, enqueue outbox sau** (dedupeKey của §17 dùng `auditLogId` nên hàng audit phải có id trước khi enqueue trong cùng tx).
+7. Bind consume cho các hàng thưởng/phạt vừa gộp; `status` kỳ → `Calculated`; ghi `calculated_by/at`, **xoá `submitted_by/at`** (§13.1 bảng RESET); audit + enqueue outbox trong **cùng transaction**. ⚠️ dedupeKey của §17 **KHÔNG dùng `auditLogId`** — `AuditService.record` trả `void` (đo 2026-09-01), khoá là **content-derived** từ `RETURNING` của chính câu UPDATE trạng thái (xem §17).
 
 **Sinh phiếu lương** (`generate-payslips`, tại `Approved`, dưới row-lock):
 
@@ -645,15 +664,18 @@ Nguồn chuẩn: [DB-13](<../DB/DB-13 PAYROLL Database Design.md>). Tóm tắt:
 
 | Event code | Mã chuẩn (SPEC-01 §20.2 · SPEC-08 §15.0) | Khi nào | Người nhận | Dedupe |
 | --- | --- | --- | --- | --- |
-| `PAYROLL_PERIOD_SUBMITTED` | NOTI-EVENT-020 | kỳ lương gửi duyệt (commit) | **người duyệt hợp lệ** theo `PayrollApproverReader` — CÙNG bộ giải với PAYROLL-ERR-017 (§13.1), `recipient.mode='UserIds'`, trừ actor. **KHÔNG tự tra role `company-admin` riêng** | `PAYROLL_PERIOD_SUBMITTED:{periodId}:{auditLogId}` — **mỗi LẦN gửi là một sự kiện** (reject → sửa → gửi lại phải báo lại; engine `DedupeKey` là once-ever, không có bucket thời gian) |
-| `PAYROLL_PERIOD_APPROVED` | NOTI-EVENT-021 | kỳ được duyệt | `submitted_by` (người gửi duyệt), trừ actor | `PAYROLL_PERIOD_APPROVED:{periodId}:{auditLogId}` |
-| `PAYROLL_PERIOD_REJECTED` | NOTI-EVENT-022 | kỳ bị từ chối | `submitted_by`, trừ actor | `PAYROLL_PERIOD_REJECTED:{periodId}:{auditLogId}` |
-| `PAYSLIP_PUBLISHED` | NOTI-EVENT-023 | phát hành phiếu lương (`Approved → Paid`, commit) | **từng nhân sự có phiếu** trong kỳ (`payslips.user_id`), trừ actor | `PAYSLIP_PUBLISHED:{payslipId}` (một phiếu báo đúng một lần) |
+| `PAYROLL_PERIOD_SUBMITTED` | NOTI-EVENT-020 | kỳ lương gửi duyệt (commit) | **người duyệt hợp lệ** theo `PayrollApproverReader` — CÙNG bộ giải với PAYROLL-ERR-017 (§13.1), `recipient.mode='UserIds'`, trừ actor. **KHÔNG tự tra role `company-admin` riêng** | `{periodId}:{submittedAtIso}` — **mỗi LẦN gửi là một sự kiện** (reject → sửa → gửi lại phải báo lại; engine `DedupeKey` là once-ever, không có bucket thời gian) |
+| `PAYROLL_PERIOD_APPROVED` | NOTI-EVENT-021 | kỳ được duyệt | `submitted_by` (người gửi duyệt), trừ actor | `{periodId}:{approvedAtIso}` |
+| `PAYROLL_PERIOD_REJECTED` | NOTI-EVENT-022 | kỳ bị từ chối | `submitted_by`, trừ actor | `{periodId}:{updatedAtIso}` — `reject` KHÔNG có cột `rejected_at` |
+| `PAYSLIP_PUBLISHED` | NOTI-EVENT-023 | phát hành phiếu lương (`Approved → Paid`, commit) | **từng nhân sự có phiếu** trong kỳ (`payslips.user_id`), trừ actor | `{payslipId}` (một phiếu báo đúng một lần) |
 
 - `notification_type = 'Payroll'`, `module_code = 'PAYROLL'`, `priority` Normal (020/021) · High (022/023), `isEnabled=true`, `isSystemEvent=false` cả 4 — **PAYROLL v1 không có system job** (mọi event đều event-driven; nhắc chốt kỳ = Phase sau nếu cần).
 - **`dedupe_strategy = 'DedupeKey'`** ngay seed đầu cho cả 4 (mặc định `'None'` biến `dedupeKey` thành chuỗi trang trí — bài học `0479`/`0507`/`0538`).
 - **Payload TUYỆT ĐỐI KHÔNG chứa số tiền** — chỉ `periodMonth` + tên kỳ + lý do từ chối (022) + liên kết (`/payroll/periods/:id` cho 020/021/022, `/me/payslips` cho 023). Đây là ràng buộc mạnh hơn các module khác: NOTI đi qua nhiều kênh và không có tầng masking riêng.
-- Phát qua **OutboxNotificationBridge** (enqueue trong transaction; **audit ghi TRƯỚC, enqueue SAU** — dedupeKey dùng `auditLogId`). `registerSource()` fail-loud lúc boot ⇒ seed NOTI (**DB-13 §10 bước C**) phải merge **trước** khi WO BE đăng ký registrar.
+- **Khoá dedupe là CONTENT-DERIVED, KHÔNG dùng `auditLogId`** (đính chính 2026-09-01, S13-PAYROLL-BE-2): `AuditService.record` trả **`void`**, không có id để ghép — bản trước của bảng này (và comment trong mig `0566`) viết `{auditLogId}` khi chưa đo tầng audit. Nửa sau của khoá lấy từ **`RETURNING` của chính câu UPDATE đổi trạng thái**, nên tính chất «mỗi LẦN gửi là một sự kiện» vẫn giữ nguyên.
+- **Cột «Dedupe» ở trên là phần do PRODUCER sinh.** Engine tự ghép tiền tố: `NotificationDedupeService.computeKey` trả `${eventCode}:${dedupeKey}` — registrar **không** được tự thêm `eventCode`, kẻo khoá lưu xuống mang tiền tố đôi.
+- Phát qua **OutboxNotificationBridge**, enqueue trong CÙNG transaction nghiệp vụ. `registerSource()` fail-loud lúc boot ⇒ seed NOTI (**DB-13 §10 bước C**) phải merge **trước** khi WO BE đăng ký registrar.
+- **Người nhận đi THEO PAYLOAD outbox, không resolve lại lúc giao**: `PayrollApproverReader` chạy ở `submit` (cùng lượt với cổng `PAYROLL-ERR-017`) và nhét danh sách vào payload. Đọc lại DB lúc giao là dựng **bộ giải thứ hai** — hai bộ giải lệch nhau đẻ đúng thất bại mà 017 sinh ra để chặn.
 - Đo dải mã chuẩn ngày 31/08/2026: SPEC-01 §20.2 dừng ở **NOTI-EVENT-019** (ASSET 010–012 · ROOM 013–015 · RECRUIT 016–019). PAYROLL cấp tiếp **020–023**; module sau lấy **024+** — **đo lại bằng grep `NOTI-EVENT-0` trước khi cấp**, không mặc định còn trống.
 
 ---

@@ -15192,7 +15192,7 @@ export const backlog = [
     title:
       "Máy tính lương: calculate (SQL numeric, snapshot ĐÓNG BĂNG, idempotency theo kỳ) → điều chỉnh dòng có lý do → submit/approve/reject/lock/reopen (four-eyes) → generate + publish payslip (bản ghi bất biến) + ack + export XLSX (quyền riêng + audit) + outbox NOTI 020..023",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/payroll/**",
       "apps/api/src/notifications/**",
@@ -15207,7 +15207,7 @@ export const backlog = [
     depends_on: ["S13-PAYROLL-BE-1", "S13-PAYROLL-BE-1B"],
     plan: "docs/plans/S13-PAYROLL-BE-2.md",
     src: [
-      "SPEC-11 §công-thức/§FSM (viết ở DOC-1): gross = base pro-rate + phụ cấp + thưởng − phạt; khấu trừ = không lương + trễ/sớm (nếu bật rule) + dòng tay; net = gross − khấu trừ; breakdown giải-thích-được (P2-PAY-05-006)",
+      "SPEC-11 §13.4 (đính chính owner 01/09/2026, S13-PAYROLL-BE-2): pro-rate = LEAST((present_days + unpaid_leave_days)/work_days, 1) — TỬ SỐ CỘNG unpaid vì present_days đã LOẠI ngày nghỉ không lương, không cộng là TRỪ HAI LẦN. gross = base pro-rate + phụ cấp + thưởng; khấu trừ = phạt + nghỉ không lương × đơn giá ngày (v1 KHÔNG có vế trễ/sớm — companies.payroll_config_json không có rule nào để bật); net = GREATEST(gross − khấu trừ + adjustment, 0) tính Ở SQL; breakdown giải-thích-được (P2-PAY-05-006)",
       "PAY-DEC-004 (KHÔNG engine BHXH/thuế — PARK-PAYROLL-001) · 007 (1 cấp duyệt, officer KHÔNG approve) · 008 (publish + ack + XLSX, PDF Phase sau)",
       "Khuôn: outbox NOTI dedupeKey content-derived (0561) · memory period-key-idempotency-needs-frozen-source · clamp-must-be-sql",
     ],
@@ -15217,11 +15217,11 @@ export const backlog = [
       "BÀN GIAO TỪ BE-1 (3 mục nằm trong done_when của BE-1 nhưng thuộc route của BE-2 — plan-review S13-PAYROLL-BE-1 vòng 1 blocker #3; để rơi thì KHÔNG cổng nào bắt lại): (a) «Calculated đòi attendance_periods locked (409 PAYROLL-ERR-002)» ở route 007 — mã 002 hiện nằm trong PAYROLL_PENDING_BE2_ERRORS, gỡ khỏi danh sách CÙNG ca test; (b) «recalc đầu vào khi nguồn đổi TRƯỚC duyệt» — collect/calculate lại TẠI CHỖ dùng LẠI PayrollInputsRepository.computeInputsTx của BE-1, KHÔNG viết bản aggregation thứ hai; (c) «reopen CHẶN khi payslips_generated_at đã set» ở route 016 — BE-1 đã ship assertReopenAllowed() (payroll-fsm.ts) + ca test cả hai kind, BE-2 chỉ việc gọi NGAY SAU lockForUpdateTx và TRƯỚC assertPeriodTransition",
       "Payslip: generate từ kỳ Approved → Published + NOTI 022 từng NV; bản ghi BẤT BIẾN sau Published (append-only đã ép ở DB — điều chỉnh đi vào kỳ sau); ack ghi payslip_acknowledgements; employee chỉ thấy Own (IDOR cross-employee CÙNG company có int-spec riêng, không chỉ cross-tenant)",
       "Export XLSX bảng lương tổng: đòi cặp ('export','payroll') RIÊNG + audit TỪNG lần xuất; số trong file khớp breakdown",
-      "Outbox NOTI đúng catalog ĐÃ CHỐT (SPEC-11 §17 · SPEC-08 §15.10 · DB-13 §10 bước C): 020 PAYROLL_PERIOD_SUBMITTED (→ người duyệt hợp lệ qua PayrollApproverReader, CÙNG bộ giải với PAYROLL-ERR-017) · 021 PAYROLL_PERIOD_APPROVED (→ submitted_by) · 022 PAYROLL_PERIOD_REJECTED (→ submitted_by, kèm lý do) · 023 PAYSLIP_PUBLISHED (→ từng payslips.user_id). KHÔNG có event cho reopen. dedupeKey theo LẦN thao tác ({periodId}:{auditLogId}) — audit ghi TRƯỚC, enqueue SAU. Payload TUYỆT ĐỐI không có số tiền. Fixture đối soát TAY ít nhất 1 NV đủ mọi loại khoản (số khớp từng đồng)",
+      "Outbox NOTI đúng catalog ĐÃ CHỐT (SPEC-11 §17 · SPEC-08 §15.10 · DB-13 §10 bước C): 020 PAYROLL_PERIOD_SUBMITTED (→ người duyệt hợp lệ qua PayrollApproverReader, CÙNG bộ giải với PAYROLL-ERR-017) · 021 PAYROLL_PERIOD_APPROVED (→ submitted_by) · 022 PAYROLL_PERIOD_REJECTED (→ submitted_by, kèm lý do) · 023 PAYSLIP_PUBLISHED (→ từng payslips.user_id). KHÔNG có event cho reopen. dedupeKey CONTENT-DERIVED theo LẦN thao tác ({periodId}:{submittedAtIso} · {periodId}:{approvedAtIso} · {periodId}:{updatedAtIso} · {payslipId}) — KHÔNG dùng auditLogId (AuditService.record trả void) và KHÔNG tự thêm tiền tố eventCode (engine đã ghép). Payload TUYỆT ĐỐI không có số tiền. Fixture đối soát TAY ít nhất 1 NV đủ mọi loại khoản (số khớp từng đồng)",
     ],
     notes: [
       "🔴 FULL gate + Opus. Đây là WO crown nặng nhất wave — nếu plan-reviewer thấy vượt khẩu độ, được phép cắt export XLSX sang WO FE/QA, KHÔNG được cắt four-eyes hay snapshot đóng băng.",
-      "BE-1 (đã ship) để sẵn: PAYROLL_ROUTE_PAIRS khai ĐỦ 35 key + 3 cờ (17 key của WO này nằm trong PAYROLL_PENDING_BE2 — census assert hợp=toàn bộ VÀ giao=∅, nối dây mà quên gỡ là ĐỎ) · PAYROLL_ERR_CODE khai đủ 001..017 (9 mã hoãn trong PAYROLL_PENDING_BE2_ERRORS, cùng luật cổng) · payroll-fsm.ts (bảng 10 chuyển tiếp + 3 ô tại chỗ + TRAIL_RESET 9 hàng + assertReopenAllowed) · PayrollInputsRepository (5 đại lượng §13.4, chỉ ĐỌC) · PayrollAccessService/PayrollPeopleRepository. ⚠️ objectGrantRequired chỉ được khai `false`: khai `true` là deny-object-required fail-closed ⇒ 403 CẢ ROUTE (permission.decide.ts:93). ⚠️ mapPayrollPgError CHƯA map 005/006/015 — thêm CÙNG ca test đi qua chúng. ⚠️ payrollSummarySchema.totalGross/totalNet khai z.number() nhưng API-18 §6.3 vẽ CHUỖI — lệch hợp đồng chưa giải quyết, chốt cùng route 018.",
+      "BE-1 (đã ship) để sẵn: PAYROLL_ROUTE_PAIRS khai ĐỦ 35 key + 3 cờ (17 key của WO này nằm trong PAYROLL_PENDING_BE2 — census assert hợp=toàn bộ VÀ giao=∅, nối dây mà quên gỡ là ĐỎ) · PAYROLL_ERR_CODE khai đủ 001..017 (9 mã hoãn trong PAYROLL_PENDING_BE2_ERRORS, cùng luật cổng) · payroll-fsm.ts (bảng 10 chuyển tiếp + 3 ô tại chỗ + TRAIL_RESET 9 hàng + assertReopenAllowed) · PayrollInputsRepository (5 đại lượng §13.4, chỉ ĐỌC) · PayrollAccessService/PayrollPeopleRepository. ⚠️ objectGrantRequired chỉ được khai `false`: khai `true` là deny-object-required fail-closed ⇒ 403 CẢ ROUTE (permission.decide.ts:93). ⚠️ mapPayrollPgError CHƯA map 005/006/015 — thêm CÙNG ca test đi qua chúng. ✅ ĐÃ CHỐT ở BE-2: payrollSummarySchema.totalGross/totalNet giữ z.number(), API-18 §6.3 sửa theo (đảo quyết định cũ 'trả chuỗi' — cả module dùng number, tổng VND ~10^12 cách MAX_SAFE_INTEGER bốn bậc).",
       "Test biên: ngày cuối tháng + NV vào/nghỉ giữa kỳ (pro-rate) + kỳ 0 NV (tính rỗng hợp lệ) + bonus_penalty Pending không vào công thức.",
     ],
   },

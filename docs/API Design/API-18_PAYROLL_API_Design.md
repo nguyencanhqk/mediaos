@@ -158,7 +158,8 @@ Bảng mã ↔ method/path ↔ cặp quyền ↔ audit/NOTI: xem **SPEC-11 §15*
 
 | Mã | Trạng thái | Ghi chú |
 | --- | --- | --- |
-| PAYROLL-API-001..035 | ⏳ **Chưa hiện thực** | `apps/api/src/payroll/` chưa tồn tại (đo 31/08/2026: 0 route, 0 dòng `app.module.ts`). Thi công ở `S13-PAYROLL-BE-1` (nền: hồ sơ lương · thưởng/phạt · FSM kỳ · gom đầu vào) và `S13-PAYROLL-BE-2` (máy tính lương · duyệt · phát hành · export · NOTI) |
+| PAYROLL-API-001..006 · 019..028 · 034..035 | ✅ **Đã hiện thực** | `S13-PAYROLL-BE-1` (#456) — nền: hồ sơ lương · thưởng/phạt · FSM kỳ · gom đầu vào công/phép |
+| PAYROLL-API-007..018 · 029..033 | ✅ **Đã hiện thực** | `S13-PAYROLL-BE-2` — máy tính lương (set-based SQL) · duyệt four-eyes · phiếu lương + breakdown · export XLSX · NOTI 020–023. **35/35 route** đã lên dây; census 2 tầng phủ đủ (`PAYROLL_PENDING_BE2` rỗng) |
 
 > Lệch giữa thiết kế và code ⇒ **sửa code**, không sửa ngầm tài liệu (CLAUDE.md — docs/spec + docs/DB là chuẩn).
 
@@ -210,14 +211,18 @@ Chuẩn API-01 (`data[]` + `pagination { page, per_page, total, total_pages, has
     "periodMonth": "2026-09",
     "status": "Paid",
     "headcount": 42,
-    "totalGross": "512400000.00",
-    "totalNet": "486180000.00"
+    "totalGross": 512400000,
+    "totalNet": 486180000
   },
   "meta": { "request_id": "req_…", "timestamp": "…" }
 }
 ```
 
-> Cặp gác `('view-line','payroll-period')` **+ SÀN scope `Company`** (`DASH_WIDGET_MIN_DATA_SCOPE`) — payload CHỨA SỐ TIỀN và cộng toàn công ty, nên grant hẹp hơn `Company` **không được serve** (`dash-widget-gate-needs-scope-floor`). Số tiền trả về dạng **chuỗi** để không mất chính xác qua JSON number.
+> Cặp gác `('view-line','payroll-period')` **+ SÀN scope `Company`** (`DASH_WIDGET_MIN_DATA_SCOPE`) — payload CHỨA SỐ TIỀN và cộng toàn công ty, nên grant hẹp hơn `Company` **không được serve** (`dash-widget-gate-needs-scope-floor`).
+>
+> ⚠️ **ĐẢO QUYẾT ĐỊNH 01/09/2026 (S13-PAYROLL-BE-2), thay cho ghi chú «số tiền trả về dạng chuỗi» ở bản trước.** `totalGross`/`totalNet` là **`number`**, không phải chuỗi. Lý do: cả module (dòng bảng lương · phiếu lương · `payslip_items`) đã trả `number`; riêng `summary` trả chuỗi thì FE phải mang **hai** cách đọc tiền trong cùng một màn. Rủi ro mất chính xác không tồn tại ở thang này: tổng VND một kỳ (~10¹²) còn cách `Number.MAX_SAFE_INTEGER` (~9×10¹⁵) bốn bậc. Lúc đảo chưa có consumer nào parse chuỗi (`S13-PAYROLL-FE-1` còn `todo`).
+>
+> Công ty **chưa có kỳ lương nào** ⇒ **200** với `data: null`, KHÔNG 404: widget DASH phải phân biệt được «chưa có kỳ» với «không có quyền».
 
 ### 6.4 Cảnh báo dữ liệu thiếu (`GET /payroll-periods/{id}/readiness`)
 

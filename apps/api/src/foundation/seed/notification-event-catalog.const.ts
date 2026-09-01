@@ -171,12 +171,19 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
 
   // ===== PAYROLL (SPEC-11 §17 · NOTI-EVENT-020..023 · mig 0566 · S13-PAYROLL-DB-1) =====
   //   dedupe_strategy='DedupeKey' + window NULL cả 4 (mặc định 'None' làm tầng dedupe BIẾN MẤT — 0479/0507/0538).
-  //   020 'PAYROLL_PERIOD_SUBMITTED:{periodId}:{auditLogId}' — MỖI LẦN GỬI là một sự kiện (reject → sửa → gửi lại
-  //       phải báo lại; engine DedupeKey là once-ever, không có bucket thời gian);
-  //   021 ':{periodId}:{auditLogId}' · 022 ':{periodId}:{auditLogId}' · 023 'PAYSLIP_PUBLISHED:{payslipId}'.
+  //   ⚠️ ĐÍNH CHÍNH 01/09 (S13-PAYROLL-BE-2): khoá dedupe KHÔNG dùng {auditLogId} — `AuditService.record` trả
+  //       VOID, không có id để ghép (bản trước của comment này + mig 0566 viết vậy khi chưa đo). Khoá là
+  //       CONTENT-DERIVED, lấy mốc thời gian từ RETURNING của CHÍNH câu UPDATE đổi trạng thái. Và registrar
+  //       KHÔNG tự thêm tiền tố eventCode — `NotificationDedupeService.computeKey` đã ghép `${eventCode}:`.
+  //   020 '{periodId}:{submittedAtIso}' — MỖI LẦN GỬI là một sự kiện (reject → sửa → gửi lại phải báo lại;
+  //       engine DedupeKey là once-ever, không có bucket thời gian);
+  //   021 '{periodId}:{approvedAtIso}' · 022 '{periodId}:{updatedAtIso}' (reject không có cột rejected_at)
+  //       · 023 '{payslipId}' (một phiếu báo đúng một lần).
   //   is_system_event=false CẢ 4 (PAYROLL v1 KHÔNG có system job — mọi event event-driven).
-  //   Người nhận: 020 = người duyệt hợp lệ theo `PayrollApproverReader` — CÙNG bộ giải với PAYROLL-ERR-017
-  //       (SPEC-11 §13.1); hai bộ giải lệch nhau đẻ đúng thất bại mà 017 sinh ra để chặn. 021/022 = submitted_by.
+  //   Người nhận đi THEO PAYLOAD outbox (không resolve lại lúc giao): 020 = người duyệt hợp lệ do
+  //       `PayrollApproverReader` sinh Ở `submit` — CÙNG bộ giải với PAYROLL-ERR-017 (SPEC-11 §13.1); hai bộ
+  //       giải lệch nhau đẻ đúng thất bại mà 017 sinh ra để chặn. 021/022 = submitted_by (đọc TRƯỚC khi
+  //       TRAIL_RESET.reject xoá cột đó).
   //       023 = từng nhân sự có phiếu trong kỳ. Tất cả trừ actor.
   //   ⚠️ Payload/template TUYỆT ĐỐI KHÔNG chứa số tiền — NOTI đi qua nhiều kênh và KHÔNG có tầng masking riêng
   //       (SPEC-11 §17/§18). Chỉ periodMonth · tên người thao tác · lý do từ chối (022) · deep-link.
