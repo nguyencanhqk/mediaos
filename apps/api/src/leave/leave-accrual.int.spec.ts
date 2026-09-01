@@ -540,7 +540,9 @@ describe.skipIf(!runDb)("S6-LEAVE-ACCRUAL-1 engine cộng dồn phép (DB cô l�
     await plantEmployee(co, { startDate: null });
 
     expect(handler.jobCode).toBe(LEAVE_ACCRUAL_JOB_CODE);
-    const result = await handler.run({ companyId: co });
+    // `today` TƯỜNG MINH (S13-LEAVE-JOBDATE-1): con số 7 là của mốc 01/08/2026, KHÔNG phải của đồng hồ
+    // máy. Trước khi handler chuyển tiếp ngày, ca này đọc ngày thật ⇒ đỏ vĩnh viễn từ 01/09/2026.
+    const result = await handler.run({ companyId: co, today: TODAY });
     expect(result.success).toBe(7);
     expect(result.failed).toBe(0);
 
@@ -552,9 +554,40 @@ describe.skipIf(!runDb)("S6-LEAVE-ACCRUAL-1 engine cộng dồn phép (DB cô l�
     expect(meta).not.toContain("@");
 
     // Nhịp thứ hai: cùng chữ ký cảnh báo ⇒ không lặp WARN, và vẫn không cấp thêm gì.
-    const second = await handler.run({ companyId: co });
+    const second = await handler.run({ companyId: co, today: TODAY });
     expect(second.success).toBe(0);
     expect(second.metadata?.alreadyGranted).toBe(7);
+  });
+
+  it.each([
+    { today: "2026-03-01", expected: 2 },
+    { today: TODAY, expected: 7 },
+  ])(
+    "job handler: `today`=$today ⇒ cấp đúng $expected kỳ — kết quả do THAM SỐ quyết, không do đồng hồ máy",
+    async ({ today, expected }) => {
+      // Hai mốc khác nhau chạy trong CÙNG một lần chạy suite (đồng hồ máy KHÔNG đổi) mà ra hai con số
+      // khác nhau ⇒ chứng minh ngày nghiệp vụ đến từ `ctx.today`. Tenant RIÊNG mỗi mốc: sổ cái là
+      // append-only, dùng lại tenant thì kỳ đã cấp ở mốc trước sẽ nuốt phần chênh.
+      const t = await freshTenant("lvaccdt");
+      await plantEmployee(t.companyId, { startDate: "2020-05-10" });
+
+      const result = await handler.run({ companyId: t.companyId, today });
+      expect(result.success).toBe(expected);
+      expect(result.metadata?.today).toBe(today);
+      expect(await ledgerRows(t.companyId)).toHaveLength(expected);
+    },
+  );
+
+  it("job handler KHÔNG nhận `today` (đường PROD) ⇒ dùng ngày THẬT của máy", async () => {
+    // Nhánh đối chứng của hai ca trên: JobRunner gọi `run({ companyId })` KHÔNG kèm ngày (job-runner.ts:117).
+    // Không ghim con số (nó trôi theo lịch) — ghim đúng thứ phải đúng: ngày engine dùng = ngày thật.
+    await plantEmployee(co, { startDate: "2020-05-10" });
+
+    const result = await handler.run({ companyId: co });
+    // CẤM ghim con số ở đây (nó trôi theo lịch) và CẤM ghim `!== TODAY` (đúng ngày 01/08 sẽ đỏ oan) —
+    // ghim đúng thứ bất biến: engine chạy tại ngày thật, và số dòng sổ cái khớp số kỳ báo cấp.
+    expect(result.metadata?.today).toBe(LeaveAccrualService.today());
+    expect(await ledgerRows(co)).toHaveLength(result.success);
   });
 
   it("handler ĐƯỢC scheduler nhìn thấy: có metadata SYSTEM_JOB_HANDLER + resolve được từ container", () => {
