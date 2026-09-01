@@ -69,6 +69,9 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 đầu vào công/phép + audit đ
   let salaryProfileId = "";
   let paidTypeId = "";
   let unpaidTypeId = "";
+  /** Người RIÊNG cho nhóm ca «nửa ngày» — nhóm B1..B7 tích luỹ trạng thái trên `workerId`. */
+  let halfId = "";
+  let halfEmployeeId = "";
 
   const http = () => request(app.getHttpServer());
   const get = (u: string) => http().get(u).set("Authorization", `Bearer ${token}`);
@@ -102,6 +105,57 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 đầu vào công/phép + audit đ
        VALUES ($1,$2,$3,$4,$5,1,$6)`,
       [A.companyId, userId, typeId, from, to, status],
     );
+  }
+
+  /**
+   * Đơn nghỉ **kèm `leave_request_days`** — đúng như đường ghi thật (`LeaveRequestService.createDraft`
+   * ghi đơn + day-rows trong CÙNG tx, `leave-request.service.ts:110`). `seedLeave` ở trên CỐ Ý không
+   * ghi day-rows: nó là dữ liệu **di sản** và chạy nhánh fallback (SPEC-11 §13.4).
+   */
+  async function seedLeaveWithDays(
+    userId: string,
+    employeeId: string,
+    typeId: string,
+    days: { date: string; leaveDays: number; session?: "Morning" | "Afternoon" }[],
+    opts: { status?: string; dayStatus?: string; dayDeleted?: boolean } = {},
+  ): Promise<string> {
+    const total = days.reduce((a, d) => a + d.leaveDays, 0);
+    const r = await direct.query(
+      `INSERT INTO leave_requests (company_id, user_id, employee_id, leave_type_id, start_date, end_date, total_days, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      [
+        A.companyId,
+        userId,
+        employeeId,
+        typeId,
+        days[0].date,
+        days[days.length - 1].date,
+        total,
+        opts.status ?? "Approved",
+      ],
+    );
+    const requestId = r.rows[0].id as string;
+    for (const d of days) {
+      await direct.query(
+        `INSERT INTO leave_request_days
+           (company_id, leave_request_id, employee_id, leave_type_id, work_date, day_type,
+            half_day_session, leave_days, is_working_day, status, deleted_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$10)`,
+        [
+          A.companyId,
+          requestId,
+          employeeId,
+          typeId,
+          d.date,
+          d.session ? "Half Day" : "Full Day",
+          d.session ?? null,
+          d.leaveDays,
+          opts.dayStatus ?? "Active",
+          opts.dayDeleted ? new Date() : null,
+        ],
+      );
+    }
+    return requestId;
   }
 
   async function seedLeaveType(code: string, paid: boolean): Promise<string> {
@@ -186,6 +240,15 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 đầu vào công/phép + audit đ
     token = login.body.data.accessToken;
 
     workerId = await seedUser(direct, A.companyId, `worker@${A.slug}.test`, hash);
+    halfId = await seedUser(direct, A.companyId, `half@${A.slug}.test`, hash);
+    // `leave_request_days.employee_id` NOT NULL → FK `employee_profiles` ⇒ người của nhóm ca nửa ngày
+    // PHẢI có hồ sơ nhân sự (khác `workerId` vốn chỉ cần user).
+    const emp = await direct.query(
+      `INSERT INTO employee_profiles (company_id, user_id, employee_code, start_date, status)
+         VALUES ($1,$2,$3,'2020-01-01','active') RETURNING id`,
+      [A.companyId, halfId, `E-${halfId.slice(0, 8)}`],
+    );
+    halfEmployeeId = emp.rows[0].id as string;
     paidTypeId = await seedLeaveType(`PAID-${randomUUID().slice(0, 4)}`, true);
     unpaidTypeId = await seedLeaveType(`UNP-${randomUUID().slice(0, 4)}`, false);
 
@@ -301,6 +364,104 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 đầu vào công/phép + audit đ
       A.companyId,
       JSON.stringify({ days: [1, 2, 3, 4, 5] }),
     ]);
+  });
+
+  // ── E. nửa ngày (S13-PAYROLL-BE-1B) ──────────────────────────────────────────────────────────
+  //
+  // Nhóm này chạy trên NGƯỜI RIÊNG (`halfId`) và TÍCH LUỸ theo thứ tự — mỗi ca cộng thêm vào tổng của
+  // ca trước, nên con số kỳ vọng viết ra tường minh ở từng ca. Ngày 2027-11-03 bị ca A2 gieo lễ quốc
+  // gia ⇒ KHÔNG dùng ở đây (nó không nằm trong `cal_work`).
+
+  const halfRow = async () => (await rowOf(halfId)).row;
+
+  it("E1 — nghỉ NỬA BUỔI có lương ⇒ 0.5 ngày (không làm tròn LÊN thành 1)", async () => {
+    await seedLeaveWithDays(halfId, halfEmployeeId, paidTypeId, [
+      { date: `${MONTH}-01`, leaveDays: 0.5, session: "Morning" },
+    ]);
+    const row = await halfRow();
+    expect(row?.paidLeaveDays, "count(distinct ngày) ⇒ 1: nửa buổi bị tính tròn một ngày").toBe(0.5);
+    expect(row?.presentDays).toBe(0.5);
+  });
+
+  it("E2 — nghỉ NỬA BUỔI không lương ⇒ 0.5, và KHÔNG vào present_days", async () => {
+    await seedLeaveWithDays(halfId, halfEmployeeId, unpaidTypeId, [
+      { date: `${MONTH}-02`, leaveDays: 0.5, session: "Afternoon" },
+    ]);
+    const row = await halfRow();
+    expect(row?.unpaidLeaveDays, "BE-2 trừ lương theo số này — tròn lên là trừ gấp đôi").toBe(0.5);
+    expect(row?.presentDays, "phép không lương không phải ngày có mặt").toBe(0.5);
+  });
+
+  it("E3 — ngày vừa có bản ghi CÔNG vừa có phép nửa buổi có lương ⇒ present đếm ĐÚNG MỘT", async () => {
+    await seedAttendance(halfId, `${MONTH}-01`, "present");
+    const row = await halfRow();
+    // GREATEST(1, 0.5) = 1 — cộng dồn sẽ ra 1.5 (ngày công phồng lên), cộng hai COUNT rời ra 2.
+    expect(row?.presentDays, "SUM thay vì GREATEST ⇒ một ngày thành 1.5").toBe(1);
+    expect(row?.paidLeaveDays, "số ngày phép KHÔNG đổi vì có bản ghi công").toBe(0.5);
+  });
+
+  it("E4 — ALLOW đối chứng: nghỉ NGUYÊN NGÀY vẫn = 1.0 (không hồi quy)", async () => {
+    await seedLeaveWithDays(halfId, halfEmployeeId, paidTypeId, [
+      { date: `${MONTH}-04`, leaveDays: 1 },
+    ]);
+    const row = await halfRow();
+    expect(row?.paidLeaveDays).toBe(1.5);
+    expect(row?.presentDays).toBe(2);
+  });
+
+  it("E5 — HAI đơn nửa buổi CÙNG một ngày ⇒ phép 1.0 và present ngày đó KHÔNG vượt 1", async () => {
+    await seedLeaveWithDays(halfId, halfEmployeeId, paidTypeId, [
+      { date: `${MONTH}-05`, leaveDays: 0.5, session: "Morning" },
+    ]);
+    await seedLeaveWithDays(halfId, halfEmployeeId, paidTypeId, [
+      { date: `${MONTH}-05`, leaveDays: 0.5, session: "Afternoon" },
+    ]);
+    const row = await halfRow();
+    expect(row?.paidLeaveDays).toBe(2.5);
+    expect(row?.presentDays, "thiếu trần LEAST(…,1) ⇒ một ngày đếm > 1").toBe(3);
+  });
+
+  it("E6 — đơn DI SẢN không có day-row ⇒ fallback 1.0/ngày, KHÔNG rơi về 0 lặng lẽ", async () => {
+    // Nguồn day-row RỖNG ≠ bằng 0. Đọc rỗng thành 0 là mất im lặng một khoản tiền.
+    await seedLeave(halfId, paidTypeId, `${MONTH}-08`, `${MONTH}-08`, "approved");
+    const row = await halfRow();
+    expect(row?.paidLeaveDays).toBe(3.5);
+    expect(row?.presentDays).toBe(4);
+  });
+
+  it("E7 — day-row `Cancelled`/đã xoá mềm KHÔNG được tính; day-row Active của CÙNG đơn vẫn tính", async () => {
+    await seedLeaveWithDays(halfId, halfEmployeeId, paidTypeId, [
+      { date: `${MONTH}-09`, leaveDays: 0.5, session: "Morning" },
+    ]);
+    const cancelled = await seedLeaveWithDays(halfId, halfEmployeeId, paidTypeId, [
+      { date: `${MONTH}-10`, leaveDays: 0.5, session: "Morning" },
+      { date: `${MONTH}-11`, leaveDays: 0.5, session: "Morning" },
+    ]);
+    // Huỷ MỘT trong hai day-row của đơn: đơn vẫn "có day-row" ⇒ không rơi fallback, và ngày bị huỷ
+    // biến mất khỏi tổng — chỉ 0.5 của ngày còn Active được cộng.
+    await direct.query(
+      `UPDATE leave_request_days SET status='Cancelled' WHERE leave_request_id=$1 AND work_date=$2`,
+      [cancelled, `${MONTH}-11`],
+    );
+    const row = await halfRow();
+    expect(row?.paidLeaveDays).toBe(4.5);
+    expect(row?.presentDays).toBe(5);
+  });
+
+  it("E8 — đơn bắc qua BIÊN THÁNG: chỉ phần ngày NẰM TRONG kỳ được tính", async () => {
+    // 29–30/11 (T2,T3) + 01–03/12 — `total_days` của đơn là 5.0, nhưng kỳ 2027-11 chỉ được hưởng 2.
+    // Đây là lý do `leave_requests.total_days` KHÔNG thể làm nguồn (SPEC-11 §13.4).
+    await seedLeaveWithDays(halfId, halfEmployeeId, paidTypeId, [
+      { date: `${MONTH}-29`, leaveDays: 1 },
+      { date: `${MONTH}-30`, leaveDays: 1 },
+      { date: "2027-12-01", leaveDays: 1 },
+      { date: "2027-12-02", leaveDays: 1 },
+      { date: "2027-12-03", leaveDays: 1 },
+    ]);
+    const row = await halfRow();
+    expect(row?.paidLeaveDays, "lấy total_days của cả đơn ⇒ 5 ngày rơi vào tháng 11").toBe(6.5);
+    expect(row?.presentDays).toBe(7);
+    expect(row?.unpaidLeaveDays, "phép không lương của E2 không bị nhóm ca này đụng").toBe(0.5);
   });
 
   // ── C. readiness ──────────────────────────────────────────────────────────────────────────────
