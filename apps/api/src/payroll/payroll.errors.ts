@@ -2,6 +2,7 @@ import { ConflictException, NotFoundException, UnprocessableEntityException } fr
 import type { ErrorDetail } from "@mediaos/contracts";
 import {
   PG_CHECK_VIOLATION,
+  PG_FK_VIOLATION,
   PG_UNIQUE_VIOLATION,
   pgErrorCode,
   pgErrorField,
@@ -154,7 +155,7 @@ export const payrollNotFound = () =>
 /**
  * Map lỗi PG → PAYROLL-ERR. Trả `null` khi ngoài phổ — caller `throw mapPayrollPgError(err) ?? err`.
  *
- * Ba luật (plan §8, plan-review vòng 1 blocker #6):
+ * BỐN luật (ba luật đầu: plan §8, plan-review vòng 1 blocker #6; luật 4 thêm ở S13-PAYROLL-QA-1):
  *  1. `23505` → theo TÊN constraint. Bốn nhánh: `008` kỳ trùng tháng · `014` hồ sơ lương trùng ngày
  *     (BE-1) · `006` sinh phiếu hai lần · `015` xác nhận hai lần (BE-2, nối dây CÙNG ca test đi qua).
  *  2. `23514` **CÓ tên** → bản đồ SPEC-11 §12. `lines_adjustment_check` → `null` (rơi về 400 của tầng
@@ -237,6 +238,29 @@ export function mapPayrollPgError(err: unknown): Error | null {
         PAYROLL_ERR.BONUS_FROZEN_RACE,
         payrollDetails("bonus-frozen-race"),
       );
+    }
+    return null;
+  }
+  // 🩹 Luật 4 — thêm ở `S13-PAYROLL-QA-1` (đo 2026-09-01). `23503` TRƯỚC đó không có nhánh nào ⇒
+  // `POST /salary-profiles` và `POST /bonus-penalties` với `userId` KHÔNG tồn tại (hoặc thuộc tenant
+  // khác) rơi thẳng thành **500 SYSTEM-ERR-001** — đúng thứ §8b của file này cấm. Kịch bản thật, không
+  // phải trò cạy: người dùng bị xoá giữa lúc mở picker và lúc bấm Lưu.
+  //
+  // Map theo TÊN constraint (luật 1), KHÔNG map trọn `23503`: FK nội bộ vỡ (`company_id`, `created_by`,
+  // `payroll_period_id`…) là BUG của server, che nó bằng 404 sẽ giấu lỗi thật. Chỉ hai FK trỏ tới
+  // NHÂN SỰ ĐƯỢC CHỌN mới là "đầu vào người dùng sai" ⇒ 404 sentinel `PAYROLL-ERR-010`.
+  //
+  // ⚠️ Hai nguồn phải CÙNG một phản hồi: `*_user_id_fkey` (không tồn tại) và `*_user_id_company_fk`
+  // (tồn tại nhưng của tenant KHÁC). Trả khác nhau là dựng oracle "user này có thật ở đâu đó" — cùng
+  // lỗ mà sentinel 404 của module sinh ra để bịt.
+  if (code === PG_FK_VIOLATION) {
+    const c = pgErrorField(err, "constraint") ?? "";
+    if (
+      c.includes("salary_profiles_user_id") ||
+      c.includes("bonus_penalties_user_id") ||
+      c.includes("payslips_user_id")
+    ) {
+      return payrollNotFound();
     }
     return null;
   }
