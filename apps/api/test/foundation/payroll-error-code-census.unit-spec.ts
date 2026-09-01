@@ -96,14 +96,17 @@ describe("S13-PAYROLL-BE-1 census — mã lỗi & kind PAYROLL được ném đ�
     },
   );
 
-  it("PENDING_BE2 đúng 9 mã và là tập con của bảng mã", () => {
-    // BE-1 ném 8 mã: 001 · 004 (assertReopenAllowed) · 008 · 010 · 011 · 012 · 013 · 014 ⇒ 17 − 8 = 9.
-    expect(pending.size).toBe(9);
+  it("PENDING_BE2 RỖNG sau BE-2, và bảng mã vẫn đủ 17 mã", () => {
+    // BE-1 ném 8 mã (001 · 004 · 008 · 010 · 011 · 012 · 013 · 014); BE-2 nối dây 9 mã còn lại.
+    expect(pending.size, "BE-2 đã ném hết — PENDING_BE2 phải RỖNG").toBe(0);
     const all = new Set(Object.keys(PAYROLL_ERR_CODE));
     expect(
       [...pending].filter((k) => !all.has(k)),
       "PENDING_BE2 giữ mã không tồn tại",
     ).toEqual([]);
+    // ⚠️ NEO THAY THẾ (§10): `PENDING` rỗng ⇒ nó không còn chống được xanh-RỖNG. Ghim SỐ LƯỢNG mã để
+    // một lần xoá bớt hằng không lặng lẽ đi qua cổng này. **Cấm hạ neo để lấy màu xanh.**
+    expect(all.size, "SPEC-11 §12 khai đúng 17 mã PAYROLL-ERR").toBe(17);
   });
 
   /** Tập `kind` ném được — `\s*` nuốt chỗ Prettier ngắt dòng sau dấu `(`. */

@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 557,
-    "controllers": 101,
-    "gated": 518,
+    "routes": 574,
+    "controllers": 103,
+    "gated": 535,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -5556,6 +5556,54 @@
       "verdictWo": null
     },
     {
+      "key": "MePayslipsController#acknowledge",
+      "httpMethod": "POST",
+      "path": "/api/v1/me/payslips/:id/acknowledge",
+      "hasPermission": true,
+      "permission": "acknowledge-own-payslip:payslip",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "MePayslipsController#getMine",
+      "httpMethod": "GET",
+      "path": "/api/v1/me/payslips/:id",
+      "hasPermission": true,
+      "permission": "view-own-payslip:payslip",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "MePayslipsController#listMine",
+      "httpMethod": "GET",
+      "path": "/api/v1/me/payslips",
+      "hasPermission": true,
+      "permission": "view-own-payslip:payslip",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "MePreferencesController#get",
       "httpMethod": "GET",
       "path": "/api/v1/me/preferences",
@@ -6322,6 +6370,54 @@
       "verdictWo": null
     },
     {
+      "key": "PayrollPeriodsController#adjustLine",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/payroll-periods/:id/lines/:lineId",
+      "hasPermission": true,
+      "permission": "calculate:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPeriodsController#approve",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll-periods/:id/approve",
+      "hasPermission": true,
+      "permission": "approve:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPeriodsController#calculate",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll-periods/:id/calculate",
+      "hasPermission": true,
+      "permission": "calculate:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "PayrollPeriodsController#collect",
       "httpMethod": "POST",
       "path": "/api/v1/payroll-periods/:id/collect",
@@ -6354,11 +6450,59 @@
       "verdictWo": null
     },
     {
+      "key": "PayrollPeriodsController#exportXlsx",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll-periods/:id/export",
+      "hasPermission": true,
+      "permission": "export:payroll",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPeriodsController#generatePayslips",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll-periods/:id/generate-payslips",
+      "hasPermission": true,
+      "permission": "publish:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "PayrollPeriodsController#getOne",
       "httpMethod": "GET",
       "path": "/api/v1/payroll-periods/:id",
       "hasPermission": true,
       "permission": "view:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPeriodsController#lines",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll-periods/:id/lines",
+      "hasPermission": true,
+      "permission": "view-line:payroll-period",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],
@@ -6386,11 +6530,107 @@
       "verdictWo": null
     },
     {
+      "key": "PayrollPeriodsController#lock",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll-periods/:id/lock",
+      "hasPermission": true,
+      "permission": "manage:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPeriodsController#publish",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll-periods/:id/publish",
+      "hasPermission": true,
+      "permission": "publish:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "PayrollPeriodsController#readiness",
       "httpMethod": "GET",
       "path": "/api/v1/payroll-periods/:id/readiness",
       "hasPermission": true,
       "permission": "calculate:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPeriodsController#reject",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll-periods/:id/reject",
+      "hasPermission": true,
+      "permission": "approve:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPeriodsController#reopen",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll-periods/:id/reopen",
+      "hasPermission": true,
+      "permission": "reopen:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPeriodsController#submit",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll-periods/:id/submit",
+      "hasPermission": true,
+      "permission": "calculate:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPeriodsController#summary",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll-periods/summary",
+      "hasPermission": true,
+      "permission": "view-line:payroll-period",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],
@@ -6439,6 +6679,38 @@
       "path": "/api/v1/payroll/pickers/people",
       "hasPermission": true,
       "permission": "view:salary-profile",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayslipsController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/payslips/:id",
+      "hasPermission": true,
+      "permission": "view-payslip:payslip",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayslipsController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/payslips",
+      "hasPermission": true,
+      "permission": "view-payslip:payslip",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],

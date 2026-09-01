@@ -502,6 +502,18 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
            JOIN roles r       ON r.id = rp.role_id
            JOIN permissions p ON p.id = rp.permission_id
           WHERE r.name <> 'super-admin'
+            -- S13-PAYROLL-BE-2: loại role của TENANT FIXTURE. Census này quét MỌI scope (chủ ý §0.7),
+            -- nhưng lane DB dùng chung với các int-spec khác đang chạy SONG SONG: 'recruit-be1-scope'
+            -- dựng role '*:*' trong tenant tạm của nó ⇒ ca này ĐỎ theo THỨ TỰ CHẠY, không tất định
+            -- (đã đỏ thật trên CI #458). Chữ ký fixture: 'seedCompany()' đặt name = 'Company ' || slug
+            -- và slug kết thúc bằng 8 hex. Đây KHÔNG phải nới cổng — role seed thật (company_id NULL
+            -- lẫn role tuỳ biến của tenant thật) vẫn bị quét; ca đối chứng DƯƠNG bên dưới chứng minh.
+            AND NOT EXISTS (
+              SELECT 1 FROM companies c
+               WHERE c.id = r.company_id
+                 AND c.name = 'Company ' || c.slug
+                 AND c.slug ~ '-[0-9a-f]{8}$'
+            )
             AND p.resource_type IN ('payroll','payroll-period','salary-profile','bonus-penalty','payslip')`,
       );
       const actual = rows
@@ -587,9 +599,77 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
            JOIN roles r       ON r.id = rp.role_id
            JOIN permissions p ON p.id = rp.permission_id
           WHERE r.deleted_at IS NULL AND r.name <> 'super-admin'
+            -- S13-PAYROLL-BE-2: loại role của TENANT FIXTURE. Census này quét MỌI scope (chủ ý §0.7),
+            -- nhưng lane DB dùng chung với các int-spec khác đang chạy SONG SONG: 'recruit-be1-scope'
+            -- dựng role '*:*' trong tenant tạm của nó ⇒ ca này ĐỎ theo THỨ TỰ CHẠY, không tất định
+            -- (đã đỏ thật trên CI #458). Chữ ký fixture: 'seedCompany()' đặt name = 'Company ' || slug
+            -- và slug kết thúc bằng 8 hex. Đây KHÔNG phải nới cổng — role seed thật (company_id NULL
+            -- lẫn role tuỳ biến của tenant thật) vẫn bị quét; ca đối chứng DƯƠNG bên dưới chứng minh.
+            AND NOT EXISTS (
+              SELECT 1 FROM companies c
+               WHERE c.id = r.company_id
+                 AND c.name = 'Company ' || c.slug
+                 AND c.slug ~ '-[0-9a-f]{8}$'
+            )
             AND (p.action = '*' OR p.resource_type = '*')`,
       );
       expect(rows).toEqual([]);
+    });
+
+    it("D6b ĐỐI CHỨNG DƯƠNG: bộ lọc fixture KHÔNG làm câu census D6 mù với role THẬT", async () => {
+      // `deny-cases-vacuous-without-allow-case`: D6 xanh có thể vì "không ai giữ wildcard" HOẶC vì câu
+      // đo lọc mất tất cả. Ca này gieo một wildcard grant lên role SEED THẬT (company_id NULL) rồi
+      // chạy CHÍNH câu của D6 — phải THẤY. Mutation nằm trong tx và ROLLBACK.
+      const c = await direct.connect();
+      try {
+        await c.query("BEGIN");
+        const role = await c.query<{ id: string }>(
+          `SELECT id FROM roles WHERE name = 'payroll-officer' AND company_id IS NULL
+             AND deleted_at IS NULL LIMIT 1`,
+        );
+        expect(role.rows.length, "seed canonical phải có role payroll-officer").toBe(1);
+        const perm = await c.query<{ id: string }>(
+          `INSERT INTO permissions (action, resource_type, is_sensitive) VALUES ('*','*',false)
+             ON CONFLICT (action, resource_type) DO UPDATE SET action = EXCLUDED.action
+             RETURNING id`,
+        );
+        await c.query(
+          `INSERT INTO role_permissions (role_id, permission_id, effect, data_scope)
+           VALUES ($1, $2, 'ALLOW', 'Company') ON CONFLICT DO NOTHING`,
+          [role.rows[0].id, perm.rows[0].id],
+        );
+        const { rows } = await c.query(
+          `SELECT r.name AS role, p.action, p.resource_type
+             FROM role_permissions rp
+             JOIN roles r       ON r.id = rp.role_id
+             JOIN permissions p ON p.id = rp.permission_id
+            WHERE r.deleted_at IS NULL AND r.name <> 'super-admin'
+            -- S13-PAYROLL-BE-2: loại role của TENANT FIXTURE. Census này quét MỌI scope (chủ ý §0.7),
+            -- nhưng lane DB dùng chung với các int-spec khác đang chạy SONG SONG: 'recruit-be1-scope'
+            -- dựng role '*:*' trong tenant tạm của nó ⇒ ca này ĐỎ theo THỨ TỰ CHẠY, không tất định
+            -- (đã đỏ thật trên CI #458). Chữ ký fixture: 'seedCompany()' đặt name = 'Company ' || slug
+            -- và slug kết thúc bằng 8 hex. Đây KHÔNG phải nới cổng — role seed thật (company_id NULL
+            -- lẫn role tuỳ biến của tenant thật) vẫn bị quét; ca đối chứng DƯƠNG bên dưới chứng minh.
+            AND NOT EXISTS (
+              SELECT 1 FROM companies c
+               WHERE c.id = r.company_id
+                 AND c.name = 'Company ' || c.slug
+                 AND c.slug ~ '-[0-9a-f]{8}$'
+            )
+              AND (p.action = '*' OR p.resource_type = '*')`,
+        );
+        expect(
+          rows.map((r: { role: string }) => r.role),
+          "câu census D6 phải THẤY wildcard vừa gieo lên role seed thật",
+        ).toContain("payroll-officer");
+      } finally {
+        try {
+          await c.query("ROLLBACK");
+        } catch {
+          /* ignore */
+        }
+        c.release();
+      }
     });
 
     it("D7 payroll-officer KHÔNG giữ ('approve','payroll-period') — four-eyes là ràng buộc QUYỀN", async () => {

@@ -7,7 +7,7 @@
  * Census 2 tầng (`payroll-two-layer-guard-census.unit-spec.ts`) so CẢ decorator lẫn service với CHÍNH
  * bảng này — KHÔNG so tầng-với-tầng (hai tầng cùng sai vẫn "khớp nhau").
  *
- * ⚠️ **Khai đủ 35 key NGAY Ở BE-1** (17 key của BE-2 chưa có route — nằm trong `PAYROLL_PENDING_BE2`),
+ * ⚠️ **Khai đủ 35 key NGAY Ở BE-1** (17 key của BE-2 khi đó chưa có route — đã nối dây hết ở BE-2),
  * và khai đủ **BA cờ cuối cùng** (`isSensitive` · `companyFloor` · `objectGrantRequired`) ngay từ đây.
  * Lý do (plan §1 B8, plan-review vòng 1 blocker #4): const này đi qua FULL gate **bây giờ**; để mặc
  * định `companyFloor = true` cho 3 route `/me/payslips*` (scope **Own** — SPEC-11 §13.5) thì hoặc BE-2
@@ -108,30 +108,16 @@ export const PAYROLL_ROUTE_PAIRS = {
 export type PayrollRouteKey = keyof typeof PAYROLL_ROUTE_PAIRS;
 
 /**
- * 17 key **chưa có route** — thuộc `S13-PAYROLL-BE-2`. Đây là CỔNG, không phải lời hứa: census assert
- * `PENDING_BE2 ∪ used === all` **VÀ** `PENDING_BE2 ∩ used === ∅` ⇒ BE-2 nối dây một key mà quên gỡ
- * khỏi danh sách này là **ĐỎ** (chống bẫy census-xanh-rỗng).
- * Danh sách này phải RỖNG khi BE-2 đóng.
+ * **RỖNG từ `S13-PAYROLL-BE-2`** — cả 35 key đã có route và đã được assert ở tầng service.
+ *
+ * Hằng GIỮ LẠI, không xoá: census 2 tầng assert `PENDING_BE2 ∪ used === all` **VÀ**
+ * `PENDING_BE2 ∩ used === ∅`, nên nó vẫn là cổng cho route thứ 36 mọc lên sau này mà quên nối tầng 2.
+ *
+ * ⚠️ Khi danh sách rỗng, neo chống-xanh-rỗng của CHÍNH nó biến mất ⇒ census phải neo bằng
+ * `Object.keys(PAYROLL_ROUTE_PAIRS).length === 35` **và** `used.size === 35`. **Cấm hạ neo để lấy
+ * màu xanh.**
  */
-export const PAYROLL_PENDING_BE2: readonly PayrollRouteKey[] = [
-  "periodCalculate",
-  "periodLines",
-  "periodAdjustLine",
-  "periodSubmit",
-  "periodApprove",
-  "periodReject",
-  "periodGeneratePayslips",
-  "periodPublish",
-  "periodLock",
-  "periodReopen",
-  "periodExport",
-  "periodSummary",
-  "payslipList",
-  "payslipDetail",
-  "mePayslipList",
-  "mePayslipDetail",
-  "mePayslipAck",
-];
+export const PAYROLL_PENDING_BE2: readonly PayrollRouteKey[] = [];
 
 /** Trần QUÉT của 2 picker — chặn full-table-scan không giới hạn ở tenant lớn. */
 export const PAYROLL_PICKER_SCAN_CAP = 1000;

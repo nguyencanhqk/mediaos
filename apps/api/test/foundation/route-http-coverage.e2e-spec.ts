@@ -323,9 +323,10 @@ export function measureRouteHttpCoverage(
 const MAX_UNCOVERED_HIGH_RISK = 0;
 const MAX_UNCOVERED_TOTAL = 0;
 // S13-PAYROLL-BE-1 (01/09/2026): 468 → 486 (+18 route PAYROLL `001..006` · `019..028` · `034..035`).
+// S13-PAYROLL-BE-2 (01/09/2026): 486 → 503 (+17 route PAYROLL `007..018` · `029..033`).
 // Nâng CÙNG COMMIT với WO — `MAX_UNCOVERED_TOTAL = 0` là cổng chính, nên mỗi route mới phải có file
-// test chạm ĐÚNG literal path (3 int-spec `payroll-be1-*`).
-const MIN_COVERED_COUNT = 486;
+// test chạm ĐÚNG literal path (int-spec `payroll-be1-*` + `payroll-be2-*`).
+const MIN_COVERED_COUNT = 503;
 
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;

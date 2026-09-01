@@ -60,23 +60,14 @@ export type PayrollErrKey = keyof typeof PAYROLL_ERR_CODE;
 export type PayrollErrCode = (typeof PAYROLL_ERR_CODE)[PayrollErrKey];
 
 /**
- * 9 mã chỉ được ném ở `S13-PAYROLL-BE-2` (route 007–018 · 029–033). Liệt kê TƯỜNG MINH thay vì để
- * trần: census mã lỗi assert `PENDING ∪ tested === all` **VÀ** `PENDING ∩ tested === ∅` ⇒ BE-2 ném một
- * mã mà quên gỡ khỏi đây là ĐỎ. Danh sách phải RỖNG khi BE-2 đóng.
+ * **RỖNG từ `S13-PAYROLL-BE-2`** — cả 17 mã đều đã được ném và có ca test (route 007–018 · 029–033
+ * lên dây ở BE-2). Hằng GIỮ LẠI, không xoá: census mã lỗi assert `PENDING ∪ tested === all` **VÀ**
+ * `PENDING ∩ tested === ∅`, nên nó vẫn là cổng cho mã thứ 18 mọc lên sau này.
+ *
+ * ⚠️ Khi danh sách rỗng, neo chống-xanh-rỗng của CHÍNH nó biến mất ⇒ ca census phải neo bằng số
+ * lượng mã (`Object.keys(PAYROLL_ERR_CODE).length`) thay thế. **Cấm hạ neo để lấy màu xanh.**
  */
-export const PAYROLL_PENDING_BE2_ERRORS: readonly PayrollErrKey[] = [
-  "ATTENDANCE_NOT_READY",
-  "PERIOD_FROZEN",
-  // ⓘ `REOPEN_BLOCKED` (004) KHÔNG nằm ở đây: BE-1 ship `assertReopenAllowed()` (payroll-fsm.ts) —
-  // cổng dữ liệu cho `reopen` của BE-2 — và có ca test đầy đủ cả hai `kind` ở `payroll-fsm.spec.ts`.
-  "FOUR_EYES",
-  "PAYSLIP_DUPLICATE",
-  "NO_PAYSLIP",
-  "NO_ELIGIBLE_EMPLOYEE",
-  "ACK_INVALID",
-  "EXPORT_LIMIT",
-  "NO_ELIGIBLE_APPROVER",
-];
+export const PAYROLL_PENDING_BE2_ERRORS: readonly PayrollErrKey[] = [];
 
 export const PAYROLL_ERR = {
   PERIOD_TRANSITION: (from: string, to: string) =>
@@ -112,6 +103,13 @@ export const PAYROLL_ERR = {
   ACK_ALREADY: "PAYROLL-ERR-015: bạn đã xác nhận phiếu lương này.",
   EXPORT_LIMIT: (total: number, max: number) =>
     `PAYROLL-ERR-016: kết quả ${total} dòng vượt trần ${max} — thu hẹp bộ lọc rồi xuất lại.`,
+  /**
+   * Vi phạm CHECK cặp vết duyệt (`approved_pair` · `published_pair` · `generated_pair` ·
+   * `calculated_needs_attendance`) — CÙNG mã 001, khác nguyên nhân: chỉ xảy ra khi đường ghi trạng
+   * thái có bug, và phải hiện thành 409 đọc được thay vì 500 vô danh (§8b).
+   */
+  TRAIL_PAIR_VIOLATION:
+    "PAYROLL-ERR-001: trạng thái kỳ lương và vết duyệt không khớp nhau — tải lại kỳ rồi thử lại.",
   NO_ELIGIBLE_APPROVER:
     "PAYROLL-ERR-017: công ty chưa có người duyệt hợp lệ nào khác bạn — gán vai trò cho người tính lương hoặc thêm quản trị viên thứ hai.",
 } as const;
@@ -157,12 +155,14 @@ export const payrollNotFound = () =>
  * Map lỗi PG → PAYROLL-ERR. Trả `null` khi ngoài phổ — caller `throw mapPayrollPgError(err) ?? err`.
  *
  * Ba luật (plan §8, plan-review vòng 1 blocker #6):
- *  1. `23505` → theo TÊN constraint. BE-1 map ĐÚNG hai constraint mà route của nó chạm tới (`008` kỳ
- *     trùng tháng · `014` hồ sơ lương trùng ngày); `006`/`015` để BE-2 thêm cùng ca test của nó —
- *     nhánh map cho bảng không ai ghi là code chết.
- *  2. `23514` **CÓ tên** → bản đồ SPEC-11 §12. BE-1 chỉ giữ vế `lines_adjustment_check` → `null` (rơi
- *     về 400 của tầng validate, đúng SPEC); `four_eyes_check` → 005 là của BE-2 (BE-1 không ghi
- *     `submitted_by`/`approved_by` ở route nào).
+ *  1. `23505` → theo TÊN constraint. Bốn nhánh: `008` kỳ trùng tháng · `014` hồ sơ lương trùng ngày
+ *     (BE-1) · `006` sinh phiếu hai lần · `015` xác nhận hai lần (BE-2, nối dây CÙNG ca test đi qua).
+ *  2. `23514` **CÓ tên** → bản đồ SPEC-11 §12. `lines_adjustment_check` → `null` (rơi về 400 của tầng
+ *     validate, đúng SPEC). `four_eyes_check` → **005** (chốt cuối cho RACE — service đã tiền-kiểm
+ *     dưới row-lock). Bốn CHECK cặp vết duyệt (`approved_pair` · `published_pair` · `generated_pair` ·
+ *     `calculated_needs_attendance`) → **409 mã 001 kèm `kind='trail-pair-violation'`**: mọi hành
+ *     động FSM đã đi qua `applyTransitionTx` nên chúng chỉ nổ khi có BUG, mà bug ở vùng đỏ phải hiện
+ *     thành lỗi đọc được — để rơi `null` là **500 vô danh** (§8b).
  *  3. `23514` **KHÔNG tên** → đây là trigger `enforce_bonus_penalty_freeze`: mig `0564` dùng
  *     `RAISE EXCEPTION … USING ERRCODE='check_violation'` **không kèm `USING CONSTRAINT`** ⇒
  *     `err.constraint` RỖNG, không phân biệt được nhánh (A)–(E). Vì vậy service **tiền-kiểm 011/013
@@ -187,19 +187,49 @@ export function mapPayrollPgError(err: unknown): Error | null {
         payrollDetails("effective-date-exists"),
       );
     }
-    // ⚠️ `payslips_period_user_uq` (→ 006) và `payslip_acknowledgements_payslip_user_uq` (→ 015)
-    // KHÔNG map ở đây: **không route nào của BE-1 ghi vào hai bảng đó**, nên nhánh map sẽ là code
-    // chết không cổng nào chạm tới (`coverage-high-but-error-code-untested`). `S13-PAYROLL-BE-2`
-    // thêm hai nhánh này CÙNG với ca test đi qua chúng.
+    // S13-PAYROLL-BE-2 nối dây hai nhánh dưới CÙNG với ca test đi qua chúng (BE-1 cố ý để trống vì
+    // không route nào của nó ghi vào hai bảng này — nhánh map khi đó là code chết).
+    if (c.includes("payslips_period_user_uq")) {
+      return payrollConflict(
+        "PAYSLIP_DUPLICATE",
+        PAYROLL_ERR.PAYSLIP_DUPLICATE,
+        payrollDetails("payslip-duplicate"),
+      );
+    }
+    if (c.includes("payslip_acknowledgements_payslip_user_uq")) {
+      return payrollConflict(
+        "ACK_INVALID",
+        PAYROLL_ERR.ACK_ALREADY,
+        payrollDetails("already-acknowledged"),
+      );
+    }
     return null;
   }
   if (code === PG_CHECK_VIOLATION) {
     const c = pgErrorField(err, "constraint") ?? "";
-    // ⚠️ `payroll_periods_four_eyes_check` (→ 005) cũng để cho BE-2: BE-1 KHÔNG ghi
-    // `submitted_by`/`approved_by` ở bất kỳ route nào (`collect` chỉ xoá `calculated_*`), nên nhánh
-    // map ở đây là code chết. Cùng lý do với 006/015 ở trên.
-    // `payroll_period_lines_adjustment_check` → để `null`: SPEC-11 §12 xếp nó về 400 VALIDATION-ERR-001.
+    // `payroll_period_lines_adjustment_check` → để `null`: SPEC-11 §12 xếp nó về 400 VALIDATION-ERR-001
+    // (Zod đã mirror ĐÚNG BẰNG, nên tới được đây nghĩa là payload lách qua tầng validate).
     if (c.includes("payroll_period_lines_adjustment_check")) return null;
+    // Four-eyes — chốt cuối ở DB cho RACE: service đã tiền-kiểm `submitted_by <> actor` dưới row-lock,
+    // nên tới được đây là hai lượt duyệt chen nhau. 409, KHÔNG 500 (SPEC-11 §12 mã 005).
+    if (c.includes("payroll_periods_four_eyes_check")) {
+      return payrollConflict("FOUR_EYES", PAYROLL_ERR.FOUR_EYES, payrollDetails("four-eyes"));
+    }
+    // 🩹§8b — BỐN CHECK cặp vết duyệt còn lại. Trước BE-2 chúng rơi `null` ⇒ **500 ở vùng đỏ**.
+    // Mọi hành động FSM đã đi qua `applyTransitionTx` (bảng `TRAIL_RESET`), nên bốn cái này chỉ nổ khi
+    // có BUG — nhưng bug phải hiện thành 409 đọc được, không phải 500 vô danh.
+    if (
+      c.includes("payroll_periods_approved_pair_check") ||
+      c.includes("payroll_periods_published_pair_check") ||
+      c.includes("payroll_periods_generated_pair_check") ||
+      c.includes("payroll_periods_calculated_needs_attendance_check")
+    ) {
+      return payrollConflict(
+        "PERIOD_TRANSITION",
+        PAYROLL_ERR.TRAIL_PAIR_VIOLATION,
+        payrollDetails("trail-pair-violation", { constraint: c }),
+      );
+    }
     if (c === "") {
       // Không tên ⇒ trigger `enforce_bonus_penalty_freeze` (luật 3 ở JSDoc trên).
       return payrollConflict(

@@ -1,14 +1,21 @@
 import { createZodDto } from "nestjs-zod";
 import {
+  adjustPayrollLineSchema,
   approveBonusPenaltySchema,
   bonusPenaltyListQuerySchema,
   createBonusPenaltySchema,
   createPayrollPeriodSchema,
   createSalaryProfileSchema,
+  mePayslipListQuerySchema,
   payrollAttendancePeriodPickerQuerySchema,
+  payrollExportQuerySchema,
+  payrollLineListQuerySchema,
   payrollPeoplePickerQuerySchema,
   payrollPeriodListQuerySchema,
+  payslipListQuerySchema,
   rejectBonusPenaltySchema,
+  rejectPayrollPeriodSchema,
+  reopenPayrollPeriodSchema,
   salaryProfileListQuerySchema,
   updateBonusPenaltySchema,
   updatePayrollPeriodSchema,
@@ -39,3 +46,12 @@ export class CreateBonusPenaltyDto extends createZodDto(createBonusPenaltySchema
 export class UpdateBonusPenaltyDto extends createZodDto(updateBonusPenaltySchema) {}
 export class ApproveBonusPenaltyDto extends createZodDto(approveBonusPenaltySchema) {}
 export class RejectBonusPenaltyDto extends createZodDto(rejectBonusPenaltySchema) {}
+
+// ── S13-PAYROLL-BE-2 ────────────────────────────────────────────────────────────────────────────
+export class AdjustPayrollLineDto extends createZodDto(adjustPayrollLineSchema) {}
+export class RejectPayrollPeriodDto extends createZodDto(rejectPayrollPeriodSchema) {}
+export class ReopenPayrollPeriodDto extends createZodDto(reopenPayrollPeriodSchema) {}
+export class ListPayrollLinesQueryDto extends createZodDto(payrollLineListQuerySchema) {}
+export class PayrollExportQueryDto extends createZodDto(payrollExportQuerySchema) {}
+export class ListPayslipsQueryDto extends createZodDto(payslipListQuerySchema) {}
+export class ListMePayslipsQueryDto extends createZodDto(mePayslipListQuerySchema) {}
