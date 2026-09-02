@@ -69,6 +69,13 @@ overrides:
   # qua vitest coverage (apps/api>@vitest/coverage-v8>vitest>…>postcss), KHÔNG vào runtime bundle. Range-
   # scoped để chỉ nâng dải lỗ hổng, không đụng postcss khác. Cổng CI = `pnpm audit --audit-level high`.
   "postcss@<8.5.18": "^8.5.18"
+  # 2026-09-02 — HAI advisory MỚI `GHSA-c83g-rgw3-j3cx` + `GHSA-73wf-gq98-2v4g` (HIGH, browserslist <=4.28.6: unbounded memory
+  # growth vì cache không evict theo query khác nhau ⇒ OOM). Lên registry giữa lần Security chạy trên
+  # PR #460 (01/09 15:39 XANH) và PR #461 (01/09 17:47 ĐỎ) ⇒ đỏ trên MỌI PR + trên master, KHÔNG do PR
+  # nào sinh ra. `pnpm why browserslist -r` đo 02/09: cây có ĐÚNG MỘT bản 4.28.2, hai đường tới đều là
+  # devDependency — `@vitejs/plugin-react > @babel/core > @babel/helper-compilation-targets` và
+  # `@nestjs/cli > webpack` — KHÔNG vào runtime bundle của API.
+  "browserslist@<4.28.7": "^4.28.7"
 
 # 2026-07-29 — GHSA-mh99-v99m-4gvg (brace-expansion DoS): dải advisory ghi `<=5.0.7`, tức nó cờ MỌI bản
 # của dòng 1.x–4.x kể cả bản ĐÃ VÁ (2.1.3). `overrides` bên trên đã đưa toàn cây về 2.1.3 + 5.0.8 và ĐO
@@ -93,6 +100,8 @@ allowBuilds:
 # Repo đặt minimumReleaseAge (chặn cài gói vừa phát hành — phòng supply-chain). Bản VÁ bảo mật ở
 # `overrides` bên trên phải được miễn trừ ở đây, nếu không install sẽ từ chối chính bản đã vá.
 minimumReleaseAgeExclude:
+  - browserslist@4.28.7
+  - browserslist@4.28.8
   - brace-expansion@2.1.3
   - brace-expansion@5.0.8
   - fast-uri@3.1.4
