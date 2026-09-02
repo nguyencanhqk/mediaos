@@ -8,6 +8,7 @@
 
 import { NotFoundException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
+import { MODULE_APP_METADATA } from "./module-app-metadata";
 import { ModuleCatalogService } from "./module-catalog.service";
 
 const COMPANY_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
@@ -104,12 +105,17 @@ describe("ModuleCatalogService.getAllModules — admin catalog", () => {
     expect(hr.required_permissions).toContain("HR.EMPLOYEE.VIEW");
   });
 
-  it("module thiếu metadata (vd PAYROLL) → vẫn hiện, route/icon rỗng, required_permissions=[] (KHÔNG bịa)", async () => {
+  // S14-FND-MODULEMETA-1: fixture ĐỔI PAYROLL→MOBILE — PAYROLL nay ĐÃ CÓ metadata nên ca này sẽ
+  // đo nhầm nhánh (fixture-đinh giữ lỗ mở). MOBILE = Phase 5, mig 0435:301 is_active=false, CỐ Ý
+  // chưa có metadata. TIỀN ĐỀ dưới là TƯỜNG MINH: nếu wave sau APPEND metadata MOBILE, ca này ĐỎ
+  // ngay (buộc chọn module thiếu-metadata khác) thay vì âm thầm hết đo nhánh fail-soft.
+  it("module thiếu metadata (vd MOBILE) → vẫn hiện, route/icon rỗng, required_permissions=[] (KHÔNG bịa)", async () => {
+    expect(MODULE_APP_METADATA.MOBILE).toBeUndefined(); // tiền đề của ca: MOBILE thật sự thiếu metadata
     const { svc } = makeService({
-      all: [mod("PAYROLL", 8, { isActive: false, moduleGroup: "Extension" })],
+      all: [mod("MOBILE", 8, { isActive: false, moduleGroup: "Extension" })],
     });
     const [p] = await svc.getAllModules(actor);
-    expect(p.module_code).toBe("PAYROLL");
+    expect(p.module_code).toBe("MOBILE");
     expect(p.route).toBe("");
     expect(p.icon).toBe("");
     expect(p.required_permissions).toEqual([]);
