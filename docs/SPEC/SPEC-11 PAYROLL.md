@@ -19,11 +19,11 @@
 | Tài liệu cha | SPEC-01: Tổng quan hệ thống (§12.8) |
 | Module phụ thuộc trực tiếp | AUTH (RBAC per-pair + data scope), HR (`employee_profiles` · `users` · hồ sơ lương), ATT (`attendance_periods` khoá kỳ công + `attendance_records`), LEAVE (`leave_types.paid` · đơn nghỉ đã duyệt), FOUNDATION (audit · `@Idempotent()` · settings `payroll_config_json`) |
 | Module liên quan | NOTI (gửi duyệt · duyệt/từ chối · phát hành phiếu lương), DASH (widget «chi phí lương kỳ»), ME (màn «Phiếu lương của tôi») |
-| Phiên bản | v1.0 |
-| Trạng thái | **Approved** — owner duyệt nguyên gói hồ sơ wave S13-PAYROLL ngày **31/08/2026**, ký PAY-DEC-001..010 (§22) |
+| Phiên bản | v1.0 — **v2 đã duyệt, đang viết** (wave S15-PAYROLL-V2, `S15-PAYROLL-DOC-1`) |
+| Trạng thái | **Approved** — owner duyệt nguyên gói hồ sơ wave S13-PAYROLL ngày **31/08/2026**, ký PAY-DEC-001..010 (§22); **v2: owner duyệt hồ sơ wave S15 ngày 02/09/2026, ký PAY-DEC-011..020 (§22.1)** |
 | Giai đoạn | **Phase 2 «HR nâng cao» · wave S13-PAYROLL** — hậu go-live |
 | Ngày tạo | 31/08/2026 |
-| Ngày cập nhật | 31/08/2026 |
+| Ngày cập nhật | 02/09/2026 (§1 · §5.2 · §22.1 — chép quyết định wave S15) |
 
 ---
 
@@ -144,6 +144,8 @@ Tên nhân sự/phòng ban/kỳ công luôn **JOIN** lúc đọc qua **một** �
 | 10 | Widget DASH **«chi phí lương kỳ»** | PL-10 |
 
 ### 5.2 Ngoài v1 (chừa thiết kế, KHÔNG làm đợt này) — **PARK-PAYROLL-001**
+
+> **Cập nhật 02/09/2026 (wave S15-PAYROLL-V2, PAY-DEC-011..020 §22.1):** v2 **lấy lại** từ danh sách này engine BHXH/BHYT/BHTN/TNCN (DEC-014) · PDF phiếu lương (DEC-019) · report theo phòng ban + variance dưới dạng 7 báo cáo (DEC-018); phần còn lại (khiếu nại · multi-currency · chu kỳ ngoài tháng · duyệt nhiều cấp · attachment) chuyển sang **PARK-PAYROLL-002** cùng các mục gạt mới (Doanh số/KPI/Sản phẩm · Phân bổ lương · lịch gửi báo cáo · Trợ lý AI · đa pháp nhân · mẫu theo từng NV). Bảng «v2» của §5.1 do `S15-PAYROLL-DOC-1` viết.
 
 - **Engine BHXH/BHYT/BHTN/TNCN luỹ tiến** (P2-PAY-05-002/003) — v1 chỉ khấu trừ nghỉ không lương · trễ/sớm · phạt · dòng tay.
 - **PDF phiếu lương** (P2-PAY-07-003) · **export payslip batch / signed-URL** (P2-PAY-08-002) — v1 chỉ XLSX bảng lương tổng.
@@ -822,6 +824,29 @@ Nguồn chuẩn: [DB-13](<../DB/DB-13 PAYROLL Database Design.md>). Tóm tắt:
 > (o) **Vế «kỳ lương `Locked` khoá chỉnh công ATT» của PAY-DEC-005 đã được thoả sẵn**, PAYROLL không dựng cổng thứ hai và **không viện dẫn `ATT-ERR-024`** (mã không tồn tại trong code; SPEC-04 và API-04 đang mô tả nó khác nhau) — §3.5. Đây là **thu hẹp phần hiện thực**, không thu hẹp phạm vi đã duyệt: kết quả nghiệp vụ owner yêu cầu vẫn đúng.
 >
 > Điều kiện mở WO code của track PAYROLL: 10 quyết định chốt (✅) · §1 = `Approved` (✅) · `plan-reviewer` đối kháng **PASS** trên SPEC-11 + DB-13 (làm ở cuối `S13-PAYROLL-DOC-1`, trước khi mở `S13-PAYROLL-DB-1`).
+
+### 22.1 Wave S15-PAYROLL-V2 — **OWNER ĐÃ KÝ 02/09/2026** (PAY-DEC-011..020)
+
+> Owner duyệt nguyên gói hồ sơ [`docs/plans/S15-PAYROLL-V2-WAVE-review.html`](<../plans/S15-PAYROLL-V2-WAVE-review.html>) («ok tôi duyệt») ⇒ 10 mã dưới đây chốt **đúng cột «Đề xuất»** của [wave plan S15 §3](<../plans/S15-PAYROLL-V2-WAVE.md>). Bảng này là bản chép kết luận; nội dung chi tiết (bảng mới · màn hình · route · mã lỗi · §13.4 v2) do WO `S15-PAYROLL-DOC-1` viết vào các mục tương ứng của tài liệu này. Benchmark: 8 màn MISA AMIS Tiền lương (02/09/2026) — bản đồ 17 khoảng cách ở wave plan §2.
+
+| Mã | Câu hỏi | Kết quả owner chốt | Trạng thái |
+| --- | --- | --- | --- |
+| PAY-DEC-011 | Đánh số & phạm vi tài liệu v2 | **SPEC-11 lên v2 trong cùng file** (§5.1 thêm bảng «v2», §22.1 này) · DB-13 v2 · API-18 v2 · §9g mở rộng · mig `0569+` (đo journal lúc chạy) · `PAY-SCREEN-007+` · `PAYROLL-API-036+` · `PAYROLL-ERR-018+` · `NOTI-EVENT-024+` (đo dải) · `IMP02-STORY-191+` · Sprint 15 — không tách SPEC mới | ✅ chốt |
+| PAY-DEC-012 | Máy công thức đặt ở đâu (đảo **một phần** PAY-DEC-004 «tính ở SQL») | **Engine biểu thức ở TS, số học `decimal.js`** (cấm float), đánh giá theo đồ thị phụ thuộc thành phần (topo-sort, cấm vòng), kết quả ghi `numeric(18,2)` + **snapshot `component_values_json` per dòng**; **SQL giữ bất biến** (`SUM(items) = gross − deduction + adjustment`, CHECK ≥ 0, UNIQUE). Grammar cố định: `+ − × ÷ ( )`, so sánh, `IF/MIN/MAX/ROUND/ABS`, tham chiếu `MÃ_THÀNH_PHẦN`, hàm luật định đặt tên — KHÔNG `eval`, KHÔNG hàm tuỳ ý, giới hạn độ dài/độ sâu/số node/timeout | ✅ chốt |
+| PAY-DEC-013 | Mô hình catalog + mẫu bảng lương | `salary_components` = **hệ thống (seed, không xoá, sửa được công thức) + tự thêm**; `payroll_templates` + `payroll_template_components` (nhãn cột · công thức ghi đè · ẩn/hiện · thứ tự); **kỳ gắn ĐÚNG MỘT mẫu lúc tạo**, đổi mẫu chỉ khi kỳ ≤ `CollectingData`; phạm vi mẫu v2 = **toàn công ty hoặc theo `org_unit`** (theo vị trí/nhân viên = Phase sau) | ✅ chốt |
+| PAY-DEC-014 | Engine luật định BH + TNCN (lấy lại từ PARK-PAYROLL-001) | Có: BHXH · BHYT · BHTN · KPCĐ (DN) · đoàn phí (NV) · **TNCN luỹ tiến 7 bậc** + giảm trừ bản thân/người phụ thuộc. **Tỉ lệ + trần + bậc thuế lưu ở `payroll_statutory_rates` versioned theo `effective_from`** (kỳ dùng bản hiệu lực tại ngày cuối kỳ). Seed do **owner xác nhận số**: NV 8 / 1,5 / 1 · DN 17,5 / 3 / 1 · KPCĐ 2 · đoàn phí 1 · giảm trừ 11 tr + 4,4 tr/NPT · trần BHXH/BHYT = 20× lương cơ sở · BHTN = 20× lương tối thiểu vùng. Hệ thống **lưu và áp**, không tự khẳng định đúng luật; KHÔNG hard-code tỉ lệ trong code | ✅ chốt |
+| PAY-DEC-015 | NET / GROSS (v1 đã GỠ `salary_type`) | **Dựng lại `salary_type ∈ {GROSS, NET}`** trên `salary_profiles` bằng cột MỚI (band 0564 bất khả xâm phạm), default `GROSS`; **NET = gross-up lặp** ≤ 30 vòng, hội tụ ≤ 1 đ, số vòng ghi vào snapshot; không hội tụ ⇒ 422, kỳ không đổi trạng thái | ✅ chốt |
+| PAY-DEC-016 | Màn «Nhân viên» trong PAYROLL vs Phương án B | Màn Nhân viên đọc **chiếu HR bó hẹp qua route PAYROLL** (`PAYROLL-API-036`, mở rộng picker 034), **không cấp cặp HR** cho `payroll-officer`; **`tax_code` chiếu qua `('view','salary-profile')`** (TNCN cần) + audit lượt xem; **người phụ thuộc + thiết lập BH/công đoàn + tài khoản ngân hàng là bảng PAYROLL** (`payroll_dependents` · `payroll_employee_settings`), không đẩy vào HR | ✅ chốt |
+| PAY-DEC-017 | Tạm ứng · Chi trả · FSM kỳ | `payroll_advances` (`Pending → Approved/Rejected → Deducted`, four-eyes, **tự thành khoản khấu trừ** ở kỳ chỉ định); `payroll_payment_batches` + lines (kỳ · bank/cash · trạng thái · tệp UNC XLSX); **FSM kỳ 8 trạng thái**: `Draft → CollectingData → Calculated → Reviewing → Approved → Published → Paid → Locked` — `Published` = đã phát hành phiếu (nghĩa cũ của `Paid`), `Paid` chỉ khi đợt chi trả hoàn tất (SPEC-01 §17.15 sửa ở DOC-1); tài khoản ngân hàng = cột `payroll_employee_settings` (mask, sensitive). **Phân bổ lương (cost center) NGOÀI** | ✅ chốt |
+| PAY-DEC-018 | Báo cáo + Tổng quan | `/payroll` = **Tổng quan module** (phân bố mức lương · cơ cấu thu nhập · ngân sách gauge · chi phí theo thời gian · thu nhập BQ theo thời gian · thu nhập BQ theo đơn vị + **Lời nhắc**: phiếu chưa phát hành · NV chính thức chưa tham gia BH · lương BH ngoài quy định). **7 báo cáo**: tổng hợp thu nhập NV · thống kê lương theo thời gian · cơ cấu thu nhập · chi phí lương theo đơn vị · lịch sử lương NV · tổng hợp chi trả · tình hình ngân sách («Công nợ» gộp vào tạm ứng; lịch gửi định kỳ = Phase sau). **Cài Recharts**. Mọi báo cáo gác cặp ĐỌC tiền + sàn scope Company + audit mỗi lượt, **không cache** | ✅ chốt |
+| PAY-DEC-019 | PDF phiếu lương (lấy lại từ PARK-PAYROLL-001) | **Có** — sinh server (`pdfmake`, font Việt nhúng), tải qua signed-URL file-service; `('export','payroll')` cho batch, Own cho phiếu của mình; audit; nội dung = snapshot `payslip_items`, không tính lại | ✅ chốt |
+| PAY-DEC-020 | Nâng vỏ UI dùng chung — làm TRƯỚC | WO `S15-UI-SHELL-1` ở `packages/ui` + layout `apps/app`: sidebar **nhóm gập được** · **toolbar chuẩn** (tìm · trạng thái · đơn vị · lọc · ⚙ chọn cột) · `DataTable` **ghim cột + chọn cột + footer «Tổng số · Số dòng/trang · 1–N»** · **header trang chi tiết** (← · tiêu đề · nút chính · ⋯) · pill trạng thái; UI-07 cập nhật để mọi module dùng chung; theme light/dark giữ | ✅ chốt |
+
+> **NGOÀI phạm vi v2 → PARK-PAYROLL-002** (ghi để không ai tự thêm): Doanh số · KPI · Sản phẩm (de-media-fy — CLAUDE.md §1) · Phân bổ lương (cost center) · lịch gửi báo cáo định kỳ · Trợ lý AI · thư viện mẫu cloud · đa pháp nhân · mẫu bảng lương theo từng nhân viên · duyệt nhiều cấp · multi-currency.
+>
+> **Tiên quyết vận hành (không phải phụ thuộc kỹ thuật):** PAYROLL v1 chưa chạy ngày nào trên PROD (lô mig 0564–0568 bị census 0565 chặn) — chạy `S14-PROD-PAYROLLGRANT-1` trước để kế toán dùng thật v1 một kỳ.
+>
+> Điều kiện mở WO code của track v2: 10 quyết định chốt (✅) · `plan-reviewer` đối kháng **PASS** trên SPEC-11 v2 + DB-13 v2 (cuối `S15-PAYROLL-DOC-1`, trước khi mở `S15-PAYROLL-DB-1`). Phân rã 15 WO: wave plan §5.
 
 ---
 

@@ -1,0 +1,1774 @@
+<title>Wave S15-PAYROLL-V2</title>
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap"
+/>
+<style>
+  :root {
+    --bg: #f4f6f8;
+    --surface: #ffffff;
+    --surface-2: #ecf0f4;
+    --ink: #1e242e;
+    --muted: #5c6572;
+    --line: #d9dfe7;
+    --line-soft: #e5eaf0;
+    --pay: #2c549c;
+    --pay-ink: #234380;
+    --pay-soft: #e2eaf8;
+    --hr: #12796b;
+    --hr-ink: #0e5f55;
+    --hr-soft: #e0f0ec;
+    --amber: #96590c;
+    --amber-soft: #f6ecd9;
+    --red: #b3261e;
+    --red-soft: #f9e6e4;
+    --green: #256c2f;
+    --green-soft: #e3f0e1;
+    --code-bg: #e9edf3;
+    --shadow: 0 1px 2px rgba(30, 36, 46, 0.05), 0 4px 16px rgba(30, 36, 46, 0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #13161c;
+      --surface: #1a1e26;
+      --surface-2: #222731;
+      --ink: #e4e8ee;
+      --muted: #949dab;
+      --line: #2e3542;
+      --line-soft: #262c37;
+      --pay: #8fb2ec;
+      --pay-ink: #a8c3f2;
+      --pay-soft: #1e2b44;
+      --hr: #48bfaa;
+      --hr-ink: #6ed0be;
+      --hr-soft: #143530;
+      --amber: #e0a554;
+      --amber-soft: #3a2d15;
+      --red: #e98d82;
+      --red-soft: #3d201c;
+      --green: #7cc383;
+      --green-soft: #1d3320;
+      --code-bg: #262d39;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #13161c;
+    --surface: #1a1e26;
+    --surface-2: #222731;
+    --ink: #e4e8ee;
+    --muted: #949dab;
+    --line: #2e3542;
+    --line-soft: #262c37;
+    --pay: #8fb2ec;
+    --pay-ink: #a8c3f2;
+    --pay-soft: #1e2b44;
+    --hr: #48bfaa;
+    --hr-ink: #6ed0be;
+    --hr-soft: #143530;
+    --amber: #e0a554;
+    --amber-soft: #3a2d15;
+    --red: #e98d82;
+    --red-soft: #3d201c;
+    --green: #7cc383;
+    --green-soft: #1d3320;
+    --code-bg: #262d39;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 40px 24px 96px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: Archivo, "Be Vietnam Pro", system-ui, sans-serif;
+    text-wrap: balance;
+    line-height: 1.2;
+  }
+  h1 {
+    font-size: 2.1rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin: 10px 0 8px;
+  }
+  h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin: 0 0 4px;
+  }
+  h3 {
+    font-size: 1.02rem;
+    font-weight: 700;
+    margin: 22px 0 8px;
+  }
+  p {
+    margin: 8px 0;
+  }
+  section {
+    margin-top: 44px;
+  }
+  .lede {
+    color: var(--muted);
+    max-width: 62ch;
+  }
+
+  .eyebrow {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pay);
+    font-family: "IBM Plex Mono", monospace;
+  }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    border-bottom: 2px solid var(--line);
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+  }
+  .sec-head .num {
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  code,
+  .mono {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.86em;
+  }
+  code {
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  .banner {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--amber);
+    padding: 14px 18px;
+    margin: 20px 0 0;
+    box-shadow: var(--shadow);
+  }
+  .banner strong {
+    color: var(--amber);
+  }
+
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-top: 22px;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    padding: 12px 14px;
+  }
+  .kpi .v {
+    font-family: Archivo, sans-serif;
+    font-size: 1.6rem;
+    font-weight: 800;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .kpi .l {
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin-top: 4px;
+  }
+  .kpi.pay .v {
+    color: var(--pay);
+  }
+  .kpi.red .v {
+    color: var(--red);
+  }
+  .kpi.green .v {
+    color: var(--green);
+  }
+
+  .tbl-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    background: var(--surface);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.9rem;
+  }
+  th,
+  td {
+    text-align: left;
+    vertical-align: top;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  th {
+    background: var(--surface-2);
+    font-size: 0.76rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  tr:last-child td {
+    border-bottom: 0;
+  }
+  td.k {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    color: var(--pay-ink);
+  }
+  td.num {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .pill {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 1px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+  }
+  .pill.a {
+    background: var(--hr-soft);
+    color: var(--hr-ink);
+  }
+  .pill.b {
+    background: var(--pay-soft);
+    color: var(--pay-ink);
+  }
+  .pill.c {
+    background: var(--amber-soft);
+    color: var(--amber);
+  }
+  .pill.d {
+    background: var(--green-soft);
+    color: var(--green);
+  }
+  .pill.ui {
+    background: var(--surface-2);
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+  .pill.out {
+    background: var(--red-soft);
+    color: var(--red);
+  }
+  .zone {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.8rem;
+  }
+
+  .dec {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    margin-top: 12px;
+    box-shadow: var(--shadow);
+  }
+  .dec-head {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 14px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--surface-2);
+  }
+  .dec-head .code {
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--pay);
+    font-weight: 500;
+    font-size: 0.85rem;
+  }
+  .dec-head .q {
+    font-weight: 600;
+  }
+  .dec-body {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 14px;
+    padding: 12px 16px;
+  }
+  .dec-body .lbl {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    font-weight: 600;
+    padding-top: 3px;
+  }
+  .dec-body .lbl.rec {
+    color: var(--green);
+  }
+  .dec-body .lbl.alt {
+    color: var(--amber);
+  }
+  .dec-body + .dec-body {
+    border-top: 1px dashed var(--line-soft);
+  }
+  .dec-body p {
+    margin: 0;
+  }
+  .dec-body ul {
+    margin: 4px 0 0;
+    padding-left: 18px;
+  }
+
+  .note {
+    background: var(--surface-2);
+    border-left: 3px solid var(--pay);
+    padding: 10px 14px;
+    margin: 14px 0;
+    font-size: 0.92rem;
+  }
+  .note.warn {
+    border-color: var(--amber);
+  }
+  .note.out {
+    border-color: var(--red);
+  }
+
+  /* wireframes */
+  .wf {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    margin-top: 14px;
+  }
+  .wf-cap {
+    font-size: 0.78rem;
+    color: var(--muted);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex;
+    justify-content: space-between;
+  }
+  .wf-cap b {
+    color: var(--ink);
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 500;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: 190px 1fr;
+    min-height: 300px;
+    font-size: 0.8rem;
+  }
+  .side {
+    border-right: 1px solid var(--line-soft);
+    padding: 10px 0;
+    background: var(--surface-2);
+  }
+  .side div {
+    padding: 5px 14px;
+    color: var(--ink);
+  }
+  .side .grp {
+    display: flex;
+    justify-content: space-between;
+    font-weight: 600;
+  }
+  .side .sub {
+    padding-left: 28px;
+    color: var(--muted);
+  }
+  .side .on {
+    background: var(--pay-soft);
+    color: var(--pay-ink);
+    font-weight: 600;
+    border-left: 3px solid var(--pay);
+    padding-left: 11px;
+  }
+  .main {
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .toolbar {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .toolbar span {
+    border: 1px solid var(--line);
+    padding: 3px 9px;
+    background: var(--surface);
+    color: var(--muted);
+  }
+  .toolbar .btn {
+    background: var(--pay);
+    color: #fff;
+    border-color: var(--pay);
+    font-weight: 600;
+    margin-left: auto;
+  }
+  .toolbar .ic {
+    padding: 3px 6px;
+  }
+  .hd {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .hd .title {
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+  .hd .btn {
+    margin-left: auto;
+    background: var(--pay);
+    color: #fff;
+    padding: 3px 12px;
+    font-weight: 600;
+  }
+  .hd .more {
+    border: 1px solid var(--line);
+    padding: 3px 7px;
+  }
+  .tabs {
+    display: flex;
+    gap: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .tabs span {
+    padding: 4px 0;
+    color: var(--muted);
+  }
+  .tabs .on {
+    color: var(--pay);
+    border-bottom: 2px solid var(--pay);
+    font-weight: 600;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .fld {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 6px;
+  }
+  .fld .l {
+    color: var(--muted);
+  }
+  .fld .v {
+    border-bottom: 1px solid var(--line-soft);
+    font-variant-numeric: tabular-nums;
+  }
+  .wt {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.76rem;
+  }
+  .wt th {
+    background: var(--surface-2);
+    padding: 5px 8px;
+    font-size: 0.68rem;
+  }
+  .wt td {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .wt td.pin {
+    position: sticky;
+    left: 0;
+    background: var(--surface);
+  }
+  .wt .st {
+    color: var(--green);
+    border: 1px solid var(--green);
+    border-radius: 999px;
+    padding: 0 7px;
+    font-size: 0.68rem;
+  }
+  .wt .f {
+    color: var(--pay);
+    font-family: "IBM Plex Mono", monospace;
+  }
+  .foot {
+    display: flex;
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 0.74rem;
+    padding-top: 6px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .card {
+    border: 1px solid var(--line);
+    padding: 8px 10px;
+    min-height: 84px;
+  }
+  .card b {
+    display: block;
+    font-size: 0.78rem;
+  }
+  .card i {
+    color: var(--muted);
+    font-style: normal;
+    font-size: 0.72rem;
+  }
+  .bar {
+    height: 6px;
+    background: var(--pay-soft);
+    margin-top: 8px;
+    position: relative;
+  }
+  .bar::after {
+    content: "";
+    position: absolute;
+    inset: 0 62% 0 0;
+    background: var(--pay);
+  }
+  .rem {
+    border: 1px solid var(--line);
+    padding: 8px 10px;
+    font-size: 0.76rem;
+  }
+  .rem b {
+    display: block;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .rem .n {
+    color: var(--amber);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .track {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.8rem;
+    background: var(--code-bg);
+    padding: 14px 16px;
+    overflow-x: auto;
+    white-space: pre;
+    line-height: 1.6;
+    margin: 14px 0;
+  }
+
+  ol.risks {
+    padding-left: 22px;
+  }
+  ol.risks li {
+    margin: 6px 0;
+  }
+  ol.risks li::marker {
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--muted);
+  }
+
+  .dod {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .dod div {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    padding: 12px 14px;
+  }
+  .dod b {
+    display: block;
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--pay);
+    margin-bottom: 4px;
+  }
+  .dod ul {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 0.9rem;
+  }
+
+  .approve {
+    margin-top: 44px;
+    background: var(--pay-soft);
+    border: 1px solid var(--pay);
+    padding: 18px 22px;
+  }
+  .approve h2 {
+    color: var(--pay-ink);
+  }
+  .approve ol {
+    margin: 8px 0 0;
+    padding-left: 20px;
+  }
+
+  a {
+    color: var(--pay);
+  }
+  a:focus-visible,
+  .toolbar span:focus-visible {
+    outline: 2px solid var(--pay);
+    outline-offset: 2px;
+  }
+  @media (max-width: 720px) {
+    .kpis,
+    .dod,
+    .cards,
+    .grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .dec-head,
+    .dec-body {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+    .app {
+      grid-template-columns: 1fr;
+    }
+    .side {
+      display: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none !important;
+    }
+  }
+</style>
+
+<div class="page">
+  <div class="eyebrow">Hồ sơ duyệt · wave S15 · PAYROLL v2 · 02/09/2026</div>
+  <h1>Nâng cấp PAYROLL lên chuẩn phần mềm tiền lương thương mại</h1>
+  <p class="lede">
+    Đối chiếu 8 màn hình MISA AMIS Tiền lương owner cung cấp với module PAYROLL v1 vừa đóng (wave
+    S13, 9/9 WO). Hồ sơ này chỉ ra <b>17 khoảng cách</b>, xếp 13 khoảng cách vào 4 track + 1 track
+    vỏ UI, gạt 4 ra ngoài phạm vi sản phẩm, và xin owner ký <b>10 quyết định</b> (PAY-DEC-011..020).
+    Nguồn máy-đọc: <code>docs/plans/S15-PAYROLL-V2-WAVE.md</code>.
+  </p>
+
+  <div class="banner">
+    <strong>Điều kiện tiên quyết:</strong> PAYROLL v1 <b>chưa chạy ngày nào trên PROD</b> — lô
+    migration 0564–0568 đang bị census 0565 chặn vì hai role tuỳ biến giữ grant
+    <code>('*','*')</code>. WO <code>S14-PROD-PAYROLLGRANT-1</code> đã READY; nên chạy nó trước khi
+    mở v2 để kế toán dùng thật v1 một kỳ và phản hồi vào v2.
+  </div>
+
+  <div class="kpis">
+    <div class="kpi pay">
+      <div class="v">17</div>
+      <div class="l">khoảng cách so với benchmark</div>
+    </div>
+    <div class="kpi green">
+      <div class="v">13</div>
+      <div class="l">đưa vào v2 (4 track + vỏ UI)</div>
+    </div>
+    <div class="kpi red">
+      <div class="v">4</div>
+      <div class="l">ngoài phạm vi sản phẩm (de-media-fy / SaaS)</div>
+    </div>
+    <div class="kpi">
+      <div class="v">15</div>
+      <div class="l">Work Order · 6 đỏ · ≈ $1.3–1.6k</div>
+    </div>
+  </div>
+
+  <!-- 01 -->
+  <section>
+    <div class="sec-head">
+      <span class="num">01</span>
+      <h2>Điểm xuất phát — v1 đã có gì, đo thật trên master <code>a4644898</code></h2>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <tr>
+          <th>Tầng</th>
+          <th>Số đo</th>
+          <th>Ý nghĩa cho v2</th>
+        </tr>
+        <tr>
+          <td>DB</td>
+          <td>7 bảng, RLS+FORCE, <code>payslips</code> append-only</td>
+          <td>Giữ nguyên khung; v2 chỉ ADD COLUMN + bảng mới (band 0564 bất khả xâm phạm)</td>
+        </tr>
+        <tr>
+          <td>API</td>
+          <td>35/35 route · 17 cặp quyền · 13 sensitive · 17 mã lỗi</td>
+          <td>Đánh số tiếp: API-036+, ERR-018+</td>
+        </tr>
+        <tr>
+          <td>Máy tính lương</td>
+          <td>
+            Công thức <b>cố định ở SQL</b>: base×prorate + phụ cấp + thưởng − phạt − nghỉ không
+            lương; <b>không BH, không TNCN</b>
+          </td>
+          <td>Khoảng cách lớn nhất về nghiệp vụ (G2·G3·G4)</td>
+        </tr>
+        <tr>
+          <td>Hồ sơ lương</td>
+          <td>
+            versioned: <code>base_salary</code> + <code>allowances jsonb</code>; v1 đã GỠ
+            <code>salary_type</code>
+          </td>
+          <td>Dựng lại NET/GROSS bằng cột mới (DEC-015)</td>
+        </tr>
+        <tr>
+          <td>FSM kỳ</td>
+          <td>7 trạng thái; <code>publish</code> nhảy thẳng <code>Approved → Paid</code></td>
+          <td>«Paid» đang là tên sai của «đã phát hành» — DEC-017 tách</td>
+        </tr>
+        <tr>
+          <td>FE</td>
+          <td>6 màn, sidebar phẳng 3 mục, primitives shadcn chung, không trang tổng quan</td>
+          <td>Vỏ UI chung cần nâng trước (DEC-020)</td>
+        </tr>
+        <tr>
+          <td>Nền tái dùng</td>
+          <td>
+            <code>exceljs</code> · khuôn import Excel HR · tabs/sheet/donut/stat-card · job + NOTI ·
+            widget DASH có sàn scope
+          </td>
+          <td>Không phải nền trắng — chỉ thiếu Recharts, thư viện PDF, cột tài khoản ngân hàng</td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- 02 -->
+  <section>
+    <div class="sec-head">
+      <span class="num">02</span>
+      <h2>Bản đồ khoảng cách — 8 màn MISA ↔ v1</h2>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <tr>
+          <th>#</th>
+          <th>MISA có</th>
+          <th>v1 có</th>
+          <th>Thiếu</th>
+          <th>Xếp</th>
+        </tr>
+        <tr>
+          <td class="k">G1</td>
+          <td>
+            Nhân viên: danh sách + 5 tab (chung · lịch sử lương · BH-công đoàn · TNCN · gia đình)
+          </td>
+          <td>Picker + form 1 dòng phụ cấp</td>
+          <td>
+            Màn nhân viên; NET/GROSS · đối tượng TNCN · lương BH · thử việc · tỉ lệ hưởng · phụ
+            cấp/khấu trừ có định mức; BH-công đoàn; người phụ thuộc
+          </td>
+          <td><span class="pill a">Track A</span></td>
+        </tr>
+        <tr>
+          <td class="k">G2</td>
+          <td>Thành phần lương (mã · loại · tính chất · kiểu · công thức · nguồn)</td>
+          <td>Khoản cứng trong SQL</td>
+          <td>Catalog + máy công thức</td>
+          <td><span class="pill b">Track B</span></td>
+        </tr>
+        <tr>
+          <td class="k">G3</td>
+          <td>Mẫu bảng lương (cột · công thức · ẩn/hiện · xem trước)</td>
+          <td>1 khuôn cột cố định</td>
+          <td>Template gắn vào kỳ</td>
+          <td><span class="pill b">Track B</span></td>
+        </tr>
+        <tr>
+          <td class="k">G4</td>
+          <td>BHXH/BHYT/BHTN/KPCĐ/đoàn phí · TNCN luỹ tiến · giảm trừ</td>
+          <td>PARK-PAYROLL-001</td>
+          <td>Engine luật định + bảng tỉ lệ theo hiệu lực</td>
+          <td><span class="pill b">Track B</span></td>
+        </tr>
+        <tr>
+          <td class="k">G5</td>
+          <td>Dữ liệu tính lương → Chấm công (bảng công tháng, nguồn, khoá)</td>
+          <td>Gom ngầm lúc tính</td>
+          <td>Màn xem bảng công tổng hợp per kỳ</td>
+          <td><span class="pill a">Track A</span></td>
+        </tr>
+        <tr>
+          <td class="k">G6</td>
+          <td>Doanh số · KPI · Sản phẩm</td>
+          <td>—</td>
+          <td>KPI/doanh thu theo kênh đã bị loại khỏi sản phẩm (CLAUDE.md §1)</td>
+          <td><span class="pill out">Ngoài</span></td>
+        </tr>
+        <tr>
+          <td class="k">G7</td>
+          <td>Thu nhập khác · Khấu trừ khác (+ nhập khẩu)</td>
+          <td><code>bonus_penalties</code> có duyệt</td>
+          <td>Import Excel + phân loại theo thành phần</td>
+          <td><span class="pill c">Track C</span></td>
+        </tr>
+        <tr>
+          <td class="k">G8</td>
+          <td>Tạm ứng</td>
+          <td>—</td>
+          <td>Toàn bộ</td>
+          <td><span class="pill c">Track C</span></td>
+        </tr>
+        <tr>
+          <td class="k">G9</td>
+          <td>Tổng hợp lương nhiều kỳ · theo đơn vị</td>
+          <td><code>summary</code> 1 kỳ</td>
+          <td>Báo cáo đa kỳ</td>
+          <td><span class="pill d">Track D</span></td>
+        </tr>
+        <tr>
+          <td class="k">G10</td>
+          <td>Phân bổ lương (cost center)</td>
+          <td>—</td>
+          <td>Kế toán chi phí — finance OUT</td>
+          <td><span class="pill out">Ngoài</span></td>
+        </tr>
+        <tr>
+          <td class="k">G11</td>
+          <td>Ngân sách lương + gauge</td>
+          <td>—</td>
+          <td>Toàn bộ</td>
+          <td><span class="pill c">Track C</span></td>
+        </tr>
+        <tr>
+          <td class="k">G12</td>
+          <td>Chi trả (đợt · bank/cash · tệp UNC)</td>
+          <td><code>publish</code> = Paid</td>
+          <td>Bước chi trả thật + tài khoản ngân hàng</td>
+          <td><span class="pill c">Track C</span></td>
+        </tr>
+        <tr>
+          <td class="k">G13</td>
+          <td>8 báo cáo + lịch gửi định kỳ</td>
+          <td>XLSX 1 kỳ</td>
+          <td>7 báo cáo (lịch gửi = Phase sau)</td>
+          <td><span class="pill d">Track D</span></td>
+        </tr>
+        <tr>
+          <td class="k">G14</td>
+          <td>Tổng quan: 6 biểu đồ + Lời nhắc</td>
+          <td>1 widget DASH</td>
+          <td>Trang tổng quan module</td>
+          <td><span class="pill d">Track D</span></td>
+        </tr>
+        <tr>
+          <td class="k">G15</td>
+          <td>Phiếu lương PDF</td>
+          <td>PARK</td>
+          <td>Toàn bộ</td>
+          <td><span class="pill d">Track D</span></td>
+        </tr>
+        <tr>
+          <td class="k">G16</td>
+          <td>
+            Bố cục: sidebar nhóm gập · toolbar · ghim cột · chọn cột · footer phân trang · header
+            chi tiết · tab
+          </td>
+          <td>shadcn chung</td>
+          <td>Vỏ UI dùng chung mọi module</td>
+          <td><span class="pill ui">UI shell</span></td>
+        </tr>
+        <tr>
+          <td class="k">G17</td>
+          <td>Trợ lý AI · thư viện mẫu cloud · «Lấy lại dữ liệu» AMIS · đa pháp nhân</td>
+          <td>—</td>
+          <td>Phase 5 / SaaS</td>
+          <td><span class="pill out">Ngoài</span></td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- 03 -->
+  <section>
+    <div class="sec-head">
+      <span class="num">03</span>
+      <h2>10 quyết định cần ký — mỗi dòng đã kèm đề xuất</h2>
+    </div>
+    <p class="lede">
+      Duyệt nguyên gói («ok tôi duyệt») = chốt theo cột <b>Đề xuất</b>. Muốn đổi dòng nào, ghi mã +
+      lựa chọn khác.
+    </p>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">PAY-DEC-011</span><span class="q">Đánh số &amp; phạm vi tài liệu</span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          Wave <code>S15-PAYROLL-V2</code>. <b>SPEC-11 lên v2 trong cùng file</b> (§5.1 thêm bảng
+          «v2», §22 thêm 011..020) · DB-13 v2 · API-18 v2 · §9g mở rộng · mig <code>0569+</code> (đo
+          journal lúc chạy) · PAY-SCREEN-007+ · PAYROLL-API-036+ · PAYROLL-ERR-018+ ·
+          NOTI-EVENT-024+ · story IMP02-STORY-191+ · Sprint 15.
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>Tách SPEC-16 riêng = nhân bản rule tính lương ở hai chỗ ⇒ drift.</p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">PAY-DEC-012</span
+        ><span class="q">Máy công thức đặt ở đâu — đảo một phần PAY-DEC-004 «tiền tính ở SQL»</span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          <b>Engine biểu thức ở TS, số học <code>decimal.js</code></b> (cấm float); đánh giá theo đồ
+          thị phụ thuộc thành phần (topo-sort, phát hiện vòng); kết quả ghi
+          <code>numeric(18,2)</code> + <b>snapshot <code>component_values_json</code> mỗi dòng</b>.
+          <b>SQL giữ bất biến</b>: <code>SUM(items) = net</code>, CHECK ≥ 0, UNIQUE. Grammar cố
+          định: <code>+ − × ÷ ( )</code>, so sánh, <code>IF(c,a,b)</code>,
+          <code>MIN MAX ROUND ABS</code>, tham chiếu <code>MÃ_THÀNH_PHẦN</code>. Không
+          <code>eval</code>, không gọi hàm tuỳ ý, giới hạn độ dài/độ sâu/số node.
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>
+          Giữ SQL thuần = viết trình dịch công thức → SQL, chi phí ×3 và khó audit. Giữ công thức
+          cứng = không có G2/G3, tức không có «Thành phần lương» lẫn «Mẫu bảng lương».
+        </p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">PAY-DEC-013</span
+        ><span class="q">Mô hình catalog thành phần + mẫu bảng lương</span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          <code>salary_components</code> = <b>hệ thống</b> (seed, không xoá, sửa được công thức) +
+          <b>tự thêm</b>. <code>payroll_templates</code> +
+          <code>payroll_template_components</code> (nhãn cột · công thức ghi đè · ẩn/hiện · thứ tự).
+          Kỳ lương gắn <b>đúng một mẫu lúc tạo</b>; đổi mẫu chỉ khi kỳ ≤
+          <code>CollectingData</code>. Phạm vi mẫu v2 = <b>toàn công ty hoặc theo đơn vị</b>.
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>
+          Mẫu theo vị trí / từng nhân viên ngay v2 = ma trận ưu tiên phức tạp, chưa có nhu cầu ở N=1
+          — để Phase sau.
+        </p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">PAY-DEC-014</span
+        ><span class="q">Engine luật định: bảo hiểm + thuế TNCN</span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          Có: BHXH · BHYT · BHTN · KPCĐ (DN) · đoàn phí (NV) · <b>TNCN luỹ tiến 7 bậc</b> + giảm trừ
+          bản thân/người phụ thuộc.
+          <b
+            >Tỉ lệ, trần, bậc thuế lưu ở <code>payroll_statutory_rates</code> versioned theo
+            <code>effective_from</code></b
+          >. Seed đề xuất, <b>owner xác nhận số</b>: NV 8 / 1,5 / 1 · DN 17,5 / 3 / 1 · KPCĐ 2 ·
+          đoàn phí 1 · giảm trừ 11 tr + 4,4 tr/NPT · trần BHXH/BHYT = 20× lương cơ sở · BHTN = 20×
+          lương tối thiểu vùng. Hệ thống <i>lưu và áp</i>, không tự khẳng định đúng luật.
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>Hard-code tỉ lệ = mỗi lần đổi luật là một migration vùng đỏ.</p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">PAY-DEC-015</span
+        ><span class="q">NET / GROSS — v1 đã gỡ <code>salary_type</code></span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          Dựng lại <code>salary_type ∈ {GROSS, NET}</code> trên <code>salary_profiles</code> (cột
+          mới, default GROSS). GROSS đầy đủ; <b>NET = gross-up lặp</b> ≤ 30 vòng, hội tụ ≤ 1 đ, số
+          vòng ghi vào snapshot.
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>
+          Bỏ NET giảm một WO đỏ nhưng màn Lịch sử lương thiếu radio NET/GROSS như benchmark.
+          <b>Owner chọn</b> — hồ sơ MISA của công ty đang dùng GROSS.
+        </p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">PAY-DEC-016</span
+        ><span class="q">Màn «Nhân viên» trong PAYROLL và Phương án B (PAYROLL tách HR)</span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          Màn Nhân viên đọc <b>chiếu HR bó hẹp qua route PAYROLL</b> (<code>PAYROLL-API-036</code>,
+          mở rộng picker 034) — <b>không cấp cặp HR</b> cho <code>payroll-officer</code>.
+          <code>tax_code</code> được chiếu qua <code>('view','salary-profile')</code> vì TNCN cần,
+          có audit lượt xem.
+          <b>Người phụ thuộc + thiết lập BH/công đoàn/tài khoản ngân hàng là bảng PAYROLL</b> (<code
+            >payroll_dependents</code
+          >
+          · <code>payroll_employee_settings</code>), không đẩy vào HR.
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>Đưa NPT/bank vào HR = mở lại đường HR↔PAYROLL vốn đã tách ở PAY-DEC-006.</p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">PAY-DEC-017</span><span class="q">Tạm ứng · Chi trả · FSM kỳ</span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          <code>payroll_advances</code>: <code>Pending → Approved/Rejected → Deducted</code>,
+          four-eyes như thưởng/phạt, <b>tự thành khoản khấu trừ</b> ở kỳ chỉ định.
+          <code>payroll_payment_batches</code> + lines: kỳ · bank/cash · trạng thái · tệp UNC XLSX
+          theo mẫu. <b>FSM kỳ 8 trạng thái</b>: <code>Approved → Published → Paid → Locked</code> —
+          <code>Paid</code> chỉ khi đợt chi trả hoàn tất (sửa SPEC-01 §17.15). Tài khoản ngân hàng =
+          cột mới ở <code>payroll_employee_settings</code> (mask, sensitive).
+          <b>Phân bổ lương NGOÀI.</b>
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>
+          Giữ 7 trạng thái = «Paid» tiếp tục là tên sai của «đã phát hành», báo cáo chi trả không có
+          nguồn.
+        </p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">PAY-DEC-018</span><span class="q">Báo cáo + trang Tổng quan</span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          <code>/payroll</code> = <b>Tổng quan module</b>: phân bố mức lương · cơ cấu thu nhập ·
+          ngân sách (gauge) · chi phí theo thời gian · thu nhập BQ theo thời gian · thu nhập BQ theo
+          đơn vị + <b>Lời nhắc</b> (phiếu chưa phát hành · NV chính thức chưa tham gia BH · lương BH
+          ngoài quy định). <b>7 báo cáo</b>: tổng hợp thu nhập NV · thống kê lương theo thời gian ·
+          cơ cấu thu nhập · chi phí lương theo đơn vị · lịch sử lương NV · tổng hợp chi trả · tình
+          hình ngân sách («Công nợ» gộp vào tạm ứng; lịch gửi định kỳ = Phase sau).
+          <b>Cài Recharts</b> (stack đã chốt, chưa cài). Mọi báo cáo gác cặp ĐỌC tiền + sàn scope
+          Company + audit, <b>không cache</b>.
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>Không cài Recharts = tự vẽ SVG 6 loại biểu đồ.</p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">PAY-DEC-019</span><span class="q">Phiếu lương PDF</span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          <b>Có</b> — sinh server bằng <code>pdfmake</code>, font Việt nhúng, tải qua signed-URL
+          file-service; <code>('export','payroll')</code> cho batch, Own cho phiếu của mình; audit.
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>Giữ PARK = khoảng cách nhìn thấy rõ nhất với benchmark còn nguyên.</p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">PAY-DEC-020</span
+        ><span class="q">Nâng vỏ UI dùng chung — làm TRƯỚC</span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          WO riêng ở <code>packages/ui</code> + layout <code>apps/app</code>: sidebar
+          <b>nhóm gập được</b> · <b>toolbar chuẩn</b> (tìm · trạng thái · đơn vị · lọc · ⚙ chọn cột)
+          · <code>DataTable</code>
+          <b>ghim cột + chọn cột + footer «Tổng số · Số dòng/trang · 1–N»</b> ·
+          <b>header trang chi tiết</b> (← · tiêu đề · nút chính · ⋯) · pill trạng thái. Cập nhật
+          UI-07 để HR/ATT/LEAVE dùng chung; theme light/dark giữ.
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>
+          Làm riêng trong <code>routes/payroll</code> = nhân bản component, PAYROLL lệch với phần
+          còn lại của app.
+        </p>
+      </div>
+    </div>
+
+    <div class="note out">
+      <b>Ngoài phạm vi v2 (PARK-PAYROLL-002):</b> Doanh số · KPI · Sản phẩm · Phân bổ lương · lịch
+      gửi báo cáo · Trợ lý AI · thư viện mẫu cloud · đa pháp nhân · mẫu theo từng nhân viên · duyệt
+      nhiều cấp · multi-currency.
+    </div>
+  </section>
+
+  <!-- 04 -->
+  <section>
+    <div class="sec-head">
+      <span class="num">04</span>
+      <h2>Mô hình dữ liệu — 3 ALTER + 10 bảng mới, khung v1 giữ nguyên</h2>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <tr>
+          <th>Bảng</th>
+          <th>Việc</th>
+          <th>Cột chính</th>
+          <th>Track</th>
+        </tr>
+        <tr>
+          <td class="k">salary_profiles</td>
+          <td>ALTER</td>
+          <td>
+            + <code>salary_type</code> · <code>pit_payer</code> · <code>insurance_salary</code> ·
+            <code>probation_salary</code> · <code>pay_ratio_pct</code>
+          </td>
+          <td><span class="pill a">A</span></td>
+        </tr>
+        <tr>
+          <td class="k">salary_profile_items</td>
+          <td>MỚI (thay <code>allowances jsonb</code>, expand-contract)</td>
+          <td>profile · component · kind allowance/deduction · quota · amount · status</td>
+          <td><span class="pill a">A</span></td>
+        </tr>
+        <tr>
+          <td class="k">payroll_employee_settings</td>
+          <td>MỚI</td>
+          <td>user · tham gia BH · công đoàn · tỉ lệ ghi đè · <b>bank_account (mask)</b></td>
+          <td><span class="pill a">A</span></td>
+        </tr>
+        <tr>
+          <td class="k">payroll_dependents</td>
+          <td>MỚI</td>
+          <td>user · họ tên · quan hệ · MST · hiệu lực từ/đến</td>
+          <td><span class="pill a">A</span></td>
+        </tr>
+        <tr>
+          <td class="k">salary_components</td>
+          <td>MỚI (seed hệ thống)</td>
+          <td>code · name · type · nature · value_type · formula · is_system · is_active</td>
+          <td><span class="pill b">B</span></td>
+        </tr>
+        <tr>
+          <td class="k">payroll_templates / _components</td>
+          <td>MỚI</td>
+          <td>
+            name · scope (company / org_unit) · status · [component · label · formula override ·
+            visible · sort]
+          </td>
+          <td><span class="pill b">B</span></td>
+        </tr>
+        <tr>
+          <td class="k">payroll_statutory_rates</td>
+          <td>MỚI (seed)</td>
+          <td>effective_from · tỉ lệ NV/DN · trần · bậc thuế jsonb · giảm trừ</td>
+          <td><span class="pill b">B</span></td>
+        </tr>
+        <tr>
+          <td class="k">payroll_periods</td>
+          <td>ALTER</td>
+          <td>
+            + <code>template_id</code> · trạng thái <code>Published</code> · vết
+            <code>paid_by/at</code>
+          </td>
+          <td><span class="pill b">B</span>/<span class="pill c">C</span></td>
+        </tr>
+        <tr>
+          <td class="k">payroll_period_lines</td>
+          <td>ALTER</td>
+          <td>+ <code>component_values_json</code> (snapshot từng thành phần)</td>
+          <td><span class="pill b">B</span></td>
+        </tr>
+        <tr>
+          <td class="k">payroll_advances</td>
+          <td>MỚI</td>
+          <td>user · period_month · amount · status · decided_by · consumed payslip</td>
+          <td><span class="pill c">C</span></td>
+        </tr>
+        <tr>
+          <td class="k">payroll_payment_batches / _lines</td>
+          <td>MỚI</td>
+          <td>period · method · status · [user · amount · bank snapshot]</td>
+          <td><span class="pill c">C</span></td>
+        </tr>
+        <tr>
+          <td class="k">payroll_budgets</td>
+          <td>MỚI</td>
+          <td>year · org_unit · planned_amount</td>
+          <td><span class="pill c">C</span></td>
+        </tr>
+      </table>
+    </div>
+    <p class="lede">
+      Tất cả: <code>company_id</code> + RLS FORCE + composite tenant-FK · soft delete ·
+      <code>payslips</code>/<code>payslip_items</code> vẫn append-only (dòng phiếu mang
+      <code>meta.componentCode</code>, không đổi CHECK 7 loại).
+    </p>
+  </section>
+
+  <!-- 05 -->
+  <section>
+    <div class="sec-head">
+      <span class="num">05</span>
+      <h2>Wireframe — sidebar v2 và ba màn đại diện</h2>
+    </div>
+
+    <div class="wf">
+      <div class="wf-cap">
+        <span>PAY-SCREEN-007 · Nhân viên → chi tiết → tab Lịch sử lương</span
+        ><b>/payroll/employees/:id</b>
+      </div>
+      <div class="app">
+        <div class="side">
+          <div>Tổng quan</div>
+          <div class="on">Nhân viên</div>
+          <div>Thành phần lương</div>
+          <div>Mẫu bảng lương</div>
+          <div class="grp"><span>Dữ liệu tính lương</span><span>▾</span></div>
+          <div class="sub">Bảng công</div>
+          <div class="sub">Thu nhập / khấu trừ khác</div>
+          <div class="grp"><span>Tính lương</span><span>▸</span></div>
+          <div>Chi trả</div>
+          <div>Báo cáo</div>
+          <div class="grp"><span>Thiết lập</span><span>▸</span></div>
+        </div>
+        <div class="main">
+          <div class="hd">
+            <span>←</span><span class="title">1081 · Nguyễn Văn Cảnh</span
+            ><span class="btn">Sửa</span><span class="more">⋯</span>
+          </div>
+          <div class="tabs">
+            <span>Thông tin chung</span><span class="on">Lịch sử lương</span
+            ><span>Bảo hiểm · Công đoàn</span><span>Thuế TNCN</span><span>Gia đình</span>
+          </div>
+          <div class="grid">
+            <div>
+              <div class="fld">
+                <span class="l">Ngày hiệu lực</span><span class="v">22/04/2026</span>
+              </div>
+              <div class="fld">
+                <span class="l">Loại lương</span><span class="v">○ NET ● GROSS</span>
+              </div>
+              <div class="fld">
+                <span class="l">Đối tượng TNCN</span
+                ><span class="v">● Nhân viên đóng ○ Công ty đóng</span>
+              </div>
+              <div class="fld">
+                <span class="l">Đơn vị · Vị trí</span
+                ><span class="v">BU Nỗ Lực · Phó giám đốc</span>
+              </div>
+              <div class="fld"><span class="l">Lương thử việc</span><span class="v">—</span></div>
+            </div>
+            <div>
+              <div class="fld">
+                <span class="l">Lương cơ bản</span><span class="v">14.200.000</span>
+              </div>
+              <div class="fld">
+                <span class="l">Tỉ lệ hưởng (%)</span><span class="v">100</span>
+              </div>
+              <div class="fld">
+                <span class="l">Lương đóng BH</span><span class="v">15.500.000</span>
+              </div>
+              <div class="fld">
+                <span class="l">Tổng lương</span><span class="v">24.200.000</span>
+              </div>
+              <div class="fld"><span class="l">Ghi chú</span><span class="v">—</span></div>
+            </div>
+          </div>
+          <table class="wt">
+            <tr>
+              <th>Khoản phụ cấp</th>
+              <th>Định mức</th>
+              <th>Giá trị</th>
+              <th>Nguồn</th>
+              <th>Trạng thái</th>
+            </tr>
+            <tr>
+              <td>Thực hiện công việc khác</td>
+              <td>—</td>
+              <td class="num">5.000.000</td>
+              <td>Tự thêm</td>
+              <td><span class="st">Đang áp dụng</span></td>
+            </tr>
+            <tr>
+              <td>Phụ cấp nhà ở</td>
+              <td>—</td>
+              <td class="num">5.000.000</td>
+              <td>Tự thêm</td>
+              <td><span class="st">Đang áp dụng</span></td>
+            </tr>
+          </table>
+          <div style="color: var(--pay); font-size: 0.76rem">
+            + Thêm khoản phụ cấp &nbsp;&nbsp; + Thêm khoản khấu trừ
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wf">
+      <div class="wf-cap">
+        <span
+          >PAY-SCREEN-010 · Mẫu bảng lương → chi tiết (thành phần · nhãn cột · công thức · hiển
+          thị)</span
+        ><b>/payroll/templates/:id</b>
+      </div>
+      <div class="app">
+        <div class="side">
+          <div>Tổng quan</div>
+          <div>Nhân viên</div>
+          <div>Thành phần lương</div>
+          <div class="on">Mẫu bảng lương</div>
+          <div class="grp"><span>Dữ liệu tính lương</span><span>▸</span></div>
+          <div class="grp"><span>Tính lương</span><span>▸</span></div>
+          <div>Chi trả</div>
+          <div>Báo cáo</div>
+        </div>
+        <div class="main">
+          <div class="hd">
+            <span>←</span><span class="title">Mẫu bảng lương đóng BH · toàn công ty</span
+            ><span class="btn">Sửa</span><span class="more">⋯</span>
+          </div>
+          <div class="toolbar">
+            <span>🔍 Tìm thành phần</span><span class="ic">👁 Xem trước</span>
+          </div>
+          <table class="wt">
+            <tr>
+              <th>Tên thành phần</th>
+              <th>Mã</th>
+              <th>Tên cột hiển thị</th>
+              <th>Công thức</th>
+              <th>Hiển thị</th>
+            </tr>
+            <tr>
+              <td>Lương cơ bản</td>
+              <td class="f">LUONG_CO_BAN</td>
+              <td>Lương cơ bản</td>
+              <td class="f">—</td>
+              <td>☑</td>
+            </tr>
+            <tr>
+              <td>Số công chuẩn</td>
+              <td class="f">SO_CONG_CHUAN</td>
+              <td>Ngày công tiêu chuẩn</td>
+              <td class="f">—</td>
+              <td>☑</td>
+            </tr>
+            <tr>
+              <td>Tổng công hưởng lương</td>
+              <td class="f">TONG_CONG_HUONG_LUONG</td>
+              <td>Tổng công tính lương</td>
+              <td class="f">= CONG_DI_LAM + PHEP_CO_LUONG</td>
+              <td>☑</td>
+            </tr>
+            <tr>
+              <td>BHXH (NV đóng)</td>
+              <td class="f">BHXH</td>
+              <td>BHXH</td>
+              <td class="f">= LUONG_DONG_BH × TL_BHXH_NV</td>
+              <td>☑</td>
+            </tr>
+            <tr>
+              <td>BHXH (Công ty đóng)</td>
+              <td class="f">BHXH_CONG_TY_DONG</td>
+              <td>BHXH (Công ty)</td>
+              <td class="f">= LUONG_DONG_BH × TL_BHXH_DN</td>
+              <td>☐</td>
+            </tr>
+            <tr>
+              <td>Thuế TNCN</td>
+              <td class="f">THUE_TNCN</td>
+              <td>Thuế TNCN</td>
+              <td class="f">= TNCN_LUY_TIEN(THU_NHAP_TINH_THUE)</td>
+              <td>☑</td>
+            </tr>
+            <tr>
+              <td>Thực lĩnh</td>
+              <td class="f">THUC_LINH</td>
+              <td>Thực lĩnh</td>
+              <td class="f">= TONG_THU_NHAP − TONG_KHAU_TRU</td>
+              <td>☑</td>
+            </tr>
+          </table>
+          <div class="foot"><span>Tổng số: 31</span><span>Số dòng/trang 25 · 1–25 ‹ ›</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wf">
+      <div class="wf-cap">
+        <span>PAY-SCREEN-015 · Tổng quan module (Recharts) + Lời nhắc</span><b>/payroll</b>
+      </div>
+      <div class="app">
+        <div class="side">
+          <div class="on">Tổng quan</div>
+          <div>Nhân viên</div>
+          <div>Thành phần lương</div>
+          <div>Mẫu bảng lương</div>
+          <div class="grp"><span>Dữ liệu tính lương</span><span>▸</span></div>
+          <div class="grp"><span>Tính lương</span><span>▸</span></div>
+          <div>Chi trả</div>
+          <div>Báo cáo</div>
+        </div>
+        <div class="main">
+          <div class="cards">
+            <div class="card">
+              <b>Phân bố mức lương</b><i>Tất cả đơn vị · kỳ 08/2026</i>
+              <div class="bar"></div>
+              <div class="bar" style="width: 70%"></div>
+              <div class="bar" style="width: 40%"></div>
+            </div>
+            <div class="card"><b>Cơ cấu thu nhập</b><i>Quý trước · donut theo thành phần</i></div>
+            <div class="rem">
+              <b>Lời nhắc</b>
+              <div><span class="n">2</span> bảng lương chưa phát hành phiếu</div>
+              <div><span class="n">3</span> NV chính thức chưa tham gia BH</div>
+              <div><span class="n">0</span> lương đóng BH ngoài quy định</div>
+            </div>
+            <div class="card">
+              <b>Ngân sách lương</b><i>Năm nay · gauge kế hoạch / thực hiện</i>
+              <div class="bar"></div>
+            </div>
+            <div class="card"><b>Thu nhập BQ theo thời gian</b><i>2026 · theo quý</i></div>
+            <div class="card">
+              <b>Thu nhập BQ theo đơn vị</b><i>Quý này · cao nhất / thấp nhất / BQ</i>
+            </div>
+          </div>
+          <div class="foot">
+            <span
+              >Mọi khối gác <code>('view-line','payroll-period')</code> + sàn scope Company ·
+              <code>useCanExact</code></span
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 -->
+  <section>
+    <div class="sec-head">
+      <span class="num">06</span>
+      <h2>15 Work Order — 4 track song song sau DB-1, một lane migration</h2>
+    </div>
+    <div class="track">
+      S14-PROD-PAYROLLGRANT-1 (READY — chạy trước) ─┐ ▼ duyệt ✅ → DOC-1 🟢* → UI-SHELL-1 🟢 ─┬─ A:
+      DB-1 🔴 → BE-1 🔴 → FE-1 🟡 ├─ B: (sau DB-1) BE-2 🔴 → BE-3 🔴 → FE-2 🟡 ├─ C: DB-2 🔴 (sau
+      DB-1) → BE-4 🔴 → FE-3 🟡 └─ D: BE-5 🟡 (sau BE-3, BE-4) → FE-4 🟡 → QA-1 🟡 → DASH-1 🟢
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <tr>
+          <th>WO</th>
+          <th>Zone</th>
+          <th>Nội dung</th>
+          <th>Sau</th>
+        </tr>
+        <tr>
+          <td class="k">S15-PAYROLL-DOC-1</td>
+          <td class="zone">🟢*</td>
+          <td>
+            SPEC-11 v2 · DB-13 v2 · API-18 v2 · §9g v2 · SPEC-01 §17.15 (8 trạng thái) · EPIC-20
+            PL-11..24 · UI-07 · plan-reviewer PASS. <i>*nhãn xanh, chi phí vùng đỏ</i>
+          </td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td class="k">S15-UI-SHELL-1</td>
+          <td class="zone">🟢</td>
+          <td>
+            <code>packages/ui</code>: sidebar nhóm gập · toolbar · DataTable ghim/chọn cột/footer ·
+            DetailPageHeader · StatusPill; áp lên 6 màn v1 làm mẫu
+          </td>
+          <td>DOC-1</td>
+        </tr>
+        <tr>
+          <td class="k">S15-PAYROLL-DB-1</td>
+          <td class="zone">🔴</td>
+          <td>
+            mig 0569+: ALTER <code>salary_profiles</code> · 7 bảng mới track A+B · RLS+FORCE trước
+            backfill · seed catalog + tỉ lệ + cặp quyền · contracts Zod
+          </td>
+          <td>DOC-1</td>
+        </tr>
+        <tr>
+          <td class="k">S15-PAYROLL-BE-1</td>
+          <td class="zone">🔴</td>
+          <td>
+            Route nhân viên (036 chiếu HR bó hẹp, tax_code có audit) · hồ sơ lương v2 · items ·
+            settings · dependents · bảng công kỳ (tái dùng <code>computeInputsTx</code>); deny-path
+            RED trước
+          </td>
+          <td>DB-1</td>
+        </tr>
+        <tr>
+          <td class="k">S15-PAYROLL-BE-2</td>
+          <td class="zone">🔴</td>
+          <td>
+            Catalog + mẫu: CRUD · <b>parser/evaluator <code>decimal.js</code></b> grammar cố định,
+            topo-sort, phát hiện vòng, giới hạn độ sâu · validate khi lưu · xem trước với dữ liệu
+            giả
+          </td>
+          <td>DB-1</td>
+        </tr>
+        <tr>
+          <td class="k">S15-PAYROLL-BE-3</td>
+          <td class="zone">🔴</td>
+          <td>
+            Máy tính lương v2 theo mẫu · BH/KPCĐ/đoàn phí · TNCN luỹ tiến + NPT · gross-up NET ·
+            snapshot thành phần · bất biến SQL · fixture đối soát tay từng đồng (GROSS + NET)
+          </td>
+          <td>BE-2</td>
+        </tr>
+        <tr>
+          <td class="k">S15-PAYROLL-FE-1</td>
+          <td class="zone">🟡</td>
+          <td>PAY-SCREEN-007 Nhân viên (list + 5 tab) · 008 Bảng công kỳ · form hồ sơ lương v2</td>
+          <td>BE-1, UI-SHELL-1</td>
+        </tr>
+        <tr>
+          <td class="k">S15-PAYROLL-FE-2</td>
+          <td class="zone">🟡</td>
+          <td>
+            009 Thành phần lương · 010 Mẫu bảng lương · 011 Tỉ lệ luật định · chi tiết kỳ v2 (cột
+            theo mẫu, breakdown theo thành phần)
+          </td>
+          <td>BE-3, FE-1</td>
+        </tr>
+        <tr>
+          <td class="k">S15-PAYROLL-DB-2</td>
+          <td class="zone">🔴</td>
+          <td>
+            mig: advances · payment batches · budgets · FSM 8 trạng thái + RESET vết ·
+            NOTI-EVENT-024+ cả hai bảng catalog
+          </td>
+          <td>DB-1</td>
+        </tr>
+        <tr>
+          <td class="k">S15-PAYROLL-BE-4</td>
+          <td class="zone">🔴</td>
+          <td>
+            Tạm ứng FSM + tự khấu trừ · đợt chi trả + tệp UNC + <code>Paid</code> khi đợt hoàn tất ·
+            ngân sách · import Excel thu nhập/khấu trừ khác · outbox NOTI
+          </td>
+          <td>DB-2, BE-3</td>
+        </tr>
+        <tr>
+          <td class="k">S15-PAYROLL-FE-3</td>
+          <td class="zone">🟡</td>
+          <td>
+            012 Tạm ứng · 013 Chi trả · 014 Ngân sách · import dialog · «Tạm ứng của tôi» (ME)
+          </td>
+          <td>BE-4</td>
+        </tr>
+        <tr>
+          <td class="k">S15-PAYROLL-BE-5</td>
+          <td class="zone">🟡</td>
+          <td>
+            7 báo cáo (SQL set-based, XLSX) · dữ liệu tổng quan + lời nhắc · PDF phiếu lương +
+            signed-URL · sàn Company + audit, không cache
+          </td>
+          <td>BE-3, BE-4</td>
+        </tr>
+        <tr>
+          <td class="k">S15-PAYROLL-FE-4</td>
+          <td class="zone">🟡</td>
+          <td>015 Tổng quan (Recharts) · 016 Báo cáo · nút PDF ở phiếu lương / ME</td>
+          <td>BE-5, FE-2, FE-3</td>
+        </tr>
+        <tr>
+          <td class="k">S15-PAYROLL-QA-1</td>
+          <td class="zone">🟡</td>
+          <td>
+            Ma trận per-pair route mới · IDOR NPT/bank/advance · fuzz parser công thức · đối soát
+            BH/TNCN/gross-up theo bảng tay · FSM 8 · race · coverage ≥85% trên LANE_DB
+          </td>
+          <td>FE-4</td>
+        </tr>
+        <tr>
+          <td class="k">S15-PAYROLL-DASH-1</td>
+          <td class="zone">🟢</td>
+          <td>
+            Widget «ngân sách lương» + «tạm ứng chờ duyệt» (sàn scope, <code>useCanExact</code>)
+          </td>
+          <td>QA-1</td>
+        </tr>
+      </table>
+    </div>
+    <div class="note">
+      Vẫn <b>1 WO / phiên</b> theo vận hành v2; ba track song song để hàng đợi luôn có WO ready.
+      Crown routing: DB/BE-1..4 = FULL gate + Opus. Ước chi phí: 6 đỏ × ~$136 + 7 vàng × ~$60 + 2
+      xanh × ~$30 ≈ <b>$1 300–1 600</b>; DOC-1 lần S13 tốn $504 vì 3 vòng review — lần này chốt điều
+      kiện tự-mở-cổng từ vòng 2.
+    </div>
+  </section>
+
+  <!-- 07 -->
+  <section>
+    <div class="sec-head">
+      <span class="num">07</span>
+      <h2>12 bẫy đã biết — viết sẵn vào <code>done_when</code></h2>
+    </div>
+    <ol class="risks">
+      <li>
+        <b>Máy công thức là bề mặt tấn công mới</b>: grammar cố định, không
+        <code>eval</code>/<code>Function</code>, giới hạn độ dài/độ sâu/số node, timeout, fuzz test;
+        cặp <code>('manage','salary-component')</code> là <b>sensitive</b> (sửa công thức = sửa tiền
+        cả công ty) + audit diff.
+      </li>
+      <li>
+        <code>decimal.js</code> duy nhất cho số học ở TS; cấm <code>Number</code> trên tiền; ghi SQL
+        <code>numeric(18,2)</code>; <code>SUM(items) = net</code> vẫn assert ở SQL trong tx.
+      </li>
+      <li>
+        Đổi mẫu / đổi công thức <b>không</b> chạm kỳ đã <code>Calculated</code> trở lên — snapshot
+        <code>component_values_json</code> là nguồn giải thích; có ca «sửa công thức sau khi tính
+        không đổi số».
+      </li>
+      <li>
+        Tỉ lệ luật định versioned: kỳ dùng bản hiệu lực tại ngày cuối kỳ; seed do owner xác nhận, ca
+        test ghim số seed.
+      </li>
+      <li>
+        FSM 7→8: sửa SPEC-01 §17.15 <b>trước</b>, bảng RESET vết +
+        <code>assertPeriodTransition</code> + parity FE — CHECK không ép được chuyển tiếp.
+      </li>
+      <li>
+        Bank / NPT / tax_code = PII mới trong PAYROLL: mask server (vắng khoá),
+        <code>.optional()</code> FE, audit lượt xem, allowlist capability ở BACKEND, IDOR
+        cross-employee có cụm ca riêng.
+      </li>
+      <li>
+        <code>salary_type</code> dựng lại sau khi v1 gỡ: ADD COLUMN mới (band 0564 bất khả xâm
+        phạm), default GROSS.
+      </li>
+      <li>
+        <code>allowances jsonb</code> → <code>salary_profile_items</code>: expand-contract, đo PROD
+        trước (v1 chưa lên PROD ⇒ dự kiến 0 hàng).
+      </li>
+      <li>
+        Recharts + pdfmake là dep mới: <code>pnpm audit</code>, license MIT, font Việt nhúng — PDF
+        không được rơi về font thiếu dấu.
+      </li>
+      <li>
+        Báo cáo cộng toàn công ty ⇒ sàn scope Company cả đường metadata lẫn data; cache hit bỏ audit
+        ⇒ báo cáo <b>không cache</b>.
+      </li>
+      <li>Tối đa 1 vòng plan-review / WO đỏ + điều kiện tự-mở-cổng — vòng sau đẻ lỗ mới.</li>
+      <li>
+        UI-SHELL đụng <code>packages/ui</code> chung ⇒ chạy đủ test FE 3 app + soi lại màn
+        HR/ATT/LEAVE.
+      </li>
+    </ol>
+  </section>
+
+  <!-- 08 -->
+  <section>
+    <div class="sec-head">
+      <span class="num">08</span>
+      <h2>Definition of Done cấp wave</h2>
+    </div>
+    <div class="dod">
+      <div>
+        <b>Tài liệu</b>
+        <ul>
+          <li>
+            SPEC-11 · DB-13 · API-18 · §9g · SPEC-01 §17.15 · EPIC-20 · UI-07 · README §8 ·
+            erd-current · PARK-PAYROLL-002
+          </li>
+          <li>plan-reviewer PASS trước DB-1</li>
+        </ul>
+      </div>
+      <div>
+        <b>DB</b>
+        <ul>
+          <li>3 ALTER + 10 bảng mới: RLS+FORCE, composite tenant-FK, CHECK</li>
+          <li>Seed catalog hệ thống + tỉ lệ luật định + cặp quyền</li>
+        </ul>
+      </div>
+      <div>
+        <b>BE</b>
+        <ul>
+          <li>Engine công thức an toàn + luật định + gross-up, fixture đối soát tay</li>
+          <li>FSM 8 trạng thái · tạm ứng · chi trả · ngân sách · 7 báo cáo · PDF</li>
+          <li>Guard 2 tầng + masking + audit + @Idempotent mọi route mới</li>
+        </ul>
+      </div>
+      <div>
+        <b>FE · QA</b>
+        <ul>
+          <li>10 màn PAY-SCREEN-007..016 trên vỏ UI chung; ME thêm tạm ứng + PDF</li>
+          <li>Coverage payroll/ ≥85% trên LANE_DB; TESTABLE-FEATURES cập nhật; 15 WO đóng dấu</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="approve">
+    <h2>Cách duyệt</h2>
+    <ol>
+      <li>
+        <b>«ok tôi duyệt»</b> ⇒ chốt 10 quyết định theo cột Đề xuất; tôi chép vào SPEC-11 §22, seed
+        15 WO vào <code>harness/backlog.mjs</code>, regen STATUS.
+      </li>
+      <li>
+        Muốn đổi: ghi mã (ví dụ <code>PAY-DEC-015: bỏ NET</code>,
+        <code>PAY-DEC-019: giữ PARK</code>) — tôi cập nhật hồ sơ rồi seed.
+      </li>
+      <li>
+        Hai con số cần owner xác nhận riêng: <b>tỉ lệ + trần BH/thuế seed</b> (DEC-014) và
+        <b>có làm NET gross-up không</b> (DEC-015).
+      </li>
+    </ol>
+  </div>
+</div>
