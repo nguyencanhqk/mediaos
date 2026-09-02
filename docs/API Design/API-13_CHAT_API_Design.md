@@ -156,6 +156,8 @@ Cột **Membership** ghi rõ endpoint có phải chạy `ChatAccessService.asser
 | CHAT-API-016 | GET | `/chat/unread-count` | Tổng chưa đọc của tôi (badge header) — tính bằng phép trừ `seq` | `('view','chat-room')` | tự-bound theo actor | — |
 | CHAT-API-017 | GET | `/chat/rooms/{room_id}/files` | Tệp đã gửi trong phòng, URL ký hạn ngắn. *(S17)* Tham số `kind=image\|file` — xem API-13 §5.1d | `('view','chat-room')` | ✅ | — |
 
+> ⚠️ **Bảng này KHÔNG phải danh sách đầy đủ mọi route CHAT.** Route cấp ở wave sau nằm ở bảng riêng bên dưới và **census/kiểm quyền nào chỉ đọc §5.1 sẽ TRƯỢT chúng**: `CHAT-API-024a/024b·025·020·021a-c·022a/b·023` ở [§5.1b](#51b-endpoint-bổ-sung--wave-s8-chat-ux-spec-15-51b--chat-dec-014019) · cuộc gọi ở §5.1c · **`CHAT-API-031` (GET `/chat/rooms/{room_id}/links`, S17) ở §5.1d** · oversight `018a/018b/018c` ở §5.3.
+
 > **Notation permission:** Chuỗi `('action','resource')` là **cặp engine thực thi** (permission-matrix-spec §9c + seed DB-12 §9 bước D) — không phải chuỗi dotted `MODULE.RESOURCE.ACTION` hiển thị FE.
 
 #### 5.1b Endpoint bổ sung — wave S8-CHAT-UX (SPEC-15 §5.1b · CHAT-DEC-014…019)
