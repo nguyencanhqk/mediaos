@@ -15347,4 +15347,239 @@ export const backlog = [
       "GIỚI HẠN ĐÃ BIẾT (ghi ở SPEC-11 §10.1 + có ca test cả hai mặt): audit lượt xem widget CHỈ có trên cache MISS — cache company-shared TTL 300s nên lượt xem thứ hai không chạy `fetch`. Trong spec: §20.12 chỉ đòi +1 hàng/lượt cho `/lines` · `/payslips/:id` · `/salary-profiles`. Muốn vết per-view thì sửa `gateAndResolve`, KHÔNG phải `fetch`.",
     ],
   },
+
+  // ════════════════════ WAVE S14-CONSOLIDATE — đưa những gì ĐÃ SHIP vào dùng thật ════════════════════
+  // Seed 2026-09-02 sau khi đóng wave S13-PAYROLL (backlog cạn 434/434). KHÔNG mở Phase 5 (MOBILE·AI·
+  // INTEGRATION) trước wave này: PAYROLL ship 35 route + 6 màn + 1 widget nhưng CHƯA chạy ngày nào trên
+  // PROD (migration 0564–0568 bị census 0565 chặn), ASSET vô hình với admin PROD, và 6 module hậu-MVP đã
+  // ship còn thiếu metadata app-shell. Mở tính năng mới lúc này = chồng lớp lên thứ chưa ai dùng.
+  // Bằng chứng từng mục đo lại trên cây làm việc 02/09/2026 (không lấy từ sổ tay).
+  {
+    id: "S14-PROD-PAYROLLGRANT-1",
+    module: "DEVOPS",
+    layer: "DEVOPS",
+    title:
+      "GỠ CHẶN PROD: thu hồi grant wildcard ('*','*') của 2 role tuỳ biến tenant → áp được lô migration 0564–0568 → PAYROLL thực sự tồn tại trên PROD; commit script vận hành vào repo",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "scripts/**",
+      "docs/DEVOPS/**",
+      "docs/RELEASE/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "scripts/s13-revoke-wildcard-grants.mjs (doc-block đo PROD 02/09); migration 0565 census §6.7 fail-closed; permission-matrix §9g; memory payroll-legacy-permission-surface · grant-in-old-migration-is-not-current-state · revoke-table-grant-wipes-column-grants",
+    ],
+    done_when: [
+      "Script `scripts/s13-revoke-wildcard-grants.mjs` ĐƯỢC COMMIT vào repo (hiện là file untracked DUY NHẤT — mất máy là mất bản vá) kèm mục vận hành trong docs/DEVOPS/",
+      "DRY RUN in bảng chênh lệch từng role × từng cặp (SA 10 người · QUẢN LÝ CẤP CAO 4 người) → OWNER DUYỆT bảng đó TRƯỚC khi chạy --apply; không tự ý apply",
+      "Sau --apply: quyền NGOÀI miền lương của cả hai role giữ nguyên hiệu lực (đối chiếu trước/sau theo cặp, không theo số đếm); quyền miền lương = 0 cho cả hai role",
+      "`pnpm db:migrate` áp trọn 0564–0568 trên PROD KHÔNG rollback; verify 0565 (6.2 is_sensitive = đúng 13 cặp · 6.4 tổng 32 hàng grant · 6.7 census wildcard) đều qua",
+      "Thu hồi kiểm trên CẢ BA bảng `permissions` / `role_permissions` / `object_permissions` (object_permissions CASCADE âm thầm — verify role=0 cặp vẫn XANH trong khi object-grant sống sót)",
+      "Đăng nhập PROD bằng 1 tài khoản của mỗi role, xác nhận màn hình ngoài lương KHÔNG mất; module PAYROLL hiện đúng cho payroll-officer/company-admin",
+    ],
+    notes: [
+      "🔴 NGƯỜI CHỐT — chạm permission trên DB PROD, không có đường lùi tự động. Snapshot/dump role_permissions + object_permissions TRƯỚC khi apply.",
+      "KHÔNG chuyển thành migration: hai role này là dữ liệu RIÊNG của tenant PROD, không tồn tại ở CI/lane-DB ⇒ migration sẽ đỏ ở mọi môi trường khác.",
+      "PROD 2FA chặn automation (memory prod-2fa-blocks-headless-automation) — thao tác qua UI phải đi bước-2 thủ công.",
+      "Đây là WO chặn: S14-OPS-MODULEROLE-1 phụ thuộc kết quả (chưa áp 0564–0568 thì role payroll-officer chưa tồn tại trên PROD để gán).",
+    ],
+  },
+  {
+    id: "S14-FND-MODULEMETA-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "MODULE_APP_METADATA phủ 6 module hậu-MVP đã ship (GOAL·LMS·ASSET·ROOM·RECRUIT·PAYROLL) — hiện chỉ có 7 mã MVP ⇒ module đã ship không có metadata app-shell",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/module-catalog/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "apps/app/src/**",
+      "docs/BACKEND/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "apps/api/src/foundation/module-catalog/module-app-metadata.ts:38 (keyed AUTH·HR·ATT·LEAVE·TASK·DASH·NOTI — grep 02/09: 0 hit cho GOAL/LMS/ASSET/ROOM/RECRUIT/PAYROLL); BACKEND-04 §8.2; harness/handoff.md phiên 30/08 ('MODULE_APP_METADATA thiếu ASSET … GOAL đã vậy từ 0506')",
+    ],
+    done_when: [
+      "Mỗi module thêm vào có `requiredAny` là CẶP ENGINE grep-verified khớp SEED THẬT của migration tương ứng — KHÔNG dùng mã dotted FE, KHÔNG bịa cặp legacy (đúng DRIFT-GUARD đã ghi ở đầu file)",
+      "Cặp is_sensitive=true dùng làm cổng phải nằm trong allowlist sensitive BE (Option B) — nếu không, getCapabilities() lọc mất và module vô hình y như lỗi ASSET đã gặp",
+      "Test ratchet: mọi mã trong bảng `modules` (mig 0435 + các mig bật module sau) PHẢI có entry metadata, hoặc được liệt kê tường minh trong danh sách miễn trừ — cổng này chính là thứ đã vắng nên drift trôi 3 wave",
+      "typecheck + build xanh; không đổi hành vi 7 module MVP (regression test hiện có giữ nguyên số ca)",
+    ],
+    notes: [
+      "🟡 LIGHT gate + đọc kỹ cặp sensitive. Drift này ĐÃ TỒN TẠI từ 0506 (GOAL) và trôi qua 4 wave vì không có ratchet — phần ratchet quan trọng hơn phần thêm dữ liệu.",
+      "Không tự ý bật/tắt cờ `modules.is_active` trong WO này (memory module-is-active-is-not-a-gate · module-enable-guard-blocks-next-wo).",
+    ],
+  },
+  {
+    id: "S14-QA-COVGATE-1",
+    module: "QA",
+    layer: "QA",
+    title:
+      "Dọn cổng coverage CHẾT: script `test:cov` trỏ `src/workflow` (module đã xoá hẳn) + ratchet ghim khoá threshold theo ĐỊNH NGHĨA file có thật",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/api/package.json",
+      "apps/api/vitest.config.ts",
+      "apps/api/src/**",
+      "docs/QA/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "apps/api/package.json:12 `test:cov` = `vitest run src/workflow --coverage --coverage.include=src/workflow/**` (thư mục KHÔNG còn tồn tại — module dọn hết ở S10-CLEAN-WORKFLOWCLUSTER-2); vitest.config.ts:103-113 (4 khoá src/workflow đã gỡ + khoá payroll gõ nhầm số ít đã sửa ở QA-1 — nợ script còn lại ghi rõ ở comment dòng 107); memory coverage-threshold-key-typo-is-dead-gate · index-ratchet-must-pin-definition-not-name",
+    ],
+    done_when: [
+      "`pnpm --filter @mediaos/api test:cov` chạy được và ĐO ĐÚNG thứ nó tuyên bố đo (không còn trỏ thư mục đã xoá); nếu không còn phạm vi mặc định hợp lý thì XOÁ script và cập nhật mọi nơi tham chiếu nó",
+      "Quét TOÀN BỘ khoá `coverage.thresholds` trong vitest.config.ts: mỗi khoá trỏ một file TỒN TẠI — chứng minh bằng một test tự-kiểm ĐỎ khi thêm khoá trỏ file ma (đo cổng phải VI PHẠM thật, memory vitest-globalsetup-teardown-exits-zero)",
+      "Cùng lượt: kiểm mọi script `test:cov:*` khác (sensitive·call·asset·room·recruit·payroll) — mỗi đường dẫn spec liệt kê phải tồn tại, không có tệp ma nào lọt",
+      "`bash harness/check.sh` xanh; ghi kết quả đo vào docs/QA/",
+    ],
+    notes: [
+      "🟢 LIGHT gate, cỡ XS nhưng giá trị cao: đây là lớp cổng đã CHẾT TRONG IM LẶNG suốt từ G12 — vitest bỏ qua khoá trỏ file không tồn tại mà không kêu.",
+      "CI hiện KHÔNG gọi `test:cov*` (comment vitest.config.ts:242) ⇒ sửa an toàn, nhưng cũng có nghĩa đừng trông cậy CI phát hiện hồi quy của chính WO này.",
+    ],
+  },
+  {
+    id: "S14-PERF-DASHACTOR-1",
+    module: "DASH",
+    layer: "PERF",
+    title:
+      "Gộp 4 bản `gateOrThrow` trùng nhau ở dashboard handlers + cắt round-trip `getCompanyRoleGrantsWithScope` không cache mỗi lượt summary()",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/api/src/dashboard/**",
+      "apps/api/src/recruit/**",
+      "apps/api/src/payroll/**",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "4 bản `gateOrThrow` đo 02/09: dashboard-widget-handlers.service.ts:127 (bản gốc) · -office.handlers.ts:50 · -recruit.handlers.ts:44 · -payroll.handlers.ts:55 — mỗi bản tự ghi comment 'mirror <bản trước>'; harness/handoff.md 31/08 ('resolveActor đốt 4 round-trip getCompanyRoleGrantsWithScope uncached mỗi summary()')",
+    ],
+    done_when: [
+      "MỘT bản `gateOrThrow` dùng chung cho cả 4 nhóm handler; hành vi fail-closed + SÀN scope của TỪNG widget giữ NGUYÊN (sàn Company của ASSET/RECRUIT/PAYROLL khác nhau về lý do — gộp code, KHÔNG gộp hằng sàn)",
+      "Đo số round-trip TRƯỚC/SAU cho mỗi widget bằng spy đếm lệnh gọi, ghi con số vào plan — không nhận 'đã tối ưu' bằng cảm giác",
+      "Toàn bộ ca deny/allow hiện có của 4 widget (ASSET_SUMMARY · ROOM_TODAY · RECRUIT_FUNNEL · PAYROLL_COST) giữ nguyên kết quả; thêm ca ghim rằng bản gộp KHÔNG cho wildcard `*:*` qua cặp sensitive",
+      "`bash harness/check.sh --lane-db` xanh không banner",
+    ],
+    notes: [
+      "🟢 LIGHT gate nhưng ĐỘNG VÀO ĐƯỜNG QUYỀN: refactor phải giữ đúng tính chất 'gate ⊥ fetch' (dashboard-widget-handlers.service.ts:77) — gộp nhầm sang đường fetch là dựng lại lỗ cache-hit-bỏ-qua-audit.",
+      "Memory liên quan: dash-widget-gate-needs-scope-floor · sensitive-pair-widget-needs-usecanexact · widget-cache-hit-skips-audit-trail.",
+    ],
+  },
+  {
+    id: "S14-RECRUIT-FILEGRANT-1",
+    module: "RECRUIT",
+    layer: "DB",
+    title:
+      "Cấp cặp quyền foundation-file cho recruiter/hr — gap defer từ S12-RECRUIT-FE-1 (đính kèm CV/hồ sơ ứng viên không có quyền tệp thì luồng tuyển dụng hở nửa chừng)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/foundation/**",
+      "apps/api/src/recruit/**",
+      "apps/api/test/**",
+      "docs/permission-matrix-spec.md",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "harness/handoff.md 31/08 — 'Gap defer wave (từ FE-1): grant foundation-file recruiter/hr'; permission-matrix §9f; memory permission-grant-census-must-cover-four-wildcard-shapes · read-path-gate-pair-must-match-download-pair",
+    ],
+    done_when: [
+      "ĐO TRƯỚC KHI CẤP: grep toàn bộ apps/api/migrations/ theo resource_type `foundation-file` (không theo migration được nhắc tên) — liệt kê đủ cặp hiện có + role đang giữ, gồm cả 4 hình dạng wildcard",
+      "Cặp cấp cho recruiter/hr là cặp TỐI THIỂU đủ cho luồng CV, và cặp gác MÀN đúng bằng cặp gác ĐƯỜNG TẢI (memory read-path-gate-pair-must-match-download-pair)",
+      "Deny-path test RED-TRƯỚC: role khác recruiter/hr KHÔNG tải được tệp ứng viên; cross-tenant có ca riêng; ca ALLOW đối chứng cho mỗi ca DENY (không để deny xanh rỗng nghĩa)",
+      "Migration đánh số tiếp head thật lúc chạy; seed `ON CONFLICT DO NOTHING`; `bash harness/check.sh --all --lane-db` xanh",
+    ],
+    notes: [
+      "🔴 FULL gate (security-reviewer + database-reviewer) — cấp quyền mới trên đường đọc tệp.",
+      "Đo PROD trước khi viết lệnh cấp: grant trong migration CŨ không phải hiện trạng (memory grant-in-old-migration-is-not-current-state).",
+    ],
+  },
+  {
+    id: "S14-FE-DEBT-1",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "Nợ FE gộp từ wave S12: picker đơn vị tổ chức (org-unit) dùng chung + gom PaginationFooter/error-parser đang lặp giữa các màn",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/app/src/**",
+      "packages/ui/**",
+      "packages/web-core/**",
+      "docs/UI/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "harness/handoff.md 31/08 — 'Gap defer wave (từ FE-1): … org-unit picker · refactor PaginationFooter/error-parser'",
+    ],
+    done_when: [
+      "Đếm và liệt kê các bản lặp TRƯỚC khi gộp (file + dòng); sau gộp, số bản lặp = 1 và mọi màn dùng bản chung",
+      "Picker org-unit dùng chung: loading/error/empty đủ ba trạng thái; không hard-code quyền (PermissionGate/useCan); i18n vi",
+      "Không đổi hành vi màn hình hiện có — test FE hiện có giữ nguyên kết quả, thêm ca cho component chung",
+      "typecheck + build của apps/app xanh",
+    ],
+    notes: [
+      "🟢 LIGHT gate. Việc dọn thuần FE — nếu phát hiện cần đổi API thì DỪNG và tách WO, đừng nới phạm vi.",
+      "Cẩn thận masking: dữ liệu nhạy cảm do SERVER che, component chung không được tự suy (memory server-masking-needs-optional-fe-schema).",
+    ],
+  },
+  {
+    id: "S14-OPS-MODULEROLE-1",
+    module: "DEVOPS",
+    layer: "DEVOPS",
+    title:
+      "Gán role của các module đã ship cho người thật trên PROD (asset-manager · recruiter · payroll-officer …) — SuperAdminBootstrap no-op trên PROD nên module ship xong vẫn VÔ HÌNH và job NOTI phát 0 thông báo",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "docs/DEVOPS/**",
+      "docs/RELEASE/**",
+      "scripts/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: [],
+    depends_on: ["S14-PROD-PAYROLLGRANT-1"],
+    src: [
+      "harness/handoff.md 30/08 — 'Nợ ASSET: gán role asset-manager (mig 0550) cho admin thật trên PROD … SuperAdminBootstrap no-op trên PROD, 0550 không có khối catch-up; tới khi gán, ASSET vô hình với admin PROD và job ASSET_MAINTENANCE_DUE phát 0 thông báo (KHÔNG vá bằng blanket grant)'",
+    ],
+    done_when: [
+      "Liệt kê MỌI role sinh ra bởi các wave S11/S12/S13 và trạng thái gán thật trên PROD (bao nhiêu người mỗi role) — đo, không đoán",
+      "Gán qua MÀN QUẢN TRỊ ROLE (đường sản phẩm, có audit), KHÔNG blanket grant, KHÔNG SQL tay trừ khi màn hình không làm được và được owner chốt",
+      "Sau khi gán: mỗi module ship hiện đúng với người được gán; job `ASSET_MAINTENANCE_DUE` phát >0 thông báo ở lần chạy kế (hoặc giải thích được vì sao 0 là đúng)",
+      "role `payroll-officer` requires_two_factor=TRUE ⇒ người được gán phải bật 2FA trước, xác nhận đăng nhập được sau khi gán",
+    ],
+    notes: [
+      "🟡 Việc VẬN HÀNH trên PROD, không sinh code. Owner quyết ai được gán role nào — agent chỉ dựng danh sách + hướng dẫn + verify.",
+      "Phụ thuộc S14-PROD-PAYROLLGRANT-1: chưa áp 0564–0568 thì role payroll-officer chưa tồn tại trên PROD.",
+    ],
+  },
 ];
