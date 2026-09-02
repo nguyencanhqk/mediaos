@@ -398,6 +398,10 @@ GRANT SELECT, INSERT, DELETE ON chat_message_reactions TO mediaos_app;
 >
 > Người thả reaction rồi **rời phòng**: hàng reaction **giữ nguyên** (không xoá theo `left_at`) — cùng lý do tin nhắn của người đã nghỉ việc được giữ (SPEC-15 §4.1).
 
+### 6.8 Wave S17-CHAT-UX2 — KHÔNG có phần DB
+
+**S17: 0 migration · 0 GRANT · 0 cột · 0 bảng · 0 index · 0 cặp quyền.** `lastMessage` lấy bằng LATERAL trên index đã có `idx_chat_messages_room_seq (company_id, room_id, room_seq DESC)` (mig `0539:56`); `peer` dựng từ `chat_room_members` + `employees` đã có; `createdByName` từ `chat_rooms.created_by` đã có (`communication.ts:178`). Không ai cần đo lại head migration cho wave này.
+
 ---
 
 ## 7. Enum chuẩn (đồng bộ `packages/contracts/src/chat.ts`)

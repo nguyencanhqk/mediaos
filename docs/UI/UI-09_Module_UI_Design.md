@@ -1469,6 +1469,48 @@ Detail drawer:
 
 ---
 
+## 13a. CHAT MODULE UI DESIGN
+
+> Đánh số **hậu tố chữ** (không phải `## 14.` mới) — cố ý: UI-09 hiện có **0 chữ "CHAT"**, và §14..§24 là các mục xuyên-module đã đánh số cố định; chèn một `## 14.` mới sẽ đánh số lại toàn bộ §14..§24. Cùng quy ước với §5.1b · §7.2b · §9a · §15a · §22c ở các tài liệu khác.
+
+### 13a.1 Mục tiêu UX
+
+Trang Chat v2 (wireframe: [`docs/plans/S17-CHAT-UX2-WAVE-review.html`](../plans/S17-CHAT-UX2-WAVE-review.html) §05 "Wireframe — trang Chat v2, drawer, mobile") nâng cấp toàn bộ hình thái hiển thị so với bản trước đó: bố cục 3 cột trên desktop (CHAT-SCREEN-001), drawer phải 400px mở từ badge header (CHAT-SCREEN-002), bong bóng hai phía, bảng thông tin phòng dạng thẻ dọc. Nguồn nghiệp vụ: [SPEC-15 §9](<../SPEC/SPEC-15 CHAT.md>) · [§9a](<../SPEC/SPEC-15 CHAT.md>) · [§14](<../SPEC/SPEC-15 CHAT.md>) · [§15b](<../SPEC/SPEC-15 CHAT.md>) — luật không nhân bản lại ở đây, chỉ trỏ.
+
+### 13a.2 Screen list CHAT
+
+| Screen code | Tên màn hình | Route | Actor | Priority | Template |
+| --- | --- | --- | --- | --- | --- |
+| CHAT-SCREEN-001 | Trang Chat full-screen v2 | `/chat` | Nhân viên | P1 | 3 cột responsive |
+| CHAT-SCREEN-002 | Drawer chat 400px | mọi trang (badge header) | Nhân viên | P1 | Drawer/Sheet |
+| CHAT-SCREEN-003 | Tạo nhóm / chọn người nhắn riêng | dialog | Nhân viên | P2 | Dialog/Combobox |
+| CHAT-SCREEN-004 | Bảng thông tin phòng v2 | panel/Sheet | Nhân viên | P1 | Card dọc + accordion |
+| CHAT-SCREEN-005 | Tìm kiếm tin nhắn | dialog/panel | Nhân viên | P2 | Search |
+| CHAT-SCREEN-006 | Badge chưa đọc header | header | Nhân viên | P1 | Badge |
+| CHAT-SCREEN-007 🔒 | Quản trị: đọc-vượt membership | `/system/chat-oversight` | Super Admin | P3 | Admin table |
+| CHAT-SCREEN-008 🔒 | Quản trị: nhật ký đọc-vượt | `/system/chat-oversight/audit` | Super Admin | P3 | Audit/Table |
+| CHAT-SCREEN-009 | Khung cuộc gọi thoại/hình | overlay | Nhân viên | P2 | Call overlay |
+
+### 13a.3 Bàn giao FE — Screen ↔ API · Component · Responsive · State (v2)
+
+> Endpoint theo [API-13](<../API Design/API-13_CHAT_API_Design.md>); component theo thư viện UI-05 (`packages/ui`); state nền tảng ở §5.7.
+
+| Screen code | API chính | Component chính | Responsive | State bắt buộc |
+| --- | --- | --- | --- | --- |
+| CHAT-SCREEN-001 | CHAT-API-001/004/009/015 | `RoomList`, `ConversationPanel`, `RoomInfoPanel` | **≥1280**: 3 cột · **≥768**: info → Sheet · **<768**: 1 cột push | loading, error, empty, mất-kết-nối |
+| CHAT-SCREEN-002 | CHAT-API-001, `chat:room` | `Sheet` (packages/ui) phải 400px, `ConversationPanel showHeader=false` | **<md**: toàn màn | đúng 1 hội thoại, đóng/mở |
+| CHAT-SCREEN-004 | CHAT-API-004/007a/013/017 (`kind`)/031 | `RoomInfoCard`, `Accordion`, `MemberSheet` | Card dọc mọi kích thước | loading, empty (ảnh/tệp/liên kết), lỗi ký URL |
+| CHAT-SCREEN-006 | CHAT-API-016, `chat:read` | `Badge` | — | realtime đồng bộ |
+
+### 13a.4 Breakpoint & token (v2)
+
+- **Breakpoint responsive `/chat`** (CHAT-DEC-026): `≥1280px` → 3 cột đầy đủ; `≥768px` → 2 cột, bảng thông tin phòng chuyển thành `Sheet` trượt từ phải; `<768px` → 1 cột, điều hướng kiểu push (danh sách → hội thoại → info), có nút quay lại.
+- **Drawer**: 400px cố định trên desktop/tablet; toàn màn dưới `md`.
+- **Bong bóng hai phía** (CHAT-DEC-024): tin của tôi lề phải nền `primary/12%` + chữ `foreground`; người khác lề trái nền `muted`; avatar chỉ ở tin đầu cụm bên trái.
+- **Token**: giữ nguyên theme hệ thống `packages/ui/src/styles/theme.css`, hỗ trợ **cả light lẫn dark**, **không thêm màu thương hiệu mới** cho riêng CHAT.
+
+---
+
 ## 14. Cross-module interaction patterns
 
 ### 14.1 Notification deep link

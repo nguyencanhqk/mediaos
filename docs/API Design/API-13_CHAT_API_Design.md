@@ -118,6 +118,9 @@ POST   /api/v1/chat/rooms/{room_id}/avatar/upload-url
 PUT    /api/v1/chat/messages/{message_id}/reactions/{emoji}
 DELETE /api/v1/chat/messages/{message_id}/reactions/{emoji}
 
+# wave S17-CHAT-UX2 — bố cục/thao tác (§5.1d). KHÔNG cặp quyền mới.
+GET    /api/v1/chat/rooms/{room_id}/links
+
 # 🔒 đọc-vượt membership — cặp riêng, chỉ đọc, có audit (§5.3)
 GET    /api/v1/chat/oversight/rooms
 GET    /api/v1/chat/oversight/rooms/{room_id}
@@ -151,7 +154,7 @@ Cột **Membership** ghi rõ endpoint có phải chạy `ChatAccessService.asser
 | CHAT-API-014 | POST | `/chat/rooms/{room_id}/read` | `{ seq }` → `last_read_seq = GREATEST(cũ, seq)`; gửi số nhỏ hơn → bỏ qua im lặng (CHAT-ERR-018) | `('view','chat-room')` | ✅ | — |
 | CHAT-API-015 | GET | `/chat/search` | `q` (≥2 ký tự) + `roomId?` + con trỏ. **Luôn** giới hạn theo phòng người tìm là thành viên (`left_at IS NULL`) | `('view','chat-room')` | ✅ ngầm trong truy vấn | — |
 | CHAT-API-016 | GET | `/chat/unread-count` | Tổng chưa đọc của tôi (badge header) — tính bằng phép trừ `seq` | `('view','chat-room')` | tự-bound theo actor | — |
-| CHAT-API-017 | GET | `/chat/rooms/{room_id}/files` | Tệp đã gửi trong phòng, URL ký hạn ngắn | `('view','chat-room')` | ✅ | — |
+| CHAT-API-017 | GET | `/chat/rooms/{room_id}/files` | Tệp đã gửi trong phòng, URL ký hạn ngắn. *(S17)* Tham số `kind=image\|file` — xem §5.1d | `('view','chat-room')` | ✅ | — |
 
 > **Notation permission:** Chuỗi `('action','resource')` là **cặp engine thực thi** (permission-matrix-spec §9c + seed DB-12 §9 bước D) — không phải chuỗi dotted `MODULE.RESOURCE.ACTION` hiển thị FE.
 
@@ -216,6 +219,79 @@ Toàn bộ vòng đời đi **REST** — hàng rào **R4** của `CHAT-DEC-020`.
 ⚠️ **`ringing` quá hạn → `missed` do SERVER chuyển**, bằng `@SystemJobHandler` idempotent + `@Optional()` cho DI (memory `systemjobhandler-optional-dbw-di` — thiếu `@Optional()` sập `AppModule`, kéo đỏ dây chuyền hàng trăm spec). Để client tự đóng khung mà server không đổi trạng thái ⇒ phòng kẹt "đang có cuộc gọi sống" và **mọi lời mời sau đó 409 vĩnh viễn**.
 
 ⚠️ **Chưa cấp endpoint ĐỌC lịch sử cuộc gọi.** `chat_calls` append-only có dữ liệu nhưng wave này không mở đường liệt kê — ADR không đặt phạm vi đó. Ai làm màn "nhật ký cuộc gọi" phải cấp mã mới và **đo lại dải trống**, đừng mặc định `030` còn trống.
+
+### 5.1d Wave S17-CHAT-UX2 — bố cục · mật độ thông tin · thao tác (API-13 §5.1d, owner duyệt 02/09/2026)
+
+> Nguồn quyết định: [SPEC-15 §5.1d](<../SPEC/SPEC-15 CHAT.md>) (khối owner đã ký — **0 dòng đổi** ở WO này, mọi con trỏ mới đi vào [SPEC-15 §15b](<../SPEC/SPEC-15 CHAT.md>)) · [`docs/plans/S17-CHAT-UX2-WAVE.md`](../plans/S17-CHAT-UX2-WAVE.md). **KHÔNG cặp quyền mới, KHÔNG migration, KHÔNG mở bề mặt WebSocket** — ratchet 0 `@SubscribeMessage` (§7) giữ nguyên.
+
+| Mã | Method | Path | Chức năng | Permission | Membership | Audit |
+| --- | --- | --- | --- | --- | --- | --- |
+| CHAT-API-031 | GET | `/chat/rooms/{room_id}/links` | Liên kết đã chia sẻ trong phòng — trích `https?://` từ `body` tin **chưa thu hồi**; keyset `room_seq DESC` + tie-break chỉ số liên kết trong tin; trần 50; **không dedupe URL ở server** | `('view','chat-room')` | ✅ | — |
+
+`CHAT-API-017` (`GET /chat/rooms/{room_id}/files`) nhận thêm tham số query **`kind=image|file`** — permission/membership/audit **không đổi** so với bảng §5.1. Vị từ nguồn là **`mime_type LIKE 'image/%'` ở SQL**, và đây là **ĐỊNH NGHĨA DUY NHẤT** dùng chung với khoá `isImage` của `chatAttachmentSchema` (`packages/contracts/src/chat.ts`) — `isImage` là khoá DTO **suy ra ở tầng mapper**, **không phải cột DB** (memory `clamp-must-be-sql-not-js`). Chi tiết hợp đồng: [SPEC-15 §15b](<../SPEC/SPEC-15 CHAT.md>).
+
+#### (1) Ba khoá DTO mới trên `chatRoomSchema` — TẤT CẢ `.nullable().optional()`
+
+`/chat/rooms` có **7 consumer đang chạy** (memory `server-masking-needs-optional-fe-schema`) — thêm khoá **required** làm mọi consumer ăn `ZodError` khi FE lên trước BE.
+
+| Khoá | Hình dạng | Quyết định |
+| --- | --- | --- |
+| `lastMessage` | `{ senderId, senderName, kind: 'text'\|'file'\|'system'\|'recalled', excerpt: string \| null, attachmentCount: number } \| null` | CHAT-DEC-022 |
+| `peer` | `{ userId, name, avatarUrl, isActive } \| null` — chỉ khác `null` ở phòng `direct` | CHAT-DEC-023 |
+| `createdByName` | `string \| null` | thêm vào `getRoom` (CHAT-API-004) |
+
+Ràng buộc ngữ nghĩa của `lastMessage` — **bắt buộc test contract cho từng vế**:
+
+- **Ưu tiên `kind` khi tin có CẢ body LẪN đính kèm:** `kind` = `'text'` **thắng** (không phải `'file'`), và `attachmentCount` **vẫn xuất hiện** (> 0) trong cùng bản ghi — hai trường **không loại trừ nhau**.
+- `excerpt` ≤ **120 ký tự**, cắt **Ở SERVER theo grapheme** (không cắt giữa một cụm ký tự tổ hợp/emoji nhiều-codepoint), **strip** xuống dòng (`\n`) + ký tự điều khiển **trước khi** cắt.
+- Tin `kind:'recalled'` ⇒ `excerpt: null` (che ở server — SPEC-15 §13.6).
+- **Nguồn `senderName`** khi người gửi **đã rời phòng** hoặc **bị vô hiệu hoá**: vẫn **hiện tên** — nhất quán với roster `CHAT-API-007a` (§5.1b), vốn **cố ý giữ** người đã rời kèm `leftAt` thay vì ẩn tên.
+- Lấy bằng **một** LATERAL trên `idx_chat_messages_room_seq` trong `listRoomsForUser` — **không N+1** (một câu SQL cho N phòng; phần vị từ §13.4 xem mục (3) BLOCKING 1 dưới đây).
+
+#### (2) Strip `peer.avatarUrl` khỏi payload WS `chat:room`
+
+`wsChatRoomEventSchema.room = chatRoomSchema.omit({unreadCount, pinnedAt, mutedUntil, markedUnreadAt, avatarUrl})` (`packages/contracts/src/realtime.ts:164-176`). Khoá **mới** thêm vào `chatRoomSchema` gốc (`lastMessage`, `peer`, `createdByName`) **tự động lọt ra WS** vì `.omit()` chỉ loại các khoá đã liệt kê tên — không cần sửa gì thêm cho ba khoá đó. Nhưng **`.omit()` KHÔNG với tới khoá LỒNG**: Zod không có cú pháp `.omit({'peer.avatarUrl': true})`. Muốn strip `peer.avatarUrl` thì `room` trong payload WS **PHẢI `.extend({ peer: … })`** bằng một bản `peer` đã strip sẵn `avatarUrl` ngay tại schema WS.
+
+Ký avatar: ghim **tái dùng** `AvatarPresignService.resolveEmployeeAvatars` (đã dùng ở `chat-members.service.ts:74`, CHAT-API-007a) — **ký MỘT LÔ cho cả trang** danh sách phòng (chống N+1 lần ký), **KHÔNG cache / KHÔNG persist** — cùng nguyên tắc docblock `chatRoomSchema.avatarUrl` (`packages/contracts/src/chat.ts`).
+
+#### (3) §13.4 — hai đường đọc MỚI phải qua vị từ visibility (BLOCKING 1)
+
+S17 mở **ĐÚNG HAI** đường đọc mới trên `chat_messages`: (a) LATERAL lấy `lastMessage` trong `listRoomsForUser`, (b) trích link từ `body` ở `CHAT-API-031`. SPEC-15 §13.4 bắt MỌI đường đọc mang vị từ `(m.visible_from_seq IS NULL OR msg.room_seq >= m.visible_from_seq)` qua nguồn duy nhất `apps/api/src/chat/chat-visibility.ts`.
+
+⚠️ **`chat-visibility.spec.ts` là census THEO FILE, không phải "toàn bộ module".** Census per-method hiện chỉ quét `chat-messages.repository.ts` · `chat-attachments.repository.ts` · `chat-search.repository.ts`. `chat-rooms.repository.ts` chỉ xuất hiện trong khẳng định "không file chat nào tự viết chuỗi thô `visible_from_seq`" — khẳng định đó **cấm chuỗi thô nhưng KHÔNG đòi gọi helper** ⇒ đặt LATERAL của `lastMessage` trong `chat-rooms.repository.ts` mà quên gọi helper thì **ratchet vẫn XANH** dù đường đọc đã thoát §13.4.
+
+Bắt buộc:
+
+1. Cả hai đường đọc mới gọi `visibleFromSeqColumn()` hoặc `visibleFromSeqScalar()` (`apps/api/src/chat/chat-visibility.ts`).
+2. File chứa chúng (dự kiến `chat-rooms.repository.ts` cho (a); file trích link mới cho (b)) **PHẢI được thêm vào danh sách census** của `chat-visibility.spec.ts`; `S17-CHAT-UX2-BE-1`/`BE-2` **PHẢI khai** `apps/api/src/chat/chat-visibility.spec.ts` trong `paths` của WO.
+3. **CẤM** thêm tên vào `DOCUMENTED_EXCEPTIONS` (hiện đúng 2 phần tử: `countPinned`, `findByClientMessageId`) — thêm là đóng đinh lỗ mở (memory `tests-can-pin-a-hole-open`).
+4. testTask RED bắt buộc: gỡ lời gọi helper khỏi đường đọc mới ⇒ `chat-visibility.spec.ts` phải **ĐỎ**.
+
+#### (4) Oversight KHÔNG miễn `assertMember` (BLOCKING 2)
+
+**Oversight KHÔNG miễn `assertMember` ở `CHAT-API-031`; KHÔNG có `/chat/oversight/**/links`** — cùng khuôn tiền lệ S7-CALL đã ghi ở §5.1c dòng ~212.
+
+`chatOversightRoomSummarySchema` (`packages/contracts/src/chat.ts`, gần dòng 637) là schema **ĐỘC LẬP có chủ ý** (docblock: không `members`, không `directKey`, không `unreadCount`) và `chatOversightRoomDetailSchema` (gần dòng 671) **`.extend()`** nó. **CẤM** cho `chatOversightRoomSummarySchema` (và do đó `chatOversightRoomDetailSchema`) `.extend()`/`.pick()`/`.omit()` từ `chatRoomSchema` — nếu BE-1 "dọn trùng lặp" cho nó thừa hưởng `chatRoomSchema` thì hai khoá mới (`lastMessage`, `peer`) biến **CẢ `018a` LẪN `018b`** thành cổng xem trước nội dung tin + đồ thị DM toàn công ty.
+
+testTask bắt buộc: unit assert `chatOversightRoomSummarySchema` **KHÔNG chứa** khoá `lastMessage`/`peer`; deny-path 404 cho actor có `('view','chat-oversight')` nhưng **không thuộc phòng** gọi `GET /chat/rooms/:id/links` (kèm ca ALLOW đối chứng bắt buộc: thành viên phòng gọi cùng route → 200 — memory `deny-cases-vacuous-without-allow-case`).
+
+#### (5) Route-census — `CHAT-API-031` là route MỚI (BLOCKING 3)
+
+Theo đúng tiền lệ §5.3 dòng ~271: `S17-CHAT-UX2-BE-2` **PHẢI**:
+
+- Đặt `@RequirePermission('view', 'chat-room')` + `PermissionGuard` trong chuỗi guard của controller mới.
+- Khai `apps/api/test/foundation/**` và `docs/_review/S6-SEC-ROUTEMAP-1-route-census.json` trong `paths` của WO.
+- Regen census bằng `ROUTE_CENSUS_WRITE=1` và **ký phán quyết** (`route-verdicts.ts`).
+
+Thiếu bước này → `route-guard-coverage.e2e-spec.ts` đỏ, hoặc **tệ hơn** route rơi vào `needVerdict` = **fail-open** (memory `route-census-runtime-gate`).
+
+#### (6) Ngữ nghĩa chạm trần của `CHAT-API-031` (BLOCKING 4)
+
+`CHAT-API-031` có trần quét **50** nhưng phải chốt hợp đồng khi chạm trần — theo đúng tiền lệ đã bịt ở `018a` (`chatOversightRoomListSchema` — "cắt trang mà im lặng đọc ra y hệt đã trả hết" là lỗi). Chốt:
+
+- DTO trả **`truncated: true`** khi dừng quét vì chạm trần (không phải vì hết dữ liệu thật).
+- **Vẫn trả `nextCursor`** khi `truncated: true` — khác `018a` (`018a` không phân trang); `CHAT-API-031` **có** phân trang nên phải cho lật tiếp.
+- testTask bắt buộc: phòng gieo N tin **không có link** vượt trần quét 50 ⇒ phản hồi `truncated: true` **và** `nextCursor` khác null; lật tiếp con trỏ đó ra được trang sau, không treo, không đọc nhầm thành "hết dữ liệu". Ca âm: phòng ít tin, quét hết ⇒ `truncated: false`.
 
 ### 5.2 Trạng thái hiện thực (đối chiếu code, 01/08/2026)
 
@@ -340,6 +416,7 @@ Ràng buộc:
 - Membership đổi → server buộc socket `join`/`leave` ngay, không đợi kết nối lại.
 - Mọi payload `.parse()` qua schema contracts trước khi emit (`RealtimeEmitterService`) — cấm `io.emit` row DB thẳng.
 - `REALTIME_ENABLED=false` → gateway từ chối mọi kết nối ở handshake; FE chuyển sang bù bằng `afterSeq` mỗi 10 giây. **Nghiệp vụ vẫn phải đúng hoàn toàn** ở chế độ này.
+- *(S17)* Payload WS `chat:room` **HẸP HƠN** DTO REST thêm một nấc: `room.peer` đi qua bản đã **strip `avatarUrl`**; `.omit()` ở `wsChatRoomEventSchema` không với tới khoá lồng nên phải `.extend()` (§5.1d). FE nhận sự kiện **giữ nguyên** `peer.avatarUrl` đang có, **không** ghi đè bằng `null`. Wave S17 **không thêm sự kiện WS nào** — ratchet 0 `@SubscribeMessage` và luật một-tệp-socket phải **vẫn xanh**.
 
 ### 7a. Namespace `/ws-call` — bắt tay WebRTC *(S7-CALL, CHAT-DEC-020)*
 
