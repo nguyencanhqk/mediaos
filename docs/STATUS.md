@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-02 10:19Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-02 10:20Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -59,7 +59,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 9
+- **branch**: `master` · **file đang đổi (dirty)**: 2
 - **migration head**: idx 235 — `0568_s13payrolldash1_widget_payroll_cost` (236 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -68,6 +68,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `93a68170` | 2026-09-02 | chore(harness): seed wave S17-CHAT-UX2 — 9 WO (DOC-1 ready) + SPEC-15 §5.1d/§22c CHAT-DEC-021..027 (owner duyệt 02/09) |
+| `081859f1` | 2026-09-02 | chore(harness): seed wave S16-SOCIAL — owner duyệt 02/09 (SOC-DEC-001..010), 12 WO + hồ sơ wave + khung SPEC-16 §22 + regen STATUS |
 | `fd29c167` | 2026-09-02 | chore(harness): seed wave S15-PAYROLL-V2 — owner duyệt 02/09 (PAY-DEC-011..020), 15 WO + hồ sơ wave + SPEC-11 §22.1 + regen STATUS |
 | `a4644898` | 2026-09-02 | chore(harness): seed wave S14-CONSOLIDATE — 7 WO (6 ready) + regen STATUS |
 | `913c4700` | 2026-09-02 | chore(harness): regen STATUS sau merge #462 — đóng wave S13-PAYROLL (9/9 WO), hàng đợi WO cạn |
@@ -78,8 +80,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `61d48bcd` | 2026-09-01 | chore(harness): regen STATUS sau merge #457–#459 — đóng dấu JOBDATE-1 · PAYROLL-BE-1B · BE-2 |
 | `c32c31eb` | 2026-09-01 | feat(payroll): S13-PAYROLL-BE-2 — máy tính lương · duyệt four-eyes · phiếu lương · export · NOTI 020–023 (35/35 route) (#459) |
 | `d0f82b66` | 2026-09-01 | fix(payroll): S13-PAYROLL-BE-1B — đầu vào phép theo NỬA NGÀY (SPEC-11 §13.4 trước, repository sau) (#458) |
-| `df0c852d` | 2026-09-01 | fix(leave): S13-LEAVE-JOBDATE-1 — tiêm `today` tuỳ chọn vào JobRunContext, gỡ ca đỏ-vĩnh-viễn leave-accrual (#457) |
-| `10f7db29` | 2026-09-01 | chore(harness): seed S13-LEAVE-JOBDATE-1 + S13-PAYROLL-BE-1B, regen STATUS sau merge #456 |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
