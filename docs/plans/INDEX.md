@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**434 WO** · có micro-plan: **255/434** · ⬜ 0 chờ · 🔵 1 đang làm · ✅ 433 xong · 🔴 0 chặn
+**434 WO** · có micro-plan: **255/434** · ⬜ 0 chờ · 🔵 0 đang làm · ✅ 434 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -513,7 +513,7 @@
 | `S13-PAYROLL-BE-2` | 🔴 | ✅ xong | [📄](S13-PAYROLL-BE-2.md) | ✅S13-PAYROLL-BE-1 ✅S13-PAYROLL-BE-1B | Máy tính lương: calculate (SQL numeric, snapshot ĐÓNG BĂNG, idempotenc |
 | `S13-PAYROLL-FE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S13-PAYROLL-BE-2 | FE PAYROLL (apps/app routes/payroll/ + màn ME): 6 màn PAY-SCREEN-001.. |
 | `S13-PAYROLL-QA-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S13-PAYROLL-FE-1 | QA PAYROLL: ma trận allow/deny per-pair TỪNG route (kể cả hr-manager S |
-| `S13-PAYROLL-DASH-1` | 🟢 | 🔵 đang làm | — *(chưa)* | ✅S13-PAYROLL-QA-1 | Widget DASH «chi phí lương kỳ» (PAYROLL-WIDGET-001): tổng gross/net +  |
+| `S13-PAYROLL-DASH-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S13-PAYROLL-QA-1 | Widget DASH «chi phí lương kỳ» (PAYROLL-WIDGET-001): tổng gross/net +  |
 
 ---
 

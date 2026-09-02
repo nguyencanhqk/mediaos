@@ -15311,7 +15311,7 @@ export const backlog = [
     title:
       "Widget DASH «chi phí lương kỳ» (PAYROLL-WIDGET-001): tổng gross/net + headcount + trạng thái kỳ gần nhất — catalog BE + SÀN SCOPE (chỉ role có cặp payroll) + wire slug FE DashboardWidgetGrid + test slug-map, đăng ký mã theo SPEC-01 §9.9",
     zone: "green",
-    status: "in_progress",
+    status: "done",
     paths: [
       "apps/api/src/dashboard/**",
       "apps/api/migrations/**",
