@@ -431,6 +431,52 @@ tầng, parity nguồn, PII, cross-tenant) + **9 ca** FE (`RecruitFunnelWidget.s
 
 ---
 
+## 5i. PAYROLL — Tiền lương (wave S13-PAYROLL, nghiệm thu QA 01/09/2026)
+
+Module Phase 2 thứ hai vào tay người dùng: `modules.PAYROLL.is_active = true` từ migration `0567` (bật
+cùng `S13-PAYROLL-FE-1`). Nghiệp vụ: [SPEC-11](spec/SPEC-11%20PAYROLL.md) · schema DB-13 · API-18
+(35 route). **6 màn:** `PAY-SCREEN-001` danh sách kỳ lương · `002` chi tiết kỳ (bảng lương + hành động
+FSM + cảnh báo thiếu) · `003` phiếu lương breakdown · `004` hồ sơ lương nhân viên (có phiên bản theo
+ngày hiệu lực) · `005` thưởng/phạt kỳ · `006` «Phiếu lương của tôi».
+
+**Quyền cần có để thấy gì:** 17 cặp `(action, resource)` — `access:payroll` là cổng **nav** của khối
+«Phiếu lương của tôi», 16 cặp còn lại gác route. **13 cặp là SENSITIVE** ⇒ wildcard `*:*` KHÔNG qua
+được. **32/35 route ép SÀN SCOPE Company**: có đúng cặp nhưng scope Own/Department vẫn 403 — tiền lương
+không có khái niệm "bảng lương của phòng tôi". Ngoại lệ **duy nhất** là 3 route `/me/payslips*` theo
+**Own** (nhân viên xem + xác nhận phiếu của chính mình). Vai `hr-manager` giữ **0 cặp PAYROLL** sau đợt
+thu hồi của `S13-PAYROLL-DB-1` — xem lương là việc của vai lương, không phải vai nhân sự.
+
+> ℹ️ **Đọc kỹ nếu test quyền:** hai loại 403 trông GIỐNG HỆT nhau trên UI — "thiếu cặp" và "có cặp
+> nhưng sai tầng scope". Phân biệt bằng chuỗi `AUTH-ERR-SCOPE-DENIED` trong `error.message` của phản
+> hồi API (`error.code` của cả hai đều là `AUTH-ERR-FORBIDDEN`).
+
+| Việc | Cách kiểm | Kỳ vọng |
+| --- | --- | --- |
+| Vòng đời kỳ lương | Draft → CollectingData → Calculated → Reviewing → Approved → Paid → Locked | đúng FSM §13.1 (10 ô đổi trạng thái + 3 ô tại chỗ); mọi ô còn lại ⇒ `PAYROLL-ERR-001` |
+| Bốn mắt (four-eyes) | người GỬI duyệt tự bấm Duyệt | `PAYROLL-ERR-005`; người khác duyệt thì được. Công ty chỉ có **một** người duyệt hợp lệ ⇒ chặn ngay ở Gửi duyệt bằng `PAYROLL-ERR-017` (không để kỳ kẹt ở `Reviewing`) |
+| Tính lương | tính khi chưa gắn kỳ công · kỳ công chưa khoá · công ty 0 người có hồ sơ lương · lịch 0 ngày làm việc | `PAYROLL-ERR-002 attendance-period-missing` · `002 attendance-not-locked` · `422 PAYROLL-ERR-009` · `422 no-work-days` |
+| Đóng băng sau duyệt | tính lại / sửa dòng khi kỳ đã `Approved` | `PAYROLL-ERR-003` (KHÔNG phải 001 — 003 dành riêng cho "snapshot đã đóng băng") |
+| Mở lại kỳ | reopen kỳ đã sinh phiếu · reopen kỳ `Paid`/`Locked` | `PAYROLL-ERR-004 payslip-already-generated` · `004 period-terminal`; gỡ cờ sinh phiếu thì reopen đi được |
+| Phát hành | publish khi chưa sinh phiếu · publish hai lần | `PAYROLL-ERR-007` · lần hai 409 (đúng-một-thắng, kể cả bấm đồng thời) |
+| Số tiền | mở chi tiết kỳ, cộng tay: `gross = base×pro-rate + phụ cấp + thưởng`, `net = max(gross − phạt − nghỉ-không-lương×đơn-giá-ngày + điều chỉnh, 0)` | khớp **từng đồng**; đi làm đủ ngày ⇒ pro-rate chạm trần 1; phạt lớn hơn gross ⇒ `net = 0` (không âm); tổng kỳ = tổng các dòng |
+| Nghỉ không lương | thêm 2 ngày nghỉ không lương rồi tính lại | khấu trừ tăng ĐÚNG `2 × lương/ngày-công`, và **lương cơ bản KHÔNG giảm** — giảm cả hai là trừ hai lần |
+| Thưởng/phạt | tự duyệt khoản mình tạo · sửa khoản không còn `Pending` · sửa khoản đã gộp vào kỳ | `PAYROLL-ERR-012` · `011` · `013` |
+| Hồ sơ lương | tạo hai phiên bản cùng ngày hiệu lực · chọn nhân sự đã bị xoá | `PAYROLL-ERR-014` · **404** `PAYROLL-ERR-010` (đã vá 01/09 — trước đó là 500) |
+| Sàn scope | gán user đủ 16 cặp nhưng scope Own/Department rồi mở danh sách kỳ lương | **403** kèm `AUTH-ERR-SCOPE-DENIED` trong message |
+| «Phiếu lương của tôi» | nhân viên thường (3 cặp Own) mở `/payroll/me` | thấy ĐÚNG phiếu của mình, xác nhận được; phiếu người khác ⇒ **404** (không phải 403 — chống oracle); mở `/payslips/:id` ⇒ **403** (khối ME không phải cửa sau) |
+| Phạm vi nhìn thấy | mở kỳ/phiếu/hồ sơ lương của công ty khác · id bịa · bản xoá mềm | cả ba trả **404 giống hệt nhau** (sentinel `PAYROLL-ERR-010`) |
+| Export XLSX | export vượt trần 10.000 dòng · export khi thiếu `view-line` | `PAYROLL-ERR-016` · 403 (đòi CẢ HAI cặp `export:payroll` + `view-line`). Lỗi trả về là **JSON đọc được**, không phải file hỏng (đã vá 01/09) |
+| Vết kiểm toán | mở danh sách hồ sơ lương / dòng lương / phiếu người khác / export | mỗi lượt ghi **+1** hàng `audit_logs`; xem phiếu CỦA MÌNH ghi **+0** (tự xem lương mình không phải sự kiện an ninh); payload audit **không bao giờ** chứa số tiền |
+
+Bộ test tự động: **375 ca** cụm PAYROLL BE (14 tệp, cần `LANE_DB`; gồm bất biến DB của `S13-PAYROLL-DB-1`)
+— trong đó **195 ca mới** của `S13-PAYROLL-QA-1` (sàn scope per-route 79 · FSM 9×7 tầng HTTP + đua ghi 71 ·
+IDOR/cross-tenant/FK-sentinel 36 · đối soát số học 9) — + **70 ca** FE `apps/app/src/routes/payroll`.
+Coverage `src/payroll/**`: **97,05 %** statements / 81,8 % branches (lệnh tái lập:
+`pnpm --filter @mediaos/api test:cov:payroll`). Bằng chứng nghiệm thu — gồm **3 lỗi sản phẩm tìm được
+và đã vá** trong chính đợt QA: [`QA/evidence/S13-PAYROLL-QA-1-ACCEPTANCE.md`](QA/evidence/S13-PAYROLL-QA-1-ACCEPTANCE.md).
+
+---
+
 ## 6. Tham chiếu
 
 - Trạng thái tự sinh: [docs/STATUS.md](STATUS.md) — danh sách WO "Đã xong (v2)".

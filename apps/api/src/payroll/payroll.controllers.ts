@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  Header,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -170,13 +169,21 @@ export class PayrollPeriodsController {
    *
    * `@Res()` library-mode ⇒ response đi VÒNG QUA envelope interceptor (bytes nhị phân, không phải JSON).
    * Cặp quyền ở decorator là `export:payroll`; vế `view-line` assert ở service (hai cặp — SPEC-11 §18).
+   *
+   * ⚠️ **KHÔNG dùng `@Header("Content-Type", …xlsx)`** (đã gỡ ở `S13-PAYROLL-QA-1`, đo 2026-09-01).
+   * Nest áp header của `@Header` NGAY TRƯỚC khi gọi handler — tức TRƯỚC khi service kịp ném. Mọi lỗi
+   * phát từ TRONG handler (403 sàn scope · 404 sentinel `PAYROLL-ERR-010` · 422 `PAYROLL-ERR-016`)
+   * do đó đi ra với **thân JSON của `AllExceptionsFilter` nhưng nhãn XLSX**: `res.json()` của Express
+   * chỉ đặt `application/json` khi Content-Type CHƯA có. Client (và `apiFetch` của FE) parse theo
+   * nhãn ⇒ mất trắng `error.code`/`error.details`, người dùng "tải về" một file hỏng chứa JSON lỗi.
+   * Lỗi 401 vẫn đúng nhãn vì guard chạy TRƯỚC bước áp header — nên bug này vô hình với mọi ca chỉ
+   * đo `status`. Đặt Content-Type Ở ĐƯỜNG THÀNH CÔNG, ngay cạnh `send(buffer)`.
    */
   @Get(":id/export")
   @UseGuards(PermissionGuard)
   @RequirePermission(P.periodExport.action, P.periodExport.resourceType, {
     isSensitive: P.periodExport.isSensitive,
   })
-  @Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
   @UsePipes(ZodValidationPipe)
   async exportXlsx(
     @Req() req: AuthenticatedRequest,
@@ -185,6 +192,10 @@ export class PayrollPeriodsController {
     @Res() res: Response,
   ): Promise<void> {
     const { buffer, filename } = await this.exporter.export(req.user, id, query);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.send(buffer);
   }

@@ -15265,14 +15265,20 @@ export const backlog = [
     id: "S13-PAYROLL-QA-1",
     module: "PAYROLL",
     layer: "QA",
+    // ⚠️ `layer:"QA"` NÓI THIẾU diện chạm (memory `wo-layer-field-can-understate-scope`): WO này có
+    // sửa `src/payroll/**` — 3 lỗi SẢN PHẨM do chính bộ ca mới làm lộ ra (xem `notes`).
     title:
       "QA PAYROLL: ma trận allow/deny per-pair TỪNG route (kể cả hr-manager SAU thu hồi) · IDOR cross-employee payslip + cross-tenant 2-tenant · FSM chuyển sai đủ 7 trạng thái · race double-calculate/publish · biên idempotency theo kỳ ĐÓNG BĂNG · census mã lỗi theo MÃ · audit-trail lượt xem lương — coverage payroll/ ≥85%, chạy như CI trên LANE_DB",
     zone: "yellow",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/payroll/**",
       "apps/api/test/**",
       "apps/app/src/routes/payroll/**",
+      // Thêm 01/09: cổng coverage của module sống ở hai file này (script + ngưỡng per-file) — không
+      // đụng được thì done_when "coverage ≥85%" không có chỗ nào ép.
+      "apps/api/vitest.config.ts",
+      "apps/api/package.json",
       "docs/QA/**",
       "docs/TESTABLE-FEATURES.md",
       "harness/backlog.mjs",
@@ -15290,6 +15296,9 @@ export const backlog = [
     ],
     notes: [
       "Fixture số tiền/tài khoản giả ghép chuỗi (gitleaks); LANE_DB cô lập; deny-path đã RED-trước ở BE-1/BE-2, WO này vét ma trận + biên + đối soát số.",
+      "KẾT QUẢ 01/09/2026 — 195 ca mới (4 tệp int-spec), tổng cụm PAYROLL 375 ca, coverage src/payroll/** 97,05% stmts. Bằng chứng: docs/QA/evidence/S13-PAYROLL-QA-1-ACCEPTANCE.md. Lệnh tái lập: `pnpm --filter @mediaos/api test:cov:payroll` (cần LANE_DB).",
+      "🐞 BA LỖI SẢN PHẨM tìm được + vá trong CÙNG WO: (1) route 017 export — `@Header` áp trước handler ⇒ lỗi phát TỪ TRONG handler ra với thân JSON nhưng nhãn XLSX, FE mất `error.code` (401 vẫn đúng nhãn nên mọi ca chỉ đo status đều mù); (2) `mapPayrollPgError` thiếu nhánh 23503 ⇒ tạo hồ sơ lương / thưởng-phạt với `userId` không tồn tại hoặc chéo tenant = 500 vô danh, nay 404 sentinel map theo TÊN constraint; (3) ngưỡng coverage crown-jewel trỏ `salary-profile.service.ts` (số ít) trong khi file thật là số nhiều ⇒ cổng CHẾT từ G12 — cùng lượt đo có 4 khoá `src/workflow/*` trỏ vào module đã xoá, tổng 5/7 khoá chết (vitest bỏ qua trong im lặng).",
+      "Nợ ghi nhận NGOÀI phạm vi: script `test:cov` (apps/api/package.json) vẫn trỏ `src/workflow` đã xoá — cần WO dọn riêng.",
     ],
   },
   {
