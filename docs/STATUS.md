@@ -1,10 +1,18 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-02 14:56Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-02 17:35Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🟡 S14-OPS-MODULEROLE-1 — Gán role của các module đã ship cho người thật trên PROD (asset-manager · recruiter · payroll-officer …) — SuperAdminBootstrap no-op trên PROD nên module ship xong vẫn VÔ HÌNH và job NOTI phát 0 thông báo
+- **zone**: yellow
+- **sửa ở đâu (paths)**: `docs/DEVOPS/**`, `docs/RELEASE/**`, `docs/README.md`, `scripts/**`, `docs/plans/**`, `harness/backlog.mjs`
+- **phụ thuộc**: S14-PROD-PAYROLLGRANT-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] Liệt kê MỌI role sinh ra bởi các wave S11/S12/S13 và trạng thái gán thật trên PROD (bao nhiêu người mỗi role) — đo, không đoán
+  - [ ] Gán qua MÀN QUẢN TRỊ ROLE (đường sản phẩm, có audit), KHÔNG blanket grant, KHÔNG SQL tay trừ khi màn hình không làm được và được owner chốt
+  - [ ] Sau khi gán: mỗi module ship hiện đúng với người được gán; job `ASSET_MAINTENANCE_DUE` phát >0 thông báo ở lần chạy kế (hoặc giải thích được vì sao 0 là đúng)
+  - [ ] role `payroll-officer` requires_two_factor=TRUE ⇒ người được gán phải bật 2FA trước, xác nhận đăng nhập được sau khi gán
 
 ## Hàng đợi
 
@@ -12,7 +20,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 - 🟢 `S14-PERF-DASHACTOR-1` Gộp 4 bản `gateOrThrow` trùng nhau ở dashboard handlers + cắt round-trip `getCompanyRoleGrantsWithScope` không cache mỗi lượt summary()
 - 🔴 `S14-RECRUIT-FILEGRANT-1` Cấp cặp quyền foundation-file cho recruiter/hr — gap defer từ S12-RECRUIT-FE-1 (đính kèm CV/hồ sơ ứng viên không có quyền tệp thì luồng tuyển dụng hở nửa chừng)
 - 🟢 `S14-FE-DEBT-1` Nợ FE gộp từ wave S12: picker đơn vị tổ chức (org-unit) dùng chung + gom PaginationFooter/error-parser đang lặp giữa các màn
-- 🟡 `S14-OPS-MODULEROLE-1` Gán role của các module đã ship cho người thật trên PROD (asset-manager · recruiter · payroll-officer …) — SuperAdminBootstrap no-op trên PROD nên module ship xong vẫn VÔ HÌNH và job NOTI phát 0 thông báo
 - 🟢 `S15-PAYROLL-DOC-1` Bộ tài liệu PAYROLL v2: SPEC-11 v2 (§5.1 phạm vi v2 · §8 bảng mới · §9 PAY-SCREEN-007..016 · §11 cặp mới · §12 ERR-018+ · §13.4 máy công thức decimal + luật định BH/TNCN + gross-up · §22 DEC-011..020) + DB-13 v2 (3 ALTER + 10 bảng mới) + API-18 v2 (~40 route) + §9g v2 + SPEC-01 §17.15 (FSM 8 trạng thái) + EPIC-20 PL-11..24 + UI-07 + PARK-PAYROLL-002 — plan-reviewer PASS trước khi mở DB-1
 - 🟢 `S16-SOCIAL-DOC-1` Bộ tài liệu SOCIAL (mạng xã hội nội bộ): SPEC-16 đầy đủ (§5 phạm vi v1 + PARK · §8 15 bảng · §9 SOC-SCREEN-001..012 · §11 13 cặp feed-* + luật «tương tác đi theo view:feed» · §12 SOCIAL-ERR-001+ · §13 FSM bài/sáng kiến/bình chọn · §17 NOTI-EVENT đo dải · §22 SOC-DEC-001..010) + DB-17 + API-19 (~45 route) + §9h + SPEC-01 §17.18–17.20 + §12.13 + ghi chú fbpost là tiện ích con + DECISIONS-08 §7 bổ sung + EPIC-21 §8.22 SC-01..14 + UI-07 biến thể cổng thông tin 3 cột + README/erd/RELEASE-14 — plan-reviewer PASS trước khi mở DB-1
 
@@ -59,7 +66,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 0
+- **branch**: `master` · **file đang đổi (dirty)**: 5
 - **migration head**: idx 235 — `0568_s13payrolldash1_widget_payroll_cost` (236 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -68,6 +75,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `f0892425` | 2026-09-03 | chore(ops): S14-PROD-PAYROLLGRANT-1 — lưu script vận hành đã chạy trên PROD (#467) |
+| `9237a276` | 2026-09-02 | chore(docs): regen STATUS sau PR #467 — S14-OPS-MODULEROLE-1 hết chặn (0 đang làm, 6 READY) |
 | `74a9af2e` | 2026-09-02 | chore(docs): regen STATUS sau khi sync origin (#463–#466) + đính chính dấu start-on-touch nhầm cho S14-RECRUIT-FILEGRANT-1 |
 | `3541759d` | 2026-09-02 | fix(foundation): MODULE_APP_METADATA phủ 6 module hậu-MVP đã ship + ratchet chống drift (#465) |
 | `1d54ca04` | 2026-09-02 | wip(S14-QA-COVGATE-1): xoá script test:cov trỏ src/workflow đã xoá + ratchet tự-kiểm coverage.thresholds/test:cov:* (#463) |
@@ -78,8 +87,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `0487dbef` | 2026-09-02 | fix(harness): gỡ 9 WO S17-CHAT-UX2 bị nhân đôi trong backlog + regen STATUS |
 | `93a68170` | 2026-09-02 | chore(harness): seed wave S17-CHAT-UX2 — 9 WO (DOC-1 ready) + SPEC-15 §5.1d/§22c CHAT-DEC-021..027 (owner duyệt 02/09) |
 | `081859f1` | 2026-09-02 | chore(harness): seed wave S16-SOCIAL — owner duyệt 02/09 (SOC-DEC-001..010), 12 WO + hồ sơ wave + khung SPEC-16 §22 + regen STATUS |
-| `fd29c167` | 2026-09-02 | chore(harness): seed wave S15-PAYROLL-V2 — owner duyệt 02/09 (PAY-DEC-011..020), 15 WO + hồ sơ wave + SPEC-11 §22.1 + regen STATUS |
-| `a4644898` | 2026-09-02 | chore(harness): seed wave S14-CONSOLIDATE — 7 WO (6 ready) + regen STATUS |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

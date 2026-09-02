@@ -15562,10 +15562,11 @@ export const backlog = [
     title:
       "Gán role của các module đã ship cho người thật trên PROD (asset-manager · recruiter · payroll-officer …) — SuperAdminBootstrap no-op trên PROD nên module ship xong vẫn VÔ HÌNH và job NOTI phát 0 thông báo",
     zone: "yellow",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "docs/DEVOPS/**",
       "docs/RELEASE/**",
+      "docs/README.md",
       "scripts/**",
       "docs/plans/**",
       "harness/backlog.mjs",
@@ -15583,7 +15584,10 @@ export const backlog = [
     ],
     notes: [
       "🟡 Việc VẬN HÀNH trên PROD, không sinh code. Owner quyết ai được gán role nào — agent chỉ dựng danh sách + hướng dẫn + verify.",
-      "Phụ thuộc S14-PROD-PAYROLLGRANT-1: chưa áp 0564–0568 thì role payroll-officer chưa tồn tại trên PROD.",
+      "Phụ thuộc S14-PROD-PAYROLLGRANT-1 ĐÃ THOẢ (PR #467 merge 03/09). Đo PROD 02/09 ghi trong commit f0892425: 236/236 migration đã áp (head 0568) ⇒ role `payroll-officer` TỒN TẠI THẬT với 14 hàng quyền; 0 hàng wildcard còn lại ngoài super-admin; quyền lương 32 hàng đúng ma trận §9g (company-admin 15 · payroll-officer 14 · employee 3) ⇒ `company-admin` CŨNG mở khoá PAYROLL, không bắt buộc phải gán payroll-officer để THẤY module.",
+      "TIẾN ĐỘ 03/09: giao công cụ + thủ tục, CHƯA đo được. `scripts/s14-audit-module-roles.mjs` (chỉ SELECT, 6 khối) + `docs/DEVOPS/DEVOPS-16` (runbook census→gán→nghiệm thu). CHẶN: auto-mode classifier từ chối mọi lệnh mở kết nối DB PROD (cả Bash lẫn PowerShell) ⇒ done_when #1 phải do owner chạy script rồi dán output.",
+      "Đo được từ MÃ NGUỒN (không cần DB), đã ghi vào DEVOPS-16: (a) `PLATFORM_SUPERADMIN_EMAIL` KHÔNG có trong `.env` ⇒ SuperAdminBootstrap thật sự no-op trên PROD — tiền đề của WO đúng; (b) `asset-manager` là tên role DUY NHẤT mã runtime tham chiếu (`asset-audience.reader.ts:45`) ⇒ chỉ ASSET có NOTI phụ thuộc role, 3 module kia chỉ phụ thuộc CẶP QUYỀN; (c) reader ghim `r.company_id IS NULL` ⇒ role tuỳ biến tenant (`SA`, `QUẢN LÝ CẤP CAO`) KHÔNG BAO GIỜ nhận `ASSET_MAINTENANCE_DUE` dù đủ quyền; (d) `assignRole` chặn TỰ GÁN (SoD) ⇒ cần HAI người có `assign-role:user`, công ty 1 admin sẽ kẹt; (e) `assignRole` KHÔNG có luật «chỉ cấp quyền mình có» ⇒ admin vẫn gán được `payroll-officer` sau khi bị thu hồi quyền lương.",
+      "⚠️ THỨ TỰ BẮT BUỘC cho `payroll-officer`: PROD có `TWO_FACTOR_ENFORCEMENT_ENABLED=true` và `requiresTwoFactorTx` đọc CẢ role đang giữ ⇒ gán cho người CHƯA enroll TOTP làm họ ăn 403 `TWO_FACTOR_SETUP_REQUIRED` ở MỌI route (mất cả module đang dùng), và sau đó họ KHÔNG tự tắt được 2FA (409). Bật 2FA TRƯỚC, gán SAU.",
     ],
   },
 
@@ -16738,7 +16742,9 @@ export const backlog = [
       "Store: applyIncomingMessage cập nhật `lastMessage` (che sẵn từ DTO — KHÔNG tự dựng excerpt từ body ở FE); mergeRoom giữ `peer.avatarUrl` cũ khi payload WS thiếu; `resolvedNames` + `chat-dock.store.resolvedNames` GỠ HẲN (grep 0) — roomDisplayName đọc peer.name",
       "Test cũ `chat-room-item` giữ nguyên số ca; a11y: chip là `role=tablist`/`aria-pressed`, hàng phòng có aria-label kèm số chưa đọc; theme light/dark; typecheck/build/test apps/app xanh",
     ],
-    notes: ["🟡 LIGHT — thuần FE trên DTO của BE-1. Nếu cần thêm khoá DTO thì DỪNG, đưa về BE-1 (memory wo-layer-field-can-understate-scope)."],
+    notes: [
+      "🟡 LIGHT — thuần FE trên DTO của BE-1. Nếu cần thêm khoá DTO thì DỪNG, đưa về BE-1 (memory wo-layer-field-can-understate-scope).",
+    ],
   },
   {
     id: "S17-CHAT-UX2-FE-2",
@@ -16781,7 +16787,9 @@ export const backlog = [
       "Header: RoomAvatar/peer avatar · tên · «Đang online» (DM) hoặc «N thành viên» · nút tìm-trong-phòng mở MessageSearchPanel scope room · CallButtons · ⓘ; hero khung trống với 2 hành động (Tin nhắn mới [gate create] · Tìm kiếm); dải ngày sticky top trong khung cuộn",
       "Phím tắt: Esc huỷ reply/đóng info; Ctrl/⌘+K mở tìm kiếm (không trùng phím tắt shell); typecheck/build/test xanh",
     ],
-    notes: ["🟡 LIGHT — không đụng BE. ConversationPanel vẫn dùng lại được cho drawer (showHeader=false) — FE-5 phụ thuộc."],
+    notes: [
+      "🟡 LIGHT — không đụng BE. ConversationPanel vẫn dùng lại được cho drawer (showHeader=false) — FE-5 phụ thuộc.",
+    ],
   },
   {
     id: "S17-CHAT-UX2-FE-3",
@@ -16819,7 +16827,9 @@ export const backlog = [
       "Dán ảnh (paste) + kéo-thả vào ô soạn ⇒ uploadChatAttachment đúng 1 lần/tệp, tôn trọng MAX_ATTACHMENTS_PER_MESSAGE; thumbnail xem trước (URL.createObjectURL, revoke khi gỡ/gửi); tệp không ảnh giữ tile tên + cỡ",
       "Hai bất biến composer giữ: test S7 hiện có (clientMessageId 1 lần qua Gửi lại; lỗi giữ nháp + tệp) xanh; typing ping không đổi; a11y popover có role=listbox; typecheck/build/test xanh",
     ],
-    notes: ["🟡 LIGHT. Tách sub-component vào components/chat/composer/** để MessageComposer.tsx < 400 dòng."],
+    notes: [
+      "🟡 LIGHT. Tách sub-component vào components/chat/composer/** để MessageComposer.tsx < 400 dòng.",
+    ],
   },
   {
     id: "S17-CHAT-UX2-FE-4",
@@ -16858,7 +16868,9 @@ export const backlog = [
       "Ảnh/Video: lưới 3 cột từ listRoomFiles({kind:'image'}) — chỉ gọi khi accordion MỞ (luật file_access_logs của S7-FE-4); url null ⇒ ô «không tải được», không <img src=null>; «Xem tất cả» phân trang keyset; Tệp = kind:'file'; Liên kết = CHAT-API-031 (mở tab mới rel=noopener noreferrer nofollow, nhảy tới tin qua onJumpToMessage); Tin ghim giữ nguyên",
       "RoomAvatarEditor không đổi hành vi (4 nhánh); Lưu trữ [gate] + Rời nhóm [group] + confirm giữ; theme light/dark; typecheck/build/test xanh",
     ],
-    notes: ["🟡 LIGHT. Nếu Sheet/Accordion thiếu ở packages/ui thì thêm primitive shadcn CHUẨN (khối additive index.ts), không tự vẽ."],
+    notes: [
+      "🟡 LIGHT. Nếu Sheet/Accordion thiếu ở packages/ui thì thêm primitive shadcn CHUẨN (khối additive index.ts), không tự vẽ.",
+    ],
   },
   {
     id: "S17-CHAT-UX2-FE-5",
@@ -16899,7 +16911,9 @@ export const backlog = [
       "/chat responsive: ≥1280 3 cột (320/flex/340) · ≥768 info panel thành Sheet (nút ⓘ) · <768 1 cột: danh sách → hội thoại (push, ‹) → info Sheet toàn màn; key conv-/info- giữ; 3 breakpoint có test (matchMedia mock)",
       "ChatBadge mở drawer (không navigate) trên mọi trang có ProtectedShell; a11y: Sheet focus-trap + Esc đóng; theme light/dark; typecheck/build/test 3 app xanh",
     ],
-    notes: ["🟡 LIGHT. Đây là WO đổi hình thái SCREEN-002 — nếu owner đổi ý DEC-026 thì WO này là chỗ duy nhất phải sửa."],
+    notes: [
+      "🟡 LIGHT. Đây là WO đổi hình thái SCREEN-002 — nếu owner đổi ý DEC-026 thì WO này là chỗ duy nhất phải sửa.",
+    ],
   },
   {
     id: "S17-CHAT-UX2-QA-1",
@@ -16934,6 +16948,8 @@ export const backlog = [
       "FE: coverage apps/app/src/components/chat ≥80% (đo cả 2 glob); snapshot light+dark cho RoomListPanel · ConversationPanel · RoomInfoPanel · ChatDrawer; axe 0 critical/serious trên 3 màn; 3 breakpoint",
       "Ratchet: chat-realtime-structure.spec (0 @SubscribeMessage) + ESLint single-socket-file xanh; bash harness/check.sh --all --lane-db=s17qa1 XANH; TESTABLE-FEATURES.md cập nhật màn chat v2; ACCEPTANCE ghi bằng chứng + KI mở (nếu có); đóng wave: regen STATUS + memory",
     ],
-    notes: ["🟡 LIGHT. Đóng wave S17 — nếu phát hiện lỗ sản phẩm, vá trong WO này khi ≤ 30 dòng, ngược lại seed WO follow-up (khuôn S13-PAYROLL-QA-1 vá 3 lỗi)."],
+    notes: [
+      "🟡 LIGHT. Đóng wave S17 — nếu phát hiện lỗ sản phẩm, vá trong WO này khi ≤ 30 dòng, ngược lại seed WO follow-up (khuôn S13-PAYROLL-QA-1 vá 3 lỗi).",
+    ],
   },
 ];
