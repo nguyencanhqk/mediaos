@@ -477,6 +477,37 @@ và đã vá** trong chính đợt QA: [`QA/evidence/S13-PAYROLL-QA-1-ACCEPTANCE
 
 ---
 
+## 5j. DASH — widget «Chi phí lương kỳ» (S13-PAYROLL-DASH-1, 02/09/2026)
+
+Dashboard có thêm «Chi phí lương kỳ» (`PAYROLL_COST`, mã `PAYROLL-WIDGET-001`): tổng **thực trả** + tổng
+**thu nhập** + **số nhân sự** + trạng thái của **kỳ lương gần nhất**. Widget **đọc lại đúng**
+`GET /payroll-periods/summary` (PAYROLL-API-018) — số trên widget và số trong màn kỳ lương luôn là MỘT.
+Bấm vào khối số → sang `/payroll/periods`.
+
+**Ai thấy widget:** cần `view-line:payroll-period` **@Company** (payroll-officer · Company Admin — ma trận
+§9g). Đây là widget DASH **đầu tiên chở tiền**, nên có hai điểm khác mọi widget trước:
+
+- Cổng là **cặp ĐỌC-TIỀN** `view-line`, KHÔNG phải cặp danh sách `view:payroll-period` (cặp đó cố ý không
+  nhạy cảm nên SPEC-11 §334 cấm chở tiền) và cũng KHÔNG phải cặp GHI `calculate` (§329 — gác bằng cặp ghi
+  thì ai thấy widget đều ghi được lương). Cả hai vai đó đều **403**, có ca test riêng.
+- Sàn `Company` là bắt buộc vì phép cộng là **toàn công ty**: grant hẹp hơn (nếu mai sau xuất hiện) bị chặn
+  ở CẢ metadata lẫn data-path.
+
+| Việc | Cách kiểm | Kỳ vọng |
+| --- | --- | --- |
+| Số đúng | tính lương một kỳ → mở Dashboard | tổng gross/net + headcount khớp bảng lương kỳ ĐÓ; dòng xoá mềm KHÔNG cộng; kỳ cũ hơn KHÔNG hiện |
+| Nhân viên/HR/manager | mở Dashboard bằng tài khoản không có `view-line:payroll-period` | **không có** ô «Chi phí lương kỳ»; tab Network **không** có lời gọi `/dashboard/widgets/payroll-cost` |
+| Chỉ xem được danh sách kỳ | tài khoản chỉ có `view:payroll-period` | vẫn **không** thấy widget (tiền không đi qua cặp không nhạy cảm) |
+| Trống | công ty chưa có kỳ lương nào | trạng thái rỗng «Chưa có kỳ lương nào», không phải lỗi |
+| Vết kiểm toán | mở widget lần đầu (sau khi cache hết hạn) | có hàng `audit_logs` `read`/`payroll_period`. ⚠️ Lượt xem trong 5 phút sau đó ăn cache ⇒ **không** thêm vết — đúng thiết kế, xem SPEC-11 §10.1 |
+
+Bộ test tự động: **16 ca** int-spec `dashboard-payroll-cost.int-spec.ts` (cần `LANE_DB` — 4 ca deny theo
+CẶP/SCOPE, sàn 2 tầng, parity nguồn + số tường minh, audit cả hai mặt cache, cross-tenant) + **12 ca** FE
+(`PayrollCostWidget.spec` 11 ca — gồm ca **wildcard `*:*` KHÔNG mở được widget** và ca **tiền bị mask in
+dấu gạch chứ không in 0 ₫** — cộng 1 ca wire trong Grid).
+
+---
+
 ## 6. Tham chiếu
 
 - Trạng thái tự sinh: [docs/STATUS.md](STATUS.md) — danh sách WO "Đã xong (v2)".

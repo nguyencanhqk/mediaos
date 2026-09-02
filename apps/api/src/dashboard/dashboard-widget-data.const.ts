@@ -36,6 +36,11 @@ export const DASH_WIDGET_TTL_SECONDS: Readonly<Record<DashModuleCode, number>> =
   // S12-RECRUIT-DASH-1: phễu tuyển dụng đổi theo nhịp move-stage/mở vị trí (vài lần/ngày) — 300s, cùng
   // nhóm ASSET/GOAL. Cache company-shared (payload chỉ ĐẾM, sàn scope Company) nên TTL dài không rò gì.
   RECRUIT: 300,
+  // S13-PAYROLL-DASH-1: bảng lương đổi theo nhịp KỲ (thu thập/tính/duyệt vài lần mỗi tháng) — 300s, cùng
+  // nhóm ASSET/GOAL/RECRUIT. Cache company-shared an toàn: cặp gate `view-line:payroll-period` có
+  // canSeeMoney=true cho MỌI actor qua được (route 018 không nằm trong MONEY_FREE_ROUTES) ⇒ payload
+  // viewer-independent, không có nhánh mask-per-người để cache lẫn.
+  PAYROLL: 300,
 } as const;
 
 /**

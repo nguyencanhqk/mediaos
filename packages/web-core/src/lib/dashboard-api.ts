@@ -60,6 +60,8 @@ export const DASH_WIDGET_SLUG: Readonly<Record<string, string>> = {
   ASSET_SUMMARY: "asset-summary",
   // S12-RECRUIT-DASH-1 — widget «phễu tuyển dụng» (mig 0563), khớp dataSourceKey của RECRUIT_FUNNEL.
   RECRUIT_FUNNEL: "recruit-funnel",
+  // S13-PAYROLL-DASH-1 — widget «chi phí lương kỳ» (mig 0568), khớp dataSourceKey của PAYROLL_COST.
+  PAYROLL_COST: "payroll-cost",
 };
 
 /** 4 dashboard type user-facing → path GET /dashboard/{type} (API-08 §10.1, DashboardResolverController). */

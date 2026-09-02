@@ -99,6 +99,16 @@ export default {
     totalUnit: "ứng viên",
     openJobOpenings: "{{count}} vị trí đang mở",
   },
+  // ── S13-PAYROLL-DASH-1 — PAYROLL_COST «Chi phí lương kỳ» (SPEC-11 §10.1 PAYROLL-WIDGET-001).
+  // Nhãn trạng thái kỳ KHÔNG khai ở đây — dùng lại `payroll:periodStatus.*` (một enum, một bộ nhãn).
+  payrollCost: {
+    title: "Chi phí lương kỳ",
+    empty: { title: "Chưa có kỳ lương nào" },
+    periodMonth: "Kỳ {{month}}",
+    netLabel: "thực trả",
+    grossLabel: "Tổng thu nhập",
+    headcountLabel: "Số nhân sự",
+  },
   typeSwitcher: {
     label: "Chuyển đổi loại bảng điều khiển",
   },

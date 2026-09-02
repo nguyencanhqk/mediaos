@@ -293,7 +293,13 @@ Mọi màn: `<PermissionGate>` + `useCan()`, trạng thái loading/error/empty (
 
 | Mã | widget_code | Tên | Nguồn | Gate |
 | --- | --- | --- | --- | --- |
-| **PAYROLL-WIDGET-001** | `PAYROLL_COST` | Chi phí lương kỳ (slug `payroll-cost` — ship `S13-PAYROLL-DASH-1`) | PAYROLL-FUNC-014 / PAYROLL-API-018 (`PayrollPeriodsService.summary` — một công thức, một con số) | cặp **`('view-line','payroll-period')`** (nhạy cảm, **cặp ĐỌC thuần** — payload CHỨA SỐ TIỀN nên không dùng được `view:payroll-period`; và gác bằng cặp GHI `calculate` thì «ai thấy widget đều ghi được lương») **+ SÀN scope `Company`** (`DASH_WIDGET_MIN_DATA_SCOPE` — `summary` cộng toàn công ty nên grant hẹp hơn không được serve) |
+| **PAYROLL-WIDGET-001** | `PAYROLL_COST` | Chi phí lương kỳ (slug `payroll-cost`, mig `0568` — **ĐÃ SHIP** `S13-PAYROLL-DASH-1`) | PAYROLL-FUNC-014 / PAYROLL-API-018 (`PayrollCalcService.summary` — một công thức, một con số) | cặp **`('view-line','payroll-period')`** (nhạy cảm, **cặp ĐỌC thuần** — payload CHỨA SỐ TIỀN nên không dùng được `view:payroll-period`; và gác bằng cặp GHI `calculate` thì «ai thấy widget đều ghi được lương») **+ SÀN scope `Company`** (`DASH_WIDGET_MIN_DATA_SCOPE` — `summary` cộng toàn công ty nên grant hẹp hơn không được serve) |
+
+Ba điều chốt thêm khi triển khai (`S13-PAYROLL-DASH-1`):
+
+- **Nguồn là `PayrollCalcService.summary`**, không phải `PayrollPeriodsService` — BE-2 đặt `summary()` cạnh `PayrollCalcRepository.latestSummaryTx`. Bảng trên đã đính chính; route và công thức không đổi.
+- **Sàn scope `Company` ép ở HAI tầng độc lập** — `DashboardWidgetRegistryService.filterByGatePair` (đường METADATA `/dashboard/me`) và `DashboardWidgetPayrollHandlers.gatePayrollCost` (đường DATA). `companyFloor` mà `PayrollAccessService` ép ở route 018 **không** gác được đường metadata (đường đó không gọi service PAYROLL), nên hai tầng này là bắt buộc, không phải thừa.
+- **Audit lượt xem widget chỉ có trên cache MISS.** Cache của widget là company-shared, TTL 300s ⇒ lượt xem thứ hai trong TTL không chạy `fetch` nên không đẻ hàng `audit_logs`. Chấp nhận được: §20.12 chỉ đòi +1 hàng/lượt cho `/lines` · `/payslips/:id` · `/salary-profiles`, widget không nằm trong đó. Nếu về sau cần vết per-view, chỗ sửa là `gateAndResolve` (chạy mọi lần serve), không phải `fetch`.
 
 ---
 

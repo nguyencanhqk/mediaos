@@ -28,6 +28,7 @@ import { HrDepartmentService } from "../org/hr-department.service";
 // của CLAUDE.md §5) — registry vẫn MỘT: `add()` bên dưới trỏ thẳng vào method của collaborator.
 import { DashboardWidgetOfficeHandlers } from "./dashboard-widget-office.handlers";
 import { DashboardWidgetRecruitHandlers } from "./dashboard-widget-recruit.handlers";
+import { DashboardWidgetPayrollHandlers } from "./dashboard-widget-payroll.handlers";
 import {
   gatePairFor,
   ttlSecondsFor,
@@ -105,6 +106,8 @@ export class DashboardWidgetHandlersService {
     private readonly office: DashboardWidgetOfficeHandlers,
     // S12-RECRUIT-DASH-1 (additive): handler RECRUIT_FUNNEL.
     private readonly recruit: DashboardWidgetRecruitHandlers,
+    // S13-PAYROLL-DASH-1 (additive): handler PAYROLL_COST.
+    private readonly payroll: DashboardWidgetPayrollHandlers,
   ) {
     this.buildRegistry();
   }
@@ -255,6 +258,12 @@ export class DashboardWidgetHandlersService {
     add("recruit-funnel", "RECRUIT_FUNNEL", {
       gateAndResolve: (ctx) => this.recruit.gateRecruitFunnel(ctx),
       fetch: (ctx) => this.recruit.fetchRecruitFunnel(ctx),
+    });
+
+    // ─── S13-PAYROLL-DASH-1 (APPEND) — PAYROLL_COST (gate + fetch ở payroll.handlers.ts) ───────────
+    add("payroll-cost", "PAYROLL_COST", {
+      gateAndResolve: (ctx) => this.payroll.gatePayrollCost(ctx),
+      fetch: (ctx) => this.payroll.fetchPayrollCost(ctx),
     });
   }
 
