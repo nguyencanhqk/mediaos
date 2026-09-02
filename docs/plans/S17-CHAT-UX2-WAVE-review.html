@@ -1,0 +1,2101 @@
+<title>Wave S17-CHAT-UX2</title>
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
+/>
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --surface: #ffffff;
+    --surface-2: #edf1f6;
+    --ink: #18212e;
+    --muted: #5b6675;
+    --line: #d7dee8;
+    --line-soft: #e6ebf2;
+    --acc: #1a8fc4;
+    --acc-ink: #146f99;
+    --acc-soft: #dff1fa;
+    --be: #0f7b6c;
+    --be-ink: #0b5f53;
+    --be-soft: #dcf1ec;
+    --amber: #9a5b0b;
+    --amber-soft: #f7ecd8;
+    --red: #b3261e;
+    --red-soft: #f9e6e4;
+    --green: #256c2f;
+    --green-soft: #e3f0e1;
+    --code-bg: #e8edf4;
+    --bubble-me: #d5ecf8;
+    --bubble-them: #eef2f7;
+    --shadow: 0 1px 2px rgba(24, 33, 46, 0.05), 0 4px 16px rgba(24, 33, 46, 0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121821;
+      --surface: #182029;
+      --surface-2: #202a35;
+      --ink: #e6ebf1;
+      --muted: #97a3b2;
+      --line: #2c3745;
+      --line-soft: #253040;
+      --acc: #5fc3ec;
+      --acc-ink: #8ad4f2;
+      --acc-soft: #163446;
+      --be: #4cc0ad;
+      --be-ink: #74d2c2;
+      --be-soft: #14362f;
+      --amber: #e2a858;
+      --amber-soft: #3a2d15;
+      --red: #ea8f85;
+      --red-soft: #3d201c;
+      --green: #82c789;
+      --green-soft: #1d3320;
+      --code-bg: #252f3c;
+      --bubble-me: #1b3f55;
+      --bubble-them: #232d3a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121821;
+    --surface: #182029;
+    --surface-2: #202a35;
+    --ink: #e6ebf1;
+    --muted: #97a3b2;
+    --line: #2c3745;
+    --line-soft: #253040;
+    --acc: #5fc3ec;
+    --acc-ink: #8ad4f2;
+    --acc-soft: #163446;
+    --be: #4cc0ad;
+    --be-ink: #74d2c2;
+    --be-soft: #14362f;
+    --amber: #e2a858;
+    --amber-soft: #3a2d15;
+    --red: #ea8f85;
+    --red-soft: #3d201c;
+    --green: #82c789;
+    --green-soft: #1d3320;
+    --code-bg: #252f3c;
+    --bubble-me: #1b3f55;
+    --bubble-them: #232d3a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 16px rgba(0, 0, 0, 0.3);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 24px 96px;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: Manrope, "Be Vietnam Pro", system-ui, sans-serif;
+    text-wrap: balance;
+    line-height: 1.2;
+  }
+  h1 {
+    font-size: 2.1rem;
+    font-weight: 800;
+    letter-spacing: -0.015em;
+    margin: 10px 0 8px;
+  }
+  h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin: 0 0 4px;
+  }
+  h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 22px 0 8px;
+  }
+  p {
+    margin: 8px 0;
+  }
+  section {
+    margin-top: 44px;
+  }
+  .lede {
+    color: var(--muted);
+    max-width: 64ch;
+  }
+  .eyebrow {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--acc);
+    font-family: "JetBrains Mono", monospace;
+  }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    border-bottom: 2px solid var(--line);
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+  }
+  .sec-head .num {
+    font-family: "JetBrains Mono", monospace;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  code,
+  .mono {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.86em;
+  }
+  code {
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  a {
+    color: var(--acc-ink);
+  }
+
+  .banner {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--acc);
+    padding: 14px 18px;
+    margin: 20px 0 0;
+    box-shadow: var(--shadow);
+  }
+  .banner.warn {
+    border-left-color: var(--amber);
+  }
+  .banner strong {
+    color: var(--acc-ink);
+  }
+  .banner.warn strong {
+    color: var(--amber);
+  }
+
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-top: 22px;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    padding: 12px 14px;
+  }
+  .kpi .v {
+    font-family: Manrope, sans-serif;
+    font-size: 1.6rem;
+    font-weight: 800;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .kpi .l {
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin-top: 4px;
+  }
+  .kpi.acc .v {
+    color: var(--acc);
+  }
+  .kpi.green .v {
+    color: var(--green);
+  }
+  .kpi.be .v {
+    color: var(--be);
+  }
+
+  .tbl-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    background: var(--surface);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.9rem;
+  }
+  th,
+  td {
+    text-align: left;
+    vertical-align: top;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  th {
+    background: var(--surface-2);
+    font-size: 0.76rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  tr:last-child td {
+    border-bottom: 0;
+  }
+  td.k {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    color: var(--acc-ink);
+  }
+
+  .pill {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 1px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+  }
+  .pill.a {
+    background: var(--acc-soft);
+    color: var(--acc-ink);
+  }
+  .pill.b {
+    background: var(--be-soft);
+    color: var(--be-ink);
+  }
+  .pill.c {
+    background: var(--amber-soft);
+    color: var(--amber);
+  }
+  .pill.d {
+    background: var(--green-soft);
+    color: var(--green);
+  }
+  .pill.qa {
+    background: var(--surface-2);
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+  .pill.out {
+    background: var(--red-soft);
+    color: var(--red);
+  }
+  .zone {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.8rem;
+  }
+
+  .dec {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    margin-top: 12px;
+    box-shadow: var(--shadow);
+  }
+  .dec-head {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 14px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--surface-2);
+  }
+  .dec-head .code {
+    font-family: "JetBrains Mono", monospace;
+    color: var(--acc);
+    font-weight: 500;
+    font-size: 0.85rem;
+  }
+  .dec-head .q {
+    font-weight: 600;
+  }
+  .dec-body {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 14px;
+    padding: 12px 16px;
+  }
+  .dec-body + .dec-body {
+    border-top: 1px dashed var(--line-soft);
+  }
+  .dec-body .lbl {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    font-weight: 600;
+    padding-top: 3px;
+  }
+  .dec-body .lbl.rec {
+    color: var(--green);
+  }
+  .dec-body .lbl.alt {
+    color: var(--amber);
+  }
+  .dec-body p {
+    margin: 0;
+  }
+
+  .track {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .lane {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    padding: 12px 14px;
+  }
+  .lane b {
+    display: block;
+    margin-bottom: 6px;
+  }
+  .lane .steps {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.9;
+  }
+  .lane .steps span {
+    color: var(--ink);
+  }
+
+  .dod {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .dod > div {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    padding: 12px 16px;
+  }
+  .dod ul {
+    margin: 6px 0 0;
+    padding-left: 18px;
+    font-size: 0.9rem;
+  }
+  .approve {
+    margin-top: 44px;
+    background: var(--acc-soft);
+    border: 1px solid var(--acc);
+    padding: 18px 22px;
+  }
+  .approve h2 {
+    color: var(--acc-ink);
+  }
+  .approve ol {
+    padding-left: 20px;
+    margin: 8px 0 0;
+  }
+
+  /* ───────── wireframe ───────── */
+  .wf {
+    margin-top: 18px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+  .wf-cap {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .wf-cap b {
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 500;
+    color: var(--acc-ink);
+  }
+  .app {
+    display: grid;
+    grid-template-columns: 250px 1fr 240px;
+    min-width: 860px;
+    height: 520px;
+    font-size: 11.5px;
+    line-height: 1.35;
+  }
+  .app > div {
+    min-width: 0;
+    overflow: hidden;
+  }
+  .rl {
+    border-right: 1px solid var(--line-soft);
+    display: flex;
+    flex-direction: column;
+  }
+  .rl .bar {
+    display: flex;
+    gap: 6px;
+    padding: 8px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .rl .bar .srch {
+    flex: 1;
+    background: var(--surface-2);
+    border-radius: 6px;
+    padding: 4px 8px;
+    color: var(--muted);
+  }
+  .rl .bar .ic {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--surface-2);
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+  }
+  .chips {
+    display: flex;
+    gap: 5px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--line-soft);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .chips span {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .chips span.on {
+    background: var(--acc-soft);
+    color: var(--acc-ink);
+    border-color: transparent;
+    font-weight: 600;
+  }
+  .sect {
+    font-size: 9.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 7px 10px 2px;
+    font-weight: 600;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 32px 1fr auto;
+    gap: 8px;
+    padding: 6px 10px;
+    align-items: center;
+  }
+  .row.on {
+    background: var(--acc-soft);
+  }
+  .av {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    font-size: 11px;
+    color: #fff;
+    position: relative;
+  }
+  .av.a1 {
+    background: #2e8bb8;
+  }
+  .av.a2 {
+    background: #c0632b;
+  }
+  .av.a3 {
+    background: #4f7d3a;
+  }
+  .av.a4 {
+    background: #6a5aa8;
+  }
+  .av.a5 {
+    background: #a8385a;
+  }
+  .av .dot {
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #22a06b;
+    border: 2px solid var(--surface);
+  }
+  .row .t {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .row .t.dim {
+    font-weight: 500;
+  }
+  .row .p {
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 10.5px;
+  }
+  .row .p b {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .row .m {
+    text-align: right;
+    font-size: 10px;
+    color: var(--muted);
+    display: grid;
+    gap: 3px;
+    justify-items: end;
+  }
+  .badge {
+    background: var(--acc);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 0 5px;
+    line-height: 14px;
+  }
+  .tag {
+    font-size: 9px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 0 4px;
+    color: var(--muted);
+  }
+
+  .cv {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--line-soft);
+  }
+  .cv .hd {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .cv .hd .nm {
+    font-weight: 700;
+  }
+  .cv .hd .st {
+    color: var(--muted);
+    font-size: 10.5px;
+  }
+  .cv .hd .acts {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+    color: var(--muted);
+  }
+  .cv .hd .acts span {
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    border-radius: 6px;
+    background: var(--surface-2);
+  }
+  .msgs {
+    flex: 1;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow: hidden;
+  }
+  .day {
+    text-align: center;
+    color: var(--muted);
+    font-size: 9.5px;
+    margin: 4px 0;
+  }
+  .sys {
+    text-align: center;
+    font-size: 9.5px;
+    color: var(--muted);
+  }
+  .sys span {
+    background: var(--surface-2);
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+  .ml,
+  .mr {
+    display: flex;
+    gap: 6px;
+    max-width: 78%;
+  }
+  .mr {
+    align-self: flex-end;
+    flex-direction: row-reverse;
+  }
+  .ml .av,
+  .mr .av {
+    width: 24px;
+    height: 24px;
+    font-size: 9px;
+    flex: none;
+  }
+  .ml .sp {
+    width: 24px;
+    flex: none;
+  }
+  .bub {
+    padding: 6px 9px;
+    border-radius: 12px;
+    background: var(--bubble-them);
+    position: relative;
+  }
+  .ml .bub {
+    border-top-left-radius: 4px;
+  }
+  .mr .bub {
+    background: var(--bubble-me);
+    border-top-right-radius: 4px;
+  }
+  .bub .who {
+    font-weight: 600;
+    font-size: 10px;
+    color: var(--acc-ink);
+    margin-bottom: 1px;
+  }
+  .bub .tm {
+    font-size: 9px;
+    color: var(--muted);
+    margin-left: 6px;
+  }
+  .bub .at {
+    color: var(--acc-ink);
+    font-weight: 600;
+  }
+  .rx {
+    display: inline-flex;
+    gap: 3px;
+    margin-top: 3px;
+    font-size: 9.5px;
+  }
+  .rx span {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 0 5px;
+    background: var(--surface);
+  }
+  .rx span.mine {
+    border-color: var(--acc);
+    background: var(--acc-soft);
+  }
+  .hover {
+    position: absolute;
+    top: -12px;
+    right: 8px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-size: 9.5px;
+    box-shadow: var(--shadow);
+    color: var(--muted);
+    letter-spacing: 0.15em;
+  }
+  .seen {
+    align-self: flex-end;
+    display: flex;
+    gap: 2px;
+    margin-right: 30px;
+  }
+  .seen span {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    font-size: 7px;
+    color: #fff;
+    display: grid;
+    place-items: center;
+  }
+  .typing {
+    font-size: 9.5px;
+    color: var(--muted);
+    padding: 0 12px 4px;
+    font-style: italic;
+  }
+  .comp {
+    border-top: 1px solid var(--line-soft);
+    padding: 6px 10px 8px;
+  }
+  .comp .thumbs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 5px;
+  }
+  .comp .thumbs span {
+    width: 40px;
+    height: 30px;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #6ea8c9, #2e5f80);
+    position: relative;
+  }
+  .comp .thumbs span::after {
+    content: "×";
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--surface);
+    font-size: 9px;
+    line-height: 12px;
+    text-align: center;
+  }
+  .comp .box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 5px 8px;
+  }
+  .comp .box .ic {
+    color: var(--muted);
+  }
+  .comp .box .txt {
+    flex: 1;
+    color: var(--muted);
+  }
+  .comp .box .send {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: var(--acc);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    font-size: 10px;
+  }
+  .mention {
+    position: absolute;
+    left: 40px;
+    bottom: 44px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    border-radius: 6px;
+    padding: 4px 0;
+    width: 170px;
+    font-size: 10.5px;
+  }
+  .mention div {
+    padding: 3px 8px;
+  }
+  .mention div.on {
+    background: var(--acc-soft);
+  }
+
+  .ip {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .ip .top {
+    text-align: center;
+    padding: 12px 10px 8px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .ip .top .av {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 6px;
+    font-size: 16px;
+  }
+  .ip .top .nm {
+    font-weight: 700;
+    font-size: 12.5px;
+  }
+  .ip .top .by {
+    color: var(--muted);
+    font-size: 10px;
+  }
+  .ip .acts {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    padding: 8px 8px;
+    border-bottom: 1px solid var(--line-soft);
+    text-align: center;
+    font-size: 9.5px;
+    color: var(--muted);
+  }
+  .ip .acts i {
+    display: block;
+    width: 28px;
+    height: 28px;
+    margin: 0 auto 3px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    font-style: normal;
+    line-height: 28px;
+    color: var(--ink);
+  }
+  .ip .line {
+    display: flex;
+    justify-content: space-between;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--line-soft);
+    font-weight: 600;
+  }
+  .ip .line span:last-child {
+    color: var(--muted);
+    font-weight: 400;
+  }
+  .ip .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    padding: 6px 10px 8px;
+  }
+  .ip .grid span {
+    aspect-ratio: 1;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #8db6d0, #3c6f8f);
+  }
+  .ip .grid span:nth-child(2n) {
+    background: linear-gradient(135deg, #c9a679, #7c5a2a);
+  }
+  .ip .grid span:nth-child(3n) {
+    background: linear-gradient(135deg, #9cbf9a, #3f6b47);
+  }
+  .ip .file {
+    display: grid;
+    grid-template-columns: 18px 1fr;
+    gap: 6px;
+    padding: 3px 10px;
+    font-size: 10.5px;
+  }
+  .ip .file i {
+    font-style: normal;
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    background: var(--be);
+    color: #fff;
+    font-size: 8px;
+    display: grid;
+    place-items: center;
+  }
+  .ip .file i.pdf {
+    background: var(--red);
+  }
+  .ip .file .meta {
+    color: var(--muted);
+    font-size: 9.5px;
+  }
+  .ip .leave {
+    margin-top: auto;
+    text-align: center;
+    color: var(--red);
+    font-weight: 600;
+    padding: 8px;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  /* drawer + mobile boards */
+  .boards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .board {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  .canvas {
+    background: var(--surface-2);
+    height: 380px;
+    position: relative;
+    overflow: hidden;
+    font-size: 11.5px;
+  }
+  .canvas .ghost {
+    position: absolute;
+    inset: 12px auto auto 12px;
+    right: 210px;
+    color: var(--muted);
+    font-size: 10px;
+  }
+  .canvas .ghost div {
+    height: 10px;
+    background: var(--line);
+    border-radius: 3px;
+    margin: 6px 0;
+    width: 70%;
+  }
+  .drawer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 200px;
+    background: var(--surface);
+    border-left: 1px solid var(--line);
+    box-shadow: -6px 0 18px rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+  }
+  .drawer .rl {
+    border-right: 0;
+    flex: 1;
+  }
+  .drawer .row {
+    grid-template-columns: 26px 1fr auto;
+    padding: 5px 8px;
+  }
+  .drawer .av {
+    width: 26px;
+    height: 26px;
+    font-size: 9px;
+  }
+  .phone {
+    width: 190px;
+    height: 350px;
+    margin: 15px auto;
+    background: var(--surface);
+    border: 2px solid var(--line);
+    border-radius: 18px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .phone .cv {
+    border-right: 0;
+    flex: 1;
+  }
+  .phone .cv .hd {
+    padding: 8px;
+  }
+  .phone .msgs {
+    padding: 6px 8px;
+  }
+  .phone .ml,
+  .phone .mr {
+    max-width: 88%;
+  }
+  .brd-cap {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    color: var(--muted);
+    border-top: 1px solid var(--line-soft);
+  }
+  .brd-cap b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  ul.tight {
+    margin: 6px 0 0;
+    padding-left: 18px;
+  }
+  ul.tight li {
+    margin: 3px 0;
+  }
+  @media (max-width: 720px) {
+    .kpis,
+    .track,
+    .dod,
+    .boards {
+      grid-template-columns: 1fr;
+    }
+    .dec-head,
+    .dec-body {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none !important;
+    }
+  }
+</style>
+
+<div class="page">
+  <div class="eyebrow">Đề xuất wave · CHAT · chờ owner duyệt · 02/09/2026</div>
+  <h1>Nâng giao diện Chat lên chuẩn ứng dụng nhắn tin thương mại</h1>
+  <p class="lede">
+    Đối chiếu 3 ảnh MISA AMIS Chat với mã CHAT hiện có trên master <code>fd29c167</code>. Kết luận
+    đo: khoảng cách nằm ở <b>bố cục, mật độ thông tin và thao tác</b>, không ở nền dữ liệu — wave
+    này <b>không có migration, không có cặp quyền mới, không mở bề mặt WebSocket</b>.
+  </p>
+
+  <div class="kpis">
+    <div class="kpi green">
+      <div class="v">0</div>
+      <div class="l">migration · cặp quyền mới</div>
+    </div>
+    <div class="kpi be">
+      <div class="v">3 + 1</div>
+      <div class="l">khoá DTO mới · route đọc mới</div>
+    </div>
+    <div class="kpi acc">
+      <div class="v">9</div>
+      <div class="l">Work Order, toàn 🟡 LIGHT gate</div>
+    </div>
+    <div class="kpi">
+      <div class="v">7</div>
+      <div class="l">quyết định cần ký CHAT-DEC-021..027</div>
+    </div>
+  </div>
+
+  <div class="banner">
+    <strong>Không làm lại S8.</strong> Wave S8-CHAT-UX (đóng 07/08) đã ship chia mục · ghim · avatar
+    phòng · mute · đang gõ/online · reaction. Wave này chỉ chạm phần S8 chưa chạm: preview tin cuối,
+    tên thật của phòng riêng, bong bóng hai phía, composer, bảng thông tin phòng, drawer,
+    responsive.
+  </div>
+
+  <!-- 01 -->
+  <section>
+    <div class="sec-head">
+      <span class="num">01</span>
+      <h2>Điểm xuất phát — đo thật trên master</h2>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <tr>
+          <th style="width: 190px">Thứ</th>
+          <th>Số đo</th>
+        </tr>
+        <tr>
+          <td>Bố cục <code>/chat</code></td>
+          <td>
+            3 cột <b>cứng</b> 288 / flex / 320px. <b>0 breakpoint</b> trong
+            <code>components/chat</code> + <code>routes/chat</code> (chỉ <code>ChatDock</code> có
+            <code>hidden md:flex</code>) ⇒ laptop 13" chen chúc, điện thoại không dùng được.
+          </td>
+        </tr>
+        <tr>
+          <td>Dòng phòng</td>
+          <td>
+            avatar · tên · <code>HH:mm</code> · dòng 2 = <b>loại phòng</b> («Nhóm», «Phòng ban»).
+            <code>chatRoomSchema</code> chỉ có <code>lastMessageAt</code>/<code
+              >lastMessageSeq</code
+            >
+            — <b>không có nội dung tin cuối</b>.
+          </td>
+        </tr>
+        <tr>
+          <td>Phòng riêng (DM)</td>
+          <td>
+            <code>GET /chat/rooms</code> không kèm thành viên ⇒ danh sách hiện
+            <b>«Tin nhắn riêng · CHAT-000123»</b> cho tới khi mở phòng; avatar là chữ cái đầu của
+            <i>mã phòng</i>. Nợ đã ghi ở <code>RoomAvatar.tsx:12-17</code>. Hai cache tên tạm
+            (<code>ChatPage</code>, <code>chat-dock.store</code>) đang che lỗ này.
+          </td>
+        </tr>
+        <tr>
+          <td>Đang online</td>
+          <td>
+            Kênh <code>chat:presence</code> đã có (S8), nhưng danh sách phòng
+            <b>không biết peer là ai</b> nên chấm online chỉ hiện ở header phòng đang mở.
+          </td>
+        </tr>
+        <tr>
+          <td>Ô soạn</td>
+          <td>
+            <code>sendMessageSchema.mentions</code> (max 20) + BE lọc thành viên <b>đã có</b>;
+            <code>MessageComposer.tsx</code> <b>0 dòng «mention»</b> ⇒ tính năng chết ở FE. Không
+            emoji, không dán/kéo ảnh, đính kèm trước gửi chỉ là tên + cỡ.
+          </td>
+        </tr>
+        <tr>
+          <td>Bong bóng tin</td>
+          <td>
+            Tuyến tính kiểu Slack (avatar trái, mọi tin cùng lề). Tác vụ hover 3 nút. «Đã xem bởi A,
+            B» bằng chữ.
+          </td>
+        </tr>
+        <tr>
+          <td>Bảng thông tin phòng</td>
+          <td>
+            Header chữ → 3 nút → 3 tab. Tab Tệp là danh sách phẳng dù DTO đã có
+            <code>isImage</code> + <code>thumbnailUrl</code>. Không «Liên kết», không «Tạo bởi» dù
+            <code>chat_rooms.created_by</code> tồn tại.
+          </td>
+        </tr>
+        <tr>
+          <td>Panel nổi</td>
+          <td>
+            Cửa sổ 1 phòng góc dưới phải, <b>không có danh sách phòng</b> — muốn đổi phòng phải rời
+            trang.
+          </td>
+        </tr>
+        <tr>
+          <td>Nền BE tái dùng</td>
+          <td>
+            <code>listRoomsForUser</code> đã sắp <code>last_message_at DESC</code>; index
+            <code>idx_chat_messages_room_seq (company_id, room_id, room_seq DESC)</code> ⇒ tin cuối
+            mỗi phòng lấy bằng 1 LATERAL index-only;
+            <code>AvatarPresignService.resolveEmployeeAvatars</code> đã ký avatar roster ⇒ dùng lại
+            cho peer; <code>GET …/files</code> đã trả <code>isImage</code>.
+          </td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- 02 -->
+  <section>
+    <div class="sec-head">
+      <span class="num">02</span>
+      <h2>Bản đồ khoảng cách — 3 ảnh MISA ↔ MediaOS</h2>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <tr>
+          <th>#</th>
+          <th>Bề mặt MISA</th>
+          <th>MediaOS hiện tại</th>
+          <th>Khoảng cách</th>
+          <th>Xếp</th>
+        </tr>
+        <tr>
+          <td class="k">G1</td>
+          <td>
+            Dòng hội thoại: avatar 40 · tên đậm khi chưa đọc · <b>«NGƯỜI GỬI: tin cuối»</b> · «2
+            ngày»
+          </td>
+          <td>loại phòng + HH:mm</td>
+          <td>preview tin cuối + thời gian tương đối</td>
+          <td><span class="pill a">Track A</span></td>
+        </tr>
+        <tr>
+          <td class="k">G2</td>
+          <td>DM hiện tên + ảnh thật + chấm online + «Ngừng hoạt động»</td>
+          <td>mã phòng tới khi mở</td>
+          <td><code>peer</code> trong DTO</td>
+          <td><span class="pill a">Track A</span></td>
+        </tr>
+        <tr>
+          <td class="k">G3</td>
+          <td>Thanh đầu 1 hàng (tìm · lọc · tạo) + tab lọc</td>
+          <td>tiêu đề + 2 icon + 1 hàng «Xem lưu trữ»</td>
+          <td>chip lọc nhanh</td>
+          <td><span class="pill a">Track A</span></td>
+        </tr>
+        <tr>
+          <td class="k">G4</td>
+          <td>Khung trống có hero + composer</td>
+          <td>icon xám + 2 dòng</td>
+          <td>hero + 2 hành động; phần AI ngoài</td>
+          <td><span class="pill b">Track B</span></td>
+        </tr>
+        <tr>
+          <td class="k">G5</td>
+          <td>Header hội thoại: avatar · tên · trạng thái · tìm-trong-phòng · gọi · ⓘ</td>
+          <td>tên · loại · gọi · ⓘ</td>
+          <td>avatar + tìm trong phòng</td>
+          <td><span class="pill b">Track B</span></td>
+        </tr>
+        <tr>
+          <td class="k">G6</td>
+          <td>Bong bóng hai phía, tác vụ nổi khi hover</td>
+          <td>tuyến tính Slack</td>
+          <td>đổi bố cục tin (DEC-024)</td>
+          <td><span class="pill b">Track B</span></td>
+        </tr>
+        <tr>
+          <td class="k">G7</td>
+          <td>Composer: emoji · @mention · dán/kéo ảnh · xem trước</td>
+          <td>textarea + kẹp giấy</td>
+          <td>4 tiện ích; mention BE có sẵn</td>
+          <td><span class="pill b">Track B</span></td>
+        </tr>
+        <tr>
+          <td class="k">G8</td>
+          <td>
+            «Thông tin nhóm»: avatar to · «Được tạo bởi» · 3 hành động tròn · «N thành viên ›» ·
+            Ảnh/Video lưới · Files · Links · «Rời nhóm» đỏ
+          </td>
+          <td>header chữ · 3 nút · 3 tab</td>
+          <td>bố cục dọc + <code>createdByName</code> + lọc <code>kind</code> + route liên kết</td>
+          <td><span class="pill c">Track C</span></td>
+        </tr>
+        <tr>
+          <td class="k">G9</td>
+          <td>Nhãn «Dữ liệu được mã hoá»</td>
+          <td>không E2E</td>
+          <td><b>không bịa nhãn</b></td>
+          <td><span class="pill out">✖</span></td>
+        </tr>
+        <tr>
+          <td class="k">G10</td>
+          <td>Nhắc hẹn · Huy hiệu</td>
+          <td>—</td>
+          <td>TASK / ME đã có chỗ riêng</td>
+          <td><span class="pill out">✖</span></td>
+        </tr>
+        <tr>
+          <td class="k">G11</td>
+          <td>Agentwork · @misaava · AI Tóm tắt</td>
+          <td>—</td>
+          <td>Phase 5 AI</td>
+          <td><span class="pill out">✖</span></td>
+        </tr>
+        <tr>
+          <td class="k">G12</td>
+          <td><b>Drawer chat bên phải</b> trên mọi trang (danh sách + hội thoại)</td>
+          <td>cửa sổ nổi 1 phòng</td>
+          <td>đổi hình thái panel phụ (DEC-026)</td>
+          <td><span class="pill d">Track D</span></td>
+        </tr>
+        <tr>
+          <td class="k">G13</td>
+          <td>Responsive</td>
+          <td>0 breakpoint</td>
+          <td>3 → 2 → 1 cột</td>
+          <td><span class="pill d">Track D</span></td>
+        </tr>
+        <tr>
+          <td class="k">G14</td>
+          <td>Phím tắt</td>
+          <td>Enter / Shift+Enter</td>
+          <td>Ctrl+K · ↑↓ · Esc</td>
+          <td><span class="pill b">Track B</span></td>
+        </tr>
+        <tr>
+          <td class="k">G15</td>
+          <td>Trạng thái cá nhân (bận/họp)</td>
+          <td>presence on/off</td>
+          <td>cần cột + màn ME + luật riêng tư</td>
+          <td><span class="pill out">chừa</span></td>
+        </tr>
+        <tr>
+          <td class="k">G16</td>
+          <td>Đã xem = dãy avatar nhỏ</td>
+          <td>chữ «Đã xem bởi»</td>
+          <td>roster đã có avatar ⇒ thuần FE</td>
+          <td><span class="pill b">Track B</span></td>
+        </tr>
+        <tr>
+          <td class="k">G17</td>
+          <td>LITE · thư viện mẫu</td>
+          <td>—</td>
+          <td>ngoài</td>
+          <td><span class="pill out">✖</span></td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- 03 -->
+  <section>
+    <div class="sec-head">
+      <span class="num">03</span>
+      <h2>7 quyết định cần ký — mỗi dòng đã kèm đề xuất</h2>
+    </div>
+    <p class="lede">
+      Đánh số từ <code>CHAT-DEC-021</code> (020 thuộc S7-CALL). Không cấp mã màn hình mới — sửa
+      SCREEN-001 · 002 · 004 tại chỗ. Chức năng <code>CHAT-FUNC-022..026</code>, API
+      <code>CHAT-API-031</code>.
+    </p>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">CHAT-DEC-021</span
+        ><span class="q">Chip lọc nhanh có đảo mục cố định (DEC-014) không?</span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          <b>Không đảo.</b> Chip
+          <code>Tất cả · Chưa đọc · Riêng · Nhóm · Phòng ban·Dự án · Đã lưu trữ</code>. «Tất cả» =
+          giữ nguyên 5 mục S8; chip khác = danh sách phẳng theo hoạt động. «Ưa thích» của MISA ≡
+          <b>Đã ghim</b>, không thêm khái niệm thứ hai. Chip không lưu.
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>
+          Bỏ mục cố định = làm lại FE-1 của S8 vừa ship; «Ưa thích» tách khỏi ghim = hai cột
+          per-user gần trùng nghĩa.
+        </p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">CHAT-DEC-022</span
+        ><span class="q">Preview tin cuối — đặt ở đâu, che thế nào?</span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          Thêm <code>lastMessage</code> vào
+          <code>chatRoomSchema</code> (<code>.nullable().optional()</code>):
+          <code
+            >{ senderId, senderName, kind: text|file|system|recalled, excerpt ≤120 ký tự cắt ở
+            server, attachmentCount }</code
+          >. <b>Che ở server</b> như §13.6: thu hồi ⇒ <code>excerpt: null</code>. Lấy bằng
+          <b>1 LATERAL</b> trên index sẵn có — không N+1. FE cập nhật từ chính sự kiện
+          <code>chat:message</code>, không thêm sự kiện.
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>
+          Ghép ở client = chỉ có preview cho phòng đã mở trong phiên; 19 phòng còn lại hiện «…».
+        </p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">CHAT-DEC-023</span
+        ><span class="q">Peer của phòng riêng trong danh sách</span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          Thêm <code>peer</code> (<code>.nullable().optional()</code>, chỉ khác null ở
+          <code>direct</code>): <code>{ userId, name, avatarUrl ký tươi, isActive }</code>. Ký qua
+          <code>resolveEmployeeAvatars</code> hiện có — 1 lô/lần list. Chấm online =
+          <code>presenceByUser[peer.userId]</code>. <b>Gỡ</b> hai cache tên tạm. ⚠️
+          <code>avatarUrl</code> ký per-recipient ⇒ <b>strip khỏi payload WS</b>
+          <code>chat:room</code>.
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>
+          Không có <code>peer</code> = DM tiếp tục hiện mã phòng. Route lô riêng = thêm một vòng
+          mạng ở khung hình đầu.
+        </p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">CHAT-DEC-024</span
+        ><span class="q">Bố cục tin nhắn: giữ tuyến tính hay bong bóng hai phía?</span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          <b>Bong bóng hai phía.</b> Tin của tôi lề phải (nền primary nhạt), người khác lề trái (nền
+          surface), avatar chỉ ở tin đầu cụm bên trái (giữ luật gộp 5 phút của S8). Giờ ở tin cuối
+          cụm + hover. Tác vụ hover = thanh nổi (👍 nhanh · trả lời · ghim · thu hồi). «Đã xem» =
+          dãy avatar 16px (≤3 + «+N»). <b>Bất biến render giữ nguyên</b>: body chỉ vào text node,
+          không markdown.
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>
+          Giữ tuyến tính = bớt ~1 WO nhưng khác mọi app chat người Việt đang dùng; người dùng hỏi
+          «tin nào của tôi?».
+        </p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">CHAT-DEC-025</span><span class="q">Bảng thông tin phòng v2</span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          Bố cục dọc: avatar lớn + tên (bút nếu đủ quyền) + «Tạo bởi … · ngày» → 3 hành động tròn
+          <b>Thêm thành viên</b> (gate cũ) · <b>Tắt/Bật thông báo</b> · <b>Ghim</b> (hai cái sau là
+          tuỳ chọn cá nhân, <b>không</b> sau cổng quyền) → «Thành viên (N) ›» mở Sheet → accordion
+          <b>Ảnh/Video</b> (lưới, lọc <code>kind=image</code> ở <b>server</b>) · <b>Tệp</b> ·
+          <b>Liên kết</b> (<code>CHAT-API-031</code>) · <b>Tin ghim</b> → cuối: Lưu trữ +
+          <b>Rời nhóm</b> đỏ. Không nhãn «mã hoá», không nhắc hẹn/huy hiệu.
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>
+          Giữ tab = ảnh vẫn là dòng chữ; lọc <code>isImage</code> ở client trên 1 trang 30 tệp =
+          lưới «2 ảnh» trong khi phòng có 200.
+        </p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">CHAT-DEC-026</span
+        ><span class="q">Panel phụ: cửa sổ nổi hay drawer?</span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          <b>Drawer phải 400px</b> (Sheet của <code>packages/ui</code>) mở từ badge header: ô tìm +
+          chip; danh sách thu gọn ↔ hội thoại (push, ‹ quay lại); <b>vẫn đúng 1 hội thoại</b> mở tại
+          một thời điểm; ⤢ mở <code>/chat</code>. Dùng lại
+          <code>ConversationPanel showHeader=false</code>. Thay <code>ChatDock</code>.
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>
+          Giữ cửa sổ nổi = người dùng phải rời trang đang làm để đổi phòng — đúng phiền toái ảnh 1
+          của owner cho thấy MISA đã giải.
+        </p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head">
+        <span class="code">CHAT-DEC-027</span
+        ><span class="q">Composer v2 — phạm vi và thư viện</span>
+      </div>
+      <div class="dec-body">
+        <span class="lbl rec">Đề xuất</span>
+        <p>
+          <code>@mention</code> từ roster (BE lọc sẵn) · <b>emoji tĩnh ~120</b> Unicode,
+          <b>0 dependency</b> (khác bộ 6 reaction đóng) · dán/kéo-thả ảnh đi đúng đường upload hiện
+          có · thumbnail xem trước · Ctrl/⌘+K tìm, Esc huỷ. Không rich-text.
+        </p>
+      </div>
+      <div class="dec-body">
+        <span class="lbl alt">Nếu khác</span>
+        <p>Thêm <code>emoji-mart</code> = +0,5MB cho app đã có nợ code-splitting.</p>
+      </div>
+    </div>
+
+    <div class="banner warn">
+      <strong>Ngoài phạm vi (ghi để không ai tự thêm):</strong> mã hoá đầu-cuối · trạng thái cá nhân
+      · nhắc hẹn · huy hiệu · AI tóm tắt/agent · sửa tin đã gửi · thư mục tự đặt · gọi nhóm ·
+      sticker/GIF · chuyển tiếp tin · tìm tệp/liên kết toàn cục.
+    </div>
+  </section>
+
+  <!-- 04 -->
+  <section>
+    <div class="sec-head">
+      <span class="num">04</span>
+      <h2>Dữ liệu — 3 khoá DTO, 1 tham số, 1 route; 0 bảng</h2>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <tr>
+          <th>Chỗ</th>
+          <th>Thêm</th>
+          <th>Che / gác</th>
+        </tr>
+        <tr>
+          <td class="k">chatRoomSchema</td>
+          <td><code>lastMessage</code> · <code>peer</code> (chỉ direct)</td>
+          <td>
+            thu hồi ⇒ excerpt null; membership đã gác ở <code>listRoomsForUser</code>;
+            <code>peer.avatarUrl</code> không đi qua WS
+          </td>
+        </tr>
+        <tr>
+          <td class="k">GET /chat/rooms/:id</td>
+          <td><code>createdByName</code></td>
+          <td>nullable (người tạo đã rời/xoá)</td>
+        </tr>
+        <tr>
+          <td class="k">GET /chat/rooms/:id/files</td>
+          <td>tham số <code>kind=image|file</code></td>
+          <td>gate + ký như CHAT-API-017, không đổi</td>
+        </tr>
+        <tr>
+          <td class="k">GET /chat/rooms/:id/links</td>
+          <td>
+            <b>CHAT-API-031</b> — trích <code>https?://</code> từ body tin chưa thu hồi, keyset
+            <code>room_seq DESC</code>, trần 50
+          </td>
+          <td>non-member 404; con trỏ mang vân phòng (CHAT-ERR-016)</td>
+        </tr>
+      </table>
+    </div>
+    <p class="lede" style="margin-top: 12px">
+      Mọi khoá mới đều <code>.nullable().optional()</code> — 7 consumer
+      <code>/chat/rooms</code> đang chạy không được vỡ khi FE lên trước BE (bài học
+      <code>server-masking-needs-optional-fe-schema</code>).
+    </p>
+  </section>
+
+  <!-- 05 -->
+  <section>
+    <div class="sec-head">
+      <span class="num">05</span>
+      <h2>Wireframe — trang Chat v2, drawer, mobile</h2>
+    </div>
+    <p class="lede">
+      Nội dung trong khung là ví dụ dựng từ chính ảnh owner gửi. Màu dùng token theme của
+      <code>packages/ui</code> (primary <code>#1fa9e0</code>), light/dark đều có.
+    </p>
+
+    <div class="wf">
+      <div class="wf-cap">
+        <span>CHAT-SCREEN-001 v2 · 3 cột ≥1280px · danh sách 320 · hội thoại · thông tin 340</span
+        ><b>/chat</b>
+      </div>
+      <div class="app">
+        <div class="rl">
+          <div class="bar">
+            <span class="srch">🔍 Tìm người, tin nhắn, tệp…</span><span class="ic">⚲</span
+            ><span class="ic">✎</span>
+          </div>
+          <div class="chips">
+            <span class="on">Tất cả</span><span>Chưa đọc</span><span>Riêng</span><span>Nhóm</span
+            ><span>Phòng ban · Dự án</span><span>Lưu trữ</span>
+          </div>
+          <div class="sect">Đã ghim</div>
+          <div class="row on">
+            <span class="av a1">SE</span>
+            <div>
+              <div class="t">Nhóm SEO 2025</div>
+              <div class="p"><b>Đỗ Tiến Bắc:</b> Cái này triển khai QUYẾT LIỆT nhé anh em…</div>
+            </div>
+            <div class="m"><span>2 ngày</span><span class="badge">3</span></div>
+          </div>
+          <div class="sect">Tin nhắn riêng</div>
+          <div class="row">
+            <span class="av a2">TP<i class="dot"></i></span>
+            <div>
+              <div class="t dim">Trần Thị Phượng</div>
+              <div class="p"><b>Bạn:</b> Cảm ơn em.</div>
+            </div>
+            <div class="m"><span>3 ngày</span></div>
+          </div>
+          <div class="row">
+            <span class="av a4">BA</span>
+            <div>
+              <div class="t dim">Bùi Văn Anh <span class="tag">Ngừng hoạt động</span></div>
+              <div class="p">chị lấy mấy cái ảnh lúc sáng chụp</div>
+            </div>
+            <div class="m"><span>4 ngày</span></div>
+          </div>
+          <div class="sect">Nhóm</div>
+          <div class="row">
+            <span class="av a3">FM</span>
+            <div>
+              <div class="t">FMC QUYẾT LIỆT!</div>
+              <div class="p">
+                <b>Bùi Quỳnh Trang:</b> Do đã hoàn thành kế hoạch tuần nên em xin phép…
+              </div>
+            </div>
+            <div class="m"><span>3 ngày</span><span class="badge">12</span></div>
+          </div>
+          <div class="row">
+            <span class="av a5">BL</span>
+            <div>
+              <div class="t dim">Ban Lãnh đạo</div>
+              <div class="p"><b>Lương Phương Anh:</b> Anh nhận thông tin rồi em nhé!</div>
+            </div>
+            <div class="m"><span>1 tuần</span></div>
+          </div>
+          <div class="row">
+            <span class="av a1">AU</span>
+            <div>
+              <div class="t dim">Automation</div>
+              <div class="p"><b>Đỗ Tiến Bắc:</b> 📎 1 tệp · Chi tiết HR - QUY TRÌNH.xlsx</div>
+            </div>
+            <div class="m"><span>1 tuần</span><span>🔕</span></div>
+          </div>
+          <div class="sect">Phòng ban</div>
+          <div class="row">
+            <span class="av a4">NS</span>
+            <div>
+              <div class="t dim">Phòng nhân sự đào tạo</div>
+              <div class="p"><i>Hệ thống:</i> Nguyễn Văn Cảnh đã tham gia</div>
+            </div>
+            <div class="m"><span>2 tuần</span></div>
+          </div>
+        </div>
+
+        <div class="cv">
+          <div class="hd">
+            <span class="av a1" style="width: 28px; height: 28px; font-size: 10px">SE</span>
+            <div>
+              <div class="nm">Nhóm SEO 2025</div>
+              <div class="st">12 thành viên · 4 đang online</div>
+            </div>
+            <div class="acts"><span>🔍</span><span>📞</span><span>📹</span><span>ⓘ</span></div>
+          </div>
+          <div class="msgs">
+            <div class="day">Hôm qua</div>
+            <div class="sys"><span>Trần Thị Phượng đã thêm Bùi Văn Anh vào nhóm</span></div>
+            <div class="ml">
+              <span class="av a2">ĐB</span>
+              <div class="bub">
+                <div class="who">Đỗ Tiến Bắc</div>
+                Cái này triển khai QUYẾT LIỆT nhé anh em, nó vất vả hơn nhưng nó đáng làm.
+                <div class="rx"><span>👍 4</span><span class="mine">❤️ 1</span></div>
+              </div>
+            </div>
+            <div class="ml">
+              <span class="sp"></span>
+              <div class="bub">
+                Link kế hoạch: https://docs.google.com/spreadsheets/d/1ULEZ…<span class="tm"
+                  >09:41</span
+                >
+                <div class="hover">👍 ↩ 📌 ⋯</div>
+              </div>
+            </div>
+            <div class="mr">
+              <div class="bub">
+                <span class="at">@Đỗ Tiến Bắc</span> em nhận, tuần này ưu tiên bài GTA trước ạ.<span
+                  class="tm"
+                  >09:52</span
+                >
+              </div>
+            </div>
+            <div class="seen">
+              <span style="background: #c0632b">ĐB</span><span style="background: #4f7d3a">QT</span
+              ><span style="background: #6a5aa8">+2</span>
+            </div>
+            <div class="day">Hôm nay</div>
+            <div class="ml">
+              <span class="av a3">QT</span>
+              <div class="bub">
+                <div class="who">Bùi Quỳnh Trang</div>
+                Em gửi bản nháp outline, anh em xem giúp.
+              </div>
+            </div>
+          </div>
+          <div class="typing">Bùi Quỳnh Trang đang gõ…</div>
+          <div class="comp" style="position: relative">
+            <div class="mention">
+              <div class="on">Đỗ Tiến Bắc · Trưởng nhóm</div>
+              <div>Đỗ Minh Tuấn</div>
+            </div>
+            <div class="thumbs"><span></span><span></span></div>
+            <div class="box">
+              <span class="ic">📎</span><span class="ic">😊</span><span class="txt">@Đỗ|</span
+              ><span class="send">➤</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="ip">
+          <div class="top">
+            <span class="av a1">SE</span>
+            <div class="nm">Nhóm SEO 2025 ✎</div>
+            <div class="by">Tạo bởi Đỗ Tiến Bắc · 12/05/2026</div>
+          </div>
+          <div class="acts">
+            <div><i>👤+</i>Thêm thành viên</div>
+            <div><i>🔕</i>Tắt thông báo</div>
+            <div><i>📌</i>Ghim</div>
+          </div>
+          <div class="line"><span>Thành viên</span><span>12 ›</span></div>
+          <div class="line"><span>Ảnh / Video</span><span>▾</span></div>
+          <div class="grid">
+            <span></span><span></span><span></span><span></span><span></span><span></span
+            ><span></span><span></span>
+          </div>
+          <div class="line"><span>Tệp</span><span>▾</span></div>
+          <div class="file">
+            <i>XLS</i>
+            <div>
+              Chi tiết HR - QUY TRÌNH - CÔNG VIỆC.xlsx
+              <div class="meta">16 KB · 15/06/2026</div>
+            </div>
+          </div>
+          <div class="file">
+            <i class="pdf">PDF</i>
+            <div>
+              Báo cáo tiến độ dự án · 2026-06-15.pdf
+              <div class="meta">2 MB · 15/06/2026</div>
+            </div>
+          </div>
+          <div class="line"><span>Liên kết</span><span>▸</span></div>
+          <div class="line"><span>Tin ghim</span><span>3 ▸</span></div>
+          <div class="leave">Rời nhóm</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="boards">
+      <div class="board">
+        <div class="canvas">
+          <div class="ghost">
+            Trang Công việc (đang làm dở)
+            <div></div>
+            <div style="width: 45%"></div>
+            <div></div>
+            <div style="width: 60%"></div>
+          </div>
+          <div class="drawer">
+            <div class="rl">
+              <div class="bar">
+                <span class="srch">🔍 Tìm…</span><span class="ic">⤢</span><span class="ic">×</span>
+              </div>
+              <div class="chips">
+                <span class="on">Tất cả</span><span>Chưa đọc</span><span>Riêng</span>
+              </div>
+              <div class="row on">
+                <span class="av a1">SE</span>
+                <div>
+                  <div class="t">Nhóm SEO 2025</div>
+                  <div class="p"><b>Đỗ Tiến Bắc:</b> Cái này…</div>
+                </div>
+                <div class="m"><span class="badge">3</span></div>
+              </div>
+              <div class="row">
+                <span class="av a2">TP<i class="dot"></i></span>
+                <div>
+                  <div class="t dim">Trần Thị Phượng</div>
+                  <div class="p"><b>Bạn:</b> Cảm ơn em.</div>
+                </div>
+                <div class="m"><span>3 ng</span></div>
+              </div>
+              <div class="row">
+                <span class="av a3">FM</span>
+                <div>
+                  <div class="t">FMC QUYẾT LIỆT!</div>
+                  <div class="p"><b>Quỳnh Trang:</b> Do đã…</div>
+                </div>
+                <div class="m"><span class="badge">12</span></div>
+              </div>
+              <div class="row">
+                <span class="av a5">BL</span>
+                <div>
+                  <div class="t dim">Ban Lãnh đạo</div>
+                  <div class="p"><b>Phương Anh:</b> Anh nhận…</div>
+                </div>
+                <div class="m"><span>1 t</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="brd-cap">
+          <b>CHAT-SCREEN-002 v2 · Drawer</b> — mở từ badge trên mọi trang; bấm phòng ⇒ hội thoại đẩy
+          vào (‹ quay lại); ⤢ mở <code>/chat</code>. Đúng 1 hội thoại tại một thời điểm.
+        </div>
+      </div>
+      <div class="board">
+        <div class="canvas" style="background: var(--surface-2)">
+          <div class="phone">
+            <div class="cv">
+              <div class="hd">
+                <span>‹</span
+                ><span class="av a2" style="width: 24px; height: 24px; font-size: 9px"
+                  >TP<i class="dot"></i
+                ></span>
+                <div>
+                  <div class="nm">Trần Thị Phượng</div>
+                  <div class="st">Đang online</div>
+                </div>
+                <div class="acts"><span>📞</span><span>ⓘ</span></div>
+              </div>
+              <div class="msgs">
+                <div class="ml">
+                  <span class="av a2">TP</span>
+                  <div class="bub">Anh xem giúp em file này với ạ.</div>
+                </div>
+                <div class="mr">
+                  <div class="bub">Ok em, chiều anh gửi lại.<span class="tm">16:20</span></div>
+                </div>
+                <div class="ml">
+                  <span class="av a2">TP</span>
+                  <div class="bub">Cảm ơn anh 🙏</div>
+                </div>
+              </div>
+              <div class="comp">
+                <div class="box">
+                  <span class="ic">📎</span><span class="txt">Nhắn tin…</span
+                  ><span class="send">➤</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="brd-cap">
+          <b>&lt;768px · 1 cột</b> — danh sách → hội thoại (push) → thông tin phòng là Sheet toàn
+          màn. ≥768: thông tin phòng thành Sheet; ≥1280: 3 cột.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 -->
+  <section>
+    <div class="sec-head">
+      <span class="num">06</span>
+      <h2>9 Work Order — 4 track song song sau DOC-1, không lane migration</h2>
+    </div>
+    <div class="track">
+      <div class="lane">
+        <b><span class="pill a">Track A</span> Danh sách</b>
+        <div class="steps">
+          DOC-1 → <span>BE-1</span> (lastMessage · peer · createdByName · kind) →
+          <span>FE-1</span> (chip · dòng phòng · gỡ cache tên)
+        </div>
+      </div>
+      <div class="lane">
+        <b><span class="pill b">Track B</span> Hội thoại</b>
+        <div class="steps">
+          DOC-1 → <span>FE-2</span> (header · bong bóng · hero · đã-xem) →
+          <span>FE-3</span> (composer: mention · emoji · dán ảnh)
+        </div>
+      </div>
+      <div class="lane">
+        <b><span class="pill c">Track C</span> Thông tin phòng</b>
+        <div class="steps">
+          DOC-1 → <span>BE-2</span> (CHAT-API-031 liên kết) → <span>FE-4</span> (bảng dọc · Sheet
+          thành viên · lưới ảnh)
+        </div>
+      </div>
+      <div class="lane">
+        <b><span class="pill d">Track D</span> Vỏ</b>
+        <div class="steps">
+          FE-1 + FE-2 → <span>FE-5</span> (drawer · responsive) → <span class="pill qa">QA-1</span>
+        </div>
+      </div>
+    </div>
+    <div class="tbl-wrap" style="margin-top: 14px">
+      <table>
+        <tr>
+          <th>WO</th>
+          <th>Zone</th>
+          <th>Phụ thuộc</th>
+          <th>Bằng chứng xong (rút gọn)</th>
+        </tr>
+        <tr>
+          <td class="k">S17-CHAT-UX2-DOC-1</td>
+          <td class="zone">🟡 LIGHT</td>
+          <td>—</td>
+          <td>DEC-021..027 vào SPEC-15 §22c · API-13 · DB-12 «0 migration»; plan-reviewer PASS</td>
+        </tr>
+        <tr>
+          <td class="k">S17-CHAT-UX2-BE-1</td>
+          <td class="zone">🟡 + silent-failure-hunter</td>
+          <td>DOC-1</td>
+          <td>
+            EXPLAIN list 200 phòng = 1 câu index-only; thu hồi ⇒ excerpt null; non-member 404;
+            cross-tenant 0; WS không có avatarUrl
+          </td>
+        </tr>
+        <tr>
+          <td class="k">S17-CHAT-UX2-BE-2</td>
+          <td class="zone">🟡 LIGHT</td>
+          <td>DOC-1</td>
+          <td>links: non-member 404 · tin thu hồi vắng · con trỏ phòng khác 400</td>
+        </tr>
+        <tr>
+          <td class="k">S17-CHAT-UX2-FE-1</td>
+          <td class="zone">🟡 LIGHT</td>
+          <td>BE-1</td>
+          <td>
+            mỗi phòng 1 node ở mọi chip; DM có tên ngay khung hình đầu; test
+            <code>chat-room-item</code> giữ số ca
+          </td>
+        </tr>
+        <tr>
+          <td class="k">S17-CHAT-UX2-FE-2</td>
+          <td class="zone">🟡 LIGHT</td>
+          <td>DOC-1</td>
+          <td>
+            ratchet «body chỉ text node» xanh; test đếm avatar cụm giữ; thanh nổi có focus-within
+          </td>
+        </tr>
+        <tr>
+          <td class="k">S17-CHAT-UX2-FE-3</td>
+          <td class="zone">🟡 LIGHT</td>
+          <td>FE-2</td>
+          <td>
+            mention gửi đúng <code>mentions[]</code>; dán ảnh ⇒ 1 upload;
+            <code>clientMessageId</code> bất biến giữ
+          </td>
+        </tr>
+        <tr>
+          <td class="k">S17-CHAT-UX2-FE-4</td>
+          <td class="zone">🟡 LIGHT</td>
+          <td>BE-1 · BE-2</td>
+          <td>
+            Tắt thông báo/Ghim không gate; lưới ảnh chỉ ký khi mở accordion; 4 nhánh tư cách avatar
+            không đổi
+          </td>
+        </tr>
+        <tr>
+          <td class="k">S17-CHAT-UX2-FE-5</td>
+          <td class="zone">🟡 LIGHT</td>
+          <td>FE-1 · FE-2</td>
+          <td>ESLint single-socket-file xanh; 1 hội thoại/lần; 3 breakpoint có test</td>
+        </tr>
+        <tr>
+          <td class="k">S17-CHAT-UX2-QA-1</td>
+          <td class="zone">🟡 LIGHT</td>
+          <td>tất cả</td>
+          <td>
+            <code>check.sh --all --lane-db</code> xanh; snapshot light/dark 3 màn; axe 0 critical;
+            coverage chat ≥80%
+          </td>
+        </tr>
+      </table>
+    </div>
+    <p class="lede" style="margin-top: 12px">
+      Chi phí ước ≈ <b>$350–450 cả wave</b> (9 WO vàng ≈ ⅓ WO đỏ theo
+      <code>red-zone-wo-cost-profile</code>) — 9 phiên tuần tự, hoặc 4 track song song qua
+      <code>parallel-lanes</code>.
+    </p>
+  </section>
+
+  <!-- 07 -->
+  <section>
+    <div class="sec-head">
+      <span class="num">07</span>
+      <h2>Bẫy đã biết — viết sẵn vào <code>done_when</code></h2>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <tr>
+          <th>Memory</th>
+          <th>Áp vào</th>
+        </tr>
+        <tr>
+          <td>
+            <code>server-masking-needs-optional-fe-schema</code> — 3 khoá DTO mới đều
+            <code>.nullable().optional()</code>
+          </td>
+          <td>BE-1</td>
+        </tr>
+        <tr>
+          <td>
+            <code>ws-payload-narrower-than-rest-dto</code> — <code>peer.avatarUrl</code> không đi
+            qua <code>chat:room</code>; FE giữ giá trị cũ khi payload thiếu
+          </td>
+          <td>BE-1 · FE-1</td>
+        </tr>
+        <tr>
+          <td>
+            <code>duplicate-sibling-key-leaks-dom-node</code> — chip phẳng + mục cố định cùng dùng
+            <code>RoomRow</code>
+          </td>
+          <td>FE-1</td>
+        </tr>
+        <tr>
+          <td>
+            <code>ui-promises-backend-never-reads</code> — lưới Ảnh/Video lọc ở server
+            (<code>kind</code>)
+          </td>
+          <td>BE-1 · FE-4</td>
+        </tr>
+        <tr>
+          <td>
+            <code>read-path-gate-pair-must-match-download-pair</code> — ảnh lưới dùng đúng URL ký
+            của API-017
+          </td>
+          <td>FE-4</td>
+        </tr>
+        <tr>
+          <td>
+            <code>personal-prefs-must-not-sit-behind-permission-gate</code> — Tắt thông báo · Ghim
+          </td>
+          <td>FE-4</td>
+        </tr>
+        <tr>
+          <td><code>chat-fe-single-socket-file</code> — drawer không mở socket thứ hai</td>
+          <td>FE-5</td>
+        </tr>
+        <tr>
+          <td>
+            <code>react-query-v5-stale-mutationfn-closure</code> ·
+            <code>ismounted-ref-stuck-false-under-strictmode</code> ·
+            <code>fake-timers-break-socketio-client-emit</code>
+          </td>
+          <td>FE-3 · FE-4</td>
+        </tr>
+        <tr>
+          <td>
+            <code>console-had-zero-code-splitting</code> — emoji tĩnh + drawer lazy, 0 dependency
+            mới
+          </td>
+          <td>FE-3 · FE-5</td>
+        </tr>
+        <tr>
+          <td>
+            <code>pg-planner-index-assert-trap</code> — LATERAL nằm trong câu list, assert trên
+            EXPLAIN
+          </td>
+          <td>BE-1</td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- 08 -->
+  <section>
+    <div class="sec-head">
+      <span class="num">08</span>
+      <h2>Definition of Done cấp wave</h2>
+    </div>
+    <div class="dod">
+      <div>
+        <b>Tài liệu</b>
+        <ul>
+          <li>
+            SPEC-15 §5.1d · §9 (SCREEN-001/002/004 v2) · §9a · §10 · §15 · §22c; API-13; DB-12; UI
+            doc; README §8
+          </li>
+          <li>§9 không còn dòng «DM hiện mã phòng»</li>
+        </ul>
+      </div>
+      <div>
+        <b>BE</b>
+        <ul>
+          <li>3 khoá DTO + 1 route có int-spec deny-path trên LANE_DB</li>
+          <li>Ratchet 0-<code>@SubscribeMessage</code> vẫn xanh — không mở bề mặt WS</li>
+        </ul>
+      </div>
+      <div>
+        <b>FE</b>
+        <ul>
+          <li>
+            Coverage <code>components/chat</code> ≥80%; snapshot light + dark 3 màn; axe 0 critical
+          </li>
+          <li>ESLint single-socket-file xanh; không dependency mới</li>
+        </ul>
+      </div>
+      <div>
+        <b>Vận hành</b>
+        <ul>
+          <li><code>check.sh --all</code> xanh; 9 WO đóng dấu; TESTABLE-FEATURES cập nhật</li>
+          <li>Không thêm nợ migration PROD; bật module CHAT là WO vận hành riêng</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="approve">
+    <h2>Cách duyệt</h2>
+    <ol>
+      <li>
+        <b>«ok tôi duyệt»</b> ⇒ chốt 7 quyết định theo cột Đề xuất; tôi chép vào SPEC-15 §22c, seed
+        9 WO vào <code>harness/backlog.mjs</code>, regen STATUS.
+      </li>
+      <li>
+        Muốn đổi: ghi mã (ví dụ <code>CHAT-DEC-024: giữ tuyến tính</code>,
+        <code>CHAT-DEC-026: giữ cửa sổ nổi</code>) — tôi cập nhật hồ sơ rồi seed.
+      </li>
+      <li>
+        Hai quyết định thẩm mỹ owner nên xem wireframe trước khi ký:
+        <b>bong bóng hai phía</b> (DEC-024) và <b>drawer thay cửa sổ nổi</b> (DEC-026).
+      </li>
+    </ol>
+  </div>
+</div>

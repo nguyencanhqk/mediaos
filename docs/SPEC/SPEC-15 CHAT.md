@@ -20,10 +20,10 @@
 | Module phụ thuộc trực tiếp | AUTH (RBAC · token WS), HR (employees/departments), TASK (projects), FOUNDATION (files · audit · sequences) |
 | Module liên quan | NOTI, ME, DASH, LMS (lối vào /chat hiện tại) |
 | Phiên bản | v1.0 |
-| Trạng thái | **Approved** — owner chốt 12 quyết định §22 ngày 02/08/2026 (CHAT-DEC-004 chốt **ngược** đề xuất ban đầu — xem §3.3) |
+| Trạng thái | **Approved** — owner chốt 12 quyết định §22 ngày 02/08/2026 (CHAT-DEC-004 chốt **ngược** đề xuất ban đầu — xem §3.3) · S8 DEC-014..019 chốt 05/08 (§22a) · S7-CALL DEC-020 ký 08/08 (§22b) · **S17-CHAT-UX2 DEC-021..027 duyệt 02/09/2026 (§5.1d · §22c)** |
 | Giai đoạn | **Phase 4 · wave S7-CHAT** — NGOÀI phạm vi RC v1.0.0 (scope freeze RELEASE-05) |
 | Ngày tạo | 01/08/2026 |
-| Ngày cập nhật | 01/08/2026 |
+| Ngày cập nhật | 02/09/2026 |
 
 > ⚠️ **Vị trí so với go-live:** CHAT nằm **ngoài** cửa sổ RC đang mở (`S6-GOLIVE-1` NO-GO + 10 cổng owner). Wave `S7-CHAT-*` được phép thi công song song nhưng **KHÔNG merge vào `master`** cho tới khi go-live đóng — bảo toàn 4 chặn RC của [RELEASE-05](<../RELEASE/RELEASE-05_Scope_Freeze_And_Release_Governance.md>).
 
@@ -198,6 +198,23 @@ CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ 
 ⚠️ **Ranh giới vẫn là membership, KHÔNG phải data_scope** (§3.2): gọi được trong phòng nào ⇔ `assertMember` phòng đó. Handshake `/ws-call` kiểm phiên; **mỗi sự kiện kiểm lại tư cách tham gia cuộc gọi** — **không** tin vào việc socket đang ở trong room (bài học `ws-permission-gate-needs-its-own-room`).
 
 ⚠️ **`('view','chat-oversight')` KHÔNG cấp quyền nghe hay tham gia cuộc gọi.** Đọc-vượt (§3.3) là quyền đọc **lịch sử tin nhắn**; nó **không** mở cửa vào một cuộc gọi đang diễn ra, và **không** miễn `assertMember` cho bất kỳ đường CALL nào. Người có cặp đó mà không thuộc phòng gọi vào → **404** như mọi người ngoài (`CHAT-ERR-026`). Ghi tường minh ở đây để **không ai suy diễn từ `CHAT-DEC-004`** rằng quản trị nghe lén được.
+
+### 5.1d Bổ sung wave S17-CHAT-UX2 — bố cục · mật độ thông tin · thao tác (owner duyệt 02/09/2026)
+
+> Wave này **chỉ nâng trình bày và thao tác**. Ranh giới dữ liệu KHÔNG đổi (membership vẫn là ranh giới duy nhất, §3.2), **không cặp quyền mới**, **không migration**, **không mở bề mặt WebSocket** (ratchet 0 `@SubscribeMessage` giữ nguyên). Hồ sơ: [`docs/plans/S17-CHAT-UX2-WAVE.md`](../plans/S17-CHAT-UX2-WAVE.md). Bản chi tiết từng mục (§9 · §9a · §10 · §15) là việc của WO `S17-CHAT-UX2-DOC-1`.
+
+| Nhóm | Nội dung | Quyết định |
+| --- | --- | --- |
+| Chip lọc nhanh | Thanh chip `Tất cả · Chưa đọc · Riêng · Nhóm · Phòng ban·Dự án · Đã lưu trữ` trên danh sách phòng. «Tất cả» = giữ nguyên 5 mục cố định của CHAT-DEC-014; chip khác = danh sách phẳng theo hoạt động. «Ưa thích» ≡ **Đã ghim**, không thêm khái niệm thứ hai | CHAT-DEC-021 |
+| Preview tin cuối | `chatRoomSchema.lastMessage` (`.nullable().optional()`): người gửi · `kind` (`text`/`file`/`system`/`recalled`) · `excerpt` ≤120 ký tự **cắt và che ở server** (thu hồi ⇒ `null`) · số tệp. Lấy bằng **một** LATERAL trên `idx_chat_messages_room_seq`, không N+1. FE cập nhật từ chính `chat:message` | CHAT-DEC-022 |
+| Peer phòng `direct` | `chatRoomSchema.peer` (`.nullable().optional()`, chỉ khác null ở `direct`): `userId` · `name` · `avatarUrl` ký tươi qua `AvatarPresignService.resolveEmployeeAvatars` · `isActive`. **`avatarUrl` KHÔNG đi qua payload WS `chat:room`** (ký per-recipient). Danh sách hiện tên + ảnh + chấm online + nhãn «Ngừng hoạt động» ngay khung hình đầu; gỡ hai cache tên tạm ở FE | CHAT-DEC-023 |
+| Bố cục tin nhắn | **Bong bóng hai phía**: tin của tôi lề phải, người khác lề trái, avatar chỉ ở tin đầu cụm bên trái (giữ luật gộp 5 phút). Tác vụ hover = thanh nổi. «Đã xem» = dãy avatar. **Bất biến render giữ nguyên**: `body` chỉ vào text node | CHAT-DEC-024 |
+| Bảng thông tin phòng v2 | Bố cục dọc: avatar lớn · tên · «Tạo bởi … · ngày» (`createdByName` thêm vào `getRoom`) · 3 hành động tròn (Thêm thành viên [gate] · Tắt/Bật thông báo · Ghim — hai cái sau là **tuỳ chọn cá nhân, KHÔNG sau cổng quyền**) · «Thành viên (N) ›» · accordion Ảnh/Video (lọc `kind=image` **ở server** trên CHAT-API-017) · Tệp · Liên kết (`CHAT-API-031`) · Tin ghim · Lưu trữ · Rời nhóm. **KHÔNG** nhãn «mã hoá» (không có E2E), không nhắc hẹn/huy hiệu | CHAT-DEC-025 |
+| Panel phụ (CHAT-SCREEN-002 v2) | **Drawer phải 400px** mở từ badge header trên mọi trang: ô tìm + chip · danh sách thu gọn ↔ hội thoại (push) · vẫn **đúng 1 hội thoại** mở tại một thời điểm · ⤢ mở `/chat`. Thay cửa sổ nổi. Dưới `md` drawer thành toàn màn; `/chat` responsive 3 → 2 → 1 cột | CHAT-DEC-026 |
+| Ô soạn v2 | `@mention` autocomplete từ roster (gửi `mentions[]`, BE đã lọc — CHAT-ERR-010) · emoji **tĩnh** ~120 Unicode chèn vào chữ, **0 dependency** (khác bộ 6 reaction đóng của DEC-018) · dán/kéo-thả ảnh đi đường upload hiện có · thumbnail xem trước · phím tắt Ctrl/⌘+K, Esc. Không rich-text (§3.4) | CHAT-DEC-027 |
+
+⚠️ **Ngoài phạm vi wave (ghi để không ai tự thêm):** mã hoá đầu-cuối · trạng thái cá nhân (bận/họp) · nhắc hẹn · huy hiệu · AI tóm tắt/agent (Phase 5) · sửa tin đã gửi · thư mục tự đặt (§5.2) · gọi nhóm · sticker/GIF · chuyển tiếp tin · tìm tệp/liên kết toàn cục.
+
 
 ### 5.2 Ngoài v1 (chừa thiết kế, KHÔNG làm đợt này)
 
@@ -801,6 +818,23 @@ Phát qua **OutboxNotificationBridge** (đã ship): enqueue trong transaction, m
 > ⚠️ **`CHAT-DEC-020` KHÔNG huỷ `CHAT-DEC-005`, và KHÔNG phải tiền lệ.** Ngoại lệ đứng được **chỉ vì** SDP/ICE không phải dữ liệu nghiệp vụ: không lưu DB, không lên DTO, không sống quá cuộc gọi (R3). **Ngày nào ta lưu SDP hoặc ghi âm cuộc gọi, ngoại lệ này hết hiệu lực** và phải mở ADR mới — đã ghi vào §5.2 để không ai lặng lẽ vượt rào.
 >
 > ⚠️ **`('view','chat-oversight')` KHÔNG mở cửa nghe lén.** `CHAT-DEC-004` cho Super Admin đọc-vượt **lịch sử tin nhắn**; nó **không** cấp quyền tham gia hay nghe một cuộc gọi đang diễn ra, và **không** miễn `assertMember` cho đường CALL nào (§5.1c · CHAT-ERR-026). Ghi tường minh để chặn đúng một suy diễn: "quản trị đọc được mọi phòng ⇒ nghe được mọi cuộc gọi" — **SAI**.
+
+### 22c. Wave S17-CHAT-UX2 — nâng bố cục/thao tác theo benchmark MISA AMIS Chat, **OWNER DUYỆT 02/09/2026**
+
+> Nguồn: [`docs/plans/S17-CHAT-UX2-WAVE.md`](../plans/S17-CHAT-UX2-WAVE.md) §3 — owner duyệt nguyên gói hồ sơ («ok tôi duyệt»), 7/7 quyết định chốt theo cột Đề xuất. Đánh số từ **021** vì `CHAT-DEC-020` thuộc S7-CALL (§22b). Không cấp mã màn hình mới — SCREEN-001 · 002 · 004 sửa tại chỗ («v2»). Chức năng mới `CHAT-FUNC-022..026`, API mới `CHAT-API-031` (+ tham số `kind` cho CHAT-API-017) — chi tiết do `S17-CHAT-UX2-DOC-1` viết.
+
+| Mã | Câu hỏi | Kết quả owner chốt | Đảo spec? |
+| --- | --- | --- | --- |
+| CHAT-DEC-021 | Chip lọc nhanh có đảo mục cố định (CHAT-DEC-014) không? | **Không đảo.** Chip `Tất cả · Chưa đọc · Riêng · Nhóm · Phòng ban·Dự án · Đã lưu trữ`; «Tất cả» giữ 5 mục S8, chip khác = phẳng theo hoạt động; chip không lưu. «Ưa thích» ≡ Đã ghim | Không — bổ sung §9a |
+| CHAT-DEC-022 | Preview tin cuối đặt ở đâu, che thế nào? | `chatRoomSchema.lastMessage` `.nullable().optional()` `{ senderId, senderName, kind, excerpt ≤120 cắt ở server, attachmentCount }`; thu hồi ⇒ `kind:'recalled'`, `excerpt:null` (che ở server như §13.6); 1 LATERAL trong `listRoomsForUser`; FE cập nhật từ `chat:message`, không thêm sự kiện WS | Không — bổ sung §8 · §15 |
+| CHAT-DEC-023 | Peer của phòng `direct` trong danh sách | `chatRoomSchema.peer` `.nullable().optional()` chỉ ở `direct`: `{ userId, name, avatarUrl ký tươi, isActive }`; ký qua `resolveEmployeeAvatars` hiện có (1 lô/lần list); **`avatarUrl` strip khỏi WS `chat:room`**; gỡ cache tên tạm ở `ChatPage` + `chat-dock.store`; `isActive=false` ⇒ nhãn «Ngừng hoạt động», **không** khoá ô soạn | Không — bổ sung §8 · §9 |
+| CHAT-DEC-024 | Bố cục tin nhắn: tuyến tính hay bong bóng hai phía? | **Bong bóng hai phía** (tôi phải · người khác trái); avatar chỉ tin đầu cụm bên trái; giờ ở tin cuối cụm + hover; thanh tác vụ nổi (👍 nhanh · trả lời · ghim · thu hồi); «Đã xem» = dãy avatar ≤3 + «+N»; `body` chỉ text node, không markdown | Không — bổ sung §9 · §14 |
+| CHAT-DEC-025 | Bảng thông tin phòng v2 | Bố cục dọc: avatar lớn · tên (bút nếu `update:chat-room` & `group`) · «Tạo bởi {createdByName} · ngày» · 3 hành động tròn (Thêm thành viên gate cũ · Tắt/Bật thông báo · Ghim — **không gate quyền**) · «Thành viên (N) ›» Sheet · accordion Ảnh/Video (`kind=image` **server**) · Tệp (`kind=file`) · Liên kết (`CHAT-API-031`: trích `https?://` từ body tin **chưa thu hồi**, keyset `room_seq DESC`, trần 50, membership-gated, con trỏ mang vân phòng → `CHAT-ERR-016`) · Tin ghim · Lưu trữ · Rời nhóm đỏ. **Không** nhãn «mã hoá», không nhắc hẹn/huy hiệu | Không — sửa §9 SCREEN-004, bổ sung §15 |
+| CHAT-DEC-026 | Panel phụ: cửa sổ nổi hay drawer? | **Drawer phải 400px** (Sheet `packages/ui`) mở từ badge header: ô tìm + chip · danh sách thu gọn ↔ hội thoại (push, ‹) · **vẫn đúng 1 hội thoại** · ⤢ mở `/chat`; dùng lại `ConversationPanel showHeader=false`; thay `ChatDock`/`ChatDockWindow`; dưới `md` toàn màn; `/chat` responsive ≥1280 3 cột · ≥768 info thành Sheet · <768 1 cột push | ⚠️ **Sửa §9 SCREEN-002** (hình thái), giữ luật «1 hội thoại» |
+| CHAT-DEC-027 | Ô soạn v2 — phạm vi và thư viện | `@mention` từ roster (`useRoomRoster`), gửi `mentions[]` · emoji **tĩnh** ~120, **0 dependency** · dán/kéo-thả ảnh qua `uploadChatAttachment` · thumbnail xem trước · Ctrl/⌘+K, Esc · không rich-text | Không — bổ sung §10 |
+
+> ⚠️ **Wave này không được mở bề mặt nào mới về dữ liệu:** không cột, không bảng, không cặp quyền, không sự kiện WS mới. `chat-realtime-structure.spec.ts` (0 `@SubscribeMessage`) và luật một-tệp-socket (`realtime-socket.ts`) phải **vẫn xanh** sau mọi WO `S17-CHAT-UX2-*`.
+
 
 ---
 
