@@ -1,0 +1,1715 @@
+<title>Wave S16-SOCIAL</title>
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
+/>
+<style>
+  :root {
+    --bg: #f2f5f4;
+    --surface: #ffffff;
+    --surface-2: #e9eeec;
+    --ink: #1b2430;
+    --muted: #5b6672;
+    --line: #d5dcda;
+    --line-soft: #e3e8e6;
+    --soc: #1f6b86;
+    --soc-ink: #185468;
+    --soc-soft: #dcebf1;
+    --fb: #4b5aa3;
+    --fb-soft: #e3e6f5;
+    --amber: #935a0c;
+    --amber-soft: #f6ecd8;
+    --red: #b2261e;
+    --red-soft: #f8e5e3;
+    --green: #256b30;
+    --green-soft: #e1efe0;
+    --code-bg: #e6ecea;
+    --shadow: 0 1px 2px rgba(27, 36, 48, 0.05), 0 4px 16px rgba(27, 36, 48, 0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12171a;
+      --surface: #191f23;
+      --surface-2: #21292e;
+      --ink: #e3e8ea;
+      --muted: #94a0a6;
+      --line: #2d383e;
+      --line-soft: #252e33;
+      --soc: #6fbdd6;
+      --soc-ink: #92cde1;
+      --soc-soft: #16323c;
+      --fb: #9ba8e8;
+      --fb-soft: #222a4a;
+      --amber: #e0a554;
+      --amber-soft: #3a2d15;
+      --red: #e98d82;
+      --red-soft: #3d201c;
+      --green: #7cc383;
+      --green-soft: #1d3320;
+      --code-bg: #262f35;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12171a;
+    --surface: #191f23;
+    --surface-2: #21292e;
+    --ink: #e3e8ea;
+    --muted: #94a0a6;
+    --line: #2d383e;
+    --line-soft: #252e33;
+    --soc: #6fbdd6;
+    --soc-ink: #92cde1;
+    --soc-soft: #16323c;
+    --fb: #9ba8e8;
+    --fb-soft: #222a4a;
+    --amber: #e0a554;
+    --amber-soft: #3a2d15;
+    --red: #e98d82;
+    --red-soft: #3d201c;
+    --green: #7cc383;
+    --green-soft: #1d3320;
+    --code-bg: #262f35;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  main {
+    max-width: 1060px;
+    margin: 0 auto;
+    padding: 40px 24px 96px;
+    display: grid;
+    gap: 56px;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: "Manrope", "Be Vietnam Pro", sans-serif;
+    text-wrap: balance;
+    margin: 0;
+    line-height: 1.2;
+  }
+  h1 {
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  h2 {
+    font-size: 24px;
+    font-weight: 700;
+  }
+  h3 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  p {
+    margin: 0;
+    max-width: 72ch;
+  }
+  code,
+  .mono {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 0.88em;
+  }
+  code {
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  a {
+    color: var(--soc-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--soc);
+    outline-offset: 2px;
+  }
+
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--soc-ink);
+  }
+  .section-head {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 20px;
+  }
+  .section-head p {
+    color: var(--muted);
+  }
+
+  header.hero {
+    display: grid;
+    gap: 18px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--line);
+  }
+  .hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .hero-meta b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+  .pill-amber {
+    background: var(--amber-soft);
+    color: var(--amber);
+  }
+  .pill-soc {
+    background: var(--soc-soft);
+    color: var(--soc-ink);
+  }
+  .pill-fb {
+    background: var(--fb-soft);
+    color: var(--fb);
+  }
+  .pill-red {
+    background: var(--red-soft);
+    color: var(--red);
+  }
+  .pill-green {
+    background: var(--green-soft);
+    color: var(--green);
+  }
+  .pill-grey {
+    background: var(--surface-2);
+    color: var(--muted);
+  }
+
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: grid;
+    gap: 2px;
+  }
+  .stat .n {
+    font-family: "Manrope", sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--soc-ink);
+  }
+  .stat .l {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14px;
+  }
+  th,
+  td {
+    text-align: left;
+    vertical-align: top;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  th {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    font-weight: 600;
+    background: var(--surface-2);
+    position: sticky;
+    top: 0;
+  }
+  tr:last-child td {
+    border-bottom: 0;
+  }
+  td.k {
+    white-space: nowrap;
+    font-weight: 600;
+  }
+  td.num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .callout {
+    border-left: 3px solid var(--soc);
+    background: var(--soc-soft);
+    padding: 12px 16px;
+    border-radius: 0 8px 8px 0;
+  }
+  .callout.warn {
+    border-color: var(--amber);
+    background: var(--amber-soft);
+  }
+  .callout.warn b {
+    color: var(--amber);
+  }
+
+  .dec-list {
+    display: grid;
+    gap: 14px;
+  }
+  .dec {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    overflow: hidden;
+  }
+  .dec .id {
+    background: var(--surface-2);
+    padding: 14px 16px;
+    display: grid;
+    gap: 6px;
+    align-content: start;
+    border-right: 1px solid var(--line-soft);
+  }
+  .dec .id .code {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--soc-ink);
+  }
+  .dec .id .q {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .dec .body {
+    padding: 14px 16px;
+    display: grid;
+    gap: 10px;
+  }
+  .dec .prop {
+    display: grid;
+    gap: 4px;
+  }
+  .dec .lbl {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    color: var(--soc-ink);
+  }
+  .dec .alt .lbl {
+    color: var(--muted);
+  }
+  .dec .alt p {
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  .box {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: grid;
+    gap: 8px;
+    align-content: start;
+  }
+  .box ul {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 4px;
+    font-size: 14px;
+  }
+  .box .tag {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* wireframe */
+  .wire {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: 200px 1fr 220px;
+    gap: 12px;
+    font-size: 12px;
+  }
+  .wire .col {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    padding: 10px;
+    display: grid;
+    gap: 8px;
+    align-content: start;
+  }
+  .wire .nav-item {
+    padding: 6px 8px;
+    border-radius: 6px;
+    color: var(--muted);
+  }
+  .wire .nav-item.on {
+    background: var(--soc-soft);
+    color: var(--soc-ink);
+    font-weight: 600;
+  }
+  .wire .nav-item.fb {
+    color: var(--fb);
+  }
+  .wire .who {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .wire .av {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--soc);
+    flex: none;
+  }
+  .wire .av.sm {
+    width: 22px;
+    height: 22px;
+  }
+  .wire .quick {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px;
+  }
+  .wire .quick div {
+    background: var(--surface-2);
+    border-radius: 6px;
+    padding: 8px 4px;
+    text-align: center;
+    color: var(--muted);
+  }
+  .wire .composer {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px;
+    display: grid;
+    gap: 6px;
+  }
+  .wire .composer .in {
+    color: var(--muted);
+    padding: 6px 8px;
+    background: var(--surface-2);
+    border-radius: 999px;
+  }
+  .wire .composer .btns {
+    display: flex;
+    gap: 10px;
+    color: var(--soc-ink);
+    font-weight: 600;
+    flex-wrap: wrap;
+  }
+  .wire .card {
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    padding: 10px;
+    display: grid;
+    gap: 6px;
+  }
+  .wire .card .hd {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .wire .card .hd .t {
+    color: var(--muted);
+  }
+  .wire .card .imgs {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 4px;
+  }
+  .wire .card .imgs div {
+    background: var(--surface-2);
+    border-radius: 4px;
+    height: 44px;
+  }
+  .wire .card .cnt {
+    display: flex;
+    justify-content: space-between;
+    color: var(--muted);
+  }
+  .wire .card .act {
+    display: flex;
+    gap: 14px;
+    border-top: 1px solid var(--line-soft);
+    padding-top: 6px;
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .wire .card .cm {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .wire .card .cm .in {
+    flex: 1;
+    background: var(--surface-2);
+    border-radius: 999px;
+    padding: 5px 8px;
+    color: var(--muted);
+  }
+  .wire .poll {
+    display: grid;
+    gap: 4px;
+  }
+  .wire .poll div {
+    position: relative;
+    background: var(--surface-2);
+    border-radius: 4px;
+    padding: 4px 8px;
+    overflow: hidden;
+  }
+  .wire .poll div i {
+    position: absolute;
+    inset: 0;
+    background: var(--soc-soft);
+    z-index: 0;
+  }
+  .wire .poll div span {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+  }
+  .wire .w {
+    display: grid;
+    gap: 4px;
+  }
+  .wire .w b {
+    font-size: 12px;
+  }
+  .wire .w .row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+  }
+  .wire .kudo {
+    background: var(--amber-soft);
+    color: var(--amber);
+    border-radius: 6px;
+    padding: 6px 8px;
+  }
+  .wire .bar {
+    display: flex;
+    justify-content: space-between;
+    color: var(--muted);
+  }
+
+  /* WO graph */
+  .wo-graph {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    padding: 16px;
+    overflow-x: auto;
+  }
+  .wo-graph pre {
+    margin: 0;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    line-height: 1.55;
+    white-space: pre;
+  }
+  .zone {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: -1px;
+  }
+  .z-red {
+    background: var(--red);
+  }
+  .z-amber {
+    background: var(--amber);
+  }
+  .z-green {
+    background: var(--green);
+  }
+
+  ol.traps {
+    margin: 0;
+    padding-left: 22px;
+    display: grid;
+    gap: 8px;
+    max-width: 80ch;
+  }
+  ol.traps li::marker {
+    font-family: "JetBrains Mono", monospace;
+    color: var(--muted);
+  }
+
+  .approve {
+    background: var(--surface);
+    border: 1px solid var(--soc);
+    border-radius: 12px;
+    padding: 20px 22px;
+    display: grid;
+    gap: 10px;
+  }
+  .approve ul {
+    margin: 0;
+    padding-left: 20px;
+    display: grid;
+    gap: 6px;
+  }
+
+  @media (max-width: 900px) {
+    .stat-row,
+    .grid-3 {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .grid-2 {
+      grid-template-columns: 1fr;
+    }
+    .dec {
+      grid-template-columns: 1fr;
+    }
+    .dec .id {
+      border-right: 0;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .wire {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+</style>
+
+<main>
+  <header class="hero">
+    <div class="eyebrow">Hồ sơ duyệt wave · MediaOS · SPEC-16</div>
+    <h1>S16-SOCIAL — Mạng xã hội nội bộ theo benchmark MISA AMIS</h1>
+    <p>
+      Một ảnh chụp bảng tin MISA AMIS (02/09/2026) đối chiếu với MediaOS. Kết quả: module
+      <code>SOCIAL</code> trong SPEC-01 vốn là <b>mạng xã hội nội bộ</b>, nhưng mã đó đang được app
+      vệ tinh <em>đăng bài Facebook</em> (fbpost) dùng. Hồ sơ này đề xuất cách gỡ, 10 quyết định, 15
+      bảng và 12 Work Order.
+    </p>
+    <div class="hero-meta">
+      <span class="pill pill-amber">Chờ owner duyệt</span>
+      <span>Đo trên master <b class="mono">fd29c167</b></span>
+      <span>Nguồn: <b class="mono">docs/plans/S16-SOCIAL-WAVE.md</b></span>
+      <span>Ước chi phí <b>$950–1 150</b></span>
+    </div>
+    <div class="stat-row">
+      <div class="stat">
+        <span class="n">21</span><span class="l">năng lực MISA đã đối chiếu (16 làm · 5 gạt)</span>
+      </div>
+      <div class="stat">
+        <span class="n">10</span><span class="l">quyết định SOC-DEC-001..010</span>
+      </div>
+      <div class="stat">
+        <span class="n">15</span><span class="l">bảng mới · 13 cặp quyền <code>feed-*</code></span>
+      </div>
+      <div class="stat">
+        <span class="n">12</span><span class="l">Work Order · 4 đỏ · 6 vàng · 2 xanh</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- 01 -->
+  <section id="s01">
+    <div class="section-head">
+      <div class="eyebrow">§01</div>
+      <h2>Điểm xuất phát — đo thật, không phải nền trắng nhưng cũng chưa có gì của bảng tin</h2>
+      <p>
+        Cái đã có là <em>hạ tầng</em> (emoji, file, realtime, outbox, preference). Cái chưa có là
+        mọi bảng của bài đăng.
+      </p>
+    </div>
+    <div class="callout warn" style="margin-bottom: 14px">
+      <b>Xung đột mã cần gỡ trước tiên.</b> SPEC-01 §7 xếp <code>SOCIAL</code> = «Mạng xã hội nội
+      bộ» (SPEC-16, Phase 4) và mig 0435 seed hàng <code>modules</code> đúng tên đó. Nhưng wave S9
+      (DECISIONS-08) đã nhập <code>apps/fbpost</code> — app vệ tinh đăng bài Facebook Page — dưới
+      cùng mã: 3 cặp quyền <code>social-post</code>/<code>social-account</code> (mig 0544,
+      <em>không cấp</em> cho employee), tile «Đăng bài» ở Home, dịch vụ cổng 3500 đang LIVE PROD.
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Thứ đã có</th>
+            <th>Số đo (02/09/2026)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="k">Định nghĩa module</td>
+            <td>
+              SPEC-01 §12.13 liệt kê 9 chức năng: đăng bài · like · comment · gắn thẻ · hashtag ·
+              thông báo công ty · chúc mừng sinh nhật · vinh danh · khảo sát. UI-02/UI-04 ghi «Ẩn
+              mặc định / Coming soon». IMPLEMENTATION-10 §22: <code>PARK-SOCIAL-001</code> «cần
+              moderation/notification».
+            </td>
+          </tr>
+          <tr>
+            <td class="k">Tài liệu module</td>
+            <td>
+              <b>Không có</b> SPEC-16 · DB-17 · API-19 · permission-matrix §9h · EPIC-21 · mã
+              SOC-SCREEN/SOCIAL-API/SOCIAL-ERR.
+            </td>
+          </tr>
+          <tr>
+            <td class="k">fbpost dưới mã SOCIAL</td>
+            <td>
+              Route FE <code>apps/app/src/routes/social/</code> chỉ có
+              <code>SocialRedirectPage</code> + <code>open-social.ts</code>; registry
+              <code>moduleCode:"SOCIAL"</code> đánh dấu «KHÔNG phải module nội bộ»; audit
+              <code>social_sso</code>/<code>social_account</code> (0545); verify 0544 RAISE nếu
+              employee có grant <code>social*</code>.
+            </td>
+          </tr>
+          <tr>
+            <td class="k">Nền tái dùng</td>
+            <td>
+              CHAT: bộ emoji cố định · khuôn reactions composite tenant-FK · attachments qua
+              file-service · RealtimeEmitter + room <code>co:{companyId}:…</code>. TASK: comment +
+              mention (<b>nợ ghi sẵn:</b> bảng mention chưa từng được tạo). HR:
+              <code>employees.date_of_birth</code> (PII, mask). FOUNDATION: <code>files</code>/<code
+                >file_links</code
+              >
+              · <code>user_preferences</code> · recycle-bin · system-jobs · outbox NOTI. ORG:
+              <code>org_units</code>. DASH: khuôn widget có sàn scope.
+            </td>
+          </tr>
+          <tr>
+            <td class="k">packages/ui</td>
+            <td>
+              avatar · badge · card · dialog · popover · sheet · tabs · empty-state · skeleton ·
+              data-table. <b>Chưa có:</b> composer, lưới ảnh, thanh reaction, thẻ bình chọn, layout
+              3 cột.
+            </td>
+          </tr>
+          <tr>
+            <td class="k">Chưa có</td>
+            <td>
+              Bảng nào cho bài/bình luận/nhóm/bình chọn; tìm kiếm toàn văn (chưa bảng nào có
+              <code>tsvector</code>); template cổng thông tin (UI-07 là khuôn module 2 cột).
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 02 -->
+  <section id="s02">
+    <div class="section-head">
+      <div class="eyebrow">§02</div>
+      <h2>Bản đồ khoảng cách — 21 năng lực đọc từ ảnh MISA</h2>
+      <p>
+        Cột «Xếp» là đề xuất: Track A bảng tin lõi · B cộng đồng (nhóm · bình chọn · sáng kiến ·
+        vinh danh) · C kiểm duyệt &amp; thống kê · ✖ gạt có lý do.
+      </p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Năng lực MISA</th>
+            <th>MediaOS hôm nay</th>
+            <th>Khoảng cách</th>
+            <th>Xếp</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="num">G1</td>
+            <td>
+              <b>Bảng tin</b> 3 cột · composer · thẻ bài (👍 3 · 31 người xem · Thích/Bình luận/Chia
+              sẻ) · lọc + sắp xếp «Hoạt động mới»
+            </td>
+            <td>—</td>
+            <td>Thiếu toàn bộ</td>
+            <td><span class="pill pill-soc">V1 · A</span></td>
+          </tr>
+          <tr>
+            <td class="num">G2</td>
+            <td><b>Tin tức</b> / Tin nổi bật (ghim)</td>
+            <td>NOTI = thông báo hệ thống theo sự kiện</td>
+            <td>Thiếu bài «tin tức» do HR viết, ghim, xác nhận đã đọc</td>
+            <td><span class="pill pill-soc">V1 · A</span></td>
+          </tr>
+          <tr>
+            <td class="num">G3</td>
+            <td><b>Bình luận</b>: mention @ · đính kèm · emoji</td>
+            <td>CHAT có emoji/đính kèm; TASK mention không lưu</td>
+            <td>Thiếu bình luận 1 cấp, mention lưu thật</td>
+            <td><span class="pill pill-soc">V1 · A</span></td>
+          </tr>
+          <tr>
+            <td class="num">G4</td>
+            <td><b>Đã lưu</b></td>
+            <td>—</td>
+            <td>Thiếu</td>
+            <td><span class="pill pill-soc">V1 · A</span></td>
+          </tr>
+          <tr>
+            <td class="num">G5</td>
+            <td><b>Trang cá nhân</b></td>
+            <td>ME có tổng quan/avatar</td>
+            <td>Thiếu «Bài viết của tôi» + trang bài đồng nghiệp</td>
+            <td><span class="pill pill-soc">V1 · A</span></td>
+          </tr>
+          <tr>
+            <td class="num">G6</td>
+            <td><b>Tìm kiếm</b> tin tức, chia sẻ</td>
+            <td>—</td>
+            <td>Thiếu tìm toàn văn phạm vi tenant</td>
+            <td><span class="pill pill-soc">V1 · A</span></td>
+          </tr>
+          <tr>
+            <td class="num">G7</td>
+            <td><b>Sinh nhật</b> «Hôm nay ▾»</td>
+            <td>DOB bị mask ở HR</td>
+            <td>Widget chỉ lộ ngày+tháng, không cấp cặp HR</td>
+            <td><span class="pill pill-soc">V1 · A</span></td>
+          </tr>
+          <tr>
+            <td class="num">G8</td>
+            <td><b>Nhóm</b> + Nhóm của tôi (badge)</td>
+            <td><code>teams</code> là đơn vị tổ chức</td>
+            <td>Thiếu nhóm công khai/riêng tư, vai trò trong nhóm</td>
+            <td><span class="pill pill-soc">V1 · B</span></td>
+          </tr>
+          <tr>
+            <td class="num">G9</td>
+            <td><b>Bình chọn</b></td>
+            <td>—</td>
+            <td>Thiếu poll 1/nhiều · ẩn danh · hạn</td>
+            <td><span class="pill pill-soc">V1 · B</span></td>
+          </tr>
+          <tr>
+            <td class="num">G10</td>
+            <td><b>Sáng kiến</b></td>
+            <td>—</td>
+            <td>Thiếu bài có trạng thái xét duyệt</td>
+            <td><span class="pill pill-soc">V1 · B</span></td>
+          </tr>
+          <tr>
+            <td class="num">G11</td>
+            <td><b>Tôn vinh nhân viên</b></td>
+            <td>—</td>
+            <td>Thiếu kudos + huy hiệu</td>
+            <td><span class="pill pill-soc">V1 · B</span></td>
+          </tr>
+          <tr>
+            <td class="num">G12</td>
+            <td><b>Ô liên kết nhanh</b> (Quy trình · Lịch họp · Công việc · …)</td>
+            <td>APP_REGISTRY + <code>useCan</code></td>
+            <td>Dải ô trỏ TASK · LEAVE · ATT · ROOM · GOAL · LMS theo quyền</td>
+            <td><span class="pill pill-soc">V1 · C</span></td>
+          </tr>
+          <tr>
+            <td class="num">G13</td>
+            <td><b>Kiểm duyệt</b> (ngầm)</td>
+            <td>—</td>
+            <td>Hàng đợi báo cáo · ẩn/ghim/khoá · audit</td>
+            <td><span class="pill pill-soc">V1 · C</span></td>
+          </tr>
+          <tr>
+            <td class="num">G14</td>
+            <td><b>Widget Nhân sự</b> bên phải</td>
+            <td>DASH có widget HR</td>
+            <td>Nhúng lại theo quyền — không viết mới</td>
+            <td><span class="pill pill-soc">V1 · C</span></td>
+          </tr>
+          <tr>
+            <td class="num">G15</td>
+            <td><b>Thống kê tương tác</b></td>
+            <td>—</td>
+            <td>Bài/bình luận/thích theo tuần &amp; đơn vị</td>
+            <td><span class="pill pill-soc">V1 · C</span></td>
+          </tr>
+          <tr>
+            <td class="num">G16</td>
+            <td><b>Bố cục</b> 3 cột · tìm kiếm topbar · composer 5 nút</td>
+            <td>UI-07 2 cột</td>
+            <td>Template cổng thông tin 3 cột riêng cho SOCIAL</td>
+            <td><span class="pill pill-soc">V1 · A</span></td>
+          </tr>
+          <tr>
+            <td class="num">G17</td>
+            <td>Chia sẻ (đăng lại)</td>
+            <td>—</td>
+            <td>v1 = sao chép liên kết</td>
+            <td><span class="pill pill-grey">✖ PARK</span></td>
+          </tr>
+          <tr>
+            <td class="num">G18</td>
+            <td>Giới thiệu ứng viên</td>
+            <td>RECRUIT do recruiter tạo</td>
+            <td>Cần đường Own vào RECRUIT — việc của RECRUIT</td>
+            <td><span class="pill pill-grey">✖ PARK-SOCIAL-002</span></td>
+          </tr>
+          <tr>
+            <td class="num">G19</td>
+            <td>Trợ lý AI tổng hợp tin</td>
+            <td>—</td>
+            <td>Phase 5</td>
+            <td><span class="pill pill-grey">✖</span></td>
+          </tr>
+          <tr>
+            <td class="num">G20</td>
+            <td>Top Agent · Bán hàng xuất sắc</td>
+            <td>—</td>
+            <td>Doanh số/KPI — de-media-fy</td>
+            <td><span class="pill pill-grey">✖</span></td>
+          </tr>
+          <tr>
+            <td class="num">G21</td>
+            <td>Quy trình · Lịch họp · Đánh giá</td>
+            <td>Không có module</td>
+            <td>Chỉ link ROOM</td>
+            <td><span class="pill pill-grey">✖</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 03 -->
+  <section id="s03">
+    <div class="section-head">
+      <div class="eyebrow">§03</div>
+      <h2>10 quyết định cần ký — mỗi dòng đã kèm đề xuất</h2>
+      <p>
+        Duyệt nguyên gói = chốt theo cột Đề xuất. Muốn khác, ghi mã quyết định + lựa chọn của anh.
+      </p>
+    </div>
+    <div class="dec-list">
+      <article class="dec">
+        <div class="id">
+          <span class="code">SOC-DEC-001</span><span class="q">Đánh số &amp; phạm vi tài liệu</span>
+        </div>
+        <div class="body">
+          <div class="prop">
+            <span class="lbl">Đề xuất</span>
+            <p>
+              Wave <code>S16-SOCIAL</code> · <b>SPEC-16</b> (số đã khoá ở SPEC-01 §7) · DB-17 ·
+              API-19 · permission-matrix §9h · EPIC-21 §8.22 · Sprint 16 · mã
+              <code>SOC-SCREEN-001+</code> · <code>SOCIAL-API-001+</code> ·
+              <code>SOCIAL-ERR-001+</code> · SPEC-01 §17.18 (bài) · §17.19 (sáng kiến) · §17.20
+              (bình chọn). Story IMP02 và NOTI-EVENT <b>đo dải lúc chạy</b> (S15 đã giữ 191+ và
+              024+). Migration nối tiếp head lúc merge — hai lane migration S15/S16
+              <b>không chạy song song</b>.
+            </p>
+          </div>
+          <div class="prop alt">
+            <span class="lbl">Nếu chọn khác</span>
+            <p>
+              Tách module «FEED» mới = trái SPEC-01 §7 và hàng <code>modules</code> đã seed ở 0435.
+            </p>
+          </div>
+        </div>
+      </article>
+      <article class="dec">
+        <div class="id">
+          <span class="code">SOC-DEC-002</span><span class="q">Mã SOCIAL đang bị fbpost chiếm</span>
+        </div>
+        <div class="body">
+          <div class="prop">
+            <span class="lbl">Đề xuất</span>
+            <p>
+              Mã <code>SOCIAL</code> = <b>mạng xã hội nội bộ</b>. fbpost trở thành
+              <b>tiện ích con «Đăng bài Facebook»</b> bên trong SOCIAL: giữ nguyên 3 cặp
+              <code>social-post</code>/<code>social-account</code>, dịch vụ 3500, SSO; chỉ chuyển
+              tile từ ô Home riêng sang mục cuối sidebar SOCIAL. Resource mới dùng tiền tố
+              <code>feed-</code> (<code>feed</code> · <code>feed-post</code> ·
+              <code>feed-comment</code> · <code>feed-news</code> · <code>feed-group</code> ·
+              <code>feed-poll</code> · <code>feed-idea</code> · <code>feed-kudos</code> ·
+              <code>feed-report</code>) — không đụng verify 0544, không migration đổi tên quyền trên
+              PROD.
+            </p>
+          </div>
+          <div class="prop alt">
+            <span class="lbl">Nếu chọn khác</span>
+            <p>
+              Đổi tên 3 cặp fbpost = migration đổi quyền trên PROD đang chạy + sửa app vệ tinh.
+              Module <code>FEED</code> mới = hai «mạng xã hội» trong catalog.
+            </p>
+          </div>
+        </div>
+      </article>
+      <article class="dec">
+        <div class="id">
+          <span class="code">SOC-DEC-003</span><span class="q">Loại bài &amp; phạm vi</span>
+        </div>
+        <div class="body">
+          <div class="prop">
+            <span class="lbl">Đề xuất</span>
+            <p>
+              <b>5 loại bài</b>: <code>share</code> · <code>news</code> (ghim, «yêu cầu xác nhận đã
+              đọc» tuỳ chọn) · <code>idea</code> · <code>poll</code> · <code>kudos</code>.
+              <b>Phạm vi</b>: <code>company</code> · <code>group</code> · <code>org_unit</code>.
+              Hashtag parse <code>#tag</code> → bảng tag + lọc.
+              <b>Không có bài hệ thống tự sinh</b> — sinh nhật là widget + nút «Gửi lời chúc» tạo
+              bài <code>share</code> gắn thẻ.
+            </p>
+          </div>
+          <div class="prop alt">
+            <span class="lbl">Nếu chọn khác</span>
+            <p>Tự sinh bài sinh nhật/nhập việc = feed đầy bài máy, người dùng tắt thông báo.</p>
+          </div>
+        </div>
+      </article>
+      <article class="dec">
+        <div class="id">
+          <span class="code">SOC-DEC-004</span><span class="q">Ai được cấp mặc định</span>
+        </div>
+        <div class="body">
+          <div class="prop">
+            <span class="lbl">Đề xuất</span>
+            <p>
+              <b>Employee được cấp mặc định</b> (khác SOCIAL-DEC-006 của fbpost):
+              <code>view:feed</code> (Company) · <code>create:feed-post</code> ·
+              <code>create:feed-comment</code> · <code>create:feed-poll</code> ·
+              <code>create:feed-idea</code> · <code>create:feed-kudos</code> ·
+              <code>create:feed-group</code>. Tương tác cá nhân (thích · bình chọn · lưu · đã xem ·
+              xác nhận đọc) <b>đi theo <code>view:feed</code> + quyền sở hữu hàng</b> — không đẻ
+              verb mới ngoài DECISIONS-06. <code>manage:feed-news</code> ·
+              <code>manage:feed-post</code> · <code>manage:feed-group</code> ·
+              <code>approve:feed-idea</code> · <code>manage:feed-kudos</code> ·
+              <code>manage:feed-report</code> · <code>view:feed-report</code> cho company-admin + hr
+              (manager: <code>view:feed-report</code> Department). Không cặp nào
+              <code>is_sensitive</code>, nhưng mọi <code>manage/approve</code> ghi audit.
+            </p>
+          </div>
+          <div class="prop alt">
+            <span class="lbl">Nếu chọn khác</span>
+            <p>
+              Không cấp đại trà = không ai đăng được. Cấp <code>manage</code> cho manager = kiểm
+              duyệt phân tán, khó truy.
+            </p>
+          </div>
+        </div>
+      </article>
+      <article class="dec">
+        <div class="id">
+          <span class="code">SOC-DEC-005</span><span class="q">Kiểm duyệt &amp; xoá</span>
+        </div>
+        <div class="body">
+          <div class="prop">
+            <span class="lbl">Đề xuất</span>
+            <p>
+              Chủ bài tự sửa/xoá (nhãn «đã chỉnh sửa», <code>edited_at</code>).
+              <code>manage:feed-post</code>: ẩn/hiện · ghim/bỏ ghim · khoá bình luận · xoá bài người
+              khác — mỗi hành động 1 dòng audit (object_type mới <code>feed_post</code> ·
+              <code>feed_comment</code> · <code>feed_group</code> · <code>feed_report</code>). Người
+              dùng báo cáo bài/bình luận (<code>feed_reports</code>:
+              <code>open → resolved/dismissed</code>). Xoá = <b>soft-delete</b> + thùng rác (BẤT
+              BIẾN 2). Trạng thái bài §17.18: <code>published ⇄ hidden</code> ·
+              <code>→ deleted</code>.
+            </p>
+          </div>
+          <div class="prop alt">
+            <span class="lbl">Nếu chọn khác</span>
+            <p>Hard-delete phá BẤT BIẾN 2. Không hàng đợi báo cáo = admin phải đọc hết feed.</p>
+          </div>
+        </div>
+      </article>
+      <article class="dec">
+        <div class="id">
+          <span class="code">SOC-DEC-006</span><span class="q">Mô hình nhóm</span>
+        </div>
+        <div class="body">
+          <div class="prop">
+            <span class="lbl">Đề xuất</span>
+            <p>
+              Nhóm <code>public</code> (ai cũng xem/tham gia) · <code>private</code> (xin vào, admin
+              nhóm duyệt; bài chỉ thành viên thấy). <b>Vai trò trong nhóm là hàng</b>
+              <code>feed_group_members.role ∈ {owner, admin, member}</code> (khuôn per-project role
+              DECISIONS-04), không phải cặp quyền. Quyền xem bài nhóm riêng tư
+              <b>ép ở service + ca IDOR</b> (RLS chỉ biết tenant).
+              <code>manage:feed-group</code> cho company-admin can thiệp nhóm bất kỳ.
+            </p>
+          </div>
+          <div class="prop alt">
+            <span class="lbl">Nếu chọn khác</span>
+            <p>Nhóm = cặp quyền động ⇒ catalog quyền phình theo số nhóm.</p>
+          </div>
+        </div>
+      </article>
+      <article class="dec">
+        <div class="id">
+          <span class="code">SOC-DEC-007</span><span class="q">Sinh nhật &amp; PII</span>
+        </div>
+        <div class="body">
+          <div class="prop">
+            <span class="lbl">Đề xuất</span>
+            <p>
+              Route SOCIAL riêng trả <b>chỉ ngày + tháng</b> (<code
+                >{employeeId, fullName, avatar, day, month}</code
+              >) từ <code>employees.date_of_birth</code> — không năm, không tuổi — gate
+              <code>view:feed</code>, <b>không cấp cặp HR</b>. Nhân viên ẩn sinh nhật qua
+              <code>user_preferences.feed.showBirthday=false</code>. Widget «Hôm nay / Tuần này /
+              Tháng này».
+            </p>
+          </div>
+          <div class="prop alt">
+            <span class="lbl">Nếu chọn khác</span>
+            <p>
+              Lộ năm sinh = lộ PII qua cửa sau SOCIAL. Không cho ẩn = vi phạm quyền riêng tư nhân
+              viên.
+            </p>
+          </div>
+        </div>
+      </article>
+      <article class="dec">
+        <div class="id">
+          <span class="code">SOC-DEC-008</span
+          ><span class="q">Đính kèm · mention · emoji · lượt xem</span>
+        </div>
+        <div class="body">
+          <div class="prop">
+            <span class="lbl">Đề xuất</span>
+            <p>
+              Tái dùng file-service: <code>file_links.object_type</code> UNION-ADD
+              <code>feed_post</code> · <code>feed_comment</code>; giới hạn ≤10 ảnh/bài · ≤1 video ·
+              ≤20MB/tệp (mirror hằng CHAT). <b>Bộ emoji = bộ CHAT</b>, một bảng
+              <code>feed_reactions</code> cho cả bài và bình luận.
+              <b>Bảng <code>feed_mentions</code> thật</b> (không lặp nợ TASK). Lượt xem =
+              <code>feed_post_views</code> UNIQUE(post,user) ghi lần đầu — «N người xem» là COUNT
+              thật.
+            </p>
+          </div>
+          <div class="prop alt">
+            <span class="lbl">Nếu chọn khác</span>
+            <p>Emoji tự do = validate lại từ đầu. Đếm xem theo request = số ảo.</p>
+          </div>
+        </div>
+      </article>
+      <article class="dec">
+        <div class="id">
+          <span class="code">SOC-DEC-009</span><span class="q">Sáng kiến · Bình chọn</span>
+        </div>
+        <div class="body">
+          <div class="prop">
+            <span class="lbl">Đề xuất</span>
+            <p>
+              <b>Sáng kiến</b> §17.19:
+              <code>submitted → under_review → accepted / rejected</code>
+              (<code>approve:feed-idea</code>, ghi <code>reviewed_by/at/note</code>, NOTI tác giả).
+              <b>Bình chọn</b> §17.20: <code>open → closed</code>; 2–10 lựa chọn · 1/nhiều phiếu ·
+              ẩn danh tuỳ chọn (vẫn lưu <code>user_id</code> chống phiếu đôi, DTO không lộ) · hạn
+              đóng bằng job <code>system-jobs</code>; đổi phiếu khi còn mở.
+            </p>
+          </div>
+          <div class="prop alt">
+            <span class="lbl">Nếu chọn khác</span>
+            <p>Không FSM = «Sáng kiến» chỉ là bài thường. Ẩn danh không lưu user = vote vô hạn.</p>
+          </div>
+        </div>
+      </article>
+      <article class="dec">
+        <div class="id">
+          <span class="code">SOC-DEC-010</span><span class="q">Tìm kiếm · realtime · thống kê</span>
+        </div>
+        <div class="body">
+          <div class="prop">
+            <span class="lbl">Đề xuất</span>
+            <p>
+              <b>Tìm kiếm</b> PG <code>tsvector</code> cột sinh (<code>simple</code> +
+              <code>unaccent</code> nếu extension có — đo ở DB-1, không thì ILIKE), phạm vi tenant.
+              <b>Realtime tối giản</b>: <code>feed:post.created</code> ·
+              <code>feed:comment.created</code> · <code>feed:reaction.changed</code> vào room
+              <code>co:{companyId}:feed</code> + <code>feedgroup:{id}</code>, payload = DTO đã mask;
+              FE chỉ hiện badge «N bài mới». <b>Thống kê</b> theo tuần &amp; đơn vị, sàn scope
+              Company (manager Department), không cache, XLSX.
+            </p>
+          </div>
+          <div class="prop alt">
+            <span class="lbl">Nếu chọn khác</span>
+            <p>
+              Realtime đầy đủ (feed tự chèn bài) = xáo cuộn, tốn WS. Không tìm kiếm = feed chết sau
+              3 tháng.
+            </p>
+          </div>
+        </div>
+      </article>
+    </div>
+    <div class="callout" style="margin-top: 16px">
+      <b>Ngoài phạm vi v1 (ghi để không ai tự thêm):</b> đăng lại có trích dẫn · giới thiệu ứng viên
+      (→ PARK-SOCIAL-002) · trợ lý AI · doanh số/KPI · quy trình/lịch họp/đánh giá · khảo sát nhiều
+      câu · story/video ngắn · push mobile · sự kiện + RSVP · đăng chéo ra Facebook qua fbpost.
+    </div>
+  </section>
+
+  <!-- 04 -->
+  <section id="s04">
+    <div class="section-head">
+      <div class="eyebrow">§04</div>
+      <h2>Mô hình dữ liệu — 15 bảng, hai migration, mọi bảng RLS + FORCE</h2>
+      <p>
+        Tất cả có <code>company_id</code>, composite tenant-FK, soft-delete ở bài/bình luận/nhóm.
+        Không bảng nào append-only mới; vết kiểm duyệt đi vào <code>audit_logs</code>.
+      </p>
+    </div>
+    <div class="grid-3">
+      <div class="box">
+        <h3>DB-1 · Track A — bảng tin lõi (9)</h3>
+        <ul>
+          <li>
+            <code>feed_posts</code> — type · audience · status · pinned · comments_locked · counters
+            · <code>search_vector</code>
+          </li>
+          <li><code>feed_comments</code> — 1 cấp trả lời (<code>parent_id</code>)</li>
+          <li>
+            <code>feed_reactions</code> — target (post|comment) · emoji CHAT · UNIQUE user/target
+          </li>
+          <li><code>feed_mentions</code> — target · employee_id (bảng thật)</li>
+          <li><code>feed_tags</code> · <code>feed_post_tags</code> — hashtag</li>
+          <li><code>feed_saved_posts</code> — UNIQUE(user, post)</li>
+          <li><code>feed_post_views</code> — UNIQUE(post, user), lần đầu</li>
+          <li><code>feed_post_acks</code> — xác nhận đã đọc tin tức</li>
+          <li><code>feed_reports</code> — lý do · open → resolved/dismissed</li>
+        </ul>
+        <span class="tag"
+          >+ UNION-ADD <code>file_links.object_type</code> và <code>audit_logs.object_types</code> ·
+          seed 13 cặp <code>feed-*</code> + grant employee</span
+        >
+      </div>
+      <div class="box">
+        <h3>DB-2 · Track B — cộng đồng (9)</h3>
+        <ul>
+          <li><code>feed_groups</code> — public/private · cover · member_count</li>
+          <li>
+            <code>feed_group_members</code> — role hàng owner/admin/member · status active/pending
+          </li>
+          <li>
+            <code>feed_polls</code> — post UNIQUE · allow_multiple · is_anonymous · closes_at ·
+            status
+          </li>
+          <li>
+            <code>feed_poll_options</code> · <code>feed_poll_votes</code> — UNIQUE(poll, user,
+            option)
+          </li>
+          <li><code>feed_ideas</code> — FSM + reviewed_by/at/note</li>
+          <li>
+            <code>feed_kudos</code> · <code>feed_kudos_recipients</code> ·
+            <code>feed_kudos_badges</code> (seed catalog)
+          </li>
+        </ul>
+        <span class="tag">+ NOTI-EVENT ~9 sự kiện ở CẢ HAI bảng catalog + template</span>
+      </div>
+      <div class="box">
+        <h3>Dùng lại, không tạo</h3>
+        <ul>
+          <li><code>files</code> + <code>file_links</code> — ảnh/video/đính kèm</li>
+          <li><code>user_preferences</code> — ẩn sinh nhật, thông báo feed</li>
+          <li><code>employees.date_of_birth</code> — chỉ đọc ngày+tháng</li>
+          <li><code>org_units</code> — phạm vi đơn vị</li>
+          <li><code>notification_events</code> + outbox — thông báo</li>
+          <li><code>audit_logs</code> — vết kiểm duyệt</li>
+          <li>recycle-bin — khôi phục bài đã xoá</li>
+        </ul>
+        <span class="tag"
+          >Sổ NOTI dự kiến: mention · bình luận · trả lời · tin tức mới · sáng kiến đổi trạng thái ·
+          vinh danh · nhóm duyệt · bình chọn đóng · bài bị báo cáo</span
+        >
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 -->
+  <section id="s05">
+    <div class="section-head">
+      <div class="eyebrow">§05</div>
+      <h2>Wireframe — cổng thông tin 3 cột và thẻ bài</h2>
+      <p>
+        Template mới chỉ SOCIAL dùng, ghi vào UI-07 như biến thể. Dưới 1024px: rail trái thành tab
+        ngang, rail phải gập xuống cuối.
+      </p>
+    </div>
+    <div class="wire" aria-label="Wireframe bảng tin">
+      <div class="col">
+        <div class="who">
+          <span class="av"></span>
+          <div><b>Nguyễn Văn A</b><br /><span style="color: var(--muted)">Trang cá nhân</span></div>
+        </div>
+        <div class="nav-item on">Bảng tin</div>
+        <div class="nav-item">Tin tức</div>
+        <div class="nav-item">Sáng kiến</div>
+        <div class="nav-item">Bình chọn</div>
+        <div class="nav-item">Nhóm</div>
+        <div class="nav-item">Đã lưu</div>
+        <div style="border-top: 1px solid var(--line-soft); padding-top: 6px; color: var(--muted)">
+          <b>Nhóm của tôi</b>
+        </div>
+        <div class="nav-item">
+          Bóng đá công ty
+          <span class="pill pill-soc" style="font-size: 10px; padding: 0 6px">3</span>
+        </div>
+        <div class="nav-item">Phòng Kỹ thuật</div>
+        <div
+          class="nav-item fb"
+          style="border-top: 1px solid var(--line-soft); margin-top: 4px; padding-top: 8px"
+        >
+          ↗ Đăng bài Facebook
+        </div>
+      </div>
+      <div class="col">
+        <div class="quick">
+          <div>Công việc</div>
+          <div>Nghỉ phép</div>
+          <div>Chấm công</div>
+          <div>Đặt phòng</div>
+          <div>Mục tiêu</div>
+          <div>Đào tạo</div>
+        </div>
+        <div class="composer">
+          <div class="in">Bạn muốn chia sẻ điều gì?</div>
+          <div class="btns">
+            <span>✎ Chia sẻ</span><span>📰 Tin tức</span><span>💡 Sáng kiến</span
+            ><span>▤ Bình chọn</span><span>★ Vinh danh</span>
+          </div>
+        </div>
+        <div class="bar">
+          <span>🎂 Sinh nhật · <b>Hôm nay ▾</b></span
+          ><span>2 người</span>
+        </div>
+        <div class="bar">
+          <span>Tất cả ▾</span><span>Sắp xếp: <b>Hoạt động mới</b> ⇅</span>
+        </div>
+        <div class="card">
+          <div class="hd">
+            <span class="av sm"></span>
+            <div><b>Bùi Văn Anh</b> <span class="t">· 1 tuần trước · 🏢 Công ty</span></div>
+            <span style="margin-left: auto; color: var(--muted)">⋯</span>
+          </div>
+          <div>
+            [THÔNG BÁO] Chương trình mừng đại lễ 2/9 — kế hoạch chụp ảnh và liên hoan…
+            <span style="color: var(--soc-ink)">Xem thêm</span>
+          </div>
+          <div class="imgs">
+            <div></div>
+            <div></div>
+          </div>
+          <div class="cnt"><span>👍❤️ 3</span><span>31 người xem</span></div>
+          <div class="act">
+            <span>Thích</span><span>Bình luận</span><span>Sao chép liên kết</span>
+          </div>
+          <div class="cm">
+            <span class="av sm"></span><span class="in">Viết bình luận…</span><span>@ 📎 😊 ➤</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="hd">
+            <span class="av sm"></span>
+            <div><b>Trần Thị B</b> <span class="t">· 2 ngày trước · 👥 Bóng đá công ty</span></div>
+          </div>
+          <div>
+            <b>Bình chọn:</b> Chọn sân đá thứ 7 tuần này?
+            <span class="t" style="color: var(--muted)">(1 phiếu · đóng 05/09)</span>
+          </div>
+          <div class="poll">
+            <div>
+              <i style="width: 62%"></i><span><span>Sân Cầu Giấy</span><span>62%</span></span>
+            </div>
+            <div>
+              <i style="width: 38%"></i><span><span>Sân Mỹ Đình</span><span>38%</span></span>
+            </div>
+          </div>
+          <div class="cnt"><span>13 phiếu</span><span>19 người xem</span></div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="w">
+          <b>📌 Tin nổi bật</b>
+          <div class="row">
+            Lịch nghỉ lễ 2/9 ·
+            <span class="pill pill-amber" style="font-size: 10px; padding: 0 6px"
+              >chưa xác nhận</span
+            >
+          </div>
+          <div class="row">Quy định chấm công mới</div>
+        </div>
+        <div class="w">
+          <b>▤ Bình chọn đang mở</b>
+          <div class="row">Sân đá thứ 7 · đóng 05/09</div>
+        </div>
+        <div class="w">
+          <b>★ Vinh danh tháng này</b>
+          <div class="kudo">Lê Văn C — «Người hỗ trợ vàng» · 5 lượt</div>
+        </div>
+        <div class="w">
+          <b>Nhân sự</b>
+          <div class="row">Widget DASH (theo quyền)</div>
+          <div class="row" style="color: var(--muted)">Tổng NV · nhập/ nghỉ tháng này</div>
+        </div>
+      </div>
+    </div>
+    <p style="margin-top: 12px; color: var(--muted); font-size: 14px">
+      Thẻ bài: avatar · tên · thời gian · biểu tượng phạm vi (🏢 công ty / 👥 nhóm / 🏷 đơn vị) · ⋯
+      (sửa · xoá · lưu · báo cáo · [ghim · ẩn · khoá bình luận] theo quyền) · nội dung xem thêm &gt;
+      6 dòng · lưới ảnh 1–10 · khối poll/idea/kudos theo loại · hàng đếm · Thích/Bình luận/Sao chép
+      liên kết · ô bình luận (mention · đính kèm · emoji).
+    </p>
+  </section>
+
+  <!-- 06 -->
+  <section id="s06">
+    <div class="section-head">
+      <div class="eyebrow">§06</div>
+      <h2>12 Work Order — ba track, một lane migration</h2>
+      <p>
+        Vẫn 1 WO/phiên. Song song chỉ để hàng đợi luôn có WO ready.
+        <span class="zone z-red"></span>đỏ FULL gate + Opus · <span class="zone z-amber"></span>vàng
+        · <span class="zone z-green"></span>xanh.
+      </p>
+    </div>
+    <div class="wo-graph">
+      <pre>
+duyệt ✅ → S16-SOCIAL-DOC-1 🟢* → S16-SOCIAL-DB-1 🔴 ─┬─ Track A: BE-1 🔴 → FE-1 🟡
+                                                    ├─ Track B: DB-2 🔴 (sau DB-1) → BE-2 🔴 → FE-2 🟡
+                                                    └─ Track C: BE-3 🟡 (sau BE-2) → FE-3 🟡
+                            S16-SOCIAL-FBPOST-1 🟢 (sau DOC-1, song song)          └→ QA-1 🟡 → DASH-1 🟢</pre
+      >
+    </div>
+    <div class="table-wrap" style="margin-top: 14px">
+      <table>
+        <thead>
+          <tr>
+            <th>WO</th>
+            <th>Zone</th>
+            <th>Nội dung</th>
+            <th>Sau</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="k mono">S16-SOCIAL-DOC-1</td>
+            <td><span class="zone z-green"></span>🟢*</td>
+            <td>
+              SPEC-16 · DB-17 · API-19 · §9h · SPEC-01 §17.18–17.20 + §12.13 + ghi chú fbpost là
+              tiện ích con · DECISIONS-08 bổ sung SOC-DEC-002 · EPIC-21 SC-01..14 · UI-07 biến thể 3
+              cột · README/erd/RELEASE-14 (PARK-SOCIAL-001/002) · plan-reviewer PASS (≤2 vòng).
+              <em>Xanh nhưng chi phí vùng đỏ.</em>
+            </td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td class="k mono">S16-SOCIAL-DB-1</td>
+            <td><span class="zone z-red"></span>🔴</td>
+            <td>
+              9 bảng Track A · RLS+FORCE trước dữ liệu · composite tenant-FK · UNION-ADD
+              file_links/audit · seed 13 cặp <code>feed-*</code> + grant employee (không đụng
+              <code>social-*</code>) · đo <code>unaccent</code> · contracts mirror hai chiều
+            </td>
+            <td>DOC-1</td>
+          </tr>
+          <tr>
+            <td class="k mono">S16-SOCIAL-BE-1</td>
+            <td><span class="zone z-red"></span>🔴</td>
+            <td>
+              Module <code>apps/api/src/social/</code> mới (fbpost ở
+              <code>integrations/social/</code> giữ nguyên): bài + tin tức · bình luận · reaction ·
+              mention + NOTI · hashtag · lưu · lượt xem · báo cáo · tìm kiếm · sinh nhật · guard 2
+              tầng + audience check · audit manage · <code>@Idempotent</code> · WS room feed;
+              deny-path RED trước
+            </td>
+            <td>DB-1</td>
+          </tr>
+          <tr>
+            <td class="k mono">S16-SOCIAL-FE-1</td>
+            <td><span class="zone z-amber"></span>🟡</td>
+            <td>
+              Template cổng thông tin 3 cột · SOC-SCREEN-001 Bảng tin · 002 Chi tiết · 003 Tin tức
+              (+ ack) · 004 Đã lưu · 005 Trang cá nhân · rail Sinh nhật/Tin nổi bật · tìm kiếm
+              topbar · ME thêm 2 mục · bật <code>modules.is_active</code> SOCIAL ·
+              MODULE_APP_METADATA
+            </td>
+            <td>BE-1</td>
+          </tr>
+          <tr>
+            <td class="k mono">S16-SOCIAL-DB-2</td>
+            <td><span class="zone z-red"></span>🔴</td>
+            <td>
+              9 bảng Track B · NOTI-EVENT ~9 ở hai bảng catalog + template · cặp manage/approve còn
+              thiếu
+            </td>
+            <td>DB-1</td>
+          </tr>
+          <tr>
+            <td class="k mono">S16-SOCIAL-BE-2</td>
+            <td><span class="zone z-red"></span>🔴</td>
+            <td>
+              Nhóm (membership check ở service) · bình chọn (job đóng theo hạn) · sáng kiến FSM ·
+              kudos + huy hiệu · outbox NOTI · room feedgroup; deny-path RED: bài nhóm riêng tư ·
+              vote poll đóng · duyệt không có cặp
+            </td>
+            <td>DB-2, BE-1</td>
+          </tr>
+          <tr>
+            <td class="k mono">S16-SOCIAL-FE-2</td>
+            <td><span class="zone z-amber"></span>🟡</td>
+            <td>
+              SOC-SCREEN-006 Nhóm · 007 Bình chọn · 008 Sáng kiến · 009 Vinh danh · rail: Bình chọn
+              đang mở · Vinh danh tháng · Nhóm của tôi
+            </td>
+            <td>BE-2, FE-1</td>
+          </tr>
+          <tr>
+            <td class="k mono">S16-SOCIAL-BE-3</td>
+            <td><span class="zone z-amber"></span>🟡</td>
+            <td>
+              Hàng đợi báo cáo · ẩn/ghim/khoá/xoá người khác (audit) · thống kê tương tác (SQL
+              set-based · sàn scope · XLSX · không cache) · catalog huy hiệu · dữ liệu widget
+            </td>
+            <td>BE-2</td>
+          </tr>
+          <tr>
+            <td class="k mono">S16-SOCIAL-FE-3</td>
+            <td><span class="zone z-amber"></span>🟡</td>
+            <td>
+              SOC-SCREEN-010 Kiểm duyệt · 011 Thống kê · 012 Thiết lập huy hiệu · dải ô liên kết
+              nhanh · nhúng widget DASH Nhân sự
+            </td>
+            <td>BE-3, FE-2</td>
+          </tr>
+          <tr>
+            <td class="k mono">S16-SOCIAL-FBPOST-1</td>
+            <td><span class="zone z-green"></span>🟢</td>
+            <td>
+              Chuyển tile «Đăng bài» từ Home → mục cuối sidebar SOCIAL «Đăng bài Facebook» (gate 3
+              cặp cũ, SSO như cũ) · i18n · không đụng <code>apps/fbpost</code> hay quyền
+            </td>
+            <td>DOC-1</td>
+          </tr>
+          <tr>
+            <td class="k mono">S16-SOCIAL-QA-1</td>
+            <td><span class="zone z-amber"></span>🟡</td>
+            <td>
+              Ma trận per-pair từng route · IDOR (nhóm riêng tư · bài hidden · sửa bài người khác ·
+              ack giả · vote đôi · poll đóng · ẩn danh không lộ user · sinh nhật không lộ năm) ·
+              cross-tenant · fuzz mention/hashtag/emoji · race counters · WS payload = DTO ·
+              coverage ≥85% trên LANE_DB
+            </td>
+            <td>FE-3</td>
+          </tr>
+          <tr>
+            <td class="k mono">S16-SOCIAL-DASH-1</td>
+            <td><span class="zone z-green"></span>🟢</td>
+            <td>
+              Widget «Tương tác tuần» + «Tin tức chưa đọc» (Own) — sàn scope 2 tầng ·
+              <code>useCanExact</code> · SOCIAL-WIDGET-001/002
+            </td>
+            <td>QA-1</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="grid-2" style="margin-top: 14px">
+      <div class="box">
+        <h3>Ước chi phí</h3>
+        <p>
+          4 đỏ × ~$136 + 6 vàng × ~$60 + 2 xanh × ~$30 ≈ <b>$950–1 150</b> (theo hồ sơ chi phí WO
+          vùng đỏ đã đo ở S13/S15).
+        </p>
+      </div>
+      <div class="box">
+        <h3>Liên đới với S15-PAYROLL-V2</h3>
+        <p>
+          Hai wave cùng «nối tiếp head» migration ⇒
+          <b>không chạy DB-1 của hai wave trong cùng ngày</b>. Nếu <code>S15-UI-SHELL-1</code> merge
+          trước FE-1 thì dùng sidebar nhóm gập; nếu chưa, FE-1 không chờ.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 07 -->
+  <section id="s07">
+    <div class="section-head">
+      <div class="eyebrow">§07</div>
+      <h2>14 bẫy đã biết — viết sẵn vào <code>done_when</code></h2>
+    </div>
+    <ol class="traps">
+      <li>
+        <b>Mã SOCIAL hai nghĩa</b> — mọi doc/registry nói rõ «SOCIAL = mạng xã hội nội bộ, trong đó
+        có tiện ích Đăng bài Facebook»; resource mới bắt buộc tiền tố <code>feed-</code> (0544
+        verify đếm grant <code>social*</code>), có ca test ghim.
+      </li>
+      <li>
+        <b>Bật <code>modules.is_active</code> SOCIAL</b> ở FE-1 theo khuôn 0567; guard không assert
+        trạng thái module khác; nhớ bẫy guard bật-module chặn WO kế tiếp.
+      </li>
+      <li>
+        <b>Membership nhóm riêng tư không ép được bằng RLS</b> — lọc trong SQL (LEFT JOIN
+        membership), không lọc ở JS; ca IDOR bắt buộc.
+      </li>
+      <li>
+        <b>Counters denormalized</b> cập nhật cùng tx; ca race 2 like đồng thời; script đối soát
+        COUNT ↔ counter.
+      </li>
+      <li>
+        <b>PII sinh nhật</b>: DTO chỉ day/month; ca test grep response không có
+        <code>date_of_birth</code>/năm; preference ẩn tôn trọng cả ở tìm kiếm/tag.
+      </li>
+      <li>
+        <b>Bình chọn ẩn danh</b>: lưu <code>user_id</code> nhưng DTO kết quả không lộ, kể cả cho
+        admin.
+      </li>
+      <li>
+        <b>NOTI catalog CHECK ở hai bảng</b> + dải NOTI-EVENT đo lại trước khi ghi (S15 giữ 024+).
+      </li>
+      <li><b>file_links / audit object_types = hot-file UNION-ADD</b>, không rewrite.</li>
+      <li>
+        <b>Mention</b>: bảng thật, FK composite, NOTI qua outbox; mention người ngoài audience nhóm
+        riêng tư → mã lỗi riêng, không rò bài.
+      </li>
+      <li>
+        <b>WS payload = DTO</b>; room <code>co:{c}:feed</code> join có gate <code>view:feed</code>.
+      </li>
+      <li>
+        <b><code>unaccent</code></b> có thể không có trên PROD — DB-1 đo <code>pg_extension</code>,
+        không <code>CREATE EXTENSION</code> mù; fallback ILIKE ghi vào DB-17.
+      </li>
+      <li>
+        <b>Soft-delete + thùng rác</b>: bài xoá biến khỏi feed/đếm/tìm kiếm/tag/saved trong cùng tx;
+        khôi phục trả lại đủ.
+      </li>
+      <li>
+        <b>Hai lane migration (S15, S16)</b> cùng nối tiếp head — seed WO ghi rõ, số chốt lúc merge.
+      </li>
+      <li><b>Nhân bản WO đỏ</b>: tối đa 1 vòng plan-review; vòng thêm đẻ lỗ mới.</li>
+    </ol>
+  </section>
+
+  <!-- 08 -->
+  <section id="s08">
+    <div class="section-head">
+      <div class="eyebrow">§08</div>
+      <h2>Definition of Done cấp wave</h2>
+    </div>
+    <div class="grid-2">
+      <div class="box">
+        <h3>Tài liệu</h3>
+        <ul>
+          <li>
+            SPEC-16 · DB-17 · API-19 · §9h · SPEC-01 §17.18–17.20 · DECISIONS-08 bổ sung · EPIC-21 ·
+            UI-07 biến thể 3 cột · README · erd-current · RELEASE-14 đồng bộ
+          </li>
+          <li>plan-reviewer PASS</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>DB</h3>
+        <ul>
+          <li>15 bảng RLS+FORCE, composite tenant-FK, CHECK mirror contracts</li>
+          <li>Seed 13 cặp + grant employee · NOTI ~9 sự kiện ở hai bảng</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>BE</h3>
+        <ul>
+          <li>
+            <code>apps/api/src/social/</code> ~45 route guard 2 tầng + audience/membership + audit
+            manage + <code>@Idempotent</code> + WS payload DTO
+          </li>
+          <li>FSM sáng kiến/bình chọn · tìm kiếm · sinh nhật không lộ năm</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>FE · QA</h3>
+        <ul>
+          <li>
+            Template 3 cột + 12 màn SOC-SCREEN-001..012 · ME thêm 2 mục · tile fbpost gộp · module
+            SOCIAL bật
+          </li>
+          <li>
+            QA ≥85% <code>social/</code> trên LANE_DB · TESTABLE-FEATURES cập nhật · 12 WO đóng dấu
+            · widget DASH đăng ký
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="approve" id="approve">
+    <h2>Cách duyệt</h2>
+    <ul>
+      <li>
+        <b>«ok tôi duyệt»</b> = chốt 10/10 theo cột Đề xuất ⇒ chép SOC-DEC-001..010 vào SPEC-16 §22,
+        seed 12 WO vào <code>harness/backlog.mjs</code>, regen STATUS;
+        <code>S16-SOCIAL-DOC-1</code> và <code>S16-SOCIAL-FBPOST-1</code> thành READY.
+      </li>
+      <li>
+        Muốn khác ở điểm nào: ghi <b>mã quyết định + lựa chọn</b> (ví dụ «DEC-004: employee không
+        được tạo nhóm»). Chỉ dòng đó đổi, phần còn lại giữ.
+      </li>
+      <li>
+        Ba điểm dễ tranh luận nhất: <b>DEC-002</b> (fbpost thành tiện ích con, giữ nguyên quyền cũ)
+        · <b>DEC-004</b> (employee được cấp mặc định, kể cả tạo nhóm/bình chọn) ·
+        <b>DEC-007</b> (sinh nhật lộ ngày+tháng, nhân viên tự ẩn).
+      </li>
+      <li>
+        Thứ tự vận hành đề xuất: chạy song song với S15 ở hàng đợi, nhưng
+        <b>DB-1 của hai wave không cùng ngày</b>.
+      </li>
+    </ul>
+  </section>
+</main>
