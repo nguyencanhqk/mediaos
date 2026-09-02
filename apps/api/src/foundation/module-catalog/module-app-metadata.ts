@@ -111,6 +111,78 @@ export const MODULE_APP_METADATA: Readonly<Record<string, ModuleAppMeta>> = {
     requiredAny: [],
     feCodes: [],
   },
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // S14-FND-MODULEMETA-1 — APPEND 5 module đã `is_active=true` ở HEAD nhưng THIẾU metadata (khối 8
+  // key trên KHÔNG sửa 1 ký tự — CLAUDE.md §9.3 hot-file = APPEND).
+  //
+  // ⚠️ `route` = ĐÍCH ĐIỀU HƯỚNG, mirror `APP_REGISTRY.defaultRoute` (packages/web-core/src/lib/
+  // registry.ts) — KHÔNG phải rootPath. Dùng rootPath ('/recruit', '/payroll') chỉ đổi trục lỗi
+  // 403→404 chứ không vá gì. Đây là HẰNG CHÉO-PACKAGE (apps/api không phụ thuộc @mediaos/web-core)
+  // ⇒ KHÔNG có cổng runtime tự so; cổng duy nhất = check literal trong
+  // apps/api/test/foundation/module-app-metadata-ratchet.unit-spec.ts (BLOCKING 3).
+  //
+  // ⚠️ VÌ SAO chọn cặp TẢI-TRANG (view:X) thay vì cặp cổng-nav (access:X): `requiredAny` chỉ có ngữ
+  // nghĩa OR, trong khi FE gate 4 thẻ này bằng `requiredPermissions` (AND access+view). Nếu BE gate
+  // bằng mình `access:X` thì manager có 'access:recruit' (0560:105) nhưng KHÔNG 'view:job-opening'
+  // sẽ THẤY thẻ rồi ăn 403 khi bấm. KHÔNG OR cả hai cặp — nới lỏng = dựng lại đúng cái lỗ đó.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+
+  // GOAL — mig 0506:46 ('access','goal', is_sensitive=false); grant 0506:63-66 Own cho CẢ 4 role
+  // canonical (employee·manager·hr·company-admin) ⇒ thẻ hiện cho mọi role. Ngoại lệ CÓ CHỦ Ý của luật
+  // "chọn cặp tải-trang": catalog GOAL chỉ seed cặp 'access:goal' làm cổng module — KHÔNG có cặp
+  // view:goal, nên access:goal CHÍNH LÀ cặp tải-trang. requiredAny KHÔNG rỗng (khác ME) ⇒ caps rỗng
+  // vẫn KHÔNG thấy thẻ.
+  GOAL: {
+    route: "/goals", // = APP_REGISTRY.defaultRoute (registry.ts:671)
+    icon: "target",
+    requiredAny: [{ action: "access", resourceType: "goal" }], // GOAL.ACCESS (mig 0506:46)
+    // ⚠️ NỢ: 'GOAL.ACCESS' là mã TRUY VẾT, chưa map trong PERMISSION_CODE_TO_PAIR (permission.service).
+    feCodes: ["GOAL.ACCESS"],
+  },
+
+  // ASSET — mig 0550:62 ('view','asset', is_sensitive=false); grant 0550:81-102 employee@Own ·
+  // manager@Department · hr@Company · company-admin@Company · asset-manager@Company. Cặp cổng-nav
+  // 'access:asset' (0550:61) CỐ Ý không dùng: role có access nhưng thiếu view sẽ thấy thẻ rồi ăn 403.
+  ASSET: {
+    route: "/assets", // = APP_REGISTRY.defaultRoute (registry.ts:778)
+    icon: "package",
+    requiredAny: [{ action: "view", resourceType: "asset" }], // ASSET.ASSET.VIEW (mig 0550:62)
+    feCodes: ["ASSET.ASSET.VIEW"], // đã map trong PERMISSION_CODE_TO_PAIR:225
+  },
+
+  // ROOM — mig 0554:58 ('view','room', is_sensitive=false); grant 0554:71-92 @Company cho employee ·
+  // manager · hr · company-admin · office-admin. Cặp cổng-nav 'access:room' (0554:57) không dùng.
+  ROOM: {
+    route: "/rooms", // = APP_REGISTRY.defaultRoute (registry.ts:799)
+    icon: "calendar-clock",
+    requiredAny: [{ action: "view", resourceType: "room" }], // ROOM.ROOM.VIEW (mig 0554:58)
+    feCodes: ["ROOM.ROOM.VIEW"], // đã map trong PERMISSION_CODE_TO_PAIR:249
+  },
+
+  // RECRUIT — mig 0560:81 ('view','job-opening', is_sensitive=false); grant 0560:110/118/135
+  // hr·company-admin·recruiter @Company. manager CHỈ có 'access:recruit' (0560:105) ⇒ CỐ Ý KHÔNG thấy
+  // thẻ (khớp FE requiredPermissions AND). employee: 0 grant RECRUIT (least privilege).
+  RECRUIT: {
+    route: "/recruit/job-openings", // = APP_REGISTRY.defaultRoute (registry.ts:820) — KHÔNG '/recruit'
+    icon: "user-plus",
+    requiredAny: [{ action: "view", resourceType: "job-opening" }], // RECRUIT.JOB.VIEW (mig 0560:81)
+    // ⚠️ NỢ: 'RECRUIT.JOB.VIEW' là mã TRUY VẾT, chưa map trong PERMISSION_CODE_TO_PAIR.
+    feCodes: ["RECRUIT.JOB.VIEW"],
+  },
+
+  // PAYROLL — mig 0565:189 ('view','payroll-period', is_sensitive=false — KHÔNG số tiền; cặp CÓ TIỀN
+  // là 'view-line':payroll-period 0565:191 is_sensitive=TRUE, CỐ Ý không đưa vào đây). Grant
+  // 0565:232/247 payroll-officer·company-admin @Company. employee chỉ có 'access:payroll' @Own ⇒ CỐ Ý
+  // KHÔNG thấy thẻ. Vì cặp này non-sensitive nên getCapabilities() đã surface ⇒ KHÔNG cần Option B
+  // (SENSITIVE_CAPABILITY_ALLOWLIST giữ nguyên).
+  PAYROLL: {
+    route: "/payroll/periods", // = APP_REGISTRY.defaultRoute (registry.ts:843) — KHÔNG '/payroll'
+    icon: "wallet",
+    requiredAny: [{ action: "view", resourceType: "payroll-period" }], // PAYROLL.PERIOD.VIEW (0565:189)
+    // ⚠️ NỢ: 'PAYROLL.PERIOD.VIEW' là mã TRUY VẾT, chưa map trong PERMISSION_CODE_TO_PAIR.
+    feCodes: ["PAYROLL.PERIOD.VIEW"],
+  },
 };
 
 /**
