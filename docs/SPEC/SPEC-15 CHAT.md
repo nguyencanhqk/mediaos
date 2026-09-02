@@ -20,7 +20,7 @@
 | Module phụ thuộc trực tiếp | AUTH (RBAC · token WS), HR (employees/departments), TASK (projects), FOUNDATION (files · audit · sequences) |
 | Module liên quan | NOTI, ME, DASH, LMS (lối vào /chat hiện tại) |
 | Phiên bản | v1.0 |
-| Trạng thái | **Approved** — owner chốt 12 quyết định §22 ngày 02/08/2026 (CHAT-DEC-004 chốt **ngược** đề xuất ban đầu — xem §3.3) · S8 DEC-014..019 chốt 05/08 (§22a) · S7-CALL DEC-020 ký 08/08 (§22b) · **S17-CHAT-UX2 DEC-021..027 duyệt 02/09/2026 (§5.1d · §22c)** |
+| Trạng thái | **Approved** — owner chốt 12 quyết định §22 ngày 02/08/2026 (CHAT-DEC-004 chốt **ngược** đề xuất ban đầu — xem §3.3) · S8 DEC-014..019 chốt 05/08 (§22a) · S7-CALL DEC-020 ký 08/08 (§22b) · **S17-CHAT-UX2 DEC-021..027 duyệt 02/09/2026 (SPEC-15 §5.1d · §22c)** |
 | Giai đoạn | **Phase 4 · wave S7-CHAT** — NGOÀI phạm vi RC v1.0.0 (scope freeze RELEASE-05) |
 | Ngày tạo | 01/08/2026 |
 | Ngày cập nhật | 02/09/2026 |
@@ -144,7 +144,7 @@ CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ 
 2. Một điểm khẳng định membership duy nhất (§3.2), fail-closed.
 3. Realtime **best-effort**: WS chết thì REST + polling vẫn cho trải nghiệm đúng, không mất tin (`REALTIME_ENABLED=false` là đường lui hợp lệ).
 4. Tìm kiếm tiếng Việt bằng hạ tầng Postgres sẵn có (`unaccent` + `tsvector`), **không** thêm search engine (Typesense đã bị loại vì GPL-3 — CLAUDE.md §4).
-5. Một kết nối WS duy nhất cho toàn app shell, dùng chung giữa trang full-screen và panel nổi.
+5. Một kết nối WS duy nhất cho toàn app shell, dùng chung giữa trang full-screen và drawer chat (CHAT-SCREEN-002 v2).
 
 ---
 
@@ -340,7 +340,7 @@ Mục cố định, đúng thứ tự: **Đã ghim** · **Tin nhắn riêng** ·
 - `room_type` lạ (server thêm loại mới mà client chưa biết) phải **vẫn hiện ra** ở một mục cuối, **không** được biến mất. Mất phòng trong im lặng tệ hơn một tiêu đề xấu.
 - **KHÔNG** phải thư mục tự đặt — xem §5.2.
 
-**Luật chip lọc nhanh — CHAT-DEC-021 (S17, §5.1d):**
+**Luật chip lọc nhanh — CHAT-DEC-021 (S17, SPEC-15 §5.1d):**
 
 - «**Tất cả**» = **GIỮ NGUYÊN** 5 mục cố định của CHAT-DEC-014 (Đã ghim · Tin nhắn riêng · Nhóm · Phòng ban · Dự án) — ghim vẫn **THẮNG** loại phòng ở chế độ này, đúng luật đã chốt ở trên.
 - Chip khác (`Chưa đọc` · `Riêng` · `Nhóm` · `Phòng ban·Dự án` · `Đã lưu trữ`) = danh sách **PHẲNG** theo hoạt động (`last_message_at`), **không** chia mục con; chỉ hiện phòng khớp đúng điều kiện của chip đó.
@@ -392,7 +392,7 @@ Theo chuẩn per-pair `(action, resource)` + data_scope per-(permission, role). 
 
 | Cặp quyền | Ý nghĩa | Nhân viên | Trưởng đơn vị | BOD/Admin |
 | --- | --- | --- | --- | --- |
-| `('access','chat')` | cổng nav + panel nổi | có | có | có |
+| `('access','chat')` | cổng nav + drawer chat | có | có | có |
 | `('view','chat-room')` | xem phòng · đọc tin · **tìm kiếm** · tải tệp đính kèm | có (all) | có (all) | có (all) |
 | `('create','chat-room')` | tạo phòng nhóm + mở DM | có | có | có |
 | `('update','chat-room')` | sửa tên/mô tả phòng nhóm | có (admin phòng) | có | có |
