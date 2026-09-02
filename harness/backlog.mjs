@@ -16575,7 +16575,7 @@ export const backlog = [
     module: "CHAT",
     layer: "DOC",
     title:
-      "Bộ tài liệu CHAT v2 (S17): SPEC-15 §9 sửa SCREEN-001/002/004 «v2» · §9a chip lọc · §10 CHAT-FUNC-022..026 · §15 CHAT-API-031 + tham số kind cho API-017 · §14 trạng thái UI bong bóng/drawer/responsive; API-13 §5 (lastMessage · peer · createdByName · kind · links); DB-12 ghi «0 migration»; UI doc màn chat; README §8 — plan-reviewer PASS trước khi BE-1/FE-2 khởi động",
+      "Bộ tài liệu CHAT v2 (S17): SPEC-15 §9 sửa SCREEN-001/002/004 «v2» · §9a chip lọc · §10 CHAT-FUNC-022..026 · §15 CHAT-API-031 + tham số kind cho API-017 · §14 trạng thái UI bong bóng/drawer/responsive; API-13 §5 (lastMessage · peer · createdByName · kind · links); DB-12 ghi «0 migration»; UI doc màn chat; README §9 — plan-reviewer PASS trước khi BE-1/FE-2 khởi động",
     zone: "yellow",
     status: "todo",
     paths: [
@@ -16598,7 +16598,7 @@ export const backlog = [
     ],
     done_when: [
       "SPEC-15: §9 SCREEN-001 (3 cột responsive ≥1280/≥768/<768) · SCREEN-002 (drawer, vẫn 1 hội thoại) · SCREEN-004 (bố cục dọc DEC-025, KHÔNG nhãn mã hoá) · §9a thêm luật chip (Tất cả = mục cố định; chip khác = phẳng; không lưu) · §10 FUNC-022 preview tin cuối · 023 peer DM · 024 mention UI · 025 liên kết đã chia sẻ · 026 lọc nhanh · §14 hàng cho bong bóng (mine/theirs) + drawer + 1 cột · §15 CHAT-API-031 (gate như 017, keyset, trần 50, con trỏ vân phòng → ERR-016) + API-017 thêm `kind=image|file`; grep 0 dòng còn nói «DM hiện mã phòng» hay «panel nổi 1 phòng»",
-      "API-13 §5: 3 khoá DTO `.nullable().optional()` (lastMessage · peer · createdByName) + luật strip `peer.avatarUrl` khỏi payload `chat:room` + route links; DB-12 ghi rõ «S17: 0 migration, 0 GRANT» để không ai đo lại",
+      "API-13 §5: 3 khoá DTO `.nullable().optional()` (lastMessage · peer · createdByName) + luật strip `peer.avatarUrl` khỏi payload `chat:room`; bảng riêng của API-13 §5.1d có hàng CHAT-API-031; DB-12 ghi rõ «S17: 0 migration, 0 GRANT» để không ai đo lại",
       "UI doc (docs/UI) có màn chat v2 tham chiếu wireframe hồ sơ HTML §05; README §8 CHAT trỏ đủ; docs/plans/S17-CHAT-UX2-WAVE.md §5 đổi trạng thái WO khi xong",
       "plan-reviewer đối kháng PASS — TỐI ĐA 1 vòng (memory red-zone-wo-cost-profile · plan-review-rounds-inject-new-holes): hỏi đúng 3 câu — masking preview có che đủ 3 nhánh (recalled · file · system)? peer có rò ngoài membership/cross-tenant? drawer có mở socket thứ hai?",
       "🔒 GHIM plan-reviewer 02/09 (BLOCKING 1 — bất biến đọc §13.4 bị bỏ quên): S17 đẻ ĐÚNG HAI đường đọc MỚI trên chat_messages — (a) LATERAL lấy lastMessage trong danh sách phòng, (b) trích link từ body ở CHAT-API-031. SPEC-15 §13.4 (dòng 535/541) bắt MỌI đường đọc mang vị từ (m.visible_from_seq IS NULL OR msg.room_seq >= m.visible_from_seq) qua nguồn duy nhất apps/api/src/chat/chat-visibility.ts. NGUY HIỂM: chat-visibility.spec.ts là census THEO FILE (chỉ quét chat-messages/chat-attachments/chat-search repository + DOCUMENTED_EXCEPTIONS) ⇒ đặt LATERAL trong chat-rooms.repository.ts thì ratchet VẪN XANH dù có đường đọc thoát §13.4 — census nói dối. DOC phải ghi: (1) hai đường đọc mới gọi visibleFromSeqColumn()/visibleFromSeqScalar(); (2) file chứa chúng PHẢI thêm vào danh sách census của chat-visibility.spec.ts và BE-1/BE-2 phải khai file spec đó trong paths; (3) CẤM thêm tên vào DOCUMENTED_EXCEPTIONS; (4) testTask RED: gỡ vị từ ⇒ chat-visibility.spec.ts phải ĐỎ.",
