@@ -56,6 +56,11 @@ vi.mock("./RecruitFunnelWidget", () => ({
     <div data-testid="widget-RECRUIT_FUNNEL">RECRUIT_FUNNEL:{dashboardType}</div>
   ),
 }));
+vi.mock("./PayrollCostWidget", () => ({
+  PayrollCostWidget: ({ dashboardType }: { dashboardType?: string }) => (
+    <div data-testid="widget-PAYROLL_COST">PAYROLL_COST:{dashboardType}</div>
+  ),
+}));
 
 function widget(code: string, order: number): DashboardWidgetSummaryDto {
   return {
@@ -116,6 +121,11 @@ describe("DashboardWidgetGrid", () => {
   it("S12-RECRUIT-DASH-1 — wire widget RECRUIT_FUNNEL", () => {
     render(<DashboardWidgetGrid widgets={[widget("RECRUIT_FUNNEL", 90)]} dashboardType="HR" />);
     expect(screen.getByTestId("widget-RECRUIT_FUNNEL")).toHaveTextContent("RECRUIT_FUNNEL:HR");
+  });
+
+  it("S13-PAYROLL-DASH-1 — wire widget PAYROLL_COST", () => {
+    render(<DashboardWidgetGrid widgets={[widget("PAYROLL_COST", 100)]} dashboardType="Admin" />);
+    expect(screen.getByTestId("widget-PAYROLL_COST")).toHaveTextContent("PAYROLL_COST:Admin");
   });
 
   /**

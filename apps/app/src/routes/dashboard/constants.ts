@@ -22,6 +22,8 @@ import { ASSET_ENGINE_PAIRS } from "@/routes/assets/constants";
 import { ROOM_ENGINE_PAIRS } from "@/routes/rooms/constants";
 // S12-RECRUIT-DASH-1 (additive): cặp gate RECRUIT_FUNNEL — tái dùng RECRUIT_ENGINE_PAIRS.candidateSummary (DRY).
 import { RECRUIT_ENGINE_PAIRS } from "@/routes/recruit/constants";
+// S13-PAYROLL-DASH-1 (additive): cặp gate PAYROLL_COST — tái dùng PAYROLL_ENGINE_PAIRS.periodSummary (DRY).
+import { PAYROLL_ENGINE_PAIRS } from "@/routes/payroll/constants";
 
 export const DASH_WIDGET_CODE = {
   MY_TASKS: "MY_TASKS",
@@ -39,6 +41,8 @@ export const DASH_WIDGET_CODE = {
   ASSET_SUMMARY: "ASSET_SUMMARY",
   // S12-RECRUIT-DASH-1 (APPEND) — widget «phễu tuyển dụng» (SPEC-12 RC-10 · RECRUIT-WIDGET-001, mig 0563).
   RECRUIT_FUNNEL: "RECRUIT_FUNNEL",
+  // S13-PAYROLL-DASH-1 (APPEND) — widget «chi phí lương kỳ» (SPEC-11 §10.1 PAYROLL-WIDGET-001, mig 0568).
+  PAYROLL_COST: "PAYROLL_COST",
 } as const;
 
 export type DashWidgetCode = (typeof DASH_WIDGET_CODE)[keyof typeof DASH_WIDGET_CODE];
@@ -71,6 +75,14 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<
   // summaryTx đếm TOÀN company nên grant hẹp hơn không được thấy. FE không kiểm được scope ⇒ PermissionGate
   // ở component là gate PHỤ; cổng THẬT là GET /dashboard/me đã omit widget ⇒ Grid không mount nó.
   RECRUIT_FUNNEL: RECRUIT_ENGINE_PAIRS.candidateSummary,
+  // S13-PAYROLL-DASH-1 (APPEND) — MIRROR đúng BE: PAYROLL_COST→view-line:payroll-period (SENSITIVE,
+  // mig 0565 — chỉ payroll-officer/company-admin @Company). BE còn ép SÀN scope 'Company'
+  // (DASH_WIDGET_MIN_DATA_SCOPE): latestSummaryTx SUM toàn company nên grant hẹp hơn không được thấy.
+  //
+  // ⚠ Cặp này là cặp NHẠY CẢM ⇒ component PayrollCostWidget gate bằng `useCanExact`, KHÔNG dùng
+  // <PermissionGate> (nó gọi `useCan`, vốn chấp nhận wildcard '*:*' — mà wildcard KHÔNG kế thừa cặp
+  // sensitive ở BE). Đây là khác biệt DUY NHẤT so với 3 widget wave trước, xem doc-block component.
+  PAYROLL_COST: PAYROLL_ENGINE_PAIRS.periodSummary,
 };
 
 /**

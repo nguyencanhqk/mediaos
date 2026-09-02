@@ -15304,18 +15304,30 @@ export const backlog = [
   {
     id: "S13-PAYROLL-DASH-1",
     module: "PAYROLL",
+    // ⚠️ `layer:"FE"` NÓI THIẾU diện chạm (memory `wo-layer-field-can-understate-scope`): WO có VẾ BE
+    // thật — migration catalog, handler widget, và 1 dòng `exports` ở `payroll.module.ts` (module nguồn
+    // hiện KHÔNG export gì, xem doc-block ở đó).
     layer: "FE",
     title:
       "Widget DASH «chi phí lương kỳ» (PAYROLL-WIDGET-001): tổng gross/net + headcount + trạng thái kỳ gần nhất — catalog BE + SÀN SCOPE (chỉ role có cặp payroll) + wire slug FE DashboardWidgetGrid + test slug-map, đăng ký mã theo SPEC-01 §9.9",
     zone: "green",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/dashboard/**",
       "apps/api/migrations/**",
+      // Nới 02/09: module nguồn phải `exports: [PayrollCalcService]` để handler inject được (khuôn
+      // RecruitModule ở S12-RECRUIT-DASH-1) — 1 dòng, KHÔNG đụng logic lương.
+      "apps/api/src/payroll/**",
+      // Nới 02/09: int-spec đường thật (2 tầng gate + đối chiếu một-công-thức với PAYROLL-API-018).
+      "apps/api/test/**",
       "apps/app/src/components/dashboard/**",
+      "apps/app/src/routes/dashboard/**",
+      "apps/app/src/i18n/**",
       "packages/web-core/**",
       "packages/contracts/**",
       "docs/SPEC/**",
+      "docs/TESTABLE-FEATURES.md",
+      "docs/plans/**",
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],
@@ -15330,6 +15342,9 @@ export const backlog = [
     ],
     notes: [
       "🟢 LIGHT gate. Đóng wave S13-PAYROLL — sau WO này regen STATUS + cập nhật memory wave. Variance/report theo phòng ban = Phase sau (PARK-PAYROLL-001).",
+      "KẾT QUẢ 02/09/2026 — mig 0568 (CHECK union +'PAYROLL', catalog row PAYROLL_COST slug `payroll-cost`, journal idx 235); handler file riêng `dashboard-widget-payroll.handlers.ts`; `PayrollModule` nay `exports: [PayrollCalcService]` (trước đó KHÔNG export gì); seeder bump v4→v5 (4 entry × 4 dashboard type @100). Test: 16 ca int-spec `dashboard-payroll-cost.int-spec.ts` + 12 ca FE. Lệnh tái lập: `LANE_DB=mediaos_payrolldash1 pnpm --filter @mediaos/api exec vitest run test/integration/dashboard-payroll-cost.int-spec.ts`.",
+      "⚠️ KHÁC 3 widget wave trước — đây là widget DASH ĐẦU TIÊN CHỞ TIỀN: (a) cặp gate là cặp ĐỌC-TIỀN `view-line:payroll-period` (sensitive), có ca deny RIÊNG cho `view:payroll-period` (cặp danh sách) và cho `calculate` (cặp GHI); (b) component gate bằng `useCanExact` chứ KHÔNG <PermissionGate> — `PermissionGate` gọi `useCan` vốn cho wildcard `*:*` qua, mà wildcard KHÔNG kế thừa cặp sensitive ở BE ⇒ sẽ hiện shell cho vai server chắc chắn 403; có ca test ghim.",
+      "GIỚI HẠN ĐÃ BIẾT (ghi ở SPEC-11 §10.1 + có ca test cả hai mặt): audit lượt xem widget CHỈ có trên cache MISS — cache company-shared TTL 300s nên lượt xem thứ hai không chạy `fetch`. Trong spec: §20.12 chỉ đòi +1 hàng/lượt cho `/lines` · `/payslips/:id` · `/salary-profiles`. Muốn vết per-view thì sửa `gateAndResolve`, KHÔNG phải `fetch`.",
     ],
   },
 ];

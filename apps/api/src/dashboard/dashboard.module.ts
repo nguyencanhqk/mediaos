@@ -42,11 +42,16 @@ import { RoomsModule } from "../rooms/rooms.module";
 // S12-RECRUIT-DASH-1 (additive): module nguồn cho RECRUIT_FUNNEL — RecruitModule (CandidatesService.summary
 // = đúng công thức GET /candidates/summary). RecruitModule KHÔNG import DashboardModule ⇒ không circular-dep.
 import { RecruitModule } from "../recruit/recruit.module";
+// S13-PAYROLL-DASH-1 (additive): module nguồn cho PAYROLL_COST — PayrollModule (PayrollCalcService.summary
+// = đúng công thức GET /payroll-periods/summary, PAYROLL-API-018; nó tự gate + ghi audit lượt đọc).
+// PayrollModule chỉ import PermissionModule ⇒ KHÔNG circular-dep.
+import { PayrollModule } from "../payroll/payroll.module";
 import { DashboardWidgetDataController } from "./dashboard-widget-data.controller";
 import { DashboardWidgetDataService } from "./dashboard-widget-data.service";
 import { DashboardWidgetHandlersService } from "./dashboard-widget-handlers.service";
 import { DashboardWidgetOfficeHandlers } from "./dashboard-widget-office.handlers";
 import { DashboardWidgetRecruitHandlers } from "./dashboard-widget-recruit.handlers";
+import { DashboardWidgetPayrollHandlers } from "./dashboard-widget-payroll.handlers";
 import { DashboardWidgetCacheService } from "./dashboard-widget-cache.service";
 // S4-DASH-BE-3 (additive): config CRUD — controller THỨ TƯ (/configs + /configs/:id), không đụng khối trên.
 import { DashboardConfigController } from "./dashboard-config.controller";
@@ -93,6 +98,8 @@ import { DashboardMvRefreshJobHandler } from "./dashboard-mv-refresh.job-handler
     RoomsModule,
     // S12-RECRUIT-DASH-1 (additive): + module nguồn cho RECRUIT_FUNNEL.
     RecruitModule,
+    // S13-PAYROLL-DASH-1 (additive): + module nguồn cho PAYROLL_COST.
+    PayrollModule,
   ],
   controllers: [
     DashboardController,
@@ -122,6 +129,8 @@ import { DashboardMvRefreshJobHandler } from "./dashboard-mv-refresh.job-handler
     DashboardWidgetOfficeHandlers,
     // S12-RECRUIT-DASH-1 (additive): handler RECRUIT_FUNNEL (file riêng, cùng MỘT registry).
     DashboardWidgetRecruitHandlers,
+    // S13-PAYROLL-DASH-1 (additive): handler PAYROLL_COST (file riêng, cùng MỘT registry).
+    DashboardWidgetPayrollHandlers,
     // S4-DASH-BE-3 (additive): config CRUD service.
     DashboardConfigService,
     // S4-INT-2 (additive): internal cache invalidation service.

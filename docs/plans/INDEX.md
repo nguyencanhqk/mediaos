@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**432 WO** · có micro-plan: **251/432** · ⬜ 6 chờ · 🔵 0 đang làm · ✅ 426 xong · 🔴 0 chặn
+**434 WO** · có micro-plan: **255/434** · ⬜ 0 chờ · 🔵 1 đang làm · ✅ 433 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -506,12 +506,14 @@
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
 | `S13-PAYROLL-DOC-1` | 🟢 | ✅ xong | [📄](S13-PAYROLL-WAVE.md) | — | Bộ tài liệu PAYROLL: SPEC-11 + DB-13 (kèm bản đồ reconcile 6 bảng G12) |
-| `S13-PAYROLL-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S13-PAYROLL-DOC-1 | Schema + migration PAYROLL theo DB-13 (mig 0564+): ĐO dữ liệu PROD 6 b |
-| `S13-PAYROLL-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S13-PAYROLL-DB-1 | Module NestJS payroll/ (nền): salary-profile versioned + bonus-penalty |
-| `S13-PAYROLL-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S13-PAYROLL-BE-1 | Máy tính lương: calculate (SQL numeric, snapshot ĐÓNG BĂNG, idempotenc |
-| `S13-PAYROLL-FE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S13-PAYROLL-BE-2 | FE PAYROLL (apps/app routes/payroll/ + màn ME): 6 màn PAY-SCREEN-001.. |
-| `S13-PAYROLL-QA-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S13-PAYROLL-FE-1 | QA PAYROLL: ma trận allow/deny per-pair TỪNG route (kể cả hr-manager S |
-| `S13-PAYROLL-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S13-PAYROLL-QA-1 | Widget DASH «chi phí lương kỳ» (PAYROLL-WIDGET-001): tổng gross/net +  |
+| `S13-PAYROLL-DB-1` | 🔴 | ✅ xong | [📄](S13-PAYROLL-DB-1.md) | ✅S13-PAYROLL-DOC-1 | Schema + migration PAYROLL theo DB-13 (mig 0564+): ĐO dữ liệu PROD 6 b |
+| `S13-PAYROLL-BE-1` | 🔴 | ✅ xong | [📄](S13-PAYROLL-BE-1.md) | ✅S13-PAYROLL-DB-1 | Module NestJS payroll/ (nền): salary-profile versioned + bonus-penalty |
+| `S13-LEAVE-JOBDATE-1` | 🟡 | ✅ xong | — *(chưa)* | — | Gỡ ca đỏ-vĩnh-viễn leave-accrual: tiêm `today` vào JobRunContext để sp |
+| `S13-PAYROLL-BE-1B` | 🔴 | ✅ xong | [📄](S13-PAYROLL-BE-1B.md) | ✅S13-PAYROLL-BE-1 | Đầu vào phép theo NỬA NGÀY: sửa SPEC-11 §13.4 sang mức 0.5 ngày rồi vá |
+| `S13-PAYROLL-BE-2` | 🔴 | ✅ xong | [📄](S13-PAYROLL-BE-2.md) | ✅S13-PAYROLL-BE-1 ✅S13-PAYROLL-BE-1B | Máy tính lương: calculate (SQL numeric, snapshot ĐÓNG BĂNG, idempotenc |
+| `S13-PAYROLL-FE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S13-PAYROLL-BE-2 | FE PAYROLL (apps/app routes/payroll/ + màn ME): 6 màn PAY-SCREEN-001.. |
+| `S13-PAYROLL-QA-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S13-PAYROLL-FE-1 | QA PAYROLL: ma trận allow/deny per-pair TỪNG route (kể cả hr-manager S |
+| `S13-PAYROLL-DASH-1` | 🟢 | 🔵 đang làm | — *(chưa)* | ✅S13-PAYROLL-QA-1 | Widget DASH «chi phí lương kỳ» (PAYROLL-WIDGET-001): tổng gross/net +  |
 
 ---
 

@@ -15,7 +15,7 @@ import type { DataScope } from "@mediaos/contracts";
  *  - mô hình gate widget       → docs/permission-matrix-spec.md §7 (dòng 144)
  */
 
-/** Union khớp CHECK chk_dashboard_widgets_module_code (mig 0482:71-72; APPEND 'GOAL' 0525; 'ASSET','ROOM' 0558; 'RECRUIT' 0563). */
+/** Union khớp CHECK chk_dashboard_widgets_module_code (mig 0482:71-72; APPEND 'GOAL' 0525; 'ASSET','ROOM' 0558; 'RECRUIT' 0563; 'PAYROLL' 0568). */
 export type DashModuleCode =
   | "AUTH"
   | "HR"
@@ -28,7 +28,8 @@ export type DashModuleCode =
   | "GOAL"
   | "ASSET"
   | "ROOM"
-  | "RECRUIT";
+  | "RECRUIT"
+  | "PAYROLL";
 /** Union khớp CHECK chk_dashboard_widgets_widget_type (mig 0482:73-74). */
 export type DashWidgetType = "Summary" | "List" | "Chart" | "Calendar" | "Action" | "Alert";
 /** Union khớp CHECK chk_dashboard_widgets_default_data_scope (mig 0482:75-76). */
@@ -280,6 +281,19 @@ export const DASH_WIDGET_CATALOG: readonly DashWidgetEntry[] = [
     dataSourceKey: "recruit-funnel",
     componentKey: "RecruitFunnelWidget",
   },
+  // ─── S13-PAYROLL-DASH-1 (APPEND-only) — widget «chi phí lương kỳ» (SPEC-11 §10 PAYROLL-FUNC-014 ·
+  // §10.1 PAYROLL-WIDGET-001 · PAY-DEC-010, mig 0568). Scope 'Company' KHÔNG phải cận-dưới trang trí —
+  // nó là SÀN THẬT (xem DASH_WIDGET_MIN_DATA_SCOPE.PAYROLL_COST): latestSummaryTx SUM toàn company.
+  {
+    widgetCode: "PAYROLL_COST",
+    moduleCode: "PAYROLL",
+    name: "Chi phí lương kỳ",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_PAYROLL_COST",
+    defaultDataScope: "Company",
+    widgetType: "Summary",
+    dataSourceKey: "payroll-cost",
+    componentKey: "PayrollCostWidget",
+  },
 ] as const;
 
 export const DASH_WIDGET_COUNT = DASH_WIDGET_CATALOG.length;
@@ -351,6 +365,16 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<Record<string, EnginePair>> = {
   // engine tự ép effectivelySensitive ⇒ wildcard KHÔNG lọt. Cặp vẫn CHƯA đủ một mình: xem
   // DASH_WIDGET_MIN_DATA_SCOPE.RECRUIT_FUNNEL (sàn 'Company' — summaryTx đếm toàn company).
   RECRUIT_FUNNEL: { action: "view", resourceType: "candidate" },
+  // ─── S13-PAYROLL-DASH-1 (APPEND) — cặp gate PAYROLL_COST ────────────────────────────────────────
+  // ('view-line','payroll-period') — mig 0565:191, is_sensitive=TRUE (cặp CHỞ TIỀN); grant CHỈ
+  // payroll-officer/company-admin @Company (permission-matrix §9g) ⇒ employee/manager/hr thiếu CẶP đã
+  // bị loại. engine tự ép effectivelySensitive ⇒ wildcard '*:*' KHÔNG lọt.
+  //
+  // ⚠ KHÔNG dùng ('view','payroll-period'): cặp đó cố ý is_sensitive=false cho màn DANH SÁCH kỳ nên
+  // "không được chở số tiền, kể cả tổng" (SPEC-11 §334) — mà payload widget CÓ totalGross/totalNet.
+  // Và KHÔNG dùng cặp GHI ('calculate',…): gác bằng nó thì ai thấy widget đều ghi được lương
+  // (SPEC-11 §329). Cặp vẫn CHƯA đủ một mình: xem DASH_WIDGET_MIN_DATA_SCOPE.PAYROLL_COST.
+  PAYROLL_COST: { action: "view-line", resourceType: "payroll-period" },
 } as const;
 
 /**
@@ -380,6 +404,13 @@ export const DASH_WIDGET_MIN_DATA_SCOPE: Readonly<Record<string, DataScope>> = {
   // sau ai đó grant view:candidate@Department, thiếu sàn này widget sẽ serve số TOÀN company cho scope
   // hẹp — rò dữ liệu ngoài scope. Hôm nay sàn không loại ai; nó gác grant hẹp hơn xuất hiện về sau.
   RECRUIT_FUNNEL: "Company",
+  // S13-PAYROLL-DASH-1: sàn = 'Company', CÙNG lý do RECRUIT_FUNNEL nhưng hệ quả NẶNG hơn vì payload là
+  // TIỀN: `PayrollCalcRepository.latestSummaryTx` SUM toàn bộ payroll_period_lines của company (không co
+  // theo actor scope) ⇒ grant `view-line:payroll-period` hẹp hơn Company mà được serve là rò tổng quỹ
+  // lương ra ngoài scope. Hôm nay mọi grant cặp này đều @Company (mig 0565) nên sàn không loại ai — nó
+  // gác grant hẹp hơn xuất hiện về sau, ĐỘC LẬP với `companyFloor` mà PayrollAccessService ép ở route
+  // 018 (đường METADATA /dashboard/me KHÔNG đi qua PayrollAccessService ⇒ không có sàn đó).
+  PAYROLL_COST: "Company",
 } as const;
 
 /**
@@ -600,6 +631,15 @@ export const DASH_DEFAULT_CONFIG: readonly DashDefaultConfigEntry[] = [
   { dashboardType: "Manager", widgetCode: "RECRUIT_FUNNEL", sortOrder: 90 },
   { dashboardType: "HR", widgetCode: "RECRUIT_FUNNEL", sortOrder: 90 },
   { dashboardType: "Admin", widgetCode: "RECRUIT_FUNNEL", sortOrder: 90 },
+  // ─── S13-PAYROLL-DASH-1 (APPEND) — PAYROLL_COST@100 trên CẢ 4 dashboard type (mirror lý do
+  // ASSET_SUMMARY@Employee / RECRUIT_FUNNEL): role `payroll-officer` KHÔNG có cặp view-*:dashboard riêng
+  // ⇒ resolve về dashboard type của các role KHÁC user đó mang (thường 'Employee'). Ai không có
+  // view-line:payroll-period@Company bị loại bởi CẶP + SÀN (filterByGatePair), KHÔNG bởi việc vắng
+  // config — lọc theo config sẽ giấu widget khỏi chính người đáng thấy nó.
+  { dashboardType: "Employee", widgetCode: "PAYROLL_COST", sortOrder: 100 },
+  { dashboardType: "Manager", widgetCode: "PAYROLL_COST", sortOrder: 100 },
+  { dashboardType: "HR", widgetCode: "PAYROLL_COST", sortOrder: 100 },
+  { dashboardType: "Admin", widgetCode: "PAYROLL_COST", sortOrder: 100 },
 ] as const;
 
 // ─── S4-DASH-BE-1 (APPEND-only) — resolver route → cặp engine ────────────────────────────────────────

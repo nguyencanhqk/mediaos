@@ -226,3 +226,32 @@ export const recruitFunnelWidgetDataSchema = z.object({
   }),
 });
 export type RecruitFunnelWidgetData = z.infer<typeof recruitFunnelWidgetDataSchema>;
+
+// ── S13-PAYROLL-DASH-1 — PAYROLL_COST (dashboard-widget-payroll.handlers.ts) ─────────────────────
+
+/**
+ * PAYROLL_COST — `fetchPayrollCost()`: { period: { payrollPeriodId, periodMonth, status },
+ * summary: { headcount, totalGross, totalNet } } của kỳ lương GẦN NHẤT.
+ *
+ * `totalGross`/`totalNet` để `.nullable()` chứ KHÔNG `z.number()` trần: mask của server là **VẮNG
+ * KHOÁ** (SPEC-11 §18) và handler chuyển vế vắng thành `null` — schema phải nhận được `null` để
+ * component in `—` thay vì rơi vào nhánh parse-fail (memory `server-masking-needs-optional-fe-schema`).
+ * Trên đường widget hôm nay hai khoá này LUÔN có số (route 018 chở tiền cho mọi actor qua được gate),
+ * nhưng ghim `z.number()` ở đây là dựng một quả mìn cho ngày cặp gate đổi.
+ *
+ * `status` để `z.string()` chứ không ghim 7 giá trị FSM: enum sống ở contracts (`payrollPeriodStatusEnum`)
+ * và ở i18n `payroll:periodStatus.*`; chép lần thứ ba vào đây là ba nơi cùng trôi.
+ */
+export const payrollCostWidgetDataSchema = z.object({
+  period: z.object({
+    payrollPeriodId: z.string().uuid(),
+    periodMonth: z.string(),
+    status: z.string(),
+  }),
+  summary: z.object({
+    headcount: z.number().int().nonnegative(),
+    totalGross: z.number().nullable(),
+    totalNet: z.number().nullable(),
+  }),
+});
+export type PayrollCostWidgetData = z.infer<typeof payrollCostWidgetDataSchema>;

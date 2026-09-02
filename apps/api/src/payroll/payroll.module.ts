@@ -38,9 +38,11 @@ import { SalaryProfilesService } from "./salary-profiles.service";
  * chỉ báo HIỂN THỊ, **không phải cổng** (memory `module-is-active-is-not-a-gate`): route ở đây sống
  * bình thường và vẫn được gác bằng `PermissionGuard` + RLS. Đừng "sửa cho nhất quán".
  *
- * KHÔNG export gì: người nhận NOTI-020 đi THEO PAYLOAD outbox (`PayrollApproverReader` chạy ở
- * `submit`), nên registrar không cần đọc lại từ module này. Widget DASH của lương là việc của
- * `S13-PAYROLL-DASH-1`.
+ * Export DUY NHẤT `PayrollCalcService` (S13-PAYROLL-DASH-1) — `DashboardModule` inject nó cho handler
+ * widget `PAYROLL_COST` để dùng LẠI `summary()` (một công thức, một con số với PAYROLL-API-018; nó tự
+ * `resolveActor` + ghi audit lượt đọc). DASH là leaf, PayrollModule KHÔNG import DASH ⇒ không circular-dep.
+ * Người nhận NOTI-020 vẫn đi THEO PAYLOAD outbox (`PayrollApproverReader` chạy ở `submit`), nên registrar
+ * KHÔNG đọc gì từ module này — export ở đây không mở thêm bề mặt nào cho NOTI.
  */
 @Module({
   imports: [PermissionModule],
@@ -71,5 +73,8 @@ import { SalaryProfilesService } from "./salary-profiles.service";
     PayrollPayslipsService,
     PayrollExportService,
   ],
+  // S13-PAYROLL-DASH-1: chỉ PayrollCalcService — KHÔNG export repository (widget phải đi qua service để
+  // giữ nguyên tầng guard THỨ HAI `resolveActor` + audit; export repository là mở đường vòng qua cả hai).
+  exports: [PayrollCalcService],
 })
 export class PayrollModule {}
