@@ -103,8 +103,13 @@ export default defineConfig({
       // file không tồn tại (4 khoá `src/workflow/*` — module ĐÃ XOÁ HẲN — và một khoá payroll gõ
       // nhầm số ít/số nhiều). Bốn khoá workflow đã gỡ ở đây; khoá payroll đã sửa bên dưới.
       // ⚠️ Đổi tên/di chuyển file crown-jewel ⇒ PHẢI sửa khoá tương ứng trong CÙNG commit.
-      // ⓘ Nợ ghi nhận (ngoài phạm vi WO này): script `test:cov` trong package.json vẫn trỏ vào
-      //   `src/workflow` đã xoá — cần một WO dọn riêng.
+      // ⓘ S14-QA-COVGATE-1 (2026-09-02): script `test:cov` (package.json) cũng trỏ vào `src/workflow`
+      //   đã xoá — đó là nợ ghi ở đây trước đó. Đã XOÁ script đó (không còn phạm vi mặc định hợp lý:
+      //   mỗi module nhạy cảm giờ có script riêng `test:cov:<module>`, và chạy `--coverage` toàn repo
+      //   không `--coverage.include` sẽ VI PHẠM đúng bất biến ghi ở dòng ~239 dưới đây). Thêm ratchet
+      //   tự-kiểm `test/foundation/coverage-thresholds-ratchet.unit-spec.ts`: đọc khoá `thresholds` này
+      //   qua AST (không regex — tránh bẫy đọc nhầm chuỗi trong comment) + quét mọi script `test:cov:*`
+      //   còn lại, assert từng khoá/đường dẫn trỏ file/thư mục CÓ THẬT.
       //
       // Chỉ có hiệu lực khi truyền `--coverage`, và chỉ CẮN khi file lọt vào `--coverage.include` của
       // lượt chạy đó ⇒ mỗi module nhạy cảm có script riêng (`test:cov:payroll`, `test:cov:sensitive`…).
@@ -177,8 +182,9 @@ export default defineConfig({
         },
         // S2-QA-1-FIX-B: crown-jewel auth/permission services ARE per-file gated ≥80% (DoD §6, hard block).
         // Vitest per-file thresholds bite ONLY when the file appears in the coverage report (verified: the
-        // workflow/salary/setting thresholds above are no-ops under the workflow-scoped `test:cov` run that
-        // never measures them). So these two gates are ENFORCED by `test:cov:sensitive` (which --coverage.include
+        // salary/setting thresholds above are no-ops under a run whose `--coverage.include` never matches
+        // those two files — e.g. `test:cov:payroll`/`test:cov:sensitive` don't include them either). So
+        // these two gates are ENFORCED by `test:cov:sensitive` (which --coverage.include
         // both files AND runs their flows under an isolated LANE_DB), and are inert in the default no-DB unit run
         // (`pnpm test`) where the auth/permission *.int-spec.ts skipIf(!(hasDb && LANE_DB)) — no false-red.
         //   • permission.service.ts: can()/scope/userGrantsPermissionIds/listGrantableScopes covered at UNIT
