@@ -20,7 +20,7 @@
 | Module phụ thuộc trực tiếp | AUTH (RBAC · token WS), HR (employees/departments), TASK (projects), FOUNDATION (files · audit · sequences) |
 | Module liên quan | NOTI, ME, DASH, LMS (lối vào /chat hiện tại) |
 | Phiên bản | v1.0 |
-| Trạng thái | **Approved** — owner chốt 12 quyết định §22 ngày 02/08/2026 (CHAT-DEC-004 chốt **ngược** đề xuất ban đầu — xem §3.3) · S8 DEC-014..019 chốt 05/08 (§22a) · S7-CALL DEC-020 ký 08/08 (§22b) · **S17-CHAT-UX2 DEC-021..027 duyệt 02/09/2026 (§5.1d · §22c)** |
+| Trạng thái | **Approved** — owner chốt 12 quyết định §22 ngày 02/08/2026 (CHAT-DEC-004 chốt **ngược** đề xuất ban đầu — xem §3.3) · S8 DEC-014..019 chốt 05/08 (§22a) · S7-CALL DEC-020 ký 08/08 (§22b) · **S17-CHAT-UX2 DEC-021..027 duyệt 02/09/2026 (SPEC-15 §5.1d · §22c)** |
 | Giai đoạn | **Phase 4 · wave S7-CHAT** — NGOÀI phạm vi RC v1.0.0 (scope freeze RELEASE-05) |
 | Ngày tạo | 01/08/2026 |
 | Ngày cập nhật | 02/09/2026 |
@@ -144,7 +144,7 @@ CHAT không lưu tên nhân viên, tên phòng ban, tên dự án — join từ 
 2. Một điểm khẳng định membership duy nhất (§3.2), fail-closed.
 3. Realtime **best-effort**: WS chết thì REST + polling vẫn cho trải nghiệm đúng, không mất tin (`REALTIME_ENABLED=false` là đường lui hợp lệ).
 4. Tìm kiếm tiếng Việt bằng hạ tầng Postgres sẵn có (`unaccent` + `tsvector`), **không** thêm search engine (Typesense đã bị loại vì GPL-3 — CLAUDE.md §4).
-5. Một kết nối WS duy nhất cho toàn app shell, dùng chung giữa trang full-screen và panel nổi.
+5. Một kết nối WS duy nhất cho toàn app shell, dùng chung giữa trang full-screen và drawer chat (CHAT-SCREEN-002 v2).
 
 ---
 
@@ -317,10 +317,10 @@ Chi tiết cột/kiểu/constraint: [DB-12](<../DB/DB-12 CHAT Database Design.md
 
 | Mã | Màn hình | Ghi chú |
 | --- | --- | --- |
-| CHAT-SCREEN-001 | Trang Chat full-screen (`/chat`) | 3 cột: danh sách phòng · khung hội thoại · thông tin phòng. Cột trái chia mục — xem ghi chú §9a |
-| CHAT-SCREEN-002 | Panel chat nổi (mọi màn hình) | thu nhỏ/mở rộng, **đúng 1 hội thoại mở tại một thời điểm** — bấm phòng khác thì THAY CHỖ phòng đang mở (đổi 2026-08-05 từ "tối đa 3": nhiều cửa sổ cộng dồn ở cạnh dưới, người dùng đọc ra là "cứ bấm là mở thêm khung, không ẩn phần chat cũ"). **Dùng chung store + chung 1 kết nối WS** với CHAT-SCREEN-001 |
+| CHAT-SCREEN-001 | Trang Chat full-screen (`/chat`) — **v2** | 3 cột **responsive** (CHAT-DEC-026): **≥1280px** ba cột (danh sách phòng · khung hội thoại · thông tin phòng) · **≥768px** hai cột (bảng thông tin phòng chuyển thành **Sheet** trượt) · **<768px** một cột (push: danh sách → hội thoại → info, không chồng cột). Cột trái chia mục — xem ghi chú §9a |
+| CHAT-SCREEN-002 | **Drawer phải 400px** (v2, CHAT-DEC-026) | Thay cửa sổ nổi cũ: mở từ **badge header trên mọi trang** — ô tìm + chip lọc (§9a) · danh sách thu gọn ↔ hội thoại (push, ‹ quay lại) · ⤢ mở `/chat`. **Dưới `md` drawer thành toàn màn.** **GIỮ NGUYÊN**: **đúng 1 hội thoại mở tại một thời điểm** — bấm phòng khác thì THAY CHỖ phòng đang mở (đổi 2026-08-05 từ "tối đa 3"); **dùng chung store + chung 1 kết nối WS** với CHAT-SCREEN-001 |
 | CHAT-SCREEN-003 | Hộp thoại tạo nhóm / chọn người nhắn riêng | danh bạ nhân viên có tìm kiếm, tôn trọng quyền xem danh bạ của HR |
-| CHAT-SCREEN-004 | Bảng thông tin phòng | thành viên · tệp đã gửi · tin đã ghim · nút rời/lưu trữ (theo quyền + loại phòng). *(S8)* Thêm lối **đặt/gỡ ảnh đại diện phòng** — chỉ hiện đúng với chủ thể được phép theo CHAT-DEC-016, **không** hiện nút rồi để server trả 403 |
+| CHAT-SCREEN-004 | Bảng thông tin phòng — **v2, bố cục dọc (CHAT-DEC-025)** | thành viên · tệp đã gửi · tin đã ghim · nút rời/lưu trữ (theo quyền + loại phòng); bố cục dọc: avatar lớn · tên · «Tạo bởi … · ngày» · 3 hành động tròn · «Thành viên (N) ›» · accordion Ảnh/Video · Tệp · Liên kết (§15b). *(S8)* Thêm lối **đặt/gỡ ảnh đại diện phòng** — chỉ hiện đúng với chủ thể được phép theo CHAT-DEC-016, **không** hiện nút rồi để server trả 403. **KHÔNG** nhãn «Dữ liệu được mã hoá» (MediaOS không có E2E), không nhắc hẹn/huy hiệu |
 | CHAT-SCREEN-005 | Tìm kiếm tin nhắn | phạm vi: tất cả phòng của tôi, hoặc trong 1 phòng; nhảy tới tin trong ngữ cảnh |
 | CHAT-SCREEN-006 | Badge chưa đọc trên header | tổng theo user, đồng bộ realtime qua `chat:read` |
 | CHAT-SCREEN-007 🔒 | **Quản trị: đọc-vượt membership** (§3.3) | Chỉ hiện với cặp `('view','chat-oversight')`. Tra phòng theo mã/tên → **hộp thoại xác nhận "xem với tư cách quản trị"** → mở phòng ở chế độ **chỉ đọc** (không gửi/ghim/thu hồi được). **Không** trộn vào danh sách phòng của CHAT-SCREEN-001 |
@@ -339,6 +339,15 @@ Mục cố định, đúng thứ tự: **Đã ghim** · **Tin nhắn riêng** ·
 - Mỗi phòng xuất hiện **đúng một lần** trên toàn danh sách: **ghim THẮNG loại phòng**.
 - `room_type` lạ (server thêm loại mới mà client chưa biết) phải **vẫn hiện ra** ở một mục cuối, **không** được biến mất. Mất phòng trong im lặng tệ hơn một tiêu đề xấu.
 - **KHÔNG** phải thư mục tự đặt — xem §5.2.
+
+**Luật chip lọc nhanh — CHAT-DEC-021 (S17, SPEC-15 §5.1d):**
+
+- «**Tất cả**» = **GIỮ NGUYÊN** 5 mục cố định của CHAT-DEC-014 (Đã ghim · Tin nhắn riêng · Nhóm · Phòng ban · Dự án) — ghim vẫn **THẮNG** loại phòng ở chế độ này, đúng luật đã chốt ở trên.
+- Chip khác (`Chưa đọc` · `Riêng` · `Nhóm` · `Phòng ban·Dự án` · `Đã lưu trữ`) = danh sách **PHẲNG** theo hoạt động (`last_message_at`), **không** chia mục con; chỉ hiện phòng khớp đúng điều kiện của chip đó.
+- Chip **không lưu trạng thái** — mỗi lần vào lại màn hình, chip mặc định quay về «Tất cả».
+- «**Ưa thích**» **≡ Đã ghim** — không phải khái niệm thứ hai, không có chip riêng cho "ưa thích".
+- «Xem phòng đã lưu trữ» (trước đây là một hành động riêng) nay là **chip** `Đã lưu trữ`.
+- ⚠️ **Bất biến «mỗi phòng xuất hiện đúng MỘT lần» áp cho MỌI chip**, không riêng chế độ mục cố định «Tất cả»: một phòng khớp điều kiện của một chip thì xuất hiện đúng một lần trong danh sách phẳng của chip đó — không lặp lại do vừa khớp nhiều tiêu chí phụ (ví dụ vừa `pinned` vừa `unread`).
 
 ---
 
@@ -367,6 +376,11 @@ Mục cố định, đúng thứ tự: **Đã ghim** · **Tin nhắn riêng** ·
 | CHAT-FUNC-019 *(S8)* | Thả / bỏ cảm xúc | 6 emoji cố định; idempotent; **không** thả được vào tin đã thu hồi |
 | CHAT-FUNC-020 *(S8)* | Báo "đang gõ" | REST-ping → fan-out WS; không ghi DB, không audit; chỉ báo tự tắt sau 5s |
 | CHAT-FUNC-021 *(S8)* | Hiện "đang online" | presence server-side theo vòng đời kết nối WS; **chỉ** hiện ở phòng `direct` và danh sách thành viên |
+| CHAT-FUNC-022 *(S17)* | Preview tin cuối trong danh sách phòng | `chatRoomSchema.lastMessage`, che ở server (§8 · §15b), cập nhật realtime từ `chat:message` |
+| CHAT-FUNC-023 *(S17)* | Hiện tên/ảnh người đối thoại phòng `direct` | `chatRoomSchema.peer` (§8 · §9a), `avatarUrl` ký tươi — **không** đi qua payload WS `chat:room` (§15b) |
+| CHAT-FUNC-024 *(S17)* | `@mention` gợi ý ở ô soạn | UI thuần từ roster phòng; BE vẫn là bên lọc mention không-phải-thành-viên (CHAT-ERR-010) — gợi ý sai bị bỏ qua **im lặng** khi gửi |
+| CHAT-FUNC-025 *(S17)* | Liên kết đã chia sẻ trong phòng | `CHAT-API-031` (§15b) — trích từ nội dung tin **chưa thu hồi** |
+| CHAT-FUNC-026 *(S17)* | Lọc nhanh danh sách phòng bằng chip | §9a — CHAT-DEC-021 |
 
 ---
 
@@ -378,7 +392,7 @@ Theo chuẩn per-pair `(action, resource)` + data_scope per-(permission, role). 
 
 | Cặp quyền | Ý nghĩa | Nhân viên | Trưởng đơn vị | BOD/Admin |
 | --- | --- | --- | --- | --- |
-| `('access','chat')` | cổng nav + panel nổi | có | có | có |
+| `('access','chat')` | cổng nav + drawer chat | có | có | có |
 | `('view','chat-room')` | xem phòng · đọc tin · **tìm kiếm** · tải tệp đính kèm | có (all) | có (all) | có (all) |
 | `('create','chat-room')` | tạo phòng nhóm + mở DM | có | có | có |
 | `('update','chat-room')` | sửa tên/mô tả phòng nhóm | có (admin phòng) | có | có |
@@ -447,7 +461,7 @@ Toàn bộ 7 tính năng của §5.1b dùng lại **đúng 10 cặp CHAT của v
 | CHAT-ERR-013 | Rời phòng `direct` / `department` / `project` → chặn (§3.1) |
 | CHAT-ERR-014 | `client_message_id` trùng trong cùng (phòng, người gửi) → **trả lại tin đã tạo lần đầu, 200 idempotent** — không tạo bản sao, không báo lỗi |
 | CHAT-ERR-015 | Tệp đính kèm không thuộc quyền của người gửi, chưa quét virus xong, hoặc đã bị đánh dấu nhiễm |
-| CHAT-ERR-016 | Con trỏ phân trang không hợp lệ (`beforeSeq`/`afterSeq` sai kiểu, hoặc dùng cả hai cùng lúc) |
+| CHAT-ERR-016 | Con trỏ phân trang không hợp lệ (`beforeSeq`/`afterSeq` sai kiểu, hoặc dùng cả hai cùng lúc), **hoặc** *(S17)* con trỏ keyset mang **dấu vân** (bộ lọc của CHAT-API-019 · **phòng** của CHAT-API-031) dùng lại ở phạm vi khác |
 | CHAT-ERR-017 | Truy vấn tìm kiếm ngắn hơn 2 ký tự → **400/422** (lỗi validate thuần). Chỉ định `roomId` mà người tìm không thuộc → **404, GIỐNG HỆT** trường hợp `roomId` không tồn tại — trả mã khác nhau là biến ô tìm kiếm thành oracle dò sự tồn tại của phòng, đúng thứ CHAT-ERR-001 dựng 404 để chặn |
 | CHAT-ERR-018 | `last_read_seq` gửi lên nhỏ hơn giá trị hiện có → bỏ qua im lặng (chỉ tiến, không lùi), không lỗi |
 | CHAT-ERR-019 | Gọi đường đọc-vượt (§3.3) mà **thiếu cặp** `('view','chat-oversight')` → **403** (không phải 404: người gọi biết mình đang cố dùng chức năng quản trị, không có gì để dò). Ghi audit cả lần **bị từ chối** |
@@ -609,6 +623,14 @@ truy vấn      = websearch_to_tsquery('simple', f_unaccent($q))
 
 Mọi màn hình CHAT phải xử lý: **loading** (skeleton danh sách phòng + khung tin) · **error** (thông điệp + thử lại, không mất nội dung đang soạn) · **empty** ("chưa có tin nhắn nào" + gợi ý bắt đầu) · **đang gửi / gửi lỗi** (tin lạc quan có trạng thái riêng + nút gửi lại — dùng lại `client_message_id` cũ) · **mất kết nối** (dải báo "đang kết nối lại", vẫn đọc được tin đã tải) · **tin đã thu hồi** (chữ xám, không phải khoảng trắng) · **phòng đã lưu trữ** (chỉ đọc, khoá ô soạn) · **không có quyền** (ẩn bằng `<PermissionGate>`, không hard-code).
 
+> **Bổ sung wave S17-CHAT-UX2 (v2 — §9 · §9a · §15b):**
+>
+> - **Bong bóng** (`mine`/`theirs`, CHAT-DEC-024): tin của tôi lề phải, người khác lề trái; avatar chỉ hiện ở tin **đầu cụm** bên trái (giữ luật gộp 5 phút); giờ hiện ở tin **cuối cụm** + khi hover. Thanh tác vụ nổi (👍 nhanh · trả lời · ghim · thu hồi) **phải** có `focus-within` — dùng được bằng bàn phím, không chỉ hover chuột.
+> - **Drawer** (CHAT-SCREEN-002 v2): trạng thái đang mở/đang đóng; luôn **đúng 1 hội thoại** hiển thị bên trong; nút ‹ quay lại danh sách thu gọn; nút ⤢ mở `/chat` full-screen.
+> - **Một cột <768px**: push (danh sách → hội thoại → info), **không bao giờ** chồng cột lên nhau.
+> - **Lưới ảnh accordion** (bảng thông tin phòng v2): trạng thái loading (skeleton lưới) · empty ("chưa có ảnh nào") · lỗi ký URL (thử lại, không vỡ layout).
+> - **Dòng phòng trong danh sách**: preview rỗng khi phòng **chưa có tin nào** (không hiện dòng trắng gây hiểu nhầm là lỗi); `lastMessage.kind:'recalled'` hiện **chữ xám** «Tin nhắn đã được thu hồi», **không phải** khoảng trắng.
+
 ---
 
 ## 15. Yêu cầu API cấp SPEC
@@ -657,6 +679,26 @@ Toàn bộ vòng đời đi **REST** (hàng rào **R4**). `/ws-call` **không** 
 > ⚠️ **Chưa cấp mã cho đường ĐỌC lịch sử cuộc gọi.** `chat_calls` là bảng append-only có dữ liệu, nhưng wave này **không** mở endpoint liệt kê nhật ký cuộc gọi — ADR không đặt phạm vi đó. Ai làm màn "nhật ký cuộc gọi" phải cấp mã mới (`CHAT-API-030`+) và **đo lại dải trống**, không mặc định 030 còn trống.
 >
 > ⚠️ **Nợ tài liệu có sẵn, KHÔNG do wave này gây ra:** `CHAT-API-020..025` (wave S8-CHAT-UX) sống trong `API-13` nhưng **chưa** được thêm vào bảng §15 ở trên. Bảng §15 hiện nhảy `019 → 026`. Không sửa ở đây để giữ diff của `S7-CALL-DOC-1` đúng phạm vi; ghi ra để lần đối chiếu sau không đọc nhầm khoảng trống đó thành dải trống cấp phát được.
+
+### 15b. Wave S17-CHAT-UX2 — `CHAT-API-031` + tham số `kind` cho `CHAT-API-017` (owner duyệt 02/09/2026)
+
+> Ràng buộc thi công đầy đủ (§13.4 · oversight · route-census · chạm trần): [API-13 §5.1d](<../API Design/API-13_CHAT_API_Design.md>). Mục này chỉ chốt **hợp đồng** cấp SPEC.
+
+| Mã | Endpoint | Ghi chú |
+| --- | --- | --- |
+| CHAT-API-031 | `GET /chat/rooms/:id/links` | Liên kết đã chia sẻ trong phòng — trích `https?://` từ `body` của tin **chưa thu hồi**. Gate **y hệt CHAT-API-017**: `('view','chat-room')` + `assertMember`. Phân trang keyset `room_seq DESC` **kèm tie-break theo chỉ số liên kết trong tin** (một tin nhiều link không trùng/không sót ở biên trang). Trần quét **50**. Con trỏ mang **vân phòng** — dùng lại ở phòng khác → `CHAT-ERR-016`. **Không dedupe URL ở server** (một tin 3 URL trả đủ 3 mục). Tin đã thu hồi **không** xuất hiện |
+
+`CHAT-API-017` (`GET /chat/rooms/:id/files`) nhận thêm tham số query **`kind=image|file`**. Vị từ nguồn là **`mime_type LIKE 'image/%'` ở SQL**, và đây là **ĐỊNH NGHĨA DUY NHẤT** dùng chung với khoá `isImage` của `chatAttachmentSchema` — `isImage` là khoá DTO **suy ra ở tầng mapper**, **không phải cột DB**.
+
+**Ranh giới oversight (giữ nguyên §3.3 · §5.3):**
+
+- `lastMessage` và `peer` (§8 · CHAT-DEC-022/023) **CHỈ** tồn tại ở đường **thành viên** (`CHAT-API-001`/`004`) — **KHÔNG** có ở bất kỳ đường `/chat/oversight/**` nào.
+- `CHAT-API-031` **không miễn** `assertMember`; oversight **không có** `/chat/oversight/rooms/:id/links`, và **không** được thêm.
+
+**Chưa cấp / không lấp ở wave này (ghi để không ai suy diễn nhầm):**
+
+- `CHAT-API-030` **vẫn CHỪA** cho đường đọc lịch sử cuộc gọi — xem §15a phía trên (dòng cảnh báo cuối bảng). Wave S17 **không** chiếm mã này.
+- Khoảng trống `CHAT-API-020..025` (nợ tài liệu của wave S8-CHAT-UX, đã ghi ở cảnh báo phía trên) **không** được lấp ở wave này — ngoài phạm vi `S17-CHAT-UX2-DOC-1`.
 
 ---
 
