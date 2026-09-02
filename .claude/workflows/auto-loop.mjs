@@ -293,7 +293,14 @@ const analyzePrompt = (exclude) =>
 
 // ĐỘI 1 — phân rã 1 WO ĐÃ CHỌN (KHÔNG tìm next). Dùng khi triage quyết định việc KHÓ cần kế hoạch.
 // Đường dẫn micro-plan của 1 WO: con trỏ `plan` tường minh > mặc định docs/plans/<id>.md.
+// ĐỌC: có thể là hồ sơ wave DÙNG CHUNG do người viết (wo.plan), dùng làm đầu vào reconcile-refresh.
 const planPathFor = (wo) => wo.plan || `docs/plans/${wo.id}.md`;
+// GHI: LUÔN là file RIÊNG của WO. KHÔNG BAO GIỜ ghi đè `wo.plan`.
+//   Lý do (02/09/2026, xảy ra THẬT 2 lần): S17-CHAT-UX2-DOC-1 khai `plan:'docs/plans/S17-CHAT-UX2-WAVE.md'`
+//   — hồ sơ wave 152 dòng owner đã duyệt (§1 số đo · §2 bản đồ 17 gap · §3 CHAT-DEC-021..027). Bước lưu
+//   micro-plan ghi ĐÈ đúng file đó còn 44-45 dòng, xoá sạch phần người viết. Đường ĐỌC vẫn cần `wo.plan`
+//   (tech-lead đọc hồ sơ wave để phân rã), nên hai đường PHẢI tách.
+const planWritePathFor = (wo) => `docs/plans/${wo.id}.md`;
 
 const decomposePrompt = (wo, planPath) =>
   [
@@ -318,9 +325,16 @@ const decomposePrompt = (wo, planPath) =>
     .join('\n');
 
 // Ghi micro-plan ra file để TÁI DÙNG (project-analyst — chỉ ghi docs, KHÔNG đụng code).
-const persistPlanPrompt = (wo, planPath, plan) =>
+const persistPlanPrompt = (wo, planPath, plan, wt) =>
   [
-    `Bạn là project-analyst. GHI micro-plan của Work Order ${wo.id} ra "${planPath}" (tạo thư mục cha nếu cần, GHI ĐÈ nếu đã có) để auto-loop ĐỌC LẠI lần sau.`,
+    `Bạn là project-analyst. GHI micro-plan của Work Order ${wo.id} ra "${planPath}" để auto-loop ĐỌC LẠI lần sau.`,
+    wtPreamble(wo, wt),
+    wt
+      ? `   ⛔ File plan PHẢI nằm TRONG worktree "${wt}". KHÔNG ghi ra cây gốc — cây gốc là của phiên khác.`
+      : '',
+    `⚠️ KHÔNG GHI ĐÈ CẢ FILE. File đã tồn tại ⇒ thay ĐÚNG khối \`\`\`yaml đầu tiên, GIỮ NGUYÊN 100% mọi dòng còn lại`,
+    `   (prose, gap-analysis, bảng, phần người viết). Chưa có khối yaml ⇒ CHÈN khối yaml lên ĐẦU, phần cũ đẩy xuống dưới.`,
+    `   Chưa có file ⇒ tạo mới (tạo thư mục cha nếu cần). Đây là luật hot-file APPEND của CLAUDE.md §9.3.`,
     `Định dạng: MỘT khối \`\`\`yaml máy-đọc, RỒI tới prose. Khối yaml (đúng key, JSON-flow hợp lệ YAML):`,
     `  wo: ${wo.id}`,
     `  zone: ${wo.zone || ''}`,
@@ -457,7 +471,7 @@ let queue = providedWOs ? providedWOs.filter((w) => matchesOnly(w.id)) : null; /
 let round = 0;
 
 // ── planWO: TRIAGE 1 queue item → {wo,lanes,accept,tests,steps,sensitive,planned}. Đội 1 chỉ chạy khi việc KHÓ + LIVE. ──
-async function planWO(item) {
+async function planWO(item, wt) {
   const wo = { id: item.id, title: item.title, paths: item.paths || [], zone: item.zone, plan: item.plan };
   const planned = needsPlanning(item);
   // Đóng dấu BẮT ĐẦU NGAY — TRƯỚC Đội 1. WO đỏ tốn 9–15' phân rã (tech-lead đọc docs/README §8 + DB-* + SPEC-*);
@@ -476,7 +490,9 @@ async function planWO(item) {
     // TẠO-RỒI-LƯU: phân rã MỚI (không tái dùng cache) → ghi micro-plan ra file cho lần sau (best-effort).
     if (plan && plan.reused !== true && lanes.length) {
       try {
-        await agent(persistPlanPrompt(wo, planPath, plan), { agentType: 'project-analyst', effort: 'low', schema: STAMP_SCHEMA, label: `plan:save:${item.id}`, phase: 'Analyze' });
+        // GHI vào file RIÊNG của WO (KHÔNG phải planPath — planPath có thể là hồ sơ wave dùng chung),
+        // và ghi TRONG worktree khi chạy song song (fail-closed: vào không được thì THÔI, đừng bẩn cây gốc).
+        await agent(persistPlanPrompt(wo, planWritePathFor(wo), plan, wt), { agentType: 'project-analyst', effort: 'low', schema: STAMP_SCHEMA, label: `plan:save:${item.id}`, phase: 'Analyze' });
       } catch {
         /* lưu plan là phụ — không để hỏng việc chính */
       }
@@ -663,7 +679,7 @@ if (queue && MAX_CONCURRENT > 1 && !dryRun) {
       running.push(it);
       round++;
       const wt = worktreePath(it.id);
-      const p = (async () => executeWO(await planWO(it), wt))()
+      const p = (async () => executeWO(await planWO(it, wt), wt))()
         .catch((e) => {
           report.push({ wo: it.id, outcome: 'stopped', detail: `lỗi xử lý song song: ${(e && e.message) || e}` });
           log(`🛑 ${it.id} lỗi song song: ${(e && e.message) || e}`);
@@ -709,7 +725,7 @@ if (queue && MAX_CONCURRENT > 1 && !dryRun) {
         log(`✅ Hết WO trong hàng đợi (round ${round}). Dừng vòng.`);
         break;
       }
-      const plan = await planWO(queue.shift());
+      const plan = await planWO(queue.shift(), null); // tuần tự = cây gốc, không worktree
       if (dryRun) {
         dryPreview(plan);
         continue;
