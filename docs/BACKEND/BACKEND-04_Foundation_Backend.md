@@ -415,31 +415,88 @@ Module catalog dùng cho:
 5. Notification event source.
 6. Dashboard widget source.
 
-Module MVP active:
+**Hiện trạng 17 mã `modules` tại HEAD** _(đo lại 02/09 — S14-FND-MODULEMETA-1; thay hai danh sách "MVP active / phase sau seed inactive" cũ đã STALE: thiếu ME + GOAL, và vẫn xếp PAYROLL/RECRUIT/ASSET/ROOM vào nhóm inactive dù 0556/0557/0562/0567 đã bật)._
 
-```text
-AUTH
-HR
-ATT
-LEAVE
-TASK
-DASH
-NOTI
-FOUNDATION/SYSTEM
-```
+Bảng `modules` là **catalog GLOBAL** (mig 0435 tự loại khỏi rls-registry — không có `company_id`, không RLS). Chỉ **3 migration** từng `INSERT INTO modules`: `0435:287-302` (15 mã) · `0495:96` (ME) · `0506:36` (GOAL). Bốn migration sau **chỉ `UPDATE ... is_active`**, KHÔNG thêm hàng: `0556` (ASSET) · `0557` (ROOM) · `0562` (RECRUIT) · `0567` (PAYROLL). Cột `modules.metadata` (jsonb) hiện **luôn NULL** — nguồn route/icon/quyền thật là hằng `MODULE_APP_METADATA` (`apps/api/src/foundation/module-catalog/module-app-metadata.ts`), merge lên hàng DB lúc chạy.
 
-Module phase sau seed inactive:
+| # | `module_code` | `module_group` | Seed | `is_active` @HEAD | Metadata BE |
+| --- | --- | --- | --- | --- | --- |
+| 1 | AUTH | Core | 0435 | ✅ true | ✅ `/system` |
+| 2 | HR | Core | 0435 | ✅ true | ✅ `/hr` |
+| 3 | ATT | Operation | 0435 | ✅ true | ✅ `/attendance` |
+| 4 | LEAVE | Operation | 0435 | ✅ true | ✅ `/leave` |
+| 5 | TASK | Collaboration | 0435 | ✅ true | ✅ `/tasks` |
+| 6 | DASH | Experience | 0435 | ✅ true | ✅ `/dashboard` |
+| 7 | NOTI | Experience | 0435 | ✅ true | ✅ `/notifications` |
+| 8 | ME | Experience | 0495 (seed active) | ✅ true | ✅ `/me` |
+| 9 | GOAL | Collaboration | 0506 (seed active) | ✅ true | ✅ `/goals` — thêm ở S14 |
+| 10 | ASSET | Extension | 0435 (inactive) → bật `0556` | ✅ true | ✅ `/assets` — thêm ở S14 |
+| 11 | ROOM | Extension | 0435 (inactive) → bật `0557` | ✅ true | ✅ `/rooms` — thêm ở S14 |
+| 12 | RECRUIT | Extension | 0435 (inactive) → bật `0562` | ✅ true | ✅ `/recruit/job-openings` — thêm ở S14 |
+| 13 | PAYROLL | Extension | 0435 (inactive) → bật `0567` | ✅ true | ✅ `/payroll/periods` — thêm ở S14 |
+| 14 | CHAT | Extension | 0435 | ❌ false | ⬜ MIỄN TRỪ (Phase 4) |
+| 15 | SOCIAL | Extension | 0435 | ❌ false | ⬜ MIỄN TRỪ (Phase 4 — wave S16 sẽ bật) |
+| 16 | MOBILE | Extension | 0435 | ❌ false | ⬜ MIỄN TRỪ (Phase 5, không có route web) |
+| 17 | AI | Extension | 0435 | ❌ false | ⬜ MIỄN TRỪ (Phase 5) |
 
-```text
-PAYROLL
-RECRUIT
-ASSET
-ROOM
-CHAT
-SOCIAL
-MOBILE
-AI
-```
+**Tổng: 17 mã = 13 active + 4 inactive. `MODULE_APP_METADATA` có ĐÚNG 13 key** (8 cũ AUTH·HR·ATT·LEAVE·TASK·DASH·NOTI·ME + 5 thêm ở S14: GOAL·ASSET·ROOM·RECRUIT·PAYROLL).
+
+**LUẬT CỔNG (mới từ S14-FND-MODULEMETA-1) — module `is_active=true` BẮT BUỘC có metadata.**
+
+`ModuleCatalogService.getMyApps()` **fail-soft**: module active mà thiếu metadata thì chỉ `logger.warn` rồi `continue` — thẻ app **biến mất trong im lặng**, không lỗi, không test đỏ. Đó chính là cách 5 module trên trôi mất card sau khi bật cờ. Hai cổng thay thế sự im lặng đó bằng ĐỎ:
+
+1. `apps/api/test/foundation/module-app-metadata-ratchet.unit-spec.ts` — unit thuần. Tập mã seed lấy bằng **PARSE thật** mọi câu `INSERT INTO modules ... VALUES` trong `apps/api/migrations/*.sql` (ghim ĐỊNH NGHĨA, không hard-code mảng tên), rồi audit **3 chiều**: `MISSING_METADATA` (mã seed thiếu metadata và không miễn trừ) · `ORPHAN_METADATA` (**chiều ngược** — key metadata không có hàng `modules`) · `DOUBLE_LISTED` (vừa miễn trừ vừa có metadata).
+2. `apps/api/src/foundation/module-catalog/module-app-metadata-coverage.int.spec.ts` — DB-backed (`LANE_DB`), CHỈ `SELECT`. Mọi hàng `modules` `is_active = true AND deleted_at IS NULL` **phải** có metadata; mỗi cặp trong `requiredAny` phải tồn tại trong `permissions`; cặp `is_sensitive = true` phải nằm trong `SENSITIVE_CAPABILITY_ALLOWLIST`.
+
+**Miễn trừ CHỈ hợp lệ khi module `is_active = false`** và phải kèm `reason` máy-đọc (hôm nay đúng 4 mã: CHAT · SOCIAL · MOBILE · AI). Với module ACTIVE, int-spec **không chấp nhận** miễn trừ — muốn bật cờ thì phải thêm metadata **trong cùng commit**.
+
+**🔒 Ánh xạ `module_code` ↔ `MODULE_APP_METADATA.route` ↔ `APP_REGISTRY.defaultRoute` ↔ `icon`** _(FE: `packages/web-core/src/lib/registry.ts`)_
+
+> ⚠️ **ĐÂY LÀ HẰNG CHÉO-PACKAGE, KHÔNG CÓ CỔNG TỰ ĐỘNG Ở RUNTIME.** `apps/api` **không** phụ thuộc `@mediaos/web-core`, và backend **không bao giờ đọc** giá trị `route`/`icon` — nó chỉ trả nguyên xi ra `/foundation/modules/my-apps` cho FE điều hướng. Hệ quả: **một route rác (`/recruitt`, `/payroll` rỗng, `/xyz`) đi qua SẠCH `pnpm typecheck`, `pnpm build`, int-spec và mọi cổng runtime** — chỉ vỡ khi người dùng bấm vào thẻ app và ăn 404. Cổng DUY NHẤT là **ratchet unit-spec so LITERAL** (hằng `APP_REGISTRY_LITERALS` viết tay trong spec, cố ý không `import` cross-package để tránh coupling `api → web-core`). Đây đúng bẫy đã ghi nhận ở bản đồ slug widget DASH của FE: **bản đồ hằng do người giữ, không phải cổng do máy giữ** — sửa một đầu mà quên đầu kia thì không gì đỏ.
+
+| `module_code` | `MODULE_APP_METADATA.route` (BE) | `appKey` (FE) | `rootPath` | `defaultRoute` (FE) | `icon` (khớp cả hai) | Khớp? |
+| --- | --- | --- | --- | --- | --- | --- |
+| AUTH | `/system` | `system` ⚠️ `moduleCode: "FOUNDATION"` | `/system` | `/system` | `settings` | ✅ |
+| HR | `/hr` | `hr` | `/hr` | `/hr` | `users` | ✅ |
+| ATT | `/attendance` | `attendance` | `/attendance` | `/attendance/today` | `clock` | ⚠️ = rootPath |
+| LEAVE | `/leave` | `leave` | `/leave` | `/leave/me/requests` | `calendar-days` | ⚠️ = rootPath |
+| TASK | `/tasks` | `tasks` | `/tasks` | `/tasks/my-tasks` | `kanban-square` | ⚠️ = rootPath |
+| DASH | `/dashboard` | `dashboard` | `/dashboard` | `/dashboard` | `layout-dashboard` | ✅ |
+| NOTI | `/notifications` | `notifications` | `/notifications` | `/notifications` | `bell` | ✅ |
+| ME | `/me` | `me` | `/me` | `/me` | `user-circle` | ✅ |
+| GOAL | `/goals` | `goals` | `/goals` | `/goals` | `target` | ✅ |
+| ASSET | `/assets` | `assets` | `/assets` | `/assets` | `package` | ✅ |
+| ROOM | `/rooms` | `rooms` | `/rooms` | `/rooms` | `calendar-clock` | ✅ |
+| RECRUIT | `/recruit/job-openings` | `recruit` | `/recruit` | `/recruit/job-openings` | `user-plus` | ✅ |
+| PAYROLL | `/payroll/periods` | `payroll` | `/payroll` | `/payroll/periods` | `wallet` | ✅ |
+
+Quy ước: **`route` = ĐÍCH ĐIỀU HƯỚNG (`defaultRoute`), KHÔNG phải `rootPath`.** Với RECRUIT/PAYROLL, dùng rootPath (`/recruit`, `/payroll`) chỉ **đổi trục lỗi 403 → 404** chứ không vá gì. Ba dòng ⚠️ (ATT · LEAVE · TASK) là **lệch DI SẢN có trước S14**: metadata đang giữ rootPath trong khi FE `defaultRoute` sâu hơn. Ratchet **ghim nguyên giá trị hiện tại** (no-regress) nhưng **CỐ Ý chưa hoà giải** — đổi route của module đang chạy là thay đổi hành vi điều hướng, phải đi bằng WO riêng có QA. 🟡
+
+**Quy ước chọn cặp quyền cho `requiredAny`: lấy cặp TẢI-TRANG, không lấy cặp cổng-nav.**
+
+`requiredAny` là danh sách **cặp engine** `(action, resourceType)` — KHÔNG phải mã FE dotted — và ngữ nghĩa là **OR**. Nhiều module seed hai lớp quyền: cặp cổng-nav `access:<module>` (mở khu vực) và cặp tải-trang `view:<resource>` (đọc dữ liệu của màn hình đích). FE gate các thẻ này bằng `requiredPermissions` với ngữ nghĩa **AND**. Nếu BE gate bằng mình `access:X` thì một role có `access:recruit` nhưng thiếu `view:job-opening` sẽ **thấy thẻ rồi ăn 403 khi bấm** — nên luật là **chọn đúng cặp tải-trang, và KHÔNG OR cả hai cặp** (OR = nới lỏng = dựng lại đúng cái lỗ đó).
+
+| Module | Cặp engine đã chọn | Seed | `is_sensitive` |
+| --- | --- | --- | --- |
+| GOAL | `access:goal` | 0506 | false |
+| ASSET | `view:asset` | 0550 | false |
+| ROOM | `view:room` | 0554 | false |
+| RECRUIT | `view:job-opening` | 0560 | false |
+| PAYROLL | `view:payroll-period` | 0565 | false |
+
+GOAL là **ngoại lệ có chủ ý**: catalog GOAL chỉ seed `access:goal`, không có `view:goal`, nên `access:goal` chính là cặp tải-trang. PAYROLL cố ý dùng `view:payroll-period` (non-sensitive, **không** số tiền) chứ không phải `view-line:payroll-period` (is_sensitive = true). Vì cả 5 cặp đều non-sensitive, `getCapabilities()` đã surface chúng ⇒ **không cần** thêm gì vào `SENSITIVE_CAPABILITY_ALLOWLIST`. ME là ngoại lệ ngược lại: `requiredAny` **rỗng** ⇒ hiện cho mọi user đã đăng nhập (route thật vẫn gate `access:me` ở controller).
+
+**NỢ ĐÃ BIẾT (mở từ S14, chưa đóng)**
+
+- 🟡 **BE `requiredAny` (OR) LỎNG hơn FE `requiredPermissions` (AND)** ⇒ role có `view:X` mà không có `access:X` sẽ **BE-hiện / FE-ẩn**. Parity tuyệt đối cần bổ sung `requiredAll` vào `ModuleAppMeta` — đổi `hasAnyCapability` là đổi hành vi cổng, **ngoài phạm vi** S14-FND-MODULEMETA-1.
+- 🟡 **3 `feCode` chưa map trong `PERMISSION_CODE_TO_PAIR`**: `GOAL.ACCESS` · `RECRUIT.JOB.VIEW` · `PAYROLL.PERIOD.VIEW` (chỉ `ASSET.ASSET.VIEW` và `ROOM.ROOM.VIEW` đã có). `feCodes` chỉ dùng để **trả ra** `required_permissions` cho FE hiển thị + truy vết, **không dùng để enforce** ⇒ chưa map không tạo lỗ quyền, nhưng cần đóng để tra cứu hai chiều.
+- 🟡 Ba route di sản ATT/LEAVE/TASK trỏ `rootPath` thay vì `defaultRoute` (bảng trên).
+
+**LMS · fbpost KHÔNG có metadata — và không được thêm.** Cả hai là **app vệ tinh nối bằng SSO**, chạy ngoài monolith và **KHÔNG có hàng trong bảng `modules`** (`APP_REGISTRY` có `moduleCode: "LMS"` chỉ để FE dựng thẻ tĩnh). `getMyApps()` duyệt **hàng DB trước** rồi mới merge metadata ⇒ một key `LMS` trong `MODULE_APP_METADATA` là **dữ liệu CHẾT**, không bao giờ được đọc. Cổng chiều-ngược (`ORPHAN_METADATA`) **chặn** đúng trường hợp này. Muốn LMS lên my-apps thì phải seed hàng `modules` bằng migration ⇒ WO riêng, cần owner chốt.
+
+**Bàn giao cho wave sau (đọc trước khi bật cờ module):** WO nào chạy `UPDATE modules SET is_active = true` **PHẢI APPEND entry `MODULE_APP_METADATA` trong CÙNG commit** — cụ thể **S16-SOCIAL-FE-1** (bật `SOCIAL`) và WO bật `CHAT`; đồng thời gỡ mã đó khỏi danh sách miễn trừ của ratchet. Quên ⇒ int-spec coverage **ĐỎ** (đúng thiết kế), thay vì thẻ app biến mất trong im lặng như trước S14.
+
+Khối JSON dưới đây là **đề xuất thiết kế ban đầu**; hình dạng đang chạy thật là `ModuleAppMeta { route, icon, requiredAny, feCodes }` (cặp engine + mã FE tách bạch, chưa có `color`/`aliases`/`homeVisible`/`switcherVisible` — các trường đó hiện do `APP_REGISTRY` phía FE giữ).
 
 MVP nên bổ sung bảng hoặc metadata hỗ trợ app behavior:
 
