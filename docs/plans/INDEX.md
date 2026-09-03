@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**478 WO** · có micro-plan: **269/478** · ⬜ 38 chờ · 🔵 1 đang làm · ✅ 438 xong · 🔴 1 chặn
+**478 WO** · có micro-plan: **269/478** · ⬜ 38 chờ · 🔵 0 đang làm · ✅ 439 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -522,8 +522,8 @@
 | `S14-PROD-PAYROLLGRANT-1` | 🔴 | ✅ xong | — *(chưa)* | — | GỠ CHẶN PROD: thu hồi grant wildcard ('*','*') của 2 role tuỳ biến ten |
 | `S14-FND-MODULEMETA-1` | 🟡 | ✅ xong | [📄](S14-FND-MODULEMETA-1.md) | — | MODULE_APP_METADATA phủ 6 module hậu-MVP đã ship (GOAL·LMS·ASSET·ROOM· |
 | `S14-QA-COVGATE-1` | 🟢 | ✅ xong | [📄](S14-QA-COVGATE-1.md) | — | Dọn cổng coverage CHẾT: script `test:cov` trỏ `src/workflow` (module đ |
-| `S14-PERF-DASHACTOR-1` | 🔴 | 🔵 đang làm | [📄](S14-PERF-DASHACTOR-1.md) | — | Gộp 4 bản `gateOrThrow` trùng nhau ở dashboard handlers + cắt round-tr |
-| `S14-SEC-DASHGATE-WILDCARD-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S14-PERF-DASHACTOR-1 | Gate widget DASH cho grant wildcard `*:*` lọt qua cặp SENSITIVE — `can |
+| `S14-PERF-DASHACTOR-1` | 🔴 | ✅ xong | [📄](S14-PERF-DASHACTOR-1.md) | — | Gộp 4 bản `gateOrThrow` trùng nhau ở dashboard handlers + cắt round-tr |
+| `S14-SEC-DASHGATE-WILDCARD-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S14-PERF-DASHACTOR-1 | Gate widget DASH cho grant wildcard `*:*` lọt qua cặp SENSITIVE — `can |
 | `S14-RECRUIT-FILEGRANT-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Cấp cặp quyền foundation-file cho recruiter/hr — gap defer từ S12-RECR |
 | `S14-FE-DEBT-1` | 🟢 | ⬜ chờ | — *(chưa)* | — | Nợ FE gộp từ wave S12: picker đơn vị tổ chức (org-unit) dùng chung + g |
 | `S14-OPS-MODULEROLE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S14-PROD-PAYROLLGRANT-1 | Gán role của các module đã ship cho người thật trên PROD (asset-manage |
