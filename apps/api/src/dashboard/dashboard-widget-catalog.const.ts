@@ -414,7 +414,8 @@ export const DASH_WIDGET_MIN_DATA_SCOPE: Readonly<Record<string, DataScope>> = {
 } as const;
 
 /**
- * Độ mạnh scope — MIRROR `SCOPE_STRENGTH` của PermissionService (permission.service.ts:16-22), nguồn duy
+ * Độ mạnh scope — MIRROR `SCOPE_STRENGTH` của permission engine (permission.decide.ts — dời khỏi permission.service.ts ở
+ * S14-PERF-DASHACTOR-1), nguồn duy
  * nhất mà `resolveStrongestScope` dùng để chọn grant mạnh nhất. Khai lại ở đây (thay vì export chéo) để
  * DASH không phụ thuộc chi tiết nội bộ của permission engine; `DataScope` là kiểu chung của contracts nên
  * thêm giá trị mới sẽ ĐỎ typecheck ở CẢ HAI nơi.

@@ -165,25 +165,30 @@ export class DashboardWidgetRegistryService {
   }
 
   /**
-   * Gate tầng-2: mỗi widget qua DASH_WIDGET_GATE_PAIR[widgetCode] → can(action,resourceType), rồi (nếu
-   * widget khai sàn) resolveOrNull(cùng cặp) → meetsMinDataScope.
+   * Gate tầng-2, HAI PHA: (1) mỗi widget qua DASH_WIDGET_GATE_PAIR[widgetCode] → can(action,resourceType);
+   * (2) widget khai sàn → MỘT lượt resolveManyOrNull(cùng cặp) → meetsMinDataScope.
    *   - thiếu entry map ⇒ LOẠI + log.warn (fail-closed; KHÔNG throw làm sập cả dashboard).
-   *   - KHÔNG truyền isSensitive: engine tự ép effectivelySensitive = input.isSensitive OR grant.isSensitive
-   *     (permission.service.ts:206) ⇒ cặp nguồn is_sensitive=true VẪN bị ép exact-match, wildcard KHÔNG lọt.
+   *   - KHÔNG truyền isSensitive — GIỮ NGUYÊN hành vi cũ. ⚠️ Câu cũ ở đây («engine tự ép
+   *     effectivelySensitive ⇒ wildcard KHÔNG lọt») SAI một nửa: `decideStrongestScope` /`decideCan` đọc
+   *     `is_sensitive` của HÀNG GRANT KHỚP — tức hàng `*:*` (is_sensitive=false) — chứ không của cặp đích,
+   *     nên actor chỉ cầm wildcard VẪN qua. Chưa nổ (mig 0565 §6.7 census: 0 role seed giữ wildcard; tầng-2
+   *     service nguồn truyền cờ tường minh). Siết = đổi hành vi quyền thật ⇒ WO riêng
+   *     S14-SEC-DASHGATE-WILDCARD-1; xem doc-block `dashboard-widget-gate.ts`.
    */
   private async filterByGatePair(
     companyId: string,
     userId: string,
     rows: ConfigRow[],
   ): Promise<ConfigRow[]> {
-    const decisions = await Promise.all(
+    // ── Pha 1: cặp gate + can() (đi qua cache grant, không phải nút thắt) ──────────────────────────
+    const gated = await Promise.all(
       rows.map(async (row) => {
         const pair: EnginePair | undefined = DASH_WIDGET_GATE_PAIR[row.widgetCode];
         if (!pair) {
           this.logger.warn(
             `widget '${row.widgetCode}' thiếu DASH_WIDGET_GATE_PAIR — fail-closed loại khỏi registry`,
           );
-          return false;
+          return null;
         }
         const decision = await this.permission.can({
           userId,
@@ -191,20 +196,45 @@ export class DashboardWidgetRegistryService {
           action: pair.action,
           resourceType: pair.resourceType,
         });
-        if (!decision.allow) return false;
-        // S11-OFFICE-DASH-1 — sàn scope, CHỈ cho widget có khai (đa số không khai ⇒ không tốn round-trip
-        // thứ hai). resolveOrNull KHÔNG ném (một widget thiếu scope không được làm sập cả dashboard);
-        // null ⇒ meetsMinDataScope trả false = fail-closed.
-        if (!DASH_WIDGET_MIN_DATA_SCOPE[row.widgetCode]) return true;
-        const scope = await this.dataScope.resolveOrNull(
-          userId,
-          companyId,
-          pair.action,
-          pair.resourceType,
-        );
-        return meetsMinDataScope(row.widgetCode, scope);
+        return decision.allow ? pair : null;
       }),
     );
-    return rows.filter((_, i) => decisions[i]);
+
+    // ── Pha 2: sàn scope — MỘT lượt đọc grant cho MỌI widget khai sàn ──────────────────────────────
+    // ⟲ S14-PERF-DASHACTOR-1: trước đây mỗi widget khai sàn tốn MỘT `resolveOrNull` =
+    // `getCompanyRoleGrantsWithScope` (KHÔNG cache) ⇒ 3 query cho dashboard admin đủ 3 widget khai sàn.
+    // Nay gom thành một `resolveManyOrNull`.
+    //
+    // Tính chất PHẢI GIỮ (comment gốc S11-OFFICE-DASH-1: «đa số không khai ⇒ không tốn round-trip thứ
+    // hai»): danh sách khai-sàn RỖNG ⇒ **0 query**, không phải 1. `resolveStrongestScopes` short-circuit
+    // trên `requests.length === 0` TRƯỚC khi chạm repository, nên dashboard của nhân viên thường (0
+    // widget khai sàn, hoặc 3 widget khai sàn nhưng `can()` deny hết) vẫn tốn đúng 0 như trước.
+    //
+    // Chỉ hỏi cho widget ĐÃ QUA `can()` — hỏi cho widget đã bị deny là tính thừa, và mảng theo chỉ số
+    // buộc phải khớp đúng tập đó.
+    const floorIdx: number[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      if (gated[i] && DASH_WIDGET_MIN_DATA_SCOPE[rows[i].widgetCode]) floorIdx.push(i);
+    }
+    // resolveManyOrNull KHÔNG ném (một widget thiếu scope không được làm sập cả dashboard); `null` ⇒
+    // meetsMinDataScope trả false = fail-closed. Đọc THEO CHỈ SỐ, không tra theo cặp: hai widget hoàn
+    // toàn có thể dùng CHUNG một cặp gate, tra theo khoá sẽ nhập nhằng.
+    const floorScopes = await this.dataScope.resolveManyOrNull(
+      userId,
+      companyId,
+      floorIdx.map((i) => {
+        const pair = gated[i] as EnginePair;
+        return { action: pair.action, resourceType: pair.resourceType };
+      }),
+    );
+
+    const keep = rows.map((_, i) => gated[i] != null);
+    floorIdx.forEach((rowIndex, k) => {
+      // `?? null` là ĐAI fail-closed CÓ CHỦ Ý, không phải phòng hờ thừa: `resolveManyOrNull` cam kết
+      // mảng đủ độ dài (kể cả nhánh catch), nhưng nếu cam kết đó vỡ thì `undefined` phải rơi về
+      // `meetsMinDataScope(code, null)` = false (LOẠI widget), KHÔNG được lọt thành "không kiểm sàn".
+      keep[rowIndex] = meetsMinDataScope(rows[rowIndex].widgetCode, floorScopes[k] ?? null);
+    });
+    return rows.filter((_, i) => keep[i]);
   }
 }

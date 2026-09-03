@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**434 WO** · có micro-plan: **255/434** · ⬜ 0 chờ · 🔵 0 đang làm · ✅ 434 xong · 🔴 0 chặn
+**477 WO** · có micro-plan: **268/477** · ⬜ 38 chờ · 🔵 0 đang làm · ✅ 438 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -514,6 +514,69 @@
 | `S13-PAYROLL-FE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S13-PAYROLL-BE-2 | FE PAYROLL (apps/app routes/payroll/ + màn ME): 6 màn PAY-SCREEN-001.. |
 | `S13-PAYROLL-QA-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S13-PAYROLL-FE-1 | QA PAYROLL: ma trận allow/deny per-pair TỪNG route (kể cả hr-manager S |
 | `S13-PAYROLL-DASH-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S13-PAYROLL-QA-1 | Widget DASH «chi phí lương kỳ» (PAYROLL-WIDGET-001): tổng gross/net +  |
+
+## Sprint 14
+
+| WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
+| --- | --- | --- | --- | --- | --- |
+| `S14-PROD-PAYROLLGRANT-1` | 🔴 | ✅ xong | — *(chưa)* | — | GỠ CHẶN PROD: thu hồi grant wildcard ('*','*') của 2 role tuỳ biến ten |
+| `S14-FND-MODULEMETA-1` | 🟡 | ✅ xong | [📄](S14-FND-MODULEMETA-1.md) | — | MODULE_APP_METADATA phủ 6 module hậu-MVP đã ship (GOAL·LMS·ASSET·ROOM· |
+| `S14-QA-COVGATE-1` | 🟢 | ✅ xong | [📄](S14-QA-COVGATE-1.md) | — | Dọn cổng coverage CHẾT: script `test:cov` trỏ `src/workflow` (module đ |
+| `S14-PERF-DASHACTOR-1` | 🟢 | ⬜ chờ | — *(chưa)* | — | Gộp 4 bản `gateOrThrow` trùng nhau ở dashboard handlers + cắt round-tr |
+| `S14-RECRUIT-FILEGRANT-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Cấp cặp quyền foundation-file cho recruiter/hr — gap defer từ S12-RECR |
+| `S14-FE-DEBT-1` | 🟢 | ⬜ chờ | — *(chưa)* | — | Nợ FE gộp từ wave S12: picker đơn vị tổ chức (org-unit) dùng chung + g |
+| `S14-OPS-MODULEROLE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S14-PROD-PAYROLLGRANT-1 | Gán role của các module đã ship cho người thật trên PROD (asset-manage |
+
+## Sprint 15
+
+| WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
+| --- | --- | --- | --- | --- | --- |
+| `S15-PAYROLL-DOC-1` | 🟢 | ⬜ chờ | [📄](S15-PAYROLL-V2-WAVE.md) | — | Bộ tài liệu PAYROLL v2: SPEC-11 v2 (§5.1 phạm vi v2 · §8 bảng mới · §9 |
+| `S15-UI-SHELL-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-DOC-1 | Vỏ UI dùng chung (DEC-020): sidebar nhóm gập được · toolbar chuẩn (tìm |
+| `S15-PAYROLL-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-DOC-1 | Schema + migration PAYROLL v2 track A+B (mig 0569+): ALTER salary_prof |
+| `S15-PAYROLL-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-DB-1 | BE track A: route Nhân viên PAYROLL (PAYROLL-API-036 chiếu HR bó hẹp,  |
+| `S15-PAYROLL-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-DB-1 | BE track B (1/2): catalog thành phần lương + mẫu bảng lương — CRUD + p |
+| `S15-PAYROLL-BE-3` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-2 | BE track B (2/2): máy tính lương v2 — evaluate theo mẫu của kỳ · engin |
+| `S15-PAYROLL-FE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-1 ⏳S15-UI-SHELL-1 | FE track A: PAY-SCREEN-007 Nhân viên (danh sách + chi tiết 5 tab: Thôn |
+| `S15-PAYROLL-FE-2` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-3 ⏳S15-PAYROLL-FE-1 | FE track B: PAY-SCREEN-009 Thành phần lương (catalog + editor công thứ |
+| `S15-PAYROLL-DB-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-DB-1 | Schema + migration PAYROLL v2 track C: payroll_advances · payroll_paym |
+| `S15-PAYROLL-BE-4` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-DB-2 ⏳S15-PAYROLL-BE-3 | BE track C: tạm ứng FSM (Pending → Approved/Rejected → Deducted, four- |
+| `S15-PAYROLL-FE-3` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-4 | FE track C: PAY-SCREEN-012 Tạm ứng (list + form + duyệt) · 013 Chi trả |
+| `S15-PAYROLL-BE-5` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-3 ⏳S15-PAYROLL-BE-4 | BE track D: 7 báo cáo (tổng hợp thu nhập NV · thống kê lương theo thời |
+| `S15-PAYROLL-FE-4` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-5 ⏳S15-PAYROLL-FE-2 ⏳S15-PAYROLL-FE-3 | FE track D: PAY-SCREEN-015 Tổng quan `/payroll` (6 biểu đồ Recharts +  |
+| `S15-PAYROLL-QA-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-FE-4 | QA PAYROLL v2: ma trận allow/deny per-pair TỪNG route mới (kể cả hr-ma |
+| `S15-PAYROLL-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-QA-1 | Widget DASH «ngân sách lương năm» (kế hoạch/thực hiện/chênh lệch) + «t |
+
+## Sprint 16
+
+| WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
+| --- | --- | --- | --- | --- | --- |
+| `S16-SOCIAL-DOC-1` | 🟢 | ⬜ chờ | [📄](S16-SOCIAL-WAVE.md) | — | Bộ tài liệu SOCIAL (mạng xã hội nội bộ): SPEC-16 đầy đủ (§5 phạm vi v1 |
+| `S16-SOCIAL-FBPOST-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-DOC-1 | Gộp tile «Đăng bài» (app vệ tinh fbpost) từ ô Home riêng → mục cuối si |
+| `S16-SOCIAL-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-DOC-1 | Schema + migration SOCIAL track A (nối tiếp head lúc merge): feed_post |
+| `S16-SOCIAL-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-DB-1 | Module apps/api/src/social/ (mới — fbpost ở integrations/social/ giữ n |
+| `S16-SOCIAL-FE-1` | amber | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-BE-1 | FE track A: template cổng thông tin 3 cột (apps/app/src/layouts/portal |
+| `S16-SOCIAL-DB-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-DB-1 | Schema + migration SOCIAL track B: feed_groups · feed_group_members (r |
+| `S16-SOCIAL-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-DB-2 ⏳S16-SOCIAL-BE-1 | BE track B: nhóm (tạo · xin vào · duyệt · vai trò hàng · bài trong nhó |
+| `S16-SOCIAL-FE-2` | amber | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-BE-2 ⏳S16-SOCIAL-FE-1 | FE track B: SOC-SCREEN-006 Nhóm (danh sách · trang nhóm · thành viên · |
+| `S16-SOCIAL-BE-3` | amber | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-BE-2 | BE track C: hàng đợi báo cáo (resolve/dismiss + hành động ẩn/khoá/xoá  |
+| `S16-SOCIAL-FE-3` | amber | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-BE-3 ⏳S16-SOCIAL-FE-2 | FE track C: SOC-SCREEN-010 Kiểm duyệt (hàng đợi báo cáo + bài ẩn) · 01 |
+| `S16-SOCIAL-QA-1` | amber | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-FE-3 | QA SOCIAL: ma trận allow/deny per-pair TỪNG route (employee · manager  |
+| `S16-SOCIAL-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-QA-1 | Widget DASH «Tương tác tuần» (bài · bình luận · thích · thành viên hoạ |
+
+## Sprint 17
+
+| WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
+| --- | --- | --- | --- | --- | --- |
+| `S17-CHAT-UX2-DOC-1` | 🟡 | 🔴 chặn | [📄](S17-CHAT-UX2-WAVE.md) | — | Bộ tài liệu CHAT v2 (S17): SPEC-15 §9 sửa SCREEN-001/002/004 «v2» · §9 |
+| `S17-CHAT-UX2-BE-1` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-DOC-1 | DTO phòng v2: `lastMessage` (LATERAL tin cuối, che thu hồi ở server) + |
+| `S17-CHAT-UX2-BE-2` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-DOC-1 | CHAT-API-031 GET /chat/rooms/:id/links — liên kết đã chia sẻ trong phò |
+| `S17-CHAT-UX2-FE-1` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-BE-1 | Danh sách phòng v2: thanh đầu (tìm · lọc · tạo) · chip lọc DEC-021 · d |
+| `S17-CHAT-UX2-FE-2` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-DOC-1 | Hội thoại v2: header (avatar · tên · «đang online / N thành viên» · tì |
+| `S17-CHAT-UX2-FE-3` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-FE-2 | Composer v2 DEC-027: @mention autocomplete từ roster (gửi mentions[])  |
+| `S17-CHAT-UX2-FE-4` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-BE-1 ⏳S17-CHAT-UX2-BE-2 | Bảng thông tin phòng v2 DEC-025: bố cục dọc (avatar lớn · tên · Tạo bở |
+| `S17-CHAT-UX2-FE-5` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-FE-1 ⏳S17-CHAT-UX2-FE-2 | Drawer chat DEC-026 thay ChatDock/ChatDockWindow (Sheet phải 400px: tì |
+| `S17-CHAT-UX2-QA-1` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-FE-3 ⏳S17-CHAT-UX2-FE-4 ⏳S17-CHAT-UX2-FE-5 | Nghiệm thu wave S17-CHAT-UX2: masking preview/links (thu hồi · file ·  |
 
 ---
 

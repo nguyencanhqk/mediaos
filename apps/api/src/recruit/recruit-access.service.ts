@@ -27,16 +27,42 @@ import type { RecruitActor, RecruitRequestUser } from "./recruit.types";
 export class RecruitAccessService {
   constructor(private readonly dataScope: DataScopeService) {}
 
+  /**
+   * ⟲ S14-PERF-DASHACTOR-1 — 4 round-trip → **1**. Bốn câu hỏi scope ở đây luôn cùng
+   * `(user.id, user.companyId)` nên đọc CÙNG một tập grant; `getCompanyRoleGrantsWithScope` KHÔNG
+   * được cache (`permission.cache.ts:95` passthrough có chủ ý) ⇒ trước WO này mỗi `resolveActor` =
+   * 4 query DB giống hệt nhau (nặng nhất repo: `CandidatesService.summary` cho widget DASH).
+   *
+   * Đọc kết quả **THEO CHỈ SỐ**, KHÔNG theo khoá cặp — hai lý do, cả hai đều là lỗ nếu làm sai:
+   *   • `routeKey='candidateUpdate'` hỏi ĐÚNG cặp `update:candidate` mà cờ mask PII cũng hỏi; tra
+   *     theo khoá thì hai vai đè nhau và bản `isSensitive` LỎNG hơn có thể thắng.
+   *   • `Map.get()` trượt trả `undefined`, mà `canSeeCandidatePii`/`canSeeSalary` bên dưới kiểm
+   *     `!== null` ⇒ `undefined` sẽ MỞ KHOÁ PII/lương, và typecheck không bắt.
+   *
+   * Thứ tự deny KHÔNG đổi ở đầu ra, chỉ đổi ở thời điểm TÍNH: trước đây `resolveAndAssert` ném
+   * trước khi 3 cờ phụ chạy; nay cả 4 được decide in-memory rồi mới assert. Vô hại (thuần hàm, 0
+   * side-effect, vẫn ném TRƯỚC khi trả actor) — ghi ra để không ai tưởng là rò.
+   */
   async resolveActor(user: RecruitRequestUser, routeKey: RecruitRouteKey): Promise<RecruitActor> {
     const p = RECRUIT_ROUTE_PAIRS[routeKey];
+    const [routeScopeOrNull, interviewViewScope, candidateUpdateScope, offerManageScope] =
+      await this.dataScope.resolveManyOrNull(user.id, user.companyId, [
+        // [0] cặp của route — cờ sensitive lấy từ BẢNG, không gõ lại literal.
+        { action: p.action, resourceType: p.resourceType, isSensitive: p.isSensitive },
+        // [1] không khai isSensitive — giữ NGUYÊN hành vi cũ (resolveOrNull không truyền opts).
+        { action: "view", resourceType: "interview" },
+        // [2] isSensitive:true TƯỜNG MINH — thiếu cờ thì wildcard *:* mở khoá PII (plan §4.4).
+        { action: "update", resourceType: "candidate", isSensitive: true },
+        // [3] isSensitive:false TƯỜNG MINH — manage:offer KHÔNG sensitive (REC-DEC-004, §9f:569).
+        { action: "manage", resourceType: "offer", isSensitive: false },
+      ]);
     // Tầng 2 — assert đúng cặp + đúng cờ sensitive; 403 AUTH-ERR-FORBIDDEN khi thiếu grant.
-    const routeScope = await this.dataScope.resolveAndAssert(
-      user.id,
-      user.companyId,
-      p.action,
-      p.resourceType,
-      { isSensitive: p.isSensitive },
-    );
+    // `resolveManyOrNull` KHÔNG ném (hợp đồng của nó), nên assert ở ĐÂY phải giữ nguyên CHUỖI mà
+    // `resolveAndAssert` vẫn ném — mã lỗi này là hợp đồng với FE/QA, không phải văn bản tự do.
+    if (routeScopeOrNull == null) {
+      throw new ForbiddenException("AUTH-ERR-FORBIDDEN: out of permission scope");
+    }
+    const routeScope = routeScopeOrNull;
     // SÀN SCOPE (FULL gate security M1, khuôn ROOM resolveViewActor + dash-widget-gate-needs-scope-floor):
     // cặp §13.6 CHỈ-Company mà grant resolve ra hẹp hơn ⇒ TỪ CHỐI, không "coi như" Company — một lần
     // đổi data_scope per-pair sau này không được âm thầm nới thành toàn công ty.
@@ -45,17 +71,6 @@ export class RecruitAccessService {
         "AUTH-ERR-SCOPE-DENIED: cặp RECRUIT này chỉ hợp lệ ở scope Company",
       );
     }
-    const [interviewViewScope, candidateUpdateScope, offerManageScope] = await Promise.all([
-      this.dataScope.resolveOrNull(user.id, user.companyId, "view", "interview"),
-      // isSensitive:true TƯỜNG MINH — thiếu cờ thì wildcard *:* mở khoá PII (plan §4.4).
-      this.dataScope.resolveOrNull(user.id, user.companyId, "update", "candidate", {
-        isSensitive: true,
-      }),
-      // isSensitive:false TƯỜNG MINH — manage:offer KHÔNG sensitive (REC-DEC-004, §9f:569).
-      this.dataScope.resolveOrNull(user.id, user.companyId, "manage", "offer", {
-        isSensitive: false,
-      }),
-    ]);
     return {
       actorUserId: user.id,
       companyId: user.companyId,

@@ -1,25 +1,20 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { DATA_SCOPES, type DataScope } from "@mediaos/contracts";
+import { type DataScope } from "@mediaos/contracts";
 import type {
   BatchActionSpec,
   BatchDecisions,
   CanInput,
   CompanyRoleGrant,
-  CompanyRoleGrantWithScope,
   IPermissionRepository,
   PermissionContext,
   PermissionDecision,
 } from "./permission.types";
-import { decideCan, isGrantActive } from "./permission.decide";
-
-/** Scope strength order (BACKEND-03 §18.1): higher = wider visibility. */
-const SCOPE_STRENGTH: Record<DataScope, number> = {
-  Own: 1,
-  Team: 2,
-  Department: 3,
-  Company: 4,
-  System: 5,
-};
+import {
+  decideCan,
+  decideStrongestScope,
+  isGrantActive,
+  type ScopeRequest,
+} from "./permission.decide";
 
 /**
  * FIX-1-CAP-EXPOSE (S2-AUTH-BE-5) — ALLOWLIST cặp quyền NHẠY CẢM được phép PHƠI vào /auth/me `capabilities`
@@ -635,50 +630,12 @@ export class PermissionService {
     opts?: { isSensitive?: boolean },
   ): Promise<DataScope | null> {
     try {
-      const now = new Date();
       const rawGrants = await this.repo.getCompanyRoleGrantsWithScope(userId, companyId);
-      const grants = rawGrants.filter((grant) => isGrantActive(grant.expiresAt, now));
-
-      const matches = (grant: CompanyRoleGrantWithScope): boolean =>
-        (grant.action === action || grant.action === "*") &&
-        (grant.resourceType === resourceType || grant.resourceType === "*");
-
-      // Deny-overrides-across-roles (wildcard-aware) — any matching DENY blocks all scope.
-      if (grants.some((grant) => grant.effect === "DENY" && matches(grant))) return null;
-
-      const allowMatches = grants.filter((grant) => grant.effect === "ALLOW" && matches(grant));
-      if (allowMatches.length === 0) return null;
-
-      const isExact = (grant: CompanyRoleGrantWithScope): boolean =>
-        grant.action === action && grant.resourceType === resourceType;
-
-      // Sensitive gate (mirror can() §3b): wildcard ALLOW does NOT satisfy a sensitive pair.
-      const effectivelySensitive =
-        (opts?.isSensitive ?? false) || allowMatches.some((grant) => grant.isSensitive);
-
-      let eligible: CompanyRoleGrantWithScope[];
-      if (effectivelySensitive) {
-        // Mirror can() (:124-131): only exact (non-wildcard) ALLOW satisfies a sensitive pair.
-        eligible = allowMatches.filter(isExact);
-      } else {
-        const exact = allowMatches.filter(isExact);
-        eligible = exact.length > 0 ? exact : allowMatches;
-      }
-      if (eligible.length === 0) return null;
-
-      // Strongest scope among eligible; each grant contributes its own scope (no upgrade).
-      let best: DataScope | null = null;
-      let bestStrength = 0;
-      for (const grant of eligible) {
-        const scope = normalizeScope(grant.dataScope);
-        if (scope == null) continue;
-        const strength = SCOPE_STRENGTH[scope];
-        if (strength > bestStrength) {
-          bestStrength = strength;
-          best = scope;
-        }
-      }
-      return best;
+      return decideStrongestScope(
+        rawGrants,
+        { action, resourceType, isSensitive: opts?.isSensitive },
+        new Date(),
+      );
     } catch (error: unknown) {
       this.logger.error("resolveStrongestScope() infrastructure error — fail-closed null", {
         error: error instanceof Error ? error.message : String(error),
@@ -688,6 +645,47 @@ export class PermissionService {
         resourceType,
       });
       return null;
+    }
+  }
+
+  /**
+   * S14-PERF-DASHACTOR-1 — N cặp, **MỘT** lượt đọc grant. Mirror `canBatch()` cho trục scope:
+   * `resolveStrongestScope` và method này khác nhau ĐÚNG ở tầng FETCH (1 vs N câu hỏi trên CÙNG tập
+   * grant), tầng DECIDE là chung một hàm `decideStrongestScope` ⇒ hai đường không thể trôi khỏi nhau.
+   *
+   * ⚠️ **Trả MẢNG THEO CHỈ SỐ, cùng độ dài và thứ tự với `requests` — CỐ Ý không phải `Map`.**
+   * `Map.get()` trả `undefined` khi miss, mà người gọi kiểm deny bằng `scope !== null` (khuôn cờ
+   * `canSeeCandidatePii`/`canSeeSalary` ở `recruit-access.service.ts`): `undefined !== null` là TRUE
+   * ⇒ một map-miss biến DENY thành ALLOW trong im lặng, và typecheck không bắt được. Mảng cũng loại
+   * bỏ đụng độ khoá: hai request CÙNG cặp nhưng khác `isSensitive` (vd `update:candidate` hỏi cả ở
+   * vai cặp-route lẫn vai cờ-mask-PII) có ô riêng, bản lỏng hơn không thể đè bản sensitive.
+   *
+   * `requests` rỗng ⇒ trả `[]` **TRƯỚC** khi chạm repository (mirror `canBatch` :383) — người gọi gom
+   * theo điều kiện (vd chỉ widget khai sàn) không được trả giá một round-trip cho danh sách rỗng.
+   *
+   * Lỗi hạ tầng ⇒ fail-closed **TOÀN LƯỢT**: mảng ĐỦ ĐỘ DÀI toàn `null` (mirror canBatch deny cả
+   * trang). KHÔNG partial — nửa giá trị thật nửa null là quyết định quyền trên dữ liệu nửa vời.
+   */
+  async resolveStrongestScopes(
+    userId: string,
+    companyId: string,
+    requests: readonly ScopeRequest[],
+  ): Promise<(DataScope | null)[]> {
+    if (requests.length === 0) return [];
+    try {
+      const now = new Date();
+      const rawGrants = await this.repo.getCompanyRoleGrantsWithScope(userId, companyId);
+      return requests.map((req) => decideStrongestScope(rawGrants, req, now));
+    } catch (error: unknown) {
+      this.logger.error("resolveStrongestScopes() infrastructure error — fail-closed null (batch)", {
+        error: error instanceof Error ? error.message : String(error),
+        userId,
+        companyId,
+        // Bản đơn log kèm action/resourceType; bản batch log MỘT lần ⇒ phải mang ĐỦ danh sách cặp,
+        // nếu không mọi deny của lượt này mất dấu vết (luật quan sát).
+        pairs: requests.map((r) => `${r.action}:${r.resourceType}`),
+      });
+      return requests.map(() => null);
     }
   }
 
@@ -745,9 +743,4 @@ export class PermissionService {
       return [];
     }
   }
-}
-
-/** Narrows an arbitrary string to a known DataScope, or null when it is not a recognised scope. */
-function normalizeScope(value: string): DataScope | null {
-  return (DATA_SCOPES as readonly string[]).includes(value) ? (value as DataScope) : null;
 }

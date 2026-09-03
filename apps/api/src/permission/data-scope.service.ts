@@ -4,6 +4,7 @@ import type { PgColumn } from "drizzle-orm/pg-core";
 import type { DataScope } from "@mediaos/contracts";
 import { employeeProfiles, users } from "../db/schema";
 import { PermissionService } from "./permission.service";
+import type { ScopeRequest } from "./permission.decide";
 import { DataScopeRepository } from "./data-scope.repository";
 
 /**
@@ -105,6 +106,30 @@ export class DataScopeService {
     opts?: { isSensitive?: boolean },
   ): Promise<DataScope | null> {
     return this.permission.resolveStrongestScope(userId, companyId, action, resourceType, opts);
+  }
+
+  /**
+   * S14-PERF-DASHACTOR-1 — N cặp trong MỘT lượt đọc grant (`PermissionService.resolveStrongestScopes`).
+   * Dùng khi một request hỏi NHIỀU cặp cùng (userId, companyId): `RecruitAccessService.resolveActor`
+   * (cặp route + 3 cờ phụ = 4 query giống hệt nhau trước WO này) hay `filterByGatePair` (một query
+   * cho MỖI widget khai sàn). `getCompanyRoleGrantsWithScope` **KHÔNG được cache** (`permission.cache.ts:95`
+   * là passthrough có chủ ý), nên mỗi lời gọi lẻ = một round-trip DB thật.
+   *
+   * ⚠️ **KHÔNG NÉM** — cùng hợp đồng `resolveOrNull`, và cùng cảnh báo: đừng dùng cho route mà cặp
+   * gate = cặp bound trừ khi bạn assert TAY ngay sau đó (`null` ở đó nghĩa là guard đã hỏng, phải
+   * thành 403 chứ không phải "0 hàng"). Người gọi PHẢI tự xử `null`.
+   *
+   * ⚠️ Kết quả là **MẢNG THEO CHỈ SỐ** cùng độ dài/thứ tự với `requests` — đọc bằng `[i]`, KHÔNG bao
+   * giờ tra theo khoá `action:resourceType`: hai request cùng cặp khác `isSensitive` là hợp lệ và
+   * phải cho hai kết quả RIÊNG, còn một khoá tra trượt sẽ trả `undefined` mà `!== null` là TRUE
+   * (deny hoá thành allow, typecheck không bắt). Xem doc-block `resolveStrongestScopes`.
+   */
+  async resolveManyOrNull(
+    userId: string,
+    companyId: string,
+    requests: readonly ScopeRequest[],
+  ): Promise<(DataScope | null)[]> {
+    return this.permission.resolveStrongestScopes(userId, companyId, requests);
   }
 
   /**

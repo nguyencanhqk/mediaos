@@ -15,15 +15,13 @@ import { ForbiddenException, Injectable } from "@nestjs/common";
 import { PermissionService } from "../permission/permission.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { CandidatesService } from "../recruit/candidates.service";
-import { gatePairFor, ttlSecondsFor } from "./dashboard-widget-data.const";
+import { ttlSecondsFor } from "./dashboard-widget-data.const";
 import { meetsMinDataScope } from "./dashboard-widget-catalog.const";
-import { DASH_ERR } from "./dashboard-resolver.errors";
-import type { EnginePair } from "./dashboard-widget-catalog.const";
+import { gateWidgetOrThrow } from "./dashboard-widget-gate";
 import type {
   WidgetCacheIdentity,
   WidgetFetchResult,
   WidgetHandlerContext,
-  WidgetRequestUser,
 } from "./dashboard-widget-data.types";
 
 @Injectable()
@@ -33,32 +31,6 @@ export class DashboardWidgetRecruitHandlers {
     private readonly dataScope: DataScopeService,
     private readonly candidates: CandidatesService,
   ) {}
-
-  // ── gate helper (mirror DashboardWidgetOfficeHandlers.gateOrThrow) ───────────────────────────────
-
-  /**
-   * Gate bằng cặp của MODULE NGUỒN. KHÔNG truyền isSensitive — engine tự ép effectivelySensitive = input OR
-   * grant.isSensitive, nên wildcard KHÔNG lọt qua ('view','candidate') dù cặp đó is_sensitive=true (mig
-   * 0560). Deny ⇒ 403 fail-closed (runner KHÔNG nuốt ForbiddenException thành Degraded).
-   */
-  private async gateOrThrow(user: WidgetRequestUser, widgetCode: string): Promise<EnginePair> {
-    const pair = gatePairFor(widgetCode);
-    if (!pair) {
-      throw new ForbiddenException(`${DASH_ERR.VALIDATION}: widget thiếu cặp gate (${widgetCode})`);
-    }
-    const decision = await this.permission.can({
-      userId: user.id,
-      companyId: user.companyId,
-      action: pair.action,
-      resourceType: pair.resourceType,
-    });
-    if (!decision.allow) {
-      throw new ForbiddenException(
-        `AUTH-ERR-FORBIDDEN: thiếu quyền ${pair.action}:${pair.resourceType}`,
-      );
-    }
-    return pair;
-  }
 
   // ── RECRUIT_FUNNEL (CandidatesService.summary — đúng công thức GET /candidates/summary, API-009) ──
 
@@ -75,7 +47,7 @@ export class DashboardWidgetRecruitHandlers {
    * lương offer (REC-DEC-003/004).
    */
   async gateRecruitFunnel(ctx: WidgetHandlerContext): Promise<WidgetCacheIdentity> {
-    const pair = await this.gateOrThrow(ctx.user, "RECRUIT_FUNNEL");
+    const pair = await gateWidgetOrThrow(this.permission, ctx.user, "RECRUIT_FUNNEL");
     const scope = await this.dataScope.resolveAndAssert(
       ctx.user.id,
       ctx.user.companyId,
