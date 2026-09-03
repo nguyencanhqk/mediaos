@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ConflictException } from "@nestjs/common";
+import { ConflictException, HttpException, HttpStatus } from "@nestjs/common";
+import type { ErrorDetail } from "@mediaos/contracts";
 import { Column, SQL } from "drizzle-orm";
+import { rlKey as rateLimitKey } from "../common/valkey/valkey-key";
+import { TOO_MANY_REQUESTS_MESSAGE } from "../common/filters/retry-after";
 import { AuthService, redactEmailFromDetail } from "./auth.service";
 import { LoginRateLimiter } from "./login-rate-limiter";
 import { TWO_FACTOR_ENFORCED } from "./two-factor.service";
@@ -626,6 +629,184 @@ describe("AuthService.emitAccountLocked — silent-failure log-not-swallow + pay
     expect(securityEvents.record).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ eventType: "USER_LOCKED", userId: "user-1" }),
+    );
+  });
+});
+
+// ── S18-AUTH-RETRYAFTER-1 — 429 mang `retryAfterSec` ────────────────────────────────────────────
+describe("AuthService — 429 mang retryAfterSec (S18-AUTH-RETRYAFTER-1)", () => {
+  const SLUG = "acme";
+  const EMAIL = "victim@acme.test";
+  const IP = "203.0.113.7";
+  const COMPANY_ID = "00000000-0000-0000-0000-000000000001";
+  const USER_ID = "11111111-1111-1111-1111-111111111111";
+
+  /** Bóc số giây ra khỏi payload 429 — `null` khi payload không khai `details`. */
+  function retryAfterOf(err: unknown): string | null {
+    expect(err).toBeInstanceOf(HttpException);
+    const e = err as HttpException;
+    expect(e.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+    const payload = e.getResponse() as { message?: unknown; details?: ErrorDetail[] };
+    // `message` PHẢI giữ nguyên ở CẢ hai nhánh (Nest initMessage) — ghim luôn tại đây.
+    expect(payload.message).toBe(TOO_MANY_REQUESTS_MESSAGE);
+    const hit = payload.details?.find((d) => d.field === "retryAfterSec");
+    return hit?.message ?? null;
+  }
+
+  // ── login(): nhánh 429 có SÀN THỜI GIAN, nên còn phải ghim THỨ TỰ ────────────────────────────
+  function makeLoginAuth(opts: {
+    lockedKey: string | null;
+    remaining?: number | null;
+  }) {
+    const order: string[] = [];
+    const rateLimiter = {
+      isLocked: vi.fn(async (key: string) => key === opts.lockedKey),
+      remainingLockSecOrNull: vi.fn(async (key: string) => {
+        order.push(`remainingLockSec:${key}`);
+        return opts.remaining ?? null;
+      }),
+      claimFirstOfWindow: vi.fn(async () => false),
+      lockoutSec: 900,
+    };
+    const auth = Object.create(AuthService.prototype) as AuthService;
+    Object.assign(auth, {
+      rateLimiter,
+      logger: { error: vi.fn(), warn: vi.fn() },
+      dbsvc: { withTenant: vi.fn() },
+    });
+    vi.spyOn(
+      auth as unknown as { applyUniformResponseFloor: (s: number, f?: number) => Promise<void> },
+      "applyUniformResponseFloor",
+    ).mockImplementation(async () => {
+      order.push("floor");
+    });
+    return { auth, rateLimiter, order };
+  }
+
+  const login = (auth: AuthService) =>
+    auth.login({ companySlug: SLUG, email: EMAIL, password: "wrong" }, { ip: IP, userAgent: "v" });
+
+  it("bucket `acct` khoá ⇒ đọc TTL bằng ĐÚNG accountKey và TRƯỚC khi sàn chạy", async () => {
+    const acctKey = LoginRateLimiter.accountKey(SLUG, EMAIL);
+    const { auth, rateLimiter, order } = makeLoginAuth({ lockedKey: acctKey, remaining: 842 });
+
+    await expect(login(auth)).rejects.toSatisfy((err) => retryAfterOf(err) === "842");
+
+    expect(rateLimiter.remainingLockSecOrNull).toHaveBeenCalledWith(acctKey);
+    // THỨ TỰ LÀ HỢP ĐỒNG: đọc TTL SAU sàn = cộng thẳng round-trip Valkey vào sau mốc tuyệt đối,
+    // tức tự tay đẻ lại đúng oracle mà sàn sinh ra để che.
+    expect(order).toEqual(["remainingLockSec:" + acctKey, "floor"]);
+  });
+
+  it("bucket `ip` khoá ⇒ đọc TTL bằng ĐÚNG khoá per-IP (không dựng khoá lần hai bằng tay)", async () => {
+    const ipKey = LoginRateLimiter.key(SLUG, EMAIL, IP);
+    const { auth, rateLimiter } = makeLoginAuth({ lockedKey: ipKey, remaining: 77 });
+
+    await expect(login(auth)).rejects.toSatisfy((err) => retryAfterOf(err) === "77");
+    expect(rateLimiter.remainingLockSecOrNull).toHaveBeenCalledWith(ipKey);
+  });
+
+  it("TTL `null` (Valkey rớt) ⇒ VẪN 429, KHÔNG `details`, KHÔNG '0 giây'", async () => {
+    const { auth } = makeLoginAuth({
+      lockedKey: LoginRateLimiter.accountKey(SLUG, EMAIL),
+      remaining: null,
+    });
+
+    await expect(login(auth)).rejects.toSatisfy((err) => retryAfterOf(err) === null);
+  });
+
+  it("KHÔNG khoá ⇒ KHÔNG đọc TTL một round-trip nào (đường sạch không trả thêm giá)", async () => {
+    const { auth, rateLimiter } = makeLoginAuth({ lockedKey: null });
+    vi.spyOn(
+      auth as unknown as { resolveCompanyId: (s: string) => Promise<string | null> },
+      "resolveCompanyId",
+    ).mockResolvedValue(null);
+    Object.assign(auth, {
+      password: { hash: vi.fn().mockResolvedValue("h") },
+      recordLoginFailure: vi.fn().mockResolvedValue(undefined),
+      recordLoginAttempt: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await expect(login(auth)).rejects.toThrow();
+    expect(rateLimiter.remainingLockSecOrNull).not.toHaveBeenCalled();
+  });
+
+  // ── 3 chỗ ném còn lại trong auth.service (actor ĐÃ có token ⇒ không cần sàn) ─────────────────
+  function makeReauthAuth(remaining: number | null) {
+    const rateLimiter = {
+      isLocked: vi.fn(async () => true),
+      remainingLockSecOrNull: vi.fn(async () => remaining),
+    };
+    const twoFactor = { requiresTwoFactor: vi.fn(async () => false) };
+    const auth = Object.create(AuthService.prototype) as AuthService;
+    Object.assign(auth, { rateLimiter, twoFactor, logger: { error: vi.fn(), warn: vi.fn() } });
+    return { auth, rateLimiter };
+  }
+
+  const ACTOR = { id: USER_ID, companyId: COMPANY_ID };
+
+  it("disableTwoFactor 429 mang số giây, đọc bằng ĐÚNG khoá `2fa-disable`", async () => {
+    const { auth, rateLimiter } = makeReauthAuth(300);
+
+    await expect(auth.disableTwoFactor(ACTOR, "pw")).rejects.toSatisfy(
+      (err) => retryAfterOf(err) === "300",
+    );
+    expect(rateLimiter.remainingLockSecOrNull).toHaveBeenCalledWith(
+      rateLimitKey("2fa-disable", `${COMPANY_ID}|${USER_ID}`),
+    );
+  });
+
+  it("changePassword 429 mang số giây, đọc bằng ĐÚNG khoá `change-pw`", async () => {
+    const { auth, rateLimiter } = makeReauthAuth(120);
+
+    await expect(auth.changePassword(ACTOR, "old", "new")).rejects.toSatisfy(
+      (err) => retryAfterOf(err) === "120",
+    );
+    expect(rateLimiter.remainingLockSecOrNull).toHaveBeenCalledWith(
+      rateLimitKey("change-pw", `${COMPANY_ID}|${USER_ID}`),
+    );
+  });
+
+  it("completeTwoFactorLogin 429 mang số giây, đọc bằng ĐÚNG khoá twoFactorKey", async () => {
+    // Chỗ ném 429 THỨ NĂM — trước WO này KHÔNG có ca nào chạm nhánh này (cùng họ với mock rỗng ở
+    // `two-factor.service.spec.ts`): `grep verifyTwoFactorChallenge *.spec.ts` chỉ ra spec của
+    // TokenService, không phải của đường này.
+    const rlKey = LoginRateLimiter.twoFactorKey(COMPANY_ID, USER_ID);
+    const rateLimiter = {
+      isLocked: vi.fn(async () => true),
+      remainingLockSecOrNull: vi.fn(async () => 480),
+      // `claimFirstOfWindow` được gọi HAI lần trên đường này (replay-guard + gộp log 429) — trả false
+      // để không rẽ vào nhánh ghi `login_logs` (cần DB), ta chỉ đo hình dạng của 429.
+      claimFirstOfWindow: vi.fn(async () => false),
+      lockoutSec: 900,
+    };
+    const auth = Object.create(AuthService.prototype) as AuthService;
+    Object.assign(auth, {
+      rateLimiter,
+      logger: { error: vi.fn(), warn: vi.fn() },
+      tokens: {
+        verifyTwoFactorChallenge: vi.fn(() => ({
+          sub: USER_ID,
+          companyId: COMPANY_ID,
+          jti: "jti-1",
+        })),
+      },
+      // `true` = challengeToken dùng LẦN ĐẦU ⇒ đi tiếp xuống nhánh khoá. `false` sẽ rẽ sang 401
+      // replay và ca này xanh-RỖNG (không bao giờ chạm chỗ ném 429).
+      replayGuard: { claim: vi.fn(async () => true) },
+    });
+
+    await expect(
+      auth.completeTwoFactorLogin("challenge-token", "123456", { ip: IP, userAgent: "v" }),
+    ).rejects.toSatisfy((err) => retryAfterOf(err) === "480");
+    expect(rateLimiter.remainingLockSecOrNull).toHaveBeenCalledWith(rlKey);
+  });
+
+  it("changePassword TTL `null` ⇒ 429 KHÔNG `details` (hành vi y hệt trước WO này)", async () => {
+    const { auth } = makeReauthAuth(null);
+
+    await expect(auth.changePassword(ACTOR, "old", "new")).rejects.toSatisfy(
+      (err) => retryAfterOf(err) === null,
     );
   });
 });

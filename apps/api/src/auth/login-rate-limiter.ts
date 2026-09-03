@@ -477,6 +477,30 @@ export class LoginRateLimiter {
   }
 
   /**
+   * ⟲ S18-AUTH-RETRYAFTER-1 — bản AN TOÀN của `remainingLockSec` dành cho ĐƯỜNG NÉM 429.
+   *
+   * VÌ SAO Ở ĐÂY chứ không phải một wrapper `private` trong từng service: con số này chỉ để HIỂN THỊ,
+   * và hợp đồng "trục trặc đọc TTL KHÔNG được biến 429 thành 500" phải có ĐÚNG MỘT hình dạng gọi. Hai
+   * bản sao private ở hai service sẽ lệch câm, và chỗ ném 429 thứ sáu sẽ gọi thẳng `remainingLockSec`
+   * rồi mở lại lỗ 429→500 mà không ca test nào đỏ (bài học `wrapper-escape-hatch-needs-its-own-case`).
+   *
+   * FAIL-SOFT NHƯNG KHÔNG CÂM: lỗi → `null` (429 mất phần số giây, FE rơi về chuỗi cũ) + LOG. Nuốt câm
+   * nghĩa là tiện ích chết trong im lặng và không ai biết cho tới khi có người hỏi.
+   * KHÔNG nội suy `key` vào log — khoá chứa slug + email của người dùng (BẤT BIẾN #3).
+   */
+  async remainingLockSecOrNull(key: string): Promise<number | null> {
+    try {
+      return await this.remainingLockSec(key);
+    } catch (err) {
+      this.logger.warn(
+        `Đọc TTL khoá rate-limit thất bại — 429 sẽ KHÔNG mang retryAfterSec (người dùng thấy câu chữ ` +
+          `vô định thay vì đếm ngược): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    }
+  }
+
+  /**
    * Dọn khoá in-memory theo TIỀN TỐ dựng qua chính builder khoá (`key(slug,email,"")` → `…|{email}|`),
    * KHÔNG nối chuỗi tay: nối tay là thứ `valkey-key-census.spec.ts` cấm, và sẽ lệch câm khi `envScope` đổi.
    *

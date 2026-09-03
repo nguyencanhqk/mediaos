@@ -10,6 +10,7 @@ import type { ErrorDetail } from "@mediaos/contracts";
 import type { Request, Response } from "express";
 import { ZodValidationException } from "nestjs-zod";
 import { ERROR_CODES, httpStatusToCode } from "../errors/error-codes";
+import { retryAfterHeaderValue } from "./retry-after";
 
 interface ResolvedError {
   status: number;
@@ -48,6 +49,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
         `${request?.method ?? "-"} ${path} -> ${status} [${code}] req=${requestId || "-"}`,
         exception instanceof Error ? exception.stack : String(exception),
       );
+    }
+
+    // ⟲ S18-AUTH-RETRYAFTER-1 — `Retry-After` PHẢI đặt ở ĐÂY, trên chính `response` sắp ghi.
+    // KHÔNG dùng `@Header('Retry-After')` ở controller: decorator đó dán nhãn cho phản hồi THÀNH CÔNG;
+    // đường ném đi qua filter này nên header sẽ không bao giờ tới (memory nest-header-decorator-mislabels-errors).
+    // Giá trị suy TỪ `details` đã lọc ở trên ⇒ body và header không thể lệch nhau. Header chỉ thuộc về
+    // 429; mọi status khác mang detail y hệt vẫn KHÔNG được đặt header.
+    if (status === HttpStatus.TOO_MANY_REQUESTS) {
+      const retryAfter = retryAfterHeaderValue(details);
+      if (retryAfter !== null) response.setHeader("Retry-After", retryAfter);
     }
 
     response.status(status).json({

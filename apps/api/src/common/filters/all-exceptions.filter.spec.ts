@@ -7,7 +7,9 @@ import {
 import { ZodValidationException } from "nestjs-zod";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ZodError, type ZodIssue } from "zod";
+import { httpStatusToCode } from "../errors/error-codes";
 import { AllExceptionsFilter } from "./all-exceptions.filter";
+import { TOO_MANY_REQUESTS_MESSAGE, tooManyRequests } from "./retry-after";
 
 interface MockRequest {
   method: string;
@@ -25,9 +27,14 @@ function invoke(exception: unknown, request: Partial<MockRequest> = {}) {
   };
   const json = vi.fn();
   const status = vi.fn((_statusCode: number) => ({ json }));
+  // `setHeader` PHẢI có mặt trong mock: S18-AUTH-RETRYAFTER-1 cho filter đặt `Retry-After` trên
+  // response của ngoại lệ. Thiếu nó thì MỌI ca ở file này ném TypeError vì một lý do không liên quan
+  // tới điều đang đo. Filter vẫn gọi setHeader CÓ ĐIỀU KIỆN (429 + detail hợp lệ) — hình dạng response
+  // không được biến thành phụ thuộc bắt buộc của mọi nhánh lỗi.
+  const setHeader = vi.fn();
   const host = {
     switchToHttp: () => ({
-      getResponse: () => ({ status }),
+      getResponse: () => ({ status, setHeader }),
       getRequest: () => req,
     }),
   } as unknown as ArgumentsHost;
@@ -38,6 +45,7 @@ function invoke(exception: unknown, request: Partial<MockRequest> = {}) {
   return {
     statusCode: status.mock.calls[0]?.[0] as number,
     body: json.mock.calls[0]?.[0] as Record<string, unknown>,
+    setHeader,
   };
 }
 
@@ -116,5 +124,45 @@ describe("AllExceptionsFilter — error mapping (API-01 §12)", () => {
     expect(body.data).toBeNull();
     expect(body.error).toBeTypeOf("object");
     expect(body.meta).toBeTypeOf("object");
+  });
+});
+
+// ── S18-AUTH-RETRYAFTER-1 — header `Retry-After` suy TỪ `details` của 429 ────────────────────────
+describe("AllExceptionsFilter — header Retry-After (429 mang retryAfterSec)", () => {
+  const retryDetail = { field: "retryAfterSec", message: "900", rule: "retry-after" };
+
+  it("429 + detail hợp lệ ⇒ setHeader('Retry-After','900') và body VẪN mang details", () => {
+    const { statusCode, body, setHeader } = invoke(tooManyRequests(900));
+
+    expect(statusCode).toBe(429);
+    expect(setHeader).toHaveBeenCalledWith("Retry-After", "900");
+    expect(setHeader).toHaveBeenCalledTimes(1);
+    expect((body.error as { details: unknown }).details).toEqual([retryDetail]);
+  });
+
+  it("429 KHÔNG detail (Valkey rớt) ⇒ 0 lần setHeader, body details = null, KHÔNG ném", () => {
+    const { statusCode, body, setHeader } = invoke(tooManyRequests(null));
+
+    expect(statusCode).toBe(429);
+    expect(setHeader).not.toHaveBeenCalled();
+    expect((body.error as { details: unknown }).details).toBeNull();
+    expect(body.message).toBe(TOO_MANY_REQUESTS_MESSAGE);
+  });
+
+  it("403 mang detail Y HỆT ⇒ 0 lần setHeader (header CHỈ thuộc về 429)", () => {
+    const { statusCode, setHeader } = invoke(
+      new ForbiddenException({ message: "Không có quyền", details: [retryDetail] }),
+    );
+
+    expect(statusCode).toBe(403);
+    expect(setHeader).not.toHaveBeenCalled();
+  });
+
+  it("`code` của 429 VẪN là SYSTEM-ERR-RATE-LIMIT ở CẢ hai nhánh (payload không khai `code`)", () => {
+    for (const err of [tooManyRequests(900), tooManyRequests(null)]) {
+      const { body } = invoke(err);
+      expect((body.error as { code: string }).code).toBe(httpStatusToCode(429));
+      expect((body.error as { type: string }).type).toBe("HttpException");
+    }
   });
 });

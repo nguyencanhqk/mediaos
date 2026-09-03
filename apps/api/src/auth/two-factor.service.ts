@@ -1,9 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { rlKey as rateLimitKey } from "../common/valkey/valkey-key";
+import { tooManyRequests } from "../common/filters/retry-after";
 import {
   ConflictException,
-  HttpException,
-  HttpStatus,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -192,10 +191,9 @@ export class TwoFactorService {
   async confirmEnable(userId: string, companyId: string, token: string): Promise<void> {
     const rlKey = rateLimitKey("2fa-enable", `${companyId}|${userId}`);
     if (await this.rateLimiter.isLocked(rlKey)) {
-      throw new HttpException(
-        "Quá nhiều lần thử. Vui lòng thử lại sau.",
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      // ⟲ S18-AUTH-RETRYAFTER-1 — không cần sàn thời gian ở đây: actor ĐÃ có access token nên không
+      // còn ẩn số nào (tenant, user) để dò bằng đồng hồ.
+      throw tooManyRequests(await this.rateLimiter.remainingLockSecOrNull(rlKey));
     }
     const verified = await this.dbsvc.withTenant(companyId, async (tx) => {
       const row = await this.loadTotp(tx, userId);

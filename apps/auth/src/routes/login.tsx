@@ -1,11 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { TFunction } from "i18next";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Link } from "@tanstack/react-router";
-import { ApiError, authApi } from "@mediaos/web-core";
+import { ApiError, authApi, retryAfterSecFromError } from "@mediaos/web-core";
 import { Button, Input } from "@mediaos/ui";
 import { AuthShell } from "@/components/AuthShell";
 import { TwoFactorChallengeForm } from "@/components/TwoFactorChallengeForm";
@@ -24,6 +24,16 @@ function friendlyError(err: unknown, t: TFunction<"auth">): string {
     return err.message;
   }
   return t("common:errors.generic");
+}
+
+/**
+ * ⟲ S18-AUTH-RETRYAFTER-1 — mm:ss cho đếm ngược khoá. `mm` KHÔNG chặn ở 2 chữ số: khoá dài bất thường
+ * (ops đặt `LOGIN_LOCKOUT_SEC` lớn) phải hiện đúng con số, thà dài còn hơn nói sai.
+ */
+function formatMmSs(totalSec: number): string {
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 /**
@@ -56,6 +66,35 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // ⟲ S18-AUTH-RETRYAFTER-1 — khoá 429 lưu bằng MỐC HẾT HẠN, không bằng bộ đếm lùi.
+  // VÌ SAO MỐC chứ không phải "trừ 1 mỗi giây": `setTimeout` bị trình duyệt bóp xuống ≥1 lần/phút khi
+  // tab chạy nền, nên bộ đếm lùi sẽ chạy CHẬM HƠN khoá thật ⇒ người dùng bị giam thêm sau khi server đã
+  // mở. Đọc lại đồng hồ mỗi nhịp thì mọi nhịp rơi/trễ tự bù, và số hiện ra luôn là số THẬT.
+  // `null` = không khoá HOẶC server không gửi số (Valkey rớt / 429 từ chỗ chưa mang `retryAfterSec`)
+  // ⇒ rơi về CHÍNH XÁC hành vi trước WO này: chuỗi "vui lòng thử lại sau" + nút KHÔNG bị khoá.
+  const [lockUntilMs, setLockUntilMs] = useState<number | null>(null);
+  const [lockRemainingSec, setLockRemainingSec] = useState<number | null>(null);
+
+  // Nhịp đếm ngược. Mỗi nhịp TỰ lên lịch nhịp kế trong chính callback — KHÔNG đi vòng qua state, để
+  // chuỗi nhịp không phụ thuộc React commit kịp hay không. Chạm 0 ⇒ nhả khoá VÀ xoá thông báo: giữ câu
+  // "quá nhiều lần thử" sau khi đã hết giờ là NÓI SAI. Cleanup `clearTimeout` chặn rò timer khi unmount.
+  useEffect(() => {
+    if (lockUntilMs === null) return;
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+    const tick = () => {
+      const remaining = Math.ceil((lockUntilMs - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setLockUntilMs(null);
+        setLockRemainingSec(null);
+        setError(null);
+        return;
+      }
+      setLockRemainingSec(remaining);
+      timerId = setTimeout(tick, 1000);
+    };
+    tick();
+    return () => clearTimeout(timerId);
+  }, [lockUntilMs]);
 
   const {
     register,
@@ -77,6 +116,8 @@ export function LoginPage() {
   const onSubmitCredentials = async (values: LoginFormValues) => {
     setBusy(true);
     setError(null);
+    setLockUntilMs(null);
+    setLockRemainingSec(null);
     try {
       // Đơn-tenant: slug đến từ config (SINGLE_COMPANY_SLUG), user KHÔNG phải gõ — hợp đồng backend không đổi.
       const result = await authApi.login({
@@ -93,6 +134,9 @@ export function LoginPage() {
       }
     } catch (err) {
       setError(friendlyError(err, t));
+      // `null` khi 429 không mang số hoặc lỗi khác — countdown tắt, chuỗi cũ hiện như trước.
+      const retryAfterSec = retryAfterSecFromError(err);
+      setLockUntilMs(retryAfterSec === null ? null : Date.now() + retryAfterSec * 1000);
       setBusy(false);
     }
   };
@@ -110,6 +154,13 @@ export function LoginPage() {
     }
   };
 
+  // Thông báo hiển thị: đang đếm ⇒ câu có mm:ss (dựng lại mỗi giây, KHÔNG lưu chuỗi đã format vào
+  // state); ngược lại ⇒ `error` như cũ.
+  const shownError =
+    lockRemainingSec !== null
+      ? t("errors.tooManyAttemptsIn", { time: formatMmSs(lockRemainingSec) })
+      : error;
+
   const onCancelTwoFactor = () => {
     setStep({ kind: "credentials" });
     setError(null);
@@ -121,13 +172,13 @@ export function LoginPage() {
       subtitle={step.kind === "twoFactor" ? t("twoFactor.challengeHint") : t("login.subtitle")}
     >
       {/* Lỗi hiển thị ở container — nhìn thấy ở CẢ bước credentials lẫn 2FA. */}
-      {error && (
+      {shownError && (
         <p
           role="alert"
           aria-live="assertive"
           className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
         >
-          {error}
+          {shownError}
         </p>
       )}
 
@@ -200,7 +251,13 @@ export function LoginPage() {
               </p>
             )}
           </div>
-          <Button type="submit" className="w-full" disabled={busy || isEmpty}>
+          {/* Đang khoá ⇒ nút tự khoá theo, và tự BẬT LẠI khi đồng hồ chạm 0 — không cần người dùng
+              tải lại trang. 429 không kèm số ⇒ `lockRemainingSec` null ⇒ nút không bị khoá (như cũ). */}
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={busy || isEmpty || lockRemainingSec !== null}
+          >
             {busy ? t("login.submitting") : t("login.submit")}
             {!busy && <ArrowRight className="size-4" />}
           </Button>

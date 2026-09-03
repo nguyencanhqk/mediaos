@@ -388,4 +388,79 @@ không mang `retryAfterSec`.
 
 ## 7. Kết quả chạy thật
 
-*(điền khi chạy — `bash harness/check.sh --all --lane-db=s18retry`)*
+Chạy 03/09 trên `LANE_DB=mediaos_s18retry` (Postgres cục bộ + Valkey).
+
+### 7.1 Test
+
+| Bộ | Kết quả |
+| --- | --- |
+| `src/common/filters/retry-after.spec.ts` (mới) | 11/11 xanh |
+| `src/common/filters/all-exceptions.filter.spec.ts` | 9/9 xanh (5 ca CŨ + 4 ca header mới) |
+| `src/auth/auth.service.spec.ts` | 25/25 xanh (17 cũ + 8 mới) |
+| `src/auth/two-factor.service.spec.ts` | 21/21 xanh (18 cũ + 3 mới) |
+| `packages/web-core/src/lib/retry-after.spec.ts` (mới) | 8/8 xanh |
+| `apps/auth/src/routes/login.spec.tsx` | 17/17 xanh (11 cũ + 6 mới) |
+| `test/integration/auth-s18-retryafter-e2e.int-spec.ts` (mới) | 4/4 xanh |
+
+### 7.2 §floor — số đo thật (`done_when[1]`)
+
+```text
+[s18-retryafter §floor] p50 — 429 slug-đúng: 314ms · 429 slug-sai: 323ms
+                              401 đối chứng (KHÔNG assert): 43ms · sàn=250ms
+```
+
+- **Sàn còn tác dụng:** cả hai nhánh 429 đều **≥ 250ms** ⇒ round-trip TTL vừa thêm CHƯA ăn hết ngân
+  sách. Đây là điều WO này chịu trách nhiệm.
+- **Không tách được:** |314 − 323| = **9ms**, dưới ngưỡng 60–80ms chọn theo `FORGOT_PW_JITTER_MS = 80`.
+- 401 (43ms) thấp hơn hẳn — **đúng theo thiết kế** (429 không có `password.hash` burn). KHÔNG assert
+  quan hệ này; chỉ ghi làm mốc.
+
+⚠️ **Sửa thiết kế §4.2/§4.4 khi chạy thật:** bản plan ghi "429 slug ĐÚNG vs 429 slug SAI" bằng cách đổi
+slug trên **cùng một bucket đã khoá** — điều đó KHÔNG chạy được: bucket rate-limit **khoá theo slug**
+(`LoginRateLimiter.key(slug,email,ip)`), nên đổi slug cho ra bucket khác ⇒ chưa khoá ⇒ **401**, không
+phải 429. Ca thật phải khoá **RIÊNG một bucket cho slug ma** rồi mới đo. Đã sửa trong int-spec.
+
+Giới hạn đã biết của ca này (ghi ra, không giấu): mọi mẫu đều là 429 **sau** lần đầu của cửa sổ, nên
+`claimBlockedLogSlot` đã gộp và không nhánh nào ghi `login_logs`. Nó đo đúng thứ WO này thêm vào (round
+trip TTL nằm trong sàn), KHÔNG đo chênh lệch của **lần 429 đầu cửa sổ** (đo được điều đó cần 15 cửa sổ
+mới × 5 lần argon2 mỗi cửa sổ — quá đắt cho giá trị thêm).
+
+### 7.3 Đột biến kiểm chứng (§4.3) — chạy TỪNG dòng
+
+| Bỏ đi | Ca ĐỎ thật sự | Kết quả |
+| --- | --- | --- |
+| vế `details` trong `tooManyRequests` | §e2e (body) | ✅ ĐỎ |
+| `retryAfterSecFromError` không bao giờ trả số | `login.spec.tsx` (đếm ngược) | ✅ ĐỎ 4 ca |
+| `response.setHeader` trong filter | filter.spec + §e2e (header) | ✅ ĐỎ cả hai |
+| dời đọc TTL ra SAU `finally` | `auth.service.spec` (thứ tự gọi) | ✅ ĐỎ |
+| bỏ chặn dải trong `retryAfterSecFromError` | `retry-after.spec` (`0`/âm/quá lớn) | ✅ ĐỎ |
+
+⚠️ **Bẫy gặp khi chạy đột biến FE:** lượt đầu tưởng "không ca nào bắt" — thực ra bản vá đột biến tạo
+**unreachable code** làm `pnpm --filter @mediaos/web-core build` ĐỎ, nên `dist/` giữ nguyên bản CŨ và
+`apps/auth` (đọc web-core qua **dist**, không phải src) vẫn chạy code đúng. Đột biến FE phải **kiểm
+build xanh** trước khi kết luận. (Cùng họ với memory `web-core-stale-dist-white-page`.)
+
+### 7.4 Lệch so với plan — đã làm KHÁC, có lý do
+
+1. **§4.2/§4.4 §floor** — xem 7.2.
+2. **FE dùng MỐC HẾT HẠN, không phải bộ đếm lùi** (`lockUntilMs` + tính lại từ `Date.now()` mỗi nhịp).
+   Plan §3.5 ghi "hạ 1 mỗi giây". Đổi vì hai lý do: (a) `setTimeout` bị trình duyệt bóp xuống ≥1
+   lần/phút khi tab chạy nền ⇒ bộ đếm lùi chạy CHẬM HƠN khoá thật và giam người dùng thêm sau khi
+   server đã mở; (b) chuỗi nhịp không còn đi vòng qua React state nên không phụ thuộc commit kịp hay
+   không. Hành vi ngoài (mm:ss, tự nhả nút, ca thiếu số) giữ nguyên như plan.
+3. **Thêm ca cho chỗ ném 429 THỨ NĂM** — `AuthService.completeTwoFactorLogin` (`auth.service.ts:575`).
+   Plan §4.1 liệt kê ca cho `login`/`disableTwoFactor`/`changePassword`/`confirmEnable` nhưng BỎ SÓT
+   đường này; `grep verifyTwoFactorChallenge --include=*.spec.ts` chỉ ra spec của `TokenService`, không
+   phải của đường này ⇒ nhánh 429 ở đó **chưa từng chạy** trong bất kỳ spec nào (cùng họ với mock rỗng
+   mà §4.0 đã bắt ở `two-factor.service.spec.ts`). Đã thêm ca.
+4. **`remainingLockSecSafe`** — plan R8 vừa đòi ca "TTL ném ⇒ vẫn 429" vừa cấm `try/catch`. Giải bằng
+   khuôn ĐÃ CÓ ngay trên trong cùng file (`resolveBlockedLogOwner`): fail-soft **có LOG**, không phải
+   catch câm. Có ca test ghim cả hai vế (vẫn 429 **và** `logger.warn` được gọi).
+
+## 8. Nợ mở khi lên PR
+
+- `auth/step-up/step-up.service.ts:122` — 429 AUTH **duy nhất còn lại** không mang `retryAfterSec`
+  (ngoài `paths` của WO này). Sau WO này AUTH có **hai hợp đồng 429**: 5 chỗ mang số, `stepUp` thì
+  không. Owner quyết có seed WO nối tiếp hay không.
+- `chat/chat-calls.service.ts:531` và `notifications/lms-service-intake.guard.ts:107` — khác module /
+  kênh máy-tới-máy, cố ý ngoài phạm vi (§1).
