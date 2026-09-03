@@ -5,17 +5,19 @@
  * lo nháp. Component này chỉ nối chúng và giữ ba trạng thái ĐIỀU PHỐI: tin đang trả lời, hộp xác nhận
  * thu hồi, và bản đồ `clientMessageId → fileIds` để "Gửi lại" không đánh rơi tệp.
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { History, Info, MessageSquare } from "lucide-react";
+import { History } from "lucide-react";
 import { ApiError, chatApi, chatKeys, useCan } from "@mediaos/web-core";
-import { Button, EmptyState, Skeleton } from "@mediaos/ui";
+import { Button, Skeleton } from "@mediaos/ui";
 import type { ChatReactionEmoji, ChatRoomDto, ChatRoomMemberDto } from "@mediaos/contracts";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useChatStore, type PendingChatMessage, type StoredChatMessage } from "@/stores/chat.store";
 import { CHAT_PAIRS } from "@/routes/chat/constants";
+import { ChatEmptyHero } from "./ChatEmptyHero";
 import { ConnectionBanner } from "./ConnectionBanner";
+import { ConversationHeader } from "./ConversationHeader";
 import { MessageComposer, type ComposerSubmitPayload } from "./MessageComposer";
 import { MessageList } from "./MessageList";
 import { TypingIndicator } from "./TypingIndicator";
@@ -42,6 +44,13 @@ interface ConversationPanelProps {
    * hệt trang — đó là lý do panel nổi dùng LẠI component này thay vì có bản rút gọn của riêng nó.
    */
   showHeader?: boolean;
+  /**
+   * S17 — mở tìm kiếm ĐÃ bó theo phòng đang mở (nút 🔍 ở thanh đầu + phím tắt).
+   *
+   * `undefined` ⇒ ẩn nút và TẮT phím tắt: ngữ cảnh không có cột tìm kiếm (drawer của FE-5) mà vẫn bắt
+   * phím là nuốt một tổ hợp của trình duyệt để không làm gì cả.
+   */
+  onSearchInRoom?: () => void;
 }
 
 export function ConversationPanel({
@@ -51,6 +60,7 @@ export function ConversationPanel({
   isInfoOpen = false,
   onToggleInfo,
   showHeader = true,
+  onSearchInRoom,
 }: ConversationPanelProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const queryClient = useQueryClient();
@@ -228,6 +238,69 @@ export function ConversationPanel({
     [patchMessageReactions, room.id, t],
   );
 
+  /**
+   * S17 — chép nội dung tin (mục `⋯` của thanh tác vụ nổi).
+   *
+   * `navigator.clipboard` KHÔNG phải lúc nào cũng có: ngữ cảnh không bảo mật (http), người dùng chặn
+   * quyền, hoặc trình duyệt cũ. Mỗi nhánh trượt đều BÁO qua `actionError` — một nút bấm im lặng không
+   * làm gì là dạng hỏng khó chịu nhất vì người dùng dán ra và mất đúng thứ họ tưởng đã chép.
+   */
+  const copyMessage = useCallback(
+    (message: StoredChatMessage) => {
+      const body = message.body ?? "";
+      if (body.length === 0) return;
+      const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+      if (!clipboard) {
+        setActionError(t("message.copyFailed"));
+        return;
+      }
+      void clipboard.writeText(body).catch(() => setActionError(t("message.copyFailed")));
+    },
+    [t],
+  );
+
+  /**
+   * S17 — phím tắt của khung hội thoại (`done_when #6`).
+   *
+   * ⚠️ **KHÔNG dùng Ctrl/⌘+K.** Tổ hợp đó đã là phím tắt TOÀN CỤC của app shell (App Switcher —
+   * `apps/app/src/layouts/home/AppSwitcher.tsx`, listener trên `document` với `preventDefault`, luôn
+   * gắn). Bắt thêm ở đây là hai handler cùng nổ trên một lần bấm: bảng chuyển app bật lên ĐỒNG THỜI
+   * với cột tìm kiếm. `done_when` đã ghi kèm ràng buộc "không trùng phím tắt shell" — ràng buộc thắng
+   * cái tên phím. Dùng **Ctrl/⌘+Shift+F** (khuôn "tìm trong hội thoại" của Slack/Teams).
+   *
+   * Esc: huỷ trả lời TRƯỚC, đóng bảng thông tin SAU — bấm Esc lúc đang soạn câu trả lời mà mất luôn
+   * bảng thông tin là làm hai việc cho một ý định.
+   *
+   * Cả hai NHƯỜNG cho lớp nổi đang mở (`data-floating-layer="open"` — hợp đồng của `Popover`/`Sheet`):
+   * thiếu vế này thì một lần Esc đóng cả popover LẪN thứ nằm dưới nó.
+   */
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (document.querySelector('[data-floating-layer="open"]') !== null) return;
+
+      if (e.key === "Escape") {
+        if (replyTo !== null) {
+          e.preventDefault();
+          setReplyTo(null);
+          return;
+        }
+        if (isInfoOpen && onToggleInfo) {
+          e.preventDefault();
+          onToggleInfo();
+        }
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "F" || e.key === "f")) {
+        if (!onSearchInRoom) return;
+        e.preventDefault();
+        onSearchInRoom();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [replyTo, isInfoOpen, onToggleInfo, onSearchInRoom]);
+
   const title = roomDisplayName(room, members, myUserId, (code) =>
     t("rooms.directFallback", { code }),
   );
@@ -250,56 +323,31 @@ export function ConversationPanel({
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col" aria-label={title}>
       {showHeader && (
-        <header className="flex items-center gap-2 border-b border-border px-4 py-3">
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-sm font-semibold">{title}</h2>
-            <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-              {directPeerId !== null && isPeerOnline && (
-                <>
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-full bg-emerald-500"
-                    aria-hidden="true"
-                    data-testid="chat-peer-online-dot"
-                  />
-                  {/* Chấm màu là tín hiệu THỊ GIÁC — người đọc màn hình cần chữ, không có chữ thì trạng
-                      thái này đơn giản không tồn tại với họ. */}
-                  <span className="sr-only">{t("presence.online")}</span>
-                </>
-              )}
-              <span className="truncate">
-                {t(`rooms.types.${room.roomType}`)}
-                {members.length > 0 &&
-                  ` · ${t("conversation.membersCount", { count: members.length })}`}
-              </span>
-            </p>
-          </div>
-          {/*
-           * S7-CALL-FE-1 — nút gọi. `callContext === null` (cây không có `<CallProvider>`: test lẻ,
-           * story) ⇒ KHÔNG render: một nút gọi không có máy trạng thái phía sau là nút bấm không có
-           * gì xảy ra. Cổng quyền + cổng 1-1 nằm trong chính `CallButtons`.
-           */}
-          {callContext !== null && (
-            <CallButtons
-              room={room}
-              members={roster.members}
-              isBusy={callContext.phase !== "idle"}
-              onStartCall={(kind) => callContext.startCall(room.id, kind)}
-            />
-          )}
-          {onToggleInfo && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={
-                isInfoOpen ? t("conversation.infoToggleClose") : t("conversation.infoToggle")
-              }
-              aria-pressed={isInfoOpen}
-              onClick={onToggleInfo}
-            >
-              <Info className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          )}
-        </header>
+        <ConversationHeader
+          room={room}
+          title={title}
+          memberCount={members.length}
+          peerOnline={directPeerId === null ? null : isPeerOnline}
+          peerAvatarUrl={directPeerId === null ? null : (roster.avatarByUser.get(directPeerId) ?? null)}
+          isInfoOpen={isInfoOpen}
+          onToggleInfo={onToggleInfo}
+          onSearchInRoom={onSearchInRoom}
+          callSlot={
+            /*
+             * S7-CALL-FE-1 — nút gọi. `callContext === null` (cây không có `<CallProvider>`: test lẻ,
+             * story) ⇒ KHÔNG render: một nút gọi không có máy trạng thái phía sau là nút bấm không có
+             * gì xảy ra. Cổng quyền + cổng 1-1 nằm trong chính `CallButtons`.
+             */
+            callContext !== null ? (
+              <CallButtons
+                room={room}
+                members={roster.members}
+                isBusy={callContext.phase !== "idle"}
+                onStartCall={(kind) => callContext.startCall(room.id, kind)}
+              />
+            ) : null
+          }
+        />
       )}
 
       <ConnectionBanner />
@@ -348,13 +396,16 @@ export function ConversationPanel({
           </Button>
         </div>
       ) : (messages?.length ?? 0) === 0 && pendingForRoom.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center p-6">
-          <EmptyState
-            icon={MessageSquare}
-            title={t("conversation.empty")}
-            description={t("conversation.emptyHint")}
-          />
-        </div>
+        /*
+         * Phòng đã mở mà chưa có tin. Hero KHÔNG có nút nào ở đây: ô soạn nằm ngay bên dưới và đó
+         * chính là hành động cần làm — thêm nút "Tin nhắn mới" ở màn này là mời tạo phòng THỨ HAI khi
+         * người dùng vừa mở đúng phòng họ muốn nhắn. Hai nút thuộc về khung trống của TRANG
+         * (`ChatPage`, chưa chọn phòng nào).
+         */
+        <ChatEmptyHero
+          title={t("conversation.empty")}
+          description={t("conversation.emptyHint")}
+        />
       ) : (
         <MessageList
           room={room}
@@ -381,6 +432,7 @@ export function ConversationPanel({
             onUnpin: (m) => pinMutation.mutate({ messageId: m.id, pinned: true }),
             onRecall: setRecallTarget,
             onToggleReaction: toggleReaction,
+            onCopy: copyMessage,
           }}
         />
       )}

@@ -61,6 +61,7 @@ const noopActions = {
   onUnpin: vi.fn(),
   onRecall: vi.fn(),
   onToggleReaction: vi.fn(),
+  onCopy: vi.fn(),
 };
 
 interface HarnessProps {
@@ -314,9 +315,13 @@ describe("MessageList · đã xem bởi (§13.2 — dẫn xuất, không bảng 
         },
       ] as unknown as ChatRoomMemberDto[],
     });
-    const seen = screen.getByText(/Đã xem/);
-    expect(seen.textContent).toContain("Trần B");
-    expect(seen.textContent).not.toContain("Lê C");
+    // S17: «đã xem» là DÃY AVATAR. Danh sách tên sống trong nhãn trợ năng — đo ở đó vì đó là nơi
+    // duy nhất còn mang thông tin «ai» sau khi đổi sang ảnh.
+    const seen = screen.getByTestId("chat-seen-by");
+    expect(seen.getAttribute("aria-label")).toContain("Trần B");
+    expect(seen.getAttribute("aria-label")).not.toContain("Lê C");
+    // Đối chứng bằng NODE: đúng MỘT mặt được vẽ — nhãn đúng mà vẽ thừa mặt vẫn là sai.
+    expect(screen.getAllByTestId("chat-seen-avatar")).toHaveLength(1);
   });
 });
 

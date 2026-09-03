@@ -21,6 +21,15 @@ import { MessageList } from "./MessageList";
 const ROOM_ID = "11111111-1111-4111-8111-111111111111";
 const ANNA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const BINH = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+/**
+ * S17-CHAT-UX2-FE-2 — NGUOI DANG XEM la mot nguoi THU BA, khong phai An.
+ *
+ * Bo cuc hai phia (CHAT-DEC-024) chi ve avatar o phia TRAI, tuc chi cho tin cua NGUOI KHAC: tin cua
+ * chinh minh da duoc vi tri (le phai) noi ro la cua ai. Neu giu `myUserId = ANNA` nhu ban S8 thi moi
+ * tin trong file nay deu la tin CUA TOI => 0 avatar, va ca bo dem se do vi mot ly do KHONG lien quan
+ * gi den luat gop. Doi nguoi xem giu nguyen so ca + giu nguyen dieu dang do (luat gop).
+ */
+const ME = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
 const room: ChatRoomDto = {
   id: ROOM_ID,
@@ -43,6 +52,7 @@ const actions = {
   onUnpin: vi.fn(),
   onRecall: vi.fn(),
   onToggleReaction: vi.fn(),
+  onCopy: vi.fn(),
 };
 
 function message(
@@ -82,7 +92,7 @@ function renderList(
         messages={messages}
         pending={[]}
         members={[]}
-        myUserId={ANNA}
+        myUserId={ME}
         myRole="member"
         canRecallPair={false}
         canPinPair={false}

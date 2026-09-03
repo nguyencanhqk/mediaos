@@ -44,7 +44,10 @@ const room: ChatRoomDto = {
   createdAt: "2026-08-01T00:00:00.000Z",
 };
 
-function renderPanel(over: Partial<ChatRoomDto> = {}) {
+function renderPanel(
+  over: Partial<ChatRoomDto> = {},
+  panelProps: Partial<Parameters<typeof ConversationPanel>[0]> = {},
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
@@ -55,10 +58,33 @@ function renderPanel(over: Partial<ChatRoomDto> = {}) {
           myRole="member"
           isInfoOpen={false}
           onToggleInfo={vi.fn()}
+          {...panelProps}
         />
       </I18nextProvider>
     </QueryClientProvider>,
   );
+}
+
+/** Một tin có thật trong phòng — cần cho các ca phím tắt (phải trả lời được một tin nào đó). */
+function seededMessage() {
+  return {
+    id: "00000001-1111-4111-8111-111111111111",
+    companyId: room.companyId,
+    roomId: ROOM_ID,
+    senderId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    senderName: "Trần B",
+    body: "xin chào",
+    messageType: "text" as const,
+    mentions: [],
+    pinnedAt: null,
+    pinnedBy: null,
+    replyToMessageId: null,
+    recalledAt: null,
+    attachmentCount: 0,
+    attachments: [],
+    roomSeq: 5,
+    createdAt: "2026-08-04T10:00:00.000Z",
+  };
 }
 
 beforeEach(() => {
@@ -208,5 +234,103 @@ describe("ConversationPanel · ngữ cảnh tìm kiếm", () => {
     fireEvent.click(screen.getByLabelText("Gửi tin nhắn"));
 
     await waitFor(() => expect(useChatStore.getState().contextByRoom[ROOM_ID]).toBeUndefined());
+  });
+});
+
+// ── S17-CHAT-UX2-FE-2 — phím tắt khung hội thoại (done_when #6) ──────────────────────────────────────
+
+describe("ConversationPanel · phím tắt", () => {
+  it("Esc HUỶ trả lời trước, KHÔNG đóng bảng thông tin cùng lúc", async () => {
+    getMessages.mockResolvedValue([seededMessage()]);
+    const onToggleInfo = vi.fn();
+    renderPanel({}, { isInfoOpen: true, onToggleInfo });
+
+    fireEvent.click(await screen.findByLabelText("Trả lời"));
+    expect(await screen.findByText(/Trả lời Trần B/)).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByText(/Trả lời Trần B/)).toBeNull());
+    // Một lần Esc = một ý định. Đóng luôn bảng thông tin là làm hai việc cho một lần bấm.
+    expect(onToggleInfo).not.toHaveBeenCalled();
+  });
+
+  it("Esc khi KHÔNG có trả lời đang chờ ⇒ đóng bảng thông tin", async () => {
+    getMessages.mockResolvedValue([seededMessage()]);
+    const onToggleInfo = vi.fn();
+    renderPanel({}, { isInfoOpen: true, onToggleInfo });
+    await screen.findByTestId("chat-composer");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onToggleInfo).toHaveBeenCalledTimes(1);
+  });
+
+  it("Esc KHÔNG đụng gì khi bảng thông tin đã đóng (không có gì để huỷ)", async () => {
+    const onToggleInfo = vi.fn();
+    renderPanel({}, { isInfoOpen: false, onToggleInfo });
+    await screen.findByTestId("chat-composer");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onToggleInfo).not.toHaveBeenCalled();
+  });
+
+  it("Esc NHƯỜNG cho lớp nổi đang mở (popover/sheet tự đóng trước)", async () => {
+    const onToggleInfo = vi.fn();
+    renderPanel({}, { isInfoOpen: true, onToggleInfo });
+    await screen.findByTestId("chat-composer");
+
+    // Hợp đồng `data-floating-layer="open"` của `Popover`/`Sheet`. Thiếu vế nhường thì một lần Esc
+    // đóng CẢ popover LẪN thứ nằm dưới nó.
+    const layer = document.createElement("div");
+    layer.setAttribute("data-floating-layer", "open");
+    document.body.appendChild(layer);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onToggleInfo).not.toHaveBeenCalled();
+    layer.remove();
+  });
+
+  it("Ctrl+Shift+F mở tìm-trong-phòng", async () => {
+    const onSearchInRoom = vi.fn();
+    renderPanel({}, { onSearchInRoom });
+    await screen.findByTestId("chat-composer");
+
+    fireEvent.keyDown(document, { key: "F", ctrlKey: true, shiftKey: true });
+    expect(onSearchInRoom).toHaveBeenCalledTimes(1);
+  });
+
+  it("⌘+Shift+F cũng mở (macOS)", async () => {
+    const onSearchInRoom = vi.fn();
+    renderPanel({}, { onSearchInRoom });
+    await screen.findByTestId("chat-composer");
+
+    fireEvent.keyDown(document, { key: "f", metaKey: true, shiftKey: true });
+    expect(onSearchInRoom).toHaveBeenCalledTimes(1);
+  });
+
+  it("KHÔNG cướp Ctrl/⌘+K — đó là phím tắt TOÀN CỤC của App Switcher", async () => {
+    // `apps/app/src/layouts/home/AppSwitcher.tsx` gắn Ctrl/⌘+K trên `document` với `preventDefault`,
+    // luôn sống. Bắt thêm ở đây là hai handler cùng nổ trên một lần bấm: bảng chuyển app bật lên ĐỒNG
+    // THỜI với cột tìm kiếm. Ca này ghim quyết định đó lại.
+    const onSearchInRoom = vi.fn();
+    renderPanel({}, { onSearchInRoom });
+    await screen.findByTestId("chat-composer");
+
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+    fireEvent.keyDown(document, { key: "k", metaKey: true });
+    expect(onSearchInRoom).not.toHaveBeenCalled();
+  });
+
+  it("không có `onSearchInRoom` (drawer FE-5) ⇒ phím tắt IM, không nuốt tổ hợp của trình duyệt", async () => {
+    renderPanel();
+    await screen.findByTestId("chat-composer");
+    const event = new KeyboardEvent("keydown", {
+      key: "F",
+      ctrlKey: true,
+      shiftKey: true,
+      cancelable: true,
+      bubbles: true,
+    });
+    document.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
   });
 });

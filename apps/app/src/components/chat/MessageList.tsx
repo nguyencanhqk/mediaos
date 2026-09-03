@@ -17,6 +17,7 @@ import { MAX_HISTORY_PER_ROOM } from "@/stores/chat.store";
 import { NEAR_BOTTOM_THRESHOLD_PX } from "@/routes/chat/constants";
 import { canRecallMessage, dayKeyOf, formatDayLabel } from "./chat-format";
 import { MessageBubble, type MessageBubbleActions } from "./MessageBubble";
+import type { SeenByViewer } from "./SeenByAvatars";
 
 /** Khoảng cách tới ĐỈNH đủ để coi là "đang muốn xem tiếp lịch sử". */
 const LOAD_OLDER_THRESHOLD_PX = 60;
@@ -170,8 +171,11 @@ export function MessageList({
   }, [isNearBottom, messages, onMarkRead]);
 
   // ── Dẫn xuất "đã xem bởi" (§13.2) — không bảng riêng ───────────────────────
+  //
+  // S17: trả VIEWER (id · tên · ảnh) thay vì mảng tên, để `SeenByAvatars` vẽ được dãy mặt. Ảnh lấy từ
+  // `avatarByUser` (ROSTER phòng, CHAT-DEC-019) — KHÔNG ký lẻ theo từng người ở tầng này.
   const seenByFor = useCallback(
-    (roomSeq: number): string[] =>
+    (roomSeq: number): SeenByViewer[] =>
       members
         .filter(
           (m) =>
@@ -180,12 +184,48 @@ export function MessageList({
             m.lastReadSeq >= roomSeq &&
             m.userName,
         )
-        .map((m) => m.userName as string),
-    [members, myUserId],
+        .map((m) => ({
+          userId: m.userId,
+          name: m.userName ?? null,
+          avatarUrl: avatarByUser?.get(m.userId) ?? null,
+        })),
+    [members, myUserId, avatarByUser],
   );
 
-  let previousDayKey = "";
-  let previous: StoredChatMessage | null = null;
+  /**
+   * S17 — dựng SẴN các cờ bố cục trong MỘT lượt, thay vì tính trong lúc `.map()` render.
+   *
+   * Lý do bắt buộc phải đổi: `isLastOfGroup` cần NHÌN TỚI tin kế tiếp, mà vòng render cũ chỉ giữ được
+   * tin TRƯỚC (`previous`). Tính hai cờ ở hai nơi khác nhau là mở đường cho chúng lệch nhau — cụm mở
+   * bằng luật này và đóng bằng luật kia.
+   *
+   * `grouped` giữ NGUYÊN thuật toán của S7/S8 (cùng người · cùng ngày · trong `GROUP_WINDOW_MS` · tin
+   * `system` cắt cụm) — bài đếm avatar đang neo đúng luật này.
+   */
+  const rows = useMemo(() => {
+    let previousDayKey = "";
+    let previous: StoredChatMessage | null = null;
+    const out = messages.map((message) => {
+      const dayKey = dayKeyOf(message.createdAt);
+      const showDay = dayKey !== previousDayKey;
+      previousDayKey = dayKey;
+
+      const grouped =
+        previous !== null &&
+        !showDay &&
+        previous.senderId === message.senderId &&
+        previous.messageType !== "system" &&
+        message.messageType !== "system" &&
+        new Date(message.createdAt).getTime() - new Date(previous.createdAt).getTime() <
+          GROUP_WINDOW_MS;
+      previous = message;
+      return { message, showDay, grouped, isLastOfGroup: true };
+    });
+
+    // Tin i là CUỐI cụm khi tin i+1 mở cụm mới (hoặc không còn tin nào sau nó).
+    for (let i = 0; i < out.length - 1; i += 1) out[i].isLastOfGroup = !out[i + 1].grouped;
+    return out;
+  }, [messages]);
 
   return (
     <div className="relative flex-1 overflow-hidden">
@@ -218,21 +258,7 @@ export function MessageList({
           </p>
         ) : null}
 
-        {messages.map((message) => {
-          const dayKey = dayKeyOf(message.createdAt);
-          const showDay = dayKey !== previousDayKey;
-          previousDayKey = dayKey;
-
-          const grouped =
-            previous !== null &&
-            !showDay &&
-            previous.senderId === message.senderId &&
-            previous.messageType !== "system" &&
-            message.messageType !== "system" &&
-            new Date(message.createdAt).getTime() - new Date(previous.createdAt).getTime() <
-              GROUP_WINDOW_MS;
-          previous = message;
-
+        {rows.map(({ message, showDay, grouped, isLastOfGroup }) => {
           const isHighlighted = message.id === highlightMessageId;
 
           return (
@@ -245,7 +271,12 @@ export function MessageList({
               data-highlighted={isHighlighted ? "true" : undefined}
             >
               {showDay && (
-                <div className="my-2 flex items-center gap-3 px-3">
+                /*
+                 * S17 — dải ngày DÍNH ĐỈNH khung cuộn: cuộn sâu vào giữa một ngày dài thì mốc ngày đã
+                 * trôi khỏi màn hình và người đọc mất neo thời gian. `z-[5]` nằm DƯỚI thanh tác vụ nổi
+                 * (`z-10`) để thanh không bị dải ngày cắt ngang khi hai thứ chạm nhau.
+                 */
+                <div className="sticky top-0 z-[5] flex items-center gap-3 bg-background/90 px-3 py-2 backdrop-blur-sm">
                   <span className="h-px flex-1 bg-border" />
                   <span className="text-[11px] text-muted-foreground">
                     {formatDayLabel(message.createdAt, {
@@ -260,6 +291,7 @@ export function MessageList({
                 message={message}
                 isMine={myUserId !== null && message.senderId === myUserId}
                 isGrouped={grouped}
+                isLastOfGroup={isLastOfGroup}
                 replyTo={
                   message.replyToMessageId !== null ? byId.get(message.replyToMessageId) : undefined
                 }
@@ -278,18 +310,24 @@ export function MessageList({
           );
         })}
 
-        {/* Bong bóng LẠC QUAN — dưới cùng, không có `roomSeq` nên không xen vào thứ tự thật. */}
+        {/*
+         * Bong bóng LẠC QUAN — dưới cùng, không có `roomSeq` nên không xen vào thứ tự thật.
+         *
+         * S17: tin đang gửi LUÔN là tin của tôi ⇒ phải áp lề PHẢI và mang đúng nền `--bubble-mine` như
+         * bong bóng thật. Để nó lề trái là tin "nhảy" từ trái sang phải ngay khi server xác nhận —
+         * chuyển động không ai giải thích được và trông như gửi nhầm chỗ.
+         */}
         {pending.map((p) => (
           <div
             key={p.clientMessageId}
-            className="px-3 py-1 pl-13"
+            className="flex justify-end px-3 py-1"
             data-testid={`chat-pending-${p.status}`}
           >
             <div
               className={
                 p.status === "failed"
-                  ? "rounded-md border border-destructive/50 px-3 py-2"
-                  : "opacity-60"
+                  ? "max-w-[min(42rem,78%)] rounded-2xl rounded-br-sm border border-destructive/50 px-3 py-2"
+                  : "max-w-[min(42rem,78%)] rounded-2xl rounded-br-sm bg-bubble-mine px-3 py-2 opacity-60"
               }
             >
               <p className="whitespace-pre-wrap break-words text-sm">{p.body}</p>

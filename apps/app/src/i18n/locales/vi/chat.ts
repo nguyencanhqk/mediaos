@@ -94,6 +94,15 @@ export default {
     // đó chính là điều người dùng sẽ thắc mắc, và im lặng về nó là để họ tưởng chat bị hỏng.
     contextMode: "Đang xem đoạn hội thoại quanh tin đã chọn — tin mới chưa hiện ở đây.",
     contextExit: "Về tin mới nhất",
+
+    // ── S17-CHAT-UX2-FE-2 — đầu phòng v2 + khung trống hero (SPEC-15 §14 · CHAT-DEC-024) ──
+    searchInRoom: "Tìm trong phòng này",
+    // Khung trống của TRANG (chưa chọn phòng nào) — hero + 2 hành động. Khác `empty` (phòng đã mở mà
+    // chưa có tin): ở đó ô soạn nằm ngay dưới nên hero không cần nút nào.
+    heroTitle: "Bắt đầu một cuộc trò chuyện",
+    heroBody: "Chọn một cuộc trò chuyện ở bên trái, tạo cuộc trò chuyện mới, hoặc tìm lại một tin cũ.",
+    heroCreate: "Tin nhắn mới",
+    heroSearch: "Tìm kiếm",
   },
 
   connection: {
@@ -125,6 +134,14 @@ export default {
     pinLimitReached: "Phòng đã đạt tối đa 20 tin ghim. Hãy bỏ ghim bớt trước.",
     recallFailed: "Không thu hồi được tin nhắn.",
     pinFailed: "Không ghim được tin nhắn.",
+
+    // ── S17-CHAT-UX2-FE-2 — «đã xem» thành dãy avatar (CHAT-DEC-024) ──
+    // `seenBy` ở trên GIỮ NGUYÊN: nó thành nhãn trợ năng + tooltip của dãy avatar, không bị bỏ đi.
+    // Người đọc màn hình vẫn nghe đủ TÊN người đã xem — dãy avatar không nói gì với họ.
+    seenByMore: "+{{count}}",
+    quickLike: "Thích nhanh",
+    copyFailed: "Không chép được nội dung. Trình duyệt đang chặn quyền truy cập clipboard.",
+    moreActions: "Thêm tác vụ",
   },
 
   // ── S8-CHAT-UX-FE-3 — thả cảm xúc (CHAT-FUNC-019 · CHAT-DEC-018) ──

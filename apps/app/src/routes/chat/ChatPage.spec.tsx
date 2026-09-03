@@ -113,7 +113,8 @@ describe("ChatPage · chọn phòng", () => {
   it("chưa chọn phòng ⇒ hướng dẫn chọn, KHÔNG gọi getRoom", async () => {
     useChatStore.getState().syncRoomList([room()], false);
     renderPage();
-    expect(await screen.findByText("Chọn một cuộc trò chuyện")).toBeTruthy();
+    // S17: khung trống của TRANG là hero (`ChatEmptyHero`), không còn là `EmptyState` chữ.
+    expect(await screen.findByTestId("chat-empty-hero")).toBeTruthy();
     expect(getRoom).not.toHaveBeenCalled();
   });
 
@@ -159,7 +160,7 @@ describe("ChatPage · chọn phòng", () => {
 
     useChatStore.getState().removeRoomForSelf(ROOM_ID);
 
-    expect(await screen.findByText("Chọn một cuộc trò chuyện")).toBeTruthy();
+    expect(await screen.findByTestId("chat-empty-hero")).toBeTruthy();
   });
 });
 

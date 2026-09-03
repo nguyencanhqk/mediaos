@@ -71,6 +71,15 @@
 
   /* Lưới texture .control-room-bg — dẫn xuất từ --brand, theo nó khi brand đổi */
   --grid-line: rgba(7, 113, 166, 0.06);
+
+  /* ---- S17-CHAT-UX2-FE-2 — bong bóng tin hai phía (SPEC-15 §14 · CHAT-DEC-024) ----
+     Hai token PHẲNG (không phải `primary/12%` lúc chạy) vì bong bóng chồng lên nhiều nền khác nhau
+     (khung cuộn · dải làm nổi `bg-primary/10` của kết quả tìm kiếm) — màu trong suốt cho ra tỉ số
+     tương phản KHÁC nhau ở mỗi nền, tức là không đo được. Giá trị dưới đây = primary 12% ĐÃ TRỘN sẵn
+     trên `--background` của từng chế độ; cặp với `--foreground` cho ≈14:1 ở cả hai (đo trong
+     `MessageBubble.theme.spec.tsx`, ngưỡng AA 4.5:1). */
+  --bubble-mine: #daedf8; /* tin CỦA TÔI — phải, sắc primary */
+  --surface-2: #e9eef7; /* tin người khác — trái, mặt phẳng nổi một nấc trên nền */
 }
 
 /* ---- DARK — phòng tối (giữ phổ Control Room hiện hành, tinh chỉnh nhẹ) ---- */
@@ -122,6 +131,10 @@
   --chrome-foreground: #e6ecf5;
 
   --grid-line: rgba(31, 169, 224, 0.04);
+
+  /* S17-CHAT-UX2-FE-2 — xem ghi chú ở khối light. primary 12% trộn trên `--background` dark #0b1220. */
+  --bubble-mine: #0d2437;
+  --surface-2: #1a2336;
 }
 
 /* Kích hoạt variant `dark:` theo class trên <html> (không theo prefers-color-scheme) */
@@ -162,6 +175,8 @@
   --color-info-muted: var(--info-muted);
   --color-chrome: var(--chrome);
   --color-chrome-foreground: var(--chrome-foreground);
+  --color-bubble-mine: var(--bubble-mine);
+  --color-surface-2: var(--surface-2);
 }
 
 /* Token tĩnh (không đổi theo theme) */
