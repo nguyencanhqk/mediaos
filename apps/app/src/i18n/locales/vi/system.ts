@@ -197,6 +197,20 @@ export default {
         conflict: "Không thể thực hiện: trạng thái đã thay đổi. Vui lòng tải lại.",
       },
 
+      // S18-AUTH-UNLOCK429-1 — bộ chặn tần suất đăng nhập (lỗi "Quá nhiều lần thử"). CỐ Ý dùng chữ khác
+      // hẳn nhóm "Khoá/Mở khoá tài khoản" ở trên: đó là trạng thái tài khoản do admin đặt, còn đây là
+      // khoá tạm do gõ sai mật khẩu/OTP. Người trực ca từng bấm nhầm nút "Mở khoá" rồi tưởng đã xử lý.
+      loginThrottle: {
+        badge: "Đang bị khoá đăng nhập · còn ~{{minutes}} phút",
+        badgeNoEta: "Đang bị khoá đăng nhập",
+        action: "Gỡ khoá đăng nhập",
+        hint: "Người dùng gõ sai mật khẩu hoặc mã 2FA quá nhiều lần. Gỡ để họ đăng nhập lại ngay, không phải chờ hết 15 phút.",
+        cleared: "Đã gỡ khoá đăng nhập. Người dùng có thể đăng nhập lại ngay.",
+        failed: "Chưa gỡ được khoá đăng nhập — khoá vẫn còn. Hãy thử lại; nếu vẫn vậy, báo người vận hành.",
+        unknown:
+          "Chưa đọc được trạng thái khoá đăng nhập (bộ nhớ đệm không phản hồi). Nút gỡ khoá vẫn dùng được.",
+      },
+
       // S2-FE-SYS-SEC-1 — card xác thực 2 lớp (2FA). CHỈ hiển thị trạng thái + nguồn ép; KHÔNG secret.
       twoFactor: {
         title: "Xác thực 2 lớp (2FA)",

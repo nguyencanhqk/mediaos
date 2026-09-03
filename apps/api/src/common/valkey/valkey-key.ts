@@ -69,7 +69,15 @@ export type RlBucket =
   // ⚠️ CỐ Ý nằm trong họ `rl:` chứ không đẻ namespace mới: tiền tố `rl:` ĐÃ có trong `KEY_PREFIXES`
   // của `valkey-key-census.spec.ts` ⇒ cổng envScope phủ ngay, không cần ai nhớ thêm một dòng. Namespace
   // mới là namespace không ai canh.
-  | "logdedup";
+  | "logdedup"
+  // S18-AUTH-UNLOCK429-1 (APPEND) — CHỈ MỤC nguồn thất bại, KHÔNG phải bucket đếm: tập các `ip` đã gõ sai
+  // cho một `{slug}|{email}`, TTL = LOGIN_LOCKOUT_SEC. Tồn tại vì khoá per-IP nhúng `ip` vào chuỗi khoá,
+  // nên đường GỠ khoá của admin không có cách nào biết phải xoá những khoá nào — mà Valkey DÙNG CHUNG 4
+  // môi trường nên `SCAN` theo pattern là CẤM (KI-067). Hai bucket TÁCH BẠCH, không dùng chung một tập:
+  // `forgot:*` cố ý tách namespace khỏi login (xem docblock `forgotPasswordImpl`) để endpoint CÔNG KHAI
+  // không ảnh hưởng đường đăng nhập — gộp chỉ mục sẽ làm mờ đúng ranh giới đó.
+  | "ip-index"
+  | "forgot:ip-index";
 
 /** Marker single-use của ReplayGuard. */
 export type ReplayMarker =

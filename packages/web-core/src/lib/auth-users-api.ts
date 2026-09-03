@@ -3,6 +3,7 @@ import {
   authUserSchema,
   authUserDetailSchema,
   authUserListSchema,
+  authUserLoginThrottleSchema,
   authUserPasswordResetResultSchema,
   authUserTwoFactorResetSchema,
   roleListSchema,
@@ -10,6 +11,7 @@ import {
   type AuthUserDto,
   type AuthUserDetailDto,
   type AuthUserListDto,
+  type AuthUserLoginThrottleDto,
   type AuthUserPasswordResetResultDto,
   type AuthUserTwoFactorResetDto,
   type CreateAuthUserRequest,
@@ -73,6 +75,25 @@ export const authUsersApi = {
   /** POST /auth/users/:id/unlock — mở khoá tài khoản. */
   unlockUser: (id: string): Promise<AuthUserDto> =>
     apiFetch(`/auth/users/${id}/unlock`, authUserSchema, {
+      method: "POST",
+      body: "{}",
+    }),
+
+  /**
+   * S18-AUTH-UNLOCK429-1 — GET /auth/users/:id/login-throttle: trạng thái khoá 429 (bộ chặn tần suất
+   * đăng nhập). KHÁC `status === 'locked'` ở `getUser` — đó là khoá TÀI KHOẢN do admin đặt. Hai khái
+   * niệm độc lập: người bị 429 vẫn `active`, nên `unlockUser` KHÔNG gỡ được nó (server trả 400).
+   * Gate `unlock:user` ⇒ caller phải tự bật/tắt query theo quyền, đừng để màn hình ăn 403 vô cớ.
+   */
+  getLoginThrottle: (id: string): Promise<AuthUserLoginThrottleDto> =>
+    apiFetch(`/auth/users/${id}/login-throttle`, authUserLoginThrottleSchema),
+
+  /**
+   * POST /auth/users/:id/login-throttle/clear — gỡ khoá 429 (204). Server trả 503 khi CHƯA gỡ được
+   * (Valkey không phản hồi / khoá vẫn còn) — nhánh lỗi đó phải hiện ra, KHÔNG được nuốt thành "xong".
+   */
+  clearLoginThrottle: (id: string): Promise<undefined> =>
+    apiFetch(`/auth/users/${id}/login-throttle/clear`, authUserVoidSchema, {
       method: "POST",
       body: "{}",
     }),

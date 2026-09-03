@@ -74,6 +74,11 @@ export const authUsersKeys = {
   list: (params?: Record<string, unknown>) =>
     [...rootKeys.auth, "admin", "users", "list", params] as const,
   detail: (id: string) => [...rootKeys.auth, "admin", "users", "detail", id] as const,
+  // S18-AUTH-UNLOCK429-1 — trạng thái BỘ CHẶN TẦN SUẤT (429) của user. Khoá RIÊNG, KHÔNG nhánh con của
+  // `detail`: trạng thái này sống ở Valkey với TTL riêng và đổi độc lập với hàng `users`, nên gỡ khoá
+  // xong chỉ cần làm mới đúng nó — gộp vào `detail` sẽ kéo theo refetch cả hồ sơ mỗi lần.
+  loginThrottle: (id: string) =>
+    [...rootKeys.auth, "admin", "users", "login-throttle", id] as const,
   roles: () => [...rootKeys.auth, "admin", "roles"] as const,
 };
 

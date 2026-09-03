@@ -96,6 +96,7 @@ describe("AuthService.disableTwoFactor — fail-fast khi bị ÉP 2FA (S2-AUTH-B
     const rateLimiter = {
       isLocked: vi.fn().mockResolvedValue(false),
       recordFailure: vi.fn().mockResolvedValue(undefined),
+      noteFailureSource: vi.fn().mockResolvedValue(undefined),
       reset: vi.fn().mockResolvedValue(undefined),
     };
     const password = {
@@ -339,6 +340,7 @@ describe("AuthService.changePassword — clear must_change_password cùng tx (S2
     const rateLimiter = {
       isLocked: vi.fn().mockResolvedValue(false),
       recordFailure: vi.fn().mockResolvedValue(undefined),
+      noteFailureSource: vi.fn().mockResolvedValue(undefined),
       reset: vi.fn().mockResolvedValue(undefined),
     };
     const audit = { record: vi.fn().mockResolvedValue(undefined) };

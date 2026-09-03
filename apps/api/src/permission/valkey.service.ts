@@ -18,6 +18,14 @@ import { assertKeysScoped } from "../common/valkey/valkey-key";
  * Hệ quả phải nói ra: production KHÔNG được cổng này bảo vệ; cưỡng chế thật nằm ở test/CI (cổng này +
  * census tĩnh `valkey-key-census.spec.ts`). Xem KI-067.
  */
+/**
+ * Rút gọn khoá cho log: chỉ NAMESPACE + độ dài. Khoá `rl:*` nhúng email (và IP ở khoá lock), mà log ứng
+ * dụng không phải chỗ chứa PII — mirror đúng cách `ValkeyKeyScopeError` đã in.
+ */
+function redactKey(key: string): { ns: string; keyLen: number } {
+  return { ns: key.split(":").slice(0, 2).join(":"), keyLen: key.length };
+}
+
 @Injectable()
 export class ValkeyService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ValkeyService.name);
@@ -191,6 +199,48 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
       return await this.client.scard(key);
     } catch (err) {
       this.logger.warn("Valkey SCARD error", { key, error: (err as Error).message });
+      return null;
+    }
+  }
+
+  /**
+   * S18-AUTH-UNLOCK429-1 — SMEMBERS: toàn bộ phần tử của SET. `null` khi Valkey tắt/lỗi. Never throws.
+   *
+   * ⚠️ `null` ≠ `[]`, và người gọi PHẢI phân biệt: `[]` nghĩa "chắc chắn tập rỗng", `null` nghĩa "KHÔNG
+   * BIẾT". Đường gỡ khoá đăng nhập dùng tập này để biết phải xoá những khoá per-IP nào; coi `null` như
+   * `[]` sẽ báo "đã gỡ xong" trong khi chưa xoá được gì (`clearLoginLocks` vì thế trả cờ `degraded`).
+   *
+   * Đây là phép đọc TOÀN TẬP một khoá đã biết tên — KHÔNG phải `SCAN` theo pattern (thứ bị cấm ở
+   * `common/valkey/valkey-key.ts` vì bốn môi trường dùng chung một Valkey db0).
+   */
+  async sMembers(key: string): Promise<string[] | null> {
+    assertKeysScoped("sMembers", [key]);
+    if (!this.client) return null;
+    try {
+      return await this.client.smembers(key);
+    } catch (err) {
+      // KHÔNG in nguyên khoá: `rl:*` nhúng EMAIL (và `ip` ở khoá lock) — mirror ValkeyKeyScopeError.
+      this.logger.warn("Valkey SMEMBERS error", { ...redactKey(key), error: (err as Error).message });
+      return null;
+    }
+  }
+
+  /**
+   * S18-AUTH-UNLOCK429-1 — TTL còn lại (giây) của một khoá. `null` khi Valkey tắt/lỗi, khoá KHÔNG tồn
+   * tại (`-2`) hoặc khoá KHÔNG có hạn (`-1`).
+   *
+   * Gộp ba ca âm về `null` là có chủ ý: người gọi duy nhất hôm nay hỏi "còn bao lâu nữa mới vào được",
+   * và cả ba ca đều trả lời "không có con số để hiện" — trả số âm ra ngoài là đường ngắn nhất tới việc
+   * UI hiện "còn -2 giây". Ai cần phân biệt "vắng" với "vĩnh viễn" thì hỏi `get`, đừng nới hàm này.
+   */
+  async ttl(key: string): Promise<number | null> {
+    assertKeysScoped("ttl", [key]);
+    if (!this.client) return null;
+    try {
+      const sec = await this.client.ttl(key);
+      return sec >= 0 ? sec : null;
+    } catch (err) {
+      this.logger.warn("Valkey TTL error", { ...redactKey(key), error: (err as Error).message });
       return null;
     }
   }

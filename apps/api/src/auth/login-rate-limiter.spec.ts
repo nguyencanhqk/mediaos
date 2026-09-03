@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LoginRateLimiter } from "./login-rate-limiter";
-import type { ValkeyService } from "../permission/valkey.service";
+import { ValkeyService } from "../permission/valkey.service";
+import { isKeyScoped, rlKey } from "../common/valkey/valkey-key";
 
 /**
  * Fake Valkey: Map nội bộ mô phỏng incr/get/set/del + EXPIRE bỏ qua (test đếm ngưỡng, không test TTL thật).
@@ -233,5 +234,426 @@ describe("S10-SEC-LOGINLOG429-1 (KI-048) — claimFirstOfWindow: gộp hàng nh�
     expect(await rl.claimFirstOfWindow(KEY, TTL, t0)).toBe(true);
     await rl.reset(KEY);
     expect(await rl.claimFirstOfWindow(KEY, TTL, t0 + 1)).toBe(false);
+  });
+});
+/**
+ * S18-AUTH-UNLOCK429-1 — GỠ khoá đăng nhập (429) + chỉ mục IP.
+ *
+ * ⚠️ BẢNG CA CHẠY HAI LẦN, và đó là điều kiện để bộ ca này có nghĩa. `VALKEY_URL` VẮNG ở máy local
+ * (⇒ nhánh in-memory) nhưng CI có service Valkey và đặt biến đó (`.github/workflows/ci.yml`) ⇒ nhánh
+ * Valkey. Chỉ phủ một bên nghĩa là một nửa số lần chạy không chứng minh gì, và hai ca đột biến ở dưới
+ * sẽ chỉ đỏ ở một nửa số môi trường.
+ */
+interface FakeValkey extends ValkeyService {
+  store: Map<string, string>;
+  sets: Map<string, Set<string>>;
+  ttls: Map<string, number>;
+}
+
+/** Fake đầy đủ hơn `fakeValkey` ở trên: có SET + TTL để đo chỉ mục IP và `remainingSec`. */
+function fakeValkeyWithSets(
+  opts: { enabled?: boolean; sAddFails?: boolean } = {},
+): FakeValkey {
+  const enabled = opts.enabled !== false;
+  const store = new Map<string, string>();
+  const sets = new Map<string, Set<string>>();
+  const ttls = new Map<string, number>();
+  return {
+    store,
+    sets,
+    ttls,
+    isEnabled: () => enabled,
+    async incr(key: string, ttlSec: number) {
+      if (!enabled) return null;
+      const n = Number(store.get(key) ?? "0") + 1;
+      store.set(key, String(n));
+      ttls.set(key, ttlSec);
+      return n;
+    },
+    async get(key: string) {
+      return enabled ? (store.get(key) ?? null) : null;
+    },
+    async set(key: string, val: string, ttlSec: number) {
+      if (!enabled) return true;
+      store.set(key, val);
+      ttls.set(key, ttlSec);
+      return true;
+    },
+    async ttl(key: string) {
+      if (!enabled) return null;
+      if (!store.has(key) && !sets.has(key)) return null;
+      return ttls.get(key) ?? null;
+    },
+    async sAddWithTtl(key: string, member: string, ttlSec: number) {
+      if (!enabled || opts.sAddFails) return null;
+      const set = sets.get(key) ?? new Set<string>();
+      set.add(member);
+      sets.set(key, set);
+      ttls.set(key, ttlSec);
+      return set.size;
+    },
+    async sCard(key: string) {
+      if (!enabled) return null;
+      return sets.get(key)?.size ?? 0;
+    },
+    // Nhánh chạm-trần của `noteFailureSource` gộp WARN qua `claimFirstOfWindow` ⇒ fake phải có `setNx`,
+    // nếu không ca trần sẽ đỏ vì lý do chẳng liên quan gì tới cái nó đo.
+    async setNx(key: string, val: string, ttlSec: number) {
+      if (!enabled) return null;
+      if (store.has(key)) return false;
+      store.set(key, val);
+      ttls.set(key, ttlSec);
+      return true;
+    },
+    async sMembers(key: string) {
+      if (!enabled) return null;
+      return [...(sets.get(key) ?? [])];
+    },
+    async del(...keys: string[]) {
+      keys.forEach((k) => {
+        store.delete(k);
+        sets.delete(k);
+        ttls.delete(k);
+      });
+      return true;
+    },
+  } as unknown as FakeValkey;
+}
+
+describe.each([
+  ["in-memory (VALKEY_URL vắng — máy local)", () => new LoginRateLimiter()],
+  [
+    "Valkey (CI có service valkey)",
+    () => new LoginRateLimiter(fakeValkeyWithSets()),
+  ],
+] as const)("S18 — gỡ khoá đăng nhập · %s", (_label, makeLimiter) => {
+  const SLUG = "acme";
+  const EMAIL = "victim@acme.test";
+  const NOW = 2_000_000;
+
+  /** Bản sao điều phối của `AuthService.recordLoginFailure` (2 bucket + nuôi chỉ mục). */
+  async function loginFailure(
+    rl: LoginRateLimiter,
+    ip: string,
+    now = NOW,
+  ): Promise<void> {
+    await rl.recordFailure(
+      LoginRateLimiter.key(SLUG, EMAIL, ip),
+      undefined,
+      now,
+    );
+    await rl.recordFailure(
+      LoginRateLimiter.accountKey(SLUG, EMAIL),
+      rl.accountMaxAttempts,
+      now,
+    );
+    await rl.noteFailureSource("login", SLUG, EMAIL, ip);
+  }
+
+  async function ipLocked(
+    rl: LoginRateLimiter,
+    ip: string,
+    now = NOW,
+  ): Promise<boolean> {
+    return rl.isLocked(LoginRateLimiter.key(SLUG, EMAIL, ip), now);
+  }
+
+  it("5 lần sai từ 1 IP ⇒ khoá; clearLoginLocks ⇒ vào lại được NGAY (không chờ TTL)", async () => {
+    const rl = makeLimiter();
+    for (let i = 0; i < 5; i++) await loginFailure(rl, "198.51.100.10");
+    expect(await ipLocked(rl, "198.51.100.10")).toBe(true);
+
+    const res = await rl.clearLoginLocks(SLUG, EMAIL);
+    expect(res.degraded).toBe(false);
+    expect(await ipLocked(rl, "198.51.100.10")).toBe(false);
+  });
+
+  it("ĐỘT BIẾN A (bucket acct) — 20 lần sai rải 2 IP ⇒ khoá tài khoản; clear phải gỡ CẢ bucket acct", async () => {
+    // Bỏ vế xoá `accountKey` trong `clearLoginLocks` ⇒ ca này ĐỎ: từng IP mở ra nhưng bucket tài khoản
+    // vẫn chặn, tức người dùng vẫn 429 sau khi admin bấm nút.
+    const rl = makeLimiter();
+    for (let n = 0; n < 10; n++) await loginFailure(rl, "203.0.113.1");
+    for (let n = 0; n < 10; n++) await loginFailure(rl, "203.0.113.2");
+    const acct = LoginRateLimiter.accountKey(SLUG, EMAIL);
+    expect(await rl.isLocked(acct, NOW)).toBe(true);
+
+    await rl.clearLoginLocks(SLUG, EMAIL);
+    expect(await rl.isLocked(acct, NOW)).toBe(false);
+  });
+
+  it("ĐỘT BIẾN B (chỉ mục IP) — hai IP cùng bị khoá ⇒ clear phải gỡ CẢ HAI, không riêng cái cuối", async () => {
+    // Bỏ vế duyệt chỉ mục (hoặc chỉ xoá một IP) ⇒ ca này ĐỎ. Đây là lý do chỉ mục tồn tại: khoá per-IP
+    // nhúng `ip` vào chuỗi khoá và `SCAN` theo pattern bị CẤM (Valkey dùng chung 4 môi trường).
+    const rl = makeLimiter();
+    for (let n = 0; n < 5; n++) await loginFailure(rl, "203.0.113.11");
+    for (let n = 0; n < 5; n++) await loginFailure(rl, "203.0.113.12");
+    expect(await ipLocked(rl, "203.0.113.11")).toBe(true);
+    expect(await ipLocked(rl, "203.0.113.12")).toBe(true);
+
+    await rl.clearLoginLocks(SLUG, EMAIL);
+    expect(await ipLocked(rl, "203.0.113.11")).toBe(false);
+    expect(await ipLocked(rl, "203.0.113.12")).toBe(false);
+  });
+
+  it("KHÔNG quét quá tay: gỡ khoá cho email A KHÔNG mở khoá của email B", async () => {
+    // Ca đối chứng cho hai ca trên. Một `clearLoginLocks` dựng tiền tố quá rộng (ví dụ quên `|{email}|`)
+    // sẽ vẫn làm chúng xanh, nhưng biến nút "gỡ khoá" thành nút "tắt chống brute-force cho cả công ty".
+    const rl = makeLimiter();
+    const other = "other@acme.test";
+    for (let n = 0; n < 5; n++) await loginFailure(rl, "203.0.113.21");
+    for (let n = 0; n < 5; n++) {
+      await rl.recordFailure(
+        LoginRateLimiter.key(SLUG, other, "203.0.113.22"),
+        undefined,
+        NOW,
+      );
+      await rl.noteFailureSource("login", SLUG, other, "203.0.113.22");
+    }
+
+    await rl.clearLoginLocks(SLUG, EMAIL);
+    expect(await ipLocked(rl, "203.0.113.21")).toBe(false);
+    expect(
+      await rl.isLocked(LoginRateLimiter.key(SLUG, other, "203.0.113.22"), NOW),
+    ).toBe(true);
+  });
+
+  it("slug lệch HOA/thường vẫn gỡ được — `companies.slug` là citext nên `Funtime` và `funtime` là CÙNG công ty", async () => {
+    // Không có ca này thì bản vá xanh toàn tập mà vẫn hỏng trên PROD: khoá do một client gửi slug hoa
+    // tạo ra, còn admin gỡ bằng slug canonical đọc từ DB ⇒ 204 + audit "đã gỡ" mà người dùng vẫn 429.
+    const rl = makeLimiter();
+    for (let n = 0; n < 5; n++) await loginFailure(rl, "203.0.113.31");
+    const upper = "ACME";
+    for (let n = 0; n < 5; n++) {
+      await rl.recordFailure(
+        LoginRateLimiter.key(upper, EMAIL, "203.0.113.32"),
+        undefined,
+        NOW,
+      );
+      await rl.noteFailureSource("login", upper, EMAIL, "203.0.113.32");
+    }
+    expect(LoginRateLimiter.key("Funtime", EMAIL, "ip")).toBe(
+      LoginRateLimiter.key("funtime", EMAIL, "ip"),
+    );
+    expect(await ipLocked(rl, "203.0.113.32")).toBe(true);
+
+    await rl.clearLoginLocks(SLUG, EMAIL);
+    expect(await ipLocked(rl, "203.0.113.32")).toBe(false);
+  });
+
+  it("bucket forgot (`forgot:ip` + `forgot:acct`) cũng được gỡ — đường tự-chữa phải mở lại cùng lúc", async () => {
+    const rl = makeLimiter();
+    const ip = "203.0.113.41";
+    for (let n = 0; n < 5; n++) {
+      await rl.recordFailure(
+        LoginRateLimiter.forgotKey(SLUG, EMAIL, ip),
+        undefined,
+        NOW,
+      );
+      await rl.recordFailure(
+        LoginRateLimiter.forgotAccountKey(SLUG, EMAIL),
+        rl.accountMaxAttempts,
+        NOW,
+      );
+      await rl.noteFailureSource("forgot", SLUG, EMAIL, ip);
+    }
+    expect(
+      await rl.isLocked(LoginRateLimiter.forgotKey(SLUG, EMAIL, ip), NOW),
+    ).toBe(true);
+
+    await rl.clearLoginLocks(SLUG, EMAIL);
+    expect(
+      await rl.isLocked(LoginRateLimiter.forgotKey(SLUG, EMAIL, ip), NOW),
+    ).toBe(false);
+  });
+
+  it("bucket bước-2 (`2fa`) được gỡ và có mặt trong `buckets` — sai TOTP cũng là 429 Ở MÀN ĐĂNG NHẬP", async () => {
+    const rl = makeLimiter();
+    const subject = { companyId: "co-1", userId: "user-1" };
+    const key = LoginRateLimiter.twoFactorKey(
+      subject.companyId,
+      subject.userId,
+    );
+    for (let n = 0; n < 5; n++) await rl.recordFailure(key, undefined, NOW);
+
+    const before = await rl.loginThrottleState(SLUG, EMAIL, subject, NOW);
+    expect(before.locked).toBe(true);
+    expect(before.buckets).toContain("2fa");
+
+    await rl.clearLoginLocks(SLUG, EMAIL, subject);
+    const after = await rl.loginThrottleState(SLUG, EMAIL, subject, NOW);
+    expect(after.locked).toBe(false);
+    expect(after.buckets).toEqual([]);
+  });
+
+  it("không có khoá nào ⇒ clear không ném, không degraded; state rỗng KHÔNG hiện '0 giây'", async () => {
+    const rl = makeLimiter();
+    const res = await rl.clearLoginLocks(SLUG, EMAIL);
+    expect(res.degraded).toBe(false);
+    const state = await rl.loginThrottleState(SLUG, EMAIL, undefined, NOW);
+    expect(state).toEqual({ locked: false, remainingSec: null, buckets: [], unknown: false });
+  });
+
+  it("`buckets` phân biệt đúng nguồn khoá: chỉ IP ⇒ ['ip'] · chỉ tài khoản ⇒ ['acct'] · cả hai ⇒ ['acct','ip']", async () => {
+    const onlyIp = makeLimiter();
+    for (let n = 0; n < 5; n++)
+      await onlyIp.recordFailure(
+        LoginRateLimiter.key(SLUG, EMAIL, "203.0.113.51"),
+        undefined,
+        NOW,
+      );
+    await onlyIp.noteFailureSource("login", SLUG, EMAIL, "203.0.113.51");
+    expect(
+      (await onlyIp.loginThrottleState(SLUG, EMAIL, undefined, NOW)).buckets,
+    ).toEqual(["ip"]);
+
+    const onlyAcct = makeLimiter();
+    for (let n = 0; n < onlyAcct.accountMaxAttempts; n++) {
+      await onlyAcct.recordFailure(
+        LoginRateLimiter.accountKey(SLUG, EMAIL),
+        onlyAcct.accountMaxAttempts,
+        NOW,
+      );
+    }
+    expect(
+      (await onlyAcct.loginThrottleState(SLUG, EMAIL, undefined, NOW)).buckets,
+    ).toEqual(["acct"]);
+
+    const both = makeLimiter();
+    for (let n = 0; n < 20; n++) await loginFailure(both, "203.0.113.52");
+    expect(
+      (await both.loginThrottleState(SLUG, EMAIL, undefined, NOW)).buckets,
+    ).toEqual(["acct", "ip"]);
+  });
+});
+
+describe("S18 — chỉ mục IP: hình dạng khoá, trần, và nhánh Valkey rớt", () => {
+  const SLUG = "acme";
+  const EMAIL = "victim@acme.test";
+  const NOW = 3_000_000;
+
+  it("chỉ mục dựng qua `rlKey` (có envScope) và TÁCH BẠCH login ↔ forgot", () => {
+    // Khoá tự nối chuỗi là thứ `valkey-key-census.spec.ts` cấm; ca này ghim hình dạng để một refactor
+    // "cho gọn" không lặng lẽ đẻ ra khoá thiếu envScope (bốn môi trường dùng chung một db0 — KI-067).
+    const loginIdx = LoginRateLimiter.ipIndexKey(SLUG, EMAIL, "login");
+    const forgotIdx = LoginRateLimiter.ipIndexKey(SLUG, EMAIL, "forgot");
+    expect(loginIdx).toBe(rlKey("ip-index", `${SLUG}|${EMAIL}`));
+    expect(forgotIdx).toBe(rlKey("forgot:ip-index", `${SLUG}|${EMAIL}`));
+    expect(loginIdx).not.toBe(forgotIdx);
+    expect(isKeyScoped(loginIdx)).toBe(true);
+    expect(isKeyScoped(forgotIdx)).toBe(true);
+  });
+
+  it("khoá chỉ mục đi qua cổng `assertKeysScoped` của ValkeyService THẬT (fake không đo được cổng)", async () => {
+    // Fake Valkey ở các ca trên KHÔNG chạy `assertKeysScoped` ⇒ chúng mù với lỗi thiếu envScope.
+    // `ValkeyService` thật (client null vì VALKEY_URL vắng) vẫn chạy cổng TRƯỚC `if (!this.client)`.
+    const real = new ValkeyService();
+    real.onModuleInit();
+    await expect(
+      real.sMembers(LoginRateLimiter.ipIndexKey(SLUG, EMAIL, "login")),
+    ).resolves.toBeNull();
+    await expect(
+      real.ttl(LoginRateLimiter.ipIndexKey(SLUG, EMAIL, "login")),
+    ).resolves.toBeNull();
+    // Đối chứng: khoá KHÔNG scoped phải bị cổng NÉM — nếu không, hai assert trên chỉ chứng minh
+    // "hàm trả null", chẳng liên quan gì tới cổng.
+    // Khoá dựng bằng GHÉP CHUỖI, KHÔNG literal: census tĩnh `valkey-key-census.spec.ts` cấm mọi literal
+    // mở đầu bằng tiền tố khoá — kể cả trong spec, kể cả khi cố ý sai để đo cổng.
+    const unscoped = ["rl", "ip-index", "acme|x@y.z"].join(":");
+    await expect(real.sMembers(unscoped)).rejects.toThrow(/envScope/);
+  });
+
+  it("SADD ghi ip vào đúng chỉ mục với TTL = lockoutSec", async () => {
+    const valkey = fakeValkeyWithSets();
+    const rl = new LoginRateLimiter(valkey);
+    await rl.noteFailureSource("login", SLUG, EMAIL, "198.51.100.1");
+    await rl.noteFailureSource("login", SLUG, EMAIL, "198.51.100.2");
+    const idx = LoginRateLimiter.ipIndexKey(SLUG, EMAIL, "login");
+    expect([...(valkey.sets.get(idx) ?? [])]).toEqual([
+      "198.51.100.1",
+      "198.51.100.2",
+    ]);
+    expect(valkey.ttls.get(idx)).toBe(rl.lockoutSec);
+  });
+
+  it("TRẦN: chỉ mục không phình quá IP_INDEX_CAP (endpoint công khai không điều khiển được kích thước)", async () => {
+    const valkey = fakeValkeyWithSets();
+    const rl = new LoginRateLimiter(valkey);
+    for (let i = 0; i < 80; i++) {
+      await rl.noteFailureSource("login", SLUG, EMAIL, `198.51.100.${i}`);
+    }
+    const idx = LoginRateLimiter.ipIndexKey(SLUG, EMAIL, "login");
+    expect(valkey.sets.get(idx)?.size).toBe(64);
+  });
+
+  it("Valkey ENABLED nhưng RỚT: khoá rơi xuống memory ⇒ state vẫn báo locked (không nói 'không bị khoá')", async () => {
+    // Ca này bảo vệ đúng nhánh nguy hiểm nhất: nếu `loginThrottleState` chỉ đọc chỉ mục trên Valkey,
+    // một outage sẽ làm màn hình khẳng định người dùng KHÔNG bị khoá trong khi họ đang bị chặn.
+    const dead = {
+      isEnabled: () => true,
+      incr: async () => null,
+      get: async () => null,
+      set: async () => false,
+      del: async () => false,
+      ttl: async () => null,
+      sCard: async () => null,
+      sMembers: async () => null,
+      sAddWithTtl: async () => null,
+    } as unknown as ValkeyService;
+    const rl = new LoginRateLimiter(dead);
+    for (let n = 0; n < 5; n++) {
+      await rl.recordFailure(
+        LoginRateLimiter.key(SLUG, EMAIL, "198.51.100.9"),
+        undefined,
+        NOW,
+      );
+      await rl.noteFailureSource("login", SLUG, EMAIL, "198.51.100.9");
+    }
+    const state = await rl.loginThrottleState(SLUG, EMAIL, undefined, NOW);
+    expect(state.locked).toBe(true);
+    expect(state.buckets).toEqual(["ip"]);
+
+    // …và clear phải báo DEGRADED (sMembers null = KHÔNG BIẾT, del false), để service KHÔNG trả 204.
+    const res = await rl.clearLoginLocks(SLUG, EMAIL);
+    expect(res.degraded).toBe(true);
+  });
+
+  it("TRÀN TRẦN ⇒ clear báo DEGRADED và state báo UNKNOWN — không được nói 'đã gỡ xong'", async () => {
+    // Các IP đến sau trần nằm NGOÀI chỉ mục ⇒ không xoá được và cũng không đọc được. Nếu không có
+    // marker, `clearLoginLocks` sẽ trả degraded=false và service trả 204 + audit ok:true trong khi
+    // nạn nhân vẫn ăn 429. Gỡ bucket `acct` KHÔNG cứu: một IP giữ `:lock` riêng vẫn chặn.
+    const valkey = fakeValkeyWithSets();
+    const rl = new LoginRateLimiter(valkey);
+    for (let i = 0; i < 80; i++) {
+      await rl.noteFailureSource("login", SLUG, EMAIL, `198.51.100.${i}`);
+    }
+    expect(await valkey.get(LoginRateLimiter.cappedMarkerKey(SLUG, EMAIL, "login"))).not.toBeNull();
+
+    const state = await rl.loginThrottleState(SLUG, EMAIL, undefined, NOW);
+    expect(state.unknown).toBe(true);
+
+    const res = await rl.clearLoginLocks(SLUG, EMAIL);
+    expect(res.degraded).toBe(true);
+  });
+
+  it("`remainingLockSec` đọc TTL của khoá đã biết; không khoá ⇒ null (KHÔNG phải 0)", async () => {
+    const valkey = fakeValkeyWithSets();
+    const rl = new LoginRateLimiter(valkey);
+    const key = LoginRateLimiter.key(SLUG, EMAIL, "198.51.100.3");
+    expect(await rl.remainingLockSec(key, NOW)).toBeNull();
+    for (let n = 0; n < 5; n++) await rl.recordFailure(key, undefined, NOW);
+    expect(await rl.remainingLockSec(key, NOW)).toBe(rl.lockoutSec);
+  });
+
+  it("nhánh in-memory: `remainingLockSec` suy từ mốc hết hạn, giảm dần theo thời gian", async () => {
+    const rl = new LoginRateLimiter();
+    const key = LoginRateLimiter.key(SLUG, EMAIL, "198.51.100.4");
+    for (let n = 0; n < 5; n++) await rl.recordFailure(key, undefined, NOW);
+    expect(await rl.remainingLockSec(key, NOW)).toBe(rl.lockoutSec);
+    expect(await rl.remainingLockSec(key, NOW + 300_000)).toBe(
+      rl.lockoutSec - 300,
+    );
+    expect(
+      await rl.remainingLockSec(key, NOW + rl.lockoutSec * 1000),
+    ).toBeNull();
   });
 });

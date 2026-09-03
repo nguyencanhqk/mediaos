@@ -20,6 +20,7 @@ import {
   type AuthUserDetailDto,
   type AuthUserDto,
   type AuthUserListDto,
+  type AuthUserLoginThrottleDto,
   type AuthUserPasswordResetResultDto,
   type AuthUserTwoFactorResetDto,
 } from "@mediaos/contracts";
@@ -111,6 +112,34 @@ export class AuthUsersController {
     @Param("id", new ParseUUIDPipe()) id: string,
   ): Promise<AuthUserDto> {
     return this.users.unlockUser(req.user, id);
+  }
+
+  /**
+   * S18-AUTH-UNLOCK429-1 — bộ chặn tần suất đăng nhập (429), TÁCH BẠCH với khoá tài khoản ở trên:
+   *   GET  /auth/users/:id/login-throttle       → trạng thái khoá 429 + giây còn lại
+   *   POST /auth/users/:id/login-throttle/clear → gỡ khoá (204)
+   *
+   * Gate CÙNG cặp `unlock:user` (một khái niệm "mở khoá cho người này" dưới mắt người phân quyền; tách
+   * cặp mới = thêm migration = đổi phạm vi). §13: cặp is_sensitive=false ⇒ **KHÔNG khai `isSensitive`** —
+   * khai thừa sẽ chặn oan grant wildcard vốn hợp lệ với cặp này.
+   */
+  @Get(":id/login-throttle")
+  @RequirePermission(AUTH_USER.UNLOCK.action, AUTH_USER.UNLOCK.resource)
+  loginThrottle(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", new ParseUUIDPipe()) id: string,
+  ): Promise<AuthUserLoginThrottleDto> {
+    return this.users.getLoginThrottle(req.user, id);
+  }
+
+  @Post(":id/login-throttle/clear")
+  @HttpCode(204)
+  @RequirePermission(AUTH_USER.UNLOCK.action, AUTH_USER.UNLOCK.resource)
+  clearLoginThrottle(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", new ParseUUIDPipe()) id: string,
+  ): Promise<void> {
+    return this.users.clearLoginThrottle(req.user, id);
   }
 
   /**

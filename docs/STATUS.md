@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-03 02:35Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-03 02:37Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -65,7 +65,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 2
+- **branch**: `master` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 235 — `0568_s13payrolldash1_widget_payroll_cost` (236 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -74,6 +74,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `d599d382` | 2026-09-03 | chore(harness): seed wave S18-AUTH-LOCKOUT — 3 WO gỡ khoá 429 đăng nhập |
 | `c89fb0d1` | 2026-09-03 | docs(plan): S14-SEC-DASHGATE-WILDCARD-1 v3 — kế hoạch vá lỗ wildcard `*:*` lọt cặp SENSITIVE |
 | `fbc00deb` | 2026-09-03 | feat(chat): S17-CHAT-UX2-FE-2 — hội thoại v2 (bong bóng hai phía · thanh tác vụ nổi · đã-xem avatar · hero · phím tắt) (#471) |
 | `d2c70c1d` | 2026-09-03 | chore(harness): đóng sổ S17-CHAT-UX2-DOC-1 — PR #464 đã merge, gỡ chặn oan 8 WO S17 |
@@ -85,7 +86,6 @@
 | `9237a276` | 2026-09-02 | chore(docs): regen STATUS sau PR #467 — S14-OPS-MODULEROLE-1 hết chặn (0 đang làm, 6 READY) |
 | `74a9af2e` | 2026-09-02 | chore(docs): regen STATUS sau khi sync origin (#463–#466) + đính chính dấu start-on-touch nhầm cho S14-RECRUIT-FILEGRANT-1 |
 | `3541759d` | 2026-09-02 | fix(foundation): MODULE_APP_METADATA phủ 6 module hậu-MVP đã ship + ratchet chống drift (#465) |
-| `1d54ca04` | 2026-09-02 | wip(S14-QA-COVGATE-1): xoá script test:cov trỏ src/workflow đã xoá + ratchet tự-kiểm coverage.thresholds/test:cov:* (#463) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

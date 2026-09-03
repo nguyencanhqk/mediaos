@@ -4,6 +4,7 @@ import { DatabaseModule } from "../db/db.module";
 import { PermissionModule } from "../permission/permission.module";
 import { AuthModule } from "../auth/auth.module";
 import { SecurityEventWriter } from "../auth/security-event-writer.service";
+import { LoginRateLimiter } from "../auth/login-rate-limiter";
 import { LmsSyncModule } from "../integrations/lms/lms-sync.module";
 import { AdminUsersController } from "./admin-users.controller";
 import { AdminUsersRepository } from "./admin-users.repository";
@@ -60,6 +61,22 @@ export class UsersModule implements OnModuleInit {
         "UsersModule: SecurityEventWriter provider không resolve được lúc boot — dual-write " +
           "user_security_events (USER_LOCKED/USER_UNLOCKED) sẽ degrade âm thầm. Đăng ký lại provider trong " +
           `UsersModule.providers. (cause: ${err instanceof Error ? err.message : String(err)})`,
+      );
+    }
+    // S18-AUTH-UNLOCK429-1 — `LoginRateLimiter` (đến từ AuthModule.exports).
+    //
+    // ⚠️ NÓI ĐÚNG SỨC MẠNH của nó (FULL gate 03/09, F8): bảo đảm THẬT nằm ở chỗ tham số constructor
+    // KHÔNG có `@Optional()` — Nest tự chết ở boot nếu không resolve được. Khối này `strict:false` nên
+    // nó quét TOÀN container, tức KHÔNG bắt được ca "gỡ khỏi AuthModule.exports". Giá trị còn lại của
+    // nó: bắt được ca ai đó dán `@Optional()` vào tham số để dập một lỗi boot — lúc ấy `?.` sẽ biến
+    // đường gỡ khoá thành nút giả. Đừng dựa vào nó nhiều hơn thế.
+    try {
+      this.moduleRef.get(LoginRateLimiter, { strict: false });
+    } catch (err) {
+      throw new Error(
+        "UsersModule: LoginRateLimiter không resolve được lúc boot — POST /auth/users/:id/login-throttle/clear " +
+          "sẽ không gỡ được khoá 429 nào. Kiểm tra AuthModule.exports. " +
+          `(cause: ${err instanceof Error ? err.message : String(err)})`,
       );
     }
   }
