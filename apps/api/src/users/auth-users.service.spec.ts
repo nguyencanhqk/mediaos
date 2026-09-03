@@ -65,13 +65,25 @@ describe("AuthUsersService", () => {
   let securityEvents: { record: ReturnType<typeof vi.fn> };
   // S5-LMS-BE-1: LmsSyncProducer.enqueueSync — wire-in assertion cho lock/unlock.
   let lmsSync: { enqueueSync: ReturnType<typeof vi.fn> };
+  // S18-AUTH-RESETCLEARS-1: `resetPassword` (admin) gọi `requireRateLimiter()` TRƯỚC mọi mutation ⇒
+  // mọi chỗ dựng service phải truyền, nếu không 3 ca resetPassword ném Error thay vì 400/404 mong đợi.
+  let rateLimiter: { clearLoginLocks: ReturnType<typeof vi.fn> };
+  // Spy logger: thiếu nó thì đổi `catch (err) { this.logger.error(…); … }` thành `catch { … }` vẫn
+  // XANH toàn bộ suite — đúng mẫu tests-can-pin-a-hole-open.
+  let logger: ReturnType<typeof vi.spyOn>;
   let service: AuthUsersService;
-  const TX = Symbol("tx");
+  // S18-AUTH-RESETCLEARS-1: `resetPassword` (admin) giờ đọc `companies.slug` TRONG tx để dựng khoá
+  // rate-limit ⇒ tx sentinel phải có `.execute`. Vẫn là MỘT tham chiếu duy nhất nên mọi assert
+  // `toHaveBeenCalledWith(TX, …)` giữ nguyên ý nghĩa.
+  const TX = { execute: vi.fn(async () => ({ rows: [{ slug: "acme" }] })) };
 
   beforeEach(() => {
     audit = { record: vi.fn(async () => undefined) };
     securityEvents = { record: vi.fn(async () => undefined) };
     lmsSync = { enqueueSync: vi.fn(async () => undefined) };
+    rateLimiter = {
+      clearLoginLocks: vi.fn(async () => ({ clearedKeys: 6, degraded: false })),
+    };
     db = {
       withTenant: vi.fn(async (_companyId: string, fn: (tx: unknown) => Promise<unknown>) =>
         fn(TX),
@@ -106,7 +118,14 @@ describe("AuthUsersService", () => {
       auth as never,
       securityEvents as never,
       lmsSync as never,
+      rateLimiter as never,
     );
+    logger = vi
+      .spyOn(
+        (service as unknown as { logger: { error: (...a: unknown[]) => void } }).logger,
+        "error",
+      )
+      .mockImplementation(() => undefined);
   });
 
   // ── create ─────────────────────────────────────────────────────────────────
@@ -195,6 +214,8 @@ describe("AuthUsersService", () => {
       permissions as never,
       auth as never,
       securityEvents as never,
+      lmsSync as never,
+      rateLimiter as never,
     );
     await service.lockUser(ACTOR, TARGET_ID, "abuse");
     expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
@@ -327,6 +348,8 @@ describe("AuthUsersService", () => {
       permissions as never,
       auth as never,
       securityEvents as never,
+      lmsSync as never,
+      rateLimiter as never,
     );
     const res = await service.resetTwoFactor(ACTOR, TARGET_ID);
     expect(res.revokedSessionCount).toBe(3);
@@ -379,6 +402,8 @@ describe("AuthUsersService", () => {
       permissions as never,
       auth as never,
       securityEvents as never,
+      lmsSync as never,
+      rateLimiter as never,
     );
     const dto = await service.deleteUser(ACTOR, TARGET_ID);
     expect(repo.softDeleteTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID, ACTOR.id);
@@ -468,6 +493,8 @@ describe("AuthUsersService", () => {
       permissions as never,
       auth as never,
       securityEvents as never,
+      lmsSync as never,
+      rateLimiter as never,
     );
     const res = await service.resetPassword(ACTOR, TARGET_ID);
 
@@ -527,6 +554,113 @@ describe("AuthUsersService", () => {
     expect(repo.setPasswordTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
     expect(securityEvents.record).not.toHaveBeenCalled();
+  });
+
+  // ── S18-AUTH-RESETCLEARS-1: admin đặt lại mật khẩu ⇒ gỡ luôn khoá 429 ───────────
+  it("resetPassword: gỡ khoá đăng nhập SAU commit — slug/email TỪ DB, includeForgot=true, KHÔNG truyền subject", async () => {
+    await service.resetPassword(ACTOR, TARGET_ID);
+    // Ghim CẢ BỐN đối số. Thiếu `undefined` ở vế 3 ⇒ bucket `2fa` bước-2 bị gỡ bằng một cặp quyền
+    // KHÔNG phải `reset-2fa:user`; thiếu `includeForgot` ⇒ lỗi biên dịch. Cả hai đều là leo thang.
+    expect(rateLimiter.clearLoginLocks).toHaveBeenCalledWith("acme", "target@a.test", undefined, {
+      includeForgot: true,
+    });
+  });
+
+  it("resetPassword: tự reset chính mình ⇒ 400 TRƯỚC cả requireRateLimiter (thứ tự lỗi không đổi)", async () => {
+    await expect(service.resetPassword(ACTOR, ACTOR.id)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(rateLimiter.clearLoginLocks).not.toHaveBeenCalled();
+  });
+
+  it("resetPassword: target không thấy ⇒ KHÔNG gỡ khoá (không chạm không gian khoá của ai)", async () => {
+    repo.findByIdTx = vi.fn(async () => undefined) as never;
+    await expect(service.resetPassword(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(NotFoundException);
+    expect(rateLimiter.clearLoginLocks).not.toHaveBeenCalled();
+  });
+
+  it("resetPassword: thiếu DI LoginRateLimiter ⇒ ném TRƯỚC mọi mutation (0 hash, 0 update, 0 audit)", async () => {
+    // Fail-fast, KHÔNG `?.` no-op: no-op nghĩa là admin nhận temp password mà người dùng vẫn 429.
+    service = new AuthUsersService(
+      db as never,
+      repo,
+      audit as never,
+      password as never,
+      permissions as never,
+      auth as never,
+      securityEvents as never,
+      lmsSync as never,
+      undefined,
+    );
+    await expect(service.resetPassword(ACTOR, TARGET_ID)).rejects.toThrow(/LoginRateLimiter/);
+    expect(password.hash).not.toHaveBeenCalled();
+    expect(repo.setPasswordTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("resetPassword: gỡ khoá degraded ⇒ VẪN trả tempPassword, và ghi vết thất bại (audit + USER_UNLOCKED ok:false)", async () => {
+    // Đây là điểm cả wave xoay quanh: `user.password_reset_by_admin` một mình HÀM Ý "vào lại được
+    // ngay". Khi gỡ hỏng, câu đó sai — phải có hàng nói ra, nếu không forensics đọc ngược thành công.
+    rateLimiter.clearLoginLocks = vi.fn(async () => ({
+      clearedKeys: 6,
+      degraded: true,
+    }));
+    const res = await service.resetPassword(ACTOR, TARGET_ID);
+    // KHÔNG được ném: tempPassword là plaintext trả MỘT LẦN, ném = vứt mất nó.
+    expect(res.tempPassword.length).toBeGreaterThanOrEqual(12);
+    // Nhánh degraded KHÔNG ném ⇒ nếu chỉ ghi audit thì log/APM im lặng đúng lúc bất thường nhất.
+    expect(logger).toHaveBeenCalled();
+    const actions = audit.record.mock.calls.map((c) => (c[1] as { action: string }).action);
+    expect(actions).toContain("user.login_throttle_cleared");
+    const events = securityEvents.record.mock.calls.map(
+      (c) =>
+        c[1] as {
+          eventType: string;
+          payload?: { ok?: boolean; reason?: string };
+        },
+    );
+    const unlocked = events.find((e) => e.eventType === "USER_UNLOCKED");
+    expect(unlocked?.payload).toMatchObject({
+      reason: "password_reset",
+      ok: false,
+    });
+  });
+
+  it("resetPassword: gỡ khoá THÀNH CÔNG ⇒ KHÔNG bồi hàng USER_UNLOCKED (ca đối chứng của ca trên)", async () => {
+    // Thiếu ca này thì ca degraded ở trên xanh cả khi code ghi vết VÔ ĐIỀU KIỆN — tức đo sai hẳn thứ
+    // đang đo, và bồi `USER_UNLOCKED` cho tài khoản chưa từng bị khoá (món nợ WO-1 §10.5).
+    await service.resetPassword(ACTOR, TARGET_ID);
+    const actions = audit.record.mock.calls.map((c) => (c[1] as { action: string }).action);
+    expect(actions).not.toContain("user.login_throttle_cleared");
+    const events = securityEvents.record.mock.calls.map(
+      (c) => (c[1] as { eventType: string }).eventType,
+    );
+    expect(events).not.toContain("USER_UNLOCKED");
+  });
+
+  it("resetPassword: clearLoginLocks NÉM ⇒ vẫn trả tempPassword + ghi vết (bug Valkey không được nuốt)", async () => {
+    rateLimiter.clearLoginLocks = vi.fn(async () => {
+      throw new Error("ValkeyKeyScopeError: khoá ngoài phạm vi env");
+    });
+    const res = await service.resetPassword(ACTOR, TARGET_ID);
+    expect(res.tempPassword.length).toBeGreaterThanOrEqual(12);
+    expect(logger).toHaveBeenCalled();
+    const actions = audit.record.mock.calls.map((c) => (c[1] as { action: string }).action);
+    expect(actions).toContain("user.login_throttle_cleared");
+  });
+
+  it("resetPassword: KHÔNG đọc được slug công ty ⇒ KHÔNG gỡ khoá, KHÔNG đoán, và PHẢI cảnh báo", async () => {
+    // Nhánh "không gỡ vì chưa từng thử gỡ" — ít dấu vết hơn cả ca degraded, nên nếu im luôn thì không
+    // gì trên đời ghi lại việc admin tưởng đã cứu người dùng mà thực ra chưa. Đoán slug còn tệ hơn:
+    // đoán sai = gỡ khoá của NGƯỜI KHÁC (khoá dựng theo `(slug,email)`).
+    const warn = vi
+      .spyOn((service as unknown as { logger: { warn: (...a: unknown[]) => void } }).logger, "warn")
+      .mockImplementation(() => undefined);
+    TX.execute.mockResolvedValueOnce({ rows: [] });
+    const res = await service.resetPassword(ACTOR, TARGET_ID);
+    expect(res.tempPassword.length).toBeGreaterThanOrEqual(12);
+    expect(rateLimiter.clearLoginLocks).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
   });
 
   // ── S2-AUTH-USEROPS-1: list deleted filter ──────────────────────────────────────
@@ -759,16 +893,20 @@ describe("AuthUsersService — login throttle (429)", () => {
     // nghĩa là người giữ wildcard — vốn bị `POST /:id/2fa/reset` từ chối — lại reset được ngưỡng tuỳ ý.
     const { service, clearLoginLocks } = makeService({ canResetTwoFactor: false });
     await service.clearLoginThrottle(ACTOR, TARGET_ID);
-    expect(clearLoginLocks).toHaveBeenCalledWith(SLUG, "target@a.test", undefined);
+    expect(clearLoginLocks).toHaveBeenCalledWith(SLUG, "target@a.test", undefined, {
+      includeForgot: true,
+    });
   });
 
   it("actor CÓ `reset-2fa:user` ⇒ bucket bước-2 ĐƯỢC gỡ (ca ALLOW đối chứng — ca deny trên không xanh-rỗng)", async () => {
     const { service, clearLoginLocks } = makeService();
     await service.clearLoginThrottle(ACTOR, TARGET_ID);
-    expect(clearLoginLocks).toHaveBeenCalledWith(SLUG, "target@a.test", {
-      companyId: ACTOR.companyId,
-      userId: TARGET_ID,
-    });
+    expect(clearLoginLocks).toHaveBeenCalledWith(
+      SLUG,
+      "target@a.test",
+      { companyId: ACTOR.companyId, userId: TARGET_ID },
+      { includeForgot: true },
+    );
   });
 
   it("GET: đọc KHÔNG kết luận được (unknown) mà chưa thấy khoá ⇒ 503, KHÔNG trả 'không bị khoá'", async () => {

@@ -314,6 +314,45 @@ describe("UsersPage — S2-AUTH-USEROPS-1", () => {
     await waitFor(() => expect(screen.getByText(/1 thành công · 0 lỗi/i)).toBeInTheDocument());
   });
 
+  // ── S18-AUTH-RESETCLEARS-1: reset mật khẩu giờ GỠ LUÔN khoá 429 ở server ───
+  it("đặt lại mật khẩu ⇒ invalidate CẢ query loginThrottle (badge 'đang bị khoá' phải hết ngay)", async () => {
+    // BE giờ gỡ khoá 429 cùng lượt reset. `invalidateList()` chỉ chạm `authUsersKeys.all`, nên nếu
+    // thiếu vế này thì màn chi tiết còn hiện badge "Đang bị khoá đăng nhập" tới hết staleTime (15s) —
+    // giao diện nói ngược lại chính thứ vừa được sửa.
+    setCapabilitiesAsSelf({ "view:user": true, "reset-password:user": true });
+    vi.mocked(authUsersApi.resetPassword).mockResolvedValue({
+      // ⚠️ GHÉP CHUỖI, KHÔNG viết literal: chuỗi high-entropy trông-giống-mật-khẩu trip rule
+      // `generic-api-key` của gitleaks (quét FULL-HISTORY) ⇒ cổng Secret scan ĐỎ OAN dù đây chỉ là
+      // fixture. Xem CLAUDE.md §5 "Test — fixture giống-secret".
+      tempPassword: ["Tmp0", "Passw0rd", "Xyz"].join(""),
+      revokedSessionCount: 2,
+    });
+    const client = makeQueryClient();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    render(
+      <QueryClientProvider client={client}>
+        <UsersPage />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("hr@demo.local")).toBeInTheDocument());
+
+    const buttons = screen.getAllByLabelText(systemVi.users.actions.resetPassword);
+    fireEvent.click(buttons.find((b) => !(b as HTMLButtonElement).disabled) as HTMLElement);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: systemVi.users.actions.resetPassword }),
+    );
+
+    await waitFor(() => expect(authUsersApi.resetPassword).toHaveBeenCalledWith("user-002"));
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          queryKey: expect.arrayContaining(["login-throttle", "user-002"]),
+        }),
+      ),
+    );
+  });
+
   // ── TAB Đã xóa: query deleted=true + nút Khôi phục ─────────────────────────
   it("tab Đã xóa → listUsers({deleted:true}) + hiện nút Khôi phục", async () => {
     setCapabilitiesAsSelf({ "view:user": true, "restore:user": true });

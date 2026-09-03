@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
@@ -24,7 +25,7 @@ import { isUniqueViolation } from "../common/db-error";
 import { DatabaseService } from "../db/db.service";
 import { users, type User } from "../db/schema";
 import { AuditService } from "../events/audit.service";
-import { AuthService } from "../auth/auth.service";
+import { AuthService, redactEmailFromDetail } from "../auth/auth.service";
 import { PasswordService } from "../auth/password.service";
 import { LoginRateLimiter } from "../auth/login-rate-limiter";
 import { SecurityEventWriter } from "../auth/security-event-writer.service";
@@ -100,6 +101,8 @@ function generateTempPassword(): string {
  */
 @Injectable()
 export class AuthUsersService {
+  private readonly logger = new Logger(AuthUsersService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly repo: AuthUsersRepository,
@@ -434,7 +437,8 @@ export class AuthUsersService {
       : undefined;
 
     const before = await limiter.loginThrottleState(slug, email, subject);
-    const result = await limiter.clearLoginLocks(slug, email, subject);
+    // Đường admin: ĐÃ xác thực + ĐÃ audit ⇒ xoá cả trần `forgot:*` (khác đường công khai).
+    const result = await limiter.clearLoginLocks(slug, email, subject, { includeForgot: true });
     const after = await limiter.loginThrottleState(slug, email, subject);
     // `after.unknown` cũng chặn "ok": một phép đọc không kết luận được thì KHÔNG được coi là bằng chứng
     // đã gỡ xong — đó chính là hình dạng của vết nói dối mà đường này sinh ra để chặn.
@@ -618,10 +622,16 @@ export class AuthUsersService {
    * plaintext CHỈ trả 1 lần trong response.
    */
   async resetPassword(actor: AuthUserActor, id: string): Promise<AuthUserPasswordResetResultDto> {
+    // Self-guard giữ NGUYÊN vị trí đầu hàm: `requireRateLimiter` đứng sau nó để thứ tự lỗi không đổi
+    // (tự-reset-mình vẫn là 400, không biến thành 500 khi DI sai).
     if (actor.id === id) throw new BadRequestException(CANNOT_RESET_SELF);
+    // S18-AUTH-RESETCLEARS-1 — fail-fast TRƯỚC mọi mutation. `?.` no-op ở đây nghĩa là admin đặt lại
+    // mật khẩu hộ, nhận `tempPassword`, mà người dùng vẫn 429 — đúng cái nút-giả-vờ-hoạt-động mà
+    // `requireRateLimiter` sinh ra để chặn.
+    const limiter = this.requireRateLimiter();
     const tempPassword = generateTempPassword();
     const passwordHash = await this.password.hash(tempPassword);
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const outcome = await this.db.withTenant(actor.companyId, async (tx) => {
       const target = await this.repo.findByIdTx(tx, actor.companyId, id);
       if (!target) throw new NotFoundException(USER_NOT_FOUND);
       const updated = await this.repo.setPasswordTx(
@@ -651,8 +661,89 @@ export class AuthUsersService {
         actorUserId: actor.id,
         payload: { revokedSessionCount },
       });
-      return { tempPassword, revokedSessionCount };
+      // Slug đọc SAU mọi lệnh ghi, KHÔNG try/catch (statement lỗi đã abort tx — PG 25P02). 0 hàng ⇒
+      // mất bước gỡ khoá, KHÔNG được làm hỏng việc đặt lại mật khẩu.
+      const companyRow = await tx.execute(
+        sql`SELECT slug FROM companies WHERE id = ${actor.companyId} AND deleted_at IS NULL LIMIT 1`,
+      );
+      const slug = (companyRow.rows[0] as { slug: string } | undefined)?.slug ?? null;
+      return { tempPassword, revokedSessionCount, slug, email: target.email };
     });
+
+    // SAU commit, KHÔNG ném: `tempPassword` là plaintext trả MỘT LẦN DUY NHẤT và không lưu ở đâu — ném
+    // ở đây là vứt mất nó, admin phải reset lần nữa. `includeForgot: true`: đường này đã xác thực + đã
+    // audit, khác hẳn endpoint công khai (cùng lập luận nút "Gỡ khoá đăng nhập" của WO-1). KHÔNG truyền
+    // `subject` ⇒ bucket `2fa` không bị gỡ: `reset-password:user` không phải `reset-2fa:user`.
+    if (!outcome.slug) {
+      // BẤT THƯỜNG HỆ THỐNG, không phải ca nghiệp vụ: actor vừa thao tác THÀNH CÔNG trong tenant này
+      // nên hàng `companies` phải tồn tại. Không đoán slug (đoán sai = gỡ khoá của người khác) — nhưng
+      // cũng KHÔNG được im: đây là ca "không gỡ vì chưa từng thử gỡ", ít dấu vết hơn cả ca degraded.
+      this.logger.warn(
+        `resetPassword: KHÔNG gỡ được khoá đăng nhập cho user ${id} — không đọc được slug của công ty ` +
+          `${actor.companyId}; mật khẩu ĐÃ đổi, người dùng có thể vẫn bị 429`,
+      );
+    } else {
+      try {
+        const result = await limiter.clearLoginLocks(outcome.slug, outcome.email, undefined, {
+          includeForgot: true,
+        });
+        if (result.degraded) {
+          // Log Ở ĐÂY chứ không chỉ trong `recordFailedLockClear`: nhánh này KHÔNG ném, nên chỉ ghi
+          // audit là để kênh quan sát chính (log/APM) im lặng đúng lúc bất thường nhất.
+          this.logger.error(
+            `resetPassword: gỡ khoá đăng nhập KHÔNG kết luận được (degraded) cho user ${id} — ` +
+              `mật khẩu ĐÃ đổi nhưng người dùng có thể vẫn bị 429`,
+          );
+          await this.recordFailedLockClear(actor, id);
+        }
+      } catch (err) {
+        // ValkeyService là "never throws" ⇒ tới đây là BUG (namespace khoá sai / DI vắng). Kêu, đừng nuốt.
+        // Redact + giữ `stack`: khoá `rl:*` NHÚNG email, nên chi tiết lỗi của đúng lớp lỗi này là chỗ
+        // email dễ trôi vào log nhất. Mirror đường tự phục vụ (`AuthService.clearLoginLocksAfterReset`).
+        const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+        this.logger.error(
+          `resetPassword: gỡ khoá đăng nhập thất bại cho user ${id} (mật khẩu ĐÃ đổi — có thể vẫn 429): ` +
+            redactEmailFromDetail(detail, outcome.email),
+        );
+        await this.recordFailedLockClear(actor, id);
+      }
+    }
+    return { tempPassword: outcome.tempPassword, revokedSessionCount: outcome.revokedSessionCount };
+  }
+
+  /**
+   * S18-AUTH-RESETCLEARS-1 — ghi vết CHỈ khi gỡ khoá THẤT BẠI (tx thứ hai, sau commit).
+   *
+   * Ca thành công không ghi hàng nào — hàng `user.password_reset_by_admin` đã đủ, và bồi `USER_UNLOCKED`
+   * cho tài khoản chưa từng bị khoá là món nợ WO-1 đã ghi ở §10.5. Ca thất bại thì khác: đúng lúc đó
+   * hàng audit kia hàm ý "người dùng vào lại được ngay" trong khi khoá còn sống ⇒ suy luận gãy, phải có
+   * vết riêng. Bọc try/catch: tx phụ hỏng không được kéo đổ thao tác chính đã commit.
+   */
+  private async recordFailedLockClear(actor: AuthUserActor, id: string): Promise<void> {
+    try {
+      await this.db.withTenant(actor.companyId, async (tx) => {
+        await this.audit.record(tx, {
+          action: "user.login_throttle_cleared",
+          objectType: "user",
+          actorUserId: actor.id,
+          objectId: id,
+          after: { ok: false, reason: "password_reset" },
+        });
+        await this.securityEvents?.record(tx, {
+          eventType: "USER_UNLOCKED",
+          userId: id,
+          actorUserId: actor.id,
+          payload: { reason: "password_reset", ok: false },
+        });
+      });
+    } catch (err) {
+      // KHÔNG nhận email vào đây chỉ để redact: `id` đã định danh đủ, và một tham số email thêm vào
+      // hàm ghi-vết là đúng đường để nó vô tình trôi vào payload audit (đang sạch — giữ nguyên).
+      const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+      this.logger.error(
+        `resetPassword: ghi vết 'gỡ khoá thất bại' KHÔNG thành công cho user ${id} — mất dấu forensics: ${detail}`,
+      );
+    }
   }
 
   /** Chống tự khoá/mở khoá chính mình (lockout). actor.id === target → BadRequest TRƯỚC khi chạm DB. */

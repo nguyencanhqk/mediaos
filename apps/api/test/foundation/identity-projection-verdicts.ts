@@ -143,6 +143,20 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
     signedBy: WO,
   },
   {
+    point: "auth/auth.service.ts#resetPassword:users.email",
+    basis: "self-bound-route",
+    reason:
+      "S18-AUTH-RESETCLEARS-1. `POST /auth/reset-password` KHÔNG nhận id/email nào từ caller: hàng " +
+      "duy nhất chạm được là `eq(users.id, row.userId)` với `row` tra bằng HASH của token single-use " +
+      "(chưa dùng, chưa hết hạn) trong cùng tx — cùng hình dạng với ba dòng `self-bound-route` ngay " +
+      "trên (id lấy từ vật chứng đã verify, không từ tham số). Email đọc ra KHÔNG đi tới caller: " +
+      "response là 204, nó chỉ dùng để dựng khoá rate-limit `(slug,email)` cho `clearLoginLocks` — " +
+      "đường ghi, không phải đường đọc. Vì sao KHÔNG vá bằng `identityColumns()`: `IdentityGrant` gác " +
+      "cột theo QUYỀN của một actor, mà nhánh này KHÔNG có actor đã xác thực (người dùng đang bị khoá, " +
+      "chưa đăng nhập được) — bọc grant ở đây sẽ phải bịa ra một actor, tức làm cổng nói dối.",
+    signedBy: "S18-AUTH-RESETCLEARS-1",
+  },
+  {
     point: "auth/two-factor.service.ts#enroll:users.email",
     basis: "self-bound-route",
     reason:
@@ -643,7 +657,10 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   // ĐÍCH và đi qua FULL gate đúng như dòng cảnh báo của cổng này đòi. Điểm mới KHÔNG mở bề mặt đọc
   // nào: email đọc ra chỉ rơi vào `login_logs.email` (cột vốn đã chứa email client tự khai), và bề
   // mặt đọc lại của cột đó gác danh tính riêng qua `LoginLogGrants.identity`.
-  "self-bound-route": 8,
+  // 8 → 9 (S18-AUTH-RESETCLEARS-1, 03/09/2026): `resetPassword:users.email`. Nới CÓ CHỦ ĐÍCH, cùng
+  // hình dạng với dòng trên. Điểm mới KHÔNG mở bề mặt đọc nào: route trả 204, email chỉ dùng để dựng
+  // khoá rate-limit `(slug,email)` rồi gỡ khoá 429 — không có DTO nào chở nó ra ngoài.
+  "self-bound-route": 9,
   "order-only": 1,
   // Có vị từ SQL thật, nhưng SỔ này không nhìn thấy vị từ ⇒ vẫn phải có trần.
   "scoped-predicate": 23, // S11-ASSET-BE-1: +2 (holderSelect · listByAssetTx) — plan-review B7, nâng có chủ đích qua FULL gate

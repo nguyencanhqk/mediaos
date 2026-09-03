@@ -1509,19 +1509,22 @@ export class AuthService {
     const { companyId, full } = parsed;
     const tokenHash = this.tokens.hashToken(full);
 
-    const ok = await this.dbsvc.withTenant(companyId, async (tx) => {
+    const target = await this.dbsvc.withTenant(companyId, async (tx) => {
       const [row] = await tx
         .select()
         .from(passwordResetTokens)
         .where(eq(passwordResetTokens.tokenHash, tokenHash))
         .limit(1);
-      if (!row || row.usedAt || row.expiresAt.getTime() <= Date.now()) return false;
+      if (!row || row.usedAt || row.expiresAt.getTime() <= Date.now()) return null;
 
       const newHash = await this.password.hash(req.newPassword);
-      await tx
+      // S18-AUTH-RESETCLEARS-1: `.returning()` thay vì một SELECT phụ — bớt một điểm hỏng trên đường
+      // tới hạn, và lấy luôn `deletedAt` (xem nhánh chặn ở dưới) từ chính hàng vừa ghi.
+      const [updated] = await tx
         .update(users)
         .set({ passwordHash: newHash, updatedAt: new Date(), mustChangePassword: false })
-        .where(eq(users.id, row.userId));
+        .where(eq(users.id, row.userId))
+        .returning({ email: users.email, deletedAt: users.deletedAt });
       // single-use: đánh dấu đã dùng.
       await tx
         .update(passwordResetTokens)
@@ -1551,10 +1554,133 @@ export class AuthService {
         actorUserId: row.userId,
         payload: { reason: "password_reset" },
       });
-      return true;
+      // S18-AUTH-RESETCLEARS-1 — slug đọc SAU mọi lệnh ghi, KHÔNG bọc try/catch: một statement lỗi đã
+      // abort tx (PG 25P02) nên "bắt rồi đi tiếp" chỉ đổi một lỗi rõ thành 500 mù. "Không có hàng
+      // công ty" là ca 0 HÀNG, và ca đó chỉ làm mất bước gỡ khoá — KHÔNG được làm hỏng reset.
+      const companyRow = await tx.execute(
+        sql`SELECT slug FROM companies WHERE id = ${companyId} AND deleted_at IS NULL LIMIT 1`,
+      );
+      const slug = (companyRow.rows[0] as { slug: string } | undefined)?.slug ?? null;
+      return {
+        userId: row.userId,
+        email: updated?.email ?? null,
+        deletedAt: updated?.deletedAt ?? null,
+        slug,
+      };
     });
 
-    if (!ok) throw new UnauthorizedException("Token không hợp lệ hoặc đã hết hạn.");
+    if (!target) throw new UnauthorizedException("Token không hợp lệ hoặc đã hết hạn.");
+
+    await this.clearLoginLocksAfterReset(companyId, target);
+  }
+
+  /**
+   * S18-AUTH-RESETCLEARS-1 — gỡ khoá đăng nhập 429 SAU KHI đặt lại mật khẩu thành công.
+   *
+   * NGOÀI tx, SAU commit, và **không bao giờ ném**. Ba ràng buộc, mỗi cái có lý do riêng:
+   *
+   * • **Ngoài tx** — Valkey không transactional; rollback DB không hoàn tác được `DEL`. Gỡ trong tx rồi
+   *   tx hỏng = khoá đã mất mà mật khẩu chưa đổi.
+   * • **Không ném** — tới đây thì mật khẩu ĐÃ đổi và token đã `used_at` (single-use). Một 5xx làm người
+   *   dùng tưởng thất bại và bấm lại, mà lần hai chắc chắn "Token không hợp lệ" ⇒ ta biến một thao tác
+   *   THÀNH CÔNG thành ngõ cụt. Cửa thoát khi gỡ hỏng vẫn còn: nút admin (503 thật) + TTL tự hết.
+   * • **`includeForgot: false`** — trần `rl:forgot:*` gác một endpoint CÔNG KHAI không cần xác thực.
+   *   Xoá nó ở đây nghĩa là ai cầm một token reset hợp lệ của chính hòm thư mình sẽ tự cấp lại hạn
+   *   mức forgot vô hạn lần (quyết định đã ký ở docblock `forgotPasswordImpl`).
+   *
+   * KHÔNG truyền `subject` ⇒ bucket `2fa` bước-2 KHÔNG bị gỡ. Đặt lại mật khẩu không chứng minh quyền
+   * kiểm soát yếu tố thứ hai — đó chính là lý do 2FA tồn tại; `rl:2fa` là control DUY NHẤT chặn dò TOTP.
+   *
+   * ⚠️ User đã XOÁ MỀM thì DỪNG. Unique email là PARTIAL (`WHERE deleted_at IS NULL`) nên email của họ
+   * có thể đã được cấp lại cho NGƯỜI KHÁC, mà khoá rate-limit dựng theo `(slug,email)` chứ không theo
+   * `userId` ⇒ gỡ ở đây là gỡ khoá của người đang dùng email đó.
+   */
+  private async clearLoginLocksAfterReset(
+    companyId: string,
+    target: { userId: string; email: string | null; deletedAt: Date | null; slug: string | null },
+  ): Promise<void> {
+    const { userId, email, deletedAt, slug } = target;
+    // Ba nhánh dừng KHÁC HẲN nhau về mức bất thường — gộp chung một `if` sẽ che nhau khi đọc log:
+    //  • `deletedAt` — ca NGHIỆP VỤ bình thường (xem docblock trên), im lặng là đúng.
+    //  • `!slug` — BẤT THƯỜNG HỆ THỐNG: token được cấp cho `companyId` này thì hàng công ty phải tồn
+    //    tại. Null nghĩa là công ty vừa bị xoá mềm giữa lúc cấp token và lúc reset, hoặc lệch dữ liệu.
+    //  • `!email` — gần như bất khả (UPDATE chạy trong cùng tx trên đúng `row.userId` vừa đọc được),
+    //    nhưng nếu xảy ra thì cũng là lệch dữ liệu, không phải nghiệp vụ.
+    if (deletedAt) return;
+    if (!slug || !email) {
+      this.logger.warn(
+        `resetPassword: KHÔNG gỡ được khoá đăng nhập vì thiếu dữ kiện dựng khoá ` +
+          `(company=${companyId} user=${userId} slug=${slug ? "có" : "THIẾU"} ` +
+          `email=${email ? "có" : "THIẾU"}) — mật khẩu ĐÃ đổi, người dùng có thể vẫn bị 429`,
+      );
+      return;
+    }
+    try {
+      const result = await this.rateLimiter.clearLoginLocks(slug, email, undefined, {
+        includeForgot: false,
+      });
+      if (result.degraded) {
+        // Log Ở ĐÂY, không chỉ trong `recordFailedLockClear`: nhánh này KHÔNG ném, nên nếu chỉ ghi vào
+        // audit thì kênh quan sát chính (log/APM) im lặng đúng lúc hệ thống bất thường nhất — mật khẩu
+        // đã đổi mà khoá thì không kết luận được đã gỡ hay chưa.
+        this.logger.error(
+          `resetPassword: gỡ khoá đăng nhập KHÔNG kết luận được (degraded) cho user ${userId} — ` +
+            `mật khẩu ĐÃ đổi nhưng người dùng có thể vẫn bị 429`,
+        );
+        await this.recordFailedLockClear(companyId, userId, userId, email);
+      }
+    } catch (err) {
+      // Hợp đồng của ValkeyService là "never throws", nên tới được đây nghĩa là BUG (namespace khoá sai
+      // ⇒ ValkeyKeyScopeError, hoặc field DI vắng). Phải KÊU chứ không nuốt — ERROR, không warn.
+      const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+      this.logger.error(
+        "resetPassword: gỡ khoá đăng nhập thất bại (mật khẩu ĐÃ đổi — người dùng có thể vẫn bị 429)",
+        redactEmailFromDetail(detail, email),
+      );
+      await this.recordFailedLockClear(companyId, userId, userId, email);
+    }
+  }
+
+  /**
+   * S18-AUTH-RESETCLEARS-1 — ghi vết CHỈ khi gỡ khoá THẤT BẠI.
+   *
+   * Ca thành công KHÔNG ghi hàng nào: hàng audit của chính thao tác reset đã đủ, và bồi `USER_UNLOCKED`
+   * cho tài khoản chưa từng bị khoá là món nợ WO-1 đã ghi. Ca THẤT BẠI thì ngược lại — hàng
+   * `auth.password_reset` / `user.password_reset_by_admin` khi đó hàm ý "vào lại được ngay" trong khi
+   * khoá còn sống, tức suy luận từ hàng đã có bị GÃY. Đó là chỗ duy nhất cần vết riêng.
+   *
+   * Bọc try/catch: đây là tx THỨ HAI sau commit — nó hỏng thì thao tác chính vẫn đúng, không được kéo
+   * theo. `email` KHÔNG vào payload (khoá `rl:*` nhúng email; `objectId` đã định danh đủ).
+   */
+  private async recordFailedLockClear(
+    companyId: string,
+    actorUserId: string,
+    targetUserId: string,
+    email: string,
+  ): Promise<void> {
+    try {
+      await this.dbsvc.withTenant(companyId, async (tx) => {
+        await this.audit.record(tx, {
+          action: "user.login_throttle_cleared",
+          objectType: "user",
+          actorUserId,
+          objectId: targetUserId,
+          after: { ok: false, reason: "password_reset" },
+        });
+        await this.securityEvents.record(tx, {
+          eventType: "USER_UNLOCKED",
+          userId: targetUserId,
+          actorUserId,
+          payload: { reason: "password_reset", ok: false },
+        });
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+      this.logger.error(
+        "resetPassword: ghi vết 'gỡ khoá thất bại' KHÔNG thành công — mất dấu forensics",
+        redactEmailFromDetail(detail, email),
+      );
+    }
   }
 
   /**
