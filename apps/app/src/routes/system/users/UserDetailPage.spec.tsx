@@ -27,6 +27,11 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       unlockUser: vi.fn(),
       updateUser: vi.fn(),
       resetTwoFactor: vi.fn(),
+      // S18-AUTH-UNLOCK429-1 — thiếu hai hàm này thì mọi ca có  sẽ nổ ở undefined.
+      // Mặc định "không bị khoá": các ca CŨ có  vẫn chạy query này, và một mock trả
+      // undefined làm react-query cảnh báo ầm ĩ ở stderr của những ca chẳng liên quan.
+      getLoginThrottle: vi.fn(async () => ({ locked: false, remainingSec: null, buckets: [] })),
+      clearLoginThrottle: vi.fn(),
     },
   };
 });
@@ -297,5 +302,157 @@ describe("UserDetailPage — 2FA card", () => {
     expect(html).not.toMatch(/recovery/);
     expect(html).not.toMatch(/otpauth/);
     expect(html).not.toMatch(/cipher/);
+  });
+});
+/**
+ * S18-AUTH-UNLOCK429-1 — badge + nút "Gỡ khoá đăng nhập" (khoá 429).
+ *
+ * Điều được ghim ở đây KHÔNG phải "có nút hay không", mà là hai loại khoá KHÔNG được trộn: nút "Mở
+ * khoá" (trạng thái tài khoản) và nút "Gỡ khoá đăng nhập" (bộ chặn tần suất) hiện theo hai điều kiện
+ * khác nhau, và người dùng bị 429 vẫn `status='active'` nên nút cũ KHÔNG được xuất hiện thay nó.
+ */
+describe("UserDetailPage — gỡ khoá đăng nhập (429)", () => {
+  const THROTTLED = {
+    locked: true,
+    remainingSec: 600,
+    buckets: ["ip" as const],
+  };
+  const CLEAR = { locked: false, remainingSec: null, buckets: [] as never[] };
+
+  beforeEach(() => {
+    clearCapabilities();
+    vi.clearAllMocks();
+    vi.mocked(authUsersApi.getUser).mockResolvedValue(ACTIVE_USER);
+  });
+
+  it("KHÔNG bị khoá ⇒ không badge, không nút (không doạ người trực ca bằng cảnh báo rỗng)", async () => {
+    setCapabilities({ "view:user": true, "unlock:user": true });
+    vi.mocked(authUsersApi.getLoginThrottle).mockResolvedValue(CLEAR);
+    renderWithQuery(<UserDetailPage userId={ACTIVE_USER.id} />);
+
+    await waitFor(() =>
+      expect(authUsersApi.getLoginThrottle).toHaveBeenCalled(),
+    );
+    expect(
+      screen.queryByText(/đang bị khoá đăng nhập/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /gỡ khoá đăng nhập/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("bị khoá ⇒ badge kèm số phút + nút RIÊNG, KHÔNG phải nút 'Mở khoá' (tài khoản vẫn 'active')", async () => {
+    setCapabilities({ "view:user": true, "unlock:user": true });
+    vi.mocked(authUsersApi.getLoginThrottle).mockResolvedValue(THROTTLED);
+    renderWithQuery(<UserDetailPage userId={ACTIVE_USER.id} />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/đang bị khoá đăng nhập · còn ~10 phút/i),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole("button", { name: /gỡ khoá đăng nhập/i }),
+    ).toBeInTheDocument();
+    // Nút "Mở khoá" (khoá tài khoản) KHÔNG được hiện: `status` vẫn 'active'. Nếu nó hiện, người trực
+    // ca sẽ bấm nó, nhận 400 NOT_LOCKED, và tưởng hệ thống hỏng — đúng ca WO này sinh ra để xoá.
+    expect(
+      screen.queryByRole("button", { name: /^mở khoá$/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("không đọc được TTL (remainingSec null) ⇒ badge KHÔNG kèm số — không bao giờ hiện '0 phút'", async () => {
+    setCapabilities({ "view:user": true, "unlock:user": true });
+    vi.mocked(authUsersApi.getLoginThrottle).mockResolvedValue({
+      ...THROTTLED,
+      remainingSec: null,
+    });
+    renderWithQuery(<UserDetailPage userId={ACTIVE_USER.id} />);
+
+    const badge = await screen.findByText(/đang bị khoá đăng nhập/i);
+    expect(badge.textContent).not.toMatch(/\d/);
+  });
+
+  it("thiếu `unlock:user` ⇒ KHÔNG gọi endpoint (nó gate unlock:user — gọi là ăn 403 vô cớ)", async () => {
+    setCapabilities({ "view:user": true });
+    vi.mocked(authUsersApi.getLoginThrottle).mockResolvedValue(THROTTLED);
+    renderWithQuery(<UserDetailPage userId={ACTIVE_USER.id} />);
+
+    await waitFor(() =>
+      expect(screen.getAllByText("active@demo.local").length).toBeGreaterThan(
+        0,
+      ),
+    );
+    expect(authUsersApi.getLoginThrottle).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: /gỡ khoá đăng nhập/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("gỡ thành công ⇒ badge biến mất sau khi làm mới", async () => {
+    setCapabilities({ "view:user": true, "unlock:user": true });
+    vi.mocked(authUsersApi.getLoginThrottle)
+      .mockResolvedValueOnce(THROTTLED)
+      .mockResolvedValue(CLEAR);
+    vi.mocked(authUsersApi.clearLoginThrottle).mockResolvedValue(undefined);
+    renderWithQuery(<UserDetailPage userId={ACTIVE_USER.id} />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /gỡ khoá đăng nhập/i }),
+    );
+    await waitFor(() =>
+      expect(authUsersApi.clearLoginThrottle).toHaveBeenCalledWith(
+        ACTIVE_USER.id,
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/đang bị khoá đăng nhập/i),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText(/đã gỡ khoá đăng nhập/i)).toBeInTheDocument();
+  });
+
+  it("gỡ trả 503 ⇒ hiện đúng câu 'khoá vẫn còn', KHÔNG phải câu lỗi hệ thống chung", async () => {
+    // 503 ở đường này là tín hiệu server bỏ công dựng ("chưa gỡ được, khoá còn nguyên"). Nếu nó rơi vào
+    // nhánh `>= 500` chung thì người trực ca đọc được "lỗi hệ thống, thử lại sau" — một lời khuyên SAI.
+    setCapabilities({ "view:user": true, "unlock:user": true });
+    vi.mocked(authUsersApi.getLoginThrottle).mockResolvedValue(THROTTLED);
+    vi.mocked(authUsersApi.clearLoginThrottle).mockRejectedValue(
+      new ApiError(503, "unavailable", "/auth/users/x/login-throttle/clear"),
+    );
+    renderWithQuery(<UserDetailPage userId={ACTIVE_USER.id} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /gỡ khoá đăng nhập/i }));
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(screen.getByRole("alert").textContent).toMatch(/khoá vẫn còn/i);
+  });
+
+  it("GET lỗi (không đọc được trạng thái) ⇒ nút gỡ VẪN hiện + cảnh báo — cửa thoát không được biến mất", async () => {
+    // Đây là ca hỏng-lúc-cần-nhất: Valkey rớt ở đường ĐỌC. Coi lỗi như "không bị khoá" sẽ ẩn đúng cái
+    // nút mà admin cần bấm.
+    setCapabilities({ "view:user": true, "unlock:user": true });
+    vi.mocked(authUsersApi.getLoginThrottle).mockRejectedValue(
+      new ApiError(503, "unavailable", "/auth/users/x/login-throttle"),
+    );
+    renderWithQuery(<UserDetailPage userId={ACTIVE_USER.id} />);
+
+    expect(await screen.findByRole("button", { name: /gỡ khoá đăng nhập/i })).toBeInTheDocument();
+    expect(screen.getByText(/chưa đọc được trạng thái khoá đăng nhập/i)).toBeInTheDocument();
+  });
+
+  it("gỡ THẤT BẠI (403) ⇒ hiện lỗi và badge GIỮ NGUYÊN — không giả vờ đã xong", async () => {
+    setCapabilities({ "view:user": true, "unlock:user": true });
+    vi.mocked(authUsersApi.getLoginThrottle).mockResolvedValue(THROTTLED);
+    vi.mocked(authUsersApi.clearLoginThrottle).mockRejectedValue(
+      new ApiError(403, "forbidden", "/auth/users/x/login-throttle/clear"),
+    );
+    renderWithQuery(<UserDetailPage userId={ACTIVE_USER.id} />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /gỡ khoá đăng nhập/i }),
+    );
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(screen.getByText(/đang bị khoá đăng nhập/i)).toBeInTheDocument();
   });
 });

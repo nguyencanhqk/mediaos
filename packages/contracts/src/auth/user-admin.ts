@@ -217,3 +217,25 @@ export const authUserPasswordResetResultSchema = z.object({
   revokedSessionCount: z.number().int().nonnegative(),
 });
 export type AuthUserPasswordResetResultDto = z.infer<typeof authUserPasswordResetResultSchema>;
+
+/**
+ * S18-AUTH-UNLOCK429-1 — GET /auth/users/:id/login-throttle: trạng thái BỘ CHẶN TẦN SUẤT đăng nhập (429).
+ *
+ * ⚠️ KHÁC HẲN `status === 'locked'` (khoá tài khoản do admin, gỡ bằng POST …/unlock). Hai khái niệm khoá
+ * độc lập: người bị 429 vẫn `status='active'`, nên nút "Mở khoá" còn ném 400 NOT_LOCKED. FE phải để hai
+ * nhãn TÁCH BẠCH, không gộp.
+ *
+ * `buckets` = các bucket đang CHẶN ĐĂNG NHẬP: `acct` (mọi IP) · `ip` (ít nhất một IP) · `2fa` (bước-2
+ * TOTP). Bucket `forgot:*` KHÔNG có mặt — nó chặn endpoint "quên mật khẩu", không chặn đăng nhập — dù
+ * vẫn được xoá khi gỡ khoá.
+ *
+ * `remainingSec` = giây còn lại của khoá LÂU NHẤT, `null` khi không đọc được TTL (Valkey rớt/tắt). KHÔNG
+ * dùng `.default()`: schema phản hồi có default sẽ làm kiểu trả về của `apiFetch` sai lệch, và "0 giây"
+ * là con số sai duy nhất mà màn hình không được phép hiện.
+ */
+export const authUserLoginThrottleSchema = z.object({
+  locked: z.boolean(),
+  remainingSec: z.number().int().nonnegative().nullable(),
+  buckets: z.array(z.enum(["acct", "ip", "2fa"])),
+});
+export type AuthUserLoginThrottleDto = z.infer<typeof authUserLoginThrottleSchema>;

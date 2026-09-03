@@ -17024,7 +17024,7 @@ export const backlog = [
     title:
       "Gỡ khoá đăng nhập (429) từ giao diện: chỉ mục IP + clearLoginLocks/remainingLockSec trong LoginRateLimiter, GET/POST /auth/users/:id/login-throttle[/clear] gate unlock:user + audit, badge & nút 'Gỡ khoá đăng nhập' ở UserDetailPage",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/auth/login-rate-limiter.ts",
       "apps/api/src/auth/auth.service.ts",
@@ -17040,6 +17040,9 @@ export const backlog = [
       "packages/contracts/src/auth/user-admin.ts",
       "packages/contracts/src/**/*.spec.ts",
       "packages/web-core/src/lib/auth-users-api.ts",
+      "packages/web-core/src/lib/query-keys.ts",
+      "apps/api/vitest.config.ts",
+      "docs/_review/S6-SEC-ROUTEMAP-1-route-census.json",
       "apps/app/src/routes/system/users/UserDetailPage.tsx",
       "apps/app/src/routes/system/users/**/*.spec.tsx",
       "apps/app/src/i18n/locales/vi/system.ts",

@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 574,
+    "routes": 576,
     "controllers": 103,
-    "gated": 535,
+    "gated": 537,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -1526,6 +1526,22 @@
       "verdictWo": null
     },
     {
+      "key": "AuthUsersController#clearLoginThrottle",
+      "httpMethod": "POST",
+      "path": "/api/v1/auth/users/:id/login-throttle/clear",
+      "hasPermission": true,
+      "permission": "unlock:user",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "AuthUsersController#create",
       "httpMethod": "POST",
       "path": "/api/v1/auth/users",
@@ -1579,6 +1595,22 @@
       "path": "/api/v1/auth/users/:id/lock",
       "hasPermission": true,
       "permission": "lock:user",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "AuthUsersController#loginThrottle",
+      "httpMethod": "GET",
+      "path": "/api/v1/auth/users/:id/login-throttle",
+      "hasPermission": true,
+      "permission": "unlock:user",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [

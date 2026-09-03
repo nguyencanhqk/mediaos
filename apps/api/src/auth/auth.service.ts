@@ -531,7 +531,9 @@ export class AuthService {
       }
       throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
     }
-    const rlKey = rateLimitKey("2fa", `${claims.companyId}|${claims.sub}`);
+    // Dựng qua BUILDER dùng chung: đường gỡ khoá của admin xoá đúng khoá này, và hai bản sao viết tay
+    // sẽ lệch trong im lặng (clear no-op nhưng vẫn trả 204 + audit ok:true).
+    const rlKey = LoginRateLimiter.twoFactorKey(claims.companyId, claims.sub);
     if (await this.rateLimiter.isLocked(rlKey)) {
       // ⟲ S10-SEC-LOGINLOG429-1 · KI-047 — đây là NGOẠI LỆ CÓ CHỦ Ý của luật "đường đang bị khoá ghi
       // 0 hàng" (luật đó giữ nguyên cho `disableTwoFactor`/`changePassword`/`confirmEnable`/`stepUp`).
@@ -821,10 +823,12 @@ export class AuthService {
     email: string,
     ip: string,
   ): Promise<boolean> {
+    // S18-AUTH-UNLOCK429-1 — slug đi qua `normSlug` y như bucket mà khoá này soi gương. Nếu không,
+    // `Funtime` và `funtime` (slug là citext ở DB ⇒ CÙNG một công ty) cho hai khoá gộp khác nhau và
+    // `login_logs` — append-only, KHÔNG thu hồi được — lại bị bồi mỗi biến thể một hàng (đúng KI-048).
+    const slug = LoginRateLimiter.normSlug(companySlug);
     const rest =
-      bucket === "acct"
-        ? `${companySlug}|${email.toLowerCase()}`
-        : `${companySlug}|${email.toLowerCase()}|${ip}`;
+      bucket === "acct" ? `${slug}|${email.toLowerCase()}` : `${slug}|${email.toLowerCase()}|${ip}`;
     return this.rateLimiter.claimFirstOfWindow(
       rateLimitKey("logdedup", `login:${bucket}:${rest}`),
       this.rateLimiter.lockoutSec,
@@ -838,6 +842,12 @@ export class AuthService {
       LoginRateLimiter.accountKey(companySlug, email),
       this.rateLimiter.accountMaxAttempts,
     );
+    // S18-AUTH-UNLOCK429-1 — ghi `ip` vào chỉ mục để đường GỠ khoá của admin biết phải xoá khoá nào
+    // (khoá per-IP nhúng ip vào chuỗi khoá, và SCAN theo pattern bị CẤM — Valkey dùng chung 4 môi trường).
+    // Đặt ở ĐÂY vì đây là chỗ duy nhất trong luồng login biết đủ (slug, email, ip) và LUÔN chạy khi một
+    // lượt sai được ghi nhận — kể cả nhánh slug không resolve được và nhánh email không tồn tại, nên
+    // không tạo chênh lệch quan sát được giữa email-ma và email-thật.
+    await this.rateLimiter.noteFailureSource("login", companySlug, email, ip);
   }
 
   /** Xoá cả hai bucket sau login thành công. */
@@ -1387,6 +1397,10 @@ export class AuthService {
     }
     await this.rateLimiter.recordFailure(ipKey);
     await this.rateLimiter.recordFailure(acctKey, this.rateLimiter.accountMaxAttempts);
+    // S18-AUTH-UNLOCK429-1 — nuôi chỉ mục IP của họ `forgot` (TÁCH khỏi chỉ mục login, giữ nguyên ranh
+    // giới namespace ký ở trên). Đứng ĐÚNG chỗ này — sau lượt recordFailure, TRƯỚC nhánh rẽ theo
+    // "email có tồn tại không" — nên email-ma và email-thật đi qua cùng số round-trip: không thêm oracle.
+    await this.rateLimiter.noteFailureSource("forgot", req.companySlug, req.email, ip);
 
     // Plaintext token tồn tại NGOÀI tx (để gửi mail sau commit). null khi email không tồn tại.
     let mailToken: { email: string; token: string } | null = null;

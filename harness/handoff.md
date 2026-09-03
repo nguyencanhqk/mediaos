@@ -4,6 +4,39 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
+## Phiên 2026-09-03 (chiều) — S18-AUTH-UNLOCK429-1: code + test XONG, CHƯA commit/PR
+
+**Nhánh `feat/s18-auth-unlock429-1`, working tree BẨN (chưa commit).** Kế hoạch + toàn bộ số đo:
+`docs/plans/S18-AUTH-UNLOCK429-1.md` (§9 bản vá sau plan-review · §10 kết quả chạy thật · §11 FULL gate).
+
+- **Đã ship (0 migration):** chỉ mục IP `rl:{env}:ip-index:…` + `forgot:ip-index` (SADD, CAP 64, KHÔNG
+  SCAN) · `clearLoginLocks`/`loginThrottleState`/`remainingLockSec` · `sMembers`+`ttl` ở ValkeyService ·
+  2 route gate `unlock:user` + audit `user.login_throttle_cleared` + security event · badge & nút FE
+  tách bạch nhãn với "Mở khoá" · cổng coverage mới cho `login-rate-limiter.ts` (trước nay NGOÀI mọi
+  `--coverage.include`; đo được 100% lines/funcs · 98.97% branches).
+- **Owner đã chốt 2 mở rộng:** chuẩn hoá slug trong khoá (citext) · gỡ luôn bucket `2fa` bước-2.
+- **FULL gate BLOCK → đã vá, cần người xác nhận lại:** (1) `normSlug` **KHÔNG được `trim()`** — trim
+  làm `" acme"` (slug không đăng nhập được) ghi vào bucket THẬT ⇒ khoá được tài khoản người khác + hàng
+  `login_logs` gán `company_id=NULL` làm admin mù; (2) bucket `2fa` chỉ được gỡ khi actor qua cặp
+  SENSITIVE `reset-2fa:user` — `unlock:user` là non-sensitive nên wildcard `*:*` thoả nó, và bucket đó
+  là control duy nhất chặn dò TOTP.
+- **Ba giả định của plan sai khi đo thật** (đã sửa cả plan lẫn code): trần tự nhiên của chỉ mục · "gỡ
+  `acct` là đủ" · `after` quan sát được bucket `ip`.
+- **Ba cổng đỏ ở lượt `check.sh --all` đầu, đã xử:** (1) `valkey-key-census` — spec của WO chứa literal
+  `"rl:ip-index:…"` (ca đối chứng cổng envScope) ⇒ đổi sang GHÉP CHUỖI, KHÔNG thêm dòng miễn trừ nào;
+  (2) `route-guard-coverage` — 2 route mới chưa có trong artifact ⇒ regen bằng
+  `ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts`
+  (file `docs/_review/S6-SEC-ROUTEMAP-1-route-census.json` đã thêm vào `paths` của WO);
+  (3) `s11-asset-db1-invariants` H1 — chạy RIÊNG thì XANH, full-suite lần 2 cũng xanh ⇒ **flake do
+  spec chạy song song trên lane chung**, không phải hồi quy của WO này (đừng truy vào diff S18).
+- **Full test api trên `LANE_DB=mediaos_s18unlock`: XANH, 0 FAIL** (lượt 2, sau 3 vá trên).
+- **Việc còn lại:** commit → PR (vùng đỏ, KHÔNG auto-merge, người chốt). Lane `mediaos_s18unlock` còn
+  sống, DROP sau khi merge.
+- **Friction:** (1) chạy 1 int-spec cần export tay `APP_DB_PASSWORD`/`WORKER_DB_PASSWORD`/
+  `SUPERUSER_DB_PASSWORD` từ `.env` (không `source .env` — đầu độc NODE_ENV). (2) Bash tool nuốt
+  backtick trong chuỗi JS của `node -e` ⇒ comment bị mất chữ; dùng `python - << EOF` cho mọi vá có
+  backtick. (3) Ba mock `LoginRateLimiter` dựng tay vỡ khi thêm method — cái giá của mock theo hình dạng.
+
 ## Phiên 2026-09-03 — S14-PERF-DASHACTOR-1 → PR #469 MỞ (vùng đỏ, chờ người chốt)
 
 - **Ship (PR #469, nhánh `perf/s14-perf-dashactor-1`, 2 commit, 0 migration):** (1) gộp 4 bản `gateOrThrow` byte-giống-nhau ở dashboard handlers về MỘT hàm thuần `gateWidgetOrThrow` (`dashboard-widget-gate.ts`) — gộp CODE gate, KHÔNG gộp hằng sàn scope; giữ `gate ⊥ fetch`. (2) batch scope: thân quyết định chuyển NGUYÊN XI sang hàm thuần `decideStrongestScope` (`permission.decide.ts`) + `resolveStrongestScopes` = 1 fetch + N decide, mirror `canBatch`. **Số đo spy tầng repo: /dashboard/me 3→1 · resolveActor 4→1 · tổng đường admin 12→7 (−42%)**; nhân viên thường giữ 0→0 nhờ short-circuit `requests.length===0` TRƯỚC fetch.

@@ -179,6 +179,8 @@ function makeDeps(tx: unknown) {
   const rateLimiter = {
     isLocked: vi.fn(async () => false),
     recordFailure: vi.fn(async () => undefined),
+    // S18-AUTH-UNLOCK429-1: recordLoginFailure giờ nuôi thêm chỉ mục IP (đường gỡ khoá 429 đọc nó).
+    noteFailureSource: vi.fn(async () => undefined),
     reset: vi.fn(async () => undefined),
     accountMaxAttempts: 20,
   };

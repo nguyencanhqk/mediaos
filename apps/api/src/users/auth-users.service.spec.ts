@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthUsersService } from "./auth-users.service";
 import type { AuthUsersRepository } from "./auth-users.repository";
@@ -327,7 +332,12 @@ describe("AuthUsersService", () => {
     expect(res.revokedSessionCount).toBe(3);
     expect(repo.deleteTwoFactorTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID);
     expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
-    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID, "2fa_reset");
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(
+      TX,
+      ACTOR.companyId,
+      TARGET_ID,
+      "2fa_reset",
+    );
     const auditEntry = audit.record.mock.calls[0][1];
     expect(auditEntry.action).toBe("user.2fa_reset");
     expect(auditEntry.objectType).toBe("user");
@@ -478,7 +488,12 @@ describe("AuthUsersService", () => {
       ACTOR.id,
     );
     expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
-    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID, "admin_password_reset");
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(
+      TX,
+      ACTOR.companyId,
+      TARGET_ID,
+      "admin_password_reset",
+    );
 
     // audit + security event KHÔNG BAO GIỜ chứa temp password / hash (BẤT BIẾN #3)
     const entry = audit.record.mock.calls[0][1];
@@ -535,5 +550,256 @@ describe("AuthUsersService", () => {
     })) as never;
     const result = await service.listUsers(ACTOR, { limit: 50, offset: 0 });
     expect(result.users[0].hasEmployeeProfile).toBe(true);
+  });
+});
+/**
+ * S18-AUTH-UNLOCK429-1 — GET/POST /auth/users/:id/login-throttle (gỡ khoá 429).
+ *
+ * Dựng service RIÊNG ở đây (không dùng `beforeEach` chung) vì đường này cần một `tx` có `.execute`
+ * (đọc `companies.slug`), trong khi mock chung dùng `Symbol` làm tx.
+ */
+describe("AuthUsersService — login throttle (429)", () => {
+  const SLUG = "acme";
+  const TX = {
+    execute: vi.fn(async () => ({ rows: [{ slug: SLUG }] })),
+  };
+
+  function makeService(
+    over: {
+      throttle?: Partial<{
+        state: {
+          locked: boolean;
+          remainingSec: number | null;
+          buckets: string[];
+          unknown: boolean;
+        };
+        after: {
+          locked: boolean;
+          remainingSec: number | null;
+          buckets: string[];
+          unknown: boolean;
+        };
+        degraded: boolean;
+      }>;
+      findByIdTx?: () => Promise<unknown>;
+      omitRateLimiter?: boolean;
+      canResetTwoFactor?: boolean;
+    } = {},
+  ) {
+    const state = over.throttle?.state ?? {
+      locked: true,
+      remainingSec: 600,
+      buckets: ["ip"],
+    };
+    const after = over.throttle?.after ?? {
+      locked: false,
+      remainingSec: null,
+      buckets: [],
+    };
+    // Khai báo THAM SỐ tường minh: `vi.fn(async () => …)` cho kiểu call là tuple RỖNG, nên mọi assert
+    // đọc `mock.calls[0][1]` (hàng audit) sẽ đỏ kiểu — và cách "sửa" nhanh là ép `as never`, tức vứt
+    // luôn chính thứ mà các ca dưới đây đang đo.
+    const audit = {
+      record: vi.fn(async (_tx: unknown, _entry: Record<string, unknown>) => undefined),
+    };
+    const securityEvents = {
+      record: vi.fn(async (_tx: unknown, _entry: Record<string, unknown>) => undefined),
+    };
+    const db = {
+      withTenant: vi.fn(async (_c: string, fn: (tx: unknown) => Promise<unknown>) => fn(TX)),
+    };
+    const repo = {
+      findByIdTx: over.findByIdTx ?? vi.fn(async () => makeUser()),
+    } as unknown as AuthUsersRepository;
+    // `loginThrottleState` trả state TRƯỚC ở lần gọi đầu, state SAU ở lần gọi thứ hai — đúng thứ tự
+    // service gọi (đọc → clear → đọc lại). Dùng cùng một hàm cho cả hai lần sẽ làm ca "vẫn còn khoá
+    // sau khi gỡ" không thể tồn tại.
+    const loginThrottleState = vi
+      .fn()
+      .mockResolvedValueOnce(state)
+      .mockResolvedValueOnce(after)
+      .mockResolvedValue(after);
+    const clearLoginLocks = vi.fn(async () => ({
+      clearedKeys: 6,
+      degraded: over.throttle?.degraded ?? false,
+    }));
+    const rateLimiter = { loginThrottleState, clearLoginLocks };
+    const service = new AuthUsersService(
+      db as never,
+      repo,
+      audit as never,
+      { hash: vi.fn(async () => HASHED) } as never,
+      {
+        resolveStrongestScope: vi.fn(async () => "Company"),
+        // Gate bucket bước-2: mặc định actor CÓ `reset-2fa:user` (cặp sensitive) ⇒ `subject` được truyền.
+        // Ca deny riêng ở dưới lật cờ này về false.
+        can: vi.fn(async () => ({ allow: over.canResetTwoFactor !== false })),
+      } as never,
+      { revokeAllForUserTx: vi.fn(async () => 0) } as never,
+      securityEvents as never,
+      { enqueueSync: vi.fn(async () => undefined) } as never,
+      over.omitRateLimiter ? undefined : (rateLimiter as never),
+    );
+    return {
+      service,
+      audit,
+      securityEvents,
+      clearLoginLocks,
+      loginThrottleState,
+      repo,
+    };
+  }
+
+  beforeEach(() => {
+    TX.execute.mockClear();
+  });
+
+  it("GET: trả state từ limiter, KHÔNG audit (đường chỉ đọc), slug lấy TỪ DB chứ không từ input", async () => {
+    const { service, audit, loginThrottleState } = makeService();
+    const dto = await service.getLoginThrottle(ACTOR, TARGET_ID);
+    expect(dto).toEqual({ locked: true, remainingSec: 600, buckets: ["ip"] });
+    expect(audit.record).not.toHaveBeenCalled();
+    // slug đọc trong tenant tx; email lấy từ HÀNG user, không phải từ tham số nào của caller.
+    expect(loginThrottleState).toHaveBeenCalledWith(SLUG, "target@a.test", {
+      companyId: ACTOR.companyId,
+      userId: TARGET_ID,
+    });
+  });
+
+  it("CLEAR self ⇒ 400 và KHÔNG chạm một byte nào của không gian khoá", async () => {
+    const { service, clearLoginLocks, audit } = makeService();
+    await expect(service.clearLoginThrottle(ACTOR, ACTOR.id)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(clearLoginLocks).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("CLEAR user không tồn tại / cross-tenant ⇒ 404 TRƯỚC khi gỡ bất cứ khoá nào", async () => {
+    const { service, clearLoginLocks, audit } = makeService({
+      findByIdTx: vi.fn(async () => undefined),
+    });
+    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(clearLoginLocks).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("CLEAR thành công: audit 'user.login_throttle_cleared' + security event USER_UNLOCKED{reason:'login_throttle'}", async () => {
+    const { service, audit, securityEvents } = makeService();
+    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID)).resolves.toBeUndefined();
+
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    const entry = audit.record.mock.calls[0][1] as {
+      action: string;
+      objectType: string;
+      before: { locked: boolean };
+      after: { locked: boolean; ok: boolean };
+    };
+    expect(entry.action).toBe("user.login_throttle_cleared");
+    expect(entry.objectType).toBe("user");
+    // Vết mô tả KẾT QUẢ ĐO ĐƯỢC (đọc lại sau khi gỡ), không phải ý định.
+    expect(entry.before.locked).toBe(true);
+    expect(entry.after).toMatchObject({ locked: false, ok: true });
+    // KHÔNG rò email vào payload (khoá `rl:*` nhúng email; objectId đã định danh đủ).
+    expect(JSON.stringify(entry)).not.toContain("target@a.test");
+
+    const ev = securityEvents.record.mock.calls[0][1] as {
+      eventType: string;
+      payload: { reason: string };
+    };
+    expect(ev.eventType).toBe("USER_UNLOCKED");
+    expect(ev.payload.reason).toBe("login_throttle");
+  });
+
+  it("CLEAR khi KHÔNG có khoá nào: vẫn ghi ĐÚNG 1 audit + 1 security event (hadLock=false), không ném", async () => {
+    // lock-observability-rule: đường GỠ khoá phải để vết kể cả khi không có gì để gỡ — "admin đã thử
+    // gỡ" là dữ kiện forensics. `hadLock` phân biệt hai ca, nên vết không mơ hồ.
+    const { service, audit, securityEvents } = makeService({
+      throttle: {
+        state: { locked: false, remainingSec: null, buckets: [], unknown: false },
+        after: { locked: false, remainingSec: null, buckets: [], unknown: false },
+      },
+    });
+    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID)).resolves.toBeUndefined();
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    expect(securityEvents.record).toHaveBeenCalledTimes(1);
+    const ev = securityEvents.record.mock.calls[0][1] as {
+      payload: { hadLock: boolean };
+    };
+    expect(ev.payload.hadLock).toBe(false);
+  });
+
+  it("Valkey DEGRADED ⇒ 503, KHÔNG 204 — nhưng vết vẫn được ghi với ok:false", async () => {
+    // 204 ở đây là nói dối với người bấm nút: họ sẽ bảo người dùng "thử lại đi" trong khi vẫn bị chặn.
+    const { service, audit } = makeService({ throttle: { degraded: true } });
+    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    expect((audit.record.mock.calls[0][1] as { after: { ok: boolean } }).after.ok).toBe(false);
+  });
+
+  it("gỡ xong mà ĐỌC LẠI vẫn thấy khoá ⇒ 503 (không tin lời `del`, tin phép đo)", async () => {
+    const { service } = makeService({
+      throttle: {
+        state: { locked: true, remainingSec: 600, buckets: ["acct"], unknown: false },
+        after: { locked: true, remainingSec: 590, buckets: ["acct"], unknown: false },
+      },
+    });
+    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it("actor KHÔNG có `reset-2fa:user` ⇒ bucket bước-2 KHÔNG được gỡ (wildcard không được lách cặp sensitive)", async () => {
+    // FULL gate 03/09 (HIGH-2): `unlock:user` là is_sensitive=false ⇒ một grant `*:*` thoả nó. Bucket
+    // `rl:2fa` là control DUY NHẤT giới hạn dò TOTP ở bước-2; cho phép gỡ nó bằng cặp non-sensitive
+    // nghĩa là người giữ wildcard — vốn bị `POST /:id/2fa/reset` từ chối — lại reset được ngưỡng tuỳ ý.
+    const { service, clearLoginLocks } = makeService({ canResetTwoFactor: false });
+    await service.clearLoginThrottle(ACTOR, TARGET_ID);
+    expect(clearLoginLocks).toHaveBeenCalledWith(SLUG, "target@a.test", undefined);
+  });
+
+  it("actor CÓ `reset-2fa:user` ⇒ bucket bước-2 ĐƯỢC gỡ (ca ALLOW đối chứng — ca deny trên không xanh-rỗng)", async () => {
+    const { service, clearLoginLocks } = makeService();
+    await service.clearLoginThrottle(ACTOR, TARGET_ID);
+    expect(clearLoginLocks).toHaveBeenCalledWith(SLUG, "target@a.test", {
+      companyId: ACTOR.companyId,
+      userId: TARGET_ID,
+    });
+  });
+
+  it("GET: đọc KHÔNG kết luận được (unknown) mà chưa thấy khoá ⇒ 503, KHÔNG trả 'không bị khoá'", async () => {
+    // Trả `locked:false` ở đây sẽ làm FE ẩn nút gỡ — tức cửa thoát biến mất đúng lúc Valkey hỏng.
+    const { service } = makeService({
+      throttle: {
+        state: { locked: false, remainingSec: null, buckets: [], unknown: true },
+        after: { locked: false, remainingSec: null, buckets: [], unknown: true },
+      },
+    });
+    await expect(service.getLoginThrottle(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it("CLEAR: `after.unknown` cũng chặn 204 — vết ghi ok:false thay vì khẳng định đã gỡ xong", async () => {
+    const { service, audit } = makeService({
+      throttle: {
+        state: { locked: true, remainingSec: 600, buckets: ["ip"], unknown: false },
+        after: { locked: false, remainingSec: null, buckets: [], unknown: true },
+      },
+    });
+    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect((audit.record.mock.calls[0][1] as { after: { ok: boolean } }).after.ok).toBe(false);
+  });
+
+  it("LoginRateLimiter vắng (DI hỏng) ⇒ NÉM ngay, KHÔNG âm thầm trả 204 + audit 'đã gỡ'", async () => {
+    const { service, audit } = makeService({ omitRateLimiter: true });
+    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID)).rejects.toThrow(/LoginRateLimiter/);
+    expect(audit.record).not.toHaveBeenCalled();
   });
 });

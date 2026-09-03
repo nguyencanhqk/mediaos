@@ -3,11 +3,13 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { randomInt } from "node:crypto";
 import { eq, sql, type SQL } from "drizzle-orm";
 import type {
   AuthUserDetailDto,
+  AuthUserLoginThrottleDto,
   AuthUserDto,
   AuthUserListDto,
   AuthUserPasswordResetResultDto,
@@ -17,12 +19,14 @@ import type {
   ListAuthUsersQuery,
   UpdateAuthUserRequest,
 } from "@mediaos/contracts";
+import { AUTH_USER } from "@mediaos/contracts";
 import { isUniqueViolation } from "../common/db-error";
 import { DatabaseService } from "../db/db.service";
 import { users, type User } from "../db/schema";
 import { AuditService } from "../events/audit.service";
 import { AuthService } from "../auth/auth.service";
 import { PasswordService } from "../auth/password.service";
+import { LoginRateLimiter } from "../auth/login-rate-limiter";
 import { SecurityEventWriter } from "../auth/security-event-writer.service";
 import { PermissionService } from "../permission/permission.service";
 import { LmsSyncProducer } from "../integrations/lms/lms-sync-producer.service";
@@ -116,7 +120,30 @@ export class AuthUsersService {
     // (Nest LUÔN inject — LmsSyncProducer export từ LmsSyncModule, UsersModule import; chỉ vắng khi unit-spec
     // dựng tay). ZERO HTTP trong tx (fail-soft cấu trúc); company-gated bên trong producer.
     private readonly lmsSync?: LmsSyncProducer,
+    // S18-AUTH-UNLOCK429-1 — bộ chặn tần suất đăng nhập (khoá 429), để admin GỠ được từ giao diện.
+    //
+    // ⚠️ PHẢI đứng CUỐI danh sách, không chèn vào giữa: ba chỗ trong `auth-users.service.spec.ts` dựng
+    // service THEO VỊ TRÍ với `as never`, nên một tham số chèn giữa sẽ làm lệch mock đúng một ô mà
+    // TypeScript vẫn biên dịch sạch. Optional theo convention `securityEvents`/`lmsSync` (Nest LUÔN
+    // inject — provider có trong AuthModule đã import; chỉ vắng khi unit-spec dựng tay) — nhưng KHÔNG
+    // đi kèm `?.` no-op ở call-site: xem `requireRateLimiter`.
+    private readonly rateLimiter?: LoginRateLimiter,
   ) {}
+
+  /**
+   * Fail-fast thay cho `?.`. Với dual-write timeline, `?.` là đúng (mất một hàng phụ trợ). Ở đây thì
+   * KHÔNG: no-op nghĩa là admin bấm "Gỡ khoá đăng nhập", nhận 204, audit ghi "đã gỡ" — mà không có khoá
+   * nào bị xoá và người dùng vẫn 429. Thà 500 rõ ràng còn hơn một nút bấm giả vờ hoạt động.
+   */
+  private requireRateLimiter(): LoginRateLimiter {
+    if (!this.rateLimiter) {
+      throw new Error(
+        "AuthUsersService: LoginRateLimiter chưa được inject — đường gỡ khoá đăng nhập (429) sẽ no-op " +
+          "trong khi vẫn trả 204 + ghi audit. Kiểm tra AuthModule export / UsersModule imports.",
+      );
+    }
+    return this.rateLimiter;
+  }
 
   /**
    * GET /auth/users — danh sách LIVE + tổng (data-scope-aware). Chỉ đọc (không audit). PermissionGuard
@@ -351,6 +378,153 @@ export class AuthUsersService {
       // → LMS mở lại NẾU nhân viên vẫn active. Ngoài LMS-company / không hồ sơ → no-op.
       await this.lmsSync?.enqueueSync(tx, actor.companyId, id);
       return toDto(updated);
+    });
+  }
+
+  /**
+   * S18-AUTH-UNLOCK429-1 — GET /auth/users/:id/login-throttle: người này có đang bị BỘ CHẶN TẦN SUẤT
+   * (429) khoá đăng nhập không, và còn bao lâu.
+   *
+   * KHÔNG `assertNotSelf`: đọc trạng thái khoá của chính mình là vô hại và đúng thứ admin cần khi tự
+   * chẩn đoán. Chặn tự-thao-tác chỉ áp cho đường GHI (`clearLoginThrottle`), mirror `lock`/`unlock`.
+   *
+   * Chỉ đọc ⇒ KHÔNG audit (đúng luật của `listUsers`/`getUserDetail`). Người gọi đã qua gate
+   * `unlock:user`, cặp có scope `Company` ⇒ thấy được mọi user trong tenant — chấp nhận có ý thức,
+   * ghi ra đây để review sau không tưởng là sót vị từ scope.
+   */
+  async getLoginThrottle(actor: AuthUserActor, id: string): Promise<AuthUserLoginThrottleDto> {
+    const limiter = this.requireRateLimiter();
+    const { slug, email } = await this.resolveThrottleTarget(actor, id);
+    const state = await limiter.loginThrottleState(slug, email, {
+      companyId: actor.companyId,
+      userId: id,
+    });
+    // KHÔNG trả "không bị khoá" khi thật ra là "không biết": FE chỉ dựng nút gỡ khi thấy khoá, nên một
+    // `locked:false` sai sẽ làm CỬA THOÁT biến mất đúng lúc Valkey hỏng — ca duy nhất cần nó nhất.
+    if (state.unknown && !state.locked) {
+      throw new ServiceUnavailableException(
+        "Chưa đọc được trạng thái khoá đăng nhập (bộ nhớ đệm không phản hồi). Vui lòng thử lại.",
+      );
+    }
+    return { locked: state.locked, remainingSec: state.remainingSec, buckets: state.buckets };
+  }
+
+  /**
+   * S18-AUTH-UNLOCK429-1 — POST /auth/users/:id/login-throttle/clear: GỠ khoá 429 của người này.
+   *
+   * ⚠️ KHÁC `unlockUser`: đó là khoá TÀI KHOẢN (`users.status='locked'`, do admin đặt). Người bị 429 vẫn
+   * `status='active'` nên `unlockUser` còn ném 400 NOT_LOCKED — đây là lý do đường này phải tồn tại
+   * riêng, không phải một biến thể của nút cũ.
+   *
+   * THỨ TỰ có chủ ý — gỡ TRƯỚC, ghi vết SAU:
+   *   Valkey không transactional, rollback DB không hoàn tác được `DEL`. Ghi audit trong tx rồi gỡ sau
+   *   commit sẽ để lại VẾT NÓI DỐI khi việc gỡ hỏng. Gỡ trước ⇒ hàng audit mô tả KẾT QUẢ ĐO ĐƯỢC
+   *   (`before`/`after` đọc thật, `ok`), không phải ý định. Đánh đổi còn lại: nếu bước ghi vết ném thì
+   *   khoá đã gỡ mà mất dấu — hẹp hơn hẳn rủi ro ngược lại, và lúc đó cả request đã 500 có log.
+   *
+   * Ghi vết CẢ KHI không có khoá nào để gỡ: đường DỰNG/GỠ khoá phải để lại dấu (`hadLock` phân biệt hai
+   * ca trong payload) — "admin đã thử gỡ" là dữ kiện forensics, không phải nhiễu.
+   */
+  async clearLoginThrottle(actor: AuthUserActor, id: string): Promise<void> {
+    this.assertNotSelf(actor, id);
+    const limiter = this.requireRateLimiter();
+    const { slug, email } = await this.resolveThrottleTarget(actor, id);
+    const subject = (await this.canClearTwoFactorBucket(actor))
+      ? { companyId: actor.companyId, userId: id }
+      : undefined;
+
+    const before = await limiter.loginThrottleState(slug, email, subject);
+    const result = await limiter.clearLoginLocks(slug, email, subject);
+    const after = await limiter.loginThrottleState(slug, email, subject);
+    // `after.unknown` cũng chặn "ok": một phép đọc không kết luận được thì KHÔNG được coi là bằng chứng
+    // đã gỡ xong — đó chính là hình dạng của vết nói dối mà đường này sinh ra để chặn.
+    const ok = !result.degraded && !after.locked && !after.unknown;
+
+    await this.db.withTenant(actor.companyId, async (tx) => {
+      await this.audit.record(tx, {
+        action: "user.login_throttle_cleared",
+        objectType: "user",
+        actorUserId: actor.id,
+        objectId: id,
+        // KHÔNG đưa email vào payload: khoá `rl:*` nhúng email, và audit đã định danh đủ bằng objectId.
+        before: {
+          locked: before.locked,
+          buckets: before.buckets,
+          remainingSec: before.remainingSec,
+        },
+        after: {
+          locked: after.locked,
+          buckets: after.buckets,
+          clearedKeys: result.clearedKeys,
+          ok,
+        },
+      });
+      await this.securityEvents?.record(tx, {
+        eventType: "USER_UNLOCKED",
+        userId: id,
+        actorUserId: actor.id,
+        // Phân biệt với unlock TÀI KHOẢN (payload rỗng) khi đọc timeline — hai hành động khác nhau.
+        // `ok` phải có mặt: `hadLock` chỉ nói "trước đó có khoá không", KHÔNG nói "gỡ được hay không".
+        // Thiếu nó, timeline bảo mật ghi USER_UNLOCKED cho một thao tác 503 không mở được gì.
+        payload: { reason: "login_throttle", hadLock: before.locked, ok },
+      });
+    });
+
+    if (!ok) {
+      // Valkey bật nhưng một phép đọc/xoá không kết luận được, HOẶC khoá vẫn còn sau khi gỡ. 204 ở đây
+      // là nói dối với người bấm nút — và họ sẽ bảo người dùng "thử lại đi" trong khi vẫn bị chặn.
+      throw new ServiceUnavailableException(
+        "Chưa gỡ được khoá đăng nhập (bộ nhớ đệm không phản hồi hoặc khoá vẫn còn). Vui lòng thử lại.",
+      );
+    }
+  }
+
+  /**
+   * Bộ đôi `(slug, email)` để dựng khoá rate-limit — LẤY TỪ DB, không từ input.
+   *
+   * `findByIdTx` company-scoped + RLS ⇒ cross-tenant/không tồn tại đều 404 TRƯỚC khi chạm một byte nào
+   * của không gian khoá; không có đường nào để một tenant xoá khoá của tenant khác. `slug` đọc trong
+   * cùng tenant tx (khuôn `dashboard-company-tz.util.ts`).
+   */
+  /**
+   * Người này có được phép gỡ bucket bước-2 (TOTP) không — gate bằng CẶP NHẠY CẢM `reset-2fa:user`,
+   * KHÔNG phải bằng `unlock:user`.
+   *
+   * Lý do (FULL gate 03/09, HIGH-2): `unlock:user` là `is_sensitive=false` (mig 0450) ⇒ một grant
+   * wildcard `*:*` thoả nó. Bucket `rl:2fa:{companyId}|{userId}` là control DUY NHẤT giới hạn dò mã
+   * TOTP ở bước-2; nếu gỡ được nó bằng cặp non-sensitive thì người giữ wildcard — vốn bị
+   * `POST /:id/2fa/reset` TỪ CHỐI vì cặp đó khai `isSensitive` — lại reset được ngưỡng 5 tuỳ ý và dò
+   * 10⁶ mã. Ràng buộc đúng là: ai gỡ được 2FA của người khác thì mới được gỡ khoá dò 2FA của họ.
+   *
+   * Fail-closed: quyết định `allow=false` (kể cả khi engine lỗi) ⇒ chỉ gỡ khoá mật khẩu, phần còn lại
+   * của thao tác vẫn chạy. Người dùng vẫn được cứu khỏi 429 của bucket `ip`/`acct`.
+   */
+  private async canClearTwoFactorBucket(actor: AuthUserActor): Promise<boolean> {
+    const decision = await this.permissions.can({
+      userId: actor.id,
+      companyId: actor.companyId,
+      action: AUTH_USER.RESET_2FA.action,
+      resourceType: AUTH_USER.RESET_2FA.resource,
+      isSensitive: true,
+    });
+    return decision.allow;
+  }
+
+  private async resolveThrottleTarget(
+    actor: AuthUserActor,
+    id: string,
+  ): Promise<{ slug: string; email: string }> {
+    return this.db.withTenant(actor.companyId, async (tx) => {
+      const target = await this.repo.findByIdTx(tx, actor.companyId, id);
+      if (!target) throw new NotFoundException(USER_NOT_FOUND);
+      const r = await tx.execute(
+        sql`SELECT slug FROM companies WHERE id = ${actor.companyId} AND deleted_at IS NULL LIMIT 1`,
+      );
+      const slug = (r.rows[0] as { slug: string } | undefined)?.slug;
+      // Không có hàng công ty ⇒ không dựng được khoá. Ném thay vì đoán một slug: đoán sai nghĩa là gỡ
+      // nhầm khoá của người khác, hoặc báo "đã gỡ" mà không chạm gì.
+      if (!slug) throw new NotFoundException(USER_NOT_FOUND);
+      return { slug, email: target.email };
     });
   }
 

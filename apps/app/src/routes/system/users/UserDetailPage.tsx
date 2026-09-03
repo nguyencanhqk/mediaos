@@ -29,6 +29,7 @@ import {
   KeyRound,
   ShieldCheck,
   ShieldOff,
+  ShieldAlert,
 } from "lucide-react";
 import {
   authUsersApi,
@@ -70,6 +71,9 @@ function mutationErrorMessage(err: unknown, t: TF): string {
     if (err.status === 403) return t("users.form.errors.forbidden");
     if (err.status === 404) return t("users.detail.errors.notFound");
     if (err.status === 409) return t("users.detail.errors.conflict");
+    // 503 của đường gỡ khoá 429 mang nghĩa RIÊNG: "khoá vẫn còn". Gộp vào "lỗi hệ thống, thử lại sau"
+    // là biến tín hiệu server bỏ công dựng thành một câu khuyên SAI (thử lại không giúp gì).
+    if (err.status === 503) return t("users.detail.loginThrottle.failed");
     if (err.status >= 500) return t("users.form.errors.server");
   }
   return t("users.form.errors.generic");
@@ -286,7 +290,39 @@ export function UserDetailPage({ userId, onBack, onEdit, onManageRoles }: UserDe
     },
   });
 
-  const mutationError = lockMutation.error ?? unlockMutation.error;
+  /**
+   * S18-AUTH-UNLOCK429-1 — trạng thái BỘ CHẶN TẦN SUẤT (429), TÁCH HẲN `data.status === 'locked'`.
+   *
+   * `enabled: canUnlock` là bắt buộc chứ không phải tối ưu: endpoint gate `unlock:user`, nên người chỉ
+   * có `view:user` sẽ ăn 403 và màn hình hiện một lỗi chẳng liên quan gì tới việc họ đang làm.
+   * `staleTime` ngắn vì đây là trạng thái có TTL (khoá tự hết sau ~15 phút) — cache dài sẽ hiện badge
+   * cho một khoá đã hết hạn.
+   */
+  const throttleQuery = useQuery({
+    queryKey: authUsersKeys.loginThrottle(userId),
+    queryFn: () => authUsersApi.getLoginThrottle(userId),
+    enabled: canUnlock && !!userId,
+    staleTime: 15_000,
+  });
+
+  const clearThrottleMutation = useMutation({
+    mutationFn: () => authUsersApi.clearLoginThrottle(userId),
+    // Dọn lỗi treo của hai mutation kia: banner dùng chung một chỗ, để nguyên thì lỗi cũ che lỗi mới.
+    onMutate: () => {
+      lockMutation.reset();
+      unlockMutation.reset();
+    },
+    // Làm mới ở CẢ hai nhánh: server trả 503 khi CHƯA gỡ được (Valkey không phản hồi / khoá còn), và nếu
+    // chỉ invalidate ở nhánh thành công thì badge sẽ đứng im ở trạng thái cũ đúng lúc nó sai nhất.
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: authUsersKeys.loginThrottle(userId) });
+    },
+  });
+
+  // Thứ tự có chủ ý: React Query giữ `error` tới lần `mutate()` KẾ TIẾP CỦA CHÍNH mutation đó, nên
+  // chuỗi theo thứ tự cũ sẽ hiện lỗi 409 của nút "Khoá" bấm lúc trước và NUỐT thông điệp 503 "vẫn còn
+  // khoá" của lần bấm vừa rồi. Lỗi mới nhất phải thắng.
+  const mutationError = clearThrottleMutation.error ?? unlockMutation.error ?? lockMutation.error;
 
   // ── Forbidden ──────────────────────────────────────────────────────────────
   if (!canView) {
@@ -337,6 +373,15 @@ export function UserDetailPage({ userId, onBack, onEdit, onManageRoles }: UserDe
   }
 
   const isLocked = data.status === "locked";
+  const throttle = throttleQuery.data;
+  const throttleLocked = throttle?.locked === true;
+  // Query lỗi = KHÔNG BIẾT, không phải "không bị khoá". Gộp hai cái làm một chính là cách cửa thoát
+  // biến mất đúng lúc cần nhất (server trả 503 khi không đọc được trạng thái).
+  const throttleUnknown = throttleQuery.isError;
+  // `remainingSec === null` = KHÔNG đọc được TTL (Valkey rớt) — khi đó hiện badge KHÔNG kèm số, tuyệt
+  // đối không quy về 0 ("còn ~0 phút" là câu duy nhất sai trong mọi trường hợp).
+  const throttleMinutes =
+    throttle?.remainingSec != null ? Math.max(1, Math.ceil(throttle.remainingSec / 60)) : null;
   const activeMutation =
     confirmAction === "lock"
       ? lockMutation
@@ -388,6 +433,21 @@ export function UserDetailPage({ userId, onBack, onEdit, onManageRoles }: UserDe
                 {t("users.detail.actions.unlock")}
               </Button>
             )}
+            {/* S18-AUTH-UNLOCK429-1 — nút RIÊNG cho khoá 429. Điều kiện hiện KHÁC nút "Mở khoá" ở trên
+                (`throttle.locked` vs `status==='locked'`) vì hai loại khoá độc lập: người bị 429 vẫn
+                `active`, nên nút kia còn ném 400. Không gộp, không đổi nhãn cho giống nhau. */}
+            {(throttleLocked || throttleUnknown) && canUnlock && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={clearThrottleMutation.isPending}
+                title={t("users.detail.loginThrottle.hint")}
+                onClick={() => clearThrottleMutation.mutate()}
+              >
+                <ShieldAlert className="mr-2 h-4 w-4" />
+                {t("users.detail.loginThrottle.action")}
+              </Button>
+            )}
             {!isLocked && canLock && (
               <Button variant="destructive" size="sm" onClick={() => setConfirmAction("lock")}>
                 <Lock className="mr-2 h-4 w-4" />
@@ -397,6 +457,37 @@ export function UserDetailPage({ userId, onBack, onEdit, onManageRoles }: UserDe
           </div>
         }
       />
+
+      {/* S18-AUTH-UNLOCK429-1 — badge trạng thái khoá 429. Đứng RIÊNG, không trộn vào badge
+          `users.status.*` ở bảng dưới: cùng chỗ = lại đúng nhầm lẫn mà WO này sinh ra để xoá. */}
+      {throttleLocked && (
+        <p
+          role="status"
+          className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
+          <ShieldAlert className="h-4 w-4 shrink-0" />
+          <span>
+            {throttleMinutes !== null
+              ? t("users.detail.loginThrottle.badge", { minutes: throttleMinutes })
+              : t("users.detail.loginThrottle.badgeNoEta")}
+          </span>
+        </p>
+      )}
+
+      {throttleUnknown && canUnlock && (
+        <p
+          role="status"
+          className="rounded-md border border-warning/40 bg-warning-muted px-3 py-2 text-sm text-warning"
+        >
+          {t("users.detail.loginThrottle.unknown")}
+        </p>
+      )}
+
+      {clearThrottleMutation.isSuccess && !throttleLocked && !throttleUnknown && (
+        <p role="status" className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+          {t("users.detail.loginThrottle.cleared")}
+        </p>
+      )}
 
       {mutationError && (
         <p

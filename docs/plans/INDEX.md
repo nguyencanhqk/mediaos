@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**478 WO** · có micro-plan: **269/478** · ⬜ 38 chờ · 🔵 0 đang làm · ✅ 439 xong · 🔴 1 chặn
+**481 WO** · có micro-plan: **270/481** · ⬜ 39 chờ · 🔵 1 đang làm · ✅ 441 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -523,7 +523,7 @@
 | `S14-FND-MODULEMETA-1` | 🟡 | ✅ xong | [📄](S14-FND-MODULEMETA-1.md) | — | MODULE_APP_METADATA phủ 6 module hậu-MVP đã ship (GOAL·LMS·ASSET·ROOM· |
 | `S14-QA-COVGATE-1` | 🟢 | ✅ xong | [📄](S14-QA-COVGATE-1.md) | — | Dọn cổng coverage CHẾT: script `test:cov` trỏ `src/workflow` (module đ |
 | `S14-PERF-DASHACTOR-1` | 🔴 | ✅ xong | [📄](S14-PERF-DASHACTOR-1.md) | — | Gộp 4 bản `gateOrThrow` trùng nhau ở dashboard handlers + cắt round-tr |
-| `S14-SEC-DASHGATE-WILDCARD-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S14-PERF-DASHACTOR-1 | Gate widget DASH cho grant wildcard `*:*` lọt qua cặp SENSITIVE — `can |
+| `S14-SEC-DASHGATE-WILDCARD-1` | 🔴 | 🔵 đang làm | [📄](S14-SEC-DASHGATE-WILDCARD-1.md) | ✅S14-PERF-DASHACTOR-1 | Gate widget DASH cho grant wildcard `*:*` lọt qua cặp SENSITIVE — `can |
 | `S14-RECRUIT-FILEGRANT-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Cấp cặp quyền foundation-file cho recruiter/hr — gap defer từ S12-RECR |
 | `S14-FE-DEBT-1` | 🟢 | ⬜ chờ | — *(chưa)* | — | Nợ FE gộp từ wave S12: picker đơn vị tổ chức (org-unit) dùng chung + g |
 | `S14-OPS-MODULEROLE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S14-PROD-PAYROLLGRANT-1 | Gán role của các module đã ship cho người thật trên PROD (asset-manage |
@@ -569,15 +569,23 @@
 
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
-| `S17-CHAT-UX2-DOC-1` | 🟡 | 🔴 chặn | [📄](S17-CHAT-UX2-WAVE.md) | — | Bộ tài liệu CHAT v2 (S17): SPEC-15 §9 sửa SCREEN-001/002/004 «v2» · §9 |
-| `S17-CHAT-UX2-BE-1` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-DOC-1 | DTO phòng v2: `lastMessage` (LATERAL tin cuối, che thu hồi ở server) + |
-| `S17-CHAT-UX2-BE-2` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-DOC-1 | CHAT-API-031 GET /chat/rooms/:id/links — liên kết đã chia sẻ trong phò |
+| `S17-CHAT-UX2-DOC-1` | 🟡 | ✅ xong | [📄](S17-CHAT-UX2-WAVE.md) | — | Bộ tài liệu CHAT v2 (S17): SPEC-15 §9 sửa SCREEN-001/002/004 «v2» · §9 |
+| `S17-CHAT-UX2-BE-1` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-DOC-1 | DTO phòng v2: `lastMessage` (LATERAL tin cuối, che thu hồi ở server) + |
+| `S17-CHAT-UX2-BE-2` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-DOC-1 | CHAT-API-031 GET /chat/rooms/:id/links — liên kết đã chia sẻ trong phò |
 | `S17-CHAT-UX2-FE-1` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-BE-1 | Danh sách phòng v2: thanh đầu (tìm · lọc · tạo) · chip lọc DEC-021 · d |
-| `S17-CHAT-UX2-FE-2` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-DOC-1 | Hội thoại v2: header (avatar · tên · «đang online / N thành viên» · tì |
-| `S17-CHAT-UX2-FE-3` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-FE-2 | Composer v2 DEC-027: @mention autocomplete từ roster (gửi mentions[])  |
+| `S17-CHAT-UX2-FE-2` | 🟡 | ✅ xong | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-DOC-1 | Hội thoại v2: header (avatar · tên · «đang online / N thành viên» · tì |
+| `S17-CHAT-UX2-FE-3` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-FE-2 | Composer v2 DEC-027: @mention autocomplete từ roster (gửi mentions[])  |
 | `S17-CHAT-UX2-FE-4` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-BE-1 ⏳S17-CHAT-UX2-BE-2 | Bảng thông tin phòng v2 DEC-025: bố cục dọc (avatar lớn · tên · Tạo bở |
-| `S17-CHAT-UX2-FE-5` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-FE-1 ⏳S17-CHAT-UX2-FE-2 | Drawer chat DEC-026 thay ChatDock/ChatDockWindow (Sheet phải 400px: tì |
+| `S17-CHAT-UX2-FE-5` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-FE-1 ✅S17-CHAT-UX2-FE-2 | Drawer chat DEC-026 thay ChatDock/ChatDockWindow (Sheet phải 400px: tì |
 | `S17-CHAT-UX2-QA-1` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-FE-3 ⏳S17-CHAT-UX2-FE-4 ⏳S17-CHAT-UX2-FE-5 | Nghiệm thu wave S17-CHAT-UX2: masking preview/links (thu hồi · file ·  |
+
+## Sprint 18
+
+| WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
+| --- | --- | --- | --- | --- | --- |
+| `S18-AUTH-UNLOCK429-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Gỡ khoá đăng nhập (429) từ giao diện: chỉ mục IP + clearLoginLocks/rem |
+| `S18-AUTH-RESETCLEARS-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S18-AUTH-UNLOCK429-1 | Đặt lại mật khẩu thành công thì xoá luôn khoá login 429 của email đó ( |
+| `S18-AUTH-RETRYAFTER-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S18-AUTH-UNLOCK429-1 | 429 đăng nhập mang `retryAfterSec` (error.details + header Retry-After |
 
 ---
 

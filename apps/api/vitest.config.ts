@@ -251,6 +251,17 @@ export default defineConfig({
           branches: 80,
           statements: 80,
         },
+        // S18-AUTH-UNLOCK429-1 — file này TRƯỚC NAY nằm ngoài MỌI `--coverage.include`, tức bộ chặn
+        // brute-force + đường GỠ khoá 429 không có cổng coverage nào đo. Ngưỡng đặt theo SỐ ĐO THẬT
+        // 2026-09-03 dưới `test:cov:sensitive` (LANE_DB): 100% stmts/lines/funcs · 98.94% branches.
+        // Để 90 cho branches là biên cho nhánh `??`/`?.` mà v8 đếm nhưng không tới được — nâng khi có
+        // ca mới, ĐỪNG hạ.
+        "src/auth/login-rate-limiter.ts": {
+          lines: 95,
+          functions: 95,
+          branches: 90,
+          statements: 95,
+        },
         // S7-CALL-QA-1 (cùng mô hình cưỡng chế như S2-QA-1-FIX-B ở trên): ngưỡng per-file chỉ CẮN khi file
         // xuất hiện trong report, nên hai khối này **inert** ở lần chạy unit mặc định (`pnpm test`, không
         // LANE_DB ⇒ int-spec skipIf) và được CƯỠNG CHẾ bởi `test:cov:call` — script đó `--coverage.include`
