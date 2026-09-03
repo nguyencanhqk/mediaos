@@ -4,6 +4,16 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
+## Phiên 2026-09-03 — S14-PERF-DASHACTOR-1 → PR #469 MỞ (vùng đỏ, chờ người chốt)
+
+- **Ship (PR #469, nhánh `perf/s14-perf-dashactor-1`, 2 commit, 0 migration):** (1) gộp 4 bản `gateOrThrow` byte-giống-nhau ở dashboard handlers về MỘT hàm thuần `gateWidgetOrThrow` (`dashboard-widget-gate.ts`) — gộp CODE gate, KHÔNG gộp hằng sàn scope; giữ `gate ⊥ fetch`. (2) batch scope: thân quyết định chuyển NGUYÊN XI sang hàm thuần `decideStrongestScope` (`permission.decide.ts`) + `resolveStrongestScopes` = 1 fetch + N decide, mirror `canBatch`. **Số đo spy tầng repo: /dashboard/me 3→1 · resolveActor 4→1 · tổng đường admin 12→7 (−42%)**; nhân viên thường giữ 0→0 nhờ short-circuit `requests.length===0` TRƯỚC fetch.
+- **Hình dạng trả về là MẢNG THEO CHỈ SỐ, KHÔNG Map** — đây là điều kiện an toàn, không phải sở thích: `Map.get()` miss trả `undefined` mà caller kiểm `scope !== null` ⇒ mở khoá PII ứng viên + lương offer, typecheck KHÔNG bắt. CẤM mẫu `<batch>.get(...) !== null` ở mọi caller mới.
+- **Cổng coverage vá cùng commit:** `permission.decide.ts` trước nay KHÔNG có khoá threshold và ngoài MỌI `--coverage.include` (`decideCan` đã ngoài cổng từ HR-PERF-1). Thêm khoá ≥80% + include + spec mới vào `test:cov:sensitive` ⇒ đo được 91.3% lines / 94.56% branches / 100% funcs.
+- **⚠️ Phát hiện phụ đã seed WO nợ `S14-SEC-DASHGATE-WILDCARD-1` (🔴, FULL, depends_on WO này):** câu «wildcard KHÔNG lọt» lặp ở cả 4 bản `gateOrThrow` cũ là **SAI** — `decideCan` đọc `is_sensitive` của HÀNG GRANT KHỚP (hàng `*:*`, false) chứ không của CẶP ĐÍCH ⇒ actor cầm `*:*` qua được gate widget cặp sensitive (đo bằng test chạy engine thật). Chưa nổ (census 0565 §6.7 · 2 role PROD đã thu hồi · tầng-2 truyền cờ tường minh); hở ở đường METADATA /dashboard/me + gọi thẳng slug. KHÔNG vá trong WO perf — siết = đổi hành vi quyền thật.
+- **Verify:** `check.sh --all --lane-db=check` XANH 9/9 không banner · `test:cov:sensitive` **dưới LANE_DB** 970/970 pass, 0 ngưỡng đỏ. (Lượt đầu chạy KHÔNG có LANE_DB cho ĐỎ GIẢ ở `auth.service.ts` + 2 repository vì 164 test skip — cổng này vô nghĩa nếu thiếu LANE_DB.)
+- **Kế:** người chốt merge #469 (`gh pr merge 469 --squash --admin`), rồi `S14-SEC-DASHGATE-WILDCARD-1` mới hết chặn. Backlog S14 còn READY: `S14-RECRUIT-FILEGRANT-1` (🔴) · `S14-FE-DEBT-1` (🟢).
+- **Friction:** (1) WO seed `zone:green` + `paths` ĐO THIẾU (thiếu `apps/api/src/permission/**`) — mà `pickReviewers` chỉ đọc `task`+`gate`, KHÔNG đọc `paths` ⇒ sửa mỗi paths là gate FULL không bao giờ chạy; phải sửa CẢ BA (zone+gate+paths). (2) Phiên trước để code+4 spec trong working tree KHÔNG commit và KHÔNG có dấu ledger nào ⇒ phiên sau phải suy trạng thái từ `git status` + plan file.
+
 ## Phiên 2026-08-31 — S12-RECRUIT-DASH-1 XONG (#452 squash `36b4b283`) — ĐÓNG WAVE S12-RECRUIT
 
 **Trạng thái:** merged --admin sau CI 14/14 xanh; STATUS regen push docs-only (`34190163`). Backlog
