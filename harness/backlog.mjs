@@ -16627,7 +16627,7 @@ export const backlog = [
     title:
       "Bộ tài liệu CHAT v2 (S17): SPEC-15 §9 sửa SCREEN-001/002/004 «v2» · §9a chip lọc · §10 CHAT-FUNC-022..026 · §15 CHAT-API-031 + tham số kind cho API-017 · §14 trạng thái UI bong bóng/drawer/responsive; API-13 §5 (lastMessage · peer · createdByName · kind · links); DB-12 ghi «0 migration»; UI doc màn chat; README §8 — plan-reviewer PASS trước khi BE-1/FE-2 khởi động",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "docs/spec/**",
       "docs/SPEC/**",
