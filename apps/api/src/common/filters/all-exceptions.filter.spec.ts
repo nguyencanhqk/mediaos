@@ -161,6 +161,10 @@ describe("AllExceptionsFilter — header Retry-After (429 mang retryAfterSec)", 
   it("`code` của 429 VẪN là SYSTEM-ERR-RATE-LIMIT ở CẢ hai nhánh (payload không khai `code`)", () => {
     for (const err of [tooManyRequests(900), tooManyRequests(null)]) {
       const { body } = invoke(err);
+      // Ghim CẢ literal: `toBe(httpStatusToCode(429))` một mình là so implementation với chính nó —
+      // đổi bảng mã thì ca vẫn xanh. Literal được ghim ở int-spec, nhưng file đó SKIP khi không có
+      // LANE_DB ⇒ ở lượt CI không-DB sẽ KHÔNG ai canh hợp đồng mã lỗi 429.
+      expect((body.error as { code: string }).code).toBe("SYSTEM-ERR-RATE-LIMIT");
       expect((body.error as { code: string }).code).toBe(httpStatusToCode(429));
       expect((body.error as { type: string }).type).toBe("HttpException");
     }

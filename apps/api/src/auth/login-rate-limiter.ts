@@ -422,7 +422,10 @@ export class LoginRateLimiter {
       );
       if (ips === null) unknown = true;
       // Còn marker tràn trần ⇒ có IP nằm NGOÀI chỉ mục: ta không thể khẳng định "không bị khoá".
-      if ((await this.valkey!.get(LoginRateLimiter.cappedMarkerKey(companySlug, email, "login"))) !== null) {
+      if (
+        (await this.valkey!.get(LoginRateLimiter.cappedMarkerKey(companySlug, email, "login"))) !==
+        null
+      ) {
         unknown = true;
       }
       for (const ip of ips ?? []) {
@@ -486,6 +489,13 @@ export class LoginRateLimiter {
    *
    * FAIL-SOFT NHƯNG KHÔNG CÂM: lỗi → `null` (429 mất phần số giây, FE rơi về chuỗi cũ) + LOG. Nuốt câm
    * nghĩa là tiện ích chết trong im lặng và không ai biết cho tới khi có người hỏi.
+   *
+   * ⚠️ ĐỪNG ĐỌC `catch` NÀY LÀ "ĐIỂM QUAN SÁT KHI VALKEY RỚT" — nó KHÔNG phải. `ValkeyService.ttl`
+   * never-throws (tự nuốt + log rồi trả `null`), và `assertKeysScoped` chỉ ném khi `NODE_ENV==='test'`
+   * ⇒ ở production nhánh này gần như không tới được, và ca "Valkey rớt" mất số **trong im lặng** ở tầng
+   * dưới (log thật đến từ `ValkeyService`). `catch` ở đây là lưới cho lỗi LẬP TRÌNH của chỗ gọi
+   * (`remainingLockSec` đổi hợp đồng, khoá sai họ) — vẫn đáng giữ, nhưng đừng trông vào nó để biết
+   * Valkey có sống hay không.
    * KHÔNG nội suy `key` vào log — khoá chứa slug + email của người dùng (BẤT BIẾN #3).
    */
   async remainingLockSecOrNull(key: string): Promise<number | null> {

@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ConflictException, HttpException, HttpStatus } from "@nestjs/common";
+import {
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  UnauthorizedException,
+} from "@nestjs/common";
 import type { ErrorDetail } from "@mediaos/contracts";
 import { Column, SQL } from "drizzle-orm";
 import { rlKey as rateLimitKey } from "../common/valkey/valkey-key";
@@ -654,10 +659,7 @@ describe("AuthService — 429 mang retryAfterSec (S18-AUTH-RETRYAFTER-1)", () =>
   }
 
   // ── login(): nhánh 429 có SÀN THỜI GIAN, nên còn phải ghim THỨ TỰ ────────────────────────────
-  function makeLoginAuth(opts: {
-    lockedKey: string | null;
-    remaining?: number | null;
-  }) {
+  function makeLoginAuth(opts: { lockedKey: string | null; remaining?: number | null }) {
     const order: string[] = [];
     const rateLimiter = {
       isLocked: vi.fn(async (key: string) => key === opts.lockedKey),
@@ -727,7 +729,11 @@ describe("AuthService — 429 mang retryAfterSec (S18-AUTH-RETRYAFTER-1)", () =>
       recordLoginAttempt: vi.fn().mockResolvedValue(undefined),
     });
 
-    await expect(login(auth)).rejects.toThrow();
+    // ⚠️ KHÔNG dùng `.rejects.toThrow()` TRẦN: nó xanh với BẤT KỲ lỗi nào, kể cả `TypeError` do mock
+    // thiếu một method — lúc đó `remainingLockSecOrNull` "không được gọi" chỉ vì hàm đã chết TRƯỚC khi
+    // tới đó, và ca này biến thành xanh-RỖNG (cùng họ `.not.toBe(403)` nuốt cả 500). Ghim đúng lớp lỗi
+    // của đường không-khoá: 401 đồng nhất.
+    await expect(login(auth)).rejects.toThrow(UnauthorizedException);
     expect(rateLimiter.remainingLockSecOrNull).not.toHaveBeenCalled();
   });
 

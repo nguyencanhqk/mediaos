@@ -396,7 +396,7 @@ Chạy 03/09 trên `LANE_DB=mediaos_s18retry` (Postgres cục bộ + Valkey).
 | --- | --- |
 | `src/common/filters/retry-after.spec.ts` (mới) | 11/11 xanh |
 | `src/common/filters/all-exceptions.filter.spec.ts` | 9/9 xanh (5 ca CŨ + 4 ca header mới) |
-| `src/auth/auth.service.spec.ts` | 25/25 xanh (17 cũ + 8 mới) |
+| `src/auth/auth.service.spec.ts` | 24/24 xanh (16 cũ + 8 mới) — bản đầu ghi 25, đếm sai, sửa sau review |
 | `src/auth/two-factor.service.spec.ts` | 21/21 xanh (18 cũ + 3 mới) |
 | `packages/web-core/src/lib/retry-after.spec.ts` (mới) | 8/8 xanh |
 | `apps/auth/src/routes/login.spec.tsx` | 17/17 xanh (11 cũ + 6 mới) |
@@ -464,3 +464,37 @@ build xanh** trước khi kết luận. (Cùng họ với memory `web-core-stale
   không. Owner quyết có seed WO nối tiếp hay không.
 - `chat/chat-calls.service.ts:531` và `notifications/lms-service-intake.guard.ts:107` — khác module /
   kênh máy-tới-máy, cố ý ngoài phạm vi (§1).
+
+## 9. Review gate (03/09, sau commit `e926f282`)
+
+`security-reviewer` độc lập (đọc code thật + chạy lại 7 bộ test): **PASS · 0 CRITICAL · 0 HIGH**.
+Bất biến kiểm: tenant ✓ · audit append-only ✓ · secret ✓ · authz ✓ · authn ✓.
+
+**Đã vá theo review (commit kế tiếp):**
+
+1. **§floor không thể ĐỎ** (MEDIUM) — `expect(p50 >= 250)` xanh kể cả khi round-trip TTL ngốn 5 giây,
+   vì sàn ngủ tới MỐC TUYỆT ĐỐI. Tức ca này KHÔNG ghim được điều §7.2 tuyên bố; thứ thật sự ghim
+   `done_when[1]` là ca **thứ tự gọi** ở `auth.service.spec`. Thêm assert **trần**
+   `FLOOR_BUDGET_CEILING_MS = sàn + jitter + 250` — bắt được việc TTL tràn RA NGOÀI sàn.
+2. **Nhãn `--no-file-parallelism` chỉ là văn xuôi** (MEDIUM) — `vitest.config.ts` không hề đặt
+   `fileParallelism:false`, file vẫn chạy song song. Sửa docblock nói ĐÚNG hiện trạng + ghi rõ ca chịu
+   nhiễu bằng p50 xen kẽ và ngưỡng thô, không phải bằng cô lập worker.
+3. `.rejects.toThrow()` TRẦN ở ca "không khoá ⇒ không đọc TTL" → ghim `UnauthorizedException` (ca cũ
+   xanh với cả `TypeError` do mock thiếu).
+4. `code` của 429 chỉ so với `httpStatusToCode(429)` (implementation với chính nó) → ghim thêm literal
+   `SYSTEM-ERR-RATE-LIMIT` ở **unit** spec, vì int-spec SKIP khi không có `LANE_DB`.
+5. Docblock `remainingLockSecOrNull` nói nhánh `catch` là điểm quan sát "Valkey rớt" — LỆCH một tầng
+   (`ValkeyService.ttl` never-throws). Sửa lại cho đúng: nó là lưới cho lỗi lập trình của chỗ gọi.
+6. §7.1 đếm sai `auth.service.spec` 25 → **24**.
+
+**Ghi nhận, KHÔNG vá (owner đọc rồi quyết):**
+
+- **Bề mặt lộ đã chấp nhận** (§3.4): kẻ tấn công từ IP mới nhận `retryAfterSec = n` của bucket `acct`
+  ⇒ suy ra khoá dựng lúc `T = now − (LOGIN_LOCKOUT_SEC − n)`. Không lộ email tồn tại, không rút ngắn
+  khoá, và T vốn đo được bằng polling ⇒ đây là **bỏ chi phí polling**, không phải kênh mới.
+- **Đếm ngược FE có thể sống lâu hơn khoá thật** (LOW): admin gỡ khoá bằng S18-AUTH-UNLOCK429-1 thì FE
+  vẫn giam nút Submit tới hết `lockRemainingSec` (lối thoát: tải lại trang). Cùng họ: đồng hồ hệ thống
+  nhảy lùi ⇒ đếm ngược phình. Không mất control (server vẫn là cổng).
+- **Tab chạy nền**: mốc hết hạn chống trôi tích luỹ, nhưng nhịp cuối vẫn bị bóp ≥1 lần/phút ⇒ quay lại
+  tab có thể thấy nút khoá thêm tới ~60s sau khi server đã mở. Vá gọn = listener `visibilitychange`.
+- `step-up.service.ts:122` — 429 AUTH duy nhất còn lại chưa mang số (§8).

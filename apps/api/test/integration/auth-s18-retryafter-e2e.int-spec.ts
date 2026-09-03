@@ -13,8 +13,11 @@
  *  §floor   — `done_when[1]`: đọc TTL nằm TRONG sàn thời gian. Đo PHÂN PHỐI (p50 của N lượt), không đo
  *             một mẫu: (a) 429 slug ĐÚNG vs (b) 429 slug SAI phải KHÔNG tách được, và cả hai vẫn ≥ sàn.
  *
- * ⚠️ Ca đo thời gian chạy tuần tự và cần file này KHÔNG chia sẻ worker: xem `--no-file-parallelism`
- *    trong §6 của `docs/plans/S18-AUTH-RETRYAFTER-1.md` nếu p50 dao động.
+ * ⚠️ ĐÍNH CHÍNH (review e926f282): file này CHẠY SONG SONG với int-spec khác — `vitest.config.ts`
+ *    KHÔNG đặt `fileParallelism:false`, và đặt sẽ làm chậm toàn bộ suite chỉ vì một ca. Nên §floor
+ *    KHÔNG được thiết kế như một đồng hồ chính xác: nó chịu nhiễu bằng p50 của 15 lượt XEN KẼ hai
+ *    nhóm (nhiễu rơi đều lên cả hai) và bằng các ngưỡng THÔ ở dưới. Muốn số sạch để đọc tay thì chạy
+ *    riêng file này; muốn cổng thì đọc ba assert (1)(1b)(2).
  */
 import "reflect-metadata";
 import type { INestApplication } from "@nestjs/common";
@@ -37,6 +40,12 @@ const WRONG_PASSWORD = "Wr0ng!s18retry";
 const BLOCKED_LOGIN_FLOOR_MS = 250;
 /** Jitter của sàn (`FORGOT_PW_JITTER_MS`). Ngưỡng "không tách được" chọn theo con số này. */
 const FLOOR_JITTER_MS = 80;
+/**
+ * TRẦN ngân sách sàn = sàn + jitter + biên nhiễu 250ms (HTTP loopback + supertest + int-spec chạy
+ * song song). Số đo thật khi ký WO: p50 314ms / 323ms — cách trần ~260ms, nên ca KHÔNG bám sát mép.
+ * Trần tồn tại để bắt việc round-trip TTL TRÀN RA NGOÀI sàn (bậc nghìn ms), không để đo chục ms.
+ */
+const FLOOR_BUDGET_CEILING_MS = BLOCKED_LOGIN_FLOOR_MS + FLOOR_JITTER_MS + 250;
 
 let _pwHash: string | undefined;
 async function hashedPw(): Promise<string> {
@@ -211,6 +220,16 @@ describe.skipIf(!hasDb)("S18-AUTH-RETRYAFTER-1 — 429 mang retryAfterSec", () =
     //     hết ngân sách 250ms. Nếu ca này đỏ, sàn đã hở và oracle KI-044 quay lại.
     expect(pCorrect).toBeGreaterThanOrEqual(BLOCKED_LOGIN_FLOOR_MS);
     expect(pWrong).toBeGreaterThanOrEqual(BLOCKED_LOGIN_FLOOR_MS);
+
+    // (1b) TRẦN — assert (1) MỘT MÌNH KHÔNG THỂ ĐỎ, nên nó không ghim được điều ca này tuyên bố.
+    //      `applyUniformResponseFloor` ngủ tới MỐC TUYỆT ĐỐI `startedAt+sàn+jitter`, nên "≥ sàn" vẫn
+    //      xanh kể cả khi round-trip TTL ngốn 5 giây — tức đúng cái hỏng mà ta muốn bắt lại lọt.
+    //      Trần này mới là vế "TTL CHƯA ăn hết ngân sách": vượt trần ⇒ TTL đã tràn RA NGOÀI sàn và
+    //      thời gian Valkey bắt đầu cộng thẳng vào phản hồi (oracle KI-044 quay lại).
+    //      Biên rộng có chủ đích (file chạy song song với int-spec khác — xem docblock đầu file): nó
+    //      là cổng bắt sai KHÁC BẬC (round-trip nghìn ms), không phải đồng hồ đo chục ms.
+    expect(pCorrect).toBeLessThan(FLOOR_BUDGET_CEILING_MS);
+    expect(pWrong).toBeLessThan(FLOOR_BUDGET_CEILING_MS);
 
     // (2) KHÔNG TÁCH ĐƯỢC — ngưỡng chọn theo jitter THẬT của sàn: nhỏ hơn jitter thì đo được nhiễu,
     //     lớn hơn nhiều thì cổng vô dụng.
