@@ -52,7 +52,12 @@ overrides:
   # nâng eslint 9→10 (eslint@10 dùng minimatch@^10 ⇒ brace-expansion@5). Vá này chọn ĐÚNG CODE trước.
   "brace-expansion@<2.1.3": "^2.1.3"
   "brace-expansion@>=3.0.0 <5.0.8": "^5.0.8"
-  "fast-uri@>=3.0.0 <=3.1.3": "^3.1.4"
+  # 2026-09-03 — NỚI dải từ `<=3.1.3` lên `<3.1.6`: BỐN advisory HIGH mới (GHSA-jqff-g426-hqxp và
+  # họ hàng) phủ CẢ 3.1.4/3.1.5 mà override cũ vừa ép lên — «percent-encoded scheme normalization».
+  # Đỏ trên MỌI PR **và trên master** (2 lần Security gần nhất trên master đều failure trên commit
+  # docs-only) ⇒ nợ có sẵn, KHÔNG do PR nào sinh ra. 28 đường tới, tất cả là devDependency qua
+  # `@nestjs/cli > @angular-devkit/core > ajv` — KHÔNG vào runtime bundle của API.
+  "fast-uri@<3.1.6": "^3.1.6"
   # 2026-08-07 — NỚI dải từ `<4.3.0` lên `<4.3.1`: advisory MỚI `GHSA-5p4m-2wfm-xmqj`
   # (CVE-2026-59870, quadratic CPU trong `!!omap`) phủ CẢ 4.3.0 mà override cũ vừa ép lên.
   # Đo 07/08: đỏ trên MỌI PR (đã tái hiện ở máy + trên CI của #361/#363), đường tới là
@@ -105,6 +110,8 @@ minimumReleaseAgeExclude:
   - brace-expansion@2.1.3
   - brace-expansion@5.0.8
   - fast-uri@3.1.4
+  - fast-uri@3.1.6
+  - fast-uri@3.1.7
   - js-yaml@4.3.1
   - nanoid@3.3.17
   - nanoid@3.3.18
