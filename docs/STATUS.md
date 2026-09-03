@@ -1,21 +1,33 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-02 18:17Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-03 00:23Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🔴 S14-PERF-DASHACTOR-1 — Gộp 4 bản `gateOrThrow` trùng nhau ở dashboard handlers + cắt round-trip `getCompanyRoleGrantsWithScope` không cache mỗi lượt summary()
+- **zone**: red · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/api/src/dashboard/**`, `apps/api/src/recruit/**`, `apps/api/src/permission/**`, `apps/api/vitest.config.ts`, `apps/api/package.json`, `apps/api/test/**`, `docs/plans/**`, `harness/backlog.mjs`
+- **done_when (đích hội tụ)**:
+  - [ ] MỘT bản `gateOrThrow` dùng chung cho cả 4 nhóm handler; hành vi fail-closed + SÀN scope của TỪNG widget giữ NGUYÊN (sàn Company của ASSET/RECRUIT/PAYROLL khác nhau về lý do — gộp code, KHÔNG gộp hằng sàn)
+  - [ ] Đo số round-trip TRƯỚC/SAU cho mỗi widget bằng spy đếm lệnh gọi, ghi con số vào plan — không nhận 'đã tối ưu' bằng cảm giác
+  - [ ] Toàn bộ ca deny/allow hiện có của 4 widget (ASSET_SUMMARY · ROOM_TODAY · RECRUIT_FUNNEL · PAYROLL_COST) giữ nguyên kết quả; thêm ca ghim rằng bản gộp KHÔNG cho wildcard `*:*` qua cặp sensitive
+  - [ ] `bash harness/check.sh --all` xanh không banner (vùng đỏ — CLAUDE.md §9.5, KHÔNG chỉ --lane-db)
+  - [ ] 🔒 GHIM plan-reviewer 03/09 (BLOCKING 1+2 — fail-open THẬT): API batch scope trả MẢNG THEO CHỈ SỐ `(DataScope|null)[]`, KHÔNG `Map`. `Map.get()` trả `undefined` khi miss, mà `recruit-access.service.ts:66-67` viết `candidateUpdateScope !== null` ⇒ `undefined !== null` = TRUE ⇒ MỞ KHOÁ PII ứng viên + lương offer, typecheck KHÔNG bắt (khác routeScope vốn typed). Mảng cũng xoá đụng độ khoá: `candidateUpdate` và cờ phụ dùng CÙNG cặp `update:candidate` khác `isSensitive` ⇒ bản lỏng hơn đè bản sensitive = leo thang im lặng. Nhánh catch phải điền ĐỦ ĐỘ DÀI bằng `null` (không mảng rỗng). CẤM mẫu `<batch>.get(...) !== null` ở mọi caller.
+  - [ ] 🔒 GHIM plan-reviewer 03/09 (BLOCKING 3 — ca xanh-RỖNG): KHÔNG assert «batch === single» — sau refactor `resolveStrongestScope` GỌI CHÍNH `decideStrongestScope` nên đó là so hàm với chính nó (memory same-builder-twice-makes-unit-spec-vacuous). Oracle THẬT = 8 ca literal ở `data-scope.service.spec.ts:83-150`; spec batch phải assert GIÁ TRỊ LITERAL. Lưu ý `permission.scopes.spec.ts` KHÔNG test `resolveStrongestScope` (chỉ `getCapabilityScopes`).
+  - [ ] 🔒 GHIM plan-reviewer 03/09 (BLOCKING 4 — done_when #3 đặt SAI tầng): `gateOrThrow` gọi `can()` KHÔNG truyền `isSensitive`; `permission.decide.ts:98-118` đọc `is_sensitive` của HÀNG GRANT KHỚP (tức hàng `*:*`, is_sensitive=false) chứ không của cặp đích ⇒ wildcard HIỆN QUA ĐƯỢC gate. Ca ghim wildcard của done_when #3 thực thi ở TẦNG SCOPE RESOLVER (nơi cờ ĐƯỢC truyền); tầng gate chỉ GHIM HÀNH VI HIỆN TẠI. CẤM thêm `isSensitive:true` vào gate trong WO này — đó là đổi hành vi quyền thật (403 mọi actor cầm wildcard), tách thành S14-SEC-DASHGATE-WILDCARD-1.
+  - [ ] 🔒 GHIM plan-reviewer 03/09 (BLOCKING 6 — cổng coverage bị thoát): `permission.decide.ts` KHÔNG có khoá threshold và KHÔNG nằm trong bất kỳ `--coverage.include` nào (`decideCan` đã ngoài cổng từ HR-PERF-1). Chuyển thân quyết định scope sang đó mà không vá là đào sâu lỗ. CÙNG COMMIT: thêm khoá `src/permission/permission.decide.ts` ≥80% vào `vitest.config.ts` + `--coverage.include` + thêm spec mới vào danh sách file của `test:cov:sensitive`.
+  - [ ] 🔒 GHIM plan-reviewer 03/09 (BLOCKING 7 — đẻ round-trip MỚI): `filterByGatePair` hiện chỉ resolve scope cho widget đã qua `can()` VÀ có khai sàn (`dashboard-widget-registry.service.ts:195-196`). Gom ra ngoài vòng lặp mà không short-circuit `requests.length===0` TRƯỚC fetch ⇒ dashboard nhân viên thường đi 0→1 query. Bảng đo phải có ca «employee 0 widget khai sàn» + ca «can() deny cả 3», không chỉ ca admin.
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
-- 🟢 `S14-PERF-DASHACTOR-1` Gộp 4 bản `gateOrThrow` trùng nhau ở dashboard handlers + cắt round-trip `getCompanyRoleGrantsWithScope` không cache mỗi lượt summary()
 - 🔴 `S14-RECRUIT-FILEGRANT-1` Cấp cặp quyền foundation-file cho recruiter/hr — gap defer từ S12-RECRUIT-FE-1 (đính kèm CV/hồ sơ ứng viên không có quyền tệp thì luồng tuyển dụng hở nửa chừng)
 - 🟢 `S14-FE-DEBT-1` Nợ FE gộp từ wave S12: picker đơn vị tổ chức (org-unit) dùng chung + gom PaginationFooter/error-parser đang lặp giữa các màn
 - 🟢 `S15-PAYROLL-DOC-1` Bộ tài liệu PAYROLL v2: SPEC-11 v2 (§5.1 phạm vi v2 · §8 bảng mới · §9 PAY-SCREEN-007..016 · §11 cặp mới · §12 ERR-018+ · §13.4 máy công thức decimal + luật định BH/TNCN + gross-up · §22 DEC-011..020) + DB-13 v2 (3 ALTER + 10 bảng mới) + API-18 v2 (~40 route) + §9g v2 + SPEC-01 §17.15 (FSM 8 trạng thái) + EPIC-20 PL-11..24 + UI-07 + PARK-PAYROLL-002 — plan-reviewer PASS trước khi mở DB-1
 - 🟢 `S16-SOCIAL-DOC-1` Bộ tài liệu SOCIAL (mạng xã hội nội bộ): SPEC-16 đầy đủ (§5 phạm vi v1 + PARK · §8 15 bảng · §9 SOC-SCREEN-001..012 · §11 13 cặp feed-* + luật «tương tác đi theo view:feed» · §12 SOCIAL-ERR-001+ · §13 FSM bài/sáng kiến/bình chọn · §17 NOTI-EVENT đo dải · §22 SOC-DEC-001..010) + DB-17 + API-19 (~45 route) + §9h + SPEC-01 §17.18–17.20 + §12.13 + ghi chú fbpost là tiện ích con + DECISIONS-08 §7 bổ sung + EPIC-21 §8.22 SC-01..14 + UI-07 biến thể cổng thông tin 3 cột + README/erd/RELEASE-14 — plan-reviewer PASS trước khi mở DB-1
 
 **CHỜ (kẹt phụ thuộc):**
+- `S14-SEC-DASHGATE-WILDCARD-1` Gate widget DASH cho grant wildcard `*:*` lọt qua cặp SENSITIVE — `can()` đọc is_sensitive của HÀNG GRANT KHỚP (hàng `*:*`, false) chứ không của cặp đích; hở ở đường METADATA /dashboard/me + gọi thẳng slug ⏳ cần: S14-PERF-DASHACTOR-1
 - `S15-UI-SHELL-1` Vỏ UI dùng chung (DEC-020): sidebar nhóm gập được · toolbar chuẩn (tìm · trạng thái · đơn vị · lọc · ⚙ chọn cột) · DataTable ghim cột + chọn cột + footer «Tổng số · Số dòng/trang · 1–N» · DetailPageHeader (← · tiêu đề · nút chính · ⋯) · StatusPill — áp lên 6 màn PAYROLL v1 làm mẫu ⏳ cần: S15-PAYROLL-DOC-1
 - `S15-PAYROLL-DB-1` Schema + migration PAYROLL v2 track A+B (mig 0569+): ALTER salary_profiles (salary_type · pit_payer · insurance_salary · probation_salary · pay_ratio_pct) + salary_profile_items (expand-contract thay allowances jsonb) + payroll_employee_settings (BH · công đoàn · bank mask) + payroll_dependents + salary_components + payroll_templates/_components + payroll_statutory_rates + payroll_periods.template_id + payroll_period_lines.component_values_json; RLS+FORCE TRƯỚC backfill; seed catalog hệ thống + tỉ lệ luật định + cặp quyền §9g v2; contracts Zod mirror ⏳ cần: S15-PAYROLL-DOC-1
 - `S15-PAYROLL-BE-1` BE track A: route Nhân viên PAYROLL (PAYROLL-API-036 chiếu HR bó hẹp, mở rộng picker 034; tax_code qua view:salary-profile + audit) · hồ sơ lương v2 (salary_type/pit_payer/insurance_salary/probation/pay_ratio + salary_profile_items) · payroll_employee_settings · payroll_dependents · bảng công tổng hợp kỳ (đọc, tái dùng computeInputsTx) — deny-path RED trước ⏳ cần: S15-PAYROLL-DB-1
@@ -58,7 +70,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `fix/pnpm-audit-fast-uri-3.1.6` · **file đang đổi (dirty)**: 0
+- **branch**: `perf/s14-perf-dashactor-1` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 235 — `0568_s13payrolldash1_widget_payroll_cost` (236 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -67,6 +79,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `8226751b` | 2026-09-03 | perf(permission): S14-PERF-DASHACTOR-1 — gộp 4 bản gateOrThrow + batch scope 1 fetch/N decide (12→7 round-trip) |
 | `8c03c325` | 2026-09-03 | chore(ops): S14-OPS-MODULEROLE-1 — công cụ census + runbook gán role module trên PROD (#468) |
 | `f0892425` | 2026-09-03 | chore(ops): S14-PROD-PAYROLLGRANT-1 — lưu script vận hành đã chạy trên PROD (#467) |
 | `9237a276` | 2026-09-02 | chore(docs): regen STATUS sau PR #467 — S14-OPS-MODULEROLE-1 hết chặn (0 đang làm, 6 READY) |
@@ -78,7 +91,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `39c9debe` | 2026-09-02 | chore(docs): regen STATUS sau PR #464 S17-CHAT-UX2-DOC-1 |
 | `11a34d64` | 2026-09-02 | chore(harness): ghim phát hiện plan-reviewer vào done_when S14-FND-MODULEMETA-1 + S17-CHAT-UX2-DOC-1 |
 | `0487dbef` | 2026-09-02 | fix(harness): gỡ 9 WO S17-CHAT-UX2 bị nhân đôi trong backlog + regen STATUS |
-| `93a68170` | 2026-09-02 | chore(harness): seed wave S17-CHAT-UX2 — 9 WO (DOC-1 ready) + SPEC-15 §5.1d/§22c CHAT-DEC-021..027 (owner duyệt 02/09) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
