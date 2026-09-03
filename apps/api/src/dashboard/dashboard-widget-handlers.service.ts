@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { DatabaseService } from "../db/db.service";
 import { PermissionService } from "../permission/permission.service";
 import { DataScopeService } from "../permission/data-scope.service";
@@ -30,20 +30,18 @@ import { DashboardWidgetOfficeHandlers } from "./dashboard-widget-office.handler
 import { DashboardWidgetRecruitHandlers } from "./dashboard-widget-recruit.handlers";
 import { DashboardWidgetPayrollHandlers } from "./dashboard-widget-payroll.handlers";
 import {
-  gatePairFor,
   ttlSecondsFor,
   DASH_WIDGET_LIST_CAP,
   TASK_TERMINAL_STATUSES,
 } from "./dashboard-widget-data.const";
 import { DASH_ERR } from "./dashboard-resolver.errors";
+import { gateWidgetOrThrow } from "./dashboard-widget-gate";
 import type {
   WidgetCacheIdentity,
   WidgetFetchResult,
   WidgetHandler,
   WidgetHandlerContext,
-  WidgetRequestUser,
 } from "./dashboard-widget-data.types";
-import type { EnginePair } from "./dashboard-widget-catalog.const";
 
 /** Ngưỡng "sắp đến hạn" cho TASK_ALERTS: task chưa hoàn thành có due trong 48h tới (hoặc đã overdue). */
 const DUE_SOON_MS = 48 * 60 * 60 * 1000;
@@ -115,32 +113,6 @@ export class DashboardWidgetHandlersService {
   /** Handler theo slug (dataSourceKey). undefined ⇒ slug ngoài catalog. */
   get(slug: string): WidgetHandler | undefined {
     return this.registry.get(slug);
-  }
-
-  // ── gate helper ─────────────────────────────────────────────────────────────
-
-  /**
-   * Gate quyền của widget bằng cặp source-module (KHÔNG truyền isSensitive — engine tự ép effectivelySensitive =
-   * input OR grant.isSensitive ⇒ cặp nguồn is_sensitive=true vẫn exact-match, wildcard KHÔNG lọt). Deny ⇒ 403
-   * fail-closed (runner KHÔNG nuốt thành Degraded).
-   */
-  private async gateOrThrow(user: WidgetRequestUser, widgetCode: string): Promise<EnginePair> {
-    const pair = gatePairFor(widgetCode);
-    if (!pair) {
-      throw new ForbiddenException(`${DASH_ERR.VALIDATION}: widget thiếu cặp gate (${widgetCode})`);
-    }
-    const decision = await this.permission.can({
-      userId: user.id,
-      companyId: user.companyId,
-      action: pair.action,
-      resourceType: pair.resourceType,
-    });
-    if (!decision.allow) {
-      throw new ForbiddenException(
-        `AUTH-ERR-FORBIDDEN: thiếu quyền ${pair.action}:${pair.resourceType}`,
-      );
-    }
-    return pair;
   }
 
   /** Cache identity per-user Own (widget self-locked / recipient-scoped / viewer-dependent). */
@@ -272,7 +244,7 @@ export class DashboardWidgetHandlersService {
     ctx: WidgetHandlerContext,
     widgetCode: string,
   ): Promise<WidgetCacheIdentity> {
-    await this.gateOrThrow(ctx.user, widgetCode);
+    await gateWidgetOrThrow(this.permission, ctx.user, widgetCode);
     return this.ownIdentity(ctx);
   }
 
@@ -425,7 +397,7 @@ export class DashboardWidgetHandlersService {
         message: "project-progress bắt buộc project_id",
       });
     }
-    await this.gateOrThrow(ctx.user, "PROJECT_PROGRESS"); // read:project (403 fail-closed)
+    await gateWidgetOrThrow(this.permission, ctx.user, "PROJECT_PROGRESS"); // read:project (403 fail-closed)
     // Authorize TRƯỚC aggregate: getProject resolveAndAssert('read','project') (403) + scope 404 (cross-company/
     // out-scope). listByProject CHỈ tenant-guard (KHÔNG lọc employee-scope) ⇒ authorize project là BẮT BUỘC.
     await this.projects.getProject(ctx.user, projectId);
@@ -473,7 +445,7 @@ export class DashboardWidgetHandlersService {
   // ── HR_OVERVIEW (HrReadService.listHrEmployees → count/aggregate viewer-independent; KHÔNG lương/PII) ──
 
   private async gateHrOverview(ctx: WidgetHandlerContext): Promise<WidgetCacheIdentity> {
-    await this.gateOrThrow(ctx.user, "HR_OVERVIEW"); // read:employee (403 fail-closed)
+    await gateWidgetOrThrow(this.permission, ctx.user, "HR_OVERVIEW"); // read:employee (403 fail-closed)
     // Resolve scope (403 nếu thiếu — cũng là gate). Company/System ⇒ aggregate toàn tenant, viewer-independent ⇒
     // chia sẻ company-wide. scope < Company ⇒ aggregate scoped-theo-viewer ⇒ per-user (viewer-dependent).
     const scope = await this.dataScope.resolveAndAssert(

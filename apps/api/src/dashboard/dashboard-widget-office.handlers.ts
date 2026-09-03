@@ -19,15 +19,13 @@ import { AssetsService } from "../assets/assets.service";
 import { RoomBookingsService } from "../rooms/room-bookings.service";
 import { localDateOf } from "../common/tz.util";
 import { resolveCompanyTz } from "./dashboard-company-tz.util";
-import { gatePairFor, ttlSecondsFor, DASH_WIDGET_LIST_CAP } from "./dashboard-widget-data.const";
+import { ttlSecondsFor, DASH_WIDGET_LIST_CAP } from "./dashboard-widget-data.const";
 import { meetsMinDataScope } from "./dashboard-widget-catalog.const";
-import { DASH_ERR } from "./dashboard-resolver.errors";
-import type { EnginePair } from "./dashboard-widget-catalog.const";
+import { gateWidgetOrThrow } from "./dashboard-widget-gate";
 import type {
   WidgetCacheIdentity,
   WidgetFetchResult,
   WidgetHandlerContext,
-  WidgetRequestUser,
 } from "./dashboard-widget-data.types";
 
 @Injectable()
@@ -40,32 +38,6 @@ export class DashboardWidgetOfficeHandlers {
     private readonly roomBookings: RoomBookingsService,
   ) {}
 
-  // ── gate helper (mirror DashboardWidgetHandlersService.gateOrThrow) ──────────────────────────────
-
-  /**
-   * Gate bằng cặp của MODULE NGUỒN. KHÔNG truyền isSensitive — engine tự ép effectivelySensitive = input OR
-   * grant.isSensitive, nên wildcard KHÔNG lọt qua cặp nhạy cảm. Deny ⇒ 403 fail-closed (runner KHÔNG nuốt
-   * ForbiddenException thành Degraded).
-   */
-  private async gateOrThrow(user: WidgetRequestUser, widgetCode: string): Promise<EnginePair> {
-    const pair = gatePairFor(widgetCode);
-    if (!pair) {
-      throw new ForbiddenException(`${DASH_ERR.VALIDATION}: widget thiếu cặp gate (${widgetCode})`);
-    }
-    const decision = await this.permission.can({
-      userId: user.id,
-      companyId: user.companyId,
-      action: pair.action,
-      resourceType: pair.resourceType,
-    });
-    if (!decision.allow) {
-      throw new ForbiddenException(
-        `AUTH-ERR-FORBIDDEN: thiếu quyền ${pair.action}:${pair.resourceType}`,
-      );
-    }
-    return pair;
-  }
-
   // ── ROOM_TODAY (RoomBookingsService.listMine — self-locked organizer/attendee = caller) ──────────
 
   /**
@@ -74,7 +46,7 @@ export class DashboardWidgetOfficeHandlers {
    * (mirror PENDING_LEAVE/GOAL_PROGRESS) — không dựa vào việc method nguồn tự gate.
    */
   async gateRoomToday(ctx: WidgetHandlerContext): Promise<WidgetCacheIdentity> {
-    await this.gateOrThrow(ctx.user, "ROOM_TODAY");
+    await gateWidgetOrThrow(this.permission, ctx.user, "ROOM_TODAY");
     return {
       shareScope: "user",
       cacheScope: "Own",
@@ -136,7 +108,7 @@ export class DashboardWidgetOfficeHandlers {
    * (memory `read-path-gate-pair-must-match-download-pair`).
    */
   async gateAssetSummary(ctx: WidgetHandlerContext): Promise<WidgetCacheIdentity> {
-    const pair = await this.gateOrThrow(ctx.user, "ASSET_SUMMARY");
+    const pair = await gateWidgetOrThrow(this.permission, ctx.user, "ASSET_SUMMARY");
     const scope = await this.dataScope.resolveAndAssert(
       ctx.user.id,
       ctx.user.companyId,

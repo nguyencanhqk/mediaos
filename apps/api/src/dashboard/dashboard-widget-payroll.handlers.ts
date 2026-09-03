@@ -26,15 +26,13 @@ import { ForbiddenException, Injectable } from "@nestjs/common";
 import { PermissionService } from "../permission/permission.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { PayrollCalcService } from "../payroll/payroll-calc.service";
-import { gatePairFor, ttlSecondsFor } from "./dashboard-widget-data.const";
+import { ttlSecondsFor } from "./dashboard-widget-data.const";
 import { meetsMinDataScope } from "./dashboard-widget-catalog.const";
-import { DASH_ERR } from "./dashboard-resolver.errors";
-import type { EnginePair } from "./dashboard-widget-catalog.const";
+import { gateWidgetOrThrow } from "./dashboard-widget-gate";
 import type {
   WidgetCacheIdentity,
   WidgetFetchResult,
   WidgetHandlerContext,
-  WidgetRequestUser,
 } from "./dashboard-widget-data.types";
 
 @Injectable()
@@ -44,32 +42,6 @@ export class DashboardWidgetPayrollHandlers {
     private readonly dataScope: DataScopeService,
     private readonly payrollCalc: PayrollCalcService,
   ) {}
-
-  // ── gate helper (mirror DashboardWidgetRecruitHandlers.gateOrThrow) ──────────────────────────────
-
-  /**
-   * Gate bằng cặp của MODULE NGUỒN. KHÔNG truyền isSensitive — engine tự ép effectivelySensitive = input OR
-   * grant.isSensitive, nên wildcard KHÔNG lọt qua ('view-line','payroll-period') dù cặp đó is_sensitive=true
-   * (mig 0565). Deny ⇒ 403 fail-closed (runner KHÔNG nuốt ForbiddenException thành Degraded).
-   */
-  private async gateOrThrow(user: WidgetRequestUser, widgetCode: string): Promise<EnginePair> {
-    const pair = gatePairFor(widgetCode);
-    if (!pair) {
-      throw new ForbiddenException(`${DASH_ERR.VALIDATION}: widget thiếu cặp gate (${widgetCode})`);
-    }
-    const decision = await this.permission.can({
-      userId: user.id,
-      companyId: user.companyId,
-      action: pair.action,
-      resourceType: pair.resourceType,
-    });
-    if (!decision.allow) {
-      throw new ForbiddenException(
-        `AUTH-ERR-FORBIDDEN: thiếu quyền ${pair.action}:${pair.resourceType}`,
-      );
-    }
-    return pair;
-  }
 
   // ── PAYROLL_COST (PayrollCalcService.summary — đúng công thức GET /payroll-periods/summary, API-018) ──
 
@@ -91,7 +63,7 @@ export class DashboardWidgetPayrollHandlers {
    * doc-block đầu file, mục 3).
    */
   async gatePayrollCost(ctx: WidgetHandlerContext): Promise<WidgetCacheIdentity> {
-    const pair = await this.gateOrThrow(ctx.user, "PAYROLL_COST");
+    const pair = await gateWidgetOrThrow(this.permission, ctx.user, "PAYROLL_COST");
     const scope = await this.dataScope.resolveAndAssert(
       ctx.user.id,
       ctx.user.companyId,

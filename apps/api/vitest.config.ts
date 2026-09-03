@@ -204,6 +204,20 @@ export default defineConfig({
           branches: 80,
           statements: 80,
         },
+        // S14-PERF-DASHACTOR-1: `permission.decide.ts` giữ TOÀN BỘ thân quyết định quyền dưới dạng hàm
+        // THUẦN — `decideCan` (can/canBatch) từ HR-PERF-1 và nay cả `decideStrongestScope`
+        // (resolveStrongestScope/resolveStrongestScopes). Nó KHÔNG có khoá threshold nào và KHÔNG nằm
+        // trong `--coverage.include` của bất kỳ script nào ⇒ logic crown-jewel đã nằm NGOÀI cổng từ
+        // HR-PERF-1, im lặng (họ `coverage-threshold-key-typo-is-dead-gate`). Khoá này + include mới ở
+        // `test:cov:sensitive` đóng lỗ đó. Unit-test được TOÀN BỘ không cần DB (permission.service.spec ·
+        // data-scope.service.spec · test/foundation/permission-scope-batch.unit-spec) nên bar 80 mọi trục
+        // là an toàn, không rơi vào bẫy "inert vì int-spec skip".
+        "src/permission/permission.decide.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
         // S2-AUTH-BE-5-FIX (same enforcement model as S2-QA-1-FIX-B above): the 4 NEW auth-log-viewer
         // crown-jewel files (read security data + Company-scope RLS + jsonb masking) ARE per-file gated ≥80%
         // on all axes (CLAUDE.md §6 "permission/auth — ngưỡng riêng module nhạy cảm"; DoD §8 hard block).
