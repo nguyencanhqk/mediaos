@@ -18,6 +18,7 @@ import { MessagesSquare } from "lucide-react";
 import { chatApi, chatKeys, useCan } from "@mediaos/web-core";
 import { Button, EmptyState } from "@mediaos/ui";
 import type { ChatRoomDto } from "@mediaos/contracts";
+import { ChatEmptyHero } from "@/components/chat/ChatEmptyHero";
 import { ConversationPanel } from "@/components/chat/ConversationPanel";
 import { CreateRoomDialog } from "@/components/chat/CreateRoomDialog";
 import { MessageSearchPanel } from "@/components/chat/MessageSearchPanel";
@@ -30,6 +31,12 @@ import { CHAT_PAIRS, CONTEXT_AFTER, CONTEXT_BEFORE } from "./constants";
 export function ChatPage(): React.ReactElement {
   const { t } = useTranslation("chat");
   const canViewRoom = useCan(CHAT_PAIRS.VIEW_ROOM.action, CHAT_PAIRS.VIEW_ROOM.resourceType);
+  /**
+   * S17 — cổng của nút "Tin nhắn mới" trên hero khung trống. Hỏi Ở ĐÂY chứ không truyền cờ từ
+   * `RoomListPanel` (nơi cũng hỏi cùng cặp): `useCan` là hook thuần đọc capabilities trong store, gọi
+   * hai lần không tốn vòng mạng nào — còn chuyền cờ qua ba tầng props là mở đường cho hai cổng lệch nhau.
+   */
+  const canCreateRoom = useCan(CHAT_PAIRS.CREATE_ROOM.action, CHAT_PAIRS.CREATE_ROOM.resourceType);
 
   const roomsById = useChatStore((s) => s.roomsById);
   const myUserId = useChatStore((s) => s.myUserId);
@@ -195,11 +202,13 @@ export function ChatPage(): React.ReactElement {
       )}
 
       {selectedRoom === null ? (
-        <div className="flex min-w-0 flex-1 items-center justify-center p-6">
-          <EmptyState
-            icon={MessagesSquare}
-            title={t("conversation.selectRoom")}
-            description={t("conversation.selectRoomHint")}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <ChatEmptyHero
+            title={t("conversation.heroTitle")}
+            description={t("conversation.heroBody")}
+            // Cổng `create:chat-room`: thiếu cặp ⇒ KHÔNG truyền handler ⇒ nút không render (§14).
+            onCreateRoom={canCreateRoom ? () => setCreateOpen(true) : undefined}
+            onOpenSearch={() => setSearchOpen(true)}
           />
         </div>
       ) : (
@@ -221,6 +230,15 @@ export function ChatPage(): React.ReactElement {
           myRole={myRole}
           isInfoOpen={isInfoOpen}
           onToggleInfo={() => setInfoOpen((v) => !v)}
+          /*
+           * S17 — 🔍 ở thanh đầu + phím tắt: mở cột tìm kiếm ĐÃ bó theo phòng đang mở. Đặt `searchScope`
+           * là "room" chứ không để mặc định "all": người dùng bấm kính lúp TRONG một phòng đang có ý
+           * định tìm trong phòng đó, và phạm vi vẫn đổi lại được bằng nút ngay trong panel.
+           */
+          onSearchInRoom={() => {
+            setSearchScope("room");
+            setSearchOpen(true);
+          }}
         />
       )}
 

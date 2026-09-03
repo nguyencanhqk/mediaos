@@ -6,7 +6,7 @@
  *  (c) đính kèm BA trạng thái của `attachmentUrl` — mỗi trạng thái một giao diện khác nhau.
  */
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
 import type { StoredChatMessage } from "@/stores/chat.store";
@@ -14,12 +14,20 @@ import { MessageBubble, type MessageBubbleActions } from "./MessageBubble";
 
 const ME = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
+/** Mot nguoi da doc toi tin — hinh dang `SeenByViewer` cua S17 (id · ten · anh roster). */
+const SEEN_TRAN_B = {
+  userId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  name: "Trần B",
+  avatarUrl: null,
+};
+
 const actions: MessageBubbleActions = {
   onReply: vi.fn(),
   onPin: vi.fn(),
   onUnpin: vi.fn(),
   onRecall: vi.fn(),
   onToggleReaction: vi.fn(),
+  onCopy: vi.fn(),
 };
 
 function message(over: Partial<StoredChatMessage> = {}): StoredChatMessage {
@@ -54,6 +62,7 @@ function renderBubble(
         message={message(over)}
         isMine
         isGrouped={false}
+        isLastOfGroup
         replyTo={undefined}
         canRecall={false}
         canPin={false}
@@ -185,8 +194,10 @@ describe("MessageBubble · phụ trợ", () => {
   });
 
   it("'đã xem bởi' chỉ hiện trên tin CỦA MÌNH", () => {
-    const { rerender } = renderBubble({}, { seenBy: ["Trần B"] });
-    expect(screen.getByText(/Đã xem/)).toBeTruthy();
+    // S17: «đã xem» là DÃY AVATAR, không còn là text node ⇒ đo bằng nhãn trợ năng (`aria-label`) — chính là
+    // thứ phải còn lại cho người đọc màn hình sau khi đổi sang ảnh.
+    const { rerender } = renderBubble({}, { seenBy: [SEEN_TRAN_B] });
+    expect(screen.getByLabelText(/Đã xem/)).toBeTruthy();
 
     rerender(
       <I18nextProvider i18n={i18n}>
@@ -194,10 +205,11 @@ describe("MessageBubble · phụ trợ", () => {
           message={message({ senderId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" })}
           isMine={false}
           isGrouped={false}
+          isLastOfGroup
           replyTo={undefined}
           canRecall={false}
           canPin={false}
-          seenBy={["Trần B"]}
+          seenBy={[SEEN_TRAN_B]}
           senderAvatarUrl={null}
           senderNameFallback={null}
           isArchived={false}
@@ -205,6 +217,131 @@ describe("MessageBubble · phụ trợ", () => {
         />
       </I18nextProvider>,
     );
-    expect(screen.queryByText(/Đã xem/)).toBeNull();
+    expect(screen.queryByLabelText(/Đã xem/)).toBeNull();
+  });
+});
+
+// ── S17-CHAT-UX2-FE-2 — bố cục hai phía + thanh tác vụ nổi (CHAT-DEC-024) ────────────────────────────
+
+describe("MessageBubble v2 · hai phía (done_when #1)", () => {
+  it("tin CỦA TÔI: đánh dấu `data-mine`, KHÔNG có avatar (vị trí đã nói ai gửi)", () => {
+    renderBubble();
+    expect(screen.getByTestId("chat-message").getAttribute("data-mine")).toBe("true");
+    expect(screen.queryByTestId("chat-sender-avatar")).toBeNull();
+  });
+
+  it("tin NGƯỜI KHÁC: có avatar bên trái + hiện TÊN người gửi", () => {
+    renderBubble({}, { isMine: false });
+    expect(screen.getByTestId("chat-message").getAttribute("data-mine")).toBe("false");
+    expect(screen.getByTestId("chat-sender-avatar")).toBeTruthy();
+    expect(screen.getByText("Nguyễn Văn A")).toBeTruthy();
+  });
+
+  it("hai phía dùng HAI nền token khác nhau (không cùng một lớp ⇒ 'hai phía' mới có nghĩa)", () => {
+    const mine = renderBubble().getByTestId("chat-message-body-shell").className;
+    const theirs = renderBubble({}, { isMine: false }).getAllByTestId("chat-message-body-shell")[1]
+      .className;
+    expect(mine).toContain("bg-bubble-mine");
+    expect(theirs).toContain("bg-surface-2");
+    expect(mine).not.toBe(theirs);
+  });
+
+  it("tin gộp của NGƯỜI KHÁC ⇒ không lặp avatar, nhưng NHÃN GHIM vẫn thấy được", () => {
+    // Hàng tên (chỗ bám của nhãn ghim ở tin đầu cụm) không tồn tại ở tin gộp — nhãn phải chuyển vào
+    // trong bong bóng, nếu không thì ghim một tin gộp là ghim xong mà không có dấu vết nào.
+    renderBubble(
+      { pinnedAt: "2026-08-04T10:01:00.000Z" },
+      { isMine: false, isGrouped: true },
+    );
+    expect(screen.queryByTestId("chat-sender-avatar")).toBeNull();
+    expect(screen.getByText("Đã ghim")).toBeTruthy();
+  });
+});
+
+describe("MessageBubble v2 · giờ theo cụm (done_when #1)", () => {
+  it("tin CUỐI cụm ⇒ giờ hiện thường trực", () => {
+    renderBubble({}, { isLastOfGroup: true });
+    expect(screen.getByTestId("chat-message-clock").className).toContain("opacity-100");
+  });
+
+  it("tin GIỮA cụm ⇒ giờ ẩn, chỉ lộ khi trỏ vào (không lặp cùng một con số 8 lần)", () => {
+    renderBubble({}, { isLastOfGroup: false });
+    const cls = screen.getByTestId("chat-message-clock").className;
+    expect(cls).toContain("opacity-0");
+    expect(cls).toContain("group-hover:opacity-100");
+  });
+
+  it("giờ luôn có `dateTime` máy đọc được, dù đang ẩn", () => {
+    renderBubble({}, { isLastOfGroup: false });
+    expect(screen.getByTestId("chat-message-clock").getAttribute("dateTime")).toBe(
+      "2026-08-04T10:00:00.000Z",
+    );
+  });
+});
+
+describe("MessageBubble v2 · thanh tác vụ nổi (done_when #3)", () => {
+  it("ẩn thì KHÔNG ăn chuột (thanh ở -top-3 chồng lên tin phía trên)", () => {
+    renderBubble();
+    const cls = screen.getByTestId("chat-message-actions").className;
+    expect(cls).toContain("pointer-events-none");
+    expect(cls).toContain("group-hover:pointer-events-auto");
+    // …nhưng hiện lại khi HỘI TỤ bàn phím — đây là vế giữ tác vụ sống với người không dùng chuột.
+    expect(cls).toContain("focus-within:pointer-events-auto");
+    expect(cls).toContain("focus-within:opacity-100");
+  });
+
+  it("👍 nhanh gọi ĐÚNG emoji `like` kèm trạng thái hiện tại (chưa thả ⇒ currentlyMine=false)", () => {
+    const onToggleReaction = vi.fn();
+    renderBubble({}, { actions: { ...actions, onToggleReaction } });
+    fireEvent.click(screen.getByTestId("chat-message-quick-like"));
+    expect(onToggleReaction).toHaveBeenCalledWith(expect.anything(), "like", false);
+  });
+
+  it("ĐÃ thả 👍 ⇒ nút ở trạng thái bật (`aria-pressed`) và gửi currentlyMine=true để BỎ thả", () => {
+    const onToggleReaction = vi.fn();
+    renderBubble(
+      { reactions: [{ emoji: "like", count: 1, mine: true }] },
+      { actions: { ...actions, onToggleReaction } },
+    );
+    const btn = screen.getByTestId("chat-message-quick-like");
+    expect(btn.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(btn);
+    expect(onToggleReaction).toHaveBeenCalledWith(expect.anything(), "like", true);
+  });
+
+  it("phòng đã LƯU TRỮ ⇒ không có 👍 nhanh (giữ đúng luật chỉ-đọc của ReactionBar)", () => {
+    renderBubble({}, { isArchived: true });
+    expect(screen.queryByTestId("chat-message-quick-like")).toBeNull();
+  });
+
+  it("cổng: thiếu `canPin`/`canRecall` ⇒ ẩn nút, có ⇒ hiện (ca DENY kèm ca ALLOW)", () => {
+    renderBubble();
+    expect(screen.queryByLabelText("Ghim")).toBeNull();
+    expect(screen.queryByLabelText("Thu hồi")).toBeNull();
+
+    renderBubble({}, { canPin: true, canRecall: true });
+    expect(screen.getByLabelText("Ghim")).toBeTruthy();
+    expect(screen.getByLabelText("Thu hồi")).toBeTruthy();
+  });
+
+  it("mục `⋯ › Sao chép` báo lên caller (clipboard do panel ghi, để nó báo được lỗi)", () => {
+    const onCopy = vi.fn();
+    renderBubble({}, { actions: { ...actions, onCopy } });
+    fireEvent.click(screen.getByTestId("chat-message-more"));
+    fireEvent.click(screen.getByTestId("chat-message-copy"));
+    expect(onCopy).toHaveBeenCalledTimes(1);
+  });
+
+  it("tin KHÔNG có phần chữ (chỉ tệp) ⇒ không có mục Sao chép — không mời chép chuỗi rỗng", () => {
+    renderBubble({ body: null });
+    expect(screen.queryByTestId("chat-message-more")).toBeNull();
+  });
+
+  it("tin đã THU HỒI ⇒ không có thanh tác vụ nào cả", () => {
+    renderBubble(
+      { body: null, recalledAt: "2026-08-04T10:05:00.000Z" },
+      { canPin: true, canRecall: true },
+    );
+    expect(screen.queryByTestId("chat-message-actions")).toBeNull();
   });
 });
