@@ -14,9 +14,27 @@ import ts from "typescript";
  * và `grep -c TOO_MANY_REQUESTS` đếm cả 4 dòng `expect(...)` của `step-up.service.spec.ts`.
  *
  * ─── BẤT BIẾN ĐANG ĐO ───────────────────────────────────────────────────────────────────────────
- * Gọi `B` = **`Block` TRONG CÙNG NHẤT** chứa nút `throw` ném `HttpStatus.TOO_MANY_REQUESTS`.
+ * Gọi `B` = **`Block` TRONG CÙNG NHẤT** chứa nút `throw` ném 429.
  * Điểm ném ĐẠT khi có ít nhất một lời gọi ghi nhật ký (`recordLoginAttempt` hoặc
  * `securityEvents.record`) là **HẬU DUỆ của `B`**.
+ *
+ * ─── HAI HÌNH DẠNG CỦA "NÉM 429" ────────────────────────────────────────────────────────────────
+ * ⚠️ S18-AUTH-RETRYAFTER-1 (03/09/2026) đã dạy một bài đắt: WO đó gom 5/6 điểm ném về một nhà máy
+ * chung `throw tooManyRequests(...)` (`src/common/filters/retry-after.ts`). Bộ dò khi ấy CHỈ biết
+ * hình `HttpStatus.TOO_MANY_REQUESTS` nằm ngay trong biểu thức `throw` ⇒ census tụt 6 → 1 và cổng
+ * này MÙ với 5 điểm ném — một refactor hợp lệ, không ác ý, vô hiệu hoá một cổng an ninh. CI bắt
+ * được nhờ ca (2) "chống xanh-rỗng"; nếu ngưỡng đó không tồn tại thì ca (1) đã XANH-RỖNG.
+ *
+ * Nên bộ dò nhận HAI hình:
+ *   (a) `inline`  — biểu thức `throw` có nhắc `HttpStatus.TOO_MANY_REQUESTS` (hình gốc);
+ *   (b) `factory` — `throw <tên>(...)` với `<tên>` là hàm **TRẢ VỀ** một 429, tự tìm bằng
+ *       `tooManyRequestsFactoryNames()`.
+ *
+ * ⚠️ NEO THEO ĐỊNH NGHĨA, KHÔNG THEO TÊN ([[index-ratchet-must-pin-definition-not-name]]): danh sách
+ * nhà máy KHÔNG hard-code chuỗi `"tooManyRequests"`. Nó suy ra từ chính mã nguồn — "hàm nào có câu
+ * `return` nhắc `HttpStatus.TOO_MANY_REQUESTS`". Đổi tên hàm ⇒ census vẫn thấy. Đổi hàm đó thành
+ * KHÔNG-429 nữa ⇒ nó rụng khỏi danh sách, số điểm ném tụt xuống dưới sàn 6 ⇒ ratchet ĐỎ TO, chứ
+ * không im lặng bỏ sót.
  *
  * ⚠️ "Hậu duệ của block trong cùng nhất" — KHÔNG phải "câu lệnh anh em" và KHÔNG phải "cùng `try`".
  * Đường `login()` (`auth.service.ts:241-273`) là đường DUY NHẤT đang ĐÚNG và nó có hình dạng
@@ -36,6 +54,16 @@ import ts from "typescript";
 const AUTH_SRC = path.join(__dirname, "..", "..", "src", "auth");
 
 /**
+ * Nơi thứ hai được quét — CHỈ để tìm **nhà máy 429**, không để đếm điểm ném.
+ *
+ * `tooManyRequests()` sống ở `src/common/filters/retry-after.ts` vì nó là một nửa của hợp đồng 429
+ * (nửa kia là `retryAfterHeaderValue` trong cùng thư mục với `all-exceptions.filter.ts`). Census
+ * vẫn ĐẾM ĐIỂM NÉM trong `src/auth` mà thôi: một `throw tooManyRequests(...)` ở module khác không
+ * phải đường đăng nhập và không thuộc phạm vi KI-047.
+ */
+const COMMON_SRC = path.join(__dirname, "..", "..", "src", "common");
+
+/**
  * Lời gọi được tính là "để lại vết". Tên method, khớp ở đuôi property-access.
  *
  * `recordLoginAttemptForUser` là biến thể "đã biết tenant+user, chưa biết email" (tự SELECT email
@@ -47,6 +75,9 @@ const WRITE_CALLS = new Set(["recordLoginAttempt", "recordLoginAttemptForUser", 
 /** Với `record` phải thêm điều kiện object — `audit.record` KHÔNG tính (xem `isWriteCall`). */
 const SECURITY_EVENT_RECEIVERS = new Set(["securityEvents"]);
 
+/** Hình dạng đã nhận ra điểm ném — xem docblock "HAI HÌNH DẠNG" ở đầu file. */
+export type ThrowShape = "inline" | "factory";
+
 export interface ThrowSite {
   /** Đường dẫn tương đối từ `apps/api/src/auth`, dấu `/`. */
   readonly file: string;
@@ -55,6 +86,8 @@ export interface ThrowSite {
   readonly key: string;
   /** Có lời gọi ghi nhật ký là hậu duệ của block trong cùng nhất chứa `throw` không. */
   readonly logsInBranch: boolean;
+  /** `inline` = 429 nằm ngay trong biểu thức `throw`; `factory` = `throw tooManyRequests(...)`. */
+  readonly via: ThrowShape;
 }
 
 function walk(dir: string, out: string[], keep: (n: string) => boolean): string[] {
@@ -138,6 +171,97 @@ function hasWriteCallDescendant(node: ts.Node): boolean {
   return found;
 }
 
+/** Hàm/method/arrow — bốn hình mà một "nhà máy 429" có thể mang. */
+function isFunctionLike(n: ts.Node): boolean {
+  return (
+    ts.isFunctionDeclaration(n) ||
+    ts.isFunctionExpression(n) ||
+    ts.isArrowFunction(n) ||
+    ts.isMethodDeclaration(n)
+  );
+}
+
+/**
+ * Hàm này có câu `return` nào TRẢ VỀ 429 không.
+ *
+ * ⚠️ `return`, KHÔNG phải "có nhắc đâu đó trong thân": `stepUp()` NÉM 429 chứ không trả về, và
+ * `all-exceptions.filter.ts` ánh xạ mã trạng thái nên cũng nhắc `TOO_MANY_REQUESTS`. Tính cả hai
+ * thứ đó vào danh sách nhà máy sẽ biến mọi lời gọi cùng tên thành "điểm ném" giả.
+ *
+ * ⚠️ KHÔNG lấn sang hàm LỒNG BÊN TRONG: một callback trả 429 nằm trong hàm cha không biến hàm cha
+ * thành nhà máy.
+ */
+function returnsTooManyRequests(fn: ts.Node): boolean {
+  const body = (fn as ts.FunctionLikeDeclaration).body;
+  if (!body) return false;
+  if (!ts.isBlock(body)) return mentionsTooManyRequests(body); // arrow rút gọn: `=> tooMany(...)`
+
+  let found = false;
+  const visit = (n: ts.Node): void => {
+    if (found) return;
+    if (n !== body && isFunctionLike(n)) return;
+    if (ts.isReturnStatement(n) && n.expression && mentionsTooManyRequests(n.expression)) {
+      found = true;
+      return;
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(body);
+  return found;
+}
+
+/** Tên khai báo của một hàm-like; rỗng khi vô danh (arrow gán vào thuộc tính, callback…). */
+function functionName(n: ts.Node): string {
+  if (ts.isFunctionDeclaration(n) || ts.isMethodDeclaration(n)) {
+    return n.name && ts.isIdentifier(n.name) ? n.name.text : "";
+  }
+  // `const tooManyRequests = (...) => ...` / `= function (...) {...}`
+  const parent = n.parent;
+  if (parent && ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+    return parent.name.text;
+  }
+  return "";
+}
+
+/**
+ * Tên các hàm TRẢ VỀ một 429 trong `src/auth` + `src/common` — tức "ném cái này là ném 429".
+ *
+ * Đây là vế NEO-THEO-ĐỊNH-NGHĨA của bộ dò: danh sách sinh ra từ mã nguồn, không phải hằng chuỗi.
+ * Rỗng ⇒ bộ dò chỉ còn thấy hình `inline` ⇒ ca (2) của ratchet tụt dưới sàn và ĐỎ.
+ */
+export function tooManyRequestsFactoryNames(): ReadonlySet<string> {
+  const names = new Set<string>();
+  const files = [
+    ...walk(AUTH_SRC, [], (n) => n.endsWith(".ts") && !n.endsWith(".spec.ts")),
+    ...walk(COMMON_SRC, [], (n) => n.endsWith(".ts") && !n.endsWith(".spec.ts")),
+  ];
+
+  for (const f of files) {
+    const sf = parse(f);
+    const visit = (n: ts.Node): void => {
+      if (isFunctionLike(n) && returnsTooManyRequests(n)) {
+        const name = functionName(n);
+        if (name) names.add(name);
+      }
+      ts.forEachChild(n, visit);
+    };
+    visit(sf);
+  }
+  return names;
+}
+
+/** `throw tooManyRequests(...)` / `throw this.build429(...)` với tên nằm trong danh sách nhà máy. */
+function isFactoryCall(expr: ts.Expression, factories: ReadonlySet<string>): boolean {
+  if (!ts.isCallExpression(expr)) return false;
+  const callee = expr.expression;
+  const name = ts.isIdentifier(callee)
+    ? callee.text
+    : ts.isPropertyAccessExpression(callee)
+      ? callee.name.text
+      : "";
+  return name !== "" && factories.has(name);
+}
+
 /** `Block` TRONG CÙNG NHẤT bao quanh `node`; null khi `throw` nằm trần ở thân hàm rút gọn. */
 function innermostBlock(node: ts.Node): ts.Block | null {
   for (let p = node.parent; p; p = p.parent) {
@@ -166,6 +290,7 @@ function enclosingKey(node: ts.Node, fallback: string): string {
  */
 export function tooManyRequestsThrowSites(): readonly ThrowSite[] {
   const out: ThrowSite[] = [];
+  const factories = tooManyRequestsFactoryNames();
 
   for (const f of walk(AUTH_SRC, [], (n) => n.endsWith(".ts") && !n.endsWith(".spec.ts"))) {
     const sf = parse(f);
@@ -173,18 +298,22 @@ export function tooManyRequestsThrowSites(): readonly ThrowSite[] {
     const base = path.basename(f, ".ts");
 
     const visit = (node: ts.Node): void => {
-      if (
-        ts.isThrowStatement(node) &&
-        node.expression &&
-        mentionsTooManyRequests(node.expression)
-      ) {
-        const block = innermostBlock(node);
-        out.push({
-          file: rel,
-          line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1,
-          key: enclosingKey(node, base),
-          logsInBranch: block ? hasWriteCallDescendant(block) : false,
-        });
+      if (ts.isThrowStatement(node) && node.expression) {
+        const via: ThrowShape | null = mentionsTooManyRequests(node.expression)
+          ? "inline"
+          : isFactoryCall(node.expression, factories)
+            ? "factory"
+            : null;
+        if (via !== null) {
+          const block = innermostBlock(node);
+          out.push({
+            file: rel,
+            line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1,
+            key: enclosingKey(node, base),
+            logsInBranch: block ? hasWriteCallDescendant(block) : false,
+            via,
+          });
+        }
       }
       ts.forEachChild(node, visit);
     };

@@ -498,3 +498,50 @@ Bất biến kiểm: tenant ✓ · audit append-only ✓ · secret ✓ · authz 
 - **Tab chạy nền**: mốc hết hạn chống trôi tích luỹ, nhưng nhịp cuối vẫn bị bóp ≥1 lần/phút ⇒ quay lại
   tab có thể thấy nút khoá thêm tới ~60s sau khi server đã mở. Vá gọn = listener `visibilitychange`.
 - `step-up.service.ts:122` — 429 AUTH duy nhất còn lại chưa mang số (§8).
+
+
+## 10. Hồi quy CI: refactor 429 làm MÙ một cổng an ninh có sẵn (03/09, sau `484c0ea5`)
+
+**Triệu chứng.** Hai job CI ĐỎ trên PR #474 (`Build · Typecheck · Migrate · Test` và
+`Lint · Typecheck · Migrate · RLS Test`), cùng MỘT gốc: `test/foundation/login-log-429-ratchet.unit-spec.ts`
+(cổng S10-SEC-LOGINLOG429-1 / KI-047), hai ca:
+
+| Ca | Thông điệp |
+| --- | --- |
+| (2) chống xanh-rỗng | `scanner không thấy điểm ném 429 nào trong apps/api/src/auth — nó đang hỏng: expected 1 to be >= 6` |
+| (1b) waiver phải CÒN im lặng | `expected [ Array(3) ] to deeply equal []` |
+
+**Cơ chế.** `login-log-429-census.ts` nhận diện điểm ném theo hình `throw`-có-nhắc-`HttpStatus.TOO_MANY_REQUESTS`.
+WO này gom **5/6** điểm ném về nhà máy chung `throw tooManyRequests(...)` (`src/common/filters/retry-after.ts`)
+⇒ census chỉ còn thấy **1** (`step-up.service.ts:122`, chỗ duy nhất giữ hình cũ). Ca (1b) đỏ là **hệ quả**,
+không phải quyết định độc lập: ba waiver biến mất khỏi census nên "không còn im lặng" theo nghĩa của phép đo.
+
+⚠️ Đây là dạng hồi quy đáng sợ nhất của một refactor sạch: **không có test nào đỏ vì hành vi**, mà một
+**cổng** mất thị lực. Nếu ca (2) không có SÀN ≥6 thì ca (1) đã XANH-RỖNG và điểm ném thứ bảy mọc lên
+sau đó sẽ không ai thấy — đúng kịch bản KI-047 mở lại.
+
+**Bản vá (thuộc chính WO này, không defer).** Dạy census hình thứ hai, neo theo ĐỊNH NGHĨA chứ không
+theo tên ([[index-ratchet-must-pin-definition-not-name]]):
+
+- `tooManyRequestsFactoryNames()` — quét `src/auth` + `src/common`, thu tên **hàm có câu `return` trả về
+  429**. Danh sách sinh từ mã nguồn, KHÔNG hard-code chuỗi `"tooManyRequests"`. Điều kiện là `return`
+  (không phải "nhắc đâu đó trong thân") để `stepUp()` — chỗ **ném** 429 — và `all-exceptions.filter.ts`
+  — chỗ **ánh xạ** mã trạng thái — không bị nhận nhầm là nhà máy.
+- `ThrowSite.via: "inline" | "factory"` — ghi lại hình đã nhận ra, để ca neo đo được nhánh dò mới có CHẠY.
+- Ca **(2b)** mới: nhà máy ≠ rỗng · có `tooManyRequests` · ≥5 điểm ném nhận qua hình `factory`.
+  Ca (2) chỉ nói "scanner đang hỏng"; (2b) nói hỏng **ở đâu**.
+- **KHÔNG hạ sàn ≥6.** Hạ sàn là bịt miệng cổng — cái bẫy mà chính WO này suýt rơi vào.
+
+**Kiểm chứng bằng đột biến (3/3 ĐỎ đúng chỗ):**
+
+| # | Đột biến | Kết quả |
+| --- | --- | --- |
+| M1 | Gỡ `recordLoginAttempt` khỏi nhánh 429 của `login()` | ĐỎ ca (1) + neo dương ca (2) — chứng minh `logsInBranch` vẫn đo qua hình `factory` |
+| M2 | `tooManyRequests` trả `BAD_REQUEST` thay vì 429 | ĐỎ ca (2) + (2b) `expected 0 to be greater than 0` — định-nghĩa-đổi thì cổng đỏ, không im |
+| M3 | Thêm điểm ném thứ bảy im lặng `throw tooManyRequests(null)` trong `src/auth` | ĐỎ ca (1), chỉ đúng tên `MutantService#guard (auth/mutant-seventh-site.ts:6)` |
+
+M3 là ca đáng giá nhất: **trước** bản vá nó XANH (census mù với hình factory) — tức lỗ hổng thật, không
+phải chuyện thẩm mỹ.
+
+**Bài học ghi ra ngoài WO:** một refactor gom điểm ném về hàm chung có thể vô hiệu hoá census/ratchet
+quét theo *hình dạng cú pháp*. Trước khi gom, `grep` xem hình cũ có đang bị cổng nào đếm không.

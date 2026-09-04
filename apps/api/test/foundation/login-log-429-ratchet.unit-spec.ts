@@ -4,6 +4,7 @@ import {
   silentTooManyRequestsSites,
   reauthFailedWriterCount,
   stepUpAntiAmplificationAnchors,
+  tooManyRequestsFactoryNames,
   tooManyRequestsThrowSites,
 } from "./login-log-429-census";
 
@@ -113,6 +114,36 @@ describe("S10-SEC-LOGINLOG429-1 — ratchet: điểm ném 429 phải để lại
       login?.logsInBranch,
       "bộ dò không thấy recordLoginAttempt trong nhánh 429 của login() — luật đang quá chặt",
     ).toBe(true);
+  });
+
+  it("(2b) HÌNH `throw tooManyRequests(...)` cũng bị đếm — neo cho nhánh dò mới", () => {
+    // VÌ SAO CÓ CA NÀY. S18-AUTH-RETRYAFTER-1 gom 5/6 điểm ném về một nhà máy chung
+    // (`throw tooManyRequests(...)`, `src/common/filters/retry-after.ts`). Bộ dò lúc đó chỉ biết
+    // hình `HttpStatus.TOO_MANY_REQUESTS` NẰM TRONG biểu thức `throw` ⇒ census tụt 6 → 1: một
+    // refactor sạch, hợp lệ, vô hiệu hoá cổng an ninh này. Ca (2) bắt được vì có SÀN — nhưng nó chỉ
+    // nói "scanner đang hỏng". Ca này nói hỏng Ở ĐÂU.
+    //
+    // ⚠️ Sàn ở đây KHÔNG được hạ để "cho qua": hạ sàn là bịt miệng cổng, đúng cái bẫy WO trên suýt
+    // rơi vào. Nếu một điểm ném biến mất THẬT (hàm bị xoá), sửa số ở ĐÂY và ghi vì sao.
+    const factories = tooManyRequestsFactoryNames();
+    expect(
+      factories.size,
+      "không tìm thấy hàm nào TRẢ VỀ 429 trong src/auth + src/common — bộ dò nhà máy đang hỏng, " +
+        "hoặc nhà máy đã dọn sang thư mục khác (sửa COMMON_SRC trong census, ĐỪNG hạ sàn ca (2))",
+    ).toBeGreaterThan(0);
+    expect(
+      [...factories],
+      "hợp đồng 429 của S18-AUTH-RETRYAFTER-1 không còn hàm `tooManyRequests` — nếu đổi tên là có " +
+        "chủ ý thì sửa neo này; nếu hàm không còn trả 429 thì cổng đang mù, phải đo lại",
+    ).toContain("tooManyRequests");
+
+    // Neo DƯƠNG cho chính nhánh `factory`: nếu phép khớp tên nhà máy chết trong im lặng, ca này đỏ
+    // TRƯỚC khi ai đó kịp nghĩ tới việc hạ sàn của ca (2) ([[deny-cases-vacuous-without-allow-case]]).
+    const byFactory = tooManyRequestsThrowSites().filter((s) => s.via === "factory");
+    expect(
+      byFactory.length,
+      "không điểm ném nào được nhận ra qua hình `throw tooManyRequests(...)` — nhánh dò mới đang chết",
+    ).toBeGreaterThanOrEqual(5);
   });
 
   it("(3) NEO DƯƠNG cho 3 waiver post-auth: nhánh SAI vẫn ghi REAUTH_FAILED", () => {

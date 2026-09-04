@@ -17131,6 +17131,11 @@ export const backlog = [
       "apps/api/src/auth/**/*.spec.ts",
       "apps/api/src/common/filters/**",
       "apps/api/test/integration/auth-s18-retryafter-*.int-spec.ts",
+      // Seed đo THIẾU (phát hiện khi CI đỏ 03/09): gom 5/6 điểm ném 429 về `tooManyRequests()` làm
+      // MÙ cổng an ninh `login-log-429-ratchet` (census chỉ biết hình `HttpStatus.TOO_MANY_REQUESTS`
+      // ⇒ tụt 6 → 1 điểm ném). Vá thuộc chính WO này: dạy census hình `throw tooManyRequests(...)`.
+      "apps/api/test/foundation/login-log-429-census.ts",
+      "apps/api/test/foundation/login-log-429-ratchet.unit-spec.ts",
       "packages/web-core/src/i18n/locales/vi/auth.ts",
       "packages/web-core/src/lib/api-client.ts",
       "packages/web-core/src/**/*.spec.ts",
