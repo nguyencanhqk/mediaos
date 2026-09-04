@@ -43,6 +43,21 @@ export interface ClearLoginLocksResult {
   degraded: boolean;
 }
 
+/**
+ * S18-AUTH-RESETCLEARS-1 — ý định của MỘT lời gọi `clearLoginLocks`. **Không có giá trị mặc định** và
+ * đó là chủ ý: `rl:forgot:*` gác một endpoint CÔNG KHAI không cần xác thực (xem docblock
+ * `forgotPasswordImpl`), nên "quên khai" phải là lỗi BIÊN DỊCH chứ không phải một cái trần bị mở
+ * trong im lặng. Mọi call-site buộc nói ra mình có được xoá trần đó hay không.
+ */
+export interface ClearLoginLocksOptions {
+  /**
+   * `true` — đường ĐÃ XÁC THỰC + ĐÃ AUDIT (nút admin, admin đặt lại mật khẩu hộ): xoá cả `forgot:*`.
+   * `false` — đường TỰ PHỤC VỤ (`resetPassword` bằng token email): giữ nguyên trần forgot, nếu không
+   * ai cầm một token reset hợp lệ của chính hòm thư mình sẽ tự cấp lại hạn mức forgot vô hạn lần.
+   */
+  includeForgot: boolean;
+}
+
 /** Định danh cho bucket bước-2 (2FA) — khoá đó mang `(companyId,userId)`, không mang email/ip. */
 export interface LoginThrottleSubject {
   companyId: string;
@@ -321,8 +336,10 @@ export class LoginRateLimiter {
   /**
    * S18-AUTH-UNLOCK429-1 — GỠ mọi khoá đăng nhập của `(slug,email)` [+ bucket bước-2 nếu biết `subject`].
    *
-   * Xoá: `ip:` (từng IP trong chỉ mục) · `acct:` · `forgot:ip:` · `forgot:acct:` · `2fa:` · và chính hai
-   * chỉ mục. **KHÔNG** xoá `logdedup:` — đó là khoá gộp bảo vệ `login_logs` (append-only, KHÔNG thu hồi
+   * Xoá: `ip:` (từng IP trong chỉ mục) · `acct:` · `2fa:` (chỉ khi có `subject`) · và chỉ mục của họ
+   * `login`. Họ `forgot` (`forgot:ip:` · `forgot:acct:` · chỉ mục của nó) **chỉ** bị xoá khi
+   * `opts.includeForgot === true` — xem `ClearLoginLocksOptions` (S18-AUTH-RESETCLEARS-1).
+   * **KHÔNG** xoá `logdedup:` — đó là khoá gộp bảo vệ `login_logs` (append-only, KHÔNG thu hồi
    * được) khỏi bị bồi hàng (KI-048); xoá nó là mở lại đúng lỗ đó cho mỗi lần bấm nút. **KHÔNG** xoá
    * `2fa-enable`/`2fa-disable`/`change-pw`/`stepup` — luồng SAU đăng nhập, ngoài phạm vi.
    *
@@ -333,9 +350,10 @@ export class LoginRateLimiter {
   async clearLoginLocks(
     companySlug: string,
     email: string,
-    subject?: LoginThrottleSubject,
+    subject: LoginThrottleSubject | undefined,
+    opts: ClearLoginLocksOptions,
   ): Promise<ClearLoginLocksResult> {
-    this.purgeMemoryLocks(companySlug, email, subject);
+    this.purgeMemoryLocks(companySlug, email, subject, opts);
     if (!this.useValkey()) return { clearedKeys: 0, degraded: false };
 
     let degraded = false;
@@ -347,7 +365,11 @@ export class LoginRateLimiter {
      * bucket hay chặn nhất.
      */
     const perIpLockKeys: string[] = [];
-    for (const family of ["login", "forgot"] as const) {
+    // `includeForgot=false` ⇒ họ `forgot` KHÔNG được duyệt: không xoá khoá, và cũng không đọc
+    // `sMembers`/marker của nó. Hệ quả có chủ ý — `degraded` khi đó chỉ nói về họ `login`; ta không hứa
+    // gì về forgot nên không được để nó bôi đen kết luận của người gọi.
+    const families: readonly FailureFamily[] = opts.includeForgot ? ["login", "forgot"] : ["login"];
+    for (const family of families) {
       const indexKey = LoginRateLimiter.ipIndexKey(companySlug, email, family);
       const ips = await this.valkey!.sMembers(indexKey);
       // `null` = KHÔNG BIẾT (Valkey rớt), khác hẳn `[]` = chắc chắn không có IP nào. Coi null như rỗng
@@ -372,7 +394,7 @@ export class LoginRateLimiter {
     }
     for (const base of [
       LoginRateLimiter.accountKey(companySlug, email),
-      LoginRateLimiter.forgotAccountKey(companySlug, email),
+      ...(opts.includeForgot ? [LoginRateLimiter.forgotAccountKey(companySlug, email)] : []),
       ...(subject ? [LoginRateLimiter.twoFactorKey(subject.companyId, subject.userId)] : []),
     ]) {
       keys.push(this.countKey(base), this.lockKey(base));
@@ -422,7 +444,10 @@ export class LoginRateLimiter {
       );
       if (ips === null) unknown = true;
       // Còn marker tràn trần ⇒ có IP nằm NGOÀI chỉ mục: ta không thể khẳng định "không bị khoá".
-      if ((await this.valkey!.get(LoginRateLimiter.cappedMarkerKey(companySlug, email, "login"))) !== null) {
+      if (
+        (await this.valkey!.get(LoginRateLimiter.cappedMarkerKey(companySlug, email, "login"))) !==
+        null
+      ) {
         unknown = true;
       }
       for (const ip of ips ?? []) {
@@ -486,15 +511,18 @@ export class LoginRateLimiter {
   private purgeMemoryLocks(
     companySlug: string,
     email: string,
-    subject?: LoginThrottleSubject,
+    subject: LoginThrottleSubject | undefined,
+    opts: ClearLoginLocksOptions,
   ): void {
+    // `includeForgot` phải áp Ở ĐÂY y hệt nhánh Valkey. Bỏ sót chỗ này = nhánh Valkey giữ khoá forgot
+    // còn nhánh in-memory thì xoá: hai nhánh nói hai điều khác nhau, và test chạy nhánh nào cũng xanh.
     const prefixes = [
       LoginRateLimiter.key(companySlug, email, ""),
-      LoginRateLimiter.forgotKey(companySlug, email, ""),
+      ...(opts.includeForgot ? [LoginRateLimiter.forgotKey(companySlug, email, "")] : []),
     ];
     const exact = new Set([
       LoginRateLimiter.accountKey(companySlug, email),
-      LoginRateLimiter.forgotAccountKey(companySlug, email),
+      ...(opts.includeForgot ? [LoginRateLimiter.forgotAccountKey(companySlug, email)] : []),
       ...(subject ? [LoginRateLimiter.twoFactorKey(subject.companyId, subject.userId)] : []),
     ]);
     for (const key of [...this.attempts.keys()]) {

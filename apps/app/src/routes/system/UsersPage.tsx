@@ -205,6 +205,10 @@ export function UsersPage() {
     onSuccess: (result, user) => {
       setConfirm(null);
       invalidateList();
+      // S18-AUTH-RESETCLEARS-1: đặt lại mật khẩu giờ GỠ LUÔN khoá 429 ở server. `invalidateList()` chỉ
+      // chạm `authUsersKeys.all`, không chạm query `loginThrottle` — thiếu dòng này thì badge "Đang bị
+      // khoá đăng nhập" ở màn chi tiết còn nói khoá cũ tới hết `staleTime` (15s).
+      void queryClient.invalidateQueries({ queryKey: authUsersKeys.loginThrottle(user.id) });
       setResetResult({
         email: user.email,
         tempPassword: result.tempPassword,

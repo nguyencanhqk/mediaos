@@ -629,3 +629,242 @@ describe("AuthService.emitAccountLocked — silent-failure log-not-swallow + pay
     );
   });
 });
+/**
+ * S18-AUTH-RESETCLEARS-1 — `resetPassword` (tự phục vụ) gỡ luôn khoá đăng nhập 429.
+ *
+ * Ba trục được đo ở đây, và cả ba đều là nhánh QUYẾT ĐỊNH chứ không phải hình dạng:
+ *   1. chỉ gỡ khi token HỢP LỆ (ba nhánh hỏng phải im lặng tuyệt đối trên không gian khoá);
+ *   2. gỡ với `includeForgot:false` và KHÔNG `subject` — hai control còn lại không được đụng tới;
+ *   3. gỡ hỏng KHÔNG được ném (mật khẩu đã đổi, token đã dùng) nhưng cũng KHÔNG được im.
+ */
+describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mật khẩu (S18-AUTH-RESETCLEARS-1)", () => {
+  const COMPANY_ID = "3f6a6a3e-3a52-4f2f-9f6e-2a1c4b8d0e11";
+  const USER_ID = "9a2c1b44-0d6b-4a1e-8c33-77d5f0a1b2c3";
+  const EMAIL = "victim@acme.test";
+  const TOKEN = `${COMPANY_ID}.opaque-token-part`;
+
+  function makeService(
+    over: {
+      tokenRow?: Record<string, unknown> | null;
+      deletedAt?: Date | null;
+      companyRows?: Array<{ slug: string }>;
+      clearImpl?: () => Promise<{ clearedKeys: number; degraded: boolean }>;
+    } = {},
+  ) {
+    const tokenRow =
+      over.tokenRow === undefined
+        ? {
+            id: "tok-1",
+            userId: USER_ID,
+            usedAt: null,
+            expiresAt: new Date(Date.now() + 60_000),
+          }
+        : over.tokenRow;
+
+    const chain: Record<string, unknown> = {
+      select: vi.fn(() => chain),
+      from: vi.fn(() => chain),
+      where: vi.fn(() => chain),
+      limit: vi.fn(() => Promise.resolve(tokenRow ? [tokenRow] : [])),
+      update: vi.fn(() => chain),
+      set: vi.fn(() => chain),
+      insert: vi.fn(() => chain),
+      values: vi.fn(() => chain),
+      // `.returning()` CHỈ có trên câu UPDATE users (lấy email + deleted_at của chính hàng vừa ghi).
+      returning: vi.fn(() =>
+        Promise.resolve([{ email: EMAIL, deletedAt: over.deletedAt ?? null }]),
+      ),
+      execute: vi.fn(async () => ({
+        rows: over.companyRows ?? [{ slug: "acme" }],
+      })),
+      then: (resolve: (v: unknown) => void) => resolve(undefined),
+    };
+
+    const dbsvc = {
+      withTenant: vi.fn(async (_c: string, fn: (tx: unknown) => unknown) => fn(chain)),
+    };
+    const clearLoginLocks = vi.fn(
+      over.clearImpl ?? (async () => ({ clearedKeys: 8, degraded: false })),
+    );
+    const rateLimiter = { clearLoginLocks };
+    const audit = { record: vi.fn().mockResolvedValue(undefined) };
+    const securityEvents = { record: vi.fn().mockResolvedValue(undefined) };
+
+    const Ctor = AuthService as unknown as new (...args: unknown[]) => AuthService;
+    const service = new Ctor(
+      dbsvc, // 1 dbsvc
+      { hash: vi.fn().mockResolvedValue("argon2-new-hash") }, // 2 password
+      { hashToken: vi.fn(() => "hashed-token") }, // 3 tokens
+      rateLimiter, // 4 rateLimiter
+      audit, // 5 audit
+      {}, // 6 outbox
+      {}, // 7 permissions
+      {}, // 8 secrets
+      {}, // 9 twoFactor
+      {}, // 10 replayGuard
+      {}, // 11 securityAlerts
+      {}, // 12 securityPolicy
+      {}, // 13 modules
+    );
+    (service as unknown as { securityEvents: unknown }).securityEvents = securityEvents;
+    const svcLogger = (
+      service as unknown as {
+        logger: { error: (...a: unknown[]) => void; warn: (...a: unknown[]) => void };
+      }
+    ).logger;
+    const logger = vi.spyOn(svcLogger, "error").mockImplementation(() => undefined);
+    const warn = vi.spyOn(svcLogger, "warn").mockImplementation(() => undefined);
+    return { service, clearLoginLocks, audit, securityEvents, logger, warn, chain };
+  }
+
+  it("token HỢP LỆ ⇒ gỡ khoá với ĐÚNG 4 đối số: slug/email từ DB · subject undefined · includeForgot=false", async () => {
+    const { service, clearLoginLocks } = makeService();
+    await expect(
+      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }),
+    ).resolves.toBeUndefined();
+    // `undefined` ở vế 3 KHÔNG phải thừa: truyền `subject` sẽ gỡ bucket `rl:2fa` — control DUY NHẤT
+    // chặn dò TOTP bước-2 — bằng một thao tác chỉ chứng minh quyền kiểm soát HÒM THƯ.
+    // `includeForgot:false` giữ trần của endpoint forgot (công khai, không xác thực).
+    expect(clearLoginLocks).toHaveBeenCalledTimes(1);
+    expect(clearLoginLocks).toHaveBeenCalledWith("acme", EMAIL, undefined, {
+      includeForgot: false,
+    });
+  });
+
+  it.each([
+    ["token không tồn tại", null],
+    [
+      "token ĐÃ DÙNG",
+      {
+        id: "t",
+        userId: USER_ID,
+        usedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    ],
+    [
+      "token HẾT HẠN",
+      {
+        id: "t",
+        userId: USER_ID,
+        usedAt: null,
+        expiresAt: new Date(Date.now() - 1),
+      },
+    ],
+  ])("%s ⇒ 401 + TUYỆT ĐỐI không chạm không gian khoá", async (_label, tokenRow) => {
+    const { service, clearLoginLocks } = makeService({ tokenRow });
+    await expect(
+      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }),
+    ).rejects.toThrow("Token không hợp lệ hoặc đã hết hạn.");
+    // Gọi clear ở nhánh hỏng = biến một endpoint nhận token TUỲ Ý thành nút gỡ khoá theo email.
+    expect(clearLoginLocks).not.toHaveBeenCalled();
+  });
+
+  it("ba nhánh token hỏng trả chuỗi lỗi BYTE-GIỐNG NHAU (thay cho sàn thời gian — done_when sửa 03/09)", async () => {
+    const rows = [
+      null,
+      {
+        id: "t",
+        userId: USER_ID,
+        usedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+      {
+        id: "t",
+        userId: USER_ID,
+        usedAt: null,
+        expiresAt: new Date(Date.now() - 1),
+      },
+    ];
+    const messages: string[] = [];
+    for (const tokenRow of rows) {
+      const { service } = makeService({ tokenRow });
+      await service
+        .resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" })
+        .catch((e: Error) => messages.push(e.message));
+    }
+    expect(messages).toHaveLength(3);
+    expect(new Set(messages).size).toBe(1);
+  });
+
+  it("user đã XOÁ MỀM ⇒ KHÔNG gỡ khoá: email đó có thể đã cấp lại cho NGƯỜI KHÁC (unique là partial)", async () => {
+    const { service, clearLoginLocks } = makeService({ deletedAt: new Date() });
+    await expect(
+      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }),
+    ).resolves.toBeUndefined();
+    expect(clearLoginLocks).not.toHaveBeenCalled();
+  });
+
+  it("không đọc được slug ⇒ KHÔNG đoán, KHÔNG gỡ, KHÔNG hỏng reset — nhưng PHẢI cảnh báo", async () => {
+    const { service, clearLoginLocks, warn } = makeService({ companyRows: [] });
+    await expect(
+      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }),
+    ).resolves.toBeUndefined();
+    expect(clearLoginLocks).not.toHaveBeenCalled();
+    // Khác hẳn ca user-xoá-mềm ngay dưới: thiếu hàng `companies` cho `companyId` của một token VỪA
+    // ĐƯỢC CẤP là lệch dữ liệu, không phải nghiệp vụ. Đây là ca "không gỡ vì chưa từng thử gỡ" —
+    // im lặng ở đây để lại ÍT dấu vết hơn cả ca Valkey chập chờn.
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it("user đã xoá mềm ⇒ bỏ qua trong IM LẶNG (nghiệp vụ bình thường, KHÔNG cảnh báo nhiễu)", async () => {
+    // Ca đối chứng của ca trên: nếu gộp ba nhánh dừng vào một `if` chung thì hoặc mất cảnh báo cho
+    // ca lệch dữ liệu, hoặc bồi cảnh báo cho ca bình thường — cặp này ghim cả hai chiều.
+    const { service, warn, logger } = makeService({ deletedAt: new Date() });
+    await service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" });
+    expect(warn).not.toHaveBeenCalled();
+    expect(logger).not.toHaveBeenCalled();
+  });
+
+  it("gỡ khoá NÉM ⇒ reset vẫn thành công, nhưng PHẢI log ERROR (catch rỗng ⇒ ca này ĐỎ)", async () => {
+    // `ValkeyService` theo hợp đồng "never throws" ⇒ tới được đây là BUG (namespace khoá sai / DI vắng).
+    // Một `catch {}` ở đây chỉ có tác dụng giấu đúng loại lỗi đó.
+    const { service, logger, audit } = makeService({
+      clearImpl: async () => {
+        throw new Error("ValkeyKeyScopeError: khoá ngoài phạm vi env");
+      },
+    });
+    await expect(
+      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }),
+    ).resolves.toBeUndefined();
+    expect(logger).toHaveBeenCalled();
+    const actions = audit.record.mock.calls.map((c) => (c[1] as { action: string }).action);
+    expect(actions).toContain("user.login_throttle_cleared");
+  });
+
+  it("gỡ khoá degraded ⇒ ghi vết USER_UNLOCKED{ok:false}; ca THÀNH CÔNG thì KHÔNG ghi (đối chứng)", async () => {
+    const bad = makeService({
+      clearImpl: async () => ({ clearedKeys: 8, degraded: true }),
+    });
+    await bad.service.resetPassword({
+      token: TOKEN,
+      newPassword: "N3wPassw0rd",
+    });
+    // Nhánh degraded KHÔNG ném ⇒ nếu chỉ ghi audit thì log/APM im lặng đúng lúc bất thường nhất
+    // (mật khẩu đã đổi mà không kết luận được khoá đã gỡ hay chưa).
+    expect(bad.logger).toHaveBeenCalled();
+    const badEvents = bad.securityEvents.record.mock.calls.map(
+      (c) =>
+        c[1] as {
+          eventType: string;
+          payload?: { ok?: boolean; reason?: string };
+        },
+    );
+    expect(badEvents.find((e) => e.eventType === "USER_UNLOCKED")?.payload).toMatchObject({
+      reason: "password_reset",
+      ok: false,
+    });
+
+    // Đối chứng: thiếu vế này thì ca trên vẫn xanh khi code ghi vết VÔ ĐIỀU KIỆN — tức bồi
+    // `USER_UNLOCKED` cho tài khoản chưa từng bị khoá, đúng món nợ WO-1 đã ghi ở §10.5.
+    const good = makeService();
+    await good.service.resetPassword({
+      token: TOKEN,
+      newPassword: "N3wPassw0rd",
+    });
+    const goodEvents = good.securityEvents.record.mock.calls.map(
+      (c) => (c[1] as { eventType: string }).eventType,
+    );
+    expect(goodEvents).not.toContain("USER_UNLOCKED");
+  });
+});

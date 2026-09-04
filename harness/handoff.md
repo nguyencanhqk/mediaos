@@ -4,6 +4,69 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
+## Phiên 2026-09-03 (chiều muộn) — S18-AUTH-RESETCLEARS-1
+
+**Đóng sổ trước đó:** `S18-AUTH-UNLOCK429-1` đã merge (PR #472, `13219b1b`) nhưng ledger chưa có mốc
+`finished` ⇒ STATUS vẫn vẽ nó là "đang làm". Đã `ledger.mjs done` + regen. Bài học lặp lại: **merge
+xong phải đóng sổ ledger**, không thì WO kế bị chặn oan (mẫu `blocked-status-is-the-only-machine-readable-stop`).
+
+**WO này (0 migration).** Đặt lại mật khẩu thành công ⇒ gỡ luôn khoá 429, ở CẢ hai đường: tự phục vụ
+(`AuthService.resetPassword`) và admin đặt lại hộ (`AuthUsersService.resetPassword`). Kế hoạch + toàn
+bộ số đo: `docs/plans/S18-AUTH-RESETCLEARS-1.md` (§8 bản vá sau plan-review · §9 kết quả chạy thật).
+
+- **Owner đã chốt 4 quyết định** (§8.1–8.4): gác lời gọi clear theo `deleted_at` chứ KHÔNG siết `WHERE`
+  của UPDATE · ghi vết CHỈ khi gỡ thất bại · sửa `done_when` #6 (không thêm sàn thời gian, thay bằng
+  3 ràng buộc đo được) · thêm 1 dòng invalidate `loginThrottle` ở FE.
+- **`clearLoginLocks` nhận `opts: {includeForgot}` BẮT BUỘC** (không mặc định): `rl:forgot:*` gác một
+  endpoint CÔNG KHAI không xác thực, nên "quên khai" phải là lỗi BIÊN DỊCH. Đường tự phục vụ khai
+  `false`, đường admin khai `true`. Cờ áp ở đúng BA chỗ (vòng family · `exact` · `purgeMemoryLocks`).
+- **KHÔNG truyền `subject` ở cả hai đường** ⇒ bucket `rl:2fa` không bị gỡ. Đặt lại mật khẩu không
+  chứng minh quyền kiểm soát yếu tố thứ hai.
+
+**Ba giả định của plan SAI khi đo thật (plan-reviewer bắt, đã sửa cả plan lẫn test):**
+1. Ca int-spec bucket `acct` viết "2 IP" là **bất khả thi** — `login()` trả 429 TRƯỚC
+   `recordLoginFailure` nên mỗi IP chỉ góp tối đa `LOGIN_MAX_ATTEMPTS`=5 vào ngưỡng 20 ⇒ phải rải
+   **4 IP × 5**, và ca đó phải gọi `auth.login(...,{ip})` TRỰC TIẾP (supertest cho `req.ip` hằng số).
+2. `resetPassword` KHÔNG lọc `deleted_at`, mà unique email là **partial** (`WHERE deleted_at IS NULL`)
+   ⇒ email của user đã xoá mềm có thể đã cấp lại cho NGƯỜI KHÁC; clear theo `(slug,email)` sẽ gỡ khoá
+   nhầm. R1 của plan khẳng định điều này bất khả — khẳng định đó SAI.
+3. `requireRateLimiter()` làm **4 ca hiện có** đỏ (5 chỗ dựng `AuthUsersService` thiếu tham số thứ 9);
+   plan nói "chỉ spec nào assert đối số mới phải sửa" — sai.
+
+**silent-failure-hunter BLOCK → 3 vá:** (a) nhánh `degraded` **không ném** trước đây chỉ ghi audit ⇒
+log/APM im lặng đúng lúc bất thường nhất — nay `logger.error` NGAY TẠI nhánh ở cả hai đường; (b) nhánh
+thiếu `slug` im lặng tuyệt đối, mà đó là ca "không gỡ vì CHƯA TỪNG THỬ gỡ" (ít dấu vết hơn cả ca
+Valkey chập chờn) — nay tách khỏi `deletedAt` và `logger.warn`; (c) spec đường admin không có spy
+logger ⇒ đổi `catch (err) {log; …}` thành `catch {…}` vẫn xanh.
+
+**security-reviewer PASS**, 0 CRITICAL/HIGH. LOW đã vá: `redactEmailFromDetail` + giữ `stack` ở hai
+`catch` của đường admin; int-spec mới thêm vào `test:cov:sensitive`.
+
+**14/14 đột biến ĐỎ** (10 unit + 3 int + 1 FE) — bảng đầy đủ ở plan §9.3. **p50/p95** (plan §9.4):
+token-SAI 6/18ms · token-ĐÚNG 29/39ms TRƯỚC → 30/54ms SAU ⇒ round-trip Valkey đóng góp ~1ms ở p50,
+khoảng cách 5× giữa hai nhánh vốn đã có từ trước.
+
+**Giới hạn ghi ra để không ai tưởng là bug mới** (plan §9.6): `degraded` không verify lại bucket `acct`
+· marker "chỉ mục IP tràn trần" (64 IP) khiến `degraded` bị tác động từ ngoài ⇒ đẻ `USER_UNLOCKED{ok:false}`
+dù gỡ đúng · hàng `user.login_throttle_cleared` giờ có HAI hình dạng (discriminator là
+`after.reason='password_reset'`) ⇒ báo cáo đếm "admin đã gỡ khoá" theo mỗi `action` sẽ đếm DƯ.
+
+**Nợ CŨ chưa vá (owner chốt ngoài phạm vi):** user đã xoá mềm vẫn **đặt lại được mật khẩu** —
+`resetPassword` không lọc `deleted_at` ở câu UPDATE. WO này chỉ chặn phần của mình (không gỡ khoá cho
+hàng đã xoá mềm). Siết `WHERE` = đổi 200 → 401 trên đường auth, cần WO riêng.
+
+**check.sh --all --lane-db=s18reset:** 8/9 cổng XANH; ca đỏ duy nhất là
+`s11-asset-db1-invariants` H1 — chạy RIÊNG 22/22 XANH ⇒ **flake lane chung, LẶP LẠI y hệt WO trước
+trong cùng wave** (đã ghi ở mục dưới). Không liên quan diff S18 (ASSET mig 0549–0551 vs auth).
+Cùng một ca flake nổ hai lần liên tiếp ⇒ đáng seed WO dọn riêng thay vì tiếp tục miễn trừ bằng tay.
+
+**Friction:** (1) Bash tool vỡ với heredoc dài chứa backtick ⇒ dùng Write tool rồi `cat >>`, hoặc
+`python - << EOF`. (2) python ghi thẳng file thì hook prettier KHÔNG chạy ⇒ thụt lề lệch, phải
+`npx prettier --write` tay; và một `assert` gãy giữa script làm MỌI thay đổi trước đó không được ghi
+(script chỉ write ở cuối) — dễ tưởng đã vá mà chưa. (3) `test:cov:sensitive` đỏ MỘT lần rồi xanh với
+cùng đầu vào (flake), phải chạy lại để phân biệt với hồi quy thật. (4) Lane `mediaos_s18reset` còn
+sống, DROP sau khi merge.
+
 ## Phiên 2026-09-03 (chiều) — S18-AUTH-UNLOCK429-1: code + test XONG, CHƯA commit/PR
 
 **Nhánh `feat/s18-auth-unlock429-1`, working tree BẨN (chưa commit).** Kế hoạch + toàn bộ số đo:

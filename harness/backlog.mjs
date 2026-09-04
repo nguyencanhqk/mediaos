@@ -17087,10 +17087,18 @@ export const backlog = [
     status: "todo",
     paths: [
       "apps/api/src/auth/auth.service.ts",
+      // Seed đo THIẾU 4 file (plan §8.11): clearLoginLocks nhận thêm tham số `opts` ⇒ chạm chính
+      // login-rate-limiter.ts; hai ngưỡng coverage per-file nằm ở vitest.config.ts; và mutation
+      // reset-mật-khẩu ở FE phải invalidate query loginThrottle nếu không badge WO-1 nói sai.
+      "apps/api/src/auth/login-rate-limiter.ts",
       "apps/api/src/auth/**/*.spec.ts",
       "apps/api/src/users/auth-users.service.ts",
       "apps/api/src/users/**/*.spec.ts",
       "apps/api/test/integration/auth-s18-resetclears-*.int-spec.ts",
+      "apps/api/package.json",
+      "apps/api/vitest.config.ts",
+      "apps/app/src/routes/system/UsersPage.tsx",
+      "apps/app/src/routes/system/**/*.spec.tsx",
       "docs/plans/S18-AUTH-RESETCLEARS-1.md",
       "harness/backlog.mjs",
     ],
@@ -17109,7 +17117,12 @@ export const backlog = [
       "Token sai / hết hạn / đã dùng ⇒ KHÔNG clear — int-spec đột biến: khoá còn nguyên sau 3 ca token hỏng",
       "KHÔNG clear bucket `forgot:*` ở đường self-service — giữ chống spam endpoint công khai (quyết định đã ký ở docblock forgotPasswordImpl)",
       "Int-spec END-TO-END: 5 lần sai ⇒ 429 → forgot → reset đúng token → login 200 ngay; và ca 2 IP (bucket acct) cũng sạch",
-      "Không đẻ oracle: nhánh token hỏng giữ nguyên UNIFORM error + sàn thời gian; ca đo thời gian phản hồi token-đúng vs token-sai không tách được bằng clear",
+      // ✅ owner sửa 03/09 (plan §8.3): tiêu chí gốc đòi 'sàn thời gian' cho resetPassword — đo thật thì
+      // hàm này CHƯA TỪNG có sàn (chỉ forgotPassword có) và hai nhánh đã lệch hàng trăm lần từ trước
+      // (argon2 + 5 lệnh ghi vs 1 SELECT rồi ném). Thêm sàn = đổi hành vi một đường auth NGOÀI phạm vi WO.
+      "Không đẻ oracle — KHÔNG thêm sàn thời gian, thay bằng 3 ràng buộc đo được: (1) ba nhánh token hỏng trả chuỗi lỗi BYTE-GIỐNG NHAU; (2) clearLoginLocks KHÔNG được gọi ở bất kỳ nhánh hỏng nào; (3) số đo p50/p95 hai nhánh ghi vào plan §9 TRƯỚC khi mở PR",
+      "User đã XOÁ MỀM (deleted_at) ⇒ KHÔNG gọi clearLoginLocks: unique email là PARTIAL (WHERE deleted_at IS NULL) nên email đó có thể đã cấp lại cho người khác — clear sẽ gỡ khoá NHẦM. Giữ nguyên 200 của resetPassword (không siết WHERE — nợ cũ, ngoài phạm vi)",
+      "Gỡ thất bại (degraded) ⇒ ghi vết: withTenant thứ hai sau commit ghi audit user.login_throttle_cleared + USER_UNLOCKED{reason:'password_reset', ok:false}; ca thành công KHÔNG ghi hàng nào. Cả hai đường log ERROR khi degraded",
       "bash harness/check.sh --all --lane-db=s18reset XANH",
     ],
     notes: [
