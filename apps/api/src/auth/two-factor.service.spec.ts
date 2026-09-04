@@ -1,4 +1,6 @@
-import { ConflictException } from "@nestjs/common";
+import { ConflictException, HttpException, HttpStatus } from "@nestjs/common";
+import { rlKey as rateLimitKey } from "../common/valkey/valkey-key";
+import { TOO_MANY_REQUESTS_MESSAGE } from "../common/filters/retry-after";
 import { describe, expect, it, vi } from "vitest";
 import { Column, SQL } from "drizzle-orm";
 import { TwoFactorService, TWO_FACTOR_ENFORCED } from "./two-factor.service";
@@ -102,23 +104,40 @@ function makeTx(opts: {
   return { tx, calls, captures };
 }
 
+/**
+ * Mock `LoginRateLimiter` dựng TỪ SỐ 0 — trước S18-AUTH-RETRYAFTER-1 hai chỗ dùng `{}` rỗng, nghĩa là
+ * nhánh 429 của `confirmEnable` (`two-factor.service.ts:194`) CHƯA TỪNG chạy trong file spec này: gọi
+ * `isLocked` trên object rỗng ném TypeError chứ không cho ra 429. Ba method dưới đây là toàn bộ bề mặt
+ * `two-factor.service.ts` chạm tới (`grep "rateLimiter\." two-factor.service.ts`) — cộng `remainingLockSec`
+ * mà nhánh 429 mới đọc để lấy số giây còn khoá.
+ */
+function makeRateLimiterMock(opts: { locked?: boolean; remainingSec?: number | null } = {}) {
+  return {
+    isLocked: vi.fn(async () => opts.locked ?? false),
+    remainingLockSecOrNull: vi.fn(async () => opts.remainingSec ?? null),
+    recordFailure: vi.fn(async () => undefined),
+    reset: vi.fn(async () => undefined),
+  };
+}
+
 function makeSvc(tx: unknown) {
   const dbsvc = {
     withTenant: vi.fn(async (_cid: string, fn: (t: unknown) => Promise<unknown>) => fn(tx)),
   };
   const audit = { record: vi.fn(async () => undefined) };
   const securityEvents = { record: vi.fn(async () => undefined) };
+  const rateLimiter = makeRateLimiterMock();
   const svc = new TwoFactorService(
     dbsvc as never, // dbsvc
     {} as never, // secrets
     {} as never, // totp
     {} as never, // tokens
     audit as never, // audit
-    {} as never, // rateLimiter
+    rateLimiter as never, // rateLimiter
     {} as never, // replayGuard
     securityEvents as never, // securityEvents (S2-AUTH-BE-8 dual-write)
   );
-  return { svc, audit, securityEvents };
+  return { svc, audit, securityEvents, rateLimiter };
 }
 
 const COMPANY_ID = "22222222-2222-2222-2222-222222222222";
@@ -267,7 +286,10 @@ function makeVerifyTx(opts: {
   return { tx, calls };
 }
 
-function makeVerifySvc(tx: unknown, opts: { totpOk?: boolean; firstUse?: boolean }) {
+function makeVerifySvc(
+  tx: unknown,
+  opts: { totpOk?: boolean; firstUse?: boolean; locked?: boolean; remainingSec?: number | null },
+) {
   const dbsvc = {
     withTenant: vi.fn(async (_cid: string, fn: (t: unknown) => Promise<unknown>) => fn(tx)),
   };
@@ -275,7 +297,10 @@ function makeVerifySvc(tx: unknown, opts: { totpOk?: boolean; firstUse?: boolean
   const totp = { verify: vi.fn(() => opts.totpOk ?? true), currentStep: vi.fn(() => 1_800_000) };
   const tokens = { hashToken: vi.fn(() => "hash-of-code") };
   const audit = { record: vi.fn(async (_tx: unknown, _entry: unknown) => undefined) };
-  const rateLimiter = {};
+  const rateLimiter = makeRateLimiterMock({
+    locked: opts.locked,
+    remainingSec: opts.remainingSec,
+  });
   const replayGuard = {
     claim: vi.fn(async (_marker: string, _rest: string, _ttlSec?: number) => opts.firstUse ?? true),
   };
@@ -290,7 +315,7 @@ function makeVerifySvc(tx: unknown, opts: { totpOk?: boolean; firstUse?: boolean
     replayGuard as never,
     securityEvents as never,
   );
-  return { svc, audit, replayGuard, totp, dbsvc };
+  return { svc, audit, replayGuard, totp, dbsvc, rateLimiter };
 }
 
 describe("TwoFactorService.verifyChallenge — HỒI QUY: giữ nguyên từng hành vi (spec 2FA cũ)", () => {
@@ -373,5 +398,48 @@ describe("TwoFactorService.verifyTotpForStepUp — D1/D2: TOTP THUẦN, marker R
     const { svc, dbsvc } = makeVerifySvc(tx, { totpOk: true });
     await svc.verifyTotpForStepUp(USER_ID, COMPANY_ID, "123456");
     expect(dbsvc.withTenant.mock.calls[0]?.[0]).toBe(COMPANY_ID);
+  });
+});
+
+// ── S18-AUTH-RETRYAFTER-1 — confirmEnable 429 mang retryAfterSec ────────────────────────────────
+describe("TwoFactorService.confirmEnable — 429 mang retryAfterSec (S18-AUTH-RETRYAFTER-1)", () => {
+  const RL_KEY = rateLimitKey("2fa-enable", `${COMPANY_ID}|${USER_ID}`);
+
+  function payloadOf(err: unknown) {
+    expect(err).toBeInstanceOf(HttpException);
+    const e = err as HttpException;
+    expect(e.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+    expect(e.message).toBe(TOO_MANY_REQUESTS_MESSAGE);
+    return e.getResponse() as { details?: Array<{ field: string; message: string }> };
+  }
+
+  it("đang khoá + TTL đọc được ⇒ 429 mang số giây, đọc bằng ĐÚNG khoá `2fa-enable`", async () => {
+    const { tx } = makeVerifyTx({});
+    const { svc, rateLimiter } = makeVerifySvc(tx, { locked: true, remainingSec: 540 });
+
+    const err = await svc.confirmEnable(USER_ID, COMPANY_ID, "123456").catch((e: unknown) => e);
+
+    expect(payloadOf(err).details).toEqual([
+      { field: "retryAfterSec", message: "540", rule: "retry-after" },
+    ]);
+    expect(rateLimiter.remainingLockSecOrNull).toHaveBeenCalledWith(RL_KEY);
+  });
+
+  it("đang khoá + TTL `null` (Valkey rớt) ⇒ VẪN 429, KHÔNG `details`", async () => {
+    const { tx } = makeVerifyTx({});
+    const { svc } = makeVerifySvc(tx, { locked: true, remainingSec: null });
+
+    const err = await svc.confirmEnable(USER_ID, COMPANY_ID, "123456").catch((e: unknown) => e);
+
+    expect(payloadOf(err)).not.toHaveProperty("details");
+  });
+
+  it("KHÔNG khoá ⇒ KHÔNG đọc TTL (đường sạch không trả thêm giá)", async () => {
+    const { tx } = makeVerifyTx({});
+    const { svc, rateLimiter } = makeVerifySvc(tx, { locked: false, totpOk: true });
+
+    await svc.confirmEnable(USER_ID, COMPANY_ID, "123456").catch(() => undefined);
+
+    expect(rateLimiter.remainingLockSecOrNull).not.toHaveBeenCalled();
   });
 });

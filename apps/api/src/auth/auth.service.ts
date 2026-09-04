@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { rlKey as rateLimitKey } from "../common/valkey/valkey-key";
+import { tooManyRequests } from "../common/filters/retry-after";
 import {
   BadRequestException,
   ConflictException,
@@ -100,6 +101,13 @@ const BLOCKED_LOGIN_FLOOR_MS = 250;
  * nhau (`acct` không chứa ip). Xem `isLoginRateLimited`.
  */
 type LockedLoginBucket = "acct" | "ip";
+
+/**
+ * ⟲ S18-AUTH-RETRYAFTER-1 — `isLoginRateLimited` trả CHÍNH KHOÁ đang khoá, không chỉ tên bucket.
+ * Nhánh 429 cần đọc TTL của đúng bucket đó; dựng khoá lần thứ hai bằng tay ở `login()` là thứ
+ * `valkey-key-census.spec.ts` cấm, và hai bản sao sẽ lệch CÂM ngay khi builder khoá đổi.
+ */
+type LockedLogin = { bucket: LockedLoginBucket; key: string };
 
 /**
  * S10-SEC-LOGINLOG429-1 — TTL khoá gộp hàng nhật ký của nhánh REPLAY challengeToken.
@@ -252,8 +260,8 @@ export class AuthService {
 
   async login(req: LoginRequest, meta: RequestMeta): Promise<AuthTokens | TwoFactorChallenge> {
     const ip = meta.ip ?? "unknown";
-    const lockedBucket = await this.isLoginRateLimited(req.companySlug, req.email, ip);
-    if (lockedBucket) {
+    const locked = await this.isLoginRateLimited(req.companySlug, req.email, ip);
+    if (locked) {
       // ⟲ S6-SEC-LOGINLOG-2 · KI-044 — GẮN ĐÚNG CHỦ cho hàng bị chặn.
       // Trước: luôn ghi company_id NULL vì bộ chặn tần suất chạy TRƯỚC resolveCompanyId(). Sau mig 0532
       // (USING chỉ còn tenant hiện tại) hàng NULL KHÔNG tenant nào đọc được ⇒ company-admin mất hẳn quan
@@ -261,7 +269,15 @@ export class AuthService {
       // KHÔNG đảo thứ tự đường login: chỉ resolve BÊN TRONG nhánh đã-bị-chặn ⇒ request KHÔNG bị chặn
       // không tốn thêm một lượt tra DB nào. Slug sai/inactive vẫn ra NULL (hàng thực sự vô chủ).
       const startedAt = Date.now();
+      let retryAfterSec: number | null = null;
       try {
+        // ⟲ S18-AUTH-RETRYAFTER-1 — đọc TTL PHẢI nằm TRONG `try`, tức TRƯỚC `finally` áp sàn.
+        // `applyUniformResponseFloor` chờ tới MỐC TUYỆT ĐỐI `startedAt + 250 + jitter`, nên một
+        // round-trip Valkey thêm vào đây bị NUỐT TRỌN miễn còn ngân sách. Đặt nó sau `finally` (giữa
+        // sàn và `throw`) là cộng thẳng thời gian Valkey vào SAU mốc ⇒ tự tay đẻ lại đúng oracle mà
+        // sàn sinh ra để che. Dùng khoá do `isLoginRateLimited` trả về — KHÔNG dựng lại bằng tay.
+        retryAfterSec = await this.rateLimiter.remainingLockSecOrNull(locked.key);
+
         // ⟲ S10-SEC-LOGINLOG429-1 · KI-048 — GỘP: ghi ĐÚNG MỘT hàng cho mỗi cửa sổ khoá.
         //
         // VÌ SAO. Nhánh này không có `password.hash` burn, nên chi phí server mỗi hàng gần bằng 0 ⇒
@@ -280,7 +296,7 @@ export class AuthService {
         // lần". Ghi được số đếm cần UPDATE ⇒ cấm; đẻ hàng tổng kết lại là hàng do kẻ tấn công điều
         // khiển. Số đếm sống ở bucket rate-limit, không phải ở forensics.
         const firstOfWindow = await this.claimBlockedLogSlot(
-          lockedBucket,
+          locked.bucket,
           req.companySlug,
           req.email,
           ip,
@@ -306,10 +322,7 @@ export class AuthService {
         // TRƯỚC khi ngủ ⇒ chờ ở đây KHÔNG giữ slot DB (chỉ giữ socket). Xem plan §2.3 + số đo §6.
         await this.applyUniformResponseFloor(startedAt, BLOCKED_LOGIN_FLOOR_MS);
       }
-      throw new HttpException(
-        "Quá nhiều lần thử. Vui lòng thử lại sau.",
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      throw tooManyRequests(retryAfterSec);
     }
 
     // ⚠️ Đường QUYẾT ĐỊNH AUTH — TUYỆT ĐỐI KHÔNG cache/tái dùng kết quả resolve của nhánh 429 ở trên.
@@ -560,10 +573,7 @@ export class AuthService {
           meta,
         });
       }
-      throw new HttpException(
-        "Quá nhiều lần thử. Vui lòng thử lại sau.",
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      throw tooManyRequests(await this.rateLimiter.remainingLockSecOrNull(rlKey));
     }
 
     const ok = await this.twoFactor.verifyChallenge(claims.sub, claims.companyId, code);
@@ -696,10 +706,7 @@ export class AuthService {
     }
     const rlKey = rateLimitKey("2fa-disable", `${user.companyId}|${user.id}`);
     if (await this.rateLimiter.isLocked(rlKey)) {
-      throw new HttpException(
-        "Quá nhiều lần thử. Vui lòng thử lại sau.",
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      throw tooManyRequests(await this.rateLimiter.remainingLockSecOrNull(rlKey));
     }
     const ok = await this.dbsvc.withTenant(user.companyId, async (tx) => {
       const [row] = await tx
@@ -732,10 +739,7 @@ export class AuthService {
   ): Promise<void> {
     const rlKey = rateLimitKey("change-pw", `${user.companyId}|${user.id}`);
     if (await this.rateLimiter.isLocked(rlKey)) {
-      throw new HttpException(
-        "Quá nhiều lần thử. Vui lòng thử lại sau.",
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      throw tooManyRequests(await this.rateLimiter.remainingLockSecOrNull(rlKey));
     }
     // Khác mật khẩu cũ: chặn no-op + ép xoay thật. So plaintext (chưa chạm DB) → lỗi rõ ràng, không tốn băm.
     if (newPassword === currentPassword) {
@@ -805,11 +809,21 @@ export class AuthService {
     companySlug: string,
     email: string,
     ip: string,
-  ): Promise<LockedLoginBucket | null> {
+  ): Promise<LockedLogin | null> {
+    // ⚠️ THỨ TỰ LÀ HỢP ĐỒNG — `acct` PHẢI đứng trước `ip`, vì HAI lý do độc lập:
+    //  (a) gộp hàng `login_logs` theo dạng THÔ hơn (KI-048, docblock trên) — có int-spec canh
+    //      (`login-blocked-attribution.int-spec.ts:297`);
+    //  (b) ⟲ S18-AUTH-RETRYAFTER-1: TTL trả về phải là "khi nào THẬT SỰ vào lại được". Khi cả hai
+    //      bucket cùng khoá thì TTL của `acct` luôn ≥ TTL của `ip`, nên lấy `acct` là đúng chiều —
+    //      mọi bucket dùng chung một độ dài khoá (`recordFailure` set `:lock` bằng `LOGIN_LOCKOUT_SEC`
+    //      bất kể `maxAttempts`), và khi `acct` đã khoá thì KHÔNG khoá per-IP mới nào hình thành được
+    //      nữa vì `login()` ném 429 TRƯỚC `recordLoginFailure` ⇒ khoá `ip` chỉ có thể sinh ra TRƯỚC.
+    //      Ràng buộc (b) sống nhờ thứ tự "chặn TRƯỚC khi đếm" ở `login()`: ai đảo thứ tự đó phải xét
+    //      lại đoạn này, nếu không `retryAfterSec` sẽ nói một con số NGẮN HƠN thực tế.
     const acctKey = LoginRateLimiter.accountKey(companySlug, email);
-    if (await this.rateLimiter.isLocked(acctKey)) return "acct";
+    if (await this.rateLimiter.isLocked(acctKey)) return { bucket: "acct", key: acctKey };
     const ipKey = LoginRateLimiter.key(companySlug, email, ip);
-    if (await this.rateLimiter.isLocked(ipKey)) return "ip";
+    if (await this.rateLimiter.isLocked(ipKey)) return { bucket: "ip", key: ipKey };
     return null;
   }
 

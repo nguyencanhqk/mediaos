@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { LoginRateLimiter } from "./login-rate-limiter";
 import { ValkeyService } from "../permission/valkey.service";
 import { isKeyScoped, rlKey } from "../common/valkey/valkey-key";
@@ -635,5 +635,32 @@ describe("S18 — chỉ mục IP: hình dạng khoá, trần, và nhánh Valkey 
     expect(await rl.remainingLockSec(key, NOW)).toBe(rl.lockoutSec);
     expect(await rl.remainingLockSec(key, NOW + 300_000)).toBe(rl.lockoutSec - 300);
     expect(await rl.remainingLockSec(key, NOW + rl.lockoutSec * 1000)).toBeNull();
+  });
+});
+
+// ── S18-AUTH-RETRYAFTER-1 — remainingLockSecOrNull: fail-soft NHƯNG KHÔNG CÂM ───────────────────
+describe("LoginRateLimiter.remainingLockSecOrNull — đường ném 429 không bao giờ thành 500", () => {
+  const KEY = rlKey("change-pw", "s18-retryafter");
+
+  it("`remainingLockSec` NÉM ⇒ trả `null` (KHÔNG lan lỗi) VÀ có LOG (không nuốt câm)", async () => {
+    // Hợp đồng này là LÝ DO wrapper tồn tại (plan R8): một sự cố Valkey không được đổi ý nghĩa phản
+    // hồi auth từ 429 sang 500. Đo trên wrapper THẬT — mock chính wrapper là đo một thứ không tồn tại.
+    const rl = new LoginRateLimiter();
+    const boom = new Error("valkey down");
+    vi.spyOn(rl, "remainingLockSec").mockRejectedValue(boom);
+    const warn = vi.spyOn(rl["logger"], "warn").mockImplementation(() => undefined);
+
+    await expect(rl.remainingLockSecOrNull(KEY)).resolves.toBeNull();
+    expect(warn).toHaveBeenCalledOnce();
+
+    // BẤT BIẾN #3: khoá chứa slug+email ⇒ TUYỆT ĐỐI không được nội suy vào log.
+    expect(String(warn.mock.calls[0]?.[0])).not.toContain(KEY);
+  });
+
+  it("không ném ⇒ trả nguyên giá trị (wrapper KHÔNG đổi hành vi đường sạch)", async () => {
+    const rl = new LoginRateLimiter();
+    vi.spyOn(rl, "remainingLockSec").mockResolvedValue(842);
+
+    await expect(rl.remainingLockSecOrNull(KEY)).resolves.toBe(842);
   });
 });

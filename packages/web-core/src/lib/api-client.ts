@@ -132,6 +132,38 @@ export class ApiError extends Error {
 }
 
 /**
+ * ⟲ S18-AUTH-RETRYAFTER-1 — giây phải chờ của một 429 mang `retryAfterSec`; `null` khi không phải 429,
+ * thiếu field, hoặc hỏng hình. FE gọi hàm này để đếm ngược thay cho câu chữ vô định.
+ *
+ * ĐỌC TỪ BODY, KHÔNG TỪ HEADER — có lý do đo được: `main.ts` gọi `enableCors()` mà KHÔNG khai
+ * `exposedHeaders`, và `Retry-After` không nằm trong 7 header CORS-safelisted ⇒ `fetch` cross-origin của
+ * `apps/auth` KHÔNG BAO GIỜ thấy header đó dù server có gửi. Header phục vụ hạ tầng (proxy/`curl`).
+ *
+ * Khuôn bóc soi gương `parseRoomConflictsDetail` (`contracts/src/room.ts:314`): `details` là mảng
+ * `ErrorDetail {field,message,rule}` — HÌNH DUY NHẤT `AllExceptionsFilter` cho đi ra. Khớp CẢ `field`
+ * LẪN `rule` để không nhận nhầm detail của lỗi khác. Hỏng hình ⇒ `null` (rơi về chuỗi cũ) — KHÔNG ném,
+ * KHÔNG hiện "0 giây".
+ */
+export function retryAfterSecFromError(err: unknown): number | null {
+  if (!(err instanceof ApiError) || err.status !== 429) return null;
+  if (!Array.isArray(err.details)) return null;
+  const hit = err.details.find(
+    (d): d is { field: string; message: string; rule: string } =>
+      typeof d === "object" &&
+      d !== null &&
+      (d as { field?: unknown }).field === "retryAfterSec" &&
+      (d as { rule?: unknown }).rule === "retry-after" &&
+      typeof (d as { message?: unknown }).message === "string",
+  );
+  if (hit === undefined) return null;
+  // `/^\d+$/` TRƯỚC parseInt: `parseInt` nuốt hậu tố ("9 00" → 9, "1.5" → 1) ⇒ sẽ đếm ngược sai số.
+  if (!/^\d+$/.test(hit.message)) return null;
+  const sec = Number.parseInt(hit.message, 10);
+  // Dải soi gương RETRY_AFTER_MAX_SEC của server. `0` nghĩa "thử ngay" trong khi đang là 429 ⇒ loại.
+  return Number.isInteger(sec) && sec > 0 && sec <= 86_400 ? sec : null;
+}
+
+/**
  * Bóc { error: { code, type, details, message }, meta: { request_id } } từ body lỗi (envelope chuẩn)
  * → ApiError với đầy đủ kind/type/details/requestId; fallback nếu body không phải JSON.
  */

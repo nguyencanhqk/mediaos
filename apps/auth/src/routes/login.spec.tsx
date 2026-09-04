@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LoginPage } from "./login";
 
@@ -216,5 +216,117 @@ describe("apps/auth LoginPage", () => {
       expect(screen.getByText("Email hoặc mật khẩu không đúng.")).toBeInTheDocument(),
     );
     expect(assign).not.toHaveBeenCalled();
+  });
+
+  // ── S18-AUTH-RETRYAFTER-1 — 429 mang retryAfterSec ⇒ đếm ngược mm:ss ─────────────────────────
+  describe("429 đếm ngược", () => {
+    // Đồng hồ giả CHỈ trong describe này: các ca ở trên dùng `waitFor` với timer THẬT sẽ treo nếu bật
+    // toàn file.
+    beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+    afterEach(() => vi.useRealTimers());
+
+    async function reject429(details: unknown) {
+      const { ApiError } = await import("@mediaos/web-core");
+      vi.mocked(authApi.login).mockRejectedValueOnce(
+        new ApiError({
+          status: 429,
+          code: "SYSTEM-ERR-RATE-LIMIT",
+          message: "Quá nhiều lần thử. Vui lòng thử lại sau.",
+          details,
+        }),
+      );
+    }
+
+    const lockDetail = (sec: string) => [
+      { field: "retryAfterSec", message: sec, rule: "retry-after" },
+    ];
+
+    const submit = () => fireEvent.click(screen.getByRole("button", { name: /vào hệ thống/i }));
+    const submitBtn = () => screen.getByRole("button", { name: /vào hệ thống|đang/i });
+
+    /** Nhích đồng hồ N giây — bản `…Async` vì state update nằm trong callback `setTimeout`. */
+    async function tick(sec: number) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(sec * 1000);
+      });
+    }
+
+    it("429 có số ⇒ hiện mm:ss, nút Submit bị khoá", async () => {
+      await reject429(lockDetail("900"));
+      render(<LoginPage />);
+      fillCredentials();
+      submit();
+
+      await waitFor(() =>
+        expect(screen.getByText("Quá nhiều lần thử. Thử lại sau 15:00.")).toBeInTheDocument(),
+      );
+      expect(submitBtn()).toBeDisabled();
+    });
+
+    it("đồng hồ chạy ⇒ số giảm từng giây (mm:ss có đệm 0)", async () => {
+      await reject429(lockDetail("65"));
+      render(<LoginPage />);
+      fillCredentials();
+      submit();
+
+      await waitFor(() => expect(screen.getByText(/01:05/)).toBeInTheDocument());
+      await tick(1);
+      expect(screen.getByText(/01:04/)).toBeInTheDocument();
+      await tick(60);
+      expect(screen.getByText(/00:04/)).toBeInTheDocument();
+    });
+
+    it("hết giờ ⇒ nút bật lại VÀ thông báo biến mất (nói 'quá nhiều lần thử' sau khi hết giờ là NÓI SAI)", async () => {
+      await reject429(lockDetail("3"));
+      render(<LoginPage />);
+      fillCredentials();
+      submit();
+
+      await waitFor(() => expect(screen.getByText(/00:03/)).toBeInTheDocument());
+      expect(submitBtn()).toBeDisabled();
+
+      await tick(3);
+
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(submitBtn()).toBeEnabled();
+    });
+
+    it("429 KHÔNG số ⇒ chuỗi CŨ, nút KHÔNG bị khoá (hành vi y hệt trước WO này)", async () => {
+      await reject429(null);
+      render(<LoginPage />);
+      fillCredentials();
+      submit();
+
+      await waitFor(() =>
+        expect(screen.getByText("Quá nhiều lần thử. Vui lòng thử lại sau.")).toBeInTheDocument(),
+      );
+      expect(submitBtn()).toBeEnabled();
+    });
+
+    it("429 số HỎNG HÌNH ('0') ⇒ chuỗi cũ, KHÔNG hiện '00:00', nút KHÔNG khoá", async () => {
+      await reject429(lockDetail("0"));
+      render(<LoginPage />);
+      fillCredentials();
+      submit();
+
+      await waitFor(() =>
+        expect(screen.getByText("Quá nhiều lần thử. Vui lòng thử lại sau.")).toBeInTheDocument(),
+      );
+      expect(screen.queryByText(/00:00/)).toBeNull();
+      expect(submitBtn()).toBeEnabled();
+    });
+
+    it("unmount giữa chừng ⇒ KHÔNG rò timer (không setState sau khi gỡ)", async () => {
+      await reject429(lockDetail("900"));
+      const { unmount } = render(<LoginPage />);
+      fillCredentials();
+      submit();
+      await waitFor(() => expect(screen.getByText(/15:00/)).toBeInTheDocument());
+
+      unmount();
+      await tick(5);
+
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 });

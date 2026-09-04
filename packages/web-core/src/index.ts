@@ -23,6 +23,9 @@ export {
   // SSO như apiFetch nhưng KHÔNG set Content-Type mặc định (browser tự set boundary). Response vẫn Zod-parse.
   apiFetchMultipart,
   ApiError,
+  // retryAfterSecFromError (S18-AUTH-RETRYAFTER-1): giây phải chờ của 429 — đọc từ BODY (`error.details`),
+  // KHÔNG từ header `Retry-After` (CORS không expose header đó cho `fetch` cross-origin của apps/auth).
+  retryAfterSecFromError,
   unwrapEnvelope,
   configureApiBaseUrl,
   getApiBaseUrl,

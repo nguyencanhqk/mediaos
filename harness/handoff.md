@@ -67,6 +67,45 @@ Cùng một ca flake nổ hai lần liên tiếp ⇒ đáng seed WO dọn riêng
 cùng đầu vào (flake), phải chạy lại để phân biệt với hồi quy thật. (4) Lane `mediaos_s18reset` còn
 sống, DROP sau khi merge.
 
+## Phiên 2026-09-03 (tối) — S18-AUTH-RETRYAFTER-1: KẾ HOẠCH xong + qua 1 vòng plan-review, **CHƯA có code**
+
+**Nhánh `feat/s18-auth-retryafter-1`** (đã commit plan; cây sạch). Việc tiếp theo = **code thẳng theo
+`docs/plans/S18-AUTH-RETRYAFTER-1.md` §6 (thứ tự thi công)** — đừng lặp lại vòng đọc code/plan-review,
+plan đã trả lời hết. Dừng ở đây là quyết định của owner vì chi phí phiên ($67).
+
+- **Hình dạng chốt:** 429 mang `retryAfterSec` qua `error.details` (`ErrorDetail{field,message,rule}` —
+  hình DUY NHẤT `AllExceptionsFilter` cho ra ngoài) + header `Retry-After` đặt TRONG filter, suy TỪ
+  `details` (một nguồn). Hàm mới `apps/api/src/common/filters/retry-after.ts`. Dùng lại
+  `remainingLockSec()` của WO trước — không viết bản thứ hai.
+- **plan-review trả BLOCK, đã vá đủ 5 điểm.** Ba điểm là lỗi số đo của phiên này, đã tự kiểm lại và
+  xác nhận reviewer ĐÚNG:
+  1. **Census 429 là 8 chỗ, không phải 5** — grep đầu tiên bị `head -30` cắt mất. `step-up.service.ts:122`
+     (cùng module AUTH!), `chat-calls.service.ts:531`, `lms-service-intake.guard.ts:107`. Cả ba NGOÀI
+     `paths` ⇒ cố ý không làm; nợ đã ghi vào plan §1 + §6. Sau WO này AUTH có HAI hợp đồng 429.
+  2. **Mock response của `all-exceptions.filter.spec.ts:32` chỉ có `status`** — gọi `setHeader` trong
+     filter sẽ làm ĐỎ cả 5 ca đang xanh. Plan §4.0 là bước-0 bắt buộc: vá mock TRƯỚC.
+  3. **Census mock `LoginRateLimiter` sai** — `grep -l` bắt cả file *dùng* limiter thật. Đúng là 4 chỗ /
+     3 file; và `two-factor.service.spec.ts` mock RỖNG (`{} as never`) phải dựng mới.
+  4. `done_when[1]` (ca ĐO THỜI GIAN 429 vs sai-mật-khẩu) chưa được phủ → plan §4.4 `§floor` (đo p50,
+     N=15/nhóm, ngưỡng 60ms theo jitter 80ms).
+  5. §3.4 lẫn **trần** TTL với **TTL còn lại** ⇒ `retryAfterSec` CÓ lộ thời điểm khoá được dựng. Đã ghi
+     là chấp nhận (polling đo được sẵn), và **cấm** ghim "hai bucket cùng số" thành assert.
+- **Số đo tự kiểm, dùng được ngay, đừng đo lại:**
+  - `main.ts:37-40` CORS **không có `exposedHeaders`** ⇒ trình duyệt KHÔNG đọc được `Retry-After`
+    cross-origin. Đường tải thật cho FE là BODY. ⚠️ int-spec supertest chạy cùng tiến trình nên header
+    XANH — đừng vì thế tưởng FE đọc được.
+  - Không spec nào ghim BODY của 429 hiện tại (chỉ assert status) ⇒ đổi payload string→object an toàn.
+  - `recordFailure` set `:lock` bằng cùng `LOGIN_LOCKOUT_SEC` cho MỌI bucket
+    (`login-rate-limiter.ts:230-241`), và `login()` ném 429 TRƯỚC `recordLoginFailure` ⇒ không khoá
+    per-IP mới nào sinh ra khi `acct` đang khoá ⇒ **TTL(acct) ≥ TTL(ip)**, lấy `acct` trước là ĐÚNG chiều.
+  - `assertKeysScoped` chỉ ném khi `NODE_ENV==='test'` (`valkey-key.ts:240-241`); Valkey client
+    `enableOfflineQueue:false` + `maxRetriesPerRequest:1` ⇒ Valkey rớt là fail NHANH, không treo quá sàn.
+  - `LOGIN_LOCKOUT_SEC` **không có `.max()`** (`env.schema.ts:116`) ⇒ trần 86400 của FE có thể chặn câm
+    một khoá thật (R7, chấp nhận, phải ghi docblock).
+- **Friction:** (1) `grep | head -N` trên một câu lệnh CENSUS đẻ ra khẳng định "không còn chỗ nào khác"
+  SAI — census thì không được `head`. (2) Bash tool vỡ với heredoc dài (`unexpected EOF`) khi viết file
+  markdown lớn ⇒ dùng Write tool, và dùng `python - <<PY` cho mọi vá có backtick.
+
 ## Phiên 2026-09-03 (chiều) — S18-AUTH-UNLOCK429-1: code + test XONG, CHƯA commit/PR
 
 **Nhánh `feat/s18-auth-unlock429-1`, working tree BẨN (chưa commit).** Kế hoạch + toàn bộ số đo:

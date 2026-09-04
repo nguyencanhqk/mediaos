@@ -46,7 +46,11 @@ export default {
   errors: {
     invalidCredentials: "Email hoặc mật khẩu không đúng.",
     forbidden: "Tài khoản bị khóa hoặc không có quyền truy cập.",
+    // GIỮ `tooManyAttempts` — 3 call-site khác vẫn dùng (TwoFactorChallengeForm, forgot-password, và
+    // chính login.tsx ở ca 429 KHÔNG kèm số giây).
     tooManyAttempts: "Quá nhiều lần thử. Vui lòng thử lại sau.",
+    // S18-AUTH-RETRYAFTER-1 — dùng khi 429 mang `retryAfterSec`; `{{time}}` là mm:ss.
+    tooManyAttemptsIn: "Quá nhiều lần thử. Thử lại sau {{time}}.",
     serverError: "Lỗi máy chủ. Vui lòng thử lại sau.",
     invalidCode: "Mã không đúng hoặc đã hết hạn.",
     unknown: "Đã xảy ra lỗi.",

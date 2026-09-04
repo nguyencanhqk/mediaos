@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**481 WO** · có micro-plan: **270/481** · ⬜ 39 chờ · 🔵 1 đang làm · ✅ 441 xong · 🔴 0 chặn
+**481 WO** · có micro-plan: **272/481** · ⬜ 36 chờ · 🔵 2 đang làm · ✅ 443 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -583,9 +583,9 @@
 
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
-| `S18-AUTH-UNLOCK429-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Gỡ khoá đăng nhập (429) từ giao diện: chỉ mục IP + clearLoginLocks/rem |
-| `S18-AUTH-RESETCLEARS-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S18-AUTH-UNLOCK429-1 | Đặt lại mật khẩu thành công thì xoá luôn khoá login 429 của email đó ( |
-| `S18-AUTH-RETRYAFTER-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S18-AUTH-UNLOCK429-1 | 429 đăng nhập mang `retryAfterSec` (error.details + header Retry-After |
+| `S18-AUTH-UNLOCK429-1` | 🔴 | ✅ xong | [📄](S18-AUTH-UNLOCK429-1.md) | — | Gỡ khoá đăng nhập (429) từ giao diện: chỉ mục IP + clearLoginLocks/rem |
+| `S18-AUTH-RESETCLEARS-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S18-AUTH-UNLOCK429-1 | Đặt lại mật khẩu thành công thì xoá luôn khoá login 429 của email đó ( |
+| `S18-AUTH-RETRYAFTER-1` | 🟡 | 🔵 đang làm | [📄](S18-AUTH-RETRYAFTER-1.md) | ✅S18-AUTH-UNLOCK429-1 | 429 đăng nhập mang `retryAfterSec` (error.details + header Retry-After |
 
 ---
 
