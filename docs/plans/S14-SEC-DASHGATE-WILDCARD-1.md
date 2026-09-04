@@ -27,11 +27,11 @@ là sensitive. Cùng cơ chế ở `decideStrongestScope:202-203` (đường sà
 
 ### 1.1 Luật đúng ĐÃ TỒN TẠI ở hai nơi khác trong repo (✅ M5, H4)
 
-| Nơi | Cách làm | Trạng thái |
-| --- | --- | --- |
-| `permission.service.ts:728-730` `userGrantsPermissionIds` | `if (p.isSensitive)` với `p` = **catalog entry của cặp đích** ⇒ ép `allows.some(g => g.action!=='*' && g.resourceType!=='*')` | ĐÚNG |
-| `payroll-approver.reader.ts:70-74` | SQL: wildcard tính cho vế DENY, **không** tính cho vế ALLOW của cặp đích | ĐÚNG |
-| `decideCan` / `decideStrongestScope` | đọc cờ của **hàng grant khớp** | **SAI** |
+| Nơi                                                       | Cách làm                                                                                                                      | Trạng thái |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `permission.service.ts:728-730` `userGrantsPermissionIds` | `if (p.isSensitive)` với `p` = **catalog entry của cặp đích** ⇒ ép `allows.some(g => g.action!=='*' && g.resourceType!=='*')` | ĐÚNG       |
+| `payroll-approver.reader.ts:70-74`                        | SQL: wildcard tính cho vế DENY, **không** tính cho vế ALLOW của cặp đích                                                      | ĐÚNG       |
+| `decideCan` / `decideStrongestScope`                      | đọc cờ của **hàng grant khớp**                                                                                                | **SAI**    |
 
 ⇒ WO này làm engine **hội tụ về luật đã có sẵn hai bản**, không phát minh luật mới. ADR phải ghi cả 3
 bản là một họ phải giữ đồng bộ (H4).
@@ -42,11 +42,11 @@ bản là một họ phải giữ đồng bộ (H4).
 
 ### 2.1 Catalog `permissions`
 
-| Đo | Giá trị |
-| --- | --- |
-| tổng hàng | **390** |
-| `is_sensitive = true` | **139** |
-| hàng wildcard | **đúng 1**: `*:*`, `is_sensitive=false` |
+| Đo                                                   | Giá trị                                        |
+| ---------------------------------------------------- | ---------------------------------------------- |
+| tổng hàng                                            | **390**                                        |
+| `is_sensitive = true`                                | **139**                                        |
+| hàng wildcard                                        | **đúng 1**: `*:*`, `is_sensitive=false`        |
 | role giữ wildcard (`role_permissions ⋈ permissions`) | **0 hàng** — kể cả `SA` (SA giữ 372 cặp EXACT) |
 
 Grant PHẢI join `permissions` ⇒ chỉ hình dạng `*:*` dựng được hôm nay. Nhưng matcher xử lý `action==='*'`
@@ -55,10 +55,10 @@ Grant PHẢI join `permissions` ⇒ chỉ hình dạng `*:*` dựng được hô
 
 ### 2.2 Bề mặt gọi thiếu cờ
 
-| Đường | Tổng | **Thiếu `isSensitive`** |
-| --- | --- | --- |
-| `permission.can({...})` | 36 | **25** |
-| `dataScope.resolveOrNull/resolveAndAssert/resolveManyOrNull` | 120 | **87** |
+| Đường                                                        | Tổng | **Thiếu `isSensitive`** |
+| ------------------------------------------------------------ | ---- | ----------------------- |
+| `permission.can({...})`                                      | 36   | **25**                  |
+| `dataScope.resolveOrNull/resolveAndAssert/resolveManyOrNull` | 120  | **87**                  |
 
 **112 điểm gọi.** Phần lớn truyền cặp **ĐỘNG** (`assertCan(action, resourceType)`, `pair.action`,
 `FOUNDATION_FILE_PERMISSION[input.action]`) ⇒ không sửa tĩnh được.
@@ -124,11 +124,11 @@ site dựng tay, tức đúng những int-spec chống-leo-thang lại chạy tr
 
 v1 định OR cờ catalog vào `isSensitive`. Sai, vì `isSensitive` **điều khiển 3 thứ khác nhau**:
 
-| Dùng ở | Dòng | Hệ quả nếu bị lật ngầm |
-| --- | --- | --- |
-| cổng wildcard/exact | `:103-110`, `:202-208` | ← **CHỖ DUY NHẤT muốn đổi** |
-| `auditRequired` ở object-tier ALLOW | `:82` | `hr-read.service.ts:360,393` · `:136,151` · `employees.service.ts:223` dùng `reveal = allow && auditRequired` ⇒ lật false→true = **mask biến thành REVEAL** |
-| `needsObjectGrant = objectGrantRequired ?? (isSensitive && requiresReauth)` | `:95-98` | deny **cả actor có grant EXACT** |
+| Dùng ở                                                                      | Dòng                   | Hệ quả nếu bị lật ngầm                                                                                                                                      |
+| --------------------------------------------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| cổng wildcard/exact                                                         | `:103-110`, `:202-208` | ← **CHỖ DUY NHẤT muốn đổi**                                                                                                                                 |
+| `auditRequired` ở object-tier ALLOW                                         | `:82`                  | `hr-read.service.ts:360,393` · `:136,151` · `employees.service.ts:223` dùng `reveal = allow && auditRequired` ⇒ lật false→true = **mask biến thành REVEAL** |
+| `needsObjectGrant = objectGrantRequired ?? (isSensitive && requiresReauth)` | `:95-98`               | deny **cả actor có grant EXACT**                                                                                                                            |
 
 **Chốt — MỘT dòng, đặt SAU cả hai vùng nguy hiểm:**
 
@@ -159,9 +159,9 @@ cặp đích.
 
 **Bất biến kết quả — đúng MỘT return site mới, gộp HAI trạng thái cũ:**
 
-| Trạng thái cũ | Mới | Ý nghĩa |
-| --- | --- | --- |
-| `:132` `allow / auditRequired:false` (actor **chỉ có wildcard**) | `:109` `deny-sensitive` | ← **chính là lỗ đang vá** |
+| Trạng thái cũ                                                                   | Mới                     | Ý nghĩa                                      |
+| ------------------------------------------------------------------------------- | ----------------------- | -------------------------------------------- |
+| `:132` `allow / auditRequired:false` (actor **chỉ có wildcard**)                | `:109` `deny-sensitive` | ← **chính là lỗ đang vá**                    |
 | `:136` `deny-default / auditRequired:false` (actor **không có grant nào khớp**) | `:109` `deny-sensitive` | ✅ **F1** — vẫn DENY, nhưng **`reason` đổi** |
 
 #### ✅ F1 — `reason` là chuỗi ĐI RA NGOÀI, phải xử lý tường minh
@@ -180,25 +180,25 @@ NHIỀU hơn cho một denial trên cặp nhạy cảm là chiều đúng.
 
 ### 4.3 Ảnh chụp catalog — vòng đời
 
-| Quyết định | Nội dung |
-| --- | --- |
-| **D1 — không preload lúc boot** | `OnModuleInit` đọc DB biến DB thành phụ thuộc cứng lúc khởi động; memory `prod-api-boots-without-db-until-login` ghi API PROD **boot được khi chưa có DB**. Nạp lười ở lần kiểm quyền đầu. |
-| **D2 — hỏng khi nạp** | có ảnh chụp cũ + refresh lỗi ⇒ GIỮ ảnh cũ + `logger.error`, KHÔNG ném. **Chưa có ảnh chụp nào** + nạp lỗi ⇒ `pairIsSensitive = true` + `logger.error`, KHÔNG ném, **KHÔNG đóng dấu TTL** (✅ M3 — blip DB không khoá 300s). Nhờ §4.2, `true` chỉ siết cổng wildcard: không lật `auditRequired`, không bật `needsObjectGrant` ⇒ degradation có biên. **Cấm ném**: `can()` bọc try/catch fail-closed ⇒ một lỗi catalog sẽ deny TOÀN BỘ kiểm quyền = sự cố lớn hơn lỗ đang vá. |
+| Quyết định                                                               | Nội dung                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **D1 — không preload lúc boot**                                          | `OnModuleInit` đọc DB biến DB thành phụ thuộc cứng lúc khởi động; memory `prod-api-boots-without-db-until-login` ghi API PROD **boot được khi chưa có DB**. Nạp lười ở lần kiểm quyền đầu.                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **D2 — hỏng khi nạp**                                                    | có ảnh chụp cũ + refresh lỗi ⇒ GIỮ ảnh cũ + `logger.error`, KHÔNG ném. **Chưa có ảnh chụp nào** + nạp lỗi ⇒ `pairIsSensitive = true` + `logger.error`, KHÔNG ném, **KHÔNG đóng dấu TTL** (✅ M3 — blip DB không khoá 300s). Nhờ §4.2, `true` chỉ siết cổng wildcard: không lật `auditRequired`, không bật `needsObjectGrant` ⇒ degradation có biên. **Cấm ném**: `can()` bọc try/catch fail-closed ⇒ một lỗi catalog sẽ deny TOÀN BỘ kiểm quyền = sự cố lớn hơn lỗ đang vá.                                                                                                                     |
 | **D3 — ✅ B2/B3: ảnh chụp ĐÃ NẠP mà cặp VẮNG ⇒ `false` (non-sensitive)** | v1 chọn `true`. **Sai:** unit spec mock `getAllPermissions(): []` (`permission.service.spec.ts:137` · `permission.service.reveal.spec.ts:80` · `permission.coverage.spec.ts:69` · `permission.scopes.spec.ts:49` · `data-scope.service.spec.ts:51` · `data-scope.service.coverage.spec.ts:57` · `test/foundation/permission-scope-batch.unit-spec.ts:56` · `dashboard-scope-roundtrip.unit-spec.ts:48`) ⇒ MỌI cặp thành sensitive ⇒ đỏ hàng loạt; và `test/helpers/seed.ts:155-171` seed catalog **SAU** `app.init()` ⇒ đỏ/flaky theo thứ tự chạy. Với `false`, các spec đó giữ nguyên hành vi. |
-| **D4 — cặp truy vấn tự chứa `*` ⇒ `true`** | chặn `*` thành đường lách chính bản vá. ✅ M7: ghép ca test này với assert census «0 call-site sản phẩm truyền `*`» để nó không là code chết. |
-| **D5 — TTL** | `PERMISSION_CATALOG_TTL_MS = 300_000`, refresh **await** khi hết hạn. Kèm `AbortSignal.timeout` cho query (✅ M3: DB treo không kéo `can()` treo theo). |
-| **D6 — ✅ B4 + F3 single-flight** | `dashboard-widget-registry.service.ts:184-201` gọi `Promise.all(rows.map(… can()))` ⇒ ảnh chụp lạnh + N widget = **N query song song**, đúng trên đường WO này đang vá. Giữ promise đang bay, trả lại cho mọi caller đồng thời. ✅ **F3: promise chia sẻ KHÔNG BAO GIỜ reject** — bọc `try/catch` BÊN TRONG, trả giá trị sentinel (`null` = nạp hỏng), và xoá slot trong `finally`. Để nó reject là bắn unhandled rejection trên đường **mọi** `can()` đi qua — repo đã ăn đúng đòn này (memory `vitest-unhandled-rejection-after-teardown`: CI ĐỎ trong khi 1821/1821 PASS). |
-| **D7 — ✅ B3 + F4 seam cho test** | ✅ **F4 chốt: ảnh chụp là state PER-INSTANCE của `PermissionService`** (không phải module-level — module-level làm mọi instance trong CÙNG file test dùng chung ảnh chụp bất kể repo nào nạp trước, vỡ ở `data-scope.service.spec.ts:85-146` dựng 8 instance và ở §5.3 dùng stub mini-catalog). Seam = **method public trên `PermissionService`** (`resetCatalogSnapshotForTest()`), int-spec gọi qua `app.get(PermissionService)` — **không** export hàm module-level (sẽ là dây chết, không chạm được ảnh chụp của singleton DI). |
-| **D8 — không Valkey** | ảnh chụp trong tiến trình, mỗi instance tự nạp ⇒ 0 khoá chia sẻ để lệch (memory `valkey-shared-across-all-envs-no-channel-prefix`). ✅ M8: **KHÔNG** móc vào `permission.changed` — đó là sự kiện của GRANT, không phải catalog. Ghi comment để người sau không nối nhầm dây. |
+| **D4 — cặp truy vấn tự chứa `*` ⇒ `true`**                               | chặn `*` thành đường lách chính bản vá. ✅ M7: ghép ca test này với assert census «0 call-site sản phẩm truyền `*`» để nó không là code chết.                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **D5 — TTL**                                                             | `PERMISSION_CATALOG_TTL_MS = 300_000`, refresh **await** khi hết hạn. Kèm `AbortSignal.timeout` cho query (✅ M3: DB treo không kéo `can()` treo theo).                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **D6 — ✅ B4 + F3 single-flight**                                        | `dashboard-widget-registry.service.ts:184-201` gọi `Promise.all(rows.map(… can()))` ⇒ ảnh chụp lạnh + N widget = **N query song song**, đúng trên đường WO này đang vá. Giữ promise đang bay, trả lại cho mọi caller đồng thời. ✅ **F3: promise chia sẻ KHÔNG BAO GIỜ reject** — bọc `try/catch` BÊN TRONG, trả giá trị sentinel (`null` = nạp hỏng), và xoá slot trong `finally`. Để nó reject là bắn unhandled rejection trên đường **mọi** `can()` đi qua — repo đã ăn đúng đòn này (memory `vitest-unhandled-rejection-after-teardown`: CI ĐỎ trong khi 1821/1821 PASS).                   |
+| **D7 — ✅ B3 + F4 seam cho test**                                        | ✅ **F4 chốt: ảnh chụp là state PER-INSTANCE của `PermissionService`** (không phải module-level — module-level làm mọi instance trong CÙNG file test dùng chung ảnh chụp bất kể repo nào nạp trước, vỡ ở `data-scope.service.spec.ts:85-146` dựng 8 instance và ở §5.3 dùng stub mini-catalog). Seam = **method public trên `PermissionService`** (`resetCatalogSnapshotForTest()`), int-spec gọi qua `app.get(PermissionService)` — **không** export hàm module-level (sẽ là dây chết, không chạm được ảnh chụp của singleton DI).                                                             |
+| **D8 — không Valkey**                                                    | ảnh chụp trong tiến trình, mỗi instance tự nạp ⇒ 0 khoá chia sẻ để lệch (memory `valkey-shared-across-all-envs-no-channel-prefix`). ✅ M8: **KHÔNG** móc vào `permission.changed` — đó là sự kiện của GRANT, không phải catalog. Ghi comment để người sau không nối nhầm dây.                                                                                                                                                                                                                                                                                                                   |
 
 ### 4.4 Điểm nối
 
-| File | Sửa |
-| --- | --- |
-| `permission.types.ts` | `CanInput.pairIsSensitive?: boolean`; `ScopeRequest.pairIsSensitive?: boolean` |
-| `permission.decide.ts` | §4.2 — tách `auditSensitive` / `gateSensitive` ở `decideCan`; `\|\| pairIsSensitive` ở `decideStrongestScope` |
-| `permission.service.ts` | ảnh chụp private + `pairIsSensitiveFor()`; bơm vào `can` · `canBatch` (mỗi spec) · `resolveStrongestScope` · `resolveStrongestScopes` (mỗi request) |
-| `permission-catalog-snapshot.ts` (mới) | logic ảnh chụp thuần (TTL · single-flight · fail mode) để unit-test không cần DB |
+| File                                   | Sửa                                                                                                                                                 |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `permission.types.ts`                  | `CanInput.pairIsSensitive?: boolean`; `ScopeRequest.pairIsSensitive?: boolean`                                                                      |
+| `permission.decide.ts`                 | §4.2 — tách `auditSensitive` / `gateSensitive` ở `decideCan`; `\|\| pairIsSensitive` ở `decideStrongestScope`                                       |
+| `permission.service.ts`                | ảnh chụp private + `pairIsSensitiveFor()`; bơm vào `can` · `canBatch` (mỗi spec) · `resolveStrongestScope` · `resolveStrongestScopes` (mỗi request) |
+| `permission-catalog-snapshot.ts` (mới) | logic ảnh chụp thuần (TTL · single-flight · fail mode) để unit-test không cần DB                                                                    |
 
 **✅ F2 — Trần hot-path phải có CỔNG ĐO, không phải lời hứa.**
 Ca ghim BLOCKING-7 của #469 (`test/foundation/dashboard-scope-roundtrip.unit-spec.ts:120-126`
@@ -216,15 +216,7 @@ trong im lặng — đúng cái #469 vừa chặn. Cùng lỗ ở `permission-sc
 
 ### 5.1 Unit — `permission-catalog-snapshot.spec.ts` (mới, không cần DB)
 
-1–2. cặp catalog `true` ⇒ `true`; catalog `false` ⇒ `false`
-3. ảnh chụp đã nạp + cặp vắng ⇒ **`false`** (D3)
-4. cặp chứa `*` ⇒ `true` — cả 4 hình dạng (D4)
-5. N lời gọi **tuần tự** ⇒ repo gọi **1 lần**
-6. **N lời gọi ĐỒNG THỜI (`Promise.all`)** ⇒ repo gọi **1 lần** (D6 — ca #5 một mình xanh-RỖNG với bug fan-out)
-7. hết TTL ⇒ nạp lần 2 (đồng hồ TIÊM, không `vi.useFakeTimers` toàn cục — memory `fake-timers-break-socketio-client-emit`)
-8. refresh lỗi + có ảnh cũ ⇒ giữ giá trị cũ, không ném
-9. nạp lỗi + chưa có ảnh ⇒ `true`, không ném, **và lần gọi kế tiếp vẫn thử nạp lại** (D2 không đóng dấu TTL)
-10. query treo quá timeout ⇒ hành xử như lỗi nạp, không treo caller
+1–2. cặp catalog `true` ⇒ `true`; catalog `false` ⇒ `false` 3. ảnh chụp đã nạp + cặp vắng ⇒ **`false`** (D3) 4. cặp chứa `*` ⇒ `true` — cả 4 hình dạng (D4) 5. N lời gọi **tuần tự** ⇒ repo gọi **1 lần** 6. **N lời gọi ĐỒNG THỜI (`Promise.all`)** ⇒ repo gọi **1 lần** (D6 — ca #5 một mình xanh-RỖNG với bug fan-out) 7. hết TTL ⇒ nạp lần 2 (đồng hồ TIÊM, không `vi.useFakeTimers` toàn cục — memory `fake-timers-break-socketio-client-emit`) 8. refresh lỗi + có ảnh cũ ⇒ giữ giá trị cũ, không ném 9. nạp lỗi + chưa có ảnh ⇒ `true`, không ném, **và lần gọi kế tiếp vẫn thử nạp lại** (D2 không đóng dấu TTL) 10. query treo quá timeout ⇒ hành xử như lỗi nạp, không treo caller
 
 ### 5.2 Unit — `permission.decide.spec` / `permission.service.spec.ts`
 
@@ -245,6 +237,7 @@ trong im lặng — đúng cái #469 vừa chặn. Cùng lỗ ở `permission-sc
 **Chốt:** dựng lại `permissionOverGrants` thành `new PermissionService(stubRepo)` với `stubRepo` trả
 grant như cũ **và** `getAllPermissions()` trả catalog thật-thu-nhỏ có `view-line:payroll-period`
 (`is_sensitive: true`). Rồi:
+
 - ca «`*:*` ⇒ HIỆN TẠI qua được» → **đảo** thành `rejects.toThrowError("AUTH-ERR-FORBIDDEN: thiếu quyền view-line:payroll-period")`, đổi tên khối, viết lại doc-block;
 - **GIỮ** 2 ca đối chứng (`*:*` mang `is_sensitive=true` ⇒ chặn; EXACT ⇒ qua).
 
@@ -253,13 +246,13 @@ grant như cũ **và** `getAllPermissions()` trả catalog thật-thu-nhỏ có 
 Fixture: role tuỳ biến giữ **DUY NHẤT** `('*','*')`; gọi `__resetCatalogSnapshotForTest()` sau seed (D7).
 Tái dùng khuôn bật widget của `dashboard-payroll-cost.int-spec.ts` / `dashboard-recruit-funnel.int-spec.ts`.
 
-| # | Ca | Kỳ vọng |
-| --- | --- | --- |
-| 18 | `GET /dashboard/me` | `PAYROLL_COST` + `RECRUIT_FUNNEL` **KHÔNG có** |
-| 19 | `GET /dashboard/widgets/payroll-cost` | **403**, assert **đúng mã** `AUTH-ERR-FORBIDDEN` (không dùng `.not.toBe(200)` — `allow-counter-case-not-403-lets-500-through`) |
-| 20 | ✅ H3 ĐỐI CHỨNG: `NOTIFICATIONS` (`read:notification`, non-sensitive, có ở **cả** Employee lẫn Admin) | hiện + 200 |
-| 21 | ĐỐI CHỨNG: actor có grant EXACT `view-line:payroll-period` @Company | hiện + 200 |
-| 22 | ✅ H3 — kiểu dashboard resolve được của actor wildcard | **Employee** (`view-admin/hr/manager:dashboard` đều sensitive ⇒ mất; `view-employee:dashboard` non-sensitive ⇒ còn). Ghim tường minh: đây là **hệ quả có chủ ý**, không phải hồi quy |
+| #   | Ca                                                                                                    | Kỳ vọng                                                                                                                                                                              |
+| --- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 18  | `GET /dashboard/me`                                                                                   | `PAYROLL_COST` + `RECRUIT_FUNNEL` **KHÔNG có**                                                                                                                                       |
+| 19  | `GET /dashboard/widgets/payroll-cost`                                                                 | **403**, assert **đúng mã** `AUTH-ERR-FORBIDDEN` (không dùng `.not.toBe(200)` — `allow-counter-case-not-403-lets-500-through`)                                                       |
+| 20  | ✅ H3 ĐỐI CHỨNG: `NOTIFICATIONS` (`read:notification`, non-sensitive, có ở **cả** Employee lẫn Admin) | hiện + 200                                                                                                                                                                           |
+| 21  | ĐỐI CHỨNG: actor có grant EXACT `view-line:payroll-period` @Company                                   | hiện + 200                                                                                                                                                                           |
+| 22  | ✅ H3 — kiểu dashboard resolve được của actor wildcard                                                | **Employee** (`view-admin/hr/manager:dashboard` đều sensitive ⇒ mất; `view-employee:dashboard` non-sensitive ⇒ còn). Ghim tường minh: đây là **hệ quả có chủ ý**, không phải hồi quy |
 
 ✅ H3: **bỏ** ca 16 cũ (`MY_TASKS` chỉ có ở type Employee — `dashboard-widget-catalog.const.ts:584`) và
 ca 18 cũ («công ty B gọi slug của A» — slug toàn cục, `getWidget` dùng `companyId` của CHÍNH caller,
@@ -306,7 +299,7 @@ CÙNG COMMIT: khoá `"src/permission/permission-catalog-snapshot.ts"` ≥80 cả
 
 ✅ **F5 — còn thiếu `apps/api/src/security-policy/**`**: §5.5 bắt phải chạy/phân loại
 `security-policy.permission-contract.spec.ts`, sửa fixture ở đó sẽ bật cảnh báo `guard-scope`.
-Thêm nốt trước khi chạm file (memory `wo-paths-drive-gate-and-scheduler` — `paths` lái cả gate lẫn scheduler).
+Thêm nốt trước khi chạm file (memory `wo-paths-drive-gate-and-scheduler`—`paths` lái cả gate lẫn scheduler).
 
 ## 7. Thứ tự thi công
 
@@ -325,13 +318,13 @@ Thêm nốt trước khi chạm file (memory `wo-paths-drive-gate-and-scheduler`
 
 ## 8. Rủi ro & chốt người
 
-| Rủi ro | Biện pháp |
-| --- | --- |
-| **PROD có role giữ `*:*` ⇒ mất quyền khi deploy** | Dev = 0 hàng (§2.1). PROD không đo được từ phiên agent (`classifier-blocks-prod-db-from-agent`) ⇒ **cổng NGƯỜI**. ✅ M6: tiêu chí census KHÔNG phải «có wildcard ⇒ DỪNG» — `super-admin-bootstrap.service.ts:104-111` grant TOÀN BỘ catalog (trừ `reveal-secret:platform-account`) nên SA có thể ôm cả `*:*` mà vẫn đủ 389 cặp EXACT ⇒ không mất gì. Tiêu chí đúng: **role giữ wildcard VÀ THIẾU grant exact cho cặp sensitive nó đang với tới**. |
-| Cặp sensitive seed khi API đang chạy ⇒ cửa sổ ≤300s | Chỉ nổ khi có holder wildcard (đo: 0). Migration đi kèm deploy ⇒ restart xoá ảnh chụp. D7 lo phía test. Ghi vào ADR. |
-| Đổi hành vi ở module ngoài DASH (§2.3) | **Chủ đích** (done_when #4 — vá theo BỀ MẶT). §5.5 + `check.sh --all` là lưới bắt. Liệt kê đủ trong PR body. |
-| Query thêm ở hot-path | Ca đếm §5.1 #5 **và** #6 (đồng thời) + giữ short-circuit `requests.length===0`. |
-| ✅ M4 — FE nới rộng khoảng lệch | `use-can.ts:17-21` có fallback `caps["*:*"]`, và `getCapabilities()` vẫn publish `*:*` (lọc theo cờ HÀNG GRANT — `permission.service.ts:476,492`). Sau bản vá, actor chỉ có wildcard sẽ **thấy** màn sensitive rồi ăn 403. **Không phải lỗ mới** (đã ghi ở `use-can.ts:33-34`, và `useCanExact` là lối đúng). **DEFER TƯỜNG MINH** — 0 holder wildcard nên 0 người gặp; mở WO nối `S14-SEC-CAPWILDCARD-1` trong `harness/backlog.mjs` cùng commit. |
+| Rủi ro                                              | Biện pháp                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PROD có role giữ `*:*` ⇒ mất quyền khi deploy**   | Dev = 0 hàng (§2.1). PROD không đo được từ phiên agent (`classifier-blocks-prod-db-from-agent`) ⇒ **cổng NGƯỜI**. ✅ M6: tiêu chí census KHÔNG phải «có wildcard ⇒ DỪNG» — `super-admin-bootstrap.service.ts:104-111` grant TOÀN BỘ catalog (trừ `reveal-secret:platform-account`) nên SA có thể ôm cả `*:*` mà vẫn đủ 389 cặp EXACT ⇒ không mất gì. Tiêu chí đúng: **role giữ wildcard VÀ THIẾU grant exact cho cặp sensitive nó đang với tới**.  |
+| Cặp sensitive seed khi API đang chạy ⇒ cửa sổ ≤300s | Chỉ nổ khi có holder wildcard (đo: 0). Migration đi kèm deploy ⇒ restart xoá ảnh chụp. D7 lo phía test. Ghi vào ADR.                                                                                                                                                                                                                                                                                                                               |
+| Đổi hành vi ở module ngoài DASH (§2.3)              | **Chủ đích** (done_when #4 — vá theo BỀ MẶT). §5.5 + `check.sh --all` là lưới bắt. Liệt kê đủ trong PR body.                                                                                                                                                                                                                                                                                                                                       |
+| Query thêm ở hot-path                               | Ca đếm §5.1 #5 **và** #6 (đồng thời) + giữ short-circuit `requests.length===0`.                                                                                                                                                                                                                                                                                                                                                                    |
+| ✅ M4 — FE nới rộng khoảng lệch                     | `use-can.ts:17-21` có fallback `caps["*:*"]`, và `getCapabilities()` vẫn publish `*:*` (lọc theo cờ HÀNG GRANT — `permission.service.ts:476,492`). Sau bản vá, actor chỉ có wildcard sẽ **thấy** màn sensitive rồi ăn 403. **Không phải lỗ mới** (đã ghi ở `use-can.ts:33-34`, và `useCanExact` là lối đúng). **DEFER TƯỜNG MINH** — 0 holder wildcard nên 0 người gặp; mở WO nối `S14-SEC-CAPWILDCARD-1` trong `harness/backlog.mjs` cùng commit. |
 
 **Non-goal tường minh:** không đổi `SENSITIVE_CAPABILITY_ALLOWLIST` (cờ HIỂN THỊ, không phải cổng —
 `sensitive-screen-gate-allowlist.spec.ts:16`) · không đổi seed/migration · không đụng
@@ -350,3 +343,210 @@ spec) ⇒ vá ở `PermissionService` + hàm thuần là ĐỦ phủ đường s
 `tests-can-pin-a-hole-open` · `same-builder-twice-makes-unit-spec-vacuous` ·
 `prod-api-boots-without-db-until-login` · `classifier-blocks-prod-db-from-agent` ·
 `wo-paths-drive-gate-and-scheduler` · `allow-counter-case-not-403-lets-500-through`.
+
+---
+
+## 9. Kết quả thi công 2026-09-04 — chỗ kế hoạch SAI khi đo thật
+
+Ba giả định của §4–§5 không sống sót khi chạy. Ghi lại để lần sau không lặp, và để người review biết
+vì sao code lệch plan ở đúng ba chỗ này.
+
+### 9.1 §5.2 ca #14 đo một trạng thái BẤT KHẢ
+
+Plan: «grant EXACT + `isSensitive:false` + `pairIsSensitive:true` ⇒ `auditRequired` VẪN false».
+
+Fixture đó không tồn tại ngoài đời: `grant.isSensitive` lấy từ `innerJoin(permissions)` trên cặp của
+CHÍNH HÀNG GRANT (`permission.repository.ts:31-35`), nên grant EXACT cho cặp sensitive **luôn** mang
+`isSensitive=true` ⇒ nhánh sensitive đã vào **từ trước** bản vá và `auditRequired` đã là `true`.
+Ép con số của plan sẽ buộc quay lại thiết kế hai-cờ mà §4.2 đã cân nhắc và loại.
+
+**Thay bằng bất biến THẬT**, ghim trên ma trận fixture hợp lệ (`REALISTIC_CASES`):
+`reveal = allow && auditRequired` **không bao giờ đi false→true** (#14) · mọi ca còn ALLOW sau bản vá
+giữ nguyên `auditRequired` (#14a) · ma trận có ca ALLOW thật để #14/#14a không xanh-rỗng (#14c).
+
+### 9.2 §5.4 ca 22 KHÔNG phải hệ quả của bản vá
+
+Plan xếp «kiểu dashboard của actor wildcard tụt về Employee» là hệ quả có chủ ý. Đo lại:
+`DashboardResolverService.allowedTypeSet` (`dashboard-resolver.service.ts:81-86`) **đã** truyền
+`isSensitive: pair.isSensitive` tường minh ⇒ `view-admin/-hr/-manager:dashboard` chặn wildcard từ
+trước WO này. Ca được giữ lại nhưng đổi vai thành **TIỀN ĐỀ** của #18b.
+
+### 9.3 §5.4 như plan viết thì **VACUOUS với nửa `decideCan`** — lỗ nghiêm trọng nhất của kế hoạch
+
+Đo bằng đột biến (gỡ `pairIsSensitive` khỏi **riêng** `decideCan`, giữ `decideStrongestScope`):
+int-spec §5.4 **10/10 XANH**. Lý do: `PAYROLL_COST`/`RECRUIT_FUNNEL` đều khai
+`DASH_WIDGET_MIN_DATA_SCOPE` ⇒ `decideStrongestScope` loại chúng TRƯỚC khi `decideCan` kịp nói gì; và
+ở tầng data, handler nguồn tự `resolveAndAssert` nên deny bị **quyết định thừa** ở nhiều tầng.
+
+Plan chọn đúng hai widget mà cả hai đều có sàn ⇒ bộ test không chứng được nửa bản vá.
+
+**Vá:** thêm hai ca trên widget có cặp SENSITIVE mà **KHÔNG khai sàn** — cổng duy nhất của chúng là
+`can()`:
+
+| Ca   | Widget             | Cặp                                 | Tầng     | Vì sao chọn                                                                |
+| ---- | ------------------ | ----------------------------------- | -------- | -------------------------------------------------------------------------- |
+| #18b | `ATTENDANCE_TODAY` | `view-own:attendance` (mig 0454:35) | METADATA | widget SENSITIVE-không-sàn DUY NHẤT trên dashboard `Employee` mặc định     |
+| #19c | `SYSTEM_LOGS`      | `view:audit-log` (mig 0340:31)      | DATA     | vắng trong bản đồ sàn; slug gọi thẳng được, không phụ thuộc dashboard type |
+
+Sau khi thêm: đột biến chỉ-`decideCan` ⇒ **#18b ĐỎ**. Ma trận đột biến cuối:
+
+| Đột biến                        | unit `pair-sensitive` | unit `widget-gate` | int-spec                                       |
+| ------------------------------- | --------------------- | ------------------ | ---------------------------------------------- |
+| gỡ cả hai vế                    | 6 đỏ                  | đỏ                 | —                                              |
+| gỡ riêng `decideCan`            | đỏ                    | đỏ                 | **#18b đỏ**                                    |
+| gỡ riêng `decideStrongestScope` | 3 đỏ                  | xanh               | xanh (bị `can()` chặn trước — over-determined) |
+
+### 9.4 Census §2.4 chạy lại theo GIÁ TRỊ — 0 xung đột
+
+19 site khai `isSensitive: false` (non-spec). Hai trong số đó (`module-catalog.repository.ts:90`,
+`setting.service.ts:470`) là cột `company_settings.is_sensitive` — **cột khác**, không thuộc census.
+17 site còn lại đối chiếu catalog: **tất cả đều thật sự non-sensitive**
+(`access:lms · access:me · manage.position:position · manage:offer · read:dashboard · read:employee ·
+read:notification · read:task · update:avatar · update:user-preference · view-employee:dashboard ·
+view-own:leave-balance · view-own:leave-calendar · view:leave-type · view:social-post ·
+view:user-preference`) ⇒ **không site nào bị bản vá lật.**
+
+Bề mặt đo lại: `can({` **37** · scope-resolver **154**.
+
+### 9.5 Census wildcard — mạnh hơn plan §2.1
+
+**KHÔNG migration nào tạo hoặc cấp hàng wildcard.** `grep '\*'` trên toàn `apps/api/migrations/` chỉ
+ra đúng một hit: mig `0565:479`, và đó là **câu census** chứ không phải câu cấp. Hàng `*:*` trong DB
+dev/lane do fixture test (`seedPermissionCatalog`) sinh ra. Cổng NGƯỜI ở §8 vẫn giữ nguyên cho PROD.
+
+### 9.6 Cổng coverage — đã xác minh SỐNG, không phải khoá chết
+
+`test:cov:sensitive` (LANE_DB) exit 0 · 75 file / 1079 ca. Bảng coverage **có dòng file mới**:
+`permission-catalog-snapshot.ts` = **100 stmts / 97.14 branch / 100 funcs / 100 lines** (ngưỡng đặt 90).
+`permission.decide.ts` 92.47/94.84/100/92.47 · `permission.service.ts` 97.26/89.51/94.44/97.26.
+
+### 9.7 Ghi chú thi công
+
+Một byte NUL THẬT lọt vào `permission-catalog-snapshot.ts` (dấu ngăn khoá tra cứu viết thẳng thay vì
+escape). Hậu quả: `grep`/`rg` xếp file vào loại BINARY và **bỏ qua trong im lặng** — mọi census bằng
+grep sẽ mù với đúng file mang cờ quyết định. Đã đổi sang `PAIR_KEY_SEP = "\u0000"` + ghi cảnh báo tại chỗ.
+
+---
+
+## 10. Vòng review gate 2026-09-04 — 5 vá sau `6405a25c`
+
+FULL gate chạy trên bản vá chính (`6405a25c`): **security-reviewer verdict BLOCK (1 HIGH)** +
+**silent-failure-hunter 4 findings**. Cả 5 đã vá ở `21fe3d20`. Ghi lại đây vì một trong số đó lật
+**bất biến trung tâm** mà §4 của kế hoạch này khẳng định là đúng.
+
+### 10.1 [HIGH] Bất biến trung tâm của WO SAI — `auditRequired` hard-code `true`
+
+ADR §5.2 và comment ở `permission.decide.ts` khẳng định: «mọi lần vào nhánh sensitive nhờ
+`pairIsSensitive` đều có `explicitAllows` rỗng ⇒ chỉ đẻ deny» ⇒ nên hard-code `auditRequired: true`
+ở return cuối nhánh là vô hại.
+
+**Khẳng định đó SAI.** Nó ngầm giả định cờ HÀNG-GRANT luôn bằng cờ CATALOG. Hai trạng thái THẬT làm
+chúng lệch:
+
+- **(a) Catalog suy biến** — ảnh chụp nạp hỏng ⇒ fail-closed coi MỌI cặp là sensitive, trong khi
+  grant vẫn phục vụ từ cache Valkey với cờ THẬT.
+- **(b) `is_sensitive` vừa lật false→true** — cache grant giữ cờ cũ tối đa 300s.
+
+Ở cả hai, actor có grant **EXACT** chạm return ALLOW cuối nhánh với `auditRequired` hard-code `true`
+⇒ lật `reveal = allow && auditRequired` từ false→true ⇒ **MASK thành REVEAL** ở
+`hr-read.service.ts:360,393` + `employees.service.ts:223`. Đây đúng là điều `done_when` #5 cấm.
+
+Counterexample đã nằm sẵn trong spec của chính WO (ca #15) nhưng ca đó **không assert `auditRequired`**
+⇒ cổng xanh trong khi bất biến vỡ.
+
+**Vá:** `auditRequired: isSensitive || companyAllows.some(g => g.isSensitive)` — SUY RA thay vì
+hard-code. Bằng `true` ở mọi trạng thái tới được return đó TRƯỚC bản vá (không đổi hành vi cũ), `false`
+ở trạng thái MỚI, đúng giá trị priority-4 mà cùng đầu vào nhận trước bản vá ⇒ `reveal` bảo toàn từng bit.
+
+**Ghim:** #15 thêm assert · #15c mới · ma trận `REALISTIC_CASES` thêm HAI hàng LỆCH. Ma trận cũ cố ý
+chỉ chứa hàng khớp bất biến DB ⇒ nó loại đúng trạng thái duy nhất mà bất biến có thể vỡ.
+Đột biến hard-code lại `true` ⇒ **4 ca ĐỎ**.
+
+> Bài học rộng hơn: ma trận test "chỉ chứa trạng thái hợp lệ theo DB" **loại mất** đúng lớp trạng thái
+> mà cache/ảnh-chụp sinh ra. Xem memory `cache-breaks-two-source-flag-invariants`.
+
+### 10.2 [MED] `reset()` không huỷ được lượt nạp đang bay
+
+Lượt CŨ ghi đè ảnh MỚI, và `finally` của nó xoá luôn ô `inFlight` của lượt sau ⇒ single-flight vỡ.
+**Vá:** `epoch` — lượt lạc hậu không ghi ảnh, không nhả ô của người khác.
+
+### 10.3 [MED] `onError` không được bọc
+
+Transport log ném ⇒ promise single-flight REJECT ⇒ phá hợp đồng **never-throw** trên đường mọi `can()`
+đi qua, và thay lỗi NGUYÊN NHÂN bằng lỗi thứ cấp của logger. **Vá:** `emitError()` nuốt lỗi hook.
+
+### 10.4 [MED] `onError` chưa từng được test qua `PermissionService`
+
+Đổi thành `() => {}` vẫn xanh cả suite lẫn cổng coverage — trong khi dòng log là quan sát **DUY NHẤT**
+của nhánh suy biến. **Vá:** thêm 2 ca — log mang `phase='no-snapshot'`, và logger ném vẫn không làm
+`can()` reject.
+
+### 10.5 [MED] `canBatch` fail-OPEN
+
+`pairFlags.get(action) ?? false` — cùng họ bug mà chính WO này tránh ở `resolveStrongestScopes` (lý do
+method đó trả MẢNG chứ không Map). **Vá:** mảng theo chỉ số.
+
+### 10.6 Kết quả
+
+`bash harness/check.sh --all --lane-db=s14dashgate`: **9/9 XANH**, không banner.
+
+---
+
+## 11. Vòng review ĐỘC LẬP trên `21fe3d20` (04/09) — **verdict PASS**
+
+`21fe3d20` là bản vá _cho_ vòng review của `6405a25c`, nên bản thân nó chưa từng qua cổng. Nó sửa đúng
+**bất biến trung tâm** của WO ⇒ cho security-reviewer chạy lại riêng trên nó (memory
+`reviewer-proposed-fix-can-open-holes`).
+
+**Kết quả: PASS — 0 CRITICAL, 0 HIGH.**
+
+### 11.1 Bảng chân trị `auditRequired` — dựng lại độc lập, khớp
+
+Điều kiện tới được return ALLOW ở `permission.decide.ts:155-159`: `needsObjectGrant===false` (`:98`) ·
+`E = A‖B‖C` (`:129`) · `explicitAllows.length>0` (`:134`) · không rơi nhánh reauth (`:138`).
+Đặt **A** = `input.isSensitive`, **B** = `companyAllows.some(g=>g.isSensitive)`, **C** = `pairIsSensitive`.
+
+| A   | B   | C   | TRƯỚC `6405a25c` (E=A‖B)                                         | SAU `21fe3d20` (`A‖B`)    | Lệch?                               |
+| --- | --- | --- | ---------------------------------------------------------------- | ------------------------- | ----------------------------------- |
+| T   | –   | –   | tới `:155`, `auditRequired=true`                                 | `true`                    | không                               |
+| F   | T   | –   | tới `:155`, `auditRequired=true`                                 | `true`                    | không                               |
+| F   | F   | F   | KHÔNG tới (rơi priority-4 `:172`, `false`)                       | KHÔNG tới (y hệt)         | không                               |
+| F   | F   | T   | KHÔNG tồn tại (C chưa có) → cùng đầu vào nhận priority-4 `false` | tới `:155`, `A‖B = false` | **bằng đúng giá trị priority-4 cũ** |
+
+**Không tổ hợp nào lật true→false hay false→true.** Và đúng vì lý do CẤU TRÚC, không phải may mắn:
+biểu thức mới **chính là** vị từ vào-nhánh của bản tiền-vá.
+
+Củng cố: mọi consumer của `reveal = allow && auditRequired` đều truyền `isSensitive: true` TƯỜNG MINH
+(`hr-read.service.ts:355,384,:122-128` · `employees.service.ts:223`) ⇒ nhánh (F,F,T) không với tới
+đường reveal hôm nay. Bản vá vẫn đúng như bảo đảm cấu trúc cho consumer TIẾP THEO.
+
+### 11.2 Ba vá còn lại — xác nhận
+
+- **epoch**: chỉ TĂNG, không ABA; giữa `:136` và `:153` không có `await` ⇒ không điểm xen. Lưu ý:
+  `reset()` **chỉ gọi từ test** ⇒ race được vá là race đường TEST.
+- **never-throw**: liệt kê mọi điểm ném khả dĩ — điểm duy nhất NGOÀI try là `this.now()` (`:113`).
+  Hợp đồng kín. Ca test onError-ném **phân biệt được** (truy đường đột biến).
+- **`canBatch`**: `Promise.all` giữ độ dài + thứ tự ⇒ không lệch chỉ số; kiểu là `boolean` (không
+  `boolean|undefined`) ⇒ lỗ `?? false` bị loại **về mặt KIỂU**, không phải kỷ luật.
+
+### 11.3 Hai MEDIUM — DEFER, không chặn merge
+
+Cả hai là hardening nhánh SUY BIẾN, **không tới được** với code sản phẩm hôm nay. Đã seed
+**`S14-SEC-CATALOGSNAP-HARDEN-1`** (đầy đủ số đo + blast radius ở đó).
+
+1. **`:137-143` nạp THÀNH CÔNG mà RỖNG = fail-OPEN duy nhất**, cache 300s, KHÔNG vết. Không tới được:
+   câu `SELECT` không trả PARTIAL, bảng là catalog global không RLS ⇒ 0 hàng chỉ khi bảng thật sự rỗng.
+   ⚠️ Ca ghim D3 hiện tại (`permission-catalog-snapshot.spec.ts:54-62`) **CỐ Ý neo empty ⇒ `false`** với
+   lý do TIỆN TEST — đó là mẫu `tests-can-pin-a-hole-open`, WO sau phải sửa ca đó chứ không lách quanh.
+2. **`:131,150-157` `inFlight` gán SAU khi thân có thể settle** ⇒ kẹt vĩnh viễn (fail-CLOSED, nhưng là
+   DoS quyền tới khi restart). Không tới được: `load` sản phẩm là method `async` nên không ném đồng bộ.
+
+Hai LOW (`reason` đi ra ngoài qua `file_access_logs.denied_reason`; `perAction` còn keyed bằng
+`spec.action`) cũng ghi ở WO đó.
+
+### 11.4 Bất biến
+
+`tenant ✓` (catalog GLOBAL không cột `company_id`, đọc qua `runRaw` đúng trường hợp (2) của
+`db.service.ts:105-112`; grant vẫn qua `withTenant`) · `audit-append-only ✓` (`auditRequired` bảo toàn
+từng bit trên MỌI đường ALLOW ⇒ không mất vết reveal) · `secret ✓` · `authz ✓` (cờ đặt SAU object-tier
+và SAU `needsObjectGrant`; 45/45 xanh trên 3 spec liên quan) · `authn ✓`.

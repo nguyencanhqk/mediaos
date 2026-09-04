@@ -218,6 +218,18 @@ export default defineConfig({
           branches: 80,
           statements: 80,
         },
+        // S14-SEC-DASHGATE-WILDCARD-1: `permission-catalog-snapshot.ts` là NGUỒN của `pairIsSensitive`
+        // — cờ quyết định một cặp có bị cổng wildcard chặn hay không (ADR `DECISIONS-12`). Sai ở đây
+        // là sai theo hướng NGUY HIỂM NHẤT: trả `false` cho một cặp sensitive = dựng lại đúng lỗ WO
+        // này vừa vá, và không cổng nào khác bắt được. File thuần, unit-test TOÀN BỘ không cần DB
+        // (`permission-catalog-snapshot.spec.ts`) nên bar cao là an toàn, không rơi vào bẫy "inert vì
+        // int-spec skip". Cưỡng chế bởi `test:cov:sensitive` (đã `--coverage.include` file này).
+        "src/permission/permission-catalog-snapshot.ts": {
+          lines: 90,
+          functions: 90,
+          branches: 90,
+          statements: 90,
+        },
         // S2-AUTH-BE-5-FIX (same enforcement model as S2-QA-1-FIX-B above): the 4 NEW auth-log-viewer
         // crown-jewel files (read security data + Company-scope RLS + jsonb masking) ARE per-file gated ≥80%
         // on all axes (CLAUDE.md §6 "permission/auth — ngưỡng riêng module nhạy cảm"; DoD §8 hard block).

@@ -8,9 +8,12 @@
 import { ForbiddenException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { gateWidgetOrThrow } from "./dashboard-widget-gate";
-import type { PermissionService } from "../permission/permission.service";
-import type { CompanyRoleGrant } from "../permission/permission.types";
-import { decideCan } from "../permission/permission.decide";
+import { PermissionService } from "../permission/permission.service";
+import type {
+  CompanyRoleGrant,
+  IPermissionRepository,
+  PermissionCatalogEntry,
+} from "../permission/permission.types";
 import type { WidgetRequestUser } from "./dashboard-widget-data.types";
 
 const user: WidgetRequestUser = { id: "u1", companyId: "co1" } as unknown as WidgetRequestUser;
@@ -26,14 +29,40 @@ function stubPermission(allow: boolean) {
 }
 
 /**
- * `can()` chạy ENGINE THẬT (`decideCan`) trên một tập grant cho trước — cần cho ca wildcard, vì ca đó
- * hỏi «engine quyết thế nào», không phải «stub trả gì».
+ * Catalog thu-nhỏ NHƯNG THẬT: `view-line:payroll-period` là cặp SENSITIVE (mig 0565), `view:candidate`
+ * cũng vậy, `read:notification` thì không. Cờ ở đây phải khớp seed thật — sai cờ là tự viết ra một
+ * thế giới khác rồi test nó.
  */
-function permissionOverGrants(grants: CompanyRoleGrant[]) {
-  const can = vi.fn(async (input: Parameters<PermissionService["can"]>[0]) =>
-    decideCan(grants, [], input, new Date()),
-  );
-  return { can } as unknown as PermissionService;
+const MINI_CATALOG: PermissionCatalogEntry[] = [
+  // mig 0565:191
+  { id: "p-payroll-line", action: "view-line", resourceType: "payroll-period", isSensitive: true },
+  // mig 0560:84
+  { id: "p-candidate", action: "view", resourceType: "candidate", isSensitive: true },
+  // mig 0554:58 — NON-sensitive: nguồn của ca ĐỐI CHỨNG «wildcard vẫn qua widget thường»
+  { id: "p-room", action: "view", resourceType: "room", isSensitive: false },
+  // mig 0550:62
+  { id: "p-asset", action: "view", resourceType: "asset", isSensitive: false },
+];
+
+/**
+ * `can()` chạy ENGINE THẬT trên một tập grant cho trước — cần cho ca wildcard, vì ca đó hỏi «engine
+ * quyết thế nào», không phải «stub trả gì».
+ *
+ * ⚠️ S14-SEC-DASHGATE-WILDCARD-1: bản trước gọi THẲNG `decideCan`, tức bỏ qua `PermissionService` —
+ * mà chính `PermissionService` mới là chỗ bơm cờ catalog của CẶP ĐÍCH (`pairIsSensitive`). Gọi thẳng
+ * hàm thuần thì ca wildcard dưới đây vẫn XANH sau khi lỗ đã được vá: nó đo một đường mà sản phẩm
+ * không đi. Nay dựng `PermissionService` THẬT trên stub repo, để catalog tham gia quyết định.
+ */
+function permissionOverGrants(grants: CompanyRoleGrant[]): PermissionService {
+  const repo: IPermissionRepository = {
+    getCompanyRoleGrants: async () => grants,
+    getCompanyRoleGrantsWithScope: async () => grants.map((g) => ({ ...g, dataScope: "Company" })),
+    getObjectGrants: async () => [],
+    getObjectGrantsBatch: async () => new Map(),
+    getPermissionsByIds: async () => MINI_CATALOG,
+    getAllPermissions: async () => MINI_CATALOG,
+  };
+  return new PermissionService(repo);
 }
 
 describe("gateWidgetOrThrow", () => {
@@ -83,30 +112,48 @@ describe("gateWidgetOrThrow", () => {
   });
 });
 
-describe("gateWidgetOrThrow — GHIM hành vi wildcard hiện tại (KHÔNG phải mong muốn)", () => {
+describe("gateWidgetOrThrow — wildcard KHÔNG mở được cặp SENSITIVE (S14-SEC-DASHGATE-WILDCARD-1)", () => {
   const wildcard = (isSensitive: boolean): CompanyRoleGrant[] => [
     { action: "*", resourceType: "*", isSensitive, effect: "ALLOW", expiresAt: null },
   ];
 
   /**
-   * ⚠️ Ca này ghim TRẠNG THÁI, không ghim MONG MUỐN. Comment cũ ở cả 4 bản `gateOrThrow` khẳng định
-   * «wildcard KHÔNG lọt qua cặp sensitive» — SAI: `decideCan` tính
-   * `effectivelySensitive = input.isSensitive || companyAllows.some(g => g.isSensitive)`, mà
-   * `companyAllows` là các HÀNG GRANT KHỚP ⇒ đọc `is_sensitive` của hàng `*:*` (false), không phải
-   * của cặp đích. Gate không truyền `isSensitive` ⇒ wildcard QUA.
+   * 🔁 Ca này ĐÃ ĐẢO. Bản trước ghim TRẠNG THÁI («wildcard HIỆN TẠI qua được») như một khoản nợ có
+   * chủ ý, để lần siết là CÓ Ý THỨC chứ không phải phụ phẩm im lặng của refactor. WO này là lần siết
+   * đó, nên kỳ vọng lật từ `resolves` sang `rejects`.
    *
-   * Chưa nổ ngoài thực địa: mig 0565 §6.7 census fail-closed (0 role seed giữ wildcard), 2 role tuỳ
-   * biến PROD đã thu hồi ở S14-PROD-PAYROLLGRANT-1, và tầng-2 (PayrollAccessService /
-   * RecruitAccessService) truyền cờ TƯỜNG MINH nên đường DỮ LIỆU vẫn kín. Hở là đường METADATA
-   * `/dashboard/me` + gọi thẳng slug.
+   * Cơ chế đã vá (ADR `DECISIONS-12`): `decideCan` trước đây tính
+   * `effectivelySensitive = input.isSensitive || companyAllows.some(g => g.isSensitive)` — cả hai vế
+   * đều đọc cờ của thứ KHÁC cặp đích, nên hàng `*:*` (is_sensitive=false) trượt qua cổng.
+   * `PermissionService` nay bơm thêm `pairIsSensitive` = cờ catalog của CẶP ĐÍCH.
    *
-   * Siết ở đây = đổi hành vi quyền thật ⇒ WO riêng `S14-SEC-DASHGATE-WILDCARD-1`. Ca này tồn tại để
-   * lần đổi đó là CÓ CHỦ Ý (spec đỏ, người sửa phải đọc), không phải phụ phẩm im lặng của refactor.
+   * ⚠️ Ca phải đi qua `PermissionService` THẬT (xem `permissionOverGrants`): gọi thẳng `decideCan`
+   * là bỏ qua đúng chỗ bơm cờ ⇒ ca xanh mà lỗ vẫn sống.
    */
-  it("grant CHỈ *:* với is_sensitive=false ⇒ HIỆN TẠI qua được gate PAYROLL_COST (nợ, xem doc-block)", async () => {
+  it("grant CHỈ *:* (is_sensitive=false) ⇒ 403 ở gate PAYROLL_COST — cặp đích là cặp SENSITIVE", async () => {
     await expect(
       gateWidgetOrThrow(permissionOverGrants(wildcard(false)), user, "PAYROLL_COST"),
-    ).resolves.toEqual({ action: "view-line", resourceType: "payroll-period" });
+    ).rejects.toThrowError("AUTH-ERR-FORBIDDEN: thiếu quyền view-line:payroll-period");
+  });
+
+  it("cùng actor wildcard ⇒ 403 luôn ở RECRUIT_FUNNEL (vá theo BỀ MẶT, không theo một widget)", async () => {
+    await expect(
+      gateWidgetOrThrow(permissionOverGrants(wildcard(false)), user, "RECRUIT_FUNNEL"),
+    ).rejects.toThrowError("AUTH-ERR-FORBIDDEN: thiếu quyền view:candidate");
+  });
+
+  it("ĐỐI CHỨNG — CÙNG actor wildcard VẪN qua widget có cặp NON-sensitive (không phải 'deny mọi wildcard')", async () => {
+    // Thiếu ca này, hai ca deny ở trên xanh y hệt với một bản vá chặn sạch mọi grant wildcard —
+    // tức mất quyền của mọi actor hợp lệ mà spec không kêu (`deny-cases-vacuous-without-allow-case`).
+    const svc = permissionOverGrants(wildcard(false));
+    await expect(gateWidgetOrThrow(svc, user, "ROOM_TODAY")).resolves.toEqual({
+      action: "view",
+      resourceType: "room",
+    });
+    await expect(gateWidgetOrThrow(svc, user, "ASSET_SUMMARY")).resolves.toEqual({
+      action: "view",
+      resourceType: "asset",
+    });
   });
 
   it("ĐỐI CHỨNG — chính hàng *:* mang is_sensitive=true thì engine CHẶN (cơ chế sensitive vẫn sống)", async () => {
