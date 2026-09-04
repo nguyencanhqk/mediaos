@@ -110,15 +110,39 @@ const effectivelySensitive =
 Vị trí giải quyết hai rủi ro trên **về mặt cấu trúc**, không bằng kỷ luật: object-tier trả về ở `:82` và
 `needsObjectGrant` quyết ở `:95-98` đều **trước** dòng này ⇒ cờ mới không với tới được chúng.
 
-### 5.2 Bất biến kết quả — đúng MỘT return site mới, gộp HAI trạng thái cũ
+### 5.2 Trạng thái mới — và `auditRequired` phải SUY RA, không hard-code
 
-`explicitAllows` lọc `g.action !== "*" && g.resourceType !== "*"` ⇒ mọi phần tử là grant EXACT cho đúng
-cặp đích. `grant.isSensitive` lấy từ `innerJoin(permissions)` ⇒ với grant exact nó **CHÍNH LÀ** cờ catalog
-của cặp đích. Suy ra: nếu `pairIsSensitive === true` **và** `explicitAllows` khác rỗng thì
-`companyAllows.some(g => g.isSensitive)` đã `true` từ trước ⇒ nhánh sensitive đã vào kể cả khi không vá.
+> 🔴 **Sửa 2026-09-04 sau security-review (verdict BLOCK).** Bản đầu mục này khẳng định: «mọi lần vào
+> nhánh sensitive NHỜ `pairIsSensitive` đều có `explicitAllows === []` ⇒ chỉ đẻ ra `deny-sensitive`,
+> không `auditRequired` nào đổi». **Khẳng định đó SAI.** Nó dựa trên giả định cờ hàng-grant LUÔN bằng
+> cờ catalog (qua `innerJoin(permissions)`) — đúng ở trạng thái ổn định, sai ở hai trạng thái THẬT:
+>
+> 1. **Catalog suy biến.** Ảnh chụp nạp hỏng khi chưa có ảnh ⇒ `pairIsSensitive = true` cho MỌI cặp,
+>    trong khi `CachedPermissionRepository` vẫn phục vụ grant từ Valkey (không chạm DB) với cờ THẬT.
+>    Actor có grant EXACT trên cặp **non-sensitive** ⇒ vào nhánh sensitive, `explicitAllows` **KHÔNG
+>    rỗng** ⇒ chạm return ALLOW cuối nhánh.
+> 2. **Cache grant cũ.** `permissions.is_sensitive` vừa lật false→true; hàng grant trong cache còn mang
+>    cờ CŨ tối đa `CACHE_TTL_SEC = 300`s. Cùng hình dạng lệch.
+>
+> Ở cả hai, hard-code `auditRequired: true` tại return đó **lật `reveal = allow && auditRequired` từ
+> false sang true** ⇒ biến MASK thành REVEAL. Không phải rò dữ liệu hôm nay (mọi consumer `reveal` hiện
+> đều truyền `isSensitive: true`), nhưng nó biến một bảo đảm CẤU TRÚC thành kỷ luật call-site — đúng
+> thứ §5.1 tuyên bố đã thay thế — và làm consumer TIẾP THEO thành lỗ thật.
 
-⇒ **Mọi lần vào nhánh NHỜ `pairIsSensitive` đều có `explicitAllows === []`** ⇒ luôn dừng ở return
-`deny-sensitive`. Nhánh reauth và nhánh allow **không** có đường vào mới ⇒ mọi `auditRequired` giữ nguyên.
+**Chốt:** ở return ALLOW cuối nhánh sensitive, `auditRequired` được **suy ra**:
+
+```ts
+auditRequired: isSensitive || companyAllows.some((g) => g.isSensitive)
+```
+
+- Mọi trạng thái tới được return này **trước** bản vá đều có một trong hai vế `true` ⇒ biểu thức cho
+  `true`, y hệt hằng cũ ⇒ **không đổi hành vi cũ một bit nào**.
+- Trạng thái **mới** cho `false` — đúng bằng giá trị mà CÙNG đầu vào ấy nhận ở priority 4 trước bản vá
+  ⇒ `reveal` được bảo toàn.
+
+⇒ **Bất biến ĐÚNG, phát biểu lại:** `pairIsSensitive` chỉ có thể đưa `allow` từ true→false, và **không
+bao giờ** đưa `reveal` từ false→true. Ghim ở `permission.decide.pair-sensitive.spec.ts` #14/#14a (ma
+trận có hai hàng LỆCH) · #15 · #15c — đột biến hard-code lại `true` làm 4 ca ĐỎ.
 
 | Trạng thái cũ | Mới | Ý nghĩa |
 | --- | --- | --- |

@@ -440,16 +440,20 @@ export class PermissionService {
 
       // Cờ catalog theo CẶP — MỘT lần cho mỗi action, KHÔNG lặp theo resourceId (một trang N hàng ×
       // M action vẫn chỉ hỏi M lần, và single-flight gộp chúng thành ≤1 query).
-      const pairFlags = new Map<string, boolean>();
-      for (const spec of actions) {
-        pairFlags.set(spec.action, await this.pairIsSensitiveFor(spec.action, resourceType));
-      }
+      //
+      // MẢNG theo CHỈ SỐ, cố ý KHÔNG phải `Map<action, boolean>`: `Map.get()` trả `undefined` khi
+      // miss, và `?? false` sau đó là fail-OPEN — cặp sensitive bị coi là thường ⇒ wildcard thoả gate.
+      // Cùng lý do `resolveStrongestScopes` trả mảng chứ không trả Map (xem doc-block của nó). Hôm nay
+      // không miss được, nhưng một refactor thêm `continue` vào vòng dựng là đủ để mở lỗ trong im lặng.
+      const pairFlags = await Promise.all(
+        actions.map((spec) => this.pairIsSensitiveFor(spec.action, resourceType)),
+      );
 
       const result: BatchDecisions = new Map();
       for (const resourceId of resourceIds) {
         const objectGrants = objectBatch.get(resourceId) ?? [];
         const perAction = new Map<string, PermissionDecision>();
-        for (const spec of actions) {
+        for (const [specIndex, spec] of actions.entries()) {
           const input: CanInput = {
             userId,
             companyId,
@@ -457,7 +461,7 @@ export class PermissionService {
             resourceType,
             resourceId,
             isSensitive: spec.isSensitive,
-            pairIsSensitive: pairFlags.get(spec.action) ?? false,
+            pairIsSensitive: pairFlags[specIndex],
             requiresReauth: spec.requiresReauth,
             objectGrantRequired: spec.objectGrantRequired,
             ctx,

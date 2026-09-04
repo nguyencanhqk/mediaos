@@ -13,7 +13,7 @@
  *     `auditRequired` false→true là biến MASK thành REVEAL ở `hr-read.service.ts` /
  *     `employees.service.ts` (`reveal = allow && auditRequired`).
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { decideCan, decideStrongestScope } from "./permission.decide";
 import { PermissionService } from "./permission.service";
 import type {
@@ -150,6 +150,30 @@ const REALISTIC_CASES: Array<{
         action: SENS_ACTION,
         resourceType: SENS_TYPE,
         isSensitive: true,
+        pairIsSensitive: p,
+      }),
+  },
+  {
+    // 🔴 security-review 04/09: hình dạng LỆCH — cờ hàng-grant (false) ≠ cờ catalog (true). Ma trận
+    // bản đầu CỐ Ý chỉ chứa hàng "khớp bất biến DB", nên nó loại đúng trạng thái DUY NHẤT mà bất biến
+    // có thể vỡ ⇒ #14/#14a xanh mà không chứng gì. Hai nguồn lệch THẬT: catalog suy biến (mọi cặp
+    // true) + cache grant Valkey giữ cờ cũ ≤300s sau khi catalog lật false→true.
+    name: "LỆCH — grant EXACT cờ false trên cặp catalog nói SENSITIVE",
+    pairFlag: true,
+    decide: (p) =>
+      can([grant(SENS_ACTION, SENS_TYPE)], {
+        action: SENS_ACTION,
+        resourceType: SENS_TYPE,
+        pairIsSensitive: p,
+      }),
+  },
+  {
+    name: "LỆCH — catalog suy biến: cặp NON-sensitive bị coi là sensitive, actor có grant EXACT",
+    pairFlag: true,
+    decide: (p) =>
+      can([grant(PLAIN_ACTION, PLAIN_TYPE)], {
+        action: PLAIN_ACTION,
+        resourceType: PLAIN_TYPE,
         pairIsSensitive: p,
       }),
   },
@@ -294,6 +318,30 @@ describe("decideCan — pairIsSensitive (cờ của CẶP ĐÍCH)", () => {
     });
     expect(d.reason).not.toBe("deny-object-required");
     expect(d.allow).toBe(true);
+    // 🔴 security-review 04/09: dòng NÀY là ca chứng minh bất biến ban đầu của WO SAI. Đầu vào trên
+    // vào nhánh sensitive nhờ MỖI `pairIsSensitive`, mà `explicitAllows` KHÔNG rỗng ⇒ chạm return
+    // ALLOW cuối nhánh. Hard-code `auditRequired: true` ở đó lật `reveal` false→true = MASK thành
+    // REVEAL. Giá trị đúng = giá trị mà CÙNG đầu vào này nhận ở priority 4 trước bản vá: false.
+    expect(d.auditRequired).toBe(false);
+  });
+
+  it("#15c GHIM — cờ hàng-grant LỆCH cờ catalog (catalog suy biến / cache grant cũ) ⇒ auditRequired giữ nguyên", () => {
+    // Trạng thái THẬT, không phải giả tưởng: `permission-catalog-snapshot` nạp hỏng + chưa có ảnh ⇒
+    // MỌI cặp `pairIsSensitive=true`, trong khi grant vẫn phục vụ từ cache Valkey với cờ THẬT (false).
+    // Actor có grant EXACT trên cặp NON-sensitive ⇒ vào nhánh sensitive nhưng KHÔNG được đổi reveal.
+    const before = can([grant(PLAIN_ACTION, PLAIN_TYPE)], {
+      action: PLAIN_ACTION,
+      resourceType: PLAIN_TYPE,
+      pairIsSensitive: false,
+    });
+    const after = can([grant(PLAIN_ACTION, PLAIN_TYPE)], {
+      action: PLAIN_ACTION,
+      resourceType: PLAIN_TYPE,
+      pairIsSensitive: true,
+    });
+    expect(after.allow).toBe(true);
+    expect(after.auditRequired).toBe(before.auditRequired);
+    expect(after.auditRequired).toBe(false);
   });
 
   it("#15b GHIM — object-grant requirement TƯỜNG MINH vẫn deny như cũ", () => {
@@ -470,6 +518,50 @@ describe("PermissionService — bơm pairIsSensitive từ catalog (call site KH�
       { action: SENS_ACTION, resourceType: SENS_TYPE },
     ]);
     expect(repo.catalogHits).toBe(1);
+  });
+
+  it("catalog nạp HỎNG ⇒ `logger.error` ĐƯỢC gọi với phase — dòng log là quan sát DUY NHẤT của nhánh suy biến", async () => {
+    // Không có ca này, đổi `onError: (e, phase) => { this.logger.error(...) }` thành `onError: () => {}`
+    // vẫn xanh toàn bộ suite VÀ vẫn qua cổng coverage ⇒ hệ chạy ở trạng thái siết vì lỗi hạ tầng mà
+    // không ai biết (luật quan sát: nhánh suy biến PHẢI để vết).
+    class FailingCatalogRepo extends StubRepo {
+      override async getAllPermissions(): Promise<PermissionCatalogEntry[]> {
+        throw new Error("catalog read failed (simulated)");
+      }
+    }
+    const svc = new PermissionService(new FailingCatalogRepo([scoped("*", "*")]));
+    const spy = vi.spyOn(svc["logger"], "error").mockImplementation(() => undefined);
+
+    const d = await svc.can({
+      userId: U,
+      companyId: CO,
+      action: SENS_ACTION,
+      resourceType: SENS_TYPE,
+    });
+
+    // Suy biến về phía SIẾT: chưa có ảnh chụp ⇒ mọi cặp coi như sensitive ⇒ wildcard bị chặn.
+    expect(d.allow).toBe(false);
+    const call = spy.mock.calls.find((c) => String(c[0]).includes("catalog snapshot load failed"));
+    expect(call, "thiếu dòng log của nhánh catalog suy biến").toBeDefined();
+    expect((call?.[1] as { phase?: string } | undefined)?.phase).toBe("no-snapshot");
+  });
+
+  it("`onError` NÉM cũng không được biến lỗi đã xử lý thành reject (hợp đồng never-throw)", async () => {
+    // Transport log hỏng là chuyện có thật. Nếu nó ném, promise single-flight reject ⇒ mọi caller
+    // đang chờ chung lượt đó (vd Promise.all của dashboard) nhận reject thay vì sentinel.
+    class FailingCatalogRepo extends StubRepo {
+      override async getAllPermissions(): Promise<PermissionCatalogEntry[]> {
+        throw new Error("catalog read failed (simulated)");
+      }
+    }
+    const svc = new PermissionService(new FailingCatalogRepo([scoped("*", "*")]));
+    vi.spyOn(svc["logger"], "error").mockImplementation(() => {
+      throw new Error("log transport down");
+    });
+
+    await expect(
+      svc.can({ userId: U, companyId: CO, action: SENS_ACTION, resourceType: SENS_TYPE }),
+    ).resolves.toMatchObject({ allow: false });
   });
 
   it("D7 — `resetCatalogSnapshotForTest()` buộc nạp lại", async () => {

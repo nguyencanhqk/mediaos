@@ -56,6 +56,11 @@ export class PermissionCatalogSnapshot {
   private loadedAtMs = 0;
   /** ADR §5.3 D6 — single-flight. Promise này KHÔNG BAO GIỜ reject (xem `refresh`). */
   private inFlight: Promise<Set<string> | null> | null = null;
+  /**
+   * Thế hệ ảnh chụp, tăng ở mỗi `reset()`. Một lượt nạp CHỈ được ghi kết quả nếu thế hệ của nó còn
+   * hiện hành — xem `refresh`. Không có nó, `reset()` giữa chừng làm lượt nạp CŨ ghi đè lượt MỚI.
+   */
+  private epoch = 0;
 
   private readonly load: () => Promise<PermissionCatalogEntry[]>;
   private readonly now: () => number;
@@ -89,8 +94,16 @@ export class PermissionCatalogSnapshot {
     return snapshot.has(pairKey(action, resourceType));
   }
 
-  /** ADR §5.3 D7 — seam test. Gọi qua `PermissionService.resetCatalogSnapshotForTest()`. */
+  /**
+   * ADR §5.3 D7 — seam test. Gọi qua `PermissionService.resetCatalogSnapshotForTest()`.
+   *
+   * ⚠️ `reset()` KHÔNG huỷ được lượt nạp đang bay (không có AbortController xuyên qua `load`), nên nó
+   * **đánh dấu** thay vì **chờ**: tăng `epoch` để lượt cũ tự biết mình lạc hậu và không ghi gì. Bỏ
+   * `epoch` đi thì chuỗi «nạp L1 đang bay → reset() → L2 nạp xong ghi ảnh MỚI → L1 về, ghi đè ảnh CŨ»
+   * dựng lại một ảnh chụp sai trong im lặng — và `finally` của L1 còn xoá luôn ô `inFlight` của L2.
+   */
   reset(): void {
+    this.epoch += 1;
     this.sensitivePairs = null;
     this.loadedAtMs = 0;
     this.inFlight = null;
@@ -114,9 +127,13 @@ export class PermissionCatalogSnapshot {
   private refresh(): Promise<Set<string> | null> {
     if (this.inFlight !== null) return this.inFlight;
 
+    const epochAtStart = this.epoch;
     const flight = (async (): Promise<Set<string> | null> => {
       try {
         const rows = await this.withTimeout(this.load());
+        // `reset()` xen vào giữa lượt nạp ⇒ kết quả này đã LẠC HẬU: không ghi đè ảnh mà lượt sau
+        // (chạy trên catalog mới hơn) có thể đã đặt.
+        if (epochAtStart !== this.epoch) return this.sensitivePairs;
         const next = new Set<string>();
         for (const row of rows) {
           if (row.isSensitive) next.add(pairKey(row.action, row.resourceType));
@@ -128,15 +145,36 @@ export class PermissionCatalogSnapshot {
         // ADR §5.3 D2. CỐ Ý không đóng dấu `loadedAtMs`: một blip DB không được khoá trạng thái suy
         // biến suốt TTL — lần gọi kế tiếp phải thử nạp lại. Giá phải trả: DB hỏng KÉO DÀI ⇒ mỗi lượt
         // kiểm quyền tuần tự tốn một lần thử (đã có trần `timeoutMs`, và single-flight gộp lượt song song).
-        this.onError?.(error, this.sensitivePairs === null ? "no-snapshot" : "stale-kept");
+        this.emitError(error, this.sensitivePairs === null ? "no-snapshot" : "stale-kept");
         return this.sensitivePairs; // ảnh chụp CŨ nếu có, `null` nếu chưa từng nạp được
       } finally {
-        this.inFlight = null;
+        // CHỈ nhả ô của CHÍNH mình: sau `reset()`, ô này có thể đang giữ lượt nạp MỚI hơn — xoá nó là
+        // mở đường cho hai lượt nạp chạy song song, đúng thứ single-flight sinh ra để chặn.
+        if (epochAtStart === this.epoch) this.inFlight = null;
       }
     })();
 
     this.inFlight = flight;
     return flight;
+  }
+
+  /**
+   * Hook quan sát KHÔNG được phá hợp đồng "không bao giờ ném" của lớp này.
+   *
+   * `onError` trong sản phẩm là `logger.error` — một transport log hỏng mà ném ra sẽ khiến promise
+   * single-flight **reject**, đúng điều doc-block ở đầu `refresh` cấm. Hệ quả dây chuyền: mọi caller
+   * đang chờ chung lượt đó (vd `Promise.all` của dashboard) nhận reject thay vì sentinel, và lỗi
+   * NGUYÊN NHÂN (DB/catalog) bị thay bằng lỗi THỨ CẤP của chính logger.
+   *
+   * Nuốt lỗi ở đây là chọn có ý thức: mất một dòng log còn hơn biến một sự cố ĐÃ XỬ LÝ thành reject
+   * trên đường mà MỌI `can()` đi qua.
+   */
+  private emitError(error: unknown, phase: "stale-kept" | "no-snapshot"): void {
+    try {
+      this.onError?.(error, phase);
+    } catch {
+      /* hook quan sát hỏng KHÔNG được leo thang thành lỗi quyền */
+    }
   }
 
   /**

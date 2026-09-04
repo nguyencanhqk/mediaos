@@ -116,10 +116,16 @@ export function decideCan(
   //     actor có grant EXACT.
   // Cả hai nằm TRƯỚC dòng này ⇒ `pairIsSensitive` không với tới được chúng.
   //
-  // Bất biến: mọi lần vào nhánh sensitive NHỜ `pairIsSensitive` đều có `explicitAllows === []` (grant
-  // exact mang cờ catalog của chính cặp đích qua innerJoin(permissions), nên nếu có grant exact thì vế
-  // thứ hai đã true từ trước) ⇒ đường đi mới DUY NHẤT là `deny-sensitive` ở :109. Không có return
-  // ALLOW nào mới, không `auditRequired` nào đổi giá trị.
+  // ⚠️ KHÔNG có bất biến «`pairIsSensitive` chỉ đẻ ra deny». Bản đầu của WO này khẳng định vậy, dựa
+  // trên lập luận: grant EXACT mang cờ catalog của chính cặp đích qua `innerJoin(permissions)`, nên
+  // hễ `explicitAllows` khác rỗng thì vế thứ hai đã true từ trước. **Lập luận đó SAI** — nó giả định
+  // cờ hàng-grant và cờ catalog KHÔNG BAO GIỜ lệch, mà chúng lệch ở ít nhất hai trạng thái THẬT:
+  //   • catalog suy biến (`permission-catalog-snapshot.ts`: nạp hỏng + chưa có ảnh ⇒ MỌI cặp = true)
+  //     trong khi grant vẫn phục vụ được từ cache Valkey (`permission.cache.ts` — không chạm DB);
+  //   • `permissions.is_sensitive` vừa bị lật false→true, hàng grant trong cache còn mang cờ CŨ ≤300s.
+  // Ở cả hai, một actor có grant EXACT trên cặp NON-sensitive vào được nhánh sensitive nhờ MỖI
+  // `pairIsSensitive` mà `explicitAllows` KHÔNG rỗng ⇒ chạm return ALLOW ở cuối nhánh.
+  // Vì thế `auditRequired` ở return đó phải được SUY RA, không hard-code — xem chú thích tại chỗ.
   const effectivelySensitive =
     isSensitive || companyAllows.some((g) => g.isSensitive) || pairIsSensitive;
 
@@ -137,7 +143,20 @@ export function decideCan(
         auditRequired: true,
       };
     }
-    return { allow: true, reason: "allow", auditRequired: true };
+    // `auditRequired` SUY RA, KHÔNG hard-code `true` (S14-SEC-DASHGATE-WILDCARD-1, security-review):
+    //   • mọi trạng thái tới được return này TRƯỚC bản vá đều có `isSensitive` hoặc một hàng grant
+    //     mang cờ ⇒ biểu thức cho `true`, y hệt hằng cũ. Không đổi hành vi cũ.
+    //   • trạng thái MỚI (vào nhánh nhờ MỖI `pairIsSensitive`, cờ hàng-grant lệch cờ catalog — xem
+    //     chú thích ở `effectivelySensitive`) cho `false`, đúng bằng giá trị priority-4 mà cùng đầu
+    //     vào ấy nhận trước bản vá.
+    // Vì sao PHẢI thế: `hr-read.service.ts` và `employees.service.ts` tính `reveal = allow &&
+    // auditRequired`. Hard-code `true` ở đây lật `reveal` false→true ⇒ biến MASK thành REVEAL, tức rò
+    // dữ liệu — đúng chiều NGƯỢC với WO này, và chỉ nổ khi catalog đang suy biến.
+    return {
+      allow: true,
+      reason: "allow",
+      auditRequired: isSensitive || companyAllows.some((g) => g.isSensitive),
+    };
   }
 
   // Priority 4: non-sensitive ALLOW (wildcards valid here)
