@@ -17177,4 +17177,76 @@ export const backlog = [
       "Không đụng ngưỡng/TTL khoá — chỉ hiển thị.",
     ],
   },
+  // ─────────── S18 follow-up: hai món nợ tách ra trong lúc chạy wave (seed 04/09/2026) ───────────
+  {
+    id: "S18-AUTH-RESETDELETED-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "`resetPassword` không lọc `deleted_at`: user đã XOÁ MỀM vẫn đặt lại được mật khẩu — siết `WHERE` và đổi 200 → lỗi token không hợp lệ",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/auth/auth.service.ts",
+      "apps/api/src/auth/**/*.spec.ts",
+      "apps/api/test/integration/auth-s18-resetdeleted-*.int-spec.ts",
+      "docs/plans/S18-AUTH-RESETDELETED-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S18-AUTH-RESETCLEARS-1"],
+    plan: "docs/plans/S18-AUTH-RESETDELETED-1.md",
+    src: [
+      "Đo trong S18-AUTH-RESETCLEARS-1 (03/09/2026), owner chốt NGOÀI phạm vi WO đó: câu UPDATE của `resetPassword` không có vế `deleted_at IS NULL` ⇒ token còn hạn của user đã xoá mềm vẫn đổi được hash",
+      "Unique email là PARTIAL (`WHERE deleted_at IS NULL`) ⇒ email của user đã xoá có thể ĐÃ cấp lại cho người khác — đây là vế làm nợ này nguy hiểm hơn 'chỉ là dữ liệu chết'",
+      "docs/plans/S18-AUTH-RESETCLEARS-1.md — WO đó đã tự chặn phần của mình (KHÔNG gọi clearLoginLocks cho hàng xoá mềm), nợ còn lại đúng là câu UPDATE",
+      "memory login-lockout-keyed-by-email-and-trust-proxy · tests-can-pin-a-hole-open",
+    ],
+    done_when: [
+      "Xác định TRƯỚC khi sửa: user xoá mềm có còn đăng nhập được không (`login` đã lọc `deleted_at` chưa) — nếu login đã chặn thì đây là lỗ ĐƠN LẺ ở reset; nếu chưa, phạm vi rộng hơn và phải quay lại chốt với owner",
+      "Siết `WHERE` của UPDATE trong `resetPassword` theo `deleted_at IS NULL`; hàng xoá mềm ⇒ trả ĐÚNG chuỗi lỗi token-không-hợp-lệ như 3 nhánh hỏng còn lại (BYTE-GIỐNG NHAU — đừng đẻ oracle 'tài khoản này từng tồn tại')",
+      "Ca đối chứng DƯƠNG bắt buộc: user BÌNH THƯỜNG vẫn đặt lại được (ca deny không được xanh-rỗng)",
+      "Đường admin `resetUserPassword` đo cùng lúc: nó có lọc `deleted_at` không, và có trả cùng hình lỗi không",
+      "Token của user xoá mềm phải bị VÔ HIỆU chứ không chỉ 'UPDATE không khớp hàng nào' — kiểm tra hàng token có bị đánh dấu `used_at` nhầm không",
+      "bash harness/check.sh --all --lane-db=s18resetdel XANH",
+    ],
+    notes: [
+      "🔴 FULL gate (auth). Nhỏ về dòng code, nằm trên đường quyết định auth ⇒ security-reviewer + silent-failure-hunter.",
+      "⚠️ Đổi 200 → lỗi là ĐỔI HÀNH VI một đường auth công khai: phải đo xem có client nào đang dựa vào 200 đó không trước khi siết.",
+    ],
+  },
+  {
+    id: "S18-QA-ASSETFLAKE-1",
+    module: "QA",
+    layer: "BE",
+    title:
+      "`s11-asset-db1-invariants` ĐỎ trong lane chung nhưng XANH khi chạy riêng — tìm gốc và đóng, thay vì tiếp tục miễn trừ bằng tay mỗi WO",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/test/integration/s11-asset-db1-invariants.int-spec.ts",
+      "apps/api/test/integration/**",
+      "docs/plans/S18-QA-ASSETFLAKE-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S18-QA-ASSETFLAKE-1.md",
+    src: [
+      "harness/handoff.md — GHI TAY, chưa tái hiện có kiểm soát: ca H1 đỏ ở `check.sh --all` của S18-AUTH-UNLOCK429-1 (03/09) rồi LẶP LẠI y hệt ở S18-AUTH-RESETCLEARS-1; cả hai lần chạy RIÊNG đều 22/22 XANH",
+      "Diff hai WO đó nằm ở AUTH, không đụng ASSET (mig 0549–0551) ⇒ giả thuyết là nhiễu giữa các spec dùng chung lane, không phải hồi quy",
+      "memory parallel-int-specs-share-one-outbox · fresh-lane-db-exposes-teardown-ri-race · per-statement-now-inverts-seeded-order · vitest-worker-crash-chunked-runs",
+    ],
+    done_when: [
+      "TÁI HIỆN TRƯỚC khi vá: chạy lane chung đủ số lần để ra tỉ lệ đỏ (n≥5), ghi số vào plan — 'đỏ 2 lần theo ghi chép tay' KHÔNG đủ để gọi là flake hay để gọi là bug",
+      "Xác định ca H1 hỏng vì cái gì: thứ tự gieo (`now()` per-statement), hàng dùng chung (outbox/catalog), teardown của spec khác, hay worker crash — nêu BẰNG CHỨNG, không suy đoán",
+      "Vá tận gốc (cô lập dữ liệu của spec) — KHÔNG dùng retry, KHÔNG nới assert, KHÔNG thêm dòng miễn trừ vào cổng",
+      "Chạy lại n≥5 lần lane chung: 0/5 đỏ",
+      "Nếu kết luận là hồi quy THẬT của ASSET thì dừng và quay lại chốt phạm vi với owner (đổi zone)",
+    ],
+    notes: [
+      "🟡 LIGHT. Giá trị là cắt tiếng ồn: cùng một ca đỏ hai wave liên tiếp ⇒ mọi phiên sau đều phải tự hỏi 'flake hay thật', đó là thuế đánh vào mọi WO.",
+      "⚠️ Bằng chứng hiện có là GHI TAY từ hai phiên trước, chưa ai đo lại có kiểm soát — bước 1 của WO là đo, không phải vá.",
+    ],
+  },
 ];

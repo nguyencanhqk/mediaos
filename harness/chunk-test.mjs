@@ -58,6 +58,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { rescueRun } from "./chunk-bisect.mjs";
+import { SPEC_FILE_RE } from "./spec-file-re.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
@@ -76,7 +77,8 @@ const CRASH_SIGNATURES = [
   /3221225477/, // 0xC0000005 ACCESS_VIOLATION (Windows)
 ];
 
-const SPEC_FILE_RE = /\.(spec|e2e-spec|int-spec)\.(ts|tsx)$/;
+// SPEC_FILE_RE nay ở `spec-file-re.mjs` — xem docblock ở đó: bản cũ tại ĐÂY thiếu nhánh
+// `unit-` và làm runner bỏ chạy 20 spec tĩnh của apps/api trong im lặng (sự cố 03–04/09/2026).
 
 /**
  * BASELINE "mang tên spec nhưng vitest KHÔNG thu thập" — đo 2026-07-28 (gate bù S6-QA-CHUNK-1).
