@@ -9,6 +9,7 @@ import type {
   ObjectGrant,
   PermissionCatalogEntry,
 } from "./permission.types";
+import { sentinelCatalog } from "../../test/helpers/permission-catalog-fixture";
 
 /**
  * S2-AUTH-BE-1 — getCapabilityScopes + DATA_SCOPES↔ROLE_DATA_SCOPES sync (RED-first deny-path).
@@ -46,8 +47,11 @@ class ScopeMockRepo implements IPermissionRepository {
   async getPermissionsByIds(): Promise<PermissionCatalogEntry[]> {
     return [];
   }
+  // ADR DECISIONS-12 D9 — catalog RỖNG là trạng thái SUY BIẾN (hạ tầng hỏng), không phải
+  // "không có cặp nhạy cảm nào". Spec này không đo sensitivity, nên nó trả một catalog KHÔNG
+  // RỖNG mà mọi cặp nó kiểm đều VẮNG ⇒ `false` theo D3 = y hệt hành vi trước D9.
   async getAllPermissions(): Promise<PermissionCatalogEntry[]> {
-    return [];
+    return sentinelCatalog();
   }
 }
 

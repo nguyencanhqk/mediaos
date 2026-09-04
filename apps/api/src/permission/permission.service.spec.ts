@@ -30,7 +30,9 @@ import type {
   IPermissionRepository,
   ObjectGrant,
   PermissionDecision,
+  PermissionCatalogEntry,
 } from "./permission.types";
+import { sentinelCatalog } from "../../test/helpers/permission-catalog-fixture";
 
 // ─── Mock repository ─────────────────────────────────────────────────────────
 
@@ -134,8 +136,11 @@ class MockPermissionRepository implements IPermissionRepository {
     return [];
   }
 
-  async getAllPermissions(): Promise<[]> {
-    return [];
+  // ADR DECISIONS-12 D9 — catalog RỖNG là trạng thái SUY BIẾN (hạ tầng hỏng), không phải
+  // "không có cặp nhạy cảm nào". Spec này không đo sensitivity, nên nó trả một catalog KHÔNG
+  // RỖNG mà mọi cặp nó kiểm đều VẮNG ⇒ `false` theo D3 = y hệt hành vi trước D9.
+  async getAllPermissions(): Promise<PermissionCatalogEntry[]> {
+    return sentinelCatalog();
   }
 }
 

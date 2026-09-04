@@ -23,6 +23,27 @@ export const PERMISSION_CATALOG_TTL_MS = 300_000;
 export const PERMISSION_CATALOG_LOAD_TIMEOUT_MS = 5_000;
 
 /**
+ * ADR §5.3 D9 — sàn thử-lại của nhánh SUY BIẾN-RỖNG (catalog nạp THÀNH CÔNG mà 0 hàng).
+ *
+ * Vì sao nhánh rỗng cần sàn mà nhánh `catch` (D2) thì không: khi `load()` NÉM, DB đang chết ⇒ mỗi lượt
+ * thử đã tự có giá (và trần `timeoutMs`), và trạng thái TỰ HẾT khi DB sống lại. Khi `load()` trả 0
+ * hàng thì DB **khoẻ**: query thành công và NHANH, còn trạng thái **không tự lành** nếu chưa ai chạy
+ * seed ⇒ không có sàn thì mỗi `can()` = 1 `SELECT` + 1 `logger.error`, **mãi mãi**, trên đúng hot-path
+ * mà MỌI kiểm quyền đi qua (single-flight chỉ gộp lượt SONG SONG, không gộp lượt tuần tự).
+ *
+ * Vì sao 5s: ≪ TTL 300s nên không tái lập «khoá suy biến 300s» mà D2 cấm; ≫ thời gian một request nên
+ * mọi `can()` trong cùng một request chia nhau MỘT lần thử; đủ để một vòng poll dashboard không đẻ ra
+ * hai query.
+ */
+export const PERMISSION_CATALOG_EMPTY_RETRY_MS = 5_000;
+
+/** KẾT QUẢ suy biến — suy DUY NHẤT từ `sensitivePairs === null`. Đừng nhét nguyên nhân vào đây. */
+export type CatalogDegradePhase = "stale-kept" | "no-snapshot";
+
+/** NGUYÊN NHÂN suy biến — trực giao với `CatalogDegradePhase` (một sự cố rỗng vẫn có thể stale-kept). */
+export type CatalogDegradeCause = "load-failed" | "empty-catalog";
+
+/**
  * Khoá tra cứu. Dùng `\u0000` chứ không phải `:` — `:` là ký tự người-đọc dùng ở mọi nơi khác
  * (`view:leave`), nên nếu một `action`/`resourceType` nào đó chứa `:` thì hai cặp khác nhau sẽ trùng
  * khoá. Trùng khoá ở đây = tra nhầm cờ = đúng loại lỗ WO này đang vá, nên không đánh cược.
@@ -46,8 +67,18 @@ export interface PermissionCatalogSnapshotDeps {
   now?: () => number;
   ttlMs?: number;
   timeoutMs?: number;
-  /** Gọi khi nạp hỏng. KHÔNG được ném. */
-  onError?: (error: unknown, phase: "stale-kept" | "no-snapshot") => void;
+  /** ADR D9 — sàn thử-lại nhánh rỗng. TIÊM để test không phải chờ 5s thật. */
+  degradedRetryMs?: number;
+  /**
+   * Gọi khi suy biến. KHÔNG được ném.
+   *
+   * `phase` = KẾT QUẢ (giữ được ảnh cũ hay không), `cause` = NGUYÊN NHÂN. Hai chiều TÁCH BẠCH: nhét
+   * cause vào `phase` làm `degradedTo` ở `permission.service.ts` NÓI DỐI ở ca «rỗng nhưng CÓ ảnh cũ»
+   * (kết quả là stale-kept, không phải siết) — bẫy `cache-breaks-two-source-flag-invariants`.
+   *
+   * Handler 2 tham số vẫn gán được (structural typing) ⇒ thêm `cause` là non-breaking.
+   */
+  onError?: (error: unknown, phase: CatalogDegradePhase, cause: CatalogDegradeCause) => void;
 }
 
 export class PermissionCatalogSnapshot {
@@ -61,18 +92,38 @@ export class PermissionCatalogSnapshot {
    * hiện hành — xem `refresh`. Không có nó, `reset()` giữa chừng làm lượt nạp CŨ ghi đè lượt MỚI.
    */
   private epoch = 0;
+  /**
+   * ADR D9 — mốc `now()` mà TRƯỚC đó không thử nạp lại. `0` = không có sàn.
+   *
+   * Chỉ nhánh SUY BIẾN-RỖNG đặt nó. Đường gỡ THẬT có hai: **tự hết hạn** (so với `now()`) và
+   * `reset()`.
+   *
+   * ⚠️ Dòng `retryNotBeforeMs = 0` ở nhánh nạp LÀNH là **phòng thủ, KHÔNG phải một đường gỡ** — nó
+   * không thể chạy khi sàn còn hiệu lực: sàn được kiểm ở ĐẦU `refresh()` nên không lượt nạp nào khởi
+   * động được trong cửa sổ sàn, và single-flight bảo đảm không có lượt nào đang bay sẵn lúc sàn được
+   * đặt (sàn được đặt và ô `inFlight` được nhả trong cùng một job đồng bộ). Nghĩa là: sàn nào mà một
+   * lượt nạp lành với tới được thì đã hết hạn từ trước, tức đã trơ. Giữ dòng đó vì nó vô hại và
+   * đúng-theo-ý-định; đừng viết vào tài liệu rằng nó là một cơ chế nhả.
+   */
+  private retryNotBeforeMs = 0;
 
   private readonly load: () => Promise<PermissionCatalogEntry[]>;
   private readonly now: () => number;
   private readonly ttlMs: number;
   private readonly timeoutMs: number;
-  private readonly onError?: (error: unknown, phase: "stale-kept" | "no-snapshot") => void;
+  private readonly degradedRetryMs: number;
+  private readonly onError?: (
+    error: unknown,
+    phase: CatalogDegradePhase,
+    cause: CatalogDegradeCause,
+  ) => void;
 
   constructor(deps: PermissionCatalogSnapshotDeps) {
     this.load = deps.load;
     this.now = deps.now ?? Date.now;
     this.ttlMs = deps.ttlMs ?? PERMISSION_CATALOG_TTL_MS;
     this.timeoutMs = deps.timeoutMs ?? PERMISSION_CATALOG_LOAD_TIMEOUT_MS;
+    this.degradedRetryMs = deps.degradedRetryMs ?? PERMISSION_CATALOG_EMPTY_RETRY_MS;
     this.onError = deps.onError;
   }
 
@@ -107,6 +158,9 @@ export class PermissionCatalogSnapshot {
     this.sensitivePairs = null;
     this.loadedAtMs = 0;
     this.inFlight = null;
+    // ADR D9 — gỡ CẢ sàn thử-lại. Thiếu dòng này thì seam D7 mất tác dụng đúng lúc cần nhất: int-spec
+    // seed cặp quyền mới rồi gọi `resetCatalogSnapshotForTest()` sẽ vẫn bị sàn chặn.
+    this.retryNotBeforeMs = 0;
   }
 
   private async ensureSnapshot(): Promise<Set<string> | null> {
@@ -127,25 +181,91 @@ export class PermissionCatalogSnapshot {
   private refresh(): Promise<Set<string> | null> {
     if (this.inFlight !== null) return this.inFlight;
 
+    // ADR D9 — sàn thử-lại của nhánh SUY BIẾN-RỖNG (xem `PERMISSION_CATALOG_EMPTY_RETRY_MS`).
+    //
+    // ⚠️ Sàn KHÔNG được gỡ ở nhánh `catch`, và đó là CHỦ Ý — chứng minh: sàn được kiểm ở ĐẦU
+    // `refresh()`, nên khi sàn còn hiệu lực thì KHÔNG lượt nạp nào chạy ⇒ `catch` không thể chạy trong
+    // cửa sổ sàn; và một sàn ĐÃ quá hạn là trơ (`now() < past` = false). Thêm `retryNotBeforeMs = 0`
+    // vào `catch` là một dòng không ai giải thích được — đừng «vá cho chắc».
+    if (this.now() < this.retryNotBeforeMs) return Promise.resolve(this.sensitivePairs);
+
     const epochAtStart = this.epoch;
+
+    // M2 — khởi động HÁO HỨC, ngay trong lượt ĐỒNG BỘ này, rồi CHỜ trong thân async.
+    //
+    // Vì sao không gói cả thân vào `Promise.resolve().then(...)`: cách đó hoãn luôn lời gọi `load()`
+    // sang microtask, làm ca D6 (đếm `load` ĐỒNG BỘ ngay sau khi phát N lượt song song) thấy 0 — tức
+    // là hạ sàn một ca đang đo thật.
+    //
+    // `try` phải ôm CẢ biểu thức, không chỉ `this.load()`: `withTimeout` cũng ném ĐỒNG BỘ được
+    // (`work.catch(...)` trên một non-promise ⇒ TypeError). Ném đồng bộ ở đây mà không bọc sẽ thoát
+    // khỏi `refresh()` và CƯỚP MẤT dòng `this.inFlight = flight` bên dưới ⇒ ô ghim một promise ĐÃ
+    // settle mà `finally` không còn cơ hội xoá ⇒ mọi cặp = sensitive VĨNH VIỄN tới khi restart.
+    let started: Promise<PermissionCatalogEntry[]>;
+    try {
+      started = this.withTimeout(this.load());
+    } catch (syncError: unknown) {
+      started = Promise.reject(syncError);
+    }
+
     const flight = (async (): Promise<Set<string> | null> => {
       try {
-        const rows = await this.withTimeout(this.load());
+        // `await` LUÔN nhường ít nhất một microtask, kể cả trên promise ĐÃ settle ⇒ thân này KHÔNG
+        // THỂ settle đồng bộ ⇒ `finally` chắc chắn chạy SAU `this.inFlight = flight`. Đó là bất biến
+        // khoá bản vá M2.
+        const rows = await started;
         // `reset()` xen vào giữa lượt nạp ⇒ kết quả này đã LẠC HẬU: không ghi đè ảnh mà lượt sau
         // (chạy trên catalog mới hơn) có thể đã đặt.
+        //
+        // Kiểm epoch nằm TRƯỚC kiểm rỗng: một lượt đã lạc hậu KHÔNG được đặt `retryNotBeforeMs` cho
+        // một thế hệ ảnh chụp mà không ai còn dùng — nếu không, `reset()` xen giữa để lại một cái sàn
+        // mồ côi, tức là «M2 phiên bản 2».
         if (epochAtStart !== this.epoch) return this.sensitivePairs;
+
+        // ADR D9 — `permissions` là catalog GLOBAL do migration seed. 0 hàng là phát biểu HẠ TẦNG
+        // («chưa seed / vừa bị xoá»), KHÔNG phải phát biểu nghiệp vụ («hệ này không có cặp nhạy cảm
+        // nào»). Coi nó hợp lệ là để một sự cố hạ tầng TỰ TUYÊN BỐ rằng không có gì cần bảo vệ — và
+        // đóng dấu tuyên bố đó suốt TTL, không một dòng log. Đối xứng ngược với nhánh `catch` bên
+        // dưới: cùng một sự cố mà biểu hiện bằng THROW thì siết + có vết.
+        //
+        // ⚠️⚠️ VỊ NGỮ LÀ `rows.length`, TUYỆT ĐỐI KHÔNG `next.size`. Đổi sang `next.size === 0` trông
+        // như dọn dẹp vô hại (thậm chí «chặt hơn») nhưng nó biến MỌI catalog không có cặp sensitive
+        // nào thành trạng thái suy biến — kể cả các stub repo hợp lệ trong test. Có ca ghim.
+        //
+        // Hệ quả ĐƯỢC CHỌN, không phải bỏ sót: catalog CÓ hàng mà 0 hàng `isSensitive` (một migration
+        // hỏng xoá sạch cờ) là fail-OPEN mà D9 KHÔNG bắt — vì không phân biệt được với một hệ hợp lệ
+        // không có cặp nhạy cảm nào.
+        if (rows.length === 0) {
+          // Không đóng dấu `loadedAtMs` (lượt sau vẫn phải thử lại), nhưng CÓ đặt sàn: DB ở đây
+          // KHOẺ ⇒ query nhanh và trạng thái không tự lành ⇒ không có sàn thì mỗi `can()` đẻ ra
+          // một query + một dòng log, mãi mãi, trên hot-path.
+          this.retryNotBeforeMs = this.now() + this.degradedRetryMs;
+          this.emitError(
+            new Error("permission catalog loaded 0 rows — degenerate (ADR DECISIONS-12 D9)"),
+            this.sensitivePairs === null ? "no-snapshot" : "stale-kept",
+            "empty-catalog",
+          );
+          // Ảnh chụp CŨ nếu có; `null` nếu chưa từng nạp được ⇒ mọi cặp = sensitive = SIẾT.
+          return this.sensitivePairs;
+        }
+
         const next = new Set<string>();
         for (const row of rows) {
           if (row.isSensitive) next.add(pairKey(row.action, row.resourceType));
         }
         this.sensitivePairs = next;
         this.loadedAtMs = this.now();
+        this.retryNotBeforeMs = 0; // nạp LÀNH ⇒ gỡ sàn
         return next;
       } catch (error: unknown) {
         // ADR §5.3 D2. CỐ Ý không đóng dấu `loadedAtMs`: một blip DB không được khoá trạng thái suy
         // biến suốt TTL — lần gọi kế tiếp phải thử nạp lại. Giá phải trả: DB hỏng KÉO DÀI ⇒ mỗi lượt
         // kiểm quyền tuần tự tốn một lần thử (đã có trần `timeoutMs`, và single-flight gộp lượt song song).
-        this.emitError(error, this.sensitivePairs === null ? "no-snapshot" : "stale-kept");
+        this.emitError(
+          error,
+          this.sensitivePairs === null ? "no-snapshot" : "stale-kept",
+          "load-failed",
+        );
         return this.sensitivePairs; // ảnh chụp CŨ nếu có, `null` nếu chưa từng nạp được
       } finally {
         // CHỈ nhả ô của CHÍNH mình: sau `reset()`, ô này có thể đang giữ lượt nạp MỚI hơn — xoá nó là
@@ -169,9 +289,9 @@ export class PermissionCatalogSnapshot {
    * Nuốt lỗi ở đây là chọn có ý thức: mất một dòng log còn hơn biến một sự cố ĐÃ XỬ LÝ thành reject
    * trên đường mà MỌI `can()` đi qua.
    */
-  private emitError(error: unknown, phase: "stale-kept" | "no-snapshot"): void {
+  private emitError(error: unknown, phase: CatalogDegradePhase, cause: CatalogDegradeCause): void {
     try {
-      this.onError?.(error, phase);
+      this.onError?.(error, phase, cause);
     } catch {
       /* hook quan sát hỏng KHÔNG được leo thang thành lỗi quyền */
     }

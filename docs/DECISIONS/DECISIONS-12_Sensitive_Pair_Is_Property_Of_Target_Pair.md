@@ -160,12 +160,72 @@ sensitive là **chủ đích** và phải cập nhật kỳ vọng test, KHÔNG 
 | --- | --- |
 | **D1 — không preload lúc boot** | `OnModuleInit` đọc DB biến DB thành phụ thuộc CỨNG lúc khởi động; API PROD hiện **boot được khi chưa có DB**. Nạp lười ở lần kiểm quyền đầu. |
 | **D2 — hỏng khi nạp** | Có ảnh chụp cũ + refresh lỗi ⇒ GIỮ ảnh cũ + `logger.error`, KHÔNG ném. Chưa có ảnh chụp + nạp lỗi ⇒ `pairIsSensitive = true` + `logger.error`, KHÔNG ném, **KHÔNG đóng dấu TTL** (blip DB không khoá 300s). Nhờ §5.1, `true` chỉ siết cổng wildcard ⇒ degradation có biên. **Cấm ném:** `can()` bọc try/catch fail-closed ⇒ một lỗi catalog sẽ deny TOÀN BỘ kiểm quyền = sự cố lớn hơn lỗ đang vá. |
-| **D3 — ảnh chụp ĐÃ NẠP mà cặp VẮNG ⇒ `false`** | Cặp không có trong catalog không thể là cặp sensitive của catalog. Chọn `true` sẽ biến mọi mock `getAllPermissions(): []` thành «mọi cặp sensitive» và làm hàng loạt spec đỏ vì lý do sai. |
+| **D3 — ảnh chụp ĐÃ NẠP _và KHÔNG RỖNG_ mà cặp VẮNG ⇒ `false`** | Cặp không có trong catalog không thể là cặp sensitive của catalog. ⚠️ **Thu hẹp bởi D9 (S14-SEC-CATALOGSNAP-HARDEN-1):** bản đầu không có vế «KHÔNG RỖNG» và biện minh bằng lý do TIỆN TEST («chọn `true` sẽ làm hàng loạt spec đỏ»). Lý do đó **sai đối tượng** — nó nói về `[]` (ảnh RỖNG), không phải về cặp VẮNG. Xem D9. |
 | **D4 — cặp truy vấn tự chứa `*` ⇒ `true`** | Chặn `*` thành đường lách chính bản vá. |
 | **D5 — TTL** | `PERMISSION_CATALOG_TTL_MS = 300_000`, refresh **await** khi hết hạn, kèm timeout cho query (DB treo không kéo `can()` treo theo). |
 | **D6 — single-flight** | `dashboard-widget-registry.service.ts` gọi `Promise.all(rows.map(… can()))` ⇒ ảnh chụp lạnh + N widget = N query song song. Giữ promise đang bay, trả lại cho mọi caller đồng thời. **Promise chia sẻ KHÔNG BAO GIỜ reject** — bọc try/catch BÊN TRONG, trả sentinel, xoá slot trong `finally`; để nó reject là bắn unhandled rejection trên đường **mọi** `can()` đi qua. |
 | **D7 — seam cho test là method PUBLIC trên `PermissionService`** | Ảnh chụp là state **PER-INSTANCE** (module-level làm mọi instance trong cùng file test dùng chung ảnh chụp bất kể repo nào nạp trước). `resetCatalogSnapshotForTest()` gọi qua `app.get(PermissionService)`. |
 | **D8 — không Valkey, KHÔNG móc `permission.changed`** | Ảnh chụp trong tiến trình, mỗi instance tự nạp ⇒ 0 khoá chia sẻ để lệch. `permission.changed` là sự kiện của **GRANT**, không phải catalog — nối vào đó là nối nhầm dây. |
+| **D9 — `rows.length === 0` là SUY BIẾN, không phải ảnh hợp lệ** _(S14-SEC-CATALOGSNAP-HARDEN-1)_ | Xem §5.4. |
+
+### 5.4 D9 — catalog RỖNG là trạng thái suy biến
+
+**Quyết định:** `load()` trả về `0` hàng ⇒ **KHÔNG** ghi ảnh, **KHÔNG** đóng dấu `loadedAtMs`, **CÓ** gọi
+`onError`, trả ảnh **CŨ** nếu có / `null` nếu chưa từng nạp (⇒ mọi cặp = sensitive = **SIẾT**).
+
+**Vì sao.** `permissions` là catalog **GLOBAL** do migration seed (không RLS, không thể trả PARTIAL —
+`permission.repository.ts:266-278`, `db/schema/permissions.ts:39-48`). «0 hàng» vì vậy không phải một phát
+biểu **nghiệp vụ** («hệ này không có cặp nhạy cảm nào») mà là một phát biểu **hạ tầng** («DB chưa seed /
+vừa bị xoá»). Coi nó hợp lệ là để một sự cố hạ tầng **tự tuyên bố** rằng không có gì cần bảo vệ — và
+đóng dấu tuyên bố đó suốt TTL 300s, **không một dòng log**.
+
+Bản trước bất đối xứng theo đúng chiều xấu: cùng một sự cố mà biểu hiện bằng **THROW** thì siết + có vết
+(D2); biểu hiện bằng **0 hàng** thì nới + im lặng + **được cache**. Và vì `dashboard-widget-gate.ts:58-63`
+cố ý không truyền `isSensitive`, `pairIsSensitive` là tín hiệu sensitive **duy nhất** của đường đó ⇒ lỗ
+`*:*` mở cặp sensitive dựng lại nguyên vẹn trong 300s. D9 xoá bất đối xứng ấy.
+
+**Vị ngữ là `rows.length`, TUYỆT ĐỐI không `next.size`.** `next.size === 0` trông như dọn dẹp vô hại
+(thậm chí «chặt hơn») nhưng nó biến **mọi** catalog không chứa cặp sensitive nào thành trạng thái suy
+biến — gồm cả các stub repo hợp lệ trong test. Có ca ghim ở `permission-catalog-snapshot.spec.ts`.
+**Hệ quả được CHỌN, không phải bỏ sót:** catalog **có** hàng mà **0** hàng `is_sensitive` (một migration
+hỏng xoá sạch cờ) là fail-OPEN mà D9 **không** bắt — vì không phân biệt được với một hệ hợp lệ không có
+cặp nhạy cảm nào.
+
+**Sàn thử-lại `PERMISSION_CATALOG_EMPTY_RETRY_MS = 5_000` — chỉ cho nhánh rỗng.** Nhánh `catch` (D2) cố ý
+thử lại **mỗi lượt** vì DB đang **chết**: mỗi lượt tự có giá (trần `timeoutMs`) và trạng thái **tự hết**
+khi DB sống lại. Nhánh rỗng thì ngược: DB **khoẻ**, query nhanh, trạng thái **không tự lành** nếu chưa ai
+seed ⇒ không có sàn thì mỗi `can()` = 1 `SELECT` + 1 `logger.error`, **mãi mãi**, trên hot-path mà mọi
+kiểm quyền đi qua (single-flight chỉ gộp lượt **song song**). 5s: ≪ TTL 300s nên không tái lập «khoá suy
+biến 300s» mà D2 cấm; ≫ thời gian một request. Đường gỡ **THẬT** có hai: sàn **tự hết hạn**, và
+`reset()` (D7) — `reset()` phải gỡ **cả** sàn, nếu không seam test mất tác dụng đúng lúc int-spec seed
+cặp mới rồi gọi `resetCatalogSnapshotForTest()`.
+
+Sàn **không** gỡ ở nhánh `catch`, có chủ ý: sàn được kiểm ở **đầu** `refresh()` nên `catch` không thể
+chạy trong cửa sổ sàn, và một sàn đã quá hạn là trơ. Cùng lập luận đó cho thấy dòng gỡ sàn ở nhánh nạp
+**LÀNH** là **phòng thủ, không phải một đường gỡ**: sàn nào mà một lượt nạp lành với tới được thì đã hết
+hạn từ trước. (Đo bằng đột biến: xoá dòng ấy — suite vẫn xanh. Giữ vì vô hại; **đừng** kể nó như một cơ
+chế nhả.)
+
+**Thứ tự `epoch` trước kiểm rỗng là BẤT BIẾN, có ca ghim.** Một lượt nạp đã lạc hậu mà đặt được
+`retryNotBeforeMs` sẽ khoá **thế hệ ảnh chụp MỚI** bằng sàn của thế hệ CŨ, không đường gỡ — đúng hình
+dạng M2, chỉ đổi tên biến. Đột biến «xoá dòng kiểm epoch» từng xanh toàn suite; nay có ca giết nó.
+**Đồng hồ lùi** (NTP) kéo dài cửa sổ đúng bằng bước lùi — cùng hạng rủi ro với TTL đã có, không thêm code.
+
+**Quan sát — hai chiều tách bạch.** `onError(error, phase, cause)`: `phase` (`stale-kept` | `no-snapshot`)
+= **KẾT QUẢ**, suy **duy nhất** từ `sensitivePairs === null`; `cause` (`load-failed` | `empty-catalog`) =
+**NGUYÊN NHÂN**. Nhét cause vào `phase` làm `degradedTo` **nói dối** ở ca «rỗng nhưng CÓ ảnh cũ» (kết quả
+là stale-kept, không phải siết). Message log phân nhánh theo `cause` — nhánh rỗng là một lượt nạp **THÀNH
+CÔNG**, gọi nó là «load failed» là ghi một dòng sai vào đúng chỗ quan sát duy nhất của nó.
+
+**Forensics lệch — đọc log phải biết.** Trong cửa sổ suy biến, mọi từ chối mang `reason: "deny-sensitive"`
+kèm `auditRequired: true` (`permission.decide.ts:136`), và chuỗi này **đi ra ngoài** qua
+`file_access_logs.denied_reason` (§5.2). Nhật ký sẽ nói «cặp này nhạy cảm» trong khi sự thật là «không đọc
+được catalog». Không đổi `reason` (đó là hợp đồng §5.2) — đối chiếu bằng dòng log `cause=empty-catalog`.
+
+**Hệ quả cho TEST:** một stub `getAllPermissions(): []` giờ **nói dối** (tuyên bố hạ tầng hỏng). Bảy stub
+như vậy đã đổi sang hàng canh dùng chung `test/helpers/permission-catalog-fixture.ts`. Cặp mà các spec đó
+kiểm vẫn để **VẮNG** ⇒ `false` theo D3 = y hệt hành vi trước D9; **không** hạ sàn, và **0** dòng `expect`
+phải đổi.
 
 **Cửa sổ ≤300s:** cặp sensitive seed **khi API đang chạy** có thể lọt tối đa một TTL. Chỉ nổ khi có holder
 wildcard (đo: 0). Migration đi kèm deploy ⇒ restart xoá ảnh chụp.

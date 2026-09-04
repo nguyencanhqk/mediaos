@@ -25,6 +25,7 @@ import {
   DASH_WIDGET_GATE_PAIR,
   DASH_WIDGET_MIN_DATA_SCOPE,
 } from "../../src/dashboard/dashboard-widget-catalog.const";
+import { sentinelCatalog } from "../helpers/permission-catalog-fixture";
 
 class CountingRepo implements IPermissionRepository {
   readonly hits = vi.fn<() => void>();
@@ -45,8 +46,11 @@ class CountingRepo implements IPermissionRepository {
   async getPermissionsByIds(): Promise<PermissionCatalogEntry[]> {
     return [];
   }
+  // ADR DECISIONS-12 D9 — catalog RỖNG là trạng thái SUY BIẾN (hạ tầng hỏng), không phải
+  // "không có cặp nhạy cảm nào". Spec này không đo sensitivity, nên nó trả một catalog KHÔNG
+  // RỖNG mà mọi cặp nó kiểm đều VẮNG ⇒ `false` theo D3 = y hệt hành vi trước D9.
   async getAllPermissions(): Promise<PermissionCatalogEntry[]> {
-    return [];
+    return sentinelCatalog();
   }
 }
 
