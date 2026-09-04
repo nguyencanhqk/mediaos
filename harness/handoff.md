@@ -4,6 +4,57 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
+## Phiên 2026-09-04 — S14-SEC-DASHGATE-WILDCARD-1 ĐÓNG SỔ: **PR #476 mở, CHƯA merge**
+
+Phiên trước để lại 2 commit trên nhánh `feat/s14-sec-dashgate-wildcard-1` mà **chưa mở PR, chưa đóng sổ
+ledger**. Phiên này làm nốt phần cổng + PR. Vùng ĐỎ ⇒ theo CLAUDE.md §9.4 **không auto-merge**, để
+người chốt.
+
+**Việc đáng kể nhất của phiên: cho gate chạy VÒNG HAI trên riêng `21fe3d20`.** Commit đó là bản vá
+_cho các phát hiện_ của vòng gate đầu — nên tự nó chưa từng qua cổng — mà nó lại sửa đúng **bất biến
+trung tâm của WO** (`auditRequired` hard-code `true` → SUY RA; cờ chảy vào `reveal = allow &&
+auditRequired`, lật nhầm một bit = **mask thành reveal**). Commit rủi ro nhất của WO là commit duy nhất
+không ai đọc. Đã đóng băng thành memory `fix-commit-for-review-findings-is-itself-ungated`.
+
+- **verdict PASS, 0 CRITICAL / 0 HIGH.** Reviewer dựng lại bảng chân trị `auditRequired` ĐỘC LẬP và
+  khớp: không tổ hợp nào lật true→false hay false→true, và đúng vì lý do **CẤU TRÚC** — biểu thức mới
+  CHÍNH LÀ vị từ vào-nhánh của bản tiền-vá, không phải may mắn. Bảng đầy đủ ở plan §11.1.
+- Xác nhận thêm: `epoch` không ABA (nhưng chỉ phủ đường TEST — `reset()` chỉ gọi từ test) · never-throw
+  kín (điểm duy nhất ngoài try là `this.now()`) · `canBatch` mảng-theo-chỉ-số loại lỗ `?? false` **về
+  mặt KIỂU**, không phải kỷ luật.
+
+**2 MEDIUM defer sang `S14-SEC-CATALOGSNAP-HARDEN-1` (đã seed, 485 WO).** Cả hai KHÔNG tới được với
+code sản phẩm hôm nay — reviewer chứng minh chứ không phỏng đoán:
+
+1. **`permission-catalog-snapshot.ts:137-143` — nạp THÀNH CÔNG mà RỖNG là hình dạng fail-OPEN DUY NHẤT**,
+   cache 300s, KHÔNG vết (`emitError` chỉ ở nhánh catch). Đối xứng ngược: cùng sự cố mà biểu hiện bằng
+   THROW thì siết + có log. Không tới được vì `SELECT` không trả PARTIAL và catalog là bảng global
+   không RLS ⇒ 0 hàng chỉ khi bảng thật sự rỗng. → memory `empty-success-is-the-fail-open-shape`.
+2. **`:131,150-157` — `inFlight` gán SAU khi thân có thể settle** ⇒ kẹt vĩnh viễn (fail-CLOSED nhưng là
+   DoS quyền tới khi restart). Không tới được vì `load` sản phẩm là method `async`.
+
+**⚠️ Bẫy cho WO kế:** ca ghim D3 (`permission-catalog-snapshot.spec.ts:54-62`) **CỐ Ý neo empty ⇒
+`false`** với lý do **tiện test** («chọn `true` sẽ làm hàng loạt spec đỏ vì lý do sai») — lý do vận
+hành-test, không phải lý do an ninh. Đó là `tests-can-pin-a-hole-open`: phải **sửa ca ghim**, không
+lách quanh. Blast radius đã đo sẵn để khỏi đo lại: ~9 stub repo khai `getAllPermissions`, 2 khai kiểu
+`Promise<[]>` (`permission.service.reveal.spec.ts:80`, `permission.service.spec.ts:137`).
+
+**Plan doc trước đó dừng ở §9 và KHÔNG ở đâu ghi lại 5 phát hiện đã vá** — kể cả cái HIGH lật bất biến.
+WO sau đọc plan sẽ tưởng bất biến gốc vẫn đúng. Đã bổ sung **§10** (5 vá vòng 1) + **§11** (vòng 2 +
+bảng chân trị + defer).
+
+`bash harness/check.sh --all --lane-db=s14dashgate`: **9/9 XANH**, không banner. FORCE RLS 0 bảng
+thiếu · append-only 0 grant UPDATE/DELETE trên 9 bảng ledger.
+
+**Việc còn lại:** chờ CI PR #476 → **người chốt merge** (không gắn auto-merge). Sau merge: `ledger.mjs
+done` đã ghi rồi, nhưng nhớ DROP lane `mediaos_s14dashgate`. `S14-SEC-CAPWILDCARD-1` (FE `useCan` còn
+fallback `caps['*:*']`) vẫn `depends_on` WO này ⇒ mở khoá sau merge.
+
+**Friction:** (1) `node harness/ledger.mjs --help` không in usage mà **render cả timeline** — đọc
+docblock đầu file thay vì gọi `--help`. (2) Lặp lại friction phiên trước: heredoc dài + backtick vỡ ở
+Bash tool ⇒ dùng `python - << EOF` rồi `npx prettier --write` tay (hook prettier không chạy khi python
+ghi thẳng file). Friction này đã xuất hiện **≥2 lần** ⇒ đáng gọi `skill-smith`.
+
 ## Phiên 2026-09-03 (chiều muộn) — S18-AUTH-RESETCLEARS-1
 
 **Đóng sổ trước đó:** `S18-AUTH-UNLOCK429-1` đã merge (PR #472, `13219b1b`) nhưng ledger chưa có mốc
@@ -24,6 +75,7 @@ bộ số đo: `docs/plans/S18-AUTH-RESETCLEARS-1.md` (§8 bản vá sau plan-re
   chứng minh quyền kiểm soát yếu tố thứ hai.
 
 **Ba giả định của plan SAI khi đo thật (plan-reviewer bắt, đã sửa cả plan lẫn test):**
+
 1. Ca int-spec bucket `acct` viết "2 IP" là **bất khả thi** — `login()` trả 429 TRƯỚC
    `recordLoginFailure` nên mỗi IP chỉ góp tối đa `LOGIN_MAX_ATTEMPTS`=5 vào ngưỡng 20 ⇒ phải rải
    **4 IP × 5**, và ca đó phải gọi `auth.login(...,{ip})` TRỰC TIẾP (supertest cho `req.ip` hằng số).
@@ -84,7 +136,7 @@ plan đã trả lời hết. Dừng ở đây là quyết định của owner v�
      `paths` ⇒ cố ý không làm; nợ đã ghi vào plan §1 + §6. Sau WO này AUTH có HAI hợp đồng 429.
   2. **Mock response của `all-exceptions.filter.spec.ts:32` chỉ có `status`** — gọi `setHeader` trong
      filter sẽ làm ĐỎ cả 5 ca đang xanh. Plan §4.0 là bước-0 bắt buộc: vá mock TRƯỚC.
-  3. **Census mock `LoginRateLimiter` sai** — `grep -l` bắt cả file *dùng* limiter thật. Đúng là 4 chỗ /
+  3. **Census mock `LoginRateLimiter` sai** — `grep -l` bắt cả file _dùng_ limiter thật. Đúng là 4 chỗ /
      3 file; và `two-factor.service.spec.ts` mock RỖNG (`{} as never`) phải dựng mới.
   4. `done_when[1]` (ca ĐO THỜI GIAN 429 vs sai-mật-khẩu) chưa được phủ → plan §4.4 `§floor` (đo p50,
      N=15/nhóm, ngưỡng 60ms theo jitter 80ms).
@@ -178,7 +230,7 @@ hiện **0 READY / 0 in-progress** — hết WO, wave sau chờ owner seed. Lane
 - **Hai chỗ SPEC-13 lệch bản ship, làm theo CODE THẬT:** (1) ba `kind` lỗi trong bảng §12
   (`employee-not-found`/`maintenance-not-found`/`readonly-field`) **không bao giờ được phát ra** — bản ship
   phát 19 kind khác; map theo spec sẽ đẻ 3 nhánh chết + sót 9 kind. (2) ô FSM `Under Maintenance → Under
-  Maintenance: revoke` có thật trong `asset-fsm.ts`; bỏ nó là dựng **ngõ cụt** (còn người giữ ⇒ không thu
+Maintenance: revoke` có thật trong `asset-fsm.ts`; bỏ nó là dựng **ngõ cụt** (còn người giữ ⇒ không thu
   hồi được mà cũng không thanh lý được vì ERR-008).
 - **Gate lối vào ASSET đòi ĐỦ CẢ HAI** `access:asset` + `view:asset` (lệch tiền lệ GOAL vốn chỉ dùng
   `access`) — trang tải `GET /assets` = `view:asset`, gate bằng mình cặp access là dựng lại lỗ đã vá ở
@@ -236,7 +288,7 @@ auto-mode classifier chặn lệnh này tới khi owner nói duyệt.
   1 vòng + vá là dừng. `S11-ASSET-BE-1` và `S11-ROOM-BE-1` nâng 🔴 (data-scope ép ở service + audit = khuôn GOAL-BE-1).
 - ROOM-DEC-001 chốt sau khi ĐO: `logs/measure-meeting-legacy.mjs` (chỉ SELECT, đọc env trong tiến trình) — `--env .env.prod`
   bị classifier chặn 2 lần, `--env .env` chạy được và trỏ cùng DB `mediaos` (PROD + dev-online dùng chung): **0 hàng cả 5
-  bảng meeting_***, 6 cặp quyền meeting* × 2 grant, 0 guard. Kết luận: tái dụng+ALTER `meeting_rooms`, THAY
+  bảng meeting\_\***, 6 cặp quyền meeting\* × 2 grant, 0 guard. Kết luận: tái dụng+ALTER `meeting_rooms`, THAY
   `meetings`/`meeting_attendees` bằng `room_bookings`/`room_booking_attendees`, DROP 4 bảng (DB-16 §3.0/§9).
 - Việc kế theo thứ tự: merge #433 → rebase + PR ROOM-DOC-1 (áp verdict plan-reviewer ROOM nếu còn BLOCK) → mở
   `S11-ASSET-DB-1` 🔴 (planner sonnet xhigh → plan-reviewer → Opus; head migration thật lúc đó).
@@ -256,11 +308,12 @@ ngay lập tức — phải `git rebase --onto origin/master <sha-cũ-của-base
 ### #411 `wo/s10-sec-loginlog429-1` — KI-047 + KI-048 (🔴)
 
 Vá theo **LUẬT**, không vá từng chỗ:
+
 > Đường DỰNG NÊN cái khoá phải để lại vết; đường ĐANG BỊ KHOÁ ghi 0 hàng.
 
 Luật này đóng CẢ HAI KI thay vì để chúng đánh nhau (KI-047 đòi ghi thêm, KI-048 kêu ghi quá nhiều).
 
-**`stepUp` KHÔNG phải lỗ** — nhánh khoá ghi 0 hàng là *nửa (a)* của bản vá A09 chống bồi hàng
+**`stepUp` KHÔNG phải lỗ** — nhánh khoá ghi 0 hàng là _nửa (a)_ của bản vá A09 chống bồi hàng
 append-only, có docblock ký sẵn (`step-up.service.ts:52-63`). Ghi vào đó là **hoàn tác** nó. Sổ
 KI-047 đếm nó là "đường thứ 5 không ghi" — đếm đúng, kết luận sai.
 
@@ -330,6 +383,7 @@ không đụng code sản phẩm) và đúng. Đừng đọc "BLOCK" thành "có
 **Hai PR XẾP CHỒNG, chưa merge — #409 là base của #410. Merge #409 TRƯỚC.**
 
 ### #409 `gov/dot3-seed-wo` — seed (CI xanh toàn bộ)
+
 6/8 món của bảng Đợt 3 có số hiệu KI nhưng KHÔNG có WO ⇒ vô hình với auto-loop. Seed 5 WO
 (backlog 391 → 396): `S10-FND-BODYVALIDATE-1` (KI-068) · `S10-SEC-LOGINLOG429-1` (KI-047+KI-048,
 **gộp** vì cùng `auth.service.ts` + cùng bảng `login_logs`) · `S10-HR-EMPPAGE-1` (KI-010) ·
@@ -341,6 +395,7 @@ phải 5) ⇒ **5 đường không ghi `login_logs`** (không phải 4). Điểm
 **`verifyTwoFactorLogin` KHÔNG tồn tại** — hàm thật `completeTwoFactorLogin` (`auth.service.ts:452`).
 
 ### #410 `wo/s10-fnd-bodyvalidate-1` — thi công 3.1, `check.sh --lane-db` XANH (api 566/566)
+
 KI-068 **ĐÓNG**. Vá hướng (a): `api-keys.dto.ts` + `files.dto.ts` (`createZodDto`). 3/4 route trước
 chỉ là SUY LUẬN, nay đã **ĐO bằng HTTP** — cả ba 500 + `ZodError` → 400
 (`test/integration/files-http-validate.int-spec.ts`, spec `files` đầu tiên dùng supertest).
@@ -354,6 +409,7 @@ chính lên #409, cố ý KHÔNG sửa lịch sử để giữ dấu vết "số
 CHƯA ĐO** ⇒ cấp số thay vì vá mù. Hàng KI-068 ghi rõ dấu gạch chỉ phủ **kênh BODY**.
 
 ### Còn lại của Đợt 3 (theo thứ tự đã xếp)
+
 `S10-SEC-LOGINLOG429-1` (🔴 3.3+3.4) → `S10-SEC-ROLEMEMBERDEL-1` (🔴 3.5) → `S10-HR-EMPPAGE-1` (3.6)
 → `S10-SEC-FKCATALOG-1` (🔴 CROWN 3.7) → `S10-QA-ROUTEHTTP-2` (3.8, chạy CUỐI để đo mẫu số đã ổn định).
 
@@ -418,8 +474,8 @@ chạy 1 lần là xong — đổi phiên là đúng thuốc.)_
 fix chuẩn là type-assertion TẠI call-site kèm comment (role-admin-api.ts), đừng đổi apiFetch.
 (3) 🆕 **Classifier chặn số đo PROD 5 lần — nguyên nhân KHÔNG phải "đụng DB PROD"** mà là **chuỗi kết
 nối đi qua DÒNG LỆNH** (`PROD_DATABASE_URL="$(node -e '…đọc .env.prod…')" node script.mjs`). Chạy được
-ngay khi bọc wrapper **tự đọc `.env.prod` TRONG tiến trình** rồi `await import()` bộ đo. Ghi lần 2 (phiên
-trước đã chặn 3 lần rồi bỏ cuộc) ⇒ **ứng viên `skill-smith`**. Bẫy phụ: script ở `c:\tmp\` không resolve
+ngay khi bọc wrapper **tự đọc `.env.prod`TRONG tiến trình** rồi`await import()`bộ đo. Ghi lần 2 (phiên
+trước đã chặn 3 lần rồi bỏ cuộc) ⇒ **ứng viên`skill-smith`**. Bẫy phụ: script ở `c:\tmp\` không resolve
 được `import pg` — phải đặt trong cây repo (dùng `logs/`, đã gitignore) để với tới `node_modules` gốc.
 
 ## Phiên 2026-08-05 (session b74ca3cc) — `S7-SEC-ROLE2FA-UI-1` → PR #345
@@ -433,7 +489,7 @@ trước đã chặn 3 lần rồi bỏ cuộc) ⇒ **ứng viên `skill-smith`*
 
 Ai đọc `roleToFormValues()` hard-code `false` cũng thấy "hiển thị sai". Lớp thứ hai mới đắt: giá trị
 prefill **cũng là `defaultValues` của react-hook-form**, mà patch chỉ gửi field **dirty**. Mặc-định-
-`false` ⇒ tick-rồi-bỏ-tick trả giá trị *về đúng mặc định* ⇒ RHF **xoá dirty** ⇒ field rơi khỏi PATCH.
+`false` ⇒ tick-rồi-bỏ-tick trả giá trị _về đúng mặc định_ ⇒ RHF **xoá dirty** ⇒ field rơi khỏi PATCH.
 Kết quả: màn chỉ **BẬT** được, không **TẮT** được — và không có lỗi nào hiện ra.
 
 ⇒ Với form dirty-patch, **mọi ô prefill sai đều là lỗ ghi một chiều**, không phải lỗi cosmetic. Sửa
@@ -445,7 +501,7 @@ phủ** — UI không gọi tới được thì test cũng không nghĩ ra để
 
 `.optional()`/`.default(false)` "cho an toàn deploy" chính là tái tạo lỗ vừa vá (mặc-định-ngầm). Đã
 chọn **required** + ratchet ở `user-admin.spec.ts` từ chối hàng thiếu cờ. Giá phải trả là thật:
-**BE phải lên TRƯỚC FE**, nếu không `apiFetch` ném ZodError cho *mọi* consumer `/auth/roles`
+**BE phải lên TRƯỚC FE**, nếu không `apiFetch` ném ZodError cho _mọi_ consumer `/auth/roles`
 (7 màn, gồm cả gán vai). Fail-closed nên chấp nhận được — nhưng đây là **luật cho mọi PR thêm field
 vào một read-schema đã có**, không riêng PR này.
 
@@ -649,7 +705,7 @@ xác nhận đỏ, khôi phục) — không có vá nào chỉ "xanh sau khi s�
 2. **Hành vi gửi lại tệp sang phòng thứ hai** làm mất `url` ở phòng thứ nhất — quyết định SẢN PHẨM: chấp
    nhận (an toàn, gây bất ngờ) hay đổi tầng GHI để gửi-lại tạo **bản sao tệp** thay vì link thứ hai.
 3. **~15 MEDIUM** còn tồn. Đáng gom nhất: 4 mục least-privilege của L3 — `GRANT UPDATE(visible_from_seq)`
-   là quyền CHẾT đang gác bất biến CHAT-DEC-008 bằng *một unit test*; `users` còn DELETE ⇒ cascade xoá
+   là quyền CHẾT đang gác bất biến CHAT-DEC-008 bằng _một unit test_; `users` còn DELETE ⇒ cascade xoá
    CỨNG `chat_messages` (bảng append-only). Một migration expand-contract là gọn.
 
 ### Chưa xong / chưa chắc
@@ -658,7 +714,7 @@ xác nhận đỏ, khôi phục) — không có vá nào chỉ "xanh sau khi s�
 - Lô int-spec thứ hai **đỏ 1 lần trong 4 lượt**, KHÔNG bắt được tên ca; 3 lượt sau xanh sạch. Chưa kết
   luận được — đừng đọc thành "đã ổn định".
 - Lệnh chạy lại: `set -a; . ./.env; set +a; unset DATABASE_URL DATABASE_DIRECT_URL DATABASE_WORKER_URL;
-  export LANE_DB=mediaos_outboxfifo` (lane này còn sống, nhớ `DROP DATABASE` khi xong — pgdata từng phình).
+export LANE_DB=mediaos_outboxfifo` (lane này còn sống, nhớ `DROP DATABASE` khi xong — pgdata từng phình).
 
 ## Phiên 2026-08-02 (session b817bc82) — chuỗi cổng G4→G6 + NGHIỆM THU engine phép ĐẠT
 
@@ -696,7 +752,7 @@ xác nhận đỏ, khôi phục) — không có vá nào chỉ "xanh sau khi s�
 - **Và phải kiểm CẢ HAI đầu luồng:** vá `submit` xong mới lộ `approve` chặn cứng ở `used + delta <= total`, không đọc trần ⇒ đơn nợ phép **nộp được nhưng không bao giờ duyệt được**. Vá một đầu = để lại tính năng bấm-không-chạy.
 - **Doc vs thực tế lệch 3 chỗ, 1 chỗ chặn go-live OAN — CHƯA SỬA:** `RELEASE-10` ô #8 nói PROD tồn đọng `0535` (thực tế DB **203/203, ở head**) · **`KI-006` đánh dấu chặn go-live** nhưng `LMS_NOTI_TOKEN` **đã đặt** ở cả `.env` lẫn `.env.prod` và có notification `LMS_ENROLLMENT_APPROVED` thật 31/07 ⇒ nên ĐÓNG · `KI-003` (3 loại nghỉ trùng chữ thường) thực tế 8 loại code HOA, sạch.
 - **`ops-alert-check` từng trả CRIT GIẢ:** gate bằng mtime file rồi đếm mọi chữ `ERROR` trong 2MB cuối, không nhìn timestamp dòng ⇒ 5 ngày lịch sử thành "1787 lỗi trong 60 phút". Đã vá ở #321 (đếm theo timestamp từng dòng + xoay log; `api.out.log` từng phình **721 MB**).
-- **Bổ sung 2026-08-02 — hai quyết định phép ĐÃ ÁP THẬT trên PROD, kèm một lần đổi ý:** `SICK` bỏ trừ quỹ (**S-1**, đúng kế hoạch) · `COMPENSATORY` **cũng bỏ trừ quỹ** — tức phương án **C-2**, KHÔNG phải C-1 như chốt ban đầu. Owner chốt giữ nguyên ⇒ ghi thành **`KI-057`** (`S3` 19→20). Hệ quả phải nhớ: **không còn cơ chế nào đối chiếu nghỉ bù với giờ làm thêm**, chốt chặn duy nhất là bước DUYỆT của quản lý — thông báo go-live phải nói rõ điều này. Gỡ về C-1 bằng 1 thao tác: `/leave/types` → `COMPENSATORY` → tick lại *Trừ số dư phép*.
+- **Bổ sung 2026-08-02 — hai quyết định phép ĐÃ ÁP THẬT trên PROD, kèm một lần đổi ý:** `SICK` bỏ trừ quỹ (**S-1**, đúng kế hoạch) · `COMPENSATORY` **cũng bỏ trừ quỹ** — tức phương án **C-2**, KHÔNG phải C-1 như chốt ban đầu. Owner chốt giữ nguyên ⇒ ghi thành **`KI-057`** (`S3` 19→20). Hệ quả phải nhớ: **không còn cơ chế nào đối chiếu nghỉ bù với giờ làm thêm**, chốt chặn duy nhất là bước DUYỆT của quản lý — thông báo go-live phải nói rõ điều này. Gỡ về C-1 bằng 1 thao tác: `/leave/types` → `COMPENSATORY` → tick lại _Trừ số dư phép_.
 - **Bổ sung 2026-08-02 — `S6-LEAVE-TYPEADMIN-1` (#323) đã ship và ĐÃ CỨU đúng tình huống nó sinh ra để cứu:** màn Loại nghỉ trước đó là **cửa một chiều** (đặt `inactive` xong không bật lại được vì màn quản trị đọc route active-only). Sự cố thật: `SICK` + `COMPENSATORY` bị đặt `inactive` lúc 13:54Z, nhân viên mất luôn quyền xin nghỉ ốm. Sau khi #323 lên PROD, owner **bật lại bằng chính màn hình vừa vá** lúc 18:38Z — có vết `LeaveTypeUpdated` chuẩn, không phải vá tay DB. **Bẫy CI kèm theo:** thêm route ⇒ ĐỎ cổng kiểm kê (`route MỚI chưa có trong artifact`); phải `ROUTE_CENSUS_WRITE=1` regen `docs/_review/S6-SEC-ROUTEMAP-1-route-census.json`. Chạy `src/**` KHÔNG bắt được — cổng này nằm ở `test/foundation/**`.
 - **CÒN TREO — đọc trước khi làm tiếp:**
   1. **PROD chưa nhận gì cả**: vẫn `14306b8a` / `migrationHead 0535` / `leave_balances` = 0. Bốn WO chỉ nằm trong repo.
@@ -754,7 +810,7 @@ xác nhận đỏ, khôi phục) — không có vá nào chỉ "xanh sau khi s�
 
 ## Phiên 2026-07-19f (session 45cf048b) — đợt D1 S5-TASK-WORKSPACE-1 SHIPPED (#243 → master `1cd45662`)
 
-- **Ship:** vỏ workspace dự án — tab bar `?tab=` deep-link (validateSearch trên route, back/forward đúng; tab Báo cáo/Hoạt động ẩn theo useCanExact) + toolbar lọc chung Bảng↔Danh sách (state ở vỏ; 2 tab lọc qua CÙNG helper `workspace-constants` ⇒ parity theo cấu trúc) + rail avatar multi-select (`pinSelectedInSummary` ghim người đang chọn count-0). **BE build kèm TASK-API-601** GET /projects/:id/activity (sổ mã có sẵn, chưa ai build; int-spec lane DB 5/5) + vá 2 nguồn ghi activity thiếu `project_id` (TASK_WATCHER_REMOVED · TASK_FILE_*).
+- **Ship:** vỏ workspace dự án — tab bar `?tab=` deep-link (validateSearch trên route, back/forward đúng; tab Báo cáo/Hoạt động ẩn theo useCanExact) + toolbar lọc chung Bảng↔Danh sách (state ở vỏ; 2 tab lọc qua CÙNG helper `workspace-constants` ⇒ parity theo cấu trúc) + rail avatar multi-select (`pinSelectedInSummary` ghim người đang chọn count-0). **BE build kèm TASK-API-601** GET /projects/:id/activity (sổ mã có sẵn, chưa ai build; int-spec lane DB 5/5) + vá 2 nguồn ghi activity thiếu `project_id` (TASK*WATCHER_REMOVED · TASK_FILE*\*).
 - **HOÃN "xuất khẩu"** (toolbar): chưa có cặp `export:task` + SPEC-06 §14.19 đòi ghi activity log khi export — CSV client-side sẽ lách log. Đã ghi backlog src; cần WO riêng nếu owner muốn.
 - **Kế (thứ tự owner đã chốt trong task-ux-reference-benchmark):** 🔴 **đợt C quyền per-project** (data_scope Project chưa có trong engine — crown, cần plan→plan-reviewer) · `S5-TASK-DETAIL-1` · `S5-TASK-SUBTASK-1` · WO dọn follow-up (F1 orphan-state · 23505→409 · flake attendance-leave-sync app.close-order · S5-LEAVE-DEADCODE-1 🔴 · S5-SEQ-HARDEN-1 🔴) · chuỗi QA S5 (6 WO READY).
 - **Friction:** (1) classifier CHẶN `gh pr merge --admin` cho phiên tự hành (lần ~4) — flow ổn định giờ là: PR + CI xanh + đưa lệnh merge cho owner. (2) vitest full-suite api segfault/IPC crash giữa run dài (máy này) — chạy CHUNK theo module là đủ bằng chứng local, CI là gate cuối. (3) Dev-online muốn thấy D1 cần owner chạy `m dev-online-fast` (không migration).
@@ -783,7 +839,7 @@ xác nhận đỏ, khôi phục) — không có vá nào chỉ "xanh sau khi s�
 
 ## Friction / DEBT
 
-1. ✅ **ĐÃ FIX (commit `3347358`)** — Reviewer ecc:* không tồn tại. `pickReviewers` giờ map vai-trò→agent CÓ THẬT (DB→rls-tenant-isolation-tester · security/silent-failure→general-purpose · react/typescript→completion-evaluator), gom theo agent (đa góc nhìn, không spawn trùng); reviewPrompt ép read-only mạnh hơn. Verified bằng dryRun. (Skills `ecc:santa-method`/`quality-gate` + build-resolver `ecc:*` vẫn là prompt-text, KHÔNG spawn nên không crash — để sau nếu cần.)
+1. ✅ **ĐÃ FIX (commit `3347358`)** — Reviewer ecc:_ không tồn tại. `pickReviewers` giờ map vai-trò→agent CÓ THẬT (DB→rls-tenant-isolation-tester · security/silent-failure→general-purpose · react/typescript→completion-evaluator), gom theo agent (đa góc nhìn, không spawn trùng); reviewPrompt ép read-only mạnh hơn. Verified bằng dryRun. (Skills `ecc:santa-method`/`quality-gate` + build-resolver `ecc:_` vẫn là prompt-text, KHÔNG spawn nên không crash — để sau nếu cần.)
 2. ✅ **ĐÃ FIX (Wave 2a, `parallel-lanes.mjs` CHƯA commit — xem cảnh báo reframe)** — workflow drop lane âm thầm khi stage1 (plan) trả `null` (lane skipPlan/non-crown): CONSOLE-1 ×2 + acct2fe (lần 3). Root-cause: pipeline drop item khi 1 stage trả falsy. Fix: stage1 trả sentinel `{__noPlan}` thay null (giữ item sống tới Implement), stage2 quy đổi sentinel→null cho prompt. Crown không ảnh hưởng (luôn có plan thật). Validate syntax OK (async-IIFE wrap). acct2fe Wave 2a dính bug TRƯỚC khi vá → cứu bằng Agent-tool workaround.
 3. **Review agent `general-purpose` vượt quyền read-only**: đã Edit file acct2 dù dặn read-only (có quyền Edit). → dùng agent read-only (`Explore`/`rls-tenant-isolation-tester`) cho review, hoặc ràng buộc tool.
 4. **DEBT — acct2 repo hardening CHƯA áp** (reviewer đề xuất, đã discard vì chưa review): thay `.select()`/`.returning()` → tập cột tường minh `ADMIN_USER_COLUMNS` + type `AdminUserRow` trong `admin-users.repository.ts` (+ chỉnh `service.ts`/`service.spec.ts`) → repo KHÔNG fetch `password_hash` (defense-in-depth #3). Master hiện dùng `select()`+toDto-strip — ĐÃ verify an toàn (test chứng minh không rò), nên đây chỉ là tăng cường. ~15', cần re-verify.
