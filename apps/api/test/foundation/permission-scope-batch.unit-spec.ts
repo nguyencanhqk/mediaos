@@ -21,6 +21,7 @@ import type {
   ObjectGrant,
   PermissionCatalogEntry,
 } from "../../src/permission/permission.types";
+import { sentinelCatalog } from "../helpers/permission-catalog-fixture";
 
 /** Mirror `ScopeMockRepo` của data-scope.service.spec.ts, thêm bộ đếm để ĐO round-trip. */
 class CountingScopeRepo implements IPermissionRepository {
@@ -53,8 +54,11 @@ class CountingScopeRepo implements IPermissionRepository {
   async getPermissionsByIds(): Promise<PermissionCatalogEntry[]> {
     return [];
   }
+  // ADR DECISIONS-12 D9 — catalog RỖNG là trạng thái SUY BIẾN (hạ tầng hỏng), không phải
+  // "không có cặp nhạy cảm nào". Spec này không đo sensitivity, nên nó trả một catalog KHÔNG
+  // RỖNG mà mọi cặp nó kiểm đều VẮNG ⇒ `false` theo D3 = y hệt hành vi trước D9.
   async getAllPermissions(): Promise<PermissionCatalogEntry[]> {
-    return [];
+    return sentinelCatalog();
   }
 }
 

@@ -546,6 +546,43 @@ describe("PermissionService — bơm pairIsSensitive từ catalog (call site KH�
     expect((call?.[1] as { phase?: string } | undefined)?.phase).toBe("no-snapshot");
   });
 
+  it("D9 — catalog RỖNG ⇒ dòng log nói ĐÚNG SỰ THẬT (không phải «load failed»), kèm cause", async () => {
+    // Nhánh rỗng là một lượt nạp THÀNH CÔNG. Dùng lại message «load failed» là ghi một dòng SAI vào
+    // đúng chỗ quan sát duy nhất của nhánh này ⇒ D9 chỉ «có vết» trên giấy.
+    //
+    // Ca này cũng ghim rằng hai message KHÁC nhau: ca `catalog nạp HỎNG` ở trên tìm chuỗi
+    // "catalog snapshot load failed", nên «đồng bộ hoá» hai message sẽ làm MỘT trong hai ca đỏ.
+    class EmptyCatalogRepo extends StubRepo {
+      override async getAllPermissions(): Promise<PermissionCatalogEntry[]> {
+        return [];
+      }
+    }
+    const svc = new PermissionService(new EmptyCatalogRepo([scoped("*", "*")]));
+    const spy = vi.spyOn(svc["logger"], "error").mockImplementation(() => undefined);
+
+    const d = await svc.can({
+      userId: U,
+      companyId: CO,
+      action: SENS_ACTION,
+      resourceType: SENS_TYPE,
+    });
+
+    // Suy biến về phía SIẾT — y hệt nhánh THROW, đối xứng đúng.
+    expect(d.allow).toBe(false);
+
+    const call = spy.mock.calls.find((c) => String(c[0]).includes("EMPTY (0 rows)"));
+    expect(call, "thiếu dòng log của nhánh catalog RỖNG").toBeDefined();
+    const meta = call?.[1] as { phase?: string; cause?: string; degradedTo?: string } | undefined;
+    expect(meta?.phase).toBe("no-snapshot");
+    expect(meta?.cause).toBe("empty-catalog");
+    expect(meta?.degradedTo).toBe("pairIsSensitive=true (siết)");
+
+    // KHÔNG được đi nhầm sang message của nhánh THROW.
+    expect(spy.mock.calls.some((c) => String(c[0]).includes("catalog snapshot load failed"))).toBe(
+      false,
+    );
+  });
+
   it("`onError` NÉM cũng không được biến lỗi đã xử lý thành reject (hợp đồng never-throw)", async () => {
     // Transport log hỏng là chuyện có thật. Nếu nó ném, promise single-flight reject ⇒ mọi caller
     // đang chờ chung lượt đó (vd Promise.all của dashboard) nhận reject thay vì sentinel.

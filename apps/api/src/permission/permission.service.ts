@@ -320,14 +320,28 @@ export class PermissionService {
    */
   private readonly catalog = new PermissionCatalogSnapshot({
     load: () => this.repo.getAllPermissions(),
-    onError: (error, phase) => {
+    onError: (error, phase, cause) => {
       // Luật quan sát: nhánh suy biến phải ĐỂ LẠI VẾT. `no-snapshot` là nhánh SIẾT (mọi cặp coi như
       // sensitive) — im lặng ở đây là để hệ thống từ chối quyền vì lý do hạ tầng mà không ai biết.
-      this.logger.error("permission catalog snapshot load failed", {
-        error: error instanceof Error ? error.message : String(error),
-        phase,
-        degradedTo: phase === "no-snapshot" ? "pairIsSensitive=true (siết)" : "ảnh chụp CŨ",
-      });
+      //
+      // Message phân nhánh theo NGUYÊN NHÂN: nhánh rỗng là một lượt nạp THÀNH CÔNG, gọi nó là "load
+      // failed" là ghi một dòng sai sự thật vào đúng chỗ quan sát duy nhất của nhánh đó.
+      //
+      // ⚠️ Chuỗi nhánh THROW giữ NGUYÊN TỪNG KÝ TỰ — `permission.decide.pair-sensitive.spec.ts` tìm
+      // dòng log bằng `includes("catalog snapshot load failed")`. Đừng «đồng bộ hoá» hai message.
+      this.logger.error(
+        cause === "empty-catalog"
+          ? "permission catalog snapshot is EMPTY (0 rows) — degenerate"
+          : "permission catalog snapshot load failed",
+        {
+          error: error instanceof Error ? error.message : String(error),
+          phase,
+          cause,
+          // SUY RA từ `phase` — nguồn DUY NHẤT của KẾT QUẢ. Không hard-code theo `cause`: một sự cố
+          // rỗng vẫn có thể là `stale-kept` (giữ ảnh cũ), không phải lúc nào cũng siết.
+          degradedTo: phase === "no-snapshot" ? "pairIsSensitive=true (siết)" : "ảnh chụp CŨ",
+        },
+      );
     },
   });
 
