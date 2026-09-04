@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-04 06:54Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-04 07:19Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -56,7 +56,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `feat/s14-sec-dashgate-wildcard-1` · **file đang đổi (dirty)**: 0
+- **branch**: `master` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 235 — `0568_s13payrolldash1_widget_payroll_cost` (236 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -65,9 +65,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
-| `025e1420` | 2026-09-04 | docs(permission): ghi vòng review + defer 2 MEDIUM hardening sang WO riêng |
-| `21fe3d20` | 2026-09-04 | fix(permission): vá 4 phát hiện review — auditRequired SUY RA, epoch guard, onError không ném |
-| `6405a25c` | 2026-09-04 | fix(permission): S14-SEC-DASHGATE-WILDCARD-1 — grant `*:*` không còn mở được cặp SENSITIVE |
+| `092fc6e7` | 2026-09-04 | fix(permission): S14-SEC-DASHGATE-WILDCARD-1 — grant `*:*` không còn mở được cặp SENSITIVE (#476) |
 | `61696e88` | 2026-09-04 | feat(auth): S18-AUTH-RETRYAFTER-1 — 429 đăng nhập mang `retryAfterSec` + đếm ngược mm:ss ở màn đăng nhập (#474) |
 | `20452f0c` | 2026-09-04 | fix(harness): chunk runner bỏ chạy 20 spec tĩnh — bộ lọc thiếu họ `*.unit-spec.ts` (#475) |
 | `dc500b29` | 2026-09-04 | feat(auth): S18-AUTH-RESETCLEARS-1 — đặt lại mật khẩu thì gỡ luôn khoá đăng nhập (429) (#473) |
@@ -77,6 +75,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `fbc00deb` | 2026-09-03 | feat(chat): S17-CHAT-UX2-FE-2 — hội thoại v2 (bong bóng hai phía · thanh tác vụ nổi · đã-xem avatar · hero · phím tắt) (#471) |
 | `d2c70c1d` | 2026-09-03 | chore(harness): đóng sổ S17-CHAT-UX2-DOC-1 — PR #464 đã merge, gỡ chặn oan 8 WO S17 |
 | `6fd89367` | 2026-09-03 | chore(docs): regen STATUS + plans/INDEX sau merge #469 + #470 — S14-PERF-DASHACTOR-1 done, 0 đang làm, 5 READY |
+| `9cff2d13` | 2026-09-03 | perf(permission): S14-PERF-DASHACTOR-1 — gộp 4 bản gateOrThrow + batch scope 1 fetch/N decide (12→7 round-trip) (#469) |
+| `b2dc9964` | 2026-09-03 | chore(deps): gỡ 4 advisory HIGH fast-uri — cổng Dependency scan xanh trở lại (0 HIGH/CRITICAL) (#470) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
