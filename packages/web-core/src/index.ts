@@ -50,6 +50,10 @@ export {
   type ErrorUiBehavior,
   type ErrorUiMapping,
   type ToastFn,
+  // S14-FE-DEBT-1 — bản chung cho lỗi mang `kind` (asset/payroll/recruit/room)
+  readDetailFields,
+  parseKindError,
+  type KindErrorInfo,
 } from "./lib/error-mapper";
 
 // API types (FRONTEND-04 §9) — NAMED re-export; no wildcard (contracts exports type ApiError)

@@ -5,7 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Plus, RefreshCw } from "lucide-react";
 import { payrollApi, payrollKeys, useCan } from "@mediaos/web-core";
 import type { PayrollPeriodDto, PayrollPeriodStatus } from "@mediaos/contracts";
-import { Button, DataTable, EmptyState, Input, PageHeader, Select } from "@mediaos/ui";
+import { Button, DataTable, EmptyState, Input, PageHeader, PaginationFooter, Select } from "@mediaos/ui";
 import { PAYROLL_ENGINE_PAIRS, PAYROLL_PAGE_SIZE, PAYROLL_PERIOD_STATUSES } from "./constants";
 import { PayrollPeriodStatusBadge } from "./components/StatusBadges";
 import { PeriodFormDialog } from "./components/PeriodFormDialog";
@@ -196,27 +196,12 @@ export function PayrollPeriodListPage({ onOpenPeriod }: { onOpenPeriod: (id: str
           />
 
           {lastPage > 1 && (
-            <div className="flex items-center justify-end gap-2 text-sm">
-              <span className="text-muted-foreground">
-                {page} / {lastPage}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1 || listQuery.isFetching}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                ‹
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= lastPage || listQuery.isFetching}
-                onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
-              >
-                ›
-              </Button>
-            </div>
+            <PaginationFooter
+              page={page}
+              totalPages={lastPage}
+              disabled={listQuery.isFetching}
+              onPageChange={setPage}
+            />
           )}
         </>
       )}

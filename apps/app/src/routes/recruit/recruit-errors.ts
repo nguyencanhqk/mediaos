@@ -12,7 +12,7 @@
  * `recruitDetails(...)` tường minh). Vẫn giữ fallback theo `code` cho mã idempotency (FOUNDATION, không
  * phải RECRUIT-ERR, không mang `kind`).
  */
-import { ApiError } from "@mediaos/web-core";
+import { parseKindError, type KindErrorInfo } from "@mediaos/web-core";
 import { IDEMPOTENCY_ERROR_CODES } from "@mediaos/contracts";
 
 export const RECRUIT_ERROR_KINDS = [
@@ -46,48 +46,12 @@ export const RECRUIT_ERROR_KINDS = [
 ] as const;
 export type RecruitErrorKind = (typeof RECRUIT_ERROR_KINDS)[number];
 
-export interface RecruitErrorInfo {
-  readonly code: string | null;
-  readonly status: number | null;
-  readonly kind: string | null;
-  readonly message: string;
-  readonly fields: ReadonlyMap<string, string>;
-}
+/** Alias của `KindErrorInfo` (@mediaos/web-core) — giữ tên cũ để 0 call-site phải đổi. */
+export type RecruitErrorInfo = KindErrorInfo;
 
-/** Đọc `details` (unknown) thành bảng field → message. KHÔNG ném: hình sai trả bảng rỗng. */
-function readDetailFields(details: unknown): ReadonlyMap<string, string> {
-  const out = new Map<string, string>();
-  if (!Array.isArray(details)) return out;
-  for (const d of details) {
-    if (typeof d !== "object" || d === null) continue;
-    const field = (d as { field?: unknown }).field;
-    const message = (d as { message?: unknown }).message;
-    if (typeof field === "string" && typeof message === "string" && !out.has(field)) {
-      out.set(field, message);
-    }
-  }
-  return out;
-}
 
-export function parseRecruitError(error: unknown): RecruitErrorInfo {
-  if (!(error instanceof ApiError)) {
-    return {
-      code: null,
-      status: null,
-      kind: null,
-      message: error instanceof Error ? error.message : "",
-      fields: new Map(),
-    };
-  }
-  const fields = readDetailFields(error.details);
-  return {
-    code: error.code,
-    status: error.status,
-    kind: fields.get("kind") ?? null,
-    message: error.message,
-    fields,
-  };
-}
+/** Bóc lỗi mang `kind` — dùng bản CHUNG; xem `parseKindError` ở @mediaos/web-core. */
+export { parseKindError as parseRecruitError };
 
 /** Ánh xạ `kind` → khoá i18n (namespace `recruit`). Tách riêng để spec neo "mọi kind có khoá riêng". */
 const KIND_TO_I18N_KEY: Readonly<Record<RecruitErrorKind, string>> = {

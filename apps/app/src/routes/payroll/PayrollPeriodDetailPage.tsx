@@ -11,7 +11,7 @@ import {
   useCanExact,
 } from "@mediaos/web-core";
 import type { PayrollPeriodLineDto } from "@mediaos/contracts";
-import { Button, DataTable, EmptyState, PageHeader } from "@mediaos/ui";
+import { Button, DataTable, EmptyState, PageHeader, PaginationFooter } from "@mediaos/ui";
 import { triggerBlobDownload } from "../attendance/download-blob";
 import { PAYROLL_ENGINE_PAIRS, PAYROLL_PAGE_SIZE } from "./constants";
 import {
@@ -370,27 +370,12 @@ export function PayrollPeriodDetailPage({
             emptyState={<EmptyState title={t("lines.empty")} />}
           />
           {lineLastPage > 1 && (
-            <div className="flex items-center justify-end gap-2 text-sm">
-              <span className="text-muted-foreground">
-                {linePage} / {lineLastPage}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={linePage <= 1 || linesQuery.isFetching}
-                onClick={() => setLinePage((p) => Math.max(1, p - 1))}
-              >
-                ‹
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={linePage >= lineLastPage || linesQuery.isFetching}
-                onClick={() => setLinePage((p) => Math.min(lineLastPage, p + 1))}
-              >
-                ›
-              </Button>
-            </div>
+            <PaginationFooter
+              page={linePage}
+              totalPages={lineLastPage}
+              disabled={linesQuery.isFetching}
+              onPageChange={setLinePage}
+            />
           )}
         </>
       )}

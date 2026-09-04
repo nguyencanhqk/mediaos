@@ -5,7 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Plus, RefreshCw } from "lucide-react";
 import { recruitApi, recruitKeys, useCan, useCanExact } from "@mediaos/web-core";
 import type { InterviewResponseDto, InterviewStatusDto } from "@mediaos/contracts";
-import { Button, DataTable, Dialog, EmptyState, PageHeader, Select } from "@mediaos/ui";
+import { Button, DataTable, Dialog, EmptyState, PageHeader, PaginationFooter, Select } from "@mediaos/ui";
 import { RECRUIT_ENGINE_PAIRS, RECRUIT_PAGE_SIZE } from "./constants";
 import { InterviewStatusBadge } from "./components/StatusBadges";
 import { InterviewFormDialog } from "./components/InterviewFormDialog";
@@ -189,27 +189,11 @@ export function InterviewListPage({ onOpenCandidate }: InterviewListPageProps) {
       />
 
       {lastPage > 1 && (
-        <div className="flex items-center justify-end gap-2 text-sm">
-          <span className="text-muted-foreground">
-            {page} / {lastPage}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            ‹
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= lastPage}
-            onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
-          >
-            ›
-          </Button>
-        </div>
+        <PaginationFooter
+          page={page}
+          totalPages={lastPage}
+          onPageChange={setPage}
+        />
       )}
 
       <Dialog

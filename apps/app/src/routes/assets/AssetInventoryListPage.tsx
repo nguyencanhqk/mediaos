@@ -3,16 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { assetApi, assetKeys, useCan } from "@mediaos/web-core";
-import {
-  Badge,
-  Button,
-  Dialog,
-  EmptyState,
-  Input,
-  PageHeader,
-  Select,
-  Skeleton,
-} from "@mediaos/ui";
+import { Badge, Button, Dialog, EmptyState, Input, PageHeader, PaginationFooter, Select, Skeleton } from "@mediaos/ui";
 import { ASSET_ENGINE_PAIRS, ASSET_PAGE_SIZE } from "./constants";
 import { assetErrorI18nKey, parseAssetError } from "./asset-errors";
 
@@ -145,27 +136,11 @@ export function AssetInventoryListPage({ onOpenInventory }: AssetInventoryListPa
       )}
 
       {lastPage > 1 && (
-        <div className="flex items-center justify-end gap-2 text-sm">
-          <span className="text-muted-foreground">
-            {page} / {lastPage}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            ‹
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= lastPage}
-            onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
-          >
-            ›
-          </Button>
-        </div>
+        <PaginationFooter
+          page={page}
+          totalPages={lastPage}
+          onPageChange={setPage}
+        />
       )}
 
       <Dialog

@@ -6,7 +6,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Plus, RefreshCw, Settings2, Wrench } from "lucide-react";
 import { assetApi, assetKeys, useCan } from "@mediaos/web-core";
 import type { AssetListItemResponseDto, AssetLifecycleStatusDto } from "@mediaos/contracts";
-import { Button, DataTable, EmptyState, Input, PageHeader, Select } from "@mediaos/ui";
+import { Button, DataTable, EmptyState, Input, PageHeader, PaginationFooter, Select } from "@mediaos/ui";
 import { ASSET_ENGINE_PAIRS, ASSET_PAGE_SIZE, ASSET_STATUS_OPTIONS } from "./constants";
 import { AssetStatusBadge } from "./components/AssetStatusBadge";
 import { AssetCategoryDialog } from "./components/AssetCategoryDialog";
@@ -259,27 +259,12 @@ export function AssetListPage() {
           />
 
           {lastPage > 1 && (
-            <div className="flex items-center justify-end gap-2 text-sm">
-              <span className="text-muted-foreground">
-                {page} / {lastPage}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1 || listQuery.isFetching}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                ‹
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= lastPage || listQuery.isFetching}
-                onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
-              >
-                ›
-              </Button>
-            </div>
+            <PaginationFooter
+              page={page}
+              totalPages={lastPage}
+              disabled={listQuery.isFetching}
+              onPageChange={setPage}
+            />
           )}
         </>
       )}

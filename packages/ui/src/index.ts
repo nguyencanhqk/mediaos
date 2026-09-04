@@ -20,6 +20,8 @@ export * from "./components/ui/sheet";
 export * from "./components/ui/skeleton";
 export * from "./components/ui/empty-state";
 export * from "./components/ui/data-table";
+// S14-FE-DEBT-1 — footer phân trang SERVER-side dùng chung (khối additive)
+export * from "./components/ui/pagination-footer";
 export * from "./components/ui/avatar";
 export * from "./components/ui/badge";
 export * from "./components/ui/card";
