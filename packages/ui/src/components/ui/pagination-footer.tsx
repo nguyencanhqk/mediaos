@@ -16,8 +16,15 @@ export interface PaginationFooterProps {
   page: number;
   /** Tổng số trang. Bỏ trống khi server không trả tổng (chỉ có `hasNext`). */
   totalPages?: number;
-  /** Đổi trang — nhận số trang ĐÍCH đã kẹp biên, không phải hàm cập nhật. */
-  onPageChange: (next: number) => void;
+  /**
+   * Đổi trang. Nhận **hàm cập nhật** `(prev) => next` — khớp thẳng `Dispatch<SetStateAction<number>>`
+   * của `useState`, nên 19 chỗ gọi truyền `setPage` là xong.
+   *
+   * Cố ý KHÔNG truyền giá trị tính sẵn từ prop `page`: prop là ảnh của lần render hiện tại, nên hai
+   * cú nhấn nhanh trước khi React render lại sẽ cùng tính ra một số ⇒ cú thứ hai thành no-op câm.
+   * 19 bản chép tay trước đây đều dùng functional updater; giữ đúng như vậy.
+   */
+  onPageChange: (next: (prev: number) => number) => void;
   /** Ép chiều lùi. Mặc định suy từ `page > 1`. Truyền khi server trả `meta.hasPrev`. */
   hasPrev?: boolean;
   /** Ép chiều tiến. Mặc định suy từ `page < totalPages`. Truyền khi server trả `meta.hasNext`. */
@@ -72,7 +79,7 @@ export function PaginationFooter({
         <PageButton
           label={t("pagination.prev")}
           disabled={disabled || !canPrev}
-          onClick={() => onPageChange(Math.max(1, page - 1))}
+          onClick={() => onPageChange((prev) => Math.max(1, prev - 1))}
         >
           <ChevronLeft className="h-4 w-4" />
         </PageButton>
@@ -85,7 +92,9 @@ export function PaginationFooter({
           label={t("pagination.next")}
           disabled={disabled || !canNext}
           onClick={() =>
-            onPageChange(totalPages === undefined ? page + 1 : Math.min(totalPages, page + 1))
+            onPageChange((prev) =>
+              totalPages === undefined ? prev + 1 : Math.min(totalPages, prev + 1),
+            )
           }
         >
           <ChevronRight className="h-4 w-4" />

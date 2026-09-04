@@ -79,7 +79,6 @@ export interface RoomErrorInfo extends KindErrorInfo {
   readonly rawDetails: unknown;
 }
 
-
 /** Bóc thông tin lỗi ROOM từ một `unknown` bắt được ở `onError` của react-query. */
 export function parseRoomError(error: unknown): RoomErrorInfo {
   // Khác ba module anh em: ROOM cần `details` THÔ để `readConflicts()` đưa nguyên vào

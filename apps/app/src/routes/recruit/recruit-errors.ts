@@ -49,7 +49,6 @@ export type RecruitErrorKind = (typeof RECRUIT_ERROR_KINDS)[number];
 /** Alias của `KindErrorInfo` (@mediaos/web-core) — giữ tên cũ để 0 call-site phải đổi. */
 export type RecruitErrorInfo = KindErrorInfo;
 
-
 /** Bóc lỗi mang `kind` — dùng bản CHUNG; xem `parseKindError` ở @mediaos/web-core. */
 export { parseKindError as parseRecruitError };
 
