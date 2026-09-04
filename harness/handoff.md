@@ -2,7 +2,36 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
-## Phiên 2026-09-04 (b) — S14-RECRUIT-FILEGRANT-1 **CODE XONG, FULL gate PASS, PR mở** — chờ người merge
+## Phiên 2026-09-04 (c) — S14-RECRUIT-FILEGRANT-1 **ĐÃ MERGE** (PR #477 → squash `2bf9cead`)
+
+**Trạng thái:** đóng sổ xong. CI **14/14 xanh** (gồm `Build · Typecheck · Migrate · Test` của API —
+job chạy int-spec + migration, và `Lint · Typecheck · Migrate · RLS Test`). Branch protection đòi
+review người ⇒ owner chốt trong phiên, merge bằng `--admin --squash --delete-branch`. Nhánh đã xoá cả
+local lẫn remote; `master` local đồng bộ 0/0. Ledger `finished`, `gen-status` **0 đang làm · 10 ready**
+và **không in dòng `🔧 reconcile`** (đúng nghiệm thu của `wo-status-auto-ledger`).
+
+### Bẫy gặp lại trong phiên này (memory đã ghi, xác nhận vẫn đúng)
+
+- **`gh pr checks --watch` thoát `exit 0` khi VẪN CÒN 2 check `pending`.** Lần này đo được tận mắt:
+  watcher báo "completed (exit code 0)" trong khi `Build · Typecheck · Migrate · Test` và
+  `Lint · Typecheck · Migrate · RLS Test` còn đang chạy. Nếu tin exit code thì đã merge lên một CI
+  chưa chạy xong. **Nguồn thật là `gh pr checks --json name,bucket` rồi tự đếm `bucket != pass|skipping`**
+  — đó là cái đã dùng để chốt. Xem `gh-watch-exit-code-unreliable`.
+
+### Nợ mang sang (KHÔNG làm ở WO này — plan §13.2)
+
+- **MEDIUM** — `list` (API-033) không đi qua `FilePolicyService` ⇒ lệch pha list↔download khi KI-d xảy
+  ra. Reviewer TỰ khuyến nghị không vá ở đây → gộp vào WO đóng **KI-b/KI-d**.
+- 3 LOW: `confirm` 403 không để vết · mục B của qa1 dùng `.not.toBe(403)` · khối (4b) của 0569 là bất
+  biến toàn cục lúc migrate.
+- **KI-a/KI-b/KI-c/KI-d** của plan §9 giữ nguyên, chưa đụng. KI-d (`EmployeeFileResolver.canLinkFile`
+  thiếu owner-check) là cái **reachable HÔM NAY**, đáng seed WO sớm.
+- `database-reviewer` của FULL gate **không ra verdict** (bị hook chi phí cắt giữa chừng) — các câu nó
+  bỏ ngỏ đã tự đo, ghi ở plan §12.6. Nếu muốn verdict chính thức thì phải chạy lại riêng.
+
+---
+
+## Phiên 2026-09-04 (b) — S14-RECRUIT-FILEGRANT-1 — code + FULL gate (PR #477, đã merge ở phiên (c))
 
 **Trạng thái:** nhánh `feat/s14-recruit-filegrant-1`, 2 commit. Vùng ĐỎ ⇒ theo CLAUDE.md §9.4 **KHÔNG
 gắn nhãn auto-merge**, để người chốt.
