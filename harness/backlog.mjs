@@ -17339,4 +17339,73 @@ export const backlog = [
       "⚠️ Bằng chứng hiện có là GHI TAY từ hai phiên trước, chưa ai đo lại có kiểm soát — bước 1 của WO là đo, không phải vá.",
     ],
   },
+  {
+    id: "S18-QA-SUPERTESTLISTEN-1",
+    module: "QA",
+    layer: "BE",
+    title:
+      "12 int-spec còn `app.init()` KHÔNG kèm `listen(0)` nhưng có `Promise.all` — cờ ECONNRESET đang nằm chờ, vá hàng loạt + dựng ratchet",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/test/integration/**",
+      "docs/plans/S18-QA-SUPERTESTLISTEN-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S18-QA-SUPERTESTLISTEN-1.md",
+    src: [
+      "ĐO 04/09 (phiên S14-SEC-CATALOGSNAP-HARDEN-1): CI của PR #478 ĐỎ ở `s14-recruit-filegrant1-cv.int-spec.ts > Z3` với `Error: read ECONNRESET` — KHÔNG nằm trong diff PR (diff chỉ chạm `src/permission/**` + docs). Đã vá RIÊNG spec đó (commit `7cb01ca0`) để gỡ chặn PR.",
+      "Cùng lần đo: quét `Promise.all` + `app.init()` mà thiếu `app.listen(0)` trên `apps/api/test/integration/*.int-spec.ts` ⇒ 13 spec, đã vá 1, CÒN 12: asset-be1-fsm · chat-be1-access · chat-be1-rooms · chat-be2-messages · chat-be3-attachments · chat-noti-e2e · chat-s7-call-be1-lifecycle · chat-s8-be1-room-prefs · me-training · recruit-be1-convert · recruit-be1-interview-offer · task-subtask-tree.",
+      "Tổng thể: 171 int-spec dùng `app.init()`, chỉ 14 có `listen(0)`.",
+      "memory supertest-closes-shared-server-on-first-response (đo ở PR #420: 5/6 spec có `Promise.all` đỏ, spec duy nhất không dùng `Promise.all` xanh) · ci-red-can-depend-on-time-of-day.",
+    ],
+    done_when: [
+      "LỌC TRƯỚC KHI VÁ: trong 12 spec, cái nào thực sự bọc **request supertest** trong `Promise.all` (chứ không phải chỉ seed DB song song) — liệt kê file + dòng vào plan; spec không thuộc diện thì KHÔNG động vào",
+      "Mỗi spec thuộc diện: thêm `await app.listen(0)` ngay sau `app.init()` VÀ xác minh `afterAll` đã có `app.close()` — thiếu `close()` thì phải thêm, không thì rò cổng giữa các spec",
+      "CẤM ‘vá’ bằng cách đổi `Promise.all` thành vòng lặp `await`: supertest quyết định listen LÚC gọi `http().get(...)`, mảng dựng sẵn rồi await tuần tự còn tệ hơn (`ECONNREFUSED` từ request #2)",
+      "Ratchet chống tái phát: 1 unit-spec quét `apps/api/test/integration/*.int-spec.ts`, đỏ khi có file vừa `Promise.all` vừa `app.init()` mà thiếu `app.listen(0)`; kèm ca chống-xanh-rỗng (census KHÔNG rỗng) — memory refactor-to-helper-blinds-syntax-census",
+      "Chạy `bash harness/check.sh --lane-db=<lane>` xanh; số test-file không giảm",
+    ],
+    notes: [
+      "🟡 LIGHT gate. Thuần hạ tầng test — 0 file sản phẩm.",
+      "Giá trị: cờ này nổ ở CI của **PR không liên quan** (lần này là PR permission đỏ vì spec RECRUIT) nên mỗi lần nổ đều tốn một vòng điều tra ‘hồi quy hay flake’ đúng lúc sắp merge.",
+      "⚠️ Cục bộ gần như luôn XANH — đừng dùng ‘chạy máy xanh’ làm bằng chứng đã vá; bằng chứng là ratchet + đọc code, không phải lần chạy.",
+    ],
+  },
+  {
+    id: "S18-FE-DEPTQUERYKEY-1",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "Hai API khác endpoint/khác cổng quyền dùng CHUNG `hrKeys.departments.list()` ⇒ màn mount trước đầu độc cache của màn kia",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/**",
+      "packages/web-core/src/lib/hr-api.ts",
+      "packages/web-core/src/lib/hr-master-data-api.ts",
+      "docs/plans/S18-FE-DEPTQUERYKEY-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S18-FE-DEPTQUERYKEY-1.md",
+    src: [
+      "ĐO 04/09: `apps/app/src/routes/hr/departments/DepartmentsPage.tsx:41-42` dùng `queryKey: hrKeys.departments.list()` với `queryFn: () => hrMasterDataApi.listDepartments()` → **GET /hr/departments** (gác `read:department`, schema `HrDepartment`).",
+      "15 call-site KHÁC dùng ĐÚNG key ấy với `queryFn: () => hrApi.listDepartments()` → **GET /hr/lookups/departments** (MỞ, schema `HrDepartmentLookup` — shape HẸP hơn): EmployeeMultiPickerDialog · goals/TaskTemplateFormDialog · goals/GoalFormPage · goals/GoalListPage · goals/TaskTemplateListPage · hr/employees/EmployeeListPage · hr/employees/use-employee-lookups · hr/positions/PositionsPage · leave/AllLeaveRequestsPage · leave/LeavePoliciesPage · recruit/JobOpeningFormDialog · tasks/ProjectFormDrawer · tasks/ProjectListPage · tasks/TaskFormDrawer.",
+      "Phát hiện trong lúc census của S14-FE-DEBT-1 (memory s14-remaining-two-wos) — tách WO riêng vì là LỖI THẬT, không phải nợ trùng lặp.",
+    ],
+    done_when: [
+      "Tách key: hai nguồn dữ liệu khác endpoint phải có hai key khác nhau (ví dụ `hrKeys.departments.lookup()` cho `/hr/lookups/departments`) — KHÔNG ‘vá’ bằng cách đổi một bên sang gọi API bên kia (khác cổng quyền: `/hr/departments` gác `read:department`, đổi sẽ ẨN picker với actor không có cặp — memory capability-allowlist-hides-admin-screens)",
+      "Mọi `invalidateQueries` của màn Phòng ban phải vô hiệu ĐÚNG cả hai key (tạo/sửa/xoá phòng ban phải làm tươi cả picker) — có ca test",
+      "Ca RED trước: mount màn Phòng ban rồi mount một màn dùng picker trong CÙNG QueryClient ⇒ picker phải gọi `/hr/lookups/departments`, KHÔNG ăn cache shape `HrDepartment`",
+      "typecheck + build `apps/app` và `packages/web-core` xanh; 78 spec FE hiện có giữ nguyên kết quả",
+    ],
+    notes: [
+      "🟡 LIGHT gate nhưng chạm CỔNG QUYỀN gián tiếp: hai endpoint có hai cổng khác nhau, chọn sai bên là ẩn màn của actor hợp lệ hoặc lộ dữ liệu rộng hơn ⇒ đọc kỹ trước khi đổi.",
+      "Shape khác nhau ⇒ triệu chứng thật có thể là Zod parse đỏ hoặc field `undefined` im lặng tùy thứ tự mount — memory server-masking-needs-optional-fe-schema.",
+    ],
+  },
 ];
