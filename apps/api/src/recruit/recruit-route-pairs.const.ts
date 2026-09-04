@@ -10,6 +10,12 @@
  *
  * 7 cặp resource `candidate` là SENSITIVE (seed 0560) — mọi `permission.can()` cho chúng phải truyền
  * `isSensitive: true` tường minh (wildcard `*:*` không thoả cổng sensitive — plan §4.4).
+ *
+ * S14-RECRUIT-FILEGRANT-1 — cặp thứ 8 `('upload','candidate-file')` (seed 0569, is_sensitive=TRUE) gác
+ * ĐƯỜNG GHI tệp CV. Resource là `candidate-file` chứ KHÔNG phải `candidate`: `0560:336-347`/`:431-444`
+ * RAISE theo SỐ ĐẾM grant trên đúng 5 resource RECRUIT, và int-spec I1
+ * (`s12-recruit-db1-invariants:982-1016`) đọc `0560_*.sql` từ đĩa rồi CHẠY LẠI ⇒ đặt trên `candidate`
+ * làm migration ĐÃ SHIP nổ khi replay. Đọc plan §3.2 trước khi đổi tên cặp này.
  */
 export interface RecruitPair {
   readonly action: string;
@@ -32,7 +38,7 @@ const pair = (
   companyFloor = true,
 ): RecruitPair => ({ action, resourceType, isSensitive, companyFloor });
 
-/** Key = mã route API-17 (RECRUIT-API-XXX) — đủ 32 route. */
+/** Key = mã route API-17 (RECRUIT-API-XXX) — đủ 37 route. */
 export const RECRUIT_ROUTE_PAIRS = {
   // Job openings 001–005
   jobOpeningList: pair("view", "job-opening"),
@@ -71,6 +77,17 @@ export const RECRUIT_ROUTE_PAIRS = {
   // Pickers 031–032 — gate bằng cặp GHI tương ứng (SPEC-12 §15 ghi chú 031).
   pickerEmployees: pair("manage", "interview"),
   pickerRecruiterUsers: pair("update", "job-opening"),
+  // Tệp CV 033–037 (S14-RECRUIT-FILEGRANT-1) — wrapper RECRUIT quanh Foundation Files.
+  // ĐƯỜNG ĐỌC gác bằng CHÍNH cặp của màn ứng viên (`view:candidate`) — "cặp gác MÀN = cặp gác ĐƯỜNG
+  // TẢI" (`read-path-gate-pair-must-match-download-pair`): tách một cặp đọc-tệp riêng sẽ đẻ ra vai
+  // "tải được CV mà xem hồ sơ không được", hoặc ngược lại.
+  candidateFileList: pair("view", "candidate", true, true),
+  candidateFileDownload: pair("view", "candidate", true, true),
+  // ĐƯỜNG GHI gác bằng cặp MỚI. `isSensitive`/`companyFloor` khai TƯỜNG MINH (mặc định của `pair()`
+  // là isSensitive=false) — quên gõ ⇒ wildcard `*:*` mở được đường ghi tệp CV.
+  candidateFileUploadUrl: pair("upload", "candidate-file", true, true),
+  candidateFileConfirm: pair("upload", "candidate-file", true, true),
+  candidateFileLink: pair("upload", "candidate-file", true, true),
 } as const satisfies Record<string, RecruitPair>;
 
 export type RecruitRouteKey = keyof typeof RECRUIT_ROUTE_PAIRS;

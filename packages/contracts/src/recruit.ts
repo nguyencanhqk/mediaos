@@ -502,3 +502,46 @@ export const recruitUserPickerItemSchema = z.object({
   fullName: z.string().nullable(),
 });
 export type RecruitUserPickerItemDto = z.infer<typeof recruitUserPickerItemSchema>;
+
+// ─── Tệp CV ứng viên (033–037, S14-RECRUIT-FILEGRANT-1) ────────────────────────────────────────
+
+/**
+ * 035 — `POST /candidates/:id/files/upload-url`. Đăng ký metadata + xin presigned-PUT.
+ *
+ * KHÔNG nhận `visibility`/`moduleCode`/`entityType`/`entityId` từ client: cả bốn do SERVER đặt
+ * (`Private` + `RECRUIT`/`candidate`/`:id` của URL). Client khai được `visibility` là mở đường đưa CV
+ * — PII ứng viên — lên `Public`; khai được module/entity là tạo link "ma" trỏ sang module khác.
+ * `.strict()` ⇒ field lạ ăn 400 tại biên thay vì bị bỏ qua trong im lặng.
+ */
+export const recruitCandidateFileUploadUrlInputSchema = z
+  .object({
+    originalName: z.string().trim().min(1).max(500),
+    declaredMimeType: z.string().min(1).max(255),
+    sizeBytes: z.number().int().nonnegative(),
+  })
+  .strict();
+export type RecruitCandidateFileUploadUrlInput = z.infer<
+  typeof recruitCandidateFileUploadUrlInputSchema
+>;
+
+/**
+ * 033/037 — một tệp CV đã gắn vào ứng viên (compose từ `file_links ⋈ files`, khuôn `employeeFileDto`).
+ *
+ * KHÔNG lộ storage internals (BẤT BIẾN #2.3): storagePath/storedName/checksum/bucket đều vắng mặt.
+ * `originalName` CỐ Ý **không mask** — SPEC-12 §18 buộc che email/phone ở DTO có cấu trúc, nhưng người
+ * đọc được tệp này có `view:candidate` nên đọc được TOÀN VĂN CV; che tên tệp trong khi phục vụ chính
+ * tệp đó là hình thức (plan §3.9).
+ */
+export const recruitCandidateFileSchema = z.object({
+  linkId: z.string().uuid(),
+  fileId: z.string().uuid(),
+  originalName: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  scanStatus: z.string(),
+  uploadStatus: z.string(),
+  uploadedAt: z.string(),
+  /** `file_links.purpose` — luôn `'CV'` ở luồng hiện tại, giữ nullable cho tệp gắn tay trước đây. */
+  purpose: z.string().nullable(),
+});
+export type RecruitCandidateFileDto = z.infer<typeof recruitCandidateFileSchema>;

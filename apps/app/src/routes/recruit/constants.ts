@@ -1,14 +1,15 @@
 /**
  * S12-RECRUIT-FE-1 — hằng số module Tuyển dụng (SPEC-12). Cặp quyền engine THẬT + hằng dùng chung.
  *
- * `RECRUIT_ENGINE_PAIRS` MIRROR ĐÚNG BẢNG 32 route của `apps/api/src/recruit/recruit-route-pairs.const.ts`
+ * `RECRUIT_ENGINE_PAIRS` MIRROR ĐÚNG BẢNG 37 route của `apps/api/src/recruit/recruit-route-pairs.const.ts`
  * (nguồn sự thật cho CẢ HAI tầng census BE) — copy literal, KHÔNG import chéo package (`apps/app` không
  * import `apps/api`). `recruit-wiring.spec.ts` đọc lại file BE bằng `fs` và so KHỚP TỪNG TRƯỜNG với bảng
  * này để bắt drift, cùng kỹ thuật `ASSET_ENGINE_PAIRS` (khuôn `uniqueness-gate-covered-one-of-fifteen-
  * families` — vá đúng LỚP không phải phủ hết THỂ HIỆN, nên census phải so bằng MÃ/CẶP, không phải bằng mắt).
  *
- * 7 cặp resource `candidate` là SENSITIVE (seed mig 0560) ⇒ KHÔNG có mặt trong `/auth/me` capabilities
- * nếu chỉ có wildcard `*:*` — PHẢI gate bằng `useCanExact(action, resourceType)`. Mọi cặp còn lại
+ * 7 cặp resource `candidate` (seed mig 0560) VÀ cặp `('upload','candidate-file')` (seed mig 0569,
+ * S14-RECRUIT-FILEGRANT-1) là SENSITIVE ⇒ KHÔNG có mặt trong `/auth/me` capabilities nếu chỉ có
+ * wildcard `*:*` — PHẢI gate bằng `useCanExact(action, resourceType)`. Mọi cặp còn lại
  * (job-opening/interview/offer) `isSensitive=false` ⇒ dùng `useCan` như thường (wildcard thoả được).
  *
  * `companyFloor` của BE (sàn scope Company) KHÔNG cần mirror ở FE — đó là ràng buộc server tính
@@ -27,7 +28,7 @@ const pair = (action: string, resourceType: string, isSensitive = false): Recrui
   isSensitive,
 });
 
-/** Key = mã route API-17 (RECRUIT-API-XXX), ĐÚNG 32 khoá như BE. */
+/** Key = mã route API-17 (RECRUIT-API-XXX), ĐÚNG 37 khoá như BE. */
 export const RECRUIT_ENGINE_PAIRS = {
   // Job openings 001–005
   jobOpeningList: pair("view", "job-opening"),
@@ -66,6 +67,12 @@ export const RECRUIT_ENGINE_PAIRS = {
   // Pickers 031–032
   pickerEmployees: pair("manage", "interview"),
   pickerRecruiterUsers: pair("update", "job-opening"),
+  // Tệp CV 033–037 (S14-RECRUIT-FILEGRANT-1) — đọc dùng lại cặp của màn ứng viên, ghi có cặp riêng.
+  candidateFileList: pair("view", "candidate", true),
+  candidateFileDownload: pair("view", "candidate", true),
+  candidateFileUploadUrl: pair("upload", "candidate-file", true),
+  candidateFileConfirm: pair("upload", "candidate-file", true),
+  candidateFileLink: pair("upload", "candidate-file", true),
 } as const satisfies Record<string, RecruitEnginePair>;
 
 export type RecruitEngineKey = keyof typeof RECRUIT_ENGINE_PAIRS;
@@ -127,6 +134,6 @@ export const RECRUIT_OFFER_STATUS_BADGE_VARIANT: Readonly<
   Withdrawn: "danger",
 };
 
-/** module_code/entity_type dùng khi gắn CV vào Foundation Files (mirror `RECRUIT_MODULE`/`CANDIDATE_ENTITY` của BE resolver). */
-export const RECRUIT_FILE_MODULE_CODE = "RECRUIT";
-export const RECRUIT_FILE_ENTITY_TYPE = "candidate";
+// S14-RECRUIT-FILEGRANT-1 — GỠ `RECRUIT_FILE_MODULE_CODE`/`RECRUIT_FILE_ENTITY_TYPE`: client không
+// còn khai module/entity nữa (bề mặt RECRUIT tự đặt cả hai ở server), nên hai hằng này thành
+// GHI-RỒI-BỎ. Giữ lại = một bản sao thứ hai của khoá điều phối, chờ trôi lệch với BE.

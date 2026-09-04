@@ -398,10 +398,14 @@ theo server; lương offer chỉ hiện khi có `manage:offer`.
 | Sàn scope | gán user đủ 15 cặp nhưng scope Own/Department rồi mở danh sách ứng viên | **403** (`AUTH-ERR-SCOPE-DENIED` trong message) — có cặp chưa đủ, RECRUIT ép sàn Company |
 | Phạm vi nhìn thấy | mở `/candidates/:id` của công ty khác · id bịa · ứng viên đã xoá mềm · sửa note của người khác | cả bốn trả **404 giống hệt nhau** (sentinel `RECRUIT-ERR-010` — chống dò chéo tenant/oracle) |
 | Export | export vượt trần dòng | `RECRUIT-ERR-015 export-too-large`; CSV không dính formula-injection (đã vá FE-1) |
+| **Tệp CV** (S14-RECRUIT-FILEGRANT-1, 04/09/2026) | đăng nhập bằng `recruiter` **hoặc** `hr` → tab CV của một ứng viên → Tải CV lên → tải xuống | cả hai role đi trọn chuỗi (200/200/201) và tải được — trước WO này nút Tải lên 403 ở bước cuối vì họ không có cặp `foundation-file`. `employee` ⇒ 403 cả 5 route. Người chỉ có `*:*` ⇒ **403** (cặp sensitive không kế thừa từ wildcard) |
+| Tệp CV — không nới bề mặt chung | cùng token `recruiter`/`hr` gọi thẳng `/foundation/files*` | **403** cả 4 route — WO cấp cặp `('upload','candidate-file')`, KHÔNG cấp `foundation-file`; màn quản trị `System > Files` vẫn chỉ của admin |
+| Tệp CV — chống gắn tệp mượn | thử gắn tệp NGƯỜI KHÁC upload, tệp còn `Pending`, hoặc tệp đã bị gỡ link (thu hồi) | cả ba ⇒ **403**; tệp đã thu hồi vẫn KHÔNG tải được sau đó. Gỡ nhầm rồi muốn đính lại ⇒ phải **tải lên lại** (không tái-link được — chủ đích) |
+| Tệp CV — IDOR | lấy `fileId` của ứng viên X, gọi `/candidates/{Y}/files/{fileId}/download-url` | **404** (không 403 — tránh oracle) |
 
-Bộ test tự động: **327 ca** cụm RECRUIT BE (15 tệp unit + int-spec, cần `LANE_DB`; gồm bất biến DB của
+Bộ test tự động: **375 ca** cụm RECRUIT BE (17 tệp unit + int-spec, cần `LANE_DB`; gồm bất biến DB của
 `S12-RECRUIT-DB-1`) — trong đó **135 ca mới** của `S12-RECRUIT-QA-1` (sàn scope 66 · biên idempotency 6 ·
-error-residue 20 · census mã lỗi/kind 43) — + **108 ca** FE `apps/app/src/routes/recruit` (trong đó 6 ca
+error-residue 20 · census mã lỗi/kind 43) — và **48 ca mới** của `S14-RECRUIT-FILEGRANT-1` (30 int-spec tệp CV `s14-recruit-filegrant1-cv` + 20 unit-spec đột biến từng vế `canLinkFile`; trừ 2 ca census đã có) — + **116 ca** FE `apps/app/src/routes/recruit` (đo 04/09/2026; thêm 7 ca `CandidateCvTab.spec.tsx`) (trong đó 6 ca
 fs-pin FE↔BE mới: parity 4 bảng FSM + census 27 `kind`). Coverage `src/recruit/**`: **93.6 %** statements /
 **82.1 %** branches (lệnh tái lập: `pnpm --filter @mediaos/api test:cov:recruit`). Bằng chứng nghiệm thu:
 [`QA/evidence/S12-RECRUIT-QA-1-ACCEPTANCE.md`](QA/evidence/S12-RECRUIT-QA-1-ACCEPTANCE.md).

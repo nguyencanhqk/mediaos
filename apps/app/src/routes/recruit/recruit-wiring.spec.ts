@@ -36,8 +36,8 @@ describe("RECRUIT wiring — pair-drift (RECRUIT_ENGINE_PAIRS vs recruit-route-p
     beEntries.set(key, { action, resourceType, isSensitive: isSensitive === "true" });
   }
 
-  it("đọc được đủ 32 route pair từ file BE (regex census không mù)", () => {
-    expect(beEntries.size).toBe(32);
+  it("đọc được đủ 37 route pair từ file BE (regex census không mù)", () => {
+    expect(beEntries.size).toBe(37);
   });
 
   it("mỗi khoá RECRUIT_ENGINE_PAIRS khớp ĐÚNG action/resourceType/isSensitive của BE", () => {
@@ -50,11 +50,11 @@ describe("RECRUIT wiring — pair-drift (RECRUIT_ENGINE_PAIRS vs recruit-route-p
     }
   });
 
-  it("không thiếu/thừa khoá nào so với BE (32 = 32)", () => {
+  it("không thiếu/thừa khoá nào so với BE (37 = 37)", () => {
     expect(Object.keys(RECRUIT_ENGINE_PAIRS).sort()).toEqual([...beEntries.keys()].sort());
   });
 
-  it("13 route resource candidate ĐỀU sensitive (0560) — không route candidate nào lọt lưới", () => {
+  it("15 route resource candidate ĐỀU sensitive (0560) — không route candidate nào lọt lưới", () => {
     const candidateKeys = Object.entries(RECRUIT_ENGINE_PAIRS)
       .filter(([, p]) => p.resourceType === "candidate")
       .map(([k]) => k)
@@ -65,6 +65,9 @@ describe("RECRUIT wiring — pair-drift (RECRUIT_ENGINE_PAIRS vs recruit-route-p
         "candidateConvert",
         "candidateCreate",
         "candidateDetail",
+        // S14-RECRUIT-FILEGRANT-1 — ĐƯỜNG ĐỌC tệp CV gác bằng CHÍNH cặp `view:candidate`.
+        "candidateFileDownload",
+        "candidateFileList",
         "candidateExport",
         "candidateList",
         "candidateMoveStage",
@@ -94,9 +97,40 @@ describe("RECRUIT wiring — pair-drift (RECRUIT_ENGINE_PAIRS vs recruit-route-p
     );
   });
 
-  it("không resource nào KHÁC candidate bị đánh sensitive (job-opening/interview/offer đều false)", () => {
+  /**
+   * S14-RECRUIT-FILEGRANT-1 — cặp GHI tệp CV nằm trên resource RIÊNG `candidate-file` (lý do KỸ THUẬT:
+   * `0560` (b1)/(b4) RAISE theo SỐ ĐẾM grant trên đúng 5 resource RECRUIT và int-spec I1 replay chính
+   * file đó — xem `recruit-route-pairs.const.ts`). Nó cũng `is_sensitive=true` (mig 0569, PII ứng viên).
+   *
+   * Ca dưới ghim TẬP resource được phép sensitive — nới thêm một resource ở đây là quyết định có chủ
+   * đích qua FULL gate, KHÔNG phải hệ quả phụ của việc thêm route.
+   */
+  it("3 route ghi tệp CV dùng cặp `upload:candidate-file` và ĐỀU sensitive (0569)", () => {
+    const writeKeys = Object.entries(RECRUIT_ENGINE_PAIRS)
+      .filter(([, p]) => p.resourceType === "candidate-file")
+      .map(([k]) => k)
+      .sort();
+    expect(writeKeys).toEqual([
+      "candidateFileConfirm",
+      "candidateFileLink",
+      "candidateFileUploadUrl",
+    ]);
+    for (const key of writeKeys) {
+      const p = RECRUIT_ENGINE_PAIRS[key as keyof typeof RECRUIT_ENGINE_PAIRS];
+      expect(p.action, key).toBe("upload");
+      expect(p.isSensitive, key).toBe(true);
+    }
+  });
+
+  it("chỉ candidate + candidate-file được đánh sensitive (job-opening/interview/offer đều false)", () => {
+    const sensitiveResources = new Set(
+      Object.values(RECRUIT_ENGINE_PAIRS)
+        .filter((p) => p.isSensitive)
+        .map((p) => p.resourceType),
+    );
+    expect([...sensitiveResources].sort()).toEqual(["candidate", "candidate-file"]);
     for (const [key, p] of Object.entries(RECRUIT_ENGINE_PAIRS)) {
-      if (p.resourceType === "candidate") continue;
+      if (p.resourceType === "candidate" || p.resourceType === "candidate-file") continue;
       expect(p.isSensitive, `${key} không nên sensitive`).toBe(false);
     }
   });

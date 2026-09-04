@@ -545,9 +545,9 @@ Ghi chú:
 
 ---
 
-## 9f. RECRUIT — Tuyển dụng (SPEC-12) · *ĐÃ SEED 31/08/2026 (S12-RECRUIT-DB-1, mig `0560`)*
+## 9f. RECRUIT — Tuyển dụng (SPEC-12) · *ĐÃ SEED 31/08/2026 (S12-RECRUIT-DB-1, mig `0560`) · +1 cặp 04/09/2026 (S14-RECRUIT-FILEGRANT-1, mig `0569`)*
 
-RECRUIT đứng riêng, **16 cặp** quyền per-(action, resource) theo SPEC-12 §11 — owner duyệt gói wave 31/08/2026 (REC-DEC-001..008). Data scope **chốt cùng migration seed** (S12-RECRUIT-DB-1, KHÔNG để mở sau). Ngoài 4 role canonical, wave này seed thêm **role hệ thống `recruiter`** (SPEC-01 §10.7; `roles.company_id IS NULL`, `is_system=true`, `requires_two_factor=false` tường minh; tiền lệ `asset-manager` §9d, `office-admin` §9e) — **không** phải role canonical, không được thêm vào `DashCanonicalRole`/`NOTI_CANONICAL_ROLES`/pin `auth-seed-canonical-roles`. Hiring manager = role `manager` hiện có, **không** role mới (REC-DEC-008).
+RECRUIT đứng riêng, **17 cặp** quyền per-(action, resource) theo SPEC-12 §11 — owner duyệt gói wave 31/08/2026 (REC-DEC-001..008). Data scope **chốt cùng migration seed** (S12-RECRUIT-DB-1, KHÔNG để mở sau). Ngoài 4 role canonical, wave này seed thêm **role hệ thống `recruiter`** (SPEC-01 §10.7; `roles.company_id IS NULL`, `is_system=true`, `requires_two_factor=false` tường minh; tiền lệ `asset-manager` §9d, `office-admin` §9e) — **không** phải role canonical, không được thêm vào `DashCanonicalRole`/`NOTI_CANONICAL_ROLES`/pin `auth-seed-canonical-roles`. Hiring manager = role `manager` hiện có, **không** role mới (REC-DEC-008).
 
 | Cặp quyền (SPEC-12 §11) | `is_sensitive` | Ý nghĩa | Nhân viên | Trưởng đơn vị | HR | BOD/Admin · Recruiter |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -567,13 +567,15 @@ RECRUIT đứng riêng, **16 cặp** quyền per-(action, resource) theo SPEC-12
 | `('feedback','interview')` | false | Ghi/sửa feedback **của mình** trên lượt mình tham gia | không | **own** | **own** | **own** |
 | `('view','offer')` | false | Xem offer (**không** thấy lương) | không | không | all | all |
 | `('manage','offer')` | false | Tạo/sửa/đổi trạng thái offer + **thấy lương** | không | không | không | all |
+| `('upload','candidate-file')` | **true** | Đăng ký · xác nhận · **gắn** tệp CV vào ứng viên (RECRUIT-API-035..037). KHÔNG mở đường đọc (đã là `view:candidate`), KHÔNG mở gỡ/xoá | không | không | all | all |
 
 Ghi chú:
 
-- **7 cặp resource `candidate` mang `is_sensitive = true`** (REC-DEC-003 — PII ứng viên), 9 cặp còn lại `false` — chốt cùng seed, không flip sau (bẫy `canonical-seed-pin-regression`). Cặp sensitive phải khai **allowlist capability ở BACKEND** cùng WO BE (kẻo màn quản trị biến mất với chính role được grant).
+- **8 cặp `is_sensitive = true`**: 7 cặp resource `candidate` (REC-DEC-003 — PII ứng viên) + `('upload','candidate-file')` (mig `0569` — CV là PII ứng viên); 9 cặp còn lại `false` — chốt cùng seed, không flip sau (bẫy `canonical-seed-pin-regression`). Cặp sensitive phải khai **allowlist capability ở BACKEND** cùng WO BE (kẻo màn quản trị biến mất với chính role được grant).
 - **Masking là tầng thứ hai, tách khỏi cặp quyền:** email/phone che ở server trừ khi caller giữ `('update','candidate')`; `offers.salary` chỉ trả cho `('manage','offer')` — không dựng cặp nhạy cảm riêng cho lương (SPEC-12 §18).
 - **`('feedback','interview')` scope Own cho MỌI role** — feedback bản chất là "của tôi trên lượt tôi tham gia"; điều kiện participant kiểm ở service (RECRUIT-ERR-011). Đường đọc tệp CV dùng **chính cặp đọc** `('view','candidate')` qua resolver Foundation Files (họ lỗi `read-path-gate-pair-must-match-download-pair`).
-- **Ma trận seed = 42 hàng** `role_permissions`: `employee` 0 · `manager` 3 (`access`@Own · `view:interview`@Own · `feedback:interview`@Own) · `hr` 7 (`access`@Own · `view` job-opening/candidate/interview/offer @Company · `convert:candidate`@Company · `feedback:interview`@Own) · `company-admin` 16 · `recruiter` 16 (`access`@Own · `feedback`@Own · 14 cặp @Company). Migration verify fail-loud đúng số; `super-admin` không enumerate (nhận qua `SuperAdminBootstrapService`).
+- **Cặp GHI tệp CV `('upload','candidate-file')` (mig `0569`) — vì sao resource riêng, không phải `candidate`:** `0560` RAISE theo SỐ ĐẾM grant trên đúng 5 resource RECRUIT và int-spec replay chính file migration đó từ đĩa ⇒ đặt cặp mới trên `candidate` làm migration ĐÃ SHIP nổ. Vì sao không tái dùng `('update','candidate')`: cặp đó mở luôn PII (email/phone không che) cho TOÀN role được cấp. Và vì sao KHÔNG cấp `*:foundation-file` cho `recruiter`/`hr`: `view:foundation-file` là cổng màn quản trị `System > Files`, còn `GET /foundation/files` không gác per-file ⇒ cấp = mở trình duyệt tệp toàn tenant.
+- **Ma trận seed = 45 hàng** `role_permissions` (42 ở `0560` + 3 ở `0569`): `employee` 0 · `manager` 3 (`access`@Own · `view:interview`@Own · `feedback:interview`@Own) · `hr` 8 (`access`@Own · `view` job-opening/candidate/interview/offer @Company · `convert:candidate`@Company · `feedback:interview`@Own · `upload:candidate-file`@Company) · `company-admin` 17 · `recruiter` 17 (`access`@Own · `feedback`@Own · 15 cặp @Company). Migration verify fail-loud đúng số; `super-admin` không enumerate (nhận qua `SuperAdminBootstrapService`).
 - RLS+FORCE cô lập **tenant** trên 8 bảng RECRUIT; own-scope interview ép ở **service layer** (`EXISTS interview_participants` theo employee của caller). Ngoài scope → **404** (không 403 — chống dò sự tồn tại); riêng ghi feedback khi thấy lượt ở Company mà không tham gia → **403** (RECRUIT-ERR-011).
 - 4 FSM (ứng viên · vị trí · phỏng vấn · offer — SPEC-01 §17.11–17.14) ép ở service; chốt cuối ở DB: UNIQUE `candidates.employee_id` (double-convert) · partial unique 1 offer sống · unique feedback per interviewer (DB-14 §6).
 - Chi tiết mã lỗi/quy tắc: [SPEC-12 RECRUIT §11–13](<SPEC/SPEC-12 RECRUIT.md>); schema: [DB-14](<DB/DB-14 RECRUIT Database Design.md>); API: [API-17](<API Design/API-17_RECRUIT_API_Design.md>).

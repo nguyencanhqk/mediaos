@@ -1,6 +1,127 @@
 # Bàn giao phiên — Memory tầng 2 (phiên trước → phiên sau)
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
+
+## Phiên 2026-09-04 (b) — S14-RECRUIT-FILEGRANT-1 **CODE XONG, FULL gate PASS, PR mở** — chờ người merge
+
+**Trạng thái:** nhánh `feat/s14-recruit-filegrant-1`, 2 commit. Vùng ĐỎ ⇒ theo CLAUDE.md §9.4 **KHÔNG
+gắn nhãn auto-merge**, để người chốt.
+
+- `bash harness/check.sh --lane-db=filegrant1` → **XANH ✅ mọi cổng** (657/657 file api · 259/259 app;
+  6 lần chạy lại do crash hạ tầng `ERR_IPC_CHANNEL_CLOSED`, 0 test đỏ).
+- **security-reviewer PASS** (0 CRITICAL / 0 HIGH / 1 MEDIUM / 5 LOW) · **silent-failure-hunter PASS**
+  (1 MEDIUM, đã vá) · `database-reviewer` **dừng ở hook chi phí, không có verdict** — câu nó bỏ ngỏ đã
+  **tự đo** (plan §12.6), không hỏi lại.
+- Test mới: 30 int-spec · 20 unit-spec (đột biến TỪNG VẾ `canLinkFile`) · 9 FE spec.
+
+### Ba điều đáng nhớ (đã đóng băng vào plan §12–§13)
+
+1. **Plan đếm THIẾU cổng census: có BẢY, không phải sáu.** Cổng thứ 7 là FE
+   `recruit-wiring.spec.ts` — nó đọc file BE bằng `fs`, ghim 32 cặp và có ca *"không resource nào KHÁC
+   `candidate` bị sensitive"*. Đã vá theo hướng **ghim TẬP, không ghim TÊN**.
+2. **Ca `/auth/me` (K1) đã ĐỘT BIẾN để chứng minh không xanh-rỗng:** gỡ dòng allowlist ⇒ K1 đỏ
+   (`expected undefined to be true`). Lớp lỗi CAP-2 này đã lặp 12+ lần mà trước đây không có ca đo.
+3. **Đo thay vì tin lời khai:** replay `0569` lần 2 trên lane DB cho `INSERT 0 0` + 2 khối verify xanh;
+   và trong 8 hàng grant `candidate-file` có **5 role company-scoped của fixture test** mà verify
+   NEGATIVE **không** trip ⇒ vế neo `company_id IS NULL` hoạt động đúng trên dữ liệu thật.
+
+### Nợ ghi nhận (KHÔNG làm ở WO này — plan §13.2)
+
+- **MEDIUM** — `list` (033) không đi qua `FilePolicyService` ⇒ lệch pha list↔download khi KI-d xảy ra.
+  Reviewer TỰ khuyến nghị không vá ở đây. → gộp WO đóng **KI-b/KI-d**.
+- 3 LOW: `confirm` 403 không để vết · mục B của qa1 dùng `.not.toBe(403)` · khối (4b) của 0569 là bất
+  biến toàn cục lúc migrate.
+- KI-a/KI-b/KI-c/KI-d của plan §9 giữ nguyên, chưa đụng.
+
+### Friction
+
+- **Chi phí phiên chạm $293.80** — riêng 3 reviewer FULL gate đốt ~$160 (security 181k token, silent-
+  failure 143k, database 88k *mà không ra verdict*). `database-reviewer` bị hook chi phí cắt giữa chừng
+  và trả về câu hỏi thay vì kết luận ⇒ **tiền mất, verdict không có**. Bài học: với lane vùng đỏ, chạy
+  reviewer **tuần tự và hỏi ĐÚNG thứ mình không tự đo được**; những câu như "index có tồn tại không",
+  "canLink có chạy ngoài tx không", "migration có idempotent không" thì tự đo bằng 1 câu SQL / 1 lần
+  `sed` rẻ hơn hai bậc.
+
+---
+
+## Phiên 2026-09-04 — S14-RECRUIT-FILEGRANT-1 ĐANG DỞ: plan v3 + migration XONG, code CHƯA viết
+
+**Trạng thái:** nhánh `feat/s14-recruit-filegrant-1` (cắt từ master `1685f9e5`), backlog `in_progress`.
+Dừng CÓ CHỦ ĐÍCH ở ranh giới sạch vì chi phí phiên chạm $174 — phần đắt nhất (hiểu hệ thống + quyết
+định thiết kế) đã kết tinh vào plan, phiên sau đọc plan rồi code thẳng sẽ rẻ hơn nhiều cho cùng kết quả.
+
+### Owner đã chốt trong phiên (KHÔNG hỏi lại)
+
+1. **Hướng = wrapper RECRUIT**, KHÔNG cấp cặp `foundation-file` cho recruiter/hr (WO seed viết sai hướng).
+2. **`hr` được đủ 4 thao tác CV như `recruiter`.**
+3. *(người thực hiện tự quyết, owner chưa bác)* KHÔNG cấp `update:candidate` cho hr — SPEC-12 §11:276
+   chốt cặp đó cho thấy email/phone KHÔNG che ⇒ sẽ bỏ mask PII toàn role hr. Thay bằng cặp ghi-tệp riêng.
+
+### Vì sao WO seed sai hướng (đo trên DB thật, không suy đoán)
+
+Cấp `view:foundation-file` cho recruiter/hr sẽ mở **màn quản trị `System > Files`**
+(`sidebar-registry.ts:692` + `FilesPage.tsx:111`), và `GET /foundation/files` **không gác per-file**
+(`file.repository.ts:308 listTx` bỏ qua `moduleCode/entityType/entityId`) ⇒ liệt kê MỌI tệp tenant.
+`download:foundation-file` mở fallback `FOUNDATION.FILE.*` cho tệp chưa từng link.
+
+### ĐÃ XONG (trên đĩa, chưa merge)
+
+- **`docs/plans/S14-RECRUIT-FILEGRANT-1.md` v3** — qua **2 vòng plan-review đối kháng**, 8 điểm BLOCK
+  đã vá, mỗi điểm kèm `file:dòng` đã tự kiểm chứng. **ĐỌC PLAN TRƯỚC KHI CODE** — nó có sẵn 20 ca test,
+  khuôn phải chép, và 6 cổng census phải cập nhật.
+- **`apps/api/migrations/0569_s14recruitfilegrant1_candidate_file_perm.sql`** + journal idx 236.
+  **ĐÃ CHẠY THẬT 2 LẦN trên `mediaos_filegrant1`**: lần 1 seed 1 cặp + 3 grant, lần 2 idempotent
+  (0 INSERT), cả 4 khối verify xanh. State: `recruiter|hr|company-admin × upload:candidate-file
+  × ALLOW@Company`, `is_sensitive=true`.
+- **`harness/backlog.mjs`** — layer `DB+BE+FE`, paths 7→14, done_when +1 (hướng owner chốt).
+- Lane DB `mediaos_filegrant1` sẵn sàng (236 migration + 0569).
+
+### CHƯA LÀM — phần còn lại của WO
+
+4 file BE mới (controller · service · repository · unit-spec resolver) · 5 file BE sửa
+(`recruit-route-pairs.const` +5 key · resolver `canLinkFile` 5 vế · `recruit.module` · `permission.service`
+2 mảng allowlist) · 2 contract · 3 file FE · int-spec ~20 ca · **6 cổng census toàn cục** · 6 doc
+(SPEC-12 §11/§15/§18 · permission-matrix §9f · API-17 · route-census artifact) · FULL gate ·
+`bash harness/check.sh --all --lane-db=filegrant1`.
+
+### BA điều KHÔNG được quên (mỗi cái là một lỗ thật review đã bắt)
+
+1. **`canLinkFile` phải có NĂM vế**, không phải chỉ cặp quyền. `FileService.link`
+   (`files.service.ts:530-600`) **không hề kiểm `owner_user_id`** — chỉ tenant + `Infected`. Thiếu vế
+   "caller sở hữu tệp" + vế "tệp CHƯA từng link" thì recruiter/hr link được **tệp bất kỳ** vào ứng viên,
+   kể cả tệp đã bị **thu hồi** (gỡ link) — biến `deny-links-revoked` thành vô dụng **vĩnh viễn**.
+   Khuôn phải chép: `ChatMessageFileResolver.canAttach` (`chat-message-file.resolver.ts:110`).
+2. **Cặp mới đặt trên resource `candidate-file`, KHÔNG phải `('file-upload','candidate')`** — lý do kỹ
+   thuật, không phải đặt tên: `0560:336-347` (b1) RAISE nếu ≠42 và `:431-444` (b4) nếu ≠14 trên 5
+   resource RECRUIT, mà int-spec I1 (`s12-recruit-db1-invariants:982-1016`) **đọc `0560_*.sql` từ đĩa
+   rồi chạy lại** ⇒ đặt trên `candidate` là migration ĐÃ SHIP nổ khi replay, exception ném từ trong SQL
+   nên không "sửa kỳ vọng ở test" được.
+3. **Mọi câu đo role trong migration phải neo `company_id IS NULL`.** `SuperAdminBootstrapRepository`
+   grant TOÀN BỘ catalog không lọc (`:127-128`) — gồm cặp `('*','*')` — cho role `super-admin`
+   **COMPANY-SCOPED** (`:44`). Không neo ⇒ RAISE trên mọi DB đã bootstrap. **Bẫy này KHÔNG lộ ra khi
+   thử local** (DB dev chưa bootstrap super-admin nên grant wildcard = 0 hàng).
+
+### Nợ ghi nhận, KHÔNG làm trong WO này (plan §9)
+
+- **KI-a** `GET /foundation/files` bỏ qua bộ lọc entity ⇒ tab CV hiện tại đang liệt kê MỌI tệp tenant
+  (lỗi CÓ SẴN, đang bị che vì chỉ admin giữ cặp). WO riêng — bề mặt dùng chung.
+- **KI-b** TASK và HR có **cùng lớp gap**: `employee`/`manager` giữ `file-upload:task@Own`, `hr` giữ
+  `file-upload:employee@Company`, nhưng cả hai vẫn upload qua `/foundation/files/upload`. Dùng lại
+  khuôn wrapper của WO này.
+- **KI-d** `EmployeeFileResolver.canLinkFile` (`employee-file.resolver.ts:57-59`) **không có
+  owner-check** ⇒ hr gắn được CV ứng viên vào hồ sơ nhân viên qua HR-API-801, làm recruiter **mất**
+  quyền tải chính CV đó (AND-verdict `decideForLinkedFile:238-261`). **Reachable HÔM NAY**, không phải
+  giả định. Không phải escalation nên không chặn WO này.
+
+### Friction
+
+- **Chi phí plan-review vùng đỏ cao hơn `red-zone-wo-cost-profile` ghi nhận**: 2 vòng review = ~$90
+  (vòng 2 một mình đốt 295k token). Vòng 2 vẫn đáng — nó bắt 3 điểm BLOCK mà **chính bản vá vòng 1 đẻ
+  ra** (đúng `plan-review-rounds-inject-new-holes`). Nhưng phải tính vòng review vào ngân sách WO ngay
+  từ đầu, và dừng ở 2 vòng.
+- **Bash heredoc `<<'PY'` vỡ** với nội dung nhiều backtick/nháy tiếng Việt ("unexpected EOF looking for
+  matching `''`") ⇒ script vá file phải ghi ra file rồi chạy, đừng nhét inline.
+
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
