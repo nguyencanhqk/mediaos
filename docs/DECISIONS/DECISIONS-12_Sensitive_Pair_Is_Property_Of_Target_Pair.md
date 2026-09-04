@@ -196,10 +196,19 @@ thử lại **mỗi lượt** vì DB đang **chết**: mỗi lượt tự có gi
 khi DB sống lại. Nhánh rỗng thì ngược: DB **khoẻ**, query nhanh, trạng thái **không tự lành** nếu chưa ai
 seed ⇒ không có sàn thì mỗi `can()` = 1 `SELECT` + 1 `logger.error`, **mãi mãi**, trên hot-path mà mọi
 kiểm quyền đi qua (single-flight chỉ gộp lượt **song song**). 5s: ≪ TTL 300s nên không tái lập «khoá suy
-biến 300s» mà D2 cấm; ≫ thời gian một request. Sàn **tự hết hạn** và có hai đường gỡ: một lượt nạp LÀNH,
-và `reset()` (D7) — `reset()` phải gỡ **cả** sàn, nếu không seam test mất tác dụng đúng lúc int-spec seed
-cặp mới rồi gọi `resetCatalogSnapshotForTest()`. Sàn **không** gỡ ở nhánh `catch`, có chủ ý: sàn được
-kiểm ở **đầu** `refresh()` nên `catch` không thể chạy trong cửa sổ sàn, và một sàn đã quá hạn là trơ.
+biến 300s» mà D2 cấm; ≫ thời gian một request. Đường gỡ **THẬT** có hai: sàn **tự hết hạn**, và
+`reset()` (D7) — `reset()` phải gỡ **cả** sàn, nếu không seam test mất tác dụng đúng lúc int-spec seed
+cặp mới rồi gọi `resetCatalogSnapshotForTest()`.
+
+Sàn **không** gỡ ở nhánh `catch`, có chủ ý: sàn được kiểm ở **đầu** `refresh()` nên `catch` không thể
+chạy trong cửa sổ sàn, và một sàn đã quá hạn là trơ. Cùng lập luận đó cho thấy dòng gỡ sàn ở nhánh nạp
+**LÀNH** là **phòng thủ, không phải một đường gỡ**: sàn nào mà một lượt nạp lành với tới được thì đã hết
+hạn từ trước. (Đo bằng đột biến: xoá dòng ấy — suite vẫn xanh. Giữ vì vô hại; **đừng** kể nó như một cơ
+chế nhả.)
+
+**Thứ tự `epoch` trước kiểm rỗng là BẤT BIẾN, có ca ghim.** Một lượt nạp đã lạc hậu mà đặt được
+`retryNotBeforeMs` sẽ khoá **thế hệ ảnh chụp MỚI** bằng sàn của thế hệ CŨ, không đường gỡ — đúng hình
+dạng M2, chỉ đổi tên biến. Đột biến «xoá dòng kiểm epoch» từng xanh toàn suite; nay có ca giết nó.
 **Đồng hồ lùi** (NTP) kéo dài cửa sổ đúng bằng bước lùi — cùng hạng rủi ro với TTL đã có, không thêm code.
 
 **Quan sát — hai chiều tách bạch.** `onError(error, phase, cause)`: `phase` (`stale-kept` | `no-snapshot`)

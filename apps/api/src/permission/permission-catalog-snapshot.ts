@@ -95,8 +95,15 @@ export class PermissionCatalogSnapshot {
   /**
    * ADR D9 — mốc `now()` mà TRƯỚC đó không thử nạp lại. `0` = không có sàn.
    *
-   * Chỉ nhánh SUY BIẾN-RỖNG đặt nó. Tự hết hạn (so với `now()`), và có hai đường gỡ tường minh: một
-   * lượt nạp LÀNH (`refresh`) và `reset()`.
+   * Chỉ nhánh SUY BIẾN-RỖNG đặt nó. Đường gỡ THẬT có hai: **tự hết hạn** (so với `now()`) và
+   * `reset()`.
+   *
+   * ⚠️ Dòng `retryNotBeforeMs = 0` ở nhánh nạp LÀNH là **phòng thủ, KHÔNG phải một đường gỡ** — nó
+   * không thể chạy khi sàn còn hiệu lực: sàn được kiểm ở ĐẦU `refresh()` nên không lượt nạp nào khởi
+   * động được trong cửa sổ sàn, và single-flight bảo đảm không có lượt nào đang bay sẵn lúc sàn được
+   * đặt (sàn được đặt và ô `inFlight` được nhả trong cùng một job đồng bộ). Nghĩa là: sàn nào mà một
+   * lượt nạp lành với tới được thì đã hết hạn từ trước, tức đã trơ. Giữ dòng đó vì nó vô hại và
+   * đúng-theo-ý-định; đừng viết vào tài liệu rằng nó là một cơ chế nhả.
    */
   private retryNotBeforeMs = 0;
 
@@ -238,7 +245,8 @@ export class PermissionCatalogSnapshot {
             this.sensitivePairs === null ? "no-snapshot" : "stale-kept",
             "empty-catalog",
           );
-          return new Set();
+          // Ảnh chụp CŨ nếu có; `null` nếu chưa từng nạp được ⇒ mọi cặp = sensitive = SIẾT.
+          return this.sensitivePairs;
         }
 
         const next = new Set<string>();

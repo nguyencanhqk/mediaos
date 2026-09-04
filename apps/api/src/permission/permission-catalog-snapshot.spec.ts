@@ -211,6 +211,42 @@ describe("PermissionCatalogSnapshot", () => {
     expect(load).toHaveBeenCalledTimes(2);
   });
 
+  it("D9 sàn — lượt nạp LẠC HẬU (reset() xen giữa) KHÔNG được để lại sàn MỒ CÔI", async () => {
+    // Ghim THỨ TỰ: kiểm `epoch` phải nằm TRƯỚC kiểm rỗng trong `refresh()`.
+    //
+    // Không có ca này thì XOÁ HẲN dòng `if (epochAtStart !== this.epoch) return ...` vẫn xanh toàn
+    // suite (đo bằng đột biến). Mà chính dòng đó là thứ chặn một lượt nạp ĐÃ LẠC HẬU đặt
+    // `retryNotBeforeMs` cho một thế hệ ảnh chụp không ai còn dùng — tức khoá thế hệ MỚI bằng sàn của
+    // thế hệ CŨ, không đường gỡ: đúng hình dạng M2, chỉ đổi tên biến.
+    const clock = fakeClock();
+    let resolveStale: ((rows: PermissionCatalogEntry[]) => void) | undefined;
+    const load = vi
+      .fn<() => Promise<PermissionCatalogEntry[]>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise<PermissionCatalogEntry[]>((resolve) => {
+            resolveStale = resolve;
+          }),
+      )
+      .mockResolvedValue(CATALOG);
+    const snap = new PermissionCatalogSnapshot({
+      load,
+      now: clock.now,
+      onError: vi.fn(),
+      degradedRetryMs: 10_000,
+    });
+
+    const stale = snap.isPairSensitive("view", "candidate"); // lượt 1 đang BAY
+    snap.reset(); // sang thế hệ MỚI trong lúc lượt 1 chưa về
+    resolveStale?.([]); // lượt CŨ về, và về RỖNG
+    await stale;
+
+    // Lượt kế thuộc thế hệ MỚI ⇒ phải nạp lại NGAY, không bị sàn của lượt lạc hậu chặn.
+    // Đồng hồ KHÔNG nhúc nhích: nếu sàn mồ côi tồn tại thì nó còn hiệu lực 10s nữa.
+    expect(await snap.isPairSensitive("read", "notification")).toBe(false);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
   it("M2 — `load` ném ĐỒNG BỘ ⇒ ô single-flight KHÔNG kẹt: lượt kế tiếp vẫn nạp lại", async () => {
     // ⚠️ Phải ném ĐỒNG BỘ (`mockImplementationOnce(() => { throw })`), KHÔNG `mockRejectedValueOnce`:
     // promise-reject là đường đã có ca xanh sẵn ⇒ dùng nó ở đây là một ca RỖNG.
