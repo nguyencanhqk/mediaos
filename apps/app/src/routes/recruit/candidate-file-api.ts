@@ -1,39 +1,36 @@
 /**
- * S12-RECRUIT-FE-1 — client CV ứng viên qua Foundation Files GENERIC (API-09), KHÔNG qua route RECRUIT
- * riêng (RECRUIT không có route upload/tải — `RecruitCandidateFileResolver` phía BE đăng ký cặp
- * (module='RECRUIT', entity='candidate') vào chính surface chung `foundation/files`).
+ * S14-RECRUIT-FILEGRANT-1 — client tệp CV ứng viên qua bề mặt RECRUIT RIÊNG
+ * (`/candidates/:id/files*`, RECRUIT-API-033..037), KHÔNG còn qua `/foundation/files*` generic.
  *
- * File này SỐNG Ở `apps/app` (KHÔNG phải `packages/web-core`) — tái dùng `apiFetch`/`apiFetchPaginated`
- * đã export sẵn + schema `@mediaos/contracts` đã export sẵn (`listFilesQuerySchema`, `fileMetadataSchema`,
- * `linkFileInputSchema`, `registerFileResponseSchema`, `confirmUploadResponseSchema`). KHÔNG chế endpoint:
- * cả 5 route `/foundation/files*` dùng ở đây đều tồn tại thật (`files.controller.ts`), đã có sẵn client
- * mẫu cùng shape ở `employeeFilesApi.uploadEmployeeFile` (khác ở bước cuối: RECRUIT KHÔNG có route
- * "gắn theo module" riêng như `/hr/employees/:id/files` — bước cuối ở đây gọi THẲNG
- * `POST /foundation/files/:id/links` generic, đúng route đã có sẵn cho MỌI module).
+ * ┌─ VÌ SAO ĐỔI ─────────────────────────────────────────────────────────────────────────────────┐
+ * │ Bản S12-RECRUIT-FE-1 gọi thẳng 5 route `/foundation/files*`, vốn gate `*:foundation-file` —   │
+ * │ cặp mà seed chỉ cấp cho company-admin. Đó là "NỢ SEED" ghi ở docblock cũ. Cách đóng KHÔNG      │
+ * │ phải là cấp cặp đó cho recruiter/hr: `view:foundation-file` mở luôn màn quản trị              │
+ * │ System > Files, và `GET /foundation/files` không gác per-file ⇒ trình duyệt tệp TOÀN TENANT.  │
+ * │ Thay vào đó BE dựng wrapper module-owned với một cặp GHI mới `upload:candidate-file`          │
+ * │ (is_sensitive=TRUE, mig 0569) và đường ĐỌC dùng lại `view:candidate`.                          │
+ * └───────────────────────────────────────────────────────────────────────────────────────────────┘
  *
- * ⚠️ NỢ SEED (ghi nhận tường minh, KHÔNG che giấu — cùng lớp gap đã note ở `employee-file-api.ts`):
- * migration 0435 chỉ grant `upload/view/download/link/unlink:foundation-file` cho `company-admin`
- * (role 0001) — role `recruiter`/`hr` CHƯA có các quyền này trong seed hiện tại. Nút Tải CV vẫn gate
- * ĐÚNG theo cặp thật (`useCan(..., 'foundation-file')`) — role thiếu grant sẽ thấy nút ẩn (PermissionGate)
- * hoặc 403 nếu gọi thẳng API; đây là gap BE/seed cần WO riêng, KHÔNG phải lỗi ở client này.
+ * `moduleCode`/`entityType`/`entityId`/`visibility` KHÔNG còn nằm trong payload: cả bốn do SERVER đặt
+ * (schema `.strict()` ⇒ gửi lên là 400). Client chỉ khai tên/MIME/kích thước.
+ *
+ * Danh sách trả **mảng TRẦN** — `apiFetch` + array schema, KHÔNG `apiFetchPaginated`
+ * (`apifetch-drops-pagination-bare-array`).
  */
 import { z } from "zod";
 import {
-  fileMetadataSchema,
-  fileLinkSchema,
-  listFilesQuerySchema,
-  linkFileInputSchema,
+  recruitCandidateFileSchema,
+  recruitCandidateFileUploadUrlInputSchema,
   registerFileResponseSchema,
   confirmUploadResponseSchema,
   downloadUrlSchema,
-  type FileMetadataDto,
+  type RecruitCandidateFileDto,
   type RegisterFileResponse,
   type DownloadUrlDto,
 } from "@mediaos/contracts";
 import { apiFetch } from "@mediaos/web-core";
-import { RECRUIT_FILE_MODULE_CODE, RECRUIT_FILE_ENTITY_TYPE } from "./constants";
 
-const fileListSchema = z.array(fileMetadataSchema);
+const fileListSchema = z.array(recruitCandidateFileSchema);
 const DEFAULT_UPLOAD_MIME = "application/octet-stream";
 
 /** PUT bytes trực tiếp lên presigned URL — mirror `putFileToUrl` của `employee-file-api.ts`. */
@@ -57,74 +54,49 @@ function putFileToUrl(url: string, file: File, contentType: string): Promise<voi
 }
 
 export const candidateFileApi = {
-  /** GET /foundation/files?moduleCode=RECRUIT&entityType=candidate&entityId=:id — CV + tài liệu đã gắn. */
-  listCandidateFiles: (candidateId: string): Promise<FileMetadataDto[]> => {
-    const query = listFilesQuerySchema.parse({
-      moduleCode: RECRUIT_FILE_MODULE_CODE,
-      entityType: RECRUIT_FILE_ENTITY_TYPE,
-      entityId: candidateId,
-      limit: 50,
-    });
-    const params = new URLSearchParams({
-      moduleCode: query.moduleCode ?? "",
-      entityType: query.entityType ?? "",
-      entityId: query.entityId ?? "",
-      limit: String(query.limit),
-      page: String(query.page),
-    });
-    return apiFetch(`/foundation/files?${params.toString()}`, fileListSchema);
-  },
+  /** 033 — GET /candidates/:id/files. Chỉ tệp đã gắn vào ĐÚNG ứng viên này. */
+  listCandidateFiles: (candidateId: string): Promise<RecruitCandidateFileDto[]> =>
+    apiFetch(`/candidates/${candidateId}/files`, fileListSchema),
 
-  /** URL tải TTL-ngắn — mirror `filesApi.getDownloadUrl`. */
-  getDownloadUrl: (fileId: string): Promise<DownloadUrlDto> =>
-    apiFetch(`/foundation/files/${fileId}/download-url`, downloadUrlSchema),
+  /** 034 — GET /candidates/:id/files/:fileId/download-url (TTL ngắn; sai ứng viên ⇒ 404). */
+  getDownloadUrl: (candidateId: string, fileId: string): Promise<DownloadUrlDto> =>
+    apiFetch(`/candidates/${candidateId}/files/${fileId}/download-url`, downloadUrlSchema),
 
   /**
-   * Upload + gắn CV vào ứng viên — 3 pha (register → PUT bytes → confirm), rồi POST /:id/links generic
-   * (linkType='Document', accessScope='Company' — Candidate CHỈ Company theo §13.6).
+   * Tải CV lên — 4 pha: 035 upload-url → PUT bytes → 036 confirm → 037 link.
+   *
+   * Cả chuỗi phải chạy LẠI từ đầu khi retry: BE chặn tái-link một tệp đã từng được gắn (vế 5 của
+   * `canLinkFile`, chống bypass thu hồi) ⇒ gọi lại RIÊNG bước link cho cùng tệp sẽ ăn 403, không 409.
    */
-  uploadCandidateFile: async (candidateId: string, file: File): Promise<FileMetadataDto> => {
+  uploadCandidateFile: async (
+    candidateId: string,
+    file: File,
+  ): Promise<RecruitCandidateFileDto> => {
     const declaredMimeType = file.type || DEFAULT_UPLOAD_MIME;
+    const body = recruitCandidateFileUploadUrlInputSchema.parse({
+      originalName: file.name,
+      declaredMimeType,
+      sizeBytes: file.size,
+    });
 
     const registered = await apiFetch<RegisterFileResponse>(
-      "/foundation/files/upload",
+      `/candidates/${candidateId}/files/upload-url`,
       registerFileResponseSchema,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          originalName: file.name,
-          declaredMimeType,
-          sizeBytes: file.size,
-          visibility: "Private",
-          moduleCode: RECRUIT_FILE_MODULE_CODE,
-          entityType: RECRUIT_FILE_ENTITY_TYPE,
-          entityId: candidateId,
-        }),
-      },
+      { method: "POST", body: JSON.stringify(body) },
     );
 
     await putFileToUrl(registered.uploadUrl, file, declaredMimeType);
 
-    await apiFetch(`/foundation/files/${registered.fileId}/confirm`, confirmUploadResponseSchema, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
+    await apiFetch(
+      `/candidates/${candidateId}/files/${registered.fileId}/confirm`,
+      confirmUploadResponseSchema,
+      { method: "POST", body: JSON.stringify({}) },
+    );
 
-    const linkBody = linkFileInputSchema.parse({
-      fileId: registered.fileId,
-      moduleCode: RECRUIT_FILE_MODULE_CODE,
-      entityType: RECRUIT_FILE_ENTITY_TYPE,
-      entityId: candidateId,
-      linkType: "Document",
-      accessScope: "Company",
-      isPrimary: false,
-      purpose: "CV",
-    });
-    await apiFetch(`/foundation/files/${registered.fileId}/links`, fileLinkSchema, {
-      method: "POST",
-      body: JSON.stringify(linkBody),
-    });
-
-    return apiFetch(`/foundation/files/${registered.fileId}`, fileMetadataSchema);
+    return apiFetch(
+      `/candidates/${candidateId}/files/${registered.fileId}/link`,
+      recruitCandidateFileSchema,
+      { method: "POST", body: JSON.stringify({}) },
+    );
   },
 };

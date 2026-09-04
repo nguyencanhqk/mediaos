@@ -51,7 +51,7 @@ import {
   RECRUIT_ROUTE_PAIRS,
   type RecruitRouteKey,
 } from "../../src/recruit/recruit-route-pairs.const";
-import { loginPasswordFixture } from "../helpers/fixture-secrets";
+import { FALLBACK_S3_SECRET, loginPasswordFixture } from "../helpers/fixture-secrets";
 import { directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -67,7 +67,16 @@ import {
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = loginPasswordFixture("s12recruitqa1");
 
-/** 15 cặp distinct của RECRUIT_ROUTE_PAIRS (dedupe theo "action:resource"), giữ NGUYÊN cờ sensitive —
+// S14-RECRUIT-FILEGRANT-1 — 3 route tệp CV đi qua `FileService` (presign S3 là HMAC OFFLINE, KHÔNG
+// gọi mạng ⇒ không cần MinIO chạy). Đặt TRƯỚC khi dựng app.
+process.env.S3_ENDPOINT ??= "http://localhost:9000";
+process.env.S3_ACCESS_KEY ??= "mediaos";
+process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
+process.env.S3_BUCKET ??= "mediaos-assets";
+process.env.S3_FORCE_PATH_STYLE ??= "true";
+process.env.S3_REGION ??= "us-east-1";
+
+/** 16 cặp distinct của RECRUIT_ROUTE_PAIRS (dedupe theo "action:resource"), giữ NGUYÊN cờ sensitive —
  * nguồn sự thật DUY NHẤT cho cả ba chủ thể (`tOwn`/`tDept`/`tCompany`), không gõ lại literal. */
 const ALL_PAIRS: ReadonlyArray<{ action: string; resourceType: string; isSensitive: boolean }> = [
   ...new Map(
@@ -88,6 +97,14 @@ interface Fixture {
   candidateId: string;
   offerId: string;
   orgUnitId: string;
+  /**
+   * Tệp CV do CHỦ THỂ `tCompany` upload+confirm, CHƯA gắn — dành riêng cho `candidateFileLink`.
+   *
+   * Không dùng `ghost()` được ở route đó: `FileService.link` hỏi resolver, resolver không tìm thấy tệp
+   * ⇒ deny ⇒ **403**, làm mục B (`.not.toBe(403)`) đỏ vì lý do SAI (thiếu tệp, không phải thiếu sàn
+   * scope). Tệp thật cũng làm mục B mạnh hơn: nó chứng minh đường GẮN chạy được ở scope Company.
+   */
+  linkableFileId: string;
 }
 
 interface RouteSpec {
@@ -224,6 +241,39 @@ const ROUTES: Partial<Record<RecruitRouteKey, RouteSpec>> = {
     url: () => "/recruit/pickers/recruiter-users?limit=5",
     read: true,
   },
+  // ── Tệp CV 033–037 (S14-RECRUIT-FILEGRANT-1) ──
+  // Cả 5 đều companyFloor:true. `resolveActor` chạy TRƯỚC mọi lookup DB nên `ghost()` ở `:fileId` đủ
+  // cho mục A; mục B cần tệp THẬT ở route `link` (xem `Fixture.linkableFileId`).
+  candidateFileList: {
+    method: "GET",
+    url: (f) => `/candidates/${f.candidateId}/files`,
+    read: true,
+  },
+  candidateFileDownload: {
+    method: "GET",
+    url: (f) => `/candidates/${f.candidateId}/files/${ghost()}/download-url`,
+  },
+  candidateFileUploadUrl: {
+    method: "POST",
+    url: (f) => `/candidates/${f.candidateId}/files/upload-url`,
+    // Body PHẢI qua được Zod `.strict()` — thiếu field dừng ở 400 TRƯỚC khi service assert sàn scope,
+    // làm mục A xanh-giả (xem docblock `RouteSpec`).
+    body: () => ({
+      originalName: "cv-s12qa1.pdf",
+      declaredMimeType: "application/pdf",
+      sizeBytes: 1024,
+    }),
+  },
+  candidateFileConfirm: {
+    method: "POST",
+    url: (f) => `/candidates/${f.candidateId}/files/${ghost()}/confirm`,
+    body: () => ({}),
+  },
+  candidateFileLink: {
+    method: "POST",
+    url: (f) => `/candidates/${f.candidateId}/files/${f.linkableFileId}/link`,
+    body: () => ({}),
+  },
 };
 
 describe.skipIf(!hasLaneDb)("S12-RECRUIT-QA-1 sàn scope Company (DB cô lập, đường thật)", () => {
@@ -238,7 +288,13 @@ describe.skipIf(!hasLaneDb)("S12-RECRUIT-QA-1 sàn scope Company (DB cô lập, 
   let ownUserId = "";
   let ownEmployeeId = "";
 
-  const fixture: Fixture = { jobOpeningId: "", candidateId: "", offerId: "", orgUnitId: "" };
+  const fixture: Fixture = {
+    jobOpeningId: "",
+    candidateId: "",
+    offerId: "",
+    orgUnitId: "",
+    linkableFileId: "",
+  };
   let interviewOwnId = "";
 
   const http = () => request(app.getHttpServer());
@@ -406,6 +462,25 @@ describe.skipIf(!hasLaneDb)("S12-RECRUIT-QA-1 sàn scope Company (DB cô lập, 
     });
     expect(iv.status, JSON.stringify(iv.body)).toBe(201);
     interviewOwnId = iv.body.data.id;
+
+    // ── Tệp CV cho `candidateFileLink` (mục B): upload + confirm, CHƯA gắn ──
+    // Leg "client PUT bytes" thay bằng UPDATE upload_status qua direct pool (không cần MinIO);
+    // `owner_user_id` giữ nguyên giá trị FileService đặt — chính cột mà confirm + resolver soi.
+    const reg = await post(tCompany, `/candidates/${fixture.candidateId}/files/upload-url`).send({
+      originalName: "cv-s12qa1-fixture.pdf",
+      declaredMimeType: "application/pdf",
+      sizeBytes: 1024,
+    });
+    expect(reg.status, JSON.stringify(reg.body)).toBe(200);
+    fixture.linkableFileId = reg.body.data.fileId as string;
+    await direct.query(`UPDATE files SET upload_status = 'Uploaded' WHERE id = $1`, [
+      fixture.linkableFileId,
+    ]);
+    const cf = await post(
+      tCompany,
+      `/candidates/${fixture.candidateId}/files/${fixture.linkableFileId}/confirm`,
+    ).send({});
+    expect(cf.status, JSON.stringify(cf.body)).toBe(200);
   }, 180_000);
 
   afterAll(async () => {
@@ -493,14 +568,14 @@ describe.skipIf(!hasLaneDb)("S12-RECRUIT-QA-1 sàn scope Company (DB cô lập, 
 
   // ── E. Census chống xanh-rỗng ──────────────────────────────────────────────────────────────────
 
-  describe("E. census — 28 key mục A ∪ 4 key mục C = ĐÚNG 32 key của RECRUIT_ROUTE_PAIRS", () => {
-    it("RECRUIT_ROUTE_PAIRS giữ đủ 32 key (chốt chặn xanh-rỗng cho toàn bộ census)", () => {
-      expect(Object.keys(RECRUIT_ROUTE_PAIRS).length).toBe(32);
+  describe("E. census — 33 key mục A ∪ 4 key mục C = ĐÚNG 37 key của RECRUIT_ROUTE_PAIRS", () => {
+    it("RECRUIT_ROUTE_PAIRS giữ đủ 37 key (chốt chặn xanh-rỗng cho toàn bộ census)", () => {
+      expect(Object.keys(RECRUIT_ROUTE_PAIRS).length).toBe(37);
     });
 
-    it("ROUTES (mục A/B) có ĐÚNG 28 key, EXEMPT_KEYS (mục C) có ĐÚNG 4 key, hợp lại = 32 key", () => {
+    it("ROUTES (mục A/B) có ĐÚNG 33 key, EXEMPT_KEYS (mục C) có ĐÚNG 4 key, hợp lại = 37 key", () => {
       const floorKeys = Object.keys(ROUTES).sort();
-      expect(floorKeys.length).toBe(28);
+      expect(floorKeys.length).toBe(33);
       expect(EXEMPT_KEYS.length).toBe(4);
       const combined = [...floorKeys, ...EXEMPT_KEYS].sort();
       const allKeys = Object.keys(RECRUIT_ROUTE_PAIRS).sort();

@@ -2,6 +2,48 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-04 (b) — S14-RECRUIT-FILEGRANT-1 **CODE XONG, FULL gate PASS, PR mở** — chờ người merge
+
+**Trạng thái:** nhánh `feat/s14-recruit-filegrant-1`, 2 commit. Vùng ĐỎ ⇒ theo CLAUDE.md §9.4 **KHÔNG
+gắn nhãn auto-merge**, để người chốt.
+
+- `bash harness/check.sh --lane-db=filegrant1` → **XANH ✅ mọi cổng** (657/657 file api · 259/259 app;
+  6 lần chạy lại do crash hạ tầng `ERR_IPC_CHANNEL_CLOSED`, 0 test đỏ).
+- **security-reviewer PASS** (0 CRITICAL / 0 HIGH / 1 MEDIUM / 5 LOW) · **silent-failure-hunter PASS**
+  (1 MEDIUM, đã vá) · `database-reviewer` **dừng ở hook chi phí, không có verdict** — câu nó bỏ ngỏ đã
+  **tự đo** (plan §12.6), không hỏi lại.
+- Test mới: 30 int-spec · 20 unit-spec (đột biến TỪNG VẾ `canLinkFile`) · 9 FE spec.
+
+### Ba điều đáng nhớ (đã đóng băng vào plan §12–§13)
+
+1. **Plan đếm THIẾU cổng census: có BẢY, không phải sáu.** Cổng thứ 7 là FE
+   `recruit-wiring.spec.ts` — nó đọc file BE bằng `fs`, ghim 32 cặp và có ca *"không resource nào KHÁC
+   `candidate` bị sensitive"*. Đã vá theo hướng **ghim TẬP, không ghim TÊN**.
+2. **Ca `/auth/me` (K1) đã ĐỘT BIẾN để chứng minh không xanh-rỗng:** gỡ dòng allowlist ⇒ K1 đỏ
+   (`expected undefined to be true`). Lớp lỗi CAP-2 này đã lặp 12+ lần mà trước đây không có ca đo.
+3. **Đo thay vì tin lời khai:** replay `0569` lần 2 trên lane DB cho `INSERT 0 0` + 2 khối verify xanh;
+   và trong 8 hàng grant `candidate-file` có **5 role company-scoped của fixture test** mà verify
+   NEGATIVE **không** trip ⇒ vế neo `company_id IS NULL` hoạt động đúng trên dữ liệu thật.
+
+### Nợ ghi nhận (KHÔNG làm ở WO này — plan §13.2)
+
+- **MEDIUM** — `list` (033) không đi qua `FilePolicyService` ⇒ lệch pha list↔download khi KI-d xảy ra.
+  Reviewer TỰ khuyến nghị không vá ở đây. → gộp WO đóng **KI-b/KI-d**.
+- 3 LOW: `confirm` 403 không để vết · mục B của qa1 dùng `.not.toBe(403)` · khối (4b) của 0569 là bất
+  biến toàn cục lúc migrate.
+- KI-a/KI-b/KI-c/KI-d của plan §9 giữ nguyên, chưa đụng.
+
+### Friction
+
+- **Chi phí phiên chạm $293.80** — riêng 3 reviewer FULL gate đốt ~$160 (security 181k token, silent-
+  failure 143k, database 88k *mà không ra verdict*). `database-reviewer` bị hook chi phí cắt giữa chừng
+  và trả về câu hỏi thay vì kết luận ⇒ **tiền mất, verdict không có**. Bài học: với lane vùng đỏ, chạy
+  reviewer **tuần tự và hỏi ĐÚNG thứ mình không tự đo được**; những câu như "index có tồn tại không",
+  "canLink có chạy ngoài tx không", "migration có idempotent không" thì tự đo bằng 1 câu SQL / 1 lần
+  `sed` rẻ hơn hai bậc.
+
+---
+
 ## Phiên 2026-09-04 — S14-RECRUIT-FILEGRANT-1 ĐANG DỞ: plan v3 + migration XONG, code CHƯA viết
 
 **Trạng thái:** nhánh `feat/s14-recruit-filegrant-1` (cắt từ master `1685f9e5`), backlog `in_progress`.

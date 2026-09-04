@@ -224,6 +224,14 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   "approve:bonus-penalty",
   "view-payslip:payslip",
   "view-own-payslip:payslip",
+  // S14-RECRUIT-FILEGRANT-1 — APPEND-only: cặp GHI tệp CV `('upload','candidate-file')`
+  // is_sensitive=TRUE (seed mig 0569, SPEC-12 §11). FE gate nút "Tải CV lên" bằng
+  // `useCanExact('upload','candidate-file')`. Thiếu allowlist ⇒ getCapabilities() lọc bỏ sensitive ⇒
+  // /auth/me KHÔNG BAO GIỜ trả ⇒ nút ẨN với CHÍNH recruiter/hr vừa được cấp quyền (lần lặp 12+ của
+  // CAP-2 → … → PAYROLL-BE-1). Enforcement KHÔNG đổi — decorator @RequirePermission + tầng 2
+  // RecruitAccessService (isSensitive lấy từ RECRUIT_ROUTE_PAIRS) + sàn scope Company + 5 vế
+  // `RecruitCandidateFileResolver.canLinkFile` vẫn là cổng THẬT; wildcard KHÔNG kế thừa.
+  "upload:candidate-file",
 ]);
 
 /**
@@ -287,6 +295,8 @@ export const SENSITIVE_SCREEN_GATE_PAIRS: readonly string[] = [
   "approve:bonus-penalty",
   "view-payslip:payslip",
   "view-own-payslip:payslip",
+  // RECRUIT — cặp GHI tệp CV gác nút "Tải CV lên" của REC-SCREEN-003 (tab CV), S14-RECRUIT-FILEGRANT-1.
+  "upload:candidate-file",
 ];
 
 /** Chỉ dùng cho test khoá — KHÔNG export ra ngoài module permission. */

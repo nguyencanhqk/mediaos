@@ -113,11 +113,19 @@ POST   /api/v1/offers/{offer_id}/change-status
 
 GET    /api/v1/recruit/pickers/employees
 GET    /api/v1/recruit/pickers/recruiter-users
+
+GET    /api/v1/candidates/{candidate_id}/files
+GET    /api/v1/candidates/{candidate_id}/files/{file_id}/download-url
+POST   /api/v1/candidates/{candidate_id}/files/upload-url
+POST   /api/v1/candidates/{candidate_id}/files/{file_id}/confirm
+POST   /api/v1/candidates/{candidate_id}/files/{file_id}/link
 ```
 
-> Hai picker nằm dưới basePath `recruit/pickers` trong khi 30 route kia phẳng — controller riêng (`RecruitPickersController`, basePath `recruit/pickers`) vẫn khai chung `API_MODULE_TAGS` nhóm `RECRUIT` để OpenAPI + route-census (32) gom đúng module.
+> Hai picker nằm dưới basePath `recruit/pickers` trong khi các route kia phẳng — controller riêng (`RecruitPickersController`, basePath `recruit/pickers`) vẫn khai chung `API_MODULE_TAGS` nhóm `RECRUIT` để OpenAPI + route-census gom đúng module. Tệp CV (033–037) cũng có controller riêng `RecruitCandidateFileController` (basePath `candidates/:id/files`).
 
-> **32 mã RECRUIT-API = 32 route HTTP** (không mã nào gói 2 route; `GET /offers/{offer_id}` = RECRUIT-API-030, hai picker = 031/032 — plan-review B4/B5). Route-census đếm route — WO BE regen census với 32, khai `API_MODULE_TAGS` cho `RECRUIT`. Ba route tĩnh `check-duplicate` / `summary` / `export` khai **TRƯỚC** `/candidates/{id}` (bài học `goals/tree`).
+> **37 mã RECRUIT-API = 37 route HTTP** (không mã nào gói 2 route; `GET /offers/{offer_id}` = RECRUIT-API-030, hai picker = 031/032 — plan-review B4/B5; tệp CV = 033..037, `S14-RECRUIT-FILEGRANT-1`). Route-census đếm route — regen census với 37, khai `API_MODULE_TAGS` cho `RECRUIT`. Ba route tĩnh `check-duplicate` / `summary` / `export` khai **TRƯỚC** `/candidates/{id}` (bài học `goals/tree`); 5 route tệp CV sâu ≥3 segment nên KHÔNG va chạm `/candidates/{id}`.
+
+> **Tệp CV (033–037) — vì sao có bề mặt riêng thay vì dùng `/foundation/files*`:** đường generic gate `*:foundation-file`, cặp mà seed chỉ cấp cho `company-admin`. Cấp cặp đó cho `recruiter`/`hr` sẽ mở luôn màn quản trị `System > Files` và `GET /foundation/files` (route không gác per-file) ⇒ trình duyệt tệp TOÀN TENANT. Wrapper module-owned thay thế: đọc gate `('view','candidate')`, ghi gate `('upload','candidate-file')`. Tệp vẫn nằm ở `files`/`file_links` của Foundation. Chi tiết: SPEC-12 §15/§18.
 
 ### 5.1 Bảng endpoint (stub — chi tiết DTO ở WO backend)
 
@@ -144,6 +152,7 @@ Bảng mã ↔ method/path ↔ cặp quyền ↔ audit/NOTI: xem **SPEC-12 §15*
 | Mã | Trạng thái | Ghi chú |
 | --- | --- | --- |
 | RECRUIT-API-001..032 | ✅ Đã hiện thực (S12-RECRUIT-BE-1, 31/08/2026) | 5 controller `apps/api/src/recruit/recruit.controllers.ts`; cặp quyền đọc từ bảng hằng `recruit-route-pairs.const.ts` (census 2 tầng `recruit-two-layer-guard-census.unit-spec.ts`); DTO = `packages/contracts/src/recruit.ts`; route census 539/500 gated |
+| RECRUIT-API-033..037 | ✅ Đã hiện thực (S14-RECRUIT-FILEGRANT-1, 04/09/2026) | `apps/api/src/recruit/recruit-candidate-file.{controller,service,repository,resolver}.ts`; cặp mới `('upload','candidate-file')` seed mig `0569` (3 grant @Company: recruiter · hr · company-admin); 5 vế chống forge/bypass-thu-hồi ở `canLinkFile` |
 
 > Lệch giữa thiết kế và code ⇒ **sửa code**, không sửa ngầm tài liệu (CLAUDE.md — docs/spec + docs/DB là chuẩn).
 

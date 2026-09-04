@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 576,
-    "controllers": 103,
-    "gated": 537,
+    "routes": 581,
+    "controllers": 104,
+    "gated": 542,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -7277,6 +7277,86 @@
         "PermissionGuard"
       ],
       "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RecruitCandidateFileController#confirm",
+      "httpMethod": "POST",
+      "path": "/api/v1/candidates/:id/files/:fileId/confirm",
+      "hasPermission": true,
+      "permission": "upload:candidate-file",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RecruitCandidateFileController#createUploadUrl",
+      "httpMethod": "POST",
+      "path": "/api/v1/candidates/:id/files/upload-url",
+      "hasPermission": true,
+      "permission": "upload:candidate-file",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RecruitCandidateFileController#downloadUrl",
+      "httpMethod": "GET",
+      "path": "/api/v1/candidates/:id/files/:fileId/download-url",
+      "hasPermission": true,
+      "permission": "view:candidate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RecruitCandidateFileController#link",
+      "httpMethod": "POST",
+      "path": "/api/v1/candidates/:id/files/:fileId/link",
+      "hasPermission": true,
+      "permission": "upload:candidate-file",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RecruitCandidateFileController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/candidates/:id/files",
+      "hasPermission": true,
+      "permission": "view:candidate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
       "verdict": null,
       "verdictReason": null,
       "verdictWo": null

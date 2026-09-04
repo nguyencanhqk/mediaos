@@ -297,8 +297,6 @@ export default {
     uploading: "Đang tải lên…",
     download: "Tải xuống",
     noPermission: "Bạn không có quyền xem tài liệu của ứng viên này.",
-    gapNote:
-      "Ghi chú vận hành: một số vai trò (recruiter/hr) hiện chưa được cấp quyền foundation-file trong seed — xem docblock candidate-file-api.ts.",
   },
 
   actions: {

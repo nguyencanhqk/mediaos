@@ -492,3 +492,110 @@ có cặp exact ⇒ nút ẨN"** (chứng minh dùng `useCanExact` chứ không 
 > **KHÔNG có vòng 3.** `red-zone-wo-cost-profile` (1 vòng plan-review là đủ) +
 > `plan-review-rounds-inject-new-holes` (vòng 2 đã chứng minh: 3 điểm mới đều do bản vá vòng 1 đẻ ra).
 > Phần còn lại để FULL gate sau implement bắt.
+
+---
+
+## 12. Nhật ký thi công (điền khi code — 2026-09-04)
+
+Plan v3 được thi công gần như nguyên vẹn. Ghi lại **những chỗ thực tế khác plan** để phiên sau và
+reviewer không phải đo lại.
+
+### 12.1 Plan ĐẾM THIẾU cổng census: có BẢY, không phải sáu
+
+§7.5 liệt kê 6 cổng toàn cục. Cổng thứ **7** là **`apps/app/src/routes/recruit/recruit-wiring.spec.ts`**
+— nó đọc `recruit-route-pairs.const.ts` của BE bằng `fs`, ghim `beEntries.size === 32`, và có ca
+*"không resource nào KHÁC `candidate` bị đánh sensitive"*. Cặp mới `('upload','candidate-file')`
+`is_sensitive=true` làm ca đó ĐỎ.
+
+Đã vá theo hướng **ghim TẬP, không ghim TÊN**: ca mới assert tập resource được phép sensitive đúng bằng
+`{candidate, candidate-file}` + một ca riêng ghim 3 key ghi dùng đúng cặp `upload:candidate-file`. Nới
+thêm một resource sau này vẫn phải là quyết định có chủ đích qua FULL gate.
+
+### 12.2 `candidateFileLink` trong ma trận QA-1 cần tệp THẬT, không `ghost()`
+
+Mục B của `s12-recruit-qa1-permission-matrix.int-spec.ts` assert `.not.toBe(403)` cho chủ thể Company.
+Với `ghost()` ở `:fileId`, `FileService.link` hỏi resolver → không tìm thấy tệp → deny → **403** ⇒ mục B
+đỏ vì lý do SAI (thiếu tệp, không phải thiếu sàn scope). Đã thêm `Fixture.linkableFileId`: một tệp do
+chính `tCompany` upload+confirm ở `beforeAll` (leg PUT bytes thay bằng `UPDATE upload_status` qua direct
+pool). Phụ phẩm: mục B nay chứng minh luôn đường GẮN chạy được ở scope Company.
+
+Kéo theo: spec đó phải đặt `process.env.S3_*` (presign là HMAC offline, KHÔNG cần MinIO).
+
+### 12.3 Ba nhóm ca THÊM ngoài §7.2
+
+| Ca | Vì sao thêm |
+| --- | --- |
+| **A3 / A3b** | Chủ thể chỉ có `('*','*')` ⇒ **403 cả 5 route**; đối chứng A3b: cùng chủ thể mở được route RECRUIT non-sensitive ⇒ grant wildcard là THẬT. Decorator route KHÔNG khai `isSensitive` (đồng nhất 32 route cũ) nên vế chặn là TẦNG 2 — phải có ca đo. Đúng lớp lỗ `S14-SEC-DASHGATE-WILDCARD-1` vừa vá. |
+| **K1 / K2** | `/auth/me` phải TRẢ `upload:candidate-file` cho recruiter/hr. **Đã đột biến để chứng minh không xanh-rỗng:** gỡ dòng allowlist ⇒ K1 đỏ (`expected undefined to be true`). Đây là lớp lỗi CAP-2 đã lặp 12+ lần và §7.5 mục 5 chỉ ghi "pin cặp mới" mà không nói pin Ở ĐÂU. |
+| **Biên** | `ParseUUIDPipe` ⇒ 400 (không 500 `22P02`); body khai `visibility`/`entityId` ⇒ 400 (`.strict()`). |
+
+### 12.4 Phát hiện của FULL gate đã vá trong WO
+
+**silent-failure-hunter (MEDIUM, verdict PASS):** `CandidateCvTab.uploadMutation` thiếu `onError` ⇒ mọi
+thất bại của chuỗi 4 chặng biến mất trong im lặng (nút hết "Đang tải lên…" rồi thôi). Lỗi **có từ trước**
+WO (xác minh bằng `git show master:`), nhưng chính WO này biến 403-khi-gắn-lại thành nhánh **dự kiến**
+(vế 5), nên nó nay bị bấm vào thường xuyên. Đã vá: `onError` + dùng chung ô alert với `downloadError`, kèm
+2 ca ghim (thất bại ⇒ có alert · thành công ⇒ KHÔNG có alert).
+
+### 12.5 Giới hạn ghi nhận tường minh (KHÔNG vá trong WO)
+
+**036 `confirm` không kiểm "tệp được đăng ký cho ĐÚNG `:id` này".** Không kiểm được cho rẻ — `files`
+không có cột entity, `entityId` của bước 035 chỉ nằm trong `audit_logs`/`file_access_logs`. Hệ quả tối
+đa: caller (đã sở hữu tệp, đã có quyền @Company trên MỌI ứng viên) confirm qua URL ứng viên khác ⇒ hàng
+audit bước register ghi A còn link cuối gắn vào B. **Không phải escalation** — cùng người đó chỉ cần đăng
+ký tệp mới cho B. Khớp cả `ChatFilesService`/`MeAvatarService`. Vá thật đòi thêm cột entity vào `files`
+= đổi hợp đồng dùng chung của 5 module ⇒ WO riêng. Ghi ở docblock `confirmOwnUpload`.
+
+### 12.6 Số đo sau khi thi công
+
+- `bash harness/check.sh --lane-db=filegrant1` → **XANH ✅ mọi cổng** (secret-literals · lint · typecheck ·
+  migration-no-drop · tooling-tests · test chunked trên `LANE_DB=mediaos_filegrant1`); 657/657 file api ·
+  259/259 file app. 6 lần chạy lại do crash hạ tầng `ERR_IPC_CHANNEL_CLOSED` (flake đã biết, 0 test đỏ).
+- Test mới: **30 ca** int-spec `s14-recruit-filegrant1-cv` · **20 ca** unit-spec đột biến từng vế
+  `canLinkFile` · **9 ca** FE `CandidateCvTab.spec.tsx`.
+- **Replay `0569` lần 2 trên lane DB (đo, không tin lời khai):** `INSERT 0 0` · `0 INSERT moi, 0 re-scope`
+  · `verify OK: 3 ALLOW@Company, 0 DENY` · `verify OK: 0 grant foundation-file cho recruiter/hr, 0
+  wildcard cho role he thong`; số grant `candidate-file` không đổi 8 → 8. Trong 8 hàng đó có **5 role
+  company-scoped của fixture test** — và verify NEGATIVE **không** trip, chứng minh vế neo
+  `company_id IS NULL` hoạt động đúng trên dữ liệu thật.
+- Index phục vụ repository: `idx_file_links_entity` trên `(company_id, module_code, entity_type,
+  entity_id)` — khớp đúng `WHERE` của cả hai method, không seq-scan.
+- `policy.canLink` chạy **NGOÀI** mọi tx (`files.service.ts:549` trước `:573`) ⇒ resolver tự mở
+  `withTenant` KHÔNG lồng tx. Đã tự đọc, không tin plan.
+
+---
+
+## 13. FULL gate — kết quả (2026-09-04)
+
+| Reviewer | Verdict | Ghi chú |
+| --- | --- | --- |
+| `security-reviewer` | **PASS** | 0 CRITICAL · 0 HIGH · 1 MEDIUM · 5 LOW. Dựng lại bảng chân trị `canLinkFile` ĐỘC LẬP, không tìm ra tổ hợp lọt sai; xác nhận đường vòng `POST /foundation/files/:id/links` của company-admin ĐÃ đóng (cùng resolver). |
+| `silent-failure-hunter` | **PASS** | 1 MEDIUM (FE nuốt lỗi tải lên) — **đã vá trong WO**, xem §12.4. |
+| `database-reviewer` | *dừng ở hook chi phí* | Chỉ ra quan sát sơ bộ, không có verdict. Các câu nó bỏ ngỏ đã được **tự đo** thay vì hỏi lại — xem §12.6 (replay 0569, index, tx). |
+
+> Điều kiện PASS của security-reviewer (“`harness/check.sh --all` xanh với `LANE_DB` đặt”) **đã thoả**:
+> `bash harness/check.sh --lane-db=filegrant1` → XANH ✅ mọi cổng (§12.6). Reviewer read-only nên không
+> quan sát được lượt chạy đó.
+
+### 13.1 Đã vá ngay trong WO
+
+- **LOW** `recruit-candidate-file.repository.ts` — `innerJoin(files, …)` không AND `files.company_id`
+  trong khi docblock khẳng định “mỗi WHERE vẫn AND `company_id`”. Cô lập vẫn đứng nhờ RLS+FORCE, nhưng
+  lời khẳng định SAI về chính nó và lớp belt-and-suspenders chỉ còn MỘT vế. Đã thêm ở cả hai method.
+- **LOW** quy kết audit — đã ghi vào **SPEC-12 §18**: người đọc audit tệp CV phải tin hàng `FileLinked`,
+  KHÔNG tin hàng `FileUploaded` của bước 035 (lý do ở §12.5).
+- **MEDIUM** (silent-failure) FE nuốt lỗi tải lên — §12.4.
+
+> ⚠️ Ba bản vá trên là **commit sửa phát hiện của gate**, tức tự nó chưa qua cổng nào
+> (`fix-commit-for-review-findings-is-itself-ungated`). Đã chạy lại 4 spec liên quan trên `LANE_DB`
+> ngay sau khi vá: **150/150 xanh** (`s14-recruit-filegrant1-cv` 30 · `s12-recruit-qa1-permission-matrix`
+> 76 · `s12-recruit-db1-invariants` 24 · `recruit-candidate-file.resolver.spec` 20).
+
+### 13.2 Ghi nhận, KHÔNG vá trong WO này
+
+| Mức | Việc | Vì sao để lại |
+| --- | --- | --- |
+| **MEDIUM** | **033 `list` không đi qua `FilePolicyService`** ⇒ bất biến AND-across-links chỉ áp cho đường TẢI, không áp cho đường LIỆT KÊ. Hệ quả: sau khi `hr` gắn CV vào một nhân viên qua HR-API-801 (KI-d), recruiter vẫn THẤY `originalName` ở tab CV nhưng bấm Tải ăn 403 — **lệch pha list↔download**, KHÔNG rò thêm dữ liệu (recruiter đã thấy tên tệp đó từ trước) | Reviewer tự khuyến nghị **không** vá ở đây: gọi policy per-row sẽ ẩn tệp khỏi chính người sở hữu luồng và nhân N call mỗi lần render — đúng lớp `reviewer-proposed-fix-can-open-holes`. Gộp vào WO đóng **KI-b/KI-d** |
+| LOW | `confirm` trả 403 owner-mismatch **không để vết** (`file_access_logs`/`audit_logs`), trong khi link và download đều có `logDeny` | Chép nguyên văn `ChatFilesService.confirmOwnUpload:89-91` đã qua FULL gate ⇒ nhất quán, không phải hồi quy. Vá đúng = thêm `logDeny` (không mở lỗ mới) nhưng nên làm CÙNG hai wrapper kia, không lệch một mình |
+| LOW | `s12-recruit-qa1-permission-matrix` mục B dùng `.not.toBe(403)` ⇒ **500 vẫn xanh** cho 3 route POST mới | Khẳng định yếu CÓ SẴN của spec đó, nay nhân thêm cho 5 route vùng đỏ. Đường phủ thật đã có: `s14-recruit-filegrant1-cv` A2/L4/F2/G2 assert **mã 2xx cụ thể**. Siết mục B là đổi bảng dùng chung cho cả 33 route ⇒ WO riêng |
+| LOW | Khối (4b) của `0569` là **bất biến TOÀN CỤC mới** lúc migrate: WO sau cấp wildcard cho role hệ thống sẽ làm `db:migrate` chết TẠI 0569 và chặn mọi migration kế tiếp | Đã đo: `0565:463-482` đang ship một phiên bản **rộng hơn** ⇒ 0569 không thể đỏ ở nơi 0565 xanh, trừ ca role hệ thống tên đúng `super-admin` (hiện không dựng được — bootstrap tạo role company-scoped). Ghi để không ai ngạc nhiên |

@@ -12,7 +12,10 @@ import { JobOpeningsService } from "./job-openings.service";
 import { OffersRepository } from "./offers.repository";
 import { OffersService } from "./offers.service";
 import { RecruitAccessService } from "./recruit-access.service";
+import { RecruitCandidateFileController } from "./recruit-candidate-file.controller";
+import { RecruitCandidateFileRepository } from "./recruit-candidate-file.repository";
 import { RecruitCandidateFileResolver } from "./recruit-candidate-file.resolver";
+import { RecruitCandidateFileService } from "./recruit-candidate-file.service";
 import { RecruitConvertService } from "./recruit-convert.service";
 import { RecruitPeopleRepository } from "./recruit-people.repository";
 import {
@@ -42,6 +45,8 @@ import {
     InterviewsController,
     OffersController,
     RecruitPickersController,
+    // S14-RECRUIT-FILEGRANT-1 (additive) — RECRUIT-API-033..037, tệp CV.
+    RecruitCandidateFileController,
   ],
   providers: [
     RecruitAccessService,
@@ -56,6 +61,9 @@ import {
     OffersService,
     RecruitConvertService,
     RecruitCandidateFileResolver,
+    // S14-RECRUIT-FILEGRANT-1 (additive).
+    RecruitCandidateFileRepository,
+    RecruitCandidateFileService,
   ],
   // S12-RECRUIT-DASH-1 (additive): DashboardModule inject CandidatesService.summary cho widget
   // RECRUIT_FUNNEL (MỘT công thức, MỘT con số với GET /candidates/summary) — mirror AssetsModule/RoomsModule.

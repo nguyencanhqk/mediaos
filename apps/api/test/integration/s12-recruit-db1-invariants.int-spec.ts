@@ -646,11 +646,19 @@ describe.skipIf(!hasDb)("S12-RECRUIT-DB-1 · bất biến nền dữ liệu RECR
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // E. Seed quyền §9f — set-equality 42 bộ + census 4 hình dạng wildcard + role recruiter
+  // E. Seed quyền §9f — set-equality 45 bộ + census 4 hình dạng wildcard + role recruiter
   // ─────────────────────────────────────────────────────────────────────────────
   describe("E. seed quyền / role / canonical", () => {
-    /** Ma trận §9f — literal chép từ 0560, cố ý KHÔNG import (tautology). */
-    const EXPECTED_42: Array<[string, string, string, string]> = [
+    /**
+     * Ma trận §9f — literal chép từ 0560 (+ 0569), cố ý KHÔNG import (tautology).
+     *
+     * S14-RECRUIT-FILEGRANT-1 thêm 3 bộ trên resource `candidate-file` (42 → 45). Resource đó nằm
+     * NGOÀI 5 resource mà 0560 (b1)/(b4) đếm, nên hai khối RAISE của migration ĐÃ SHIP không đổi — đó
+     * chính là lý do cặp mới được đặt trên `candidate-file` chứ không phải `candidate`
+     * (`recruit-route-pairs.const.ts`, plan §3.2). Nhưng câu đo Ở ĐÂY thì PHẢI mở rộng `IN`: giữ
+     * nguyên 5 resource là để 3 grant mới nằm ngoài tầm nhìn của set-equality, tức một cổng mù.
+     */
+    const EXPECTED_45: Array<[string, string, string, string]> = [
       ["manager", "access", "recruit", "Own"],
       ["manager", "view", "interview", "Own"],
       ["manager", "feedback", "interview", "Own"],
@@ -681,14 +689,18 @@ describe.skipIf(!hasDb)("S12-RECRUIT-DB-1 · bất biến nền dữ liệu RECR
           [role, "manage", "offer", "Company"],
         ],
       ),
+      // 0569 — cặp GHI tệp CV (is_sensitive=TRUE) cho ĐÚNG 3 role.
+      ["company-admin", "upload", "candidate-file", "Company"],
+      ["recruiter", "upload", "candidate-file", "Company"],
+      ["hr", "upload", "candidate-file", "Company"],
     ];
 
-    it("E1 set-equality 42 bộ (role, action, resource, scope, effect=ALLOW) trên MỌI role hệ thống — sai MỘT hàng là đỏ", async () => {
+    it("E1 set-equality 45 bộ (role, action, resource, scope, effect=ALLOW) trên MỌI role hệ thống — sai MỘT hàng là đỏ", async () => {
       // ⚠️ CỐ Ý KHÔNG neo r.name IN (5 role) — security review MED-2 (lớp
       // `uniqueness-gate-covered-one-of-fifteen-families`): hệ thống còn ≥12 role company_id IS NULL khác
       // (hr-manager, asset-manager, office-admin…); neo 5 role thì WO sau grant `export:candidate` cho
       // hr-manager KHÔNG gì đỏ — trong khi NOTI-019 cố ý loại hr-manager vì giả định role đó 0 grant RECRUIT.
-      // Grant RECRUIT cho role hệ thống MỚI ⇒ phải cập nhật danh sách 42 bộ ở đây (ratchet có chủ đích).
+      // Grant RECRUIT cho role hệ thống MỚI ⇒ phải cập nhật danh sách 45 bộ ở đây (ratchet có chủ đích).
       const rows = await direct.query<{
         role: string;
         action: string;
@@ -701,14 +713,14 @@ describe.skipIf(!hasDb)("S12-RECRUIT-DB-1 · bất biến nền dữ liệu RECR
            JOIN roles r       ON r.id = rp.role_id
            JOIN permissions p ON p.id = rp.permission_id
           WHERE r.company_id IS NULL AND r.deleted_at IS NULL
-            AND p.resource_type IN ('recruit', 'job-opening', 'candidate', 'interview', 'offer')
+            AND p.resource_type IN ('recruit', 'job-opening', 'candidate', 'candidate-file', 'interview', 'offer')
           ORDER BY 1, 2, 3`,
       );
       expect(rows.rows.every((r) => r.effect === "ALLOW")).toBe(true);
       const actual = rows.rows
         .map((r) => `${r.role}|${r.action}|${r.resource_type}|${r.data_scope}`)
         .sort();
-      const expected = EXPECTED_42.map((g) => g.join("|")).sort();
+      const expected = EXPECTED_45.map((g) => g.join("|")).sort();
       expect(actual).toEqual(expected);
     });
 

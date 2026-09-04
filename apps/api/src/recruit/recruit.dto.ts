@@ -18,6 +18,7 @@ import {
   listJobOpeningsQuerySchema,
   listOffersQuerySchema,
   moveCandidateStageSchema,
+  recruitCandidateFileUploadUrlInputSchema,
   recruitPickerQuerySchema,
   updateCandidateNoteSchema,
   updateCandidateSchema,
@@ -71,3 +72,12 @@ export class ChangeOfferStatusDto extends createZodDto(changeOfferStatusSchema) 
 
 // ── Pickers (031–032) ──
 export class RecruitPickerQueryDto extends createZodDto(recruitPickerQuerySchema) {}
+
+// ── Tệp CV (033–037, S14-RECRUIT-FILEGRANT-1) ──
+/**
+ * `.strict()` ở schema — client KHÔNG khai được `visibility`/`moduleCode`/`entityType`/`entityId`
+ * (server đặt cả bốn). Field lạ ⇒ 400 tại biên thay vì bị bỏ qua trong im lặng.
+ */
+export class RecruitCandidateFileUploadUrlDto extends createZodDto(
+  recruitCandidateFileUploadUrlInputSchema,
+) {}

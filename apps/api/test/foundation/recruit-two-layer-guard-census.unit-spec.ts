@@ -29,7 +29,7 @@ import { collectRoutes, type RouteInfo } from "./route-census";
 
 const SRC_RECRUIT = path.join(__dirname, "..", "..", "src", "recruit");
 
-/** Bảng route HTTP → key `RECRUIT_ROUTE_PAIRS` — fixture của census, phủ ĐỦ 32 route API-17. */
+/** Bảng route HTTP → key `RECRUIT_ROUTE_PAIRS` — fixture của census, phủ ĐỦ 37 route API-17. */
 const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: RecruitRouteKey }> = [
   { method: "GET", path: "/api/v1/job-openings", key: "jobOpeningList" },
   { method: "POST", path: "/api/v1/job-openings", key: "jobOpeningCreate" },
@@ -63,14 +63,39 @@ const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: RecruitRo
   { method: "POST", path: "/api/v1/offers/:id/change-status", key: "offerChangeStatus" },
   { method: "GET", path: "/api/v1/recruit/pickers/employees", key: "pickerEmployees" },
   { method: "GET", path: "/api/v1/recruit/pickers/recruiter-users", key: "pickerRecruiterUsers" },
+  // 033–037 (S14-RECRUIT-FILEGRANT-1) — tệp CV, controller RIÊNG `RecruitCandidateFileController`.
+  { method: "GET", path: "/api/v1/candidates/:id/files", key: "candidateFileList" },
+  {
+    method: "GET",
+    path: "/api/v1/candidates/:id/files/:fileId/download-url",
+    key: "candidateFileDownload",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/candidates/:id/files/upload-url",
+    key: "candidateFileUploadUrl",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/candidates/:id/files/:fileId/confirm",
+    key: "candidateFileConfirm",
+  },
+  { method: "POST", path: "/api/v1/candidates/:id/files/:fileId/link", key: "candidateFileLink" },
 ];
 
+/**
+ * ⚠️ Set TÊN CLASS — quên thêm một controller ở đây thì `recruitRoutes` KHÔNG thấy route của nó và
+ * TOÀN BỘ census 2 tầng mù với nó trong im lặng (ca "bảng fixture phủ đúng tập route" vẫn XANH vì cả
+ * hai vế cùng thiếu). Đó là `module-closed-by-second-assert-not-scope`: bề mặt phải được ĐÓNG bằng
+ * một khẳng định thứ hai, không phải bằng phạm vi quét.
+ */
 const RECRUIT_CONTROLLERS = new Set([
   "JobOpeningsController",
   "CandidatesController",
   "InterviewsController",
   "OffersController",
   "RecruitPickersController",
+  "RecruitCandidateFileController",
 ]);
 
 /**
@@ -140,6 +165,11 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   "OffersService#update": ["offerUpdate"],
   "OffersService#changeStatus": ["offerChangeStatus"],
   "RecruitConvertService#convert": ["candidateConvert"],
+  "RecruitCandidateFileService#list": ["candidateFileList"],
+  "RecruitCandidateFileService#getDownloadUrl": ["candidateFileDownload"],
+  "RecruitCandidateFileService#createUploadUrl": ["candidateFileUploadUrl"],
+  "RecruitCandidateFileService#confirmOwnUpload": ["candidateFileConfirm"],
+  "RecruitCandidateFileService#link": ["candidateFileLink"],
 };
 
 describe("RECRUIT census 2 tầng — decorator + service so với RECRUIT_ROUTE_PAIRS", () => {
@@ -160,7 +190,7 @@ describe("RECRUIT census 2 tầng — decorator + service so với RECRUIT_ROUTE
 
   it("bảng fixture phủ ĐÚNG tập route RECRUIT đã boot — không thiếu, không thừa", () => {
     // Chốt chặn xanh-RỖNG: scanner/boot hỏng ⇒ 0 route ⇒ mọi assert dưới vô nghĩa.
-    expect(recruitRoutes.length, "app boot phải thấy 32 route RECRUIT").toBe(32);
+    expect(recruitRoutes.length, "app boot phải thấy 37 route RECRUIT").toBe(37);
     const seen = new Set(recruitRoutes.map((r) => `${r.httpMethod} ${r.path}`));
     const expected = new Set(ROUTE_TO_KEY.map((r) => `${r.method} ${r.path}`));
     expect(
@@ -187,10 +217,10 @@ describe("RECRUIT census 2 tầng — decorator + service so với RECRUIT_ROUTE
     expect(bad, "decorator lệch bảng hằng (sửa route hoặc sửa bảng QUA FULL gate)").toEqual([]);
   });
 
-  it("TẦNG 2 — service: ĐÚNG method dùng ĐÚNG key (map pin, không chỉ đếm) + đủ 32 key", () => {
+  it("TẦNG 2 — service: ĐÚNG method dùng ĐÚNG key (map pin, không chỉ đếm) + đủ 37 key", () => {
     const calls = serviceResolveActorCalls();
     // Chốt chặn xanh-RỖNG cho scanner AST.
-    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(32);
+    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(37);
     const validKeys = new Set(Object.keys(RECRUIT_ROUTE_PAIRS));
     expect(
       calls.filter((c) => !validKeys.has(c.key)).map((c) => `${c.site}→${c.key}`),
@@ -230,9 +260,33 @@ describe("RECRUIT census 2 tầng — decorator + service so với RECRUIT_ROUTE
     ]);
   });
 
-  it("cờ sensitive của bảng khớp seed: đúng 7 cặp resource candidate", () => {
+  /**
+   * S14-RECRUIT-FILEGRANT-1 — 8 cặp sensitive: 7 cặp `candidate` (mig 0560) + cặp GHI tệp CV
+   * `('upload','candidate-file')` (mig 0569). Cặp thứ 8 nằm trên resource RIÊNG vì lý do KỸ THUẬT —
+   * `0560` (b1)/(b4) RAISE theo SỐ ĐẾM grant trên đúng 5 resource RECRUIT và int-spec I1 replay chính
+   * file đó (xem `recruit-route-pairs.const.ts`).
+   *
+   * Ca này ghim TẬP CẶP, không chỉ đếm: đổi resource của cặp GHI, hay đánh sensitive thêm một resource
+   * nào khác, đều là ĐỎ — phải là quyết định có chủ đích qua FULL gate.
+   */
+  it("cờ sensitive của bảng khớp seed: 7 cặp candidate + 1 cặp candidate-file", () => {
     const sensitive = Object.values(RECRUIT_ROUTE_PAIRS).filter((p) => p.isSensitive);
-    expect(new Set(sensitive.map((p) => `${p.action}:${p.resourceType}`)).size).toBe(7);
-    expect(sensitive.every((p) => p.resourceType === "candidate")).toBe(true);
+    expect([...new Set(sensitive.map((p) => `${p.action}:${p.resourceType}`))].sort()).toEqual(
+      [
+        "comment:candidate",
+        "convert:candidate",
+        "create:candidate",
+        "export:candidate",
+        "move-stage:candidate",
+        "update:candidate",
+        "upload:candidate-file",
+        "view:candidate",
+      ].sort(),
+    );
+    expect(
+      sensitive.every(
+        (p) => p.resourceType === "candidate" || p.resourceType === "candidate-file",
+      ),
+    ).toBe(true);
   });
 });
