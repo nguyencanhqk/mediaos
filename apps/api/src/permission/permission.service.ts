@@ -302,6 +302,27 @@ export const SENSITIVE_SCREEN_GATE_PAIRS: readonly string[] = [
 /** Chỉ dùng cho test khoá — KHÔNG export ra ngoài module permission. */
 export const __SENSITIVE_CAPABILITY_ALLOWLIST_FOR_TEST = SENSITIVE_CAPABILITY_ALLOWLIST;
 
+/**
+ * Trải chuỗi `Error.cause` thành object log được.
+ *
+ * Vì sao cần: Drizzle bọc lỗi PG và GIẤU mã lỗi (SQLSTATE) trong `cause`
+ * (memory `drizzle-wraps-pg-error-code-in-cause`). Log mỗi `error.message` là vứt đúng thứ duy nhất
+ * phân biệt được 42501 với cạn connection pool.
+ *
+ * Có TRẦN ĐỘ SÂU: chuỗi `cause` có thể tự tham chiếu vòng; không có trần thì hàm quan sát này tự
+ * đệ quy vô hạn — tức một hàm sinh ra để chẩn đoán sự cố lại thành sự cố.
+ */
+function serializeErrorChain(error: unknown, depth = 0): unknown {
+  if (depth >= 4) return "[cause chain truncated]";
+  if (!(error instanceof Error)) return error === undefined ? undefined : String(error);
+  return {
+    name: error.name,
+    message: error.message,
+    code: (error as { code?: unknown }).code,
+    cause: error.cause === undefined ? undefined : serializeErrorChain(error.cause, depth + 1),
+  };
+}
+
 @Injectable()
 export class PermissionService {
   private readonly logger = new Logger(PermissionService.name);
@@ -334,7 +355,16 @@ export class PermissionService {
           ? "permission catalog snapshot is EMPTY (0 rows) — degenerate"
           : "permission catalog snapshot load failed",
         {
-          error: error instanceof Error ? error.message : String(error),
+          // ⚠️ KHÔNG rút gọn về `error.message`. Drizzle GIẤU mã lỗi PG (SQLSTATE) trong `cause`
+          // (memory `drizzle-wraps-pg-error-code-in-cause`) ⇒ `.message` trần chỉ còn
+          // "Failed query: select id, action, resource_type, is_sensitive from permissions", không
+          // phân biệt được 42501 (insufficient_privilege) với cạn pool hay lỗi driver. Đây là chẩn
+          // đoán DUY NHẤT của nhánh fail-closed: mọi `can()` trong tiến trình đang trả
+          // `pairIsSensitive=true`, tức một cơn bão từ-chối-quyền. Người trực phải đọc ra được vì sao.
+          error: serializeErrorChain(error),
+          // Nest chỉ nhận stack khi nó là CHUỖI khớp `isStackFormat`; một object không bao giờ được
+          // coi là stack ⇒ phải đưa stack sang trường riêng, dạng chuỗi.
+          stack: error instanceof Error ? error.stack : undefined,
           phase,
           cause,
           // SUY RA từ `phase` — nguồn DUY NHẤT của KẾT QUẢ. Không hard-code theo `cause`: một sự cố

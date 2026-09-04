@@ -238,8 +238,7 @@ export class PermissionCatalogSnapshot {
             this.sensitivePairs === null ? "no-snapshot" : "stale-kept",
             "empty-catalog",
           );
-          // Ảnh chụp CŨ nếu có; `null` nếu chưa từng nạp được ⇒ mọi cặp = sensitive = SIẾT.
-          return this.sensitivePairs;
+          return new Set();
         }
 
         const next = new Set<string>();
