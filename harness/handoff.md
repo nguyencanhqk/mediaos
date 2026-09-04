@@ -2,6 +2,66 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-04 (d) — S14-SEC-CATALOGSNAP-HARDEN-1 → **PR #478 MỞ**, chờ người chốt
+
+**Trạng thái:** code xong, gate xong, PR mở. `bash harness/check.sh --all --lane-db` **XANH ✅** 9/9
+step (int-spec deny-path chạy THẬT trên `mediaos_check`). Full `apps/api` 4867 passed / 0 failed.
+Ledger đã `finished`. Nhánh `fix/s14-sec-catalogsnap-harden-1` (3 commit) đã push.
+
+**Gate:** plan-review **2 vòng đều BLOCK** (6 mục + 3 mục) trước khi cho code chạy — vòng 2 chặn đúng
+cơ chế mà vòng 1 vừa đẻ ra (sàn thử-lại). `security-reviewer` PASS 0 CRIT/0 HIGH (10 lượt đột biến,
+3 đột biến fail-OPEN đều bị giết). `silent-failure-hunter` PASS 0 CRIT. MEDIUM + HIGH-1 + 1 LOW đã vá
+ngay trong PR; phần còn lại đẩy sang follow-up (liệt kê trong mô tả PR).
+
+### CÒN LẠI CỦA S14 — 2 WO
+
+**`S14-SEC-CAPWILDCARD-1` 🔴 — CÓ CỔNG NGƯỜI CHẶN Ở ĐẦU.**
+`done_when` #1 đòi **đếm actor giữ wildcard trên PROD**, mà classifier chặn phiên agent chạm DB PROD
+(`classifier-blocks-prod-db-from-agent`) ⇒ **owner phải tự chạy** trước khi mở WO. Dev = **0 role giữ
+wildcard** ⇒ nếu PROD cũng 0 thì đây là **nợ SẠCH**, 0 người gặp.
+
+Phân tích đã làm sẵn (đừng đo lại):
+- `permission.service.ts` `getCapabilities()` lọc `!g.isSensitive` — cờ của **HÀNG GRANT**. Hàng `*:*`
+  có `is_sensitive=false` ⇒ sống sót ⇒ publish `caps["*:*"]=true`.
+- `packages/web-core/src/hooks/use-can.ts:16-22` `useCan` rơi xuống `caps["*:*"]` ⇒ FE render màn
+  sensitive rồi ăn 403. `useCanExact` (`:39-41`) là lối đúng đã có sẵn.
+- **Bề mặt FE nếu đụng `useCan`: 345 call-site `useCan(` · 128 `useCanExact(` · 72 `<PermissionGate`.**
+  ⇒ gỡ fallback `*:*` trong `useCan` là đổi hành vi toàn hệ, KHÔNG làm bằng cảm giác.
+- Hướng đề xuất (chưa chốt, chưa qua plan-review): lọc theo **CẶP ĐÍCH** bằng `pairIsSensitive`; grant
+  chứa `*` thì **khai triển** theo catalog thành các cặp EXACT non-sensitive nó phủ (giữ được ca ALLOW
+  đối chứng trong done_when: actor wildcard VẪN thấy cặp non-sensitive). Rồi để `useCan` NGUYÊN VẸN +
+  thêm ratchet «getCapabilities không bao giờ phát khoá chứa `*`» — rẻ hơn nhiều so với sửa 345 chỗ.
+  Nhớ **BỐN hình dạng wildcard** (`permission-grant-census-must-cover-four-wildcard-shapes`).
+
+**`S14-FE-DEBT-1` 🟢 — owner ĐÃ CHỐT PHẠM VI 04/09.** Census đầy đủ đã đo (đừng chạy lại, tốn):
+- **Phân trang: 38 nơi render.** 1 shared (`packages/ui` `data-table.tsx:213-235`, chỉ client-side) ·
+  2 shared app-local đặt nhầm chỗ (`AuthLogPagination` ở `routes/system/auth-logs/AuthLogControls.tsx:112`,
+  `AuditLogPagination` ở `routes/system/foundation/audit-logs/AuditLogControls.tsx:112` — file thứ 2 tự
+  thú trong docblock là bản chép của file thứ 1) · **35 bản chép tay**, **11 hình dạng**, 3 namespace
+  i18n khác nhau. **KHÔNG có component tên `PaginationFooter`/`Pagination`/`Pager` nào trong repo.**
+- **Parse lỗi: ~85 helper, 5 họ.** Bản dùng chung `packages/web-core/src/lib/error-mapper.ts`
+  (`mapApiErrorToUi:43`, `showApiErrorToast:149`) chỉ có **9 call-site**. 4 module `parse*Error`
+  (asset/recruit/payroll/room) chép từ cùng một khuôn — `readDetailFields` **byte-identical cả 4**.
+  32 helper «ladder `instanceof ApiError`» + 6 bản duck-typed + 7 bản inline.
+- **Picker org-unit: 22 nơi, 0 component dùng chung, 4 NGUỒN DỮ LIỆU khác nhau** — và **một lỗi thật**:
+  `hrApi.listDepartments` (`/hr/lookups/departments`, mở) và `hrMasterDataApi.listDepartments`
+  (`/hr/departments`, gác `read:department`) **dùng CHUNG `queryKey: hrKeys.departments.list()`** ⇒ cái
+  nào mount trước đầu độc cache của cái kia. Khác shape, khác cổng quyền. **Tách WO riêng nếu đụng.**
+- 2 chỗ **không có picker**, nhập UUID thô: `attendance/admin/ShiftAssignmentFormDialog.tsx:159`,
+  `attendance/admin/RuleFormDialog.tsx:201`.
+- Spec phải giữ xanh: ~33 (phân trang) · 10 (parse lỗi) · 35 (picker). 5 spec hard-code khoá i18n
+  `pagination.prev/next` ⇒ đổi khoá là đỏ.
+- **Phạm vi owner chốt:** dựng bản chung ở `packages/ui` + `web-core`, rồi **CHỈ áp cho cụm chép-y-nguyên
+  lớn nhất**: 10 bản hình θ (đang dùng glyph `‹`/`›` **không i18n, không `aria-label`** — lỗi a11y thật),
+  9 bản hình α, và 4 module `parse*Error`. Đuôi dài để lại + ghi WO nối tiếp. **Không** làm cả ~140 điểm.
+
+### Chi phí — đọc trước khi mở WO đỏ kế
+
+Phiên này chạm **$106** cho **một** WO đỏ (2 vòng plan-review + 2 reviewer Opus + đột biến). Khớp số
+`red-zone-wo-cost-profile` (~$136/WO đỏ). `S14-SEC-CAPWILDCARD-1` cùng hạng ⇒ dự trù tương đương.
+
+---
+
 ## Phiên 2026-09-04 (c) — S14-RECRUIT-FILEGRANT-1 **ĐÃ MERGE** (PR #477 → squash `2bf9cead`)
 
 **Trạng thái:** đóng sổ xong. CI **14/14 xanh** (gồm `Build · Typecheck · Migrate · Test` của API —
