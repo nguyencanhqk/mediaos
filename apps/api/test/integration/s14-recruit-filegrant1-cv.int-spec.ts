@@ -237,6 +237,11 @@ describe.skipIf(!hasLaneDb)("S14-RECRUIT-FILEGRANT-1 — tệp CV qua bề mặt
     ctx.app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
     ctx.app.useGlobalFilters(new AllExceptionsFilter());
     await ctx.app.init();
+    // `listen(0)` BẮT BUỘC: Z3 bắn 5 request qua `Promise.all`. Nếu app mới chỉ `init()`,
+    // supertest thấy `server.address()` rỗng nên tự `listen(0)` + tự `close()` ngay khi request
+    // ĐẦU về ⇒ các request anh em còn đang bay nhận `ECONNRESET` (đỏ ở CI, xanh ở máy).
+    // Server đang listen thì supertest không sở hữu, không đóng. `afterAll` đã có `app.close()`.
+    await ctx.app.listen(0);
 
     ctx.direct = directPool();
     const hash = await new PasswordService().hash(LOGIN_PW);
