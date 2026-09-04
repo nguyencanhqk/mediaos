@@ -5,7 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Plus, RefreshCw } from "lucide-react";
 import { recruitApi, recruitKeys, useCan } from "@mediaos/web-core";
 import type { JobOpeningResponseDto, JobOpeningStatusDto } from "@mediaos/contracts";
-import { Button, DataTable, EmptyState, Input, PageHeader, Select } from "@mediaos/ui";
+import { Button, DataTable, EmptyState, Input, PageHeader, PaginationFooter, Select } from "@mediaos/ui";
 import { RECRUIT_ENGINE_PAIRS, RECRUIT_PAGE_SIZE } from "./constants";
 import { JobOpeningStatusBadge } from "./components/StatusBadges";
 import { JobOpeningFormDialog } from "./components/JobOpeningFormDialog";
@@ -188,27 +188,12 @@ export function JobOpeningListPage() {
           />
 
           {lastPage > 1 && (
-            <div className="flex items-center justify-end gap-2 text-sm">
-              <span className="text-muted-foreground">
-                {page} / {lastPage}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1 || listQuery.isFetching}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                ‹
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= lastPage || listQuery.isFetching}
-                onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
-              >
-                ›
-              </Button>
-            </div>
+            <PaginationFooter
+              page={page}
+              totalPages={lastPage}
+              disabled={listQuery.isFetching}
+              onPageChange={setPage}
+            />
           )}
         </>
       )}

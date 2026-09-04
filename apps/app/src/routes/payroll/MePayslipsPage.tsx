@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, RefreshCw } from "lucide-react";
 import { payrollApi, payrollKeys } from "@mediaos/web-core";
-import { Button, EmptyState, PageHeader } from "@mediaos/ui";
+import { Button, EmptyState, PageHeader, PaginationFooter } from "@mediaos/ui";
 import { PAYROLL_PAGE_SIZE } from "./constants";
 import { formatPayrollMoney } from "./payroll-format";
 import { parsePayrollError, payrollErrorI18nKey } from "./payroll-errors";
@@ -124,27 +124,12 @@ export function MePayslipsPage() {
             </ul>
 
             {lastPage > 1 && (
-              <div className="flex items-center justify-end gap-2 text-sm">
-                <span className="text-muted-foreground">
-                  {page} / {lastPage}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1 || listQuery.isFetching}
-                  onClick={() => setPage((v) => Math.max(1, v - 1))}
-                >
-                  ‹
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= lastPage || listQuery.isFetching}
-                  onClick={() => setPage((v) => Math.min(lastPage, v + 1))}
-                >
-                  ›
-                </Button>
-              </div>
+              <PaginationFooter
+                page={page}
+                totalPages={lastPage}
+                disabled={listQuery.isFetching}
+                onPageChange={setPage}
+              />
             )}
           </div>
 

@@ -5,7 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Plus, RefreshCw } from "lucide-react";
 import { payrollApi, payrollKeys, useCanExact } from "@mediaos/web-core";
 import type { SalaryProfileListItemDto } from "@mediaos/contracts";
-import { Button, DataTable, EmptyState, PageHeader, Select } from "@mediaos/ui";
+import { Button, DataTable, EmptyState, PageHeader, PaginationFooter, Select } from "@mediaos/ui";
 import { PAYROLL_ENGINE_PAIRS, PAYROLL_PAGE_SIZE } from "./constants";
 import { formatPayrollMoney, PAYROLL_NUMERIC_CELL_CLASS } from "./payroll-format";
 import { displayUserRef, usePayrollPeople } from "./use-payroll-people";
@@ -174,27 +174,12 @@ export function SalaryProfileListPage() {
             }
           />
           {lastPage > 1 && (
-            <div className="flex items-center justify-end gap-2 text-sm">
-              <span className="text-muted-foreground">
-                {page} / {lastPage}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1 || listQuery.isFetching}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                ‹
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= lastPage || listQuery.isFetching}
-                onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
-              >
-                ›
-              </Button>
-            </div>
+            <PaginationFooter
+              page={page}
+              totalPages={lastPage}
+              disabled={listQuery.isFetching}
+              onPageChange={setPage}
+            />
           )}
         </>
       )}

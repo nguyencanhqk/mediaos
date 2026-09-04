@@ -15,7 +15,7 @@
  * headcount}`) và ROOM-ERR-008 phát `room-has-upcoming` (spec chỉ ghi `{upcomingCount}`). Map theo
  * đúng bảng spec sẽ bỏ sót hai nhánh có thật.
  */
-import { ApiError } from "@mediaos/web-core";
+import { ApiError, parseKindError, type KindErrorInfo } from "@mediaos/web-core";
 // Mã idempotency lấy TỪ CONTRACTS — mã thật là `REQUEST-ERR-IDEMPOTENCY-*`, không phải tên khoá hằng.
 import { IDEMPOTENCY_ERROR_CODES, parseRoomConflictsDetail } from "@mediaos/contracts";
 import type { RoomConflictsDetailDto } from "@mediaos/contracts";
@@ -74,58 +74,19 @@ export const ROOM_ERROR_KINDS = [
 ] as const;
 export type RoomErrorKind = (typeof ROOM_ERROR_KINDS)[number];
 
-export interface RoomErrorInfo {
-  /** `error.code` của envelope — `ROOM-ERR-001`, `AUTH-ERR-SCOPE-DENIED`, `REQUEST-ERR-…`. */
-  readonly code: string | null;
-  readonly status: number | null;
-  /** `details[].field === "kind"` → `.message`. `null` khi backend không gửi kind. */
-  readonly kind: string | null;
-  /** Thông điệp thô từ server (đã tiếng Việt ở mọi route ROOM) — fallback cuối. */
-  readonly message: string;
-  /** Mọi cặp `field → message` của `details` (đọc `capacity`/`headcount`/`upcomingCount`/`userId`). */
-  readonly fields: ReadonlyMap<string, string>;
+export interface RoomErrorInfo extends KindErrorInfo {
   /** `details` thô — để `readConflicts()` đưa nguyên vào `parseRoomConflictsDetail` của contracts. */
   readonly rawDetails: unknown;
 }
 
-/**
- * Đọc `details` (unknown — `ApiError.details` không ràng buộc kiểu) thành bảng field → message.
- * KHÔNG ném: input hỏng hình trả bảng rỗng để phía gọi rơi về thông điệp chung thay vì trắng trang.
- */
-function readDetailFields(details: unknown): ReadonlyMap<string, string> {
-  const out = new Map<string, string>();
-  if (!Array.isArray(details)) return out;
-  for (const d of details) {
-    if (typeof d !== "object" || d === null) continue;
-    const field = (d as { field?: unknown }).field;
-    const message = (d as { message?: unknown }).message;
-    if (typeof field === "string" && typeof message === "string" && !out.has(field)) {
-      out.set(field, message);
-    }
-  }
-  return out;
-}
-
 /** Bóc thông tin lỗi ROOM từ một `unknown` bắt được ở `onError` của react-query. */
 export function parseRoomError(error: unknown): RoomErrorInfo {
-  if (!(error instanceof ApiError)) {
-    return {
-      code: null,
-      status: null,
-      kind: null,
-      message: error instanceof Error ? error.message : "",
-      fields: new Map(),
-      rawDetails: null,
-    };
-  }
-  const fields = readDetailFields(error.details);
+  // Khác ba module anh em: ROOM cần `details` THÔ để `readConflicts()` đưa nguyên vào
+  // `parseRoomConflictsDetail` của contracts — nên bọc thêm một trường quanh bản chung.
+  const base = parseKindError(error);
   return {
-    code: error.code,
-    status: error.status,
-    kind: fields.get("kind") ?? null,
-    message: error.message,
-    fields,
-    rawDetails: error.details,
+    ...base,
+    rawDetails: error instanceof ApiError ? (error.details ?? null) : null,
   };
 }
 

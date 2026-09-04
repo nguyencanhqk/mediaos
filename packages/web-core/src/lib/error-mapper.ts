@@ -119,6 +119,75 @@ export function extractValidationDetails(error: unknown): ApiValidationDetail[] 
   return error.details;
 }
 
+// ── Lỗi mang `kind` (bản CHUNG cho asset/payroll/recruit/room) ────────────────
+
+/**
+ * Thông tin đã bóc từ một lỗi API mang `kind` nghiệp vụ.
+ *
+ * Trước S14-FE-DEBT-1 mỗi module RECRUIT/ASSET/ROOM/PAYROLL tự khai một interface y hệt
+ * (`RecruitErrorInfo`, `AssetErrorInfo`, …) kèm một bản `readDetailFields` byte-identical.
+ * Bốn bản đó nay là alias của bản này.
+ */
+export interface KindErrorInfo {
+  /** Mã lỗi envelope (`error.code`) — `ASSET-ERR-008`, `VALIDATION-ERR-001`… `null` nếu không phải ApiError. */
+  readonly code: string | null;
+  readonly status: number | null;
+  /** `details[].field === "kind"` → `.message`. `null` khi backend không gửi kind. */
+  readonly kind: string | null;
+  /** Thông điệp thô từ server — dùng làm fallback cuối. */
+  readonly message: string;
+  /** Mọi cặp `field → message` của `details`, để phía gọi đọc tham số phụ (`capacity`, `count`…). */
+  readonly fields: ReadonlyMap<string, string>;
+}
+
+/**
+ * Đọc `details` (unknown) thành bảng `field → message`.
+ *
+ * `details` là **MẢNG** `ErrorDetail{field,message,rule}` — KHÔNG phải object `{kind:…}`. Đọc nhầm
+ * thành object trả `undefined` và nuốt lỗi trong im lặng; đó là lý do hàm này tồn tại thay vì
+ * `details?.kind`. Nằm trên đường xử lý lỗi nên **không bao giờ ném**: hình sai ⇒ bảng rỗng.
+ * Field trùng thì phần tử ĐẦU thắng.
+ */
+export function readDetailFields(details: unknown): ReadonlyMap<string, string> {
+  const out = new Map<string, string>();
+  if (!Array.isArray(details)) return out;
+  for (const d of details) {
+    if (typeof d !== "object" || d === null) continue;
+    const field = (d as { field?: unknown }).field;
+    const message = (d as { message?: unknown }).message;
+    if (typeof field === "string" && typeof message === "string" && !out.has(field)) {
+      out.set(field, message);
+    }
+  }
+  return out;
+}
+
+/**
+ * Bóc `code`/`status`/`kind`/`message`/`fields` từ một lỗi bất kỳ.
+ *
+ * Không phải `ApiError` (lỗi mạng, lỗi lập trình) ⇒ code/status/kind = `null`, giữ `message` nếu là
+ * `Error`, ngược lại chuỗi rỗng. Phía gọi tự map `kind` → khoá i18n của namespace mình.
+ */
+export function parseKindError(error: unknown): KindErrorInfo {
+  if (!(error instanceof ApiError)) {
+    return {
+      code: null,
+      status: null,
+      kind: null,
+      message: error instanceof Error ? error.message : "",
+      fields: new Map(),
+    };
+  }
+  const fields = readDetailFields(error.details);
+  return {
+    code: error.code,
+    status: error.status,
+    kind: fields.get("kind") ?? null,
+    message: error.message,
+    fields,
+  };
+}
+
 // ── Toast helper ──────────────────────────────────────────────────────────────
 
 /**

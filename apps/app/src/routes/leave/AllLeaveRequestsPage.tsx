@@ -5,16 +5,7 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { ClipboardList, RefreshCw } from "lucide-react";
 import type { LeaveManagementListItemView, LeaveTypeView } from "@mediaos/contracts";
 import { leaveApi, leaveKeys, hrApi, hrKeys, useCan } from "@mediaos/web-core";
-import {
-  PageHeader,
-  DataTable,
-  EmptyState,
-  Button,
-  Select,
-  Input,
-  Badge,
-  Dialog,
-} from "@mediaos/ui";
+import { Badge, Button, DataTable, Dialog, EmptyState, Input, PageHeader, PaginationFooter, Select } from "@mediaos/ui";
 import { LEAVE_ENGINE_PAIRS, LEAVE_STATUS } from "./constants";
 
 /**
@@ -395,34 +386,22 @@ export function AllLeaveRequestsPage() {
       />
 
       {!isLoading && totalPages > 1 && (
-        <div className="flex items-center justify-between gap-3 px-1 text-sm text-muted-foreground">
-          <span>
-            {meta
-              ? `${(page - 1) * meta.pageSize + 1}–${Math.min(page * meta.pageSize, meta.total)} / ${meta.total}`
-              : ""}
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!meta?.hasPrev}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              {t("pagination.prev", { ns: "common" })}
-            </Button>
-            <span>
-              {page} / {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!meta?.hasNext}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              {t("pagination.next", { ns: "common" })}
-            </Button>
-          </div>
-        </div>
+        <PaginationFooter
+          page={page}
+          totalPages={totalPages}
+          hasPrev={!!meta?.hasPrev}
+          hasNext={!!meta?.hasNext}
+          range={
+            meta
+              ? {
+                  from: (page - 1) * meta.pageSize + 1,
+                  to: Math.min(page * meta.pageSize, meta.total),
+                  total: meta.total,
+                }
+              : null
+          }
+          onPageChange={setPage}
+        />
       )}
 
       {selected && (

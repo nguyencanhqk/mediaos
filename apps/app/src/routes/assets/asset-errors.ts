@@ -15,7 +15,7 @@
  *
  * Value ở `message` luôn là chuỗi (`assetDetails` gọi `String(value)`) — kể cả boolean và số.
  */
-import { ApiError } from "@mediaos/web-core";
+import { parseKindError, type KindErrorInfo } from "@mediaos/web-core";
 // Mã lỗi idempotency lấy TỪ CONTRACTS (nguồn sự thật DTO) — gõ tay chuỗi ở đây là mời drift: mã thật là
 // `REQUEST-ERR-IDEMPOTENCY-*`, KHÔNG phải `IDEMPOTENCY_*` như tên khoá của object hằng.
 import { IDEMPOTENCY_ERROR_CODES } from "@mediaos/contracts";
@@ -48,57 +48,11 @@ export const ASSET_ERROR_KINDS = [
 ] as const;
 export type AssetErrorKind = (typeof ASSET_ERROR_KINDS)[number];
 
-export interface AssetErrorInfo {
-  /** Mã lỗi envelope (`error.code`) — ví dụ `ASSET-ERR-008`, `VALIDATION-ERR-001`. */
-  readonly code: string | null;
-  readonly status: number | null;
-  /** `details[].field === "kind"` → `.message`. `null` khi backend không gửi kind. */
-  readonly kind: string | null;
-  /** Thông điệp thô từ server (đã có tiếng Việt ở nhiều route) — dùng làm fallback cuối. */
-  readonly message: string;
-  /** Mọi cặp `field → message` của `details`, để phía gọi đọc tham số phụ (`status`, `count`, `from`…). */
-  readonly fields: ReadonlyMap<string, string>;
-}
+/** Alias của `KindErrorInfo` (@mediaos/web-core) — giữ tên cũ để 0 call-site phải đổi. */
+export type AssetErrorInfo = KindErrorInfo;
 
-/**
- * Đọc `details` (unknown, vì `ApiError.details` không được ràng buộc kiểu) thành bảng field → message.
- * KHÔNG ném: input hỏng hình trả bảng rỗng, để phía gọi rơi về thông điệp chung thay vì trắng trang.
- * Giữ lần xuất hiện ĐẦU của mỗi field (BE không phát trùng field, nhưng cố định hành vi cho chắc).
- */
-function readDetailFields(details: unknown): ReadonlyMap<string, string> {
-  const out = new Map<string, string>();
-  if (!Array.isArray(details)) return out;
-  for (const d of details) {
-    if (typeof d !== "object" || d === null) continue;
-    const field = (d as { field?: unknown }).field;
-    const message = (d as { message?: unknown }).message;
-    if (typeof field === "string" && typeof message === "string" && !out.has(field)) {
-      out.set(field, message);
-    }
-  }
-  return out;
-}
-
-/** Bóc thông tin lỗi ASSET từ một `unknown` bắt được ở `onError` của react-query. */
-export function parseAssetError(error: unknown): AssetErrorInfo {
-  if (!(error instanceof ApiError)) {
-    return {
-      code: null,
-      status: null,
-      kind: null,
-      message: error instanceof Error ? error.message : "",
-      fields: new Map(),
-    };
-  }
-  const fields = readDetailFields(error.details);
-  return {
-    code: error.code,
-    status: error.status,
-    kind: fields.get("kind") ?? null,
-    message: error.message,
-    fields,
-  };
-}
+/** Bóc lỗi mang `kind` — dùng bản CHUNG; xem `parseKindError` ở @mediaos/web-core. */
+export { parseKindError as parseAssetError };
 
 /**
  * Loại đang chiếm tiền tố (vế `prefix-taken`) — để màn 007 gợi ý «Khôi phục loại» thay vì tạo mới. Đây

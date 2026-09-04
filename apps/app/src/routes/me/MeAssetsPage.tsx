@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { assetApi, meKeys, useCan } from "@mediaos/web-core";
-import { Badge, Button, EmptyState, PageHeader, Skeleton } from "@mediaos/ui";
+import { Badge, Button, EmptyState, PageHeader, PaginationFooter, Skeleton } from "@mediaos/ui";
 import { ASSET_ENGINE_PAIRS, ASSET_PAGE_SIZE } from "@/routes/assets/constants";
 import { AssetStatusBadge } from "@/routes/assets/components/AssetStatusBadge";
 
@@ -95,27 +95,11 @@ export function MeAssetsPage() {
       )}
 
       {lastPage > 1 && (
-        <div className="flex items-center justify-end gap-2 text-sm">
-          <span className="text-muted-foreground">
-            {page} / {lastPage}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            ‹
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= lastPage}
-            onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
-          >
-            ›
-          </Button>
-        </div>
+        <PaginationFooter
+          page={page}
+          totalPages={lastPage}
+          onPageChange={setPage}
+        />
       )}
     </div>
   );
