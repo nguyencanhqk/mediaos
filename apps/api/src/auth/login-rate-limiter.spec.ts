@@ -251,9 +251,7 @@ interface FakeValkey extends ValkeyService {
 }
 
 /** Fake đầy đủ hơn `fakeValkey` ở trên: có SET + TTL để đo chỉ mục IP và `remainingSec`. */
-function fakeValkeyWithSets(
-  opts: { enabled?: boolean; sAddFails?: boolean } = {},
-): FakeValkey {
+function fakeValkeyWithSets(opts: { enabled?: boolean; sAddFails?: boolean } = {}): FakeValkey {
   const enabled = opts.enabled !== false;
   const store = new Map<string, string>();
   const sets = new Map<string, Set<string>>();
@@ -322,39 +320,20 @@ function fakeValkeyWithSets(
 
 describe.each([
   ["in-memory (VALKEY_URL vắng — máy local)", () => new LoginRateLimiter()],
-  [
-    "Valkey (CI có service valkey)",
-    () => new LoginRateLimiter(fakeValkeyWithSets()),
-  ],
+  ["Valkey (CI có service valkey)", () => new LoginRateLimiter(fakeValkeyWithSets())],
 ] as const)("S18 — gỡ khoá đăng nhập · %s", (_label, makeLimiter) => {
   const SLUG = "acme";
   const EMAIL = "victim@acme.test";
   const NOW = 2_000_000;
 
   /** Bản sao điều phối của `AuthService.recordLoginFailure` (2 bucket + nuôi chỉ mục). */
-  async function loginFailure(
-    rl: LoginRateLimiter,
-    ip: string,
-    now = NOW,
-  ): Promise<void> {
-    await rl.recordFailure(
-      LoginRateLimiter.key(SLUG, EMAIL, ip),
-      undefined,
-      now,
-    );
-    await rl.recordFailure(
-      LoginRateLimiter.accountKey(SLUG, EMAIL),
-      rl.accountMaxAttempts,
-      now,
-    );
+  async function loginFailure(rl: LoginRateLimiter, ip: string, now = NOW): Promise<void> {
+    await rl.recordFailure(LoginRateLimiter.key(SLUG, EMAIL, ip), undefined, now);
+    await rl.recordFailure(LoginRateLimiter.accountKey(SLUG, EMAIL), rl.accountMaxAttempts, now);
     await rl.noteFailureSource("login", SLUG, EMAIL, ip);
   }
 
-  async function ipLocked(
-    rl: LoginRateLimiter,
-    ip: string,
-    now = NOW,
-  ): Promise<boolean> {
+  async function ipLocked(rl: LoginRateLimiter, ip: string, now = NOW): Promise<boolean> {
     return rl.isLocked(LoginRateLimiter.key(SLUG, EMAIL, ip), now);
   }
 
@@ -363,7 +342,7 @@ describe.each([
     for (let i = 0; i < 5; i++) await loginFailure(rl, "198.51.100.10");
     expect(await ipLocked(rl, "198.51.100.10")).toBe(true);
 
-    const res = await rl.clearLoginLocks(SLUG, EMAIL);
+    const res = await rl.clearLoginLocks(SLUG, EMAIL, undefined, { includeForgot: true });
     expect(res.degraded).toBe(false);
     expect(await ipLocked(rl, "198.51.100.10")).toBe(false);
   });
@@ -377,7 +356,7 @@ describe.each([
     const acct = LoginRateLimiter.accountKey(SLUG, EMAIL);
     expect(await rl.isLocked(acct, NOW)).toBe(true);
 
-    await rl.clearLoginLocks(SLUG, EMAIL);
+    await rl.clearLoginLocks(SLUG, EMAIL, undefined, { includeForgot: true });
     expect(await rl.isLocked(acct, NOW)).toBe(false);
   });
 
@@ -390,7 +369,7 @@ describe.each([
     expect(await ipLocked(rl, "203.0.113.11")).toBe(true);
     expect(await ipLocked(rl, "203.0.113.12")).toBe(true);
 
-    await rl.clearLoginLocks(SLUG, EMAIL);
+    await rl.clearLoginLocks(SLUG, EMAIL, undefined, { includeForgot: true });
     expect(await ipLocked(rl, "203.0.113.11")).toBe(false);
     expect(await ipLocked(rl, "203.0.113.12")).toBe(false);
   });
@@ -402,19 +381,13 @@ describe.each([
     const other = "other@acme.test";
     for (let n = 0; n < 5; n++) await loginFailure(rl, "203.0.113.21");
     for (let n = 0; n < 5; n++) {
-      await rl.recordFailure(
-        LoginRateLimiter.key(SLUG, other, "203.0.113.22"),
-        undefined,
-        NOW,
-      );
+      await rl.recordFailure(LoginRateLimiter.key(SLUG, other, "203.0.113.22"), undefined, NOW);
       await rl.noteFailureSource("login", SLUG, other, "203.0.113.22");
     }
 
-    await rl.clearLoginLocks(SLUG, EMAIL);
+    await rl.clearLoginLocks(SLUG, EMAIL, undefined, { includeForgot: true });
     expect(await ipLocked(rl, "203.0.113.21")).toBe(false);
-    expect(
-      await rl.isLocked(LoginRateLimiter.key(SLUG, other, "203.0.113.22"), NOW),
-    ).toBe(true);
+    expect(await rl.isLocked(LoginRateLimiter.key(SLUG, other, "203.0.113.22"), NOW)).toBe(true);
   });
 
   it("slug lệch HOA/thường vẫn gỡ được — `companies.slug` là citext nên `Funtime` và `funtime` là CÙNG công ty", async () => {
@@ -424,11 +397,7 @@ describe.each([
     for (let n = 0; n < 5; n++) await loginFailure(rl, "203.0.113.31");
     const upper = "ACME";
     for (let n = 0; n < 5; n++) {
-      await rl.recordFailure(
-        LoginRateLimiter.key(upper, EMAIL, "203.0.113.32"),
-        undefined,
-        NOW,
-      );
+      await rl.recordFailure(LoginRateLimiter.key(upper, EMAIL, "203.0.113.32"), undefined, NOW);
       await rl.noteFailureSource("login", upper, EMAIL, "203.0.113.32");
     }
     expect(LoginRateLimiter.key("Funtime", EMAIL, "ip")).toBe(
@@ -436,7 +405,7 @@ describe.each([
     );
     expect(await ipLocked(rl, "203.0.113.32")).toBe(true);
 
-    await rl.clearLoginLocks(SLUG, EMAIL);
+    await rl.clearLoginLocks(SLUG, EMAIL, undefined, { includeForgot: true });
     expect(await ipLocked(rl, "203.0.113.32")).toBe(false);
   });
 
@@ -444,11 +413,7 @@ describe.each([
     const rl = makeLimiter();
     const ip = "203.0.113.41";
     for (let n = 0; n < 5; n++) {
-      await rl.recordFailure(
-        LoginRateLimiter.forgotKey(SLUG, EMAIL, ip),
-        undefined,
-        NOW,
-      );
+      await rl.recordFailure(LoginRateLimiter.forgotKey(SLUG, EMAIL, ip), undefined, NOW);
       await rl.recordFailure(
         LoginRateLimiter.forgotAccountKey(SLUG, EMAIL),
         rl.accountMaxAttempts,
@@ -456,30 +421,63 @@ describe.each([
       );
       await rl.noteFailureSource("forgot", SLUG, EMAIL, ip);
     }
-    expect(
-      await rl.isLocked(LoginRateLimiter.forgotKey(SLUG, EMAIL, ip), NOW),
-    ).toBe(true);
+    expect(await rl.isLocked(LoginRateLimiter.forgotKey(SLUG, EMAIL, ip), NOW)).toBe(true);
 
-    await rl.clearLoginLocks(SLUG, EMAIL);
-    expect(
-      await rl.isLocked(LoginRateLimiter.forgotKey(SLUG, EMAIL, ip), NOW),
-    ).toBe(false);
+    await rl.clearLoginLocks(SLUG, EMAIL, undefined, { includeForgot: true });
+    expect(await rl.isLocked(LoginRateLimiter.forgotKey(SLUG, EMAIL, ip), NOW)).toBe(false);
+  });
+
+  // S18-AUTH-RESETCLEARS-1 — ca ĐỐI XỨNG với ca ngay trên. Cặp này phải đi CÙNG nhau: một mình ca
+  // `includeForgot:false` sẽ XANH-RỖNG nếu `clearLoginLocks` không xoá gì cả, còn một mình ca
+  // `includeForgot:true` thì không chứng minh được cái trần forgot có thật sự giữ lại được hay không.
+  // Cả hai chạy trên CẢ HAI nhánh (in-memory + Valkey) nhờ describe.each của khối này — đó là điều
+  // kiện để `purgeMemoryLocks` không lệch khỏi nhánh Valkey trong im lặng.
+  it("`includeForgot:false` (đường tự phục vụ) ⇒ khoá LOGIN sạch nhưng trần `forgot:*` CÒN NGUYÊN", async () => {
+    const rl = makeLimiter();
+    const ip = "203.0.113.42";
+    for (let n = 0; n < 5; n++) {
+      await loginFailure(rl, ip);
+      await rl.recordFailure(LoginRateLimiter.forgotKey(SLUG, EMAIL, ip), undefined, NOW);
+      await rl.recordFailure(
+        LoginRateLimiter.forgotAccountKey(SLUG, EMAIL),
+        rl.accountMaxAttempts,
+        NOW,
+      );
+      await rl.noteFailureSource("forgot", SLUG, EMAIL, ip);
+    }
+    expect(await ipLocked(rl, ip)).toBe(true);
+    expect(await rl.isLocked(LoginRateLimiter.forgotKey(SLUG, EMAIL, ip), NOW)).toBe(true);
+
+    await rl.clearLoginLocks(SLUG, EMAIL, undefined, { includeForgot: false });
+
+    // Đường login mở lại — đó là mục đích của WO.
+    expect(await ipLocked(rl, ip)).toBe(false);
+    expect(await rl.isLocked(LoginRateLimiter.accountKey(SLUG, EMAIL), NOW)).toBe(false);
+    // …nhưng trần của endpoint CÔNG KHAI thì không được cấp lại. Bỏ vế `includeForgot` ở BẤT KỲ chỗ
+    // nào trong ba chỗ (vòng family · `exact` · `purgeMemoryLocks`) ⇒ một trong hai assert này ĐỎ.
+    expect(await rl.isLocked(LoginRateLimiter.forgotKey(SLUG, EMAIL, ip), NOW)).toBe(true);
+    // Bucket `forgot:acct` CHƯA khoá ở đây (ngưỡng của nó là `accountMaxAttempts`=20, mới có 5 lượt)
+    // nên hỏi "còn khoá không" đo được ĐÚNG KHÔNG GÌ CẢ. Thứ phải đo là **bộ đếm có sống sót không**:
+    // bồi nốt phần còn thiếu tới ngưỡng. Đếm còn ⇒ khoá; đếm bị xoá ⇒ 15 < 20 ⇒ không khoá.
+    const forgotAcct = LoginRateLimiter.forgotAccountKey(SLUG, EMAIL);
+    expect(await rl.isLocked(forgotAcct, NOW)).toBe(false);
+    for (let n = 0; n < rl.accountMaxAttempts - 5; n++) {
+      await rl.recordFailure(forgotAcct, rl.accountMaxAttempts, NOW);
+    }
+    expect(await rl.isLocked(forgotAcct, NOW)).toBe(true);
   });
 
   it("bucket bước-2 (`2fa`) được gỡ và có mặt trong `buckets` — sai TOTP cũng là 429 Ở MÀN ĐĂNG NHẬP", async () => {
     const rl = makeLimiter();
     const subject = { companyId: "co-1", userId: "user-1" };
-    const key = LoginRateLimiter.twoFactorKey(
-      subject.companyId,
-      subject.userId,
-    );
+    const key = LoginRateLimiter.twoFactorKey(subject.companyId, subject.userId);
     for (let n = 0; n < 5; n++) await rl.recordFailure(key, undefined, NOW);
 
     const before = await rl.loginThrottleState(SLUG, EMAIL, subject, NOW);
     expect(before.locked).toBe(true);
     expect(before.buckets).toContain("2fa");
 
-    await rl.clearLoginLocks(SLUG, EMAIL, subject);
+    await rl.clearLoginLocks(SLUG, EMAIL, subject, { includeForgot: true });
     const after = await rl.loginThrottleState(SLUG, EMAIL, subject, NOW);
     expect(after.locked).toBe(false);
     expect(after.buckets).toEqual([]);
@@ -487,7 +485,7 @@ describe.each([
 
   it("không có khoá nào ⇒ clear không ném, không degraded; state rỗng KHÔNG hiện '0 giây'", async () => {
     const rl = makeLimiter();
-    const res = await rl.clearLoginLocks(SLUG, EMAIL);
+    const res = await rl.clearLoginLocks(SLUG, EMAIL, undefined, { includeForgot: true });
     expect(res.degraded).toBe(false);
     const state = await rl.loginThrottleState(SLUG, EMAIL, undefined, NOW);
     expect(state).toEqual({ locked: false, remainingSec: null, buckets: [], unknown: false });
@@ -496,15 +494,9 @@ describe.each([
   it("`buckets` phân biệt đúng nguồn khoá: chỉ IP ⇒ ['ip'] · chỉ tài khoản ⇒ ['acct'] · cả hai ⇒ ['acct','ip']", async () => {
     const onlyIp = makeLimiter();
     for (let n = 0; n < 5; n++)
-      await onlyIp.recordFailure(
-        LoginRateLimiter.key(SLUG, EMAIL, "203.0.113.51"),
-        undefined,
-        NOW,
-      );
+      await onlyIp.recordFailure(LoginRateLimiter.key(SLUG, EMAIL, "203.0.113.51"), undefined, NOW);
     await onlyIp.noteFailureSource("login", SLUG, EMAIL, "203.0.113.51");
-    expect(
-      (await onlyIp.loginThrottleState(SLUG, EMAIL, undefined, NOW)).buckets,
-    ).toEqual(["ip"]);
+    expect((await onlyIp.loginThrottleState(SLUG, EMAIL, undefined, NOW)).buckets).toEqual(["ip"]);
 
     const onlyAcct = makeLimiter();
     for (let n = 0; n < onlyAcct.accountMaxAttempts; n++) {
@@ -514,15 +506,16 @@ describe.each([
         NOW,
       );
     }
-    expect(
-      (await onlyAcct.loginThrottleState(SLUG, EMAIL, undefined, NOW)).buckets,
-    ).toEqual(["acct"]);
+    expect((await onlyAcct.loginThrottleState(SLUG, EMAIL, undefined, NOW)).buckets).toEqual([
+      "acct",
+    ]);
 
     const both = makeLimiter();
     for (let n = 0; n < 20; n++) await loginFailure(both, "203.0.113.52");
-    expect(
-      (await both.loginThrottleState(SLUG, EMAIL, undefined, NOW)).buckets,
-    ).toEqual(["acct", "ip"]);
+    expect((await both.loginThrottleState(SLUG, EMAIL, undefined, NOW)).buckets).toEqual([
+      "acct",
+      "ip",
+    ]);
   });
 });
 
@@ -551,9 +544,7 @@ describe("S18 — chỉ mục IP: hình dạng khoá, trần, và nhánh Valkey 
     await expect(
       real.sMembers(LoginRateLimiter.ipIndexKey(SLUG, EMAIL, "login")),
     ).resolves.toBeNull();
-    await expect(
-      real.ttl(LoginRateLimiter.ipIndexKey(SLUG, EMAIL, "login")),
-    ).resolves.toBeNull();
+    await expect(real.ttl(LoginRateLimiter.ipIndexKey(SLUG, EMAIL, "login"))).resolves.toBeNull();
     // Đối chứng: khoá KHÔNG scoped phải bị cổng NÉM — nếu không, hai assert trên chỉ chứng minh
     // "hàm trả null", chẳng liên quan gì tới cổng.
     // Khoá dựng bằng GHÉP CHUỖI, KHÔNG literal: census tĩnh `valkey-key-census.spec.ts` cấm mọi literal
@@ -568,10 +559,7 @@ describe("S18 — chỉ mục IP: hình dạng khoá, trần, và nhánh Valkey 
     await rl.noteFailureSource("login", SLUG, EMAIL, "198.51.100.1");
     await rl.noteFailureSource("login", SLUG, EMAIL, "198.51.100.2");
     const idx = LoginRateLimiter.ipIndexKey(SLUG, EMAIL, "login");
-    expect([...(valkey.sets.get(idx) ?? [])]).toEqual([
-      "198.51.100.1",
-      "198.51.100.2",
-    ]);
+    expect([...(valkey.sets.get(idx) ?? [])]).toEqual(["198.51.100.1", "198.51.100.2"]);
     expect(valkey.ttls.get(idx)).toBe(rl.lockoutSec);
   });
 
@@ -601,11 +589,7 @@ describe("S18 — chỉ mục IP: hình dạng khoá, trần, và nhánh Valkey 
     } as unknown as ValkeyService;
     const rl = new LoginRateLimiter(dead);
     for (let n = 0; n < 5; n++) {
-      await rl.recordFailure(
-        LoginRateLimiter.key(SLUG, EMAIL, "198.51.100.9"),
-        undefined,
-        NOW,
-      );
+      await rl.recordFailure(LoginRateLimiter.key(SLUG, EMAIL, "198.51.100.9"), undefined, NOW);
       await rl.noteFailureSource("login", SLUG, EMAIL, "198.51.100.9");
     }
     const state = await rl.loginThrottleState(SLUG, EMAIL, undefined, NOW);
@@ -613,7 +597,7 @@ describe("S18 — chỉ mục IP: hình dạng khoá, trần, và nhánh Valkey 
     expect(state.buckets).toEqual(["ip"]);
 
     // …và clear phải báo DEGRADED (sMembers null = KHÔNG BIẾT, del false), để service KHÔNG trả 204.
-    const res = await rl.clearLoginLocks(SLUG, EMAIL);
+    const res = await rl.clearLoginLocks(SLUG, EMAIL, undefined, { includeForgot: true });
     expect(res.degraded).toBe(true);
   });
 
@@ -631,7 +615,7 @@ describe("S18 — chỉ mục IP: hình dạng khoá, trần, và nhánh Valkey 
     const state = await rl.loginThrottleState(SLUG, EMAIL, undefined, NOW);
     expect(state.unknown).toBe(true);
 
-    const res = await rl.clearLoginLocks(SLUG, EMAIL);
+    const res = await rl.clearLoginLocks(SLUG, EMAIL, undefined, { includeForgot: true });
     expect(res.degraded).toBe(true);
   });
 
@@ -649,12 +633,8 @@ describe("S18 — chỉ mục IP: hình dạng khoá, trần, và nhánh Valkey 
     const key = LoginRateLimiter.key(SLUG, EMAIL, "198.51.100.4");
     for (let n = 0; n < 5; n++) await rl.recordFailure(key, undefined, NOW);
     expect(await rl.remainingLockSec(key, NOW)).toBe(rl.lockoutSec);
-    expect(await rl.remainingLockSec(key, NOW + 300_000)).toBe(
-      rl.lockoutSec - 300,
-    );
-    expect(
-      await rl.remainingLockSec(key, NOW + rl.lockoutSec * 1000),
-    ).toBeNull();
+    expect(await rl.remainingLockSec(key, NOW + 300_000)).toBe(rl.lockoutSec - 300);
+    expect(await rl.remainingLockSec(key, NOW + rl.lockoutSec * 1000)).toBeNull();
   });
 });
 
