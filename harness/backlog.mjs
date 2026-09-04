@@ -15581,6 +15581,42 @@ export const backlog = [
     ],
   },
   {
+    id: "S14-SEC-CATALOGSNAP-HARDEN-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "`PermissionCatalogSnapshot` — hai nhánh SUY BIẾN chưa kín: catalog nạp THÀNH CÔNG mà RỖNG lật fail-closed thành fail-OPEN (cache 300s, KHÔNG vết); và ô `inFlight` gán SAU khi thân có thể đã settle ⇒ kẹt vĩnh viễn",
+    zone: "red",
+    gate: "FULL",
+    status: "todo",
+    paths: [
+      "apps/api/src/permission/**",
+      "docs/DECISIONS/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S14-SEC-DASHGATE-WILDCARD-1"],
+    src: [
+      "DEFER TƯỜNG MINH từ vòng review 04/09 của S14-SEC-DASHGATE-WILDCARD-1 (security-reviewer verdict PASS, 2 MEDIUM). Cả hai KHÔNG tới được với code sản phẩm hôm nay ⇒ hardening, không phải lỗ đang mở — nhưng cả hai đều nằm trong file MỚI mà WO kia vừa tạo, và cả hai đều phá đúng thuộc tính file đó sinh ra để giữ.",
+      "[M1] `permission-catalog-snapshot.ts:137-143` — `load()` trả `[]` ⇒ `next = new Set()` (non-null) ⇒ ghi ảnh + đóng dấu `loadedAtMs` ⇒ `isPairSensitive` trả `false` cho MỌI cặp suốt TTL 300s, và KHÔNG gọi `emitError` (chỉ nhánh catch mới gọi, `:148`). `dashboard-widget-gate.ts:58-63` CỐ Ý không truyền `isSensitive` ⇒ `pairIsSensitive` là tín hiệu sensitive DUY NHẤT của đường đó ⇒ lỗ `*:*` mở cặp sensitive dựng lại nguyên vẹn, IM LẶNG. Đối xứng ngược: cùng sự cố mà biểu hiện bằng THROW thì siết (mọi cặp true) + có log.",
+      "[M2] `permission-catalog-snapshot.ts:131,150-157` — `this.inFlight = flight` gán SAU khi IIFE có thể đã settle. Nếu `load()` ném ĐỒNG BỘ, thân async chạy hết đồng bộ (catch → `emitError` → `finally` nhả ô) TRƯỚC dòng gán ⇒ ô giữ promise ĐÃ settle mà không ai xoá được nữa ⇒ `ensureSnapshot` mãi mãi trả promise đó (resolve `null`) ⇒ mọi cặp = sensitive VĨNH VIỄN, không thử nạp lại, không thêm dòng log, `reset()` là đường thoát duy nhất và nó là seam TEST. Fail-CLOSED (không rò) nhưng là DoS quyền tới khi restart tiến trình — đúng thứ ADR D2 tuyên bố tránh («blip DB không khoá 300s»).",
+    ],
+    done_when: [
+      "[M2] TRƯỚC (rẻ, không đổi hợp đồng, 0 spec đỏ): gán `this.inFlight = flight` TRƯỚC khi khởi động thân (hoặc bọc `Promise.resolve().then(async () => {...})`) để `finally` luôn chạy SAU khi ô đã được gán. Ca RED: `load` ném ĐỒNG BỘ ⇒ lượt gọi KẾ TIẾP vẫn thử nạp lại (không kẹt ở promise cũ)",
+      "[M1] Quyết định hợp đồng TRƯỚC khi code: `rows.length === 0` là SUY BIẾN (giữ ảnh cũ / trả `null` + `emitError` phase mới `empty-catalog`) hay vẫn là ảnh hợp lệ? Ghi vào ADR DECISIONS-12 — D3 hiện chỉ nói về cặp VẮNG trong ảnh KHÔNG rỗng, không nói gì về ảnh RỖNG",
+      "[M1] ĐO blast radius TRƯỚC khi đổi: ~9 stub repo khai `getAllPermissions`, trong đó `permission.service.reveal.spec.ts:80` + `permission.service.spec.ts:137` khai kiểu `Promise<[]>`. Ca ghim hiện tại `permission-catalog-snapshot.spec.ts:54-62` (D3) CỐ Ý neo empty ⇒ `false` với lý do TIỆN TEST («làm hàng loạt spec đỏ vì lý do sai») — đó là mẫu `tests-can-pin-a-hole-open`, phải sửa ca đó chứ không lách quanh nó",
+      "[M1] Nếu chọn SUY BIẾN: stub nào cần catalog thật thì cho seed catalog, KHÔNG hạ sàn bằng cách cho `isPairSensitive` bỏ qua ảnh rỗng",
+      "`bash harness/check.sh --all` xanh không banner",
+    ],
+    notes: [
+      "Bối cảnh đầy đủ: `docs/plans/S14-SEC-DASHGATE-WILDCARD-1.md` §10 + §11.",
+      "Vì sao MEDIUM chứ không HIGH (đo bởi reviewer, đừng đo lại từ đầu): `SELECT id, action, resource_type, is_sensitive FROM permissions` (`permission.repository.ts:266-278`) KHÔNG thể trả PARTIAL; bảng là catalog GLOBAL không RLS (`db/schema/permissions.ts:39-48`, `db.service.ts:105-112`) nên 0 hàng chỉ xảy ra khi bảng THẬT SỰ rỗng. Và `load` sản phẩm là method `async` (`permission.repository.ts:266`, `permission.cache.ts:160-162` passthrough) nên KHÔNG ném đồng bộ được. Cả hai chỉ tới được qua callback TIÊM.",
+      "Hai điểm LOW cùng vòng review, gộp vào đây nếu tiện — KHÔNG bắt buộc: (a) `permission.decide.ts:138-144` vs `:164-171` — ở trạng thái MỚI (A=F,B=F,C=T) nhánh reauth đổi `auditRequired` false→true và `reason` `deny-reauth-required`→`deny-sensitive`, mất cờ `requiresReauth`; vô hại hôm nay (`reveal-class-pairs.ts:7-9` danh sách RỖNG ⇒ 0 route đặt cờ) nhưng `reason` ĐI RA NGOÀI qua `file_access_logs.denied_reason` ⇒ thêm một dòng vào bảng ADR §5.2. (b) `permission.service.ts:456-469` — `perAction` vẫn keyed bằng `spec.action` nên hai `BatchActionSpec` trùng `action` khác `isSensitive` ĐÈ nhau ở tầng KẾT QUẢ (bản vá chỉ đóng vế `pairFlags`); call site duy nhất truyền 3 action phân biệt (`hr-read.service.ts:122-128`).",
+      "Memory liên quan: tests-can-pin-a-hole-open · cache-breaks-two-source-flag-invariants · nullable-escape-clause-makes-check-vacuous · overdetermined-gate-makes-deny-spec-vacuous.",
+    ],
+  },
+  {
     id: "S14-RECRUIT-FILEGRANT-1",
     module: "RECRUIT",
     layer: "DB",
