@@ -45,6 +45,16 @@ export interface CanInput {
    */
   isSensitive?: boolean;
   /**
+   * S14-SEC-DASHGATE-WILDCARD-1 (ADR `DECISIONS-12`) — cờ `permissions.is_sensitive` của **CẶP ĐÍCH**,
+   * bơm bởi `PermissionService` từ ảnh chụp catalog. KHÁC `isSensitive` ở trên (gợi ý của CALLER) và
+   * khác `CompanyRoleGrant.isSensitive` (cờ của HÀNG GRANT KHỚP — hàng `*:*` mang `false`, chính là lỗ).
+   *
+   * ⚠️ Cờ này chỉ được đọc ở **cổng wildcard/exact**, KHÔNG ở `auditRequired` và KHÔNG ở
+   * `needsObjectGrant`. Xem `permission.decide.ts` để biết vì sao vị trí của nó là bảo đảm CẤU TRÚC,
+   * không phải kỷ luật. Caller sản phẩm KHÔNG cần (và không nên) tự đặt trường này.
+   */
+  pairIsSensitive?: boolean;
+  /**
    * True when this action requires a valid re-auth window (e.g. reveal-secret).
    * Service checks ctx.reauthValidUntil > now() before allowing.
    */

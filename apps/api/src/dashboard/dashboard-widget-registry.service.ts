@@ -168,12 +168,14 @@ export class DashboardWidgetRegistryService {
    * Gate tầng-2, HAI PHA: (1) mỗi widget qua DASH_WIDGET_GATE_PAIR[widgetCode] → can(action,resourceType);
    * (2) widget khai sàn → MỘT lượt resolveManyOrNull(cùng cặp) → meetsMinDataScope.
    *   - thiếu entry map ⇒ LOẠI + log.warn (fail-closed; KHÔNG throw làm sập cả dashboard).
-   *   - KHÔNG truyền isSensitive — GIỮ NGUYÊN hành vi cũ. ⚠️ Câu cũ ở đây («engine tự ép
-   *     effectivelySensitive ⇒ wildcard KHÔNG lọt») SAI một nửa: `decideStrongestScope` /`decideCan` đọc
-   *     `is_sensitive` của HÀNG GRANT KHỚP — tức hàng `*:*` (is_sensitive=false) — chứ không của cặp đích,
-   *     nên actor chỉ cầm wildcard VẪN qua. Chưa nổ (mig 0565 §6.7 census: 0 role seed giữ wildcard; tầng-2
-   *     service nguồn truyền cờ tường minh). Siết = đổi hành vi quyền thật ⇒ WO riêng
-   *     S14-SEC-DASHGATE-WILDCARD-1; xem doc-block `dashboard-widget-gate.ts`.
+   *   - KHÔNG truyền isSensitive, và đó là ĐÚNG kể từ `S14-SEC-DASHGATE-WILDCARD-1`: `PermissionService`
+   *     bơm `pairIsSensitive` (cờ catalog của CẶP ĐÍCH) vào cả `can()` lẫn `resolveStrongestScopes`, nên
+   *     wildcard `*:*` KHÔNG còn mở được cặp sensitive dù call-site không khai gì (ADR `DECISIONS-12`).
+   *     ⚠️ Câu ở đây TRƯỚC ĐÂY khẳng định điều tương tự mà SAI — hồi đó engine đọc `is_sensitive` của
+   *     HÀNG GRANT KHỚP (hàng `*:*`, false), không phải của cặp đích. Cơ chế đã đổi; đừng suy ngược từ
+   *     câu cũ nếu gặp nó ở nhánh khác.
+   *   - Deny-path đo hai tầng: `test/integration/dash-wildcard-sensitive-gate.int-spec.ts`. Ca #18b ở đó
+   *     (ATTENDANCE_TODAY) là ca DUY NHẤT cô lập pha 1 — hai widget khai sàn bị pha 2 chặn trước.
    */
   private async filterByGatePair(
     companyId: string,

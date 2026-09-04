@@ -28,21 +28,23 @@ import type { WidgetRequestUser } from "./dashboard-widget-data.types";
  * `ForbiddenException` thành Degraded). Thiếu entry cặp gate ⇒ cũng 403, KHÔNG "cho qua vì không
  * biết gác gì".
  *
- * 📌 **KHÔNG truyền `isSensitive` — GIỮ NGUYÊN hành vi 4 bản cũ.** Bốn bản cũ đều kèm câu «engine tự
- * ép effectivelySensitive = input OR grant.isSensitive ⇒ cặp nguồn is_sensitive=true vẫn exact-match,
- * wildcard KHÔNG lọt». **Câu đó SAI một nửa**: `permission.decide.ts` tính
- * `effectivelySensitive = isSensitive || companyAllows.some(g => g.isSensitive)`, trong đó
- * `companyAllows` là các HÀNG GRANT KHỚP — nên `is_sensitive` được đọc là của hàng `*:*`
- * (`is_sensitive=false`), KHÔNG phải của cặp đích. Actor chỉ cầm `*:*` VẪN qua được gate này.
+ * 📌 **KHÔNG truyền `isSensitive` — và ĐÓ LÀ ĐÚNG kể từ `S14-SEC-DASHGATE-WILDCARD-1`.**
  *
- * Hôm nay chưa nổ: mig `0565` §6.7 census fail-closed khẳng định không role SEED nào giữ wildcard,
- * 2 role tuỳ biến PROD đã thu hồi ở `S14-PROD-PAYROLLGRANT-1`, và tầng-2 (service nguồn — vd
- * `PayrollAccessService`/`RecruitAccessService`) truyền cờ TƯỜNG MINH nên đường DỮ LIỆU vẫn kín.
- * Hở là đường METADATA `/dashboard/me` + gọi thẳng slug.
+ * Lịch sử, vì nó là một cái bẫy đã sập một lần: bốn bản `gateOrThrow` cũ đều kèm câu «engine tự ép
+ * effectivelySensitive ⇒ wildcard KHÔNG lọt». Câu đó **từng SAI**: `decideCan` đọc `is_sensitive` của
+ * HÀNG GRANT KHỚP — tức hàng `*:*` (`is_sensitive=false`) — chứ không của CẶP ĐÍCH, nên actor chỉ cầm
+ * `*:*` qua được gate này. Nếu bạn thấy câu khẳng định đó ở một nhánh cũ, đừng tin nó ở đó.
  *
- * Siết ở đây = đổi hành vi quyền THẬT (403 cho mọi actor cầm wildcard trên RECRUIT_FUNNEL /
- * PAYROLL_COST), cần deny-path riêng ⇒ tách WO `S14-SEC-DASHGATE-WILDCARD-1`. WO perf này chỉ GHIM
- * hành vi hiện tại bằng test để nó không đổi ngầm theo chiều nào cả.
+ * Nay câu ấy ĐÚNG, nhưng vì một cơ chế KHÁC: `PermissionService` bơm `pairIsSensitive` — cờ catalog
+ * của CẶP ĐÍCH — vào mọi `can()`/scope-resolve (ADR `DECISIONS-12`). Cổng không còn phụ thuộc việc
+ * call-site có nhớ truyền cờ hay không, nên gate này KHÔNG cần (và không nên) tự tra catalog.
+ *
+ * ⚠️ Đừng "sửa cho chắc" bằng cách thêm `isSensitive: true` ở đây: `isSensitive` còn điều khiển
+ * `auditRequired` và `needsObjectGrant` (xem `permission.decide.ts`), nên bật nó ở tầng gate là đổi
+ * hai thứ khác ngoài cổng wildcard.
+ *
+ * Deny-path: `dashboard-widget-gate.spec.ts` (đơn vị, qua `PermissionService` THẬT) +
+ * `test/integration/dash-wildcard-sensitive-gate.int-spec.ts` (HTTP, hai tầng).
  */
 export async function gateWidgetOrThrow(
   permission: PermissionService,

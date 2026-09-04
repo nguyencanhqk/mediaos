@@ -15,6 +15,7 @@ import {
   isGrantActive,
   type ScopeRequest,
 } from "./permission.decide";
+import { PermissionCatalogSnapshot } from "./permission-catalog-snapshot";
 
 /**
  * FIX-1-CAP-EXPOSE (S2-AUTH-BE-5) — ALLOWLIST cặp quyền NHẠY CẢM được phép PHƠI vào /auth/me `capabilities`
@@ -295,7 +296,52 @@ export const __SENSITIVE_CAPABILITY_ALLOWLIST_FOR_TEST = SENSITIVE_CAPABILITY_AL
 export class PermissionService {
   private readonly logger = new Logger(PermissionService.name);
 
+  /**
+   * S14-SEC-DASHGATE-WILDCARD-1 (ADR `DECISIONS-12`) — ảnh chụp cờ `is_sensitive` theo CẶP ĐÍCH.
+   *
+   * Dựng TẠI ĐÂY chứ không phải provider DI mới, có chủ đích: `new PermissionService(` xuất hiện ~56
+   * chỗ trong `apps/api` (phần lớn là int-spec dựng tay). Thêm tham số constructor = typecheck đỏ hàng
+   * chục file; thêm tham số OPTIONAL = bản vá INERT ở đúng những int-spec chống-leo-thang, tức test
+   * chống lỗ lại chạy trên engine chưa vá (memory `tests-can-pin-a-hole-open`). Tự dựng từ `this.repo`
+   * ⇒ 0 call-site đổi, 0 provider mới, 0 dòng `permission.module.ts`.
+   *
+   * State PER-INSTANCE (không module-level): các spec dựng nhiều `PermissionService` với stub catalog
+   * khác nhau trong CÙNG file phải không giẫm lên nhau.
+   */
+  private readonly catalog = new PermissionCatalogSnapshot({
+    load: () => this.repo.getAllPermissions(),
+    onError: (error, phase) => {
+      // Luật quan sát: nhánh suy biến phải ĐỂ LẠI VẾT. `no-snapshot` là nhánh SIẾT (mọi cặp coi như
+      // sensitive) — im lặng ở đây là để hệ thống từ chối quyền vì lý do hạ tầng mà không ai biết.
+      this.logger.error("permission catalog snapshot load failed", {
+        error: error instanceof Error ? error.message : String(error),
+        phase,
+        degradedTo: phase === "no-snapshot" ? "pairIsSensitive=true (siết)" : "ảnh chụp CŨ",
+      });
+    },
+  });
+
   constructor(private readonly repo: IPermissionRepository) {}
+
+  /**
+   * ADR `DECISIONS-12` D7 — seam TEST duy nhất cho ảnh chụp catalog. int-spec gọi qua
+   * `app.get(PermissionService)` SAU khi seed cặp quyền mới, nếu không ảnh chụp nạp lúc kiểm quyền đầu
+   * tiên sẽ không thấy hàng vừa seed (TTL 5 phút).
+   *
+   * KHÔNG export hàm module-level thay cho method này: hàm module-level không chạm được ảnh chụp của
+   * instance singleton mà DI đang dùng ⇒ dây chết trông như dây sống.
+   */
+  resetCatalogSnapshotForTest(): void {
+    this.catalog.reset();
+  }
+
+  /**
+   * Cờ `is_sensitive` của CẶP ĐÍCH. NEVER throws (xem `PermissionCatalogSnapshot`) — `can()` bọc
+   * try/catch fail-closed, nên một lỗi catalog ném ra sẽ deny TOÀN BỘ kiểm quyền của tiến trình.
+   */
+  private pairIsSensitiveFor(action: string, resourceType: string): Promise<boolean> {
+    return this.catalog.isPairSensitive(action, resourceType);
+  }
 
   /**
    * 4-tier permission check (§3b of G3-permission-engine.md).
@@ -333,10 +379,15 @@ export class PermissionService {
           ? await this.repo.getObjectGrants(userId, companyId, resourceType, resourceId)
           : [];
 
+      // ── Cờ catalog của CẶP ĐÍCH (S14-SEC-DASHGATE-WILDCARD-1) ─────────────
+      // Bơm Ở ĐÂY chứ không ở 25 call-site thiếu cờ: phần lớn site truyền cặp ĐỘNG nên chúng cũng sẽ
+      // phải tra catalog — tức cùng một việc, nhân 25, cộng 25 cơ hội quên (ADR `DECISIONS-12` §3).
+      const pairIsSensitive = await this.pairIsSensitiveFor(action, resourceType);
+
       // ── Decide ────────────────────────────────────────────────────────────
       // Single source of truth (permission.decide.ts) — SHARED verbatim with canBatch(); the two paths
       // differ ONLY in the fetch above (single vs batched), never in the decision semantics.
-      return decideCan(rawCompanyGrants, objectGrants, input, now);
+      return decideCan(rawCompanyGrants, objectGrants, { ...input, pairIsSensitive }, now);
     } catch (error: unknown) {
       // Fail-closed: DB/cache/network error → DENY. Never false-ALLOW on exception.
       // Log with full context so infra failures are distinguishable from legitimate denies.
@@ -387,6 +438,13 @@ export class PermissionService {
         resourceIds,
       );
 
+      // Cờ catalog theo CẶP — MỘT lần cho mỗi action, KHÔNG lặp theo resourceId (một trang N hàng ×
+      // M action vẫn chỉ hỏi M lần, và single-flight gộp chúng thành ≤1 query).
+      const pairFlags = new Map<string, boolean>();
+      for (const spec of actions) {
+        pairFlags.set(spec.action, await this.pairIsSensitiveFor(spec.action, resourceType));
+      }
+
       const result: BatchDecisions = new Map();
       for (const resourceId of resourceIds) {
         const objectGrants = objectBatch.get(resourceId) ?? [];
@@ -399,6 +457,7 @@ export class PermissionService {
             resourceType,
             resourceId,
             isSensitive: spec.isSensitive,
+            pairIsSensitive: pairFlags.get(spec.action) ?? false,
             requiresReauth: spec.requiresReauth,
             objectGrantRequired: spec.objectGrantRequired,
             ctx,
@@ -631,9 +690,10 @@ export class PermissionService {
   ): Promise<DataScope | null> {
     try {
       const rawGrants = await this.repo.getCompanyRoleGrantsWithScope(userId, companyId);
+      const pairIsSensitive = await this.pairIsSensitiveFor(action, resourceType);
       return decideStrongestScope(
         rawGrants,
-        { action, resourceType, isSensitive: opts?.isSensitive },
+        { action, resourceType, isSensitive: opts?.isSensitive, pairIsSensitive },
         new Date(),
       );
     } catch (error: unknown) {
@@ -675,16 +735,26 @@ export class PermissionService {
     try {
       const now = new Date();
       const rawGrants = await this.repo.getCompanyRoleGrantsWithScope(userId, companyId);
-      return requests.map((req) => decideStrongestScope(rawGrants, req, now));
+      // N cặp ⇒ N lần TRA ảnh chụp, nhưng ≤1 query: single-flight gộp mọi lượt hỏi trên ảnh chụp lạnh
+      // (ADR `DECISIONS-12` D6). Short-circuit `requests.length === 0` ở trên vẫn đi TRƯỚC cả hai.
+      const pairFlags = await Promise.all(
+        requests.map((req) => this.pairIsSensitiveFor(req.action, req.resourceType)),
+      );
+      return requests.map((req, i) =>
+        decideStrongestScope(rawGrants, { ...req, pairIsSensitive: pairFlags[i] }, now),
+      );
     } catch (error: unknown) {
-      this.logger.error("resolveStrongestScopes() infrastructure error — fail-closed null (batch)", {
-        error: error instanceof Error ? error.message : String(error),
-        userId,
-        companyId,
-        // Bản đơn log kèm action/resourceType; bản batch log MỘT lần ⇒ phải mang ĐỦ danh sách cặp,
-        // nếu không mọi deny của lượt này mất dấu vết (luật quan sát).
-        pairs: requests.map((r) => `${r.action}:${r.resourceType}`),
-      });
+      this.logger.error(
+        "resolveStrongestScopes() infrastructure error — fail-closed null (batch)",
+        {
+          error: error instanceof Error ? error.message : String(error),
+          userId,
+          companyId,
+          // Bản đơn log kèm action/resourceType; bản batch log MỘT lần ⇒ phải mang ĐỦ danh sách cặp,
+          // nếu không mọi deny của lượt này mất dấu vết (luật quan sát).
+          pairs: requests.map((r) => `${r.action}:${r.resourceType}`),
+        },
+      );
       return requests.map(() => null);
     }
   }

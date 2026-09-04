@@ -15510,7 +15510,7 @@ export const backlog = [
       "Gate widget DASH cho grant wildcard `*:*` lọt qua cặp SENSITIVE — `can()` đọc is_sensitive của HÀNG GRANT KHỚP (hàng `*:*`, false) chứ không của cặp đích; hở ở đường METADATA /dashboard/me + gọi thẳng slug",
     zone: "red",
     gate: "FULL",
-    status: "in_progress",
+    status: "done",
     paths: [
       "apps/api/src/dashboard/**",
       "apps/api/src/permission/**",
@@ -15543,6 +15543,41 @@ export const backlog = [
       "🔴 CHƯA NỔ ngoài thực địa, KHÔNG phải đã an toàn: mig 0565 §6.7 census fail-closed (0 role SEED giữ wildcard) + 2 role tuỳ biến PROD đã thu hồi ở S14-PROD-PAYROLLGRANT-1 + tầng-2 service nguồn (PayrollAccessService/RecruitAccessService) truyền cờ TƯỜNG MINH nên đường DỮ LIỆU vẫn kín. Một role tuỳ biến mới cầm `*:*` là lỗ sống lại.",
       "Comment SAI đã sửa ở S14-PERF-DASHACTOR-1 (4 bản gateOrThrow cũ đều khẳng định «wildcard KHÔNG lọt») — đừng tin lại câu cũ nếu thấy nó ở nhánh khác.",
       "Memory liên quan: permission-grant-census-must-cover-four-wildcard-shapes · sensitive-capability-allowlist-is-backend · asset-guards-pairs-in-two-layers.",
+    ],
+  },
+  {
+    id: "S14-SEC-CAPWILDCARD-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "`getCapabilities()` vẫn publish `*:*` — FE `useCan` rơi xuống wildcard nên actor chỉ-wildcard THẤY màn sensitive rồi ăn 403 (khoảng lệch FE↔BE nới ra sau S14-SEC-DASHGATE-WILDCARD-1)",
+    zone: "red",
+    gate: "FULL",
+    status: "todo",
+    paths: [
+      "apps/api/src/permission/**",
+      "apps/api/src/auth/**",
+      "packages/web-core/src/hooks/**",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S14-SEC-DASHGATE-WILDCARD-1"],
+    src: [
+      "DEFER TƯỜNG MINH từ S14-SEC-DASHGATE-WILDCARD-1 §8 (ADR DECISIONS-12 §7). `permission.service.ts` getCapabilities lọc grant sensitive theo cờ HÀNG GRANT ⇒ hàng `*:*` (is_sensitive=false) vẫn được publish; `packages/web-core/src/hooks/use-can.ts:16-22` `useCan` rơi xuống `caps['*:*']`. Sau bản vá engine, BE 403 nhưng FE vẫn render ⇒ khoảng lệch RỘNG HƠN trước.",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: đếm actor thực tế giữ wildcard trên PROD (cổng NGƯỜI — classifier-blocks-prod-db-from-agent). Hiện dev = 0 role ⇒ 0 người gặp; nếu PROD cũng 0 thì đây là nợ SẠCH, không phải sự cố",
+      "getCapabilities lọc theo CẶP ĐÍCH (cùng nguồn `pairIsSensitive` của DECISIONS-12), KHÔNG theo cờ hàng grant — hợp nhất với họ 3 bản cài đặt ở ADR §2",
+      "Ca ALLOW đối chứng: cặp non-sensitive VẪN lên capabilities cho actor wildcard (không biến thành 'giấu sạch wildcard')",
+      "Quyết định + ghi rõ: có giữ `caps['*:*']` fallback trong `useCan` hay không. Gỡ fallback là đổi hành vi FE toàn hệ ⇒ cần census màn bị ảnh hưởng, không làm bằng cảm giác",
+      "`bash harness/check.sh --all --lane-db` xanh không banner",
+    ],
+    notes: [
+      "🔴 KHÔNG phải lỗ leo thang: cổng thật là BE (đã kín sau DECISIONS-12). Đây là lỗi TRẢI NGHIỆM + một nguồn sự-thật thứ hai đang trôi khỏi engine.",
+      "`useCanExact` là lối đúng đã có sẵn cho cặp nhạy cảm (memory sensitive-pair-widget-needs-usecanexact) — cân nhắc census 'cặp sensitive nào còn dùng useCan' trước khi đổi bản thân useCan.",
+      "Memory liên quan: sensitive-pair-widget-needs-usecanexact · sensitive-capability-allowlist-is-backend · capability-allowlist-hides-admin-screens.",
     ],
   },
   {

@@ -14,7 +14,9 @@
  *   5. Default            → deny-default
  *
  * Sensitive gate: wildcard grants (*:*) do NOT satisfy; requires exact non-wildcard ALLOW.
- * Defense-in-depth: effectivelySensitive = input.isSensitive OR any matching grant.isSensitive.
+ * effectivelySensitive = input.isSensitive (gợi ý CALLER) OR any matching grant.isSensitive
+ * (defense-in-depth) OR input.pairIsSensitive (cờ catalog của CẶP ĐÍCH — S14-SEC-DASHGATE-WILDCARD-1,
+ * ADR `DECISIONS-12`; hai vế đầu MỘT MÌNH để `*:*` mở được cặp sensitive).
  * expires_at: re-checked here (cache-hit safety — the caller passes RAW grants, filter is applied here).
  * This function NEVER throws — the caller owns fail-closed error handling around the fetch.
  */
@@ -43,6 +45,7 @@ export function decideCan(
     resourceType,
     resourceId,
     isSensitive = false,
+    pairIsSensitive = false,
     requiresReauth = false,
     objectGrantRequired,
     ctx,
@@ -99,8 +102,26 @@ export function decideCan(
 
   const companyAllows = companyGrants.filter((g) => matchesCompanyGrant(g) && g.effect === "ALLOW");
 
-  // Defense-in-depth: sensitive if EITHER the caller flags it OR any matching grant is is_sensitive.
-  const effectivelySensitive = isSensitive || companyAllows.some((g) => g.isSensitive);
+  // Sensitive nếu MỘT TRONG BA: caller khai · một hàng grant khớp mang cờ · **cặp ĐÍCH là sensitive
+  // trong catalog** (S14-SEC-DASHGATE-WILDCARD-1, ADR `DECISIONS-12`).
+  //
+  // Vế thứ ba là bản vá: hai vế đầu đều đọc cờ của thứ KHÁC cặp đích, nên actor chỉ cầm `('*','*')`
+  // (hàng wildcard mang `is_sensitive=false`) trượt qua cổng — cổng tự khoá mình bằng chìa của kẻ đi qua.
+  //
+  // ⚠️ VỊ TRÍ DÒNG NÀY LÀ MỘT BẢO ĐẢM, KHÔNG PHẢI NGẪU NHIÊN — đừng chuyển nó lên trên:
+  //   • object-tier ALLOW trả về ở :82 với `auditRequired: isSensitive` — `hr-read.service.ts` và
+  //     `employees.service.ts` dùng `reveal = allow && auditRequired`, nên lật false→true ở đó biến
+  //     MASK thành REVEAL (rò dữ liệu, đúng chiều ngược với WO này);
+  //   • `needsObjectGrant` quyết ở :95-98 từ `isSensitive && requiresReauth` — bật nhầm sẽ deny CẢ
+  //     actor có grant EXACT.
+  // Cả hai nằm TRƯỚC dòng này ⇒ `pairIsSensitive` không với tới được chúng.
+  //
+  // Bất biến: mọi lần vào nhánh sensitive NHỜ `pairIsSensitive` đều có `explicitAllows === []` (grant
+  // exact mang cờ catalog của chính cặp đích qua innerJoin(permissions), nên nếu có grant exact thì vế
+  // thứ hai đã true từ trước) ⇒ đường đi mới DUY NHẤT là `deny-sensitive` ở :109. Không có return
+  // ALLOW nào mới, không `auditRequired` nào đổi giá trị.
+  const effectivelySensitive =
+    isSensitive || companyAllows.some((g) => g.isSensitive) || pairIsSensitive;
 
   if (effectivelySensitive) {
     // Sensitive gate: wildcards (*) do NOT satisfy — require exact (non-wildcard) ALLOW.
@@ -155,6 +176,11 @@ export interface ScopeRequest {
   action: string;
   resourceType: string;
   isSensitive?: boolean;
+  /**
+   * S14-SEC-DASHGATE-WILDCARD-1 — cờ catalog của CẶP ĐÍCH, bơm bởi `PermissionService`.
+   * Mirror `CanInput.pairIsSensitive`; caller sản phẩm không cần đặt.
+   */
+  pairIsSensitive?: boolean;
 }
 
 /**
@@ -182,7 +208,7 @@ export function decideStrongestScope(
   req: ScopeRequest,
   now: Date,
 ): DataScope | null {
-  const { action, resourceType, isSensitive } = req;
+  const { action, resourceType, isSensitive, pairIsSensitive } = req;
   const grants = rawGrants.filter((grant) => isGrantActive(grant.expiresAt, now));
 
   const matches = (grant: CompanyRoleGrantWithScope): boolean =>
@@ -199,8 +225,14 @@ export function decideStrongestScope(
     grant.action === action && grant.resourceType === resourceType;
 
   // Sensitive gate (mirror can() §3b): wildcard ALLOW does NOT satisfy a sensitive pair.
+  // Vế `pairIsSensitive` = cờ catalog của CẶP ĐÍCH (S14-SEC-DASHGATE-WILDCARD-1, ADR `DECISIONS-12`) —
+  // hai vế đầu đọc cờ của caller / của HÀNG GRANT KHỚP, nên `*:*` (is_sensitive=false) trượt qua.
+  // Ở đây không có `auditRequired` để lật, nên vị trí dòng không nhạy như bản `decideCan`; giữ cùng
+  // hình dạng biểu thức để hai bản không trôi khỏi nhau.
   const effectivelySensitive =
-    (isSensitive ?? false) || allowMatches.some((grant) => grant.isSensitive);
+    (isSensitive ?? false) ||
+    allowMatches.some((grant) => grant.isSensitive) ||
+    (pairIsSensitive ?? false);
 
   let eligible: CompanyRoleGrantWithScope[];
   if (effectivelySensitive) {

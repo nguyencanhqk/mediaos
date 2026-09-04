@@ -350,3 +350,85 @@ spec) ⇒ vá ở `PermissionService` + hàm thuần là ĐỦ phủ đường s
 `tests-can-pin-a-hole-open` · `same-builder-twice-makes-unit-spec-vacuous` ·
 `prod-api-boots-without-db-until-login` · `classifier-blocks-prod-db-from-agent` ·
 `wo-paths-drive-gate-and-scheduler` · `allow-counter-case-not-403-lets-500-through`.
+
+---
+
+## 9. Kết quả thi công 2026-09-04 — chỗ kế hoạch SAI khi đo thật
+
+Ba giả định của §4–§5 không sống sót khi chạy. Ghi lại để lần sau không lặp, và để người review biết
+vì sao code lệch plan ở đúng ba chỗ này.
+
+### 9.1 §5.2 ca #14 đo một trạng thái BẤT KHẢ
+
+Plan: «grant EXACT + `isSensitive:false` + `pairIsSensitive:true` ⇒ `auditRequired` VẪN false».
+
+Fixture đó không tồn tại ngoài đời: `grant.isSensitive` lấy từ `innerJoin(permissions)` trên cặp của
+CHÍNH HÀNG GRANT (`permission.repository.ts:31-35`), nên grant EXACT cho cặp sensitive **luôn** mang
+`isSensitive=true` ⇒ nhánh sensitive đã vào **từ trước** bản vá và `auditRequired` đã là `true`.
+Ép con số của plan sẽ buộc quay lại thiết kế hai-cờ mà §4.2 đã cân nhắc và loại.
+
+**Thay bằng bất biến THẬT**, ghim trên ma trận fixture hợp lệ (`REALISTIC_CASES`):
+`reveal = allow && auditRequired` **không bao giờ đi false→true** (#14) · mọi ca còn ALLOW sau bản vá
+giữ nguyên `auditRequired` (#14a) · ma trận có ca ALLOW thật để #14/#14a không xanh-rỗng (#14c).
+
+### 9.2 §5.4 ca 22 KHÔNG phải hệ quả của bản vá
+
+Plan xếp «kiểu dashboard của actor wildcard tụt về Employee» là hệ quả có chủ ý. Đo lại:
+`DashboardResolverService.allowedTypeSet` (`dashboard-resolver.service.ts:81-86`) **đã** truyền
+`isSensitive: pair.isSensitive` tường minh ⇒ `view-admin/-hr/-manager:dashboard` chặn wildcard từ
+trước WO này. Ca được giữ lại nhưng đổi vai thành **TIỀN ĐỀ** của #18b.
+
+### 9.3 §5.4 như plan viết thì **VACUOUS với nửa `decideCan`** — lỗ nghiêm trọng nhất của kế hoạch
+
+Đo bằng đột biến (gỡ `pairIsSensitive` khỏi **riêng** `decideCan`, giữ `decideStrongestScope`):
+int-spec §5.4 **10/10 XANH**. Lý do: `PAYROLL_COST`/`RECRUIT_FUNNEL` đều khai
+`DASH_WIDGET_MIN_DATA_SCOPE` ⇒ `decideStrongestScope` loại chúng TRƯỚC khi `decideCan` kịp nói gì; và
+ở tầng data, handler nguồn tự `resolveAndAssert` nên deny bị **quyết định thừa** ở nhiều tầng.
+
+Plan chọn đúng hai widget mà cả hai đều có sàn ⇒ bộ test không chứng được nửa bản vá.
+
+**Vá:** thêm hai ca trên widget có cặp SENSITIVE mà **KHÔNG khai sàn** — cổng duy nhất của chúng là
+`can()`:
+
+| Ca | Widget | Cặp | Tầng | Vì sao chọn |
+| --- | --- | --- | --- | --- |
+| #18b | `ATTENDANCE_TODAY` | `view-own:attendance` (mig 0454:35) | METADATA | widget SENSITIVE-không-sàn DUY NHẤT trên dashboard `Employee` mặc định |
+| #19c | `SYSTEM_LOGS` | `view:audit-log` (mig 0340:31) | DATA | vắng trong bản đồ sàn; slug gọi thẳng được, không phụ thuộc dashboard type |
+
+Sau khi thêm: đột biến chỉ-`decideCan` ⇒ **#18b ĐỎ**. Ma trận đột biến cuối:
+
+| Đột biến | unit `pair-sensitive` | unit `widget-gate` | int-spec |
+| --- | --- | --- | --- |
+| gỡ cả hai vế | 6 đỏ | đỏ | — |
+| gỡ riêng `decideCan` | đỏ | đỏ | **#18b đỏ** |
+| gỡ riêng `decideStrongestScope` | 3 đỏ | xanh | xanh (bị `can()` chặn trước — over-determined) |
+
+### 9.4 Census §2.4 chạy lại theo GIÁ TRỊ — 0 xung đột
+
+19 site khai `isSensitive: false` (non-spec). Hai trong số đó (`module-catalog.repository.ts:90`,
+`setting.service.ts:470`) là cột `company_settings.is_sensitive` — **cột khác**, không thuộc census.
+17 site còn lại đối chiếu catalog: **tất cả đều thật sự non-sensitive**
+(`access:lms · access:me · manage.position:position · manage:offer · read:dashboard · read:employee ·
+read:notification · read:task · update:avatar · update:user-preference · view-employee:dashboard ·
+view-own:leave-balance · view-own:leave-calendar · view:leave-type · view:social-post ·
+view:user-preference`) ⇒ **không site nào bị bản vá lật.**
+
+Bề mặt đo lại: `can({` **37** · scope-resolver **154**.
+
+### 9.5 Census wildcard — mạnh hơn plan §2.1
+
+**KHÔNG migration nào tạo hoặc cấp hàng wildcard.** `grep '\*'` trên toàn `apps/api/migrations/` chỉ
+ra đúng một hit: mig `0565:479`, và đó là **câu census** chứ không phải câu cấp. Hàng `*:*` trong DB
+dev/lane do fixture test (`seedPermissionCatalog`) sinh ra. Cổng NGƯỜI ở §8 vẫn giữ nguyên cho PROD.
+
+### 9.6 Cổng coverage — đã xác minh SỐNG, không phải khoá chết
+
+`test:cov:sensitive` (LANE_DB) exit 0 · 75 file / 1079 ca. Bảng coverage **có dòng file mới**:
+`permission-catalog-snapshot.ts` = **100 stmts / 97.14 branch / 100 funcs / 100 lines** (ngưỡng đặt 90).
+`permission.decide.ts` 92.47/94.84/100/92.47 · `permission.service.ts` 97.26/89.51/94.44/97.26.
+
+### 9.7 Ghi chú thi công
+
+Một byte NUL THẬT lọt vào `permission-catalog-snapshot.ts` (dấu ngăn khoá tra cứu viết thẳng thay vì
+escape). Hậu quả: `grep`/`rg` xếp file vào loại BINARY và **bỏ qua trong im lặng** — mọi census bằng
+grep sẽ mù với đúng file mang cờ quyết định. Đã đổi sang `PAIR_KEY_SEP = "\u0000"` + ghi cảnh báo tại chỗ.
