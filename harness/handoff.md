@@ -2,6 +2,80 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-05 — S14-SEC-CAPWILDCARD-1: **thiết kế CHỐT, 0 dòng code**, WO để `blocked`
+
+**Kết quả:** `docs/DECISIONS/DECISIONS-13_Capabilities_Mirror_Company_Tier_Decision.md` (MỚI) +
+`docs/plans/S14-SEC-CAPWILDCARD-1.md` **v3** + `…census.sql` (**6 câu**). Owner dừng trước code ở cổng
+chi phí ($72). Plan v3 là **tài liệu thi công** — phiên sau code thẳng từ §9/§14, **không cần
+plan-review lại** trừ khi đổi thiết kế.
+
+### ⛔ Vì sao `blocked` chứ không `ready`
+
+Plan §14 bước 1 = **đọc Q4/Q6 của census PROD**, mà agent không chạm được DB PROD
+(`classifier-blocks-prod-db-from-agent`). Để `ready` là dựng bẫy: phiên sau nhận WO rồi **dừng ở dòng
+đầu tiên**. Gỡ chặn bằng đúng một lệnh:
+
+```bash
+psql "$PROD_URL" -f docs/plans/S14-SEC-CAPWILDCARD-1.census.sql   # chỉ-đọc, vai bỏ qua RLS
+```
+
+- **Q4** ⚠️ = danh sách màn sẽ hiện thêm. Có cặp lớp reveal/step-up hoặc cặp owner không muốn phơi ⇒
+  **đổi thiết kế trước khi code**, không phải chờ PR.
+- **Q6** ⛔ = trả về hàng catalog wildcard `is_sensitive=true` ⇒ **DỪNG** (tiền đề T1 của plan §8 sai ⇒
+  có actor sẽ **MẤT** khoá).
+
+### Ba điều đắt tiền nhất phiên này mua được — ĐỪNG ĐO LẠI
+
+1. **Giả định "PROD = 0 holder wildcard" là SAI.** memory `superadmin-not-a-canonical-role` (đo thật
+   PROD 02/08): role **`SA`**, company-scoped, **10 user**, giữ **379/379** cặp catalog gồm **128/128**
+   sensitive, và có `*:*`. `migrations/0569:167-168` xác nhận độc lập. Dev đo ra 0 vì dev **chưa
+   bootstrap SA**, không vì hệ sạch.
+2. **`mediaos` (dev dùng chung) LỆCH catalog so với migration.** dev = 390/139/**1 wildcard**;
+   `mediaos_capwildcard` dựng thuần migration = 389/140/**0 wildcard**. Dev **thừa** `*:*` +
+   `view:employee`, **thiếu** `upload:candidate-file` — fixture int-spec đóng dấu vào catalog GLOBAL.
+   **Không migration nào seed hàng `('*','*')`.** ⇒ đừng suy từ dev ra PROD.
+3. **Q4 trên dev = 71 cặp, 6 cặp đầu chạm 49 actor**: `view/upload/delete:leave-file` ·
+   `view-detail:attendance` · `view-own:adjustment` · `view-own:remote-request`. Đó là **màn tự-phục-vụ
+   của chính nhân viên** đang bị allowlist giấu khỏi họ ⇒ WO này gỡ thứ đang hỏng, không phải hardening
+   phòng xa.
+
+### Hai vòng plan-review — 12 lỗ, đã vá hết vào v3
+
+Vòng 1 BLOCK v1 (6 mục). Vòng 2 BLOCK v2 (6 mục). Hai mục đáng nhớ nhất:
+
+- **B1/v2 — break-glass lọt vào caps.** `permission.decide.ts:98-101` chặn `needsObjectGrant =
+  objectGrantRequired ?? (isSensitive && requiresReauth)` **TRƯỚC** company-tier. Vị ngữ v2 thiếu vế này
+  ⇒ grant exact `reveal-secret:platform-account` sẽ bật `caps[...] = true` trong khi `can()` không bao
+  giờ ALLOW. ⇒ v3 §4.2-(3) thêm tập `EXCLUDED`.
+- **B4/v2 — tôi trình bày SAI cho owner.** Đã nói allowlist là "hàng rào tuỳ tiện". **Sai**: tiêu chí có
+  thật (`permission.service.ts:21-27`, `S2-AUTH-BE-5`) + có cổng máy
+  (`sensitive-screen-gate-allowlist.spec.ts:20-31`). Đã đính chính với owner; ADR-13 §1 viết lại cho
+  đúng **trước khi** bác. `security-reviewer` phải đọc ADR-13 §1–§2, **không** đọc câu của plan v2.
+
+### Bẫy mới gặp
+
+**`prettier --write` trên docs đổi `*` thành `_` BÊN TRONG code span** khi code span nằm trong một cụm
+emphasis ở **ô bảng**. Trong tài liệu quyền thì `*` là ký tự wildcard ⇒ **hỏng nội dung, không phải
+hỏng định dạng**. Đã sửa; cách tránh: đừng bọc emphasis quanh cụm có backtick chứa `*`. Sau khi sửa thì
+prettier ổn định (chỉ căn lại độ rộng cột).
+
+### Hạ tầng để lại cho phiên sau
+
+- Lane DB **`mediaos_capwildcard`** đã dựng + migrate (389/140/0). Baseline `src/permission`:
+  **342 pass / 14 skip**.
+- `docs/plans/S14-SEC-CAPWILDCARD-1.census.sql` — 6 câu, chỉ-đọc, chạy sạch trên cả hai DB. Danh sách 69
+  cặp allowlist trong Q4 **sinh tự động** từ `permission.service.ts` ⇒ sinh lại nếu allowlist đổi.
+- `backlog.mjs`: `paths` 6→9 (**còn thiếu `apps/console/**`** — nới lúc code, plan §13.1),
+  `done_when` 5→10, `status: blocked`.
+
+### Chi phí
+
+**$72** cho **0 dòng code** — toàn bộ vào 2 vòng plan-review Opus trên vùng đỏ. Đắt, nhưng vòng 2 bắt
+đúng lỗ break-glass. Bài học: **đọc `superadmin-not-a-canonical-role` TRƯỚC khi viết plan dựa trên "0
+holder wildcard"** — nó đã bác giả định đó từ 02/08, v1 đã không đọc.
+
+---
+
 ## Phiên 2026-09-04 (d) — S14-SEC-CATALOGSNAP-HARDEN-1 → **PR #478 MỞ**, chờ người chốt
 
 **Trạng thái:** code xong, gate xong, PR mở. `bash harness/check.sh --all --lane-db` **XANH ✅** 9/9

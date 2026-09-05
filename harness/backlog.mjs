@@ -15550,14 +15550,20 @@ export const backlog = [
     module: "AUTH",
     layer: "BE",
     title:
-      "`getCapabilities()` vẫn publish `*:*` — FE `useCan` rơi xuống wildcard nên actor chỉ-wildcard THẤY màn sensitive rồi ăn 403 (khoảng lệch FE↔BE nới ra sau S14-SEC-DASHGATE-WILDCARD-1)",
+      "`capabilities` phát ĐÚNG quyết định của `can()` tầng công ty (v2, owner chốt 05/09): bỏ cờ HÀNG GRANT + bỏ danh sách tay `SENSITIVE_CAPABILITY_ALLOWLIST` — đóng CẢ lỗ `*:*` lẫn lớp lỗi `capability-allowlist-hides-admin-screens`",
     zone: "red",
     gate: "FULL",
-    status: "todo",
+    status: "blocked",
     paths: [
       "apps/api/src/permission/**",
       "apps/api/src/auth/**",
+      // v2 (plan §13.1): comment o module-app-metadata.ts (hasAnyCapability) + getMyApps merge
+      "apps/api/src/foundation/**",
       "packages/web-core/src/hooks/**",
+      // v2: docblock meResponseSchema.capabilities/.scopes — Zod shape KHONG doi, chi mo ta
+      "packages/contracts/**",
+      // v2: cap nhat DECISIONS-12 §7 (gach DEFER) + ghi hop dong moi
+      "docs/DECISIONS/**",
       "apps/api/test/**",
       "docs/plans/**",
       "harness/backlog.mjs",
@@ -15568,11 +15574,16 @@ export const backlog = [
       "DEFER TƯỜNG MINH từ S14-SEC-DASHGATE-WILDCARD-1 §8 (ADR DECISIONS-12 §7). `permission.service.ts` getCapabilities lọc grant sensitive theo cờ HÀNG GRANT ⇒ hàng `*:*` (is_sensitive=false) vẫn được publish; `packages/web-core/src/hooks/use-can.ts:16-22` `useCan` rơi xuống `caps['*:*']`. Sau bản vá engine, BE 403 nhưng FE vẫn render ⇒ khoảng lệch RỘNG HƠN trước.",
     ],
     done_when: [
-      "ĐO TRƯỚC: đếm actor thực tế giữ wildcard trên PROD (cổng NGƯỜI — classifier-blocks-prod-db-from-agent). Hiện dev = 0 role ⇒ 0 người gặp; nếu PROD cũng 0 thì đây là nợ SẠCH, không phải sự cố",
-      "getCapabilities lọc theo CẶP ĐÍCH (cùng nguồn `pairIsSensitive` của DECISIONS-12), KHÔNG theo cờ hàng grant — hợp nhất với họ 3 bản cài đặt ở ADR §2",
-      "Ca ALLOW đối chứng: cặp non-sensitive VẪN lên capabilities cho actor wildcard (không biến thành 'giấu sạch wildcard')",
-      "Quyết định + ghi rõ: có giữ `caps['*:*']` fallback trong `useCan` hay không. Gỡ fallback là đổi hành vi FE toàn hệ ⇒ cần census màn bị ảnh hưởng, không làm bằng cảm giác",
-      "`bash harness/check.sh --all --lane-db` xanh không banner",
+      "HOP DONG (v2): capabilities[k]===true <=> can() ALLOW o tang CONG TY cho k='action:resourceType'; k KHONG BAO GIO chua '*'. Ghi vao DECISIONS-12 + docblock contracts/src/auth.ts",
+      "Cong sensitive doc co CAP DICH: sensitive(cap) => phai co ALLOW EXACT (mirror decideCan/decideStrongestScope/userGrantsPermissionIds - ho 3 ban cai dat ADR §2). Ve `!g.isSensitive` tren HANG GRANT bi GO",
+      "getCapabilityScopes GIU keyset Y HET getCapabilities, va chon grant dong gop scope theo luat exact-THANG-wildcard (mirror decideStrongestScope) - khong union ngay tho",
+      "Catalog CHI duoc doc khi actor giu grant wildcard (plan §4.3). Actor khong wildcard => 0 truy van them, output byte-identical truoc/sau (ca doi chung #4/#16)",
+      "Ca ALLOW doi chung DOI CHIEU: cap sensitive + grant EXACT => CO khoa (#6); cap sensitive + CHI wildcard => VANG khoa (#7). Thieu mot trong hai la ca kia xanh-RONG",
+      "Don dieu: caps_cu TRU {'*:*'} la TAP CON cua caps_moi voi moi bo grant (ca #13) - khong actor nao MAT khoa",
+      "Chuyen DU 9 ca ghim caps['*:*']===true o auth-me-capabilities.int.spec.ts (:234 :273 :433 :574 :737 :879 :1001 :1136 :1276) - KHONG xoa dong (tests-can-pin-a-hole-open) + them cong ratchet tinh",
+      "Quyet + ghi ro: GIU fallback caps['*:*'] trong useCan (plan §7.2, 0 dong logic FE doi) - fallback thanh code CHET vi ratchet BE",
+      "CONG NGUOI TRUOC MERGE: owner chay docs/plans/S14-SEC-CAPWILDCARD-1.census.sql tren PROD, dan Q0/Q1/Q3/Q4 vao PR (Q4 = danh sach man se hien them). classifier-blocks-prod-db-from-agent",
+      "`bash harness/check.sh --all --lane-db` xanh khong banner",
     ],
     notes: [
       "🔴 KHÔNG phải lỗ leo thang: cổng thật là BE (đã kín sau DECISIONS-12). Đây là lỗi TRẢI NGHIỆM + một nguồn sự-thật thứ hai đang trôi khỏi engine.",
