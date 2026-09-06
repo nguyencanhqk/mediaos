@@ -17350,6 +17350,7 @@ export const backlog = [
     ],
     notes: [
       "🔴 FULL gate (auth). Nhỏ, nhưng đụng chữ ký một đường auth CÔNG KHAI + constructor mock của auth.service.spec.ts (dựng bằng Object.create + gán MỘT PHẦN field — chạm field khác là vỡ spec).",
+      "ĐỀ XUẤT MỞ RỘNG (từ S18-AUTH-CHANGEPWTOCTOU-1, 06/09 — owner chốt trước khi làm): `changePassword` mang ĐÚNG món nợ này — cả `auth.password_changed` lẫn `auth.password_change_denied` (thêm ở WO đó) đều thiếu `ip`/`userAgent`, và controller `auth.controller.ts:196` cũng chưa truyền RequestMeta. Phủ luôn trong WO này rẻ hơn seed WO thứ ba; nếu mở rộng thì thêm `apps/api/src/auth/auth.service.ts` ca changePassword vào done_when.",
     ],
   },
   {
@@ -17359,11 +17360,12 @@ export const backlog = [
     title:
       "`changePassword` ghi `password_hash` không lọc `deleted_at` ở câu UPDATE — TOCTOU giữa SELECT (:753) và UPDATE (:766)",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/auth/auth.service.ts",
       "apps/api/src/auth/**/*.spec.ts",
       "apps/api/test/integration/auth-s18-changepwtoctou-*.int-spec.ts",
+      "docs/plans/S18-AUTH-CHANGEPWTOCTOU-1.md",
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],
@@ -17376,13 +17378,52 @@ export const backlog = [
     done_when: [
       "⚠️ CÁI BẪY của WO này: thêm `isNull(users.deletedAt)` vào `:766` mà KHÔNG xử kết quả sẽ tạo ĐƯỜNG THÀNH CÔNG GIẢ — 0 hàng khớp ⇒ hàm vẫn `return true` ⇒ HTTP 200 mà mật khẩu KHÔNG đổi. Phải xử `.returning()` rỗng một cách tường minh.",
       "Chốt mã lỗi cho ca 0-hàng: KHÔNG được tái dùng nhánh `!ok` hiện tại (`:788-792`) vì nhánh đó phạt rate-limit + ghi `recordReauthFailure` + trả 'Mật khẩu hiện tại không đúng' — sai sự thật và phạt oan người dùng hợp lệ",
-      "Ca RED trên DB thật: soft-delete xen giữa (mô phỏng bằng cách gọi thẳng service với hàng đã xoá) ⇒ KHÔNG ghi được hash + KHÔNG trả 200",
+      "⚠️ SỬA 06/09 (plan §2b — công thức cũ cho ra bài XANH-RỖNG): «gọi thẳng service với hàng đã xoá» KHÔNG đo được vế mới, vì câu SELECT `:753` đã lọc `deleted_at` nên nhánh `!row` bắt trước và câu UPDATE KHÔNG BAO GIỜ CHẠY — bài đó xanh y hệt trước/sau vá (`overdetermined-gate-makes-deny-spec-vacuous`). Ca RED đúng: bọc `withTenant` CALL-THROUGH + proxy cho câu `select().from(users)` ĐẦU TIÊN thấy hàng còn sống (ảnh chụp cũ của READ COMMITTED) trong khi câu UPDATE chạy THẬT lên hàng đã xoá ⇒ KHÔNG ghi được hash + KHÔNG trả 200 + 0 side-effect (phiên/security-event) + có vết từ chối",
       "Ca đối chứng DƯƠNG: user bình thường vẫn đổi được mật khẩu (chống xanh-rỗng)",
       "bash harness/check.sh --all --lane-db=s18chgpw XANH",
     ],
     notes: [
       "🔴 FULL gate (auth). Rủi ro khai thác THẤP (cần session hợp lệ + mật khẩu hiện tại + trúng cửa sổ micro-giây); giá trị chính là đóng nốt lớp lỗi 'ghi lên hàng đã xoá mềm'.",
-      "Owner có thể đóng WO này là 'chấp nhận TOCTOU' — nhưng phải là một quyết định được ghi, không phải một ô ✅ sai trong bảng đo.",
+      "Owner có thể đóng WO này là 'chấp nhận TOCTOU' — nhưng phải là một quyết định được ghi, không phải một ô ✅ sai trong bảng đo. Số liệu để ký ở plan §1b; owner chọn VÁ (06/09).",
+      "ĐO 06/09 — lỗ TỚI ĐƯỢC THẬT, đã chứng minh bằng int-spec §race ĐỎ trước vá (service trả 200 + ghi hash lên hàng đã xoá). Hai đột biến đều ĐỎ: (a) bỏ `isNull` khỏi câu UPDATE, (b) giữ predicate nhưng bỏ qua `.returning()` rỗng ⇒ cả unit lẫn int đều load-bearing, không có cổng chồng nhau.",
+      "NỢ #1 (KHÔNG vá ở đây — plan §7): nhánh `!row` trả 'Mật khẩu hiện tại không đúng' + `REAUTH_FAILED` cho ca TÀI KHOẢN ĐÃ XOÁ ⇒ nhãn SAI. Giữ nguyên chủ ý (D1) vì gộp vào nhánh mới sẽ XOÁ vết bảo mật đang có. Cần WO riêng nếu owner muốn sửa nhãn.",
+      "NỢ #2 (plan §7): `changePassword` không nhận `RequestMeta` ⇒ CẢ `auth.password_changed` LẪN `auth.password_change_denied` (WO này thêm) đều thiếu `ip`/`userAgent` — CÙNG món nợ `S18-AUTH-RESETMETA-1` đang mở cho `resetPassword` ⇒ MỞ RỘNG RESETMETA phủ luôn `changePassword`, đừng seed WO thứ ba.",
+      "NỢ #3 (plan §7): cả BA APP_GUARD toàn cục (`JwtAuthGuard` · `CompanyGuard` · `TwoFactorEnforcementGuard`) đều stateless với `users.deleted_at` ⇒ access token của user vừa bị xoá mềm còn sống tới hết TTL trên MỌI endpoint. Giá của stateless JWT — WO này KHÔNG đóng nó.",
+    ],
+  },
+  {
+    id: "S18-AUTH-2FADELETED-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "`disableTwoFactor` KHÔNG lọc `deleted_at` ở CẢ câu SELECT — user đã xoá mềm còn access token vẫn tắt được 2FA (yếu hơn cả `changePassword` TRƯỚC khi vá)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/auth/auth.service.ts",
+      "apps/api/src/auth/**/*.spec.ts",
+      "apps/api/test/integration/auth-s18-2fadeleted-*.int-spec.ts",
+      "docs/plans/S18-AUTH-2FADELETED-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S18-AUTH-CHANGEPWTOCTOU-1"],
+    src: [
+      "silent-failure-hunter (FULL gate S18-AUTH-CHANGEPWTOCTOU-1, 06/09/2026): `auth.service.ts:711-718` — câu SELECT re-auth của `disableTwoFactor` chỉ có `eq(users.id, user.id)`, KHÔNG có `isNull(users.deletedAt)`. Yếu hơn cả hiện trạng TRƯỚC vá của `changePassword` (ở đó vế lọc ít nhất còn nằm ở câu SELECT).",
+      "KHÁC `changePassword`: đây KHÔNG phải race — nó là đường ĐI THẲNG. Ba APP_GUARD đều stateless với `users.deleted_at` (đo ở S18-AUTH-CHANGEPWTOCTOU-1 §2a) ⇒ user vừa bị xoá mềm còn access token trong TTL là gọi tới được, không cần trúng khe nào.",
+      "`twoFactor.disable(user.id, user.companyId)` chạy NGOÀI tx re-auth ⇒ ghi lên hàng/cấu hình 2FA của một tài khoản đã xoá — cùng lớp lỗi 'ghi lên hàng đã xoá mềm' mà S18-AUTH-RESETDELETED-1 + S18-AUTH-CHANGEPWTOCTOU-1 đã đóng ở hai đường kia.",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: tác động thật của việc tắt 2FA trên tài khoản đã xoá là gì — `login`/`refresh` đã chặn hàng xoá mềm, nên nếu tài khoản được KHÔI PHỤC (`restoreUser`) thì nó quay lại với 2FA đã tắt mà không ai duyệt. Chốt với owner đây là lỗ hay chỉ là dữ liệu chết.",
+      "Siết `WHERE` câu SELECT `:715` theo `deleted_at IS NULL` (+ `company_id` tường minh như hai WO trước)",
+      "Đo xem `twoFactor.disable` có tự lọc `deleted_at` không; nếu không, hoặc siết nó, hoặc kéo nó vào TRONG tx re-auth — KHÔNG để lệnh ghi nằm ngoài phép kiểm",
+      "Ca RED tới được THẬT (khác WO trước — không cần proxy): user xoá mềm + access token còn sống ⇒ 2FA KHÔNG bị tắt",
+      "Ca đối chứng DƯƠNG: user bình thường vẫn tắt được 2FA (chống xanh-rỗng)",
+      "bash harness/check.sh --all --lane-db=s18twofadel XANH",
+    ],
+    notes: [
+      "🔴 FULL gate (auth). Đọc `docs/plans/S18-AUTH-CHANGEPWTOCTOU-1.md` trước: cùng lớp lỗi, và §2b ở đó giải thích vì sao ca test phải đột biến TỪNG VẾ. Ở WO này thì DỄ HƠN — chỉ có MỘT cổng nên không có cổng chồng nhau.",
+      "⚠️ Nhánh `!ok` của `disableTwoFactor` (`:720-724`) phạt rate-limit + `recordReauthFailure('2fa_disable')` + trả 'Mật khẩu không đúng.' — cùng bài toán nhãn-sai đã ghi ở S18-AUTH-CHANGEPWTOCTOU-1 D1. Chốt hình lỗi TRƯỚC khi code.",
     ],
   },
   {
