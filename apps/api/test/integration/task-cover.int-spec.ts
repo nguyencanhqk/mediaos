@@ -312,6 +312,10 @@ describe.skipIf(!hasLaneDb)(
       nest.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
       nest.useGlobalFilters(new AllExceptionsFilter());
       await nest.init();
+      // S18-QA-SUPERTESTLISTEN-1 — BẮT BUỘC vì suite này có `Promise.all` request song song: khi app
+      // chỉ `init()`, supertest mở server tạm rồi TỰ ĐÓNG lúc request ĐẦU về ⇒ request thứ hai ăn
+      // `ECONNRESET` (xanh cục bộ, đỏ ở CI). Cổng: `test/foundation/supertest-listen-ratchet.unit-spec.ts`.
+      await nest.listen(0);
     });
 
     afterAll(async () => {

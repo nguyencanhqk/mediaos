@@ -17360,6 +17360,8 @@ export const backlog = [
     status: "todo",
     paths: [
       "apps/api/test/integration/**",
+      "apps/api/test/foundation/supertest-listen-census.ts",
+      "apps/api/test/foundation/supertest-listen-ratchet.unit-spec.ts",
       "docs/plans/S18-QA-SUPERTESTLISTEN-1.md",
       "harness/backlog.mjs",
     ],
@@ -17383,6 +17385,8 @@ export const backlog = [
       "🟡 LIGHT gate. Thuần hạ tầng test — 0 file sản phẩm.",
       "Giá trị: cờ này nổ ở CI của **PR không liên quan** (lần này là PR permission đỏ vì spec RECRUIT) nên mỗi lần nổ đều tốn một vòng điều tra ‘hồi quy hay flake’ đúng lúc sắp merge.",
       "⚠️ Cục bộ gần như luôn XANH — đừng dùng ‘chạy máy xanh’ làm bằng chứng đã vá; bằng chứng là ratchet + đọc code, không phải lần chạy.",
+      "ĐÍNH CHÍNH census tay của WO (đo lại 06/09 bằng AST, plan §2.3): (1) danh sách 12 file ở `src` BỎ SÓT `task-cover.int-spec.ts` — file đó đặt tên biến app là `nest` nên `grep app.init()` trượt hẳn, trong khi dòng 455 là `Promise.all` hai request đặt bìa đồng thời; (2) `chat-be3-attachments.int-spec.ts` KHÔNG thuộc diện — `Promise.all` duy nhất của nó (409) chỉ gieo DB. ⇒ vẫn 12 file, nhưng khác tập.",
+      "Ratchet + census đặt ở `apps/api/test/foundation/` (nhà của cả họ census/ratchet có sẵn, KHÔNG cần DB) chứ không phải `test/integration/` như `paths` seed — `vitest.config.ts` đã include `test/**/*.unit-spec.ts` nên 0 dòng config phải đổi. `paths` đã cập nhật.",
     ],
   },
   {

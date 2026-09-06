@@ -219,6 +219,10 @@ describe.skipIf(!hasLaneDb)("S7-CALL-BE-1 — vòng đời cuộc gọi REST (DB
     app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
     app.useGlobalFilters(new AllExceptionsFilter());
     await app.init();
+    // S18-QA-SUPERTESTLISTEN-1 — BẮT BUỘC vì suite này có `Promise.all` request song song: khi app
+    // chỉ `init()`, supertest mở server tạm rồi TỰ ĐÓNG lúc request ĐẦU về ⇒ request thứ hai ăn
+    // `ECONNRESET` (xanh cục bộ, đỏ ở CI). Cổng: `test/foundation/supertest-listen-ratchet.unit-spec.ts`.
+    await app.listen(0);
 
     direct = directPool();
     const hash = await new PasswordService().hash(LOGIN_PW);
