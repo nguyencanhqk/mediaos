@@ -320,28 +320,64 @@ describe("AuthService.me — expose mustChangePassword (S2-FND-SEED-3)", () => {
 describe("AuthService.changePassword — clear must_change_password cùng tx (S2-FND-SEED-3)", () => {
   const user = { id: "user-1", companyId: "co-1" } as const;
 
-  function makeChangePwTx() {
+  /**
+   * S18-AUTH-CHANGEPWTOCTOU-1 — hai kết quả DB được THAM SỐ HOÁ (`selectRows` cho câu SELECT hash hiện
+   * tại, `updateRows` cho `.returning()` của câu UPDATE `users`). Mỗi ca truyền giá trị của RIÊNG nó:
+   * dùng CHUNG một builder cứng cho hai ý nghĩa khác nhau là cách bài unit xanh-RỖNG
+   * (memory `same-builder-twice-makes-unit-spec-vacuous`).
+   *
+   * ⚠️ Stub này MÙ với `.where()` — nó KHÔNG chứng minh được `isNull(users.deletedAt)` có mặt trong
+   * predicate. Việc đó là của `test/integration/auth-s18-changepwtoctou-1.int-spec.ts` §race. Ở đây chỉ
+   * chứng minh service XỬ ĐÚNG kết quả 0 hàng (bẫy fail-OPEN "200 mà mật khẩu không đổi").
+   */
+  function makeChangePwTx(
+    opts: {
+      selectRows?: Array<{ passwordHash: string }>;
+      updateRows?: Array<{ id: string }>;
+    } = {},
+  ) {
     const setCalls: Array<Record<string, unknown>> = [];
+    // (table, where) của MỌI câu — để đo predicate của câu UPDATE `users` (khuôn #480 `:1109`).
+    const wheres: Array<{ table: unknown; where: unknown }> = [];
+    let lastTable: unknown;
     const chain = {
       select: vi.fn(() => chain),
-      from: vi.fn(() => chain),
-      where: vi.fn(() => chain),
-      limit: vi.fn(() => Promise.resolve([{ passwordHash: "argon2-current-hash" }])),
-      update: vi.fn(() => chain),
+      from: vi.fn((table: unknown) => {
+        lastTable = table;
+        return chain;
+      }),
+      where: vi.fn((cond: unknown) => {
+        wheres.push({ table: lastTable, where: cond });
+        return chain;
+      }),
+      limit: vi.fn(() =>
+        Promise.resolve(opts.selectRows ?? [{ passwordHash: "argon2-current-hash" }]),
+      ),
+      update: vi.fn((table: unknown) => {
+        lastTable = table;
+        return chain;
+      }),
       set: vi.fn((obj: Record<string, unknown>) => {
         setCalls.push(obj);
         return chain;
       }),
+      returning: vi.fn(() => Promise.resolve(opts.updateRows ?? [{ id: "user-1" }])),
       insert: vi.fn(() => chain),
       values: vi.fn(() => chain),
       // UPDATE/INSERT được `await` trực tiếp ở service → chain là thenable resolve êm.
       then: (resolve: (v: unknown) => void) => resolve(undefined),
     };
-    return { tx: chain, setCalls };
+    return { tx: chain, setCalls, wheres };
   }
 
-  function makeService() {
-    const { tx, setCalls } = makeChangePwTx();
+  function makeService(
+    opts: {
+      selectRows?: Array<{ passwordHash: string }>;
+      updateRows?: Array<{ id: string }>;
+      auditImpl?: (...args: unknown[]) => Promise<unknown>;
+    } = {},
+  ) {
+    const { tx, setCalls, wheres } = makeChangePwTx(opts);
     const dbsvc = {
       withTenant: vi.fn(async (_c: string, fn: (tx: unknown) => unknown) => fn(tx)),
     };
@@ -355,7 +391,9 @@ describe("AuthService.changePassword — clear must_change_password cùng tx (S2
       noteFailureSource: vi.fn().mockResolvedValue(undefined),
       reset: vi.fn().mockResolvedValue(undefined),
     };
-    const audit = { record: vi.fn().mockResolvedValue(undefined) };
+    const audit = {
+      record: opts.auditImpl ? vi.fn(opts.auditImpl) : vi.fn().mockResolvedValue(undefined),
+    };
 
     const Ctor = AuthService as unknown as new (...args: unknown[]) => AuthService;
     const service = new Ctor(
@@ -373,7 +411,7 @@ describe("AuthService.changePassword — clear must_change_password cùng tx (S2
       {}, // 12 securityPolicy
       {}, // 13 modules
     );
-    return { service, setCalls, password, audit };
+    return { service, setCalls, password, audit, rateLimiter, wheres };
   }
 
   it("đổi thành công → set mustChangePassword:false trong CÙNG update với password_hash", async () => {
@@ -393,6 +431,102 @@ describe("AuthService.changePassword — clear must_change_password cùng tx (S2
       expect.anything(),
       expect.objectContaining({ action: "auth.password_changed" }),
     );
+  });
+
+  /**
+   * S18-AUTH-CHANGEPWTOCTOU-1 — câu UPDATE `users` giờ lọc `deleted_at IS NULL` và `.returning()`.
+   * BẪY TRUNG TÂM của WO: thêm predicate mà KHÔNG xử kết quả ⇒ 0 hàng khớp ⇒ hàm vẫn `return true` ⇒
+   * **HTTP 200 mà mật khẩu KHÔNG đổi** — đúng hình dạng fail-OPEN (memory
+   * `empty-success-is-the-fail-open-shape`: nhánh ném thì siết + để vết; nhánh "thành công mà rỗng"
+   * thì nới + im lặng). Ba ca dưới đo CÁCH XỬ kết quả, không đo predicate (§5.1 của plan).
+   */
+  describe("0 hàng khớp ở câu UPDATE (S18-AUTH-CHANGEPWTOCTOU-1)", () => {
+    it("UPDATE khớp 0 hàng ⇒ 401 KHÁC 'mật khẩu sai', KHÔNG audit thành công, KHÔNG phạt, KHÔNG reset khoá", async () => {
+      const { service, audit, rateLimiter } = makeService({ updateRows: [] });
+
+      // 🔴 Trước bản vá: resolves.toBeUndefined() (200 rỗng) ⇒ ca này ĐỎ.
+      await expect(service.changePassword(user, "old-pw", "new-pw")).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      // Message PHẢI khác nhánh sai-mật-khẩu: người dùng đã đưa ĐÚNG mật khẩu hiện tại.
+      await expect(service.changePassword(user, "old-pw", "new-pw")).rejects.toSatisfy(
+        (err: unknown) => (err as Error).message !== "Mật khẩu hiện tại không đúng.",
+      );
+
+      // Vết THÀNH CÔNG tuyệt đối không được ghi…
+      expect(audit.record).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ action: "auth.password_changed" }),
+      );
+      // …nhưng nhánh từ chối vùng đỏ PHẢI để lại vết BỀN (mirror `auth.password_reset_denied` của #480).
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ action: "auth.password_change_denied" }),
+      );
+
+      // D4 — KHÔNG phạt: người dùng đưa đúng mật khẩu, hỏng là do trạng thái đổi phía server.
+      expect(rateLimiter.recordFailure).not.toHaveBeenCalled();
+      // …và KHÔNG gỡ khoá đang sống. Nếu ai dời `reset(rlKey)` lên trên hai câu throw thì khoá bị gỡ
+      // trong im lặng — không có assert này thì không test nào bắt được.
+      expect(rateLimiter.reset).not.toHaveBeenCalled();
+    });
+
+    it("đối chứng DƯƠNG: UPDATE khớp 1 hàng ⇒ thành công + audit + reset khoá (ca deny không xanh-RỖNG)", async () => {
+      const { service, audit, rateLimiter } = makeService({ updateRows: [{ id: "user-1" }] });
+
+      await expect(service.changePassword(user, "old-pw", "new-pw")).resolves.toBeUndefined();
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ action: "auth.password_changed" }),
+      );
+      expect(rateLimiter.reset).toHaveBeenCalled();
+    });
+
+    it("câu UPDATE `users` lọc CẢ `deleted_at IS NULL` LẪN `company_id` — RED nếu thiếu một vế", async () => {
+      const { service, wheres } = makeService();
+      await service.changePassword(user, "old-pw", "new-pw");
+
+      // ⚠️ Hai vế phải nằm trên CÙNG MỘT `where`. Hai `.some()` độc lập sẽ được thoả bởi HAI câu KHÁC
+      // NHAU — câu SELECT hash hiện tại (`:753`) ĐÃ lọc soft-delete nhưng KHÔNG có company_id, nên
+      // tách ra là bài xanh-RỖNG ngay lập tức (`same-builder-twice-makes-unit-spec-vacuous`).
+      const userWrites = wheres.filter((w) => w.table === users);
+      expect(userWrites.length).toBeGreaterThan(0);
+      expect(
+        userWrites.some(
+          (w) =>
+            // Vế xoá-mềm: VẾ CHỐT của WO — đóng TOCTOU giữa SELECT `:753` và UPDATE `:766`.
+            whereFiltersSoftDelete(w.where, users) &&
+            // Vế tenant (BẤT BIẾN #1): trước WO này đường đổi-mật-khẩu chỉ dựa vào RLS (mirror #480).
+            whereHasColumn(w.where, users, "company_id"),
+        ),
+      ).toBe(true);
+    });
+
+    it("audit ở nhánh từ chối NÉM ⇒ lỗi PHẢI trồi lên (fail-closed), KHÔNG bị nuốt thành 401 giả", async () => {
+      // Đối xứng với ca đã có của `resetPassword` (`:1161`). Hôm nay code fail-closed do CẤU TRÚC
+      // (không có try/catch nào quanh `withTenant`), nhưng một quyết định 0 test ghim thì lần refactor
+      // sau — kiểu bọc `audit.record` trong try/catch "cho an toàn" — sẽ lặng lẽ đổi nó: khi đó nhánh
+      // từ chối trả 401 mà KHÔNG còn vết nào (memory `fix-commit-for-review-findings-is-itself-ungated`).
+      const boom = new Error("audit sink down");
+      const { service } = makeService({
+        updateRows: [],
+        auditImpl: () => Promise.reject(boom),
+      });
+
+      // KHÔNG phải UnauthorizedException: 401 ở đây nghĩa là lỗi đã bị nuốt và vết đã mất trong im lặng.
+      await expect(service.changePassword(user, "old-pw", "new-pw")).rejects.toBe(boom);
+    });
+
+    it("neo D1: SELECT 0 hàng (user đã xoá) ⇒ hành vi CŨ y nguyên — 401 'mật khẩu sai' + phạt", async () => {
+      // WO này CHỦ Ý không gộp nhánh `!row` vào outcome mới: nhánh đó là đường chạy được thật và hôm
+      // nay để lại vết BỀN `REAUTH_FAILED`; gộp = xoá một vết bảo mật đang có (plan D1).
+      const { service, rateLimiter } = makeService({ selectRows: [] });
+
+      await expect(service.changePassword(user, "old-pw", "new-pw")).rejects.toSatisfy(
+        (err: unknown) => (err as Error).message === "Mật khẩu hiện tại không đúng.",
+      );
+      expect(rateLimiter.recordFailure).toHaveBeenCalled();
+    });
   });
 });
 

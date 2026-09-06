@@ -746,24 +746,88 @@ export class AuthService {
       throw new BadRequestException("Mật khẩu mới phải khác mật khẩu hiện tại.");
     }
 
-    const ok = await this.dbsvc.withTenant(user.companyId, async (tx) => {
+    const outcome = await this.dbsvc.withTenant(user.companyId, async (tx) => {
       const [row] = await tx
         .select({ passwordHash: users.passwordHash })
         .from(users)
         .where(and(eq(users.id, user.id), isNull(users.deletedAt)))
         .limit(1);
-      if (!row) return false;
+      // ⟲ S18-AUTH-CHANGEPWTOCTOU-1 (D1) — nhánh này GIỮ NGUYÊN hành vi cũ (`bad_credentials`) một
+      // cách CHỦ Ý, dù "user đã xoá" và "sai mật khẩu" là hai sự thật khác nhau: nó là đường chạy
+      // được THẬT (ba APP_GUARD đều stateless với `users.deleted_at` ⇒ access token của user vừa bị
+      // xoá mềm còn sống tới hết TTL) và hôm nay nó để lại vết BỀN `REAUTH_FAILED`. Gộp nó vào
+      // `account_gone` (không phạt, không `recordReauthFailure`) sẽ XOÁ một vết bảo mật đang có.
+      // Nợ "nhãn sai" được ghi ở plan §7 #1 — sửa ở WO riêng, không lặng lẽ đổi ở đây.
+      if (!row) return "bad_credentials" as const;
       // verify trả false khi SAI mật khẩu; NÉM (PasswordVerificationError) khi hash hỏng → 500 (KHÔNG nuốt thành 401).
       const verified = await this.password.verify(row.passwordHash, currentPassword);
-      if (!verified) return false;
+      if (!verified) return "bad_credentials" as const;
 
+      // ⚠️ KHÔNG đảo `hash` xuống sau câu UPDATE (khác `resetPassword`, nơi câu đòi token đứng TRƯỚC
+      // `hash` để kẻ thua race không đốt argon2): ở đây phép kiểm `deleted_at` CHÍNH LÀ câu UPDATE,
+      // muốn đảo thì phải đẻ thêm một SELECT thừa.
       const newHash = await this.password.hash(newPassword);
-      await tx
+      // S18-AUTH-CHANGEPWTOCTOU-1 — ba vế của `WHERE`, mỗi vế một lý do:
+      //  • `deleted_at IS NULL` — VẾ CHỐT. Trước WO này vế đó CHỈ có ở câu SELECT trên, và
+      //    PostgreSQL chạy READ COMMITTED (**mỗi câu lệnh một ảnh chụp**) ⇒ một `deleteUser` commit
+      //    XEN GIỮA hai câu là đủ để hash bị ghi đè lên hàng đã xoá. Unique email là PARTIAL
+      //    (`WHERE deleted_at IS NULL`) nên email đó CÓ THỂ đã cấp lại cho NGƯỜI KHÁC.
+      //  • `company_id` — BẤT BIẾN #1 tường minh, không chỉ dựa vào RLS (mirror `resetPassword`).
+      //  • `id` — như cũ.
+      const [updated] = await tx
         .update(users)
         // S2-FND-SEED-3: clear cờ ép-đổi TRONG CÙNG statement/tx với password_hash mới ⇒ nguyên tử
         // (rollback ⇒ cả hai không đổi). Đổi mật khẩu = hết bị ép; /auth/me sau đó trả mustChangePassword=false.
         .set({ passwordHash: newHash, updatedAt: new Date(), mustChangePassword: false })
-        .where(eq(users.id, user.id));
+        .where(
+          and(
+            eq(users.id, user.id),
+            eq(users.companyId, user.companyId),
+            isNull(users.deletedAt),
+          ),
+        )
+        .returning({ id: users.id });
+      if (!updated) {
+        // ⚠️ BẪY TRUNG TÂM của WO: thêm predicate mà KHÔNG xử kết quả ⇒ 0 hàng khớp ⇒ hàm vẫn trả
+        // "thành công" ⇒ **200 mà mật khẩu KHÔNG đổi**. Đó là hình dạng fail-OPEN nguy hiểm nhất —
+        // nhánh ném thì siết + để vết; nhánh "thành công mà rỗng" thì nới + im lặng.
+        //
+        // Vết BỀN, không chỉ log: đây là nhánh từ chối trên một đường vùng đỏ, và mirror đúng
+        // `auth.password_reset_denied` của resetPassword.
+        //
+        // `actorUserId` an toàn FK (`audit_logs.actor_user_id → users.id`): soft-delete GIỮ hàng, và
+        // hard-delete KHÔNG chỉ là chính sách — `REVOKE DELETE ON companies, users FROM mediaos_app`
+        // ở migration `0467_s2_fnddb1_companies_users_revoke_delete.sql:32` ép ở tầng DB (đo lại trên
+        // DB thật 06/09: `has_table_privilege('mediaos_app','users','DELETE')` = false). ⚠️ Đừng đọc
+        // mỗi `0002_companies_users.sql:70` rồi kết luận ngược — GRANT ở migration cũ KHÔNG phải hiện
+        // trạng (đúng bẫy `grant-in-old-migration-is-not-current-state`; một reviewer đã trượt ca này).
+        //
+        // ĐO rồi mới ghi (mirror `resetPassword:1643-1655`): `.returning()` rỗng KHÔNG nói cho ta
+        // biết VÌ SAO, nên nhãn không được khẳng định thứ vừa mất khả năng quan sát. Probe chạy trong
+        // cùng tenant-tx nên bị FORCE RLS bó vào đúng công ty của người gọi ⇒ "0 hàng" không phân
+        // biệt được "vắng hàng" với "hàng bị RLS ẩn", và nhãn phải nói đúng thế.
+        const [probe] = await tx
+          .select({ deletedAt: users.deletedAt })
+          .from(users)
+          .where(eq(users.id, user.id))
+          .limit(1);
+        const reason = !probe
+          ? "user_not_visible"
+          : probe.deletedAt
+            ? "user_deleted"
+            : "state_changed";
+        await this.audit.record(tx, {
+          action: "auth.password_change_denied",
+          objectType: "auth",
+          actorUserId: user.id,
+          objectId: user.id,
+          after: { reason },
+        });
+        // `return` chứ KHÔNG `throw`: tx phải COMMIT để giữ vết audit (ném trong tx = rollback nuốt
+        // luôn nó). Trả ở ĐÂY — trước mọi lệnh ghi còn lại — nên `refresh_tokens`, `user_sessions`,
+        // `user_security_events` đều KHÔNG bị đụng; câu UPDATE `users` là lệnh ghi ĐẦU TIÊN của tx.
+        return "account_gone" as const;
+      }
       // Đổi mật khẩu = đăng xuất MỌI phiên: thu hồi mọi refresh token còn sống (mirror resetPassword).
       await tx
         .update(refreshTokens)
@@ -782,13 +846,37 @@ export class AuthService {
         userId: user.id,
         actorUserId: user.id,
       });
-      return true;
+      return "ok" as const;
     });
 
-    if (!ok) {
+    if (outcome === "account_gone") {
+      // D3 — giữ NGUYÊN hình dạng HTTP (401 như mọi nhánh hỏng khác, không đẻ status/mã lỗi mới),
+      // nhưng KHÔNG tái dùng chuỗi "mật khẩu hiện tại không đúng": người dùng vừa đưa ĐÚNG mật khẩu,
+      // nói dối họ là sai. Không có rủi ro oracle — người gọi đã xác thực CHÍNH HỌ.
+      //
+      // D4 — KHÔNG `recordFailure`, KHÔNG `recordReauthFailure`: hỏng là do trạng thái đổi phía
+      // server, phạt = phạt oan + đẻ vết `REAUTH_FAILED` sai nhãn.
+      //
+      // ⚠️ LÝ DO AN TOÀN — đọc kỹ trước khi nới điều kiện vào nhánh này. KHÔNG phải "cửa sổ race
+      // micro-giây nên không lặp lại được" (security-reviewer 06/09 bác đúng: `password.hash` =
+      // argon2id 19 MiB nằm GIỮA câu SELECT và câu UPDATE ⇒ cửa sổ cỡ hàng chục–hàng trăm ms, và một
+      // actor THỨ HAI có quyền `softDeleteUser`/`restoreUser` lặp được nó quanh request đang bay).
+      // Lý do thật: đường THÀNH CÔNG ngay dưới cũng chỉ gọi `reset(rlKey)` ⇒ một người dùng đã xác
+      // thực vốn ĐÃ đốt được 2× argon2/lượt không giới hạn, nên nhánh này KHÔNG thêm chút khuếch đại
+      // nào. Nếu sau này bịt trần cho đường thành công thì phải bịt CẢ nhánh này.
+      throw new UnauthorizedException("Phiên đăng nhập không còn hợp lệ.");
+    }
+    if (outcome === "bad_credentials") {
       await this.rateLimiter.recordFailure(rlKey);
       await this.recordReauthFailure(user.companyId, user.id, "change_password");
       throw new UnauthorizedException("Mật khẩu hiện tại không đúng.");
+    }
+    // ⚠️ Thành công phải là nhánh ĐƯỢC ĐẶT TÊN, không phải phần rơi-xuống-cuối: thêm một outcome thứ
+    // tư mà quên nhánh của nó thì nó lặng lẽ nghĩa là "ok" — đúng hình dạng "thành công mà RỖNG" mà
+    // WO này tồn tại để giết. `assertNever` biến sơ suất đó thành lỗi BIÊN DỊCH.
+    if (outcome !== "ok") {
+      const never: never = outcome;
+      throw new Error(`changePassword: outcome chưa xử lý: ${String(never)}`);
     }
     await this.rateLimiter.reset(rlKey);
   }
