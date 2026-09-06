@@ -17314,6 +17314,75 @@ export const backlog = [
     notes: [
       "🔴 FULL gate (auth). Nhỏ về dòng code, nằm trên đường quyết định auth ⇒ security-reviewer + silent-failure-hunter.",
       "⚠️ Đổi 200 → lỗi là ĐỔI HÀNH VI một đường auth công khai: phải đo xem có client nào đang dựa vào 200 đó không trước khi siết.",
+      "KẾT QUẢ đo done_when#1: lỗ ĐƠN LẺ — login b1/b2, refresh, forgot, admin setPasswordTx đều đã lọc `deleted_at`. Phạm vi giữ nguyên (plan §2).",
+      "PHÁT SINH (plan-reviewer vòng 1, ĐÃ đo trên DB thật): single-use của token KHÔNG được code ép — SELECT không FOR UPDATE + UPDATE `used_at` không có `used_at IS NULL` ⇒ int-spec §atomic đo được 5/5 × 200. Đã vá kèm vì nhánh từ-chối mới GHI trên đường công khai, và trần '≤1 lần/token' là thứ DUY NHẤT khiến việc đó an toàn.",
+      "PHÁT SINH #2: `changePassword` UPDATE (`auth.service.ts:766`) cũng thiếu `deleted_at IS NULL` — TOCTOU không khai thác được từ ngoài, KHÔNG vá ở đây (thêm predicate mà không xử kết quả ⇒ 200 mà mật khẩu không đổi). Tách ra `S18-AUTH-CHANGEPWTOCTOU-1`.",
+    ],
+  },
+  {
+    id: "S18-AUTH-RESETMETA-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "`resetPassword` không nhận `RequestMeta` ⇒ audit `auth.password_reset` VÀ `auth.password_reset_denied` đều KHÔNG có `ip`/`userAgent` — vết không trả lời được 'ai'",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/auth/auth.service.ts",
+      "apps/api/src/auth/auth.controller.ts",
+      "apps/api/src/auth/**/*.spec.ts",
+      "apps/api/test/integration/auth-s18-resetmeta-*.int-spec.ts",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S18-AUTH-RESETDELETED-1"],
+    src: [
+      "security-reviewer (FULL gate S18-AUTH-RESETDELETED-1, 05/09/2026) — MEDIUM: hàng audit ở nhánh từ chối tự nhận là 'bằng chứng DUY NHẤT' nhưng không mang ip/userAgent, và `actorUserId` là NẠN NHÂN chứ không phải người thao tác",
+      "`forgotPassword(req, meta)` ĐÃ nhận RequestMeta và ghi ip/ua; `resetPassword(req)` thì không — lệch ngay trong cùng một file, cùng một cặp endpoint công khai",
+      "KHÔNG phải hồi quy của S18-AUTH-RESETDELETED-1: nhánh THÀNH CÔNG cũng đã thiếu từ trước",
+    ],
+    done_when: [
+      "`resetPassword` nhận `RequestMeta` (khuôn `forgotPassword`); controller truyền vào từ request",
+      "CẢ HAI hàng audit (`auth.password_reset` và `auth.password_reset_denied`) mang `ip` + `userAgent`",
+      "KHÔNG được đổi hình dạng phản hồi: mọi nhánh hỏng vẫn 401 BYTE-GIỐNG NHAU (đừng đẻ oracle mới khi thêm trường vào vết)",
+      "Ca int-spec đọc thẳng audit_logs xác nhận ip/ua có mặt ở CẢ nhánh 200 lẫn nhánh 401-từ-chối",
+      "bash harness/check.sh --all --lane-db=s18resetmeta XANH",
+    ],
+    notes: [
+      "🔴 FULL gate (auth). Nhỏ, nhưng đụng chữ ký một đường auth CÔNG KHAI + constructor mock của auth.service.spec.ts (dựng bằng Object.create + gán MỘT PHẦN field — chạm field khác là vỡ spec).",
+    ],
+  },
+  {
+    id: "S18-AUTH-CHANGEPWTOCTOU-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "`changePassword` ghi `password_hash` không lọc `deleted_at` ở câu UPDATE — TOCTOU giữa SELECT (:753) và UPDATE (:766)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/auth/auth.service.ts",
+      "apps/api/src/auth/**/*.spec.ts",
+      "apps/api/test/integration/auth-s18-changepwtoctou-*.int-spec.ts",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S18-AUTH-RESETDELETED-1"],
+    src: [
+      "Đo trong S18-AUTH-RESETDELETED-1 (05/09/2026) — plan §2c, do plan-reviewer vòng 1 bắt được: bảng đo của plan v1 ghi `changePassword` là ✅ trong khi vế ✅ nằm ở câu SELECT `:753`, còn câu UPDATE `:761-766` chỉ có `eq(users.id, user.id)`",
+      "Cùng HÌNH DẠNG lỗi với S18-AUTH-RESETDELETED-1, khác ở chỗ được chặn gián tiếp bởi một câu đọc TRONG CÙNG tx ⇒ cửa sổ chỉ cỡ micro-giây và đòi access token hợp lệ + biết mật khẩu hiện tại",
+      "docs/plans/S18-AUTH-RESETDELETED-1.md §2c — phán quyết KHÔNG vá kèm và lý do",
+    ],
+    done_when: [
+      "⚠️ CÁI BẪY của WO này: thêm `isNull(users.deletedAt)` vào `:766` mà KHÔNG xử kết quả sẽ tạo ĐƯỜNG THÀNH CÔNG GIẢ — 0 hàng khớp ⇒ hàm vẫn `return true` ⇒ HTTP 200 mà mật khẩu KHÔNG đổi. Phải xử `.returning()` rỗng một cách tường minh.",
+      "Chốt mã lỗi cho ca 0-hàng: KHÔNG được tái dùng nhánh `!ok` hiện tại (`:788-792`) vì nhánh đó phạt rate-limit + ghi `recordReauthFailure` + trả 'Mật khẩu hiện tại không đúng' — sai sự thật và phạt oan người dùng hợp lệ",
+      "Ca RED trên DB thật: soft-delete xen giữa (mô phỏng bằng cách gọi thẳng service với hàng đã xoá) ⇒ KHÔNG ghi được hash + KHÔNG trả 200",
+      "Ca đối chứng DƯƠNG: user bình thường vẫn đổi được mật khẩu (chống xanh-rỗng)",
+      "bash harness/check.sh --all --lane-db=s18chgpw XANH",
+    ],
+    notes: [
+      "🔴 FULL gate (auth). Rủi ro khai thác THẤP (cần session hợp lệ + mật khẩu hiện tại + trúng cửa sổ micro-giây); giá trị chính là đóng nốt lớp lỗi 'ghi lên hàng đã xoá mềm'.",
+      "Owner có thể đóng WO này là 'chấp nhận TOCTOU' — nhưng phải là một quyết định được ghi, không phải một ô ✅ sai trong bảng đo.",
     ],
   },
   {

@@ -1531,19 +1531,86 @@ export class AuthService {
         .limit(1);
       if (!row || row.usedAt || row.expiresAt.getTime() <= Date.now()) return null;
 
+      // S18-AUTH-RESETDELETED-1 — ĐÒI token theo lối NGUYÊN TỬ, TRƯỚC mọi việc tốn kém.
+      //
+      // Trước WO này: câu SELECT ở trên không `FOR UPDATE` và câu đánh dấu `used_at` không có vế
+      // `used_at IS NULL` ⇒ ở READ COMMITTED, N request đồng thời cùng MỘT token đều đọc
+      // `used_at = null`, đều đi tiếp, đều đổi mật khẩu. Không phải lý thuyết: int-spec §atomic đo
+      // được **5/5 × 200** trước bản vá. Single-use khi đó là LỜI HỨA ở tên cột, không phải thứ code ép.
+      //
+      // `UPDATE … WHERE used_at IS NULL` thì nguyên tử: kẻ thua chặn ở khoá hàng, đọc lại bản mới,
+      // khớp 0 hàng ⇒ KHÔNG cần `FOR UPDATE`. Đặt TRƯỚC `password.hash` để kẻ thua không đốt argon2.
+      //
+      // ⚠️ Đây là ĐIỀU KIỆN TIÊN QUYẾT của nhánh từ chối bên dưới: nhánh đó GHI (audit) trên một
+      // đường CÔNG KHAI không xác thực, và điều duy nhất khiến việc đó không thành bề mặt sinh-hàng
+      // do kẻ tấn công điều khiển (KI-048) là trần "tối đa 1 lần/token" — trần này ép ra nó.
+      const [claimed] = await tx
+        .update(passwordResetTokens)
+        .set({ usedAt: new Date() })
+        .where(and(eq(passwordResetTokens.id, row.id), isNull(passwordResetTokens.usedAt)))
+        .returning({ id: passwordResetTokens.id });
+      if (!claimed) return null;
+
       const newHash = await this.password.hash(req.newPassword);
       // S18-AUTH-RESETCLEARS-1: `.returning()` thay vì một SELECT phụ — bớt một điểm hỏng trên đường
-      // tới hạn, và lấy luôn `deletedAt` (xem nhánh chặn ở dưới) từ chính hàng vừa ghi.
+      // tới hạn.
+      //
+      // S18-AUTH-RESETDELETED-1 — ba vế của `WHERE`, mỗi vế một lý do:
+      //  • `deleted_at IS NULL` — VẾ CHỐT của WO. Unique email là PARTIAL (`WHERE deleted_at IS NULL`)
+      //    nên email của user đã xoá mềm CÓ THỂ đã được cấp lại cho NGƯỜI KHÁC ⇒ ghi đè hash của hàng
+      //    đã xoá là đổi mật khẩu gắn với một email mà người khác đang sở hữu. `forgotPassword` không
+      //    mint token cho hàng đã xoá, nên ca thật là: token mint TRƯỚC lúc xoá và còn trong TTL
+      //    ("xoá nhân viên nghỉ việc trong lúc họ đang giữ mail đặt lại mật khẩu").
+      //  • `company_id` — BẤT BIẾN #1. Mọi repo khác đã kèm vế này (`auth-users.repository.ts`
+      //    :293/:327/:346/:366); riêng đường này trước giờ chỉ dựa vào RLS.
+      //  • `id` — như cũ.
       const [updated] = await tx
         .update(users)
         .set({ passwordHash: newHash, updatedAt: new Date(), mustChangePassword: false })
-        .where(eq(users.id, row.userId))
-        .returning({ email: users.email, deletedAt: users.deletedAt });
-      // single-use: đánh dấu đã dùng.
-      await tx
-        .update(passwordResetTokens)
-        .set({ usedAt: new Date() })
-        .where(eq(passwordResetTokens.id, row.id));
+        .where(
+          and(eq(users.id, row.userId), eq(users.companyId, companyId), isNull(users.deletedAt)),
+        )
+        .returning({ email: users.email });
+      if (!updated) {
+        // ĐO rồi mới ghi: hàng audit này là vết DUY NHẤT rằng một token của tài khoản không còn sống
+        // vừa được dùng, nên nó không được khẳng định thứ mà `.returning()` vừa mất khả năng quan
+        // sát. Một SELECT ở nhánh chạy TỐI ĐA 1 LẦN/token (xem trần nguyên tử ở trên) là rẻ.
+        //
+        // ⚠️ GIỚI HẠN CỦA PHÉP ĐO — nhãn phải trung thực với thứ probe THẤY ĐƯỢC, không phải với thứ
+        // ta đoán. `users` có FORCE RLS `USING company_id = current_setting('app.current_company_id')`
+        // (`0002_companies_users.sql:65-67`) và `withTenant` đã set GUC đó = `companyId`
+        // (`db.service.ts:87-89`) ⇒ probe **bị bó vào đúng tenant của token**. Hệ quả:
+        //  • 0 hàng KHÔNG phân biệt được "vắng hàng" với "hàng thuộc tenant khác bị RLS ẩn" — từ
+        //    trong tenant thì hai thứ đó giống hệt nhau, nên nhãn phải nói đúng thế.
+        //  • hàng LIVE ở đây KHÔNG phải "lệch tenant": nếu probe thấy hàng thì hàng đó cùng tenant,
+        //    và nếu nó còn sống thì predicate của câu UPDATE đã thoả ⇒ nghĩa là trạng thái ĐỔI giữa
+        //    hai câu lệnh (READ COMMITTED — mỗi statement một ảnh chụp), ví dụ `restoreTx` xen vào.
+        const [probe] = await tx
+          .select({ deletedAt: users.deletedAt })
+          .from(users)
+          .where(eq(users.id, row.userId))
+          .limit(1);
+        const reason = !probe
+          ? "user_not_visible"
+          : probe.deletedAt
+            ? "user_deleted"
+            : "state_changed";
+        // `actorUserId` AN TOÀN FK: `audit_logs.actor_user_id` → `users.id`, và
+        // `password_reset_tokens.user_id` là NOT NULL + FK tới `users.id` (`schema/auth.ts:64-66`) ⇒
+        // hàng token tồn tại thì hàng user tồn tại (soft-delete GIỮ hàng; hard-delete bị BẤT BIẾN #2
+        // cấm). Nên ca 23503 → rollback → mất `used_at` + 500 là KHÔNG tới được.
+        await this.audit.record(tx, {
+          action: "auth.password_reset_denied",
+          objectType: "auth",
+          actorUserId: row.userId,
+          objectId: row.userId,
+          after: { reason },
+        });
+        // `return` chứ KHÔNG `throw`: tx phải COMMIT để giữ `used_at` vừa đốt + vết audit. Ném trong
+        // tx là rollback nuốt cả hai. 401 ném NGOÀI `withTenant`, dùng LẠI đúng câu throw có sẵn ⇒
+        // chuỗi lỗi BYTE-GIỐNG NHAU với mọi nhánh token hỏng (không đẻ oracle "tài khoản từng tồn tại").
+        return null;
+      }
       // Thu hồi mọi refresh token còn sống của user (đổi mật khẩu = đăng xuất mọi phiên).
       await tx
         .update(refreshTokens)
@@ -1575,12 +1642,9 @@ export class AuthService {
         sql`SELECT slug FROM companies WHERE id = ${companyId} AND deleted_at IS NULL LIMIT 1`,
       );
       const slug = (companyRow.rows[0] as { slug: string } | undefined)?.slug ?? null;
-      return {
-        userId: row.userId,
-        email: updated?.email ?? null,
-        deletedAt: updated?.deletedAt ?? null,
-        slug,
-      };
+      // `updated` đã qua guard ở trên ⇒ hàng LIVE, đúng tenant. Không còn trả `deletedAt`: xem
+      // docblock `clearLoginLocksAfterReset` (bảo vệ chuyển LÊN predicate của câu UPDATE).
+      return { userId: row.userId, email: updated.email, slug };
     });
 
     if (!target) throw new UnauthorizedException("Token không hợp lệ hoặc đã hết hạn.");
@@ -1605,22 +1669,26 @@ export class AuthService {
    * KHÔNG truyền `subject` ⇒ bucket `2fa` bước-2 KHÔNG bị gỡ. Đặt lại mật khẩu không chứng minh quyền
    * kiểm soát yếu tố thứ hai — đó chính là lý do 2FA tồn tại; `rl:2fa` là control DUY NHẤT chặn dò TOTP.
    *
-   * ⚠️ User đã XOÁ MỀM thì DỪNG. Unique email là PARTIAL (`WHERE deleted_at IS NULL`) nên email của họ
-   * có thể đã được cấp lại cho NGƯỜI KHÁC, mà khoá rate-limit dựng theo `(slug,email)` chứ không theo
-   * `userId` ⇒ gỡ ở đây là gỡ khoá của người đang dùng email đó.
+   * ⚠️ **User đã XOÁ MỀM không còn tới được đây** — và đó là điểm của S18-AUTH-RESETDELETED-1. Hiểm
+   * hoạ thì KHÔNG mất đi, nó chỉ được chặn SỚM HƠN: unique email là PARTIAL
+   * (`WHERE deleted_at IS NULL`) nên email của user đã xoá có thể đã được cấp lại cho NGƯỜI KHÁC, mà
+   * khoá rate-limit dựng theo `(slug,email)` chứ không theo `userId` ⇒ gỡ khoá ở đây là gỡ khoá của
+   * người đang dùng email đó. Trước WO đó, guard nằm ngay tại hàm này — tức chỉ chặn được bước GỠ
+   * KHOÁ, sau khi mật khẩu đã bị đổi mất rồi. Nay vế `deleted_at IS NULL` nằm trong predicate của
+   * câu UPDATE `users` ở `resetPassword`, nên hàng đã xoá dừng ở tầng DB và không bao giờ dựng được
+   * `target` để gọi vào đây. Giữ lại một `if (deletedAt) return;` ở đây sẽ là một nhánh KHÔNG TỚI
+   * ĐƯỢC cùng hai unit spec khẳng định một trạng thái mà người gọi thật không sinh ra nổi.
    */
   private async clearLoginLocksAfterReset(
     companyId: string,
-    target: { userId: string; email: string | null; deletedAt: Date | null; slug: string | null },
+    target: { userId: string; email: string | null; slug: string | null },
   ): Promise<void> {
-    const { userId, email, deletedAt, slug } = target;
-    // Ba nhánh dừng KHÁC HẲN nhau về mức bất thường — gộp chung một `if` sẽ che nhau khi đọc log:
-    //  • `deletedAt` — ca NGHIỆP VỤ bình thường (xem docblock trên), im lặng là đúng.
+    const { userId, email, slug } = target;
+    // Hai nhánh dừng còn lại KHÁC HẲN nhau về mức bất thường — gộp chung một `if` sẽ che nhau khi đọc log:
     //  • `!slug` — BẤT THƯỜNG HỆ THỐNG: token được cấp cho `companyId` này thì hàng công ty phải tồn
     //    tại. Null nghĩa là công ty vừa bị xoá mềm giữa lúc cấp token và lúc reset, hoặc lệch dữ liệu.
     //  • `!email` — gần như bất khả (UPDATE chạy trong cùng tx trên đúng `row.userId` vừa đọc được),
     //    nhưng nếu xảy ra thì cũng là lệch dữ liệu, không phải nghiệp vụ.
-    if (deletedAt) return;
     if (!slug || !email) {
       this.logger.warn(
         `resetPassword: KHÔNG gỡ được khoá đăng nhập vì thiếu dữ kiện dựng khoá ` +

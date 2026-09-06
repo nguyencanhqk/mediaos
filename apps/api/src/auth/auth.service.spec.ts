@@ -13,7 +13,7 @@ import { AuthService, redactEmailFromDetail } from "./auth.service";
 import { LoginRateLimiter } from "./login-rate-limiter";
 import { TWO_FACTOR_ENFORCED } from "./two-factor.service";
 import { loadEnv } from "../config/env.schema";
-import { companies, employeeProfiles, userRoles, users } from "../db/schema";
+import { companies, employeeProfiles, passwordResetTokens, userRoles, users } from "../db/schema";
 
 /**
  * S2-AUTH-DB-3 Lane C — RED-first (kiểm chứng CẤU TRÚC WHERE, không cần Postgres). Reader `user_roles`
@@ -21,11 +21,11 @@ import { companies, employeeProfiles, userRoles, users } from "../db/schema";
  * `queryChunks` đệ quy tìm Column `deleted_at` THUỘC ĐÚNG bảng — phân biệt userRoles.deleted_at với
  * roles.deleted_at (reader CŨ chỉ lọc roles ⇒ RED; sau fix lọc CẢ HAI ⇒ GREEN).
  */
-function whereFiltersSoftDelete(where: unknown, table: unknown): boolean {
+function whereHasColumn(where: unknown, table: unknown, column: string): boolean {
   let found = false;
   const walk = (node: unknown): void => {
     if (node instanceof Column) {
-      if (node.table === table && node.name === "deleted_at") found = true;
+      if (node.table === table && node.name === column) found = true;
       return;
     }
     if (node instanceof SQL) {
@@ -36,6 +36,10 @@ function whereFiltersSoftDelete(where: unknown, table: unknown): boolean {
   };
   walk(where);
   return found;
+}
+
+function whereFiltersSoftDelete(where: unknown, table: unknown): boolean {
+  return whereHasColumn(where, table, "deleted_at");
 }
 
 /**
@@ -834,9 +838,16 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
   function makeService(
     over: {
       tokenRow?: Record<string, unknown> | null;
-      deletedAt?: Date | null;
+      /** Hàng `users` mà câu UPDATE trả về. `[]` = bị predicate từ chối (xoá mềm / lệch tenant). */
+      updatedRow?: Array<{ email: string }>;
+      /** Hàng `.returning()` của câu ĐÒI token nguyên tử. `[]` = thua race / token đã dùng. */
+      claimed?: Array<{ id: string }>;
+      /** Hàng `users` mà SELECT đo-lý-do ở nhánh từ chối đọc được. */
+      probeRow?: Array<{ deletedAt: Date | null }>;
       companyRows?: Array<{ slug: string }>;
       clearImpl?: () => Promise<{ clearedKeys: number; degraded: boolean }>;
+      /** Cho phép ép `audit.record` NÉM — pin hành vi "ghi vết hỏng thì fail-closed". */
+      auditImpl?: () => Promise<void>;
     } = {},
   ) {
     const tokenRow =
@@ -849,18 +860,39 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
           }
         : over.tokenRow;
 
+    // S18-AUTH-RESETDELETED-1 — mock phải BIẾT nó đang dựng câu trên BẢNG NÀO. `resetPassword` giờ
+    // chạm ba bảng và có HAI câu `.returning()` (đòi token nguyên tử · UPDATE users); trả chung một
+    // giá trị cho cả hai là cách nhanh nhất biến một ca từ chối thành xanh-RỖNG.
+    let current: unknown = null;
+    const wheres: Array<{ table: unknown; where: unknown }> = [];
     const chain: Record<string, unknown> = {
       select: vi.fn(() => chain),
-      from: vi.fn(() => chain),
-      where: vi.fn(() => chain),
-      limit: vi.fn(() => Promise.resolve(tokenRow ? [tokenRow] : [])),
-      update: vi.fn(() => chain),
+      from: vi.fn((t: unknown) => {
+        current = t;
+        return chain;
+      }),
+      where: vi.fn((w: unknown) => {
+        wheres.push({ table: current, where: w });
+        return chain;
+      }),
+      limit: vi.fn(() =>
+        Promise.resolve(
+          current === users ? (over.probeRow ?? [{ deletedAt: null }]) : tokenRow ? [tokenRow] : [],
+        ),
+      ),
+      update: vi.fn((t: unknown) => {
+        current = t;
+        return chain;
+      }),
       set: vi.fn(() => chain),
       insert: vi.fn(() => chain),
       values: vi.fn(() => chain),
-      // `.returning()` CHỈ có trên câu UPDATE users (lấy email + deleted_at của chính hàng vừa ghi).
       returning: vi.fn(() =>
-        Promise.resolve([{ email: EMAIL, deletedAt: over.deletedAt ?? null }]),
+        Promise.resolve(
+          current === passwordResetTokens
+            ? (over.claimed ?? [{ id: "tok-1" }])
+            : (over.updatedRow ?? [{ email: EMAIL }]),
+        ),
       ),
       execute: vi.fn(async () => ({
         rows: over.companyRows ?? [{ slug: "acme" }],
@@ -875,7 +907,9 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
       over.clearImpl ?? (async () => ({ clearedKeys: 8, degraded: false })),
     );
     const rateLimiter = { clearLoginLocks };
-    const audit = { record: vi.fn().mockResolvedValue(undefined) };
+    const audit = {
+      record: over.auditImpl ? vi.fn(over.auditImpl) : vi.fn().mockResolvedValue(undefined),
+    };
     const securityEvents = { record: vi.fn().mockResolvedValue(undefined) };
 
     const Ctor = AuthService as unknown as new (...args: unknown[]) => AuthService;
@@ -902,7 +936,7 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
     ).logger;
     const logger = vi.spyOn(svcLogger, "error").mockImplementation(() => undefined);
     const warn = vi.spyOn(svcLogger, "warn").mockImplementation(() => undefined);
-    return { service, clearLoginLocks, audit, securityEvents, logger, warn, chain };
+    return { service, clearLoginLocks, audit, securityEvents, logger, warn, chain, wheres };
   }
 
   it("token HỢP LỆ ⇒ gỡ khoá với ĐÚNG 4 đối số: slug/email từ DB · subject undefined · includeForgot=false", async () => {
@@ -975,11 +1009,87 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
     expect(new Set(messages).size).toBe(1);
   });
 
-  it("user đã XOÁ MỀM ⇒ KHÔNG gỡ khoá: email đó có thể đã cấp lại cho NGƯỜI KHÁC (unique là partial)", async () => {
-    const { service, clearLoginLocks } = makeService({ deletedAt: new Date() });
+  /**
+   * S18-AUTH-RESETDELETED-1 — ca "user xoá mềm ⇒ KHÔNG gỡ khoá" và ca đối chứng "…trong IM LẶNG" của
+   * WO trước ĐÃ BỊ XOÁ khỏi đây, KHÔNG phải sửa cho xanh.
+   *
+   * Lý do: cả hai gieo `updated.deletedAt = <Date>`, một trạng thái mà người gọi thật không còn dựng
+   * được — predicate `deleted_at IS NULL` nay nằm trong chính câu UPDATE, nên hàng đã xoá dừng ở tầng
+   * DB và không bao giờ tới `clearLoginLocksAfterReset`. Giữ chúng lại là ghim một trạng thái không
+   * tồn tại (`tests-can-pin-a-hole-open`). Bảo vệ tương ứng được đo ở hai chỗ ĐÚNG hơn: predicate ở
+   * ca ngay dưới, và hành vi đầu-cuối trên DB thật ở `auth-s18-resetdeleted-1.int-spec.ts`.
+   *
+   * ⚠️ Ca dưới đây là kiểm CẤU TRÚC. Nó KHÔNG thay được int-spec: mock `.returning()` mù với
+   * `.where()`, nên nếu chỉ có ca này thì gỡ cả predicate đi vẫn có thể xanh ở nơi khác.
+   */
+  it("câu UPDATE `users` lọc CẢ `deleted_at IS NULL` LẪN `company_id` — RED nếu thiếu một vế", async () => {
+    const { service, wheres } = makeService();
+    await service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" });
+
+    // ⚠️ Hai vế phải nằm trên CÙNG MỘT `where`. Hai `.some()` độc lập sẽ được thoả bởi HAI câu KHÁC
+    // NHAU (mỗi câu một vế) ngay khi ai đó thêm một câu `users` thứ hai vào đường này — đúng hình
+    // dạng `same-builder-twice-makes-unit-spec-vacuous`.
+    const userWrites = wheres.filter((w) => w.table === users);
+    expect(userWrites.length).toBeGreaterThan(0);
+    expect(
+      userWrites.some(
+        (w) =>
+          // Vế xoá-mềm: email của user đã xoá có thể đã cấp lại cho NGƯỜI KHÁC (unique là PARTIAL).
+          whereFiltersSoftDelete(w.where, users) &&
+          // Vế tenant (BẤT BIẾN #1): trước WO này đường reset chỉ dựa vào RLS, khác mọi repo khác.
+          whereHasColumn(w.where, users, "company_id"),
+      ),
+    ).toBe(true);
+  });
+
+  it("audit ở nhánh từ chối NÉM ⇒ lỗi PHẢI trồi lên (fail-closed), KHÔNG bị nuốt thành 401 giả", async () => {
+    // Quyết định đã ký ở plan §3.2: ghi vết hỏng ⇒ tx rollback ⇒ mất luôn `used_at` ⇒ token SỐNG LẠI
+    // và người dùng nhận 500. Chấp nhận được vì fail-CLOSED (không ai đổi được mật khẩu), nhưng một
+    // quyết định 0 test pin thì lần refactor sau (vd bọc `audit.record` trong try/catch "cho an
+    // toàn") sẽ lặng lẽ đổi nó: khi đó nhánh từ chối trả 401 mà KHÔNG còn vết nào — đúng thứ mà
+    // memory `fix-commit-for-review-findings-is-itself-ungated` cảnh báo.
+    const boom = new Error("audit sink down");
+    const { service, clearLoginLocks } = makeService({
+      updatedRow: [],
+      probeRow: [{ deletedAt: new Date() }],
+      auditImpl: () => Promise.reject(boom),
+    });
+    // KHÔNG phải UnauthorizedException: 401 ở đây nghĩa là lỗi đã bị nuốt và vết đã mất trong im lặng.
+    await expect(service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" })).rejects.toBe(
+      boom,
+    );
+    expect(clearLoginLocks).not.toHaveBeenCalled();
+  });
+
+  it("token đã dùng/thua race ⇒ ĐÒI token khớp 0 hàng ⇒ 401, KHÔNG đổi mật khẩu, KHÔNG gỡ khoá", async () => {
+    // Trạng thái này TỚI ĐƯỢC (khác hai ca đã xoá ở trên): `UPDATE … WHERE used_at IS NULL` khớp 0
+    // hàng khi một request khác vừa đòi được token. Đây là vế ép single-use thành thật.
+    const { service, clearLoginLocks, audit } = makeService({ claimed: [] });
     await expect(
       service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }),
-    ).resolves.toBeUndefined();
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(clearLoginLocks).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("predicate `users` từ chối (xoá mềm) ⇒ 401 + audit 'auth.password_reset_denied', KHÔNG gỡ khoá", async () => {
+    const { service, clearLoginLocks, audit, securityEvents } = makeService({
+      updatedRow: [],
+      probeRow: [{ deletedAt: new Date() }],
+    });
+    await expect(
+      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    // Vết forensics phải ĐO rồi mới ghi — `reason` suy từ SELECT đo-lý-do, không phải hằng.
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    expect(audit.record.mock.calls[0][1]).toMatchObject({
+      action: "auth.password_reset_denied",
+      objectType: "auth",
+      after: { reason: "user_deleted" },
+    });
+    // TUYỆT ĐỐI không được ghi vết "đã đặt lại thành công" cho một lượt bị từ chối.
+    expect(securityEvents.record).not.toHaveBeenCalled();
     expect(clearLoginLocks).not.toHaveBeenCalled();
   });
 
@@ -995,10 +1105,11 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
     expect(warn).toHaveBeenCalled();
   });
 
-  it("user đã xoá mềm ⇒ bỏ qua trong IM LẶNG (nghiệp vụ bình thường, KHÔNG cảnh báo nhiễu)", async () => {
-    // Ca đối chứng của ca trên: nếu gộp ba nhánh dừng vào một `if` chung thì hoặc mất cảnh báo cho
-    // ca lệch dữ liệu, hoặc bồi cảnh báo cho ca bình thường — cặp này ghim cả hai chiều.
-    const { service, warn, logger } = makeService({ deletedAt: new Date() });
+  it("ca BÌNH THƯỜNG ⇒ KHÔNG cảnh báo nhiễu (đối chứng của ca thiếu-slug ngay trên)", async () => {
+    // Đối chứng giữ lại từ cặp cũ: nếu gộp các nhánh dừng vào một `if` chung thì hoặc mất cảnh báo
+    // cho ca lệch dữ liệu, hoặc bồi cảnh báo cho ca bình thường — cặp này ghim cả hai chiều. Vế
+    // "user xoá mềm" của cặp cũ đã chuyển lên tầng predicate (xem khối ca ở trên).
+    const { service, warn, logger } = makeService();
     await service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" });
     expect(warn).not.toHaveBeenCalled();
     expect(logger).not.toHaveBeenCalled();
