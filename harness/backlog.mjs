@@ -17351,6 +17351,7 @@ export const backlog = [
     notes: [
       "🔴 FULL gate (auth). Nhỏ, nhưng đụng chữ ký một đường auth CÔNG KHAI + constructor mock của auth.service.spec.ts (dựng bằng Object.create + gán MỘT PHẦN field — chạm field khác là vỡ spec).",
       "ĐỀ XUẤT MỞ RỘNG (từ S18-AUTH-CHANGEPWTOCTOU-1, 06/09 — owner chốt trước khi làm): `changePassword` mang ĐÚNG món nợ này — cả `auth.password_changed` lẫn `auth.password_change_denied` (thêm ở WO đó) đều thiếu `ip`/`userAgent`, và controller `auth.controller.ts:196` cũng chưa truyền RequestMeta. Phủ luôn trong WO này rẻ hơn seed WO thứ ba; nếu mở rộng thì thêm `apps/api/src/auth/auth.service.ts` ca changePassword vào done_when.",
+      "ĐỀ XUẤT MỞ RỘNG #2 (từ S18-AUTH-2FADELETED-1, 07/09): đường 2FA mang ĐÚNG món nợ này — `disableTwoFactor` không nhận RequestMeta, nên `auth.2fa_disabled` (đã có) LẪN `auth.2fa_disable_denied` (WO đó thêm, ở CẢ auth.service.ts và two-factor.service.ts) đều thiếu ip/userAgent. Gộp vào WO này, đừng seed WO thứ tư.",
     ],
   },
   {
@@ -17398,11 +17399,13 @@ export const backlog = [
     title:
       "`disableTwoFactor` KHÔNG lọc `deleted_at` ở CẢ câu SELECT — user đã xoá mềm còn access token vẫn tắt được 2FA (yếu hơn cả `changePassword` TRƯỚC khi vá)",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/auth/auth.service.ts",
+      "apps/api/src/auth/two-factor.service.ts",
       "apps/api/src/auth/**/*.spec.ts",
       "apps/api/test/integration/auth-s18-2fadeleted-*.int-spec.ts",
+      "apps/api/test/integration/two-factor.int-spec.ts",
       "docs/plans/S18-AUTH-2FADELETED-1.md",
       "harness/backlog.mjs",
     ],
@@ -17424,6 +17427,44 @@ export const backlog = [
     notes: [
       "🔴 FULL gate (auth). Đọc `docs/plans/S18-AUTH-CHANGEPWTOCTOU-1.md` trước: cùng lớp lỗi, và §2b ở đó giải thích vì sao ca test phải đột biến TỪNG VẾ. Ở WO này thì DỄ HƠN — chỉ có MỘT cổng nên không có cổng chồng nhau.",
       "⚠️ Nhánh `!ok` của `disableTwoFactor` (`:720-724`) phạt rate-limit + `recordReauthFailure('2fa_disable')` + trả 'Mật khẩu không đúng.' — cùng bài toán nhãn-sai đã ghi ở S18-AUTH-CHANGEPWTOCTOU-1 D1. Chốt hình lỗi TRƯỚC khi code.",
+      "✅ ĐÃ CHỐT khi thi công (07/09, plan §3.0): done_when #3 cho hai lựa chọn — chọn **siết BÊN TRONG `twoFactor.disable()`** (D2), KHÔNG kéo re-auth vào tx của nó (`password.verify` = argon2id 19 MiB sẽ giữ tx mở hàng trăm ms — xấu cho PgBouncer transaction-mode). Hình lỗi (D1): GIỮ 401 + phạt + `REAUTH_FAILED` như cũ, NHƯNG thêm vết bền `auth.2fa_disable_denied` — vì khác `#482`, ở đây user xoá mềm hôm nay KHÔNG rơi vào `!row` mà đi thẳng tới THÀNH CÔNG, nên không có vết nào để 'bảo tồn' cả.",
+    ],
+  },
+  {
+    id: "S18-AUTH-RESTORE2FA-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Khôi phục user KHÔNG soát lại 2FA + `enroll`/`confirmEnable` không lọc `deleted_at` — tài khoản khôi phục có thể về với 2FA TẮT, hoặc với yếu tố thứ hai CỦA KẺ TẤN CÔNG",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/users/auth-users.service.ts",
+      "apps/api/src/auth/two-factor.service.ts",
+      "apps/api/src/auth/**/*.spec.ts",
+      "apps/api/test/integration/auth-s18-restore2fa-*.int-spec.ts",
+      "docs/plans/S18-AUTH-RESTORE2FA-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S18-AUTH-2FADELETED-1"],
+    src: [
+      "S18-AUTH-2FADELETED-1 §7.1–7.2 (07/09/2026) — owner CHỐT phạm vi WO đó CHỈ ở đường GHI; hai mục dưới defer sang đây.",
+      "(1) `restoreUser` (`apps/api/src/users/auth-users.service.ts:580-613`) khôi phục hàng (clear `deleted_at`/`deleted_by`, `status` giữ nguyên) và KHÔNG đụng trạng thái 2FA. Vì `twoFactor.disable()` HARD-DELETE `user_totp` + `user_recovery_codes`, mọi lần 2FA bị tắt trong lúc tài khoản đã xoá mềm là KHÔNG phục hồi được.",
+      "(3) security-reviewer (FULL gate S18-AUTH-2FADELETED-1, 07/09) MEDIUM: hai câu DELETE trong `twoFactor.disable()` (`user_totp`, `user_recovery_codes`) vẫn KHÔNG có vế `company_id` — dựa hoàn toàn vào RLS. Có sẵn (không do WO đó đẻ ra), nhưng WO đó đã siết vế ĐỌC của cùng hàm nên vế GHI nên đi cùng.",
+      "(2) 🔴 `enroll` (`two-factor.service.ts:147-188`) và `confirmEnable` (`:191-227`) KHÔNG lọc `deleted_at`. Với tài khoản đã xoá mềm mà 2FA đang TẮT, người giữ access token còn hạn có thể `enroll` một secret DO CHÍNH HỌ kiểm soát rồi enable; `restoreUser` không đụng 2FA ⇒ tài khoản khôi phục về với YẾU TỐ THỨ HAI CỦA KẺ TẤN CÔNG. Đây KHÔNG phải rác dữ liệu.",
+    ],
+    done_when: [
+      "CHỐT với owner (nghiệp vụ): khôi phục user thì 2FA phải (a) bị ép bật lại, (b) đánh dấu chờ duyệt, hay (c) giữ nguyên — quyết định này CHƯA có",
+      "Siết `enroll` + `confirmEnable` theo `deleted_at IS NULL` (+ `company_id` tường minh, mirror S18-AUTH-2FADELETED-1)",
+      "Ca RED: user xoá mềm + access token còn sống ⇒ KHÔNG enroll được, KHÔNG confirmEnable được",
+      "Ca đối chứng DƯƠNG: user bình thường vẫn enroll/enable được (chống xanh-RỖNG)",
+      "Xử lý `restoreUser` theo quyết định ở gạch đầu dòng 1, có audit + ca test",
+      "bash harness/check.sh --all --lane-db=s18restore2fa XANH",
+    ],
+    notes: [
+      "🔴 FULL gate (auth). Đọc `docs/plans/S18-AUTH-2FADELETED-1.md` §1b + §7 TRƯỚC — bằng chứng và lý do defer nằm cả ở đó.",
+      "⚠️ Mục (2) là LỖ BẢO MẬT thực sự, không phải dọn dẹp: nó cho kẻ tấn công CÀI yếu tố thứ hai vào một tài khoản sẽ được khôi phục. Plan v1 của WO trước từng viết nhầm rằng 'bật 2FA cho tài khoản đã xoá không phải là làm yếu đi' — plan-reviewer bác đúng.",
     ],
   },
   {

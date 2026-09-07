@@ -1,4 +1,9 @@
-import { ConflictException, HttpException, HttpStatus } from "@nestjs/common";
+import {
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { rlKey as rateLimitKey } from "../common/valkey/valkey-key";
 import { TOO_MANY_REQUESTS_MESSAGE } from "../common/filters/retry-after";
 import { describe, expect, it, vi } from "vitest";
@@ -60,6 +65,15 @@ function makeTx(opts: {
   hasEnforcedRole?: boolean;
   /** hàng user_totp bị xoá (disable): [{id}] = đang bật ⇒ audit+TOTP_DISABLED; [] = chưa bật ⇒ không. */
   deletedTotp?: { id: string }[];
+  /**
+   * S18-AUTH-2FADELETED-1 — `users.deleted_at` của hàng đọc được. `disable()` đọc bảng `users` HAI
+   * lần (requiresTwoFactorTx `:96-100`, rồi vế `alive` mới) mà mock này dispatch CHỈ theo bảng ⇒ một
+   * hàng phải mang CẢ HAI cột. Bỏ qua tham số này thì `deletedAt === undefined` ⇒ cổng mới luôn cho
+   * qua và ca test xanh vì lý do SAI (`same-builder-twice-makes-unit-spec-vacuous`).
+   */
+  userDeletedAt?: Date | null;
+  /** Hàng `users` KHÔNG nhìn thấy được (RLS ẩn — đường cross-tenant của `disable()`). */
+  userMissing?: boolean;
 }): { tx: unknown; calls: TxCalls; captures: { userRolesWhere?: unknown } } {
   const calls: TxCalls = { totpDeletes: 0, recoveryDeletes: 0 };
   // S2-AUTH-DB-3 Lane C: bắt WHERE của reader user_roles để assert lọc soft-delete (không cần DB).
@@ -68,7 +82,16 @@ function makeTx(opts: {
     select: (_cols?: unknown) => ({
       from: (table: unknown) => {
         const rowsFor = () => {
-          if (table === users) return [{ requireTwoFactor: opts.userRequireTwoFactor ?? false }];
+          if (table === users) {
+            // Một hàng mang CẢ HAI cột — xem ghi chú `userDeletedAt` ở khai báo opts.
+            if (opts.userMissing) return [];
+            return [
+              {
+                requireTwoFactor: opts.userRequireTwoFactor ?? false,
+                deletedAt: opts.userDeletedAt ?? null,
+              },
+            ];
+          }
           if (table === userRoles) return opts.hasEnforcedRole ? [{ one: 1 }] : [];
           return [];
         };
@@ -227,6 +250,98 @@ describe("TwoFactorService.disable — fail-closed khi bị ép 2FA", () => {
     expect(calls.totpDeletes).toBe(1); // vẫn thử xoá (idempotent)
     expect(audit.record).not.toHaveBeenCalled();
     expect(securityEvents.record).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * S18-AUTH-2FADELETED-1 (vế L2) — lệnh GHI không được nằm NGOÀI phép kiểm.
+ *
+ * `AuthService.disableTwoFactor` re-auth trong tx của NÓ rồi gọi `disable()`, hàm này mở tx RIÊNG.
+ * Vế `deleted_at` ở câu SELECT re-auth KHÔNG bảo vệ được một câu ghi ở tx khác: một `soft-delete`
+ * commit XEN GIỮA hai tx vẫn hard-delete được `user_totp` + `user_recovery_codes` của hàng đã xoá.
+ * Đây là ca cô lập vế L2 — nó gọi THẲNG `disable()`, nên vế L1 không tồn tại trong đường đi (cổng
+ * chồng nhau phải đột biến TỪNG VẾ — `overdetermined-gate-makes-deny-spec-vacuous`).
+ */
+describe("TwoFactorService.disable — hàng đã XOÁ MỀM (S18-AUTH-2FADELETED-1)", () => {
+  it("§inner-unit: hàng thấy được + deleted_at != null ⇒ NÉM 401, KHÔNG xoá totp/recovery", async () => {
+    const { tx, calls } = makeTx({ userDeletedAt: new Date(), deletedTotp: [{ id: "x" }] });
+    const { svc, audit, securityEvents } = makeSvc(tx);
+
+    await expect(svc.disable(USER_ID, COMPANY_ID)).rejects.toBeInstanceOf(UnauthorizedException);
+
+    // Lệnh ghi KHÔNG chạy — đây là điều WO này mua được.
+    expect(calls.totpDeletes).toBe(0);
+    expect(calls.recoveryDeletes).toBe(0);
+    // Vết BỀN cho nhánh từ chối (ghi TRONG tx, ném NGOÀI tx ⇒ tx commit giữ được vết).
+    expect(audit.record).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ action: "auth.2fa_disable_denied", objectType: "auth" }),
+    );
+    // KHÔNG được đẻ TOTP_DISABLED cho một lần KHÔNG tắt.
+    expect(securityEvents.record).not.toHaveBeenCalled();
+  });
+
+  /**
+   * §inner-notvisible — hàng KHÔNG nhìn thấy được (RLS ẩn) là đường CROSS-TENANT, và hợp đồng hiện
+   * hành ghim nó là **no-op im lặng**: `two-factor.int-spec.ts` ca (f) gọi `disable(userOfC, D.companyId)`
+   * và đòi KHÔNG ném. Biến nhánh này thành 401 sẽ làm ĐỎ ca đó, và tệ hơn: ghi một hàng audit
+   * append-only gán `company_id = D` cho `actor_user_id = user của C` (`audit_logs.actor_user_id` FK
+   * về `users(id)`, KHÔNG composite tenant — `0003_audit_outbox.sql:9-11`).
+   *
+   * Không phải fail-open: hôm nay nhánh này ĐÃ là no-op (delete khớp 0 hàng do RLS), bản vá không nới
+   * thêm gì. Phép kiểm thật nằm ở vế L1, nơi `companyId` luôn là của chính người gọi.
+   */
+  it("§inner-notvisible: hàng KHÔNG thấy (cross-tenant/RLS) ⇒ KHÔNG ném, KHÔNG audit (giữ hợp đồng)", async () => {
+    const { tx, calls } = makeTx({ userMissing: true, deletedTotp: [] });
+    const { svc, audit } = makeSvc(tx);
+
+    await expect(svc.disable(USER_ID, COMPANY_ID)).resolves.toBeUndefined();
+
+    expect(calls.totpDeletes).toBe(1); // vẫn chạy, RLS lọc còn 0 hàng — y như trước vá
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("§enforced-trước: 409 TWO_FACTOR_ENFORCED vẫn THẮNG vế mới (thứ tự cổng không đảo)", async () => {
+    // Vừa bị ép, vừa đã xoá mềm: phải ra 409 (policy) chứ KHÔNG phải 401 — vế `alive` đứng SAU
+    // `requiresTwoFactorTx`, không được chen lên trước.
+    const { tx, calls } = makeTx({ userRequireTwoFactor: true, userDeletedAt: new Date() });
+    const { svc } = makeSvc(tx);
+
+    await expect(svc.disable(USER_ID, COMPANY_ID)).rejects.toBeInstanceOf(ConflictException);
+    expect(calls.totpDeletes).toBe(0);
+  });
+
+  it("§inner-allow (đối chứng DƯƠNG): hàng sống vẫn tắt được — ca deny không xanh-RỖNG", async () => {
+    const { tx, calls } = makeTx({ userDeletedAt: null, deletedTotp: [{ id: "x" }] });
+    const { svc, audit, securityEvents } = makeSvc(tx);
+
+    await expect(svc.disable(USER_ID, COMPANY_ID)).resolves.toBeUndefined();
+
+    expect(calls.totpDeletes).toBe(1);
+    expect(calls.recoveryDeletes).toBe(1);
+    expect(audit.record).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ action: "auth.2fa_disabled" }),
+    );
+    expect(securityEvents.record).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ eventType: "TOTP_DISABLED" }),
+    );
+  });
+
+  /**
+   * §audit-fail-closed — hôm nay fail-closed do CẤU TRÚC (không có try/catch quanh `withTenant`),
+   * nhưng một quyết định 0 test ghim thì lần refactor sau — kiểu bọc `audit.record` trong try/catch
+   * "cho an toàn" — sẽ lặng lẽ đổi nó: khi đó nhánh từ chối vẫn ném 401 mà KHÔNG còn vết nào.
+   * Đối xứng ca đã có của `resetPassword` (`auth.service.spec.ts:1161`).
+   */
+  it("§audit-fail-closed: audit.record NÉM ⇒ lỗi trồi lên, KHÔNG nuốt thành 401 giả", async () => {
+    const { tx } = makeTx({ userDeletedAt: new Date() });
+    const { svc, audit } = makeSvc(tx);
+    const boom = new Error("audit sink down");
+    audit.record.mockRejectedValueOnce(boom);
+
+    await expect(svc.disable(USER_ID, COMPANY_ID)).rejects.toBe(boom);
   });
 });
 
