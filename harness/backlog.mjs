@@ -17410,14 +17410,17 @@ export const backlog = [
     title:
       "`user_security_events` của đường đổi mật khẩu KHÔNG có `ip_address`/`user_agent` — nhánh `bad_credentials` (kẻ chiếm phiên dò mật khẩu) để lại vết VÔ DANH",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/auth/auth.service.ts",
-      "apps/api/src/users/auth-users.service.ts",
+      "apps/api/src/auth/auth.controller.ts",
+      "apps/api/src/users/**",
       "apps/api/src/auth/**/*.spec.ts",
       "apps/api/test/integration/auth-s18-seceventmeta-*.int-spec.ts",
+      "docs/plans/S18-AUTH-SECEVENTMETA-1.md",
       "harness/backlog.mjs",
     ],
+    plan: "docs/plans/S18-AUTH-SECEVENTMETA-1.md",
     skills: ["code-review"],
     depends_on: ["S18-AUTH-RESETMETA-1"],
     src: [
@@ -17435,6 +17438,44 @@ export const backlog = [
     notes: [
       "🔴 FULL gate (auth). Đọc `docs/plans/S18-AUTH-RESETMETA-1.md` §7 N2/N3 TRƯỚC — bằng chứng và lý do defer nằm ở đó.",
       "Khuôn đã có sẵn: S18-AUTH-RESETMETA-1 đã nối dây `RequestMeta` xuyên hai method + chuỗi private; WO này chỉ mở rộng sang bảng thứ hai.",
+    ],
+  },
+  {
+    id: "S18-AUTH-SECEVENTREST-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "9 điểm ghi `user_security_events` NGOÀI đường mật khẩu vẫn VÔ DANH — nặng nhất là hai nút admin chạy mỗi ngày (`unlockUser`, `clearLoginThrottle`)",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/auth/auth.service.ts",
+      "apps/api/src/auth/auth.controller.ts",
+      "apps/api/src/users/**",
+      "apps/api/src/auth/**/*.spec.ts",
+      "apps/api/test/integration/auth-s18-seceventrest-*.int-spec.ts",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S18-AUTH-SECEVENTMETA-1"],
+    src: [
+      "docs/plans/S18-AUTH-SECEVENTMETA-1.md §7 N1 — census ĐẦY ĐỦ hai file đã đo ở §2e của plan đó; WO này là phần CÒN LẠI sau khi WO kia đóng 9 điểm của đường mật khẩu.",
+      "`auth.service.ts:1224` · `:1329` · `:1384` — `SESSION_REVOKED` (`logout` · `revokeSession` · `revokeOtherSessions`). Không method nào nhận `RequestMeta` ⇒ phải sửa cả controller.",
+      "`auth-users.service.ts:298` `TOTP_RESET` · `:339` `USER_LOCKED` · `:375` `USER_UNLOCKED` · `:466` `USER_UNLOCKED` · `:563` `USER_DELETED` · `:606` `USER_RESTORED`.",
+      "⚠️ Hai điểm ĐÁNG GIÁ NHẤT là `:375` (`unlockUser` — nút 'Mở khoá tài khoản') và `:466` (`clearLoginThrottle` — nút 'Gỡ khoá đăng nhập'): chúng chạy MỖI NGÀY, khác `recordFailedLockClear` chỉ chạy khi Valkey degraded. Sau S18-AUTH-SECEVENTMETA-1, bảng có BA họ `USER_UNLOCKED` mà chỉ họ `reason='password_reset'` mang ip/UA.",
+      "Helper dùng chung đã có sẵn: `requestMeta(req)` export từ `auth.service.ts` (D6 của WO trước) — KHÔNG viết lại biểu thức `{ ip, userAgent }` lần thứ ba.",
+    ],
+    done_when: [
+      "9 điểm ghi mang `ip`/`userAgent`; mọi controller dùng `requestMeta(req)` (KHÔNG nhân bản biểu thức)",
+      "KHÔNG nhét `meta` vào type `AuthUserActor` — nó dùng chung cho 15 method; thêm tham số riêng cho từng method như S18-AUTH-SECEVENTMETA-1 đã làm với `resetPassword`",
+      "⚠️ `clearLoginThrottle` kéo theo 10 điểm gọi trong `auth-users.service.spec.ts` (`:805, :816, :825, :859, :871, :885, :895, :903, :932, :940`) — LUẬT VÁ: chỉ THÊM đối số, CẤM đổi assert đang có",
+      "Ca int-spec đi qua HTTP THẬT rồi đọc thẳng `user_security_events` (gọi thẳng service ⇒ spec tự truyền meta ⇒ xanh-RỖNG với dây controller). Khuôn: `auth-s18-seceventmeta-1.int-spec.ts`",
+      "Cổng đột biến: gỡ ip/UA khỏi TỪNG điểm một ⇒ phải có ≥1 ca đỏ cho mỗi điểm",
+      "bash harness/check.sh --all --lane-db=s18seceventrest XANH",
+    ],
+    notes: [
+      "🟡 Không phải lỗ khai thác — là mù forensics. Ba họ `USER_UNLOCKED` phân biệt được bằng `payload.reason` (`password_reset` / `login_throttle` / vắng) nên hôm nay đọc bảng vẫn suy luận được; WO này xoá nhu cầu phải suy luận.",
+      "Đọc `docs/plans/S18-AUTH-SECEVENTMETA-1.md` §2e (census), §3 D6 (helper dùng chung) và D7 (vì sao `clearLoginThrottle` bị hoãn sang đây) TRƯỚC khi lập plan.",
     ],
   },
   {
@@ -17524,13 +17565,14 @@ export const backlog = [
     paths: [
       "apps/api/src/users/auth-users.service.ts",
       "apps/api/src/auth/two-factor.service.ts",
+      "apps/api/src/auth/auth.service.ts",
       "apps/api/src/auth/**/*.spec.ts",
       "apps/api/test/integration/auth-s18-restore2fa-*.int-spec.ts",
       "docs/plans/S18-AUTH-RESTORE2FA-1.md",
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],
-    depends_on: ["S18-AUTH-2FADELETED-1"],
+    depends_on: ["S18-AUTH-2FADELETED-1", "S18-AUTH-SECEVENTMETA-1"],
     src: [
       "S18-AUTH-2FADELETED-1 §7.1–7.2 (07/09/2026) — owner CHỐT phạm vi WO đó CHỈ ở đường GHI; hai mục dưới defer sang đây.",
       "(1) `restoreUser` (`apps/api/src/users/auth-users.service.ts:580-613`) khôi phục hàng (clear `deleted_at`/`deleted_by`, `status` giữ nguyên) và KHÔNG đụng trạng thái 2FA. Vì `twoFactor.disable()` HARD-DELETE `user_totp` + `user_recovery_codes`, mọi lần 2FA bị tắt trong lúc tài khoản đã xoá mềm là KHÔNG phục hồi được.",
@@ -17544,6 +17586,7 @@ export const backlog = [
       "Ca đối chứng DƯƠNG: user bình thường vẫn enroll/enable được (chống xanh-RỖNG)",
       "Xử lý `restoreUser` theo quyết định ở gạch đầu dòng 1, có audit + ca test",
       "NỢ N1 từ S18-AUTH-RESETMETA-1 (#484): `disableTwoFactor` nhận `RequestMeta` (mirror hai method đã nối dây ở WO đó) ⇒ `auth.2fa_disabled` (`two-factor.service.ts`) VÀ `auth.2fa_disable_denied` (CẢ `auth.service.ts` lẫn `two-factor.service.ts`) mang `ip`+`userAgent`",
+      "NỢ N2 từ S18-AUTH-SECEVENTMETA-1: `REAUTH_FAILED` trong `user_security_events` vẫn VÔ DANH ở CẢ HAI context 2FA — `2fa_disable` (`auth.service.ts` truyền `{}` TƯỜNG MINH tại call-site, thay đúng token đó) VÀ `2fa_enable` (`two-factor.service.ts:238` là một writer RIÊNG, không được tham số bắt buộc của `AuthService` bảo vệ). WO này chạm cả hai file ⇒ cân nhắc GỘP hai writer làm một thay vì nối dây song song.",
       "Ca int-spec đi qua HTTP THẬT rồi đọc thẳng `audit_logs` — gọi thẳng service thì spec tự truyền meta ⇒ xanh-RỖNG với dây controller (khuôn `auth-s18-resetmeta-1.int-spec.ts`)",
       "bash harness/check.sh --all --lane-db=s18restore2fa XANH",
     ],

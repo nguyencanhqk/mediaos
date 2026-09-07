@@ -321,6 +321,46 @@ describe("AuthService.disableTwoFactor — hàng đã XOÁ MỀM (S18-AUTH-2FADE
       expect(entry.objectType).toBe("auth");
     });
 
+    /**
+     * S18-AUTH-SECEVENTMETA-1 — NEO hình dạng LỜI GỌI cho call-site 2FA của `recordReauthFailure`.
+     *
+     * WO đó làm `meta` thành tham số BẮT BUỘC (D1: mặc định `= {}` làm caller-quên trở nên im lặng ở
+     * compile-time, mà WO tồn tại chính vì một vết im lặng). Đường 2FA CHƯA nhận `RequestMeta` — vế
+     * đó thuộc `S18-AUTH-RESTORE2FA-1`, KHÔNG được cướp ở đây — nên nó truyền `{}` TƯỜNG MINH.
+     *
+     * Đo HÌNH DẠNG, không đo GIÁ TRỊ, và đó là CHỦ Ý: assert `ip === undefined` sẽ ĐỎ đúng ngày WO
+     * kia nối dây meta thật, rồi agent kế tiếp "sửa" bằng cách revert — tức đóng đinh lỗ hổng
+     * (memory `tests-can-pin-a-hole-open`). `{}` hôm nay và `{ip,userAgent}` ngày mai đều là object
+     * ⇒ ca này xanh ở cả hai thế giới, và ĐỎ ở thế giới thứ ba (ai đó bỏ đối số).
+     *
+     * ⚠️ Vế `!== null` KHÔNG thừa: `typeof null === "object"`.
+     *
+     * Ca RIÊNG chứ không nhét vào ca trên: spy thay THÂN hàm ⇒ sẽ nuốt luôn lượt ghi `REAUTH_FAILED`
+     * mà ca trên đang assert.
+     */
+    it("call-site 2FA truyền `meta` là OBJECT (không undefined) — neo cho tham số bắt buộc", async () => {
+      const { service } = makeService({ selectRows: [] });
+      const spy = vi
+        .spyOn(
+          service as unknown as {
+            recordReauthFailure: (...a: unknown[]) => Promise<void>;
+          },
+          "recordReauthFailure",
+        )
+        .mockResolvedValue(undefined);
+
+      await expect(service.disableTwoFactor(user, "pw")).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      const args = spy.mock.calls[0];
+      expect(args[2]).toBe("2fa_disable");
+      const meta = args[3];
+      expect(typeof meta).toBe("object");
+      expect(meta).not.toBeNull();
+    });
+
     it("GIỮ hình cũ: 401 + recordFailure + REAUTH_FAILED (waiver ratchet 429 vẫn đứng)", async () => {
       const { service, rateLimiter, securityEvents, twoFactor } = makeService({ selectRows: [] });
       await expect(service.disableTwoFactor(user, "pw")).rejects.toBeInstanceOf(
@@ -1566,12 +1606,16 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
     const bad = makeService({
       clearImpl: async () => ({ clearedKeys: 8, degraded: true }),
     });
+    // S18-AUTH-SECEVENTMETA-1 — meta THẬT ở nhánh `bad`: đây là chỗ đo DUY NHẤT của điểm ghi
+    // `USER_UNLOCKED` trong `recordFailedLockClear` (chỉ chạy khi Valkey degraded ⇒ không tới được
+    // qua HTTP). Nhánh `good` bên dưới GIỮ `{}` — nó là đối chứng DƯƠNG, không phải chỗ đo.
+    const badMeta = { ip: "203.0.113.10", userAgent: "unit-ua-unlocked-event" };
     await bad.service.resetPassword(
       {
         token: TOKEN,
         newPassword: "N3wPassw0rd",
       },
-      {},
+      badMeta,
     );
     // Nhánh degraded KHÔNG ném ⇒ nếu chỉ ghi audit thì log/APM im lặng đúng lúc bất thường nhất
     // (mật khẩu đã đổi mà không kết luận được khoá đã gỡ hay chưa).
@@ -1587,6 +1631,24 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
       reason: "password_reset",
       ok: false,
     });
+    // S18-AUTH-SECEVENTMETA-1 — hàng #4: assert BẰNG ĐÚNG giá trị của `badMeta`, không phải
+    // "khác null". `securityEvents.record` ghi thẳng vào cột `ip_address`/`user_agent` của
+    // `user_security_events` (security-event-writer.service.ts:76-77).
+    const badUnlocked = bad.securityEvents.record.mock.calls
+      .map((c) => c[1] as { eventType: string; ip?: string; userAgent?: string })
+      .find((e) => e.eventType === "USER_UNLOCKED");
+    expect(badUnlocked?.ip).toBe(badMeta.ip);
+    expect(badUnlocked?.userAgent).toBe(badMeta.userAgent);
+    // …và hai hàng của đường THÀNH CÔNG trong cùng lượt (#2 `PASSWORD_RESET_COMPLETED`,
+    // #3 `ALL_SESSIONS_REVOKED`) cũng phải mang meta — chúng cùng tx, cùng `meta`, nhưng là HAI điểm
+    // ghi riêng: đo một cái rồi suy ra cái kia là cách để một điểm bị bỏ quên lọt cổng.
+    for (const et of ["PASSWORD_RESET_COMPLETED", "ALL_SESSIONS_REVOKED"]) {
+      const row = bad.securityEvents.record.mock.calls
+        .map((c) => c[1] as { eventType: string; ip?: string; userAgent?: string })
+        .find((e) => e.eventType === et);
+      expect(row?.ip, et).toBe(badMeta.ip);
+      expect(row?.userAgent, et).toBe(badMeta.userAgent);
+    }
 
     // Đối chứng: thiếu vế này thì ca trên vẫn xanh khi code ghi vết VÔ ĐIỀU KIỆN — tức bồi
     // `USER_UNLOCKED` cho tài khoản chưa từng bị khoá, đúng món nợ WO-1 đã ghi ở §10.5.
