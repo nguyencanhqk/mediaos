@@ -300,10 +300,11 @@ describe.skipIf(!hasDb)("S11-ROOM-DB-1 · bất biến nền dữ liệu ROOM (m
       expect(r2.code).toBe("23503");
       expect(r2.constraint).toBe("meeting_rooms_deleted_by_tenant_fk");
       // ĐỐI CHỨNG DƯƠNG cùng tenant (deny-cases-vacuous-without-allow-case): FK composite không được chặn cả A→A.
-      const okSame = await attempt(A.companyId, `UPDATE meeting_rooms SET updated_by=$2 WHERE id=$1`, [
-        roomA2,
-        orgA,
-      ]);
+      const okSame = await attempt(
+        A.companyId,
+        `UPDATE meeting_rooms SET updated_by=$2 WHERE id=$1`,
+        [roomA2, orgA],
+      );
       expect(okSame.code, "updated_by cùng tenant phải OK").toBeNull();
       // created_by (FK 0052 + composite 0535): ca W4 của tenant-isolation KHÔNG còn chứng minh được cặp này sau
       // 0552 (nó chèn BẢN SAO hàng seed ⇒ uq_meeting_rooms_company_name_active nổ 23505 trước FK) — bằng chứng hành
@@ -468,13 +469,17 @@ describe.skipIf(!hasDb)("S11-ROOM-DB-1 · bất biến nền dữ liệu ROOM (m
       expect(badStatus.code, "Completed là DẪN XUẤT, không phải trạng thái lưu").toBe("23514");
       // "Completed" vi phạm CẢ chk_room_bookings_status LẪN cancel_pair (không nhánh nào khớp) — Postgres báo cái nào
       // kiểm trước, không cố định ⇒ chấp nhận cả hai, và pin ĐỊNH NGHĨA của chk_room_bookings_status từ catalog.
-      expect(["chk_room_bookings_status", "chk_room_bookings_cancel_pair"]).toContain(badStatus.constraint);
+      expect(["chk_room_bookings_status", "chk_room_bookings_cancel_pair"]).toContain(
+        badStatus.constraint,
+      );
       const statusDef = (
         await direct.query<{ def: string }>(
           `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conrelid='room_bookings'::regclass AND conname='chk_room_bookings_status'`,
         )
       ).rows[0]?.def;
-      expect(statusDef).toBe("CHECK (((status)::text = ANY ((ARRAY['Confirmed'::character varying, 'Cancelled'::character varying])::text[])))");
+      expect(statusDef).toBe(
+        "CHECK (((status)::text = ANY ((ARRAY['Confirmed'::character varying, 'Cancelled'::character varying])::text[])))",
+      );
       const noCancelledAt = await attempt(
         A.companyId,
         `INSERT INTO room_bookings (company_id, room_id, title, starts_at, ends_at, organizer_user_id, status)
@@ -727,14 +732,24 @@ describe.skipIf(!hasDb)("S11-ROOM-DB-1 · bất biến nền dữ liệu ROOM (m
         SELECT
           (SELECT count(*) FROM roles WHERE name = 'office-admin' AND company_id IS NULL AND deleted_at IS NULL) AS roles,
           (SELECT count(*) FROM permissions WHERE resource_type IN ('room','room-booking'))                       AS perms,
+          -- S18-QA-ASSETFLAKE-1: cùng LỚP LỖI đã ĐO ở s11-asset-db1-invariants H1 (plan §4.1/§5) —
+          -- counter thiếu vế sở hữu thì đếm cả role của công ty fixture, mà mỗi spec boot AppModule đẻ
+          -- một "super-admin" company-scoped mang TRỌN catalog rồi cleanupTenants xoá đi ⇒ before/after
+          -- lệch trong khi replay VẪN idempotent. 0554 chỉ cấp cho role hệ thống (:107 resolve role bằng
+          -- company_id IS NULL, 22 hàng §9e). Ca này CHƯA từng quan sát đỏ — vá theo lớp lỗi, không theo
+          -- sự cố. Khuôn: s12-recruit-db1-invariants.
           (SELECT count(*) FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
-            WHERE p.resource_type IN ('room','room-booking'))                                                     AS grants,
+             JOIN roles r ON r.id = rp.role_id
+            WHERE p.resource_type IN ('room','room-booking')
+              AND r.company_id IS NULL)                                                                           AS grants,
           (SELECT count(*) FROM notification_events
             WHERE company_id IS NULL AND deleted_at IS NULL AND module_code = 'ROOM')                            AS events,
           (SELECT count(*) FROM notification_templates t JOIN notification_events e ON e.id = t.event_id
             WHERE t.company_id IS NULL AND t.deleted_at IS NULL AND e.company_id IS NULL AND e.module_code = 'ROOM') AS templates,
           (SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'audit_logs_object_type_chk')      AS audit_def`;
       const before = (await direct.query(COUNTS)).rows[0];
+      // Chống xanh-RỖNG: vế lọc sở hữu ở trên mà lọc trượt hết thì `0 === 0` vẫn đúng ⇒ ca chết âm thầm.
+      expect(Number(before.grants)).toBeGreaterThan(0);
       for (const file of [
         "0554_s11roomdb1_seed_role_perms_audit.sql",
         "0555_s11roomdb1_noti_room.sql",

@@ -860,14 +860,27 @@ describe.skipIf(!hasDb)("S11-ASSET-DB-1 · bất biến nền dữ liệu ASSET 
           (SELECT count(*) FROM roles WHERE name = 'asset-manager' AND company_id IS NULL AND deleted_at IS NULL) AS roles,
           (SELECT count(*) FROM permissions
             WHERE resource_type IN ('asset','asset-category','asset-maintenance','asset-inventory'))            AS perms,
+          -- S18-QA-ASSETFLAKE-1: vế "r.company_id IS NULL" KHÔNG phải nới assert — nó là phạm vi SỞ HỮU.
+          -- 0550 chỉ cấp cho role HỆ THỐNG (vòng lặp grant resolve role bằng company_id IS NULL, không
+          -- thấy thì RAISE EXCEPTION) ⇒ 28 hàng §9d. Counter cũ thiếu vế này nên đếm cả role CỦA CÔNG TY
+          -- FIXTURE: mỗi spec boot AppModule sinh một role "super-admin" company-scoped mang TRỌN catalog
+          -- (= đúng 11 cặp asset), rồi cleanupTenants của spec đó xoá đi. Trúng cửa sổ giữa hai lần chụp
+          -- ⇒ lệch ±11 mà chẳng nói gì về tính idempotent. Đo được: plan §4.1 lượt 3/5 đỏ đúng ±11
+          -- (116 → 105); §5 có phép đếm tất định 28 (sở hữu) vs 105 (không lọc).
+          -- Khuôn lấy từ s12-recruit-db1-invariants (WO sau đã vá đúng chỗ này).
           (SELECT count(*) FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
-            WHERE p.resource_type IN ('asset','asset-category','asset-maintenance','asset-inventory'))            AS grants,
+             JOIN roles r ON r.id = rp.role_id
+            WHERE p.resource_type IN ('asset','asset-category','asset-maintenance','asset-inventory')
+              AND r.company_id IS NULL)                                                                          AS grants,
           (SELECT count(*) FROM notification_events
             WHERE company_id IS NULL AND deleted_at IS NULL AND module_code = 'ASSET')                          AS events,
           (SELECT count(*) FROM notification_templates t JOIN notification_events e ON e.id = t.event_id
             WHERE t.company_id IS NULL AND t.deleted_at IS NULL AND e.company_id IS NULL AND e.module_code = 'ASSET') AS templates,
           (SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'audit_logs_object_type_chk')      AS audit_def`;
       const before = (await direct.query(COUNTS)).rows[0];
+      // Chống xanh-RỖNG: vế lọc sở hữu ở trên mà lọc trượt hết (đổi tên role, đổi resource_type) thì
+      // `0 === 0` vẫn đúng và ca này chết âm thầm. Neo "khác 0" ở đây; con số CHÍNH XÁC 28 do F1 ghim.
+      expect(Number(before.grants)).toBeGreaterThan(0);
       for (const file of [
         "0550_s11assetdb1_seed_role_perms_audit.sql",
         "0551_s11assetdb1_noti_asset.sql",
