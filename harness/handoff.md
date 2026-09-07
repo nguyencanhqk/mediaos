@@ -2,6 +2,65 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-07 (c) — S18-QA-ASSETFLAKE-1 → **PR #485 MỞ** (🟡, có nhãn auto-merge, vẫn chờ 1 review NGƯỜI)
+
+**Kết quả:** ca `H1` của `s11-asset-db1-invariants` hết đỏ-giả. `check.sh --all --lane-db=s18assetflake`
+**XANH 9/9** trên lane **vừa `--reset`**. LIGHT gate `typescript-reviewer` **PASS** (0 phát hiện).
+Không code sản phẩm, không migration. Plan đầy đủ số đo: `docs/plans/S18-QA-ASSETFLAKE-1.md`.
+
+### Điều đắt nhất phiên này mua được — ĐỪNG ĐO LẠI
+
+**Trường `grants` của mọi ca "replay migration rồi so count" phải lọc theo phạm vi SỞ HỮU.**
+`role_permissions` không có `company_id`, nên đếm theo `permissions.resource_type` là đếm luôn hàng
+của công ty fixture. Mà **mỗi int-spec boot `AppModule` sinh một role `super-admin` COMPANY-SCOPED
+mang TRỌN catalog** (`super-admin-bootstrap.service.ts:94-113`, log `granted 411 catalog
+permissions`) ⇒ mỗi spec đẩy counter đúng bằng **số cặp của module đó** (ASSET = 11) khi seed, rồi
+kéo về khi `cleanupTenants`. Đo tất định trên lane: **28** (sở hữu) vs **105** (counter cũ).
+
+**Vì sao CI chưa từng đỏ mà local đỏ — KHÔNG phải vì CI sạch hơn.** `super-admin` sinh ở CI y hệt.
+Khác là _khối lượng_: `LANE_DB` ở local bật thêm cả họ spec `skipIf(!hasLaneDb)` (`s11-asset-qa1-*`,
+`asset-be1-*`, `dashboard-office-widgets`…) ⇒ nhiều vòng seed/cleanup công ty hơn hẳn trong cùng
+chunk. **Xanh ở CI là may, không phải bằng chứng.**
+
+**Ranh giới chunk trôi mỗi lần thêm/bớt một spec file** (chunk 40 file, chia theo tổng số file của
+package) ⇒ cùng một ca lúc đỏ lúc xanh giữa các wave mà chẳng ai đụng vào module đó. Đừng truy vào
+diff của mình khi thấy một ca lạ đỏ trong lane chung.
+
+**Tỉ lệ đỏ của int-spec đi theo ĐỘ BẨN của lane DB.** Đo được ở đây: `task-pipeline-backfill-0500`
+dính FK **0/5** lượt khi lane vừa dựng · **2/6** sau khi lane tích rác (**681 companies · 80
+projects · 999 role tenant** sót lại từ những chunk crash hạ tầng — chunk chết thì `afterAll`
+không chạy) · **0/1** ngay sau `--reset`. ⇒ "chạy 5 lượt trên một lane" **không** phải 5 phép đo
+cùng điều kiện.
+
+### Cách làm đã hiệu quả, giữ lại
+
+- **ĐO TRƯỚC, VÁ SAU.** 5 lượt `chunk-test.mjs` cho tỉ lệ **1/5** + diff chỉ đúng một trường ⇒
+  loại được cả H-B (đua CHECK) lẫn H-C, và chứng minh migration VẪN idempotent. Không có diff đó
+  thì mọi kết luận là suy đoán (hai phiên trước chỉ ghi tay "H1 đỏ", vô dụng cho phiên này).
+- **Đột biến để chứng minh ca không xanh-RỖNG:** thêm tạm 1 câu `INSERT … 'DENY'` cho role hệ thống
+  vào 0550 ⇒ H1 ĐỎ (`grants` 28 → 29). Rồi `git checkout` file + `diff` với bản chép trước đột biến
+  (byte-giống) + dọn hàng lạ khỏi lane. Chép bản gốc ra scratchpad TRƯỚC khi đột biến.
+- **Nói thẳng với reviewer là được dừng ở review TĨNH** + liệt kê sẵn thứ mình đã chạy. Reviewer
+  tuân thủ, tự chạy `tsc`/`eslint`/`prettier --check` (rẻ) và vẫn trả lời đủ 5 câu hỏi đặt ra.
+
+### Bẫy đã sập
+
+- **Backtick trong comment SQL nằm TRONG template literal ⇒ đóng chuỗi sớm.** Comment `-- … \`x\` …`đặt trong`const COUNTS = \`…\``làm swc báo "Expected a semicolon" ở đúng dòng comment. Dùng
+ngoặc kép trong comment SQL. (Comment`//` sau khi chuỗi đã đóng thì backtick vô hại.)
+
+### Còn lại cho phiên sau
+
+- **PR #485 chờ 1 review NGƯỜI** (đã có nhãn auto-merge, `mergeStateStatus=BLOCKED`). **#484**
+  (RESETMETA) và các PR cũ vẫn theo trạng thái riêng của chúng.
+- **Seed mới `S18-QA-PIPELINEREPLAY-1`** 🟡: `task-pipeline-backfill-0500` replay 0500 — backfill
+  TOÀN CỤC nên ghi lên project của spec khác ⇒ FK `project_states_project_id_fkey`. WO đó phải đo
+  trên **CẢ HAI** trạng thái lane (vừa dựng vs dùng lại), đo một trạng thái là ra tỉ lệ sai.
+- **Lane DB tồn đọng:** `mediaos_s18assetflake` (DROP sau khi #485 merge) + danh sách tồn của hai
+  phiên trước (`mediaos_s18resetmeta`, `mediaos_s18twofadel`, …). `docker exec mediaos-postgres psql
+-U mediaos -d postgres -c "SELECT datname…"` đang liệt kê **rất nhiều** lane cũ.
+- **Chưa vá, đã ghi:** phép đếm của H1 mù với "đổi scope" (0550 re-scope bằng DELETE+INSERT ⇒ tổng
+  số hàng không đổi). Giới hạn CÓ SẴN, không phải do bản vá này; F1 mới là chỗ ghim ma trận §9d.
+
 ## Phiên 2026-09-07 (b) — S18-AUTH-RESETMETA-1 → **PR #484 MỞ**, chờ người chốt
 
 > ⚠️ Nhánh này cắt từ master nên KHÔNG thấy mục bàn giao của `S18-AUTH-2FADELETED-1` (PR #483, vẫn
@@ -53,6 +112,7 @@ gọi. Chuỗi đó hoàn toàn kín (private, 1 caller) nên nối dây bán k�
 - **Sau khi #483 merge:** thêm `ip`/`userAgent` vào `done_when` của `S18-AUTH-RESTORE2FA-1` (WO đó được
   seed TRONG #483, không có trên master — nợ N1 treo vào đó).
 - **Lane DB tồn đọng:** thêm `mediaos_s18resetmeta` vào danh sách xoá của phiên trước.
+
 ## Phiên 2026-09-07 — S18-AUTH-2FADELETED-1 → **PR #483 MỞ**, chờ người chốt
 
 **Kết quả:** tài khoản đã xoá mềm hết tắt được 2FA. `harness/check.sh --all --lane-db=s18twofadel`
@@ -72,7 +132,7 @@ chữ ký riêng của L1 (`auth.2fa_disable_denied`=1 **và** `REAUTH_FAILED`=1
 ### Ba cái bẫy đã sập (ghi để phiên sau khỏi sập lại)
 
 1. **Chép D1 của `#482` sang đây là SAI.** #482 giữ nhánh `!row` nguyên vẹn vì ở đó câu SELECT
-   *đã* lọc `deleted_at` ⇒ user xoá mềm *đã* để lại `REAUTH_FAILED`, đổi đi là xoá vết. Ở đây SELECT
+   _đã_ lọc `deleted_at` ⇒ user xoá mềm _đã_ để lại `REAUTH_FAILED`, đổi đi là xoá vết. Ở đây SELECT
    **trần** ⇒ họ KHÔNG đi vào `!row`, họ đi thẳng tới **thành công**. Không có vết nào để bảo tồn —
    nên phải **THÊM** `auth.2fa_disable_denied`, nếu không đường tấn công CHÍNH im lặng còn đường phụ
    lại có vết (**quan sát bị đảo ngược**). `plan-reviewer` bắt được; tôi đã chép nhầm tiền đề.
@@ -153,7 +213,7 @@ psql "$PROD_URL" -f docs/plans/S14-SEC-CAPWILDCARD-1.census.sql   # chỉ-đọc
 Vòng 1 BLOCK v1 (6 mục). Vòng 2 BLOCK v2 (6 mục). Hai mục đáng nhớ nhất:
 
 - **B1/v2 — break-glass lọt vào caps.** `permission.decide.ts:98-101` chặn `needsObjectGrant =
-  objectGrantRequired ?? (isSensitive && requiresReauth)` **TRƯỚC** company-tier. Vị ngữ v2 thiếu vế này
+objectGrantRequired ?? (isSensitive && requiresReauth)` **TRƯỚC** company-tier. Vị ngữ v2 thiếu vế này
   ⇒ grant exact `reveal-secret:platform-account` sẽ bật `caps[...] = true` trong khi `can()` không bao
   giờ ALLOW. ⇒ v3 §4.2-(3) thêm tập `EXCLUDED`.
 - **B4/v2 — tôi trình bày SAI cho owner.** Đã nói allowlist là "hàng rào tuỳ tiện". **Sai**: tiêu chí có
@@ -175,7 +235,7 @@ prettier ổn định (chỉ căn lại độ rộng cột).
 - `docs/plans/S14-SEC-CAPWILDCARD-1.census.sql` — 6 câu, chỉ-đọc, chạy sạch trên cả hai DB. Danh sách 69
   cặp allowlist trong Q4 **sinh tự động** từ `permission.service.ts` ⇒ sinh lại nếu allowlist đổi.
 - `backlog.mjs`: `paths` 6→9 (**còn thiếu `apps/console/**`** — nới lúc code, plan §13.1),
-  `done_when` 5→10, `status: blocked`.
+`done_when`5→10,`status: blocked`.
 
 ### Chi phí
 
@@ -204,6 +264,7 @@ ngay trong PR; phần còn lại đẩy sang follow-up (liệt kê trong mô t�
 wildcard** ⇒ nếu PROD cũng 0 thì đây là **nợ SẠCH**, 0 người gặp.
 
 Phân tích đã làm sẵn (đừng đo lại):
+
 - `permission.service.ts` `getCapabilities()` lọc `!g.isSensitive` — cờ của **HÀNG GRANT**. Hàng `*:*`
   có `is_sensitive=false` ⇒ sống sót ⇒ publish `caps["*:*"]=true`.
 - `packages/web-core/src/hooks/use-can.ts:16-22` `useCan` rơi xuống `caps["*:*"]` ⇒ FE render màn
@@ -217,6 +278,7 @@ Phân tích đã làm sẵn (đừng đo lại):
   Nhớ **BỐN hình dạng wildcard** (`permission-grant-census-must-cover-four-wildcard-shapes`).
 
 **`S14-FE-DEBT-1` 🟢 — owner ĐÃ CHỐT PHẠM VI 04/09.** Census đầy đủ đã đo (đừng chạy lại, tốn):
+
 - **Phân trang: 38 nơi render.** 1 shared (`packages/ui` `data-table.tsx:213-235`, chỉ client-side) ·
   2 shared app-local đặt nhầm chỗ (`AuthLogPagination` ở `routes/system/auth-logs/AuthLogControls.tsx:112`,
   `AuditLogPagination` ở `routes/system/foundation/audit-logs/AuditLogControls.tsx:112` — file thứ 2 tự
@@ -289,8 +351,8 @@ gắn nhãn auto-merge**, để người chốt.
 ### Ba điều đáng nhớ (đã đóng băng vào plan §12–§13)
 
 1. **Plan đếm THIẾU cổng census: có BẢY, không phải sáu.** Cổng thứ 7 là FE
-   `recruit-wiring.spec.ts` — nó đọc file BE bằng `fs`, ghim 32 cặp và có ca *"không resource nào KHÁC
-   `candidate` bị sensitive"*. Đã vá theo hướng **ghim TẬP, không ghim TÊN**.
+   `recruit-wiring.spec.ts` — nó đọc file BE bằng `fs`, ghim 32 cặp và có ca _"không resource nào KHÁC
+   `candidate` bị sensitive"_. Đã vá theo hướng **ghim TẬP, không ghim TÊN**.
 2. **Ca `/auth/me` (K1) đã ĐỘT BIẾN để chứng minh không xanh-rỗng:** gỡ dòng allowlist ⇒ K1 đỏ
    (`expected undefined to be true`). Lớp lỗi CAP-2 này đã lặp 12+ lần mà trước đây không có ca đo.
 3. **Đo thay vì tin lời khai:** replay `0569` lần 2 trên lane DB cho `INSERT 0 0` + 2 khối verify xanh;
@@ -308,7 +370,7 @@ gắn nhãn auto-merge**, để người chốt.
 ### Friction
 
 - **Chi phí phiên chạm $293.80** — riêng 3 reviewer FULL gate đốt ~$160 (security 181k token, silent-
-  failure 143k, database 88k *mà không ra verdict*). `database-reviewer` bị hook chi phí cắt giữa chừng
+  failure 143k, database 88k _mà không ra verdict_). `database-reviewer` bị hook chi phí cắt giữa chừng
   và trả về câu hỏi thay vì kết luận ⇒ **tiền mất, verdict không có**. Bài học: với lane vùng đỏ, chạy
   reviewer **tuần tự và hỏi ĐÚNG thứ mình không tự đo được**; những câu như "index có tồn tại không",
   "canLink có chạy ngoài tx không", "migration có idempotent không" thì tự đo bằng 1 câu SQL / 1 lần
@@ -326,7 +388,7 @@ Dừng CÓ CHỦ ĐÍCH ở ranh giới sạch vì chi phí phiên chạm $174 �
 
 1. **Hướng = wrapper RECRUIT**, KHÔNG cấp cặp `foundation-file` cho recruiter/hr (WO seed viết sai hướng).
 2. **`hr` được đủ 4 thao tác CV như `recruiter`.**
-3. *(người thực hiện tự quyết, owner chưa bác)* KHÔNG cấp `update:candidate` cho hr — SPEC-12 §11:276
+3. _(người thực hiện tự quyết, owner chưa bác)_ KHÔNG cấp `update:candidate` cho hr — SPEC-12 §11:276
    chốt cặp đó cho thấy email/phone KHÔNG che ⇒ sẽ bỏ mask PII toàn role hr. Thay bằng cặp ghi-tệp riêng.
 
 ### Vì sao WO seed sai hướng (đo trên DB thật, không suy đoán)
@@ -344,7 +406,7 @@ Cấp `view:foundation-file` cho recruiter/hr sẽ mở **màn quản trị `Sys
 - **`apps/api/migrations/0569_s14recruitfilegrant1_candidate_file_perm.sql`** + journal idx 236.
   **ĐÃ CHẠY THẬT 2 LẦN trên `mediaos_filegrant1`**: lần 1 seed 1 cặp + 3 grant, lần 2 idempotent
   (0 INSERT), cả 4 khối verify xanh. State: `recruiter|hr|company-admin × upload:candidate-file
-  × ALLOW@Company`, `is_sensitive=true`.
+× ALLOW@Company`, `is_sensitive=true`.
 - **`harness/backlog.mjs`** — layer `DB+BE+FE`, paths 7→14, done_when +1 (hướng owner chốt).
 - Lane DB `mediaos_filegrant1` sẵn sàng (236 migration + 0569).
 

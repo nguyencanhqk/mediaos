@@ -17584,6 +17584,43 @@ export const backlog = [
     notes: [
       "🟡 LIGHT. Giá trị là cắt tiếng ồn: cùng một ca đỏ hai wave liên tiếp ⇒ mọi phiên sau đều phải tự hỏi 'flake hay thật', đó là thuế đánh vào mọi WO.",
       "⚠️ Bằng chứng hiện có là GHI TAY từ hai phiên trước, chưa ai đo lại có kiểm soát — bước 1 của WO là đo, không phải vá.",
+      "ĐO XONG 07/09/2026 (plan §4.1): 1/5 lượt đỏ. Diff chỉ vào MỘT trường `grants` (116→105, −11); `audit_def`/`perms`/`roles`/`events`/`templates` GIỐNG HỆT ⇒ replay 0550+0551 VẪN idempotent, KHÔNG phải hồi quy ASSET (done_when #5 không kích hoạt, giữ zone 🟡).",
+      "GỐC (plan §5): `grants` là trường DUY NHẤT thiếu vế sở hữu ⇒ đếm cả role của công ty fixture. Mỗi int-spec boot AppModule sinh một role `super-admin` COMPANY-SCOPED mang trọn catalog = đúng 11 cặp asset (`super-admin-bootstrap.service.ts:94-113`), `cleanupTenants` xoá đi ⇒ ±11. Đếm tất định trên lane: 28 (sở hữu) vs 105 (không lọc).",
+      "VÁ: thêm `JOIN roles r … AND r.company_id IS NULL` (khuôn có sẵn ở `s12-recruit-db1-invariants:1000`) + neo chống xanh-RỖNG `before.grants > 0`. Vá cùng lớp lỗi cho `s11-room-db1-invariants` (chưa từng quan sát đỏ — vá theo lớp, không theo sự cố). `s13-payroll`/`s7-chat-db1-invariants` KHÔNG có ca kiểu này.",
+    ],
+  },
+  {
+    id: "S18-QA-PIPELINEREPLAY-1",
+    module: "QA",
+    layer: "BE",
+    title:
+      "`task-pipeline-backfill-0500` replay migration 0500 lên TOÀN BỘ project của lane ⇒ FK `project_states_project_id_fkey` vỡ khi spec khác dọn tenant — cùng họ 'replay spec vs fixture song song', khác cơ chế với S18-QA-ASSETFLAKE-1",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/test/integration/task-pipeline-backfill-0500.int-spec.ts",
+      "apps/api/test/integration/**",
+      "docs/plans/S18-QA-PIPELINEREPLAY-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S18-QA-PIPELINEREPLAY-1.md",
+    src: [
+      'ĐO ĐƯỢC trong S18-QA-ASSETFLAKE-1 (07/09/2026, lượt xác minh 1/5 sau vá): `error: insert or update on table "project_states" violates foreign key constraint "project_states_project_id_fkey"` tại `task-pipeline-backfill-0500.int-spec.ts:150` (câu replay 0500). KHÔNG xuất hiện ở 5 lượt trước đó ⇒ tỉ lệ chưa biết, phải đo.',
+      "Khác cơ chế với ASSETFLAKE: ở đó là phép ĐẾM thiếu vế sở hữu; ở đây replay 0500 là backfill TOÀN CỤC (không giới hạn tenant của spec) nên nó GHI lên project của spec khác — trúng lúc `cleanupTenants` của spec đó xoá project thì FK vỡ.",
+      "memory fresh-lane-db-exposes-teardown-ri-race · parallel-int-specs-share-one-outbox",
+      "MANH MỐI có số (plan S18-QA-ASSETFLAKE-1 §9.1): 0/5 lượt dính khi lane vừa dựng, 2/6 lượt dính sau khi lane tích rác (681 companies · 80 projects · 999 role tenant, sót từ chunk crash — chunk chết thì cleanupTenants không chạy). 0500 backfill MỌI project ⇒ bán kính ghi phình theo rác. ⇒ WO này phải đo trên CẢ HAI trạng thái lane (vừa dựng vs dùng lại), đo một trạng thái là ra tỉ lệ sai.",
+    ],
+    done_when: [
+      "TÁI HIỆN có kiểm soát (n≥5 lane chung) ra tỉ lệ đỏ — 1 lần quan sát KHÔNG đủ để gọi tên",
+      "Chốt hình dạng vá: giới hạn phạm vi replay theo tenant của spec, hay cô lập bằng khoá — KHÔNG retry, KHÔNG nới assert, KHÔNG miễn trừ ở cổng",
+      "Giữ được điều ca đang đo (0500 backfill/heal/idempotent) — chứng minh bằng đột biến: làm 0500 sai thì ca vẫn ĐỎ",
+      "Chạy lại n≥5: 0/5 đỏ ở ca này",
+    ],
+    notes: [
+      "🟡 LIGHT. Cùng động cơ với S18-QA-ASSETFLAKE-1: mỗi ca đỏ-không-thật là thuế đánh vào MỌI WO sau.",
+      "Đọc `docs/plans/S18-QA-ASSETFLAKE-1.md` §4/§5 trước — giao thức đo (5 lượt `chunk-test.mjs` trên lane riêng) dùng lại được nguyên xi.",
     ],
   },
   {
