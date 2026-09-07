@@ -201,6 +201,7 @@ describe.skipIf(!runDb)("S2-AUTH-BE-8 per-emit-site — user_security_events (SP
         { id: subject.id, companyId: A.companyId },
         LOGIN_PW,
         NEW_PW,
+        {},
       );
 
       const events = await eventsForUser(subject.id);
@@ -241,7 +242,7 @@ describe.skipIf(!runDb)("S2-AUTH-BE-8 per-emit-site — user_security_events (SP
         [A.companyId, subject.id, tokens.hashToken(scoped)],
       );
 
-      await authService.resetPassword({ token: scoped, newPassword: NEW_PW });
+      await authService.resetPassword({ token: scoped, newPassword: NEW_PW }, {});
 
       const events = await eventsForUser(subject.id);
       expectExactEvents(events, ["PASSWORD_RESET_COMPLETED", "ALL_SESSIONS_REVOKED"]);

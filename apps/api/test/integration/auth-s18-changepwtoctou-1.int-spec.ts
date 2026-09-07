@@ -214,21 +214,19 @@ describe.skipIf(!hasDb)("S18-AUTH-CHANGEPWTOCTOU-1 — đổi mật khẩu trên
     // CALL-THROUGH, không thay thế: tự mở `db.transaction()` thì GUC `app.current_company_id` không
     // được set ⇒ FORCE RLS trả 0 hàng ⇒ câu UPDATE khớp 0 hàng vì lý do SAI ⇒ bài xanh mà chứng minh
     // nhầm thứ.
-    const spy = vi
-      .spyOn(dbsvc, "withTenant")
-      .mockImplementation((companyId, fn) =>
-        // Chỉ bọc tx của ĐÚNG công ty test: `withTenant` là điểm vào dùng chung của cả app, và một
-        // job/scheduler do AppModule khởi động có thể mở tx trong cửa sổ này và ăn mất suất chặn duy
-        // nhất. Lọc theo companyId thu hẹp cửa đó (bài vẫn ĐỎ ồn ào chứ không xanh giả nếu trượt).
-        companyId === A.companyId
-          ? original(companyId, (tx) =>
-              fn(proxyTx(tx as object, [{ passwordHash: before.hash }], counter)),
-            )
-          : original(companyId, fn),
-      );
+    const spy = vi.spyOn(dbsvc, "withTenant").mockImplementation((companyId, fn) =>
+      // Chỉ bọc tx của ĐÚNG công ty test: `withTenant` là điểm vào dùng chung của cả app, và một
+      // job/scheduler do AppModule khởi động có thể mở tx trong cửa sổ này và ăn mất suất chặn duy
+      // nhất. Lọc theo companyId thu hẹp cửa đó (bài vẫn ĐỎ ồn ào chứ không xanh giả nếu trượt).
+      companyId === A.companyId
+        ? original(companyId, (tx) =>
+            fn(proxyTx(tx as object, [{ passwordHash: before.hash }], counter)),
+          )
+        : original(companyId, fn),
+    );
     try {
       await expect(
-        auth.changePassword({ id: target.id, companyId: A.companyId }, PASSWORD, NEW_PASSWORD),
+        auth.changePassword({ id: target.id, companyId: A.companyId }, PASSWORD, NEW_PASSWORD, {}),
       ).rejects.toSatisfy((err: unknown) => {
         const e = err as { status?: number; message?: string };
         // 401 như mọi nhánh hỏng khác (không đẻ status mới), nhưng KHÔNG được nói dối là sai mật
@@ -276,7 +274,7 @@ describe.skipIf(!hasDb)("S18-AUTH-CHANGEPWTOCTOU-1 — đổi mật khẩu trên
     await softDelete(target.id);
 
     await expect(
-      auth.changePassword({ id: target.id, companyId: A.companyId }, PASSWORD, NEW_PASSWORD),
+      auth.changePassword({ id: target.id, companyId: A.companyId }, PASSWORD, NEW_PASSWORD, {}),
     ).rejects.toSatisfy(
       (err: unknown) => (err as { message?: string }).message === "Mật khẩu hiện tại không đúng.",
     );

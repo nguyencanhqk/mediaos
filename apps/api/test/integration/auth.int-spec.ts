@@ -166,11 +166,11 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
 
     const NEW_PW = "BrandNewPw!2026";
     await expect(
-      fresh.resetPassword({ token: resetToken, newPassword: NEW_PW }),
+      fresh.resetPassword({ token: resetToken, newPassword: NEW_PW }, {}),
     ).resolves.toBeUndefined();
     // dùng lại token → từ chối
     await expect(
-      fresh.resetPassword({ token: resetToken, newPassword: "another!Pw1" }),
+      fresh.resetPassword({ token: resetToken, newPassword: "another!Pw1" }, {}),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     // mật khẩu mới đăng nhập được
     const logged = expectTokens(

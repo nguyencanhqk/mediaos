@@ -121,16 +121,19 @@ describe.skipIf(!hasLaneDb)("S2-AUTH-BE-4 reset/forgot/change deny-path uniform"
   // ── uniform reset error (no enumeration / no expired-vs-used signal) ──────────────
   it("invalid token → 401 ĐỒNG NHẤT", async () => {
     await expect(
-      auth.resetPassword({
-        token: `${A.companyId}.not-a-real-token`,
-        newPassword: "WhatEver!2026",
-      }),
+      auth.resetPassword(
+        {
+          token: `${A.companyId}.not-a-real-token`,
+          newPassword: "WhatEver!2026",
+        },
+        {},
+      ),
     ).rejects.toMatchObject({ message: UNIFORM });
   });
 
   it("token sai định dạng (không scoped) → 401 CÙNG message (không lộ lý do)", async () => {
     await expect(
-      auth.resetPassword({ token: "garbage-no-dot", newPassword: "WhatEver!2026" }),
+      auth.resetPassword({ token: "garbage-no-dot", newPassword: "WhatEver!2026" }, {}),
     ).rejects.toMatchObject({ message: UNIFORM });
   });
 
@@ -144,15 +147,17 @@ describe.skipIf(!hasLaneDb)("S2-AUTH-BE-4 reset/forgot/change deny-path uniform"
       [A.companyId, userId, tok.hashToken(plainExpired)],
     );
     let expiredErr: unknown;
-    await auth.resetPassword({ token: plainExpired, newPassword: "WhatEver!2026" }).catch((e) => {
-      expiredErr = e;
-    });
+    await auth
+      .resetPassword({ token: plainExpired, newPassword: "WhatEver!2026" }, {})
+      .catch((e) => {
+        expiredErr = e;
+      });
 
     // used: tạo token thật rồi tiêu thụ 1 lần, sau đó dùng lại.
     const usedToken = await requestResetToken();
-    await auth.resetPassword({ token: usedToken, newPassword: "FirstUse!2026" });
+    await auth.resetPassword({ token: usedToken, newPassword: "FirstUse!2026" }, {});
     let usedErr: unknown;
-    await auth.resetPassword({ token: usedToken, newPassword: "SecondUse!2026" }).catch((e) => {
+    await auth.resetPassword({ token: usedToken, newPassword: "SecondUse!2026" }, {}).catch((e) => {
       usedErr = e;
     });
 
@@ -212,7 +217,7 @@ describe.skipIf(!hasLaneDb)("S2-AUTH-BE-4 reset/forgot/change deny-path uniform"
     const resetToken = await requestResetToken();
     const NEW_PW = "Reset!NewPw2026";
     await expect(
-      auth.resetPassword({ token: resetToken, newPassword: NEW_PW }),
+      auth.resetPassword({ token: resetToken, newPassword: NEW_PW }, {}),
     ).resolves.toBeUndefined();
 
     // used_at đã set trên row tương ứng.
@@ -260,7 +265,12 @@ describe.skipIf(!hasLaneDb)("S2-AUTH-BE-4 reset/forgot/change deny-path uniform"
   it("change-password sai currentPassword → 401 + ZERO mutation (hash giữ nguyên)", async () => {
     const before = await direct.query(`SELECT password_hash FROM users WHERE id = $1`, [userId]);
     await expect(
-      auth.changePassword({ id: userId, companyId: A.companyId }, "wrong-current", "NewPw!2026xyz"),
+      auth.changePassword(
+        { id: userId, companyId: A.companyId },
+        "wrong-current",
+        "NewPw!2026xyz",
+        {},
+      ),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     const after = await direct.query(`SELECT password_hash FROM users WHERE id = $1`, [userId]);
     expect(after.rows[0].password_hash).toBe(before.rows[0].password_hash);
@@ -273,7 +283,7 @@ describe.skipIf(!hasLaneDb)("S2-AUTH-BE-4 reset/forgot/change deny-path uniform"
     );
     const NEW_PW = "Change!NewPw2026";
     await expect(
-      auth.changePassword({ id: userId, companyId: A.companyId }, PASSWORD, NEW_PW),
+      auth.changePassword({ id: userId, companyId: A.companyId }, PASSWORD, NEW_PW, {}),
     ).resolves.toBeUndefined();
     // phiên cũ chết.
     await expect(session.refresh(tokens.refreshToken)).rejects.toBeInstanceOf(

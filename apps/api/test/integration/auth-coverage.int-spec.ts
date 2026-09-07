@@ -125,7 +125,7 @@ describe.skipIf(!hasLaneDb)(
 
       const NEW_PW = "ChangedPw!2026";
       await expect(
-        auth.changePassword({ id: u.id, companyId: A.companyId }, PASSWORD, NEW_PW),
+        auth.changePassword({ id: u.id, companyId: A.companyId }, PASSWORD, NEW_PW, {}),
       ).resolves.toBeUndefined();
 
       // Cả hai refresh token cũ chết (đổi pass = đăng xuất mọi phiên).
@@ -156,7 +156,12 @@ describe.skipIf(!hasLaneDb)(
       const auth = newAuth();
       const u = await freshUser("chpw-bad");
       await expect(
-        auth.changePassword({ id: u.id, companyId: A.companyId }, "wrong-current", "Whatever!2026"),
+        auth.changePassword(
+          { id: u.id, companyId: A.companyId },
+          "wrong-current",
+          "Whatever!2026",
+          {},
+        ),
       ).rejects.toBeInstanceOf(UnauthorizedException);
       // Không đổi: mật khẩu cũ vẫn login được.
       const tokens = expectTokens(
@@ -169,7 +174,7 @@ describe.skipIf(!hasLaneDb)(
       const auth = newAuth();
       const u = await freshUser("chpw-same");
       await expect(
-        auth.changePassword({ id: u.id, companyId: A.companyId }, PASSWORD, PASSWORD),
+        auth.changePassword({ id: u.id, companyId: A.companyId }, PASSWORD, PASSWORD, {}),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -178,11 +183,16 @@ describe.skipIf(!hasLaneDb)(
       const u = await freshUser("chpw-rl");
       for (let i = 0; i < 5; i++) {
         await expect(
-          auth.changePassword({ id: u.id, companyId: A.companyId }, "still-wrong", "NewPw!2026x"),
+          auth.changePassword(
+            { id: u.id, companyId: A.companyId },
+            "still-wrong",
+            "NewPw!2026x",
+            {},
+          ),
         ).rejects.toBeInstanceOf(UnauthorizedException);
       }
       await expect(
-        auth.changePassword({ id: u.id, companyId: A.companyId }, "still-wrong", "NewPw!2026x"),
+        auth.changePassword({ id: u.id, companyId: A.companyId }, "still-wrong", "NewPw!2026x", {}),
       ).rejects.toBeInstanceOf(HttpException);
     });
 

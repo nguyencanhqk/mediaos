@@ -736,6 +736,12 @@ export class AuthService {
     user: { id: string; companyId: string },
     currentPassword: string,
     newPassword: string,
+    // S18-AUTH-RESETMETA-1 — `meta` BẮT BUỘC (mirror `forgotPassword`/`login`, KHÔNG mirror
+    // `refresh(token, meta = {})`). Mặc định `= {}` sẽ làm một caller quên trở nên IM LẶNG ở
+    // compile-time — mà WO này tồn tại chính vì một vết im lặng. Bắt buộc ⇒ caller tương lai không
+    // biên dịch được nếu quên. ⚠️ CẤM đọc bằng `meta?.ip`: nó tái tạo đúng sự im lặng đó, và nếu một
+    // điểm gọi lách `tsc` bằng `as unknown as` thì optional-chaining biến 401 thành 500 âm thầm.
+    meta: RequestMeta,
   ): Promise<void> {
     const rlKey = rateLimitKey("change-pw", `${user.companyId}|${user.id}`);
     if (await this.rateLimiter.isLocked(rlKey)) {
@@ -780,11 +786,7 @@ export class AuthService {
         // (rollback ⇒ cả hai không đổi). Đổi mật khẩu = hết bị ép; /auth/me sau đó trả mustChangePassword=false.
         .set({ passwordHash: newHash, updatedAt: new Date(), mustChangePassword: false })
         .where(
-          and(
-            eq(users.id, user.id),
-            eq(users.companyId, user.companyId),
-            isNull(users.deletedAt),
-          ),
+          and(eq(users.id, user.id), eq(users.companyId, user.companyId), isNull(users.deletedAt)),
         )
         .returning({ id: users.id });
       if (!updated) {
@@ -822,6 +824,10 @@ export class AuthService {
           actorUserId: user.id,
           objectId: user.id,
           after: { reason },
+          // S18-AUTH-RESETMETA-1 — `actorUserId` ở đây là CHỦ TÀI KHOẢN, không phải người bấm nút.
+          // Thiếu ip/UA thì vết chỉ nói "chuyện này đã xảy ra với tài khoản X", không trả lời được "AI".
+          ip: meta.ip,
+          userAgent: meta.userAgent,
         });
         // `return` chứ KHÔNG `throw`: tx phải COMMIT để giữ vết audit (ném trong tx = rollback nuốt
         // luôn nó). Trả ở ĐÂY — trước mọi lệnh ghi còn lại — nên `refresh_tokens`, `user_sessions`,
@@ -839,6 +845,8 @@ export class AuthService {
         objectType: "auth",
         actorUserId: user.id,
         objectId: user.id,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       // S2-AUTH-BE-8: dual-write timeline bảo mật TRONG cùng tx (rollback ⇒ 0 orphan). subject=actor=user.
       await this.securityEvents.record(tx, {
@@ -1605,7 +1613,10 @@ export class AuthService {
     if (remaining > 0) await new Promise<void>((resolve) => setTimeout(resolve, remaining));
   }
 
-  async resetPassword(req: ResetPasswordRequest): Promise<void> {
+  // S18-AUTH-RESETMETA-1 — `meta` BẮT BUỘC. `forgotPassword(req, meta)` ngay trên đã nhận từ lâu; đây
+  // là NỬA KIA của cùng một cặp endpoint công khai (mint token ↔ dùng token) mà trước WO này lại mù
+  // với ngữ cảnh request. Xem ghi chú ở `changePassword` về lý do không dùng `= {}` và cấm `meta?.`.
+  async resetPassword(req: ResetPasswordRequest, meta: RequestMeta): Promise<void> {
     const parsed = this.splitScopedToken(req.token);
     if (!parsed) throw new UnauthorizedException("Token không hợp lệ hoặc đã hết hạn.");
     const { companyId, full } = parsed;
@@ -1693,6 +1704,10 @@ export class AuthService {
           actorUserId: row.userId,
           objectId: row.userId,
           after: { reason },
+          // S18-AUTH-RESETMETA-1 — đây là đường CÔNG KHAI không xác thực: `actorUserId` chỉ nói được
+          // "token của ai", còn ip/UA là thứ duy nhất nói được "ai đã dùng nó".
+          ip: meta.ip,
+          userAgent: meta.userAgent,
         });
         // `return` chứ KHÔNG `throw`: tx phải COMMIT để giữ `used_at` vừa đốt + vết audit. Ném trong
         // tx là rollback nuốt cả hai. 401 ném NGOÀI `withTenant`, dùng LẠI đúng câu throw có sẵn ⇒
@@ -1710,6 +1725,8 @@ export class AuthService {
         objectType: "auth",
         actorUserId: row.userId,
         objectId: row.userId,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       // S2-AUTH-BE-8: reset hoàn tất = đổi mật khẩu + thu hồi MỌI phiên → 2 event (dual-write cùng tx).
       await this.securityEvents.record(tx, {
@@ -1737,7 +1754,7 @@ export class AuthService {
 
     if (!target) throw new UnauthorizedException("Token không hợp lệ hoặc đã hết hạn.");
 
-    await this.clearLoginLocksAfterReset(companyId, target);
+    await this.clearLoginLocksAfterReset(companyId, target, meta);
   }
 
   /**
@@ -1770,6 +1787,9 @@ export class AuthService {
   private async clearLoginLocksAfterReset(
     companyId: string,
     target: { userId: string; email: string | null; slug: string | null },
+    // S18-AUTH-RESETMETA-1 — chuỗi này KÍN (private, caller duy nhất là `resetPassword`), nên `meta`
+    // chỉ đi xuyên qua để tới hàng audit `user.login_throttle_cleared` ở `recordFailedLockClear`.
+    meta: RequestMeta,
   ): Promise<void> {
     const { userId, email, slug } = target;
     // Hai nhánh dừng còn lại KHÁC HẲN nhau về mức bất thường — gộp chung một `if` sẽ che nhau khi đọc log:
@@ -1797,7 +1817,7 @@ export class AuthService {
           `resetPassword: gỡ khoá đăng nhập KHÔNG kết luận được (degraded) cho user ${userId} — ` +
             `mật khẩu ĐÃ đổi nhưng người dùng có thể vẫn bị 429`,
         );
-        await this.recordFailedLockClear(companyId, userId, userId, email);
+        await this.recordFailedLockClear(companyId, userId, userId, email, meta);
       }
     } catch (err) {
       // Hợp đồng của ValkeyService là "never throws", nên tới được đây nghĩa là BUG (namespace khoá sai
@@ -1807,7 +1827,7 @@ export class AuthService {
         "resetPassword: gỡ khoá đăng nhập thất bại (mật khẩu ĐÃ đổi — người dùng có thể vẫn bị 429)",
         redactEmailFromDetail(detail, email),
       );
-      await this.recordFailedLockClear(companyId, userId, userId, email);
+      await this.recordFailedLockClear(companyId, userId, userId, email, meta);
     }
   }
 
@@ -1827,6 +1847,7 @@ export class AuthService {
     actorUserId: string,
     targetUserId: string,
     email: string,
+    meta: RequestMeta,
   ): Promise<void> {
     try {
       await this.dbsvc.withTenant(companyId, async (tx) => {
@@ -1836,6 +1857,11 @@ export class AuthService {
           actorUserId,
           objectId: targetUserId,
           after: { ok: false, reason: "password_reset" },
+          // S18-AUTH-RESETMETA-1 — hàng này ghi khi việc gỡ khoá SAU reset thất bại, tức đúng lúc hệ
+          // thống bất thường nhất. `actorUserId === targetUserId` (`:1817`/`:1827` truyền `userId,
+          // userId`) nên nếu không có ip/UA thì vết forensics này không định danh được người thao tác.
+          ip: meta.ip,
+          userAgent: meta.userAgent,
         });
         await this.securityEvents.record(tx, {
           eventType: "USER_UNLOCKED",
