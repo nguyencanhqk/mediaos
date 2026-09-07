@@ -709,12 +709,63 @@ export class AuthService {
       throw tooManyRequests(await this.rateLimiter.remainingLockSecOrNull(rlKey));
     }
     const ok = await this.dbsvc.withTenant(user.companyId, async (tx) => {
+      // S18-AUTH-2FADELETED-1 — ba vế, mỗi vế một lý do:
+      //  • `deleted_at IS NULL` — VẾ CHỐT. Trước WO này KHÔNG có vế này ở ĐÂU CẢ (khác
+      //    `changePassword`, nơi nó ít nhất còn ở câu SELECT) ⇒ tài khoản đã xoá mềm mà access token
+      //    còn trong TTL đưa ĐÚNG mật khẩu thì tắt được 2FA và nhận 200. Ba APP_GUARD đều stateless
+      //    với `users.deleted_at` nên đây là đường ĐI THẲNG, không cần trúng khe race nào.
+      //  • `company_id` — BẤT BIẾN #1 tường minh, không chỉ dựa vào RLS (mirror `resetPassword`).
+      //  • `id` — như cũ.
       const [row] = await tx
         .select({ passwordHash: users.passwordHash })
         .from(users)
-        .where(eq(users.id, user.id))
+        .where(
+          and(
+            eq(users.id, user.id),
+            eq(users.companyId, user.companyId),
+            isNull(users.deletedAt),
+          ),
+        )
         .limit(1);
-      if (!row) return false;
+      if (!row) {
+        // ⚠️ VÌ SAO NHÁNH NÀY PHẢI ĐỂ VẾT (D1) — đừng rút gọn về `return false` trần.
+        //
+        // `S18-AUTH-CHANGEPWTOCTOU-1` cố ý KHÔNG đổi nhánh `!row` của nó, vì ở ĐÓ câu SELECT đã lọc
+        // `deleted_at` từ trước ⇒ user xoá mềm vốn ĐÃ rơi vào đây và vốn ĐÃ để lại `REAUTH_FAILED`;
+        // đổi đi là XOÁ một vết đang có. Lý do đó KHÔNG áp dụng ở đây: trước WO này user xoá mềm
+        // KHÔNG hề đi vào nhánh này — họ đi thẳng tới THÀNH CÔNG. Nếu chỉ siết predicate rồi trả
+        // `false` lặng lẽ thì đường tấn công CHÍNH kết thúc không có tín hiệu bền nào, trong khi
+        // đường phụ (race, chặn trong `TwoFactorService.disable`) lại có audit ⇒ khả năng quan sát
+        // bị ĐẢO NGƯỢC.
+        //
+        // ĐO rồi mới ghi (mirror `resetPassword` + `changePassword`): `.limit(1)` rỗng KHÔNG nói vì
+        // sao. Probe chạy trong CÙNG tenant-tx nên bị FORCE RLS bó vào đúng công ty người gọi ⇒ "0
+        // hàng" không phân biệt được "vắng hàng" với "hàng bị RLS ẩn", và nhãn phải nói đúng thế
+        // (`rls-makes-cross-tenant-look-nonexistent-in-audit-labels`) — nên là `user_absent`, KHÔNG
+        // phải khẳng định "đã xoá".
+        //
+        // Quy gán an toàn: `user` ở đây là `req.user` ⇒ `id`/`companyId` LUÔN của chính người gọi,
+        // không bao giờ cross-tenant (khác `TwoFactorService.disable`, nơi caller truyền `companyId`
+        // rời — xem nhánh `!alive` bên đó).
+        const [probe] = await tx
+          .select({ deletedAt: users.deletedAt })
+          .from(users)
+          .where(eq(users.id, user.id))
+          .limit(1);
+        await this.audit.record(tx, {
+          action: "auth.2fa_disable_denied",
+          objectType: "auth",
+          actorUserId: user.id,
+          objectId: user.id,
+          after: {
+            reason: !probe ? "user_absent" : probe.deletedAt ? "user_deleted" : "state_changed",
+          },
+        });
+        // Trả `false` (KHÔNG ném): tx phải COMMIT để giữ vết audit — ném trong tx = rollback nuốt
+        // luôn nó. Rơi xuống nhánh `!ok` ⇒ GIỮ NGUYÊN hình 401 + phạt rate-limit + `REAUTH_FAILED`
+        // như trước (nợ "nhãn sai" ghi ở plan §7.3, sửa ở WO nhãn chung — không lặng lẽ đổi ở đây).
+        return false;
+      }
       return this.password.verify(row.passwordHash, password);
     });
     if (!ok) {
