@@ -156,7 +156,7 @@ describe.skipIf(!runDb)("S2-AUTH-BE-8 security-event atomicity (rollback → 0 o
 
     const auth = newAuth(new ThrowAfterRecordWriter());
     await expect(
-      auth.changePassword({ id: subject, companyId: A.companyId }, LOGIN_PW, NEW_PW),
+      auth.changePassword({ id: subject, companyId: A.companyId }, LOGIN_PW, NEW_PW, {}),
     ).rejects.toThrow(/simulated downstream mutation failure/);
 
     // 0 orphan event (PASSWORD_CHANGED ghi rồi bị cuốn theo rollback).

@@ -114,6 +114,7 @@ describe.skipIf(!hasDb)("Module 2a self-service account", () => {
         { id: userId, companyId: A.companyId },
         "wrong-current",
         "BrandNewPw!1",
+        {},
       ),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
@@ -128,6 +129,7 @@ describe.skipIf(!hasDb)("Module 2a self-service account", () => {
         { id: userId, companyId: A.companyId },
         "wrong-current-2",
         "Xy!9zzzz",
+        {},
       ),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(await countReauthFailed("change_password")).toBe(before + 1);
@@ -142,7 +144,7 @@ describe.skipIf(!hasDb)("Module 2a self-service account", () => {
     // Dựng khoá bằng chính đường sai mật khẩu (mỗi lượt cũng ghi 1 hàng — đó là trần N/cửa sổ).
     for (let i = 0; i < 5; i += 1) {
       await auth
-        .changePassword({ id: userId, companyId: A.companyId }, `nope-${i}`, "Zz!9aaaa")
+        .changePassword({ id: userId, companyId: A.companyId }, `nope-${i}`, "Zz!9aaaa", {})
         .catch(() => undefined);
     }
     const before = await countReauthFailed("change_password");
@@ -150,7 +152,7 @@ describe.skipIf(!hasDb)("Module 2a self-service account", () => {
     // Ba lượt nữa: nay bucket đã khoá ⇒ 429, và KHÔNG hàng nào được ghi thêm.
     for (let i = 0; i < 3; i += 1) {
       const err = await auth
-        .changePassword({ id: userId, companyId: A.companyId }, "still-wrong", "Zz!9bbbb")
+        .changePassword({ id: userId, companyId: A.companyId }, "still-wrong", "Zz!9bbbb", {})
         .then(() => null)
         .catch((e: unknown) => e);
       expect((err as HttpException)?.getStatus?.()).toBe(429);
@@ -172,10 +174,10 @@ describe.skipIf(!hasDb)("Module 2a self-service account", () => {
 
     const NEXT_PW = "Allow-Case-Pw!2026";
     await expect(
-      auth.changePassword({ id: userId, companyId: A.companyId }, PASSWORD, NEXT_PW),
+      auth.changePassword({ id: userId, companyId: A.companyId }, PASSWORD, NEXT_PW, {}),
     ).resolves.toBeUndefined();
     // trả mật khẩu về giá trị cũ để không ảnh hưởng ca sau trong cùng file
-    await auth.changePassword({ id: userId, companyId: A.companyId }, NEXT_PW, PASSWORD);
+    await auth.changePassword({ id: userId, companyId: A.companyId }, NEXT_PW, PASSWORD, {});
 
     expect(await countReauthFailed("change_password")).toBe(beforeBad);
     const afterOk = await direct
@@ -190,7 +192,7 @@ describe.skipIf(!hasDb)("Module 2a self-service account", () => {
 
   it("changePassword: mật khẩu mới TRÙNG mật khẩu cũ → 400", async () => {
     await expect(
-      newAuth().changePassword({ id: userId, companyId: A.companyId }, PASSWORD, PASSWORD),
+      newAuth().changePassword({ id: userId, companyId: A.companyId }, PASSWORD, PASSWORD, {}),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -203,7 +205,7 @@ describe.skipIf(!hasDb)("Module 2a self-service account", () => {
 
     const NEW_PW = "Even-Newer-Pw!2026";
     await expect(
-      auth.changePassword({ id: userId, companyId: A.companyId }, PASSWORD, NEW_PW),
+      auth.changePassword({ id: userId, companyId: A.companyId }, PASSWORD, NEW_PW, {}),
     ).resolves.toBeUndefined();
 
     // phiên cũ chết: refresh token CŨ (đã revoke) → 401 đồng nhất

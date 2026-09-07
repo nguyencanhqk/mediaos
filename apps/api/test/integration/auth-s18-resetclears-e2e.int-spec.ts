@@ -161,7 +161,7 @@ describe.skipIf(!hasDb)("S18-AUTH-RESETCLEARS-1 — reset mật khẩu gỡ kho�
     expect(await limiter.isLocked(acctKey)).toBe(true);
 
     const token = await requestResetToken(target.email);
-    await auth.resetPassword({ token, newPassword: NEW_PASSWORD });
+    await auth.resetPassword({ token, newPassword: NEW_PASSWORD }, {});
 
     // Bỏ vế xoá `accountKey` trong `clearLoginLocks` ⇒ ca này ĐỎ: từng IP mở ra nhưng bucket tài khoản
     // vẫn chặn, tức người dùng vẫn 429 sau khi vừa tự đặt lại mật khẩu.
@@ -232,7 +232,7 @@ describe.skipIf(!hasDb)("S18-AUTH-RESETCLEARS-1 — reset mật khẩu gỡ kho�
 
     // Token phải lấy TRƯỚC khi trần forgot chặn — lấy lại qua IP khác (bucket per-IP).
     const token = await requestResetToken(target.email);
-    await auth.resetPassword({ token, newPassword: NEW_PASSWORD });
+    await auth.resetPassword({ token, newPassword: NEW_PASSWORD }, {});
 
     // Khoá LOGIN mở — đó là mục đích của WO…
     expect((await throttleOf(target.id)).locked).toBe(false);
@@ -248,7 +248,7 @@ describe.skipIf(!hasDb)("S18-AUTH-RESETCLEARS-1 — reset mật khẩu gỡ kho�
     expect(await limiter.isLocked(twoFaKey)).toBe(true);
 
     const token = await requestResetToken(target.email);
-    await auth.resetPassword({ token, newPassword: NEW_PASSWORD });
+    await auth.resetPassword({ token, newPassword: NEW_PASSWORD }, {});
 
     // Truyền `subject` vào `clearLoginLocks` ở `resetPassword` ⇒ ca này ĐỎ. `rl:2fa` là control DUY
     // NHẤT chặn dò 10⁶ mã TOTP; gỡ được nó bằng một lượt reset là biến 2FA thành hình thức.

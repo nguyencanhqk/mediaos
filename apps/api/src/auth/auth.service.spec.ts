@@ -620,7 +620,7 @@ describe("AuthService.changePassword — clear must_change_password cùng tx (S2
   it("đổi thành công → set mustChangePassword:false trong CÙNG update với password_hash", async () => {
     const { service, setCalls, password, audit } = makeService();
 
-    await expect(service.changePassword(user, "old-pw", "new-pw")).resolves.toBeUndefined();
+    await expect(service.changePassword(user, "old-pw", "new-pw", {})).resolves.toBeUndefined();
 
     // Câu UPDATE users mang password_hash mới PHẢI đồng thời clear cờ (cùng tx, cùng statement).
     const pwUpdate = setCalls.find((c) => "passwordHash" in c);
@@ -648,11 +648,11 @@ describe("AuthService.changePassword — clear must_change_password cùng tx (S2
       const { service, audit, rateLimiter } = makeService({ updateRows: [] });
 
       // 🔴 Trước bản vá: resolves.toBeUndefined() (200 rỗng) ⇒ ca này ĐỎ.
-      await expect(service.changePassword(user, "old-pw", "new-pw")).rejects.toBeInstanceOf(
+      await expect(service.changePassword(user, "old-pw", "new-pw", {})).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
       // Message PHẢI khác nhánh sai-mật-khẩu: người dùng đã đưa ĐÚNG mật khẩu hiện tại.
-      await expect(service.changePassword(user, "old-pw", "new-pw")).rejects.toSatisfy(
+      await expect(service.changePassword(user, "old-pw", "new-pw", {})).rejects.toSatisfy(
         (err: unknown) => (err as Error).message !== "Mật khẩu hiện tại không đúng.",
       );
 
@@ -677,7 +677,7 @@ describe("AuthService.changePassword — clear must_change_password cùng tx (S2
     it("đối chứng DƯƠNG: UPDATE khớp 1 hàng ⇒ thành công + audit + reset khoá (ca deny không xanh-RỖNG)", async () => {
       const { service, audit, rateLimiter } = makeService({ updateRows: [{ id: "user-1" }] });
 
-      await expect(service.changePassword(user, "old-pw", "new-pw")).resolves.toBeUndefined();
+      await expect(service.changePassword(user, "old-pw", "new-pw", {})).resolves.toBeUndefined();
       expect(audit.record).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ action: "auth.password_changed" }),
@@ -685,9 +685,42 @@ describe("AuthService.changePassword — clear must_change_password cùng tx (S2
       expect(rateLimiter.reset).toHaveBeenCalled();
     });
 
+    /**
+     * S18-AUTH-RESETMETA-1 — CẢ HAI hàng audit của `changePassword` phải mang ngữ cảnh request.
+     *
+     * ⚠️ Hằng phải CỤ THỂ và KHÁC NHAU. `expect.objectContaining({ ip: meta.ip })` với `meta = {}`
+     * là assert `undefined` — nó khớp cả khi key hoàn toàn VẮNG ⇒ xanh dù không nối dây gì, đúng
+     * hình dạng xanh-RỖNG mà WO này tồn tại để giết.
+     */
+    it.each([
+      ["auth.password_change_denied", [] as { id: string }[], "unit-ua-change-denied", true],
+      ["auth.password_changed", [{ id: "user-1" }], "unit-ua-change-ok", false],
+    ])(
+      "hàng audit `%s` mang ĐÚNG ip/userAgent của request",
+      async (action, updateRows, ua, shouldThrow) => {
+        const { service, audit } = makeService({ updateRows });
+        const meta = { ip: "203.0.113.9", userAgent: ua };
+        const call = service.changePassword(user, "old-pw", "new-pw", meta);
+
+        // ⚠️ KHÔNG `.catch(() => undefined)`: nuốt kết quả thì ca này đo HẸP HƠN tên gọi của nó — một
+        // hồi quy fail-open (nhánh 0-hàng quay lại "thành công mà rỗng") sẽ đi qua đây mà vẫn xanh.
+        // Ghim luôn hình dạng nhánh, không chỉ nội dung hàng audit (security-reviewer 07/09, LOW).
+        if (shouldThrow) {
+          await expect(call).rejects.toBeInstanceOf(UnauthorizedException);
+        } else {
+          await expect(call).resolves.toBeUndefined();
+        }
+
+        expect(audit.record).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ action, ip: "203.0.113.9", userAgent: ua }),
+        );
+      },
+    );
+
     it("câu UPDATE `users` lọc CẢ `deleted_at IS NULL` LẪN `company_id` — RED nếu thiếu một vế", async () => {
       const { service, wheres } = makeService();
-      await service.changePassword(user, "old-pw", "new-pw");
+      await service.changePassword(user, "old-pw", "new-pw", {});
 
       // ⚠️ Hai vế phải nằm trên CÙNG MỘT `where`. Hai `.some()` độc lập sẽ được thoả bởi HAI câu KHÁC
       // NHAU — câu SELECT hash hiện tại (`:753`) ĐÃ lọc soft-delete nhưng KHÔNG có company_id, nên
@@ -717,7 +750,7 @@ describe("AuthService.changePassword — clear must_change_password cùng tx (S2
       });
 
       // KHÔNG phải UnauthorizedException: 401 ở đây nghĩa là lỗi đã bị nuốt và vết đã mất trong im lặng.
-      await expect(service.changePassword(user, "old-pw", "new-pw")).rejects.toBe(boom);
+      await expect(service.changePassword(user, "old-pw", "new-pw", {})).rejects.toBe(boom);
     });
 
     it("neo D1: SELECT 0 hàng (user đã xoá) ⇒ hành vi CŨ y nguyên — 401 'mật khẩu sai' + phạt", async () => {
@@ -725,7 +758,7 @@ describe("AuthService.changePassword — clear must_change_password cùng tx (S2
       // nay để lại vết BỀN `REAUTH_FAILED`; gộp = xoá một vết bảo mật đang có (plan D1).
       const { service, rateLimiter } = makeService({ selectRows: [] });
 
-      await expect(service.changePassword(user, "old-pw", "new-pw")).rejects.toSatisfy(
+      await expect(service.changePassword(user, "old-pw", "new-pw", {})).rejects.toSatisfy(
         (err: unknown) => (err as Error).message === "Mật khẩu hiện tại không đúng.",
       );
       expect(rateLimiter.recordFailure).toHaveBeenCalled();
@@ -1106,7 +1139,7 @@ describe("AuthService — 429 mang retryAfterSec (S18-AUTH-RETRYAFTER-1)", () =>
   it("changePassword 429 mang số giây, đọc bằng ĐÚNG khoá `change-pw`", async () => {
     const { auth, rateLimiter } = makeReauthAuth(120);
 
-    await expect(auth.changePassword(ACTOR, "old", "new")).rejects.toSatisfy(
+    await expect(auth.changePassword(ACTOR, "old", "new", {})).rejects.toSatisfy(
       (err) => retryAfterOf(err) === "120",
     );
     expect(rateLimiter.remainingLockSecOrNull).toHaveBeenCalledWith(
@@ -1152,7 +1185,7 @@ describe("AuthService — 429 mang retryAfterSec (S18-AUTH-RETRYAFTER-1)", () =>
   it("changePassword TTL `null` ⇒ 429 KHÔNG `details` (hành vi y hệt trước WO này)", async () => {
     const { auth } = makeReauthAuth(null);
 
-    await expect(auth.changePassword(ACTOR, "old", "new")).rejects.toSatisfy(
+    await expect(auth.changePassword(ACTOR, "old", "new", {})).rejects.toSatisfy(
       (err) => retryAfterOf(err) === null,
     );
   });
@@ -1279,7 +1312,7 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
   it("token HỢP LỆ ⇒ gỡ khoá với ĐÚNG 4 đối số: slug/email từ DB · subject undefined · includeForgot=false", async () => {
     const { service, clearLoginLocks } = makeService();
     await expect(
-      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }),
+      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }, {}),
     ).resolves.toBeUndefined();
     // `undefined` ở vế 3 KHÔNG phải thừa: truyền `subject` sẽ gỡ bucket `rl:2fa` — control DUY NHẤT
     // chặn dò TOTP bước-2 — bằng một thao tác chỉ chứng minh quyền kiểm soát HÒM THƯ.
@@ -1313,7 +1346,7 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
   ])("%s ⇒ 401 + TUYỆT ĐỐI không chạm không gian khoá", async (_label, tokenRow) => {
     const { service, clearLoginLocks } = makeService({ tokenRow });
     await expect(
-      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }),
+      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }, {}),
     ).rejects.toThrow("Token không hợp lệ hoặc đã hết hạn.");
     // Gọi clear ở nhánh hỏng = biến một endpoint nhận token TUỲ Ý thành nút gỡ khoá theo email.
     expect(clearLoginLocks).not.toHaveBeenCalled();
@@ -1339,7 +1372,7 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
     for (const tokenRow of rows) {
       const { service } = makeService({ tokenRow });
       await service
-        .resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" })
+        .resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }, {})
         .catch((e: Error) => messages.push(e.message));
     }
     expect(messages).toHaveLength(3);
@@ -1361,7 +1394,7 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
    */
   it("câu UPDATE `users` lọc CẢ `deleted_at IS NULL` LẪN `company_id` — RED nếu thiếu một vế", async () => {
     const { service, wheres } = makeService();
-    await service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" });
+    await service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }, {});
 
     // ⚠️ Hai vế phải nằm trên CÙNG MỘT `where`. Hai `.some()` độc lập sẽ được thoả bởi HAI câu KHÁC
     // NHAU (mỗi câu một vế) ngay khi ai đó thêm một câu `users` thứ hai vào đường này — đúng hình
@@ -1392,9 +1425,9 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
       auditImpl: () => Promise.reject(boom),
     });
     // KHÔNG phải UnauthorizedException: 401 ở đây nghĩa là lỗi đã bị nuốt và vết đã mất trong im lặng.
-    await expect(service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" })).rejects.toBe(
-      boom,
-    );
+    await expect(
+      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }, {}),
+    ).rejects.toBe(boom);
     expect(clearLoginLocks).not.toHaveBeenCalled();
   });
 
@@ -1403,7 +1436,7 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
     // hàng khi một request khác vừa đòi được token. Đây là vế ép single-use thành thật.
     const { service, clearLoginLocks, audit } = makeService({ claimed: [] });
     await expect(
-      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }),
+      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }, {}),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(clearLoginLocks).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
@@ -1415,7 +1448,7 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
       probeRow: [{ deletedAt: new Date() }],
     });
     await expect(
-      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }),
+      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }, {}),
     ).rejects.toBeInstanceOf(UnauthorizedException);
 
     // Vết forensics phải ĐO rồi mới ghi — `reason` suy từ SELECT đo-lý-do, không phải hằng.
@@ -1430,10 +1463,32 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
     expect(clearLoginLocks).not.toHaveBeenCalled();
   });
 
+  /**
+   * S18-AUTH-RESETMETA-1 — neo hàng #3. Đây là đường CÔNG KHAI không xác thực: `actorUserId` chỉ nói
+   * được "token của ai", còn ip/UA là thứ duy nhất nói được "AI đã dùng nó".
+   */
+  it("hàng audit `auth.password_reset_denied` mang ĐÚNG ip/userAgent của request", async () => {
+    const { service, audit } = makeService({
+      updatedRow: [],
+      probeRow: [{ deletedAt: new Date() }],
+    });
+    const meta = { ip: "203.0.113.9", userAgent: "unit-ua-reset-denied" };
+
+    await expect(
+      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }, meta),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(audit.record.mock.calls[0][1]).toMatchObject({
+      action: "auth.password_reset_denied",
+      ip: "203.0.113.9",
+      userAgent: "unit-ua-reset-denied",
+    });
+  });
+
   it("không đọc được slug ⇒ KHÔNG đoán, KHÔNG gỡ, KHÔNG hỏng reset — nhưng PHẢI cảnh báo", async () => {
     const { service, clearLoginLocks, warn } = makeService({ companyRows: [] });
     await expect(
-      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }),
+      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }, {}),
     ).resolves.toBeUndefined();
     expect(clearLoginLocks).not.toHaveBeenCalled();
     // Khác hẳn ca user-xoá-mềm ngay dưới: thiếu hàng `companies` cho `companyId` của một token VỪA
@@ -1447,7 +1502,7 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
     // cho ca lệch dữ liệu, hoặc bồi cảnh báo cho ca bình thường — cặp này ghim cả hai chiều. Vế
     // "user xoá mềm" của cặp cũ đã chuyển lên tầng predicate (xem khối ca ở trên).
     const { service, warn, logger } = makeService();
-    await service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" });
+    await service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }, {});
     expect(warn).not.toHaveBeenCalled();
     expect(logger).not.toHaveBeenCalled();
   });
@@ -1461,21 +1516,63 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
       },
     });
     await expect(
-      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }),
+      service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }, {}),
     ).resolves.toBeUndefined();
     expect(logger).toHaveBeenCalled();
     const actions = audit.record.mock.calls.map((c) => (c[1] as { action: string }).action);
     expect(actions).toContain("user.login_throttle_cleared");
   });
 
+  /**
+   * S18-AUTH-RESETMETA-1 — hàng audit thứ NĂM của đường reset.
+   *
+   * `user.login_throttle_cleared` chỉ tới được khi việc gỡ khoá SAU reset thất bại — tức đúng lúc hệ
+   * thống bất thường nhất, và `actorUserId === objectId` (cả hai đều là nạn nhân). Không có ip/UA thì
+   * vết forensics này không định danh được người thao tác. Đo ở unit vì tới được nó đòi Valkey hỏng.
+   *
+   * Đây cũng là ca duy nhất chứng minh `meta` đi HẾT chuỗi private
+   * `resetPassword` → `clearLoginLocksAfterReset` → `recordFailedLockClear`.
+   */
+  it("hàng thứ 5 `user.login_throttle_cleared` mang ĐÚNG ip/userAgent (meta xuyên hết chuỗi private)", async () => {
+    const { service, audit } = makeService({
+      clearImpl: async () => {
+        throw new Error("ValkeyKeyScopeError: khoá ngoài phạm vi env");
+      },
+    });
+    const meta = { ip: "203.0.113.9", userAgent: "unit-ua-throttle-cleared" };
+
+    await service.resetPassword({ token: TOKEN, newPassword: "N3wPassw0rd" }, meta);
+
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: "user.login_throttle_cleared",
+        ip: "203.0.113.9",
+        userAgent: "unit-ua-throttle-cleared",
+      }),
+    );
+    // …và hàng THÀNH CÔNG của cùng lượt chạy cũng phải mang meta (neo hàng #4).
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: "auth.password_reset",
+        ip: "203.0.113.9",
+        userAgent: "unit-ua-throttle-cleared",
+      }),
+    );
+  });
+
   it("gỡ khoá degraded ⇒ ghi vết USER_UNLOCKED{ok:false}; ca THÀNH CÔNG thì KHÔNG ghi (đối chứng)", async () => {
     const bad = makeService({
       clearImpl: async () => ({ clearedKeys: 8, degraded: true }),
     });
-    await bad.service.resetPassword({
-      token: TOKEN,
-      newPassword: "N3wPassw0rd",
-    });
+    await bad.service.resetPassword(
+      {
+        token: TOKEN,
+        newPassword: "N3wPassw0rd",
+      },
+      {},
+    );
     // Nhánh degraded KHÔNG ném ⇒ nếu chỉ ghi audit thì log/APM im lặng đúng lúc bất thường nhất
     // (mật khẩu đã đổi mà không kết luận được khoá đã gỡ hay chưa).
     expect(bad.logger).toHaveBeenCalled();
@@ -1494,10 +1591,13 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
     // Đối chứng: thiếu vế này thì ca trên vẫn xanh khi code ghi vết VÔ ĐIỀU KIỆN — tức bồi
     // `USER_UNLOCKED` cho tài khoản chưa từng bị khoá, đúng món nợ WO-1 đã ghi ở §10.5.
     const good = makeService();
-    await good.service.resetPassword({
-      token: TOKEN,
-      newPassword: "N3wPassw0rd",
-    });
+    await good.service.resetPassword(
+      {
+        token: TOKEN,
+        newPassword: "N3wPassw0rd",
+      },
+      {},
+    );
     const goodEvents = good.securityEvents.record.mock.calls.map(
       (c) => (c[1] as { eventType: string }).eventType,
     );

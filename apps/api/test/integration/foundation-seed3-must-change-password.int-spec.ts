@@ -273,7 +273,7 @@ describe.skipIf(!runDb)(
     it("change-password — clear must_change_password CÙNG tx (DB false + password rotated); /auth/me → false", async () => {
       const auth = makeAuth();
       // Tiền đề: sau idempotent re-boot, cờ vẫn true (re-ép). Đổi mật khẩu → clear.
-      await auth.changePassword({ id: userId, companyId }, PASSWORD, NEW_PASSWORD);
+      await auth.changePassword({ id: userId, companyId }, PASSWORD, NEW_PASSWORD, {});
 
       // Cờ clear + password rotated CÙNG statement/tx (Lane C) — quan sát qua DB.
       const u = await direct.query<{ must_change_password: boolean; password_hash: string }>(

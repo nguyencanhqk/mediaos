@@ -61,6 +61,58 @@ ngoặc kép trong comment SQL. (Comment`//` sau khi chuỗi đã đóng thì ba
 - **Chưa vá, đã ghi:** phép đếm của H1 mù với "đổi scope" (0550 re-scope bằng DELETE+INSERT ⇒ tổng
   số hàng không đổi). Giới hạn CÓ SẴN, không phải do bản vá này; F1 mới là chỗ ghim ma trận §9d.
 
+## Phiên 2026-09-07 (b) — S18-AUTH-RESETMETA-1 → **PR #484 MỞ**, chờ người chốt
+
+> ⚠️ Nhánh này cắt từ master nên KHÔNG thấy mục bàn giao của `S18-AUTH-2FADELETED-1` (PR #483, vẫn
+> đang mở). Đọc cả hai khi merge.
+
+**Kết quả:** 5 hàng audit của `resetPassword`+`changePassword` mang `ip`/`userAgent`.
+`check.sh --all --lane-db=s18resetmeta` XANH 9/9 (chạy lại cho CẢ commit vá). FULL gate 2 reviewer
+**PASS** (0 CRITICAL, 0 HIGH). Không migration.
+
+### Điều đắt nhất phiên này mua được — ĐỪNG ĐO LẠI
+
+**Đường `reset` và đường `change` KHÁC NHAU về chỗ đặt vế `deleted_at`, nên nhánh tới được cũng khác.**
+`changePassword` lọc `deleted_at` ngay ở **SELECT** ⇒ user xoá mềm rơi vào `bad_credentials`, nhánh đó
+**KHÔNG ghi `audit_logs`** ⇒ ca "user xoá mềm ⇒ `password_change_denied`" trả **0 hàng** = xanh-RỖNG.
+`resetPassword` thì vế đó nằm ở câu **UPDATE** nên tới thẳng được. Tôi đã chép nhầm tiền đề từ đường
+kia; `plan-reviewer` bắt được. Cách tới hàng `password_change_denied` mà vẫn giữ HTTP thật: spy
+`password.hash` (argon2id nằm đúng giữa SELECT và UPDATE), soft-delete qua `directPool` trong đó.
+Memory: `deleted-user-hits-badcreds-not-accountgone`.
+
+**Plan v1 đếm THIẾU một hàng audit.** Có hàng thứ năm `user.login_throttle_cleared`
+(`auth.service.ts:1834`) qua chuỗi private `resetPassword` → `clearLoginLocksAfterReset` →
+`recordFailedLockClear`. Census "grep `audit.record` trong thân method" bỏ sót nó vì nó nằm sau HAI lớp
+gọi. Chuỗi đó hoàn toàn kín (private, 1 caller) nên nối dây bán kính nổ = 0.
+
+**`§shape` kiểu "so hai phản hồi với nhau" tự nó xanh-RỖNG được.**
+`expect(a.error?.code).toBe(b.error?.code)` xanh khi CẢ HAI là `undefined`. Phải có neo TUYỆT ĐỐI
+(`toBeTruthy()`) trước phép so tương đối.
+
+### Bẫy mới gặp
+
+- **prettier với glob rộng reformat 43 file chưa từng đụng** (chúng vốn lệch format trên master) ⇒ diff
+  phình 13→56 file, reviewer FULL gate phải lọc nhiễu. Format theo **danh sách file đã sửa**, không theo
+  glob. Memory: `prettier-glob-reformats-untouched-files`.
+- **Script chèn đối số bằng cân bằng ngoặc gãy ở call có DẤU PHẨY CUỐI** — sinh `f(a, b, c, , {})`.
+  `tsc` bắt được (TS1135), nhưng phải nhớ vá lại 3 chỗ.
+
+### Chi phí
+
+**~$163/phiên** — vượt mốc ~$136/WO đỏ nhưng THẤP HƠN $246 của phiên trước. Cách tiết kiệm có hiệu quả:
+**nói thẳng với reviewer là được phép dừng ở review tĩnh** và liệt kê sẵn thứ mình đã chạy (check.sh,
+đột biến). Cả hai reviewer đều tuân thủ và vẫn bắt được lỗi thật. Giữ cách này.
+
+### Còn lại cho phiên sau
+
+- **PR #484 chờ NGƯỜI chốt** (vùng đỏ, KHÔNG gắn auto-merge). **PR #483 vẫn đang chờ** từ phiên trước.
+- Seed mới: `S18-AUTH-RESETFLOOR-1` 🔴 (oracle timing có sẵn ở `/auth/reset-password` — `done_when` bắt
+  ĐO TRƯỚC, đừng vá theo lý thuyết) · `S18-AUTH-SECEVENTMETA-1` 🔴 (`user_security_events` nhánh
+  `bad_credentials` vẫn vô danh; hoãn vì `recordReauthFailure` dùng chung với `disableTwoFactor`).
+- **Sau khi #483 merge:** thêm `ip`/`userAgent` vào `done_when` của `S18-AUTH-RESTORE2FA-1` (WO đó được
+  seed TRONG #483, không có trên master — nợ N1 treo vào đó).
+- **Lane DB tồn đọng:** thêm `mediaos_s18resetmeta` vào danh sách xoá của phiên trước.
+
 ## Phiên 2026-09-07 — S18-AUTH-2FADELETED-1 → **PR #483 MỞ**, chờ người chốt
 
 **Kết quả:** tài khoản đã xoá mềm hết tắt được 2FA. `harness/check.sh --all --lane-db=s18twofadel`

@@ -181,8 +181,11 @@ export class AuthController {
   @Public()
   @Post("reset-password")
   @HttpCode(200)
-  async resetPassword(@Body() dto: ResetPasswordDto): Promise<{ ok: true }> {
-    await this.auth.resetPassword(dto);
+  async resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request): Promise<{ ok: true }> {
+    // S18-AUTH-RESETMETA-1 — nửa kia của cặp: `forgot-password` ngay trên đã truyền `this.meta(req)`
+    // từ lâu. Đây là DÂY NỐI mà cả 4 hàng audit của đường reset phụ thuộc vào; int-spec đo nó qua
+    // HTTP thật chứ không gọi thẳng service, vì gọi thẳng thì spec tự truyền meta ⇒ xanh-RỖNG.
+    await this.auth.resetPassword(dto, this.meta(req));
     return { ok: true };
   }
 
@@ -201,6 +204,9 @@ export class AuthController {
       { id: req.user.id, companyId: req.user.companyId },
       dto.currentPassword,
       dto.newPassword,
+      // S18-AUTH-RESETMETA-1 — `AuthenticatedRequest extends Request` (`:52`) ⇒ dùng thẳng helper
+      // `meta()`, không cần ép kiểu.
+      this.meta(req),
     );
     return { ok: true };
   }
