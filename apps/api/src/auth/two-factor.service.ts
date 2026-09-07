@@ -1,12 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { rlKey as rateLimitKey } from "../common/valkey/valkey-key";
 import { tooManyRequests } from "../common/filters/retry-after";
-import {
-  ConflictException,
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from "@nestjs/common";
+import { ConflictException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { roles, userRecoveryCodes, userRoles, users, userTotp } from "../db/schema";
@@ -271,12 +266,47 @@ export class TwoFactorService {
    * enforcement guard + status). Ném trước khi ghi ⇒ tx rollback không có gì để hoàn.
    */
   async disable(userId: string, companyId: string): Promise<void> {
-    await this.dbsvc.withTenant(companyId, async (tx) => {
+    const outcome = await this.dbsvc.withTenant(companyId, async (tx) => {
       if (await this.requiresTwoFactorTx(tx, userId)) {
         throw new ConflictException({
           code: TWO_FACTOR_ENFORCED,
           message: "Tài khoản của bạn bị bắt buộc bật xác thực 2 bước (2FA) — không thể tắt.",
         });
+      }
+      // ── S18-AUTH-2FADELETED-1 ───────────────────────────────────────────────────────────────────
+      // Vế `deleted_at` ở câu SELECT re-auth của `AuthService.disableTwoFactor` KHÔNG bảo vệ được
+      // hàm này: nó chạy trong tx RIÊNG, mở SAU khi tx re-auth đã COMMIT. Một `soft-delete` commit
+      // XEN GIỮA hai tx là đủ để hai câu DELETE dưới đây hard-delete 2FA của một hàng đã xoá — và
+      // `restoreUser` không phục hồi 2FA, nên tài khoản khôi phục sẽ quay lại với 2FA đã TẮT.
+      //
+      // ⚠️ CHỈ chặn khi hàng NHÌN THẤY ĐƯỢC **và** ĐÃ XOÁ. Nhánh `!alive` (RLS ẩn) là đường
+      // CROSS-TENANT, và hợp đồng hiện hành ghim nó là **no-op im lặng**
+      // (`test/integration/two-factor.int-spec.ts` ca (f)). Biến `!alive` thành 401 vừa làm đỏ ca đó,
+      // vừa ghi một hàng audit APPEND-ONLY gán `company_id` của người gọi cho `actor_user_id` của
+      // tenant khác (`audit_logs.actor_user_id` FK về `users(id)`, KHÔNG composite tenant —
+      // `0003_audit_outbox.sql:9-11`). Để im lặng KHÔNG phải fail-open: hôm nay nhánh đó đã là no-op
+      // (DELETE khớp 0 hàng do RLS), bản vá không nới thêm gì.
+      //
+      // Vị trí: SAU `requiresTwoFactorTx` (409 policy vẫn phải THẮNG) và TRƯỚC câu DELETE đầu tiên —
+      // tức trước mọi lệnh ghi của tx này.
+      // `company_id` TƯỜNG MINH (BẤT BIẾN #1) — không chỉ dựa vào RLS, mirror đúng câu SELECT re-auth
+      // ở `AuthService.disableTwoFactor`. Hôm nay RLS đã ép điều này, nên đây là defence-in-depth; để
+      // thiếu thì cùng một commit lại nói hai giọng về invariant #1.
+      const [alive] = await tx
+        .select({ deletedAt: users.deletedAt })
+        .from(users)
+        .where(and(eq(users.id, userId), eq(users.companyId, companyId)))
+        .limit(1);
+      if (alive && alive.deletedAt != null) {
+        // Ghi vết TRONG tx rồi `return` (KHÔNG ném ở đây): ném trong tx = rollback nuốt luôn vết.
+        await this.audit.record(tx, {
+          action: "auth.2fa_disable_denied",
+          objectType: "auth",
+          actorUserId: userId,
+          objectId: userId,
+          after: { reason: "user_deleted" },
+        });
+        return "account_gone" as const;
       }
       const deleted = await tx
         .delete(userTotp)
@@ -297,7 +327,22 @@ export class TwoFactorService {
           actorUserId: userId,
         });
       }
+      return "ok" as const;
     });
+
+    // Ném NGOÀI `withTenant` để tx COMMIT giữ được vết `auth.2fa_disable_denied` (mirror
+    // `AuthService.changePassword`). Chuỗi 401 CỐ Ý khác "Mật khẩu không đúng." của nhánh re-auth:
+    // người gọi vừa đưa ĐÚNG mật khẩu, và hai nhánh phải phân biệt được nhau khi đọc vết.
+    if (outcome === "account_gone") {
+      throw new UnauthorizedException("Phiên đăng nhập không còn hợp lệ.");
+    }
+    // ⚠️ Thành công phải là nhánh ĐƯỢC ĐẶT TÊN, không phải phần rơi-xuống-cuối: thêm một outcome thứ
+    // ba mà quên nhánh của nó thì nó lặng lẽ nghĩa là "đã tắt 2FA" — đúng hình dạng "thành công mà
+    // RỖNG" mà WO này tồn tại để giết.
+    if (outcome !== "ok") {
+      const never: never = outcome;
+      throw new Error(`disable: outcome chưa xử lý: ${String(never)}`);
+    }
   }
 
   /**

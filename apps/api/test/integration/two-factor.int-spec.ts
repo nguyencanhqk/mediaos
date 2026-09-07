@@ -300,6 +300,13 @@ describe.skipIf(!hasDb)(
     });
 
     // (f) 2-tenant deny: ngữ cảnh tenant D KHÔNG đọc/ghi được cờ 2FA của user tenant C (RLS); disable chéo = no-op.
+    //
+    // ⚠️ S18-AUTH-2FADELETED-1 (plan §3.0 D3) — ca này là HỢP ĐỒNG, không phải chi tiết cài đặt.
+    // `disable()` giờ có vế chặn hàng đã xoá mềm, nhưng vế đó CHỈ ném khi hàng NHÌN THẤY ĐƯỢC và
+    // `deleted_at != null`. Nhánh "không thấy hàng" (chính là ca này — RLS ẩn hàng của C khi đứng ở D)
+    // CỐ Ý giữ no-op im lặng: ném ở đó vừa làm đỏ ca này, vừa ghi một hàng audit APPEND-ONLY gán
+    // `company_id` của D cho `actor_user_id` của C (`audit_logs.actor_user_id` FK về `users(id)`,
+    // KHÔNG composite tenant). Nếu ai đó thấy nhánh im lặng và muốn "siết cho an toàn" — đọc D3 trước.
     it("(f) cross-tenant: tenant D KHÔNG thấy require/enabled của user C; disable chéo KHÔNG gỡ 2FA của C", async () => {
       // uPerUser (tenant C) đang enabled (từ case a). Từ ngữ cảnh tenant D:
       expect(await svc.requiresTwoFactor(uPerUser, D.companyId)).toBe(false); // cờ per-user KHÔNG rò chéo tenant

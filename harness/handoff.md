@@ -53,6 +53,61 @@ gọi. Chuỗi đó hoàn toàn kín (private, 1 caller) nên nối dây bán k�
 - **Sau khi #483 merge:** thêm `ip`/`userAgent` vào `done_when` của `S18-AUTH-RESTORE2FA-1` (WO đó được
   seed TRONG #483, không có trên master — nợ N1 treo vào đó).
 - **Lane DB tồn đọng:** thêm `mediaos_s18resetmeta` vào danh sách xoá của phiên trước.
+## Phiên 2026-09-07 — S18-AUTH-2FADELETED-1 → **PR #483 MỞ**, chờ người chốt
+
+**Kết quả:** tài khoản đã xoá mềm hết tắt được 2FA. `harness/check.sh --all --lane-db=s18twofadel`
+XANH ✅ (9/9). FULL gate 2 reviewer **PASS** (0 CRITICAL, 0 HIGH). Không migration.
+
+### Điều đắt nhất phiên này mua được — ĐỪNG ĐO LẠI
+
+**WO có HAI khiếm khuyết, không phải một.** Tiêu đề WO chỉ nói câu SELECT. Nhưng
+`twoFactor.disable()` chạy ở **tx RIÊNG** mở SAU khi tx re-auth commit ⇒ vế `deleted_at` ở SELECT
+**không bảo vệ được một câu ghi ở tx khác**. Vá một vế là để đường kia mở.
+
+**Hệ quả: cổng CHỒNG NHAU.** Sau khi vá cả hai, mọi ca "user xoá mềm gọi endpoint" bị chặn bởi CẢ
+HAI ⇒ xanh y hệt nhau dù chỉ một vế được vá. Cách tách duy nhất đo được: `§direct` assert **SỐ ĐẾM**
+chữ ký riêng của L1 (`auth.2fa_disable_denied`=1 **và** `REAUTH_FAILED`=1), KHÔNG chỉ HTTP 401.
+Đã kiểm chứng: gỡ `isNull` khỏi L1 mà giữ L2 ⇒ vẫn 401, totp vẫn còn — chỉ số đếm mới đỏ.
+
+### Ba cái bẫy đã sập (ghi để phiên sau khỏi sập lại)
+
+1. **Chép D1 của `#482` sang đây là SAI.** #482 giữ nhánh `!row` nguyên vẹn vì ở đó câu SELECT
+   *đã* lọc `deleted_at` ⇒ user xoá mềm *đã* để lại `REAUTH_FAILED`, đổi đi là xoá vết. Ở đây SELECT
+   **trần** ⇒ họ KHÔNG đi vào `!row`, họ đi thẳng tới **thành công**. Không có vết nào để bảo tồn —
+   nên phải **THÊM** `auth.2fa_disable_denied`, nếu không đường tấn công CHÍNH im lặng còn đường phụ
+   lại có vết (**quan sát bị đảo ngược**). `plan-reviewer` bắt được; tôi đã chép nhầm tiền đề.
+2. **`disable()` có caller TEST ghim HỢP ĐỒNG.** `two-factor.int-spec.ts` ca (f) đòi disable
+   cross-tenant = **no-op im lặng**. Plan v1 định cho nhánh `!alive` ném 401 ⇒ sẽ làm đỏ ca đó VÀ ghi
+   hàng audit **append-only** gán `actor_user_id` chéo tenant (`audit_logs.actor_user_id` FK
+   `users(id)`, KHÔNG composite). Đếm caller mà gạt spec sang bên là cách bỏ sót hợp đồng.
+3. **`login` KHÔNG trả access token khi 2FA đã bật** (`auth.service.ts:418-421`, `:479-481`) — trả
+   `{twoFactorRequired, challengeToken}`. Int-spec phải login **khi 2FA còn TẮT** rồi mới enroll.
+
+### Phát hiện đáng giá nhất của `security-reviewer` — đã vá thành ca `§rls-shape`
+
+Tính đúng đắn của vế L2 **ngồi lên HÌNH DẠNG** của policy `users_tenant_isolation`
+(`0002_companies_users.sql:65-67` — lọc **mỗi** `company_id`). Nếu migration sau siết thêm
+`deleted_at IS NULL` (hardening rất hợp lý), hàng xoá mềm **cùng tenant** hoá vô hình ⇒ rơi vào
+`!alive` ⇒ no-op ⇒ hai DELETE **vẫn khớp** (policy `user_totp`/`user_recovery_codes` là company-only)
+⇒ **lỗ mở lại mà KHÔNG ca nào đỏ**. Nay đã có ca chốt tiền đề đó.
+
+### Còn lại cho phiên sau
+
+- **PR #483 chờ NGƯỜI chốt** (vùng đỏ, KHÔNG gắn auto-merge).
+- Seed mới `S18-AUTH-RESTORE2FA-1` (🔴): `restoreUser` không soát lại 2FA + `enroll`/`confirmEnable`
+  không lọc `deleted_at` ⇒ kẻ giữ token cài được **yếu tố thứ hai của mình** vào tài khoản sẽ được
+  khôi phục. Cộng nợ MEDIUM #3 (hai câu DELETE của `disable()` thiếu `company_id`).
+- **Lane DB tồn đọng** (`pgdata-bloat-lane-dbs-and-job-log`): `mediaos_s18retry` · `s18resetdel` ·
+  `s18listen` · `s18chgpw` · `s18twofadel` — WO của chúng đã merge/PR, xoá được khi rảnh.
+  (`s18tfdrev` của reviewer đã xoá.)
+
+### Chi phí — CẢNH BÁO
+
+**~$246/phiên**, vượt xa hồ sơ ~$136/WO đỏ (`red-zone-wo-cost-profile`). Gốc: 1 vòng plan-review +
+2 reviewer FULL gate, trong đó `security-reviewer` **tự chạy lại** cả hai đột biến + dựng lane DB
+riêng + chạy int-spec (nó tự khai trong báo cáo). Xác minh độc lập đó CÓ giá trị — nó bắt được
+`§rls-shape` — nhưng lần sau nên **nói rõ với reviewer là được phép dừng ở review tĩnh**, hoặc chỉ
+cho MỘT reviewer chạy thực nghiệm.
 
 ---
 

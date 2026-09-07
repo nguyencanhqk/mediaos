@@ -187,6 +187,209 @@ describe("AuthService.disableTwoFactor — fail-fast khi bị ÉP 2FA (S2-AUTH-B
 });
 
 /**
+ * S18-AUTH-2FADELETED-1 — `disableTwoFactor` KHÔNG được re-auth thành công trên hàng đã XOÁ MỀM.
+ *
+ * TRƯỚC WO này câu SELECT re-auth (`auth.service.ts:715`) là `where(eq(users.id, user.id))` **trần**:
+ * không `deleted_at`, không `company_id`. Ba APP_GUARD đều stateless với `users.deleted_at` ⇒ user vừa
+ * bị xoá mềm mà access token còn trong TTL đưa ĐÚNG mật khẩu thì **tắt được 2FA và nhận 200**. Không
+ * cần trúng khe race nào — đây là đường ĐI THẲNG.
+ *
+ * ⚠️ VÌ SAO PHẢI CÓ AUDIT Ở NHÁNH `!row` (plan D1). Khác `S18-AUTH-CHANGEPWTOCTOU-1`: ở đó câu SELECT
+ * ĐÃ lọc `deleted_at` từ trước, nên user xoá mềm vốn đã rơi vào `!row` và vốn đã để lại `REAUTH_FAILED`
+ * — WO đó chỉ phải GIỮ vết. Ở ĐÂY thì hôm nay user xoá mềm KHÔNG hề đi vào `!row` (SELECT trả hàng,
+ * verify đúng, 2FA bị tắt). Nếu chỉ siết predicate rồi `return false` lặng lẽ thì đường tấn công CHÍNH
+ * kết thúc KHÔNG có tín hiệu bền nào, trong khi đường phụ (race, chặn ở TwoFactorService.disable) lại
+ * có audit ⇒ khả năng quan sát bị ĐẢO NGƯỢC. Vết `auth.2fa_disable_denied` cũng chính là chữ ký làm cho
+ * int-spec §direct tách được vế này khỏi vế kia (cổng chồng nhau — plan §5.4).
+ */
+describe("AuthService.disableTwoFactor — hàng đã XOÁ MỀM (S18-AUTH-2FADELETED-1)", () => {
+  const user = { id: "user-1", companyId: "co-1" } as const;
+
+  /**
+   * Stub tham số hoá HAI câu SELECT trên `users` mà nhánh `!row` chạy: (1) câu re-auth lấy hash,
+   * (2) câu probe đọc `deleted_at` để ĐO nguyên nhân. Bắt cả `where` của từng câu để §predicate khẳng
+   * định được CẤU TRÚC (mirror `isOperatorTx` `:571` — không cần Postgres).
+   */
+  function makeService(
+    over: {
+      selectRows?: Array<{ passwordHash: string }>;
+      probeRow?: Array<{ deletedAt: Date | null }>;
+    } = {},
+  ) {
+    const wheres: unknown[] = [];
+    let selectCall = 0;
+    const tx = {
+      select: (_cols?: unknown) => {
+        const idx = selectCall++;
+        return {
+          from: (_table: unknown) => ({
+            where: (cond?: unknown) => {
+              wheres.push(cond);
+              return {
+                limit: () =>
+                  Promise.resolve(
+                    idx === 0
+                      ? (over.selectRows ?? [{ passwordHash: "argon2-hash" }])
+                      : (over.probeRow ?? [{ deletedAt: new Date() }]),
+                  ),
+              };
+            },
+          }),
+        };
+      },
+    };
+    const twoFactor = {
+      requiresTwoFactor: vi.fn().mockResolvedValue(false),
+      disable: vi.fn().mockResolvedValue(undefined),
+    };
+    const rateLimiter = {
+      isLocked: vi.fn().mockResolvedValue(false),
+      recordFailure: vi.fn().mockResolvedValue(undefined),
+      noteFailureSource: vi.fn().mockResolvedValue(undefined),
+      reset: vi.fn().mockResolvedValue(undefined),
+    };
+    const password = { verify: vi.fn().mockResolvedValue(true) };
+    const audit = { record: vi.fn().mockResolvedValue(undefined) };
+    const securityEvents = { record: vi.fn().mockResolvedValue(undefined) };
+    const dbsvc = {
+      withTenant: vi.fn(async (_companyId: string, fn: (tx: unknown) => unknown) => fn(tx)),
+    };
+    const Ctor = AuthService as unknown as new (...args: unknown[]) => AuthService;
+    const service = new Ctor(
+      dbsvc, // 1 dbsvc
+      password, // 2 password
+      {}, // 3 tokens
+      rateLimiter, // 4 rateLimiter
+      audit, // 5 audit
+      {}, // 6 outbox
+      {}, // 7 permissions
+      {}, // 8 secrets
+      twoFactor, // 9 twoFactor
+      {}, // 10 replayGuard
+      {}, // 11 securityAlerts
+      {}, // 12 securityPolicy
+      {}, // 13 modules
+      undefined, // 14 resetMail
+      securityEvents, // 15 securityEvents (REAUTH_FAILED của recordReauthFailure)
+    );
+    return { service, wheres, twoFactor, rateLimiter, password, audit, securityEvents };
+  }
+
+  /** Lấy `where` của câu SELECT re-auth (câu ĐẦU trong tx). */
+  function reauthWhere(wheres: unknown[]): unknown {
+    expect(wheres.length).toBeGreaterThan(0);
+    return wheres[0];
+  }
+
+  // ── §predicate — CỔNG ĐƠN VỊ của vế L1 ────────────────────────────────────────────────────────
+  // Ba vế phải nằm trên CÙNG MỘT `where`: tách thành ba câu khác nhau thì assert được thoả bởi hai
+  // builder KHÁC nhau và bài trở thành xanh-RỖNG (`same-builder-twice-makes-unit-spec-vacuous`).
+  // Mỗi vế một `expect` riêng để thông báo lỗi chỉ đúng vế bị gỡ.
+  describe("§predicate — câu SELECT re-auth mang ĐỦ ba vế", () => {
+    it("vế CHỐT: deleted_at — RED nếu gỡ isNull(users.deletedAt)", async () => {
+      const { service, wheres } = makeService();
+      await service.disableTwoFactor(user, "pw");
+      expect(whereFiltersSoftDelete(reauthWhere(wheres), users)).toBe(true);
+    });
+
+    it("vế tenant: company_id tường minh (BẤT BIẾN #1, không chỉ dựa RLS)", async () => {
+      const { service, wheres } = makeService();
+      await service.disableTwoFactor(user, "pw");
+      expect(whereHasColumn(reauthWhere(wheres), users, "company_id")).toBe(true);
+    });
+
+    it("vế id giữ nguyên", async () => {
+      const { service, wheres } = makeService();
+      await service.disableTwoFactor(user, "pw");
+      expect(whereHasColumn(reauthWhere(wheres), users, "id")).toBe(true);
+    });
+  });
+
+  // ── §denied-audit — nhánh `!row` để lại vết BỀN, và GIỮ hình 401 cũ ───────────────────────────
+  describe("§denied-audit — `!row` ghi auth.2fa_disable_denied và vẫn 401 + phạt", () => {
+    it("audit `auth.2fa_disable_denied` được ghi TRONG tx (vết bền cho đường đi-thẳng)", async () => {
+      const { service, audit } = makeService({ selectRows: [] });
+      await expect(service.disableTwoFactor(user, "pw")).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      expect(audit.record).toHaveBeenCalledTimes(1);
+      const [, entry] = audit.record.mock.calls[0] as [
+        unknown,
+        { action: string; objectType: string },
+      ];
+      expect(entry.action).toBe("auth.2fa_disable_denied");
+      expect(entry.objectType).toBe("auth");
+    });
+
+    it("GIỮ hình cũ: 401 + recordFailure + REAUTH_FAILED (waiver ratchet 429 vẫn đứng)", async () => {
+      const { service, rateLimiter, securityEvents, twoFactor } = makeService({ selectRows: [] });
+      await expect(service.disableTwoFactor(user, "pw")).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      expect(rateLimiter.recordFailure).toHaveBeenCalledTimes(1);
+      const events = securityEvents.record.mock.calls.map(
+        (c) => (c[1] as { eventType: string }).eventType,
+      );
+      expect(events).toContain("REAUTH_FAILED");
+      // Lệnh GHI không bao giờ tới: 2FA của hàng đã xoá KHÔNG bị đụng.
+      expect(twoFactor.disable).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── §reason — nhãn phải ĐO, không khẳng định (mirror gate #482 mục #2) ────────────────────────
+  // Probe chạy trong cùng tenant-tx nên bị FORCE RLS bó vào đúng công ty người gọi; hai nhãn dưới đây
+  // là TOÀN BỘ giá trị WO này ghi vào bảng append-only ⇒ cả hai đều phải có ca.
+  describe("§reason — nhãn suy từ probe", () => {
+    it("hàng còn thấy + deleted_at != null ⇒ user_deleted", async () => {
+      const { service, audit } = makeService({
+        selectRows: [],
+        probeRow: [{ deletedAt: new Date() }],
+      });
+      await expect(service.disableTwoFactor(user, "pw")).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      const [, entry] = audit.record.mock.calls[0] as [unknown, { after: { reason: string } }];
+      expect(entry.after.reason).toBe("user_deleted");
+    });
+
+    it("probe KHÔNG thấy hàng ⇒ user_absent (KHÔNG khẳng định 'đã xoá')", async () => {
+      const { service, audit } = makeService({ selectRows: [], probeRow: [] });
+      await expect(service.disableTwoFactor(user, "pw")).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      const [, entry] = audit.record.mock.calls[0] as [unknown, { after: { reason: string } }];
+      expect(entry.after.reason).toBe("user_absent");
+    });
+
+    // Nhãn THỨ BA — KHÔNG phải code chết: hai câu SELECT là hai câu lệnh riêng trong CÙNG một tx
+    // READ COMMITTED (mỗi câu một ảnh chụp), nên một `restoreUser` commit XEN GIỮA chúng cho ra đúng
+    // trạng thái này: câu đầu không thấy (lúc đó còn `deleted_at`), probe thấy hàng SỐNG.
+    it("probe thấy hàng CÒN SỐNG ⇒ state_changed (khe restore chen giữa hai câu)", async () => {
+      const { service, audit } = makeService({ selectRows: [], probeRow: [{ deletedAt: null }] });
+      await expect(service.disableTwoFactor(user, "pw")).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      const [, entry] = audit.record.mock.calls[0] as [unknown, { after: { reason: string } }];
+      expect(entry.after.reason).toBe("state_changed");
+    });
+  });
+
+  /**
+   * §neo-hành-vi — KHÔNG PHẢI CỔNG. Stub trên MÙ với `.where()`, nên "SELECT trả rỗng" xảy ra y hệt
+   * nhau TRƯỚC và SAU bản vá ⇒ ca này XANH ở cả hai phía và KHÔNG bắt được đột biến gỡ `isNull`.
+   * Giữ lại chỉ để neo hình dạng 401 (đúng mẫu §reachable của `#482`). Cổng thật = §predicate (vế L1)
+   * + §inner-unit ở `two-factor.service.spec.ts` (vế L2) + int-spec §direct.
+   */
+  it("§neo-hành-vi (xanh TRƯỚC lẫn SAU vá): SELECT rỗng ⇒ 401, KHÔNG chạm twoFactor.disable", async () => {
+    const { service, twoFactor } = makeService({ selectRows: [] });
+    await expect(service.disableTwoFactor(user, "pw")).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(twoFactor.disable).not.toHaveBeenCalled();
+  });
+});
+
+/**
  * S2-FND-SEED-3 (LANE SEED3-C-authme) — /auth/me PHẢI expose `mustChangePassword` (ADDITIVE, mẫu
  * S2-AUTH-BE-1: KHÔNG phá contract cũ). Super-admin bootstrap upsert đặt cờ = true (mig 0469 +
  * super-admin-bootstrap.repository), FE dùng cờ này để ép đổi mật khẩu lần đầu (enforcement = follow-up FE).
