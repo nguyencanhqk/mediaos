@@ -17357,7 +17357,7 @@ export const backlog = [
     done_when: [
       "`resetPassword` + `changePassword` nhận `RequestMeta` BẮT BUỘC (khuôn `forgotPassword`, KHÔNG `= {}`); controller truyền `this.meta(req)` cho cả hai",
       "NĂM hàng audit mang `ip` + `userAgent`: `auth.password_reset` · `auth.password_reset_denied` · `auth.password_changed` · `auth.password_change_denied` · `user.login_throttle_cleared`",
-      "KHÔNG được đổi hình dạng phản hồi: mọi nhánh hỏng vẫn 401 BYTE-GIỐNG NHAU (đừng đẻ oracle mới khi thêm trường vào vết); hai câu 401 CỐ Ý khác nhau của `changePassword` KHÔNG bị gộp",
+      "KHÔNG được đổi hình dạng phản hồi: mọi nhánh hỏng vẫn 401 BYTE-GIỐNG NHAU **ở THÂN phản hồi** (status + error.code + error.message) — KHÔNG hứa về TIMING, xem WO S18-AUTH-RESETFLOOR-1; hai câu 401 CỐ Ý khác nhau của `changePassword` KHÔNG bị gộp",
       "Ca int-spec đi qua HTTP THẬT (supertest) rồi đọc thẳng `audit_logs` — KHÔNG gọi thẳng service, vì gọi thẳng thì spec tự truyền meta \u21d2 xanh-RỖNG với dây controller",
       "`§change-denied` phải tới được nhánh `account_gone` bằng cửa sổ `password.hash` (soft-delete XEN GIỮA SELECT và UPDATE) — user xoá mềm thường rơi vào `bad_credentials`, nhánh đó KHÔNG ghi audit_logs",
       "Đo đột biến TỪNG VẾ: gỡ `ip:` khỏi mỗi hàng trong 5 hàng \u21d2 đúng ca tương ứng đỏ (chống cổng chồng nhau)",
@@ -17368,6 +17368,39 @@ export const backlog = [
       "auth.service.spec.ts có HAI khuôn dựng service (`Object.create(AuthService.prototype)` + `new Ctor(13 đối số vị trí)`) — cả hai chỉ ăn tham số, D1 không thêm field constructor nên không vỡ. Đây cũng là lý do BÁC phương án AsyncLocalStorage/REQUEST-scoped.",
       "⚠️ CẤM đọc bằng `meta?.ip`: điểm gọi lách `tsc` bằng `as unknown as` sẽ biến 401 thành 500 trên đường CÔNG KHAI.",
       "Nợ N1 (vế 2FA) treo vào việc PR #483 merge — `S18-AUTH-RESTORE2FA-1` được seed TRONG #483, KHÔNG có trên master. Sau khi #483 merge: thêm ip/userAgent vào done_when của WO đó.",
+    ],
+  },
+  {
+    id: "S18-AUTH-RESETFLOOR-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "`resetPassword` KHÔNG có `applyUniformResponseFloor` — nhánh từ chối chạy argon2 (hàng trăm ms) còn nhánh token-rác trả sau 1 SELECT ⇒ oracle TIMING trên đường công khai",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/auth/auth.service.ts",
+      "apps/api/src/auth/**/*.spec.ts",
+      "apps/api/test/integration/auth-s18-resetfloor-*.int-spec.ts",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "security-reviewer (FULL gate S18-AUTH-RESETMETA-1, 07/09/2026) — MEDIUM: `applyUniformResponseFloor` được áp cho `login` (`auth.service.ts:323`) và `forgotPassword` (`:1489`) nhưng KHÔNG cho `resetPassword`.",
+      "CÓ TRƯỚC S18-AUTH-RESETMETA-1, KHÔNG do WO đó đẻ ra — hai cột text thêm vào INSERT là nhiễu so với argon2id 19 MiB.",
+      "Đường đi: token HỢP LỆ của user đã xoá mềm ⇒ đốt `used_at`, chạy `password.hash`, UPDATE khớp 0 hàng ⇒ 401 CHẬM. Token rác ⇒ 401 NHANH sau 1 SELECT. Chênh lệch nói cho người cầm token biết 'token này là THẬT, tài khoản tồn tại nhưng đã bị xoá'.",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: chênh lệch thật giữa hai nhánh trên lane DB (đừng vá theo lý thuyết) — nếu dưới ngưỡng nhiễu mạng thì đóng WO là 'không phải lỗ', có số liệu",
+      "Nếu là lỗ: áp sàn thời gian cho `resetPassword` theo khuôn `forgotPassword` (`:1483-1490`) — sàn ở PUBLIC boundary + `finally` phủ MỌI return-path",
+      "⚠️ Trần nguyên tử 'tối đa 1 lần/token' (`:1646-1651`) làm attacker chỉ đo được MỘT lần/token — cân nhắc điều đó khi chấm mức độ, đừng thổi phồng",
+      "Ca int-spec đo thời gian hai nhánh, có ngưỡng và có chống-flake (nhiều lượt, lấy trung vị)",
+      "bash harness/check.sh --all --lane-db=s18resetfloor XANH",
+    ],
+    notes: [
+      "🔴 FULL gate (auth, đường CÔNG KHAI không xác thực).",
+      "NỢ KÈM (security-reviewer cùng lượt, LOW): `audit_logs.user_agent` lưu THÔ (masker chỉ chạm jsonb). Hôm nay an toàn — đường đọc sau cặp sensitive `view:audit-log`, FE React escape, KHÔNG có export. Khi thêm export CSV/XLSX cho audit viewer thì PHẢI neutralize `= + - @` TẠI ĐIỂM EXPORT (không phải điểm ghi).",
     ],
   },
   {

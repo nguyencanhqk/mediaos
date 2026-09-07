@@ -490,19 +490,30 @@ describe("AuthService.changePassword — clear must_change_password cùng tx (S2
      * hình dạng xanh-RỖNG mà WO này tồn tại để giết.
      */
     it.each([
-      ["auth.password_change_denied", [] as { id: string }[], "unit-ua-change-denied"],
-      ["auth.password_changed", [{ id: "user-1" }], "unit-ua-change-ok"],
-    ])("hàng audit `%s` mang ĐÚNG ip/userAgent của request", async (action, updateRows, ua) => {
-      const { service, audit } = makeService({ updateRows });
-      const meta = { ip: "203.0.113.9", userAgent: ua };
+      ["auth.password_change_denied", [] as { id: string }[], "unit-ua-change-denied", true],
+      ["auth.password_changed", [{ id: "user-1" }], "unit-ua-change-ok", false],
+    ])(
+      "hàng audit `%s` mang ĐÚNG ip/userAgent của request",
+      async (action, updateRows, ua, shouldThrow) => {
+        const { service, audit } = makeService({ updateRows });
+        const meta = { ip: "203.0.113.9", userAgent: ua };
+        const call = service.changePassword(user, "old-pw", "new-pw", meta);
 
-      await service.changePassword(user, "old-pw", "new-pw", meta).catch(() => undefined);
+        // ⚠️ KHÔNG `.catch(() => undefined)`: nuốt kết quả thì ca này đo HẸP HƠN tên gọi của nó — một
+        // hồi quy fail-open (nhánh 0-hàng quay lại "thành công mà rỗng") sẽ đi qua đây mà vẫn xanh.
+        // Ghim luôn hình dạng nhánh, không chỉ nội dung hàng audit (security-reviewer 07/09, LOW).
+        if (shouldThrow) {
+          await expect(call).rejects.toBeInstanceOf(UnauthorizedException);
+        } else {
+          await expect(call).resolves.toBeUndefined();
+        }
 
-      expect(audit.record).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ action, ip: "203.0.113.9", userAgent: ua }),
-      );
-    });
+        expect(audit.record).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ action, ip: "203.0.113.9", userAgent: ua }),
+        );
+      },
+    );
 
     it("câu UPDATE `users` lọc CẢ `deleted_at IS NULL` LẪN `company_id` — RED nếu thiếu một vế", async () => {
       const { service, wheres } = makeService();

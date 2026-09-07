@@ -191,6 +191,10 @@ describe.skipIf(!hasDb)("S18-AUTH-RESETMETA-1 — ip/userAgent trong vết đổ
       .set("User-Agent", UA)
       .send({ token: `${A.companyId}.khong-phai-token-that`, newPassword: NEW_PASSWORD });
     expect(garbage.status).toBe(401);
+    // Neo TUYỆT ĐỐI trước khi so tương đối: nếu envelope đổi tên khoá thì `error?.code` của CẢ HAI vế
+    // thành `undefined` và phép so bằng dưới đây xanh RỖNG (security-reviewer 07/09, LOW).
+    expect(res.body.error?.code).toBeTruthy();
+    expect(res.body.error?.message).toBeTruthy();
     expect(res.body.error?.code).toBe(garbage.body.error?.code);
     expect(res.body.error?.message).toBe(garbage.body.error?.message);
   });

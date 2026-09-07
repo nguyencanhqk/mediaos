@@ -257,3 +257,21 @@ phủ cả 4 `securityEvents.record` của hai method + `recordReauthFailure`.
 Audit `user.password_reset_by_admin` mang **cùng món nợ**. Ngoài phạm vi (method khác, module khác),
 nhưng ghi ra đây để nó **không rơi vào khoảng trống như N1 suýt rơi**. Gộp vào `S18-AUTH-SECEVENTMETA-1`
 khi seed.
+
+### N4 — Oracle TIMING trên `/auth/reset-password` (có TRƯỚC WO này)
+
+`security-reviewer` (FULL gate, 07/09): `applyUniformResponseFloor` áp cho `login` (`:323`) và
+`forgotPassword` (`:1489`) nhưng **KHÔNG** cho `resetPassword`. Nhánh từ chối chạy `password.hash`
+(argon2id 19 MiB) **trước khi biết sẽ từ chối**, còn nhánh token-rác trả về sau đúng một SELECT ⇒ thời
+gian phản hồi nói cho người cầm token biết "token này THẬT, tài khoản tồn tại nhưng đã bị xoá".
+
+**KHÔNG do WO này đẻ ra** (hai cột `text` thêm vào INSERT là nhiễu so với argon2), nhưng nó làm câu
+`done_when` cũ — "401 BYTE-GIỐNG NHAU ⇒ không đẻ oracle" — **hứa rộng hơn** thứ ca `§shape` chứng minh
+được. Đã sửa câu chữ thành "byte-giống nhau **ở THÂN phản hồi**" và seed `S18-AUTH-RESETFLOOR-1`.
+
+### N5 — `user_agent` lưu THÔ ⇒ formula injection ở ĐIỂM EXPORT tương lai
+
+`audit.service.ts:133-134` ghi `userAgent` không mask (masker chỉ chạm jsonb). Hôm nay an toàn: đường
+đọc nằm sau cặp sensitive `view:audit-log`, FE React escape mặc định, và **chưa có** export CSV/XLSX
+nào cho cột này. Quyết định D2 (không cắt) vẫn đúng — chỗ phòng ngự là **điểm export**, không phải điểm
+ghi. Ghi vào notes của `S18-AUTH-RESETFLOOR-1`.
