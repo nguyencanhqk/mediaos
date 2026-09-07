@@ -1306,6 +1306,38 @@ export LANE_DB=mediaos_outboxfifo` (lane này còn sống, nhớ `DROP DATABASE`
 - **Xoá worktree trên Windows**: `git worktree remove` fail "Directory not empty" do node_modules → dùng `rm -rf <dir>` rồi `git worktree prune` + `git branch -d lane/*`.
 - **Band migration**: lane v2 (acct2/ai1/console1) branch không khớp regex `g*`/`ac*` → `guard-migration-band` fail-open (không ép band); chỉ an toàn khi mỗi wave ≤1 lane sinh migration.
 
+## FULL gate — S18-AUTH-SECEVENTMETA-1 (07/09/2026): 2/2 PASS
+
+`security-reviewer` PASS (0 CRITICAL, 0 HIGH) · `silent-failure-hunter` PASS (0 blocker).
+
+**Cần OWNER biết — MEDIUM, đã ghi thành nợ N6 ở plan §7:** sau WO này, `GET /auth/security-events`
+(gán phạm vi theo CHỦ THỂ, `security-event.repository.ts:109-110`) phát `ip_address`/`user_agent`
+**THÔ** (`auth-logs-viewer.service.ts:388-389`) trong khi chỉ email/họ tên của actor được che ⇒ chủ
+thể đọc được IP/UA của ADMIN đã thao tác trên mình. Hôm nay vô hại (cặp `isSensitive`, chỉ
+`company-admin` giữ ⇒ admin→admin). **Kích hoạt khi** cấp `view:audit-log` scope `Own`/`Department`
+cho vai không phải admin. Điểm trung hoà = DTO của viewer, KHÔNG phải điểm ghi.
+
+## Cổng RED — S18-AUTH-SECEVENTMETA-1 (07/09/2026)
+
+Chạy TRƯỚC khi viết một dòng code sản phẩm nào (plan §4.4). Lane `mediaos_s18seceventmeta`.
+
+**8 ca ĐỎ THẬT, tất cả đỏ vì đúng cột đang đo (`user_agent` NULL / `ip` undefined):**
+
+- `test/integration/auth-s18-seceventmeta-1.int-spec.ts` — **4/4 đỏ**: `§reset-ok`
+  (`PASSWORD_RESET_COMPLETED`) · `§change-ok` (`PASSWORD_CHANGED`) · `§reauth-failed`
+  (`REAUTH_FAILED`) · `§admin-reset` (`PASSWORD_RESET_BY_ADMIN`). Tất cả:
+  `expected null to be '<UA của ca>'`.
+  ⤷ `§admin-reset` trả **HTTP 200** (không 403) ⇒ công thức quyền của plan §2l đúng, ca đỏ vì phép
+  đo chứ không vì cổng.
+- `src/auth/auth.service.spec.ts` — **2 đỏ**: `USER_UNLOCKED`/`PASSWORD_RESET_COMPLETED`/
+  `ALL_SESSIONS_REVOKED` thiếu `203.0.113.10`; neo hình-dạng call-site 2FA
+  (`expected 'undefined' to be 'object'` — hôm nay `recordReauthFailure` được gọi 3 đối số).
+- `src/users/auth-users.service.spec.ts` — **2 đỏ**: nhánh degraded + nhánh NÉM, cả hai thiếu
+  `203.0.113.11` ở `user.login_throttle_cleared` + `USER_UNLOCKED`.
+
+⚠️ `typecheck` ĐỎ ở bước này là **DỰ KIẾN** (spec gọi chữ ký chưa đổi) — bằng chứng RED là danh sách
+ca vitest đỏ, KHÔNG phải mã thoát của `check.sh` (plan §4.4).
+
 ## Lịch sử
 
 - Phiên 2026-06-19: FE-AUTH-1 (redesign login + 2FA) + ACCT-1 (self-service đổi mật khẩu/hồ sơ, wire route /settings/account) — đều land. Realign backlog v2 (auth·console·app).

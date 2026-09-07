@@ -62,6 +62,26 @@ export interface RequestMeta {
   userAgent?: string;
 }
 
+/**
+ * S18-AUTH-SECEVENTMETA-1 (D6) — dựng `RequestMeta` từ một request Express. MỘT nguồn duy nhất cho
+ * cả `AuthController` lẫn `AuthUsersController`.
+ *
+ * Vì sao là hàm export chứ không phải hai biểu thức giống nhau ở hai controller: sợi dây
+ * `req → { ip, userAgent }` chính là thứ cả họ WO S18-AUTH-*META bảo vệ. Hai bản sao của nó sẽ trôi,
+ * và bản trôi sẽ là bản im lặng. Tiền lệ cùng file: `redactEmailFromDetail` cũng là hàm thuần export
+ * và đã được `users/auth-users.service.ts` dùng lại.
+ *
+ * Kiểu nhận vào cố ý HẸP (không phải `express.Request`) để không kéo phụ thuộc kiểu của tầng HTTP vào
+ * service, và vẫn nhận được `Request` thật.
+ */
+export function requestMeta(req: {
+  ip?: string;
+  headers: Record<string, string | string[] | undefined>;
+}): RequestMeta {
+  const ua = req.headers["user-agent"];
+  return { ip: req.ip, userAgent: Array.isArray(ua) ? ua[0] : ua };
+}
+
 const uuidSchema = z.string().uuid();
 /** 401 ĐỒNG NHẤT cho mọi lỗi đăng nhập — không lộ user/tenant tồn tại (plan §3b/G2-6). */
 const UNIFORM_LOGIN_ERROR = "Thông tin đăng nhập không hợp lệ.";
@@ -770,7 +790,13 @@ export class AuthService {
     });
     if (!ok) {
       await this.rateLimiter.recordFailure(rlKey);
-      await this.recordReauthFailure(user.companyId, user.id, "2fa_disable");
+      // S18-AUTH-SECEVENTMETA-1 — `{}` TƯỜNG MINH, không phải quên. `disableTwoFactor` chưa nhận
+      // `RequestMeta`, và việc nối dây nó thuộc `S18-AUTH-RESTORE2FA-1` (`done_when` của WO đó đòi
+      // `auth.2fa_disabled` + `auth.2fa_disable_denied` mang ip/UA, và `paths` của nó có
+      // `two-factor.service.ts`). Lấy sang đây là cướp phạm vi + rủi ro xung đột hai nhánh.
+      // Một `{}` viết ra ở call-site là thứ grep được và đọc thấy khi review; một giá trị mặc định
+      // trong chữ ký thì vô hình. WO kia chỉ cần thay đúng token này.
+      await this.recordReauthFailure(user.companyId, user.id, "2fa_disable", {});
       throw new UnauthorizedException("Mật khẩu không đúng.");
     }
     await this.rateLimiter.reset(rlKey);
@@ -904,6 +930,10 @@ export class AuthService {
         eventType: "PASSWORD_CHANGED",
         userId: user.id,
         actorUserId: user.id,
+        // S18-AUTH-SECEVENTMETA-1 — dual-write phải mang CÙNG dấu vết như hàng `audit_logs` ngay
+        // trên; thiếu nó thì timeline bảo mật per-account (AUTH-API-402) không trả lời được "AI".
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       return "ok" as const;
     });
@@ -927,7 +957,7 @@ export class AuthService {
     }
     if (outcome === "bad_credentials") {
       await this.rateLimiter.recordFailure(rlKey);
-      await this.recordReauthFailure(user.companyId, user.id, "change_password");
+      await this.recordReauthFailure(user.companyId, user.id, "change_password", meta);
       throw new UnauthorizedException("Mật khẩu hiện tại không đúng.");
     }
     // ⚠️ Thành công phải là nhánh ĐƯỢC ĐẶT TÊN, không phải phần rơi-xuống-cuối: thêm một outcome thứ
@@ -1784,11 +1814,17 @@ export class AuthService {
         eventType: "PASSWORD_RESET_COMPLETED",
         userId: row.userId,
         actorUserId: row.userId,
+        // S18-AUTH-SECEVENTMETA-1 — đường CÔNG KHAI không xác thực: `actorUserId` chỉ nói "chủ tài
+        // khoản", nên ip/UA là thứ DUY NHẤT nói người cầm token ngồi ở đâu.
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       await this.securityEvents.record(tx, {
         eventType: "ALL_SESSIONS_REVOKED",
         userId: row.userId,
         actorUserId: row.userId,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
         payload: { reason: "password_reset" },
       });
       // S18-AUTH-RESETCLEARS-1 — slug đọc SAU mọi lệnh ghi, KHÔNG bọc try/catch: một statement lỗi đã
@@ -1918,6 +1954,10 @@ export class AuthService {
           eventType: "USER_UNLOCKED",
           userId: targetUserId,
           actorUserId,
+          // S18-AUTH-SECEVENTMETA-1 — `actorUserId === targetUserId` ở đường này (`:1817`/`:1827`
+          // truyền `userId, userId`), y hệt lý do hàng `audit_logs` anh em cần ip/UA.
+          ip: meta.ip,
+          userAgent: meta.userAgent,
           payload: { reason: "password_reset", ok: false },
         });
       });
@@ -2183,6 +2223,19 @@ export class AuthService {
     companyId: string,
     userId: string,
     context: "2fa_disable" | "change_password",
+    // S18-AUTH-SECEVENTMETA-1 — `meta` BẮT BUỘC, KHÔNG `= {}` (mirror D1 của #484). Đây là vết BỀN
+    // duy nhất của nhánh mà KẺ CHIẾM PHIÊN dò mật khẩu rơi vào, và `actorUserId` ở đây là CHỦ TÀI
+    // KHOẢN — nên không có ip/UA thì nó không trả lời được câu "AI". Mặc định `= {}` sẽ làm một
+    // caller quên trở nên im lặng ở compile-time, đúng thứ WO này đi giết.
+    //
+    // ⚠️ CẤM đọc bằng `meta?.ip`: nếu một điểm gọi lách `tsc` bằng `as unknown as` thì
+    // `meta === undefined` ⇒ TypeError NẰM TRONG `try` dưới đây ⇒ bị `catch` NUỐT ⇒ vết biến mất
+    // trong im lặng. Giữ required và để `tsc` là cổng.
+    //
+    // ⚠️ PHẠM VI của lời hứa "caller tương lai không biên dịch được nếu quên": chỉ đúng cho caller
+    // TRONG class này. `two-factor.service.ts:238` có một `recordReauthFailure` RIÊNG (context
+    // `2fa_enable`) — nó KHÔNG được tham số này bảo vệ. Nợ có chủ: `S18-AUTH-RESTORE2FA-1`.
+    meta: RequestMeta,
   ): Promise<void> {
     try {
       await this.dbsvc.withTenant(companyId, async (tx) => {
@@ -2190,6 +2243,8 @@ export class AuthService {
           eventType: "REAUTH_FAILED",
           userId,
           actorUserId: userId,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
           // CHỈ ngữ cảnh — KHÔNG mật khẩu, KHÔNG mã (BẤT BIẾN #3): không truyền vào thì không có gì để lộ.
           payload: { context },
         });

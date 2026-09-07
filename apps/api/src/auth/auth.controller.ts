@@ -29,7 +29,7 @@ import {
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request, Response } from "express";
-import { AuthService, type RequestMeta } from "./auth.service";
+import { AuthService, requestMeta, type RequestMeta } from "./auth.service";
 import { csrfTokensMatch, parseCookies } from "./cookie.util";
 import { SessionCookieService } from "./session-cookie.service";
 import {
@@ -317,8 +317,13 @@ export class AuthController {
     return this.stepUpService.stepUp({ id: req.user.id, companyId: req.user.companyId }, dto);
   }
 
+  /**
+   * S18-AUTH-SECEVENTMETA-1 (D6) — delegate về helper DÙNG CHUNG ở `auth.service.ts`.
+   * `AuthUsersController` cần đúng sợi dây này; hai bản sao của nó sẽ trôi, và bản trôi sẽ là bản
+   * im lặng. Giữ method private ở đây để 7 điểm gọi `this.meta(req)` không phải đổi.
+   */
   private meta(req: Request): RequestMeta {
-    return { ip: req.ip, userAgent: req.headers["user-agent"] };
+    return requestMeta(req);
   }
 
   private bearer(authorization?: string): string {

@@ -15,6 +15,7 @@ import {
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
+import { requestMeta } from "../auth/auth.service";
 import {
   AUTH_USER,
   type AuthUserDetailDto,
@@ -202,6 +203,8 @@ export class AuthUsersController {
     @Req() req: AuthenticatedRequest,
     @Param("id", new ParseUUIDPipe()) id: string,
   ): Promise<AuthUserPasswordResetResultDto> {
-    return this.users.resetPassword(req.user, id);
+    // S18-AUTH-SECEVENTMETA-1 (D6) — helper DÙNG CHUNG với `AuthController`, không viết lại biểu
+    // thức `{ ip, userAgent }` lần thứ hai: sợi dây này chính là thứ họ WO S18-AUTH-*META bảo vệ.
+    return this.users.resetPassword(req.user, id, requestMeta(req));
   }
 }

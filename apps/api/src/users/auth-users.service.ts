@@ -25,7 +25,7 @@ import { isUniqueViolation } from "../common/db-error";
 import { DatabaseService } from "../db/db.service";
 import { users, type User } from "../db/schema";
 import { AuditService } from "../events/audit.service";
-import { AuthService, redactEmailFromDetail } from "../auth/auth.service";
+import { AuthService, redactEmailFromDetail, type RequestMeta } from "../auth/auth.service";
 import { PasswordService } from "../auth/password.service";
 import { LoginRateLimiter } from "../auth/login-rate-limiter";
 import { SecurityEventWriter } from "../auth/security-event-writer.service";
@@ -621,7 +621,15 @@ export class AuthUsersService {
    * + dual-write PASSWORD_RESET_BY_ADMIN — TUYỆT ĐỐI KHÔNG chứa temp password/hash (BẤT BIẾN #3);
    * plaintext CHỈ trả 1 lần trong response.
    */
-  async resetPassword(actor: AuthUserActor, id: string): Promise<AuthUserPasswordResetResultDto> {
+  async resetPassword(
+    actor: AuthUserActor,
+    id: string,
+    // S18-AUTH-SECEVENTMETA-1 — ip/UA của ADMIN (người BẤM NÚT), KHÔNG phải của nạn nhân. Tham số
+    // riêng cho method này chứ KHÔNG nhét vào `AuthUserActor`: type đó dùng chung cho 15 method,
+    // sửa nó là ripple 15 chữ ký + mọi builder trong spec cho đúng MỘT method trong phạm vi.
+    // BẮT BUỘC (không `= {}`) — mirror D1 của #484.
+    meta: RequestMeta,
+  ): Promise<AuthUserPasswordResetResultDto> {
     // Self-guard giữ NGUYÊN vị trí đầu hàm: `requireRateLimiter` đứng sau nó để thứ tự lỗi không đổi
     // (tự-reset-mình vẫn là 400, không biến thành 500 khi DI sai).
     if (actor.id === id) throw new BadRequestException(CANNOT_RESET_SELF);
@@ -654,11 +662,18 @@ export class AuthUsersService {
         actorUserId: actor.id,
         objectId: id,
         after: { revokedSessionCount, mustChangePassword: true },
+        // S18-AUTH-SECEVENTMETA-1 (nợ N3 của #484) — ip/UA của ADMIN. Đây là thao tác privileged sau
+        // cặp sensitive `reset-password:user`; vết không định danh được người thao tác thì cặp đó chỉ
+        // chặn được lúc bấm, không truy được về sau.
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       await this.securityEvents?.record(tx, {
         eventType: "PASSWORD_RESET_BY_ADMIN",
         userId: id,
         actorUserId: actor.id,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
         payload: { revokedSessionCount },
       });
       // Slug đọc SAU mọi lệnh ghi, KHÔNG try/catch (statement lỗi đã abort tx — PG 25P02). 0 hàng ⇒
@@ -694,7 +709,7 @@ export class AuthUsersService {
             `resetPassword: gỡ khoá đăng nhập KHÔNG kết luận được (degraded) cho user ${id} — ` +
               `mật khẩu ĐÃ đổi nhưng người dùng có thể vẫn bị 429`,
           );
-          await this.recordFailedLockClear(actor, id);
+          await this.recordFailedLockClear(actor, id, meta);
         }
       } catch (err) {
         // ValkeyService là "never throws" ⇒ tới đây là BUG (namespace khoá sai / DI vắng). Kêu, đừng nuốt.
@@ -705,7 +720,7 @@ export class AuthUsersService {
           `resetPassword: gỡ khoá đăng nhập thất bại cho user ${id} (mật khẩu ĐÃ đổi — có thể vẫn 429): ` +
             redactEmailFromDetail(detail, outcome.email),
         );
-        await this.recordFailedLockClear(actor, id);
+        await this.recordFailedLockClear(actor, id, meta);
       }
     }
     return { tempPassword: outcome.tempPassword, revokedSessionCount: outcome.revokedSessionCount };
@@ -719,7 +734,13 @@ export class AuthUsersService {
    * hàng audit kia hàm ý "người dùng vào lại được ngay" trong khi khoá còn sống ⇒ suy luận gãy, phải có
    * vết riêng. Bọc try/catch: tx phụ hỏng không được kéo đổ thao tác chính đã commit.
    */
-  private async recordFailedLockClear(actor: AuthUserActor, id: string): Promise<void> {
+  private async recordFailedLockClear(
+    actor: AuthUserActor,
+    id: string,
+    // S18-AUTH-SECEVENTMETA-1 — private, MỘT caller (`resetPassword`) ⇒ ripple = 0 ngoài file. Để
+    // một hàng cùng chuỗi câm trong khi hàng chính có vết là để lại đúng khoảng trống WO này đi lấp.
+    meta: RequestMeta,
+  ): Promise<void> {
     try {
       await this.db.withTenant(actor.companyId, async (tx) => {
         await this.audit.record(tx, {
@@ -728,11 +749,15 @@ export class AuthUsersService {
           actorUserId: actor.id,
           objectId: id,
           after: { ok: false, reason: "password_reset" },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
         });
         await this.securityEvents?.record(tx, {
           eventType: "USER_UNLOCKED",
           userId: id,
           actorUserId: actor.id,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
           payload: { reason: "password_reset", ok: false },
         });
       });

@@ -1,10 +1,19 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-07 09:41Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-07 10:44Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🔴 S18-AUTH-SECEVENTMETA-1 — `user_security_events` của đường đổi mật khẩu KHÔNG có `ip_address`/`user_agent` — nhánh `bad_credentials` (kẻ chiếm phiên dò mật khẩu) để lại vết VÔ DANH
+- **zone**: red · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/api/src/auth/auth.service.ts`, `apps/api/src/auth/auth.controller.ts`, `apps/api/src/users/**`, `apps/api/src/auth/**/*.spec.ts`, `apps/api/test/integration/auth-s18-seceventmeta-*.int-spec.ts`, `docs/plans/S18-AUTH-SECEVENTMETA-1.md`, `harness/backlog.mjs`
+- **phụ thuộc**: S18-AUTH-RESETMETA-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] 4 `securityEvents.record` của `resetPassword`/`changePassword` + `recordReauthFailure` mang `ip`/`userAgent`
+  - [ ] `recordReauthFailure` dùng chung với `disableTwoFactor` ⇒ CHỐT cách truyền meta ở đó mà không kéo phạm vi 2FA ngoài ý muốn
+  - [ ] Đường admin `user.password_reset_by_admin` mang ip/userAgent của ADMIN (không phải của nạn nhân)
+  - [ ] Ca int-spec qua HTTP thật đọc thẳng `user_security_events` (KHÔNG gọi thẳng service — mirror S18-AUTH-RESETMETA-1)
+  - [ ] bash harness/check.sh --all --lane-db=s18seceventmeta XANH
 
 ## Hàng đợi
 
@@ -15,8 +24,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 - 🟡 `S17-CHAT-UX2-BE-2` CHAT-API-031 GET /chat/rooms/:id/links — liên kết đã chia sẻ trong phòng: trích https?:// từ body tin chưa thu hồi, keyset room_seq DESC, trần 50/trang, membership-gated như API-017, con trỏ mang vân phòng (DEC-025)
 - 🟡 `S17-CHAT-UX2-FE-3` Composer v2 DEC-027: @mention autocomplete từ roster (gửi mentions[]) · emoji picker tĩnh ~120 (0 dependency) · dán/kéo-thả ảnh qua uploadChatAttachment · thumbnail xem trước trước gửi · giữ bất biến clientMessageId + không mất nháp khi lỗi
 - 🔴 `S18-AUTH-RESETFLOOR-1` `resetPassword` KHÔNG có `applyUniformResponseFloor` — nhánh từ chối chạy argon2 (hàng trăm ms) còn nhánh token-rác trả sau 1 SELECT ⇒ oracle TIMING trên đường công khai
-- 🔴 `S18-AUTH-SECEVENTMETA-1` `user_security_events` của đường đổi mật khẩu KHÔNG có `ip_address`/`user_agent` — nhánh `bad_credentials` (kẻ chiếm phiên dò mật khẩu) để lại vết VÔ DANH
-- 🔴 `S18-AUTH-RESTORE2FA-1` Khôi phục user KHÔNG soát lại 2FA + `enroll`/`confirmEnable` không lọc `deleted_at` — tài khoản khôi phục có thể về với 2FA TẮT, hoặc với yếu tố thứ hai CỦA KẺ TẤN CÔNG
 - 🟡 `S18-QA-PIPELINEREPLAY-1` `task-pipeline-backfill-0500` replay migration 0500 lên TOÀN BỘ project của lane ⇒ FK `project_states_project_id_fkey` vỡ khi spec khác dọn tenant — cùng họ 'replay spec vs fixture song song', khác cơ chế với S18-QA-ASSETFLAKE-1
 - 🟡 `S18-FE-DEPTQUERYKEY-1` Hai API khác endpoint/khác cổng quyền dùng CHUNG `hrKeys.departments.list()` ⇒ màn mount trước đầu độc cache của màn kia
 
@@ -50,6 +57,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 - `S17-CHAT-UX2-FE-4` Bảng thông tin phòng v2 DEC-025: bố cục dọc (avatar lớn · tên · Tạo bởi) · 3 hành động tròn (Thêm thành viên [gate] · Tắt thông báo · Ghim — không gate) · Sheet thành viên · accordion Ảnh/Video lưới (kind=image) · Tệp · Liên kết (CHAT-API-031) · Tin ghim · Lưu trữ · Rời nhóm ⏳ cần: S17-CHAT-UX2-BE-1, S17-CHAT-UX2-BE-2
 - `S17-CHAT-UX2-FE-5` Drawer chat DEC-026 thay ChatDock/ChatDockWindow (Sheet phải 400px: tìm + chip · danh sách thu gọn ↔ hội thoại push · 1 hội thoại · ⤢ mở /chat · toàn màn dưới md) + /chat responsive (≥1280 3 cột · ≥768 info thành Sheet · <768 1 cột push) + ChatBadge mở drawer ⏳ cần: S17-CHAT-UX2-FE-1
 - `S17-CHAT-UX2-QA-1` Nghiệm thu wave S17-CHAT-UX2: masking preview/links (thu hồi · file · system) · peer cross-tenant + non-member · WS payload hẹp hơn REST · snapshot light/dark 3 màn · axe 0 critical · coverage components/chat ≥80% · ratchet 0-@SubscribeMessage + single-socket-file vẫn xanh · bằng chứng ACCEPTANCE ⏳ cần: S17-CHAT-UX2-FE-3, S17-CHAT-UX2-FE-4, S17-CHAT-UX2-FE-5
+- `S18-AUTH-SECEVENTREST-1` 9 điểm ghi `user_security_events` NGOÀI đường mật khẩu vẫn VÔ DANH — nặng nhất là hai nút admin chạy mỗi ngày (`unlockUser`, `clearLoginThrottle`) ⏳ cần: S18-AUTH-SECEVENTMETA-1
+- `S18-AUTH-RESTORE2FA-1` Khôi phục user KHÔNG soát lại 2FA + `enroll`/`confirmEnable` không lọc `deleted_at` — tài khoản khôi phục có thể về với 2FA TẮT, hoặc với yếu tố thứ hai CỦA KẺ TẤN CÔNG ⏳ cần: S18-AUTH-SECEVENTMETA-1
 
 **🛑 BLOCKED:**
 - `S14-SEC-CAPWILDCARD-1` `capabilities` phát ĐÚNG quyết định của `can()` tầng công ty (v2, owner chốt 05/09): bỏ cờ HÀNG GRANT + bỏ danh sách tay `SENSITIVE_CAPABILITY_ALLOWLIST` — đóng CẢ lỗ `*:*` lẫn lớp lỗi `capability-allowlist-hides-admin-screens`
@@ -59,7 +68,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 0
+- **branch**: `master` · **file đang đổi (dirty)**: 10
 - **migration head**: idx 236 — `0569_s14recruitfilegrant1_candidate_file_perm` (237 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -68,6 +77,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `361b4666` | 2026-09-07 | docs(status): regen sau khi merge #484 + #485 — S18-AUTH-RESETMETA-1 và S18-QA-ASSETFLAKE-1 đóng sổ |
 | `118a6ec4` | 2026-09-07 | fix(auth): S18-AUTH-RESETMETA-1 — 5 hàng audit đổi mật khẩu giờ mang ip/userAgent (#S18) (#484) |
 | `530069e2` | 2026-09-07 | test(qa): S18-QA-ASSETFLAKE-1 — H1 của s11-asset-db1-invariants hết đỏ-giả: đếm `grants` theo phạm vi SỞ HỮU (#S18) (#485) |
 | `2ed34586` | 2026-09-07 | fix(auth): S18-AUTH-2FADELETED-1 — tài khoản đã xoá mềm KHÔNG còn tắt được 2FA (#S18) (#483) |
@@ -79,7 +89,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `d4b37200` | 2026-09-04 | fix(permission): S14-SEC-CATALOGSNAP-HARDEN-1 — catalog RỖNG là SUY BIẾN (D9) + ô single-flight không còn kẹt (M2) (#478) |
 | `eb6508de` | 2026-09-04 | docs(harness): bàn giao — S14-SEC-CATALOGSNAP-HARDEN-1 PR #478 mở; census FE + cổng người của 2 WO S14 còn lại |
 | `82c6c263` | 2026-09-04 | chore(docs): regen STATUS sau merge #477 — S14-RECRUIT-FILEGRANT-1 done, 0 đang làm, 10 ready |
-| `2bf9cead` | 2026-09-04 | feat(recruit): S14-RECRUIT-FILEGRANT-1 — bề mặt tệp CV riêng cho RECRUIT (API-033..037) (#477) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
