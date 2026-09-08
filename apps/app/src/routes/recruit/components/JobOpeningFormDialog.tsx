@@ -71,13 +71,13 @@ export function JobOpeningFormDialog({
   // thích làm form thành ngõ cụt (review-gate mục 22). BE chưa có picker org-unit cho RECRUIT —
   // gap seed/API ghi ở backlog FE-1, đây chỉ vá phần HIỆN LỖI tường minh.
   const { data: departments, isError: departmentsFailed } = useQuery({
-    queryKey: hrKeys.departments.list(),
+    queryKey: hrKeys.departments.lookup(),
     queryFn: () => hrApi.listDepartments(),
     enabled: open && allowed,
     staleTime: 300_000,
   });
   const { data: positions, isError: positionsFailed } = useQuery({
-    queryKey: hrKeys.positions.list(),
+    queryKey: hrKeys.positions.lookup(),
     queryFn: () => hrApi.listPositions(),
     enabled: open && allowed,
     staleTime: 300_000,

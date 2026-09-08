@@ -173,7 +173,7 @@ export function ProjectListPage() {
   // fallback bên dưới) để người dùng THẤY và GỠ được filter đang áp.
   const canReadDepartments = useCan("read", "department");
   const { data: departments } = useQuery({
-    queryKey: hrKeys.departments.list(),
+    queryKey: hrKeys.departments.lookup(),
     queryFn: () => hrApi.listDepartments(),
     enabled: canView && canReadDepartments,
     staleTime: 5 * 60 * 1000,

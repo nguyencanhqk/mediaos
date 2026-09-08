@@ -50,17 +50,17 @@ function useLookupOptions() {
     staleTime: 5 * 60_000,
   });
   const { data: departments } = useQuery({
-    queryKey: hrKeys.departments.list(),
+    queryKey: hrKeys.departments.lookup(),
     queryFn: () => hrApi.listDepartments(),
     staleTime: 5 * 60_000,
   });
   const { data: jobLevels } = useQuery({
-    queryKey: hrKeys.jobLevels.list(),
+    queryKey: hrKeys.jobLevels.lookup(),
     queryFn: () => hrApi.listJobLevels(),
     staleTime: 5 * 60_000,
   });
   const { data: contractTypes } = useQuery({
-    queryKey: hrKeys.contractTypes.list(),
+    queryKey: hrKeys.contractTypes.lookup(),
     queryFn: () => hrApi.listContractTypes(),
     staleTime: 5 * 60_000,
   });

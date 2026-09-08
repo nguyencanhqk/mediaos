@@ -61,7 +61,7 @@ export function GoalListPage() {
   // Danh mục phụ trợ filter — GET /hr/lookups/departments là reference-data non-sensitive (KHÔNG cần
   // read:department). fail-soft: lỗi → không có option, filter vẫn dùng "tất cả".
   const { data: departments } = useQuery({
-    queryKey: hrKeys.departments.list(),
+    queryKey: hrKeys.departments.lookup(),
     queryFn: () => hrApi.listDepartments(),
     enabled: canView,
     staleTime: 300_000,

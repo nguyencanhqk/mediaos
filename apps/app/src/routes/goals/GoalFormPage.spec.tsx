@@ -15,31 +15,32 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
 }));
 
-vi.mock("@mediaos/web-core", () => ({
-  useCan: vi.fn(() => true),
-  // Inline TRONG factory (vi.mock hoisted — biến top-level chưa khởi tạo lúc chạy factory).
-  ApiError: class ApiError extends Error {
-    status = 0;
-  },
-  goalApi: {
-    getGoal: vi.fn(),
-    createGoal: vi.fn(),
-    updateGoal: vi.fn(),
-    listGoals: vi.fn(),
-  },
-  goalInvalidation: { create: () => [["goals", "list"]], update: () => [["goals", "list"]] },
-  goalKeys: {
-    detail: (id: string) => ["goals", "detail", id],
-    list: (p?: unknown) => ["goals", "list", p],
-  },
-  hrApi: { listDepartments: vi.fn(), listEmployees: vi.fn() },
-  hrKeys: {
-    departments: { list: (p?: unknown) => ["hr", "departments", "list", p] },
-    employees: { list: (p?: unknown) => ["hr", "employees", "list", p] },
-  },
-  taskProjectApi: { listProjects: vi.fn() },
-  taskKeys: { projects: { list: (p?: unknown) => ["tasks", "projects", "list", p] } },
-}));
+// S18-FE-DEPTQUERYKEY-1 — `hrKeys` lấy BẢN THẬT (xem ghi chú cùng tên ở GoalListPage.spec.tsx).
+vi.mock("@mediaos/web-core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@mediaos/web-core")>();
+  return {
+    useCan: vi.fn(() => true),
+    // Inline TRONG factory (vi.mock hoisted — biến top-level chưa khởi tạo lúc chạy factory).
+    ApiError: class ApiError extends Error {
+      status = 0;
+    },
+    goalApi: {
+      getGoal: vi.fn(),
+      createGoal: vi.fn(),
+      updateGoal: vi.fn(),
+      listGoals: vi.fn(),
+    },
+    goalInvalidation: { create: () => [["goals", "list"]], update: () => [["goals", "list"]] },
+    goalKeys: {
+      detail: (id: string) => ["goals", "detail", id],
+      list: (p?: unknown) => ["goals", "list", p],
+    },
+    hrApi: { listDepartments: vi.fn(), listEmployees: vi.fn() },
+    hrKeys: actual.hrKeys,
+    taskProjectApi: { listProjects: vi.fn() },
+    taskKeys: { projects: { list: (p?: unknown) => ["tasks", "projects", "list", p] } },
+  };
+});
 
 vi.mock("@/routes/tasks/EmployeePicker", () => ({
   EmployeePicker: ({ testId }: { testId: string }) => <div data-testid={testId}>picker</div>,

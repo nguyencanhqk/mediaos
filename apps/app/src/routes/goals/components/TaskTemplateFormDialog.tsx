@@ -40,7 +40,7 @@ export function TaskTemplateFormDialog({
   const [isActive, setIsActive] = useState(template?.isActive ?? true);
 
   const { data: departments } = useQuery({
-    queryKey: hrKeys.departments.list(),
+    queryKey: hrKeys.departments.lookup(),
     queryFn: () => hrApi.listDepartments(),
     staleTime: 300_000,
   });

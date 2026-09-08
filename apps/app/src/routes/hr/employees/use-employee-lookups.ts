@@ -33,26 +33,26 @@ export function useEmployeeLookups(): EmployeeLookups {
   );
 
   const departments = useQuery({
-    queryKey: hrKeys.departments.list(),
+    queryKey: hrKeys.departments.lookup(),
     queryFn: () => hrApi.listDepartments(),
     staleTime: LOOKUP_STALE_TIME,
   });
 
   const positions = useQuery({
-    queryKey: hrKeys.positions.list(),
+    queryKey: hrKeys.positions.lookup(),
     queryFn: () => hrApi.listPositions(),
     staleTime: LOOKUP_STALE_TIME,
   });
 
   const jobLevels = useQuery({
-    queryKey: hrKeys.jobLevels.list(),
+    queryKey: hrKeys.jobLevels.lookup(),
     queryFn: () => hrApi.listJobLevels(),
     staleTime: LOOKUP_STALE_TIME,
     enabled: canManageMasterData,
   });
 
   const contractTypes = useQuery({
-    queryKey: hrKeys.contractTypes.list(),
+    queryKey: hrKeys.contractTypes.lookup(),
     queryFn: () => hrApi.listContractTypes(),
     staleTime: LOOKUP_STALE_TIME,
     enabled: canManageMasterData,

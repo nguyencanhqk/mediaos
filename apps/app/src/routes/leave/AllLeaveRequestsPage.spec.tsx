@@ -15,27 +15,29 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
 
-vi.mock("@mediaos/web-core", () => ({
-  useCan: vi.fn(() => true),
-  leaveApi: {
-    listRequests: vi.fn(),
-    listTypes: vi.fn().mockResolvedValue([]),
-  },
-  leaveKeys: {
-    all: ["leave"],
-    requests: {
-      list: (p?: unknown) => ["leave", "requests", "list", p],
-      detail: (id: string) => ["leave", "requests", "detail", id],
+// S18-FE-DEPTQUERYKEY-1 — `hrKeys` lấy BẢN THẬT (xem ghi chú cùng tên ở GoalListPage.spec.tsx).
+vi.mock("@mediaos/web-core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@mediaos/web-core")>();
+  return {
+    useCan: vi.fn(() => true),
+    leaveApi: {
+      listRequests: vi.fn(),
+      listTypes: vi.fn().mockResolvedValue([]),
     },
-    types: { list: (p?: unknown) => ["leave", "types", "list", p] },
-  },
-  hrApi: {
-    listDepartments: vi.fn().mockResolvedValue([]),
-  },
-  hrKeys: {
-    departments: { list: () => ["hr", "departments", "list"] },
-  },
-}));
+    leaveKeys: {
+      all: ["leave"],
+      requests: {
+        list: (p?: unknown) => ["leave", "requests", "list", p],
+        detail: (id: string) => ["leave", "requests", "detail", id],
+      },
+      types: { list: (p?: unknown) => ["leave", "types", "list", p] },
+    },
+    hrApi: {
+      listDepartments: vi.fn().mockResolvedValue([]),
+    },
+    hrKeys: actual.hrKeys,
+  };
+});
 
 vi.mock("@mediaos/ui", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/ui")>();

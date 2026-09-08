@@ -17723,11 +17723,14 @@ export const backlog = [
     title:
       "Hai API khác endpoint/khác cổng quyền dùng CHUNG `hrKeys.departments.list()` ⇒ màn mount trước đầu độc cache của màn kia",
     zone: "yellow",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/app/src/**",
       "packages/web-core/src/lib/hr-api.ts",
       "packages/web-core/src/lib/hr-master-data-api.ts",
+      // Điểm vá THẬT nằm ở đây (định nghĩa khoá + invalidation), không phải ở hai file api trên —
+      // seed đoán nhầm vị trí. Thiếu dòng này thì `guard-scope` cảnh báo mỗi lượt Edit.
+      "packages/web-core/src/lib/query-keys.ts",
       "docs/plans/S18-FE-DEPTQUERYKEY-1.md",
       "harness/backlog.mjs",
     ],
@@ -17738,6 +17741,8 @@ export const backlog = [
       "ĐO 04/09: `apps/app/src/routes/hr/departments/DepartmentsPage.tsx:41-42` dùng `queryKey: hrKeys.departments.list()` với `queryFn: () => hrMasterDataApi.listDepartments()` → **GET /hr/departments** (gác `read:department`, schema `HrDepartment`).",
       "15 call-site KHÁC dùng ĐÚNG key ấy với `queryFn: () => hrApi.listDepartments()` → **GET /hr/lookups/departments** (MỞ, schema `HrDepartmentLookup` — shape HẸP hơn): EmployeeMultiPickerDialog · goals/TaskTemplateFormDialog · goals/GoalFormPage · goals/GoalListPage · goals/TaskTemplateListPage · hr/employees/EmployeeListPage · hr/employees/use-employee-lookups · hr/positions/PositionsPage · leave/AllLeaveRequestsPage · leave/LeavePoliciesPage · recruit/JobOpeningFormDialog · tasks/ProjectFormDrawer · tasks/ProjectListPage · tasks/TaskFormDrawer.",
       "Phát hiện trong lúc census của S14-FE-DEBT-1 (memory s14-remaining-two-wos) — tách WO riêng vì là LỖI THẬT, không phải nợ trùng lặp.",
+      "⚠️ CENSUS 08/09 CHỈNH LẠI SỐ ĐO CỦA SEED (3 chỗ): (1) `hr/positions/PositionsPage.tsx:34` dùng `hrMasterDataApi.listDepartments()`, KHÔNG phải `hrApi` — họ `departments` là 2 master-data + 13 lookup, không phải 1 + 15; (2) danh sách `src` liệt kê 14 tên cho con số '15'; (3) khiếm khuyết là HỌ BỐN KHOÁ — `positions`/`jobLevels`/`contractTypes` có ĐÚNG cùng hình dạng (màn master-data gác quyền, DTO superset ↔ picker `/hr/lookups/*` mở, DTO hẹp). Owner chốt 08/09: làm cả 4 trong MỘT PR.",
+      "Điểm vá là `packages/web-core/src/lib/query-keys.ts` (thêm `lookup()` cho 4 họ + nối `hrMasterDataInvalidation` trả HAI prefix), KHÔNG phải `hr-api.ts`/`hr-master-data-api.ts` như seed đoán — hai file đó không đổi một dòng.",
     ],
     done_when: [
       "Tách key: hai nguồn dữ liệu khác endpoint phải có hai key khác nhau (ví dụ `hrKeys.departments.lookup()` cho `/hr/lookups/departments`) — KHÔNG ‘vá’ bằng cách đổi một bên sang gọi API bên kia (khác cổng quyền: `/hr/departments` gác `read:department`, đổi sẽ ẨN picker với actor không có cặp — memory capability-allowlist-hides-admin-screens)",
@@ -17748,6 +17753,8 @@ export const backlog = [
     notes: [
       "🟡 LIGHT gate nhưng chạm CỔNG QUYỀN gián tiếp: hai endpoint có hai cổng khác nhau, chọn sai bên là ẩn màn của actor hợp lệ hoặc lộ dữ liệu rộng hơn ⇒ đọc kỹ trước khi đổi.",
       "Shape khác nhau ⇒ triệu chứng thật có thể là Zod parse đỏ hoặc field `undefined` im lặng tùy thứ tự mount — memory server-masking-needs-optional-fe-schema.",
+      "Tách khoá ĐẺ RA nợ mới: trước WO, CRUD trên màn quản trị làm tươi picker NHỜ TAI NẠN (chung khoá). Tách xong mà không nối `hrMasterDataInvalidation` thì picker giữ bản cũ tới 5 phút (staleTime lookup) ⇒ done_when #2 là bắt buộc, không phải tuỳ chọn.",
+      "Nợ để lại (plan §7): N1 `PositionsPage` đọc phòng ban qua endpoint gác `read:department` (hành vi CÓ TRƯỚC WO, D1 cấm đổi) · N2 còn 4 spec tự dựng bản sao ngầm `hrKeys` — trong đó `OrgChartPage.spec` stub THIẾU nhánh `departments.all` mà màn thật có invalidate, spec xanh chỉ vì đường đó không ca nào chạy tới.",
     ],
   },
 ];
