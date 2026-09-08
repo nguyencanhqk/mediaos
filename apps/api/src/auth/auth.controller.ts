@@ -136,11 +136,14 @@ export class AuthController {
   ): Promise<LogoutResponse> {
     const cookies = parseCookies(req.headers.cookie);
     const cookieToken = cookies[REFRESH_COOKIE_NAME];
+    // S18-AUTH-SECEVENTREST-1: HAI điểm gọi, không phải một. Đường COOKIE là đường production
+    // (web-core dùng cookie — xem `login` ở trên); nối dây đường body mà quên đường này cho ra một
+    // int-spec XANH trong khi vết của người dùng thật vẫn VÔ DANH.
     if (cookieToken) {
       this.assertCsrf(req, cookies);
-      await this.auth.logout(cookieToken);
+      await this.auth.logout(cookieToken, this.meta(req));
     } else if (dto?.refreshToken) {
-      await this.auth.logout(dto.refreshToken);
+      await this.auth.logout(dto.refreshToken, this.meta(req));
     }
     this.clearSessionCookies(res);
     return { ok: true };
@@ -282,7 +285,7 @@ export class AuthController {
     @Req() req: AuthenticatedRequest,
     @Param("id") id: string,
   ): Promise<SessionRevokeResponse> {
-    await this.auth.revokeSession(req.user.companyId, req.user.id, id);
+    await this.auth.revokeSession(req.user.companyId, req.user.id, id, this.meta(req));
     return { ok: true, revoked_count: 1 };
   }
 
@@ -294,6 +297,7 @@ export class AuthController {
       req.user.companyId,
       req.user.id,
       req.user.sessionId,
+      this.meta(req),
     );
     return { ok: true, revoked_count: revokedCount };
   }

@@ -197,7 +197,7 @@ describe("AuthUsersService", () => {
 
   // ── lock ───────────────────────────────────────────────────────────────────
   it("lock: status='locked' + audit 'user.locked'", async () => {
-    const dto = await service.lockUser(ACTOR, TARGET_ID, "abuse");
+    const dto = await service.lockUser(ACTOR, TARGET_ID, "abuse", {});
     expect(repo.setLockTx).toHaveBeenCalled();
     expect(dto.status).toBe("locked");
     expect(audit.record).toHaveBeenCalledWith(
@@ -223,7 +223,7 @@ describe("AuthUsersService", () => {
       lmsSync as never,
       rateLimiter as never,
     );
-    await service.lockUser(ACTOR, TARGET_ID, "abuse");
+    await service.lockUser(ACTOR, TARGET_ID, "abuse", {});
     expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
     expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID, "locked");
     const entry = audit.record.mock.calls[0][1];
@@ -231,7 +231,7 @@ describe("AuthUsersService", () => {
   });
 
   it("lock: tự khoá chính mình → BadRequest (no-op, 0 audit, KHÔNG revoke phiên)", async () => {
-    await expect(service.lockUser(ACTOR, ACTOR.id)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.lockUser(ACTOR, ACTOR.id, undefined, {})).rejects.toBeInstanceOf(BadRequestException);
     expect(repo.setLockTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
     expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
@@ -239,7 +239,7 @@ describe("AuthUsersService", () => {
 
   it("lock: đã 'locked' → BadRequest (no-op, 0 audit, KHÔNG revoke phiên)", async () => {
     repo.findByIdTx = vi.fn(async () => makeUser({ status: "locked" })) as never;
-    await expect(service.lockUser(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.lockUser(ACTOR, TARGET_ID, undefined, {})).rejects.toBeInstanceOf(BadRequestException);
     expect(repo.setLockTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
     expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
@@ -247,7 +247,7 @@ describe("AuthUsersService", () => {
 
   it("lock: target không thấy → NotFound TRƯỚC audit", async () => {
     repo.findByIdTx = vi.fn(async () => undefined) as never;
-    await expect(service.lockUser(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.lockUser(ACTOR, TARGET_ID, undefined, {})).rejects.toBeInstanceOf(NotFoundException);
     expect(audit.record).not.toHaveBeenCalled();
   });
 
@@ -256,7 +256,7 @@ describe("AuthUsersService", () => {
     repo.findByIdTx = vi.fn(async () =>
       makeUser({ status: "locked", lockedAt: new Date() }),
     ) as never;
-    const dto = await service.unlockUser(ACTOR, TARGET_ID);
+    const dto = await service.unlockUser(ACTOR, TARGET_ID, {});
     expect(dto.status).toBe("active");
     expect(dto.lockedAt).toBeNull();
     expect(audit.record).toHaveBeenCalledWith(
@@ -271,13 +271,13 @@ describe("AuthUsersService", () => {
 
   it("unlock: chưa 'locked' → BadRequest (no-op, 0 audit)", async () => {
     repo.findByIdTx = vi.fn(async () => makeUser({ status: "active" })) as never;
-    await expect(service.unlockUser(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.unlockUser(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(BadRequestException);
     expect(repo.setUnlockTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
   });
 
   it("unlock: tự mở khoá chính mình → BadRequest", async () => {
-    await expect(service.unlockUser(ACTOR, ACTOR.id)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.unlockUser(ACTOR, ACTOR.id, {})).rejects.toBeInstanceOf(BadRequestException);
     expect(audit.record).not.toHaveBeenCalled();
   });
 
@@ -357,7 +357,7 @@ describe("AuthUsersService", () => {
       lmsSync as never,
       rateLimiter as never,
     );
-    const res = await service.resetTwoFactor(ACTOR, TARGET_ID);
+    const res = await service.resetTwoFactor(ACTOR, TARGET_ID, {});
     expect(res.revokedSessionCount).toBe(3);
     expect(repo.deleteTwoFactorTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID);
     expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
@@ -381,14 +381,14 @@ describe("AuthUsersService", () => {
 
   it("resetTwoFactor: self-reset (actor==target) CHO PHÉP (KHÔNG BadRequest)", async () => {
     repo.findByIdTx = vi.fn(async () => makeUser({ id: ACTOR.id })) as never;
-    const res = await service.resetTwoFactor(ACTOR, ACTOR.id);
+    const res = await service.resetTwoFactor(ACTOR, ACTOR.id, {});
     expect(res.revokedSessionCount).toBeGreaterThanOrEqual(0);
     expect(repo.deleteTwoFactorTx).toHaveBeenCalled();
   });
 
   it("resetTwoFactor: target không thấy / cross-tenant → NotFound TRƯỚC mọi mutation (0 audit, 0 revoke)", async () => {
     repo.findByIdTx = vi.fn(async () => undefined) as never;
-    await expect(service.resetTwoFactor(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(
+    await expect(service.resetTwoFactor(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(
       NotFoundException,
     );
     expect(repo.deleteTwoFactorTx).not.toHaveBeenCalled();
@@ -411,7 +411,7 @@ describe("AuthUsersService", () => {
       lmsSync as never,
       rateLimiter as never,
     );
-    const dto = await service.deleteUser(ACTOR, TARGET_ID);
+    const dto = await service.deleteUser(ACTOR, TARGET_ID, {});
     expect(repo.softDeleteTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID, ACTOR.id);
     expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
     expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID, "deleted");
@@ -431,12 +431,12 @@ describe("AuthUsersService", () => {
     repo.softDeleteTx = vi.fn(async () =>
       makeUser({ status: "locked", deletedAt: new Date() }),
     ) as never;
-    const dto = await service.deleteUser(ACTOR, TARGET_ID);
+    const dto = await service.deleteUser(ACTOR, TARGET_ID, {});
     expect(dto.status).toBe("locked");
   });
 
   it("delete: tự xóa chính mình → BadRequest (no-op, 0 audit, 0 revoke)", async () => {
-    await expect(service.deleteUser(ACTOR, ACTOR.id)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.deleteUser(ACTOR, ACTOR.id, {})).rejects.toBeInstanceOf(BadRequestException);
     expect(repo.softDeleteTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
     expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
@@ -444,14 +444,14 @@ describe("AuthUsersService", () => {
 
   it("delete: target không thấy / cross-tenant → NotFound TRƯỚC audit (0 audit rác)", async () => {
     repo.findByIdTx = vi.fn(async () => undefined) as never;
-    await expect(service.deleteUser(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.deleteUser(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(NotFoundException);
     expect(audit.record).not.toHaveBeenCalled();
     expect(securityEvents.record).not.toHaveBeenCalled();
   });
 
   // ── S2-AUTH-USEROPS-1: restoreUser (khôi phục) ──────────────────────────────────
   it("restore: đòi row ĐANG deleted + clear deletedAt + audit 'user.restored' + emit USER_RESTORED (KHÔNG revoke)", async () => {
-    const dto = await service.restoreUser(ACTOR, TARGET_ID);
+    const dto = await service.restoreUser(ACTOR, TARGET_ID, {});
     expect(repo.findDeletedByIdTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID);
     expect(repo.restoreTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID, ACTOR.id);
     expect(dto.deletedAt).toBeNull();
@@ -465,14 +465,14 @@ describe("AuthUsersService", () => {
 
   it("restore: target KHÔNG ở trạng thái deleted (hoặc cross-tenant) → NotFound, 0 audit", async () => {
     repo.findDeletedByIdTx = vi.fn(async () => undefined) as never;
-    await expect(service.restoreUser(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.restoreUser(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(NotFoundException);
     expect(repo.restoreTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
   });
 
   it("restore: email đã có user LIVE trùng (tạo mới sau khi xóa) → 409 Conflict, KHÔNG restore", async () => {
     repo.emailExistsTx = vi.fn(async () => true) as never;
-    await expect(service.restoreUser(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.restoreUser(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(ConflictException);
     expect(repo.restoreTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
   });
@@ -484,7 +484,7 @@ describe("AuthUsersService", () => {
         cause: { code: "23505", constraint: "users_company_normalized_email_active_uq" },
       });
     }) as never;
-    await expect(service.restoreUser(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.restoreUser(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(ConflictException);
     expect(audit.record).not.toHaveBeenCalled();
   });
 
@@ -839,7 +839,7 @@ describe("AuthUsersService — login throttle (429)", () => {
 
   it("CLEAR self ⇒ 400 và KHÔNG chạm một byte nào của không gian khoá", async () => {
     const { service, clearLoginLocks, audit } = makeService();
-    await expect(service.clearLoginThrottle(ACTOR, ACTOR.id)).rejects.toBeInstanceOf(
+    await expect(service.clearLoginThrottle(ACTOR, ACTOR.id, {})).rejects.toBeInstanceOf(
       BadRequestException,
     );
     expect(clearLoginLocks).not.toHaveBeenCalled();
@@ -850,7 +850,7 @@ describe("AuthUsersService — login throttle (429)", () => {
     const { service, clearLoginLocks, audit } = makeService({
       findByIdTx: vi.fn(async () => undefined),
     });
-    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(
+    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(
       NotFoundException,
     );
     expect(clearLoginLocks).not.toHaveBeenCalled();
@@ -859,7 +859,7 @@ describe("AuthUsersService — login throttle (429)", () => {
 
   it("CLEAR thành công: audit 'user.login_throttle_cleared' + security event USER_UNLOCKED{reason:'login_throttle'}", async () => {
     const { service, audit, securityEvents } = makeService();
-    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID)).resolves.toBeUndefined();
+    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID, {})).resolves.toBeUndefined();
 
     expect(audit.record).toHaveBeenCalledTimes(1);
     const entry = audit.record.mock.calls[0][1] as {
@@ -893,7 +893,7 @@ describe("AuthUsersService — login throttle (429)", () => {
         after: { locked: false, remainingSec: null, buckets: [], unknown: false },
       },
     });
-    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID)).resolves.toBeUndefined();
+    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID, {})).resolves.toBeUndefined();
     expect(audit.record).toHaveBeenCalledTimes(1);
     expect(securityEvents.record).toHaveBeenCalledTimes(1);
     const ev = securityEvents.record.mock.calls[0][1] as {
@@ -905,7 +905,7 @@ describe("AuthUsersService — login throttle (429)", () => {
   it("Valkey DEGRADED ⇒ 503, KHÔNG 204 — nhưng vết vẫn được ghi với ok:false", async () => {
     // 204 ở đây là nói dối với người bấm nút: họ sẽ bảo người dùng "thử lại đi" trong khi vẫn bị chặn.
     const { service, audit } = makeService({ throttle: { degraded: true } });
-    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(
+    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
     expect(audit.record).toHaveBeenCalledTimes(1);
@@ -919,7 +919,7 @@ describe("AuthUsersService — login throttle (429)", () => {
         after: { locked: true, remainingSec: 590, buckets: ["acct"], unknown: false },
       },
     });
-    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(
+    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
   });
@@ -929,7 +929,7 @@ describe("AuthUsersService — login throttle (429)", () => {
     // `rl:2fa` là control DUY NHẤT giới hạn dò TOTP ở bước-2; cho phép gỡ nó bằng cặp non-sensitive
     // nghĩa là người giữ wildcard — vốn bị `POST /:id/2fa/reset` từ chối — lại reset được ngưỡng tuỳ ý.
     const { service, clearLoginLocks } = makeService({ canResetTwoFactor: false });
-    await service.clearLoginThrottle(ACTOR, TARGET_ID);
+    await service.clearLoginThrottle(ACTOR, TARGET_ID, {});
     expect(clearLoginLocks).toHaveBeenCalledWith(SLUG, "target@a.test", undefined, {
       includeForgot: true,
     });
@@ -937,7 +937,7 @@ describe("AuthUsersService — login throttle (429)", () => {
 
   it("actor CÓ `reset-2fa:user` ⇒ bucket bước-2 ĐƯỢC gỡ (ca ALLOW đối chứng — ca deny trên không xanh-rỗng)", async () => {
     const { service, clearLoginLocks } = makeService();
-    await service.clearLoginThrottle(ACTOR, TARGET_ID);
+    await service.clearLoginThrottle(ACTOR, TARGET_ID, {});
     expect(clearLoginLocks).toHaveBeenCalledWith(
       SLUG,
       "target@a.test",
@@ -966,7 +966,7 @@ describe("AuthUsersService — login throttle (429)", () => {
         after: { locked: false, remainingSec: null, buckets: [], unknown: true },
       },
     });
-    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(
+    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
     expect((audit.record.mock.calls[0][1] as { after: { ok: boolean } }).after.ok).toBe(false);
@@ -974,7 +974,7 @@ describe("AuthUsersService — login throttle (429)", () => {
 
   it("LoginRateLimiter vắng (DI hỏng) ⇒ NÉM ngay, KHÔNG âm thầm trả 204 + audit 'đã gỡ'", async () => {
     const { service, audit } = makeService({ omitRateLimiter: true });
-    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID)).rejects.toThrow(/LoginRateLimiter/);
+    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID, {})).rejects.toThrow(/LoginRateLimiter/);
     expect(audit.record).not.toHaveBeenCalled();
   });
 });

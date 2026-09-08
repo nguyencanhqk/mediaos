@@ -17446,14 +17446,24 @@ export const backlog = [
     layer: "BE",
     title:
       "9 điểm ghi `user_security_events` NGOÀI đường mật khẩu vẫn VÔ DANH — nặng nhất là hai nút admin chạy mỗi ngày (`unlockUser`, `clearLoginThrottle`)",
-    zone: "yellow",
-    status: "todo",
+    // zone NÂNG yellow→red 2026-09-07 (plan v2 D0, plan-reviewer B1): diff chạm `auth` (logout/thu hồi
+    // phiên) VÀ — do D3 — thêm ip/userAgent vào 9 hàng `audit_logs` ⇒ policy.md xếp 🔴 + CLAUDE.md §6 đòi
+    // FULL gate. WO anh em cùng hình dạng (S18-AUTH-SECEVENTMETA-1) cũng là red. Seed yellow là ĐO THIẾU.
+    zone: "red",
+    status: "in_progress",
+    plan: "docs/plans/S18-AUTH-SECEVENTREST-1.md",
     paths: [
       "apps/api/src/auth/auth.service.ts",
       "apps/api/src/auth/auth.controller.ts",
       "apps/api/src/users/**",
       "apps/api/src/auth/**/*.spec.ts",
       "apps/api/test/integration/auth-s18-seceventrest-*.int-spec.ts",
+      // plan-reviewer B2: LUẬT VÁ (plan §D7) BẮT BUỘC sửa hai int-spec này (10 điểm gọi). Thiếu chúng
+      // trong `paths` thì `guard-scope` cảnh báo mỗi lượt Edit và gate/scheduler đo sai phạm vi
+      // (memory `wo-paths-drive-gate-and-scheduler`).
+      "apps/api/test/integration/auth-logout.int-spec.ts",
+      "apps/api/test/integration/security-event-emit-sites.int-spec.ts",
+      "docs/plans/S18-AUTH-SECEVENTREST-1.md",
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],
@@ -17476,6 +17486,7 @@ export const backlog = [
     notes: [
       "🟡 Không phải lỗ khai thác — là mù forensics. Ba họ `USER_UNLOCKED` phân biệt được bằng `payload.reason` (`password_reset` / `login_throttle` / vắng) nên hôm nay đọc bảng vẫn suy luận được; WO này xoá nhu cầu phải suy luận.",
       "Đọc `docs/plans/S18-AUTH-SECEVENTMETA-1.md` §2e (census), §3 D6 (helper dùng chung) và D7 (vì sao `clearLoginThrottle` bị hoãn sang đây) TRƯỚC khi lập plan.",
+      "⛔ KHÔNG chạy song song với `S18-AUTH-RESTORE2FA-1` (plan v2 §2e/W2): WO đó có `paths` gồm CẢ `auth.service.ts` LẪN `users/auth-users.service.ts`, và mục `src` đầu của nó là `restoreUser` — đúng method mà D1 của WO này đổi chữ ký. Ai làm RESTORE2FA-1 sau phải rebase trên commit của WO này (memory `stage-head-blob-races-parallel-session`).",
     ],
   },
   {
