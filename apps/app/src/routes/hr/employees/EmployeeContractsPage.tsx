@@ -162,7 +162,7 @@ export function EmployeeContractsPage({ employeeId, onBack }: EmployeeContractsP
   });
 
   const contractTypesQuery = useQuery({
-    queryKey: hrKeys.contractTypes.list(),
+    queryKey: hrKeys.contractTypes.lookup(),
     queryFn: () => hrApi.listContractTypes(),
     enabled: canManage,
     staleTime: 5 * 60 * 1000,

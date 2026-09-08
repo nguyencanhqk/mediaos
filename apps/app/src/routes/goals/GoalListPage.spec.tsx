@@ -15,20 +15,22 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
 }));
 
-vi.mock("@mediaos/web-core", () => ({
-  useCan: vi.fn(() => true),
-  goalApi: { listGoals: vi.fn(), getTree: vi.fn() },
-  goalKeys: {
-    list: (p?: unknown) => ["goals", "list", p],
-    tree: (p?: unknown) => ["goals", "tree", p],
-    detail: (id: string) => ["goals", "detail", id],
-  },
-  hrApi: { listDepartments: vi.fn(), listEmployees: vi.fn() },
-  hrKeys: {
-    departments: { list: (p?: unknown) => ["hr", "departments", "list", p] },
-    employees: { list: (p?: unknown) => ["hr", "employees", "list", p] },
-  },
-}));
+// S18-FE-DEPTQUERYKEY-1 — `hrKeys` lấy BẢN THẬT. Bản sao gõ tay là hợp đồng khoá THỨ HAI: nó trôi
+// trong im lặng mỗi lần `query-keys.ts` thêm/đổi khoá, và spec vẫn xanh trong khi màn thật đã đổi.
+vi.mock("@mediaos/web-core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@mediaos/web-core")>();
+  return {
+    useCan: vi.fn(() => true),
+    goalApi: { listGoals: vi.fn(), getTree: vi.fn() },
+    goalKeys: {
+      list: (p?: unknown) => ["goals", "list", p],
+      tree: (p?: unknown) => ["goals", "tree", p],
+      detail: (id: string) => ["goals", "detail", id],
+    },
+    hrApi: { listDepartments: vi.fn(), listEmployees: vi.fn() },
+    hrKeys: actual.hrKeys,
+  };
+});
 
 import { useCan, goalApi, hrApi } from "@mediaos/web-core";
 import { GoalListPage } from "./GoalListPage";

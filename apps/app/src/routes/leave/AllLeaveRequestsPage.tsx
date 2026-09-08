@@ -249,7 +249,7 @@ export function AllLeaveRequestsPage() {
   });
 
   const { data: departments } = useQuery({
-    queryKey: hrKeys.departments.list(),
+    queryKey: hrKeys.departments.lookup(),
     queryFn: () => hrApi.listDepartments(),
     staleTime: 5 * 60_000,
     enabled: canView,

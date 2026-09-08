@@ -105,7 +105,7 @@ export function EmployeeMultiPickerDialog({
     staleTime: 30_000,
   });
   const departmentsQuery = useQuery({
-    queryKey: hrKeys.departments.list(),
+    queryKey: hrKeys.departments.lookup(),
     queryFn: () => hrApi.listDepartments(),
     staleTime: 300_000,
   });

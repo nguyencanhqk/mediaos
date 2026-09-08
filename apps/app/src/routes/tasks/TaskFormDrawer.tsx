@@ -81,7 +81,7 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
   });
 
   const { data: departments } = useQuery({
-    queryKey: hrKeys.departments.list(),
+    queryKey: hrKeys.departments.lookup(),
     queryFn: () => hrApi.listDepartments(),
     enabled: canReadDepartments,
     staleTime: 5 * 60 * 1000,

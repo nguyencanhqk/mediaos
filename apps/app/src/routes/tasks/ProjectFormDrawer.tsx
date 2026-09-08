@@ -87,7 +87,7 @@ export function ProjectFormDrawer({
   useDirtyFormGuard({ isDirty });
 
   const { data: departments } = useQuery({
-    queryKey: hrKeys.departments.list(),
+    queryKey: hrKeys.departments.lookup(),
     queryFn: () => hrApi.listDepartments(),
     staleTime: 5 * 60 * 1000,
   });

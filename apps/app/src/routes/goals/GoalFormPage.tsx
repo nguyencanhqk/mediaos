@@ -92,7 +92,7 @@ export function GoalFormPage({ goalId, onSuccess, onCancel }: GoalFormPageProps)
 
   // Danh mục neo — tải theo cấp đang chọn (fail-soft nếu thiếu quyền → option rỗng).
   const { data: departments } = useQuery({
-    queryKey: hrKeys.departments.list(),
+    queryKey: hrKeys.departments.lookup(),
     queryFn: () => hrApi.listDepartments(),
     enabled: level === "department",
     staleTime: 300_000,

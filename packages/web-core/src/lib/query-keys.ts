@@ -123,16 +123,27 @@ export const hrKeys = {
     // S2-FE-HR-9 — Employee Files tab (danh sách file đính kèm hồ sơ, GET /hr/employees/:id/files).
     files: (employeeId: string) => [...rootKeys.hr, "employees", "files", employeeId] as const,
   },
+  // S18-FE-DEPTQUERYKEY-1 — mỗi họ danh mục HR có HAI đường đọc khác endpoint và khác CỔNG QUYỀN:
+  //   `list()`   → màn quản trị (`hrMasterDataApi`, DTO superset, gác read:<res> / manage:master-data)
+  //   `lookup()` → picker (`hrApi` → /hr/lookups/*, DTO HẸP, non-sensitive, không gác)
+  // Dùng chung một khoá cho cả hai ⇒ màn nào mount trước đầu độc cache của màn kia (shape lệch, và
+  // lookup lọc `inactive` còn master-data thì không). `all` vẫn là tiền tố CHUNG nên một lệnh
+  // invalidate cấp họ quét được cả hai. KHÔNG hợp nhất bằng cách cho một bên gọi API bên kia —
+  // hai cổng khác nhau, đổi là ẩn picker với actor hợp lệ.
   departments: {
     all: [...rootKeys.hr, "departments"] as const,
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.hr, "departments", "list", params] as const,
+    lookup: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "departments", "lookup", params] as const,
     detail: (id: string) => [...rootKeys.hr, "departments", "detail", id] as const,
   },
   positions: {
     all: [...rootKeys.hr, "positions"] as const,
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.hr, "positions", "list", params] as const,
+    lookup: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "positions", "lookup", params] as const,
     // S2-FE-HR-5 (lane HR5-WC) — APPEND detail (GET/PATCH /org/positions/:id).
     detail: (id: string) => [...rootKeys.hr, "positions", "detail", id] as const,
   },
@@ -140,6 +151,8 @@ export const hrKeys = {
     all: [...rootKeys.hr, "job-levels"] as const,
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.hr, "job-levels", "list", params] as const,
+    lookup: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "job-levels", "lookup", params] as const,
     // S2-FE-HR-5 (lane HR5-WC) — APPEND detail (GET/PATCH /hr/master-data/job-levels/:id).
     detail: (id: string) => [...rootKeys.hr, "job-levels", "detail", id] as const,
   },
@@ -147,6 +160,8 @@ export const hrKeys = {
     all: [...rootKeys.hr, "contract-types"] as const,
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.hr, "contract-types", "list", params] as const,
+    lookup: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "contract-types", "lookup", params] as const,
     // S2-FE-HR-5 (lane HR5-WC) — APPEND detail (GET/PATCH /hr/master-data/contract-types/:id).
     detail: (id: string) => [...rootKeys.hr, "contract-types", "detail", id] as const,
   },
@@ -237,11 +252,19 @@ const hrPositionsListPrefix = [...rootKeys.hr, "positions", "list"] as const;
 const hrJobLevelsListPrefix = [...rootKeys.hr, "job-levels", "list"] as const;
 const hrContractTypesListPrefix = [...rootKeys.hr, "contract-types", "list"] as const;
 
+// S18-FE-DEPTQUERYKEY-1 — sau khi tách khoá, CRUD trên màn quản trị phải làm tươi CẢ đường picker:
+// sửa tên/ngừng dùng một phòng ban mà picker vẫn giữ bản cũ tới 5 phút (staleTime của lookup) là
+// hồi quy do chính việc tách khoá đẻ ra. Prefix (bỏ slot params) khớp mọi biến thể param'd.
+const hrDepartmentsLookupPrefix = [...rootKeys.hr, "departments", "lookup"] as const;
+const hrPositionsLookupPrefix = [...rootKeys.hr, "positions", "lookup"] as const;
+const hrJobLevelsLookupPrefix = [...rootKeys.hr, "job-levels", "lookup"] as const;
+const hrContractTypesLookupPrefix = [...rootKeys.hr, "contract-types", "lookup"] as const;
+
 export const hrMasterDataInvalidation = {
-  departments: () => [hrDepartmentsListPrefix] as const,
-  positions: () => [hrPositionsListPrefix] as const,
-  jobLevels: () => [hrJobLevelsListPrefix] as const,
-  contractTypes: () => [hrContractTypesListPrefix] as const,
+  departments: () => [hrDepartmentsListPrefix, hrDepartmentsLookupPrefix] as const,
+  positions: () => [hrPositionsListPrefix, hrPositionsLookupPrefix] as const,
+  jobLevels: () => [hrJobLevelsListPrefix, hrJobLevelsLookupPrefix] as const,
+  contractTypes: () => [hrContractTypesListPrefix, hrContractTypesLookupPrefix] as const,
 };
 
 // ── Attendance keys ───────────────────────────────────────────────────────────

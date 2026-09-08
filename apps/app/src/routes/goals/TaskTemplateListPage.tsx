@@ -75,7 +75,7 @@ export function TaskTemplateListPage() {
   });
 
   const { data: departments } = useQuery({
-    queryKey: hrKeys.departments.list(),
+    queryKey: hrKeys.departments.lookup(),
     queryFn: () => hrApi.listDepartments(),
     enabled: canManage,
     staleTime: 300_000,
