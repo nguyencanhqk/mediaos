@@ -276,7 +276,14 @@ export class AuthUsersService {
    * (4) dual-write timeline TOTP_RESET. Self-reset CHO PHÉP (KHÔNG assertNotSelf — owner chốt 2026-07-03).
    * Cross-tenant / không tồn tại → NotFound TRƯỚC mọi mutation (RLS che, no-op, 0 audit + 0 security-event).
    */
-  async resetTwoFactor(actor: AuthUserActor, id: string): Promise<AuthUserTwoFactorResetDto> {
+  async resetTwoFactor(
+    actor: AuthUserActor,
+    id: string,
+    // S18-AUTH-SECEVENTREST-1 (D1/D2): `meta` là tham số RIÊNG đặt CUỐI, KHÔNG nhét vào
+    // `AuthUserActor` — type đó dùng chung 15 method. Bắt buộc (không `= {}`) để "caller quên" là
+    // lỗi lúc BIÊN DỊCH, không phải một hàng vết vô danh lúc chạy.
+    meta: RequestMeta,
+  ): Promise<AuthUserTwoFactorResetDto> {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const target = await this.repo.findByIdTx(tx, actor.companyId, id);
       if (!target) throw new NotFoundException(USER_NOT_FOUND);
@@ -294,12 +301,16 @@ export class AuthUsersService {
         actorUserId: actor.id,
         objectId: id,
         after: { revokedSessionCount },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       await this.securityEvents?.record(tx, {
         eventType: "TOTP_RESET",
         userId: id,
         actorUserId: actor.id,
         payload: { revokedSessionCount },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       return { revokedSessionCount };
     });
@@ -309,7 +320,16 @@ export class AuthUsersService {
    * POST /auth/users/:id/lock — status='locked' (chặn login). Self-guard (chống lockout). Đã 'locked'
    * → 400 (no-op, KHÔNG audit rác). Không thấy / cross-tenant → NotFound TRƯỚC khi audit.
    */
-  async lockUser(actor: AuthUserActor, id: string, reason?: string): Promise<AuthUserDto> {
+  async lockUser(
+    actor: AuthUserActor,
+    id: string,
+    // S18-AUTH-SECEVENTREST-1 (D2): `reason?:` → `reason: string | undefined`. TS cấm tham số BẮT
+    // BUỘC đứng sau tham số optional (TS1016), và đảo thứ tự để `meta` lên trước sẽ phá quy ước
+    // «meta luôn CUỐI» của cả 9 method. `dto.reason` vốn đã là `string | undefined` ⇒ 0 đổi kiểu ở
+    // controller.
+    reason: string | undefined,
+    meta: RequestMeta,
+  ): Promise<AuthUserDto> {
     this.assertNotSelf(actor, id);
     return this.db.withTenant(actor.companyId, async (tx) => {
       const before = await this.repo.findByIdTx(tx, actor.companyId, id);
@@ -332,6 +352,8 @@ export class AuthUsersService {
         objectId: id,
         before: authUserSnapshot(before),
         after: { ...authUserSnapshot(updated), revokedSessionCount },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       // S2-AUTH-BE-8: dual-write timeline bảo mật TRONG cùng tx (rollback ⇒ 0 orphan). subject=target,
       // actor=admin. payload CHỈ reason-code (KHÔNG PII của subject — email/fullName/hash không đưa vào);
@@ -341,6 +363,8 @@ export class AuthUsersService {
         userId: id,
         actorUserId: actor.id,
         payload: { reason: reason ?? null },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       // S5-LMS-BE-1: enqueue LMS auto-sync CÙNG tx (SAU setLockTx ⇒ active=false). eventType RIÊNG
       // hr.employee_status_changed — KHÔNG re-emit auth.user_locked (né consumer notification). User không
@@ -354,7 +378,7 @@ export class AuthUsersService {
    * POST /auth/users/:id/unlock — đòi status hiện='locked' → 'active' + clear lockedAt. Self-guard.
    * Không 'locked' → 400. Không thấy / cross-tenant → NotFound TRƯỚC khi audit.
    */
-  async unlockUser(actor: AuthUserActor, id: string): Promise<AuthUserDto> {
+  async unlockUser(actor: AuthUserActor, id: string, meta: RequestMeta): Promise<AuthUserDto> {
     this.assertNotSelf(actor, id);
     return this.db.withTenant(actor.companyId, async (tx) => {
       const before = await this.repo.findByIdTx(tx, actor.companyId, id);
@@ -369,6 +393,8 @@ export class AuthUsersService {
         objectId: id,
         before: authUserSnapshot(before),
         after: authUserSnapshot(updated),
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       // S2-AUTH-BE-8: dual-write timeline bảo mật TRONG cùng tx (rollback ⇒ 0 orphan). subject=target,
       // actor=admin. Không có reason cho unlock → payload rỗng (writer default {}), KHÔNG PII.
@@ -376,6 +402,10 @@ export class AuthUsersService {
         eventType: "USER_UNLOCKED",
         userId: id,
         actorUserId: actor.id,
+        // payload GIỮ NGUYÊN vắng: đó là thứ phân biệt họ này với hai họ `USER_UNLOCKED` còn lại
+        // (`login_throttle` · `password_reset`) khi đọc timeline.
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       // S5-LMS-BE-1: enqueue LMS auto-sync CÙNG tx (SAU setUnlockTx ⇒ active theo ep.status). Mở khoá user
       // → LMS mở lại NẾU nhân viên vẫn active. Ngoài LMS-company / không hồ sơ → no-op.
@@ -428,7 +458,7 @@ export class AuthUsersService {
    * Ghi vết CẢ KHI không có khoá nào để gỡ: đường DỰNG/GỠ khoá phải để lại dấu (`hadLock` phân biệt hai
    * ca trong payload) — "admin đã thử gỡ" là dữ kiện forensics, không phải nhiễu.
    */
-  async clearLoginThrottle(actor: AuthUserActor, id: string): Promise<void> {
+  async clearLoginThrottle(actor: AuthUserActor, id: string, meta: RequestMeta): Promise<void> {
     this.assertNotSelf(actor, id);
     const limiter = this.requireRateLimiter();
     const { slug, email } = await this.resolveThrottleTarget(actor, id);
@@ -462,6 +492,8 @@ export class AuthUsersService {
           clearedKeys: result.clearedKeys,
           ok,
         },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       await this.securityEvents?.record(tx, {
         eventType: "USER_UNLOCKED",
@@ -471,6 +503,8 @@ export class AuthUsersService {
         // `ok` phải có mặt: `hadLock` chỉ nói "trước đó có khoá không", KHÔNG nói "gỡ được hay không".
         // Thiếu nó, timeline bảo mật ghi USER_UNLOCKED cho một thao tác 503 không mở được gì.
         payload: { reason: "login_throttle", hadLock: before.locked, ok },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
     });
 
@@ -539,7 +573,7 @@ export class AuthUsersService {
    * → 401 tức thì). Audit 'user.deleted' + dual-write USER_DELETED. Không thấy / cross-tenant / ĐÃ xóa
    * → NotFound TRƯỚC mọi mutation (no-op, 0 audit rác).
    */
-  async deleteUser(actor: AuthUserActor, id: string): Promise<AuthUserDto> {
+  async deleteUser(actor: AuthUserActor, id: string, meta: RequestMeta): Promise<AuthUserDto> {
     if (actor.id === id) throw new BadRequestException(CANNOT_DELETE_SELF);
     return this.db.withTenant(actor.companyId, async (tx) => {
       const before = await this.repo.findByIdTx(tx, actor.companyId, id);
@@ -559,12 +593,16 @@ export class AuthUsersService {
         objectId: id,
         before: authUserSnapshot(before),
         after: { ...authUserSnapshot(deleted), revokedSessionCount },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       await this.securityEvents?.record(tx, {
         eventType: "USER_DELETED",
         userId: id,
         actorUserId: actor.id,
         payload: { revokedSessionCount },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       return toDto(deleted);
     });
@@ -577,7 +615,7 @@ export class AuthUsersService {
    * unique (company_id, normalized_email). KHÔNG revoke phiên (user deleted không còn phiên sống —
    * delete đã thu hồi). Audit 'user.restored' + dual-write USER_RESTORED.
    */
-  async restoreUser(actor: AuthUserActor, id: string): Promise<AuthUserDto> {
+  async restoreUser(actor: AuthUserActor, id: string, meta: RequestMeta): Promise<AuthUserDto> {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const before = await this.repo.findDeletedByIdTx(tx, actor.companyId, id);
       if (!before) throw new NotFoundException(USER_NOT_FOUND);
@@ -602,11 +640,15 @@ export class AuthUsersService {
         objectId: id,
         before: authUserSnapshot(before),
         after: authUserSnapshot(restored),
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       await this.securityEvents?.record(tx, {
         eventType: "USER_RESTORED",
         userId: id,
         actorUserId: actor.id,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       return toDto(restored);
     });

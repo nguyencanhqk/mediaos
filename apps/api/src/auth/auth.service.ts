@@ -1213,7 +1213,7 @@ export class AuthService {
    * lần refresh kế). Idempotent + KHÔNG lộ token tồn tại: token rác/không thấy → trả void êm (controller vẫn
    * xoá cookie). Audit `auth.logout` khi tìm thấy phiên. CSRF được ép Ở CONTROLLER (endpoint cookie-based).
    */
-  async logout(refreshToken: string): Promise<void> {
+  async logout(refreshToken: string, meta: RequestMeta): Promise<void> {
     const parsed = this.splitScopedToken(refreshToken);
     if (!parsed) {
       // Token cookie sai định dạng (truncate/tamper) → idempotent void (controller vẫn xoá cookie), nhưng
@@ -1249,6 +1249,10 @@ export class AuthService {
         actorUserId: row.userId,
         objectId: row.userId,
         after: { scope: "family" },
+        // S18-AUTH-SECEVENTREST-1: hàng audit ANH EM của điểm ghi ngay dưới — nối cùng lượt, vì để
+        // một hàng cùng tx câm trong khi hàng kia có vết là để lại đúng khoảng trống WO này đi lấp.
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       // S2-AUTH-BE-8: logout = thu hồi phiên (family) → SESSION_REVOKED (dual-write cùng tx).
       await this.securityEvents.record(tx, {
@@ -1256,6 +1260,10 @@ export class AuthService {
         userId: row.userId,
         actorUserId: row.userId,
         payload: { scope: "family" },
+        // S18-AUTH-SECEVENTREST-1 (#1). `payload` KHÔNG đụng tới: `scope` là thứ phân biệt BA writer
+        // `SESSION_REVOKED` khi đọc timeline (và là thứ int-spec dùng để khoá đúng hàng).
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
     });
   }
@@ -1315,7 +1323,12 @@ export class AuthService {
    * WHERE (userId=… AND id=…) — RLS chỉ ép company_id, KHÔNG ép owner; app PHẢI tự khoanh Own scope.
    * revoke = UPDATE revoked_at (KHÔNG hard-delete, BẤT BIẾN #2 mirror — session mutable theo thiết kế DB-02).
    */
-  async revokeSession(companyId: string, userId: string, sessionId: string): Promise<void> {
+  async revokeSession(
+    companyId: string,
+    userId: string,
+    sessionId: string,
+    meta: RequestMeta,
+  ): Promise<void> {
     const parsed = uuidSchema.safeParse(sessionId);
     if (!parsed.success) throw new NotFoundException("Không tìm thấy phiên đăng nhập.");
 
@@ -1354,6 +1367,8 @@ export class AuthService {
         actorUserId: userId,
         objectId: sessionId,
         after: { scope: "single" },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       // S2-AUTH-BE-8: self-revoke 1 phiên → SESSION_REVOKED (dual-write cùng tx). subject=actor=user (Own).
       await this.securityEvents.record(tx, {
@@ -1361,6 +1376,8 @@ export class AuthService {
         userId,
         actorUserId: userId,
         payload: { scope: "single", sessionId },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
     });
   }
@@ -1374,6 +1391,7 @@ export class AuthService {
     companyId: string,
     userId: string,
     currentSessionId: string | undefined,
+    meta: RequestMeta,
   ): Promise<number> {
     return this.dbsvc.withTenant(companyId, async (tx) => {
       const conds = [eq(userSessions.userId, userId), isNull(userSessions.revokedAt)];
@@ -1409,6 +1427,8 @@ export class AuthService {
           count: targets.length,
           hadCurrentSession: currentSessionId != null,
         },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       // S2-AUTH-BE-8: self-revoke phiên khác → SESSION_REVOKED (dual-write cùng tx). count non-sensitive.
       await this.securityEvents.record(tx, {
@@ -1420,6 +1440,8 @@ export class AuthService {
           count: targets.length,
           hadCurrentSession: currentSessionId != null,
         },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       return targets.length;
     });

@@ -102,7 +102,7 @@ export class AuthUsersController {
     @Param("id", new ParseUUIDPipe()) id: string,
     @Body() dto: LockAuthUserDto,
   ): Promise<AuthUserDto> {
-    return this.users.lockUser(req.user, id, dto.reason);
+    return this.users.lockUser(req.user, id, dto.reason, requestMeta(req));
   }
 
   @Post(":id/unlock")
@@ -112,7 +112,7 @@ export class AuthUsersController {
     @Req() req: AuthenticatedRequest,
     @Param("id", new ParseUUIDPipe()) id: string,
   ): Promise<AuthUserDto> {
-    return this.users.unlockUser(req.user, id);
+    return this.users.unlockUser(req.user, id, requestMeta(req));
   }
 
   /**
@@ -140,7 +140,7 @@ export class AuthUsersController {
     @Req() req: AuthenticatedRequest,
     @Param("id", new ParseUUIDPipe()) id: string,
   ): Promise<void> {
-    return this.users.clearLoginThrottle(req.user, id);
+    return this.users.clearLoginThrottle(req.user, id, requestMeta(req));
   }
 
   /**
@@ -157,7 +157,7 @@ export class AuthUsersController {
     @Req() req: AuthenticatedRequest,
     @Param("id", new ParseUUIDPipe()) id: string,
   ): Promise<AuthUserTwoFactorResetDto> {
-    return this.users.resetTwoFactor(req.user, id);
+    return this.users.resetTwoFactor(req.user, id, requestMeta(req));
   }
 
   /**
@@ -172,7 +172,7 @@ export class AuthUsersController {
     @Req() req: AuthenticatedRequest,
     @Param("id", new ParseUUIDPipe()) id: string,
   ): Promise<AuthUserDto> {
-    return this.users.deleteUser(req.user, id);
+    return this.users.deleteUser(req.user, id, requestMeta(req));
   }
 
   /**
@@ -186,7 +186,7 @@ export class AuthUsersController {
     @Req() req: AuthenticatedRequest,
     @Param("id", new ParseUUIDPipe()) id: string,
   ): Promise<AuthUserDto> {
-    return this.users.restoreUser(req.user, id);
+    return this.users.restoreUser(req.user, id, requestMeta(req));
   }
 
   /**

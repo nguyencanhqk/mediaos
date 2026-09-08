@@ -115,7 +115,7 @@ describe.skipIf(!hasLaneDb)("S2-QA-1 logout terminal family revoke (service)", (
       await auth.login({ companySlug: A.slug, email: EMAIL, password: PASSWORD }, meta),
     );
 
-    await auth.logout(tokens.refreshToken);
+    await auth.logout(tokens.refreshToken, {});
 
     // refresh bằng token vừa logout → 401 ĐỒNG NHẤT (token đã revoke trong family).
     await expect(auth.refresh(tokens.refreshToken)).rejects.toBeInstanceOf(UnauthorizedException);
@@ -136,7 +136,7 @@ describe.skipIf(!hasLaneDb)("S2-QA-1 logout terminal family revoke (service)", (
     expect(rotated.refreshToken).not.toBe(tokens.refreshToken);
 
     // logout bằng token CÒN SỐNG (B) → thu hồi cả family.
-    await auth.logout(rotated.refreshToken);
+    await auth.logout(rotated.refreshToken, {});
 
     // B (token logout) chết.
     await expect(auth.refresh(rotated.refreshToken)).rejects.toBeInstanceOf(UnauthorizedException);
@@ -151,7 +151,7 @@ describe.skipIf(!hasLaneDb)("S2-QA-1 logout terminal family revoke (service)", (
     );
     // A → B (A revoked). Kẻ tấn công giữ A (đã chết) gọi logout — KHÔNG được force-logout nạn nhân.
     const rotated = await auth.refresh(tokens.refreshToken);
-    await expect(auth.logout(tokens.refreshToken)).resolves.toBeUndefined();
+    await expect(auth.logout(tokens.refreshToken, {})).resolves.toBeUndefined();
     // Token sống B VẪN refresh được (family chưa bị thu hồi bởi token chết).
     const chained = await auth.refresh(rotated.refreshToken);
     expect(chained.accessToken).toBeTruthy();
@@ -159,7 +159,7 @@ describe.skipIf(!hasLaneDb)("S2-QA-1 logout terminal family revoke (service)", (
 
   it("logout token RÁC (sai định dạng) → void êm, KHÔNG ném (idempotent)", async () => {
     const auth = newAuth();
-    await expect(auth.logout("not-a-scoped-token")).resolves.toBeUndefined();
-    await expect(auth.logout("")).resolves.toBeUndefined();
+    await expect(auth.logout("not-a-scoped-token", {})).resolves.toBeUndefined();
+    await expect(auth.logout("", {})).resolves.toBeUndefined();
   });
 });

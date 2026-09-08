@@ -281,7 +281,7 @@ describe.skipIf(!runDb)("S2-AUTH-BE-8 per-emit-site — user_security_events (SP
     async () => {
       const subject = await seedLoginSubject("logout");
       const { refreshToken } = await loginBody(subject.email);
-      await authService.logout(refreshToken);
+      await authService.logout(refreshToken, {});
 
       const events = await eventsForUser(subject.id);
       expectExactEvents(events, ["SESSION_REVOKED"]);
@@ -301,7 +301,7 @@ describe.skipIf(!runDb)("S2-AUTH-BE-8 per-emit-site — user_security_events (SP
       const [sessionId] = await activeSessionIds(subject.id);
       expect(sessionId, "phải có 1 phiên sau login").toBeTruthy();
 
-      await authService.revokeSession(A.companyId, subject.id, sessionId);
+      await authService.revokeSession(A.companyId, subject.id, sessionId, {});
 
       const events = await eventsForUser(subject.id);
       expectExactEvents(events, ["SESSION_REVOKED"]);
@@ -327,6 +327,7 @@ describe.skipIf(!runDb)("S2-AUTH-BE-8 per-emit-site — user_security_events (SP
         A.companyId,
         subject.id,
         currentSessionId,
+        {},
       );
       expect(revoked).toBeGreaterThanOrEqual(1);
 
@@ -376,7 +377,7 @@ describe.skipIf(!runDb)("S2-AUTH-BE-8 per-emit-site — user_security_events (SP
     "AuthUsers.lockUser → 1× USER_LOCKED (actor=admin, subject=target)",
     async () => {
       const target = await seedLoginSubject("lock");
-      await authUsers.lockUser({ id: adminId, companyId: A.companyId }, target.id, "policy");
+      await authUsers.lockUser({ id: adminId, companyId: A.companyId }, target.id, "policy", {});
 
       const events = await eventsForUser(target.id);
       expectExactEvents(events, ["USER_LOCKED"]);
@@ -396,7 +397,7 @@ describe.skipIf(!runDb)("S2-AUTH-BE-8 per-emit-site — user_security_events (SP
       await direct.query(`UPDATE users SET status = 'locked', locked_at = now() WHERE id = $1`, [
         target.id,
       ]);
-      await authUsers.unlockUser({ id: adminId, companyId: A.companyId }, target.id);
+      await authUsers.unlockUser({ id: adminId, companyId: A.companyId }, target.id, {});
 
       const events = await eventsForUser(target.id);
       expectExactEvents(events, ["USER_UNLOCKED"]);
