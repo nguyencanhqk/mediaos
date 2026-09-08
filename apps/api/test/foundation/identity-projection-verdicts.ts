@@ -143,9 +143,14 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
     signedBy: WO,
   },
   {
-    point: "auth/auth.service.ts#resetPassword:users.email",
+    point: "auth/auth.service.ts#resetPasswordImpl:users.email",
     basis: "self-bound-route",
     reason:
+      "S18-AUTH-RESETFLOOR-1 đổi `#fn` từ `resetPassword` → `resetPasswordImpl`: RENAME THUẦN, " +
+      "KHÔNG phải ký lại cách chiếu. WO đó tách `resetPassword` thành wrapper áp sàn thời gian " +
+      "(`try/finally` + `applyUniformResponseFloor`) và dời NGUYÊN VẸN thân cũ xuống " +
+      "`resetPasswordImpl`; câu `.returning({ email: users.email })` cùng predicate của nó không đổi " +
+      "một ký tự, nên căn cứ bên dưới giữ nguyên hiệu lực. " +
       "S18-AUTH-RESETCLEARS-1. `POST /auth/reset-password` KHÔNG nhận id/email nào từ caller: hàng " +
       "duy nhất chạm được là `eq(users.id, row.userId)` với `row` tra bằng HASH của token single-use " +
       "(chưa dùng, chưa hết hạn) trong cùng tx — cùng hình dạng với ba dòng `self-bound-route` ngay " +

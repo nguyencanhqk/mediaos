@@ -17377,7 +17377,7 @@ export const backlog = [
     title:
       "`resetPassword` KHÔNG có `applyUniformResponseFloor` — nhánh từ chối chạy argon2 (hàng trăm ms) còn nhánh token-rác trả sau 1 SELECT ⇒ oracle TIMING trên đường công khai",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/auth/auth.service.ts",
       "apps/api/src/auth/**/*.spec.ts",
@@ -17400,6 +17400,13 @@ export const backlog = [
     ],
     notes: [
       "🔴 FULL gate (auth, đường CÔNG KHAI không xác thực).",
+      "SỐ ĐO (done_when[1], lane `mediaos_s18resetfloor`, p50 của 12 lượt xen kẽ qua HTTP thật) — TRƯỚC: malformed 3ms · unknown 5ms · deleted 26ms ⇒ Δ=21ms, tỉ lệ 5×. SAU: 296 · 308 · 293ms ⇒ Δ=−15ms (dưới jitter 80ms). LÀ LỖ, nhưng NHỎ HƠN mô tả WO: mô tả đoán argon2 'hàng trăm ms', đo thật chỉ 12ms (OWASP 19 MiB · timeCost 2 · p=1) — tín hiệu là TỔNG của băm + 5 round-trip thừa, không phải riêng argon2.",
+      "MỨC ĐỘ giữ ở MEDIUM (done_when[3]): trần nguyên tử ép mỗi token qua nhánh chậm ĐÚNG 1 lần ⇒ attacker lấy 1 mẫu/token, không gom được phân phối. Nhưng route KHÔNG có decorator rate-limit nên đường CƠ SỞ đo thoải mái ⇒ 1 mẫu vs cơ sở đã biết = cập nhật Bayes, không vô hại.",
+      "CỔNG THẬT của int-spec là assert (1) «p50 mọi nhánh ≥ sàn» (gỡ vá ⇒ 3ms/5ms ⇒ đỏ chắc chắn) + (1b) TRẦN. Assert Δ<jitter là cổng YẾU — Δ trước vá (21ms) vốn đã < jitter 80ms nên một mình nó xanh cả khi chưa vá; đã ghi rõ trong docblock để người sau không tưởng nó là cổng.",
+      "FULL gate security-reviewer (08/09/2026): PASS. Đã vá trong WO: neo DƯƠNG cho nhóm `deleted` (đếm N vết `auth.password_reset_denied`) — không có nó thì nhóm đó thoái hoá thành bản sao của `unknown` mà spec vẫn xanh (`tests-can-pin-a-hole-open`).",
+      "NỢ MỞ 1 (MEDIUM, cần WO riêng): sàn TRÀN thì oracle mở lại mà KHÔNG có tín hiệu runtime nào. Biên hôm nay ~10× (26ms việc thật / 250ms sàn) nhưng nhánh `deleted` là ~7 round-trip + argon2 ⇒ DB tải nặng hoặc ở xa (≥35ms/query) là tràn. Chỗ ĐÚNG để đặt counter/metric là WRAPPER `resetPassword` (ở đó `this` đã dựng đủ), KHÔNG phải helper `applyUniformResponseFloor` — docblock helper cấm chạm field inject vì spec dựng service bằng `Object.create` + gán MỘT PHẦN.",
+      "NỢ MỞ 2 (MEDIUM, cần WO riêng): `reset-password` là endpoint CÔNG KHAI không rate-limit, giữ socket 250-330ms. KHÔNG phải lớp DoS mới — reviewer đo được `forgotPassword` ĐÃ có y hệt profile đó: nhánh bị khoá `return` sớm khỏi `forgotPasswordImpl` nhưng wrapper VẪN ngủ đủ sàn ⇒ `rl:forgot` vô can với chiếm-socket. Chiều tài nguyên ĐẮT thì ngược lại: sàn GIẢM QPS bơm vào Postgres ~12-100×. Nếu làm bucket `rl:reset:*` thì WO đó PHẢI ghi rõ limiter short-circuit TRƯỚC sàn mới thả được socket, không thì lặp lại no-op của `rl:forgot`.",
+      "KHÔNG NÂNG TRẦN `FLOOR_BUDGET_CEILING_MS` (580ms) nếu spec flake: biên đo trong cô lập là ~254ms, và chính trần đó là assert bắt 'việc thật tràn ra ngoài sàn'. Flake thì chạy RIÊNG file (docblock đã ghi).",
       "NỢ KÈM (security-reviewer cùng lượt, LOW): `audit_logs.user_agent` lưu THÔ (masker chỉ chạm jsonb). Hôm nay an toàn — đường đọc sau cặp sensitive `view:audit-log`, FE React escape, KHÔNG có export. Khi thêm export CSV/XLSX cho audit viewer thì PHẢI neutralize `= + - @` TẠI ĐIỂM EXPORT (không phải điểm ghi).",
     ],
   },
