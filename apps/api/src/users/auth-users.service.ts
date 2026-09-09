@@ -614,6 +614,27 @@ export class AuthUsersService {
    * cross-tenant → NotFound. Email đã có user LIVE trùng (tạo mới sau khi xóa) → 409 TRƯỚC khi chạm
    * unique (company_id, normalized_email). KHÔNG revoke phiên (user deleted không còn phiên sống —
    * delete đã thu hồi). Audit 'user.restored' + dual-write USER_RESTORED.
+   *
+   * S18-AUTH-RESTORE2FA-1 (D3) — KHÔI PHỤC PHẢI SOÁT LẠI 2FA. Quyết định owner (2 vòng, plan §2):
+   *
+   *  • **A1 — xoá sạch VÔ ĐIỀU KIỆN.** Sau restore, `user_totp` + `user_recovery_codes` của user đó
+   *    0 hàng. Đây là vế đóng lỗ: mọi yếu tố cài trong cửa sổ đã-xoá biến mất, KỂ CẢ khi vế chặn ở
+   *    `TwoFactorService.enroll` hồi quy về sau. Defence-in-depth CỐ Ý, không phải thừa.
+   *  • **A2 — set `require_two_factor = true` CHỈ KHI** trước lúc xoá sạch user ĐANG BẬT 2FA
+   *    (`enabled_at IS NOT NULL`). Hàng enroll PENDING KHÔNG tính — restore không được siết chính
+   *    sách của user chưa từng bật 2FA.
+   *
+   * ⚠️ HỆ QUẢ ĐÃ ĐƯỢC OWNER KÝ, ghi ra để không im lặng: `users.require_two_factor` DÍNH VĨNH VIỄN.
+   * `TwoFactorService.disable` fail-closed 409 `TWO_FACTOR_ENFORCED` dựa trên cờ đó BẤT KỂ
+   * `TWO_FACTOR_ENFORCEMENT_ENABLED`, và `confirmEnable` KHÔNG clear cờ ⇒ user từng TỰ NGUYỆN bật
+   * 2FA, bị xoá mềm rồi khôi phục, vĩnh viễn mất quyền TỰ tắt 2FA. Đường gỡ DUY NHẤT là admin
+   * `PATCH /auth/users/:id`. Lập luận chấp nhận: tài khoản vừa khôi phục là tài khoản rủi ro cao
+   * hơn, và admin gỡ được nên không phải một chiều. Ghim bằng `§sticky-409`
+   * (`test/integration/auth-s18-restore2fa-1.int-spec.ts`).
+   *
+   * ⚠️ KHÔNG tái dùng `TwoFactorService.disable()` cho A1: nó mang chính sách self-disable
+   * (`requiresTwoFactorTx` → 409) ⇒ sẽ GIẾT CẢ LỆNH restore với đúng nhóm user bị ép 2FA
+   * (`reused-method-must-be-actor-scoped`). Dùng primitive repo — đúng cái admin-reset đang dùng.
    */
   async restoreUser(actor: AuthUserActor, id: string, meta: RequestMeta): Promise<AuthUserDto> {
     return this.db.withTenant(actor.companyId, async (tx) => {
@@ -633,13 +654,51 @@ export class AuthUsersService {
         throw err;
       }
       if (!restored) throw new NotFoundException(USER_NOT_FOUND);
+
+      // ── D3: soát lại 2FA TRONG CÙNG TX (nguyên tử — không có cửa sổ nào tài khoản sống lại mà
+      //    2FA cũ còn). Thứ tự BẮT BUỘC: đọc trạng thái → xoá sạch → set cờ → audit.
+      const { enabled: twoFactorWasEnabled } = await this.repo.getTwoFactorStateTx(tx, id);
+      await this.repo.deleteTwoFactorTx(tx, actor.companyId, id); // A1 — vô điều kiện
+      let finalRow: User = restored;
+      if (twoFactorWasEnabled) {
+        // A2. `updateProfileTx` lọc `isNull(users.deletedAt)` — chạy được vì `restoreTx` đã clear
+        // trong CÙNG tx này.
+        const afterRow = await this.repo.updateProfileTx(
+          tx,
+          actor.companyId,
+          id,
+          { requireTwoFactor: true },
+          actor.id,
+        );
+        // 🔴 CẤM `afterRow ?? restored`. `updateProfileTx` trả `User | undefined`; với `??`, một
+        // lượt trả `undefined` (0 hàng khớp) bị NUỐT LẶNG: audit ghi snapshot cũ, `toDto` trả row
+        // cũ, HTTP 200 — và A2 ĐÃ KHÔNG XẢY RA, không tín hiệu nào. Đúng hình
+        // `empty-success-is-the-fail-open-shape`. Tệ hơn: `authUserSnapshot(undefined)` trả `null`
+        // và `{...null}` = `{}` ⇒ `after` co lại còn hai khoá 2FA, MẤT SẠCH snapshot user trong
+        // bảng append-only mà không ai đỏ. Ném ⇒ rollback CẢ lệnh restore (fail-closed) thay vì
+        // restore-không-ép. Tiền lệ cùng hàm: `if (!restored) throw NotFound` ở trên.
+        if (!afterRow) {
+          throw new Error("restoreUser: A2 set require_two_factor khớp 0 hàng");
+        }
+        finalRow = afterRow;
+      }
+
       await this.audit.record(tx, {
         action: "user.restored",
         objectType: "user",
         actorUserId: actor.id,
         objectId: id,
         before: authUserSnapshot(before),
-        after: authUserSnapshot(restored),
+        // ⚠️ `finalRow`, KHÔNG phải `restored`. `authUserSnapshot` CÓ trường `requireTwoFactor` ⇒
+        // snapshot row cũ sẽ ghi `false` trong khi DB là `true` — một hàng APPEND-ONLY NÓI DỐI.
+        after: {
+          ...authUserSnapshot(finalRow),
+          // `twoFactorReset` là HẰNG SỐ, đọc cho đúng: `deleteTwoFactorTx` trả `void` nên vết này
+          // nghĩa là "ĐÃ CHẠY bước reset", KHÔNG phải "đã có gì để xoá". Muốn số hàng thì phải đổi
+          // `deleteTwoFactorTx` — dùng chung với admin-reset ⇒ nợ riêng, không làm ở đây.
+          twoFactorReset: true,
+          twoFactorWasEnabled,
+        },
         ip: meta.ip,
         userAgent: meta.userAgent,
       });
@@ -650,7 +709,8 @@ export class AuthUsersService {
         ip: meta.ip,
         userAgent: meta.userAgent,
       });
-      return toDto(restored);
+      // `toDto` KHÔNG mang `requireTwoFactor` ⇒ response admin không đổi hình.
+      return toDto(finalRow);
     });
   }
 

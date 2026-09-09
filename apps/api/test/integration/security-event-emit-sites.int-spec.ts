@@ -345,9 +345,9 @@ describe.skipIf(!runDb)("S2-AUTH-BE-8 per-emit-site — user_security_events (SP
     "TwoFactor.confirmEnable → 1× TOTP_ENABLED (self)",
     async () => {
       const subject = await seedLoginSubject("2faon");
-      const { otpauthUri } = await twoFactor.enroll(subject.id, A.companyId); // enroll KHÔNG phát event
+      const { otpauthUri } = await twoFactor.enroll(subject.id, A.companyId, {}); // enroll KHÔNG phát event
       const secret = new URL(otpauthUri).searchParams.get("secret") ?? "";
-      await twoFactor.confirmEnable(subject.id, A.companyId, totp.generate(secret));
+      await twoFactor.confirmEnable(subject.id, A.companyId, totp.generate(secret), {});
 
       const events = await eventsForUser(subject.id);
       expectExactEvents(events, ["TOTP_ENABLED"]);
@@ -363,7 +363,7 @@ describe.skipIf(!runDb)("S2-AUTH-BE-8 per-emit-site — user_security_events (SP
       const subject = await seedLoginSubject("2faoff");
       // Bật sẵn TRỰC TIẾP (không qua confirmEnable) để timeline của subject CHỈ chứa event của disable.
       await seedTwoFactorEnabled(direct, A.companyId, subject.id);
-      await twoFactor.disable(subject.id, A.companyId);
+      await twoFactor.disable(subject.id, A.companyId, {});
 
       const events = await eventsForUser(subject.id);
       expectExactEvents(events, ["TOTP_DISABLED"]);

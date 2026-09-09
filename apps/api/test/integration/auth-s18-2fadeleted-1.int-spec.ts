@@ -86,8 +86,8 @@ describe.skipIf(!hasDb)("S18-AUTH-2FADELETED-1 — tắt 2FA trên hàng đã xo
 
   /** Bật 2FA thật (enroll + confirmEnable bằng mã TOTP hợp lệ) — sau khi đã có token. */
   async function enable2fa(userId: string, companyId: string): Promise<void> {
-    const { otpauthUri } = await twoFactor.enroll(userId, companyId);
-    await twoFactor.confirmEnable(userId, companyId, totp.generate(secretFromUri(otpauthUri)));
+    const { otpauthUri } = await twoFactor.enroll(userId, companyId, {});
+    await twoFactor.confirmEnable(userId, companyId, totp.generate(secretFromUri(otpauthUri)), {});
     expect(await twoFactor.isEnabled(userId, companyId)).toBe(true);
   }
 
@@ -227,7 +227,7 @@ describe.skipIf(!hasDb)("S18-AUTH-2FADELETED-1 — tắt 2FA trên hàng đã xo
     // Nhánh `!alive` (RLS ẩn hàng). Biến nó thành 401 sẽ làm đỏ ca (f) của two-factor.int-spec VÀ ghi
     // một hàng audit append-only gán company_id của D cho actor_user_id của A (`audit_logs.actor_user_id`
     // FK về `users(id)`, KHÔNG composite tenant) — xem plan §2f.
-    await expect(twoFactor.disable(target.id, D.companyId)).resolves.toBeUndefined();
+    await expect(twoFactor.disable(target.id, D.companyId, {})).resolves.toBeUndefined();
 
     expect(await twoFactor.isEnabled(target.id, A.companyId)).toBe(true);
     expect(await rowCount("user_totp", target.id)).toBe(1);

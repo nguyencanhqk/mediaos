@@ -713,8 +713,19 @@ export class AuthService {
     return tokens;
   }
 
-  /** Tắt 2FA của chính user — PHẢI re-auth bằng mật khẩu (chống chiếm phiên gỡ 2FA), có rate-limit. */
-  async disableTwoFactor(user: { id: string; companyId: string }, password: string): Promise<void> {
+  /**
+   * Tắt 2FA của chính user — PHẢI re-auth bằng mật khẩu (chống chiếm phiên gỡ 2FA), có rate-limit.
+   *
+   * S18-AUTH-RESTORE2FA-1 (D4, nợ N1 của `#484`) — `meta` BẮT BUỘC, KHÔNG `= {}`. Giá trị mặc định
+   * trong chữ ký là VÔ HÌNH khi review; tham số bắt buộc biến "quên truyền" thành lỗi BIÊN DỊCH.
+   * Ba hàng vết của đường này (`auth.2fa_disable_denied` ở đây, `auth.2fa_disable_denied` +
+   * `auth.2fa_disabled` trong `TwoFactorService.disable`) nhờ đó mang `ip`/`userAgent`.
+   */
+  async disableTwoFactor(
+    user: { id: string; companyId: string },
+    password: string,
+    meta: RequestMeta,
+  ): Promise<void> {
     // FAIL-FAST (S2-AUTH-BE-11): user bị ÉP 2FA (role HOẶC per-user, mig 0466) → 409 TWO_FACTOR_ENFORCED
     // TRƯỚC re-auth mật khẩu (không tiêu rate-limit/verify vô ích, deny sớm cho FE). twoFactor.disable()
     // fail-closed LẦN 2 trong cùng tx (defense-in-depth) — kể cả khi role đổi giữa 2 lần đọc.
@@ -740,11 +751,7 @@ export class AuthService {
         .select({ passwordHash: users.passwordHash })
         .from(users)
         .where(
-          and(
-            eq(users.id, user.id),
-            eq(users.companyId, user.companyId),
-            isNull(users.deletedAt),
-          ),
+          and(eq(users.id, user.id), eq(users.companyId, user.companyId), isNull(users.deletedAt)),
         )
         .limit(1);
       if (!row) {
@@ -780,6 +787,8 @@ export class AuthService {
           after: {
             reason: !probe ? "user_absent" : probe.deletedAt ? "user_deleted" : "state_changed",
           },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
         });
         // Trả `false` (KHÔNG ném): tx phải COMMIT để giữ vết audit — ném trong tx = rollback nuốt
         // luôn nó. Rơi xuống nhánh `!ok` ⇒ GIỮ NGUYÊN hình 401 + phạt rate-limit + `REAUTH_FAILED`
@@ -790,17 +799,14 @@ export class AuthService {
     });
     if (!ok) {
       await this.rateLimiter.recordFailure(rlKey);
-      // S18-AUTH-SECEVENTMETA-1 — `{}` TƯỜNG MINH, không phải quên. `disableTwoFactor` chưa nhận
-      // `RequestMeta`, và việc nối dây nó thuộc `S18-AUTH-RESTORE2FA-1` (`done_when` của WO đó đòi
-      // `auth.2fa_disabled` + `auth.2fa_disable_denied` mang ip/UA, và `paths` của nó có
-      // `two-factor.service.ts`). Lấy sang đây là cướp phạm vi + rủi ro xung đột hai nhánh.
-      // Một `{}` viết ra ở call-site là thứ grep được và đọc thấy khi review; một giá trị mặc định
-      // trong chữ ký thì vô hình. WO kia chỉ cần thay đúng token này.
-      await this.recordReauthFailure(user.companyId, user.id, "2fa_disable", {});
+      // S18-AUTH-RESTORE2FA-1 (D5) — nợ N2 của `#486` ĐÃ TRẢ: `{}` tường minh trước đây giờ là
+      // `meta` thật. Writer thứ hai của `REAUTH_FAILED` (context `2fa_enable`) nằm ở
+      // `TwoFactorService` và được nối dây riêng — xem docblock ở đó về việc vì sao KHÔNG gộp.
+      await this.recordReauthFailure(user.companyId, user.id, "2fa_disable", meta);
       throw new UnauthorizedException("Mật khẩu không đúng.");
     }
     await this.rateLimiter.reset(rlKey);
-    await this.twoFactor.disable(user.id, user.companyId);
+    await this.twoFactor.disable(user.id, user.companyId, meta);
   }
 
   /**

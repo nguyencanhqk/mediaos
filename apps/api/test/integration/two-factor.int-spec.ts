@@ -73,7 +73,7 @@ describe.skipIf(!hasDb)("G16-1 TwoFactorService — 2FA TOTP", () => {
   });
 
   it("enroll → otpauthUri + 10 recovery codes; secret KHÔNG plaintext trong DB", async () => {
-    const res = await svc.enroll(userA, A.companyId);
+    const res = await svc.enroll(userA, A.companyId, {});
     expect(res.otpauthUri).toMatch(/^otpauth:\/\/totp\//);
     expect(res.recoveryCodes).toHaveLength(10);
     expect(new Set(res.recoveryCodes).size).toBe(10); // không trùng
@@ -101,7 +101,7 @@ describe.skipIf(!hasDb)("G16-1 TwoFactorService — 2FA TOTP", () => {
 
   it("DENY: confirmEnable mã SAI → UnauthorizedException, enabled_at vẫn null", async () => {
     await reEnroll();
-    await expect(svc.confirmEnable(userA, A.companyId, "000000")).rejects.toBeInstanceOf(
+    await expect(svc.confirmEnable(userA, A.companyId, "000000", {})).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
     const row = await direct.query("SELECT enabled_at FROM user_totp WHERE user_id = $1", [userA]);
@@ -111,28 +111,28 @@ describe.skipIf(!hasDb)("G16-1 TwoFactorService — 2FA TOTP", () => {
   it("confirmEnable mã ĐÚNG → bật; isEnabled true; verifyChallenge TOTP đúng → true, sai → false", async () => {
     const { otpauthUri } = await reEnroll();
     const secret = secretFromUri(otpauthUri);
-    await svc.confirmEnable(userA, A.companyId, totp.generate(secret));
+    await svc.confirmEnable(userA, A.companyId, totp.generate(secret), {});
     expect(await svc.isEnabled(userA, A.companyId)).toBe(true);
     expect(await svc.verifyChallenge(userA, A.companyId, totp.generate(secret))).toBe(true);
     expect(await svc.verifyChallenge(userA, A.companyId, "111111")).toBe(false);
   });
 
   it("DENY: enroll lại khi ĐÃ bật → ConflictException", async () => {
-    await expect(svc.enroll(userA, A.companyId)).rejects.toBeInstanceOf(ConflictException);
+    await expect(svc.enroll(userA, A.companyId, {})).rejects.toBeInstanceOf(ConflictException);
   });
 
   it("recovery code dùng được 1 LẦN: lần 2 cùng mã → false", async () => {
     // disable + re-enroll + enable để lấy bộ recovery codes mới đã biết plaintext
-    await svc.disable(userA, A.companyId);
-    const { otpauthUri, recoveryCodes } = await svc.enroll(userA, A.companyId);
-    await svc.confirmEnable(userA, A.companyId, totp.generate(secretFromUri(otpauthUri)));
+    await svc.disable(userA, A.companyId, {});
+    const { otpauthUri, recoveryCodes } = await svc.enroll(userA, A.companyId, {});
+    await svc.confirmEnable(userA, A.companyId, totp.generate(secretFromUri(otpauthUri)), {});
     expect(await svc.verifyChallenge(userA, A.companyId, recoveryCodes[0])).toBe(true);
     expect(await svc.verifyChallenge(userA, A.companyId, recoveryCodes[0])).toBe(false); // đã dùng
     expect(await svc.verifyChallenge(userA, A.companyId, recoveryCodes[1])).toBe(true); // mã khác vẫn được
   });
 
   it("disable → xoá secret + recovery codes; isEnabled false", async () => {
-    await svc.disable(userA, A.companyId);
+    await svc.disable(userA, A.companyId, {});
     expect(await svc.isEnabled(userA, A.companyId)).toBe(false);
     const totpRows = await direct.query("SELECT 1 FROM user_totp WHERE user_id = $1", [userA]);
     const recRows = await direct.query("SELECT 1 FROM user_recovery_codes WHERE user_id = $1", [
@@ -148,8 +148,8 @@ describe.skipIf(!hasDb)("G16-1 TwoFactorService — 2FA TOTP", () => {
   });
 
   it("tenant isolation: 2FA của tenant A KHÔNG thấy được từ ngữ cảnh tenant B (RLS)", async () => {
-    const { otpauthUri } = await svc.enroll(userA, A.companyId);
-    await svc.confirmEnable(userA, A.companyId, totp.generate(secretFromUri(otpauthUri)));
+    const { otpauthUri } = await svc.enroll(userA, A.companyId, {});
+    await svc.confirmEnable(userA, A.companyId, totp.generate(secretFromUri(otpauthUri)), {});
     expect(await svc.isEnabled(userA, A.companyId)).toBe(true);
     // Cùng userId nhưng ngữ cảnh tenant B → RLS lọc → 0 row → false (không rò trạng thái chéo tenant).
     expect(await svc.isEnabled(userA, B.companyId)).toBe(false);
@@ -157,21 +157,21 @@ describe.skipIf(!hasDb)("G16-1 TwoFactorService — 2FA TOTP", () => {
 
   it("rate-limit confirmEnable: nhiều mã sai → khoá (429) chống brute-force TOTP", async () => {
     // svc dùng chung 1 LoginRateLimiter; dùng userB (chưa đụng) để key sạch.
-    await svc.enroll(userB, B.companyId);
+    await svc.enroll(userB, B.companyId, {});
     for (let i = 0; i < 5; i++) {
-      await expect(svc.confirmEnable(userB, B.companyId, "000000")).rejects.toBeInstanceOf(
+      await expect(svc.confirmEnable(userB, B.companyId, "000000", {})).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
     }
-    await expect(svc.confirmEnable(userB, B.companyId, "000000")).rejects.toBeInstanceOf(
+    await expect(svc.confirmEnable(userB, B.companyId, "000000", {})).rejects.toBeInstanceOf(
       HttpException,
     );
   });
 
   /** Helper: disable (nếu có) + enroll lại, trả enroll result. Dùng cho các case cần trạng thái pending sạch. */
   async function reEnroll() {
-    await svc.disable(userA, A.companyId);
-    return svc.enroll(userA, A.companyId);
+    await svc.disable(userA, A.companyId, {});
+    return svc.enroll(userA, A.companyId, {});
   }
 });
 
@@ -213,8 +213,8 @@ describe.skipIf(!hasDb)(
     }
 
     async function enrollAndEnable(userId: string, companyId: string): Promise<void> {
-      const { otpauthUri } = await svc.enroll(userId, companyId);
-      await svc.confirmEnable(userId, companyId, totp.generate(secretFromUri(otpauthUri)));
+      const { otpauthUri } = await svc.enroll(userId, companyId, {});
+      await svc.confirmEnable(userId, companyId, totp.generate(secretFromUri(otpauthUri)), {});
     }
 
     beforeAll(async () => {
@@ -262,7 +262,7 @@ describe.skipIf(!hasDb)(
       await enrollAndEnable(uPerUser, C.companyId);
       expect(await svc.isEnabled(uPerUser, C.companyId)).toBe(true);
 
-      const err = await svc.disable(uPerUser, C.companyId).catch((e) => e);
+      const err = await svc.disable(uPerUser, C.companyId, {}).catch((e) => e);
       expect(err).toBeInstanceOf(ConflictException);
       expect((err as ConflictException).getStatus()).toBe(409);
       expect((err as ConflictException).getResponse()).toMatchObject({ code: TWO_FACTOR_ENFORCED });
@@ -276,7 +276,7 @@ describe.skipIf(!hasDb)(
     // (b) ép QUA ROLE → disable 409, vẫn enabled.
     it("(b) ép QUA ROLE (roles.requires_two_factor) → disable 409 TWO_FACTOR_ENFORCED, vẫn enabled", async () => {
       await enrollAndEnable(uRole, C.companyId);
-      const err = await svc.disable(uRole, C.companyId).catch((e) => e);
+      const err = await svc.disable(uRole, C.companyId, {}).catch((e) => e);
       expect(err).toBeInstanceOf(ConflictException);
       expect((err as ConflictException).getResponse()).toMatchObject({ code: TWO_FACTOR_ENFORCED });
       expect(await svc.isEnabled(uRole, C.companyId)).toBe(true);
@@ -287,7 +287,7 @@ describe.skipIf(!hasDb)(
     // (c) KHÔNG bị ép → disable OK (regression wiring BE-8): xoá secret+recovery + audit + TOTP_DISABLED.
     it("(c) KHÔNG bị ép → disable OK: xoá secret+recovery, audit auth.2fa_disabled + TOTP_DISABLED", async () => {
       await enrollAndEnable(uPlain, C.companyId);
-      await svc.disable(uPlain, C.companyId);
+      await svc.disable(uPlain, C.companyId, {});
       expect(await svc.isEnabled(uPlain, C.companyId)).toBe(false);
       const totpRows = await direct.query("SELECT 1 FROM user_totp WHERE user_id = $1", [uPlain]);
       const recRows = await direct.query("SELECT 1 FROM user_recovery_codes WHERE user_id = $1", [
@@ -313,7 +313,7 @@ describe.skipIf(!hasDb)(
       expect(await svc.isEnabled(uPerUser, D.companyId)).toBe(false); // RLS lọc → không lộ trạng thái
 
       // disable chéo tenant: trong D, requiresTwoFactorTx=false (RLS) → không 409, nhưng delete lọc 0 hàng → no-op.
-      await svc.disable(uPerUser, D.companyId);
+      await svc.disable(uPerUser, D.companyId, {});
       // 2FA của uPerUser trong tenant C KHÔNG bị đụng (không xoá xuyên tenant).
       expect(await svc.isEnabled(uPerUser, C.companyId)).toBe(true);
       expect(await countSecEvent(uPerUser, "TOTP_DISABLED")).toBe(0);

@@ -13,6 +13,28 @@
 >
 > Mọi số dòng đọc trên `138d71de` (master sau khi merge `#489`) — **đã re-anchor ở v2**.
 
+> **v2.2 (09/09/2026) — ba lệch so với v2.1, phát hiện KHI THI CÔNG (đo trên DB lane, không phải suy
+> đoán). Ghi ở đây để người sau không "sửa lại cho đúng plan" và mở lại lỗ:**
+>
+> 1. **`§absent-label` KHÔNG dùng hard-delete, và `actorUserId` ở nhánh `!alive` PHẢI là NULL.**
+>    `audit_logs` có FK `actor_user_id → users(id)` **và** composite
+>    `(company_id, actor_user_id) → users(company_id, id)` (đo bằng `pg_constraint` trên lane DB).
+>    Gán một id vừa ĐO ĐƯỢC là vắng vào cột đó ⇒ 23503 ⇒ **500**, và rollback nuốt luôn chính hàng
+>    vết đang ghi — nhánh này tồn tại để LƯU vết, nên đó là tự phá. Ngoài ra hard-delete một user đã
+>    login là bất khả: `login_logs`/`audit_logs` đã trỏ về `users(id)` ⇒ nổ FK ở bước DỰNG. Ca dùng
+>    **token ký tay** cho một id chưa từng tồn tại trong tenant (đúng vế "id lạ trong tenant" của
+>    §5) — sạch, và đúng hình dạng mà nhãn `user_absent` nói tới.
+> 2. **`enroll` cũng nhận `RequestMeta` (mở rộng D4 từ 3 chữ ký lên 4).** WO này ĐẺ RA một hàng vết
+>    mới `auth.2fa_enroll_denied`; ship nó vô danh trong đúng commit tồn tại để trả nợ vô-danh là tự
+>    mâu thuẫn. Cùng file, cùng thay đổi cơ học, `auth.controller.ts` đã có `this.meta(req)`.
+> 3. **`§a2-pos-guard` KHÔNG tạo ca mới.** Ca cần thiết ĐÃ ship ở
+>    `two-factor-enforcement.guard.spec.ts` ("DENY: role requires 2FA + chưa enroll → 403
+>    `TWO_FACTOR_SETUP_REQUIRED`", dựng bằng `makeGuard({global:true})` nên không bị
+>    `vitest.config.ts` ép `false`). Thêm bản sao thứ hai của cùng tiền đề là đúng cái §5 cấm ở
+>    `§rls-shape`. Thay vào đó: **dán docblock "§a2-pos-guard ngồi lên ca này"** để nó không bị xoá,
+>    và chuỗi được đóng bằng `§a2-pos-flag` (cờ per-user ⇒ `requiresTwoFactorTx` true) +
+>    uỷ quyền một dòng `requiresTwoFactor` → `requiresTwoFactorTx`.
+
 ---
 
 ## 1. Lỗ — đã xác minh trên code (09/09/2026)
@@ -436,7 +458,25 @@ hiện của FULL gate, **chạy lại toàn bộ cột "Đột biến"** — c�
 1. **Guard chỉ đọc cờ per-user khi `TWO_FACTOR_ENFORCEMENT_ENABLED='true'`** (§2). Muốn ép vô điều
    kiện thì phải đổi `TwoFactorEnforcementGuard` trên **mọi** request ⇒ WO riêng, cổng riêng, đo tải.
 2. **`enroll` không rate-limit + gọi `encryptSecret` trước khi biết được phép hay không** (§4 D1.e) ⇒
-   vòng lặp gọi KMS miễn phí cho người giữ token. Không phải lỗ ghi (0 hàng). Vá đòi tái cấu trúc tx.
+   vòng lặp gọi KMS miễn phí cho người giữ token. Vá đòi tái cấu trúc tx.
+
+   > 🔴 **SỬA v2.3 — câu cũ ở mục này SAI, phải chết hẳn.** Nó viết *"Không phải lỗ ghi (0 hàng)"*.
+   > Đúng TRƯỚC D1, **sai ngay sau D1**: nhánh từ chối giờ ghi **đúng một hàng `audit_logs` vĩnh viễn
+   > mỗi lượt** (`auth.2fa_enroll_denied` / `auth.2fa_enable_denied`). `enroll` **không có** limiter,
+   > và `account_gone` của `confirmEnable` **cố ý** bỏ `recordFailure` (D1.d) ⇒ người giữ access token
+   > của tài khoản đã xoá mềm bồi hàng vào bảng append-only tới hết TTL token, **không counter nào
+   > chặn**. Ca `§enable-deny-norl` chạy 6 vòng liên tiếp mà không khoá — nó minh hoạ chính điều này.
+   > Luật đối chiếu đã có sẵn trong repo: `login-log-429-ratchet.unit-spec.ts:22-45` ("trần lưu trữ
+   > mỗi cửa sổ là N hàng chứ không phải vô hạn"); hai nhánh mới **vô hình** với ratchet đó vì chúng
+   > không phải điểm ném 429 ⇒ **không cổng nào đỏ**.
+   >
+   > **Vì sao vẫn KHÔNG vá ở WO này:** không phải hồi quy — trước bản vá, cùng lời gọi đó ghi *nhiều*
+   > hàng bền hơn (`enroll`: 11 hàng dữ liệu + `auth.2fa_enrolled`; `enable`: `auth.2fa_enabled` +
+   > `TOTP_ENABLED`) ⇒ trần lưu trữ đã **giảm**. Bản vá rẻ mà `security-reviewer` chỉ ra (FULL gate
+   > 09/09): gọi `this.rateLimiter.recordFailure(rlKey)` ở nhánh `account_gone` — limiter là **bộ
+   > đếm**, không phải **nhãn**, nên lập luận chống-sai-nhãn của D1.d (nhắm vào `recordReauthFailure`)
+   > không cấm nó. Nhưng nó **đảo một quyết định đã ký**, làm đỏ `§enable-deny-norl` + đột biến M3 ⇒
+   > **owner chốt**, không tự làm. Và nó **chỉ đóng một nửa**: `enroll` vẫn không có limiter nào.
 3. **Hai writer `recordReauthFailure`** (§4 D5) — gộp đòi refactor DI giữa hai service crown-jewel, và
    sẽ làm ratchet `reauthFailedWriterCount() >= 2` đỏ.
 4. **`getTwoFactorStateTx` đọc `user_totp` không có `company_id` tường minh**
@@ -458,3 +498,58 @@ hiện của FULL gate, **chạy lại toàn bộ cột "Đột biến"** — c�
    mật khẩu. Nợ có sẵn từ `#482` §7.1 + `#483` §7.3 ⇒ **WO nhãn chung**, đừng seed WO thứ tư.
 6. **Không backfill.** Tài khoản đã bị cài/tắt 2FA trước bản vá không được soát lại — `user_totp` bị
    hard-delete nên không đo được thiệt hại quá khứ. WO này chặn đường, không sửa quá khứ.
+7. **`restoreUser` gỡ yếu tố thứ hai mà KHÔNG phát `user_security_events`** — MEDIUM-3 của FULL gate
+   09/09. Đường anh em làm ĐÚNG cùng mutation, `AuthUsersService.resetTwoFactor`
+   (`auth-users.service.ts:291-314`), **có** phát `TOTP_RESET` (và thu hồi phiên). Sau D3, dòng thời
+   gian bảo mật của chính nạn nhân chỉ thấy `USER_RESTORED`; câu "yếu tố thứ hai của bạn đã bị gỡ"
+   sống duy nhất ở `audit_logs.after.twoFactorReset` — thứ người dùng cuối **không đọc**.
+   §4 D3 đã ký "không thêm hàng thứ ba", nên đây là **quyết định**, không phải bỏ sót — nhưng nó tạo
+   **lệch quan sát giữa hai đường cùng xoá credential**, đúng trong mô hình đe doạ mà WO này tồn tại
+   để chống. *Bản vá đề xuất:* phát `TOTP_RESET` **chỉ khi** `twoFactorWasEnabled` (một hàng, đúng ca
+   đáng kể). **Owner chốt** — không tự đảo quyết định đã ký.
+8. **Hai `recordReauthFailure` nuốt lỗi ghi mà không mang ngữ cảnh truy vết** — LOW của FULL gate
+   09/09 (`silent-failure-hunter` + `security-reviewer` gặp nhau ở đây). Cả
+   `auth.service.ts:2316-2320` lẫn `two-factor.service.ts:363-367` bắt lỗi `securityEvents.record` rồi
+   log **chỉ** `err.message`, không `userId`/`companyId`/`context`. Nuốt-và-đi-tiếp là **cố ý** (ghi
+   best-effort, không được biến 401 thành 500) — vấn đề là khi nó hỏng ở PROD thì không ai truy được
+   **hàng của ai** đã mất. Có TRƯỚC WO này ở cả hai file; D5 chỉ thêm `ip`/`userAgent` vào payload,
+   không đụng khối `catch`. *Gộp vào lần tới khi một trong hai file bị mở ra.*
+9. **Probe `alive` là TƯ VẤN, không serialize** — LOW của FULL gate 09/09. `SELECT` trần, không
+   `FOR SHARE` ⇒ dưới READ COMMITTED, một `deleteUser` COMMIT xen giữa probe và lệnh ghi vẫn lọt qua
+   đúng một cửa sổ đua. **A1 là biện pháp bù** và đó là lý do A1 được thiết kế **vô điều kiện**. Đã
+   ghi thẳng vào docblock của `enroll` (v2.3) để không ai đọc "trước MỌI lệnh ghi" thành "hết cửa sổ".
+   Muốn đóng hẳn thì phải khoá hàng `users` trong tx 2FA ⇒ đo tải trước, WO riêng.
+
+---
+
+## 9. FULL gate — kết quả 09/09/2026
+
+`security-reviewer` **PASS** (0 CRITICAL, 0 HIGH · 3 MEDIUM, 3 LOW) ·
+`silent-failure-hunter` **PASS** (0 blocker). `database-reviewer` không chạy — §3 đã lập luận
+KHÔNG cần (không migration, không đổi schema).
+
+**Đã VÁ trong chính WO này (MEDIUM-1):** D2 siết bốn câu DELETE nhưng **bỏ sót hai câu UPDATE** chỉ
+dựa RLS — và một trong hai là chính câu ghi **BẬT** 2FA:
+
+| Câu | Vị trí | Cổng mới |
+| --- | --- | --- |
+| `UPDATE user_totp SET enabled_at` (`confirmEnable`) | `two-factor.service.ts:288` | `§d2-enable-shape` (M16) |
+| `UPDATE user_recovery_codes SET used_at` (`verifyChallenge`) | `:513` | `§d2-recovery-shape` (M17) |
+
+Census đã đóng: `grep "\.update(userTotp)\|\.update(userRecoveryCodes)"` toàn `src/` ⇒ **đúng hai
+điểm**, cả hai đã siết. Mục tiêu tự khai của D2 ("hết hai giọng trong cùng một file") giờ mới đạt.
+
+**Cũng vá (LOW):** mắt xích `requiresTwoFactor` → `requiresTwoFactorTx` trước đây **không ca nào đo**,
+trong khi cả lập luận "ở PROD A2 ép enroll thật" (§2) treo vào đúng dòng đó ⇒ thêm `§a2-pos-delegate`
+(M18). Và docblock probe nay nói rõ nó là **tư vấn** (nợ §8.9).
+
+**Chuyển thành nợ, KHÔNG vá (đảo quyết định owner đã ký):** MEDIUM-2 → §8.2 (đã sửa câu SAI ở đó) ·
+MEDIUM-3 → §8.7 · LOW log-context → §8.8.
+
+> ⚠️ **Bản vá cho phát hiện của gate TỰ NÓ chưa qua cổng** (`fix-commit-for-review-findings-is-itself-ungated`).
+> Vì vậy bảng đột biến §5 được chạy **LẠI TRỌN BỘ** sau khi vá, cộng ba đột biến mới M16/M17/M18.
+
+**Bẫy đo đạc gặp phải, ghi ra để người sau không đếm nhầm:** ở lượt sweep đầu, M5 báo "ĐỎ" **chỉ vì**
+mã thoát khác 0 do `Unhandled Rejection: Channel closed` (ERR_IPC_CHANNEL_CLOSED) sau teardown —
+**không ca nào đỏ**. Chạy lại riêng M5 mới ra bằng chứng thật (`1 failed | 13 passed`, đúng
+`§absent-label`). ⇒ **Đọc mã thoát là chưa đủ**: phải đối chiếu tên ca đỏ trong output.

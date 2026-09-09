@@ -8,6 +8,7 @@ import { roles, userRecoveryCodes, userRoles, users, userTotp } from "../db/sche
 import { AuditService } from "../events/audit.service";
 import { SecretEncryptionService } from "../crypto/secret-encryption.service";
 import type { EncryptedColumns } from "../crypto/secret-encryption.types";
+import type { RequestMeta } from "./auth.service";
 import { LoginRateLimiter } from "./login-rate-limiter";
 import { ReplayGuardService } from "./replay-guard.service";
 import { SecurityEventWriter } from "./security-event-writer.service";
@@ -138,8 +139,15 @@ export class TwoFactorService {
   /**
    * Enroll: sinh secret + recovery codes, lưu user_totp (enabled_at=NULL, CHƯA bật). Đã BẬT rồi → 409
    * (phải disable trước, chống tự khoá). Trả otpauthUri + recoveryCodes plaintext (hiển thị 1 lần).
+   *
+   * S18-AUTH-RESTORE2FA-1 (D1) — TỪ CHỐI khi hàng `users` đã xoá mềm HOẶC vắng mặt. Trước WO này câu
+   * SELECT duy nhất ở đây đụng `user_totp`, KHÔNG đụng `users` ⇒ người giữ access token của một tài
+   * khoản vừa bị xoá mềm (ba APP_GUARD đều stateless với `users.deleted_at`, và `deleteUser` chỉ thu
+   * hồi *refresh* token) CÀI được yếu tố thứ hai DO CHÍNH HỌ kiểm soát. `restoreUser` không soát lại
+   * 2FA và `TwoFactorEnforcementGuard` chỉ ép enroll khi `!isEnabled` ⇒ tài khoản khôi phục về với
+   * yếu tố của kẻ tấn công, IM LẶNG. Đây là đường ĐI THẲNG, không cần trúng race.
    */
-  async enroll(userId: string, companyId: string): Promise<EnrollResult> {
+  async enroll(userId: string, companyId: string, meta: RequestMeta): Promise<EnrollResult> {
     const secret = this.totp.generateSecret();
     const enc = await this.secrets.encryptSecret(secret, {
       companyId,
@@ -149,7 +157,47 @@ export class TwoFactorService {
     const recoveryCodes = this.generateRecoveryCodes();
     const recoveryHashes = recoveryCodes.map((c) => this.tokens.hashToken(c));
 
-    const accountName = await this.dbsvc.withTenant(companyId, async (tx) => {
+    const outcome = await this.dbsvc.withTenant(companyId, async (tx) => {
+      // ⟵ PHÉP KIỂM ĐẦU TIÊN TRONG TX, trước MỌI lệnh ghi. `company_id` tường minh (BẤT BIẾN #1).
+      //
+      // ⚠️ Phép kiểm này là TƯ VẤN (advisory), KHÔNG serialize: `SELECT` trần, không `FOR SHARE`.
+      // Dưới READ COMMITTED, một `deleteUser` COMMIT xen giữa probe và lệnh ghi vẫn lọt qua đúng một
+      // cửa sổ đua. Biện pháp bù là A1 (`restoreUser` xoá sạch 2FA vô điều kiện) — cố ý, KHÔNG phải
+      // bỏ sót. Đừng đọc dòng "trước MỌI lệnh ghi" ở trên thành "không còn cửa sổ nào".
+      //
+      // KHÁC `disable()`: ở đó `companyId` là tham số RỜI do caller truyền nên nhánh `!alive` là
+      // đường cross-tenant và hợp đồng ghim nó là no-op im lặng (`two-factor.int-spec.ts` ca (f)).
+      // Ở đây controller truyền `req.user.id` + `req.user.companyId` — LUÔN là chính người gọi ⇒
+      // không có rủi ro gán actor của tenant khác vào hàng audit append-only, và `!alive` nghĩa là
+      // hàng user thật sự vắng ⇒ ghi tiếp vào `user_totp` sẽ nổ FK 500. Từ chối SẠCH HƠN.
+      const [alive] = await tx
+        .select({ deletedAt: users.deletedAt, email: users.email })
+        .from(users)
+        .where(and(eq(users.id, userId), eq(users.companyId, companyId)))
+        .limit(1);
+      if (!alive || alive.deletedAt != null) {
+        // Ghi vết TRONG tx rồi `return` sentinel; ném NGOÀI tx (mirror `disable()`) — ném ở đây =
+        // rollback nuốt luôn vết.
+        //
+        // ⚠️ `actorUserId` PHẢI là `undefined` ở nhánh `!alive`. `audit_logs` có FK
+        // `actor_user_id → users(id)` VÀ composite `(company_id, actor_user_id) → users(company_id,
+        // id)`: gán một id vừa ĐO ĐƯỢC là vắng vào cột đó ⇒ 23503 ⇒ 500, và rollback xoá luôn chính
+        // hàng vết này. Nhánh `user_deleted` thì hàng còn tồn tại nên gán được.
+        //
+        // Nhãn ĐO rồi mới ghi (`rls-makes-cross-tenant-look-nonexistent-in-audit-labels`): trong
+        // tenant-tx, FORCE RLS làm "khác tenant" trông y hệt "không tồn tại" ⇒ "0 hàng" chỉ được
+        // nói `user_absent`, KHÔNG được khẳng định "đã xoá".
+        await this.audit.record(tx, {
+          action: "auth.2fa_enroll_denied",
+          objectType: "auth",
+          actorUserId: alive ? userId : undefined,
+          objectId: userId,
+          after: { reason: alive ? "user_deleted" : "user_absent" },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        });
+        return { kind: "account_gone" as const };
+      }
       const [existing] = await tx
         .select({ enabledAt: userTotp.enabledAt })
         .from(userTotp)
@@ -159,64 +207,127 @@ export class TwoFactorService {
         throw new ConflictException("2FA đã được bật. Hãy tắt trước khi đăng ký lại.");
       }
       // Reset mọi enrollment pending cũ + recovery codes cũ (re-enroll = bộ secret/codes mới).
-      await tx.delete(userTotp).where(eq(userTotp.userId, userId));
-      await tx.delete(userRecoveryCodes).where(eq(userRecoveryCodes.userId, userId));
+      // `company_id` TƯỜNG MINH (D2, BẤT BIẾN #1) — hôm nay RLS đã ép điều này nên đây là
+      // defence-in-depth; để thiếu thì cùng một file lại nói hai giọng (`deleteTwoFactorTx` của
+      // `AuthUsersRepository` — cùng thao tác — đã có vế này từ đầu).
+      await tx
+        .delete(userTotp)
+        .where(and(eq(userTotp.companyId, companyId), eq(userTotp.userId, userId)));
+      await tx
+        .delete(userRecoveryCodes)
+        .where(
+          and(eq(userRecoveryCodes.companyId, companyId), eq(userRecoveryCodes.userId, userId)),
+        );
       await tx.insert(userTotp).values({ userId, ...this.toColumns(enc) });
       await tx
         .insert(userRecoveryCodes)
         .values(recoveryHashes.map((codeHash) => ({ userId, codeHash })));
-      const [u] = await tx
-        .select({ email: users.email })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
       await this.audit.record(tx, {
         action: "auth.2fa_enrolled",
         objectType: "auth",
         actorUserId: userId,
         objectId: userId,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
-      return u?.email ?? userId;
+      // Email đọc từ CÙNG hàng `alive` ở trên — không cần câu SELECT thứ hai.
+      return { kind: "ok" as const, accountName: alive.email ?? userId };
     });
 
-    return { otpauthUri: this.totp.keyUri(accountName, secret), recoveryCodes };
+    if (outcome.kind === "account_gone") {
+      throw new UnauthorizedException("Phiên đăng nhập không còn hợp lệ.");
+    }
+    return { otpauthUri: this.totp.keyUri(outcome.accountName, secret), recoveryCodes };
   }
 
-  /** Xác nhận bật: verify mã TOTP với secret đã enroll → set enabled_at. Mã sai → 401 (deny-path), rate-limit. */
-  async confirmEnable(userId: string, companyId: string, token: string): Promise<void> {
+  /**
+   * Xác nhận bật: verify mã TOTP với secret đã enroll → set enabled_at. Mã sai → 401 (deny-path), rate-limit.
+   *
+   * S18-AUTH-RESTORE2FA-1 (D1) — nửa kia của lỗ ở `enroll`: chặn ở `enroll` mà không chặn ở đây thì
+   * một hàng enroll dựng TRƯỚC lúc xoá mềm vẫn bật được sau đó.
+   *
+   * (D1.d) Sentinel BA trạng thái, KHÔNG phải boolean. Nhánh `account_gone` cố ý KHÔNG
+   * `recordFailure` và KHÔNG `recordReauthFailure`: phạt rate-limit + gắn nhãn "xác thực lại thất
+   * bại" cho một lượt KHÔNG PHẢI "nhập sai mã" là SAI NHÃN (mirror lập luận D4 ở
+   * `AuthService.changePassword`). Vết bền của nhánh này là `auth.2fa_enable_denied`.
+   */
+  async confirmEnable(
+    userId: string,
+    companyId: string,
+    token: string,
+    meta: RequestMeta,
+  ): Promise<void> {
     const rlKey = rateLimitKey("2fa-enable", `${companyId}|${userId}`);
     if (await this.rateLimiter.isLocked(rlKey)) {
       // ⟲ S18-AUTH-RETRYAFTER-1 — không cần sàn thời gian ở đây: actor ĐÃ có access token nên không
       // còn ẩn số nào (tenant, user) để dò bằng đồng hồ.
       throw tooManyRequests(await this.rateLimiter.remainingLockSecOrNull(rlKey));
     }
-    const verified = await this.dbsvc.withTenant(companyId, async (tx) => {
+    const outcome = await this.dbsvc.withTenant(companyId, async (tx) => {
+      // Vế `deleted_at`/`company_id` ĐẦU TIÊN trong tx — xem docblock `enroll` cho lý do đầy đủ của
+      // nhánh `!alive` (ở đây `userId`/`companyId` cũng LUÔN là của chính người gọi).
+      const [alive] = await tx
+        .select({ deletedAt: users.deletedAt })
+        .from(users)
+        .where(and(eq(users.id, userId), eq(users.companyId, companyId)))
+        .limit(1);
+      if (!alive || alive.deletedAt != null) {
+        // `actorUserId` bỏ trống ở nhánh `!alive` — FK `audit_logs.actor_user_id → users(id)`
+        // (xem docblock `enroll`).
+        await this.audit.record(tx, {
+          action: "auth.2fa_enable_denied",
+          objectType: "auth",
+          actorUserId: alive ? userId : undefined,
+          objectId: userId,
+          after: { reason: alive ? "user_deleted" : "user_absent" },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        });
+        return "account_gone" as const;
+      }
       const row = await this.loadTotp(tx, userId);
       if (!row) throw new UnauthorizedException("Chưa đăng ký 2FA.");
       const secret = await this.decryptSecret(row, companyId, userId);
-      if (!this.totp.verify(token, secret)) return false;
+      if (!this.totp.verify(token, secret)) return "bad_code" as const;
+      // D2 (mở rộng sau FULL gate): `company_id` TƯỜNG MINH. Đây là câu ghi BẬT 2FA — bỏ sót nó thì
+      // file vẫn "hai giọng" đúng ở chỗ quan trọng nhất, trong khi bốn câu DELETE quanh nó đã siết.
+      // Hành vi KHÔNG đổi (FORCE RLS đã ép); giá trị là defence-in-depth. Cổng: `§d2-enable-shape`.
       await tx
         .update(userTotp)
         .set({ enabledAt: new Date(), updatedAt: new Date() })
-        .where(eq(userTotp.userId, userId));
+        .where(and(eq(userTotp.companyId, companyId), eq(userTotp.userId, userId)));
       await this.audit.record(tx, {
         action: "auth.2fa_enabled",
         objectType: "auth",
         actorUserId: userId,
         objectId: userId,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       // S2-AUTH-BE-8: TOTP_ENABLED (dual-write cùng tx). subject=actor=user (Own self-enroll).
       await this.securityEvents.record(tx, {
         eventType: "TOTP_ENABLED",
         userId,
         actorUserId: userId,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
-      return true;
+      return "ok" as const;
     });
-    if (!verified) {
+    // Ném NGOÀI `withTenant` để tx COMMIT giữ được vết `auth.2fa_enable_denied`.
+    if (outcome === "account_gone") {
+      throw new UnauthorizedException("Phiên đăng nhập không còn hợp lệ.");
+    }
+    if (outcome === "bad_code") {
       await this.rateLimiter.recordFailure(rlKey);
-      await this.recordReauthFailure(companyId, userId, "2fa_enable");
+      await this.recordReauthFailure(companyId, userId, "2fa_enable", meta);
       throw new UnauthorizedException("Mã xác thực không đúng.");
+    }
+    // ⚠️ Thành công là nhánh ĐƯỢC ĐẶT TÊN, không phải phần rơi-xuống-cuối: thêm outcome thứ tư mà
+    // quên nhánh của nó thì nó lặng lẽ nghĩa là "đã bật 2FA" — đúng hình "thành công mà RỖNG".
+    if (outcome !== "ok") {
+      const never: never = outcome;
+      throw new Error(`confirmEnable: outcome chưa xử lý: ${String(never)}`);
     }
     await this.rateLimiter.reset(rlKey);
   }
@@ -239,6 +350,7 @@ export class TwoFactorService {
     companyId: string,
     userId: string,
     context: "2fa_enable",
+    meta: RequestMeta,
   ): Promise<void> {
     try {
       await this.dbsvc.withTenant(companyId, async (tx) => {
@@ -248,6 +360,12 @@ export class TwoFactorService {
           actorUserId: userId,
           // CHỈ ngữ cảnh — KHÔNG mã, KHÔNG secret (BẤT BIẾN #3). Không truyền vào thì không có gì để mask.
           payload: { context },
+          // S18-AUTH-RESTORE2FA-1 (D5, nợ N2 của `#486`): đây là writer `REAUTH_FAILED` THỨ HAI —
+          // nó KHÔNG được tham số bắt buộc của `AuthService` bảo vệ, nên phải nối dây riêng.
+          // KHÔNG gộp hai writer: gộp đòi vòng DI giữa hai service crown-jewel (hoặc một service
+          // thứ ba), và ratchet `reauthFailedWriterCount() >= 2` đang ghim rằng có HAI writer.
+          ip: meta.ip,
+          userAgent: meta.userAgent,
         });
       });
     } catch (err) {
@@ -265,7 +383,7 @@ export class TwoFactorService {
    * không revoke, không audit, không ghi timeline). requiresTwoFactorTx đọc trong CÙNG tx (nhất quán với
    * enforcement guard + status). Ném trước khi ghi ⇒ tx rollback không có gì để hoàn.
    */
-  async disable(userId: string, companyId: string): Promise<void> {
+  async disable(userId: string, companyId: string, meta: RequestMeta): Promise<void> {
     const outcome = await this.dbsvc.withTenant(companyId, async (tx) => {
       if (await this.requiresTwoFactorTx(tx, userId)) {
         throw new ConflictException({
@@ -305,26 +423,38 @@ export class TwoFactorService {
           actorUserId: userId,
           objectId: userId,
           after: { reason: "user_deleted" },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
         });
         return "account_gone" as const;
       }
+      // D2 — `company_id` TƯỜNG MINH (BẤT BIẾN #1), mirror `enroll` ở trên. Hành vi KHÔNG đổi (RLS
+      // đã ép hôm nay); giá trị là defence-in-depth + hết "hai giọng" trong cùng một file.
       const deleted = await tx
         .delete(userTotp)
-        .where(eq(userTotp.userId, userId))
+        .where(and(eq(userTotp.companyId, companyId), eq(userTotp.userId, userId)))
         .returning({ id: userTotp.id });
-      await tx.delete(userRecoveryCodes).where(eq(userRecoveryCodes.userId, userId));
+      await tx
+        .delete(userRecoveryCodes)
+        .where(
+          and(eq(userRecoveryCodes.companyId, companyId), eq(userRecoveryCodes.userId, userId)),
+        );
       if (deleted.length > 0) {
         await this.audit.record(tx, {
           action: "auth.2fa_disabled",
           objectType: "auth",
           actorUserId: userId,
           objectId: userId,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
         });
         // S2-AUTH-BE-8: TOTP_DISABLED (dual-write cùng tx) — chỉ khi thực sự có bản ghi bị xoá (đã bật).
         await this.securityEvents.record(tx, {
           eventType: "TOTP_DISABLED",
           userId,
           actorUserId: userId,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
         });
       }
       return "ok" as const;
@@ -385,11 +515,14 @@ export class TwoFactorService {
 
       // Recovery code: hash input, tìm bản CHƯA dùng, đánh dấu used (1-lần, append used_at).
       const codeHash = this.tokens.hashToken(code);
+      // D2 (mở rộng sau FULL gate): `company_id` TƯỜNG MINH — xem chú thích ở câu UPDATE của
+      // `confirmEnable`. Cổng: `§d2-recovery-shape`.
       const consumed = await tx
         .update(userRecoveryCodes)
         .set({ usedAt: new Date() })
         .where(
           and(
+            eq(userRecoveryCodes.companyId, companyId),
             eq(userRecoveryCodes.userId, userId),
             eq(userRecoveryCodes.codeHash, codeHash),
             isNull(userRecoveryCodes.usedAt),

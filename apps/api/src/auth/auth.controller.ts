@@ -239,7 +239,7 @@ export class AuthController {
   @Post("2fa/enroll")
   @HttpCode(200)
   enrollTwoFactor(@Req() req: AuthenticatedRequest): Promise<TwoFactorEnrollResponse> {
-    return this.twoFactor.enroll(req.user.id, req.user.companyId);
+    return this.twoFactor.enroll(req.user.id, req.user.companyId, this.meta(req));
   }
 
   /** Xác nhận bật 2FA: nhập mã TOTP hiện tại. Mã sai → 401. */
@@ -249,7 +249,7 @@ export class AuthController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: TwoFactorEnableDto,
   ): Promise<{ ok: true }> {
-    await this.twoFactor.confirmEnable(req.user.id, req.user.companyId, dto.token);
+    await this.twoFactor.confirmEnable(req.user.id, req.user.companyId, dto.token, this.meta(req));
     return { ok: true };
   }
 
@@ -260,7 +260,7 @@ export class AuthController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: TwoFactorDisableDto,
   ): Promise<{ ok: true }> {
-    await this.auth.disableTwoFactor(req.user, dto.password);
+    await this.auth.disableTwoFactor(req.user, dto.password, this.meta(req));
     return { ok: true };
   }
 

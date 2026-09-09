@@ -17579,7 +17579,7 @@ export const backlog = [
     title:
       "Khôi phục user KHÔNG soát lại 2FA + `enroll`/`confirmEnable` không lọc `deleted_at` — tài khoản khôi phục có thể về với 2FA TẮT, hoặc với yếu tố thứ hai CỦA KẺ TẤN CÔNG",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/users/auth-users.service.ts",
       "apps/api/src/users/auth-users.repository.ts",
@@ -17620,6 +17620,7 @@ export const backlog = [
     notes: [
       "🔴 FULL gate (auth). Đọc `docs/plans/S18-AUTH-2FADELETED-1.md` §1b + §7 TRƯỚC — bằng chứng và lý do defer nằm cả ở đó.",
       "⚠️ Mục (2) là LỖ BẢO MẬT thực sự, không phải dọn dẹp: nó cho kẻ tấn công CÀI yếu tố thứ hai vào một tài khoản sẽ được khôi phục. Plan v1 của WO trước từng viết nhầm rằng 'bật 2FA cho tài khoản đã xoá không phải là làm yếu đi' — plan-reviewer bác đúng.",
+      "🔎 THI CÔNG 09/09 — BA LỆCH so với plan v2.1, đã ghi ở plan §v2.2 (đừng 'sửa lại cho đúng plan'): (1) `audit_logs` có FK `actor_user_id → users(id)` VÀ composite `(company_id, actor_user_id)` ⇒ nhánh `!alive` của enroll/confirmEnable PHẢI ghi `actorUserId` NULL — gán id vừa đo được là vắng thì 23503 ⇒ 500 và rollback nuốt luôn hàng vết. `§absent-label` do đó dùng token KÝ TAY cho id lạ trong tenant; hard-delete là bất khả vì `login_logs`/`audit_logs` đã trỏ về `users(id)`. (2) `enroll` cũng nhận `RequestMeta` (D4 từ 3 lên 4 chữ ký) — WO này đẻ ra hàng vết mới `auth.2fa_enroll_denied`, ship nó vô danh trong đúng commit tồn tại để trả nợ vô-danh là tự mâu thuẫn. (3) `§a2-pos-guard` KHÔNG tạo ca mới — ca cần thiết ĐÃ ship ở `two-factor-enforcement.guard.spec.ts` (dựng `makeGuard({global:true})` nên không bị vitest.config ép 'false'); chỉ dán docblock 'ca này là chịu lực' thay vì nhân bản tiền đề (đúng cái §5 cấm ở `§rls-shape`).",
     ],
   },
   {
@@ -17771,6 +17772,36 @@ export const backlog = [
       "Shape khác nhau ⇒ triệu chứng thật có thể là Zod parse đỏ hoặc field `undefined` im lặng tùy thứ tự mount — memory server-masking-needs-optional-fe-schema.",
       "Tách khoá ĐẺ RA nợ mới: trước WO, CRUD trên màn quản trị làm tươi picker NHỜ TAI NẠN (chung khoá). Tách xong mà không nối `hrMasterDataInvalidation` thì picker giữ bản cũ tới 5 phút (staleTime lookup) ⇒ done_when #2 là bắt buộc, không phải tuỳ chọn.",
       "Nợ để lại (plan §7): N1 `PositionsPage` đọc phòng ban qua endpoint gác `read:department` (hành vi CÓ TRƯỚC WO, D1 cấm đổi) · N2 còn 4 spec tự dựng bản sao ngầm `hrKeys` — trong đó `OrgChartPage.spec` stub THIẾU nhánh `departments.all` mà màn thật có invalidate, spec xanh chỉ vì đường đó không ca nào chạy tới.",
+    ],
+  },
+  {
+    id: "S18-QA-LEAVEDATEBOMB-1",
+    module: "LEAVE",
+    layer: "QA",
+    title:
+      "`leave-request.int.spec.ts` dùng NGÀY CỨNG tuyệt đối — đỏ từ 0h 09/09/2026 trên MỌI nhánh, và còn 2 quả bom nữa chưa nổ",
+    zone: "yellow",
+    status: "ready",
+    paths: ["apps/api/src/leave/leave-request.int.spec.ts", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "ĐO 09/09/2026 trong lúc chạy `harness/check.sh --all --lane-db=s18restore2fa` cho S18-AUTH-RESTORE2FA-1: ca `submit happy: exactly 1 RESERVE tx + pending+1 + Reserved + 1 approval/outbox/audit` trả 422 `LEAVE-ERR-MIN-NOTICE` thay vì 201.",
+      "Root-cause: `const D_SINGLE = \"2026-09-08\"` (`:47`) là ngày TUYỆT ĐỐI. Loại nghỉ `annualA` được gieo với `min_notice_days = 0` (`:129`) ⇒ luật đòi ngày nghỉ >= HÔM NAY. Hôm nay là 09/09 ⇒ 08/09 nằm trong quá khứ ⇒ từ chối. Ca này đỏ đúng lúc nửa đêm 09/09, KHÔNG do commit nào.",
+      "XÁC MINH có sẵn trên master (không cần stash): `git show master:apps/api/src/leave/leave-request.int.spec.ts` mang ĐÚNG cùng hằng số; nhánh `fix/s18-auth-restore2fa-1` chạm 0 file LEAVE.",
+      "CÒN HAI QUẢ BOM CÙNG HỌ chưa nổ: `FRI = \"2026-09-04\"` (`:48`) và `NOTICE_DATE = \"2026-06-30\"` (`:53`) — cùng hình dạng, sẽ hỏng theo cùng cơ chế khi luật/ngày đổi. `OVER_START = \"2026-11-02\"` còn ở tương lai nên tạm sống.",
+      "Cùng họ với memory `leave-accrual-spec-red-on-real-today` và `ci-red-can-depend-on-time-of-day` — dự án ĐÃ ăn bẫy này ít nhất một lần trước đây.",
+    ],
+    done_when: [
+      "Ngày trong spec suy ra TỪ đồng hồ (ví dụ `addDays(today, +N)` kèm dịch sang ngày làm việc), KHÔNG phải hằng số tuyệt đối — hoặc đóng băng đồng hồ cho cả file nếu ca cần một thứ-trong-tuần cố định",
+      "Ca phải ĐỎ được khi luật min-notice hỏng, và KHÔNG đỏ khi chỉ vì hôm nay là ngày khác — chạy lại spec với đồng hồ giả đặt ở 3 mốc khác nhau (đầu tuần / cuối tuần / cuối tháng) đều xanh",
+      "Quét CẢ FILE tìm mọi ngày tuyệt đối còn lại (`grep -n '\"20[0-9][0-9]-'`) và xử lý hết trong cùng PR — vá một hằng số rồi để hai cái kia là hẹn giờ lại quả sau",
+      "Quét sang các int-spec LEAVE/ATT khác cùng hình dạng; nếu có thì ghi ra (không bắt buộc vá trong PR này)",
+      "`pnpm --filter @mediaos/api test src/leave/leave-request.int.spec.ts` xanh với LANE_DB",
+    ],
+    notes: [
+      "🟡 LIGHT gate — chỉ sửa spec, không đụng code sản phẩm. NHƯNG cẩn thận: đổi ngày mà làm ca không còn đo được luật min-notice thì thành cổng RỖNG. Ca `NOTICE_DATE` tồn tại để chứng minh min-notice 10 ngày TỪ CHỐI — nó phải giữ được vế đó.",
+      "Đừng 'vá' bằng cách hạ `min_notice_days` hay nới assert — đó là vá triệu chứng, giết luôn thứ ca này đang canh.",
     ],
   },
 ];

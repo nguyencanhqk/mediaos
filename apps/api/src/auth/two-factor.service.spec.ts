@@ -17,11 +17,11 @@ import { userRecoveryCodes, userRoles, users, userTotp } from "../db/schema";
  * Duyệt `queryChunks` đệ quy tìm Column `deleted_at` THUỘC ĐÚNG bảng — phân biệt userRoles.deleted_at với
  * roles.deleted_at (reader CŨ chỉ lọc roles ⇒ RED; sau fix lọc CẢ HAI ⇒ GREEN).
  */
-function whereFiltersSoftDelete(where: unknown, table: unknown): boolean {
+function whereHasColumn(where: unknown, table: unknown, column: string): boolean {
   let found = false;
   const walk = (node: unknown): void => {
     if (node instanceof Column) {
-      if (node.table === table && node.name === "deleted_at") found = true;
+      if (node.table === table && node.name === column) found = true;
       return;
     }
     if (node instanceof SQL) {
@@ -32,6 +32,10 @@ function whereFiltersSoftDelete(where: unknown, table: unknown): boolean {
   };
   walk(where);
   return found;
+}
+
+function whereFiltersSoftDelete(where: unknown, table: unknown): boolean {
+  return whereHasColumn(where, table, "deleted_at");
 }
 
 /**
@@ -51,6 +55,14 @@ function whereFiltersSoftDelete(where: unknown, table: unknown): boolean {
 interface TxCalls {
   totpDeletes: number;
   recoveryDeletes: number;
+}
+
+interface TxCaptures {
+  userRolesWhere?: unknown;
+  /** WHERE của câu `DELETE FROM user_totp` gần nhất (D2 — §d2-*-shape). */
+  totpDeleteWhere?: unknown;
+  /** WHERE của câu `DELETE FROM user_recovery_codes` gần nhất (D2). */
+  recoveryDeleteWhere?: unknown;
 }
 
 /**
@@ -74,10 +86,10 @@ function makeTx(opts: {
   userDeletedAt?: Date | null;
   /** Hàng `users` KHÔNG nhìn thấy được (RLS ẩn — đường cross-tenant của `disable()`). */
   userMissing?: boolean;
-}): { tx: unknown; calls: TxCalls; captures: { userRolesWhere?: unknown } } {
+}): { tx: unknown; calls: TxCalls; captures: TxCaptures } {
   const calls: TxCalls = { totpDeletes: 0, recoveryDeletes: 0 };
   // S2-AUTH-DB-3 Lane C: bắt WHERE của reader user_roles để assert lọc soft-delete (không cần DB).
-  const captures: { userRolesWhere?: unknown } = {};
+  const captures: TxCaptures = {};
   const tx = {
     select: (_cols?: unknown) => ({
       from: (table: unknown) => {
@@ -106,9 +118,14 @@ function makeTx(opts: {
         return { ...whereChain, innerJoin: () => whereChain };
       },
     }),
+    // S18-AUTH-RESTORE2FA-1 (D2) — `where` giờ NHẬN và GIỮ đối số. Trước WO này nó là `where: ()`
+    // KHÔNG tham số ⇒ mock này bắt được 0/4 câu DELETE, và một đột biến "gỡ `company_id`" đi qua
+    // toàn bộ suite unit mà không ai đỏ. HAI hình dạng khác nhau phải giữ nguyên: `userTotp` đi
+    // tiếp `.returning()`, còn `userRecoveryCodes` trả THẲNG Promise.
     delete: (table: unknown) => ({
-      where: () => {
+      where: (cond?: unknown) => {
         if (table === userTotp) {
+          captures.totpDeleteWhere = cond;
           return {
             returning: () => {
               calls.totpDeletes += 1;
@@ -117,11 +134,16 @@ function makeTx(opts: {
           };
         }
         if (table === userRecoveryCodes) {
+          captures.recoveryDeleteWhere = cond;
           calls.recoveryDeletes += 1;
           return Promise.resolve(undefined);
         }
         return Promise.resolve(undefined);
       },
+    }),
+    // `enroll` ghi hai bảng; mock này chỉ cần nuốt giá trị (hình dạng WHERE của INSERT không tồn tại).
+    insert: (_table: unknown) => ({
+      values: (_vals: unknown) => Promise.resolve(undefined),
     }),
   };
   return { tx, calls, captures };
@@ -160,7 +182,9 @@ function makeSvc(tx: unknown) {
     {} as never, // replayGuard
     securityEvents as never, // securityEvents (S2-AUTH-BE-8 dual-write)
   );
-  return { svc, audit, securityEvents, rateLimiter };
+  // `dbsvc` phơi ra để `§a2-pos-delegate` đo được rằng đường controller ĐI QUA `withTenant` với đúng
+  // companyId — không chỉ trả đúng giá trị (thêm trường, không đổi trường cũ).
+  return { svc, audit, securityEvents, rateLimiter, dbsvc };
 }
 
 const COMPANY_ID = "22222222-2222-2222-2222-222222222222";
@@ -204,7 +228,7 @@ describe("TwoFactorService.disable — fail-closed khi bị ép 2FA", () => {
   it("ép QUA PER-USER (users.require_two_factor) → ConflictException code=TWO_FACTOR_ENFORCED, 0 delete/audit/event", async () => {
     const { tx, calls } = makeTx({ userRequireTwoFactor: true, deletedTotp: [{ id: "x" }] });
     const { svc, audit, securityEvents } = makeSvc(tx);
-    const err = await svc.disable(USER_ID, COMPANY_ID).catch((e) => e);
+    const err = await svc.disable(USER_ID, COMPANY_ID, {}).catch((e) => e);
     expect(err).toBeInstanceOf(ConflictException);
     expect((err as ConflictException).getStatus()).toBe(409);
     expect((err as ConflictException).getResponse()).toMatchObject({ code: TWO_FACTOR_ENFORCED });
@@ -218,7 +242,7 @@ describe("TwoFactorService.disable — fail-closed khi bị ép 2FA", () => {
   it("ép QUA ROLE (roles.requires_two_factor) → 409 TWO_FACTOR_ENFORCED, 0 delete/audit/event", async () => {
     const { tx, calls } = makeTx({ hasEnforcedRole: true, deletedTotp: [{ id: "x" }] });
     const { svc, audit, securityEvents } = makeSvc(tx);
-    const err = await svc.disable(USER_ID, COMPANY_ID).catch((e) => e);
+    const err = await svc.disable(USER_ID, COMPANY_ID, {}).catch((e) => e);
     expect(err).toBeInstanceOf(ConflictException);
     expect((err as ConflictException).getResponse()).toMatchObject({ code: TWO_FACTOR_ENFORCED });
     expect(calls.totpDeletes).toBe(0);
@@ -229,7 +253,7 @@ describe("TwoFactorService.disable — fail-closed khi bị ép 2FA", () => {
   it("KHÔNG bị ép + đang bật → xoá secret+recovery, audit 'auth.2fa_disabled' + TOTP_DISABLED (regression BE-8)", async () => {
     const { tx, calls } = makeTx({ deletedTotp: [{ id: "x" }] }); // không ép, có bản ghi bị xoá
     const { svc, audit, securityEvents } = makeSvc(tx);
-    await svc.disable(USER_ID, COMPANY_ID);
+    await svc.disable(USER_ID, COMPANY_ID, {});
     expect(calls.totpDeletes).toBe(1);
     expect(calls.recoveryDeletes).toBe(1);
     expect(audit.record).toHaveBeenCalledTimes(1);
@@ -246,7 +270,7 @@ describe("TwoFactorService.disable — fail-closed khi bị ép 2FA", () => {
   it("KHÔNG bị ép + CHƯA bật (0 hàng bị xoá) → KHÔNG audit/TOTP_DISABLED (regression BE-8)", async () => {
     const { tx, calls } = makeTx({ deletedTotp: [] }); // không ép, không có bản ghi bị xoá
     const { svc, audit, securityEvents } = makeSvc(tx);
-    await svc.disable(USER_ID, COMPANY_ID);
+    await svc.disable(USER_ID, COMPANY_ID, {});
     expect(calls.totpDeletes).toBe(1); // vẫn thử xoá (idempotent)
     expect(audit.record).not.toHaveBeenCalled();
     expect(securityEvents.record).not.toHaveBeenCalled();
@@ -267,7 +291,9 @@ describe("TwoFactorService.disable — hàng đã XOÁ MỀM (S18-AUTH-2FADELETE
     const { tx, calls } = makeTx({ userDeletedAt: new Date(), deletedTotp: [{ id: "x" }] });
     const { svc, audit, securityEvents } = makeSvc(tx);
 
-    await expect(svc.disable(USER_ID, COMPANY_ID)).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(svc.disable(USER_ID, COMPANY_ID, {})).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
 
     // Lệnh ghi KHÔNG chạy — đây là điều WO này mua được.
     expect(calls.totpDeletes).toBe(0);
@@ -295,7 +321,7 @@ describe("TwoFactorService.disable — hàng đã XOÁ MỀM (S18-AUTH-2FADELETE
     const { tx, calls } = makeTx({ userMissing: true, deletedTotp: [] });
     const { svc, audit } = makeSvc(tx);
 
-    await expect(svc.disable(USER_ID, COMPANY_ID)).resolves.toBeUndefined();
+    await expect(svc.disable(USER_ID, COMPANY_ID, {})).resolves.toBeUndefined();
 
     expect(calls.totpDeletes).toBe(1); // vẫn chạy, RLS lọc còn 0 hàng — y như trước vá
     expect(audit.record).not.toHaveBeenCalled();
@@ -307,7 +333,7 @@ describe("TwoFactorService.disable — hàng đã XOÁ MỀM (S18-AUTH-2FADELETE
     const { tx, calls } = makeTx({ userRequireTwoFactor: true, userDeletedAt: new Date() });
     const { svc } = makeSvc(tx);
 
-    await expect(svc.disable(USER_ID, COMPANY_ID)).rejects.toBeInstanceOf(ConflictException);
+    await expect(svc.disable(USER_ID, COMPANY_ID, {})).rejects.toBeInstanceOf(ConflictException);
     expect(calls.totpDeletes).toBe(0);
   });
 
@@ -315,7 +341,7 @@ describe("TwoFactorService.disable — hàng đã XOÁ MỀM (S18-AUTH-2FADELETE
     const { tx, calls } = makeTx({ userDeletedAt: null, deletedTotp: [{ id: "x" }] });
     const { svc, audit, securityEvents } = makeSvc(tx);
 
-    await expect(svc.disable(USER_ID, COMPANY_ID)).resolves.toBeUndefined();
+    await expect(svc.disable(USER_ID, COMPANY_ID, {})).resolves.toBeUndefined();
 
     expect(calls.totpDeletes).toBe(1);
     expect(calls.recoveryDeletes).toBe(1);
@@ -341,7 +367,7 @@ describe("TwoFactorService.disable — hàng đã XOÁ MỀM (S18-AUTH-2FADELETE
     const boom = new Error("audit sink down");
     audit.record.mockRejectedValueOnce(boom);
 
-    await expect(svc.disable(USER_ID, COMPANY_ID)).rejects.toBe(boom);
+    await expect(svc.disable(USER_ID, COMPANY_ID, {})).rejects.toBe(boom);
   });
 });
 
@@ -532,7 +558,7 @@ describe("TwoFactorService.confirmEnable — 429 mang retryAfterSec (S18-AUTH-RE
     const { tx } = makeVerifyTx({});
     const { svc, rateLimiter } = makeVerifySvc(tx, { locked: true, remainingSec: 540 });
 
-    const err = await svc.confirmEnable(USER_ID, COMPANY_ID, "123456").catch((e: unknown) => e);
+    const err = await svc.confirmEnable(USER_ID, COMPANY_ID, "123456", {}).catch((e: unknown) => e);
 
     expect(payloadOf(err).details).toEqual([
       { field: "retryAfterSec", message: "540", rule: "retry-after" },
@@ -544,7 +570,7 @@ describe("TwoFactorService.confirmEnable — 429 mang retryAfterSec (S18-AUTH-RE
     const { tx } = makeVerifyTx({});
     const { svc } = makeVerifySvc(tx, { locked: true, remainingSec: null });
 
-    const err = await svc.confirmEnable(USER_ID, COMPANY_ID, "123456").catch((e: unknown) => e);
+    const err = await svc.confirmEnable(USER_ID, COMPANY_ID, "123456", {}).catch((e: unknown) => e);
 
     expect(payloadOf(err)).not.toHaveProperty("details");
   });
@@ -553,8 +579,232 @@ describe("TwoFactorService.confirmEnable — 429 mang retryAfterSec (S18-AUTH-RE
     const { tx } = makeVerifyTx({});
     const { svc, rateLimiter } = makeVerifySvc(tx, { locked: false, totpOk: true });
 
-    await svc.confirmEnable(USER_ID, COMPANY_ID, "123456").catch(() => undefined);
+    await svc.confirmEnable(USER_ID, COMPANY_ID, "123456", {}).catch(() => undefined);
 
     expect(rateLimiter.remainingLockSecOrNull).not.toHaveBeenCalled();
+  });
+});
+
+// ── S18-AUTH-RESTORE2FA-1 (D2) — BỐN câu DELETE mang `company_id` TƯỜNG MINH ───────────────────
+//
+// ⚠️ VÌ SAO ASSERT CÚ PHÁP, KHÔNG PHẢI HÀNH VI. Một ca int kiểu "`disable()` của A không đụng hàng
+// của B khác tenant" KHÔNG THỂ ĐỎ: `uniqueIndex("user_totp_user_uq").on(t.userId)` là UNIQUE TOÀN
+// BẢNG ⇒ `DELETE WHERE user_id = A` không bao giờ chạm hàng của B, có hay không `company_id`. Cổng
+// rỗng. Vế duy nhất đo được là hình dạng WHERE — nên đo đúng nó.
+//
+// ⚠️ HAI HỌ TÁCH RIÊNG (`disable` vs `enroll`) vì chúng dùng HAI harness khác nhau. Gộp lại thì đột
+// biến "gỡ `company_id` ở câu DELETE của `enroll`" không nói được nó đỏ ở đâu.
+describe("TwoFactorService — D2: DELETE user_totp/user_recovery_codes có company_id tường minh", () => {
+  describe("§d2-disable-shape — hai câu DELETE của disable()", () => {
+    it("DELETE user_totp mang CẢ company_id LẪN user_id", async () => {
+      const { tx, captures } = makeTx({ deletedTotp: [{ id: "t1" }] });
+      const { svc } = makeSvc(tx);
+      await svc.disable(USER_ID, COMPANY_ID, {});
+      expect(whereHasColumn(captures.totpDeleteWhere, userTotp, "company_id")).toBe(true);
+      expect(whereHasColumn(captures.totpDeleteWhere, userTotp, "user_id")).toBe(true);
+    });
+
+    it("DELETE user_recovery_codes mang CẢ company_id LẪN user_id", async () => {
+      const { tx, captures } = makeTx({ deletedTotp: [{ id: "t1" }] });
+      const { svc } = makeSvc(tx);
+      await svc.disable(USER_ID, COMPANY_ID, {});
+      expect(whereHasColumn(captures.recoveryDeleteWhere, userRecoveryCodes, "company_id")).toBe(
+        true,
+      );
+      expect(whereHasColumn(captures.recoveryDeleteWhere, userRecoveryCodes, "user_id")).toBe(true);
+    });
+  });
+
+  describe("§d2-enroll-shape — hai câu DELETE reset của enroll()", () => {
+    /**
+     * Harness RIÊNG. `makeSvc` truyền `{} as never` cho secrets/totp/tokens nên `enroll` nổ ngay ở
+     * `this.totp.generateSecret()`. Ba mock dưới đây là TOÀN BỘ bề mặt ngoài-DB mà `enroll` chạm.
+     *
+     * ⚠️ `makeTx` dispatch CHỈ theo BẢNG (bẫy đã ăn một lần ở `#483` §5.2): câu `select userTotp`
+     * kiểm `existing` phải trả `[]` để đi vào nhánh enroll-mới. `makeTx.rowsFor` trả `[]` cho mọi
+     * bảng ngoài `users`/`userRoles` ⇒ đúng như cần, nhưng ĐỪNG đổi mặc định đó mà không đọc lại đây.
+     */
+    function makeEnrollSvc(tx: unknown) {
+      const dbsvc = {
+        withTenant: vi.fn(async (_cid: string, fn: (t: unknown) => Promise<unknown>) => fn(tx)),
+      };
+      // Kiểu tham số TƯỜNG MINH: `vi.fn(async () => undefined)` cho `mock.calls` kiểu `[]` ⇒
+      // `.calls.at(-1)?.[1]` không biên dịch được. Ca dưới đây PHẢI đọc được đối số thứ hai.
+      const audit = { record: vi.fn(async (..._args: unknown[]) => undefined) };
+      const svc = new TwoFactorService(
+        dbsvc as never,
+        { encryptSecret: vi.fn(async () => ({})) } as never, // secrets
+        { generateSecret: () => "SECRET", keyUri: () => "otpauth://x" } as never, // totp
+        { hashToken: (c: string) => `h:${c}` } as never, // tokens
+        audit as never,
+        makeRateLimiterMock() as never,
+        {} as never, // replayGuard
+        { record: vi.fn(async () => undefined) } as never,
+      );
+      return { svc, audit };
+    }
+
+    it("DELETE user_totp mang CẢ company_id LẪN user_id", async () => {
+      const { tx, captures } = makeTx({ userDeletedAt: null });
+      const { svc } = makeEnrollSvc(tx);
+      await svc.enroll(USER_ID, COMPANY_ID, {});
+      expect(whereHasColumn(captures.totpDeleteWhere, userTotp, "company_id")).toBe(true);
+      expect(whereHasColumn(captures.totpDeleteWhere, userTotp, "user_id")).toBe(true);
+    });
+
+    it("DELETE user_recovery_codes mang CẢ company_id LẪN user_id", async () => {
+      const { tx, captures } = makeTx({ userDeletedAt: null });
+      const { svc } = makeEnrollSvc(tx);
+      await svc.enroll(USER_ID, COMPANY_ID, {});
+      expect(whereHasColumn(captures.recoveryDeleteWhere, userRecoveryCodes, "company_id")).toBe(
+        true,
+      );
+      expect(whereHasColumn(captures.recoveryDeleteWhere, userRecoveryCodes, "user_id")).toBe(true);
+    });
+
+    /**
+     * Đối chứng ÂM cho chính harness trên: nếu `enroll` KHÔNG chặn user xoá mềm thì hai ca ở trên
+     * vẫn xanh (chúng chỉ đo hình dạng WHERE của nhánh THÀNH CÔNG). Ca này ghim rằng nhánh chặn tồn
+     * tại ở tầng unit, và rằng nó chặn TRƯỚC mọi lệnh ghi.
+     */
+    it("user xoá mềm ⇒ 401 và KHÔNG câu DELETE nào chạy", async () => {
+      const { tx, calls } = makeTx({ userDeletedAt: new Date() });
+      const { svc, audit } = makeEnrollSvc(tx);
+      await expect(svc.enroll(USER_ID, COMPANY_ID, {})).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      expect(calls.totpDeletes).toBe(0);
+      expect(calls.recoveryDeletes).toBe(0);
+      expect(audit.record.mock.calls.at(-1)?.[1]).toMatchObject({
+        action: "auth.2fa_enroll_denied",
+        after: { reason: "user_deleted" },
+      });
+    });
+  });
+});
+
+// ── S18-AUTH-RESTORE2FA-1 (A2) — NEO DƯƠNG cho cờ per-user ─────────────────────────────────────
+//
+// ⚠️ VÌ SAO PHẢI CÓ. `vitest.config.ts` ép `TWO_FACTOR_ENFORCEMENT_ENABLED: "false"` cho TOÀN SUITE
+// ⇒ nhánh `roleRequired` của `TwoFactorEnforcementGuard` KHÔNG BAO GIỜ chạy trong int-spec. Nếu A2
+// chỉ có ca deny thì cả vế "ép enroll lại" là xanh-RỖNG
+// (`deny-cases-vacuous-without-allow-case`). Ca dưới đây đo vế DƯƠNG ở tầng service, nơi env không
+// can thiệp.
+describe("TwoFactorService — §a2-pos-flag: cờ per-user do restore set ⇒ requiresTwoFactorTx = true", () => {
+  it("users.require_two_factor=true (role KHÔNG cờ) ⇒ true — đây là thứ làm disable() 409 sau restore", async () => {
+    const { tx } = makeTx({ userRequireTwoFactor: true, hasEnforcedRole: false });
+    const { svc } = makeSvc(tx);
+    expect(await svc.requiresTwoFactorTx(tx as never, USER_ID)).toBe(true);
+  });
+});
+
+// ── S18-AUTH-RESTORE2FA-1 (D2 MỞ RỘNG — sau FULL gate, phát hiện MEDIUM-1) ─────────────────────
+//
+// `security-reviewer` đo đúng: D2 siết BỐN câu DELETE nhưng để lại HAI câu UPDATE chỉ dựa RLS — và
+// một trong hai chính là câu ghi BẬT 2FA (`confirmEnable`). Mục tiêu tự khai của D2 là "hết hai
+// giọng trong cùng một file", nên bỏ sót đúng câu quan trọng nhất thì mục tiêu đó chưa đạt.
+//
+// ⚠️ VÌ SAO LẠI ASSERT CÚ PHÁP (giống `§d2-*-shape`): `uniqueIndex("user_totp_user_uq").on(t.userId)`
+// là UNIQUE TOÀN BẢNG ⇒ ca hành vi "UPDATE của A không đụng hàng của B" KHÔNG THỂ ĐỎ. Vế duy nhất
+// đo được là hình dạng WHERE.
+describe("TwoFactorService — D2 mở rộng: UPDATE user_totp / user_recovery_codes có company_id", () => {
+  /**
+   * Harness thứ BA trong file. KHÔNG mở rộng `makeTx` vì (a) nó không capture `update`, và (b) nó là
+   * mock dùng chung của ~20 ca khác — thêm nhánh `update` + một hàng `user_totp` mặc định vào đó là
+   * đổi tiền đề của những ca không liên quan (`same-builder-twice-makes-unit-spec-vacuous`).
+   *
+   * HAI hình dạng UPDATE khác nhau, phải giữ đúng: `userTotp` await THẲNG `.where()`, còn
+   * `userRecoveryCodes` đi tiếp `.returning()`.
+   */
+  function makeUpdateTx(opts: { totpEnabled?: boolean } = {}) {
+    const captures: { totpUpdateWhere?: unknown; recoveryUpdateWhere?: unknown } = {};
+    const totpRow = {
+      userId: USER_ID,
+      enabledAt: opts.totpEnabled ? new Date() : null,
+      secretCiphertext: "c",
+      encryptedDek: "d",
+      dekKeyVersion: 1,
+      kmsKeyId: "k",
+      ivNonce: "i",
+      authTag: "a",
+      encAlgo: "aes-256-gcm",
+    };
+    const tx = {
+      select: (_cols?: unknown) => ({
+        from: (table: unknown) => {
+          const rowsFor = () => {
+            if (table === users) return [{ deletedAt: null, requireTwoFactor: false }];
+            if (table === userTotp) return [totpRow];
+            return [];
+          };
+          const limitChain = { limit: () => Promise.resolve(rowsFor()) };
+          const whereChain = { where: () => limitChain };
+          return { ...whereChain, innerJoin: () => whereChain };
+        },
+      }),
+      update: (table: unknown) => ({
+        set: (_vals: unknown) => ({
+          where: (cond?: unknown) => {
+            if (table === userTotp) {
+              captures.totpUpdateWhere = cond;
+              return Promise.resolve(undefined);
+            }
+            captures.recoveryUpdateWhere = cond;
+            return { returning: () => Promise.resolve([{ id: "r1" }]) };
+          },
+        }),
+      }),
+    };
+    return { tx, captures };
+  }
+
+  function makeUpdateSvc(tx: unknown, opts: { totpVerifies: boolean }) {
+    const dbsvc = {
+      withTenant: vi.fn(async (_cid: string, fn: (t: unknown) => Promise<unknown>) => fn(tx)),
+    };
+    return new TwoFactorService(
+      dbsvc as never,
+      { decryptSecret: vi.fn(async () => "SECRET") } as never, // secrets
+      { verify: () => opts.totpVerifies, currentStep: () => 1 } as never, // totp
+      { hashToken: (c: string) => `h:${c}` } as never, // tokens
+      { record: vi.fn(async () => undefined) } as never, // audit
+      makeRateLimiterMock() as never,
+      { claim: vi.fn(async () => true) } as never, // replayGuard
+      { record: vi.fn(async () => undefined) } as never, // securityEvents
+    );
+  }
+
+  it("§d2-enable-shape: UPDATE user_totp SET enabled_at mang CẢ company_id LẪN user_id", async () => {
+    const { tx, captures } = makeUpdateTx();
+    const svc = makeUpdateSvc(tx, { totpVerifies: true });
+    await svc.confirmEnable(USER_ID, COMPANY_ID, "123456", {});
+    expect(whereHasColumn(captures.totpUpdateWhere, userTotp, "company_id")).toBe(true);
+    expect(whereHasColumn(captures.totpUpdateWhere, userTotp, "user_id")).toBe(true);
+  });
+
+  it("§d2-recovery-shape: UPDATE user_recovery_codes SET used_at mang CẢ company_id LẪN user_id", async () => {
+    // `totpVerifies:false` ⇒ rơi xuống nhánh recovery-code; `totpEnabled:true` ⇒ qua chốt
+    // `row.enabledAt == null` ở đầu `verifyChallenge` (thiếu nó thì hàm trả false SỚM và ca này
+    // xanh-RỖNG vì câu UPDATE chưa từng chạy).
+    const { tx, captures } = makeUpdateTx({ totpEnabled: true });
+    const svc = makeUpdateSvc(tx, { totpVerifies: false });
+    await expect(svc.verifyChallenge(USER_ID, COMPANY_ID, "recovery-code")).resolves.toBe(true);
+    expect(whereHasColumn(captures.recoveryUpdateWhere, userRecoveryCodes, "company_id")).toBe(true);
+    expect(whereHasColumn(captures.recoveryUpdateWhere, userRecoveryCodes, "user_id")).toBe(true);
+  });
+});
+
+// ── S18-AUTH-RESTORE2FA-1 (A2) — MẮT XÍCH UỶ QUYỀN (LOW của FULL gate) ─────────────────────────
+//
+// `§a2-pos-flag` chứng minh `requiresTwoFactorTx` tôn trọng cờ per-user; ca guard chứng minh 403 khi
+// `requiresTwoFactor` trả true. Nhưng MẮT XÍCH nối hai đầu — `requiresTwoFactor` uỷ quyền xuống
+// `requiresTwoFactorTx` trong `withTenant` — trước đây KHÔNG có ca nào. Cả lập luận "ở PROD A2 ép
+// enroll thật" của plan §2 treo vào đúng một dòng không ai đo.
+describe("TwoFactorService — §a2-pos-delegate: requiresTwoFactor uỷ quyền xuống requiresTwoFactorTx", () => {
+  it("cờ per-user=true ⇒ requiresTwoFactor (đường controller) cũng true, và đi qua withTenant", async () => {
+    const { tx } = makeTx({ userRequireTwoFactor: true, hasEnforcedRole: false });
+    const { svc, dbsvc } = makeSvc(tx);
+    expect(await svc.requiresTwoFactor(USER_ID, COMPANY_ID)).toBe(true);
+    expect(dbsvc.withTenant).toHaveBeenCalledWith(COMPANY_ID, expect.any(Function));
   });
 });

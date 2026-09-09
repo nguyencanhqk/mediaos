@@ -213,9 +213,9 @@ describe.skipIf(!hasLaneDb)(
         new LoginRateLimiter(),
         new ReplayGuardService(new ValkeyService()),
       );
-      const { otpauthUri } = await twoFactor.enroll(u.id, A.companyId);
+      const { otpauthUri } = await twoFactor.enroll(u.id, A.companyId, {});
       const secret = new URL(otpauthUri).searchParams.get("secret") ?? "";
-      await twoFactor.confirmEnable(u.id, A.companyId, totp.generate(secret));
+      await twoFactor.confirmEnable(u.id, A.companyId, totp.generate(secret), {});
 
       // login giờ phải ra challenge (2FA bật).
       const challenge = await auth.login(
@@ -226,7 +226,7 @@ describe.skipIf(!hasLaneDb)(
 
       // disable bằng re-auth mật khẩu đúng → gỡ 2FA.
       await expect(
-        auth.disableTwoFactor({ id: u.id, companyId: A.companyId }, PASSWORD),
+        auth.disableTwoFactor({ id: u.id, companyId: A.companyId }, PASSWORD, {}),
       ).resolves.toBeUndefined();
 
       // login giờ ra tokens trực tiếp (2FA đã gỡ).
@@ -240,7 +240,7 @@ describe.skipIf(!hasLaneDb)(
       const auth = newAuth();
       const u = await freshUser("2fa-baddpw");
       await expect(
-        auth.disableTwoFactor({ id: u.id, companyId: A.companyId }, "wrong-pw"),
+        auth.disableTwoFactor({ id: u.id, companyId: A.companyId }, "wrong-pw", {}),
       ).rejects.toBeInstanceOf(UnauthorizedException);
     });
 
@@ -249,11 +249,11 @@ describe.skipIf(!hasLaneDb)(
       const u = await freshUser("2fa-rl");
       for (let i = 0; i < 5; i++) {
         await expect(
-          auth.disableTwoFactor({ id: u.id, companyId: A.companyId }, "wrong-pw"),
+          auth.disableTwoFactor({ id: u.id, companyId: A.companyId }, "wrong-pw", {}),
         ).rejects.toBeInstanceOf(UnauthorizedException);
       }
       await expect(
-        auth.disableTwoFactor({ id: u.id, companyId: A.companyId }, "wrong-pw"),
+        auth.disableTwoFactor({ id: u.id, companyId: A.companyId }, "wrong-pw", {}),
       ).rejects.toBeInstanceOf(HttpException);
     });
   },
