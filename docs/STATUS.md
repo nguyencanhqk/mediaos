@@ -1,10 +1,23 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-08 08:28Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-09 05:50Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🔴 S18-AUTH-RESTORE2FA-1 — Khôi phục user KHÔNG soát lại 2FA + `enroll`/`confirmEnable` không lọc `deleted_at` — tài khoản khôi phục có thể về với 2FA TẮT, hoặc với yếu tố thứ hai CỦA KẺ TẤN CÔNG
+- **zone**: red · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/api/src/users/auth-users.service.ts`, `apps/api/src/auth/two-factor.service.ts`, `apps/api/src/auth/auth.service.ts`, `apps/api/src/auth/**/*.spec.ts`, `apps/api/test/integration/auth-s18-restore2fa-*.int-spec.ts`, `docs/plans/S18-AUTH-RESTORE2FA-1.md`, `harness/backlog.mjs`
+- **phụ thuộc**: S18-AUTH-2FADELETED-1✓, S18-AUTH-SECEVENTMETA-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] CHỐT với owner (nghiệp vụ): khôi phục user thì 2FA phải (a) bị ép bật lại, (b) đánh dấu chờ duyệt, hay (c) giữ nguyên — quyết định này CHƯA có
+  - [ ] Siết `enroll` + `confirmEnable` theo `deleted_at IS NULL` (+ `company_id` tường minh, mirror S18-AUTH-2FADELETED-1)
+  - [ ] Ca RED: user xoá mềm + access token còn sống ⇒ KHÔNG enroll được, KHÔNG confirmEnable được
+  - [ ] Ca đối chứng DƯƠNG: user bình thường vẫn enroll/enable được (chống xanh-RỖNG)
+  - [ ] Xử lý `restoreUser` theo quyết định ở gạch đầu dòng 1, có audit + ca test
+  - [ ] NỢ N1 từ S18-AUTH-RESETMETA-1 (#484): `disableTwoFactor` nhận `RequestMeta` (mirror hai method đã nối dây ở WO đó) ⇒ `auth.2fa_disabled` (`two-factor.service.ts`) VÀ `auth.2fa_disable_denied` (CẢ `auth.service.ts` lẫn `two-factor.service.ts`) mang `ip`+`userAgent`
+  - [ ] NỢ N2 từ S18-AUTH-SECEVENTMETA-1: `REAUTH_FAILED` trong `user_security_events` vẫn VÔ DANH ở CẢ HAI context 2FA — `2fa_disable` (`auth.service.ts` truyền `{}` TƯỜNG MINH tại call-site, thay đúng token đó) VÀ `2fa_enable` (`two-factor.service.ts:238` là một writer RIÊNG, không được tham số bắt buộc của `AuthService` bảo vệ). WO này chạm cả hai file ⇒ cân nhắc GỘP hai writer làm một thay vì nối dây song song.
+  - [ ] Ca int-spec đi qua HTTP THẬT rồi đọc thẳng `audit_logs` — gọi thẳng service thì spec tự truyền meta ⇒ xanh-RỖNG với dây controller (khuôn `auth-s18-resetmeta-1.int-spec.ts`)
+  - [ ] bash harness/check.sh --all --lane-db=s18restore2fa XANH
 
 ## Hàng đợi
 
@@ -14,7 +27,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 - 🟡 `S17-CHAT-UX2-BE-1` DTO phòng v2: `lastMessage` (LATERAL tin cuối, che thu hồi ở server) + `peer` cho phòng direct (ký avatar qua resolveEmployeeAvatars, strip khỏi WS) + `createdByName` ở getRoom + tham số `kind=image|file` cho GET /chat/rooms/:id/files (CHAT-DEC-022/023/025)
 - 🟡 `S17-CHAT-UX2-BE-2` CHAT-API-031 GET /chat/rooms/:id/links — liên kết đã chia sẻ trong phòng: trích https?:// từ body tin chưa thu hồi, keyset room_seq DESC, trần 50/trang, membership-gated như API-017, con trỏ mang vân phòng (DEC-025)
 - 🟡 `S17-CHAT-UX2-FE-3` Composer v2 DEC-027: @mention autocomplete từ roster (gửi mentions[]) · emoji picker tĩnh ~120 (0 dependency) · dán/kéo-thả ảnh qua uploadChatAttachment · thumbnail xem trước trước gửi · giữ bất biến clientMessageId + không mất nháp khi lỗi
-- 🔴 `S18-AUTH-RESTORE2FA-1` Khôi phục user KHÔNG soát lại 2FA + `enroll`/`confirmEnable` không lọc `deleted_at` — tài khoản khôi phục có thể về với 2FA TẮT, hoặc với yếu tố thứ hai CỦA KẺ TẤN CÔNG
 - 🟡 `S18-QA-PIPELINEREPLAY-1` `task-pipeline-backfill-0500` replay migration 0500 lên TOÀN BỘ project của lane ⇒ FK `project_states_project_id_fkey` vỡ khi spec khác dọn tenant — cùng họ 'replay spec vs fixture song song', khác cơ chế với S18-QA-ASSETFLAKE-1
 
 **CHỜ (kẹt phụ thuộc):**
@@ -56,7 +68,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 5
+- **branch**: `master` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 236 — `0569_s14recruitfilegrant1_candidate_file_perm` (237 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -65,6 +77,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `ba2ca921` | 2026-09-09 | fix(test): S18-QA-LEAVEDATEBOMB-1 — gỡ bom hẹn giờ ngày cứng trong leave-request.int.spec.ts (#S18) (#491) |
+| `138d71de` | 2026-09-09 | fix(auth): S18-AUTH-RESETFLOOR-1 — sàn thời gian cho /auth/reset-password, đóng oracle timing (#S18) (#489) |
 | `f5da18fb` | 2026-09-08 | docs(status): regen sau khi merge #487 + #488 — S18-AUTH-SECEVENTREST-1 và S18-FE-DEPTQUERYKEY-1 đóng sổ (0 đang làm, 8 ready) |
 | `669fd36d` | 2026-09-08 | fix(fe): S18-FE-DEPTQUERYKEY-1 — tách khoá cache cho 4 họ danh mục HR, hết đầu độc chéo master-data ↔ lookup (#S18) (#488) |
 | `a928234c` | 2026-09-08 | fix(auth): S18-AUTH-SECEVENTREST-1 — 18 hàng vết phiên + thao tác admin giờ mang ip/userAgent (#S18) (#487) |
@@ -75,8 +89,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `530069e2` | 2026-09-07 | test(qa): S18-QA-ASSETFLAKE-1 — H1 của s11-asset-db1-invariants hết đỏ-giả: đếm `grants` theo phạm vi SỞ HỮU (#S18) (#485) |
 | `2ed34586` | 2026-09-07 | fix(auth): S18-AUTH-2FADELETED-1 — tài khoản đã xoá mềm KHÔNG còn tắt được 2FA (#S18) (#483) |
 | `1f963382` | 2026-09-06 | fix(auth): S18-AUTH-CHANGEPWTOCTOU-1 — changePassword KHÔNG còn ghi hash lên user đã xoá mềm (#S18) (#482) |
-| `6ba9c29e` | 2026-09-06 | test(qa): S18-QA-SUPERTESTLISTEN-1 — supertest song song đòi `app.listen(0)`: vá 12 int-spec + dựng cổng (#S18) (#481) |
-| `730a748e` | 2026-09-06 | fix(auth): S18-AUTH-RESETDELETED-1 — reset mật khẩu KHÔNG còn ghi lên user đã xoá mềm (#S18) (#480) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
