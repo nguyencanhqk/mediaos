@@ -17682,6 +17682,14 @@ export const backlog = [
     notes: [
       "🟡 LIGHT. Cùng động cơ với S18-QA-ASSETFLAKE-1: mỗi ca đỏ-không-thật là thuế đánh vào MỌI WO sau.",
       "Đọc `docs/plans/S18-QA-ASSETFLAKE-1.md` §4/§5 trước — giao thức đo (5 lượt `chunk-test.mjs` trên lane riêng) dùng lại được nguyên xi.",
+      "ĐO XONG 09/09/2026 (plan §4.1/§4.2): 0/5 lane vừa dựng + 0/5 lane tích rác = **0/10**. Giao thức thống kê KHÔNG tái hiện được ⇒ chuyển sang phép thử có chủ đích. Kèm kết luận âm tính: mô hình 'rác nằm ì làm phình bán kính' của WO seed là SAI — 80 project rác chỉ thêm ~480 hàng (vài ms), điều kiện kích hoạt là một spec song song đang TẠO rồi XOÁ project, tức phải trúng lịch chunk.",
+      "TÁI HIỆN TẤT ĐỊNH (plan §4.3): gieo 83.100 project mồ côi ⇒ replay 0500 mất 61.408ms; bắn DELETE project_states→projects (đúng thứ tự seed.ts:657→:666) vào giữa ⇒ ra ĐÚNG lỗi gốc `project_states_project_id_fkey`. Giả thuyết thành chứng minh, không phụ thuộc may rủi.",
+      "GỐC (plan §3): hai vế. (A) 0500 chèn project_states `FROM projects` KHÔNG có vế company_id (`:38-51`, `:95-122`). (B) `cleanupTenants` KHÔNG transactional — `DELETE project_states` (`seed.ts:657`) và `DELETE projects` (`:666`) là hai câu autocommit RIÊNG ⇒ giữa chúng project tồn tại với 0 state, ĐÚNG tập đích của (A). Teardown không chỉ ĐUA — nó CHẾ RA tiền đề. Nặng hơn mô tả trong WO seed.",
+      "VÁ = V6 (plan §5.1/§5.2): replay chạy dưới vai `mediaos_app` + `set_config('app.current_company_id', A, true)` thay cho `directPool()`. Thu hẹp thứ connection NHÌN THẤY, KHÔNG sửa một ký tự SQL 0500 ⇒ ca vẫn đo '0500 như đã viết'. Khả thi vì: 0500 thuần DML (0 câu DDL) · mediaos_app đủ SELECT/INSERT/UPDATE trên projects/project_states/tasks · `*_all_tenant_read` chỉ áp cho `mediaos_readonly` nên app role chỉ còn `*_tenant_isolation`.",
+      "A/B trên chính spec dưới áp lực teardown (plan §4.4): trước vá `1 failed` (FK 23503) — sau vá `2 passed`.",
+      "ĐỘT BIẾN (plan §5.3): M1 rename ⇒ ĐỎ ✅ · M2 nhóm cột Done ⇒ ĐỎ ✅ · M3 `is_default` bộ seed ⇒ SỐNG SÓT, nhưng đo baseline cho thấy nó cũng sống trên bản CŨ ⇒ lỗ hổng CÓ SẴN, không phải hồi quy. Ghi nợ plan §6.4.",
+      "🪤 BẪY ĐO ĐẠC (plan §5.3): baseline M3 lượt đầu ra ĐỎ ⇒ suýt kết luận 'bản vá gây hồi quy'. Đọc kỹ thì là `Test timed out in 60000ms`, KHÔNG assertion nào fail — 83k project rác của §4.3 còn trong lane khiến bản cũ (superuser) quét 61s > timeout 60s. Phép đo bị đầu độc bởi rác của chính phép đo trước. Bài học: một phép thử làm CHẬM hệ thống tự sinh ra 'đỏ vì timeout' trông hệt 'đỏ vì bắt được đột biến'.",
+      "NỢ (plan §6): (1) `cleanupTenants` không transactional — cửa sổ vẫn nguyên cho spec khác, ngoài paths WO này. (2) Census đã chạy: 9 spec đọc file migration nhưng chỉ 3 THỰC THI — `task-pipeline-backfill-0500` (đã vá), `goal-db2-templates`, `lms-audit-object-types` (2 cái sau CHƯA soát, cùng ứng viên). (3) Ca chưa neo `is_default` bộ seed 0500.",
     ],
   },
   {

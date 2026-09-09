@@ -4,8 +4,23 @@
  *
  * Cách chạy: fixture dựng dữ liệu "hình dạng production" (project 0420-era 5 cột tiếng Anh · project
  * 0-state · project cột tự tạo thiếu nhóm) rồi RE-RUN toàn bộ SQL 0500 TRONG 1 TRANSACTION trên
- * connection riêng + ROLLBACK cuối test — hermetic, không đụng dữ liệu spec khác chạy song song
- * (0500 idempotent by-design nên re-run là hành vi hợp lệ).
+ * connection riêng + ROLLBACK cuối test (0500 idempotent by-design nên re-run là hành vi hợp lệ).
+ *
+ * ⚠ S18-QA-PIPELINEREPLAY-1 — replay chạy dưới VAI `mediaos_app` (RLS + FORCE) với
+ * `app.current_company_id` = tenant của fixture, KHÔNG phải connection superuser.
+ *
+ * Bản trước dùng `directPool()` và docblock này khẳng định replay là "hermetic, không đụng dữ liệu
+ * spec khác chạy song song". Câu đó SAI: `ROLLBACK` bảo đảm không để lại DẤU VẾT, nó không bảo đảm
+ * không ĐỤNG TỚI. 0500 chèn `project_states` cho MỌI project của DB (`:38-51`, `:95-122` — không có
+ * vế `company_id`), nên trên lane dùng chung nó ghi lên project của spec khác. `cleanupTenants` xoá
+ * `project_states` (`seed.ts:657`) rồi `projects` (`:666`) bằng hai câu autocommit RIÊNG ⇒ giữa hai
+ * câu đó project của spec kia tồn tại với 0 state — ĐÚNG tập đích của 0500. Nếu `:666` commit xen
+ * vào giữa snapshot và kiểm-tra-FK của câu INSERT ⇒ 23503 `project_states_project_id_fkey`.
+ * Tái hiện tất định: docs/plans/S18-QA-PIPELINEREPLAY-1.md §4.3.
+ *
+ * Vá bằng cách thu hẹp thứ connection NHÌN THẤY, không sửa một ký tự nào của SQL 0500 — ca vẫn đo
+ * "0500 như đã viết". Với `mediaos_app`, policy duy nhất áp là `*_tenant_isolation`
+ * (`*_all_tenant_read` chỉ dành cho `mediaos_readonly`) ⇒ bán kính ghi = đúng tenant fixture.
  *
  * Phủ (testTasks plan rev 8):
  *   (i)   task Done + state_id NULL (tạo sau 0420) → nhảy sang cột nhóm completed.
@@ -27,7 +42,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Pool, PoolClient } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { directPool, hasDb } from "../helpers/integration-db";
+import { appPool, directPool, hasDb } from "../helpers/integration-db";
 import { cleanupTenants, seedCompany, type SeededTenant } from "../helpers/seed";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
@@ -44,6 +59,7 @@ describe.skipIf(!hasLaneDb)(
   "S5-TASK-PIPELINE-1 — migration 0500 backfill (DB cô lập LANE_DB)",
   () => {
     let direct: Pool;
+    let app: Pool; // vai mediaos_app — RLS ép bán kính replay về tenant fixture (S18-QA-PIPELINEREPLAY-1)
     let A: SeededTenant;
     const companyIds: string[] = [];
 
@@ -105,6 +121,7 @@ describe.skipIf(!hasLaneDb)(
 
     beforeAll(async () => {
       direct = directPool();
+      app = appPool();
       A = await seedCompany(direct, "p1mig");
       companyIds.push(A.companyId);
 
@@ -138,6 +155,7 @@ describe.skipIf(!hasLaneDb)(
 
     afterAll(async () => {
       await cleanupTenants(direct, companyIds);
+      await app.end();
       await direct.end();
     });
 
@@ -165,9 +183,14 @@ describe.skipIf(!hasLaneDb)(
       ).rows[0] as { name: string; state_group: string; sort_order: number; is_default: boolean };
 
     it("0500 end-to-end: map (i) · giữ (ii)/(iii) · heal (iv) · review (v) · rename a2 · dồn sort a3 · seed a · idempotent", async () => {
-      const client = await direct.connect();
+      // Vai `mediaos_app` + RLS, KHÔNG phải superuser: 0500 duyệt `projects` không có vế company_id,
+      // nên trên lane dùng chung một client superuser sẽ ghi lên project của spec khác đang bị
+      // teardown xoá ⇒ 23503 (S18-QA-PIPELINEREPLAY-1 §3, tái hiện tất định ở §4.3).
+      const client = await app.connect();
       try {
         await client.query("BEGIN");
+        // `true` = local theo transaction ⇒ an toàn cả khi DATABASE_URL đi qua PgBouncer.
+        await client.query("SELECT set_config('app.current_company_id', $1, true)", [A.companyId]);
         await run0500(client);
 
         // ── (a2) rename đúng cặp (tên cũ, group); Backlog giữ; 'Todo'-group-started KHÔNG đổi ──
