@@ -154,9 +154,16 @@ describe.skipIf(!hasLaneDb)(
     }, 60000);
 
     afterAll(async () => {
-      await cleanupTenants(direct, companyIds);
-      await app.end();
-      await direct.end();
+      // `try/finally` chứ KHÔNG phải ba lệnh nối tiếp: `cleanupTenants` không transactional
+      // (`seed.ts:449` — ~30 câu DELETE autocommit, `project_states`/`projects` KHÔNG bọc
+      // `deleteWithFkRetry`) nên nó ném được đúng loại đua FK mà WO này tồn tại để chống. Nếu nó ném,
+      // hai pool dưới đây không bao giờ đóng ⇒ rò connection Postgres tới hết đời vitest worker.
+      try {
+        await cleanupTenants(direct, companyIds);
+      } finally {
+        await app.end();
+        await direct.end();
+      }
     });
 
     /** Chạy toàn bộ statement của 0500 trên client (trong tx đã BEGIN). */
