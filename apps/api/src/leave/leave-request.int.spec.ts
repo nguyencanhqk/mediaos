@@ -43,14 +43,105 @@ const LOGIN_PW = "Passw0rd!test99";
 type Scope = "Own" | "Team" | "Department" | "Company" | "System";
 type LeavePair = [action: string, resource: string, scope: Scope];
 
-// Lưới ngày ISO đã kiểm: 2026-06-26 Fri … 2026-06-30 Tue. +7n giữ nguyên thứ.
-const D_SINGLE = "2026-09-08"; // Tue (working)
-const FRI = "2026-09-04"; // Fri (working)
-const TUE_RANGE = "2026-09-08"; // Tue (working)
-const HOLIDAY_MON = "2026-09-07"; // Mon (planted company holiday, affects leave)
-const OVER_START = "2026-11-02"; // Mon
-const OVER_END = "2026-11-06"; // Fri (5 working days)
-const NOTICE_DATE = "2026-06-30"; // Tue, 3 days out (< min-notice 10)
+/**
+ * ── LƯỚI NGÀY — SUY TỪ ĐỒNG HỒ, KHÔNG hằng số tuyệt đối (S18-QA-LEAVEDATEBOMB-1) ──────────────
+ *
+ * 🔴 VÌ SAO. Trước WO này lưới là ngày TUYỆT ĐỐI neo ở 2026-09. Loại nghỉ `annualA` gieo với
+ * `min_notice_days = 0` ⇒ luật đòi ngày nghỉ >= HÔM NAY. Lúc 0h ngày 2026-09-09, `D_SINGLE`
+ * ("2026-09-08") rơi vào quá khứ và ca `submit happy` đỏ trên MỌI nhánh — CI master đỏ theo, chặn
+ * mọi PR. Đây là bom hẹn giờ, không phải lỗi của commit nào.
+ *
+ * CÁCH NEO. Cả lưới treo vào MỘT thứ Hai `GRID`, mọi ngày còn lại là `d(n)` — offset giữ NGUYÊN
+ * quan hệ thứ-trong-tuần của lưới cũ (neo cũ 2026-09-07 là thứ Hai; offset tính từ đó). Nhờ vậy
+ * các bất biến mà bộ ca dựa vào KHÔNG đổi: Sat/Sun không phải ngày làm; `HOLIDAY_MON` = `d(0)` là
+ * ngày lễ được gieo; dải `d(-3)`→`d(1)` vắt qua cuối tuần + lễ nên còn ĐÚNG 2 ngày công.
+ *
+ * BA RÀNG BUỘC ép cách chọn `GRID` (đừng "đơn giản hoá" mất một cái nào):
+ *   1. **Đủ xa để `d(-3)` vẫn ở tương lai.** `GRID` là thứ Hai đầu tiên cách hôm nay >= 8 ngày ⇒
+ *      `d(-3)` >= hôm nay + 5. Lấy "thứ Hai tuần sau" là KHÔNG đủ: `d(-3)` có thể rơi vào quá khứ.
+ *   2. **Cả lưới phải nằm TRONG MỘT NĂM DƯƠNG LỊCH.** Ca `MAXNEG R1` cần một dải ~43 ngày công
+ *      (`d(56)`→`d(115)`); DTO chặn đơn VẮT NĂM bằng 400 nên dải đó mà qua giao thừa thì ca chứng
+ *      minh nhầm lớp. Nếu `d(115)` sang năm sau ⇒ dời `GRID` sang thứ Hai đầu tiên của năm kế.
+ *   3. **Năm của số dư phải ĐI THEO lưới.** `plantBalance` trước đây mặc định `year ?? 2026` —
+ *      quả bom thứ hai, tự nó sẽ nổ năm 2027. Nay mặc định là `GRID_YEAR`.
+ *
+ * Lệch múi giờ ±1 ngày KHÔNG phá gì: mọi ngày lưới cách hôm nay >= 5 ngày, và `NOTICE_DATE` (dưới)
+ * còn cách trần min-notice 10 một biên rộng.
+ */
+function isoUtc(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function addDaysUtc(base: Date, n: number): Date {
+  return new Date(base.getTime() + n * 86_400_000);
+}
+
+/** Hôm nay theo LỊCH ĐỊA PHƯƠNG, nâng lên UTC-midnight để số học ngày không dính DST. */
+function todayUtcMidnight(now: Date): Date {
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+}
+
+function firstMondayOnOrAfter(d: Date): Date {
+  const shift = (8 - d.getUTCDay()) % 7; // getUTCDay: 0=CN, 1=T2
+  return addDaysUtc(d, shift === 0 ? 7 : shift);
+}
+
+/** Hai biên của lưới. CỔNG "ràng buộc 2" đo bằng ĐÚNG hai số này ⇒ không trôi được. */
+const GRID_MIN_OFFSET = -3; // `FRI`
+const GRID_SPAN_DAYS = 115; // `d(115)` của ca MAXNEG R1
+
+/** Cả lưới có nằm gọn trong MỘT năm dương lịch không (ràng buộc 2)? */
+function gridFitsOneYear(anchor: Date): boolean {
+  const y = anchor.getUTCFullYear();
+  return (
+    addDaysUtc(anchor, GRID_MIN_OFFSET).getUTCFullYear() === y &&
+    addDaysUtc(anchor, GRID_SPAN_DAYS).getUTCFullYear() === y
+  );
+}
+
+/**
+ * Xem ràng buộc 1 + 2 ở docblock trên.
+ *
+ * ⚠️ BẢN ĐẦU dùng cách xử-lý-đặc-biệt ("nếu `d(115)` sang năm thì nhảy tới tháng Giêng kế") và SAI
+ * hai lần liên tiếp — cổng bất biến ở cuối file bắt được cả hai (neo rơi vào 01–03/01 ⇒ `d(-3)`
+ * lùi về năm cũ; và điều kiện chỉ soi biên TRÊN nên bỏ sót biên DƯỚI). Nay: nhích từng TUẦN cho
+ * tới khi cả lưới vừa một năm — hiển nhiên đúng, và dừng sau vài vòng vì mọi thứ Hai trong
+ * [04/01, 10/01] đều vừa. Đừng "tối ưu" ngược lại thành nhánh điều kiện.
+ */
+function pickGridAnchor(now: Date = new Date()): Date {
+  let anchor = firstMondayOnOrAfter(addDaysUtc(todayUtcMidnight(now), 7));
+  while (!gridFitsOneYear(anchor)) anchor = addDaysUtc(anchor, 7);
+  return anchor;
+}
+
+const GRID = pickGridAnchor();
+const GRID_YEAR = GRID.getUTCFullYear();
+/** Ngày thứ `n` của lưới (n âm = trước neo). */
+const d = (n: number): string => isoUtc(addDaysUtc(GRID, n));
+
+const D_SINGLE = d(1); // Tue (working)
+const FRI = d(-3); // Fri (working)
+const TUE_RANGE = d(1); // Tue (working)
+const HOLIDAY_MON = d(0); // Mon (planted company holiday, affects leave)
+const OVER_START = d(56); // Mon
+const OVER_END = d(60); // Fri (5 working days)
+
+/**
+ * NGOÀI lưới, và cố ý. Ca min-notice cần một ngày làm việc GẦN hôm nay (notice thực < 10) — lấy
+ * `d(...)` thì cách hôm nay >= 5 ngày và vẫn < 10, nhưng biên mỏng. Quan trọng hơn: ngày này phải
+ * >= hôm nay. Bản cũ ("2026-06-30") đã trôi vào QUÁ KHỨ ⇒ ca vẫn xanh nhưng vì LÝ DO SAI (ngày quá
+ * khứ bị từ chối bằng ĐÚNG mã lỗi `LEAVE-ERR-MIN-NOTICE`), tức một cổng RỖNG đang ghim chính lỗ nó
+ * định canh. Nay: hôm nay + 3, nhảy qua cuối tuần (tối đa hôm nay + 5 ⇒ vẫn < 10).
+ */
+function pickNoticeDate(now: Date = new Date()): string {
+  let candidate = addDaysUtc(todayUtcMidnight(now), 3);
+  while (candidate.getUTCDay() === 0 || candidate.getUTCDay() === 6) {
+    candidate = addDaysUtc(candidate, 1);
+  }
+  return isoUtc(candidate);
+}
+
+const NOTICE_DATE = pickNoticeDate(); // ngày làm việc ~3 ngày tới (< min-notice 10)
 
 const FULL_PAIRS: LeavePair[] = [
   ["create", "leave", "Own"],
@@ -61,6 +152,64 @@ const FULL_PAIRS: LeavePair[] = [
   ["view", "leave-type", "Company"],
   ["view-own", "leave-balance", "Own"],
 ];
+
+// ── S18-QA-LEAVEDATEBOMB-1 — CỔNG cho chính LƯỚI NGÀY ─────────────────────────────
+//
+// KHÔNG cần DB ⇒ chạy cả ở lane unit của CI, nơi toàn bộ khối int-spec dưới đây bị `skipIf`.
+//
+// ⚠️ Đây là vế mà "chạy spec lúc 10h sáng thấy xanh" KHÔNG chứng minh được: một lưới suy-từ-đồng-hồ
+// chỉ đúng với HÔM NAY thì vẫn là bom hẹn giờ, chỉ là hẹn xa hơn. Nên quét ~5.5 năm ngày-làm-"hôm
+// nay" liên tiếp và đòi BỐN bất biến đúng Ở MỌI MỐC — gồm thứ Bảy/Chủ Nhật, cuối tháng, và cả
+// vùng cuối năm nơi ràng buộc "cùng một năm dương lịch" bắt đầu cắn.
+describe("S18-QA-LEAVEDATEBOMB-1 — bất biến của lưới ngày (thuần, không DB)", () => {
+  const DAYS = 2000; // ~5.5 năm
+  const starts = Array.from({ length: DAYS }, (_, i) =>
+    addDaysUtc(new Date(Date.UTC(2026, 0, 1)), i),
+  );
+
+  it("neo LUÔN là thứ Hai, và `d(-3)` LUÔN ở tương lai (ràng buộc 1)", () => {
+    for (const now of starts) {
+      const anchor = pickGridAnchor(now);
+      expect(anchor.getUTCDay(), `neo cho ${isoUtc(now)}`).toBe(1);
+      const earliest = addDaysUtc(anchor, -3);
+      expect(
+        isoUtc(earliest) > isoUtc(now),
+        `d(-3)=${isoUtc(earliest)} phải SAU hôm nay ${isoUtc(now)}`,
+      ).toBe(true);
+    }
+  });
+
+  it("cả lưới `d(-3)`..`d(115)` nằm TRONG MỘT năm dương lịch (ràng buộc 2)", () => {
+    for (const now of starts) {
+      const anchor = pickGridAnchor(now);
+      const y = anchor.getUTCFullYear();
+      expect(addDaysUtc(anchor, GRID_MIN_OFFSET).getUTCFullYear(), `d(-3) cho ${isoUtc(now)}`).toBe(y);
+      expect(addDaysUtc(anchor, GRID_SPAN_DAYS).getUTCFullYear(), `d(115) cho ${isoUtc(now)}`).toBe(
+        y,
+      );
+    }
+  });
+
+  it("`NOTICE_DATE` là ngày LÀM VIỆC, >= hôm nay, và notice thực < 10 ngày (ràng buộc của ca min-notice)", () => {
+    for (const now of starts) {
+      const picked = pickNoticeDate(now);
+      const asDate = new Date(`${picked}T00:00:00Z`);
+      expect([0, 6], `${picked} không được rơi vào cuối tuần`).not.toContain(asDate.getUTCDay());
+      const notice = Math.round(
+        (asDate.getTime() - todayUtcMidnight(now).getTime()) / 86_400_000,
+      );
+      // >0: KHÔNG được là quá khứ — ngày quá khứ bị từ chối bằng ĐÚNG mã `LEAVE-ERR-MIN-NOTICE`,
+      // nên ca min-notice sẽ xanh vì LÝ DO SAI (đó là cái bản cũ đã mắc từ 2026-06-30).
+      expect(notice, `notice cho ${isoUtc(now)}`).toBeGreaterThan(0);
+      expect(notice, `notice cho ${isoUtc(now)}`).toBeLessThan(10);
+    }
+  });
+
+  it("`GRID_YEAR` đi theo neo — năm số dư KHÔNG được đóng đinh (ràng buộc 3)", () => {
+    expect(GRID_YEAR).toBe(GRID.getUTCFullYear());
+    expect(isoUtc(GRID).startsWith(String(GRID_YEAR))).toBe(true);
+  });
+});
 
 describe.skipIf(!runDb)("S3-LEAVE-BE-2 request workflow (DB cô lập, đường thật)", () => {
   let app: INestApplication;
@@ -173,7 +322,7 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-2 request workflow (DB cô lập, đường
         companyId,
         userId,
         leaveTypeId,
-        opts.year ?? 2026,
+        opts.year ?? GRID_YEAR,
         opts.total,
         opts.used ?? 0,
         opts.pending ?? null,
@@ -454,10 +603,10 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-2 request workflow (DB cô lập, đường
   // ── 5 · overlap: Pending/Approved/legacy-lowercase block; Rejected doesn't ─────
   it("submit overlap → 422 with conflicting id/dates (Pending/Approved/'pending' block; Rejected doesn't)", async () => {
     const token = await login(A.slug, `overlap@${A.slug}.test`);
-    const W_PENDING = "2026-10-05";
-    const W_APPROVED = "2026-10-12";
-    const W_LEGACY = "2026-10-19";
-    const W_REJECTED = "2026-10-26";
+    const W_PENDING = d(28);
+    const W_APPROVED = d(35);
+    const W_LEGACY = d(42);
+    const W_REJECTED = d(49);
     const pendBlocker = await plantRequest(
       A.companyId,
       u.overlap.id,
@@ -499,8 +648,8 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-2 request workflow (DB cô lập, đường
     const token = await login(A.slug, `draft@${A.slug}.test`);
     const created = await post(token, "/leave/requests", {
       leaveTypeId: annualA,
-      startDate: "2026-09-15",
-      endDate: "2026-09-15",
+      startDate: d(8),
+      endDate: d(8),
       durationType: "FullDay",
       submitNow: true,
     });
@@ -508,8 +657,8 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-2 request workflow (DB cô lập, đường
     expect(created.body.data.status).toBe("Pending");
     const upd = await patch(token, `/leave/requests/${created.body.data.id}`, {
       leaveTypeId: annualA,
-      startDate: "2026-09-16",
-      endDate: "2026-09-16",
+      startDate: d(9),
+      endDate: d(9),
       durationType: "FullDay",
     });
     expect(upd.status, JSON.stringify(upd.body)).toBe(409);
@@ -527,8 +676,8 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-2 request workflow (DB cô lập, đường
 
     const created = await post(token, "/leave/requests", {
       leaveTypeId: annualA,
-      startDate: "2026-09-22",
-      endDate: "2026-09-22",
+      startDate: d(15),
+      endDate: d(15),
       durationType: "FullDay",
       submitNow: true,
     });
@@ -555,8 +704,8 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-2 request workflow (DB cô lập, đường
     const token = await login(A.slug, `canceldraft@${A.slug}.test`);
     const created = await post(token, "/leave/requests", {
       leaveTypeId: annualA,
-      startDate: "2026-09-29",
-      endDate: "2026-09-29",
+      startDate: d(22),
+      endDate: d(22),
       durationType: "FullDay",
     });
     expect(created.status, JSON.stringify(created.body)).toBe(201);
@@ -573,8 +722,8 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-2 request workflow (DB cô lập, đường
     const draftToken = await login(A.slug, `draft@${A.slug}.test`);
     const created = await post(draftToken, "/leave/requests", {
       leaveTypeId: annualA,
-      startDate: "2026-09-10",
-      endDate: "2026-09-10",
+      startDate: d(3),
+      endDate: d(3),
       durationType: "FullDay",
     });
     expect(created.status, JSON.stringify(created.body)).toBe(201);
@@ -664,25 +813,25 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-2 request workflow (DB cô lập, đường
     const token = await login(A.slug, `draft@${A.slug}.test`);
     const created = await post(token, "/leave/requests", {
       leaveTypeId: annualA,
-      startDate: "2026-09-17",
-      endDate: "2026-09-17",
+      startDate: d(10),
+      endDate: d(10),
       durationType: "FullDay",
     });
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     const id = created.body.data.id as string;
     expect(created.body.data.totalDays).toBe(1);
-    expect(await activeDays(id)).toEqual(["2026-09-17"]);
+    expect(await activeDays(id)).toEqual([d(10)]);
 
-    // widen to a 3-working-day range (Wed-Fri 2026-09-16..18)
+    // widen to a 3-working-day range (Wed-Fri = d(9)..d(11))
     const upd = await patch(token, `/leave/requests/${id}`, {
       leaveTypeId: annualA,
-      startDate: "2026-09-16",
-      endDate: "2026-09-18",
+      startDate: d(9),
+      endDate: d(11),
       durationType: "MultipleDays",
     });
     expect(upd.status, JSON.stringify(upd.body)).toBe(200);
     expect(upd.body.data.totalDays).toBe(3);
-    expect(await activeDays(id)).toEqual(["2026-09-16", "2026-09-17", "2026-09-18"]);
+    expect(await activeDays(id)).toEqual([d(9), d(10), d(11)]);
 
     const list = await get(token, "/leave/me/requests?pageSize=100");
     expect(list.status, JSON.stringify(list.body)).toBe(200);
@@ -704,8 +853,8 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-2 request workflow (DB cô lập, đường
 
     const draft = await post(token, "/leave/requests", {
       leaveTypeId: type,
-      startDate: "2026-11-02",
-      endDate: "2026-12-31",
+      startDate: d(56),
+      endDate: d(115),
       durationType: "MultipleDays",
     });
     expect(draft.status, JSON.stringify(draft.body)).toBe(201);
@@ -802,8 +951,8 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-2 request workflow (DB cô lập, đường
 
     const first = await post(token, "/leave/requests", {
       leaveTypeId: type,
-      startDate: "2026-11-02",
-      endDate: "2026-11-04",
+      startDate: d(56),
+      endDate: d(58),
       durationType: "MultipleDays",
     });
     expect(first.status, JSON.stringify(first.body)).toBe(201);
@@ -813,8 +962,8 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-2 request workflow (DB cô lập, đường
     // Đã nợ 3/5. Đơn thứ hai 3 ngày ⇒ tổng 6 > trần 5 ⇒ chặn.
     const second = await post(token, "/leave/requests", {
       leaveTypeId: type,
-      startDate: "2026-11-09",
-      endDate: "2026-11-11",
+      startDate: d(63),
+      endDate: d(65),
       durationType: "MultipleDays",
     });
     expect(second.status, JSON.stringify(second.body)).toBe(201);
