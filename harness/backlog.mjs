@@ -17802,6 +17802,10 @@ export const backlog = [
     notes: [
       "🟡 LIGHT gate — chỉ sửa spec, không đụng code sản phẩm. NHƯNG cẩn thận: đổi ngày mà làm ca không còn đo được luật min-notice thì thành cổng RỖNG. Ca `NOTICE_DATE` tồn tại để chứng minh min-notice 10 ngày TỪ CHỐI — nó phải giữ được vế đó.",
       "Đừng 'vá' bằng cách hạ `min_notice_days` hay nới assert — đó là vá triệu chứng, giết luôn thứ ca này đang canh.",
+      "🔎 THI CÔNG 09/09 — seed ĐO THIẾU: file còn HAI quả bom nữa ngoài ngày cứng. (1) `plantBalance` mặc định `year ?? 2026` (`:176`) — tự nổ năm 2027 kể cả khi ngày đã tương đối. (2) Ca `MAXNEG R1` cần dải ~43 ngày công `d(56)`→`d(115)` mà DTO CHẶN đơn vắt năm bằng 400 ⇒ lưới phải nằm gọn TRONG MỘT năm dương lịch, không chỉ 'ở tương lai'. Cả hai đã vá cùng PR.",
+      "🔎 `NOTICE_DATE = '2026-06-30'` là CỔNG RỖNG chứ không chỉ lỗi thời: ngày quá khứ bị từ chối bằng ĐÚNG mã `LEAVE-ERR-MIN-NOTICE` mà ca đang assert ⇒ ca xanh vì lý do SAI, đang ghim mở chính lỗ nó định canh (memory tests-can-pin-a-hole-open). Nay suy = hôm nay + 3, nhảy qua cuối tuần.",
+      "🔎 CỔNG cho chính lưới ngày (`describe` THUẦN, không DB ⇒ chạy cả ở lane unit CI): quét 2000 ngày-làm-'hôm nay' liên tiếp và đòi 4 bất biến. Nó BẮT ĐƯỢC HAI lỗi trong chính bản vá đầu của tôi — neo rơi vào 01–03/01 làm `d(-3)` lùi về năm cũ, và điều kiện chỉ soi biên TRÊN nên bỏ sót biên DƯỚI. Chạy spec một lần lúc 10h sáng KHÔNG phát hiện được cả hai.",
+      "📋 CENSUS bề mặt cùng họ (done_when #4, KHÔNG vá ở PR này): 55 int-spec khác còn ngày tuyệt đối. Đậm đặc nhất — `payroll-be2-lifecycle` 57 · `leave-accrual` 38 · `leave-carryover` 29 · `remote-work-request` 29 · `attendance-adjustment` 16 · `leave-approval` 15 · `leave-param-uuid` 11 · `attendance-adjustment-allocate-guard` 10. Chỉ ca nào so ngày với HÔM NAY mới là bom; ca dùng ngày làm DỮ LIỆU thuần thì vô hại — phải đọc từng ca, đừng thay hàng loạt. `leave-accrual` đã có tiền lệ đỏ (memory leave-accrual-spec-red-on-real-today).",
     ],
   },
 ];
