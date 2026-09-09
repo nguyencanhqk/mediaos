@@ -20,7 +20,14 @@ overrides:
   # tới gián tiếp qua @nestjs/platform-express nên direct bump apps/api chưa đủ → cần override.
   "ws@>=8.0.0 <8.21.0": "^8.21.0"
   "form-data@>=4.0.0 <4.0.6": "^4.0.6"
-  "multer@>=1.0.0 <2.2.0": "^2.2.0"
+  # 2026-09-09 — NỚI dải từ `<2.2.0` lên `<2.3.0`: BA advisory HIGH mới (`GHSA-wc9g-mqfw-jrwm` +
+  # `GHSA-535w-7cp7-47q4` phủ `<2.3.0`, và `GHSA-qfvm-cv95-jqjf` cờ ĐÚNG `=2.2.0` mà override cũ vừa
+  # ép lên) — DoS qua field name chế tác / rò file descriptor khi upload bị huỷ / chỉ số mảng quá cỡ.
+  # ⚠️ KHÁC các dòng override khác trong khối này: multer VÀO runtime bundle của API. 12 đường tới,
+  # tất cả qua `@nestjs/core > @nestjs/platform-express > multer`, tức ĐƯỜNG UPLOAD THẬT — không được
+  # viện lý do "chỉ dev-tooling". `@nestjs/platform-express` GHIM `multer: "2.1.1"` (chuỗi chính xác,
+  # không phải range) nên bump `apps/api/package.json` một mình KHÔNG kéo được cây → vẫn cần override.
+  "multer@>=1.0.0 <2.3.0": "^2.3.0"
   # 2026-07-22 — vá advisory HIGH (cổng CI = `pnpm audit --audit-level high`). Cả 6 đều là dep BẮC CẦU
   # của tooling build/test (eslint · vitest · @nestjs/cli · drizzle-kit · exceljs), KHÔNG phải dep
   # runtime của API. Dùng override thay vì bump devDep gốc để giữ blast radius nhỏ: `pnpm audit
@@ -62,7 +69,11 @@ overrides:
   # (CVE-2026-59870, quadratic CPU trong `!!omap`) phủ CẢ 4.3.0 mà override cũ vừa ép lên.
   # Đo 07/08: đỏ trên MỌI PR (đã tái hiện ở máy + trên CI của #361/#363), đường tới là
   # `eslint > @eslint/eslintrc > js-yaml` — dev-tooling, KHÔNG vào runtime bundle của API.
-  "js-yaml@>=4.0.0 <4.3.1": "^4.3.1"
+  # 2026-09-09 — NỚI tiếp dải lên `<4.3.2`: advisory MỚI `GHSA-2883-xcg3-v3hh` phủ CẢ 4.3.1 mà override
+  # 07/08 vừa ép lên (lần thứ HAI cùng hình dạng — xem fast-uri/browserslist/multer trong file này).
+  # Đo 09/09: 18 đường, vẫn nguyên `eslint > @eslint/eslintrc > js-yaml` — dev-tooling, KHÔNG vào
+  # runtime bundle của API.
+  "js-yaml@>=4.0.0 <4.3.2": "^4.3.2"
   "shell-quote@<=1.8.4": "^1.8.5"
   # 2026-08-08 — advisory MỚI `GHSA-2v37-7h3g-55p8` (HIGH, `nanoid <3.3.17`: custom generator lặp vô hạn
   # khi size = 0). Lên registry giữa lần Security chạy cuối trên master (07/08 15:42 XANH) và PR #368
@@ -113,6 +124,9 @@ minimumReleaseAgeExclude:
   - fast-uri@3.1.6
   - fast-uri@3.1.7
   - js-yaml@4.3.1
+  - js-yaml@4.3.2
+  - multer@2.3.0
   - nanoid@3.3.17
   - nanoid@3.3.18
+  - nodemailer@9.1.1
   - shell-quote@1.8.5
