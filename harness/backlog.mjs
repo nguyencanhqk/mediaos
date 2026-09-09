@@ -17582,10 +17582,19 @@ export const backlog = [
     status: "todo",
     paths: [
       "apps/api/src/users/auth-users.service.ts",
+      "apps/api/src/users/auth-users.repository.ts",
+      "apps/api/src/users/**/*.spec.ts",
       "apps/api/src/auth/two-factor.service.ts",
       "apps/api/src/auth/auth.service.ts",
+      "apps/api/src/auth/auth.controller.ts",
       "apps/api/src/auth/**/*.spec.ts",
       "apps/api/test/integration/auth-s18-restore2fa-*.int-spec.ts",
+      // D4/D5 đổi 3 chữ ký public (`disableTwoFactor`/`disable`/`confirmEnable` nhận `RequestMeta`
+      // BẮT BUỘC) ⇒ ~37 điểm gọi trong int-spec CŨ phải sửa theo. Không liệt kê ở đây thì
+      // `guard-scope` cảnh báo oan suốt lane (memory `wo-paths-drive-gate-and-scheduler`).
+      "apps/api/test/integration/two-factor*.int-spec.ts",
+      "apps/api/test/integration/auth-*.int-spec.ts",
+      "apps/api/test/integration/security-event-emit-sites.int-spec.ts",
       "docs/plans/S18-AUTH-RESTORE2FA-1.md",
       "harness/backlog.mjs",
     ],
@@ -17598,7 +17607,7 @@ export const backlog = [
       "(2) 🔴 `enroll` (`two-factor.service.ts:147-188`) và `confirmEnable` (`:191-227`) KHÔNG lọc `deleted_at`. Với tài khoản đã xoá mềm mà 2FA đang TẮT, người giữ access token còn hạn có thể `enroll` một secret DO CHÍNH HỌ kiểm soát rồi enable; `restoreUser` không đụng 2FA ⇒ tài khoản khôi phục về với YẾU TỐ THỨ HAI CỦA KẺ TẤN CÔNG. Đây KHÔNG phải rác dữ liệu.",
     ],
     done_when: [
-      "CHỐT với owner (nghiệp vụ): khôi phục user thì 2FA phải (a) bị ép bật lại, (b) đánh dấu chờ duyệt, hay (c) giữ nguyên — quyết định này CHƯA có",
+      "✅ ĐÃ CHỐT (owner, 09/09/2026 — 2 vòng, xem plan §2). Vòng 1: chọn (a) xoá sạch 2FA + ép đăng ký lại. Vòng 2 (sau khi plan-reviewer phát hiện `users.require_two_factor` là cờ DÍNH VĨNH VIỄN — `disable()` fail-closed 409 dựa trên cờ đó BẤT KỂ env, và đường gỡ DUY NHẤT là admin PATCH): owner giữ nguyên (a), CHẤP NHẬN cờ dính. ⇒ A1 xoá sạch VÔ ĐIỀU KIỆN + A2 set `require_two_factor=true` CHỈ KHI `enabled_at IS NOT NULL` lúc xoá (hàng pending KHÔNG tính). Hệ quả phải ghim bằng ca `§sticky-409`, KHÔNG được để im lặng.",
       "Siết `enroll` + `confirmEnable` theo `deleted_at IS NULL` (+ `company_id` tường minh, mirror S18-AUTH-2FADELETED-1)",
       "Ca RED: user xoá mềm + access token còn sống ⇒ KHÔNG enroll được, KHÔNG confirmEnable được",
       "Ca đối chứng DƯƠNG: user bình thường vẫn enroll/enable được (chống xanh-RỖNG)",
