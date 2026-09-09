@@ -1392,7 +1392,11 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
     expect(clearLoginLocks).not.toHaveBeenCalled();
   });
 
-  it("ba nhánh token hỏng trả chuỗi lỗi BYTE-GIỐNG NHAU (thay cho sàn thời gian — done_when sửa 03/09)", async () => {
+  // S18-AUTH-RESETFLOOR-1 đã ĐẢO tiền đề trong tên cũ của ca này ("thay cho sàn thời gian — done_when
+  // sửa 03/09"): sàn thời gian nay CÓ thật ở `resetPassword`. Hai vế giờ là phòng thủ theo TẦNG, không
+  // phải cái này thay cái kia — ca dưới ghim vế THÂN phản hồi, còn vế THỜI GIAN đo ở
+  // `auth-s18-resetfloor-1.int-spec.ts` §measure (đo qua HTTP thật, không đo được ở tầng unit).
+  it("ba nhánh token hỏng trả chuỗi lỗi BYTE-GIỐNG NHAU (vế THÂN phản hồi của chống-oracle)", async () => {
     const rows = [
       null,
       {

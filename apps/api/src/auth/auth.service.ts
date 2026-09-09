@@ -1698,10 +1698,13 @@ export class AuthService {
    * trong khoảng ~đồng nhất, làm mờ timing-oracle. GIẢM THIỂU, KHÔNG constant-time tuyệt đối: nếu công
    * việc trước đó vượt sàn thì chênh lệch lộ lại ⇒ phải ĐO, đừng chỉ tin lập luận.
    *
-   * Hai người dùng, hai oracle khác nhau (⟲ S6-SEC-LOGINLOG-2 tổng quát hoá `floorMs`):
+   * Ba người dùng, ba oracle khác nhau (⟲ S6-SEC-LOGINLOG-2 tổng quát hoá `floorMs`):
    *   • `forgotPassword` (FORGOT_PW_FLOOR_MS) — "email tồn tại?". KMS chậm (vd Vault transit) có thể vượt
    *     sàn → cân nhắc nâng hằng hoặc dời crypto/mail sang outbox-consumer (deferred) khi có.
    *   • nhánh 429 của `login` (BLOCKED_LOGIN_FLOOR_MS) — "slug tenant tồn tại?" (KI-044, xem hằng đó).
+   *   • `resetPassword` (FORGOT_PW_FLOOR_MS — S18-AUTH-RESETFLOOR-1) — "token này có THẬT không?".
+   *     Dùng LẠI hằng của forgot chứ không đẻ hằng thứ ba: đây là NỬA KIA của cùng một cặp endpoint
+   *     công khai (mint token ↔ dùng token), cùng bậc chi phí, nên hai sàn lệch nhau chỉ là nợ trôi.
    *
    * ⚠️ CHỈ dùng hằng module + setTimeout: KHÔNG tham chiếu field inject (`this.<dep>`), KHÔNG log.
    * `forgot-password-rate-limit.spec.ts` và `auth.service.spec.ts` dựng AuthService bằng
@@ -1716,10 +1719,43 @@ export class AuthService {
     if (remaining > 0) await new Promise<void>((resolve) => setTimeout(resolve, remaining));
   }
 
+  /**
+   * S18-AUTH-RESETFLOOR-1 — SÀN thời gian phản hồi, khuôn Y HỆT `forgotPassword` ở trên.
+   *
+   * Thân phản hồi của mọi nhánh 401 đã BYTE-GIỐNG NHAU (S18-AUTH-RESETMETA-1 §shape), nhưng THỜI GIAN
+   * thì không, và chênh lệch trả lời đúng câu mà thân phản hồi cố tình giấu — "token này có THẬT
+   * không". Ba nhánh, ba lượng việc khác hẳn: token sai định dạng ném NGAY (0 round-trip) · token
+   * không có hàng ném sau 1 SELECT · token THẬT của user đã xoá mềm thì đốt `used_at`, chạy argon2id,
+   * UPDATE khớp 0 hàng, SELECT probe rồi GHI audit.
+   *
+   * SỐ ĐO THẬT trước bản vá (lane `mediaos_s18resetfloor`, p50 của 12 lượt xen kẽ — đo TRƯỚC khi vá
+   * theo done_when[1], vì mô tả gốc của WO đoán sai bậc): **3ms · 5ms · 26ms**, tức Δ=21ms và tỉ lệ
+   * 5×. Đoán ban đầu "argon2 tốn hàng trăm ms" là SAI — tham số OWASP hiện hành (19 MiB · timeCost 2 ·
+   * p=1) chỉ tốn p50 12ms; phần còn lại là 5 round-trip thừa. Lỗ có thật nhưng nhỏ hơn mô tả.
+   *
+   * MỨC ĐỘ (MEDIUM, không hơn): trần nguyên tử `UPDATE … WHERE used_at IS NULL`
+   * (S18-AUTH-RESETDELETED-1) ép mỗi token đi qua nhánh chậm ĐÚNG MỘT LẦN — lần hai rơi xuống nhánh
+   * "không có hàng". Nên kẻ tấn công lấy được đúng MỘT mẫu/token, không gom được phân phối. Nhưng
+   * đường CƠ SỞ thì không bị chặn (route `reset-password` không có decorator rate-limit), nên một mẫu
+   * so với đường cơ sở đã biết rõ vẫn là cập nhật Bayes chứ không phải vô hại.
+   *
+   * `finally` phủ MỌI return-path — kể cả nhánh thành công (200 vs 401 vốn đã tách sẵn nên đó không
+   * phải yêu cầu bảo mật, chỉ là hệ quả của việc đặt sàn ở BIÊN CÔNG KHAI thay vì rắc vào từng nhánh).
+   */
+  async resetPassword(req: ResetPasswordRequest, meta: RequestMeta): Promise<void> {
+    const startedAt = Date.now();
+    try {
+      await this.resetPasswordImpl(req, meta);
+    } finally {
+      await this.applyUniformResponseFloor(startedAt);
+    }
+  }
+
   // S18-AUTH-RESETMETA-1 — `meta` BẮT BUỘC. `forgotPassword(req, meta)` ngay trên đã nhận từ lâu; đây
   // là NỬA KIA của cùng một cặp endpoint công khai (mint token ↔ dùng token) mà trước WO này lại mù
   // với ngữ cảnh request. Xem ghi chú ở `changePassword` về lý do không dùng `= {}` và cấm `meta?.`.
-  async resetPassword(req: ResetPasswordRequest, meta: RequestMeta): Promise<void> {
+  /** Thân reset thật — LUÔN gọi qua `resetPassword` (đã áp sàn thời gian). */
+  private async resetPasswordImpl(req: ResetPasswordRequest, meta: RequestMeta): Promise<void> {
     const parsed = this.splitScopedToken(req.token);
     if (!parsed) throw new UnauthorizedException("Token không hợp lệ hoặc đã hết hạn.");
     const { companyId, full } = parsed;
