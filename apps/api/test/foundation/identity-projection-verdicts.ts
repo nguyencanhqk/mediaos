@@ -222,7 +222,7 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
     point: "chat/chat-rooms.repository.ts#findRoomCreatorName:users.fullName",
     basis: "membership",
     reason:
-      "chat-rooms.service.ts:175 — `assertMember` chạy NGAY TRƯỚC lời gọi (dòng 183) trong cùng `withTenant`. Hàm repo CỐ Ý không tự lọc membership (docblock «Nghĩa vụ CALLER», mirror `findRoomById`), nên căn cứ nằm ở đúng call-site DUY NHẤT của nó.",
+      "chat-rooms.service.ts:175 — `assertMember` chạy NGAY TRƯỚC lời gọi (dòng 183) trong cùng `withTenant`; hàm repo CỐ Ý không tự lọc membership (docblock «Nghĩa vụ CALLER», mirror `findRoomById`), nên căn cứ nằm ở đúng call-site DUY NHẤT của nó. ⚠️ ĐỌC KỸ — dòng này KHÁC hình dạng 10 dòng `membership` còn lại: ở đó người ĐƯỢC CHIẾU luôn là thành viên của chính phòng đã assert, còn `chat_rooms.created_by` là FK TỰ DO — người tạo có thể đã rời phòng, đã xoá mềm (hàm không lọc `users.deleted_at`/`status`, chat-rooms.repository.ts:563-571), hoặc do đường đồng bộ đặt cho phòng `department`/`project`. Tức một thành viên có thể biết tên người chưa từng chung phòng với mình. Phơi CÓ CHỦ ĐÍCH theo CHAT-DEC-025, bó trong tenant, và cùng hạng với thành viên đã rời mà `listRosterMembers` vốn đã hiện — đừng đọc nhãn `membership` ở đây thành «chủ thể được chiếu là thành viên».",
     signedBy: "S17-CHAT-UX2-BE-1",
   },
   {
