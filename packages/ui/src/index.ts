@@ -31,6 +31,8 @@ export * from "./components/ui/checkbox";
 export * from "./components/ui/popover";
 export * from "./components/ui/stat-card";
 export * from "./components/ui/donut-chart";
+// S17-CHAT-UX2-FE-4 — accordion (bảng thông tin phòng chat v2, khối additive)
+export * from "./components/ui/accordion";
 
 // Layout chrome
 export * from "./components/layout/app-shell";

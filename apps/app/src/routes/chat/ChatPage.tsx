@@ -255,6 +255,15 @@ export function ChatPage(): React.ReactElement {
           room={selectedRoom}
           members={members}
           myRole={myRole}
+          /*
+           * S17-CHAT-UX2-FE-4 — «Tạo bởi …» lấy từ `detail`, KHÔNG từ `selectedRoom`.
+           *
+           * `createdByName` chỉ có ở `chatRoomDetailSchema` (CHAT-API-004) — đường DANH SÁCH không
+           * mang nó (BE-1 cố ý: thêm một `LEFT JOIN users` cho mỗi phòng ở đường nóng nhất của
+           * module). `selectedRoom` đến từ store (kiểu `ChatRoomDto`) nên đọc trường này ở đó là đọc
+           * một khóa không thuộc hợp đồng — hôm nay tình cờ còn, ngày store dọn là mất im lặng.
+           */
+          createdByName={detail?.createdByName ?? null}
           isLoading={detailQuery.isLoading}
           loadError={detailQuery.isError}
           onChanged={() => void detailQuery.refetch()}

@@ -1,6 +1,6 @@
 # S17-CHAT-UX2-FE-4 — Bảng thông tin phòng v2 (DEC-025)
 
-> **TRẠNG THÁI: BÀN GIAO — chưa viết một dòng code nào.**
+> **TRẠNG THÁI: ĐÃ THI CÔNG 10/09/2026** — xem §7 (nhật ký thi công + lệch so với `done_when`).
 > Ghi ngày **10/09/2026** bởi phiên đã đóng `S17-CHAT-UX2-FE-3`. Đây là **khảo sát đã trả tiền rồi**,
 > không phải kế hoạch thi công đầy đủ — phiên nhận việc vẫn phải viết §Thi công của riêng mình.
 
@@ -117,3 +117,41 @@ Thêm hai bẫy nữa từ `src` của WO: `ui-promises-backend-never-reads` ·
 
 Worktree `C:/dev 2/mediaos-s17fe2` trên nhánh `wo/s17-chat-ux2-fe-2` còn treo, mà **FE-2 đã merge vào
 master rồi**. Xem `windows-worktree-orphan-dirs` trước khi xoá.
+
+---
+
+## 7. Nhật ký thi công (10/09/2026)
+
+### 7.1 Đã làm
+
+| # | Việc | Tệp |
+| --- | --- | --- |
+| 1 | Primitive `accordion` (shadcn-shape, **controlled**, `value: string[]`) + spec 5 ca | `packages/ui/src/components/ui/accordion.tsx` · `.spec.tsx` · export additive ở `index.ts` |
+| 2 | Rút luật phân trang tệp ra hook dùng CHUNG cho danh sách «Tệp» và lưới «Ảnh/Video» | `room-info/use-room-files.ts` |
+| 3 | Lưới ảnh 3 cột (`kind='image'` lọc ở **server**) | `room-info/RoomMediaGrid.tsx` |
+| 4 | Khối «Liên kết» CHAT-API-031 (keyset opaque · `truncated` tường minh · `rel` đủ ba giá trị) | `RoomLinksList.tsx` + spec 9 ca |
+| 5 | Danh sách thành viên chuyển tab → **Sheet** (giữ nguyên nội dung + số ca test) | `RoomMembersSheet.tsx` |
+| 6 | Tin ghim tách khỏi panel (bỏ cờ `enabled` — accordion đóng là unmount) | `room-info/RoomPinnedList.tsx` |
+| 7 | Đại phẫu panel: bố cục dọc · 3 nút tròn · «Thành viên (N) ›» · 4 accordion · Lưu trữ + Rời nhóm | `RoomInfoPanel.tsx` (561 → ~430 dòng) |
+| 8 | `createdByName` nối dây từ `detail` (KHÔNG từ store) | `routes/chat/ChatPage.tsx` |
+| 9 | `RoomAvatarEditor` thêm prop trình bày `showAvatar` (mặc định `true`) — **bốn nhánh DEC-016 không đổi một chữ** | `RoomAvatarEditor.tsx` |
+
+### 7.2 Bằng chứng
+
+- `RoomInfoPanel.spec.tsx` **34 ca** (từ 16) · `RoomLinksList.spec.tsx` **9 ca** · `accordion.spec.tsx` **5 ca**.
+- **Mutation sweep 8/8 ĐỎcU ĐỌ** (không ca nào xanh-RỖNG): bỏ `kind='file'` · accordion đóng vẫn render thân · bọc nút «Ghim» sau cổng quyền · trang rỗng luôn đọc thành «không có liên kết» · khoá React chỉ còn `messageId` · ô ảnh `url=null` vẫn dựng `<img>` · dòng «Tạo bởi» hiện cả khi null · `before` bỏ trống.
+- `pnpm --filter @mediaos/app typecheck` xanh · eslint `@mediaos/ui` + `@mediaos/app` xanh · `@mediaos/ui test` 18/18 · vitest `src/components/chat` + `src/routes/chat` **32/32 tệp xanh**.
+- ⚠️ **KHÔNG chạy full-suite `apps/app` tại máy**: hai lần thử đều làm worker vitest chết (`ERR_IPC_CHANNEL_CLOSED`) và lần thứ hai kéo sập cả máy — để CI chạy phần còn lại (diện ảnh hưởng ngoài `chat/**` chỉ là hai khối **additive**: khoá i18n mới + export `accordion`).
+
+### 7.3 Lệch so với `done_when` — ghi ra, không giấu
+
+1. **Nhãn «Xem tất cả».** `done_when` dùng chữ «Xem tất cả» cho phân trang keyset. Thực tế **không có màn «tất cả»** để mở, và mỗi lần bấm chỉ lấy THÊM một trang — nên nhãn là «Xem ảnh cũ hơn» / «Xem liên kết cũ hơn», cùng khuôn với «Tải tệp cũ hơn» đã có từ S7. Nhãn hứa «tất cả» rồi chỉ đưa thêm 30 dòng là nói dối người dùng.
+2. **Nút tròn «Tắt thông báo» mở MENU mốc** thay vì bật/tắt một chạm: hợp đồng là `mutedUntil` (MỘT MỐC), không phải cờ. Tự chọn hộ một mốc mặc định là loại lỗi người dùng không bao giờ quy được về đây (docblock `chat-room-prefs.ts` cấm dựng mốc giả). Chiều ngược (đang tắt ⇒ bật lại) vẫn là MỘT chạm.
+3. **Lưới Ảnh/Video không có «Xem trong hội thoại»** — `done_when` không đòi, và nhét hai thao tác vào một ô vuông 1/3 cột làm cả hai khó bấm. Danh sách «Tệp» và «Liên kết» vẫn có đủ lối nhảy.
+4. **`accordion` KHÔNG kéo Radix về.** `packages/ui` có đúng một gói Radix (`react-slot`); `tabs`/`sheet`/`popover` đều tự viết theo đúng API shadcn (docblock `tabs.tsx` nói thẳng «không Radix, đồng bộ convention»). Thêm một dependency chỉ cho một primitive là phá quy ước đang có.
+
+### 7.4 NỢ / việc kế tiếp
+
+- **Rebase khi #495 (BE-2) squash-merge.** Nhánh này base là `feat/s17-chat-ux2-be-2` — xem §0.
+- `RoomInfoPanel.tsx` còn ~430 dòng (trong ngưỡng 800 nhưng trên mức 400 «điển hình»): nếu FE-5 phải nhét thêm chế độ Sheet cho panel này thì tách tiếp khối đầu (avatar/tên/3 nút) sang `room-info/`.
+- Bidi/homograph trong URL: FE chỉ cô lập chiều viết (`dir="ltr"`) — **không thay** lớp kiểm ở server; nợ gốc vẫn nằm ở `docs/plans/S17-CHAT-UX2-BE-2.md`.
