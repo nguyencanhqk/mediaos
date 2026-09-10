@@ -128,3 +128,12 @@ Thứ tự hai nhánh đầu LÀ hợp đồng: "còn link chưa trả" xét TR�
 
 1. **`https://).` cho ra `https://`, KHÔNG cho ra rỗng.** `:` và `/` không nằm trong tập gọt, nên một kết quả khớp không bao giờ mất phần lược đồ. Vế `if (url.length === 0)` trong `extractChatLinks` vì thế **không bao giờ chạy** — giữ lại vì nó NGANG BẰNG vế phòng thủ của FE (`splitTextWithLinks`), và parity mới là hợp đồng. Giá trị `https://` là link chết trong bảng, nhưng bong bóng tin ở FE **đang** vẽ nó thành `<a>` y như vậy: "sửa cho đẹp" ở một bên chính là cái trôi mà ca đối chiếu tồn tại để chặn.
 2. **`view:chat-oversight` là cặp NHẠY CẢM** (`is_sensitive = true`) trong catalog chính tắc. Fixture truyền `false` bị guard của `seedPermissionCatalog` chặn — đúng, vì `permissions` là catalog TOÀN CỤC không được `cleanupTenants` dọn (memory `test-fixture-stamps-global-permission-catalog`).
+
+## 12. Gate review + NỢ ghi nhận (không vá trong WO này)
+
+`typescript-reviewer` **PASS** (0 defect) · `security-reviewer` **PASS** (0 CRITICAL/HIGH). Hai finding **LOW**, cả hai đều là nợ CHUNG của module chứ không phải do route mới mở ra — vá lén một chỗ sẽ làm lệch với 5 chỗ còn lại:
+
+1. **`leftJoin(users)` thiếu vế `users.deleted_at IS NULL`** (`chat-messages.repository.ts`) ⇒ tên người dùng đã xoá mềm vẫn ra ở `senderName`. Join này **TRÙNG NGUYÊN VĂN** 5 đường đọc đang chạy (`listMessages` · `listPinned` · `MESSAGE_COLUMNS` · `listRoomFiles`…) nên WO này KHÔNG mở bề mặt mới. Sửa (nếu owner muốn) phải làm **cả 6 chỗ một lượt** — việc của một WO riêng.
+2. **URL chứa U+202E (RTL-override) / ký tự homograph** lọt qua lớp `[^\s<>"']`. FE `splitTextWithLinks` dùng ĐÚNG luật đó, và parity là hợp đồng của WO này ⇒ **không sửa một bên**. Nếu xử thì xử ở tầng RENDER (hiện punycode / gọt bidi) cho CẢ hai điểm đọc — bảng «Liên kết» và bong bóng tin.
+
+> Ghi ở đây thay vì mở WO ngay: cả hai là quyết định phạm-vi-module cần owner chốt, và cái giá của việc chọn sai là 6 đường đọc nói hai chuyện khác nhau.
