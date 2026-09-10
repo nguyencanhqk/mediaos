@@ -97,6 +97,10 @@ const ROUTE_GATES: readonly RouteGate[] = [
   // sẽ NHỐT nhân viên thường trong mọi phòng họ được thêm vào (API-13 §5.1 + jsdoc controller).
   { controller: ChatRoomsController, handlerName: "leaveRoom", action: "view", resourceType: "chat-room" },
   { controller: ChatRoomsController, handlerName: "listMembers", action: "view", resourceType: "chat-room" },
+  // CHAT-API-031 (S17-CHAT-UX2-BE-2) — liên kết đã chia sẻ. Cặp TRÙNG NGUYÊN VĂN `listMessages`/
+  // `listRoomFiles`/`listPinned`: liên kết CHÍNH LÀ một phần nội dung tin, nên cặp riêng chỉ đẻ ra role
+  // "thấy liên kết mà không đọc được tin".
+  { controller: ChatRoomsController, handlerName: "listRoomLinks", action: "view", resourceType: "chat-room" },
   { controller: ChatRoomsController, handlerName: "addMember", action: "manage", resourceType: "chat-member" },
   { controller: ChatRoomsController, handlerName: "updateMember", action: "manage", resourceType: "chat-member" },
   { controller: ChatRoomsController, handlerName: "removeMember", action: "manage", resourceType: "chat-member" },

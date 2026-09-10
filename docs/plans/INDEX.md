@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**487 WO** · có micro-plan: **278/487** · ⬜ 37 chờ · 🔵 1 đang làm · ✅ 448 xong · 🔴 1 chặn
+**496 WO** · có micro-plan: **288/496** · ⬜ 32 chờ · 🔵 2 đang làm · ✅ 461 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -572,12 +572,12 @@
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
 | `S17-CHAT-UX2-DOC-1` | 🟡 | ✅ xong | [📄](S17-CHAT-UX2-WAVE.md) | — | Bộ tài liệu CHAT v2 (S17): SPEC-15 §9 sửa SCREEN-001/002/004 «v2» · §9 |
-| `S17-CHAT-UX2-BE-1` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-DOC-1 | DTO phòng v2: `lastMessage` (LATERAL tin cuối, che thu hồi ở server) + |
-| `S17-CHAT-UX2-BE-2` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-DOC-1 | CHAT-API-031 GET /chat/rooms/:id/links — liên kết đã chia sẻ trong phò |
-| `S17-CHAT-UX2-FE-1` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-BE-1 | Danh sách phòng v2: thanh đầu (tìm · lọc · tạo) · chip lọc DEC-021 · d |
+| `S17-CHAT-UX2-BE-1` | 🟡 | ✅ xong | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-DOC-1 | DTO phòng v2: `lastMessage` (LATERAL tin cuối, che thu hồi ở server) + |
+| `S17-CHAT-UX2-BE-2` | 🟡 | 🔵 đang làm | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-DOC-1 | CHAT-API-031 GET /chat/rooms/:id/links — liên kết đã chia sẻ trong phò |
+| `S17-CHAT-UX2-FE-1` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-BE-1 | Danh sách phòng v2: thanh đầu (tìm · lọc · tạo) · chip lọc DEC-021 · d |
 | `S17-CHAT-UX2-FE-2` | 🟡 | ✅ xong | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-DOC-1 | Hội thoại v2: header (avatar · tên · «đang online / N thành viên» · tì |
 | `S17-CHAT-UX2-FE-3` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-FE-2 | Composer v2 DEC-027: @mention autocomplete từ roster (gửi mentions[])  |
-| `S17-CHAT-UX2-FE-4` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-BE-1 ⏳S17-CHAT-UX2-BE-2 | Bảng thông tin phòng v2 DEC-025: bố cục dọc (avatar lớn · tên · Tạo bở |
+| `S17-CHAT-UX2-FE-4` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-BE-1 ⏳S17-CHAT-UX2-BE-2 | Bảng thông tin phòng v2 DEC-025: bố cục dọc (avatar lớn · tên · Tạo bở |
 | `S17-CHAT-UX2-FE-5` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-FE-1 ✅S17-CHAT-UX2-FE-2 | Drawer chat DEC-026 thay ChatDock/ChatDockWindow (Sheet phải 400px: tì |
 | `S17-CHAT-UX2-QA-1` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-FE-3 ⏳S17-CHAT-UX2-FE-4 ⏳S17-CHAT-UX2-FE-5 | Nghiệm thu wave S17-CHAT-UX2: masking preview/links (thu hồi · file ·  |
 
@@ -588,10 +588,19 @@
 | `S18-AUTH-UNLOCK429-1` | 🔴 | ✅ xong | [📄](S18-AUTH-UNLOCK429-1.md) | — | Gỡ khoá đăng nhập (429) từ giao diện: chỉ mục IP + clearLoginLocks/rem |
 | `S18-AUTH-RESETCLEARS-1` | 🔴 | ✅ xong | [📄](S18-AUTH-RESETCLEARS-1.md) | ✅S18-AUTH-UNLOCK429-1 | Đặt lại mật khẩu thành công thì xoá luôn khoá login 429 của email đó ( |
 | `S18-AUTH-RETRYAFTER-1` | 🟡 | ✅ xong | [📄](S18-AUTH-RETRYAFTER-1.md) | ✅S18-AUTH-UNLOCK429-1 | 429 đăng nhập mang `retryAfterSec` (error.details + header Retry-After |
-| `S18-AUTH-RESETDELETED-1` | 🔴 | 🔵 đang làm | — *(chưa)* | ✅S18-AUTH-RESETCLEARS-1 | `resetPassword` không lọc `deleted_at`: user đã XOÁ MỀM vẫn đặt lại đư |
-| `S18-QA-ASSETFLAKE-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | `s11-asset-db1-invariants` ĐỎ trong lane chung nhưng XANH khi chạy riê |
-| `S18-QA-SUPERTESTLISTEN-1` | 🟡 | ⬜ chờ | [📄](S18-QA-SUPERTESTLISTEN-1.md) | — | 12 int-spec còn `app.init()` KHÔNG kèm `listen(0)` nhưng có `Promise.a |
-| `S18-FE-DEPTQUERYKEY-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | Hai API khác endpoint/khác cổng quyền dùng CHUNG `hrKeys.departments.l |
+| `S18-AUTH-RESETDELETED-1` | 🔴 | ✅ xong | [📄](S18-AUTH-RESETDELETED-1.md) | ✅S18-AUTH-RESETCLEARS-1 | `resetPassword` không lọc `deleted_at`: user đã XOÁ MỀM vẫn đặt lại đư |
+| `S18-AUTH-RESETMETA-1` | 🔴 | ✅ xong | [📄](S18-AUTH-RESETMETA-1.md) | ✅S18-AUTH-RESETDELETED-1 ✅S18-AUTH-CHANGEPWTOCTOU-1 | `resetPassword` + `changePassword` không nhận `RequestMeta` ⇒ NĂM hàng |
+| `S18-AUTH-RESETFLOOR-1` | 🔴 | ✅ xong | — *(chưa)* | — | `resetPassword` KHÔNG có `applyUniformResponseFloor` — nhánh từ chối c |
+| `S18-AUTH-SECEVENTMETA-1` | 🔴 | ✅ xong | [📄](S18-AUTH-SECEVENTMETA-1.md) | ✅S18-AUTH-RESETMETA-1 | `user_security_events` của đường đổi mật khẩu KHÔNG có `ip_address`/`u |
+| `S18-AUTH-SECEVENTREST-1` | 🔴 | ✅ xong | [📄](S18-AUTH-SECEVENTREST-1.md) | ✅S18-AUTH-SECEVENTMETA-1 | 9 điểm ghi `user_security_events` NGOÀI đường mật khẩu vẫn VÔ DANH — n |
+| `S18-AUTH-CHANGEPWTOCTOU-1` | 🔴 | ✅ xong | [📄](S18-AUTH-CHANGEPWTOCTOU-1.md) | ✅S18-AUTH-RESETDELETED-1 | `changePassword` ghi `password_hash` không lọc `deleted_at` ở câu UPDA |
+| `S18-AUTH-2FADELETED-1` | 🔴 | ✅ xong | [📄](S18-AUTH-2FADELETED-1.md) | ✅S18-AUTH-CHANGEPWTOCTOU-1 | `disableTwoFactor` KHÔNG lọc `deleted_at` ở CẢ câu SELECT — user đã xo |
+| `S18-AUTH-RESTORE2FA-1` | 🔴 | 🔵 đang làm | — *(chưa)* | ✅S18-AUTH-2FADELETED-1 ✅S18-AUTH-SECEVENTMETA-1 | Khôi phục user KHÔNG soát lại 2FA + `enroll`/`confirmEnable` không lọc |
+| `S18-QA-ASSETFLAKE-1` | 🟡 | ✅ xong | [📄](S18-QA-ASSETFLAKE-1.md) | — | `s11-asset-db1-invariants` ĐỎ trong lane chung nhưng XANH khi chạy riê |
+| `S18-QA-PIPELINEREPLAY-1` | 🟡 | ✅ xong | [📄](S18-QA-PIPELINEREPLAY-1.md) | — | `task-pipeline-backfill-0500` replay migration 0500 lên TOÀN BỘ projec |
+| `S18-QA-SUPERTESTLISTEN-1` | 🟡 | ✅ xong | [📄](S18-QA-SUPERTESTLISTEN-1.md) | — | 12 int-spec còn `app.init()` KHÔNG kèm `listen(0)` nhưng có `Promise.a |
+| `S18-FE-DEPTQUERYKEY-1` | 🟡 | ✅ xong | [📄](S18-FE-DEPTQUERYKEY-1.md) | — | Hai API khác endpoint/khác cổng quyền dùng CHUNG `hrKeys.departments.l |
+| `S18-SEC-AUDITGATE-1` | 🟡 | ✅ xong | [📄](S18-SEC-AUDITGATE-1.md) | — | Cổng `Dependency scan (pnpm audit)` ĐỎ trên master từ 09/09 — 5 adviso |
 
 ---
 

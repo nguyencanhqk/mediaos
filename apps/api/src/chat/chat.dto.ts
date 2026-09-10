@@ -11,6 +11,7 @@ import {
   createChatRoomSchema,
   listChatMessagesQuerySchema,
   listChatRoomFilesQuerySchema,
+  listChatRoomLinksQuerySchema,
   listChatRoomsQuerySchema,
   openDirectRoomSchema,
   sendMessageSchema,
@@ -66,6 +67,16 @@ export class ChatMuteRoomDto extends createZodDto(chatMuteRoomSchema) {}
 
 /** GET /chat/rooms/:id/files (view:chat-room) — con trỏ `beforeSeq`, cấm offset. */
 export class ListChatRoomFilesQueryDto extends createZodDto(listChatRoomFilesQuerySchema) {}
+
+// ── S17-CHAT-UX2-BE-2 — liên kết đã chia sẻ (CHAT-API-031) ─────────────────────
+
+/**
+ * GET /chat/rooms/:id/links (view:chat-room) — con trỏ opaque **mang vân phòng**, cấm offset.
+ *
+ * ⚠️ Con trỏ ở đây KHÔNG phải `beforeSeq` như `CHAT-API-017`: khoá keyset là `(room_seq, linkIndex)`
+ * vì một tin có thể chứa nhiều liên kết hơn cả `limit`. Xem `chat-links-cursor.ts`.
+ */
+export class ListChatRoomLinksQueryDto extends createZodDto(listChatRoomLinksQuerySchema) {}
 
 // ── S7-CHAT-BE-8 — presign upload own-scope (SPEC-15 §13.5 bước 1-2) ───────────
 
