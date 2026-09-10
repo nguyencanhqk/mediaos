@@ -151,7 +151,7 @@ describe("AuthService.disableTwoFactor — fail-fast khi bị ÉP 2FA (S2-AUTH-B
 
     let thrown: unknown;
     try {
-      await ctx.service.disableTwoFactor(user, "pw");
+      await ctx.service.disableTwoFactor(user, "pw", {});
       expect.unreachable("disableTwoFactor phải ném khi user bị ép 2FA");
     } catch (err) {
       thrown = err;
@@ -175,14 +175,18 @@ describe("AuthService.disableTwoFactor — fail-fast khi bị ÉP 2FA (S2-AUTH-B
   it("KHÔNG bị ép (requiresTwoFactor=false) → chạy tiếp xuống rate-limit + re-auth + disable (hành vi cũ)", async () => {
     ctx.twoFactor.requiresTwoFactor.mockResolvedValue(false);
 
-    await expect(ctx.service.disableTwoFactor(user, "pw")).resolves.toBeUndefined();
+    const meta = { ip: "203.0.113.9", userAgent: "ua/1.0" };
+    await expect(ctx.service.disableTwoFactor(user, "pw", meta)).resolves.toBeUndefined();
 
     // Qua khỏi fail-fast → chạm đúng các lớp phía dưới.
     expect(ctx.twoFactor.requiresTwoFactor).toHaveBeenCalledWith(user.id, user.companyId);
     expect(ctx.rateLimiter.isLocked).toHaveBeenCalledTimes(1);
     expect(ctx.password.verify).toHaveBeenCalledWith("argon2-hash", "pw");
     expect(ctx.rateLimiter.reset).toHaveBeenCalledTimes(1);
-    expect(ctx.twoFactor.disable).toHaveBeenCalledWith(user.id, user.companyId);
+    // S18-AUTH-RESTORE2FA-1 (D4): `meta` phải ĐI XUỐNG `TwoFactorService.disable` — đó là thứ làm
+    // `auth.2fa_disabled` mang ip/userAgent. Assert đối tượng CỤ THỂ, không phải `expect.anything()`:
+    // một lượt truyền `{}` vẫn thoả `anything()` và cổng lại rỗng.
+    expect(ctx.twoFactor.disable).toHaveBeenCalledWith(user.id, user.companyId, meta);
   });
 });
 
@@ -288,19 +292,19 @@ describe("AuthService.disableTwoFactor — hàng đã XOÁ MỀM (S18-AUTH-2FADE
   describe("§predicate — câu SELECT re-auth mang ĐỦ ba vế", () => {
     it("vế CHỐT: deleted_at — RED nếu gỡ isNull(users.deletedAt)", async () => {
       const { service, wheres } = makeService();
-      await service.disableTwoFactor(user, "pw");
+      await service.disableTwoFactor(user, "pw", {});
       expect(whereFiltersSoftDelete(reauthWhere(wheres), users)).toBe(true);
     });
 
     it("vế tenant: company_id tường minh (BẤT BIẾN #1, không chỉ dựa RLS)", async () => {
       const { service, wheres } = makeService();
-      await service.disableTwoFactor(user, "pw");
+      await service.disableTwoFactor(user, "pw", {});
       expect(whereHasColumn(reauthWhere(wheres), users, "company_id")).toBe(true);
     });
 
     it("vế id giữ nguyên", async () => {
       const { service, wheres } = makeService();
-      await service.disableTwoFactor(user, "pw");
+      await service.disableTwoFactor(user, "pw", {});
       expect(whereHasColumn(reauthWhere(wheres), users, "id")).toBe(true);
     });
   });
@@ -309,7 +313,7 @@ describe("AuthService.disableTwoFactor — hàng đã XOÁ MỀM (S18-AUTH-2FADE
   describe("§denied-audit — `!row` ghi auth.2fa_disable_denied và vẫn 401 + phạt", () => {
     it("audit `auth.2fa_disable_denied` được ghi TRONG tx (vết bền cho đường đi-thẳng)", async () => {
       const { service, audit } = makeService({ selectRows: [] });
-      await expect(service.disableTwoFactor(user, "pw")).rejects.toBeInstanceOf(
+      await expect(service.disableTwoFactor(user, "pw", {})).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
       expect(audit.record).toHaveBeenCalledTimes(1);
@@ -349,7 +353,7 @@ describe("AuthService.disableTwoFactor — hàng đã XOÁ MỀM (S18-AUTH-2FADE
         )
         .mockResolvedValue(undefined);
 
-      await expect(service.disableTwoFactor(user, "pw")).rejects.toBeInstanceOf(
+      await expect(service.disableTwoFactor(user, "pw", {})).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
 
@@ -363,7 +367,7 @@ describe("AuthService.disableTwoFactor — hàng đã XOÁ MỀM (S18-AUTH-2FADE
 
     it("GIỮ hình cũ: 401 + recordFailure + REAUTH_FAILED (waiver ratchet 429 vẫn đứng)", async () => {
       const { service, rateLimiter, securityEvents, twoFactor } = makeService({ selectRows: [] });
-      await expect(service.disableTwoFactor(user, "pw")).rejects.toBeInstanceOf(
+      await expect(service.disableTwoFactor(user, "pw", {})).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
       expect(rateLimiter.recordFailure).toHaveBeenCalledTimes(1);
@@ -385,7 +389,7 @@ describe("AuthService.disableTwoFactor — hàng đã XOÁ MỀM (S18-AUTH-2FADE
         selectRows: [],
         probeRow: [{ deletedAt: new Date() }],
       });
-      await expect(service.disableTwoFactor(user, "pw")).rejects.toBeInstanceOf(
+      await expect(service.disableTwoFactor(user, "pw", {})).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
       const [, entry] = audit.record.mock.calls[0] as [unknown, { after: { reason: string } }];
@@ -394,7 +398,7 @@ describe("AuthService.disableTwoFactor — hàng đã XOÁ MỀM (S18-AUTH-2FADE
 
     it("probe KHÔNG thấy hàng ⇒ user_absent (KHÔNG khẳng định 'đã xoá')", async () => {
       const { service, audit } = makeService({ selectRows: [], probeRow: [] });
-      await expect(service.disableTwoFactor(user, "pw")).rejects.toBeInstanceOf(
+      await expect(service.disableTwoFactor(user, "pw", {})).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
       const [, entry] = audit.record.mock.calls[0] as [unknown, { after: { reason: string } }];
@@ -406,7 +410,7 @@ describe("AuthService.disableTwoFactor — hàng đã XOÁ MỀM (S18-AUTH-2FADE
     // trạng thái này: câu đầu không thấy (lúc đó còn `deleted_at`), probe thấy hàng SỐNG.
     it("probe thấy hàng CÒN SỐNG ⇒ state_changed (khe restore chen giữa hai câu)", async () => {
       const { service, audit } = makeService({ selectRows: [], probeRow: [{ deletedAt: null }] });
-      await expect(service.disableTwoFactor(user, "pw")).rejects.toBeInstanceOf(
+      await expect(service.disableTwoFactor(user, "pw", {})).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
       const [, entry] = audit.record.mock.calls[0] as [unknown, { after: { reason: string } }];
@@ -422,7 +426,7 @@ describe("AuthService.disableTwoFactor — hàng đã XOÁ MỀM (S18-AUTH-2FADE
    */
   it("§neo-hành-vi (xanh TRƯỚC lẫn SAU vá): SELECT rỗng ⇒ 401, KHÔNG chạm twoFactor.disable", async () => {
     const { service, twoFactor } = makeService({ selectRows: [] });
-    await expect(service.disableTwoFactor(user, "pw")).rejects.toBeInstanceOf(
+    await expect(service.disableTwoFactor(user, "pw", {})).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
     expect(twoFactor.disable).not.toHaveBeenCalled();
@@ -1168,7 +1172,7 @@ describe("AuthService — 429 mang retryAfterSec (S18-AUTH-RETRYAFTER-1)", () =>
   it("disableTwoFactor 429 mang số giây, đọc bằng ĐÚNG khoá `2fa-disable`", async () => {
     const { auth, rateLimiter } = makeReauthAuth(300);
 
-    await expect(auth.disableTwoFactor(ACTOR, "pw")).rejects.toSatisfy(
+    await expect(auth.disableTwoFactor(ACTOR, "pw", {})).rejects.toSatisfy(
       (err) => retryAfterOf(err) === "300",
     );
     expect(rateLimiter.remainingLockSecOrNull).toHaveBeenCalledWith(

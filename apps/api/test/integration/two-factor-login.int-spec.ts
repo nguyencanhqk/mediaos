@@ -107,9 +107,9 @@ describe.skipIf(!hasDb)("G16-1 login 2FA flow", () => {
     await seedUserRole(direct, adminId, COMPANY_ADMIN_ROLE_ID, A.companyId);
     ({ auth, twoFactor } = make());
     // Bật 2FA cho userEmail; giữ lại secret để sinh mã TOTP hợp lệ trong các test.
-    const { otpauthUri } = await twoFactor.enroll(userId, A.companyId);
+    const { otpauthUri } = await twoFactor.enroll(userId, A.companyId, {});
     enrolledSecret = secretFromUri(otpauthUri);
-    await twoFactor.confirmEnable(userId, A.companyId, totp.generate(enrolledSecret));
+    await twoFactor.confirmEnable(userId, A.companyId, totp.generate(enrolledSecret), {});
   });
 
   afterAll(async () => {

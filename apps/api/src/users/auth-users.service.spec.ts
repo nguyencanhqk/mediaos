@@ -231,7 +231,9 @@ describe("AuthUsersService", () => {
   });
 
   it("lock: tự khoá chính mình → BadRequest (no-op, 0 audit, KHÔNG revoke phiên)", async () => {
-    await expect(service.lockUser(ACTOR, ACTOR.id, undefined, {})).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.lockUser(ACTOR, ACTOR.id, undefined, {})).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
     expect(repo.setLockTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
     expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
@@ -239,7 +241,9 @@ describe("AuthUsersService", () => {
 
   it("lock: đã 'locked' → BadRequest (no-op, 0 audit, KHÔNG revoke phiên)", async () => {
     repo.findByIdTx = vi.fn(async () => makeUser({ status: "locked" })) as never;
-    await expect(service.lockUser(ACTOR, TARGET_ID, undefined, {})).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.lockUser(ACTOR, TARGET_ID, undefined, {})).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
     expect(repo.setLockTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
     expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
@@ -247,7 +251,9 @@ describe("AuthUsersService", () => {
 
   it("lock: target không thấy → NotFound TRƯỚC audit", async () => {
     repo.findByIdTx = vi.fn(async () => undefined) as never;
-    await expect(service.lockUser(ACTOR, TARGET_ID, undefined, {})).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.lockUser(ACTOR, TARGET_ID, undefined, {})).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
     expect(audit.record).not.toHaveBeenCalled();
   });
 
@@ -271,13 +277,17 @@ describe("AuthUsersService", () => {
 
   it("unlock: chưa 'locked' → BadRequest (no-op, 0 audit)", async () => {
     repo.findByIdTx = vi.fn(async () => makeUser({ status: "active" })) as never;
-    await expect(service.unlockUser(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.unlockUser(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
     expect(repo.setUnlockTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
   });
 
   it("unlock: tự mở khoá chính mình → BadRequest", async () => {
-    await expect(service.unlockUser(ACTOR, ACTOR.id, {})).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.unlockUser(ACTOR, ACTOR.id, {})).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
     expect(audit.record).not.toHaveBeenCalled();
   });
 
@@ -436,7 +446,9 @@ describe("AuthUsersService", () => {
   });
 
   it("delete: tự xóa chính mình → BadRequest (no-op, 0 audit, 0 revoke)", async () => {
-    await expect(service.deleteUser(ACTOR, ACTOR.id, {})).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.deleteUser(ACTOR, ACTOR.id, {})).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
     expect(repo.softDeleteTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
     expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
@@ -444,7 +456,9 @@ describe("AuthUsersService", () => {
 
   it("delete: target không thấy / cross-tenant → NotFound TRƯỚC audit (0 audit rác)", async () => {
     repo.findByIdTx = vi.fn(async () => undefined) as never;
-    await expect(service.deleteUser(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.deleteUser(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
     expect(audit.record).not.toHaveBeenCalled();
     expect(securityEvents.record).not.toHaveBeenCalled();
   });
@@ -465,16 +479,100 @@ describe("AuthUsersService", () => {
 
   it("restore: target KHÔNG ở trạng thái deleted (hoặc cross-tenant) → NotFound, 0 audit", async () => {
     repo.findDeletedByIdTx = vi.fn(async () => undefined) as never;
-    await expect(service.restoreUser(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.restoreUser(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
     expect(repo.restoreTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
   });
 
   it("restore: email đã có user LIVE trùng (tạo mới sau khi xóa) → 409 Conflict, KHÔNG restore", async () => {
     repo.emailExistsTx = vi.fn(async () => true) as never;
-    await expect(service.restoreUser(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.restoreUser(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(
+      ConflictException,
+    );
     expect(repo.restoreTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  // ── S18-AUTH-RESTORE2FA-1 (D3): restore soát lại 2FA ─────────────────────────
+  it("§restore-wipe-unit: restore LUÔN gọi deleteTwoFactorTx (A1 vô điều kiện), đúng company của actor", async () => {
+    repo.getTwoFactorStateTx = vi.fn(async () => ({
+      enabled: false,
+      requiredByRole: false,
+    })) as never;
+    await service.restoreUser(ACTOR, TARGET_ID, {});
+    expect(repo.deleteTwoFactorTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID);
+  });
+
+  it("§restore-noflag-unit: user CHƯA bật 2FA ⇒ KHÔNG set require_two_factor", async () => {
+    repo.getTwoFactorStateTx = vi.fn(async () => ({
+      enabled: false,
+      requiredByRole: false,
+    })) as never;
+    await service.restoreUser(ACTOR, TARGET_ID, {});
+    expect(repo.updateProfileTx).not.toHaveBeenCalled();
+    expect(audit.record.mock.calls[0][1].after).toMatchObject({
+      twoFactorReset: true,
+      twoFactorWasEnabled: false,
+    });
+  });
+
+  /**
+   * §restore-flag-failclosed — BLOCK-1 của plan-review vòng 2, và là ca DUY NHẤT đo được vế này.
+   *
+   * `updateProfileTx` trả `Promise<User | undefined>`. Nếu ai đó viết `afterRow ?? restored`, một
+   * lượt trả `undefined` (0 hàng khớp) bị NUỐT LẶNG: audit ghi snapshot CŨ, `toDto` trả row cũ, HTTP
+   * **200**, và A2 ĐÃ KHÔNG XẢY RA — tài khoản khôi phục xong KHÔNG bị ép 2FA, không tín hiệu nào.
+   * Đúng hình `empty-success-is-the-fail-open-shape`.
+   *
+   * Đột biến: thay `throw` bằng `?? restored` ⇒ ca này PHẢI ĐỎ.
+   */
+  it("§restore-flag-failclosed: updateProfileTx trả undefined ⇒ NÉM (rollback), KHÔNG phải 200 im lặng", async () => {
+    repo.getTwoFactorStateTx = vi.fn(async () => ({
+      enabled: true,
+      requiredByRole: false,
+    })) as never;
+    repo.updateProfileTx = vi.fn(async () => undefined) as never;
+    await expect(service.restoreUser(ACTOR, TARGET_ID, {})).rejects.toThrow(
+      /require_two_factor khớp 0 hàng/,
+    );
+    // Ném TRƯỚC audit ⇒ bảng append-only không nhận hàng nói dối nào.
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  /**
+   * §restore-flag-order — B2. `authUserSnapshot` CÓ trường `requireTwoFactor`, nên nếu bước set-cờ
+   * chạy SAU bước audit (hoặc `after` dùng `restored` thay vì row trả về của `updateProfileTx`) thì
+   * hàng APPEND-ONLY ghi `false` trong khi DB là `true`. Ca này đo đúng điều đó ở tầng unit: mock
+   * trả row có `requireTwoFactor: true`, và `after` phải mang giá trị ĐÓ.
+   */
+  it("§restore-flag-order: after của audit là row SAU cập nhật (requireTwoFactor=true), không phải row restore", async () => {
+    repo.getTwoFactorStateTx = vi.fn(async () => ({
+      enabled: true,
+      requiredByRole: false,
+    })) as never;
+    repo.restoreTx = vi.fn(async () =>
+      makeUser({ deletedAt: null, requireTwoFactor: false }),
+    ) as never;
+    repo.updateProfileTx = vi.fn(async () =>
+      makeUser({ deletedAt: null, requireTwoFactor: true }),
+    ) as never;
+
+    await service.restoreUser(ACTOR, TARGET_ID, {});
+
+    expect(repo.updateProfileTx).toHaveBeenCalledWith(
+      TX,
+      ACTOR.companyId,
+      TARGET_ID,
+      { requireTwoFactor: true },
+      ACTOR.id,
+    );
+    expect(audit.record.mock.calls[0][1].after).toMatchObject({
+      requireTwoFactor: true,
+      twoFactorReset: true,
+      twoFactorWasEnabled: true,
+    });
   });
 
   it("restore: thua ĐUA unique (precheck pass nhưng UPDATE nổ 23505 lồng trong cause) → 409, KHÔNG 500", async () => {
@@ -484,7 +582,9 @@ describe("AuthUsersService", () => {
         cause: { code: "23505", constraint: "users_company_normalized_email_active_uq" },
       });
     }) as never;
-    await expect(service.restoreUser(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.restoreUser(ACTOR, TARGET_ID, {})).rejects.toBeInstanceOf(
+      ConflictException,
+    );
     expect(audit.record).not.toHaveBeenCalled();
   });
 
@@ -974,7 +1074,9 @@ describe("AuthUsersService — login throttle (429)", () => {
 
   it("LoginRateLimiter vắng (DI hỏng) ⇒ NÉM ngay, KHÔNG âm thầm trả 204 + audit 'đã gỡ'", async () => {
     const { service, audit } = makeService({ omitRateLimiter: true });
-    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID, {})).rejects.toThrow(/LoginRateLimiter/);
+    await expect(service.clearLoginThrottle(ACTOR, TARGET_ID, {})).rejects.toThrow(
+      /LoginRateLimiter/,
+    );
     expect(audit.record).not.toHaveBeenCalled();
   });
 });

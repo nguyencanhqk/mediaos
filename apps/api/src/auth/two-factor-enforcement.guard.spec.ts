@@ -72,6 +72,18 @@ function makeGuard(opts: {
 }
 
 describe("TwoFactorEnforcementGuard (global=ON, role-based — hành vi cũ)", () => {
+  /**
+   * ⚠️ §a2-pos-guard của S18-AUTH-RESTORE2FA-1 NGỒI LÊN ca này — đừng xoá/nới nó.
+   *
+   * A2 của WO đó set `users.require_two_factor = true` khi khôi phục một tài khoản từng bật 2FA.
+   * Chuỗi ép enroll là: cờ per-user ⇒ `requiresTwoFactorTx` true (`§a2-pos-flag` ở
+   * `two-factor.service.spec.ts`) ⇒ `requiresTwoFactor` true (uỷ quyền một dòng) ⇒ ca DƯỚI ĐÂY.
+   * Ca này KHÔNG được nhân bản sang file khác: hai bản sao của cùng một tiền đề sẽ trôi.
+   *
+   * Nó cũng là lý do `makeGuard({global:true})` phải tồn tại: `vitest.config.ts` ép
+   * `TWO_FACTOR_ENFORCEMENT_ENABLED="false"` cho TOÀN SUITE, và guard đọc-và-cache cờ đó LÚC
+   * CONSTRUCT ⇒ ngoài file này, nhánh `roleRequired` không bao giờ chạy trong test.
+   */
   it("DENY: role requires 2FA + chưa enroll → ForbiddenException code=TWO_FACTOR_SETUP_REQUIRED", async () => {
     const { ctx, reflector } = httpCtx({ id: "u1", companyId: "c1" });
     const guard = makeGuard({ global: true, reflector, twoFactor: fakeTwoFactor(true, false) });
@@ -92,7 +104,12 @@ describe("TwoFactorEnforcementGuard (global=ON, role-based — hành vi cũ)", (
 
   it("ALLOW: role KHÔNG ép + công ty KHÔNG ép → pass", async () => {
     const { ctx, reflector } = httpCtx({ id: "u1", companyId: "c1" });
-    const guard = makeGuard({ global: true, reflector, twoFactor: fakeTwoFactor(false, false), companyEnforced: false });
+    const guard = makeGuard({
+      global: true,
+      reflector,
+      twoFactor: fakeTwoFactor(false, false),
+      companyEnforced: false,
+    });
     expect(await guard.canActivate(ctx)).toBe(true);
   });
 
@@ -129,32 +146,57 @@ describe("TwoFactorEnforcementGuard — 4 tổ hợp fail-stricter (global × co
 
   it("(global OFF, company OFF) → KHÔNG ép (pass) — sàn thấp nhất", async () => {
     const { ctx, reflector } = httpCtx(user);
-    const guard = makeGuard({ global: false, reflector, twoFactor: fakeTwoFactor(false, false), companyEnforced: false });
+    const guard = makeGuard({
+      global: false,
+      reflector,
+      twoFactor: fakeTwoFactor(false, false),
+      companyEnforced: false,
+    });
     expect(await guard.canActivate(ctx)).toBe(true);
   });
 
   it("(global OFF, company ON) → ÉP (deny khi chưa enroll) — tenant NÂNG chuẩn", async () => {
     const { ctx, reflector } = httpCtx(user);
-    const guard = makeGuard({ global: false, reflector, twoFactor: fakeTwoFactor(false, false), companyEnforced: true });
+    const guard = makeGuard({
+      global: false,
+      reflector,
+      twoFactor: fakeTwoFactor(false, false),
+      companyEnforced: true,
+    });
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("(global ON, company OFF/null) → VẪN ép theo role (global là sàn, company KHÔNG hạ được)", async () => {
     const { ctx, reflector } = httpCtx(user);
     // role ép + chưa enroll → deny dù company không bật.
-    const guard = makeGuard({ global: true, reflector, twoFactor: fakeTwoFactor(true, false), companyEnforced: false });
+    const guard = makeGuard({
+      global: true,
+      reflector,
+      twoFactor: fakeTwoFactor(true, false),
+      companyEnforced: false,
+    });
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("(global ON, company ON) → ép cho MỌI user công ty (kể cả không role) khi chưa enroll", async () => {
     const { ctx, reflector } = httpCtx(user);
-    const guard = makeGuard({ global: true, reflector, twoFactor: fakeTwoFactor(false, false), companyEnforced: true });
+    const guard = makeGuard({
+      global: true,
+      reflector,
+      twoFactor: fakeTwoFactor(false, false),
+      companyEnforced: true,
+    });
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("(global OFF, company ON) + ĐÃ enroll → pass (đủ điều kiện)", async () => {
     const { ctx, reflector } = httpCtx(user);
-    const guard = makeGuard({ global: false, reflector, twoFactor: fakeTwoFactor(false, true), companyEnforced: true });
+    const guard = makeGuard({
+      global: false,
+      reflector,
+      twoFactor: fakeTwoFactor(false, true),
+      companyEnforced: true,
+    });
     expect(await guard.canActivate(ctx)).toBe(true);
   });
 });
