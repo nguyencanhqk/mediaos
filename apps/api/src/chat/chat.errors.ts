@@ -198,6 +198,24 @@ export const CHAT_ERR = {
    */
   SEARCH_CURSOR_INVALID: "CHAT-ERR-016: con trỏ phân trang tìm kiếm không hợp lệ.",
 
+  /**
+   * S17-CHAT-UX2-BE-2 · CHAT-ERR-016 (trục LIÊN KẾT) — con trỏ opaque của `CHAT-API-031` hỏng.
+   *
+   * Hằng RIÊNG, cùng lý do với `SEARCH_CURSOR_INVALID`: mã kia nói về `/chat/search` (khoá
+   * `(created_at, id)`), còn con trỏ ở đây mang `(room_seq, linkIndex)` — dùng lại là chỉ sai chỗ cho
+   * người đi sửa.
+   */
+  LINKS_CURSOR_INVALID: "CHAT-ERR-016: con trỏ phân trang liên kết không hợp lệ.",
+
+  /**
+   * S17-CHAT-UX2-BE-2 · CHAT-ERR-016 — con trỏ sinh ở PHÒNG KHÁC (SPEC-15 §12, vế "dấu vân").
+   *
+   * `room_seq` là per-room nên con trỏ của phòng A vẫn hợp cú pháp ở phòng B; không có vế này thì server
+   * trả 200 kèm một trang cắt theo mốc của phòng khác — sai trong im lặng.
+   */
+  LINKS_CURSOR_ROOM_MISMATCH:
+    "CHAT-ERR-016: con trỏ phân trang thuộc phòng khác — hãy tải lại từ trang đầu.",
+
   /** Tin `system` / tin đã thu hồi không phải đối tượng của thao tác kiểm duyệt. */
   MESSAGE_NOT_ACTIONABLE:
     "CHAT-ERR-006: tin hệ thống hoặc tin đã thu hồi không thực hiện được thao tác này.",

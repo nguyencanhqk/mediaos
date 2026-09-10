@@ -16839,16 +16839,26 @@ export const backlog = [
     title:
       "CHAT-API-031 GET /chat/rooms/:id/links — liên kết đã chia sẻ trong phòng: trích https?:// từ body tin chưa thu hồi, keyset room_seq DESC, trần 50/trang, membership-gated như API-017, con trỏ mang vân phòng (DEC-025)",
     zone: "yellow",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/chat/chat-links.service.ts",
+      "apps/api/src/chat/chat-link-extract.ts",
+      "apps/api/src/chat/chat-links-cursor.ts",
       "apps/api/src/chat/chat-messages.repository.ts",
       "apps/api/src/chat/chat-rooms.controller.ts",
+      "apps/api/src/chat/chat.dto.ts",
+      "apps/api/src/chat/chat.errors.ts",
       "apps/api/src/chat/chat.module.ts",
       "apps/api/src/chat/**/*.spec.ts",
       "apps/api/test/integration/chat-s17-be2-links.int-spec.ts",
+      // BLOCKING 3 (API-13 §5.1d(5)) — CHAT-API-031 là route MỚI: phải regen census runtime
+      // (`ROUTE_CENSUS_WRITE=1`) + ký phán quyết, nếu không `route-guard-coverage.e2e-spec.ts` đỏ
+      // hoặc route rơi vào `needVerdict` = fail-open (memory `route-census-runtime-gate`).
+      "apps/api/test/foundation/**",
+      "docs/_review/S6-SEC-ROUTEMAP-1-route-census.json",
       "packages/contracts/src/chat.ts",
       "packages/web-core/src/lib/chat-api.ts",
+      "docs/API Design/API-13_CHAT_API_Design.md",
       "docs/plans/S17-CHAT-UX2-BE-2.md",
       "harness/backlog.mjs",
     ],
@@ -16858,6 +16868,7 @@ export const backlog = [
     src: [
       "SPEC-15 §22c DEC-025 · §15 CHAT-API-031 (sau DOC-1); khuôn GET /chat/rooms/:id/files (CHAT-API-017, S7-CHAT-BE-3) — gate + keyset + trimToMessageBoundary",
       "apps/app/src/components/chat/chat-format.ts splitTextWithLinks — cùng luật nhận diện link (chỉ http/https) để BE/FE không lệch",
+      "docs/plans/S17-CHAT-UX2-BE-2.md",
     ],
     done_when: [
       "Route + DTO `chatRoomLinkSchema` {messageId, roomSeq, url, senderName, createdAt}; trích ở SQL (regexp) hoặc service trên trang tin — 1 câu/trang, chỉ tin `recalled_at IS NULL` và `message_type <> 'system'`",
