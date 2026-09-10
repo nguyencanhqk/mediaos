@@ -316,6 +316,10 @@ describe("RoomInfoPanel · khối Liên kết (CHAT-API-031)", () => {
     const link = anchor.closest("a");
     expect(link?.getAttribute("rel")).toBe("noopener noreferrer nofollow");
     expect(link?.getAttribute("target")).toBe("_blank");
+    // `dir="ltr"` cô lập chiều viết: URL chứa ký tự đảo chiều (bidi) hiện ra có thể đọc thành một tên
+    // miền KHÁC hẳn cái sẽ mở. Neo lại ở đây vì refactor `LinkAnchor` làm rơi thuộc tính này thì
+    // không có gì khác đỏ (nợ gốc bidi/homograph ở docs/plans/S17-CHAT-UX2-BE-2.md).
+    expect(link?.getAttribute("dir")).toBe("ltr");
   });
 
   it("trang RỖNG + `truncated` ⇒ mời quét tiếp, KHÔNG khẳng định 'phòng không có liên kết'", async () => {

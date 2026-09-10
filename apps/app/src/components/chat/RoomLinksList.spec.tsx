@@ -177,8 +177,11 @@ describe("RoomLinksList · trình bày", () => {
     });
     renderList();
 
-    expect(await screen.findByTestId("chat-link-not-http")).toBeTruthy();
+    const plain = await screen.findByTestId("chat-link-not-http");
     expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
+    // Cả HAI nhánh (link thật và chữ thường) đều phải cô lập chiều viết — nhánh này còn dễ quên
+    // hơn vì nó không phải `<a>`.
+    expect(plain.getAttribute("dir")).toBe("ltr");
   });
 
   it("lỗi mạng ⇒ báo + cho thử lại, không im lặng để danh sách trống", async () => {

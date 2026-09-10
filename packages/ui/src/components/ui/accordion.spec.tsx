@@ -94,6 +94,23 @@ describe("Accordion", () => {
     expect(trigger.getAttribute("aria-controls")).toBe(region.id);
   });
 
+  /**
+   * Guard của `AccordionTrigger`/`AccordionContent` là MỘT nhánh RIÊNG (`useAccordionItemContext`),
+   * không phải nhánh của `AccordionItem` ở ca dưới. Thiếu ca này thì xoá hẳn dòng `throw` đó vẫn
+   * xanh cả suite — và lần đầu ai đó đặt nhầm chỗ hai component này sẽ nhận một khối render CÂM
+   * thay vì một lỗi nói rõ sai ở đâu.
+   */
+  it("AccordionTrigger/AccordionContent dùng ngoài <AccordionItem> ⇒ NÉM, nêu ĐÚNG tên component", () => {
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(() => render(<AccordionTrigger>x</AccordionTrigger>)).toThrow(
+      "<AccordionTrigger> phải nằm trong <AccordionItem>",
+    );
+    expect(() => render(<AccordionContent>x</AccordionContent>)).toThrow(
+      "<AccordionContent> phải nằm trong <AccordionItem>",
+    );
+    quiet.mockRestore();
+  });
+
   it("dùng ngoài <Accordion>/<AccordionItem> ⇒ NÉM ngay, không render câm", () => {
     const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(() =>
