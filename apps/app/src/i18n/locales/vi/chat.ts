@@ -14,10 +14,29 @@ export default {
     newButtonAria: "Tạo cuộc trò chuyện mới",
     showArchived: "Xem phòng đã lưu trữ",
     showActive: "Quay lại phòng đang hoạt động",
+    /**
+     * S17-CHAT-UX2-FE-1 — chip lọc nhanh (CHAT-DEC-021 · SPEC-15 §9a). Khoá TRÙNG `ROOM_FILTER_CHIPS`
+     * để tra cứu theo khoá chip không cần bảng ánh xạ thứ hai phải giữ đồng bộ bằng tay.
+     *
+     * «Ưa thích» **KHÔNG có** ở đây: §9a chốt nó ≡ «Đã ghim», và một chip thứ hai gần trùng nghĩa là
+     * mời người dùng đi tìm sự khác biệt không tồn tại.
+     */
+    /** Nhãn của cả NHÓM chip (`role="group"`) — không phải nhãn của một chip nào. */
+    chipsAria: "Lọc nhanh danh sách hội thoại",
+    chips: {
+      all: "Tất cả",
+      unread: "Chưa đọc",
+      direct: "Riêng",
+      group: "Nhóm",
+      deptproject: "Phòng ban · Dự án",
+      archived: "Lưu trữ",
+    },
     empty: "Chưa có cuộc trò chuyện nào.",
     emptyHint: "Bấm “Tin nhắn mới” để bắt đầu.",
     emptyArchived: "Không có phòng nào đã lưu trữ.",
     noSearchResult: "Không có phòng nào khớp “{{query}}”.",
+    /** Chip lọc ra rỗng — KHÁC "chưa có phòng nào": ở đây phòng CÓ, chỉ là không khớp bộ lọc đang bật. */
+    emptyChip: "Không có hội thoại nào trong bộ lọc này.",
     unreadAria: "{{count}} tin chưa đọc",
     unreadOverflow: "99+",
     archivedBadge: "Đã lưu trữ",
@@ -46,6 +65,19 @@ export default {
     /** Dấu hiệu NGAY TRÊN DÒNG — không phải chỉ trong menu (mở từng phòng mới biết = không bao giờ biết). */
     pinnedAria: "Đã ghim hội thoại",
     mutedAria: "Đang tắt thông báo",
+
+    // ── S17-CHAT-UX2-FE-1 — dòng phòng v2 (CHAT-DEC-022/023) ────────────────────────────────────
+    onlineAria: "Đang online",
+    /** Nhãn cạnh TÊN peer khi tài khoản/nhân sự đã ngừng hoạt động. KHÔNG khoá gì cả (CHAT-DEC-023). */
+    peerInactive: "Ngừng hoạt động",
+    preview: {
+      /** Tiền tố khi tin cuối là của CHÍNH TÔI. Dấu «:» do component thêm, không nhét vào chuỗi. */
+      you: "Bạn",
+      /** SPEC-15 §14 v2: tin thu hồi hiện CHỮ XÁM, **không phải** khoảng trắng. */
+      recalled: "Tin nhắn đã được thu hồi",
+      files: "{{count}} tệp đính kèm",
+      attachmentAria: "Có {{count}} tệp đính kèm",
+    },
     menu: {
       openAria: "Tuỳ chọn cho {{name}}",
       listAria: "Tuỳ chọn hội thoại {{name}}",

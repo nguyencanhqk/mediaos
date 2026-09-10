@@ -4,25 +4,37 @@
  * Tách khỏi component để test bằng gọi hàm (không dựng DOM) và để cùng một luật không có hai bản sao ở
  * trang `/chat` và panel nổi (`S7-CHAT-FE-3` dùng lại nguyên file này).
  */
+import { formatDistanceStrict } from "date-fns";
+import { vi } from "date-fns/locale";
 import type { ChatMessageDto, ChatRoomDto, ChatRoomMemberDto } from "@mediaos/contracts";
 import { RECALL_WINDOW_MS } from "@/routes/chat/constants";
 
 /**
  * Tên hiển thị của phòng.
  *
- * `direct` KHÔNG có `name` (mig `0538` DROP NOT NULL) — tên dựng từ NGƯỜI CÒN LẠI. Danh sách phòng
- * (`GET /chat/rooms`) KHÔNG kèm `members`, nên khi chưa mở phòng ta chỉ có `roomCode`. Trả nhãn dự
- * phòng mang mã phòng thay vì bịa một cái tên: nhãn sai làm người dùng nhắn nhầm người.
+ * `direct` KHÔNG có `name` (mig `0538` DROP NOT NULL) — tên dựng từ NGƯỜI CÒN LẠI.
+ *
+ * S17-CHAT-UX2-FE-1 — hai nguồn, theo đúng thứ tự này:
+ *
+ *  1. `members[]` (chỉ có sau `GET /chat/rooms/:id`) — GIỮ ĐẦU, không đảo: `ConversationPanel` truyền
+ *     `members` thật và các ca test S7 neo hành vi đó;
+ *  2. `room.peer.name` (S17-CHAT-UX2-BE-1) — có NGAY ở danh sách `GET /chat/rooms`, tức DM có tên từ
+ *     khung hình đầu. Đây là thứ đã thay thế hẳn cache `resolvedNames` trước đây ở `ChatPage` và
+ *     `chat-dock.store`.
+ *
+ * Hai nguồn cùng suy từ `chat_room_members` nên KHÔNG được phép lệch; nếu lệch thì đó là lỗi BE, không
+ * phải chỗ để FE chọn bên. Hết cả hai ⇒ nhãn dự phòng mang MÃ PHÒNG, không bịa tên: nhãn sai làm người
+ * dùng nhắn nhầm người.
  */
 export function roomDisplayName(
-  room: Pick<ChatRoomDto, "name" | "roomType" | "roomCode">,
+  room: Pick<ChatRoomDto, "name" | "roomType" | "roomCode" | "peer">,
   members: readonly Pick<ChatRoomMemberDto, "userId" | "userName">[] | undefined,
   myUserId: string | null,
   fallback: (code: string) => string,
 ): string {
   if (room.roomType !== "direct") return room.name ?? fallback(room.roomCode);
-  const peer = members?.find((m) => m.userId !== myUserId);
-  return peer?.userName ?? room.name ?? fallback(room.roomCode);
+  const fromMembers = members?.find((m) => m.userId !== myUserId)?.userName;
+  return fromMembers ?? room.peer?.name ?? room.name ?? fallback(room.roomCode);
 }
 
 /** Chữ cái đầu cho avatar chữ. Chuỗi rỗng/khoảng trắng ⇒ "?" (không trả chuỗi rỗng làm ô trống). */
@@ -52,6 +64,29 @@ export function formatDateTimeShort(iso: string): string {
   const day = String(d.getDate()).padStart(2, "0");
   const month = String(d.getMonth() + 1).padStart(2, "0");
   return `${day}/${month} ${formatClock(iso)}`;
+}
+
+/**
+ * S17-CHAT-UX2-FE-1 — thời gian TƯƠNG ĐỐI cho dòng phòng ở danh sách («2 ngày», «1 tuần»).
+ *
+ * Dùng ở cột trái thay `formatClock`: danh sách sắp theo hoạt động và trải dài hàng tháng, nên `HH:mm`
+ * làm hai dòng cách nhau ba tháng trông y hệt nhau (cùng lớp lỗi mà `formatDateTimeShort` được dựng ra
+ * để chữa ở tab Tệp).
+ *
+ * `Strict` chứ không phải bản thường: bản thường cho ra «khoảng 1 tháng», «hơn 2 năm» — dài gấp đôi và
+ * tràn khỏi cột 320px. Không có hậu tố «trước» vì cột hẹp; ngữ cảnh đã rõ đó là mốc quá khứ.
+ *
+ * ⚠️ Tính trên đồng hồ MÁY KHÁCH — chấp nhận được vì đây là giá trị TƯƠNG ĐỐI, không phải ngày công của
+ * công ty (memory `fe-has-no-company-timezone`). Mốc không hợp lệ ⇒ chuỗi rỗng, không phải "Invalid Date".
+ */
+export function formatRelativeTime(iso: string, now: Date = new Date()): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  // `formatDistanceStrict(d, now)` chứ KHÔNG `formatDistanceToNowStrict(d)`: bản `ToNow` đọc thẳng
+  // `Date.now()` bên trong và bỏ qua mọi tham số — một `now` tiêm vào mà không có tác dụng là chữ ký
+  // nói dối, và ca test sẽ phải dịch đồng hồ thật (thứ làm vỡ socket.io ở specs khác của module này —
+  // memory `fake-timers-break-socketio-client-emit`). Hai hàm cho ra CÙNG chuỗi khi `now` là hiện tại.
+  return formatDistanceStrict(d, now, { locale: vi, addSuffix: false });
 }
 
 /** Khoá nhóm-theo-ngày (`YYYY-MM-DD` giờ ĐỊA PHƯƠNG). Không dùng `toISOString` — nó đổi sang UTC ⇒ tin
