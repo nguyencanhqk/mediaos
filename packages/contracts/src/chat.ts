@@ -428,6 +428,66 @@ export const chatRoomFileSchema = chatAttachmentSchema.extend({
 });
 export type ChatRoomFileDto = z.infer<typeof chatRoomFileSchema>;
 
+// ─── S17-CHAT-UX2-BE-2 — CHAT-API-031 «Liên kết đã chia sẻ» (SPEC-15 §15b · API-13 §5.1d) ─────
+
+/**
+ * Một liên kết trích được từ `chat_messages.body` (CHAT-FUNC-025).
+ *
+ * ⚠️ **KHÔNG dedupe URL ở server** (API-13 §5.1d bảng): cùng một địa chỉ gửi ba lần là ba dòng, vì
+ * dòng ở đây là "một lần ai đó chia sẻ", không phải "một địa chỉ". Gộp ở server làm mất người gửi và
+ * mốc thời gian của hai lần còn lại — thông tin không dựng lại được từ phía client.
+ *
+ * `linkIndex` là thứ tự liên kết BÊN TRONG một tin (0-based). Nó ở DTO vì hai lý do, cả hai đều là
+ * ràng buộc thật chứ không phải trang trí:
+ *   • nó là vế TIE-BREAK của con trỏ keyset — một tin nhiều link có thể bị cắt làm đôi giữa hai trang;
+ *   • FE cần khoá duy nhất `${messageId}:${linkIndex}`; hai anh em cùng `key` là rò node DOM
+ *     (memory `duplicate-sibling-key-leaks-dom-node`).
+ */
+export const chatRoomLinkSchema = z.object({
+  messageId: z.string().uuid(),
+  /** `room_seq` của tin chứa liên kết — vế THỨ NHẤT của khoá keyset (DESC). */
+  roomSeq: z.number().int().positive(),
+  /** Thứ tự liên kết trong tin, 0-based — vế THỨ HAI của khoá keyset (ASC). */
+  linkIndex: z.number().int().nonnegative(),
+  url: z.string(),
+  senderId: z.string().uuid(),
+  senderName: z.string().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type ChatRoomLinkDto = z.infer<typeof chatRoomLinkSchema>;
+
+/**
+ * `GET /chat/rooms/:id/links?cursor=&limit=` — con trỏ OPAQUE **mang vân phòng**, cấm `offset`.
+ *
+ * ⚠️ Con trỏ KHÔNG phải `beforeSeq` như `CHAT-API-017`: `room_seq` là con trỏ theo TIN, mà một tin có
+ * thể chứa nhiều liên kết hơn cả `limit`. Chi tiết ngữ nghĩa: `chat-links-cursor.ts` ở BE.
+ *
+ * `z.coerce` idempotent khi `ZodValidationPipe` chạy 2 lần (memory `zod-query-param-double-pipe-idempotent`).
+ */
+export const listChatRoomLinksQuerySchema = z.object({
+  cursor: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(30),
+});
+export type ListChatRoomLinksQuery = z.infer<typeof listChatRoomLinksQuerySchema>;
+
+/**
+ * Phản hồi CHAT-API-031 — **OBJECT keyset**, KHÔNG phải mảng trần (khác `listRoomFiles` ngay bên trên).
+ *
+ * ⚠️ `truncated` là hợp đồng của API-13 §5.1d(6), không phải trường thông tin thêm: server quét tối đa
+ * một số tin cố định mỗi request, và `truncated: true` nói **"dừng vì chạm trần quét"**, phân biệt với
+ * "hết dữ liệu thật". Thiếu cờ này thì một phòng có 200 tin không-link ở đầu sẽ trả trang rỗng và client
+ * đọc thành "phòng không có liên kết nào" — đúng lỗi đã bịt ở `018a` (`chatOversightRoomListSchema`).
+ *
+ * `nextCursor` **vẫn khác null khi `truncated: true`** (khác `018a`, vốn không phân trang): chạm trần là
+ * lời mời lật tiếp, không phải điểm dừng.
+ */
+export const chatRoomLinksResponseSchema = z.object({
+  data: z.array(chatRoomLinkSchema),
+  nextCursor: z.string().nullable(),
+  truncated: z.boolean(),
+});
+export type ChatRoomLinksResponseDto = z.infer<typeof chatRoomLinksResponseSchema>;
+
 /** GET /chat/unread-count (CHAT-API-016) — badge header. Tổng PHÉP TRỪ, không `COUNT(*)`. */
 export const chatUnreadCountSchema = z.object({
   total: z.number().int().nonnegative(),

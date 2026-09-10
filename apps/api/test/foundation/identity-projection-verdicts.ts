@@ -192,6 +192,13 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
     signedBy: WO,
   },
   {
+    point: "chat/chat-messages.repository.ts#listRoomLinkCandidates:users.fullName",
+    basis: "membership",
+    reason:
+      "S17-CHAT-UX2-BE-2 · CHAT-API-031 — chat-links.service.ts:77 gọi `assertMember` TRƯỚC khi đọc (404 chung, thông điệp HẰNG); người ngoài phòng không chạm được hàng nào. Cùng căn cứ với listRoomFiles của CHAT-API-017, và oversight KHÔNG được miễn vế này (API-13 §5.1d(4)).",
+    signedBy: "S17-CHAT-UX2-BE-2",
+  },
+  {
     point: "chat/chat-messages.repository.ts#MESSAGE_COLUMNS:users.fullName",
     basis: "membership",
     reason:
@@ -696,7 +703,14 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   // cả ba nằm trên đường đọc phòng ĐÃ bound membership (câu list ghim `chat_room_members.user_id`
   // = actor; `findRoomCreatorName` đứng sau `assertMember` ở chat-rooms.service.ts:175) — KHÔNG mở
   // bề mặt đọc nào ngoài phòng của chính actor.
-  membership: 11,
+  // 11 → 12 (S17-CHAT-UX2-BE-2, 10/09/2026): `chat-messages.repository.ts#listRoomLinkCandidates:
+  // users.fullName` — tên người chia sẻ trên bảng «Liên kết» (CHAT-API-031). Nới CÓ CHỦ ĐÍCH: điểm
+  // này nằm trên đường đọc ĐÃ bound membership TRƯỚC mọi truy vấn (`chat-links.service.ts` gọi
+  // `assertMember` rồi mới đọc; đo bằng ca "assertMember ném 404 ⇒ không truy vấn nào chạy" ở
+  // `chat-links.service.spec.ts`), CÙNG căn cứ với `listRoomFiles` của CHAT-API-017. KHÔNG mở bề mặt
+  // đọc nào ngoài phòng của chính actor — oversight cũng KHÔNG được miễn `assertMember` (API-13
+  // §5.1d(4), có ca int-spec 404 cho actor mang `view:chat-oversight`).
+  membership: 12,
   "self-bound-row": 4, // S11-ASSET-BE-1: +1 (findUserDisplayNameTx — tên actor cho payload NOTI, thay raw SQL để không nới vùng mù rawSqlIdentity)
   // 14 → 15 (S11-ROOM-BE-1, 30/08/2026): `rooms/room-people.repository.ts#namesByUserIdsTx` — điểm chiếu DUY NHẤT của
   // module ROOM; cặp gate route ghi (`book`/`cancel`) ≠ cặp bound (`view`, resolveOrNull ⇒ fail-closed `users.id =

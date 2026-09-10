@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, gt, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { chatMessages, chatRoomMembers, chatRooms } from "../db/schema/communication";
@@ -22,6 +22,20 @@ export interface ChatMessageRow {
   recalledAt: Date | null;
   attachmentCount: number;
   roomSeq: number;
+  createdAt: Date;
+}
+
+/**
+ * S17-CHAT-UX2-BE-2 — hàng thô của trang quét `CHAT-API-031`. HẸP HƠN `ChatMessageRow` có chủ đích:
+ * bảng «Liên kết» chỉ cần đủ để dựng một dòng + con trỏ, và mỗi cột thừa ở đây là một cột `body`-lân-cận
+ * đi ra khỏi repo cho một đường đọc không cần nó.
+ */
+export interface ChatLinkCandidateRow {
+  id: string;
+  roomSeq: number;
+  body: string;
+  senderId: string;
+  senderName: string | null;
   createdAt: Date;
 }
 
@@ -257,6 +271,78 @@ export class ChatMessagesRepository {
       )
       .orderBy(desc(chatMessages.pinnedAt));
     return rows.map((r) => ({ ...r, messageType: r.messageType as ChatMessageType }));
+  }
+
+  /**
+   * S17-CHAT-UX2-BE-2 · CHAT-API-031 — TRANG QUÉT của bảng «Liên kết đã chia sẻ».
+   *
+   * Trả về **tin thô**, không phải liên kết: việc trích `https?://` làm ở JS (`chat-link-extract.ts`)
+   * để BE và FE dùng CHUNG một luật. Xem docblock file đó về việc vì sao không dùng `regexp_matches`.
+   *
+   * ⚠️ **KHÔNG lọc `body LIKE '%http%'` ở đây.** Nghe như một tối ưu miễn phí, nhưng nó xoá đúng bất
+   * biến mà API-13 §5.1d(6) dựng ra: hợp đồng đòi "50 tin liền KHÔNG có liên kết ⇒ `truncated: true` +
+   * `nextCursor` khác null". Có prefilter thì ca đó ra 0 hàng và service đọc thành **"hết dữ liệu"** —
+   * phòng có 200 tin không-link ở đầu sẽ báo "không có liên kết nào" trong khi phía sau còn cả kho.
+   *
+   * Mang vị từ §13.4 (`visibleFromSeqScalar`) như mọi đường đọc `chat_messages` khác — thiếu nó thì đây
+   * là cửa hậu đọc phần lịch sử mà `/messages`, `/pinned`, `/files` đã chặn: `body` đi ra nguyên văn
+   * dưới dạng URL. `chat-visibility.spec.ts` census file này nên quên là ĐỎ, không phải là im lặng.
+   *
+   * Ba vế lọc còn lại đều thuộc hợp đồng, không phải sở thích:
+   *   • `recalled_at IS NULL` — SPEC-15 §13.6, tin thu hồi biến mất khỏi MỌI đường đọc;
+   *   • `message_type <> 'system'` — tin hệ thống là câu do server sinh, không phải lời ai chia sẻ;
+   *   • `body <> ''` — tin chỉ-có-tệp (`body` NOT NULL nên chuỗi rỗng là giá trị hợp lệ) không thể chứa
+   *     liên kết; loại ở SQL để không tiêu ngân sách quét 50 tin vào những hàng chắc chắn ra 0 link.
+   *
+   * @param opts.beforeSeqExclusive `room_seq < x` — con trỏ đã tiêu thụ TRỌN tin `x` (`linkIndex = -1`).
+   * @param opts.beforeSeqInclusive `room_seq <= x` — con trỏ dừng GIỮA tin `x`; service bỏ qua phần đã trả.
+   * @param opts.limit PHẢI là `trần quét + 1` — hàng dư là bằng chứng "còn tin phía sau", nó KHÔNG được
+   *   đưa vào phần trích (nếu không, `truncated` mất nghĩa và trang cuối bị đếm nhầm thành chạm trần).
+   */
+  async listRoomLinkCandidates(
+    tx: TenantTx,
+    companyId: string,
+    roomId: string,
+    opts: {
+      beforeSeqExclusive?: number;
+      beforeSeqInclusive?: number;
+      limit: number;
+      visibleFromSeq: number | null;
+    },
+  ): Promise<ChatLinkCandidateRow[]> {
+    const conds: SQL[] = [
+      eq(chatMessages.companyId, companyId),
+      eq(chatMessages.roomId, roomId),
+      isNull(chatMessages.recalledAt),
+      ne(chatMessages.messageType, "system"),
+      ne(chatMessages.body, ""),
+    ];
+    const visible = visibleFromSeqScalar(opts.visibleFromSeq);
+    if (visible) conds.push(visible);
+    if (opts.beforeSeqExclusive !== undefined) {
+      conds.push(lt(chatMessages.roomSeq, opts.beforeSeqExclusive));
+    }
+    if (opts.beforeSeqInclusive !== undefined) {
+      conds.push(lte(chatMessages.roomSeq, opts.beforeSeqInclusive));
+    }
+
+    return tx
+      .select({
+        id: chatMessages.id,
+        roomSeq: chatMessages.roomSeq,
+        body: chatMessages.body,
+        senderId: chatMessages.senderId,
+        senderName: users.fullName,
+        createdAt: chatMessages.createdAt,
+      })
+      .from(chatMessages)
+      .leftJoin(
+        users,
+        and(eq(users.id, chatMessages.senderId), eq(users.companyId, chatMessages.companyId)),
+      )
+      .where(and(...conds))
+      .orderBy(desc(chatMessages.roomSeq))
+      .limit(opts.limit);
   }
 
   /**

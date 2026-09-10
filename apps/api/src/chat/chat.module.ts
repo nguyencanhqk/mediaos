@@ -12,6 +12,7 @@ import { ChatAccessService } from "./chat-access.service";
 import { ChatReactionsRepository } from "./chat-reactions.repository";
 import { ChatReactionsService } from "./chat-reactions.service";
 import { ChatRoomPrefsService } from "./chat-room-prefs.service";
+import { ChatLinksService } from "./chat-links.service";
 import { ChatRoomsService } from "./chat-rooms.service";
 import { ChatMembersService } from "./chat-members.service";
 // S8-CHAT-UX-RT-1 (additive): "đang gõ" — REST-ping → fan-out WS, 0 ghi DB, 0 audit (CHAT-DEC-017).
@@ -175,6 +176,11 @@ import { ChatOversightRepository } from "./chat-oversight.repository";
     // + `ChatRoomsRepository` (đã ở trên). CỐ Ý KHÔNG export: ba tuỳ chọn này ghi lên hàng membership
     // CỦA CHÍNH actor — module khác gọi được là mở đường đặt tuỳ chọn hộ người khác.
     ChatRoomPrefsService,
+    // ── S17-CHAT-UX2-BE-2 ── CHAT-API-031 «Liên kết đã chia sẻ». Chỉ cần `DatabaseService` +
+    // `ChatAccessService` + `ChatMessagesRepository` (đã ở trên). CỐ Ý KHÔNG export: lối vào duy nhất là
+    // route đã gate `view:chat-room`, và service này đọc `body` tin — export ra là mở một đường đọc nội
+    // dung tin cho module khác, bỏ qua `assertMember` mà nó tự gọi.
+    ChatLinksService,
     // ── S8-CHAT-UX-BE-3 ── CHAT-API-022a/022b. `ChatReactionsService` CÓ export: nó là phụ thuộc của
     // `ChatAttachmentPresignService.decorate` (cùng module) — nhưng đường vào từ ngoài vẫn chỉ có 2
     // route đã gate `send:chat-message`.
