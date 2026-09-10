@@ -41,6 +41,9 @@ import {
   type CreateChatRoomRequest,
   type ListChatMessagesQuery,
   type ListChatRoomFilesQuery,
+  type ListChatRoomLinksQuery,
+  type ChatRoomLinksResponseDto,
+  chatRoomLinksResponseSchema,
   type ListChatRoomsQuery,
   type OpenDirectRoomRequest,
   type SendMessageRequest,
@@ -362,6 +365,30 @@ export const chatApi = {
     apiFetch(
       `/chat/rooms/${roomId}/files${buildQueryString(query ?? {})}`,
       z.array(chatRoomFileSchema),
+    ),
+
+  /**
+   * GET /chat/rooms/:id/links (CHAT-API-031) — liên kết đã chia sẻ trong phòng.
+   *
+   * ⚠️ **OBJECT keyset** `{data, nextCursor, truncated}`, KHÔNG phải mảng trần như `listRoomFiles` ngay
+   * bên trên — đừng chép nhầm schema: truyền `z.array(...)` vào đây là `ZodError` runtime DÙ HTTP 200
+   * (memory `apifetch-drops-pagination-bare-array`).
+   *
+   * ⚠️ **`nextCursor: null` mới là "hết", KHÔNG phải `data.length === 0`.** Server quét tối đa một số
+   * TIN cố định mỗi request, nên một trang RỖNG là chuyện bình thường (50 tin liền không ai gửi link).
+   * Khi đó `truncated: true` và `nextCursor` vẫn khác null — client phải lật tiếp. Đọc trang rỗng thành
+   * "phòng không có liên kết nào" là hiểu sai hợp đồng (API-13 §5.1d(6)).
+   *
+   * ⚠️ Con trỏ **mang vân phòng**: dùng lại con trỏ của phòng khác ⇒ 400 `CHAT-ERR-016`, không phải một
+   * trang cắt sai lặng lẽ. Vì vậy khi đổi phòng, BỎ con trỏ đi — đừng mang theo.
+   */
+  listRoomLinks: (
+    roomId: string,
+    query?: Partial<ListChatRoomLinksQuery>,
+  ): Promise<ChatRoomLinksResponseDto> =>
+    apiFetch(
+      `/chat/rooms/${roomId}/links${buildQueryString(query ?? {})}`,
+      chatRoomLinksResponseSchema,
     ),
 };
 

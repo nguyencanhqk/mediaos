@@ -307,6 +307,15 @@ Thiếu bước này → `route-guard-coverage.e2e-spec.ts` đỏ, hoặc **tệ
 - **Vẫn trả `nextCursor`** khi `truncated: true` — khác `018a` (`018a` không phân trang); `CHAT-API-031` **có** phân trang nên phải cho lật tiếp.
 - testTask bắt buộc: phòng gieo N tin **không có link** vượt trần quét 50 ⇒ phản hồi `truncated: true` **và** `nextCursor` khác null; lật tiếp con trỏ đó ra được trang sau, không treo, không đọc nhầm thành "hết dữ liệu". Ca âm: phòng ít tin, quét hết ⇒ `truncated: false`.
 
+> **Đo lại 10/09/2026 khi thi công (`S17-CHAT-UX2-BE-2`) — hai trần TÁCH BẠCH.** "Trần 50" ở bảng §5.1d là trần
+> **KẾT QUẢ** (`limit` ≤ 50 liên kết/trang); trần **QUÉT** là 50 **TIN**/request (`ChatLinksService.SCAN_CAP`).
+> Chúng trùng con số nhưng khác đơn vị, và chính vế thứ hai mới sinh ra trạng thái `truncated`. Hệ quả thi công:
+> truy vấn **KHÔNG được prefilter `body LIKE '%http%'`** — có prefilter thì ca "50 tin liền không có link" ra 0 hàng
+> và đọc thành "hết dữ liệu", tức xoá đúng bất biến mục (6) dựng ra.
+>
+> Con trỏ mang `linkIndex = -1` nghĩa là "đã tiêu thụ TRỌN tin `roomSeq`" — vế đó là thứ làm ca chạm-trần lật tiếp
+> được (khi không có liên kết nào để trỏ vào). Thiếu nó, client lật lại đúng 50 tin ấy mãi mãi.
+
 #### (7) Trạng thái thi công §5.1d (cập nhật 09/09/2026 — `S17-CHAT-UX2-BE-1`)
 
 | Mục §5.1d | Trạng thái | Nơi kiểm |
@@ -316,7 +325,7 @@ Thiếu bước này → `route-guard-coverage.e2e-spec.ts` đỏ, hoặc **tệ
 | (3) §13.4 cho đường đọc LATERAL | ✅ **đã ship** — `visibleFromSeqColumn()` + census per-method mới cho `chat-rooms.repository.ts` | `chat-visibility.spec.ts` (đã đo ĐỎ khi gỡ helper) |
 | (4) oversight không nhận 2 khoá mới | ✅ **đã ship** — schema oversight giữ nguyên, thêm ratchet | `packages/contracts/src/chat.spec.ts` |
 | `CHAT-API-017?kind=image\|file` | ✅ **đã ship** — vị từ SQL dùng CHUNG hằng với `isImage` | `chat-file.constants.spec.ts` · int-spec ca 15–19 |
-| `CHAT-API-031` `/links` + (5) census + (6) trần | ⏳ **chưa** — thuộc `S17-CHAT-UX2-BE-2` | — |
+| `CHAT-API-031` `/links` + (5) census + (6) trần | ✅ **đã ship** (`S17-CHAT-UX2-BE-2`, 10/09/2026) — trích ở JS (`chat-link-extract.ts`, cùng luật với `splitTextWithLinks` của FE, có ca đối chiếu đọc file); keyset `(room_seq DESC, linkIndex ASC)` con trỏ mang **vân phòng**; trần quét **50 TIN**/request tách khỏi trần `limit` 50 **liên kết** ⇒ `truncated` | `chat-link-extract.spec.ts` · `chat-links-cursor.spec.ts` · `chat-links.service.spec.ts` · `chat-s17-be2-links.int-spec.ts` (21 ca) · census route regen |
 
 ⚠️ Hai lệch đo được lúc thi công, ghi để không ai suy diễn nhầm:
 
