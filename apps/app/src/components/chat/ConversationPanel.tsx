@@ -3,9 +3,9 @@
  *
  * Nơi ghép mọi mảnh: `useChatConversation` lo con trỏ/IO, `MessageList` lo cuộn/DOM, `MessageComposer`
  * lo nháp. Component này chỉ nối chúng và giữ ba trạng thái ĐIỀU PHỐI: tin đang trả lời, hộp xác nhận
- * thu hồi, và bản đồ `clientMessageId → fileIds` để "Gửi lại" không đánh rơi tệp.
+ * thu hồi, và bản đồ `clientMessageId → {fileIds, mentions}` để "Gửi lại" không đánh rơi tệp/mention.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { History } from "lucide-react";
@@ -23,6 +23,7 @@ import { MessageList } from "./MessageList";
 import { TypingIndicator } from "./TypingIndicator";
 import { roomDisplayName } from "./chat-format";
 import { useChatConversation } from "./use-chat-conversation";
+import { rosterToMentionCandidates } from "./use-mention-autocomplete";
 import { useRoomRoster } from "./use-room-roster";
 import { CallButtons } from "./call/CallButtons";
 import { useOptionalCallContext } from "./call/CallProvider";
@@ -87,6 +88,14 @@ export function ConversationPanel({
    * Đây là nguồn KHÁC `members` (prop, từ `getRoom`): roster gồm cả người ĐÃ RỜI. Xem `use-room-roster.ts`.
    */
   const roster = useRoomRoster(room.id);
+  /**
+   * S17-CHAT-UX2-FE-3 — ứng viên `@mention`. Lọc `leftAt` ở ĐÂY (xem `rosterToMentionCandidates`):
+   * roster cố ý giữ người đã rời để vẽ tin cũ, nhưng gợi ý họ là hứa một mention mà server bỏ im lặng.
+   */
+  const mentionCandidates = useMemo(
+    () => rosterToMentionCandidates(roster.members),
+    [roster.members],
+  );
   const patchMessageReactions = useChatStore((s) => s.patchMessageReactions);
 
   /** S7-CALL-FE-1 — `null` khi cây không có `<CallProvider>` (test lẻ). Xem chỗ dùng ở thanh đầu phòng. */
@@ -109,13 +118,16 @@ export function ConversationPanel({
   const [actionError, setActionError] = useState<string | null>(null);
 
   /**
-   * `clientMessageId → fileIds` của những lần gửi ĐANG chờ.
+   * `clientMessageId → phần payload KHÔNG nằm trong `PendingChatMessage`` của những lần gửi ĐANG chờ.
    *
    * `PendingChatMessage` (FE-1) chỉ mang `body` — cố ý, vì nó là hình dạng dùng chung với panel nổi.
    * Không giữ bản đồ này thì bấm "Gửi lại" một tin có 3 tệp sẽ gửi lại **mỗi phần chữ**, im lặng đánh
    * rơi tệp: người dùng thấy tin gửi thành công và tin đó thiếu đúng thứ họ muốn gửi.
+   *
+   * ⚠️ S17: `mentions` vào CHÍNH bản đồ này, không phải một ref thứ hai. Hai sổ song song cho cùng một
+   * vòng đời (`submit` ghi · `resend` đọc · `discard` xoá) là hai chỗ để quên xoá một chỗ.
    */
-  const pendingFileIdsRef = useRef<Record<string, string[]>>({});
+  const pendingSendRef = useRef<Record<string, { fileIds: string[]; mentions: string[] }>>({});
 
   const pendingForRoom: PendingChatMessage[] = Object.values(pendingMap).filter(
     (p) => p.roomId === room.id,
@@ -127,16 +139,20 @@ export function ConversationPanel({
       // `roomSeq` lớn hơn cửa sổ nên chốt chèn sẽ chặn nó: người dùng bấm Gửi, thấy bong bóng "đang
       // gửi" rồi… không thấy tin đâu. Không có thông báo lỗi nào vì không có lỗi nào cả.
       if (context !== undefined) leaveContext();
-      if (payload.fileIds.length > 0) {
-        pendingFileIdsRef.current[payload.clientMessageId] = payload.fileIds;
+      if (payload.fileIds.length > 0 || payload.mentions.length > 0) {
+        pendingSendRef.current[payload.clientMessageId] = {
+          fileIds: payload.fileIds,
+          mentions: payload.mentions,
+        };
       }
       const ok = await conversation.sendMessage({
         clientMessageId: payload.clientMessageId,
         body: payload.body,
         fileIds: payload.fileIds,
+        mentions: payload.mentions,
         ...(payload.replyToMessageId ? { replyToMessageId: payload.replyToMessageId } : {}),
       });
-      if (ok) delete pendingFileIdsRef.current[payload.clientMessageId];
+      if (ok) delete pendingSendRef.current[payload.clientMessageId];
       return ok;
     },
     [context, conversation, leaveContext],
@@ -146,10 +162,12 @@ export function ConversationPanel({
     (p: PendingChatMessage) => {
       // ⚠️ TÁI DÙNG `p.clientMessageId` — KHÔNG sinh khoá mới. Khoá mới nghĩa là "tin mới" với server,
       // và nếu lần gửi trước thật ra đã tới nơi thì người dùng nhận HAI tin giống hệt.
+      const kept = pendingSendRef.current[p.clientMessageId];
       void conversation.sendMessage({
         clientMessageId: p.clientMessageId,
         body: p.body,
-        fileIds: pendingFileIdsRef.current[p.clientMessageId] ?? [],
+        fileIds: kept?.fileIds ?? [],
+        mentions: kept?.mentions ?? [],
       });
     },
     [conversation],
@@ -157,7 +175,7 @@ export function ConversationPanel({
 
   const discard = useCallback(
     (p: PendingChatMessage) => {
-      delete pendingFileIdsRef.current[p.clientMessageId];
+      delete pendingSendRef.current[p.clientMessageId];
       discardPendingSend(p.clientMessageId);
     },
     [discardPendingSend],
@@ -328,7 +346,9 @@ export function ConversationPanel({
           title={title}
           memberCount={members.length}
           peerOnline={directPeerId === null ? null : isPeerOnline}
-          peerAvatarUrl={directPeerId === null ? null : (roster.avatarByUser.get(directPeerId) ?? null)}
+          peerAvatarUrl={
+            directPeerId === null ? null : (roster.avatarByUser.get(directPeerId) ?? null)
+          }
           isInfoOpen={isInfoOpen}
           onToggleInfo={onToggleInfo}
           onSearchInRoom={onSearchInRoom}
@@ -402,10 +422,7 @@ export function ConversationPanel({
          * người dùng vừa mở đúng phòng họ muốn nhắn. Hai nút thuộc về khung trống của TRANG
          * (`ChatPage`, chưa chọn phòng nào).
          */
-        <ChatEmptyHero
-          title={t("conversation.empty")}
-          description={t("conversation.emptyHint")}
-        />
+        <ChatEmptyHero title={t("conversation.empty")} description={t("conversation.emptyHint")} />
       ) : (
         <MessageList
           room={room}
@@ -446,6 +463,7 @@ export function ConversationPanel({
         roomId={room.id}
         isArchived={room.isArchived ?? false}
         replyTo={replyTo}
+        mentionCandidates={mentionCandidates}
         onCancelReply={() => setReplyTo(null)}
         onSubmit={submit}
       />

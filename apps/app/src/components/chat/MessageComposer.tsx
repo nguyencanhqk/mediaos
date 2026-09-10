@@ -1,5 +1,5 @@
 /**
- * S7-CHAT-FE-2 — ô soạn tin (SPEC-15 §14: đang gửi / gửi lỗi / phòng lưu trữ / không có quyền).
+ * S7-CHAT-FE-2 → **S17-CHAT-UX2-FE-3** — ô soạn tin (SPEC-15 §14 · §22c CHAT-DEC-027).
  *
  * HAI BẤT BIẾN của file này:
  *
@@ -7,27 +7,53 @@
  *    nguyên qua mọi lần bấm "Gửi lại". Sinh mới trong hàm gửi = khoá ngẫu nhiên mỗi lần = **không chống
  *    trùng gì cả** (memory `idempotency-key-must-be-content-derived`).
  * 2. Gửi lỗi **KHÔNG được xoá chữ người dùng đã gõ** (§14). Nháp chỉ bị dọn khi server đã nhận.
+ *
+ * S17 thêm bốn thứ và KHÔNG được phá hai bất biến trên: gợi ý `@mention`, bảng emoji tĩnh, dán/kéo-thả
+ * tệp, và thumbnail xem trước. Ba luật đi kèm:
+ *
+ * 3. Ô soạn có **ĐÚNG MỘT** `role="textbox"`. Gợi ý mention bám chính `<textarea>` (trigger inline `@`)
+ *    chứ không phải một ô tìm riêng — thêm input thứ hai làm đỏ hàng loạt spec đang dùng
+ *    `getByRole("textbox")`, và tệ hơn là cắt mạch gõ của người dùng.
+ * 4. `mentions[]` gửi lên **suy từ chính chuỗi nháp** (`collectMentionIds`), không phải từ danh sách
+ *    tích luỹ theo lượt chọn — xem docblock `use-mention-autocomplete.ts`.
+ * 5. Mọi blob URL xem trước sinh ở ĐÂY thì cũng **thu hồi ở đây** (gỡ tệp · gửi xong · tháo cây).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Paperclip, SendHorizontal, X } from "lucide-react";
-import { chatApi, useCan } from "@mediaos/web-core";
+import { SendHorizontal } from "lucide-react";
+import { useCan } from "@mediaos/web-core";
 import { Button, cn } from "@mediaos/ui";
 import type { StoredChatMessage } from "@/stores/chat.store";
 import { createClientMessageId } from "@/stores/chat.store";
 import {
   CHAT_PAIRS,
   MAX_ATTACHMENTS_PER_MESSAGE,
+  MAX_MENTIONS_PER_MESSAGE,
   MAX_MESSAGE_LENGTH,
-  TYPING_PING_THROTTLE_MS,
 } from "@/routes/chat/constants";
-import { formatFileSize } from "./chat-format";
-import { uploadChatAttachment, type ChatUploadResult } from "./chat-upload";
+import { uploadChatAttachment } from "./chat-upload";
+import {
+  applyMention,
+  collectMentionIds,
+  mentionLabel,
+  useMentionAutocomplete,
+  type MentionCandidate,
+  type MentionEntry,
+} from "./use-mention-autocomplete";
+import { AttachmentPreviewList, type PendingAttachment } from "./composer/AttachmentPreviewList";
+import { ComposerActions } from "./composer/ComposerActions";
+import { ComposerNotices } from "./composer/ComposerNotices";
+import { MentionPopover, mentionOptionId } from "./composer/MentionPopover";
+import { useAttachmentPreviews } from "./composer/use-attachment-previews";
+import { useFileDrop } from "./composer/use-file-drop";
+import { useTypingPing } from "./composer/use-typing-ping";
 
 export interface ComposerSubmitPayload {
   clientMessageId: string;
   body: string;
   fileIds: string[];
+  /** Đã lọc theo nháp hiện tại; mảng RỖNG khi không nhắc ai (không phải `undefined`). */
+  mentions: string[];
   replyToMessageId?: string;
 }
 
@@ -37,15 +63,23 @@ interface MessageComposerProps {
   isArchived: boolean;
   replyTo: StoredChatMessage | null;
   onCancelReply: () => void;
+  /**
+   * S17 — ứng viên gợi ý `@mention`, ĐÃ lọc người còn trong phòng (`rosterToMentionCandidates`).
+   * Rỗng ⇒ tính năng tự tắt, không có nhánh riêng nào.
+   */
+  mentionCandidates?: readonly MentionCandidate[];
   /** Trả `true` khi server đã nhận; `false` ⇒ GIỮ NGUYÊN nháp để bấm "Gửi lại". */
   onSubmit: (payload: ComposerSubmitPayload) => Promise<boolean>;
 }
+
+const MENTION_LISTBOX_ID = "chat-mention-listbox";
 
 export function MessageComposer({
   roomId,
   isArchived,
   replyTo,
   onCancelReply,
+  mentionCandidates = [],
   onSubmit,
 }: MessageComposerProps): React.ReactElement {
   const { t } = useTranslation("chat");
@@ -60,11 +94,11 @@ export function MessageComposer({
   const canSend = useCan(CHAT_PAIRS.SEND_MESSAGE.action, CHAT_PAIRS.SEND_MESSAGE.resourceType);
 
   const [draft, setDraft] = useState("");
-  const [attachments, setAttachments] = useState<ChatUploadResult[]>([]);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSending, setSending] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   /**
    * `handleSubmit` giữ một `await onSubmit(...)` bay ngang qua ranh giới mạng thật (POST gửi tin). Nếu ô
@@ -77,6 +111,9 @@ export function MessageComposer({
    * còn đó nên hậu quả chỉ là một no-op vô hình; ở test, `window` có thể đã bị môi trường jsdom dọn sạch
    * ngay sau khi file test kết thúc — và lúc đó `setSending(false)` ném `ReferenceError`. Chặn TẠI NGUỒN
    * bằng cờ mounted, đừng gọi `setState` cho một cây đã tháo, dù nguyên nhân "đã tháo" là gì.
+   *
+   * ⚠️ S17: cờ này ở LẠI đây khi tách sub-component. Đẩy nó xuống `composer/**` là mở lại đúng cái bẫy
+   * `ismounted-ref-stuck-false-under-strictmode` ở một file mà không ai nhớ vì sao nó tồn tại.
    */
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -102,40 +139,36 @@ export function MessageComposer({
     return clientMessageIdRef.current;
   };
 
+  /** Những lượt chèn mention đã xảy ra. Bảng tra `label → userId`, KHÔNG phải payload gửi đi. */
+  const mentionEntriesRef = useRef<MentionEntry[]>([]);
+  /** Vị trí con trỏ cần đặt lại SAU khi React vẽ xong `draft` mới (chèn mention / emoji). */
+  const pendingCaretRef = useRef<number | null>(null);
+
+  const mention = useMentionAutocomplete(mentionCandidates);
+  const previews = useAttachmentPreviews();
+
+  // Đặt lại con trỏ sau khi chèn. `pendingCaretRef` là cổng: mọi lần `draft` đổi vì GÕ đều bỏ qua đây.
+  useEffect(() => {
+    const caret = pendingCaretRef.current;
+    if (caret === null) return;
+    pendingCaretRef.current = null;
+    const el = textareaRef.current;
+    if (el === null) return;
+    el.focus();
+    el.setSelectionRange(caret, caret);
+  }, [draft]);
+
   const disabled = isArchived || !canSend;
   const hasContent = draft.trim().length > 0 || attachments.length > 0;
   const tooLong = draft.length > MAX_MESSAGE_LENGTH;
 
+  /** S8-CHAT-UX-FE-3 — ping "đang gõ", tiết lưu leading-edge. Xem `composer/use-typing-ping.ts`. */
+  const pingTyping = useTypingPing(roomId, disabled);
+
   /**
-   * S8-CHAT-UX-FE-3 — báo "đang gõ" (CHAT-API-023 · CHAT-DEC-017), **TIẾT LƯU leading-edge**.
-   *
-   * Mốc ping cuối ở `ref` chứ không ở state: nó không được kích hoạt render (một `setState` mỗi phím là
-   * đúng thứ làm ô soạn giật khi gõ nhanh), và nó phải sống qua mọi lần re-render.
-   *
-   * Leading-edge (bắn NGAY phím đầu rồi im 3 s) chứ không trailing: người nhận cần thấy chỉ báo ở đầu
-   * lượt gõ, không phải 3 giây sau khi người kia đã gõ xong nửa câu.
-   *
-   * ⚠️ Lỗi bị NUỐT CÓ CHỦ ĐÍCH — không toast, không banner. Đây là tín hiệu mỹ thuật: không ghi DB, không
-   * audit, mất một ping thì chỉ báo tắt sớm 5 s và tự lành. Chen một thông báo lỗi vào giữa lúc người
-   * dùng đang gõ là đổi một khiếm khuyết vô hình lấy một phiền toái nhìn thấy được.
+   * ĐƯỜNG DUY NHẤT đưa tệp vào nháp — nút 📎, dán, và kéo-thả đều đi qua đây. Nhân bản luật trần
+   * tệp / `ensureClientMessageId` / gộp lỗi ra ba chỗ là ba chỗ để chúng trôi khỏi nhau.
    */
-  const lastTypingPingRef = useRef(0);
-  const pingTyping = useCallback(() => {
-    if (disabled) return;
-    const now = Date.now();
-    if (now - lastTypingPingRef.current < TYPING_PING_THROTTLE_MS) return;
-    lastTypingPingRef.current = now;
-    void chatApi.pingTyping(roomId).catch(() => {
-      // Cố ý im lặng — xem docblock trên. Nhả mốc để lần gõ kế tiếp thử lại thay vì im 3 s vô ích.
-      lastTypingPingRef.current = 0;
-    });
-  }, [disabled, roomId]);
-
-  // Đổi phòng ⇒ quên mốc tiết lưu: mốc là của MỘT phòng, giữ lại thì phím đầu tiên ở phòng mới bị nuốt.
-  useEffect(() => {
-    lastTypingPingRef.current = 0;
-  }, [roomId]);
-
   const handlePickFiles = useCallback(
     async (files: FileList | null) => {
       if (!files || files.length === 0) return;
@@ -150,7 +183,14 @@ export function MessageComposer({
         setUploading(file.name);
         try {
           const uploaded = await uploadChatAttachment(file);
-          setAttachments((prev) => [...prev, uploaded]);
+          // Cây có thể ĐÃ THÁO trong lúc `await` bay: cleanup của `useAttachmentPreviews` khi đó đã
+          // `revokeAll()` xong ⇒ blob URL tạo sau mốc này KHÔNG AI thu hồi được nữa (rò tới khi tải
+          // lại trang). Dừng ngay — đừng tạo, đừng `setState`.
+          if (!isMountedRef.current) return;
+          // Xem trước dựng từ CHÍNH `File` người dùng chọn, không đợi URL ký của server: tệp chưa gắn
+          // vào tin nào nên chưa có `file_links` để ký, mà người dùng cần thấy ngay mình vừa dán gì.
+          const previewUrl = previews.create(uploaded.fileId, file, uploaded.isImage);
+          setAttachments((prev) => [...prev, { ...uploaded, previewUrl }]);
         } catch (err: unknown) {
           // Dừng ở tệp lỗi, GIỮ những tệp đã lên. Bỏ hết là bắt người dùng làm lại từ đầu vì một tệp hỏng.
           setError(t("composer.uploadFailed", { name: file.name }));
@@ -161,8 +201,54 @@ export function MessageComposer({
         }
       }
     },
-    [attachments.length, t],
+    [attachments.length, previews, t],
   );
+
+  // Bọc `useCallback`: `useFileDrop` memo theo tham chiếu này — truyền một arrow mới mỗi lần render
+  // thì memo bên trong không giữ được gì cả.
+  const acceptFiles = useCallback(
+    (files: FileList | null) => void handlePickFiles(files),
+    [handlePickFiles],
+  );
+  const fileDrop = useFileDrop(disabled, acceptFiles);
+
+  const removeAttachment = useCallback(
+    (fileId: string) => {
+      previews.revokeOne(fileId);
+      setAttachments((prev) => prev.filter((x) => x.fileId !== fileId));
+    },
+    [previews],
+  );
+
+  const pickMention = useCallback(
+    (candidate: MentionCandidate) => {
+      const trigger = mention.trigger;
+      if (trigger === null) return;
+      const next = applyMention(draft, trigger, candidate);
+      mentionEntriesRef.current.push({
+        userId: candidate.userId,
+        label: mentionLabel(candidate.name),
+      });
+      setDraft(next.text);
+      pendingCaretRef.current = next.caret;
+      // Đóng NGAY và KHÔNG `sync` lại: con trỏ vừa đứng sau `@Tên ` nên dò trigger sẽ mở lại đúng cái
+      // popover mình vừa chọn xong.
+      mention.close();
+      ensureClientMessageId();
+    },
+    [draft, mention],
+  );
+
+  const insertEmoji = useCallback((emoji: string) => {
+    const el = textareaRef.current;
+    setDraft((prev) => {
+      const start = el?.selectionStart ?? prev.length;
+      const end = el?.selectionEnd ?? start;
+      pendingCaretRef.current = start + emoji.length;
+      return `${prev.slice(0, start)}${emoji}${prev.slice(end)}`;
+    });
+    ensureClientMessageId();
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     if (disabled || !hasContent || tooLong || isSending) return;
@@ -173,19 +259,22 @@ export function MessageComposer({
       clientMessageId,
       body: draft,
       fileIds: attachments.map((a) => a.fileId),
+      mentions: collectMentionIds(draft, mentionEntriesRef.current, MAX_MENTIONS_PER_MESSAGE),
       ...(replyTo ? { replyToMessageId: replyTo.id } : {}),
     });
     if (!isMountedRef.current) return; // xem docblock của `isMountedRef` — cây đã tháo, dừng tại đây
     setSending(false);
 
     if (!ok) {
-      // §14: KHÔNG mất nội dung đang soạn. Nháp + tệp + khoá idempotency đều giữ nguyên; bong bóng
-      // "gửi lỗi" ở danh sách tin là nơi bấm "Gửi lại".
+      // §14: KHÔNG mất nội dung đang soạn. Nháp + tệp + khoá idempotency + bảng mention đều giữ nguyên;
+      // bong bóng "gửi lỗi" ở danh sách tin là nơi bấm "Gửi lại".
       setError(t("composer.sendFailed"));
       return;
     }
     setDraft("");
     setAttachments([]);
+    previews.revokeAll();
+    mentionEntriesRef.current = [];
     clientMessageIdRef.current = null; // tin kế tiếp là tin KHÁC ⇒ khoá mới
     onCancelReply();
   }, [
@@ -196,6 +285,7 @@ export function MessageComposer({
     isSending,
     onCancelReply,
     onSubmit,
+    previews,
     replyTo,
     t,
     tooLong,
@@ -208,113 +298,83 @@ export function MessageComposer({
       : t("composer.placeholder");
 
   return (
-    <div className="border-t border-border bg-background p-3" data-testid="chat-composer">
-      {isArchived && (
-        <p className="mb-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-          {t("composer.archivedNotice")}
-        </p>
-      )}
-
-      {replyTo && (
-        <div className="mb-2 flex items-start gap-2 rounded-md border-l-2 border-primary bg-muted/50 px-3 py-2 text-xs">
-          <div className="min-w-0 flex-1">
-            <p className="font-medium">
-              {t("message.replyingTo", { name: replyTo.senderName ?? "" })}
-            </p>
-            <p className="line-clamp-1 break-words text-muted-foreground">{replyTo.body ?? ""}</p>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 shrink-0 p-0"
-            aria-label={t("composer.cancelReply")}
-            onClick={onCancelReply}
-          >
-            <X className="h-3.5 w-3.5" aria-hidden="true" />
-          </Button>
-        </div>
-      )}
+    <div
+      className="relative border-t border-border bg-background p-3"
+      data-testid="chat-composer"
+      // Dán + kéo-thả — xem `use-file-drop.ts` (gắn ở ROOT, không ở textarea).
+      {...fileDrop}
+    >
+      <ComposerNotices
+        isArchived={isArchived}
+        replyTo={replyTo}
+        onCancelReply={onCancelReply}
+        uploading={uploading}
+        error={error}
+        tooLong={tooLong}
+      />
 
       {attachments.length > 0 && (
-        <ul className="mb-2 flex flex-wrap gap-2">
-          {attachments.map((a) => (
-            <li
-              key={a.fileId}
-              className="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs"
-            >
-              <span className="max-w-[12rem] truncate">{a.name}</span>
-              <span className="text-muted-foreground">{formatFileSize(a.sizeBytes)}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-5 w-5 p-0"
-                aria-label={t("composer.removeAttachment", { name: a.name })}
-                onClick={() => setAttachments((prev) => prev.filter((x) => x.fileId !== a.fileId))}
-              >
-                <X className="h-3 w-3" aria-hidden="true" />
-              </Button>
-            </li>
-          ))}
-        </ul>
+        <AttachmentPreviewList items={attachments} onRemove={removeAttachment} />
       )}
 
-      {uploading !== null && (
-        <p className="mb-2 text-xs text-muted-foreground">
-          {t("composer.uploading", { name: uploading, percent: 0 })}
-        </p>
-      )}
-      {error !== null && (
-        <p className="mb-2 text-xs text-destructive" role="alert">
-          {error}
-        </p>
-      )}
-      {tooLong && (
-        <p className="mb-2 text-xs text-destructive" role="alert">
-          {t("composer.tooLong", { count: MAX_MESSAGE_LENGTH })}
-        </p>
+      {mention.isOpen && (
+        <MentionPopover
+          suggestions={mention.suggestions}
+          activeIndex={mention.activeIndex}
+          listboxId={MENTION_LISTBOX_ID}
+          onPick={pickMention}
+        />
       )}
 
       <div className="flex items-end gap-2">
-        {/* Nút đính kèm CHỈ hiện khi thực sự upload được — hiện nút rồi để server 403 là "UI hứa,
-            backend không đọc". Từ `S7-CHAT-BE-8`, điều kiện đó CHÍNH LÀ `!disabled` (phòng chưa lưu trữ
-            + có `send:chat-message`), vì `/chat/files/*` gate đúng cặp ấy. */}
+        {/* Xem `composer/ComposerActions.tsx`: dải nút này CÓ CÙNG cổng với ô soạn (`!disabled`). */}
         {!disabled && (
-          <>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              data-testid="chat-attach-input"
-              onChange={(e) => {
-                void handlePickFiles(e.target.files);
-                e.target.value = ""; // chọn LẠI cùng tệp phải bắn `change` lần nữa
-              }}
-            />
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t("composer.attachAria")}
-              disabled={uploading !== null}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Paperclip className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          </>
+          <ComposerActions
+            uploading={uploading}
+            onFiles={acceptFiles}
+            onInsertEmoji={insertEmoji}
+          />
         )}
 
         <textarea
           key={roomId}
+          ref={textareaRef}
           value={draft}
+          /*
+           * a11y: tiêu điểm DOM Ở LẠI textarea, trình đọc màn hình theo `aria-activedescendant` để đọc
+           * dòng gợi ý đang trỏ.
+           *
+           * ⚠️ KHÔNG đổi sang `role="combobox"` và KHÔNG thêm `aria-expanded`:
+           *  - `combobox` **thay** vai trò ngầm `textbox` của `<textarea>` ⇒ mọi spec đang dùng
+           *    `getByRole("textbox")` đỏ hàng loạt, và đó là bất biến B5 của WO này;
+           *  - `aria-expanded` không nằm trong tập thuộc tính mà vai trò `textbox` hỗ trợ.
+           * `aria-autocomplete` + `aria-activedescendant` thì `textbox` CÓ hỗ trợ — đủ để đọc gợi ý.
+           */
+          aria-autocomplete="list"
+          {...(mention.isOpen
+            ? {
+                "aria-controls": MENTION_LISTBOX_ID,
+                "aria-activedescendant": mentionOptionId(MENTION_LISTBOX_ID, mention.activeIndex),
+              }
+            : {})}
           onChange={(e) => {
-            setDraft(e.target.value);
-            if (e.target.value.length > 0) {
+            const value = e.target.value;
+            setDraft(value);
+            mention.sync(value, e.target.selectionStart ?? value.length);
+            if (value.length > 0) {
               ensureClientMessageId();
               // Chỉ ping khi ô CÓ chữ: xoá sạch nháp rồi bấm backspace tiếp không phải là "đang gõ".
               pingTyping();
             }
           }}
+          // Rời ô soạn ⇒ ĐÓNG gợi ý (chọn bằng chuột KHÔNG rơi vào đây: `MentionPopover` bắt
+          // `onMouseDown` + `preventDefault()` nên tiêu điểm chưa từng rời textarea). Vì sao không
+          // đồng bộ thêm theo `onSelect`: xem docblock của `sync` ở `use-mention-autocomplete.ts`.
+          onBlur={() => mention.close()}
           onKeyDown={(e) => {
+            // Popover mention ĐANG MỞ nuốt trọn bộ phím điều hướng — nhất là Enter: nó phải CHỌN gợi ý,
+            // KHÔNG gửi tin. Gửi nhầm ở đây là gửi một tin đang viết dở với `@ng` chưa thành tên ai.
+            if (mention.handleKeyDown(e, pickMention)) return;
             // Enter gửi, Shift+Enter xuống dòng — quy ước quen thuộc của mọi công cụ chat nội bộ.
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();

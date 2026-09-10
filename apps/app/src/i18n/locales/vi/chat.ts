@@ -132,7 +132,8 @@ export default {
     // Khung trống của TRANG (chưa chọn phòng nào) — hero + 2 hành động. Khác `empty` (phòng đã mở mà
     // chưa có tin): ở đó ô soạn nằm ngay dưới nên hero không cần nút nào.
     heroTitle: "Bắt đầu một cuộc trò chuyện",
-    heroBody: "Chọn một cuộc trò chuyện ở bên trái, tạo cuộc trò chuyện mới, hoặc tìm lại một tin cũ.",
+    heroBody:
+      "Chọn một cuộc trò chuyện ở bên trái, tạo cuộc trò chuyện mới, hoặc tìm lại một tin cũ.",
     heroCreate: "Tin nhắn mới",
     heroSearch: "Tìm kiếm",
   },
@@ -235,6 +236,24 @@ export default {
     discard: "Bỏ tin này",
     sendFailed: "Không gửi được tin. Nội dung của bạn vẫn được giữ nguyên.",
     archivedNotice: "Phòng đã lưu trữ. Bạn vẫn đọc được nhưng không gửi tin mới.",
+
+    // S17-CHAT-UX2-FE-3 — ô soạn v2 (CHAT-DEC-027).
+    previewAlt: "Ảnh xem trước: {{name}}",
+    mention: {
+      listAria: "Gợi ý nhắc tên",
+    },
+    emoji: {
+      openAria: "Chèn biểu tượng cảm xúc",
+      insertAria: "Chèn {{emoji}}",
+      loading: "Đang tải bộ biểu tượng…",
+      groups: {
+        smileys: "Mặt cười",
+        gestures: "Cử chỉ",
+        hearts: "Tim & ký hiệu",
+        work: "Công việc",
+        misc: "Khác",
+      },
+    },
   },
 
   info: {
