@@ -13,7 +13,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessagesSquare } from "lucide-react";
 import { chatApi, chatKeys, useCan } from "@mediaos/web-core";
 import { Button, EmptyState } from "@mediaos/ui";
@@ -37,6 +37,8 @@ export function ChatPage(): React.ReactElement {
    * hai lần không tốn vòng mạng nào — còn chuyền cờ qua ba tầng props là mở đường cho hai cổng lệch nhau.
    */
   const canCreateRoom = useCan(CHAT_PAIRS.CREATE_ROOM.action, CHAT_PAIRS.CREATE_ROOM.resourceType);
+
+  const queryClient = useQueryClient();
 
   const roomsById = useChatStore((s) => s.roomsById);
   const myUserId = useChatStore((s) => s.myUserId);
@@ -70,15 +72,6 @@ export function ChatPage(): React.ReactElement {
   const [searchScope, setSearchScope] = useState<"all" | "room">("all");
   const [activeResultId, setActiveResultId] = useState<string | null>(null);
   const [jumpError, setJumpError] = useState(false);
-  /**
-   * Tên đã dựng của phòng `direct`, cache theo `roomId`.
-   *
-   * `GET /chat/rooms` KHÔNG kèm `members`, và phòng `direct` không có `name` (mig 0538). Tên chỉ dựng
-   * được sau khi mở phòng (`getRoom` trả `members[]`). Cache lại để lần sau vào danh sách không tụt về
-   * nhãn mã phòng — nhưng KHÔNG bịa tên khi chưa biết: nhãn sai làm người dùng nhắn nhầm người.
-   */
-  const [resolvedNames, setResolvedNames] = useState<Record<string, string>>({});
-
   const selectedRoom: ChatRoomDto | null =
     selectedRoomId !== null ? (roomsById[selectedRoomId] ?? null) : null;
 
@@ -96,13 +89,7 @@ export function ChatPage(): React.ReactElement {
     // thêm một điểm CÓ THỂ NÉM (cùng lý do đã ghi ở `useChatRealtime.refetchRoom`).
     const { members: _members, myRole: _myRole, ...room } = detail;
     hydrateRooms([room]);
-    if (room.roomType === "direct") {
-      const label = roomDisplayName(room, detail.members, myUserId, (code) =>
-        t("rooms.directFallback", { code }),
-      );
-      setResolvedNames((prev) => (prev[room.id] === label ? prev : { ...prev, [room.id]: label }));
-    }
-  }, [detail, hydrateRooms, myUserId, t]);
+  }, [detail, hydrateRooms]);
 
   // Phòng đang mở biến mất (bị bớt / tự rời / lưu trữ khỏi rổ) ⇒ bỏ chọn. Giữ id chết lại thì cột giữa
   // đứng hình ở trạng thái "đang tải" vĩnh viễn.
@@ -165,12 +152,19 @@ export function ChatPage(): React.ReactElement {
     );
   }
 
+  /**
+   * S17-CHAT-UX2-FE-1 — dựng TẠI CHỖ, không còn cache `resolvedNames`.
+   *
+   * `room.peer.name` (S17-CHAT-UX2-BE-1) có ngay từ `GET /chat/rooms` nên DM có tên đúng ở khung hình
+   * đầu — toàn bộ lý do tồn tại của cache đã biến mất. `detail?.members` vẫn được truyền vào để phòng
+   * đang MỞ dùng nguồn tươi nhất; hai nguồn cùng suy từ `chat_room_members` nên không được phép lệch.
+   */
   const selectedRoomLabel =
     selectedRoom === null
       ? null
-      : (resolvedNames[selectedRoom.id] ??
-        selectedRoom.name ??
-        t("rooms.directFallback", { code: selectedRoom.roomCode }));
+      : roomDisplayName(selectedRoom, detail?.members, myUserId, (code) =>
+          t("rooms.directFallback", { code }),
+        );
 
   return (
     <div className="relative flex h-[calc(100vh-4rem)] min-h-0" data-testid="chat-page">
@@ -196,7 +190,6 @@ export function ChatPage(): React.ReactElement {
           onSelectRoom={setSelectedRoomId}
           onCreateRoom={() => setCreateOpen(true)}
           onOpenSearch={() => setSearchOpen(true)}
-          resolvedNames={resolvedNames}
           isBootstrapping={!hasLoadedRooms}
         />
       )}
@@ -255,6 +248,15 @@ export function ChatPage(): React.ReactElement {
           room={selectedRoom}
           members={members}
           myRole={myRole}
+          /*
+           * S17-CHAT-UX2-FE-4 — «Tạo bởi …» lấy từ `detail`, KHÔNG từ `selectedRoom`.
+           *
+           * `createdByName` chỉ có ở `chatRoomDetailSchema` (CHAT-API-004) — đường DANH SÁCH không
+           * mang nó (BE-1 cố ý: thêm một `LEFT JOIN users` cho mỗi phòng ở đường nóng nhất của
+           * module). `selectedRoom` đến từ store (kiểu `ChatRoomDto`) nên đọc trường này ở đó là đọc
+           * một khóa không thuộc hợp đồng — hôm nay tình cờ còn, ngày store dọn là mất im lặng.
+           */
+          createdByName={detail?.createdByName ?? null}
           isLoading={detailQuery.isLoading}
           loadError={detailQuery.isError}
           onChanged={() => void detailQuery.refetch()}
@@ -289,11 +291,20 @@ export function ChatPage(): React.ReactElement {
       {isCreateOpen && (
         <CreateRoomDialog
           onClose={() => setCreateOpen(false)}
-          onCreated={(room, displayName) => {
+          onCreated={(room) => {
             hydrateRooms([room]);
-            if (room.roomType === "direct" && displayName.length > 0) {
-              setResolvedNames((prev) => ({ ...prev, [room.id]: displayName }));
-            }
+            /**
+             * S17-CHAT-UX2-FE-1 — XIN LẠI danh sách thay vì bịa `peer` từ tên vừa gõ.
+             *
+             * `POST /chat/rooms/direct` trả `peer: null` (mapper mặc định — hai khoá v2 chỉ được dựng ở
+             * `listRooms`), nên dòng phòng vừa tạo sẽ hiện nhãn MÃ PHÒNG cho tới lần nạp danh sách kế
+             * tiếp. Trước đây `resolvedNames` lấp chỗ đó bằng chuỗi người dùng vừa gõ.
+             *
+             * Không lấp lại bằng một `peer` tự dựng: `peer` thiếu `userId`/`isActive` là DTO GIẢ, và mọi
+             * thứ đọc nó — chấm online, nhãn «Ngừng hoạt động» — sẽ nói sai về một người thật. Một vòng
+             * `GET /chat/rooms` trả về nguồn thật, và `syncRoomList` ở `useChatRealtime` đưa thẳng vào store.
+             */
+            void queryClient.invalidateQueries({ queryKey: chatKeys.rooms.list() });
             setSelectedRoomId(room.id);
             setCreateOpen(false);
           }}

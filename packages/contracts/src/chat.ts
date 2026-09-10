@@ -5,6 +5,64 @@ import { z } from "zod";
 export const chatRoomTypeSchema = z.enum(["direct", "group", "department", "project"]);
 export type ChatRoomType = z.infer<typeof chatRoomTypeSchema>;
 
+/**
+ * S17-CHAT-UX2-BE-1 — **preview tin cuối** của một phòng (CHAT-DEC-022 · SPEC-15 §15b).
+ *
+ * Khai TRƯỚC `chatRoomSchema` vì nó là khoá lồng của schema đó — không phải khối append cuối file.
+ *
+ * ⚠️ `kind` và `attachmentCount` **KHÔNG loại trừ nhau**: tin có CẢ chữ LẪN tệp ra `kind:'text'`
+ * (chữ thắng — đó là thứ người dùng đọc được trong dòng preview) nhưng `attachmentCount` **vẫn > 0**
+ * để FE vẽ được kẹp giấy. Ai đọc `kind === 'file'` để suy "có tệp" sẽ bỏ sót đúng ca phổ biến nhất.
+ *
+ * ⚠️ `excerpt` là chuỗi **ĐÃ CẮT VÀ ĐÃ CHE Ở SERVER** (≤120 grapheme, `\n` + ký tự điều khiển bị strip
+ * TRƯỚC khi cắt). `kind:'recalled'` ⇒ `excerpt: null` — bản gốc không rời server (SPEC-15 §13.6). Cắt ở
+ * client là không cắt gì cả: toàn bộ nội dung vẫn đi qua dây.
+ */
+export const chatRoomLastMessageSchema = z.object({
+  senderId: z.string().uuid(),
+  /**
+   * ⚠️ VẪN HIỆN TÊN khi người gửi đã rời phòng hoặc bị vô hiệu hoá — nhất quán với roster
+   * `CHAT-API-007a`, vốn CỐ Ý giữ người đã rời kèm `leftAt` thay vì ẩn tên. `null` = không tra được
+   * hàng `users` (tài khoản đã xoá cứng ở tenant khác — không xảy ra ở v1).
+   */
+  senderName: z.string().nullable(),
+  kind: z.enum(["text", "file", "system", "recalled"]),
+  excerpt: z.string().nullable(),
+  attachmentCount: z.number().int().nonnegative(),
+});
+export type ChatRoomLastMessageDto = z.infer<typeof chatRoomLastMessageSchema>;
+
+/**
+ * S17-CHAT-UX2-BE-1 — **người đối thoại** của một phòng `direct` (CHAT-DEC-023 · SPEC-15 §15b).
+ *
+ * CHỈ khác `null` ở `roomType === 'direct'`. Phòng nhóm/phòng-ban/dự án LUÔN `null`: "peer" của một
+ * phòng 200 người không có nghĩa, và suy bừa một người ra đó là dựng quan hệ ai-nhắn-với-ai từ hư không.
+ *
+ * ⚠️ **`avatarUrl` KHÔNG được đi qua payload WS `chat:room`** — nó là URL ký TTL ngắn, per-recipient.
+ * `wsChatRoomEventSchema` phải `.extend()` một bản đã strip khoá này (`.omit()` của Zod KHÔNG với tới
+ * khoá LỒNG). Xem ca âm bắt buộc ở `packages/contracts/src/realtime.spec.ts`.
+ *
+ * ⚠️ **KHÔNG suy peer từ `directKey`.** Cột đó ghép từ 2 `userId` nên bản thân nó LÀ quan hệ
+ * ai-nhắn-với-ai và không bao giờ rời server; peer suy từ `chat_room_members` của chính phòng.
+ */
+export const chatRoomPeerSchema = z.object({
+  userId: z.string().uuid(),
+  name: z.string().nullable(),
+  /** URL ký TƯƠI mỗi lần trả (`AvatarPresignService`). `null` = chưa có ảnh / đầu độc / ký lỗi. */
+  avatarUrl: z.string().nullable(),
+  /**
+   * `false` ⇒ FE hiện nhãn «Ngừng hoạt động» — **KHÔNG khoá ô soạn** (CHAT-DEC-023): lịch sử DM vẫn đọc
+   * được và người dùng vẫn gửi được tin cuối.
+   *
+   * Đúng khi CẢ HAI vế còn sống: tài khoản (`users.status='active'` + chưa xoá mềm) VÀ nhân sự (còn ít
+   * nhất một `employee_profiles` `active` chưa xoá mềm, nếu người đó có hồ sơ). Hai vế vì đăng nhập chỉ
+   * gate `users.status`, KHÔNG gate trạng thái nhân sự — người đã nghỉ việc mà tài khoản chưa khoá vẫn
+   * `users.status='active'` (xem `chat-derived-rooms-sync.service.ts`, khối `applyOffboardLeavesTx`).
+   */
+  isActive: z.boolean(),
+});
+export type ChatRoomPeerDto = z.infer<typeof chatRoomPeerSchema>;
+
 export const chatRoomSchema = z.object({
   id: z.string().uuid(),
   companyId: z.string().uuid(),
@@ -58,6 +116,20 @@ export const chatRoomSchema = z.object({
    * là dẫn xuất từ người đối thoại, FE tự dựng từ roster.
    */
   avatarUrl: z.string().nullable().optional(),
+  // ── S17-CHAT-UX2-BE-1 — hai khoá v2 (CHAT-DEC-022/023 · SPEC-15 §15b) ──
+  // CẢ HAI `.nullable().optional()`, KHÔNG required: `/chat/rooms` có **7 consumer đang chạy** và một
+  // khoá required mới làm TẤT CẢ ăn `ZodError` ngay khi FE lên trước BE — HTTP 200 mà trắng trang
+  // (memory `server-masking-needs-optional-fe-schema`). `null` = không có, `undefined` = server cũ.
+  /**
+   * Tin cuối của phòng, ĐÃ che + ĐÃ cắt ở server. `null` = phòng chưa có tin nào ⇒ FE để dòng preview
+   * TRỐNG (không hiện dòng trắng gây hiểu nhầm là lỗi — SPEC-15 §14).
+   *
+   * Lấy bằng MỘT `LEFT JOIN LATERAL` trong `listRoomsForUser` (không N+1) — xem
+   * `apps/api/src/chat/chat-rooms.repository.ts`.
+   */
+  lastMessage: chatRoomLastMessageSchema.nullable().optional(),
+  /** Người đối thoại — chỉ phòng `direct`, `null` ở mọi loại khác. Xem `chatRoomPeerSchema`. */
+  peer: chatRoomPeerSchema.nullable().optional(),
 });
 export type ChatRoomDto = z.infer<typeof chatRoomSchema>;
 
@@ -324,9 +396,24 @@ export type ChatMarkReadResultDto = z.infer<typeof chatMarkReadResultSchema>;
  * `/messages` (API-13 §6.4). `z.coerce` idempotent khi `ZodValidationPipe` chạy 2 lần
  * (memory `zod-query-param-double-pipe-idempotent`).
  */
+/**
+ * S17-CHAT-UX2-BE-1 — bộ lọc loại tệp của `CHAT-API-017` (SPEC-15 §15b · CHAT-DEC-025).
+ *
+ * Bảng thông tin phòng v2 có accordion «Ảnh/Video» (lưới) TÁCH khỏi «Tệp» (danh sách). Lọc phải ở
+ * **SERVER**: lọc ở client thì trang 30 tệp có 2 ảnh vẫn ra 2 ô rồi "hết dữ liệu" trong khi phòng còn
+ * hàng trăm ảnh ở trang sau (memory `ui-promises-backend-never-reads`).
+ *
+ * ⚠️ VẮNG MẶT ⇒ trả TOÀN BỘ tệp — giữ nguyên hành vi CHAT-API-017 hiện tại, không đổi mặc định.
+ * ⚠️ Giá trị NGOÀI tập ⇒ **400 `VALIDATION-ERR-001`** (Zod pipe), KHÔNG 422: 422 chỉ dành cho vi phạm
+ * rule nghiệp vụ (API-01).
+ */
+export const chatRoomFileKindSchema = z.enum(["image", "file"]);
+export type ChatRoomFileKind = z.infer<typeof chatRoomFileKindSchema>;
+
 export const listChatRoomFilesQuerySchema = z.object({
   beforeSeq: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().min(1).max(50).default(30),
+  kind: chatRoomFileKindSchema.optional(),
 });
 export type ListChatRoomFilesQuery = z.infer<typeof listChatRoomFilesQuerySchema>;
 
@@ -340,6 +427,66 @@ export const chatRoomFileSchema = chatAttachmentSchema.extend({
   createdAt: z.string().datetime(),
 });
 export type ChatRoomFileDto = z.infer<typeof chatRoomFileSchema>;
+
+// ─── S17-CHAT-UX2-BE-2 — CHAT-API-031 «Liên kết đã chia sẻ» (SPEC-15 §15b · API-13 §5.1d) ─────
+
+/**
+ * Một liên kết trích được từ `chat_messages.body` (CHAT-FUNC-025).
+ *
+ * ⚠️ **KHÔNG dedupe URL ở server** (API-13 §5.1d bảng): cùng một địa chỉ gửi ba lần là ba dòng, vì
+ * dòng ở đây là "một lần ai đó chia sẻ", không phải "một địa chỉ". Gộp ở server làm mất người gửi và
+ * mốc thời gian của hai lần còn lại — thông tin không dựng lại được từ phía client.
+ *
+ * `linkIndex` là thứ tự liên kết BÊN TRONG một tin (0-based). Nó ở DTO vì hai lý do, cả hai đều là
+ * ràng buộc thật chứ không phải trang trí:
+ *   • nó là vế TIE-BREAK của con trỏ keyset — một tin nhiều link có thể bị cắt làm đôi giữa hai trang;
+ *   • FE cần khoá duy nhất `${messageId}:${linkIndex}`; hai anh em cùng `key` là rò node DOM
+ *     (memory `duplicate-sibling-key-leaks-dom-node`).
+ */
+export const chatRoomLinkSchema = z.object({
+  messageId: z.string().uuid(),
+  /** `room_seq` của tin chứa liên kết — vế THỨ NHẤT của khoá keyset (DESC). */
+  roomSeq: z.number().int().positive(),
+  /** Thứ tự liên kết trong tin, 0-based — vế THỨ HAI của khoá keyset (ASC). */
+  linkIndex: z.number().int().nonnegative(),
+  url: z.string(),
+  senderId: z.string().uuid(),
+  senderName: z.string().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type ChatRoomLinkDto = z.infer<typeof chatRoomLinkSchema>;
+
+/**
+ * `GET /chat/rooms/:id/links?cursor=&limit=` — con trỏ OPAQUE **mang vân phòng**, cấm `offset`.
+ *
+ * ⚠️ Con trỏ KHÔNG phải `beforeSeq` như `CHAT-API-017`: `room_seq` là con trỏ theo TIN, mà một tin có
+ * thể chứa nhiều liên kết hơn cả `limit`. Chi tiết ngữ nghĩa: `chat-links-cursor.ts` ở BE.
+ *
+ * `z.coerce` idempotent khi `ZodValidationPipe` chạy 2 lần (memory `zod-query-param-double-pipe-idempotent`).
+ */
+export const listChatRoomLinksQuerySchema = z.object({
+  cursor: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(30),
+});
+export type ListChatRoomLinksQuery = z.infer<typeof listChatRoomLinksQuerySchema>;
+
+/**
+ * Phản hồi CHAT-API-031 — **OBJECT keyset**, KHÔNG phải mảng trần (khác `listRoomFiles` ngay bên trên).
+ *
+ * ⚠️ `truncated` là hợp đồng của API-13 §5.1d(6), không phải trường thông tin thêm: server quét tối đa
+ * một số tin cố định mỗi request, và `truncated: true` nói **"dừng vì chạm trần quét"**, phân biệt với
+ * "hết dữ liệu thật". Thiếu cờ này thì một phòng có 200 tin không-link ở đầu sẽ trả trang rỗng và client
+ * đọc thành "phòng không có liên kết nào" — đúng lỗi đã bịt ở `018a` (`chatOversightRoomListSchema`).
+ *
+ * `nextCursor` **vẫn khác null khi `truncated: true`** (khác `018a`, vốn không phân trang): chạm trần là
+ * lời mời lật tiếp, không phải điểm dừng.
+ */
+export const chatRoomLinksResponseSchema = z.object({
+  data: z.array(chatRoomLinkSchema),
+  nextCursor: z.string().nullable(),
+  truncated: z.boolean(),
+});
+export type ChatRoomLinksResponseDto = z.infer<typeof chatRoomLinksResponseSchema>;
 
 /** GET /chat/unread-count (CHAT-API-016) — badge header. Tổng PHÉP TRỪ, không `COUNT(*)`. */
 export const chatUnreadCountSchema = z.object({
@@ -468,6 +615,16 @@ export type UpdateChatMemberRequest = z.infer<typeof updateChatMemberSchema>;
 export const chatRoomDetailSchema = chatRoomSchema.extend({
   members: z.array(chatRoomMemberSchema),
   myRole: chatMemberRoleSchema,
+  /**
+   * S17-CHAT-UX2-BE-1 — họ tên người tạo phòng, cho dòng «Tạo bởi … · ngày» của bảng thông tin phòng v2
+   * (CHAT-DEC-025). `.nullable().optional()` như mọi khoá bổ sung: `null` = phòng do HỆ THỐNG dựng
+   * (`department`/`project` — `chat_rooms.created_by` nullable ở `communication.ts`) hoặc không tra được
+   * hàng `users`; `undefined` = server cũ.
+   *
+   * ⚠️ CHỈ ở `chatRoomDetailSchema` (CHAT-API-004), **KHÔNG** ở `chatRoomSchema`: đường DANH SÁCH không
+   * cần nó, và thêm vào đó là một `LEFT JOIN users` nữa cho mỗi phòng ở đường nóng nhất của module.
+   */
+  createdByName: z.string().nullable().optional(),
 });
 export type ChatRoomDetailDto = z.infer<typeof chatRoomDetailSchema>;
 

@@ -199,14 +199,14 @@ describe("ChatPage · cô lập state theo phòng", () => {
     const rows = await screen.findAllByTestId("chat-room-item");
     fireEvent.click(rows[0]);
     await waitFor(() => expect(getRoom).toHaveBeenCalled());
-    fireEvent.click(await screen.findByText("Đổi tên / mô tả"));
+    fireEvent.click(await screen.findByLabelText("Đổi tên / mô tả"));
     expect((screen.getByLabelText("Tên phòng") as HTMLInputElement).value).toBe("Phòng thử");
 
     // Sang phòng khác: form PHẢI biến mất cùng state của nó (panel keyed theo roomId).
     fireEvent.click(screen.getAllByTestId("chat-room-item")[1]);
     await waitFor(() => expect(screen.queryByLabelText("Tên phòng")).toBeNull());
 
-    fireEvent.click(await screen.findByText("Đổi tên / mô tả"));
+    fireEvent.click(await screen.findByLabelText("Đổi tên / mô tả"));
     expect((screen.getByLabelText("Tên phòng") as HTMLInputElement).value).toBe("Phòng B");
   });
 

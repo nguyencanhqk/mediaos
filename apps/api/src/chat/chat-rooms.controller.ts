@@ -21,11 +21,13 @@ import { RequirePermission } from "../permission/require-permission.decorator";
 import { ChatMembersService } from "./chat-members.service";
 import { ChatRoomPrefsService } from "./chat-room-prefs.service";
 import { ChatRoomsService } from "./chat-rooms.service";
+import { ChatLinksService } from "./chat-links.service";
 import { ChatTypingService } from "./chat-typing.service";
 import {
   AddChatMemberDto,
   ChatMuteRoomDto,
   CreateChatRoomDto,
+  ListChatRoomLinksQueryDto,
   ListChatRoomsQueryDto,
   OpenDirectRoomDto,
   UpdateChatMemberDto,
@@ -67,6 +69,8 @@ export class ChatRoomsController {
     private readonly typingService: ChatTypingService,
     // S8-CHAT-UX-BE-1 (additive) — CHAT-API-024a/b · 025 · 020.
     private readonly prefs: ChatRoomPrefsService,
+    // S17-CHAT-UX2-BE-2 (additive) — CHAT-API-031.
+    private readonly links: ChatLinksService,
   ) {}
 
   /** GET /chat/rooms — CHAT-API-001. Tự-bound theo actor; 1 truy vấn, unread bằng phép trừ. */
@@ -211,6 +215,31 @@ export class ChatRoomsController {
   @RequirePermission("view", "chat-room")
   markRoomUnread(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
     return this.prefs.markUnread(req.user, id);
+  }
+
+  /**
+   * GET /chat/rooms/:id/links — CHAT-API-031 (accordion «Liên kết» của bảng thông tin phòng v2).
+   *
+   * Cặp `view:chat-room` — **TRÙNG NGUYÊN VĂN** cặp của `listMessages` / `listRoomFiles` / `listPinned`.
+   * API-13 §6 nguyên tắc 3 (`data_scope` là per-(permission, role)): gắn một cặp riêng cho liên kết sẽ
+   * đẻ ra role "thấy liên kết mà không đọc được tin" — trong khi liên kết CHÍNH LÀ một phần nội dung tin.
+   *
+   * ⚠️ Route MỚI ⇒ census runtime phải regen (`ROUTE_CENSUS_WRITE=1`). Quên `@UseGuards(PermissionGuard)`
+   * ở đây là route MỞ cho mọi user đã đăng nhập, IM LẶNG (guard là opt-in per-route ở dự án này) —
+   * `route-guard-coverage.e2e-spec` là thứ gác đúng chỗ đó.
+   *
+   * Membership vẫn ép ở service (`assertMember` ⇒ 404 HẰNG): guard trả lời "được làm hành động gì",
+   * không trả lời "ở phòng nào".
+   */
+  @Get("rooms/:id/links")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("view", "chat-room")
+  listRoomLinks(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query() query: ListChatRoomLinksQueryDto,
+  ) {
+    return this.links.listRoomLinks(req.user, id, query);
   }
 
   /** GET /chat/rooms/:id/members — CHAT-API-007a. */

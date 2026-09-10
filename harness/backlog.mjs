@@ -16776,7 +16776,7 @@ export const backlog = [
     title:
       "DTO phòng v2: `lastMessage` (LATERAL tin cuối, che thu hồi ở server) + `peer` cho phòng direct (ký avatar qua resolveEmployeeAvatars, strip khỏi WS) + `createdByName` ở getRoom + tham số `kind=image|file` cho GET /chat/rooms/:id/files (CHAT-DEC-022/023/025)",
     zone: "yellow",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/chat/chat-rooms.repository.ts",
       "apps/api/src/chat/chat-rooms.service.ts",
@@ -16785,7 +16785,14 @@ export const backlog = [
       "apps/api/src/chat/chat-files.service.ts",
       "apps/api/src/chat/chat.mapper.ts",
       "apps/api/src/chat/chat.module.ts",
+      "apps/api/src/chat/chat-preview.ts",
+      "apps/api/src/chat/chat-file.constants.ts",
+      "apps/api/src/chat/chat-attachments.repository.ts",
+      "apps/api/src/chat/chat-attachments.service.ts",
       "apps/api/src/chat/**/*.spec.ts",
+      "apps/api/src/chat/chat-visibility.spec.ts",
+      "apps/api/test/integration/chat-be1-rooms.int-spec.ts",
+      "apps/app/src/stores/chat.store.ts",
       "apps/api/src/realtime/**",
       "apps/api/test/integration/chat-s17-be1-*.int-spec.ts",
       "packages/contracts/src/chat.ts",
@@ -16816,6 +16823,13 @@ export const backlog = [
     notes: [
       "🟡 LIGHT + silent-failure-hunter (che nội dung tin) — KHÔNG phải FULL: không permission/RLS/secret/audit/migration.",
       "⚠️ `directKey` là quan hệ ai-nhắn-với-ai (repo docblock :65) — peer suy từ chat_room_members của phòng, KHÔNG parse directKey ra DTO.",
+      "🔎 THI CÔNG 09/09 — drizzle render bảng-có-BÍ-DANH trong `sql` template thành CHỈ bí danh (`FROM \"peer_employee_any\"`), KHÔNG kèm tên bảng gốc ⇒ `relation does not exist` lúc CHẠY, typecheck mù. Phải viết `FROM ${employeeProfiles} AS ${sql.identifier(ALIAS)}` với ALIAS là hằng dùng chung với `alias()`.",
+      "🔎 THI CÔNG 09/09 — cột SQL THÔ trong subquery BẮT BUỘC `.as(\"ten\")`; thiếu là drizzle ném lúc chạy (\"raw SQL field … doesn’t have an alias\").",
+      "🔎 THI CÔNG 09/09 — ca N+1 CŨ (`chat-be1-rooms.int-spec.ts` ca 11) đếm số BUILDER `tx.select` được dựng rồi assert `=== 1`, tức pin chi tiết thi công chứ không phải bất biến: LATERAL dựng 3 builder mà vẫn ĐI TRONG MỘT CÂU. Đã đổi phép đo sang «số builder KHÔNG tăng theo số phòng» (chạy 2 kích cỡ, đòi bằng nhau + đòi lần hai nhiều phòng hơn để không xanh-RỖNG); vế đếm câu SQL THẬT ở tầng driver `pg` nằm ở ca 20 của int-spec mới.",
+      "🔎 THI CÔNG 09/09 — CHƯA writer nào sinh tin `message_type='system'` (grep `apps/api/src/chat/**` ra 0 writer) dù SPEC-15 hứa tin hệ thống cho thêm/bớt thành viên và CHECK đã nhận giá trị. Ca `kind:'system'` vì thế gieo THẲNG DB để khoá ĐƯỜNG ĐỌC trước; WO nối dây writer là việc khác.",
+      "🔎 THI CÔNG 09/09 — NGOÀI `paths`: `apps/app/src/stores/chat.store.ts` phải sửa 1 chỗ (nhánh `created` của `applyRoomEvent`) vì `peer` ở payload WS hẹp hơn REST đúng khoá `avatarUrl` ⇒ typecheck FE đỏ. Vá bằng `widenWsPeer()` (gán `avatarUrl: null` CHỈ cho phòng vừa tạo); đường `updated`/`archived` vẫn qua `mergeRoomMetadata` (ALLOWLIST, không chạm `peer`) nên avatar KHÔNG bị xoá khi đổi tên phòng.",
+      "🔎 THI CÔNG 09/09 — `employee_profiles` KHÔNG có cột `full_name`; cột NOT NULL gồm work_type/employment_type/salary_type/status (có DEFAULT). `chat_rooms.ref_id` có FK sang `projects` ⇒ ca «peer NULL ở phòng dẫn xuất» dùng `department` + `org_units` (bảng nền, rẻ hơn) thay vì `project`.",
+      "🔎 THI CÔNG 09/09 — `recall`/`send`/`pin` × `chat-message` là BA cặp KHÁC nhau; fixture thiếu cặp `recall` ⇒ 403 `deny-default` chứ không phải lỗi thu hồi.",
     ],
   },
   {
@@ -16825,16 +16839,26 @@ export const backlog = [
     title:
       "CHAT-API-031 GET /chat/rooms/:id/links — liên kết đã chia sẻ trong phòng: trích https?:// từ body tin chưa thu hồi, keyset room_seq DESC, trần 50/trang, membership-gated như API-017, con trỏ mang vân phòng (DEC-025)",
     zone: "yellow",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/chat/chat-links.service.ts",
+      "apps/api/src/chat/chat-link-extract.ts",
+      "apps/api/src/chat/chat-links-cursor.ts",
       "apps/api/src/chat/chat-messages.repository.ts",
       "apps/api/src/chat/chat-rooms.controller.ts",
+      "apps/api/src/chat/chat.dto.ts",
+      "apps/api/src/chat/chat.errors.ts",
       "apps/api/src/chat/chat.module.ts",
       "apps/api/src/chat/**/*.spec.ts",
       "apps/api/test/integration/chat-s17-be2-links.int-spec.ts",
+      // BLOCKING 3 (API-13 §5.1d(5)) — CHAT-API-031 là route MỚI: phải regen census runtime
+      // (`ROUTE_CENSUS_WRITE=1`) + ký phán quyết, nếu không `route-guard-coverage.e2e-spec.ts` đỏ
+      // hoặc route rơi vào `needVerdict` = fail-open (memory `route-census-runtime-gate`).
+      "apps/api/test/foundation/**",
+      "docs/_review/S6-SEC-ROUTEMAP-1-route-census.json",
       "packages/contracts/src/chat.ts",
       "packages/web-core/src/lib/chat-api.ts",
+      "docs/API Design/API-13_CHAT_API_Design.md",
       "docs/plans/S17-CHAT-UX2-BE-2.md",
       "harness/backlog.mjs",
     ],
@@ -16844,6 +16868,7 @@ export const backlog = [
     src: [
       "SPEC-15 §22c DEC-025 · §15 CHAT-API-031 (sau DOC-1); khuôn GET /chat/rooms/:id/files (CHAT-API-017, S7-CHAT-BE-3) — gate + keyset + trimToMessageBoundary",
       "apps/app/src/components/chat/chat-format.ts splitTextWithLinks — cùng luật nhận diện link (chỉ http/https) để BE/FE không lệch",
+      "docs/plans/S17-CHAT-UX2-BE-2.md",
     ],
     done_when: [
       "Route + DTO `chatRoomLinkSchema` {messageId, roomSeq, url, senderName, createdAt}; trích ở SQL (regexp) hoặc service trên trang tin — 1 câu/trang, chỉ tin `recalled_at IS NULL` và `message_type <> 'system'`",
@@ -16868,8 +16893,10 @@ export const backlog = [
       "apps/app/src/components/chat/room-list-sections.ts",
       "apps/app/src/components/chat/room-list-filter.ts",
       "apps/app/src/components/chat/chat-format.ts",
+      "apps/app/src/components/chat/chat-preview.ts",
       "apps/app/src/components/chat/chat-dock.store.ts",
       "apps/app/src/components/chat/ChatDockWindow.tsx",
+      "apps/app/src/components/chat/ChatBadge.tsx",
       "apps/app/src/components/chat/**/*.spec.ts",
       "apps/app/src/components/chat/**/*.spec.tsx",
       "apps/app/src/routes/chat/**",
@@ -16959,6 +16986,9 @@ export const backlog = [
       "apps/app/src/components/chat/**/*.spec.ts",
       "apps/app/src/components/chat/**/*.spec.tsx",
       "apps/app/src/components/chat/ConversationPanel.tsx",
+      // BỔ SUNG lúc thi công (10/09): `mentions[]` phải đi qua `SendChatMessageInput` → `SendMessageRequest`,
+      // mà khoá đó nằm ở đây. Khai tường minh thay vì để hook `guard-scope` kêu rồi lách.
+      "apps/app/src/components/chat/use-chat-conversation.ts",
       "apps/app/src/routes/chat/constants.ts",
       "apps/app/src/i18n/locales/**",
       "docs/plans/S17-CHAT-UX2-FE-3.md",

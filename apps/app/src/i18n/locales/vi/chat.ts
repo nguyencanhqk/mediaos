@@ -14,10 +14,29 @@ export default {
     newButtonAria: "Tạo cuộc trò chuyện mới",
     showArchived: "Xem phòng đã lưu trữ",
     showActive: "Quay lại phòng đang hoạt động",
+    /**
+     * S17-CHAT-UX2-FE-1 — chip lọc nhanh (CHAT-DEC-021 · SPEC-15 §9a). Khoá TRÙNG `ROOM_FILTER_CHIPS`
+     * để tra cứu theo khoá chip không cần bảng ánh xạ thứ hai phải giữ đồng bộ bằng tay.
+     *
+     * «Ưa thích» **KHÔNG có** ở đây: §9a chốt nó ≡ «Đã ghim», và một chip thứ hai gần trùng nghĩa là
+     * mời người dùng đi tìm sự khác biệt không tồn tại.
+     */
+    /** Nhãn của cả NHÓM chip (`role="group"`) — không phải nhãn của một chip nào. */
+    chipsAria: "Lọc nhanh danh sách hội thoại",
+    chips: {
+      all: "Tất cả",
+      unread: "Chưa đọc",
+      direct: "Riêng",
+      group: "Nhóm",
+      deptproject: "Phòng ban · Dự án",
+      archived: "Lưu trữ",
+    },
     empty: "Chưa có cuộc trò chuyện nào.",
     emptyHint: "Bấm “Tin nhắn mới” để bắt đầu.",
     emptyArchived: "Không có phòng nào đã lưu trữ.",
     noSearchResult: "Không có phòng nào khớp “{{query}}”.",
+    /** Chip lọc ra rỗng — KHÁC "chưa có phòng nào": ở đây phòng CÓ, chỉ là không khớp bộ lọc đang bật. */
+    emptyChip: "Không có hội thoại nào trong bộ lọc này.",
     unreadAria: "{{count}} tin chưa đọc",
     unreadOverflow: "99+",
     archivedBadge: "Đã lưu trữ",
@@ -46,6 +65,19 @@ export default {
     /** Dấu hiệu NGAY TRÊN DÒNG — không phải chỉ trong menu (mở từng phòng mới biết = không bao giờ biết). */
     pinnedAria: "Đã ghim hội thoại",
     mutedAria: "Đang tắt thông báo",
+
+    // ── S17-CHAT-UX2-FE-1 — dòng phòng v2 (CHAT-DEC-022/023) ────────────────────────────────────
+    onlineAria: "Đang online",
+    /** Nhãn cạnh TÊN peer khi tài khoản/nhân sự đã ngừng hoạt động. KHÔNG khoá gì cả (CHAT-DEC-023). */
+    peerInactive: "Ngừng hoạt động",
+    preview: {
+      /** Tiền tố khi tin cuối là của CHÍNH TÔI. Dấu «:» do component thêm, không nhét vào chuỗi. */
+      you: "Bạn",
+      /** SPEC-15 §14 v2: tin thu hồi hiện CHỮ XÁM, **không phải** khoảng trắng. */
+      recalled: "Tin nhắn đã được thu hồi",
+      files: "{{count}} tệp đính kèm",
+      attachmentAria: "Có {{count}} tệp đính kèm",
+    },
     menu: {
       openAria: "Tuỳ chọn cho {{name}}",
       listAria: "Tuỳ chọn hội thoại {{name}}",
@@ -100,7 +132,8 @@ export default {
     // Khung trống của TRANG (chưa chọn phòng nào) — hero + 2 hành động. Khác `empty` (phòng đã mở mà
     // chưa có tin): ở đó ô soạn nằm ngay dưới nên hero không cần nút nào.
     heroTitle: "Bắt đầu một cuộc trò chuyện",
-    heroBody: "Chọn một cuộc trò chuyện ở bên trái, tạo cuộc trò chuyện mới, hoặc tìm lại một tin cũ.",
+    heroBody:
+      "Chọn một cuộc trò chuyện ở bên trái, tạo cuộc trò chuyện mới, hoặc tìm lại một tin cũ.",
     heroCreate: "Tin nhắn mới",
     heroSearch: "Tìm kiếm",
   },
@@ -203,6 +236,24 @@ export default {
     discard: "Bỏ tin này",
     sendFailed: "Không gửi được tin. Nội dung của bạn vẫn được giữ nguyên.",
     archivedNotice: "Phòng đã lưu trữ. Bạn vẫn đọc được nhưng không gửi tin mới.",
+
+    // S17-CHAT-UX2-FE-3 — ô soạn v2 (CHAT-DEC-027).
+    previewAlt: "Ảnh xem trước: {{name}}",
+    mention: {
+      listAria: "Gợi ý nhắc tên",
+    },
+    emoji: {
+      openAria: "Chèn biểu tượng cảm xúc",
+      insertAria: "Chèn {{emoji}}",
+      loading: "Đang tải bộ biểu tượng…",
+      groups: {
+        smileys: "Mặt cười",
+        gestures: "Cử chỉ",
+        hearts: "Tim & ký hiệu",
+        work: "Công việc",
+        misc: "Khác",
+      },
+    },
   },
 
   info: {
@@ -263,6 +314,8 @@ export default {
       derivedNotice:
         "Thành viên phòng {{type}} do hệ thống đồng bộ tự động — không thêm/bớt bằng tay được.",
       actionFailed: "Không thực hiện được thao tác thành viên.",
+      // S17-CHAT-UX2-FE-4 — danh sách thành viên chuyển từ tab sang Sheet (DEC-025).
+      sheetTitle: "Thành viên ({{count}})",
     },
     pinned: {
       empty: "Chưa có tin nào được ghim.",
@@ -298,6 +351,41 @@ export default {
       // làm người dùng dùng trình đọc màn hình không phân biệt được đang ở bước nào.
       confirmAction: "Rời khỏi phòng",
       failed: "Không rời được phòng.",
+    },
+
+    // ── S17-CHAT-UX2-FE-4 — bảng thông tin phòng v2 (CHAT-DEC-025), KHỐI APPEND ──────────────
+
+    /** Ẩn HẲN dòng khi `createdByName` vắng — không bịa "Không rõ" cho phòng do hệ thống dựng. */
+    createdBy: "Tạo bởi {{name}} · {{date}}",
+    actions: {
+      // Nhãn của nút tròn khi đang BẬT thông báo (bấm ⇒ mở menu chọn mốc). Chiều ngược dùng
+      // `rooms.menu.unmute` — cùng một câu chữ với menu ngữ cảnh ở danh sách phòng.
+      mute: "Tắt thông báo",
+    },
+    sections: {
+      media: "Ảnh / Video",
+      files: "Tệp",
+      links: "Liên kết",
+      pinned: "Tin ghim",
+    },
+    media: {
+      empty: "Phòng chưa có ảnh nào được gửi.",
+      loadError: "Không tải được ảnh của phòng.",
+      loadMoreError: "Không tải thêm được ảnh cũ hơn.",
+      loadMore: "Xem ảnh cũ hơn",
+      loadingMore: "Đang tải…",
+    },
+    links: {
+      empty: "Phòng chưa có liên kết nào được chia sẻ.",
+      // KHÁC `empty`: server dừng vì chạm trần QUÉT, không phải vì hết dữ liệu (CHAT-API-031 `truncated`).
+      // Gộp hai câu này làm một là khẳng định sai rằng phòng không có liên kết nào.
+      scanTruncated: "Mới quét tới đây — có thể còn liên kết ở những tin cũ hơn.",
+      scanMore: "Quét tiếp tin cũ hơn",
+      loadError: "Không tải được danh sách liên kết.",
+      loadMoreError: "Không tải thêm được liên kết cũ hơn.",
+      loadMore: "Xem liên kết cũ hơn",
+      loadingMore: "Đang tải…",
+      jump: "Xem trong hội thoại",
     },
   },
 

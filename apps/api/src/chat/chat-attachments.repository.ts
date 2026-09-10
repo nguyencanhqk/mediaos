@@ -5,10 +5,12 @@ import type { TenantTx } from "../db/db.service";
 import { chatMessages } from "../db/schema/communication";
 import { fileLinks, files, type NewFileLink } from "../db/schema/files";
 import { users } from "../db/schema/users";
+import type { ChatRoomFileKind } from "@mediaos/contracts";
 import {
   CHAT_ATTACHMENT_ACCESS_SCOPE,
   CHAT_ATTACHMENT_LINK_TYPE,
   CHAT_MESSAGE_ENTITY_TYPE,
+  imageMimeSqlPredicate,
 } from "./chat-file.constants";
 import { CHAT_MODULE_CODE } from "./chat.errors";
 import { visibleFromSeqScalar } from "./chat-visibility";
@@ -280,7 +282,17 @@ export class ChatAttachmentsRepository {
     tx: TenantTx,
     companyId: string,
     roomId: string,
-    opts: { beforeSeq?: number; limit: number; visibleFromSeq: number | null },
+    opts: {
+      beforeSeq?: number;
+      limit: number;
+      visibleFromSeq: number | null;
+      /**
+       * S17-CHAT-UX2-BE-1 — `kind=image|file` (SPEC-15 §15b). `undefined` = KHÔNG lọc, giữ nguyên hành
+       * vi CHAT-API-017 cũ. Vị từ lấy từ `imageMimeSqlPredicate()` — định nghĩa DUY NHẤT dùng chung với
+       * khoá DTO `isImage`.
+       */
+      kind?: ChatRoomFileKind;
+    },
   ): Promise<ChatRoomFileRow[]> {
     const conds: SQL[] = [
       eq(chatMessages.companyId, companyId),
@@ -294,6 +306,12 @@ export class ChatAttachmentsRepository {
     const visible = visibleFromSeqScalar(opts.visibleFromSeq);
     if (visible) conds.push(visible);
     if (opts.beforeSeq !== undefined) conds.push(lt(chatMessages.roomSeq, opts.beforeSeq));
+    // S17-CHAT-UX2-BE-1 — lọc Ở SQL, TRƯỚC phân trang. Lọc sau khi đọc trang thì một trang 30 tệp có 2
+    // ảnh trả 2 ô rồi "hết dữ liệu" trong khi phòng còn hàng trăm ảnh ở trang sau, và `beforeSeq` đã
+    // nhảy qua chúng (memory `ui-promises-backend-never-reads`).
+    if (opts.kind !== undefined) {
+      conds.push(imageMimeSqlPredicate(files.mimeType, opts.kind === "image"));
+    }
 
     return tx
       .select({

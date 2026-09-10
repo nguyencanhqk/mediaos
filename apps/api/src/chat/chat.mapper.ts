@@ -5,7 +5,9 @@ import type {
   ChatMessageReactionDto,
   ChatRoomDetailDto,
   ChatRoomDto,
+  ChatRoomLastMessageDto,
   ChatRoomMemberDto,
+  ChatRoomPeerDto,
 } from "@mediaos/contracts";
 import type { ChatCallKind, ChatCallStatus, ChatMemberRole } from "../db/schema/communication";
 import type { ChatCallParticipantRow } from "./chat-calls.repository";
@@ -80,10 +82,23 @@ export function toChatRoomDto(
    * biệt được "server chưa có tính năng" với "phòng chưa đặt ảnh".
    */
   avatarUrl: string | null = null,
+  /**
+   * S17-CHAT-UX2-BE-1 — hai khoá v2 (CHAT-DEC-022/023). **THAM SỐ CUỐI**, không chèn vào giữa: ba spec
+   * dựng `ChatRoomsService`/`ChatMembersService` bằng THỨ TỰ THAM SỐ và mọi lời gọi `toChatRoomDto`
+   * hiện có đang truyền 4 vị trí đầu.
+   *
+   * Mặc định `{}` ⇒ hai khoá ra `null`, KHÔNG phải `undefined`: `undefined` biến mất khỏi JSON và FE
+   * không phân biệt được "server chưa có tính năng" với "phòng chưa có tin" — cùng lý do `avatarUrl`
+   * mặc định `null`. Ba đường broadcast (`updateRoom`/`archiveRoom`/`createGroup`) cố ý KHÔNG truyền
+   * tham số này: payload WS không mang preview của một thời điểm khác thời điểm người nhận đọc nó.
+   */
+  extra: { lastMessage?: ChatRoomLastMessageDto | null; peer?: ChatRoomPeerDto | null } = {},
 ): ChatRoomDto {
   const p = prefs ?? row;
   return {
     avatarUrl,
+    lastMessage: extra.lastMessage ?? null,
+    peer: extra.peer ?? null,
     id: row.id,
     companyId: row.companyId,
     refId: row.refId,
@@ -161,6 +176,42 @@ export function toChatMessageDto(
     reactions: recalled ? [] : reactions,
     roomSeq: row.roomSeq,
     createdAt: toIso(row.createdAt) ?? EPOCH,
+  };
+}
+
+/**
+ * S17-CHAT-UX2-BE-1 — `chatRoomSchema.peer` từ một hàng của `listRoomsForUser` (CHAT-DEC-023).
+ *
+ * `null` khi LATERAL không khớp: phòng KHÔNG phải `direct`, hoặc DM lệch dữ liệu không còn hàng
+ * membership nào của người kia. FE dựng tên phòng theo đường cũ trong cả hai ca.
+ *
+ * ⚠️ **KHÔNG đọc `row.peerAvatarRaw`, và không được sửa để đọc nó.** Cột `employee_profiles.avatar_url`
+ * ĐA-NGƯỜI-GHI và có thể bị đầu độc trỏ tệp bất kỳ trong tenant; chỉ URL đã đi qua
+ * `AvatarPresignService.resolveEmployeeAvatars` (xác minh cặp `(employeeId, fileId)` rồi mới ký) mới
+ * được lên DTO. Mirror `toChatRosterMemberDto`.
+ *
+ * ⚠️ `isActive` `?? false` chứ không `?? true`: hàng NULL ở đây nghĩa là không xác định được tư cách,
+ * và mặc-định-đang-hoạt-động là fail-OPEN của một chỉ báo hiển thị — nhãn «Ngừng hoạt động» vắng mặt
+ * đúng lúc nó cần có. Thực tế `peerIsActiveExpr()` luôn trả boolean khi có hàng peer, nên nhánh này chỉ
+ * là lưới cuối.
+ */
+export function toChatRoomPeerDto(
+  row: {
+    roomType: ChatRoomDto["roomType"];
+    peerUserId: string | null;
+    peerName: string | null;
+    peerIsActive: boolean | null;
+    peerEmployeeId: string | null;
+  },
+  signedAvatarByEmployee: ReadonlyMap<string, string>,
+): ChatRoomPeerDto | null {
+  if (row.roomType !== "direct" || row.peerUserId === null) return null;
+  return {
+    userId: row.peerUserId,
+    name: row.peerName,
+    avatarUrl:
+      row.peerEmployeeId === null ? null : (signedAvatarByEmployee.get(row.peerEmployeeId) ?? null),
+    isActive: row.peerIsActive ?? false,
   };
 }
 
@@ -255,10 +306,19 @@ export function toChatRoomDetailDto(
   prefs: ChatRoomMemberPrefs,
   /** S8-CHAT-UX-BE-2 — URL avatar đã ký (xem `toChatRoomDto`). `null` = chưa đặt / không hợp lệ. */
   avatarUrl: string | null = null,
+  /**
+   * S17-CHAT-UX2-BE-1 — họ tên người tạo phòng, cho dòng «Tạo bởi … · ngày» (CHAT-DEC-025).
+   *
+   * `null` = phòng do HỆ THỐNG dựng (`department`/`project` — `chat_rooms.created_by` nullable) hoặc
+   * không tra được hàng `users`. Caller truyền vào; mapper KHÔNG tự đi lấy (hàm THUẦN, mirror
+   * `attachments`/`reactions` của `toChatMessageDto`).
+   */
+  createdByName: string | null = null,
 ): ChatRoomDetailDto {
   return {
     ...toChatRoomDto(room, unreadCount, prefs, avatarUrl),
     members: members.map(toChatMemberDto),
     myRole,
+    createdByName,
   };
 }

@@ -74,6 +74,14 @@ export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
 /** Khớp `sendMessageSchema.body.max(4000)`. */
 export const MAX_MESSAGE_LENGTH = 4000;
 
+/**
+ * S17-CHAT-UX2-FE-3 — khớp `sendMessageSchema.mentions.max(20)`.
+ *
+ * Cắt ở FE là để người dùng không mất CẢ tin vì một 422 sau khi đã gõ xong: server từ chối nguyên
+ * request khi mảng quá 20, chứ không lặng lẽ bỏ bớt (khác với lọc người-ngoài-phòng CHAT-ERR-010).
+ */
+export const MAX_MENTIONS_PER_MESSAGE = 20;
+
 /** Số tin mỗi trang khi cuộn ngược — khớp `listChatMessagesQuerySchema.limit.default(50)`. */
 export const MESSAGE_PAGE_SIZE = 50;
 
@@ -117,6 +125,15 @@ export const SEARCH_PAGE_SIZE = 20;
 
 /** Số tệp mỗi trang của tab Tệp — khớp `listChatRoomFilesQuerySchema.limit` (max 50). */
 export const ROOM_FILES_PAGE_SIZE = 30;
+
+/**
+ * S17-CHAT-UX2-FE-4 — số liên kết mỗi trang của khối «Liên kết» (CHAT-API-031, `limit` max 50).
+ *
+ * Hằng RIÊNG chứ không dùng lại `ROOM_FILES_PAGE_SIZE`: hai endpoint đếm hai thứ khác nhau (tệp vs
+ * liên kết trích từ thân tin) và trần của chúng có thể rời nhau bất kỳ lúc nào — chia chung một hằng là
+ * buộc chúng phải đi cùng nhau mãi mãi.
+ */
+export const ROOM_LINKS_PAGE_SIZE = 30;
 
 /**
  * Cửa sổ ngữ cảnh quanh tin đích: `CONTEXT_BEFORE` tin (KỂ CẢ tin đích) + `CONTEXT_AFTER` tin sau nó.

@@ -435,6 +435,90 @@ describe("applyMessageRecalled", () => {
   });
 });
 
+/**
+ * S17-CHAT-UX2-FE-1 — dòng preview ở danh sách phòng (CHAT-DEC-022) được VÁ CỤC BỘ từ `chat:message`.
+ *
+ * Ca đắt nhất ở đây là ca ÂM: `applyIncomingMessage` nhận cả tin CŨ (lưới bù `getMessages(roomId, {})`
+ * trả nguyên trang 50 tin mới nhất khi phòng chưa có tin nào trong RAM; cuộn ngược `beforeSeq` cũng đổ
+ * tin cũ qua đây). Vá preview NGOÀI chốt `roomSeq` là để một tin cũ leo lên làm "tin cuối" của phòng.
+ */
+describe("S17-CHAT-UX2-FE-1 · lastMessage vá từ chat:message", () => {
+  it("tin MỚI ⇒ `lastMessage` đổi theo, cùng lúc với lastMessageAt/Seq", () => {
+    s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 10, lastMessage: null })]);
+    s().applyIncomingMessage(message(11, { body: "tin mới nhất", senderName: "Trần B" }));
+
+    expect(s().roomsById[ROOM_A].lastMessage).toEqual({
+      senderId: OTHER,
+      senderName: "Trần B",
+      kind: "text",
+      excerpt: "tin mới nhất",
+      attachmentCount: 0,
+    });
+  });
+
+  it("tin CŨ (roomSeq ≤ lastMessageSeq) ⇒ `lastMessage` GIỮ NGUYÊN — cùng chốt với badge", () => {
+    const oldPreview = {
+      senderId: OTHER,
+      senderName: "Trần B",
+      kind: "text" as const,
+      excerpt: "tin cuối thật",
+      attachmentCount: 0,
+    };
+    s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 10, lastMessage: oldPreview })]);
+
+    s().applyIncomingMessage(message(4, { body: "tin cũ từ lưới bù" }));
+
+    expect(s().roomsById[ROOM_A].lastMessage).toEqual(oldPreview);
+    // Và tin vẫn được CHÈN bình thường — chốt chỉ chặn phần TỔNG HỢP của phòng.
+    expect(s().messagesByRoom[ROOM_A].map((m) => m.roomSeq)).toContain(4);
+  });
+
+  it("tin có tệp mà KHÔNG có chữ ⇒ kind 'file' (dòng preview vẽ «N tệp», không để trống)", () => {
+    s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 10 })]);
+    s().applyIncomingMessage(message(12, { body: "", attachmentCount: 2 }));
+    expect(s().roomsById[ROOM_A].lastMessage).toMatchObject({ kind: "file", attachmentCount: 2 });
+  });
+});
+
+describe("S17-CHAT-UX2-FE-1 · lastMessage khi THU HỒI", () => {
+  function recall(id: string, roomId = ROOM_A) {
+    s().applyMessageRecalled(
+      wsChatMessageRecalledEventSchema.parse({
+        messageId: id,
+        roomId,
+        recalledAt: "2026-08-04T02:00:00.000Z",
+      }),
+    );
+  }
+
+  it("thu hồi ĐÚNG tin cuối ⇒ kind 'recalled' + excerpt null (SPEC-15 §14: chữ xám, không phải trống)", () => {
+    s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 10 })]);
+    s().applyIncomingMessage(message(11, { body: "nội dung nhạy cảm" }));
+    expect(s().roomsById[ROOM_A].lastMessage).toMatchObject({ kind: "text" });
+
+    recall(s().messagesByRoom[ROOM_A].find((m) => m.roomSeq === 11)!.id);
+
+    expect(s().roomsById[ROOM_A].lastMessage).toMatchObject({ kind: "recalled", excerpt: null });
+  });
+
+  it("thu hồi một tin GIỮA ⇒ `lastMessage` nguyên vẹn (nó nói về TIN KHÁC)", () => {
+    s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 10 })]);
+    s().applyIncomingMessage(message(11, { body: "tin giữa" }));
+    s().applyIncomingMessage(message(12, { body: "tin cuối" }));
+
+    recall(s().messagesByRoom[ROOM_A].find((m) => m.roomSeq === 11)!.id);
+
+    expect(s().roomsById[ROOM_A].lastMessage).toMatchObject({ kind: "text", excerpt: "tin cuối" });
+  });
+
+  it("tin thu hồi KHÔNG có trong RAM ⇒ không đụng gì (refetch REST sau sẽ trả bản đã che)", () => {
+    s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 10 })]);
+    const before = s().roomsById;
+    recall(messageId(99));
+    expect(s().roomsById).toBe(before);
+  });
+});
+
 describe("applyReadEvent", () => {
   beforeEach(() => s().hydrateRooms([room(ROOM_A, { lastMessageSeq: 10, unreadCount: 5 })]));
 

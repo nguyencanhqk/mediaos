@@ -232,6 +232,12 @@ Toàn bộ vòng đời đi **REST** — hàng rào **R4** của `CHAT-DEC-020`.
 
 `CHAT-API-017` (`GET /chat/rooms/{room_id}/files`) nhận thêm tham số query **`kind=image|file`** — permission/membership/audit **không đổi** so với bảng §5.1. Vị từ nguồn là **`mime_type LIKE 'image/%'` ở SQL**, và đây là **ĐỊNH NGHĨA DUY NHẤT** dùng chung với khoá `isImage` của `chatAttachmentSchema` (`packages/contracts/src/chat.ts`) — `isImage` là khoá DTO **suy ra ở tầng mapper**, **không phải cột DB** (memory `clamp-must-be-sql-not-js`). Chi tiết hợp đồng: [SPEC-15 §15b](<../SPEC/SPEC-15 CHAT.md>).
 
+> ⚠️ **Đo lại 09/09/2026 khi thi công (`S17-CHAT-UX2-BE-1`): vị từ thực tế là `lower(mime_type) LIKE 'image/%'`.**
+> `LIKE` của Postgres phân biệt HOA/thường, còn `isImageMimeType` gọi `.toLowerCase()` trước khi so — viết
+> `mime_type LIKE 'image/%'` TRẦN là để một tệp `IMAGE/PNG` ra `isImage: true` ở DTO mà `kind=image` lọc MẤT,
+> tức phá đúng bất biến «ĐỊNH NGHĨA DUY NHẤT» mà câu trên dựng ra. Chi tiết + ca đo: §5.1d(7) bên dưới.
+> (SPEC-15 §15b là khối owner đã ký nên KHÔNG sửa ở WO này — cần owner chốt lại câu chữ.)
+
 `kind` NGOÀI tập `{image, file}` ⇒ **400 `VALIDATION-ERR-001`** (API-01: 400 = sai format/validation; KHÔNG dùng 422 — 422 chỉ dành cho vi phạm rule nghiệp vụ). `kind` vắng mặt ⇒ trả TOÀN BỘ tệp, giữ nguyên hành vi `CHAT-API-017` hiện tại.
 
 #### (1) Ba khoá DTO mới trên `chatRoomSchema` — TẤT CẢ `.nullable().optional()`
@@ -300,6 +306,31 @@ Thiếu bước này → `route-guard-coverage.e2e-spec.ts` đỏ, hoặc **tệ
 - DTO trả **`truncated: true`** khi dừng quét vì chạm trần (không phải vì hết dữ liệu thật).
 - **Vẫn trả `nextCursor`** khi `truncated: true` — khác `018a` (`018a` không phân trang); `CHAT-API-031` **có** phân trang nên phải cho lật tiếp.
 - testTask bắt buộc: phòng gieo N tin **không có link** vượt trần quét 50 ⇒ phản hồi `truncated: true` **và** `nextCursor` khác null; lật tiếp con trỏ đó ra được trang sau, không treo, không đọc nhầm thành "hết dữ liệu". Ca âm: phòng ít tin, quét hết ⇒ `truncated: false`.
+
+> **Đo lại 10/09/2026 khi thi công (`S17-CHAT-UX2-BE-2`) — hai trần TÁCH BẠCH.** "Trần 50" ở bảng §5.1d là trần
+> **KẾT QUẢ** (`limit` ≤ 50 liên kết/trang); trần **QUÉT** là 50 **TIN**/request (`ChatLinksService.SCAN_CAP`).
+> Chúng trùng con số nhưng khác đơn vị, và chính vế thứ hai mới sinh ra trạng thái `truncated`. Hệ quả thi công:
+> truy vấn **KHÔNG được prefilter `body LIKE '%http%'`** — có prefilter thì ca "50 tin liền không có link" ra 0 hàng
+> và đọc thành "hết dữ liệu", tức xoá đúng bất biến mục (6) dựng ra.
+>
+> Con trỏ mang `linkIndex = -1` nghĩa là "đã tiêu thụ TRỌN tin `roomSeq`" — vế đó là thứ làm ca chạm-trần lật tiếp
+> được (khi không có liên kết nào để trỏ vào). Thiếu nó, client lật lại đúng 50 tin ấy mãi mãi.
+
+#### (7) Trạng thái thi công §5.1d (cập nhật 09/09/2026 — `S17-CHAT-UX2-BE-1`)
+
+| Mục §5.1d | Trạng thái | Nơi kiểm |
+| --- | --- | --- |
+| (1) `lastMessage` · `peer` · `createdByName` | ✅ **đã ship** — LATERAL trong `listRoomsForUser`, che/cắt ở `chat-preview.ts` | `chat-preview.spec.ts` · `chat-s17-be1-room-dto.int-spec.ts` ca 1–12 |
+| (2) strip `peer.avatarUrl` khỏi WS | ✅ **đã ship** — `wsChatRoomEventSchema.room.extend()` | `packages/contracts/src/chat.spec.ts` (ca ÂM) |
+| (3) §13.4 cho đường đọc LATERAL | ✅ **đã ship** — `visibleFromSeqColumn()` + census per-method mới cho `chat-rooms.repository.ts` | `chat-visibility.spec.ts` (đã đo ĐỎ khi gỡ helper) |
+| (4) oversight không nhận 2 khoá mới | ✅ **đã ship** — schema oversight giữ nguyên, thêm ratchet | `packages/contracts/src/chat.spec.ts` |
+| `CHAT-API-017?kind=image\|file` | ✅ **đã ship** — vị từ SQL dùng CHUNG hằng với `isImage` | `chat-file.constants.spec.ts` · int-spec ca 15–19 |
+| `CHAT-API-031` `/links` + (5) census + (6) trần | ✅ **đã ship** (`S17-CHAT-UX2-BE-2`, 10/09/2026) — trích ở JS (`chat-link-extract.ts`, cùng luật với `splitTextWithLinks` của FE, có ca đối chiếu đọc file); keyset `(room_seq DESC, linkIndex ASC)` con trỏ mang **vân phòng**; trần quét **50 TIN**/request tách khỏi trần `limit` 50 **liên kết** ⇒ `truncated` | `chat-link-extract.spec.ts` · `chat-links-cursor.spec.ts` · `chat-links.service.spec.ts` · `chat-s17-be2-links.int-spec.ts` (21 ca) · census route regen |
+
+⚠️ Hai lệch đo được lúc thi công, ghi để không ai suy diễn nhầm:
+
+- **Vị từ ảnh là `lower(mime_type) LIKE 'image/%'`**, không phải `mime_type LIKE 'image/%'` trần như câu chữ ở trên. `LIKE` của Postgres phân biệt HOA/thường còn `isImage` gọi `.toLowerCase()`; bỏ `lower()` là để tệp `IMAGE/PNG` ra `isImage: true` mà `kind=image` lọc MẤT — đúng cái lệch mà "ĐỊNH NGHĨA DUY NHẤT" tồn tại để chặn.
+- **Chưa writer nào sinh tin `message_type='system'`** (đo 09/09/2026, 0 writer trong `apps/api/src/chat/**`) dù SPEC-15 hứa tin hệ thống cho thêm/bớt thành viên. Nhánh `kind:'system'` đã có ĐƯỜNG ĐỌC + ca test (gieo thẳng DB); nối dây writer là WO khác.
 
 ### 5.2 Trạng thái hiện thực (đối chiếu code, 01/08/2026)
 

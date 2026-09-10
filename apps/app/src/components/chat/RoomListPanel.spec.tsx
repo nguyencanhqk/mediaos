@@ -60,6 +60,26 @@ function room(id: string, over: Partial<ChatRoomDto> = {}): ChatRoomDto {
   };
 }
 
+/** Peer mặc định của một phòng `direct` (S17-CHAT-UX2-BE-1). */
+function peer(over: Partial<NonNullable<ChatRoomDto["peer"]>> = {}): ChatRoomDto["peer"] {
+  return {
+    userId: "11111111-1111-4111-8111-111111111111",
+    name: "Nguyễn Văn A",
+    avatarUrl: null,
+    isActive: true,
+    ...over,
+  };
+}
+
+/** Chip lọc theo khoá — bấm bằng `data-chip`, không bằng CHỮ (chữ đổi theo i18n, khoá thì không). */
+function chip(key: string): HTMLElement {
+  const found = screen
+    .getAllByTestId("chat-room-chip")
+    .find((el) => el.getAttribute("data-chip") === key);
+  if (!found) throw new Error(`không thấy chip "${key}"`);
+  return found;
+}
+
 function renderPanel(props: Partial<Parameters<typeof RoomListPanel>[0]> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const onSelectRoom = props.onSelectRoom ?? vi.fn();
@@ -70,7 +90,6 @@ function renderPanel(props: Partial<Parameters<typeof RoomListPanel>[0]> = {}) {
       <I18nextProvider i18n={i18n}>
         <RoomListPanel
           selectedRoomId={null}
-          resolvedNames={{}}
           isBootstrapping={false}
           {...props}
           onSelectRoom={onSelectRoom}
@@ -128,9 +147,15 @@ describe("RoomListPanel · danh sách + badge chưa đọc", () => {
     expect(screen.getByText(/CHAT-a/)).toBeTruthy();
   });
 
-  it("có `resolvedNames` ⇒ dùng tên đã dựng", () => {
-    useChatStore.getState().hydrateRooms([room("a", { roomType: "direct", name: null })]);
-    renderPanel({ resolvedNames: { a: "Nguyễn Văn A" } });
+  /**
+   * S17-CHAT-UX2-FE-1 — thay ca `resolvedNames` cũ: cache đã gỡ, tên DM nay đến từ `room.peer.name`
+   * (BE-1) và có mặt NGAY khung hình đầu — store chưa có `members[]` nào ở đây, cố ý.
+   */
+  it("phòng direct có `peer.name` ⇒ hiện tên người đối thoại (không cần members)", () => {
+    useChatStore
+      .getState()
+      .hydrateRooms([room("a", { roomType: "direct", name: null, peer: peer() })]);
+    renderPanel();
     expect(screen.getByText("Nguyễn Văn A")).toBeTruthy();
   });
 });
@@ -158,7 +183,7 @@ describe("RoomListPanel · tìm + rổ lưu trữ", () => {
     listRooms.mockResolvedValue([room("old", { isArchived: true })]);
     renderPanel();
 
-    fireEvent.click(screen.getByText("Xem phòng đã lưu trữ"));
+    fireEvent.click(chip("archived"));
 
     await waitFor(() => expect(listRooms).toHaveBeenCalledWith({ archived: true }));
     // Phòng đang hoạt động PHẢI còn trong store — nếu bị gỡ, quay lại rổ thường sẽ trống trơn.
@@ -169,7 +194,7 @@ describe("RoomListPanel · tìm + rổ lưu trữ", () => {
 
   it("rổ lưu trữ rỗng ⇒ thông điệp riêng, không dùng lại chữ của rổ thường", async () => {
     renderPanel();
-    fireEvent.click(screen.getByText("Xem phòng đã lưu trữ"));
+    fireEvent.click(chip("archived"));
     expect(await screen.findByText("Không có phòng nào đã lưu trữ.")).toBeTruthy();
   });
 });

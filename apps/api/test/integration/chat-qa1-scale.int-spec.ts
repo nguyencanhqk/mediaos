@@ -39,6 +39,11 @@ import { DatabaseService } from "../../src/db/db.service";
 import { ChatRoomsRepository } from "../../src/chat/chat-rooms.repository";
 import { directPool, hasDb } from "../helpers/integration-db";
 import {
+  captureQueries,
+  queriesFromTable,
+  type CapturedQuery,
+} from "../helpers/query-capture";
+import {
   cleanupTenants,
   seedCompany,
   seedPermissionCatalog,
@@ -229,23 +234,35 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-QA-1 — hiệu năng ở quy mô (SPEC-15 
 
   // ══════════════ (B) N+1 không xuất hiện theo quy mô ══════════════
 
-  it("§19: danh sách phòng vẫn ĐÚNG 1 truy vấn SELECT khi công ty có 50k tin / 25 phòng", async () => {
+  it("§19: danh sách phòng vẫn ĐÚNG 1 CÂU SQL khi công ty có 50k tin / 25 phòng", async () => {
+    // ⚠️ ĐỔI PHÉP ĐO ở S17-CHAT-UX2-BE-1 — bản cũ đếm số lần BUILDER `tx.select` được DỰNG rồi assert
+    // `=== 1`, tức ngầm coi "1 builder = 1 round-trip". Hai thứ đó KHÔNG bằng nhau: `LEFT JOIN LATERAL`
+    // phải dựng builder cho subquery nhưng vẫn đi trong CÙNG MỘT câu SQL. Con số 1 vì thế là chi tiết
+    // THI CÔNG chứ không phải bất biến §19 — và giữ nó ép mọi WO sau hoặc bỏ lateral, hoặc sửa hằng số
+    // thành 3 (rồi 4, rồi 5) mà không ai còn biết số đó nghĩa là gì.
+    //
+    // Nay đếm CÂU SQL THẬT ở tầng driver `pg` — đúng đại lượng mà mệnh đề "không N+1" nói tới, rời rạc,
+    // không phụ thuộc máy chạy (khác hẳn đo thời gian — `slow-probe-manufactures-timeout-red`).
     const db = app.get(DatabaseService);
     const repo = app.get(ChatRoomsRepository);
-    let selectCalls = 0;
 
-    const rows = await db.withTenant(A.companyId, async (tx) => {
-      const counting = new Proxy(tx as object, {
-        get(target, prop, receiver) {
-          if (prop === "select") selectCalls += 1;
-          return Reflect.get(target, prop, receiver);
-        },
-      }) as typeof tx;
-      return repo.listRoomsForUser(counting, A.companyId, uActor, { archived: false });
-    });
+    const cap = captureQueries();
+    let rows: Awaited<ReturnType<typeof repo.listRoomsForUser>>;
+    let queries: CapturedQuery[];
+    try {
+      rows = await db.withTenant(A.companyId, (tx) =>
+        repo.listRoomsForUser(tx, A.companyId, uActor, { archived: false }),
+      );
+    } finally {
+      queries = cap.stop();
+    }
 
     expect(rows.length, "actor là thành viên đúng 5 phòng").toBe(INSIDE_ROOMS);
-    expect(selectCalls, `số truy vấn SELECT cho ${rows.length} phòng ở quy mô 50k tin`).toBe(1);
+    const roomQueries = queriesFromTable(queries, "chat_rooms");
+    expect(
+      roomQueries.length,
+      `số CÂU SQL chạm chat_rooms cho ${rows.length} phòng ở quy mô 50k tin`,
+    ).toBe(1);
   });
 
   it("§19: /chat/rooms qua HTTP ở quy mô — trả đủ 5 phòng, unreadCount là SỐ (không null)", async () => {
