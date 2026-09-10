@@ -36,6 +36,11 @@ export interface SendChatMessageInput {
   clientMessageId: string;
   body: string;
   fileIds?: string[];
+  /**
+   * S17-CHAT-UX2-FE-3 — userId được nhắc trong tin. Server LỌC bỏ người ngoài phòng im lặng
+   * (CHAT-ERR-010) nhưng KHÔNG lọc hộ ta người đã bị xoá khỏi chữ — xem `collectMentionIds`.
+   */
+  mentions?: string[];
   replyToMessageId?: string;
 }
 
@@ -153,6 +158,9 @@ export function useChatConversation(roomId: string | null): ChatConversationStat
         clientMessageId: input.clientMessageId,
         ...(input.replyToMessageId ? { replyToMessageId: input.replyToMessageId } : {}),
         ...(input.fileIds && input.fileIds.length > 0 ? { fileIds: input.fileIds } : {}),
+        // Mảng RỖNG bị bỏ hẳn khỏi body chứ không gửi `[]`: `mentions` là `.optional()` ở
+        // `sendMessageSchema`, và gửi một khoá rỗng chỉ để "cho đủ" là thêm nhiễu vào mọi log request.
+        ...(input.mentions && input.mentions.length > 0 ? { mentions: input.mentions } : {}),
       };
 
       try {

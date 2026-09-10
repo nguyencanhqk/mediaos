@@ -74,6 +74,14 @@ export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
 /** Khớp `sendMessageSchema.body.max(4000)`. */
 export const MAX_MESSAGE_LENGTH = 4000;
 
+/**
+ * S17-CHAT-UX2-FE-3 — khớp `sendMessageSchema.mentions.max(20)`.
+ *
+ * Cắt ở FE là để người dùng không mất CẢ tin vì một 422 sau khi đã gõ xong: server từ chối nguyên
+ * request khi mảng quá 20, chứ không lặng lẽ bỏ bớt (khác với lọc người-ngoài-phòng CHAT-ERR-010).
+ */
+export const MAX_MENTIONS_PER_MESSAGE = 20;
+
 /** Số tin mỗi trang khi cuộn ngược — khớp `listChatMessagesQuerySchema.limit.default(50)`. */
 export const MESSAGE_PAGE_SIZE = 50;
 

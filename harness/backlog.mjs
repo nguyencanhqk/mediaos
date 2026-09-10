@@ -16973,6 +16973,9 @@ export const backlog = [
       "apps/app/src/components/chat/**/*.spec.ts",
       "apps/app/src/components/chat/**/*.spec.tsx",
       "apps/app/src/components/chat/ConversationPanel.tsx",
+      // BỔ SUNG lúc thi công (10/09): `mentions[]` phải đi qua `SendChatMessageInput` → `SendMessageRequest`,
+      // mà khoá đó nằm ở đây. Khai tường minh thay vì để hook `guard-scope` kêu rồi lách.
+      "apps/app/src/components/chat/use-chat-conversation.ts",
       "apps/app/src/routes/chat/constants.ts",
       "apps/app/src/i18n/locales/**",
       "docs/plans/S17-CHAT-UX2-FE-3.md",
