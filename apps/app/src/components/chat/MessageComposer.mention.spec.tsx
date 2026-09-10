@@ -187,6 +187,29 @@ describe("MessageComposer · chọn gợi ý ⇒ chèn chữ + gửi `mentions[]
     expect(onSubmit.mock.calls[0][0].body).toBe("@ng");
     expect(onSubmit.mock.calls[0][0].mentions).toEqual([]);
   });
+
+  it("popover MỞ ⇒ phát `data-floating-layer=open`; ĐÓNG ⇒ dấu biến mất", async () => {
+    /*
+     * S17-CHAT-UX2-FE-5 — nửa còn thiếu của hợp đồng "nhường Esc".
+     *
+     * `ConversationPanel` và `Sheet` đều bail khi thấy `[data-floating-layer="open"]`, và cả hai đã có
+     * ca riêng cho việc bail đó (dựng một `<div>` giả mang dấu). Thứ KHÔNG ca nào giữ là: popover THẬT
+     * có phát dấu hay không. `MentionPopover` không đi qua primitive `Popover` (nó không có trigger và
+     * cố ý không nhận tiêu điểm) nên nó là lớp nổi duy nhất của CHAT phải tự khai — quên là trong
+     * drawer, một lần Esc vừa đóng gợi ý vừa đóng cả drawer, mất tin đang gõ.
+     *
+     * Cặp ALLOW/DENY trong cùng một ca: chỉ đo lúc MỞ thì một thuộc tính dán cứng cũng xanh.
+     */
+    renderComposer({});
+
+    type("@ng");
+    const listbox = await screen.findByRole("listbox");
+    expect(listbox).toHaveAttribute("data-floating-layer", "open");
+
+    fireEvent.keyDown(textbox(), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
+    expect(document.querySelector('[data-floating-layer="open"]')).toBeNull();
+  });
 });
 
 describe("MessageComposer · `mentions[]` đi theo CHỮ, không theo lượt chọn", () => {

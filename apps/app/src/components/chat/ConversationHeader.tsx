@@ -10,7 +10,7 @@
  * phụ thuộc vào một context tuỳ chọn biến nó thành thứ không render nổi trong test lẻ.
  */
 import { useTranslation } from "react-i18next";
-import { Info, Search } from "lucide-react";
+import { ChevronLeft, Info, Search } from "lucide-react";
 import { Avatar, Button } from "@mediaos/ui";
 import type { ChatRoomDto } from "@mediaos/contracts";
 import { RoomAvatar } from "./RoomAvatar";
@@ -35,6 +35,13 @@ interface ConversationHeaderProps {
   onToggleInfo?: () => void;
   /** Mở tìm kiếm ĐÃ bó theo phòng này. `undefined` ⇒ ẩn nút (drawer chưa có cột tìm kiếm). */
   onSearchInRoom?: () => void;
+  /**
+   * S17-CHAT-UX2-FE-5 — quay lại danh sách phòng (mốc 1 cột của `/chat`). `undefined` ⇒ ẩn nút.
+   *
+   * Chỉ có nghĩa ở bố cục mà danh sách và hội thoại LOẠI TRỪ nhau; ở ba cột thì danh sách vẫn nằm ngay
+   * bên trái, một nút "quay lại" ở đó là mời bấm vào chỗ không dẫn đi đâu cả.
+   */
+  onBack?: () => void;
   /** Nút gọi — do caller dựng (cần `CallProvider`). */
   callSlot?: React.ReactNode;
 }
@@ -48,6 +55,7 @@ export function ConversationHeader({
   isInfoOpen,
   onToggleInfo,
   onSearchInRoom,
+  onBack,
   callSlot,
 }: ConversationHeaderProps): React.ReactElement {
   const { t } = useTranslation("chat");
@@ -58,6 +66,19 @@ export function ConversationHeader({
       className="flex items-center gap-2 border-b border-border px-4 py-2.5"
       data-testid="chat-conversation-header"
     >
+      {onBack && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="shrink-0"
+          aria-label={t("conversation.back")}
+          data-testid="chat-header-back"
+          onClick={onBack}
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      )}
+
       {/*
        * Phòng `direct` KHÔNG có `avatarUrl` riêng — CHECK `chk_chat_rooms_direct_no_avatar` (mig 0543)
        * ép ở DB. Ảnh DM là dẫn xuất từ người đối thoại, lấy qua ROSTER (đã ký 1 lô cho cả phòng).

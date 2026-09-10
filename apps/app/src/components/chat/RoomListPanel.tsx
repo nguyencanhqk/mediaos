@@ -64,10 +64,44 @@ import {
 interface RoomListPanelProps {
   selectedRoomId: string | null;
   onSelectRoom: (roomId: string) => void;
-  onCreateRoom: () => void;
-  /** S7-CHAT-FE-4 — mở CHAT-SCREEN-005 (tìm theo NỘI DUNG tin), khác hẳn ô lọc phòng bên dưới. */
-  onOpenSearch: () => void;
+  /**
+   * Mở hộp thoại tạo phòng. `undefined` ⇒ **ẩn hẳn nút**, không render nút vô hiệu.
+   *
+   * S17-CHAT-UX2-FE-5 làm prop này tuỳ chọn cho drawer. Một nút hiện ra mà không làm gì là thứ người
+   * dùng bấm rồi tưởng hệ thống treo.
+   */
+  onCreateRoom?: () => void;
+  /**
+   * S7-CHAT-FE-4 — mở CHAT-SCREEN-005 (tìm theo NỘI DUNG tin), khác hẳn ô lọc phòng bên dưới.
+   * `undefined` ⇒ ẩn nút (drawer không có cột tìm kiếm để mở).
+   */
+  onOpenSearch?: () => void;
   isBootstrapping: boolean;
+  /**
+   * S17-CHAT-UX2-FE-5 — hình dạng của cột.
+   *
+   *   `page`   (mặc định) cột trái của `/chat`: bề rộng cố định + viền phải
+   *   `drawer` chiếm hết bề ngang vật chứa, không viền — dùng trong drawer và ở mốc 1 cột của `/chat`
+   *
+   * CHỈ khác bề rộng/viền: chia mục, chiều cao dòng, preview, `RoomRowMenu` giữ nguyên. Một "chế độ
+   * compact" cắt bớt nội dung sẽ tạo ra hai bản danh sách phòng phải nuôi song song.
+   */
+  variant?: "page" | "drawer";
+  /**
+   * S17-CHAT-UX2-FE-5 — câu lọc theo tên/mã, ĐIỀU KHIỂN TỪ NGOÀI (tuỳ chọn).
+   *
+   * Không truyền ⇒ panel tự giữ state như trước (mọi caller cũ không đổi một dòng). Truyền ⇒ caller
+   * giữ. Drawer cần vế sau: bấm một phòng là đẩy sang hội thoại và panel này UNMOUNT, nên câu vừa gõ
+   * sẽ bốc hơi mỗi lần liếc một phòng rồi bấm ‹ quay lại.
+   *
+   * ⚠️ Đọc bằng `??` chứ KHÔNG `||`: `""` là câu lọc rỗng HỢP LỆ do caller đặt, `||` sẽ nuốt nó và rơi
+   * về state nội bộ ⇒ hai nguồn sự thật lệch nhau ngay lần người dùng xoá hết ô tìm.
+   */
+  query?: string;
+  onQueryChange?: (query: string) => void;
+  /** Chip lọc nhanh, điều khiển từ ngoài (cùng lý do `query`). */
+  chip?: RoomFilterChip;
+  onChipChange?: (chip: RoomFilterChip) => void;
 }
 
 export function RoomListPanel({
@@ -76,6 +110,11 @@ export function RoomListPanel({
   onCreateRoom,
   onOpenSearch,
   isBootstrapping,
+  variant = "page",
+  query: queryProp,
+  onQueryChange,
+  chip: chipProp,
+  onChipChange,
 }: RoomListPanelProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const canCreate = useCan(CHAT_PAIRS.CREATE_ROOM.action, CHAT_PAIRS.CREATE_ROOM.resourceType);
@@ -83,12 +122,39 @@ export function RoomListPanel({
   // thông báo · đánh dấu chưa đọc) là tuỳ chọn CÁ NHÂN và không hỏi cặp quản trị nào — xem `useRoomPrefs`.
   const canArchive = useCan(CHAT_PAIRS.ARCHIVE_ROOM.action, CHAT_PAIRS.ARCHIVE_ROOM.resourceType);
 
-  const [query, setQuery] = useState("");
+  const [queryState, setQueryState] = useState("");
   /**
    * Chip đang chọn. **`useState`, KHÔNG `localStorage`** — §9a: chip không lưu, mỗi lần vào lại màn hình
    * đều về «Tất cả». (Trạng thái THU/MỞ mục thì VẪN nhớ — hai thứ khác nhau, đừng gộp khoá.)
    */
-  const [chip, setChip] = useState<RoomFilterChip>(DEFAULT_ROOM_FILTER_CHIP);
+  const [chipState, setChipState] = useState<RoomFilterChip>(DEFAULT_ROOM_FILTER_CHIP);
+
+  /**
+   * S17-CHAT-UX2-FE-5 — controlled/uncontrolled: caller truyền thì caller giữ, KHÔNG giữ cả hai.
+   *
+   * `setQueryState` chỉ được gọi ở nhánh KHÔNG được điều khiển. Ghi vào state nội bộ khi đang được điều
+   * khiển là dựng một bản sao thứ hai chạy song song: caller từ chối một giá trị (ví dụ chuẩn hoá
+   * khoảng trắng) thì ô input hiện một đằng, danh sách lọc theo một nẻo.
+   */
+  const isQueryControlled = queryProp !== undefined;
+  const query = queryProp ?? queryState;
+  const setQuery = useCallback(
+    (next: string): void => {
+      if (isQueryControlled) onQueryChange?.(next);
+      else setQueryState(next);
+    },
+    [isQueryControlled, onQueryChange],
+  );
+
+  const isChipControlled = chipProp !== undefined;
+  const chip = chipProp ?? chipState;
+  const setChip = useCallback(
+    (next: RoomFilterChip): void => {
+      if (isChipControlled) onChipChange?.(next);
+      else setChipState(next);
+    },
+    [isChipControlled, onChipChange],
+  );
   const showArchived = chipNeedsArchivedScope(chip);
   /** Menu ĐANG mở của phòng nào — một tại một thời điểm (mở cái thứ hai tự đóng cái trước). */
   const [openMenuRoomId, setOpenMenuRoomId] = useState<string | null>(null);
@@ -287,14 +353,21 @@ export function RoomListPanel({
 
   return (
     <aside
-      className="flex h-full w-72 shrink-0 flex-col border-r border-border"
+      className={cn(
+        "flex h-full min-h-0 flex-col",
+        // `page`: 320px theo CHAT-DEC-026 (§9 SCREEN-001 v2 — 320/co giãn/340). Trước FE-5 là `w-72`
+        // (288px), lệch 32px so với thiết kế.
+        variant === "page" ? "w-80 shrink-0 border-r border-border" : "w-full",
+      )}
       aria-label={t("rooms.heading")}
+      data-testid="chat-room-list"
+      data-variant={variant}
     >
       <RoomListHeader
         query={query}
         onQueryChange={setQuery}
         onOpenSearch={onOpenSearch}
-        onCreateRoom={canCreate ? onCreateRoom : null}
+        onCreateRoom={canCreate ? onCreateRoom : undefined}
       />
 
       <RoomFilterChipBar value={chip} onChange={setChip} />
@@ -395,8 +468,10 @@ export function RoomListPanel({
  * Tách khỏi `RoomListPanel` cùng lý do `RoomRow`/`RoomPreviewLine` đã tách: thân component chính vốn đã
  * dài, và mỗi khối JSX độc lập ở đây không đọc state nào ngoài thứ nó nhận qua props.
  *
- * `onCreateRoom === null` ⇒ **không render nút** (không phải render nút vô hiệu hoá): §14 nói ẩn hẳn khi
- * thiếu cặp quyền. Cổng thật vẫn ở server; đây chỉ là chuyện không mời người dùng bấm vào chỗ sẽ bị từ chối.
+ * `onCreateRoom === undefined` ⇒ **không render nút** (không phải render nút vô hiệu hoá): §14 nói ẩn hẳn
+ * khi thiếu cặp quyền. Cổng thật vẫn ở server; đây chỉ là chuyện không mời người dùng bấm vào chỗ sẽ bị
+ * từ chối. `onOpenSearch === undefined` cũng vậy, nhưng vì lý do khác (S17-CHAT-UX2-FE-5): trong drawer
+ * KHÔNG có cột tìm kiếm nào để mở, nên nút đó sẽ là một nút chết.
  */
 function RoomListHeader({
   query,
@@ -406,8 +481,8 @@ function RoomListHeader({
 }: {
   query: string;
   onQueryChange: (value: string) => void;
-  onOpenSearch: () => void;
-  onCreateRoom: (() => void) | null;
+  onOpenSearch?: () => void;
+  onCreateRoom?: () => void;
 }): React.ReactElement {
   const { t } = useTranslation("chat");
   return (
@@ -425,21 +500,24 @@ function RoomListHeader({
           className="h-8 pl-7 text-sm"
         />
       </div>
-      <Button
-        size="icon-sm"
-        variant="ghost"
-        aria-label={t("search.openAria")}
-        onClick={onOpenSearch}
-        data-testid="chat-open-search"
-      >
-        <MessagesSquare className="h-4 w-4" aria-hidden="true" />
-      </Button>
-      {onCreateRoom !== null && (
+      {onOpenSearch !== undefined && (
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          aria-label={t("search.openAria")}
+          onClick={onOpenSearch}
+          data-testid="chat-open-search"
+        >
+          <MessagesSquare className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      )}
+      {onCreateRoom !== undefined && (
         <Button
           size="icon-sm"
           variant="ghost"
           aria-label={t("rooms.newButtonAria")}
           onClick={onCreateRoom}
+          data-testid="chat-create-room"
         >
           <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
         </Button>

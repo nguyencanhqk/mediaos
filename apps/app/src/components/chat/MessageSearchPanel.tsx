@@ -43,6 +43,14 @@ interface MessageSearchPanelProps {
   onClose: () => void;
   /** Tin đang được làm nổi ở cột giữa — đánh dấu lại trong danh sách để không mất dấu sau khi cuộn. */
   activeMessageId: string | null;
+  /**
+   * S17-CHAT-UX2-FE-5 — đè bề rộng (mặc định `w-96`).
+   *
+   * Ở mốc 1 cột của `/chat` (<768px) panel này chiếm TOÀN BỘ bề ngang thay vì đứng cạnh hội thoại. Mở
+   * một `className` thay vì sinh một `variant` thứ hai: khác biệt duy nhất là bề rộng, còn nội dung và
+   * mọi hành vi giữ nguyên — một enum ở đây sẽ là hai tên gọi cho cùng một component.
+   */
+  className?: string;
 }
 
 export function MessageSearchPanel({
@@ -53,13 +61,14 @@ export function MessageSearchPanel({
   onOpenResult,
   onClose,
   activeMessageId,
+  className,
 }: MessageSearchPanelProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const search = useMessageSearch(query, scope.roomId);
 
   return (
     <aside
-      className="flex h-full w-96 shrink-0 flex-col border-r border-border"
+      className={cn("flex h-full min-h-0 w-96 shrink-0 flex-col border-r border-border", className)}
       aria-label={t("search.heading")}
       data-testid="chat-search-panel"
     >
