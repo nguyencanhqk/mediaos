@@ -14,6 +14,7 @@ import {
   formatDayLabel,
   formatFileSize,
   initialsOf,
+  formatRelativeTime,
   roomDisplayName,
   splitTextWithLinks,
 } from "./chat-format";
@@ -103,6 +104,92 @@ describe("roomDisplayName", () => {
     expect(
       roomDisplayName({ name: null, roomType: "group", roomCode: "C1" }, [], ME, fallback),
     ).toBe("DM · C1");
+  });
+
+  // ── S17-CHAT-UX2-FE-1 — `room.peer` thay hẳn cache `resolvedNames` ────────────────────────────
+  const PEER = {
+    userId: OTHER,
+    name: "Nguyễn Văn A",
+    avatarUrl: null,
+    isActive: true,
+  };
+
+  it("direct có `peer.name` mà KHÔNG có members ⇒ ra tên peer (DM có tên ở khung hình ĐẦU)", () => {
+    expect(
+      roomDisplayName(
+        { name: null, roomType: "direct", roomCode: "CHAT-0009", peer: PEER },
+        undefined,
+        ME,
+        fallback,
+      ),
+    ).toBe("Nguyễn Văn A");
+  });
+
+  /**
+   * Thứ tự nguồn LÀ hợp đồng: `members` (phòng đang MỞ, nguồn tươi nhất) đứng TRƯỚC `peer`. Đảo lại là
+   * đổi hành vi của `ConversationPanel` — một màn ngoài phạm vi WO — để tiện cho màn trong phạm vi.
+   */
+  it("có CẢ members lẫn peer ⇒ `members` THẮNG", () => {
+    expect(
+      roomDisplayName(
+        { name: null, roomType: "direct", roomCode: "CHAT-0009", peer: PEER },
+        [
+          { userId: ME, userName: "Tôi" },
+          { userId: OTHER, userName: "Tên từ roster" },
+        ],
+        ME,
+        fallback,
+      ),
+    ).toBe("Tên từ roster");
+  });
+
+  it("`peer.name` null (không tra được `users`) ⇒ vẫn tụt về nhãn mã phòng, KHÔNG ra chuỗi rỗng", () => {
+    expect(
+      roomDisplayName(
+        { name: null, roomType: "direct", roomCode: "CHAT-0009", peer: { ...PEER, name: null } },
+        undefined,
+        ME,
+        fallback,
+      ),
+    ).toBe("DM · CHAT-0009");
+  });
+
+  it("phòng NHÓM KHÔNG bao giờ đọc `peer` (peer của phòng 200 người là vô nghĩa)", () => {
+    expect(
+      roomDisplayName(
+        { name: null, roomType: "group", roomCode: "C1", peer: PEER },
+        undefined,
+        ME,
+        fallback,
+      ),
+    ).toBe("DM · C1");
+  });
+});
+
+/**
+ * S17-CHAT-UX2-FE-1 — thời gian TƯƠNG ĐỐI của dòng phòng.
+ *
+ * `now` tiêm được nên KHÔNG cần dịch đồng hồ: fake timers làm vỡ `socket.io-client` ở các spec khác
+ * cùng module (memory `fake-timers-break-socketio-client-emit`).
+ */
+describe("formatRelativeTime", () => {
+  const now = new Date("2026-08-10T12:00:00.000Z");
+
+  it("khoảng cách ngày/tuần ra chữ Việt, KHÔNG kèm hậu tố «trước» (cột 320px)", () => {
+    expect(formatRelativeTime("2026-08-08T12:00:00.000Z", now)).toBe("2 ngày");
+    expect(formatRelativeTime("2026-08-03T12:00:00.000Z", now)).toBe("7 ngày");
+    expect(formatRelativeTime("2026-08-10T11:55:00.000Z", now)).toBe("5 phút");
+  });
+
+  it("mốc KHÔNG hợp lệ ⇒ chuỗi rỗng, không phải «Invalid Date»", () => {
+    expect(formatRelativeTime("khong-phai-ngay", now)).toBe("");
+  });
+
+  it("`now` thực sự được dùng — hai mốc `now` khác nhau cho hai kết quả khác nhau", () => {
+    const iso = "2026-08-08T12:00:00.000Z";
+    expect(formatRelativeTime(iso, now)).not.toBe(
+      formatRelativeTime(iso, new Date("2026-09-08T12:00:00.000Z")),
+    );
   });
 });
 

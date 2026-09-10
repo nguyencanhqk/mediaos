@@ -26,6 +26,7 @@ import type {
   WsChatRoomEvent,
   WsChatTypingEvent,
 } from "@mediaos/contracts";
+import { previewFromMessage } from "@/components/chat/chat-preview";
 
 /**
  * Một đính kèm trong store — hợp của HAI hình dạng, và đây KHÔNG phải sự cẩu thả về kiểu.
@@ -706,6 +707,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         lastMessageAt: message.createdAt,
         lastMessageSeq: message.roomSeq,
         unreadCount: isMine ? (room.unreadCount ?? 0) : (room.unreadCount ?? 0) + 1,
+        // S17-CHAT-UX2-FE-1 (CHAT-DEC-022) — dòng preview ở danh sách phòng đi CÙNG chốt `roomSeq` ngay
+        // trên, không phải một nhánh riêng: lưới bù `getMessages(roomId, {})` trả nguyên trang 50 tin
+        // MỚI NHẤT (đã đọc từ lâu) và cuộn ngược `beforeSeq` cũng đổ tin cũ qua đây. Vá preview ngoài
+        // chốt đó là để một tin CŨ leo lên làm "tin cuối" của phòng.
+        lastMessage: previewFromMessage(message),
       };
       const roomsById = { ...state.roomsById, [message.roomId]: updatedRoom };
       return {
@@ -816,7 +822,29 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           ? { ...m, body: null, recalledAt: event.recalledAt, attachments: [] }
           : m,
       );
-      return { messagesByRoom: { ...state.messagesByRoom, [event.roomId]: next } };
+      const messagesByRoom = { ...state.messagesByRoom, [event.roomId]: next };
+
+      /**
+       * S17-CHAT-UX2-FE-1 — thu hồi ĐÚNG tin cuối ⇒ dòng preview ở danh sách phòng phải theo (SPEC-15
+       * §14 v2: chữ xám «đã được thu hồi», KHÔNG phải khoảng trắng). Thu hồi một tin GIỮA thì `lastMessage`
+       * giữ nguyên — nó nói về tin khác.
+       *
+       * So bằng `roomSeq === room.lastMessageSeq`: `lastMessage` không mang `roomSeq` nên không tự so
+       * được, còn `id` thì không có trong DTO preview. Tin bị thu hồi KHÔNG nằm trong RAM ⇒ nhánh trên
+       * đã `return state`, và lần refetch REST kế tiếp sẽ trả preview đã che từ server.
+       */
+      const room = state.roomsById[event.roomId];
+      const recalled = next.find((m) => m.id === event.messageId);
+      if (!room || !recalled || recalled.roomSeq !== (room.lastMessageSeq ?? 0)) {
+        return { messagesByRoom };
+      }
+      return {
+        messagesByRoom,
+        roomsById: {
+          ...state.roomsById,
+          [event.roomId]: { ...room, lastMessage: previewFromMessage(recalled) },
+        },
+      };
     }),
 
   /**

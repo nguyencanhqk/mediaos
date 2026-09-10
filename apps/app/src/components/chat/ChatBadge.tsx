@@ -37,7 +37,6 @@ export function ChatBadge(): React.ReactElement | null {
   const roomOrder = useChatStore((s) => s.roomOrder);
   const myUserId = useChatStore((s) => s.myUserId);
   const openRoom = useChatDockStore((s) => s.openRoom);
-  const resolvedNames = useChatDockStore((s) => s.resolvedNames);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -140,11 +139,11 @@ export function ChatBadge(): React.ReactElement | null {
             <ul className="max-h-80 overflow-y-auto py-1">
               {rooms.map((room) => {
                 const unread = room.unreadCount ?? 0;
-                const name =
-                  resolvedNames[room.id] ??
-                  roomDisplayName(room, undefined, myUserId, (code) =>
-                    t("rooms.directFallback", { code }),
-                  );
+                // S17-CHAT-UX2-FE-1 — `roomDisplayName` nay đọc `room.peer.name` (BE-1) nên DM có tên
+                // đúng ngay ở badge, kể cả phòng chưa bao giờ mở. Cache `resolvedNames` đã gỡ hẳn.
+                const name = roomDisplayName(room, undefined, myUserId, (code) =>
+                  t("rooms.directFallback", { code }),
+                );
                 return (
                   <li key={room.id}>
                     <button

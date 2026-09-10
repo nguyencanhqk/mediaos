@@ -47,30 +47,27 @@ describe("chat-dock.store", () => {
     expect(store().openRoomIds).toEqual(["a"]);
   });
 
-  it("closeRoom dọn CẢ ba map (openRoomIds · minimized · resolvedNames)", () => {
+  // S17-CHAT-UX2-FE-1 — trước đây là "CẢ BA map"; `resolvedNames` đã gỡ khỏi store (tên DM nay đến
+  // thẳng từ `room.peer.name`). Ca GIỮ NGUYÊN mục đích: đóng cửa sổ không được để lại tàn dư nào.
+  it("closeRoom dọn CẢ HAI map (openRoomIds · minimized)", () => {
     store().openRoom("a");
     store().toggleMinimize("a");
-    store().setResolvedName("a", "Nguyễn Văn A");
-    expect(store().resolvedNames.a).toBe("Nguyễn Văn A");
+    expect(store().minimizedRoomIds.a).toBe(true);
 
     store().closeRoom("a");
     expect(store().openRoomIds).toEqual([]);
     expect(store().minimizedRoomIds.a).toBeUndefined();
-    expect(store().resolvedNames.a).toBeUndefined();
   });
 
   it("cửa sổ bị THAY CHỖ để lại đúng bằng KHÔNG state (như khi đóng tay)", () => {
     store().openRoom("a");
     store().toggleMinimize("a");
-    store().setResolvedName("a", "Nguyễn Văn A");
 
     store().openRoom("b"); // "a" bị thay chỗ
 
     expect(store().openRoomIds).toEqual(["b"]);
     // Sót cờ này thì mở lại "a" sẽ hiện ra ở trạng thái thu nhỏ, không ai hiểu vì sao.
     expect(store().minimizedRoomIds.a).toBeUndefined();
-    // Sót tên này thì mỗi lần đổi phòng lại bỏ lại một khoá chết — rò rỉ theo số lần bấm.
-    expect(store().resolvedNames.a).toBeUndefined();
   });
 
   it("toggleMinimize KHÔNG tạo trạng thái cho phòng chưa mở", () => {
@@ -79,21 +76,25 @@ describe("chat-dock.store", () => {
     expect(store().openRoomIds).toEqual([]);
   });
 
-  it("setResolvedName bỏ qua tên RỖNG (không biến nhãn phòng thành ô trắng)", () => {
-    store().openRoom("a");
-    store().setResolvedName("a", "Trần Thị B");
-    store().setResolvedName("a", "");
-    expect(store().resolvedNames.a).toBe("Trần Thị B");
-  });
-
   it("resetChatDock trả về trạng thái khởi tạo", () => {
     store().openRoom("a");
     store().toggleMinimize("a");
-    store().setResolvedName("a", "X");
 
     store().resetChatDock();
     expect(store().openRoomIds).toEqual([]);
     expect(store().minimizedRoomIds).toEqual({});
-    expect(store().resolvedNames).toEqual({});
+  });
+
+  /**
+   * S17-CHAT-UX2-FE-1 — ratchet: `chat-dock.store` **không được** mọc lại một cache tên phòng.
+   *
+   * Nó từng có (`resolvedNames` + `setResolvedName`) và đã gỡ vì `room.peer.name` đến thẳng từ
+   * `GET /chat/rooms`. Ca này ĐỎ nếu ai đó thêm lại một map thứ ba — thứ chỉ hỏng khi hai nhãn của cùng
+   * một người lệch nhau, tức là ở đúng chỗ không ai nhìn.
+   */
+  it("KHÔNG có cache tên phòng nào trong store (đã gỡ ở S17-CHAT-UX2-FE-1)", () => {
+    const keys = Object.keys(store());
+    expect(keys).not.toContain("resolvedNames");
+    expect(keys).not.toContain("setResolvedName");
   });
 });

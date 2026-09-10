@@ -6,7 +6,6 @@
  * ngược, banner mất kết nối — panel nổi phải làm được y hệt, và cách rẻ nhất để điều đó ĐÚNG MÃI là
  * dùng chung đúng một component.
  */
-import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -33,8 +32,6 @@ export function ChatDockWindow({ roomId }: ChatDockWindowProps): React.ReactElem
   const myUserId = useChatStore((s) => s.myUserId);
 
   const isMinimized = useChatDockStore((s) => s.minimizedRoomIds[roomId] === true);
-  const cachedName = useChatDockStore((s) => s.resolvedNames[roomId]);
-  const setResolvedName = useChatDockStore((s) => s.setResolvedName);
   const toggleMinimize = useChatDockStore((s) => s.toggleMinimize);
   const closeRoom = useChatDockStore((s) => s.closeRoom);
 
@@ -45,7 +42,8 @@ export function ChatDockWindow({ roomId }: ChatDockWindowProps): React.ReactElem
    * trang không sinh request thứ hai. Khoá riêng sẽ tạo hai bản `members[]` lệch nhau và tên phòng
    * `direct` nhấp nháy giữa hai giá trị.
    *
-   * `enabled: !isMinimized` — cửa sổ thu nhỏ chỉ cần cái tên (đã cache), không cần danh sách thành viên.
+   * `enabled: !isMinimized` — cửa sổ thu nhỏ chỉ cần cái tên (nay đến từ `room.peer.name` ở store, xem
+   * `title` bên dưới), không cần danh sách thành viên.
    */
   const detailQuery = useQuery({
     queryKey: chatKeys.rooms.detail(roomId),
@@ -54,25 +52,21 @@ export function ChatDockWindow({ roomId }: ChatDockWindowProps): React.ReactElem
   });
   const detail = detailQuery.data;
 
-  useEffect(() => {
-    if (!detail || detail.roomType !== "direct") return;
-    // Thu hẹp về đúng phần "phòng" trước khi dựng nhãn — mirror ChatPage. `roomDisplayName` chỉ đọc
-    // name/roomType/roomCode nên không cần cả DTO.
-    setResolvedName(
-      roomId,
-      roomDisplayName(detail, detail.members, myUserId, (code) =>
-        t("rooms.directFallback", { code }),
-      ),
-    );
-  }, [detail, myUserId, roomId, setResolvedName, t]);
-
   // Phòng đã biến khỏi store (bị bớt / tự rời) — `ChatDock` dọn bằng effect riêng; ở đây chỉ tránh vẽ
   // một khung rỗng trong khung hình xen giữa hai lần render.
   if (!room) return null;
 
-  const title =
-    cachedName ??
-    roomDisplayName(room, detail?.members, myUserId, (code) => t("rooms.directFallback", { code }));
+  /**
+   * S17-CHAT-UX2-FE-1 — dựng TẠI CHỖ, không còn cache `resolvedNames` ở `chat-dock.store`.
+   *
+   * `room.peer.name` (S17-CHAT-UX2-BE-1) đã ở trong store từ `GET /chat/rooms`, kể cả khi cửa sổ đang
+   * THU NHỎ (lúc `detailQuery` không chạy) — đúng ca mà cache trước đây tồn tại để phục vụ. Badge trên
+   * header và cửa sổ này vì thế vẫn gọi cùng một phòng bằng CÙNG một cái tên: cùng một nguồn, không
+   * phải hai bản sao được giữ đồng bộ bằng tay.
+   */
+  const title = roomDisplayName(room, detail?.members, myUserId, (code) =>
+    t("rooms.directFallback", { code }),
+  );
   const unreadLabel = formatUnreadBadge(room.unreadCount ?? 0);
 
   return (

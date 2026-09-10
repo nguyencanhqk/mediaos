@@ -37,18 +37,6 @@ interface ChatDockState {
   openRoomIds: readonly string[];
   minimizedRoomIds: Readonly<Record<string, true>>;
   /**
-   * Tên hiển thị đã dựng của phòng `direct`, cache theo `roomId`.
-   *
-   * `GET /chat/rooms` KHÔNG kèm `members` và phòng `direct` không có `name` (mig 0538) ⇒ tên chỉ dựng
-   * được sau khi mở phòng (`getRoom` trả `members[]`). Cache ở ĐÂY chứ không ở component để badge trên
-   * header và cửa sổ dock gọi cùng một phòng bằng CÙNG một cái tên — hai nhãn khác nhau cho một người
-   * là cách chắc chắn làm người dùng nhắn nhầm.
-   *
-   * Không có tên thì call-site dùng nhãn dự phòng mang mã phòng; TUYỆT ĐỐI không bịa tên.
-   */
-  resolvedNames: Readonly<Record<string, string>>;
-
-  /**
    * Mở (hoặc đưa ra trước mắt) một hội thoại.
    *
    * Đã mở sẵn ⇒ chỉ BỎ thu nhỏ, GIỮ NGUYÊN vị trí: nhảy cửa sổ sang chỗ khác ngay lúc người dùng vừa
@@ -62,7 +50,6 @@ interface ChatDockState {
   openRoom: (roomId: string) => void;
   closeRoom: (roomId: string) => void;
   toggleMinimize: (roomId: string) => void;
-  setResolvedName: (roomId: string, name: string) => void;
   /**
    * Dọn sạch — mirror `resetChatStore` của FE-1, và giống nó ở cả chỗ CHƯA có caller sản phẩm: đăng
    * xuất là hard navigation nên trình duyệt huỷ luôn cả tab (xem cleanup của `useChatRealtime`). Giữ
@@ -74,7 +61,6 @@ interface ChatDockState {
 const createInitialState = () => ({
   openRoomIds: [] as readonly string[],
   minimizedRoomIds: {} as Readonly<Record<string, true>>,
-  resolvedNames: {} as Readonly<Record<string, string>>,
 });
 
 /** Gỡ một khoá khỏi map, trả về CHÍNH map cũ khi khoá không có (caller bỏ qua được `set()` thừa). */
@@ -102,32 +88,29 @@ export const useChatDockStore = create<ChatDockState>((set) => ({
       // đẩy ra và tự đóng là cùng một kết cục, để lại hai loại tàn dư khác nhau thì không ai lần được.
       //
       //  · cờ thu nhỏ: giữ lại ⇒ lần sau mở lại chính phòng ấy nó hiện ra ở trạng thái thu nhỏ của một
-      //    phiên đã quên;
-      //  · tên đã dựng: giữ lại ⇒ tích luỹ khoá chết suốt phiên. Ở trần 1, MỖI lần đổi phòng đều đi qua
-      //    nhánh này (không còn là ca hiếm như hồi trần 3), nên rò rỉ ở đây là rò rỉ theo số lần bấm.
+      //    phiên đã quên.
+      //
+      // S17-CHAT-UX2-FE-1 — map `resolvedNames` ĐÃ GỠ: `room.peer.name` đến thẳng từ `GET /chat/rooms`
+      // nên không còn gì để cache, và không còn khoá chết nào tích luỹ theo số lần bấm.
       const evicted = next.slice(0, next.length - MAX_DOCK_WINDOWS);
       let minimizedRoomIds = state.minimizedRoomIds;
-      let resolvedNames = state.resolvedNames;
       for (const id of evicted) {
         minimizedRoomIds = omitKey(minimizedRoomIds, id);
-        resolvedNames = omitKey(resolvedNames, id);
       }
       return {
         openRoomIds: next.slice(next.length - MAX_DOCK_WINDOWS),
         minimizedRoomIds,
-        resolvedNames,
       };
     }),
 
   closeRoom: (roomId) =>
     set((state) => {
       if (!state.openRoomIds.includes(roomId)) return state;
-      // Gỡ khỏi CẢ BA map. `resolvedNames` cũng đi theo: nó là bộ nhớ đệm của một cửa sổ đang mở, và
-      // giữ nó lại sau khi đóng chỉ tích luỹ khoá chết suốt phiên (đóng/mở 200 phòng = 200 khoá).
+      // Gỡ khỏi CẢ HAI map (trước S17-CHAT-UX2-FE-1 là ba — xem `openRoom`). Bị đẩy ra và tự đóng là
+      // cùng một kết cục, để lại hai loại tàn dư khác nhau thì không ai lần được.
       return {
         openRoomIds: state.openRoomIds.filter((id) => id !== roomId),
         minimizedRoomIds: omitKey(state.minimizedRoomIds, roomId),
-        resolvedNames: omitKey(state.resolvedNames, roomId),
       };
     }),
 
@@ -138,13 +121,6 @@ export const useChatDockStore = create<ChatDockState>((set) => ({
         return { minimizedRoomIds: omitKey(state.minimizedRoomIds, roomId) };
       }
       return { minimizedRoomIds: { ...state.minimizedRoomIds, [roomId]: true as const } };
-    }),
-
-  setResolvedName: (roomId, name) =>
-    set((state) => {
-      // Tên rỗng KHÔNG được ghi đè tên đang có: nó biến nhãn phòng thành ô trắng, tệ hơn nhãn mã phòng.
-      if (name.length === 0 || state.resolvedNames[roomId] === name) return state;
-      return { resolvedNames: { ...state.resolvedNames, [roomId]: name } };
     }),
 
   resetChatDock: () => set(createInitialState()),
