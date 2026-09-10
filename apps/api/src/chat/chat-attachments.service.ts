@@ -164,6 +164,9 @@ export class ChatAttachmentPresignService {
         // (`limit` nhỏ hơn số tệp của một tin). Tối đa 50 + 10 + 1 = 61 hàng.
         limit: query.limit + CHAT_MAX_ATTACHMENTS_PER_MESSAGE + 1,
         visibleFromSeq: acc.membership.visibleFromSeq,
+        // S17-CHAT-UX2-BE-1 — `kind` đi THẲNG xuống SQL. Gate/ký/audit của CHAT-API-017 KHÔNG đổi:
+        // đây là một vị từ hẹp hơn trên cùng đường đọc, không phải một đường đọc mới.
+        kind: query.kind,
       });
     });
     const rows = trimToMessageBoundary(fetched, query.limit);

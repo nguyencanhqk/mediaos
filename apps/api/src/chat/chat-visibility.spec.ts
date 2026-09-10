@@ -152,6 +152,47 @@ describe("census — MỌI truy vấn đọc `chat_messages` mang vị từ §13
     expect(offenders, `đường đọc thiếu vị từ SPEC-15 §13.4: ${offenders.join(", ")}`).toEqual([]);
   });
 
+  it("chat-rooms.repository.ts: mỗi hàm CHẠM `chatMessages` đều GỌI vị từ §13.4", () => {
+    // S17-CHAT-UX2-BE-1 mở đường đọc `chat_messages` ở file THỨ TƯ: LATERAL lấy tin cuối cho
+    // `chatRoomSchema.lastMessage` trong `listRoomsForUser` (CHAT-DEC-022).
+    //
+    // ⚠️ TRƯỚC ca này, file `chat-rooms.repository.ts` chỉ xuất hiện ở khẳng định "không viết chuỗi thô
+    // `visible_from_seq`" phía dưới — khẳng định đó CẤM chuỗi thô nhưng KHÔNG ĐÒI gọi helper. Nghĩa là
+    // đặt một đường đọc mới vào file này mà quên vị từ thì ratchet VẪN XANH dù đường đọc đã thoát
+    // §13.4, và preview tin cuối sẽ rò đúng phần lịch sử mà `/messages`, `/pinned`, `/files` đã chặn —
+    // rò ra chính danh sách phòng, chỗ dễ thấy nhất. Đây là BLOCKING 1 của API-13 §5.1d(3).
+    //
+    // ⚠️ Bộ lọc ở đây RỘNG HƠN ba ca trên (`chatMessages` bất kỳ, không chỉ `.from(chatMessages)`):
+    // LATERAL đặt bảng trong một SUBQUERY, nên `.from()` của câu NGOÀI là `chatRooms` — soi `.from(...)`
+    // của method sẽ bỏ lọt hoàn toàn đúng cái đường đọc ca này sinh ra để canh.
+    const offenders = methodsOf(codeOf("chat-rooms.repository.ts"))
+      .filter((m) => m.block.includes("chatMessages"))
+      .filter((m) => !DOCUMENTED_EXCEPTIONS.has(m.name))
+      .filter(
+        (m) =>
+          !m.block.includes("visibleFromSeqScalar(") && !m.block.includes("visibleFromSeqColumn("),
+      )
+      .map((m) => m.name);
+    expect(offenders, `đường đọc thiếu vị từ SPEC-15 §13.4: ${offenders.join(", ")}`).toEqual([]);
+  });
+
+  it("ca trên KHÔNG rỗng — `listRoomsForUser` thực sự nằm trong tập được soi", () => {
+    // Neo chống XANH-RỖNG: nếu ai đó đổi cách dựng LATERAL và `chatMessages` biến mất khỏi thân method
+    // (ví dụ gói vào một helper ở file khác — memory `refactor-to-helper-blinds-syntax-census`), bộ lọc
+    // trên lọc ra tập RỖNG và ca census xanh mà không soi gì cả. Ca này bắt đúng khoảnh khắc đó.
+    const scanned = methodsOf(codeOf("chat-rooms.repository.ts"))
+      .filter((m) => m.block.includes("chatMessages"))
+      .map((m) => m.name);
+    expect(scanned).toContain("listRoomsForUser");
+  });
+
+  it("`DOCUMENTED_EXCEPTIONS` vẫn ĐÚNG 2 phần tử — S17 không thêm miễn trừ nào", () => {
+    // API-13 §5.1d(3) mục 3: CẤM `S17-CHAT-UX2-BE-1`/`BE-2` thêm tên vào danh sách này. Thêm là đóng
+    // đinh lỗ mở (memory `tests-can-pin-a-hole-open`) — và cách sửa RẺ NHẤT khi ca census trên đỏ đúng
+    // là nhét tên method vào đây, nên ratchet phải chặn sẵn.
+    expect([...DOCUMENTED_EXCEPTIONS].sort()).toEqual(["countPinned", "findByClientMessageId"]);
+  });
+
   it("`DOCUMENTED_EXCEPTIONS` KHÔNG chứa hàm tìm kiếm nào", () => {
     // Miễn trừ vị từ §13.4 cho đường đọc RỘNG NHẤT module là mở lại đúng lỗ mà cả GATE-2 lẫn BE-4 dựng
     // census để chặn. Ca này làm việc miễn trừ đó thành ĐỎ tự động thay vì một quyết định lặng lẽ.

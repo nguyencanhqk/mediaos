@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { files } from "../db/schema/files";
 import {
   CHAT_ATTACHMENT_LINK_TYPE,
   CHAT_MAX_ATTACHMENTS_PER_MESSAGE,
   CHAT_MESSAGE_ENTITY_TYPE,
+  imageMimeSqlPredicate,
   isAttachableFile,
   isImageMimeType,
   trimToMessageBoundary,
@@ -31,6 +34,55 @@ describe("isImageMimeType — server quyết định, không đoán từ phần 
     ["", false],
   ])("%s → %s", (mime, expected) => {
     expect(isImageMimeType(mime)).toBe(expected);
+  });
+});
+
+/**
+ * S17-CHAT-UX2-BE-1 — "là ảnh" phải là MỘT định nghĩa cho CẢ HAI tầng (SPEC-15 §15b · API-13 §5.1d):
+ * khoá DTO `isImage` (mapper, JS) và bộ lọc `kind=image|file` của CHAT-API-017 (SQL).
+ *
+ * ⚠️ Ca dưới KHÔNG so vị từ SQL với một chuỗi kỳ vọng chép tay — nó **suy luật ra TỪ SQL đã render** rồi
+ * đối chiếu với `isImageMimeType` trên cùng bảng MIME. Chép tay chuỗi kỳ vọng chỉ khoá được chính tả;
+ * suy ngược mới bắt được lệch NGỮ NGHĨA — bỏ `lower()` là ca `IMAGE/JPEG` đỏ ngay.
+ */
+describe("imageMimeSqlPredicate ⟷ isImageMimeType — MỘT định nghĩa, hai tầng", () => {
+  const dialect = new PgDialect();
+  const render = (isImage: boolean) =>
+    dialect.sqlToQuery(imageMimeSqlPredicate(files.mimeType, isImage));
+
+  const MIMES = ["image/png", "IMAGE/JPEG", "Image/Gif", "image/svg+xml", "application/pdf", "text/plain", ""];
+
+  it("vị từ chạy trên `lower(mime_type)` + tham số BIND, không nội suy chuỗi", () => {
+    const q = render(true);
+    expect(q.sql).toBe('lower("files"."mime_type") like $1');
+    expect(q.params).toEqual(["image/%"]);
+  });
+
+  it("nhánh `file` là PHỦ ĐỊNH của cùng vị từ — không phải một luật thứ hai", () => {
+    const q = render(false);
+    expect(q.sql).toBe('lower("files"."mime_type") not like $1');
+    expect(q.params).toEqual(["image/%"]);
+  });
+
+  it("SQL và JS ĐỒNG Ý trên mọi MIME, kể cả viết HOA", () => {
+    const q = render(true);
+    // Emulate Postgres: `lower(col) LIKE 'image/%'`. Luật lấy TỪ chuỗi đã render, không viết lại.
+    const usesLower = q.sql.includes("lower(");
+    const prefix = String(q.params[0]).replace(/%$/u, "");
+    const sqlSaysImage = (mime: string) =>
+      (usesLower ? mime.toLowerCase() : mime).startsWith(prefix);
+
+    for (const mime of MIMES) {
+      expect(sqlSaysImage(mime), `SQL và JS lệch nhau ở MIME '${mime}'`).toBe(isImageMimeType(mime));
+    }
+  });
+
+  it("ca neo: `IMAGE/JPEG` là ảnh ở CẢ HAI tầng", () => {
+    // Đây là ca mà `mime_type LIKE 'image/%'` TRẦN (không `lower`) sẽ trượt: DTO nói `isImage: true`
+    // còn `kind=image` lọc mất tệp. `mime_type` do client khai lúc upload và KHÔNG được chuẩn hoá ở DB.
+    const q = render(true);
+    expect(isImageMimeType("IMAGE/JPEG")).toBe(true);
+    expect(q.sql).toContain("lower(");
   });
 });
 

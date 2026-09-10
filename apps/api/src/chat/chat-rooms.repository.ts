@@ -3,14 +3,14 @@ import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
-import { chatRoomMembers, chatRooms } from "../db/schema/communication";
+import { chatMessages, chatRoomMembers, chatRooms } from "../db/schema/communication";
 import type { ChatMemberRole, ChatRoomType } from "../db/schema/communication";
 // S8-CHAT-UX-FE-3 — chỉ để lấy ỨNG VIÊN ảnh đại diện cho roster (`employee_profiles.avatar_url` thô).
 // CHAT không đọc gì khác của HR ở đây và không được phép: mọi trường hồ sơ khác đi qua module HR với
 // cặp quyền của nó.
 import { employeeProfiles } from "../db/schema/employees";
 import { users } from "../db/schema/users";
-import { unreadSeqExpr } from "./chat-visibility";
+import { unreadSeqExpr, visibleFromSeqColumn } from "./chat-visibility";
 
 export interface ChatRoomListRow {
   id: string;
@@ -30,6 +30,25 @@ export interface ChatRoomListRow {
   pinnedAt: Date | null;
   mutedUntil: Date | null;
   markedUnreadAt: Date | null;
+  // ── S17-CHAT-UX2-BE-1 — hai LATERAL của CHAT-DEC-022/023, LEFT nên MỌI cột đều nullable ──
+  // "Phòng chưa có tin" và "phòng không phải direct" đều ra NULL ở đây; mapper dịch NULL → `null` DTO.
+  lastSenderId: string | null;
+  lastSenderName: string | null;
+  lastBody: string | null;
+  lastMessageType: string | null;
+  lastAttachmentCount: number | null;
+  lastRecalledAt: Date | null;
+  peerUserId: string | null;
+  peerName: string | null;
+  peerIsActive: boolean | null;
+  peerEmployeeId: string | null;
+  /**
+   * ⚠️ Hậu tố `Raw` CỐ Ý (mirror `ChatRosterRow.avatarRaw`): `employee_profiles.avatar_url` là cột
+   * ĐA-NGƯỜI-GHI (yêu-cầu-đổi-hồ-sơ ghi verbatim, có thể bị đầu độc trỏ tệp bất kỳ trong tenant) nên
+   * **KHÔNG được vào DTO**. Nó chỉ là ứng viên; `AvatarPresignService.resolveEmployeeAvatars` mới là nơi
+   * xác minh cặp `(employeeId, fileId)` rồi ký.
+   */
+  peerAvatarRaw: string | null;
 }
 
 export interface ChatMemberListRow {
@@ -211,6 +230,67 @@ const ROOM_COLUMNS = {
   deletedAt: chatRooms.deletedAt,
 } as const;
 
+// ─── S17-CHAT-UX2-BE-1 — bí danh cho hai LATERAL của `listRoomsForUser` (CHAT-DEC-022/023) ──────────
+//
+// Bí danh TƯỜNG MINH chứ không dùng thẳng bảng gốc: `chat_room_members` và `users` đã xuất hiện ở câu
+// NGOÀI (membership của actor). Dùng lại tên gốc trong LATERAL sẽ che mất tham chiếu ngoài và biến
+// "người đối thoại" thành "chính actor" — một lỗi im lặng, không lỗi cú pháp.
+//
+// ⚠️ `chatMessages` CỐ Ý **không** có bí danh: `visibleFromSeqColumn()` render đúng chuỗi
+// `"chat_messages"."room_seq"`, nên bảng trong LATERAL phải mang CHÍNH tên đó thì vị từ §13.4 mới bám
+// được. Đặt bí danh cho nó là làm vị từ trỏ vào hư không — Postgres sẽ báo lỗi, không âm thầm sai.
+const lastSender = alias(users, "last_sender");
+const peerMember = alias(chatRoomMembers, "peer_member_dto");
+const peerUser = alias(users, "peer_user");
+const peerEmployee = alias(employeeProfiles, "peer_employee");
+// Bí danh THỨ HAI cho CÙNG bảng: subquery của `peerIsActiveExpr()` phải nhìn thấy CẢ hồ sơ đã xoá mềm,
+// còn `peerEmployee` ở trên cố ý chỉ join hồ sơ còn sống (để lấy avatar). Dùng chung một bí danh cho hai
+// câu hỏi khác nhau là mời một WO sau "dọn trùng lặp" rồi làm hỏng đúng một trong hai.
+//
+// ⚠️ Tên bí danh phải là HẰNG dùng chung: trong một `sql` template, `${aliasedTable}` render ra ĐÚNG
+// bí danh (`"peer_employee_any"`) chứ KHÔNG phải `"employee_profiles" "peer_employee_any"` — dùng nó ở
+// vị trí `FROM` sinh ra `relation "peer_employee_any" does not exist` lúc CHẠY (typecheck mù). Vì vậy
+// mệnh đề FROM dưới phải viết `${employeeProfiles} AS ${sql.identifier(ALIAS)}`, và ALIAS phải là cùng
+// một chuỗi mà `alias()` đã nhận — chép tay lần thứ hai là một bản sao sẽ trôi.
+const PEER_EMPLOYEE_ANY_ALIAS = "peer_employee_any";
+const peerEmployeeAny = alias(employeeProfiles, PEER_EMPLOYEE_ANY_ALIAS);
+
+/**
+ * S17-CHAT-UX2-BE-1 — `peer.isActive` (CHAT-DEC-023). Hai vế, và cả hai đều cần:
+ *
+ *  1. **tài khoản** — `users.status='active'` + chưa xoá mềm;
+ *  2. **nhân sự** — còn hồ sơ `active`, *nếu người đó có hồ sơ*.
+ *
+ * Vế 2 không suy ra được từ vế 1: đăng nhập chỉ gate `users.status`, KHÔNG gate trạng thái nhân sự
+ * (`chat-derived-rooms-sync.service.ts`, khối `applyOffboardLeavesTx`) — `deleteEmployee`/`unlinkUser`
+ * không chạm `users` và `lockUser` là TUỲ CHỌN, nên người đã nghỉ việc vẫn `users.status='active'`.
+ *
+ * ⚠️ `bool_or(...)` trên KHÔNG hàng ra `NULL`, và `COALESCE(..., true)` biến đó thành "không có hồ sơ
+ * nào ⇒ xét theo tài khoản". Đây là ca của tài khoản hệ thống/quản trị không gắn nhân sự: bắt chúng
+ * hiện «Ngừng hoạt động» là sai. Viết bằng `NOT EXISTS(...) OR EXISTS(...)` cũng đúng nhưng cần HAI
+ * subquery cho cùng một câu hỏi.
+ *
+ * ⚠️ Vế `deleted_at IS NULL` nằm TRONG `bool_or` chứ không ở `WHERE`: để ở `WHERE` thì hồ sơ đã xoá mềm
+ * (nghỉ việc) không còn hàng nào ⇒ `bool_or` ra NULL ⇒ COALESCE trả `true` — đúng cái ca vế 2 sinh ra
+ * để bắt. Vế `IS NULL OR` kiểu đó là chỗ CHECK rỗng hay nảy sinh (memory
+ * `nullable-escape-clause-makes-check-vacuous`).
+ */
+function peerIsActiveExpr(): SQL<boolean> {
+  return sql<boolean>`(
+    ${peerUser.status} = 'active'
+    AND ${peerUser.deletedAt} IS NULL
+    AND coalesce(
+      (
+        SELECT bool_or(${peerEmployeeAny.deletedAt} IS NULL AND ${peerEmployeeAny.status} = 'active')
+        FROM ${employeeProfiles} AS ${sql.identifier(PEER_EMPLOYEE_ANY_ALIAS)}
+        WHERE ${peerEmployeeAny.companyId} = ${peerMember.companyId}
+          AND ${peerEmployeeAny.userId} = ${peerMember.userId}
+      ),
+      true
+    )
+  )`;
+}
+
 /**
  * S7-CHAT-BE-1 — data-access phòng & thành viên.
  *
@@ -268,6 +348,101 @@ export class ChatRoomsRepository {
     ];
     if (filters.roomType) conds.push(eq(chatRooms.roomType, filters.roomType));
 
+    // ── S17-CHAT-UX2-BE-1 · LATERAL 1 — TIN CUỐI của phòng (CHAT-DEC-022) ──────────────────────────
+    //
+    // ⚠️ **PHẢI là LATERAL nằm TRONG câu list, không phải một truy vấn thứ hai theo `roomId[]`.** Một
+    // người có 200 phòng thì bản N+1 là 200 round-trip trên đường nóng nhất của module; bản "IN (…)"
+    // thì không có cách nào lấy ĐÚNG tin cuối mỗi phòng bằng một GROUP BY mà vẫn giữ được `body`/
+    // `sender` của chính hàng đó (DISTINCT ON được, nhưng LATERAL đi thẳng trên index).
+    //
+    // `ORDER BY room_seq DESC LIMIT 1` khớp `idx_chat_messages_room_seq (company_id, room_id,
+    // room_seq DESC)` (mig `0539:56`) ⇒ mỗi phòng là một lần dò index, không quét.
+    //
+    // ⚠️ `visibleFromSeqColumn()` là BẮT BUỘC (SPEC-15 §13.4): đây là một đường đọc `chat_messages` MỚI,
+    // và preview tin cuối mà bỏ vị từ là rò đúng phần lịch sử `/messages`, `/pinned`, `/files` đã chặn —
+    // rò ra chính danh sách phòng, chỗ dễ thấy nhất. Dạng CỘT vì câu này đã join `chat_room_members` của
+    // actor và không có `visibleFromSeq` ở JS. Census ép ở `chat-visibility.spec.ts`.
+    const lastMessage = tx
+      .select({
+        senderId: chatMessages.senderId,
+        senderName: lastSender.fullName,
+        body: chatMessages.body,
+        messageType: chatMessages.messageType,
+        attachmentCount: chatMessages.attachmentCount,
+        recalledAt: chatMessages.recalledAt,
+      })
+      .from(chatMessages)
+      // LEFT chứ không INNER: tin của người đã bị gỡ tài khoản vẫn phải hiện preview (tên `null`),
+      // không được làm cả dòng phòng biến mất.
+      .leftJoin(
+        lastSender,
+        and(
+          eq(lastSender.id, chatMessages.senderId),
+          eq(lastSender.companyId, chatMessages.companyId),
+        ),
+      )
+      .where(
+        and(
+          eq(chatMessages.companyId, chatRooms.companyId),
+          eq(chatMessages.roomId, chatRooms.id),
+          visibleFromSeqColumn(),
+        ),
+      )
+      .orderBy(desc(chatMessages.roomSeq))
+      .limit(1)
+      .as("last_message");
+
+    // ── S17-CHAT-UX2-BE-1 · LATERAL 2 — NGƯỜI ĐỐI THOẠI của phòng `direct` (CHAT-DEC-023) ──────────
+    //
+    // ⚠️ Suy từ `chat_room_members`, **KHÔNG parse `direct_key`**: cột đó ghép từ 2 `userId` nên bản
+    // thân nó LÀ quan hệ ai-nhắn-với-ai và không bao giờ rời server (docblock `ChatRoomRow`).
+    //
+    // ⚠️ `eq(chatRooms.roomType, "direct")` nằm TRONG lateral: phòng nhóm/phòng-ban/dự án ra NULL sạch,
+    // không phải "một thành viên bất kỳ" — peer của phòng 200 người là dữ liệu bịa.
+    //
+    // ⚠️ KHÔNG lọc `left_at IS NULL`: DM không rời được (`assertLeavable` chỉ cho phòng `group`), nên vế
+    // đó không lọc thêm ai — nhưng nếu một đường ghi tương lai set `left_at` cho DM thì lọc ở đây sẽ làm
+    // `peer` im lặng thành NULL và FE quay về hiện MÃ PHÒNG, đúng cái bug WO này đang vá.
+    const peer = tx
+      .select({
+        userId: peerMember.userId,
+        name: peerUser.fullName,
+        // ⚠️ `.as(...)` BẮT BUỘC: drizzle không tham chiếu được một cột SQL THÔ của subquery nếu nó
+        // không có bí danh — lỗi ném lúc CHẠY ("raw SQL field … doesn't have an alias"), typecheck mù.
+        isActive: peerIsActiveExpr().as("peer_is_active"),
+        employeeId: peerEmployee.id,
+        avatarRaw: peerEmployee.avatarUrl,
+      })
+      .from(peerMember)
+      .innerJoin(
+        peerUser,
+        and(eq(peerUser.id, peerMember.userId), eq(peerUser.companyId, peerMember.companyId)),
+      )
+      // ⚠️ `isNull(deletedAt)` BẮT BUỘC: unique `employee_profiles_company_user_active_uq` là PARTIAL
+      // (`WHERE deleted_at IS NULL`) ⇒ user từng có hồ sơ bị xoá mềm rồi lập lại sẽ khớp ≥2 hàng và
+      // LIMIT 1 chọn hàng nào là do planner quyết (memory `partial-unique-index-makes-join-duplicate`).
+      .leftJoin(
+        peerEmployee,
+        and(
+          eq(peerEmployee.userId, peerMember.userId),
+          eq(peerEmployee.companyId, peerMember.companyId),
+          isNull(peerEmployee.deletedAt),
+        ),
+      )
+      .where(
+        and(
+          eq(peerMember.companyId, chatRooms.companyId),
+          eq(peerMember.roomId, chatRooms.id),
+          ne(peerMember.userId, userId),
+          eq(chatRooms.roomType, "direct"),
+        ),
+      )
+      // Thứ tự ỔN ĐỊNH cho ca dữ liệu lệch (DM có >2 hàng membership do đồng bộ hỏng): không sắp thì
+      // planner chọn tuỳ ý và tên người đối thoại NHẢY giữa hai lần tải.
+      .orderBy(peerMember.joinedAt, peerMember.userId)
+      .limit(1)
+      .as("peer");
+
     const rows = await tx
       .select({
         id: chatRooms.id,
@@ -287,6 +462,18 @@ export class ChatRoomsRepository {
         pinnedAt: chatRoomMembers.pinnedAt,
         mutedUntil: chatRoomMembers.mutedUntil,
         markedUnreadAt: chatRoomMembers.markedUnreadAt,
+        // S17-CHAT-UX2-BE-1 — hai LATERAL, không phải hai truy vấn.
+        lastSenderId: lastMessage.senderId,
+        lastSenderName: lastMessage.senderName,
+        lastBody: lastMessage.body,
+        lastMessageType: lastMessage.messageType,
+        lastAttachmentCount: lastMessage.attachmentCount,
+        lastRecalledAt: lastMessage.recalledAt,
+        peerUserId: peer.userId,
+        peerName: peer.name,
+        peerIsActive: peer.isActive,
+        peerEmployeeId: peer.employeeId,
+        peerAvatarRaw: peer.avatarRaw,
       })
       .from(chatRooms)
       .innerJoin(
@@ -296,6 +483,10 @@ export class ChatRoomsRepository {
           eq(chatRoomMembers.companyId, chatRooms.companyId),
         ),
       )
+      // LEFT: phòng chưa có tin nào / phòng không phải `direct` vẫn phải ra hàng. INNER ở đây sẽ làm
+      // MỌI phòng mới tạo biến mất khỏi danh sách — im lặng, và chỉ lộ ra khi ai đó tạo phòng.
+      .leftJoinLateral(lastMessage, sql`true`)
+      .leftJoinLateral(peer, sql`true`)
       .where(and(...conds))
       // NULLS LAST: phòng chưa có tin nào (last_message_at NULL) xuống cuối, không chiếm đầu danh sách.
       .orderBy(sql`${chatRooms.lastMessageAt} desc nulls last`, desc(chatRooms.createdAt));
@@ -349,6 +540,36 @@ export class ChatRoomsRepository {
       );
 
     return rows.map((r) => r.userId);
+  }
+
+  /**
+   * S17-CHAT-UX2-BE-1 — họ tên người TẠO phòng, cho «Tạo bởi … · ngày» (CHAT-API-004 · CHAT-DEC-025).
+   *
+   * `null` ở hai ca KHÁC NHAU mà DTO cố ý không phân biệt: phòng do HỆ THỐNG dựng (`created_by` NULL ở
+   * `department`/`project` — `communication.ts`), và hàng `users` không tra được. Cả hai đều render
+   * giống nhau ở FE («Tạo bởi hệ thống»), nên tách ra là thêm một trạng thái không ai dùng.
+   *
+   * ⚠️ Đường CHI TIẾT (một phòng), KHÔNG phải đường danh sách: `leftJoin users` ở `listRoomsForUser` là
+   * một join nữa cho MỌI phòng ở đường nóng nhất của module, phục vụ một dòng chữ danh sách không hiện.
+   *
+   * ⚠️ Nghĩa vụ CALLER: `assertMember` phải chạy TRƯỚC. Hàm này không lọc membership (mirror
+   * `findRoomById`) — `company_id` tường minh + RLS là hàng rào tenant, không phải hàng rào phòng.
+   */
+  async findRoomCreatorName(
+    tx: TenantTx,
+    companyId: string,
+    roomId: string,
+  ): Promise<string | null> {
+    const rows = await tx
+      .select({ fullName: users.fullName })
+      .from(chatRooms)
+      .innerJoin(
+        users,
+        and(eq(users.id, chatRooms.createdBy), eq(users.companyId, chatRooms.companyId)),
+      )
+      .where(and(eq(chatRooms.companyId, companyId), eq(chatRooms.id, roomId)))
+      .limit(1);
+    return rows[0]?.fullName ?? null;
   }
 
   /** Phòng theo id — KHÔNG lọc membership. CHỈ dùng sau khi `assertMember` đã chạy, hoặc cho dedup DM. */

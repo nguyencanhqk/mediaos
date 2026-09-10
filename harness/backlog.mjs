@@ -16776,7 +16776,7 @@ export const backlog = [
     title:
       "DTO phòng v2: `lastMessage` (LATERAL tin cuối, che thu hồi ở server) + `peer` cho phòng direct (ký avatar qua resolveEmployeeAvatars, strip khỏi WS) + `createdByName` ở getRoom + tham số `kind=image|file` cho GET /chat/rooms/:id/files (CHAT-DEC-022/023/025)",
     zone: "yellow",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/chat/chat-rooms.repository.ts",
       "apps/api/src/chat/chat-rooms.service.ts",
@@ -16785,7 +16785,14 @@ export const backlog = [
       "apps/api/src/chat/chat-files.service.ts",
       "apps/api/src/chat/chat.mapper.ts",
       "apps/api/src/chat/chat.module.ts",
+      "apps/api/src/chat/chat-preview.ts",
+      "apps/api/src/chat/chat-file.constants.ts",
+      "apps/api/src/chat/chat-attachments.repository.ts",
+      "apps/api/src/chat/chat-attachments.service.ts",
       "apps/api/src/chat/**/*.spec.ts",
+      "apps/api/src/chat/chat-visibility.spec.ts",
+      "apps/api/test/integration/chat-be1-rooms.int-spec.ts",
+      "apps/app/src/stores/chat.store.ts",
       "apps/api/src/realtime/**",
       "apps/api/test/integration/chat-s17-be1-*.int-spec.ts",
       "packages/contracts/src/chat.ts",
@@ -16816,6 +16823,13 @@ export const backlog = [
     notes: [
       "🟡 LIGHT + silent-failure-hunter (che nội dung tin) — KHÔNG phải FULL: không permission/RLS/secret/audit/migration.",
       "⚠️ `directKey` là quan hệ ai-nhắn-với-ai (repo docblock :65) — peer suy từ chat_room_members của phòng, KHÔNG parse directKey ra DTO.",
+      "🔎 THI CÔNG 09/09 — drizzle render bảng-có-BÍ-DANH trong `sql` template thành CHỈ bí danh (`FROM \"peer_employee_any\"`), KHÔNG kèm tên bảng gốc ⇒ `relation does not exist` lúc CHẠY, typecheck mù. Phải viết `FROM ${employeeProfiles} AS ${sql.identifier(ALIAS)}` với ALIAS là hằng dùng chung với `alias()`.",
+      "🔎 THI CÔNG 09/09 — cột SQL THÔ trong subquery BẮT BUỘC `.as(\"ten\")`; thiếu là drizzle ném lúc chạy (\"raw SQL field … doesn’t have an alias\").",
+      "🔎 THI CÔNG 09/09 — ca N+1 CŨ (`chat-be1-rooms.int-spec.ts` ca 11) đếm số BUILDER `tx.select` được dựng rồi assert `=== 1`, tức pin chi tiết thi công chứ không phải bất biến: LATERAL dựng 3 builder mà vẫn ĐI TRONG MỘT CÂU. Đã đổi phép đo sang «số builder KHÔNG tăng theo số phòng» (chạy 2 kích cỡ, đòi bằng nhau + đòi lần hai nhiều phòng hơn để không xanh-RỖNG); vế đếm câu SQL THẬT ở tầng driver `pg` nằm ở ca 20 của int-spec mới.",
+      "🔎 THI CÔNG 09/09 — CHƯA writer nào sinh tin `message_type='system'` (grep `apps/api/src/chat/**` ra 0 writer) dù SPEC-15 hứa tin hệ thống cho thêm/bớt thành viên và CHECK đã nhận giá trị. Ca `kind:'system'` vì thế gieo THẲNG DB để khoá ĐƯỜNG ĐỌC trước; WO nối dây writer là việc khác.",
+      "🔎 THI CÔNG 09/09 — NGOÀI `paths`: `apps/app/src/stores/chat.store.ts` phải sửa 1 chỗ (nhánh `created` của `applyRoomEvent`) vì `peer` ở payload WS hẹp hơn REST đúng khoá `avatarUrl` ⇒ typecheck FE đỏ. Vá bằng `widenWsPeer()` (gán `avatarUrl: null` CHỈ cho phòng vừa tạo); đường `updated`/`archived` vẫn qua `mergeRoomMetadata` (ALLOWLIST, không chạm `peer`) nên avatar KHÔNG bị xoá khi đổi tên phòng.",
+      "🔎 THI CÔNG 09/09 — `employee_profiles` KHÔNG có cột `full_name`; cột NOT NULL gồm work_type/employment_type/salary_type/status (có DEFAULT). `chat_rooms.ref_id` có FK sang `projects` ⇒ ca «peer NULL ở phòng dẫn xuất» dùng `department` + `org_units` (bảng nền, rẻ hơn) thay vì `project`.",
+      "🔎 THI CÔNG 09/09 — `recall`/`send`/`pin` × `chat-message` là BA cặp KHÁC nhau; fixture thiếu cặp `recall` ⇒ 403 `deny-default` chứ không phải lỗi thu hồi.",
     ],
   },
   {

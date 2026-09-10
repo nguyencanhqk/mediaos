@@ -1,8 +1,21 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-09 09:49Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-09 10:23Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
+
+### 🟡 S17-CHAT-UX2-BE-1 — DTO phòng v2: `lastMessage` (LATERAL tin cuối, che thu hồi ở server) + `peer` cho phòng direct (ký avatar qua resolveEmployeeAvatars, strip khỏi WS) + `createdByName` ở getRoom + tham số `kind=image|file` cho GET /chat/rooms/:id/files (CHAT-DEC-022/023/025)
+- **zone**: yellow · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/api/src/chat/chat-rooms.repository.ts`, `apps/api/src/chat/chat-rooms.service.ts`, `apps/api/src/chat/chat-rooms.controller.ts`, `apps/api/src/chat/chat-members.service.ts`, `apps/api/src/chat/chat-files.service.ts`, `apps/api/src/chat/chat.mapper.ts`, `apps/api/src/chat/chat.module.ts`, `apps/api/src/chat/**/*.spec.ts`, `apps/api/src/realtime/**`, `apps/api/test/integration/chat-s17-be1-*.int-spec.ts`, `packages/contracts/src/chat.ts`, `packages/contracts/src/realtime.ts`, `packages/contracts/src/**/*.spec.ts`, `packages/web-core/src/lib/chat-api.ts`, `docs/plans/S17-CHAT-UX2-BE-1.md`, `harness/backlog.mjs`
+- **phụ thuộc**: S17-CHAT-UX2-DOC-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] `chatRoomSchema` += `lastMessage` · `peer` `.nullable().optional()`; `getRoom` += `createdByName` `.nullable().optional()`; contracts spec ratchet: 3 khoá mới KHÔNG required (test parse payload cũ vẫn qua)
+  - [ ] listRoomsForUser: 1 câu SQL với LATERAL tin cuối (không N+1) — int-spec assert trên EXPLAIN (plan có Index Scan idx_chat_messages_room_seq, KHÔNG assert idx_scan); 200 phòng = 1 round-trip
+  - [ ] Masking int-spec: tin thu hồi ⇒ `kind:'recalled'` + `excerpt:null`; tin tệp không chữ ⇒ `kind:'file'` + attachmentCount; tin system ⇒ `kind:'system'`; excerpt cắt ≤120 ký tự ở server (gửi 500 ký tự, nhận ≤120)
+  - [ ] peer: chỉ ở direct (group/department/project ⇒ null); avatarUrl ký 1 lô/lần list qua resolveEmployeeAvatars (spy đếm 1 lần cho N DM); `isActive` đúng khi tài khoản khoá/nhân sự nghỉ; deny-path: non-member 404 · cross-tenant 0 hàng (LANE_DB)
+  - [ ] Payload WS `chat:room` (contracts/realtime.ts) KHÔNG có `peer.avatarUrl` — spec đối chiếu schema WS ⊂ REST; emitter strip qua `.parse()` schema WS, không tự xoá tay
+  - [ ] GET /chat/rooms/:id/files?kind=image|file: lọc ở SQL theo mime, gate + ký như CHAT-API-017 không đổi; ca kind lạ → 400
+  - [ ] bash harness/check.sh --lane-db=s17be1 XANH; typecheck contracts/web-core/api xanh
 
 ### 🔴 S18-AUTH-RESTORE2FA-1 — Khôi phục user KHÔNG soát lại 2FA + `enroll`/`confirmEnable` không lọc `deleted_at` — tài khoản khôi phục có thể về với 2FA TẮT, hoặc với yếu tố thứ hai CỦA KẺ TẤN CÔNG
 - **zone**: red · **skills**: code-review
@@ -24,7 +37,6 @@
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🟢 `S15-PAYROLL-DOC-1` Bộ tài liệu PAYROLL v2: SPEC-11 v2 (§5.1 phạm vi v2 · §8 bảng mới · §9 PAY-SCREEN-007..016 · §11 cặp mới · §12 ERR-018+ · §13.4 máy công thức decimal + luật định BH/TNCN + gross-up · §22 DEC-011..020) + DB-13 v2 (3 ALTER + 10 bảng mới) + API-18 v2 (~40 route) + §9g v2 + SPEC-01 §17.15 (FSM 8 trạng thái) + EPIC-20 PL-11..24 + UI-07 + PARK-PAYROLL-002 — plan-reviewer PASS trước khi mở DB-1
 - 🟢 `S16-SOCIAL-DOC-1` Bộ tài liệu SOCIAL (mạng xã hội nội bộ): SPEC-16 đầy đủ (§5 phạm vi v1 + PARK · §8 15 bảng · §9 SOC-SCREEN-001..012 · §11 13 cặp feed-* + luật «tương tác đi theo view:feed» · §12 SOCIAL-ERR-001+ · §13 FSM bài/sáng kiến/bình chọn · §17 NOTI-EVENT đo dải · §22 SOC-DEC-001..010) + DB-17 + API-19 (~45 route) + §9h + SPEC-01 §17.18–17.20 + §12.13 + ghi chú fbpost là tiện ích con + DECISIONS-08 §7 bổ sung + EPIC-21 §8.22 SC-01..14 + UI-07 biến thể cổng thông tin 3 cột + README/erd/RELEASE-14 — plan-reviewer PASS trước khi mở DB-1
-- 🟡 `S17-CHAT-UX2-BE-1` DTO phòng v2: `lastMessage` (LATERAL tin cuối, che thu hồi ở server) + `peer` cho phòng direct (ký avatar qua resolveEmployeeAvatars, strip khỏi WS) + `createdByName` ở getRoom + tham số `kind=image|file` cho GET /chat/rooms/:id/files (CHAT-DEC-022/023/025)
 - 🟡 `S17-CHAT-UX2-BE-2` CHAT-API-031 GET /chat/rooms/:id/links — liên kết đã chia sẻ trong phòng: trích https?:// từ body tin chưa thu hồi, keyset room_seq DESC, trần 50/trang, membership-gated như API-017, con trỏ mang vân phòng (DEC-025)
 - 🟡 `S17-CHAT-UX2-FE-3` Composer v2 DEC-027: @mention autocomplete từ roster (gửi mentions[]) · emoji picker tĩnh ~120 (0 dependency) · dán/kéo-thả ảnh qua uploadChatAttachment · thumbnail xem trước trước gửi · giữ bất biến clientMessageId + không mất nháp khi lỗi
 
@@ -67,7 +79,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 0
+- **branch**: `wo/s17-chat-ux2-be-1` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 236 — `0569_s14recruitfilegrant1_candidate_file_perm` (237 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -76,6 +88,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `b261b820` | 2026-09-09 | docs(status): regen sau khi merge #493 + #492 — S18-SEC-AUDITGATE-1 và S18-QA-PIPELINEREPLAY-1 đóng sổ (1 đang làm, 5 ready) |
 | `36556d4b` | 2026-09-09 | fix(test): S18-QA-PIPELINEREPLAY-1 — replay 0500 chạy dưới RLS, hết ghi lên project của spec khác (#S18) (#492) |
 | `5d4d266c` | 2026-09-09 | fix(security): S18-SEC-AUDITGATE-1 — gỡ đỏ cổng pnpm audit trên master, 5 advisory HIGH (#S18) (#493) |
 | `2674a163` | 2026-09-09 | docs(status): regen sau khi merge #491 — S18-QA-LEAVEDATEBOMB-1 đóng sổ (1 đang làm, 6 ready) |
@@ -87,7 +100,6 @@
 | `9d284de3` | 2026-09-07 | docs(status): regen sau khi merge #486 — S18-AUTH-SECEVENTMETA-1 đóng sổ, mở khoá SECEVENTREST-1 + RESTORE2FA-1 |
 | `d3c66029` | 2026-09-07 | fix(auth): S18-AUTH-SECEVENTMETA-1 — 9 hàng vết mật khẩu giờ mang ip/userAgent (#S18) (#486) |
 | `361b4666` | 2026-09-07 | docs(status): regen sau khi merge #484 + #485 — S18-AUTH-RESETMETA-1 và S18-QA-ASSETFLAKE-1 đóng sổ |
-| `118a6ec4` | 2026-09-07 | fix(auth): S18-AUTH-RESETMETA-1 — 5 hàng audit đổi mật khẩu giờ mang ip/userAgent (#S18) (#484) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
