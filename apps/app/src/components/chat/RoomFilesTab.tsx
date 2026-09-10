@@ -1,81 +1,40 @@
 /**
- * S7-CHAT-FE-4 — tab "Tệp" của bảng thông tin phòng (SPEC-15 §9 CHAT-SCREEN-004 · §13.5 · CHAT-API-017).
+ * S7-CHAT-FE-4 — danh sách "Tệp" của bảng thông tin phòng (SPEC-15 §9 CHAT-SCREEN-004 · §13.5 ·
+ * CHAT-API-017). **v2 (S17-CHAT-UX2-FE-4):** là thân của accordion «Tệp», lọc `kind='file'` ở SERVER.
  *
- * Tách khỏi `RoomInfoPanel` vì panel đó đã lo 3 nhóm trạng thái (sửa phòng · thành viên · ghim) và tab
- * này còn mang con trỏ phân trang riêng — gộp vào là một file phình quá ngưỡng đọc được (CLAUDE.md §5).
+ * Tách khỏi `RoomInfoPanel` vì panel đó đã lo nhiều nhóm trạng thái và khối này còn mang con trỏ phân
+ * trang riêng — gộp vào là một file phình quá ngưỡng đọc được (CLAUDE.md §5). Luật con trỏ chuyển sang
+ * `room-info/use-room-files.ts` vì lưới «Ảnh/Video» dùng CHUNG hợp đồng đó.
  *
- * ⚠️ HAI điều dễ làm sai, cả hai đều IM LẶNG:
- *   1. `url`/`thumbnailUrl` **`.nullable()` có chủ đích** — server bỏ trắng khi `FilePolicyService` từ
- *      chối, khi tệp `Infected`/chưa `Uploaded`, hoặc khi ký lỗi. Render `<img src={null}>` hay `<a
- *      href={undefined}>` cho ra một dòng bấm-không-làm-gì; phải nói thẳng "không tải được tệp này".
- *   2. "Còn trang sau" KHÔNG suy được từ `rows.length === limit`: server gọi `trimToMessageBoundary` để
- *      không chẻ đôi nhóm tệp của một tin, nên trang có thể ngắn hơn `limit` dù còn dữ liệu. Chỉ một
- *      trang RỖNG mới chứng minh đã hết (xem docblock `chatApi.listRoomFiles`).
+ * ⚠️ `url`/`thumbnailUrl` **`.nullable()` có chủ đích** — server bỏ trắng khi `FilePolicyService` từ
+ * chối, khi tệp `Infected`/chưa `Uploaded`, hoặc khi ký lỗi. Render `<img src={null}>` hay
+ * `<a href={undefined}>` cho ra một dòng bấm-không-làm-gì; phải nói thẳng "không tải được tệp này".
  */
-import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, FileText, ImageOff } from "lucide-react";
-import { chatApi } from "@mediaos/web-core";
 import { Button, Skeleton } from "@mediaos/ui";
-import type { ChatRoomFileDto } from "@mediaos/contracts";
-import { ROOM_FILES_PAGE_SIZE } from "@/routes/chat/constants";
+import type { ChatRoomFileDto, ChatRoomFileKind } from "@mediaos/contracts";
 import { formatDateTimeShort, formatFileSize } from "./chat-format";
+import { useRoomFiles } from "./room-info/use-room-files";
 
 interface RoomFilesTabProps {
   roomId: string;
+  /** Lọc loại tệp Ở SERVER (CHAT-API-017 `kind`). Vắng ⇒ mọi tệp — giữ hành vi cũ của S7. */
+  kind?: ChatRoomFileKind;
   /** Nhảy tới tin chứa tệp — cùng đường ngữ cảnh với kết quả tìm kiếm và tin ghim. */
   onJumpToMessage: (messageId: string, roomSeq: number) => void;
 }
 
-export function RoomFilesTab({ roomId, onJumpToMessage }: RoomFilesTabProps): React.ReactElement {
+export function RoomFilesTab({
+  roomId,
+  kind,
+  onJumpToMessage,
+}: RoomFilesTabProps): React.ReactElement {
   const { t } = useTranslation("chat");
-  const [files, setFiles] = useState<readonly ChatRoomFileDto[]>([]);
-  const [isLoading, setLoading] = useState(true);
-  const [isLoadingMore, setLoadingMore] = useState(false);
-  const [hasError, setError] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-
-  /** Phòng mà lần nạp đang bay THUỘC VỀ — panel keyed theo phòng, nhưng response cũ vẫn có thể về sau. */
-  const activeRoomRef = useRef(roomId);
-
-  const load = useCallback(
-    async (beforeSeq: number | undefined) => {
-      activeRoomRef.current = roomId;
-      if (beforeSeq === undefined) setLoading(true);
-      else setLoadingMore(true);
-      setError(false);
-      try {
-        const page = await chatApi.listRoomFiles(roomId, {
-          limit: ROOM_FILES_PAGE_SIZE,
-          ...(beforeSeq !== undefined ? { beforeSeq } : {}),
-        });
-        if (activeRoomRef.current !== roomId) return;
-        setFiles((prev) => (beforeSeq === undefined ? page : [...prev, ...page]));
-        setHasMore(page.length > 0);
-      } catch (err: unknown) {
-        if (activeRoomRef.current !== roomId) return;
-        setError(true);
-        console.error(`[chat] không tải được danh sách tệp của phòng ${roomId}:`, err);
-      } finally {
-        if (activeRoomRef.current === roomId) {
-          setLoading(false);
-          setLoadingMore(false);
-        }
-      }
-    },
-    [roomId],
+  const { files, isLoading, isLoadingMore, hasError, hasMore, loadMore, reload } = useRoomFiles(
+    roomId,
+    kind,
   );
-
-  useEffect(() => {
-    void load(undefined);
-  }, [load]);
-
-  const loadMore = useCallback(() => {
-    if (files.length === 0) return;
-    // Con trỏ = `roomSeq` NHỎ NHẤT của trang hiện tại (`beforeSeq` LOẠI TRỪ, server sắp giảm dần).
-    const oldest = files.reduce((min, f) => Math.min(min, f.roomSeq), files[0].roomSeq);
-    void load(oldest);
-  }, [files, load]);
 
   if (isLoading) {
     return (
@@ -90,7 +49,7 @@ export function RoomFilesTab({ roomId, onJumpToMessage }: RoomFilesTabProps): Re
     return (
       <div className="flex flex-col items-center gap-2 p-4">
         <p className="text-xs text-muted-foreground">{t("info.files.loadError")}</p>
-        <Button variant="outline" size="sm" onClick={() => void load(undefined)}>
+        <Button variant="outline" size="sm" onClick={reload}>
           {t("conversation.retry")}
         </Button>
       </div>

@@ -127,6 +127,15 @@ export const SEARCH_PAGE_SIZE = 20;
 export const ROOM_FILES_PAGE_SIZE = 30;
 
 /**
+ * S17-CHAT-UX2-FE-4 — số liên kết mỗi trang của khối «Liên kết» (CHAT-API-031, `limit` max 50).
+ *
+ * Hằng RIÊNG chứ không dùng lại `ROOM_FILES_PAGE_SIZE`: hai endpoint đếm hai thứ khác nhau (tệp vs
+ * liên kết trích từ thân tin) và trần của chúng có thể rời nhau bất kỳ lúc nào — chia chung một hằng là
+ * buộc chúng phải đi cùng nhau mãi mãi.
+ */
+export const ROOM_LINKS_PAGE_SIZE = 30;
+
+/**
  * Cửa sổ ngữ cảnh quanh tin đích: `CONTEXT_BEFORE` tin (KỂ CẢ tin đích) + `CONTEXT_AFTER` tin sau nó.
  *
  * Nạp bằng đúng hai lời gọi `getMessages`: `beforeSeq = seq + 1` (loại trừ ⇒ lấy tới chính tin đích) và

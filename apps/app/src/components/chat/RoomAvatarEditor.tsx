@@ -53,6 +53,14 @@ interface RoomAvatarEditorProps {
   /** Nhãn phòng đã dựng — nguồn chữ cái đầu khi chưa có ảnh. */
   label: string;
   myRole: "member" | "admin" | null;
+  /**
+   * S17-CHAT-UX2-FE-4 — vẽ lại avatar bên trái hai nút hay không.
+   *
+   * Bảng thông tin phòng v2 (DEC-025) đã có avatar LỚN ngay trên đầu panel; vẽ lần hai chỉ để đặt
+   * nút cạnh nó là nhiễu. **Chỉ đổi cách trình bày** — bốn nhánh tư cách CHAT-DEC-016 và hai
+   * mutation không đổi một chữ.
+   */
+  showAvatar?: boolean;
   /** Tải lại phòng để lấy `avatarUrl` ký TƯƠI (server không trả URL ở đường ghi). */
   onChanged: () => void;
 }
@@ -62,6 +70,7 @@ export function RoomAvatarEditor({
   label,
   myRole,
   onChanged,
+  showAvatar = true,
 }: RoomAvatarEditorProps): React.ReactElement | null {
   const { t } = useTranslation("chat");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -119,12 +128,17 @@ export function RoomAvatarEditor({
 
   return (
     <div
-      className="flex items-center gap-3 border-b border-border p-3"
+      className={
+        showAvatar
+          ? "flex items-center gap-3 border-b border-border p-3"
+          : // Biến thể của bảng thông tin phòng v2: nằm trong khối đầu panel đã căn giữa, không viền riêng.
+            "flex w-full flex-col items-center gap-1 pt-1"
+      }
       data-testid="chat-room-avatar-editor"
     >
-      <RoomAvatar room={room} label={label} size="lg" />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap gap-2">
+      {showAvatar && <RoomAvatar room={room} label={label} size="lg" />}
+      <div className={showAvatar ? "min-w-0 flex-1" : "min-w-0"}>
+        <div className={showAvatar ? "flex flex-wrap gap-2" : "flex flex-wrap justify-center gap-2"}>
           <Button
             size="sm"
             variant="outline"

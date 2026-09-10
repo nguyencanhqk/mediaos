@@ -314,6 +314,8 @@ export default {
       derivedNotice:
         "Thành viên phòng {{type}} do hệ thống đồng bộ tự động — không thêm/bớt bằng tay được.",
       actionFailed: "Không thực hiện được thao tác thành viên.",
+      // S17-CHAT-UX2-FE-4 — danh sách thành viên chuyển từ tab sang Sheet (DEC-025).
+      sheetTitle: "Thành viên ({{count}})",
     },
     pinned: {
       empty: "Chưa có tin nào được ghim.",
@@ -349,6 +351,41 @@ export default {
       // làm người dùng dùng trình đọc màn hình không phân biệt được đang ở bước nào.
       confirmAction: "Rời khỏi phòng",
       failed: "Không rời được phòng.",
+    },
+
+    // ── S17-CHAT-UX2-FE-4 — bảng thông tin phòng v2 (CHAT-DEC-025), KHỐI APPEND ──────────────
+
+    /** Ẩn HẲN dòng khi `createdByName` vắng — không bịa "Không rõ" cho phòng do hệ thống dựng. */
+    createdBy: "Tạo bởi {{name}} · {{date}}",
+    actions: {
+      // Nhãn của nút tròn khi đang BẬT thông báo (bấm ⇒ mở menu chọn mốc). Chiều ngược dùng
+      // `rooms.menu.unmute` — cùng một câu chữ với menu ngữ cảnh ở danh sách phòng.
+      mute: "Tắt thông báo",
+    },
+    sections: {
+      media: "Ảnh / Video",
+      files: "Tệp",
+      links: "Liên kết",
+      pinned: "Tin ghim",
+    },
+    media: {
+      empty: "Phòng chưa có ảnh nào được gửi.",
+      loadError: "Không tải được ảnh của phòng.",
+      loadMoreError: "Không tải thêm được ảnh cũ hơn.",
+      loadMore: "Xem ảnh cũ hơn",
+      loadingMore: "Đang tải…",
+    },
+    links: {
+      empty: "Phòng chưa có liên kết nào được chia sẻ.",
+      // KHÁC `empty`: server dừng vì chạm trần QUÉT, không phải vì hết dữ liệu (CHAT-API-031 `truncated`).
+      // Gộp hai câu này làm một là khẳng định sai rằng phòng không có liên kết nào.
+      scanTruncated: "Mới quét tới đây — có thể còn liên kết ở những tin cũ hơn.",
+      scanMore: "Quét tiếp tin cũ hơn",
+      loadError: "Không tải được danh sách liên kết.",
+      loadMoreError: "Không tải thêm được liên kết cũ hơn.",
+      loadMore: "Xem liên kết cũ hơn",
+      loadingMore: "Đang tải…",
+      jump: "Xem trong hội thoại",
     },
   },
 
