@@ -239,28 +239,51 @@ describe.skipIf(!hasLaneDb)("S7-CHAT-BE-1 — phòng & thành viên (DB cô lậ
 
   // ── Ca 11 + 15: danh sách phòng, unread, không N+1 ─────────────────────────
 
-  it("ca 11: danh sách ≥3 phòng dùng ĐÚNG 1 truy vấn SELECT (không N+1), unread bằng phép trừ", async () => {
+  it("ca 11: số truy vấn của danh sách phòng KHÔNG tăng theo số phòng (không N+1)", async () => {
+    // ⚠️ ĐỔI PHÉP ĐO ở S17-CHAT-UX2-BE-1 — bản cũ assert `selectCalls === 1`, tức đếm số lần BUILDER
+    // `tx.select` được DỰNG và ngầm coi "1 builder = 1 round-trip". Hai thứ đó không bằng nhau: một
+    // `LEFT JOIN LATERAL` cần dựng builder cho subquery nhưng vẫn đi trong CÙNG MỘT câu SQL. Con số 1
+    // vì thế là chi tiết THI CÔNG, không phải bất biến — và giữ nó sẽ ép mọi WO sau hoặc bỏ LATERAL,
+    // hoặc sửa số thành 3 (rồi 4, rồi 5) mà không ai còn biết số đó nghĩa là gì.
+    //
+    // Bất biến THẬT là: chi phí truy vấn KHÔNG phụ thuộc số phòng. Đo bằng cách chạy hai lần với hai
+    // kích cỡ khác nhau và đòi số đếm BẰNG NHAU — không pin một hằng nào cả.
+    // Vế bổ sung (đếm câu SQL THẬT ở tầng driver `pg`) nằm ở `chat-s17-be1-room-dto.int-spec.ts` ca 20.
+    const db = app.get(DatabaseService);
+    const repo = app.get(ChatRoomsRepository);
+
+    async function countBuilders(): Promise<{ builders: number; rooms: number }> {
+      let builders = 0;
+      const rows = await db.withTenant(A.companyId, async (tx) => {
+        const counting = new Proxy(tx as object, {
+          get(target, prop, receiver) {
+            if (prop === "select") builders += 1;
+            return Reflect.get(target, prop, receiver);
+          },
+        }) as typeof tx;
+        return repo.listRoomsForUser(counting, A.companyId, uAdmin, { archived: false });
+      });
+      return { builders, rooms: rows.length };
+    }
+
     for (const name of ["N+1 A", "N+1 B", "N+1 C"]) {
       const r = await authPost(tAdmin, "/chat/rooms").send({ name, memberUserIds: [] });
       expect(r.status).toBe(201);
     }
+    const small = await countBuilders();
+    expect(small.rooms).toBeGreaterThanOrEqual(3);
 
-    const db = app.get(DatabaseService);
-    const repo = app.get(ChatRoomsRepository);
-    let selectCalls = 0;
-    const rows = await db.withTenant(A.companyId, async (tx) => {
-      // Proxy đếm số lần builder `select` được dựng: N+1 nghĩa là 1 + số phòng, không phải 1.
-      const counting = new Proxy(tx as object, {
-        get(target, prop, receiver) {
-          if (prop === "select") selectCalls += 1;
-          return Reflect.get(target, prop, receiver);
-        },
-      }) as typeof tx;
-      return repo.listRoomsForUser(counting, A.companyId, uAdmin, { archived: false });
-    });
-
-    expect(rows.length).toBeGreaterThanOrEqual(3);
-    expect(selectCalls, `số truy vấn SELECT cho ${rows.length} phòng`).toBe(1);
+    for (const name of ["N+1 D", "N+1 E", "N+1 F", "N+1 G"]) {
+      const r = await authPost(tAdmin, "/chat/rooms").send({ name, memberUserIds: [] });
+      expect(r.status).toBe(201);
+    }
+    const big = await countBuilders();
+    // Ca chỉ có nghĩa khi lần hai THỰC SỰ nhiều phòng hơn — nếu không, "bằng nhau" là xanh RỖNG.
+    expect(big.rooms).toBeGreaterThan(small.rooms);
+    expect(
+      big.builders,
+      `N+1: ${small.rooms} phòng → ${small.builders} builder, ${big.rooms} phòng → ${big.builders}`,
+    ).toBe(small.builders);
   });
 
   it("ca 15: phòng CHƯA có tin nào (last_message_seq NULL) → unreadCount = 0, KHÔNG phải null", async () => {

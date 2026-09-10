@@ -380,6 +380,23 @@ function insertMessage(
 }
 
 /**
+ * S17-CHAT-UX2-BE-1 — `peer` của payload WS **HẸP HƠN** `peer` của REST đúng một khoá: `avatarUrl` bị
+ * strip ở `wsChatRoomEventSchema` vì nó là URL ký TTL-ngắn, per-recipient (memory
+ * `ws-payload-narrower-than-rest-dto`).
+ *
+ * ⚠️ `avatarUrl: null` ở đây là ĐÚNG **chỉ cho phòng VỪA TẠO** — chưa có ảnh REST nào để giữ. Với phòng
+ * ĐÃ BIẾT thì tuyệt đối KHÔNG đi qua hàm này: ghi `null` đè lên URL đang có làm avatar người đối thoại
+ * BIẾN MẤT mỗi lần ai đó đổi tên phòng. Đường `updated`/`archived` vì thế đi qua `mergeRoomMetadata`,
+ * vốn là ALLOWLIST và KHÔNG chạm `peer`.
+ */
+function widenWsPeer(
+  peer: NonNullable<WsChatRoomEvent["room"]>["peer"],
+): ChatRoomDto["peer"] {
+  if (peer === null || peer === undefined) return peer;
+  return { ...peer, avatarUrl: null };
+}
+
+/**
  * Trường được phép ghi đè từ payload `chat:room` — ALLOWLIST, không phải merge tổng quát.
  *
  * ⚠️ `unreadCount` là PER-MEMBER: payload WS `.omit()` nó CÓ CHỦ Ý (một con số chung cho cả phòng là
@@ -545,7 +562,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         if (known) return { kind: "none" }; // trùng lặp/đua — idempotent
         // Phòng vừa tạo chưa có tin nào ⇒ `unreadCount: 0` là sự thật, không phải giá trị bịa.
         set((s) => {
-          const roomsById = { ...s.roomsById, [event.roomId]: { ...incomingRoom, unreadCount: 0 } };
+          const roomsById = {
+            ...s.roomsById,
+            [event.roomId]: { ...incomingRoom, unreadCount: 0, peer: widenWsPeer(incomingRoom.peer) },
+          };
           return { roomsById, roomOrder: sortRoomIds(roomsById) };
         });
         return { kind: "none" };

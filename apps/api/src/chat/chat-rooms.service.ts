@@ -12,6 +12,7 @@ import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 import { AuditService } from "../events/audit.service";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import type { ChatRoomType } from "../db/schema/communication";
+import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
 import { ChatAccessService } from "./chat-access.service";
 import { ChatCallRoomExitService } from "./chat-call-room-exit.service";
 import { ChatRoomAvatarPresignService } from "./chat-room-avatar-presign.service";
@@ -25,7 +26,8 @@ import {
   buildDirectKey,
   unreadOf,
 } from "./chat-room-rules";
-import { toChatRoomDetailDto, toChatRoomDto } from "./chat.mapper";
+import { buildLastMessagePreview } from "./chat-preview";
+import { toChatRoomDetailDto, toChatRoomDto, toChatRoomPeerDto } from "./chat.mapper";
 
 export interface ChatActor {
   id: string;
@@ -70,9 +72,14 @@ export class ChatRoomsService {
     private readonly realtime: RealtimeEmitterService,
     // S8-CHAT-UX-BE-2 (additive) — ký avatar phòng theo LÔ ở hai đường đọc (`listRooms`/`getRoom`).
     private readonly avatarPresign: ChatRoomAvatarPresignService,
-    // ⚠️ S7-CALL-RT-FIX-2 (additive) — **PHẢI Ở CUỐI**: `chat-realtime-after-commit.spec.ts` dựng
-    // service này bằng THỨ TỰ THAM SỐ.
+    // ⚠️ S7-CALL-RT-FIX-2 (additive) — `chat-realtime-after-commit.spec.ts` dựng service này bằng THỨ
+    // TỰ THAM SỐ, nên vị trí của nó là hợp đồng.
     private readonly callExit: ChatCallRoomExitService,
+    // ⚠️ S17-CHAT-UX2-BE-1 (additive) — ký avatar NGƯỜI ĐỐI THOẠI ở `listRooms` (CHAT-DEC-023). Đặt SAU
+    // `callExit` CHỨ KHÔNG chèn vào giữa: chèn giữa sẽ đẩy `callExit` sang một chỗ khác và spec dựng
+    // theo THỨ TỰ ở trên sẽ nhận nhầm object — `as never` làm typecheck im lặng, lỗi chỉ lộ lúc chạy.
+    // Spec đó đã được cập nhật để truyền stub cho tham số này (không để `undefined` trôi vào DI).
+    private readonly employeeAvatarPresign: AvatarPresignService,
   ) {}
 
   /**
@@ -128,7 +135,37 @@ export class ChatRoomsService {
         rows.map((r) => r.id),
         tx,
       );
-      return rows.map((r) => toChatRoomDto(r, undefined, undefined, avatars.get(r.id) ?? null));
+
+      // S17-CHAT-UX2-BE-1 — avatar NGƯỜI ĐỐI THOẠI (CHAT-DEC-023). ĐÚNG MỘT lời gọi cho CẢ TRANG, không
+      // phải một lần ký mỗi DM: mỗi lần ký là một hạn riêng (URL của cùng một trang hết hạn lệch nhau)
+      // và ở những đường có bật thì còn là một dòng `file_access_logs` (CHAT-DEC-019, mirror
+      // `ChatMembersService.listMembers`). Truyền `tx` của chính vòng này — mở `withTenant` LỒNG NHAU
+      // sẽ TREO trên PgBouncer transaction-mode.
+      //
+      // ⚠️ Đưa vào `resolveEmployeeAvatars` là giá trị THÔ (`peerAvatarRaw`); chính nó mới là nơi xác
+      // minh cặp `(employeeId, fileId)` rồi ký. Row thô KHÔNG bao giờ lên DTO.
+      const peerSubjects = rows
+        .filter((r): r is typeof r & { peerEmployeeId: string } => r.peerEmployeeId !== null)
+        .map((r) => ({ employeeId: r.peerEmployeeId, avatarUrl: r.peerAvatarRaw }));
+      const peerAvatars = await this.employeeAvatarPresign.resolveEmployeeAvatars(
+        actor.companyId,
+        peerSubjects,
+        tx,
+      );
+
+      return rows.map((r) =>
+        toChatRoomDto(r, undefined, undefined, avatars.get(r.id) ?? null, {
+          lastMessage: buildLastMessagePreview({
+            senderId: r.lastSenderId,
+            senderName: r.lastSenderName,
+            body: r.lastBody,
+            messageType: r.lastMessageType,
+            attachmentCount: r.lastAttachmentCount,
+            recalledAt: r.lastRecalledAt,
+          }),
+          peer: toChatRoomPeerDto(r, peerAvatars),
+        }),
+      );
     });
   }
 
@@ -139,6 +176,11 @@ export class ChatRoomsService {
       const members = await this.repo.listActiveMembers(tx, actor.companyId, roomId);
       // Nghĩa vụ caller đã thoả: `assertMember` ngay trên là điểm khẳng định membership.
       const avatars = await this.avatarPresign.resolveRoomAvatars(actor.companyId, [roomId], tx);
+      // S17-CHAT-UX2-BE-1 — «Tạo bởi … · ngày» của bảng thông tin phòng v2 (CHAT-DEC-025). Một truy vấn
+      // NHỎ trên đường CHI TIẾT (một phòng), CỐ Ý không nhét vào `listRoomsForUser`: ở đường danh sách nó
+      // là thêm một LEFT JOIN `users` cho MỌI phòng, trên đường nóng nhất của module, để phục vụ một dòng
+      // chữ mà danh sách không hiển thị.
+      const createdByName = await this.repo.findRoomCreatorName(tx, actor.companyId, roomId);
       return toChatRoomDetailDto(
         acc.room,
         members,
@@ -146,6 +188,7 @@ export class ChatRoomsService {
         unreadOf(acc.room.lastMessageSeq, acc.membership.lastReadSeq),
         acc.membership,
         avatars.get(roomId) ?? null,
+        createdByName,
       );
     });
   }

@@ -1,3 +1,6 @@
+import { sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { fileDownloadStateDenyReason } from "../foundation/files/file-download-state";
 
 /**
@@ -65,7 +68,41 @@ export const CHAT_MAX_ATTACHMENTS_PER_MESSAGE = 10;
 
 /** Server quyết định "có phải ảnh không" từ MIME, KHÔNG từ phần mở rộng do client đặt tên. */
 export function isImageMimeType(mimeType: string): boolean {
-  return mimeType.toLowerCase().startsWith("image/");
+  return mimeType.toLowerCase().startsWith(IMAGE_MIME_PREFIX);
+}
+
+/**
+ * S17-CHAT-UX2-BE-1 — tiền tố MIME của ảnh. **ĐỊNH NGHĨA DUY NHẤT** (SPEC-15 §15b · API-13 §5.1d), dùng
+ * chung bởi:
+ *
+ *   • `isImageMimeType()` — khoá DTO `chatAttachmentSchema.isImage`, suy ở tầng MAPPER (không phải cột DB);
+ *   • `imageMimeSqlPredicate()` — vị từ lọc `kind=image|file` của `CHAT-API-017`, chạy ở SQL.
+ *
+ * ⚠️ Hai chỗ, một hằng — và hằng ở đây LÀ cái giữ chúng khớp. Viết `'image/'` lần thứ hai trong SQL là
+ * dựng bản sao thứ hai của một luật: chúng trôi lần đầu ai đó nới định nghĩa (ví dụ tính cả `video/`
+ * cho lưới «Ảnh/Video»), và triệu chứng là một tệp có `isImage: true` nhưng biến mất khỏi `kind=image` —
+ * không test nào đỏ vì mỗi đường đi qua một literal khác nhau.
+ */
+const IMAGE_MIME_PREFIX = "image/";
+
+/**
+ * Vị từ SQL "là ảnh" cho `CHAT-API-017?kind=…`.
+ *
+ * ⚠️ **`lower(mime_type) LIKE 'image/%'`, KHÔNG phải `mime_type LIKE 'image/%'` trần.** `LIKE` của
+ * Postgres phân biệt HOA/thường, còn `isImageMimeType` gọi `.toLowerCase()` trước khi so. Bỏ `lower()`
+ * là để một tệp `IMAGE/PNG` ra `isImage: true` ở DTO mà `kind=image` lọc MẤT — đúng cái lệch mà hằng
+ * trên tồn tại để chặn. (`mime_type` do client khai lúc upload và chỉ được re-validate theo allowlist,
+ * không được chuẩn hoá về chữ thường ở DB.)
+ *
+ * ⚠️ Lọc ở SQL chứ KHÔNG lọc trang ở JS sau khi đọc: lọc sau phân trang thì một trang 30 tệp có 2 ảnh
+ * trả về 2 ô rồi "hết dữ liệu", trong khi phòng còn hàng trăm ảnh ở trang sau
+ * (memory `ui-promises-backend-never-reads`).
+ */
+export function imageMimeSqlPredicate(mimeColumn: SQL | AnyPgColumn, isImage: boolean): SQL {
+  const pattern = `${IMAGE_MIME_PREFIX}%`;
+  return isImage
+    ? sql`lower(${mimeColumn}) like ${pattern}`
+    : sql`lower(${mimeColumn}) not like ${pattern}`;
 }
 
 /**

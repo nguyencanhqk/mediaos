@@ -374,6 +374,11 @@ describe("emit SAU COMMIT — ChatRoomsService.createGroup", () => {
       // là đủ VÀ đúng: nếu một ngày chúng bắt đầu ký, ca test thấy `avatarUrl: null` — không phải URL giả.
       { resolveRoomAvatars: vi.fn(async () => new Map<string, string>()) } as never,
       callExit() as never,
+      // S17-CHAT-UX2-BE-1 — `AvatarPresignService` (ký avatar NGƯỜI ĐỐI THOẠI). Cùng lý do stub như
+      // `ChatRoomAvatarPresignService` ngay trên: các đường trong file này (createGroup / updateRoom /
+      // archive…) KHÔNG ký avatar — chỉ `listRooms` ký. Map RỖNG là đủ VÀ đúng: nếu một ngày chúng bắt
+      // đầu ký, ca test thấy `peer.avatarUrl: null`, không phải URL giả.
+      { resolveEmployeeAvatars: vi.fn(async () => new Map<string, string>()) } as never,
     );
     return { svc, realtime };
   }

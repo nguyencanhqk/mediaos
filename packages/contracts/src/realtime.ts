@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { chatMessageReactionSchema, chatMessageSchema, chatRoomSchema } from "./chat";
+import {
+  chatMessageReactionSchema,
+  chatMessageSchema,
+  chatRoomPeerSchema,
+  chatRoomSchema,
+} from "./chat";
 import { chatCallKindSchema, chatCallStatusSchema } from "./chat-call";
 import { notificationSchema } from "./notification";
 
@@ -161,6 +166,20 @@ export type WsChatRoomAction = z.infer<typeof wsChatRoomActionSchema>;
  * một đường tải sẽ hết hạn ⇒ ảnh vỡ. Vắng khoá (nhờ `.optional()`) làm phép trộn ở FE **giữ nguyên**
  * URL đang có thay vì ghi đè bằng `null` — đúng hành vi mong muốn. Ảnh mới lấy ở lần refetch REST.
  */
+/**
+ * S17-CHAT-UX2-BE-1 — bản `peer` dùng cho payload WS: **đã strip `avatarUrl`**.
+ *
+ * ⚠️ Tồn tại vì `.omit()` của Zod **KHÔNG với tới khoá LỒNG** — không có cú pháp
+ * `.omit({ 'peer.avatarUrl': true })`. Thêm `peer` vào `chatRoomSchema` mà không `.extend()` bản này ở
+ * schema WS thì URL ký per-recipient chảy thẳng ra một sự kiện broadcast, và client hay giữ sự kiện lâu
+ * hơn TTL của chữ ký ⇒ ảnh vỡ (cùng lý do `avatarUrl` cấp phòng đã bị strip ở khối trên).
+ *
+ * ⚠️ **Đây là bản sao THỨ HAI của một hợp đồng — nó PHẢI đi kèm ca âm ở `realtime.spec.ts`**: thêm bất
+ * kỳ khoá lồng mới nào vào `chatRoomPeerSchema` mà quên chỗ này sẽ trôi im lặng ở wave sau
+ * (memory `ws-payload-narrower-than-rest-dto`).
+ */
+const wsChatRoomPeerSchema = chatRoomPeerSchema.omit({ avatarUrl: true });
+
 export const wsChatRoomEventSchema = z.object({
   roomId: z.string().uuid(),
   action: wsChatRoomActionSchema,
@@ -172,6 +191,9 @@ export const wsChatRoomEventSchema = z.object({
       markedUnreadAt: true,
       avatarUrl: true,
     })
+    // S17-CHAT-UX2-BE-1 — `lastMessage` đi qua nguyên vẹn (đã che + đã cắt Ở SERVER, không phải URL ký
+    // nên không hết hạn); `peer` phải thay bằng bản đã strip `avatarUrl` — xem `wsChatRoomPeerSchema`.
+    .extend({ peer: wsChatRoomPeerSchema.nullable().optional() })
     .optional(),
 });
 export type WsChatRoomEvent = z.infer<typeof wsChatRoomEventSchema>;
