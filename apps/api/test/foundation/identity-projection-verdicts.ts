@@ -219,11 +219,32 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
     signedBy: WO,
   },
   {
+    point: "chat/chat-rooms.repository.ts#findRoomCreatorName:users.fullName",
+    basis: "membership",
+    reason:
+      "chat-rooms.service.ts:175 — `assertMember` chạy NGAY TRƯỚC lời gọi (dòng 183) trong cùng `withTenant`. Hàm repo CỐ Ý không tự lọc membership (docblock «Nghĩa vụ CALLER», mirror `findRoomById`), nên căn cứ nằm ở đúng call-site DUY NHẤT của nó.",
+    signedBy: "S17-CHAT-UX2-BE-1",
+  },
+  {
     point: "chat/chat-rooms.repository.ts#listActiveMembers:users.fullName",
     basis: "membership",
     reason:
       "chat-rooms.service.ts:138 + chat-members.service.ts:341 — cả hai sau `assertMember` (đường thứ hai là đọc-lại-sau-ghi, thao tác ghi đã gate).",
     signedBy: WO,
+  },
+  {
+    point: "chat/chat-rooms.repository.ts#listRoomsForUser:lastSender.fullName",
+    basis: "membership",
+    reason:
+      "chat-rooms.repository.ts:345-346 — câu NGOÀI ghim `eq(chatRoomMembers.userId, userId)` + `leftAt IS NULL`, còn LATERAL tin cuối tương quan theo `chatRooms.id` nên chỉ chạy trên phòng actor đang là thành viên. Tên người gửi tin cuối là danh tính của người CÙNG PHÒNG.",
+    signedBy: "S17-CHAT-UX2-BE-1",
+  },
+  {
+    point: "chat/chat-rooms.repository.ts#listRoomsForUser:peerUser.fullName",
+    basis: "membership",
+    reason:
+      "CÙNG câu với dòng trên (chat-rooms.repository.ts:345-346): tập phòng ghim theo membership của chính actor, và LATERAL peer còn thêm `roomType='direct'` + `ne(peerMember.userId, userId)` — tên trả về là người đối thoại trong DM của chính actor.",
+    signedBy: "S17-CHAT-UX2-BE-1",
   },
   {
     point: "chat/chat-rooms.repository.ts#listRosterMembers:users.fullName",
@@ -669,7 +690,13 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   "order-only": 1,
   // Có vị từ SQL thật, nhưng SỔ này không nhìn thấy vị từ ⇒ vẫn phải có trần.
   "scoped-predicate": 23, // S11-ASSET-BE-1: +2 (holderSelect · listByAssetTx) — plan-review B7, nâng có chủ đích qua FULL gate
-  membership: 8,
+  // 8 → 11 (S17-CHAT-UX2-BE-1, 10/09/2026): DTO phòng v2 thêm BA điểm chiếu trong
+  // `chat-rooms.repository.ts` — `listRoomsForUser:lastSender.fullName` ·
+  // `listRoomsForUser:peerUser.fullName` · `findRoomCreatorName:users.fullName`. Nới CÓ CHỦ ĐÍCH:
+  // cả ba nằm trên đường đọc phòng ĐÃ bound membership (câu list ghim `chat_room_members.user_id`
+  // = actor; `findRoomCreatorName` đứng sau `assertMember` ở chat-rooms.service.ts:175) — KHÔNG mở
+  // bề mặt đọc nào ngoài phòng của chính actor.
+  membership: 11,
   "self-bound-row": 4, // S11-ASSET-BE-1: +1 (findUserDisplayNameTx — tên actor cho payload NOTI, thay raw SQL để không nới vùng mù rawSqlIdentity)
   // 14 → 15 (S11-ROOM-BE-1, 30/08/2026): `rooms/room-people.repository.ts#namesByUserIdsTx` — điểm chiếu DUY NHẤT của
   // module ROOM; cặp gate route ghi (`book`/`cancel`) ≠ cặp bound (`view`, resolveOrNull ⇒ fail-closed `users.id =
