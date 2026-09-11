@@ -341,7 +341,14 @@ export class LoginRateLimiter {
    * `opts.includeForgot === true` — xem `ClearLoginLocksOptions` (S18-AUTH-RESETCLEARS-1).
    * **KHÔNG** xoá `logdedup:` — đó là khoá gộp bảo vệ `login_logs` (append-only, KHÔNG thu hồi
    * được) khỏi bị bồi hàng (KI-048); xoá nó là mở lại đúng lỗ đó cho mỗi lần bấm nút. **KHÔNG** xoá
-   * `2fa-enable`/`2fa-disable`/`change-pw`/`stepup` — luồng SAU đăng nhập, ngoài phạm vi.
+   * `2fa-enable`/`2fa-disable`/`change-pw`/`stepup`/`2fa-enroll` — luồng SAU đăng nhập, ngoài phạm vi.
+   *
+   * ⚠️ `2fa-enroll` (S18-AUTH-490DEBT-1) là trường hợp DUY NHẤT trong danh sách trên có đường gỡ
+   * RIÊNG, và nó bắt buộc phải có: sau `restoreUser`, `require_two_factor=true` ÉP người vừa được
+   * khôi phục đi enroll, nên một khoá còn sống là nhốt họ trọn `LOGIN_LOCKOUT_SEC` mà nút này không
+   * gỡ được. Đường gỡ nằm ở `AuthUsersService.restoreUser` (gọi `reset()` sau khi tx COMMIT) — đừng
+   * "thống nhất" bằng cách kéo bucket ấy vào đây: nút này là *gỡ khoá ĐĂNG NHẬP*, và
+   * `LoginThrottleBucket` của badge trạng thái cố ý chỉ có `acct`/`ip`/`2fa`.
    *
    * Dọn `attempts` in-memory là VÔ ĐIỀU KIỆN (mirror `reset()`): khi Valkey rớt giữa chừng,
    * `recordFailure` đã fail-soft ghi khoá vào memory — bỏ qua nhánh này là gỡ hụt đúng lúc hệ thống đang

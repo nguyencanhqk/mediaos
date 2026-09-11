@@ -306,12 +306,25 @@ describe.skipIf(!hasDb)(
     });
 
     /**
-     * §enable-deny-norl — nhánh `account_gone` KHÔNG phạt rate-limit và KHÔNG đẻ `REAUTH_FAILED`.
-     * Phạt + gắn nhãn "xác thực lại thất bại" cho một lượt KHÔNG PHẢI "nhập sai mã" là sai nhãn
-     * (lập luận D4 ở `auth.service.ts`). Đột biến: trả `"bad_code"` thay `"account_gone"` ⇒ ca này ĐỎ.
+     * §enable-deny-noreauth — nhánh `account_gone` KHÔNG đẻ `REAUTH_FAILED`. Gắn nhãn "xác thực lại
+     * thất bại" cho một lượt KHÔNG PHẢI "nhập sai mã" là sai nhãn (lập luận D4 ở `auth.service.ts`).
+     * Đột biến: trả `"bad_code"` thay `"account_gone"` ⇒ ca này ĐỎ.
+     *
+     * ⚠️ ĐẢO CỔNG CÓ CHỦ Ý — S18-AUTH-490DEBT-1, owner chốt 11/09/2026. Ca này TRƯỚC ĐÂY tên là
+     * `§enable-deny-norl` và còn assert thêm "lặp 6 lượt vẫn KHÔNG khoá rate-limit". Vế ấy ghim đúng
+     * cái LỖ mà #490 ghi nợ ở §8.2: nhánh `account_gone` ghi một hàng `audit_logs` VĨNH VIỄN mỗi lượt
+     * mà không counter nào chặn ⇒ trần lưu trữ mỗi cửa sổ là VÔ HẠN. Nay `confirmEnable` CÓ
+     * `recordFailure` ở nhánh này (trần = `LOGIN_MAX_ATTEMPTS` hàng/cửa sổ, đúng luật
+     * `lock-observability-rule`), nên vế "không khoá" đã bị **gỡ bỏ có chủ ý**, KHÔNG phải nới cổng.
+     *   · Vế 429 + trần audit chuyển sang `§enable-deny-rl` (`auth-s18-490debt-1.int-spec.ts`).
+     *   · Vế "`REAUTH_FAILED` = 0" — ranh giới ĐẾM ↔ NHÃN — ở lại đây, và nó vẫn là bất biến.
+     * Đừng đọc lịch sử file thành "ai đó làm yếu ca này đi" (memory `tests-can-pin-a-hole-open`).
+     *
+     * Bằng chứng bộ đếm `REAUTH_FAILED` CÓ THỂ tăng (chống xanh-rỗng cho assert-0 này): `§meta-enable`
+     * ở cuối file — enable mã SAI ⇒ CÓ hàng `REAUTH_FAILED`.
      */
-    it("§enable-deny-norl: nhánh account_gone KHÔNG đẻ REAUTH_FAILED và KHÔNG khoá rate-limit", async () => {
-      const target = await seedTarget("enablenorl");
+    it("§enable-deny-noreauth: nhánh account_gone KHÔNG đẻ REAUTH_FAILED", async () => {
+      const target = await seedTarget("enablenoreauth");
       const token = await loginToken(target.email);
 
       const enroll = await api(app)
@@ -322,14 +335,12 @@ describe.skipIf(!hasDb)(
       const secret = secretFromUri(enroll.body.data.otpauthUri as string);
       await softDelete(target.id);
 
-      // Gọi LẶP: nếu nhánh này phạt rate-limit thì một trong các lượt sau sẽ đổi hình thành 429.
-      for (let i = 0; i < 6; i++) {
-        const res = await api(app)
-          .post("/auth/2fa/enable")
-          .set("Authorization", `Bearer ${token}`)
-          .send({ token: totp.generate(secret) });
-        expect(res.status, `lượt ${i}: ${JSON.stringify(res.body)}`).toBe(401);
-      }
+      const res = await api(app)
+        .post("/auth/2fa/enable")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ token: totp.generate(secret) });
+      expect(res.status, JSON.stringify(res.body)).toBe(401);
+
       expect(await securityEventCount(target.id, "REAUTH_FAILED")).toBe(0);
       expect(await enabledAt(target.id)).toBeNull();
     });

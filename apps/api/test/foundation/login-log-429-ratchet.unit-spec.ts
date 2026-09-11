@@ -6,6 +6,7 @@ import {
   stepUpAntiAmplificationAnchors,
   tooManyRequestsFactoryNames,
   tooManyRequestsThrowSites,
+  twoFactorDenyBranchAnchors,
 } from "./login-log-429-census";
 
 /**
@@ -22,7 +23,7 @@ import {
 /**
  * WAIVER ĐÃ KÝ — điểm ném 429 CỐ Ý không ghi hàng nào ở chính nhánh đó.
  *
- * ⚠️ ĐÂY KHÔNG PHẢI "miễn cho qua". Cả bốn dòng đều theo cùng MỘT luật, phát biểu ở
+ * ⚠️ ĐÂY KHÔNG PHẢI "miễn cho qua". Cả năm dòng đều theo cùng MỘT luật, phát biểu ở
  * `docs/plans/S10-SEC-LOGINLOG429-1.md` §1:
  *
  *   > Đường DỰNG NÊN cái khoá phải để lại vết; đường ĐANG BỊ KHOÁ ghi 0 hàng.
@@ -31,8 +32,8 @@ import {
  * hàng chứ không phải vô hạn. Ghi ở nhánh đã-khoá là mời kẻ tấn công bồi hàng vào bảng
  * **không xoá được** — chính là KI-048, thứ WO này đang đóng ở vế kia.
  *
- * ⚠️ Mỗi waiver PHẢI có NEO DƯƠNG ở ca (3)/(4) bên dưới. Waiver không neo là dây thừa: ai đó xoá lời
- * ghi ở nhánh SAI thì nhánh khoá vẫn được miễn và ratchet vẫn xanh ([[tests-can-pin-a-hole-open]]).
+ * ⚠️ Mỗi waiver PHẢI có NEO DƯƠNG ở ca (3)/(4)/(5) bên dưới. Waiver không neo là dây thừa: ai đó xoá
+ * lời ghi ở nhánh SAI thì nhánh khoá vẫn được miễn và ratchet vẫn xanh ([[tests-can-pin-a-hole-open]]).
  */
 const WAIVERS: ReadonlyMap<string, string> = new Map<string, string>([
   [
@@ -42,6 +43,12 @@ const WAIVERS: ReadonlyMap<string, string> = new Map<string, string>([
   ["AuthService#disableTwoFactor", "Ghi vết ở nhánh SAI MẬT KHẨU — neo dương ở ca (3)."],
   ["AuthService#changePassword", "Ghi vết ở nhánh SAI MẬT KHẨU — neo dương ở ca (3)."],
   ["TwoFactorService#confirmEnable", "Ghi vết ở nhánh MÃ SAI — neo dương ở ca (3)."],
+  [
+    "TwoFactorService#enroll",
+    "S18-AUTH-490DEBT-1: trần = LOGIN_MAX_ATTEMPTS hàng `auth.2fa_enroll_denied` mỗi cửa sổ nhờ " +
+      "`recordFailure` ở nhánh `account_gone` — neo dương ở ca (5). KHÔNG dùng neo ca (3): nhánh này " +
+      "cố ý KHÔNG gắn nhãn `REAUTH_FAILED` (D1.d của #490 — lượt đó không phải 'nhập sai mã').",
+  ],
 ]);
 
 /**
@@ -171,5 +178,39 @@ describe("S10-SEC-LOGINLOG429-1 — ratchet: điểm ném 429 phải để lại
       a.writeOutcome,
       "step-up.service.ts không còn writeOutcome — nhánh từ chối không để lại vết nữa",
     ).toBeGreaterThanOrEqual(1);
+  });
+
+  it("(5) NEO DƯƠNG cho waiver enroll: CẢ HAI nhánh account_gone của 2FA còn bồi bộ đếm", () => {
+    // S18-AUTH-490DEBT-1 (nợ §8.2 của #490). Waiver `TwoFactorService#enroll` dựa vào: nhánh từ chối
+    // bồi `recordFailure` ⇒ trần lưu trữ mỗi cửa sổ là LOGIN_MAX_ATTEMPTS hàng `audit_logs`, không
+    // phải vô hạn. Xoá lời gọi đó ⇒ trần quay lại vô hạn ⇒ waiver mất cơ sở ⇒ ca này ĐỎ.
+    //
+    // ⚠️ ĐẲNG THỨC THEO KHOÁ, KHÔNG PHẢI TỔNG ĐẾM. Một sàn kiểu `withRecordFailure >= 2` sẽ xanh khi
+    // ai đó DỜI `recordFailure` từ `enroll` sang `disable` — tổng vẫn 2 trong khi lỗ mở lại. Đây đúng
+    // là điểm mù của `stepUpAntiAmplificationAnchors()` ở ca (4), cố ý không lặp lại
+    // ([[index-ratchet-must-pin-definition-not-name]]).
+    //
+    // ⚠️ `TwoFactorService#disable` là `false` CÓ CHỦ Ý, không phải bỏ sót. Nhánh `account_gone` của
+    // `disable()` chỉ tới được sau khi re-auth mật khẩu ĐÚNG và chỉ khi một lượt xoá mềm chen vào
+    // giữa hai tx ⇒ không phải đường lặp-được-miễn-phí. Đường lặp-được của nó đã bị đếm ở TẦNG TRÊN:
+    // `AuthService.disableTwoFactor` ghi `auth.2fa_disable_denied` rồi rơi xuống nhánh `!ok` ⇒
+    // `recordFailure` trên bucket `2fa-disable`. Vế `false` vì thế ghim CẢ CHIỀU CẤM: thêm
+    // `recordFailure` vào `disable` cũng làm ca này đỏ, và người thêm phải nói ra lý do.
+    const a = twoFactorDenyBranchAnchors();
+    expect(
+      a.branches.map((b) => `${b.key}:${b.withRecordFailure}`).sort(),
+      "hình dạng nhánh `account_gone` của two-factor.service.ts đã đổi — đọc plan " +
+        "docs/plans/S18-AUTH-490DEBT-1.md §4 D5 trước khi sửa con số ở đây",
+    ).toEqual([
+      "TwoFactorService#confirmEnable:true",
+      "TwoFactorService#disable:false",
+      "TwoFactorService#enroll:true",
+    ]);
+
+    expect(
+      a.badCodeHasBoth,
+      "nhánh `bad_code` của confirmEnable mất `recordFailure` hoặc `recordReauthFailure` — ranh giới " +
+        "ĐẾM ↔ NHÃN (D1.d của #490) đang mờ đi, và neo ca (3) mất một chân",
+    ).toBe(true);
   });
 });

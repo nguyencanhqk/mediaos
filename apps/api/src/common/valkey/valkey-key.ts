@@ -77,7 +77,19 @@ export type RlBucket =
   // `forgot:*` cố ý tách namespace khỏi login (xem docblock `forgotPasswordImpl`) để endpoint CÔNG KHAI
   // không ảnh hưởng đường đăng nhập — gộp chỉ mục sẽ làm mờ đúng ranh giới đó.
   | "ip-index"
-  | "forgot:ip-index";
+  | "forgot:ip-index"
+  // S18-AUTH-490DEBT-1 (APPEND — nợ §8.2 của #490, owner chốt 11/09/2026): bucket của
+  // `POST /auth/2fa/enroll`, khoá `{companyId}|{userId}` lấy TỪ JWT (luôn là chính người gọi).
+  //
+  // TÁCH HẲN `2fa-enable` dù hai endpoint đi liền nhau trong cùng một luồng: dùng chung khoá thì một
+  // bề mặt khoá luôn bề mặt kia — chính lý do `stepup` đã tách khỏi `ip`/`acct` ở trên. Ở đây hệ quả
+  // cụ thể hơn: `enroll` bị khoá sẽ chặn cả đường SỬA LỖI (người dùng enroll lại bộ secret mới).
+  //
+  // ⚠️ KHÔNG được `clearLoginLocks` xoá — nó là nút "gỡ khoá ĐĂNG NHẬP" và chỉ đụng họ login
+  // (`acct`/`ip`/`2fa`/`forgot`), đúng như `2fa-enable`/`2fa-disable`/`change-pw`. Đường gỡ của bucket
+  // này là chính lượt `AuthUsersService.restoreUser` (plan S18-AUTH-490DEBT-1 §4 D3b), vì sau khi
+  // khôi phục thì `require_two_factor=true` ÉP nạn nhân enroll — để khoá sống là nhốt nạn nhân 900s.
+  | "2fa-enroll";
 
 /** Marker single-use của ReplayGuard. */
 export type ReplayMarker =

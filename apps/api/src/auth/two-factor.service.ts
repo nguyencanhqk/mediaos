@@ -148,6 +148,30 @@ export class TwoFactorService {
    * yếu tố của kẻ tấn công, IM LẶNG. Đây là đường ĐI THẲNG, không cần trúng race.
    */
   async enroll(userId: string, companyId: string, meta: RequestMeta): Promise<EnrollResult> {
+    // ── S18-AUTH-490DEBT-1 (D1, nợ §8.2 của #490) — TRẦN cho nhánh từ chối ────────────────────────
+    //
+    // Trước WO này `enroll` KHÔNG có limiter nào. Cộng với D1 ở trên (nhánh `account_gone` ghi một
+    // hàng `auth.2fa_enroll_denied`), người giữ access token của tài khoản vừa xoá mềm bồi hàng vào
+    // `audit_logs` — bảng APPEND-ONLY — tới hết TTL token, không gì chặn. Luật đã ký
+    // (`docs/plans/S10-SEC-LOGINLOG429-1.md` §1): "đường DỰNG NÊN cái khoá phải để lại vết; đường
+    // ĐANG BỊ KHOÁ ghi 0 hàng". Nửa đầu đã có; đây là nửa sau. Trần mới = `LOGIN_MAX_ATTEMPTS`
+    // hàng / `LOGIN_LOCKOUT_SEC` / (company,user) thay vì VÔ HẠN.
+    //
+    // ⚠️ BUCKET RIÊNG, không dùng chung `2fa-enable` — xem docblock `RlBucket` ở `valkey-key.ts`.
+    //
+    // ⚠️ VỊ TRÍ: kiểm khoá phải đứng TRƯỚC `generateSecret`/`encryptSecret` bên dưới. Để sau thì khoá
+    // chỉ chặn đường GHI DB mà vẫn để KMS bị gọi miễn phí mỗi lượt.
+    //
+    // ⚠️ NGOẶC `{}` BẮT BUỘC. Cổng `login-log-429-ratchet.unit-spec.ts` đo "lời ghi có phải hậu duệ
+    // của block trong-cùng-nhất chứa `throw` hay không". Bản không-ngoặc làm block đó thành CẢ THÂN
+    // HÀM ⇒ ngày ai đó thêm một `securityEvents.record` bất kỳ vào `enroll`, waiver của hàm này lật
+    // sang "no longer silent" và ca (1b) đỏ vì lý do không liên quan.
+    const rlKey = rateLimitKey("2fa-enroll", `${companyId}|${userId}`);
+    if (await this.rateLimiter.isLocked(rlKey)) {
+      // Không cần sàn thời gian (mirror `confirmEnable`): actor ĐÃ có access token nên không còn ẩn
+      // số nào (tenant, user) để dò bằng đồng hồ.
+      throw tooManyRequests(await this.rateLimiter.remainingLockSecOrNull(rlKey));
+    }
     const secret = this.totp.generateSecret();
     const enc = await this.secrets.encryptSecret(secret, {
       companyId,
@@ -235,6 +259,21 @@ export class TwoFactorService {
     });
 
     if (outcome.kind === "account_gone") {
+      // (D1) Bồi bộ ĐẾM — đây là thứ đặt trần cho hàng `auth.2fa_enroll_denied` vừa ghi ở trên.
+      //
+      // ⚠️ CỐ Ý KHÔNG `recordReauthFailure` ở đây, và điều đó KHÔNG mâu thuẫn với dòng trên:
+      // `recordFailure` là bộ ĐẾM, `recordReauthFailure` là NHÃN ("xác thực lại thất bại"). Lượt này
+      // không phải "nhập sai mã" nên gắn nhãn đó là SAI NHÃN — lập luận D1.d của #490, vẫn còn hiệu
+      // lực. Ghim ở ca `§enroll-rl-noreauth`.
+      //
+      // ⚠️ KHÔNG có `reset()` ở đường thành công bên dưới, khác `confirmEnable`. `recordFailure` chỉ
+      // chạy ở ĐÚNG nhánh này — nhánh của tài khoản đã chết — nên một user bình thường không bao giờ
+      // bồi counter và `reset` sẽ là no-op vĩnh viễn, không ca nào đo được. Đường duy nhất counter
+      // này cần được xoá là lượt KHÔI PHỤC tài khoản: `AuthUsersService.restoreUser` gỡ nó (D3b).
+      //   🔴 LẬP LUẬN TRÊN HẾT HẠN nếu ai đó thêm `recordFailure` cho một nhánh của user CÒN SỐNG
+      //   (ví dụ đặt trần cho nhánh 409 "2FA đã được bật" — nợ đang mở). Khi đó PHẢI thêm `reset` ở
+      //   đường thành công trong CÙNG lượt, nếu không user hợp lệ tự khoá chính mình.
+      await this.rateLimiter.recordFailure(rlKey);
       throw new UnauthorizedException("Phiên đăng nhập không còn hợp lệ.");
     }
     return { otpauthUri: this.totp.keyUri(outcome.accountName, secret), recoveryCodes };
@@ -316,6 +355,11 @@ export class TwoFactorService {
     });
     // Ném NGOÀI `withTenant` để tx COMMIT giữ được vết `auth.2fa_enable_denied`.
     if (outcome === "account_gone") {
+      // S18-AUTH-490DEBT-1 (D2, nợ §8.2 của #490) — nửa kia của D1 ở `enroll`. Trước WO này
+      // `recordFailure` CHỈ có ở nhánh `bad_code` bên dưới, còn nhánh này ném ngay ⇒ hàng
+      // `auth.2fa_enable_denied` không có trần. Xem docblock `enroll` cho lý do đầy đủ của việc
+      // thêm bộ ĐẾM mà KHÔNG thêm NHÃN (`recordReauthFailure` vẫn bị cấm ở đây — D1.d của #490).
+      await this.rateLimiter.recordFailure(rlKey);
       throw new UnauthorizedException("Phiên đăng nhập không còn hợp lệ.");
     }
     if (outcome === "bad_code") {
@@ -369,8 +413,15 @@ export class TwoFactorService {
         });
       });
     } catch (err) {
+      // S18-AUTH-490DEBT-1 (D4, nợ §8.8 của #490). NUỐT là CỐ Ý và KHÔNG đổi: biến 401 thành 500 là
+      // biến mất-tầm-nhìn thành mất-đăng-nhập. Thứ thiếu trước đây là NGỮ CẢNH — log chỉ có
+      // `err.message`, nên khi đường này hỏng ở PROD thì không ai truy được HÀNG CỦA AI đã mất.
+      // ⚠️ KHÔNG log `ip`/`userAgent` (log không phải chỗ nhân bản PII) và KHÔNG log khoá Valkey
+      // (họ `rl:` nhúng email/slug — xem docblock `valkey-key.ts`).
       this.logger.error(
-        `recordReauthFailure thất bại (best-effort, KHÔNG đổi outcome 401): ${err instanceof Error ? err.message : String(err)}`,
+        `recordReauthFailure thất bại (best-effort, KHÔNG đổi outcome 401) — ` +
+          `companyId=${companyId} userId=${userId} context=${context}: ` +
+          `${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }

@@ -73,7 +73,11 @@ describe("AuthUsersService", () => {
   let lmsSync: { enqueueSync: ReturnType<typeof vi.fn> };
   // S18-AUTH-RESETCLEARS-1: `resetPassword` (admin) gọi `requireRateLimiter()` TRƯỚC mọi mutation ⇒
   // mọi chỗ dựng service phải truyền, nếu không 3 ca resetPassword ném Error thay vì 400/404 mong đợi.
-  let rateLimiter: { clearLoginLocks: ReturnType<typeof vi.fn> };
+  let rateLimiter: {
+    clearLoginLocks: ReturnType<typeof vi.fn>;
+    /** S18-AUTH-490DEBT-1 (D3b) — `restoreUser` gỡ khoá `2fa-enroll` sau khi tx COMMIT. */
+    reset: ReturnType<typeof vi.fn>;
+  };
   // Spy logger: thiếu nó thì đổi `catch (err) { this.logger.error(…); … }` thành `catch { … }` vẫn
   // XANH toàn bộ suite — đúng mẫu tests-can-pin-a-hole-open.
   let logger: ReturnType<typeof vi.spyOn>;
@@ -89,6 +93,8 @@ describe("AuthUsersService", () => {
     lmsSync = { enqueueSync: vi.fn(async () => undefined) };
     rateLimiter = {
       clearLoginLocks: vi.fn(async () => ({ clearedKeys: 6, degraded: false })),
+      // S18-AUTH-490DEBT-1 (D3b): `restoreUser` gỡ khoá `2fa-enroll` sau khi tx COMMIT.
+      reset: vi.fn(async () => undefined),
     };
     db = {
       withTenant: vi.fn(async (_companyId: string, fn: (tx: unknown) => Promise<unknown>) =>
@@ -539,6 +545,11 @@ describe("AuthUsersService", () => {
     );
     // Ném TRƯỚC audit ⇒ bảng append-only không nhận hàng nói dối nào.
     expect(audit.record).not.toHaveBeenCalled();
+    // S18-AUTH-490DEBT-1 (D3a): `TOTP_RESET` đứng SAU điểm ném này ⇒ nhánh fail-closed không được
+    // đẻ hàng timeline nào. ⚠️ Đây là neo HÌNH DẠNG ở tầng unit (`withTenant` là mock, không có tx
+    // thật) — nó KHÔNG chứng minh rollback DB. Tiền đề rollback thật sống ở `§restore-flag`
+    // (int-spec), nơi `TOTP_RESET` phải = 1.
+    expect(securityEvents.record).not.toHaveBeenCalled();
   });
 
   /**

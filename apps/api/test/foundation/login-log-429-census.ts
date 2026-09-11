@@ -351,6 +351,102 @@ export function stepUpAntiAmplificationAnchors(): { recordFailure: number; write
   return { recordFailure, writeOutcome };
 }
 
+/** Một nhánh từ chối của `two-factor.service.ts`, định danh bằng hàm bao quanh. */
+export interface DenyBranchAnchor {
+  /** `<Class>#<method>` — dùng CHUNG `enclosingKey` với bộ dò điểm ném, nên không lệch định nghĩa. */
+  key: string;
+  /** Có `…recordFailure(…)` là hậu duệ của `thenStatement` của chính nhánh đó hay không. */
+  withRecordFailure: boolean;
+}
+
+/**
+ * NEO DƯƠNG cho waiver `TwoFactorService#enroll` (S18-AUTH-490DEBT-1, nợ §8.2 của #490).
+ *
+ * Waiver ấy đứng được CHỈ KHI nhánh `account_gone` còn bồi bộ đếm: `N` lượt từ chối đều ghi một hàng
+ * `audit_logs` rồi khoá ⇒ trần lưu trữ mỗi cửa sổ là `LOGIN_MAX_ATTEMPTS` hàng, không phải VÔ HẠN.
+ * Gỡ `recordFailure` ⇒ trần quay lại vô hạn ⇒ waiver mất cơ sở ⇒ ratchet phải ĐỎ.
+ *
+ * ⚠️ VÌ SAO KHÔNG CHÉP KHUÔN `stepUpAntiAmplificationAnchors()`. Hàm đó đếm ở mức **FILE**. Chép sang
+ * đây cho ra neo RỖNG: `two-factor.service.ts` đã có sẵn MỘT `recordFailure` ở nhánh `bad_code` từ
+ * trước WO này ⇒ mọi sàn `>=1`/`>=2` xanh TRƯỚC CẢ KHI VÁ; và một tổng đếm không phân biệt được
+ * "recordFailure ở `enroll`" với "recordFailure ở `disable`" ⇒ dời lời gọi giữa hai hàm vẫn xanh
+ * trong khi lỗ mở lại. Neo phải theo KHOÁ NHÁNH ([[index-ratchet-must-pin-definition-not-name]]).
+ *
+ * ⚠️ ĐO, ĐỪNG SUY: có **BA** `IfStatement` mang literal `"account_gone"` trong `expression`
+ * (`enroll` · `confirmEnable` · `disable`), không phải hai. Ba câu `return "account_gone"` nằm trong
+ * `thenStatement` nên không bị đếm, và chuỗi trong docblock là comment nên AST không thấy.
+ *
+ * `badCodeHasBoth` ghim CHIỀU NGƯỢC LẠI: nhánh `"bad_code"` phải còn CẢ `recordFailure` LẪN
+ * `recordReauthFailure`. Không có vế này thì ai đó "dọn gọn" bằng cách bỏ nhãn ở `bad_code` sẽ đi qua
+ * im lặng, và ranh giới ĐẾM ↔ NHÃN mà D1.d của #490 dựng nên sẽ mờ đi.
+ */
+export function twoFactorDenyBranchAnchors(): {
+  branches: readonly DenyBranchAnchor[];
+  badCodeHasBoth: boolean;
+} {
+  const f = path.join(AUTH_SRC, "two-factor.service.ts");
+  const sf = parse(f);
+
+  /** Có lời gọi `<method>` nào là hậu duệ của `n` không (khớp đuôi property-access, như `isWriteCall`). */
+  const callsWithin = (n: ts.Node, method: string): boolean => {
+    let found = false;
+    const walkNode = (x: ts.Node): void => {
+      if (found) return;
+      if (
+        ts.isCallExpression(x) &&
+        ts.isPropertyAccessExpression(x.expression) &&
+        x.expression.name.text === method
+      ) {
+        found = true;
+        return;
+      }
+      ts.forEachChild(x, walkNode);
+    };
+    ts.forEachChild(n, walkNode);
+    return found;
+  };
+
+  /** Literal `text` xuất hiện trong ĐIỀU KIỆN của `if` (không tính thân) — mirror lý do ở docblock. */
+  const conditionMentions = (n: ts.IfStatement, text: string): boolean => {
+    let found = false;
+    const walkNode = (x: ts.Node): void => {
+      if (found) return;
+      if (ts.isStringLiteralLike(x) && x.text === text) {
+        found = true;
+        return;
+      }
+      ts.forEachChild(x, walkNode);
+    };
+    walkNode(n.expression);
+    return found;
+  };
+
+  const branches: DenyBranchAnchor[] = [];
+  let badCodeHasBoth = false;
+
+  const visit = (n: ts.Node): void => {
+    if (ts.isIfStatement(n)) {
+      if (conditionMentions(n, "account_gone")) {
+        branches.push({
+          key: enclosingKey(n, "two-factor.service"),
+          withRecordFailure: callsWithin(n.thenStatement, "recordFailure"),
+        });
+      }
+      if (
+        conditionMentions(n, "bad_code") &&
+        callsWithin(n.thenStatement, "recordFailure") &&
+        callsWithin(n.thenStatement, "recordReauthFailure")
+      ) {
+        badCodeHasBoth = true;
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+
+  return { branches, badCodeHasBoth };
+}
+
 /**
  * NEO DƯƠNG cho waiver của BA đường post-auth (`disableTwoFactor` · `changePassword` ·
  * `confirmEnable`) — §1.1 của plan. Trả tập ngữ cảnh xác thực-lại-thất-bại ĐANG ĐƯỢC GHI.
