@@ -74,6 +74,21 @@ export class RetentionService {
     "payroll_periods",
     "payroll_period_lines",
     "bonus_penalties",
+    // PAYROLL v2 — SÁU trên bảy bảng mới của S15-PAYROLL-DB-1 (mig 0570). Cùng tiêu chí ở trên:
+    // KHÔNG bảng nào trong sáu bảng này có GRANT DELETE cho mediaos_app ⇒ retention phát lệnh DELETE
+    // sẽ ăn 42501 UNCAUGHT và hỏng CẢ LƯỢT cleanup của tenant.
+    "salary_profile_items",
+    "payroll_employee_settings",
+    "payroll_dependents",
+    "salary_components",
+    "payroll_templates",
+    "payroll_statutory_rates",
+    // ⚠️ `payroll_template_components` CỐ Ý VẮNG MẶT — KHÔNG phải bỏ sót (DB-13 §13.6).
+    //    Nó là bảng PAYROLL DUY NHẤT CÓ GRANT DELETE (API-053 đặt lại cả danh sách thành phần trong
+    //    một tx) nên tiêu chí "42501 uncaught" của tập này KHÔNG áp cho nó. Thêm vào đây sẽ làm hỏng
+    //    chính tiêu chí đang giữ tập này đọc được. Nó cũng không mang dữ liệu tiền hay lịch sử —
+    //    lịch sử nằm ở component_values_json + template_fingerprint của dòng lương đã tính, và vết
+    //    sửa nằm ở audit_logs (object_type='payroll_template').
     // Finance ledgers (G13 — append-only, GIỮ; cụm media/finance đang park).
     "kpi_results",
     "profit_snapshots",

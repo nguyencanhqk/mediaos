@@ -259,11 +259,16 @@ amount         := <amount gốc>                              -- CHECK >= 0
 7. 7 bảng đều có `UNIQUE (company_id, id)` **và** `company_id` là **`NOT NULL`** — nullable thì composite FK
    chỉ bịt một nửa và `xtenant-fk-ratchet.int-spec.ts:231–243` (lớp P `<= 24`) sẽ ĐỎ.
 8. 5 cột §12.1 + 3 cột §12.4 tồn tại **đúng kiểu**; 7 CHECK mới tồn tại **đúng tên**.
-9. Backfill — **so với LITERAL đã ĐO, không so hai vế tính sống.**
-   `count(salary_profile_items)` và `sum(jsonb_array_length(allowances))` trên DB sạch (CI · lane MỚI TINH ·
-   PROD = 0 hàng) **đều = 0** ⇒ so hai vế với nhau là **tautology**, cổng chỉ tồn tại trên lane có dữ liệu v1.
-   ⇒ ghi **cứng** số đo bước (b) vào migration (`v_expected constant integer := <số đo>`) và `RAISE` khi lệch.
-   Literal lệch với lane khác là **tính năng**, không phải lỗi: nó bắt người chạy đọc lại số đo.
+9. Backfill — **đẳng thức TỪNG HỒ SƠ** (🔁 đổi khi triển khai, xem dưới).
+
+   > 🔁 **KHÁC điều kiện tự-mở-cổng #6 — ghi lại để review thấy.** Bản vá hứa «so với LITERAL đã đo».
+   > Khi viết migration thì thấy literal cứng **đỏ oan MỌI lane**: số hàng `salary_profiles` của một lane
+   > là hàm của fixture đang chạy, không phải thuộc tính của bản vá — literal `= 5` sẽ chặn mọi lane khác.
+   > **Thay bằng phép so MẠNH HƠN**: `count(items) = jsonb_array_length(allowances)` cho **TỪNG hồ sơ**.
+   > Nó bắt cả lỗi bỏ sót **lẫn lỗi BÙ TRỪ** (hồ sơ A thiếu 1, hồ sơ B thừa 1 — tổng vẫn khớp) mà phép so
+   > tổng không thấy. Vế mà reviewer thật sự muốn (chứng minh cổng KHÔNG rỗng) được trả bằng **lượt lane
+   > CÓ dữ liệu v1** ở §10 — đó mới là bằng chứng, không phải con số trong file.
+   > Tổng vẫn `RAISE NOTICE` để dán vào PR.
 10. `salary_profiles.allowances` **VẪN CÒN** (expand, chưa contract) — mất cột = đã contract sớm.
 
 ---
@@ -379,11 +384,17 @@ amount         := <amount gốc>                              -- CHECK >= 0
 | `test/integration/rls-registry.ts` | **7 case mới** + fixture | `rls-guards.int-spec` lấy danh sách bảng cần kiểm **từ registry** ⇒ bảng không đăng ký thì **nhánh kiểm cô lập không chạy cho nó**. *(Có đai thứ hai: `rls-guards.int-spec.ts:52–72` assert «bảng có `company_id` chưa đăng ký» ⇒ quên đăng ký vẫn ĐỎ. Nên câu «im lặng bỏ qua» là **quá lời** — nhưng việc phải làm thì không đổi.)* |
 | `apps/api/src/db/schema/audit.ts` | `AUDIT_OBJECT_TYPES` += 10 literal (§5.4) | §5.4 đòi đồng bộ; thiếu ⇒ hằng TS lệch CHECK DB |
 | `test/helpers/seed.ts` `cleanupTenants()` | 7 bảng, **con→cha**, chèn ĐÚNG CHỖ — xem §7.1 | thiếu ⇒ đỏ hàng loạt `afterAll` (`drop-table-must-clean-test-teardown`) |
-| `foundation/retention/retention.service.ts` + `.spec.ts` | `PROTECTED_TABLES` += 7 | retention hard-delete bảng không có GRANT DELETE ⇒ `42501` uncaught, hỏng cả lượt cleanup |
+| `foundation/retention/retention.service.ts` | `PROTECTED_TABLES` += **6** (🔁 không phải 7 — xem dưới) | retention hard-delete bảng không có GRANT DELETE ⇒ `42501` uncaught, hỏng cả lượt cleanup |
 | `permission/permission.service.ts` | APPEND 17 cặp vào **CẢ HAI** `SENSITIVE_CAPABILITY_ALLOWLIST` và `SENSITIVE_SCREEN_GATE_PAIRS` ⇒ 30 mỗi bên | cặp sensitive gác màn mà thiếu allowlist ⇒ màn **biến mất** với đúng vai được cấp quyền (lớp lỗi đã lặp 8+ lần) |
 | `harness/backlog.mjs` | sửa `paths` (§3.2) + `done_when` phản ánh §3.1 | `paths` lái guard-scope + reviewer |
 | `docs/DB/DB-13` §15.3 bước B | đính chính chỗ đặt seed company-scoped (§3.1) | doc là nguồn sự thật của WO sau |
 | `docs/erd-current.md` | 7 bảng mới + append-only/RLS | §9 đối chiếu |
+
+> 🔁 **`PROTECTED_TABLES` nhận 6, KHÔNG phải 7 — `payroll_template_components` CỐ Ý VẮNG.** Tiêu chí của tập
+> đó, ghi ngay trong docblock của nó, là «bảng KHÔNG có `GRANT DELETE` ⇒ retention phát lệnh sẽ ăn `42501`
+> uncaught». Bảng này **CÓ** DELETE (ngoại lệ §3.3) nên tiêu chí không áp; nhét nó vào sẽ làm hỏng chính tiêu
+> chí đang giữ tập đó đọc được. DB-13 §13.6 nói đúng điều này. Lý do vắng mặt đã ghi thành comment ngay tại
+> chỗ, để lượt sau không đọc thành bỏ sót.
 
 ### 7.1 `cleanupTenants()` — thứ tự ĐÍCH DANH (câu «trước `DELETE FROM users`» KHÔNG đủ)
 
@@ -477,6 +488,45 @@ danh sách lúc chạy, không tin con số «6».
 ---
 
 ## 10. Definition of Done
+
+### 10.0 BẰNG CHỨNG ĐÃ CHẠY (11/09/2026)
+
+**Migration `0570`+`0571` áp sạch trên lane MỚI TINH** (`mediaos_s15db1`, chain `0000→latest`). Đo trên DB:
+7 bảng `RLS+FORCE` · 7 policy · `btree_gist` ✓ · `EXCLUDE` ✓ · **26 composite FK** · catalog **34 cặp /
+30 sensitive** · **63 grant** · **14 `object_type`** PAYROLL · `payroll_template_components` CÓ `DELETE` ·
+6 bảng kia **0** `DELETE` · `mediaos_worker` **0 quyền** trên cả 7.
+
+**Lượt lane CÓ dữ liệu v1** (`mediaos_s15bf` — migrate tới `0569`, gieo 4 hồ sơ, rồi áp `0570`):
+
+| | profiles (sống) | allowance items (sống) | allowance items (tất cả) |
+| --- | --- | --- | --- |
+| **TRƯỚC** | 3 | 5 | 6 |
+| **SAU** | 3 | — | — |
+| `salary_profile_items` tạo ra | | **5** | trong đó **5/5** đúng khuôn `PC_nnn` |
+
+Hồ sơ xoá mềm (1 mục) **cố ý không backfill** ⇒ `6 − 5 = 1` khớp. Hai phụ cấp **TRÙNG TÊN** của cùng một hồ sơ
+thành `PC_001` + `PC_002` (`note` giữ tên gốc) — **đây chính là ca mà lối `component_code := name` sẽ chết
+`23505` giữa lane**, nên §4.1.a không phải lo xa.
+
+**Lượt gieo dữ liệu HỎNG** (`mediaos_s15bad`, §8.2 lối iii) — `0570` **ĐỎ** đúng như thiết kế:
+
+```text
+[0570] backfill DUNG: salary_profiles.allowances co phan tu SAI KHUON (thieu name/amount hoac
+amount khong parse duoc): profile=66666666-6666-6666-6666-666666666666 idx=1 elem={"name": "Thiếu amount"}
+```
+
+**Ca đối chứng RLS (đúng cổng)**: `ALTER TABLE salary_components NO FORCE ROW LEVEL SECURITY` ⇒
+`rls-guards.int-spec` **ĐỎ** đích danh *«salary_components thiếu FORCE RLS»* ⇒ nhánh registry-driven THẬT SỰ
+phủ 7 bảng mới (không phải chỉ đai «bảng chưa đăng ký»). Đã khôi phục.
+
+**Cổng dự án**: `bash harness/check.sh --lane-db=s15db1` ⇒ **XANH**, 675/675 file test API + mọi workspace,
+`secret-literals` · `lint` · `typecheck` · `migration-no-drop` · `tooling-tests` đều xanh, **không** banner
+«XANH KHÔNG ĐỦ BẰNG CHỨNG».
+
+**Bàn giao DB-2**: trên lane sạch `count(*) FROM payroll_periods WHERE status='Paid'` = **0** (v1 chưa lên
+PROD). DB-2 phải ĐO LẠI trên môi trường đích trước khi chạy bước (3) của §12.3.
+
+### 10.1 Checklist
 
 - [ ] `0570` + `0571` áp sạch trên lane DB **MỚI TINH** **và** trên lane đã có dữ liệu v1 — **dán số backfill
       trước/sau vào PR** (lượt lane-sạch là tautology, §4.2 #9; bằng chứng chỉ tồn tại ở lượt có dữ liệu).

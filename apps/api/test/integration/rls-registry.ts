@@ -1686,6 +1686,147 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  // ════════════════════════════════════════════════════════════════════════════════════════════
+  // PAYROLL v2 — BẢY bảng mới của S15-PAYROLL-DB-1 (mig 0570).
+  //
+  // 🔴 ĐĂNG KÝ Ở ĐÂY LÀ BẮT BUỘC, CÙNG COMMIT với migration tạo bảng. `rls-guards.int-spec` lấy danh
+  //    sách bảng cần kiểm TỪ REGISTRY này, không tự quét information_schema ⇒ bảng không đăng ký thì
+  //    nhánh kiểm cô lập KHÔNG CHẠY cho nó (policy sai, FORCE thiếu, composite FK vắng đều không ai
+  //    thấy). Có đai thứ hai ở rls-guards (assert "bảng có company_id chưa đăng ký") nên quên vẫn ĐỎ —
+  //    nhưng đừng dựa vào đai đó: nó chỉ nói THIẾU, không kiểm được policy.
+  // ════════════════════════════════════════════════════════════════════════════════════════════
+  {
+    name: "salary_profile_items",
+    table: "salary_profile_items",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `spi-${randomUUID().slice(0, 8)}@x.test`);
+      const sp = await direct.query(
+        `INSERT INTO salary_profiles (company_id, user_id, effective_date, base_salary)
+         VALUES ($1, $2, '2026-01-01', 1000.00) RETURNING id`,
+        [t.companyId, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO salary_profile_items (company_id, salary_profile_id, component_code, amount)
+         VALUES ($1, $2, 'PC_001', 250.00) RETURNING id`,
+        [t.companyId, sp.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "payroll_employee_settings",
+    table: "payroll_employee_settings",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `pes-${randomUUID().slice(0, 8)}@x.test`);
+      // bank_pair_check: số TK đi kèm bank_name + account_holder (dòng UNC không gửi được nếu thiếu).
+      const r = await direct.query(
+        `INSERT INTO payroll_employee_settings
+           (company_id, user_id, joins_social_insurance, bank_account_number, bank_name, account_holder)
+         VALUES ($1, $2, true, '0123456789', 'RLS Bank', 'RLS Fixture') RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "payroll_dependents",
+    table: "payroll_dependents",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `pdep-${randomUUID().slice(0, 8)}@x.test`);
+      // EXCLUDE no-overlap khoá theo (company, user, full_name, daterange) ⇒ tên duy nhất cho mỗi hàng.
+      const r = await direct.query(
+        `INSERT INTO payroll_dependents (company_id, user_id, full_name, relationship, effective_from)
+         VALUES ($1, $2, $3, 'Child', '2026-01-01') RETURNING id`,
+        [t.companyId, u, `rls-dep-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "salary_components",
+    table: "salary_components",
+    seedRow: async (direct, t) => {
+      // code_shape_check: ^[A-Z][A-Z0-9_]{0,31}$ và KHÔNG tiền tố SYS_/TL_/GT_ ⇒ dùng tiền tố RLS_.
+      const code = `RLS_${randomUUID().slice(0, 8).toUpperCase().replace(/-/g, "")}`;
+      const r = await direct.query(
+        `INSERT INTO salary_components (company_id, code, name, kind, value_type, formula)
+         VALUES ($1, $2, 'RLS fixture', 'earning', 'formula', 'BASE_SALARY') RETURNING id`,
+        [t.companyId, code],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "payroll_statutory_rates",
+    table: "payroll_statutory_rates",
+    seedRow: async (direct, t) => {
+      // effective_from unique theo (company, ngày) ⇒ mỗi tenant gieo một ngày riêng để chạy lại được.
+      const day = 1 + Math.floor(Math.random() * 28);
+      const r = await direct.query(
+        `INSERT INTO payroll_statutory_rates
+           (company_id, effective_from,
+            si_employee_pct, hi_employee_pct, ui_employee_pct,
+            si_employer_pct, hi_employer_pct, ui_employer_pct,
+            union_employer_pct, union_employee_pct,
+            si_cap, hi_cap, ui_cap, base_wage, min_region_wage,
+            personal_deduction, dependent_deduction, pit_brackets)
+         VALUES ($1, make_date(2026, 1, $2),
+                 8, 1.5, 1, 17.5, 3, 1, 2, 1,
+                 1000, 1000, 1000, 100, 100, 1000, 400,
+                 $3::jsonb) RETURNING id`,
+        [
+          t.companyId,
+          day,
+          // brackets_check: mảng ĐÚNG 7 phần tử; bậc cuối upTo = null.
+          JSON.stringify([
+            { upTo: 1, rate: 5 },
+            { upTo: 2, rate: 10 },
+            { upTo: 3, rate: 15 },
+            { upTo: 4, rate: 20 },
+            { upTo: 5, rate: 25 },
+            { upTo: 6, rate: 30 },
+            { upTo: null, rate: 35 },
+          ]),
+        ],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "payroll_templates",
+    table: "payroll_templates",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO payroll_templates (company_id, code, name, scope)
+         VALUES ($1, $2, 'RLS fixture', 'company') RETURNING id`,
+        [t.companyId, `RLS_TPL_${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "payroll_template_components",
+    table: "payroll_template_components",
+    seedRow: async (direct, t) => {
+      const tpl = await direct.query(
+        `INSERT INTO payroll_templates (company_id, code, name, scope)
+         VALUES ($1, $2, 'RLS fixture', 'company') RETURNING id`,
+        [t.companyId, `RLS_TPLC_${randomUUID().slice(0, 8)}`],
+      );
+      const code = `RLS_${randomUUID().slice(0, 8).toUpperCase().replace(/-/g, "")}`;
+      const comp = await direct.query(
+        `INSERT INTO salary_components (company_id, code, name, kind, value_type, formula)
+         VALUES ($1, $2, 'RLS fixture', 'earning', 'formula', 'BASE_SALARY') RETURNING id`,
+        [t.companyId, code],
+      );
+      const r = await direct.query(
+        `INSERT INTO payroll_template_components (company_id, template_id, component_id)
+         VALUES ($1, $2, $3) RETURNING id`,
+        [t.companyId, tpl.rows[0].id, comp.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
   // ── G13 Finance (Revenue/Cost/Profit/Expense) — APPEND-ONLY ledgers + mutable allocation/request ──
   // Mỗi bảng có company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
   {

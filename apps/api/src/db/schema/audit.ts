@@ -179,6 +179,28 @@ export const AUDIT_OBJECT_TYPES = [
   "bonus_penalty",
   // G12-4 nhân viên xác nhận/khiếu nại bảng lương (acknowledge/dispute/resolve ghi 'payslip_acknowledgement')
   "payslip_acknowledgement",
+  // ── PAYROLL v2 (S15-PAYROLL-DB-1 · mig 0571) — 10 giá trị, ⇒ tổng 14 cho PAYROLL.
+  //    SPEC-11 §12.1 ghi chú 4 + §18.1 B (bảng route → object_type + object_id, 18 đường).
+  //    ⚠️ BẤT ĐỐI XỨNG CỐ Ý với không gian tên QUYỀN: resource_type là `statutory-rate` /
+  //       `payment-batch`, nhưng object_type là `payroll_statutory_rate` / `payroll_payment_batch`.
+  //       Ghi object_type ngoài bản đồ = CHECK violation = 500 TRÊN ĐƯỜNG ĐỌC ⇒ chép literal, đừng
+  //       suy từ tên cặp quyền.
+  //    ⚠️ `payroll_employee` và `payroll_report` KHÔNG ứng với bảng nào (chiếu HR bó hẹp · báo cáo là
+  //       phép ĐỌC SỐ LIỆU, không phải một hàng) — thiếu chúng ⇒ 6/18 đường audit-đọc trả 500.
+  //    ⚠️ `payroll_payment_lines` · `payroll_template_components` · `salary_profile_items` KHÔNG có
+  //       object_type riêng: vết của chúng đi kèm đối tượng CHA.
+  "payroll_employee",
+  "payroll_employee_setting",
+  "payroll_dependent",
+  "salary_component",
+  "payroll_template",
+  "payroll_statutory_rate",
+  // Ba giá trị dưới đây thuộc track C (bảng ra đời ở S15-PAYROLL-DB-2) — cấp SỚM CÓ CHỦ ĐÍCH để chỉ
+  // chạm parse-anchor của CHECK audit_logs.object_type MỘT lượt. KHÔNG phải cấp thừa; đừng gỡ.
+  "payroll_advance",
+  "payroll_payment_batch",
+  "payroll_budget",
+  "payroll_report",
   // G3 mutation-path runtime permission mgmt (gán/thu role ghi 'user_role'; set/xoá object-permission ghi 'object_permission')
   "user_role",
   "object_permission",

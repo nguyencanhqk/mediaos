@@ -232,6 +232,30 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   // RecruitAccessService (isSensitive lấy từ RECRUIT_ROUTE_PAIRS) + sàn scope Company + 5 vế
   // `RecruitCandidateFileResolver.canLinkFile` vẫn là cổng THẬT; wildcard KHÔNG kế thừa.
   "upload:candidate-file",
+  // S15-PAYROLL-DB-1 — APPEND-only: **17 cặp PAYROLL v2** (mig 0571, SPEC-11 §11.3), TẤT CẢ
+  // is_sensitive=true ⇒ getCapabilities() lọc sạch chúng khỏi /auth/me nếu không khai ở đây, và mọi màn
+  // PAY-SCREEN-007..016 sẽ BIẾN MẤT với đúng payroll-officer/company-admin vừa được cấp quyền — im lặng,
+  // không lỗi, không log (lớp lỗi đã lặp 8+ lần: CAP-2 → USEROPS-1 → EXPORT-1 → … → RECRUIT-FILEGRANT-1).
+  // Đo 11/09/2026: v1 có 13 cặp PAYROLL mỗi danh sách ⇒ sau v2 = 30 mỗi bên (SPEC-11 §11.3 ghi chú 2).
+  // Enforcement KHÔNG đổi: @RequirePermission ở decorator + tầng 2 PayrollAccessService + sàn scope
+  // Company + RLS vẫn là cổng THẬT; wildcard *:* KHÔNG kế thừa cặp sensitive. Chỉ mở CỜ HIỂN THỊ.
+  "view:payroll-employee",
+  "manage:payroll-employee",
+  "view:salary-component",
+  "manage:salary-component",
+  "view:payroll-template",
+  "manage:payroll-template",
+  "view:statutory-rate",
+  "manage:statutory-rate",
+  "view:payroll-advance",
+  "manage:payroll-advance",
+  "approve:payroll-advance",
+  "view-own:payroll-advance",
+  "view:payment-batch",
+  "manage:payment-batch",
+  "view:payroll-budget",
+  "manage:payroll-budget",
+  "view:payroll-report",
 ]);
 
 /**
@@ -297,6 +321,30 @@ export const SENSITIVE_SCREEN_GATE_PAIRS: readonly string[] = [
   "view-own-payslip:payslip",
   // RECRUIT — cặp GHI tệp CV gác nút "Tải CV lên" của REC-SCREEN-003 (tab CV), S14-RECRUIT-FILEGRANT-1.
   "upload:candidate-file",
+  // S15-PAYROLL-DB-1 — APPEND-only: **17 cặp PAYROLL v2** (mig 0571, SPEC-11 §11.3), TẤT CẢ
+  // is_sensitive=true ⇒ getCapabilities() lọc sạch chúng khỏi /auth/me nếu không khai ở đây, và mọi màn
+  // PAY-SCREEN-007..016 sẽ BIẾN MẤT với đúng payroll-officer/company-admin vừa được cấp quyền — im lặng,
+  // không lỗi, không log (lớp lỗi đã lặp 8+ lần: CAP-2 → USEROPS-1 → EXPORT-1 → … → RECRUIT-FILEGRANT-1).
+  // Đo 11/09/2026: v1 có 13 cặp PAYROLL mỗi danh sách ⇒ sau v2 = 30 mỗi bên (SPEC-11 §11.3 ghi chú 2).
+  // Enforcement KHÔNG đổi: @RequirePermission ở decorator + tầng 2 PayrollAccessService + sàn scope
+  // Company + RLS vẫn là cổng THẬT; wildcard *:* KHÔNG kế thừa cặp sensitive. Chỉ mở CỜ HIỂN THỊ.
+  "view:payroll-employee",
+  "manage:payroll-employee",
+  "view:salary-component",
+  "manage:salary-component",
+  "view:payroll-template",
+  "manage:payroll-template",
+  "view:statutory-rate",
+  "manage:statutory-rate",
+  "view:payroll-advance",
+  "manage:payroll-advance",
+  "approve:payroll-advance",
+  "view-own:payroll-advance",
+  "view:payment-batch",
+  "manage:payment-batch",
+  "view:payroll-budget",
+  "manage:payroll-budget",
+  "view:payroll-report",
 ];
 
 /** Chỉ dùng cho test khoá — KHÔNG export ra ngoài module permission. */

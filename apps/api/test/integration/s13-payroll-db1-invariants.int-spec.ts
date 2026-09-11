@@ -468,9 +468,13 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
       expect(names).toContain("bonus_penalty_freeze_guard");
     });
 
-    it("C9 20 cột di sản đã biến mất khỏi 6 bảng (DROP COLUMN im lặng là lớp lỗi chính)", async () => {
+    it("C9 19 cột di sản đã biến mất khỏi 6 bảng (DROP COLUMN im lặng là lớp lỗi chính)", async () => {
+      // 🔁 20 → 19 (S15-PAYROLL-DB-1, mig 0570). `salary_profiles.salary_type` ĐÃ ĐƯỢC DỰNG LẠI theo
+      // **PAY-DEC-015** (owner ký 02/09/2026) với NGHĨA KHÁC HẲN: v1 gỡ nó vì "chỉ lương THÁNG"
+      // (0564 §5.1), v2 dùng nó cho GROSS/NET ⇒ gross-up (SPEC-11 §13.8 · DB-13 §12.1).
+      // KHÔNG xoá dòng này cho êm — chuyển sang ca C9b bên dưới, nơi HÌNH DẠNG MỚI bị ghim. Một cột
+      // quay lại mà không ai ghim hình dạng của nó là đúng lớp lỗi mà C9 sinh ra để chặn.
       const gone: Array<[string, string]> = [
-        ["salary_profiles", "salary_type"],
         ["salary_profiles", "pay_cycle"],
         ["salary_profiles", "currency"],
         ["salary_profiles", "status"],
@@ -491,7 +495,7 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
         ["payslip_acknowledgements", "resolution_note"],
         ["payslip_acknowledgements", "updated_at"],
       ];
-      expect(gone).toHaveLength(20);
+      expect(gone).toHaveLength(19);
       const { rows } = await direct.query<{ tbl: string; col: string }>(
         `SELECT c.relname AS tbl, a.attname AS col
            FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
@@ -501,6 +505,39 @@ describe.skipIf(!hasDb)("S13-PAYROLL-DB-1 · bất biến nền dữ liệu PAYR
       const present = new Set(rows.map((r) => `${r.tbl}.${r.col}`));
       const survivors = gone.filter(([t, c]) => present.has(`${t}.${c}`));
       expect(survivors, "cột di sản lẽ ra phải biến mất").toEqual([]);
+    });
+
+    it("C9b salary_profiles.salary_type QUAY LẠI với hình dạng v2 — CHECK mang TIỀN TỐ BẢNG", async () => {
+      // Cột duy nhất rời khỏi danh sách C9. Ghim ba thứ, vì một cột "quay lại" mà không ai ghim hình
+      // dạng là chỗ nghĩa cũ lặng lẽ bò về:
+      //   (1) nó TỒN TẠI (không thì gross-up của BE-3 không có đầu vào);
+      //   (2) CHECK của nó là `salary_profiles_salary_type_check` — KHÔNG phải `emp_salary_type_check`
+      //       của `employee_profiles.salary_type` (TÊN TRÙNG, NGHĨA KHÁC: monthly/hourly/project);
+      //   (3) tập giá trị ĐÚNG BẰNG {GROSS, NET} — nghĩa v1 (pay-cycle) không được bò về.
+      const { rows: col } = await direct.query<{ n: string }>(
+        `SELECT count(*) AS n FROM information_schema.columns
+          WHERE table_name = 'salary_profiles' AND column_name = 'salary_type'`,
+      );
+      expect(Number(col[0].n), "salary_type biến mất — PAY-DEC-015 cần nó").toBe(1);
+
+      const { rows: chk } = await direct.query<{ def: string }>(
+        `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+          WHERE conname = 'salary_profiles_salary_type_check' AND contype = 'c'`,
+      );
+      expect(
+        chk,
+        "thiếu CHECK mang tiền tố bảng ⇒ grep salary_type ra hai chỗ, không ai phân biệt được",
+      ).toHaveLength(1);
+      expect(chk[0].def).toContain("'GROSS'");
+      expect(chk[0].def).toContain("'NET'");
+
+      // Đối chứng: CHECK của employee_profiles vẫn là CỦA NÓ, không bị đụng.
+      const { rows: emp } = await direct.query<{ def: string }>(
+        `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+          WHERE conname = 'emp_salary_type_check' AND contype = 'c'`,
+      );
+      expect(emp).toHaveLength(1);
+      expect(emp[0].def).toContain("monthly");
     });
   });
 
@@ -815,12 +852,7 @@ ${NOT_FIXTURE_TENANT}
       // Assert theo BIẾN, không theo văn xuôi: chữ "lương" trong «Bảng lương {period_month}» là TÊN đối tượng,
       // không phải số tiền — quét văn xuôi bằng regex thô sẽ đỏ oan (prettier/gitleaks-style false positive).
       // Danh sách biến cho phép là ĐÓNG: thêm biến mới phải sửa ca này, tức phải nghĩ về việc nó có chở tiền không.
-      const ALLOWED_VARS = new Set([
-        "actor_name",
-        "period_month",
-        "reason",
-        "payroll_period_id",
-      ]);
+      const ALLOWED_VARS = new Set(["actor_name", "period_month", "reason", "payroll_period_id"]);
       const { rows } = await direct.query<{
         template_code: string;
         title_template: string;
@@ -836,9 +868,10 @@ ${NOT_FIXTURE_TENANT}
         const declared = Object.keys(r.variables_schema ?? {});
         // (1) mọi biến KHAI BÁO nằm trong allowlist money-free
         for (const v of declared) {
-          expect(ALLOWED_VARS.has(v), `${r.template_code}: biến '${v}' ngoài allowlist money-free`).toBe(
-            true,
-          );
+          expect(
+            ALLOWED_VARS.has(v),
+            `${r.template_code}: biến '${v}' ngoài allowlist money-free`,
+          ).toBe(true);
         }
         // (2) mọi placeholder DÙNG trong title/body đều đã khai báo — placeholder lạ là đường lọt trường
         //     ngoài schema (vd {net}) mà engine vẫn nội suy.
@@ -847,8 +880,10 @@ ${NOT_FIXTURE_TENANT}
           ...r.body_template.matchAll(/\{(\w+)\}/g),
         ].map((m) => m[1]);
         for (const v of used) {
-          expect(declared, `${r.template_code}: placeholder '{${v}}' không có trong variables_schema`)
-            .toContain(v);
+          expect(
+            declared,
+            `${r.template_code}: placeholder '{${v}}' không có trong variables_schema`,
+          ).toContain(v);
         }
       }
     });
