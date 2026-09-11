@@ -28,6 +28,16 @@ import { AuditService } from "../events/audit.service";
 import { AuthService, redactEmailFromDetail, type RequestMeta } from "../auth/auth.service";
 import { PasswordService } from "../auth/password.service";
 import { LoginRateLimiter } from "../auth/login-rate-limiter";
+import { rlKey, type RlBucket } from "../common/valkey/valkey-key";
+
+/**
+ * S18-AUTH-490DEBT-1 (D3b) — hai bucket rate-limit gác ĐƯỜNG THIẾT LẬP 2FA; cả hai phải được gỡ khi
+ * khôi phục tài khoản. Đây là một CẶP, không phải hai thứ rời: sau A2 (`require_two_factor=true`),
+ * `TwoFactorEnforcementGuard` chỉ tha khi `isEnabled`, mà muốn `isEnabled` thì phải đi HẾT
+ * `enroll` → `confirmEnable`. Khoá một trong hai là nhốt nạn nhân khỏi MỌI route.
+ * Cố ý KHÔNG gồm `2fa-disable`/`change-pw`: chúng không nằm trên đường thoát khỏi guard.
+ */
+const TWO_FACTOR_SETUP_BUCKETS: readonly RlBucket[] = ["2fa-enroll", "2fa-enable"];
 import { SecurityEventWriter } from "../auth/security-event-writer.service";
 import { PermissionService } from "../permission/permission.service";
 import { LmsSyncProducer } from "../integrations/lms/lms-sync-producer.service";
@@ -637,7 +647,14 @@ export class AuthUsersService {
    * (`reused-method-must-be-actor-scoped`). Dùng primitive repo — đúng cái admin-reset đang dùng.
    */
   async restoreUser(actor: AuthUserActor, id: string, meta: RequestMeta): Promise<AuthUserDto> {
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    // S18-AUTH-490DEBT-1 (D3b) — fail-fast TRƯỚC mọi mutation, mirror `resetPassword`.
+    //
+    // ⚠️ ĐỪNG dời xuống cạnh lời gọi `reset()` ở cuối hàm. `requireRateLimiter()` NÉM; ném SAU khi tx
+    // đã COMMIT nghĩa là: hàng đã được khôi phục THẬT, admin nhận 500, bấm lại thì `findDeletedByIdTx`
+    // không còn thấy hàng deleted nữa ⇒ 404. Vận hành kết luận "restore hỏng" trong khi nó đã thành
+    // công — đúng cái nút-nói-dối mà `requireRateLimiter` sinh ra để chặn.
+    const limiter = this.requireRateLimiter();
+    const dto = await this.db.withTenant(actor.companyId, async (tx) => {
       const before = await this.repo.findDeletedByIdTx(tx, actor.companyId, id);
       if (!before) throw new NotFoundException(USER_NOT_FOUND);
       if (await this.repo.emailExistsTx(tx, actor.companyId, before.email)) {
@@ -709,9 +726,68 @@ export class AuthUsersService {
         ip: meta.ip,
         userAgent: meta.userAgent,
       });
+      // ── S18-AUTH-490DEBT-1 (D3a — nợ §8.7 của #490, owner chốt 11/09/2026) ────────────────────
+      //
+      // A1 ở trên vừa GỠ yếu tố thứ hai của người này. Đường anh em làm ĐÚNG cùng mutation —
+      // `resetTwoFactor` — phát `TOTP_RESET`; trước WO này `restoreUser` thì không, nên dòng thời
+      // gian bảo mật của CHÍNH nạn nhân chỉ thấy `USER_RESTORED`. Câu "yếu tố thứ hai của bạn đã bị
+      // gỡ" sống duy nhất ở `audit_logs.after.twoFactorReset` — thứ người dùng cuối KHÔNG đọc.
+      //
+      // CÓ ĐIỀU KIỆN (owner chốt), khác A1 vốn vô điều kiện: cờ là `twoFactorWasEnabled` — đọc ở
+      // TRƯỚC `deleteTwoFactorTx`. Đừng suy từ kết quả xoá: `deleteTwoFactorTx` trả `void`.
+      //
+      // LỆCH CÓ CHỦ Ý so với `resetTwoFactor` (đừng "hài hoà hoá" hai đường): ở đó hàng mang
+      // `payload:{revokedSessionCount}` và kèm thu hồi phiên. Ở đây KHÔNG cần — phiên của user này
+      // đã bị thu hồi từ lượt `deleteUser`. Không payload cũng là BẤT BIẾN #3 (không secret/recovery
+      // code lọt vào bảng append-only).
+      if (twoFactorWasEnabled) {
+        await this.securityEvents?.record(tx, {
+          eventType: "TOTP_RESET",
+          userId: id,
+          actorUserId: actor.id,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        });
+      }
       // `toDto` KHÔNG mang `requireTwoFactor` ⇒ response admin không đổi hình.
       return toDto(finalRow);
     });
+    // ── S18-AUTH-490DEBT-1 (D3b) — gỡ khoá `2fa-enroll` mà chính bản vá §8.2 có thể đã dựng ──────
+    //
+    // ⚠️ ĐÂY LÀ ĐƯỜNG GỠ DUY NHẤT của bucket đó, và nó tồn tại vì HAI quyết định đã ký va vào nhau:
+    //   · `clearLoginLocks` (nút "Gỡ khoá đăng nhập" của admin) CỐ Ý chỉ đụng họ login —
+    //     `2fa-enable`/`2fa-disable`/`change-pw`/`2fa-enroll` đều nằm ngoài;
+    //   · A2 ở trên set `require_two_factor = true` ⇒ `TwoFactorEnforcementGuard` ÉP người vừa được
+    //     khôi phục phải enroll.
+    // Kẻ tấn công giữ access token cũ chỉ cần gọi `POST /auth/2fa/enroll` đủ `LOGIN_MAX_ATTEMPTS`
+    // lượt là nhốt nạn nhân 900s NGAY SAU khi được khôi phục, và admin không có nút nào gỡ.
+    //
+    // ⚠️ Vị trí: SAU khi tx COMMIT (Valkey không nằm trong tx DB). Còn `requireRateLimiter()` thì
+    // đứng ở ĐẦU hàm — xem lý do ở đó.
+    //
+    // ⚠️ PHẢI GỠ CẢ HAI BUCKET, không chỉ `2fa-enroll` (security-reviewer FULL gate 11/09, HIGH).
+    // Bản vá đầu chỉ gỡ `2fa-enroll` vì tin rằng `2fa-enable` "không bị guard ép". SAI, đo được:
+    //   · `confirmEnable` (`two-factor.service.ts:336`) là nơi DUY NHẤT set `user_totp.enabled_at`
+    //     (`grep -rn "enabledAt: new Date()" src --include=*.ts` → đúng 1 kết quả);
+    //   · `TwoFactorEnforcementGuard` tha đúng khi `isEnabled`, tức đúng khi cờ ấy được set.
+    // ⇒ `2fa-enable` KHÔNG phải bề mặt phụ — nó là NỬA SAU của cửa thoát duy nhất sau A2.
+    // Và D2 vừa làm nó khoá được từ đường tấn công: nhánh `account_gone` của `confirmEnable` đứng
+    // TRƯỚC `loadTotp`, nên kẻ giữ access token của tài khoản đã xoá mềm gọi 5 lượt
+    // `POST /auth/2fa/enable` là dựng xong khoá 900s — KHÔNG cần hàng enroll nào. Nạn nhân sau khi
+    // được khôi phục enroll được (200) rồi kẹt 429 ở bước bật, và ăn 403 mọi route tới khi khoá hết
+    // hạn. HỒI QUY do chính WO này đẻ ra: trên master nhánh đó không `recordFailure`.
+    //
+    // Gỡ counter đoán-mã của `2fa-enable` ở đây KHÔNG nới bảo mật: A1 ngay trên đã xoá sạch
+    // `user_totp`, nên không còn bí mật nào để đoán.
+    //
+    // ⚠️ GIỚI HẠN đã biết: đây là best-effort CÂM. `reset()` trả `void` và `ValkeyService.del` nuốt
+    // lỗi ⇒ Valkey degraded đúng lúc này thì khoá sống hết `LOGIN_LOCKOUT_SEC` mà KHÔNG tín hiệu nào.
+    // Cố ý không dựng vế `ok`/`degraded` như `clearLoginThrottle`: đó là bề mặt API riêng, ngoài
+    // phạm vi WO này. Ghi ra để lượt sau biết đây là quyết định, không phải bỏ sót.
+    for (const bucket of TWO_FACTOR_SETUP_BUCKETS) {
+      await limiter.reset(rlKey(bucket, `${actor.companyId}|${id}`));
+    }
+    return dto;
   }
 
   /**

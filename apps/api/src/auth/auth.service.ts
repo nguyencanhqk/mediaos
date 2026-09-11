@@ -2314,8 +2314,13 @@ export class AuthService {
         });
       });
     } catch (err) {
+      // S18-AUTH-490DEBT-1 (D4, nợ §8.8 của #490). NUỐT là CỐ Ý và KHÔNG đổi (xem docblock trên).
+      // Thứ thiếu trước đây là NGỮ CẢNH: hỏng ở PROD thì không truy được HÀNG CỦA AI đã mất.
+      // ⚠️ KHÔNG log `ip`/`userAgent` (log không phải chỗ nhân bản PII) và KHÔNG log khoá Valkey.
       this.logger.error(
-        `recordReauthFailure thất bại (best-effort, KHÔNG đổi outcome 401): ${err instanceof Error ? err.message : String(err)}`,
+        `recordReauthFailure thất bại (best-effort, KHÔNG đổi outcome 401) — ` +
+          `companyId=${companyId} userId=${userId} context=${context}: ` +
+          `${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }

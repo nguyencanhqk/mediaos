@@ -76,6 +76,14 @@ const BUILDERS: Array<{
     build: (s, co, u) => rlKey("2fa-disable", `${co}|${u}`, s),
     carriesIdentity: true,
   },
+  // S18-AUTH-490DEBT-1. ⚠️ Bảng này là VỆ SINH, không phải cổng: nó KHÔNG đối chiếu với union
+  // `RlBucket` (`logdedup`/`ip-index`/`forgot:ip-index` vắng mặt sẵn từ trước). Thêm dòng ở đây
+  // không chứng minh "mọi bucket đều được kiểm cô lập môi trường" — đừng viết thế trong PR.
+  {
+    name: "rlKey(2fa-enroll)",
+    build: (s, co, u) => rlKey("2fa-enroll", `${co}|${u}`, s),
+    carriesIdentity: true,
+  },
   {
     name: "rlKey(change-pw)",
     build: (s, co, u) => rlKey("change-pw", `${co}|${u}`, s),

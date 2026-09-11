@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Column, SQL } from "drizzle-orm";
 import { TwoFactorService, TWO_FACTOR_ENFORCED } from "./two-factor.service";
 import { userRecoveryCodes, userRoles, users, userTotp } from "../db/schema";
+import { withExpectedLoggerErrors } from "../../test/helpers/expect-logged-errors";
 
 /**
  * S2-AUTH-DB-3 Lane C — RED-first (kiểm chứng CẤU TRÚC WHERE, không cần Postgres). Reader `user_roles`
@@ -789,7 +790,9 @@ describe("TwoFactorService — D2 mở rộng: UPDATE user_totp / user_recovery_
     const { tx, captures } = makeUpdateTx({ totpEnabled: true });
     const svc = makeUpdateSvc(tx, { totpVerifies: false });
     await expect(svc.verifyChallenge(USER_ID, COMPANY_ID, "recovery-code")).resolves.toBe(true);
-    expect(whereHasColumn(captures.recoveryUpdateWhere, userRecoveryCodes, "company_id")).toBe(true);
+    expect(whereHasColumn(captures.recoveryUpdateWhere, userRecoveryCodes, "company_id")).toBe(
+      true,
+    );
     expect(whereHasColumn(captures.recoveryUpdateWhere, userRecoveryCodes, "user_id")).toBe(true);
   });
 });
@@ -806,5 +809,90 @@ describe("TwoFactorService — §a2-pos-delegate: requiresTwoFactor uỷ quyền
     const { svc, dbsvc } = makeSvc(tx);
     expect(await svc.requiresTwoFactor(USER_ID, COMPANY_ID)).toBe(true);
     expect(dbsvc.withTenant).toHaveBeenCalledWith(COMPANY_ID, expect.any(Function));
+  });
+});
+
+// ── S18-AUTH-490DEBT-1 (D4 — nợ §8.8 của #490) ─────────────────────────────────────────────────
+describe("TwoFactorService.recordReauthFailure — nuốt lỗi NHƯNG mang ngữ cảnh truy vết", () => {
+  /**
+   * Tx tối thiểu để `confirmEnable` đi tới nhánh `bad_code`: hàng `users` CÒN SỐNG (qua được vế
+   * `deleted_at` của D1 ở #490) + hàng `user_totp` đã enroll, rồi `totp.verify` trả false.
+   */
+  function makeBadCodeTx() {
+    return {
+      select: () => ({
+        from: (table: unknown) => ({
+          where: () => ({
+            limit: () => {
+              if (table === users) return Promise.resolve([{ deletedAt: null, email: "u@a.test" }]);
+              if (table === userTotp)
+                return Promise.resolve([{ enabledAt: null, secretCiphertext: "c" }]);
+              return Promise.resolve([]);
+            },
+          }),
+        }),
+      }),
+      update: () => ({ set: () => ({ where: () => Promise.resolve(undefined) }) }),
+      insert: () => ({ values: () => Promise.resolve(undefined) }),
+      delete: () => ({ where: () => Promise.resolve(undefined) }),
+    };
+  }
+
+  function makeSvcWithFailingWriter(tx: unknown) {
+    const dbsvc = {
+      withTenant: vi.fn(async (_cid: string, fn: (t: unknown) => Promise<unknown>) => fn(tx)),
+    };
+    const securityEvents = {
+      record: vi.fn(async () => {
+        throw new Error("ghi timeline hỏng");
+      }),
+    };
+    const svc = new TwoFactorService(
+      dbsvc as never,
+      { decryptSecret: vi.fn(async () => "PLAIN-SECRET-NOT-LOGGED") } as never,
+      { verify: vi.fn(() => false), currentStep: vi.fn(() => 1) } as never,
+      { hashToken: vi.fn(() => "h") } as never,
+      { record: vi.fn(async () => undefined) } as never,
+      makeRateLimiterMock() as never,
+      { claim: vi.fn(async () => true) } as never,
+      securityEvents as never,
+    );
+    return { svc, securityEvents };
+  }
+
+  /**
+   * (a) NEO CHỐNG-HỒI-QUY cho quyết định "nuốt là CỐ Ý". `SecurityEventWriter.record` ném ⇒ outcome
+   * PHẢI vẫn là 401. Biến nhánh này thành 500 là biến mất-tầm-nhìn thành mất-đăng-nhập.
+   * Đột biến: bỏ khối `try/catch` ⇒ ca này ĐỎ (nhận Error thường thay vì UnauthorizedException).
+   */
+  it("§reauth-log-ctx-2fa (a): writer timeline NÉM ⇒ vẫn 401, KHÔNG 500", async () => {
+    const { svc } = makeSvcWithFailingWriter(makeBadCodeTx());
+    const { result: err } = await withExpectedLoggerErrors(
+      [{ label: "reauth", match: /recordReauthFailure thất bại/ }],
+      () => svc.confirmEnable(USER_ID, COMPANY_ID, "123456", {}).catch((e: unknown) => e),
+    );
+    expect(err).toBeInstanceOf(UnauthorizedException);
+  });
+
+  /**
+   * (b) VẾ MỚI: dòng log phải trả lời được "hàng CỦA AI đã mất". Trước WO này nó chỉ có `err.message`.
+   * Đột biến: bỏ ba trường khỏi chuỗi log ⇒ ca này ĐỎ.
+   *
+   * ⚠️ Cấm `ip`/`userAgent` trong log (không nhân bản PII) và cấm khoá Valkey (họ `rl:` nhúng
+   * email/slug) — assert âm ở dưới ghim điều đó.
+   */
+  it("§reauth-log-ctx-2fa (b): dòng log mang companyId + userId + context, KHÔNG mang PII", async () => {
+    const { svc } = makeSvcWithFailingWriter(makeBadCodeTx());
+    const { matched } = await withExpectedLoggerErrors(
+      [{ label: "reauth", match: /recordReauthFailure thất bại/, min: 1, max: 1 }],
+      () => svc.confirmEnable(USER_ID, COMPANY_ID, "123456", {}).catch(() => undefined),
+    );
+    const line = matched.get("reauth")?.[0]?.message ?? "";
+    expect(line).toContain(`companyId=${COMPANY_ID}`);
+    expect(line).toContain(`userId=${USER_ID}`);
+    expect(line).toContain("context=2fa_enable");
+    // Regex chứ KHÔNG string literal: `valkey-key-census.spec.ts` neo mọi literal MỞ ĐẦU bằng tiền
+    // tố khoá và sẽ báo file này là "chỗ dựng khoá thứ hai" — đỏ oan cho một assert ÂM.
+    expect(line, "log KHÔNG được mang khoá Valkey (họ rl: nhúng email/slug)").not.toMatch(/rl:/);
   });
 });

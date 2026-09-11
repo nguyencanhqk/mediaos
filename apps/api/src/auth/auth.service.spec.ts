@@ -14,6 +14,7 @@ import { LoginRateLimiter } from "./login-rate-limiter";
 import { TWO_FACTOR_ENFORCED } from "./two-factor.service";
 import { loadEnv } from "../config/env.schema";
 import { companies, employeeProfiles, passwordResetTokens, userRoles, users } from "../db/schema";
+import { withExpectedLoggerErrors } from "../../test/helpers/expect-logged-errors";
 
 /**
  * S2-AUTH-DB-3 Lane C — RED-first (kiểm chứng CẤU TRÚC WHERE, không cần Postgres). Reader `user_roles`
@@ -1672,5 +1673,90 @@ describe("AuthService.resetPassword — gỡ khoá 429 sau khi đặt lại mậ
       (c) => (c[1] as { eventType: string }).eventType,
     );
     expect(goodEvents).not.toContain("USER_UNLOCKED");
+  });
+});
+
+// ── S18-AUTH-490DEBT-1 (D4 — nợ §8.8 của #490), writer THỨ HAI ─────────────────────────────────
+/**
+ * `AuthService.recordReauthFailure` là `private` ⇒ đi qua entry point công khai `changePassword`
+ * với mật khẩu SAI (nhánh `bad_credentials` gọi đúng nó).
+ *
+ * Đây là writer RIÊNG với writer của `TwoFactorService` — ratchet `reauthFailedWriterCount() >= 2`
+ * đang ghim rằng có HAI. Vá một chỗ mà quên chỗ kia là đúng cái bẫy mà #490 §8.3 ghi nợ.
+ */
+describe("AuthService.recordReauthFailure — nuốt lỗi NHƯNG mang ngữ cảnh truy vết (S18-AUTH-490DEBT-1)", () => {
+  const COMPANY_ID = "11111111-1111-1111-1111-111111111111";
+  const USER_ID = "22222222-2222-2222-2222-222222222222";
+  const user = { id: USER_ID, companyId: COMPANY_ID } as never;
+
+  function makeService() {
+    const tx = {
+      select: vi.fn(() => tx),
+      from: vi.fn(() => tx),
+      where: vi.fn(() => tx),
+      limit: vi.fn(() => Promise.resolve([{ passwordHash: "argon2-current-hash" }])),
+      then: (resolve: (v: unknown) => void) => resolve(undefined),
+    };
+    const dbsvc = {
+      withTenant: vi.fn(async (_c: string, fn: (t: unknown) => unknown) => fn(tx)),
+    };
+    // Mật khẩu SAI ⇒ nhánh `bad_credentials`.
+    const password = { verify: vi.fn().mockResolvedValue(false) };
+    const rateLimiter = {
+      isLocked: vi.fn().mockResolvedValue(false),
+      recordFailure: vi.fn().mockResolvedValue(undefined),
+      reset: vi.fn().mockResolvedValue(undefined),
+    };
+    const securityEvents = {
+      record: vi.fn(async () => {
+        throw new Error("ghi timeline hỏng");
+      }),
+    };
+
+    const Ctor = AuthService as unknown as new (...args: unknown[]) => AuthService;
+    const service = new Ctor(
+      dbsvc, // 1 dbsvc
+      password, // 2 password
+      {}, // 3 tokens
+      rateLimiter, // 4 rateLimiter
+      { record: vi.fn().mockResolvedValue(undefined) }, // 5 audit
+      {}, // 6 outbox
+      {}, // 7 permissions
+      {}, // 8 secrets
+      {}, // 9 twoFactor
+      {}, // 10 replayGuard
+      {}, // 11 securityAlerts
+      {}, // 12 securityPolicy
+      {}, // 13 modules
+      undefined, // 14 resetMail
+      securityEvents, // 15 securityEvents
+    );
+    return { service, securityEvents };
+  }
+
+  /** (a) NEO CHỐNG-HỒI-QUY: nuốt là CỐ Ý — writer ném KHÔNG được biến 401 thành 500. */
+  it("§reauth-log-ctx-auth (a): writer timeline NÉM ⇒ vẫn 401, KHÔNG 500", async () => {
+    const { service } = makeService();
+    const { result: err } = await withExpectedLoggerErrors(
+      [{ label: "reauth", match: /recordReauthFailure thất bại/ }],
+      () => service.changePassword(user, "wrong-pw", "new-pw", {}).catch((e: unknown) => e),
+    );
+    expect(err).toBeInstanceOf(UnauthorizedException);
+  });
+
+  /** (b) VẾ MỚI: dòng log trả lời được "hàng CỦA AI đã mất", và KHÔNG nhân bản PII. */
+  it("§reauth-log-ctx-auth (b): dòng log mang companyId + userId + context, KHÔNG mang PII", async () => {
+    const { service } = makeService();
+    const { matched } = await withExpectedLoggerErrors(
+      [{ label: "reauth", match: /recordReauthFailure thất bại/, min: 1, max: 1 }],
+      () => service.changePassword(user, "wrong-pw", "new-pw", {}).catch(() => undefined),
+    );
+    const line = matched.get("reauth")?.[0]?.message ?? "";
+    expect(line).toContain(`companyId=${COMPANY_ID}`);
+    expect(line).toContain(`userId=${USER_ID}`);
+    expect(line).toContain("context=change_password");
+    // Regex chứ KHÔNG string literal: `valkey-key-census.spec.ts` neo mọi literal MỞ ĐẦU bằng tiền
+    // tố khoá và sẽ báo file này là "chỗ dựng khoá thứ hai" — đỏ oan cho một assert ÂM.
+    expect(line, "log KHÔNG được mang khoá Valkey (họ rl: nhúng email/slug)").not.toMatch(/rl:/);
   });
 });
